@@ -1,6 +1,12 @@
 `include "VX_define.vh"
 `include "VX_print_instr.vh"
 
+`ifdef EXT_F_ENABLE
+    `define USED_REGS(f,r) used_regs[{f,r}] = 1
+`else
+    `define USED_REGS(f,r) used_regs[r] = 1
+`endif
+
 module VX_decode  #(
     parameter CORE_ID = 0
 ) (
@@ -22,10 +28,12 @@ module VX_decode  #(
     reg [`EX_BITS-1:0]  ex_type;    
     reg [`OP_BITS-1:0]  op_type; 
     reg [`MOD_BITS-1:0] op_mod;
-    reg [31:0]          imm;
-    reg use_rd, use_rs1, use_rs2, use_rs3, use_PC, use_imm;
+    reg [4:0]           rd_r, rs1_r, rs2_r, rs3_r;
+    reg [31:0]          imm;    
+    reg use_rd, use_PC, use_imm;
     reg rd_fp, rs1_fp, rs2_fp;
     reg is_join, is_wstall;
+    reg [`NUM_REGS-1:0] used_regs;
 
     wire [31:0] instr = ifetch_rsp_if.instr;
     wire [6:0] opcode = instr[6:0];  
@@ -45,21 +53,23 @@ module VX_decode  #(
     
     always @(*) begin
 
-        ex_type   = `EX_NOP;
+        ex_type   = 0;
         op_type   = 'x;
         op_mod    = 'x;
         imm       = 'x;
         use_rd    = 0;
-        use_rs1   = 0;
-        use_rs2   = 0;
-        use_rs3   = 0;
         use_PC    = 0;
         use_imm   = 0;
         rd_fp     = 0;  
         rs1_fp    = 0;
         rs2_fp    = 0;
         is_join   = 0;
-        is_wstall = 0;    
+        is_wstall = 0;  
+        used_regs = 0;  
+        rd_r      = rd;
+        rs1_r     = rs1;
+        rs2_r     = rs2;
+        rs3_r     = rs3;
 
         case (opcode)            
             `INST_I: begin
@@ -78,8 +88,9 @@ module VX_decode  #(
                 op_mod  = 0;
                 imm     = {{20{alu_imm[11]}}, alu_imm};
                 use_rd  = 1;
-                use_rs1 = 1;
                 use_imm = 1;
+                `USED_REGS (1'b0, rd);
+                `USED_REGS (1'b0, rs1);
             end
             `INST_R: begin 
                 ex_type = `EX_ALU;
@@ -113,18 +124,21 @@ module VX_decode  #(
                     endcase
                     op_mod  = 0; 
                 end                
-                use_rd  = 1;
-                use_rs1 = 1;
-                use_rs2 = 1;
+                use_rd = 1;
+                `USED_REGS (1'b0, rd);
+                `USED_REGS (1'b0, rs1);
+                `USED_REGS (1'b0, rs2);
             end
             `INST_LUI: begin 
                 ex_type = `EX_ALU;
                 op_type = `OP_BITS'(`ALU_LUI);
-                op_mod  = 0;                
+                op_mod  = 0;
+                rs1_r   = 0;                
                 imm     = {upper_imm, 12'(0)};
                 use_rd  = 1;
-                use_rs1 = 1; 
-                use_imm = 1;
+                use_imm = 1;                
+                `USED_REGS (1'b0, rd);
+                `USED_REGS (1'b0, 5'b0);
             end
             `INST_AUIPC: begin 
                 ex_type = `EX_ALU;
@@ -134,6 +148,7 @@ module VX_decode  #(
                 use_rd  = 1;
                 use_PC  = 1;
                 use_imm = 1;
+                `USED_REGS (1'b0, rd);
             end
             `INST_JAL: begin 
                 ex_type = `EX_ALU;
@@ -144,6 +159,7 @@ module VX_decode  #(
                 use_PC  = 1;
                 use_imm = 1;
                 is_wstall = 1;
+                `USED_REGS (1'b0, rd);
             end
             `INST_JALR: begin 
                 ex_type = `EX_ALU;
@@ -151,9 +167,10 @@ module VX_decode  #(
                 op_mod  = 1;
                 imm     = {{20{jalr_imm[11]}}, jalr_imm};
                 use_rd  = 1;
-                use_rs1 = 1;
                 use_imm = 1;
                 is_wstall = 1;
+                `USED_REGS (1'b0, rd);
+                `USED_REGS (1'b0, rs1);
             end
             `INST_B: begin 
                 ex_type = `EX_ALU;
@@ -168,11 +185,11 @@ module VX_decode  #(
                 endcase
                 op_mod  = 1;
                 imm     = {{20{instr[31]}}, instr[7], instr[30:25], instr[11:8], 1'b0};
-                use_rs1 = 1;
-                use_rs2 = 1;
                 use_PC  = 1;
                 use_imm = 1;
                 is_wstall = 1;
+                `USED_REGS (1'b0, rs1);
+                `USED_REGS (1'b0, rs2);
             end
             `INST_SYS : begin 
                 if (func3 == 0) begin                    
@@ -190,6 +207,7 @@ module VX_decode  #(
                     use_rd  = 1;
                     use_PC  = 1;
                     use_imm = 1;
+                    `USED_REGS (1'b0, rd);
                 end else begin
                     ex_type = `EX_CSR;
                     case (func3[1:0])
@@ -201,8 +219,10 @@ module VX_decode  #(
                     endcase
                     imm     = 32'(u_12);
                     use_rd  = 1;
-                    use_rs1 = !func3[2];
                     use_imm = func3[2];
+                    `USED_REGS (1'b0, rd);
+                    if (!func3[2]) 
+                        `USED_REGS (1'b0, rs1);
                 end
             end
         `ifdef EXT_F_ENABLE
@@ -212,10 +232,11 @@ module VX_decode  #(
                 ex_type = `EX_LSU;
                 op_type = `OP_BITS'({1'b0, func3});
                 imm     = {{20{u_12[11]}}, u_12};
-                use_rd  = 1;
-                use_rs1 = 1;
-            `ifdef EXT_F_ENABLE
-                rd_fp   = (opcode == `INST_FL);
+                use_rd  = 1;                
+                `USED_REGS (1'b0, rs1);
+                `USED_REGS ((opcode == `INST_FL), rd);
+            `ifdef EXT_F_ENABLE               
+                rd_fp = (opcode == `INST_FL);
             `endif
             end
         `ifdef EXT_F_ENABLE
@@ -225,8 +246,8 @@ module VX_decode  #(
                 ex_type = `EX_LSU;
                 op_type = `OP_BITS'({1'b1, func3});
                 imm     = {{20{func7[6]}}, func7, rd};
-                use_rs1 = 1;
-                use_rs2 = 1;
+                `USED_REGS (1'b0, rs1);
+                `USED_REGS ((opcode == `INST_FS), rs2);        
             `ifdef EXT_F_ENABLE
                 rs2_fp = (opcode == `INST_FS);
             `endif
@@ -240,17 +261,18 @@ module VX_decode  #(
                 op_type = `OP_BITS'(opcode[3:0]);
                 op_mod  = func3;
                 use_rd  = 1;
-                use_rs1 = 1;
-                use_rs2 = 1;
-                use_rs3 = 1;
                 rd_fp   = 1;
                 rs1_fp  = 1;
-                rs2_fp  = 1;                
+                rs2_fp  = 1;  
+                `USED_REGS (1'b1, rd);              
+                `USED_REGS (1'b1, rs1);
+                `USED_REGS (1'b1, rs2);
+                `USED_REGS (1'b1, rs3);
             end
             `INST_FCI: begin 
                 ex_type = `EX_FPU;
                 op_mod = func3;
-                use_rd = 1;
+                use_rd = 1;                
                 case (func7)
                     7'h00, // FADD
                     7'h04, // FSUB
@@ -258,55 +280,61 @@ module VX_decode  #(
                     7'h0C: // FDIV                        
                         begin
                         op_type = `OP_BITS'(func7[3:0]);
-                        use_rd  = 1;
-                        use_rs1 = 1;
-                        use_rs2 = 1;
                         rd_fp   = 1;
                         rs1_fp  = 1;
                         rs2_fp  = 1;     
+                        `USED_REGS (1'b1, rd);
+                        `USED_REGS (1'b1, rs1);
+                        `USED_REGS (1'b1, rs2);
                     end
                     7'h2C: begin
                         op_type = `OP_BITS'(`FPU_SQRT);
-                        use_rs1 = 1;
                         rd_fp   = 1;
                         rs1_fp  = 1;    
+                        `USED_REGS (1'b1, rd);
+                        `USED_REGS (1'b1, rs1);
                     end
                     7'h50: begin
                         op_type = `OP_BITS'(`FPU_CMP);
-                        use_rs1 = 1;
-                        use_rs2 = 1;
                         rs1_fp  = 1;
                         rs2_fp  = 1;     
+                        `USED_REGS (1'b0, rd);
+                        `USED_REGS (1'b1, rs1);
+                        `USED_REGS (1'b1, rs2);
                     end
                     7'h60: begin
                         op_type = (instr[20]) ? `OP_BITS'(`FPU_CVTWUS) : `OP_BITS'(`FPU_CVTWS);
-                        use_rs1 = 1; 
                         rs1_fp  = 1; 
+                        `USED_REGS (1'b0, rd);
+                        `USED_REGS (1'b1, rs1);
                     end
                     7'h68: begin
                         op_type = (instr[20]) ? `OP_BITS'(`FPU_CVTSWU) : `OP_BITS'(`FPU_CVTSW);
-                        use_rs1 = 1;
                         rd_fp   = 1;
+                        `USED_REGS (1'b1, rd);
+                        `USED_REGS (1'b0, rs1);
                     end
                     7'h10: begin
                         // FSGNJ=0, FSGNJN=1, FSGNJX=2
                         op_type = `OP_BITS'(`FPU_MISC);
                         op_mod  = {1'b0, func3[1:0]};
-                        use_rs1 = 1;
-                        use_rs2 = 1;
                         rd_fp   = 1;
                         rs1_fp  = 1;
                         rs2_fp  = 1;
+                        `USED_REGS (1'b1, rd);
+                        `USED_REGS (1'b1, rs1);
+                        `USED_REGS (1'b1, rs2);
                     end
                     7'h14: begin
                         // FMIN=3, FMAX=4
                         op_type = `OP_BITS'(`FPU_MISC);
                         op_mod  = func3[0] ? 4 : 3;
-                        use_rs1 = 1;
-                        use_rs2 = 1;
                         rd_fp   = 1;
                         rs1_fp  = 1;
                         rs2_fp  = 1;
+                        `USED_REGS (1'b1, rd);
+                        `USED_REGS (1'b1, rs1);
+                        `USED_REGS (1'b1, rs2);
                     end
                     7'h70: begin 
                         if (func3[0]) begin
@@ -316,15 +344,17 @@ module VX_decode  #(
                             // FMV.X.W=5
                             op_type = `OP_BITS'(`FPU_MISC);
                             op_mod  = 5;
-                        end
-                        use_rs1 = 1;                   
-                        rs1_fp  = 1;                                             
+                        end             
+                        rs1_fp  = 1;  
+                        `USED_REGS (1'b0, rd);
+                        `USED_REGS (1'b1, rs1);                                           
                     end 
                     7'h78: begin 
                         // FMV.W.X=6
                         op_type = `OP_BITS'(`FPU_MISC); 
                         op_mod = 6;                         
                         rd_fp  = 1;
+                        `USED_REGS (1'b1, rd);
                     end
                 default:;
                 endcase
@@ -335,28 +365,28 @@ module VX_decode  #(
                 case (func3)
                     3'h0: begin
                         op_type = `OP_BITS'(`GPU_TMC);
-                        use_rs1 = 1;
                         is_wstall = 1;
+                        `USED_REGS (1'b0, rs1);
                     end
                     3'h1: begin
                         op_type = `OP_BITS'(`GPU_WSPAWN);
-                        use_rs1 = 1;
-                        use_rs2 = 1;
+                        `USED_REGS (1'b0, rs1);
+                        `USED_REGS (1'b0, rs2);
                     end
                     3'h2: begin
                         op_type = `OP_BITS'(`GPU_SPLIT);
-                        use_rs1 = 1;
                         is_wstall = 1;
+                        `USED_REGS (1'b0, rs1);
                     end
                     3'h3: begin 
                         op_type = `OP_BITS'(`GPU_JOIN);
                         is_join = 1;
                     end
                     3'h4: begin 
-                        op_type = `OP_BITS'(`GPU_BAR); 
-                        use_rs1 = 1;
-                        use_rs2 = 1;
+                        op_type = `OP_BITS'(`GPU_BAR);
                         is_wstall = 1;
+                        `USED_REGS (1'b0, rs1);
+                        `USED_REGS (1'b0, rs2);
                     end
                     default:;
                 endcase
@@ -366,10 +396,7 @@ module VX_decode  #(
     end
 
     // disable write to integer register r0
-    wire use_rd_qual = use_rd && (rd_fp || (rd != 0));
-
-    // EX_ALU needs rs1=0 for LUI operation
-    wire [4:0] rs1_qual = (opcode == `INST_LUI) ? 5'h0 : rs1;
+    wire wb = use_rd && (rd_fp || (rd_r != 0));
 
     assign decode_if.valid   = ifetch_rsp_if.valid;
     assign decode_if.wid     = ifetch_rsp_if.wid;
@@ -378,31 +405,27 @@ module VX_decode  #(
     assign decode_if.ex_type = ex_type;
     assign decode_if.op_type = op_type;
     assign decode_if.op_mod  = op_mod;
-    assign decode_if.wb      = use_rd_qual;
+    assign decode_if.wb      = wb;
 
-    `ifdef EXT_F_ENABLE
-        assign decode_if.rd  = {rd_fp,  rd};
-        assign decode_if.rs1 = {rs1_fp, rs1_qual};
-        assign decode_if.rs2 = {rs2_fp, rs2};
-        assign decode_if.rs3 = {1'b1,   rs3};
-    `else
-        `UNUSED_VAR (rd_fp)
-        `UNUSED_VAR (rs1_fp)
-        `UNUSED_VAR (rs2_fp)
-        assign decode_if.rd  = rd;
-        assign decode_if.rs1 = rs1_qual;
-        assign decode_if.rs2 = rs2;
-        assign decode_if.rs3 = rs3;
-    `endif
+`ifdef EXT_F_ENABLE
+    assign decode_if.rd  = {rd_fp,  rd_r};
+    assign decode_if.rs1 = {rs1_fp, rs1_r};
+    assign decode_if.rs2 = {rs2_fp, rs2_r};
+    assign decode_if.rs3 = {1'b1,   rs3_r};
+`else
+    `UNUSED_VAR (rd_fp)
+    `UNUSED_VAR (rs1_fp)
+    `UNUSED_VAR (rs2_fp)
+    assign decode_if.rd  = rd_r;
+    assign decode_if.rs1 = rs1_r;
+    assign decode_if.rs2 = rs2_r;
+    assign decode_if.rs3 = rs3_r;
+`endif
 
-    assign decode_if.imm     = imm;
-    assign decode_if.use_PC  = use_PC;
-    assign decode_if.use_imm = use_imm;
-
-    assign decode_if.used_regs = (`NUM_REGS'(use_rd)  << decode_if.rd) 
-                               | (`NUM_REGS'(use_rs1) << decode_if.rs1) 
-                               | (`NUM_REGS'(use_rs2) << decode_if.rs2)
-                               | (`NUM_REGS'(use_rs3) << decode_if.rs3);
+    assign decode_if.imm       = imm;
+    assign decode_if.use_PC    = use_PC;
+    assign decode_if.use_imm   = use_imm;
+    assign decode_if.used_regs = used_regs;
 
     ///////////////////////////////////////////////////////////////////////////
 

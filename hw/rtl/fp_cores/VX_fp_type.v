@@ -10,7 +10,7 @@ module VX_fp_type (
 );
     wire is_normal    = (exp_i != 8'd0) && (exp_i != 8'hff);
     wire is_zero      = (exp_i == 8'd0) && (man_i == 23'd0);
-    wire is_subnormal = (exp_i == 8'd0) && !is_zero;
+    wire is_subnormal = (exp_i == 8'd0) && (man_i != 23'd0);
     wire is_inf       = (exp_i == 8'hff) && (man_i == 23'd0); 
     wire is_nan       = (exp_i == 8'hff) && (man_i != 23'd0);
     wire is_signaling = is_nan && (man_i[22] == 1'b0);

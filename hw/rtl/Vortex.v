@@ -121,7 +121,7 @@ module Vortex (
         .NUM_REQS     (`NUM_CLUSTERS),
         .DATA_WIDTH   (32),
         .ADDR_WIDTH   (12),
-        .BUFFERED_REQ (`NUM_CLUSTERS >= 4),
+        .BUFFERED_REQ (1),
         .BUFFERED_RSP (1)
     ) csr_arb (
         .clk            (clk),
@@ -228,7 +228,7 @@ module Vortex (
             .TAG_IN_WIDTH  (`L2DRAM_TAG_WIDTH),
             .TAG_OUT_WIDTH (`L3DRAM_TAG_WIDTH),
             .BUFFERED_REQ  (1),
-            .BUFFERED_RSP  (`NUM_CLUSTERS >= 4)
+            .BUFFERED_RSP  (1)
         ) dram_arb (
             .clk            (clk),
             .reset          (reset),

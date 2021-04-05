@@ -54,7 +54,8 @@ module VX_fpu_unit #(
         .write_data   ({fpu_req_if.wid, fpu_req_if.tmask, fpu_req_if.PC, fpu_req_if.rd, fpu_req_if.wb}),                    
         .read_data    ({rsp_wid,        rsp_tmask,        rsp_PC,        rsp_rd,        rsp_wb}), 
         .release_slot (fpuq_pop),     
-        .full         (fpuq_full)
+        .full         (fpuq_full),
+        `UNUSED_PIN (empty)
     );
     
     // can accept new request?
