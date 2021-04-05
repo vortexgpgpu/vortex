@@ -98,7 +98,8 @@ module VX_cache_core_rsp_merge #(
             wire core_rsp_valid_any = (| per_bank_core_rsp_valid);
             
             VX_skid_buffer #(
-                .DATAW (NUM_REQS + CORE_TAG_WIDTH + (NUM_REQS *`WORD_WIDTH))
+                .DATAW (NUM_REQS + CORE_TAG_WIDTH + (NUM_REQS *`WORD_WIDTH)),
+                .BUFFERED (1)
             ) pipe_reg (
                 .clk       (clk),
                 .reset     (reset),
@@ -146,7 +147,8 @@ module VX_cache_core_rsp_merge #(
 
             for (genvar i = 0; i < NUM_REQS; i++) begin
                 VX_skid_buffer #(
-                    .DATAW (CORE_TAG_WIDTH + `WORD_WIDTH)
+                    .DATAW (CORE_TAG_WIDTH + `WORD_WIDTH),
+                    .BUFFERED (1)
                 ) pipe_reg (
                     .clk       (clk),
                     .reset     (reset),

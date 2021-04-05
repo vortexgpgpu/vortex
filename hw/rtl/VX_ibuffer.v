@@ -82,8 +82,7 @@ module VX_ibuffer #(
 
             if (writing && is_slot0) begin                                                       
                 q_data_out[i] <= q_data_in;
-            end
-            if (pop) begin
+            end else if (pop) begin
                 q_data_out[i] <= q_data_prev[i];
             end                  
         end

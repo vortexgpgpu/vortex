@@ -139,4 +139,3 @@ clean-fpga-64c:
 	rm -rf $(FPGA_BUILD_DIR)_64c sources.txt
 
 clean: clean-ase-1c	clean-ase-2c clean-ase-4c clean-fpga-1c clean-fpga-2c clean-fpga-4c clean-fpga-8c clean-fpga-16c clean-fpga-32c clean-fpga-64c
-	rm sources.txt

@@ -120,7 +120,7 @@ module VX_cluster #(
         .DATA_WIDTH   (32),
         .ADDR_WIDTH   (12),
         .BUFFERED_REQ (1), 
-        .BUFFERED_RSP (`NUM_CORES >= 4)
+        .BUFFERED_RSP (1)
     ) csr_arb (
         .clk            (clk),
         .reset          (reset),
@@ -225,7 +225,7 @@ module VX_cluster #(
             .DATA_WIDTH    (`L2DRAM_LINE_WIDTH),            
             .TAG_IN_WIDTH  (`XDRAM_TAG_WIDTH),
             .TAG_OUT_WIDTH (`L2DRAM_TAG_WIDTH),
-            .BUFFERED_REQ  (`NUM_CORES >= 4),
+            .BUFFERED_REQ  (1),
             .BUFFERED_RSP  (1)
         ) dram_arb (
             .clk            (clk),

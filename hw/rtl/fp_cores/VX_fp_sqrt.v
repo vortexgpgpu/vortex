@@ -1,5 +1,9 @@
 `include "VX_define.vh"
 
+`ifndef SYNTHESIS
+`include "float_dpi.vh"
+`endif
+
 module VX_fp_sqrt #( 
     parameter TAGW = 1,
     parameter LANES = 1
@@ -44,7 +48,7 @@ module VX_fp_sqrt #(
         fflags_t f;
 
         always @(*) begin        
-            dpi_fsqrt  (dataa[i], frm, r, f);
+            dpi_fsqrt (dataa[i], frm, r, f);
         end
         `UNUSED_VAR (f)
 

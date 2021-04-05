@@ -97,7 +97,7 @@ module VX_lsu_unit #(
                   && (0 == req_sent_mask)  // first submission only
                   && req_wb;               // loads only
 
-    wire mbuf_pop = dcache_rsp_fire && ~(|rsp_rem_mask_n);
+    wire mbuf_pop = dcache_rsp_fire && (0 == rsp_rem_mask_n);
     
     assign mbuf_raddr = dcache_rsp_if.tag[`LSUQ_ADDR_BITS-1:0];    
 
@@ -124,8 +124,9 @@ module VX_lsu_unit #(
         end    
     end
 
-    assign sent_all_ready = (&(dcache_req_if.ready | req_sent_mask | ~req_tmask))
-                         || (req_is_dup & dcache_req_if.ready[0]);
+    assign sent_all_ready = &(dcache_req_if.ready | req_sent_mask);
+
+    wire [`NUM_THREADS-1:0] req_sent_dup = {{(`NUM_THREADS-1){dcache_req_fire[0] && req_is_dup}}, 1'b0};
 
     always @(posedge clk) begin
         if (reset) begin
@@ -134,7 +135,7 @@ module VX_lsu_unit #(
             if (sent_all_ready)
                 req_sent_mask <= 0;
             else
-                req_sent_mask <= req_sent_mask | dcache_req_fire;            
+                req_sent_mask <= req_sent_mask | dcache_req_fire | req_sent_dup;
         end
     end
 
@@ -146,10 +147,13 @@ module VX_lsu_unit #(
             req_tag_hold <= mbuf_waddr;
     end
 
+    wire [`NUM_THREADS-1:0] req_tmask_dup = req_tmask & {{(`NUM_THREADS-1){~req_is_dup}}, 1'b1};
+
     assign rsp_rem_mask_n = rsp_rem_mask[mbuf_raddr] & ~dcache_rsp_if.valid;
+
     always @(posedge clk) begin
         if (mbuf_push)  begin
-            rsp_rem_mask[mbuf_waddr] <= req_is_dup ? (`NUM_THREADS)'(1) : req_tmask;
+            rsp_rem_mask[mbuf_waddr] <= req_tmask_dup;
         end    
         if (dcache_rsp_fire) begin
             rsp_rem_mask[mbuf_raddr] <= rsp_rem_mask_n;
@@ -158,8 +162,6 @@ module VX_lsu_unit #(
 
     wire req_ready_dep = (req_wb && ~mbuf_full) 
                       || (~req_wb && st_commit_if.ready);
-
-    wire [`NUM_THREADS-1:0] dup_mask = {{(`NUM_THREADS-1){~req_is_dup}}, 1'b1};
 
     // DCache Request
 
@@ -191,7 +193,7 @@ module VX_lsu_unit #(
         end
     end
 
-    assign dcache_req_if.valid  = {`NUM_THREADS{req_valid && req_ready_dep}} & req_tmask & dup_mask & ~req_sent_mask;
+    assign dcache_req_if.valid  = {`NUM_THREADS{req_valid && req_ready_dep}} & req_tmask_dup & ~req_sent_mask;
     assign dcache_req_if.rw     = {`NUM_THREADS{~req_wb}};
     assign dcache_req_if.addr   = mem_req_addr;
     assign dcache_req_if.byteen = mem_req_byteen;
@@ -257,8 +259,8 @@ module VX_lsu_unit #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!load_rsp_stall),
-        .data_in  ({(| dcache_rsp_if.valid), rsp_wid,          rsp_tmask_qual,      rsp_pc,          rsp_rd,          rsp_wb,          rsp_data,          mbuf_pop}),
-        .data_out ({ld_commit_if.valid,      ld_commit_if.wid, ld_commit_if.tmask,  ld_commit_if.PC, ld_commit_if.rd, ld_commit_if.wb, ld_commit_if.data, ld_commit_if.eop})
+        .data_in  ({(| dcache_rsp_if.valid), rsp_wid,          rsp_tmask_qual,     rsp_pc,          rsp_rd,          rsp_wb,          rsp_data,          mbuf_pop}),
+        .data_out ({ld_commit_if.valid,      ld_commit_if.wid, ld_commit_if.tmask, ld_commit_if.PC, ld_commit_if.rd, ld_commit_if.wb, ld_commit_if.data, ld_commit_if.eop})
     );
 
     // Can accept new cache response?
