@@ -3,7 +3,7 @@
 +define+SYNTHESIS
 +define+QUARTUS
 #+define+SCOPE
-##+define+PERF_ENABLE
+#+define+PERF_ENABLE
 
 #+define+DBG_PRINT_CORE_ICACHE
 #+define+DBG_PRINT_CORE_DCACHE
