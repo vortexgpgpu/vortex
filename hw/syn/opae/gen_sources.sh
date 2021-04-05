@@ -31,7 +31,7 @@ add_files()
 
 add_dirs $rtl_dir/fp_cores/altera/$1
 
-add_dirs $rtl_dir/libs $rtl_dir/interfaces $rtl_dir/fp_cores $rtl_dir/cache $rtl_dir $rtl_dir/afu
+add_dirs $rtl_dir/libs $rtl_dir/interfaces $rtl_dir/fp_cores $rtl_dir/cache $rtl_dir/tex_unit $rtl_dir $rtl_dir/afu
 
 # dump file list
 for file in $file_list; do
