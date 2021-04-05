@@ -15,12 +15,12 @@ int SaveTGA(const char *filename,
             uint32_t height, 
             uint32_t bpp);
 
-int CopyBuffers(const GLSurfaceDesc &dstDesc, 
+int CopyBuffers(const SurfaceDesc &dstDesc, 
                 int32_t dstOffsetX,
                 int32_t dstOffsetY, 
                 int32_t copyWidth, 
                 int32_t copyHeight,
-                const GLSurfaceDesc &srcDesc, 
+                const SurfaceDesc &srcDesc, 
                 int32_t srcOffsetX,
                 int32_t srcOffsetY);
 
