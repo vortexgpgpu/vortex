@@ -103,7 +103,6 @@ module VX_tex_unit #(
     wire [`NW_BITS-1:0]     mem_rsp_wid;
     wire [`NUM_THREADS-1:0] mem_rsp_tmask;
     wire [31:0]             mem_rsp_PC;
-    wire [`TEX_FILTER_BITS-1:0] mem_rsp_filter;    
     wire [`NUM_THREADS-1:0][3:0][31:0] mem_rsp_data;
     wire [REQ_INFO_WIDTH_M-1:0] mem_rsp_info;
     wire mem_rsp_ready;        
@@ -175,8 +174,7 @@ module VX_tex_unit #(
         .rsp_valid (mem_rsp_valid),
         .rsp_wid   (mem_rsp_wid), 
         .rsp_tmask (mem_rsp_tmask), 
-        .rsp_PC    (mem_rsp_PC),         
-        .rsp_filter(mem_rsp_filter), 
+        .rsp_PC    (mem_rsp_PC),
         .rsp_data  (mem_rsp_data),
         .rsp_info  (mem_rsp_info),
         .rsp_ready (mem_rsp_ready)
@@ -202,8 +200,7 @@ module VX_tex_unit #(
         .req_wid    (mem_rsp_wid), 
         .req_tmask  (mem_rsp_tmask),         
         .req_PC     (mem_rsp_PC),
-        .req_data   (mem_rsp_data),     
-        .req_filter (mem_rsp_filter),     
+        .req_data   (mem_rsp_data), 
         .req_format (rsp_format),  
         .req_blend_u(rsp_blend_u),
         .req_blend_v(rsp_blend_v),               

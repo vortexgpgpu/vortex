@@ -26,7 +26,6 @@ module VX_tex_memory #(
     output wire [`NW_BITS-1:0]          rsp_wid,
     output wire [`NUM_THREADS-1:0]      rsp_tmask,
     output wire [31:0]                  rsp_PC,
-    output wire [`TEX_FILTER_BITS-1:0]  rsp_filter,
     output wire [`NUM_THREADS-1:0][3:0][31:0] rsp_data,
     output wire [REQ_INFO_WIDTH-1:0]    rsp_info,
     input wire                          rsp_ready    
@@ -169,8 +168,7 @@ module VX_tex_memory #(
     wire [`NUM_THREADS-1:0][3:0][31:0] rsp_texels_qual;
     reg [`NUM_THREADS-1:0][31:0] rsp_data_qual;
     reg [RSP_CTR_W-1:0] rsp_rem_ctr; 
-    wire [`NUM_THREADS-1:0] rsp_cur_tmask;    
-    wire [RSP_CTR_W-1:0] rsp_max_cnt;
+    wire [`NUM_THREADS-1:0] rsp_cur_tmask;
     wire [$clog2(`NUM_THREADS + 1)-1:0] rsp_cur_cnt;
     wire dcache_rsp_fire;
     wire [1:0] rsp_texel_idx;
@@ -185,8 +183,6 @@ module VX_tex_memory #(
     assign rsp_cur_tmask = rsp_texel_dup ? q_req_tmask : dcache_rsp_if.valid;
 
     assign rsp_cur_cnt = $countones(rsp_cur_tmask);
-
-    assign rsp_max_cnt = $countones(q_req_tmask) * (q_req_filter ? 4 : 1);
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin             
         wire [31:0] src_mask = {32{dcache_rsp_if.valid[i]}};
@@ -226,7 +222,7 @@ module VX_tex_memory #(
             rsp_rem_ctr <= 0;
         end else begin
             if ((| dcache_req_fire) && 0 == rsp_rem_ctr) begin
-                rsp_rem_ctr <= rsp_max_cnt;
+                rsp_rem_ctr <= q_req_filter ? {$countones(q_req_tmask), 2'b0} : {2'b0, $countones(q_req_tmask)};
             end else if (dcache_rsp_fire) begin
                 rsp_rem_ctr <= rsp_rem_ctr - RSP_CTR_W'(rsp_cur_cnt);
             end
@@ -246,14 +242,14 @@ module VX_tex_memory #(
     assign reqq_pop = rsp_texels_done && ~stall_out;
     
     VX_pipe_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `TEX_FILTER_BITS + (4 * `NUM_THREADS * 32) + REQ_INFO_WIDTH),
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + (4 * `NUM_THREADS * 32) + REQ_INFO_WIDTH),
         .RESETW (1)
     ) rsp_pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({rsp_texels_done, q_req_wid, q_req_tmask, q_req_PC, q_req_filter, rsp_texels_qual, q_req_info}),
-        .data_out ({rsp_valid,       rsp_wid,   rsp_tmask,   rsp_PC,   rsp_filter,   rsp_data,        rsp_info})
+        .data_in  ({rsp_texels_done, q_req_wid, q_req_tmask, q_req_PC, rsp_texels_qual, q_req_info}),
+        .data_out ({rsp_valid,       rsp_wid,   rsp_tmask,   rsp_PC,   rsp_data,        rsp_info})
     );
 
     // Can accept new cache response?
@@ -280,8 +276,8 @@ module VX_tex_memory #(
             $write("\n");
         end
         if (rsp_valid && rsp_ready) begin
-            $write("%t: core%0d-tex-mem-rsp: wid=%0d, PC=%0h, tmask=%b, filter=%0d, data=", 
-                    $time, CORE_ID, rsp_wid, rsp_PC, rsp_tmask, rsp_filter);
+            $write("%t: core%0d-tex-mem-rsp: wid=%0d, PC=%0h, tmask=%b, data=", 
+                    $time, CORE_ID, rsp_wid, rsp_PC, rsp_tmask);
             `PRINT_ARRAY2D(rsp_data, 4, `NUM_THREADS);
             $write("\n");
         end        
