@@ -168,8 +168,7 @@ module VX_cache #(
         .NUM_BANKS  (NUM_BANKS)
     ) flush_ctrl (
         .clk       (clk),
-        .reset     (reset),
-        .flush     (flush),        
+        .reset     (reset || flush),
         .addr_out  (flush_addr),
         .valid_out (flush_enable)
     );

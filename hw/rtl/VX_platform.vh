@@ -102,4 +102,25 @@
     end                                         \
     $write("}")
 
+`define PRINT_ARRAY1D(a, m)                     \
+    $write("{");                                \
+    for (integer i = (m-1); i >= 0; --i) begin  \
+        if (i != (m-1)) $write(", ");           \
+        $write("0x%0h", a[i]);                  \
+    end                                         \
+    $write("}");                                \
+
+`define PRINT_ARRAY2D(a, m, n)                  \
+    $write("{");                                \
+    for (integer i = n-1; i >= 0; --i) begin    \
+        if (i != (n-1)) $write(", ");           \
+        $write("{");                            \
+        for (integer j = (m-1); j >= 0; --j) begin \
+            if (j != (m-1)) $write(", ");       \
+            $write("0x%0h", a[i][j]);           \
+        end                                     \
+        $write("}");                            \
+    end                                         \
+    $write("}")
+
 `endif
