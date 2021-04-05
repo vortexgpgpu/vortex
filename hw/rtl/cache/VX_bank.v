@@ -487,7 +487,8 @@ module VX_bank #(
     end
 
     VX_skid_buffer #(
-        .DATAW (CORE_TAG_WIDTH + (1 + `WORD_WIDTH + `REQS_BITS) * NUM_PORTS)
+        .DATAW (CORE_TAG_WIDTH + (1 + `WORD_WIDTH + `REQS_BITS) * NUM_PORTS),
+        .BUFFERED (NUM_BANKS == 1)
     ) core_rsp_req (
         .clk       (clk),
         .reset     (reset),
