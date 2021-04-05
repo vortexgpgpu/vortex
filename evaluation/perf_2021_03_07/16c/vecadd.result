@@ -1,0 +1,459 @@
+CONFIGS=-DNUM_CLUSTERS=1 -DNUM_CORES=2 -DNUM_WARPS=4 -DNUM_THREADS=4 -DL2_ENABLE=0 -DL3_ENABLE=0 -DPERF_ENABLE
+make: Entering directory '/nethome/lcooper43/vortex-dev-old/driver/opae'
+rm -rf libvortex.so *.o .depend
+make: Leaving directory '/nethome/lcooper43/vortex-dev-old/driver/opae'
+make: Entering directory '/nethome/lcooper43/vortex-dev-old/benchmarks/opencl/vecadd'
+LD_LIBRARY_PATH=/opt/pocl/runtime/lib:/nethome/lcooper43/vortex-dev-old/driver/opae:/opt/opae/1.1.2/lib:/opt/inteldevstack/a10_gx_pac_ias_1_2_1_pv/opencl/opencl_bsp/linux64/lib:/opt/intelFPGA_pro/quartus_19.2.0b57/hld/host/linux64/lib:/opt/intelFPGA_pro/quartus_19.2.0b57/hld/linux64/lib: ./vecadd -n64
+[VXDRV] DEVCAPS: version=0, num_cores=16, num_warps=4, num_threads=4
+Create context
+Allocate device buffers
+Create program from kernel source
+Upload source buffers
+Execute the kernel
+Elapsed time: 4 ms
+Download destination buffer
+Verify result
+PASSED!
+PERF: core0: instrs=2019, cycles=5194, IPC=0.388718
+PERF: core0: ibuffer stalls=89
+PERF: core0: scoreboard stalls=493
+PERF: core0: alu unit stalls=68
+PERF: core0: lsu unit stalls=50
+PERF: core0: csr unit stalls=0
+PERF: core0: fpu unit stalls=0
+PERF: core0: gpu unit stalls=0
+PERF: core0: icache reads=804
+PERF: core0: icache read misses=65 (hit ratio=91%)
+PERF: core0: icache pipeline stalls=444
+PERF: core0: icache reponse stalls=89
+PERF: core0: dcache reads=114
+PERF: core0: dcache writes=65
+PERF: core0: dcache read misses=28 (hit ratio=75%)
+PERF: core0: dcache write misses=60 (hit ratio=7%)
+PERF: core0: dcache bank stalls=72 (utilization=71%)
+PERF: core0: dcache mshr stalls=58
+PERF: core0: dcache pipeline stalls=596
+PERF: core0: dcache reponse stalls=1
+PERF: core0: smem reads=70
+PERF: core0: smem writes=63
+PERF: core0: smem bank stalls=0 (utilization=100%)
+PERF: core0: dram requests=109 (reads=44, writes=65)
+PERF: core0: dram stalls=780 (utilization=12%)
+PERF: core0: dram average latency=31 cycles
+PERF: core1: instrs=2019, cycles=5191, IPC=0.388942
+PERF: core1: ibuffer stalls=89
+PERF: core1: scoreboard stalls=494
+PERF: core1: alu unit stalls=68
+PERF: core1: lsu unit stalls=48
+PERF: core1: csr unit stalls=0
+PERF: core1: fpu unit stalls=0
+PERF: core1: gpu unit stalls=0
+PERF: core1: icache reads=804
+PERF: core1: icache read misses=65 (hit ratio=91%)
+PERF: core1: icache pipeline stalls=455
+PERF: core1: icache reponse stalls=89
+PERF: core1: dcache reads=114
+PERF: core1: dcache writes=65
+PERF: core1: dcache read misses=28 (hit ratio=75%)
+PERF: core1: dcache write misses=60 (hit ratio=7%)
+PERF: core1: dcache bank stalls=72 (utilization=71%)
+PERF: core1: dcache mshr stalls=58
+PERF: core1: dcache pipeline stalls=596
+PERF: core1: dcache reponse stalls=1
+PERF: core1: smem reads=70
+PERF: core1: smem writes=63
+PERF: core1: smem bank stalls=0 (utilization=100%)
+PERF: core1: dram requests=109 (reads=44, writes=65)
+PERF: core1: dram stalls=774 (utilization=12%)
+PERF: core1: dram average latency=31 cycles
+PERF: core2: instrs=2019, cycles=5110, IPC=0.395108
+PERF: core2: ibuffer stalls=89
+PERF: core2: scoreboard stalls=485
+PERF: core2: alu unit stalls=68
+PERF: core2: lsu unit stalls=53
+PERF: core2: csr unit stalls=0
+PERF: core2: fpu unit stalls=0
+PERF: core2: gpu unit stalls=0
+PERF: core2: icache reads=804
+PERF: core2: icache read misses=65 (hit ratio=91%)
+PERF: core2: icache pipeline stalls=401
+PERF: core2: icache reponse stalls=89
+PERF: core2: dcache reads=114
+PERF: core2: dcache writes=65
+PERF: core2: dcache read misses=28 (hit ratio=75%)
+PERF: core2: dcache write misses=60 (hit ratio=7%)
+PERF: core2: dcache bank stalls=72 (utilization=71%)
+PERF: core2: dcache mshr stalls=60
+PERF: core2: dcache pipeline stalls=541
+PERF: core2: dcache reponse stalls=1
+PERF: core2: smem reads=70
+PERF: core2: smem writes=63
+PERF: core2: smem bank stalls=0 (utilization=100%)
+PERF: core2: dram requests=109 (reads=44, writes=65)
+PERF: core2: dram stalls=731 (utilization=12%)
+PERF: core2: dram average latency=30 cycles
+PERF: core3: instrs=2019, cycles=5101, IPC=0.395805
+PERF: core3: ibuffer stalls=89
+PERF: core3: scoreboard stalls=486
+PERF: core3: alu unit stalls=68
+PERF: core3: lsu unit stalls=52
+PERF: core3: csr unit stalls=0
+PERF: core3: fpu unit stalls=0
+PERF: core3: gpu unit stalls=0
+PERF: core3: icache reads=804
+PERF: core3: icache read misses=65 (hit ratio=91%)
+PERF: core3: icache pipeline stalls=401
+PERF: core3: icache reponse stalls=89
+PERF: core3: dcache reads=114
+PERF: core3: dcache writes=65
+PERF: core3: dcache read misses=28 (hit ratio=75%)
+PERF: core3: dcache write misses=60 (hit ratio=7%)
+PERF: core3: dcache bank stalls=72 (utilization=71%)
+PERF: core3: dcache mshr stalls=58
+PERF: core3: dcache pipeline stalls=532
+PERF: core3: dcache reponse stalls=1
+PERF: core3: smem reads=70
+PERF: core3: smem writes=63
+PERF: core3: smem bank stalls=0 (utilization=100%)
+PERF: core3: dram requests=109 (reads=44, writes=65)
+PERF: core3: dram stalls=731 (utilization=12%)
+PERF: core3: dram average latency=29 cycles
+PERF: core4: instrs=495, cycles=3605, IPC=0.137309
+PERF: core4: ibuffer stalls=0
+PERF: core4: scoreboard stalls=267
+PERF: core4: alu unit stalls=0
+PERF: core4: lsu unit stalls=0
+PERF: core4: csr unit stalls=0
+PERF: core4: fpu unit stalls=0
+PERF: core4: gpu unit stalls=0
+PERF: core4: icache reads=348
+PERF: core4: icache read misses=31 (hit ratio=91%)
+PERF: core4: icache pipeline stalls=63
+PERF: core4: icache reponse stalls=0
+PERF: core4: dcache reads=18
+PERF: core4: dcache writes=48
+PERF: core4: dcache read misses=8 (hit ratio=55%)
+PERF: core4: dcache write misses=44 (hit ratio=8%)
+PERF: core4: dcache bank stalls=0 (utilization=100%)
+PERF: core4: dcache mshr stalls=0
+PERF: core4: dcache pipeline stalls=525
+PERF: core4: dcache reponse stalls=0
+PERF: core4: smem reads=23
+PERF: core4: smem writes=25
+PERF: core4: smem bank stalls=0 (utilization=100%)
+PERF: core4: dram requests=79 (reads=31, writes=48)
+PERF: core4: dram stalls=765 (utilization=9%)
+PERF: core4: dram average latency=31 cycles
+PERF: core5: instrs=495, cycles=3603, IPC=0.137386
+PERF: core5: ibuffer stalls=0
+PERF: core5: scoreboard stalls=269
+PERF: core5: alu unit stalls=0
+PERF: core5: lsu unit stalls=0
+PERF: core5: csr unit stalls=0
+PERF: core5: fpu unit stalls=0
+PERF: core5: gpu unit stalls=0
+PERF: core5: icache reads=348
+PERF: core5: icache read misses=31 (hit ratio=91%)
+PERF: core5: icache pipeline stalls=63
+PERF: core5: icache reponse stalls=0
+PERF: core5: dcache reads=18
+PERF: core5: dcache writes=48
+PERF: core5: dcache read misses=8 (hit ratio=55%)
+PERF: core5: dcache write misses=44 (hit ratio=8%)
+PERF: core5: dcache bank stalls=0 (utilization=100%)
+PERF: core5: dcache mshr stalls=0
+PERF: core5: dcache pipeline stalls=514
+PERF: core5: dcache reponse stalls=0
+PERF: core5: smem reads=23
+PERF: core5: smem writes=25
+PERF: core5: smem bank stalls=0 (utilization=100%)
+PERF: core5: dram requests=79 (reads=31, writes=48)
+PERF: core5: dram stalls=758 (utilization=9%)
+PERF: core5: dram average latency=31 cycles
+PERF: core6: instrs=495, cycles=3587, IPC=0.137998
+PERF: core6: ibuffer stalls=0
+PERF: core6: scoreboard stalls=260
+PERF: core6: alu unit stalls=0
+PERF: core6: lsu unit stalls=0
+PERF: core6: csr unit stalls=0
+PERF: core6: fpu unit stalls=0
+PERF: core6: gpu unit stalls=0
+PERF: core6: icache reads=348
+PERF: core6: icache read misses=31 (hit ratio=91%)
+PERF: core6: icache pipeline stalls=63
+PERF: core6: icache reponse stalls=0
+PERF: core6: dcache reads=18
+PERF: core6: dcache writes=48
+PERF: core6: dcache read misses=8 (hit ratio=55%)
+PERF: core6: dcache write misses=44 (hit ratio=8%)
+PERF: core6: dcache bank stalls=0 (utilization=100%)
+PERF: core6: dcache mshr stalls=0
+PERF: core6: dcache pipeline stalls=472
+PERF: core6: dcache reponse stalls=0
+PERF: core6: smem reads=23
+PERF: core6: smem writes=25
+PERF: core6: smem bank stalls=0 (utilization=100%)
+PERF: core6: dram requests=79 (reads=31, writes=48)
+PERF: core6: dram stalls=727 (utilization=9%)
+PERF: core6: dram average latency=31 cycles
+PERF: core7: instrs=495, cycles=3573, IPC=0.138539
+PERF: core7: ibuffer stalls=0
+PERF: core7: scoreboard stalls=260
+PERF: core7: alu unit stalls=0
+PERF: core7: lsu unit stalls=0
+PERF: core7: csr unit stalls=0
+PERF: core7: fpu unit stalls=0
+PERF: core7: gpu unit stalls=0
+PERF: core7: icache reads=348
+PERF: core7: icache read misses=31 (hit ratio=91%)
+PERF: core7: icache pipeline stalls=63
+PERF: core7: icache reponse stalls=0
+PERF: core7: dcache reads=18
+PERF: core7: dcache writes=48
+PERF: core7: dcache read misses=8 (hit ratio=55%)
+PERF: core7: dcache write misses=44 (hit ratio=8%)
+PERF: core7: dcache bank stalls=0 (utilization=100%)
+PERF: core7: dcache mshr stalls=0
+PERF: core7: dcache pipeline stalls=474
+PERF: core7: dcache reponse stalls=0
+PERF: core7: smem reads=23
+PERF: core7: smem writes=25
+PERF: core7: smem bank stalls=0 (utilization=100%)
+PERF: core7: dram requests=79 (reads=31, writes=48)
+PERF: core7: dram stalls=728 (utilization=9%)
+PERF: core7: dram average latency=31 cycles
+PERF: core8: instrs=495, cycles=3604, IPC=0.137347
+PERF: core8: ibuffer stalls=0
+PERF: core8: scoreboard stalls=268
+PERF: core8: alu unit stalls=0
+PERF: core8: lsu unit stalls=0
+PERF: core8: csr unit stalls=0
+PERF: core8: fpu unit stalls=0
+PERF: core8: gpu unit stalls=0
+PERF: core8: icache reads=348
+PERF: core8: icache read misses=31 (hit ratio=91%)
+PERF: core8: icache pipeline stalls=63
+PERF: core8: icache reponse stalls=0
+PERF: core8: dcache reads=18
+PERF: core8: dcache writes=48
+PERF: core8: dcache read misses=8 (hit ratio=55%)
+PERF: core8: dcache write misses=44 (hit ratio=8%)
+PERF: core8: dcache bank stalls=0 (utilization=100%)
+PERF: core8: dcache mshr stalls=0
+PERF: core8: dcache pipeline stalls=525
+PERF: core8: dcache reponse stalls=0
+PERF: core8: smem reads=23
+PERF: core8: smem writes=25
+PERF: core8: smem bank stalls=0 (utilization=100%)
+PERF: core8: dram requests=79 (reads=31, writes=48)
+PERF: core8: dram stalls=764 (utilization=9%)
+PERF: core8: dram average latency=31 cycles
+PERF: core9: instrs=495, cycles=3600, IPC=0.137500
+PERF: core9: ibuffer stalls=0
+PERF: core9: scoreboard stalls=268
+PERF: core9: alu unit stalls=0
+PERF: core9: lsu unit stalls=0
+PERF: core9: csr unit stalls=0
+PERF: core9: fpu unit stalls=0
+PERF: core9: gpu unit stalls=0
+PERF: core9: icache reads=348
+PERF: core9: icache read misses=31 (hit ratio=91%)
+PERF: core9: icache pipeline stalls=63
+PERF: core9: icache reponse stalls=0
+PERF: core9: dcache reads=18
+PERF: core9: dcache writes=48
+PERF: core9: dcache read misses=8 (hit ratio=55%)
+PERF: core9: dcache write misses=44 (hit ratio=8%)
+PERF: core9: dcache bank stalls=0 (utilization=100%)
+PERF: core9: dcache mshr stalls=0
+PERF: core9: dcache pipeline stalls=514
+PERF: core9: dcache reponse stalls=0
+PERF: core9: smem reads=23
+PERF: core9: smem writes=25
+PERF: core9: smem bank stalls=0 (utilization=100%)
+PERF: core9: dram requests=79 (reads=31, writes=48)
+PERF: core9: dram stalls=756 (utilization=9%)
+PERF: core9: dram average latency=31 cycles
+PERF: core10: instrs=495, cycles=3585, IPC=0.138075
+PERF: core10: ibuffer stalls=0
+PERF: core10: scoreboard stalls=261
+PERF: core10: alu unit stalls=0
+PERF: core10: lsu unit stalls=0
+PERF: core10: csr unit stalls=0
+PERF: core10: fpu unit stalls=0
+PERF: core10: gpu unit stalls=0
+PERF: core10: icache reads=348
+PERF: core10: icache read misses=31 (hit ratio=91%)
+PERF: core10: icache pipeline stalls=63
+PERF: core10: icache reponse stalls=0
+PERF: core10: dcache reads=18
+PERF: core10: dcache writes=48
+PERF: core10: dcache read misses=8 (hit ratio=55%)
+PERF: core10: dcache write misses=44 (hit ratio=8%)
+PERF: core10: dcache bank stalls=0 (utilization=100%)
+PERF: core10: dcache mshr stalls=0
+PERF: core10: dcache pipeline stalls=472
+PERF: core10: dcache reponse stalls=0
+PERF: core10: smem reads=23
+PERF: core10: smem writes=25
+PERF: core10: smem bank stalls=0 (utilization=100%)
+PERF: core10: dram requests=79 (reads=31, writes=48)
+PERF: core10: dram stalls=728 (utilization=9%)
+PERF: core10: dram average latency=31 cycles
+PERF: core11: instrs=495, cycles=3572, IPC=0.138578
+PERF: core11: ibuffer stalls=0
+PERF: core11: scoreboard stalls=259
+PERF: core11: alu unit stalls=0
+PERF: core11: lsu unit stalls=0
+PERF: core11: csr unit stalls=0
+PERF: core11: fpu unit stalls=0
+PERF: core11: gpu unit stalls=0
+PERF: core11: icache reads=348
+PERF: core11: icache read misses=31 (hit ratio=91%)
+PERF: core11: icache pipeline stalls=63
+PERF: core11: icache reponse stalls=0
+PERF: core11: dcache reads=18
+PERF: core11: dcache writes=48
+PERF: core11: dcache read misses=8 (hit ratio=55%)
+PERF: core11: dcache write misses=44 (hit ratio=8%)
+PERF: core11: dcache bank stalls=0 (utilization=100%)
+PERF: core11: dcache mshr stalls=0
+PERF: core11: dcache pipeline stalls=474
+PERF: core11: dcache reponse stalls=0
+PERF: core11: smem reads=23
+PERF: core11: smem writes=25
+PERF: core11: smem bank stalls=0 (utilization=100%)
+PERF: core11: dram requests=79 (reads=31, writes=48)
+PERF: core11: dram stalls=728 (utilization=9%)
+PERF: core11: dram average latency=31 cycles
+PERF: core12: instrs=495, cycles=3599, IPC=0.137538
+PERF: core12: ibuffer stalls=0
+PERF: core12: scoreboard stalls=261
+PERF: core12: alu unit stalls=0
+PERF: core12: lsu unit stalls=0
+PERF: core12: csr unit stalls=0
+PERF: core12: fpu unit stalls=0
+PERF: core12: gpu unit stalls=0
+PERF: core12: icache reads=348
+PERF: core12: icache read misses=31 (hit ratio=91%)
+PERF: core12: icache pipeline stalls=63
+PERF: core12: icache reponse stalls=0
+PERF: core12: dcache reads=18
+PERF: core12: dcache writes=48
+PERF: core12: dcache read misses=8 (hit ratio=55%)
+PERF: core12: dcache write misses=44 (hit ratio=8%)
+PERF: core12: dcache bank stalls=0 (utilization=100%)
+PERF: core12: dcache mshr stalls=0
+PERF: core12: dcache pipeline stalls=533
+PERF: core12: dcache reponse stalls=0
+PERF: core12: smem reads=23
+PERF: core12: smem writes=25
+PERF: core12: smem bank stalls=0 (utilization=100%)
+PERF: core12: dram requests=79 (reads=31, writes=48)
+PERF: core12: dram stalls=762 (utilization=9%)
+PERF: core12: dram average latency=31 cycles
+PERF: core13: instrs=495, cycles=3589, IPC=0.137921
+PERF: core13: ibuffer stalls=0
+PERF: core13: scoreboard stalls=257
+PERF: core13: alu unit stalls=0
+PERF: core13: lsu unit stalls=0
+PERF: core13: csr unit stalls=0
+PERF: core13: fpu unit stalls=0
+PERF: core13: gpu unit stalls=0
+PERF: core13: icache reads=348
+PERF: core13: icache read misses=31 (hit ratio=91%)
+PERF: core13: icache pipeline stalls=63
+PERF: core13: icache reponse stalls=0
+PERF: core13: dcache reads=18
+PERF: core13: dcache writes=48
+PERF: core13: dcache read misses=8 (hit ratio=55%)
+PERF: core13: dcache write misses=44 (hit ratio=8%)
+PERF: core13: dcache bank stalls=0 (utilization=100%)
+PERF: core13: dcache mshr stalls=0
+PERF: core13: dcache pipeline stalls=478
+PERF: core13: dcache reponse stalls=0
+PERF: core13: smem reads=23
+PERF: core13: smem writes=25
+PERF: core13: smem bank stalls=0 (utilization=100%)
+PERF: core13: dram requests=79 (reads=31, writes=48)
+PERF: core13: dram stalls=736 (utilization=9%)
+PERF: core13: dram average latency=31 cycles
+PERF: core14: instrs=495, cycles=3584, IPC=0.138114
+PERF: core14: ibuffer stalls=0
+PERF: core14: scoreboard stalls=255
+PERF: core14: alu unit stalls=0
+PERF: core14: lsu unit stalls=0
+PERF: core14: csr unit stalls=0
+PERF: core14: fpu unit stalls=0
+PERF: core14: gpu unit stalls=0
+PERF: core14: icache reads=348
+PERF: core14: icache read misses=31 (hit ratio=91%)
+PERF: core14: icache pipeline stalls=63
+PERF: core14: icache reponse stalls=0
+PERF: core14: dcache reads=18
+PERF: core14: dcache writes=48
+PERF: core14: dcache read misses=8 (hit ratio=55%)
+PERF: core14: dcache write misses=44 (hit ratio=8%)
+PERF: core14: dcache bank stalls=0 (utilization=100%)
+PERF: core14: dcache mshr stalls=0
+PERF: core14: dcache pipeline stalls=480
+PERF: core14: dcache reponse stalls=0
+PERF: core14: smem reads=23
+PERF: core14: smem writes=25
+PERF: core14: smem bank stalls=0 (utilization=100%)
+PERF: core14: dram requests=79 (reads=31, writes=48)
+PERF: core14: dram stalls=734 (utilization=9%)
+PERF: core14: dram average latency=31 cycles
+PERF: core15: instrs=495, cycles=3570, IPC=0.138655
+PERF: core15: ibuffer stalls=0
+PERF: core15: scoreboard stalls=241
+PERF: core15: alu unit stalls=0
+PERF: core15: lsu unit stalls=0
+PERF: core15: csr unit stalls=0
+PERF: core15: fpu unit stalls=0
+PERF: core15: gpu unit stalls=0
+PERF: core15: icache reads=348
+PERF: core15: icache read misses=31 (hit ratio=91%)
+PERF: core15: icache pipeline stalls=62
+PERF: core15: icache reponse stalls=0
+PERF: core15: dcache reads=18
+PERF: core15: dcache writes=48
+PERF: core15: dcache read misses=8 (hit ratio=55%)
+PERF: core15: dcache write misses=44 (hit ratio=8%)
+PERF: core15: dcache bank stalls=0 (utilization=100%)
+PERF: core15: dcache mshr stalls=0
+PERF: core15: dcache pipeline stalls=419
+PERF: core15: dcache reponse stalls=0
+PERF: core15: smem reads=23
+PERF: core15: smem writes=25
+PERF: core15: smem bank stalls=0 (utilization=100%)
+PERF: core15: dram requests=79 (reads=31, writes=48)
+PERF: core15: dram stalls=667 (utilization=10%)
+PERF: core15: dram average latency=31 cycles
+PERF: instrs=14016, cycles=5194, IPC=2.698498
+PERF: ibuffer stalls=356
+PERF: scoreboard stalls=5084
+PERF: alu unit stalls=272
+PERF: lsu unit stalls=203
+PERF: csr unit stalls=0
+PERF: fpu unit stalls=0
+PERF: gpu unit stalls=0
+PERF: icache reads=7392
+PERF: icache read misses=632 (hit ratio=91%)
+PERF: icache pipeline stalls=2456
+PERF: icache reponse stalls=356
+PERF: dcache reads=672
+PERF: dcache writes=836
+PERF: dcache read misses=208 (hit ratio=69%)
+PERF: dcache write misses=768 (hit ratio=8%)
+PERF: dcache bank stalls=288 (utilization=83%)
+PERF: dcache mshr stalls=234
+PERF: dcache pipeline stalls=8145
+PERF: dcache reponse stalls=4
+PERF: smem reads=556
+PERF: smem writes=552
+PERF: smem bank stalls=0 (utilization=100%)
+PERF: dram requests=1384 (reads=548, writes=836)
+PERF: dram stalls=11869 (utilization=10%)
+PERF: dram average latency=31 cycles
+make: Leaving directory '/nethome/lcooper43/vortex-dev-old/benchmarks/opencl/vecadd'
