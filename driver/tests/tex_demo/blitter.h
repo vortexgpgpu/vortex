@@ -1,6 +1,6 @@
 #include "format.h"
 
-struct GLSurfaceDesc {
+struct SurfaceDesc {
   uint8_t Format;
   uint8_t *pBits;
   int32_t Width;
@@ -10,12 +10,12 @@ struct GLSurfaceDesc {
 
 class BlitTable {
 public:
-  typedef void (*PfnCopy)(const GLSurfaceDesc &dstDesc, 
+  typedef void (*PfnCopy)(const SurfaceDesc &dstDesc, 
                           uint32_t dstOffsetX,
                           uint32_t dstOffsetY, 
                           uint32_t copyWidth,
                           uint32_t copyHeight, 
-                          const GLSurfaceDesc &srcDesc,
+                          const SurfaceDesc &srcDesc,
                           uint32_t srcOffsetX, 
                           uint32_t srcOffsetY);
 
@@ -183,12 +183,12 @@ public:
 
 private:
   template <ePixelFormat SrcFormat, ePixelFormat DstFormat>
-  static void Copy(const GLSurfaceDesc &dstDesc, 
+  static void Copy(const SurfaceDesc &dstDesc, 
                    uint32_t dstOffsetX,
                    uint32_t dstOffsetY, 
                    uint32_t copyWidth,
                    uint32_t copyHeight, 
-                   const GLSurfaceDesc &srcDesc,
+                   const SurfaceDesc &srcDesc,
                    uint32_t srcOffsetX, 
                    uint32_t srcOffsetY) {
     auto srcBPP = TFormatInfo<SrcFormat>::CBSIZE;
@@ -215,9 +215,9 @@ private:
   }
 
   template <typename Type>
-  static void CopyFast(const GLSurfaceDesc &dstDesc, uint32_t dstOffsetX,
+  static void CopyFast(const SurfaceDesc &dstDesc, uint32_t dstOffsetX,
                        uint32_t dstOffsetY, uint32_t copyWidth,
-                       uint32_t copyHeight, const GLSurfaceDesc &srcDesc,
+                       uint32_t copyHeight, const SurfaceDesc &srcDesc,
                        uint32_t srcOffsetX, uint32_t srcOffsetY) {
     auto nBPP = sizeof(Type);
     auto srcNextLine = srcDesc.Pitch;
@@ -237,12 +237,12 @@ private:
     }
   }
 
-  static void CopyInvalid(const GLSurfaceDesc & /*dstDesc*/,
+  static void CopyInvalid(const SurfaceDesc & /*dstDesc*/,
                           uint32_t /*dstOffsetX*/, 
                           uint32_t /*dstOffsetY*/,
                           uint32_t /*copyWidth*/, 
                           uint32_t /*copyHeight*/,
-                          const GLSurfaceDesc & /*srcDesc*/,
+                          const SurfaceDesc & /*srcDesc*/,
                           uint32_t /*srcOffsetX*/, 
                           uint32_t /*srcOffsetY*/)
   {

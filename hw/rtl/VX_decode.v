@@ -394,6 +394,7 @@ module VX_decode  #(
                     3'h5: begin
                         op_type = `OP_BITS'(`GPU_TEX);
                         op_mod  = `MOD_BITS'(func2);
+                        use_rd  = 1;
                         rs3_fp  = 0;
                         `USED_REGS (1'b0, rd);
                         `USED_REGS (1'b0, rs1);
