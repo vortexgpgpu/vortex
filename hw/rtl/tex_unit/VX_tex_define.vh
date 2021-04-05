@@ -5,7 +5,7 @@
 
 `define FIXED_FRAC      20
 `define FIXED_INT       (32 - `FIXED_FRAC)
-`define FIXED_ONE       (1 << `FIXED_FRAC)
+`define FIXED_ONE       (2 ** `FIXED_FRAC)
 `define FIXED_HALF      (`FIXED_ONE >> 1)
 `define FIXED_MASK      (`FIXED_ONE - 1)
 
@@ -28,7 +28,9 @@
 `define TEX_WRAP_MIRROR     2
 
 `define TEX_COLOR_BITS      8
+
 `define BLEND_FRAC          8
+`define BLEND_ONE           (2 ** `BLEND_FRAC)
 
 `define TEX_FORMAT_R8G8B8A8 `TEX_FORMAT_BITS'(0)
 `define TEX_FORMAT_R5G6B5   `TEX_FORMAT_BITS'(1)

@@ -8,8 +8,8 @@ module VX_tex_lerp #(
     output wire [31:0] out
 );  
     for (genvar i = 0; i < 4; ++i) begin
-        wire [8:0]  m1 = (8'hff - blend);
-        wire [16:0] sum = in1[i*8+:8] * blend + in2[i*8+:8] * m1;
+        wire [8:0]  blend_m1 = `BLEND_ONE - blend;
+        wire [16:0] sum = in1[i*8+:8] * blend_m1 + in2[i*8+:8] * blend;
         `UNUSED_VAR (sum)
         assign out[i*8+:8] = sum[15:8];
     end

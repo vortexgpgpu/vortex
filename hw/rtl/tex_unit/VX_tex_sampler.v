@@ -35,7 +35,7 @@ module VX_tex_sampler #(
    
     wire [`NUM_THREADS-1:0][31:0] texel_ul, texel_uh;
     wire [`NUM_THREADS-1:0][31:0] texel_ul_s0, texel_uh_s0;
-    wire [`NUM_THREADS-1:0][`BLEND_FRAC-1:0] blend_v_qual, blend_v_s0;
+    wire [`NUM_THREADS-1:0][`BLEND_FRAC-1:0] blend_v_s0;
     wire [`NUM_THREADS-1:0][31:0] texel_v;
     
     wire                          req_valid_s0;
@@ -49,8 +49,7 @@ module VX_tex_sampler #(
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
 
-        wire [3:0][31:0] fmt_texels;  
-        wire [31:0] texel_ul_unqual;
+        wire [3:0][31:0] fmt_texels;
 
         for (genvar j = 0; j < 4; j++) begin
             VX_tex_format #(
@@ -67,7 +66,7 @@ module VX_tex_sampler #(
             .blend (req_blend_u[i]), 
             .in1 (fmt_texels[0]),
             .in2 (fmt_texels[1]),
-            .out (texel_ul_unqual)
+            .out (texel_ul[i])
         );  
 
         VX_tex_lerp #(
@@ -76,10 +75,7 @@ module VX_tex_sampler #(
             .in1 (fmt_texels[2]),
             .in2 (fmt_texels[3]),
             .out (texel_uh[i])
-        );  
-
-        assign blend_v_qual[i] = req_filter ? `BLEND_FRAC'(0) : req_blend_v[i];
-        assign texel_ul[i]     = req_filter ? fmt_texels[0] : texel_ul_unqual;
+        );
     end
 
     VX_pipe_register #(
@@ -89,8 +85,8 @@ module VX_tex_sampler #(
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({req_valid,    req_wid,    req_tmask,    req_PC,    req_rd,    req_wb,    blend_v_qual, texel_ul,    texel_uh}),
-        .data_out ({req_valid_s0, req_wid_s0, req_tmask_s0, req_PC_s0, req_rd_s0, req_wb_s0, blend_v_s0,   texel_ul_s0, texel_uh_s0})
+        .data_in  ({req_valid,    req_wid,    req_tmask,    req_PC,    req_rd,    req_wb,    req_blend_v, texel_ul,    texel_uh}),
+        .data_out ({req_valid_s0, req_wid_s0, req_tmask_s0, req_PC_s0, req_rd_s0, req_wb_s0, blend_v_s0,  texel_ul_s0, texel_uh_s0})
     );
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
