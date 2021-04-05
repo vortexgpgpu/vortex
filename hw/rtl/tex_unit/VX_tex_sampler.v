@@ -13,7 +13,6 @@ module VX_tex_sampler #(
     input wire [31:0]                   req_PC,
     input wire [`NR_BITS-1:0]           req_rd,   
     input wire                          req_wb,
-    input wire [`TEX_FILTER_BITS-1:0]   req_filter,
     input wire [`TEX_FORMAT_BITS-1:0]   req_format,
     input wire [`NUM_THREADS-1:0][3:0][31:0] req_data,
     input wire [`NUM_THREADS-1:0][`BLEND_FRAC-1:0] req_blend_u,
@@ -118,8 +117,8 @@ module VX_tex_sampler #(
 `ifdef DBG_PRINT_TEX
    always @(posedge clk) begin        
         if (req_valid && req_ready) begin
-            $write("%t: core%0d-tex-sampler-req: wid=%0d, PC=%0h, tmask=%b, filter=%0d, format=%0d, data=", 
-                    $time, CORE_ID, req_wid, req_PC, req_tmask, req_filter, req_format);
+            $write("%t: core%0d-tex-sampler-req: wid=%0d, PC=%0h, tmask=%b, format=%0d, data=", 
+                    $time, CORE_ID, req_wid, req_PC, req_tmask, req_format);
             `PRINT_ARRAY2D(req_data, 4, `NUM_THREADS);
             $write(", u0=");
             `PRINT_ARRAY1D(req_blend_u, `NUM_THREADS);
