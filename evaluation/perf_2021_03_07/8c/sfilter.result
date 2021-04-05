@@ -1,0 +1,19 @@
+CONFIGS=-DNUM_CLUSTERS=1 -DNUM_CORES=2 -DNUM_WARPS=4 -DNUM_THREADS=4 -DL2_ENABLE=0 -DL3_ENABLE=0 -DPERF_ENABLE
+make: Entering directory '/nethome/lcooper43/vortex-dev-old/driver/opae'
+rm -rf libvortex.so *.o .depend
+make: Leaving directory '/nethome/lcooper43/vortex-dev-old/driver/opae'
+make: Entering directory '/nethome/lcooper43/vortex-dev-old/benchmarks/opencl/sfilter'
+LD_LIBRARY_PATH=/opt/pocl/runtime/lib:/nethome/lcooper43/vortex-dev-old/driver/opae:/opt/opae/1.1.2/lib:/opt/inteldevstack/a10_gx_pac_ias_1_2_1_pv/opencl/opencl_bsp/linux64/lib:/opt/intelFPGA_pro/quartus_19.2.0b57/hld/host/linux64/lib:/opt/intelFPGA_pro/quartus_19.2.0b57/hld/linux64/lib: ./sfilter
+enter demo main
+[VXDRV] DEVCAPS: version=0, num_cores=8, num_warps=4, num_threads=4
+Attempting to create program from binary...
+Read program from binary.
+attempting to create input buffer
+attempting to create output buffer
+attempting to create kernel
+setting up kernel args
+attempting to enqueue write buffer
+attempting to enqueue kernel
+Elapsed time: 4 ms
+Download destination buffer
+make: Leaving directory '/nethome/lcooper43/vortex-dev-old/benchmarks/opencl/sfilter'

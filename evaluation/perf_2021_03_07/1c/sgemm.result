@@ -1,0 +1,42 @@
+CONFIGS=-DNUM_CLUSTERS=1 -DNUM_CORES=2 -DNUM_WARPS=4 -DNUM_THREADS=4 -DL2_ENABLE=0 -DL3_ENABLE=0 -DPERF_ENABLE
+make: Entering directory '/nethome/lcooper43/vortex-dev-old/driver/opae'
+rm -rf libvortex.so *.o .depend
+make: Leaving directory '/nethome/lcooper43/vortex-dev-old/driver/opae'
+make: Entering directory '/nethome/lcooper43/vortex-dev-old/benchmarks/opencl/sgemm'
+LD_LIBRARY_PATH=/opt/pocl/runtime/lib:/nethome/lcooper43/vortex-dev-old/driver/opae:/opt/opae/1.1.2/lib:/opt/inteldevstack/a10_gx_pac_ias_1_2_1_pv/opencl/opencl_bsp/linux64/lib:/opt/intelFPGA_pro/quartus_19.2.0b57/hld/host/linux64/lib:/opt/intelFPGA_pro/quartus_19.2.0b57/hld/linux64/lib: ./sgemm -n32
+[VXDRV] DEVCAPS: version=0, num_cores=1, num_warps=4, num_threads=4
+Create context
+Create program from kernel source
+Upload source buffers
+Execute the kernel
+Elapsed time: 4 ms
+Download destination buffer
+Verify result
+PASSED!
+PERF: instrs=360460, cycles=175991, IPC=2.048173
+PERF: ibuffer stalls=20439
+PERF: scoreboard stalls=50656
+PERF: alu unit stalls=7129
+PERF: lsu unit stalls=16771
+PERF: csr unit stalls=0
+PERF: fpu unit stalls=0
+PERF: gpu unit stalls=0
+PERF: icache reads=90397
+PERF: icache read misses=73 (hit ratio=99%)
+PERF: icache pipeline stalls=12325
+PERF: icache reponse stalls=20439
+PERF: dcache reads=45342
+PERF: dcache writes=1061
+PERF: dcache read misses=1252 (hit ratio=97%)
+PERF: dcache write misses=1057 (hit ratio=0%)
+PERF: dcache bank stalls=50688 (utilization=47%)
+PERF: dcache mshr stalls=2005
+PERF: dcache pipeline stalls=2034
+PERF: dcache reponse stalls=192
+PERF: smem reads=7978
+PERF: smem writes=6207
+PERF: smem bank stalls=0 (utilization=100%)
+PERF: dram requests=1423 (reads=362, writes=1061)
+PERF: dram stalls=0 (utilization=100%)
+PERF: dram average latency=26 cycles
+make: Leaving directory '/nethome/lcooper43/vortex-dev-old/benchmarks/opencl/sgemm'
