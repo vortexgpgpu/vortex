@@ -2,6 +2,8 @@
 +define+NUM_CLUSTERS=8
 #+define+L3_ENABLE=1
 
++define+GLOBAL_BLOCK_SIZE=16
+
 +define+SYNTHESIS
 +define+QUARTUS
 #+define+PERF_ENABLE

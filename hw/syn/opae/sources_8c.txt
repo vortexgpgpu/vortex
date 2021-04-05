@@ -6,7 +6,7 @@
 +define+QUARTUS
 #+define+PERF_ENABLE
 
-vortex_afu.json
+vortex_afu8.json
 QI:vortex_afu.qsf
 
 C:sources.txt
