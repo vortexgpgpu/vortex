@@ -7,6 +7,8 @@ POCL_RT_PATH ?= /opt/pocl/runtime
 VORTEX_DRV_PATH ?= $(realpath ../../../driver)
 VORTEX_RT_PATH ?= $(realpath ../../../runtime)
 
+OPTS ?= -n1024
+
 K_LLCFLAGS += "-O3 -march=riscv32 -target-abi=ilp32f -mcpu=generic-rv32 -mattr=+m,+f -float-abi=hard -code-model=small"
 K_CFLAGS   += "-v -O3 --sysroot=$(SYSROOT) --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH) -march=rv32imf -mabi=ilp32f -I$(VORTEX_RT_PATH)/include -fno-rtti -fno-exceptions -ffreestanding -nostartfiles -fdata-sections -ffunction-sections"
 K_LDFLAGS  += "-Wl,-Bstatic,-T$(VORTEX_RT_PATH)/linker/vx_link.ld -Wl,--gc-sections $(VORTEX_RT_PATH)/libvortexrt.a -lm"
@@ -33,19 +35,19 @@ $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 run-fpga: $(PROJECT) kernel.pocl   
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/opae:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/opae:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
 run-asesim: $(PROJECT) kernel.pocl   
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 	
 run-vlsim: $(PROJECT) kernel.pocl   
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/opae/vlsim:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/opae/vlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
 run-simx: $(PROJECT) kernel.pocl   
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
 run-rtlsim: $(PROJECT) kernel.pocl   
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
