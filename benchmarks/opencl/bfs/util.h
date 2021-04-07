@@ -60,10 +60,10 @@ void compare_results(const datatype *cpu_results, const datatype *gpu_results, c
       }
     }
     if (passed){
-        std::cout << "--cambine:passed:-)" << endl;
+        std::cout << "--cambine: passed: -)" << endl;
     }
     else{
-        std::cout << "--cambine: failed:-(" << endl;
+        std::cout << "--cambine: failed :-(" << endl;
     }
     return ;
 }

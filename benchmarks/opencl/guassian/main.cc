@@ -76,6 +76,9 @@ int main(int argc, char *argv[]) {
   free(b);
   free(finalVec);
   // OpenClGaussianElimination(context,timing);
+
+  cl_cleanup();
+
   printf("Passed!\n");
   return 0;
 }
@@ -142,7 +145,8 @@ void ForwardSub(cl_context context, float *a, float *b, float *m, int size,
     writeTime += eventTime(writeEvent, command_queue);
   clReleaseEvent(writeEvent);
 
-  error = clEnqueueWriteBuffer(command_queue, m_dev,
+  error = clEnqueueWriteBuffer(command_queue, 
+                               m_dev,
                                1, // change to 0 for nonblocking write
                                0, // offset
                                sizeof(float) * size * size, m, 0, NULL,
@@ -258,6 +262,13 @@ void ForwardSub(cl_context context, float *a, float *b, float *m, int size,
 
     printf("%f\n\n", writeTime + kernelTime + readTime);
   }
+  
+  cl_freeMem(a_dev);
+  cl_freeMem(b_dev);
+  cl_freeMem(m_dev);
+  cl_freeKernel(fan1_kernel);
+  cl_freeKernel(fan2_kernel);
+  cl_freeProgram(gaussianElim_program);
 }
 
 float eventTime(cl_event event, cl_command_queue command_queue) {
