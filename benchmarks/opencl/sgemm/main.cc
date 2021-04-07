@@ -129,6 +129,8 @@ static void parse_args(int argc, char **argv) {
     printf("Error: invalid size!\n");
     exit(-1);
   }
+
+  printf("Workload size=%d\n", size);
 }
 
 int main (int argc, char **argv) {
