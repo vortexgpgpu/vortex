@@ -2,8 +2,8 @@
 #include <unistd.h>
 #include <string.h>
 #include <vortex.h>
+#include <openssl/sha.h>
 #include "common.h"
-#include "testcases.h"
 #include "sha256.h"
 
 #define RT_CHECK(_expr)                                         \
@@ -19,29 +19,25 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 const char* kernel_file = "kernel.bin";
-uint32_t testno = 0, nmsg = 0;
+uint32_t msgsize = 0, nmsg = 0;
 
 vx_device_h device = nullptr;
 vx_buffer_h buffer = nullptr;
 
 static void show_usage() {
    std::cout << "Vortex Driver Test." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-n nmsg] [-t testno] [-h: help]" << std::endl;
+   std::cout << "Usage: [-k: kernel] [-n nmsg] [-m msgsize] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "n:t:k:h?")) != -1) {
+  while ((c = getopt(argc, argv, "n:m:k:h?")) != -1) {
     switch (c) {
     case 'n':
       nmsg = atoi(optarg);
       break;
-    case 't':
-      testno = atoi(optarg);
-      if (testno >= N_TESTCASES) {
-        show_usage();
-        exit(-1);
-      }
+    case 'm':
+      msgsize = atoi(optarg);
       break;
     case 'k':
       kernel_file = optarg;
@@ -68,7 +64,7 @@ void cleanup() {
 }
 
 int run_test(const kernel_arg_t& kernel_arg,
-             testcase_t *testcase,
+             const char *expected_digests,
              uint32_t digestbuf_size, 
              uint32_t num_points) {
   // start device
@@ -89,7 +85,7 @@ int run_test(const kernel_arg_t& kernel_arg,
     int errors = 0;
     auto buf_ptr = (char*)vx_host_ptr(buffer);
     for (uint32_t i = 0; i < num_points; ++i) {
-      if (memcmp(buf_ptr + i * DIGEST_BYTES, testcase->expected_digest, DIGEST_BYTES)) {
+      if (memcmp(buf_ptr + i * DIGEST_BYTES, expected_digests + i * DIGEST_BYTES, DIGEST_BYTES)) {
         std::cout << "hash mismatch at " << i << std::endl;
         ++errors;
       }
@@ -104,6 +100,13 @@ int run_test(const kernel_arg_t& kernel_arg,
   return 0;
 }
 
+// Adapted from an example in POSIX.1-2001
+static inline uint8_t myrand(void) {
+  static uint32_t next = 1;
+  next = next * 1103515245 + 12345;
+  return (uint32_t)(next / 65536) & 0xff;
+}
+
 int main(int argc, char *argv[]) {
   size_t value; 
   kernel_arg_t kernel_arg;
@@ -111,8 +114,8 @@ int main(int argc, char *argv[]) {
   // parse command arguments
   parse_args(argc, argv);
 
-  if (!testno) {
-    testno = DEFAULT_TESTNO;
+  if (!msgsize) {
+    msgsize = 128;
   }
   if (!nmsg) {
     nmsg = 1;
@@ -127,10 +130,9 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_WARPS, &max_warps));
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_THREADS, &max_threads));
 
-  testcase_t *testcase = &testcases[testno];
   // Need to allocate enough space for sha256() to pad the message
-  uint32_t padded_msgsize = PADDED_SIZE_BYTES(testcase->msgsize);
-  uint32_t num_tasks  = max_cores * max_warps * max_threads;
+  uint32_t padded_msgsize = PADDED_SIZE_BYTES(msgsize);
+  uint32_t num_tasks = max_cores * max_warps * max_threads;
   uint32_t num_points = nmsg * num_tasks;
   uint32_t msgbuf_size = num_points * padded_msgsize;
   uint32_t digestbuf_size = num_points * DIGEST_BYTES;
@@ -152,7 +154,7 @@ int main(int argc, char *argv[]) {
   kernel_arg.digest_ptr = value;
 
   kernel_arg.num_tasks = num_tasks;
-  kernel_arg.msgsize = testcase->msgsize;
+  kernel_arg.msgsize = msgsize;
   kernel_arg.nmsg = nmsg;
 
   std::cout << "dev_src=" << std::hex << kernel_arg.msg_ptr << std::dec << std::endl;
@@ -171,11 +173,18 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_copy_to_dev(buffer, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
   }
 
+  char *expected_digests = (char *)malloc(num_points * DIGEST_BYTES);
+  RT_CHECK(!expected_digests);
+
   // upload message (source) buffer
   {
     auto buf_ptr = (char*)vx_host_ptr(buffer);
     for (uint32_t i = 0; i < num_points; ++i) {
-      memcpy(buf_ptr + i * padded_msgsize, testcase->msg, testcase->msgsize);
+      char *msg = buf_ptr + i * padded_msgsize;
+      for (uint32_t j = 0; j < msgsize; j++) {
+        msg[j] = myrand();
+      }
+      SHA256((const unsigned char*)msg, msgsize, (unsigned char *)(expected_digests + i * DIGEST_BYTES));
     }
   }
   std::cout << "upload message buffer" << std::endl;      
@@ -193,11 +202,12 @@ int main(int argc, char *argv[]) {
 
   // run tests
   std::cout << "run tests" << std::endl;
-  RT_CHECK(run_test(kernel_arg, testcase, digestbuf_size, num_points));
+  RT_CHECK(run_test(kernel_arg, expected_digests, digestbuf_size, num_points));
 
   // cleanup
   std::cout << "cleanup" << std::endl;  
   cleanup();
+  free(expected_digests);
 
   std::cout << "PASSED!" << std::endl;
 

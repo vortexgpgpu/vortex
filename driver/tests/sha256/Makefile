@@ -1,7 +1,7 @@
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 VORTEX_RT_PATH ?= $(wildcard ../../../runtime)
 
-OPTS ?= -n 8 -t 2
+OPTS ?= -n 16 -m 1024
 
 VX_CC  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
 VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++
@@ -22,7 +22,8 @@ CXXFLAGS += -I../../include
 
 PROJECT = sha256
 
-SRCS = sha256.cpp testcases.c
+SRCS = sha256.cpp
+PROJ_LIBS = $(shell pkg-config --libs openssl)
 
 all: $(PROJECT) kernel.bin kernel.dump
  
@@ -36,7 +37,7 @@ kernel.elf: $(VX_SRCS)
 	$(VX_CC) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -o kernel.elf
 
 $(PROJECT): $(SRCS)
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -L../../stub -lvortex -o $@
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -L../../stub -lvortex $(PROJ_LIBS) -o $@
 
 run-fpga: $(PROJECT)
 	LD_LIBRARY_PATH=../../opae:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)

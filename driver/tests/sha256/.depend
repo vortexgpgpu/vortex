@@ -1,3 +1,2 @@
 sha256.o: sha256.cpp /usr/include/stdc-predef.h ../../include/vortex.h common.h \
- testcases.h sha256.h
-testcases.o: testcases.c /usr/include/stdc-predef.h testcases.h sha256.h
+ sha256.h
