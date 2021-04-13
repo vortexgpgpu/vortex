@@ -199,12 +199,10 @@ int CopyBuffers(const SurfaceDesc &dstDesc,
   if (copyHeight > srcDesc.Height) {
     copyHeight = srcDesc.Height;
   }
-  std::cout << "There" << std::endl;
 
   s_blitTable.get(srcDesc.Format, dstDesc.Format)(
       dstDesc, dstOffsetX, dstOffsetY, copyWidth, copyHeight, srcDesc,
       srcOffsetX, srcOffsetY);
-  std::cout << "There2" << std::endl;
 
 
   return 0;
@@ -218,39 +216,27 @@ int ConvertImage(std::vector<uint8_t> &dst_pixels,
                  uint8_t src_format,
                  uint8_t dst_format) {
   
-  uint8_t SrcFormat = TEX_FORMAT(src_format);
-  uint8_t DstFormat = TEX_FORMAT(dst_format);
+  ePixelFormat SrcFormat = TEX_FORMAT(src_format);
+  ePixelFormat DstFormat = TEX_FORMAT(dst_format);
 
   *bpp = CBSIZE(DstFormat);
 
   int32_t src_pitch =  CBSIZE(SrcFormat) * width;
   int32_t dst_pitch =  CBSIZE(DstFormat) * width;
 
-// struct SurfaceDesc {
-//   uint8_t Format;
-//   uint8_t *pBits;
-//   int32_t Width;
-//   int32_t Height;
-//   int32_t Pitch;
-// };
-
   const SurfaceDesc srcDesc = {SrcFormat, 
-                           (uint8_t*)(src_pixels.data()),
+                           src_pixels.data(),
                            int32_t(width),
                            int32_t(height),
                            src_pitch} ;            
 
   const SurfaceDesc dstDesc = {DstFormat,
-                           (uint8_t*)(dst_pixels.data()),
+                           dst_pixels.data(),
                            int32_t(width),
                            int32_t(height),
                            dst_pitch};
-  std::cout << "Here" << std::endl;
-  
 
   CopyBuffers(dstDesc, 0, 0, width, height, srcDesc, 0, 0);    
   
-  std::cout << "Here" << std::endl;
-
   return 0;
 }
