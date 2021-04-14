@@ -109,6 +109,69 @@ inline int vx_num_instrs() {
     return result; 
 }
 
+//
+// AES-256
+//
+inline void aes_enc_round(uint32_t *newcols, uint32_t *oldcols) {
+    // aes32esmi
+    asm volatile (
+        // See:
+        // https://sourceware.org/binutils/docs-2.36/as/RISC_002dV_002dFormats.html
+        // The last operation here is weird because it's a signed
+        // immediate. If you print it as binary and compare with the
+        // draft spec, it will make more sense
+        ".insn s 0x33, 0, %[n0],   864(%[o0])\n"
+        ".insn s 0x33, 0, %[n0],  1888(%[o1])\n"
+        ".insn s 0x33, 0, %[n0], -1184(%[o2])\n"
+        ".insn s 0x33, 0, %[n0],  -160(%[o3])\n"
+        ".insn s 0x33, 0, %[n1],   864(%[o1])\n"
+        ".insn s 0x33, 0, %[n1],  1888(%[o2])\n"
+        ".insn s 0x33, 0, %[n1], -1184(%[o3])\n"
+        ".insn s 0x33, 0, %[n1],  -160(%[o0])\n"
+        ".insn s 0x33, 0, %[n2],   864(%[o2])\n"
+        ".insn s 0x33, 0, %[n2],  1888(%[o3])\n"
+        ".insn s 0x33, 0, %[n2], -1184(%[o0])\n"
+        ".insn s 0x33, 0, %[n2],  -160(%[o1])\n"
+        ".insn s 0x33, 0, %[n3],   864(%[o3])\n"
+        ".insn s 0x33, 0, %[n3],  1888(%[o0])\n"
+        ".insn s 0x33, 0, %[n3], -1184(%[o1])\n"
+        ".insn s 0x33, 0, %[n3],  -160(%[o2])"
+        : [n0] "+r" (newcols[0]), [n1] "+r" (newcols[1]),
+          [n2] "+r" (newcols[2]), [n3] "+r" (newcols[3])
+        : [o0] "r" (oldcols[0]), [o1] "r" (oldcols[1]),
+          [o2] "r" (oldcols[2]), [o3] "r" (oldcols[3]));
+}
+
+inline void aes_last_enc_round(uint32_t *newcols, uint32_t *oldcols) {
+    // aes32esi
+    asm volatile (
+        // See:
+        // https://sourceware.org/binutils/docs-2.36/as/RISC_002dV_002dFormats.html
+        // The last operation here is weird because it's a signed
+        // immediate. If you print it as binary and compare with the
+        // draft spec, it will make more sense
+        ".insn s 0x33, 0, %[n0],   800(%[o0])\n"
+        ".insn s 0x33, 0, %[n0],  1824(%[o1])\n"
+        ".insn s 0x33, 0, %[n0], -1248(%[o2])\n"
+        ".insn s 0x33, 0, %[n0],  -224(%[o3])\n"
+        ".insn s 0x33, 0, %[n1],   800(%[o1])\n"
+        ".insn s 0x33, 0, %[n1],  1824(%[o2])\n"
+        ".insn s 0x33, 0, %[n1], -1248(%[o3])\n"
+        ".insn s 0x33, 0, %[n1],  -224(%[o0])\n"
+        ".insn s 0x33, 0, %[n2],   800(%[o2])\n"
+        ".insn s 0x33, 0, %[n2],  1824(%[o3])\n"
+        ".insn s 0x33, 0, %[n2], -1248(%[o0])\n"
+        ".insn s 0x33, 0, %[n2],  -224(%[o1])\n"
+        ".insn s 0x33, 0, %[n3],   800(%[o3])\n"
+        ".insn s 0x33, 0, %[n3],  1824(%[o0])\n"
+        ".insn s 0x33, 0, %[n3], -1248(%[o1])\n"
+        ".insn s 0x33, 0, %[n3],  -224(%[o2])"
+        : [n0] "+r" (newcols[0]), [n1] "+r" (newcols[1]),
+          [n2] "+r" (newcols[2]), [n3] "+r" (newcols[3])
+        : [o0] "r" (oldcols[0]), [o1] "r" (oldcols[1]),
+          [o2] "r" (oldcols[2]), [o3] "r" (oldcols[3]));
+}
+
 #define __if(b) vx_split(b); \
                 if (b) 
 

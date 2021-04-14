@@ -2,6 +2,10 @@
 #include <string.h>
 #include "aes256.h"
 
+#ifdef AES_NATIVE
+#include <vx_intrinsics.h>
+#endif
+
 static void aes256_key_exp(const uint32_t *, uint32_t *);
 static void aes256_cipher(const uint8_t *, uint8_t *, const uint32_t *);
 static void aes256_inv_cipher(const uint8_t *, uint8_t *, const uint32_t *);
@@ -10,12 +14,14 @@ static uint8_t inv_s_box_replace(uint8_t);
 static uint32_t sub_word(uint32_t);
 static uint32_t rot_word(uint32_t);
 static void add_round_key(uint8_t *, const uint32_t *);
-static void sub_bytes(uint8_t *);
 static void inv_sub_bytes(uint8_t *);
-static void shift_rows(uint8_t *);
 static void inv_shift_rows(uint8_t *);
-static void mix_columns(uint8_t *);
 static void inv_mix_columns(uint8_t *);
+#ifndef AES_NATIVE
+static void sub_bytes(uint8_t *);
+static void shift_rows(uint8_t *);
+static void mix_columns(uint8_t *);
+#endif
 
 void aes256enc(const uint8_t *in, const uint8_t *key, uint8_t *out, int nblocks) {
     uint32_t round_keys[Nb * (Nr + 1)];
@@ -66,6 +72,20 @@ static void aes256_key_exp(const uint32_t *key, uint32_t *round_keys) {
     }
 }
 
+#ifdef AES_NATIVE
+    static void aes_native_round(uint8_t *state, int last,
+                                 const uint32_t *this_round_keys) {
+        uint8_t new_state[4 * Nb];
+        memcpy(new_state, this_round_keys, 4 * Nb);
+        if (last) {
+            aes_last_enc_round((uint32_t *)new_state, (uint32_t *)state);
+        } else {
+            aes_enc_round((uint32_t *)new_state, (uint32_t *)state);
+        }
+        memcpy(state, new_state, 4 * Nb);
+    }
+#endif
+
 static void aes256_cipher(const uint8_t *in, uint8_t *out, const uint32_t *round_keys) {
     uint8_t state[4 * Nb];
 
@@ -74,12 +94,17 @@ static void aes256_cipher(const uint8_t *in, uint8_t *out, const uint32_t *round
     add_round_key(state, round_keys);
 
     for (int round = 1; round <= Nr; round++) {
-        sub_bytes(state);
-        shift_rows(state);
-        if (round < Nr) {
-            mix_columns(state);
-        }
-        add_round_key(state, round_keys + (Nb * round));
+        const uint32_t *this_round_keys = round_keys + (Nb * round);
+        #ifdef AES_NATIVE
+            aes_native_round(state, round == Nr, this_round_keys);
+        #else
+            sub_bytes(state);
+            shift_rows(state);
+            if (round < Nr) {
+                mix_columns(state);
+            }
+            add_round_key(state, this_round_keys);
+        #endif
     }
 
     memcpy(out, state, 4 * Nb);
@@ -135,11 +160,13 @@ static void add_round_key(uint8_t *state, const uint32_t *round_keys) {
     }
 }
 
+#ifndef AES_NATIVE
 static void sub_bytes(uint8_t *state) {
     for (int i = 0; i < 4 * Nb; i++) {
         state[i] = s_box_replace(state[i]);
     }
 }
+#endif
 
 static void inv_sub_bytes(uint8_t *state) {
     for (int i = 0; i < 4 * Nb; i++) {
@@ -147,6 +174,7 @@ static void inv_sub_bytes(uint8_t *state) {
     }
 }
 
+#ifndef AES_NATIVE
 static void shift_rows(uint8_t *state) {
     uint8_t new[4 * Nb];
     new[0] = state[0]; new[4] = state[4]; new[8] = state[8]; new[12] = state[12];
@@ -155,6 +183,7 @@ static void shift_rows(uint8_t *state) {
     new[3] = state[15]; new[7] = state[3]; new[11] = state[7]; new[15] = state[11];
     memcpy(state, new, sizeof new);
 }
+#endif
 
 static void inv_shift_rows(uint8_t *state) {
     uint8_t new[4 * Nb];
@@ -173,6 +202,7 @@ static inline uint8_t xtime(uint8_t byte) {
     return ((byte << 1) & 0xff) ^ xor_with[byte >> 7];
 }
 
+#ifndef AES_NATIVE
 static void mix_columns(uint8_t *state) {
     uint32_t *state_cols = (uint32_t *)state;
 
@@ -190,6 +220,7 @@ static void mix_columns(uint8_t *state) {
         state_cols[i] = new;
     }
 }
+#endif
 
 static void inv_mix_columns(uint8_t *state) {
     uint32_t *state_cols = (uint32_t *)state;
