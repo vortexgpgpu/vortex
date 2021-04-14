@@ -1,0 +1,4 @@
+*.elf
+*.bin
+*.dump
+aes256
