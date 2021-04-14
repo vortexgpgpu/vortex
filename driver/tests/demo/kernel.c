@@ -13,7 +13,9 @@ void kernel_body(int task_id, void* arg) {
 	uint32_t offset = task_id * count;
 
 	for (uint32_t i = 0; i < count; ++i) {
-		dst_ptr[offset+i] = src0_ptr[offset+i] + src1_ptr[offset+i];
+		uint32_t cursed[] = {src0_ptr[offset+i], src1_ptr[offset+i]};
+		__intrin_add_more_cursed(cursed);
+		dst_ptr[offset+i] = cursed[1];
 	}
 }
 

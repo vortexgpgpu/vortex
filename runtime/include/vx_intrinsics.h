@@ -109,10 +109,38 @@ inline int vx_num_instrs() {
     return result; 
 }
 
+// TODO: delete all 3 of me
+inline uint32_t __intrin_add(uint32_t a, uint32_t b) {
+    uint32_t ret;
+    asm volatile (
+        "add %[rd], %[rs1], %[rs2]"
+        : [rd] "=r" (ret)
+        : [rs1] "r" (a), [rs2] "r" (b));
+    return ret;
+}
+
+inline void __intrin_add_cursed(uint32_t *arr) {
+    asm volatile (
+        "add %[rd], %[rs1], %[rs2]"
+        : [rd] "=r" (arr[2])
+        : [rs1] "r" (arr[0]), [rs2] "r" (arr[1]));
+}
+
+inline void __intrin_add_more_cursed(uint32_t *arr) {
+    asm volatile (
+        "add %[rd], %[rs1], %[rd]"
+        : [rd] "+r" (arr[1])
+        : [rs1] "r" (arr[0]));
+}
+
+//
+// SHA-256
+//
+
 //
 // AES-256
 //
-inline void aes_enc_round(uint32_t *newcols, uint32_t *oldcols) {
+inline void __intrin_aes_enc_round(uint32_t *newcols, uint32_t *oldcols) {
     // aes32esmi
     asm volatile (
         // See:
@@ -142,7 +170,7 @@ inline void aes_enc_round(uint32_t *newcols, uint32_t *oldcols) {
           [o2] "r" (oldcols[2]), [o3] "r" (oldcols[3]));
 }
 
-inline void aes_last_enc_round(uint32_t *newcols, uint32_t *oldcols) {
+inline void __intrin_aes_last_enc_round(uint32_t *newcols, uint32_t *oldcols) {
     // aes32esi
     asm volatile (
         // See:
