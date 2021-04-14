@@ -73,17 +73,17 @@ static void aes256_key_exp(const uint32_t *key, uint32_t *round_keys) {
 }
 
 #ifdef AES_NATIVE
-    static void aes_native_round(uint8_t *state, int last,
-                                 const uint32_t *this_round_keys) {
-        uint8_t new_state[4 * Nb];
-        memcpy(new_state, this_round_keys, 4 * Nb);
-        if (last) {
-            aes_last_enc_round((uint32_t *)new_state, (uint32_t *)state);
-        } else {
-            aes_enc_round((uint32_t *)new_state, (uint32_t *)state);
-        }
-        memcpy(state, new_state, 4 * Nb);
+static void aes_native_round(uint8_t *state, int last,
+                             const uint32_t *this_round_keys) {
+    uint8_t new_state[4 * Nb];
+    memcpy(new_state, this_round_keys, 4 * Nb);
+    if (last) {
+        __intrin_aes_last_enc_round((uint32_t *)new_state, (uint32_t *)state);
+    } else {
+        __intrin_aes_enc_round((uint32_t *)new_state, (uint32_t *)state);
     }
+    memcpy(state, new_state, 4 * Nb);
+}
 #endif
 
 static void aes256_cipher(const uint8_t *in, uint8_t *out, const uint32_t *round_keys) {
