@@ -82,6 +82,12 @@ public:
 
 private:
 
+  uint32_t rotr(int n, uint32_t x);
+  uint32_t Sigma0(uint32_t x);
+  uint32_t Sigma1(uint32_t x);
+  uint32_t sigma0(uint32_t x);
+  uint32_t sigma1(uint32_t x);
+
   void execute(const Instr &instr, Pipeline *);
   
   Word id_;

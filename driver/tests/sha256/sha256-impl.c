@@ -3,17 +3,23 @@
 #include <stdint.h>
 #include "sha256.h"
 
+#ifdef SHA_NATIVE
+#include <vx_intrinsics.h>
+#endif
+
 static const uint32_t K[64];
 static const uint32_t Hzero[8];
 static void pad_message(uint8_t *, uint32_t);
 static void sha256_hash(uint8_t *, uint32_t, uint8_t *);
-static uint32_t rotr(int, uint32_t);
 static uint32_t ch(uint32_t, uint32_t, uint32_t);
 static uint32_t maj(uint32_t, uint32_t, uint32_t);
 static uint32_t Sigma0(uint32_t);
 static uint32_t Sigma1(uint32_t);
 static uint32_t sigma0(uint32_t);
 static uint32_t sigma1(uint32_t);
+#ifndef SHA_NATIVE
+static uint32_t rotr(int, uint32_t);
+#endif
 
 void sha256(uint8_t *buf, uint32_t n_bytes, uint8_t *digest_out) {
     pad_message(buf, n_bytes);
@@ -116,9 +122,11 @@ static void sha256_hash(uint8_t *M, uint32_t N, uint8_t *digest_out) {
     }
 }
 
+#ifndef SHA_NATIVE
 static inline uint32_t rotr(int n, uint32_t x) {
     return (x >> n) | (x << (32 - n));
 }
+#endif
 
 static inline uint32_t ch(uint32_t x, uint32_t y, uint32_t z) {
     return (x & y) ^ (~x & z);
@@ -129,19 +137,35 @@ static inline uint32_t maj(uint32_t x, uint32_t y, uint32_t z) {
 }
 
 static inline uint32_t Sigma0(uint32_t x) {
+    #ifdef SHA_NATIVE
+    return __intrin_sha_Sigma0(x);
+    #else
     return rotr(2, x) ^ rotr(13, x) ^ rotr(22, x);
+    #endif
 }
 
 static inline uint32_t Sigma1(uint32_t x) {
+    #ifdef SHA_NATIVE
+    return __intrin_sha_Sigma1(x);
+    #else
     return rotr(6, x) ^ rotr(11, x) ^ rotr(25, x);
+    #endif
 }
 
 static inline uint32_t sigma0(uint32_t x) {
+    #ifdef SHA_NATIVE
+    return __intrin_sha_sigma0(x);
+    #else
     return rotr(7, x) ^ rotr(18, x) ^ (x >> 3);
+    #endif
 }
 
 static inline uint32_t sigma1(uint32_t x) {
+    #ifdef SHA_NATIVE
+    return __intrin_sha_sigma1(x);
+    #else
     return rotr(17, x) ^ rotr(19, x) ^ (x >> 10);
+    #endif
 }
 
 static const uint32_t K[64] = {

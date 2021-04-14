@@ -85,7 +85,9 @@ int run_test(const kernel_arg_t& kernel_arg,
     int errors = 0;
     auto buf_ptr = (char*)vx_host_ptr(buffer);
     for (uint32_t i = 0; i < num_points; ++i) {
-      if (memcmp(buf_ptr + i * DIGEST_BYTES, expected_digests + i * DIGEST_BYTES, DIGEST_BYTES)) {
+      const char *expected = expected_digests + i * DIGEST_BYTES;
+      const char *actual = buf_ptr + i * DIGEST_BYTES;
+      if (memcmp(expected, actual, DIGEST_BYTES)) {
         std::cout << "hash mismatch at " << i << std::endl;
         ++errors;
       }

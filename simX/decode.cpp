@@ -79,7 +79,16 @@ static const char* op_string(const Instr &instr) {
   case Opcode::I_INST:
     switch (func3) {
     case 0: return "ADDI";
-    case 1: return "SLLI";
+    case 1:
+        if (!(imm >> 5)) {
+            return "SLLI";
+        }
+        switch (imm & 0x3) {
+            case 0: return "SHA256SUM0";
+            case 1: return "SHA256SUM1";
+            case 2: return "SHA256SIG0";
+            case 3: return "SHA256SIG1";
+        }
     case 2: return "SLTI";
     case 3: return "SLTIU";
     case 4: return "XORI";

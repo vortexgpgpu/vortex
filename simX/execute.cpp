@@ -68,6 +68,26 @@ static void update_fcrs(Core* core, int tid, int wid, bool outOfRange = false) {
   }
 }
 
+uint32_t Warp::rotr(int n, uint32_t x) {
+  return (x >> n) | (x << (32 - n));
+}
+
+uint32_t Warp::Sigma0(uint32_t x) {
+  return rotr(2, x) ^ rotr(13, x) ^ rotr(22, x);
+}
+
+uint32_t Warp::Sigma1(uint32_t x) {
+  return rotr(6, x) ^ rotr(11, x) ^ rotr(25, x);
+}
+
+uint32_t Warp::sigma0(uint32_t x) {
+  return rotr(7, x) ^ rotr(18, x) ^ (x >> 3);
+}
+
+uint32_t Warp::sigma1(uint32_t x) {
+  return rotr(17, x) ^ rotr(19, x) ^ (x >> 10);
+}
+
 void Warp::execute(const Instr &instr, Pipeline *pipeline) {
   assert(tmask_.any());
 
@@ -256,8 +276,29 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         rddata = rsdata[0] + immsrc;
         break;
       case 1:
-        // SLLI
-        rddata = rsdata[0] << immsrc;
+        if (!(immsrc >> 5)) {
+          // SLLI
+          rddata = rsdata[0] << immsrc;
+        } else {
+          switch (immsrc & 0x3) {
+            // SHA256SUM0
+            case 0:
+            rddata = Sigma0(rsdata[0]);
+            break;
+            // SHA256SUM1
+            case 1:
+            rddata = Sigma1(rsdata[0]);
+            break;
+            // SHA256SIG0
+            case 2:
+            rddata = sigma0(rsdata[0]);
+            break;
+            // SHA256SIG1
+            case 3:
+            rddata = sigma1(rsdata[0]);
+            break;
+          }
+        }
         break;
       case 2:
         // SLTI

@@ -136,6 +136,41 @@ inline void __intrin_add_more_cursed(uint32_t *arr) {
 //
 // SHA-256
 //
+inline uint32_t __intrin_sha_sigma0(uint32_t x) {
+    uint32_t ret;
+    asm volatile (
+        ".insn i 0x13, 1, %[rd], %[rs1], 0x102\n"
+        : [rd] "=r" (ret)
+        : [rs1] "r" (x));
+    return ret;
+}
+
+inline uint32_t __intrin_sha_sigma1(uint32_t x) {
+    uint32_t ret;
+    asm volatile (
+        ".insn i 0x13, 1, %[rd], %[rs1], 0x103\n"
+        : [rd] "=r" (ret)
+        : [rs1] "r" (x));
+    return ret;
+}
+
+inline uint32_t __intrin_sha_Sigma0(uint32_t x) {
+    uint32_t ret;
+    asm volatile (
+        ".insn i 0x13, 1, %[rd], %[rs1], 0x100\n"
+        : [rd] "=r" (ret)
+        : [rs1] "r" (x));
+    return ret;
+}
+
+inline uint32_t __intrin_sha_Sigma1(uint32_t x) {
+    uint32_t ret;
+    asm volatile (
+        ".insn i 0x13, 1, %[rd], %[rs1], 0x101\n"
+        : [rd] "=r" (ret)
+        : [rs1] "r" (x));
+    return ret;
+}
 
 //
 // AES-256
@@ -145,25 +180,22 @@ inline void __intrin_aes_enc_round(uint32_t *newcols, uint32_t *oldcols) {
     asm volatile (
         // See:
         // https://sourceware.org/binutils/docs-2.36/as/RISC_002dV_002dFormats.html
-        // The last operation here is weird because it's a signed
-        // immediate. If you print it as binary and compare with the
-        // draft spec, it will make more sense
-        ".insn s 0x33, 0, %[n0],   864(%[o0])\n"
-        ".insn s 0x33, 0, %[n0],  1888(%[o1])\n"
-        ".insn s 0x33, 0, %[n0], -1184(%[o2])\n"
-        ".insn s 0x33, 0, %[n0],  -160(%[o3])\n"
-        ".insn s 0x33, 0, %[n1],   864(%[o1])\n"
-        ".insn s 0x33, 0, %[n1],  1888(%[o2])\n"
-        ".insn s 0x33, 0, %[n1], -1184(%[o3])\n"
-        ".insn s 0x33, 0, %[n1],  -160(%[o0])\n"
-        ".insn s 0x33, 0, %[n2],   864(%[o2])\n"
-        ".insn s 0x33, 0, %[n2],  1888(%[o3])\n"
-        ".insn s 0x33, 0, %[n2], -1184(%[o0])\n"
-        ".insn s 0x33, 0, %[n2],  -160(%[o1])\n"
-        ".insn s 0x33, 0, %[n3],   864(%[o3])\n"
-        ".insn s 0x33, 0, %[n3],  1888(%[o0])\n"
-        ".insn s 0x33, 0, %[n3], -1184(%[o1])\n"
-        ".insn s 0x33, 0, %[n3],  -160(%[o2])"
+        ".insn r 0x33, 0, 0x1b, x0, %[n0], %[o0]\n"
+        ".insn r 0x33, 0, 0x3b, x0, %[n0], %[o1]\n"
+        ".insn r 0x33, 0, 0x5b, x0, %[n0], %[o2]\n"
+        ".insn r 0x33, 0, 0x7b, x0, %[n0], %[o3]\n"
+        ".insn r 0x33, 0, 0x1b, x0, %[n1], %[o1]\n"
+        ".insn r 0x33, 0, 0x3b, x0, %[n1], %[o2]\n"
+        ".insn r 0x33, 0, 0x5b, x0, %[n1], %[o3]\n"
+        ".insn r 0x33, 0, 0x7b, x0, %[n1], %[o0]\n"
+        ".insn r 0x33, 0, 0x1b, x0, %[n2], %[o2]\n"
+        ".insn r 0x33, 0, 0x3b, x0, %[n2], %[o3]\n"
+        ".insn r 0x33, 0, 0x5b, x0, %[n2], %[o0]\n"
+        ".insn r 0x33, 0, 0x7b, x0, %[n2], %[o1]\n"
+        ".insn r 0x33, 0, 0x1b, x0, %[n3], %[o3]\n"
+        ".insn r 0x33, 0, 0x3b, x0, %[n3], %[o0]\n"
+        ".insn r 0x33, 0, 0x5b, x0, %[n3], %[o1]\n"
+        ".insn r 0x33, 0, 0x7b, x0, %[n3], %[o2]"
         : [n0] "+r" (newcols[0]), [n1] "+r" (newcols[1]),
           [n2] "+r" (newcols[2]), [n3] "+r" (newcols[3])
         : [o0] "r" (oldcols[0]), [o1] "r" (oldcols[1]),
@@ -175,25 +207,22 @@ inline void __intrin_aes_last_enc_round(uint32_t *newcols, uint32_t *oldcols) {
     asm volatile (
         // See:
         // https://sourceware.org/binutils/docs-2.36/as/RISC_002dV_002dFormats.html
-        // The last operation here is weird because it's a signed
-        // immediate. If you print it as binary and compare with the
-        // draft spec, it will make more sense
-        ".insn s 0x33, 0, %[n0],   800(%[o0])\n"
-        ".insn s 0x33, 0, %[n0],  1824(%[o1])\n"
-        ".insn s 0x33, 0, %[n0], -1248(%[o2])\n"
-        ".insn s 0x33, 0, %[n0],  -224(%[o3])\n"
-        ".insn s 0x33, 0, %[n1],   800(%[o1])\n"
-        ".insn s 0x33, 0, %[n1],  1824(%[o2])\n"
-        ".insn s 0x33, 0, %[n1], -1248(%[o3])\n"
-        ".insn s 0x33, 0, %[n1],  -224(%[o0])\n"
-        ".insn s 0x33, 0, %[n2],   800(%[o2])\n"
-        ".insn s 0x33, 0, %[n2],  1824(%[o3])\n"
-        ".insn s 0x33, 0, %[n2], -1248(%[o0])\n"
-        ".insn s 0x33, 0, %[n2],  -224(%[o1])\n"
-        ".insn s 0x33, 0, %[n3],   800(%[o3])\n"
-        ".insn s 0x33, 0, %[n3],  1824(%[o0])\n"
-        ".insn s 0x33, 0, %[n3], -1248(%[o1])\n"
-        ".insn s 0x33, 0, %[n3],  -224(%[o2])"
+        ".insn r 0x33, 0, 0x19, x0, %[n0], %[o0]\n"
+        ".insn r 0x33, 0, 0x39, x0, %[n0], %[o1]\n"
+        ".insn r 0x33, 0, 0x59, x0, %[n0], %[o2]\n"
+        ".insn r 0x33, 0, 0x79, x0, %[n0], %[o3]\n"
+        ".insn r 0x33, 0, 0x19, x0, %[n1], %[o1]\n"
+        ".insn r 0x33, 0, 0x39, x0, %[n1], %[o2]\n"
+        ".insn r 0x33, 0, 0x59, x0, %[n1], %[o3]\n"
+        ".insn r 0x33, 0, 0x79, x0, %[n1], %[o0]\n"
+        ".insn r 0x33, 0, 0x19, x0, %[n2], %[o2]\n"
+        ".insn r 0x33, 0, 0x39, x0, %[n2], %[o3]\n"
+        ".insn r 0x33, 0, 0x59, x0, %[n2], %[o0]\n"
+        ".insn r 0x33, 0, 0x79, x0, %[n2], %[o1]\n"
+        ".insn r 0x33, 0, 0x19, x0, %[n3], %[o3]\n"
+        ".insn r 0x33, 0, 0x39, x0, %[n3], %[o0]\n"
+        ".insn r 0x33, 0, 0x59, x0, %[n3], %[o1]\n"
+        ".insn r 0x33, 0, 0x79, x0, %[n3], %[o2]"
         : [n0] "+r" (newcols[0]), [n1] "+r" (newcols[1]),
           [n2] "+r" (newcols[2]), [n3] "+r" (newcols[3])
         : [o0] "r" (oldcols[0]), [o1] "r" (oldcols[1]),
