@@ -84,32 +84,6 @@ static void aes256_key_exp(const uint32_t *key, uint32_t *round_keys, int inv_mi
     }
 }
 
-#ifdef AES_NATIVE
-static inline void aes_native_round(uint8_t *state, int last,
-                                    const uint32_t *this_round_keys) {
-    uint8_t new_state[4 * Nb];
-    memcpy(new_state, this_round_keys, 4 * Nb);
-    if (last) {
-        __intrin_aes_last_enc_round((uint32_t *)new_state, (uint32_t *)state);
-    } else {
-        __intrin_aes_enc_round((uint32_t *)new_state, (uint32_t *)state);
-    }
-    memcpy(state, new_state, 4 * Nb);
-}
-
-static inline void aes_native_inv_round(uint8_t *state, int last,
-                                        const uint32_t *this_round_keys) {
-    uint8_t new_state[4 * Nb];
-    memcpy(new_state, this_round_keys, 4 * Nb);
-    if (last) {
-        __intrin_aes_last_dec_round((uint32_t *)new_state, (uint32_t *)state);
-    } else {
-        __intrin_aes_dec_round((uint32_t *)new_state, (uint32_t *)state);
-    }
-    memcpy(state, new_state, 4 * Nb);
-}
-#endif
-
 static void aes256_cipher(const uint8_t *in, uint8_t *out, const uint32_t *round_keys) {
     uint8_t state[4 * Nb];
 
@@ -120,7 +94,11 @@ static void aes256_cipher(const uint8_t *in, uint8_t *out, const uint32_t *round
     for (int round = 1; round <= Nr; round++) {
         const uint32_t *this_round_keys = round_keys + (Nb * round);
         #ifdef AES_NATIVE
-        aes_native_round(state, round == Nr, this_round_keys);
+        if (round < Nr) {
+            __intrin_aes_enc_round((uint32_t *)state, (uint32_t *)state, this_round_keys);
+        } else {
+            __intrin_aes_last_enc_round((uint32_t *)state, (uint32_t *)state, this_round_keys);
+        }
         #else
         sub_bytes(state);
         shift_rows(state);
@@ -145,7 +123,11 @@ static void aes256_inv_cipher(const uint8_t *in, uint8_t *out, const uint32_t *r
     for (int round = Nr - 1; round >= 0; round--) {
         const uint32_t *this_round_keys = round_keys + (Nb * round);
         #ifdef AES_NATIVE
-        aes_native_inv_round(state, round == 0, this_round_keys);
+        if (round > 0) {
+            __intrin_aes_dec_round((uint32_t *)state, (uint32_t *)state, this_round_keys);
+        } else {
+            __intrin_aes_last_dec_round((uint32_t *)state, (uint32_t *)state, this_round_keys);
+        }
         #else
         inv_sub_bytes(state);
         inv_shift_rows(state);
