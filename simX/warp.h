@@ -82,6 +82,11 @@ public:
 
 private:
 
+  uint32_t aes32esi(int mix_columns, int byte_select, uint32_t word);
+  uint32_t aes32dsi(int inv_mix_columns, int byte_select, uint32_t word);
+  uint8_t xtime(uint8_t byte);
+  uint8_t s_box_replace(uint8_t byte);
+  uint8_t inv_s_box_replace(uint8_t byte);
   uint32_t rotr(int n, uint32_t x);
   uint32_t Sigma0(uint32_t x);
   uint32_t Sigma1(uint32_t x);

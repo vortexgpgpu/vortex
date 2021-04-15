@@ -55,7 +55,19 @@ static const char* op_string(const Instr &instr) {
   case Opcode::R_INST:
     if (func7 & 0x1) {
       switch (func3) {
-      case 0: return "MUL";
+      case 0:
+      if (func7 == 1) {
+        return "MUL";
+      } else if (func7 & 0x19 == 0x19) {
+        switch ((func7 >> 1) & 0x3) {
+          case 0: return "AES32ESI";
+          case 1: return "AES32ESMI";
+          case 2: return "AES32DSI";
+          case 3: return "AES32DSMI";
+        }
+      } else {
+        std::abort();
+      }
       case 1: return "MULH";
       case 2: return "MULHSU";
       case 3: return "MULHU";
@@ -310,6 +322,11 @@ std::shared_ptr<Instr> Decoder::decode(Word code) {
       default:
         instr->setDestFReg(rd);
       }
+    } else if (op == Opcode::R_INST && !func3
+               && (func7 & 0x19) == 0x19) {
+      instr->setDestReg(rs1);
+      instr->setSrcReg(rs1);
+      instr->setSrcReg(rs2);
     } else {
       instr->setDestReg(rd);
       instr->setSrcReg(rs1);

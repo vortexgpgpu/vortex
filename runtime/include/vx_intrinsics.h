@@ -229,6 +229,60 @@ inline void __intrin_aes_last_enc_round(uint32_t *newcols, uint32_t *oldcols) {
           [o2] "r" (oldcols[2]), [o3] "r" (oldcols[3]));
 }
 
+inline void __intrin_aes_dec_round(uint32_t *newcols, uint32_t *oldcols) {
+    // aes32dsmi
+    asm volatile (
+        // See:
+        // https://sourceware.org/binutils/docs-2.36/as/RISC_002dV_002dFormats.html
+        ".insn r 0x33, 0, 0x1f, x0, %[n0], %[o0]\n"
+        ".insn r 0x33, 0, 0x3f, x0, %[n0], %[o3]\n"
+        ".insn r 0x33, 0, 0x5f, x0, %[n0], %[o2]\n"
+        ".insn r 0x33, 0, 0x7f, x0, %[n0], %[o1]\n"
+        ".insn r 0x33, 0, 0x1f, x0, %[n1], %[o1]\n"
+        ".insn r 0x33, 0, 0x3f, x0, %[n1], %[o0]\n"
+        ".insn r 0x33, 0, 0x5f, x0, %[n1], %[o3]\n"
+        ".insn r 0x33, 0, 0x7f, x0, %[n1], %[o2]\n"
+        ".insn r 0x33, 0, 0x1f, x0, %[n2], %[o2]\n"
+        ".insn r 0x33, 0, 0x3f, x0, %[n2], %[o1]\n"
+        ".insn r 0x33, 0, 0x5f, x0, %[n2], %[o0]\n"
+        ".insn r 0x33, 0, 0x7f, x0, %[n2], %[o3]\n"
+        ".insn r 0x33, 0, 0x1f, x0, %[n3], %[o3]\n"
+        ".insn r 0x33, 0, 0x3f, x0, %[n3], %[o2]\n"
+        ".insn r 0x33, 0, 0x5f, x0, %[n3], %[o1]\n"
+        ".insn r 0x33, 0, 0x7f, x0, %[n3], %[o0]"
+        : [n0] "+r" (newcols[0]), [n1] "+r" (newcols[1]),
+          [n2] "+r" (newcols[2]), [n3] "+r" (newcols[3])
+        : [o0] "r" (oldcols[0]), [o1] "r" (oldcols[1]),
+          [o2] "r" (oldcols[2]), [o3] "r" (oldcols[3]));
+}
+
+inline void __intrin_aes_last_dec_round(uint32_t *newcols, uint32_t *oldcols) {
+    // aes32dsi
+    asm volatile (
+        // See:
+        // https://sourceware.org/binutils/docs-2.36/as/RISC_002dV_002dFormats.html
+        ".insn r 0x33, 0, 0x1d, x0, %[n0], %[o0]\n"
+        ".insn r 0x33, 0, 0x3d, x0, %[n0], %[o3]\n"
+        ".insn r 0x33, 0, 0x5d, x0, %[n0], %[o2]\n"
+        ".insn r 0x33, 0, 0x7d, x0, %[n0], %[o1]\n"
+        ".insn r 0x33, 0, 0x1d, x0, %[n1], %[o1]\n"
+        ".insn r 0x33, 0, 0x3d, x0, %[n1], %[o0]\n"
+        ".insn r 0x33, 0, 0x5d, x0, %[n1], %[o3]\n"
+        ".insn r 0x33, 0, 0x7d, x0, %[n1], %[o2]\n"
+        ".insn r 0x33, 0, 0x1d, x0, %[n2], %[o2]\n"
+        ".insn r 0x33, 0, 0x3d, x0, %[n2], %[o1]\n"
+        ".insn r 0x33, 0, 0x5d, x0, %[n2], %[o0]\n"
+        ".insn r 0x33, 0, 0x7d, x0, %[n2], %[o3]\n"
+        ".insn r 0x33, 0, 0x1d, x0, %[n3], %[o3]\n"
+        ".insn r 0x33, 0, 0x3d, x0, %[n3], %[o2]\n"
+        ".insn r 0x33, 0, 0x5d, x0, %[n3], %[o1]\n"
+        ".insn r 0x33, 0, 0x7d, x0, %[n3], %[o0]"
+        : [n0] "+r" (newcols[0]), [n1] "+r" (newcols[1]),
+          [n2] "+r" (newcols[2]), [n3] "+r" (newcols[3])
+        : [o0] "r" (oldcols[0]), [o1] "r" (oldcols[1]),
+          [o2] "r" (oldcols[2]), [o3] "r" (oldcols[3]));
+}
+
 #define __if(b) vx_split(b); \
                 if (b) 
 
