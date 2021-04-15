@@ -196,8 +196,8 @@ inline void __intrin_aes_enc_round(uint32_t *newcols, uint32_t *oldcols) {
         ".insn r 0x33, 0, 0x3b, x0, %[n3], %[o0]\n"
         ".insn r 0x33, 0, 0x5b, x0, %[n3], %[o1]\n"
         ".insn r 0x33, 0, 0x7b, x0, %[n3], %[o2]"
-        : [n0] "+r" (newcols[0]), [n1] "+r" (newcols[1]),
-          [n2] "+r" (newcols[2]), [n3] "+r" (newcols[3])
+        : [n0] "+&r" (newcols[0]), [n1] "+&r" (newcols[1]),
+          [n2] "+&r" (newcols[2]), [n3] "+&r" (newcols[3])
         : [o0] "r" (oldcols[0]), [o1] "r" (oldcols[1]),
           [o2] "r" (oldcols[2]), [o3] "r" (oldcols[3]));
 }
@@ -223,8 +223,8 @@ inline void __intrin_aes_last_enc_round(uint32_t *newcols, uint32_t *oldcols) {
         ".insn r 0x33, 0, 0x39, x0, %[n3], %[o0]\n"
         ".insn r 0x33, 0, 0x59, x0, %[n3], %[o1]\n"
         ".insn r 0x33, 0, 0x79, x0, %[n3], %[o2]"
-        : [n0] "+r" (newcols[0]), [n1] "+r" (newcols[1]),
-          [n2] "+r" (newcols[2]), [n3] "+r" (newcols[3])
+        : [n0] "+&r" (newcols[0]), [n1] "+&r" (newcols[1]),
+          [n2] "+&r" (newcols[2]), [n3] "+&r" (newcols[3])
         : [o0] "r" (oldcols[0]), [o1] "r" (oldcols[1]),
           [o2] "r" (oldcols[2]), [o3] "r" (oldcols[3]));
 }
@@ -250,8 +250,8 @@ inline void __intrin_aes_dec_round(uint32_t *newcols, uint32_t *oldcols) {
         ".insn r 0x33, 0, 0x3f, x0, %[n3], %[o2]\n"
         ".insn r 0x33, 0, 0x5f, x0, %[n3], %[o1]\n"
         ".insn r 0x33, 0, 0x7f, x0, %[n3], %[o0]"
-        : [n0] "+r" (newcols[0]), [n1] "+r" (newcols[1]),
-          [n2] "+r" (newcols[2]), [n3] "+r" (newcols[3])
+        : [n0] "+&r" (newcols[0]), [n1] "+&r" (newcols[1]),
+          [n2] "+&r" (newcols[2]), [n3] "+&r" (newcols[3])
         : [o0] "r" (oldcols[0]), [o1] "r" (oldcols[1]),
           [o2] "r" (oldcols[2]), [o3] "r" (oldcols[3]));
 }
@@ -277,10 +277,86 @@ inline void __intrin_aes_last_dec_round(uint32_t *newcols, uint32_t *oldcols) {
         ".insn r 0x33, 0, 0x3d, x0, %[n3], %[o2]\n"
         ".insn r 0x33, 0, 0x5d, x0, %[n3], %[o1]\n"
         ".insn r 0x33, 0, 0x7d, x0, %[n3], %[o0]"
-        : [n0] "+r" (newcols[0]), [n1] "+r" (newcols[1]),
-          [n2] "+r" (newcols[2]), [n3] "+r" (newcols[3])
+        : [n0] "+&r" (newcols[0]), [n1] "+&r" (newcols[1]),
+          [n2] "+&r" (newcols[2]), [n3] "+&r" (newcols[3])
         : [o0] "r" (oldcols[0]), [o1] "r" (oldcols[1]),
           [o2] "r" (oldcols[2]), [o3] "r" (oldcols[3]));
+}
+
+// Hack to accelerate the InvMixColumns() invocations in the revised key
+// schedule generation logic from Section 3.5.5 of the AES spec. We want
+// to use the InvMixColumns() hardware implementation in aes32dsmi;
+// however, it calls InvSubBytes() which we don't want. To work around
+// this, we first perform SubBytes() via aes32esi and then
+// InvSubBytes()+InvMixColumns() via aes32dsmi. Despite this being a
+// grotesque kludge, it appears to beat our software InvMixColumns()
+// implementation compiled with -O3, showing an ~8% reduction in total
+// instruction count for our test kernel which decrypts 4KiB of data
+// (split evenly across 16 threads)
+inline void __intrin_aes_inv_mixcols(uint32_t *newcols, uint32_t *oldcols) {
+    uint32_t s0 = 0, s1 = 0, s2 = 0, s3 = 0;
+
+    asm volatile (
+        // First, do subbytes on all the columns with aes32esi
+        ".insn r 0x33, 0, 0x19, x0, %[s0], %[o0]\n"
+        ".insn r 0x33, 0, 0x39, x0, %[s0], %[o0]\n"
+        ".insn r 0x33, 0, 0x59, x0, %[s0], %[o0]\n"
+        ".insn r 0x33, 0, 0x79, x0, %[s0], %[o0]\n"
+        ".insn r 0x33, 0, 0x19, x0, %[s1], %[o1]\n"
+        ".insn r 0x33, 0, 0x39, x0, %[s1], %[o1]\n"
+        ".insn r 0x33, 0, 0x59, x0, %[s1], %[o1]\n"
+        ".insn r 0x33, 0, 0x79, x0, %[s1], %[o1]\n"
+        ".insn r 0x33, 0, 0x19, x0, %[s2], %[o2]\n"
+        ".insn r 0x33, 0, 0x39, x0, %[s2], %[o2]\n"
+        ".insn r 0x33, 0, 0x59, x0, %[s2], %[o2]\n"
+        ".insn r 0x33, 0, 0x79, x0, %[s2], %[o2]\n"
+        ".insn r 0x33, 0, 0x19, x0, %[s3], %[o3]\n"
+        ".insn r 0x33, 0, 0x39, x0, %[s3], %[o3]\n"
+        ".insn r 0x33, 0, 0x59, x0, %[s3], %[o3]\n"
+        ".insn r 0x33, 0, 0x79, x0, %[s3], %[o3]\n"
+        // Zero out destinations first, since the instructions below xor
+        // into the result
+        "andi %[n0], x0, 0\n"
+        "andi %[n1], x0, 0\n"
+        "andi %[n2], x0, 0\n"
+        "andi %[n3], x0, 0\n"
+        // Now do invsubbytes + invmixcols with aes32dsmi
+        ".insn r 0x33, 0, 0x1f, x0, %[n0], %[s0]\n"
+        ".insn r 0x33, 0, 0x3f, x0, %[n0], %[s0]\n"
+        ".insn r 0x33, 0, 0x5f, x0, %[n0], %[s0]\n"
+        ".insn r 0x33, 0, 0x7f, x0, %[n0], %[s0]\n"
+        ".insn r 0x33, 0, 0x1f, x0, %[n1], %[s1]\n"
+        ".insn r 0x33, 0, 0x3f, x0, %[n1], %[s1]\n"
+        ".insn r 0x33, 0, 0x5f, x0, %[n1], %[s1]\n"
+        ".insn r 0x33, 0, 0x7f, x0, %[n1], %[s1]\n"
+        ".insn r 0x33, 0, 0x1f, x0, %[n2], %[s2]\n"
+        ".insn r 0x33, 0, 0x3f, x0, %[n2], %[s2]\n"
+        ".insn r 0x33, 0, 0x5f, x0, %[n2], %[s2]\n"
+        ".insn r 0x33, 0, 0x7f, x0, %[n2], %[s2]\n"
+        ".insn r 0x33, 0, 0x1f, x0, %[n3], %[s3]\n"
+        ".insn r 0x33, 0, 0x3f, x0, %[n3], %[s3]\n"
+        ".insn r 0x33, 0, 0x5f, x0, %[n3], %[s3]\n"
+        ".insn r 0x33, 0, 0x7f, x0, %[n3], %[s3]"
+        : [n0] "=&r" (newcols[0]), [n1] "=&r" (newcols[1]),
+          [n2] "=&r" (newcols[2]), [n3] "=&r" (newcols[3]),
+          [s0] "+&r" (s0), [s1] "+&r" (s1),
+          [s2] "+&r" (s2), [s3] "+&r" (s3)
+        : [o0] "r" (oldcols[0]), [o1] "r" (oldcols[1]),
+          [o2] "r" (oldcols[2]), [o3] "r" (oldcols[3]));
+}
+
+inline uint32_t __intrin_aes_subword(uint32_t word) {
+    uint32_t ret = 0;
+    asm volatile (
+        // Use aes32esi for SubBytes
+        ".insn r 0x33, 0, 0x19, x0, %[ret], %[word]\n"
+        ".insn r 0x33, 0, 0x39, x0, %[ret], %[word]\n"
+        ".insn r 0x33, 0, 0x59, x0, %[ret], %[word]\n"
+        ".insn r 0x33, 0, 0x79, x0, %[ret], %[word]"
+        : [ret] "+&r" (ret)
+        : [word] "r" (word));
+
+    return ret;
 }
 
 #define __if(b) vx_split(b); \

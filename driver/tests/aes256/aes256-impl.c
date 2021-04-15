@@ -9,19 +9,18 @@
 static void aes256_key_exp(const uint32_t *, uint32_t *, int);
 static void aes256_cipher(const uint8_t *, uint8_t *, const uint32_t *);
 static void aes256_inv_cipher(const uint8_t *, uint8_t *, const uint32_t *);
-static uint8_t s_box_replace(uint8_t);
-static uint8_t inv_s_box_replace(uint8_t);
 static uint32_t sub_word(uint32_t);
 static uint32_t rot_word(uint32_t);
 static void add_round_key(uint8_t *, const uint32_t *);
-static void inv_mix_columns(uint8_t *);
-static uint8_t xtime(uint8_t byte);
 #ifndef AES_NATIVE
 static void inv_sub_bytes(uint8_t *);
 static void inv_shift_rows(uint8_t *);
+static void inv_mix_columns(uint8_t *);
 static void sub_bytes(uint8_t *);
 static void shift_rows(uint8_t *);
 static void mix_columns(uint8_t *);
+static uint8_t s_box_replace(uint8_t);
+static uint8_t inv_s_box_replace(uint8_t);
 #endif
 
 void aes256enc(const uint8_t *in, const uint8_t *key, uint8_t *out, int nblocks) {
@@ -76,7 +75,11 @@ static void aes256_key_exp(const uint32_t *key, uint32_t *round_keys, int inv_mi
     // For equivalent inverse cipher. See Section 5.3.5 of AES spec
     if (inv_mix_cols) {
         for (int r = 1; r < Nr; r++) {
+            #ifdef AES_NATIVE
+            __intrin_aes_inv_mixcols(round_keys + (Nb * r), round_keys + (Nb * r));
+            #else
             inv_mix_columns((uint8_t *)(round_keys + (Nb * r)));
+            #endif
         }
     }
 }
@@ -157,6 +160,9 @@ static void aes256_inv_cipher(const uint8_t *in, uint8_t *out, const uint32_t *r
 }
 
 static uint32_t sub_word(uint32_t word) {
+    #ifdef AES_NATIVE
+    return __intrin_aes_subword(word);
+    #else
     uint8_t *bytes = (uint8_t *)&word;
 
     for (int i = 0; i < 4; i++) {
@@ -164,6 +170,7 @@ static uint32_t sub_word(uint32_t word) {
     }
 
     return word;
+    #endif
 }
 
 static inline uint32_t rot_word(uint32_t word) {
@@ -218,6 +225,14 @@ static void inv_shift_rows(uint8_t *state) {
     memcpy(state, new, sizeof new);
 }
 
+static inline uint8_t xtime(uint8_t byte) {
+    // Hack because the following line does not work when using multiple
+    // threads, strangely enough:
+    //     return ((byte << 1) & 0xff) ^ ((0x80 & byte)? 0x1b : 0);
+    static const uint8_t xor_with[] = {0x00, 0x1b};
+    return ((byte << 1) & 0xff) ^ xor_with[byte >> 7];
+}
+
 static void mix_columns(uint8_t *state) {
     uint32_t *state_cols = (uint32_t *)state;
 
@@ -235,7 +250,6 @@ static void mix_columns(uint8_t *state) {
         state_cols[i] = new;
     }
 }
-#endif
 
 static void inv_mix_columns(uint8_t *state) {
     uint32_t *state_cols = (uint32_t *)state;
@@ -273,14 +287,6 @@ static void inv_mix_columns(uint8_t *state) {
 
         state_cols[i] = new;
     }
-}
-
-static inline uint8_t xtime(uint8_t byte) {
-    // Hack because the following line does not work when using multiple
-    // threads, strangely enough:
-    //     return ((byte << 1) & 0xff) ^ ((0x80 & byte)? 0x1b : 0);
-    static const uint8_t xor_with[] = {0x00, 0x1b};
-    return ((byte << 1) & 0xff) ^ xor_with[byte >> 7];
 }
 
 static inline uint8_t s_box_replace(uint8_t byte) {
@@ -422,3 +428,4 @@ static inline uint8_t inv_s_box_replace(uint8_t byte) {
     };
     return inv_s_box[byte];
 }
+#endif
