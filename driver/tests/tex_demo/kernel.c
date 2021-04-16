@@ -30,10 +30,10 @@ void kernel_body(int task_id, void* arg) {
 			int32_t v = (int32_t)(fv * (1<<20));
 		#ifdef ENABLE_SW
 			if (state->use_sw) {
-				dst_row[x] = tex_sw(state, 0, u, v, 0x0);
+				dst_row[x] = (state->filter == 2) ? tex3_sw(state, 0, u, v, state->lod) : tex_sw(state, 0, u, v, state->lod);
 			} else {
 		#endif
-			dst_row[x] = vx_tex(0, u, v, 0x0);
+			dst_row[x] = (state->filter == 2) ? vx_tex3(0, u, v, state->lod) : vx_tex(0, u, v, state->lod);
 		#ifdef ENABLE_SW
 			}
 		#endif
@@ -54,7 +54,7 @@ int main() {
 	vx_csr_write(CSR_TEX_HEIGHT(0), arg->src_logHeight);
 	vx_csr_write(CSR_TEX_FORMAT(0), arg->format);
 	vx_csr_write(CSR_TEX_WRAP(0),   (arg->wrap << 2) | arg->wrap);
-	vx_csr_write(CSR_TEX_FILTER(0), arg->filter);
+	vx_csr_write(CSR_TEX_FILTER(0), (arg->filter ? 1 : 0));
 
 	struct tile_arg_t targ;
 	targ.state       = arg;
