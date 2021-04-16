@@ -8,8 +8,8 @@ struct kernel_arg_t {
   uint32_t format;
   uint32_t filter;
   uint32_t wrap;
-  uint32_t src_width;
-  uint32_t src_height;
+  uint32_t src_logWidth;
+  uint32_t src_logHeight;
   uint32_t src_stride;
   uint32_t src_pitch;
   uint8_t src_ptr;

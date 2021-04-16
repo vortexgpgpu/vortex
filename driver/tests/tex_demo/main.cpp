@@ -2,6 +2,7 @@
 #include <vector>
 #include <unistd.h>
 #include <string.h>
+#include <chrono>
 #include <assert.h>
 #include <vortex.h>
 #include "common.h"
@@ -78,6 +79,7 @@ void cleanup() {
 }
 
 int run_test(const kernel_arg_t& kernel_arg, uint32_t buf_size, uint32_t width, uint32_t height, uint32_t bpp) {
+  auto time_start = std::chrono::high_resolution_clock::now();
   // start device
   std::cout << "start device" << std::endl;
   RT_CHECK(vx_start(device));
@@ -85,6 +87,10 @@ int run_test(const kernel_arg_t& kernel_arg, uint32_t buf_size, uint32_t width, 
   // wait for completion
   std::cout << "wait for completion" << std::endl;
   RT_CHECK(vx_ready_wait(device, -1));
+  
+  auto time_end = std::chrono::high_resolution_clock::now();
+  double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
+  printf("Elapsed time: %lg ms\n", elapsed);
 
   // download destination buffer
   std::cout << "download destination buffer" << std::endl;
@@ -98,7 +104,7 @@ int run_test(const kernel_arg_t& kernel_arg, uint32_t buf_size, uint32_t width, 
 
   // save output image
   std::cout << "save output image" << std::endl;  
-  dump_image(dst_pixels, width, height, bpp);
+  //dump_image(dst_pixels, width, height, bpp);
   RT_CHECK(SaveTGA(output_file, dst_pixels, width, height, bpp));
 
   return 0;
@@ -115,7 +121,14 @@ int main(int argc, char *argv[]) {
   parse_args(argc, argv);
 
   RT_CHECK(LoadTGA(input_file, src_pixels, &src_width, &src_height, &src_bpp));
-  dump_image(src_pixels, src_width, src_height, src_bpp);
+
+  // check power of two support
+  if (!ISPOW2(src_width) || !ISPOW2(src_height)) {
+    std::cout << "Error: only power of two textures supported: width=" << src_width << ", heigth=" << src_height << std::endl;
+    return -1;
+  }
+
+  //dump_image(src_pixels, src_width, src_height, src_bpp);
   uint32_t src_bufsize = src_bpp * src_width * src_height;
 
   uint32_t dst_width   = (uint32_t)(src_width * scale);
@@ -164,8 +177,8 @@ int main(int argc, char *argv[]) {
     kernel_arg.filter     = filter;
     kernel_arg.wrap       = wrap;
     
-    kernel_arg.src_width  = src_width;
-    kernel_arg.src_height = src_height;
+    kernel_arg.src_logWidth  = ilog2(src_width);
+    kernel_arg.src_logHeight = ilog2(src_height);
     kernel_arg.src_stride = src_bpp;
     kernel_arg.src_pitch  = src_bpp * src_width;
     kernel_arg.src_ptr    = src_addr;
