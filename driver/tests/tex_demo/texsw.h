@@ -135,10 +135,10 @@ inline int tex_sw(struct kernel_arg_t* state, int stage, int u, int v, int lod) 
 
 inline int vx_tex3(int stage, int u, int v, int lod) {
     int lodn = MIN(lod + 0x100000, TEX_LOD_MAX);
-    int a = vx_tex(0, u, v, lod);
-    int b = vx_tex(0, u, v, lodn);
+    int a = vx_tex(0, u, v, lod);  
+    int b = vx_tex(0, u, v, lodn);  
     int al = a & 0x00ff00ff;
-    int ah = (a >> 8) & 0x00ff00ff;
+    int ah = (a >> 8) & 0x00ff00ff;    
     int bl = b & 0x00ff00ff;
     int bh = (b >> 8) & 0x00ff00ff;
     int frac = (lod >> 12) & 0xff;
@@ -150,13 +150,14 @@ inline int vx_tex3(int stage, int u, int v, int lod) {
 
 inline int tex3_sw(struct kernel_arg_t* state, int stage, int u, int v, int lod) {
     int lodn = MIN(lod + 0x10000, TEX_LOD_MAX);
-    int a = tex_sw(state, 0, u, v, lod);
+    int a = tex_sw(state, 0, u, v, lod);    
     int b = tex_sw(state, 0, u, v, lodn);
     int al = a & 0x00ff00ff;
     int ah = (a >> 8) & 0x00ff00ff;
+    
     int bl = b & 0x00ff00ff;
     int bh = (b >> 8) & 0x00ff00ff;
-    int frac = lod & 0xffff;
+    int frac = (lod >> 12) & 0xff;
     int cl = (al + (((bl - al) * frac) >> 8)) & 0x00ff00ff;
     int ch = (ah + (((bh - ah) * frac) >> 8)) & 0x00ff00ff;
     int c = al | (ah << 8);

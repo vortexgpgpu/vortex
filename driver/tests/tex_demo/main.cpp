@@ -207,6 +207,7 @@ int main(int argc, char *argv[]) {
     kernel_arg.filter     = filter;
     kernel_arg.wrap       = wrap;
     kernel_arg.use_sw     = use_sw;
+    kernel_arg.lod        = 0x0;
     
     kernel_arg.src_logWidth  = (uint32_t)std::log2(src_width);
     kernel_arg.src_logHeight = (uint32_t)std::log2(src_height);

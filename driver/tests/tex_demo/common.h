@@ -9,6 +9,7 @@ struct kernel_arg_t {
   uint8_t filter;
   uint8_t wrap;
   uint8_t use_sw;
+  uint32_t lod;
   uint8_t src_logWidth;
   uint8_t src_logHeight;
   uint8_t src_stride;
