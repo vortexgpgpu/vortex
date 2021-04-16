@@ -3,11 +3,6 @@
 #include <assert.h>
 #include "format.h"
 
-#define TEX_FORMAT(x) (x==0) ? FORMAT_A8R8G8B8 :(x==1) ? FORMAT_R5G6B5 : (x==2) ? FORMAT_R4G4B4A4 :(x==3) ? FORMAT_A8L8 :(x==4) ? FORMAT_L8 : FORMAT_A8 
-
-#define CBSIZE(x) (x==FORMAT_A8R8G8B8) ? 4 : (x==FORMAT_R5G6B5) ? 2 : (x==FORMAT_R4G4B4A4) ? 2 : (x==FORMAT_A8L8) ? 2 : 1 
-
-
 struct __attribute__((__packed__)) tga_header_t {
   int8_t idlength;
   int8_t colormaptype;
@@ -26,8 +21,7 @@ struct __attribute__((__packed__)) tga_header_t {
 int LoadTGA(const char *filename, 
             std::vector<uint8_t> &pixels, 
             uint32_t *width, 
-            uint32_t *height, 
-            uint32_t *bpp) {
+            uint32_t *height) {
   std::ifstream ifs(filename, std::ios::in | std::ios::binary);
   if (!ifs.is_open()) {
     std::cerr << "couldn't open file: " << filename << "!" << std::endl;
@@ -76,7 +70,7 @@ int LoadTGA(const char *filename,
       ColorARGB color;        
       switch (stride) {
       case 2: 
-        color = Format::ConvertFrom<FORMAT_A1R5G5B5, true>(src_bytes); 
+        color = Format::ConvertFrom<FORMAT_A1R5G5B5, true>(src_bytes);         
         break;
       case 3: 
         color = Format::ConvertFrom<FORMAT_R8G8B8, true>(src_bytes); 
@@ -98,7 +92,6 @@ int LoadTGA(const char *filename,
 
   *width = header.width;
   *height = header.height;
-  *bpp = 4;
 
   return 0;
 }
@@ -168,19 +161,19 @@ void dump_image(const std::vector<uint8_t>& pixels, uint32_t width, uint32_t hei
   }
 }
 
-int CopyBuffers(const SurfaceDesc &dstDesc, 
+int CopyBuffers(SurfaceDesc &dstDesc, 
                 int32_t dstOffsetX,
                 int32_t dstOffsetY, 
-                int32_t copyWidth, 
-                int32_t copyHeight,
+                uint32_t copyWidth, 
+                uint32_t copyHeight,
                 const SurfaceDesc &srcDesc, 
                 int32_t srcOffsetX,                
                 int32_t srcOffsetY) {
 
   static const BlitTable s_blitTable;
 
-  if ((srcOffsetX >= srcDesc.Width) || (srcOffsetY >= srcDesc.Height) ||
-      (dstOffsetX >= dstDesc.Width) || (dstOffsetY >= dstDesc.Height)) {
+  if ((srcOffsetX >= (int32_t)srcDesc.Width) || (srcOffsetY >= (int32_t)srcDesc.Height) ||
+      (dstOffsetX >= (int32_t)dstDesc.Width) || (dstOffsetY >= (int32_t)dstDesc.Height)) {
     return -1;
   }
 
@@ -200,43 +193,25 @@ int CopyBuffers(const SurfaceDesc &dstDesc,
     copyHeight = srcDesc.Height;
   }
 
-  s_blitTable.get(srcDesc.Format, dstDesc.Format)(
-      dstDesc, dstOffsetX, dstOffsetY, copyWidth, copyHeight, srcDesc,
-      srcOffsetX, srcOffsetY);
-
-
-  return 0;
+  return s_blitTable.get(srcDesc.Format, dstDesc.Format)(
+    dstDesc, dstOffsetX, dstOffsetY, copyWidth, copyHeight, srcDesc,
+    srcOffsetX, srcOffsetY);
 }
 
-int ConvertImage(std::vector<uint8_t> &dst_pixels,
-                 std::vector<uint8_t>&src_pixels,
-                 uint32_t *bpp,
+int ConvertImage(std::vector<uint8_t>& dst_pixels,
+                 const std::vector<uint8_t>& src_pixels,
                  uint32_t width,
                  uint32_t height,
-                 uint8_t src_format,
-                 uint8_t dst_format) {
-  
-  ePixelFormat SrcFormat = TEX_FORMAT(src_format);
-  ePixelFormat DstFormat = TEX_FORMAT(dst_format);
+                 ePixelFormat src_format,
+                 ePixelFormat dst_format) {
 
-  *bpp = CBSIZE(DstFormat);
+  uint32_t src_pitch = Format::GetInfo(src_format).BytePerPixel * width;
+  uint32_t dst_pitch = Format::GetInfo(dst_format).BytePerPixel * width;
 
-  int32_t src_pitch =  CBSIZE(SrcFormat) * width;
-  int32_t dst_pitch =  CBSIZE(DstFormat) * width;
+  dst_pixels.resize(dst_pitch * height);
 
-  const SurfaceDesc srcDesc = {SrcFormat, 
-                           src_pixels.data(),
-                           int32_t(width),
-                           int32_t(height),
-                           src_pitch} ;            
+  SurfaceDesc srcDesc{src_format, (uint8_t*)src_pixels.data(), width, height, src_pitch};            
+  SurfaceDesc dstDesc{dst_format, dst_pixels.data(), width, height, dst_pitch};
 
-  const SurfaceDesc dstDesc = {DstFormat,
-                           dst_pixels.data(),
-                           int32_t(width),
-                           int32_t(height),
-                           dst_pitch};
-
-  CopyBuffers(dstDesc, 0, 0, width, height, srcDesc, 0, 0);    
-  
-  return 0;
+  return CopyBuffers(dstDesc, 0, 0, width, height, srcDesc, 0, 0);
 }
