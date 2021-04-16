@@ -41,7 +41,7 @@ static void show_usage() {
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "i:o:k:w:f:g:h?")) != -1) {
+  while ((c = getopt(argc, argv, "zi:o:k:w:f:g:h?")) != -1) {
     switch (c) {
     case 'i':
        input_file = optarg;
@@ -56,7 +56,7 @@ static void parse_args(int argc, char **argv) {
       wrap = std::atoi(optarg);
       break;
     case 'z':
-      use_sw = std::atoi(optarg);
+      use_sw = true;
       break;
     case 'f': {
       format  = std::atoi(optarg);
@@ -129,7 +129,7 @@ int run_test(const kernel_arg_t& kernel_arg,
 
   // save output image
   std::cout << "save output image" << std::endl;  
-  dump_image(dst_pixels, width, height, bpp);
+  //dump_image(dst_pixels, width, height, bpp);
   RT_CHECK(SaveTGA(output_file, dst_pixels, width, height, bpp));
 
   return 0;
@@ -157,7 +157,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(ConvertImage(src_pixels, tmp_pixels, src_width, src_height, FORMAT_A8R8G8B8, eformat));
   src_bpp = Format::GetInfo(eformat).BytePerPixel;
   
-  dump_image(src_pixels, src_width, src_height, src_bpp);
+  //dump_image(src_pixels, src_width, src_height, src_bpp);
 
   uint32_t src_bufsize = src_bpp * src_width * src_height;
 

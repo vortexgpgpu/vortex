@@ -66,26 +66,24 @@ inline int pack(int format, int l, int h) {
 }
 
 inline int tex_sw(struct kernel_arg_t* state, int stage, int u, int v, int lod) {
-    int base_addr  = state->src_ptr;//vx_csr_read(CSR_TEX_ADDR(0));
-	int mip_offset = 0;//vx_csr_read(CSR_TEX_MIPOFF(0));	
-	int log_width  = state->src_logWidth;//vx_csr_read(CSR_TEX_WIDTH(0));
-	int log_height = state->src_logHeight;//vx_csr_read(CSR_TEX_HEIGHT(0));
-	int format     = state->format;//vx_csr_read(CSR_TEX_FORMAT(0));
-	int wrap       = state->wrap;//vx_csr_read(CSR_TEX_WRAP(0));
-	int filter     = state->filter;//vx_csr_read(CSR_TEX_FILTER(0));
+    int base_addr  = state->src_ptr;
+	int mip_offset = 0;
+	int log_width  = state->src_logWidth;
+	int log_height = state->src_logHeight;
+	int format     = state->format;
+	int wrap       = state->wrap;
+	int filter     = state->filter;
 
-    int32_t* pBits = ((uint32_t*)base_addr) + mip_offset;
-
-    int u0 = address(wrap, u - (0x80000 >> log_width));
-    int v0 = address(wrap, v - (0x80000 >> log_height));    
-
-    int x0 = u0 >> (20 - log_width);
-    int y0 = v0 >> (20 - log_height);   
+    int32_t* pBits = ((uint32_t*)base_addr) + mip_offset;    
 
     if (filter) {
+        int u0 = address(wrap, u - (0x80000 >> log_width));
+        int v0 = address(wrap, v - (0x80000 >> log_height)); 
         int u1 = address(wrap, u + (0x80000 >> log_width));    
         int v1 = address(wrap, v + (0x80000 >> log_height));
 
+        int x0 = u0 >> (20 - log_width);
+        int y0 = v0 >> (20 - log_height);
         int x1 = u1 >> (20 - log_width);
         int y1 = v1 >> (20 - log_height); 
 
@@ -121,6 +119,12 @@ inline int tex_sw(struct kernel_arg_t* state, int stage, int u, int v, int lod) 
         lerp(c01a, c01b, c23a, c23b, beta, &c4a, &c4b);
         return pack(format, c4a, c4b);
     } else {
+        int u0 = address(wrap, u);
+        int v0 = address(wrap, v);  
+
+        int x0 = u0 >> (20 - log_width);
+        int y0 = v0 >> (20 - log_height);  
+
         int c0 = pBits[x0 + (y0 <<log_width)];
 
         int c0a, c0b;  
