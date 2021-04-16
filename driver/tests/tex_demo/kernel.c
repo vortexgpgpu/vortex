@@ -3,9 +3,7 @@
 #include "common.h"
 #include "texsw.h"
 
-uint32_t ilog2 (uint32_t value) {
-  	return (uint32_t)(sizeof(uint32_t) * 8UL) - (uint32_t)__builtin_clzl((value << 1) - 1UL) - 1;
-}
+#define ENABLE_SW
 
 struct tile_arg_t {
   	struct kernel_arg_t* state;	
@@ -30,8 +28,15 @@ void kernel_body(int task_id, void* arg) {
 		for (uint32_t x = 0; x < _arg->tile_width; ++x) {
 			int32_t u = (int32_t)(fu * (1<<20));
 			int32_t v = (int32_t)(fv * (1<<20));
-			//dst_row[x] = tex_sw(state, 0, u, v, 0x0);
+		#ifdef ENABLE_SW
+			if (state->use_sw) {
+				dst_row[x] = tex_sw(state, 0, u, v, 0x0);
+			} else {
+		#endif
 			dst_row[x] = vx_tex(0, u, v, 0x0);
+		#ifdef ENABLE_SW
+			}
+		#endif
 			fu += _arg->deltaX;
 		}
 		dst_ptr += state->dst_pitch;

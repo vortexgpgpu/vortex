@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <chrono>
+#include <cmath>
 #include <assert.h>
 #include <vortex.h>
 #include "common.h"
@@ -27,6 +28,7 @@ int wrap    = 0;
 int filter  = 0;
 float scale = 1.0f;
 int format  = 0;
+bool use_sw = false;
 ePixelFormat eformat = FORMAT_A8R8G8B8;
 
 vx_device_h device = nullptr;
@@ -34,7 +36,7 @@ vx_buffer_h buffer = nullptr;
 
 static void show_usage() {
    std::cout << "Vortex Texture Test." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-s scale] [-w wrap] [-f format] [-g filter] [-h: help]" << std::endl;
+   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-s scale] [-w wrap] [-f format] [-g filter] [-z no_hw] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
@@ -52,6 +54,9 @@ static void parse_args(int argc, char **argv) {
       break;
     case 'w':
       wrap = std::atoi(optarg);
+      break;
+    case 'z':
+      use_sw = std::atoi(optarg);
       break;
     case 'f': {
       format  = std::atoi(optarg);
@@ -124,7 +129,7 @@ int run_test(const kernel_arg_t& kernel_arg,
 
   // save output image
   std::cout << "save output image" << std::endl;  
-  //dump_image(dst_pixels, width, height, bpp);
+  dump_image(dst_pixels, width, height, bpp);
   RT_CHECK(SaveTGA(output_file, dst_pixels, width, height, bpp));
 
   return 0;
@@ -201,9 +206,10 @@ int main(int argc, char *argv[]) {
     kernel_arg.format     = format;
     kernel_arg.filter     = filter;
     kernel_arg.wrap       = wrap;
+    kernel_arg.use_sw     = use_sw;
     
-    kernel_arg.src_logWidth  = ilog2(src_width);
-    kernel_arg.src_logHeight = ilog2(src_height);
+    kernel_arg.src_logWidth  = (uint32_t)std::log2(src_width);
+    kernel_arg.src_logHeight = (uint32_t)std::log2(src_height);
     kernel_arg.src_stride = src_bpp;
     kernel_arg.src_pitch  = src_bpp * src_width;
     kernel_arg.src_ptr    = src_addr;
