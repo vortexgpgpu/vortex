@@ -79,11 +79,12 @@ static const char* op_string(const Instr &instr) {
     } else {
       switch (func3) {
       case 0: return func7 ? "SUB" : "ADD";
-      case 1: return "SLL";
+      case 1: return func7 ? "ROL" : "SLL";
       case 2: return "SLT";
       case 3: return "SLTU";
       case 4: return "XOR";
-      case 5: return func7 ? "SRA" : "SRL";
+      case 5: return (func7 == 0x30) ? "ROR" :
+                               func7 ? "SRA" : "SRL";
       case 6: return "OR";
       case 7: return "AND";
       }

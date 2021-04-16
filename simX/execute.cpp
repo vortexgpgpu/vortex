@@ -327,7 +327,13 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
           }
           break;
         case 1:
-          rddata = rsdata[0] << rsdata[1];
+          if (func7) {
+            // ROL
+            rddata = (rsdata[0] << rsdata[1]) | (rsdata[0] >> (32 - rsdata[1]));
+          } else {
+            // SLL
+            rddata = rsdata[0] << rsdata[1];
+          }
           break;
         case 2:
           rddata = (WordI(rsdata[0]) < WordI(rsdata[1]));
@@ -339,9 +345,14 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
           rddata = rsdata[0] ^ rsdata[1];
           break;
         case 5:
-          if (func7) {
+          if (func7 == 0x30) {
+            // ROR
+            rddata = (rsdata[0] >> rsdata[1]) | (rsdata[0] << (32 - rsdata[1]));
+          } else if (func7) {
+            // SRA
             rddata = WordI(rsdata[0]) >> WordI(rsdata[1]);
           } else {
+            // SRL
             rddata = Word(rsdata[0]) >> Word(rsdata[1]);
           }
           break;

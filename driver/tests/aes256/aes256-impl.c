@@ -156,6 +156,11 @@ static uint32_t sub_word(uint32_t word) {
 }
 
 static inline uint32_t rot_word(uint32_t word) {
+    #ifdef AES_NATIVE
+    // For endianness reasons, use rotr even though the algorithm
+    // specifies an rotl
+    return __intrin_rotr(word, 8);
+    #else
     uint32_t new;
     uint8_t *bytes = (uint8_t *)&word;
     uint8_t *new_bytes = (uint8_t *)&new;
@@ -166,6 +171,7 @@ static inline uint32_t rot_word(uint32_t word) {
     new_bytes[3] = bytes[0];
 
     return new;
+    #endif
 }
 
 static void add_round_key(uint8_t *state, const uint32_t *round_keys) {

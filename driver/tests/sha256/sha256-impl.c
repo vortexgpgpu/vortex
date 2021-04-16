@@ -1,9 +1,10 @@
 // From: https://github.gatech.edu/aadams80/cs7290-algos
 
 #include <stdint.h>
+#include <string.h>
 #include "sha256.h"
 
-#ifdef SHA_NATIVE
+#if defined(SHA_NATIVE) || defined(SHA_HYBRID)
 #include <vx_intrinsics.h>
 #endif
 
@@ -32,9 +33,7 @@ static void pad_message(uint8_t *buf, uint32_t n_bytes) {
     *(buf + n_bytes) = 0x80;
 
     uint32_t zero_bytes = PADDING_BYTES(n_bytes);
-    for (uint32_t i = 0; i < zero_bytes; i++) {
-        *(buf + n_bytes + 1 + i) = 0x00;
-    }
+    memset(buf + n_bytes + 1, 0, zero_bytes);
 
     // CRITICAL: this is bits, not bytes!
     // We need to multiply n_bytes by 8 to get the number of bits. So we
@@ -124,7 +123,11 @@ static void sha256_hash(uint8_t *M, uint32_t N, uint8_t *digest_out) {
 
 #ifndef SHA_NATIVE
 static inline uint32_t rotr(int n, uint32_t x) {
+    #ifdef SHA_HYBRID
+    return __intrin_rotr(x, n);
+    #else
     return (x >> n) | (x << (32 - n));
+    #endif
 }
 #endif
 

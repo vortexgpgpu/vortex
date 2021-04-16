@@ -390,6 +390,28 @@ inline uint32_t __intrin_aes_subword(uint32_t word) {
     return ret;
 }
 
+inline uint32_t __intrin_rotl(uint32_t word, uint32_t n) {
+    uint32_t ret;
+    asm volatile (
+        // Use aes32esi for SubBytes
+        ".insn r 0x33, 1, 0x30, %[ret], %[word], %[n]\n"
+        : [ret] "=r" (ret)
+        : [word] "r" (word), [n] "r" (n));
+
+    return ret;
+}
+
+inline uint32_t __intrin_rotr(uint32_t word, uint32_t n) {
+    uint32_t ret;
+    asm volatile (
+        // Use aes32esi for SubBytes
+        ".insn r 0x33, 5, 0x30, %[ret], %[word], %[n]\n"
+        : [ret] "=r" (ret)
+        : [word] "r" (word), [n] "r" (n));
+
+    return ret;
+}
+
 #define __if(b) vx_split(b); \
                 if (b) 
 
