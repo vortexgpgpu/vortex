@@ -23,21 +23,23 @@
 const char* kernel_file = "kernel.bin";
 const char* input_file  = "palette64.tga";
 const char* output_file = "output.tga";
-int wrap = 0;
-int filter = 0;
+int wrap    = 0;
+int filter  = 0;
 float scale = 1.0f;
+int format  = 0;
+ePixelFormat eformat = FORMAT_A8R8G8B8;
 
 vx_device_h device = nullptr;
 vx_buffer_h buffer = nullptr;
 
 static void show_usage() {
    std::cout << "Vortex Texture Test." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-s scale] [-w wrap] [-f filter] [-h: help]" << std::endl;
+   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-s scale] [-w wrap] [-f format] [-g filter] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "i:o:k:w:f:h?")) != -1) {
+  while ((c = getopt(argc, argv, "i:o:k:w:f:g:h?")) != -1) {
     switch (c) {
     case 'i':
        input_file = optarg;
@@ -51,7 +53,20 @@ static void parse_args(int argc, char **argv) {
     case 'w':
       wrap = std::atoi(optarg);
       break;
-    case 'f':
+    case 'f': {
+      format  = std::atoi(optarg);
+      switch (format) {
+      case 0: eformat = FORMAT_A8R8G8B8; break;
+      case 1: eformat = FORMAT_R5G6B5; break;
+      case 2: eformat = FORMAT_R4G4B4A4; break;
+      case 3: eformat = FORMAT_L8; break;
+      case 4: eformat = FORMAT_A8; break;
+      default:
+        std::cout << "Error: invalid format: " << format << std::endl;
+        exit(1);
+      }      
+    } break;
+    case 'g':
       filter = std::atoi(optarg);
       break;
     case 'k':
@@ -78,8 +93,13 @@ void cleanup() {
   }
 }
 
-int run_test(const kernel_arg_t& kernel_arg, uint32_t buf_size, uint32_t width, uint32_t height, uint32_t bpp) {
+int run_test(const kernel_arg_t& kernel_arg, 
+             uint32_t buf_size, 
+             uint32_t width, 
+             uint32_t height, 
+             uint32_t bpp) {
   auto time_start = std::chrono::high_resolution_clock::now();
+
   // start device
   std::cout << "start device" << std::endl;
   RT_CHECK(vx_start(device));
@@ -111,7 +131,7 @@ int run_test(const kernel_arg_t& kernel_arg, uint32_t buf_size, uint32_t width, 
 }
 
 int main(int argc, char *argv[]) {
-  kernel_arg_t kernel_arg;
+  kernel_arg_t kernel_arg;  
   std::vector<uint8_t> src_pixels;
   uint32_t src_width;
   uint32_t src_height;
@@ -120,7 +140,8 @@ int main(int argc, char *argv[]) {
   // parse command arguments
   parse_args(argc, argv);
 
-  RT_CHECK(LoadTGA(input_file, src_pixels, &src_width, &src_height, &src_bpp));
+  std::vector<uint8_t> tmp_pixels;
+  RT_CHECK(LoadTGA(input_file, tmp_pixels, &src_width, &src_height));
 
   // check power of two support
   if (!ISPOW2(src_width) || !ISPOW2(src_height)) {
@@ -128,7 +149,11 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  //dump_image(src_pixels, src_width, src_height, src_bpp);
+  RT_CHECK(ConvertImage(src_pixels, tmp_pixels, src_width, src_height, FORMAT_A8R8G8B8, eformat));
+  src_bpp = Format::GetInfo(eformat).BytePerPixel;
+  
+  dump_image(src_pixels, src_width, src_height, src_bpp);
+
   uint32_t src_bufsize = src_bpp * src_width * src_height;
 
   uint32_t dst_width   = (uint32_t)(src_width * scale);
@@ -173,7 +198,7 @@ int main(int argc, char *argv[]) {
   std::cout << "upload kernel argument" << std::endl;
   {
     kernel_arg.num_tasks  = std::min<uint32_t>(num_tasks, dst_height);
-    kernel_arg.format     = (src_bpp == 1) ? 5 : (src_bpp == 2) ? 1 : 0;
+    kernel_arg.format     = format;
     kernel_arg.filter     = filter;
     kernel_arg.wrap       = wrap;
     
