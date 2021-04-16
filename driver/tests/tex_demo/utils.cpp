@@ -1,6 +1,12 @@
 #include "utils.h"
 #include <fstream>
 #include <assert.h>
+#include "format.h"
+
+#define TEX_FORMAT(x) (x==0) ? FORMAT_A8R8G8B8 :(x==1) ? FORMAT_R5G6B5 : (x==2) ? FORMAT_R4G4B4A4 :(x==3) ? FORMAT_A8L8 :(x==4) ? FORMAT_L8 : FORMAT_A8 
+
+#define CBSIZE(x) (x==FORMAT_A8R8G8B8) ? 4 : (x==FORMAT_R5G6B5) ? 2 : (x==FORMAT_R4G4B4A4) ? 2 : (x==FORMAT_A8L8) ? 2 : 1 
+
 
 struct __attribute__((__packed__)) tga_header_t {
   int8_t idlength;
@@ -198,5 +204,39 @@ int CopyBuffers(const SurfaceDesc &dstDesc,
       dstDesc, dstOffsetX, dstOffsetY, copyWidth, copyHeight, srcDesc,
       srcOffsetX, srcOffsetY);
 
+
+  return 0;
+}
+
+int ConvertImage(std::vector<uint8_t> &dst_pixels,
+                 std::vector<uint8_t>&src_pixels,
+                 uint32_t *bpp,
+                 uint32_t width,
+                 uint32_t height,
+                 uint8_t src_format,
+                 uint8_t dst_format) {
+  
+  ePixelFormat SrcFormat = TEX_FORMAT(src_format);
+  ePixelFormat DstFormat = TEX_FORMAT(dst_format);
+
+  *bpp = CBSIZE(DstFormat);
+
+  int32_t src_pitch =  CBSIZE(SrcFormat) * width;
+  int32_t dst_pitch =  CBSIZE(DstFormat) * width;
+
+  const SurfaceDesc srcDesc = {SrcFormat, 
+                           src_pixels.data(),
+                           int32_t(width),
+                           int32_t(height),
+                           src_pitch} ;            
+
+  const SurfaceDesc dstDesc = {DstFormat,
+                           dst_pixels.data(),
+                           int32_t(width),
+                           int32_t(height),
+                           dst_pitch};
+
+  CopyBuffers(dstDesc, 0, 0, width, height, srcDesc, 0, 0);    
+  
   return 0;
 }
