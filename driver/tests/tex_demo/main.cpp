@@ -25,18 +25,19 @@ const char* output_file = "output.tga";
 int wrap = 0;
 int filter = 0;
 float scale = 1.0f;
+int format = 0;
 
 vx_device_h device = nullptr;
 vx_buffer_h buffer = nullptr;
 
 static void show_usage() {
    std::cout << "Vortex Texture Test." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-s scale] [-w wrap] [-f filter] [-h: help]" << std::endl;
+   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-s scale] [-w wrap] [-f format] [-g filter] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "i:o:k:w:f:h?")) != -1) {
+  while ((c = getopt(argc, argv, "i:o:k:w:f:g:h?")) != -1) {
     switch (c) {
     case 'i':
        input_file = optarg;
@@ -51,6 +52,9 @@ static void parse_args(int argc, char **argv) {
       wrap = std::atoi(optarg);
       break;
     case 'f':
+      format = std::atoi(optarg);
+      break;
+    case 'g':
       filter = std::atoi(optarg);
       break;
     case 'k':
@@ -106,6 +110,7 @@ int run_test(const kernel_arg_t& kernel_arg, uint32_t buf_size, uint32_t width, 
 
 int main(int argc, char *argv[]) {
   kernel_arg_t kernel_arg;
+  std::vector<uint8_t> src_pixels_rgba8;
   std::vector<uint8_t> src_pixels;
   uint32_t src_width;
   uint32_t src_height;
@@ -114,7 +119,13 @@ int main(int argc, char *argv[]) {
   // parse command arguments
   parse_args(argc, argv);
 
-  RT_CHECK(LoadTGA(input_file, src_pixels, &src_width, &src_height, &src_bpp));
+  // if (format){
+    RT_CHECK(LoadTGA(input_file, src_pixels_rgba8, &src_width, &src_height, &src_bpp));
+    RT_CHECK(ConvertImage(src_pixels, src_pixels_rgba8, &src_bpp, src_width, src_height, 0, format));
+  // } else {
+  //   RT_CHECK(LoadTGA(input_file, src_pixels, &src_width, &src_height, &src_bpp));
+  // }
+
   dump_image(src_pixels, src_width, src_height, src_bpp);
   uint32_t src_bufsize = src_bpp * src_width * src_height;
 
@@ -160,7 +171,7 @@ int main(int argc, char *argv[]) {
   std::cout << "upload kernel argument" << std::endl;
   {
     kernel_arg.num_tasks  = std::min<uint32_t>(num_tasks, dst_height);
-    kernel_arg.format     = (src_bpp == 1) ? 5 : (src_bpp == 2) ? 1 : 0;
+    kernel_arg.format     = format;
     kernel_arg.filter     = filter;
     kernel_arg.wrap       = wrap;
     
