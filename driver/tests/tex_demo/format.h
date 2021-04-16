@@ -54,7 +54,7 @@ enum ePixelFormat {
 #define FORMAT_ARGB FORMAT_A8R8G8B8
 #define FORMAT_ARGB_ FORMAT_A4R4G4B4
 
-template <uint32_t PixelFormat>
+template <ePixelFormat PixelFormat>
 struct TFormatInfo {};
 
 template <>
@@ -462,7 +462,7 @@ public:
 
 namespace Format {
 
-inline static const FormatInfo &GetInfo(uint32_t pixelFormat) {
+inline static const FormatInfo &GetInfo(ePixelFormat pixelFormat) {
   static const FormatInfo sc_formatInfos[FORMAT_SIZE_] = {
       __formatInfo(FORMAT_UNKNOWN),
       __formatInfo(FORMAT_A8),
@@ -501,26 +501,26 @@ typedef ColorARGB (*pfn_convert_from)(const void *pIn);
 
 typedef void (*pfn_convert_to)(void *pOut, const ColorARGB &in);
 
-template <uint32_t PixelFormat>
+template <ePixelFormat PixelFormat>
 static uint32_t ConvertTo(const ColorARGB &color);
 
-template <uint32_t PixelFormat>
+template <ePixelFormat PixelFormat>
 static void ConvertTo(void *pOut, const ColorARGB &in) {
   *reinterpret_cast<typename TFormatInfo<PixelFormat>::TYPE *>(pOut) =
       static_cast<typename TFormatInfo<PixelFormat>::TYPE>(
           ConvertTo<PixelFormat>(in));
 }
 
-template <uint32_t PixelFormat, bool bForceAlpha>
+template <ePixelFormat PixelFormat, bool bForceAlpha>
 static ColorARGB ConvertFrom(uint32_t in);
 
-template <uint32_t PixelFormat, bool bForceAlpha>
+template <ePixelFormat PixelFormat, bool bForceAlpha>
 static ColorARGB ConvertFrom(const void *pIn) {
   return ConvertFrom<PixelFormat, bForceAlpha>(
       *reinterpret_cast<const typename TFormatInfo<PixelFormat>::TYPE *>(pIn));
 }
 
-inline static pfn_convert_to GetConvertTo(uint32_t pixelFormat) {
+inline static pfn_convert_to GetConvertTo(ePixelFormat pixelFormat) {
   switch (pixelFormat) {
   case FORMAT_A8:
     return &ConvertTo<FORMAT_A8>;
@@ -550,11 +550,13 @@ inline static pfn_convert_to GetConvertTo(uint32_t pixelFormat) {
     return &ConvertTo<FORMAT_D16>;
   case FORMAT_X8S8D16:
     return &ConvertTo<FORMAT_X8S8D16>;
+  default:
+    return &ConvertTo<FORMAT_UNKNOWN>;
   }
   return nullptr;
 }
 
-inline static pfn_convert_from GetConvertFrom(uint32_t pixelFormat,
+inline static pfn_convert_from GetConvertFrom(ePixelFormat pixelFormat,
                                               bool bForceAlpha) {
   if (bForceAlpha) {
     switch (pixelFormat) {
@@ -586,6 +588,8 @@ inline static pfn_convert_from GetConvertFrom(uint32_t pixelFormat,
       return &ConvertFrom<FORMAT_D16, false>;
     case FORMAT_X8S8D16:
       return &ConvertFrom<FORMAT_X8S8D16, false>;
+    default:
+      return &ConvertFrom<FORMAT_UNKNOWN, false>;
     }
   } else {
     switch (pixelFormat) {
@@ -617,13 +621,15 @@ inline static pfn_convert_from GetConvertFrom(uint32_t pixelFormat,
       return &ConvertFrom<FORMAT_D16, false>;
     case FORMAT_X8S8D16:
       return &ConvertFrom<FORMAT_X8S8D16, false>;
+    default:
+      return &ConvertFrom<FORMAT_UNKNOWN, false>;
     }
   }
 
   return nullptr;
 }
 
-inline static uint32_t GetNativeFormat(uint32_t pixelFormat) {
+inline static uint32_t GetNativeFormat(ePixelFormat pixelFormat) {
   switch (pixelFormat) {
   case FORMAT_PAL4_B8G8R8:
   case FORMAT_PAL8_B8G8R8:
@@ -644,8 +650,10 @@ inline static uint32_t GetNativeFormat(uint32_t pixelFormat) {
   case FORMAT_PAL4_R5G5B5A1:
   case FORMAT_PAL8_R5G5B5A1:
     return FORMAT_R5G5B5A1;
+
+  default:
+    return pixelFormat;
   }
-  return pixelFormat;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -1,6 +1,7 @@
 #include "utils.h"
 #include <fstream>
 #include <assert.h>
+#include "format.h"
 
 struct __attribute__((__packed__)) tga_header_t {
   int8_t idlength;
@@ -20,8 +21,7 @@ struct __attribute__((__packed__)) tga_header_t {
 int LoadTGA(const char *filename, 
             std::vector<uint8_t> &pixels, 
             uint32_t *width, 
-            uint32_t *height, 
-            uint32_t *bpp) {
+            uint32_t *height) {
   std::ifstream ifs(filename, std::ios::in | std::ios::binary);
   if (!ifs.is_open()) {
     std::cerr << "couldn't open file: " << filename << "!" << std::endl;
@@ -70,7 +70,7 @@ int LoadTGA(const char *filename,
       ColorARGB color;        
       switch (stride) {
       case 2: 
-        color = Format::ConvertFrom<FORMAT_A1R5G5B5, true>(src_bytes); 
+        color = Format::ConvertFrom<FORMAT_A1R5G5B5, true>(src_bytes);         
         break;
       case 3: 
         color = Format::ConvertFrom<FORMAT_R8G8B8, true>(src_bytes); 
@@ -92,7 +92,6 @@ int LoadTGA(const char *filename,
 
   *width = header.width;
   *height = header.height;
-  *bpp = 4;
 
   return 0;
 }
@@ -162,19 +161,19 @@ void dump_image(const std::vector<uint8_t>& pixels, uint32_t width, uint32_t hei
   }
 }
 
-int CopyBuffers(const SurfaceDesc &dstDesc, 
+int CopyBuffers(SurfaceDesc &dstDesc, 
                 int32_t dstOffsetX,
                 int32_t dstOffsetY, 
-                int32_t copyWidth, 
-                int32_t copyHeight,
+                uint32_t copyWidth, 
+                uint32_t copyHeight,
                 const SurfaceDesc &srcDesc, 
                 int32_t srcOffsetX,                
                 int32_t srcOffsetY) {
 
   static const BlitTable s_blitTable;
 
-  if ((srcOffsetX >= srcDesc.Width) || (srcOffsetY >= srcDesc.Height) ||
-      (dstOffsetX >= dstDesc.Width) || (dstOffsetY >= dstDesc.Height)) {
+  if ((srcOffsetX >= (int32_t)srcDesc.Width) || (srcOffsetY >= (int32_t)srcDesc.Height) ||
+      (dstOffsetX >= (int32_t)dstDesc.Width) || (dstOffsetY >= (int32_t)dstDesc.Height)) {
     return -1;
   }
 
@@ -194,9 +193,25 @@ int CopyBuffers(const SurfaceDesc &dstDesc,
     copyHeight = srcDesc.Height;
   }
 
-  s_blitTable.get(srcDesc.Format, dstDesc.Format)(
-      dstDesc, dstOffsetX, dstOffsetY, copyWidth, copyHeight, srcDesc,
-      srcOffsetX, srcOffsetY);
+  return s_blitTable.get(srcDesc.Format, dstDesc.Format)(
+    dstDesc, dstOffsetX, dstOffsetY, copyWidth, copyHeight, srcDesc,
+    srcOffsetX, srcOffsetY);
+}
 
-  return 0;
+int ConvertImage(std::vector<uint8_t>& dst_pixels,
+                 const std::vector<uint8_t>& src_pixels,
+                 uint32_t width,
+                 uint32_t height,
+                 ePixelFormat src_format,
+                 ePixelFormat dst_format) {
+
+  uint32_t src_pitch = Format::GetInfo(src_format).BytePerPixel * width;
+  uint32_t dst_pitch = Format::GetInfo(dst_format).BytePerPixel * width;
+
+  dst_pixels.resize(dst_pitch * height);
+
+  SurfaceDesc srcDesc{src_format, (uint8_t*)src_pixels.data(), width, height, src_pitch};            
+  SurfaceDesc dstDesc{dst_format, dst_pixels.data(), width, height, dst_pitch};
+
+  return CopyBuffers(dstDesc, 0, 0, width, height, srcDesc, 0, 0);
 }

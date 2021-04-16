@@ -1,23 +1,23 @@
 #include "format.h"
 
 struct SurfaceDesc {
-  uint8_t Format;
+  ePixelFormat Format;
   uint8_t *pBits;
-  int32_t Width;
-  int32_t Height;
-  int32_t Pitch;
+  uint32_t Width;
+  uint32_t Height;
+  uint32_t Pitch;
 };
 
 class BlitTable {
 public:
-  typedef void (*PfnCopy)(const SurfaceDesc &dstDesc, 
-                          uint32_t dstOffsetX,
-                          uint32_t dstOffsetY, 
-                          uint32_t copyWidth,
-                          uint32_t copyHeight, 
-                          const SurfaceDesc &srcDesc,
-                          uint32_t srcOffsetX, 
-                          uint32_t srcOffsetY);
+  typedef int (*PfnCopy)(const SurfaceDesc &dstDesc, 
+                         uint32_t dstOffsetX,
+                         uint32_t dstOffsetY, 
+                         uint32_t copyWidth,
+                         uint32_t copyHeight, 
+                         const SurfaceDesc &srcDesc,
+                         uint32_t srcOffsetX, 
+                         uint32_t srcOffsetY);
 
   BlitTable() {
     for (uint32_t s = 0; s < FORMAT_COLOR_SIZE_; ++s) {
@@ -183,14 +183,14 @@ public:
 
 private:
   template <ePixelFormat SrcFormat, ePixelFormat DstFormat>
-  static void Copy(const SurfaceDesc &dstDesc, 
-                   uint32_t dstOffsetX,
-                   uint32_t dstOffsetY, 
-                   uint32_t copyWidth,
-                   uint32_t copyHeight, 
-                   const SurfaceDesc &srcDesc,
-                   uint32_t srcOffsetX, 
-                   uint32_t srcOffsetY) {
+  static int Copy(const SurfaceDesc &dstDesc, 
+                  uint32_t dstOffsetX,
+                  uint32_t dstOffsetY, 
+                  uint32_t copyWidth,
+                  uint32_t copyHeight, 
+                  const SurfaceDesc &srcDesc,
+                  uint32_t srcOffsetX, 
+                  uint32_t srcOffsetY) {
     auto srcBPP = TFormatInfo<SrcFormat>::CBSIZE;
     auto dstBPP = TFormatInfo<DstFormat>::CBSIZE;
     auto srcNextLine = srcDesc.Pitch;
@@ -211,14 +211,19 @@ private:
 
       pbSrc += srcNextLine;
       pbDst += dstNextLine;
-    }
+    }    
+    return 0;
   }
 
   template <typename Type>
-  static void CopyFast(const SurfaceDesc &dstDesc, uint32_t dstOffsetX,
-                       uint32_t dstOffsetY, uint32_t copyWidth,
-                       uint32_t copyHeight, const SurfaceDesc &srcDesc,
-                       uint32_t srcOffsetX, uint32_t srcOffsetY) {
+  static int CopyFast(const SurfaceDesc &dstDesc, 
+                      uint32_t dstOffsetX,
+                      uint32_t dstOffsetY, 
+                      uint32_t copyWidth,
+                      uint32_t copyHeight, 
+                      const SurfaceDesc &srcDesc,
+                      uint32_t srcOffsetX, 
+                      uint32_t srcOffsetY) {
     auto nBPP = sizeof(Type);
     auto srcNextLine = srcDesc.Pitch;
     auto dstNextLine = dstDesc.Pitch;
@@ -235,18 +240,20 @@ private:
       pbSrc += srcNextLine;
       pbDst += dstNextLine;
     }
+    return 0;
   }
 
-  static void CopyInvalid(const SurfaceDesc & /*dstDesc*/,
-                          uint32_t /*dstOffsetX*/, 
-                          uint32_t /*dstOffsetY*/,
-                          uint32_t /*copyWidth*/, 
-                          uint32_t /*copyHeight*/,
-                          const SurfaceDesc & /*srcDesc*/,
-                          uint32_t /*srcOffsetX*/, 
-                          uint32_t /*srcOffsetY*/)
+  static int CopyInvalid(const SurfaceDesc & /*dstDesc*/,
+                         uint32_t /*dstOffsetX*/, 
+                         uint32_t /*dstOffsetY*/,
+                         uint32_t /*copyWidth*/, 
+                         uint32_t /*copyHeight*/,
+                         const SurfaceDesc & /*srcDesc*/,
+                         uint32_t /*srcOffsetX*/, 
+                         uint32_t /*srcOffsetY*/)
   {
-    std::abort();
+    std::cout << "Error: invalid format" << std::endl;
+    return -1;
   }
 
   PfnCopy copyFuncs_[FORMAT_COLOR_SIZE_][FORMAT_COLOR_SIZE_];
