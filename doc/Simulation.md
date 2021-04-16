@@ -33,3 +33,19 @@ Example use of command line arguments: Run the sgemm benchmark using the vlsim d
 
     $ ./ci/blackbox.sh --clusters=1 --cores=4 --warps=4 --threads=4 --driver=vlsim --app=sgemm
 
+Output from terminal:
+```
+Create context
+Create program from kernel source
+Upload source buffers
+Execute the kernel
+Elapsed time: 2463 ms
+Download destination buffer
+Verify result
+PASSED!
+PERF: core0: instrs=90802, cycles=52776, IPC=1.720517
+PERF: core1: instrs=90693, cycles=53108, IPC=1.707709
+PERF: core2: instrs=90849, cycles=53107, IPC=1.710678
+PERF: core3: instrs=90836, cycles=50347, IPC=1.804199
+PERF: instrs=363180, cycles=53108, IPC=6.838518
+```
