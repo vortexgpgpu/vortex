@@ -10,7 +10,8 @@ VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
 VX_CFLAGS += -march=rv32imf -mabi=ilp32f -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
 VX_CFLAGS += -B$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/bin -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw -DSHA_NATIVE
-#VX_CFLAGS += -B$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/bin -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw -DSHA_HYBRID
+# To use the hybrid version, remove -DSHA_NATIVE from above and add
+# -DSHA_HYBRID. To use the pure software version, include neither
 
 VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link.ld -Wl,--gc-sections $(VORTEX_RT_PATH)/libvortexrt.a
 

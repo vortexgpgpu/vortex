@@ -105,7 +105,8 @@ static const char* op_string(const Instr &instr) {
     case 2: return "SLTI";
     case 3: return "SLTIU";
     case 4: return "XORI";
-    case 5: return func7 ? "SRAI" : "SRLI";
+    case 5: return (func7 == 0x30) ? "RORI" :
+                             func7 ? "SRAI" : "SRLI";
     case 6: return "ORI";
     case 7: return "ANDI";
     }  

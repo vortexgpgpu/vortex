@@ -124,7 +124,7 @@ static void sha256_hash(uint8_t *M, uint32_t N, uint8_t *digest_out) {
 #ifndef SHA_NATIVE
 static inline uint32_t rotr(int n, uint32_t x) {
     #ifdef SHA_HYBRID
-    return __intrin_rotr(x, n);
+    return __intrin_rotr_imm(x, n);
     #else
     return (x >> n) | (x << (32 - n));
     #endif

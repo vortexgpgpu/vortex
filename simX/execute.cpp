@@ -411,7 +411,14 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         rddata = rsdata[0] ^ immsrc;
         break;
       case 5:
-        if (func7) {
+        if (func7 == 0x30) {
+          // RORI
+          if (immsrc < 0) {
+            rddata = (rsdata[0] << -immsrc) | (rsdata[0] >> (32 + immsrc));
+          } else {
+            rddata = (rsdata[0] >> immsrc) | (rsdata[0] << (32 - immsrc));
+          }
+        } else if (func7) {
           // SRAI
           Word result = WordI(rsdata[0]) >> immsrc;
           rddata = result;

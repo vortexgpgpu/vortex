@@ -2,7 +2,7 @@
 #include <string.h>
 #include "aes256.h"
 
-#ifdef AES_NATIVE
+#if defined(AES_NATIVE) || defined(AES_HYBRID)
 #include <vx_intrinsics.h>
 #endif
 
@@ -156,10 +156,10 @@ static uint32_t sub_word(uint32_t word) {
 }
 
 static inline uint32_t rot_word(uint32_t word) {
-    #ifdef AES_NATIVE
+    #if defined(AES_NATIVE) || defined(AES_HYBRID)
     // For endianness reasons, use rotr even though the algorithm
     // specifies an rotl
-    return __intrin_rotr(word, 8);
+    return __intrin_rotr_imm(word, 8);
     #else
     uint32_t new;
     uint8_t *bytes = (uint8_t *)&word;
