@@ -1,2 +1,0 @@
-sha256.o: sha256.cpp /usr/include/stdc-predef.h ../../include/vortex.h common.h \
- sha256.h
