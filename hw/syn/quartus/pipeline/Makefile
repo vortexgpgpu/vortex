@@ -1,8 +1,18 @@
 PROJECT = VX_pipeline
 TOP_LEVEL_ENTITY = VX_pipeline
 SRC_FILE = VX_pipeline.v
-FPU_INCLUDE = ../../../rtl/fp_cores;../../../rtl/fp_cores/altera/arria10;../../../rtl/fp_cores/fpnew/src;../../../rtl/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl;../../../rtl/fp_cores/fpnew/src/common_cells/include;../../../rtl/fp_cores/fpnew/src/common_cells/src
-RTL_INCLUDE = $(FPU_INCLUDE);../../../rtl;../../../rtl/libs;../../../rtl/interfaces
+RTL_DIR = ../../../rtl
+
+FAMILY = "Arria 10"
+DEVICE = 10AX115N3F40E2SG
+FPU_CORE_PATH = $(RTL_DIR)/fp_cores/altera/arria10
+
+#FAMILY = "Stratix 10"
+#DEVICE = 1SX280HN2F43E2VG
+#FPU_CORE_PATH = $(RTL_DIR)/fp_cores/altera/stratix10
+
+FPU_INCLUDE = $(RTL_DIR)/fp_cores;$(FPU_CORE_PATH);$(RTL_DIR)/fp_cores/fpnew/src;$(RTL_DIR)/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl;$(RTL_DIR)/fp_cores/fpnew/src/common_cells/include;$(RTL_DIR)/fp_cores/fpnew/src/common_cells/src
+RTL_INCLUDE = $(FPU_INCLUDE);$(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Part, Family
@@ -51,7 +61,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES):
-	quartus_sh -t ../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../project.sdc -inc "$(RTL_INCLUDE)"
+	quartus_sh -t ../../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../../project.sdc -inc "$(RTL_INCLUDE)"
 	
 syn.chg:
 	$(STAMP) syn.chg
@@ -66,7 +76,7 @@ asm.chg:
 	$(STAMP) asm.chg
 
 timing: $(PROJECT_FILES)
-	quartus_sh -t ../timing-html.tcl -project $(PROJECT)
+	quartus_sh -t ../../timing-html.tcl -project $(PROJECT)
 
 program: $(PROJECT).sof
 	quartus_pgm --no_banner --mode=jtag -o "$(PROJECT).sof"

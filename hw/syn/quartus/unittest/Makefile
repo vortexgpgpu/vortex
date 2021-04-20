@@ -1,13 +1,19 @@
 PROJECT = Unittest
 TOP_LEVEL_ENTITY = VX_cache_core_req_bank_sel
 SRC_FILE = VX_cache_core_req_bank_sel.v
-FPU_INCLUDE = ../../../rtl/fp_cores;../../../rtl/fp_cores/altera/arria10;../../../rtl/fp_cores/fpnew/src;../../../rtl/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl;../../../rtl/fp_cores/fpnew/src/common_cells/include;../../../rtl/fp_cores/fpnew/src/common_cells/src
-RTL_INCLUDE = $(FPU_INCLUDE);../../../rtl;../../../rtl/libs;../../../rtl/interfaces;../../../rtl/cache
-PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
+RTL_DIR = ../../../../rtl
 
-# Part, Family
 FAMILY = "Arria 10"
-DEVICE = 10AX115N3F40E2SG   
+DEVICE = 10AX115N3F40E2SG
+FPU_CORE_PATH = $(RTL_DIR)/fp_cores/altera/arria10
+
+#FAMILY = "Stratix 10"
+#DEVICE = 1SX280HN2F43E2VG
+#FPU_CORE_PATH = $(RTL_DIR)/fp_cores/altera/stratix10 
+
+FPU_INCLUDE = $(RTL_DIR)/fp_cores;$(FPU_CORE_PATH);$(RTL_DIR)/fp_cores/fpnew/src;$(RTL_DIR)/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl;$(RTL_DIR)/fp_cores/fpnew/src/common_cells/include;$(RTL_DIR)/fp_cores/fpnew/src/common_cells/src
+RTL_INCLUDE = $(FPU_INCLUDE);$(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces;$(RTL_DIR)/cache
+PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Executable Configuration
 SYN_ARGS = --parallel --read_settings_files=on
@@ -51,7 +57,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES):
-	quartus_sh -t ../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../project.sdc -inc "$(RTL_INCLUDE)"
+	quartus_sh -t ../../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../../project.sdc -inc "$(RTL_INCLUDE)"
 	
 syn.chg:
 	$(STAMP) syn.chg

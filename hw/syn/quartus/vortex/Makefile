@@ -1,16 +1,16 @@
-FAMILY = "Arria 10"
-DEVICE = 10AX115N3F40E2SG
-FPU_CORE_PATH=../../../rtl/fp_cores/altera/arria10
-
-#FAMILY = "Stratix 10"
-#DEVICE = 1SX280HN2F43E2VG
-#FPU_CORE_PATH=../../../rtl/fp_cores/altera/stratix10
-
 PROJECT = Vortex
 TOP_LEVEL_ENTITY = Vortex
 SRC_FILE = Vortex.sv
+RTL_DIR = ../../../../rtl
 
-RTL_DIR=../../../rtl
+FAMILY = "Arria 10"
+DEVICE = 10AX115N3F40E2SG
+FPU_CORE_PATH = $(RTL_DIR)/fp_cores/altera/arria10
+
+#FAMILY = "Stratix 10"
+#DEVICE = 1SX280HN2F43E2VG
+#FPU_CORE_PATH = $(RTL_DIR)/fp_cores/altera/stratix10
+
 FPU_INCLUDE = $(RTL_DIR)/fp_cores;$(FPU_CORE_PATH);$(RTL_DIR)/fp_cores/fpnew/src;$(RTL_DIR)/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl;$(RTL_DIR)/fp_cores/fpnew/src/common_cells/include;$(RTL_DIR)/fp_cores/fpnew/src/common_cells/src
 RTL_INCLUDE = $(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces;$(RTL_DIR)/cache;$(FPU_INCLUDE)
 
@@ -58,7 +58,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES):
-	quartus_sh -t ../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../project.sdc -inc "$(RTL_INCLUDE)"
+	quartus_sh -t ../../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../../project.sdc -inc "$(RTL_INCLUDE)"
 	
 syn.chg:
 	$(STAMP) syn.chg
