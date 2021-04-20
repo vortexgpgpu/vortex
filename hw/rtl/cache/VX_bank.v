@@ -558,11 +558,11 @@ module VX_bank #(
 
 `ifdef DBG_PRINT_CACHE_BANK
     always @(posedge clk) begin  
-        /*if (valid_st1 && pmask_st1 == {NUM_PORTS{1'b1}}) begin
-            $display("%t: cache%0d:%0d full bank multi-porting - addr=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID));
-        end*/      
+        /*if (crsq_in_fire && (NUM_PORTS > 1) && $countones(crsq_pmask) > 1) begin
+            $display("%t: *** cache%0d:%0d multi-port-out: pmask=%b, addr=%0h, tag=%0h", $time, CACHE_ID, BANK_ID, crsq_pmask, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), crsq_tag);
+        end */     
         if (valid_st1 && !is_fill_st1 && miss_st1 && incoming_fill_qual_st1) begin
-            $display("%t: cache%0d:%0d miss with incoming fill - addr=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID));
+            $display("%t: *** cache%0d:%0d miss with incoming fill - addr=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID));
             assert(!is_mshr_st1);
         end
         if (crsq_in_stall || dreq_alm_full || mshr_alm_full) begin

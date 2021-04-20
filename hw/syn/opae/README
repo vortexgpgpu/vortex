@@ -44,6 +44,9 @@ fpgaconf vortex_afu.gbs
 # If this says Multiple ports. Then use --bus with fpgaconf. #bus info can be found by fpgainfo port
 fpgaconf --bus 0xaf vortex_afu.gbs
 
+# get portid
+fpgainfo port
+
 # Running the Test case 
 cd /driver/tests/basic
 make run-fpga

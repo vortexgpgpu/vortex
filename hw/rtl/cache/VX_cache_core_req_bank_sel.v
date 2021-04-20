@@ -1,6 +1,8 @@
 `include "VX_cache_config.vh"
 
 module VX_cache_core_req_bank_sel #(  
+    parameter CACHE_ID          = 0,
+
     // Size of line inside a bank in bytes
     parameter CACHE_LINE_SIZE   = 64, 
     // Size of a word in bytes
@@ -148,7 +150,7 @@ module VX_cache_core_req_bank_sel #(
                         end
                     end
                 end
-
+                
             end else begin
 
                 always @(*) begin
