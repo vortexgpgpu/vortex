@@ -88,7 +88,7 @@ module VX_cache #(
 );
 
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))
-
+    
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0]         per_bank_core_req_valid; 
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(`WORD_SELECT_BITS)-1:0] per_bank_core_req_wsel;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_core_req_byteen;
@@ -176,6 +176,7 @@ module VX_cache #(
     ///////////////////////////////////////////////////////////////////////////
 
     VX_cache_core_req_bank_sel #(
+        .CACHE_ID        (CACHE_ID),
         .CACHE_LINE_SIZE (CACHE_LINE_SIZE),
         .NUM_BANKS       (NUM_BANKS),
         .NUM_PORTS       (NUM_PORTS),
@@ -351,6 +352,7 @@ module VX_cache #(
     end   
 
     VX_cache_core_rsp_merge #(
+        .CACHE_ID           (CACHE_ID),
         .NUM_BANKS          (NUM_BANKS),
         .NUM_PORTS          (NUM_PORTS),
         .WORD_SIZE          (WORD_SIZE),

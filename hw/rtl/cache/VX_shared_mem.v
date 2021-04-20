@@ -71,6 +71,7 @@ module VX_shared_mem #(
     wire                                    per_bank_core_req_ready_unqual;
     
     VX_cache_core_req_bank_sel #(
+        .CACHE_ID        (CACHE_ID),
         .CACHE_LINE_SIZE (WORD_SIZE),
         .NUM_BANKS       (NUM_BANKS),
         .NUM_PORTS       (1),

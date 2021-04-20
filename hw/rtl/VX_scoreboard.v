@@ -31,7 +31,7 @@ module VX_scoreboard  #(
             if (release_reg) begin
                 inuse_regs[writeback_if.wid][writeback_if.rd] <= 0;
                 assert(inuse_regs[writeback_if.wid][writeback_if.rd] != 0) 
-                    else $error("*** %t: core%0d: invalid writeback register: wid=%0d, PC=%0h, rd=%0d",
+                    else $error("%t: *** core%0d: invalid writeback register: wid=%0d, PC=%0h, rd=%0d",
                                 $time, CORE_ID, writeback_if.wid, writeback_if.PC, writeback_if.rd);
             end
         end    
@@ -40,7 +40,7 @@ module VX_scoreboard  #(
 `ifdef DBG_PRINT_PIPELINE
     always @(posedge clk) begin
         if (ibuf_deq_if.valid && ~ibuf_deq_if.ready) begin            
-            $display("%t: core%0d-stall: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b",
+            $display("%t: *** core%0d-stall: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b",
                     $time, CORE_ID, ibuf_deq_if.wid, ibuf_deq_if.PC, ibuf_deq_if.rd, ibuf_deq_if.wb, 
                     deq_inuse_regs[ibuf_deq_if.rd], deq_inuse_regs[ibuf_deq_if.rs1], deq_inuse_regs[ibuf_deq_if.rs2], deq_inuse_regs[ibuf_deq_if.rs3]);            
         end
@@ -54,7 +54,7 @@ module VX_scoreboard  #(
             deadlock_ctr <= 0;
         end else if (ibuf_deq_if.valid && ~ibuf_deq_if.ready) begin            
             deadlock_ctr <= deadlock_ctr + 1;
-            assert(deadlock_ctr < deadlock_timeout) else $error("*** %t: core%0d-deadlock: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b",
+            assert(deadlock_ctr < deadlock_timeout) else $error("%t: *** core%0d-deadlock: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b",
                     $time, CORE_ID, ibuf_deq_if.wid, ibuf_deq_if.PC, ibuf_deq_if.rd, ibuf_deq_if.wb, 
                     deq_inuse_regs[ibuf_deq_if.rd], deq_inuse_regs[ibuf_deq_if.rs1], deq_inuse_regs[ibuf_deq_if.rs2], deq_inuse_regs[ibuf_deq_if.rs3]);            
         end else if (ibuf_deq_if.valid && ibuf_deq_if.ready) begin

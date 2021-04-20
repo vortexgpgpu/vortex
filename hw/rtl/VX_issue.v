@@ -33,7 +33,6 @@ module VX_issue #(
     ) ibuffer (
         .clk          (clk),
         .reset        (reset), 
-        .freeze       (1'b0),
         .ibuf_enq_if  (decode_if),
         .ibuf_deq_if  (ibuf_deq_if) 
     );
