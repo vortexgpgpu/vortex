@@ -2,7 +2,7 @@
 
 ### Table of Contents
 
-- Vortex Architecture
+- Vortex Microarchitecture
 - Vortex Software
 - [Vortex Simulation](https://github.com/vortexgpgpu/vortex-dev/blob/master/doc/Simulation.md)
 - [FPGA](https://github.com/vortexgpgpu/vortex-dev/blob/master/doc/Flubber_FPGA_Startup_Guide.md)

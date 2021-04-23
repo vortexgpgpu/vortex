@@ -24,10 +24,9 @@ Running tests under specific drivers (rtlsim,simx,fpga) is done using the script
 - *L3cache* - used to enable the shared l3cache among the Vortex clusters.
 - *Driver* - used to specify which driver to run the Vortex simulation (either rtlsim, vlsim, fpga, or simx).
 - *Debug* - used to enable debug mode for the Vortex simulation.
-- *Scope* -
-- *Perf* - is used to enable the detailed performance counters within the Vortex simulation.
-- *App* - is used to specify which test/benchmark to run in the Vortex simulation. The main choices are vecadd, sgemm, basic, demo, and dogfood. Other tests/benchmarks are located in the `/benchmarks/opencl` folder though not all of them work wit the current version of Vortex.
-- *Args* - 
+- *Perf* - used to enable the detailed performance counters within the Vortex simulation.
+- *App* - used to specify which test/benchmark to run in the Vortex simulation. The main choices are vecadd, sgemm, basic, demo, and dogfood. Other tests/benchmarks are located in the `/benchmarks/opencl` folder though not all of them work wit the current version of Vortex.
+- *Args* - used to pass additional arguments to the application.
 
 Example use of command line arguments: Run the sgemm benchmark using the vlsim driver with a Vortex configuration of 1 cluster, 4 cores, 4 warps, and 4 threads.
 
