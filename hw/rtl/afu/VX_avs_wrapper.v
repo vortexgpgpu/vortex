@@ -15,18 +15,6 @@ module VX_avs_wrapper #(
     input wire                      clk,
     input wire                      reset,
 
-    // AVS bus
-    output  wire [AVS_DATAW-1:0]    avs_writedata,
-    input   wire [AVS_DATAW-1:0]    avs_readdata,
-    output  wire [AVS_ADDRW-1:0]    avs_address,
-    input   wire                    avs_waitrequest,
-    output  wire                    avs_write,
-    output  wire                    avs_read,
-    output  wire [AVS_BYTEENW-1:0]  avs_byteenable,
-    output  wire [AVS_BURSTW-1:0]   avs_burstcount,
-    input                           avs_readdatavalid,
-    output wire [AVS_BANKS_BITS-1:0] avs_bankselect,
-
     // DRAM request
     input wire                      dram_req_valid,
     input wire                      dram_req_rw,    
@@ -40,7 +28,19 @@ module VX_avs_wrapper #(
     output wire                     dram_rsp_valid,        
     output wire [AVS_DATAW-1:0]     dram_rsp_data,
     output wire [REQ_TAGW-1:0]      dram_rsp_tag,
-    input wire                      dram_rsp_ready
+    input wire                      dram_rsp_ready,
+
+    // AVS bus
+    output  wire [AVS_DATAW-1:0]    avs_writedata,
+    input   wire [AVS_DATAW-1:0]    avs_readdata,
+    output  wire [AVS_ADDRW-1:0]    avs_address,
+    input   wire                    avs_waitrequest,
+    output  wire                    avs_write,
+    output  wire                    avs_read,
+    output  wire [AVS_BYTEENW-1:0]  avs_byteenable,
+    output  wire [AVS_BURSTW-1:0]   avs_burstcount,
+    input                           avs_readdatavalid,
+    output wire [AVS_BANKS_BITS-1:0] avs_bankselect
 );
     reg [AVS_BANKS_BITS-1:0] avs_bankselect_r;
     reg [AVS_BURSTW-1:0]     avs_burstcount_r;

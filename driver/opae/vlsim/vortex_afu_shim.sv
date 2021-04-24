@@ -1,5 +1,9 @@
-`include "VX_define.vh"
+`include "VX_platform.vh"
+`IGNORE_WARNINGS_BEGIN
 `include "vortex_afu.vh"
+`IGNORE_WARNINGS_END
+`include "VX_define.vh"
+
 /* verilator lint_off IMPORTSTAR */ 
 import ccip_if_pkg::*;
 import local_mem_cfg_pkg::*;

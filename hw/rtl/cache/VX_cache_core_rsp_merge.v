@@ -33,6 +33,8 @@ module VX_cache_core_rsp_merge #(
     output wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]     core_rsp_data,      
     input  wire [`CORE_REQ_TAG_COUNT-1:0]           core_rsp_ready
 );
+    `UNUSED_PARAM (CACHE_ID)
+
     if (NUM_BANKS > 1) begin
 
         reg [NUM_REQS-1:0] core_rsp_valid_unqual;
