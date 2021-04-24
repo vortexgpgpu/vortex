@@ -312,8 +312,7 @@ void opae_sim::avs_bus() {
   // process DRAM requests
   if (!dram_stalled) {
     assert(!vortex_afu_->avs_read || !vortex_afu_->avs_write);
-    if (vortex_afu_->avs_write) {      
-      assert(0 == vortex_afu_->mem_bank_select);
+    if (vortex_afu_->avs_write) {           
       uint64_t byteen = vortex_afu_->avs_byteenable;
       unsigned base_addr = vortex_afu_->avs_address * DRAM_BLOCK_SIZE;
       uint8_t* data = (uint8_t*)(vortex_afu_->avs_writedata);
@@ -329,7 +328,6 @@ void opae_sim::avs_bus() {
       printf("\n");*/
     }
     if (vortex_afu_->avs_read) {
-      assert(0 == vortex_afu_->mem_bank_select);
       dram_rd_req_t dram_req;      
       dram_req.addr = vortex_afu_->avs_address;
       ram_.read(vortex_afu_->avs_address * DRAM_BLOCK_SIZE, DRAM_BLOCK_SIZE, dram_req.data.data());      
