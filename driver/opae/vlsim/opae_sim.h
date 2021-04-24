@@ -9,12 +9,15 @@
 #endif
 
 #include <VX_config.h>
+#include "vortex_afu.h"
 #include "ram.h"
 
 #include <ostream>
 #include <future>
 #include <list>
 #include <unordered_map>
+
+#define DRAM_BLOCK_SIZE  (PLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH / 8)
 
 #define CACHE_BLOCK_SIZE 64
 
@@ -40,7 +43,7 @@ private:
 
   typedef struct {
     int cycles_left;  
-    std::array<uint8_t, CACHE_BLOCK_SIZE> data;
+    std::array<uint8_t, DRAM_BLOCK_SIZE> data;
     uint32_t addr;
   } dram_rd_req_t;
 

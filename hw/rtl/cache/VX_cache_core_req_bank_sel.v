@@ -45,6 +45,7 @@ module VX_cache_core_req_bank_sel #(
     output wire [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0] per_bank_core_req_tag,
     input  wire [`BANK_READY_COUNT-1:0]             per_bank_core_req_ready
 );
+    `UNUSED_PARAM (CACHE_ID)
     `STATIC_ASSERT (NUM_REQS >= NUM_BANKS, ("invalid number of banks"));
 
     `UNUSED_VAR (clk)

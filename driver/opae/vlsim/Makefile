@@ -21,10 +21,10 @@ DBG_PRINT_FLAGS += -DDBG_PRINT_SCOPE
 DBG_FLAGS += $(DBG_PRINT_FLAGS)
 DBG_FLAGS += -DDBG_CACHE_REQ_INFO
 
-#CONFIGS ?= -DNUM_CLUSTERS=2 -DNUM_CORES=4 -DL2_ENABLE=1
-#CONFIGS ?= -DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=1
-#CONFIGS ?= -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
-CONFIGS ?= -DNUM_CLUSTERS=1 -DNUM_CORES=1
+#CONFIGS := -DNUM_CLUSTERS=2 -DNUM_CORES=4 -DL2_ENABLE=1 $(CONFIGS)
+#CONFIGS := -DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=1 $(CONFIGS)
+#CONFIGS := -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0 $(CONFIGS)
+CONFIGS := -DNUM_CLUSTERS=1 -DNUM_CORES=1 $(CONFIGS)
 
 CFLAGS += -fPIC
 
@@ -47,10 +47,11 @@ FPU_INCLUDE = -I$(RTL_DIR)/fp_cores -I$(DPI_DIR) -I$(RTL_DIR)/fp_cores/fpnew/src
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 RTL_INCLUDE += -I$(RTL_DIR)/afu -I$(RTL_DIR)/afu/ccip
 
-VL_FLAGS += -O2 --language 1800-2009 --assert -Wall -Wpedantic $(CONFIGS)
-VL_FLAGS += -Wno-DECLFILENAME
+VL_FLAGS += -O2 --language 1800-2009 --assert -Wall -Wpedantic
+VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
 VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
+VL_FLAGS += $(CONFIGS)
 
 # Enable Verilator multithreaded simulation
 #THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
@@ -87,10 +88,13 @@ VL_FLAGS += -DFPU_DPI
 PROJECT = libopae-c-vlsim.so
 
 all: $(PROJECT)
+
+vortex_afu.h : $(RTL_DIR)/afu/vortex_afu.vh
+	../../../hw/scripts/gen_config.py -i $(RTL_DIR)/afu/vortex_afu.vh -o vortex_afu.h
 	
-$(PROJECT): $(SRCS)
+$(PROJECT): $(SRCS) vortex_afu.h
 	verilator --exe --cc $(TOP) --top-module $(TOP) $(RTL_INCLUDE) $(VL_FLAGS) $(SRCS) -CFLAGS '$(CFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT)
 	make -j -C obj_dir -f V$(TOP).mk
 
 clean:
-	rm -rf $(PROJECT) obj_dir ../scope-defs.h $(RTL_DIR)/scope-defs.vh
+	rm -rf $(PROJECT) obj_dir ../scope-defs.h $(RTL_DIR)/scope-defs.vh vortex_afu.h
