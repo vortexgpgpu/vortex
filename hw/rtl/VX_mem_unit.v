@@ -20,25 +20,25 @@ module VX_mem_unit # (
     VX_icache_core_req_if   icache_core_req_if,  
     VX_icache_core_rsp_if   icache_core_rsp_if,
 
-    // DRAM
-    VX_cache_dram_req_if    dram_req_if,
-    VX_cache_dram_rsp_if    dram_rsp_if
+    // Memory
+    VX_cache_mem_req_if     mem_req_if,
+    VX_cache_mem_rsp_if     mem_rsp_if
 );
     
 `ifdef PERF_ENABLE
     VX_perf_cache_if perf_icache_if(), perf_dcache_if(), perf_smem_if();
 `endif
 
-    VX_cache_dram_req_if #(
-        .DRAM_LINE_WIDTH (`DDRAM_LINE_WIDTH),
-        .DRAM_ADDR_WIDTH (`DDRAM_ADDR_WIDTH),
-        .DRAM_TAG_WIDTH  (`DDRAM_TAG_WIDTH)
-    ) dcache_dram_req_if(), icache_dram_req_if();
+    VX_cache_mem_req_if #(
+        .MEM_LINE_WIDTH (`DMEM_LINE_WIDTH),
+        .MEM_ADDR_WIDTH (`DMEM_ADDR_WIDTH),
+        .MEM_TAG_WIDTH  (`DMEM_TAG_WIDTH)
+    ) dcache_mem_req_if(), icache_mem_req_if();
 
-    VX_cache_dram_rsp_if #(
-        .DRAM_LINE_WIDTH (`DDRAM_LINE_WIDTH),
-        .DRAM_TAG_WIDTH  (`DDRAM_TAG_WIDTH)
-    ) dcache_dram_rsp_if(), icache_dram_rsp_if();
+    VX_cache_mem_rsp_if #(
+        .MEM_LINE_WIDTH (`DMEM_LINE_WIDTH),
+        .MEM_TAG_WIDTH  (`DMEM_TAG_WIDTH)
+    ) dcache_mem_rsp_if(), icache_mem_rsp_if();
 
     VX_dcache_core_req_if #(
         .NUM_REQS       (`DNUM_REQUESTS), 
@@ -96,13 +96,13 @@ module VX_mem_unit # (
         .NUM_REQS           (1),
         .CREQ_SIZE          (`ICREQ_SIZE),
         .MSHR_SIZE          (`IMSHR_SIZE),
-        .DRSQ_SIZE          (`IDRSQ_SIZE),
-        .DREQ_SIZE          (`IDREQ_SIZE),
+        .MRSQ_SIZE          (`IMRSQ_SIZE),
+        .MREQ_SIZE          (`IMREQ_SIZE),
         .WRITE_ENABLE       (0),
         .CORE_TAG_WIDTH     (`ICORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS   (`ICORE_TAG_ID_BITS),
-        .DRAM_TAG_WIDTH     (`DDRAM_TAG_WIDTH),
-        .IN_ORDER_DRAM      (!(`L2_ENABLE || `L3_ENABLE))
+        .MEM_TAG_WIDTH     (`DMEM_TAG_WIDTH),
+        .IN_ORDER_MEM      (!(`L2_ENABLE || `L3_ENABLE))
     ) icache (
         `SCOPE_BIND_VX_mem_unit_icache
 
@@ -130,20 +130,20 @@ module VX_mem_unit # (
         .perf_cache_if      (perf_icache_if),
     `endif
 
-        // DRAM Req
-        .dram_req_valid     (icache_dram_req_if.valid),
-        .dram_req_rw        (icache_dram_req_if.rw),        
-        .dram_req_byteen    (icache_dram_req_if.byteen),        
-        .dram_req_addr      (icache_dram_req_if.addr),
-        .dram_req_data      (icache_dram_req_if.data),
-        .dram_req_tag       (icache_dram_req_if.tag),
-        .dram_req_ready     (icache_dram_req_if.ready),        
+        // Memory Request
+        .mem_req_valid     (icache_mem_req_if.valid),
+        .mem_req_rw        (icache_mem_req_if.rw),        
+        .mem_req_byteen    (icache_mem_req_if.byteen),        
+        .mem_req_addr      (icache_mem_req_if.addr),
+        .mem_req_data      (icache_mem_req_if.data),
+        .mem_req_tag       (icache_mem_req_if.tag),
+        .mem_req_ready     (icache_mem_req_if.ready),        
 
-        // DRAM response
-        .dram_rsp_valid     (icache_dram_rsp_if.valid),        
-        .dram_rsp_data      (icache_dram_rsp_if.data),
-        .dram_rsp_tag       (icache_dram_rsp_if.tag),
-        .dram_rsp_ready     (icache_dram_rsp_if.ready)
+        // Memory response
+        .mem_rsp_valid     (icache_mem_rsp_if.valid),        
+        .mem_rsp_data      (icache_mem_rsp_if.data),
+        .mem_rsp_tag       (icache_mem_rsp_if.tag),
+        .mem_rsp_ready     (icache_mem_rsp_if.ready)
     );
 
     VX_cache #(
@@ -156,13 +156,13 @@ module VX_mem_unit # (
         .NUM_REQS           (`DNUM_REQUESTS),
         .CREQ_SIZE          (`DCREQ_SIZE),
         .MSHR_SIZE          (`DMSHR_SIZE),
-        .DRSQ_SIZE          (`DDRSQ_SIZE),
-        .DREQ_SIZE          (`DDREQ_SIZE),
+        .MRSQ_SIZE          (`DMRSQ_SIZE),
+        .MREQ_SIZE          (`DMREQ_SIZE),
         .WRITE_ENABLE       (1),
         .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS),
-        .DRAM_TAG_WIDTH     (`DDRAM_TAG_WIDTH),
-        .IN_ORDER_DRAM      (!(`L2_ENABLE || `L3_ENABLE))
+        .MEM_TAG_WIDTH      (`DMEM_TAG_WIDTH),
+        .IN_ORDER_MEM       (!(`L2_ENABLE || `L3_ENABLE))
     ) dcache (
         `SCOPE_BIND_VX_mem_unit_dcache
         
@@ -190,20 +190,20 @@ module VX_mem_unit # (
         .perf_cache_if      (perf_dcache_if),
     `endif
 
-        // DRAM request
-        .dram_req_valid     (dcache_dram_req_if.valid),
-        .dram_req_rw        (dcache_dram_req_if.rw),        
-        .dram_req_byteen    (dcache_dram_req_if.byteen),        
-        .dram_req_addr      (dcache_dram_req_if.addr),
-        .dram_req_data      (dcache_dram_req_if.data),
-        .dram_req_tag       (dcache_dram_req_if.tag),
-        .dram_req_ready     (dcache_dram_req_if.ready),
+        // Memory request
+        .mem_req_valid      (dcache_mem_req_if.valid),
+        .mem_req_rw         (dcache_mem_req_if.rw),        
+        .mem_req_byteen     (dcache_mem_req_if.byteen),        
+        .mem_req_addr       (dcache_mem_req_if.addr),
+        .mem_req_data       (dcache_mem_req_if.data),
+        .mem_req_tag        (dcache_mem_req_if.tag),
+        .mem_req_ready      (dcache_mem_req_if.ready),
 
-        // DRAM response
-        .dram_rsp_valid     (dcache_dram_rsp_if.valid),        
-        .dram_rsp_data      (dcache_dram_rsp_if.data),
-        .dram_rsp_tag       (dcache_dram_rsp_if.tag),
-        .dram_rsp_ready     (dcache_dram_rsp_if.ready)
+        // Memory response
+        .mem_rsp_valid      (dcache_mem_rsp_if.valid),        
+        .mem_rsp_data       (dcache_mem_rsp_if.data),
+        .mem_rsp_tag        (dcache_mem_rsp_if.tag),
+        .mem_rsp_ready      (dcache_mem_rsp_if.ready)
     ); 
 
     if (`SM_ENABLE) begin
@@ -254,45 +254,45 @@ module VX_mem_unit # (
 
     VX_mem_arb #(
         .NUM_REQS      (2),
-        .DATA_WIDTH    (`DDRAM_LINE_WIDTH),
-        .ADDR_WIDTH    (`DDRAM_ADDR_WIDTH),
-        .TAG_IN_WIDTH  (`DDRAM_TAG_WIDTH),
-        .TAG_OUT_WIDTH (`XDRAM_TAG_WIDTH),
+        .DATA_WIDTH    (`DMEM_LINE_WIDTH),
+        .ADDR_WIDTH    (`DMEM_ADDR_WIDTH),
+        .TAG_IN_WIDTH  (`DMEM_TAG_WIDTH),
+        .TAG_OUT_WIDTH (`XMEM_TAG_WIDTH),
         .BUFFERED_REQ  (1),
         .BUFFERED_RSP  (0)
-    ) dram_arb (
+    ) mem_arb (
         .clk            (clk),
         .reset          (reset),
 
         // Source request
-        .req_valid_in   ({dcache_dram_req_if.valid,   icache_dram_req_if.valid}),
-        .req_rw_in      ({dcache_dram_req_if.rw,      icache_dram_req_if.rw}),
-        .req_byteen_in  ({dcache_dram_req_if.byteen,  icache_dram_req_if.byteen}),
-        .req_addr_in    ({dcache_dram_req_if.addr,    icache_dram_req_if.addr}),
-        .req_data_in    ({dcache_dram_req_if.data,    icache_dram_req_if.data}),  
-        .req_tag_in     ({dcache_dram_req_if.tag,     icache_dram_req_if.tag}),  
-        .req_ready_in   ({dcache_dram_req_if.ready,   icache_dram_req_if.ready}),
+        .req_valid_in   ({dcache_mem_req_if.valid,  icache_mem_req_if.valid}),
+        .req_rw_in      ({dcache_mem_req_if.rw,     icache_mem_req_if.rw}),
+        .req_byteen_in  ({dcache_mem_req_if.byteen, icache_mem_req_if.byteen}),
+        .req_addr_in    ({dcache_mem_req_if.addr,   icache_mem_req_if.addr}),
+        .req_data_in    ({dcache_mem_req_if.data,   icache_mem_req_if.data}),  
+        .req_tag_in     ({dcache_mem_req_if.tag,    icache_mem_req_if.tag}),  
+        .req_ready_in   ({dcache_mem_req_if.ready,  icache_mem_req_if.ready}),
 
-        // DRAM request
-        .req_valid_out  (dram_req_if.valid),
-        .req_rw_out     (dram_req_if.rw),        
-        .req_byteen_out (dram_req_if.byteen),        
-        .req_addr_out   (dram_req_if.addr),
-        .req_data_out   (dram_req_if.data),
-        .req_tag_out    (dram_req_if.tag),
-        .req_ready_out  (dram_req_if.ready),
+        // Memory request
+        .req_valid_out  (mem_req_if.valid),
+        .req_rw_out     (mem_req_if.rw),        
+        .req_byteen_out (mem_req_if.byteen),        
+        .req_addr_out   (mem_req_if.addr),
+        .req_data_out   (mem_req_if.data),
+        .req_tag_out    (mem_req_if.tag),
+        .req_ready_out  (mem_req_if.ready),
 
         // Source response
-        .rsp_valid_out  ({dcache_dram_rsp_if.valid,   icache_dram_rsp_if.valid}),
-        .rsp_data_out   ({dcache_dram_rsp_if.data,    icache_dram_rsp_if.data}),
-        .rsp_tag_out    ({dcache_dram_rsp_if.tag,     icache_dram_rsp_if.tag}),
-        .rsp_ready_out  ({dcache_dram_rsp_if.ready,   icache_dram_rsp_if.ready}),
+        .rsp_valid_out  ({dcache_mem_rsp_if.valid,  icache_mem_rsp_if.valid}),
+        .rsp_data_out   ({dcache_mem_rsp_if.data,   icache_mem_rsp_if.data}),
+        .rsp_tag_out    ({dcache_mem_rsp_if.tag,    icache_mem_rsp_if.tag}),
+        .rsp_ready_out  ({dcache_mem_rsp_if.ready,  icache_mem_rsp_if.ready}),
         
-        // DRAM response
-        .rsp_valid_in   (dram_rsp_if.valid),
-        .rsp_tag_in     (dram_rsp_if.tag),
-        .rsp_data_in    (dram_rsp_if.data),
-        .rsp_ready_in   (dram_rsp_if.ready)
+        // Memory response
+        .rsp_valid_in   (mem_rsp_if.valid),
+        .rsp_tag_in     (mem_rsp_if.tag),
+        .rsp_data_in    (mem_rsp_if.data),
+        .rsp_ready_in   (mem_rsp_if.ready)
     );
 
 `ifdef PERF_ENABLE
@@ -321,47 +321,47 @@ end else begin
     assign perf_memsys_if.smem_bank_stalls   = 0;
 end
     
-    reg [`PERF_CTR_BITS-1:0] perf_dram_lat_per_cycle;
+    reg [`PERF_CTR_BITS-1:0] perf_mem_lat_per_cycle;
 
     always @(posedge clk) begin
         if (reset) begin
-            perf_dram_lat_per_cycle <= 0;
+            perf_mem_lat_per_cycle <= 0;
         end else begin
-            perf_dram_lat_per_cycle <= perf_dram_lat_per_cycle + 
-                `PERF_CTR_BITS'($signed(2'((dram_req_if.valid && !dram_req_if.rw && dram_req_if.ready) && !(dram_rsp_if.valid && dram_rsp_if.ready)) - 
-                            2'((dram_rsp_if.valid && dram_rsp_if.ready)                    && !(dram_req_if.valid && !dram_req_if.rw && dram_req_if.ready))));
+            perf_mem_lat_per_cycle <= perf_mem_lat_per_cycle + 
+                `PERF_CTR_BITS'($signed(2'((mem_req_if.valid && !mem_req_if.rw && mem_req_if.ready) && !(mem_rsp_if.valid && mem_rsp_if.ready)) - 
+                            2'((mem_rsp_if.valid && mem_rsp_if.ready)                    && !(mem_req_if.valid && !mem_req_if.rw && mem_req_if.ready))));
         end
     end
     
-    reg [`PERF_CTR_BITS-1:0] perf_dram_reads;
-    reg [`PERF_CTR_BITS-1:0] perf_dram_writes;
-    reg [`PERF_CTR_BITS-1:0] perf_dram_lat;
-    reg [`PERF_CTR_BITS-1:0] perf_dram_stalls;
+    reg [`PERF_CTR_BITS-1:0] perf_mem_reads;
+    reg [`PERF_CTR_BITS-1:0] perf_mem_writes;
+    reg [`PERF_CTR_BITS-1:0] perf_mem_lat;
+    reg [`PERF_CTR_BITS-1:0] perf_mem_stalls;
 
     always @(posedge clk) begin
         if (reset) begin       
-            perf_dram_reads  <= 0;     
-            perf_dram_writes <= 0;            
-            perf_dram_lat    <= 0;
-            perf_dram_stalls <= 0;
+            perf_mem_reads  <= 0;     
+            perf_mem_writes <= 0;            
+            perf_mem_lat    <= 0;
+            perf_mem_stalls <= 0;
         end else begin  
-            if (dram_req_if.valid && dram_req_if.ready && !dram_req_if.rw) begin
-                perf_dram_reads <= perf_dram_reads + `PERF_CTR_BITS'd1;
+            if (mem_req_if.valid && mem_req_if.ready && !mem_req_if.rw) begin
+                perf_mem_reads <= perf_mem_reads + `PERF_CTR_BITS'd1;
             end
-            if (dram_req_if.valid && dram_req_if.ready && dram_req_if.rw) begin
-                perf_dram_writes <= perf_dram_writes + `PERF_CTR_BITS'd1;
+            if (mem_req_if.valid && mem_req_if.ready && mem_req_if.rw) begin
+                perf_mem_writes <= perf_mem_writes + `PERF_CTR_BITS'd1;
             end            
-            if (dram_req_if.valid && !dram_req_if.ready) begin
-                perf_dram_stalls <= perf_dram_stalls + `PERF_CTR_BITS'd1;
+            if (mem_req_if.valid && !mem_req_if.ready) begin
+                perf_mem_stalls <= perf_mem_stalls + `PERF_CTR_BITS'd1;
             end       
-            perf_dram_lat <= perf_dram_lat + perf_dram_lat_per_cycle;
+            perf_mem_lat <= perf_mem_lat + perf_mem_lat_per_cycle;
         end
     end
 
-    assign perf_memsys_if.dram_reads   = perf_dram_reads;       
-    assign perf_memsys_if.dram_writes  = perf_dram_writes;
-    assign perf_memsys_if.dram_latency = perf_dram_lat; 
-    assign perf_memsys_if.dram_stalls  = perf_dram_stalls;
+    assign perf_memsys_if.mem_reads   = perf_mem_reads;       
+    assign perf_memsys_if.mem_writes  = perf_mem_writes;
+    assign perf_memsys_if.mem_latency = perf_mem_lat; 
+    assign perf_memsys_if.mem_stalls  = perf_mem_stalls;
 `endif
     
 endmodule

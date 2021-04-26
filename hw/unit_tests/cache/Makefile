@@ -10,7 +10,7 @@ DBG_PRINT_FLAGS = -DDBG_PRINT_CORE_ICACHE \
 				  -DDBG_PRINT_CACHE_MSHR \
 				  -DDBG_PRINT_CACHE_TAG   \
 				  -DDBG_PRINT_CACHE_DATA  \
-				  -DDBG_PRINT_DRAM        \
+				  -DDBG_PRINT_MEM        \
 				  -DDBG_PRINT_OPAE        \
 				  -DDBG_PRINT_AVS
 

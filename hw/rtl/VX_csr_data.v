@@ -160,15 +160,15 @@ module VX_csr_data #(
             `CSR_MPM_SMEM_WRITES_H    : read_data_r = 32'(perf_memsys_if.smem_writes[`PERF_CTR_BITS-1:32]);
             `CSR_MPM_SMEM_BANK_ST     : read_data_r = perf_memsys_if.smem_bank_stalls[31:0];
             `CSR_MPM_SMEM_BANK_ST_H   : read_data_r = 32'(perf_memsys_if.smem_bank_stalls[`PERF_CTR_BITS-1:32]);
-            // PERF: DRAM
-            `CSR_MPM_DRAM_READS     : read_data_r = perf_memsys_if.dram_reads[31:0];
-            `CSR_MPM_DRAM_READS_H   : read_data_r = 32'(perf_memsys_if.dram_reads[`PERF_CTR_BITS-1:32]);
-            `CSR_MPM_DRAM_WRITES    : read_data_r = perf_memsys_if.dram_writes[31:0];
-            `CSR_MPM_DRAM_WRITES_H  : read_data_r = 32'(perf_memsys_if.dram_writes[`PERF_CTR_BITS-1:32]);
-            `CSR_MPM_DRAM_ST        : read_data_r = perf_memsys_if.dram_stalls[31:0];
-            `CSR_MPM_DRAM_ST_H      : read_data_r = 32'(perf_memsys_if.dram_stalls[`PERF_CTR_BITS-1:32]);
-            `CSR_MPM_DRAM_LAT       : read_data_r = perf_memsys_if.dram_latency[31:0];
-            `CSR_MPM_DRAM_LAT_H     : read_data_r = 32'(perf_memsys_if.dram_latency[`PERF_CTR_BITS-1:32]);
+            // PERF: MEM
+            `CSR_MPM_MEM_READS      : read_data_r = perf_memsys_if.mem_reads[31:0];
+            `CSR_MPM_MEM_READS_H    : read_data_r = 32'(perf_memsys_if.mem_reads[`PERF_CTR_BITS-1:32]);
+            `CSR_MPM_MEM_WRITES     : read_data_r = perf_memsys_if.mem_writes[31:0];
+            `CSR_MPM_MEM_WRITES_H   : read_data_r = 32'(perf_memsys_if.mem_writes[`PERF_CTR_BITS-1:32]);
+            `CSR_MPM_MEM_ST         : read_data_r = perf_memsys_if.mem_stalls[31:0];
+            `CSR_MPM_MEM_ST_H       : read_data_r = 32'(perf_memsys_if.mem_stalls[`PERF_CTR_BITS-1:32]);
+            `CSR_MPM_MEM_LAT        : read_data_r = perf_memsys_if.mem_latency[31:0];
+            `CSR_MPM_MEM_LAT_H      : read_data_r = 32'(perf_memsys_if.mem_latency[`PERF_CTR_BITS-1:32]);
         `endif
             
             `CSR_SATP      : read_data_r = 32'(csr_satp);

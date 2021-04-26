@@ -207,14 +207,14 @@
 `define CSR_MPM_SMEM_BANK_ST    12'hB18     // bank conflicts stalls
 `define CSR_MPM_SMEM_BANK_ST_H  12'hB98
 // PERF: memory
-`define CSR_MPM_DRAM_READS      12'hB19     // dram reads
-`define CSR_MPM_DRAM_READS_H    12'hB99
-`define CSR_MPM_DRAM_WRITES     12'hB1A     // dram writes
-`define CSR_MPM_DRAM_WRITES_H   12'hB9A
-`define CSR_MPM_DRAM_ST         12'hB1B     // dram request stalls
-`define CSR_MPM_DRAM_ST_H       12'hB9B
-`define CSR_MPM_DRAM_LAT        12'hB1C     // dram latency (total)
-`define CSR_MPM_DRAM_LAT_H      12'hB9C
+`define CSR_MPM_MEM_READS      12'hB19     // memory reads
+`define CSR_MPM_MEM_READS_H    12'hB99
+`define CSR_MPM_MEM_WRITES     12'hB1A     // memory writes
+`define CSR_MPM_MEM_WRITES_H   12'hB9A
+`define CSR_MPM_MEM_ST         12'hB1B     // memory request stalls
+`define CSR_MPM_MEM_ST_H       12'hB9B
+`define CSR_MPM_MEM_LAT        12'hB1C     // memory latency (total)
+`define CSR_MPM_MEM_LAT_H      12'hB9C
 
 // Machine Information Registers
 `define CSR_MVENDORID   12'hF11
@@ -264,14 +264,14 @@
 `define IMSHR_SIZE `NUM_WARPS
 `endif
 
-// DRAM Request Queue Size
-`ifndef IDREQ_SIZE
-`define IDREQ_SIZE 4
+// Memory Request Queue Size
+`ifndef IMREQ_SIZE
+`define IMREQ_SIZE 4
 `endif
 
-// DRAM Response Queue Size
-`ifndef IDRSQ_SIZE
-`define IDRSQ_SIZE 4
+// Memory Response Queue Size
+`ifndef IMRSQ_SIZE
+`define IMRSQ_SIZE 4
 `endif
 
 // Dcache Configurable Knobs //////////////////////////////////////////////////
@@ -301,14 +301,14 @@
 `define DMSHR_SIZE `LSUQ_SIZE
 `endif
 
-// DRAM Request Queue Size
-`ifndef DDREQ_SIZE
-`define DDREQ_SIZE 4
+// Memory Request Queue Size
+`ifndef DMREQ_SIZE
+`define DMREQ_SIZE 4
 `endif
 
-// DRAM Response Queue Size
-`ifndef DDRSQ_SIZE
-`define DDRSQ_SIZE `MAX(4, (`DNUM_BANKS * 2))
+// Memory Response Queue Size
+`ifndef DMRSQ_SIZE
+`define DMRSQ_SIZE `MAX(4, (`DNUM_BANKS * 2))
 `endif
 
 // SM Configurable Knobs //////////////////////////////////////////////////////
@@ -355,14 +355,14 @@
 `define L2MSHR_SIZE 16
 `endif
 
-// DRAM Request Queue Size
-`ifndef L2DREQ_SIZE
-`define L2DREQ_SIZE 4
+// L2 Request Queue Size
+`ifndef L2MREQ_SIZE
+`define L2MREQ_SIZE 4
 `endif
 
-// DRAM Response Queue Size
-`ifndef L2DRSQ_SIZE
-`define L2DRSQ_SIZE `MAX(4, (`L2NUM_BANKS * 2))
+// L2 Response Queue Size
+`ifndef L2MRSQ_SIZE
+`define L2MRSQ_SIZE `MAX(4, (`L2NUM_BANKS * 2))
 `endif
 
 // L3cache Configurable Knobs /////////////////////////////////////////////////
@@ -387,14 +387,14 @@
 `define L3MSHR_SIZE 16
 `endif
 
-// DRAM Request Queue Size
-`ifndef L3DREQ_SIZE
-`define L3DREQ_SIZE 4
+// L3 Request Queue Size
+`ifndef L3MREQ_SIZE
+`define L3MREQ_SIZE 4
 `endif
 
-// DRAM Response Queue Size
-`ifndef L3DRSQ_SIZE
-`define L3DRSQ_SIZE `MAX(4, (`L3NUM_BANKS * 2))
+// L3 Response Queue Size
+`ifndef L3MRSQ_SIZE
+`define L3MRSQ_SIZE `MAX(4, (`L3NUM_BANKS * 2))
 `endif
 
 `endif

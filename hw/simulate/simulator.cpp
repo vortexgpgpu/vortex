@@ -5,10 +5,10 @@
 
 #define RESET_DELAY 4
 
-#define ENABLE_DRAM_STALLS
-#define DRAM_LATENCY 24
-#define DRAM_RQ_SIZE 16
-#define DRAM_STALLS_MODULO 16
+#define ENABLE_MEM_STALLS
+#define MEM_LATENCY 24
+#define MEM_RQ_SIZE 16
+#define MEM_STALLS_MODULO 16
 
 #define VL_WDATA_GETW(lwp, i, n, w) \
   VL_SEL_IWII(0, n * w, 0, 0, lwp, i * w, w)
@@ -56,19 +56,19 @@ Simulator::~Simulator() {
 
 void Simulator::attach_ram(RAM* ram) {
   ram_ = ram;
-  dram_rsp_vec_.clear();
+  mem_rsp_vec_.clear();
 }
 
 void Simulator::reset() { 
   print_bufs_.clear();
-  dram_rsp_vec_.clear();
+  mem_rsp_vec_.clear();
 
-  dram_rsp_active_ = false;
+  mem_rsp_active_ = false;
   csr_req_active_ = false;
   csr_rsp_value_ = nullptr;
 
-  vortex_->dram_rsp_valid = 0;
-  vortex_->dram_req_ready = 0;
+  vortex_->mem_rsp_valid = 0;
+  vortex_->mem_req_ready = 0;
   //vortex_->io_req_ready = 0;
   //vortex_->io_rsp_valid = 0;
   vortex_->csr_req_valid  = 0;
@@ -94,13 +94,13 @@ void Simulator::step() {
   vortex_->clk = 0;
   this->eval();
 
-  dram_rsp_ready_ = vortex_->dram_rsp_ready;
+  mem_rsp_ready_ = vortex_->mem_rsp_ready;
   csr_req_ready_ = vortex_->csr_req_ready;
   
   vortex_->clk = 1;
   this->eval();
     
-  this->eval_dram_bus();
+  this->eval_mem_bus();
   this->eval_io_bus();
   this->eval_csr_bus();
 
@@ -117,83 +117,83 @@ void Simulator::eval() {
   ++timestamp;
 }
 
-void Simulator::eval_dram_bus() {
+void Simulator::eval_mem_bus() {
   if (ram_ == nullptr) {
-    vortex_->dram_req_ready = 0;
+    vortex_->mem_req_ready = 0;
     return;
   }
 
-  // update DRAM responses schedule
-  for (auto& rsp : dram_rsp_vec_) {
+  // update memory responses schedule
+  for (auto& rsp : mem_rsp_vec_) {
     if (rsp.cycles_left > 0)
       rsp.cycles_left -= 1;
   }
 
-  // schedule DRAM responses in FIFO order
-  std::list<dram_req_t>::iterator dram_rsp_it(dram_rsp_vec_.end());
-  if (!dram_rsp_vec_.empty() 
-   && (0 == dram_rsp_vec_.begin()->cycles_left)) {
-      dram_rsp_it = dram_rsp_vec_.begin();
+  // schedule memory responses in FIFO order
+  std::list<mem_req_t>::iterator mem_rsp_it(mem_rsp_vec_.end());
+  if (!mem_rsp_vec_.empty() 
+   && (0 == mem_rsp_vec_.begin()->cycles_left)) {
+      mem_rsp_it = mem_rsp_vec_.begin();
   }
 
-  // send DRAM response  
-  if (dram_rsp_active_
-   && vortex_->dram_rsp_valid && dram_rsp_ready_) {
-    dram_rsp_active_ = false;
+  // send memory response  
+  if (mem_rsp_active_
+   && vortex_->mem_rsp_valid && mem_rsp_ready_) {
+    mem_rsp_active_ = false;
   }
-  if (!dram_rsp_active_) {
-    if (dram_rsp_it != dram_rsp_vec_.end()) {
-      vortex_->dram_rsp_valid = 1;
-      memcpy((uint8_t*)vortex_->dram_rsp_data, dram_rsp_it->block.data(), GLOBAL_BLOCK_SIZE);
-      vortex_->dram_rsp_tag = dram_rsp_it->tag;   
-      dram_rsp_vec_.erase(dram_rsp_it);
-      dram_rsp_active_ = true;
+  if (!mem_rsp_active_) {
+    if (mem_rsp_it != mem_rsp_vec_.end()) {
+      vortex_->mem_rsp_valid = 1;
+      memcpy((uint8_t*)vortex_->mem_rsp_data, mem_rsp_it->block.data(), GLOBAL_BLOCK_SIZE);
+      vortex_->mem_rsp_tag = mem_rsp_it->tag;   
+      mem_rsp_vec_.erase(mem_rsp_it);
+      mem_rsp_active_ = true;
     } else {
-      vortex_->dram_rsp_valid = 0;
+      vortex_->mem_rsp_valid = 0;
     }
   }
 
-  // handle DRAM stalls
-  bool dram_stalled = false;
-#ifdef ENABLE_DRAM_STALLS
-  if (0 == ((timestamp/2) % DRAM_STALLS_MODULO)) { 
-    dram_stalled = true;
+  // handle memory stalls
+  bool mem_stalled = false;
+#ifdef ENABLE_MEM_STALLS
+  if (0 == ((timestamp/2) % MEM_STALLS_MODULO)) { 
+    mem_stalled = true;
   } else
-  if (dram_rsp_vec_.size() >= DRAM_RQ_SIZE) {
-    dram_stalled = true;
+  if (mem_rsp_vec_.size() >= MEM_RQ_SIZE) {
+    mem_stalled = true;
   }
 #endif
 
-  // process DRAM requests
-  if (!dram_stalled) {
-    if (vortex_->dram_req_valid) {
-      if (vortex_->dram_req_rw) {
-        uint64_t byteen = vortex_->dram_req_byteen;
-        unsigned base_addr = (vortex_->dram_req_addr * GLOBAL_BLOCK_SIZE);
-        uint8_t* data = (uint8_t*)(vortex_->dram_req_data);
+  // process memory requests
+  if (!mem_stalled) {
+    if (vortex_->mem_req_valid) {
+      if (vortex_->mem_req_rw) {
+        uint64_t byteen = vortex_->mem_req_byteen;
+        unsigned base_addr = (vortex_->mem_req_addr * GLOBAL_BLOCK_SIZE);
+        uint8_t* data = (uint8_t*)(vortex_->mem_req_data);
         for (int i = 0; i < GLOBAL_BLOCK_SIZE; i++) {
           if ((byteen >> i) & 0x1) {            
             (*ram_)[base_addr + i] = data[i];
           }
         }
       } else {
-        dram_req_t dram_req;        
-        dram_req.tag  = vortex_->dram_req_tag;   
-        dram_req.addr = vortex_->dram_req_addr;
-        ram_->read(vortex_->dram_req_addr * GLOBAL_BLOCK_SIZE, GLOBAL_BLOCK_SIZE, dram_req.block.data());
-        dram_req.cycles_left = DRAM_LATENCY;
-        for (auto& rsp : dram_rsp_vec_) {
-          if (dram_req.addr == rsp.addr) {
-            dram_req.cycles_left = rsp.cycles_left;
+        mem_req_t mem_req;        
+        mem_req.tag  = vortex_->mem_req_tag;   
+        mem_req.addr = vortex_->mem_req_addr;
+        ram_->read(vortex_->mem_req_addr * GLOBAL_BLOCK_SIZE, GLOBAL_BLOCK_SIZE, mem_req.block.data());
+        mem_req.cycles_left = MEM_LATENCY;
+        for (auto& rsp : mem_rsp_vec_) {
+          if (mem_req.addr == rsp.addr) {
+            mem_req.cycles_left = rsp.cycles_left;
             break;
           }
         }     
-        dram_rsp_vec_.emplace_back(dram_req);
+        mem_rsp_vec_.emplace_back(mem_req);
       } 
     }    
   }
 
-  vortex_->dram_req_ready = !dram_stalled;
+  vortex_->mem_req_ready = !mem_stalled;
 }
 
 void Simulator::eval_io_bus() {

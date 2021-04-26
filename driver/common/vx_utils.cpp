@@ -115,10 +115,10 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   uint64_t smem_writes = 0;
   uint64_t smem_bank_stalls = 0;
   // PERF: memory
-  uint64_t dram_reads = 0;
-  uint64_t dram_writes = 0;
-  uint64_t dram_stalls = 0;
-  uint64_t dram_lat = 0;
+  uint64_t mem_reads = 0;
+  uint64_t mem_writes = 0;
+  uint64_t mem_stalls = 0;
+  uint64_t mem_lat = 0;
 #endif     
       
   for (unsigned core_id = 0; core_id < num_cores; ++core_id) {     
@@ -255,21 +255,21 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     if (num_cores > 1) fprintf(stream, "PERF: core%d: smem bank stalls=%ld (utilization=%d%%)\n", core_id, smem_bank_st_per_core, smem_bank_utilization);
     smem_bank_stalls += smem_bank_st_per_core;
 
-    // PERF: DRAM
-    uint64_t dram_reads_per_core, dram_writes_per_core, dram_stalls_per_core, dram_lat_per_core;
-    ret |= vx_csr_get_l(device, core_id, CSR_MPM_DRAM_READS, CSR_MPM_DRAM_READS_H, &dram_reads_per_core);                
-    ret |= vx_csr_get_l(device, core_id, CSR_MPM_DRAM_WRITES, CSR_MPM_DRAM_WRITES_H, &dram_writes_per_core);                
-    ret |= vx_csr_get_l(device, core_id, CSR_MPM_DRAM_ST, CSR_MPM_DRAM_ST_H, &dram_stalls_per_core);    
-    ret |= vx_csr_get_l(device, core_id, CSR_MPM_DRAM_LAT, CSR_MPM_DRAM_LAT_H, &dram_lat_per_core);        
-    int dram_utilization = (int)((double(dram_reads_per_core + dram_writes_per_core) / double(dram_reads_per_core + dram_writes_per_core + dram_stalls_per_core)) * 100);
-    int dram_avg_lat = (int)(double(dram_lat_per_core) / double(dram_reads_per_core));       
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: dram requests=%ld (reads=%ld, writes=%ld)\n", core_id, (dram_reads_per_core + dram_writes_per_core), dram_reads_per_core, dram_writes_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: dram stalls=%ld (utilization=%d%%)\n", core_id, dram_stalls_per_core, dram_utilization);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: dram average latency=%d cycles\n", core_id, dram_avg_lat);
-    dram_reads  += dram_reads_per_core;
-    dram_writes += dram_writes_per_core;
-    dram_stalls += dram_stalls_per_core;
-    dram_lat    += dram_lat_per_core;    
+    // PERF: memory
+    uint64_t mem_reads_per_core, mem_writes_per_core, mem_stalls_per_core, mem_lat_per_core;
+    ret |= vx_csr_get_l(device, core_id, CSR_MPM_MEM_READS, CSR_MPM_MEM_READS_H, &mem_reads_per_core);                
+    ret |= vx_csr_get_l(device, core_id, CSR_MPM_MEM_WRITES, CSR_MPM_MEM_WRITES_H, &mem_writes_per_core);                
+    ret |= vx_csr_get_l(device, core_id, CSR_MPM_MEM_ST, CSR_MPM_MEM_ST_H, &mem_stalls_per_core);    
+    ret |= vx_csr_get_l(device, core_id, CSR_MPM_MEM_LAT, CSR_MPM_MEM_LAT_H, &mem_lat_per_core);        
+    int mem_utilization = (int)((double(mem_reads_per_core + mem_writes_per_core) / double(mem_reads_per_core + mem_writes_per_core + mem_stalls_per_core)) * 100);
+    int mem_avg_lat = (int)(double(mem_lat_per_core) / double(mem_reads_per_core));       
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: memory requests=%ld (reads=%ld, writes=%ld)\n", core_id, (mem_reads_per_core + mem_writes_per_core), mem_reads_per_core, mem_writes_per_core);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: memory stalls=%ld (utilization=%d%%)\n", core_id, mem_stalls_per_core, mem_utilization);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: memory average latency=%d cycles\n", core_id, mem_avg_lat);
+    mem_reads  += mem_reads_per_core;
+    mem_writes += mem_writes_per_core;
+    mem_stalls += mem_stalls_per_core;
+    mem_lat    += mem_lat_per_core;    
   #endif
   }      
   
@@ -282,8 +282,8 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   int dcache_write_hit_ratio = (int)((1.0 - (double(dcache_write_misses) / double(dcache_writes))) * 100);
   int dcache_bank_utilization = (int)((double(dcache_reads + dcache_writes) / double(dcache_reads + dcache_writes + dcache_bank_stalls)) * 100);
   int smem_bank_utilization = (int)((double(smem_reads + smem_writes) / double(smem_reads + smem_writes + smem_bank_stalls)) * 100);
-  int dram_utilization = (int)((double(dram_reads + dram_writes) / double(dram_reads + dram_writes + dram_stalls)) * 100);
-  int dram_avg_lat = (int)(double(dram_lat) / double(dram_reads));
+  int mem_utilization = (int)((double(mem_reads + mem_writes) / double(mem_reads + mem_writes + mem_stalls)) * 100);
+  int mem_avg_lat = (int)(double(mem_lat) / double(mem_reads));
   fprintf(stream, "PERF: ibuffer stalls=%ld\n", ibuffer_stalls);
   fprintf(stream, "PERF: scoreboard stalls=%ld\n", scoreboard_stalls);
   fprintf(stream, "PERF: alu unit stalls=%ld\n", alu_stalls);
@@ -306,9 +306,9 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   fprintf(stream, "PERF: smem reads=%ld\n", smem_reads);
   fprintf(stream, "PERF: smem writes=%ld\n", smem_writes); 
   fprintf(stream, "PERF: smem bank stalls=%ld (utilization=%d%%)\n", smem_bank_stalls, smem_bank_utilization);
-  fprintf(stream, "PERF: dram requests=%ld (reads=%ld, writes=%ld)\n", (dram_reads + dram_writes), dram_reads, dram_writes);
-  fprintf(stream, "PERF: dram stalls=%ld (utilization=%d%%)\n", dram_stalls, dram_utilization);
-  fprintf(stream, "PERF: dram average latency=%d cycles\n", dram_avg_lat);
+  fprintf(stream, "PERF: memory requests=%ld (reads=%ld, writes=%ld)\n", (mem_reads + mem_writes), mem_reads, mem_writes);
+  fprintf(stream, "PERF: memory stalls=%ld (utilization=%d%%)\n", mem_stalls, mem_utilization);
+  fprintf(stream, "PERF: memory average latency=%d cycles\n", mem_avg_lat);
 #endif
 
   return ret;
