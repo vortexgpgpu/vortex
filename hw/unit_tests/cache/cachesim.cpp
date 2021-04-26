@@ -208,7 +208,7 @@ void CacheSim::eval_mem_bus() {
       cache_->mem_rsp_valid = 1;
 
       //copy data from the rsp queue to the cache module
-      memcpy((uint8_t*)cache_->mem_rsp_data, mem_rsp_vec_[dequeue_index].data, GLOBAL_BLOCK_SIZE);
+      memcpy((uint8_t*)cache_->mem_rsp_data, mem_rsp_vec_[dequeue_index].data, MEM_BLOCK_SIZE);
 
       cache_->mem_rsp_tag = mem_rsp_vec_[dequeue_index].tag;    
       free(mem_rsp_vec_[dequeue_index].data); //take data out of the queue
@@ -235,9 +235,9 @@ void CacheSim::eval_mem_bus() {
     if (cache_->mem_req_valid) {
       if (cache_->mem_req_rw) { //write = 1
         uint64_t byteen = cache_->mem_req_byteen;
-        unsigned base_addr = (cache_->mem_req_addr * GLOBAL_BLOCK_SIZE);
+        unsigned base_addr = (cache_->mem_req_addr * MEM_BLOCK_SIZE);
         uint8_t* data = (uint8_t*)(cache_->mem_req_data);
-        for (int i = 0; i < GLOBAL_BLOCK_SIZE; i++) {
+        for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
           if ((byteen >> i) & 0x1) {            
             (*ram_)[base_addr + i] = data[i];
           }
@@ -245,9 +245,9 @@ void CacheSim::eval_mem_bus() {
       } else {
         mem_req_t mem_req;
         mem_req.cycles_left = MEM_LATENCY;     
-        mem_req.data = (uint8_t*)malloc(GLOBAL_BLOCK_SIZE);
+        mem_req.data = (uint8_t*)malloc(MEM_BLOCK_SIZE);
         mem_req.tag = cache_->mem_req_tag;
-        ram_->read(cache_->mem_req_addr * GLOBAL_BLOCK_SIZE, GLOBAL_BLOCK_SIZE, mem_req.data);
+        ram_->read(cache_->mem_req_addr * MEM_BLOCK_SIZE, MEM_BLOCK_SIZE, mem_req.data);
         mem_rsp_vec_.push_back(mem_req);
       } 
     }    

@@ -144,7 +144,7 @@ void Simulator::eval_mem_bus() {
   if (!mem_rsp_active_) {
     if (mem_rsp_it != mem_rsp_vec_.end()) {
       vortex_->mem_rsp_valid = 1;
-      memcpy((uint8_t*)vortex_->mem_rsp_data, mem_rsp_it->block.data(), GLOBAL_BLOCK_SIZE);
+      memcpy((uint8_t*)vortex_->mem_rsp_data, mem_rsp_it->block.data(), MEM_BLOCK_SIZE);
       vortex_->mem_rsp_tag = mem_rsp_it->tag;   
       mem_rsp_vec_.erase(mem_rsp_it);
       mem_rsp_active_ = true;
@@ -169,9 +169,9 @@ void Simulator::eval_mem_bus() {
     if (vortex_->mem_req_valid) {
       if (vortex_->mem_req_rw) {
         uint64_t byteen = vortex_->mem_req_byteen;
-        unsigned base_addr = (vortex_->mem_req_addr * GLOBAL_BLOCK_SIZE);
+        unsigned base_addr = (vortex_->mem_req_addr * MEM_BLOCK_SIZE);
         uint8_t* data = (uint8_t*)(vortex_->mem_req_data);
-        for (int i = 0; i < GLOBAL_BLOCK_SIZE; i++) {
+        for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
           if ((byteen >> i) & 0x1) {            
             (*ram_)[base_addr + i] = data[i];
           }
@@ -180,7 +180,7 @@ void Simulator::eval_mem_bus() {
         mem_req_t mem_req;        
         mem_req.tag  = vortex_->mem_req_tag;   
         mem_req.addr = vortex_->mem_req_addr;
-        ram_->read(vortex_->mem_req_addr * GLOBAL_BLOCK_SIZE, GLOBAL_BLOCK_SIZE, mem_req.block.data());
+        ram_->read(vortex_->mem_req_addr * MEM_BLOCK_SIZE, MEM_BLOCK_SIZE, mem_req.block.data());
         mem_req.cycles_left = MEM_LATENCY;
         for (auto& rsp : mem_rsp_vec_) {
           if (mem_req.addr == rsp.addr) {
