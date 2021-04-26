@@ -1,8 +1,14 @@
-ASE_BUILD_DIR=build_ase
-FPGA_BUILD_DIR=build_fpga
+ASE_BUILD_DIR ?= build_ase
+FPGA_BUILD_DIR ?= build_fpga
 RTL_DIR=../../rtl
 
-ifeq (, $(shell which qsub-synth))
+ifdef $(shell [[ '$(FPGA_CLASS)' =~ 'fpga-pac-s10' ]] && echo matched)
+	DEVICE_FAMILY ?= stratix10
+else
+	DEVICE_FAMILY ?= arria10
+endif
+
+ifeq ($(shell which qsub-synth),)
 	RUN_SYNTH=$(OPAE_PLATFORM_ROOT)/bin/run.sh > build.log 2>&1 &
 else
 	RUN_SYNTH=qsub-synth
@@ -10,21 +16,18 @@ endif
 
 all: ase-1c
 
-gen_sources_a10:	
-	./gen_sources.sh arria10 > sources.txt
+gen-sources:
+	./gen_sources.sh $(DEVICE_FAMILY) > sources.txt
 
-gen_sources_s10:	
-	./gen_sources.sh stratix10 > sources.txt
-
-ase-1c: gen_sources_a10 setup-ase-1c 
+ase-1c: gen-sources setup-ase-1c 
 	make -C $(ASE_BUILD_DIR)_1c
-	cp $(RTL_DIR)/fp_cores/altera/arria10/*.hex $(ASE_BUILD_DIR)_1c/work
+	cp $(RTL_DIR)/fp_cores/altera/$(DEVICE_FAMILY)/*.hex $(ASE_BUILD_DIR)_1c/work
 
-ase-2c: gen_sources_a10 setup-ase-2c
+ase-2c: gen-sources setup-ase-2c
 	make -C $(ASE_BUILD_DIR)_2c
-	cp $(RTL_DIR)/fp_cores/altera/arria10/*.hex $(ASE_BUILD_DIR)_2c/work
+	cp $(RTL_DIR)/fp_cores/altera/arria$(DEVICE_FAMILY)10/*.hex $(ASE_BUILD_DIR)_2c/work
 
-ase-4c: gen_sources_a10 setup-ase-4c
+ase-4c: gen-sources setup-ase-4c
 	make -C $(ASE_BUILD_DIR)_4c
 	cp $(RTL_DIR)/fp_cores/altera/arria10/*.hex $(ASE_BUILD_DIR)_4c/work
 
@@ -43,25 +46,25 @@ $(ASE_BUILD_DIR)_2c/Makefile:
 $(ASE_BUILD_DIR)_4c/Makefile:
 	afu_sim_setup -s sources_4c.txt $(ASE_BUILD_DIR)_4c
 
-fpga-1c: gen_sources_a10 setup-fpga-1c
+fpga-1c: gen-sources setup-fpga-1c
 	cd $(FPGA_BUILD_DIR)_1c && $(RUN_SYNTH)
 
-fpga-2c: gen_sources_a10 setup-fpga-2c
+fpga-2c: gen-sources setup-fpga-2c
 	cd $(FPGA_BUILD_DIR)_2c && $(RUN_SYNTH)
 
-fpga-4c: gen_sources_a10 setup-fpga-4c
+fpga-4c: gen-sources setup-fpga-4c
 	cd $(FPGA_BUILD_DIR)_4c && $(RUN_SYNTH)
 
-fpga-8c: gen_sources_a10 setup-fpga-8c
+fpga-8c: gen-sources setup-fpga-8c
 	cd $(FPGA_BUILD_DIR)_8c && $(RUN_SYNTH)
 
-fpga-16c: gen_sources_a10 setup-fpga-16c
+fpga-16c: gen-sources setup-fpga-16c
 	cd $(FPGA_BUILD_DIR)_16c && $(RUN_SYNTH)
 
-fpga-32c: gen_sources_s10 setup-fpga-32c
+fpga-32c: gen-sources setup-fpga-32c
 	cd $(FPGA_BUILD_DIR)_32c && $(RUN_SYNTH)
 
-fpga-64c: gen_sources_s10 setup-fpga-64c
+fpga-64c: gen-sources setup-fpga-64c
 	cd $(FPGA_BUILD_DIR)_64c && $(RUN_SYNTH)
 	
 setup-fpga-1c: $(FPGA_BUILD_DIR)_1c/build/dcp.qpf

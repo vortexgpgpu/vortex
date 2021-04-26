@@ -3,6 +3,7 @@
 rtl_dir="../../rtl"
 exclude_list="VX_fpu_fpnew.v"
 file_list=""
+device_family=$1
 
 add_dirs()
 {
@@ -29,7 +30,7 @@ add_files()
     done
 }
 
-add_dirs $rtl_dir/fp_cores/altera/$1
+add_dirs $rtl_dir/fp_cores/altera/$device_family
 
 add_dirs $rtl_dir/libs $rtl_dir/interfaces $rtl_dir/fp_cores $rtl_dir/cache $rtl_dir $rtl_dir/afu
 
