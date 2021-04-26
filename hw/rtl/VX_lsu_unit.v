@@ -118,12 +118,6 @@ module VX_lsu_unit #(
         `UNUSED_PIN (empty)
     );
 
-    always @(posedge clk) begin
-        if (mbuf_push)  begin
-            pending_tags[mbuf_waddr] <= req_tag;
-        end    
-    end
-
     assign sent_all_ready = &(dcache_req_if.ready | req_sent_mask);
 
     wire [`NUM_THREADS-1:0] req_sent_dup = {{(`NUM_THREADS-1){dcache_req_fire[0] && req_is_dup}}, 1'b0};
@@ -143,8 +137,10 @@ module VX_lsu_unit #(
     reg [`DCORE_TAG_ID_BITS-1:0] req_tag_hold;
     wire [`DCORE_TAG_ID_BITS-1:0] req_tag = (0 == req_sent_mask) ? mbuf_waddr : req_tag_hold;
     always @(posedge clk) begin
-        if (mbuf_push) 
+        if (mbuf_push) begin            
+            pending_tags[mbuf_waddr] <= req_tag;
             req_tag_hold <= mbuf_waddr;
+        end
     end
 
     wire [`NUM_THREADS-1:0] req_tmask_dup = req_tmask & {{(`NUM_THREADS-1){~req_is_dup}}, 1'b1};
