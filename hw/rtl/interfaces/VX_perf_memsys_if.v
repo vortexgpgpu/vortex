@@ -23,10 +23,10 @@ interface VX_perf_memsys_if ();
     wire [`PERF_CTR_BITS-1:0] smem_writes;
     wire [`PERF_CTR_BITS-1:0] smem_bank_stalls;
     
-    wire [`PERF_CTR_BITS-1:0] dram_reads;
-    wire [`PERF_CTR_BITS-1:0] dram_writes;
-    wire [`PERF_CTR_BITS-1:0] dram_stalls;    
-    wire [`PERF_CTR_BITS-1:0] dram_latency;
+    wire [`PERF_CTR_BITS-1:0] mem_reads;
+    wire [`PERF_CTR_BITS-1:0] mem_writes;
+    wire [`PERF_CTR_BITS-1:0] mem_stalls;    
+    wire [`PERF_CTR_BITS-1:0] mem_latency;
 
 endinterface
 

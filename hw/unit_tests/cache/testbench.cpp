@@ -175,7 +175,7 @@ int FLUSH(CacheSim *sim){
 
 
 int BACK_PRESSURE(CacheSim *sim){
-  //happens whenever the core is stalled or DRAM is stalled
+  //happens whenever the core is stalled or memory is stalled
   unsigned int addr[4] = {0x12222222, 0xabbbbbbb, 0xcddddddd, 0xe4444444};
   unsigned int data[4] = {0xffffffff, 0x11111111, 0x22222222, 0x33333333};
   unsigned int rsp[4] = {0,0,0,0};

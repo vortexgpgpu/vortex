@@ -17,7 +17,7 @@
 #include <list>
 #include <unordered_map>
 
-#define DRAM_BLOCK_SIZE  (PLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH / 8)
+#define MEM_BLOCK_SIZE  (PLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH / 8)
 
 #define CACHE_BLOCK_SIZE 64
 
@@ -43,9 +43,9 @@ private:
 
   typedef struct {
     int cycles_left;  
-    std::array<uint8_t, DRAM_BLOCK_SIZE> data;
+    std::array<uint8_t, MEM_BLOCK_SIZE> data;
     uint32_t addr;
-  } dram_rd_req_t;
+  } mem_rd_req_t;
 
   typedef struct {
     int cycles_left;  
@@ -80,7 +80,7 @@ private:
 
   std::unordered_map<int64_t, host_buffer_t> host_buffers_;
 
-  std::list<dram_rd_req_t> dram_reads_;
+  std::list<mem_rd_req_t> mem_reads_;
 
   std::list<cci_rd_req_t> cci_reads_;
 
