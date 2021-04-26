@@ -18,7 +18,7 @@
 #define MEM_LATENCY 100
 #define MEM_RQ_SIZE 16
 #define MEM_STALLS_MODULO 16
-#define GLOBAL_BLOCK_SIZE 16
+#define MEM_BLOCK_SIZE 16
 
 typedef struct {
   int cycles_left;

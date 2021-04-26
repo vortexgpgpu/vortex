@@ -17,8 +17,6 @@
 #include <list>
 #include <unordered_map>
 
-#define MEM_BLOCK_SIZE  (PLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH / 8)
-
 #define CACHE_BLOCK_SIZE 64
 
 class opae_sim {
