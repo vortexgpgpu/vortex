@@ -5,14 +5,14 @@
 
 interface VX_perf_cache_if ();
 
-    wire [43:0] reads;
-    wire [43:0] writes;
-    wire [43:0] read_misses;
-    wire [43:0] write_misses;
-    wire [43:0] bank_stalls;
-    wire [43:0] mshr_stalls;
-    wire [43:0] pipe_stalls;
-    wire [43:0] crsp_stalls;
+    wire [`PERF_CTR_BITS-1:0] reads;
+    wire [`PERF_CTR_BITS-1:0] writes;
+    wire [`PERF_CTR_BITS-1:0] read_misses;
+    wire [`PERF_CTR_BITS-1:0] write_misses;
+    wire [`PERF_CTR_BITS-1:0] bank_stalls;
+    wire [`PERF_CTR_BITS-1:0] mshr_stalls;
+    wire [`PERF_CTR_BITS-1:0] pipe_stalls;
+    wire [`PERF_CTR_BITS-1:0] crsp_stalls;
 
 endinterface
 

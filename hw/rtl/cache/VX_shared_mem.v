@@ -250,9 +250,9 @@ module VX_shared_mem #(
         assign perf_crsp_stall_per_cycle = $countones(core_rsp_valid & ~core_rsp_ready);
     end
 
-    reg [43:0] perf_core_reads;
-    reg [43:0] perf_core_writes;
-    reg [43:0] perf_crsp_stalls;
+    reg [`PERF_CTR_BITS-1:0] perf_core_reads;
+    reg [`PERF_CTR_BITS-1:0] perf_core_writes;
+    reg [`PERF_CTR_BITS-1:0] perf_crsp_stalls;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -260,9 +260,9 @@ module VX_shared_mem #(
             perf_core_writes  <= 0;
             perf_crsp_stalls  <= 0;
         end else begin
-            perf_core_reads   <= perf_core_reads  + 44'(perf_core_reads_per_cycle);
-            perf_core_writes  <= perf_core_writes + 44'(perf_core_writes_per_cycle);
-            perf_crsp_stalls  <= perf_crsp_stalls + 44'(perf_crsp_stall_per_cycle);
+            perf_core_reads   <= perf_core_reads  + `PERF_CTR_BITS'(perf_core_reads_per_cycle);
+            perf_core_writes  <= perf_core_writes + `PERF_CTR_BITS'(perf_core_writes_per_cycle);
+            perf_crsp_stalls  <= perf_crsp_stalls + `PERF_CTR_BITS'(perf_crsp_stall_per_cycle);
         end
     end
 
