@@ -135,7 +135,9 @@ module VX_decode  #(
                         3'h7: op_type = `OP_BITS'(`MUL_REMU);
                         default:; 
                     endcase
-                    op_mod = 2;
+                    if (!use_rt) begin
+                        op_mod = 2;
+                    end
                 end else 
             `endif
                 begin

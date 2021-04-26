@@ -45,7 +45,6 @@ module VX_cry_unit #(
     wire [`NUM_THREADS-1:0][31:0] rol_result;
 
     wire [`CRY_MOD_BITS - 1:0] bytesel = `CRY_MOD(cry_req_if.op_mod);
-    `UNUSED_VAR (bytesel) // used later once aes is impl
 
     // todo: WIP
     wire saes32_valid = (`CRY_AES(cry_req_if.op_type));
