@@ -205,12 +205,4 @@ module VX_issue #(
     end
 `endif
 
-// `ifdef DBG_PRINT_PIPELINE
-always @ (posedge clk) begin
-    if (cry_req_if.valid && cry_req_if.ready) begin
-        $display("ISSUE: %t: core%0d-issue: wid=%0d, PC=%0h, ex=CRY, tmask=%b, rd=%0d, rs1_data=%0h, rs2_data=%0h", $time, CORE_ID, cry_req_if.wid, cry_req_if.PC, cry_req_if.tmask, cry_req_if.rd, cry_req_if.rs1_data, cry_req_if.rs2_data);
-    end
-end
-// `endif
-
 endmodule

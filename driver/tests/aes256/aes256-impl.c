@@ -142,9 +142,9 @@ static void aes256_inv_cipher(const uint8_t *in, uint8_t *out, const uint32_t *r
 }
 
 static uint32_t sub_word(uint32_t word) {
-    #ifdef AES_NATIVE
+#ifdef AES_NATIVE
     return __intrin_aes_subword(word);
-    #else
+#else
     uint8_t *bytes = (uint8_t *)&word;
 
     for (int i = 0; i < 4; i++) {
@@ -152,15 +152,15 @@ static uint32_t sub_word(uint32_t word) {
     }
 
     return word;
-    #endif
+#endif
 }
 
 static inline uint32_t rot_word(uint32_t word) {
-    // #if defined(AES_NATIVE) || defined(AES_HYBRID)
-    // // For endianness reasons, use rotr even though the algorithm
-    // // specifies an rotl
-    // return __intrin_rotr_imm(word, 8);
-    // #else
+#if defined(AES_NATIVE) || defined(AES_HYBRID)
+    // For endianness reasons, use rotr even though the algorithm
+    // specifies an rotl
+    return __intrin_rotr_imm(word, 8);
+#else
     uint32_t new;
     uint8_t *bytes = (uint8_t *)&word;
     uint8_t *new_bytes = (uint8_t *)&new;
@@ -171,7 +171,7 @@ static inline uint32_t rot_word(uint32_t word) {
     new_bytes[3] = bytes[0];
 
     return new;
-    // #endif
+#endif
 }
 
 static void add_round_key(uint8_t *state, const uint32_t *round_keys) {

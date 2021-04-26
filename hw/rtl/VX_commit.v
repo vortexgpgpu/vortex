@@ -114,12 +114,6 @@ module VX_commit #(
     `UNUSED_VAR (fpu_commit_if.PC)
 `endif
 
-always @(posedge clk) begin
-    if (cry_commit_if.valid && cry_commit_if.ready) begin
-        $display("COMMIT: %t: core%0d-commit: wid=%0d, PC=%0h, ex=CRY, tmask=%b, wb=%0d, rd=%0d, data=%0h", $time, CORE_ID, cry_commit_if.wid, cry_commit_if.PC, cry_commit_if.tmask, cry_commit_if.wb, cry_commit_if.rd, cry_commit_if.data);
-    end
-end
-
 endmodule
 
 

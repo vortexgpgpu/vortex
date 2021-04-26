@@ -100,7 +100,6 @@ module VX_cry_unit #(
     wire [`CRY_BITS - 1:0] cry_op = `CRY_OP(cry_req_if.op_type);
     
 
-    // `UNUSED_VAR (ror_result)
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         always @(*) begin
             case (cry_op)                        
@@ -118,7 +117,8 @@ module VX_cry_unit #(
             endcase
         end       
     end
-//  $display("%t: core%0d-commit: wid=%0d, PC=%0h, ex=CRY, tmask=%b, wb=%0d, rd=%0d, data=%0h", $time, CORE_ID, cry_req_if.wid, cry_req_if.PC, cry_req_if.tmask, cry_req_if.wb, cry_req_if.rd, cry_result);
+
+`ifdef DBG_PRINT_PIPELINE
     always @(posedge clk) begin
         if (cry_req_if.valid) begin
             case (cry_op)                        
@@ -135,11 +135,9 @@ module VX_cry_unit #(
                 default:            $display("INVALID: %t: core%0d-commit: wid=%0d, PC=%0h, ex=CRY, tmask=%b, wb=%0d, rd=%0d, data=%0h", $time, CORE_ID, cry_req_if.wid, cry_req_if.PC, cry_req_if.tmask, cry_req_if.wb, cry_req_if.rd, cry_result);
             endcase
         end
-
-        if (cry_req_if.valid && saes32_valid) begin
-            $display("SAES32 VALID");
-        end
     end
+`endif
+
     // output
 
     wire                          result_valid;
