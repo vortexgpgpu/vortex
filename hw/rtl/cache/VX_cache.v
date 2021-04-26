@@ -49,8 +49,6 @@ module VX_cache #(
     input wire clk,
     input wire reset,
 
-    input wire flush,
-
     // Core request    
     input wire [NUM_REQS-1:0]                           core_req_valid,
     input wire [NUM_REQS-1:0]                           core_req_rw,
@@ -66,11 +64,6 @@ module VX_cache #(
     output wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag,
     input  wire [`CORE_REQ_TAG_COUNT-1:0]               core_rsp_ready,   
 
-    // PERF
-`ifdef PERF_ENABLE
-    VX_perf_cache_if                        perf_cache_if,
-`endif
-
     // DRAM request
     output wire                             dram_req_valid,
     output wire                             dram_req_rw,    
@@ -84,7 +77,15 @@ module VX_cache #(
     input  wire                             dram_rsp_valid,    
     input  wire [`CACHE_LINE_WIDTH-1:0]     dram_rsp_data,
     input  wire [DRAM_TAG_WIDTH-1:0]        dram_rsp_tag,
-    output wire                             dram_rsp_ready
+    output wire                             dram_rsp_ready,    
+    
+    // PERF
+`ifdef PERF_ENABLE
+    VX_perf_cache_if                        perf_cache_if,
+`endif
+
+    // device flush
+    input wire flush
 );
 
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))
@@ -422,13 +423,13 @@ module VX_cache #(
     assign perf_mshr_stall_per_cycle = $countones(perf_mshr_stall_per_bank);
     assign perf_pipe_stall_per_cycle = $countones(perf_pipe_stall_per_bank);
 
-    reg [43:0] perf_core_reads;
-    reg [43:0] perf_core_writes;
-    reg [43:0] perf_read_misses;
-    reg [43:0] perf_write_misses;
-    reg [43:0] perf_mshr_stalls;
-    reg [43:0] perf_pipe_stalls;
-    reg [43:0] perf_crsp_stalls;
+    reg [`PERF_CTR_BITS-1:0] perf_core_reads;
+    reg [`PERF_CTR_BITS-1:0] perf_core_writes;
+    reg [`PERF_CTR_BITS-1:0] perf_read_misses;
+    reg [`PERF_CTR_BITS-1:0] perf_write_misses;
+    reg [`PERF_CTR_BITS-1:0] perf_mshr_stalls;
+    reg [`PERF_CTR_BITS-1:0] perf_pipe_stalls;
+    reg [`PERF_CTR_BITS-1:0] perf_crsp_stalls;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -440,13 +441,13 @@ module VX_cache #(
             perf_pipe_stalls  <= 0;
             perf_crsp_stalls  <= 0;
         end else begin
-            perf_core_reads   <= perf_core_reads  + 44'(perf_core_reads_per_cycle);
-            perf_core_writes  <= perf_core_writes + 44'(perf_core_writes_per_cycle);
-            perf_read_misses  <= perf_read_misses + 44'(perf_read_miss_per_cycle);
-            perf_write_misses <= perf_write_misses+ 44'(perf_write_miss_per_cycle);
-            perf_mshr_stalls  <= perf_mshr_stalls + 44'(perf_mshr_stall_per_cycle);
-            perf_pipe_stalls  <= perf_pipe_stalls + 44'(perf_pipe_stall_per_cycle);
-            perf_crsp_stalls  <= perf_crsp_stalls + 44'(perf_crsp_stall_per_cycle);
+            perf_core_reads   <= perf_core_reads  + `PERF_CTR_BITS'(perf_core_reads_per_cycle);
+            perf_core_writes  <= perf_core_writes + `PERF_CTR_BITS'(perf_core_writes_per_cycle);
+            perf_read_misses  <= perf_read_misses + `PERF_CTR_BITS'(perf_read_miss_per_cycle);
+            perf_write_misses <= perf_write_misses+ `PERF_CTR_BITS'(perf_write_miss_per_cycle);
+            perf_mshr_stalls  <= perf_mshr_stalls + `PERF_CTR_BITS'(perf_mshr_stall_per_cycle);
+            perf_pipe_stalls  <= perf_pipe_stalls + `PERF_CTR_BITS'(perf_pipe_stall_per_cycle);
+            perf_crsp_stalls  <= perf_crsp_stalls + `PERF_CTR_BITS'(perf_crsp_stall_per_cycle);
         end
     end
 

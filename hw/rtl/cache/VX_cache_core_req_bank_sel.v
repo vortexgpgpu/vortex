@@ -24,7 +24,7 @@ module VX_cache_core_req_bank_sel #(
     input wire                                      reset,
 
 `ifdef PERF_ENABLE
-    output wire [43:0]                              bank_stalls,
+    output wire [`PERF_CTR_BITS-1:0]                              bank_stalls,
 `endif
 
     input wire [NUM_REQS-1:0]                       core_req_valid,
@@ -306,13 +306,13 @@ module VX_cache_core_req_bank_sel #(
         end
     end
 
-    reg [43:0] bank_stalls_r;
+    reg [`PERF_CTR_BITS-1:0] bank_stalls_r;
 
     always @(posedge clk) begin
         if (reset) begin
             bank_stalls_r <= 0;
         end else begin
-            bank_stalls_r <= bank_stalls_r + 44'($countones(core_req_sel_r & ~core_req_ready));
+            bank_stalls_r <= bank_stalls_r + `PERF_CTR_BITS'($countones(core_req_sel_r & ~core_req_ready));
         end
     end
 

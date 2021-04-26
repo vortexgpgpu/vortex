@@ -120,14 +120,14 @@ module VX_issue #(
     `SCOPE_ASSIGN (writeback_eop,     writeback_if.eop);
 
 `ifdef PERF_ENABLE
-    reg [43:0] perf_ibf_stalls;
-    reg [43:0] perf_scb_stalls;
-    reg [43:0] perf_alu_stalls;
-    reg [43:0] perf_lsu_stalls;
-    reg [43:0] perf_csr_stalls;
-    reg [43:0] perf_gpu_stalls;
+    reg [`PERF_CTR_BITS-1:0] perf_ibf_stalls;
+    reg [`PERF_CTR_BITS-1:0] perf_scb_stalls;
+    reg [`PERF_CTR_BITS-1:0] perf_alu_stalls;
+    reg [`PERF_CTR_BITS-1:0] perf_lsu_stalls;
+    reg [`PERF_CTR_BITS-1:0] perf_csr_stalls;
+    reg [`PERF_CTR_BITS-1:0] perf_gpu_stalls;
 `ifdef EXT_F_ENABLE
-    reg [43:0] perf_fpu_stalls;
+    reg [`PERF_CTR_BITS-1:0] perf_fpu_stalls;
 `endif
 
     always @(posedge clk) begin
@@ -143,26 +143,26 @@ module VX_issue #(
         `endif
         end else begin
             if (decode_if.valid & !decode_if.ready) begin
-                perf_ibf_stalls <= perf_ibf_stalls  + 44'd1;
+                perf_ibf_stalls <= perf_ibf_stalls  + `PERF_CTR_BITS'd1;
             end
             if (ibuf_deq_if.valid & scoreboard_delay) begin 
-                perf_scb_stalls <= perf_scb_stalls  + 44'd1;
+                perf_scb_stalls <= perf_scb_stalls  + `PERF_CTR_BITS'd1;
             end
             if (alu_req_if.valid & !alu_req_if.ready) begin
-                perf_alu_stalls <= perf_alu_stalls + 44'd1;
+                perf_alu_stalls <= perf_alu_stalls + `PERF_CTR_BITS'd1;
             end
             if (lsu_req_if.valid & !lsu_req_if.ready) begin
-                perf_lsu_stalls <= perf_lsu_stalls + 44'd1;
+                perf_lsu_stalls <= perf_lsu_stalls + `PERF_CTR_BITS'd1;
             end
             if (csr_req_if.valid & !csr_req_if.ready) begin
-                perf_csr_stalls <= perf_csr_stalls + 44'd1;
+                perf_csr_stalls <= perf_csr_stalls + `PERF_CTR_BITS'd1;
             end
             if (gpu_req_if.valid & !gpu_req_if.ready) begin
-                perf_gpu_stalls <= perf_gpu_stalls + 44'd1;
+                perf_gpu_stalls <= perf_gpu_stalls + `PERF_CTR_BITS'd1;
             end
         `ifdef EXT_F_ENABLE
             if (fpu_req_if.valid & !fpu_req_if.ready) begin
-                perf_fpu_stalls <= perf_fpu_stalls + 44'd1;
+                perf_fpu_stalls <= perf_fpu_stalls + `PERF_CTR_BITS'd1;
             end
         `endif
         end

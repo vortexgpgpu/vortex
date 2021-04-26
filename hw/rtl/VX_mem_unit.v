@@ -101,7 +101,8 @@ module VX_mem_unit # (
         .WRITE_ENABLE       (0),
         .CORE_TAG_WIDTH     (`ICORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS   (`ICORE_TAG_ID_BITS),
-        .DRAM_TAG_WIDTH     (`DDRAM_TAG_WIDTH)
+        .DRAM_TAG_WIDTH     (`DDRAM_TAG_WIDTH),
+        .IN_ORDER_DRAM      (!(`L2_ENABLE || `L3_ENABLE))
     ) icache (
         `SCOPE_BIND_VX_mem_unit_icache
 
@@ -160,7 +161,8 @@ module VX_mem_unit # (
         .WRITE_ENABLE       (1),
         .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS),
-        .DRAM_TAG_WIDTH     (`DDRAM_TAG_WIDTH)
+        .DRAM_TAG_WIDTH     (`DDRAM_TAG_WIDTH),
+        .IN_ORDER_DRAM      (!(`L2_ENABLE || `L3_ENABLE))
     ) dcache (
         `SCOPE_BIND_VX_mem_unit_dcache
         
@@ -319,22 +321,22 @@ end else begin
     assign perf_memsys_if.smem_bank_stalls   = 0;
 end
     
-    reg [43:0] perf_dram_lat_per_cycle;
+    reg [`PERF_CTR_BITS-1:0] perf_dram_lat_per_cycle;
 
     always @(posedge clk) begin
         if (reset) begin
             perf_dram_lat_per_cycle <= 0;
         end else begin
             perf_dram_lat_per_cycle <= perf_dram_lat_per_cycle + 
-                44'($signed(2'((dram_req_if.valid && !dram_req_if.rw && dram_req_if.ready) && !(dram_rsp_if.valid && dram_rsp_if.ready)) - 
+                `PERF_CTR_BITS'($signed(2'((dram_req_if.valid && !dram_req_if.rw && dram_req_if.ready) && !(dram_rsp_if.valid && dram_rsp_if.ready)) - 
                             2'((dram_rsp_if.valid && dram_rsp_if.ready)                    && !(dram_req_if.valid && !dram_req_if.rw && dram_req_if.ready))));
         end
     end
     
-    reg [43:0] perf_dram_reads;
-    reg [43:0] perf_dram_writes;
-    reg [43:0] perf_dram_lat;
-    reg [43:0] perf_dram_stalls;
+    reg [`PERF_CTR_BITS-1:0] perf_dram_reads;
+    reg [`PERF_CTR_BITS-1:0] perf_dram_writes;
+    reg [`PERF_CTR_BITS-1:0] perf_dram_lat;
+    reg [`PERF_CTR_BITS-1:0] perf_dram_stalls;
 
     always @(posedge clk) begin
         if (reset) begin       
@@ -344,13 +346,13 @@ end
             perf_dram_stalls <= 0;
         end else begin  
             if (dram_req_if.valid && dram_req_if.ready && !dram_req_if.rw) begin
-                perf_dram_reads <= perf_dram_reads + 44'd1;
+                perf_dram_reads <= perf_dram_reads + `PERF_CTR_BITS'd1;
             end
             if (dram_req_if.valid && dram_req_if.ready && dram_req_if.rw) begin
-                perf_dram_writes <= perf_dram_writes + 44'd1;
+                perf_dram_writes <= perf_dram_writes + `PERF_CTR_BITS'd1;
             end            
             if (dram_req_if.valid && !dram_req_if.ready) begin
-                perf_dram_stalls <= perf_dram_stalls + 44'd1;
+                perf_dram_stalls <= perf_dram_stalls + `PERF_CTR_BITS'd1;
             end       
             perf_dram_lat <= perf_dram_lat + perf_dram_lat_per_cycle;
         end
