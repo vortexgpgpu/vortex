@@ -13,6 +13,7 @@ module VX_commit #(
     VX_commit_if    csr_commit_if,
     VX_commit_if    fpu_commit_if,
     VX_commit_if    gpu_commit_if,
+    VX_commit_if    cry_commit_if,
 
     // outputs
     VX_writeback_if     writeback_if,
@@ -28,13 +29,15 @@ module VX_commit #(
     wire csr_commit_fire = csr_commit_if.valid && csr_commit_if.ready;
     wire fpu_commit_fire = fpu_commit_if.valid && fpu_commit_if.ready;
     wire gpu_commit_fire = gpu_commit_if.valid && gpu_commit_if.ready;
+    wire cry_commit_fire = cry_commit_if.valid && cry_commit_if.ready;
 
     wire commit_fire = alu_commit_fire
                     || ld_commit_fire
                     || st_commit_fire
                     || csr_commit_fire
                     || fpu_commit_fire
-                    || gpu_commit_fire;
+                    || gpu_commit_fire
+                    || cry_commit_fire;
 
     wire [`NUM_THREADS-1:0] commit_tmask1, commit_tmask2, commit_tmask3; 
 
@@ -42,6 +45,7 @@ module VX_commit #(
                            ld_commit_fire  ? ld_commit_if.tmask:                                           
                            csr_commit_fire ? csr_commit_if.tmask:
                            fpu_commit_fire ? fpu_commit_if.tmask:
+                           cry_commit_fire ? cry_commit_if.tmask:
                                              0;
 
     assign commit_tmask2 = st_commit_fire ? st_commit_if.tmask : 0;
@@ -73,6 +77,7 @@ module VX_commit #(
         .ld_commit_if   (ld_commit_if),        
         .csr_commit_if  (csr_commit_if),
         .fpu_commit_if  (fpu_commit_if),
+        .cry_commit_if  (cry_commit_if),
 
         .writeback_if   (writeback_if)
     );
@@ -101,10 +106,19 @@ module VX_commit #(
         if (gpu_commit_if.valid && gpu_commit_if.ready) begin
             $display("%t: core%0d-commit: wid=%0d, PC=%0h, ex=GPU, tmask=%b, wb=%0d, rd=%0d, data=%0h", $time, CORE_ID, gpu_commit_if.wid, gpu_commit_if.PC, gpu_commit_if.tmask, gpu_commit_if.wb, gpu_commit_if.rd, gpu_commit_if.data);
         end
+        if (cry_commit_if.valid && cry_commit_if.ready) begin
+            $display("%t: core%0d-commit: wid=%0d, PC=%0h, ex=CRY, tmask=%b, wb=%0d, rd=%0d, data=%0h", $time, CORE_ID, cry_commit_if.wid, cry_commit_if.PC, cry_commit_if.tmask, cry_commit_if.wb, cry_commit_if.rd, cry_commit_if.data);
+        end
     end
 `else    
     `UNUSED_VAR (fpu_commit_if.PC)
 `endif
+
+always @(posedge clk) begin
+    if (cry_commit_if.valid && cry_commit_if.ready) begin
+        $display("COMMIT: %t: core%0d-commit: wid=%0d, PC=%0h, ex=CRY, tmask=%b, wb=%0d, rd=%0d, data=%0h", $time, CORE_ID, cry_commit_if.wid, cry_commit_if.PC, cry_commit_if.tmask, cry_commit_if.wb, cry_commit_if.rd, cry_commit_if.data);
+    end
+end
 
 endmodule
 

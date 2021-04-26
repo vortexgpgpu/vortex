@@ -33,7 +33,10 @@ module VX_decode  #(
     wire [6:0] func7  = instr[31:25];
     wire [11:0] u_12  = instr[31:20]; 
 
-    wire [4:0] rd  = instr[11:7];
+    reg use_rt; // used by the AES instructions
+
+    // AES instructions use RS1 as the RD as well
+    wire [4:0] rd  = use_rt ? instr[19:15] : instr[11:7];
     wire [4:0] rs1 = instr[19:15];
     wire [4:0] rs2 = instr[24:20];     
     wire [4:0] rs3 = instr[31:27];
@@ -49,6 +52,7 @@ module VX_decode  #(
         op_type   = 'x;
         op_mod    = 'x;
         imm       = 'x;
+        use_rt    = 0; // for AES
         use_rd    = 0;
         use_rs1   = 0;
         use_rs2   = 0;
@@ -66,11 +70,31 @@ module VX_decode  #(
                 ex_type = `EX_ALU;
                 case (func3)
                     3'h0: op_type = `OP_BITS'(`ALU_ADD);
-                    3'h1: op_type = `OP_BITS'(`ALU_SLL);
+                    3'h1: begin
+                        if (func7 == 7'b0001000) begin
+                            ex_type = `EX_CRY;
+                            case (u_12[1:0])
+                                2'b00: op_type = `OP_BITS'(`CRY_SHA256SUM0);
+                                2'b01: op_type = `OP_BITS'(`CRY_SHA256SUM1);
+                                2'b10: op_type = `OP_BITS'(`CRY_SHA256SIG0);
+                                2'b11: op_type = `OP_BITS'(`CRY_SHA256SIG1);
+                                default:;
+                            endcase
+                        end else begin
+                            op_type = `OP_BITS'(`ALU_SLL);
+                        end
+                    end
                     3'h2: op_type = `OP_BITS'(`ALU_SLT);
                     3'h3: op_type = `OP_BITS'(`ALU_SLTU);
                     3'h4: op_type = `OP_BITS'(`ALU_XOR);
-                    3'h5: op_type = (func7[5]) ? `OP_BITS'(`ALU_SRA) : `OP_BITS'(`ALU_SRL);
+                    3'h5: begin
+                        if (func7 == 7'b0110000) begin
+                            ex_type = `EX_CRY;
+                            op_type = `OP_BITS'(`CRY_ROR);
+                        end else begin
+                            op_type = (func7[5]) ? `OP_BITS'(`ALU_SRA) : `OP_BITS'(`ALU_SRL);
+                        end
+                    end
                     3'h6: op_type = `OP_BITS'(`ALU_OR);
                     3'h7: op_type = `OP_BITS'(`ALU_AND);
                     default:;
@@ -86,7 +110,22 @@ module VX_decode  #(
             `ifdef EXT_F_ENABLE
                 if (func7[0]) begin
                     case (func3)
-                        3'h0: op_type = `OP_BITS'(`MUL_MUL);
+                        3'h0: begin
+                            if (func7[4:3] == 2'b11 && func7[0]) begin
+                                ex_type = `EX_CRY;
+                                op_mod = `MOD_BITS'(func7[6:5]);
+                                use_rt = 1;
+                                case (func7[2:1])
+                                    2'b00: op_type = `OP_BITS'(`CRY_AES32ESI);
+                                    2'b01: op_type = `OP_BITS'(`CRY_AES32ESMI);
+                                    2'b10: op_type = `OP_BITS'(`CRY_AES32DSI);
+                                    2'b11: op_type = `OP_BITS'(`CRY_AES32DSMI);
+                                    default:;
+                                endcase
+                            end else begin
+                                op_type = `OP_BITS'(`MUL_MUL);
+                            end
+                        end
                         3'h1: op_type = `OP_BITS'(`MUL_MULH);
                         3'h2: op_type = `OP_BITS'(`MUL_MULHSU);
                         3'h3: op_type = `OP_BITS'(`MUL_MULHU);
@@ -100,6 +139,7 @@ module VX_decode  #(
                 end else 
             `endif
                 begin
+                    op_mod  = 0;
                     case (func3)
                         3'h0: op_type = (func7[5]) ? `OP_BITS'(`ALU_SUB) : `OP_BITS'(`ALU_ADD);
                         3'h1: op_type = `OP_BITS'(`ALU_SLL);
@@ -111,8 +151,8 @@ module VX_decode  #(
                         3'h7: op_type = `OP_BITS'(`ALU_AND);
                         default:;
                     endcase
-                    op_mod  = 0; 
-                end                
+                    
+                end
                 use_rd  = 1;
                 use_rs1 = 1;
                 use_rs2 = 1;

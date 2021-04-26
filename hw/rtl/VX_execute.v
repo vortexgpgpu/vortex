@@ -30,6 +30,7 @@ module VX_execute #(
     VX_csr_req_if       csr_req_if,  
     VX_fpu_req_if       fpu_req_if,    
     VX_gpu_req_if       gpu_req_if,
+    VX_cry_req_if       cry_req_if,
     
     // outputs
     VX_branch_ctl_if    branch_ctl_if,    
@@ -40,6 +41,7 @@ module VX_execute #(
     VX_commit_if        csr_commit_if,
     VX_commit_if        fpu_commit_if,
     VX_commit_if        gpu_commit_if,
+    VX_commit_if        cry_commit_if,
     
     input wire          busy,
     output wire         ebreak
@@ -130,6 +132,17 @@ module VX_execute #(
         .gpu_req_if     (gpu_req_if),
         .warp_ctl_if    (warp_ctl_if),
         .gpu_commit_if  (gpu_commit_if)
+    );
+
+    // crypto unit
+
+    VX_cry_unit #(
+        .CORE_ID(CORE_ID)
+    ) cry_unit (
+        .clk            (clk),
+        .reset          (reset),
+        .cry_req_if     (cry_req_if),
+        .cry_commit_if  (cry_commit_if)
     );
 
     assign ebreak = alu_req_if.valid 

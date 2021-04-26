@@ -13,7 +13,8 @@ module VX_instr_demux (
     VX_lsu_req_if   lsu_req_if,
     VX_csr_req_if   csr_req_if,
     VX_fpu_req_if   fpu_req_if,
-    VX_gpu_req_if   gpu_req_if    
+    VX_gpu_req_if   gpu_req_if,
+    VX_cry_req_if   cry_req_if
 );
     wire [`NT_BITS-1:0] tid;
     wire alu_req_ready;
@@ -21,6 +22,7 @@ module VX_instr_demux (
     wire csr_req_ready;
     wire fpu_req_ready;
     wire gpu_req_ready;
+    wire cry_req_ready;
 
     VX_priority_encoder #(
         .N (`NUM_THREADS)
@@ -123,6 +125,22 @@ module VX_instr_demux (
         .ready_out (gpu_req_if.ready)
     ); 
 
+    // crypto unit
+    wire cry_req_valid = execute_if.valid && (execute_if.ex_type == `EX_CRY);
+    
+    VX_skid_buffer #(
+        .DATAW (`NW_BITS + `NUM_THREADS + 32 + 32 + `CRY_BITS + `MOD_BITS + 32 + 1 + 1 + `NR_BITS + 1 + `NT_BITS + (2 * `NUM_THREADS * 32))
+    ) cry_buffer (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (cry_req_valid),
+        .ready_in  (cry_req_ready),
+        .data_in   ({execute_if.wid, execute_if.tmask, execute_if.PC, next_PC,            `CRY_OP(execute_if.op_type), execute_if.op_mod, execute_if.imm, execute_if.use_PC, execute_if.use_imm, execute_if.rd, execute_if.wb, tid,            gpr_rsp_if.rs1_data, gpr_rsp_if.rs2_data}),
+        .data_out  ({cry_req_if.wid, cry_req_if.tmask, cry_req_if.PC, cry_req_if.next_PC, cry_req_if.op_type,          cry_req_if.op_mod, cry_req_if.imm, cry_req_if.use_PC, cry_req_if.use_imm, cry_req_if.rd, cry_req_if.wb, cry_req_if.tid, cry_req_if.rs1_data, cry_req_if.rs2_data}),
+        .valid_out (cry_req_if.valid),
+        .ready_out (cry_req_if.ready)
+    );
+
     // can take next request?
     reg ready_r;
     always @(*) begin
@@ -132,6 +150,7 @@ module VX_instr_demux (
         `EX_CSR: ready_r = csr_req_ready;
         `EX_FPU: ready_r = fpu_req_ready;
         `EX_GPU: ready_r = gpu_req_ready;
+        `EX_CRY: ready_r = cry_req_ready;
         default: ready_r = 1'b1; // ignore NOPs
         endcase
     end

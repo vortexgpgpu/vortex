@@ -16,6 +16,12 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+static uint32_t rotr(uint32_t, int);
+static inline uint32_t rotr(uint32_t x, int n) {
+    return (x >> n) | (x << (32 - n));
+}
+
+
 const char* kernel_file = "kernel.bin";
 uint32_t count = 0;
 
@@ -77,13 +83,15 @@ int run_test(const kernel_arg_t& kernel_arg,
   std::cout << "verify result" << std::endl;  
   {
     int errors = 0;
-    auto buf_ptr = (int32_t*)vx_host_ptr(buffer);
+    auto buf_ptr = (uint32_t*)vx_host_ptr(buffer);
     for (uint32_t i = 0; i < num_points; ++i) {
-      int ref = i + i; 
-      int cur = buf_ptr[i];
+      uint32_t i1 = rotr(i,0);
+      uint32_t i2 = i;
+      uint32_t ref = rotr(i1 + i2, 0); 
+      uint32_t cur = buf_ptr[i];
       if (cur != ref) {
         std::cout << "error at result #" << i
-                  << ": actual 0x" << cur << ", expected 0x" << ref << std::endl;
+                  << "(0x" << (i+i) << "): actual 0x" << cur << ", expected 0x" << ref << std::endl;
         ++errors;
       }
     }

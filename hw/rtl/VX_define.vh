@@ -70,6 +70,7 @@
 `define EX_CSR          3'h3
 `define EX_FPU          3'h4
 `define EX_GPU          3'h5
+`define EX_CRY          3'h6
 `define EX_BITS         3
 
 `define NUM_EXS         6
@@ -185,6 +186,33 @@
 `define GPU_OTHER       3'h7
 `define GPU_BITS        3
 `define GPU_OP(x)       x[`GPU_BITS-1:0]
+
+
+
+`define CRY_AES32ESI    4'b0000
+`define CRY_AES32ESMI   4'b0001
+`define CRY_AES32DSI    4'b0010
+`define CRY_AES32DSMI   4'b0011
+`define CRY_SHA256SUM0  4'b0100
+`define CRY_SHA256SUM1  4'b0101
+`define CRY_SHA256SIG0  4'b0110
+`define CRY_SHA256SIG1  4'b0111
+`define CRY_ROR         4'b1000
+`define CRY_ROL         4'b1001
+`define CRY_AES(x)      x[`CRY_BITS-1:`CRY_BITS-2] == 2'b00
+// `define CRY_AES_ENC(x)      x[`CRY_BITS-1:`CRY_BITS-3] == 3'b000
+// `define CRY_AES_DEC(x)      x[`CRY_BITS-1:`CRY_BITS-3] == 3'b001
+// `define CRY_AES_MIX(x)      x[`CRY_BITS-1:0] == 4'b00x1
+`define CRY_SHA(x)      x[`CRY_BITS-1:`CRY_BITS-2] == 2'b01
+`define CRY_ROT(x)      x[`CRY_BITS-1:`CRY_BITS-3] == 3'b100
+`define CRY_BITS        4
+`define CRY_OP(x)       x[`CRY_BITS-1:0]
+`define CRY_MOD_BITS    2
+`define CRY_MOD(x)      x[`CRY_MOD_BITS-1:0]
+
+
+
+
 
 ///////////////////////////////////////////////////////////////////////////////
 

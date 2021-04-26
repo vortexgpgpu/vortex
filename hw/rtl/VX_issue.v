@@ -19,7 +19,8 @@ module VX_issue #(
     VX_lsu_req_if   lsu_req_if,    
     VX_csr_req_if   csr_req_if,
     VX_fpu_req_if   fpu_req_if,    
-    VX_gpu_req_if   gpu_req_if
+    VX_gpu_req_if   gpu_req_if,
+    VX_cry_req_if   cry_req_if
 );
     VX_decode_if  ibuf_deq_if();
     VX_decode_if  execute_if();
@@ -86,7 +87,8 @@ module VX_issue #(
         .lsu_req_if (lsu_req_if),        
         .csr_req_if (csr_req_if),
         .fpu_req_if (fpu_req_if),
-        .gpu_req_if (gpu_req_if)
+        .gpu_req_if (gpu_req_if),
+        .cry_req_if (cry_req_if)
     );     
 
     // issue the instruction
@@ -197,7 +199,18 @@ module VX_issue #(
         if (gpu_req_if.valid && gpu_req_if.ready) begin
             $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=GPU, tmask=%b, rd=%0d, rs1_data=%0h, rs2_data=%0h", $time, CORE_ID, gpu_req_if.wid, gpu_req_if.PC, gpu_req_if.tmask, gpu_req_if.rd, gpu_req_if.rs1_data, gpu_req_if.rs2_data);   
         end
+        if (cry_req_if.valid && cry_req_if.ready) begin
+            $display("%t: core%0d-issue: wid=%0d, PC=%0h, ex=CRY, tmask=%b, rd=%0d, rs1_data=%0h, rs2_data=%0h", $time, CORE_ID, cry_req_if.wid, cry_req_if.PC, cry_req_if.tmask, cry_req_if.rd, cry_req_if.rs1_data, cry_req_if.rs2_data);   
+        end
     end
 `endif
+
+// `ifdef DBG_PRINT_PIPELINE
+always @ (posedge clk) begin
+    if (cry_req_if.valid && cry_req_if.ready) begin
+        $display("ISSUE: %t: core%0d-issue: wid=%0d, PC=%0h, ex=CRY, tmask=%b, rd=%0d, rs1_data=%0h, rs2_data=%0h", $time, CORE_ID, cry_req_if.wid, cry_req_if.PC, cry_req_if.tmask, cry_req_if.rd, cry_req_if.rs1_data, cry_req_if.rs2_data);
+    end
+end
+// `endif
 
 endmodule

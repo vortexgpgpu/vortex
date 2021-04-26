@@ -56,7 +56,7 @@ module VX_scoreboard  #(
             deadlock_ctr <= deadlock_ctr + 1;
             assert(deadlock_ctr < deadlock_timeout) else $error("*** %t: core%0d-deadlock: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b",
                     $time, CORE_ID, ibuf_deq_if.wid, ibuf_deq_if.PC, ibuf_deq_if.rd, ibuf_deq_if.wb, 
-                    deq_inuse_regs[ibuf_deq_if.rd], deq_inuse_regs[ibuf_deq_if.rs1], deq_inuse_regs[ibuf_deq_if.rs2], deq_inuse_regs[ibuf_deq_if.rs3]);            
+                    deq_inuse_regs[ibuf_deq_if.rd], deq_inuse_regs[ibuf_deq_if.rs1], deq_inuse_regs[ibuf_deq_if.rs2], deq_inuse_regs[ibuf_deq_if.rs3], ibuf_deq_if.ex_type);            
         end else if (ibuf_deq_if.valid && ibuf_deq_if.ready) begin
             deadlock_ctr <= 0;
         end

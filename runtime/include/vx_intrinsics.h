@@ -415,7 +415,7 @@ inline uint32_t __intrin_rotr_imm(uint32_t word, int32_t n) {
     asm volatile (
         ".insn i 0x13, 5, %[ret], %[word], %[n]\n"
         : [ret] "=r" (ret)
-        : [word] "r" (word), [n] "i" ((0x30 << 5) | (n & 0x1f)));
+        : [word] "r" (word), [n] "i" ((0x30 << 5) | (n & 0x01f)));
 
     return ret;
 }
