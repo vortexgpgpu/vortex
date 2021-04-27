@@ -3,6 +3,7 @@
 #include <string.h>
 #include <vortex.h>
 #include <openssl/evp.h>
+#include <openssl/err.h>
 #include "common.h"
 #include "aes256.h"
 
@@ -20,24 +21,34 @@
 
 const char* kernel_file = "kernel.bin";
 uint32_t nblocks = 0;
+aes_op_type_t aes_op_type = AES_OP_ECB_ENC;
 
 vx_device_h device = nullptr;
 vx_buffer_h buffer = nullptr;
 
 static void show_usage() {
    std::cout << "Vortex Driver Test." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-n nblocks] [-h: help]" << std::endl;
+   std::cout << "Usage: [-k: kernel] [-n nblocks] [-t op_type] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
-  int c;
-  while ((c = getopt(argc, argv, "n:k:h?")) != -1) {
+  int c, op_type_arg;
+  while ((c = getopt(argc, argv, "n:k:t:h?")) != -1) {
     switch (c) {
     case 'n':
       nblocks = atoi(optarg);
       break;
     case 'k':
       kernel_file = optarg;
+      break;
+    case 't':
+      op_type_arg = atoi(optarg);
+      if (op_type_arg < 0 || op_type_arg >= (int)AES_OP_COUNT) {
+        show_usage();
+        std::cout << "invalid arg to -t" << std::endl;
+        exit(-1);
+      }
+      aes_op_type = (aes_op_type_t)op_type_arg;
       break;
     case 'h':
     case '?': {
@@ -51,7 +62,7 @@ static void parse_args(int argc, char **argv) {
   }
 }
 
-void cleanup() {
+static void cleanup() {
   if (buffer) {
     vx_buf_release(buffer);
   }
@@ -60,10 +71,66 @@ void cleanup() {
   }
 }
 
-int run_test(const kernel_arg_t& kernel_arg,
-             const char *expected_dec,
-             const char *expected_enc,
-             uint32_t buf_size) { 
+static int openssl_aes256(int enc, const char *iv, const char *input,
+                          const char *key, char *output, uint32_t buf_size) {
+  EVP_CIPHER_CTX *ctx;
+  if (!(ctx = EVP_CIPHER_CTX_new())) {
+    ERR_print_errors_fp(stderr);
+    return 1;
+  }
+  if (!EVP_CipherInit_ex(ctx, iv? EVP_aes_256_cbc() : EVP_aes_256_ecb(), NULL,
+                         (const unsigned char *)key, (const unsigned char *)iv,
+                         enc)) {
+    ERR_print_errors_fp(stderr);
+    return 1;
+  }
+  EVP_CIPHER_CTX_set_padding(ctx, 0);
+
+  int outl_update = 0;
+  if (!EVP_CipherUpdate(ctx, (unsigned char *)output, &outl_update,
+                         (const unsigned char *)input, buf_size)) {
+    ERR_print_errors_fp(stderr);
+    return 1;
+  }
+
+  int outl_final = 0;
+  if (!EVP_CipherFinal_ex(ctx, (unsigned char *)output + outl_update, &outl_final)) {
+    ERR_print_errors_fp(stderr);
+    return 1;
+  }
+
+  if (outl_update + outl_final != buf_size) {
+    std::cerr << "Wrong amount of data " << (enc? "encrypted" : "decrypted")
+              << " by openssl: " << outl_update << " + " << outl_final
+              << " != " << buf_size << std::endl;
+    return 1;
+  }
+
+  EVP_CIPHER_CTX_free(ctx);
+  return 0;
+}
+
+static int openssl_aes256_op(aes_op_type_t op_type, char *iv, const char *input, const char *key,
+                             char *output, uint32_t buf_size) {
+  switch (op_type) {
+    case AES_OP_ECB_ENC: return openssl_aes256(1, NULL, input, key, output, buf_size);
+    case AES_OP_ECB_DEC: return openssl_aes256(0, NULL, input, key, output, buf_size);
+    case AES_OP_CBC_ENC: return openssl_aes256(1, iv, input, key, output, buf_size);
+    case AES_OP_CBC_DEC: return openssl_aes256(0, iv, input, key, output, buf_size);
+    default:
+      std::cout << "unsupported aes op " << aes_op_type << std::endl;
+      return 1;
+  }
+}
+
+int run_test(const kernel_arg_t& kernel_arg, const char *input,
+             uint32_t buf_size) {
+  char *expected_output = (char *)malloc(buf_size);
+  RT_CHECK(!expected_output);
+  RT_CHECK(openssl_aes256_op(aes_op_type, (char *)kernel_arg.iv, input,
+                             (char *)kernel_arg.key, expected_output,
+                             buf_size));
+
   // start device
   std::cout << "start device" << std::endl;
   RT_CHECK(vx_start(device));
@@ -73,28 +140,16 @@ int run_test(const kernel_arg_t& kernel_arg,
   RT_CHECK(vx_ready_wait(device, -1));
 
   // download newly-decrypted buffer
-  std::cout << "download decrypted buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(buffer, kernel_arg.outdec_ptr, buf_size, 0));
+  std::cout << "download output buffer" << std::endl;
+  RT_CHECK(vx_copy_from_dev(buffer, kernel_arg.out_ptr, buf_size, 0));
 
   // verify result
-  std::cout << "verify result" << std::endl;  
+  std::cout << "verify result" << std::endl;
   int errors = 0;
   {
     auto buf_ptr = (char*)vx_host_ptr(buffer);
-    if (memcmp(buf_ptr, expected_dec, buf_size)) {
-      std::cout << "decrypted data does not match" << std::endl;
-      ++errors;
-    }
-  }
-
-  // download newly-encrypted buffer
-  std::cout << "download encrypted buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(buffer, kernel_arg.outenc_ptr, buf_size, 0));
-
-  {
-    auto buf_ptr = (char*)vx_host_ptr(buffer);
-    if (memcmp(buf_ptr, expected_enc, buf_size)) {
-      std::cout << "encrypted data does not match" << std::endl;
+    if (memcmp(buf_ptr, expected_output, buf_size)) {
+      std::cout << "output data does not match expected" << std::endl;
       ++errors;
     }
   }
@@ -102,9 +157,10 @@ int run_test(const kernel_arg_t& kernel_arg,
   if (errors != 0) {
     std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
     std::cout << "FAILED!" << std::endl;
-    return 1;  
+    return 1;
   }
 
+  free(expected_output);
   return 0;
 }
 
@@ -115,33 +171,10 @@ static inline uint8_t myrand(void) {
   return (uint32_t)(next / 65536) & 0xff;
 }
 
-static int openssl_aes256(const char *expected_dec, const char *key,
-                           char *expected_enc, uint32_t buf_size) {
-    EVP_CIPHER_CTX *ctx;
-    if (!(ctx = EVP_CIPHER_CTX_new())) {
-        return 1;
-    }
-    EVP_CIPHER_CTX_set_padding(ctx, 0);
-    if (!EVP_EncryptInit_ex(ctx, EVP_aes_256_ecb(), NULL, (const unsigned char *)key, NULL)) {
-        return 1;
-    }
-
-    int outl;
-    if (!EVP_EncryptUpdate(ctx, (unsigned char *)expected_enc, &outl, (const unsigned char *)expected_dec, buf_size)) {
-        return 1;
-    }
-    if (outl != buf_size) {
-        return 1;
-    }
-
-    EVP_CIPHER_CTX_free(ctx);
-    return 0;
-}
-
 int main(int argc, char *argv[]) {
-  size_t value; 
+  size_t value;
   kernel_arg_t kernel_arg;
-  
+
   // parse command arguments
   parse_args(argc, argv);
 
@@ -150,7 +183,7 @@ int main(int argc, char *argv[]) {
   }
 
   // open device connection
-  std::cout << "open device connection" << std::endl;  
+  std::cout << "open device connection" << std::endl;
   RT_CHECK(vx_dev_open(&device));
 
   unsigned max_cores, max_warps, max_threads;
@@ -167,37 +200,37 @@ int main(int argc, char *argv[]) {
   std::cout << "each buffer has size: " << buf_size << " bytes" << std::endl;
 
   // upload program
-  std::cout << "upload program" << std::endl;  
+  std::cout << "upload program" << std::endl;
   RT_CHECK(vx_upload_kernel_file(device, kernel_file));
 
   // allocate device memory
-  std::cout << "allocate device memory" << std::endl;  
+  std::cout << "allocate device memory" << std::endl;
 
-  RT_CHECK(vx_alloc_dev_mem(device, KEY_SIZE, &value));
-  kernel_arg.key_ptr = value;
   RT_CHECK(vx_alloc_dev_mem(device, buf_size, &value));
-  kernel_arg.indec_ptr = value;
+  kernel_arg.in_ptr = value;
   RT_CHECK(vx_alloc_dev_mem(device, buf_size, &value));
-  kernel_arg.inenc_ptr = value;
-  RT_CHECK(vx_alloc_dev_mem(device, buf_size, &value));
-  kernel_arg.outdec_ptr = value;
-  RT_CHECK(vx_alloc_dev_mem(device, buf_size, &value));
-  kernel_arg.outenc_ptr = value;
+  kernel_arg.out_ptr = value;
 
   kernel_arg.num_tasks = num_tasks;
   kernel_arg.nblocks = nblocks;
+  kernel_arg.aes_op_type = aes_op_type;
 
   std::cout << "key_ptr=0x" << std::hex << kernel_arg.key_ptr << std::dec << std::endl;
-  std::cout << "indec_ptr=0x" << std::hex << kernel_arg.indec_ptr << std::dec << std::endl;
-  std::cout << "inenc_ptr=0x" << std::hex << kernel_arg.inenc_ptr << std::dec << std::endl;
-  std::cout << "outdec_ptr=0x" << std::hex << kernel_arg.outdec_ptr << std::dec << std::endl;
-  std::cout << "outenc_ptr=0x" << std::hex << kernel_arg.outenc_ptr << std::dec << std::endl;
-  
-  // allocate shared memory  
-  std::cout << "allocate shared memory" << std::endl;    
-  uint32_t alloc_size = std::max<uint32_t>(KEY_SIZE, std::max<uint32_t>(buf_size, sizeof(kernel_arg_t)));
+  std::cout << "in_ptr=0x" << std::hex << kernel_arg.in_ptr << std::dec << std::endl;
+  std::cout << "out_ptr=0x" << std::hex << kernel_arg.out_ptr << std::dec << std::endl;
+
+  // allocate shared memory
+  std::cout << "allocate shared memory" << std::endl;
+  uint32_t alloc_size = std::max<uint32_t>(buf_size, sizeof(kernel_arg_t));
   RT_CHECK(vx_alloc_shared_mem(device, alloc_size, &buffer));
-  
+
+  for (uint32_t i = 0; i < KEY_SIZE; i++) {
+    kernel_arg.key[i] = myrand();
+  }
+  for (uint32_t i = 0; i < BLOCK_SIZE; i++) {
+    kernel_arg.iv[i] = myrand();
+  }
+
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
   {
@@ -206,73 +239,36 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_copy_to_dev(buffer, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
   }
 
-  char *aes_key = (char *)malloc(KEY_SIZE);
-  RT_CHECK(!aes_key);
-  char *expected_dec = (char *)malloc(buf_size);
-  RT_CHECK(!expected_dec);
-  char *expected_enc = (char *)malloc(buf_size);
-  RT_CHECK(!expected_enc);
-
-  for (uint32_t i = 0; i < KEY_SIZE; i++) {
-    aes_key[i] = myrand();
-  }
+  char *input = (char *)malloc(buf_size);
+  RT_CHECK(!input);
   for (uint32_t i = 0; i < buf_size; i++) {
-    expected_dec[i] = myrand();
+    input[i] = myrand();
   }
-  //memset(aes_key, 0xff, KEY_SIZE);
-  //memset(expected_dec, 0xff, buf_size);
-  RT_CHECK(openssl_aes256(expected_dec, aes_key, expected_enc, buf_size));
 
-  // upload key buffer
+  // upload input buffer
   {
     auto buf_ptr = (char*)vx_host_ptr(buffer);
-    memcpy(buf_ptr, aes_key, KEY_SIZE);
+    memcpy(buf_ptr, input, buf_size);
   }
-  std::cout << "upload key buffer" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.key_ptr, KEY_SIZE, 0));
+  std::cout << "upload input buffer" << std::endl;
+  RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.in_ptr, buf_size, 0));
 
-  // upload decrypted input buffer
-  {
-    auto buf_ptr = (char*)vx_host_ptr(buffer);
-    memcpy(buf_ptr, expected_dec, buf_size);
-  }
-  std::cout << "upload decrypted input buffer" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.indec_ptr, buf_size, 0));
-
-  // upload encrypted input buffer
-  {
-    auto buf_ptr = (char*)vx_host_ptr(buffer);
-    memcpy(buf_ptr, expected_enc, buf_size);
-  }
-  std::cout << "upload encrypted input buffer" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.inenc_ptr, buf_size, 0));
-
-  // clear decrypted output buffer
+  // clear output buffer
   {
     auto buf_ptr = (char*)vx_host_ptr(buffer);
     memset(buf_ptr, 0, buf_size);
   }
-  std::cout << "clear decrypted output buffer" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.outdec_ptr, buf_size, 0));  
-
-  // clear encrypted output buffer
-  {
-    auto buf_ptr = (char*)vx_host_ptr(buffer);
-    memset(buf_ptr, 0, buf_size);
-  }
-  std::cout << "clear encrypted output buffer" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.outenc_ptr, buf_size, 0));  
+  std::cout << "clear output buffer" << std::endl;
+  RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.out_ptr, buf_size, 0));
 
   // run tests
   std::cout << "run tests" << std::endl;
-  RT_CHECK(run_test(kernel_arg, expected_dec, expected_enc, buf_size));
+  RT_CHECK(run_test(kernel_arg, input, buf_size));
 
   // cleanup
-  std::cout << "cleanup" << std::endl;  
+  std::cout << "cleanup" << std::endl;
   cleanup();
-  free(aes_key);
-  free(expected_dec);
-  free(expected_enc);
+  free(input);
 
   std::cout << "PASSED!" << std::endl;
 

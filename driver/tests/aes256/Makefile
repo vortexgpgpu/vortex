@@ -1,7 +1,8 @@
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 VORTEX_RT_PATH ?= $(wildcard ../../../runtime)
 
-OPTS ?= -n 16
+# See aes_op_type_t in common.h for the possible values for t
+OPTS ?= -n 16 -t 3
 
 VX_CC  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
 VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++
