@@ -34,11 +34,7 @@
 `endif
 
 `ifndef MEM_BLOCK_SIZE
-`ifdef LOCAL_MEM_DATA_N_BYTES
-    `define MEM_BLOCK_SIZE `LOCAL_MEM_DATA_N_BYTES
-`else 
-    `define MEM_BLOCK_SIZE 64
-`endif
+`define MEM_BLOCK_SIZE 64
 `endif
 
 `ifndef L1_BLOCK_SIZE

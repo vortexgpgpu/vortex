@@ -2,12 +2,15 @@
 `IGNORE_WARNINGS_BEGIN
 `include "vortex_afu.vh"
 `IGNORE_WARNINGS_END
-`include "VX_define.vh"
 
 /* verilator lint_off IMPORTSTAR */ 
 import ccip_if_pkg::*;
 import local_mem_cfg_pkg::*;
 /* verilator lint_on IMPORTSTAR */ 
+
+`define MEM_BLOCK_SIZE LOCAL_MEM_DATA_N_BYTES
+
+`include "VX_define.vh"
 
 module vortex_afu_shim (
   // global signals
