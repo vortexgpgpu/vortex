@@ -1,8 +1,10 @@
 #pragma once
 
+#include "verilated.h"
+#include "verilated_stub.h"
+
 #include "Vvortex_afu_shim.h"
 #include "Vvortex_afu_shim__Syms.h"
-#include "verilated.h"
 
 #ifdef VCD_OUTPUT
 #include <verilated_vcd_c.h>
@@ -17,7 +19,10 @@
 #include <list>
 #include <unordered_map>
 
-#define CACHE_BLOCK_SIZE 64
+#undef MEM_BLOCK_SIZE
+#define MEM_BLOCK_SIZE    (Vvortex_afu_shim::VL_BITS_avs_writedata / 8)
+
+#define CACHE_BLOCK_SIZE  64
 
 class opae_sim {
 public:
