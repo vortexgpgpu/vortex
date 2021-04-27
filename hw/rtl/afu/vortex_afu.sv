@@ -6,12 +6,15 @@
 `else
 `include "afu_json_info.vh"
 `endif
-`include "VX_define.vh"
 
 /* verilator lint_off IMPORTSTAR */ 
 import ccip_if_pkg::*;
 import local_mem_cfg_pkg::*;
 /* verilator lint_on IMPORTSTAR */ 
+
+`define MEM_BLOCK_SIZE LOCAL_MEM_DATA_N_BYTES
+
+`include "VX_define.vh"
 
 module vortex_afu #(
   parameter NUM_LOCAL_MEM_BANKS = 2
@@ -40,16 +43,16 @@ module vortex_afu #(
 
 localparam RESET_DELAY        = 3;  
 
-localparam MEM_LINE_WIDTH     = $bits(t_local_mem_data);
-localparam MEM_ADDR_WIDTH     = $bits(t_local_mem_addr);
-localparam MEM_BURST_CTRW     = $bits(t_local_mem_burst_cnt);
-localparam MEM_LINE_LW        = $clog2(MEM_LINE_WIDTH);
+localparam LMEM_LINE_WIDTH    = $bits(t_local_mem_data);
+localparam LMEM_ADDR_WIDTH    = $bits(t_local_mem_addr);
+localparam LMEM_BURST_CTRW    = $bits(t_local_mem_burst_cnt);
+localparam LMEM_LINE_LW       = $clog2(LMEM_LINE_WIDTH);
 
 localparam CCI_LINE_WIDTH     = $bits(t_ccip_clData);
 localparam CCI_ADDR_WIDTH     = 32 - $clog2(CCI_LINE_WIDTH / 8);
 
 localparam VX_MEM_LINE_LW     = $clog2(`VX_MEM_LINE_WIDTH);
-localparam VX_MEM_LINE_IDX    = (MEM_LINE_LW - VX_MEM_LINE_LW);
+localparam VX_MEM_LINE_IDX    = (LMEM_LINE_LW - VX_MEM_LINE_LW);
 
 localparam AVS_RD_QUEUE_SIZE  = 16;
 localparam AVS_REQ_TAGW       = `VX_MEM_TAG_WIDTH + VX_MEM_LINE_IDX;
@@ -502,8 +505,8 @@ wire cci_mem_rsp_ready;
 VX_cci_to_mem #(
   .CCI_DATAW (CCI_LINE_WIDTH), 
   .CCI_ADDRW (CCI_ADDR_WIDTH),           
-  .AVS_DATAW (MEM_LINE_WIDTH), 
-  .AVS_ADDRW (MEM_ADDR_WIDTH),         
+  .AVS_DATAW (LMEM_LINE_WIDTH), 
+  .AVS_ADDRW (LMEM_ADDR_WIDTH),         
   .TAG_WIDTH (AVS_REQ_TAGW)
 ) cci_to_mem(
   .clk    (clk),
@@ -541,13 +544,13 @@ VX_cci_to_mem #(
 
 assign vx_mem_req_valid_qual = vx_mem_req_valid && vx_mem_en;
 
-assign vx_mem_req_addr_qual = vx_mem_req_addr[`VX_MEM_ADDR_WIDTH-1:`VX_MEM_ADDR_WIDTH-MEM_ADDR_WIDTH];
+assign vx_mem_req_addr_qual = vx_mem_req_addr[`VX_MEM_ADDR_WIDTH-1:`VX_MEM_ADDR_WIDTH-LMEM_ADDR_WIDTH];
 
-if (`VX_MEM_LINE_WIDTH != MEM_LINE_WIDTH) begin
+if (`VX_MEM_LINE_WIDTH != LMEM_LINE_WIDTH) begin
   wire [VX_MEM_LINE_IDX-1:0] vx_mem_req_idx = vx_mem_req_addr[VX_MEM_LINE_IDX-1:0];
   wire [VX_MEM_LINE_IDX-1:0] vx_mem_rsp_idx = vx_mem_rsp_tag_unqual[VX_MEM_LINE_IDX-1:0];
   assign vx_mem_req_byteen_qual = 64'(vx_mem_req_byteen) << (6'(vx_mem_req_addr[VX_MEM_LINE_IDX-1:0]) << (VX_MEM_LINE_LW-3));  
-  assign vx_mem_req_data_qual   = MEM_LINE_WIDTH'(vx_mem_req_data) << ((MEM_LINE_LW'(vx_mem_req_idx)) << VX_MEM_LINE_LW);
+  assign vx_mem_req_data_qual   = LMEM_LINE_WIDTH'(vx_mem_req_data) << ((LMEM_LINE_LW'(vx_mem_req_idx)) << VX_MEM_LINE_LW);
   assign vx_mem_req_tag_qual    = {vx_mem_req_tag, vx_mem_req_idx};
   assign vx_mem_rsp_data        = vx_mem_rsp_data_unqual[vx_mem_rsp_idx];  
 end else begin
@@ -563,8 +566,8 @@ assign vx_mem_rsp_tag = vx_mem_rsp_tag_unqual[`VX_MEM_TAG_WIDTH+VX_MEM_LINE_IDX-
 
 VX_mem_arb #(
   .NUM_REQS      (2),
-  .DATA_WIDTH    (MEM_LINE_WIDTH),
-  .ADDR_WIDTH    (MEM_ADDR_WIDTH),
+  .DATA_WIDTH    (LMEM_LINE_WIDTH),
+  .ADDR_WIDTH    (LMEM_ADDR_WIDTH),
   .TAG_IN_WIDTH  (AVS_REQ_TAGW),
   .TAG_OUT_WIDTH (AVS_REQ_TAGW+1)
 ) mem_arb (
@@ -605,9 +608,9 @@ VX_mem_arb #(
 //--
 
 VX_avs_wrapper #(
-  .AVS_DATAW     (MEM_LINE_WIDTH), 
-  .AVS_ADDRW     (MEM_ADDR_WIDTH),
-  .AVS_BURSTW    (MEM_BURST_CTRW),
+  .AVS_DATAW     (LMEM_LINE_WIDTH), 
+  .AVS_ADDRW     (LMEM_ADDR_WIDTH),
+  .AVS_BURSTW    (LMEM_BURST_CTRW),
   .AVS_BANKS     (NUM_LOCAL_MEM_BANKS),
   .REQ_TAGW      (AVS_REQ_TAGW+1),
   .RD_QUEUE_SIZE (AVS_RD_QUEUE_SIZE)
