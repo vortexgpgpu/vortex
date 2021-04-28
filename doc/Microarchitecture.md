@@ -32,7 +32,7 @@ Vortex uses the SIMT (Single Instruction, Multiple Threads) execution model with
 
 ### Vortex Pipeline/Datapath
 
-![Image of Vortex Microarchitecture](vortex_microarchitecture_v2.png)
+![Image of Vortex Microarchitecture](./Images/vortex_microarchitecture_v2.png)
 
 Vortex has a 5-stage pipeline: FI | ID | Issue | EX | WB.
 
