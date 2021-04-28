@@ -1,8 +1,8 @@
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 VORTEX_RT_PATH ?= $(wildcard ../../../runtime)
 
-# 16 threads * 16 messages/thread * 512B/message = 128KiB
-OPTS ?= -n 16 -m 512
+# 16 threads * 32 messages/thread * 512B/message = 256KiB
+OPTS ?= -n 32 -m 512
 # NATIVE, HYBRID, or SOFTWARE (although SOFTWARE is currently unused)
 CRYPTO_ACCEL_MODE ?= NATIVE
 

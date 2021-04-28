@@ -5,9 +5,9 @@ VORTEX_RT_PATH ?= $(wildcard ../../../runtime)
 # 2 = CBC encrypt, 3 = CBC decrypt,
 # 4 = CTR encrypt, 5 = CTR decrypt
 CRYPTO_OP_TYPE ?= 4
-# 16 threads * 512 blocks/thread * 16B/block = 128KiB
+# 16 threads * 1024 blocks/thread * 16B/block = 256KiB
 # See aes_op_type_t in common.h for the possible values for t
-OPTS ?= -n 512 -t $(CRYPTO_OP_TYPE)
+OPTS ?= -n 1024 -t $(CRYPTO_OP_TYPE)
 # NATIVE, HYBRID, or SOFTWARE (although SOFTWARE is currently unused)
 CRYPTO_ACCEL_MODE ?= NATIVE
 
