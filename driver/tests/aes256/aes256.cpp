@@ -71,20 +71,25 @@ static void cleanup() {
   }
 }
 
-static int openssl_aes256(int enc, const char *iv, const char *input,
+static int openssl_aes256(int enc, int ctr, const char *iv, const char *input,
                           const char *key, char *output, uint32_t buf_size) {
   EVP_CIPHER_CTX *ctx;
   if (!(ctx = EVP_CIPHER_CTX_new())) {
     ERR_print_errors_fp(stderr);
     return 1;
   }
-  if (!EVP_CipherInit_ex(ctx, iv? EVP_aes_256_cbc() : EVP_aes_256_ecb(), NULL,
-                         (const unsigned char *)key, (const unsigned char *)iv,
-                         enc)) {
+  if (!EVP_CipherInit_ex(ctx, iv? (ctr? EVP_aes_256_ctr() : EVP_aes_256_cbc())
+                                  : EVP_aes_256_ecb(),
+                         NULL, (const unsigned char *)key,
+                         (const unsigned char *)iv, enc)) {
     ERR_print_errors_fp(stderr);
     return 1;
   }
-  EVP_CIPHER_CTX_set_padding(ctx, 0);
+  if (!ctr) {
+    // Doesn't make sense to set this for CTR since it's effectively a
+    // streaming cipher
+    EVP_CIPHER_CTX_set_padding(ctx, 0);
+  }
 
   int outl_update = 0;
   if (!EVP_CipherUpdate(ctx, (unsigned char *)output, &outl_update,
@@ -113,10 +118,12 @@ static int openssl_aes256(int enc, const char *iv, const char *input,
 static int openssl_aes256_op(aes_op_type_t op_type, char *iv, const char *input, const char *key,
                              char *output, uint32_t buf_size) {
   switch (op_type) {
-    case AES_OP_ECB_ENC: return openssl_aes256(1, NULL, input, key, output, buf_size);
-    case AES_OP_ECB_DEC: return openssl_aes256(0, NULL, input, key, output, buf_size);
-    case AES_OP_CBC_ENC: return openssl_aes256(1, iv, input, key, output, buf_size);
-    case AES_OP_CBC_DEC: return openssl_aes256(0, iv, input, key, output, buf_size);
+    case AES_OP_ECB_ENC: return openssl_aes256(1, 0, NULL, input, key, output, buf_size);
+    case AES_OP_ECB_DEC: return openssl_aes256(0, 0, NULL, input, key, output, buf_size);
+    case AES_OP_CBC_ENC: return openssl_aes256(1, 0, iv, input, key, output, buf_size);
+    case AES_OP_CBC_DEC: return openssl_aes256(0, 0, iv, input, key, output, buf_size);
+    case AES_OP_CTR_ENC: return openssl_aes256(1, 1, iv, input, key, output, buf_size);
+    case AES_OP_CTR_DEC: return openssl_aes256(0, 1, iv, input, key, output, buf_size);
     default:
       std::cout << "unsupported aes op " << aes_op_type << std::endl;
       return 1;

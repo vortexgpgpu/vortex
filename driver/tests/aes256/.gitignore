@@ -1,5 +1,6 @@
 *.elf
 *.bin
 *.dump
+*.log
 aes256
 .depend

@@ -1,8 +1,15 @@
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 VORTEX_RT_PATH ?= $(wildcard ../../../runtime)
 
+# 0 = ECB encrypt, 1 = ECB decrypt,
+# 2 = CBC encrypt, 3 = CBC decrypt,
+# 4 = CTR encrypt, 5 = CTR decrypt
+CRYPTO_OP_TYPE ?= 4
+# 16 threads * 4096 blocks/thread * 16B/block = 1MiB
 # See aes_op_type_t in common.h for the possible values for t
-OPTS ?= -n 16 -t 3
+OPTS ?= -n 4096 -t $(CRYPTO_OP_TYPE)
+# NATIVE, HYBRID, or SOFTWARE (although SOFTWARE is currently unused)
+CRYPTO_ACCEL_MODE ?= NATIVE
 
 VX_CC  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
 VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++
@@ -10,11 +17,7 @@ VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
 VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
 VX_CFLAGS += -march=rv32imf -mabi=ilp32f -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections -Wall -Werror -Wextra
-VX_CFLAGS += -B$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/bin -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw -DAES_NATIVE
-#VX_CFLAGS += -B$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/bin -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw -DAES_HYBRID
-#VX_CFLAGS += -B$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/bin -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw
-# To use the hybrid version, remove -DAES_NATIVE from above and add
-# -DAES_HYBRID. To use the pure software version, include neither
+VX_CFLAGS += -B$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/bin -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw -DAES_$(CRYPTO_ACCEL_MODE)
 
 VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link.ld -Wl,--gc-sections $(VORTEX_RT_PATH)/libvortexrt.a
 

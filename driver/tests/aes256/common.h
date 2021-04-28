@@ -10,6 +10,8 @@ typedef enum {
     AES_OP_ECB_DEC,
     AES_OP_CBC_ENC,
     AES_OP_CBC_DEC,
+    AES_OP_CTR_ENC,
+    AES_OP_CTR_DEC,
     // Number of different operations
     AES_OP_COUNT
 } aes_op_type_t;

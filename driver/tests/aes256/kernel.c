@@ -12,7 +12,8 @@ static void kernel_body(int task_id, const void* arg) {
     uint8_t* out_ptr = (uint8_t*)_arg->out_ptr;
     aes_op_type_t aes_op_type = _arg->aes_op_type;
 
-    uint32_t offset = task_id * nblocks * BLOCK_SIZE;
+    uint32_t start_block_idx = task_id * nblocks;
+    uint32_t offset = start_block_idx * BLOCK_SIZE;
 
     switch (aes_op_type) {
         case AES_OP_ECB_ENC:
@@ -27,6 +28,11 @@ static void kernel_body(int task_id, const void* arg) {
                 const uint8_t *iv = iv_choices[!!offset];
                 aes256_cbc_dec(iv, in_ptr + offset, _arg->key, out_ptr + offset, nblocks);
             }
+            break;
+        case AES_OP_CTR_ENC:
+        case AES_OP_CTR_DEC:
+            aes256_ctr(_arg->iv, start_block_idx, in_ptr + offset, _arg->key,
+                       out_ptr + offset, nblocks);
             break;
         default:
             // No worries

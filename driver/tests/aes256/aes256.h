@@ -19,4 +19,6 @@ extern void aes256_cbc_enc(const uint8_t *, const uint8_t *, const uint8_t *,
                            uint8_t *, int);
 extern void aes256_cbc_dec(const uint8_t *, const uint8_t *, const uint8_t *,
                            uint8_t *, int);
+extern void aes256_ctr(const uint8_t *, uint32_t, const uint8_t *,
+                       const uint8_t *, uint8_t *, int);
 #endif

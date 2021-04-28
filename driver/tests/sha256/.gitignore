@@ -1,5 +1,6 @@
 *.elf
 *.bin
 *.dump
+*.log
 sha256
 .depend
