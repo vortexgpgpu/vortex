@@ -18,7 +18,7 @@ Directory structure
 
 - benchmarks: OpenCL and RISC-V benchmarks
  
-- docs: documentation.
+- docs: [documentation](https://github.com/vortexgpgpu/vortex-dev/blob/master/doc/Vortex.md).
 
 - hw: hardware sources.
 
