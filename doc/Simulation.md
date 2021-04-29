@@ -24,12 +24,27 @@ Running tests under specific drivers (rtlsim,simx,fpga) is done using the script
 - *L3cache* - used to enable the shared l3cache among the Vortex clusters.
 - *Driver* - used to specify which driver to run the Vortex simulation (either rtlsim, vlsim, fpga, or simx).
 - *Debug* - used to enable debug mode for the Vortex simulation.
-- *Scope* -
-- *Perf* - is used to enable the detailed performance counters within the Vortex simulation.
-- *App* - is used to specify which test/benchmark to run in the Vortex simulation. The main choices are vecadd, sgemm, basic, demo, and dogfood. Other tests/benchmarks are located in the `/benchmarks/opencl` folder though not all of them work wit the current version of Vortex.
-- *Args* - 
+- *Perf* - used to enable the detailed performance counters within the Vortex simulation.
+- *App* - used to specify which test/benchmark to run in the Vortex simulation. The main choices are vecadd, sgemm, basic, demo, and dogfood. Other tests/benchmarks are located in the `/benchmarks/opencl` folder though not all of them work wit the current version of Vortex.
+- *Args* - used to pass additional arguments to the application.
 
 Example use of command line arguments: Run the sgemm benchmark using the vlsim driver with a Vortex configuration of 1 cluster, 4 cores, 4 warps, and 4 threads.
 
     $ ./ci/blackbox.sh --clusters=1 --cores=4 --warps=4 --threads=4 --driver=vlsim --app=sgemm
 
+Output from terminal:
+```
+Create context
+Create program from kernel source
+Upload source buffers
+Execute the kernel
+Elapsed time: 2463 ms
+Download destination buffer
+Verify result
+PASSED!
+PERF: core0: instrs=90802, cycles=52776, IPC=1.720517
+PERF: core1: instrs=90693, cycles=53108, IPC=1.707709
+PERF: core2: instrs=90849, cycles=53107, IPC=1.710678
+PERF: core3: instrs=90836, cycles=50347, IPC=1.804199
+PERF: instrs=363180, cycles=53108, IPC=6.838518
+```
