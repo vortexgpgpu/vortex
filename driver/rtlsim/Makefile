@@ -68,8 +68,9 @@ ifdef PERF
 	CFLAGS += -DPERF_ENABLE
 endif
 
-# use DPI FPU
-VL_FLAGS += -DFPU_DPI
+# FPU backend
+FPU_CORE ?= FPU_DPI
+VL_FLAGS += -D$(FPU_CORE)
 
 PROJECT = libvortex.so
 # PROJECT = libvortex.dylib

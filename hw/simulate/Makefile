@@ -49,8 +49,9 @@ VL_FLAGS += verilator.vlt
 VL_FLAGS += --exe $(SRCS) $(RTL_INCLUDE)
 VL_FLAGS += --cc Vortex.v --top-module $(TOP)
 
-# Use FPNEW PFU core
-VL_FLAGS += -DFPU_FPNEW
+# FPU backend
+FPU_CORE ?= FPU_DPI
+VL_FLAGS += -D$(FPU_CORE)
 
 DBG_FLAGS += -DVCD_OUTPUT
 

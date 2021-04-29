@@ -21,15 +21,17 @@ make -s
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=demo --args="-n1"
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l2cache --l3cache --app=demo --args="-n1"
 
-# Build tests disabling extensions
+# disabling M extension
 CONFIGS=-DEXT_M_DISABLE make -C hw/simulate
+
+# disabling F extension
 CONFIGS=-DEXT_F_DISABLE make -C hw/simulate
 
 # disable shared memory
 CONFIGS=-DSM_ENABLE=0 make -C hw/simulate
 
-# test 128-bit DRAM bus
-CONFIGS=-DPLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE_BITS=4 ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
+# using FPNEW core
+FPU_CORE=FPU_FPNEW ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo
 
-# test 256-bit DRAM bus
+# test 128-bit DRAM bus
 CONFIGS=-DPLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE_BITS=4 ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
