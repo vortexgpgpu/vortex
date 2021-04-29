@@ -82,8 +82,9 @@ endif
 VL_FLAGS += -DNOPAE
 CFLAGS += -DNOPAE
 
-# use DPI FPU
-VL_FLAGS += -DFPU_DPI
+# FPU backend
+FPU_CORE ?= FPU_DPI
+VL_FLAGS += -D$(FPU_CORE)
 
 PROJECT = libopae-c-vlsim.so
 
