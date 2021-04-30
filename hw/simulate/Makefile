@@ -50,7 +50,7 @@ VL_FLAGS += --exe $(SRCS) $(RTL_INCLUDE)
 VL_FLAGS += --cc Vortex.v --top-module $(TOP)
 
 # FPU backend
-FPU_CORE ?= FPU_DPI
+FPU_CORE ?= FPU_FPNEW
 VL_FLAGS += -D$(FPU_CORE)
 
 DBG_FLAGS += -DVCD_OUTPUT
