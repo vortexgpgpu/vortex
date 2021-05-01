@@ -44,16 +44,13 @@ localparam RESET_DELAY        = 3;
 localparam LMEM_LINE_WIDTH    = $bits(t_local_mem_data);
 localparam LMEM_ADDR_WIDTH    = $bits(t_local_mem_addr);
 localparam LMEM_BURST_CTRW    = $bits(t_local_mem_burst_cnt);
-localparam LMEM_LINE_LW       = $clog2(LMEM_LINE_WIDTH);
 
 localparam CCI_LINE_WIDTH     = $bits(t_ccip_clData);
+localparam CCI_LINE_SIZE      = CCI_LINE_WIDTH / 8;
 localparam CCI_ADDR_WIDTH     = 32 - $clog2(CCI_LINE_WIDTH / 8);
 
-localparam VX_MEM_LINE_LW     = $clog2(`VX_MEM_LINE_WIDTH);
-localparam VX_MEM_LINE_IDX    = (LMEM_LINE_LW - VX_MEM_LINE_LW);
-
 localparam AVS_RD_QUEUE_SIZE  = 16;
-localparam AVS_REQ_TAGW       = `VX_MEM_TAG_WIDTH + VX_MEM_LINE_IDX;
+localparam AVS_REQ_TAGW       = `MAX(`VX_MEM_TAG_WIDTH, `VX_MEM_TAG_WIDTH + ($clog2(LMEM_LINE_WIDTH) - $clog2(`VX_MEM_LINE_WIDTH)));
 
 localparam CCI_RD_WINDOW_SIZE = 8;
 localparam CCI_RD_QUEUE_SIZE  = 2 * CCI_RD_WINDOW_SIZE;
@@ -451,6 +448,137 @@ end
 
 // AVS Controller /////////////////////////////////////////////////////////////
 
+wire cci_mem_rd_req_valid;
+wire cci_mem_wr_req_valid;
+wire [CCI_ADDR_WIDTH-1:0] cci_mem_rd_req_addr;
+wire [CCI_ADDR_WIDTH-1:0] cci_mem_wr_req_addr;
+wire [CCI_RD_RQ_DATAW-1:0] cci_rdq_dout;
+wire cci_mem_req_ready;
+
+wire cci_mem_req_valid;
+wire cci_mem_req_rw;
+wire [CCI_ADDR_WIDTH-1:0] cci_mem_req_addr;
+wire cci_mem_req_tag = 1'b0;
+
+wire cci_mem_rsp_valid;        
+wire [CCI_LINE_WIDTH-1:0] cci_mem_rsp_data;
+wire cci_mem_rsp_tag;
+wire cci_mem_rsp_ready;
+
+`UNUSED_VAR (cci_mem_rsp_tag)
+
+assign cci_mem_req_rw    = (CMD_MEM_WRITE == state);
+assign cci_mem_req_valid = cci_mem_req_rw ? cci_mem_wr_req_valid : cci_mem_rd_req_valid;
+assign cci_mem_req_addr  = cci_mem_req_rw ? cci_mem_wr_req_addr : cci_mem_rd_req_addr;
+
+//--
+
+wire                    cci_mem_req_arb_valid;
+wire                    cci_mem_req_arb_rw; 
+t_local_mem_byte_mask   cci_mem_req_arb_byteen;
+t_local_mem_addr        cci_mem_req_arb_addr;
+t_local_mem_data        cci_mem_req_arb_data;
+wire [AVS_REQ_TAGW-1:0] cci_mem_req_arb_tag;
+wire                    cci_mem_req_arb_ready;
+
+wire                    cci_mem_rsp_arb_valid;        
+t_local_mem_data        cci_mem_rsp_arb_data;
+wire [AVS_REQ_TAGW-1:0] cci_mem_rsp_arb_tag;
+wire                    cci_mem_rsp_arb_ready;
+
+VX_to_mem #(
+  .SRC_DATA_WIDTH (CCI_LINE_WIDTH), 
+  .DST_DATA_WIDTH (LMEM_LINE_WIDTH), 
+  .SRC_ADDR_WIDTH (CCI_ADDR_WIDTH),  
+  .DST_ADDR_WIDTH (LMEM_ADDR_WIDTH),         
+  .SRC_TAG_WIDTH  (1),
+  .DST_TAG_WIDTH  (AVS_REQ_TAGW)
+) cci_to_mem (
+  .clk                (clk),
+  .reset              (reset),
+
+  .mem_req_valid_in   (cci_mem_req_valid),
+  .mem_req_addr_in    (cci_mem_req_addr),
+  .mem_req_rw_in      (cci_mem_req_rw),
+  .mem_req_byteen_in  ({CCI_LINE_SIZE{1'b1}}),
+  .mem_req_data_in    (cci_rdq_dout[CCI_RD_RQ_DATAW-1:CCI_RD_RQ_TAGW]),
+  .mem_req_tag_in     (cci_mem_req_tag), 
+  .mem_req_ready_in   (cci_mem_req_ready), 
+
+  .mem_req_valid_out  (cci_mem_req_arb_valid),
+  .mem_req_addr_out   (cci_mem_req_arb_addr),
+  .mem_req_rw_out     (cci_mem_req_arb_rw),
+  .mem_req_byteen_out (cci_mem_req_arb_byteen),
+  .mem_req_data_out   (cci_mem_req_arb_data),
+  .mem_req_tag_out    (cci_mem_req_arb_tag),
+  .mem_req_ready_out  (cci_mem_req_arb_ready), 
+
+  .mem_rsp_valid_in   (cci_mem_rsp_arb_valid), 
+  .mem_rsp_data_in    (cci_mem_rsp_arb_data), 
+  .mem_rsp_tag_in     (cci_mem_rsp_arb_tag), 
+  .mem_rsp_ready_in   (cci_mem_rsp_arb_ready),
+
+  .mem_rsp_valid_out  (cci_mem_rsp_valid), 
+  .mem_rsp_data_out   (cci_mem_rsp_data), 
+  .mem_rsp_tag_out    (cci_mem_rsp_tag), 
+  .mem_rsp_ready_out  (cci_mem_rsp_ready) 
+);
+
+//--
+
+wire                    vx_mem_req_arb_valid;
+wire                    vx_mem_req_arb_rw; 
+t_local_mem_byte_mask   vx_mem_req_arb_byteen;
+t_local_mem_addr        vx_mem_req_arb_addr;
+t_local_mem_data        vx_mem_req_arb_data;
+wire [AVS_REQ_TAGW-1:0] vx_mem_req_arb_tag;
+wire                    vx_mem_req_arb_ready;
+
+wire                    vx_mem_rsp_arb_valid;        
+t_local_mem_data        vx_mem_rsp_arb_data;
+wire [AVS_REQ_TAGW-1:0] vx_mem_rsp_arb_tag;
+wire                    vx_mem_rsp_arb_ready;
+
+VX_to_mem #(
+  .SRC_DATA_WIDTH (`VX_MEM_LINE_WIDTH),
+  .DST_DATA_WIDTH (LMEM_LINE_WIDTH),  
+  .SRC_ADDR_WIDTH (`VX_MEM_ADDR_WIDTH),    
+  .DST_ADDR_WIDTH (LMEM_ADDR_WIDTH),
+  .SRC_TAG_WIDTH  (`VX_MEM_TAG_WIDTH),
+  .DST_TAG_WIDTH  (AVS_REQ_TAGW)
+) vx_to_mem (
+  .clk                (clk),
+  .reset              (reset),
+
+  .mem_req_valid_in   (vx_mem_req_valid && vx_mem_en),
+  .mem_req_addr_in    (vx_mem_req_addr),
+  .mem_req_rw_in      (vx_mem_req_rw),
+  .mem_req_byteen_in  (vx_mem_req_byteen),
+  .mem_req_data_in    (vx_mem_req_data),
+  .mem_req_tag_in     (vx_mem_req_tag), 
+  .mem_req_ready_in   (vx_mem_req_ready), 
+
+  .mem_req_valid_out  (vx_mem_req_arb_valid),
+  .mem_req_addr_out   (vx_mem_req_arb_addr),
+  .mem_req_rw_out     (vx_mem_req_arb_rw),
+  .mem_req_byteen_out (vx_mem_req_arb_byteen),
+  .mem_req_data_out   (vx_mem_req_arb_data),
+  .mem_req_tag_out    (vx_mem_req_arb_tag),
+  .mem_req_ready_out  (vx_mem_req_arb_ready), 
+
+  .mem_rsp_valid_in   (vx_mem_rsp_arb_valid), 
+  .mem_rsp_data_in    (vx_mem_rsp_arb_data), 
+  .mem_rsp_tag_in     (vx_mem_rsp_arb_tag), 
+  .mem_rsp_ready_in   (vx_mem_rsp_arb_ready),
+
+  .mem_rsp_valid_out  (vx_mem_rsp_valid), 
+  .mem_rsp_data_out   (vx_mem_rsp_data), 
+  .mem_rsp_tag_out    (vx_mem_rsp_tag), 
+  .mem_rsp_ready_out  (vx_mem_rsp_ready) 
+);
+
+//--
+
 wire                    mem_req_valid;
 wire                    mem_req_rw; 
 t_local_mem_byte_mask   mem_req_byteen;
@@ -464,104 +592,6 @@ t_local_mem_data        mem_rsp_data;
 wire [AVS_REQ_TAGW:0]   mem_rsp_tag;
 wire                    mem_rsp_ready;
 
-wire                    cci_mem_req_tmp_valid;
-wire                    cci_mem_req_tmp_rw; 
-t_local_mem_byte_mask   cci_mem_req_tmp_byteen;
-t_local_mem_addr        cci_mem_req_tmp_addr;
-t_local_mem_data        cci_mem_req_tmp_data;
-wire [AVS_REQ_TAGW-1:0] cci_mem_req_tmp_tag;
-wire                    cci_mem_req_tmp_ready;
-
-wire                    cci_mem_rsp_tmp_valid;        
-t_local_mem_data        cci_mem_rsp_tmp_data;
-wire [AVS_REQ_TAGW-1:0] cci_mem_rsp_tmp_tag;
-wire                    cci_mem_rsp_tmp_ready;
-
-wire                    vx_mem_req_valid_qual;
-t_local_mem_addr        vx_mem_req_addr_qual;
-t_local_mem_byte_mask   vx_mem_req_byteen_qual;
-t_local_mem_data        vx_mem_req_data_qual;
-wire [AVS_REQ_TAGW-1:0] vx_mem_req_tag_qual;
-
-wire [(1 << VX_MEM_LINE_IDX)-1:0][`VX_MEM_LINE_WIDTH-1:0] vx_mem_rsp_data_unqual;
-wire [AVS_REQ_TAGW-1:0] vx_mem_rsp_tag_unqual;
-
-wire cci_mem_rd_req_valid;
-wire cci_mem_wr_req_valid;
-wire [CCI_ADDR_WIDTH-1:0] cci_mem_rd_req_addr;
-wire [CCI_ADDR_WIDTH-1:0] cci_mem_wr_req_addr;
-wire [CCI_RD_RQ_DATAW-1:0] cci_rdq_dout;
-wire cci_mem_req_ready;
-
-wire cci_mem_rsp_valid;        
-wire [CCI_LINE_WIDTH-1:0] cci_mem_rsp_data;
-wire [AVS_REQ_TAGW-1:0] cci_mem_rsp_tag;
-wire cci_mem_rsp_ready;
-
-//--
-
-VX_cci_to_mem #(
-  .CCI_DATAW (CCI_LINE_WIDTH), 
-  .CCI_ADDRW (CCI_ADDR_WIDTH),           
-  .AVS_DATAW (LMEM_LINE_WIDTH), 
-  .AVS_ADDRW (LMEM_ADDR_WIDTH),         
-  .TAG_WIDTH (AVS_REQ_TAGW)
-) cci_to_mem(
-  .clk    (clk),
-  .reset  (reset),
-
-  .mem_req_valid_in  ((CMD_MEM_WRITE == state) ? cci_mem_wr_req_valid : cci_mem_rd_req_valid),
-  .mem_req_addr_in   ((CMD_MEM_WRITE == state) ? cci_mem_wr_req_addr : cci_mem_rd_req_addr),
-  .mem_req_rw_in     ((CMD_MEM_WRITE == state)),
-  .mem_req_data_in   (cci_rdq_dout[CCI_RD_RQ_DATAW-1:CCI_RD_RQ_TAGW]),
-  .mem_req_tag_in    (AVS_REQ_TAGW'(0)), 
-  .mem_req_ready_in  (cci_mem_req_ready), 
-
-  .mem_req_valid_out (cci_mem_req_tmp_valid),
-  .mem_req_addr_out  (cci_mem_req_tmp_addr),
-  .mem_req_rw_out    (cci_mem_req_tmp_rw),
-  .mem_req_byteen_out(cci_mem_req_tmp_byteen),
-  .mem_req_data_out  (cci_mem_req_tmp_data),
-  .mem_req_tag_out   (cci_mem_req_tmp_tag),
-  .mem_req_ready_out (cci_mem_req_tmp_ready), 
-
-  .mem_rsp_valid_in  (cci_mem_rsp_tmp_valid), 
-  .mem_rsp_data_in   (cci_mem_rsp_tmp_data), 
-  .mem_rsp_tag_in    (cci_mem_rsp_tmp_tag), 
-  .mem_rsp_ready_in  (cci_mem_rsp_tmp_ready),
-
-  .mem_rsp_valid_out (cci_mem_rsp_valid), 
-  .mem_rsp_data_out  (cci_mem_rsp_data), 
-  .mem_rsp_tag_out   (cci_mem_rsp_tag), 
-  .mem_rsp_ready_out (cci_mem_rsp_ready) 
-);
-
-`UNUSED_VAR (cci_mem_rsp_tag)
-
-//--
-
-assign vx_mem_req_valid_qual = vx_mem_req_valid && vx_mem_en;
-
-assign vx_mem_req_addr_qual = vx_mem_req_addr[`VX_MEM_ADDR_WIDTH-1:`VX_MEM_ADDR_WIDTH-LMEM_ADDR_WIDTH];
-
-if (`VX_MEM_LINE_WIDTH != LMEM_LINE_WIDTH) begin
-  wire [VX_MEM_LINE_IDX-1:0] vx_mem_req_idx = vx_mem_req_addr[VX_MEM_LINE_IDX-1:0];
-  wire [VX_MEM_LINE_IDX-1:0] vx_mem_rsp_idx = vx_mem_rsp_tag_unqual[VX_MEM_LINE_IDX-1:0];
-  assign vx_mem_req_byteen_qual = 64'(vx_mem_req_byteen) << (6'(vx_mem_req_addr[VX_MEM_LINE_IDX-1:0]) << (VX_MEM_LINE_LW-3));  
-  assign vx_mem_req_data_qual   = LMEM_LINE_WIDTH'(vx_mem_req_data) << ((LMEM_LINE_LW'(vx_mem_req_idx)) << VX_MEM_LINE_LW);
-  assign vx_mem_req_tag_qual    = {vx_mem_req_tag, vx_mem_req_idx};
-  assign vx_mem_rsp_data        = vx_mem_rsp_data_unqual[vx_mem_rsp_idx];  
-end else begin
-  assign vx_mem_req_byteen_qual = vx_mem_req_byteen;
-  assign vx_mem_req_tag_qual    = vx_mem_req_tag;
-  assign vx_mem_req_data_qual   = vx_mem_req_data;
-  assign vx_mem_rsp_data        = vx_mem_rsp_data_unqual;
-end
-
-assign vx_mem_rsp_tag = vx_mem_rsp_tag_unqual[`VX_MEM_TAG_WIDTH+VX_MEM_LINE_IDX-1:VX_MEM_LINE_IDX];
-
-//--
-
 VX_mem_arb #(
   .NUM_REQS      (2),
   .DATA_WIDTH    (LMEM_LINE_WIDTH),
@@ -573,13 +603,13 @@ VX_mem_arb #(
   .reset          (reset),
 
   // Source request
-  .req_valid_in   ({cci_mem_req_tmp_valid,  vx_mem_req_valid_qual}),
-  .req_rw_in      ({cci_mem_req_tmp_rw,     vx_mem_req_rw}),
-  .req_byteen_in  ({cci_mem_req_tmp_byteen, vx_mem_req_byteen_qual}),
-  .req_addr_in    ({cci_mem_req_tmp_addr,   vx_mem_req_addr_qual}),
-  .req_data_in    ({cci_mem_req_tmp_data,   vx_mem_req_data_qual}),  
-  .req_tag_in     ({cci_mem_req_tmp_tag,    vx_mem_req_tag_qual}),  
-  .req_ready_in   ({cci_mem_req_tmp_ready,  vx_mem_req_ready}),
+  .req_valid_in   ({cci_mem_req_arb_valid,  vx_mem_req_arb_valid}),
+  .req_rw_in      ({cci_mem_req_arb_rw,     vx_mem_req_arb_rw}),
+  .req_byteen_in  ({cci_mem_req_arb_byteen, vx_mem_req_arb_byteen}),
+  .req_addr_in    ({cci_mem_req_arb_addr,   vx_mem_req_arb_addr}),
+  .req_data_in    ({cci_mem_req_arb_data,   vx_mem_req_arb_data}),  
+  .req_tag_in     ({cci_mem_req_arb_tag,    vx_mem_req_arb_tag}),  
+  .req_ready_in   ({cci_mem_req_arb_ready,  vx_mem_req_arb_ready}),
 
   // Memory request
   .req_valid_out  (mem_req_valid),
@@ -591,10 +621,10 @@ VX_mem_arb #(
   .req_ready_out  (mem_req_ready),
 
   // Source response
-  .rsp_valid_out  ({cci_mem_rsp_tmp_valid, vx_mem_rsp_valid}),
-  .rsp_data_out   ({cci_mem_rsp_tmp_data,  vx_mem_rsp_data_unqual}),
-  .rsp_tag_out    ({cci_mem_rsp_tmp_tag,   vx_mem_rsp_tag_unqual}),
-  .rsp_ready_out  ({cci_mem_rsp_tmp_ready, vx_mem_rsp_ready}),
+  .rsp_valid_out  ({cci_mem_rsp_arb_valid, vx_mem_rsp_arb_valid}),
+  .rsp_data_out   ({cci_mem_rsp_arb_data,  vx_mem_rsp_arb_data}),
+  .rsp_tag_out    ({cci_mem_rsp_arb_tag,   vx_mem_rsp_arb_tag}),
+  .rsp_ready_out  ({cci_mem_rsp_arb_ready, vx_mem_rsp_arb_ready}),
   
   // Memory response
   .rsp_valid_in   (mem_rsp_valid),
@@ -606,42 +636,42 @@ VX_mem_arb #(
 //--
 
 VX_avs_wrapper #(
-  .AVS_DATAW     (LMEM_LINE_WIDTH), 
-  .AVS_ADDRW     (LMEM_ADDR_WIDTH),
-  .AVS_BURSTW    (LMEM_BURST_CTRW),
-  .AVS_BANKS     (NUM_LOCAL_MEM_BANKS),
-  .REQ_TAGW      (AVS_REQ_TAGW+1),
-  .RD_QUEUE_SIZE (AVS_RD_QUEUE_SIZE)
+  .AVS_DATA_WIDTH  (LMEM_LINE_WIDTH), 
+  .AVS_ADDR_WIDTH  (LMEM_ADDR_WIDTH),
+  .AVS_BURST_WIDTH (LMEM_BURST_CTRW),
+  .AVS_BANKS       (NUM_LOCAL_MEM_BANKS),
+  .REQ_TAG_WIDTH   (AVS_REQ_TAGW+1),
+  .RD_QUEUE_SIZE   (AVS_RD_QUEUE_SIZE)
 ) avs_wrapper (
-  .clk                (clk),
-  .reset              (reset),
+  .clk              (clk),
+  .reset            (reset),
 
   // Memory request 
-  .mem_req_valid     (mem_req_valid),
-  .mem_req_rw        (mem_req_rw),
-  .mem_req_byteen    (mem_req_byteen),
-  .mem_req_addr      (mem_req_addr),
-  .mem_req_data      (mem_req_data),
-  .mem_req_tag       (mem_req_tag),
-  .mem_req_ready     (mem_req_ready),
+  .mem_req_valid    (mem_req_valid),
+  .mem_req_rw       (mem_req_rw),
+  .mem_req_byteen   (mem_req_byteen),
+  .mem_req_addr     (mem_req_addr),
+  .mem_req_data     (mem_req_data),
+  .mem_req_tag      (mem_req_tag),
+  .mem_req_ready    (mem_req_ready),
 
   // Memory response  
-  .mem_rsp_valid     (mem_rsp_valid),
-  .mem_rsp_data      (mem_rsp_data),
-  .mem_rsp_tag       (mem_rsp_tag),
-  .mem_rsp_ready     (mem_rsp_ready),
+  .mem_rsp_valid    (mem_rsp_valid),
+  .mem_rsp_data     (mem_rsp_data),
+  .mem_rsp_tag      (mem_rsp_tag),
+  .mem_rsp_ready    (mem_rsp_ready),
 
   // AVS bus
-  .avs_writedata      (avs_writedata),
-  .avs_readdata       (avs_readdata),
-  .avs_address        (avs_address),
-  .avs_waitrequest    (avs_waitrequest),
-  .avs_write          (avs_write),
-  .avs_read           (avs_read),
-  .avs_byteenable     (avs_byteenable),
-  .avs_burstcount     (avs_burstcount),
-  .avs_readdatavalid  (avs_readdatavalid),
-  .avs_bankselect     (mem_bank_select)
+  .avs_writedata    (avs_writedata),
+  .avs_readdata     (avs_readdata),
+  .avs_address      (avs_address),
+  .avs_waitrequest  (avs_waitrequest),
+  .avs_write        (avs_write),
+  .avs_read         (avs_read),
+  .avs_byteenable   (avs_byteenable),
+  .avs_burstcount   (avs_burstcount),
+  .avs_readdatavalid(avs_readdatavalid),
+  .avs_bankselect   (mem_bank_select)
 );
 
 // CCI-P Read Request ///////////////////////////////////////////////////////////
@@ -714,7 +744,7 @@ always @(posedge clk) begin
     cci_rd_rsp_ctr      <= 0;
     cci_rd_req_enable   <= 0;
     cci_rd_req_wait     <= 0;
-    cci_mem_wr_req_ctr <= 0;
+    cci_mem_wr_req_ctr  <= 0;
     cci_mem_wr_req_addr_unqual <= 0;
   end 
   else begin          

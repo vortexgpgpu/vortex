@@ -3,14 +3,6 @@ FPGA_BUILD_DIR ?= build_fpga
 DEVICE_FAMILY ?= arria10
 RTL_DIR=../../rtl
 
-ifeq ($(DEVICE_FAMILY),arria10)
-	CFLAGS += -DMEM_BLOCK_SIZE=64
-endif
-
-ifeq ($(DEVICE_FAMILY),stratix10)
-	CFLAGS += -DMEM_BLOCK_SIZE=16
-endif
-
 ifeq ($(shell which qsub-synth),)
 	RUN_SYNTH=$(OPAE_PLATFORM_ROOT)/bin/run.sh > build.log 2>&1 &
 else

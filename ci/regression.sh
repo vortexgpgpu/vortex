@@ -33,5 +33,14 @@ CONFIGS=-DSM_ENABLE=0 make -C hw/simulate
 # using FPNEW core
 FPU_CORE=FPU_FPNEW ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo
 
-# test 128-bit DRAM bus
-CONFIGS=-DPLATFORM_PARAM_LOCAL_MEMORY_DATA_SIZE_BITS=4 ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
+# test 128-bit MEM block
+CONFIGS=-DMEM_BLOCK_SIZE=16 ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
+
+# test 128-bit DRAM block
+CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH=128 -DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=28" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
+
+# test 128-bit MEM and DRAM block
+CONFIGS="-DMEM_BLOCK_SIZE=16 -DPLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH=128 -DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=28" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
+
+# test 27-bit DRAM address
+CONFIGS=-DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=27 ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo

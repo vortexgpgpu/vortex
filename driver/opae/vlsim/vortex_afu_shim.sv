@@ -6,9 +6,7 @@
 /* verilator lint_off IMPORTSTAR */ 
 import ccip_if_pkg::*;
 import local_mem_cfg_pkg::*;
-/* verilator lint_on IMPORTSTAR */ 
-
-`define MEM_BLOCK_SIZE LOCAL_MEM_DATA_N_BYTES
+/* verilator lint_on IMPORTSTAR */
 
 `include "VX_define.vh"
 
