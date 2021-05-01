@@ -63,7 +63,8 @@ qsub-sim
 make ase
 
 # tests
-./run_ase.sh build_ase_1c ../../../driver/tests/basic/basic -n128 -t0
+./run_ase.sh build_ase_1c ../../../driver/tests/basic/basic -n1 -t0
+./run_ase.sh build_ase_1c ../../../driver/tests/basic/basic -n1 -t1
 ./run_ase.sh build_ase_1c ../../../driver/tests/basic/basic -n16
 ./run_ase.sh build_ase_1c ../../../driver/tests/demo/demo -n16
 ./run_ase.sh build_ase_1c ../../../driver/tests/dogfood/dogfood -n16
@@ -86,7 +87,7 @@ tar -zcvf run.log.tar.gz run.log
 tar -zcvf vx_scope.vcd.tar.gz vx_scope.vcd
 tar -cvjf vx_scope.vcd.tar.bz2 vx_scope.vcd
 tar -cvjf trace.fst.tar.bz2 trace.fst run.log
-tar -cvjf trace.vcd.tar.bz2 trace.vcd run.log
+tar -cvjf trace.vcd.tar.bz2 driver/tests/basic/trace.vcd run.log
 tar -cvjf trace.vcd.tar.bz2 build_ase_1c/work/run.log build_ase_1c/work/trace.vcd
 
 # decompress VCD trace

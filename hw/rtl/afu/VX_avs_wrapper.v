@@ -1,49 +1,49 @@
 `include "VX_define.vh"
 
 module VX_avs_wrapper #(
-    parameter AVS_DATAW     = 1, 
-    parameter AVS_ADDRW     = 1,    
-    parameter AVS_BURSTW    = 1,
-    parameter AVS_BANKS     = 1,
-    parameter REQ_TAGW      = 1,
-    parameter RD_QUEUE_SIZE = 1,
+    parameter AVS_DATA_WIDTH  = 1, 
+    parameter AVS_ADDR_WIDTH  = 1,    
+    parameter AVS_BURST_WIDTH = 1,
+    parameter AVS_BANKS       = 1,
+    parameter REQ_TAG_WIDTH   = 1,
+    parameter RD_QUEUE_SIZE   = 1,
         
-    parameter AVS_BYTEENW   = (AVS_DATAW / 8),
-    parameter RD_QUEUE_ADDRW= $clog2(RD_QUEUE_SIZE+1),
-    parameter AVS_BANKS_BITS= $clog2(AVS_BANKS)
+    parameter AVS_BYTEENW     = (AVS_DATA_WIDTH / 8),
+    parameter RD_QUEUE_ADDR_WIDTH = $clog2(RD_QUEUE_SIZE+1),
+    parameter AVS_BANKS_BITS  = $clog2(AVS_BANKS)
 ) (
-    input wire                      clk,
-    input wire                      reset,
+    input wire                          clk,
+    input wire                          reset,
 
     // Memory request
-    input wire                      mem_req_valid,
-    input wire                      mem_req_rw,    
-    input wire [AVS_BYTEENW-1:0]    mem_req_byteen,    
-    input wire [AVS_ADDRW-1:0]      mem_req_addr,
-    input wire [AVS_DATAW-1:0]      mem_req_data,
-    input wire [REQ_TAGW-1:0]       mem_req_tag,
-    output  wire                    mem_req_ready,
+    input wire                          mem_req_valid,
+    input wire                          mem_req_rw,    
+    input wire [AVS_BYTEENW-1:0]        mem_req_byteen,    
+    input wire [AVS_ADDR_WIDTH-1:0]     mem_req_addr,
+    input wire [AVS_DATA_WIDTH-1:0]     mem_req_data,
+    input wire [REQ_TAG_WIDTH-1:0]      mem_req_tag,
+    output  wire                        mem_req_ready,
 
     // Memory response    
-    output wire                     mem_rsp_valid,        
-    output wire [AVS_DATAW-1:0]     mem_rsp_data,
-    output wire [REQ_TAGW-1:0]      mem_rsp_tag,
-    input wire                      mem_rsp_ready,
+    output wire                         mem_rsp_valid,        
+    output wire [AVS_DATA_WIDTH-1:0]    mem_rsp_data,
+    output wire [REQ_TAG_WIDTH-1:0]     mem_rsp_tag,
+    input wire                          mem_rsp_ready,
 
     // AVS bus
-    output  wire [AVS_DATAW-1:0]    avs_writedata,
-    input   wire [AVS_DATAW-1:0]    avs_readdata,
-    output  wire [AVS_ADDRW-1:0]    avs_address,
-    input   wire                    avs_waitrequest,
-    output  wire                    avs_write,
-    output  wire                    avs_read,
-    output  wire [AVS_BYTEENW-1:0]  avs_byteenable,
-    output  wire [AVS_BURSTW-1:0]   avs_burstcount,
-    input                           avs_readdatavalid,
-    output wire [AVS_BANKS_BITS-1:0] avs_bankselect
+    output  wire [AVS_DATA_WIDTH-1:0]   avs_writedata,
+    input   wire [AVS_DATA_WIDTH-1:0]   avs_readdata,
+    output  wire [AVS_ADDR_WIDTH-1:0]   avs_address,
+    input   wire                        avs_waitrequest,
+    output  wire                        avs_write,
+    output  wire                        avs_read,
+    output  wire [AVS_BYTEENW-1:0]      avs_byteenable,
+    output  wire [AVS_BURST_WIDTH-1:0]  avs_burstcount,
+    input                               avs_readdatavalid,
+    output wire [AVS_BANKS_BITS-1:0]    avs_bankselect
 );
     reg [AVS_BANKS_BITS-1:0] avs_bankselect_r;
-    reg [AVS_BURSTW-1:0]     avs_burstcount_r;
+    reg [AVS_BURST_WIDTH-1:0]     avs_burstcount_r;
 
     wire avs_reqq_push = mem_req_valid && mem_req_ready && !mem_req_rw;
     wire avs_reqq_pop  = mem_rsp_valid && mem_rsp_ready;
@@ -53,7 +53,7 @@ module VX_avs_wrapper #(
     wire avs_rspq_empty;
 
     wire rsp_queue_going_full;
-    wire [RD_QUEUE_ADDRW-1:0] rsp_queue_size;
+    wire [RD_QUEUE_ADDR_WIDTH-1:0] rsp_queue_size;
     VX_pending_size #( 
         .SIZE (RD_QUEUE_SIZE)
     ) pending_size (
@@ -73,7 +73,7 @@ module VX_avs_wrapper #(
     end
     
     VX_fifo_queue #(
-        .DATAW   (REQ_TAGW),
+        .DATAW   (REQ_TAG_WIDTH),
         .SIZE    (RD_QUEUE_SIZE)
     ) rd_req_queue (
         .clk      (clk),
@@ -90,7 +90,7 @@ module VX_avs_wrapper #(
     );
 
     VX_fifo_queue #(
-        .DATAW   (AVS_DATAW),
+        .DATAW   (AVS_DATA_WIDTH),
         .SIZE    (RD_QUEUE_SIZE)
     ) rd_rsp_queue (
         .clk      (clk),
