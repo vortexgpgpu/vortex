@@ -1,78 +1,101 @@
 `include "VX_define.vh"
 
-module VX_cci_to_mem #(
-    parameter CCI_DATAW   = 1, 
-    parameter CCI_ADDRW   = 1,            
-    parameter AVS_DATAW   = 1, 
-    parameter AVS_ADDRW   = 1,            
-    parameter AVS_BYTEENW = (AVS_DATAW / 8),
-    parameter TAG_WIDTH   = 1
+module VX_to_mem #(
+    parameter SRC_DATA_WIDTH = 1, 
+    parameter SRC_ADDR_WIDTH = 1,            
+    parameter DST_DATA_WIDTH = 1, 
+    parameter DST_ADDR_WIDTH = 1,                
+    parameter SRC_TAG_WIDTH  = 1,
+    parameter DST_TAG_WIDTH  = 1,
+    parameter SRC_DATA_SIZE  = (SRC_DATA_WIDTH / 8),
+    parameter DST_DATA_SIZE  = (DST_DATA_WIDTH / 8)
 ) (
-    input wire clk,
-    input wire reset,
+    input wire                          clk,
+    input wire                          reset,
 
-    input wire mem_req_valid_in,
-    input wire [CCI_ADDRW-1:0] mem_req_addr_in,
-    input wire mem_req_rw_in,
-    input wire [CCI_DATAW-1:0] mem_req_data_in,
-    input wire [TAG_WIDTH-1:0] mem_req_tag_in,
-    output wire mem_req_ready_in,
+    input wire                          mem_req_valid_in,
+    input wire [SRC_ADDR_WIDTH-1:0]     mem_req_addr_in,
+    input wire                          mem_req_rw_in,
+    input wire [SRC_DATA_SIZE-1:0]      mem_req_byteen_in,
+    input wire [SRC_DATA_WIDTH-1:0]     mem_req_data_in,
+    input wire [SRC_TAG_WIDTH-1:0]      mem_req_tag_in,
+    output wire                         mem_req_ready_in,
 
-    output wire mem_req_valid_out,
-    output wire [AVS_ADDRW-1:0] mem_req_addr_out,
-    output wire mem_req_rw_out,
-    output wire [AVS_BYTEENW-1:0] mem_req_byteen_out,
-    output wire [AVS_DATAW-1:0] mem_req_data_out,
-    output wire [TAG_WIDTH-1:0] mem_req_tag_out,
-    input wire mem_req_ready_out,
+    output wire                         mem_req_valid_out,
+    output wire [DST_ADDR_WIDTH-1:0]    mem_req_addr_out,
+    output wire                         mem_req_rw_out,
+    output wire [DST_DATA_SIZE-1:0]     mem_req_byteen_out,
+    output wire [DST_DATA_WIDTH-1:0]    mem_req_data_out,
+    output wire [DST_TAG_WIDTH-1:0]     mem_req_tag_out,
+    input wire                          mem_req_ready_out,
 
-    input wire mem_rsp_valid_in, 
-    input wire [AVS_DATAW-1:0] mem_rsp_data_in, 
-    input wire [TAG_WIDTH-1:0] mem_rsp_tag_in,
-    output wire mem_rsp_ready_in,    
+    input wire                          mem_rsp_valid_in, 
+    input wire [DST_DATA_WIDTH-1:0]     mem_rsp_data_in, 
+    input wire [DST_TAG_WIDTH-1:0]      mem_rsp_tag_in,
+    output wire                         mem_rsp_ready_in,    
 
-    output wire mem_rsp_valid_out, 
-    output wire [CCI_DATAW-1:0] mem_rsp_data_out, 
-    output wire [TAG_WIDTH-1:0] mem_rsp_tag_out, 
-    input wire mem_rsp_ready_out
-);
-    localparam N = AVS_ADDRW - CCI_ADDRW;
-
-    `STATIC_ASSERT(N >= 0, ("oops!"))
+    output wire                         mem_rsp_valid_out, 
+    output wire [SRC_DATA_WIDTH-1:0]    mem_rsp_data_out, 
+    output wire [SRC_TAG_WIDTH-1:0]     mem_rsp_tag_out, 
+    input wire                          mem_rsp_ready_out
+);    
+    `STATIC_ASSERT ((DST_TAG_WIDTH >= SRC_TAG_WIDTH), ("oops!"))
     
-    if (N == 0) begin
+    localparam DST_LDATAW = $clog2(DST_DATA_WIDTH);
+    localparam SRC_LDATAW = $clog2(SRC_DATA_WIDTH);
+    localparam D = `ABS(DST_LDATAW - SRC_LDATAW);
+    localparam P = 2**D;
+
+    `UNUSED_VAR (mem_rsp_tag_in)
+
+    if (DST_LDATAW > SRC_LDATAW) begin
+
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
+        
+        wire [D-1:0] req_idx = mem_req_addr_in[D-1:0];
+        wire [D-1:0] rsp_idx = mem_rsp_tag_in[D-1:0];
+
+        wire [SRC_ADDR_WIDTH-D-1:0] mem_req_addr_in_qual = mem_req_addr_in[SRC_ADDR_WIDTH-1:D];
+
+        wire [P-1:0][SRC_DATA_WIDTH-1:0] mem_rsp_data_in_w = mem_rsp_data_in;
+
+        if (DST_ADDR_WIDTH < (SRC_ADDR_WIDTH - D)) begin
+            `UNUSED_VAR (mem_req_addr_in_qual)
+            assign mem_req_addr_out = mem_req_addr_in_qual[DST_ADDR_WIDTH-1:0];
+        end else if (DST_ADDR_WIDTH > (SRC_ADDR_WIDTH - D)) begin
+            assign mem_req_addr_out = DST_ADDR_WIDTH'(mem_req_addr_in_qual);
+        end else begin
+            assign mem_req_addr_out = mem_req_addr_in_qual;
+        end
 
         assign mem_req_valid_out  = mem_req_valid_in;
-        assign mem_req_addr_out   = mem_req_addr_in;
         assign mem_req_rw_out     = mem_req_rw_in;
-        assign mem_req_byteen_out = {AVS_BYTEENW{1'b1}};
-        assign mem_req_data_out   = mem_req_data_in;
-        assign mem_req_tag_out    = mem_req_tag_in; 
+        assign mem_req_byteen_out = DST_DATA_SIZE'(mem_req_byteen_in) << ((DST_LDATAW-3)'(req_idx) << (SRC_LDATAW-3));  
+        assign mem_req_data_out   = DST_DATA_WIDTH'(mem_req_data_in) << ((DST_LDATAW'(req_idx)) << DST_LDATAW);
+        assign mem_req_tag_out    = DST_TAG_WIDTH'({mem_req_tag_in, req_idx});
         assign mem_req_ready_in   = mem_req_ready_out;
 
         assign mem_rsp_valid_out  = mem_rsp_valid_in;
-        assign mem_rsp_data_out   = mem_rsp_data_in;
-        assign mem_rsp_tag_out    = mem_rsp_tag_in;
+        assign mem_rsp_data_out   = mem_rsp_data_in_w[rsp_idx];  
+        assign mem_rsp_tag_out    = SRC_TAG_WIDTH'(mem_rsp_tag_in[SRC_TAG_WIDTH+D-1:D]);
         assign mem_rsp_ready_in   = mem_rsp_ready_out;
 
-    end else begin
+    end else if (DST_LDATAW < SRC_LDATAW) begin
         
-        reg [N-1:0] req_ctr, rsp_ctr;
+        reg [D-1:0] req_ctr, rsp_ctr;
 
-        wire [(2**N)-1:0][AVS_DATAW-1:0] mem_req_data_w_in;
-
-        reg [(2**N)-1:0][AVS_DATAW-1:0] mem_rsp_data_r_out, mem_rsp_data_n_out;
+        reg [P-1:0][DST_DATA_WIDTH-1:0] mem_rsp_data_out_r, mem_rsp_data_out_n;
 
         wire mem_req_fire_out = mem_req_valid_out && mem_req_ready_out;
         wire mem_rsp_fire_in = mem_rsp_valid_in && mem_rsp_ready_in;     
 
-        assign mem_req_data_w_in = mem_req_data_in;
+        wire [P-1:0][DST_DATA_WIDTH-1:0] mem_req_data_in_w = mem_req_data_in;
+        wire [P-1:0][DST_DATA_SIZE-1:0] mem_req_byteen_in_w = mem_req_byteen_in;
 
         always @(*) begin
-            mem_rsp_data_n_out = mem_rsp_data_r_out;
-            mem_rsp_data_n_out[rsp_ctr] = mem_rsp_data_in;
+            mem_rsp_data_out_n = mem_rsp_data_out_r;
+            mem_rsp_data_out_n[rsp_ctr] = mem_rsp_data_in;
         end
 
         always @(posedge clk) begin
@@ -85,23 +108,71 @@ module VX_cci_to_mem #(
                 end
                 if (mem_rsp_fire_in) begin
                     rsp_ctr <= rsp_ctr + 1;
-                    mem_rsp_data_r_out <= mem_rsp_data_n_out;
+                    mem_rsp_data_out_r <= mem_rsp_data_out_n;
                 end
             end 
         end
 
-        assign mem_req_valid_out  = mem_req_valid_in;
-        assign mem_req_addr_out   = {mem_req_addr_in, req_ctr};
-        assign mem_req_rw_out     = mem_req_rw_in;
-        assign mem_req_byteen_out = {AVS_BYTEENW{1'b1}};
-        assign mem_req_data_out   = mem_req_data_w_in[req_ctr];
-        assign mem_req_tag_out    = mem_req_tag_in; 
-        assign mem_req_ready_in   = mem_req_ready_out && (req_ctr == (2**N-1));
+        reg [DST_TAG_WIDTH-1:0] mem_rsp_tag_in_r;
+        wire [DST_TAG_WIDTH-1:0] mem_rsp_tag_in_w;
+        
+        always @(posedge clk) begin
+            if (mem_rsp_fire_in) begin
+                mem_rsp_tag_in_r <= mem_rsp_tag_in;
+            end 
+        end
+        assign mem_rsp_tag_in_w = (rsp_ctr != 0) ? mem_rsp_tag_in_r : mem_rsp_tag_in;
+        `RUNTIME_ASSERT((mem_rsp_tag_in_w == mem_rsp_tag_in), ("oops!"))
 
-        assign mem_rsp_valid_out  = mem_rsp_valid_in && (rsp_ctr == (2**N-1));
-        assign mem_rsp_data_out   = mem_rsp_data_n_out;
-        assign mem_rsp_tag_out    = mem_rsp_tag_in;
+        wire [SRC_ADDR_WIDTH+D-1:0] mem_req_addr_in_qual = {mem_req_addr_in, req_ctr};
+        
+        if (DST_ADDR_WIDTH < (SRC_ADDR_WIDTH + D)) begin
+            `UNUSED_VAR (mem_req_addr_in_qual)
+            assign mem_req_addr_out = mem_req_addr_in_qual[DST_ADDR_WIDTH-1:0];
+        end else if (DST_ADDR_WIDTH > (SRC_ADDR_WIDTH + D)) begin
+            assign mem_req_addr_out = DST_ADDR_WIDTH'(mem_req_addr_in_qual);
+        end else begin
+            assign mem_req_addr_out = mem_req_addr_in_qual;
+        end
+
+        assign mem_req_valid_out  = mem_req_valid_in;
+        assign mem_req_rw_out     = mem_req_rw_in;
+        assign mem_req_byteen_out = mem_req_byteen_in_w[req_ctr];
+        assign mem_req_data_out   = mem_req_data_in_w[req_ctr];
+        assign mem_req_tag_out    = DST_TAG_WIDTH'(mem_req_tag_in);
+        assign mem_req_ready_in   = mem_req_ready_out && (req_ctr == (P-1));
+
+        assign mem_rsp_valid_out  = mem_rsp_valid_in && (rsp_ctr == (P-1));
+        assign mem_rsp_data_out   = mem_rsp_data_out_n;
+        assign mem_rsp_tag_out    = SRC_TAG_WIDTH'(mem_rsp_tag_in);
         assign mem_rsp_ready_in   = mem_rsp_ready_out;
+
+    end else begin
+
+        `UNUSED_VAR (clk)
+        `UNUSED_VAR (reset)        
+        
+        if (DST_ADDR_WIDTH < SRC_ADDR_WIDTH) begin
+            `UNUSED_VAR (mem_req_addr_in)
+            assign mem_req_addr_out = mem_req_addr_in[DST_ADDR_WIDTH-1:0];
+        end else if (DST_ADDR_WIDTH > SRC_ADDR_WIDTH) begin
+            assign mem_req_addr_out = DST_ADDR_WIDTH'(mem_req_addr_in);
+        end else begin
+            assign mem_req_addr_out = mem_req_addr_in;
+        end
+
+        assign mem_req_valid_out  = mem_req_valid_in;
+        assign mem_req_rw_out     = mem_req_rw_in;
+        assign mem_req_byteen_out = mem_req_byteen_in;
+        assign mem_req_data_out   = mem_req_data_in;
+        assign mem_req_tag_out    = DST_TAG_WIDTH'(mem_req_tag_in);
+        assign mem_req_ready_in   = mem_req_ready_out;
+
+        assign mem_rsp_valid_out  = mem_rsp_valid_in;
+        assign mem_rsp_data_out   = mem_rsp_data_in;
+        assign mem_rsp_tag_out    = SRC_TAG_WIDTH'(mem_rsp_tag_in);
+        assign mem_rsp_ready_in   = mem_rsp_ready_out;
+
     end
 
 endmodule
