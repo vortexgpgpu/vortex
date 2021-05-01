@@ -1,4 +1,4 @@
-# Vortex Cache Sub-System
+# Vortex Cache Subsystem
 
 The Vortex Cache Sub-system has the following main properties:
 
