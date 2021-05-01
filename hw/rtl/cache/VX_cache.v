@@ -39,10 +39,7 @@ module VX_cache #(
     parameter MEM_TAG_WIDTH                = (32 - $clog2(CACHE_LINE_SIZE)),
 
     // bank offset from beginning of index range
-    parameter BANK_ADDR_OFFSET              = 0,
-
-    // in-order DRAN
-    parameter IN_ORDER_MEM                 = 0
+    parameter BANK_ADDR_OFFSET              = 0
  ) (
     `SCOPE_IO_VX_cache
     
@@ -298,8 +295,7 @@ module VX_cache #(
             .WRITE_ENABLE       (WRITE_ENABLE),
             .CORE_TAG_WIDTH     (CORE_TAG_WIDTH),                
             .CORE_TAG_ID_BITS   (CORE_TAG_ID_BITS),
-            .BANK_ADDR_OFFSET   (BANK_ADDR_OFFSET),
-            .IN_ORDER_MEM       (IN_ORDER_MEM)
+            .BANK_ADDR_OFFSET   (BANK_ADDR_OFFSET)
         ) bank (
             `SCOPE_BIND_VX_cache_bank(i)
             
