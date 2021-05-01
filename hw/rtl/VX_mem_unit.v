@@ -101,8 +101,7 @@ module VX_mem_unit # (
         .WRITE_ENABLE       (0),
         .CORE_TAG_WIDTH     (`ICORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS   (`ICORE_TAG_ID_BITS),
-        .MEM_TAG_WIDTH     (`DMEM_TAG_WIDTH),
-        .IN_ORDER_MEM      (!(`L2_ENABLE || `L3_ENABLE))
+        .MEM_TAG_WIDTH     (`DMEM_TAG_WIDTH)
     ) icache (
         `SCOPE_BIND_VX_mem_unit_icache
 
@@ -161,8 +160,7 @@ module VX_mem_unit # (
         .WRITE_ENABLE       (1),
         .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS),
-        .MEM_TAG_WIDTH      (`DMEM_TAG_WIDTH),
-        .IN_ORDER_MEM       (!(`L2_ENABLE || `L3_ENABLE))
+        .MEM_TAG_WIDTH      (`DMEM_TAG_WIDTH)
     ) dcache (
         `SCOPE_BIND_VX_mem_unit_dcache
         
