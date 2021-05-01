@@ -4,7 +4,7 @@
 
 - [Vortex Codebase Layout](https://github.com/vortexgpgpu/vortex-dev/blob/master/doc/Codebase.md)
 - [Vortex Microarchitecture and Extended RISC-V ISA](https://github.com/vortexgpgpu/vortex-dev/blob/master/doc/Microarchitecture.md)
-- [Vortex Cache Sub-system](https://github.com/vortexgpgpu/vortex-dev/blob/master/doc/Cache_Subsystem.md)
+- [Vortex Cache Subsystem](https://github.com/vortexgpgpu/vortex-dev/blob/master/doc/Cache_Subsystem.md)
 - Vortex Software
 - [Vortex Simulation](https://github.com/vortexgpgpu/vortex-dev/blob/master/doc/Simulation.md)
 - [FPGA Configuration, Program and Test](https://github.com/vortexgpgpu/vortex-dev/blob/master/doc/Flubber_FPGA_Startup_Guide.md)
