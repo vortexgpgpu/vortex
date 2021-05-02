@@ -6,7 +6,6 @@
 #include <vx_intrinsics.h>
 #endif
 
-static void increment_ctr(uint32_t *, int, uint32_t);
 static void aes256_key_exp(const uint32_t *, uint32_t *, int);
 static void aes256_cipher(const uint8_t *, const uint8_t *, const uint8_t *,
                           uint8_t *, const uint32_t *);
@@ -14,6 +13,7 @@ static void aes256_inv_cipher(const uint8_t *, const uint8_t *, uint8_t *,
                               const uint32_t *);
 static uint32_t sub_word(uint32_t);
 static uint32_t rot_word(uint32_t);
+static void increment_128bit(uint32_t *, uint32_t);
 static void add_round_key(uint8_t *, const uint32_t *);
 #ifndef AES_NATIVE
 static void inv_sub_bytes(uint8_t *);
@@ -81,11 +81,22 @@ void aes256_ctr(const uint8_t *init_ctr, uint32_t start_block_idx,
 
     uint8_t ctr[4 * Nb];
     memcpy(ctr, init_ctr, sizeof ctr);
-    increment_ctr((uint32_t *)ctr, Nb, start_block_idx);
+    increment_128bit((uint32_t *)ctr, start_block_idx);
     for (int b = 0; b < nblocks; b++) {
         aes256_cipher(NULL, in + (Nb * 4 * b), ctr, out + (Nb * 4 * b), round_keys);
-        increment_ctr((uint32_t *)ctr, Nb, 1);
+        increment_128bit((uint32_t *)ctr, 1);
     }
+}
+
+static inline uint32_t big_endian_add(uint32_t a, uint32_t b, int *overflow) {
+    uint8_t *bytes = (uint8_t *)(&a);
+    uint32_t native = (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8)
+                      | bytes[3];
+    uint32_t sum = native + b;
+    *overflow = sum < native;
+    uint8_t big_sum[4] = {(sum >> 24) & 0xff, (sum >> 16) & 0xff,
+                          (sum >> 8) & 0xff, sum & 0xff};
+    return *(uint32_t *)big_sum;
 }
 
 // The CTR cipher mode puts us in a tough situation where we need to
@@ -94,20 +105,22 @@ void aes256_ctr(const uint8_t *init_ctr, uint32_t start_block_idx,
 // For convenience, use a 32-bit addend n. We will only overflow that
 // when our input hits 64GiB, which is far beyond what we plan to use
 // this implementation for.
-static void increment_ctr(uint32_t *ctr, int ctr_len, uint32_t n) {
-    int incr = 1;
-    for (int i = ctr_len - 1; i >= 0; i--) {
-        uint8_t *bytes = (uint8_t *)(ctr + i);
-        uint32_t c = (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8)
-                     | bytes[3];
-        uint32_t c_incr = c + n;
-        uint8_t bytes_incr[4] = {(c_incr >> 24) & 0xff, (c_incr >> 16) & 0xff,
-                                 (c_incr >> 8) & 0xff, c_incr & 0xff};
-        uint32_t *choices[] = {ctr + i, (uint32_t *)bytes_incr};
-        ctr[i] = *choices[incr];
-        incr = incr && c_incr < c;
-        n = 1;
-    }
+static void increment_128bit(uint32_t *limbs, uint32_t n) {
+    int overflow;
+    limbs[3] = big_endian_add(limbs[3], n, &overflow);
+    __if (overflow) {
+        limbs[2] = big_endian_add(limbs[2], 1, &overflow);
+    } __else {
+        return;
+    } __endif
+    __if (overflow) {
+        limbs[1] = big_endian_add(limbs[1], 1, &overflow);
+    } __else {
+        return;
+    } __endif
+    __if (overflow) {
+        limbs[0] = big_endian_add(limbs[0], 1, &overflow);
+    } __endif
 }
 
 // Modified key schedule generation from Section 5.3.5 of the AES spec
