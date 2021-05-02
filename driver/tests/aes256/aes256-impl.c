@@ -1,10 +1,7 @@
 #include <stdint.h>
 #include <string.h>
-#include "aes256.h"
-
-#if defined(AES_NATIVE) || defined(AES_HYBRID)
 #include <vx_intrinsics.h>
-#endif
+#include "aes256.h"
 
 static void aes256_key_exp(const uint32_t *, uint32_t *, int);
 static void aes256_cipher(const uint8_t *, const uint8_t *, const uint8_t *,
@@ -101,10 +98,9 @@ static inline uint32_t big_endian_add(uint32_t a, uint32_t b, int *overflow) {
 
 // The CTR cipher mode puts us in a tough situation where we need to
 // add n to a 128-bit counter in big endian on a big or little endian
-// system without (in the case of vortex) using diverging branches.
-// For convenience, use a 32-bit addend n. We will only overflow that
-// when our input hits 64GiB, which is far beyond what we plan to use
-// this implementation for.
+// system. For convenience, use a 32-bit addend n. We will only overflow
+// that when our input hits 64GiB, which is far beyond what we plan to
+// use this implementation for.
 static void increment_128bit(uint32_t *limbs, uint32_t n) {
     int overflow;
     limbs[3] = big_endian_add(limbs[3], n, &overflow);
