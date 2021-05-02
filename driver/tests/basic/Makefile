@@ -24,7 +24,7 @@ LDFLAGS +=
 
 PROJECT = basic
 
-SRCS = basic.cpp
+SRCS = main.cpp
 
 all: $(PROJECT) kernel.bin kernel.dump
 
