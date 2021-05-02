@@ -72,7 +72,7 @@ module VX_to_mem #(
         assign mem_req_valid_out  = mem_req_valid_in;
         assign mem_req_rw_out     = mem_req_rw_in;
         assign mem_req_byteen_out = DST_DATA_SIZE'(mem_req_byteen_in) << ((DST_LDATAW-3)'(req_idx) << (SRC_LDATAW-3));  
-        assign mem_req_data_out   = DST_DATA_WIDTH'(mem_req_data_in) << ((DST_LDATAW'(req_idx)) << DST_LDATAW);
+        assign mem_req_data_out   = DST_DATA_WIDTH'(mem_req_data_in) << ((DST_LDATAW'(req_idx)) << SRC_LDATAW);
         assign mem_req_tag_out    = DST_TAG_WIDTH'({mem_req_tag_in, req_idx});
         assign mem_req_ready_in   = mem_req_ready_out;
 
