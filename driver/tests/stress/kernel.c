@@ -6,8 +6,8 @@
 void kernel_body(int task_id, void* arg) {
 	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);	
 	uint32_t stride    = _arg->stride;
-	int32_t* src0_ptr  = (int32_t*)_arg->src0_ptr;
-	uint32_t* src1_ptr = (uint32_t*)_arg->src1_ptr;
+	uint32_t* addr_ptr = (uint32_t*)_arg->addr_ptr;
+	int32_t* src_ptr   = (int32_t*)_arg->src_ptr;	
 	int32_t* dst_ptr   = (int32_t*)_arg->dst_ptr;
 	
 	uint32_t offset = task_id * stride;
@@ -16,8 +16,8 @@ void kernel_body(int task_id, void* arg) {
 		int value = 0;
 		for (uint32_t j = 0; j < NUM_LOADS; ++j) {
 			uint32_t addr  = offset + i + j;
-			uint32_t index = src1_ptr[addr];
-			value += src0_ptr[index];
+			uint32_t index = addr_ptr[addr];
+			value += src_ptr[index];
 		}
 		dst_ptr[offset+i] = value;
 	}

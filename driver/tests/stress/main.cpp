@@ -80,7 +80,7 @@ void gen_input_data(uint32_t num_points) {
 }
 
 int run_test(const kernel_arg_t& kernel_arg,
-             uint32_t buf_size, 
+             uint32_t dst_buf_size, 
              uint32_t num_points) {
   // start device
   std::cout << "start device" << std::endl;
@@ -90,17 +90,15 @@ int run_test(const kernel_arg_t& kernel_arg,
   std::cout << "wait for completion" << std::endl;
   RT_CHECK(vx_ready_wait(device, -1));
 
-  // download destination staging_buf
-  std::cout << "download destination staging_buf" << std::endl;
-  RT_CHECK(vx_copy_from_dev(staging_buf, kernel_arg.dst_ptr, buf_size, 0));
+  // download destination buffer
+  std::cout << "download destination buffer" << std::endl;
+  RT_CHECK(vx_copy_from_dev(staging_buf, kernel_arg.dst_ptr, dst_buf_size, 0));
 
   // verify result
   std::cout << "verify result" << std::endl;  
   {
     int errors = 0;
     auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
-
-    uint32_t size_m1 = num_points - 1;
     
     for (uint32_t i = 0; i < num_points; ++i) {
 
@@ -109,7 +107,7 @@ int run_test(const kernel_arg_t& kernel_arg,
         uint32_t addr = i + j;
         uint32_t index = addr_table.at(addr);
         int value = test_data.at(index);
-        printf("*** [%d] addr=%d, index=%d, value=%d\n", i, addr, index, value);
+        //printf("*** [%d] addr=%d, index=%d, value=%d\n", i, addr, index, value);
         ref += value;
       }
       
@@ -155,13 +153,16 @@ int main(int argc, char *argv[]) {
 
   uint32_t num_tasks  = max_cores * max_warps * max_threads;
   uint32_t num_points = count * num_tasks;
-  uint32_t buf_size   = num_points * sizeof(uint32_t);
-
-  std::cout << "number of points: " << num_points << std::endl;
-  std::cout << "staging_buf size: " << buf_size << " bytes" << std::endl;
 
   // generate input data
   gen_input_data(num_points);
+
+  uint32_t addr_buf_size = addr_table.size() * sizeof(int32_t);
+  uint32_t src_buf_size  = test_data.size() * sizeof(int32_t);  
+  uint32_t dst_buf_size  = test_data.size() * sizeof(int32_t);
+
+  std::cout << "number of points: " << num_points << std::endl;
+  std::cout << "buffer size: " << dst_buf_size << " bytes" << std::endl;
 
   // upload program
   std::cout << "upload program" << std::endl;  
@@ -170,24 +171,27 @@ int main(int argc, char *argv[]) {
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;  
 
-  RT_CHECK(vx_alloc_dev_mem(device, buf_size, &value));
-  kernel_arg.src0_ptr = value;
-  RT_CHECK(vx_alloc_dev_mem(device, buf_size, &value));
-  kernel_arg.src1_ptr = value;
-  RT_CHECK(vx_alloc_dev_mem(device, buf_size, &value));
+  RT_CHECK(vx_alloc_dev_mem(device, addr_buf_size, &value));
+  kernel_arg.addr_ptr = value;
+  RT_CHECK(vx_alloc_dev_mem(device, src_buf_size, &value));
+  kernel_arg.src_ptr = value;
+  RT_CHECK(vx_alloc_dev_mem(device, dst_buf_size, &value));
   kernel_arg.dst_ptr = value;
 
   kernel_arg.num_tasks = num_tasks;
   kernel_arg.stride = count;
 
-  std::cout << "dev_src0=" << std::hex << kernel_arg.src0_ptr << std::endl;
-  std::cout << "dev_src1=" << std::hex << kernel_arg.src1_ptr << std::endl;
-  std::cout << "dev_dst=" << std::hex << kernel_arg.dst_ptr << std::endl;
+  std::cout << "dev_addr=" << std::hex << kernel_arg.addr_ptr << std::endl;
+  std::cout << "dev_src="  << std::hex << kernel_arg.src_ptr << std::endl;  
+  std::cout << "dev_dst="  << std::hex << kernel_arg.dst_ptr << std::endl;
   
   // allocate shared memory  
   std::cout << "allocate shared memory" << std::endl;    
-  uint32_t alloc_size = std::max<uint32_t>(buf_size, sizeof(kernel_arg_t));
-  RT_CHECK(vx_alloc_shared_mem(device, alloc_size, &staging_buf));
+  uint32_t staging_buf_size = std::max<uint32_t>(src_buf_size, 
+                                std::max<uint32_t>(addr_buf_size, 
+                                  std::max<uint32_t>(dst_buf_size, 
+                                    sizeof(kernel_arg_t))));
+  RT_CHECK(vx_alloc_shared_mem(device, staging_buf_size, &staging_buf));
   
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
@@ -200,36 +204,36 @@ int main(int argc, char *argv[]) {
   // upload source buffer0
   {
     auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
-    for (uint32_t i = 0; i < num_points; ++i) {
-      buf_ptr[i] = test_data.at(i);
+    for (uint32_t i = 0; i < addr_table.size(); ++i) {
+      buf_ptr[i] = addr_table.at(i);
     }
   }
-  std::cout << "upload source buffer0" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src0_ptr, buf_size, 0));
+  std::cout << "upload address buffer" << std::endl;      
+  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.addr_ptr, addr_buf_size, 0));
 
   // upload source buffer1
   {
     auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
-    for (uint32_t i = 0; i < num_points; ++i) {
-      buf_ptr[i] = addr_table.at(i);
+    for (uint32_t i = 0; i < test_data.size(); ++i) {
+      buf_ptr[i] = test_data.at(i);
     }
   }
-  std::cout << "upload source buffer1" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src1_ptr, buf_size, 0));
+  std::cout << "upload source buffer" << std::endl;      
+  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src_ptr, src_buf_size, 0));
 
-  // clear destination staging_buf
+  // clear destination buffer
   {
     auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
-    for (uint32_t i = 0; i < num_points; ++i) {
+    for (uint32_t i = 0; i < test_data.size(); ++i) {
       buf_ptr[i] = 0xdeadbeef;
     }
   }
-  std::cout << "clear destination staging_buf" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_ptr, buf_size, 0));  
+  std::cout << "clear destination buffer" << std::endl;      
+  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_ptr, dst_buf_size, 0));  
 
   // run tests
   std::cout << "run tests" << std::endl;
-  RT_CHECK(run_test(kernel_arg, buf_size, num_points));
+  RT_CHECK(run_test(kernel_arg, dst_buf_size, num_points));
 
   // cleanup
   std::cout << "cleanup" << std::endl;  
