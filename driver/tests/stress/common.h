@@ -8,9 +8,9 @@
 struct kernel_arg_t {
   uint32_t num_tasks;
   uint32_t size;
-  uint32_t stride;
-  uint32_t src0_ptr;
-  uint32_t src1_ptr;
+  uint32_t stride;  
+  uint32_t addr_ptr;
+  uint32_t src_ptr;
   uint32_t dst_ptr;  
 };
 
