@@ -1,6 +1,6 @@
-ASE_BUILD_DIR ?= build_ase
-FPGA_BUILD_DIR ?= build_fpga
 DEVICE_FAMILY ?= arria10
+ASE_BUILD_DIR ?= build_ase_$(DEVICE_FAMILY)
+FPGA_BUILD_DIR ?= build_fpga_$(DEVICE_FAMILY)
 RTL_DIR=../../rtl
 
 ifeq ($(shell which qsub-synth),)

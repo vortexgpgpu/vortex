@@ -1,8 +1,7 @@
 #pragma once
 
 #include "verilated.h"
-#include "verilated_stub.h"
-
+//#include "verilated_stub.h"
 #include "Vvortex_afu_shim.h"
 #include "Vvortex_afu_shim__Syms.h"
 
@@ -20,7 +19,7 @@
 #include <unordered_map>
 
 #undef MEM_BLOCK_SIZE
-#define MEM_BLOCK_SIZE    (Vvortex_afu_shim::VL_BITS_avs_writedata / 8)
+#define MEM_BLOCK_SIZE    (PLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH / 8)
 
 #define CACHE_BLOCK_SIZE  64
 
@@ -83,7 +82,7 @@ private:
 
   std::unordered_map<int64_t, host_buffer_t> host_buffers_;
 
-  std::list<mem_rd_req_t> mem_reads_;
+  std::list<mem_rd_req_t> mem_reads_ [PLATFORM_PARAM_LOCAL_MEMORY_BANKS];
 
   std::list<cci_rd_req_t> cci_reads_;
 
