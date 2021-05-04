@@ -48,11 +48,11 @@ FPU_CORE=FPU_FPNEW ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
 # test 128-bit MEM block
 CONFIGS=-DMEM_BLOCK_SIZE=16 ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
 
-# test 128-bit DRAM block
-CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH=128 -DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=28" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
-
 # test 128-bit MEM and DRAM block
 CONFIGS="-DMEM_BLOCK_SIZE=16 -DPLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH=128 -DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=28" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
 
 # test 27-bit DRAM address
 CONFIGS=-DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=27 ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
+
+# test 128-bit DRAM block
+CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_BANKS=1 -DPLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH=128 -DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=28" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo

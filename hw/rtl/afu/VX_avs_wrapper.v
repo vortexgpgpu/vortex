@@ -43,18 +43,16 @@ module VX_avs_wrapper #(
     input                               avs_readdatavalid [NUM_BANKS]
 );
 
-    localparam BANK_ADDRW = $clog2(NUM_BANKS);
+    localparam BANK_ADDRW = `LOG2UP(NUM_BANKS);
 
     // Requests handling
-
-    reg [AVS_BURST_WIDTH-1:0] avs_burstcount_r;
     
     wire [NUM_BANKS-1:0] avs_reqq_pop;
     wire [NUM_BANKS-1:0] req_queue_going_full;
     wire [NUM_BANKS-1:0][RD_QUEUE_ADDR_WIDTH-1:0] req_queue_size;
     wire [NUM_BANKS-1:0][REQ_TAG_WIDTH-1:0] avs_reqq_data_out;
     
-    wire [BANK_ADDRW-1:0] req_bank_sel = mem_req_addr [BANK_ADDRW-1:0];
+    wire [BANK_ADDRW-1:0] req_bank_sel = (NUM_BANKS >= 2) ? mem_req_addr [BANK_ADDRW-1:0] : 1'b0;
 
     wire avs_reqq_push = mem_req_valid && !mem_req_rw && mem_req_ready;    
 
@@ -72,10 +70,6 @@ module VX_avs_wrapper #(
             .size  (req_queue_size[i])
         ); 
         `UNUSED_VAR (req_queue_size)
-
-        always @(posedge clk) begin
-            avs_burstcount_r <= 1;
-        end
         
         VX_fifo_queue #(
             .DATAW   (REQ_TAG_WIDTH),
@@ -101,7 +95,7 @@ module VX_avs_wrapper #(
         assign avs_address[i]    = mem_req_addr;
         assign avs_byteenable[i] = mem_req_byteen;
         assign avs_writedata[i]  = mem_req_data;
-        assign avs_burstcount[i] = avs_burstcount_r;
+        assign avs_burstcount[i] = AVS_BURST_WIDTH'(1);
     end
 
     assign mem_req_ready = !(avs_waitrequest[req_bank_sel] || req_queue_going_full[req_bank_sel]);
