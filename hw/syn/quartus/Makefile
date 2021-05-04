@@ -3,18 +3,18 @@ BUILDIR ?= build
 .PHONY: unittest pipeline cache core vortex top1 top2 top4 top8 top16 top32 top64
 
 unittest:
-	mkdir -p core/$(BUILDIR)
-	cp core/Makefile core/$(BUILDIR)
+	mkdir -p unittest/$(BUILDIR)
+	cp core/Makefile unittest/$(BUILDIR)
 	$(MAKE) -C unittest/$(BUILDIR) clean && $(MAKE) -C unittest/$(BUILDIR) > unittest//$(BUILDIR)build.log 2>&1 &
 
 pipeline:
-	mkdir -p core/$(BUILDIR)
-	cp core/Makefile core/$(BUILDIR)
+	mkdir -p pipeline/$(BUILDIR)
+	cp core/Makefile pipeline/$(BUILDIR)
 	$(MAKE) -C pipeline/$(BUILDIR) clean && $(MAKE) -C pipeline/$(BUILDIR) > pipeline/$(BUILDIR)/build.log 2>&1 &
 
 cache:
-	mkdir -p core/$(BUILDIR)
-	cp core/Makefile core/$(BUILDIR)
+	mkdir -p cache/$(BUILDIR)
+	cp core/Makefile cache/$(BUILDIR)
 	$(MAKE) -C cache/$(BUILDIR) clean && $(MAKE) -C cache/$(BUILDIR) > cache/$(BUILDIR)/build.log 2>&1 &
 
 core:
@@ -23,41 +23,41 @@ core:
 	$(MAKE) -C core/$(BUILDIR) clean && $(MAKE) -C core/$(BUILDIR) > core/$(BUILDIR)/build.log 2>&1 &
 
 vortex:
-	mkdir -p core/$(BUILDIR)
-	cp core/Makefile core/$(BUILDIR)
+	mkdir -p vortex/$(BUILDIR)
+	cp core/Makefile vortex/$(BUILDIR)
 	$(MAKE) -C vortex/$(BUILDIR) clean && $(MAKE) -C vortex/$(BUILDIR) > vortex/$(BUILDIR)/build.log 2>&1 &
 
 top1:
-	mkdir -p core/$(BUILDIR)
-	cp core/Makefile core/$(BUILDIR)
+	mkdir -p top1/$(BUILDIR)
+	cp core/Makefile top1/$(BUILDIR)
 	$(MAKE) -C top1/$(BUILDIR) clean && $(MAKE) -C top1/$(BUILDIR) > top1/$(BUILDIR)/build.log 2>&1 &
 
 top2:
-	mkdir -p core/$(BUILDIR)
-	cp core/Makefile core/$(BUILDIR)
+	mkdir -p top2/$(BUILDIR)
+	cp core/Makefile top2/$(BUILDIR)
 	$(MAKE) -C top2/$(BUILDIR) clean && $(MAKE) -C top2/$(BUILDIR) > top2/$(BUILDIR)/build.log 2>&1 &
 
 top4:
-	mkdir -p core/$(BUILDIR)
-	cp core/Makefile core/$(BUILDIR)
+	mkdir -p top4/$(BUILDIR)
+	cp core/Makefile top4/$(BUILDIR)
 	$(MAKE) -C top4/$(BUILDIR) clean && $(MAKE) -C top4/$(BUILDIR) > top4/$(BUILDIR)/build.log 2>&1 &
 
 top8:
-	mkdir -p core/$(BUILDIR)
-	cp core/Makefile core/$(BUILDIR)
+	mkdir -p top8/$(BUILDIR)
+	cp core/Makefile top8/$(BUILDIR)
 	$(MAKE) -C top8/$(BUILDIR) clean && $(MAKE) -C top8/$(BUILDIR) > top8/$(BUILDIR)/build.log 2>&1 &
 
 top16:
-	mkdir -p core/$(BUILDIR)
-	cp core/Makefile core/$(BUILDIR)
+	mkdir -p top16/$(BUILDIR)
+	cp core/Makefile top16/$(BUILDIR)
 	$(MAKE) -C top16/$(BUILDIR) clean && $(MAKE) -C top16/$(BUILDIR) > top16/$(BUILDIR)build.log 2>&1 &
 
 top32:
-	mkdir -p core/$(BUILDIR)
-	cp core/Makefile core/$(BUILDIR)
+	mkdir -p top32/$(BUILDIR)
+	cp core/Makefile top32/$(BUILDIR)
 	$(MAKE) -C top32/$(BUILDIR) clean && $(MAKE) -C top32/$(BUILDIR) > top32/$(BUILDIR)/build.log 2>&1 &
 
 top64:
-	mkdir -p core/$(BUILDIR)
-	cp core/Makefile core/$(BUILDIR)
+	mkdir -p top64/$(BUILDIR)
+	cp core/Makefile top64/$(BUILDIR)
 	$(MAKE) -C top64/$(BUILDIR) clean && $(MAKE) -C top64/$(BUILDIR) > top64/$(BUILDIR)/build.log 2>&1 &

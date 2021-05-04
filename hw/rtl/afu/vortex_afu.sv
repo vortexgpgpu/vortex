@@ -26,17 +26,15 @@ module vortex_afu #(
   output  t_if_ccip_Tx  af2cp_sTxPort,
 
   // Avalon signals for local memory access
-  output  t_local_mem_data      avs_writedata,
-  input   t_local_mem_data      avs_readdata,
-  output  t_local_mem_addr      avs_address,
-  input   logic                 avs_waitrequest,
-  output  logic                 avs_write,
-  output  logic                 avs_read,
-  output  t_local_mem_byte_mask avs_byteenable,
-  output  t_local_mem_burst_cnt avs_burstcount,
-  input                         avs_readdatavalid,
-
-  output logic [$clog2(NUM_LOCAL_MEM_BANKS)-1:0] mem_bank_select
+  output  t_local_mem_data      avs_writedata [NUM_LOCAL_MEM_BANKS],
+  input   t_local_mem_data      avs_readdata [NUM_LOCAL_MEM_BANKS],
+  output  t_local_mem_addr      avs_address [NUM_LOCAL_MEM_BANKS],
+  input   logic                 avs_waitrequest [NUM_LOCAL_MEM_BANKS],
+  output  logic                 avs_write [NUM_LOCAL_MEM_BANKS],
+  output  logic                 avs_read [NUM_LOCAL_MEM_BANKS],
+  output  t_local_mem_byte_mask avs_byteenable [NUM_LOCAL_MEM_BANKS],
+  output  t_local_mem_burst_cnt avs_burstcount [NUM_LOCAL_MEM_BANKS],
+  input                         avs_readdatavalid [NUM_LOCAL_MEM_BANKS]
 );
 
 localparam RESET_DELAY        = 3;  
@@ -636,6 +634,7 @@ VX_mem_arb #(
 //--
 
 VX_avs_wrapper #(
+  .NUM_BANKS       (NUM_LOCAL_MEM_BANKS),
   .AVS_DATA_WIDTH  (LMEM_LINE_WIDTH), 
   .AVS_ADDR_WIDTH  (LMEM_ADDR_WIDTH),
   .AVS_BURST_WIDTH (LMEM_BURST_CTRW),
@@ -670,8 +669,7 @@ VX_avs_wrapper #(
   .avs_read         (avs_read),
   .avs_byteenable   (avs_byteenable),
   .avs_burstcount   (avs_burstcount),
-  .avs_readdatavalid(avs_readdatavalid),
-  .avs_bankselect   (mem_bank_select)
+  .avs_readdatavalid(avs_readdatavalid)
 );
 
 // CCI-P Read Request ///////////////////////////////////////////////////////////

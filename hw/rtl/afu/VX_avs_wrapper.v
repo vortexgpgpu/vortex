@@ -1,6 +1,7 @@
 `include "VX_define.vh"
 
 module VX_avs_wrapper #(
+    parameter NUM_BANKS       = 1, 
     parameter AVS_DATA_WIDTH  = 1, 
     parameter AVS_ADDR_WIDTH  = 1,    
     parameter AVS_BURST_WIDTH = 1,
@@ -31,92 +32,130 @@ module VX_avs_wrapper #(
     input wire                          mem_rsp_ready,
 
     // AVS bus
-    output  wire [AVS_DATA_WIDTH-1:0]   avs_writedata,
-    input   wire [AVS_DATA_WIDTH-1:0]   avs_readdata,
-    output  wire [AVS_ADDR_WIDTH-1:0]   avs_address,
-    input   wire                        avs_waitrequest,
-    output  wire                        avs_write,
-    output  wire                        avs_read,
-    output  wire [AVS_BYTEENW-1:0]      avs_byteenable,
-    output  wire [AVS_BURST_WIDTH-1:0]  avs_burstcount,
-    input                               avs_readdatavalid,
-    output wire [AVS_BANKS_BITS-1:0]    avs_bankselect
+    output  wire [AVS_DATA_WIDTH-1:0]   avs_writedata [NUM_BANKS],
+    input   wire [AVS_DATA_WIDTH-1:0]   avs_readdata [NUM_BANKS],
+    output  wire [AVS_ADDR_WIDTH-1:0]   avs_address [NUM_BANKS],
+    input   wire                        avs_waitrequest [NUM_BANKS],
+    output  wire                        avs_write [NUM_BANKS],
+    output  wire                        avs_read [NUM_BANKS],
+    output  wire [AVS_BYTEENW-1:0]      avs_byteenable [NUM_BANKS],
+    output  wire [AVS_BURST_WIDTH-1:0]  avs_burstcount [NUM_BANKS],
+    input                               avs_readdatavalid [NUM_BANKS]
 );
-    reg [AVS_BANKS_BITS-1:0] avs_bankselect_r;
-    reg [AVS_BURST_WIDTH-1:0]     avs_burstcount_r;
 
-    wire avs_reqq_push = mem_req_valid && mem_req_ready && !mem_req_rw;
-    wire avs_reqq_pop  = mem_rsp_valid && mem_rsp_ready;
+    localparam BANK_ADDRW = $clog2(NUM_BANKS);
 
-    wire avs_rspq_push = avs_readdatavalid;
-    wire avs_rspq_pop  = avs_reqq_pop;
-    wire avs_rspq_empty;
+    // Requests handling
 
-    wire rsp_queue_going_full;
-    wire [RD_QUEUE_ADDR_WIDTH-1:0] rsp_queue_size;
-    VX_pending_size #( 
-        .SIZE (RD_QUEUE_SIZE)
-    ) pending_size (
-        .clk   (clk),
-        .reset (reset),
-        .push  (avs_reqq_push),
-        .pop   (avs_rspq_pop),
-        `UNUSED_PIN (empty),
-        .full  (rsp_queue_going_full),
-        .size  (rsp_queue_size)
-    ); 
-    `UNUSED_VAR (rsp_queue_size)
-
-    always @(posedge clk) begin
-        avs_burstcount_r <= 1;
-        avs_bankselect_r <= 0;
-    end
+    reg [AVS_BURST_WIDTH-1:0] avs_burstcount_r;
     
-    VX_fifo_queue #(
-        .DATAW   (REQ_TAG_WIDTH),
-        .SIZE    (RD_QUEUE_SIZE)
-    ) rd_req_queue (
-        .clk      (clk),
-        .reset    (reset),
-        .push     (avs_reqq_push),        
-        .pop      (avs_reqq_pop),
-        .data_in  (mem_req_tag),
-        .data_out (mem_rsp_tag),
-        `UNUSED_PIN (empty),
-        `UNUSED_PIN (full),
-        `UNUSED_PIN (alm_empty),
-        `UNUSED_PIN (alm_full),
-        `UNUSED_PIN (size)
+    wire [NUM_BANKS-1:0] avs_reqq_pop;
+    wire [NUM_BANKS-1:0] req_queue_going_full;
+    wire [NUM_BANKS-1:0][RD_QUEUE_ADDR_WIDTH-1:0] req_queue_size;
+    wire [NUM_BANKS-1:0][REQ_TAG_WIDTH-1:0] avs_reqq_data_out;
+    
+    wire [BANK_ADDRW-1:0] req_bank_sel = mem_req_addr [BANK_ADDRW-1:0];
+
+    wire avs_reqq_push = mem_req_valid && !mem_req_rw && mem_req_ready;    
+
+    for (genvar i = 0; i < NUM_BANKS; i++) begin
+
+        VX_pending_size #( 
+            .SIZE (RD_QUEUE_SIZE)
+        ) pending_size (
+            .clk   (clk),
+            .reset (reset),
+            .push  (avs_reqq_push && (req_bank_sel == i)),
+            .pop   (avs_reqq_pop[i]),
+            `UNUSED_PIN (empty),
+            .full  (req_queue_going_full[i]),
+            .size  (req_queue_size[i])
+        ); 
+        `UNUSED_VAR (req_queue_size)
+
+        always @(posedge clk) begin
+            avs_burstcount_r <= 1;
+        end
+        
+        VX_fifo_queue #(
+            .DATAW   (REQ_TAG_WIDTH),
+            .SIZE    (RD_QUEUE_SIZE)
+        ) rd_req_queue (
+            .clk      (clk),
+            .reset    (reset),
+            .push     (avs_reqq_push && (req_bank_sel == i)),        
+            .pop      (avs_reqq_pop[i]),
+            .data_in  (mem_req_tag),
+            .data_out (avs_reqq_data_out[i]),
+            `UNUSED_PIN (empty),
+            `UNUSED_PIN (full),
+            `UNUSED_PIN (alm_empty),
+            `UNUSED_PIN (alm_full),
+            `UNUSED_PIN (size)
+        );
+    end    
+
+    for (genvar i = 0; i < NUM_BANKS; i++) begin
+        assign avs_read[i]       = mem_req_valid && !mem_req_rw && !req_queue_going_full[i] && (req_bank_sel == i);
+        assign avs_write[i]      = mem_req_valid && mem_req_rw && !req_queue_going_full[i] && (req_bank_sel == i);
+        assign avs_address[i]    = mem_req_addr;
+        assign avs_byteenable[i] = mem_req_byteen;
+        assign avs_writedata[i]  = mem_req_data;
+        assign avs_burstcount[i] = avs_burstcount_r;
+    end
+
+    assign mem_req_ready = !(avs_waitrequest[req_bank_sel] || req_queue_going_full[req_bank_sel]);
+
+    // Responses handling
+
+    wire [NUM_BANKS-1:0] rsp_arb_valid_in;
+    wire [NUM_BANKS-1:0][AVS_DATA_WIDTH+REQ_TAG_WIDTH-1:0] rsp_arb_data_in;
+    wire [NUM_BANKS-1:0] rsp_arb_ready_in;
+
+    wire [NUM_BANKS-1:0][AVS_DATA_WIDTH-1:0] avs_rspq_data_out;
+    wire [NUM_BANKS-1:0] avs_rspq_empty;
+
+    for (genvar i = 0; i < NUM_BANKS; i++) begin
+
+        VX_fifo_queue #(
+            .DATAW   (AVS_DATA_WIDTH),
+            .SIZE    (RD_QUEUE_SIZE)
+        ) rd_rsp_queue (
+            .clk      (clk),
+            .reset    (reset),
+            .push     (avs_readdatavalid[i]),
+            .pop      (avs_reqq_pop[i]),
+            .data_in  (avs_readdata[i]),        
+            .data_out (avs_rspq_data_out[i]),
+            .empty    (avs_rspq_empty[i]),
+            `UNUSED_PIN (full),
+            `UNUSED_PIN (alm_empty),
+            `UNUSED_PIN (alm_full),
+            `UNUSED_PIN (size)
+        );
+
+    end     
+    
+    for (genvar i = 0; i < NUM_BANKS; i++) begin
+        assign rsp_arb_valid_in[i] = !avs_rspq_empty[i];
+        assign rsp_arb_data_in[i]  = {avs_rspq_data_out[i], avs_reqq_data_out[i]};
+        assign avs_reqq_pop[i]     = rsp_arb_valid_in[i] && rsp_arb_ready_in[i];
+    end
+
+    VX_stream_arbiter #(
+        .NUM_REQS (NUM_BANKS),
+        .DATAW    (AVS_DATA_WIDTH+REQ_TAG_WIDTH),
+        .BUFFERED (0)
+    ) rsp_arb (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (rsp_arb_valid_in),
+        .data_in   (rsp_arb_data_in),
+        .ready_in  (rsp_arb_ready_in),
+        .valid_out (mem_rsp_valid),
+        .data_out  ({mem_rsp_data, mem_rsp_tag}),
+        .ready_out (mem_rsp_ready)
     );
-
-    VX_fifo_queue #(
-        .DATAW   (AVS_DATA_WIDTH),
-        .SIZE    (RD_QUEUE_SIZE)
-    ) rd_rsp_queue (
-        .clk      (clk),
-        .reset    (reset),
-        .push     (avs_rspq_push),
-        .pop      (avs_rspq_pop),
-        .data_in  (avs_readdata),        
-        .data_out (mem_rsp_data),
-        .empty    (avs_rspq_empty),
-        `UNUSED_PIN (full),
-        `UNUSED_PIN (alm_empty),
-        `UNUSED_PIN (alm_full),
-        `UNUSED_PIN (size)
-    );
-
-    assign avs_read       = mem_req_valid && !mem_req_rw && !rsp_queue_going_full;
-    assign avs_write      = mem_req_valid && mem_req_rw && !rsp_queue_going_full;
-    assign avs_address    = mem_req_addr;
-    assign avs_byteenable = mem_req_byteen;
-    assign avs_writedata  = mem_req_data;
-    assign avs_burstcount = avs_burstcount_r;
-    assign avs_bankselect = avs_bankselect_r;
-
-    assign mem_req_ready = !avs_waitrequest && !rsp_queue_going_full;
-
-    assign mem_rsp_valid = !avs_rspq_empty;   
 
 `ifdef DBG_PRINT_AVS
     always @(posedge clk) begin
@@ -124,10 +163,10 @@ module VX_avs_wrapper #(
             if (mem_req_rw) 
                 $display("%t: AVS Wr Req: addr=%0h, byteen=%0h, tag=%0h, data=%0h", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_byteen, mem_req_tag, mem_req_data);                
             else    
-                $display("%t: AVS Rd Req: addr=%0h, byteen=%0h, tag=%0h, pending=%0d", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_byteen, mem_req_tag, rsp_queue_size);
+                $display("%t: AVS Rd Req: addr=%0h, byteen=%0h, tag=%0h, pending=%0d", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_byteen, mem_req_tag, req_queue_size);
         end   
         if (mem_rsp_valid && mem_rsp_ready) begin
-            $display("%t: AVS Rd Rsp: tag=%0h, data=%0h, pending=%0d", $time, mem_rsp_tag, mem_rsp_data, rsp_queue_size);
+            $display("%t: AVS Rd Rsp: tag=%0h, data=%0h, pending=%0d", $time, mem_rsp_tag, mem_rsp_data, req_queue_size);
         end
     end
 `endif

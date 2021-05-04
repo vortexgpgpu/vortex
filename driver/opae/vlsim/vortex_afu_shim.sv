@@ -72,17 +72,15 @@ module vortex_afu_shim (
   output t_ccip_mmioData      af2cp_sTxPort_c2_data,       
   
   // Avalon signals for local memory access
-  output  t_local_mem_data      avs_writedata,
-  input   t_local_mem_data      avs_readdata,
-  output  t_local_mem_addr      avs_address,
-  input   logic                 avs_waitrequest,
-  output  logic                 avs_write,
-  output  logic                 avs_read,
-  output  t_local_mem_byte_mask avs_byteenable,
-  output  t_local_mem_burst_cnt avs_burstcount,
-  input                         avs_readdatavalid,
-
-  output logic [$clog2(`PLATFORM_PARAM_LOCAL_MEMORY_BANKS)-1:0] mem_bank_select
+  output  t_local_mem_data      avs_writedata [`PLATFORM_PARAM_LOCAL_MEMORY_BANKS],
+  input   t_local_mem_data      avs_readdata [`PLATFORM_PARAM_LOCAL_MEMORY_BANKS],
+  output  t_local_mem_addr      avs_address [`PLATFORM_PARAM_LOCAL_MEMORY_BANKS],
+  input   logic                 avs_waitrequest [`PLATFORM_PARAM_LOCAL_MEMORY_BANKS],
+  output  logic                 avs_write [`PLATFORM_PARAM_LOCAL_MEMORY_BANKS],
+  output  logic                 avs_read [`PLATFORM_PARAM_LOCAL_MEMORY_BANKS],
+  output  t_local_mem_byte_mask avs_byteenable [`PLATFORM_PARAM_LOCAL_MEMORY_BANKS],
+  output  t_local_mem_burst_cnt avs_burstcount [`PLATFORM_PARAM_LOCAL_MEMORY_BANKS],
+  input                         avs_readdatavalid [`PLATFORM_PARAM_LOCAL_MEMORY_BANKS]
 );
 
 t_if_ccip_Rx cp2af_sRxPort;
@@ -103,8 +101,7 @@ vortex_afu #(
     .avs_read(avs_read),
     .avs_byteenable(avs_byteenable),
     .avs_burstcount(avs_burstcount),
-    .avs_readdatavalid(avs_readdatavalid),
-    .mem_bank_select(mem_bank_select)
+    .avs_readdatavalid(avs_readdatavalid)
 );
 
 t_if_ccip_c0_RxHdr c0_RxHdr;
