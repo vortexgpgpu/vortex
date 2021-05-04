@@ -97,7 +97,6 @@
             "avs_byteenable":64,
             "avs_burstcount":4,
             "avs_readdatavalid":1,
-            "mem_bank_select":1,
             "cci_mem_rd_req_ctr":26,
             "cci_mem_wr_req_ctr":26,
             "cci_rd_req_ctr":26,
