@@ -4,6 +4,8 @@
 #include <vortex.h>
 #include "common.h"
 #include <assert.h>
+#include <limits>
+#include <math.h>
 #include <vector>
 
 #define RT_CHECK(_expr)                                         \
@@ -18,10 +20,55 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+union Float_t {    
+    float f;
+    int   i;
+    struct {
+        uint32_t man  : 23;
+        uint32_t exp  : 8;
+        uint32_t sign : 1;
+    } parts;
+};
+
+inline float fround(float x, int32_t precision = 8) {
+  auto power_of_10 = std::pow(10, precision);
+  return std::round(x * power_of_10) / power_of_10;
+}
+
+inline bool almost_equal_eps(float a, float b, int ulp = 128) {
+  auto eps = std::numeric_limits<float>::epsilon() * (std::max(fabs(a), fabs(b)) * ulp);
+  auto d = fabs(a - b);
+  if (d > eps) {
+    std::cout << "*** almost_equal_eps: d=" << d << ", eps=" << eps << std::endl;
+    return false;
+  }
+  return true;
+}
+
+inline bool almost_equal_ulp(float a, float b, int32_t ulp = 6) {
+  Float_t fa{a}, fb{b};
+  auto d = std::abs(fa.i - fb.i);
+  if (d > ulp) {
+    std::cout << "*** almost_equal_ulp: a=" << a << ", b=" << b << ", ulp=" << d << ", ia=" << std::hex << fa.i << ", ib=" << fb.i << std::endl;
+    return false;
+  }
+  return true;
+}
+
+inline bool almost_equal(float a, float b) {
+  if (a == b)
+    return true;
+  /*if (almost_equal_eps(a, b))
+    return true;*/
+  return almost_equal_ulp(a, b);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
 const char* kernel_file = "kernel.bin";
 uint32_t count = 0;
 
-std::vector<int> test_data;
+std::vector<float> test_data;
 std::vector<uint32_t> addr_table;
 
 vx_device_h device = nullptr;
@@ -68,7 +115,8 @@ void gen_input_data(uint32_t num_points) {
   addr_table.resize(num_points + NUM_LOADS - 1);
 
   for (uint32_t i = 0; i < test_data.size(); ++i) {
-    test_data[i] = std::rand();
+    float r = static_cast<float>(std::rand()) / RAND_MAX;
+    test_data[i] = r;
   }
 
   for (uint32_t i = 0; i < addr_table.size(); ++i) {
@@ -98,21 +146,21 @@ int run_test(const kernel_arg_t& kernel_arg,
   std::cout << "verify result" << std::endl;  
   {
     int errors = 0;
-    auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
+    auto buf_ptr = (float*)vx_host_ptr(staging_buf);
     
     for (uint32_t i = 0; i < num_points; ++i) {
 
-      int ref = 0;
+      float ref = 0.0f;
       for (uint32_t j = 0; j < NUM_LOADS; ++j) {
         uint32_t addr = i + j;
         uint32_t index = addr_table.at(addr);
-        int value = test_data.at(index);
-        //printf("*** [%d] addr=%d, index=%d, value=%d\n", i, addr, index, value);
-        ref += value;
+        float value = test_data.at(index);
+        //printf("*** [%d] addr=%d, index=%d, value=%f\n", i, addr, index, value);
+        ref *= value;
       }
       
-      int cur = buf_ptr[i];
-      if (cur != ref) {
+      float cur = buf_ptr[i];
+      if (!almost_equal(cur, ref)) {
         std::cout << "error at result #" << std::dec << i
                   << ": actual " << cur << ", expected " << ref << std::endl;
         ++errors;
