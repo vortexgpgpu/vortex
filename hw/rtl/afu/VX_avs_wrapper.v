@@ -52,7 +52,7 @@ module VX_avs_wrapper #(
     wire [NUM_BANKS-1:0][RD_QUEUE_ADDR_WIDTH-1:0] req_queue_size;
     wire [NUM_BANKS-1:0][REQ_TAG_WIDTH-1:0] avs_reqq_data_out;
     
-    wire [BANK_ADDRW-1:0] req_bank_sel = (NUM_BANKS >= 2) ? mem_req_addr [BANK_ADDRW-1:0] : 1'b0;
+    wire [BANK_ADDRW-1:0] req_bank_sel = (NUM_BANKS >= 2) ? mem_req_addr [BANK_ADDRW-1:0] : '0;
 
     wire avs_reqq_push = mem_req_valid && !mem_req_rw && mem_req_ready;    
 
