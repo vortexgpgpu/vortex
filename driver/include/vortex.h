@@ -23,7 +23,7 @@ typedef void* vx_buffer_h;
 #define VX_CAPS_KERNEL_BASE_ADDR  0x7
 
 #define CACHE_BLOCK_SIZE 64
-#define ALLOC_BASE_ADDR  0x00000010
+#define ALLOC_BASE_ADDR  0x00000000
 #define LOCAL_MEM_SIZE   0xffffffff
 
 // open the device and connect to it

@@ -29,7 +29,7 @@ void aes256_ecb_enc(const uint8_t *in, const uint8_t *key, uint8_t *out, int nbl
     aes256_key_exp((const uint32_t *)key, round_keys, 0);
 
     for (int b = 0; b < nblocks; b++) {
-        aes256_cipher(NULL, NULL, in + (Nb * 4 * b), out + (Nb * 4 * b), round_keys);
+        aes256_cipher(NO_XOR, NO_XOR, in + (Nb * 4 * b), out + (Nb * 4 * b), round_keys);
     }
 }
 
@@ -39,7 +39,7 @@ void aes256_ecb_dec(const uint8_t *in, const uint8_t *key, uint8_t *out, int nbl
     aes256_key_exp((const uint32_t *)key, round_keys, 1);
 
     for (int b = 0; b < nblocks; b++) {
-        aes256_inv_cipher(NULL, in + (Nb * 4 * b), out + (Nb * 4 * b), round_keys);
+        aes256_inv_cipher(NO_XOR, in + (Nb * 4 * b), out + (Nb * 4 * b), round_keys);
     }
 }
 
@@ -51,7 +51,7 @@ void aes256_cbc_enc(const uint8_t *iv, const uint8_t *in, const uint8_t *key,
 
     const uint8_t *next_iv = iv;
     for (int b = 0; b < nblocks; b++) {
-        aes256_cipher(next_iv, NULL, in + (Nb * 4 * b), out + (Nb * 4 * b), round_keys);
+        aes256_cipher(next_iv, NO_XOR, in + (Nb * 4 * b), out + (Nb * 4 * b), round_keys);
         next_iv = out + (Nb * 4 * b);
     }
 }
@@ -80,7 +80,7 @@ void aes256_ctr(const uint8_t *init_ctr, uint32_t start_block_idx,
     memcpy(ctr, init_ctr, sizeof ctr);
     increment_128bit((uint32_t *)ctr, start_block_idx);
     for (int b = 0; b < nblocks; b++) {
-        aes256_cipher(NULL, in + (Nb * 4 * b), ctr, out + (Nb * 4 * b), round_keys);
+        aes256_cipher(NO_XOR, in + (Nb * 4 * b), ctr, out + (Nb * 4 * b), round_keys);
         increment_128bit((uint32_t *)ctr, 1);
     }
 }
@@ -168,7 +168,7 @@ static void aes256_cipher(const uint8_t *xor_before, const uint8_t *xor_after,
     memcpy(state, in, 4 * Nb);
 
     // For CBC
-    if (xor_before) {
+    if (xor_before != NO_XOR) {
         // Minor hack: use add_round_key() since it is functionally
         // equivalent to what we want to do: xor each column with our IV
         add_round_key(state, (uint32_t *)xor_before);
@@ -195,7 +195,7 @@ static void aes256_cipher(const uint8_t *xor_before, const uint8_t *xor_after,
     }
 
     // For CTR
-    if (xor_after) {
+    if (xor_after != NO_XOR) {
         add_round_key(state, (uint32_t *)xor_after);
     }
 
@@ -230,7 +230,7 @@ static void aes256_inv_cipher(const uint8_t *xor_after, const uint8_t *in,
     }
 
     // For CBC
-    if (xor_after) {
+    if (xor_after != NO_XOR) {
         // Minor hack: use add_round_key() since it is functionally
         // equivalent to what we want to do: xor each column with our IV
         add_round_key(state, (uint32_t *)xor_after);

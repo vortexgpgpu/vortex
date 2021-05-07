@@ -12,6 +12,7 @@
 
 #define BLOCK_SIZE (4 * Nb)
 #define KEY_SIZE (4 * Nk)
+#define NO_XOR ((void *)-1)
 
 extern void aes256_ecb_enc(const uint8_t *, const uint8_t *, uint8_t *, int);
 extern void aes256_ecb_dec(const uint8_t *, const uint8_t *, uint8_t *, int);
