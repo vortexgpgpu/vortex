@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e -o pipefail
+# set -e -o pipefail
 
 printf 'algo\top_type\taccel_mode\tinstrs\tcycles\tIPC\n' >results.tsv
 
@@ -18,11 +18,11 @@ for algo in sha256 aes256; do
         op_types=${algo}_op_types
         pids=()
         for op_type in ${!op_types}; do
-            CRYPTO_OP_TYPE=$op_type make run-rtlsim &> "run-${op_type}.log" &
+            CRYPTO_OP_TYPE=$op_type make run-fpga &> "run-${op_type}.log"
             pids+=($!)
         done
 
-        wait "${pids[@]}"
+        # wait "${pids[@]}"
 
         for op_type in ${!op_types}; do
             {

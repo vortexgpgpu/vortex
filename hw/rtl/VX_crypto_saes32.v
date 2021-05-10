@@ -2,7 +2,7 @@
 AES Utilities for the crypto unit
 Inspired by/taken from: https://github.com/riscv/riscv-crypto/tree/12d66e94539ea1635db9456b896c4108b1072e86/rtl/crypto-fu
 */
-
+`include "VX_platform.vh"
 
 //    The shared non-linear middle part for AES, AES^-1, and SM4.
 module riscv_crypto_sbox_inv_mid(

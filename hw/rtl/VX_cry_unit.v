@@ -90,9 +90,10 @@ module VX_cry_unit #(
         assign ror_result[i]       = !cry_req_if.use_imm ? 
                                                 `ROR32(cry_req_if.rs1_data[i],cry_req_if.rs2_data[i])
                                                 : `ROR32(cry_req_if.rs1_data[i],cry_req_if.imm);
-        assign rol_result[i]       = cry_req_if.use_imm ?
-                                                `ROL32(cry_req_if.rs1_data[i],cry_req_if.rs2_data[i])
-                                                : `ROL32(cry_req_if.rs1_data[i],cry_req_if.imm);
+        // assign rol_result[i]       = cry_req_if.use_imm ?
+        //                                         `ROL32(cry_req_if.rs1_data[i],cry_req_if.rs2_data[i])
+        //                                         : `ROL32(cry_req_if.rs1_data[i],cry_req_if.imm);
+        assign rol_result[i] = 0;
     end
 
     wire stall_in, stall_out;    
@@ -113,7 +114,7 @@ module VX_cry_unit #(
                 `CRY_SHA256SIG1:    cry_result[i] = sha_sig1_result[i];
                 `CRY_ROR:           cry_result[i] = ror_result[i];
                 `CRY_ROL:           cry_result[i] = rol_result[i];
-                default:            cry_result[i] = 32'hffff0000;
+                default:            cry_result[i] = 32'hffff0000; // magic number for debugging
             endcase
         end       
     end
