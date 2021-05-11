@@ -198,7 +198,9 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_WARPS, &max_warps));
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_THREADS, &max_threads));
 
+  nblocks = nblocks / max_cores;
   uint32_t num_tasks = max_cores * max_warps * max_threads;
+  // uint32_t num_tasks = max_warps * max_threads;
   uint32_t num_points = nblocks * num_tasks;
   // Size of each of the four {input,output} {en,de}crypted buffers
   uint32_t buf_size = num_points * BLOCK_SIZE;
