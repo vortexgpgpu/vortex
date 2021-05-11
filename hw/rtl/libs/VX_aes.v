@@ -330,7 +330,7 @@ module VX_aes
 
 wire stall_out = ~ready_out && valid_out;
 
-wire [`NUM_THREADS-1:0][7:0] sel_byte;
+reg [`NUM_THREADS-1:0][7:0] sel_byte;
 
 for (genvar i = 0; i < `NUM_THREADS; i++) begin
     always @(*) begin

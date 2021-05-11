@@ -30,7 +30,9 @@ module VX_cry_unit #(
     `UNUSED_VAR (cry_req_if.use_PC)
     `UNUSED_VAR (cry_req_if.tid)
 
-    wire [`NUM_THREADS-1:0][31:0]  cry_result;
+    wire stall_in, stall_out;
+
+    reg [`NUM_THREADS-1:0][31:0]  cry_result;
 
     wire [`NUM_THREADS-1:0][31:0] sha_sig0_result;
     wire [`NUM_THREADS-1:0][31:0] sha_sig1_result;
@@ -111,7 +113,7 @@ module VX_cry_unit #(
         assign rol_result[i] = 0;
     end
 
-    wire stall_in, stall_out;
+    
 
     wire [`CRY_BITS - 1:0] cry_op = `CRY_OP(cry_req_if.op_type);
 
