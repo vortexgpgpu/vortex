@@ -1,8 +1,9 @@
+`include "VX_define.vh"
+
 /*
 AES Utilities for the crypto unit
 Inspired by/taken from: https://github.com/riscv/riscv-crypto/tree/12d66e94539ea1635db9456b896c4108b1072e86/rtl/crypto-fu
 */
-`include "VX_platform.vh"
 
 //    The shared non-linear middle part for AES, AES^-1, and SM4.
 module riscv_crypto_sbox_inv_mid(
@@ -111,7 +112,7 @@ output  [20:0] y
     wire    y18 = y2    ^     y8   ;
     wire    y19 = y15   ^     y13  ;
     wire    y20 = y1    ^     t3   ;
-    
+
     assign y[0 ]  = y0 ;
     assign y[1 ]  = y1 ;
     assign y[10]  = y10;
@@ -219,7 +220,7 @@ input   [ 7:0] x
     wire  y11 = y8  ^     y20 ;
     wire  y10 = y8  ^     t3 ;
     wire  y0  = x[ 7] ^     t2 ;
-    
+
     assign y[0 ] = y0 ;
     assign y[1 ] = y1 ;
     assign y[10] = y10;
@@ -292,109 +293,106 @@ input   [17:0] x
 
 endmodule
 
-//
-// Inverse AES Sbox
-module riscv_crypto_aes_inv_sbox (
-    output [7:0] fx,
-    input  [7:0] in
-);
-
-    wire [20:0] t1;
-    wire [17:0] t2;
-
-    riscv_crypto_sbox_aesi_top top ( .y(t1), .x(in) );
-    riscv_crypto_sbox_inv_mid mid  ( .y(t2), .x(t1) );
-    riscv_crypto_sbox_aesi_out out ( .y(fx), .x(t2) );
-
-endmodule
-
-//
-// Forward AES SBox
-module riscv_crypto_aes_fwd_sbox (
-    output [7:0] fx,
-    input  [7:0] in
-);
-
-    wire [20:0] t1;
-    wire [17:0] t2;
-
-    riscv_crypto_sbox_aes_top top ( .y(t1), .x(in) );
-    riscv_crypto_sbox_inv_mid mid ( .y(t2), .x(t1) );
-    riscv_crypto_sbox_aes_out out ( .y(fx), .x(t2) );
-
-endmodule
-
-
-//
-// Forward / inverse aes sbox.
-module riscv_crypto_aes_sbox(
-    input  wire        dec,
-    input  wire [7:0]  in ,
-    output wire [7:0]  fx
-);
-
-wire [7:0] fx_fwd;
-wire [7:0] fx_inv;
-
-riscv_crypto_aes_fwd_sbox i_fwd (
-    .in(in)     ,
-    .fx(fx_fwd)
-);
-
-riscv_crypto_aes_inv_sbox i_inv (
-    .in(in)     ,
-    .fx(fx_inv)
-);
-
-assign fx = dec ? fx_inv : fx_fwd;
-
-endmodule
-
-// riscv_crypto_fu_saes32
-module VX_crypto_saes32
+module VX_aes
 (
+    input wire clk,
+    input wire reset,
 
-input  wire         valid          , // Are the inputs valid?
-input  wire [ 31:0] rs1            , // Source register 1
-input  wire [ 31:0] rs2            , // Source register 2
-input  wire [  1:0] bs             , // Byte select immediate
+    input wire [`NUM_THREADS-1:0][31:0] rs1_data, // Source register 1
+    input wire [`NUM_THREADS-1:0][31:0] rs2_data, // Source register 2
+    input wire [1:0] bs, // Byte select immediate
 
-input  wire         op_saes32_encs , // Encrypt SubBytes
-input  wire         op_saes32_encsm, // Encrypt SubBytes + MixColumn
-input  wire         op_saes32_decs , // Decrypt SubBytes
-input  wire         op_saes32_decsm, // Decrypt SubBytes + MixColumn
+    input wire op_saes32_encs, // Encrypt SubBytes
+    input wire op_saes32_encsm, // Encrypt SubBytes + MixColumn
+    input wire op_saes32_decs, // Decrypt SubBytes
+    input wire op_saes32_decsm, // Decrypt SubBytes + MixColumn
 
-output wire [ 31:0] rd             , // output destination register value.
-output wire         ready            // Compute finished?
+    input wire [`NW_BITS-1:0] wid_in,
+    input wire [`NUM_THREADS-1:0] tmask_in,
+    input wire [31:0] PC_in,
+    input wire [`NR_BITS-1:0] rd_in,
+    input wire wb_in,
 
+    output wire [`NW_BITS-1:0] wid_out,
+    output wire [`NUM_THREADS-1:0] tmask_out,
+    output wire [31:0] PC_out,
+    output wire [`NR_BITS-1:0] rd_out,
+    output wire wb_out,
+
+    output wire [`NUM_THREADS-1:0][31:0] result, // output destination register value.
+
+    input wire valid_in,
+    output wire ready_in,
+    output wire valid_out,
+    input wire ready_out
 );
 `UNUSED_VAR(op_saes32_encs)
-wire [7:0] bytes_in [3:0]   ;
 
-// Always finish in a single cycle.
-assign     ready        = valid                     ;
+wire stall_out = ~ready_out && valid_out;
 
-assign     bytes_in [0] =  rs2[ 7: 0]               ;
-assign     bytes_in [1] =  rs2[15: 8]               ;
-assign     bytes_in [2] =  rs2[23:16]               ;
-assign     bytes_in [3] =  rs2[31:24]               ;
+wire [`NUM_THREADS-1:0][7:0] sel_byte;
 
-wire [7:0] sel_byte     = bytes_in[bs]              ;
+for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    always @(*) begin
+        case (bs)
+            2'b00: sel_byte[i] = rs2_data[i][7:0];
+            2'b01: sel_byte[i] = rs2_data[i][15:8];
+            2'b10: sel_byte[i] = rs2_data[i][23:16];
+            2'b11: sel_byte[i] = rs2_data[i][31:24];
+        endcase
+    end
+end
 
-wire       dec          = (op_saes32_decs  || op_saes32_decsm);
-wire       mix          =  op_saes32_encsm || op_saes32_decsm ;
+wire dec = (op_saes32_decs  || op_saes32_decsm);
+wire mix =  op_saes32_encsm || op_saes32_decsm ;
 
-wire [7:0] sbox_fwd_out     ;
-wire [7:0] sbox_inv_out     ;
-wire [7:0] sbox_out         = dec ? sbox_inv_out : sbox_fwd_out ;
+wire [`NUM_THREADS-1:0][17:0] stage1_in;
+
+for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    wire [20:0] top_fwd;
+    wire [20:0] top_inv;
+    riscv_crypto_sbox_aes_top top ( .y(top_fwd), .x(sel_byte[i]) );
+    riscv_crypto_sbox_aesi_top inv_top ( .y(top_inv), .x(sel_byte[i]) );
+    riscv_crypto_sbox_inv_mid mid  ( .y(stage1_in[i]), .x(dec ? top_inv : top_fwd) );
+end
+
+wire [`NUM_THREADS-1:0][17:0] stage1_out;
+wire stage1_valid;
+wire stage1_dec;
+wire stage1_mix;
+wire [1:0] stage1_bs;
+wire [`NUM_THREADS-1:0][31:0] stage1_rs1_data;
+assign ready_in = ~stall_out || ~stage1_valid;
+assign valid_out = stage1_valid;
+
+VX_pipe_register #(
+    .DATAW (1 + (`NUM_THREADS * 18) + 1 + 1 + 2 + (`NUM_THREADS * 32) + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1),
+    .RESETW (1)
+) stage1_reg (
+    .clk (clk),
+    .reset (reset),
+    .enable(ready_in),
+    .data_in ({valid_in, stage1_in, dec, mix, bs, rs1_data, wid_in, tmask_in, PC_in, rd_in, wb_in}),
+    .data_out ({stage1_valid, stage1_out, stage1_dec, stage1_mix, stage1_bs, stage1_rs1_data, wid_out, tmask_out, PC_out, rd_out, wb_out})
+);
+
+wire [`NUM_THREADS-1:0][7:0] sbox_out;
+
+for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    wire [7:0] outer_fwd;
+    wire [7:0] outer_inv;
+    riscv_crypto_sbox_aes_out out ( .y(outer_fwd), .x(stage1_out[i]) );
+    riscv_crypto_sbox_aesi_out inv_out ( .y(outer_inv), .x(stage1_out[i]) );
+
+    assign sbox_out[i] = stage1_dec ? outer_inv : outer_fwd;
+end
 
 //
 // Multiply by 2 in GF(2^8) modulo 8'h1b
 function [7:0] xtime2;
     input [7:0] a;
 
-    xtime2  = {a[6:0],1'b0} ^ (a[7] ? 8'h1b : 8'b0 );
-
+    xtime2 = {a[6:0],1'b0} ^ (a[7] ? 8'h1b : 8'b0 );
 endfunction
 
 //
@@ -403,43 +401,29 @@ function [7:0] xtimeN;
     input[7:0] a;
     input[3:0] b;
 
-    xtimeN = 
+    xtimeN =
         (b[0] ?                         a   : 0) ^
         (b[1] ? xtime2(                 a)  : 0) ^
         (b[2] ? xtime2(xtime2(          a)) : 0) ^
         (b[3] ? xtime2(xtime2(xtime2(   a))): 0) ;
-
 endfunction
 
-wire [ 7:0] mix_b3 =       xtimeN(sbox_out, (dec ? 11  : 3))            ;
-wire [ 7:0] mix_b2 = dec ? xtimeN(sbox_out, (           13)) : sbox_out ;
-wire [ 7:0] mix_b1 = dec ? xtimeN(sbox_out, (            9)) : sbox_out ;
-wire [ 7:0] mix_b0 =       xtimeN(sbox_out, (dec ? 14  : 2))            ;
+for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    wire [ 7:0] mix_b3 =              xtimeN(sbox_out[i], (stage1_dec ? 11 : 3));
+    wire [ 7:0] mix_b2 = stage1_dec ? xtimeN(sbox_out[i], 13) : sbox_out[i];
+    wire [ 7:0] mix_b1 = stage1_dec ? xtimeN(sbox_out[i], 9) : sbox_out[i];
+    wire [ 7:0] mix_b0 =              xtimeN(sbox_out[i], (stage1_dec ? 14 : 2));
 
-wire [31:0] result_mix  = {mix_b3, mix_b2, mix_b1, mix_b0};
+    wire [31:0] mixed = {mix_b3, mix_b2, mix_b1, mix_b0};
+    wire [31:0] zext = stage1_mix ? mixed : {24'b0, sbox_out[i]};
 
-wire [31:0] result      = mix ? result_mix : {24'b0, sbox_out};
+    wire [31:0] rotated     =
+        {32{stage1_bs == 2'b00}} & {zext                      } |
+        {32{stage1_bs == 2'b01}} & {zext[23:0], zext[31:24] } |
+        {32{stage1_bs == 2'b10}} & {zext[15:0], zext[31:16] } |
+        {32{stage1_bs == 2'b11}} & {zext[ 7:0], zext[31: 8] } ;
 
-wire [31:0] rotated     =
-    {32{bs == 2'b00}} & {result                      } |
-    {32{bs == 2'b01}} & {result[23:0], result[31:24] } |
-    {32{bs == 2'b10}} & {result[15:0], result[31:16] } |
-    {32{bs == 2'b11}} & {result[ 7:0], result[31: 8] } ;
-
-assign      rd          = rotated ^ rs1;
-
-//
-// SBOX instances
-// ------------------------------------------------------------
-
-riscv_crypto_aes_fwd_sbox i_aes_sbox_fwd (
-.in (sel_byte    ),
-.fx (sbox_fwd_out)
-);
-
-riscv_crypto_aes_inv_sbox i_aes_sbox_inv (
-.in (sel_byte    ),
-.fx (sbox_inv_out)
-);
+    assign result[i] = rotated ^ stage1_rs1_data[i];
+end
 
 endmodule
