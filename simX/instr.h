@@ -1,6 +1,11 @@
 #pragma once
 
+#include "archdef.h"
 #include "types.h"
+#include "warp.h"
+
+#include <array>
+#include <vector>
 
 namespace vortex {
 
@@ -48,16 +53,28 @@ enum InstType {
 };
 
 class Instr {
+  enum {
+    MAX_REG_SOURCES = 3
+  };
+
 public:
-  Instr() 
+  Instr(const ArchDef& arch)
     : opcode_(Opcode::NOP)
     , num_rsrcs_(0)
     , has_imm_(false)
     , rdest_(0)
     , func3_(0)
-    , func7_(0) {
+    , func7_(0)
+    , rsData(arch.num_threads())
+    , rdData(arch.num_threads(), 0)
+    , vrdData(arch.vsize(), 0)
+  {
     for (int i = 0; i < MAX_REG_SOURCES; ++i) {
        rsrc_type_[i] = 0;
+       vrsData[i].resize(arch.vsize(), 0);
+       for (int tid = 0; tid < arch.num_threads(); ++tid) {
+         rsData[tid][i] = 0;
+       }
     }
   }
 
@@ -82,6 +99,20 @@ public:
   void setVediv(Word ediv) { vediv_ = 1 << ediv; }
   void setFunc6(Word func6) { func6_ = func6; }
 
+  // tid - thread id
+  void setRSData(Word data, const int tid, const int num_rs) {
+    rsData[tid][num_rs] = data;
+  }
+  void setRDData(Word data, const int tid) {
+    rdData[tid] = data;
+  }
+  void setVRSData(const std::vector<Byte>& data, const int num_rs) {
+    vrsData[num_rs] = data;
+  }
+  void setVRDData(const std::vector<Byte>& data) {
+    vrdData = data;
+  }
+
   /* Getters used by encoders. */
   Opcode getOpcode() const { return opcode_; }
   Word getFunc3() const { return func3_; }
@@ -103,12 +134,26 @@ public:
   Word getVsew() const { return vsew_; }
   Word getVediv() const { return vediv_; }
 
+  std::array<Word, MAX_REG_SOURCES> getRSData(int tid) {
+    return rsData[tid];
+  }
+  std::array<std::vector<Byte>, MAX_REG_SOURCES> getVRSData() {
+    return vrsData;
+  }
+  Word getRDData(int tid) const {
+    return rdData.at(tid);
+  }
+  Word& getRDData(int tid) {
+    return rdData[tid];
+  }
+  std::vector<Byte> getVRDData() const {
+    return vrdData;
+  }
+  std::vector<Byte>& getVRDData() {
+    return vrdData;
+  }
+
 private:
-
-  enum {
-    MAX_REG_SOURCES = 3
-  };
-
   Opcode opcode_;
   int num_rsrcs_;
   bool has_imm_;
@@ -123,7 +168,7 @@ private:
   Word func3_;
   Word func7_;
 
-  //Vector
+  // Vector
   Word vmask_;
   Word vlsWidth_;
   Word vMop_;
@@ -133,6 +178,17 @@ private:
   Word vsew_;
   Word vediv_;
   Word func6_;
+
+  // Src and dst values
+  // Warp Source Registers
+  std::vector<std::array<Word, MAX_REG_SOURCES>> rsData;
+  // Warp Destination Registers
+  std::vector<Word> rdData;
+  // For vector instr
+  // Warp Vector Source Registers
+  std::array<std::vector<Byte>, MAX_REG_SOURCES> vrsData;
+  // Warp Vector Destination Registers
+  std::vector<Byte> vrdData;
 
   friend std::ostream &operator<<(std::ostream &, const Instr&);
 };

@@ -13,9 +13,10 @@ class Decoder {
 public:
   Decoder(const ArchDef &);    
   
-  std::shared_ptr<Instr> decode(Word code);
+  std::shared_ptr<Instr> decode(Word code) const;
 
 private:
+  const ArchDef& arch;
 
   Word inst_s_;
   Word opcode_s_;

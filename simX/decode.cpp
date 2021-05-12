@@ -221,7 +221,7 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
 }
 }
 
-Decoder::Decoder(const ArchDef &arch) {
+Decoder::Decoder(const ArchDef &arch) : arch(arch) {
   inst_s_   = arch.wsize() * 8;
   opcode_s_ = 7;
   reg_s_    = 5;
@@ -256,8 +256,8 @@ Decoder::Decoder(const ArchDef &arch) {
   v_imm_mask_  = 0x7ff;  
 }
 
-std::shared_ptr<Instr> Decoder::decode(Word code) {  
-  auto instr = std::make_shared<Instr>();
+std::shared_ptr<Instr> Decoder::decode(Word code) const {
+  auto instr = std::make_shared<Instr>(arch);
   Opcode op = (Opcode)((code >> shift_opcode_) & opcode_mask_);
   instr->setOpcode(op);
 

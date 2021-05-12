@@ -37,6 +37,10 @@ public:
   RegMask   used_fregs;
   RegMask   used_vregs;
 
+  //--
+  Word      fetched;
+  std::shared_ptr<Instr> instr;
+
 private:
 
   const char* name_;

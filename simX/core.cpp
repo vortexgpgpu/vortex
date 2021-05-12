@@ -97,7 +97,7 @@ void Core::step() {
 
   this->writeback();
   this->execute();
-  this->issue();
+  this->issue(); // read
   this->decode();
   this->fetch();
   this->schedule();

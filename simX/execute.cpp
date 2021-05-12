@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <cfenv>
 #include <assert.h>
+#include <sstream>
 #include "util.h"
 #include "warp.h"
 #include "instr.h"
@@ -68,7 +69,7 @@ static void update_fcrs(Core* core, int tid, int wid, bool outOfRange = false) {
   }
 }
 
-void Warp::execute(const Instr &instr, Pipeline *pipeline) {
+void Warp::execute(Instr &instr, Pipeline *pipeline) {
   assert(tmask_.any());
 
   Word nextPC = PC_ + core_->arch().wsize();
@@ -84,8 +85,13 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
   int rsrc1  = instr.getRSrc(1);
   Word immsrc= instr.getImm();
   Word vmask = instr.getVmask();
+  // for vector instr
+//  auto vrsdata = instr.getVRSData();
+//  const auto& vr1 = vrsdata[0];
+//  const auto& vr2 = vrsdata[1];
+//  auto& vrd = instr.getVRDData(); // mutable link
 
-  int num_threads = core_->arch().num_threads();
+  int num_threads = getNumThreads();
   for (int t = 0; t < num_threads; t++) {
     if (!tmask_.test(t) || runOnce)
       continue;
@@ -96,7 +102,9 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
     Word rsdata[3];
     Word rddata;
 
-    int num_rsrcs = instr.getNRSrc();
+    auto rsdataNew = instr.getRSData(t);
+
+    int num_rsrcs = instr.getNRSrc(); // register nums
     if (num_rsrcs) {    
       DPH(3, "[" << std::dec << t << "] Src Registers: ");
       for (int i = 0; i < num_rsrcs; ++i) {    
@@ -114,10 +122,19 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
           break;
         default: break;
         }
+
+        if (rsdataNew[i] != rsdata[i]) {
+          std::stringstream ss;
+          ss << "Now equal values, stable value: " << rsdata[i] << ", test value: " << rsdataNew[i];
+          throw std::invalid_argument(ss.str());
+        } else {
+          DPN(3, "Check for equals of input registers is OK" << std::endl);
+        }
+
       }
       DPN(3, std::endl);
     }
-  
+
     switch (opcode) {
     case NOP:
       break;

@@ -59,5 +59,7 @@ void Pipeline::next(Pipeline *drain) {
     drain->used_iregs = this->used_iregs;
     drain->used_fregs = this->used_fregs;
     drain->used_vregs = this->used_vregs;
+    drain->instr = this->instr;
+    drain->fetched = this->fetched;
   }
 }

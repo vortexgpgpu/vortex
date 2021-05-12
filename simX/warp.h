@@ -37,6 +37,7 @@ struct vtype {
   int vsew;
   int vlmul;
 };
+
 class Warp {
 public:
   Warp(Core *core, Word id);
@@ -78,19 +79,24 @@ public:
     return iRegFile_[0][reg];
   }
 
+  int getNumThreads() const;
+
   void step(Pipeline *);
+  void read(Pipeline *) const;
+
+  void writeback(Pipeline *);
 
 private:
 
-  void execute(const Instr &instr, Pipeline *);
+  void execute(Instr &instr, Pipeline *); // now instruction has intermediate source and dest registers
   
   Word id_;
   bool active_;
   Core *core_;
   
   Word PC_;
-  ThreadMask tmask_;  
-  
+  ThreadMask tmask_;
+
   std::vector<std::vector<Word>> iRegFile_;
   std::vector<std::vector<Word>> fRegFile_;
   std::vector<std::vector<Byte>> vRegFile_;
