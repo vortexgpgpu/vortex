@@ -156,10 +156,10 @@ inline void __intrin_aes_enc_round(uint32_t *newcols,
                                    const uint32_t *round_key) {
     // aes32esmi
     asm volatile (
-        "mv %[n0], %[k0]\n"
-        "mv %[n1], %[k1]\n"
-        "mv %[n2], %[k2]\n"
-        "mv %[n3], %[k3]\n"
+        "lw %[n0], %[k0]\n"
+        "lw %[n1], %[k1]\n"
+        "lw %[n2], %[k2]\n"
+        "lw %[n3], %[k3]\n"
         // See:
         // https://sourceware.org/binutils/docs-2.36/as/RISC_002dV_002dFormats.html
         ".insn r 0x33, 0, 0x1b, x0, %[n0], %[o0]\n"
@@ -182,8 +182,8 @@ inline void __intrin_aes_enc_round(uint32_t *newcols,
           [n2] "=&r" (newcols[2]), [n3] "=&r" (newcols[3])
         : [o0] "r" (oldcols[0]), [o1] "r" (oldcols[1]),
           [o2] "r" (oldcols[2]), [o3] "r" (oldcols[3]),
-          [k0] "r" (round_key[0]), [k1] "r" (round_key[1]),
-          [k2] "r" (round_key[2]), [k3] "r" (round_key[3]));
+          [k0] "m" (round_key[0]), [k1] "m" (round_key[1]),
+          [k2] "m" (round_key[2]), [k3] "m" (round_key[3]));
 }
 
 inline void __intrin_aes_last_enc_round(uint32_t *newcols,
@@ -191,10 +191,10 @@ inline void __intrin_aes_last_enc_round(uint32_t *newcols,
                                         const uint32_t *round_key) {
     // aes32esi
     asm volatile (
-        "mv %[n0], %[k0]\n"
-        "mv %[n1], %[k1]\n"
-        "mv %[n2], %[k2]\n"
-        "mv %[n3], %[k3]\n"
+        "lw %[n0], %[k0]\n"
+        "lw %[n1], %[k1]\n"
+        "lw %[n2], %[k2]\n"
+        "lw %[n3], %[k3]\n"
         // See:
         // https://sourceware.org/binutils/docs-2.36/as/RISC_002dV_002dFormats.html
         ".insn r 0x33, 0, 0x19, x0, %[n0], %[o0]\n"
@@ -217,18 +217,18 @@ inline void __intrin_aes_last_enc_round(uint32_t *newcols,
           [n2] "=&r" (newcols[2]), [n3] "=&r" (newcols[3])
         : [o0] "r" (oldcols[0]), [o1] "r" (oldcols[1]),
           [o2] "r" (oldcols[2]), [o3] "r" (oldcols[3]),
-          [k0] "r" (round_key[0]), [k1] "r" (round_key[1]),
-          [k2] "r" (round_key[2]), [k3] "r" (round_key[3]));
+          [k0] "m" (round_key[0]), [k1] "m" (round_key[1]),
+          [k2] "m" (round_key[2]), [k3] "m" (round_key[3]));
 }
 
 inline void __intrin_aes_dec_round(uint32_t *newcols, const uint32_t *oldcols,
                                    const uint32_t *round_key) {
     // aes32dsmi
     asm volatile (
-        "mv %[n0], %[k0]\n"
-        "mv %[n1], %[k1]\n"
-        "mv %[n2], %[k2]\n"
-        "mv %[n3], %[k3]\n"
+        "lw %[n0], %[k0]\n"
+        "lw %[n1], %[k1]\n"
+        "lw %[n2], %[k2]\n"
+        "lw %[n3], %[k3]\n"
         // See:
         // https://sourceware.org/binutils/docs-2.36/as/RISC_002dV_002dFormats.html
         ".insn r 0x33, 0, 0x1f, x0, %[n0], %[o0]\n"
@@ -251,8 +251,8 @@ inline void __intrin_aes_dec_round(uint32_t *newcols, const uint32_t *oldcols,
           [n2] "=&r" (newcols[2]), [n3] "=&r" (newcols[3])
         : [o0] "r" (oldcols[0]), [o1] "r" (oldcols[1]),
           [o2] "r" (oldcols[2]), [o3] "r" (oldcols[3]),
-          [k0] "r" (round_key[0]), [k1] "r" (round_key[1]),
-          [k2] "r" (round_key[2]), [k3] "r" (round_key[3]));
+          [k0] "m" (round_key[0]), [k1] "m" (round_key[1]),
+          [k2] "m" (round_key[2]), [k3] "m" (round_key[3]));
 }
 
 inline void __intrin_aes_last_dec_round(uint32_t *newcols,
@@ -260,10 +260,10 @@ inline void __intrin_aes_last_dec_round(uint32_t *newcols,
                                         const uint32_t *round_key) {
     // aes32dsi
     asm volatile (
-        "mv %[n0], %[k0]\n"
-        "mv %[n1], %[k1]\n"
-        "mv %[n2], %[k2]\n"
-        "mv %[n3], %[k3]\n"
+        "lw %[n0], %[k0]\n"
+        "lw %[n1], %[k1]\n"
+        "lw %[n2], %[k2]\n"
+        "lw %[n3], %[k3]\n"
         // See:
         // https://sourceware.org/binutils/docs-2.36/as/RISC_002dV_002dFormats.html
         ".insn r 0x33, 0, 0x1d, x0, %[n0], %[o0]\n"
@@ -286,8 +286,8 @@ inline void __intrin_aes_last_dec_round(uint32_t *newcols,
           [n2] "+&r" (newcols[2]), [n3] "+&r" (newcols[3])
         : [o0] "r" (oldcols[0]), [o1] "r" (oldcols[1]),
           [o2] "r" (oldcols[2]), [o3] "r" (oldcols[3]),
-          [k0] "r" (round_key[0]), [k1] "r" (round_key[1]),
-          [k2] "r" (round_key[2]), [k3] "r" (round_key[3]));
+          [k0] "m" (round_key[0]), [k1] "m" (round_key[1]),
+          [k2] "m" (round_key[2]), [k3] "m" (round_key[3]));
 }
 
 // Hack to accelerate the InvMixColumns() invocations in the revised key
