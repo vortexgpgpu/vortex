@@ -109,30 +109,6 @@ inline int vx_num_instrs() {
     return result; 
 }
 
-// TODO: delete all 3 of me
-inline uint32_t __intrin_add(uint32_t a, uint32_t b) {
-    uint32_t ret;
-    asm volatile (
-        "add %[rd], %[rs1], %[rs2]"
-        : [rd] "=r" (ret)
-        : [rs1] "r" (a), [rs2] "r" (b));
-    return ret;
-}
-
-inline void __intrin_add_cursed(uint32_t *arr) {
-    asm volatile (
-        "add %[rd], %[rs1], %[rs2]"
-        : [rd] "=r" (arr[2])
-        : [rs1] "r" (arr[0]), [rs2] "r" (arr[1]));
-}
-
-inline void __intrin_add_more_cursed(uint32_t *arr) {
-    asm volatile (
-        "add %[rd], %[rs1], %[rd]"
-        : [rd] "+r" (arr[1])
-        : [rs1] "r" (arr[0]));
-}
-
 //
 // SHA-256
 //
