@@ -324,31 +324,51 @@ static void inv_mix_columns(uint8_t *state) {
         uint32_t new = 0;
         uint8_t *new_col = (uint8_t *)&new;
 
+        uint8_t val0 = col[0];
+        uint8_t xval0 = xtime(val0); // x.val = {02}.val
+        uint8_t x2val0 = xtime(xval0); // x^2.val = {04}.val
+        uint8_t x3val0 = xtime(x2val0); // x^3.val = {08}.val
+
+        uint8_t val1 = col[1];
+        uint8_t xval1 = xtime(val1); // x.val = {02}.val
+        uint8_t x2val1 = xtime(xval1); // x^2.val = {04}.val
+        uint8_t x3val1 = xtime(x2val1); // x^3.val = {08}.val
+
+        uint8_t val2 = col[2];
+        uint8_t xval2 = xtime(val2); // x.val = {02}.val
+        uint8_t x2val2 = xtime(xval2); // x^2.val = {04}.val
+        uint8_t x3val2 = xtime(x2val2); // x^3.val = {08}.val
+
+        uint8_t val3 = col[3];
+        uint8_t xval3 = xtime(val3); // x.val = {02}.val
+        uint8_t x2val3 = xtime(xval3); // x^2.val = {04}.val
+        uint8_t x3val3 = xtime(x2val3); // x^3.val = {08}.val
+
         // important observations:
         // {0e}.b = ({02} ^ {04} ^ {08}).b = {02}.b ^ {04}.b ^ {08}.b
         // {0b}.b = ({01} ^ {02} ^ {08}).b = b ^ {02}.b ^ {08}.b
         // {0d}.b = ({01} ^ {04} ^ {08}).b = b ^ {04}.b ^ {08}.b
         // {09}.b = ({01} ^ {08}).b = b ^ {08}.b
 
-        new_col[0] = xtime(col[0]) ^ xtime(xtime(col[0])) ^ xtime(xtime(xtime(col[0]))) // {0e}.col[0]
-                     ^ col[1] ^ xtime(col[1]) ^ xtime(xtime(xtime(col[1]))) // {0b}.col[1]
-                     ^ col[2] ^ xtime(xtime(col[2])) ^ xtime(xtime(xtime(col[2]))) // {0d}.col[2]
-                     ^ col[3] ^ xtime(xtime(xtime(col[3]))); // {09}.col[3]
+        new_col[0] = xval0 ^ x2val0 ^ x3val0 // {0e}.val0
+                     ^ val1 ^ xval1 ^ x3val1 // {0b}.val1
+                     ^ val2 ^ x2val2 ^ x3val2 // {0d}.val2
+                     ^ val3 ^ x3val3; // {09}.val3
 
-        new_col[1] = col[0] ^ xtime(xtime(xtime(col[0]))) // {09}.col[0]
-                     ^ xtime(col[1]) ^ xtime(xtime(col[1])) ^ xtime(xtime(xtime(col[1]))) // {0e}.col[1]
-                     ^ col[2] ^ xtime(col[2]) ^ xtime(xtime(xtime(col[2]))) // {0b}.col[2]
-                     ^ col[3] ^ xtime(xtime(col[3])) ^ xtime(xtime(xtime(col[3]))); // {0d}.col[3]
+        new_col[1] = val0 ^ x3val0 // {09}.val0
+                     ^ xval1 ^ x2val1 ^ x3val1 // {0e}.val1
+                     ^ val2 ^ xval2 ^ x3val2 // {0b}.val2
+                     ^ val3 ^ x2val3 ^ x3val3; // {0d}.val3
 
-        new_col[2] = col[0] ^ xtime(xtime(col[0])) ^ xtime(xtime(xtime(col[0]))) // {0d}.col[0]
-                     ^ col[1] ^ xtime(xtime(xtime(col[1]))) // {09}.col[1]
-                     ^ xtime(col[2]) ^ xtime(xtime(col[2])) ^ xtime(xtime(xtime(col[2]))) // {0e}.col[2]
-                     ^ col[3] ^ xtime(col[3]) ^ xtime(xtime(xtime(col[3]))); // {0b}.col[3]
+        new_col[2] = val0 ^ x2val0 ^ x3val0 // {0d}.val0
+                     ^ val1 ^ x3val1 // {09}.val1
+                     ^ xval2 ^ x2val2 ^ x3val2 // {0e}.val2
+                     ^ val3 ^ xval3 ^ x3val3; // {0b}.val3
 
-        new_col[3] = col[0] ^ xtime(col[0]) ^ xtime(xtime(xtime(col[0]))) // {0b}.col[0]
-                     ^ col[1] ^ xtime(xtime(col[1])) ^ xtime(xtime(xtime(col[1]))) // {0d}.col[1]
-                     ^ col[2] ^ xtime(xtime(xtime(col[2]))) // {09}.col[2]
-                     ^ xtime(col[3]) ^ xtime(xtime(col[3])) ^ xtime(xtime(xtime(col[3]))); // {0e}.col[3]
+        new_col[3] = val0 ^ xval0 ^ x3val0 // {0b}.val0
+                     ^ val1 ^ x2val1 ^ x3val1 // {0d}.val1
+                     ^ val2 ^ x3val2 // {09}.val2
+                     ^ xval3 ^ x2val3 ^ x3val3; // {0e}.val3
 
         state_cols[i] = new;
     }
