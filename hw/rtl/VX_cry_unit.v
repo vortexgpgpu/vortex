@@ -29,6 +29,7 @@ module VX_cry_unit #(
     `UNUSED_VAR (cry_req_if.op_mod)
     `UNUSED_VAR (cry_req_if.use_PC)
     `UNUSED_VAR (cry_req_if.tid)
+    `UNUSED_VAR (cry_req_if.imm)
 
     wire stall_in, stall_out;
 
@@ -39,7 +40,7 @@ module VX_cry_unit #(
     wire [`NUM_THREADS-1:0][31:0] sha_sum0_result;
     wire [`NUM_THREADS-1:0][31:0] sha_sum1_result;
     wire [`NUM_THREADS-1:0][31:0] aes_result;
-    wire [`NUM_THREADS-1:0][31:0] ror_result;
+    reg [`NUM_THREADS-1:0][31:0] ror_result;
     wire [`NUM_THREADS-1:0][31:0] rol_result;
 
     wire [`CRY_MOD_BITS - 1:0] bytesel = `CRY_MOD(cry_req_if.op_mod);
@@ -103,13 +104,49 @@ module VX_cry_unit #(
         assign sha_sum1_result[i]  = `ROR32(cry_req_if.rs1_data[i],6) ^
                                     `ROR32(cry_req_if.rs1_data[i],11) ^
                                     `ROR32(cry_req_if.rs1_data[i],25);
-
-        assign ror_result[i]       = !cry_req_if.use_imm ?
-                                                `ROR32(cry_req_if.rs1_data[i],cry_req_if.rs2_data[i])
-                                                : `ROR32(cry_req_if.rs1_data[i],cry_req_if.imm);
+        always @ (*) begin
+            case (!cry_req_if.use_imm ? cry_req_if.rs2_data[i][4:0] : cry_req_if.imm[4:0])
+                5'b0: ror_result[i] = cry_req_if.rs1_data[i];
+                5'b1: ror_result[i] = {cry_req_if.rs1_data[i][0], cry_req_if.rs1_data[i][31:1]};
+                5'b10: ror_result[i] = {cry_req_if.rs1_data[i][1:0], cry_req_if.rs1_data[i][31:2]};
+                5'b11: ror_result[i] = {cry_req_if.rs1_data[i][2:0], cry_req_if.rs1_data[i][31:3]};
+                5'b100: ror_result[i] = {cry_req_if.rs1_data[i][3:0], cry_req_if.rs1_data[i][31:4]};
+                5'b101: ror_result[i] = {cry_req_if.rs1_data[i][4:0], cry_req_if.rs1_data[i][31:5]};
+                5'b110: ror_result[i] = {cry_req_if.rs1_data[i][5:0], cry_req_if.rs1_data[i][31:6]};
+                5'b111: ror_result[i] = {cry_req_if.rs1_data[i][6:0], cry_req_if.rs1_data[i][31:7]};
+                5'b1000: ror_result[i] = {cry_req_if.rs1_data[i][7:0], cry_req_if.rs1_data[i][31:8]};
+                5'b1001: ror_result[i] = {cry_req_if.rs1_data[i][8:0], cry_req_if.rs1_data[i][31:9]};
+                5'b1010: ror_result[i] = {cry_req_if.rs1_data[i][9:0], cry_req_if.rs1_data[i][31:10]};
+                5'b1011: ror_result[i] = {cry_req_if.rs1_data[i][10:0], cry_req_if.rs1_data[i][31:11]};
+                5'b1100: ror_result[i] = {cry_req_if.rs1_data[i][11:0], cry_req_if.rs1_data[i][31:12]};
+                5'b1101: ror_result[i] = {cry_req_if.rs1_data[i][12:0], cry_req_if.rs1_data[i][31:13]};
+                5'b1110: ror_result[i] = {cry_req_if.rs1_data[i][13:0], cry_req_if.rs1_data[i][31:14]};
+                5'b1111: ror_result[i] = {cry_req_if.rs1_data[i][14:0], cry_req_if.rs1_data[i][31:15]};
+                5'b10000: ror_result[i] = {cry_req_if.rs1_data[i][15:0], cry_req_if.rs1_data[i][31:16]};
+                5'b10001: ror_result[i] = {cry_req_if.rs1_data[i][16:0], cry_req_if.rs1_data[i][31:17]};
+                5'b10010: ror_result[i] = {cry_req_if.rs1_data[i][17:0], cry_req_if.rs1_data[i][31:18]};
+                5'b10011: ror_result[i] = {cry_req_if.rs1_data[i][18:0], cry_req_if.rs1_data[i][31:19]};
+                5'b10100: ror_result[i] = {cry_req_if.rs1_data[i][19:0], cry_req_if.rs1_data[i][31:20]};
+                5'b10101: ror_result[i] = {cry_req_if.rs1_data[i][20:0], cry_req_if.rs1_data[i][31:21]};
+                5'b10110: ror_result[i] = {cry_req_if.rs1_data[i][21:0], cry_req_if.rs1_data[i][31:22]};
+                5'b10111: ror_result[i] = {cry_req_if.rs1_data[i][22:0], cry_req_if.rs1_data[i][31:23]};
+                5'b11000: ror_result[i] = {cry_req_if.rs1_data[i][23:0], cry_req_if.rs1_data[i][31:24]};
+                5'b11001: ror_result[i] = {cry_req_if.rs1_data[i][24:0], cry_req_if.rs1_data[i][31:25]};
+                5'b11010: ror_result[i] = {cry_req_if.rs1_data[i][25:0], cry_req_if.rs1_data[i][31:26]};
+                5'b11011: ror_result[i] = {cry_req_if.rs1_data[i][26:0], cry_req_if.rs1_data[i][31:27]};
+                5'b11100: ror_result[i] = {cry_req_if.rs1_data[i][27:0], cry_req_if.rs1_data[i][31:28]};
+                5'b11101: ror_result[i] = {cry_req_if.rs1_data[i][28:0], cry_req_if.rs1_data[i][31:29]};
+                5'b11110: ror_result[i] = {cry_req_if.rs1_data[i][29:0], cry_req_if.rs1_data[i][31:30]};
+                5'b11111: ror_result[i] = {cry_req_if.rs1_data[i][30:0], cry_req_if.rs1_data[i][31:31]};
+            endcase
+        end
+        // assign ror_result[i]       = !cry_req_if.use_imm ?
+        //                                         `ROR32(cry_req_if.rs1_data[i],cry_req_if.rs2_data[i])
+        //                                         : `ROR32(cry_req_if.rs1_data[i],cry_req_if.imm);
         // assign rol_result[i]       = cry_req_if.use_imm ?
         //                                         `ROL32(cry_req_if.rs1_data[i],cry_req_if.rs2_data[i])
         //                                         : `ROL32(cry_req_if.rs1_data[i],cry_req_if.imm);
+
         assign rol_result[i] = 0;
     end
 
