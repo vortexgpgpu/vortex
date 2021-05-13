@@ -3,7 +3,6 @@
 #include <vx_intrinsics.h>
 #include "aes256.h"
 
-static void aes256_key_exp(const uint32_t *, uint32_t *, int);
 static void aes256_cipher(const uint8_t *, const uint8_t *, const uint8_t *,
                           uint8_t *, const uint32_t *);
 static void aes256_inv_cipher(const uint8_t *, const uint8_t *, uint8_t *,
@@ -23,32 +22,20 @@ static uint8_t s_box_replace(uint8_t);
 static uint8_t inv_s_box_replace(uint8_t);
 #endif
 
-void aes256_ecb_enc(const uint8_t *in, const uint8_t *key, uint8_t *out, int nblocks) {
-    uint32_t round_keys[Nb * (Nr + 1)];
-
-    aes256_key_exp((const uint32_t *)key, round_keys, 0);
-
+void aes256_ecb_enc(const uint8_t *in, const uint32_t *round_keys, uint8_t *out, int nblocks) {
     for (int b = 0; b < nblocks; b++) {
         aes256_cipher(NO_XOR, NO_XOR, in + (Nb * 4 * b), out + (Nb * 4 * b), round_keys);
     }
 }
 
-void aes256_ecb_dec(const uint8_t *in, const uint8_t *key, uint8_t *out, int nblocks) {
-    uint32_t round_keys[Nb * (Nr + 1)];
-
-    aes256_key_exp((const uint32_t *)key, round_keys, 1);
-
+void aes256_ecb_dec(const uint8_t *in, const uint32_t *round_keys, uint8_t *out, int nblocks) {
     for (int b = 0; b < nblocks; b++) {
         aes256_inv_cipher(NO_XOR, in + (Nb * 4 * b), out + (Nb * 4 * b), round_keys);
     }
 }
 
-void aes256_cbc_enc(const uint8_t *iv, const uint8_t *in, const uint8_t *key,
+void aes256_cbc_enc(const uint8_t *iv, const uint8_t *in, const uint32_t *round_keys,
                     uint8_t *out, int nblocks) {
-    uint32_t round_keys[Nb * (Nr + 1)];
-
-    aes256_key_exp((const uint32_t *)key, round_keys, 0);
-
     const uint8_t *next_iv = iv;
     for (int b = 0; b < nblocks; b++) {
         aes256_cipher(next_iv, NO_XOR, in + (Nb * 4 * b), out + (Nb * 4 * b), round_keys);
@@ -56,12 +43,8 @@ void aes256_cbc_enc(const uint8_t *iv, const uint8_t *in, const uint8_t *key,
     }
 }
 
-void aes256_cbc_dec(const uint8_t *iv, const uint8_t *in, const uint8_t *key,
+void aes256_cbc_dec(const uint8_t *iv, const uint8_t *in, const uint32_t *round_keys,
                     uint8_t *out, int nblocks) {
-    uint32_t round_keys[Nb * (Nr + 1)];
-
-    aes256_key_exp((const uint32_t *)key, round_keys, 1);
-
     const uint8_t *next_iv = iv;
     for (int b = 0; b < nblocks; b++) {
         aes256_inv_cipher(next_iv, in + (Nb * 4 * b), out + (Nb * 4 * b), round_keys);
@@ -70,12 +53,8 @@ void aes256_cbc_dec(const uint8_t *iv, const uint8_t *in, const uint8_t *key,
 }
 
 void aes256_ctr(const uint8_t *init_ctr, uint32_t start_block_idx,
-                const uint8_t *in, const uint8_t *key, uint8_t *out,
+                const uint8_t *in, const uint32_t *round_keys, uint8_t *out,
                 int nblocks) {
-    uint32_t round_keys[Nb * (Nr + 1)];
-
-    aes256_key_exp((const uint32_t *)key, round_keys, 0);
-
     uint8_t ctr[4 * Nb];
     memcpy(ctr, init_ctr, sizeof ctr);
     increment_128bit((uint32_t *)ctr, start_block_idx);
@@ -120,7 +99,7 @@ static void increment_128bit(uint32_t *limbs, uint32_t n) {
 }
 
 // Modified key schedule generation from Section 5.3.5 of the AES spec
-static void aes256_key_exp(const uint32_t *key, uint32_t *round_keys, int inv_mix_cols) {
+void aes256_key_exp(const uint32_t *key, uint32_t *round_keys, int inv_mix_cols) {
     // "Rcon[i] contains the values given by [x^{i-1},{00},{00},{00}]"
     // attempt to construct this in an endianness-safe way. note that
     // Rcon[0] is never accessed in the algorithm below
@@ -254,7 +233,7 @@ static uint32_t sub_word(uint32_t word) {
 }
 
 static inline uint32_t rot_word(uint32_t word) {
-#if defined(AES_NATIVE) || defined(AES_HYBRID)
+#ifdef AES_HYBRID
     // For endianness reasons, use rotr even though the algorithm
     // specifies an rotl
     return __intrin_rotr_imm(word, 8);

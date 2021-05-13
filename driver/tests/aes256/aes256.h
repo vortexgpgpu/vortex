@@ -14,12 +14,13 @@
 #define KEY_SIZE (4 * Nk)
 #define NO_XOR ((void *)-1)
 
-extern void aes256_ecb_enc(const uint8_t *, const uint8_t *, uint8_t *, int);
-extern void aes256_ecb_dec(const uint8_t *, const uint8_t *, uint8_t *, int);
-extern void aes256_cbc_enc(const uint8_t *, const uint8_t *, const uint8_t *,
+extern void aes256_key_exp(const uint32_t *, uint32_t *, int);
+extern void aes256_ecb_enc(const uint8_t *, const uint32_t *, uint8_t *, int);
+extern void aes256_ecb_dec(const uint8_t *, const uint32_t *, uint8_t *, int);
+extern void aes256_cbc_enc(const uint8_t *, const uint8_t *, const uint32_t *,
                            uint8_t *, int);
-extern void aes256_cbc_dec(const uint8_t *, const uint8_t *, const uint8_t *,
+extern void aes256_cbc_dec(const uint8_t *, const uint8_t *, const uint32_t *,
                            uint8_t *, int);
 extern void aes256_ctr(const uint8_t *, uint32_t, const uint8_t *,
-                       const uint8_t *, uint8_t *, int);
+                       const uint32_t *, uint8_t *, int);
 #endif

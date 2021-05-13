@@ -116,7 +116,9 @@ static int openssl_aes256(int enc, int ctr, const char *iv, const char *input,
 }
 
 static int openssl_aes256_op(aes_op_type_t op_type, char *iv, const char *input, const char *key,
-                             char *output, uint32_t buf_size) {
+                             char *output, uint32_t buf_size, int *no_ref_impl) {
+  *no_ref_impl = 0;
+
   switch (op_type) {
     case AES_OP_ECB_ENC: return openssl_aes256(1, 0, NULL, input, key, output, buf_size);
     case AES_OP_ECB_DEC: return openssl_aes256(0, 0, NULL, input, key, output, buf_size);
@@ -124,19 +126,28 @@ static int openssl_aes256_op(aes_op_type_t op_type, char *iv, const char *input,
     case AES_OP_CBC_DEC: return openssl_aes256(0, 0, iv, input, key, output, buf_size);
     case AES_OP_CTR_ENC: return openssl_aes256(1, 1, iv, input, key, output, buf_size);
     case AES_OP_CTR_DEC: return openssl_aes256(0, 1, iv, input, key, output, buf_size);
+
+    case AES_OP_KEY_ENC:
+    case AES_OP_KEY_DEC:
+        *no_ref_impl = 1;
+        std::cout << "skipping generating expected value for key expansion as "
+                     "we have no reference implementation" << std::endl;
+        return 0;
+
     default:
-      std::cout << "unsupported aes op " << aes_op_type << std::endl;
-      return 1;
+        std::cout << "unsupported aes op " << aes_op_type << std::endl;
+        return 1;
   }
 }
 
 int run_test(const kernel_arg_t& kernel_arg, const char *input,
              uint32_t buf_size) {
+  int no_ref_impl;
   char *expected_output = (char *)malloc(buf_size);
   RT_CHECK(!expected_output);
   RT_CHECK(openssl_aes256_op(aes_op_type, (char *)kernel_arg.iv, input,
                              (char *)kernel_arg.key, expected_output,
-                             buf_size));
+                             buf_size, &no_ref_impl));
 
   // start device
   std::cout << "start device" << std::endl;
@@ -146,25 +157,27 @@ int run_test(const kernel_arg_t& kernel_arg, const char *input,
   std::cout << "wait for completion" << std::endl;
   RT_CHECK(vx_ready_wait(device, -1));
 
-  // download newly-decrypted buffer
-  std::cout << "download output buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(buffer, kernel_arg.out_ptr, buf_size, 0));
+  if (!no_ref_impl) {
+      // download newly-decrypted buffer
+      std::cout << "download output buffer" << std::endl;
+      RT_CHECK(vx_copy_from_dev(buffer, kernel_arg.out_ptr, buf_size, 0));
 
-  // verify result
-  std::cout << "verify result" << std::endl;
-  int errors = 0;
-  {
-    auto buf_ptr = (char*)vx_host_ptr(buffer);
-    if (memcmp(buf_ptr, expected_output, buf_size)) {
-      std::cout << "output data does not match expected" << std::endl;
-      ++errors;
-    }
-  }
+      // verify result
+      std::cout << "verify result" << std::endl;
+      int errors = 0;
+      {
+        auto buf_ptr = (char*)vx_host_ptr(buffer);
+        if (memcmp(buf_ptr, expected_output, buf_size)) {
+          std::cout << "output data does not match expected" << std::endl;
+          ++errors;
+        }
+      }
 
-  if (errors != 0) {
-    std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
-    std::cout << "FAILED!" << std::endl;
-    return 1;
+      if (errors != 0) {
+        std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
+        std::cout << "FAILED!" << std::endl;
+        return 1;
+      }
   }
 
   free(expected_output);

@@ -4,6 +4,7 @@ VORTEX_RT_PATH ?= $(wildcard ../../../runtime)
 # 0 = ECB encrypt, 1 = ECB decrypt,
 # 2 = CBC encrypt, 3 = CBC decrypt,
 # 4 = CTR encrypt, 5 = CTR decrypt
+# 6 = key expansion for encrypt, 7 = key expansion for decrypt
 CRYPTO_OP_TYPE ?= 4
 # 16 threads * 1024 blocks/thread * 16B/block = 256KiB
 # See aes_op_type_t in common.h for the possible values for t
@@ -16,8 +17,9 @@ VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++
 VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
 VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
+comma=,
 VX_CFLAGS += -march=rv32imf -mabi=ilp32f -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections -Wall -Werror -Wextra
-VX_CFLAGS += -B$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/bin -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw -DAES_$(CRYPTO_ACCEL_MODE)
+VX_CFLAGS += -B$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/bin -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw -DAES_$(subst $(comma), -DAES_,$(CRYPTO_ACCEL_MODE))
 
 VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link.ld -Wl,--gc-sections $(VORTEX_RT_PATH)/libvortexrt.a
 
