@@ -150,26 +150,23 @@ module VX_cry_unit #(
         assign rol_result[i] = 0;
     end
 
-    
-
     wire [`CRY_BITS - 1:0] cry_op = `CRY_OP(cry_req_if.op_type);
-
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         always @(*) begin
-            case (cry_op)
-                `CRY_AES32ESI:      cry_result[i] = aes_result[i];
-                `CRY_AES32ESMI:     cry_result[i] = aes_result[i];
-                `CRY_AES32DSI:      cry_result[i] = aes_result[i];
-                `CRY_AES32DSMI:     cry_result[i] = aes_result[i];
-                `CRY_SHA256SUM0:    cry_result[i] = sha_sum0_result[i];
-                `CRY_SHA256SUM1:    cry_result[i] = sha_sum1_result[i];
-                `CRY_SHA256SIG0:    cry_result[i] = sha_sig0_result[i];
-                `CRY_SHA256SIG1:    cry_result[i] = sha_sig1_result[i];
-                `CRY_ROR:           cry_result[i] = ror_result[i];
-                `CRY_ROL:           cry_result[i] = rol_result[i];
-                default:            cry_result[i] = 32'hffff0000; // magic number for debugging
-            endcase
+            if (aes_valid_out) begin
+                cry_result[i] = aes_result[i];
+            end else begin
+                case (cry_op)
+                    `CRY_SHA256SUM0:    cry_result[i] = sha_sum0_result[i];
+                    `CRY_SHA256SUM1:    cry_result[i] = sha_sum1_result[i];
+                    `CRY_SHA256SIG0:    cry_result[i] = sha_sig0_result[i];
+                    `CRY_SHA256SIG1:    cry_result[i] = sha_sig1_result[i];
+                    `CRY_ROR:           cry_result[i] = ror_result[i];
+                    `CRY_ROL:           cry_result[i] = rol_result[i];
+                    default:            cry_result[i] = 32'hffff0000; // magic number for debugging
+                endcase
+            end
         end
     end
 
