@@ -134,6 +134,7 @@ int main(int argc, char *argv[]) {
 
   // Need to allocate enough space for sha256() to pad the message
   uint32_t padded_msgsize = PADDED_SIZE_BYTES(msgsize);
+  nmsg = nmsg / max_cores;
   uint32_t num_tasks = max_cores * max_warps * max_threads;
   uint32_t num_points = nmsg * num_tasks;
   uint32_t msgbuf_size = num_points * padded_msgsize;

@@ -1,8 +1,8 @@
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 VORTEX_RT_PATH ?= $(wildcard ../../../runtime)
 
-# 16 threads * 32 messages/thread * 512B/message = 256KiB
-OPTS ?= -n 32 -m 512
+# 16 threads * 32 messages/thread * 2KiB/message = 1MiB
+OPTS ?= -n 32 -m 2048
 # NATIVE, HYBRID, or SOFTWARE (although SOFTWARE is currently unused)
 CRYPTO_ACCEL_MODE ?= NATIVE
 
@@ -11,8 +11,9 @@ VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++
 VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
 VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
+comma=,
 VX_CFLAGS += -march=rv32imf -mabi=ilp32f -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
-VX_CFLAGS += -B$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/bin -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw -DSHA_$(CRYPTO_ACCEL_MODE)
+VX_CFLAGS += -B$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/bin -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw -DSHA_$(subst $(comma), -DSHA_,$(CRYPTO_ACCEL_MODE))
 
 VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link.ld -Wl,--gc-sections $(VORTEX_RT_PATH)/libvortexrt.a
 
