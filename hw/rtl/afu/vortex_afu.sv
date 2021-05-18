@@ -639,7 +639,7 @@ VX_avs_wrapper #(
   .AVS_ADDR_WIDTH  (LMEM_ADDR_WIDTH),
   .AVS_BURST_WIDTH (LMEM_BURST_CTRW),
   .AVS_BANKS       (NUM_LOCAL_MEM_BANKS),
-  .REQ_TAG_WIDTH   (AVS_REQ_TAGW+1),
+  .REQ_TAG_WIDTH   (AVS_REQ_TAGW + 1),
   .RD_QUEUE_SIZE   (AVS_RD_QUEUE_SIZE)
 ) avs_wrapper (
   .clk              (clk),
@@ -720,9 +720,9 @@ VX_pending_size #(
     .reset (reset),
     .push  (cci_rd_req_fire),
     .pop   (cci_rdq_pop),
-    `UNUSED_PIN (empty),
     .full  (cci_pending_reads_full),
-    .size  (cci_pending_reads)
+    .size  (cci_pending_reads),
+    `UNUSED_PIN (empty)
 );
 `UNUSED_VAR (cci_pending_reads)
 
