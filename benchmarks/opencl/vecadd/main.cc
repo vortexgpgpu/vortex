@@ -198,7 +198,8 @@ int main (int argc, char **argv) {
   for (int i = 0; i < size; ++i) {
     float ref = h_a[i] + h_b[i];
     if (!almost_equal(h_c[i], ref)) {
-      printf("*** error: [%d] expected=%f, actual=%f, a=%f, b=%f\n", i, ref, h_c[i], h_a[i], h_b[i]);
+      if (errors < 100) 
+        printf("*** error: [%d] expected=%f, actual=%f, a=%f, b=%f\n", i, ref, h_c[i], h_a[i], h_b[i]);
       ++errors;
     }
   }

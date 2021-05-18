@@ -220,7 +220,8 @@ int main (int argc, char **argv) {
   matmul(h_ref, h_a, h_b, size, size, size);
   for (int i = 0; i < (size * size); i++) {
     if (!almost_equal(h_c[i], h_ref[i])) {
-      printf("*** error: [%d] expected=%f, actual=%f\n", i, h_ref[i], h_c[i]);
+      if (errors < 100) 
+        printf("*** error: [%d] expected=%f, actual=%f\n", i, h_ref[i], h_c[i]);
       ++errors;
     }
   }  
