@@ -47,37 +47,39 @@ module VX_avs_wrapper #(
 
     // Requests handling
     
-    wire [NUM_BANKS-1:0] avs_reqq_pop;
+    wire [NUM_BANKS-1:0] avs_reqq_push, avs_reqq_pop, avs_reqq_ready;
     wire [NUM_BANKS-1:0] req_queue_going_full;
     wire [NUM_BANKS-1:0][RD_QUEUE_ADDR_WIDTH-1:0] req_queue_size;
     wire [NUM_BANKS-1:0][REQ_TAG_WIDTH-1:0] avs_reqq_data_out;
     
-    wire [BANK_ADDRW-1:0] req_bank_sel = (NUM_BANKS >= 2) ? mem_req_addr [BANK_ADDRW-1:0] : '0;
-
-    wire avs_reqq_push = mem_req_valid && !mem_req_rw && mem_req_ready;    
+    wire [BANK_ADDRW-1:0] req_bank_sel = (NUM_BANKS >= 2) ? mem_req_addr[BANK_ADDRW-1:0] : '0;
 
     for (genvar i = 0; i < NUM_BANKS; i++) begin
+        assign avs_reqq_ready[i] = !req_queue_going_full[i] && !avs_waitrequest[i];
+        assign avs_reqq_push[i] = mem_req_valid && !mem_req_rw && avs_reqq_ready[i] && (req_bank_sel == i);  
+    end
 
+    for (genvar i = 0; i < NUM_BANKS; i++) begin
         VX_pending_size #( 
             .SIZE (RD_QUEUE_SIZE)
         ) pending_size (
             .clk   (clk),
             .reset (reset),
-            .push  (avs_reqq_push && (req_bank_sel == i)),
-            .pop   (avs_reqq_pop[i]),
-            `UNUSED_PIN (empty),
+            .push  (avs_reqq_push[i]),
+            .pop   (avs_reqq_pop[i]),            
             .full  (req_queue_going_full[i]),
-            .size  (req_queue_size[i])
+            .size  (req_queue_size[i]),
+            `UNUSED_PIN (empty)
         ); 
         `UNUSED_VAR (req_queue_size)
         
         VX_fifo_queue #(
-            .DATAW   (REQ_TAG_WIDTH),
-            .SIZE    (RD_QUEUE_SIZE)
+            .DATAW (REQ_TAG_WIDTH),
+            .SIZE  (RD_QUEUE_SIZE)
         ) rd_req_queue (
             .clk      (clk),
             .reset    (reset),
-            .push     (avs_reqq_push && (req_bank_sel == i)),        
+            .push     (avs_reqq_push[i]),        
             .pop      (avs_reqq_pop[i]),
             .data_in  (mem_req_tag),
             .data_out (avs_reqq_data_out[i]),
@@ -98,7 +100,7 @@ module VX_avs_wrapper #(
         assign avs_burstcount[i] = AVS_BURST_WIDTH'(1);
     end
 
-    assign mem_req_ready = !(avs_waitrequest[req_bank_sel] || req_queue_going_full[req_bank_sel]);
+    assign mem_req_ready = avs_reqq_ready[req_bank_sel];
 
     // Responses handling
 
@@ -110,10 +112,9 @@ module VX_avs_wrapper #(
     wire [NUM_BANKS-1:0] avs_rspq_empty;
 
     for (genvar i = 0; i < NUM_BANKS; i++) begin
-
         VX_fifo_queue #(
-            .DATAW   (AVS_DATA_WIDTH),
-            .SIZE    (RD_QUEUE_SIZE)
+            .DATAW (AVS_DATA_WIDTH),
+            .SIZE  (RD_QUEUE_SIZE)
         ) rd_rsp_queue (
             .clk      (clk),
             .reset    (reset),
@@ -127,7 +128,6 @@ module VX_avs_wrapper #(
             `UNUSED_PIN (alm_full),
             `UNUSED_PIN (size)
         );
-
     end     
     
     for (genvar i = 0; i < NUM_BANKS; i++) begin
@@ -138,8 +138,8 @@ module VX_avs_wrapper #(
 
     VX_stream_arbiter #(
         .NUM_REQS (NUM_BANKS),
-        .DATAW    (AVS_DATA_WIDTH+REQ_TAG_WIDTH),
-        .BUFFERED (0)
+        .DATAW    (AVS_DATA_WIDTH + REQ_TAG_WIDTH),
+        .BUFFERED (NUM_BANKS > 2)
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),
