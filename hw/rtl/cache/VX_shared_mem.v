@@ -156,9 +156,14 @@ module VX_shared_mem #(
         `UNUSED_PIN (size)
     );
 
-    wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0] per_bank_core_rsp_data;    
+    wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0] per_bank_core_rsp_data; 
 
     for (genvar i = 0; i < NUM_BANKS; i++) begin
+
+        wire wren = per_bank_core_req_rw[i] 
+                 && per_bank_core_req_valid[i]
+                 && creq_pop;
+
         VX_sp_ram #(
             .DATAW   (`WORD_WIDTH),
             .SIZE    (`LINES_PER_BANK),
@@ -167,7 +172,7 @@ module VX_shared_mem #(
         ) data (
             .clk    (clk),
             .addr   (per_bank_core_req_addr[i]),          
-            .wren   (per_bank_core_req_valid[i] && per_bank_core_req_rw[i]),  
+            .wren   (wren),  
             .byteen (per_bank_core_req_byteen[i]),
             .rden   (1'b1),
             .din    (per_bank_core_req_data[i]),
@@ -228,10 +233,19 @@ module VX_shared_mem #(
             $display("%t: cache%0d pipeline-stall", $time, CACHE_ID);
         end
         if (creq_pop) begin
-            if (core_rsp_rw)
-                $display("%t: cache%0d core-wr-req: tmask=%0b, addr=%0h, tag=%0h, byteen=%b, data=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, per_bank_core_req_valid, per_bank_core_req_addr, per_bank_core_req_tag, per_bank_core_req_byteen, per_bank_core_req_data, debug_wid_st0, debug_pc_st0);
-            else
-                $display("%t: cache%0d core-rd-req: tmask=%0b, addr=%0h, tag=%0h, byteen=%b, data=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, per_bank_core_req_valid, per_bank_core_req_addr, per_bank_core_req_tag, per_bank_core_req_byteen, per_bank_core_rsp_data, debug_wid_st0, debug_pc_st0);
+            if (core_rsp_rw) begin
+                $write("%t: cache%0d core-wr-req: tmask=%0b, addr=", $time, CACHE_ID, per_bank_core_req_valid);
+            end else begin
+                $write("%t: cache%0d core-rd-req: tmask=%0b, addr=", $time, CACHE_ID, per_bank_core_req_valid);
+            end
+            `PRINT_ARRAY1D(per_bank_core_req_addr, `NUM_THREADS);
+            $write(", tag=%0h, byteen=%b, data=", per_bank_core_req_tag, per_bank_core_req_byteen);
+            if (core_rsp_rw) begin
+                `PRINT_ARRAY1D(per_bank_core_req_data, `NUM_THREADS);
+            end else begin
+                `PRINT_ARRAY1D(per_bank_core_rsp_data, `NUM_THREADS);
+            end
+            $write(", wid=%0d, PC=%0h\n", debug_wid_st0, debug_pc_st0);
         end
     end    
 `endif
