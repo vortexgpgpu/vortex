@@ -54,10 +54,11 @@ module VX_databus_arb (
         if (`SM_ENABLE ) begin
             assign cache_req_if.valid[i] = cache_req_valid_out && ~is_smem_addr_out;
             assign smem_req_if.valid[i]  = cache_req_valid_out && is_smem_addr_out;
-            assign cache_req_ready_out   = is_smem_addr_out ? smem_req_if.ready[i] : cache_req_if.ready[i];
+            assign cache_req_ready_out   = (cache_req_if.ready[i] && ~is_smem_addr_out) 
+                                        || (smem_req_if.ready[i] && is_smem_addr_out);
             
             assign smem_req_if.addr[i]   = cache_req_if.addr[i];
-            assign smem_req_if.rw[i]     =  cache_req_if.rw[i];
+            assign smem_req_if.rw[i]     = cache_req_if.rw[i];
             assign smem_req_if.byteen[i] = cache_req_if.byteen[i];
             assign smem_req_if.data[i]   = cache_req_if.data[i];
             assign smem_req_if.tag[i]    = cache_req_if.tag[i];
