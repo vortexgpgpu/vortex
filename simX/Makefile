@@ -1,11 +1,9 @@
 #CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors 
 CXXFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
 
-CXXFLAGS += -Wno-aligned-new -Wno-maybe-uninitialized
+CXXFLAGS += -Wno-maybe-uninitialized
 CXXFLAGS += -I. -I../hw
 CXXFLAGS += -DDUMP_PERF_STATS
-
-LDFLAGS +=
 
 TOP = vx_cache_sim
 

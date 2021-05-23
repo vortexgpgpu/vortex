@@ -1,7 +1,7 @@
 CFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors
 #CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
 
-CFLAGS += -Wno-aligned-new -Wno-maybe-uninitialized
+CFLAGS += -Wno-maybe-uninitialized
 
 CFLAGS += -I../..
 

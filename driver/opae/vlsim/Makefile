@@ -1,8 +1,7 @@
 CFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors
 #CFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
 
-CFLAGS += -Wno-aligned-new -Wno-maybe-uninitialized
-
+CFLAGS += -DUSE_VLSIM -fPIC -Wno-maybe-uninitialized
 CFLAGS += -I../../../../hw
 
 # control RTL debug print states
@@ -21,15 +20,9 @@ DBG_PRINT_FLAGS += -DDBG_PRINT_SCOPE
 DBG_FLAGS += $(DBG_PRINT_FLAGS)
 DBG_FLAGS += -DDBG_CACHE_REQ_INFO
 
-#CONFIGS := -DNUM_CLUSTERS=2 -DNUM_CORES=4 -DL2_ENABLE=1 $(CONFIGS)
-#CONFIGS := -DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=1 $(CONFIGS)
-#CONFIGS := -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0 $(CONFIGS)
-CONFIGS := -DNUM_CLUSTERS=1 -DNUM_CORES=1 $(CONFIGS)
+CONFIGS ?= -DNUM_CLUSTERS=1 -DNUM_CORES=1
 
-CFLAGS += -fPIC
-
-CFLAGS += -DUSE_VLSIM $(CONFIGS)
-
+CFLAGS += $(CONFIGS)
 CFLAGS += -DDUMP_PERF_STATS
 
 LDFLAGS += -shared -pthread
