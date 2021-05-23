@@ -6,16 +6,13 @@ SIMX_DIR = ../../simX
 CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors 
 #CXXFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
 
-CXXFLAGS += -fPIC -Wno-aligned-new -Wno-maybe-uninitialized
+CXXFLAGS += -DUSE_SIMX -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I../include -I../../hw -I$(SIMX_DIR)
-CXXFLAGS += -DDUMP_PERF_STATS
 
-#CONFIGS := -DNUM_CLUSTERS=2 -DNUM_CORES=4 -DL2_ENABLE=1 $(CONFIGS)
-#CONFIGS := -DNUM_CLUSTERS=1 -DNUM_CORES=4 -DL2_ENABLE=1 $(CONFIGS)
-#CONFIGS := -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0 $(CONFIGS)
-CONFIGS := -DNUM_CLUSTERS=1 -DNUM_CORES=1 $(CONFIGS)
+CONFIGS ?= -DNUM_CLUSTERS=1 -DNUM_CORES=1
 
 CXXFLAGS += $(CONFIGS)
+CXXFLAGS += -DDUMP_PERF_STATS
 
 LDFLAGS += -shared -pthread
 #LDFLAGS += -dynamiclib -pthread
