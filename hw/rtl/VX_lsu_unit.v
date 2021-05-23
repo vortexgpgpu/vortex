@@ -306,7 +306,7 @@ module VX_lsu_unit #(
             $write("%t: D$%0d Rsp: valid=%b, wid=%0d, PC=%0h, tag=%0h, rd=%0d, data=", 
                 $time, CORE_ID, dcache_rsp_if.valid, rsp_wid, rsp_pc, dcache_rsp_if.tag, rsp_rd);
             `PRINT_ARRAY1D(dcache_rsp_if.data, `NUM_THREADS);
-            $write("is_dup=%b\n", rsp_is_dup);
+            $write(", is_dup=%b\n", rsp_is_dup);
         end
         if (mbuf_full) begin
             $write("%t: *** D$%0d queue-full:", $time, CORE_ID);
