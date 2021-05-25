@@ -11,7 +11,6 @@ make -s
 ./ci/test_opencl.sh
 ./ci/test_driver.sh  
 ./ci/test_simx.sh
-#./ci/test_compiler.sh
 
 # warp/threads configurations
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=2 --threads=2 --app=demo
