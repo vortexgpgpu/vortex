@@ -21,6 +21,7 @@ install:
  
 script:     
   - ./ci/regression.sh
+  - ./ci/test_compiler.sh
   
 after_success:
   # Gather code coverage
