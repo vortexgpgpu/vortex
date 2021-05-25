@@ -87,8 +87,8 @@ module VX_to_mem #(
 
         reg [P-1:0][DST_DATA_WIDTH-1:0] mem_rsp_data_out_r, mem_rsp_data_out_n;
 
-        wire mem_req_fire_out = mem_req_valid_out && mem_req_ready_out;
-        wire mem_rsp_fire_in = mem_rsp_valid_in && mem_rsp_ready_in;     
+        wire mem_req_out_fire = mem_req_valid_out && mem_req_ready_out;
+        wire mem_rsp_in_fire = mem_rsp_valid_in && mem_rsp_ready_in;     
 
         wire [P-1:0][DST_DATA_WIDTH-1:0] mem_req_data_in_w = mem_req_data_in;
         wire [P-1:0][DST_DATA_SIZE-1:0] mem_req_byteen_in_w = mem_req_byteen_in;
@@ -103,10 +103,10 @@ module VX_to_mem #(
                 req_ctr <= 0;
                 rsp_ctr <= 0;
             end else begin
-                if (mem_req_fire_out) begin
+                if (mem_req_out_fire) begin
                     req_ctr <= req_ctr + 1;
                 end
-                if (mem_rsp_fire_in) begin
+                if (mem_rsp_in_fire) begin
                     rsp_ctr <= rsp_ctr + 1;
                     mem_rsp_data_out_r <= mem_rsp_data_out_n;
                 end
@@ -117,7 +117,7 @@ module VX_to_mem #(
         wire [DST_TAG_WIDTH-1:0] mem_rsp_tag_in_w;
         
         always @(posedge clk) begin
-            if (mem_rsp_fire_in) begin
+            if (mem_rsp_in_fire) begin
                 mem_rsp_tag_in_r <= mem_rsp_tag_in;
             end 
         end
