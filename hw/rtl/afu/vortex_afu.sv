@@ -673,13 +673,14 @@ reg [CCI_ADDR_WIDTH-1:0] cci_mem_wr_req_ctr;
 wire [CCI_ADDR_WIDTH-1:0] cci_mem_wr_req_addr;
 reg [CCI_ADDR_WIDTH-1:0] cci_mem_wr_req_addr_unqual;
 reg [CCI_ADDR_WIDTH-1:0] cci_rd_req_ctr;
+wire [CCI_ADDR_WIDTH-1:0] cci_rd_req_ctr_next;
 wire [CCI_RD_RQ_TAGW-1:0] cci_rd_req_tag;
 wire [CCI_RD_RQ_TAGW-1:0] cci_rd_rsp_tag;
 reg [CCI_RD_RQ_TAGW-1:0] cci_rd_rsp_ctr;
 
 wire cci_rd_req_fire;
 t_ccip_clAddr cci_rd_req_addr;
-reg cci_rd_req_enable, cci_rd_req_wait;
+reg cci_rd_req_valid, cci_rd_req_wait;
 
 wire cci_rdq_push, cci_rdq_pop;
 wire [CCI_RD_RQ_DATAW-1:0] cci_rdq_din;
@@ -720,7 +721,9 @@ VX_pending_size #(
 );
 `UNUSED_VAR (cci_pending_reads)
 
-assign cci_rd_req_fire = cci_rd_req_enable && !(cci_rd_req_wait || cci_pending_reads_full);
+assign cci_rd_req_ctr_next = cci_rd_req_ctr + CCI_ADDR_WIDTH'(cci_rd_req_fire ? 1 : 0);
+
+assign cci_rd_req_fire = cci_rd_req_valid && !(cci_rd_req_wait || cci_pending_reads_full);
 
 assign cci_mem_wr_req_valid = !cci_rdq_empty;
 
@@ -731,18 +734,18 @@ assign cmd_write_done = (cci_mem_wr_req_ctr == cmd_data_size);
 // Send read requests to CCI
 always @(posedge clk) begin
   if (reset) begin
-    cci_rd_req_enable <= 0;
-    cci_rd_req_wait   <= 0;
+    cci_rd_req_valid <= 0;
+    cci_rd_req_wait  <= 0;
   end else begin              
     if ((STATE_IDLE == state) 
     &&  (CMD_MEM_WRITE == cmd_type)) begin
-      cci_rd_req_enable <= (cmd_data_size != 0);
-      cci_rd_req_wait   <= 0;
+      cci_rd_req_valid <= (cmd_data_size != 0);
+      cci_rd_req_wait  <= 0;
     end
 
-    cci_rd_req_enable <= (STATE_WRITE == state)                       
-                      && (cci_rd_req_ctr != cmd_data_size)
-                      && !cp2af_sRxPort.c0TxAlmFull;    
+    cci_rd_req_valid <= (STATE_WRITE == state)                       
+                     && (cci_rd_req_ctr_next != cmd_data_size)
+                     && !cp2af_sRxPort.c0TxAlmFull;    
 
     if (cci_rd_req_fire && (cci_rd_req_tag == CCI_RD_RQ_TAGW'(CCI_RD_WINDOW_SIZE-1))) begin
       cci_rd_req_wait <= 1; // end current request batch
