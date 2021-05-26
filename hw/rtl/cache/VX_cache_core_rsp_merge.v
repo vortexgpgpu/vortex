@@ -43,6 +43,10 @@ module VX_cache_core_rsp_merge #(
                 
         if (CORE_TAG_ID_BITS != 0) begin
 
+            // The core response bus handles a single tag at the time
+            // We first need to select the current tag to process,
+            // then send all bank responses for that tag as a batch
+
             reg [CORE_TAG_WIDTH-1:0] core_rsp_tag_unqual;
             wire core_rsp_ready_unqual;
 
