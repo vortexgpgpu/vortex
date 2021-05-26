@@ -6,9 +6,22 @@
 #define RESET_DELAY 4
 
 #define ENABLE_MEM_STALLS
+
+#ifndef MEM_LATENCY
 #define MEM_LATENCY 24
+#endif
+
+#ifndef MEM_RQ_SIZE
 #define MEM_RQ_SIZE 16
+#endif
+
+#ifndef MEM_STALLS_MODULO
 #define MEM_STALLS_MODULO 16
+#endif
+
+#ifndef VERILATOR_RESET_VALUE
+#define VERILATOR_RESET_VALUE 2
+#endif
 
 #define VL_WDATA_GETW(lwp, i, n, w) \
   VL_SEL_IWII(0, n * w, 0, 0, lwp, i * w, w)
@@ -21,7 +34,7 @@ double sc_time_stamp() {
 
 Simulator::Simulator() {  
   // force random values for unitialized signals  
-  Verilated::randReset(2);
+  Verilated::randReset(VERILATOR_RESET_VALUE);
   Verilated::randSeed(50);
 
   // Turn off assertion before reset

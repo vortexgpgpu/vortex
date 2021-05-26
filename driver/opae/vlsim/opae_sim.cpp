@@ -11,9 +11,22 @@
 #define RESET_DELAY 4
 
 #define ENABLE_MEM_STALLS
+
+#ifndef MEM_LATENCY
 #define MEM_LATENCY 24
+#endif
+
+#ifndef MEM_RQ_SIZE
 #define MEM_RQ_SIZE 16
+#endif
+
+#ifndef MEM_STALLS_MODULO
 #define MEM_STALLS_MODULO 16
+#endif
+
+#ifndef VERILATOR_RESET_VALUE
+#define VERILATOR_RESET_VALUE 2
+#endif
 
 uint64_t timestamp = 0;
 
@@ -23,7 +36,7 @@ double sc_time_stamp() {
 
 opae_sim::opae_sim() {  
   // force random values for unitialized signals  
-  Verilated::randReset(2);
+  Verilated::randReset(VERILATOR_RESET_VALUE);
   Verilated::randSeed(50);
 
   // Turn off assertion before reset
