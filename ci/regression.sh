@@ -51,7 +51,14 @@ CONFIGS=-DMEM_BLOCK_SIZE=16 ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
 CONFIGS="-DMEM_BLOCK_SIZE=16 -DPLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH=128 -DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=28 -DPLATFORM_PARAM_LOCAL_MEMORY_BANKS=1" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
 
 # test 27-bit DRAM address
-CONFIGS=-DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=27 ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
+CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=27" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
 
 # test 128-bit DRAM block
 CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_BANKS=1 -DPLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH=128 -DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=28" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
+
+# test verilator reset values
+CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=vlsim --cores=4 --app=sgemm
+CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=vlsim --cores=4 --app=sgemm
+
+# test vlsim memory stress
+CONFIGS="-DMEM_LATENCY=100 -DMEM_RQ_SIZE=4 -DMEM_STALLS_MODULO=4" ./ci/blackbox.sh --driver=vlsim --cores=4 --app=sgemm
