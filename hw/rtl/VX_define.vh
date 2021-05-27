@@ -298,8 +298,8 @@
 `define DCORE_TAG_WIDTH         (`DBG_CACHE_REQ_MDATAW + `LSUQ_ADDR_BITS)
 `endif
 
-// DRAM request data bits
-`define DDRAM_LINE_WIDTH        (`DCACHE_LINE_SIZE * 8)
+// Memory request data bits
+`define DMEM_LINE_WIDTH         (`DCACHE_LINE_SIZE * 8)
 
 // Memory request address bits
 `define DMEM_ADDR_WIDTH         (32 - `CLOG2(`DCACHE_LINE_SIZE))

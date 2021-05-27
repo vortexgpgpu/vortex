@@ -132,8 +132,8 @@ module VX_lsu_unit #(
     wire is_req_start = (0 == req_sent_mask);
 
     // need to hold the acquired tag index until the full request is submitted
-    reg [`DCORE_TAG_ID_BITS-1:0] req_tag_hold;
-    wire [`DCORE_TAG_ID_BITS-1:0] req_tag = is_req_start ? mbuf_waddr : req_tag_hold;
+    reg [`LSUQ_ADDR_BITS-1:0] req_tag_hold;
+    wire [`LSUQ_ADDR_BITS-1:0] req_tag = is_req_start ? mbuf_waddr : req_tag_hold;
     always @(posedge clk) begin
         if (mbuf_push) begin            
             req_tag_hold <= mbuf_waddr;
