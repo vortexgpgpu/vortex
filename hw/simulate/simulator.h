@@ -48,23 +48,23 @@ private:
 
   typedef struct {
     int cycles_left;  
-    std::array<uint8_t, GLOBAL_BLOCK_SIZE> block;
+    std::array<uint8_t, MEM_BLOCK_SIZE> block;
     uint32_t addr;
     uint32_t tag;
-  } dram_req_t;
+  } mem_req_t;
 
   std::unordered_map<int, std::stringstream> print_bufs_;
 
   void eval();  
 
-  void eval_dram_bus();
+  void eval_mem_bus();
   void eval_io_bus();
   void eval_csr_bus();
   
-  std::list<dram_req_t> dram_rsp_vec_;
-  bool dram_rsp_active_;
+  std::list<mem_req_t> mem_rsp_vec_;
+  bool mem_rsp_active_;
 
-  bool dram_rsp_ready_;  
+  bool mem_rsp_ready_;  
   bool csr_req_ready_;
   bool csr_req_active_;
   uint32_t* csr_rsp_value_;

@@ -18,10 +18,10 @@ install:
   - export RISCV_TOOLCHAIN_PATH=/opt/riscv-gnu-toolchain
   - export VERILATOR_ROOT=/opt/verilator
   - export PATH=$VERILATOR_ROOT/bin:$PATH 
-  - make -s
-
+ 
 script:     
   - ./ci/regression.sh
+  - ./ci/test_compiler.sh
   
 after_success:
   # Gather code coverage

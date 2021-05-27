@@ -77,36 +77,37 @@ module ccip_std_afu #(
     // User AFU goes here
     // ====================================================================
 
-    //
-    // vortex_afu depends on CCI-P and local memory being in the same
-    // clock domain.  This is accomplished by choosing a common clock
-    // in the AFU's JSON description.  The platform instantiates clock-
-    // crossing shims automatically, as needed.
-    //
+    t_local_mem_byte_mask avs_byteenable [NUM_LOCAL_MEM_BANKS];
+    logic                 avs_waitrequest [NUM_LOCAL_MEM_BANKS];
+    t_local_mem_data      avs_readdata [NUM_LOCAL_MEM_BANKS];
+    logic                 avs_readdatavalid [NUM_LOCAL_MEM_BANKS];
+    t_local_mem_burst_cnt avs_burstcount [NUM_LOCAL_MEM_BANKS];
+    t_local_mem_data      avs_writedata [NUM_LOCAL_MEM_BANKS];
+    t_local_mem_addr      avs_address [NUM_LOCAL_MEM_BANKS];
+    logic                 avs_write [NUM_LOCAL_MEM_BANKS];
+    logic                 avs_read [NUM_LOCAL_MEM_BANKS];    
 
-    //
-    // Memory banks are used very simply here.  Only bank is active at
-    // a time, selected by mem_bank_select.  mem_bank_select is set
-    // by a CSR from the host.
-    //
-    t_local_mem_byte_mask avs_byteenable;
-    logic                 avs_waitrequest;
-    t_local_mem_data      avs_readdata;
-    logic                 avs_readdatavalid;
-    t_local_mem_burst_cnt avs_burstcount;
-    t_local_mem_data      avs_writedata;
-    t_local_mem_addr      avs_address;
-    logic                 avs_write;
-    logic                 avs_read;
-
-    // choose which memory bank to test
-    logic [$clog2(NUM_LOCAL_MEM_BANKS)-1:0] mem_bank_select;
+    for (genvar b = 0; b < NUM_LOCAL_MEM_BANKS; b++) begin
+        assign local_mem[b].burstcount = avs_burstcount[b];
+        assign local_mem[b].writedata  = avs_writedata[b];
+        assign local_mem[b].address    = avs_address[b];
+        assign local_mem[b].byteenable = avs_byteenable[b];
+        assign local_mem[b].write      = avs_write[b];
+        assign local_mem[b].read       = avs_read[b];
+        
+        assign avs_waitrequest[b]   = local_mem[b].waitrequest;
+        assign avs_readdata[b]      = local_mem[b].readdata;
+        assign avs_readdatavalid[b] = local_mem[b].readdatavalid;
+    end
 
     vortex_afu #(
         .NUM_LOCAL_MEM_BANKS(NUM_LOCAL_MEM_BANKS)
     ) afu (
         .clk                 (clk),
         .reset               (reset_T1),
+
+        .cp2af_sRxPort       (cp2af_sRx_T1),
+        .af2cp_sTxPort       (af2cp_sTx_T0),        
 
         .avs_writedata       (avs_writedata),
         .avs_readdata        (avs_readdata),
@@ -116,52 +117,7 @@ module ccip_std_afu #(
         .avs_read            (avs_read),
         .avs_byteenable      (avs_byteenable),
         .avs_burstcount      (avs_burstcount),
-        .avs_readdatavalid   (avs_readdatavalid),
-        .mem_bank_select     (mem_bank_select),
-
-        .cp2af_sRxPort       (cp2af_sRx_T1),
-        .af2cp_sTxPort       (af2cp_sTx_T0)
-        );
-
-    // 
-    // Export the local memory interface signals as vectors so that bank
-    // selection can use array syntax.
-    //
-    logic             avs_waitrequest_v[NUM_LOCAL_MEM_BANKS];
-    t_local_mem_data  avs_readdata_v[NUM_LOCAL_MEM_BANKS];
-    logic             avs_readdatavalid_v[NUM_LOCAL_MEM_BANKS];
-
-    genvar b;
-    generate
-        for (b = 0; b < NUM_LOCAL_MEM_BANKS; b = b + 1)
-        begin : lmb
-            always_comb
-            begin
-                // Local memory to AFU signals
-                avs_waitrequest_v[b] = local_mem[b].waitrequest;
-                avs_readdata_v[b] = local_mem[b].readdata;
-                avs_readdatavalid_v[b] = local_mem[b].readdatavalid;
-
-                // Replicate address and write data to all banks.  Only
-                // the request signals have to be bank-specific.
-                local_mem[b].burstcount = avs_burstcount;
-                local_mem[b].writedata = avs_writedata;
-                local_mem[b].address = avs_address;
-                local_mem[b].byteenable = avs_byteenable;
-
-                // Request a write to this bank?
-                local_mem[b].write = avs_write &&
-                                     ($bits(mem_bank_select)'(b) == mem_bank_select);
-
-                // Request a read from this bank?
-                local_mem[b].read =  avs_read &&
-                                     ($bits(mem_bank_select)'(b) == mem_bank_select);
-            end
-        end
-    endgenerate
-
-    assign avs_waitrequest   = avs_waitrequest_v[mem_bank_select];
-    assign avs_readdata      = avs_readdata_v[mem_bank_select];
-    assign avs_readdatavalid = avs_readdatavalid_v[mem_bank_select];
+        .avs_readdatavalid   (avs_readdatavalid)
+    );
 
 endmodule

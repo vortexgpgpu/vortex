@@ -34,7 +34,7 @@ module VX_smem_arb (
         wire is_smem_addr_in, is_smem_addr_out;
 
         // select shared memory bus
-        assign is_smem_addr_in = core_req_if.valid[i] && `SM_ENABLE
+        assign is_smem_addr_in = `SM_ENABLE
                              && (core_req_if.addr[i][REQ_ADDRW-1:SMEM_ASHIFT-REQ_ASHIFT] >= (32-SMEM_ASHIFT)'((`SHARED_MEM_BASE_ADDR - `SMEM_SIZE) >> SMEM_ASHIFT))
                              && (core_req_if.addr[i][REQ_ADDRW-1:SMEM_ASHIFT-REQ_ASHIFT] < (32-SMEM_ASHIFT)'(`SHARED_MEM_BASE_ADDR >> SMEM_ASHIFT));
 
@@ -51,13 +51,13 @@ module VX_smem_arb (
             .ready_out (cache_req_ready_out)
         );
 
-        if (`SM_ENABLE ) begin
+        if (`SM_ENABLE) begin
             assign cache_req_if.valid[i] = cache_req_valid_out && ~is_smem_addr_out;
             assign smem_req_if.valid[i]  = cache_req_valid_out && is_smem_addr_out;
             assign cache_req_ready_out   = is_smem_addr_out ? smem_req_if.ready[i] : cache_req_if.ready[i];
             
             assign smem_req_if.addr[i]   = cache_req_if.addr[i];
-            assign smem_req_if.rw[i]     =  cache_req_if.rw[i];
+            assign smem_req_if.rw[i]     = cache_req_if.rw[i];
             assign smem_req_if.byteen[i] = cache_req_if.byteen[i];
             assign smem_req_if.data[i]   = cache_req_if.data[i];
             assign smem_req_if.tag[i]    = cache_req_if.tag[i];

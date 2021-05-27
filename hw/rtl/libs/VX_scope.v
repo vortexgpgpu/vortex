@@ -94,13 +94,13 @@ module VX_scope #(
                         delay_val <= $bits(delay_val)'(cmd_data); 
                         cmd_start <= 1;
                     `ifdef DBG_PRINT_SCOPE
-                        $display("*** scope:CMD_SET_START: delay_val=%0d", $bits(delay_val)'(cmd_data));
+                        $display("%t: *** scope: CMD_SET_START: delay_val=%0d", $time, $bits(delay_val)'(cmd_data));
                     `endif
                     end
                     CMD_SET_STOP: begin
                         waddr_end <= $bits(waddr)'(cmd_data);
                     `ifdef DBG_PRINT_SCOPE
-                        $display("*** scope:CMD_SET_STOP: waddr_end=%0d", $bits(waddr)'(cmd_data));
+                        $display("%t: *** scope: CMD_SET_STOP: waddr_end=%0d", $time, $bits(waddr)'(cmd_data));
                     `endif
                     end
                     default:;
@@ -117,7 +117,7 @@ module VX_scope #(
                     delay_cntr  <= 0;
                     start_time  <= timestamp;
                 `ifdef DBG_PRINT_SCOPE
-                    $display("*** scope: recording start - start_time=%0d", timestamp);
+                    $display("%t: *** scope: recording start - start_time=%0d", $time, timestamp);
                 `endif
                 end else begin
                     start_wait <= 1;
@@ -133,7 +133,7 @@ module VX_scope #(
                     delta      <= 0;
                     start_time <= timestamp;
                 `ifdef DBG_PRINT_SCOPE
-                    $display("*** scope: recording start - start_time=%0d", timestamp);
+                    $display("%t: *** scope: recording start - start_time=%0d", $time, timestamp);
                 `endif
                 end 
             end
@@ -162,7 +162,7 @@ module VX_scope #(
                 if (stop
                  || (waddr >= waddr_end)) begin
                 `ifdef DBG_PRINT_SCOPE
-                    $display("*** scope: recording stop - waddr=(%0d, %0d)", waddr, waddr_end);
+                    $display("%t: *** scope: recording stop - waddr=(%0d, %0d)", $time, waddr, waddr_end);
                 `endif
                     waddr      <= waddr;  // keep last address
                     recording  <= 0;

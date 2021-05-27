@@ -1,6 +1,8 @@
 `include "VX_cache_define.vh"
 
 module VX_cache_core_rsp_merge #(
+    parameter CACHE_ID          = 0,
+
     // Number of Word requests per cycle
     parameter NUM_REQS          = 1, 
     // Number of banks
@@ -31,6 +33,8 @@ module VX_cache_core_rsp_merge #(
     output wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]     core_rsp_data,      
     input  wire [`CORE_REQ_TAG_COUNT-1:0]           core_rsp_ready
 );
+    `UNUSED_PARAM (CACHE_ID)
+
     if (NUM_BANKS > 1) begin
 
         reg [NUM_REQS-1:0] core_rsp_valid_unqual;
@@ -38,6 +42,10 @@ module VX_cache_core_rsp_merge #(
         reg [NUM_BANKS-1:0] core_rsp_bank_select;
                 
         if (CORE_TAG_ID_BITS != 0) begin
+
+            // The core response bus handles a single tag at the time
+            // We first need to select the current tag to process,
+            // then send all bank responses for that tag as a batch
 
             reg [CORE_TAG_WIDTH-1:0] core_rsp_tag_unqual;
             wire core_rsp_ready_unqual;

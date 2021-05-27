@@ -29,10 +29,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h> 
 #include <chrono>
-
-//#define NUM_DATA 65536
-#define NUM_DATA 1024
 
 #define CL_CHECK(_expr)                                                        \
   do {                                                                         \
@@ -85,14 +83,18 @@ uint8_t *kernel_bin = NULL;
 ///
 //  Cleanup any created OpenCL resources
 //
-void Cleanup(cl_context context, cl_command_queue commandQueue,
-             cl_program program, cl_kernel kernel, cl_mem memObjects[3]) {
-  for (int i = 0; i < 3; i++) {
+void Cleanup(cl_device_id device_id, cl_context context, cl_command_queue commandQueue,
+             cl_program program, cl_kernel kernel, cl_mem memObjects[2]) {
+  if (kernel_bin) 
+    free(kernel_bin);
+  
+  if (commandQueue != 0)
+    clReleaseCommandQueue(commandQueue);
+
+  for (int i = 0; i < 2; i++) {
     if (memObjects[i] != 0)
       clReleaseMemObject(memObjects[i]);
   }
-  if (commandQueue != 0)
-    clReleaseCommandQueue(commandQueue);
 
   if (kernel != 0)
     clReleaseKernel(kernel);
@@ -103,11 +105,40 @@ void Cleanup(cl_context context, cl_command_queue commandQueue,
   if (context != 0)
     clReleaseContext(context);
 
-  if (kernel_bin) free(kernel_bin);
+  if (device_id != 0) 
+    clReleaseDevice(device_id);
+}
+
+int size = 1024;
+
+static void show_usage() {
+  printf("Usage: [-n size] [-h: help]\n");
+}
+
+static void parse_args(int argc, char **argv) {
+  int c;
+  while ((c = getopt(argc, argv, "n:h?")) != -1) {
+    switch (c) {
+    case 'n':
+      size = atoi(optarg);
+      break;
+    case 'h':
+    case '?': {
+      show_usage();
+      exit(0);
+    } break;
+    default:
+      show_usage();
+      exit(-1);
+    }
+  }
+
+  printf("Workload size=%d\n", size);
 }
 
 int main(int argc, char **argv) {
-  printf("enter demo main\n");
+  // parse command arguments
+  parse_args(argc, argv);
   
   cl_platform_id platform_id;
   cl_device_id device_id;
@@ -126,7 +157,7 @@ int main(int argc, char **argv) {
   context = CL_CHECK_ERR(clCreateContext(NULL, 1, &device_id, &pfn_notify, NULL, &_err));
 
   cl_command_queue queue;
-  queue = CL_CHECK_ERR(clCreateCommandQueue(context, device_id, CL_QUEUE_PROFILING_ENABLE, &_err));
+  queue = CL_CHECK_ERR(clCreateCommandQueue(context, device_id, NULL, &_err));
 
   cl_kernel kernel = 0;
   cl_mem memObjects[2] = {0, 0};
@@ -139,7 +170,7 @@ int main(int argc, char **argv) {
     context, 1, &device_id, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &_err));
   if (program == NULL) {
     std::cerr << "Failed to write program binary" << std::endl;
-    Cleanup(context, queue, program, kernel, memObjects);
+    Cleanup(device_id, context, queue, program, kernel, memObjects);
     return 1;
   } else {
     std::cout << "Read program from binary." << std::endl;
@@ -148,7 +179,7 @@ int main(int argc, char **argv) {
   // Build program
   CL_CHECK(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
 
-  size_t nbytes = sizeof(float) * NUM_DATA;
+  size_t nbytes = sizeof(float) * size;
 
   printf("attempting to create input buffer\n");
   cl_mem input_buffer;
@@ -175,13 +206,13 @@ int main(int argc, char **argv) {
 
   printf("attempting to enqueue write buffer\n");
   float* h_src = (float*)malloc(nbytes);
-  for (int i = 0; i < NUM_DATA; i++) {
+  for (int i = 0; i < size; i++) {
     h_src[i] = ((float)rand() / (float)(RAND_MAX)) * 100.0;
   }
   CL_CHECK(clEnqueueWriteBuffer(queue, input_buffer, CL_TRUE, 0, nbytes, h_src, 0, NULL, NULL));
   free(h_src);
 
-  size_t global_work_size[] = {NUM_DATA/2, NUM_DATA/2};
+  size_t global_work_size[] = {size/2, size/2};
   printf("attempting to enqueue kernel\n");
   auto time_start = std::chrono::high_resolution_clock::now();
   CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 1, NULL, global_work_size,
@@ -196,18 +227,13 @@ int main(int argc, char **argv) {
   CL_CHECK(clEnqueueReadBuffer(queue, output_buffer, CL_TRUE, 0, nbytes, h_dst, 0, NULL, NULL));
 
   /*printf("Result:");
-  for (int i = 0; i < NUM_DATA; i++) {
+  for (int i = 0; i < size; i++) {
     float data = h_dst[i];
     printf(" %f", data);
   }*/
   free(h_dst);
 
-  CL_CHECK(clReleaseMemObject(memObjects[0]));
-  CL_CHECK(clReleaseMemObject(memObjects[1]));
-
-  CL_CHECK(clReleaseKernel(kernel));
-  CL_CHECK(clReleaseProgram(program));
-  CL_CHECK(clReleaseContext(context));
+  Cleanup(device_id, context, queue, program, kernel, memObjects);
 
   return 0;
 }

@@ -97,9 +97,8 @@
             "avs_byteenable":64,
             "avs_burstcount":4,
             "avs_readdatavalid":1,
-            "mem_bank_select":1,
-            "cci_dram_rd_req_ctr":26,
-            "cci_dram_wr_req_ctr":26,
+            "cci_mem_rd_req_ctr":26,
+            "cci_mem_wr_req_ctr":26,
             "cci_rd_req_ctr":26,
             "cci_rd_rsp_ctr":3,
             "cci_wr_req_ctr":26,
@@ -110,23 +109,23 @@
             "!cci_pending_reads_full":1,
             "!cci_pending_writes_empty":1,
             "!cci_pending_writes_full": 1,
-            "?afu_dram_req_fire": 1,            
-            "afu_dram_req_addr": 26,
-            "afu_dram_req_tag": 28,
-            "?afu_dram_rsp_fire": 1,
-            "afu_dram_rsp_tag": 28
+            "?afu_mem_req_fire": 1,            
+            "afu_mem_req_addr": 26,
+            "afu_mem_req_tag": 28,
+            "?afu_mem_rsp_fire": 1,
+            "afu_mem_rsp_tag": 28
         },
         "afu/vortex": {
             "!reset": 1,
-            "?dram_req_fire": 1,
-            "dram_req_addr": 32,
-            "dram_req_rw": 1,
-            "dram_req_byteen":"`VX_DRAM_BYTEEN_WIDTH",
-            "dram_req_data":"`VX_DRAM_LINE_WIDTH",
-            "dram_req_tag":"`VX_DRAM_TAG_WIDTH",
-            "?dram_rsp_fire": 1,
-            "dram_rsp_data":"`VX_DRAM_LINE_WIDTH",
-            "dram_rsp_tag":"`VX_DRAM_TAG_WIDTH",
+            "?mem_req_fire": 1,
+            "mem_req_addr": 32,
+            "mem_req_rw": 1,
+            "mem_req_byteen":"`VX_MEM_BYTEEN_WIDTH",
+            "mem_req_data":"`VX_MEM_LINE_WIDTH",
+            "mem_req_tag":"`VX_MEM_TAG_WIDTH",
+            "?mem_rsp_fire": 1,
+            "mem_rsp_data":"`VX_MEM_LINE_WIDTH",
+            "mem_rsp_tag":"`VX_MEM_TAG_WIDTH",
             "busy": 1       
         },
         "afu/vortex/cluster/core/pipeline/fetch/icache_stage": {
@@ -207,7 +206,7 @@
             "force_miss_st0": 1, 
             "mshr_push": 1,
             "?crsq_in_stall": 1,
-            "?dreq_alm_full": 1,
+            "?mreq_alm_full": 1,
             "?mshr_alm_full": 1
         }
     }

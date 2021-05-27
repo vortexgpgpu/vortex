@@ -233,7 +233,7 @@ free(allPlatforms);*/
   //--cambine-4: Create an OpenCL command queue
   oclHandles.queue = clCreateCommandQueue(
       oclHandles.context, oclHandles.devices[DEVICE_ID_INUSED], 0, &resultCL);
-  printf("resultCL=%d, queue=0x%x\n", resultCL, oclHandles.queue);
+  //printf("resultCL=%d, queue=0x%x\n", resultCL, oclHandles.queue);
 
   if ((resultCL != CL_SUCCESS) || (oclHandles.queue == NULL))
     throw(string("InitCL()::Creating Command Queue. (clCreateCommandQueue)"));
@@ -383,8 +383,8 @@ void _clRelease() {
         errorFlag = true;
       }
       oclHandles.kernel[nKernel] = NULL;
+      printf("clReleaseKernel()\n");
     }
-    oclHandles.kernel.clear();
   }
 
   if (oclHandles.program != NULL) {
@@ -394,6 +394,7 @@ void _clRelease() {
       errorFlag = true;
     }
     oclHandles.program = NULL;
+    printf("clReleaseProgram()\n");
   }
 
   if (oclHandles.queue != NULL) {
@@ -403,9 +404,8 @@ void _clRelease() {
       errorFlag = true;
     }
     oclHandles.queue = NULL;
+    printf("clReleaseCommandQueue()\n");
   }
-
-  free(oclHandles.devices);
 
   if (oclHandles.context != NULL) {
     cl_int resultCL = clReleaseContext(oclHandles.context);
@@ -414,6 +414,17 @@ void _clRelease() {
       errorFlag = true;
     }
     oclHandles.context = NULL;
+    printf("clReleaseContext()\n");
+  }
+
+  if (oclHandles.devices != NULL) {
+    cl_int resultCL = clReleaseDevice(oclHandles.devices[0]);
+    if (resultCL != CL_SUCCESS) {
+      cerr << "ReleaseCL()::Error: In clReleaseDevice" << endl;
+      errorFlag = true;
+    }
+    free(oclHandles.devices);
+    printf("clReleaseDevice()\n");
   }
 
   if (errorFlag)
@@ -675,7 +686,7 @@ void _clFinish() throw(string) {
 void _clInvokeKernel(int kernel_id, int work_items,
                      int work_group_size) throw(string) {
   cl_uint work_dim = WORK_DIM;
-  cl_event e[1];
+  //cl_event e[1];
   if (work_items % work_group_size != 0) // process situations that work_items
                                          // cannot be divided by work_group_size
     work_items =
@@ -684,7 +695,7 @@ void _clInvokeKernel(int kernel_id, int work_items,
   size_t global_work_size[] = {work_items, 1};
   oclHandles.cl_status = clEnqueueNDRangeKernel(
       oclHandles.queue, oclHandles.kernel[kernel_id], work_dim, 0,
-      global_work_size, local_work_size, 0, 0, &(e[0]));
+      global_work_size, local_work_size, 0, 0, NULL);
 #ifdef ERRMSG
   oclHandles.error_str = "excpetion in _clInvokeKernel() -> ";
   switch (oclHandles.cl_status) {
@@ -749,13 +760,13 @@ void _clInvokeKernel2D(int kernel_id, int range_x, int range_y, int group_x,
   cl_uint work_dim = WORK_DIM;
   size_t local_work_size[] = {group_x, group_y};
   size_t global_work_size[] = {range_x, range_y};
-  cl_event e[1];
+  //cl_event e[1];
   /*if(work_items%work_group_size != 0)	//process situations that work_items
     cannot be divided by work_group_size
     work_items = work_items + (work_group_size-(work_items%work_group_size));*/
   oclHandles.cl_status = clEnqueueNDRangeKernel(
       oclHandles.queue, oclHandles.kernel[kernel_id], work_dim, 0,
-      global_work_size, local_work_size, 0, 0, &(e[0]));
+      global_work_size, local_work_size, 0, 0, NULL);
 #ifdef ERRMSG
   oclHandles.error_str = "excpetion in _clInvokeKernel() -> ";
   switch (oclHandles.cl_status) {

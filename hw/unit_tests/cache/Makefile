@@ -2,7 +2,21 @@ TOP = VX_cache
 
 PARAMS += -DCACHE_SIZE=4096 -DWORD_SIZE=4 -DCACHE_LINE_SIZE=16 -DNUM_BANKS=4 -DCREQ_SIZE=4 -DMRVQ_SIZE=16 -DDFPQ_SIZE=16 -DSNRQ_SIZE=16 -DCWBQ_SIZE=4 -DDWBQ_SIZE=4 -DFQQ_SIZE=4
 
-INCLUDE = -I../../rtl/ -I../../rtl/libs -I../../rtl/cache
+# control RTL debug print states
+DBG_PRINT_FLAGS = -DDBG_PRINT_CORE_ICACHE \
+				  -DDBG_PRINT_CORE_DCACHE \
+			      -DDBG_PRINT_CACHE_BANK  \
+				  -DDBG_PRINT_CACHE_SNP   \
+				  -DDBG_PRINT_CACHE_MSHR  \
+				  -DDBG_PRINT_CACHE_TAG   \
+				  -DDBG_PRINT_CACHE_DATA  \
+				  -DDBG_PRINT_MEM         \
+				  -DDBG_PRINT_OPAE        \
+				  -DDBG_PRINT_AVS
+
+#DBG_PRINT=$(DBG_PRINT_FLAGS)
+
+INCLUDE = -I../../rtl/ -I../../rtl/cache -I../../rtl/libs
 
 SRCS = cachesim.cpp testbench.cpp
 

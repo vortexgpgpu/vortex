@@ -28,26 +28,15 @@ fi
 
 cd ${BUILD_DIR}
 
-sources_file="./sources_${cores}c.txt"
-
-if [ ${perf} = 1 ]; then
-  if grep -Fxq '#+define+PERF_ENABLE' ${sources_file}; then
-    sed -i 's/+define+PERF_ENABLE/#+define+PERF_ENABLE/' ${sources_file}
-  elif ! grep -Fxq '+define+PERF_ENABLE' ${sources_file}; then
-    sed -i '1s/^/+define+PERF_ENABLE\n/' ${sources_file}
-  fi
-else
-  if grep -v '^ *#' ${sources_file} | grep -Fxq '+define+SYNTHESIS'; then
-    sed -i 's/+define+PERF_ENABLE/#+define+PERF_ENABLE/' ${sources_file}
-  elif ! grep -Fxq '#+define+PERF_ENABLE' ${sources_file}; then
-    sed -i '1s/^/#+define+PERF_ENABLE\n/' ${sources_file}
-  fi
-fi
-
 if [ -d "./build_fpga_{$cores}c" ]; then
   make "clean-fpga-${cores}c"
 fi
-make "fpga-${cores}c"
+
+if [ ${perf} = 1 ]; then
+  PERF=1 make "fpga-${cores}c"
+else
+  make "fpga-${cores}c"
+fi
 
 if [ ${wait} = 1 ]; then
   sleep 30

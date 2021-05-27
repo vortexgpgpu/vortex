@@ -10,10 +10,23 @@
 
 #define RESET_DELAY 4
 
-#define ENABLE_DRAM_STALLS
-#define DRAM_LATENCY 24
-#define DRAM_RQ_SIZE 16
-#define DRAM_STALLS_MODULO 16
+#define ENABLE_MEM_STALLS
+
+#ifndef MEM_LATENCY
+#define MEM_LATENCY 24
+#endif
+
+#ifndef MEM_RQ_SIZE
+#define MEM_RQ_SIZE 16
+#endif
+
+#ifndef MEM_STALLS_MODULO
+#define MEM_STALLS_MODULO 16
+#endif
+
+#ifndef VERILATOR_RESET_VALUE
+#define VERILATOR_RESET_VALUE 2
+#endif
 
 uint64_t timestamp = 0;
 
@@ -23,7 +36,7 @@ double sc_time_stamp() {
 
 opae_sim::opae_sim() {  
   // force random values for unitialized signals  
-  Verilated::randReset(2);
+  Verilated::randReset(VERILATOR_RESET_VALUE);
   Verilated::randSeed(50);
 
   // Turn off assertion before reset
@@ -137,16 +150,19 @@ void opae_sim::flush() {
 
 void opae_sim::reset() {
   
-  host_buffers_.clear();
-  dram_reads_.clear();
+  host_buffers_.clear();  
   cci_reads_.clear();
   cci_writes_.clear();
   vortex_afu_->vcp2af_sRxPort_c0_rspValid = 0;  
   vortex_afu_->vcp2af_sRxPort_c1_rspValid = 0;  
   vortex_afu_->vcp2af_sRxPort_c0_TxAlmFull = 0;
   vortex_afu_->vcp2af_sRxPort_c1_TxAlmFull = 0;
-  vortex_afu_->avs_readdatavalid = 0;  
-  vortex_afu_->avs_waitrequest = 0;
+
+  for (int b = 0; b < PLATFORM_PARAM_LOCAL_MEMORY_BANKS; ++b) {
+    mem_reads_[b].clear();
+    vortex_afu_->avs_readdatavalid[b] = 0;  
+    vortex_afu_->avs_waitrequest[b] = 0;
+  }
 
   vortex_afu_->reset = 1;
 
@@ -268,84 +284,89 @@ void opae_sim::sTxPort_bus() {
 }
   
 void opae_sim::avs_bus() {
-  // update DRAM responses schedule
-  for (auto& rsp : dram_reads_) {
-    if (rsp.cycles_left > 0)
-      rsp.cycles_left -= 1;
-  }
-
-  // schedule DRAM responses in FIFO order
-  std::list<dram_rd_req_t>::iterator dram_rd_it(dram_reads_.end());
-  if (!dram_reads_.empty() 
-   && (0 == dram_reads_.begin()->cycles_left)) {
-      dram_rd_it = dram_reads_.begin();
-  }
-
-  // send DRAM response  
-  vortex_afu_->avs_readdatavalid = 0;  
-  if (dram_rd_it != dram_reads_.end()) {
-    vortex_afu_->avs_readdatavalid = 1;
-    memcpy(vortex_afu_->avs_readdata, dram_rd_it->data.data(), CACHE_BLOCK_SIZE);
-    uint32_t addr = dram_rd_it->addr;
-    dram_reads_.erase(dram_rd_it);
-    /*printf("%0ld: [sim] DRAM Rd Rsp: addr=%x, pending={", timestamp, addr * CACHE_BLOCK_SIZE);
-    for (auto& req : dram_reads_) {
-      if (req.cycles_left != 0) 
-        printf(" !%0x", req.addr * CACHE_BLOCK_SIZE);
-      else
-        printf(" %0x", req.addr * CACHE_BLOCK_SIZE);
+  for (int b = 0; b < PLATFORM_PARAM_LOCAL_MEMORY_BANKS; ++b) {
+    // update memory responses schedule
+    for (auto& rsp : mem_reads_[b]) {
+      if (rsp.cycles_left > 0)
+        rsp.cycles_left -= 1;
     }
-    printf("}\n");*/
-  }
 
-  // handle DRAM stalls
-  bool dram_stalled = false;
-#ifdef ENABLE_DRAM_STALLS
-  if (0 == ((timestamp/2) % DRAM_STALLS_MODULO)) { 
-    dram_stalled = true;
-  } else
-  if (dram_reads_.size() >= DRAM_RQ_SIZE) {
-    dram_stalled = true;
-  }
-#endif
-
-  // process DRAM requests
-  if (!dram_stalled) {
-    assert(!vortex_afu_->avs_read || !vortex_afu_->avs_write);
-    if (vortex_afu_->avs_write) {      
-      assert(0 == vortex_afu_->mem_bank_select);
-      uint64_t byteen = vortex_afu_->avs_byteenable;
-      unsigned base_addr = (vortex_afu_->avs_address * CACHE_BLOCK_SIZE);
-      uint8_t* data = (uint8_t*)(vortex_afu_->avs_writedata);
-      for (int i = 0; i < CACHE_BLOCK_SIZE; i++) {
-        if ((byteen >> i) & 0x1) {            
-          ram_[base_addr + i] = data[i];
-        }
-      }
+    // schedule memory responses in FIFO order
+    std::list<mem_rd_req_t>::iterator mem_rd_it(mem_reads_[b].end());
+    if (!mem_reads_[b].empty() 
+    && (0 == mem_reads_[b].begin()->cycles_left)) {
+        mem_rd_it = mem_reads_[b].begin();
     }
-    if (vortex_afu_->avs_read) {
-      assert(0 == vortex_afu_->mem_bank_select);
-      dram_rd_req_t dram_req;      
-      dram_req.addr = vortex_afu_->avs_address;
-      ram_.read(vortex_afu_->avs_address * CACHE_BLOCK_SIZE, CACHE_BLOCK_SIZE, dram_req.data.data());      
-      dram_req.cycles_left = DRAM_LATENCY;
-      for (auto& rsp : dram_reads_) {
-        if (dram_req.addr == rsp.addr) {
-          dram_req.cycles_left = rsp.cycles_left;
-          break;
-        }
-      }
-      dram_reads_.emplace_back(dram_req);
-      /*printf("%0ld: [sim] DRAM Rd Req: addr=%x, pending={", timestamp, dram_req.addr * CACHE_BLOCK_SIZE);
-      for (auto& req : dram_reads_) {
+
+    // send memory response  
+    vortex_afu_->avs_readdatavalid[b] = 0;  
+    if (mem_rd_it != mem_reads_[b].end()) {
+      vortex_afu_->avs_readdatavalid[b] = 1;
+      memcpy(vortex_afu_->avs_readdata[b], mem_rd_it->data.data(), MEM_BLOCK_SIZE);
+      uint32_t addr = mem_rd_it->addr;
+      mem_reads_[b].erase(mem_rd_it);
+      /*printf("%0ld: [sim] MEM Rd Rsp: addr=%x, pending={", timestamp, addr * MEM_BLOCK_SIZE);
+      for (auto& req : mem_reads_[b]) {
         if (req.cycles_left != 0) 
-          printf(" !%0x", req.addr * CACHE_BLOCK_SIZE);
+          printf(" !%0x", req.addr * MEM_BLOCK_SIZE);
         else
-          printf(" %0x", req.addr * CACHE_BLOCK_SIZE);
+          printf(" %0x", req.addr * MEM_BLOCK_SIZE);
       }
       printf("}\n");*/
-    }   
-  }
+    }
 
-  vortex_afu_->avs_waitrequest = dram_stalled;
+    // handle memory stalls
+    bool mem_stalled = false;
+  #ifdef ENABLE_MEM_STALLS
+    if (0 == ((timestamp/2) % MEM_STALLS_MODULO)) { 
+      mem_stalled = true;
+    } else
+    if (mem_reads_[b].size() >= MEM_RQ_SIZE) {
+      mem_stalled = true;
+    }
+  #endif
+
+    // process memory requests
+    if (!mem_stalled) {
+      assert(!vortex_afu_->avs_read[b] || !vortex_afu_->avs_write[b]);
+      if (vortex_afu_->avs_write[b]) {           
+        uint64_t byteen = vortex_afu_->avs_byteenable[b];
+        unsigned base_addr = vortex_afu_->avs_address[b] * MEM_BLOCK_SIZE;
+        uint8_t* data = (uint8_t*)(vortex_afu_->avs_writedata[b]);
+        for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
+          if ((byteen >> i) & 0x1) {            
+            ram_[base_addr + i] = data[i];
+          }
+        }
+        /*printf("%0ld: [sim] MEM Wr Req: addr=%x, data=", timestamp, base_addr);
+        for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
+          printf("%0x", data[(MEM_BLOCK_SIZE-1)-i]);
+        }
+        printf("\n");*/
+      }
+      if (vortex_afu_->avs_read[b]) {
+        mem_rd_req_t mem_req;      
+        mem_req.addr = vortex_afu_->avs_address[b];
+        ram_.read(vortex_afu_->avs_address[b] * MEM_BLOCK_SIZE, MEM_BLOCK_SIZE, mem_req.data.data());      
+        mem_req.cycles_left = MEM_LATENCY;
+        for (auto& rsp : mem_reads_[b]) {
+          if (mem_req.addr == rsp.addr) {
+            mem_req.cycles_left = rsp.cycles_left;
+            break;
+          }
+        }
+        mem_reads_[b].emplace_back(mem_req);
+        /*printf("%0ld: [sim] MEM Rd Req: addr=%x, pending={", timestamp, mem_req.addr * MEM_BLOCK_SIZE);
+        for (auto& req : mem_reads_[b]) {
+          if (req.cycles_left != 0) 
+            printf(" !%0x", req.addr * MEM_BLOCK_SIZE);
+          else
+            printf(" %0x", req.addr * MEM_BLOCK_SIZE);
+        }
+        printf("}\n");*/
+      }
+    }
+
+    vortex_afu_->avs_waitrequest[b] = mem_stalled;
+  }
 }

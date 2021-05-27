@@ -1,6 +1,9 @@
 /unittest/*
 !/unittest/Makefile
 
+/smem/*
+!/smem/Makefile
+
 /cache/*
 !/cache/Makefile
 
