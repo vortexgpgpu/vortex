@@ -4,7 +4,7 @@
         "../rtl/VX_config.vh", 
         "../rtl/VX_platform.vh", 
         "../rtl/VX_define.vh", 
-        "../rtl/cache/VX_cache_config.vh"
+        "../rtl/cache/VX_cache_define.vh"
     ],
     "modules": {
         "afu": {            
