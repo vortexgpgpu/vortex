@@ -20,7 +20,7 @@ const char* kernel_file = "kernel.bin";
 uint32_t count = 0;
 
 vx_device_h device = nullptr;
-vx_buffer_h buffer = nullptr;
+vx_buffer_h staging_buf = nullptr;
 
 static void show_usage() {
    std::cout << "Vortex Driver Test." << std::endl;
@@ -50,8 +50,8 @@ static void parse_args(int argc, char **argv) {
 }
 
 void cleanup() {
-  if (buffer) {
-    vx_buf_release(buffer);
+  if (staging_buf) {
+    vx_buf_release(staging_buf);
   }
   if (device) {
     vx_dev_close(device);
@@ -71,13 +71,13 @@ int run_test(const kernel_arg_t& kernel_arg,
 
   // download destination buffer
   std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(buffer, kernel_arg.dst_ptr, buf_size, 0));
+  RT_CHECK(vx_copy_from_dev(staging_buf, kernel_arg.dst_ptr, buf_size, 0));
 
   // verify result
   std::cout << "verify result" << std::endl;  
   {
     int errors = 0;
-    auto buf_ptr = (int32_t*)vx_host_ptr(buffer);
+    auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       int ref = i + i; 
       int cur = buf_ptr[i];
@@ -119,7 +119,7 @@ int main(int argc, char *argv[]) {
 
   uint32_t num_tasks  = max_cores * max_warps * max_threads;
   uint32_t num_points = count * num_tasks;
-  uint32_t buf_size = num_points * sizeof(uint32_t);
+  uint32_t buf_size   = num_points * sizeof(int32_t);
 
   std::cout << "number of points: " << num_points << std::endl;
   std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
@@ -148,45 +148,45 @@ int main(int argc, char *argv[]) {
   // allocate shared memory  
   std::cout << "allocate shared memory" << std::endl;    
   uint32_t alloc_size = std::max<uint32_t>(buf_size, sizeof(kernel_arg_t));
-  RT_CHECK(vx_alloc_shared_mem(device, alloc_size, &buffer));
+  RT_CHECK(vx_alloc_shared_mem(device, alloc_size, &staging_buf));
   
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
   {
-    auto buf_ptr = (int*)vx_host_ptr(buffer);
+    auto buf_ptr = (int*)vx_host_ptr(staging_buf);
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
-    RT_CHECK(vx_copy_to_dev(buffer, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
+    RT_CHECK(vx_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
   }
 
   // upload source buffer0
   {
-    auto buf_ptr = (int32_t*)vx_host_ptr(buffer);
+    auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr[i] = i-1;
     }
   }
   std::cout << "upload source buffer0" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.src0_ptr, buf_size, 0));
+  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src0_ptr, buf_size, 0));
 
   // upload source buffer1
   {
-    auto buf_ptr = (int32_t*)vx_host_ptr(buffer);
+    auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr[i] = i+1;
     }
   }
   std::cout << "upload source buffer1" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.src1_ptr, buf_size, 0));
+  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src1_ptr, buf_size, 0));
 
   // clear destination buffer
   {
-    auto buf_ptr = (int32_t*)vx_host_ptr(buffer);
+    auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr[i] = 0xdeadbeef;
     }
   }
   std::cout << "clear destination buffer" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.dst_ptr, buf_size, 0));  
+  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_ptr, buf_size, 0));  
 
   // run tests
   std::cout << "run tests" << std::endl;

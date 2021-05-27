@@ -23,7 +23,7 @@ int test = -1;
 uint32_t count = 0;
 
 vx_device_h device = nullptr;
-vx_buffer_h buffer = nullptr;
+vx_buffer_h staging_buf = nullptr;
 
 static void show_usage() {
    std::cout << "Vortex Driver Test." << std::endl;
@@ -56,8 +56,8 @@ static void parse_args(int argc, char **argv) {
 }
 
 void cleanup() {
-  if (buffer) {
-    vx_buf_release(buffer);
+  if (staging_buf) {
+    vx_buf_release(staging_buf);
   }
   if (device) {
     vx_dev_close(device);
@@ -77,38 +77,38 @@ int run_memcopy_test(uint32_t dev_addr, uint64_t value, int num_blocks) {
 
   // update source buffer
   for (int i = 0; i < num_blocks_8; ++i) {
-    ((uint64_t*)vx_host_ptr(buffer))[i] = shuffle(i, value);
+    ((uint64_t*)vx_host_ptr(staging_buf))[i] = shuffle(i, value);
   }
 
   /*for (int i = 0; i < num_blocks; ++i) {
     std::cout << "data[" << i << "]=0x";
     for (int j = 7; j >= 0; --j) {
-      std::cout << std::hex << ((uint64_t*)vx_host_ptr(buffer))[i * 8 +j];
+      std::cout << std::hex << ((uint64_t*)vx_host_ptr(staging_buf))[i * 8 +j];
     }
     std::cout << std::endl;
   }*/
   
-  // write buffer to local memory
-  std::cout << "write buffer to local memory" << std::endl;
+  // write source buffer to local memory
+  std::cout << "write source buffer to local memory" << std::endl;
   auto t0 = std::chrono::high_resolution_clock::now();
-  RT_CHECK(vx_copy_to_dev(buffer, dev_addr, 64 * num_blocks, 0));
+  RT_CHECK(vx_copy_to_dev(staging_buf, dev_addr, 64 * num_blocks, 0));
   auto t1 = std::chrono::high_resolution_clock::now();
 
   // clear destination buffer
   for (int i = 0; i < num_blocks_8; ++i) {
-    ((uint64_t*)vx_host_ptr(buffer))[i] = 0;
+    ((uint64_t*)vx_host_ptr(staging_buf))[i] = 0;
   }
 
-  // read buffer from local memory
-  std::cout << "read buffer from local memory" << std::endl;
+  // read destination buffer from local memory
+  std::cout << "read destination buffer from local memory" << std::endl;
   auto t2 = std::chrono::high_resolution_clock::now();
-  RT_CHECK(vx_copy_from_dev(buffer, dev_addr, 64 * num_blocks, 0));
+  RT_CHECK(vx_copy_from_dev(staging_buf, dev_addr, 64 * num_blocks, 0));
   auto t3 = std::chrono::high_resolution_clock::now();
 
   // verify result
   std::cout << "verify result" << std::endl;
   for (int i = 0; i < num_blocks_8; ++i) {
-    auto curr = ((uint64_t*)vx_host_ptr(buffer))[i];
+    auto curr = ((uint64_t*)vx_host_ptr(staging_buf))[i];
     auto ref = shuffle(i, value);
     if (curr != ref) {
       std::cout << "error at 0x" << std::hex << (dev_addr + 8 * i)
@@ -145,25 +145,25 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
   
   // update source buffer
   {
-    auto buf_ptr = (int32_t*)vx_host_ptr(buffer);
+    auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr[i] = i;
     }
   }
   std::cout << "upload source buffer" << std::endl;
   auto t0 = std::chrono::high_resolution_clock::now();
-  RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.src_ptr, buf_size, 0));
+  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src_ptr, buf_size, 0));
   auto t1 = std::chrono::high_resolution_clock::now();
 
   // clear destination buffer
   {
-    auto buf_ptr = (int32_t*)vx_host_ptr(buffer);
+    auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr[i] = 0xdeadbeef;
     }
   }  
   std::cout << "clear destination buffer" << std::endl;
-  RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.dst_ptr, buf_size, 0));
+  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_ptr, buf_size, 0));
 
   // start device
   std::cout << "start execution" << std::endl;
@@ -172,17 +172,17 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
   RT_CHECK(vx_ready_wait(device, -1));
   auto t3 = std::chrono::high_resolution_clock::now();
 
-  // read buffer from local memory
-  std::cout << "read buffer from local memory" << std::endl;
+  // read destination buffer from local memory
+  std::cout << "read destination buffer from local memory" << std::endl;
   auto t4 = std::chrono::high_resolution_clock::now();
-  RT_CHECK(vx_copy_from_dev(buffer, kernel_arg.dst_ptr, buf_size, 0));
+  RT_CHECK(vx_copy_from_dev(staging_buf, kernel_arg.dst_ptr, buf_size, 0));
   auto t5 = std::chrono::high_resolution_clock::now();
 
   
   // verify result
   std::cout << "verify result" << std::endl;
   for (uint32_t i = 0; i < num_points; ++i) {
-    int32_t curr = ((int32_t*)vx_host_ptr(buffer))[i];
+    int32_t curr = ((int32_t*)vx_host_ptr(staging_buf))[i];
     int32_t ref = i;
     if (curr != ref) {
       std::cout << "error at result #" << i
@@ -233,8 +233,8 @@ int main(int argc, char *argv[]) {
   unsigned max_cores;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_CORES, &max_cores));
   uint32_t num_points = 1 * count;
-  uint32_t num_blocks = (num_points * sizeof(uint32_t) + 63) / 64;
-  uint32_t buf_size = num_blocks * 64;
+  uint32_t num_blocks = (num_points * sizeof(int32_t) + 63) / 64;
+  uint32_t buf_size   = num_blocks * 64;
 
   std::cout << "number of points: " << num_points << std::endl;
   std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
@@ -253,7 +253,7 @@ int main(int argc, char *argv[]) {
   // allocate shared memory  
   std::cout << "allocate shared memory" << std::endl;
   uint32_t alloc_size = std::max<uint32_t>(buf_size, sizeof(kernel_arg_t));
-  RT_CHECK(vx_alloc_shared_mem(device, alloc_size, &buffer));
+  RT_CHECK(vx_alloc_shared_mem(device, alloc_size, &staging_buf));
 
   // run tests  
   if (0 == test || -1 == test) {
@@ -269,9 +269,9 @@ int main(int argc, char *argv[]) {
     // upload kernel argument
     std::cout << "upload kernel argument" << std::endl;
     {
-      auto buf_ptr = (void*)vx_host_ptr(buffer);
+      auto buf_ptr = (void*)vx_host_ptr(staging_buf);
       memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
-      RT_CHECK(vx_copy_to_dev(buffer, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
+      RT_CHECK(vx_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
     }
 
     std::cout << "run kernel test" << std::endl;

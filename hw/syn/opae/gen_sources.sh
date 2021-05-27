@@ -1,39 +1,46 @@
 #!/bin/bash
 
-rtl_dir="../../rtl"
 exclude_list="VX_fpu_fpnew.v"
-file_list=""
+macros=()
+includes=()
 
-add_dirs()
-{
-    for dir in $*; do
-        echo "+incdir+$dir"
-        for file in $(find $dir -maxdepth 1 -name '*.v' -o -name '*.sv' -type f); do
-            exclude=0
-            for fe in $exclude_list; do
-                if [[ $file =~ $fe ]]; then
-                    exclude=1
-                fi
-            done
-            if [[ $exclude == 0 ]]; then
-                file_list="$file_list $file"
+# parse command arguments
+while getopts D:I:h flag
+do
+  case "${flag}" in
+    D) macros+=( ${OPTARG} );;
+    I) includes+=( ${OPTARG} );;
+    h) echo "Usage: [-D macro] [-I include] [-h help]"
+       exit 0
+    ;;
+  \?)
+    echo "Invalid option: -$OPTARG" 1>&2
+    exit 1
+    ;;
+  esac
+done
+
+# dump macros
+for value in ${macros[@]}; do
+    echo "+define+$value"
+done
+
+# dump include directories
+for dir in ${includes[@]}; do
+    echo "+incdir+$dir"
+done
+
+# dump source files
+for dir in ${includes[@]}; do
+    for file in $(find $dir -maxdepth 1 -name '*.v' -o -name '*.sv' -type f); do
+        exclude=0
+        for fe in $exclude_list; do
+            if [[ $file =~ $fe ]]; then
+                exclude=1
             fi
         done
+        if [[ $exclude == 0 ]]; then
+            echo $file
+        fi
     done
-}
-
-add_files()
-{
-    for file in $*; do
-        file_list="$file_list $file"
-    done
-}
-
-add_dirs $rtl_dir/fp_cores/altera/$1
-
-add_dirs $rtl_dir/libs $rtl_dir/interfaces $rtl_dir/fp_cores $rtl_dir/cache $rtl_dir/tex_unit $rtl_dir $rtl_dir/afu
-
-# dump file list
-for file in $file_list; do
-    echo $file
 done

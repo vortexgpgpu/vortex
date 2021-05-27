@@ -70,6 +70,8 @@
 `define LOG2UP(x)   (((x) > 1) ? $clog2(x) : 1)
 `define ISPOW2(x)   (((x) != 0) && (0 == ((x) & ((x) - 1))))
 
+`define ABS(x)      (($signed(x) < 0) ? (-$signed(x)) : x);
+
 `define MIN(x, y)   ((x < y) ? (x) : (y))
 `define MAX(x, y)   ((x > y) ? (x) : (y))
 

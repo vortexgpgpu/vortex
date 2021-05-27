@@ -78,14 +78,15 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
   char h_over;
   cl_mem d_graph_nodes, d_graph_edges, d_graph_mask, d_updating_graph_mask,
       d_graph_visited, d_cost, d_over;
+
   try {
     //--1 transfer data from host to device
     _clInit();
+
     d_graph_nodes = _clMalloc(no_of_nodes * sizeof(Node), h_graph_nodes);
     d_graph_edges = _clMalloc(edge_list_size * sizeof(int), h_graph_edges);
     d_graph_mask = _clMallocRW(no_of_nodes * sizeof(char), h_graph_mask);
-    d_updating_graph_mask =
-        _clMallocRW(no_of_nodes * sizeof(char), h_updating_graph_mask);
+    d_updating_graph_mask = _clMallocRW(no_of_nodes * sizeof(char), h_updating_graph_mask);
     d_graph_visited = _clMallocRW(no_of_nodes * sizeof(char), h_graph_visited);
 
     d_cost = _clMallocRW(no_of_nodes * sizeof(int), h_cost);
@@ -94,8 +95,7 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
     _clMemcpyH2D(d_graph_nodes, no_of_nodes * sizeof(Node), h_graph_nodes);
     _clMemcpyH2D(d_graph_edges, edge_list_size * sizeof(int), h_graph_edges);
     _clMemcpyH2D(d_graph_mask, no_of_nodes * sizeof(char), h_graph_mask);
-    _clMemcpyH2D(d_updating_graph_mask, no_of_nodes * sizeof(char),
-                 h_updating_graph_mask);
+    _clMemcpyH2D(d_updating_graph_mask, no_of_nodes * sizeof(char), h_updating_graph_mask);
     _clMemcpyH2D(d_graph_visited, no_of_nodes * sizeof(char), h_graph_visited);
     _clMemcpyH2D(d_cost, no_of_nodes * sizeof(int), h_cost);
 
@@ -106,6 +106,7 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
     kernel_timer.reset();
     kernel_timer.start();
 #endif
+
     do {
       h_over = false;
       _clMemcpyH2D(d_over, sizeof(char), &h_over);
@@ -136,9 +137,8 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
       _clInvokeKernel(kernel_id, no_of_nodes, work_group_size);
 
       _clMemcpyD2H(d_over, sizeof(char), &h_over);
-    } while (h_over);
+    } while (h_over);    
 
-    _clFinish();
 #ifdef PROFILING
     kernel_timer.stop();
     kernel_time = kernel_timer.getTimeInSeconds();

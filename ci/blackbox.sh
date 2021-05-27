@@ -123,11 +123,15 @@ esac
 if [ -d "$VORTEX_HOME/driver/tests/$APP" ]; 
 then
     APP_PATH=$VORTEX_HOME/driver/tests/$APP
-else
+elif [ -d "$VORTEX_HOME/benchmarks/opencl/$APP" ];
+then
     APP_PATH=$VORTEX_HOME/benchmarks/opencl/$APP
+else
+    echo "Application folder found: $APP"
+    exit -1
 fi
 
-CONFIGS="-DNUM_CLUSTERS=$CLUSTERS -DNUM_CORES=$CORES -DNUM_WARPS=$WARPS -DNUM_THREADS=$THREADS -DL2_ENABLE=$L2 -DL3_ENABLE=$L3 $PERF_FLAG"
+CONFIGS="-DNUM_CLUSTERS=$CLUSTERS -DNUM_CORES=$CORES -DNUM_WARPS=$WARPS -DNUM_THREADS=$THREADS -DL2_ENABLE=$L2 -DL3_ENABLE=$L3 $PERF_FLAG $CONFIGS"
 
 echo "CONFIGS=$CONFIGS"
 

@@ -7,7 +7,6 @@ module VX_ibuffer #(
     input wire reset,
 
     // inputs
-    input wire    freeze,       // keep current warp
     VX_decode_if  ibuf_enq_if,  
 
     // outputs
@@ -117,18 +116,9 @@ module VX_ibuffer #(
         deq_valid_n = 0;     
         deq_wid_n   = 'x;        
         deq_instr_n = 'x;
-        schedule_table_n = 'x;         
-        
-        if ((0 == num_warps) 
-         || (1 == num_warps && deq_fire && q_alm_empty[deq_wid])) begin
-            deq_valid_n = enq_fire;
-            deq_wid_n   = ibuf_enq_if.wid;
-            deq_instr_n = q_data_in;  
-        end else if ((1 == num_warps) || freeze) begin   
-            deq_valid_n = 1;               
-            deq_wid_n   = deq_wid;
-            deq_instr_n = deq_fire ? q_data_prev[deq_wid] : q_data_out[deq_wid];
-        end else begin
+        schedule_table_n = 'x;  
+
+        if (num_warps > 1) begin
             deq_valid_n = (| schedule_table);
             schedule_table_n = schedule_table;
             for (integer i = 0; i < `NUM_WARPS; i++) begin
@@ -139,6 +129,14 @@ module VX_ibuffer #(
                     break;
                 end
             end
+        end else if (1 == num_warps && !(deq_fire && q_alm_empty[deq_wid])) begin
+            deq_valid_n = 1;               
+            deq_wid_n   = deq_wid;
+            deq_instr_n = deq_fire ? q_data_prev[deq_wid] : q_data_out[deq_wid];
+        end else begin
+            deq_valid_n = enq_fire;
+            deq_wid_n   = ibuf_enq_if.wid;
+            deq_instr_n = q_data_in;  
         end   
     end
 

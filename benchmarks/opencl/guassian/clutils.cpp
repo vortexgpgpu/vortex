@@ -69,7 +69,7 @@ static cl_uint numPlatforms;
 
 //! All discoverable OpenCL devices (one pointer per platform)
 static cl_device_id* devices = NULL;
-static cl_uint* numDevices;
+static cl_uint* numDevices = NULL;
 
 //! The chosen OpenCL platform
 static cl_platform_id platform = NULL;
@@ -87,7 +87,6 @@ static cl_command_queue commandQueueNoProf = NULL;
 
 //! Global status of events
 static bool eventsEnabled = false;
-
 
 //-------------------------------------------------------
 //          Initialization and Cleanup
@@ -239,14 +238,34 @@ static bool eventsEnabled = false;
     return context;
 }*/
 
+static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
+  if (nullptr == filename || nullptr == data || 0 == size)
+    return -1;
+
+  FILE* fp = fopen(filename, "r");
+  if (NULL == fp) {
+    fprintf(stderr, "Failed to load kernel.");
+    return -1;
+  }
+  fseek(fp , 0 , SEEK_END);
+  long fsize = ftell(fp);
+  rewind(fp);
+
+  *data = (uint8_t*)malloc(fsize);
+  *size = fread(*data, 1, fsize, fp);
+  
+  fclose(fp);
+  
+  return 0;
+}
+
+
 cl_context cl_init_context(int platform, int dev,int quiet) {
     int printInfo=1;
     if (platform >= 0 && dev >= 0) printInfo = 0;
 	cl_int status;
 	// Used to iterate through the platforms and devices, respectively
-	cl_uint numPlatforms;
-	cl_uint numDevices;
-
+	
 	// These will hold the platform and device we select (can potentially be
 	// multiple, but we're just doing one for now)
 	// cl_platform_id platform = NULL;
@@ -376,22 +395,23 @@ cl_context cl_init_context(int platform, int dev,int quiet) {
     // Getting platform and device information
 
     numPlatforms = 1;
-    numDevices = 1;
-    int platform_touse = 0;
-    int device_touse = 0;
     platforms = (cl_platform_id*)malloc(numPlatforms * sizeof(cl_platform_id));
-    devices = (cl_device_id*)malloc(sizeof(cl_device_id)*numDevices);
 
-    status = clGetPlatformIDs(1, platforms, NULL);
+    numDevices = (cl_uint*)malloc(sizeof(cl_uint)*numPlatforms);
+    numDevices[0] = 1;
+    devices = (cl_device_id*)malloc(sizeof(cl_device_id)*numDevices[0]);
+
+    int platform_touse = 0;
+    int device_touse = 0;    
+
+    status = clGetPlatformIDs(numPlatforms, platforms, NULL);
     cl_errChk(status, "Oops!", true);
-    status = clGetDeviceIDs(platforms[0], CL_DEVICE_TYPE_DEFAULT, 1, devices, NULL);
+    status = clGetDeviceIDs(platforms[0], CL_DEVICE_TYPE_DEFAULT, numDevices[0], devices, NULL);
     cl_errChk(status, "Oops!", true);
-    context = clCreateContext(NULL, 1, devices, NULL, NULL,  &status);
+    context = clCreateContext(NULL, numDevices[0], devices, NULL, NULL,  &status);
     cl_errChk(status, "Oops!", true);
 
     device=devices[device_touse];
-
-#define PROFILING
 
 #ifdef PROFILING
 
@@ -400,7 +420,7 @@ cl_context cl_init_context(int platform, int dev,int quiet) {
 
 #else
 
-	clCommandQueue = clCreateCommandQueue(clGPUContext,
+	commandQueue = clCreateCommandQueue(context,
 						devices[device_touse], NULL, &status);
 
 #endif // PROFILING
@@ -413,22 +433,34 @@ cl_context cl_init_context(int platform, int dev,int quiet) {
 /*!
     Release all resources that the user doesn't have access to.
 */
-void  cl_cleanup()
+void cl_cleanup()
 {
+    cl_int status;
+
     // Free the command queue
-    if(commandQueue) {
-        clReleaseCommandQueue(commandQueue);
+    if (commandQueue) {
+        status = clReleaseCommandQueue(commandQueue);
+        cl_errChk(status, "Oops!", true);
+        printf("clReleaseCommandQueue()\n");
     }
     
     // Free the context
-    if(context) {
-        clReleaseContext(context);
+    if (context) {
+        status = clReleaseContext(context);
+        cl_errChk(status, "Oops!", true);
+        printf("clReleaseContext()\n");
+    }
+    
+    for (int p = 0; p < numPlatforms; ++p) {
+        for (int d = 0; d < numDevices[p]; ++d) {
+            status = clReleaseDevice(devices[d]);
+            cl_errChk(status, "Oops!", true);
+            printf("clReleaseDevice()\n");
+        }
     }
 
     free(devices);
     free(numDevices);
-
-    // Free the platforms
     free(platforms);
 }
 
@@ -443,6 +475,7 @@ void cl_freeKernel(cl_kernel kernel)
     if(kernel != NULL) {
         status = clReleaseKernel(kernel);
         cl_errChk(status, "Releasing kernel object", true);
+        printf("clReleaseKernel()\n");
     }
 }
 
@@ -457,6 +490,7 @@ void cl_freeMem(cl_mem mem)
     if(mem != NULL) {
         status = clReleaseMemObject(mem);
         cl_errChk(status, "Releasing mem object", true);
+        printf("clReleaseMemObject()\n");
     }
 }
 
@@ -471,6 +505,7 @@ void cl_freeProgram(cl_program program)
     if(program != NULL) {
         status = clReleaseProgram(program);
         cl_errChk(status, "Releasing program object", true);
+        printf("clReleaseProgram()\n");
     }
 }
 
@@ -782,27 +817,6 @@ void cl_writeToZCBuffer(cl_mem mem, void* data, size_t size)
     cl_unmapBuffer(mem, ptr);
 }
 
-static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) {
-  if (nullptr == filename || nullptr == data || 0 == size)
-    return -1;
-
-  FILE* fp = fopen(filename, "r");
-  if (NULL == fp) {
-    fprintf(stderr, "Failed to load kernel.");
-    return -1;
-  }
-  fseek(fp , 0 , SEEK_END);
-  long fsize = ftell(fp);
-  rewind(fp);
-
-  *data = (uint8_t*)malloc(fsize);
-  *size = fread(*data, 1, fsize, fp);
-  
-  fclose(fp);
-  
-  return 0;
-}
-
 //-------------------------------------------------------
 //          Program and kernels
 //-------------------------------------------------------
@@ -858,17 +872,17 @@ cl_program cl_compileProgram(char* kernelPath, char* compileoptions, bool verbos
     fread(source, 1, size, fp);
     source[size] = '\0';*/
 
-    // Create the program object
-    //cl_program clProgramReturn = clCreateProgramWithSource(context, 1, (const char **)&source, NULL, &status);
-    //cl_program clProgramReturn = clCreateProgramWithBuiltInKernels(context, 1, &device, "Fan1;Fan2", &status);            
-    // read kernel binary from file  
+    // read kernel binary from file
     uint8_t *kernel_bin = NULL;
     size_t kernel_size;
-    cl_int binary_status = 0;
-    status = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
-    cl_errChk(status, "read_kernel_file", true);
+    cl_int binary_status = 0;  
+    int err = read_kernel_file("kernel.pocl", &kernel_bin, &kernel_size);
+    cl_errChk(err, "read_kernel_file", true);
+
+    // Create the program object
+    //cl_program clProgramReturn = clCreateProgramWithSource(context, 1, (const char **)&source, NULL, &status);      
     cl_program clProgramReturn = clCreateProgramWithBinary(
-        context, 1, &device, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &status);
+        context, 1, devices, &kernel_size, (const uint8_t**)&kernel_bin, &binary_status, &status);  
     free(kernel_bin);
     cl_errChk(status, "Creating program", true);
     

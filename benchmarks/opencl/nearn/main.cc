@@ -49,25 +49,27 @@ int main(int argc, char *argv[]) {
       printf("%s --> Distance=%f\n", records[i].recString, records[i].distance);
     }
   free(recordDistances);
+
+  cl_cleanup();
+
   printf("Passed!\n");
+
   return 0;
 }
 
 float *OpenClFindNearestNeighbors(cl_context context, int numRecords,
                                   std::vector<LatLong> &locations, float lat,
                                   float lng, int timing) {
-
-  // 1. set up kernel
-  cl_kernel NN_kernel;
   cl_int status;
+  
+  // 1. set up kernel
+  cl_kernel NN_kernel;  
   cl_program cl_NN_program;
   cl_NN_program = cl_compileProgram((char *)"nearestNeighbor_kernel.cl", NULL);
 
   NN_kernel = clCreateKernel(cl_NN_program, "NearestNeighbor", &status);
-  status =
-      cl_errChk(status, (char *)"Error Creating Nearest Neighbor kernel", true);
-  if (status)
-    exit(1);
+  cl_errChk(status, (char *)"Error Creating Nearest Neighbor kernel", true);
+  
   // 2. set up memory on device and send ipts data to device
   // copy ipts(1,2) to device
   // also need to alloate memory for the distancePoints
@@ -78,9 +80,11 @@ float *OpenClFindNearestNeighbors(cl_context context, int numRecords,
 
   d_locations = clCreateBuffer(context, CL_MEM_READ_ONLY,
                                sizeof(LatLong) * numRecords, NULL, &error);
+  cl_errChk(error, "ERROR: clCreateBuffer() failed", true);
 
   d_distances = clCreateBuffer(context, CL_MEM_READ_WRITE,
                                sizeof(float) * numRecords, NULL, &error);
+  cl_errChk(error, "ERROR: clCreateBuffer() failed", true);  
 
   cl_command_queue command_queue = cl_getCommandQueue();
   cl_event writeEvent, kernelEvent, readEvent;
@@ -89,6 +93,7 @@ float *OpenClFindNearestNeighbors(cl_context context, int numRecords,
                                0, // offset
                                sizeof(LatLong) * numRecords, &locations[0], 0,
                                NULL, &writeEvent);
+  cl_errChk(error, "ERROR: clEnqueueWriteBuffer() failed", true);
 
   // 3. send arguments to device
   cl_int argchk;
@@ -124,8 +129,10 @@ float *OpenClFindNearestNeighbors(cl_context context, int numRecords,
                               &readEvent);
 
   cl_errChk(error, "ERROR with clEnqueueReadBuffer", true);
-  if (timing) {
-    clFinish(command_queue);
+
+  clFinish(command_queue);
+
+  if (timing) {    
     cl_ulong eventStart, eventEnd, totalTime = 0;
     printf("# Records\tWrite(s) [size]\t\tKernel(s)\tRead(s)  "
            "[size]\t\tTotal(s)\n");
@@ -166,8 +173,14 @@ float *OpenClFindNearestNeighbors(cl_context context, int numRecords,
     printf("%f\n\n", (float)(totalTime / 1e9));
   }
   // 6. return finalized data and release buffers
-  clReleaseMemObject(d_locations);
-  clReleaseMemObject(d_distances);
+  clReleaseEvent(writeEvent);  
+  clReleaseEvent(kernelEvent);
+  clReleaseEvent(readEvent);  
+  cl_freeMem(d_locations);
+  cl_freeMem(d_distances);
+  cl_freeKernel(NN_kernel);
+  cl_freeProgram(cl_NN_program);
+
   return distances;
 }
 

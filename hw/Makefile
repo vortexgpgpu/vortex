@@ -1,9 +1,9 @@
 .PHONY: build_config
 
-build_config:
-	./scripts/gen_config.py --outv ./rtl/VX_user_config.vh --outc ./VX_config.h
+build_config: ./rtl/VX_config.vh	 
+	./scripts/gen_config.py -i ./rtl/VX_config.vh -o ./VX_config.h
 	$(MAKE) -C simulate	
 
 clean:
-	rm -f ./rtl/VX_user_config.vh ./VX_config.h
+	rm -f ./VX_config.h
 	$(MAKE) -C simulate clean
