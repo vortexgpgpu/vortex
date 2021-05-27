@@ -13,7 +13,7 @@ FPU_CORE_PATH = $(RTL_DIR)/fp_cores/altera/stratix10
 
 FPU_INCLUDE = $(RTL_DIR)/fp_cores;$(FPU_CORE_PATH);$(RTL_DIR)/fp_cores/fpnew/src;$(RTL_DIR)/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl;$(RTL_DIR)/fp_cores/fpnew/src/common_cells/include;$(RTL_DIR)/fp_cores/fpnew/src/common_cells/src
 TEX_INCLUDE = $(RTL_DIR)/tex_unit
-RTL_INCLUDE = $(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces;$(RTL_DIR)/cache;../../../rtl/afu;../../../rtl/afu/ccip;$(FPU_INCLUDE);$(TEX_INCLUDE)
+RTL_INCLUDE = $(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces;$(RTL_DIR)/cache;$(RTL_DIR)/afu;$(RTL_DIR)/afu/ccip;$(FPU_INCLUDE);$(TEX_INCLUDE)
 
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
