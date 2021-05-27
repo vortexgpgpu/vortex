@@ -1,7 +1,7 @@
 `ifndef VX_CACHE_MEM_RSP_IF
 `define VX_CACHE_MEM_RSP_IF
 
-`include "../cache/VX_cache_config.vh"
+`include "../cache/VX_cache_define.vh"
 
 interface VX_cache_mem_rsp_if #(
     parameter MEM_LINE_WIDTH = 1,
