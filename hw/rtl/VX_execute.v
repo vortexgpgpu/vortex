@@ -51,31 +51,31 @@ module VX_execute #(
     VX_dcache_core_req_if #(
         .LANES(`NUM_THREADS), 
         .WORD_SIZE(4), 
-        .CORE_TAG_WIDTH(`LSU_DACHE_TAG_BITS)
+        .CORE_TAG_WIDTH(`LSU_DCACHE_TAG_BITS)
     ) lsu_dcache_req_if();
 
     VX_dcache_core_rsp_if #(
         .LANES(`NUM_THREADS), 
         .WORD_SIZE(4), 
-        .CORE_TAG_WIDTH(`LSU_DACHE_TAG_BITS)
+        .CORE_TAG_WIDTH(`LSU_DCACHE_TAG_BITS)
     ) lsu_dcache_rsp_if();    
 
     VX_dcache_core_req_if #(
         .LANES(`NUM_THREADS), 
         .WORD_SIZE(4), 
-        .CORE_TAG_WIDTH(`TEX_DACHE_TAG_BITS)
+        .CORE_TAG_WIDTH(`TEX_DCACHE_TAG_BITS)
     ) tex_dcache_req_if();
 
     VX_dcache_core_rsp_if #(
         .LANES(`NUM_THREADS), 
         .WORD_SIZE(4), 
-        .CORE_TAG_WIDTH(`TEX_DACHE_TAG_BITS)
+        .CORE_TAG_WIDTH(`TEX_DCACHE_TAG_BITS)
     ) tex_dcache_rsp_if();
 
     VX_tex_csr_if  tex_csr_if();
 
-    wire [`NUM_THREADS-1:0][`LSU_TEX_DACHE_TAG_BITS-1:0] tex_tag_in;
-    wire [`LSU_TEX_DACHE_TAG_BITS-1:0] tex_tag_out;
+    wire [`NUM_THREADS-1:0][`LSU_TEX_DCACHE_TAG_BITS-1:0] tex_tag_in;
+    wire [`LSU_TEX_DCACHE_TAG_BITS-1:0] tex_tag_out;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign tex_tag_in[i][`LSUQ_ADDR_BITS-1:0] = `LSUQ_ADDR_BITS'(tex_dcache_req_if.tag[i][1:0]);
@@ -93,7 +93,7 @@ module VX_execute #(
         .NUM_REQS      (2),
         .LANES         (`NUM_THREADS),
         .WORD_SIZE     (4),            
-        .TAG_IN_WIDTH  (`LSU_TEX_DACHE_TAG_BITS),
+        .TAG_IN_WIDTH  (`LSU_TEX_DCACHE_TAG_BITS),
         .TAG_OUT_WIDTH (`DCORE_TAG_WIDTH)
     ) tex_lsu_arb (
         .clk            (clk),

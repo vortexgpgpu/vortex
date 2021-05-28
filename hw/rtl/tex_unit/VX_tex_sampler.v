@@ -1,52 +1,43 @@
 `include "VX_tex_define.vh"
 
 module VX_tex_sampler #(
-    parameter CORE_ID = 0    
+    parameter CORE_ID        = 0,
+    parameter REQ_INFO_WIDTH = 1,
+    parameter NUM_REQS       = 1   
 ) (
     input wire clk,
     input wire reset,
 
     // inputs
-    input wire                          req_valid,
-    input wire [`NW_BITS-1:0]           req_wid,
-    input wire [`NUM_THREADS-1:0]       req_tmask,
-    input wire [31:0]                   req_PC,
-    input wire [`NR_BITS-1:0]           req_rd,   
-    input wire                          req_wb,
-    input wire [`TEX_FORMAT_BITS-1:0]   req_format,
-    input wire [`NUM_THREADS-1:0][3:0][31:0] req_data,
-    input wire [`NUM_THREADS-1:0][`BLEND_FRAC-1:0] req_blend_u,
-    input wire [`NUM_THREADS-1:0][`BLEND_FRAC-1:0] req_blend_v,
+    input wire                          req_valid,   
+    input wire [`NUM_THREADS-1:0]       req_tmask, 
+    input wire [`TEX_FORMAT_BITS-1:0]   req_format,    
+    input wire [1:0][NUM_REQS-1:0][`BLEND_FRAC-1:0] req_blends,
+    input wire [NUM_REQS-1:0][3:0][31:0] req_data,
+    input wire [REQ_INFO_WIDTH-1:0]     req_info,
     output wire                         req_ready,
 
     // ouputs
-    output wire                          rsp_valid,
-    output wire [`NW_BITS-1:0]           rsp_wid,
-    output wire [`NUM_THREADS-1:0]       rsp_tmask,
-    output wire [31:0]                   rsp_PC,
-    output wire [`NR_BITS-1:0]           rsp_rd,   
-    output wire                          rsp_wb,
-    output wire [`NUM_THREADS-1:0][31:0] rsp_data,
-    input wire                           rsp_ready
+    output wire                         rsp_valid,
+    output wire [`NUM_THREADS-1:0]      rsp_tmask, 
+    output wire [NUM_REQS-1:0][31:0]    rsp_data,
+    output wire [REQ_INFO_WIDTH-1:0]    rsp_info,    
+    input wire                          rsp_ready
 );
     
     `UNUSED_PARAM (CORE_ID)
    
-    wire [`NUM_THREADS-1:0][31:0] texel_ul, texel_uh;
-    wire [`NUM_THREADS-1:0][31:0] texel_ul_s0, texel_uh_s0;
-    wire [`NUM_THREADS-1:0][`BLEND_FRAC-1:0] blend_v_s0;
-    wire [`NUM_THREADS-1:0][31:0] texel_v;
-    
-    wire                          req_valid_s0;
-    wire [`NW_BITS-1:0]           req_wid_s0;
-    wire [`NUM_THREADS-1:0]       req_tmask_s0;
-    wire [31:0]                   req_PC_s0;
-    wire [`NR_BITS-1:0]           req_rd_s0; 
-    wire                          req_wb_s0;
+    wire valid_s0;
+     wire [`NUM_THREADS-1:0]  tmask_s0; 
+    wire [REQ_INFO_WIDTH-1:0] req_info_s0;
+    wire [NUM_REQS-1:0][31:0] texel_ul, texel_uh;
+    wire [NUM_REQS-1:0][31:0] texel_ul_s0, texel_uh_s0;
+    wire [NUM_REQS-1:0][`BLEND_FRAC-1:0] blend_v_s0;
+    wire [NUM_REQS-1:0][31:0] texel_v;
 
     wire stall_out;
 
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < NUM_REQS; i++) begin
 
         wire [3:0][31:0] fmt_texels;
 
@@ -62,7 +53,7 @@ module VX_tex_sampler #(
 
         VX_tex_lerp #(
         ) tex_lerp_ul (
-            .blend (req_blend_u[i]), 
+            .blend (req_blends[0][i]), 
             .in1 (fmt_texels[0]),
             .in2 (fmt_texels[1]),
             .out (texel_ul[i])
@@ -70,7 +61,7 @@ module VX_tex_sampler #(
 
         VX_tex_lerp #(
         ) tex_lerp_uh (
-            .blend (req_blend_u[i]), 
+            .blend (req_blends[0][i]), 
             .in1 (fmt_texels[2]),
             .in2 (fmt_texels[3]),
             .out (texel_uh[i])
@@ -78,17 +69,17 @@ module VX_tex_sampler #(
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * `BLEND_FRAC) + (2 * `NUM_THREADS * 32)),
+        .DATAW  (1 + NUM_REQS + REQ_INFO_WIDTH + (NUM_REQS * `BLEND_FRAC) + (2 * NUM_REQS * 32)),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({req_valid,    req_wid,    req_tmask,    req_PC,    req_rd,    req_wb,    req_blend_v, texel_ul,    texel_uh}),
-        .data_out ({req_valid_s0, req_wid_s0, req_tmask_s0, req_PC_s0, req_rd_s0, req_wb_s0, blend_v_s0,  texel_ul_s0, texel_uh_s0})
+        .data_in  ({req_valid, req_tmask, req_info,    req_blends[1], texel_ul,    texel_uh}),
+        .data_out ({valid_s0,  tmask_s0,  req_info_s0, blend_v_s0,    texel_ul_s0, texel_uh_s0})
     );
 
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < NUM_REQS; i++) begin
         VX_tex_lerp #(
         ) tex_lerp_v (
             .blend (blend_v_s0[i]), 
@@ -101,35 +92,42 @@ module VX_tex_sampler #(
     assign stall_out = rsp_valid && ~rsp_ready;
     
     VX_pipe_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
+        .DATAW  (1 + NUM_REQS + REQ_INFO_WIDTH + (NUM_REQS * 32)),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({req_valid_s0, req_wid_s0, req_tmask_s0, req_PC_s0, req_rd_s0, req_wb_s0, texel_v}),
-        .data_out ({rsp_valid,    rsp_wid,    rsp_tmask,    rsp_PC,    rsp_rd,    rsp_wb,    rsp_data})
+        .data_in  ({valid_s0,  tmask_s0,  req_info_s0, texel_v}),
+        .data_out ({rsp_valid, rsp_tmask, rsp_info,    rsp_data})
     );
 
     // can accept new request?
     assign req_ready = ~stall_out;   
 
 `ifdef DBG_PRINT_TEX
-   always @(posedge clk) begin        
+    
+    wire [`NW_BITS-1:0] req_wid, rsp_wid;
+    wire [31:0]         req_PC, rsp_PC;
+
+    assign {req_wid, req_PC} = req_info[`NW_BITS+32-1:0];
+    assign {rsp_wid, rsp_PC} = rsp_info[`NW_BITS+32-1:0];
+
+    always @(posedge clk) begin        
         if (req_valid && req_ready) begin
             $write("%t: core%0d-tex-sampler-req: wid=%0d, PC=%0h, tmask=%b, format=%0d, data=", 
                     $time, CORE_ID, req_wid, req_PC, req_tmask, req_format);
-            `PRINT_ARRAY2D(req_data, 4, `NUM_THREADS);
+            `PRINT_ARRAY2D(req_data, 4, NUM_REQS);
             $write(", u0=");
-            `PRINT_ARRAY1D(req_blend_u, `NUM_THREADS);
+            `PRINT_ARRAY1D(req_blends[0], NUM_REQS);
             $write(", v0=");
-            `PRINT_ARRAY1D(req_blend_v, `NUM_THREADS);
+            `PRINT_ARRAY1D(req_blends[1], NUM_REQS);
             $write("\n");
         end
         if (rsp_valid && rsp_ready) begin
             $write("%t: core%0d-tex-sampler-rsp: wid=%0d, PC=%0h, tmask=%b, data=", 
                     $time, CORE_ID, rsp_wid, rsp_PC, rsp_tmask);
-            `PRINT_ARRAY1D(rsp_data, `NUM_THREADS);
+            `PRINT_ARRAY1D(rsp_data, NUM_REQS);
             $write("\n");
         end        
     end
