@@ -13,8 +13,7 @@ interface VX_tex_req_if ();
     wire                            wb;
 
     wire [`NTEX_BITS-1:0]           unit;
-    wire [`NUM_THREADS-1:0][31:0]   u;
-    wire [`NUM_THREADS-1:0][31:0]   v;
+    wire [1:0][`NUM_THREADS-1:0][31:0] coords;
     wire [`NUM_THREADS-1:0][31:0]   lod;
     
     wire                            ready;

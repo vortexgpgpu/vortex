@@ -275,7 +275,7 @@ module VX_lsu_unit #(
     
 `ifdef DBG_PRINT_CORE_DCACHE
 `IGNORE_WARNINGS_BEGIN
-    reg [`LSUQ_SIZE-1:0][`DCORE_TAG_WIDTH:0] pending_reqs;
+    reg [`LSUQ_SIZE-1:0][`LSU_DCACHE_TAG_BITS:0] pending_reqs;
 `IGNORE_WARNINGS_END
 
     always @(posedge clk) begin
@@ -312,7 +312,7 @@ module VX_lsu_unit #(
             $write("%t: *** D$%0d queue-full:", $time, CORE_ID);
             for (integer j = 0; j < `LSUQ_SIZE; j++) begin
                 if (pending_reqs[j][0]) begin
-                    $write(" %0d->%0h", j, pending_reqs[j][1 +: `DCORE_TAG_WIDTH]);
+                    $write(" %0d->%0h", j, pending_reqs[j][1 +: `LSU_DCACHE_TAG_BITS]);
                 end
             end            
             $write("\n");
