@@ -114,7 +114,7 @@ void gen_input_data(uint32_t num_points) {
   test_data.resize(num_points);
   addr_table.resize(num_points + NUM_LOADS - 1);
 
-  for (uint32_t i = 0; i < test_data.size(); ++i) {
+  for (uint32_t i = 0; i < num_points; ++i) {
     float r = static_cast<float>(std::rand()) / RAND_MAX;
     test_data[i] = r;
   }
