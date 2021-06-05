@@ -185,8 +185,8 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
     int32_t curr = ((int32_t*)vx_host_ptr(staging_buf))[i];
     int32_t ref = i;
     if (curr != ref) {
-      std::cout << "error at result #" << i
-                << ": actual 0x" << curr << ", expected 0x" << ref << std::endl;
+      std::cout << "error at result #" << std::dec << i
+                << std::hex << ": actual 0x" << curr << ", expected 0x" << ref << std::endl;
       ++errors;
     }
   } 
