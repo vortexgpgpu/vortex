@@ -111,9 +111,9 @@
             "!cci_pending_writes_full": 1,
             "?afu_mem_req_fire": 1,            
             "afu_mem_req_addr": 26,
-            "afu_mem_req_tag": 28,
+            "afu_mem_req_tag": 30,
             "?afu_mem_rsp_fire": 1,
-            "afu_mem_rsp_tag": 28
+            "afu_mem_rsp_tag": 30
         },
         "afu/vortex": {
             "!reset": 1,
@@ -167,10 +167,10 @@
             "dcache_req_rw": 1,
             "dcache_req_byteen":"`NUM_THREADS * 4",
             "dcache_req_data":  "`NUM_THREADS * 32",
-            "dcache_req_tag":"`DCORE_TAG_ID_BITS",  
+            "dcache_req_tag":"`LSUQ_ADDR_BITS",  
             "?dcache_rsp_fire":"`NUM_THREADS",
             "dcache_rsp_data":"`NUM_THREADS * 32",
-            "dcache_rsp_tag":"`DCORE_TAG_ID_BITS"
+            "dcache_rsp_tag":"`LSUQ_ADDR_BITS"
         },
         "afu/vortex/cluster/core/pipeline/issue": {
             "?issue_fire": 1,
