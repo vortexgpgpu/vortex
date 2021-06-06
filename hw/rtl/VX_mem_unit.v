@@ -41,25 +41,25 @@ module VX_mem_unit # (
     ) dcache_mem_rsp_if(), icache_mem_rsp_if();
 
     VX_dcache_core_req_if #(
-        .NUM_REQS       (`DNUM_REQUESTS), 
+        .NUM_REQS       (`DNUM_REQS), 
         .WORD_SIZE      (`DWORD_SIZE), 
         .CORE_TAG_WIDTH (`DCORE_TAG_WIDTH)
     ) dcache_req_if();
 
     VX_dcache_core_rsp_if #(
-        .NUM_REQS       (`DNUM_REQUESTS), 
+        .NUM_REQS       (`DNUM_REQS), 
         .WORD_SIZE      (`DWORD_SIZE), 
         .CORE_TAG_WIDTH (`DCORE_TAG_WIDTH)
     ) dcache_rsp_if();
 
     VX_dcache_core_req_if #(
-        .NUM_REQS       (`DNUM_REQUESTS), 
+        .NUM_REQS       (`DNUM_REQS), 
         .WORD_SIZE      (`DWORD_SIZE), 
         .CORE_TAG_WIDTH (`DCORE_TAG_WIDTH)
     ) smem_req_if();
 
     VX_dcache_core_rsp_if #(
-        .NUM_REQS       (`DNUM_REQUESTS), 
+        .NUM_REQS       (`DNUM_REQS), 
         .WORD_SIZE      (`DWORD_SIZE), 
         .CORE_TAG_WIDTH (`DCORE_TAG_WIDTH)
     ) smem_rsp_if();
@@ -108,8 +108,6 @@ module VX_mem_unit # (
         .clk                (clk),
         .reset              (icache_reset),
 
-        .flush              (1'b0),
-
         // Core request
         .core_req_valid     (icache_core_req_if.valid),
         .core_req_rw        (1'b0),
@@ -152,7 +150,7 @@ module VX_mem_unit # (
         .NUM_BANKS          (`DNUM_BANKS),
         .NUM_PORTS          (`DNUM_PORTS),
         .WORD_SIZE          (`DWORD_SIZE),
-        .NUM_REQS           (`DNUM_REQUESTS),
+        .NUM_REQS           (`DNUM_REQS),
         .CREQ_SIZE          (`DCREQ_SIZE),
         .MSHR_SIZE          (`DMSHR_SIZE),
         .MRSQ_SIZE          (`DMRSQ_SIZE),
@@ -160,14 +158,13 @@ module VX_mem_unit # (
         .WRITE_ENABLE       (1),
         .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH),
         .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS),
-        .MEM_TAG_WIDTH      (`DMEM_TAG_WIDTH)
+        .MEM_TAG_WIDTH      (`DMEM_TAG_WIDTH),
+        .NC_ENABLE          (1)
     ) dcache (
         `SCOPE_BIND_VX_mem_unit_dcache
         
         .clk                (clk),
         .reset              (dcache_reset),
-
-        .flush              (1'b0),
 
         // Core req
         .core_req_valid     (dcache_req_if.valid),
@@ -219,7 +216,7 @@ module VX_mem_unit # (
             .CACHE_SIZE         (`SMEM_SIZE),
             .NUM_BANKS          (`SNUM_BANKS),
             .WORD_SIZE          (`SWORD_SIZE),
-            .NUM_REQS           (`SNUM_REQUESTS),
+            .NUM_REQS           (`SNUM_REQS),
             .CREQ_SIZE          (`SCREQ_SIZE),
             .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH),
             .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS),

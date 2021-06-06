@@ -39,6 +39,7 @@ module Vortex (
     output wire                             busy, 
     output wire                             ebreak
 );
+    `STATIC_ASSERT((`L3_ENABLE == 0 || `NUM_CLUSTERS > 1), ("invalid parameter"))
 
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_req_valid;
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_req_rw;
@@ -168,7 +169,7 @@ module Vortex (
             .CACHE_LINE_SIZE    (`L3CACHE_LINE_SIZE),
             .NUM_BANKS          (`L3NUM_BANKS),
             .WORD_SIZE          (`L3WORD_SIZE),
-            .NUM_REQS           (`NUM_CLUSTERS),
+            .NUM_REQS           (`L3NUM_REQS),
             .CREQ_SIZE          (`L3CREQ_SIZE),
             .MSHR_SIZE          (`L3MSHR_SIZE),
             .MRSQ_SIZE          (`L3MRSQ_SIZE),
@@ -176,14 +177,13 @@ module Vortex (
             .WRITE_ENABLE       (1),
             .CORE_TAG_WIDTH     (`L2MEM_TAG_WIDTH),
             .CORE_TAG_ID_BITS   (0),
-            .MEM_TAG_WIDTH      (`L3MEM_TAG_WIDTH)
+            .MEM_TAG_WIDTH      (`L3MEM_TAG_WIDTH),
+            .NC_ENABLE          (1)
         ) l3cache (
             `SCOPE_BIND_Vortex_l3cache
  
             .clk                (clk),
             .reset              (reset),
-
-            .flush              (1'b0),
 
         `ifdef PERF_ENABLE
             .perf_cache_if      (perf_l3cache_if),
@@ -267,7 +267,6 @@ module Vortex (
     end
 
     `SCOPE_ASSIGN (reset, reset);
-
     `SCOPE_ASSIGN (mem_req_fire, mem_req_valid && mem_req_ready);
     `SCOPE_ASSIGN (mem_req_addr, `TO_FULL_ADDR(mem_req_addr));
     `SCOPE_ASSIGN (mem_req_rw,   mem_req_rw);

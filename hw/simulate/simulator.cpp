@@ -309,7 +309,7 @@ void Simulator::run() {
 }
 
 int Simulator::get_last_wb_value(int reg) const {
-  return (int)vortex_->Vortex->genblk1__BRA__0__KET____DOT__cluster->genblk1__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_wb_value[reg];
+  return (int)vortex_->Vortex->genblk2__BRA__0__KET____DOT__cluster->genblk2__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_wb_value[reg];
 }
 
 void Simulator::load_bin(const char* program_file) {

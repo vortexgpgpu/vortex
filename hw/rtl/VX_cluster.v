@@ -41,6 +41,7 @@ module VX_cluster #(
     output wire                             busy, 
     output wire                             ebreak
 ); 
+    `STATIC_ASSERT((`L2_ENABLE == 0 || `NUM_CORES > 1), ("invalid parameter"))
 
     wire [`NUM_CORES-1:0]                       per_core_mem_req_valid;
     wire [`NUM_CORES-1:0]                       per_core_mem_req_rw;    
@@ -166,7 +167,7 @@ module VX_cluster #(
             .CACHE_LINE_SIZE    (`L2CACHE_LINE_SIZE),
             .NUM_BANKS          (`L2NUM_BANKS),
             .WORD_SIZE          (`L2WORD_SIZE),
-            .NUM_REQS           (`NUM_CORES),
+            .NUM_REQS           (`L2NUM_REQS),
             .CREQ_SIZE          (`L2CREQ_SIZE),
             .MSHR_SIZE          (`L2MSHR_SIZE),
             .MRSQ_SIZE          (`L2MRSQ_SIZE),
@@ -174,14 +175,13 @@ module VX_cluster #(
             .WRITE_ENABLE       (1),          
             .CORE_TAG_WIDTH     (`XMEM_TAG_WIDTH),
             .CORE_TAG_ID_BITS   (0),
-            .MEM_TAG_WIDTH      (`L2MEM_TAG_WIDTH)
+            .MEM_TAG_WIDTH      (`L2MEM_TAG_WIDTH),
+            .NC_ENABLE          (1)
         ) l2cache (
             `SCOPE_BIND_VX_cluster_l2cache
               
             .clk                (clk),
             .reset              (reset),
-
-            .flush              (1'b0),
 
         `ifdef PERF_ENABLE
             .perf_cache_if      (perf_l2cache_if),

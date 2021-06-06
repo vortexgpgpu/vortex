@@ -19,8 +19,17 @@ module VX_lsu_unit #(
     VX_commit_if    ld_commit_if,
     VX_commit_if    st_commit_if
 );
+    localparam MEM_ASHIFT = `CLOG2(`MEM_BLOCK_SIZE);    
+    localparam MEM_ADDRW  = 32 - MEM_ASHIFT;
 
-    `UNUSED_PARAM (CORE_ID)
+    localparam REQ_ASHIFT = `CLOG2(`DWORD_SIZE);
+    localparam REQ_ADDRW  = 32 - REQ_ASHIFT;
+
+    localparam ADDR_TYPEW = 1 + `SM_ENABLE;
+
+    `STATIC_ASSERT(0 == (`IO_BASE_ADDR % MEM_ASHIFT), ("invalid parameter"))
+    `STATIC_ASSERT(0 == (`SMEM_BASE_ADDR % MEM_ASHIFT), ("invalid parameter"))
+    `STATIC_ASSERT(`SMEM_SIZE == `MEM_BLOCK_SIZE * (`SMEM_SIZE / `MEM_BLOCK_SIZE), ("invalid parameter"))
     
     wire                          req_valid;
     wire [`NUM_THREADS-1:0]       req_tmask;
@@ -33,29 +42,53 @@ module VX_lsu_unit #(
     wire [31:0]                   req_pc;
     wire                          req_is_dup;
 
-    wire [`NUM_THREADS-1:0][31:0] full_address;    
+    wire [`NUM_THREADS-1:0][ADDR_TYPEW-1:0] lsu_addr_type, req_addr_type;
+
+    wire [`NUM_THREADS-1:0][31:0] full_addr;    
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        assign full_address[i] = lsu_req_if.base_addr[i] + lsu_req_if.offset;
+        assign full_addr[i] = lsu_req_if.base_addr[i] + lsu_req_if.offset;
+    end
+
+    wire [`NUM_THREADS-1:0][REQ_ADDRW-1:0] word_addr;    
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+        assign word_addr[i] = full_addr[i][REQ_ASHIFT +: REQ_ADDRW];
     end
 
     wire [`NUM_THREADS-1:0] addr_matches;
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        assign addr_matches[i] = (full_address[0][31:2] == full_address[i][31:2]) || ~lsu_req_if.tmask[i];
+        assign addr_matches[i] = (word_addr[0] == word_addr[i]) || ~lsu_req_if.tmask[i];
     end    
     wire is_dup_load = lsu_req_if.wb && lsu_req_if.tmask[0] && (& addr_matches);
+
+    wire [`NUM_THREADS-1:0] is_addr_sm, is_addr_nc;
+
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+        // is shared memory address
+        assign is_addr_sm[i] = (word_addr[i][(MEM_ASHIFT-REQ_ASHIFT) +: MEM_ADDRW] >= MEM_ADDRW'((`SMEM_BASE_ADDR - `SMEM_SIZE) >> MEM_ASHIFT))
+                             & (word_addr[i][(MEM_ASHIFT-REQ_ASHIFT) +: MEM_ADDRW] < MEM_ADDRW'(`SMEM_BASE_ADDR >> MEM_ASHIFT));
+
+        // is non-cacheable address
+        assign is_addr_nc[i] = (word_addr[i][(MEM_ASHIFT-REQ_ASHIFT) +: MEM_ADDRW] >= MEM_ADDRW'(`IO_BASE_ADDR >> MEM_ASHIFT));
+
+        if (`SM_ENABLE) begin
+            assign lsu_addr_type[i] = {is_addr_sm[i], is_addr_nc[i]};
+        end else begin
+            assign lsu_addr_type[i] = {1'b0,          is_addr_nc[i]};
+        end
+    end
     
     wire ready_in;
     wire stall_in = ~ready_in && req_valid; 
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + `NW_BITS + `NUM_THREADS + 32 + (`NUM_THREADS * 32) + `LSU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32)),
+        .DATAW  (1 + 1 + `NW_BITS + `NUM_THREADS + 32 + (`NUM_THREADS * 32) + (`NUM_THREADS * ADDR_TYPEW) + `LSU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32)),
         .RESETW (1)
     ) req_pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_in),
-        .data_in  ({lsu_req_if.valid, is_dup_load, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, full_address, lsu_req_if.op_type, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.store_data}),
-        .data_out ({req_valid,        req_is_dup,  req_wid,        req_tmask,        req_pc,        req_addr,     req_type,           req_rd,        req_wb,        req_data})
+        .data_in  ({lsu_req_if.valid, is_dup_load, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, full_addr, lsu_addr_type, lsu_req_if.op_type, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.store_data}),
+        .data_out ({req_valid,        req_is_dup,  req_wid,        req_tmask,        req_pc,        req_addr,  req_addr_type, req_type,           req_rd,        req_wb,        req_data})
     );
 
     // Can accept new request?
@@ -77,10 +110,10 @@ module VX_lsu_unit #(
     reg [`NUM_THREADS-1:0] req_sent_mask;
     wire req_ready_all;
 
-    wire [`DCORE_TAG_ID_BITS-1:0] mbuf_waddr, mbuf_raddr;
+    wire [`LSUQ_ADDR_BITS-1:0] mbuf_waddr, mbuf_raddr;
     wire mbuf_full;
 
-    wire [`NUM_THREADS-1:0][1:0] req_offset, rsp_offset;
+    wire [`NUM_THREADS-1:0][REQ_ASHIFT-1:0] req_offset, rsp_offset;
     for (genvar i = 0; i < `NUM_THREADS; i++) begin  
         assign req_offset[i] = req_addr[i][1:0];
     end
@@ -95,10 +128,10 @@ module VX_lsu_unit #(
 
     wire mbuf_pop = dcache_rsp_fire && (0 == rsp_rem_mask_n);
     
-    assign mbuf_raddr = dcache_rsp_if.tag[`DCORE_TAG_ID_BITS-1:0];    
+    assign mbuf_raddr = dcache_rsp_if.tag[ADDR_TYPEW +: `LSUQ_ADDR_BITS];    
 
     VX_index_buffer #(
-        .DATAW   (`NW_BITS + 32 + `NUM_THREADS + `NR_BITS + 1 + `LSU_BITS + (`NUM_THREADS * 2) + 1),
+        .DATAW   (`NW_BITS + 32 + `NUM_THREADS + `NR_BITS + 1 + `LSU_BITS + (`NUM_THREADS * REQ_ASHIFT) + 1),
         .SIZE    (`LSUQ_SIZE)
     ) req_metadata (
         .clk          (clk),
@@ -132,8 +165,8 @@ module VX_lsu_unit #(
     wire is_req_start = (0 == req_sent_mask);
 
     // need to hold the acquired tag index until the full request is submitted
-    reg [`DCORE_TAG_ID_BITS-1:0] req_tag_hold;
-    wire [`DCORE_TAG_ID_BITS-1:0] req_tag = is_req_start ? mbuf_waddr : req_tag_hold;
+    reg [`LSUQ_ADDR_BITS-1:0] req_tag_hold;
+    wire [`LSUQ_ADDR_BITS-1:0] req_tag = is_req_start ? mbuf_waddr : req_tag_hold;
     always @(posedge clk) begin
         if (mbuf_push) begin            
             req_tag_hold <= mbuf_waddr;
@@ -193,11 +226,13 @@ module VX_lsu_unit #(
     assign dcache_req_if.byteen = mem_req_byteen;
     assign dcache_req_if.data   = mem_req_data;
 
-`ifdef DBG_CACHE_REQ_INFO
-    assign dcache_req_if.tag = {`NUM_THREADS{req_pc, req_wid, req_tag}};
-`else
-    assign dcache_req_if.tag = {`NUM_THREADS{req_tag}};
-`endif
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+    `ifdef DBG_CACHE_REQ_INFO
+        assign dcache_req_if.tag[i] = {req_pc, req_wid, req_tag, req_addr_type[i]};
+    `else
+        assign dcache_req_if.tag[i] = {req_tag, req_addr_type[i]};
+    `endif
+    end
     
     assign ready_in = req_dep_ready && req_ready_all;
 
@@ -293,18 +328,22 @@ module VX_lsu_unit #(
             if (dcache_req_if.rw[0]) begin
                 $write("%t: D$%0d Wr Req: wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, dcache_req_fire);
                 `PRINT_ARRAY1D(req_addr, `NUM_THREADS);
-                 $write(", tag=%0h, byteen=%0h, data=", dcache_req_if.tag[0], dcache_req_if.byteen);
+                 $write(", tag=%0h, byteen=%0h, type=", req_tag, dcache_req_if.byteen);
+                 `PRINT_ARRAY1D(req_addr_type, `NUM_THREADS);
+                 $write(", data=");
                  `PRINT_ARRAY1D(dcache_req_if.data, `NUM_THREADS);
                  $write("\n");
             end else begin
                  $write("%t: D$%0d Rd Req: wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, dcache_req_fire);
                 `PRINT_ARRAY1D(req_addr, `NUM_THREADS);
-                 $write(", tag=%0h, byteen=%0h, rd=%0d, is_dup=%b\n", dcache_req_if.tag[0], dcache_req_if.byteen, req_rd, req_is_dup);
+                 $write(", tag=%0h, byteen=%0h, type=", req_tag, dcache_req_if.byteen);
+                 `PRINT_ARRAY1D(req_addr_type, `NUM_THREADS);
+                 $write(", rd=%0d, is_dup=%b\n", req_rd, req_is_dup);
             end
         end
         if (dcache_rsp_fire) begin
             $write("%t: D$%0d Rsp: valid=%b, wid=%0d, PC=%0h, tag=%0h, rd=%0d, data=", 
-                $time, CORE_ID, dcache_rsp_if.valid, rsp_wid, rsp_pc, dcache_rsp_if.tag, rsp_rd);
+                $time, CORE_ID, dcache_rsp_if.valid, rsp_wid, rsp_pc, mbuf_raddr, rsp_rd);
             `PRINT_ARRAY1D(dcache_rsp_if.data, `NUM_THREADS);
             $write(", is_dup=%b\n", rsp_is_dup);
         end

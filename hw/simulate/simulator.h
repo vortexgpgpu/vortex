@@ -50,7 +50,7 @@ private:
     int cycles_left;  
     std::array<uint8_t, MEM_BLOCK_SIZE> block;
     uint32_t addr;
-    uint32_t tag;
+    uint64_t tag;
   } mem_req_t;
 
   std::unordered_map<int, std::stringstream> print_bufs_;

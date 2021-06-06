@@ -321,8 +321,8 @@ Word Core::dcache_read(Addr addr, Size size) {
   ++loads_;
   Word data = 0;
 #ifdef SM_ENABLE
-  if ((addr >= (SHARED_MEM_BASE_ADDR - SMEM_SIZE))
-   && ((addr + 3) < SHARED_MEM_BASE_ADDR)) {
+  if ((addr >= (SMEM_BASE_ADDR - SMEM_SIZE))
+   && ((addr + 3) < SMEM_BASE_ADDR)) {
      shared_mem_.read(addr & (SMEM_SIZE-1), &data, size);
      return data;
   }
@@ -334,8 +334,8 @@ Word Core::dcache_read(Addr addr, Size size) {
 void Core::dcache_write(Addr addr, Word data, Size size) {
   ++stores_;
 #ifdef SM_ENABLE
-  if ((addr >= (SHARED_MEM_BASE_ADDR - SMEM_SIZE))
-   && ((addr + 3) < SHARED_MEM_BASE_ADDR)) {
+  if ((addr >= (SMEM_BASE_ADDR - SMEM_SIZE))
+   && ((addr + 3) < SMEM_BASE_ADDR)) {
      shared_mem_.write(addr & (SMEM_SIZE-1), &data, size);
      return;
   }
