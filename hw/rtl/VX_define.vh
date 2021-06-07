@@ -237,8 +237,8 @@
 `define DBG_CACHE_REQ_MDATAW    0
 `endif
 
-// Shared memory and non-cacheable flags
-`define SM_NC_BITS              2
+// non-cacheable address bit
+`define NC_ADDR_BITS            1
 
 ////////////////////////// Icache Configurable Knobs //////////////////////////
 
@@ -269,8 +269,14 @@
 // Memory request data bits
 `define IMEM_LINE_WIDTH         (`ICACHE_LINE_SIZE * 8)
 
+// Memory request address bits
+`define IMEM_ADDR_WIDTH         (32 - `CLOG2(`ICACHE_LINE_SIZE))
+
 // Memory byte enable bits
 `define IMEM_BYTEEN_WIDTH       `ICACHE_LINE_SIZE
+
+// Memory request tag bits
+`define IMEM_TAG_WIDTH          `IMEM_ADDR_WIDTH
 
 ////////////////////////// Dcache Configurable Knobs //////////////////////////
 
@@ -283,9 +289,12 @@
 // Word size in bytes
 `define DWORD_SIZE              4
 
+// Core request address bits
+`define DCORE_ADDR_WIDTH        (32-`CLOG2(`DWORD_SIZE))
+
 // TAG sharing enable     
 `define LSUQ_ADDR_BITS          `LOG2UP(`LSUQ_SIZE)  
-`define DCORE_TAG_ID_BITS       (`LSUQ_ADDR_BITS + `SM_NC_BITS)
+`define DCORE_TAG_ID_BITS       (`LSUQ_ADDR_BITS + `NC_ADDR_BITS + `SM_ENABLE)
 
 // Input request tag bits
 `define DCORE_TAG_WIDTH         (`DBG_CACHE_REQ_MDATAW + `DCORE_TAG_ID_BITS)
@@ -305,7 +314,7 @@
 // Memory request tag bits
 `define _DMEM_ADDR_RATIO_W      $clog2(`DCACHE_LINE_SIZE / `DWORD_SIZE)
 `define _DNC_MEM_TAG_WIDTH      ($clog2(`DNUM_REQS) + `_DMEM_ADDR_RATIO_W + `DCORE_TAG_WIDTH)
-`define DMEM_TAG_WIDTH          `MAX((`DMEM_ADDR_WIDTH + `SM_NC_BITS), `_DNC_MEM_TAG_WIDTH)
+`define DMEM_TAG_WIDTH          `MAX((`DMEM_ADDR_WIDTH + `NC_ADDR_BITS), `_DNC_MEM_TAG_WIDTH)
 
 ////////////////////////// SM Configurable Knobs //////////////////////////////
 
@@ -350,7 +359,7 @@
 // Memory request tag bits
 `define _L2MEM_ADDR_RATIO_W     $clog2(`L2CACHE_LINE_SIZE / `L2WORD_SIZE)
 `define _L2NC_MEM_TAG_WIDTH     ($clog2(`L2NUM_REQS) + `_L2MEM_ADDR_RATIO_W + `XMEM_TAG_WIDTH)
-`define _L2MEM_TAG_WIDTH        `MAX((`L2MEM_ADDR_WIDTH + `SM_NC_BITS), `_L2NC_MEM_TAG_WIDTH)
+`define _L2MEM_TAG_WIDTH        `MAX((`L2MEM_ADDR_WIDTH + `NC_ADDR_BITS), `_L2NC_MEM_TAG_WIDTH)
 `define L2MEM_TAG_WIDTH         (`L2_ENABLE ? `_L2MEM_TAG_WIDTH : (`XMEM_TAG_WIDTH + `CLOG2(`L2NUM_REQS)))
 
 ////////////////////////// L3cache Configurable Knobs /////////////////////////
@@ -382,7 +391,7 @@
 // Memory request tag bits
 `define _L3MEM_ADDR_RATIO_W     $clog2(`L3CACHE_LINE_SIZE / `L3WORD_SIZE)
 `define _L3NC_MEM_TAG_WIDTH     ($clog2(`L3NUM_REQS) + `_L3MEM_ADDR_RATIO_W + `L2MEM_TAG_WIDTH)
-`define _L3MEM_TAG_WIDTH        `MAX((`L3MEM_ADDR_WIDTH + `SM_NC_BITS), `_L3NC_MEM_TAG_WIDTH)
+`define _L3MEM_TAG_WIDTH        `MAX((`L3MEM_ADDR_WIDTH + `NC_ADDR_BITS), `_L3NC_MEM_TAG_WIDTH)
 `define L3MEM_TAG_WIDTH         (`L3_ENABLE ? `_L3MEM_TAG_WIDTH : (`L2MEM_TAG_WIDTH + `CLOG2(`L3NUM_REQS)))
 
 ///////////////////////////////////////////////////////////////////////////////
