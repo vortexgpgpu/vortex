@@ -243,7 +243,7 @@ module VX_cache #(
     assign mem_rsp_ready_out = !mrsq_full;
 
     // trim out shared memory and non-cacheable flags
-    assign mem_rsp_tag_out_a = mem_rsp_tag_out[2 +: `MEM_ADDR_WIDTH];
+    assign mem_rsp_tag_out_a = mem_rsp_tag_out[NC_ENABLE +: `MEM_ADDR_WIDTH];
     
     VX_fifo_queue #(
         .DATAW    (`MEM_ADDR_WIDTH + `CACHE_LINE_WIDTH), 
@@ -534,8 +534,12 @@ module VX_cache #(
         .ready_out (mem_req_ready_in)
     );
 
-    // build memory tag adding shared memory and non-cacheable flags
-    assign mem_req_tag_in = MEM_TAG_WIDTH'({mem_req_addr_in, 1'b0, 1'b0});
+    // build memory tag adding non-cacheable flag
+    if (NC_ENABLE) begin
+        assign mem_req_tag_in = MEM_TAG_WIDTH'({mem_req_addr_in, 1'b0});
+    end else begin
+        assign mem_req_tag_in = MEM_TAG_WIDTH'(mem_req_addr_in);
+    end
 
 `ifdef PERF_ENABLE
     // per cycle: core_reads, core_writes

@@ -111,9 +111,9 @@
             "!cci_pending_writes_full": 1,
             "?afu_mem_req_fire": 1,            
             "afu_mem_req_addr": 26,
-            "afu_mem_req_tag": 30,
+            "afu_mem_req_tag": 29,
             "?afu_mem_rsp_fire": 1,
-            "afu_mem_rsp_tag": 30
+            "afu_mem_rsp_tag": 29
         },
         "afu/vortex": {
             "!reset": 1,

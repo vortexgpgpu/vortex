@@ -25,7 +25,7 @@ module VX_lsu_unit #(
     localparam REQ_ASHIFT = `CLOG2(`DWORD_SIZE);
     localparam REQ_ADDRW  = 32 - REQ_ASHIFT;
 
-    localparam ADDR_TYPEW = 1 + `SM_ENABLE;
+    localparam ADDR_TYPEW = `NC_ADDR_BITS + `SM_ENABLE;
 
     `STATIC_ASSERT(0 == (`IO_BASE_ADDR % MEM_ASHIFT), ("invalid parameter"))
     `STATIC_ASSERT(0 == (`SMEM_BASE_ADDR % MEM_ASHIFT), ("invalid parameter"))
@@ -60,20 +60,17 @@ module VX_lsu_unit #(
     end    
     wire is_dup_load = lsu_req_if.wb && lsu_req_if.tmask[0] && (& addr_matches);
 
-    wire [`NUM_THREADS-1:0] is_addr_sm, is_addr_nc;
-
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        // is shared memory address
-        assign is_addr_sm[i] = (word_addr[i][(MEM_ASHIFT-REQ_ASHIFT) +: MEM_ADDRW] >= MEM_ADDRW'((`SMEM_BASE_ADDR - `SMEM_SIZE) >> MEM_ASHIFT))
-                             & (word_addr[i][(MEM_ASHIFT-REQ_ASHIFT) +: MEM_ADDRW] < MEM_ADDRW'(`SMEM_BASE_ADDR >> MEM_ASHIFT));
-
         // is non-cacheable address
-        assign is_addr_nc[i] = (word_addr[i][(MEM_ASHIFT-REQ_ASHIFT) +: MEM_ADDRW] >= MEM_ADDRW'(`IO_BASE_ADDR >> MEM_ASHIFT));
+        wire is_addr_nc = (word_addr[i][(MEM_ASHIFT-REQ_ASHIFT) +: MEM_ADDRW] >= MEM_ADDRW'(`IO_BASE_ADDR >> MEM_ASHIFT));
 
         if (`SM_ENABLE) begin
-            assign lsu_addr_type[i] = {is_addr_sm[i], is_addr_nc[i]};
+            // is shared memory address
+            wire is_addr_sm = (word_addr[i][(MEM_ASHIFT-REQ_ASHIFT) +: MEM_ADDRW] >= MEM_ADDRW'((`SMEM_BASE_ADDR - `SMEM_SIZE) >> MEM_ASHIFT))
+                            & (word_addr[i][(MEM_ASHIFT-REQ_ASHIFT) +: MEM_ADDRW] < MEM_ADDRW'(`SMEM_BASE_ADDR >> MEM_ASHIFT));
+            assign lsu_addr_type[i] = {is_addr_nc, is_addr_sm};
         end else begin
-            assign lsu_addr_type[i] = {1'b0,          is_addr_nc[i]};
+            assign lsu_addr_type[i] = is_addr_nc;
         end
     end
     
