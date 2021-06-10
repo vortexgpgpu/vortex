@@ -97,8 +97,7 @@ module VX_nc_bypass #(
     reg [NUM_REQS-1:0] core_req_ready_in_r;
 
     wire [NUM_REQS-1:0] core_req_valid_in_nc;
-    wire [CORE_REQ_TIDW-1:0] core_req_nc_tid;
-
+    
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         assign core_req_valid_in_nc[i] = core_req_valid_in[i] && core_req_tag_in[i][NC_TAG_BIT];
     end
@@ -107,13 +106,44 @@ module VX_nc_bypass #(
         for (integer i = 0; i < NUM_REQS; ++i) begin
             if (core_req_valid_in_nc[i]) begin
                 core_req_valid_out_r[i] = 0;
-                core_req_ready_in_r[i]  = mem_req_ready_out && (core_req_nc_tid == CORE_REQ_TIDW'(i));
             end else begin
                 core_req_valid_out_r[i] = core_req_valid_in[i];
-                core_req_ready_in_r[i]  = core_req_ready_out[i];
             end
         end
     end
+
+    wire [`UP(CORE_REQ_TIDW)-1:0] core_req_nc_tid;
+    wire core_req_nc_valid;
+
+    VX_priority_encoder #(
+        .N (NUM_REQS)
+    ) core_req_sel (
+        .data_in   (core_req_valid_in_nc),
+        .index     (core_req_nc_tid),
+        `UNUSED_PIN (onehot),
+        .valid_out (core_req_nc_valid)
+    );
+
+    if (NUM_REQS > 1) begin
+        always @(*) begin
+            for (integer i = 0; i < NUM_REQS; ++i) begin
+                if (core_req_valid_in_nc[i]) begin
+                    core_req_ready_in_r[i] = mem_req_ready_out && (core_req_nc_tid == CORE_REQ_TIDW'(i));
+                end else begin
+                    core_req_ready_in_r[i] = core_req_ready_out[i];
+                end
+            end
+        end 
+    end else begin
+        `UNUSED_VAR (core_req_nc_tid)
+        always @(*) begin
+            if (core_req_valid_in_nc) begin
+                core_req_ready_in_r = mem_req_ready_out;
+            end else begin
+                core_req_ready_in_r = core_req_ready_out;
+            end
+        end 
+    end    
 
     assign core_req_valid_out  = core_req_valid_out_r;
     assign core_req_rw_out     = core_req_rw_in;
@@ -131,57 +161,92 @@ module VX_nc_bypass #(
     reg [MEM_ADDR_WIDTH-1:0]    mem_req_addr_out_r;
     reg [MEM_DATA_WIDTH-1:0]    mem_req_data_out_r;
     reg [MEM_TAG_WIDTH-1:0]     mem_req_tag_out_r;
-    reg                         mem_req_ready_in_r;
-    
-    wire core_req_nc_valid;
-
-    VX_priority_encoder #(
-        .N (NUM_REQS)
-    ) core_req_sel (
-        .data_in   (core_req_valid_in_nc),
-        .index     (core_req_nc_tid),
-        `UNUSED_PIN (onehot),
-        .valid_out (core_req_nc_valid)
-    );
+    reg                         mem_req_ready_in_r;   
 
     always @(*) begin        
         if (core_req_nc_valid) begin
-            mem_req_valid_out_r  = 1;
-            mem_req_rw_out_r     = core_req_rw_in[core_req_nc_tid];
-            mem_req_addr_out_r   = core_req_addr_in[core_req_nc_tid][D +: MEM_ADDR_WIDTH];                        
-            for (integer i = 0; i < P; ++i) begin
-                mem_req_data_out_r[i * CORE_DATA_WIDTH +: CORE_DATA_WIDTH] = core_req_data_in[core_req_nc_tid];
-            end            
-            mem_req_ready_in_r   = 0;
+            mem_req_valid_out_r = 1;
+            mem_req_ready_in_r  = 0;
         end else begin
-            mem_req_valid_out_r  = mem_req_valid_in;
-            mem_req_rw_out_r     = mem_req_rw_in;
-            mem_req_addr_out_r   = mem_req_addr_in;
-            mem_req_data_out_r   = mem_req_data_in;            
-            mem_req_ready_in_r   = mem_req_ready_out;
+            mem_req_valid_out_r = mem_req_valid_in;           
+            mem_req_ready_in_r  = mem_req_ready_out;
         end
     end
 
-    if (D != 0) begin
-        wire [D-1:0] req_addr_idx = core_req_addr_in[core_req_nc_tid][D-1:0];    
+    if (NUM_REQS > 1) begin
         always @(*) begin        
             if (core_req_nc_valid) begin
-                mem_req_byteen_out_r = 0;
-                mem_req_byteen_out_r[req_addr_idx * CORE_DATA_SIZE +: CORE_DATA_SIZE] = core_req_byteen_in[core_req_nc_tid];
-                mem_req_tag_out_r    = MEM_TAG_WIDTH'({core_req_nc_tid, req_addr_idx, core_req_tag_in[core_req_nc_tid]});
+                mem_req_rw_out_r   = core_req_rw_in[core_req_nc_tid];
+                mem_req_addr_out_r = core_req_addr_in[core_req_nc_tid][D +: MEM_ADDR_WIDTH];                        
+                for (integer i = 0; i < P; ++i) begin
+                    mem_req_data_out_r[i * CORE_DATA_WIDTH +: CORE_DATA_WIDTH] = core_req_data_in[core_req_nc_tid];
+                end            
             end else begin
-                mem_req_byteen_out_r = mem_req_byteen_in;
-                mem_req_tag_out_r    = mem_req_tag_in;
+                mem_req_rw_out_r   = mem_req_rw_in;
+                mem_req_addr_out_r = mem_req_addr_in;
+                mem_req_data_out_r = mem_req_data_in;
             end
         end
-    end else begin
+
+        if (D != 0) begin
+            wire [D-1:0] req_addr_idx = core_req_addr_in[core_req_nc_tid][D-1:0];    
+            always @(*) begin        
+                if (core_req_nc_valid) begin
+                    mem_req_byteen_out_r = 0;
+                    mem_req_byteen_out_r[req_addr_idx * CORE_DATA_SIZE +: CORE_DATA_SIZE] = core_req_byteen_in[core_req_nc_tid];
+                    mem_req_tag_out_r    = MEM_TAG_WIDTH'({core_req_nc_tid, req_addr_idx, core_req_tag_in[core_req_nc_tid]});
+                end else begin
+                    mem_req_byteen_out_r = mem_req_byteen_in;
+                    mem_req_tag_out_r    = mem_req_tag_in;
+                end
+            end
+        end else begin
+            always @(*) begin        
+                if (core_req_nc_valid) begin
+                    mem_req_byteen_out_r = core_req_byteen_in[core_req_nc_tid];
+                    mem_req_tag_out_r    = MEM_TAG_WIDTH'({core_req_nc_tid, core_req_tag_in[core_req_nc_tid]});
+                end else begin
+                    mem_req_byteen_out_r = mem_req_byteen_in;
+                    mem_req_tag_out_r    = mem_req_tag_in;
+                end
+            end
+        end
+    end else begin 
         always @(*) begin        
             if (core_req_nc_valid) begin
-                mem_req_byteen_out_r = core_req_byteen_in[core_req_nc_tid];
-                mem_req_tag_out_r    = MEM_TAG_WIDTH'({core_req_nc_tid, core_req_tag_in[core_req_nc_tid]});
+                mem_req_rw_out_r   = core_req_rw_in;
+                mem_req_addr_out_r = core_req_addr_in[0][D +: MEM_ADDR_WIDTH];
+                for (integer i = 0; i < P; ++i) begin
+                    mem_req_data_out_r[i * CORE_DATA_WIDTH +: CORE_DATA_WIDTH] = core_req_data_in;
+                end            
             end else begin
-                mem_req_byteen_out_r = mem_req_byteen_in;
-                mem_req_tag_out_r    = mem_req_tag_in;
+                mem_req_rw_out_r   = mem_req_rw_in;
+                mem_req_addr_out_r = mem_req_addr_in;
+                mem_req_data_out_r = mem_req_data_in;
+            end
+        end
+
+        if (D != 0) begin
+            wire [D-1:0] req_addr_idx = core_req_addr_in[0][D-1:0];    
+            always @(*) begin        
+                if (core_req_nc_valid) begin
+                    mem_req_byteen_out_r = 0;
+                    mem_req_byteen_out_r[req_addr_idx * CORE_DATA_SIZE +: CORE_DATA_SIZE] = core_req_byteen_in;
+                    mem_req_tag_out_r    = MEM_TAG_WIDTH'({req_addr_idx, core_req_tag_in});
+                end else begin
+                    mem_req_byteen_out_r = mem_req_byteen_in;
+                    mem_req_tag_out_r    = mem_req_tag_in;
+                end
+            end
+        end else begin
+            always @(*) begin        
+                if (core_req_nc_valid) begin
+                    mem_req_byteen_out_r = core_req_byteen_in;
+                    mem_req_tag_out_r    = MEM_TAG_WIDTH'(core_req_tag_in);
+                end else begin
+                    mem_req_byteen_out_r = mem_req_byteen_in;
+                    mem_req_tag_out_r    = mem_req_tag_in;
+                end
             end
         end
     end
@@ -201,26 +266,41 @@ module VX_nc_bypass #(
     reg [NUM_RSP_TAGS-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag_out_r;
     reg [NUM_RSP_TAGS-1:0]                  core_rsp_ready_in_r;
 
-    wire [CORE_REQ_TIDW-1:0] rsp_tid = mem_rsp_tag_in[(CORE_TAG_WIDTH + D) +: CORE_REQ_TIDW];
-
     wire is_mem_rsp_nc = mem_rsp_valid_in && mem_rsp_tag_in[NC_TAG_BIT];
 
     if (NUM_REQS > 1) begin        
-        always @(*) begin        
-            if (is_mem_rsp_nc) begin
-                core_rsp_valid_out_r = 0;
-                core_rsp_valid_out_r[rsp_tid] = 1;
-                for (integer i = 0; i < NUM_RSP_TAGS; ++i) begin                        
-                    core_rsp_tag_out_r[i] = mem_rsp_tag_in[CORE_TAG_WIDTH-1:0];
-                end                    
-                core_rsp_ready_in_r  = 0;
-            end else begin
-                core_rsp_valid_out_r = core_rsp_valid_in;
-                core_rsp_tag_out_r   = core_rsp_tag_in;
-                core_rsp_ready_in_r  = core_rsp_ready_out;
+        wire [CORE_REQ_TIDW-1:0] rsp_tid = mem_rsp_tag_in[(CORE_TAG_WIDTH + D) +: CORE_REQ_TIDW];
+        if (NUM_RSP_TAGS > 1) begin
+            always @(*) begin       
+                for (integer i = 0; i < NUM_REQS; ++i) begin
+                    if (is_mem_rsp_nc && (rsp_tid == CORE_REQ_TIDW'(i))) begin                    
+                        core_rsp_valid_out_r[i] = 1;
+                        core_rsp_tag_out_r[i]   = mem_rsp_tag_in[CORE_TAG_WIDTH-1:0];
+                        core_rsp_ready_in_r[i]  = 0;
+                    end else begin
+                        core_rsp_valid_out_r[i] = core_rsp_valid_in[i];
+                        core_rsp_tag_out_r[i]   = core_rsp_tag_in[i];
+                        core_rsp_ready_in_r[i]  = core_rsp_ready_out[i];
+                    end
+                end            
+            end
+        end else begin
+            always @(*) begin
+                if (is_mem_rsp_nc) begin
+                    core_rsp_valid_out_r = 0;
+                    core_rsp_valid_out_r[rsp_tid] = 1;
+                    for (integer i = 0; i < NUM_RSP_TAGS; ++i) begin                        
+                        core_rsp_tag_out_r[i] = mem_rsp_tag_in[CORE_TAG_WIDTH-1:0];
+                    end                    
+                    core_rsp_ready_in_r  = 0;
+                end else begin
+                    core_rsp_valid_out_r = core_rsp_valid_in;
+                    core_rsp_tag_out_r   = core_rsp_tag_in;
+                    core_rsp_ready_in_r  = core_rsp_ready_out;
+                end
             end
         end
-    end else begin
+    end else begin    
         always @(*) begin        
             if (is_mem_rsp_nc) begin
                 core_rsp_valid_out_r = 1;
@@ -276,6 +356,7 @@ module VX_nc_bypass #(
     end
 
     if (NUM_RSP_TAGS > 1) begin
+        wire [CORE_REQ_TIDW-1:0] rsp_tid = mem_rsp_tag_in[(CORE_TAG_WIDTH + D) +: CORE_REQ_TIDW];
         always @(*) begin
             if (is_mem_rsp_nc) begin
                 mem_rsp_ready_in_r = core_rsp_ready_out[rsp_tid];

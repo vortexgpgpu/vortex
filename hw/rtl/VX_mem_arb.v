@@ -3,14 +3,15 @@
 module VX_mem_arb #(    
     parameter NUM_REQS      = 1, 
     parameter DATA_WIDTH    = 1,
-    parameter TAG_IN_WIDTH  = 1,
-    parameter TAG_OUT_WIDTH = 1,
+    parameter ADDR_WIDTH    = 1,
+    parameter TAG_IN_WIDTH  = 1,    
     parameter BUFFERED_REQ  = 0,
     parameter BUFFERED_RSP  = 0,
+    parameter TYPE          = "R",
     
-    parameter DATA_SIZE     = (DATA_WIDTH / 8), 
-    parameter ADDR_WIDTH    = 32 - `CLOG2(DATA_SIZE),
-    parameter LOG_NUM_REQS  = `CLOG2(NUM_REQS)
+    parameter DATA_SIZE     = (DATA_WIDTH / 8),
+    parameter LOG_NUM_REQS  = `CLOG2(NUM_REQS),
+    parameter TAG_OUT_WIDTH = TAG_IN_WIDTH + LOG_NUM_REQS
 ) (
     input wire clk,
     input wire reset,
@@ -50,20 +51,21 @@ module VX_mem_arb #(
 
     if (NUM_REQS > 1) begin
 
-        wire [NUM_REQS-1:0][REQ_DATAW-1:0] req_merged_data_in;
+        wire [NUM_REQS-1:0][REQ_DATAW-1:0] req_data_in_merged;
         for (genvar i = 0; i < NUM_REQS; i++) begin
-            assign req_merged_data_in[i] = {{req_tag_in[i], LOG_NUM_REQS'(i)}, req_addr_in[i], req_rw_in[i], req_byteen_in[i], req_data_in[i]};
+            assign req_data_in_merged[i] = {{req_tag_in[i], LOG_NUM_REQS'(i)}, req_addr_in[i], req_rw_in[i], req_byteen_in[i], req_data_in[i]};
         end
 
-        VX_stream_arbiter #(
+        VX_stream_arbiter #(            
             .NUM_REQS (NUM_REQS),
             .DATAW    (REQ_DATAW),
-            .BUFFERED (BUFFERED_REQ)
+            .BUFFERED (BUFFERED_REQ),
+            .TYPE     (TYPE)
         ) req_arb (
             .clk       (clk),
             .reset     (reset),
             .valid_in  (req_valid_in),
-            .data_in   (req_merged_data_in),
+            .data_in   (req_data_in_merged),
             .ready_in  (req_ready_in),
             .valid_out (req_valid_out),
             .data_out  ({req_tag_out, req_addr_out, req_rw_out, req_byteen_out, req_data_out}),
@@ -72,11 +74,11 @@ module VX_mem_arb #(
 
         ///////////////////////////////////////////////////////////////////////
 
-        wire [LOG_NUM_REQS-1:0] rsp_sel = rsp_tag_in [LOG_NUM_REQS-1:0];
+        wire [LOG_NUM_REQS-1:0] rsp_sel = rsp_tag_in[LOG_NUM_REQS-1:0];
 
-        wire [NUM_REQS-1:0][RSP_DATAW-1:0] rsp_merged_data_out;
+        wire [NUM_REQS-1:0][RSP_DATAW-1:0] rsp_data_out_merged;
         for (genvar i = 0; i < NUM_REQS; i++) begin
-            assign {rsp_tag_out[i], rsp_data_out[i]} = rsp_merged_data_out[i];
+            assign {rsp_tag_out[i], rsp_data_out[i]} = rsp_data_out_merged[i];
         end
 
         VX_stream_demux #(
@@ -91,7 +93,7 @@ module VX_mem_arb #(
             .data_in   ({rsp_tag_in[LOG_NUM_REQS +: TAG_IN_WIDTH], rsp_data_in}),
             .ready_in  (rsp_ready_in),
             .valid_out (rsp_valid_out),
-            .data_out  (rsp_merged_data_out),
+            .data_out  (rsp_data_out_merged),
             .ready_out (rsp_ready_out)
         );        
 

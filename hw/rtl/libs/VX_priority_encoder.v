@@ -18,6 +18,12 @@ module VX_priority_encoder #(
         assign index     = 0;
         assign valid_out = data_in;
 
+    end else if (N == 2) begin
+
+        assign onehot    = {!data_in[REVERSE], data_in[REVERSE]};
+        assign index     = !data_in[REVERSE];
+        assign valid_out = (| data_in);
+
     end else if (FAST) begin
 
         wire [N-1:0] scan_lo;

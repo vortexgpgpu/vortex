@@ -225,8 +225,8 @@ module Vortex (
         VX_mem_arb #(
             .NUM_REQS       (`NUM_CLUSTERS),
             .DATA_WIDTH     (`L3MEM_LINE_WIDTH),            
+            .ADDR_WIDTH     (`L3MEM_ADDR_WIDTH),
             .TAG_IN_WIDTH   (`L2MEM_TAG_WIDTH),
-            .TAG_OUT_WIDTH  (`L3MEM_TAG_WIDTH),
             .BUFFERED_REQ   (1),
             .BUFFERED_RSP   (1)
         ) mem_arb (

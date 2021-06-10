@@ -27,7 +27,6 @@ module VX_stream_arbiter #(
         wire [NUM_REQS-1:0]     sel_1hot;
 
         if (TYPE == "X") begin
-
             VX_fixed_arbiter #(
                 .NUM_REQS(NUM_REQS),
                 .LOCK_ENABLE(1)
@@ -40,9 +39,7 @@ module VX_stream_arbiter #(
                 .grant_index  (sel_idx),
                 .grant_onehot (sel_1hot)
             );
-
         end else if (TYPE == "R") begin
-
             VX_rr_arbiter #(
                 .NUM_REQS(NUM_REQS),
                 .LOCK_ENABLE(1)
@@ -55,9 +52,7 @@ module VX_stream_arbiter #(
                 .grant_index  (sel_idx),
                 .grant_onehot (sel_1hot)
             );
-
         end else if (TYPE == "F") begin
-
             VX_fair_arbiter #(
                 .NUM_REQS(NUM_REQS),
                 .LOCK_ENABLE(1)
@@ -70,9 +65,7 @@ module VX_stream_arbiter #(
                 .grant_index  (sel_idx),
                 .grant_onehot (sel_1hot)
             );
-
         end else if (TYPE == "M") begin
-
             VX_matrix_arbiter #(
                 .NUM_REQS(NUM_REQS),
                 .LOCK_ENABLE(1)
@@ -85,8 +78,9 @@ module VX_stream_arbiter #(
                 .grant_index  (sel_idx),
                 .grant_onehot (sel_1hot)
             );
-
-        end 
+        end else begin
+            $error ("invalid parameter");
+        end
 
         wire ready_out_unqual;           
 

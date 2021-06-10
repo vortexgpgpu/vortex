@@ -586,23 +586,23 @@ wire [AVS_REQ_TAGW:0]   mem_rsp_tag;
 wire                    mem_rsp_ready;
 
 VX_mem_arb #(
-  .NUM_REQS      (2),
-  .DATA_WIDTH    (LMEM_LINE_WIDTH),
-  .ADDR_WIDTH    (LMEM_ADDR_WIDTH),
-  .TAG_IN_WIDTH  (AVS_REQ_TAGW),
-  .TAG_OUT_WIDTH (AVS_REQ_TAGW+1)
+  .NUM_REQS       (2),
+  .DATA_WIDTH     (LMEM_LINE_WIDTH),
+  .ADDR_WIDTH     (LMEM_ADDR_WIDTH),
+  .TAG_IN_WIDTH   (AVS_REQ_TAGW),
+  .TYPE           ("X")
 ) mem_arb (
   .clk            (clk),
   .reset          (reset),
 
   // Source request
-  .req_valid_in   ({cci_mem_req_arb_valid,  vx_mem_req_arb_valid}),
-  .req_rw_in      ({cci_mem_req_arb_rw,     vx_mem_req_arb_rw}),
-  .req_byteen_in  ({cci_mem_req_arb_byteen, vx_mem_req_arb_byteen}),
-  .req_addr_in    ({cci_mem_req_arb_addr,   vx_mem_req_arb_addr}),
-  .req_data_in    ({cci_mem_req_arb_data,   vx_mem_req_arb_data}),  
-  .req_tag_in     ({cci_mem_req_arb_tag,    vx_mem_req_arb_tag}),  
-  .req_ready_in   ({cci_mem_req_arb_ready,  vx_mem_req_arb_ready}),
+  .req_valid_in   ({vx_mem_req_arb_valid,  cci_mem_req_arb_valid}),
+  .req_rw_in      ({vx_mem_req_arb_rw,     cci_mem_req_arb_rw}),
+  .req_byteen_in  ({vx_mem_req_arb_byteen, cci_mem_req_arb_byteen}),
+  .req_addr_in    ({vx_mem_req_arb_addr,   cci_mem_req_arb_addr}),
+  .req_data_in    ({vx_mem_req_arb_data,   cci_mem_req_arb_data}),  
+  .req_tag_in     ({vx_mem_req_arb_tag,    cci_mem_req_arb_tag}),  
+  .req_ready_in   ({vx_mem_req_arb_ready,  cci_mem_req_arb_ready}),
 
   // Memory request
   .req_valid_out  (mem_req_valid),
@@ -614,10 +614,10 @@ VX_mem_arb #(
   .req_ready_out  (mem_req_ready),
 
   // Source response
-  .rsp_valid_out  ({cci_mem_rsp_arb_valid, vx_mem_rsp_arb_valid}),
-  .rsp_data_out   ({cci_mem_rsp_arb_data,  vx_mem_rsp_arb_data}),
-  .rsp_tag_out    ({cci_mem_rsp_arb_tag,   vx_mem_rsp_arb_tag}),
-  .rsp_ready_out  ({cci_mem_rsp_arb_ready, vx_mem_rsp_arb_ready}),
+  .rsp_valid_out  ({vx_mem_rsp_arb_valid, cci_mem_rsp_arb_valid}),
+  .rsp_data_out   ({vx_mem_rsp_arb_data,  cci_mem_rsp_arb_data}),
+  .rsp_tag_out    ({vx_mem_rsp_arb_tag,   cci_mem_rsp_arb_tag}),
+  .rsp_ready_out  ({vx_mem_rsp_arb_ready, cci_mem_rsp_arb_ready}),
   
   // Memory response
   .rsp_valid_in   (mem_rsp_valid),
