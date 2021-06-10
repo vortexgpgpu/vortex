@@ -999,8 +999,7 @@ Vortex #() vortex (
   .csr_rsp_ready  (vx_csr_io_rsp_ready),
  
   // status
-  .busy           (vx_busy),
-  `UNUSED_PIN     (ebreak)
+  .busy           (vx_busy)
 );
 
 // SCOPE //////////////////////////////////////////////////////////////////////

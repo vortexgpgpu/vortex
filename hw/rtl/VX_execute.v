@@ -41,8 +41,7 @@ module VX_execute #(
     VX_commit_if        fpu_commit_if,
     VX_commit_if        gpu_commit_if,
     
-    input wire          busy,
-    output wire         ebreak
+    input wire          busy
 );
     VX_fpu_to_csr_if     fpu_to_csr_if(); 
     wire[`NUM_WARPS-1:0] csr_pending;
@@ -131,10 +130,5 @@ module VX_execute #(
         .warp_ctl_if    (warp_ctl_if),
         .gpu_commit_if  (gpu_commit_if)
     );
-
-    assign ebreak = alu_req_if.valid 
-                 && `IS_BR_MOD(alu_req_if.op_mod)
-                 && (`BR_OP(alu_req_if.op_type) == `BR_EBREAK 
-                  || `BR_OP(alu_req_if.op_type) == `BR_ECALL);
 
 endmodule

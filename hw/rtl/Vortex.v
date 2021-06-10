@@ -36,8 +36,7 @@ module Vortex (
     input wire                              csr_rsp_ready,
 
     // Status
-    output wire                             busy, 
-    output wire                             ebreak
+    output wire                             busy
 );
     `STATIC_ASSERT((`L3_ENABLE == 0 || `NUM_CLUSTERS > 1), ("invalid parameter"))
 
@@ -65,7 +64,6 @@ module Vortex (
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_csr_rsp_ready;
 
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_busy;
-    wire [`NUM_CLUSTERS-1:0]                         per_cluster_ebreak;
 
     wire [`LOG2UP(`NUM_CLUSTERS)-1:0] csr_cluster_id = `LOG2UP(`NUM_CLUSTERS)'(csr_req_coreid >> `CLOG2(`NUM_CORES));
     wire [`NC_BITS-1:0] csr_core_id = `NC_BITS'(csr_req_coreid);
@@ -113,8 +111,7 @@ module Vortex (
             .csr_rsp_data   (per_cluster_csr_rsp_data   [i]),
             .csr_rsp_ready  (per_cluster_csr_rsp_ready  [i]),
 
-            .busy           (per_cluster_busy           [i]),
-            .ebreak         (per_cluster_ebreak         [i])
+            .busy           (per_cluster_busy           [i])
         );
     end
 
@@ -156,7 +153,6 @@ module Vortex (
     );
 
     assign busy   = (| per_cluster_busy);
-    assign ebreak = (| per_cluster_ebreak);
 
     if (`L3_ENABLE) begin
     `ifdef PERF_ENABLE
