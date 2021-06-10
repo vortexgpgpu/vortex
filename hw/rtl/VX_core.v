@@ -37,8 +37,7 @@ module VX_core #(
     input wire                              csr_rsp_ready,
 
     // Status
-    output wire                             busy, 
-    output wire                             ebreak
+    output wire                             busy
 );
 `ifdef PERF_ENABLE
     VX_perf_memsys_if perf_memsys_if();
@@ -143,8 +142,7 @@ module VX_core #(
         .csr_rsp_ready      (csr_rsp_ready),
 
         // Status
-        .busy(busy), 
-        .ebreak(ebreak)
+        .busy(busy)
     );  
 
     //--

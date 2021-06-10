@@ -53,8 +53,7 @@ module VX_pipeline #(
 `endif
 
     // Status
-    output wire                             busy, 
-    output wire                             ebreak
+    output wire                             busy
 );
     //
     // Dcache request
@@ -248,8 +247,7 @@ module VX_pipeline #(
         .fpu_commit_if  (fpu_commit_if),
         .gpu_commit_if  (gpu_commit_if),        
         
-        .busy           (busy), 
-        .ebreak         (ebreak)
+        .busy           (busy)
     );    
 
     VX_commit #(

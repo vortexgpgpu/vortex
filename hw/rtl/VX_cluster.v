@@ -38,8 +38,7 @@ module VX_cluster #(
     input wire                              csr_rsp_ready,
 
     // Status
-    output wire                             busy, 
-    output wire                             ebreak
+    output wire                             busy
 ); 
     `STATIC_ASSERT((`L2_ENABLE == 0 || `NUM_CORES > 1), ("invalid parameter"))
 
@@ -67,7 +66,6 @@ module VX_cluster #(
     wire [`NUM_CORES-1:0]                       per_core_csr_rsp_ready;
 
     wire [`NUM_CORES-1:0]                       per_core_busy;
-    wire [`NUM_CORES-1:0]                       per_core_ebreak;
 
     for (genvar i = 0; i < `NUM_CORES; i++) begin
         
@@ -111,8 +109,7 @@ module VX_cluster #(
             .csr_rsp_data   (per_core_csr_rsp_data  [i]),
             .csr_rsp_ready  (per_core_csr_rsp_ready [i]),
 
-            .busy           (per_core_busy          [i]),
-            .ebreak         (per_core_ebreak        [i])
+            .busy           (per_core_busy          [i])
         );
     end
 
@@ -154,7 +151,6 @@ module VX_cluster #(
     );
     
     assign busy = (| per_core_busy);
-    assign ebreak = (| per_core_ebreak);
 
     if (`L2_ENABLE) begin
     `ifdef PERF_ENABLE
