@@ -222,9 +222,9 @@ module VX_cluster #(
 
         VX_mem_arb #(
             .NUM_REQS       (`NUM_CORES),
-            .DATA_WIDTH     (`L2MEM_LINE_WIDTH),            
+            .DATA_WIDTH     (`L2MEM_LINE_WIDTH), 
+            .ADDR_WIDTH     (`L2MEM_ADDR_WIDTH),           
             .TAG_IN_WIDTH   (`XMEM_TAG_WIDTH),
-            .TAG_OUT_WIDTH  (`L2MEM_TAG_WIDTH),
             .BUFFERED_REQ   (1),
             .BUFFERED_RSP   (1)
         ) mem_arb (

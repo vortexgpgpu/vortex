@@ -54,11 +54,12 @@ module VX_lsu_unit #(
         assign word_addr[i] = full_addr[i][REQ_ASHIFT +: REQ_ADDRW];
     end
 
+    // detect duplicate addresses
     wire [`NUM_THREADS-1:0] addr_matches;
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         assign addr_matches[i] = (word_addr[0] == word_addr[i]) || ~lsu_req_if.tmask[i];
     end    
-    wire is_dup_load = lsu_req_if.wb && lsu_req_if.tmask[0] && (& addr_matches);
+    wire lsu_is_dup = lsu_req_if.tmask[0] && (& addr_matches);
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         // is non-cacheable address
@@ -84,8 +85,8 @@ module VX_lsu_unit #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_in),
-        .data_in  ({lsu_req_if.valid, is_dup_load, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, full_addr, lsu_addr_type, lsu_req_if.op_type, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.store_data}),
-        .data_out ({req_valid,        req_is_dup,  req_wid,        req_tmask,        req_pc,        req_addr,  req_addr_type, req_type,           req_rd,        req_wb,        req_data})
+        .data_in  ({lsu_req_if.valid, lsu_is_dup, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, full_addr, lsu_addr_type, lsu_req_if.op_type, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.store_data}),
+        .data_out ({req_valid,        req_is_dup, req_wid,        req_tmask,        req_pc,        req_addr,  req_addr_type, req_type,           req_rd,        req_wb,        req_data})
     );
 
     // Can accept new request?
@@ -105,9 +106,9 @@ module VX_lsu_unit #(
     wire [`NUM_THREADS-1:0] rsp_tmask;
 
     reg [`NUM_THREADS-1:0] req_sent_mask;
-    wire req_ready_all;
+    reg is_req_start;
 
-    wire [`LSUQ_ADDR_BITS-1:0] mbuf_waddr, mbuf_raddr;
+    wire [`LSUQ_ADDR_BITS-1:0] mbuf_waddr, mbuf_raddr;    
     wire mbuf_full;
 
     wire [`NUM_THREADS-1:0][REQ_ASHIFT-1:0] req_offset, rsp_offset;
@@ -119,9 +120,9 @@ module VX_lsu_unit #(
 
     wire dcache_rsp_fire = (| dcache_rsp_if.valid) && dcache_rsp_if.ready;
 
-    wire mbuf_push = (| dcache_req_fire)
-                  && (0 == req_sent_mask)  // first submission only
-                  && req_wb;               // loads only
+    wire mbuf_push = (| dcache_req_fire)                  
+                  && is_req_start   // first submission only                  
+                  && req_wb;        // loads only
 
     wire mbuf_pop = dcache_rsp_fire && (0 == rsp_rem_mask_n);
     
@@ -144,22 +145,26 @@ module VX_lsu_unit #(
         `UNUSED_PIN (empty)
     );
 
-    assign req_ready_all = &(dcache_req_if.ready | req_sent_mask | ~req_tmask);
+    wire [`NUM_THREADS-1:0] req_tmask_dup = req_tmask & {{(`NUM_THREADS-1){~req_is_dup}}, 1'b1};
+    
+    wire req_ready_all = &(dcache_req_if.ready | req_sent_mask | ~req_tmask_dup);
 
-    wire [`NUM_THREADS-1:0] req_sent_dup = {{(`NUM_THREADS-1){dcache_req_fire[0] && req_is_dup}}, 1'b0};
+    wire [`NUM_THREADS-1:0] req_sent_mask_n = req_sent_mask | dcache_req_fire;
 
     always @(posedge clk) begin
         if (reset) begin
             req_sent_mask <= 0;
+            is_req_start  <= 1;
         end else begin
-            if (req_ready_all)
+            if (req_ready_all) begin
                 req_sent_mask <= 0;
-            else
-                req_sent_mask <= req_sent_mask | dcache_req_fire | req_sent_dup;
+                is_req_start  <= 1;
+            end else begin
+                req_sent_mask <= req_sent_mask_n;
+                is_req_start  <= (0 == req_sent_mask_n);
+            end
         end
     end
-
-    wire is_req_start = (0 == req_sent_mask);
 
     // need to hold the acquired tag index until the full request is submitted
     reg [`LSUQ_ADDR_BITS-1:0] req_tag_hold;
@@ -168,9 +173,7 @@ module VX_lsu_unit #(
         if (mbuf_push) begin            
             req_tag_hold <= mbuf_waddr;
         end
-    end
-
-    wire [`NUM_THREADS-1:0] req_tmask_dup = req_tmask & {{(`NUM_THREADS-1){~req_is_dup}}, 1'b1};
+    end    
 
     assign rsp_rem_mask_n = rsp_rem_mask[mbuf_raddr] & ~dcache_rsp_if.valid;
 
@@ -184,46 +187,42 @@ module VX_lsu_unit #(
     end
 
     // ensure all dependencies for the requests are resolved
-    wire req_dep_ready = (req_wb && (~mbuf_full || ~is_req_start)) 
+    wire req_dep_ready = (req_wb && ~(mbuf_full && is_req_start)) 
                       || (~req_wb && st_commit_if.ready);
 
     // DCache Request
 
-    reg [`NUM_THREADS-1:0][29:0] mem_req_addr;    
-    reg [`NUM_THREADS-1:0][3:0]  mem_req_byteen;    
-    reg [`NUM_THREADS-1:0][31:0] mem_req_data;
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
 
-    always @(*) begin
-        for (integer i = 0; i < `NUM_THREADS; i++) begin
-            mem_req_byteen[i] = {4{req_wb}};
+        reg [3:0]  mem_req_byteen;    
+        reg [31:0] mem_req_data;
+
+        always @(*) begin
+            mem_req_byteen = {4{req_wb}};
             case (`LSU_WSIZE(req_type))
-                0: mem_req_byteen[i][req_offset[i]] = 1;
+                0: mem_req_byteen[req_offset[i]] = 1;
                 1: begin
-                    mem_req_byteen[i][req_offset[i]] = 1;
-                    mem_req_byteen[i][{req_addr[i][1], 1'b1}] = 1;
+                    mem_req_byteen[req_offset[i]] = 1;
+                    mem_req_byteen[{req_addr[i][1], 1'b1}] = 1;
                 end
-                default : mem_req_byteen[i] = {4{1'b1}};
+                default : mem_req_byteen = {4{1'b1}};
             endcase
 
-            mem_req_data[i] = 'x;
+            mem_req_data = 'x;
             case (req_offset[i])
-                1:       mem_req_data[i][31:8]  = req_data[i][23:0];
-                2:       mem_req_data[i][31:16] = req_data[i][15:0];
-                3:       mem_req_data[i][31:24] = req_data[i][7:0];
-                default: mem_req_data[i]        = req_data[i];
+                1:       mem_req_data[31:8]  = req_data[i][23:0];
+                2:       mem_req_data[31:16] = req_data[i][15:0];
+                3:       mem_req_data[31:24] = req_data[i][7:0];
+                default: mem_req_data        = req_data[i];
             endcase
-
-            mem_req_addr[i] = req_addr[i][31:2];
         end
-    end
 
-    assign dcache_req_if.valid  = {`NUM_THREADS{req_valid && req_dep_ready}} & req_tmask_dup & ~req_sent_mask;
-    assign dcache_req_if.rw     = {`NUM_THREADS{~req_wb}};
-    assign dcache_req_if.addr   = mem_req_addr;
-    assign dcache_req_if.byteen = mem_req_byteen;
-    assign dcache_req_if.data   = mem_req_data;
+        assign dcache_req_if.valid[i]  = req_valid && req_dep_ready && req_tmask_dup[i] && !req_sent_mask[i];
+        assign dcache_req_if.rw[i]     = ~req_wb;
+        assign dcache_req_if.addr[i]   = req_addr[i][31:2];
+        assign dcache_req_if.byteen[i] = mem_req_byteen;
+        assign dcache_req_if.data[i]   = mem_req_data;
 
-    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
     `ifdef DBG_CACHE_REQ_INFO
         assign dcache_req_if.tag[i] = {req_pc, req_wid, req_tag, req_addr_type[i]};
     `else
@@ -252,22 +251,17 @@ module VX_lsu_unit #(
     wire [`NUM_THREADS-1:0] rsp_tmask_qual;
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin     
-        wire [31:0] src_data = (i == 0 || rsp_is_dup) ? dcache_rsp_if.data[0] : dcache_rsp_if.data[i];
-
-        reg [31:0] rsp_data_shifted;
-        always @(*) begin
-            rsp_data_shifted[31:16] = src_data[31:16];
-            rsp_data_shifted[15:0]  = rsp_offset[i][1] ? src_data[31:16] : src_data[15:0];
-            rsp_data_shifted[7:0]   = rsp_offset[i][0] ? rsp_data_shifted[15:8] : rsp_data_shifted[7:0];
-        end
+        wire [31:0] rsp_data32 = (i == 0 || rsp_is_dup) ? dcache_rsp_if.data[0] : dcache_rsp_if.data[i];
+        wire [15:0] rsp_data16 = rsp_offset[i][1] ? rsp_data32[31:16] : rsp_data32[15:0];
+        wire [7:0]  rsp_data8  = rsp_offset[i][0] ? rsp_data16[15:8] : rsp_data16[7:0];
 
         always @(*) begin
             case (`LSU_FMT(rsp_type))
-            `FMT_B:  rsp_data[i] = 32'(signed'(rsp_data_shifted[7:0]));
-            `FMT_H:  rsp_data[i] = 32'(signed'(rsp_data_shifted[15:0]));
-            `FMT_BU: rsp_data[i] = 32'(unsigned'(rsp_data_shifted[7:0]));
-            `FMT_HU: rsp_data[i] = 32'(unsigned'(rsp_data_shifted[15:0]));
-            default: rsp_data[i] = rsp_data_shifted;     
+            `FMT_B:  rsp_data[i] = 32'(signed'(rsp_data8));
+            `FMT_H:  rsp_data[i] = 32'(signed'(rsp_data16));
+            `FMT_BU: rsp_data[i] = 32'(unsigned'(rsp_data8));
+            `FMT_HU: rsp_data[i] = 32'(unsigned'(rsp_data16));
+            default: rsp_data[i] = rsp_data32;
             endcase
         end        
     end   

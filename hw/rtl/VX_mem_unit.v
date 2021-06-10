@@ -288,7 +288,6 @@ module VX_mem_unit # (
         .DATA_WIDTH    (`DMEM_LINE_WIDTH),
         .ADDR_WIDTH    (`DMEM_ADDR_WIDTH),
         .TAG_IN_WIDTH  (`DMEM_TAG_WIDTH),
-        .TAG_OUT_WIDTH (`XMEM_TAG_WIDTH),
         .BUFFERED_REQ  (1),
         .BUFFERED_RSP  (0)
     ) mem_arb (
