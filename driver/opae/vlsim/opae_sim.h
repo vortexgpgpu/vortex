@@ -39,8 +39,6 @@ public:
 
   void read_mmio64(uint32_t mmio_num, uint64_t offset, uint64_t *value);
 
-  void flush();
-
 private: 
 
   typedef struct {
@@ -81,6 +79,7 @@ private:
   bool stop_;
 
   std::unordered_map<int64_t, host_buffer_t> host_buffers_;
+  int64_t host_buffer_ids_;
 
   std::list<mem_rd_req_t> mem_reads_ [PLATFORM_PARAM_LOCAL_MEMORY_BANKS];
 

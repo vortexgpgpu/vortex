@@ -314,11 +314,6 @@ extern void* vx_host_ptr(vx_buffer_h hbuffer) {
         return nullptr;
 
     vx_buffer_t* buffer = ((vx_buffer_t*)hbuffer);
-#ifdef USE_VLSIM
-    vx_device_t *device = ((vx_device_t*)buffer->hdevice);
-    fpgaFlush(device);
-#endif
-
     return buffer->host_ptr;
 }
 

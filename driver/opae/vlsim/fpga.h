@@ -39,8 +39,6 @@ fpga_result fpgaWriteMMIO64(fpga_handle handle, uint32_t mmio_num, uint64_t offs
 
 fpga_result fpgaReadMMIO64(fpga_handle handle, uint32_t mmio_num, uint64_t offset, uint64_t *value);
 
-fpga_result fpgaFlush(fpga_handle handle);
-
 const char *fpgaErrStr(fpga_result e);
 
 #ifdef __cplusplus

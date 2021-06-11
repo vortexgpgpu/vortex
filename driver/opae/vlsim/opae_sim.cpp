@@ -34,7 +34,27 @@ double sc_time_stamp() {
   return timestamp;
 }
 
-opae_sim::opae_sim() {  
+static void *__aligned_malloc(size_t alignment, size_t size) {
+  // reserve margin for alignment and storing of unaligned address
+  size_t margin = (alignment-1) + sizeof(void*);
+  void *unaligned_addr = malloc(size + margin);
+  void **aligned_addr = (void**)((uintptr_t)(((uint8_t*)unaligned_addr) + margin) & ~(alignment-1));
+  aligned_addr[-1] = unaligned_addr;
+  return aligned_addr;
+}
+
+static void __aligned_free(void *ptr) {
+  // retreive the stored unaligned address and use it to free the allocation
+  void* unaligned_addr = ((void**)ptr)[-1];
+  free(unaligned_addr);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+opae_sim::opae_sim() 
+  : stop_(false)
+  , host_buffer_ids_(0) 
+{  
   // force random values for unitialized signals  
   Verilated::randReset(VERILATOR_RESET_VALUE);
   Verilated::randSeed(50);
@@ -55,7 +75,6 @@ opae_sim::opae_sim() {
   this->reset();
 
   // launch execution thread
-  stop_ = false;
   future_ = std::async(std::launch::async, [&]{                   
       while (!stop_) {
           std::lock_guard<std::mutex> guard(mutex_);
@@ -71,23 +90,11 @@ opae_sim::~opae_sim() {
   }
 #ifdef VCD_OUTPUT
   trace_->close();
-#endif     
+#endif  
+  for (auto& buffer : host_buffers_) {
+    __aligned_free(buffer.second.data);
+  }   
   delete vortex_afu_;
-}
-
-static void *__aligned_malloc(size_t alignment, size_t size) {
-  // reserve margin for alignment and storing of unaligned address
-  size_t margin = (alignment-1) + sizeof(void*);
-  void *unaligned_addr = malloc(size + margin);
-  void **aligned_addr = (void**)((uintptr_t)(((uint8_t*)unaligned_addr) + margin) & ~(alignment-1));
-  aligned_addr[-1] = unaligned_addr;
-  return aligned_addr;
-}
-
-static void __aligned_free(void *ptr) {
-  // retreive the stored unaligned address and use it to free the allocation
-  void* unaligned_addr = ((void**)ptr)[-1];
-  free(unaligned_addr);
 }
 
 int opae_sim::prepare_buffer(uint64_t len, void **buf_addr, uint64_t *wsid, int flags) {
@@ -98,10 +105,10 @@ int opae_sim::prepare_buffer(uint64_t len, void **buf_addr, uint64_t *wsid, int 
   buffer.data   = (uint64_t*)alloc;
   buffer.size   = len;
   buffer.ioaddr = uintptr_t(alloc); 
-  auto index = host_buffers_.size();
-  host_buffers_.emplace(index, buffer);
+  auto buffer_id = host_buffer_ids_++;
+  host_buffers_.emplace(buffer_id, buffer);
   *buf_addr = alloc;
-  *wsid = index;
+  *wsid = buffer_id;
   return 0;
 }
 
@@ -142,15 +149,9 @@ void opae_sim::write_mmio64(uint32_t mmio_num, uint64_t offset, uint64_t value) 
   vortex_afu_->vcp2af_sRxPort_c0_mmioWrValid = 0;
 }
 
-void opae_sim::flush() {
-  // flush pending CCI requests  
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 
-void opae_sim::reset() {
-  
-  host_buffers_.clear();  
+void opae_sim::reset() {  
   cci_reads_.clear();
   cci_writes_.clear();
   vortex_afu_->vcp2af_sRxPort_c0_rspValid = 0;  
@@ -180,7 +181,6 @@ void opae_sim::reset() {
 }
 
 void opae_sim::step() {
-
   this->sRxPort_bus();
   this->sTxPort_bus();
   this->avs_bus();
