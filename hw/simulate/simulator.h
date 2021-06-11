@@ -30,14 +30,9 @@ public:
   
   bool is_busy() const;
 
-  bool csr_req_active() const;
-
   void reset();
   void step();
   void wait(uint32_t cycles);
-  
-  void set_csr(int core_id, int addr, unsigned value);
-  void get_csr(int core_id, int addr, unsigned *value);
 
   void run();  
 
@@ -61,16 +56,11 @@ private:
   void eval();  
 
   void eval_mem_bus();
-  void eval_io_bus();
-  void eval_csr_bus();
 
   std::list<mem_req_t> mem_rsp_vec_;
   bool mem_rsp_active_;
 
-  bool mem_rsp_ready_;  
-  bool csr_req_ready_;
-  bool csr_req_active_;
-  uint32_t* csr_rsp_value_;
+  bool mem_rsp_ready_;
 
   RAM *ram_;
   VVortex *vortex_;

@@ -6,11 +6,7 @@ module VX_execute #(
     `SCOPE_IO_VX_execute
 
     input wire clk, 
-    input wire reset, 
-
-    // CSR io interface
-    VX_csr_io_req_if    csr_io_req_if,
-    VX_csr_io_rsp_if    csr_io_rsp_if,    
+    input wire reset,    
 
     // Dcache interface
     VX_dcache_core_req_if dcache_req_if,
@@ -81,8 +77,6 @@ module VX_execute #(
     `endif    
         .cmt_to_csr_if  (cmt_to_csr_if),    
         .fpu_to_csr_if  (fpu_to_csr_if), 
-        .csr_io_req_if  (csr_io_req_if),           
-        .csr_io_rsp_if  (csr_io_rsp_if),
         .csr_req_if     (csr_req_if),   
         .csr_commit_if  (csr_commit_if),
         .fpu_pending    (fpu_pending),

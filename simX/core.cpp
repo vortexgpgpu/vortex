@@ -269,16 +269,16 @@ Word Core::get_csr(Addr addr, int tid, int wid) {
   } else if (addr == CSR_NC) {
     // Number of cores
     return arch_.num_cores();
-  } else if (addr == CSR_INSTRET) {
+  } else if (addr == CSR_MINSTRET) {
     // NumInsts
     return insts_;
-  } else if (addr == CSR_INSTRET_H) {
+  } else if (addr == CSR_MINSTRET_H) {
     // NumInsts
     return (Word)(insts_ >> 32);
-  } else if (addr == CSR_CYCLE) {
+  } else if (addr == CSR_MCYCLE) {
     // NumCycles
     return (Word)steps_;
-  } else if (addr == CSR_CYCLE_H) {
+  } else if (addr == CSR_MCYCLE_H) {
     // NumCycles
     return (Word)(steps_ >> 32);
   } else {

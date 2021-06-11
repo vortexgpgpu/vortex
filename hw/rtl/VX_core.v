@@ -24,18 +24,6 @@ module VX_core #(
     input  wire [`XMEM_TAG_WIDTH-1:0]       mem_rsp_tag,
     output wire                             mem_rsp_ready,
 
-    // CSR request
-    input  wire                             csr_req_valid,
-    input  wire [11:0]                      csr_req_addr,
-    input  wire                             csr_req_rw,
-    input  wire [31:0]                      csr_req_data,
-    output wire                             csr_req_ready,
-
-    // CSR response
-    output wire                             csr_rsp_valid,
-    output wire [31:0]                      csr_rsp_data,
-    input wire                              csr_rsp_ready,
-
     // Status
     output wire                             busy
 );
@@ -127,19 +115,7 @@ module VX_core #(
         .icache_rsp_valid   (icache_core_rsp_if.valid),
         .icache_rsp_data    (icache_core_rsp_if.data),
         .icache_rsp_tag     (icache_core_rsp_if.tag),
-        .icache_rsp_ready   (icache_core_rsp_if.ready),     
-
-        // CSR request
-        .csr_req_valid      (csr_req_valid),
-        .csr_req_rw         (csr_req_rw),
-        .csr_req_addr       (csr_req_addr),
-        .csr_req_data       (csr_req_data),
-        .csr_req_ready      (csr_req_ready),
-
-        // CSR response
-        .csr_rsp_valid      (csr_rsp_valid),            
-        .csr_rsp_data       (csr_rsp_data),
-        .csr_rsp_ready      (csr_rsp_ready),
+        .icache_rsp_ready   (icache_core_rsp_if.ready),
 
         // Status
         .busy(busy)

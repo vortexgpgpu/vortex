@@ -57,6 +57,10 @@
 `define IO_ADDR_COUT 32'hFFFFFFFC
 `endif
 
+`ifndef IO_ADDR_CSR
+`define IO_ADDR_CSR `IO_BASE_ADDR
+`endif
+
 `ifndef SMEM_BASE_ADDR
 `define SMEM_BASE_ADDR `IO_BASE_ADDR
 `endif
@@ -147,28 +151,30 @@
 
 `define CSR_MEPC        12'h341
 
-// Machine Counter/Timers
-`define CSR_CYCLE       12'hC00
-`define CSR_CYCLE_H     12'hC80
-`define CSR_INSTRET     12'hC02
-`define CSR_INSTRET_H   12'hC82
-
 // Machine Performance-monitoring counters
+`define CSR_MPM_BASE                12'hB00
+`define CSR_MPM_BASE_H              12'hB80
 // PERF: pipeline
-`define CSR_MPM_IBUF_ST     12'hB03
-`define CSR_MPM_IBUF_ST_H   12'hB83
-`define CSR_MPM_SCRB_ST     12'hB04
-`define CSR_MPM_SCRB_ST_H   12'hB84
-`define CSR_MPM_ALU_ST      12'hB05
-`define CSR_MPM_ALU_ST_H    12'hB85
-`define CSR_MPM_LSU_ST      12'hB06
-`define CSR_MPM_LSU_ST_H    12'hB86
-`define CSR_MPM_CSR_ST      12'hB07
-`define CSR_MPM_CSR_ST_H    12'hB87
-`define CSR_MPM_FPU_ST      12'hB08
-`define CSR_MPM_FPU_ST_H    12'hB88
-`define CSR_MPM_GPU_ST      12'hB09
-`define CSR_MPM_GPU_ST_H    12'hB89
+`define CSR_MCYCLE                  12'hB00
+`define CSR_MCYCLE_H                12'hB80
+`define CSR_MPM_RESERVED            12'hB01
+`define CSR_MPM_RESERVED_H          12'hB81
+`define CSR_MINSTRET                12'hB02
+`define CSR_MINSTRET_H              12'hB82
+`define CSR_MPM_IBUF_ST             12'hB03
+`define CSR_MPM_IBUF_ST_H           12'hB83
+`define CSR_MPM_SCRB_ST             12'hB04
+`define CSR_MPM_SCRB_ST_H           12'hB84
+`define CSR_MPM_ALU_ST              12'hB05
+`define CSR_MPM_ALU_ST_H            12'hB85
+`define CSR_MPM_LSU_ST              12'hB06
+`define CSR_MPM_LSU_ST_H            12'hB86
+`define CSR_MPM_CSR_ST              12'hB07
+`define CSR_MPM_CSR_ST_H            12'hB87
+`define CSR_MPM_FPU_ST              12'hB08
+`define CSR_MPM_FPU_ST_H            12'hB88
+`define CSR_MPM_GPU_ST              12'hB09
+`define CSR_MPM_GPU_ST_H            12'hB89
 // PERF: icache
 `define CSR_MPM_ICACHE_READS        12'hB0A     // total reads
 `define CSR_MPM_ICACHE_READS_H      12'hB8A
@@ -196,21 +202,21 @@
 `define CSR_MPM_DCACHE_CRSP_ST      12'hB15     // core response stalls
 `define CSR_MPM_DCACHE_CRSP_ST_H    12'hB95
 // PERF: smem
-`define CSR_MPM_SMEM_READS      12'hB16     // total reads
-`define CSR_MPM_SMEM_READS_H    12'hB96
-`define CSR_MPM_SMEM_WRITES     12'hB17     // total writes
-`define CSR_MPM_SMEM_WRITES_H   12'hB97
-`define CSR_MPM_SMEM_BANK_ST    12'hB18     // bank conflicts stalls
-`define CSR_MPM_SMEM_BANK_ST_H  12'hB98
+`define CSR_MPM_SMEM_READS          12'hB16     // total reads
+`define CSR_MPM_SMEM_READS_H        12'hB96
+`define CSR_MPM_SMEM_WRITES         12'hB17     // total writes
+`define CSR_MPM_SMEM_WRITES_H       12'hB97
+`define CSR_MPM_SMEM_BANK_ST        12'hB18     // bank conflicts stalls
+`define CSR_MPM_SMEM_BANK_ST_H      12'hB98
 // PERF: memory
-`define CSR_MPM_MEM_READS      12'hB19     // memory reads
-`define CSR_MPM_MEM_READS_H    12'hB99
-`define CSR_MPM_MEM_WRITES     12'hB1A     // memory writes
-`define CSR_MPM_MEM_WRITES_H   12'hB9A
-`define CSR_MPM_MEM_ST         12'hB1B     // memory request stalls
-`define CSR_MPM_MEM_ST_H       12'hB9B
-`define CSR_MPM_MEM_LAT        12'hB1C     // memory latency (total)
-`define CSR_MPM_MEM_LAT_H      12'hB9C
+`define CSR_MPM_MEM_READS           12'hB19     // memory reads
+`define CSR_MPM_MEM_READS_H         12'hB99
+`define CSR_MPM_MEM_WRITES          12'hB1A     // memory writes
+`define CSR_MPM_MEM_WRITES_H        12'hB9A
+`define CSR_MPM_MEM_ST              12'hB1B     // memory request stalls
+`define CSR_MPM_MEM_ST_H            12'hB9B
+`define CSR_MPM_MEM_LAT             12'hB1C     // memory latency (total)
+`define CSR_MPM_MEM_LAT_H           12'hB9C
 
 // Machine Information Registers
 `define CSR_MVENDORID   12'hF11

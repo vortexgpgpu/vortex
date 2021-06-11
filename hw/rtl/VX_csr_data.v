@@ -96,20 +96,25 @@ module VX_csr_data #(
     always @(*) begin
         read_data_r = 'x;
         case (read_addr)
-            `CSR_FFLAGS    : read_data_r = 32'(fcsr[read_wid][`FFG_BITS-1:0]);
-            `CSR_FRM       : read_data_r = 32'(fcsr[read_wid][`FRM_BITS+`FFG_BITS-1:`FFG_BITS]);
-            `CSR_FCSR      : read_data_r = 32'(fcsr[read_wid]);
+            `CSR_FFLAGS     : read_data_r = 32'(fcsr[read_wid][`FFG_BITS-1:0]);
+            `CSR_FRM        : read_data_r = 32'(fcsr[read_wid][`FRM_BITS+`FFG_BITS-1:`FFG_BITS]);
+            `CSR_FCSR       : read_data_r = 32'(fcsr[read_wid]);
 
-            `CSR_WTID      ,            
-            `CSR_LTID      ,
-            `CSR_LWID      : read_data_r = 32'(read_wid);            
-            `CSR_GTID      ,
+            `CSR_WTID       ,            
+            `CSR_LTID       ,
+            `CSR_LWID       : read_data_r = 32'(read_wid);            
+            `CSR_GTID       ,
             /*`CSR_MHARTID ,*/
-            `CSR_GWID      : read_data_r = CORE_ID * `NUM_WARPS + 32'(read_wid);
-            `CSR_GCID      : read_data_r = CORE_ID;
-            `CSR_NT        : read_data_r = `NUM_THREADS;
-            `CSR_NW        : read_data_r = `NUM_WARPS;
-            `CSR_NC        : read_data_r = `NUM_CORES * `NUM_CLUSTERS;
+            `CSR_GWID       : read_data_r = CORE_ID * `NUM_WARPS + 32'(read_wid);
+            `CSR_GCID       : read_data_r = CORE_ID;
+            `CSR_NT         : read_data_r = `NUM_THREADS;
+            `CSR_NW         : read_data_r = `NUM_WARPS;
+            `CSR_NC         : read_data_r = `NUM_CORES * `NUM_CLUSTERS;
+            
+            `CSR_MCYCLE     : read_data_r = csr_cycle[31:0];
+            `CSR_MCYCLE_H   : read_data_r = 32'(csr_cycle[`PERF_CTR_BITS-1:32]);
+            `CSR_MINSTRET   : read_data_r = csr_instret[31:0];
+            `CSR_MINSTRET_H : read_data_r = 32'(csr_instret[`PERF_CTR_BITS-1:32]);
             
         `ifdef PERF_ENABLE
             // PERF: pipeline
@@ -154,12 +159,12 @@ module VX_csr_data #(
             `CSR_MPM_DCACHE_CRSP_ST     : read_data_r = perf_memsys_if.dcache_crsp_stalls[31:0];
             `CSR_MPM_DCACHE_CRSP_ST_H   : read_data_r = 32'(perf_memsys_if.dcache_crsp_stalls[`PERF_CTR_BITS-1:32]);
             // PERF: smem            
-            `CSR_MPM_SMEM_READS       : read_data_r = perf_memsys_if.smem_reads[31:0];
-            `CSR_MPM_SMEM_READS_H     : read_data_r = 32'(perf_memsys_if.smem_reads[`PERF_CTR_BITS-1:32]);
-            `CSR_MPM_SMEM_WRITES      : read_data_r = perf_memsys_if.smem_writes[31:0];
-            `CSR_MPM_SMEM_WRITES_H    : read_data_r = 32'(perf_memsys_if.smem_writes[`PERF_CTR_BITS-1:32]);
-            `CSR_MPM_SMEM_BANK_ST     : read_data_r = perf_memsys_if.smem_bank_stalls[31:0];
-            `CSR_MPM_SMEM_BANK_ST_H   : read_data_r = 32'(perf_memsys_if.smem_bank_stalls[`PERF_CTR_BITS-1:32]);
+            `CSR_MPM_SMEM_READS     : read_data_r = perf_memsys_if.smem_reads[31:0];
+            `CSR_MPM_SMEM_READS_H   : read_data_r = 32'(perf_memsys_if.smem_reads[`PERF_CTR_BITS-1:32]);
+            `CSR_MPM_SMEM_WRITES    : read_data_r = perf_memsys_if.smem_writes[31:0];
+            `CSR_MPM_SMEM_WRITES_H  : read_data_r = 32'(perf_memsys_if.smem_writes[`PERF_CTR_BITS-1:32]);
+            `CSR_MPM_SMEM_BANK_ST   : read_data_r = perf_memsys_if.smem_bank_stalls[31:0];
+            `CSR_MPM_SMEM_BANK_ST_H : read_data_r = 32'(perf_memsys_if.smem_bank_stalls[`PERF_CTR_BITS-1:32]);
             // PERF: MEM
             `CSR_MPM_MEM_READS      : read_data_r = perf_memsys_if.mem_reads[31:0];
             `CSR_MPM_MEM_READS_H    : read_data_r = 32'(perf_memsys_if.mem_reads[`PERF_CTR_BITS-1:32]);
@@ -169,6 +174,9 @@ module VX_csr_data #(
             `CSR_MPM_MEM_ST_H       : read_data_r = 32'(perf_memsys_if.mem_stalls[`PERF_CTR_BITS-1:32]);
             `CSR_MPM_MEM_LAT        : read_data_r = perf_memsys_if.mem_latency[31:0];
             `CSR_MPM_MEM_LAT_H      : read_data_r = 32'(perf_memsys_if.mem_latency[`PERF_CTR_BITS-1:32]);
+            // PERF: reserved            
+            `CSR_MPM_RESERVED       : read_data_r = '0;
+            `CSR_MPM_RESERVED_H     : read_data_r = '0;
         `endif
             
             `CSR_SATP      : read_data_r = 32'(csr_satp);
@@ -185,17 +193,15 @@ module VX_csr_data #(
             `CSR_PMPCFG0   : read_data_r = 32'(csr_pmpcfg[0]);
             `CSR_PMPADDR0  : read_data_r = 32'(csr_pmpaddr[0]);
             
-            `CSR_CYCLE     : read_data_r = csr_cycle[31:0];
-            `CSR_CYCLE_H   : read_data_r = 32'(csr_cycle[`PERF_CTR_BITS-1:32]);
-            `CSR_INSTRET   : read_data_r = csr_instret[31:0];
-            `CSR_INSTRET_H : read_data_r = 32'(csr_instret[`PERF_CTR_BITS-1:32]);
-            
             `CSR_MVENDORID : read_data_r = `VENDOR_ID;
             `CSR_MARCHID   : read_data_r = `ARCHITECTURE_ID;
             `CSR_MIMPID    : read_data_r = `IMPLEMENTATION_ID;
 
-            default: begin                      
-                assert(~read_enable) else $error("%t: invalid CSR read address: %0h", $time, read_addr);
+            default: begin            
+                if (!((read_addr >= `CSR_MPM_BASE && read_addr < (`CSR_MPM_BASE + 32))
+                    | (read_addr >= `CSR_MPM_BASE_H && read_addr < (`CSR_MPM_BASE_H + 32)))) begin
+                    assert(~read_enable) else $error("%t: invalid CSR read address: %0h", $time, read_addr);
+                end
             end
         endcase
     end 

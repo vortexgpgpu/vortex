@@ -377,21 +377,3 @@ extern int vx_ready_wait(vx_device_h hdevice, long long timeout) {
 
     return device->wait(timeout);
 }
-
-extern int vx_csr_set(vx_device_h hdevice, int core_id, int addr, unsigned value) {
-    if (nullptr == hdevice)
-        return -1;
-
-    vx_device *device = ((vx_device*)hdevice);
-    
-    return device->set_csr(core_id, addr, value);
-}
-
-extern int vx_csr_get(vx_device_h hdevice, int core_id, int addr, unsigned *value) {
-    if (nullptr == hdevice)
-        return -1;
-
-    vx_device *device = ((vx_device*)hdevice);
-    
-    return device->get_csr(core_id, addr, value);
-}

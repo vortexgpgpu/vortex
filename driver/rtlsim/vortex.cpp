@@ -144,28 +144,6 @@ public:
         return 0;
     }
 
-    int set_csr(int core_id, int addr, unsigned value) {
-        if (future_.valid()) {
-            future_.wait(); // ensure prior run completed
-        }        
-        simulator_.set_csr(core_id, addr, value);        
-        while (simulator_.csr_req_active()) {
-            simulator_.step();
-        };
-        return 0;
-    }
-
-    int get_csr(int core_id, int addr, unsigned *value) {
-        if (future_.valid()) {
-            future_.wait(); // ensure prior run completed
-        }        
-        simulator_.get_csr(core_id, addr, value);        
-        while (simulator_.csr_req_active()) {
-            simulator_.step();
-        };
-        return 0;
-    }
-
 private:
 
     size_t mem_allocation_;     
@@ -330,22 +308,4 @@ extern int vx_ready_wait(vx_device_h hdevice, long long timeout) {
     vx_device *device = ((vx_device*)hdevice);
 
     return device->wait(timeout);
-}
-
-extern int vx_csr_set(vx_device_h hdevice, int core_id, int addr, unsigned value) {
-    if (nullptr == hdevice)
-        return -1;
-
-    vx_device *device = ((vx_device*)hdevice);
-
-    return device->set_csr(core_id, addr, value);
-}
-
-extern int vx_csr_get(vx_device_h hdevice, int core_id, int addr, unsigned* value) {
-    if (nullptr == hdevice)
-        return -1;
-
-    vx_device *device = ((vx_device*)hdevice);
-
-    return device->get_csr(core_id, addr, value);
 }
