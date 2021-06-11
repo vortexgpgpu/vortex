@@ -24,19 +24,6 @@ module VX_cluster #(
     input wire [`L2MEM_TAG_WIDTH-1:0]       mem_rsp_tag,
     output wire                             mem_rsp_ready,
 
-    // CSR Request
-    input  wire                             csr_req_valid,
-    input  wire [`NC_BITS-1:0]              csr_req_coreid,
-    input  wire [11:0]                      csr_req_addr,
-    input  wire                             csr_req_rw,
-    input  wire [31:0]                      csr_req_data,
-    output wire                             csr_req_ready,
-
-    // CSR Response
-    output wire                             csr_rsp_valid,
-    output wire [31:0]                      csr_rsp_data,
-    input wire                              csr_rsp_ready,
-
     // Status
     output wire                             busy
 ); 
@@ -54,16 +41,6 @@ module VX_cluster #(
     wire [`NUM_CORES-1:0][`DMEM_LINE_WIDTH-1:0] per_core_mem_rsp_data;
     wire [`NUM_CORES-1:0][`XMEM_TAG_WIDTH-1:0]  per_core_mem_rsp_tag;
     wire [`NUM_CORES-1:0]                       per_core_mem_rsp_ready;
-
-    wire [`NUM_CORES-1:0]                       per_core_csr_req_valid;
-    wire [`NUM_CORES-1:0][11:0]                 per_core_csr_req_addr;
-    wire [`NUM_CORES-1:0]                       per_core_csr_req_rw;
-    wire [`NUM_CORES-1:0][31:0]                 per_core_csr_req_data;
-    wire [`NUM_CORES-1:0]                       per_core_csr_req_ready;
-
-    wire [`NUM_CORES-1:0]                       per_core_csr_rsp_valid;
-    wire [`NUM_CORES-1:0][31:0]                 per_core_csr_rsp_data;
-    wire [`NUM_CORES-1:0]                       per_core_csr_rsp_ready;
 
     wire [`NUM_CORES-1:0]                       per_core_busy;
 
@@ -99,56 +76,9 @@ module VX_cluster #(
             .mem_rsp_tag    (per_core_mem_rsp_tag  [i]),
             .mem_rsp_ready  (per_core_mem_rsp_ready[i]),
 
-            .csr_req_valid  (per_core_csr_req_valid [i]),
-            .csr_req_rw     (per_core_csr_req_rw    [i]),
-            .csr_req_addr   (per_core_csr_req_addr  [i]),
-            .csr_req_data   (per_core_csr_req_data  [i]),
-            .csr_req_ready  (per_core_csr_req_ready [i]),
-
-            .csr_rsp_valid  (per_core_csr_rsp_valid [i]),            
-            .csr_rsp_data   (per_core_csr_rsp_data  [i]),
-            .csr_rsp_ready  (per_core_csr_rsp_ready [i]),
-
             .busy           (per_core_busy          [i])
         );
     end
-
-    VX_csr_arb #(
-        .NUM_REQS     (`NUM_CORES),
-        .DATA_WIDTH   (32),
-        .ADDR_WIDTH   (12),
-        .BUFFERED_REQ (1), 
-        .BUFFERED_RSP (1)
-    ) csr_arb (
-        .clk            (clk),
-        .reset          (reset),
-
-        .request_id     (csr_req_coreid), 
-
-        // input requests
-        .req_valid_in   (csr_req_valid),     
-        .req_addr_in    (csr_req_addr),
-        .req_rw_in      (csr_req_rw),
-        .req_data_in    (csr_req_data),
-        .req_ready_in   (csr_req_ready),
-
-        // output request
-        .req_valid_out  (per_core_csr_req_valid),
-        .req_addr_out   (per_core_csr_req_addr),            
-        .req_rw_out     (per_core_csr_req_rw),
-        .req_data_out   (per_core_csr_req_data),  
-        .req_ready_out  (per_core_csr_req_ready),     
-
-        // input responses
-        .rsp_valid_in   (per_core_csr_rsp_valid),
-        .rsp_data_in    (per_core_csr_rsp_data),
-        .rsp_ready_in   (per_core_csr_rsp_ready),       
-        
-        // output response
-        .rsp_valid_out  (csr_rsp_valid),
-        .rsp_data_out   (csr_rsp_data),
-        .rsp_ready_out  (csr_rsp_ready)
-    );
     
     assign busy = (| per_core_busy);
 

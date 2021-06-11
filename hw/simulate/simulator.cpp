@@ -77,15 +77,9 @@ void Simulator::reset() {
   mem_rsp_vec_.clear();
 
   mem_rsp_active_ = false;
-  csr_req_active_ = false;
-  csr_rsp_value_ = nullptr;
 
   vortex_->mem_rsp_valid = 0;
   vortex_->mem_req_ready = 0;
-  //vortex_->io_req_ready = 0;
-  //vortex_->io_rsp_valid = 0;
-  vortex_->csr_req_valid  = 0;
-  vortex_->csr_rsp_ready  = 0;
 
   vortex_->reset = 1;
 
@@ -108,14 +102,11 @@ void Simulator::step() {
   this->eval();
 
   mem_rsp_ready_ = vortex_->mem_rsp_ready;
-  csr_req_ready_ = vortex_->csr_req_ready;
   
   vortex_->clk = 1;
   this->eval();
     
   this->eval_mem_bus();
-  this->eval_io_bus();
-  this->eval_csr_bus();
 
 #ifndef NDEBUG
   fflush(stdout);
@@ -209,53 +200,6 @@ void Simulator::eval_mem_bus() {
   vortex_->mem_req_ready = !mem_stalled;
 }
 
-void Simulator::eval_io_bus() {
-  /*for (int i = 0; i < NUM_THREADS; ++i) {
-    if (((vortex_->io_req_valid >> i) & 0x1) 
-     && ((VL_WDATA_GETW(vortex_->io_req_addr, i, NUM_THREADS, 30) << 2) == IO_BUS_ADDR_COUT)) {
-      assert(vortex_->io_req_rw);
-      int data = vortex_->io_req_data[i];
-      int tid = data >> 16;
-      char c = data & 0xff;
-      auto& ss_buf = print_bufs_[tid];
-      ss_buf << c;
-      if (c == '\n') {
-        std::cout << std::dec << "#" << tid << ": " << ss_buf.str() << std::flush;
-        ss_buf.str("");
-      }         
-    }
-  }
-  vortex_->io_req_ready = 1;
-  vortex_->io_rsp_valid = 0;*/
-}
-
-void Simulator::eval_csr_bus() {
-  if (csr_req_active_) { 
-    if (vortex_->csr_req_valid && csr_req_ready_) {
-    #ifndef NDEBUG
-      if (vortex_->csr_req_rw)
-        std::cout << std::dec << timestamp << ": [sim] CSR Wr Req: core=" << (int)vortex_->csr_req_coreid << ", addr=" << std::hex << vortex_->csr_req_addr << ", value=" << vortex_->csr_req_data << std::endl;
-      else
-        std::cout << std::dec << timestamp << ": [sim] CSR Rd Req: core=" << (int)vortex_->csr_req_coreid << ", addr=" << std::hex << vortex_->csr_req_addr << std::endl;
-    #endif
-      vortex_->csr_req_valid = 0;
-      if (vortex_->csr_req_rw)
-        csr_req_active_ = false;      
-    }
-    if (vortex_->csr_rsp_valid && vortex_->csr_rsp_ready) {
-      *csr_rsp_value_ = vortex_->csr_rsp_data;
-      vortex_->csr_rsp_ready = 0;
-      csr_req_active_ = false;
-    #ifndef NDEBUG
-      std::cout << std::dec << timestamp << ": [sim] CSR Rsp: value=" << vortex_->csr_rsp_data << std::endl;
-    #endif
-    }
-  } else {
-    vortex_->csr_req_valid = 0;
-    vortex_->csr_rsp_ready = 0;
-  }
-}
-
 void Simulator::wait(uint32_t cycles) {
   for (int i = 0; i < cycles; ++i) {
     this->step();
@@ -264,33 +208,6 @@ void Simulator::wait(uint32_t cycles) {
 
 bool Simulator::is_busy() const {
   return vortex_->busy;
-}
-
-bool Simulator::csr_req_active() const {
-  return csr_req_active_;
-}
-
-void Simulator::set_csr(int core_id, int addr, unsigned value) {
-  vortex_->csr_req_valid  = 1;
-  vortex_->csr_req_coreid = core_id;
-  vortex_->csr_req_addr   = addr;
-  vortex_->csr_req_rw     = 1;
-  vortex_->csr_req_data   = value;  
-  vortex_->csr_rsp_ready  = 0;
-
-  csr_req_active_ = true;
-}
-
-void Simulator::get_csr(int core_id, int addr, unsigned *value) {
-  vortex_->csr_req_valid  = 1;
-  vortex_->csr_req_coreid = core_id;
-  vortex_->csr_req_addr   = addr;
-  vortex_->csr_req_rw     = 0;
-  vortex_->csr_rsp_ready  = 1;
-
-  csr_rsp_value_ = value;
-
-  csr_req_active_ = true;  
 }
 
 void Simulator::run() {

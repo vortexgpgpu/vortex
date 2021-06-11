@@ -22,19 +22,6 @@ module Vortex (
     input wire [`VX_MEM_TAG_WIDTH-1:0]      mem_rsp_tag,
     output wire                             mem_rsp_ready,
 
-    // CSR Request
-    input  wire                             csr_req_valid,
-    input  wire [`VX_CSR_ID_WIDTH-1:0]      csr_req_coreid,
-    input  wire [11:0]                      csr_req_addr,
-    input  wire                             csr_req_rw,
-    input  wire [31:0]                      csr_req_data,
-    output wire                             csr_req_ready,
-
-    // CSR Response
-    output wire                             csr_rsp_valid,
-    output wire [31:0]                      csr_rsp_data,
-    input wire                              csr_rsp_ready,
-
     // Status
     output wire                             busy
 );
@@ -53,20 +40,7 @@ module Vortex (
     wire [`NUM_CLUSTERS-1:0][`L2MEM_TAG_WIDTH-1:0]   per_cluster_mem_rsp_tag;
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_rsp_ready;
 
-    wire [`NUM_CLUSTERS-1:0]                         per_cluster_csr_req_valid;
-    wire [`NUM_CLUSTERS-1:0][11:0]                   per_cluster_csr_req_addr;
-    wire [`NUM_CLUSTERS-1:0]                         per_cluster_csr_req_rw;
-    wire [`NUM_CLUSTERS-1:0][31:0]                   per_cluster_csr_req_data;
-    wire [`NUM_CLUSTERS-1:0]                         per_cluster_csr_req_ready;
-
-    wire [`NUM_CLUSTERS-1:0]                         per_cluster_csr_rsp_valid;
-    wire [`NUM_CLUSTERS-1:0][31:0]                   per_cluster_csr_rsp_data;
-    wire [`NUM_CLUSTERS-1:0]                         per_cluster_csr_rsp_ready;
-
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_busy;
-
-    wire [`LOG2UP(`NUM_CLUSTERS)-1:0] csr_cluster_id = `LOG2UP(`NUM_CLUSTERS)'(csr_req_coreid >> `CLOG2(`NUM_CORES));
-    wire [`NC_BITS-1:0] csr_core_id = `NC_BITS'(csr_req_coreid);
 
     for (genvar i = 0; i < `NUM_CLUSTERS; i++) begin
 
@@ -100,57 +74,9 @@ module Vortex (
             .mem_rsp_tag    (per_cluster_mem_rsp_tag   [i]),
             .mem_rsp_ready  (per_cluster_mem_rsp_ready [i]),
 
-            .csr_req_valid  (per_cluster_csr_req_valid  [i]),
-            .csr_req_coreid (csr_core_id),
-            .csr_req_rw     (per_cluster_csr_req_rw     [i]),
-            .csr_req_addr   (per_cluster_csr_req_addr   [i]),
-            .csr_req_data   (per_cluster_csr_req_data   [i]),
-            .csr_req_ready  (per_cluster_csr_req_ready  [i]),
-
-            .csr_rsp_valid  (per_cluster_csr_rsp_valid  [i]),
-            .csr_rsp_data   (per_cluster_csr_rsp_data   [i]),
-            .csr_rsp_ready  (per_cluster_csr_rsp_ready  [i]),
-
             .busy           (per_cluster_busy           [i])
         );
     end
-
-    VX_csr_arb #(
-        .NUM_REQS     (`NUM_CLUSTERS),
-        .DATA_WIDTH   (32),
-        .ADDR_WIDTH   (12),
-        .BUFFERED_REQ (1),
-        .BUFFERED_RSP (1)
-    ) csr_arb (
-        .clk            (clk),
-        .reset          (reset),
-
-        .request_id     (csr_cluster_id),
-
-        // input requests
-        .req_valid_in   (csr_req_valid),
-        .req_addr_in    (csr_req_addr),
-        .req_rw_in      (csr_req_rw),
-        .req_data_in    (csr_req_data),
-        .req_ready_in   (csr_req_ready),
-
-        // output request
-        .req_valid_out  (per_cluster_csr_req_valid),
-        .req_addr_out   (per_cluster_csr_req_addr),
-        .req_rw_out     (per_cluster_csr_req_rw),
-        .req_data_out   (per_cluster_csr_req_data),
-        .req_ready_out  (per_cluster_csr_req_ready),
-
-        // input responses
-        .rsp_valid_in   (per_cluster_csr_rsp_valid),
-        .rsp_data_in    (per_cluster_csr_rsp_data),
-        .rsp_ready_in   (per_cluster_csr_rsp_ready),
-        
-        // output response
-        .rsp_valid_out  (csr_rsp_valid),
-        .rsp_data_out   (csr_rsp_data),
-        .rsp_ready_out  (csr_rsp_ready)
-    );
 
     assign busy   = (| per_cluster_busy);
 

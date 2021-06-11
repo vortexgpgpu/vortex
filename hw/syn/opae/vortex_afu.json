@@ -8,8 +8,6 @@
       "cmd-mem-read":     1,
       "cmd-mem-write":    2,
       "cmd-run":          3,
-      "cmd-csr-read":     4,
-      "cmd-csr-write":    5,
       
       "mmio-cmd-type":    10,     
       "mmio-io-addr":     12,
@@ -18,10 +16,7 @@
       "mmio-status":      18,   
       "mmio-scope-read":  20,
       "mmio-scope-write": 22,
-      "mmio-csr-core":    24,
-      "mmio-csr-addr":    26,
-      "mmio-csr-data":    28,
-      "mmio-csr-read":    30,
+      "mmio-dev-caps":    24,
 
       "afu-top-interface":
          {
