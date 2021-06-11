@@ -13,5 +13,5 @@ vx_putchar:
 
 .section .data
 print_addr:
-    .word IO_BUS_ADDR_COUT 
+    .word IO_ADDR_COUT 
 

@@ -72,7 +72,7 @@ int main() {
 	test_wsapwn();
 
 	vx_printf("Shared Memory test\n");
-	unsigned * ptr = (unsigned *) SHARED_MEM_BASE_ADDR;
+	unsigned * ptr = (unsigned *)SMEM_BASE_ADDR;
 	unsigned value = 0;
 
 	for (int i = 0; i < 5; i++)	{
