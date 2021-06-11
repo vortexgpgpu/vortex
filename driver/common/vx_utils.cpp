@@ -129,18 +129,23 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
 
   unsigned num_cores;
   ret = vx_dev_caps(device, VX_CAPS_MAX_CORES, &num_cores);
-  if (ret)
+  if (ret != 0)
     return ret;
 
   vx_buffer_h staging_buf;
-  ret |= vx_alloc_shared_mem(device, 64 * sizeof(uint32_t), &staging_buf);
-  if (ret)
+  ret = vx_alloc_shared_mem(device, 64 * sizeof(uint32_t), &staging_buf);
+  if (ret != 0)
     return ret;
 
   auto staging_ptr = (uint32_t*)vx_host_ptr(staging_buf);
       
   for (unsigned core_id = 0; core_id < num_cores; ++core_id) {
-    ret |= vx_copy_from_dev(staging_buf, IO_ADDR_CSR + 64 * sizeof(uint32_t) * core_id, 64 * sizeof(uint32_t), 0);
+    ret = vx_copy_from_dev(staging_buf, IO_ADDR_CSR + 64 * sizeof(uint32_t) * core_id, 64 * sizeof(uint32_t), 0);
+    if (ret != 0) {
+      vx_buf_release(staging_buf);
+      return ret;
+    }
+
     uint64_t instrs_per_core = get_csr_64(staging_ptr, CSR_MINSTRET);
     uint64_t cycles_per_core = get_csr_64(staging_ptr, CSR_MCYCLE);
     float IPC = (float)(double(instrs_per_core) / double(cycles_per_core));
@@ -265,7 +270,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     mem_stalls += mem_stalls_per_core;
     mem_lat    += mem_lat_per_core;    
   #endif
-  }      
+  }  
   
   float IPC = (float)(double(instrs) / double(cycles));
   fprintf(stream, "PERF: instrs=%ld, cycles=%ld, IPC=%f\n", instrs, cycles, IPC);    
@@ -304,6 +309,9 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   fprintf(stream, "PERF: memory stalls=%ld (utilization=%d%%)\n", mem_stalls, mem_utilization);
   fprintf(stream, "PERF: memory average latency=%d cycles\n", mem_avg_lat);
 #endif
+
+  // release allocated resources
+  vx_buf_release(staging_buf);
 
   return ret;
 }
