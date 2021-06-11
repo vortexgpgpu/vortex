@@ -131,4 +131,11 @@ module VX_execute #(
         .gpu_commit_if  (gpu_commit_if)
     );
 
+    // special workaround to get RISC-V tests Pass/Fail status
+    wire ebreak /* verilator public */;
+    assign ebreak = alu_req_if.valid && alu_req_if.ready
+                 && `IS_BR_MOD(alu_req_if.op_mod)
+                 && (`BR_OP(alu_req_if.op_type) == `BR_EBREAK 
+                  || `BR_OP(alu_req_if.op_type) == `BR_ECALL);
+
 endmodule

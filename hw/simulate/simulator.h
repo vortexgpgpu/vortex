@@ -40,7 +40,10 @@ public:
   void get_csr(int core_id, int addr, unsigned *value);
 
   void run();  
+
   int get_last_wb_value(int reg) const;  
+  
+  bool get_ebreak() const;
 
   void print_stats(std::ostream& out);
 
@@ -60,7 +63,7 @@ private:
   void eval_mem_bus();
   void eval_io_bus();
   void eval_csr_bus();
-  
+
   std::list<mem_req_t> mem_rsp_vec_;
   bool mem_rsp_active_;
 

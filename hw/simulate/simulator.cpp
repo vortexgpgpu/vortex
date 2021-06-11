@@ -300,12 +300,16 @@ void Simulator::run() {
 
   // execute program
   while (vortex_->busy 
-      && !vortex_->ebreak) {
+      && !get_ebreak()) {
     this->step();
   }
 
   // wait 5 cycles to flush the pipeline
   this->wait(5);  
+}
+
+bool Simulator::get_ebreak() const {
+  return (int)vortex_->Vortex->genblk2__BRA__0__KET____DOT__cluster->genblk2__BRA__0__KET____DOT__core->pipeline->execute->ebreak;
 }
 
 int Simulator::get_last_wb_value(int reg) const {
