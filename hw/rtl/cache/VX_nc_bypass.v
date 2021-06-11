@@ -316,23 +316,49 @@ module VX_nc_bypass #(
 
     if (D != 0) begin
         wire [D-1:0] rsp_addr_idx = mem_rsp_tag_in[CORE_TAG_WIDTH +: D];
-        always @(*) begin        
-            if (is_mem_rsp_nc) begin
+        if (NUM_RSP_TAGS > 1) begin
+            wire [CORE_REQ_TIDW-1:0] rsp_tid = mem_rsp_tag_in[(CORE_TAG_WIDTH + D) +: CORE_REQ_TIDW];
+            always @(*) begin        
                 for (integer i = 0; i < NUM_REQS; ++i) begin
-                    core_rsp_data_out_r[i] = mem_rsp_data_in[rsp_addr_idx * CORE_DATA_WIDTH +: CORE_DATA_WIDTH];
+                    if (is_mem_rsp_nc && (rsp_tid == CORE_REQ_TIDW'(i))) begin                    
+                        core_rsp_data_out_r[i] = mem_rsp_data_in[rsp_addr_idx * CORE_DATA_WIDTH +: CORE_DATA_WIDTH];
+                    end else begin
+                        core_rsp_data_out_r[i] = core_rsp_data_in[i];
+                    end
                 end
-            end else begin
-                core_rsp_data_out_r = core_rsp_data_in;
+            end
+        end else begin
+            always @(*) begin        
+                if (is_mem_rsp_nc) begin
+                    for (integer i = 0; i < NUM_REQS; ++i) begin
+                        core_rsp_data_out_r[i] = mem_rsp_data_in[rsp_addr_idx * CORE_DATA_WIDTH +: CORE_DATA_WIDTH];
+                    end
+                end else begin
+                    core_rsp_data_out_r = core_rsp_data_in;
+                end
             end
         end
     end else begin        
-        always @(*) begin        
-            if (is_mem_rsp_nc) begin
+        if (NUM_RSP_TAGS > 1) begin
+            wire [CORE_REQ_TIDW-1:0] rsp_tid = mem_rsp_tag_in[(CORE_TAG_WIDTH + D) +: CORE_REQ_TIDW];
+            always @(*) begin        
                 for (integer i = 0; i < NUM_REQS; ++i) begin
-                    core_rsp_data_out_r[i] = mem_rsp_data_in;
+                    if (is_mem_rsp_nc && (rsp_tid == CORE_REQ_TIDW'(i))) begin                    
+                        core_rsp_data_out_r[i] = mem_rsp_data_in;
+                    end else begin
+                        core_rsp_data_out_r[i] = core_rsp_data_in[i];
+                    end
                 end
-            end else begin
-                core_rsp_data_out_r = core_rsp_data_in;
+            end
+        end else begin
+            always @(*) begin        
+                if (is_mem_rsp_nc) begin
+                    for (integer i = 0; i < NUM_REQS; ++i) begin
+                        core_rsp_data_out_r[i] = mem_rsp_data_in;
+                    end
+                end else begin
+                    core_rsp_data_out_r = core_rsp_data_in;
+                end
             end
         end
     end
