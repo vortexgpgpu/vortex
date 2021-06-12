@@ -50,34 +50,24 @@
 `endif
 
 `ifndef IO_ADDR_SIZE
-`define IO_ADDR_SIZE (32'hFFFFFFFF - 32'hFF000000 + 1)
+`define IO_ADDR_SIZE (32'hFFFFFFFF - `IO_BASE_ADDR + 1)
 `endif
 
-`ifndef IO_ADDR_COUT
-`define IO_ADDR_COUT 32'hFFFFFFFC
+`ifndef IO_COUT_ADDR
+`define IO_COUT_ADDR 32'hFFFFFFC0
 `endif
 
-`ifndef IO_ADDR_CSR
-`define IO_ADDR_CSR `IO_BASE_ADDR
+`ifndef IO_COUT_SIZE
+`define IO_COUT_SIZE 64
+`endif
+
+`ifndef IO_CSR_ADDR
+`define IO_CSR_ADDR `IO_BASE_ADDR
 `endif
 
 `ifndef SMEM_BASE_ADDR
 `define SMEM_BASE_ADDR `IO_BASE_ADDR
 `endif
-
-`ifndef FRAME_BUFFER_BASE_ADDR
-`define FRAME_BUFFER_BASE_ADDR 32'hFF000000
-`endif
-
-`ifndef FRAME_BUFFER_WIDTH
-`define FRAME_BUFFER_WIDTH 16'd1920
-`endif
-
-`ifndef FRAME_BUFFER_HEIGHT
-`define FRAME_BUFFER_HEIGHT 16'd1080
-`endif
-
-`define FRAME_BUFFER_SIZE (FRAME_BUFFER_WIDTH * FRAME_BUFFER_HEIGHT)
 
 `ifndef EXT_M_DISABLE
 `define EXT_M_ENABLE

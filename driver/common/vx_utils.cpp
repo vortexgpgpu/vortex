@@ -140,7 +140,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   auto staging_ptr = (uint32_t*)vx_host_ptr(staging_buf);
       
   for (unsigned core_id = 0; core_id < num_cores; ++core_id) {
-    ret = vx_copy_from_dev(staging_buf, IO_ADDR_CSR + 64 * sizeof(uint32_t) * core_id, 64 * sizeof(uint32_t), 0);
+    ret = vx_copy_from_dev(staging_buf, IO_CSR_ADDR + 64 * sizeof(uint32_t) * core_id, 64 * sizeof(uint32_t), 0);
     if (ret != 0) {
       vx_buf_release(staging_buf);
       return ret;
