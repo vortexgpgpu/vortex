@@ -107,7 +107,7 @@ module VX_cache_core_rsp_merge #(
             
             VX_skid_buffer #(
                 .DATAW (NUM_REQS + CORE_TAG_WIDTH + (NUM_REQS *`WORD_WIDTH)),
-                .BUFFERED (1)
+                .USE_FASTREG (1)
             ) pipe_reg (
                 .clk       (clk),
                 .reset     (reset),
@@ -156,7 +156,7 @@ module VX_cache_core_rsp_merge #(
             for (genvar i = 0; i < NUM_REQS; i++) begin
                 VX_skid_buffer #(
                     .DATAW (CORE_TAG_WIDTH + `WORD_WIDTH),
-                    .BUFFERED (1)
+                    .USE_FASTREG (1)
                 ) pipe_reg (
                     .clk       (clk),
                     .reset     (reset),
