@@ -283,10 +283,8 @@
 // Word size in bytes
 `define DWORD_SIZE              4
 
-// TAG sharing enable  
-`define LSUQ_ADDR_BITS          `LOG2UP(`LSUQ_SIZE)     
-
 // Core request tag bits
+`define LSUQ_ADDR_BITS          `LOG2UP(`LSUQ_SIZE)
 `ifdef EXT_TEX_ENABLE
 `define LSU_DCACHE_TAG_BITS     (`DBG_CACHE_REQ_MDATAW + `LSUQ_ADDR_BITS)
 `define TEX_DCACHE_TAG_BITS     (`DBG_CACHE_REQ_MDATAW + 2)
