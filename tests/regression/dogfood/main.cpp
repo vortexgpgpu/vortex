@@ -3,7 +3,6 @@
 #include <unistd.h>
 #include <string.h>
 #include <vortex.h>
-#include <VX_config.h>
 #include "testcases.h"
 #include "common.h"
 

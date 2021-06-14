@@ -1,7 +1,4 @@
-all: driver runtime regression opencl riscv
-
-driver:
-	$(MAKE) -C driver
+all: runtime regression opencl riscv
 
 runtime:
 	$(MAKE) -C runtime
@@ -16,10 +13,9 @@ riscv:
 	$(MAKE) -C riscv
 
 clean:
-	$(MAKE) clean -C driver
 	$(MAKE) clean -C runtime
 	$(MAKE) clean -C regression
 	$(MAKE) clean -C opencl
 	$(MAKE) clean -C riscv
 
-.PHONY: all driver runtime regression opencl riscv
+.PHONY: all runtime regression opencl riscv
