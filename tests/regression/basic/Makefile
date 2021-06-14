@@ -1,5 +1,6 @@
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
-VORTEX_RT_PATH ?= $(wildcard ../../../runtime)
+VORTEX_DRV_PATH ?= $(realpath ../../../driver)
+VORTEX_RT_PATH ?= $(realpath ../../../runtime)
 
 OPTS ?= -n256
 
@@ -18,9 +19,9 @@ VX_SRCS = kernel.c
 #CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -pedantic -Wfatal-errors
 CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
 
-CXXFLAGS += -I../../include
+CXXFLAGS += -I$(VORTEX_DRV_PATH)/include
 
-LDFLAGS += 
+LDFLAGS += -L$(VORTEX_DRV_PATH)/stub -lvortex
 
 PROJECT = basic
 
@@ -38,22 +39,22 @@ kernel.elf: $(VX_SRCS)
 	$(VX_CC) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -o kernel.elf
 
 $(PROJECT): $(SRCS)
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -L../../stub -lvortex -o $@
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
-run-fpga: $(PROJECT)
-	LD_LIBRARY_PATH=../../opae:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+run-simx: $(PROJECT) kernel.bin   
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+	
+run-fpga: $(PROJECT) kernel.bin   
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/opae:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
-run-asesim: $(PROJECT)
-	ASE_LOG=0 LD_LIBRARY_PATH=../../opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+run-asesim: $(PROJECT) kernel.bin   
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/opae/ase:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+	
+run-vlsim: $(PROJECT) kernel.bin   
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/opae/vlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
-run-vlsim: $(PROJECT)
-	ASE_LOG=0 LD_LIBRARY_PATH=../../opae/vlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
-
-run-rtlsim: $(PROJECT)
-	LD_LIBRARY_PATH=../../rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
-
-run-simx: $(PROJECT)
-	LD_LIBRARY_PATH=../../simx:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+run-rtlsim: $(PROJECT) kernel.bin   
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
