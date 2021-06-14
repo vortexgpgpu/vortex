@@ -7,12 +7,15 @@ set -e
 make -C runtime clean
 make -C runtime
 
+# clear POCL cache
+rm -rf ~/.cache/pocl
+
 # rebuild native kernel
-make -C driver/tests/dogfood clean-all
-make -C driver/tests/dogfood
+make -C tests/driver/dogfood clean-all
+make -C tests/driver/dogfood
 ./ci/blackbox.sh --driver=vlsim --cores=1 --app=dogfood
 
 # rebuild opencl kernel
-make -C benchmarks/opencl/sgemm clean-all
-make -C benchmarks/opencl/sgemm
+make -C tests/opencl/sgemm clean-all
+make -C tests/opencl/sgemm
 ./ci/blackbox.sh --driver=vlsim --cores=1 --app=sgemm
