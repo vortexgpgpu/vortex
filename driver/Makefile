@@ -1,4 +1,4 @@
-all: stub rtlsim simx opae tests
+all: stub rtlsim simx opae
 
 stub:
 	$(MAKE) -C stub
@@ -12,14 +12,10 @@ rtlsim:
 simx:
 	$(MAKE) -C simx
 
-tests:
-	$(MAKE) -C tests
-
 clean:
 	$(MAKE) clean -C stub
 	$(MAKE) clean -C opae
 	$(MAKE) clean -C rtlsim
 	$(MAKE) clean -C simx
-	$(MAKE) clean -C tests
 
-.PHONY: all stub opae rtlsim simx tests clean
+.PHONY: all stub opae rtlsim simx clean

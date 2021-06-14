@@ -120,12 +120,12 @@ case $DRIVER in
         ;;
 esac
 
-if [ -d "$VORTEX_HOME/driver/tests/$APP" ]; 
+if [ -d "$VORTEX_HOME/tests/opencl/$APP" ];
 then
-    APP_PATH=$VORTEX_HOME/driver/tests/$APP
-elif [ -d "$VORTEX_HOME/benchmarks/opencl/$APP" ];
+    APP_PATH=$VORTEX_HOME/tests/opencl/$APP
+elif [ -d "$VORTEX_HOME/tests/regression/$APP" ];
 then
-    APP_PATH=$VORTEX_HOME/benchmarks/opencl/$APP
+    APP_PATH=$VORTEX_HOME/tests/regression/$APP
 else
     echo "Application folder found: $APP"
     exit -1
