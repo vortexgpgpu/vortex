@@ -11,8 +11,8 @@ make -C runtime
 rm -rf ~/.cache/pocl
 
 # rebuild native kernel
-make -C tests/driver/dogfood clean-all
-make -C tests/driver/dogfood
+make -C tests/regression/dogfood clean-all
+make -C tests/regression/dogfood
 ./ci/blackbox.sh --driver=vlsim --cores=1 --app=dogfood
 
 # rebuild opencl kernel
