@@ -101,12 +101,12 @@ Disassembly of section .text:
 80000134:	01312623          	sw	s3,12(sp)
 80000138:	fc0027f3          	csrr	a5,0xfc0
 8000013c:	0007806b          	0x7806b
-80000140:	cc5026f3          	csrr	a3,0xcc5
+80000140:	cc5027f3          	csrr	a5,0xcc5
 80000144:	cc3029f3          	csrr	s3,0xcc3
 80000148:	cc002773          	csrr	a4,0xcc0
 8000014c:	fc002673          	csrr	a2,0xfc0
-80000150:	800027b7          	lui	a5,0x80002
-80000154:	00269693          	slli	a3,a3,0x2
+80000150:	00279693          	slli	a3,a5,0x2
+80000154:	800027b7          	lui	a5,0x80002
 80000158:	d4c78793          	addi	a5,a5,-692 # 80001d4c <__stack_top+0x81001d4c>
 8000015c:	00d787b3          	add	a5,a5,a3
 80000160:	0007a483          	lw	s1,0(a5)
@@ -605,7 +605,7 @@ Disassembly of section .text:
 800008cc:	00492703          	lw	a4,4(s2)
 800008d0:	148a2783          	lw	a5,328(s4)
 800008d4:	01871463          	bne	a4,s8,800008dc <__call_exitprocs+0xe8>
-800008d8:	f8f904e3          	beq	s2,a5,80000860 <__call_exitprocs+0x6c>
+800008d8:	f92784e3          	beq	a5,s2,80000860 <__call_exitprocs+0x6c>
 800008dc:	f80788e3          	beqz	a5,8000086c <__call_exitprocs+0x78>
 800008e0:	00078913          	mv	s2,a5
 800008e4:	f5dff06f          	j	80000840 <__call_exitprocs+0x4c>
@@ -670,21 +670,20 @@ Disassembly of section .comment:
    0:	3a434347          	fmsub.d	ft6,ft6,ft4,ft7,rmm
    4:	2820                	fld	fs0,80(s0)
    6:	29554e47          	fmsub.s	ft8,fa0,fs5,ft5,rmm
-   a:	3920                	fld	fs0,112(a0)
-   c:	322e                	fld	ft4,232(sp)
-   e:	302e                	fld	ft0,232(sp)
-	...
+   a:	3120                	fld	fs0,96(a0)
+   c:	2e30                	fld	fa2,88(a2)
+   e:	2e32                	fld	ft8,264(sp)
+  10:	0030                	addi	a2,sp,8
 
 Disassembly of section .riscv.attributes:
 
 00000000 <.riscv.attributes>:
-   0:	2541                	jal	680 <__stack_size+0x280>
+   0:	2941                	jal	490 <__stack_size+0x90>
    2:	0000                	unimp
    4:	7200                	flw	fs0,32(a2)
    6:	7369                	lui	t1,0xffffa
    8:	01007663          	bgeu	zero,a6,14 <__stack_usage+0x14>
-   c:	0000001b          	0x1b
-  10:	1004                	addi	s1,sp,32
+   c:	001f 0000 1004      	0x10040000001f
   12:	7205                	lui	tp,0xfffe1
   14:	3376                	fld	ft6,376(sp)
   16:	6932                	flw	fs2,12(sp)
@@ -693,3 +692,5 @@ Disassembly of section .riscv.attributes:
   1c:	326d                	jal	fffff9c6 <__stack_top+0xfff9c6>
   1e:	3070                	fld	fa2,224(s0)
   20:	665f 7032 0030      	0x307032665f
+  26:	0108                	addi	a0,sp,128
+  28:	0b0a                	slli	s6,s6,0x2
