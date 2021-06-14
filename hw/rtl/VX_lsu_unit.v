@@ -49,26 +49,21 @@ module VX_lsu_unit #(
         assign full_addr[i] = lsu_req_if.base_addr[i] + lsu_req_if.offset;
     end
 
-    wire [`NUM_THREADS-1:0][REQ_ADDRW-1:0] word_addr;    
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        assign word_addr[i] = full_addr[i][REQ_ASHIFT +: REQ_ADDRW];
-    end
-
     // detect duplicate addresses
     wire [`NUM_THREADS-1:0] addr_matches;
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        assign addr_matches[i] = (word_addr[0] == word_addr[i]) || ~lsu_req_if.tmask[i];
+        assign addr_matches[i] = (full_addr[0] == full_addr[i]) || ~lsu_req_if.tmask[i];
     end    
     wire lsu_is_dup = lsu_req_if.tmask[0] && (& addr_matches);
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         // is non-cacheable address
-        wire is_addr_nc = (word_addr[i][(MEM_ASHIFT-REQ_ASHIFT) +: MEM_ADDRW] >= MEM_ADDRW'(`IO_BASE_ADDR >> MEM_ASHIFT));
+        wire is_addr_nc = (full_addr[i][MEM_ASHIFT +: MEM_ADDRW] >= MEM_ADDRW'(`IO_BASE_ADDR >> MEM_ASHIFT));
 
         if (`SM_ENABLE) begin
             // is shared memory address
-            wire is_addr_sm = (word_addr[i][(MEM_ASHIFT-REQ_ASHIFT) +: MEM_ADDRW] >= MEM_ADDRW'((`SMEM_BASE_ADDR - `SMEM_SIZE) >> MEM_ASHIFT))
-                            & (word_addr[i][(MEM_ASHIFT-REQ_ASHIFT) +: MEM_ADDRW] < MEM_ADDRW'(`SMEM_BASE_ADDR >> MEM_ASHIFT));
+            wire is_addr_sm = (full_addr[i][MEM_ASHIFT +: MEM_ADDRW] >= MEM_ADDRW'((`SMEM_BASE_ADDR - `SMEM_SIZE) >> MEM_ASHIFT))
+                            & (full_addr[i][MEM_ASHIFT +: MEM_ADDRW] < MEM_ADDRW'(`SMEM_BASE_ADDR >> MEM_ASHIFT));
             assign lsu_addr_type[i] = {is_addr_nc, is_addr_sm};
         end else begin
             assign lsu_addr_type[i] = is_addr_nc;
