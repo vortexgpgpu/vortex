@@ -7,7 +7,7 @@
 - [Vortex Cache Subsystem](https://github.com/vortexgpgpu/vortex-dev/blob/master/doc/Cache_Subsystem.md)
 - Vortex Software
 - [Vortex Simulation](https://github.com/vortexgpgpu/vortex-dev/blob/master/doc/Simulation.md)
-- [FPGA Configuration, Program and Test](https://github.com/vortexgpgpu/vortex-dev/blob/master/doc/Flubber_FPGA_Startup_Guide.md)
+- [FPGA Configuration, Program and Test](https://github.com/vortexgpgpu/vortex-dev/blob/master/doc/FPGA_Startup_Guide.md)
 - Debugging
 - Useful Links
 

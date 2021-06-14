@@ -5,12 +5,11 @@ set -e
 
 make -s
 
-# Dogfood tests
-./ci/test_runtime.sh
-./ci/test_riscv_isa.sh  
-./ci/test_opencl.sh
-./ci/test_driver.sh  
-./ci/test_simx.sh
+# coverage tests
+make -C tests/runtime run
+make -C tests/riscv/isa run
+make -C tests/opencl run
+make -C simX run-tests
 
 # warp/threads configurations
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=2 --threads=2 --app=demo
