@@ -5,10 +5,9 @@ set -e
 
 make -s
 
-# Dogfood tests
+# coverage tests
 make -C tests/runtime run
 make -C tests/riscv/isa run
-make -C tests/driver run
 make -C tests/opencl run
 make -C simX run-tests
 
