@@ -45,13 +45,12 @@ localparam LMEM_BURST_CTRW    = $bits(t_local_mem_burst_cnt);
 
 localparam CCI_LINE_WIDTH     = $bits(t_ccip_clData);
 localparam CCI_LINE_SIZE      = CCI_LINE_WIDTH / 8;
-localparam CCI_ADDR_WIDTH     = 32 - $clog2(CCI_LINE_WIDTH / 8);
+localparam CCI_ADDR_WIDTH     = 32 - $clog2(CCI_LINE_SIZE);
 
 localparam AVS_RD_QUEUE_SIZE  = 16;
 localparam AVS_REQ_TAGW_VX    = `MAX(`VX_MEM_TAG_WIDTH, `VX_MEM_TAG_WIDTH + $clog2(LMEM_LINE_WIDTH) - $clog2(`VX_MEM_LINE_WIDTH));
 localparam AVS_REQ_TAGW_CCI   = `MAX(CCI_ADDR_WIDTH, CCI_ADDR_WIDTH + $clog2(LMEM_LINE_WIDTH) - $clog2(CCI_LINE_WIDTH));
 localparam AVS_REQ_TAGW       = `MAX(AVS_REQ_TAGW_VX, AVS_REQ_TAGW_CCI);
-
 
 localparam CCI_RD_WINDOW_SIZE = 8;
 localparam CCI_RD_QUEUE_SIZE  = 2 * CCI_RD_WINDOW_SIZE;
@@ -69,6 +68,10 @@ localparam MMIO_IO_ADDR       = `AFU_IMAGE_MMIO_IO_ADDR;
 localparam MMIO_MEM_ADDR      = `AFU_IMAGE_MMIO_MEM_ADDR;
 localparam MMIO_DATA_SIZE     = `AFU_IMAGE_MMIO_DATA_SIZE;
 localparam MMIO_STATUS        = `AFU_IMAGE_MMIO_STATUS;
+
+localparam COUT_TID_WIDTH    = $clog2(`IO_COUT_SIZE); 
+localparam COUT_QUEUE_DATAW  = COUT_TID_WIDTH + 8;
+localparam COUT_QUEUE_SIZE   = 256; 
 
 localparam MMIO_SCOPE_READ    = `AFU_IMAGE_MMIO_SCOPE_READ;
 localparam MMIO_SCOPE_WRITE   = `AFU_IMAGE_MMIO_SCOPE_WRITE;
@@ -147,6 +150,9 @@ assign cmd_scope_read  = cp2af_sRxPort.c0.mmioRdValid && (MMIO_SCOPE_READ == mmi
 assign cmd_scope_write = cp2af_sRxPort.c0.mmioWrValid && (MMIO_SCOPE_WRITE == mmio_hdr.address);
 `endif
 
+wire [COUT_QUEUE_DATAW-1:0] cout_q_dout;
+wire cout_q_full, cout_q_empty;
+
 /*
 `DEBUG_BEGIN
 wire cp2af_sRxPort_c0_mmioWrValid = cp2af_sRxPort.c0.mmioWrValid;
@@ -189,7 +195,7 @@ always @(posedge clk) begin
     mmio_tx.hdr         <= 0;
   end else begin
     mmio_tx.mmioRdValid <= cp2af_sRxPort.c0.mmioRdValid; 
-    mmio_tx.hdr.tid     <= mmio_hdr.tid;
+    mmio_tx.hdr.tid     <= mmio_hdr.tid;    
   end
 
   // serve MMIO write request
@@ -252,7 +258,7 @@ always @(posedge clk) begin
       16'h0006: mmio_tx.data <= 64'h0; // next AFU
       16'h0008: mmio_tx.data <= 64'h0; // reserved
       MMIO_STATUS: begin
-        mmio_tx.data <= 64'(state);
+        mmio_tx.data <= 64'({cout_q_dout, !cout_q_empty, 8'(state)});
       `ifdef DBG_PRINT_OPAE
         if (state != STATE_WIDTH'(mmio_tx.data)) begin
           $display("%t: MMIO_STATUS: addr=%0h, state=%0d", $time, mmio_hdr.address, state);
@@ -462,6 +468,16 @@ t_local_mem_data        vx_mem_rsp_arb_data;
 wire [AVS_REQ_TAGW-1:0] vx_mem_rsp_arb_tag;
 wire                    vx_mem_rsp_arb_ready;
 
+wire vx_mem_is_cout;
+wire vx_mem_req_valid_qual;
+wire vx_mem_req_ready_qual;
+
+assign vx_mem_req_valid_qual = vx_mem_req_valid 
+                            && vx_mem_en 
+                            && ~vx_mem_is_cout;
+
+assign vx_mem_req_ready = vx_mem_is_cout ? ~cout_q_full : vx_mem_req_ready_qual;
+
 VX_to_mem #(
   .SRC_DATA_WIDTH (`VX_MEM_LINE_WIDTH),
   .DST_DATA_WIDTH (LMEM_LINE_WIDTH),  
@@ -473,13 +489,13 @@ VX_to_mem #(
   .clk                (clk),
   .reset              (reset),
 
-  .mem_req_valid_in   (vx_mem_req_valid && vx_mem_en),
+  .mem_req_valid_in   (vx_mem_req_valid_qual),
   .mem_req_addr_in    (vx_mem_req_addr),
   .mem_req_rw_in      (vx_mem_req_rw),
   .mem_req_byteen_in  (vx_mem_req_byteen),
   .mem_req_data_in    (vx_mem_req_data),
   .mem_req_tag_in     (vx_mem_req_tag), 
-  .mem_req_ready_in   (vx_mem_req_ready), 
+  .mem_req_ready_in   (vx_mem_req_ready_qual), 
 
   .mem_req_valid_out  (vx_mem_req_arb_valid),
   .mem_req_addr_out   (vx_mem_req_arb_addr),
@@ -883,6 +899,50 @@ Vortex #() vortex (
  
   // status
   .busy           (vx_busy)
+);
+
+// COUT HANDLING //////////////////////////////////////////////////////////////
+
+wire [COUT_TID_WIDTH-1:0] cout_tid;
+wire [7:0] cout_char;
+
+VX_onehot_encoder #(
+  .N (`VX_MEM_BYTEEN_WIDTH)
+) cout_tid_enc (
+  .data_in  (vx_mem_req_byteen),
+  .data_out (cout_tid),
+  `UNUSED_PIN (valid)
+);
+
+wire [`VX_MEM_BYTEEN_WIDTH-1:0][7:0] vx_mem_req_data_ar = vx_mem_req_data;
+assign cout_char = vx_mem_req_data_ar[cout_tid];
+
+assign vx_mem_is_cout = (vx_mem_req_addr == `VX_MEM_ADDR_WIDTH'(`IO_COUT_ADDR >> (32 - `VX_MEM_ADDR_WIDTH)));
+
+wire cout_q_push = vx_mem_req_valid 
+                && vx_mem_en 
+                && vx_mem_is_cout 
+                && ~cout_q_full;
+
+wire cout_q_pop = cp2af_sRxPort.c0.mmioRdValid 
+               && (mmio_hdr.address == MMIO_STATUS)
+               && ~cout_q_empty;
+
+VX_fifo_queue #(
+  .DATAW   (COUT_QUEUE_DATAW),
+  .SIZE    (COUT_QUEUE_SIZE)
+) cout_queue (
+  .clk      (clk),
+  .reset    (reset),
+  .push     (cout_q_push),
+  .pop      (cout_q_pop),
+  .data_in  ({cout_tid, cout_char}),
+  .data_out (cout_q_dout),
+  .empty    (cout_q_empty),
+  .full     (cout_q_full),
+  `UNUSED_PIN (alm_empty),
+  `UNUSED_PIN (alm_full),
+  `UNUSED_PIN (size)
 );
 
 // SCOPE //////////////////////////////////////////////////////////////////////

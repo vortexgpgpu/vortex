@@ -42,6 +42,15 @@ Core::Core(const ArchDef &arch, Decoder &decoder, MemoryUnit &mem, Word id)
   this->clear();
 }
 
+Core::~Core() {
+  for (auto& buf : print_bufs_) {
+    auto str = buf.second.str();
+    if (!str.empty()) {
+      std::cout << "#" << buf.first << ": " << str << std::endl;
+    }
+  }
+}
+
 void Core::clear() {
   for (int w = 0; w < arch_.num_warps(); ++w) {    
     in_use_iregs_[w].reset();
@@ -73,6 +82,7 @@ void Core::clear() {
   inst_in_issue_.clear();
   inst_in_execute_.clear();
   inst_in_writeback_.clear();
+  print_bufs_.clear();
 
   steps_  = 0;
   insts_  = 0;
@@ -340,6 +350,11 @@ void Core::dcache_write(Addr addr, Word data, Size size) {
      return;
   }
 #endif
+  if (addr >= IO_COUT_ADDR 
+   && addr <= (IO_COUT_ADDR + IO_COUT_SIZE - 1)) {
+     this->writeToStdOut(addr, data);
+     return;
+  }
   mem_.write(addr, &data, size, 0);
 }
 
@@ -356,4 +371,15 @@ void Core::printStats() const {
             << "Insts : " << insts_ << std::endl
             << "Loads : " << loads_ << std::endl
             << "Stores: " << stores_ << std::endl;
+}
+
+void Core::writeToStdOut(Addr addr, Word data) {
+  uint32_t tid = (addr - IO_COUT_ADDR) & (IO_COUT_SIZE-1);
+  auto& ss_buf = print_bufs_[tid];
+  char c = (char)data;
+  ss_buf << c;
+  if (c == '\n') {
+    std::cout << std::dec << "#" << tid << ": " << ss_buf.str() << std::flush;
+    ss_buf.str("");
+  }
 }

@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <assert.h>
 #include <cmath>
+#include <sstream>
+#include <unordered_map>
 
 #if defined(USE_FPGA) || defined(USE_ASE) 
 #include <opae/fpga.h>
@@ -334,6 +336,8 @@ extern int vx_buf_release(vx_buffer_h hbuffer) {
 extern int vx_ready_wait(vx_device_h hdevice, long long timeout) {
     if (nullptr == hdevice)
         return -1;
+
+    std::unordered_map<int, std::stringstream> print_bufs;
     
     vx_device_t *device = ((vx_device_t*)hdevice);
 
@@ -351,14 +355,40 @@ extern int vx_ready_wait(vx_device_h hdevice, long long timeout) {
     long long sleep_time_ms = (sleep_time.tv_sec * 1000) + (sleep_time.tv_nsec / 1000000);
     
     for (;;) {
-        uint64_t data;
-        CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_STATUS, &data));
-        if (0 == data || 0 == timeout) {
-            if (data != 0) {
-                fprintf(stdout, "[VXDRV] ready-wait timed out: status=%ld\n", data);
+        uint64_t status;
+        CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_STATUS, &status));
+
+        uint16_t cout_data = (status >> 8) & 0xffff;
+        if (cout_data & 0x0001) {
+            do {
+                char cout_char = (cout_data >> 1) & 0xff;
+                int cout_tid = (cout_data >> 9) & 0xff;
+                auto& ss_buf = print_bufs[cout_tid];
+                ss_buf << cout_char;
+                if (cout_char == '\n') {
+                    std::cout << std::dec << "#" << cout_tid << ": " << ss_buf.str() << std::flush;
+                    ss_buf.str("");
+                }
+                CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_STATUS, &status));
+                cout_data = (status >> 8) & 0xffff;
+            } while (cout_data & 0x0001);
+        }
+
+        uint8_t state = status & 0xff;
+
+        if (0 == state || 0 == timeout) {
+            for (auto& buf : print_bufs) {
+                auto str = buf.second.str();
+                if (!str.empty()) {
+                std::cout << "#" << buf.first << ": " << str << std::endl;
+                }
+            }
+            if (state != 0) {
+                fprintf(stdout, "[VXDRV] ready-wait timed out: state=%d\n", state);
             }
             break;
         }
+
         nanosleep(&sleep_time, nullptr);
         timeout -= sleep_time_ms;
     };

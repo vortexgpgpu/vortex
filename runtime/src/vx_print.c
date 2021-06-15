@@ -64,7 +64,7 @@ static const char* skip_modifier(const char* format) {
 		break;
 	case 'j':
 	case 'z':
-  case 't':
+    case 't':
 	case 'L':
 		++format;
 		break;
@@ -123,10 +123,10 @@ int vx_vprintf(const char* format, va_list va) {
 
 int vx_printf(const char * format, ...) {
 	va_list va;
-  va_start(va, format);
+  	va_start(va, format);
 	int ret = vx_vprintf(format, va);
-  va_end(va);
-  return ret;
+  	va_end(va);
+  	return ret;
 }
 
 static const char hextoa[] = "0123456789abcdef";

@@ -5,6 +5,7 @@ all:
 	$(MAKE) -C sfilter
 	$(MAKE) -C nearn
 	$(MAKE) -C guassian
+	$(MAKE) -C printf
 	
 run:
 	$(MAKE) -C vecadd run-vlsim 
@@ -13,6 +14,7 @@ run:
 	$(MAKE) -C sfilter run-vlsim
 	$(MAKE) -C nearn run-vlsim
 	$(MAKE) -C guassian run-vlsim
+	$(MAKE) -C printf run-vlsim
 
 clean:
 	$(MAKE) -C vecadd clean
@@ -21,6 +23,7 @@ clean:
 	$(MAKE) -C sfilter clean
 	$(MAKE) -C nearn clean
 	$(MAKE) -C guassian clean
+	$(MAKE) -C printf clean
 
 clean-all:
 	$(MAKE) -C vecadd clean-all
@@ -29,3 +32,4 @@ clean-all:
 	$(MAKE) -C sfilter clean-all
 	$(MAKE) -C nearn clean-all
 	$(MAKE) -C guassian clean-all
+	$(MAKE) -C printf clean-all

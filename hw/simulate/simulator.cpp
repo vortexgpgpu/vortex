@@ -57,8 +57,8 @@ Simulator::Simulator() {
 Simulator::~Simulator() {
   for (auto& buf : print_bufs_) {
     auto str = buf.second.str();
-    if (str.size()) {
-      std::cout << "#" << buf.first << ": " << buf.second.str() << std::endl;
+    if (!str.empty()) {
+      std::cout << "#" << buf.first << ": " << str << std::endl;
     }
   }
 #ifdef VCD_OUTPUT
@@ -171,16 +171,31 @@ void Simulator::eval_mem_bus() {
   // process memory requests
   if (!mem_stalled) {
     if (vortex_->mem_req_valid) {
-      if (vortex_->mem_req_rw) {
+      if (vortex_->mem_req_rw) {        
         uint64_t byteen = vortex_->mem_req_byteen;
         unsigned base_addr = (vortex_->mem_req_addr * MEM_BLOCK_SIZE);
         uint8_t* data = (uint8_t*)(vortex_->mem_req_data);
-        for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
-          if ((byteen >> i) & 0x1) {            
-            (*ram_)[base_addr + i] = data[i];
+        if (base_addr >= IO_COUT_ADDR 
+         && base_addr <= (IO_COUT_ADDR + IO_COUT_SIZE - 1)) {          
+          for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
+            if ((byteen >> i) & 0x1) {            
+              auto& ss_buf = print_bufs_[i];
+              char c = data[i];
+              ss_buf << c;
+              if (c == '\n') {
+                std::cout << std::dec << "#" << i << ": " << ss_buf.str() << std::flush;
+                ss_buf.str("");
+              }
+            }
+          }   
+        } else {
+          for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
+            if ((byteen >> i) & 0x1) {            
+              (*ram_)[base_addr + i] = data[i];
+            }
           }
         }
-      } else {
+      } else {        
         mem_req_t mem_req;        
         mem_req.tag  = vortex_->mem_req_tag;   
         mem_req.addr = vortex_->mem_req_addr;

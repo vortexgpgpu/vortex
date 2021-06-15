@@ -3,15 +3,9 @@
 .type vx_putchar, @function
 .global vx_putchar
 vx_putchar:
-    la t0, print_addr
-    lw t0, 0(t0)
-    csrr t1, CSR_GTID
-    slli t1, t1, 16
-    or t1, t1, a0
-    sw t1, 0(t0)
+    csrr t0, CSR_GTID
+    andi t0, t0, %lo(IO_COUT_SIZE-1)
+    li t1, IO_COUT_ADDR
+    add t0, t0, t1    
+    sb a0, 0(t0)
     ret
-
-.section .data
-print_addr:
-    .word IO_COUT_ADDR 
-
