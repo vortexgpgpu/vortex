@@ -32,7 +32,7 @@ vx_device_h device = nullptr;
 vx_buffer_h staging_buf = nullptr;
 
 static void show_usage() {
-   std::cout << "Vortex Driver Test." << std::endl;
+   std::cout << "Vortex Test." << std::endl;
    std::cout << "Usage: [-k: kernel] [-n words] [-h: help]" << std::endl;
 }
 
@@ -148,13 +148,7 @@ int main(int argc, char *argv[]) {
   std::cout << "open device connection" << std::endl;  
   RT_CHECK(vx_dev_open(&device));
 
-  unsigned max_cores, max_warps, max_threads;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_CORES, &max_cores));
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_WARPS, &max_warps));
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_THREADS, &max_threads));
-
-  uint32_t num_tasks  = max_cores * max_warps * max_threads;
-  uint32_t num_points = count * num_tasks;
+  uint32_t num_points = count;
 
   RT_CHECK(vx_alloc_dev_mem(device, NUM_ADDRS * sizeof(uint32_t), &usr_test_mem));
 

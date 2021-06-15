@@ -88,7 +88,7 @@ vx_buffer_h src2_buf = nullptr;
 vx_buffer_h dst_buf  = nullptr;
 
 static void show_usage() {
-   std::cout << "Vortex Driver Test." << std::endl;
+   std::cout << "Vortex Test." << std::endl;
    std::cout << "Usage: [-t:testid] [-s:testid] [-e:testid] [-k: kernel] [-n words] [-c] [-h: help]" << std::endl;
 }
 

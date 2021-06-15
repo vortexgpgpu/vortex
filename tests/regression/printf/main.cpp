@@ -17,7 +17,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 const char* kernel_file = "kernel.bin";
-uint32_t count = 0;
+uint32_t count = 4;
 
 vx_device_h device = nullptr;
 vx_buffer_h staging_buf = nullptr;
@@ -69,31 +69,6 @@ int run_test(const kernel_arg_t& kernel_arg,
   std::cout << "wait for completion" << std::endl;
   RT_CHECK(vx_ready_wait(device, -1));
 
-  // download destination buffer
-  std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(staging_buf, kernel_arg.dst_ptr, buf_size, 0));
-
-  // verify result
-  std::cout << "verify result" << std::endl;  
-  {
-    int errors = 0;
-    auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
-    for (uint32_t i = 0; i < num_points; ++i) {
-      int ref = i + i; 
-      int cur = buf_ptr[i];
-      if (cur != ref) {
-        std::cout << "error at result #" << std::dec << i
-                  << std::hex << ": actual 0x" << cur << ", expected 0x" << ref << std::endl;
-        ++errors;
-      }
-    }
-    if (errors != 0) {
-      std::cout << "Found " << std::dec << errors << " errors!" << std::endl;
-      std::cout << "FAILED!" << std::endl;
-      return 1;  
-    }
-  }
-
   return 0;
 }
 
@@ -117,11 +92,10 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_WARPS, &max_warps));
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_THREADS, &max_threads));
 
-  uint32_t num_tasks  = max_cores * max_warps * max_threads;
-  uint32_t num_points = count * num_tasks;
-  uint32_t buf_size   = num_points * sizeof(int32_t);
+  uint32_t num_points = count;
+  uint32_t buf_size = count * sizeof(int32_t);
 
-  std::cout << "number of points: " << num_points << std::endl;
+  std::cout << "number of points: " << count << std::endl;
   std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
 
   // upload program
@@ -132,18 +106,11 @@ int main(int argc, char *argv[]) {
   std::cout << "allocate device memory" << std::endl;  
 
   RT_CHECK(vx_alloc_dev_mem(device, buf_size, &value));
-  kernel_arg.src0_ptr = value;
-  RT_CHECK(vx_alloc_dev_mem(device, buf_size, &value));
-  kernel_arg.src1_ptr = value;
-  RT_CHECK(vx_alloc_dev_mem(device, buf_size, &value));
-  kernel_arg.dst_ptr = value;
+  kernel_arg.src_ptr = value;
 
-  kernel_arg.num_tasks = num_tasks;
-  kernel_arg.task_size = count;
+  kernel_arg.num_points = num_points;
 
-  std::cout << "dev_src0=" << std::hex << kernel_arg.src0_ptr << std::endl;
-  std::cout << "dev_src1=" << std::hex << kernel_arg.src1_ptr << std::endl;
-  std::cout << "dev_dst=" << std::hex << kernel_arg.dst_ptr << std::endl;
+  std::cout << "dev_src=" << std::hex << kernel_arg.src_ptr << std::endl;
   
   // allocate shared memory  
   std::cout << "allocate shared memory" << std::endl;    
@@ -153,40 +120,20 @@ int main(int argc, char *argv[]) {
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
   {
-    auto buf_ptr = (int*)vx_host_ptr(staging_buf);
+    auto buf_ptr = (void*)vx_host_ptr(staging_buf);
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
     RT_CHECK(vx_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
   }
 
   // upload source buffer0
   {
-    auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
+    auto buf_ptr = (float*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr[i] = i-1;
     }
   }
-  std::cout << "upload source buffer0" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src0_ptr, buf_size, 0));
-
-  // upload source buffer1
-  {
-    auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
-    for (uint32_t i = 0; i < num_points; ++i) {
-      buf_ptr[i] = i+1;
-    }
-  }
-  std::cout << "upload source buffer1" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src1_ptr, buf_size, 0));
-
-  // clear destination buffer
-  {
-    auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
-    for (uint32_t i = 0; i < num_points; ++i) {
-      buf_ptr[i] = 0xdeadbeef;
-    }
-  }
-  std::cout << "clear destination buffer" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_ptr, buf_size, 0));  
+  std::cout << "upload source buffer" << std::endl;      
+  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src_ptr, buf_size, 0));  
 
   // run tests
   std::cout << "run tests" << std::endl;
