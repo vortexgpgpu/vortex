@@ -163,11 +163,24 @@ module VX_lsu_unit #(
     reg [`NUM_THREADS-1:0][3:0]  mem_req_byteen;    
     reg [`NUM_THREADS-1:0][31:0] mem_req_data;
 
+    reg ready_prefetch = 0;
+    always @(*) begin
+        if(ready_prefetch==1) begin
+            for (integer i = 0; i < `NUM_THREADS; i++) begin
+                mem_req_addr[i]=mem_req_addr[i] + 4;
+            end
+            ready_prefetch=0;
+        end
+    end
+    
     always @(*) begin
         for (integer i = 0; i < `NUM_THREADS; i++) begin
             mem_req_byteen[i] = {4{req_wb}};
             case (`LSU_WSIZE(req_type))
-                0: mem_req_byteen[i][req_offset[i]] = 1;
+                0: begin
+                    mem_req_byteen[i][req_offset[i]] = 1;
+                    ready_prefetch = 1;
+                end
                 1: begin
                     mem_req_byteen[i][req_offset[i]] = 1;
                     mem_req_byteen[i][{req_addr[i][1], 1'b1}] = 1;
