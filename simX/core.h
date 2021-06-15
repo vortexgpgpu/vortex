@@ -22,6 +22,8 @@ class Core {
 public:
   Core(const ArchDef &arch, Decoder &decoder, MemoryUnit &mem, Word id);
 
+  ~Core();
+
   void clear();
 
   bool running() const;
@@ -78,7 +80,8 @@ private:
   void issue();
   void execute();
   void writeback();
-  
+
+  void writeToStdOut(Addr addr, Word data);
   
   std::vector<RegMask> in_use_iregs_;
   std::vector<RegMask> in_use_fregs_;
@@ -88,6 +91,7 @@ private:
   std::vector<WarpMask> barriers_;  
   std::vector<Word> csrs_;
   std::vector<Byte> fcsrs_;
+  std::unordered_map<int, std::stringstream> print_bufs_;
 
   Word id_;
   const ArchDef &arch_;
