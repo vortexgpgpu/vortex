@@ -2,7 +2,7 @@ RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 VORTEX_DRV_PATH ?= $(realpath ../../../driver)
 VORTEX_RT_PATH ?= $(realpath ../../../runtime)
 
-OPTS ?= -n16
+OPTS ?= -n4
 
 VX_CC  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
 VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++
@@ -19,11 +19,11 @@ VX_SRCS = kernel.c
 #CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -pedantic -Wfatal-errors
 CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
 
-CXXFLAGS += -I$(VORTEX_DRV_PATH)/include -I../../../hw
+CXXFLAGS += -I$(VORTEX_DRV_PATH)/include
 
 LDFLAGS += -L$(VORTEX_DRV_PATH)/stub -lvortex
 
-PROJECT = io_addr
+PROJECT = printf
 
 SRCS = main.cpp
 

@@ -75,7 +75,7 @@ vx_device_h device = nullptr;
 vx_buffer_h staging_buf = nullptr;
 
 static void show_usage() {
-   std::cout << "Vortex Driver Test." << std::endl;
+   std::cout << "Vortex Test." << std::endl;
    std::cout << "Usage: [-k: kernel] [-n words] [-h: help]" << std::endl;
 }
 
