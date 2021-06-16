@@ -193,30 +193,54 @@ static const char* op_string(const Instr &instr) {
 namespace vortex {
 std::ostream &operator<<(std::ostream &os, const Instr &instr) {
   os << op_string(instr) << ": ";
-  int rdt = instr.getRDType();
-  int rd = instr.getRDest();
-  switch (rdt) {
-  case 1: os << "r" << std::dec << rd << " <- "; break;
-  case 2: os << "fr" << std::dec << rd << " <- "; break;
-  case 3: os << "vr" << std::dec << rd << " <- "; break;
-  default: break;
-  }
-  int i = 0;
-  for (; i < instr.getNRSrc(); ++i) {    
+  auto opcode = instr.getOpcode();
+    
+  auto rd_to_string = [&]() {
+    int rdt = instr.getRDType();
+    int rd = instr.getRDest();
+    switch (rdt) {
+    case 1: os << "r" << std::dec << rd << " <- "; break;
+    case 2: os << "fr" << std::dec << rd << " <- "; break;
+    case 3: os << "vr" << std::dec << rd << " <- "; break;
+    default: break;
+    }
+  };
+
+  auto rs_to_string = [&](int i) {
     int rst = instr.getRSType(i);
-    int rs = instr.getRSrc(i);
-    if (i) os << ", ";
+    int rs = instr.getRSrc(i);    
     switch (rst) {
     case 1: os << "r" << std::dec << rs; break;
     case 2: os << "fr" << std::dec << rs; break;
     case 3: os << "vr" << std::dec << rs; break;
     default: break;
     }
-  }
-  if (instr.hasImm()) {
-    if (i) os << ", ";
-    os << "imm=0x" << std::hex << instr.getImm();
-  }
+  };
+
+  if (opcode == S_INST 
+   || opcode == FS
+   || opcode == VS) {     
+     os << "M[r" << std::dec << instr.getRSrc(0) << " + 0x" << std::hex << instr.getImm() << "] <- ";
+     rs_to_string(1);
+  } else 
+  if (opcode == L_INST 
+   || opcode == FL
+   || opcode == VL) {     
+     rd_to_string();
+     os << "M[r" << std::dec << instr.getRSrc(0) << " + 0x" << std::hex << instr.getImm() << "]";
+  } else {
+    rd_to_string();
+    int i = 0;
+    for (; i < instr.getNRSrc(); ++i) {    
+      if (i) os << ", ";
+      rs_to_string(i);
+    }    
+    if (instr.hasImm()) {
+      if (i) os << ", ";
+      os << "imm=0x" << std::hex << instr.getImm();
+    }
+  } 
+
   return os;
 }
 }
