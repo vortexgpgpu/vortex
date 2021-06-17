@@ -32,8 +32,8 @@ module VX_smem_arb (
         VX_stream_demux #(
             .NUM_REQS (2),
             .DATAW    (REQ_DATAW),
-            .BUFFERED (0)
-        ) rsp_demux (
+            .BUFFERED (1)
+        ) req_demux (
             .clk       (clk),
             .reset     (reset),
             .sel       (core_req_if.tag[i][0]),
