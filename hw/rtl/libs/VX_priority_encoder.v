@@ -48,7 +48,7 @@ module VX_priority_encoder #(
         VX_onehot_encoder #(
             .N (N),
             .REVERSE (REVERSE)
-        ) b (
+        ) onehot_encoder (
             .data_in  (onehot),
             .data_out (index),        
             `UNUSED_PIN (valid)

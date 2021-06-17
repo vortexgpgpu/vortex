@@ -83,7 +83,7 @@ module VX_skid_buffer #(
                 end                
                 if (pop && !use_buffer) begin
                     data_out_r <= data_in;                    
-                end else if (pop) begin
+                end else if (ready_out) begin
                     data_out_r <= buffer;
                 end
             end
