@@ -183,9 +183,10 @@ int main(int argc, char *argv[]) {
   
   // allocate shared memory  
   std::cout << "allocate shared memory" << std::endl;    
-  uint32_t staging_buf_size = std::max<uint32_t>(src_buf_size,
+  uint32_t staging_buf_size = std::max<uint32_t>(NUM_ADDRS * sizeof(uint32_t),
+                                std::max<uint32_t>(src_buf_size,
                                   std::max<uint32_t>(dst_buf_size, 
-                                    sizeof(kernel_arg_t)));
+                                    sizeof(kernel_arg_t))));
   RT_CHECK(vx_alloc_shared_mem(device, staging_buf_size, &staging_buf));
   
   // upload kernel argument
