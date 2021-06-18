@@ -14,7 +14,7 @@ module VX_scoreboard  #(
 
     reg is_reg_busy;
     always @(*) begin
-        is_reg_busy = 0;
+        is_reg_busy = 'x;
         for (integer i = 0; i < `NUM_WARPS; ++i) begin
             if (ibuf_deq_if.wid == `NW_BITS'(i)) begin
                 is_reg_busy = | (inuse_regs[i] & ibuf_deq_if.used_regs);

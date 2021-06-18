@@ -109,8 +109,10 @@ module VX_ibuffer #(
 
     // schedule the next instruction to issue
     always @(*) begin
-        deq_valid_n = 1;
         if (num_warps > 1) begin
+            deq_valid_n = 1;
+            deq_wid_n   = 'x;        
+            deq_instr_n = 'x;
             for (integer i = 0; i < `NUM_WARPS; i++) begin
                 if (schedule_table[i]) begin
                     deq_wid_n   = `NW_BITS'(i);                
@@ -119,6 +121,7 @@ module VX_ibuffer #(
                 end
             end
         end else if (1 == num_warps && !(deq_fire && q_alm_empty[deq_wid])) begin
+            deq_valid_n = 1;
             deq_wid_n   = deq_wid;
             deq_instr_n = deq_fire ? q_data_prev[deq_wid] : q_data_out[deq_wid];
         end else begin
