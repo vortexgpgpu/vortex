@@ -32,30 +32,68 @@ module VX_lsu_unit #(
     wire [`NW_BITS-1:0]           req_wid;
     wire [31:0]                   req_pc;
     wire                          req_is_dup;
+    wire                          req_is_prefetch ;
+   
+    // only after we successfully send the normal load
+    // into pipe, then we can call prefetch load
+    reg                           ready_to_prefetch = 0; 
 
     wire [`NUM_THREADS-1:0][31:0] full_address;    
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         assign full_address[i] = lsu_req_if.base_addr[i] + lsu_req_if.offset;
     end
 
+    // we only prefetch when have a load instruction
+    wire need_prefetch = lsu_req_if.wb;
+
+    // is the current load inst we want to push to pipe register a prefetch?
+    reg is_prefetch = 0;
+    // if we need prefetch, the lsu will only be ready after prefetch
+    // has returned 
+    reg [`NUM_THREADS-1:0][31:0] load_address = full_address; 
+    always @(ready_to_prefetch) begin
+        if(ready_to_prefetch & need_prefetch) begin
+            // calculate prefetch addr
+            for (int i = 0; i < `NUM_THREADS; i++) begin
+                load_address[i] = full_address[i] + 4;
+            end
+            assign is_prefetch = 1;
+        end
+    end
+
+
+
     wire [`NUM_THREADS-1:0] addr_matches;
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        assign addr_matches[i] = (full_address[0][31:2] == full_address[i][31:2]) || ~lsu_req_if.tmask[i];
+        assign addr_matches[i] = (load_address[0][31:2] == load_address[i][31:2]) || ~lsu_req_if.tmask[i];
     end    
     wire is_dup_load = lsu_req_if.wb && lsu_req_if.tmask[0] && (& addr_matches);
     
     wire ready_in;
     wire stall_in = ~ready_in && req_valid; 
 
+    always @(*) begin
+        // when we successfully push the original inst, 
+        // we should then push prefetch
+        if(stall_in && !req_is_prefetch) begin
+            ready_to_prefetch = 1;
+        end
+        // when we successfully push prefetch into pipe,
+        // we should set ready_to_prefetch to 0
+        if(stall_in && req_is_prefetch) begin
+            ready_to_prefetch=0;
+        end
+    end
+
     VX_pipe_register #(
-        .DATAW  (1 + 1 + `NW_BITS + `NUM_THREADS + 32 + (`NUM_THREADS * 32) + `LSU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32)),
+        .DATAW  (1 + 1 + 1+ `NW_BITS + `NUM_THREADS + 32 + (`NUM_THREADS * 32) + `LSU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32)),
         .RESETW (1)
     ) req_pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_in),
-        .data_in  ({lsu_req_if.valid, is_dup_load, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, full_address, lsu_req_if.op_type, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.store_data}),
-        .data_out ({req_valid,        req_is_dup,  req_wid,        req_tmask,        req_pc,        req_addr,     req_type,           req_rd,        req_wb,        req_data})
+        .data_in  ({lsu_req_if.valid, is_dup_load, is_prefetch,     lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, load_address, lsu_req_if.op_type, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.store_data}),
+        .data_out ({req_valid,        req_is_dup,  req_is_prefetch, req_wid,        req_tmask,        req_pc,        req_addr,     req_type,           req_rd,        req_wb,        req_data})
     );
 
     // Can accept new request?
@@ -67,6 +105,7 @@ module VX_lsu_unit #(
     wire rsp_wb;
     wire [`LSU_BITS-1:0] rsp_type;
     wire rsp_is_dup;
+    wire rsp_is_prefetch;
 
     `UNUSED_VAR (rsp_type)
     
@@ -98,7 +137,7 @@ module VX_lsu_unit #(
     assign mbuf_raddr = dcache_rsp_if.tag[`DCORE_TAG_ID_BITS-1:0];    
 
     VX_index_buffer #(
-        .DATAW   (`NW_BITS + 32 + `NUM_THREADS + `NR_BITS + 1 + `LSU_BITS + (`NUM_THREADS * 2) + 1),
+        .DATAW   (`NW_BITS + 32 + `NUM_THREADS + `NR_BITS + 1 + `LSU_BITS + (`NUM_THREADS * 2) + 1 + 1),
         .SIZE    (`LSUQ_SIZE)
     ) req_metadata (
         .clk          (clk),
@@ -106,8 +145,8 @@ module VX_lsu_unit #(
         .write_addr   (mbuf_waddr),  
         .acquire_slot (mbuf_push),       
         .read_addr    (mbuf_raddr),
-        .write_data   ({req_wid, req_pc, req_tmask, req_rd, req_wb, req_type, req_offset, req_is_dup}),                    
-        .read_data    ({rsp_wid, rsp_pc, rsp_tmask, rsp_rd, rsp_wb, rsp_type, rsp_offset, rsp_is_dup}),
+        .write_data   ({req_wid, req_pc, req_tmask, req_rd, req_wb, req_type, req_offset, req_is_dup, req_is_prefetch}),                    
+        .read_data    ({rsp_wid, rsp_pc, rsp_tmask, rsp_rd, rsp_wb, rsp_type, rsp_offset, rsp_is_dup, rsp_is_prefetch}),
         .release_addr (mbuf_raddr),
         .release_slot (mbuf_pop),     
         .full         (mbuf_full),
@@ -163,23 +202,12 @@ module VX_lsu_unit #(
     reg [`NUM_THREADS-1:0][3:0]  mem_req_byteen;    
     reg [`NUM_THREADS-1:0][31:0] mem_req_data;
 
-    reg ready_prefetch = 0;
-    always @(*) begin
-        if(ready_prefetch==1) begin
-            for (integer i = 0; i < `NUM_THREADS; i++) begin
-                mem_req_addr[i]=mem_req_addr[i] + 4;
-            end
-            ready_prefetch=0;
-        end
-    end
-    
     always @(*) begin
         for (integer i = 0; i < `NUM_THREADS; i++) begin
             mem_req_byteen[i] = {4{req_wb}};
             case (`LSU_WSIZE(req_type))
                 0: begin
                     mem_req_byteen[i][req_offset[i]] = 1;
-                    ready_prefetch = 1;
                 end
                 1: begin
                     mem_req_byteen[i][req_offset[i]] = 1;
@@ -258,7 +286,6 @@ module VX_lsu_unit #(
     // send load commit
 
     wire load_rsp_stall = ~ld_commit_if.ready && ld_commit_if.valid;
-    
     VX_pipe_register #(
         .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1),
         .RESETW (1)
@@ -271,7 +298,7 @@ module VX_lsu_unit #(
     );
 
     // Can accept new cache response?
-    assign dcache_rsp_if.ready = ~load_rsp_stall;
+    assign dcache_rsp_if.ready = ~load_rsp_stall | rsp_is_prefetch;
 
     // scope registration
     `SCOPE_ASSIGN (dcache_req_fire,  dcache_req_fire);
