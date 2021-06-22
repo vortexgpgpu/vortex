@@ -86,22 +86,6 @@ module VX_fp_cvt #(
         assign input_sign[i]   = is_itof ? int_sign : fmt_sign;
     end
 
-    wire [LANES-1:0][LZC_RESULT_WIDTH-1:0] renorm_shamt; // renormalization shift amount
-    wire [LANES-1:0] mant_is_zero;                       // for integer zeroes
-
-    for (genvar i = 0; i < LANES; ++i) begin
-        wire mant_is_nonzero;
-        VX_lzc #(
-            .WIDTH (INT_MAN_WIDTH),
-            .MODE  (1)
-        ) lzc (
-            .in_i    (encoded_mant[i]),
-            .cnt_o   (renorm_shamt[i]),
-            .valid_o (mant_is_nonzero)
-        );
-        assign mant_is_zero[i] = ~mant_is_nonzero;
-    end
-
     // Pipeline stage0
     
     wire                    valid_in_s0;
@@ -112,29 +96,42 @@ module VX_fp_cvt #(
     fp_type_t [LANES-1:0]   in_a_type_s0;
     wire [LANES-1:0]        input_sign_s0;
     wire [LANES-1:0][INT_EXP_WIDTH-1:0] fmt_exponent_s0;
-    wire [LANES-1:0][INT_MAN_WIDTH-1:0] encoded_mant_s0;    
-    wire [LANES-1:0][LZC_RESULT_WIDTH-1:0] renorm_shamt_s0;
-    wire [LANES-1:0]        mant_is_zero_s0;
+    wire [LANES-1:0][INT_MAN_WIDTH-1:0] encoded_mant_s0;
 
     wire stall;
 
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + 1 + `FRM_BITS + 1 + LANES * ($bits(fp_type_t) + 1 +INT_EXP_WIDTH + INT_MAN_WIDTH + LZC_RESULT_WIDTH + 1)),
+        .DATAW  (1 + TAGW + 1 + `FRM_BITS + 1 + LANES * ($bits(fp_type_t) + 1 + INT_EXP_WIDTH + INT_MAN_WIDTH)),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),
-        .data_in  ({valid_in,    tag_in,    is_itof,    !is_signed,  frm,         in_a_type,    input_sign,    fmt_exponent,    encoded_mant,    renorm_shamt,    mant_is_zero}),
-        .data_out ({valid_in_s0, tag_in_s0, is_itof_s0, unsigned_s0, rnd_mode_s0, in_a_type_s0, input_sign_s0, fmt_exponent_s0, encoded_mant_s0, renorm_shamt_s0, mant_is_zero_s0})
+        .data_in  ({valid_in,    tag_in,    is_itof,    !is_signed,  frm,         in_a_type,    input_sign,    fmt_exponent,    encoded_mant}),
+        .data_out ({valid_in_s0, tag_in_s0, is_itof_s0, unsigned_s0, rnd_mode_s0, in_a_type_s0, input_sign_s0, fmt_exponent_s0, encoded_mant_s0})
     );
     
     // Normalization
 
-    wire [LANES-1:0][INT_MAN_WIDTH-1:0] input_mant;      // normalized input mantissa    
-    wire [LANES-1:0][INT_EXP_WIDTH-1:0] input_exp;       // unbiased true exponent
-    wire [LANES-1:0][INT_EXP_WIDTH-1:0] destination_exp; // re-biased exponent for destination
+    wire [LANES-1:0][LZC_RESULT_WIDTH-1:0] renorm_shamt_s0; // renormalization shift amount
+    wire [LANES-1:0] mant_is_zero_s0;                       // for integer zeroes
 
+    for (genvar i = 0; i < LANES; ++i) begin
+        wire mant_is_nonzero;
+        VX_lzc #(
+            .WIDTH (INT_MAN_WIDTH),
+            .MODE  (1)
+        ) lzc (
+            .in_i    (encoded_mant_s0[i]),
+            .cnt_o   (renorm_shamt_s0[i]),
+            .valid_o (mant_is_nonzero)
+        );
+        assign mant_is_zero_s0[i] = ~mant_is_nonzero;  
+    end
+
+    wire [LANES-1:0][INT_MAN_WIDTH-1:0] input_mant_s0;      // normalized input mantissa    
+    wire [LANES-1:0][INT_EXP_WIDTH-1:0] input_exp_s0;       // unbiased true exponent
+    
     for (genvar i = 0; i < LANES; ++i) begin
     `IGNORE_WARNINGS_BEGIN
         // Input mantissa needs to be normalized
@@ -142,7 +139,7 @@ module VX_fp_cvt #(
         wire [INT_EXP_WIDTH-1:0] int_input_exp;
 
         // Realign input mantissa, append zeroes if destination is wider
-        assign input_mant[i] = encoded_mant_s0[i] << renorm_shamt_s0[i];
+        assign input_mant_s0[i] = encoded_mant_s0[i] << renorm_shamt_s0[i];
 
         // Unbias exponent and compensate for shift
         assign fp_input_exp = fmt_exponent_s0[i] + 
@@ -152,96 +149,118 @@ module VX_fp_cvt #(
                                  
         assign int_input_exp = (INT_MAN_WIDTH-1) - {1'b0, renorm_shamt_s0[i]};
 
-        assign input_exp[i] = is_itof_s0 ? int_input_exp : fp_input_exp;
-
-        // Rebias the exponent
-        assign destination_exp[i] = input_exp[i] + EXP_BIAS;
+        assign input_exp_s0[i] = is_itof_s0 ? int_input_exp : fp_input_exp;
     `IGNORE_WARNINGS_END
     end
 
-    // Perform adjustments to mantissa and exponent
-
-    wire [LANES-1:0][2*INT_MAN_WIDTH:0] preshift_mant_s0;
-    wire [LANES-1:0][SHAMT_BITS-1:0]    denorm_shamt_s0;
-    wire [LANES-1:0][INT_EXP_WIDTH-1:0] final_exp_s0;
-    wire [LANES-1:0]                    of_before_round_s0;
-
-    for (genvar i = 0; i < LANES; ++i) begin            
-        reg [2*INT_MAN_WIDTH:0] preshift_mant;  // mantissa before final shift                
-        reg [SHAMT_BITS-1:0]    denorm_shamt;   // shift amount for denormalization
-        reg [INT_EXP_WIDTH-1:0] final_exp;      // after eventual adjustments
-        reg                     of_before_round;
-        
-        always @(*) begin           
-        `IGNORE_WARNINGS_BEGIN     
-            // Default assignment
-            final_exp       = destination_exp[i]; // take exponent as is, only look at lower bits
-            preshift_mant   = {input_mant[i], 33'b0}; // Place mantissa to the left of the shifter
-            denorm_shamt    = 0;      // right of mantissa
-            of_before_round = 1'b0;
-
-            // Handle INT casts
-            if (is_itof_s0) begin                   
-                if ($signed(destination_exp[i]) >= $signed(2**EXP_BITS-1)) begin
-                    // Overflow or infinities (for proper rounding)
-                    final_exp     = (2**EXP_BITS-2); // largest normal value
-                    preshift_mant = ~0;  // largest normal value and RS bits set
-                    of_before_round = 1'b1;
-                end else if ($signed(destination_exp[i]) < $signed(-MAN_BITS)) begin
-                    // Limit the shift to retain sticky bits
-                    final_exp     = 0; // denormal result
-                    denorm_shamt  = denorm_shamt + (2 + MAN_BITS); // to sticky                
-                end else if ($signed(destination_exp[i]) < $signed(1)) begin
-                    // Denormalize underflowing values
-                    final_exp     = 0; // denormal result
-                    denorm_shamt  = denorm_shamt + 1 - destination_exp[i]; // adjust right shifting               
-                end
-            end else begin                                
-                if ($signed(input_exp[i]) >= $signed((MAX_INT_WIDTH-1) + unsigned_s0)) begin
-                    // overflow: when converting to unsigned the range is larger by one
-                    denorm_shamt = SHAMT_BITS'(0); // prevent shifting
-                    of_before_round = 1'b1;                
-                end else if ($signed(input_exp[i]) < $signed(-1)) begin
-                    // underflow
-                    denorm_shamt = MAX_INT_WIDTH + 1; // all bits go to the sticky
-                end else begin
-                    // By default right shift mantissa to be an integer
-                    denorm_shamt = (MAX_INT_WIDTH-1) - input_exp[i];
-                end              
-            end     
-        `IGNORE_WARNINGS_END  
-        end
-
-        assign preshift_mant_s0[i]   = preshift_mant;
-        assign denorm_shamt_s0[i]    = denorm_shamt;
-        assign final_exp_s0[i]       = final_exp;
-        assign of_before_round_s0[i] = of_before_round;
-    end
-
     // Pipeline stage1
-    
+
     wire                    valid_in_s1;
     wire [TAGW-1:0]         tag_in_s1;
     wire                    is_itof_s1;
     wire                    unsigned_s1;
     wire [2:0]              rnd_mode_s1;
-    fp_type_t [LANES-1:0]   in_a_type_s1;   
+    fp_type_t [LANES-1:0]   in_a_type_s1;
+    wire [LANES-1:0]        input_sign_s1;
     wire [LANES-1:0]        mant_is_zero_s1;
-    wire [LANES-1:0]        input_sign_s1;    
-    wire [LANES-1:0][2*INT_MAN_WIDTH:0] preshift_mant_s1;
-    wire [LANES-1:0][SHAMT_BITS-1:0]    denorm_shamt_s1;
-    wire [LANES-1:0][INT_EXP_WIDTH-1:0] final_exp_s1;
-    wire [LANES-1:0]        of_before_round_s1;
-    
+    wire [LANES-1:0][INT_MAN_WIDTH-1:0] input_mant_s1;
+    wire [LANES-1:0][INT_EXP_WIDTH-1:0] input_exp_s1;
+
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + 1 + 1 + `FRM_BITS + LANES * ($bits(fp_type_t) + 1 + 1 + (2*INT_MAN_WIDTH+1) + SHAMT_BITS + INT_EXP_WIDTH + 1)),
+        .DATAW  (1 + TAGW + 1 + `FRM_BITS + 1 + LANES * ($bits(fp_type_t) + 1 + 1 + INT_MAN_WIDTH + INT_EXP_WIDTH)),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),
-        .data_in  ({valid_in_s0, tag_in_s0, is_itof_s0, unsigned_s0, rnd_mode_s0, in_a_type_s0, mant_is_zero_s0, input_sign_s0, preshift_mant_s0, denorm_shamt_s0, final_exp_s0, of_before_round_s0}),
-        .data_out ({valid_in_s1, tag_in_s1, is_itof_s1, unsigned_s1, rnd_mode_s1, in_a_type_s1, mant_is_zero_s1, input_sign_s1, preshift_mant_s1, denorm_shamt_s1, final_exp_s1, of_before_round_s1})
+        .data_in  ({valid_in_s0, tag_in_s0, is_itof_s0, unsigned_s0, rnd_mode_s0, in_a_type_s0, input_sign_s0, mant_is_zero_s0, input_mant_s0, input_exp_s0}),
+        .data_out ({valid_in_s1, tag_in_s1, is_itof_s1, unsigned_s1, rnd_mode_s1, in_a_type_s1, input_sign_s1, mant_is_zero_s1, input_mant_s1, input_exp_s1})
+    );
+
+    // Perform adjustments to mantissa and exponent
+
+    wire [LANES-1:0][2*INT_MAN_WIDTH:0] destination_mant_s1;
+    wire [LANES-1:0][INT_EXP_WIDTH-1:0] final_exp_s1;
+    wire [LANES-1:0]                    of_before_round_s1;
+
+    for (genvar i = 0; i < LANES; ++i) begin            
+        wire [INT_EXP_WIDTH-1:0] destination_exp;   // re-biased exponent for destination
+        reg [2*INT_MAN_WIDTH:0] preshift_mant;      // mantissa before final shift                
+        reg [SHAMT_BITS-1:0]    denorm_shamt;       // shift amount for denormalization
+        reg [INT_EXP_WIDTH-1:0] final_exp;          // after eventual adjustments
+        reg                     of_before_round;
+
+        // Rebias the exponent
+        assign destination_exp = input_exp_s1[i] + EXP_BIAS;
+        
+        always @(*) begin           
+        `IGNORE_WARNINGS_BEGIN     
+            // Default assignment
+            final_exp       = destination_exp; // take exponent as is, only look at lower bits
+            preshift_mant   = {input_mant_s1[i], 33'b0}; // Place mantissa to the left of the shifter
+            denorm_shamt    = 0;      // right of mantissa
+            of_before_round = 1'b0;
+
+            // Handle INT casts
+            if (is_itof_s1) begin                   
+                if ($signed(destination_exp) >= $signed(2**EXP_BITS-1)) begin
+                    // Overflow or infinities (for proper rounding)
+                    final_exp     = (2**EXP_BITS-2); // largest normal value
+                    preshift_mant = ~0;  // largest normal value and RS bits set
+                    of_before_round = 1'b1;
+                end else if ($signed(destination_exp) < $signed(-MAN_BITS)) begin
+                    // Limit the shift to retain sticky bits
+                    final_exp     = 0; // denormal result
+                    denorm_shamt  = denorm_shamt + (2 + MAN_BITS); // to sticky                
+                end else if ($signed(destination_exp) < $signed(1)) begin
+                    // Denormalize underflowing values
+                    final_exp     = 0; // denormal result
+                    denorm_shamt  = denorm_shamt + 1 - destination_exp; // adjust right shifting               
+                end
+            end else begin                                
+                if ($signed(input_exp_s1[i]) >= $signed((MAX_INT_WIDTH-1) + unsigned_s1)) begin
+                    // overflow: when converting to unsigned the range is larger by one
+                    denorm_shamt = SHAMT_BITS'(0); // prevent shifting
+                    of_before_round = 1'b1;                
+                end else if ($signed(input_exp_s1[i]) < $signed(-1)) begin
+                    // underflow
+                    denorm_shamt = MAX_INT_WIDTH + 1; // all bits go to the sticky
+                end else begin
+                    // By default right shift mantissa to be an integer
+                    denorm_shamt = (MAX_INT_WIDTH-1) - input_exp_s1[i];
+                end              
+            end     
+        `IGNORE_WARNINGS_END  
+        end
+
+        assign destination_mant_s1[i] = preshift_mant >> denorm_shamt;
+        assign final_exp_s1[i]        = final_exp;
+        assign of_before_round_s1[i]  = of_before_round;
+    end
+
+    // Pipeline stage2
+    
+    wire                    valid_in_s2;
+    wire [TAGW-1:0]         tag_in_s2;
+    wire                    is_itof_s2;
+    wire                    unsigned_s2;
+    wire [2:0]              rnd_mode_s2;
+    fp_type_t [LANES-1:0]   in_a_type_s2;   
+    wire [LANES-1:0]        mant_is_zero_s2;
+    wire [LANES-1:0]        input_sign_s2;
+    wire [LANES-1:0][2*INT_MAN_WIDTH:0] destination_mant_s2;
+    wire [LANES-1:0][INT_EXP_WIDTH-1:0] final_exp_s2;
+    wire [LANES-1:0]        of_before_round_s2;
+    
+    VX_pipe_register #(
+        .DATAW  (1 + TAGW + 1 + 1 + `FRM_BITS + LANES * ($bits(fp_type_t) + 1 + 1 + (2*INT_MAN_WIDTH+1) + INT_EXP_WIDTH + 1)),
+        .RESETW (1)
+    ) pipe_reg2 (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (~stall),
+        .data_in  ({valid_in_s1, tag_in_s1, is_itof_s1, unsigned_s1, rnd_mode_s1, in_a_type_s1, mant_is_zero_s1, input_sign_s1, destination_mant_s1, final_exp_s1, of_before_round_s1}),
+        .data_out ({valid_in_s2, tag_in_s2, is_itof_s2, unsigned_s2, rnd_mode_s2, in_a_type_s2, mant_is_zero_s2, input_sign_s2, destination_mant_s2, final_exp_s2, of_before_round_s2})
     );
 
     wire [LANES-1:0]       rounded_sign;
@@ -251,41 +270,37 @@ module VX_fp_cvt #(
     // Rouding and classification
    
     for (genvar i = 0; i < LANES; ++i) begin
-        wire [2*INT_MAN_WIDTH:0] destination_mant;
         wire [MAN_BITS-1:0]      final_mant;        // mantissa after adjustments
         wire [MAX_INT_WIDTH-1:0] final_int;         // integer shifted in position
         wire [1:0]               round_sticky_bits;
         wire [31:0]              fmt_pre_round_abs;
         wire [31:0]              pre_round_abs;
 
-        // Mantissa adjustment shift
-        assign destination_mant = preshift_mant_s1[i] >> denorm_shamt_s1[i];
-
         // Extract final mantissa and round bit, discard the normal bit (for FP)
-        assign {final_mant, fp_round_sticky_bits[i][1]} = destination_mant[2*INT_MAN_WIDTH-1 : 2*INT_MAN_WIDTH-1 - (MAN_BITS+1) + 1];
-        assign {final_int, int_round_sticky_bits[i][1]} = destination_mant[2*INT_MAN_WIDTH   : 2*INT_MAN_WIDTH   - (MAX_INT_WIDTH+1) + 1];
+        assign {final_mant, fp_round_sticky_bits[i][1]} = destination_mant_s2[i][2*INT_MAN_WIDTH-1 : 2*INT_MAN_WIDTH-1 - (MAN_BITS+1) + 1];
+        assign {final_int, int_round_sticky_bits[i][1]} = destination_mant_s2[i][2*INT_MAN_WIDTH   : 2*INT_MAN_WIDTH   - (MAX_INT_WIDTH+1) + 1];
 
         // Collapse sticky bits
-        assign fp_round_sticky_bits[i][0]  = (| destination_mant[NUM_FP_STICKY-1:0]);
-        assign int_round_sticky_bits[i][0] = (| destination_mant[NUM_INT_STICKY-1:0]);
+        assign fp_round_sticky_bits[i][0]  = (| destination_mant_s2[i][NUM_FP_STICKY-1:0]);
+        assign int_round_sticky_bits[i][0] = (| destination_mant_s2[i][NUM_INT_STICKY-1:0]);
 
         // select RS bits for destination operation
-        assign round_sticky_bits = is_itof_s1 ? fp_round_sticky_bits[i] : int_round_sticky_bits[i];
+        assign round_sticky_bits = is_itof_s2 ? fp_round_sticky_bits[i] : int_round_sticky_bits[i];
 
         // Pack exponent and mantissa into proper rounding form
-        assign fmt_pre_round_abs = {1'b0, final_exp_s1[i][EXP_BITS-1:0], final_mant[MAN_BITS-1:0]};
+        assign fmt_pre_round_abs = {1'b0, final_exp_s2[i][EXP_BITS-1:0], final_mant[MAN_BITS-1:0]};
 
         // Select output with destination format and operation
-        assign pre_round_abs = is_itof_s1 ? fmt_pre_round_abs : final_int;
+        assign pre_round_abs = is_itof_s2 ? fmt_pre_round_abs : final_int;
 
         // Perform the rounding
         VX_fp_rounding #(
             .DAT_WIDTH (32)
         ) fp_rounding (
             .abs_value_i    (pre_round_abs),
-            .sign_i         (input_sign_s1[i]),
+            .sign_i         (input_sign_s2[i]),
             .round_sticky_bits_i(round_sticky_bits),
-            .rnd_mode_i     (rnd_mode_s1),
+            .rnd_mode_i     (rnd_mode_s2),
             .effective_subtraction_i(1'b0),
             .abs_rounded_o  (rounded_abs[i]),
             .sign_o         (rounded_sign[i]),
@@ -293,28 +308,28 @@ module VX_fp_cvt #(
         );
     end
 
-    // Pipeline stage2
+    // Pipeline stage3
 
-    wire                    valid_in_s2;
-    wire [TAGW-1:0]         tag_in_s2;
-    wire                    is_itof_s2;
-    wire                    unsigned_s2;
-    fp_type_t [LANES-1:0]   in_a_type_s2;   
-    wire [LANES-1:0]        mant_is_zero_s2;
-    wire [LANES-1:0]        input_sign_s2;
-    wire [LANES-1:0]        rounded_sign_s2;
-    wire [LANES-1:0][31:0]  rounded_abs_s2;
-    wire [LANES-1:0]        of_before_round_s2;
+    wire                    valid_in_s3;
+    wire [TAGW-1:0]         tag_in_s3;
+    wire                    is_itof_s3;
+    wire                    unsigned_s3;
+    fp_type_t [LANES-1:0]   in_a_type_s3;   
+    wire [LANES-1:0]        mant_is_zero_s3;
+    wire [LANES-1:0]        input_sign_s3;
+    wire [LANES-1:0]        rounded_sign_s3;
+    wire [LANES-1:0][31:0]  rounded_abs_s3;
+    wire [LANES-1:0]        of_before_round_s3;
 
     VX_pipe_register #(
         .DATAW  (1 + TAGW + 1 + 1 + LANES * ($bits(fp_type_t) + 1 + 1 + 32 + 1 + 1)),
         .RESETW (1)
-    ) pipe_reg2 (
+    ) pipe_reg3 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),
-        .data_in  ({valid_in_s1, tag_in_s1, is_itof_s1, unsigned_s1, in_a_type_s1, mant_is_zero_s1, input_sign_s1, rounded_abs,    rounded_sign,    of_before_round_s1}),
-        .data_out ({valid_in_s2, tag_in_s2, is_itof_s2, unsigned_s2, in_a_type_s2, mant_is_zero_s2, input_sign_s2, rounded_abs_s2, rounded_sign_s2, of_before_round_s2})
+        .data_in  ({valid_in_s2, tag_in_s2, is_itof_s2, unsigned_s2, in_a_type_s2, mant_is_zero_s2, input_sign_s2, rounded_abs,    rounded_sign,    of_before_round_s2}),
+        .data_out ({valid_in_s3, tag_in_s3, is_itof_s3, unsigned_s3, in_a_type_s3, mant_is_zero_s3, input_sign_s3, rounded_abs_s3, rounded_sign_s3, of_before_round_s3})
     );
      
     wire [LANES-1:0] of_after_round;
@@ -325,14 +340,14 @@ module VX_fp_cvt #(
 
     for (genvar i = 0; i < LANES; ++i) begin
         // Assemble regular result, nan box short ones. Int zeroes need to be detected
-        assign fmt_result[i] = (is_itof_s2 & mant_is_zero_s2[i]) ? 0 : {rounded_sign_s2[i], rounded_abs_s2[i][EXP_BITS+MAN_BITS-1:0]};
+        assign fmt_result[i] = (is_itof_s3 & mant_is_zero_s3[i]) ? 0 : {rounded_sign_s3[i], rounded_abs_s3[i][EXP_BITS+MAN_BITS-1:0]};
 
         // Classification after rounding select by destination format
-        assign uf_after_round[i] = (rounded_abs_s2[i][EXP_BITS+MAN_BITS-1:MAN_BITS] == 0); // denormal
-        assign of_after_round[i] = (rounded_abs_s2[i][EXP_BITS+MAN_BITS-1:MAN_BITS] == ~0); // inf exp.
+        assign uf_after_round[i] = (rounded_abs_s3[i][EXP_BITS+MAN_BITS-1:MAN_BITS] == 0); // denormal
+        assign of_after_round[i] = (rounded_abs_s3[i][EXP_BITS+MAN_BITS-1:MAN_BITS] == ~0); // inf exp.
 
         // Negative integer result needs to be brought into two's complement
-        assign rounded_int_res[i] = rounded_sign_s2[i] ? (-rounded_abs_s2[i]) : rounded_abs_s2[i];
+        assign rounded_int_res[i] = rounded_sign_s3[i] ? (-rounded_abs_s3[i]) : rounded_abs_s3[i];
         assign rounded_int_res_zero[i] = (rounded_int_res[i] == 0);
     end
 
@@ -347,13 +362,13 @@ module VX_fp_cvt #(
 
     for (genvar i = 0; i < LANES; ++i) begin
         // Detect special case from source format, I2F casts don't produce a special result
-        assign fp_result_is_special[i] = ~is_itof_s2 & (in_a_type_s2[i].is_zero | in_a_type_s2[i].is_nan);
+        assign fp_result_is_special[i] = ~is_itof_s3 & (in_a_type_s3[i].is_zero | in_a_type_s3[i].is_nan);
 
         // Signalling input NaNs raise invalid flag, otherwise no flags set
-        assign fp_special_status[i] = in_a_type_s2[i].is_signaling ? {1'b1, 4'h0} : 5'h0;   // invalid operation
+        assign fp_special_status[i] = in_a_type_s3[i].is_signaling ? {1'b1, 4'h0} : 5'h0;   // invalid operation
 
         // Assemble result according to destination format
-        assign fp_special_result[i] = in_a_type_s2[i].is_zero ? (32'(input_sign_s2) << 31) // signed zero
+        assign fp_special_result[i] = in_a_type_s3[i].is_zero ? (32'(input_sign_s3) << 31) // signed zero
                                                               : {1'b0, QNAN_EXPONENT, QNAN_MANTISSA}; // qNaN
     end
 
@@ -366,20 +381,20 @@ module VX_fp_cvt #(
     for (genvar i = 0; i < LANES; ++i) begin
          // Assemble result according to destination format
         always @(*) begin
-            if (input_sign_s2[i] && !in_a_type_s2[i].is_nan) begin
+            if (input_sign_s3[i] && !in_a_type_s3[i].is_nan) begin
                 int_special_result[i][30:0] = 0;               // alone yields 2**(31)-1
-                int_special_result[i][31]   = ~unsigned_s2;    // for unsigned casts yields 2**31
+                int_special_result[i][31]   = ~unsigned_s3;    // for unsigned casts yields 2**31
             end else begin
                 int_special_result[i][30:0] = 2**(31) - 1;     // alone yields 2**(31)-1
-                int_special_result[i][31]   = unsigned_s2;     // for unsigned casts yields 2**31
+                int_special_result[i][31]   = unsigned_s3;     // for unsigned casts yields 2**31
             end
         end            
 
         // Detect special case from source format (inf, nan, overflow, nan-boxing or negative unsigned)
-        assign int_result_is_special[i] = in_a_type_s2[i].is_nan 
-                                        | in_a_type_s2[i].is_inf 
-                                        | of_before_round_s2[i] 
-                                        | (input_sign_s2[i] & unsigned_s2 & ~rounded_int_res_zero[i]);
+        assign int_result_is_special[i] = in_a_type_s3[i].is_nan 
+                                        | in_a_type_s3[i].is_inf 
+                                        | of_before_round_s3[i] 
+                                        | (input_sign_s3[i] & unsigned_s3 & ~rounded_int_res_zero[i]);
                                         
         // All integer special cases are invalid
         assign int_special_status[i] = {1'b1, 4'h0};
@@ -395,12 +410,12 @@ module VX_fp_cvt #(
         fflags_t    fp_status, int_status;    
         wire [31:0] fp_result, int_result;
 
-        wire inexact = is_itof_s2 ? (| fp_round_sticky_bits[i]) // overflow is invalid in i2f;        
-                                  : (| fp_round_sticky_bits[i]) | (~in_a_type_s2[i].is_inf & (of_before_round_s2[i] | of_after_round[i]));
+        wire inexact = is_itof_s3 ? (| fp_round_sticky_bits[i]) // overflow is invalid in i2f;        
+                                  : (| fp_round_sticky_bits[i]) | (~in_a_type_s3[i].is_inf & (of_before_round_s3[i] | of_after_round[i]));
                                   
-        assign fp_regular_status.NV = is_itof_s2 & (of_before_round_s2[i] | of_after_round[i]); // overflow is invalid for I2F casts
+        assign fp_regular_status.NV = is_itof_s3 & (of_before_round_s3[i] | of_after_round[i]); // overflow is invalid for I2F casts
         assign fp_regular_status.DZ = 1'b0; // no divisions
-        assign fp_regular_status.OF = ~is_itof_s2 & (~in_a_type_s2[i].is_inf & (of_before_round_s2[i] | of_after_round[i])); // inf casts no OF
+        assign fp_regular_status.OF = ~is_itof_s3 & (~in_a_type_s3[i].is_inf & (of_before_round_s3[i] | of_after_round[i])); // inf casts no OF
         assign fp_regular_status.UF = uf_after_round[i] & inexact;
         assign fp_regular_status.NX = inexact;
 
@@ -413,8 +428,8 @@ module VX_fp_cvt #(
         assign int_status = int_result_is_special[i] ? int_special_status[i] : int_regular_status;
 
         // Select output depending on special case detection
-        assign tmp_result[i] = is_itof_s2 ? fp_result : int_result;
-        assign tmp_fflags[i] = is_itof_s2 ? fp_status : int_status;
+        assign tmp_result[i] = is_itof_s3 ? fp_result : int_result;
+        assign tmp_fflags[i] = is_itof_s3 ? fp_status : int_status;
     end
 
     assign stall = ~ready_out && valid_out;
@@ -422,11 +437,11 @@ module VX_fp_cvt #(
     VX_pipe_register #(
         .DATAW  (1 + TAGW + (LANES * 32) + (LANES * `FFG_BITS)),
         .RESETW (1)
-    ) pipe_reg3 (
+    ) pipe_reg4 (
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall),
-        .data_in  ({valid_in_s2, tag_in_s2, tmp_result, tmp_fflags}),
+        .data_in  ({valid_in_s3, tag_in_s3, tmp_result, tmp_fflags}),
         .data_out ({valid_out,   tag_out,   result,     fflags})
     );
 
