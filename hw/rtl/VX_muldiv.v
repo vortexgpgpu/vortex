@@ -1,5 +1,9 @@
 `include "VX_define.vh"
 
+`ifndef SYNTHESIS
+`include "util_dpi.vh"
+`endif
+
 module VX_muldiv (
     input wire clk,
     input wire reset,
@@ -43,13 +47,42 @@ module VX_muldiv (
     wire mul_valid_out;
     wire mul_valid_in = valid_in && !is_div_op;    
     wire mul_ready_in = ~stall_out || ~mul_valid_out;
-        
-    wire is_mulh_in = (alu_op != `MUL_MUL);
+
+    wire is_mulh_in      = (alu_op != `MUL_MUL);
+    wire is_signed_mul_a = (alu_op != `MUL_MULHU);
+    wire is_signed_mul_b = (alu_op != `MUL_MULHU && alu_op != `MUL_MULHSU);
+
+`ifdef IMUL_DPI
+
+    wire [`NUM_THREADS-1:0][31:0] mul_result_tmp;    
+
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+        wire [31:0] mul_resultl, mul_resulth;
+        always @(*) begin        
+            dpi_imul (alu_in1[i], alu_in2[i], is_signed_mul_a, is_signed_mul_b, mul_resultl, mul_resulth);
+        end
+        assign mul_result_tmp[i] = is_mulh_in ? mul_resulth : mul_resultl;
+    end
+
+    VX_shift_register #(
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
+        .DEPTH  (`LATENCY_IMUL),
+        .RESETW (1)
+    ) mul_shift_reg (
+        .clk(clk),
+        .reset    (reset),
+        .enable   (mul_ready_in),
+        .data_in  ({mul_valid_in,  wid_in,      tmask_in,       PC_in,      rd_in,      wb_in,      mul_result_tmp}),
+        .data_out ({mul_valid_out, mul_wid_out, mul_tmask_out,  mul_PC_out, mul_rd_out, mul_wb_out, mul_result})
+    );
+
+`else      
+    
     wire is_mulh_out;
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        wire [32:0] mul_in1 = {(alu_op != `MUL_MULHU)                          & alu_in1[i][31], alu_in1[i]};
-        wire [32:0] mul_in2 = {(alu_op != `MUL_MULHU && alu_op != `MUL_MULHSU) & alu_in2[i][31], alu_in2[i]};
+        wire [32:0] mul_in1 = {is_signed_mul_a & alu_in1[i][31], alu_in1[i]};
+        wire [32:0] mul_in2 = {is_signed_mul_b & alu_in2[i][31], alu_in2[i]};
     `IGNORE_WARNINGS_BEGIN
         wire [65:0] mul_result_tmp;
     `IGNORE_WARNINGS_END
@@ -83,9 +116,11 @@ module VX_muldiv (
         .data_out ({mul_valid_out, mul_wid_out, mul_tmask_out,  mul_PC_out, mul_rd_out, mul_wb_out, is_mulh_out})
     );
 
+`endif
+
     ///////////////////////////////////////////////////////////////////////////
 
-    wire [`NUM_THREADS-1:0][31:0] div_result_tmp, rem_result_tmp;    
+    wire [`NUM_THREADS-1:0][31:0] div_result;
     wire [`NW_BITS-1:0] div_wid_out;
     wire [`NUM_THREADS-1:0] div_tmask_out;
     wire [31:0] div_PC_out;
@@ -98,6 +133,36 @@ module VX_muldiv (
     wire div_ready_out = ~stall_out && ~mul_valid_out; // arbitration prioritizes MUL  
     wire div_ready_in;
     wire div_valid_out;
+
+`ifdef IDIV_DPI    
+
+    wire [`NUM_THREADS-1:0][31:0] div_result_tmp;
+    
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+        wire [31:0] div_quotient, div_remainder;
+        always @(*) begin        
+            dpi_idiv (alu_in1[i], alu_in2[i], is_signed_div, div_quotient, div_remainder);
+        end
+        assign div_result_tmp[i] = is_rem_op_in ? div_remainder : div_quotient;
+    end
+
+    VX_shift_register #(
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
+        .DEPTH  (`LATENCY_IMUL),
+        .RESETW (1)
+    ) div_shift_reg (
+        .clk(clk),
+        .reset    (reset),
+        .enable   (div_ready_in),
+        .data_in  ({div_valid_in,  wid_in,      tmask_in,       PC_in,      rd_in,      wb_in,      div_result_tmp}),
+        .data_out ({div_valid_out, div_wid_out, div_tmask_out,  div_PC_out, div_rd_out, div_wb_out, div_result})
+    );
+
+    assign div_ready_in = div_ready_out || ~div_valid_out;
+
+`else
+
+    wire [`NUM_THREADS-1:0][31:0] div_result_tmp, rem_result_tmp;
     wire is_rem_op_out;
     
     VX_serial_div #(
@@ -123,7 +188,9 @@ module VX_muldiv (
         .tag_out   ({div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, is_rem_op_out})
     );
 
-    wire [`NUM_THREADS-1:0][31:0] div_result = is_rem_op_out ? rem_result_tmp : div_result_tmp; 
+    assign div_result = is_rem_op_out ? rem_result_tmp : div_result_tmp; 
+
+`endif
 
     ///////////////////////////////////////////////////////////////////////////
 
