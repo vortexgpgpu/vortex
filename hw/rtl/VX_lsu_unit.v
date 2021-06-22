@@ -32,11 +32,7 @@ module VX_lsu_unit #(
     wire [`NW_BITS-1:0]           req_wid;
     wire [31:0]                   req_pc;
     wire                          req_is_dup;
-    wire                          req_is_prefetch ;
-   
-    // only after we successfully send the normal load
-    // into pipe, then we can call prefetch load
-    reg                           ready_to_prefetch = 0; 
+    wire                          req_is_prefetch;
 
     wire [`NUM_THREADS-1:0][31:0] full_address;    
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
@@ -51,17 +47,18 @@ module VX_lsu_unit #(
     // if we need prefetch, the lsu will only be ready after prefetch
     // has returned 
     reg [`NUM_THREADS-1:0][31:0] load_address = full_address; 
-    always @(ready_to_prefetch) begin
-        if(ready_to_prefetch & need_prefetch) begin
+    always @(*) begin
+        if(stall_in && !req_is_prefetch && need_prefetch) begin
             // calculate prefetch addr
             for (int i = 0; i < `NUM_THREADS; i++) begin
                 load_address[i] = full_address[i] + 4;
             end
             assign is_prefetch = 1;
+        end else begin
+            assign is_prefetch = 0;
+            load_address = full_address; 
         end
     end
-
-
 
     wire [`NUM_THREADS-1:0] addr_matches;
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
@@ -72,18 +69,7 @@ module VX_lsu_unit #(
     wire ready_in;
     wire stall_in = ~ready_in && req_valid; 
 
-    always @(*) begin
-        // when we successfully push the original inst, 
-        // we should then push prefetch
-        if(stall_in && !req_is_prefetch) begin
-            ready_to_prefetch = 1;
-        end
-        // when we successfully push prefetch into pipe,
-        // we should set ready_to_prefetch to 0
-        if(stall_in && req_is_prefetch) begin
-            ready_to_prefetch=0;
-        end
-    end
+    wire _req_valid = (is_prefetch)?1:lsu_req_if.valid;
 
     VX_pipe_register #(
         .DATAW  (1 + 1 + 1+ `NW_BITS + `NUM_THREADS + 32 + (`NUM_THREADS * 32) + `LSU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32)),
@@ -92,8 +78,8 @@ module VX_lsu_unit #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_in),
-        .data_in  ({lsu_req_if.valid, is_dup_load, is_prefetch,     lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, load_address, lsu_req_if.op_type, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.store_data}),
-        .data_out ({req_valid,        req_is_dup,  req_is_prefetch, req_wid,        req_tmask,        req_pc,        req_addr,     req_type,           req_rd,        req_wb,        req_data})
+        .data_in  ({_req_valid|is_prefetch, is_dup_load, is_prefetch,     lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, load_address, lsu_req_if.op_type, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.store_data}),
+        .data_out ({req_valid,                    req_is_dup,  req_is_prefetch, req_wid,        req_tmask,        req_pc,        req_addr,     req_type,           req_rd,        req_wb,        req_data})
     );
 
     // Can accept new request?
@@ -234,6 +220,7 @@ module VX_lsu_unit #(
     assign dcache_req_if.byteen = mem_req_byteen;
     assign dcache_req_if.data   = mem_req_data;
 
+
 `ifdef DBG_CACHE_REQ_INFO
     assign dcache_req_if.tag = {`NUM_THREADS{req_pc, req_wid, req_tag}};
 `else
@@ -285,6 +272,8 @@ module VX_lsu_unit #(
 
     // send load commit
 
+    wire is_valid = (rsp_is_prefetch)?0:(| dcache_rsp_if.valid);
+
     wire load_rsp_stall = ~ld_commit_if.ready && ld_commit_if.valid;
     VX_pipe_register #(
         .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1),
@@ -293,12 +282,12 @@ module VX_lsu_unit #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!load_rsp_stall),
-        .data_in  ({(| dcache_rsp_if.valid), rsp_wid,          rsp_tmask_qual,     rsp_pc,          rsp_rd,          rsp_wb,          rsp_data,          mbuf_pop}),
+        .data_in  ({is_valid, rsp_wid,          rsp_tmask_qual,     rsp_pc,          rsp_rd,          rsp_wb,          rsp_data,          mbuf_pop}),
         .data_out ({ld_commit_if.valid,      ld_commit_if.wid, ld_commit_if.tmask, ld_commit_if.PC, ld_commit_if.rd, ld_commit_if.wb, ld_commit_if.data, ld_commit_if.eop})
     );
 
     // Can accept new cache response?
-    assign dcache_rsp_if.ready = ~load_rsp_stall | rsp_is_prefetch;
+    assign dcache_rsp_if.ready = rsp_is_prefetch?1:~load_rsp_stall;
 
     // scope registration
     `SCOPE_ASSIGN (dcache_req_fire,  dcache_req_fire);
