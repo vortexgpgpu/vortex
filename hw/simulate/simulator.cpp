@@ -69,12 +69,18 @@ Simulator::~Simulator() {
 
 void Simulator::attach_ram(RAM* ram) {
   ram_ = ram;
-  mem_rsp_vec_.clear();
+  for (int b = 0; b < MEMORY_BANKS; ++b) {
+    mem_rsp_vec_[b].clear();
+  }
+  last_mem_rsp_bank_ = 0;
 }
 
 void Simulator::reset() { 
   print_bufs_.clear();
-  mem_rsp_vec_.clear();
+  for (int b = 0; b < MEMORY_BANKS; ++b) {
+    mem_rsp_vec_[b].clear();
+  }
+  last_mem_rsp_bank_ = 0;
 
   mem_rsp_active_ = false;
 
@@ -128,34 +134,46 @@ void Simulator::eval_mem_bus() {
   }
 
   // update memory responses schedule
-  for (auto& rsp : mem_rsp_vec_) {
-    if (rsp.cycles_left > 0)
-      rsp.cycles_left -= 1;
+  for (int b = 0; b < MEMORY_BANKS; ++b) {    
+    for (auto& rsp : mem_rsp_vec_[b]) {
+      if (rsp.cycles_left > 0)
+        rsp.cycles_left -= 1;
+    }
   }
 
+  bool has_response = false;
+
   // schedule memory responses in FIFO order
-  std::list<mem_req_t>::iterator mem_rsp_it(mem_rsp_vec_.end());
-  if (!mem_rsp_vec_.empty() 
-   && (0 == mem_rsp_vec_.begin()->cycles_left)) {
-      mem_rsp_it = mem_rsp_vec_.begin();
+  for (int i = 0; i < MEMORY_BANKS; ++i) {
+    uint32_t b = (i + last_mem_rsp_bank_ + 1) % MEMORY_BANKS;
+    if (!mem_rsp_vec_[b].empty()
+    && (0 == mem_rsp_vec_[b].begin()->cycles_left)) {
+        has_response = true;
+        last_mem_rsp_bank_ = b;
+        break;
+    }
   }
 
   // send memory response  
   if (mem_rsp_active_
-   && vortex_->mem_rsp_valid && mem_rsp_ready_) {
+  && vortex_->mem_rsp_valid && mem_rsp_ready_) {
     mem_rsp_active_ = false;
   }
   if (!mem_rsp_active_) {
-    if (mem_rsp_it != mem_rsp_vec_.end()) {
-      vortex_->mem_rsp_valid = 1;
+    if (has_response) {
+      vortex_->mem_rsp_valid = 1;      
+      std::list<mem_req_t>::iterator mem_rsp_it = mem_rsp_vec_[last_mem_rsp_bank_].begin();
       memcpy((uint8_t*)vortex_->mem_rsp_data, mem_rsp_it->block.data(), MEM_BLOCK_SIZE);
       vortex_->mem_rsp_tag = mem_rsp_it->tag;   
-      mem_rsp_vec_.erase(mem_rsp_it);
+      mem_rsp_vec_[last_mem_rsp_bank_].erase(mem_rsp_it);
       mem_rsp_active_ = true;
     } else {
       vortex_->mem_rsp_valid = 0;
     }
   }
+
+  // select the memory bank
+  uint32_t req_bank = vortex_->mem_req_addr % MEMORY_BANKS;
 
   // handle memory stalls
   bool mem_stalled = false;
@@ -163,7 +181,7 @@ void Simulator::eval_mem_bus() {
   if (0 == ((timestamp/2) % MEM_STALLS_MODULO)) { 
     mem_stalled = true;
   } else
-  if (mem_rsp_vec_.size() >= MEM_RQ_SIZE) {
+  if (mem_rsp_vec_[req_bank].size() >= MEM_RQ_SIZE) {
     mem_stalled = true;
   }
 #endif
@@ -201,13 +219,13 @@ void Simulator::eval_mem_bus() {
         mem_req.addr = vortex_->mem_req_addr;
         ram_->read(vortex_->mem_req_addr * MEM_BLOCK_SIZE, MEM_BLOCK_SIZE, mem_req.block.data());
         mem_req.cycles_left = MEM_LATENCY;
-        for (auto& rsp : mem_rsp_vec_) {
+        for (auto& rsp : mem_rsp_vec_[req_bank]) {
           if (mem_req.addr == rsp.addr) {
             mem_req.cycles_left = rsp.cycles_left;
             break;
           }
         }     
-        mem_rsp_vec_.emplace_back(mem_req);
+        mem_rsp_vec_[req_bank].emplace_back(mem_req);
       } 
     }    
   }

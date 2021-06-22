@@ -18,6 +18,14 @@
 #include <list>
 #include <unordered_map>
 
+#ifndef MEMORY_BANKS 
+  #ifdef PLATFORM_PARAM_LOCAL_MEMORY_BANKS
+    #define MEMORY_BANKS PLATFORM_PARAM_LOCAL_MEMORY_BANKS
+  #else
+    #define MEMORY_BANKS 2
+  #endif
+#endif
+
 #undef MEM_BLOCK_SIZE
 #define MEM_BLOCK_SIZE    (PLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH / 8)
 
@@ -81,7 +89,7 @@ private:
   std::unordered_map<int64_t, host_buffer_t> host_buffers_;
   int64_t host_buffer_ids_;
 
-  std::list<mem_rd_req_t> mem_reads_ [PLATFORM_PARAM_LOCAL_MEMORY_BANKS];
+  std::list<mem_rd_req_t> mem_reads_ [MEMORY_BANKS];
 
   std::list<cci_rd_req_t> cci_reads_;
 
