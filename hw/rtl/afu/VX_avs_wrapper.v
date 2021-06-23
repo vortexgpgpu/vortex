@@ -51,8 +51,13 @@ module VX_avs_wrapper #(
     wire [NUM_BANKS-1:0] req_queue_going_full;
     wire [NUM_BANKS-1:0][RD_QUEUE_ADDR_WIDTH-1:0] req_queue_size;
     wire [NUM_BANKS-1:0][REQ_TAG_WIDTH-1:0] avs_reqq_data_out;
-    
-    wire [BANK_ADDRW-1:0] req_bank_sel = (NUM_BANKS >= 2) ? mem_req_addr[BANK_ADDRW-1:0] : '0;
+    wire [BANK_ADDRW-1:0] req_bank_sel;
+
+    if (NUM_BANKS >= 2) begin
+        assign req_bank_sel = mem_req_addr[BANK_ADDRW-1:0];        
+    end else begin
+        assign req_bank_sel = 0;
+    end
 
     for (genvar i = 0; i < NUM_BANKS; i++) begin
         assign avs_reqq_ready[i] = !req_queue_going_full[i] && !avs_waitrequest[i];
@@ -100,7 +105,11 @@ module VX_avs_wrapper #(
         assign avs_burstcount[i] = AVS_BURST_WIDTH'(1);
     end
 
-    assign mem_req_ready = avs_reqq_ready[req_bank_sel];
+    if (NUM_BANKS >= 2) begin
+        assign mem_req_ready = avs_reqq_ready[req_bank_sel];
+    end else begin
+        assign mem_req_ready = avs_reqq_ready;
+    end
 
     // Responses handling
 

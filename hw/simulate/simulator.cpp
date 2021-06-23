@@ -173,7 +173,7 @@ void Simulator::eval_mem_bus() {
   }
 
   // select the memory bank
-  uint32_t req_bank = vortex_->mem_req_addr % MEMORY_BANKS;
+  uint32_t req_bank = (MEMORY_BANKS >= 2) ? (vortex_->mem_req_addr % MEMORY_BANKS) : 0;
 
   // handle memory stalls
   bool mem_stalled = false;
