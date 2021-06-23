@@ -97,6 +97,7 @@ module VX_ibuffer #(
     reg [DATAW-1:0] deq_instr, deq_instr_n;
     reg [NWARPSW-1:0] num_warps;
 
+    // calculate valid table
     always @(*) begin
         valid_table_n = valid_table;        
         if (deq_fire) begin
@@ -113,11 +114,10 @@ module VX_ibuffer #(
             deq_valid_n = 1;
             deq_wid_n   = 'x;        
             deq_instr_n = 'x;
-            for (integer i = 0; i < `NUM_WARPS; i++) begin
+            for (integer i = `NUM_WARPS-1; i >= 0; --i) begin
                 if (schedule_table[i]) begin
-                    deq_wid_n   = `NW_BITS'(i);                
+                    deq_wid_n   = `NW_BITS'(i);          
                     deq_instr_n = q_data_out[i];
-                    break;
                 end
             end
         end else if (1 == num_warps && !(deq_fire && q_alm_empty[deq_wid])) begin
@@ -130,16 +130,16 @@ module VX_ibuffer #(
             deq_instr_n = q_data_in;  
         end   
     end
-    
-    // do round-robin with multiple active warps
+
+    // do round-robin scheduling with multiple active warps
     always @(*) begin
-        schedule_table_n = schedule_table;
-        for (integer i = 0; i < `NUM_WARPS; i++) begin
-            if (schedule_table[i]) begin
-                schedule_table_n[i] = 0;
-                break;
-            end
+        if (1 == $countones(schedule_table) 
+         || (num_warps < 2)) begin
+            schedule_table_n = valid_table_n;            
+        end else begin
+            schedule_table_n = schedule_table;
         end
+        schedule_table_n[deq_wid_n] = 0;
     end
 
     wire warp_added   = enq_fire && q_empty[ibuf_enq_if.wid];
@@ -148,21 +148,12 @@ module VX_ibuffer #(
     always @(posedge clk) begin
         if (reset)  begin            
             valid_table    <= 0;
-            schedule_table <= 0;
             deq_valid      <= 0;  
             num_warps      <= 0;         
         end else begin
-            valid_table <= valid_table_n;
-
-            if (0 == (| schedule_table_n) 
-             || (num_warps < 2)) begin
-                schedule_table <= valid_table_n;
-                schedule_table[deq_wid_n] <= 0;                
-            end else begin
-                schedule_table <= schedule_table_n;
-            end
-
-            deq_valid <= deq_valid_n;
+            valid_table    <= valid_table_n;            
+            deq_valid      <= deq_valid_n;
+            schedule_table <= schedule_table_n;
 
             if (warp_added && !warp_removed) begin
                 num_warps <= num_warps + NWARPSW'(1);

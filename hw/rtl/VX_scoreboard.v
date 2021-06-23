@@ -12,18 +12,11 @@ module VX_scoreboard  #(
 );
     reg [`NUM_WARPS-1:0][`NUM_REGS-1:0] inuse_regs;
 
-    reg is_reg_busy;
-    always @(*) begin
-        is_reg_busy = 'x;
-        for (integer i = 0; i < `NUM_WARPS; ++i) begin
-            if (ibuf_deq_if.wid == `NW_BITS'(i)) begin
-                is_reg_busy = | (inuse_regs[i] & ibuf_deq_if.used_regs);
-            end
-        end
-    end
-    assign delay = is_reg_busy;
-    
-    wire reserve_reg = ibuf_deq_if.valid && ibuf_deq_if.ready && (ibuf_deq_if.wb != 0);
+    wire [`NUM_REGS-1:0] deq_inuse_regs = inuse_regs[ibuf_deq_if.wid];
+
+    assign delay = | (deq_inuse_regs & ibuf_deq_if.used_regs);
+
+    wire reserve_reg = ibuf_deq_if.valid && ibuf_deq_if.ready && ibuf_deq_if.wb;
 
     wire release_reg = writeback_if.valid && writeback_if.ready && writeback_if.eop;
 
@@ -42,8 +35,6 @@ module VX_scoreboard  #(
             end
         end    
     end
-
-    wire [`NUM_REGS-1:0] deq_inuse_regs = inuse_regs[ibuf_deq_if.wid];
 
 `ifdef DBG_PRINT_PIPELINE
     always @(posedge clk) begin
