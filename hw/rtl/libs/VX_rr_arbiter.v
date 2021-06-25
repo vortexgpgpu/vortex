@@ -14,8 +14,6 @@ module VX_rr_arbiter #(
     output wire                     grant_valid
   );
 
-    localparam NN = NUM_REQS * NUM_REQS;
-
     if (NUM_REQS == 1)  begin
 
         `UNUSED_VAR (clk)
@@ -399,17 +397,14 @@ module VX_rr_arbiter #(
             always @(*) begin
                 grant_index_r  = 'x;
                 grant_onehot_r = 'x;
-                for (integer i = 0; i < NN; ++i) begin    
-                /* verilator lint_off UNUSED */
-                    integer src  = i / NUM_REQS;
-                    integer dst  = i % NUM_REQS;
-                    integer next = (dst + 1) % NUM_REQS;
-                /* verilator lint_on UNUSED */
-                    if (state == LOG_NUM_REQS'(src )
-                     && requests[next]) begin                        
-                        grant_index_r  = LOG_NUM_REQS'(next);
-                        grant_onehot_r = '0;
-                        grant_onehot_r[next] = 1;
+                for (integer i = 0; i < NUM_REQS; ++i) begin    
+                    for (integer j = 0; j < NUM_REQS; ++j) begin
+                        if (state == LOG_NUM_REQS'(i)
+                         && requests[(j + 1) % NUM_REQS]) begin                        
+                            grant_index_r  = LOG_NUM_REQS'((j + 1) % NUM_REQS);
+                            grant_onehot_r = '0;
+                            grant_onehot_r[(j + 1) % NUM_REQS] = 1;
+                        end
                     end
                 end
             end

@@ -154,6 +154,8 @@ void opae_sim::write_mmio64(uint32_t mmio_num, uint64_t offset, uint64_t value) 
 void opae_sim::reset() {  
   cci_reads_.clear();
   cci_writes_.clear();
+  vortex_afu_->vcp2af_sRxPort_c0_mmioRdValid = 0;
+  vortex_afu_->vcp2af_sRxPort_c0_mmioWrValid = 0;
   vortex_afu_->vcp2af_sRxPort_c0_rspValid = 0;  
   vortex_afu_->vcp2af_sRxPort_c1_rspValid = 0;  
   vortex_afu_->vcp2af_sRxPort_c0_TxAlmFull = 0;

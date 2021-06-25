@@ -1,16 +1,16 @@
 `include "VX_define.vh"
 
-module VX_ibuffer #(
+module VX_instr_sched #(
     parameter CORE_ID = 0
 ) (
     input wire clk,
     input wire reset,
 
     // inputs
-    VX_decode_if  ibuf_enq_if,  
+    VX_decode_if  decode_if,  
 
     // outputs
-    VX_decode_if  ibuf_deq_if
+    VX_instr_sched_if  instr_sched_if
 );
 
     `UNUSED_PARAM (CORE_ID)
@@ -28,13 +28,13 @@ module VX_ibuffer #(
     wire [`NUM_WARPS-1:0][DATAW-1:0] q_data_prev;    
     reg [`NUM_WARPS-1:0][DATAW-1:0] q_data_out;
 
-    wire enq_fire = ibuf_enq_if.valid && ibuf_enq_if.ready;
-    wire deq_fire = ibuf_deq_if.valid && ibuf_deq_if.ready;
+    wire enq_fire = decode_if.valid && decode_if.ready;
+    wire deq_fire = instr_sched_if.valid && instr_sched_if.ready;
 
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin
 
-        wire writing = enq_fire && (i == ibuf_enq_if.wid); 
-        wire reading = deq_fire && (i == ibuf_deq_if.wid);
+        wire writing = enq_fire && (i == decode_if.wid); 
+        wire reading = deq_fire && (i == instr_sched_if.wid);
 
         wire is_head_ptr = empty_r[i] || (alm_empty_r[i] && reading);
 
@@ -104,7 +104,7 @@ module VX_ibuffer #(
             valid_table_n[deq_wid] = !q_alm_empty[deq_wid];
         end
         if (enq_fire) begin
-            valid_table_n[ibuf_enq_if.wid] = 1;
+            valid_table_n[decode_if.wid] = 1;
         end
     end
 
@@ -126,7 +126,7 @@ module VX_ibuffer #(
             deq_instr_n = deq_fire ? q_data_prev[deq_wid] : q_data_out[deq_wid];
         end else begin
             deq_valid_n = enq_fire;
-            deq_wid_n   = ibuf_enq_if.wid;
+            deq_wid_n   = decode_if.wid;
             deq_instr_n = q_data_in;  
         end   
     end
@@ -142,8 +142,8 @@ module VX_ibuffer #(
         schedule_table_n[deq_wid_n] = 0;
     end
 
-    wire warp_added   = enq_fire && q_empty[ibuf_enq_if.wid];
-    wire warp_removed = deq_fire && ~(enq_fire && ibuf_enq_if.wid == deq_wid) && q_alm_empty[deq_wid];
+    wire warp_added   = enq_fire && q_empty[decode_if.wid];
+    wire warp_removed = deq_fire && ~(enq_fire && decode_if.wid == deq_wid) && q_alm_empty[deq_wid];
     
     always @(posedge clk) begin
         if (reset)  begin            
@@ -166,37 +166,38 @@ module VX_ibuffer #(
         deq_instr <= deq_instr_n;     
     end
     
-    assign ibuf_enq_if.ready = ~q_full[ibuf_enq_if.wid];
-    assign q_data_in = {ibuf_enq_if.tmask, 
-                        ibuf_enq_if.PC, 
-                        ibuf_enq_if.ex_type, 
-                        ibuf_enq_if.op_type, 
-                        ibuf_enq_if.op_mod, 
-                        ibuf_enq_if.wb, 
-                        ibuf_enq_if.rd, 
-                        ibuf_enq_if.rs1, 
-                        ibuf_enq_if.rs2, 
-                        ibuf_enq_if.rs3, 
-                        ibuf_enq_if.imm, 
-                        ibuf_enq_if.use_PC, 
-                        ibuf_enq_if.use_imm,
-                        ibuf_enq_if.used_regs};
+    assign decode_if.ready = ~q_full[decode_if.wid];
+    assign q_data_in = {decode_if.tmask, 
+                        decode_if.PC, 
+                        decode_if.ex_type, 
+                        decode_if.op_type, 
+                        decode_if.op_mod, 
+                        decode_if.wb, 
+                        decode_if.rd, 
+                        decode_if.rs1, 
+                        decode_if.rs2, 
+                        decode_if.rs3, 
+                        decode_if.imm, 
+                        decode_if.use_PC, 
+                        decode_if.use_imm,
+                        decode_if.used_regs};
 
-    assign ibuf_deq_if.valid = deq_valid;
-    assign ibuf_deq_if.wid   = deq_wid;
-    assign {ibuf_deq_if.tmask, 
-            ibuf_deq_if.PC, 
-            ibuf_deq_if.ex_type, 
-            ibuf_deq_if.op_type, 
-            ibuf_deq_if.op_mod, 
-            ibuf_deq_if.wb, 
-            ibuf_deq_if.rd, 
-            ibuf_deq_if.rs1, 
-            ibuf_deq_if.rs2, 
-            ibuf_deq_if.rs3, 
-            ibuf_deq_if.imm, 
-            ibuf_deq_if.use_PC, 
-            ibuf_deq_if.use_imm, 
-            ibuf_deq_if.used_regs} = deq_instr;
+    assign instr_sched_if.valid = deq_valid;
+    assign instr_sched_if.wid   = deq_wid;
+    assign instr_sched_if.wid_n = deq_wid_n;
+    assign {instr_sched_if.tmask, 
+            instr_sched_if.PC, 
+            instr_sched_if.ex_type, 
+            instr_sched_if.op_type, 
+            instr_sched_if.op_mod, 
+            instr_sched_if.wb, 
+            instr_sched_if.rd, 
+            instr_sched_if.rs1, 
+            instr_sched_if.rs2, 
+            instr_sched_if.rs3, 
+            instr_sched_if.imm, 
+            instr_sched_if.use_PC, 
+            instr_sched_if.use_imm, 
+            instr_sched_if.used_regs} = deq_instr;
 
 endmodule
