@@ -5,7 +5,7 @@ module VX_instr_demux (
     input wire      reset,
 
     // inputs
-    VX_decode_if    execute_if,
+    VX_instr_sched_if execute_if,
     VX_gpr_rsp_if   gpr_rsp_if,
 
     // outputs

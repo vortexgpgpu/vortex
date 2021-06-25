@@ -718,6 +718,9 @@ always @(posedge clk) begin
 
   if (cci_rd_rsp_fire) begin
     cci_rd_rsp_ctr <= cci_rd_rsp_ctr + CCI_RD_QUEUE_TAGW'(1);
+    if (CCI_RD_QUEUE_TAGW'(cci_rd_rsp_ctr) == CCI_RD_QUEUE_TAGW'(CCI_RD_WINDOW_SIZE-1)) begin
+      cci_mem_wr_req_addr_base <= cci_mem_wr_req_addr_base + CCI_ADDR_WIDTH'(CCI_RD_WINDOW_SIZE);
+    end
   `ifdef DBG_PRINT_OPAE
     $display("%t: CCI Rd Rsp: idx=%0d, ctr=%0d, data=%0h", $time, cci_rd_rsp_tag, cci_rd_rsp_ctr, cp2af_sRxPort.c0.data);
   `endif
@@ -729,10 +732,7 @@ always @(posedge clk) begin
   `endif
   end
 
-  if (cci_mem_wr_req_fire) begin                
-    if (CCI_RD_QUEUE_TAGW'(cci_mem_wr_req_ctr) == CCI_RD_QUEUE_TAGW'(CCI_RD_WINDOW_SIZE-1)) begin
-      cci_mem_wr_req_addr_base <= cci_mem_wr_req_addr_base + CCI_ADDR_WIDTH'(CCI_RD_WINDOW_SIZE);
-    end
+  if (cci_mem_wr_req_fire) begin    
     cci_mem_wr_req_ctr <= cci_mem_wr_req_ctr + CCI_ADDR_WIDTH'(1);
     if (cci_mem_wr_req_ctr == (cmd_data_size-1)) begin
       cmd_write_done <= 1;

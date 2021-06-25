@@ -24,128 +24,6 @@ module VX_priority_encoder #(
         assign index     = ~data_in[REVERSE];
         assign valid_out = (| data_in);
 
-    end else if (N == 4)  begin
-            
-        reg [LN-1:0] index_r;
-        reg [N-1:0]  onehot_r;
-
-        if (REVERSE) begin
-            always @(*) begin
-                casez (data_in)
-                4'b1???: begin onehot_r = 4'b0001; index_r = LN'(0); end
-                4'b01??: begin onehot_r = 4'b0010; index_r = LN'(1); end
-                4'b001?: begin onehot_r = 4'b0100; index_r = LN'(2); end
-                4'b0001: begin onehot_r = 4'b1000; index_r = LN'(3); end
-                default: begin onehot_r = 'x;      index_r = 'x; end
-                endcase
-            end
-        end else begin
-            always @(*) begin
-                casez (data_in)
-                4'b???1: begin onehot_r = 4'b0001; index_r = LN'(0); end
-                4'b??10: begin onehot_r = 4'b0010; index_r = LN'(1); end
-                4'b?100: begin onehot_r = 4'b0100; index_r = LN'(2); end
-                4'b1000: begin onehot_r = 4'b1000; index_r = LN'(3); end
-                default: begin onehot_r = 'x;      index_r = 'x; end
-                endcase
-            end
-        end
-
-        assign index  = index_r;
-        assign onehot = onehot_r;
-
-    end else if (N == 8)  begin
-        
-        reg [LN-1:0] index_r;
-        reg [N-1:0]  onehot_r;
-
-        if (REVERSE) begin
-            always @(*) begin
-                casez (data_in)
-                8'b1???????: begin onehot_r = 8'b00000001; index_r = LN'(0); end
-                8'b01??????: begin onehot_r = 8'b00000010; index_r = LN'(1); end
-                8'b001?????: begin onehot_r = 8'b00000100; index_r = LN'(2); end
-                8'b0001????: begin onehot_r = 8'b00001000; index_r = LN'(3); end
-                8'b00001???: begin onehot_r = 8'b00010000; index_r = LN'(4); end
-                8'b000001??: begin onehot_r = 8'b00100000; index_r = LN'(5); end
-                8'b0000001?: begin onehot_r = 8'b01000000; index_r = LN'(6); end
-                8'b00000001: begin onehot_r = 8'b10000000; index_r = LN'(7); end
-                default:     begin onehot_r = 'x;          index_r = 'x; end
-                endcase
-            end
-        end else begin
-            always @(*) begin
-                casez (data_in)
-                8'b???????1: begin onehot_r = 8'b00000001; index_r = LN'(0); end
-                8'b??????10: begin onehot_r = 8'b00000010; index_r = LN'(1); end
-                8'b?????100: begin onehot_r = 8'b00000100; index_r = LN'(2); end
-                8'b????1000: begin onehot_r = 8'b00001000; index_r = LN'(3); end
-                8'b???10000: begin onehot_r = 8'b00010000; index_r = LN'(4); end
-                8'b??100000: begin onehot_r = 8'b00100000; index_r = LN'(5); end
-                8'b?1000000: begin onehot_r = 8'b01000000; index_r = LN'(6); end
-                8'b10000000: begin onehot_r = 8'b10000000; index_r = LN'(7); end
-                default:     begin onehot_r = 'x;          index_r = 'x; end
-                endcase
-            end
-        end
-
-        assign index  = index_r;
-        assign onehot = onehot_r;
-
-    end else if (N == 16)  begin
-        
-        reg [LN-1:0] index_r;
-        reg [N-1:0]  onehot_r;
-
-        if (REVERSE) begin
-            always @(*) begin
-                casez (data_in)
-                16'b1???????????????: begin onehot_r = 16'b0000000000000001; index_r = LN'(0); end
-                16'b01??????????????: begin onehot_r = 16'b0000000000000010; index_r = LN'(1); end
-                16'b001?????????????: begin onehot_r = 16'b0000000000000100; index_r = LN'(2); end
-                16'b0001????????????: begin onehot_r = 16'b0000000000001000; index_r = LN'(3); end
-                16'b00001???????????: begin onehot_r = 16'b0000000000010000; index_r = LN'(4); end
-                16'b000001??????????: begin onehot_r = 16'b0000000000100000; index_r = LN'(5); end
-                16'b0000001?????????: begin onehot_r = 16'b0000000001000000; index_r = LN'(6); end
-                16'b00000001????????: begin onehot_r = 16'b0000000010000000; index_r = LN'(7); end
-                16'b000000001???????: begin onehot_r = 16'b0000000100000000; index_r = LN'(8); end
-                16'b0000000001??????: begin onehot_r = 16'b0000001000000000; index_r = LN'(9); end
-                16'b00000000001?????: begin onehot_r = 16'b0000010000000000; index_r = LN'(10); end
-                16'b000000000001????: begin onehot_r = 16'b0000100000000000; index_r = LN'(11); end
-                16'b0000000000001???: begin onehot_r = 16'b0001000000000000; index_r = LN'(12); end
-                16'b00000000000001??: begin onehot_r = 16'b0010000000000000; index_r = LN'(13); end
-                16'b000000000000001?: begin onehot_r = 16'b0100000000000000; index_r = LN'(14); end
-                16'b0000000000000001: begin onehot_r = 16'b1000000000000000; index_r = LN'(15); end
-                default:              begin onehot_r = 'x;                   index_r = 'x; end
-                endcase
-            end
-        end else begin
-            always @(*) begin
-                casez (data_in)
-                16'b???????????????1: begin onehot_r = 16'b0000000000000001; index_r = LN'(0); end
-                16'b??????????????10: begin onehot_r = 16'b0000000000000010; index_r = LN'(1); end
-                16'b?????????????100: begin onehot_r = 16'b0000000000000100; index_r = LN'(2); end
-                16'b????????????1000: begin onehot_r = 16'b0000000000001000; index_r = LN'(3); end
-                16'b???????????10000: begin onehot_r = 16'b0000000000010000; index_r = LN'(4); end
-                16'b??????????100000: begin onehot_r = 16'b0000000000100000; index_r = LN'(5); end
-                16'b?????????1000000: begin onehot_r = 16'b0000000001000000; index_r = LN'(6); end
-                16'b????????10000000: begin onehot_r = 16'b0000000010000000; index_r = LN'(7); end
-                16'b???????100000000: begin onehot_r = 16'b0000000100000000; index_r = LN'(8); end
-                16'b??????1000000000: begin onehot_r = 16'b0000001000000000; index_r = LN'(9); end
-                16'b?????10000000000: begin onehot_r = 16'b0000010000000000; index_r = LN'(10); end
-                16'b????100000000000: begin onehot_r = 16'b0000100000000000; index_r = LN'(11); end
-                16'b???1000000000000: begin onehot_r = 16'b0001000000000000; index_r = LN'(12); end
-                16'b??10000000000000: begin onehot_r = 16'b0010000000000000; index_r = LN'(13); end
-                16'b?100000000000000: begin onehot_r = 16'b0100000000000000; index_r = LN'(14); end
-                16'b1000000000000000: begin onehot_r = 16'b1000000000000000; index_r = LN'(15); end
-                default:              begin onehot_r = 'x;                   index_r = 'x; end
-                endcase
-            end
-        end
-
-        assign index  = index_r;
-        assign onehot = onehot_r;
-
     end else if (FAST) begin
 
         wire [N-1:0] scan_lo;
@@ -209,9 +87,8 @@ module VX_priority_encoder #(
 
         assign index  = index_r;
         assign onehot = onehot_r;
+        assign valid_out = (| data_in);        
 
     end    
 
-    assign valid_out = (| data_in);        
-    
 endmodule

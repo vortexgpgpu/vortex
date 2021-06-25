@@ -16,7 +16,7 @@ module VX_execute #(
     VX_cmt_to_csr_if    cmt_to_csr_if,
 
 `ifdef PERF_ENABLE
-    VX_perf_memsys_if    perf_memsys_if,
+    VX_perf_memsys_if   perf_memsys_if,
     VX_perf_pipeline_if perf_pipeline_if,
  `endif
     
