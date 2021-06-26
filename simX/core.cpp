@@ -94,16 +94,10 @@ void Core::clear() {
 }
 
 void Core::step() {
-  D(3, "###########################################################");
+  D(2, "###########################################################");
 
   steps_++;
-  D(3, std::dec << "Core" << id_ << ": cycle: " << steps_);
-
-  DPH(3, "stalled warps:");
-  for (int i = 0; i < arch_.num_warps(); i++) {
-    DPN(3, " " << stalled_warps_[i]);
-  }
-  DPN(3, "\n");
+  D(2, std::dec << "Core" << id_ << ": cycle: " << steps_);
 
   this->writeback();
   this->execute();
@@ -112,7 +106,7 @@ void Core::step() {
   this->fetch();
   this->schedule();
 
-  DPN(3, std::flush);
+  DPN(2, std::flush);
 }
 
 void Core::schedule() {
@@ -136,7 +130,7 @@ void Core::schedule() {
   if (!foundSchedule)
     return;
 
-  D(3, "Schedule: wid=" << scheduled_warp);
+  D(2, "Schedule: wid=" << scheduled_warp);
   inst_in_schedule_.wid = scheduled_warp;
 
   // advance pipeline
@@ -155,11 +149,11 @@ void Core::fetch() {
 
   insts_ += active_threads_b;
   if (active_threads_b != active_threads_a) {
-    D(3, "** warp #" << wid << " active threads changed from " << active_threads_b << " to " << active_threads_a);
+    D(3, "*** warp#" << wid << " active threads changed to " << active_threads_a);
   }
 
   if (inst_in_fetch_.stall_warp) {
-    D(3, "** warp #" << wid << " stalled");
+    D(3, "*** warp#" << wid << " fetch stalled");
     stalled_warps_[wid] = true;
   }
   
@@ -186,7 +180,7 @@ void Core::issue() {
                   || (inst_in_issue_.used_vregs & in_use_vregs_) != 0;
   
   if (in_use_regs) {      
-    D(3, "Issue: registers not ready!");
+    D(3, "*** Issue: registers not ready!");
     inst_in_issue_.stalled = true;
     return;
   } 
@@ -237,7 +231,8 @@ void Core::writeback() {
   }
 
   if (inst_in_writeback_.stall_warp) {
-    stalled_warps_[inst_in_writeback_.wid] = 0;
+    stalled_warps_[inst_in_writeback_.wid] = false;
+    D(3, "*** warp#" << inst_in_writeback_.wid << " fetch released");
   }
 
   // advance pipeline

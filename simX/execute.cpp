@@ -15,30 +15,27 @@
 
 using namespace vortex;
 
-struct DivergentBranchException {};
-
-static bool checkUnanimous(unsigned p, 
-                           const std::vector<std::vector<Word>> &m,
-                           const ThreadMask &tm) {
-  bool same;
-  size_t i;
-  for (i = 0; i < m.size(); ++i) {
-    if (tm[i]) {
-      same = m[i][p];
+static bool HasDivergentThreads(const ThreadMask &thread_mask,                                
+                                const std::vector<std::vector<Word>> &reg_file,
+                                unsigned reg) {
+  bool cond;
+  size_t thread_idx = 0;
+  size_t num_threads = reg_file.size();
+  for (; thread_idx < num_threads; ++thread_idx) {
+    if (thread_mask[thread_idx]) {
+      cond = bool(reg_file[thread_idx][reg]);
       break;
     }
-  }
-  if (i == m.size())
-    throw DivergentBranchException();
-
-  for (; i < m.size(); ++i) {
-    if (tm[i]) {
-      if (same != (bool(m[i][p]))) {
-        return false;
+  }  
+  assert(thread_idx != num_threads);  
+  for (; thread_idx < num_threads; ++thread_idx) {
+    if (thread_mask[thread_idx]) {
+      if (cond != (bool(reg_file[thread_idx][reg]))) {
+        return true;
       }
     }
   }
-  return true;
+  return false;
 }
 
 static void update_fcrs(Core* core, int tid, int wid, bool outOfRange = false) {
@@ -98,24 +95,24 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
 
     int num_rsrcs = instr.getNRSrc();
     if (num_rsrcs) {    
-      DPH(3, "[" << std::dec << t << "] Src Registers: ");
+      DPH(2, "[" << std::dec << t << "] Src Regs: ");
       for (int i = 0; i < num_rsrcs; ++i) {    
         int rst = instr.getRSType(i);
         int rs = instr.getRSrc(i);        
-        if (i) DPN(3, ", ");
+        if (i) DPN(2, ", ");
         switch (rst) {
         case 1: 
           rsdata[i] = iregs[rs];
-          DPN(3, "r" << std::dec << rs << "=0x" << std::hex << rsdata[i]); 
+          DPN(2, "r" << std::dec << rs << "=0x" << std::hex << rsdata[i]); 
           break;
         case 2: 
           rsdata[i] = fregs[rs];
-          DPN(3, "fr" << std::dec << rs << "=0x" << std::hex << rsdata[i]); 
+          DPN(2, "fr" << std::dec << rs << "=0x" << std::hex << rsdata[i]); 
           break;
         default: break;
         }
       }
-      DPN(3, std::endl);
+      DPN(2, std::endl);
     }
   
     switch (opcode) {
@@ -445,7 +442,6 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       }
     } break;
     case FENCE:
-      D(3, "FENCE");
       pipeline->stall_warp = true; 
       runOnce = true;
       break;
@@ -457,10 +453,10 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         rddata = data_read;
       } else {  
         D(3, "Executing vector load");      
-        D(4, "lmul: " << vtype_.vlmul << " VLEN:" << (core_->arch().vsize() * 8) << "sew: " << vtype_.vsew);
-        D(4, "src: " << rsrc0 << " " << rsdata[0]);
-        D(4, "dest" << rdest);
-        D(4, "width" << instr.getVlsWidth());
+        D(3, "lmul: " << vtype_.vlmul << " VLEN:" << (core_->arch().vsize() * 8) << "sew: " << vtype_.vsew);
+        D(3, "src: " << rsrc0 << " " << rsdata[0]);
+        D(3, "dest" << rdest);
+        D(3, "width" << instr.getVlsWidth());
 
         auto &vd = vRegFile_[rdest];
 
@@ -471,7 +467,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
             Word memAddr = ((rsdata[0]) & 0xFFFFFFFC) + (i * vtype_.vsew / 8);
             D(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
             Word data_read = core_->dcache_read(memAddr, 4);
-            D(4, "Mem addr: " << std::hex << memAddr << " Data read " << data_read);
+            D(3, "Mem addr: " << std::hex << memAddr << " Data read " << data_read);
             int *result_ptr = (int *)(vd.data() + i);
             *result_ptr = data_read;            
           }
@@ -496,7 +492,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
             //store word and unit strided (not checking for unit stride)          
             uint32_t value = *(uint32_t *)(vRegFile_[instr.getVs3()].data() + i);
             core_->dcache_write(memAddr, value, 4);
-            D(4, "store: " << memAddr << " value:" << value);
+            D(3, "store: " << memAddr << " value:" << value);
           } break;
           default:
             std::abort();
@@ -548,7 +544,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
             // update fcsrs
             update_fcrs(core_, t, id_);
 
-            D(4, "fpDest: " << fpDest);
+            D(3, "fpDest: " << fpDest);
             if (fpBinIsNan(floatToBin(fpDest)) == 0) {
               rddata = floatToBin(fpDest);
             } else  {              
@@ -835,7 +831,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       case 1: {
         // WSPAWN
         int active_warps = std::min<int>(rsdata[0], core_->arch().num_warps());
-        D(0, "Spawning " << (active_warps-1) << " warps at PC: " << std::hex << rsdata[1]);
+        D(3, "*** Spawning " << (active_warps-1) << " warps at PC: " << std::hex << rsdata[1]);
         for (int i = 1; i < active_warps; ++i) {
           Warp &newWarp = core_->warp(i);
           newWarp.setPC(rsdata[1]);
@@ -846,15 +842,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       } break;
       case 2: {
         // SPLIT    
-        if (checkUnanimous(rsrc0, iRegFile_, tmask_)) {
-          D(3, "Unanimous pred: " << rsrc0 << "  val: " << rsdata[0] << "\n");
-          DomStackEntry e(tmask_);
-          e.unanimous = true;
-          domStack_.push(e);
-        } else {
-          D(3, "Split: Original TM: ");
-          DX( for (int i = 0; i < num_threads; ++i) D(3, tmask_[i] << " "); )
-
+        if (HasDivergentThreads(tmask_, iRegFile_, rsrc0)) {          
           ThreadMask tmask;
           for (int i = 0; i < num_threads; ++i) {
             tmask[i] = tmask_[i] && !iRegFile_[i][rsrc0];
@@ -868,37 +856,39 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
           }
           active_ = tmask_.any();
 
-          D(3, "Split: New TM");
-          DX( for (int i = 0; i < num_threads; ++i) D(3, tmask_[i] << " "); )
-
-          D(3, "Split: Pushed TM PC: " << std::hex << e.PC << std::dec << "\n");
-          DX( for (int i = 0; i < num_threads; ++i) D(3, e.tmask[i] << " "); )
+          DPH(3, "*** Split: New TM=");
+          for (int i = 0; i < num_threads; ++i) DPN(3, tmask_[num_threads-i-1]);
+          DPN(3, ", Pushed TM=");
+          for (int i = 0; i < num_threads; ++i) DPN(3, e.tmask[num_threads-i-1]);
+          DPN(3, ", PC=0x" << std::hex << e.PC << "\n");
+        } else {
+          D(3, "*** Unanimous pred: r" << rsrc0 << ", val: " << rsdata[0]);
+          DomStackEntry e(tmask_);
+          e.unanimous = true;
+          domStack_.push(e);
         }
         pipeline->stall_warp = true;
         runOnce = true;
       } break;
       case 3: {
         // JOIN
-        D(3, "JOIN");
         if (!domStack_.empty() && domStack_.top().unanimous) {
-          D(2, "Uninimous branch at join");
+          D(3, "*** Uninimous branch at join");
           tmask_ = domStack_.top().tmask;
           active_ = tmask_.any();
           domStack_.pop();
         } else {
           if (!domStack_.top().fallThrough) {
             nextPC = domStack_.top().PC;
-            D(3, "join: NOT FALLTHROUGH PC: " << std::hex << nextPC << std::dec);
+            D(3, "*** Join: next PC: " << std::hex << nextPC << std::dec);
           }
 
-          D(3, "Join: Old TM: ");
-          DX( for (int i = 0; i < num_threads; ++i) D(3, tmask_[i] << " "); )
-          std::cout << "\n";
           tmask_ = domStack_.top().tmask;
           active_ = tmask_.any();
 
-          D(3, "Join: New TM: ");
-          DX( for (int i = 0; i < num_threads; ++i) D(3, tmask_[i] << " "); )
+          DPH(3, "*** Join: New TM=");
+          for (int i = 0; i < num_threads; ++i) DPN(3, tmask_[num_threads-i-1]);
+          DPN(3, "\n");
 
           domStack_.pop();
         }
@@ -917,7 +907,6 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       }
       break;
     case VSET: {
-      D(3, "VSET");
       int VLEN = core_->arch().vsize() * 8;
       int VLMAX = (instr.getVlmul() * VLEN) / instr.getVsew();
       switch (func3) {
@@ -936,7 +925,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
                 uint8_t first  = *(uint8_t *)(vr1.data() + i);
                 uint8_t second = *(uint8_t *)(vr2.data() + i);
                 uint8_t result = first + second;
-                D(4, "Adding " << first << " + " << second << " = " << result);
+                D(3, "Adding " << first << " + " << second << " = " << result);
                 *(uint8_t *)(vd.data() + i) = result;
               }
             }
@@ -948,7 +937,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
                 uint16_t first  = *(uint16_t *)(vr1.data() + i);
                 uint16_t second = *(uint16_t *)(vr2.data() + i);
                 uint16_t result = first + second;
-                D(4, "Adding " << first << " + " << second << " = " << result);
+                D(3, "Adding " << first << " + " << second << " = " << result);
                 *(uint16_t *)(vd.data() + i) = result;
               }
             }
@@ -960,7 +949,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
                 uint32_t first  = *(uint32_t *)(vr1.data() + i);
                 uint32_t second = *(uint32_t *)(vr2.data() + i);
                 uint32_t result = first + second;
-                D(4, "Adding " << first << " + " << second << " = " << result);
+                D(3, "Adding " << first << " + " << second << " = " << result);
                 *(uint32_t *)(vd.data() + i) = result;
               }
             }
@@ -976,7 +965,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint8_t first  = *(uint8_t *)(vr1.data() + i);
               uint8_t second = *(uint8_t *)(vr2.data() + i);
               uint8_t result = (first == second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) = result;
             }
           } else if (vtype_.vsew == 16) {
@@ -984,7 +973,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint16_t first  = *(uint16_t *)(vr1.data() + i);
               uint16_t second = *(uint16_t *)(vr2.data() + i);
               uint16_t result = (first == second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint16_t *)(vd.data() + i) = result;
             }
           } else if (vtype_.vsew == 32) {
@@ -992,7 +981,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint32_t first  = *(uint32_t *)(vr1.data() + i);
               uint32_t second = *(uint32_t *)(vr2.data() + i);
               uint32_t result = (first == second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint32_t *)(vd.data() + i) = result;
             }
           }
@@ -1007,7 +996,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint8_t first  = *(uint8_t *)(vr1.data() + i);
               uint8_t second = *(uint8_t *)(vr2.data() + i);
               uint8_t result = (first != second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) = result;
             }
           } else if (vtype_.vsew == 16) {
@@ -1015,7 +1004,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint16_t first  = *(uint16_t *)(vr1.data() + i);
               uint16_t second = *(uint16_t *)(vr2.data() + i);
               uint16_t result = (first != second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint16_t *)(vd.data() + i) = result;
             }
           } else if (vtype_.vsew == 32) {
@@ -1023,7 +1012,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint32_t first  = *(uint32_t *)(vr1.data() + i);
               uint32_t second = *(uint32_t *)(vr2.data() + i);
               uint32_t result = (first != second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint32_t *)(vd.data() + i) = result;
             }
           }
@@ -1038,7 +1027,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint8_t first  = *(uint8_t *)(vr1.data() + i);
               uint8_t second = *(uint8_t *)(vr2.data() + i);
               uint8_t result = (first < second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) = result;
             }
           } else if (vtype_.vsew == 16) {
@@ -1046,7 +1035,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint16_t first  = *(uint16_t *)(vr1.data() + i);
               uint16_t second = *(uint16_t *)(vr2.data() + i);
               uint16_t result = (first < second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint16_t *)(vd.data() + i) = result;
             }
           } else if (vtype_.vsew == 32) {
@@ -1054,7 +1043,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint32_t first  = *(uint32_t *)(vr1.data() + i);
               uint32_t second = *(uint32_t *)(vr2.data() + i);
               uint32_t result = (first < second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint32_t *)(vd.data() + i) = result;
             }
           }
@@ -1069,7 +1058,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               int8_t first  = *(int8_t *)(vr1.data() + i);
               int8_t second = *(int8_t *)(vr2.data() + i);
               int8_t result = (first < second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) = result;
             }
           } else if (vtype_.vsew == 16) {
@@ -1077,7 +1066,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               int16_t first  = *(int16_t *)(vr1.data() + i);
               int16_t second = *(int16_t *)(vr2.data() + i);
               int16_t result = (first < second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(int16_t *)(vd.data() + i) = result;
             }
           } else if (vtype_.vsew == 32) {
@@ -1085,7 +1074,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               int32_t first  = *(int32_t *)(vr1.data() + i);
               int32_t second = *(int32_t *)(vr2.data() + i);
               int32_t result = (first < second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(int32_t *)(vd.data() + i) = result;
             }
           }
@@ -1100,7 +1089,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint8_t first  = *(uint8_t *)(vr1.data() + i);
               uint8_t second = *(uint8_t *)(vr2.data() + i);
               uint8_t result = (first <= second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) = result;
             }
           } else if (vtype_.vsew == 16) {
@@ -1108,7 +1097,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint16_t first  = *(uint16_t *)(vr1.data() + i);
               uint16_t second = *(uint16_t *)(vr2.data() + i);
               uint16_t result = (first <= second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint16_t *)(vd.data() + i) = result;
             }
           } else if (vtype_.vsew == 32) {
@@ -1116,7 +1105,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint32_t first  = *(uint32_t *)(vr1.data() + i);
               uint32_t second = *(uint32_t *)(vr2.data() + i);
               uint32_t result = (first <= second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint32_t *)(vd.data() + i) = result;
             }
           }
@@ -1131,7 +1120,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               int8_t first  = *(int8_t *)(vr1.data() + i);
               int8_t second = *(int8_t *)(vr2.data() + i);
               int8_t result = (first <= second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) = result;
             }
           } else if (vtype_.vsew == 16) {
@@ -1139,7 +1128,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               int16_t first  = *(int16_t *)(vr1.data() + i);
               int16_t second = *(int16_t *)(vr2.data() + i);
               int16_t result = (first <= second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(int16_t *)(vd.data() + i) = result;
             }
           } else if (vtype_.vsew == 32) {
@@ -1147,7 +1136,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               int32_t first  = *(int32_t *)(vr1.data() + i);
               int32_t second = *(int32_t *)(vr2.data() + i);
               int32_t result = (first <= second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(int32_t *)(vd.data() + i) = result;
             }
           }
@@ -1162,7 +1151,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint8_t first  = *(uint8_t *)(vr1.data() + i);
               uint8_t second = *(uint8_t *)(vr2.data() + i);
               uint8_t result = (first > second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) = result;
             }
           } else if (vtype_.vsew == 16) {
@@ -1170,7 +1159,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint16_t first  = *(uint16_t *)(vr1.data() + i);
               uint16_t second = *(uint16_t *)(vr2.data() + i);
               uint16_t result = (first > second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint16_t *)(vd.data() + i) = result;
             }
           } else if (vtype_.vsew == 32) {
@@ -1178,7 +1167,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint32_t first  = *(uint32_t *)(vr1.data() + i);
               uint32_t second = *(uint32_t *)(vr2.data() + i);
               uint32_t result = (first > second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint32_t *)(vd.data() + i) = result;
             }
           }
@@ -1193,7 +1182,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               int8_t first  = *(int8_t *)(vr1.data() + i);
               int8_t second = *(int8_t *)(vr2.data() + i);
               int8_t result = (first > second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) = result;
             }
           } else if (vtype_.vsew == 16) {
@@ -1201,7 +1190,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               int16_t first  = *(int16_t *)(vr1.data() + i);
               int16_t second = *(int16_t *)(vr2.data() + i);
               int16_t result = (first > second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(int16_t *)(vd.data() + i) = result;
             }
           } else if (vtype_.vsew == 32) {
@@ -1209,7 +1198,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               int32_t first  = *(int32_t *)(vr1.data() + i);
               int32_t second = *(int32_t *)(vr2.data() + i);
               int32_t result = (first > second) ? 1 : 0;
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(int32_t *)(vd.data() + i) = result;
             }
           }
@@ -1220,7 +1209,6 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         switch (func6) {
         case 24: { 
           // vmandnot
-          D(3, "vmandnot");
           auto &vr1 = vRegFile_[rsrc0];
           auto &vr2 = vRegFile_[rsrc1];
           auto &vd = vRegFile_[rdest];
@@ -1231,7 +1219,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint8_t first_value  = (first & 0x1);
               uint8_t second_value = (second & 0x1);
               uint8_t result = (first_value & !second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) = result;
             }            
             for (int i = vl_; i < VLMAX; i++) {
@@ -1244,7 +1232,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint16_t first_value  = (first & 0x1);
               uint16_t second_value = (second & 0x1);
               uint16_t result = (first_value & !second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint16_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1257,7 +1245,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint32_t first_value  = (first & 0x1);
               uint32_t second_value = (second & 0x1);
               uint32_t result = (first_value & !second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint32_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1267,7 +1255,6 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         } break;
         case 25: {
           // vmand
-          D(3, "vmand");
           auto &vr1 = vRegFile_[rsrc0];
           auto &vr2 = vRegFile_[rsrc1];
           auto &vd = vRegFile_[rdest];
@@ -1278,7 +1265,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint8_t first_value  = (first & 0x1);
               uint8_t second_value = (second & 0x1);
               uint8_t result = (first_value & second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1291,7 +1278,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint16_t first_value  = (first & 0x1);
               uint16_t second_value = (second & 0x1);
               uint16_t result = (first_value & second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint16_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1304,7 +1291,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint32_t first_value  = (first & 0x1);
               uint32_t second_value = (second & 0x1);
               uint32_t result = (first_value & second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint32_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1314,7 +1301,6 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         } break;
         case 26: {
           // vmor
-          D(3, "vmor");
           auto &vr1 = vRegFile_[rsrc0];
           auto &vr2 = vRegFile_[rsrc1];
           auto &vd = vRegFile_[rdest];
@@ -1325,7 +1311,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint8_t first_value  = (first & 0x1);
               uint8_t second_value = (second & 0x1);
               uint8_t result = (first_value | second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1338,7 +1324,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint16_t first_value  = (first & 0x1);
               uint16_t second_value = (second & 0x1);
               uint16_t result = (first_value | second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint16_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1351,7 +1337,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint32_t first_value  = (first & 0x1);
               uint32_t second_value = (second & 0x1);
               uint32_t result = (first_value | second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint32_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1361,7 +1347,6 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         } break;
         case 27: { 
           //vmxor
-          D(3, "vmxor");
           auto &vr1 = vRegFile_[rsrc0];
           auto &vr2 = vRegFile_[rsrc1];
           auto &vd = vRegFile_[rdest];
@@ -1372,7 +1357,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint8_t first_value  = (first & 0x1);
               uint8_t second_value = (second & 0x1);
               uint8_t result = (first_value ^ second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1385,7 +1370,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint16_t first_value  = (first & 0x1);
               uint16_t second_value = (second & 0x1);
               uint16_t result = (first_value ^ second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint16_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1398,7 +1383,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint32_t first_value  = (first & 0x1);
               uint32_t second_value = (second & 0x1);
               uint32_t result = (first_value ^ second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint32_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1408,7 +1393,6 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         } break;
         case 28: {
           //vmornot
-          D(3, "vmornot");
           auto &vr1 = vRegFile_[rsrc0];
           auto &vr2 = vRegFile_[rsrc1];
           auto &vd = vRegFile_[rdest];
@@ -1419,7 +1403,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint8_t first_value  = (first & 0x1);
               uint8_t second_value = (second & 0x1);
               uint8_t result = (first_value | !second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1432,7 +1416,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint16_t first_value  = (first & 0x1);
               uint16_t second_value = (second & 0x1);
               uint16_t result = (first_value | !second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint16_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1445,7 +1429,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint32_t first_value  = (first & 0x1);
               uint32_t second_value = (second & 0x1);
               uint32_t result = (first_value | !second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint32_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1455,7 +1439,6 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         } break;
         case 29: {
           //vmnand
-          D(3, "vmnand");
           auto &vr1 = vRegFile_[rsrc0];
           auto &vr2 = vRegFile_[rsrc1];
           auto &vd = vRegFile_[rdest];
@@ -1466,7 +1449,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint8_t first_value  = (first & 0x1);
               uint8_t second_value = (second & 0x1);
               uint8_t result = !(first_value & second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1479,7 +1462,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint16_t first_value  = (first & 0x1);
               uint16_t second_value = (second & 0x1);
               uint16_t result = !(first_value & second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint16_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1492,7 +1475,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint32_t first_value  = (first & 0x1);
               uint32_t second_value = (second & 0x1);
               uint32_t result = !(first_value & second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint32_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1502,7 +1485,6 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         } break;
         case 30: {
           //vmnor
-          D(3, "vmnor");
           auto &vr1 = vRegFile_[rsrc0];
           auto &vr2 = vRegFile_[rsrc1];
           auto &vd = vRegFile_[rdest];
@@ -1513,7 +1495,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint8_t first_value  = (first & 0x1);
               uint8_t second_value = (second & 0x1);
               uint8_t result = !(first_value | second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1526,7 +1508,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint16_t first_value  = (first & 0x1);
               uint16_t second_value = (second & 0x1);
               uint16_t result = !(first_value | second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint16_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1539,7 +1521,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint32_t first_value  = (first & 0x1);
               uint32_t second_value = (second & 0x1);
               uint32_t result = !(first_value | second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint32_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1549,7 +1531,6 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         } break;
         case 31: {
           //vmxnor
-          D(3, "vmxnor");
           auto &vr1 = vRegFile_[rsrc0];
           auto &vr2 = vRegFile_[rsrc1];
           auto &vd = vRegFile_[rdest];
@@ -1560,7 +1541,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint8_t first_value  = (first & 0x1);
               uint8_t second_value = (second & 0x1);
               uint8_t result = !(first_value ^ second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1573,7 +1554,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint16_t first_value  = (first & 0x1);
               uint16_t second_value = (second & 0x1);
               uint16_t result = !(first_value ^ second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint16_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1586,7 +1567,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint32_t first_value  = (first & 0x1);
               uint32_t second_value = (second & 0x1);
               uint32_t result = !(first_value ^ second_value);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint32_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1596,7 +1577,6 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         } break;
         case 37: {
           //vmul
-          D(3, "vmul");
           auto &vr1 = vRegFile_[rsrc0];
           auto &vr2 = vRegFile_[rsrc1];
           auto &vd = vRegFile_[rdest];
@@ -1605,7 +1585,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint8_t first  = *(uint8_t *)(vr1.data() + i);
               uint8_t second = *(uint8_t *)(vr2.data() + i);
               uint8_t result = (first * second);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1616,7 +1596,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint16_t first  = *(uint16_t *)(vr1.data() + i);
               uint16_t second = *(uint16_t *)(vr2.data() + i);
               uint16_t result = (first * second);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint16_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1627,7 +1607,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint32_t first  = *(uint32_t *)(vr1.data() + i);
               uint32_t second = *(uint32_t *)(vr2.data() + i);
               uint32_t result = (first * second);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint32_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1637,7 +1617,6 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         } break;
         case 45: {
           // vmacc
-          D(3, "vmacc");
           auto &vr1 = vRegFile_[rsrc0];
           auto &vr2 = vRegFile_[rsrc1];
           auto &vd = vRegFile_[rdest];
@@ -1646,7 +1625,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint8_t first  = *(uint8_t *)(vr1.data() + i);
               uint8_t second = *(uint8_t *)(vr2.data() + i);
               uint8_t result = (first * second);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) += result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1657,7 +1636,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint16_t first  = *(uint16_t *)(vr1.data() + i);
               uint16_t second = *(uint16_t *)(vr2.data() + i);
               uint16_t result = (first * second);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint16_t *)(vd.data() + i) += result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1668,7 +1647,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               uint32_t first  = *(uint32_t *)(vr1.data() + i);
               uint32_t second = *(uint32_t *)(vr2.data() + i);
               uint32_t result = (first * second);
-              D(4, "Comparing " << first << " + " << second << " = " << result);
+              D(3, "Comparing " << first << " + " << second << " = " << result);
               *(uint32_t *)(vd.data() + i) += result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1681,14 +1660,13 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       case 6: {
         switch (func6) {
         case 0: {
-          D(3, "vmadd.vx");
           auto &vr2 = vRegFile_[rsrc1];
           auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
               uint8_t second = *(uint8_t *)(vr2.data() + i);
               uint8_t result = (rsdata[0] + second);
-              D(4, "Comparing " << rsdata[0] << " + " << second << " = " << result);
+              D(3, "Comparing " << rsdata[0] << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1698,7 +1676,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
             for (int i = 0; i < vl_; i++) {
               uint16_t second = *(uint16_t *)(vr2.data() + i);
               uint16_t result = (rsdata[0] + second);
-              D(4, "Comparing " << rsdata[0] << " + " << second << " = " << result);
+              D(3, "Comparing " << rsdata[0] << " + " << second << " = " << result);
               *(uint16_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1708,7 +1686,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
             for (int i = 0; i < vl_; i++) {
               uint32_t second = *(uint32_t *)(vr2.data() + i);
               uint32_t result = (rsdata[0] + second);
-              D(4, "Comparing " << rsdata[0] << " + " << second << " = " << result);
+              D(3, "Comparing " << rsdata[0] << " + " << second << " = " << result);
               *(uint32_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1718,14 +1696,13 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         } break;
         case 37: {
           // vmul.vx
-          D(3, "vmul.vx");
           auto &vr2 = vRegFile_[rsrc1];
           auto &vd = vRegFile_[rdest];
           if (vtype_.vsew == 8) {
             for (int i = 0; i < vl_; i++) {
               uint8_t second = *(uint8_t *)(vr2.data() + i);
               uint8_t result = (rsdata[0] * second);
-              D(4, "Comparing " << rsdata[0] << " + " << second << " = " << result);
+              D(3, "Comparing " << rsdata[0] << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1735,7 +1712,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
             for (int i = 0; i < vl_; i++) {
               uint16_t second = *(uint16_t *)(vr2.data() + i);
               uint16_t result = (rsdata[0] * second);
-              D(4, "Comparing " << rsdata[0] << " + " << second << " = " << result);
+              D(3, "Comparing " << rsdata[0] << " + " << second << " = " << result);
               *(uint16_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1745,7 +1722,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
             for (int i = 0; i < vl_; i++) {
               uint32_t second = *(uint32_t *)(vr2.data() + i);
               uint32_t result = (rsdata[0] * second);
-              D(4, "Comparing " << rsdata[0] << " + " << second << " = " << result);
+              D(3, "Comparing " << rsdata[0] << " + " << second << " = " << result);
               *(uint32_t *)(vd.data() + i) = result;
             }
             for (int i = vl_; i < VLMAX; i++) {
@@ -1785,12 +1762,12 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
     switch (rdt) {
     case 1:      
       if (rdest) {
-        D(3, "[" << std::dec << t << "] Dest Register: r" << rdest << "=0x" << std::hex << std::hex << rddata);
+        D(2, "[" << std::dec << t << "] Dest Regs: r" << rdest << "=0x" << std::hex << std::hex << rddata);
         iregs[rdest] = rddata;
       }
       break;
     case 2:
-      D(3, "[" << std::dec << t << "] Dest Register: fr" << rdest << "=0x" << std::hex << std::hex << rddata);
+      D(2, "[" << std::dec << t << "] Dest Regs: fr" << rdest << "=0x" << std::hex << std::hex << rddata);
       fregs[rdest] = rddata;
       break;
     default:
@@ -1800,7 +1777,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
 
   PC_ += core_->arch().wsize();
   if (PC_ != nextPC) {
-    D(3, "Next PC: " << std::hex << nextPC << std::dec);
+    D(3, "*** Next PC: " << std::hex << nextPC << std::dec);
     PC_ = nextPC;
   }
 }

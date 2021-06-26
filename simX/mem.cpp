@@ -134,11 +134,11 @@ MemoryUnit::TLBEntry MemoryUnit::tlbLookup(Addr vAddr, Word flagMask) {
     if (iter->second.flags & flagMask)
       return iter->second;
     else {
-      D(2, "Page fault on addr 0x" << std::hex << vAddr << "(bad flags)");
+      D(3, "*** Page fault on addr 0x" << std::hex << vAddr << "(bad flags)");
       throw PageFault(vAddr, false);
     }
   } else {
-    D(2, "Page fault on addr 0x" << std::hex << vAddr << "(not in TLB)");
+    D(3, "*** Page fault on addr 0x" << std::hex << vAddr << "(not in TLB)");
     throw PageFault(vAddr, true);
   }
 }
@@ -168,7 +168,6 @@ void MemoryUnit::write(Addr addr, const void *data, Size size, bool sup) {
 }
 
 void MemoryUnit::tlbAdd(Addr virt, Addr phys, Word flags) {
-  D(1, "tlbAdd(0x" << std::hex << virt << ", 0x" << phys << ", 0x" << flags << ')');
   tlb_[virt / pageSize_] = TLBEntry(phys / pageSize_, flags);
 }
 
