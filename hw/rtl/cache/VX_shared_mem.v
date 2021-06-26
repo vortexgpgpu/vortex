@@ -270,6 +270,19 @@ module VX_shared_mem #(
     end
 `endif
 
+    // Check potential stack overflow
+    for (genvar i = 0; i < NUM_REQS; ++i) begin
+        wire [31:0] addr_offset = `SMEM_BASE_ADDR - `TO_FULL_ADDR(core_req_addr[i]);
+        wire [31:0] stack_offset = addr_offset % `STACK_SIZE;
+        always @(posedge clk) begin
+            if (core_req_valid[i] && core_req_ready[i]) begin 
+                if (stack_offset > (`STACK_SIZE-5)) begin               
+                    $error("*** stack overflow! tid=%0d, offset=%0d ", i, stack_offset);
+                end
+            end
+        end
+    end
+
 `ifdef DBG_PRINT_CACHE_BANK
     
     reg is_multi_tag_req;
