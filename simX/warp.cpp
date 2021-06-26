@@ -28,7 +28,10 @@ void Warp::clear() {
 void Warp::step(Pipeline *pipeline) {
   assert(tmask_.any());
 
-  D(3, "Step: wid=" << id_ << ", PC=0x" << std::hex << PC_);
+  DPH(2, "Step: wid=" << id_ << ", PC=0x" << std::hex << PC_ << ", tmask=");
+  for (int i = 0, n = core_->arch().num_threads(); i < n; ++i)
+    DPN(2, tmask_[n-i-1]);
+  DPN(2, "\n");
 
   /* Fetch and decode. */    
 
@@ -79,7 +82,6 @@ void Warp::step(Pipeline *pipeline) {
   // Execute
   this->execute(*instr, pipeline);
 
-  // At Debug Level 3, print debug info after each instruction.
   D(4, "Register state:");
   for (int i = 0; i < core_->arch().num_regs(); ++i) {
     DPN(4, "  %r" << std::setfill('0') << std::setw(2) << std::dec << i << ':');
@@ -87,10 +89,5 @@ void Warp::step(Pipeline *pipeline) {
       DPN(4, ' ' << std::setfill('0') << std::setw(8) << std::hex << iRegFile_[j][i] << std::setfill(' ') << ' ');
     }
     DPN(4, std::endl);
-  }
-
-  DPH(3, "Thread mask:");
-  for (int i = 0; i < core_->arch().num_threads(); ++i)
-    DPN(3, " " << tmask_[i]);
-  DPN(3, "\n");
+  }  
 }
