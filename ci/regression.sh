@@ -11,6 +11,9 @@ make -C tests/riscv/isa run
 make -C tests/opencl run
 make -C simX run-tests
 
+# basic pipeline stress
+./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm --args="-n128"
+
 # warp/threads configurations
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=2 --threads=2 --app=demo
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=2 --threads=8 --app=demo
@@ -41,7 +44,10 @@ CONFIGS=-DEXT_F_DISABLE make -C hw/simulate
 # disable shared memory
 CONFIGS=-DSM_ENABLE=0 make -C hw/simulate
 
-# using FPNEW core
+# using Default FPU core
+FPU_CORE=FPU_DEFAULT ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
+
+# using FPNEW FPU core
 FPU_CORE=FPU_FPNEW ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
 
 # test 128-bit MEM block
@@ -54,7 +60,7 @@ CONFIGS="-DMEM_BLOCK_SIZE=16 -DPLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH=128 -DPLAT
 CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=27" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
 
 # test 128-bit DRAM block
-CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_BANKS=1 -DPLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH=128 -DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=28" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
+CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH=128 -DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=28 -DPLATFORM_PARAM_LOCAL_MEMORY_BANKS=1" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
 
 # test verilator reset values
 CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=vlsim --cores=4 --app=sgemm

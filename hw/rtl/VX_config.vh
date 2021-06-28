@@ -117,7 +117,7 @@
 `endif
 
 `ifndef LATENCY_FCVT
-`define LATENCY_FCVT 4
+`define LATENCY_FCVT 5
 `endif
 
 // CSR Addresses //////////////////////////////////////////////////////////////
@@ -231,7 +231,7 @@
 
 // Size of LSU Request Queue
 `ifndef LSUQ_SIZE
-`define LSUQ_SIZE 8
+`define LSUQ_SIZE (`NUM_WARPS * 2)
 `endif
 
 // Size of FPU Request Queue
@@ -300,7 +300,7 @@
 
 // Memory Response Queue Size
 `ifndef DMRSQ_SIZE
-`define DMRSQ_SIZE `MAX(4, (`DNUM_BANKS * 2))
+`define DMRSQ_SIZE `MAX(4, `DNUM_BANKS)
 `endif
 
 // SM Configurable Knobs //////////////////////////////////////////////////////
@@ -329,7 +329,7 @@
 
 // Size of cache in bytes
 `ifndef L2CACHE_SIZE
-`define L2CACHE_SIZE 65536
+`define L2CACHE_SIZE 131072
 `endif
 
 // Number of banks
@@ -361,7 +361,7 @@
 
 // Size of cache in bytes
 `ifndef L3CACHE_SIZE
-`define L3CACHE_SIZE 131072
+`define L3CACHE_SIZE 1048576
 `endif
 
 // Number of banks

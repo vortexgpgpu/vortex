@@ -1,7 +1,7 @@
 `include "VX_platform.vh"
 
 module VX_priority_encoder #( 
-    parameter N       = 1,
+    parameter N       = 1,  
     parameter REVERSE = 0,
     parameter FAST    = 1,
     parameter LN      = `LOG2UP(N)
@@ -20,8 +20,8 @@ module VX_priority_encoder #(
 
     end else if (N == 2) begin
 
-        assign onehot    = {!data_in[REVERSE], data_in[REVERSE]};
-        assign index     = !data_in[REVERSE];
+        assign onehot    = {~data_in[REVERSE], data_in[REVERSE]};
+        assign index     = ~data_in[REVERSE];
         assign valid_out = (| data_in);
 
     end else if (FAST) begin
@@ -48,7 +48,7 @@ module VX_priority_encoder #(
         VX_onehot_encoder #(
             .N (N),
             .REVERSE (REVERSE)
-        ) b (
+        ) onehot_encoder (
             .data_in  (onehot),
             .data_out (index),        
             `UNUSED_PIN (valid)
@@ -56,35 +56,39 @@ module VX_priority_encoder #(
 
     end else begin
 
-        reg [N-1:0] onehot_r;
         reg [LN-1:0] index_r;
-        
-        always @(*) begin
-            index_r  = 'x;
-            onehot_r = 0;
-            if (REVERSE) begin
-                for (integer i = N-1; i >= 0; i--) begin
+        reg [N-1:0]  onehot_r;
+
+        if (REVERSE) begin            
+            always @(*) begin
+                index_r  = 'x;
+                onehot_r = 'x;
+                for (integer i = 0; i < N; ++i) begin
                     if (data_in[i]) begin
                         index_r     = LN'(i);
+                        onehot_r    = 0;
                         onehot_r[i] = 1'b1;
-                        break;
-                    end
-                end
-            end else begin
-                for (integer i = 0; i < N; i++) begin
-                    if (data_in[i]) begin
-                        index_r     = LN'(i);
-                        onehot_r[i] = 1'b1;
-                        break;
                     end
                 end
             end
-        end
+        end else begin
+            always @(*) begin
+                index_r  = 'x;
+                onehot_r = 'x;
+                for (integer i = N-1; i >= 0; --i) begin
+                    if (data_in[i]) begin
+                        index_r     = LN'(i);
+                        onehot_r    = 0;
+                        onehot_r[i] = 1'b1;
+                    end
+                end
+            end
+        end        
 
-        assign index     = index_r;
-        assign onehot    = onehot_r;
-        assign valid_out = (| data_in);
-        
-    end
-    
+        assign index  = index_r;
+        assign onehot = onehot_r;
+        assign valid_out = (| data_in);        
+
+    end    
+
 endmodule

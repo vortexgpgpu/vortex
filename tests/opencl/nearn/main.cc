@@ -237,12 +237,12 @@ int loadData(char *filename, std::vector<Record> &records,
       locations.push_back(latLong);
       records.push_back(record);
       recNum++;
-      if (0 == (recNum % 500))
-        break;
+      /*if (0 == (recNum % 500))
+        break;*/
     }
     
-    if (++q == 3)
-        break;
+    /*if (++q == 3)
+        break;*/
     fclose(fp);
   }
   fclose(flist);
@@ -281,8 +281,8 @@ void findLowest(std::vector<Record> &records, float *distances, int numRecords,
 int parseCommandline(int argc, char *argv[], char *filename, int *r, float *lat,
                      float *lng, int *q, int *t, int *p, int *d) {
   int i;
-  // if (argc < 2) return 1; // error
-  strncpy(filename, "filelist.txt", 100);
+  if (argc < 2) return 1; // error
+  strncpy(filename,argv[1],100);
   char flag;
 
   for (i = 1; i < argc; i++) {

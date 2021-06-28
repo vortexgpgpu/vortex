@@ -9,6 +9,9 @@
 #include "VX_config.h"
 
 extern "C" {
+  void dpi_imul(int a, int b, bool is_signed_a, bool is_signed_b, int* resultl, int* resulth);
+  void dpi_idiv(int a, int b, bool is_signed, int* quotient, int* remainder);
+
   int dpi_register();
   void dpi_assert(int inst, bool cond, int delay);
 }
@@ -80,5 +83,54 @@ void dpi_assert(int inst, bool cond, int delay) {
   if (status) {
     printf("delayed assertion at %s!\n", svGetNameFromScope(svGetScope()));
     std::abort();
+  }
+}
+
+void dpi_imul(int a, int b, bool is_signed_a, bool is_signed_b, int* resultl, int* resulth) {
+  uint64_t first  = a;
+  uint64_t second = b;
+    
+  if (is_signed_a && (a & 0x80000000)) {
+    first |= 0xFFFFFFFF00000000;
+  }
+
+  if (is_signed_b && (b & 0x80000000)) {
+    second |= 0xFFFFFFFF00000000;
+  }
+
+  uint64_t result;
+  if (is_signed_a || is_signed_b) {
+    result = (int64_t)first * (int64_t)second;
+  } else {
+    result = first * second;
+  }    
+    
+  *resultl = result & 0xFFFFFFFF;
+  *resulth = (result >> 32) & 0xFFFFFFFF;
+}
+
+void dpi_idiv(int a, int b, bool is_signed, int* quotient, int* remainder) {
+  uint32_t dividen = a;
+  uint32_t divisor = b;
+
+  if (is_signed) {
+    if (b == 0) {
+      *quotient  = -1;
+      *remainder = dividen;
+    } else if (dividen == 0x80000000 && divisor == 0xffffffff) {
+      *remainder = 0;
+      *quotient  = dividen;
+    } else { 
+      *quotient  = (int32_t)dividen / (int32_t)divisor;
+      *remainder = (int32_t)dividen % (int32_t)divisor;      
+    }
+  } else {    
+    if (b == 0) {
+      *quotient  = -1;
+      *remainder = dividen;
+    } else {
+      *quotient  = dividen / divisor;
+      *remainder = dividen % divisor;
+    }
   }
 }

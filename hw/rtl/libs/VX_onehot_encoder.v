@@ -1,18 +1,29 @@
 `include "VX_platform.vh"
 
 // Fast encoder using parallel prefix computation
-// Adapter from BaseJump STL: http://bjump.org/index.html
+// Adapter from BaseJump STL: http://bjump.org/data_out.html
 
 module VX_onehot_encoder #(
-    parameter N       = 1,
+    parameter N       = 1,    
     parameter REVERSE = 0,
-    parameter FAST    = 1
+    parameter FAST    = 1,
+    parameter LN      = `LOG2UP(N)
 ) (
-    input wire [N-1:0] data_in,    
-    output wire [`LOG2UP(N)-1:0] data_out,
-    output wire valid
+    input wire [N-1:0]   data_in,    
+    output wire [LN-1:0] data_out,
+    output wire          valid
 ); 
-    if (FAST) begin
+    if (N == 1) begin
+
+        assign data_out = data_in;
+        assign valid    = data_in;
+
+    end else if (N == 2) begin
+
+        assign data_out = data_in[!REVERSE];
+        assign valid    = (| data_in);
+
+    end else if (FAST) begin
     `IGNORE_WARNINGS_BEGIN
         localparam levels_lp = $clog2(N);
         localparam aligned_width_lp = 1 << $clog2(N);
@@ -51,23 +62,34 @@ module VX_onehot_encoder #(
         assign data_out = addr[levels_lp][`LOG2UP(N)-1:0];
         assign valid = v[levels_lp][0];
     `IGNORE_WARNINGS_END
-    end else begin
+    end else begin 
 
-        reg [`LOG2UP(N)-1:0] data_out_r;
-        reg valid_r;
+        reg [LN-1:0] index_r;
 
-        always @(*) begin        
-            data_out_r = 'x; 
-            for (integer i = 0; i < N; i++) begin
-                if (data_in[i]) begin                
-                    data_out_r = `LOG2UP(N)'(i);
+        if (REVERSE) begin
+
+            always @(*) begin        
+                index_r = 'x; 
+                for (integer i = N-1; i >= 0; --i) begin
+                    if (data_in[i]) begin                
+                        index_r = `LOG2UP(N)'(i);
+                    end
+                end
+            end
+
+        end else begin
+            always @(*) begin        
+                index_r = 'x; 
+                for (integer i = 0; i < N; i++) begin
+                    if (data_in[i]) begin                
+                        index_r = `LOG2UP(N)'(i);
+                    end
                 end
             end
         end
 
-        assign data_out = data_out_r;
+        assign data_out = index_r;
         assign valid    = (| data_in);
-
     end
 
 endmodule

@@ -76,16 +76,16 @@ $(FPGA_BUILD_DIR)_4c/build/dcp.qpf:
 	afu_synth_setup -s setup.cfg $(FPGA_BUILD_DIR)_4c
 
 $(FPGA_BUILD_DIR)_8c/build/dcp.qpf:
-	afu_synth_setup -s setup8.cfg $(FPGA_BUILD_DIR)_8c
+	afu_synth_setup -s setup.cfg $(FPGA_BUILD_DIR)_8c
 
 $(FPGA_BUILD_DIR)_16c/build/dcp.qpf:
-	afu_synth_setup -s setup16.cfg $(FPGA_BUILD_DIR)_16c
+	afu_synth_setup -s setup.cfg $(FPGA_BUILD_DIR)_16c
 
 $(FPGA_BUILD_DIR)_32c/build/dcp.qpf:
-	afu_synth_setup -s setup16.cfg $(FPGA_BUILD_DIR)_32c
+	afu_synth_setup -s setup.cfg $(FPGA_BUILD_DIR)_32c
 
 $(FPGA_BUILD_DIR)_64c/build/dcp.qpf:
-	afu_synth_setup -s setup16.cfg $(FPGA_BUILD_DIR)_64c
+	afu_synth_setup -s setup.cfg $(FPGA_BUILD_DIR)_64c
 
 gen-sources-1c:
 	./gen_sources.sh $(CFLAGS) $(CONFIG1) > sources.txt
