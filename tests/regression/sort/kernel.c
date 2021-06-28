@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <vx_intrinsics.h>
 #include <vx_spawn.h>
+#include <vx_print.h>
 #include "common.h"
 
 // Parallel Selection sort
@@ -33,6 +34,7 @@ void kernel_body(int task_id, void* arg) {
 		pos += __smaller(i, task_id, cur_value, ref_value);
 	}
 	dst_ptr[pos] = ref_value;
+	vx_printf("taskid=%d, pos=%d, value=%d\n", task_id, pos, ref_value);
 }
 
 void main() {
