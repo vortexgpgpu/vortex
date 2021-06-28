@@ -152,6 +152,7 @@
 `define LSU_FMT(x)      x[2:0]
 `define LSU_WSIZE(x)    x[1:0]
 `define LSU_OP(x)       x[`LSU_BITS-1:0]
+`define LSU_IS_FENCE(x) x[0]
 
 `define CSR_RW          2'h0
 `define CSR_RS          2'h1
