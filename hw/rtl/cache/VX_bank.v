@@ -437,10 +437,12 @@ module VX_bank #(
         `UNUSED_PIN (enqueue_almfull),
         `UNUSED_PIN (enqueue_full),
 
-        // lookup
-        .lookup_ready       (mrsq_pop),
+        // lookup        
         .lookup_addr        (lookup_addr),
         .lookup_match       (mshr_pending),
+
+        // fill update
+        .fill_update        (mrsq_pop),
         
         // schedule
         .schedule           (mshr_pop),        
@@ -475,8 +477,7 @@ module VX_bank #(
     end
 
     VX_skid_buffer #(
-        .DATAW (CORE_TAG_WIDTH + (1 + `WORD_WIDTH + `REQS_BITS) * NUM_PORTS),
-        .USE_FASTREG (NUM_BANKS == 1)
+        .DATAW (CORE_TAG_WIDTH + (1 + `WORD_WIDTH + `REQS_BITS) * NUM_PORTS)
     ) core_rsp_req (
         .clk       (clk),
         .reset     (reset),

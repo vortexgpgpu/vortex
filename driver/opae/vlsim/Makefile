@@ -75,6 +75,10 @@ endif
 VL_FLAGS += -DNOPAE
 CFLAGS += -DNOPAE
 
+# ALU backend
+VL_FLAGS += -DIMUL_DPI
+VL_FLAGS += -DIDIV_DPI
+
 # FPU backend
 FPU_CORE ?= FPU_DPI
 VL_FLAGS += -D$(FPU_CORE)

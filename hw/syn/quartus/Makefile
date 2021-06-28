@@ -5,7 +5,7 @@ BUILDIR ?= build
 unittest:
 	mkdir -p unittest/$(BUILDIR)
 	cp unittest/Makefile unittest/$(BUILDIR)
-	$(MAKE) -C unittest/$(BUILDIR) clean && $(MAKE) -C unittest/$(BUILDIR) > unittest//$(BUILDIR)build.log 2>&1 &
+	$(MAKE) -C unittest/$(BUILDIR) clean && $(MAKE) -C unittest/$(BUILDIR) > unittest/$(BUILDIR)/build.log 2>&1 &
 
 pipeline:
 	mkdir -p pipeline/$(BUILDIR)
@@ -55,7 +55,7 @@ top8:
 top16:
 	mkdir -p top16/$(BUILDIR)
 	cp top16/Makefile top16/$(BUILDIR)
-	$(MAKE) -C top16/$(BUILDIR) clean && $(MAKE) -C top16/$(BUILDIR) > top16/$(BUILDIR)build.log 2>&1 &
+	$(MAKE) -C top16/$(BUILDIR) clean && $(MAKE) -C top16/$(BUILDIR) > top16/$(BUILDIR)/build.log 2>&1 &
 
 top32:
 	mkdir -p top32/$(BUILDIR)

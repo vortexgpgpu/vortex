@@ -74,7 +74,7 @@
     "taps": {     
         "afu": {                                     
             "!cmd_type":3,
-            "!state":3,
+            "!state":2,
             "?cci_sRxPort_c0_mmioRdValid":1,
             "?cci_sRxPort_c0_mmioWrValid":1,
             "mmio_hdr_address":16,            

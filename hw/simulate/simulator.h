@@ -17,6 +17,14 @@
 #include <sstream> 
 #include <unordered_map>
 
+#ifndef MEMORY_BANKS
+  #ifdef PLATFORM_PARAM_LOCAL_MEMORY_BANKS
+    #define MEMORY_BANKS PLATFORM_PARAM_LOCAL_MEMORY_BANKS
+  #else
+    #define MEMORY_BANKS 2
+  #endif
+#endif
+
 class Simulator {
 public:
   
@@ -57,7 +65,9 @@ private:
 
   void eval_mem_bus();
 
-  std::list<mem_req_t> mem_rsp_vec_;
+  std::list<mem_req_t> mem_rsp_vec_ [MEMORY_BANKS];
+  uint32_t last_mem_rsp_bank_;
+
   bool mem_rsp_active_;
 
   bool mem_rsp_ready_;

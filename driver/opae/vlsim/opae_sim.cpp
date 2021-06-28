@@ -154,12 +154,14 @@ void opae_sim::write_mmio64(uint32_t mmio_num, uint64_t offset, uint64_t value) 
 void opae_sim::reset() {  
   cci_reads_.clear();
   cci_writes_.clear();
+  vortex_afu_->vcp2af_sRxPort_c0_mmioRdValid = 0;
+  vortex_afu_->vcp2af_sRxPort_c0_mmioWrValid = 0;
   vortex_afu_->vcp2af_sRxPort_c0_rspValid = 0;  
   vortex_afu_->vcp2af_sRxPort_c1_rspValid = 0;  
   vortex_afu_->vcp2af_sRxPort_c0_TxAlmFull = 0;
   vortex_afu_->vcp2af_sRxPort_c1_TxAlmFull = 0;
 
-  for (int b = 0; b < PLATFORM_PARAM_LOCAL_MEMORY_BANKS; ++b) {
+  for (int b = 0; b < MEMORY_BANKS; ++b) {
     mem_reads_[b].clear();
     vortex_afu_->avs_readdatavalid[b] = 0;  
     vortex_afu_->avs_waitrequest[b] = 0;
@@ -284,7 +286,7 @@ void opae_sim::sTxPort_bus() {
 }
   
 void opae_sim::avs_bus() {
-  for (int b = 0; b < PLATFORM_PARAM_LOCAL_MEMORY_BANKS; ++b) {
+  for (int b = 0; b < MEMORY_BANKS; ++b) {
     // update memory responses schedule
     for (auto& rsp : mem_reads_[b]) {
       if (rsp.cycles_left > 0)
