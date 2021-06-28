@@ -17,10 +17,10 @@ void test_tmc() {
 	test_tmc_impl();
 	vx_tmc(1);
 
-	vx_printx(tmc_array[0]);
-	vx_printx(tmc_array[1]);
-	vx_printx(tmc_array[2]);
-	vx_printx(tmc_array[3]);
+	vx_printf("%x", tmc_array[0]);
+	vx_printf("%x", tmc_array[1]);
+	vx_printf("%x", tmc_array[2]);
+	vx_printf("%x", tmc_array[3]);
 
 	return;
 }
@@ -57,10 +57,10 @@ void test_divergence() {
 
 	vx_tmc(1);
 
-	vx_printx(div_arr[0]);
-	vx_printx(div_arr[1]);
-	vx_printx(div_arr[2]);
-	vx_printx(div_arr[3]);
+	vx_printf("%x", div_arr[0]);
+	vx_printf("%x", div_arr[1]);
+	vx_printf("%x", div_arr[2]);
+	vx_printf("%x", div_arr[3]);
 }
 
 unsigned wsapwn_arr[4];
@@ -76,8 +76,8 @@ void simple_kernel() {
 void test_wsapwn() {
 	vx_wspawn(4, (unsigned)simple_kernel);
 	simple_kernel();
-	vx_printx(wsapwn_arr[0]);
-	vx_printx(wsapwn_arr[1]);
-	vx_printx(wsapwn_arr[2]);
-	vx_printx(wsapwn_arr[3]);
+	vx_printf("%x", wsapwn_arr[0]);
+	vx_printf("%x", wsapwn_arr[1]);
+	vx_printf("%x", wsapwn_arr[2]);
+	vx_printf("%x", wsapwn_arr[3]);
 }

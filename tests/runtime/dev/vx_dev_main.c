@@ -79,7 +79,7 @@ int main() {
 	vx_spawn_tasks(arguments.numRows * arguments.numColums, mat_add_kernel, &arguments);
 	vx_print_mat(z, arguments.numRows, arguments.numColums);
 	
-	vx_prints("Passed!\n");
+	vx_printf("Passed!\n");
 
 	return 0;
 }
