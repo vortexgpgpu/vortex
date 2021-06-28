@@ -307,7 +307,7 @@ void opae_sim::avs_bus() {
       memcpy(vortex_afu_->avs_readdata[b], mem_rd_it->data.data(), MEM_BLOCK_SIZE);
       uint32_t addr = mem_rd_it->addr;
       mem_reads_[b].erase(mem_rd_it);
-      /*printf("%0ld: [sim] MEM Rd Rsp: addr=%x, pending={", timestamp, addr * MEM_BLOCK_SIZE);
+      /*printf("%0ld: [sim] MEM Rd Rsp: bank=%d, addr=%x, pending={", timestamp, b, addr * MEM_BLOCK_SIZE);
       for (auto& req : mem_reads_[b]) {
         if (req.cycles_left != 0) 
           printf(" !%0x", req.addr * MEM_BLOCK_SIZE);
@@ -340,7 +340,7 @@ void opae_sim::avs_bus() {
             ram_[base_addr + i] = data[i];
           }
         }
-        /*printf("%0ld: [sim] MEM Wr Req: addr=%x, data=", timestamp, base_addr);
+        /*printf("%0ld: [sim] MEM Wr Req: bank=%d, addr=%x, data=", timestamp, b, base_addr);
         for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
           printf("%0x", data[(MEM_BLOCK_SIZE-1)-i]);
         }
@@ -358,7 +358,7 @@ void opae_sim::avs_bus() {
           }
         }
         mem_reads_[b].emplace_back(mem_req);
-        /*printf("%0ld: [sim] MEM Rd Req: addr=%x, pending={", timestamp, mem_req.addr * MEM_BLOCK_SIZE);
+        /*printf("%0ld: [sim] MEM Rd Req: bank=%d, addr=%x, pending={", timestamp, b, mem_req.addr * MEM_BLOCK_SIZE);
         for (auto& req : mem_reads_[b]) {
           if (req.cycles_left != 0) 
             printf(" !%0x", req.addr * MEM_BLOCK_SIZE);
