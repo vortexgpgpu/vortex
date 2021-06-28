@@ -140,6 +140,10 @@ inline int vx_num_cores() {
     return result;   
 }
 
+inline void vx_fence() {
+    asm volatile ("fence iorw, iorw");
+}
+
 #define __if(b) vx_split(b); \
                 if (b) 
 

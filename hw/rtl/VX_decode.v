@@ -199,6 +199,10 @@ module VX_decode  #(
                 `USED_REG (rs1_r, 1'b0, rs1);
                 `USED_REG (rs2_r, 1'b0, rs2);
             end
+            `INST_F: begin
+                ex_type = `EX_LSU;
+                op_mod  = `MOD_BITS'(0 == func3); // data fence
+            end
             `INST_SYS : begin 
                 if (func3 == 0) begin                    
                     ex_type = `EX_ALU;
@@ -241,6 +245,7 @@ module VX_decode  #(
             `INST_L: begin 
                 ex_type = `EX_LSU;
                 op_type = `OP_BITS'({1'b0, func3});
+                op_mod  = 0;
                 use_rd  = 1;
                 imm     = {{20{u_12[11]}}, u_12};
                 `USED_REG (rd_r,  (opcode == `INST_FL), rd);
@@ -252,6 +257,7 @@ module VX_decode  #(
             `INST_S: begin 
                 ex_type = `EX_LSU;
                 op_type = `OP_BITS'({1'b1, func3});
+                op_mod  = 0;
                 imm     = {{20{func7[6]}}, func7, rd};
                 `USED_REG (rs1_r, 1'b0, rs1);
                 `USED_REG (rs2_r, (opcode == `INST_FS), rs2);
