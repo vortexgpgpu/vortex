@@ -10,12 +10,17 @@ make -C runtime
 # clear POCL cache
 rm -rf ~/.cache/pocl
 
-# rebuild native kernel
-make -C tests/regression/dogfood clean-all
-make -C tests/regression/dogfood
-./ci/blackbox.sh --driver=vlsim --cores=1 --app=dogfood
+# rebuild runtime tests
+make -C tests/runtime clean
+make -C tests/runtime
+make -C tests/runtime run
 
-# rebuild opencl kernel
-make -C tests/opencl/sgemm clean-all
-make -C tests/opencl/sgemm
-./ci/blackbox.sh --driver=vlsim --cores=1 --app=sgemm
+# rebuild native kernels
+make -C tests/regression clean-all
+make -C tests/regression
+make -C tests/regression run
+
+# rebuild opencl kernels
+make -C tests/opencl clean-all
+make -C tests/opencl
+make -C tests/opencl run
