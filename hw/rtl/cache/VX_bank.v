@@ -437,10 +437,12 @@ module VX_bank #(
         `UNUSED_PIN (enqueue_almfull),
         `UNUSED_PIN (enqueue_full),
 
-        // lookup
-        .lookup_ready       (mrsq_pop),
+        // lookup        
         .lookup_addr        (lookup_addr),
         .lookup_match       (mshr_pending),
+
+        // fill update
+        .fill_update        (mrsq_pop),
         
         // schedule
         .schedule           (mshr_pop),        

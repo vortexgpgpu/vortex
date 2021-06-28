@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_instr_sched #(
+module VX_ibuffer #(
     parameter CORE_ID = 0
 ) (
     input wire clk,
@@ -10,7 +10,7 @@ module VX_instr_sched #(
     VX_decode_if  decode_if,  
 
     // outputs
-    VX_instr_sched_if  instr_sched_if
+    VX_ibuffer_if  ibuffer_if
 );
 
     `UNUSED_PARAM (CORE_ID)
@@ -29,12 +29,12 @@ module VX_instr_sched #(
     reg [`NUM_WARPS-1:0][DATAW-1:0] q_data_out;
 
     wire enq_fire = decode_if.valid && decode_if.ready;
-    wire deq_fire = instr_sched_if.valid && instr_sched_if.ready;
+    wire deq_fire = ibuffer_if.valid && ibuffer_if.ready;
 
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin
 
         wire writing = enq_fire && (i == decode_if.wid); 
-        wire reading = deq_fire && (i == instr_sched_if.wid);
+        wire reading = deq_fire && (i == ibuffer_if.wid);
 
         wire is_head_ptr = empty_r[i] || (alm_empty_r[i] && reading);
 
@@ -182,22 +182,22 @@ module VX_instr_sched #(
                         decode_if.use_imm,
                         decode_if.used_regs};
 
-    assign instr_sched_if.valid = deq_valid;
-    assign instr_sched_if.wid   = deq_wid;
-    assign instr_sched_if.wid_n = deq_wid_n;
-    assign {instr_sched_if.tmask, 
-            instr_sched_if.PC, 
-            instr_sched_if.ex_type, 
-            instr_sched_if.op_type, 
-            instr_sched_if.op_mod, 
-            instr_sched_if.wb, 
-            instr_sched_if.rd, 
-            instr_sched_if.rs1, 
-            instr_sched_if.rs2, 
-            instr_sched_if.rs3, 
-            instr_sched_if.imm, 
-            instr_sched_if.use_PC, 
-            instr_sched_if.use_imm, 
-            instr_sched_if.used_regs} = deq_instr;
+    assign ibuffer_if.valid = deq_valid;
+    assign ibuffer_if.wid   = deq_wid;
+    assign ibuffer_if.wid_n = deq_wid_n;
+    assign {ibuffer_if.tmask, 
+            ibuffer_if.PC, 
+            ibuffer_if.ex_type, 
+            ibuffer_if.op_type, 
+            ibuffer_if.op_mod, 
+            ibuffer_if.wb, 
+            ibuffer_if.rd, 
+            ibuffer_if.rs1, 
+            ibuffer_if.rs2, 
+            ibuffer_if.rs3, 
+            ibuffer_if.imm, 
+            ibuffer_if.use_PC, 
+            ibuffer_if.use_imm, 
+            ibuffer_if.used_regs} = deq_instr;
 
 endmodule

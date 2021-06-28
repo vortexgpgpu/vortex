@@ -21,36 +21,36 @@ module VX_issue #(
     VX_fpu_req_if   fpu_req_if,    
     VX_gpu_req_if   gpu_req_if
 );
-    VX_instr_sched_if instr_sched_if();
-    VX_instr_sched_if execute_if();
+    VX_ibuffer_if ibuffer_if();
+    VX_ibuffer_if execute_if();
     VX_gpr_req_if gpr_req_if();
     VX_gpr_rsp_if gpr_rsp_if();
 
     wire scoreboard_delay;
 
-    VX_instr_sched #(
+    VX_ibuffer #(
         .CORE_ID(CORE_ID)
-    ) instr_sched (
-        .clk            (clk),
-        .reset          (reset), 
-        .decode_if      (decode_if),
-        .instr_sched_if (instr_sched_if) 
+    ) ibuffer (
+        .clk        (clk),
+        .reset      (reset), 
+        .decode_if  (decode_if),
+        .ibuffer_if (ibuffer_if) 
     );
 
     VX_scoreboard #(
         .CORE_ID(CORE_ID)
     ) scoreboard (
-        .clk            (clk),
-        .reset          (reset), 
-        .instr_sched_if (instr_sched_if),
-        .writeback_if   (writeback_if),
-        .delay          (scoreboard_delay)
+        .clk        (clk),
+        .reset      (reset), 
+        .ibuffer_if (ibuffer_if),
+        .writeback_if(writeback_if),
+        .delay      (scoreboard_delay)
     );
         
-    assign gpr_req_if.wid = instr_sched_if.wid;
-    assign gpr_req_if.rs1 = instr_sched_if.rs1;
-    assign gpr_req_if.rs2 = instr_sched_if.rs2;
-    assign gpr_req_if.rs3 = instr_sched_if.rs3;
+    assign gpr_req_if.wid = ibuffer_if.wid;
+    assign gpr_req_if.rs1 = ibuffer_if.rs1;
+    assign gpr_req_if.rs2 = ibuffer_if.rs2;
+    assign gpr_req_if.rs3 = ibuffer_if.rs3;
 
     VX_gpr_stage #(
         .CORE_ID(CORE_ID)
@@ -62,24 +62,24 @@ module VX_issue #(
         .gpr_rsp_if   (gpr_rsp_if)
     );
 
-    assign execute_if.valid     = instr_sched_if.valid && ~scoreboard_delay;
-    assign execute_if.wid       = instr_sched_if.wid;
-    assign execute_if.tmask     = instr_sched_if.tmask;
-    assign execute_if.PC        = instr_sched_if.PC;
-    assign execute_if.ex_type   = instr_sched_if.ex_type;    
-    assign execute_if.op_type   = instr_sched_if.op_type; 
-    assign execute_if.op_mod    = instr_sched_if.op_mod;    
-    assign execute_if.wb        = instr_sched_if.wb;
-    assign execute_if.rd        = instr_sched_if.rd;
-    assign execute_if.rs1       = instr_sched_if.rs1;
-    assign execute_if.imm       = instr_sched_if.imm;        
-    assign execute_if.use_PC    = instr_sched_if.use_PC;
-    assign execute_if.use_imm   = instr_sched_if.use_imm;
+    assign execute_if.valid     = ibuffer_if.valid && ~scoreboard_delay;
+    assign execute_if.wid       = ibuffer_if.wid;
+    assign execute_if.tmask     = ibuffer_if.tmask;
+    assign execute_if.PC        = ibuffer_if.PC;
+    assign execute_if.ex_type   = ibuffer_if.ex_type;    
+    assign execute_if.op_type   = ibuffer_if.op_type; 
+    assign execute_if.op_mod    = ibuffer_if.op_mod;    
+    assign execute_if.wb        = ibuffer_if.wb;
+    assign execute_if.rd        = ibuffer_if.rd;
+    assign execute_if.rs1       = ibuffer_if.rs1;
+    assign execute_if.imm       = ibuffer_if.imm;        
+    assign execute_if.use_PC    = ibuffer_if.use_PC;
+    assign execute_if.use_imm   = ibuffer_if.use_imm;
 
     VX_instr_demux instr_demux (
         .clk        (clk),      
         .reset      (reset),
-        .execute_if (execute_if),
+        .ibuffer_if (execute_if),
         .gpr_rsp_if (gpr_rsp_if),
         .alu_req_if (alu_req_if),
         .lsu_req_if (lsu_req_if),        
@@ -89,23 +89,23 @@ module VX_issue #(
     );     
 
     // issue the instruction
-    assign instr_sched_if.ready = !scoreboard_delay && execute_if.ready;     
+    assign ibuffer_if.ready = !scoreboard_delay && execute_if.ready;     
 
-    `SCOPE_ASSIGN (issue_fire,        instr_sched_if.valid && instr_sched_if.ready);
-    `SCOPE_ASSIGN (issue_wid,         instr_sched_if.wid);
-    `SCOPE_ASSIGN (issue_tmask,       instr_sched_if.tmask);
-    `SCOPE_ASSIGN (issue_pc,          instr_sched_if.PC);
-    `SCOPE_ASSIGN (issue_ex_type,     instr_sched_if.ex_type);
-    `SCOPE_ASSIGN (issue_op_type,     instr_sched_if.op_type);
-    `SCOPE_ASSIGN (issue_op_mod,      instr_sched_if.op_mod);
-    `SCOPE_ASSIGN (issue_wb,          instr_sched_if.wb);
-    `SCOPE_ASSIGN (issue_rd,          instr_sched_if.rd);
-    `SCOPE_ASSIGN (issue_rs1,         instr_sched_if.rs1);
-    `SCOPE_ASSIGN (issue_rs2,         instr_sched_if.rs2);
-    `SCOPE_ASSIGN (issue_rs3,         instr_sched_if.rs3);
-    `SCOPE_ASSIGN (issue_imm,         instr_sched_if.imm);
-    `SCOPE_ASSIGN (issue_use_pc,      instr_sched_if.use_PC);
-    `SCOPE_ASSIGN (issue_use_imm,     instr_sched_if.use_imm);
+    `SCOPE_ASSIGN (issue_fire,        ibuffer_if.valid && ibuffer_if.ready);
+    `SCOPE_ASSIGN (issue_wid,         ibuffer_if.wid);
+    `SCOPE_ASSIGN (issue_tmask,       ibuffer_if.tmask);
+    `SCOPE_ASSIGN (issue_pc,          ibuffer_if.PC);
+    `SCOPE_ASSIGN (issue_ex_type,     ibuffer_if.ex_type);
+    `SCOPE_ASSIGN (issue_op_type,     ibuffer_if.op_type);
+    `SCOPE_ASSIGN (issue_op_mod,      ibuffer_if.op_mod);
+    `SCOPE_ASSIGN (issue_wb,          ibuffer_if.wb);
+    `SCOPE_ASSIGN (issue_rd,          ibuffer_if.rd);
+    `SCOPE_ASSIGN (issue_rs1,         ibuffer_if.rs1);
+    `SCOPE_ASSIGN (issue_rs2,         ibuffer_if.rs2);
+    `SCOPE_ASSIGN (issue_rs3,         ibuffer_if.rs3);
+    `SCOPE_ASSIGN (issue_imm,         ibuffer_if.imm);
+    `SCOPE_ASSIGN (issue_use_pc,      ibuffer_if.use_PC);
+    `SCOPE_ASSIGN (issue_use_imm,     ibuffer_if.use_imm);
     `SCOPE_ASSIGN (scoreboard_delay,  scoreboard_delay); 
     `SCOPE_ASSIGN (execute_delay,     ~execute_if.ready);    
     `SCOPE_ASSIGN (gpr_rsp_a,         gpr_rsp_if.rs1_data);
@@ -145,7 +145,7 @@ module VX_issue #(
             if (decode_if.valid & !decode_if.ready) begin
                 perf_ibf_stalls <= perf_ibf_stalls  + `PERF_CTR_BITS'd1;
             end
-            if (instr_sched_if.valid & scoreboard_delay) begin 
+            if (ibuffer_if.valid & scoreboard_delay) begin 
                 perf_scb_stalls <= perf_scb_stalls  + `PERF_CTR_BITS'd1;
             end
             if (alu_req_if.valid & !alu_req_if.ready) begin

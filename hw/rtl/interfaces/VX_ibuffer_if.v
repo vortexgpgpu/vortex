@@ -1,9 +1,9 @@
-`ifndef VX_INSTR_SCHED_IF
-`define VX_INSTR_SCHED_IF
+`ifndef VX_IBUFFER_IF
+`define VX_IBUFFER_IF
 
 `include "VX_define.vh"
 
-interface VX_instr_sched_if ();
+interface VX_ibuffer_if ();
 
     wire                    valid;    
     wire [`NW_BITS-1:0]     wid;
