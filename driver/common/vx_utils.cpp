@@ -34,7 +34,7 @@ extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, size_
     auto chunk_size = std::min<size_t>(buffer_transfer_size, size - offset);
     std::memcpy(buf_ptr, (uint8_t*)content + offset, chunk_size);
 
-    /*printf("**  Upload Kernel to 0x%0x: data=", kernel_base_addr + offset);
+    /*printf("***  Upload Kernel to 0x%0x: data=", kernel_base_addr + offset);
     for (int i = 0, n = ((chunk_size+7)/8); i < n; ++i) {
       printf("%08x", ((uint64_t*)((uint8_t*)content + offset))[n-1-i]);
     }
