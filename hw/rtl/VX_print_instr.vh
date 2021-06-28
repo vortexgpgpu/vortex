@@ -23,7 +23,7 @@ task print_ex_op (
 );
     case (ex_type)        
     `EX_ALU: begin
-        if (`IS_BR_MOD(op_mod)) begin
+        if (`ALU_IS_BR(op_mod)) begin
             case (`BR_BITS'(op_type))
                 `BR_EQ:    $write("BEQ");
                 `BR_NE:    $write("BNE");
@@ -40,7 +40,7 @@ task print_ex_op (
                 `BR_DRET:  $write("DRET");    
                 default:    $write("?");
             endcase                
-        end else if (`IS_MUL_MOD(op_mod)) begin
+        end else if (`ALU_IS_MUL(op_mod)) begin
             case (`MUL_BITS'(op_type))
                 `MUL_MUL:   $write("MUL");
                 `MUL_MULH:  $write("MULH");

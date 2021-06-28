@@ -25,7 +25,7 @@ module VX_alu_unit #(
     wire stall_in, stall_out;    
 
     `UNUSED_VAR (alu_req_if.op_mod)
-    wire               is_br_op = `IS_BR_MOD(alu_req_if.op_mod);
+    wire               is_br_op = `ALU_IS_BR(alu_req_if.op_mod);
     wire [`ALU_BITS-1:0] alu_op = `ALU_OP(alu_req_if.op_type);
     wire [`BR_BITS-1:0]   br_op = `BR_OP(alu_req_if.op_type);
     wire             alu_signed = `ALU_SIGNED(alu_op);   
@@ -117,7 +117,7 @@ module VX_alu_unit #(
     wire                          mul_wb;
     wire [`NUM_THREADS-1:0][31:0] mul_data;
 
-    wire is_mul_op = `IS_MUL_MOD(alu_req_if.op_mod);
+    wire is_mul_op = `ALU_IS_MUL(alu_req_if.op_mod);
     
     VX_muldiv muldiv (
         .clk        (clk),
