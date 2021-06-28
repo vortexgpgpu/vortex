@@ -128,7 +128,7 @@ module VX_execute #(
     // special workaround to get RISC-V tests Pass/Fail status
     wire ebreak /* verilator public */;
     assign ebreak = alu_req_if.valid && alu_req_if.ready
-                 && `IS_BR_MOD(alu_req_if.op_mod)
+                 && `ALU_IS_BR(alu_req_if.op_mod)
                  && (`BR_OP(alu_req_if.op_type) == `BR_EBREAK 
                   || `BR_OP(alu_req_if.op_type) == `BR_ECALL);
 

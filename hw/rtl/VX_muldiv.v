@@ -33,7 +33,7 @@ module VX_muldiv (
     input wire  ready_out
 ); 
 
-    wire is_div_op = `IS_DIV_OP(alu_op);
+    wire is_div_op = `MUL_IS_DIV(alu_op);
 
     wire [`NUM_THREADS-1:0][31:0] mul_result;
     wire [`NW_BITS-1:0] mul_wid_out;

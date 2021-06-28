@@ -59,11 +59,11 @@ module VX_csr_unit #(
 
     wire [31:0] csr_read_data_qual = write_hazard ? csr_updated_data_s1 : csr_read_data; 
 
-    reg [31:0] csr_updated_data;   
-
+    reg [31:0] csr_updated_data;
     reg csr_we_s0_unqual; 
     
     always @(*) begin        
+        csr_we_s0_unqual = (csr_req_data != 0);
         case (csr_req_if.op_type)
             `CSR_RW: begin
                 csr_updated_data = csr_req_data;
@@ -71,15 +71,10 @@ module VX_csr_unit #(
             end
             `CSR_RS: begin
                 csr_updated_data = csr_read_data_qual | csr_req_data;
-                csr_we_s0_unqual = (csr_req_data != 0); 
             end
-            `CSR_RC: begin
-                csr_updated_data = csr_read_data_qual & ~csr_req_data;
-                csr_we_s0_unqual = (csr_req_data != 0);
-            end
+            //`CSR_RC
             default: begin
-                csr_updated_data = 'x;
-                csr_we_s0_unqual = 0;
+                csr_updated_data = csr_read_data_qual & ~csr_req_data;
             end
         endcase
     end
