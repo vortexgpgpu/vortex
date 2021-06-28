@@ -42,10 +42,12 @@ module VX_miss_resrv #(
     output wire                         enqueue_full,
     output wire                         enqueue_almfull,
 
-    // lookup
-    input wire                          lookup_ready,    
+    // lookup    
     input wire [`LINE_ADDR_WIDTH-1:0]   lookup_addr,
     output wire                         lookup_match,
+
+    // fill update
+    input wire                          fill_update,    
 
     // schedule
     input wire                          schedule,
@@ -74,8 +76,6 @@ module VX_miss_resrv #(
         assign valid_address_match[i] = valid_table[i] && (addr_table[i] == lookup_addr);
     end
 
-    assign lookup_match = (| valid_address_match);
-    
     wire push_new = enqueue && !enqueue_is_mshr;
 
     wire restore = enqueue && enqueue_is_mshr;
@@ -93,10 +93,9 @@ module VX_miss_resrv #(
             used_r       <= 0;
             alm_full_r   <= 0;
             full_r       <= 0;            
-        end else begin            
+        end else begin
             
-            // WARNING: lookup should happen enqueue for ready_table's correct update
-            if (lookup_ready) begin                
+            if (fill_update) begin                
                 // unlock pending requests for scheduling                
                 ready_table <= ready_table | valid_address_match;
             end
@@ -170,6 +169,7 @@ module VX_miss_resrv #(
         .dout(schedule_data)
     );
 
+    assign lookup_match    = (| valid_address_match);
     assign schedule_valid  = ready_table[schedule_ptr];
     assign schedule_addr   = addr_table[schedule_ptr];    
     assign enqueue_almfull = alm_full_r;
@@ -177,7 +177,7 @@ module VX_miss_resrv #(
 
 `ifdef DBG_PRINT_CACHE_MSHR        
     always @(posedge clk) begin        
-        if (lookup_ready || schedule || enqueue || dequeue) begin
+        if (fill_update || schedule || enqueue || dequeue) begin
             if (schedule)
                 $display("%t: cache%0d:%0d mshr-schedule: addr%0d=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, schedule_ptr, `LINE_TO_BYTE_ADDR(schedule_addr, BANK_ID), deq_debug_wid, deq_debug_pc);      
             if (enqueue) begin
