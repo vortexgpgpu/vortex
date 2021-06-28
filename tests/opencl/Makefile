@@ -6,6 +6,7 @@ all:
 	$(MAKE) -C nearn
 	$(MAKE) -C guassian
 	$(MAKE) -C printf
+	$(MAKE) -C psort
 	
 run:
 	$(MAKE) -C vecadd run-vlsim 
@@ -15,6 +16,7 @@ run:
 	$(MAKE) -C nearn run-vlsim
 	$(MAKE) -C guassian run-vlsim
 	$(MAKE) -C printf run-vlsim
+#$(MAKE) -C psort run-vlsim
 
 clean:
 	$(MAKE) -C vecadd clean
@@ -24,6 +26,7 @@ clean:
 	$(MAKE) -C nearn clean
 	$(MAKE) -C guassian clean
 	$(MAKE) -C printf clean
+	$(MAKE) -C psort clean
 
 clean-all:
 	$(MAKE) -C vecadd clean-all
@@ -33,3 +36,4 @@ clean-all:
 	$(MAKE) -C nearn clean-all
 	$(MAKE) -C guassian clean-all
 	$(MAKE) -C printf clean-all
+	$(MAKE) -C psort clean-all
