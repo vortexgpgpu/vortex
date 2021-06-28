@@ -6,6 +6,7 @@ all:
 	$(MAKE) -C io_addr
 	$(MAKE) -C printf
 	$(MAKE) -C diverge
+	$(MAKE) -C fence
 
 run:
 	$(MAKE) -C basic run-vlsim
@@ -15,6 +16,7 @@ run:
 	$(MAKE) -C io_addr run-vlsim
 	$(MAKE) -C printf run-vlsim
 	$(MAKE) -C diverge run-vlsim
+	$(MAKE) -C fence run-vlsim
 
 clean:
 	$(MAKE) -C basic clean
@@ -24,6 +26,7 @@ clean:
 	$(MAKE) -C io_addr clean
 	$(MAKE) -C printf clean
 	$(MAKE) -C diverge clean
+	$(MAKE) -C fence clean
 
 clean-all:
 	$(MAKE) -C basic clean-all
@@ -33,4 +36,5 @@ clean-all:
 	$(MAKE) -C io_addr clean-all
 	$(MAKE) -C printf clean-all
 	$(MAKE) -C diverge clean-all
+	$(MAKE) -C fence clean-all
 
