@@ -50,8 +50,10 @@ module VX_decode  #(
 
     wire [4:0] rd  = instr[11:7];
     wire [4:0] rs1 = instr[19:15];
-    wire [4:0] rs2 = instr[24:20];     
+    wire [4:0] rs2 = instr[24:20];  
+`ifdef EXT_F_ENABLE   
     wire [4:0] rs3 = instr[31:27];
+`endif
 
     wire [19:0] upper_imm = {func7, rs2, rs1, func3};
     wire [11:0] alu_imm   = ((func3 == 3'h1) || (func3 == 3'h5)) ? {{7{1'b0}}, rs2} : u_12;
