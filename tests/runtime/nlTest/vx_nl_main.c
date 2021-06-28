@@ -16,7 +16,7 @@ int main() {
 	float isq = 1.0f / sqrt(fNum);
 	vx_printf("fibonacci(%d) = %d\n", Num, fib);
 	vx_printf("invAqrt(%f) = %f\n", fNum, isq);
-	vx_prints("Passed!\n");
+	vx_printf("Passed!\n");
 	return 0;
 }
 
