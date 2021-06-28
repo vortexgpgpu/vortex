@@ -56,7 +56,7 @@ module VX_decode  #(
 `endif
 
     wire [19:0] upper_imm = {func7, rs2, rs1, func3};
-    wire [11:0] alu_imm   = ((func3 == 3'h1) || (func3 == 3'h5)) ? {{7{1'b0}}, rs2} : u_12;
+    wire [11:0] alu_imm   = (func3[0] && ~func3[1]) ? {{7{1'b0}}, rs2} : u_12;
     wire [20:0] jal_imm   = {instr[31], instr[19:12], instr[20], instr[30:21], 1'b0};
     wire [11:0] jalr_imm  = {func7, rs2};
     
@@ -203,10 +203,22 @@ module VX_decode  #(
             end
             `INST_F: begin
                 ex_type = `EX_LSU;
-                op_mod  = `MOD_BITS'(0 == func3); // data fence
+                op_mod  = `MOD_BITS'(!func3[0]); // data fence
             end
             `INST_SYS : begin 
-                if (func3 == 0) begin                    
+                if (func3[1:0] != 0) begin                    
+                    ex_type = `EX_CSR;
+                    op_type = `OP_BITS'(func3[1:0]);
+                    use_rd  = 1;
+                    use_imm = func3[2]; 
+                    imm     = 32'(u_12); // addr
+                    `USED_REG (rd_r,  1'b0, rd);
+                    if (func3[2]) begin
+                        `SET_REG(rs1_r, 1'b0, rs1); // imm
+                    end else begin
+                        `USED_REG (rs1_r, 1'b0, rs1);
+                    end                    
+                end else begin
                     ex_type = `EX_ALU;
                     case (u_12)
                         12'h000: op_type = `OP_BITS'(`BR_ECALL);
@@ -222,23 +234,6 @@ module VX_decode  #(
                     use_PC  = 1;
                     imm     = 32'd4;
                     `USED_REG (rd_r, 1'b0, rd);
-                end else begin
-                    ex_type = `EX_CSR;
-                    case (func3[1:0])
-                        2'h1: op_type = `OP_BITS'(`CSR_RW);
-                        2'h2: op_type = `OP_BITS'(`CSR_RS);
-                        2'h3: op_type = `OP_BITS'(`CSR_RC);
-                        default:;
-                    endcase
-                    use_rd  = 1;
-                    use_imm = func3[2]; 
-                    imm     = 32'(u_12); // addr
-                    `USED_REG (rd_r,  1'b0, rd);
-                    if (func3[2]) begin
-                        `SET_REG(rs1_r, 1'b0, rs1); // imm
-                    end else begin
-                        `USED_REG (rs1_r, 1'b0, rs1);
-                    end
                 end
             end
         `ifdef EXT_F_ENABLE
@@ -250,7 +245,7 @@ module VX_decode  #(
                 op_mod  = 0;
                 use_rd  = 1;
                 imm     = {{20{u_12[11]}}, u_12};
-                `USED_REG (rd_r,  (opcode == `INST_FL), rd);
+                `USED_REG (rd_r, opcode[2], rd);
                 `USED_REG (rs1_r, 1'b0, rs1);
             end
         `ifdef EXT_F_ENABLE
@@ -262,7 +257,7 @@ module VX_decode  #(
                 op_mod  = 0;
                 imm     = {{20{func7[6]}}, func7, rd};
                 `USED_REG (rs1_r, 1'b0, rs1);
-                `USED_REG (rs2_r, (opcode == `INST_FS), rs2);
+                `USED_REG (rs2_r, opcode[2], rs2);
             end
         `ifdef EXT_F_ENABLE
             `INST_FMADD,

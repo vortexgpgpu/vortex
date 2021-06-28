@@ -154,10 +154,10 @@
 `define LSU_OP(x)       x[`LSU_BITS-1:0]
 `define LSU_IS_FENCE(x) x[0]
 
-`define CSR_RW          2'h0
-`define CSR_RS          2'h1
-`define CSR_RC          2'h2
-`define CSR_OTHER       2'h3
+`define CSR_RW          2'h1
+`define CSR_RS          2'h2
+`define CSR_RC          2'h3
+`define CSR_OTHER       2'h0
 `define CSR_BITS        2
 `define CSR_OP(x)       x[`CSR_BITS-1:0]
 
