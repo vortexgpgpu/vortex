@@ -41,6 +41,8 @@ module VX_lsu_unit #(
     wire [`NW_BITS-1:0]           req_wid;
     wire [31:0]                   req_pc;
     wire                          req_is_dup;
+    
+    wire mbuf_empty;
 
     wire [`NUM_THREADS-1:0][ADDR_TYPEW-1:0] lsu_addr_type, req_addr_type;
 
@@ -69,9 +71,14 @@ module VX_lsu_unit #(
             assign lsu_addr_type[i] = is_addr_nc;
         end
     end
+
+    // fence stalls the pipeline until all pending requests are sent
+    wire fence_wait = lsu_req_if.is_fence && (req_valid || !mbuf_empty);
     
     wire ready_in;
     wire stall_in = ~ready_in && req_valid; 
+    
+    wire lsu_valid = lsu_req_if.valid && ~fence_wait;
 
     VX_pipe_register #(
         .DATAW  (1 + 1 + `NW_BITS + `NUM_THREADS + 32 + (`NUM_THREADS * 32) + (`NUM_THREADS * ADDR_TYPEW) + `LSU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32)),
@@ -80,12 +87,12 @@ module VX_lsu_unit #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_in),
-        .data_in  ({lsu_req_if.valid, lsu_is_dup, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, full_addr, lsu_addr_type, lsu_req_if.op_type, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.store_data}),
-        .data_out ({req_valid,        req_is_dup, req_wid,        req_tmask,        req_pc,        req_addr,  req_addr_type, req_type,           req_rd,        req_wb,        req_data})
+        .data_in  ({lsu_valid, lsu_is_dup, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, full_addr, lsu_addr_type, lsu_req_if.op_type, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.store_data}),
+        .data_out ({req_valid, req_is_dup, req_wid,        req_tmask,        req_pc,        req_addr,  req_addr_type, req_type,           req_rd,        req_wb,        req_data})
     );
 
     // Can accept new request?
-    assign lsu_req_if.ready = ~stall_in;
+    assign lsu_req_if.ready = ~stall_in && ~fence_wait;
 
     wire [`NW_BITS-1:0] rsp_wid;
     wire [31:0] rsp_pc;
@@ -137,7 +144,7 @@ module VX_lsu_unit #(
         .release_addr (mbuf_raddr),
         .release_slot (mbuf_pop),     
         .full         (mbuf_full),
-        `UNUSED_PIN (empty)
+        .empty        (mbuf_empty)
     );
 
     wire [`NUM_THREADS-1:0] req_tmask_dup = req_tmask & {{(`NUM_THREADS-1){~req_is_dup}}, 1'b1};
@@ -309,7 +316,10 @@ module VX_lsu_unit #(
         end
     end
 
-   always @(posedge clk) begin        
+   always @(posedge clk) begin     
+        if (lsu_req_if.valid && fence_wait)  begin
+            $display("%t: *** D$%0d fence wait", $time, CORE_ID);
+        end
         if ((| dcache_req_fire)) begin
             if (dcache_req_if.rw[0]) begin
                 $write("%t: D$%0d Wr Req: wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, dcache_req_fire);

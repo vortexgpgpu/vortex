@@ -99,6 +99,8 @@
 `define ALU_OP(x)       x[`ALU_BITS-1:0]
 `define ALU_OP_CLASS(x) x[3:2]
 `define ALU_SIGNED(x)   x[0]
+`define ALU_IS_BR(x)    x[0]
+`define ALU_IS_MUL(x)   x[1]
 
 `define BR_EQ           4'b0000
 `define BR_NE           4'b0010
@@ -119,7 +121,6 @@
 `define BR_NEG(x)       x[1]
 `define BR_LESS(x)      x[2]
 `define BR_STATIC(x)    x[3]
-`define IS_BR_MOD(x)    x[0]
 
 `define MUL_MUL         3'h0
 `define MUL_MULH        3'h1
@@ -131,8 +132,7 @@
 `define MUL_REMU        3'h7
 `define MUL_BITS        3
 `define MUL_OP(x)       x[`MUL_BITS-1:0]
-`define IS_DIV_OP(x)    x[2]
-`define IS_MUL_MOD(x)   x[1]
+`define MUL_IS_DIV(x)   x[2]
 
 `define FMT_B           3'b000
 `define FMT_H           3'b001
@@ -152,6 +152,7 @@
 `define LSU_FMT(x)      x[2:0]
 `define LSU_WSIZE(x)    x[1:0]
 `define LSU_OP(x)       x[`LSU_BITS-1:0]
+`define LSU_IS_FENCE(x) x[0]
 
 `define CSR_RW          2'h0
 `define CSR_RS          2'h1

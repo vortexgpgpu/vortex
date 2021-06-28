@@ -49,8 +49,8 @@ module VX_csr_data #(
         end
 
         if (fpu_to_csr_if.write_enable) begin
-            fcsr[fpu_to_csr_if.write_wid][`FFG_BITS-1:0] <= fpu_to_csr_if.write_fflags 
-                                                          | fcsr[fpu_to_csr_if.write_wid][`FFG_BITS-1:0];
+            fcsr[fpu_to_csr_if.write_wid][`FFG_BITS-1:0] <= fcsr[fpu_to_csr_if.write_wid][`FFG_BITS-1:0] 
+                                                          | fpu_to_csr_if.write_fflags;
         end
 
         if (write_enable) begin
