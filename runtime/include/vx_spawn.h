@@ -26,11 +26,13 @@ typedef void (*pfn_workgroup_func) (
 	uint32_t /* group_z */
 );
 
-typedef void (*pfn_callback)(int task_id, const void *arg);
+typedef void (*pfn_callback)(int task_id, void *arg);
 
-void vx_spawn_kernel(struct context_t * ctx, pfn_workgroup_func wg_func, const void * args);
+void vx_spawn_kernel(struct context_t * ctx, pfn_workgroup_func wg_func, void * arg);
 
-void vx_spawn_tasks(int num_tasks, pfn_callback callback, const void * args);
+void vx_spawn_tasks(int num_tasks, pfn_callback callback, void * arg);
+
+void vx_serial(pfn_callback callback, void * arg);
 
 #ifdef __cplusplus
 }

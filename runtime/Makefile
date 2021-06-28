@@ -5,12 +5,12 @@ AR = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc-ar
 DP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
 CP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
-CFLAGS += -O3 -march=rv32imf -mabi=ilp32f -fno-exceptions -fdata-sections -ffunction-sections
+CFLAGS += -O3 -march=rv32imf -mabi=ilp32f -Wstack-usage=1024 -fno-exceptions -fdata-sections -ffunction-sections
 CFLAGS += -I./include -I../hw
 
 PROJECT = libvortexrt
 
-SRCS = ./src/vx_start.S ./src/vx_print.S ./src/vx_print.c ./src/vx_spawn.c ./src/vx_perf.c
+SRCS = ./src/vx_start.S ./src/vx_syscalls.c ./src/vx_print.S ./src/vx_print.c ./src/vx_spawn.c ./src/vx_spawn.S ./src/vx_perf.c
 
 OBJS := $(addsuffix .o, $(notdir $(SRCS)))
 
