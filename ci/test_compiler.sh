@@ -13,7 +13,7 @@ rm -rf ~/.cache/pocl
 # rebuild runtime test
 make -C tests/runtime/simple clean
 make -C tests/runtime/simple
-make -C tests/runtime/simple run
+make -C tests/runtime/simple run-rtlsim
 
 # rebuild native kernel
 make -C tests/regression/dogfood clean-all
