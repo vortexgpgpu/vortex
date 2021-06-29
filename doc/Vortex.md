@@ -1,26 +1,24 @@
 # Vortex Documentation
 
-### Table of Contents
+## Table of Contents
 
-- [Vortex Codebase Layout](https://github.com/vortexgpgpu/vortex-dev/blob/master/doc/Codebase.md)
-- [Vortex Microarchitecture and Extended RISC-V ISA](https://github.com/vortexgpgpu/vortex-dev/blob/master/doc/Microarchitecture.md)
-- [Vortex Cache Subsystem](https://github.com/vortexgpgpu/vortex-dev/blob/master/doc/Cache_Subsystem.md)
-- Vortex Software
-- [Vortex Simulation](https://github.com/vortexgpgpu/vortex-dev/blob/master/doc/Simulation.md)
-- [FPGA Configuration, Program and Test](https://github.com/vortexgpgpu/vortex-dev/blob/master/doc/FPGA_Startup_Guide.md)
-- Debugging
-- Useful Links
+- [Codebase Layout](codebase.md)
+- [Microarchitecture](microarchitecture.md)
+- [Cache Subsystem](cache_subsystem.md)
+- [Software](software.md)
+- [Simulation](simulation.md)
+- [FPGA Setup Guide](fpga_setup.md)
+- [Debugging](debugging.md)
+- [Useful Links](references.md)
 
-### Quick Start
 
-Setup Vortex environment:
-```
-$ export RISCV_TOOLCHAIN_PATH=/opt/riscv-gnu-toolchain
-$ export PATH=:/opt/verilator/bin:$PATH
-$ export VERILATOR_ROOT=/opt/verilator
-```
+## Installation
 
-Test Vortex with different drivers and configurations:
+- Refer to the install instructions in [README](../README.md). 
+
+## Quick Start Scenarios
+
+Running Vortex simulators with different configurations:
 - Run basic driver test with rtlsim driver and Vortex config of 2 clusters, 2 cores, 2 warps, 4 threads
 
     $ ./ci/blackbox.sh --clusters=2 --cores=2 --warps=2 --threads=4 --driver=rtlsim --app=basic

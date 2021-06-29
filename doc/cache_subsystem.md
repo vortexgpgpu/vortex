@@ -8,7 +8,7 @@ The Vortex Cache Sub-system has the following main properties:
 
 ### Cache Hierarchy 
 
-![Image of Cache Hierarchy](./Images/cache_hierarchy.png)
+![Image of Cache Hierarchy](./images/cache_hierarchy.png)
 
 - Cache can be configured to be any level in the hierarchy
 - Caches communicate via snooping
@@ -18,7 +18,7 @@ The Vortex Cache Sub-system has the following main properties:
 
 VX.cache.v is the top module of the cache verilog code located in the `/hw/rtl/cache` directory.
 
-![Image of Vortex Cache](./Images/vortex_cache_top_module.png)
+![Image of Vortex Cache](./images/vortex_cache_top_module.png)
 
 - Configurable (Cache size, number of banks, bank line size, etc.)
 - I/O signals
@@ -44,7 +44,7 @@ VX.cache.v is the top module of the cache verilog code located in the `/hw/rtl/c
 
 VX_bank.v is the verilog code that handles cache bank functionality and is located in the `/hw/rtl/cache` directory.
 
-![Image of Vortex Cache Bank](./Images/vortex_bank.png)
+![Image of Vortex Cache Bank](./images/vortex_bank.png)
 
 - Allows for high throughput​
 - Each bank contains queues to hold requests to the cache​

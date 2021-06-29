@@ -5,40 +5,41 @@
 
 Vortex is a full-system RISCV-based GPGPU processor.
 
-Specifications
---------------
+## Specifications
 
-- Support RISC-V RV32I ISA
-- Fully scalable: 1 to 16 cores with optional L2 and L3 caches
-- OpenCL 1.2 Support 
-- FPGA target: Intel Arria 10 @ 200 MHz peak Freq
+- Support RISC-V RV32IMF ISA
+- Scalability: 1 to 32 cores with optional L2 and L3 caches
+- Software: OpenCL 1.2 Support 
+- Supported FPGAs: 
+    - Intel Arria 10
+    - Intel Stratix 10
 
-Directory structure
--------------------
+## Directory structure
 
-- benchmarks: OpenCL and RISC-V benchmarks
- 
-- docs: [documentation](https://github.com/vortexgpgpu/vortex-dev/blob/master/doc/Vortex.md).
+- `doc`: [Documentation](doc/Vortex.md).
 
-- hw: hardware sources.
+- `hw`: Hardware sources.
 
-- driver: driver software.
+- `driver`: Host driver software.
 
-- runtime: runtime software for kernels.
+- `runtime`: Kernel Runtime software.
 
-- simX: Vortex cycle-approximate simulator.
+- `simX`: Cycle-approximate simulator.
 
-- evaluation: synthesis and performance data.
+- `tests`: Tests repository.
 
-Basic Installation
-------------------
+- `ci`: Continuous integration scripts.
 
-Install development tools 
+- `miscs`: Miscellaneous resources.
+
+## Basic Installation
+
+### Install development tools 
 
     $ sudo apt-get install build-essential
     $ sudo apt-get install git
 
-Install gnu-riscv-tools
+### Install gnu-riscv-tools
 
     $ export RISCV_TOOLCHAIN_PATH=/opt/riscv-gnu-toolchain
 
@@ -58,19 +59,17 @@ Install gnu-riscv-tools
     $ make -j`nproc`  
     $ make -j`nproc` build-qemu
 
-Install Verilator
+### Install Verilator
 
     You need into build the latest version using the instructions on their website
     $ https://www.veripool.org/projects/verilator/wiki/Installing 
 
-Install Vortex 
+### Install Vortex 
 
     $ git clone --recursive https://github.com/vortexgpgpu/vortex.git
     $ cd Vortex
     $ make
 
-Quick Test running OpenCL vecadd program
+### Quick Test running OpenCL vecadd sample on 2 cores
 
-    $ cd /Vortex/benchmarks/opencl/vecadd
-    $ make
-    $ make run-rtlsim
+    $ ./ci/blackbox.sh --cores=2 --app=vecadd
