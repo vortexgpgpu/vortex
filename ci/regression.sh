@@ -3,31 +3,30 @@
 # exit when any command fails
 set -e
 
+# build sources
 make -s
 
 # coverage tests
-make -C tests/runtime run
-make -C tests/riscv/isa run
-make -C tests/opencl run
-make -C simX run-tests
-
-# basic pipeline stress
-./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm --args="-n128"
+make -C tests/runtime run-rtlsim
+make -C tests/riscv/isa run-rtlsim
+make -C tests/regression run-vlsim
+make -C tests/opencl run-vlsim
+make -C tests/runtime run-simx
+make -C tests/riscv/isa run-simx
+make -C tests/regression run-simx
+make -C tests/opencl run-simx
 
 # warp/threads configurations
-./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=2 --threads=2 --app=demo
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=2 --threads=8 --app=demo
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=8 --threads=2 --app=demo
 
 # cores clustering
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=1 --clusters=1 --app=demo --args="-n1"
-./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=1 --app=demo --args="-n1"
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --app=demo --args="-n1"
 
 # L2/L3
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=demo --args="-n1"
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l3cache --app=demo --args="-n1"
-./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l2cache --l3cache --app=demo --args="-n1"
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr --args="-n1"
 
 # build flags
@@ -68,3 +67,6 @@ CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=vlsim --cores=4 --
 
 # test vlsim memory stress
 CONFIGS="-DMEM_LATENCY=100 -DMEM_RQ_SIZE=4 -DMEM_STALLS_MODULO=4" ./ci/blackbox.sh --driver=vlsim --cores=4 --app=sgemm
+
+# basic pipeline stress
+./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm --args="-n128"

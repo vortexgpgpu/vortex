@@ -26,11 +26,11 @@ $(PROJECT).hex: $(PROJECT).elf
 $(PROJECT).elf: $(SRCS)
 	$(CC) $(CFLAGS) $(SRCS) $(LDFLAGS) -o $(PROJECT).elf
 
-run: $(PROJECT).hex
+run-rtlsim: $(PROJECT).hex
 	../../../hw/simulate/obj_dir/VVortex $(PROJECT).hex
 
 run-simx: $(PROJECT).hex
-	../../../simX/simX -a rv32i -i $(PROJECT).hex
+	../../../simX/simX -a rv32i -c 1 -i $(PROJECT).hex
 
 .depend: $(SRCS)
 	$(CC) $(CFLAGS) -MM $^ > .depend;

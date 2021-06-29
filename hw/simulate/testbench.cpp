@@ -178,7 +178,7 @@ int main(int argc, char **argv) {
 		parse_args(argc, argv);
 
 		for (auto program : programs) {
-			std::cout << "Running " << program << " ..." << std::endl;
+			std::cout << "Running " << program << "..." << std::endl;
 
 			RAM ram;
 			Simulator simulator;
