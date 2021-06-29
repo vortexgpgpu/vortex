@@ -65,8 +65,8 @@ CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH=128 -DPLATFORM_PARAM_LOCAL_MEM
 CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=vlsim --cores=4 --app=sgemm
 CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=vlsim --cores=4 --app=sgemm
 
-# test vlsim memory stress
-CONFIGS="-DMEM_LATENCY=100 -DMEM_RQ_SIZE=4 -DMEM_STALLS_MODULO=4" ./ci/blackbox.sh --driver=vlsim --cores=4 --app=sgemm
+# test long memory latency
+CONFIGS="-DMEM_LATENCY=100 -DMEM_RQ_SIZE=4 -DMEM_STALLS_MODULO=4" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=sgemm
 
-# basic pipeline stress
+# test pipeline stress
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm --args="-n128"
