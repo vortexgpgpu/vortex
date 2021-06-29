@@ -25,11 +25,6 @@ all: $(PROJECT)
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
-run-tests:
-	./test_rv32i.sh
-	./test_rv32f.sh
-	./test_runtime.sh
-
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
 

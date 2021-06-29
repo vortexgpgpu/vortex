@@ -8,7 +8,17 @@ all:
 	$(MAKE) -C diverge
 	$(MAKE) -C fence
 
-run:
+run-simx:
+	$(MAKE) -C basic run-simx
+	$(MAKE) -C demo run-simx
+	$(MAKE) -C dogfood run-simx
+	$(MAKE) -C mstress run-simx
+	$(MAKE) -C io_addr run-simx
+	$(MAKE) -C printf run-simx
+	$(MAKE) -C diverge run-simx
+	$(MAKE) -C fence run-simx
+
+run-vlsim:
 	$(MAKE) -C basic run-vlsim
 	$(MAKE) -C demo run-vlsim
 	$(MAKE) -C dogfood run-vlsim

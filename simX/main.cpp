@@ -77,6 +77,7 @@ int main(int argc, char **argv) {
       }
       if (core->check_ebreak()) {
         exitcode = core->getIRegValue(3);
+        running = false;
         break;
       }
     }

@@ -8,7 +8,17 @@ all:
 	$(MAKE) -C printf
 	$(MAKE) -C psort
 	
-run:
+run-simx:
+	$(MAKE) -C vecadd run-simx 
+	$(MAKE) -C sgemm run-simx
+	$(MAKE) -C saxpy run-simx
+	$(MAKE) -C sfilter run-simx
+	$(MAKE) -C nearn run-simx
+	$(MAKE) -C guassian run-simx
+	$(MAKE) -C printf run-simx
+    #$(MAKE) -C psort run-simx
+
+run-vlsim:
 	$(MAKE) -C vecadd run-vlsim 
 	$(MAKE) -C sgemm run-vlsim
 	$(MAKE) -C saxpy run-vlsim
@@ -16,7 +26,7 @@ run:
 	$(MAKE) -C nearn run-vlsim
 	$(MAKE) -C guassian run-vlsim
 	$(MAKE) -C printf run-vlsim
-#$(MAKE) -C psort run-vlsim
+    #$(MAKE) -C psort run-vlsim
 
 clean:
 	$(MAKE) -C vecadd clean
