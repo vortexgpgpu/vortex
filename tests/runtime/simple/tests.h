@@ -1,10 +1,18 @@
 #ifndef TESTS
 #define TESTS
 
-void test_tmc();
+int test_global_memory();
 
-void test_divergence();
+int test_stack_memory();
 
-void test_wsapwn();
+int test_shared_memory();
+
+int test_tmc();
+
+int test_divergence();
+
+int test_wsapwn();
+
+int test_spawn_tasks();
 
 #endif

@@ -42,6 +42,11 @@ _start:
 .type _exit, @function
 .global _exit
 _exit:
+  beqz a0, label_exit_next 
+  mv gp, a0
+  ecall;
+
+label_exit_next:
   # dump performance CSRs
   call  vx_perf_dump
 
