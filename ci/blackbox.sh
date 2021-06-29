@@ -151,6 +151,10 @@ then
         OPTS=$ARGS make -C $APP_PATH run-$DRIVER > run.log 2>&1
     else
         make -C $APP_PATH run-$DRIVER > run.log 2>&1
+    
+    if [ -f "$APP_PATH/trace.vcd" ]
+    then 
+        mv $APP_PATH/trace.vcd .
     fi
 else
     if [ $SCOPE -eq 1 ]
