@@ -402,9 +402,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       case 0:
         if (csr_addr < 2) {
           // ECALL/EBREAK
-          tmask_.reset();
-          active_ = tmask_.any();
-          pipeline->stall_warp = true; 
+          core_->trigger_ebreak();
         }
         break;
       case 1:

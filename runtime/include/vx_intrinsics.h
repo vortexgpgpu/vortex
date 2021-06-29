@@ -57,8 +57,10 @@ inline void vx_tmc(unsigned num_threads) {
     asm volatile (".insn s 0x6b, 0, x0, 0(%0)" :: "r"(num_threads));
 }
 
+typedef void (*vx_wspawn_pfn)();
+
 // Spawn warps
-inline void vx_wspawn(unsigned num_warps, void* func_ptr) {
+inline void vx_wspawn(unsigned num_warps, vx_wspawn_pfn func_ptr) {
     asm volatile (".insn s 0x6b, 1, %1, 0(%0)" :: "r"(num_warps), "r"(func_ptr));
 }
 

@@ -42,11 +42,7 @@ public:
   void step();
   void wait(uint32_t cycles);
 
-  void run();  
-
-  int get_last_wb_value(int reg) const;  
-  
-  bool get_ebreak() const;
+  int run();
 
   void print_stats(std::ostream& out);
 
@@ -63,7 +59,11 @@ private:
 
   void eval();  
 
-  void eval_mem_bus();
+  void eval_mem_bus();  
+
+  int get_last_wb_value(int reg) const;  
+  
+  bool get_ebreak() const;
 
   std::list<mem_req_t> mem_rsp_vec_ [MEMORY_BANKS];
   uint32_t last_mem_rsp_bank_;

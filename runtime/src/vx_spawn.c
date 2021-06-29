@@ -11,7 +11,7 @@ extern "C" {
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 typedef struct {
-	pfn_callback callback;
+	vx_spawn_tasks_cb callback;
 	void * arg;
 	int offset;
 	int N;
@@ -20,7 +20,7 @@ typedef struct {
 
 typedef struct {
   struct context_t * ctx;
-  pfn_workgroup_func wg_func;
+  vx_spawn_kernel_cb callback;
   void * arg;
   int  offset; 
   int  N;
@@ -77,7 +77,7 @@ void spawn_remaining_tasks_callback(int nthreads) {
   vx_tmc(1);
 }
 
-void vx_spawn_tasks(int num_tasks, pfn_callback callback , void * arg) {
+void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback , void * arg) {
 	// device specs
   int NC = vx_num_cores();
   int NW = vx_num_warps();
@@ -159,7 +159,7 @@ static void spawn_kernel_callback() {
     int gid1 = p_wspawn_args->ctx->global_offset[1] + j;
     int gid2 = p_wspawn_args->ctx->global_offset[2] + k;
 
-    (p_wspawn_args->wg_func)(p_wspawn_args->arg, p_wspawn_args->ctx, gid0, gid1, gid2);
+    (p_wspawn_args->callback)(p_wspawn_args->arg, p_wspawn_args->ctx, gid0, gid1, gid2);
   }
 
   vx_tmc(0 == wid);
@@ -188,12 +188,12 @@ static void spawn_kernel_remaining_callback(int nthreads) {
   int gid1 = p_wspawn_args->ctx->global_offset[1] + j;
   int gid2 = p_wspawn_args->ctx->global_offset[2] + k;
 
-  (p_wspawn_args->wg_func)(p_wspawn_args->arg, p_wspawn_args->ctx, gid0, gid1, gid2);
+  (p_wspawn_args->callback)(p_wspawn_args->arg, p_wspawn_args->ctx, gid0, gid1, gid2);
 
   vx_tmc(1);
 }
 
-void vx_spawn_kernel(struct context_t * ctx, pfn_workgroup_func wg_func, void * arg) {  
+void vx_spawn_kernel(struct context_t * ctx, vx_spawn_kernel_cb callback, void * arg) {  
   // total number of WGs
   int X  = ctx->num_groups[0];
   int Y  = ctx->num_groups[1];
@@ -241,7 +241,9 @@ void vx_spawn_kernel(struct context_t * ctx, pfn_workgroup_func wg_func, void * 
   char log2X    = fast_log2(X);
 
   //--
-  wspawn_kernel_args_t wspawn_args = { ctx, wg_func, arg, core_id * wgs_per_core, fW, rW, isXYpow2, isXpow2, log2XY, log2X };
+  wspawn_kernel_args_t wspawn_args = { 
+    ctx, callback, arg, core_id * wgs_per_core, fW, rW, isXYpow2, isXpow2, log2XY, log2X 
+  };
   g_wspawn_args[core_id] = &wspawn_args;
 
   //--

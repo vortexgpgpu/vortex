@@ -106,49 +106,54 @@ int main(int argc, char **argv) {
 		};
 
 		for (std::string test : tests) {
-			std::cout << "\n---------------------------------------\n";
-
+			std::cout << "\n***************************************\n";
 			std::cout << test << std::endl;
 
 			RAM ram;
 			Simulator simulator;
 			simulator.attach_ram(&ram);
 			simulator.load_ihex(test.c_str());
-			simulator.run();
+			int exitcode = simulator.run();
 
-			bool status = (1 == simulator.get_last_wb_value(3));
+			if (1 == exitcode) {
+				std::cout << "Passed" << std::endl;
+			} else {
+				std::cout << "Failed: exitcode=" << exitcode << std::endl;
+				passed = false;
+			}
 
-			if (status) std::cout << "Passed: " << test << std::endl;
-			if (!status) std::cout << "Failed: " << test << std::endl;
-			passed = passed && status;
 			if (!passed)
 				break;
 		}
 
 		for (std::string test : tests_fp) {
-			std::cout << "\n---------------------------------------\n";
-
+			std::cout << "\n***************************************\n";
 			std::cout << test << std::endl;
 
 			RAM ram;
 			Simulator simulator;
 			simulator.attach_ram(&ram);
 			simulator.load_ihex(test.c_str());
-			simulator.run();
+			int exitcode = simulator.run();
 
-			bool status = (1 == simulator.get_last_wb_value(3));
+			if (1 == exitcode) {
+				std::cout << "Passed" << std::endl;
+			} else {
+				std::cout << "Failed: exitcode=" << exitcode << std::endl;
+				passed = false;
+			}
 
-			if (status) std::cout << "Passed: " << test << std::endl;
-			if (!status) std::cout << "Failed: " << test << std::endl;
-			passed = passed && status;
 			if (!passed)
 				break;
 		}
 
 		std::cout << "\n***************************************\n";
 
-		if (passed) std::cout << "PASSED ALL TESTS\n";
-		if (!passed) std::cout << "Failed one or more tests\n";
+		if (passed) {
+			std::cout << "PASSED ALL TESTS\n";
+		} else {
+			std::cout << "Failed one or more tests\n";
+		}
 
 	#else
 
@@ -160,30 +165,43 @@ int main(int argc, char **argv) {
 		Simulator simulator;
 		simulator.attach_ram(&ram);
 		simulator.load_ihex(test);
-		simulator.run();
+		int exitcode = simulator.run();
+
+		if (exitcode != 0) {
+			std::cout << "*** error: exitcode=" << exitcode << std::endl;
+			passed = false;
+		}
 
 	#endif
 
-	}	else {
+	} else {
 		parse_args(argc, argv);
 
 		for (auto program : programs) {
-			std::cout << "Running " << program << " .." << std::endl;
+			std::cout << "Running " << program << " ..." << std::endl;
 
 			RAM ram;
 			Simulator simulator;
 			simulator.attach_ram(&ram);
 			simulator.load_ihex(program);
-			simulator.run();
+			int exitcode = simulator.run();
 			
 			if (riscv_test) {
-				bool status = (1 == simulator.get_last_wb_value(3));
-				if (status) std::cout << "Passed." << std::endl;
-				if (!status) std::cout << "Failed." << std::endl;		
-				passed = passed && status;
-				if (!passed)
-					break;
+				if (1 == exitcode) {
+					std::cout << "Passed" << std::endl;
+				} else {
+					std::cout << "Failed: exitcode=" << exitcode << std::endl;
+					passed = false;
+				}
+			} else {
+				if (exitcode != 0) {
+					std::cout << "*** error: exitcode=" << exitcode << std::endl;
+					passed = false;
+				}
 			}	
+			
+			if (!passed)
+				break;
 		}
 	}
 	
