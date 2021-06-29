@@ -70,7 +70,10 @@ public:
 
   Word dcache_read(Addr, Size);
 
-  void dcache_write(Addr, Word, Size);  
+  void dcache_write(Addr, Word, Size);
+
+  void trigger_ebreak();
+  bool check_ebreak() const;
 
 private: 
 
@@ -100,6 +103,8 @@ private:
 #ifdef SM_ENABLE
   RAM shared_mem_;
 #endif 
+
+  bool ebreak_;
 
   Pipeline inst_in_schedule_;
   Pipeline inst_in_fetch_;

@@ -1,11 +1,13 @@
 #pragma once
 
-//#define USE_DEBUG 3
+#ifndef DEBUG_LEVEL
+#define DEBUG_LEVEL 3
+#endif
 
 #define DEBUG_HEADER << "DEBUG "
 //#define DEBUG_HEADER << "DEBUG " << __FILE__ << ':' << std::dec << __LINE__ << ": "
 
-#ifdef USE_DEBUG
+#ifndef NDEBUG
 
 #include <iostream>
 #include <iomanip>
@@ -13,19 +15,19 @@
 #define DX(x) x
 
 #define D(lvl, x) do { \
-  if ((lvl) <= USE_DEBUG) { \
+  if ((lvl) <= DEBUG_LEVEL) { \
     std::cout DEBUG_HEADER << x << std::endl; \
   } \
 } while(0)
 
 #define DPH(lvl, x) do { \
-  if ((lvl) <= USE_DEBUG) { \
+  if ((lvl) <= DEBUG_LEVEL) { \
     std::cout DEBUG_HEADER << x; \
   } \
 } while(0)
 
 #define DPN(lvl, x) do { \
-  if ((lvl) <= USE_DEBUG) { \
+  if ((lvl) <= DEBUG_LEVEL) { \
     std::cout << x; \
   } \
 } while(0)

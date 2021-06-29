@@ -11,9 +11,9 @@ CFLAGS += -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw
 
 LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link.ld -Wl,--gc-sections $(VORTEX_RT_PATH)/libvortexrt.a
 
-PROJECT = vx_simple
+PROJECT = simple
 
-SRCS = main.c tests.c
+SRCS = main.cpp tests.cpp
 
 all: $(PROJECT).elf $(PROJECT).hex $(PROJECT).dump
 
@@ -27,7 +27,10 @@ $(PROJECT).elf: $(SRCS)
 	$(CC) $(CFLAGS) $(SRCS) $(LDFLAGS) -o $(PROJECT).elf
 
 run: $(PROJECT).hex
-	(cd ../../../hw/simulate/obj_dir && ./VVortex ../../../tests/runtime/simple/$(PROJECT).hex)
+	../../../hw/simulate/obj_dir/VVortex $(PROJECT).hex
+
+run-simx: $(PROJECT).hex
+	../../../simX/simX -a rv32i -i $(PROJECT).hex
 
 .depend: $(SRCS)
 	$(CC) $(CFLAGS) -MM $^ > .depend;
