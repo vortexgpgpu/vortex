@@ -91,6 +91,8 @@ void Core::clear() {
 
   inst_in_schedule_.valid = true;
   warps_[0]->setTmask(0, true);
+
+  ebreak_ = false;
 }
 
 void Core::step() {
@@ -377,4 +379,12 @@ void Core::writeToStdOut(Addr addr, Word data) {
     std::cout << std::dec << "#" << tid << ": " << ss_buf.str() << std::flush;
     ss_buf.str("");
   }
+}
+
+void Core::trigger_ebreak() {
+  ebreak_ = true;
+}
+
+bool Core::check_ebreak() const {
+  return ebreak_;
 }

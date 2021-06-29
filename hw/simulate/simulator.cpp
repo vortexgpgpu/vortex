@@ -243,19 +243,26 @@ bool Simulator::is_busy() const {
   return vortex_->busy;
 }
 
-void Simulator::run() {
+int Simulator::run() {
+  int exitcode = 0;
+
 #ifndef NDEBUG
   std::cout << std::dec << timestamp << ": [sim] run()" << std::endl;
 #endif
 
   // execute program
-  while (vortex_->busy 
-      && !get_ebreak()) {
+  while (vortex_->busy) {
+    if (get_ebreak()) {
+      exitcode = get_last_wb_value(3);
+      break;  
+    }
     this->step();
   }
 
   // wait 5 cycles to flush the pipeline
   this->wait(5);  
+
+  return exitcode;
 }
 
 bool Simulator::get_ebreak() const {

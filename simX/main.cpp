@@ -67,24 +67,33 @@ int main(int argc, char **argv) {
   }
 
   bool running;
+  int exitcode = 0;
   do {
     running = false;
     for (auto& core : cores) {            
       core->step();
-      if (core->running())
+      if (core->running()) {
           running = true;
+      }
+      if (core->check_ebreak()) {
+        exitcode = core->getIRegValue(3);
+        break;
+      }
     }
   } while (running);
 
   if (riscv_test) {
-    bool status = (1 == cores[0]->getIRegValue(3));
-    if (status) {
+    if (1 == exitcode) {
       std::cout << "Passed." << std::endl;
+      exitcode = 0;
     } else {
-      std::cout << "Failed." << std::endl;		
-      return -1;
+      std::cout << "Failed." << std::endl;
+    }
+  } else {
+    if (exitcode != 0) {
+      std::cout << "*** error: exitcode=" << exitcode << std::endl;
     }
   }
 
-  return 0;
+  return exitcode;
 }
