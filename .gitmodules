@@ -1,6 +1,3 @@
 [submodule "hw/rtl/fp_cores/fpnew"]
 	path = hw/rtl/fp_cores/fpnew
 	url = https://github.com/pulp-platform/fpnew.git
-[submodule "internal"]
-	path = internal
-	url = https://github.com/vortexgpgpu/vortex-internal.git
