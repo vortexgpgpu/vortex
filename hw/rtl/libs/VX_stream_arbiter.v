@@ -1,10 +1,11 @@
 `include "VX_platform.vh"
 
 module VX_stream_arbiter #(
-    parameter NUM_REQS = 1,
-    parameter DATAW    = 1,
-    parameter TYPE     = "R",
-    parameter BUFFERED = 0
+    parameter NUM_REQS    = 1,
+    parameter DATAW       = 1,
+    parameter TYPE        = "R",
+    parameter LOCK_ENABLE = 1,
+    parameter BUFFERED    = 0
 ) (
     input  wire clk,
     input  wire reset,
@@ -29,12 +30,12 @@ module VX_stream_arbiter #(
         if (TYPE == "X") begin
             VX_fixed_arbiter #(
                 .NUM_REQS(NUM_REQS),
-                .LOCK_ENABLE(1)
+                .LOCK_ENABLE(LOCK_ENABLE)
             ) sel_arb (
                 .clk          (clk),
                 .reset        (reset),
                 .requests     (valid_in),  
-                .enable       (sel_enable),      
+                .enable       (sel_enable),     
                 .grant_valid  (sel_valid),
                 .grant_index  (sel_idx),
                 .grant_onehot (sel_1hot)
@@ -42,12 +43,12 @@ module VX_stream_arbiter #(
         end else if (TYPE == "R") begin
             VX_rr_arbiter #(
                 .NUM_REQS(NUM_REQS),
-                .LOCK_ENABLE(1)
+                .LOCK_ENABLE(LOCK_ENABLE)
             ) sel_arb (
                 .clk          (clk),
                 .reset        (reset),
                 .requests     (valid_in),  
-                .enable       (sel_enable),      
+                .enable       (sel_enable),
                 .grant_valid  (sel_valid),
                 .grant_index  (sel_idx),
                 .grant_onehot (sel_1hot)
@@ -55,12 +56,12 @@ module VX_stream_arbiter #(
         end else if (TYPE == "F") begin
             VX_fair_arbiter #(
                 .NUM_REQS(NUM_REQS),
-                .LOCK_ENABLE(1)
+                .LOCK_ENABLE(LOCK_ENABLE)
             ) sel_arb (
                 .clk          (clk),
                 .reset        (reset),
                 .requests     (valid_in),  
-                .enable       (sel_enable),      
+                .enable       (sel_enable),     
                 .grant_valid  (sel_valid),
                 .grant_index  (sel_idx),
                 .grant_onehot (sel_1hot)
@@ -68,12 +69,12 @@ module VX_stream_arbiter #(
         end else if (TYPE == "M") begin
             VX_matrix_arbiter #(
                 .NUM_REQS(NUM_REQS),
-                .LOCK_ENABLE(1)
+                .LOCK_ENABLE(LOCK_ENABLE)
             ) sel_arb (
                 .clk          (clk),
                 .reset        (reset),
                 .requests     (valid_in),  
-                .enable       (sel_enable),      
+                .enable       (sel_enable),     
                 .grant_valid  (sel_valid),
                 .grant_index  (sel_idx),
                 .grant_onehot (sel_1hot)
@@ -82,7 +83,7 @@ module VX_stream_arbiter #(
             $error ("invalid parameter");
         end
 
-        wire ready_out_unqual;           
+        wire ready_in_sel;           
 
         VX_skid_buffer #(
             .DATAW    (DATAW),
@@ -92,16 +93,16 @@ module VX_stream_arbiter #(
             .reset     (reset),
             .valid_in  (sel_valid),        
             .data_in   (data_in[sel_idx]),
-            .ready_in  (ready_out_unqual),      
+            .ready_in  (ready_in_sel),      
             .valid_out (valid_out),
             .data_out  (data_out),
             .ready_out (ready_out)
         );
 
-        assign sel_enable = ready_out_unqual;
+        assign sel_enable = ready_in_sel;
 
         for (genvar i = 0; i < NUM_REQS; i++) begin
-            assign ready_in[i] = sel_1hot[i] && ready_out_unqual;
+            assign ready_in[i] = sel_1hot[i] && ready_in_sel;
         end      
 
     end else begin

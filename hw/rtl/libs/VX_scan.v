@@ -1,7 +1,7 @@
 `include "VX_platform.vh"
 
 // Fast Paralllel scan using Kogge-Stone style prefix tree with configurable operator
-// Adapter from BaseJump STL: http://bjump.org/index.html
+// Adapted from BaseJump STL: http://bjump.org/index.html
 
 module VX_scan #(
     parameter N       = 1,
