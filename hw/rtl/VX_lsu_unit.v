@@ -209,8 +209,9 @@ module VX_lsu_unit #(
                 end
                 default : mem_req_byteen = {4{1'b1}};
             endcase
+        end
 
-            mem_req_data = 'x;
+        always @(*) begin
             case (req_offset[i])
                 1:       mem_req_data[31:8]  = req_data[i][23:0];
                 2:       mem_req_data[31:16] = req_data[i][15:0];
