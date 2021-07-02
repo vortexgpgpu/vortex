@@ -63,14 +63,13 @@ module VX_mem_unit # (
         .CORE_TAG_WIDTH (`DCORE_TAG_WIDTH-`SM_ENABLE)
     ) dcache_rsp_if(); 
 
-    wire icache_reset, dcache_reset;   
-
+    wire icache_reset, dcache_reset, smem_reset;
     VX_reset_relay #(
-        .NUM_NODES (2)
+        .NUM_NODES (3)
     ) reset_relay (
         .clk     (clk),
         .reset   (reset),
-        .reset_o ({dcache_reset, icache_reset})
+        .reset_o ({icache_reset, dcache_reset, smem_reset})
     );
 
     VX_cache #(
@@ -213,14 +212,6 @@ module VX_mem_unit # (
             .core_rsp_if  (dcache_core_rsp_if)
         );
 
-        wire scache_reset;   
-
-        VX_reset_relay reset_relay (
-            .clk     (clk),
-            .reset   (reset),
-            .reset_o (scache_reset)
-        );        
-
         VX_shared_mem #(
             .CACHE_ID           (`SCACHE_ID),
             .CACHE_SIZE         (`SMEM_SIZE),
@@ -233,7 +224,7 @@ module VX_mem_unit # (
             .BANK_ADDR_OFFSET   (`SBANK_ADDR_OFFSET)
         ) smem (            
             .clk                (clk),
-            .reset              (scache_reset),
+            .reset              (smem_reset),
 
         `ifdef PERF_ENABLE
             .perf_cache_if      (perf_smem_if),
@@ -255,6 +246,8 @@ module VX_mem_unit # (
             .core_rsp_ready     (smem_rsp_if.ready)
         );    
     end else begin
+        `UNUSED_VAR (smem_reset)
+                
         // core to D-cache request
         assign dcache_req_if.valid  = dcache_core_req_if.valid;
         assign dcache_req_if.addr   = dcache_core_req_if.addr;

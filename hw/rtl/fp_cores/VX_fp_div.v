@@ -33,17 +33,17 @@ module VX_fp_div #(
     wire stall = ~ready_out && valid_out;
     wire enable = ~stall;
 
-    for (genvar i = 0; i < LANES; i++) begin        
+    wire [LANES-1:0] fdiv_reset;
+    VX_reset_relay #(
+        .DEPTH (LANES > 1),
+        .NUM_NODES (LANES)
+    ) reset_relay (
+        .clk     (clk),
+        .reset   (reset),
+        .reset_o (fdiv_reset)
+    );
 
-        wire fdiv_reset;
-        VX_reset_relay #(
-            .NUM_NODES(1)
-        ) reset_relay (
-            .clk     (clk),
-            .reset   (reset),
-            .reset_o (fdiv_reset)
-        );
-        
+    for (genvar i = 0; i < LANES; i++) begin        
     `ifdef VERILATOR
         reg [31:0] r;
         fflags_t f;
@@ -59,7 +59,7 @@ module VX_fp_div #(
             .RESETW (1)
         ) shift_req_dpi (
             .clk      (clk),
-            .reset    (fdiv_reset),
+            .reset    (fdiv_reset[i]),
             .enable   (enable),
             .data_in  (r),
             .data_out (result[i])
@@ -67,7 +67,7 @@ module VX_fp_div #(
     `else
         acl_fdiv fdiv (
             .clk    (clk),
-            .areset (fdiv_reset),
+            .areset (fdiv_reset[i]),
             .en     (enable),
             .a      (dataa[i]),
             .b      (datab[i]),

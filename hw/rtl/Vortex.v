@@ -42,24 +42,24 @@ module Vortex (
 
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_busy;
 
+    wire [`NUM_CLUSTERS-1:0] cluster_reset;
+    VX_reset_relay #(
+        .DEPTH (`NUM_CLUSTERS > 1),
+        .NUM_NODES (`NUM_CLUSTERS)
+    ) reset_relay (
+        .clk     (clk),
+        .reset   (reset),
+        .reset_o (cluster_reset)
+    );
+
     for (genvar i = 0; i < `NUM_CLUSTERS; i++) begin
-
-        wire cluster_reset;
-        VX_reset_relay #(
-            .DEPTH (`NUM_CLUSTERS > 1)
-        ) reset_relay (
-            .clk     (clk),
-            .reset   (reset),
-            .reset_o (cluster_reset)
-        );
-
         VX_cluster #(
             .CLUSTER_ID(i)
         ) cluster (
             `SCOPE_BIND_Vortex_cluster(i)
 
             .clk            (clk),
-            .reset          (cluster_reset),
+            .reset          (cluster_reset[i]),
 
             .mem_req_valid  (per_cluster_mem_req_valid [i]),
             .mem_req_rw     (per_cluster_mem_req_rw    [i]),
