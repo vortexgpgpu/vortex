@@ -40,25 +40,14 @@ module VX_lsu_unit #(
     end
 
     // we only prefetch when have a load instruction
-    wire need_prefetch = lsu_req_if.wb;
+    //  = lsu_req_if.wb;
 
     // is the current load inst we want to push to pipe register a prefetch?
     reg is_prefetch = 0;
     // if we need prefetch, the lsu will only be ready after prefetch
     // has returned 
     reg [`NUM_THREADS-1:0][31:0] load_address = full_address; 
-    always @(*) begin
-        if(stall_in && !req_is_prefetch && need_prefetch) begin
-            // calculate prefetch addr
-            for (int i = 0; i < `NUM_THREADS; i++) begin
-                load_address[i] = full_address[i] + 4;
-            end
-            assign is_prefetch = 1;
-        end else begin
-            assign is_prefetch = 0;
-            load_address = full_address; 
-        end
-    end
+
 
     wire [`NUM_THREADS-1:0] addr_matches;
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
@@ -69,7 +58,26 @@ module VX_lsu_unit #(
     wire ready_in;
     wire stall_in = ~ready_in && req_valid; 
 
-    wire _req_valid = (is_prefetch)?1:lsu_req_if.valid;
+    // lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, load_address, lsu_req_if.op_type, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.store_data
+    always @(*) begin
+        // ready_in means the original load have been fired
+        // req_valid means this is an valid load request
+        if(ready_in && req_valid && !req_is_prefetch && req_wb) begin
+            // calculate prefetch addr
+            for (int i = 0; i < `NUM_THREADS; i++) begin
+                load_address[i] = load_address[i] + 4;
+            end
+            assign is_prefetch = 1;
+        end else begin
+            assign is_prefetch = 0;
+            load_address = full_address; 
+        end
+    end
+
+    always @(posedge clk) begin
+        $display("%t: D$%0d stall_in=%b, is_prefetch=%b, req_is_prefetch=%b", 
+                $time, CORE_ID, stall_in, is_prefetch, req_is_prefetch);
+    end
 
     VX_pipe_register #(
         .DATAW  (1 + 1 + 1+ `NW_BITS + `NUM_THREADS + 32 + (`NUM_THREADS * 32) + `LSU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32)),
@@ -78,8 +86,8 @@ module VX_lsu_unit #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_in),
-        .data_in  ({_req_valid|is_prefetch, is_dup_load, is_prefetch,     lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, load_address, lsu_req_if.op_type, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.store_data}),
-        .data_out ({req_valid,                    req_is_dup,  req_is_prefetch, req_wid,        req_tmask,        req_pc,        req_addr,     req_type,           req_rd,        req_wb,        req_data})
+        .data_in  ({lsu_req_if.valid|is_prefetch,       is_dup_load, is_prefetch,     lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, load_address, lsu_req_if.op_type, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.store_data}),
+        .data_out ({req_valid,                          req_is_dup,  req_is_prefetch, req_wid,        req_tmask,        req_pc,        req_addr,     req_type,           req_rd,        req_wb,        req_data})
     );
 
     // Can accept new request?
