@@ -65,7 +65,7 @@ module VX_lsu_unit #(
         if(ready_in && req_valid && !req_is_prefetch && req_wb) begin
             // calculate prefetch addr
             for (int i = 0; i < `NUM_THREADS; i++) begin
-                load_address[i] = load_address[i] + 4;
+                load_address[i] = req_addr[i] + 4;
             end
             assign is_prefetch = 1;
         end else begin
@@ -74,10 +74,10 @@ module VX_lsu_unit #(
         end
     end
 
-    always @(posedge clk) begin
-        $display("%t: D$%0d stall_in=%b, is_prefetch=%b, req_is_prefetch=%b", 
-                $time, CORE_ID, stall_in, is_prefetch, req_is_prefetch);
-    end
+    // always @(posedge clk) begin
+    //     $display("%t: D$%0d stall_in=%b, is_prefetch=%b, req_is_prefetch=%b", 
+    //             $time, CORE_ID, stall_in, is_prefetch, req_is_prefetch);
+    // end
 
     VX_pipe_register #(
         .DATAW  (1 + 1 + 1+ `NW_BITS + `NUM_THREADS + 32 + (`NUM_THREADS * 32) + `LSU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32)),
@@ -86,8 +86,8 @@ module VX_lsu_unit #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_in),
-        .data_in  ({lsu_req_if.valid|is_prefetch,       is_dup_load, is_prefetch,     lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, load_address, lsu_req_if.op_type, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.store_data}),
-        .data_out ({req_valid,                          req_is_dup,  req_is_prefetch, req_wid,        req_tmask,        req_pc,        req_addr,     req_type,           req_rd,        req_wb,        req_data})
+        .data_in  ({lsu_req_if.valid|is_prefetch,       is_prefetch?req_is_dup:is_dup_load,  is_prefetch,     is_prefetch?req_wid: lsu_req_if.wid, is_prefetch?req_tmask: lsu_req_if.tmask, lsu_req_if.PC, load_address, is_prefetch?req_type:lsu_req_if.op_type, is_prefetch? req_rd:lsu_req_if.rd, is_prefetch? req_wb: lsu_req_if.wb, lsu_req_if.store_data}),
+        .data_out ({req_valid,                          req_is_dup,                          req_is_prefetch, req_wid,                             req_tmask,                               req_pc,        req_addr,     req_type,                                req_rd,                            req_wb,                             req_data})
     );
 
     // Can accept new request?
