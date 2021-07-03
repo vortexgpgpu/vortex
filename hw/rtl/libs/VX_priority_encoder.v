@@ -87,7 +87,7 @@ module VX_priority_encoder #(
 
         assign index  = index_r;
         assign onehot = onehot_r;
-        assign valid_out = (| data_in);        
+        assign valid_out = (| data_in);
 
     end    
 

@@ -264,36 +264,21 @@ module VX_nc_bypass #(
 
     if (NUM_REQS > 1) begin        
         wire [CORE_REQ_TIDW-1:0] rsp_tid = mem_rsp_tag_in[(CORE_TAG_WIDTH + D) +: CORE_REQ_TIDW];
-        if (NUM_RSP_TAGS > 1) begin
-            always @(*) begin       
-                if (is_mem_rsp_nc) begin
-                    core_rsp_valid_out_r = 0;
-                    core_rsp_valid_out_r[rsp_tid] = 1;
-                    for (integer i = 0; i < NUM_REQS; ++i) begin
-                        core_rsp_tag_out_r[i] = mem_rsp_tag_in[CORE_TAG_WIDTH-1:0];
-                    end
-                    core_rsp_ready_in_r = 0;
-                end else begin
-                    core_rsp_valid_out_r = core_rsp_valid_in;
-                    core_rsp_tag_out_r   = core_rsp_tag_in;
-                    core_rsp_ready_in_r  = core_rsp_ready_out;            
+        always @(*) begin
+            if (is_mem_rsp_nc) begin
+                core_rsp_valid_out_r = 0;
+                core_rsp_valid_out_r[rsp_tid] = 1;
+                for (integer i = 0; i < NUM_RSP_TAGS; ++i) begin
+                    core_rsp_tag_out_r[i] = mem_rsp_tag_in[CORE_TAG_WIDTH-1:0];
                 end
-            end
-        end else begin
-            always @(*) begin
-                if (is_mem_rsp_nc) begin
-                    core_rsp_valid_out_r = 0;
-                    core_rsp_valid_out_r[rsp_tid] = 1;
-                    core_rsp_tag_out_r = mem_rsp_tag_in[CORE_TAG_WIDTH-1:0];
-                    core_rsp_ready_in_r  = 0;
-                end else begin
-                    core_rsp_valid_out_r = core_rsp_valid_in;
-                    core_rsp_tag_out_r   = core_rsp_tag_in;
-                    core_rsp_ready_in_r  = core_rsp_ready_out;
-                end
+                core_rsp_ready_in_r = 0;
+            end else begin
+                core_rsp_valid_out_r = core_rsp_valid_in;
+                core_rsp_tag_out_r   = core_rsp_tag_in;
+                core_rsp_ready_in_r  = core_rsp_ready_out;
             end
         end
-    end else begin    
+    end else begin
         always @(*) begin
             if (is_mem_rsp_nc) begin
                 core_rsp_valid_out_r = 1;

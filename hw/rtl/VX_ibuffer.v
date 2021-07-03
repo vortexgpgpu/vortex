@@ -110,10 +110,11 @@ module VX_ibuffer #(
 
     // schedule the next instruction to issue
     always @(*) begin
+        deq_valid_n = enq_fire;
+        deq_wid_n   = decode_if.wid;
+        deq_instr_n = q_data_in;  
         if (num_warps > 1) begin
             deq_valid_n = 1;
-            deq_wid_n   = 'x;        
-            deq_instr_n = 'x;
             for (integer i = `NUM_WARPS-1; i >= 0; --i) begin
                 if (schedule_table[i]) begin
                     deq_wid_n   = `NW_BITS'(i);          
@@ -124,17 +125,12 @@ module VX_ibuffer #(
             deq_valid_n = 1;
             deq_wid_n   = deq_wid;
             deq_instr_n = deq_fire ? q_data_prev[deq_wid] : q_data_out[deq_wid];
-        end else begin
-            deq_valid_n = enq_fire;
-            deq_wid_n   = decode_if.wid;
-            deq_instr_n = q_data_in;  
         end   
     end
 
     // do round-robin scheduling with multiple active warps
     always @(*) begin
-        if (1 == $countones(schedule_table) 
-         || (num_warps < 2)) begin
+        if ($countones(schedule_table) <= 1) begin
             schedule_table_n = valid_table_n;            
         end else begin
             schedule_table_n = schedule_table;
@@ -150,6 +146,7 @@ module VX_ibuffer #(
             valid_table    <= 0;
             deq_valid      <= 0;  
             num_warps      <= 0;         
+            schedule_table <= 0;
         end else begin
             valid_table    <= valid_table_n;            
             deq_valid      <= deq_valid_n;
