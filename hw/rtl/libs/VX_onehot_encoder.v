@@ -60,7 +60,7 @@ module VX_onehot_encoder #(
         end	
     
         assign data_out = addr[levels_lp][`LOG2UP(N)-1:0];
-        assign valid = (| data_in);
+        assign valid = v[levels_lp][0];
     `IGNORE_WARNINGS_END
     end else begin 
 

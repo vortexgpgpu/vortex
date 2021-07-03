@@ -22,10 +22,10 @@ module VX_stream_arbiter #(
     localparam LOG_NUM_REQS = $clog2(NUM_REQS);
 
     if (NUM_REQS > 1)  begin
-        wire                    sel_enable;
         wire                    sel_valid;
+        wire                    sel_ready;
         wire [LOG_NUM_REQS-1:0] sel_idx;
-        wire [NUM_REQS-1:0]     sel_1hot;
+         wire [NUM_REQS-1:0]    sel_1hot;
 
         if (TYPE == "X") begin
             VX_fixed_arbiter #(
@@ -35,7 +35,7 @@ module VX_stream_arbiter #(
                 .clk          (clk),
                 .reset        (reset),
                 .requests     (valid_in),  
-                .enable       (sel_enable),     
+                .enable       (sel_ready),     
                 .grant_valid  (sel_valid),
                 .grant_index  (sel_idx),
                 .grant_onehot (sel_1hot)
@@ -48,7 +48,7 @@ module VX_stream_arbiter #(
                 .clk          (clk),
                 .reset        (reset),
                 .requests     (valid_in),  
-                .enable       (sel_enable),
+                .enable       (sel_ready),
                 .grant_valid  (sel_valid),
                 .grant_index  (sel_idx),
                 .grant_onehot (sel_1hot)
@@ -61,7 +61,7 @@ module VX_stream_arbiter #(
                 .clk          (clk),
                 .reset        (reset),
                 .requests     (valid_in),  
-                .enable       (sel_enable),     
+                .enable       (sel_ready),     
                 .grant_valid  (sel_valid),
                 .grant_index  (sel_idx),
                 .grant_onehot (sel_1hot)
@@ -74,7 +74,7 @@ module VX_stream_arbiter #(
                 .clk          (clk),
                 .reset        (reset),
                 .requests     (valid_in),  
-                .enable       (sel_enable),     
+                .enable       (sel_ready),     
                 .grant_valid  (sel_valid),
                 .grant_index  (sel_idx),
                 .grant_onehot (sel_1hot)
@@ -82,8 +82,6 @@ module VX_stream_arbiter #(
         end else begin
             $error ("invalid parameter");
         end
-
-        wire ready_in_sel;           
 
         VX_skid_buffer #(
             .DATAW    (DATAW),
@@ -93,17 +91,15 @@ module VX_stream_arbiter #(
             .reset     (reset),
             .valid_in  (sel_valid),        
             .data_in   (data_in[sel_idx]),
-            .ready_in  (ready_in_sel),      
+            .ready_in  (sel_ready),      
             .valid_out (valid_out),
             .data_out  (data_out),
             .ready_out (ready_out)
         );
 
-        assign sel_enable = ready_in_sel;
-
         for (genvar i = 0; i < NUM_REQS; i++) begin
-            assign ready_in[i] = sel_1hot[i] && ready_in_sel;
-        end      
+            assign ready_in[i] = sel_1hot[i] && sel_ready;
+        end
 
     end else begin
     
@@ -112,7 +108,7 @@ module VX_stream_arbiter #(
         
         assign valid_out = valid_in;        
         assign data_out  = data_in;
-        assign ready_in  = ready_out;        
+        assign ready_in  = ready_out;
 
     end
     
