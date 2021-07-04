@@ -91,7 +91,8 @@ module VX_lsu_unit #(
     );
 
     // Can accept new request?
-    assign lsu_req_if.ready = ~stall_in;
+    // we can accept new request only after we have done prefetch
+    assign lsu_req_if.ready = (~stall_in) && (~(req_wb && ~is_prefetch));
 
     wire [`NW_BITS-1:0] rsp_wid;
     wire [31:0] rsp_pc;
