@@ -327,8 +327,6 @@ module VX_lsu_unit #(
     end
 
    always @(posedge clk) begin       
-       $write("%t: D$%0d Req: wid=%0d, PC=%0h, dcache_req_if.valid=%0h dcache_req_if.ready=%0h dcache_req_fire=%0h\n", 
-                $time, CORE_ID, req_wid, req_pc, dcache_req_if.valid, dcache_req_if.ready,dcache_req_fire);
         if ((| dcache_req_fire)) begin
             if (dcache_req_if.rw[0]) begin
                 $write("%t: D$%0d Wr Req: wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, dcache_req_fire);
