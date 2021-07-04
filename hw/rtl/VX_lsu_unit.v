@@ -92,7 +92,7 @@ module VX_lsu_unit #(
 
     // Can accept new request?
     // we can accept new request only after we have done prefetch
-    assign lsu_req_if.ready = (~stall_in) && (~(req_wb && ~is_prefetch));
+    assign lsu_req_if.ready = (~stall_in) && (~(req_wb && (is_prefetch&~req_is_prefetch)));
 
     wire [`NW_BITS-1:0] rsp_wid;
     wire [31:0] rsp_pc;
@@ -326,7 +326,9 @@ module VX_lsu_unit #(
         end
     end
 
-   always @(posedge clk) begin        
+   always @(posedge clk) begin       
+       $write("%t: D$%0d Req: wid=%0d, PC=%0h, dcache_req_if.valid=%0h dcache_req_if.ready=%0h dcache_req_fire=%0h\n", 
+                $time, CORE_ID, req_wid, req_pc, dcache_req_if.valid, dcache_req_if.ready,dcache_req_fire);
         if ((| dcache_req_fire)) begin
             if (dcache_req_if.rw[0]) begin
                 $write("%t: D$%0d Wr Req: wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, dcache_req_fire);
