@@ -189,7 +189,7 @@ int main (int argc, char **argv) {
   for (int i = 0; i < size; ++i) {
     float ref = h_a[i];
     int pos = 0;
-    for (uint32_t j = 0; j < size; ++j) {
+    for (int j = 0; j < size; ++j) {
       float cur = h_a[j];
       pos += (cur < ref) || (cur == ref && j < i);
     }

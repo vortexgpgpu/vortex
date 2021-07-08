@@ -168,7 +168,7 @@ module VX_fpu_unit #(
     
     fflags_t rsp_fflags;
     always @(*) begin
-        rsp_fflags = 0;        
+        rsp_fflags = '0;        
         for (integer i = 0; i < `NUM_THREADS; i++) begin
             if (rsp_tmask[i]) begin
                 rsp_fflags.NX |= fflags[i].NX;
