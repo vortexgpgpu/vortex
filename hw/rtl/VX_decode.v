@@ -53,6 +53,8 @@ module VX_decode  #(
 
     wire [19:0] upper_imm = {func7, rs2, rs1, func3};
     wire [11:0] alu_imm   = (func3[0] && ~func3[1]) ? {{7{1'b0}}, rs2} : u_12;
+    wire [11:0] s_imm     = {func7, rd};
+    wire [12:0] b_imm     = {instr[31], instr[7], instr[30:25], instr[11:8], 1'b0};
     wire [20:0] jal_imm   = {instr[31], instr[19:12], instr[20], instr[30:21], 1'b0};
     wire [11:0] jalr_imm  = {func7, rs2};
     
@@ -70,7 +72,7 @@ module VX_decode  #(
         use_PC    = 0;
         use_rd    = 0;
         is_join   = 0;
-        is_wstall = 0;  
+        is_wstall = 0;
         used_regs = 0;
 
         case (opcode)            
@@ -184,7 +186,7 @@ module VX_decode  #(
                 use_imm = 1;
                 use_PC  = 1;
                 is_wstall = 1;
-                imm     = {{20{instr[31]}}, instr[7], instr[30:25], instr[11:8], 1'b0};                
+                imm     = {{19{b_imm[12]}}, b_imm};
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
             end
@@ -245,7 +247,7 @@ module VX_decode  #(
             `INST_S: begin 
                 ex_type = `EX_LSU;
                 op_type = `OP_BITS'({1'b1, func3});
-                imm     = {{20{func7[6]}}, func7, rd};
+                imm     = {{20{s_imm[6]}}, s_imm};
                 `USED_IREG (rs1);
             `ifdef EXT_F_ENABLE
                 if (opcode[2]) begin

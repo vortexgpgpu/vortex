@@ -188,6 +188,7 @@ module VX_bank #(
     wire creq_pop_unqual = !mshr_pop_unqual && !mrsq_pop_unqual && !creq_empty && !flush_enable;
 
     wire is_miss_st1 = valid_st1 && (miss_st1 || force_miss_st1);
+    
     assign mshr_pop = mshr_pop_unqual
                    && !(is_miss_st1 && is_mshr_st1)  // do not schedule another mshr request if the previous one missed
                    && !crsq_in_stall;   // ensure core response ready

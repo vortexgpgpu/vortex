@@ -24,8 +24,7 @@ module VX_stream_arbiter #(
     if (NUM_REQS > 1)  begin
         wire                    sel_valid;
         wire                    sel_ready;
-        wire [LOG_NUM_REQS-1:0] sel_idx;
-         wire [NUM_REQS-1:0]    sel_1hot;
+        wire [NUM_REQS-1:0]     sel_1hot;
 
         if (TYPE == "X") begin
             VX_fixed_arbiter #(
@@ -37,8 +36,8 @@ module VX_stream_arbiter #(
                 .requests     (valid_in),  
                 .enable       (sel_ready),     
                 .grant_valid  (sel_valid),
-                .grant_index  (sel_idx),
-                .grant_onehot (sel_1hot)
+                .grant_onehot (sel_1hot),
+				`UNUSED_PIN (grant_index)
             );
         end else if (TYPE == "R") begin
             VX_rr_arbiter #(
@@ -50,8 +49,8 @@ module VX_stream_arbiter #(
                 .requests     (valid_in),  
                 .enable       (sel_ready),
                 .grant_valid  (sel_valid),
-                .grant_index  (sel_idx),
-                .grant_onehot (sel_1hot)
+                .grant_onehot (sel_1hot),
+				`UNUSED_PIN (grant_index)
             );
         end else if (TYPE == "F") begin
             VX_fair_arbiter #(
@@ -63,8 +62,8 @@ module VX_stream_arbiter #(
                 .requests     (valid_in),  
                 .enable       (sel_ready),     
                 .grant_valid  (sel_valid),
-                .grant_index  (sel_idx),
-                .grant_onehot (sel_1hot)
+                .grant_onehot (sel_1hot),
+				`UNUSED_PIN (grant_index)
             );
         end else if (TYPE == "M") begin
             VX_matrix_arbiter #(
@@ -76,12 +75,23 @@ module VX_stream_arbiter #(
                 .requests     (valid_in),  
                 .enable       (sel_ready),     
                 .grant_valid  (sel_valid),
-                .grant_index  (sel_idx),
-                .grant_onehot (sel_1hot)
+                .grant_onehot (sel_1hot),
+				`UNUSED_PIN (grant_index)
             );
         end else begin
             $error ("invalid parameter");
         end
+
+        wire [DATAW-1:0] data_in_sel;
+
+        VX_onehot_mux #(
+            .DATAW (DATAW),
+            .COUNT (NUM_REQS)
+        ) data_in_mux (
+            .data_in  (data_in),
+            .sel_in   (sel_1hot),
+            .data_out (data_in_sel)
+        );
 
         VX_skid_buffer #(
             .DATAW    (DATAW),
@@ -90,7 +100,7 @@ module VX_stream_arbiter #(
             .clk       (clk),
             .reset     (reset),
             .valid_in  (sel_valid),        
-            .data_in   (data_in[sel_idx]),
+            .data_in   (data_in_sel),
             .ready_in  (sel_ready),      
             .valid_out (valid_out),
             .data_out  (data_out),

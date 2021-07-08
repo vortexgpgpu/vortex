@@ -95,7 +95,9 @@ module VX_to_mem #(
 
         always @(*) begin
             mem_rsp_data_out_n = mem_rsp_data_out_r;
-            mem_rsp_data_out_n[rsp_ctr] = mem_rsp_data_in;
+            if (mem_rsp_in_fire) begin            
+                mem_rsp_data_out_n[rsp_ctr] = mem_rsp_data_in;
+            end
         end
 
         always @(posedge clk) begin
@@ -108,9 +110,9 @@ module VX_to_mem #(
                 end
                 if (mem_rsp_in_fire) begin
                     rsp_ctr <= rsp_ctr + 1;
-                    mem_rsp_data_out_r <= mem_rsp_data_out_n;
                 end
             end 
+            mem_rsp_data_out_r <= mem_rsp_data_out_n;
         end
 
         reg [DST_TAG_WIDTH-1:0] mem_rsp_tag_in_r;

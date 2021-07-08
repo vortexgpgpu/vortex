@@ -70,7 +70,7 @@ localparam MMIO_STATUS        = `AFU_IMAGE_MMIO_STATUS;
 
 localparam COUT_TID_WIDTH    = $clog2(`IO_COUT_SIZE); 
 localparam COUT_QUEUE_DATAW  = COUT_TID_WIDTH + 8;
-localparam COUT_QUEUE_SIZE   = 256; 
+localparam COUT_QUEUE_SIZE   = 64; 
 
 localparam MMIO_SCOPE_READ    = `AFU_IMAGE_MMIO_SCOPE_READ;
 localparam MMIO_SCOPE_WRITE   = `AFU_IMAGE_MMIO_SCOPE_WRITE;
@@ -470,9 +470,7 @@ wire vx_mem_is_cout;
 wire vx_mem_req_valid_qual;
 wire vx_mem_req_ready_qual;
 
-assign vx_mem_req_valid_qual = vx_mem_req_valid 
-                            && vx_started 
-                            && ~vx_mem_is_cout;
+assign vx_mem_req_valid_qual = vx_mem_req_valid && vx_started;
 
 assign vx_mem_req_ready = vx_mem_is_cout ? ~cout_q_full : vx_mem_req_ready_qual;
 
@@ -534,8 +532,9 @@ VX_mem_arb #(
   .DATA_WIDTH     (LMEM_LINE_WIDTH),
   .ADDR_WIDTH     (LMEM_ADDR_WIDTH),
   .TAG_IN_WIDTH   (AVS_REQ_TAGW),
-  .BUFFERED_REQ   (1),
-  .BUFFERED_RSP   (1)
+  .BUFFERED_REQ   (0),
+  .BUFFERED_RSP   (0),
+  .TYPE           ("X")
 ) mem_arb (
   .clk            (clk),
   .reset          (reset),
@@ -918,7 +917,7 @@ Vortex #() vortex (
 // COUT HANDLING //////////////////////////////////////////////////////////////
 
 wire [COUT_TID_WIDTH-1:0] cout_tid;
-wire [7:0] cout_char;
+reg [7:0] cout_char;
 
 VX_onehot_encoder #(
   .N (`VX_MEM_BYTEEN_WIDTH)
@@ -928,8 +927,14 @@ VX_onehot_encoder #(
   `UNUSED_PIN (valid)
 );
 
-wire [`VX_MEM_BYTEEN_WIDTH-1:0][7:0] vx_mem_req_data_ar = vx_mem_req_data;
-assign cout_char = vx_mem_req_data_ar[cout_tid];
+VX_onehot_mux #(
+  .DATAW (8),
+  .COUNT (`VX_MEM_BYTEEN_WIDTH)
+) cout_char_mux (
+  .data_in  (vx_mem_req_data),
+  .sel_in   (vx_mem_req_byteen),
+  .data_out (cout_char)
+);
 
 assign vx_mem_is_cout = (vx_mem_req_addr == `VX_MEM_ADDR_WIDTH'(`IO_COUT_ADDR >> (32 - `VX_MEM_ADDR_WIDTH)));
 
@@ -943,8 +948,8 @@ wire cout_q_pop = cp2af_sRxPort.c0.mmioRdValid
                && ~cout_q_empty;
 
 VX_fifo_queue #(
-  .DATAW   (COUT_QUEUE_DATAW),
-  .SIZE    (COUT_QUEUE_SIZE)
+  .DATAW (COUT_QUEUE_DATAW),
+  .SIZE  (COUT_QUEUE_SIZE)
 ) cout_queue (
   .clk      (clk),
   .reset    (reset),
