@@ -917,7 +917,7 @@ Vortex #() vortex (
 // COUT HANDLING //////////////////////////////////////////////////////////////
 
 wire [COUT_TID_WIDTH-1:0] cout_tid;
-reg [7:0] cout_char;
+wire [7:0] cout_char;
 
 VX_onehot_encoder #(
   .N (`VX_MEM_BYTEEN_WIDTH)

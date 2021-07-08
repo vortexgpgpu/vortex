@@ -247,7 +247,7 @@ module VX_decode  #(
             `INST_S: begin 
                 ex_type = `EX_LSU;
                 op_type = `OP_BITS'({1'b1, func3});
-                imm     = {{20{s_imm[6]}}, s_imm};
+                imm     = {{20{s_imm[11]}}, s_imm};
                 `USED_IREG (rs1);
             `ifdef EXT_F_ENABLE
                 if (opcode[2]) begin
