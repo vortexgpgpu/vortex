@@ -335,14 +335,14 @@ module VX_lsu_unit #(
                  `PRINT_ARRAY1D(dcache_req_if.data, `NUM_THREADS);
                  $write("\n");
             end else begin
-                 $write("%t: D$%0d Rd Req: wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, dcache_req_fire);
+                 $write("%t: D$%0d Rd Req: req_is_prefetch=%b wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_is_prefetch, req_wid, req_pc, dcache_req_fire);
                 `PRINT_ARRAY1D(req_addr, `NUM_THREADS);
                  $write(", tag=%0h, byteen=%0h, rd=%0d, is_dup=%b\n", dcache_req_if.tag[0], dcache_req_if.byteen, req_rd, req_is_dup);
             end
         end
         if (dcache_rsp_fire) begin
-            $write("%t: D$%0d Rsp: valid=%b, wid=%0d, PC=%0h, tag=%0h, rd=%0d, data=", 
-                $time, CORE_ID, dcache_rsp_if.valid, rsp_wid, rsp_pc, dcache_rsp_if.tag, rsp_rd);
+            $write("%t: D$%0d Rsp: rsp_is_prefetch=%b valid=%b, wid=%0d, PC=%0h, tag=%0h, rd=%0d, data=", 
+                $time, CORE_ID, rsp_is_prefetch, dcache_rsp_if.valid, rsp_wid, rsp_pc, dcache_rsp_if.tag, rsp_rd);
             `PRINT_ARRAY1D(dcache_rsp_if.data, `NUM_THREADS);
             $write(", is_dup=%b\n", rsp_is_dup);
         end
