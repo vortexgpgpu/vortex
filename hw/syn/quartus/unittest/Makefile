@@ -1,6 +1,6 @@
 PROJECT = Unittest
-TOP_LEVEL_ENTITY = VX_cache_core_req_bank_sel
-SRC_FILE = VX_cache_core_req_bank_sel.v
+TOP_LEVEL_ENTITY = VX_core_req_bank_sel
+SRC_FILE = VX_core_req_bank_sel.v
 RTL_DIR = ../../../../rtl
 
 FAMILY = "Arria 10"

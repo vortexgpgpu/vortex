@@ -1,6 +1,6 @@
 `include "VX_cache_define.vh"
 
-module VX_cache_core_req_bank_sel #(  
+module VX_core_req_bank_sel #(  
     parameter CACHE_ID          = 0,
 
     // Size of line inside a bank in bytes
@@ -24,7 +24,7 @@ module VX_cache_core_req_bank_sel #(
     input wire                                      reset,
 
 `ifdef PERF_ENABLE
-    output wire [`PERF_CTR_BITS-1:0]                              bank_stalls,
+    output wire [`PERF_CTR_BITS-1:0]                bank_stalls,
 `endif
 
     input wire [NUM_REQS-1:0]                       core_req_valid,
@@ -46,7 +46,8 @@ module VX_cache_core_req_bank_sel #(
     input  wire [`BANK_READY_COUNT-1:0]             per_bank_core_req_ready
 );
     `UNUSED_PARAM (CACHE_ID)
-    `STATIC_ASSERT (NUM_REQS >= NUM_BANKS, ("invalid number of banks"));
+    `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))
+    `STATIC_ASSERT(NUM_PORTS <= NUM_BANKS, ("invalid value"))
 
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
@@ -72,21 +73,19 @@ module VX_cache_core_req_bank_sel #(
         end
     end
 
+    reg [NUM_BANKS-1:0][NUM_PORTS-1:0]          per_bank_core_req_valid_r;
+    reg [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(`WORD_SELECT_BITS)-1:0] per_bank_core_req_wsel_r;
+    reg [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_core_req_byteen_r;
+    reg [NUM_BANKS-1:0][NUM_PORTS-1:0][`WORD_WIDTH-1:0] per_bank_core_req_data_r;
+    reg [NUM_BANKS-1:0][NUM_PORTS-1:0][`REQS_BITS-1:0] per_bank_core_req_tid_r;
+    reg [NUM_BANKS-1:0]                         per_bank_core_req_rw_r;
+    reg [NUM_BANKS-1:0][`LINE_ADDR_WIDTH-1:0]   per_bank_core_req_addr_r;
+    reg [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0]     per_bank_core_req_tag_r;
+    reg [NUM_REQS-1:0] core_req_ready_r;
+
     if (NUM_REQS > 1) begin
 
-        reg [NUM_BANKS-1:0][NUM_PORTS-1:0]          per_bank_core_req_valid_r;
-        reg [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(`WORD_SELECT_BITS)-1:0] per_bank_core_req_wsel_r;
-        reg [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_core_req_byteen_r;
-        reg [NUM_BANKS-1:0][NUM_PORTS-1:0][`WORD_WIDTH-1:0] per_bank_core_req_data_r;
-        reg [NUM_BANKS-1:0][NUM_PORTS-1:0][`REQS_BITS-1:0] per_bank_core_req_tid_r;
-        reg [NUM_BANKS-1:0]                         per_bank_core_req_rw_r;
-        reg [NUM_BANKS-1:0][`LINE_ADDR_WIDTH-1:0]   per_bank_core_req_addr_r;
-        reg [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0]     per_bank_core_req_tag_r;    
-
-        reg [NUM_REQS-1:0] core_req_ready_r;  
-
-        if (NUM_PORTS > 1) begin    
-
+        if (NUM_PORTS > 1) begin
             reg [NUM_BANKS-1:0][`LINE_ADDR_WIDTH-1:0] per_bank_line_addr_r;
             wire [NUM_REQS-1:0] core_req_line_match;
             
@@ -201,7 +200,7 @@ module VX_cache_core_req_bank_sel #(
                 end
             end
 
-        end else begin      
+        end else begin
 
             always @(*) begin
                 per_bank_core_req_valid_r = 0;        
@@ -227,14 +226,28 @@ module VX_cache_core_req_bank_sel #(
                 end
             end
 
-            if (SHARED_BANK_READY == 0) begin
-                always @(*) begin
-                    core_req_ready_r = 0;    
-                    for (integer j = 0; j < NUM_BANKS; ++j) begin
-                        for (integer i = 0; i < NUM_REQS; ++i) begin
-                            if (core_req_valid[i] && (core_req_bid[i] == `BANK_SELECT_BITS'(j))) begin
-                                core_req_ready_r[i] = per_bank_core_req_ready[j];
-                                break;
+            if (NUM_BANKS > 1) begin
+                if (SHARED_BANK_READY == 0) begin
+                    always @(*) begin
+                        core_req_ready_r = 0;
+                        for (integer j = 0; j < NUM_BANKS; ++j) begin
+                            for (integer i = 0; i < NUM_REQS; ++i) begin
+                                if (core_req_valid[i] && (core_req_bid[i] == `BANK_SELECT_BITS'(j))) begin
+                                    core_req_ready_r[i] = per_bank_core_req_ready[j];
+                                    break;
+                                end
+                            end
+                        end
+                    end
+                end else begin
+                    always @(*) begin
+                        core_req_ready_r = 0;
+                        for (integer j = 0; j < NUM_BANKS; ++j) begin
+                            for (integer i = 0; i < NUM_REQS; ++i) begin
+                                if (core_req_valid[i] && (core_req_bid[i] == `BANK_SELECT_BITS'(j))) begin
+                                    core_req_ready_r[i] = per_bank_core_req_ready;
+                                    break;
+                                end
                             end
                         end
                     end
@@ -242,42 +255,64 @@ module VX_cache_core_req_bank_sel #(
             end else begin
                 always @(*) begin
                     core_req_ready_r = 0;        
-                    for (integer j = 0; j < NUM_BANKS; ++j) begin
-                        for (integer i = 0; i < NUM_REQS; ++i) begin
-                            if (core_req_valid[i] && (core_req_bid[i] == `BANK_SELECT_BITS'(j))) begin
-                                core_req_ready_r[i] = per_bank_core_req_ready;
-                                break;
-                            end
+                    for (integer i = 0; i < NUM_REQS; ++i) begin
+                        if (core_req_valid[i]) begin
+                            core_req_ready_r[i] = per_bank_core_req_ready;
+                            break;
                         end
                     end
                 end
             end
-        end
+        end        
 
-        assign per_bank_core_req_valid  = per_bank_core_req_valid_r;        
-        assign per_bank_core_req_rw     = per_bank_core_req_rw_r;        
-        assign per_bank_core_req_addr   = per_bank_core_req_addr_r;
-        assign per_bank_core_req_wsel   = per_bank_core_req_wsel_r;
-        assign per_bank_core_req_byteen = per_bank_core_req_byteen_r;        
-        assign per_bank_core_req_data   = per_bank_core_req_data_r;
-        assign per_bank_core_req_tag    = per_bank_core_req_tag_r;
-        assign per_bank_core_req_tid    = per_bank_core_req_tid_r;
-        assign core_req_ready = core_req_ready_r;
-        
     end else begin
 
-        `UNUSED_VAR (core_req_bid)
+        if (NUM_BANKS > 1) begin
+            always @(*) begin
+                per_bank_core_req_valid_r = 0;
+                per_bank_core_req_rw_r    = 'x;
+                per_bank_core_req_addr_r  = 'x;
+                per_bank_core_req_wsel_r  = 'x;
+                per_bank_core_req_byteen_r= 'x;
+                per_bank_core_req_data_r  = 'x;
+                per_bank_core_req_tag_r   = 'x;
+                per_bank_core_req_tid_r   = 'x;
+                per_bank_core_req_valid_r[core_req_bid[0]]  = core_req_valid;
+                per_bank_core_req_rw_r[core_req_bid[0]]     = core_req_rw;
+                per_bank_core_req_addr_r[core_req_bid[0]]   = core_req_line_addr;
+                per_bank_core_req_wsel_r[core_req_bid[0]]   = core_req_wsel;
+                per_bank_core_req_byteen_r[core_req_bid[0]] = core_req_byteen;
+                per_bank_core_req_data_r[core_req_bid[0]]   = core_req_data;
+                per_bank_core_req_tag_r[core_req_bid[0]]    = core_req_tag;
+                per_bank_core_req_tid_r[core_req_bid[0]]    = 0;
+                core_req_ready_r = per_bank_core_req_ready[core_req_bid[0]];
+            end
+        end else begin
+            `UNUSED_VAR (core_req_bid)
+            always @(*) begin
+                per_bank_core_req_valid_r  = core_req_valid;
+                per_bank_core_req_rw_r     = core_req_rw;
+                per_bank_core_req_addr_r   = core_req_line_addr;
+                per_bank_core_req_wsel_r   = core_req_wsel;
+                per_bank_core_req_byteen_r = core_req_byteen;
+                per_bank_core_req_data_r   = core_req_data;
+                per_bank_core_req_tag_r    = core_req_tag;
+                per_bank_core_req_tid_r    = 0;
+                core_req_ready_r = per_bank_core_req_ready;
+            end
+        end
 
-        assign per_bank_core_req_valid  = core_req_valid;        
-        assign per_bank_core_req_rw     = core_req_rw;        
-        assign per_bank_core_req_addr   = core_req_line_addr;
-        assign per_bank_core_req_wsel   = core_req_wsel;
-        assign per_bank_core_req_byteen = core_req_byteen;        
-        assign per_bank_core_req_data   = core_req_data;
-        assign per_bank_core_req_tag    = core_req_tag;
-        assign per_bank_core_req_tid    = 0;
-        assign core_req_ready           = per_bank_core_req_ready;
-    end       
+    end
+
+    assign per_bank_core_req_valid  = per_bank_core_req_valid_r;
+    assign per_bank_core_req_rw     = per_bank_core_req_rw_r;
+    assign per_bank_core_req_addr   = per_bank_core_req_addr_r;
+    assign per_bank_core_req_wsel   = per_bank_core_req_wsel_r;
+    assign per_bank_core_req_byteen = per_bank_core_req_byteen_r;
+    assign per_bank_core_req_data   = per_bank_core_req_data_r;
+    assign per_bank_core_req_tag    = per_bank_core_req_tag_r;
+    assign per_bank_core_req_tid    = per_bank_core_req_tid_r;
+    assign core_req_ready = core_req_ready_r;
 
 `ifdef PERF_ENABLE
     reg [NUM_REQS-1:0] core_req_sel_r;
