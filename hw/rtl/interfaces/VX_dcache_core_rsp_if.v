@@ -10,6 +10,7 @@ interface VX_dcache_core_rsp_if #(
 ) ();
 
     wire [NUM_REQS-1:0]                     valid;    
+    wire [NUM_REQS-1:0]                     is_hit;  
     wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]    data;
     wire [CORE_TAG_WIDTH-1:0]               tag;    
     wire                                    ready;      

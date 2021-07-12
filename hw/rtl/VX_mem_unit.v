@@ -124,6 +124,7 @@ module VX_mem_unit # (
         .core_rsp_data      (icache_core_rsp_if.data),
         .core_rsp_tag       (icache_core_rsp_if.tag),
         .core_rsp_ready     (icache_core_rsp_if.ready),
+        .core_rsp_is_hit    (icache_core_rsp_if.is_hit),
 
     `ifdef PERF_ENABLE
         .perf_cache_if      (perf_icache_if),
@@ -183,6 +184,7 @@ module VX_mem_unit # (
         .core_rsp_data      (dcache_rsp_if.data),
         .core_rsp_tag       (dcache_rsp_if.tag),
         .core_rsp_ready     (dcache_rsp_if.ready),
+        .core_rsp_is_hit    (dcache_rsp_if.is_hit),
 
     `ifdef PERF_ENABLE
         .perf_cache_if      (perf_dcache_if),

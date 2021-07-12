@@ -117,6 +117,7 @@ module VX_core #(
         .dcache_rsp_data    (dcache_core_rsp_if.data),
         .dcache_rsp_tag     (dcache_core_rsp_if.tag),
         .dcache_rsp_ready   (dcache_core_rsp_if.ready),
+        .dcache_rsp_is_hit  (dcache_core_rsp_if.is_hit),
 
         // Icache core request
         .icache_req_valid   (icache_core_req_if.valid),
@@ -129,6 +130,7 @@ module VX_core #(
         .icache_rsp_data    (icache_core_rsp_if.data),
         .icache_rsp_tag     (icache_core_rsp_if.tag),
         .icache_rsp_ready   (icache_core_rsp_if.ready),     
+        .icache_rsp_is_hit  (icache_core_rsp_if.is_hit), 
 
         // CSR request
         .csr_req_valid      (csr_req_valid),

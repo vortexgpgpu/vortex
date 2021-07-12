@@ -59,7 +59,8 @@ module VX_cache #(
     output wire [NUM_REQS-1:0]                          core_rsp_valid,    
     output wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]         core_rsp_data,
     output wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag,
-    input  wire [`CORE_REQ_TAG_COUNT-1:0]               core_rsp_ready,   
+    input  wire [`CORE_REQ_TAG_COUNT-1:0]               core_rsp_ready, 
+    output wire [NUM_REQS-1:0]                          core_rsp_is_hit,  
 
     // Memory request
     output wire                             mem_req_valid,
@@ -103,6 +104,7 @@ module VX_cache #(
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`REQS_BITS-1:0] per_bank_core_rsp_tid;
     wire [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0]    per_bank_core_rsp_tag;    
     wire [NUM_BANKS-1:0]                        per_bank_core_rsp_ready;
+    wire [NUM_BANKS-1:0]                        per_bank_core_rsp_is_hit;
 
     wire [NUM_BANKS-1:0]                        per_bank_mem_req_valid;    
     wire [NUM_BANKS-1:0]                        per_bank_mem_req_rw;
@@ -225,6 +227,7 @@ module VX_cache #(
         wire [NUM_PORTS-1:0][`REQS_BITS-1:0] curr_bank_core_rsp_tid;
         wire [CORE_TAG_WIDTH-1:0]   curr_bank_core_rsp_tag;
         wire                        curr_bank_core_rsp_ready;
+        wire                        curr_bank_core_rsp_is_hit;
 
         wire                        curr_bank_mem_req_valid;
         wire                        curr_bank_mem_req_rw;
@@ -256,6 +259,7 @@ module VX_cache #(
         assign per_bank_core_rsp_tid  [i] = curr_bank_core_rsp_tid;
         assign per_bank_core_rsp_tag  [i] = curr_bank_core_rsp_tag;
         assign per_bank_core_rsp_data [i] = curr_bank_core_rsp_data;
+        assign per_bank_core_rsp_is_hit [i] = curr_bank_core_rsp_is_hit;
 
         // Memory request            
         assign per_bank_mem_req_valid[i] = curr_bank_mem_req_valid;          
@@ -327,6 +331,7 @@ module VX_cache #(
             .core_rsp_data      (curr_bank_core_rsp_data),
             .core_rsp_tag       (curr_bank_core_rsp_tag),
             .core_rsp_ready     (curr_bank_core_rsp_ready),
+            .core_rsp_is_hit    (curr_bank_core_rsp_is_hit),
 
             // Memory request
             .mem_req_valid      (curr_bank_mem_req_valid),
@@ -365,10 +370,12 @@ module VX_cache #(
         .per_bank_core_rsp_tag   (per_bank_core_rsp_tag),
         .per_bank_core_rsp_tid   (per_bank_core_rsp_tid),   
         .per_bank_core_rsp_ready (per_bank_core_rsp_ready),
+        .per_bank_core_rsp_is_hit(per_bank_core_rsp_is_hit),
         .core_rsp_valid          (core_rsp_valid),      
         .core_rsp_tag            (core_rsp_tag),
         .core_rsp_data           (core_rsp_data),  
-        .core_rsp_ready          (core_rsp_ready)
+        .core_rsp_ready          (core_rsp_ready),
+        .core_rsp_is_hit         (core_rsp_is_hit)
     ); 
 
     wire [NUM_BANKS-1:0][(`MEM_ADDR_WIDTH + 1 + CACHE_LINE_SIZE + `CACHE_LINE_WIDTH)-1:0] data_in;

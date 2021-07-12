@@ -22,7 +22,7 @@ module VX_databus_arb (
     localparam REQ_ASHIFT  = `CLOG2(`DWORD_SIZE);
     localparam REQ_ADDRW   = 32 - REQ_ASHIFT;
     localparam REQ_DATAW   = 1 + REQ_ADDRW + 1 + `DWORD_SIZE + (`DWORD_SIZE*8) + `DCORE_TAG_WIDTH;
-    localparam RSP_DATAW   = `NUM_THREADS + `NUM_THREADS * (`DWORD_SIZE*8) + `DCORE_TAG_WIDTH;
+    localparam RSP_DATAW   = `NUM_THREADS + `NUM_THREADS * (`DWORD_SIZE*8) + `DCORE_TAG_WIDTH + `NUM_THREADS;
 
     //
     // handle requests
@@ -81,8 +81,8 @@ module VX_databus_arb (
         wire core_rsp_valid;
         wire [`NUM_THREADS-1:0] core_rsp_valid_tmask;
 
-        assign rsp_data_in[0] = {cache_rsp_if.valid, cache_rsp_if.data, cache_rsp_if.tag};
-        assign rsp_data_in[1] = {smem_rsp_if.valid,  smem_rsp_if.data,  smem_rsp_if.tag};
+        assign rsp_data_in[0] = {cache_rsp_if.valid, cache_rsp_if.data, cache_rsp_if.tag, cache_rsp_if.is_hit};
+        assign rsp_data_in[1] = {smem_rsp_if.valid,  smem_rsp_if.data,  smem_rsp_if.tag, `NUM_THREADS'b0};
 
         assign rsp_valid_in[0] = (| cache_rsp_if.valid);
         assign rsp_valid_in[1] = (| smem_rsp_if.valid) & `SM_ENABLE;
@@ -98,7 +98,7 @@ module VX_databus_arb (
             .data_in    (rsp_data_in),
             .ready_in   (rsp_ready_in),
             .valid_out  (core_rsp_valid),
-            .data_out   ({core_rsp_valid_tmask, core_rsp_if.data, core_rsp_if.tag}),
+            .data_out   ({core_rsp_valid_tmask, core_rsp_if.data, core_rsp_if.tag, core_rsp_if.is_hit}),
             .ready_out  (core_rsp_if.ready)
         );
 
@@ -110,6 +110,7 @@ module VX_databus_arb (
     end else begin
 
         assign core_rsp_if.valid  = cache_rsp_if.valid;
+        assign core_rsp_if.is_hit = cache_rsp_if.is_hit;
         assign core_rsp_if.tag    = cache_rsp_if.tag;
         assign core_rsp_if.data   = cache_rsp_if.data;
         assign cache_rsp_if.ready = core_rsp_if.ready;

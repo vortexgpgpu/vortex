@@ -20,6 +20,7 @@ module VX_pipeline #(
 
     // Dcache core reponse    
     input wire [`NUM_THREADS-1:0]           dcache_rsp_valid,
+    input wire [`NUM_THREADS-1:0]           dcache_rsp_is_hit,
     input wire [`NUM_THREADS-1:0][31:0]     dcache_rsp_data,
     input wire [`DCORE_TAG_WIDTH-1:0]       dcache_rsp_tag,    
     output wire                             dcache_rsp_ready,      
@@ -32,6 +33,7 @@ module VX_pipeline #(
 
     // Icache core response    
     input wire                              icache_rsp_valid,
+    input wire                              icache_rsp_is_hit,
     input wire [31:0]                       icache_rsp_data,
     input wire [`ICORE_TAG_WIDTH-1:0]       icache_rsp_tag,    
     output wire                             icache_rsp_ready,
@@ -87,6 +89,7 @@ module VX_pipeline #(
     assign dcache_core_rsp_if.valid = dcache_rsp_valid;
     assign dcache_core_rsp_if.data  = dcache_rsp_data;
     assign dcache_core_rsp_if.tag   = dcache_rsp_tag;
+    assign dcache_core_rsp_if.is_hit= dcache_rsp_is_hit;
     assign dcache_rsp_ready = dcache_core_rsp_if.ready;
 
     //
@@ -115,6 +118,7 @@ module VX_pipeline #(
     assign icache_core_rsp_if.valid = icache_rsp_valid;
     assign icache_core_rsp_if.data  = icache_rsp_data;
     assign icache_core_rsp_if.tag   = icache_rsp_tag;
+    assign icache_core_rsp_if.is_hit= icache_rsp_is_hit;
     assign icache_rsp_ready = icache_core_rsp_if.ready;
 
     //

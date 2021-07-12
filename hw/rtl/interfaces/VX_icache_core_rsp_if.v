@@ -8,7 +8,8 @@ interface VX_icache_core_rsp_if #(
     parameter CORE_TAG_WIDTH = 1
 ) ();
 
-    wire                        valid;    
+    wire                        valid;
+    wire                        is_hit;   
     wire [`WORD_WIDTH-1:0]      data;
     wire [CORE_TAG_WIDTH-1:0]   tag;    
     wire                        ready;      

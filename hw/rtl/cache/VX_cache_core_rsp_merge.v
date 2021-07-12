@@ -26,18 +26,21 @@ module VX_cache_core_rsp_merge #(
     input  wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`REQS_BITS-1:0] per_bank_core_rsp_tid,   
     input  wire [NUM_BANKS-1:0][CORE_TAG_WIDTH-1:0] per_bank_core_rsp_tag,   
     output wire [NUM_BANKS-1:0]                     per_bank_core_rsp_ready,
+    input  wire [NUM_BANKS-1:0]                     per_bank_core_rsp_is_hit,
 
     // Core Response
     output wire [NUM_REQS-1:0]                      core_rsp_valid,
     output wire [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag,
     output wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]     core_rsp_data,      
-    input  wire [`CORE_REQ_TAG_COUNT-1:0]           core_rsp_ready
+    input  wire [`CORE_REQ_TAG_COUNT-1:0]           core_rsp_ready,
+    output wire [NUM_REQS-1:0]                      core_rsp_is_hit
 );
     `UNUSED_PARAM (CACHE_ID)
 
     if (NUM_BANKS > 1) begin
 
         reg [NUM_REQS-1:0] core_rsp_valid_unqual;
+        reg [NUM_REQS-1:0] core_rsp_is_hit_unqual;
         reg [NUM_REQS-1:0][`WORD_WIDTH-1:0] core_rsp_data_unqual;
         reg [NUM_BANKS-1:0] core_rsp_bank_select;
                 
@@ -65,6 +68,7 @@ module VX_cache_core_rsp_merge #(
                     core_rsp_valid_unqual = 0;
                     core_rsp_data_unqual  = 'x;            
                     core_rsp_bank_select  = 0;
+                    core_rsp_is_hit_unqual  = 0;
                     
                     for (integer i = 0; i < NUM_BANKS; i++) begin
                         for (integer p = 0; p < NUM_PORTS; p++) begin 
@@ -73,6 +77,7 @@ module VX_cache_core_rsp_merge #(
                             && (per_bank_core_rsp_tag[i][CORE_TAG_ID_BITS-1:0] == core_rsp_tag_unqual[CORE_TAG_ID_BITS-1:0])) begin
                                 core_rsp_valid_unqual[per_bank_core_rsp_tid[i][p]] = 1;
                                 core_rsp_data_unqual[per_bank_core_rsp_tid[i][p]]  = per_bank_core_rsp_data[i][p];
+                                core_rsp_is_hit_unqual[per_bank_core_rsp_tid[i][p]] = per_bank_core_rsp_is_hit[i][p];
                                 core_rsp_bank_select[i] = core_rsp_ready_unqual;
                             end
                         end
@@ -87,12 +92,14 @@ module VX_cache_core_rsp_merge #(
                     core_rsp_valid_unqual = 0;
                     core_rsp_data_unqual  = 'x;                
                     core_rsp_bank_select  = 0;
+                    core_rsp_is_hit_unqual = 0;
                     
                     for (integer i = 0; i < NUM_BANKS; i++) begin
                         if (per_bank_core_rsp_valid[i]            
                         && (per_bank_core_rsp_tag[i][CORE_TAG_ID_BITS-1:0] == core_rsp_tag_unqual[CORE_TAG_ID_BITS-1:0])) begin
                             core_rsp_valid_unqual[per_bank_core_rsp_tid[i]] = 1;     
                             core_rsp_data_unqual[per_bank_core_rsp_tid[i]]  = per_bank_core_rsp_data[i];
+                            core_rsp_is_hit_unqual[per_bank_core_rsp_tid[i]]  = per_bank_core_rsp_is_hit[i];
                             core_rsp_bank_select[i] = core_rsp_ready_unqual;
                         end
                     end
@@ -106,16 +113,16 @@ module VX_cache_core_rsp_merge #(
             wire core_rsp_valid_any = (| per_bank_core_rsp_valid);
             
             VX_skid_buffer #(
-                .DATAW (NUM_REQS + CORE_TAG_WIDTH + (NUM_REQS *`WORD_WIDTH)),
+                .DATAW (NUM_REQS + CORE_TAG_WIDTH + (NUM_REQS *`WORD_WIDTH) + NUM_REQS),
                 .BUFFERED (1)
             ) pipe_reg (
                 .clk       (clk),
                 .reset     (reset),
                 .valid_in  (core_rsp_valid_any),        
-                .data_in   ({core_rsp_valid_unqual, core_rsp_tag_unqual, core_rsp_data_unqual}),
+                .data_in   ({core_rsp_valid_unqual, core_rsp_tag_unqual, core_rsp_data_unqual, core_rsp_is_hit_unqual}),
                 .ready_in  (core_rsp_ready_unqual),      
                 .valid_out (core_rsp_valid_out),
-                .data_out  ({core_rsp_valid_out_mask, core_rsp_tag, core_rsp_data}),
+                .data_out  ({core_rsp_valid_out_mask, core_rsp_tag, core_rsp_data, core_rsp_is_hit}),
                 .ready_out (core_rsp_ready)
             );
 
@@ -134,6 +141,7 @@ module VX_cache_core_rsp_merge #(
                 core_rsp_valid_unqual = 0;                
                 core_rsp_tag_unqual   = 'x;
                 core_rsp_data_unqual  = 'x;
+                core_rsp_is_hit_unqual = 0;
                 bank_select_table     = 'x;
                 
                 for (integer i = NUM_BANKS-1; i >= 0; --i) begin
@@ -141,6 +149,7 @@ module VX_cache_core_rsp_merge #(
                         core_rsp_valid_unqual[per_bank_core_rsp_tid[i]] = 1;     
                         core_rsp_tag_unqual[per_bank_core_rsp_tid[i]]   = per_bank_core_rsp_tag[i];
                         core_rsp_data_unqual[per_bank_core_rsp_tid[i]]  = per_bank_core_rsp_data[i];
+                        core_rsp_is_hit_unqual[per_bank_core_rsp_tid[i]]  = per_bank_core_rsp_is_hit[i];
                         bank_select_table[per_bank_core_rsp_tid[i]]     = (1 << i);
                     end
                 end    
@@ -161,10 +170,10 @@ module VX_cache_core_rsp_merge #(
                     .clk       (clk),
                     .reset     (reset),
                     .valid_in  (core_rsp_valid_unqual[i]),        
-                    .data_in   ({core_rsp_tag_unqual[i], core_rsp_data_unqual[i]}),
+                    .data_in   ({core_rsp_tag_unqual[i], core_rsp_data_unqual[i], core_rsp_is_hit_unqual[i]}),
                     .ready_in  (core_rsp_ready_unqual[i]),      
                     .valid_out (core_rsp_valid[i]),
-                    .data_out  ({core_rsp_tag[i],core_rsp_data[i]}),
+                    .data_out  ({core_rsp_tag[i],core_rsp_data[i], core_rsp_is_hit[i]}),
                     .ready_out (core_rsp_ready[i])
                 );
             end
@@ -186,6 +195,7 @@ module VX_cache_core_rsp_merge #(
             reg [NUM_REQS-1:0] core_rsp_valid_unqual;
             reg [`CORE_REQ_TAG_COUNT-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag_unqual;
             reg [NUM_REQS-1:0][`WORD_WIDTH-1:0] core_rsp_data_unqual;
+            reg [NUM_REQS-1:0] core_rsp_is_hit_unqual;
 
             if (CORE_TAG_ID_BITS != 0) begin
 
@@ -195,6 +205,7 @@ module VX_cache_core_rsp_merge #(
                     core_rsp_data_unqual  = 'x;
                     core_rsp_valid_unqual[per_bank_core_rsp_tid] = per_bank_core_rsp_valid;
                     core_rsp_data_unqual[per_bank_core_rsp_tid]  = per_bank_core_rsp_data;  
+                    core_rsp_is_hit_unqual[per_bank_core_rsp_tid] = per_bank_core_rsp_is_hit;
                 end           
 
                 assign per_bank_core_rsp_ready = core_rsp_ready;
@@ -208,6 +219,7 @@ module VX_cache_core_rsp_merge #(
                     core_rsp_valid_unqual[per_bank_core_rsp_tid] = per_bank_core_rsp_valid;
                     core_rsp_tag_unqual[per_bank_core_rsp_tid]   = per_bank_core_rsp_tag;
                     core_rsp_data_unqual[per_bank_core_rsp_tid]  = per_bank_core_rsp_data;  
+                    core_rsp_is_hit_unqual[per_bank_core_rsp_tid]  = per_bank_core_rsp_is_hit; 
                 end 
 
                 assign per_bank_core_rsp_ready = core_rsp_ready[per_bank_core_rsp_tid];
@@ -216,7 +228,8 @@ module VX_cache_core_rsp_merge #(
 
             assign core_rsp_valid = core_rsp_valid_unqual;
             assign core_rsp_tag   = core_rsp_tag_unqual;
-            assign core_rsp_data  = core_rsp_data_unqual;            
+            assign core_rsp_data  = core_rsp_data_unqual;        
+            assign core_rsp_is_hit = core_rsp_is_hit_unqual;    
             
         end else begin
 
@@ -224,6 +237,7 @@ module VX_cache_core_rsp_merge #(
             assign core_rsp_valid = per_bank_core_rsp_valid;
             assign core_rsp_tag   = per_bank_core_rsp_tag;
             assign core_rsp_data  = per_bank_core_rsp_data;
+            assign core_rsp_is_hit = per_bank_core_rsp_is_hit;
             assign per_bank_core_rsp_ready = core_rsp_ready;
 
         end        

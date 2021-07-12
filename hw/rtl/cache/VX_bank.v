@@ -67,6 +67,7 @@ module VX_bank #(
     output wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] core_rsp_data,
     output wire [CORE_TAG_WIDTH-1:0]    core_rsp_tag,
     input  wire                         core_rsp_ready,
+    output wire                         core_rsp_is_hit,
 
     // Memory request
     output wire                         mem_req_valid,
@@ -458,6 +459,7 @@ module VX_bank #(
     wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] crsq_data;
     wire [NUM_PORTS-1:0][`REQS_BITS-1:0] crsq_tid;
     wire [CORE_TAG_WIDTH-1:0] crsq_tag;
+    wire crsq_is_hit;
 
     assign crsq_in_valid = valid_st1 && crsq_push_st1;      
     assign crsq_in_stall = crsq_in_valid && !crsq_in_ready;
@@ -465,6 +467,7 @@ module VX_bank #(
     assign crsq_pmask = pmask_st1;
     assign crsq_tid   = req_tid_st1;
     assign crsq_tag   = tag_st1;
+    assign crsq_is_hit = tag_match_st0;
 
     if (`WORDS_PER_LINE > 1) begin
         for (genvar p = 0; p < NUM_PORTS; ++p) begin
@@ -475,16 +478,16 @@ module VX_bank #(
     end
 
     VX_skid_buffer #(
-        .DATAW (CORE_TAG_WIDTH + (1 + `WORD_WIDTH + `REQS_BITS) * NUM_PORTS),
+        .DATAW (CORE_TAG_WIDTH + (1 + `WORD_WIDTH + `REQS_BITS) * NUM_PORTS + 1),
         .BUFFERED (NUM_BANKS == 1)
     ) core_rsp_req (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (crsq_in_valid),        
-        .data_in   ({crsq_tag, crsq_pmask, crsq_data, crsq_tid}),
+        .data_in   ({crsq_tag, crsq_pmask, crsq_data, crsq_tid, crsq_is_hit}),
         .ready_in  (crsq_in_ready),      
         .valid_out (core_rsp_valid),
-        .data_out  ({core_rsp_tag, core_rsp_pmask, core_rsp_data, core_rsp_tid}),
+        .data_out  ({core_rsp_tag, core_rsp_pmask, core_rsp_data, core_rsp_tid, core_rsp_is_hit}),
         .ready_out (core_rsp_ready)
     );
 
