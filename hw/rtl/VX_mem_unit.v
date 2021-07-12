@@ -107,6 +107,7 @@ module VX_mem_unit # (
         .core_rsp_data      (icache_core_rsp_if.data),
         .core_rsp_tag       (icache_core_rsp_if.tag),
         .core_rsp_ready     (icache_core_rsp_if.ready),
+        `UNUSED_PIN (core_rsp_tmask),
 
     `ifdef PERF_ENABLE
         .perf_cache_if      (perf_icache_if),
@@ -162,6 +163,7 @@ module VX_mem_unit # (
 
         // Core response
         .core_rsp_valid     (dcache_rsp_if.valid),
+        .core_rsp_tmask     (dcache_rsp_if.tmask),
         .core_rsp_data      (dcache_rsp_if.data),
         .core_rsp_tag       (dcache_rsp_if.tag),
         .core_rsp_ready     (dcache_rsp_if.ready),
@@ -241,6 +243,7 @@ module VX_mem_unit # (
 
             // Core response
             .core_rsp_valid     (smem_rsp_if.valid),
+            .core_rsp_tmask     (smem_rsp_if.tmask),
             .core_rsp_data      (smem_rsp_if.data),
             .core_rsp_tag       (smem_rsp_if.tag),
             .core_rsp_ready     (smem_rsp_if.ready)

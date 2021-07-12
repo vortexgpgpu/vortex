@@ -101,6 +101,7 @@ module VX_core #(
 
         // Dcache core reponse    
         .dcache_rsp_valid   (dcache_core_rsp_if.valid),
+        .dcache_rsp_tmask   (dcache_core_rsp_if.tmask),
         .dcache_rsp_data    (dcache_core_rsp_if.data),
         .dcache_rsp_tag     (dcache_core_rsp_if.tag),
         .dcache_rsp_ready   (dcache_core_rsp_if.ready),

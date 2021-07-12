@@ -53,32 +53,21 @@ module VX_smem_arb (
     // handle responses
     //
 
-    wire [1:0] rsp_valid_in;
-    wire [1:0][RSP_DATAW-1:0] rsp_data_in;        
-    wire [`NUM_THREADS-1:0] core_rsp_tmask;
-    wire core_rsp_valid;
-
-    assign rsp_valid_in[0] = (| cache_rsp_if.valid);
-    assign rsp_valid_in[1] = (| smem_rsp_if.valid);
-
-    assign rsp_data_in[0] = {cache_rsp_if.valid, cache_rsp_if.data, {cache_rsp_if.tag, 1'b0}};
-    assign rsp_data_in[1] = {smem_rsp_if.valid,  smem_rsp_if.data,  {smem_rsp_if.tag, 1'b1}};
-
     VX_stream_arbiter #(
         .NUM_REQS (2),
         .DATAW    (RSP_DATAW),
+        .TYPE     ("X"),
         .BUFFERED (1)
     ) rsp_arb (
         .clk        (clk),
         .reset      (reset),
-        .valid_in   (rsp_valid_in),
-        .data_in    (rsp_data_in),
+        .valid_in   ({smem_rsp_if.valid, cache_rsp_if.valid}),
+        .data_in    ({{smem_rsp_if.tmask,  smem_rsp_if.data,  {smem_rsp_if.tag,  1'b1}}, 
+                      {cache_rsp_if.tmask, cache_rsp_if.data, {cache_rsp_if.tag, 1'b0}}}),
         .ready_in   ({smem_rsp_if.ready, cache_rsp_if.ready}),
-        .valid_out  (core_rsp_valid),
-        .data_out   ({core_rsp_tmask, core_rsp_if.data, core_rsp_if.tag}),
+        .valid_out  (core_rsp_if.valid),
+        .data_out   ({core_rsp_if.tmask, core_rsp_if.data, core_rsp_if.tag}),
         .ready_out  (core_rsp_if.ready)
     );
-
-    assign core_rsp_if.valid = {`NUM_THREADS{core_rsp_valid}} & core_rsp_tmask;
 
 endmodule

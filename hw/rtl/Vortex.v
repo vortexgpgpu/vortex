@@ -125,6 +125,7 @@ module Vortex (
             .core_rsp_data      (per_cluster_mem_rsp_data),
             .core_rsp_tag       (per_cluster_mem_rsp_tag),              
             .core_rsp_ready     (per_cluster_mem_rsp_ready),
+            `UNUSED_PIN (core_rsp_tmask),
 
             // Memory request
             .mem_req_valid      (mem_req_valid),

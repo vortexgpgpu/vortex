@@ -42,7 +42,8 @@ module VX_shared_mem #(
     output wire [NUM_REQS-1:0]                  core_req_ready,
 
     // Core response
-    output wire [NUM_REQS-1:0]                  core_rsp_valid,    
+    output wire                                 core_rsp_valid,
+    output wire [NUM_REQS-1:0]                  core_rsp_tmask,
     output wire [NUM_REQS-1:0][`WORD_WIDTH-1:0] core_rsp_data,
     output wire [CORE_TAG_WIDTH-1:0]            core_rsp_tag,
     input  wire                                 core_rsp_ready
@@ -63,7 +64,7 @@ module VX_shared_mem #(
     wire [NUM_BANKS-1:0][`REQS_BITS-1:0]    per_bank_core_req_tid_unqual;
     wire                                    per_bank_core_req_ready_unqual;
     
-    VX_cache_core_req_bank_sel #(
+    VX_core_req_bank_sel #(
         .CACHE_ID        (CACHE_ID),
         .CACHE_LINE_SIZE (WORD_SIZE),
         .NUM_BANKS       (NUM_BANKS),
@@ -79,13 +80,13 @@ module VX_shared_mem #(
     `ifdef PERF_ENABLE        
         .bank_stalls(perf_cache_if.bank_stalls),
     `endif     
-        .core_req_valid (core_req_valid),
-        .core_req_rw    (core_req_rw),
-        .core_req_addr  (core_req_addr),
-        .core_req_byteen(core_req_byteen),
-        .core_req_data  (core_req_data),
-        .core_req_tag   (core_req_tag),
-        .core_req_ready (core_req_ready),
+        .core_req_valid          (core_req_valid),
+        .core_req_rw             (core_req_rw),
+        .core_req_addr           (core_req_addr),
+        .core_req_byteen         (core_req_byteen),
+        .core_req_data           (core_req_data),
+        .core_req_tag            (core_req_tag),
+        .core_req_ready          (core_req_ready),
         .per_bank_core_req_valid (per_bank_core_req_valid_unqual),
         .per_bank_core_req_tid   (per_bank_core_req_tid_unqual),
         .per_bank_core_req_rw    (per_bank_core_req_rw_unqual),
@@ -233,9 +234,6 @@ module VX_shared_mem #(
         end
     end
 
-    wire [NUM_REQS-1:0] core_rsp_valids_out;
-    wire core_rsp_valid_out;
-
     assign crsq_in_valid = ~creq_empty && core_req_has_read;
 
     VX_skid_buffer #(
@@ -246,12 +244,10 @@ module VX_shared_mem #(
         .valid_in  (crsq_in_valid),        
         .data_in   ({core_rsp_valids_in, core_rsp_data_in, core_rsp_tag_in}),
         .ready_in  (crsq_in_ready),      
-        .valid_out (core_rsp_valid_out),
-        .data_out  ({core_rsp_valids_out, core_rsp_data, core_rsp_tag}),
+        .valid_out (core_rsp_valid),
+        .data_out  ({core_rsp_tmask, core_rsp_data, core_rsp_tag}),
         .ready_out (core_rsp_ready)
     );
-
-    assign core_rsp_valid = core_rsp_valids_out & {NUM_REQS{core_rsp_valid_out}};
 
 `ifdef DBG_CACHE_REQ_INFO
 `IGNORE_WARNINGS_BEGIN
@@ -342,7 +338,7 @@ module VX_shared_mem #(
     assign perf_core_writes_per_cycle = $countones(core_req_valid & core_req_ready & core_req_rw);
     
     if (CORE_TAG_ID_BITS != 0) begin
-        assign perf_crsp_stall_per_cycle = $countones(core_rsp_valid & {NUM_REQS{!core_rsp_ready}});
+        assign perf_crsp_stall_per_cycle = $countones(core_rsp_tmask & {NUM_REQS{core_rsp_valid && ~core_rsp_ready}});
     end else begin
         assign perf_crsp_stall_per_cycle = $countones(core_rsp_valid & ~core_rsp_ready);
     end
