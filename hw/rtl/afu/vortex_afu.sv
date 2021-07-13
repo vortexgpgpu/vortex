@@ -924,12 +924,12 @@ VX_onehot_encoder #(
 ) cout_tid_enc (
   .data_in  (vx_mem_req_byteen),
   .data_out (cout_tid),
-  `UNUSED_PIN (valid)
+  `UNUSED_PIN (valid_out)
 );
 
 VX_onehot_mux #(
   .DATAW (8),
-  .COUNT (`VX_MEM_BYTEEN_WIDTH)
+  .N     (`VX_MEM_BYTEEN_WIDTH)
 ) cout_char_mux (
   .data_in  (vx_mem_req_data),
   .sel_in   (vx_mem_req_byteen),

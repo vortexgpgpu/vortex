@@ -3,7 +3,7 @@
 module VX_priority_encoder #( 
     parameter N       = 1,  
     parameter REVERSE = 0,
-    parameter FAST    = 1,
+    parameter MODEL   = 1,
     parameter LN      = `LOG2UP(N)
 ) (
     input  wire [N-1:0]  data_in,  
@@ -24,7 +24,7 @@ module VX_priority_encoder #(
         assign index     = ~data_in[REVERSE];
         assign valid_out = (| data_in);
 
-    end else if (FAST) begin
+    end else if (MODEL == 1) begin
 
         wire [N-1:0] scan_lo;
 
@@ -51,8 +51,43 @@ module VX_priority_encoder #(
         ) onehot_encoder (
             .data_in  (onehot),
             .data_out (index),        
-            `UNUSED_PIN (valid)
+            `UNUSED_PIN (valid_out)
         );
+
+    end else if (MODEL == 2) begin
+
+    `IGNORE_WARNINGS_BEGIN
+        wire [N-1:0] higher_pri_regs;
+    `IGNORE_WARNINGS_END
+        assign higher_pri_regs[N-1:1] = higher_pri_regs[N-2:0] | data_in[N-2:0];
+        assign higher_pri_regs[0]     = 1'b0;
+        assign onehot[N-1:0] = data_in[N-1:0] & ~higher_pri_regs[N-1:0];
+
+        VX_onehot_encoder #(
+            .N (N),
+            .REVERSE (REVERSE)
+        ) onehot_encoder (
+            .data_in  (onehot),
+            .data_out (index),        
+            `UNUSED_PIN (valid_out)
+        );
+        
+        assign valid_out = (| data_in);
+
+    end else if (MODEL == 3) begin
+
+        assign onehot = data_in & ~(data_in-1);
+
+        VX_onehot_encoder #(
+            .N (N),
+            .REVERSE (REVERSE)
+        ) onehot_encoder (
+            .data_in  (onehot),
+            .data_out (index),        
+            `UNUSED_PIN (valid_out)
+        );
+
+        assign valid_out = (| data_in);
 
     end else begin
 

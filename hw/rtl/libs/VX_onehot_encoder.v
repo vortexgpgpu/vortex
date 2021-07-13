@@ -11,17 +11,17 @@ module VX_onehot_encoder #(
 ) (
     input wire [N-1:0]   data_in,    
     output wire [LN-1:0] data_out,
-    output wire          valid
+    output wire          valid_out
 ); 
     if (N == 1) begin
 
-        assign data_out = data_in;
-        assign valid    = data_in;
+        assign data_out  = data_in;
+        assign valid_out = data_in;
 
     end else if (N == 2) begin
 
-        assign data_out = data_in[!REVERSE];
-        assign valid    = (| data_in);
+        assign data_out  = data_in[!REVERSE];
+        assign valid_out = (| data_in);
 
     end else if (FAST) begin
     `IGNORE_WARNINGS_BEGIN
@@ -60,7 +60,7 @@ module VX_onehot_encoder #(
         end	
     
         assign data_out = addr[levels_lp][`LOG2UP(N)-1:0];
-        assign valid = v[levels_lp][0];
+        assign valid_out = v[levels_lp][0];
     `IGNORE_WARNINGS_END
     end else begin 
 
@@ -86,8 +86,8 @@ module VX_onehot_encoder #(
             end
         end
 
-        assign data_out = index_r;
-        assign valid    = (| data_in);
+        assign data_out  = index_r;
+        assign valid_out = (| data_in);
     end
 
 endmodule
