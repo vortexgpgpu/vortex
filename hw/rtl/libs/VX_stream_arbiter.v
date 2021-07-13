@@ -86,7 +86,7 @@ module VX_stream_arbiter #(
 
         VX_onehot_mux #(
             .DATAW (DATAW),
-            .COUNT (NUM_REQS)
+            .N     (NUM_REQS)
         ) data_in_mux (
             .data_in  (data_in),
             .sel_in   (sel_1hot),

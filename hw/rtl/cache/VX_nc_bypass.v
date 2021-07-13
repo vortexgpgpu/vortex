@@ -153,7 +153,7 @@ module VX_nc_bypass #(
 
         VX_onehot_mux #(
             .DATAW (CORE_TAG_WIDTH + CORE_DATA_WIDTH + CORE_DATA_SIZE + CORE_ADDR_WIDTH + 1),
-            .COUNT (NUM_REQS)
+            .N     (NUM_REQS)
         ) core_req_nc_mux (
             .data_in  (core_req_nc_mux_in),
             .sel_in   (core_req_nc_sel),

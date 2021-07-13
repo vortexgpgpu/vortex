@@ -76,7 +76,7 @@ module VX_matrix_arbiter #(
         ) encoder (
             .data_in    (grant_unqual),
             .data_out   (grant_index),
-            `UNUSED_PIN (valid)
+            `UNUSED_PIN (valid_out)
         );
 
         assign grant_valid = (| requests);
