@@ -48,25 +48,25 @@ module VX_fpu_fpga #(
     reg do_madd, do_sub, do_neg, is_itof, is_signed;
 
     always @(*) begin
-        do_madd   = 'x;
-        do_sub    = 'x;        
-        do_neg    = 'x;
-        is_itof   = 'x;
-        is_signed = 'x;
+        do_madd   = 0;
+        do_sub    = 0;        
+        do_neg    = 0;
+        is_itof   = 0;
+        is_signed = 0;
         case (op_type)
-            `FPU_ADD:    begin core_select = FPU_FMA; do_madd = 0; do_sub = 0; do_neg = 0; end
-            `FPU_SUB:    begin core_select = FPU_FMA; do_madd = 0; do_sub = 1; do_neg = 0; end
-            `FPU_MUL:    begin core_select = FPU_FMA; do_madd = 0; do_sub = 0; do_neg = 1; end
-            `FPU_MADD:   begin core_select = FPU_FMA; do_madd = 1; do_sub = 0; do_neg = 0; end
-            `FPU_MSUB:   begin core_select = FPU_FMA; do_madd = 1; do_sub = 1; do_neg = 0; end
-            `FPU_NMADD:  begin core_select = FPU_FMA; do_madd = 1; do_sub = 0; do_neg = 1; end
+            `FPU_ADD:    begin core_select = FPU_FMA; end
+            `FPU_SUB:    begin core_select = FPU_FMA; do_sub = 1; end
+            `FPU_MUL:    begin core_select = FPU_FMA; do_neg = 1; end
+            `FPU_MADD:   begin core_select = FPU_FMA; do_madd = 1; end
+            `FPU_MSUB:   begin core_select = FPU_FMA; do_madd = 1; do_sub = 1; end
+            `FPU_NMADD:  begin core_select = FPU_FMA; do_madd = 1; do_neg = 1; end
             `FPU_NMSUB:  begin core_select = FPU_FMA; do_madd = 1; do_sub = 1; do_neg = 1; end
             `FPU_DIV:    begin core_select = FPU_DIV; end
             `FPU_SQRT:   begin core_select = FPU_SQRT; end
-            `FPU_CVTWS:  begin core_select = FPU_CVT; is_itof = 0; is_signed = 1; end
-            `FPU_CVTWUS: begin core_select = FPU_CVT; is_itof = 0; is_signed = 0; end
+            `FPU_CVTWS:  begin core_select = FPU_CVT; is_signed = 1; end
+            `FPU_CVTWUS: begin core_select = FPU_CVT; end
             `FPU_CVTSW:  begin core_select = FPU_CVT; is_itof = 1; is_signed = 1; end
-            `FPU_CVTSWU: begin core_select = FPU_CVT; is_itof = 1; is_signed = 0; end
+            `FPU_CVTSWU: begin core_select = FPU_CVT; is_itof = 1; end
             default:     begin core_select = FPU_NCP; end
         endcase
     end
