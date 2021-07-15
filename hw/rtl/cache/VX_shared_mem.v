@@ -91,11 +91,12 @@ module VX_shared_mem #(
         .per_bank_core_req_tid   (per_bank_core_req_tid_unqual),
         .per_bank_core_req_rw    (per_bank_core_req_rw_unqual),
         .per_bank_core_req_addr  (per_bank_core_req_addr_unqual),
-        `UNUSED_PIN (per_bank_core_req_wsel),
         .per_bank_core_req_byteen(per_bank_core_req_byteen_unqual),
         .per_bank_core_req_tag   (per_bank_core_req_tag_unqual),
         .per_bank_core_req_data  (per_bank_core_req_data_unqual),
-        .per_bank_core_req_ready (per_bank_core_req_ready_unqual)
+        .per_bank_core_req_ready (per_bank_core_req_ready_unqual),
+        `UNUSED_PIN (per_bank_core_req_pmask),
+        `UNUSED_PIN (per_bank_core_req_wsel)
     );
 
     wire [NUM_BANKS-1:0]                    per_bank_core_req_valid; 
