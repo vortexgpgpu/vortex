@@ -247,7 +247,7 @@ module VX_bank #(
             mrsq_enable || flush_enable,
             mshr_enable ? 1'b0 : creq_rw,
             mshr_enable ? mshr_addr : (mem_rsp_valid ? mem_rsp_addr : (flush_enable ? `LINE_ADDR_WIDTH'(flush_addr) : creq_addr)),
-            mem_rsp_valid ? mem_rsp_data : creq_line_data,
+            (mem_rsp_valid || !WRITE_ENABLE) ? mem_rsp_data : creq_line_data,
             mshr_enable ? mshr_wsel : creq_wsel,
             mshr_enable ? mshr_byteen : creq_byteen,
             mshr_enable ? mshr_tid : creq_tid,

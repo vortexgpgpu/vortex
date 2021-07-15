@@ -45,16 +45,18 @@ module VX_data_access #(
     `UNUSED_VAR (reset)
     `UNUSED_VAR (readen)
 
+    localparam BYTEENW = WRITE_ENABLE ? CACHE_LINE_SIZE : 1;
+
     wire [`LINE_SELECT_BITS-1:0] line_addr;
     wire [CACHE_LINE_SIZE-1:0] byte_enable;
     
     assign line_addr = addr[`LINE_SELECT_BITS-1:0];
-    assign byte_enable = (WRITE_ENABLE && !is_fill) ? byteen : {CACHE_LINE_SIZE{1'b1}};
+    assign byte_enable = is_fill ? {CACHE_LINE_SIZE{1'b1}} : byteen;
 
     VX_sp_ram #(
         .DATAW   (CACHE_LINE_SIZE * 8),
         .SIZE    (`LINES_PER_BANK),
-        .BYTEENW (CACHE_LINE_SIZE),
+        .BYTEENW (BYTEENW),
         .RWCHECK (1)
     ) data_store (
         .clk(clk),        
