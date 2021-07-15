@@ -132,14 +132,11 @@ module VX_pipeline #(
     VX_perf_pipeline_if perf_pipeline_if();
 `endif
 
-    wire fetch_reset, decode_reset, issue_reset, execute_reset, commit_reset;
-    VX_reset_relay #(
-        .NUM_NODES (5)
-    ) reset_relay (
-        .clk     (clk),
-        .reset   (reset),
-        .reset_o ({fetch_reset, decode_reset, issue_reset, execute_reset, commit_reset})
-    );
+    `RESET_RELAY (fetch_reset);
+    `RESET_RELAY (decode_reset);
+    `RESET_RELAY (issue_reset);
+    `RESET_RELAY (execute_reset);
+    `RESET_RELAY (commit_reset);
 
     VX_fetch #(
         .CORE_ID(CORE_ID)
