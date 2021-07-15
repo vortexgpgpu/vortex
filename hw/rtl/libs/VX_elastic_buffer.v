@@ -4,8 +4,7 @@ module VX_elastic_buffer #(
     parameter DATAW    = 1,
     parameter SIZE     = 2,
     parameter BUFFERED = 0,
-    parameter FASTRAM  = 0,
-    parameter PASSTHRU = 0
+    parameter FASTRAM  = 0
 ) ( 
     input  wire             clk,
     input  wire             reset,
@@ -18,7 +17,7 @@ module VX_elastic_buffer #(
     input  wire             ready_out,
     output wire             valid_out
 );
-    if (PASSTHRU) begin
+    if (SIZE == 0) begin
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
@@ -27,6 +26,22 @@ module VX_elastic_buffer #(
         assign data_out  = data_in;
         assign ready_in  = ready_out;
 
+    end else if (SIZE == 2) begin
+
+        VX_skid_buffer #(
+            .DATAW    (DATAW),
+            .USE_FASTREG (BUFFERED)
+        ) queue (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (valid_in),        
+            .data_in   (data_in),
+            .ready_in  (ready_in),      
+            .valid_out (valid_out),
+            .data_out  (data_out),
+            .ready_out (ready_out)
+        );
+    
     end else begin
         
         wire empty, full;
