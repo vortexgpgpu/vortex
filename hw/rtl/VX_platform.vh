@@ -57,6 +57,14 @@
 `define TRACING_ON  /* verilator tracing_on */
 `define TRACING_OFF /* verilator tracing_off */
 
+`define RESET_RELAY(signal) \
+    wire signal;            \
+    VX_reset_relay __``signal ( \
+        .clk     (clk),     \
+        .reset   (reset),   \
+        .reset_o (signal)   \
+    )
+
 ///////////////////////////////////////////////////////////////////////////////
 
 `define USE_FAST_BRAM   (* ramstyle = "MLAB, no_rw_check" *)

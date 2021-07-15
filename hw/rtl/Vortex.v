@@ -42,24 +42,17 @@ module Vortex (
 
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_busy;
 
-    wire [`NUM_CLUSTERS-1:0] cluster_reset;
-    VX_reset_relay #(
-        .DEPTH (`NUM_CLUSTERS > 1),
-        .NUM_NODES (`NUM_CLUSTERS)
-    ) reset_relay (
-        .clk     (clk),
-        .reset   (reset),
-        .reset_o (cluster_reset)
-    );
-
     for (genvar i = 0; i < `NUM_CLUSTERS; i++) begin
+
+        `RESET_RELAY (cluster_reset);
+
         VX_cluster #(
             .CLUSTER_ID(i)
         ) cluster (
             `SCOPE_BIND_Vortex_cluster(i)
 
             .clk            (clk),
-            .reset          (cluster_reset[i]),
+            .reset          (cluster_reset),
 
             .mem_req_valid  (per_cluster_mem_req_valid [i]),
             .mem_req_rw     (per_cluster_mem_req_rw    [i]),
@@ -85,6 +78,8 @@ module Vortex (
         VX_perf_cache_if perf_l3cache_if();
     `endif
 
+        `RESET_RELAY (l3_reset);
+
         VX_cache #(
             .CACHE_ID           (`L3CACHE_ID),
             .CACHE_SIZE         (`L3CACHE_SIZE),
@@ -105,7 +100,7 @@ module Vortex (
             `SCOPE_BIND_Vortex_l3cache
  
             .clk                (clk),
-            .reset              (reset),
+            .reset              (l3_reset),
 
         `ifdef PERF_ENABLE
             .perf_cache_if      (perf_l3cache_if),

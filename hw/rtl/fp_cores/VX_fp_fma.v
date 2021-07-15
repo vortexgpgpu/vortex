@@ -39,18 +39,6 @@ module VX_fp_fma #(
     wire stall = ~ready_out && valid_out;
     wire enable = ~stall;
 
-`ifndef VERILATOR
-    wire [LANES-1:0] fma_reset;
-    VX_reset_relay #(
-        .DEPTH (LANES > 1),
-        .NUM_NODES (LANES)
-    ) reset_relay (
-        .clk     (clk),
-        .reset   (reset),
-        .reset_o (fma_reset)
-    );
-`endif
-
     for (genvar i = 0; i < LANES; i++) begin       
         reg [31:0] a, b, c;
 
@@ -96,9 +84,11 @@ module VX_fp_fma #(
             .data_out (result[i])
         );
     `else
+        `RESET_RELAY (fma_reset);
+
         acl_fmadd fmadd (
             .clk    (clk),
-            .areset (fma_reset[i]),
+            .areset (fma_reset),
             .en     (enable),
             .a      (a),
             .b      (b),

@@ -43,14 +43,10 @@ module VX_execute #(
     wire[`NUM_WARPS-1:0] csr_pending;
     wire[`NUM_WARPS-1:0] fpu_pending;
 
-    wire alu_reset, lsu_reset, csr_reset, fpu_reset, gpu_reset;
-    VX_reset_relay #(
-        .NUM_NODES (5)
-    ) reset_relay (
-        .clk     (clk),
-        .reset   (reset),
-        .reset_o ({alu_reset, lsu_reset, csr_reset, fpu_reset, gpu_reset})
-    );
+    `RESET_RELAY (alu_reset);
+    `RESET_RELAY (lsu_reset);
+    `RESET_RELAY (csr_reset);
+    `RESET_RELAY (gpu_reset);
     
     VX_alu_unit #(
         .CORE_ID (CORE_ID)
@@ -94,6 +90,8 @@ module VX_execute #(
     );
 
 `ifdef EXT_F_ENABLE
+    `RESET_RELAY (fpu_reset);
+
     VX_fpu_unit #(
         .CORE_ID (CORE_ID)
     ) fpu_unit (
@@ -106,7 +104,6 @@ module VX_execute #(
         .pending        (fpu_pending) 
     );
 `else
-    `UNUSED_VAR (fpu_reset)
     `UNUSED_VAR (csr_pending)
     `UNUSED_VAR (fpu_to_csr_if.read_frm)
     assign fpu_req_if.ready     = 0;
