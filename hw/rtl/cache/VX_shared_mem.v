@@ -288,7 +288,7 @@ module VX_shared_mem #(
         for (integer i = 0; i < NUM_BANKS; ++i) begin
             if (per_bank_core_req_valid[i] 
              && (core_req_tag_sel[CORE_TAG_ID_BITS-1:0] != per_bank_core_req_tag[i][CORE_TAG_ID_BITS-1:0])) begin
-                is_multi_tag_req = !creq_empty;
+                is_multi_tag_req = creq_out_valid;
             end
         end
     end
