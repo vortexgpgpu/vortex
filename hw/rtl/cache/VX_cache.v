@@ -290,6 +290,7 @@ module VX_cache #(
     ///////////////////////////////////////////////////////////////////////////    
     
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0]         per_bank_core_req_valid; 
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0]         per_bank_core_req_pmask;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(`WORD_SELECT_BITS)-1:0] per_bank_core_req_wsel;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_core_req_byteen;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`WORD_WIDTH-1:0] per_bank_core_req_data;
@@ -344,7 +345,8 @@ module VX_cache #(
         .core_req_data           (core_req_data_nc),
         .core_req_tag            (core_req_tag_nc),
         .core_req_ready          (core_req_ready_nc),
-        .per_bank_core_req_valid (per_bank_core_req_valid), 
+        .per_bank_core_req_valid (per_bank_core_req_valid),
+        .per_bank_core_req_pmask (per_bank_core_req_pmask),
         .per_bank_core_req_rw    (per_bank_core_req_rw),
         .per_bank_core_req_addr  (per_bank_core_req_addr),
         .per_bank_core_req_wsel  (per_bank_core_req_wsel),
@@ -359,6 +361,7 @@ module VX_cache #(
     
     for (genvar i = 0; i < NUM_BANKS; i++) begin
         wire [NUM_PORTS-1:0]        curr_bank_core_req_valid;
+        wire [NUM_PORTS-1:0]        curr_bank_core_req_pmask;
         wire [NUM_PORTS-1:0][`UP(`WORD_SELECT_BITS)-1:0] curr_bank_core_req_wsel;
         wire [NUM_PORTS-1:0][WORD_SIZE-1:0] curr_bank_core_req_byteen;
         wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] curr_bank_core_req_data;
@@ -389,6 +392,7 @@ module VX_cache #(
 
         // Core Req
         assign curr_bank_core_req_valid   = per_bank_core_req_valid[i];
+        assign curr_bank_core_req_pmask   = per_bank_core_req_pmask[i];
         assign curr_bank_core_req_addr    = per_bank_core_req_addr[i];
         assign curr_bank_core_req_rw      = per_bank_core_req_rw[i];
         assign curr_bank_core_req_wsel    = per_bank_core_req_wsel[i];
@@ -459,7 +463,8 @@ module VX_cache #(
         `endif
                        
             // Core request
-            .core_req_valid     (curr_bank_core_req_valid),                  
+            .core_req_valid     (curr_bank_core_req_valid),
+            .core_req_pmask     (curr_bank_core_req_pmask),             
             .core_req_rw        (curr_bank_core_req_rw),
             .core_req_byteen    (curr_bank_core_req_byteen),              
             .core_req_addr      (curr_bank_core_req_addr),

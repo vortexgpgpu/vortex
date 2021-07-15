@@ -50,7 +50,8 @@ module VX_bank #(
 `endif
 
     // Core Request    
-    input wire [NUM_PORTS-1:0]          core_req_valid, 
+    input wire [NUM_PORTS-1:0]          core_req_valid,
+    input wire [NUM_PORTS-1:0]          core_req_pmask,
     input wire [NUM_PORTS-1:0][`UP(`WORD_SELECT_BITS)-1:0] core_req_wsel,
     input wire [NUM_PORTS-1:0][WORD_SIZE-1:0] core_req_byteen,
     input wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] core_req_data,  
@@ -108,7 +109,7 @@ module VX_bank #(
     wire [`LINE_ADDR_WIDTH-1:0] creq_addr;
     wire [CORE_TAG_WIDTH-1:0]   creq_tag;
     
-    wire creq_push = (| core_req_valid) && core_req_ready;
+    wire creq_push = core_req_valid && core_req_ready;
     assign core_req_ready = !creq_full;
 
     VX_fifo_queue #(
@@ -120,7 +121,7 @@ module VX_bank #(
         .reset      (reset),
         .push       (creq_push),
         .pop        (creq_pop),
-        .data_in    ({core_req_tag, core_req_rw, core_req_addr, core_req_valid, core_req_wsel, core_req_byteen, core_req_data, core_req_tid}),                
+        .data_in    ({core_req_tag, core_req_rw, core_req_addr, core_req_pmask, core_req_wsel, core_req_byteen, core_req_data, core_req_tid}),                
         .data_out   ({creq_tag,     creq_rw,     creq_addr,     creq_pmask,     creq_wsel,     creq_byteen,     creq_data,     creq_tid}),
         .empty      (creq_empty),        
         .full       (creq_full),
