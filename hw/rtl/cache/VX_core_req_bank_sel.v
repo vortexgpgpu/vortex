@@ -230,37 +230,26 @@ module VX_core_req_bank_sel #(
                 if (SHARED_BANK_READY == 0) begin
                     always @(*) begin
                         core_req_ready_r = 0;
-                        for (integer j = 0; j < NUM_BANKS; ++j) begin
-                            for (integer i = 0; i < NUM_REQS; ++i) begin
-                                if (core_req_valid[i] && (core_req_bid[i] == `BANK_SELECT_BITS'(j))) begin
-                                    core_req_ready_r[i] = per_bank_core_req_ready[j];
-                                    break;
-                                end
-                            end
+                        for (integer i = 0; i < NUM_BANKS; ++i) begin
+							if (per_bank_core_req_valid_r[i]) begin
+								core_req_ready_r[per_bank_core_req_tid_r[i]] = per_bank_core_req_ready[i];
+							end
                         end
                     end
                 end else begin
                     always @(*) begin
                         core_req_ready_r = 0;
-                        for (integer j = 0; j < NUM_BANKS; ++j) begin
-                            for (integer i = 0; i < NUM_REQS; ++i) begin
-                                if (core_req_valid[i] && (core_req_bid[i] == `BANK_SELECT_BITS'(j))) begin
-                                    core_req_ready_r[i] = per_bank_core_req_ready;
-                                    break;
-                                end
-                            end
+                        for (integer i = 0; i < NUM_BANKS; ++i) begin
+							if (per_bank_core_req_valid_r[i]) begin
+								core_req_ready_r[per_bank_core_req_tid_r[i]] = per_bank_core_req_ready;
+							end
                         end
                     end
                 end
             end else begin
                 always @(*) begin
-                    core_req_ready_r = 0;        
-                    for (integer i = 0; i < NUM_REQS; ++i) begin
-                        if (core_req_valid[i]) begin
-                            core_req_ready_r[i] = per_bank_core_req_ready;
-                            break;
-                        end
-                    end
+                    core_req_ready_r = 0;     
+                    core_req_ready_r[per_bank_core_req_tid_r[0]] = per_bank_core_req_ready;
                 end
             end
         end        
@@ -320,22 +309,18 @@ module VX_core_req_bank_sel #(
     if (SHARED_BANK_READY == 0) begin
         always @(*) begin
             core_req_sel_r = 0;
-            for (integer j = 0; j < NUM_BANKS; ++j) begin
-                for (integer i = 0; i < NUM_REQS; ++i) begin
-                    if (core_req_valid[i] && (core_req_bid[i] == `UP(`BANK_SELECT_BITS)'(j))) begin
-                        core_req_sel_r[i] = per_bank_core_req_ready[j];
-                    end
+            for (integer i = 0; i < NUM_REQS; ++i) begin
+                if (core_req_valid[i]) begin
+                    core_req_sel_r[i] = per_bank_core_req_ready[core_req_bid[i]];
                 end
             end
         end
     end else begin
         always @(*) begin
             core_req_sel_r = 0;
-            for (integer j = 0; j < NUM_BANKS; ++j) begin
-                for (integer i = 0; i < NUM_REQS; ++i) begin
-                    if (core_req_valid[i] && (core_req_bid[i] == `UP(`BANK_SELECT_BITS)'(j))) begin
-                        core_req_sel_r[i] = per_bank_core_req_ready;
-                    end
+            for (integer i = 0; i < NUM_REQS; ++i) begin
+                if (core_req_valid[i]) begin
+                    core_req_sel_r[i] = per_bank_core_req_ready;
                 end
             end
         end
