@@ -241,32 +241,25 @@ module VX_cache #(
 
     wire [`CACHE_LINE_WIDTH-1:0] mem_rsp_data_qual;
     wire [`MEM_ADDR_WIDTH-1:0] mem_rsp_tag_nc_a, mem_rsp_tag_qual;
-    
-    wire mrsq_full, mrsq_empty;
-    wire mrsq_push, mrsq_pop;
 
-    assign mrsq_push = mem_rsp_valid_nc && mem_rsp_ready_nc;
-    assign mem_rsp_ready_nc = !mrsq_full;
+    wire mrsq_out_valid, mrsq_out_ready;
 
     // trim out shared memory and non-cacheable flags
     assign mem_rsp_tag_nc_a = mem_rsp_tag_nc[NC_ENABLE +: `MEM_ADDR_WIDTH];
     
-    VX_fifo_queue #(
+    VX_elastic_buffer #(
         .DATAW    (`MEM_ADDR_WIDTH + `CACHE_LINE_WIDTH), 
         .SIZE     (MRSQ_SIZE),
         .BUFFERED (1)
     ) mem_rsp_queue (
         .clk        (clk),
         .reset      (reset),
-        .push       (mrsq_push),
-        .pop        (mrsq_pop),
+        .ready_in   (mem_rsp_ready_nc),
+        .valid_in   (mem_rsp_valid_nc),
         .data_in    ({mem_rsp_tag_nc_a, mem_rsp_data_nc}),                
-        .data_out   ({mem_rsp_tag_qual,  mem_rsp_data_qual}),
-        .empty      (mrsq_empty),
-        .full       (mrsq_full),
-        `UNUSED_PIN (alm_full),
-        `UNUSED_PIN (alm_empty),
-        `UNUSED_PIN (size)
+        .data_out   ({mem_rsp_tag_qual, mem_rsp_data_qual}),
+        .ready_out  (mrsq_out_ready),
+        .valid_out  (mrsq_out_valid)
     );
 
     `UNUSED_VAR (mem_rsp_tag_nc)
@@ -289,7 +282,7 @@ module VX_cache #(
 
     ///////////////////////////////////////////////////////////////////////////    
     
-    wire [NUM_BANKS-1:0][NUM_PORTS-1:0]         per_bank_core_req_valid; 
+    wire [NUM_BANKS-1:0]                        per_bank_core_req_valid;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0]         per_bank_core_req_pmask;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(`WORD_SELECT_BITS)-1:0] per_bank_core_req_wsel;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_core_req_byteen;
@@ -318,9 +311,9 @@ module VX_cache #(
     
     if (NUM_BANKS == 1) begin
         `UNUSED_VAR (mem_rsp_tag_qual)
-        assign mrsq_pop = !mrsq_empty && per_bank_mem_rsp_ready;
+        assign mrsq_out_ready = per_bank_mem_rsp_ready;
     end else begin
-        assign mrsq_pop = !mrsq_empty && per_bank_mem_rsp_ready[`MEM_ADDR_BANK(mem_rsp_tag_qual)];
+        assign mrsq_out_ready = per_bank_mem_rsp_ready[`MEM_ADDR_BANK(mem_rsp_tag_qual)];
     end
 
     VX_core_req_bank_sel #(
@@ -360,7 +353,7 @@ module VX_cache #(
     ///////////////////////////////////////////////////////////////////////////
     
     for (genvar i = 0; i < NUM_BANKS; i++) begin
-        wire [NUM_PORTS-1:0]        curr_bank_core_req_valid;
+        wire                        curr_bank_core_req_valid;
         wire [NUM_PORTS-1:0]        curr_bank_core_req_pmask;
         wire [NUM_PORTS-1:0][`UP(`WORD_SELECT_BITS)-1:0] curr_bank_core_req_wsel;
         wire [NUM_PORTS-1:0][WORD_SIZE-1:0] curr_bank_core_req_byteen;
@@ -424,10 +417,10 @@ module VX_cache #(
 
         // Memory response
         if (NUM_BANKS == 1) begin
-            assign curr_bank_mem_rsp_valid = !mrsq_empty;
+            assign curr_bank_mem_rsp_valid = mrsq_out_valid;
             assign curr_bank_mem_rsp_addr  = mem_rsp_tag_qual;
         end else begin
-            assign curr_bank_mem_rsp_valid = !mrsq_empty && (`MEM_ADDR_BANK(mem_rsp_tag_qual) == i);
+            assign curr_bank_mem_rsp_valid = mrsq_out_valid && (`MEM_ADDR_BANK(mem_rsp_tag_qual) == i);
             assign curr_bank_mem_rsp_addr  = `MEM_TO_LINE_ADDR(mem_rsp_tag_qual); 
         end
         assign curr_bank_mem_rsp_data    = mem_rsp_data_qual;
@@ -464,7 +457,7 @@ module VX_cache #(
                        
             // Core request
             .core_req_valid     (curr_bank_core_req_valid),
-            .core_req_pmask     (curr_bank_core_req_pmask),             
+            .core_req_pmask     (curr_bank_core_req_pmask),
             .core_req_rw        (curr_bank_core_req_rw),
             .core_req_byteen    (curr_bank_core_req_byteen),              
             .core_req_addr      (curr_bank_core_req_addr),
