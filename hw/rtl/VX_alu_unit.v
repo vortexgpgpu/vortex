@@ -37,7 +37,7 @@ module VX_alu_unit #(
 
     wire [`NUM_THREADS-1:0][31:0] alu_in1_PC   = alu_req_if.use_PC ? {`NUM_THREADS{alu_req_if.PC}} : alu_in1;
     wire [`NUM_THREADS-1:0][31:0] alu_in2_imm  = alu_req_if.use_imm ? {`NUM_THREADS{alu_req_if.imm}} : alu_in2;
-    wire [`NUM_THREADS-1:0][31:0] alu_in2_less = (alu_req_if.use_imm && !is_br_op) ? {`NUM_THREADS{alu_req_if.imm}} : alu_in2;
+    wire [`NUM_THREADS-1:0][31:0] alu_in2_less = (alu_req_if.use_imm && ~is_br_op) ? {`NUM_THREADS{alu_req_if.imm}} : alu_in2;
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         assign add_result[i] = alu_in1_PC[i] + alu_in2_imm[i];
@@ -46,7 +46,7 @@ module VX_alu_unit #(
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         wire [32:0] sub_in1 = {alu_signed & alu_in1[i][31], alu_in1[i]};
         wire [32:0] sub_in2 = {alu_signed & alu_in2_less[i][31], alu_in2_less[i]};
-        assign sub_result[i] = $signed(sub_in1) - $signed(sub_in2);
+        assign sub_result[i] = sub_in1 - sub_in2;
     end
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin    
@@ -69,10 +69,12 @@ module VX_alu_unit #(
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         always @(*) begin
             case (alu_op_class)                        
-                0: alu_result[i] = add_result[i];
-                1: alu_result[i] = {31'b0, sub_result[i][32]};
-                2: alu_result[i] = is_sub ? sub_result[i][31:0] : shr_result[i];
-                default: alu_result[i] = msc_result[i];
+                2'b00: alu_result[i] = add_result[i];               // ADD, LUI, AUIPC 
+                2'b01: alu_result[i] = {31'b0, sub_result[i][32]};  // SLTU, SLT
+                2'b10: alu_result[i] = is_sub ? sub_result[i][31:0] // SUB
+                                              : shr_result[i];      // SRL, SRA
+                // 2'b11,
+                default: alu_result[i] = msc_result[i];             // AND, OR, XOR, SLL
             endcase
         end       
     end
@@ -148,7 +150,7 @@ module VX_alu_unit #(
     assign stall_in = (is_mul_op && ~mul_ready_in) 
                    || (~is_mul_op && (mul_valid_out || stall_out));
     
-    assign mul_ready_out = !stall_out;
+    assign mul_ready_out = ~stall_out;
 
     assign result_valid = mul_valid_out | (alu_req_if.valid && ~is_mul_op);
     assign result_wid   = mul_valid_out ? mul_wid   : alu_req_if.wid;    
@@ -157,7 +159,7 @@ module VX_alu_unit #(
     assign result_rd    = mul_valid_out ? mul_rd    : alu_req_if.rd;    
     assign result_wb    = mul_valid_out ? mul_wb    : alu_req_if.wb;    
     assign result_data  = mul_valid_out ? mul_data  : alu_jal_result;
-    assign result_is_br = !mul_valid_out && is_br_op;
+    assign result_is_br = ~mul_valid_out && is_br_op;
 
 `else 
 

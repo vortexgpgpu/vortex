@@ -48,10 +48,17 @@ module VX_data_access #(
     localparam BYTEENW = WRITE_ENABLE ? CACHE_LINE_SIZE : 1;
 
     wire [`LINE_SELECT_BITS-1:0] line_addr;
-    wire [CACHE_LINE_SIZE-1:0] byte_enable;
+    wire [BYTEENW-1:0] byte_enable;
     
     assign line_addr = addr[`LINE_SELECT_BITS-1:0];
-    assign byte_enable = is_fill ? {CACHE_LINE_SIZE{1'b1}} : byteen;
+
+    if (WRITE_ENABLE) begin
+        assign byte_enable = is_fill ? {BYTEENW{1'b1}} : byteen;
+    end else begin
+        `UNUSED_VAR (byteen)
+        `UNUSED_VAR (is_fill)
+        assign byte_enable = 1'b1;
+    end
 
     VX_sp_ram #(
         .DATAW   (CACHE_LINE_SIZE * 8),
