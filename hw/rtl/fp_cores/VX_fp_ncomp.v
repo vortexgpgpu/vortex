@@ -238,8 +238,10 @@ module VX_fp_ncomp #(
         end
     end
 
-    wire tmp_has_fflags = ((op_type_s0 == `FPU_MISC) && (frm == 3 || frm == 4)) // MIN/MAX 
-                       || (op_type_s0 == `FPU_CMP); // CMP
+    wire has_fflags_s0 = ((op_type_s0 == `FPU_MISC) 
+                       && (frm_s0 == 3             // MIN
+                        || frm_s0 == 4))           // MAX 
+                      || (op_type_s0 == `FPU_CMP); // CMP
 
     assign stall = ~ready_out && valid_out;
 
@@ -250,8 +252,8 @@ module VX_fp_ncomp #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall),
-        .data_in  ({valid_in_s0, tag_in_s0, tmp_result, tmp_has_fflags, tmp_fflags}),
-        .data_out ({valid_out,   tag_out,   result,     has_fflags,     fflags})
+        .data_in  ({valid_in_s0, tag_in_s0, tmp_result, has_fflags_s0, tmp_fflags}),
+        .data_out ({valid_out,   tag_out,   result,     has_fflags,    fflags})
     );
 
     assign ready_in = ~stall;
