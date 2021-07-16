@@ -44,13 +44,14 @@ module VX_avs_wrapper #(
 );
 
     localparam BANK_ADDRW = `LOG2UP(NUM_BANKS);
+    localparam BUFFERED_OUTPUT = (NUM_BANKS > 2);
 
     // Requests handling
     
     wire [NUM_BANKS-1:0] avs_reqq_push, avs_reqq_pop, avs_reqq_ready;
+    wire [NUM_BANKS-1:0][REQ_TAG_WIDTH-1:0] avs_reqq_tag_out;
     wire [NUM_BANKS-1:0] req_queue_going_full;
     wire [NUM_BANKS-1:0][RD_QUEUE_ADDR_WIDTH-1:0] req_queue_size;
-    wire [NUM_BANKS-1:0][REQ_TAG_WIDTH-1:0] avs_reqq_data_out;
     wire [BANK_ADDRW-1:0] req_bank_sel;
 
     if (NUM_BANKS >= 2) begin
@@ -80,14 +81,15 @@ module VX_avs_wrapper #(
         
         VX_fifo_queue #(
             .DATAW (REQ_TAG_WIDTH),
-            .SIZE  (RD_QUEUE_SIZE)
+            .SIZE  (RD_QUEUE_SIZE),
+            .BUFFERED (!BUFFERED_OUTPUT)
         ) rd_req_queue (
             .clk      (clk),
             .reset    (reset),
             .push     (avs_reqq_push[i]),        
             .pop      (avs_reqq_pop[i]),
             .data_in  (mem_req_tag),
-            .data_out (avs_reqq_data_out[i]),
+            .data_out (avs_reqq_tag_out[i]),
             `UNUSED_PIN (empty),
             `UNUSED_PIN (full),
             `UNUSED_PIN (alm_empty),
@@ -123,7 +125,8 @@ module VX_avs_wrapper #(
     for (genvar i = 0; i < NUM_BANKS; i++) begin
         VX_fifo_queue #(
             .DATAW (AVS_DATA_WIDTH),
-            .SIZE  (RD_QUEUE_SIZE)
+            .SIZE  (RD_QUEUE_SIZE),
+            .BUFFERED (!BUFFERED_OUTPUT)
         ) rd_rsp_queue (
             .clk      (clk),
             .reset    (reset),
@@ -141,14 +144,14 @@ module VX_avs_wrapper #(
     
     for (genvar i = 0; i < NUM_BANKS; i++) begin
         assign rsp_arb_valid_in[i] = !avs_rspq_empty[i];
-        assign rsp_arb_data_in[i]  = {avs_rspq_data_out[i], avs_reqq_data_out[i]};
+        assign rsp_arb_data_in[i]  = {avs_rspq_data_out[i], avs_reqq_tag_out[i]};
         assign avs_reqq_pop[i]     = rsp_arb_valid_in[i] && rsp_arb_ready_in[i];
     end
 
     VX_stream_arbiter #(
         .NUM_REQS (NUM_BANKS),
         .DATAW    (AVS_DATA_WIDTH + REQ_TAG_WIDTH),
-        .BUFFERED (NUM_BANKS > 2)
+        .BUFFERED (BUFFERED_OUTPUT)
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),
