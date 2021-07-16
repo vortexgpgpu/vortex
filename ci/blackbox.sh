@@ -155,7 +155,7 @@ then
     
     if [ -f "$APP_PATH/trace.vcd" ]
     then 
-        mv $APP_PATH/trace.vcd .
+        mv -f $APP_PATH/trace.vcd .
     fi
 else
     if [ $SCOPE -eq 1 ]

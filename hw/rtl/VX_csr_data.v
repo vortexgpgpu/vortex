@@ -40,8 +40,6 @@ module VX_csr_data #(
     
     reg [`NUM_WARPS-1:0][`FRM_BITS+`FFG_BITS-1:0] fcsr;
 
-    reg [31:0] read_data_r;
-
     always @(posedge clk) begin
 
         if (reset) begin
@@ -93,8 +91,12 @@ module VX_csr_data #(
         end
     end
 
+    reg [31:0] read_data_r;
+    reg read_addr_valid_r;
+
     always @(*) begin
         read_data_r = 'x;
+        read_addr_valid_r = 1;
         case (read_addr)
             `CSR_FFLAGS     : read_data_r = 32'(fcsr[read_wid][`FFG_BITS-1:0]);
             `CSR_FRM        : read_data_r = 32'(fcsr[read_wid][`FRM_BITS+`FFG_BITS-1:`FFG_BITS]);
@@ -197,16 +199,19 @@ module VX_csr_data #(
             `CSR_MARCHID   : read_data_r = `ARCHITECTURE_ID;
             `CSR_MIMPID    : read_data_r = `IMPLEMENTATION_ID;
 
-            default: begin            
+            default: begin
                 if (!((read_addr >= `CSR_MPM_BASE && read_addr < (`CSR_MPM_BASE + 32))
                     | (read_addr >= `CSR_MPM_BASE_H && read_addr < (`CSR_MPM_BASE_H + 32)))) begin
-                    assert(~read_enable) else $error("%t: invalid CSR read address: %0h", $time, read_addr);
+                    read_addr_valid_r = 0;
                 end
             end
         endcase
     end 
 
+    `RUNTIME_ASSERT(~read_enable || read_addr_valid_r, ("invalid CSR read address: %0h", read_addr))
+
     assign read_data = read_data_r;
+    
     assign fpu_to_csr_if.read_frm = fcsr[fpu_to_csr_if.read_wid][`FRM_BITS+`FFG_BITS-1:`FFG_BITS];
 
 endmodule
