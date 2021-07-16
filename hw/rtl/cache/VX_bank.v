@@ -20,6 +20,8 @@ module VX_bank #(
 
     // Core Request Queue Size
     parameter CREQ_SIZE                     = 1, 
+    // Core Response Queue Size
+    parameter CRSQ_SIZE                     = 1,
     // Miss Reserv Queue Knob
     parameter MSHR_SIZE                     = 1, 
     // Memory Request Queue Size
@@ -474,8 +476,9 @@ module VX_bank #(
         assign crsq_data = rdata_st1;
     end
 
-    VX_skid_buffer #(
-        .DATAW (CORE_TAG_WIDTH + (1 + `WORD_WIDTH + `REQS_BITS) * NUM_PORTS)
+    VX_elastic_buffer #(
+        .DATAW    (CORE_TAG_WIDTH + (1 + `WORD_WIDTH + `REQS_BITS) * NUM_PORTS),
+        .SIZE     (CRSQ_SIZE)
     ) core_rsp_req (
         .clk       (clk),
         .reset     (reset),

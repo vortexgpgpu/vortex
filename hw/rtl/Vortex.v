@@ -88,6 +88,7 @@ module Vortex (
             .WORD_SIZE          (`L3WORD_SIZE),
             .NUM_REQS           (`L3NUM_REQS),
             .CREQ_SIZE          (`L3CREQ_SIZE),
+            .CRSQ_SIZE          (`L3CRSQ_SIZE),
             .MSHR_SIZE          (`L3MSHR_SIZE),
             .MRSQ_SIZE          (`L3MRSQ_SIZE),
             .MREQ_SIZE          (`L3MREQ_SIZE),

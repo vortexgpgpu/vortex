@@ -18,13 +18,15 @@ module VX_cache #(
     parameter WORD_SIZE                     = 4, 
 
     // Core Request Queue Size
-    parameter CREQ_SIZE                     = 4, 
+    parameter CREQ_SIZE                     = 2,
+    // Core Response Queue Size
+    parameter CRSQ_SIZE                     = 2,
     // Miss Reserv Queue Knob
     parameter MSHR_SIZE                     = 8, 
     // Memory Response Queue Size
     parameter MRSQ_SIZE                     = 4,
     // Memory Request Queue Size
-    parameter MREQ_SIZE                     = 4,
+    parameter MREQ_SIZE                     = 2,
 
     // Enable cache writeable
     parameter WRITE_ENABLE                  = 1,
@@ -250,7 +252,7 @@ module VX_cache #(
     VX_elastic_buffer #(
         .DATAW    (`MEM_ADDR_WIDTH + `CACHE_LINE_WIDTH), 
         .SIZE     (MRSQ_SIZE),
-        .BUFFERED (1)
+        .BUFFERED (MRSQ_SIZE > 2)
     ) mem_rsp_queue (
         .clk        (clk),
         .reset      (reset),
@@ -436,6 +438,7 @@ module VX_cache #(
             .WORD_SIZE          (WORD_SIZE),
             .NUM_REQS           (NUM_REQS),
             .CREQ_SIZE          (CREQ_SIZE),
+            .CRSQ_SIZE          (CRSQ_SIZE),
             .MSHR_SIZE          (MSHR_SIZE),
             .MREQ_SIZE          (MREQ_SIZE),
             .WRITE_ENABLE       (WRITE_ENABLE),
