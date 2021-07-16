@@ -17,6 +17,8 @@ module VX_elastic_buffer #(
     input  wire             ready_out,
     output wire             valid_out
 );
+    `STATIC_ASSERT (SIZE != 1, ("invalid value"))
+
     if (SIZE == 0) begin
 
         `UNUSED_VAR (clk)

@@ -95,25 +95,5 @@ build-md: gen-md
 build-mt: gen-mt
 	make -j -C obj_dir -f VVortex.mk
 
-run: run-s
-
-run-s: build-s
-	(cd obj_dir && ./VVortex)
-
-run-sd: build-sd
-	(cd obj_dir && ./VVortex)
-
-run-st: build-st
-	(cd obj_dir && ./VVortex)
-
-run-m: build-m
-	(cd obj_dir && ./VVortex)
-
-run-md: build-md
-	(cd obj_dir && ./VVortex)
-
-run-mt: build-mt
-	(cd obj_dir && ./VVortex)
-
 clean:
 	rm -rf obj_dir
