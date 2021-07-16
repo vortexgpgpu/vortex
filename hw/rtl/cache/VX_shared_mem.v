@@ -13,7 +13,9 @@ module VX_shared_mem #(
     parameter NUM_REQS                      = 4, 
 
     // Core Request Queue Size
-    parameter CREQ_SIZE                     = 8,
+    parameter CREQ_SIZE                     = 2,
+    // Core Response Queue Size
+    parameter CRSQ_SIZE                     = 2,
 
     // size of tag id in core request tag
     parameter CORE_TAG_ID_BITS              = 8,
@@ -240,8 +242,9 @@ module VX_shared_mem #(
 
     assign crsq_in_valid = creq_out_valid && per_bank_req_has_reads;
 
-    VX_skid_buffer #(
-        .DATAW (NUM_BANKS * (1 + `WORD_WIDTH) + CORE_TAG_WIDTH)
+    VX_elastic_buffer #(
+        .DATAW (NUM_BANKS * (1 + `WORD_WIDTH) + CORE_TAG_WIDTH),
+        .SIZE  (CRSQ_SIZE)
     ) core_rsp_req (
         .clk       (clk),
         .reset     (reset),

@@ -90,6 +90,7 @@ module VX_cluster #(
             .WORD_SIZE          (`L2WORD_SIZE),
             .NUM_REQS           (`L2NUM_REQS),
             .CREQ_SIZE          (`L2CREQ_SIZE),
+            .CRSQ_SIZE          (`L2CRSQ_SIZE),
             .MSHR_SIZE          (`L2MSHR_SIZE),
             .MRSQ_SIZE          (`L2MRSQ_SIZE),
             .MREQ_SIZE          (`L2MREQ_SIZE),

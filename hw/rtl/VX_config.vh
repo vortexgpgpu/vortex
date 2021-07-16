@@ -251,6 +251,11 @@
 `define ICREQ_SIZE 4
 `endif
 
+// Core Response Queue Size
+`ifndef ICRSQ_SIZE
+`define ICRSQ_SIZE 2
+`endif
+
 // Miss Handling Register Size
 `ifndef IMSHR_SIZE
 `define IMSHR_SIZE `NUM_WARPS
@@ -286,6 +291,11 @@
 // Core Request Queue Size
 `ifndef DCREQ_SIZE
 `define DCREQ_SIZE 4
+`endif
+
+// Core Response Queue Size
+`ifndef DCRSQ_SIZE
+`define DCRSQ_SIZE 2
 `endif
 
 // Miss Handling Register Size
@@ -325,6 +335,11 @@
 `define SCREQ_SIZE 4
 `endif
 
+// Core Response Queue Size
+`ifndef SCRSQ_SIZE
+`define SCRSQ_SIZE 2
+`endif
+
 // L2cache Configurable Knobs /////////////////////////////////////////////////
 
 // Size of cache in bytes
@@ -342,17 +357,22 @@
 `define L2CREQ_SIZE 4
 `endif
 
+// Core Response Queue Size
+`ifndef L2CRSQ_SIZE
+`define L2CRSQ_SIZE 2
+`endif
+
 // Miss Handling Register Size
 `ifndef L2MSHR_SIZE
 `define L2MSHR_SIZE 16
 `endif
 
-// L2 Request Queue Size
+// Memory Request Queue Size
 `ifndef L2MREQ_SIZE
 `define L2MREQ_SIZE 4
 `endif
 
-// L2 Response Queue Size
+// Memory Response Queue Size
 `ifndef L2MRSQ_SIZE
 `define L2MRSQ_SIZE `MAX(4, (`L2NUM_BANKS * 2))
 `endif
@@ -374,17 +394,22 @@
 `define L3CREQ_SIZE 4
 `endif
 
+// Core Response Queue Size
+`ifndef L3CRSQ_SIZE
+`define L3CRSQ_SIZE 2
+`endif
+
 // Miss Handling Register Size
 `ifndef L3MSHR_SIZE
 `define L3MSHR_SIZE 16
 `endif
 
-// L3 Request Queue Size
+// Memory Request Queue Size
 `ifndef L3MREQ_SIZE
 `define L3MREQ_SIZE 4
 `endif
 
-// L3 Response Queue Size
+// Memory Response Queue Size
 `ifndef L3MRSQ_SIZE
 `define L3MRSQ_SIZE `MAX(4, (`L3NUM_BANKS * 2))
 `endif

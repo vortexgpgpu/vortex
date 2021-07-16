@@ -74,6 +74,7 @@ module VX_mem_unit # (
         .WORD_SIZE          (`IWORD_SIZE),
         .NUM_REQS           (1),
         .CREQ_SIZE          (`ICREQ_SIZE),
+        .CRSQ_SIZE          (`ICRSQ_SIZE),
         .MSHR_SIZE          (`IMSHR_SIZE),
         .MRSQ_SIZE          (`IMRSQ_SIZE),
         .MREQ_SIZE          (`IMREQ_SIZE),
@@ -132,6 +133,7 @@ module VX_mem_unit # (
         .WORD_SIZE          (`DWORD_SIZE),
         .NUM_REQS           (`DNUM_REQS),
         .CREQ_SIZE          (`DCREQ_SIZE),
+        .CRSQ_SIZE          (`DCRSQ_SIZE),
         .MSHR_SIZE          (`DMSHR_SIZE),
         .MRSQ_SIZE          (`DMRSQ_SIZE),
         .MREQ_SIZE          (`DMREQ_SIZE),
@@ -217,6 +219,7 @@ module VX_mem_unit # (
             .WORD_SIZE          (`SWORD_SIZE),
             .NUM_REQS           (`SNUM_REQS),
             .CREQ_SIZE          (`SCREQ_SIZE),
+            .CRSQ_SIZE          (`SCRSQ_SIZE),
             .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH-`SM_ENABLE),
             .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS-`SM_ENABLE),
             .BANK_ADDR_OFFSET   (`SBANK_ADDR_OFFSET)
