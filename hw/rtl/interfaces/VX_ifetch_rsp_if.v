@@ -9,7 +9,7 @@ interface VX_ifetch_rsp_if ();
     wire [`NUM_THREADS-1:0] tmask;    
     wire [`NW_BITS-1:0]     wid;
     wire [31:0]             PC;
-    wire [31:0]             instr;
+    wire [31:0]             data;
     wire                    ready;
 
 endinterface

@@ -40,7 +40,7 @@ module VX_decode  #(
     reg is_join, is_wstall;
     reg [`NUM_REGS-1:0] used_regs;
 
-    wire [31:0] instr = ifetch_rsp_if.instr;
+    wire [31:0] instr = ifetch_rsp_if.data;
     wire [6:0] opcode = instr[6:0];  
     wire [2:0] func3  = instr[14:12];
     wire [6:0] func7  = instr[31:25];

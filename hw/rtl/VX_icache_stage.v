@@ -62,7 +62,7 @@ module VX_icache_stage #(
     assign ifetch_rsp_if.tmask = rsp_tmask;
     assign ifetch_rsp_if.wid   = rsp_tag;
     assign ifetch_rsp_if.PC    = rsp_PC;
-    assign ifetch_rsp_if.instr = icache_rsp_if.data;        
+    assign ifetch_rsp_if.data  = icache_rsp_if.data;        
     
     // Can accept new response?
     assign icache_rsp_if.ready = ifetch_rsp_if.ready;
@@ -81,7 +81,7 @@ module VX_icache_stage #(
             $display("%t: I$%0d req: wid=%0d, PC=%0h", $time, CORE_ID, ifetch_req_if.wid, ifetch_req_if.PC);
         end
         if (icache_rsp_if.valid && icache_rsp_if.ready) begin
-            $display("%t: I$%0d rsp: wid=%0d, PC=%0h, instr=%0h", $time, CORE_ID, ifetch_rsp_if.wid, ifetch_rsp_if.PC, ifetch_rsp_if.instr);
+            $display("%t: I$%0d rsp: wid=%0d, PC=%0h, data=%0h", $time, CORE_ID, ifetch_rsp_if.wid, ifetch_rsp_if.PC, ifetch_rsp_if.data);
         end
     end
 `endif
