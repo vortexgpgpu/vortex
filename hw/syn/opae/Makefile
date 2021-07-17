@@ -1,6 +1,5 @@
 DEVICE_FAMILY ?= arria10
-ASE_BUILD_DIR ?= build_ase_$(DEVICE_FAMILY)
-FPGA_BUILD_DIR ?= build_fpga_$(DEVICE_FAMILY)
+BUILD_DIR ?= build_$(DEVICE_FAMILY)
 RTL_DIR=../../rtl
 
 ifeq ($(shell which qsub-synth),)
@@ -57,35 +56,35 @@ endif
 
 all: ase-1c
 
-$(ASE_BUILD_DIR)_1c/Makefile:
-	afu_sim_setup -s setup.cfg $(ASE_BUILD_DIR)_1c
+$(BUILD_DIR)_ase_1c/Makefile:
+	afu_sim_setup -s setup.cfg $(BUILD_DIR)_ase_1c
 
-$(ASE_BUILD_DIR)_2c/Makefile:
-	afu_sim_setup -s setup.cfg $(ASE_BUILD_DIR)_2c
+$(BUILD_DIR)_ase_2c/Makefile:
+	afu_sim_setup -s setup.cfg $(BUILD_DIR)_ase_2c
 
-$(ASE_BUILD_DIR)_4c/Makefile:
-	afu_sim_setup -s setup.cfg $(ASE_BUILD_DIR)_4c
+$(BUILD_DIR)_ase_4c/Makefile:
+	afu_sim_setup -s setup.cfg $(BUILD_DIR)_ase_4c
 
-$(FPGA_BUILD_DIR)_1c/build/dcp.qpf:
-	afu_synth_setup -s setup.cfg $(FPGA_BUILD_DIR)_1c
+$(BUILD_DIR)_fpga_1c/build/dcp.qpf:
+	afu_synth_setup -s setup.cfg $(BUILD_DIR)_fpga_1c
 
-$(FPGA_BUILD_DIR)_2c/build/dcp.qpf:
-	afu_synth_setup -s setup.cfg $(FPGA_BUILD_DIR)_2c
+$(BUILD_DIR)_fpga_2c/build/dcp.qpf:
+	afu_synth_setup -s setup.cfg $(BUILD_DIR)_fpga_2c
 
-$(FPGA_BUILD_DIR)_4c/build/dcp.qpf:
-	afu_synth_setup -s setup.cfg $(FPGA_BUILD_DIR)_4c
+$(BUILD_DIR)_fpga_4c/build/dcp.qpf:
+	afu_synth_setup -s setup.cfg $(BUILD_DIR)_fpga_4c
 
-$(FPGA_BUILD_DIR)_8c/build/dcp.qpf:
-	afu_synth_setup -s setup.cfg $(FPGA_BUILD_DIR)_8c
+$(BUILD_DIR)_fpga_8c/build/dcp.qpf:
+	afu_synth_setup -s setup.cfg $(BUILD_DIR)_fpga_8c
 
-$(FPGA_BUILD_DIR)_16c/build/dcp.qpf:
-	afu_synth_setup -s setup.cfg $(FPGA_BUILD_DIR)_16c
+$(BUILD_DIR)_fpga_16c/build/dcp.qpf:
+	afu_synth_setup -s setup.cfg $(BUILD_DIR)_fpga_16c
 
-$(FPGA_BUILD_DIR)_32c/build/dcp.qpf:
-	afu_synth_setup -s setup.cfg $(FPGA_BUILD_DIR)_32c
+$(BUILD_DIR)_fpga_32c/build/dcp.qpf:
+	afu_synth_setup -s setup.cfg $(BUILD_DIR)_fpga_32c
 
-$(FPGA_BUILD_DIR)_64c/build/dcp.qpf:
-	afu_synth_setup -s setup.cfg $(FPGA_BUILD_DIR)_64c
+$(BUILD_DIR)_fpga_64c/build/dcp.qpf:
+	afu_synth_setup -s setup.cfg $(BUILD_DIR)_fpga_64c
 
 gen-sources-1c:
 	./gen_sources.sh $(CFLAGS) $(CONFIG1) > sources.txt
@@ -110,91 +109,91 @@ gen-sources-64c:
 
 # setup
 
-setup-ase-1c: $(ASE_BUILD_DIR)_1c/Makefile
+setup-ase-1c: $(BUILD_DIR)_ase_1c/Makefile
 
-setup-ase-2c: $(ASE_BUILD_DIR)_2c/Makefile
+setup-ase-2c: $(BUILD_DIR)_ase_2c/Makefile
 
-setup-ase-4c: $(ASE_BUILD_DIR)_4c/Makefile
+setup-ase-4c: $(BUILD_DIR)_ase_4c/Makefile
 
-setup-fpga-1c: $(FPGA_BUILD_DIR)_1c/build/dcp.qpf
+setup-fpga-1c: $(BUILD_DIR)_fpga_1c/build/dcp.qpf
 
-setup-fpga-2c: $(FPGA_BUILD_DIR)_2c/build/dcp.qpf
+setup-fpga-2c: $(BUILD_DIR)_fpga_2c/build/dcp.qpf
 
-setup-fpga-4c: $(FPGA_BUILD_DIR)_4c/build/dcp.qpf
+setup-fpga-4c: $(BUILD_DIR)_fpga_4c/build/dcp.qpf
 
-setup-fpga-8c: $(FPGA_BUILD_DIR)_8c/build/dcp.qpf
+setup-fpga-8c: $(BUILD_DIR)_fpga_8c/build/dcp.qpf
 
-setup-fpga-16c: $(FPGA_BUILD_DIR)_16c/build/dcp.qpf
+setup-fpga-16c: $(BUILD_DIR)_fpga_16c/build/dcp.qpf
 
-setup-fpga-32c: $(FPGA_BUILD_DIR)_32c/build/dcp.qpf
+setup-fpga-32c: $(BUILD_DIR)_fpga_32c/build/dcp.qpf
 
-setup-fpga-64c: $(FPGA_BUILD_DIR)_64c/build/dcp.qpf
+setup-fpga-64c: $(BUILD_DIR)_fpga_64c/build/dcp.qpf
 
 # build
 
 ase-1c: gen-sources-1c setup-ase-1c
-	make -C $(ASE_BUILD_DIR)_1c
-	cp $(RTL_DIR)/fp_cores/altera/$(DEVICE_FAMILY)/*.hex $(ASE_BUILD_DIR)_1c/work
+	make -C $(BUILD_DIR)_ase_1c
+	cp $(RTL_DIR)/fp_cores/altera/$(DEVICE_FAMILY)/*.hex $(BUILD_DIR)_ase_1c/work
 
 ase-2c: gen-sources-2c setup-ase-2c
-	make -C $(ASE_BUILD_DIR)_2c
-	cp $(RTL_DIR)/fp_cores/altera/$(DEVICE_FAMILY)/*.hex $(ASE_BUILD_DIR)_2c/work
+	make -C $(BUILD_DIR)_ase_2c
+	cp $(RTL_DIR)/fp_cores/altera/$(DEVICE_FAMILY)/*.hex $(BUILD_DIR)_ase_2c/work
 
 ase-4c: gen-sources-4c setup-ase-4c
-	make -C $(ASE_BUILD_DIR)_4c
-	cp $(RTL_DIR)/fp_cores/altera/$(DEVICE_FAMILY)/*.hex $(ASE_BUILD_DIR)_4c/work
+	make -C $(BUILD_DIR)_ase_4c
+	cp $(RTL_DIR)/fp_cores/altera/$(DEVICE_FAMILY)/*.hex $(BUILD_DIR)_ase_4c/work
 
 fpga-1c: gen-sources-1c setup-fpga-1c
-	cd $(FPGA_BUILD_DIR)_1c && $(RUN_SYNTH)
+	cd $(BUILD_DIR)_fpga_1c && $(RUN_SYNTH)
 
 fpga-2c: gen-sources-2c setup-fpga-2c
-	cd $(FPGA_BUILD_DIR)_2c && $(RUN_SYNTH)
+	cd $(BUILD_DIR)_fpga_2c && $(RUN_SYNTH)
 
 fpga-4c: gen-sources-4c setup-fpga-4c
-	cd $(FPGA_BUILD_DIR)_4c && $(RUN_SYNTH)
+	cd $(BUILD_DIR)_fpga_4c && $(RUN_SYNTH)
 
 fpga-8c: gen-sources-8c setup-fpga-8c
-	cd $(FPGA_BUILD_DIR)_8c && $(RUN_SYNTH)
+	cd $(BUILD_DIR)_fpga_8c && $(RUN_SYNTH)
 
 fpga-16c: gen-sources-16c setup-fpga-16c
-	cd $(FPGA_BUILD_DIR)_16c && $(RUN_SYNTH)
+	cd $(BUILD_DIR)_fpga_16c && $(RUN_SYNTH)
 
 fpga-32c: gen-sources-32c setup-fpga-32c
-	cd $(FPGA_BUILD_DIR)_32c && $(RUN_SYNTH)
+	cd $(BUILD_DIR)_fpga_32c && $(RUN_SYNTH)
 
 fpga-64c: gen-sources-64c setup-fpga-64c
-	cd $(FPGA_BUILD_DIR)_64c && $(RUN_SYNTH)
+	cd $(BUILD_DIR)_fpga_64c && $(RUN_SYNTH)
 
 # cleanup
 
 clean-ase-1c:
-	rm -rf $(ASE_BUILD_DIR)_1c sources.txt
+	rm -rf $(BUILD_DIR)_ase_1c sources.txt
 
 clean-ase-2c:
-	rm -rf $(ASE_BUILD_DIR)_2c sources.txt
+	rm -rf $(BUILD_DIR)_ase_2c sources.txt
 
 clean-ase-4c:
-	rm -rf $(ASE_BUILD_DIR)_4c sources.txt
+	rm -rf $(BUILD_DIR)_ase_4c sources.txt
 
 clean-fpga-1c:
-	rm -rf $(FPGA_BUILD_DIR)_1c sources.txt
+	rm -rf $(BUILD_DIR)_fpga_1c sources.txt
 	
 clean-fpga-2c:
-	rm -rf $(FPGA_BUILD_DIR)_2c sources.txt
+	rm -rf $(BUILD_DIR)_fpga_2c sources.txt
 
 clean-fpga-4c:
-	rm -rf $(FPGA_BUILD_DIR)_4c sources.txt
+	rm -rf $(BUILD_DIR)_fpga_4c sources.txt
 
 clean-fpga-8c:
-	rm -rf $(FPGA_BUILD_DIR)_8c sources.txt
+	rm -rf $(BUILD_DIR)_fpga_8c sources.txt
 
 clean-fpga-16c:
-	rm -rf $(FPGA_BUILD_DIR)_16c sources.txt
+	rm -rf $(BUILD_DIR)_fpga_16c sources.txt
 
 clean-fpga-32c:
-	rm -rf $(FPGA_BUILD_DIR)_32c sources.txt
+	rm -rf $(BUILD_DIR)_fpga_32c sources.txt
 
 clean-fpga-64c:
-	rm -rf $(FPGA_BUILD_DIR)_64c sources.txt
+	rm -rf $(BUILD_DIR)_fpga_64c sources.txt
 
 clean: clean-ase-1c	clean-ase-2c clean-ase-4c clean-fpga-1c clean-fpga-2c clean-fpga-4c clean-fpga-8c clean-fpga-16c clean-fpga-32c clean-fpga-64c
