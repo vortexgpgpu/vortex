@@ -3,8 +3,6 @@
 #include <fstream>
 #include <iomanip>
 
-#define RESET_DELAY 4
-
 #define ENABLE_MEM_STALLS
 
 #ifndef MEM_LATENCY

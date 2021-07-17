@@ -120,6 +120,8 @@
 `define LATENCY_FCVT 5
 `endif
 
+`define RESET_DELAY 6
+
 // CSR Addresses //////////////////////////////////////////////////////////////
 
 // User Floating-Point CSRs

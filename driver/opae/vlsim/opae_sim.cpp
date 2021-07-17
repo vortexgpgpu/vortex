@@ -8,8 +8,6 @@
 #define CCI_RQ_SIZE 16
 #define CCI_WQ_SIZE 16
 
-#define RESET_DELAY 4
-
 #define ENABLE_MEM_STALLS
 
 #ifndef MEM_LATENCY
