@@ -37,8 +37,6 @@ module vortex_afu #(
   input                         avs_readdatavalid [NUM_LOCAL_MEM_BANKS]
 );
 
-localparam RESET_DELAY        = 3;  
-
 localparam LMEM_LINE_WIDTH    = $bits(t_local_mem_data);
 localparam LMEM_ADDR_WIDTH    = $bits(t_local_mem_addr);
 localparam LMEM_BURST_CTRW    = $bits(t_local_mem_burst_cnt);
@@ -170,7 +168,7 @@ wire [2:0] cmd_type = (cp2af_sRxPort.c0.mmioWrValid
 
 // disable assertions until full reset
 `ifndef VERILATOR
-reg [$clog2(RESET_DELAY+1)-1:0] assert_delay_ctr;
+reg [$clog2(`RESET_DELAY+1)-1:0] assert_delay_ctr;
 initial begin
   $assertoff;  
 end
@@ -179,7 +177,7 @@ always @(posedge clk) begin
     assert_delay_ctr <= 0;
   end else begin
     assert_delay_ctr <= assert_delay_ctr + 1;
-    if (assert_delay_ctr == RESET_DELAY) begin
+    if (assert_delay_ctr == (`RESET_DELAY-1)) begin
       $asserton; // enable assertions
     end
   end
@@ -293,7 +291,7 @@ reg  cmd_write_done;
 wire cmd_run_done;
 reg  vx_started;
 
-reg [$clog2(RESET_DELAY+1)-1:0] vx_reset_ctr;
+reg [$clog2(`RESET_DELAY+1)-1:0] vx_reset_ctr;
 always @(posedge clk) begin
   if (state == STATE_IDLE) begin
     vx_reset_ctr <= 0;
@@ -365,7 +363,7 @@ always @(posedge clk) begin
           `endif
           end
         end else begin
-          if (vx_reset_ctr == $bits(vx_reset_ctr)'(RESET_DELAY)) begin
+          if (vx_reset_ctr == (`RESET_DELAY-1)) begin
             vx_started <= 1;
             vx_reset   <= 0;
           end  
