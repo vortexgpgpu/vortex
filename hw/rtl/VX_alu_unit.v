@@ -78,6 +78,8 @@ module VX_alu_unit #(
             endcase
         end       
     end
+
+    // branch
     
     wire is_jal = is_br_op && (br_op == `BR_JAL || br_op == `BR_JALR);
     wire [`NUM_THREADS-1:0][31:0] alu_jal_result = is_jal ? {`NUM_THREADS{alu_req_if.next_PC}} : alu_result; 
