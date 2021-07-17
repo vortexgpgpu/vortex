@@ -79,17 +79,14 @@ run -all
 # compress FPGA output files
 tar -zcvf output_files_1c.tar.gz `find ./build_fpga_1c -type f \( -iname \*.rpt -o -iname \*.txt -o -iname \*summary -o -iname \*.log \)`
 
-# compress VCD trace
+# compress log trace
 tar -zcvf run.log.tar.gz run.log
 tar -cvjf trace.vcd.tar.bz2 trace.vcd run.log
 tar -cvjf trace.vcd.tar.bz2 build_ase_arria10_1c/work/run.log build_ase_arria10_1c/work/trace.vcd
 
-# decompress VCD trace
+# decompress log trace
 tar -zxvf vortex.vcd.tar.gz
 tar -xvf vortex.vcd.tar.bz2
-
-# fixing device resource busy issue when deleting /build_ase_1c/
-lsof +D build_ase_1c
 
 # quick off synthesis
 make core

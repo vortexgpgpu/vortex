@@ -739,8 +739,9 @@ always @(posedge clk) begin
 end
 
 VX_fifo_queue #(
-  .DATAW   (CCI_RD_QUEUE_DATAW),
-  .SIZE    (CCI_RD_QUEUE_SIZE)
+  .DATAW    (CCI_RD_QUEUE_DATAW),
+  .SIZE     (CCI_RD_QUEUE_SIZE),
+  .BUFFERED (1)
 ) cci_rd_req_queue (
   .clk      (clk),
   .reset    (reset),
