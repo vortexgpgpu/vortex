@@ -6,6 +6,8 @@ set -e
 # build sources
 make -s
 
+coverage() 
+{
 # coverage tests
 make -C tests/runtime run-rtlsim
 make -C tests/riscv/isa run-rtlsim
@@ -15,7 +17,10 @@ make -C tests/runtime run-simx
 make -C tests/riscv/isa run-simx
 make -C tests/regression run-simx
 make -C tests/opencl run-simx
+}
 
+cluster() 
+{
 # warp/threads configurations
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=2 --threads=8 --app=demo
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=8 --threads=2 --app=demo
@@ -28,12 +33,18 @@ make -C tests/opencl run-simx
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=demo --args="-n1"
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l3cache --app=demo --args="-n1"
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr --args="-n1"
+}
 
-# build flags
+debug()
+{
+# debugging
 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=1 --perf --app=demo --args="-n1"
 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=1 --debug --app=demo --args="-n1"
 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=1 --scope --app=basic --args="-t0 -n1"
+}
 
+config() 
+{
 # disabling M extension
 CONFIGS=-DEXT_M_DISABLE make -C hw/simulate
 
@@ -75,6 +86,43 @@ CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=vlsim --cores=4 --
 
 # test long memory latency
 CONFIGS="-DMEM_LATENCY=100 -DMEM_RQ_SIZE=4 -DMEM_STALLS_MODULO=4" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
+}
 
+stress() 
+{
 # test pipeline stress
+./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=sgemm --args="-n128"
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm --args="-n128"
+}
+
+usage()
+{
+    echo "usage: regression [-coverage] [-cluster] [-debug] [-config] [-stress] [-all] [-h|--help]"
+}
+
+while [ "$1" != "" ]; do
+    case $1 in
+        -coverage ) coverage
+                    ;;
+        -cluster ) cluster
+                     ;;
+        -debug ) debug
+                    ;;
+        -config ) config
+                ;;
+        -stress ) stress
+                ;;
+        -all ) coverage
+               cluster
+               debug
+               config
+               stress
+               ;;
+        -h | --help ) usage
+                      exit
+                      ;;
+        * )           usage
+                      exit 1
+    esac
+    shift
+done
