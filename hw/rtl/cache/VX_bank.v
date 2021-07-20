@@ -113,7 +113,7 @@ module VX_bank #(
     VX_elastic_buffer #(
         .DATAW    (CORE_TAG_WIDTH + 1 + `LINE_ADDR_WIDTH + (1 + `UP(`WORD_SELECT_BITS) + WORD_SIZE + `WORD_WIDTH + `REQS_BITS) * NUM_PORTS),
         .SIZE     (CREQ_SIZE),
-        .BUFFERED (1)
+        .BUFFERED (CREQ_SIZE > 2)
     ) core_req_queue (
         .clk        (clk),
         .reset      (reset),
@@ -126,10 +126,8 @@ module VX_bank #(
     );  
 
     wire                            mshr_alm_full;
-    wire                            mshr_push;
     wire                            mshr_pop;
     wire                            mshr_pending;
-    
     wire                            mshr_valid;
     wire [`LINE_ADDR_WIDTH-1:0]     mshr_addr;
     wire [CORE_TAG_WIDTH-1:0]       mshr_tag;
@@ -268,6 +266,9 @@ module VX_bank #(
     end
 `endif
 
+    wire do_lookup_st0 = valid_st0 && ~is_fill_st0;
+    wire do_fill_st0   = valid_st0 && is_fill_st0 && !crsq_in_stall;
+
     wire tag_match_st0;
         
     VX_tag_access #(
@@ -288,9 +289,9 @@ module VX_bank #(
     `endif    
 
         // read/Fill
-        .lookup     (valid_st0 && !is_fill_st0),
+        .lookup     (do_lookup_st0),
         .addr       (addr_st0),        
-        .fill       (valid_st0 && is_fill_st0 && !crsq_in_stall),
+        .fill       (do_fill_st0),
         .is_flush   (is_flush_st0),
         .tag_match  (tag_match_st0)
     );
@@ -395,14 +396,14 @@ module VX_bank #(
         .wdata      (wdata_st1)
     );
 
-    assign mshr_push  = valid_st1 && mshr_push_st1;
+    wire mshr_push    = valid_st1 && mshr_push_st1;
     wire mshr_dequeue = valid_st1 && is_mshr_st1 && !mshr_push_st1 && crsq_in_ready;
     wire mshr_restore = is_mshr_st1;
 
     // push a missed request as 'ready' if it was a forced miss that actually had a hit 
     // or the fill request for this block is comming
     wire mshr_init_ready_state = !miss_st1 || incoming_fill_qual_st1;
-    
+
     // use memory rsp or core req address to lookup the mshr
     wire [`LINE_ADDR_WIDTH-1:0] lookup_addr = mem_rsp_valid ? mem_rsp_addr : creq_addr;
 
@@ -461,7 +462,7 @@ module VX_bank #(
     wire [NUM_PORTS-1:0][`REQS_BITS-1:0] crsq_tid;
     wire [CORE_TAG_WIDTH-1:0] crsq_tag;
 
-    assign crsq_in_valid = valid_st1 && crsq_push_st1;      
+    assign crsq_in_valid = valid_st1 && crsq_push_st1;
     assign crsq_in_stall = crsq_in_valid && !crsq_in_ready;
 
     assign crsq_pmask = pmask_st1;
@@ -477,8 +478,8 @@ module VX_bank #(
     end
 
     VX_elastic_buffer #(
-        .DATAW    (CORE_TAG_WIDTH + (1 + `WORD_WIDTH + `REQS_BITS) * NUM_PORTS),
-        .SIZE     (CRSQ_SIZE)
+        .DATAW (CORE_TAG_WIDTH + (1 + `WORD_WIDTH + `REQS_BITS) * NUM_PORTS),
+        .SIZE  (CRSQ_SIZE)
     ) core_rsp_req (
         .clk       (clk),
         .reset     (reset),
@@ -550,7 +551,7 @@ module VX_bank #(
     always @(posedge clk) begin  
         /*if (crsq_in_fire && (NUM_PORTS > 1) && $countones(crsq_pmask) > 1) begin
             $display("%t: *** cache%0d:%0d multi-port-out: pmask=%b, addr=%0h, tag=%0h", $time, CACHE_ID, BANK_ID, crsq_pmask, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), crsq_tag);
-        end */     
+        end*/     
         if (valid_st1 && !is_fill_st1 && miss_st1 && incoming_fill_qual_st1) begin
             $display("%t: *** cache%0d:%0d miss with incoming fill - addr=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID));
             assert(!is_mshr_st1);

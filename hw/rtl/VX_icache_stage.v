@@ -22,6 +22,8 @@ module VX_icache_stage #(
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (reset)
 
+    localparam OUTPUT_REG = 0;
+
     wire icache_req_fire = icache_req_if.valid && icache_req_if.ready;
     
     wire [`NW_BITS-1:0] req_tag = ifetch_req_if.wid;
@@ -58,14 +60,24 @@ module VX_icache_stage #(
     assign icache_req_if.tag = req_tag;
 `endif
 
-    assign ifetch_rsp_if.valid = icache_rsp_if.valid;
-    assign ifetch_rsp_if.tmask = rsp_tmask;
-    assign ifetch_rsp_if.wid   = rsp_tag;
-    assign ifetch_rsp_if.PC    = rsp_PC;
-    assign ifetch_rsp_if.data  = icache_rsp_if.data;        
+    wire [`NW_BITS-1:0] rsp_wid = rsp_tag;
+
+    wire stall_out = ~ifetch_rsp_if.ready && (0 == OUTPUT_REG && ifetch_rsp_if.valid);
+
+    VX_pipe_register #(
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + 32),
+        .RESETW (1),
+        .DEPTH  (OUTPUT_REG)
+    ) pipe_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (!stall_out),
+        .data_in  ({icache_rsp_if.valid, rsp_wid,           rsp_tmask,           rsp_PC,           icache_rsp_if.data}),
+        .data_out ({ifetch_rsp_if.valid, ifetch_rsp_if.wid, ifetch_rsp_if.tmask, ifetch_rsp_if.PC, ifetch_rsp_if.data})
+    );     
     
     // Can accept new response?
-    assign icache_rsp_if.ready = ifetch_rsp_if.ready;
+    assign icache_rsp_if.ready = ~stall_out;
 
     `SCOPE_ASSIGN (icache_req_fire, icache_req_fire);
     `SCOPE_ASSIGN (icache_req_wid,  ifetch_req_if.wid);
@@ -80,7 +92,7 @@ module VX_icache_stage #(
         if (icache_req_if.valid && icache_req_if.ready) begin
             $display("%t: I$%0d req: wid=%0d, PC=%0h", $time, CORE_ID, ifetch_req_if.wid, ifetch_req_if.PC);
         end
-        if (icache_rsp_if.valid && icache_rsp_if.ready) begin
+        if (ifetch_rsp_if.valid && ifetch_rsp_if.ready) begin
             $display("%t: I$%0d rsp: wid=%0d, PC=%0h, data=%0h", $time, CORE_ID, ifetch_rsp_if.wid, ifetch_rsp_if.PC, ifetch_rsp_if.data);
         end
     end
