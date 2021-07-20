@@ -13,15 +13,30 @@ addons:
         - yosys
 
 install:
-  # TOOLCHAIN
-  - ci/toolchain_install.sh -all
+  # Set environments
   - export RISCV_TOOLCHAIN_PATH=/opt/riscv-gnu-toolchain
   - export VERILATOR_ROOT=/opt/verilator
-  - export PATH=$VERILATOR_ROOT/bin:$PATH 
- 
-script:     
-  - ./ci/regression.sh
-  - ./ci/test_compiler.sh
+  - export PATH=$VERILATOR_ROOT/bin:$PATH
+  # Install toolchain
+  - ci/toolchain_install.sh -all
+  # clone build directory
+  - make -s
+  - cp -r $PWD ../build1
+  - cp -r $PWD ../build2
+  - cp -r $PWD ../build3
+  - cp -r $PWD ../build4
+  - cp -r $PWD ../build5
+  - cp -r $PWD ../build6
+
+jobs:     
+  include:
+    - stage: test
+      script: cd ../build1 && ./ci/regression.sh -coverage
+      script: cd ../build2 && ./ci/regression.sh -cluster
+      script: cd ../build3 && ./ci/regression.sh -debug
+      script: cd ../build4 && ./ci/regression.sh -config
+      script: cd ../build5 && ./ci/regression.sh -stress
+      script: cd ../build6 && ./ci/test_compiler.sh
   
 after_success:
   # Gather code coverage
