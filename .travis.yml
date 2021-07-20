@@ -21,26 +21,38 @@ install:
   - ci/toolchain_install.sh -all
   # clone build directory
   - make -s
-  - cp -r $PWD ../build1
-  - cp -r $PWD ../build2
-  - cp -r $PWD ../build3
-  - cp -r $PWD ../build4
-  - cp -r $PWD ../build5
-  - cp -r $PWD ../build6
+
+# stages ordering
+stages:
+  - test
 
 jobs:     
   include:
     - stage: test
-      script: cd ../build1 && ./ci/regression.sh -coverage
-      script: cd ../build2 && ./ci/regression.sh -cluster
-      script: cd ../build3 && ./ci/regression.sh -debug
-      script: cd ../build4 && ./ci/regression.sh -config
-      script: cd ../build5 && ./ci/regression.sh -stress
-      script: cd ../build6 && ./ci/test_compiler.sh
+      name: coverage
+      script: cp -r $PWD ../build1 && cd ../build1 && ./ci/regression.sh -coverage
+    - stage: test
+      name: cluster
+      script: cp -r $PWD ../build2 && cd ../build2 && ./ci/regression.sh -cluster
+    - stage: test
+      name: debug
+      script: cp -r $PWD ../build3 && cd ../build3 && ./ci/regression.sh -debug
+    - stage: test
+      name: config
+      script: cp -r $PWD ../build4 && cd ../build4 && ./ci/regression.sh -config
+    - stage: test
+      name: stress
+      script: cp -r $PWD ../build5 && cd ../build5 && ./ci/regression.sh -stress
+    - stage: test
+      name: compiler
+      script: cp -r $PWD ../build6 && cd ../build6 && ./ci/test_compiler.sh
   
 after_success:
   # Gather code coverage
-  - lcov --directory . --capture --output-file coverage.info # capture trace  
-  - lcov --list coverage.info # trace report
+  - lcov --directory driver --capture --output-file driver.cov # capture trace  
+  - lcov --directory simx --capture --output-file simx.cov # capture trace    
+  - lcov --list driver.cov # output coverage data for debugging
+  - lcov --list simx.cov # output coverage data for debugging
   # Upload coverage report
-  - bash <(curl -s https://codecov.io/bash)
+  - bash <(curl -s https://codecov.io/bash) -f driver.cov
+  - bash <(curl -s https://codecov.io/bash) -f simx.cov
