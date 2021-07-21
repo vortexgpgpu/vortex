@@ -9,8 +9,8 @@ module VX_lsu_unit #(
     input wire reset,
 
    // Dcache interface
-    VX_dcache_core_req_if dcache_req_if,
-    VX_dcache_core_rsp_if dcache_rsp_if,
+    VX_dcache_req_if dcache_req_if,
+    VX_dcache_rsp_if dcache_rsp_if,
 
     // inputs
     VX_lsu_req_if   lsu_req_if,

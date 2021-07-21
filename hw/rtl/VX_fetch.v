@@ -9,8 +9,8 @@ module VX_fetch #(
     input wire reset,
 
     // Icache interface
-    VX_icache_core_req_if icache_req_if,
-    VX_icache_core_rsp_if icache_rsp_if,
+    VX_icache_req_if    icache_req_if,
+    VX_icache_rsp_if    icache_rsp_if,
 
     // inputs
     VX_wstall_if        wstall_if,
