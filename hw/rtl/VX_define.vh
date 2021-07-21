@@ -268,7 +268,7 @@
 `define ICORE_TAG_WIDTH         (`DBG_CACHE_REQ_MDATAW + `ICORE_TAG_ID_BITS)
 
 // Memory request data bits
-`define IMEM_LINE_WIDTH         (`ICACHE_LINE_SIZE * 8)
+`define IMEM_DATA_WIDTH         (`ICACHE_LINE_SIZE * 8)
 
 // Memory request address bits
 `define IMEM_ADDR_WIDTH         (32 - `CLOG2(`ICACHE_LINE_SIZE))
@@ -301,7 +301,7 @@
 `define DCORE_TAG_WIDTH         (`DBG_CACHE_REQ_MDATAW + `DCORE_TAG_ID_BITS)
  
 // Memory request data bits
-`define DMEM_LINE_WIDTH         (`DCACHE_LINE_SIZE * 8)
+`define DMEM_DATA_WIDTH         (`DCACHE_LINE_SIZE * 8)
 
 // Memory request address bits
 `define DMEM_ADDR_WIDTH         (32 - `CLOG2(`DCACHE_LINE_SIZE))
@@ -346,7 +346,7 @@
 `define L2CORE_TAG_WIDTH        (`DCORE_TAG_WIDTH + `CLOG2(`NUM_CORES))
 
 // Memory request data bits
-`define L2MEM_LINE_WIDTH        (`L2CACHE_LINE_SIZE * 8)
+`define L2MEM_DATA_WIDTH        (`L2CACHE_LINE_SIZE * 8)
 
 // Memory request address bits
 `define L2MEM_ADDR_WIDTH        (32 - `CLOG2(`L2CACHE_LINE_SIZE))
@@ -378,7 +378,7 @@
 `define L3CORE_TAG_WIDTH        (`L2CORE_TAG_WIDTH + `CLOG2(`NUM_CLUSTERS))
 
 // Memory request data bits
-`define L3MEM_LINE_WIDTH        (`L3CACHE_LINE_SIZE * 8)
+`define L3MEM_DATA_WIDTH        (`L3CACHE_LINE_SIZE * 8)
 
 // Memory request address bits
 `define L3MEM_ADDR_WIDTH        (32 - `CLOG2(`L3CACHE_LINE_SIZE))
@@ -399,7 +399,7 @@
 
 `define VX_MEM_BYTEEN_WIDTH     `L3MEM_BYTEEN_WIDTH   
 `define VX_MEM_ADDR_WIDTH       `L3MEM_ADDR_WIDTH
-`define VX_MEM_LINE_WIDTH       `L3MEM_LINE_WIDTH
+`define VX_MEM_DATA_WIDTH       `L3MEM_DATA_WIDTH
 `define VX_MEM_TAG_WIDTH        `L3MEM_TAG_WIDTH
 `define VX_CORE_TAG_WIDTH       `L3CORE_TAG_WIDTH 
 `define VX_CSR_ID_WIDTH         `LOG2UP(`NUM_CLUSTERS * `NUM_CORES)

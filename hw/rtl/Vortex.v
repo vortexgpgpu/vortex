@@ -12,13 +12,13 @@ module Vortex (
     output wire                             mem_req_rw,    
     output wire [`VX_MEM_BYTEEN_WIDTH-1:0]  mem_req_byteen,    
     output wire [`VX_MEM_ADDR_WIDTH-1:0]    mem_req_addr,
-    output wire [`VX_MEM_LINE_WIDTH-1:0]    mem_req_data,
+    output wire [`VX_MEM_DATA_WIDTH-1:0]    mem_req_data,
     output wire [`VX_MEM_TAG_WIDTH-1:0]     mem_req_tag,
     input  wire                             mem_req_ready,
 
     // Memory response    
     input wire                              mem_rsp_valid,        
-    input wire [`VX_MEM_LINE_WIDTH-1:0]     mem_rsp_data,
+    input wire [`VX_MEM_DATA_WIDTH-1:0]     mem_rsp_data,
     input wire [`VX_MEM_TAG_WIDTH-1:0]      mem_rsp_tag,
     output wire                             mem_rsp_ready,
 
@@ -31,12 +31,12 @@ module Vortex (
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_req_rw;
     wire [`NUM_CLUSTERS-1:0][`L2MEM_BYTEEN_WIDTH-1:0] per_cluster_mem_req_byteen;
     wire [`NUM_CLUSTERS-1:0][`L2MEM_ADDR_WIDTH-1:0]  per_cluster_mem_req_addr;
-    wire [`NUM_CLUSTERS-1:0][`L2MEM_LINE_WIDTH-1:0]  per_cluster_mem_req_data;
+    wire [`NUM_CLUSTERS-1:0][`L2MEM_DATA_WIDTH-1:0]  per_cluster_mem_req_data;
     wire [`NUM_CLUSTERS-1:0][`L2MEM_TAG_WIDTH-1:0]   per_cluster_mem_req_tag;
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_req_ready;
 
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_rsp_valid;
-    wire [`NUM_CLUSTERS-1:0][`L2MEM_LINE_WIDTH-1:0]  per_cluster_mem_rsp_data;
+    wire [`NUM_CLUSTERS-1:0][`L2MEM_DATA_WIDTH-1:0]  per_cluster_mem_rsp_data;
     wire [`NUM_CLUSTERS-1:0][`L2MEM_TAG_WIDTH-1:0]   per_cluster_mem_rsp_tag;
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_rsp_ready;
 
@@ -143,7 +143,7 @@ module Vortex (
 
         VX_mem_arb #(
             .NUM_REQS       (`NUM_CLUSTERS),
-            .DATA_WIDTH     (`L3MEM_LINE_WIDTH),            
+            .DATA_WIDTH     (`L3MEM_DATA_WIDTH),            
             .ADDR_WIDTH     (`L3MEM_ADDR_WIDTH),
             .TAG_IN_WIDTH   (`L2MEM_TAG_WIDTH),
             .BUFFERED_REQ   (1),

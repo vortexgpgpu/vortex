@@ -14,13 +14,13 @@ module VX_cluster #(
     output wire                             mem_req_rw,    
     output wire [`L2MEM_BYTEEN_WIDTH-1:0]   mem_req_byteen,    
     output wire [`L2MEM_ADDR_WIDTH-1:0]     mem_req_addr,
-    output wire [`L2MEM_LINE_WIDTH-1:0]     mem_req_data,
+    output wire [`L2MEM_DATA_WIDTH-1:0]     mem_req_data,
     output wire [`L2MEM_TAG_WIDTH-1:0]      mem_req_tag,
     input  wire                             mem_req_ready,
 
     // Memory response    
     input wire                              mem_rsp_valid,        
-    input wire [`L2MEM_LINE_WIDTH-1:0]      mem_rsp_data,
+    input wire [`L2MEM_DATA_WIDTH-1:0]      mem_rsp_data,
     input wire [`L2MEM_TAG_WIDTH-1:0]       mem_rsp_tag,
     output wire                             mem_rsp_ready,
 
@@ -33,12 +33,12 @@ module VX_cluster #(
     wire [`NUM_CORES-1:0]                       per_core_mem_req_rw;    
     wire [`NUM_CORES-1:0][`DMEM_BYTEEN_WIDTH-1:0] per_core_mem_req_byteen;    
     wire [`NUM_CORES-1:0][`DMEM_ADDR_WIDTH-1:0] per_core_mem_req_addr;
-    wire [`NUM_CORES-1:0][`DMEM_LINE_WIDTH-1:0] per_core_mem_req_data;
+    wire [`NUM_CORES-1:0][`DMEM_DATA_WIDTH-1:0] per_core_mem_req_data;
     wire [`NUM_CORES-1:0][`XMEM_TAG_WIDTH-1:0]  per_core_mem_req_tag;
     wire [`NUM_CORES-1:0]                       per_core_mem_req_ready;
 
     wire [`NUM_CORES-1:0]                       per_core_mem_rsp_valid;            
-    wire [`NUM_CORES-1:0][`DMEM_LINE_WIDTH-1:0] per_core_mem_rsp_data;
+    wire [`NUM_CORES-1:0][`DMEM_DATA_WIDTH-1:0] per_core_mem_rsp_data;
     wire [`NUM_CORES-1:0][`XMEM_TAG_WIDTH-1:0]  per_core_mem_rsp_tag;
     wire [`NUM_CORES-1:0]                       per_core_mem_rsp_ready;
 
@@ -145,7 +145,7 @@ module VX_cluster #(
 
         VX_mem_arb #(
             .NUM_REQS       (`NUM_CORES),
-            .DATA_WIDTH     (`L2MEM_LINE_WIDTH), 
+            .DATA_WIDTH     (`L2MEM_DATA_WIDTH), 
             .ADDR_WIDTH     (`L2MEM_ADDR_WIDTH),           
             .TAG_IN_WIDTH   (`XMEM_TAG_WIDTH),
             .BUFFERED_REQ   (1),

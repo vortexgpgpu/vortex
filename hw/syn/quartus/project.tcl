@@ -42,7 +42,9 @@ set_global_assignment -name MESSAGE_DISABLE 16818
 set_global_assignment -name TIMEQUEST_DO_REPORT_TIMING ON
 set_global_assignment -name TIMEQUEST_MULTICORNER_ANALYSIS ON
 set_global_assignment -name SYNTH_TIMING_DRIVEN_SYNTHESIS ON
+
 set_global_assignment -name OPTIMIZATION_TECHNIQUE AREA
+set_global_assignment -name SEED 1
 
 # Power estimation
 set_global_assignment -name POWER_PRESET_COOLING_SOLUTION "23 MM HEAT SINK WITH 200 LFPM AIRFLOW"
