@@ -30,24 +30,24 @@ module VX_mem_unit # (
 `endif
 
     VX_mem_req_if #(
-        .LINE_WIDTH (`IMEM_LINE_WIDTH),
+        .DATA_WIDTH (`IMEM_DATA_WIDTH),
         .ADDR_WIDTH (`IMEM_ADDR_WIDTH),
         .TAG_WIDTH  (`IMEM_TAG_WIDTH)
     ) icache_mem_req_if();
 
     VX_mem_rsp_if #(
-        .LINE_WIDTH (`IMEM_LINE_WIDTH),
+        .DATA_WIDTH (`IMEM_DATA_WIDTH),
         .TAG_WIDTH  (`IMEM_TAG_WIDTH)
     ) icache_mem_rsp_if();
 
     VX_mem_req_if #(
-        .LINE_WIDTH (`DMEM_LINE_WIDTH),
+        .DATA_WIDTH (`DMEM_DATA_WIDTH),
         .ADDR_WIDTH (`DMEM_ADDR_WIDTH),
         .TAG_WIDTH  (`DMEM_TAG_WIDTH)
     ) dcache_mem_req_if();
 
     VX_mem_rsp_if #(
-        .LINE_WIDTH (`DMEM_LINE_WIDTH),
+        .DATA_WIDTH (`DMEM_DATA_WIDTH),
         .TAG_WIDTH  (`DMEM_TAG_WIDTH)
     ) dcache_mem_rsp_if();
 
@@ -271,7 +271,7 @@ module VX_mem_unit # (
 
     VX_mem_arb #(
         .NUM_REQS      (2),
-        .DATA_WIDTH    (`DMEM_LINE_WIDTH),
+        .DATA_WIDTH    (`DMEM_DATA_WIDTH),
         .ADDR_WIDTH    (`DMEM_ADDR_WIDTH),
         .TAG_IN_WIDTH  (`DMEM_TAG_WIDTH),
         .BUFFERED_REQ  (1),

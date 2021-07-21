@@ -14,13 +14,13 @@ module VX_core #(
     output wire                             mem_req_rw,    
     output wire [`DMEM_BYTEEN_WIDTH-1:0]    mem_req_byteen,
     output wire [`DMEM_ADDR_WIDTH-1:0]      mem_req_addr,
-    output wire [`DMEM_LINE_WIDTH-1:0]      mem_req_data,
+    output wire [`DMEM_DATA_WIDTH-1:0]      mem_req_data,
     output wire [`XMEM_TAG_WIDTH-1:0]       mem_req_tag,
     input  wire                             mem_req_ready,
 
     // Memory reponse    
     input  wire                             mem_rsp_valid,
-    input  wire [`DMEM_LINE_WIDTH-1:0]      mem_rsp_data,
+    input  wire [`DMEM_DATA_WIDTH-1:0]      mem_rsp_data,
     input  wire [`XMEM_TAG_WIDTH-1:0]       mem_rsp_tag,
     output wire                             mem_rsp_ready,
 
@@ -32,13 +32,13 @@ module VX_core #(
 `endif
 
     VX_mem_req_if #(
-        .LINE_WIDTH (`DMEM_LINE_WIDTH),
+        .DATA_WIDTH (`DMEM_DATA_WIDTH),
         .ADDR_WIDTH (`DMEM_ADDR_WIDTH),
         .TAG_WIDTH  (`XMEM_TAG_WIDTH)
     ) mem_req_if();
 
     VX_mem_rsp_if #(
-        .LINE_WIDTH (`DMEM_LINE_WIDTH),
+        .DATA_WIDTH (`DMEM_DATA_WIDTH),
         .TAG_WIDTH  (`XMEM_TAG_WIDTH)
     ) mem_rsp_if();
 
