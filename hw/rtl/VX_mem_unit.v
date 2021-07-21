@@ -30,37 +30,37 @@ module VX_mem_unit # (
 `endif
 
     VX_mem_req_if #(
-        .MEM_LINE_WIDTH (`IMEM_LINE_WIDTH),
-        .MEM_ADDR_WIDTH (`IMEM_ADDR_WIDTH),
-        .MEM_TAG_WIDTH  (`IMEM_TAG_WIDTH)
+        .LINE_WIDTH (`IMEM_LINE_WIDTH),
+        .ADDR_WIDTH (`IMEM_ADDR_WIDTH),
+        .TAG_WIDTH  (`IMEM_TAG_WIDTH)
     ) icache_mem_req_if();
 
     VX_mem_rsp_if #(
-        .MEM_LINE_WIDTH (`IMEM_LINE_WIDTH),
-        .MEM_TAG_WIDTH  (`IMEM_TAG_WIDTH)
+        .LINE_WIDTH (`IMEM_LINE_WIDTH),
+        .TAG_WIDTH  (`IMEM_TAG_WIDTH)
     ) icache_mem_rsp_if();
 
     VX_mem_req_if #(
-        .MEM_LINE_WIDTH (`DMEM_LINE_WIDTH),
-        .MEM_ADDR_WIDTH (`DMEM_ADDR_WIDTH),
-        .MEM_TAG_WIDTH  (`DMEM_TAG_WIDTH)
+        .LINE_WIDTH (`DMEM_LINE_WIDTH),
+        .ADDR_WIDTH (`DMEM_ADDR_WIDTH),
+        .TAG_WIDTH  (`DMEM_TAG_WIDTH)
     ) dcache_mem_req_if();
 
     VX_mem_rsp_if #(
-        .MEM_LINE_WIDTH (`DMEM_LINE_WIDTH),
-        .MEM_TAG_WIDTH  (`DMEM_TAG_WIDTH)
+        .LINE_WIDTH (`DMEM_LINE_WIDTH),
+        .TAG_WIDTH  (`DMEM_TAG_WIDTH)
     ) dcache_mem_rsp_if();
 
     VX_dcache_req_if #(
-        .NUM_REQS       (`DNUM_REQS), 
-        .WORD_SIZE      (`DWORD_SIZE), 
-        .CORE_TAG_WIDTH (`DCORE_TAG_WIDTH-`SM_ENABLE)
+        .NUM_REQS  (`DNUM_REQS), 
+        .WORD_SIZE (`DWORD_SIZE), 
+        .TAG_WIDTH (`DCORE_TAG_WIDTH-`SM_ENABLE)
     ) dcache_req_tmp_if();
 
     VX_dcache_rsp_if #(
-        .NUM_REQS       (`DNUM_REQS), 
-        .WORD_SIZE      (`DWORD_SIZE), 
-        .CORE_TAG_WIDTH (`DCORE_TAG_WIDTH-`SM_ENABLE)
+        .NUM_REQS  (`DNUM_REQS), 
+        .WORD_SIZE (`DWORD_SIZE), 
+        .TAG_WIDTH (`DCORE_TAG_WIDTH-`SM_ENABLE)
     ) dcache_rsp_tmp_if();
 
     `RESET_RELAY (icache_reset);
@@ -186,15 +186,15 @@ module VX_mem_unit # (
 
     if (`SM_ENABLE) begin                
         VX_dcache_req_if #(
-            .NUM_REQS       (`DNUM_REQS), 
-            .WORD_SIZE      (`DWORD_SIZE), 
-            .CORE_TAG_WIDTH (`DCORE_TAG_WIDTH-`SM_ENABLE)
+            .NUM_REQS  (`DNUM_REQS), 
+            .WORD_SIZE (`DWORD_SIZE), 
+            .TAG_WIDTH (`DCORE_TAG_WIDTH-`SM_ENABLE)
         ) smem_req_if();
 
         VX_dcache_rsp_if #(
-            .NUM_REQS       (`DNUM_REQS), 
-            .WORD_SIZE      (`DWORD_SIZE), 
-            .CORE_TAG_WIDTH (`DCORE_TAG_WIDTH-`SM_ENABLE)
+            .NUM_REQS  (`DNUM_REQS), 
+            .WORD_SIZE (`DWORD_SIZE), 
+            .TAG_WIDTH (`DCORE_TAG_WIDTH-`SM_ENABLE)
         ) smem_rsp_if();
 
         VX_smem_arb smem_arb (

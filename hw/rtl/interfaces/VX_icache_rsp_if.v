@@ -4,14 +4,14 @@
 `include "../cache/VX_cache_define.vh"
 
 interface VX_icache_rsp_if #(
-    parameter WORD_SIZE      = 1,
-    parameter CORE_TAG_WIDTH = 1
+    parameter WORD_SIZE = 1,
+    parameter TAG_WIDTH = 1
 ) ();
 
-    wire                        valid;    
-    wire [`WORD_WIDTH-1:0]      data;
-    wire [CORE_TAG_WIDTH-1:0]   tag;    
-    wire                        ready;      
+    wire                    valid;    
+    wire [`WORD_WIDTH-1:0]  data;
+    wire [TAG_WIDTH-1:0]    tag;    
+    wire                    ready;      
 
 endinterface
 

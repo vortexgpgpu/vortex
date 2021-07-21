@@ -4,15 +4,15 @@
 `include "../cache/VX_cache_define.vh"
 
 interface VX_dcache_rsp_if #(
-    parameter NUM_REQS       = 1,
-    parameter WORD_SIZE      = 1,
-    parameter CORE_TAG_WIDTH = 1
+    parameter NUM_REQS  = 1,
+    parameter WORD_SIZE = 1,
+    parameter TAG_WIDTH = 1
 ) ();
 
     wire                                    valid;
     wire [NUM_REQS-1:0]                     tmask;
     wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]    data;
-    wire [CORE_TAG_WIDTH-1:0]               tag;
+    wire [TAG_WIDTH-1:0]                    tag;
     wire                                    ready;
 
 endinterface
