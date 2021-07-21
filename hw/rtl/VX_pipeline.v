@@ -49,9 +49,9 @@ module VX_pipeline #(
     //
 
     VX_dcache_req_if #(
-        .NUM_REQS(`NUM_THREADS), 
-        .WORD_SIZE(4), 
-        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH)
+        .NUM_REQS  (`NUM_THREADS), 
+        .WORD_SIZE (4), 
+        .TAG_WIDTH (`DCORE_TAG_WIDTH)
     ) dcache_req_if();
 
     assign dcache_req_valid  = dcache_req_if.valid;
@@ -67,9 +67,9 @@ module VX_pipeline #(
     //
 
     VX_dcache_rsp_if #(
-        .NUM_REQS(`NUM_THREADS), 
-        .WORD_SIZE(4), 
-        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH)
+        .NUM_REQS  (`NUM_THREADS), 
+        .WORD_SIZE (4), 
+        .TAG_WIDTH (`DCORE_TAG_WIDTH)
     ) dcache_rsp_if();
 
     assign dcache_rsp_if.valid = dcache_rsp_valid;
@@ -83,8 +83,8 @@ module VX_pipeline #(
     //
 
     VX_icache_req_if #(
-        .WORD_SIZE(4), 
-        .CORE_TAG_WIDTH(`ICORE_TAG_WIDTH)
+        .WORD_SIZE (4), 
+        .TAG_WIDTH (`ICORE_TAG_WIDTH)
     ) icache_req_if();       
 
     assign icache_req_valid  = icache_req_if.valid;
@@ -97,8 +97,8 @@ module VX_pipeline #(
     //
 
     VX_icache_rsp_if #(
-        .WORD_SIZE(4), 
-        .CORE_TAG_WIDTH(`ICORE_TAG_WIDTH)
+        .WORD_SIZE (4), 
+        .TAG_WIDTH (`ICORE_TAG_WIDTH)
     ) icache_rsp_if();    
 
     assign icache_rsp_if.valid = icache_rsp_valid;

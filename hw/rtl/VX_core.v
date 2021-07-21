@@ -32,14 +32,14 @@ module VX_core #(
 `endif
 
     VX_mem_req_if #(
-        .MEM_LINE_WIDTH(`DMEM_LINE_WIDTH),
-        .MEM_ADDR_WIDTH(`DMEM_ADDR_WIDTH),
-        .MEM_TAG_WIDTH(`XMEM_TAG_WIDTH)
+        .LINE_WIDTH (`DMEM_LINE_WIDTH),
+        .ADDR_WIDTH (`DMEM_ADDR_WIDTH),
+        .TAG_WIDTH  (`XMEM_TAG_WIDTH)
     ) mem_req_if();
 
     VX_mem_rsp_if #(
-        .MEM_LINE_WIDTH(`DMEM_LINE_WIDTH),
-        .MEM_TAG_WIDTH(`XMEM_TAG_WIDTH)
+        .LINE_WIDTH (`DMEM_LINE_WIDTH),
+        .TAG_WIDTH  (`XMEM_TAG_WIDTH)
     ) mem_rsp_if();
 
     assign mem_req_valid = mem_req_if.valid;
@@ -58,25 +58,25 @@ module VX_core #(
     //--
 
     VX_dcache_req_if #(
-        .NUM_REQS(`DNUM_REQS), 
-        .WORD_SIZE(`DWORD_SIZE), 
-        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH)
+        .NUM_REQS  (`DNUM_REQS), 
+        .WORD_SIZE (`DWORD_SIZE), 
+        .TAG_WIDTH (`DCORE_TAG_WIDTH)
     ) dcache_req_if();
 
     VX_dcache_rsp_if #(
-        .NUM_REQS(`DNUM_REQS), 
-        .WORD_SIZE(`DWORD_SIZE), 
-        .CORE_TAG_WIDTH(`DCORE_TAG_WIDTH)
+        .NUM_REQS  (`DNUM_REQS), 
+        .WORD_SIZE (`DWORD_SIZE), 
+        .TAG_WIDTH (`DCORE_TAG_WIDTH)
     ) dcache_rsp_if();
     
     VX_icache_req_if #(
-        .WORD_SIZE(`IWORD_SIZE), 
-        .CORE_TAG_WIDTH(`ICORE_TAG_WIDTH)
+        .WORD_SIZE (`IWORD_SIZE), 
+        .TAG_WIDTH (`ICORE_TAG_WIDTH)
     ) icache_req_if();
 
     VX_icache_rsp_if #(
-        .WORD_SIZE(`IWORD_SIZE), 
-        .CORE_TAG_WIDTH(`ICORE_TAG_WIDTH)
+        .WORD_SIZE (`IWORD_SIZE), 
+        .TAG_WIDTH (`ICORE_TAG_WIDTH)
     ) icache_rsp_if();
     
     VX_pipeline #(
