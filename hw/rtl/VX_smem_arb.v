@@ -1,22 +1,22 @@
 `include "VX_define.vh"
 
 module VX_smem_arb (
-    input wire              clk,
-    input wire              reset,
+    input wire          clk,
+    input wire          reset,
 
     // input request
-    VX_dcache_core_req_if   core_req_if,
+    VX_dcache_req_if    core_req_if,
 
     // output requests
-    VX_dcache_core_req_if   cache_req_if,
-    VX_dcache_core_req_if   smem_req_if,
+    VX_dcache_req_if    cache_req_if,
+    VX_dcache_req_if    smem_req_if,
 
     // input responses
-    VX_dcache_core_rsp_if   cache_rsp_if,
-    VX_dcache_core_rsp_if   smem_rsp_if,
+    VX_dcache_rsp_if    cache_rsp_if,
+    VX_dcache_rsp_if    smem_rsp_if,
 
     // output response
-    VX_dcache_core_rsp_if   core_rsp_if
+    VX_dcache_rsp_if    core_rsp_if
 );
     localparam REQ_DATAW = `DCORE_ADDR_WIDTH + 1 + `DWORD_SIZE + (`DWORD_SIZE*8) + (`DCORE_TAG_WIDTH-1);
     localparam RSP_DATAW = `NUM_THREADS + `NUM_THREADS * (`DWORD_SIZE*8) + `DCORE_TAG_WIDTH;
