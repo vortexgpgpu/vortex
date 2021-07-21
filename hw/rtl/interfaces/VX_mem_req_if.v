@@ -1,9 +1,9 @@
-`ifndef VX_CACHE_MEM_REQ_IF
-`define VX_CACHE_MEM_REQ_IF
+`ifndef VX_MEM_REQ_IF
+`define VX_MEM_REQ_IF
 
 `include "../cache/VX_cache_define.vh"
 
-interface VX_cache_mem_req_if #(
+interface VX_mem_req_if #(
     parameter MEM_LINE_WIDTH = 1,
     parameter MEM_ADDR_WIDTH = 1,
     parameter MEM_TAG_WIDTH  = 1,

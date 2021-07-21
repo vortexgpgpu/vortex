@@ -3,7 +3,7 @@
 
 `include "../cache/VX_cache_define.vh"
 
-interface VX_icache_core_req_if #(
+interface VX_icache_req_if #(
     parameter WORD_SIZE      = 1,
     parameter CORE_TAG_WIDTH = 1
 ) ();
