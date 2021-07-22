@@ -133,7 +133,6 @@ module VX_bank #(
     wire [CORE_TAG_WIDTH-1:0]       mshr_tag;
     wire [NUM_PORTS-1:0]            mshr_pmask;
     wire [NUM_PORTS-1:0][`UP(`WORD_SELECT_BITS)-1:0] mshr_wsel;
-    wire [NUM_PORTS-1:0][WORD_SIZE-1:0]  mshr_byteen;
     wire [NUM_PORTS-1:0][`REQS_BITS-1:0] mshr_tid;
     
     wire [`LINE_ADDR_WIDTH-1:0]     addr_st0, addr_st1;
@@ -249,7 +248,7 @@ module VX_bank #(
             mshr_enable ? mshr_addr : (mem_rsp_valid ? mem_rsp_addr : (flush_enable ? `LINE_ADDR_WIDTH'(flush_addr) : creq_addr)),
             (mem_rsp_valid || !WRITE_ENABLE) ? mem_rsp_data : creq_line_data,
             mshr_enable ? mshr_wsel : creq_wsel,
-            mshr_enable ? mshr_byteen : creq_byteen,
+            creq_byteen,
             mshr_enable ? mshr_tid : creq_tid,
             mshr_enable ? mshr_pmask : creq_pmask,
             mshr_enable ? mshr_tag : creq_tag,
@@ -432,7 +431,7 @@ module VX_bank #(
         // enqueue
         .enqueue            (mshr_push),        
         .enqueue_addr       (addr_st1),
-        .enqueue_data       ({wsel_st1, byteen_st1, tag_st1, req_tid_st1, pmask_st1}),
+        .enqueue_data       ({wsel_st1, tag_st1, req_tid_st1, pmask_st1}),
         .enqueue_is_mshr    (mshr_restore),
         .enqueue_as_ready   (mshr_init_ready_state),                
         `UNUSED_PIN (enqueue_almfull),
@@ -449,7 +448,7 @@ module VX_bank #(
         .schedule           (mshr_pop),        
         .schedule_valid     (mshr_valid),
         .schedule_addr      (mshr_addr),
-        .schedule_data      ({mshr_wsel, mshr_byteen, mshr_tag, mshr_tid, mshr_pmask}),
+        .schedule_data      ({mshr_wsel, mshr_tag, mshr_tid, mshr_pmask}),
 
         // dequeue
         .dequeue            (mshr_dequeue)
@@ -566,7 +565,7 @@ module VX_bank #(
             $display("%t: cache%0d:%0d fill-rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mem_rsp_addr, BANK_ID), mem_rsp_data);
         end
         if (mshr_pop) begin
-            $display("%t: cache%0d:%0d mshr-rd-req: addr=%0h, tag=%0h, pmask=%b, tid=%0d, byteen=%b, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mshr_addr, BANK_ID), mshr_tag, mshr_pmask, mshr_tid, mshr_byteen, debug_wid_sel, debug_pc_sel);
+            $display("%t: cache%0d:%0d mshr-rd-req: addr=%0h, tag=%0h, pmask=%b, tid=%0d, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mshr_addr, BANK_ID), mshr_tag, mshr_pmask, mshr_tid, debug_wid_sel, debug_pc_sel);
         end
         if (creq_out_fire) begin
             if (creq_rw)
