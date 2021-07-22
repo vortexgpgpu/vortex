@@ -121,10 +121,10 @@
             "mem_req_addr": 32,
             "mem_req_rw": 1,
             "mem_req_byteen":"`VX_MEM_BYTEEN_WIDTH",
-            "mem_req_data":"`VX_MEM_LINE_WIDTH",
+            "mem_req_data":"`VX_MEM_DATA_WIDTH",
             "mem_req_tag":"`VX_MEM_TAG_WIDTH",
             "?mem_rsp_fire": 1,
-            "mem_rsp_data":"`VX_MEM_LINE_WIDTH",
+            "mem_rsp_data":"`VX_MEM_DATA_WIDTH",
             "mem_rsp_tag":"`VX_MEM_TAG_WIDTH",
             "busy": 1       
         },
