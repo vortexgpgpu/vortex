@@ -135,9 +135,9 @@ module VX_shared_mem #(
     end
 
     VX_elastic_buffer #(
-        .DATAW    (NUM_BANKS * (1 + 1 + `LINE_SELECT_BITS + WORD_SIZE + `WORD_WIDTH + CORE_TAG_WIDTH + `REQS_BITS)), 
-        .SIZE     (CREQ_SIZE),
-        .BUFFERED (1)   // output should be registered for the data_store addr port
+        .DATAW      (NUM_BANKS * (1 + 1 + `LINE_SELECT_BITS + WORD_SIZE + `WORD_WIDTH + CORE_TAG_WIDTH + `REQS_BITS)), 
+        .SIZE       (CREQ_SIZE),
+        .OUTPUT_REG (1)   // output should be registered for the data_store addr port
     ) core_req_queue (
         .clk        (clk),
         .reset      (reset),

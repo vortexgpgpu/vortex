@@ -111,9 +111,9 @@ module VX_bank #(
     wire creq_out_valid, creq_out_ready;
 
     VX_elastic_buffer #(
-        .DATAW    (CORE_TAG_WIDTH + 1 + `LINE_ADDR_WIDTH + (1 + `UP(`WORD_SELECT_BITS) + WORD_SIZE + `WORD_WIDTH + `REQS_BITS) * NUM_PORTS),
-        .SIZE     (CREQ_SIZE),
-        .BUFFERED (CREQ_SIZE > 2)
+        .DATAW      (CORE_TAG_WIDTH + 1 + `LINE_ADDR_WIDTH + (1 + `UP(`WORD_SELECT_BITS) + WORD_SIZE + `WORD_WIDTH + `REQS_BITS) * NUM_PORTS),
+        .SIZE       (CREQ_SIZE),
+        .OUTPUT_REG (CREQ_SIZE > 2)
     ) core_req_queue (
         .clk        (clk),
         .reset      (reset),

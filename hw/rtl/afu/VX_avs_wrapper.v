@@ -44,7 +44,7 @@ module VX_avs_wrapper #(
 );
 
     localparam BANK_ADDRW = `LOG2UP(NUM_BANKS);
-    localparam BUFFERED_OUTPUT = (NUM_BANKS > 2);
+    localparam OUTPUT_REG = (NUM_BANKS > 2);
 
     // Requests handling
     
@@ -80,9 +80,9 @@ module VX_avs_wrapper #(
         `UNUSED_VAR (req_queue_size)
         
         VX_fifo_queue #(
-            .DATAW (REQ_TAG_WIDTH),
-            .SIZE  (RD_QUEUE_SIZE),
-            .BUFFERED (!BUFFERED_OUTPUT)
+            .DATAW      (REQ_TAG_WIDTH),
+            .SIZE       (RD_QUEUE_SIZE),
+            .OUTPUT_REG (!OUTPUT_REG)
         ) rd_req_queue (
             .clk      (clk),
             .reset    (reset),
@@ -124,9 +124,9 @@ module VX_avs_wrapper #(
 
     for (genvar i = 0; i < NUM_BANKS; i++) begin
         VX_fifo_queue #(
-            .DATAW (AVS_DATA_WIDTH),
-            .SIZE  (RD_QUEUE_SIZE),
-            .BUFFERED (!BUFFERED_OUTPUT)
+            .DATAW      (AVS_DATA_WIDTH),
+            .SIZE       (RD_QUEUE_SIZE),
+            .OUTPUT_REG (OUTPUT_REG)
         ) rd_rsp_queue (
             .clk      (clk),
             .reset    (reset),
@@ -151,7 +151,7 @@ module VX_avs_wrapper #(
     VX_stream_arbiter #(
         .NUM_REQS (NUM_BANKS),
         .DATAW    (AVS_DATA_WIDTH + REQ_TAG_WIDTH),
-        .BUFFERED (BUFFERED_OUTPUT)
+        .BUFFERED (OUTPUT_REG ? 1 : 0)
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),

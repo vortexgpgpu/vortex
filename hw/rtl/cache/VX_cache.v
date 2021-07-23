@@ -250,9 +250,9 @@ module VX_cache #(
     assign mem_rsp_tag_nc_a = mem_rsp_tag_nc[NC_ENABLE +: `MEM_ADDR_WIDTH];
     
     VX_elastic_buffer #(
-        .DATAW    (`MEM_ADDR_WIDTH + `CACHE_LINE_WIDTH), 
-        .SIZE     (MRSQ_SIZE),
-        .BUFFERED (MRSQ_SIZE > 2)
+        .DATAW      (`MEM_ADDR_WIDTH + `CACHE_LINE_WIDTH), 
+        .SIZE       (MRSQ_SIZE),
+        .OUTPUT_REG (MRSQ_SIZE > 2)
     ) mem_rsp_queue (
         .clk        (clk),
         .reset      (reset),
