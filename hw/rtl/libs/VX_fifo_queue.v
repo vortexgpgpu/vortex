@@ -1,14 +1,14 @@
 `include "VX_platform.vh"
 
 module VX_fifo_queue #(
-    parameter DATAW     = 1,
-    parameter SIZE      = 2,
-    parameter ALM_FULL  = (SIZE - 1),
-    parameter ALM_EMPTY = 1,
-    parameter ADDRW     = $clog2(SIZE),
-    parameter SIZEW     = $clog2(SIZE+1),
-    parameter BUFFERED  = 0,
-    parameter FASTRAM   = 1
+    parameter DATAW      = 1,
+    parameter SIZE       = 2,
+    parameter ALM_FULL   = (SIZE - 1),
+    parameter ALM_EMPTY  = 1,
+    parameter ADDRW      = $clog2(SIZE),
+    parameter SIZEW      = $clog2(SIZE+1),
+    parameter OUTPUT_REG = 0,
+    parameter FASTRAM    = 1
 ) ( 
     input  wire             clk,
     input  wire             reset,    
@@ -104,7 +104,7 @@ module VX_fifo_queue #(
 
         if (SIZE == 2) begin
 
-            if (0 == BUFFERED) begin 
+            if (0 == OUTPUT_REG) begin 
 
                 reg [DATAW-1:0] shift_reg [1:0];
 
@@ -139,7 +139,7 @@ module VX_fifo_queue #(
         
         end else begin
 
-            if (0 == BUFFERED) begin          
+            if (0 == OUTPUT_REG) begin          
 
                 reg [ADDRW-1:0] rd_ptr_r;
                 reg [ADDRW-1:0] wr_ptr_r;
@@ -155,11 +155,11 @@ module VX_fifo_queue #(
                 end
 
                 VX_dp_ram #(
-                    .DATAW    (DATAW),
-                    .SIZE     (SIZE),
-                    .BUFFERED (0),
-                    .RWCHECK  (1),
-                    .FASTRAM  (FASTRAM)
+                    .DATAW      (DATAW),
+                    .SIZE       (SIZE),
+                    .OUTPUT_REG (0),
+                    .RWCHECK    (1),
+                    .FASTRAM    (FASTRAM)
                 ) dp_ram (
                     .clk(clk),
                     .waddr(wr_ptr_r),                            
@@ -200,11 +200,11 @@ module VX_fifo_queue #(
                 end
 
                 VX_dp_ram #(
-                    .DATAW    (DATAW),
-                    .SIZE     (SIZE),
-                    .BUFFERED (0),
-                    .RWCHECK  (1),
-                    .FASTRAM  (FASTRAM)
+                    .DATAW      (DATAW),
+                    .SIZE       (SIZE),
+                    .OUTPUT_REG (0),
+                    .RWCHECK    (1),
+                    .FASTRAM    (FASTRAM)
                 ) dp_ram (
                     .clk(clk),
                     .waddr(wr_ptr_r),                            

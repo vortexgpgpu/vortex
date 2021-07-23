@@ -2,14 +2,14 @@
 
 `TRACING_OFF
 module VX_sp_ram #(
-    parameter DATAW    = 1,
-    parameter SIZE     = 1,
-    parameter BYTEENW  = 1,
-    parameter BUFFERED = 0,
-    parameter RWCHECK  = 1,
-    parameter ADDRW    = $clog2(SIZE),
-    parameter FASTRAM  = 0,
-    parameter INITZERO = 0
+    parameter DATAW      = 1,
+    parameter SIZE       = 1,
+    parameter BYTEENW    = 1,
+    parameter OUTPUT_REG = 0,
+    parameter RWCHECK    = 1,
+    parameter ADDRW      = $clog2(SIZE),
+    parameter FASTRAM    = 0,
+    parameter INITZERO   = 0
 ) ( 
     input wire              clk,
     input wire [ADDRW-1:0]  addr,
@@ -23,7 +23,7 @@ module VX_sp_ram #(
     `STATIC_ASSERT((1 == BYTEENW) || ((BYTEENW > 1) && 0 == (BYTEENW % 4)), ("invalid parameter"))
 
     if (FASTRAM) begin
-        if (BUFFERED) begin        
+        if (OUTPUT_REG) begin        
             reg [DATAW-1:0] dout_r;
 
             if (BYTEENW > 1) begin
@@ -91,7 +91,7 @@ module VX_sp_ram #(
             end         
         end
     end else begin
-        if (BUFFERED) begin
+        if (OUTPUT_REG) begin
             reg [DATAW-1:0] dout_r;
 
             if (BYTEENW > 1) begin

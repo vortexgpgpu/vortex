@@ -1,10 +1,10 @@
 `include "VX_platform.vh"
 
 module VX_elastic_buffer #(
-    parameter DATAW    = 1,
-    parameter SIZE     = 2,
-    parameter BUFFERED = 0,
-    parameter FASTRAM  = 0
+    parameter DATAW      = 1,
+    parameter SIZE       = 2,
+    parameter OUTPUT_REG = 0,
+    parameter FASTRAM    = 0
 ) ( 
     input  wire             clk,
     input  wire             reset,
@@ -31,8 +31,8 @@ module VX_elastic_buffer #(
     end else if (SIZE == 2) begin
 
         VX_skid_buffer #(
-            .DATAW    (DATAW),
-            .USE_FASTREG (BUFFERED)
+            .DATAW      (DATAW),
+            .OUTPUT_REG (OUTPUT_REG)
         ) queue (
             .clk       (clk),
             .reset     (reset),
@@ -52,10 +52,10 @@ module VX_elastic_buffer #(
         wire pop  = valid_out && ready_out;
 
         VX_fifo_queue #(
-            .DATAW    (DATAW),
-            .SIZE     (SIZE),
-            .BUFFERED (BUFFERED),
-            .FASTRAM  (FASTRAM)
+            .DATAW      (DATAW),
+            .SIZE       (SIZE),
+            .OUTPUT_REG (OUTPUT_REG),
+            .FASTRAM    (FASTRAM)
         ) queue (
             .clk    (clk),
             .reset  (reset),
