@@ -1,8 +1,5 @@
 #!/bin/sh
 
-# exit when any command fails
-set -e
-
 show_usage()
 {
     echo "Vortex BlackBox Test Driver v1.0"
@@ -137,6 +134,8 @@ echo "CONFIGS=$CONFIGS"
 
 make -C $DRIVER_PATH $CLEAN_TOKEN
 
+status=0
+
 if [ $DEBUG -eq 1 ]
 then    
     if [ $SCOPE -eq 1 ]
@@ -149,8 +148,10 @@ then
     if [ $HAS_ARGS -eq 1 ]
     then
         OPTS=$ARGS make -C $APP_PATH run-$DRIVER > run.log 2>&1
+        status=$?
     else
         make -C $APP_PATH run-$DRIVER > run.log 2>&1
+        status=$?
     fi
     
     if [ -f "$APP_PATH/trace.vcd" ]
@@ -168,7 +169,11 @@ else
     if [ $HAS_ARGS -eq 1 ]
     then
         OPTS=$ARGS make -C $APP_PATH run-$DRIVER
+        status=$?
     else
         make -C $APP_PATH run-$DRIVER
+        status=$?
     fi
 fi
+
+exit $status
