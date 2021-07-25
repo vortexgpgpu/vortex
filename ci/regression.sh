@@ -91,8 +91,7 @@ CONFIGS="-DMEM_LATENCY=100 -DMEM_RQ_SIZE=4 -DMEM_STALLS_MODULO=4" ./ci/blackbox.
 stress() 
 {
 # test pipeline stress
-./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=sgemm --args="-n128"
-./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm --args="-n128"
+./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --clusters=2 --l3cache --app=sgemm --args="-n256"
 }
 
 usage()
