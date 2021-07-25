@@ -302,22 +302,32 @@ module VX_lsu_unit #(
     `SCOPE_ASSIGN (dcache_rsp_fire,  dcache_rsp_if.tmask & {`NUM_THREADS{dcache_rsp_fire}});
     `SCOPE_ASSIGN (dcache_rsp_data,  dcache_rsp_if.data);
     `SCOPE_ASSIGN (dcache_rsp_tag,   mbuf_raddr);
-    
-`ifdef DBG_PRINT_CORE_DCACHE
-`IGNORE_WARNINGS_BEGIN
-    reg [`LSUQ_SIZE-1:0][`DCORE_TAG_WIDTH:0] pending_reqs;
-`IGNORE_WARNINGS_END
+
+`ifndef SYNTHESIS
+    reg [`LSUQ_SIZE-1:0][(`NW_BITS + 32 + 64 + 1)-1:0] pending_reqs;
+    wire [63:0] delay_timeout = 10000 * (1 ** (`L2_ENABLE + `L3_ENABLE));
 
     always @(posedge clk) begin
         if (reset) begin
             pending_reqs <= '0;
-        end else if (mbuf_push) begin            
-            pending_reqs[mbuf_waddr] <= {dcache_req_if.tag[0], 1'b1};
-        end else if (mbuf_pop) begin            
-            pending_reqs[mbuf_raddr] <= '0;
+        end begin
+            if (mbuf_push) begin            
+                pending_reqs[mbuf_waddr] <= {req_wid, req_pc, $time, 1'b1};
+            end else if (mbuf_pop) begin
+                pending_reqs[mbuf_raddr] <= '0;
+            end
+        end
+
+        for (integer i = 0; i < `LSUQ_SIZE; ++i) begin
+            if (pending_reqs[i][0]) begin 
+                assert(($time - pending_reqs[i][1 +: 64]) < delay_timeout) else
+                    $error("%t: *** D$%0d response timeout: wid=%0d, PC=%0h", $time, CORE_ID, pending_reqs[i][1+64+32 +: `NW_BITS], pending_reqs[i][1+64 +: 32]);
+            end
         end
     end
-
+`endif
+    
+`ifdef DBG_PRINT_CORE_DCACHE
    always @(posedge clk) begin     
         if (lsu_req_if.valid && fence_wait)  begin
             $display("%t: *** D$%0d fence wait", $time, CORE_ID);
@@ -344,15 +354,6 @@ module VX_lsu_unit #(
                 $time, CORE_ID, dcache_rsp_if.tmask, rsp_wid, rsp_pc, mbuf_raddr, rsp_rd);
             `PRINT_ARRAY1D(dcache_rsp_if.data, `NUM_THREADS);
             $write(", is_dup=%b\n", rsp_is_dup);
-        end
-        if (mbuf_full) begin
-            $write("%t: *** D$%0d queue-full:", $time, CORE_ID);
-            for (integer j = 0; j < `LSUQ_SIZE; j++) begin
-                if (pending_reqs[j][0]) begin
-                    $write(" %0d->%0h", j, pending_reqs[j][1 +: `DCORE_TAG_WIDTH]);
-                end
-            end            
-            $write("\n");
         end
     end
 `endif
