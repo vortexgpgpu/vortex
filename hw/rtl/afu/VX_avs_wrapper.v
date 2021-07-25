@@ -126,7 +126,7 @@ module VX_avs_wrapper #(
         VX_fifo_queue #(
             .DATAW      (AVS_DATA_WIDTH),
             .SIZE       (RD_QUEUE_SIZE),
-            .OUTPUT_REG (OUTPUT_REG)
+            .OUTPUT_REG (!OUTPUT_REG)
         ) rd_rsp_queue (
             .clk      (clk),
             .reset    (reset),
