@@ -17,11 +17,8 @@ module VX_writeback #(
 );
 
     `UNUSED_PARAM (CORE_ID)
-    
-    wire ld_valid  = ld_commit_if.valid && ld_commit_if.wb;    
-    wire fpu_valid = fpu_commit_if.valid && fpu_commit_if.wb;
-    wire csr_valid = csr_commit_if.valid && csr_commit_if.wb;
-    wire alu_valid = alu_commit_if.valid && alu_commit_if.wb;
+
+    localparam DATAW = `NW_BITS + 32 + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * 32) + 1;
 
     wire wb_valid;
     wire [`NW_BITS-1:0] wb_wid;
@@ -30,59 +27,53 @@ module VX_writeback #(
     wire [`NR_BITS-1:0] wb_rd;
     wire [`NUM_THREADS-1:0][31:0] wb_data;
     wire wb_eop;
+
+    wire [3:0][DATAW-1:0] rsp_data;
+    wire [3:0] rsp_ready;
+    wire stall;
     
-    assign wb_valid =   ld_valid  | 
-                        fpu_valid | 
-                        csr_valid | 
-                        alu_valid;
+    wire ld_valid  =  ld_commit_if.valid && ld_commit_if.wb;    
+    wire fpu_valid = fpu_commit_if.valid && fpu_commit_if.wb;
+    wire csr_valid = csr_commit_if.valid && csr_commit_if.wb;
+    wire alu_valid = alu_commit_if.valid && alu_commit_if.wb;
 
-    assign wb_wid =     ld_valid  ? ld_commit_if.wid :
-                        fpu_valid ? fpu_commit_if.wid :
-                        csr_valid ? csr_commit_if.wid :                        
-                        /*alu_valid ?*/ alu_commit_if.wid;
-
-    assign wb_PC =      ld_valid  ? ld_commit_if.PC :
-                        fpu_valid ? fpu_commit_if.PC :
-                        csr_valid ? csr_commit_if.PC :                        
-                        /*alu_valid ?*/ alu_commit_if.PC;
+    assign rsp_data[0] = { ld_commit_if.wid,  ld_commit_if.PC,  ld_commit_if.tmask,  ld_commit_if.rd,  ld_commit_if.data,  ld_commit_if.eop};
+    assign rsp_data[1] = {fpu_commit_if.wid, fpu_commit_if.PC, fpu_commit_if.tmask, fpu_commit_if.rd, fpu_commit_if.data, fpu_commit_if.eop};
+    assign rsp_data[2] = {csr_commit_if.wid, csr_commit_if.PC, csr_commit_if.tmask, csr_commit_if.rd, csr_commit_if.data, csr_commit_if.eop};
+    assign rsp_data[3] = {alu_commit_if.wid, alu_commit_if.PC, alu_commit_if.tmask, alu_commit_if.rd, alu_commit_if.data, alu_commit_if.eop};
     
-    assign wb_tmask =   ld_valid  ? ld_commit_if.tmask :
-                        fpu_valid ? fpu_commit_if.tmask :
-                        csr_valid ? csr_commit_if.tmask :                        
-                        /*alu_valid ?*/ alu_commit_if.tmask;
+    VX_stream_arbiter #(            
+        .NUM_REQS (4),
+        .DATAW    (DATAW),        
+        .TYPE     ("X")
+    ) rsp_arb (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  ({alu_valid, csr_valid, fpu_valid, ld_valid}),
+        .data_in   (rsp_data),
+        .ready_in  (rsp_ready),
+        .valid_out (wb_valid),
+        .data_out  ({wb_wid, wb_PC, wb_tmask, wb_rd, wb_data, wb_eop}),
+        .ready_out (~stall)
+    );
 
-    assign wb_rd =      ld_valid  ? ld_commit_if.rd :
-                        fpu_valid ? fpu_commit_if.rd :
-                        csr_valid ? csr_commit_if.rd :                        
-                        /*alu_valid ?*/ alu_commit_if.rd;
+    assign  ld_commit_if.ready = rsp_ready[0] || ~ld_commit_if.wb;
+    assign fpu_commit_if.ready = rsp_ready[1] || ~fpu_commit_if.wb;
+    assign csr_commit_if.ready = rsp_ready[2] || ~csr_commit_if.wb;
+    assign alu_commit_if.ready = rsp_ready[3] || ~alu_commit_if.wb;
 
-    assign wb_data =    ld_valid  ? ld_commit_if.data :
-                        fpu_valid ? fpu_commit_if.data :
-                        csr_valid ? csr_commit_if.data :                        
-                        /*alu_valid ?*/ alu_commit_if.data;
-
-    assign wb_eop =     ld_valid  ? ld_commit_if.eop :
-                        fpu_valid ? fpu_commit_if.eop :
-                        csr_valid ? csr_commit_if.eop :                        
-                        /*alu_valid ?*/ alu_commit_if.eop;
-
-    wire stall = ~writeback_if.ready && writeback_if.valid;
+    assign stall = ~writeback_if.ready && writeback_if.valid;
     
     VX_pipe_register #(
-        .DATAW  (1 + `NW_BITS + 32 + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * 32) + 1),
+        .DATAW  (1 + DATAW),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
-        .enable   (!stall),
+        .enable   (~stall),
         .data_in  ({wb_valid,           wb_wid,           wb_PC,           wb_tmask,           wb_rd,           wb_data,           wb_eop}),
         .data_out ({writeback_if.valid, writeback_if.wid, writeback_if.PC, writeback_if.tmask, writeback_if.rd, writeback_if.data, writeback_if.eop})
     );
-    
-    assign ld_commit_if.ready  = !(ld_commit_if.wb  && (stall));
-    assign fpu_commit_if.ready = !(fpu_commit_if.wb && (stall || ld_valid));
-    assign csr_commit_if.ready = !(csr_commit_if.wb && (stall || ld_valid || fpu_valid));
-    assign alu_commit_if.ready = !(alu_commit_if.wb && (stall || ld_valid || fpu_valid || csr_valid));
     
     // special workaround to get RISC-V tests Pass/Fail status
     reg [31:0] last_wb_value [`NUM_REGS-1:0] /* verilator public */;
