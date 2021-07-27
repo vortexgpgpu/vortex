@@ -32,7 +32,7 @@ module VX_smem_arb (
         VX_stream_demux #(
             .NUM_REQS (2),
             .DATAW    (REQ_DATAW),
-            .BUFFERED (1)
+            .BUFFERED (2)
         ) req_demux (
             .clk       (clk),
             .reset     (reset),

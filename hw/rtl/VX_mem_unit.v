@@ -275,7 +275,7 @@ module VX_mem_unit # (
         .ADDR_WIDTH    (`DMEM_ADDR_WIDTH),
         .TAG_IN_WIDTH  (`DMEM_TAG_WIDTH),
         .BUFFERED_REQ  (1),
-        .BUFFERED_RSP  (1)
+        .BUFFERED_RSP  (2)
     ) mem_arb (
         .clk            (clk),
         .reset          (reset),
