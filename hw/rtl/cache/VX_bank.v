@@ -127,7 +127,6 @@ module VX_bank #(
 
     wire                            mshr_alm_full;
     wire                            mshr_pop;
-    wire                            mshr_pending;
     wire                            mshr_valid;
     wire [`LINE_ADDR_WIDTH-1:0]     mshr_addr;
     wire [CORE_TAG_WIDTH-1:0]       mshr_tag;
@@ -149,10 +148,10 @@ module VX_bank #(
     wire                            is_mshr_st0, is_mshr_st1;        
     wire                            miss_st0, miss_st1; 
     wire                            prev_miss_dep_st0;
-    wire                            fill_req_unqual_st0, fill_req_unqual_st1;
     wire                            force_miss_st0, force_miss_st1;
+    wire                            not_same_prev_mshr_st0, not_same_prev_mshr_st1;
     wire                            writeen_unqual_st0, writeen_unqual_st1;
-    wire                            incoming_fill_st0, incoming_fill_st1;
+    wire                            incoming_fill_unqual_st0, incoming_fill_unqual_st1;    
     wire                            mshr_pending_st0;
     wire                            is_flush_st0;
 
@@ -183,25 +182,21 @@ module VX_bank #(
     
     wire creq_grant  = !mshr_enable && !mrsq_enable && !flush_enable;
 
-    wire is_miss_st1 = valid_st1 && (miss_st1 || force_miss_st1);
+    wire is_miss_st1 = (miss_st1 || force_miss_st1);
     
     assign mshr_pop = mshr_enable
-                   && !(is_miss_st1 && is_mshr_st1)  // do not schedule another mshr request if the previous one missed
+                   && !(valid_st1 && is_mshr_st1 && is_miss_st1)  // do not schedule another mshr request if the previous one missed
                    && !crsq_in_stall;       // ensure core response ready
                    
     assign creq_out_ready = creq_grant 
-                        && !mreq_alm_full   // ensure memory request ready                   
-                        && !mshr_alm_full   // ensure mshr enqueue ready
-                        && !crsq_in_stall;  // ensure core response ready
+                         && !mreq_alm_full   // ensure memory request ready                   
+                         && !mshr_alm_full   // ensure mshr enqueue ready
+                         && !crsq_in_stall;  // ensure core response ready
 
     assign mem_rsp_ready = mrsq_grant
                         && !crsq_in_stall;  // ensure core response ready
 
     wire mem_rsp_fire = mem_rsp_valid && mem_rsp_ready;
-
-    // we have a miss in mshr or entering it for the current address
-    wire mshr_pending_sel = mshr_pending
-                         || (is_miss_st1 && (creq_addr == addr_st1));
 
 `ifdef DBG_CACHE_REQ_INFO
     if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
@@ -233,7 +228,7 @@ module VX_bank #(
     end
     
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH + (`UP(`WORD_SELECT_BITS) + WORD_SIZE + `REQS_BITS + 1) * NUM_PORTS + CORE_TAG_WIDTH + 1 + 1),
+        .DATAW  (1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH + (`UP(`WORD_SELECT_BITS) + WORD_SIZE + `REQS_BITS + 1) * NUM_PORTS + CORE_TAG_WIDTH + 1),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
@@ -251,10 +246,9 @@ module VX_bank #(
             creq_byteen,
             mshr_enable ? mshr_tid : creq_tid,
             mshr_enable ? mshr_pmask : creq_pmask,
-            mshr_enable ? mshr_tag : creq_tag,
-            mshr_pending_sel
+            mshr_enable ? mshr_tag : creq_tag
         }),
-        .data_out ({valid_st0, is_flush_st0, is_mshr_st0, is_fill_st0, mem_rw_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_tid_st0, pmask_st0, tag_st0, mshr_pending_st0})
+        .data_out ({valid_st0, is_flush_st0, is_mshr_st0, is_fill_st0, mem_rw_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_tid_st0, pmask_st0, tag_st0})
     );
 
 `ifdef DBG_CACHE_REQ_INFO
@@ -295,25 +289,25 @@ module VX_bank #(
         .tag_match  (tag_match_st0)
     );
 
-    // redundant fills
-    wire is_redundant_fill_st0 = is_fill_st0 && tag_match_st0;
-
     // we had a miss with prior request for the current address
-    assign prev_miss_dep_st0 = is_miss_st1 && (addr_st0 == addr_st1);
+    assign prev_miss_dep_st0 = valid_st1 && is_miss_st1 && (addr_st0 == addr_st1);
 
+    // we have a core request hit
     assign miss_st0 = !is_fill_st0 && !tag_match_st0;
 
-    // force miss to ensure commit order when a new request has pending previous requests to same block
-    // also force a miss for mshr requests when previous requests got a miss    
+    // force a miss to ensure commit order when a new request has pending previous requests to same block
+    // also force a miss for mshr requests when previous request was a missed
     assign force_miss_st0 = (!is_fill_st0 && !is_mshr_st0 && (mshr_pending_st0 || prev_miss_dep_st0))
-                         || (is_mshr_st0 && is_mshr_st1 && is_miss_st1);
+                         || (is_mshr_st0 && valid_st1 && is_mshr_st1 && is_miss_st1);
 
-    assign writeen_unqual_st0 = (WRITE_ENABLE && !is_fill_st0 && tag_match_st0 && mem_rw_st0)
-                             || (is_fill_st0 && !is_redundant_fill_st0);
+    // previous mshr request doesn't have same address
+    assign not_same_prev_mshr_st0 = valid_st1 && is_mshr_st1 && (addr_st1 != addr_st0);
 
-    assign incoming_fill_st0 = mem_rsp_valid && (addr_st0 == mem_rsp_addr);
+    // enable write when we have a fill request that is not redundant
+    assign writeen_unqual_st0 = is_fill_st0 && !tag_match_st0;
 
-    assign fill_req_unqual_st0 = !mem_rw_st0 && (!force_miss_st0 || (is_mshr_st0 && !prev_miss_dep_st0));
+    // check if incoming memory response match current address
+    assign incoming_fill_unqual_st0 = mem_rsp_valid && (addr_st0 == mem_rsp_addr);
 
     VX_pipe_register #(
         .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH + (`UP(`WORD_SELECT_BITS) + WORD_SIZE + `REQS_BITS + 1) * NUM_PORTS + CORE_TAG_WIDTH),
@@ -322,8 +316,8 @@ module VX_bank #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!crsq_in_stall),
-        .data_in  ({valid_st0, is_mshr_st0, is_fill_st0, writeen_unqual_st0, fill_req_unqual_st0, incoming_fill_st0, miss_st0, force_miss_st0, mem_rw_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_tid_st0, pmask_st0, tag_st0}),
-        .data_out ({valid_st1, is_mshr_st1, is_fill_st1, writeen_unqual_st1, fill_req_unqual_st1, incoming_fill_st1, miss_st1, force_miss_st1, mem_rw_st1, addr_st1, wdata_st1, wsel_st1, byteen_st1, req_tid_st1, pmask_st1, tag_st1})
+        .data_in  ({valid_st0, is_mshr_st0, is_fill_st0, writeen_unqual_st0, incoming_fill_unqual_st0, miss_st0, force_miss_st0, mem_rw_st0, not_same_prev_mshr_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_tid_st0, pmask_st0, tag_st0}),
+        .data_out ({valid_st1, is_mshr_st1, is_fill_st1, writeen_unqual_st1, incoming_fill_unqual_st1, miss_st1, force_miss_st1, mem_rw_st1, not_same_prev_mshr_st1, addr_st1, wdata_st1, wsel_st1, byteen_st1, req_tid_st1, pmask_st1, tag_st1})
     ); 
 
 `ifdef DBG_CACHE_REQ_INFO
@@ -334,18 +328,21 @@ module VX_bank #(
     end
 `endif
 
-    wire writeen_st1 = writeen_unqual_st1 && (is_fill_st1 || !force_miss_st1);
+    wire writeen_st1 = (WRITE_ENABLE && !is_fill_st1 && mem_rw_st1 && ~is_miss_st1)
+                    || writeen_unqual_st1;
 
-    wire crsq_push_st1 = !is_fill_st1 && !mem_rw_st1 && !miss_st1 && !force_miss_st1;
+    wire readen_st1 = !is_fill_st1 && !mem_rw_st1;
 
-    wire mshr_push_st1 = !is_fill_st1 && !mem_rw_st1 && (miss_st1 || force_miss_st1);
+    wire crsq_push_st1 = readen_st1 && ~is_miss_st1;
 
-    wire incoming_fill_qual_st1 = (mem_rsp_valid && (addr_st1 == mem_rsp_addr)) 
-                               || incoming_fill_st1;
+    wire mshr_push_st1 = readen_st1 && is_miss_st1;
 
-    wire do_writeback_st1 = !is_fill_st1 && mem_rw_st1;    
+    wire incoming_fill_st1 = (mem_rsp_valid && (addr_st1 == mem_rsp_addr)) 
+                          || incoming_fill_unqual_st1;
 
-    wire mreq_push_st1 = (miss_st1 && fill_req_unqual_st1 && !incoming_fill_qual_st1)
+    wire do_writeback_st1 = !is_fill_st1 && mem_rw_st1;
+    
+    wire mreq_push_st1 = (readen_st1 && miss_st1 && (~force_miss_st1 || not_same_prev_mshr_st1) && !incoming_fill_st1)
                       || do_writeback_st1;
 
     wire [`WORDS_PER_LINE-1:0][WORD_SIZE-1:0] line_byteen_st1;
@@ -385,7 +382,7 @@ module VX_bank #(
         .addr       (addr_st1),
 
         // reading
-        .readen     (valid_st1 && !is_fill_st1 && !mem_rw_st1),
+        .readen     (valid_st1 && readen_st1),
         .rdata      (rdata_st1),
 
         // writing        
@@ -401,10 +398,7 @@ module VX_bank #(
 
     // push a missed request as 'ready' if it was a forced miss that actually had a hit 
     // or the fill request for this block is comming
-    wire mshr_init_ready_state = !miss_st1 || incoming_fill_qual_st1;
-
-    // use memory rsp or core req address to lookup the mshr
-    wire [`LINE_ADDR_WIDTH-1:0] lookup_addr = mem_rsp_valid ? mem_rsp_addr : creq_addr;
+    wire mshr_init_ready_state = !miss_st1 || incoming_fill_unqual_st1;
 
     VX_miss_resrv #(
         .BANK_ID            (BANK_ID),
@@ -437,13 +431,15 @@ module VX_bank #(
         `UNUSED_PIN (enqueue_almfull),
         `UNUSED_PIN (enqueue_full),
 
-        // lookup        
-        .lookup_addr        (lookup_addr),
-        .lookup_match       (mshr_pending),
+        // fill
+        .fill_start         (mem_rsp_fire),
+        .fill_addr          (mem_rsp_addr),
 
-        // fill update
-        .fill_update        (mem_rsp_fire),
-        
+        // lookup
+        .lookup_addr        (addr_st0),
+        .lookup_match       (mshr_pending_st0),
+        .lookup_fill        (do_fill_st0),
+
         // schedule
         .schedule           (mshr_pop),        
         .schedule_valid     (mshr_valid),
@@ -477,8 +473,9 @@ module VX_bank #(
     end
 
     VX_elastic_buffer #(
-        .DATAW (CORE_TAG_WIDTH + (1 + `WORD_WIDTH + `REQS_BITS) * NUM_PORTS),
-        .SIZE  (CRSQ_SIZE)
+        .DATAW      (CORE_TAG_WIDTH + (1 + `WORD_WIDTH + `REQS_BITS) * NUM_PORTS),
+        .SIZE       (CRSQ_SIZE),
+        .OUTPUT_REG (1 == NUM_BANKS)
     ) core_rsp_req (
         .clk       (clk),
         .reset     (reset),
@@ -551,7 +548,7 @@ module VX_bank #(
         /*if (crsq_in_fire && (NUM_PORTS > 1) && $countones(crsq_pmask) > 1) begin
             $display("%t: *** cache%0d:%0d multi-port-out: pmask=%b, addr=%0h, tag=%0h", $time, CACHE_ID, BANK_ID, crsq_pmask, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), crsq_tag);
         end*/     
-        if (valid_st1 && !is_fill_st1 && miss_st1 && incoming_fill_qual_st1) begin
+        if (valid_st1 && !is_fill_st1 && miss_st1 && incoming_fill_st1) begin
             $display("%t: *** cache%0d:%0d miss with incoming fill - addr=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID));
             assert(!is_mshr_st1);
         end
@@ -565,7 +562,7 @@ module VX_bank #(
             $display("%t: cache%0d:%0d fill-rsp: addr=%0h, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mem_rsp_addr, BANK_ID), mem_rsp_data);
         end
         if (mshr_pop) begin
-            $display("%t: cache%0d:%0d mshr-rd-req: addr=%0h, tag=%0h, pmask=%b, tid=%0d, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mshr_addr, BANK_ID), mshr_tag, mshr_pmask, mshr_tid, debug_wid_sel, debug_pc_sel);
+            $display("%t: cache%0d:%0d mshr-pop: addr=%0h, tag=%0h, pmask=%b, tid=%0d, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mshr_addr, BANK_ID), mshr_tag, mshr_pmask, mshr_tid, debug_wid_sel, debug_pc_sel);
         end
         if (creq_out_fire) begin
             if (creq_rw)

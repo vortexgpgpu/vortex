@@ -42,12 +42,14 @@ module VX_miss_resrv #(
     output wire                         enqueue_full,
     output wire                         enqueue_almfull,
 
-    // lookup    
+    // fill
+    input wire                          fill_start,
+    input wire [`LINE_ADDR_WIDTH-1:0]   fill_addr,    
+
+    // lookup
     input wire [`LINE_ADDR_WIDTH-1:0]   lookup_addr,
     output wire                         lookup_match,
-
-    // fill update
-    input wire                          fill_update,    
+    input wire                          lookup_fill,
 
     // schedule
     input wire                          schedule,
@@ -64,13 +66,16 @@ module VX_miss_resrv #(
 
     reg [MSHR_SIZE-1:0][`LINE_ADDR_WIDTH-1:0] addr_table;
     
-    reg [MSHR_SIZE-1:0] valid_table;
-    reg [MSHR_SIZE-1:0] ready_table;
-    reg [ADDRW-1:0] head_ptr, tail_ptr;
-    reg [ADDRW-1:0] schedule_ptr, restore_ptr;    
+    reg [MSHR_SIZE-1:0] valid_table, valid_table_n;
+    reg [MSHR_SIZE-1:0] ready_table, ready_table_n;
+    reg [ADDRW-1:0] head_ptr, head_ptr_n;
+    reg [ADDRW-1:0] tail_ptr, tail_ptr_n;
+    reg [ADDRW-1:0] restore_ptr, restore_ptr_n;
+    reg [ADDRW-1:0] schedule_ptr, schedule_ptr_n;
     reg [ADDRW-1:0] used_r;
     reg             alm_full_r, full_r;
-    
+    reg             valid_out_r;
+
     wire [MSHR_SIZE-1:0] valid_address_match;
     for (genvar i = 0; i < MSHR_SIZE; i++) begin
         assign valid_address_match[i] = valid_table[i] && (addr_table[i] == lookup_addr);
@@ -80,7 +85,47 @@ module VX_miss_resrv #(
 
     wire restore = enqueue && enqueue_is_mshr;
 
-    wire [`LOG2UP(MSHR_SIZE)-1:0] head_ptr_n = head_ptr + $bits(head_ptr)'(1);
+    always @(*) begin
+        valid_table_n  = valid_table;
+        ready_table_n  = ready_table;
+        head_ptr_n     = head_ptr;
+        tail_ptr_n     = tail_ptr;
+        schedule_ptr_n = schedule_ptr;        
+        restore_ptr_n  = restore_ptr;
+
+        if (lookup_fill) begin
+            // unlock pending requests for scheduling                
+            ready_table_n |= valid_address_match;
+        end
+
+        if (schedule) begin
+            // schedule next entry            
+            schedule_ptr_n = schedule_ptr + 1;
+            valid_table_n[schedule_ptr] = 0;
+            ready_table_n[schedule_ptr] = 0;
+        end
+
+        if (fill_start && (fill_addr == addr_table[schedule_ptr])) begin
+            ready_table_n[schedule_ptr] = valid_table[schedule_ptr];
+        end
+
+        if (push_new) begin
+            // push new entry
+            valid_table_n[tail_ptr] = 1;
+            ready_table_n[tail_ptr] = enqueue_as_ready;
+            tail_ptr_n = tail_ptr + 1;
+        end else if (restore) begin    
+            // restore schedule, returning missed mshr entry        
+            valid_table_n[restore_ptr] = 1;
+            ready_table_n[restore_ptr] = enqueue_as_ready;                      
+            restore_ptr_n = restore_ptr + 1;
+            schedule_ptr_n = head_ptr;
+        end else if (dequeue) begin                
+            // clear scheduled entry
+            head_ptr_n = head_ptr + 1;
+            restore_ptr_n = head_ptr_n;
+        end        
+    end
 
     always @(posedge clk) begin
         if (reset) begin
@@ -92,42 +137,21 @@ module VX_miss_resrv #(
             restore_ptr  <= 0;
             used_r       <= 0;
             alm_full_r   <= 0;
-            full_r       <= 0;            
+            full_r       <= 0;
+            valid_out_r  <= 0;
         end else begin
-            
-            if (fill_update) begin                
-                // unlock pending requests for scheduling                
-                ready_table <= ready_table | valid_address_match;
+            if (schedule) begin
+                assert(schedule_valid);
+                assert(!fill_start);
+                assert(!restore);
             end
-
-            if (push_new) begin   
-                // push new entry
+            
+            if (push_new) begin
                 assert(!full_r);
-                valid_table[tail_ptr] <= 1;                    
-                ready_table[tail_ptr] <= enqueue_as_ready;
-                tail_ptr <= tail_ptr + $bits(tail_ptr)'(1);
             end else if (restore) begin
                 assert(!schedule);
-                // restore schedule, returning missed mshr entry
-                valid_table[restore_ptr] <= 1;
-                ready_table[restore_ptr] <= enqueue_as_ready;    
-                restore_ptr  <= restore_ptr + $bits(restore_ptr)'(1);
-                schedule_ptr <= head_ptr;
             end else if (dequeue) begin                
-                // clear scheduled entry
-                assert(((head_ptr+$bits(head_ptr)'(1)) == schedule_ptr) 
-                    || ((head_ptr+$bits(head_ptr)'(2)) == schedule_ptr)) else $error("schedule_ptr=%0d, head_ptr=%0d", schedule_ptr, head_ptr);
-                valid_table[head_ptr] <= 0;
-                head_ptr    <= head_ptr_n;
-                restore_ptr <= head_ptr_n;
-            end
-            
-            if (schedule) begin
-                // schedule next entry  
-                assert(schedule_valid);              
-                valid_table[schedule_ptr] <= 0; 
-                ready_table[schedule_ptr] <= 0;
-                schedule_ptr <= schedule_ptr + $bits(schedule_ptr)'(1);
+                assert(head_ptr != schedule_ptr);
             end
 
             if (push_new) begin
@@ -144,40 +168,46 @@ module VX_miss_resrv #(
             end
 
             used_r <= used_r + ADDRW'($signed(2'(push_new) - 2'(dequeue)));
-        end
-    end
 
-    always @(posedge clk) begin
+            valid_table  <= valid_table_n;
+            ready_table  <= ready_table_n;            
+            head_ptr     <= head_ptr_n;
+            tail_ptr     <= tail_ptr_n;
+            schedule_ptr <= schedule_ptr_n;
+            restore_ptr  <= restore_ptr_n;
+            valid_out_r  <= ready_table_n[schedule_ptr_n];
+        end
+
         if (push_new) begin
             addr_table[tail_ptr] <= enqueue_addr;
         end
     end
 
     VX_dp_ram #(
-        .DATAW(`MSHR_DATA_WIDTH),
-        .SIZE(MSHR_SIZE),
-        .RWCHECK(1),
-        .FASTRAM(1)
+        .DATAW   (`MSHR_DATA_WIDTH),
+        .SIZE    (MSHR_SIZE),
+        .RWCHECK (1),
+        .FASTRAM (1)
     ) entries (
-        .clk(clk),
-        .waddr(tail_ptr),                                
-        .raddr(schedule_ptr),                
-        .wren(push_new),
-        .byteen(1'b1),
-        .rden(1'b1),
-        .din(enqueue_data),
-        .dout(schedule_data)
+        .clk    (clk),
+        .waddr  (tail_ptr),                                
+        .raddr  (schedule_ptr),                
+        .wren   (push_new),
+        .byteen (1'b1),
+        .rden   (1'b1),
+        .din    (enqueue_data),
+        .dout   (schedule_data)
     );
 
     assign lookup_match    = (| valid_address_match);
-    assign schedule_valid  = ready_table[schedule_ptr];
+    assign schedule_valid  = valid_out_r;
     assign schedule_addr   = addr_table[schedule_ptr];    
     assign enqueue_almfull = alm_full_r;
     assign enqueue_full    = full_r;
 
 `ifdef DBG_PRINT_CACHE_MSHR        
     always @(posedge clk) begin        
-        if (fill_update || schedule || enqueue || dequeue) begin
+        if (lookup_fill || schedule || enqueue || dequeue) begin
             if (schedule)
                 $display("%t: cache%0d:%0d mshr-schedule: addr%0d=%0h, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, schedule_ptr, `LINE_TO_BYTE_ADDR(schedule_addr, BANK_ID), deq_debug_wid, deq_debug_pc);      
             if (enqueue) begin
