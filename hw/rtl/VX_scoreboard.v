@@ -40,7 +40,7 @@ module VX_scoreboard  #(
     end
 
     reg [31:0] deadlock_ctr;
-    wire [31:0] deadlock_timeout = 1000 * (10 ** (`L2_ENABLE + `L3_ENABLE));
+    wire [31:0] deadlock_timeout = 10000 * (1 ** (`L2_ENABLE + `L3_ENABLE));
     always @(posedge clk) begin
         if (reset) begin
             deadlock_ctr <= 0;
