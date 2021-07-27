@@ -7,7 +7,7 @@ POCL_RT_PATH ?= /opt/pocl/runtime
 OPTS ?= filelist.txt
 
 VORTEX_DRV_PATH ?= $(realpath ../../../driver)
-VORTEX_RT_PATH ?= $(realpath ../../../runtime) 
+VORTEX_RT_PATH ?= $(realpath ../../../runtime)
 
 K_LLCFLAGS += "-O3 -march=riscv32 -target-abi=ilp32f -mcpu=generic-rv32 -mattr=+m,+f -float-abi=hard -code-model=small"
 K_CFLAGS   += "-v -O3 --sysroot=$(SYSROOT) --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH) -march=rv32imf -mabi=ilp32f -I$(VORTEX_RT_PATH)/include -fno-rtti -fno-exceptions -ffreestanding -nostartfiles -fdata-sections -ffunction-sections"
