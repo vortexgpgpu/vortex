@@ -150,8 +150,6 @@ module VX_miss_resrv #(
                 assert(!full_r);
             end else if (restore) begin
                 assert(!schedule);
-            end else if (dequeue) begin                
-                assert(head_ptr != schedule_ptr);
             end
 
             if (push_new) begin
