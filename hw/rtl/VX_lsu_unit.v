@@ -313,7 +313,8 @@ module VX_lsu_unit #(
         end begin
             if (mbuf_push) begin            
                 pending_reqs[mbuf_waddr] <= {req_wid, req_pc, $time, 1'b1};
-            end else if (mbuf_pop) begin
+            end
+            if (mbuf_pop) begin
                 pending_reqs[mbuf_raddr] <= '0;
             end
         end
