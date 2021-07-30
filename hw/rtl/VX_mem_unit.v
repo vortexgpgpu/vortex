@@ -197,17 +197,49 @@ module VX_mem_unit # (
             .TAG_WIDTH (`DCORE_TAG_WIDTH-`SM_ENABLE)
         ) smem_rsp_if();
 
-        VX_smem_arb smem_arb (
+        VX_smem_arb #(
+            .NUM_REQS      (2),
+            .LANES         (`NUM_THREADS),
+            .DATA_SIZE     (4),            
+            .TAG_IN_WIDTH  (`DCORE_TAG_WIDTH),
+            .TYPE          ("X"),
+            .BUFFERED_REQ  (2),
+            .BUFFERED_RSP  (1)
+        ) smem_arb (
             .clk          (clk),
             .reset        (reset),
 
-            .core_req_if  (dcache_req_if),
-            .cache_req_if (dcache_req_tmp_if),
-            .smem_req_if  (smem_req_if),
+            // input request
+            .req_valid_in   (dcache_req_if.valid),
+            .req_rw_in      (dcache_req_if.rw),        
+            .req_byteen_in  (dcache_req_if.byteen),        
+            .req_addr_in    (dcache_req_if.addr),
+            .req_data_in    (dcache_req_if.data),
+            .req_tag_in     (dcache_req_if.tag),
+            .req_ready_in   (dcache_req_if.ready),
+            
+            // output requests
+            .req_valid_out  ({smem_req_if.valid,  dcache_req_tmp_if.valid}),
+            .req_rw_out     ({smem_req_if.rw,     dcache_req_tmp_if.rw}),
+            .req_byteen_out ({smem_req_if.byteen, dcache_req_tmp_if.byteen}),
+            .req_addr_out   ({smem_req_if.addr,   dcache_req_tmp_if.addr}),
+            .req_data_out   ({smem_req_if.data,   dcache_req_tmp_if.data}),  
+            .req_tag_out    ({smem_req_if.tag,    dcache_req_tmp_if.tag}),  
+            .req_ready_out  ({smem_req_if.ready,  dcache_req_tmp_if.ready}),            
+            
+            // input responses
+            .rsp_valid_in   ({smem_rsp_if.valid, dcache_rsp_tmp_if.valid}),
+            .rsp_tmask_in   ({smem_rsp_if.tmask, dcache_rsp_tmp_if.tmask}),
+            .rsp_data_in    ({smem_rsp_if.data,  dcache_rsp_tmp_if.data}),
+            .rsp_tag_in     ({smem_rsp_if.tag,   dcache_rsp_tmp_if.tag}),
+            .rsp_ready_in   ({smem_rsp_if.ready, dcache_rsp_tmp_if.ready}),
 
-            .cache_rsp_if (dcache_rsp_tmp_if),
-            .smem_rsp_if  (smem_rsp_if),
-            .core_rsp_if  (dcache_rsp_if)
+            // output response
+            .rsp_valid_out  (dcache_rsp_if.valid),
+            .rsp_tmask_out  (dcache_rsp_if.tmask),
+            .rsp_tag_out    (dcache_rsp_if.tag),
+            .rsp_data_out   (dcache_rsp_if.data),
+            .rsp_ready_out  (dcache_rsp_if.ready)
         );
 
         `RESET_RELAY (smem_reset);

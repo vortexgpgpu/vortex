@@ -2,6 +2,7 @@
 
 module VX_stream_demux #(
     parameter NUM_REQS = 1,
+    parameter LANES    = 1,
     parameter DATAW    = 1,
     parameter BUFFERED = 0,
     localparam LOG_NUM_REQS = `LOG2UP(NUM_REQS)
@@ -9,60 +10,58 @@ module VX_stream_demux #(
     input  wire clk,
     input  wire reset,
 
-    input wire [LOG_NUM_REQS-1:0] sel,
+    input wire [LANES-1:0][LOG_NUM_REQS-1:0] sel_in,
 
-    input  wire             valid_in,
-    input  wire [DATAW-1:0] data_in,    
-    output wire             ready_in,
+    input  wire [LANES-1:0]            valid_in,
+    input  wire [LANES-1:0][DATAW-1:0] data_in,    
+    output wire [LANES-1:0]            ready_in,
 
-    output wire [NUM_REQS-1:0]            valid_out,
-    output wire [NUM_REQS-1:0][DATAW-1:0] data_out,
-    input  wire [NUM_REQS-1:0]            ready_out
+    output wire [NUM_REQS-1:0][LANES-1:0]            valid_out,
+    output wire [NUM_REQS-1:0][LANES-1:0][DATAW-1:0] data_out,
+    input  wire [NUM_REQS-1:0][LANES-1:0]            ready_out
   );
   
     if (NUM_REQS > 1)  begin
 
-        reg [NUM_REQS-1:0]             valid_out_unqual;
-        wire [NUM_REQS-1:0][DATAW-1:0] data_out_unqual;
-        wire [NUM_REQS-1:0]            ready_out_unqual;
+        for (genvar j = 0; j < LANES; ++j) begin
 
-        always @(*) begin
-            valid_out_unqual = '0;
-            valid_out_unqual[sel] = valid_in;
-        end
-        
-        for (genvar i = 0; i < NUM_REQS; i++) begin                
-            assign data_out_unqual[i] = data_in;      
-        end
-        
-        assign ready_in = ready_out_unqual[sel]; 
+            reg [NUM_REQS-1:0]  valid_in_sel;
+            wire [NUM_REQS-1:0] ready_in_sel;
 
-        for (genvar i = 0; i < NUM_REQS; i++) begin  
-            VX_skid_buffer #(
-                .DATAW      (DATAW),
-                .PASSTHRU   (0 == BUFFERED),
-                .OUTPUT_REG (2 == BUFFERED)
-            ) out_buffer (
-                .clk       (clk),
-                .reset     (reset),
-                .valid_in  (valid_out_unqual[i]),        
-                .data_in   (data_out_unqual[i]),
-                .ready_in  (ready_out_unqual[i]),      
-                .valid_out (valid_out[i]),
-                .data_out  (data_out[i]),
-                .ready_out (ready_out[i])
-            );                   
+            always @(*) begin
+                valid_in_sel            = '0;
+                valid_in_sel[sel_in[j]] = valid_in[j];
+            end
+
+            assign ready_in[j] = ready_in_sel[sel_in[j]]; 
+
+            for (genvar i = 0; i < NUM_REQS; i++)  
+                VX_skid_buffer #(
+                    .DATAW      (DATAW),
+                    .PASSTHRU   (0 == BUFFERED),
+                    .OUTPUT_REG (2 == BUFFERED)
+                ) out_buffer (
+                    .clk       (clk),
+                    .reset     (reset),
+                    .valid_in  (valid_in_sel[i]),        
+                    .data_in   (data_in[j]),
+                    .ready_in  (ready_in_sel[i]),      
+                    .valid_out (valid_out[i][j]),
+                    .data_out  (data_out[i][j]),
+                    .ready_out (ready_out[i][j])
+                );
+            end
         end
 
     end else begin
-    
+
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
-        `UNUSED_VAR (sel)
+        `UNUSED_VAR (sel_in)
         
         assign valid_out = valid_in;        
         assign data_out  = data_in;
-        assign ready_in  = ready_out;        
+        assign ready_in  = ready_out;
 
     end
     
