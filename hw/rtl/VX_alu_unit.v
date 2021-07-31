@@ -154,7 +154,7 @@ module VX_alu_unit #(
     
     assign mul_ready_out = ~stall_out;
 
-    assign result_valid = mul_valid_out | (alu_req_if.valid && ~is_mul_op);
+    assign result_valid = mul_valid_out || (alu_req_if.valid && ~is_mul_op);
     assign result_wid   = mul_valid_out ? mul_wid   : alu_req_if.wid;    
     assign result_tmask = mul_valid_out ? mul_tmask : alu_req_if.tmask;    
     assign result_PC    = mul_valid_out ? mul_PC    : alu_req_if.PC;    
@@ -165,7 +165,7 @@ module VX_alu_unit #(
 
 `else 
 
-    assign stall_in = 0;
+    assign stall_in = stall_out;
 
     assign result_valid = alu_req_if.valid;
     assign result_wid   = alu_req_if.wid;  
