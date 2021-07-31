@@ -18,7 +18,7 @@ run-simx:
 	$(MAKE) -C printf run-simx
 	$(MAKE) -C diverge run-simx
 	$(MAKE) -C fence run-simx
-	$(MAKE) -C tex run-simx
+	#$(MAKE) -C tex run-simx
 
 run-vlsim:
 	$(MAKE) -C basic run-vlsim
