@@ -28,7 +28,7 @@ typedef struct packed {
     logic [`NUM_THREADS-1:0] tmask;
 } gpu_tmc_t;
 
-`define GPU_TMC_SIZE (1+`NUM_THREADS)
+`define GPU_TMC_BITS (1+`NUM_THREADS)
 
 typedef struct packed {
     logic                   valid;
@@ -36,7 +36,7 @@ typedef struct packed {
     logic [31:0]            pc;
 } gpu_wspawn_t;
 
-`define GPU_WSPAWN_SIZE (1+`NUM_WARPS+32)
+`define GPU_WSPAWN_BITS (1+`NUM_WARPS+32)
 
 typedef struct packed {
     logic                   valid;
@@ -46,7 +46,7 @@ typedef struct packed {
     logic [31:0]            pc;
 } gpu_split_t;
 
-`define GPU_SPLIT_SIZE (1+1+`NUM_THREADS+`NUM_THREADS+32)
+`define GPU_SPLIT_BITS (1+1+`NUM_THREADS+`NUM_THREADS+32)
 
 typedef struct packed {
     logic                   valid;
@@ -54,6 +54,6 @@ typedef struct packed {
     logic [`NW_BITS-1:0]    size_m1;
 } gpu_barrier_t;
 
-`define GPU_BARRIER_SIZE (1+`NB_BITS+`NW_BITS)
+`define GPU_BARRIER_BITS (1+`NB_BITS+`NW_BITS)
 
 `endif
