@@ -219,6 +219,8 @@ module VX_issue #(
             `PRINT_ARRAY1D(gpu_req_if.rs1_data, `NUM_THREADS);
             $write(", rs2_data=");
             `PRINT_ARRAY1D(gpu_req_if.rs2_data, `NUM_THREADS);
+            $write(", rs3_data=");
+            `PRINT_ARRAY1D(gpu_req_if.rs3_data, `NUM_THREADS);
             $write("\n");   
         end
     end

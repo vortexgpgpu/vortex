@@ -3,10 +3,12 @@
 
 `include "VX_define.vh"
 
-interface VX_cmt_to_csr_if ();
+interface VX_cmt_to_csr_if #(
+    parameter SIZE
+)();
 
-    wire                                valid;
-    wire [$clog2(3*`NUM_THREADS+1)-1:0] commit_size;
+    wire            valid;
+    wire [SIZE-1:0] commit_size;
 
 endinterface
 

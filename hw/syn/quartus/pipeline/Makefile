@@ -12,12 +12,12 @@ FPU_CORE_PATH = $(RTL_DIR)/fp_cores/altera/arria10
 #FPU_CORE_PATH = $(RTL_DIR)/fp_cores/altera/stratix10
 
 FPU_INCLUDE = $(RTL_DIR)/fp_cores;$(FPU_CORE_PATH);$(RTL_DIR)/fp_cores/fpnew/src;$(RTL_DIR)/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl;$(RTL_DIR)/fp_cores/fpnew/src/common_cells/include;$(RTL_DIR)/fp_cores/fpnew/src/common_cells/src
-RTL_INCLUDE = $(FPU_INCLUDE);$(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces
+TEX_INCLUDE = $(RTL_DIR)/tex_unit
+RTL_INCLUDE = $(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces;$(FPU_INCLUDE);$(TEX_INCLUDE)
+
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
-# Part, Family
-FAMILY = "Arria 10"
-DEVICE = 10AX115N3F40E2SG   
+PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Executable Configuration
 SYN_ARGS = --parallel --read_settings_files=on

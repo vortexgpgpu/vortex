@@ -73,13 +73,14 @@ module VX_commit #(
         .ld_commit_if   (ld_commit_if),        
         .csr_commit_if  (csr_commit_if),
         .fpu_commit_if  (fpu_commit_if),
+        .gpu_commit_if  (gpu_commit_if),
 
         .writeback_if   (writeback_if)
     );
 
-    // store and gpu commits don't writeback  
+    // store doesn't writeback  
     assign st_commit_if.ready  = 1'b1;
-    assign gpu_commit_if.ready = 1'b1;
+    // assign gpu_commit_if.ready = 1'b1;
 
 `ifdef DBG_PRINT_PIPELINE
     always @(posedge clk) begin

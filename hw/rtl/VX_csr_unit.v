@@ -12,7 +12,11 @@ module VX_csr_unit #(
 `endif
 
     VX_cmt_to_csr_if    cmt_to_csr_if, 
-    VX_fpu_to_csr_if    fpu_to_csr_if,
+    VX_fpu_to_csr_if    fpu_to_csr_if, 
+
+`ifdef EXT_TEX_ENABLE
+    VX_tex_csr_if       tex_csr_if, 
+`endif
     
     VX_csr_req_if       csr_req_if,
     VX_commit_if        csr_commit_if,
@@ -42,6 +46,9 @@ module VX_csr_unit #(
     `endif
         .cmt_to_csr_if  (cmt_to_csr_if),
         .fpu_to_csr_if  (fpu_to_csr_if), 
+    `ifdef EXT_TEX_ENABLE
+        .tex_csr_if     (tex_csr_if),
+    `endif
         .read_enable    (csr_req_if.valid),
         .read_addr      (csr_req_if.addr),
         .read_wid       (csr_req_if.wid),      
@@ -49,7 +56,7 @@ module VX_csr_unit #(
         .write_enable   (write_enable),        
         .write_addr     (csr_addr_s1), 
         .write_wid      (csr_commit_if.wid),
-        .write_data     (csr_updated_data_s1[`CSR_WIDTH-1:0]),
+        .write_data     (csr_updated_data_s1),
         .busy           (busy)
     );    
 

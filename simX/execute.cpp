@@ -555,20 +555,18 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
 
         // FSGNJ.S, FSGNJN.S, FSGNJX.S
         case 0x10: {
-          bool     fsign1 = rsdata[0] & 0x80000000;
+          bool     fsign1 = (rsdata[0] >> 31);
           uint32_t fdata1 = rsdata[0] & 0x7FFFFFFF;
-          bool     fsign2 = rsdata[1] & 0x80000000;
+          bool     fsign2 = (rsdata[1] >> 31);
           switch (func3) {            
           case 0: // FSGNJ.S
             rddata = (fsign2 << 31) | fdata1;
             break;          
           case 1: // FSGNJN.S
-            fsign2 = !fsign2;
-            rddata = (fsign2 << 31) | fdata1;
+            rddata = (!fsign2 << 31) | fdata1;
             break;          
           case 2: { // FSGNJX.S
-            bool sign = fsign1 ^ fsign2;
-            rddata = (sign << 31) | fdata1;
+            rddata = ((fsign1 ^ fsign2) << 31) | fdata1;
             } break;
           }
         } break;
