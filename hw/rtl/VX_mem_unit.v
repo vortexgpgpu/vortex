@@ -197,7 +197,7 @@ module VX_mem_unit # (
             .TAG_WIDTH (`DCORE_TAG_WIDTH-`SM_ENABLE)
         ) smem_rsp_if();
 
-        VX_smem_arb #(
+        VX_smem_arb #( 
             .NUM_REQS      (2),
             .LANES         (`NUM_THREADS),
             .DATA_SIZE     (4),            

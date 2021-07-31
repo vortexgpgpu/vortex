@@ -128,6 +128,7 @@ task print_ex_op (
             `GPU_SPLIT: $write("SPLIT");
             `GPU_JOIN:  $write("JOIN");
             `GPU_BAR:   $write("BAR");
+            `GPU_TEX:   $write("TEX");
             default:    $write("?");
         endcase
     end    

@@ -54,6 +54,9 @@ CONFIGS=-DEXT_F_DISABLE make -C hw/simulate
 # disable shared memory
 CONFIGS=-DSM_ENABLE=0 make -C hw/simulate
 
+# disabling tex extension
+CONFIGS=-DEXT_TEX_DISABLE make -C hw/simulate
+
 # using Default FPU core
 FPU_CORE=FPU_DEFAULT ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
 

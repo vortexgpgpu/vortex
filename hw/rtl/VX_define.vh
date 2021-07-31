@@ -16,6 +16,8 @@
 
 `define REQS_BITS       `LOG2UP(NUM_REQS)
 
+`define NTEX_BITS       `LOG2UP(`NUM_TEX_UNITS)
+
 `ifdef EXT_F_ENABLE
 `define NUM_REGS        64
 `else
@@ -53,6 +55,8 @@
 `define INST_FCI        7'b1010011 // float common instructions
 
 `define INST_GPU        7'b1101011
+
+`define INST_TEX       7'b0101011
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -185,6 +189,7 @@
 `define GPU_SPLIT       3'h2
 `define GPU_JOIN        3'h3
 `define GPU_BAR         3'h4
+`define GPU_TEX         3'h5
 `define GPU_OTHER       3'h7
 `define GPU_BITS        3
 `define GPU_OP(x)       x[`GPU_BITS-1:0]
@@ -293,11 +298,18 @@
 // Core request address bits
 `define DCORE_ADDR_WIDTH        (32-`CLOG2(`DWORD_SIZE))
 
-// TAG sharing enable     
-`define LSUQ_ADDR_BITS          `LOG2UP(`LSUQ_SIZE)  
+// Core request tag bits
+`define LSUQ_ADDR_BITS          `LOG2UP(`LSUQ_SIZE)
+`ifdef EXT_TEX_ENABLE
+`define LSU_TAG_ID_BITS         (`LSUQ_ADDR_BITS + `NC_ADDR_BITS + `SM_ENABLE)
+`define TEX_TAG_ID_BITS         (2)
+`define DCORE_TAG_ID_BITS       (`MAX(`LSU_TAG_ID_BITS, `TEX_TAG_ID_BITS) + 1)
+`define LSU_DCACHE_TAG_BITS     (`DBG_CACHE_REQ_MDATAW + `LSU_TAG_ID_BITS)
+`define TEX_DCACHE_TAG_BITS     (`DBG_CACHE_REQ_MDATAW + `TEX_TAG_ID_BITS)
+`define LSU_TEX_DCACHE_TAG_BITS `MAX(`LSU_DCACHE_TAG_BITS, `TEX_DCACHE_TAG_BITS)
+`else 
 `define DCORE_TAG_ID_BITS       (`LSUQ_ADDR_BITS + `NC_ADDR_BITS + `SM_ENABLE)
-
-// Input request tag bits
+`endif
 `define DCORE_TAG_WIDTH         (`DBG_CACHE_REQ_MDATAW + `DCORE_TAG_ID_BITS)
  
 // Memory request data bits
@@ -408,6 +420,8 @@
 
 // Merged D-cache/I-cache memory tag
 `define XMEM_TAG_WIDTH          (`DMEM_TAG_WIDTH + `CLOG2(2))
+
+////////////////////////////////////////////////////////////////////////////////////////
 
 `include "VX_types.vh"
 

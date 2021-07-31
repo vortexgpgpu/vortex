@@ -12,8 +12,10 @@ interface VX_gpu_req_if();
     wire [31:0]             PC;
     wire [31:0]             next_PC;
     wire [`GPU_BITS-1:0]    op_type;
+    wire [`MOD_BITS-1:0]    op_mod;
     wire [`NUM_THREADS-1:0][31:0] rs1_data;
-    wire [31:0]             rs2_data;
+    wire [`NUM_THREADS-1:0][31:0] rs2_data;
+    wire [`NUM_THREADS-1:0][31:0] rs3_data;
     wire [`NR_BITS-1:0]     rd;
     wire                    wb;
     

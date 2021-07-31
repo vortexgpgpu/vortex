@@ -328,7 +328,7 @@ module VX_shared_mem #(
                     end else begin
                         $display("%t: cache%0d:%0d core-rd-rsp: addr=%0h, tag=%0h, byteen=%b, data=%0h, wid=%0d, PC=%0h", 
                             $time, CACHE_ID, i, per_bank_core_req_addr[i], per_bank_core_req_tag[i], per_bank_core_req_byteen[i], per_bank_core_rsp_data[i],
-                            debug_wid_st1[i], debug_pc_st1[i]);
+                            debug_wid_st1[i], debug_pc_st1[i]);                        
                     end
                 end
             end

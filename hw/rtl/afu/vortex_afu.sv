@@ -45,8 +45,10 @@ localparam CCI_DATA_WIDTH     = $bits(t_ccip_clData);
 localparam CCI_DATA_SIZE      = CCI_DATA_WIDTH / 8;
 localparam CCI_ADDR_WIDTH     = 32 - $clog2(CCI_DATA_SIZE);
 
+
 localparam AVS_RD_QUEUE_SIZE  = 4;
-localparam AVS_REQ_TAGW_VX    = `MAX(`VX_MEM_TAG_WIDTH, `VX_MEM_TAG_WIDTH + $clog2(LMEM_DATA_WIDTH) - $clog2(`VX_MEM_DATA_WIDTH));
+localparam _AVS_REQ_TAGW_VX   = `VX_MEM_TAG_WIDTH + $clog2(LMEM_DATA_WIDTH) - $clog2(`VX_MEM_DATA_WIDTH);
+localparam AVS_REQ_TAGW_VX    = `MAX(`VX_MEM_TAG_WIDTH, _AVS_REQ_TAGW_VX);
 localparam AVS_REQ_TAGW_CCI   = `MAX(CCI_ADDR_WIDTH, CCI_ADDR_WIDTH + $clog2(LMEM_DATA_WIDTH) - $clog2(CCI_DATA_WIDTH));
 localparam AVS_REQ_TAGW       = `MAX(AVS_REQ_TAGW_VX, AVS_REQ_TAGW_CCI);
 

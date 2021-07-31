@@ -42,6 +42,7 @@ module VX_decode  #(
 
     wire [31:0] instr = ifetch_rsp_if.data;
     wire [6:0] opcode = instr[6:0];  
+    wire [1:0] func2  = instr[26:25];
     wire [2:0] func3  = instr[14:12];
     wire [6:0] func7  = instr[31:25];
     wire [11:0] u_12  = instr[31:20]; 
@@ -372,12 +373,24 @@ module VX_decode  #(
                         `USED_IREG (rs1);
                         `USED_IREG (rs2);
                     end
+                `ifdef EXT_TEX_ENABLE
+                    3'h5: begin
+                        op_type = `OP_BITS'(`GPU_TEX);
+                        op_mod  = `MOD_BITS'(func2);
+                        use_rd  = 1;                     
+                        `USED_IREG (rs1);
+                        `USED_IREG (rs2);
+                        `USED_IREG (rs3);
+                    end
+                `endif
                     default:;
                 endcase
             end
             default:;
         endcase
     end
+
+    `UNUSED_VAR (func2)
 
     // disable write to integer register r0
     wire wb = use_rd && (| rd_r);

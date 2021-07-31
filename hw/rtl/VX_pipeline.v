@@ -108,7 +108,10 @@ module VX_pipeline #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    VX_cmt_to_csr_if    cmt_to_csr_if();
+    VX_cmt_to_csr_if #( 
+        .SIZE ($clog2(3*`NUM_THREADS+1))
+    ) cmt_to_csr_if();
+
     VX_decode_if        decode_if();
     VX_branch_ctl_if    branch_ctl_if();
     VX_warp_ctl_if      warp_ctl_if();
