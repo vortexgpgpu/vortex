@@ -240,8 +240,8 @@ def expand_text(text, params):
     iter = 0
 
     while True:
-        if iter > 99:
-            raise Exception("Macro recursion!")    
+        if iter > 65536:
+            raise Exception("Macro recursion!")
         has_func = False
         while True:
             params_updated = False
@@ -257,7 +257,7 @@ def expand_text(text, params):
             has_func = do_repl.has_func            
             if not (params_updated or do_repl.expanded):
                 break
-            text = new_text            
+            text = new_text    
             changed = True
         if not has_func:
             break

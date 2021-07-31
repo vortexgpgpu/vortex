@@ -25,20 +25,24 @@ module VX_gpu_unit #(
 
     `UNUSED_PARAM (CORE_ID)
 
+    localparam WCTL_DATAW = `GPU_TMC_BITS + `GPU_WSPAWN_BITS + `GPU_SPLIT_BITS + `GPU_BARRIER_BITS;
+    localparam RSP_DATAW  = `MAX(`NUM_THREADS * 32, WCTL_DATAW);
+
     wire                          rsp_valid;
     wire [`NW_BITS-1:0]           rsp_wid;
     wire [`NUM_THREADS-1:0]       rsp_tmask;
     wire [31:0]                   rsp_PC;
     wire [`NR_BITS-1:0]           rsp_rd;   
-    wire                          rsp_wb; 
-    wire [`NUM_THREADS-1:0][31:0] rsp_data;
+    wire                          rsp_wb;
+
+    wire [RSP_DATAW-1:0] rsp_data, rsp_data_r;
 
     gpu_tmc_t       tmc;
     gpu_wspawn_t    wspawn;
     gpu_barrier_t   barrier;
     gpu_split_t     split;
     
-    wire [(`NUM_THREADS * 32)-1:0] warp_ctl_data;
+    wire [WCTL_DATAW-1:0] warp_ctl_data;
     wire is_warp_ctl;
     
     wire stall_in, stall_out;
@@ -92,9 +96,7 @@ module VX_gpu_unit #(
     assign barrier.size_m1 = (`NW_BITS)'(gpu_req_if.rs2_data[0] - 1);       
 
     // pack warp ctl result
-    `IGNORE_WARNINGS_BEGIN
-    assign warp_ctl_data = {tmc, wspawn, barrier, split};
-    `IGNORE_WARNINGS_END
+    assign warp_ctl_data = {tmc, wspawn, split, barrier};
 
     // texture
 
@@ -144,7 +146,7 @@ module VX_gpu_unit #(
     assign rsp_PC    = tex_rsp_if.valid ? tex_rsp_if.PC : gpu_req_if.PC;
     assign rsp_rd    = tex_rsp_if.rd;
     assign rsp_wb    = tex_rsp_if.valid && tex_rsp_if.wb;
-    assign rsp_data  = tex_rsp_if.valid ? tex_rsp_if.data : warp_ctl_data;
+    assign rsp_data  = tex_rsp_if.valid ? RSP_DATAW'(tex_rsp_if.data) : RSP_DATAW'(warp_ctl_data);
     
 `else   
 
@@ -163,7 +165,7 @@ module VX_gpu_unit #(
     assign rsp_PC    = gpu_req_if.PC;
     assign rsp_rd    = 0;
     assign rsp_wb    = 0;
-    assign rsp_data  = warp_ctl_data;
+    assign rsp_data  = RSP_DATAW'(warp_ctl_data);
 
 `endif
 
@@ -173,23 +175,23 @@ module VX_gpu_unit #(
     assign stall_out = ~gpu_commit_if.ready && gpu_commit_if.valid;
 
     VX_pipe_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1),
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + RSP_DATAW + 1),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_out),
-        .data_in  ({rsp_valid,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           rsp_wb,           rsp_data,           is_warp_ctl}),
-        .data_out ({gpu_commit_if.valid, gpu_commit_if.wid, gpu_commit_if.tmask, gpu_commit_if.PC, gpu_commit_if.rd, gpu_commit_if.wb, gpu_commit_if.data, is_warp_ctl_r})
+        .data_in  ({rsp_valid,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           rsp_wb,           rsp_data,   is_warp_ctl}),
+        .data_out ({gpu_commit_if.valid, gpu_commit_if.wid, gpu_commit_if.tmask, gpu_commit_if.PC, gpu_commit_if.rd, gpu_commit_if.wb, rsp_data_r, is_warp_ctl_r})
     );  
 
-    assign gpu_commit_if.eop = 1'b1;
+    assign gpu_commit_if.data = rsp_data_r[(`NUM_THREADS * 32)-1:0];
+    assign gpu_commit_if.eop  = 1'b1;
 
     // warp control reponse
      
-    `IGNORE_WARNINGS_BEGIN
-    assign {warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.barrier, warp_ctl_if.split} = gpu_commit_if.data;
-    `IGNORE_WARNINGS_END
+    assign {warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.split, warp_ctl_if.barrier} = rsp_data_r[WCTL_DATAW-1:0];
+    
     assign warp_ctl_if.valid = gpu_commit_if.valid && gpu_commit_if.ready && is_warp_ctl_r;
     assign warp_ctl_if.wid   = gpu_commit_if.wid;    
 
