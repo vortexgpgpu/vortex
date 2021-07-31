@@ -157,7 +157,7 @@
             "gpu_rsp_tmc": "`GPU_TMC_SIZE", 
             "gpu_rsp_wspawn": "`GPU_WSPAWN_SIZE",             
             "gpu_rsp_split": "`GPU_SPLIT_SIZE",
-            "gpu_rsp_barrier": "`GPU_BARRIER_SIZE"    
+            "gpu_rsp_barrier": "`GPU_BARRIER_SIZE"
         },
         "afu/vortex/cluster/core/pipeline/execute/lsu_unit": {
             "?dcache_req_fire":"`NUM_THREADS",
