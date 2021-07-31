@@ -35,7 +35,7 @@ module VX_stream_demux #(
 
             assign ready_in[j] = ready_in_sel[sel_in[j]]; 
 
-            for (genvar i = 0; i < NUM_REQS; i++)  
+            for (genvar i = 0; i < NUM_REQS; i++) begin
                 VX_skid_buffer #(
                     .DATAW      (DATAW),
                     .PASSTHRU   (0 == BUFFERED),
