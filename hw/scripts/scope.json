@@ -146,18 +146,12 @@
             "wsched_warp_pc": "32"
         },
         "afu/vortex/cluster/core/pipeline/execute/gpu_unit": {
-            "?gpu_req_fire": 1, 
-            "gpu_req_wid": "`NW_BITS",
-            "gpu_req_tmask": "`NUM_THREADS",
-            "gpu_req_op_type": "`GPU_BITS", 
-            "gpu_req_rs1": "32", 
-            "gpu_req_rs2": "32",
             "?gpu_rsp_valid": 1, 
             "gpu_rsp_wid": "`NW_BITS", 
-            "gpu_rsp_tmc": "`GPU_TMC_SIZE", 
-            "gpu_rsp_wspawn": "`GPU_WSPAWN_SIZE",             
-            "gpu_rsp_split": "`GPU_SPLIT_SIZE",
-            "gpu_rsp_barrier": "`GPU_BARRIER_SIZE"    
+            "gpu_rsp_tmc": "`GPU_TMC_BITS", 
+            "gpu_rsp_wspawn": "`GPU_WSPAWN_BITS",             
+            "gpu_rsp_split": "`GPU_SPLIT_BITS",
+            "gpu_rsp_barrier": "`GPU_BARRIER_BITS"    
         },
         "afu/vortex/cluster/core/pipeline/execute/lsu_unit": {
             "?dcache_req_fire":"`NUM_THREADS",

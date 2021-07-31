@@ -78,7 +78,7 @@ module VX_gpu_unit #(
     wire stall = ~gpu_commit_if.ready && gpu_commit_if.valid;
 
     VX_pipe_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + `GPU_TMC_SIZE + `GPU_WSPAWN_SIZE + `GPU_SPLIT_SIZE + `GPU_BARRIER_SIZE),
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + `GPU_TMC_BITS + `GPU_WSPAWN_BITS + `GPU_SPLIT_BITS + `GPU_BARRIER_BITS),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
@@ -96,12 +96,6 @@ module VX_gpu_unit #(
     // can accept new request?
     assign gpu_req_if.ready = ~stall;
 
-    `SCOPE_ASSIGN (gpu_req_fire, gpu_req_if.valid && gpu_req_if.ready);
-    `SCOPE_ASSIGN (gpu_req_wid, gpu_req_if.wid);
-    `SCOPE_ASSIGN (gpu_req_tmask, gpu_req_if.tmask);
-    `SCOPE_ASSIGN (gpu_req_op_type, gpu_req_if.op_type);
-    `SCOPE_ASSIGN (gpu_req_rs1, gpu_req_if.rs1_data[0]); 
-    `SCOPE_ASSIGN (gpu_req_rs2, gpu_req_if.rs2_data);
     `SCOPE_ASSIGN (gpu_rsp_valid, warp_ctl_if.valid);
     `SCOPE_ASSIGN (gpu_rsp_wid, warp_ctl_if.wid);
     `SCOPE_ASSIGN (gpu_rsp_tmc, warp_ctl_if.tmc);

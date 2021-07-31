@@ -240,7 +240,7 @@ def expand_text(text, params):
     iter = 0
 
     while True:
-        if iter > 99:
+        if iter > 65536:
             raise Exception("Macro recursion!")    
         has_func = False
         while True:
