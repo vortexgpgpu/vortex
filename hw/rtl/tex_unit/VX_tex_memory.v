@@ -125,10 +125,10 @@ module VX_tex_memory #(
     // DCache Request
 
     reg [NUM_REQS-1:0] texel_sent_mask;
-    wire [NUM_REQS-1:0] dcache_req_fire; 
-    wire [NUM_REQS-1:0] req_dup_mask;   
 
-    assign dcache_req_fire = dcache_req_if.valid & dcache_req_if.ready;    
+    wire [NUM_REQS-1:0] dcache_req_fire = dcache_req_if.valid & dcache_req_if.ready; 
+
+    wire dcache_req_fire_any = (| dcache_req_fire);
 
     assign sent_all_ready = (&(dcache_req_if.ready | texel_sent_mask | ~q_req_tmask))
                          || (req_texel_dup & dcache_req_if.ready[0]);
@@ -141,7 +141,7 @@ module VX_tex_memory #(
         end
     end
 
-    assign req_dup_mask = {{(NUM_REQS-1){~req_texel_dup}}, 1'b1};
+    wire [NUM_REQS-1:0] req_dup_mask = {{(NUM_REQS-1){~req_texel_dup}}, 1'b1};
 
     assign dcache_req_if.valid  = {NUM_REQS{req_texel_valid}} & q_req_tmask & req_dup_mask & ~texel_sent_mask;
     assign dcache_req_if.rw     = {NUM_REQS{1'b0}};
@@ -163,9 +163,8 @@ module VX_tex_memory #(
     reg [3:0][NUM_REQS-1:0][31:0] rsp_texels, rsp_texels_n;
     wire [NUM_REQS-1:0][3:0][31:0] rsp_texels_qual;
     reg [NUM_REQS-1:0][31:0] rsp_data_qual;
-    reg [RSP_CTR_W-1:0] rsp_rem_ctr; 
-    wire [NUM_REQS-1:0] rsp_cur_tmask;
-    wire [$clog2(NUM_REQS + 1)-1:0] rsp_cur_cnt;
+    reg [RSP_CTR_W-1:0] rsp_rem_ctr, rsp_rem_ctr_init;
+    wire [RSP_CTR_W-1:0] rsp_rem_ctr_n;
     wire dcache_rsp_fire;
     wire [1:0] rsp_texel_idx;
     wire rsp_texel_dup;
@@ -175,10 +174,6 @@ module VX_tex_memory #(
     assign rsp_texel_dup = q_dup_reqs[rsp_texel_idx];
 
     assign dcache_rsp_fire = dcache_rsp_if.valid && dcache_rsp_if.ready;
-
-    assign rsp_cur_tmask = rsp_texel_dup ? q_req_tmask : dcache_rsp_if.tmask;
-
-    assign rsp_cur_cnt = $countones(rsp_cur_tmask);
 
     for (genvar i = 0; i < NUM_REQS; i++) begin             
         wire [31:0] src_mask = {32{dcache_rsp_if.tmask[i]}};
@@ -213,14 +208,25 @@ module VX_tex_memory #(
         end
     end
 
+    always @(*) begin
+        rsp_rem_ctr_init = RSP_CTR_W'($countones(q_dup_reqs[0] ? NUM_REQS'(1) : q_req_tmask));
+        if (q_req_filter) begin
+            for (integer i = 1; i < 4; ++i) begin
+                rsp_rem_ctr_init += RSP_CTR_W'($countones(q_dup_reqs[i] ? NUM_REQS'(1) : q_req_tmask));
+            end
+        end
+    end
+
+    assign rsp_rem_ctr_n = rsp_rem_ctr - RSP_CTR_W'($countones(dcache_rsp_if.tmask));
+
     always @(posedge clk) begin
         if (reset) begin
             rsp_rem_ctr <= 0;
         end else begin
-            if ((| dcache_req_fire) && 0 == rsp_rem_ctr) begin
-                rsp_rem_ctr <= q_req_filter ? {$countones(q_req_tmask), 2'b0} : {2'b0, $countones(q_req_tmask)};
+            if (dcache_req_fire_any && 0 == rsp_rem_ctr) begin
+                rsp_rem_ctr <= rsp_rem_ctr_init;
             end else if (dcache_rsp_fire) begin
-                rsp_rem_ctr <= rsp_rem_ctr - RSP_CTR_W'(rsp_cur_cnt);
+                rsp_rem_ctr <= rsp_rem_ctr_n;
             end
         end
     end
@@ -233,7 +239,9 @@ module VX_tex_memory #(
 
     wire stall_out = rsp_valid && ~rsp_ready;
 
-    wire rsp_texels_done = dcache_rsp_fire && (rsp_rem_ctr == RSP_CTR_W'(rsp_cur_cnt));
+    wire is_last_rsp = (0 == rsp_rem_ctr_n);
+
+    wire rsp_texels_done = dcache_rsp_fire && is_last_rsp;
 
     assign reqq_pop = rsp_texels_done && ~stall_out;
     
@@ -249,7 +257,7 @@ module VX_tex_memory #(
     );
 
     // Can accept new cache response?
-    assign dcache_rsp_if.ready = ~stall_out || (rsp_rem_ctr != RSP_CTR_W'(rsp_cur_cnt));
+    assign dcache_rsp_if.ready = ~(is_last_rsp && stall_out);
 
 `ifdef DBG_PRINT_TEX
     wire [`NW_BITS-1:0] req_wid, rsp_wid;
@@ -258,7 +266,7 @@ module VX_tex_memory #(
     assign {rsp_wid, rsp_PC} = rsp_info[`NW_BITS+32-1:0];
 
     always @(posedge clk) begin        
-        if ((| dcache_req_fire)) begin
+        if (dcache_req_fire_any) begin
             $write("%t: core%0d-tex-cache-req: wid=%0d, PC=%0h, tmask=%b, tag=%0h, addr=", 
                     $time, CORE_ID, q_req_wid, q_req_PC, dcache_req_fire, dcache_req_if.tag);
             `PRINT_ARRAY1D(req_texel_addr, NUM_REQS);

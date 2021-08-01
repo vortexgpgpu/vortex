@@ -40,12 +40,12 @@ module VX_tex_addr #(
     wire [NUM_REQS-1:0]         tmask_s0; 
     wire [`TEX_FILTER_BITS-1:0] filter_s0;
     wire [REQ_INFO_WIDTH-1:0]   req_info_s0;
-
-    wire [1:0][NUM_REQS-1:0][`FIXED_FRAC-1:0] clamped_lo, clamped_lo_s0;
-    wire [1:0][NUM_REQS-1:0][`FIXED_FRAC-1:0] clamped_hi, clamped_hi_s0;
+    wire [1:0][NUM_REQS-1:0][31:0] coord_lo, coord_lo_s0;
+    wire [1:0][NUM_REQS-1:0][31:0] coord_hi, coord_hi_s0;
     wire [`TEX_STRIDE_BITS-1:0] log_stride, log_stride_s0;
     wire [NUM_REQS-1:0][31:0] mip_addr, mip_addr_s0;
     wire [1:0][NUM_REQS-1:0][`TEX_DIM_BITS-1:0] log_dims_s0;
+    wire [1:0][`TEX_WRAP_BITS-1:0] req_wraps_s0;
 
     wire stall_out;
 
@@ -62,39 +62,21 @@ module VX_tex_addr #(
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         for (genvar j = 0; j < 2; ++j) begin
-            wire [31:0] coord_lo, coord_hi;
-
-            assign coord_lo = req_coords[j][i] - (req_filter ? (`FIXED_HALF >> req_logdims[j][i]) : 0); 
-            assign coord_hi = req_coords[j][i] + (req_filter ? (`FIXED_HALF >> req_logdims[j][i]) : 0);       
-
-            VX_tex_wrap #(
-                .CORE_ID (CORE_ID)
-            ) tex_wrap_lo (
-                .wrap_i  (req_wraps[j]),
-                .coord_i (coord_lo),
-                .coord_o (clamped_lo[j][i])
-            );
-
-            VX_tex_wrap #(
-                .CORE_ID (CORE_ID)
-            ) tex_wrap_hi (
-                .wrap_i  (req_wraps[j]),
-                .coord_i (coord_hi),
-                .coord_o (clamped_hi[j][i])
-            );
+            assign coord_lo[j][i] = req_filter ? (req_coords[j][i] - (`FIXED_HALF >> req_logdims[j][i])) : req_coords[j][i];
+            assign coord_hi[j][i] = req_filter ? (req_coords[j][i] + (`FIXED_HALF >> req_logdims[j][i])) : req_coords[j][i];
         end
         assign mip_addr[i] = req_baseaddr + 32'(req_mipoffset[i]);
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_REQS + `TEX_FILTER_BITS + `TEX_STRIDE_BITS + REQ_INFO_WIDTH + NUM_REQS * (2 * `TEX_DIM_BITS + 32 + 2 * 2 * `FIXED_FRAC)),
+        .DATAW  (1 + NUM_REQS + `TEX_FILTER_BITS + `TEX_STRIDE_BITS + REQ_INFO_WIDTH + 2 * `TEX_WRAP_BITS + NUM_REQS * (2 * `TEX_DIM_BITS + 32 + 2 * 2 * 32)),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({req_valid, req_tmask, req_filter, log_stride,    req_info,    req_logdims, mip_addr,    clamped_lo,    clamped_hi}),
-        .data_out ({valid_s0,  tmask_s0,  filter_s0,  log_stride_s0, req_info_s0, log_dims_s0, mip_addr_s0, clamped_lo_s0, clamped_hi_s0})
+        .data_in  ({req_valid, req_tmask, req_filter, log_stride,    req_info,    req_wraps,    req_logdims, mip_addr,    coord_lo,    coord_hi}),
+        .data_out ({valid_s0,  tmask_s0,  filter_s0,  log_stride_s0, req_info_s0, req_wraps_s0, log_dims_s0, mip_addr_s0, coord_lo_s0, coord_hi_s0})
     );
     
     // addresses generation
@@ -105,9 +87,28 @@ module VX_tex_addr #(
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         for (genvar j = 0; j < 2; ++j) begin
-            assign scaled_lo[j][i] = `FIXED_INT'(clamped_lo_s0[j][i] >> ((`FIXED_FRAC) - log_dims_s0[j][i])); 
-            assign scaled_hi[j][i] = `FIXED_INT'(clamped_hi_s0[j][i] >> ((`FIXED_FRAC) - log_dims_s0[j][i]));
-            assign blends[j][i]    = filter_s0 ? clamped_lo_s0[j][i][`BLEND_FRAC-1:0] : `BLEND_FRAC'(0);
+            wire [`FIXED_FRAC-1:0] clamped_lo;
+            wire [`FIXED_FRAC-1:0] clamped_hi;
+
+            VX_tex_wrap #(
+                .CORE_ID (CORE_ID)
+            ) tex_wrap_lo (
+                .wrap_i  (req_wraps_s0[j]),
+                .coord_i (coord_lo_s0[j][i]),
+                .coord_o (clamped_lo)
+            );
+
+            VX_tex_wrap #(
+                .CORE_ID (CORE_ID)
+            ) tex_wrap_hi (
+                .wrap_i  (req_wraps_s0[j]),
+                .coord_i (coord_hi_s0[j][i]),
+                .coord_o (clamped_hi)
+            );
+
+            assign scaled_lo[j][i] = `FIXED_INT'(clamped_lo >> ((`FIXED_FRAC) - log_dims_s0[j][i])); 
+            assign scaled_hi[j][i] = `FIXED_INT'(clamped_hi >> ((`FIXED_FRAC) - log_dims_s0[j][i]));
+            assign blends[j][i]    = filter_s0 ? clamped_lo[`BLEND_FRAC-1:0] : `BLEND_FRAC'(0);
         end
     end
 

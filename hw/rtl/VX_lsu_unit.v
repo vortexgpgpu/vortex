@@ -120,9 +120,11 @@ module VX_lsu_unit #(
 
     wire [`NUM_THREADS-1:0] dcache_req_fire = dcache_req_if.valid & dcache_req_if.ready;
 
+    wire dcache_req_fire_any = (| dcache_req_fire);
+
     wire dcache_rsp_fire = dcache_rsp_if.valid && dcache_rsp_if.ready;
 
-    wire mbuf_push = (| dcache_req_fire)                  
+    wire mbuf_push = dcache_req_fire_any                  
                   && is_req_start   // first submission only                  
                   && req_wb;        // loads only
 
@@ -333,7 +335,7 @@ module VX_lsu_unit #(
         if (lsu_req_if.valid && fence_wait)  begin
             $display("%t: *** D$%0d fence wait", $time, CORE_ID);
         end
-        if ((| dcache_req_fire)) begin
+        if (dcache_req_fire_any) begin
             if (dcache_req_if.rw[0]) begin
                 $write("%t: D$%0d Wr Req: wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, dcache_req_fire);
                 `PRINT_ARRAY1D(req_addr, `NUM_THREADS);
