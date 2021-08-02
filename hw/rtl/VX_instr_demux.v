@@ -38,7 +38,8 @@ module VX_instr_demux (
     wire alu_req_valid = ibuffer_if.valid && (ibuffer_if.ex_type == `EX_ALU);
     
     VX_skid_buffer #(
-        .DATAW (`NW_BITS + `NUM_THREADS + 32 + 32 + `ALU_BITS + `MOD_BITS + 32 + 1 + 1 + `NR_BITS + 1 + `NT_BITS + (2 * `NUM_THREADS * 32))
+        .DATAW (`NW_BITS + `NUM_THREADS + 32 + 32 + `ALU_BITS + `MOD_BITS + 32 + 1 + 1 + `NR_BITS + 1 + `NT_BITS + (2 * `NUM_THREADS * 32)),
+        .OUTPUT_REG (1)
     ) alu_buffer (
         .clk       (clk),
         .reset     (reset),
@@ -56,7 +57,8 @@ module VX_instr_demux (
     wire lsu_is_fence = `LSU_IS_FENCE(ibuffer_if.op_mod);
 
     VX_skid_buffer #(
-        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `LSU_BITS + 1 + 32 + `NR_BITS + 1 + (2 * `NUM_THREADS * 32))
+        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `LSU_BITS + 1 + 32 + `NR_BITS + 1 + (2 * `NUM_THREADS * 32)),
+        .OUTPUT_REG (1)
     ) lsu_buffer (
         .clk       (clk),
         .reset     (reset),
@@ -73,7 +75,8 @@ module VX_instr_demux (
     wire csr_req_valid = ibuffer_if.valid && (ibuffer_if.ex_type == `EX_CSR);
 
     VX_skid_buffer #(
-        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `CSR_BITS + `CSR_ADDR_BITS + `NR_BITS + 1 + 1 + `NR_BITS + 32)
+        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `CSR_BITS + `CSR_ADDR_BITS + `NR_BITS + 1 + 1 + `NR_BITS + 32),
+        .OUTPUT_REG (1)
     ) csr_buffer (
         .clk       (clk),
         .reset     (reset),
@@ -91,7 +94,8 @@ module VX_instr_demux (
     wire fpu_req_valid = ibuffer_if.valid && (ibuffer_if.ex_type == `EX_FPU);
         
     VX_skid_buffer #(
-        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `FPU_BITS + `MOD_BITS + `NR_BITS + 1 + (3 * `NUM_THREADS * 32))
+        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `FPU_BITS + `MOD_BITS + `NR_BITS + 1 + (3 * `NUM_THREADS * 32)),
+        .OUTPUT_REG (1)
     ) fpu_buffer (
         .clk       (clk),
         .reset     (reset),
@@ -112,7 +116,8 @@ module VX_instr_demux (
     wire gpu_req_valid = ibuffer_if.valid && (ibuffer_if.ex_type == `EX_GPU);
 
     VX_skid_buffer #(
-        .DATAW (`NW_BITS + `NUM_THREADS + 32 + 32 + `GPU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32 + 32))
+        .DATAW (`NW_BITS + `NUM_THREADS + 32 + 32 + `GPU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32 + 32)),
+        .OUTPUT_REG (1)
     ) gpu_buffer (
         .clk       (clk),
         .reset     (reset),
