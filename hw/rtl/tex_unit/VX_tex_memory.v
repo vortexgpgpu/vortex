@@ -150,10 +150,7 @@ module VX_tex_memory #(
     assign dcache_req_if.data   = 'x;
 
 `ifdef DBG_CACHE_REQ_INFO
-    wire [`NW_BITS-1:0] q_req_wid;
-    wire [31:0]         q_req_PC;
-    assign {q_req_wid, q_req_PC} = q_req_info[`NW_BITS+32-1:0];
-    assign dcache_req_if.tag = {NUM_REQS{q_req_PC, q_req_wid, req_texel_idx}};
+    assign dcache_req_if.tag = {NUM_REQS{q_req_info[`DBG_CACHE_REQ_MDATAW-1:0], req_texel_idx}};
 `else
     assign dcache_req_if.tag = {NUM_REQS{req_texel_idx}};
 `endif
@@ -177,7 +174,7 @@ module VX_tex_memory #(
 
     for (genvar i = 0; i < NUM_REQS; i++) begin             
         wire [31:0] src_mask = {32{dcache_rsp_if.tmask[i]}};
-        wire [31:0] src_data = ((i == 0 || rsp_texel_dup) ? dcache_rsp_if.data[0] : (dcache_rsp_if.data[i]) & src_mask);
+        wire [31:0] src_data = ((i == 0 || rsp_texel_dup) ? dcache_rsp_if.data[0] : dcache_rsp_if.data[i]) & src_mask;
 
         reg [31:0] rsp_data_shifted;
         always @(*) begin
@@ -260,22 +257,23 @@ module VX_tex_memory #(
     assign dcache_rsp_if.ready = ~(is_last_rsp && stall_out);
 
 `ifdef DBG_PRINT_TEX
-    wire [`NW_BITS-1:0] req_wid, rsp_wid;
-    wire [31:0]         req_PC, rsp_PC;
-    assign {req_wid, req_PC} = req_info[`NW_BITS+32-1:0];
-    assign {rsp_wid, rsp_PC} = rsp_info[`NW_BITS+32-1:0];
+    wire [`NW_BITS-1:0] q_req_wid, req_wid, rsp_wid;
+    wire [31:0]         q_req_PC, req_PC, rsp_PC;
+    assign {q_req_wid, q_req_PC} = q_req_info[`NW_BITS+32-1:0];
+    assign {req_wid, req_PC}     = req_info[`NW_BITS+32-1:0];
+    assign {rsp_wid, rsp_PC}     = rsp_info[`NW_BITS+32-1:0];
 
     always @(posedge clk) begin        
         if (dcache_req_fire_any) begin
             $write("%t: core%0d-tex-cache-req: wid=%0d, PC=%0h, tmask=%b, tag=%0h, addr=", 
-                    $time, CORE_ID, q_req_wid, q_req_PC, dcache_req_fire, dcache_req_if.tag);
+                    $time, CORE_ID, q_req_wid, q_req_PC, dcache_req_fire, dcache_req_if.tag[0]);
             `PRINT_ARRAY1D(req_texel_addr, NUM_REQS);
             $write(", is_dup=%b\n", req_texel_dup);
         end
         if (dcache_rsp_fire) begin
             $write("%t: core%0d-tex-cache-rsp: wid=%0d, PC=%0h, tmask=%b, tag=%0h, data=", 
-                    $time, CORE_ID, q_req_wid, q_req_PC, dcache_rsp_if.valid, dcache_rsp_if.tag);
-            `PRINT_ARRAY1D(rsp_data_qual, NUM_REQS);
+                    $time, CORE_ID, q_req_wid, q_req_PC, dcache_rsp_if.tmask, dcache_rsp_if.tag);
+            `PRINT_ARRAY1D(dcache_rsp_if.data, NUM_REQS);
             $write("\n");
         end
         if (req_valid && req_ready) begin

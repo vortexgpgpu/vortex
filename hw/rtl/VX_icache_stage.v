@@ -55,7 +55,7 @@ module VX_icache_stage #(
     assign ifetch_req_if.ready = icache_req_if.ready;
 
 `ifdef DBG_CACHE_REQ_INFO  
-    assign icache_req_if.tag = {ifetch_req_if.PC, ifetch_req_if.wid, req_tag};
+    assign icache_req_if.tag = {ifetch_req_if.wid, ifetch_req_if.PC, req_tag};
 `else
     assign icache_req_if.tag = req_tag;
 `endif
