@@ -70,14 +70,13 @@ vx_set_sp:
 
   # allocate stack region for a threads on the processor 
   # set stack pointer
-  la sp, __stack_top   # load stack base address
-  la a1, __stack_size  # stack size
+  li sp, SMEM_BASE_ADDR # load stack base address
   #if SM_ENABLE
-  csrr a2, CSR_LTID    # get lobal thread id
+  csrr a2, CSR_LTID    # get local thread id
   #else
   csrr a2, CSR_GTID    # get global thread id
   #endif
-  mul  a1, a1, a2
+  slli a1, a2, STACK_LOG2_SIZE
   sub  sp, sp, a1      # sub thread block
 
   # disable active warps except warp0
