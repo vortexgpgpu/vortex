@@ -7,6 +7,8 @@ all:
 	$(MAKE) -C printf
 	$(MAKE) -C diverge
 	$(MAKE) -C fence
+	$(MAKE) -C no_mf_ext
+	$(MAKE) -C no_smem
 
 run-simx:
 	$(MAKE) -C basic run-simx
@@ -17,6 +19,20 @@ run-simx:
 	$(MAKE) -C printf run-simx
 	$(MAKE) -C diverge run-simx
 	$(MAKE) -C fence run-simx
+	$(MAKE) -C no_mf_ext run-simx
+	$(MAKE) -C no_smem run-simx
+
+run-rtlsim:
+	$(MAKE) -C basic run-rtlsim
+	$(MAKE) -C demo run-rtlsim
+	$(MAKE) -C dogfood run-rtlsim
+	$(MAKE) -C mstress run-rtlsim
+	$(MAKE) -C io_addr run-rtlsim
+	$(MAKE) -C printf run-rtlsim
+	$(MAKE) -C diverge run-rtlsim
+	$(MAKE) -C fence run-rtlsim
+	$(MAKE) -C no_mf_ext run-rtlsim
+	$(MAKE) -C no_smem run-rtlsim
 
 run-vlsim:
 	$(MAKE) -C basic run-vlsim
@@ -27,6 +43,8 @@ run-vlsim:
 	$(MAKE) -C printf run-vlsim
 	$(MAKE) -C diverge run-vlsim
 	$(MAKE) -C fence run-vlsim
+	$(MAKE) -C no_mf_ext run-vlsim
+	$(MAKE) -C no_smem run-vlsim
 
 clean:
 	$(MAKE) -C basic clean
@@ -37,6 +55,8 @@ clean:
 	$(MAKE) -C printf clean
 	$(MAKE) -C diverge clean
 	$(MAKE) -C fence clean
+	$(MAKE) -C no_mf_ext clean
+	$(MAKE) -C no_smem clean
 
 clean-all:
 	$(MAKE) -C basic clean-all
@@ -47,4 +67,6 @@ clean-all:
 	$(MAKE) -C printf clean-all
 	$(MAKE) -C diverge clean-all
 	$(MAKE) -C fence clean-all
+	$(MAKE) -C no_mf_ext clean-all
+	$(MAKE) -C no_smem clean-all
 

@@ -318,9 +318,10 @@
 // SM Configurable Knobs //////////////////////////////////////////////////////
 
 // per thread stack size
-`ifndef STACK_SIZE
-`define STACK_SIZE 1024
+`ifndef STACK_LOG2_SIZE
+`define STACK_LOG2_SIZE 10
 `endif
+`define STACK_SIZE (1 << `STACK_LOG2_SIZE)
 
 // Size of cache in bytes
 `ifndef SMEM_SIZE

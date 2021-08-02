@@ -8,7 +8,8 @@ make -s
 
 coverage() 
 {
-# coverage tests
+echo "begin coverage tests..."
+
 make -C tests/runtime run-rtlsim
 make -C tests/riscv/isa run-rtlsim
 make -C tests/regression run-vlsim
@@ -17,10 +18,14 @@ make -C tests/runtime run-simx
 make -C tests/riscv/isa run-simx
 make -C tests/regression run-simx
 make -C tests/opencl run-simx
+
+echo "coverage tests done!"
 }
 
 cluster() 
 {
+echo "begin clustering tests..."
+
 # warp/threads configurations
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=2 --threads=8 --app=demo
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=8 --threads=2 --app=demo
@@ -33,26 +38,33 @@ cluster()
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=demo --args="-n1"
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l3cache --app=demo --args="-n1"
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr --args="-n1"
+
+echo "clustering tests done!"
 }
 
 debug()
 {
-# debugging
+echo "begin debugging tests..."
+
 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=1 --perf --app=demo --args="-n1"
 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=1 --debug --app=demo --args="-n1"
 ./ci/travis_run.py ./ci/blackbox.sh --driver=vlsim --cores=1 --scope --app=basic --args="-t0 -n1"
+
+echo "debugging tests done!"
 }
 
 config() 
 {
+echo "begin configuration tests..."
+
 # disabling M extension
-CONFIGS=-DEXT_M_DISABLE make -C hw/simulate
+CONFIGS=-DEXT_M_DISABLE ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=no_mf_ext
 
 # disabling F extension
-CONFIGS=-DEXT_F_DISABLE make -C hw/simulate
+CONFIGS=-DEXT_F_DISABLE ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=no_mf_ext
 
 # disable shared memory
-CONFIGS=-DSM_ENABLE=0 make -C hw/simulate
+CONFIGS=-DSM_ENABLE=0 ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=no_smem
 
 # using Default FPU core
 FPU_CORE=FPU_DEFAULT ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
@@ -86,12 +98,17 @@ CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=vlsim --cores=4 --
 
 # test long memory latency
 CONFIGS="-DMEM_LATENCY=100 -DMEM_RQ_SIZE=4 -DMEM_STALLS_MODULO=4" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
+
+echo "configuration tests done!"
 }
 
 stress() 
 {
-# test pipeline stress
+echo "begin stress tests..."
+
 ./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --clusters=2 --l3cache --app=sgemm --args="-n256"
+
+echo "stress tests done!"
 }
 
 usage()
