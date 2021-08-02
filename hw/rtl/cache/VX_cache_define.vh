@@ -1,5 +1,5 @@
-`ifndef VX_CACHE_CONFIG
-`define VX_CACHE_CONFIG
+`ifndef VX_CACHE_DEFINE
+`define VX_CACHE_DEFINE
 
 `include "VX_platform.vh"
 
@@ -51,17 +51,19 @@
 
 `define LINE_TAG_ADDR(x)        x[`LINE_ADDR_WIDTH-1 : `LINE_SELECT_BITS]
 
+`define CACHE_REQ_INFO_RNG      CORE_TAG_WIDTH-1:(CORE_TAG_WIDTH-`NW_BITS-32)
+
 ///////////////////////////////////////////////////////////////////////////////
 
 `define CORE_RSP_TAGS           ((CORE_TAG_ID_BITS != 0) ? 1 : NUM_REQS)
 
 `define BANK_READY_COUNT        ((SHARED_BANK_READY != 0) ? 1 : NUM_BANKS)
 
-`define MEM_ADDR_BANK(x)       x[`BANK_SELECT_BITS+BANK_ADDR_OFFSET-1 : BANK_ADDR_OFFSET]
+`define MEM_ADDR_BANK(x)        x[`BANK_SELECT_BITS+BANK_ADDR_OFFSET-1 : BANK_ADDR_OFFSET]
 
-`define MEM_TO_LINE_ADDR(x)    x[`MEM_ADDR_WIDTH-1 : `BANK_SELECT_BITS]
+`define MEM_TO_LINE_ADDR(x)     x[`MEM_ADDR_WIDTH-1 : `BANK_SELECT_BITS]
 
-`define LINE_TO_MEM_ADDR(x, i) {x, `BANK_SELECT_BITS'(i)}
+`define LINE_TO_MEM_ADDR(x, i)  {x, `BANK_SELECT_BITS'(i)}
 
 `define LINE_TO_BYTE_ADDR(x, i) {x, (32-$bits(x))'(i << (32-$bits(x)-`BANK_SELECT_BITS))}
 

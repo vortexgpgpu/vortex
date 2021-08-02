@@ -264,11 +264,11 @@ module VX_shared_mem #(
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin        
-            assign {debug_pc_st0[i], debug_wid_st0[i]} = per_bank_core_req_tag_unqual[i][CORE_TAG_WIDTH-1:CORE_TAG_ID_BITS];
-            assign {debug_pc_st1[i], debug_wid_st1[i]} = per_bank_core_req_tag[i][CORE_TAG_WIDTH-1:CORE_TAG_ID_BITS];        
+            assign {debug_wid_st0[i], debug_pc_st0[i]} = per_bank_core_req_tag_unqual[i][`CACHE_REQ_INFO_RNG];
+            assign {debug_wid_st1[i], debug_pc_st1[i]} = per_bank_core_req_tag[i][`CACHE_REQ_INFO_RNG];        
         end else begin
-            assign {debug_pc_st0[i], debug_wid_st0[i]} = 0;
-            assign {debug_pc_st1[i], debug_wid_st1[i]} = 0;
+            assign {debug_wid_st0[i], debug_pc_st0[i]} = 0;
+            assign {debug_wid_st1[i], debug_pc_st1[i]} = 0;
         end
     end
 `endif
