@@ -230,7 +230,7 @@ module VX_lsu_unit #(
         assign dcache_req_if.data[i]   = mem_req_data;
 
     `ifdef DBG_CACHE_REQ_INFO
-        assign dcache_req_if.tag[i] = {req_pc, req_wid, req_tag, req_addr_type[i]};
+        assign dcache_req_if.tag[i] = {req_wid, req_pc, req_tag, req_addr_type[i]};
     `else
         assign dcache_req_if.tag[i] = {req_tag, req_addr_type[i]};
     `endif
@@ -353,8 +353,8 @@ module VX_lsu_unit #(
             end
         end
         if (dcache_rsp_fire) begin
-            $write("%t: D$%0d Rsp: tmask=%b, wid=%0d, PC=%0h, tag=%0h, rd=%0d, data=", 
-                $time, CORE_ID, dcache_rsp_if.tmask, rsp_wid, rsp_pc, mbuf_raddr, rsp_rd);
+            $write("%t: D$%0d Rsp: wid=%0d, PC=%0h, tmask=%b, tag=%0h, rd=%0d, data=", 
+                $time, CORE_ID, rsp_wid, rsp_pc, dcache_rsp_if.tmask, mbuf_raddr, rsp_rd);
             `PRINT_ARRAY1D(dcache_rsp_if.data, `NUM_THREADS);
             $write(", is_dup=%b\n", rsp_is_dup);
         end
