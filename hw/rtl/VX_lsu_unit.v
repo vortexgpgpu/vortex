@@ -120,9 +120,11 @@ module VX_lsu_unit #(
 
     wire [`NUM_THREADS-1:0] dcache_req_fire = dcache_req_if.valid & dcache_req_if.ready;
 
+    wire dcache_req_fire_any = (| dcache_req_fire);
+
     wire dcache_rsp_fire = dcache_rsp_if.valid && dcache_rsp_if.ready;
 
-    wire mbuf_push = (| dcache_req_fire)                  
+    wire mbuf_push = dcache_req_fire_any                  
                   && is_req_start   // first submission only                  
                   && req_wb;        // loads only
 
@@ -228,7 +230,7 @@ module VX_lsu_unit #(
         assign dcache_req_if.data[i]   = mem_req_data;
 
     `ifdef DBG_CACHE_REQ_INFO
-        assign dcache_req_if.tag[i] = {req_pc, req_wid, req_tag, req_addr_type[i]};
+        assign dcache_req_if.tag[i] = {req_wid, req_pc, req_tag, req_addr_type[i]};
     `else
         assign dcache_req_if.tag[i] = {req_tag, req_addr_type[i]};
     `endif
@@ -333,26 +335,26 @@ module VX_lsu_unit #(
         if (lsu_req_if.valid && fence_wait)  begin
             $display("%t: *** D$%0d fence wait", $time, CORE_ID);
         end
-        if ((| dcache_req_fire)) begin
+        if (dcache_req_fire_any) begin
             if (dcache_req_if.rw[0]) begin
                 $write("%t: D$%0d Wr Req: wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, dcache_req_fire);
                 `PRINT_ARRAY1D(req_addr, `NUM_THREADS);
-                 $write(", tag=%0h, byteen=%0h, type=", req_tag, dcache_req_if.byteen);
-                 `PRINT_ARRAY1D(req_addr_type, `NUM_THREADS);
-                 $write(", data=");
-                 `PRINT_ARRAY1D(dcache_req_if.data, `NUM_THREADS);
-                 $write("\n");
+                $write(", tag=%0h, byteen=%0h, type=", req_tag, dcache_req_if.byteen);
+                `PRINT_ARRAY1D(req_addr_type, `NUM_THREADS);
+                $write(", data=");
+                `PRINT_ARRAY1D(dcache_req_if.data, `NUM_THREADS);
+                $write("\n");
             end else begin
-                 $write("%t: D$%0d Rd Req: wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, dcache_req_fire);
+                $write("%t: D$%0d Rd Req: wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, dcache_req_fire);
                 `PRINT_ARRAY1D(req_addr, `NUM_THREADS);
-                 $write(", tag=%0h, byteen=%0h, type=", req_tag, dcache_req_if.byteen);
-                 `PRINT_ARRAY1D(req_addr_type, `NUM_THREADS);
-                 $write(", rd=%0d, is_dup=%b\n", req_rd, req_is_dup);
+                $write(", tag=%0h, byteen=%0h, type=", req_tag, dcache_req_if.byteen);
+                `PRINT_ARRAY1D(req_addr_type, `NUM_THREADS);
+                $write(", rd=%0d, is_dup=%b\n", req_rd, req_is_dup);
             end
         end
         if (dcache_rsp_fire) begin
-            $write("%t: D$%0d Rsp: tmask=%b, wid=%0d, PC=%0h, tag=%0h, rd=%0d, data=", 
-                $time, CORE_ID, dcache_rsp_if.tmask, rsp_wid, rsp_pc, mbuf_raddr, rsp_rd);
+            $write("%t: D$%0d Rsp: wid=%0d, PC=%0h, tmask=%b, tag=%0h, rd=%0d, data=", 
+                $time, CORE_ID, rsp_wid, rsp_pc, dcache_rsp_if.tmask, mbuf_raddr, rsp_rd);
             `PRINT_ARRAY1D(dcache_rsp_if.data, `NUM_THREADS);
             $write(", is_dup=%b\n", rsp_is_dup);
         end
