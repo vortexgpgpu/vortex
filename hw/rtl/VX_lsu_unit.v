@@ -130,7 +130,8 @@ module VX_lsu_unit #(
 
     wire mbuf_pop = dcache_rsp_fire && (0 == rsp_rem_mask_n);
     
-    assign mbuf_raddr = dcache_rsp_if.tag[ADDR_TYPEW +: `LSUQ_ADDR_BITS];    
+    assign mbuf_raddr = dcache_rsp_if.tag[ADDR_TYPEW +: `LSUQ_ADDR_BITS];
+    `UNUSED_VAR (dcache_rsp_if.tag)   
 
     VX_index_buffer #(
         .DATAW   (`NW_BITS + 32 + `NUM_THREADS + `NR_BITS + 1 + `LSU_BITS + (`NUM_THREADS * REQ_ASHIFT) + 1),

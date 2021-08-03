@@ -53,7 +53,7 @@ module VX_execute #(
         .NUM_REQS  (`NUM_THREADS), 
         .WORD_SIZE (4), 
         .TAG_WIDTH (`LSU_DCACHE_TAG_BITS)
-    ) lsu_dcache_rsp_if();    
+    ) lsu_dcache_rsp_if();
 
     VX_dcache_req_if #(
         .NUM_REQS  (`NUM_THREADS), 
@@ -96,7 +96,7 @@ module VX_execute #(
         .LANES         (`NUM_THREADS),
         .DATA_SIZE     (4),            
         .TAG_IN_WIDTH  (`LSU_TEX_DCACHE_TAG_BITS),
-        .TAG_SEL_IDX   (2)
+        .TAG_SEL_IDX   (`NC_ADDR_BITS + `SM_ENABLE)
     ) tex_lsu_arb (
         .clk            (clk),
         .reset          (reset),

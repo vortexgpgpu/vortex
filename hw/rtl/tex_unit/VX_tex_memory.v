@@ -166,7 +166,8 @@ module VX_tex_memory #(
     wire [1:0] rsp_texel_idx;
     wire rsp_texel_dup;
 
-    assign rsp_texel_idx = dcache_rsp_if.tag[1:0];   
+    assign rsp_texel_idx = dcache_rsp_if.tag[1:0];
+    `UNUSED_VAR (dcache_rsp_if.tag)
 
     assign rsp_texel_dup = q_dup_reqs[rsp_texel_idx];
 
@@ -266,13 +267,13 @@ module VX_tex_memory #(
     always @(posedge clk) begin        
         if (dcache_req_fire_any) begin
             $write("%t: core%0d-tex-cache-req: wid=%0d, PC=%0h, tmask=%b, tag=%0h, addr=", 
-                    $time, CORE_ID, q_req_wid, q_req_PC, dcache_req_fire, dcache_req_if.tag[0]);
+                    $time, CORE_ID, q_req_wid, q_req_PC, dcache_req_fire, req_texel_idx);
             `PRINT_ARRAY1D(req_texel_addr, NUM_REQS);
             $write(", is_dup=%b\n", req_texel_dup);
         end
         if (dcache_rsp_fire) begin
             $write("%t: core%0d-tex-cache-rsp: wid=%0d, PC=%0h, tmask=%b, tag=%0h, data=", 
-                    $time, CORE_ID, q_req_wid, q_req_PC, dcache_rsp_if.tmask, dcache_rsp_if.tag);
+                    $time, CORE_ID, q_req_wid, q_req_PC, dcache_rsp_if.tmask, rsp_texel_idx);
             `PRINT_ARRAY1D(dcache_rsp_if.data, NUM_REQS);
             $write("\n");
         end
