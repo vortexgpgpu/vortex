@@ -92,7 +92,7 @@ module VX_cache #(
     `STATIC_ASSERT(NUM_PORTS <= NUM_BANKS, ("invalid value"))
 
     localparam CORE_TAG_X_WIDTH = CORE_TAG_WIDTH - NC_ENABLE;
-    localparam CORE_TAG_ID_X_BITS = CORE_TAG_ID_BITS - NC_ENABLE;
+    localparam CORE_TAG_ID_X_BITS = (CORE_TAG_ID_BITS != 0) ? (CORE_TAG_ID_BITS - NC_ENABLE) : CORE_TAG_ID_BITS;
 
 `ifdef PERF_ENABLE
     wire [NUM_BANKS-1:0] perf_read_miss_per_bank;
@@ -125,13 +125,13 @@ module VX_cache #(
     wire [CACHE_LINE_SIZE-1:0]      mem_req_byteen_nc; 
     wire [`MEM_ADDR_WIDTH-1:0]      mem_req_addr_nc;
     wire [`CACHE_LINE_WIDTH-1:0]    mem_req_data_nc;
-    wire [MEM_TAG_WIDTH-1:0]        mem_req_tag_nc;
+    wire [`MEM_ADDR_WIDTH-1:0]      mem_req_tag_nc;
     wire                            mem_req_ready_nc;
     
     // Memory response
     wire                            mem_rsp_valid_nc;
     wire [`CACHE_LINE_WIDTH-1:0]    mem_rsp_data_nc;
-    wire [MEM_TAG_WIDTH-1:0]        mem_rsp_tag_nc;
+    wire [`MEM_ADDR_WIDTH-1:0]      mem_rsp_tag_nc;
     wire                            mem_rsp_ready_nc; 
 
     if (NC_ENABLE) begin
@@ -146,7 +146,8 @@ module VX_cache #(
                 
             .MEM_ADDR_WIDTH    (`MEM_ADDR_WIDTH),
             .MEM_DATA_SIZE     (CACHE_LINE_SIZE),   
-            .MEM_TAG_WIDTH     (MEM_TAG_WIDTH)
+            .MEM_TAG_IN_WIDTH  (`MEM_ADDR_WIDTH),
+            .MEM_TAG_OUT_WIDTH (MEM_TAG_WIDTH)
         ) nc_bypass (
             .clk       (clk),
             .reset     (reset),
@@ -245,12 +246,9 @@ module VX_cache #(
     ///////////////////////////////////////////////////////////////////////////
 
     wire [`CACHE_LINE_WIDTH-1:0] mem_rsp_data_qual;
-    wire [`MEM_ADDR_WIDTH-1:0] mem_rsp_tag_nc_a, mem_rsp_tag_qual;
+    wire [`MEM_ADDR_WIDTH-1:0] mem_rsp_tag_qual;
 
     wire mrsq_out_valid, mrsq_out_ready;
-
-    // trim out non-cacheable flags
-    assign mem_rsp_tag_nc_a = mem_rsp_tag_nc[NC_ENABLE +: `MEM_ADDR_WIDTH];
     
     VX_elastic_buffer #(
         .DATAW      (`MEM_ADDR_WIDTH + `CACHE_LINE_WIDTH), 
@@ -261,7 +259,7 @@ module VX_cache #(
         .reset      (reset),
         .ready_in   (mem_rsp_ready_nc),
         .valid_in   (mem_rsp_valid_nc),
-        .data_in    ({mem_rsp_tag_nc_a, mem_rsp_data_nc}),                
+        .data_in    ({mem_rsp_tag_nc,   mem_rsp_data_nc}),                
         .data_out   ({mem_rsp_tag_qual, mem_rsp_data_qual}),
         .ready_out  (mrsq_out_ready),
         .valid_out  (mrsq_out_valid)
@@ -545,12 +543,7 @@ module VX_cache #(
         .ready_out (mem_req_ready_nc)
     );
 
-    // build memory tag adding non-cacheable flag
-    if (NC_ENABLE) begin
-        assign mem_req_tag_nc = MEM_TAG_WIDTH'({mem_req_addr_nc, 1'b0});
-    end else begin
-        assign mem_req_tag_nc = MEM_TAG_WIDTH'(mem_req_addr_nc);
-    end
+    assign mem_req_tag_nc = mem_req_addr_nc;
 
 `ifdef PERF_ENABLE
     // per cycle: core_reads, core_writes

@@ -18,6 +18,16 @@ run-simx:
 	$(MAKE) -C printf run-simx
     #$(MAKE) -C psort run-simx
 
+run-rtlsim:
+	$(MAKE) -C vecadd run-rtlsim 
+	$(MAKE) -C sgemm run-rtlsim
+	$(MAKE) -C saxpy run-rtlsim
+	$(MAKE) -C sfilter run-rtlsim
+	$(MAKE) -C nearn run-rtlsim
+	$(MAKE) -C guassian run-rtlsim
+	$(MAKE) -C printf run-rtlsim
+    #$(MAKE) -C psort run-rtlsim
+
 run-vlsim:
 	$(MAKE) -C vecadd run-vlsim 
 	$(MAKE) -C sgemm run-vlsim

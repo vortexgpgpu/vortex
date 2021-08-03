@@ -241,7 +241,7 @@ def expand_text(text, params):
 
     while True:
         if iter > 65536:
-            raise Exception("Macro recursion!")
+            raise Exception("Macro recursion!")    
         has_func = False
         while True:
             params_updated = False

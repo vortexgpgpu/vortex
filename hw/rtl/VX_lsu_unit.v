@@ -339,17 +339,17 @@ module VX_lsu_unit #(
             if (dcache_req_if.rw[0]) begin
                 $write("%t: D$%0d Wr Req: wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, dcache_req_fire);
                 `PRINT_ARRAY1D(req_addr, `NUM_THREADS);
-                 $write(", tag=%0h, byteen=%0h, type=", req_tag, dcache_req_if.byteen);
-                 `PRINT_ARRAY1D(req_addr_type, `NUM_THREADS);
-                 $write(", data=");
-                 `PRINT_ARRAY1D(dcache_req_if.data, `NUM_THREADS);
-                 $write("\n");
+                $write(", tag=%0h, byteen=%0h, type=", req_tag, dcache_req_if.byteen);
+                `PRINT_ARRAY1D(req_addr_type, `NUM_THREADS);
+                $write(", data=");
+                `PRINT_ARRAY1D(dcache_req_if.data, `NUM_THREADS);
+                $write("\n");
             end else begin
-                 $write("%t: D$%0d Rd Req: wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, dcache_req_fire);
+                $write("%t: D$%0d Rd Req: wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, dcache_req_fire);
                 `PRINT_ARRAY1D(req_addr, `NUM_THREADS);
-                 $write(", tag=%0h, byteen=%0h, type=", req_tag, dcache_req_if.byteen);
-                 `PRINT_ARRAY1D(req_addr_type, `NUM_THREADS);
-                 $write(", rd=%0d, is_dup=%b\n", req_rd, req_is_dup);
+                $write(", tag=%0h, byteen=%0h, type=", req_tag, dcache_req_if.byteen);
+                `PRINT_ARRAY1D(req_addr_type, `NUM_THREADS);
+                $write(", rd=%0d, is_dup=%b\n", req_rd, req_is_dup);
             end
         end
         if (dcache_rsp_fire) begin
