@@ -12,14 +12,20 @@ module VX_tex_wrap #(
 
     reg [`FIXED_FRAC-1:0] coord_r;
 
-    wire [31:0] clamp = `CLAMP(coord_i, 0, `FIXED_MASK);
+    wire [`FIXED_FRAC-1:0] clamp;
 
-    `UNUSED_VAR (clamp)
+    VX_sat_fx #(
+        .IN_W  (32),
+        .OUT_W (`FIXED_FRAC)
+    ) sat_fx (
+        .data_in  (coord_i),
+        .data_out (clamp)
+    );
 
     always @(*) begin
         case (wrap_i)
             `TEX_WRAP_CLAMP:   
-                coord_r = clamp[`FIXED_FRAC-1:0];
+                coord_r = clamp;
             `TEX_WRAP_MIRROR: 
                 coord_r = coord_i[`FIXED_FRAC-1:0] ^ {`FIXED_FRAC{coord_i[`FIXED_FRAC]}};
             default: //`TEX_WRAP_REPEAT

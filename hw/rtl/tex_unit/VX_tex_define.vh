@@ -9,8 +9,6 @@
 `define FIXED_HALF      (`FIXED_ONE >> 1)
 `define FIXED_MASK      (`FIXED_ONE - 1)
 
-`define CLAMP(x,lo,hi)  (($signed(x) < $signed(lo)) ? lo : ((x > hi) ? hi : x))
-
 `define TEX_ADDR_BITS       32
 `define TEX_FORMAT_BITS     3
 `define TEX_WRAP_BITS       2
