@@ -25,8 +25,6 @@
 `define TEX_WRAP_REPEAT     1
 `define TEX_WRAP_MIRROR     2
 
-`define TEX_COLOR_BITS      8
-
 `define BLEND_FRAC          8
 `define BLEND_ONE           (2 ** `BLEND_FRAC)
 
