@@ -188,13 +188,13 @@ module VX_mem_unit # (
         VX_dcache_req_if #(
             .NUM_REQS  (`DNUM_REQS), 
             .WORD_SIZE (`DWORD_SIZE), 
-            .TAG_WIDTH (`DCORE_TAG_WIDTH-`SM_ENABLE)
+            .TAG_WIDTH (`DCORE_TAG_WIDTH-1)
         ) smem_req_if();
 
         VX_dcache_rsp_if #(
             .NUM_REQS  (`DNUM_REQS), 
             .WORD_SIZE (`DWORD_SIZE), 
-            .TAG_WIDTH (`DCORE_TAG_WIDTH-`SM_ENABLE)
+            .TAG_WIDTH (`DCORE_TAG_WIDTH-1)
         ) smem_rsp_if();
 
         VX_smem_arb #( 
@@ -252,8 +252,8 @@ module VX_mem_unit # (
             .NUM_REQS           (`SNUM_REQS),
             .CREQ_SIZE          (`SCREQ_SIZE),
             .CRSQ_SIZE          (`SCRSQ_SIZE),
-            .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH-`SM_ENABLE),
-            .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS-`SM_ENABLE),
+            .CORE_TAG_WIDTH     (`DCORE_TAG_WIDTH-1),
+            .CORE_TAG_ID_BITS   (`DCORE_TAG_ID_BITS-1),
             .BANK_ADDR_OFFSET   (`SBANK_ADDR_OFFSET)
         ) smem (            
             .clk                (clk),
