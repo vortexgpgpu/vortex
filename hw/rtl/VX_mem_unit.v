@@ -287,13 +287,14 @@ module VX_mem_unit # (
         assign dcache_req_tmp_if.byteen = dcache_req_if.byteen;
         assign dcache_req_tmp_if.data   = dcache_req_if.data;
         assign dcache_req_tmp_if.tag    = dcache_req_if.tag;
-        assign dcache_req_tmp_if.ready  = dcache_req_if.ready;
+        assign dcache_req_if.ready  = dcache_req_tmp_if.ready;
         
         // D-cache to core reponse
         assign dcache_rsp_if.valid  = dcache_rsp_tmp_if.valid;
+        assign dcache_rsp_if.tmask  = dcache_rsp_tmp_if.tmask;
         assign dcache_rsp_if.tag    = dcache_rsp_tmp_if.tag;
         assign dcache_rsp_if.data   = dcache_rsp_tmp_if.data;
-        assign dcache_rsp_if.ready  = dcache_rsp_tmp_if.ready;
+        assign dcache_rsp_tmp_if.ready = dcache_rsp_if.ready;
     end
 
     wire [`DMEM_TAG_WIDTH-1:0] icache_mem_req_tag = `DMEM_TAG_WIDTH'(icache_mem_req_if.tag);
