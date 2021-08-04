@@ -19,13 +19,15 @@ VX_SRCS = kernel.c
 #CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -Wfatal-errors
 
+CXXFLAGS += -DLUPNG_USE_ZLIB
+
 CXXFLAGS += -I$(VORTEX_DRV_PATH)/include
 
-LDFLAGS += -L$(VORTEX_DRV_PATH)/stub -lvortex
+LDFLAGS += -L$(VORTEX_DRV_PATH)/stub -lvortex  -lz
 
 PROJECT = tex
 
-SRCS = main.cpp utils.cpp
+SRCS = main.cpp utils.cpp tga.cpp lupng.c
 
 all: $(PROJECT) kernel.bin kernel.dump
  

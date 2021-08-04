@@ -1,144 +1,121 @@
 #include "utils.h"
-#include <fstream>
 #include <assert.h>
+#include <cstring>
+#include "blitter.h"
 #include "format.h"
+#include "tga.h"
+#include "lupng.h"
 
-struct __attribute__((__packed__)) tga_header_t {
-  int8_t idlength;
-  int8_t colormaptype;
-  int8_t imagetype;
-  int16_t colormaporigin;
-  int16_t colormaplength;
-  int8_t colormapdepth;
-  int16_t xoffset;
-  int16_t yoffset;
-  int16_t width;
-  int16_t height;
-  int8_t bitsperpixel;
-  int8_t imagedescriptor;
-};
+std::string getFileExt(const std::string& str) {
+   auto i = str.rfind('.');
+   if (i != std::string::npos) {
+      return str.substr(i+1);
+   }
+   return("");
+}
 
-int LoadTGA(const char *filename, 
-            std::vector<uint8_t> &pixels, 
-            uint32_t *width, 
-            uint32_t *height) {
-  std::ifstream ifs(filename, std::ios::in | std::ios::binary);
-  if (!ifs.is_open()) {
-    std::cerr << "couldn't open file: " << filename << "!" << std::endl;
-    return -1;
-  }
+bool iequals(const std::string& a, const std::string& b) {
+    auto sz = a.size();
+    if (b.size() != sz)
+        return false;
+    for (size_t i = 0; i < sz; ++i) {
+        if (tolower(a[i]) != tolower(b[i]))
+            return false;
+    }
+    return true;
+}
 
-  tga_header_t header;
-  ifs.read(reinterpret_cast<char *>(&header), sizeof(tga_header_t));
-  if (ifs.fail()) {
-    std::cerr << "invalid TGA file header!" << std::endl;
-    return -1;
-  }
+int LoadImage(const char *filename,
+              ePixelFormat format, 
+              std::vector<uint8_t> &pixels, 
+              uint32_t *width,
+              uint32_t *height) {
+  uint32_t img_width;
+  uint32_t img_height;
+  uint32_t img_bpp;
 
-  if (header.imagetype != 2) {
-    std::cerr << "unsupported TGA encoding format!" << std::endl;
-    return -1;
-  }
-
-  ifs.seekg(header.idlength, std::ios::cur); // skip string
-  if (ifs.fail()) {
-    std::cerr << "invalid TGA file!" << std::endl;
-    return -1;
-  }
-
-  switch (header.bitsperpixel) {
-  case 16:
-  case 24:
-  case 32: {
-    auto stride = header.bitsperpixel / 8;
-    std::vector<uint8_t> staging(stride * header.width * header.height);
-
-    // Read pixels data
-    ifs.read((char*)staging.data(), staging.size());
-    if (ifs.fail()) {
-      std::cerr << "invalid TGA file!" << std::endl;
+  auto ext = getFileExt(filename);
+  if (iequals(ext, "tga")) {
+    int ret = LoadTGA(filename, pixels, &img_width, &img_height, &img_bpp);
+    if (ret)
+      return ret;
+  } else 
+  if (iequals(ext, "png")) {
+    auto image = luPngReadFile(filename, NULL);
+    if (image == NULL)
+      return -1;
+    if (image->depth != 8 
+      || (image->channels != 3 
+       && image->channels != 4)) {
+      luImageRelease(image, NULL);
+      std::cerr << "invalid png file format!" << std::endl;  
       return -1;
     }
-
-    // format conversion to RGBA
-    pixels.resize(4 * header.width * header.height);
-    const uint8_t* src_bytes = staging.data();
-    uint32_t* dst_bytes = (uint32_t*)pixels.data();
-    for (const uint8_t* const src_end = src_bytes + staging.size(); 
-         src_bytes != src_end; 
-         src_bytes += stride) {
-      ColorARGB color;        
-      switch (stride) {
-      case 2: 
-        color = Format::ConvertFrom<FORMAT_A1R5G5B5, true>(src_bytes);         
-        break;
-      case 3: 
-        color = Format::ConvertFrom<FORMAT_R8G8B8, true>(src_bytes); 
-        break;
-      case 4: 
-        color = Format::ConvertFrom<FORMAT_A8R8G8B8, true>(src_bytes); 
-        break;
-      default:
-        std::abort();            
-      }
-      *dst_bytes++ = color;
-    }
-    break;
-  }
-  default:
-    std::cerr << "unsupported TGA bitsperpixel!" << std::endl;
+    pixels.resize(image->channels * image->width * image->height);
+    memcpy(pixels.data(), image->data, pixels.size());
+    img_width  = image->width;
+    img_height = image->height;
+    img_bpp    = image->channels;
+    luImageRelease(image, NULL);
+  } else {
+    std::cerr << "invalid file extension: " << ext << "!" << std::endl;
     return -1;
-  } 
+  }
 
-  *width = header.width;
-  *height = header.height;
+  ePixelFormat img_format;  
+  switch (img_bpp) {
+  case 1: 
+    img_format = FORMAT_A8;
+    break;
+  case 2: 
+    img_format = FORMAT_A1R5G5B5;
+    break;
+  case 3: 
+    img_format = FORMAT_R8G8B8; 
+    break;
+  case 4: 
+    img_format = FORMAT_A8R8G8B8; 
+    break;
+  default:
+    std::abort();            
+  }
 
+  if (img_format != format) {
+    // format conversion to RGBA
+    std::vector<uint8_t> staging;    
+    int ret = ConvertImage(staging, pixels, img_width, img_height, img_format, format);
+    if (ret)
+      return ret;
+    pixels.swap(staging);
+  }
+
+  *width  = img_width;
+  *height = img_height;
+  
   return 0;
 }
 
-int SaveTGA(const char *filename, 
-            const std::vector<uint8_t> &pixels, 
-            uint32_t width, 
-            uint32_t height, 
-            uint32_t bpp) {              
-  std::ofstream ofs(filename, std::ios::out | std::ios::binary);
-  if (!ofs.is_open()) {
-    std::cerr << "couldn't create file: " << filename << "!" << std::endl;
+int SaveImage(const char *filename,
+              ePixelFormat format,
+              const std::vector<uint8_t> &pixels, 
+              uint32_t width,
+              uint32_t height) {
+  uint32_t bpp = Format::GetInfo(format).BytePerPixel;
+  auto ext = getFileExt(filename);
+  if (iequals(ext, "tga")) {
+    return SaveTGA(filename, pixels, width, height, bpp);
+  } else 
+  if (iequals(ext, "png")) {
+    LuImage image;
+    image.width    = width;
+    image.height   = height;
+    image.depth    = 8;
+    image.channels = bpp;
+    image.data     = (uint8_t*)pixels.data();
+    return luPngWriteFile(filename, &image);
+  } else {
+    std::cerr << "invalid file extension: " << ext << "!" << std::endl;
     return -1;
-  }
-
-  if (bpp < 2 || bpp > 4) {        
-    std::cerr << "unsupported pixel stride: " << bpp << "!" << std::endl;
-    return -1;
-  }
-
-  tga_header_t header;
-  header.idlength = 0;
-  header.colormaptype = 0; // no palette
-  header.imagetype = 2; // color mapped data
-  header.colormaporigin = 0;
-  header.colormaplength = 0;
-  header.colormapdepth = 0;
-  header.xoffset = 0;
-  header.yoffset = 0;
-  header.width = width;
-  header.height = height;
-  header.bitsperpixel = bpp * 8;
-  header.imagedescriptor = 0;
-
-  // write header
-  ofs.write(reinterpret_cast<char *>(&header), sizeof(tga_header_t));
-
-  // write pixel data
-  uint32_t pitch = bpp * width;
-  const uint8_t* pixel_bytes = pixels.data() + (height - 1) * pitch;
-  for (uint32_t y = 0; y < height; ++y) {
-    const uint8_t* pixel_row = pixel_bytes;
-    for (uint32_t x = 0; x < width; ++x) {
-      ofs.write((const char*)pixel_row, bpp);      
-      pixel_row += bpp;
-    }
-    pixel_bytes -= pitch;
   }
 
   return 0;
