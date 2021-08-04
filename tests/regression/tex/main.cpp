@@ -22,8 +22,8 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 const char* kernel_file = "kernel.bin";
-const char* input_file  = "palette64.tga";
-const char* output_file = "output.tga";
+const char* input_file  = "palette64.png";
+const char* output_file = "output.png";
 int wrap    = 0;
 int filter  = 0;
 float scale = 1.0f;
@@ -101,8 +101,7 @@ void cleanup() {
 int run_test(const kernel_arg_t& kernel_arg, 
              uint32_t buf_size, 
              uint32_t width, 
-             uint32_t height, 
-             uint32_t bpp) {
+             uint32_t height) {
   auto time_start = std::chrono::high_resolution_clock::now();
 
   // start device
@@ -130,7 +129,7 @@ int run_test(const kernel_arg_t& kernel_arg,
   // save output image
   std::cout << "save output image" << std::endl;  
   //dump_image(dst_pixels, width, height, bpp);
-  RT_CHECK(SaveTGA(output_file, dst_pixels, width, height, bpp));
+  RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, dst_pixels, width, height));
 
   return 0;
 }
@@ -140,13 +139,11 @@ int main(int argc, char *argv[]) {
   std::vector<uint8_t> src_pixels;
   uint32_t src_width;
   uint32_t src_height;
-  uint32_t src_bpp;
- 
+  
   // parse command arguments
   parse_args(argc, argv);
 
-  std::vector<uint8_t> tmp_pixels;
-  RT_CHECK(LoadTGA(input_file, tmp_pixels, &src_width, &src_height));
+  RT_CHECK(LoadImage(input_file, eformat, src_pixels, &src_width, &src_height));
 
   // check power of two support
   if (!ISPOW2(src_width) || !ISPOW2(src_height)) {
@@ -154,8 +151,7 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  RT_CHECK(ConvertImage(src_pixels, tmp_pixels, src_width, src_height, FORMAT_A8R8G8B8, eformat));
-  src_bpp = Format::GetInfo(eformat).BytePerPixel;
+  uint32_t src_bpp = Format::GetInfo(eformat).BytePerPixel;
   
   //dump_image(src_pixels, src_width, src_height, src_bpp);
 
@@ -248,7 +244,7 @@ int main(int argc, char *argv[]) {
 
   // run tests
   std::cout << "run tests" << std::endl;
-  RT_CHECK(run_test(kernel_arg, dst_bufsize, dst_width, dst_height, dst_bpp));
+  RT_CHECK(run_test(kernel_arg, dst_bufsize, dst_width, dst_height));
 
   // cleanup
   std::cout << "cleanup" << std::endl;  
