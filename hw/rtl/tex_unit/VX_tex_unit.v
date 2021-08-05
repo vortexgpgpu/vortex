@@ -18,9 +18,9 @@ module VX_tex_unit #(
     VX_tex_rsp_if   tex_rsp_if
 );
 
-    localparam REQ_INFO_WIDTH_S = `NR_BITS + 1 + `NW_BITS + 32;
-    localparam REQ_INFO_WIDTH_A = `TEX_FORMAT_BITS + REQ_INFO_WIDTH_S;
-    localparam REQ_INFO_WIDTH_M = (2 * `NUM_THREADS * `BLEND_FRAC) + REQ_INFO_WIDTH_A;
+    localparam REQ_INFOW_S = `NR_BITS + 1 + `NW_BITS + 32;
+    localparam REQ_INFOW_A = `TEX_FORMAT_BITS + REQ_INFOW_S;
+    localparam REQ_INFOW_M = (2 * `NUM_THREADS * `BLEND_FRAC) + REQ_INFOW_A;
     
     reg [`TEX_MIPOFF_BITS-1:0]    tex_mipoff [`NUM_TEX_UNITS-1:0][(1 << `TEX_LOD_BITS)-1:0];
     reg [1:0][`TEX_DIM_BITS-1:0]  tex_dims   [`NUM_TEX_UNITS-1:0][(1 << `TEX_LOD_BITS)-1:0];
@@ -96,13 +96,13 @@ module VX_tex_unit #(
     wire [`TEX_STRIDE_BITS-1:0] mem_req_stride;
     wire [`NUM_THREADS-1:0][1:0][`BLEND_FRAC-1:0] mem_req_blends;
     wire [`NUM_THREADS-1:0][3:0][31:0] mem_req_addr;
-    wire [REQ_INFO_WIDTH_A-1:0] mem_req_info;
+    wire [REQ_INFOW_A-1:0] mem_req_info;
     wire mem_req_ready;
                 
     VX_tex_addr #(
-        .CORE_ID        (CORE_ID),
-        .REQ_INFO_WIDTH (REQ_INFO_WIDTH_A),
-        .NUM_REQS       (`NUM_THREADS)
+        .CORE_ID   (CORE_ID),
+        .REQ_INFOW (REQ_INFOW_A),
+        .NUM_REQS  (`NUM_THREADS)
     ) tex_addr (
         .clk        (clk),
         .reset      (reset),
@@ -134,13 +134,13 @@ module VX_tex_unit #(
     wire mem_rsp_valid;
     wire [`NUM_THREADS-1:0] mem_rsp_tmask;
     wire [`NUM_THREADS-1:0][3:0][31:0] mem_rsp_data;
-    wire [REQ_INFO_WIDTH_M-1:0] mem_rsp_info;
+    wire [REQ_INFOW_M-1:0] mem_rsp_info;
     wire mem_rsp_ready;        
 
     VX_tex_memory #(
-        .CORE_ID        (CORE_ID),
-        .REQ_INFO_WIDTH (REQ_INFO_WIDTH_M),
-        .NUM_REQS       (`NUM_THREADS)
+        .CORE_ID   (CORE_ID),
+        .REQ_INFOW (REQ_INFOW_M),
+        .NUM_REQS  (`NUM_THREADS)
     ) tex_memory (
         .clk           (clk),
         .reset         (reset),
@@ -170,14 +170,14 @@ module VX_tex_unit #(
 
     wire [`NUM_THREADS-1:0][1:0][`BLEND_FRAC-1:0] rsp_blends;
     wire [`TEX_FORMAT_BITS-1:0] rsp_format;
-    wire [REQ_INFO_WIDTH_S-1:0] rsp_info;
+    wire [REQ_INFOW_S-1:0] rsp_info;
     
     assign {rsp_blends, rsp_format, rsp_info} = mem_rsp_info;
 
     VX_tex_sampler #(
-        .CORE_ID        (CORE_ID),
-        .REQ_INFO_WIDTH (REQ_INFO_WIDTH_S),
-        .NUM_REQS       (`NUM_THREADS)
+        .CORE_ID   (CORE_ID),
+        .REQ_INFOW (REQ_INFOW_S),
+        .NUM_REQS  (`NUM_THREADS)
     ) tex_sampler (
         .clk        (clk),
         .reset      (reset),

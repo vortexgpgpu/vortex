@@ -1,9 +1,9 @@
 `include "VX_tex_define.vh"
 
 module VX_tex_addr #(
-    parameter CORE_ID        = 0,
-    parameter REQ_INFO_WIDTH = 1,
-    parameter NUM_REQS       = 1
+    parameter CORE_ID   = 0,
+    parameter REQ_INFOW = 1,
+    parameter NUM_REQS  = 1
 ) (
     input wire clk,
     input wire reset,
@@ -19,7 +19,7 @@ module VX_tex_addr #(
     input wire [`TEX_ADDR_BITS-1:0]     req_baseaddr,
     input wire [NUM_REQS-1:0][`TEX_MIPOFF_BITS-1:0] req_mipoff,    
     input wire [NUM_REQS-1:0][1:0][`TEX_DIM_BITS-1:0] req_logdims,
-    input wire [REQ_INFO_WIDTH-1:0]     req_info,    
+    input wire [REQ_INFOW-1:0]          req_info,    
     output wire                         req_ready,
 
     // outputs
@@ -30,7 +30,7 @@ module VX_tex_addr #(
     output wire [`TEX_STRIDE_BITS-1:0]  rsp_stride,
     output wire [NUM_REQS-1:0][3:0][31:0] rsp_addr,
     output wire [NUM_REQS-1:0][1:0][`BLEND_FRAC-1:0] rsp_blends,
-    output wire [REQ_INFO_WIDTH-1:0]    rsp_info,  
+    output wire [REQ_INFOW-1:0]         rsp_info,  
     input wire                          rsp_ready
 );
 
@@ -38,10 +38,10 @@ module VX_tex_addr #(
 
     localparam PITCH_BITS = `ADDER_CARRY_WIDTH(`TEX_DIM_BITS, `TEX_STRIDE_BITS);
 
-    wire                        valid_s0;   
-    wire [NUM_REQS-1:0]         tmask_s0; 
+    wire                valid_s0;   
+    wire [NUM_REQS-1:0] tmask_s0; 
     wire [`TEX_FILTER_BITS-1:0] filter_s0;
-    wire [REQ_INFO_WIDTH-1:0]   req_info_s0;
+    wire [REQ_INFOW-1:0] req_info_s0;
     wire [NUM_REQS-1:0][1:0][`FIXED_FRAC-1:0] clamped_lo, clamped_lo_s0;
     wire [NUM_REQS-1:0][1:0][`FIXED_FRAC-1:0] clamped_hi, clamped_hi_s0;
     wire [`TEX_STRIDE_BITS-1:0] log_stride, log_stride_s0;
@@ -90,7 +90,7 @@ module VX_tex_addr #(
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_REQS + `TEX_FILTER_BITS + `TEX_STRIDE_BITS + REQ_INFO_WIDTH + NUM_REQS * (PITCH_BITS + `TEX_DIM_BITS + 32 + 2 * 2 * `FIXED_FRAC)),
+        .DATAW  (1 + NUM_REQS + `TEX_FILTER_BITS + `TEX_STRIDE_BITS + REQ_INFOW + NUM_REQS * (PITCH_BITS + `TEX_DIM_BITS + 32 + 2 * 2 * `FIXED_FRAC)),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
@@ -127,7 +127,7 @@ module VX_tex_addr #(
     assign stall_out = rsp_valid && ~rsp_ready;
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_REQS + `TEX_FILTER_BITS + `TEX_STRIDE_BITS + (NUM_REQS * 4 * 32) + (2 * NUM_REQS * `BLEND_FRAC) + REQ_INFO_WIDTH),
+        .DATAW  (1 + NUM_REQS + `TEX_FILTER_BITS + `TEX_STRIDE_BITS + (NUM_REQS * 4 * 32) + (2 * NUM_REQS * `BLEND_FRAC) + REQ_INFOW),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
@@ -157,18 +157,18 @@ module VX_tex_addr #(
 
 function logic [(`FIXED_INT+`TEX_STRIDE_BITS)-1:0] scale_to_pitch (input logic [`FIXED_FRAC-1:0] src,  
                                                                    input logic [PITCH_BITS-1:0] dim);
-`IGNORE_UNUSED_BEGIN
+`IGNORE_WARNINGS_BEGIN
     logic [(`FIXED_BITS+`TEX_STRIDE_BITS)-1:0] out;
-`IGNORE_UNUSED_END
+`IGNORE_WARNINGS_END
     out = (`FIXED_BITS+`TEX_STRIDE_BITS)'(src) << dim;
     return out[`FIXED_FRAC +: (`FIXED_INT+`TEX_STRIDE_BITS)];
 endfunction
 
 function logic [`FIXED_INT-1:0] scale_to_height (input logic [`FIXED_FRAC-1:0] src, 
                                                  input logic [`TEX_DIM_BITS-1:0] dim);
-`IGNORE_UNUSED_BEGIN
+`IGNORE_WARNINGS_BEGIN
     logic [`FIXED_BITS-1:0] out;
-`IGNORE_UNUSED_END
+`IGNORE_WARNINGS_END
     out = `FIXED_BITS'(src) << dim;
     return out[`FIXED_FRAC +: `FIXED_INT];
 endfunction

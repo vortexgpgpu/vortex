@@ -1,8 +1,8 @@
 `include "VX_tex_define.vh"
 module VX_tex_memory #(
-    parameter CORE_ID        = 0,
-    parameter REQ_INFO_WIDTH = 1,
-    parameter NUM_REQS       = 1
+    parameter CORE_ID   = 0,
+    parameter REQ_INFOW = 1,
+    parameter NUM_REQS  = 1
 ) (    
     input wire clk,
     input wire reset,
@@ -17,14 +17,14 @@ module VX_tex_memory #(
     input wire [`TEX_FILTER_BITS-1:0]   req_filter,
     input wire [`TEX_STRIDE_BITS-1:0]   req_stride,
     input wire [NUM_REQS-1:0][3:0][31:0] req_addr,
-    input wire [REQ_INFO_WIDTH-1:0]     req_info,
+    input wire [REQ_INFOW-1:0]          req_info,
     output wire                         req_ready,
 
     // outputs
     output wire                         rsp_valid,
     output wire [NUM_REQS-1:0]          rsp_tmask,
     output wire [NUM_REQS-1:0][3:0][31:0] rsp_data,
-    output wire [REQ_INFO_WIDTH-1:0]    rsp_info,
+    output wire [REQ_INFOW-1:0]         rsp_info,
     input wire                          rsp_ready    
 );
 
@@ -59,18 +59,18 @@ module VX_tex_memory #(
     
     wire reqq_push, reqq_pop, reqq_empty, reqq_full;
 
-    wire [3:0][NUM_REQS-1:0][29:0] q_req_addr;
-    wire [NUM_REQS-1:0]         q_req_tmask;
-    wire [`TEX_FILTER_BITS-1:0] q_req_filter;
-    wire [REQ_INFO_WIDTH-1:0]   q_req_info;
-    wire [`TEX_STRIDE_BITS-1:0] q_req_stride;
-    wire [3:0][NUM_REQS-1:0][1:0] q_align_offs;
-    wire [3:0]                  q_dup_reqs;
+    wire [3:0][NUM_REQS-1:0][29:0]  q_req_addr;
+    wire [NUM_REQS-1:0]             q_req_tmask;
+    wire [`TEX_FILTER_BITS-1:0]     q_req_filter;
+    wire [REQ_INFOW-1:0]            q_req_info;
+    wire [`TEX_STRIDE_BITS-1:0]     q_req_stride;
+    wire [3:0][NUM_REQS-1:0][1:0]   q_align_offs;
+    wire [3:0]                      q_dup_reqs;
 
     assign reqq_push = req_valid && req_ready;
     
     VX_fifo_queue #(
-        .DATAW      ((NUM_REQS * 4 * 30) + NUM_REQS + REQ_INFO_WIDTH + `TEX_FILTER_BITS + `TEX_STRIDE_BITS + (4 * NUM_REQS * 2) + 4), 
+        .DATAW      ((NUM_REQS * 4 * 30) + NUM_REQS + REQ_INFOW + `TEX_FILTER_BITS + `TEX_STRIDE_BITS + (4 * NUM_REQS * 2) + 4), 
         .SIZE       (`LSUQ_SIZE),
         .OUTPUT_REG (1)
     ) req_queue (
@@ -244,7 +244,7 @@ module VX_tex_memory #(
     assign reqq_pop = rsp_texels_done && ~stall_out;
     
     VX_pipe_register #(
-        .DATAW  (1 + NUM_REQS + REQ_INFO_WIDTH + (4 * NUM_REQS * 32)),
+        .DATAW  (1 + NUM_REQS + REQ_INFOW + (4 * NUM_REQS * 32)),
         .RESETW (1)
     ) rsp_pipe_reg (
         .clk      (clk),
