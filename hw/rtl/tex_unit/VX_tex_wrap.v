@@ -14,7 +14,7 @@ module VX_tex_wrap #(
 
     wire [`FIXED_FRAC-1:0] clamp;
 
-    VX_sat_fx #(
+    VX_tex_sat #(
         .IN_W  (32),
         .OUT_W (`FIXED_FRAC)
     ) sat_fx (

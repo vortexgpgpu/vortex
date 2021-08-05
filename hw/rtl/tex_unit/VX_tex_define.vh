@@ -3,11 +3,12 @@
 
 `include "VX_define.vh"
 
-`define FIXED_FRAC      20
-`define FIXED_INT       (32 - `FIXED_FRAC)
-`define FIXED_ONE       (2 ** `FIXED_FRAC)
-`define FIXED_HALF      (`FIXED_ONE >> 1)
-`define FIXED_MASK      (`FIXED_ONE - 1)
+`define FIXED_BITS          32
+`define FIXED_FRAC          20
+`define FIXED_INT           (`FIXED_BITS - `FIXED_FRAC)
+`define FIXED_ONE           (2 ** `FIXED_FRAC)
+`define FIXED_HALF          (`FIXED_ONE >> 1)
+`define FIXED_MASK          (`FIXED_ONE - 1)
 
 `define TEX_ADDR_BITS       32
 `define TEX_FORMAT_BITS     3
