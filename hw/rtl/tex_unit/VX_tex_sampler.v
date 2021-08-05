@@ -51,20 +51,25 @@ module VX_tex_sampler #(
             );
         end 
 
+        wire [7:0] beta  = req_blends[i][0];
+        wire [8:0] alpha = `BLEND_ONE - beta;
+
         VX_tex_lerp #(
         ) tex_lerp_ul (
-            .blend (req_blends[i][0]), 
-            .in1 (fmt_texels[0]),
-            .in2 (fmt_texels[1]),
-            .out (texel_ul[i])
+            .in1   (fmt_texels[0]),
+            .in2   (fmt_texels[1]),
+            .alpha (alpha), 
+            .beta  (beta),
+            .out   (texel_ul[i])
         );  
 
         VX_tex_lerp #(
         ) tex_lerp_uh (
-            .blend (req_blends[i][0]), 
-            .in1 (fmt_texels[2]),
-            .in2 (fmt_texels[3]),
-            .out (texel_uh[i])
+            .in1   (fmt_texels[2]),
+            .in2   (fmt_texels[3]),
+            .alpha (alpha),
+            .beta  (beta),
+            .out   (texel_uh[i])
         );
 
         assign blend_v[i] = req_blends[i][1];
@@ -82,12 +87,16 @@ module VX_tex_sampler #(
     );
 
     for (genvar i = 0; i < NUM_REQS; i++) begin
+        wire [7:0] beta  = blend_v_s0[i];
+        wire [8:0] alpha = `BLEND_ONE - beta;
+
         VX_tex_lerp #(
         ) tex_lerp_v (
-            .blend (blend_v_s0[i]), 
-            .in1 (texel_ul_s0[i]),
-            .in2 (texel_uh_s0[i]),
-            .out (texel_v[i])
+            .in1   (texel_ul_s0[i]),
+            .in2   (texel_uh_s0[i]),
+            .alpha (alpha),
+            .beta  (beta),
+            .out   (texel_v[i])
         );
     end
 
@@ -108,7 +117,6 @@ module VX_tex_sampler #(
     assign req_ready = ~stall_out;   
 
 `ifdef DBG_PRINT_TEX
-    
     wire [`NW_BITS-1:0] req_wid, rsp_wid;
     wire [31:0]         req_PC, rsp_PC;
 

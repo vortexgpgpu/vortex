@@ -13,6 +13,12 @@ module VX_tex_format #(
 
     always @(*) begin        
         case (format)
+        `TEX_FORMAT_R8G8B8A8: begin
+            texel_out_r[07:00] = texel_in[7:0];
+            texel_out_r[15:08] = texel_in[15:8];
+            texel_out_r[23:16] = texel_in[23:16];
+            texel_out_r[31:24] = texel_in[31:24];
+        end
         `TEX_FORMAT_R5G6B5: begin
             texel_out_r[07:00] = {texel_in[15:11], texel_in[15:13]};  
             texel_out_r[15:08] = {texel_in[10:5], texel_in[10:9]};
@@ -31,24 +37,18 @@ module VX_tex_format #(
             texel_out_r[23:16] = texel_in[7:0];
             texel_out_r[31:24] = texel_in[15:8];
         end
-        `TEX_FORMAT_A8: begin
-            texel_out_r[07:00] = 0;
-            texel_out_r[15:08] = 0;
-            texel_out_r[23:16] = 0;
-            texel_out_r[31:24] = texel_in[7:0];
-        end
         `TEX_FORMAT_L8: begin
             texel_out_r[07:00] = texel_in[7:0];
             texel_out_r[15:08] = texel_in[7:0];
             texel_out_r[23:16] = texel_in[7:0];
             texel_out_r[31:24] = 8'hff;
         end
-        // `TEX_FORMAT_R8G8B8A8
-        default: begin 
-            texel_out_r[07:00] = texel_in[7:0];
-            texel_out_r[15:08] = texel_in[15:8];
-            texel_out_r[23:16] = texel_in[23:16];
-            texel_out_r[31:24] = texel_in[31:24];
+        //`TEX_FORMAT_A8
+        default: begin
+            texel_out_r[07:00] = 0;
+            texel_out_r[15:08] = 0;
+            texel_out_r[23:16] = 0;
+            texel_out_r[31:24] = texel_in[7:0];
         end
         endcase
     end

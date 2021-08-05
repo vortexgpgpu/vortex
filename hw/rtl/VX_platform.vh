@@ -91,6 +91,8 @@
 
 `define LTRIM(x, s) x[s-1:0]
 
+`define ADDER_CARRY_WIDTH(x, y) `MAX(x, `MIN(x, y)+1);
+
 `define PRINT_ARRAY1D(a, m)                     \
     $write("{");                                \
     for (integer i = (m-1); i >= 0; --i) begin  \
