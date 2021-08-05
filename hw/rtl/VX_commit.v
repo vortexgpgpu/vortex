@@ -11,7 +11,9 @@ module VX_commit #(
     VX_commit_if    ld_commit_if,
     VX_commit_if    st_commit_if, 
     VX_commit_if    csr_commit_if,
+`ifdef EXT_F_ENABLE
     VX_commit_if    fpu_commit_if,
+`endif
     VX_commit_if    gpu_commit_if,
 
     // outputs
@@ -26,14 +28,18 @@ module VX_commit #(
     wire ld_commit_fire  = ld_commit_if.valid && ld_commit_if.ready;
     wire st_commit_fire  = st_commit_if.valid && st_commit_if.ready;
     wire csr_commit_fire = csr_commit_if.valid && csr_commit_if.ready;
+`ifdef EXT_F_ENABLE
     wire fpu_commit_fire = fpu_commit_if.valid && fpu_commit_if.ready;
+`endif
     wire gpu_commit_fire = gpu_commit_if.valid && gpu_commit_if.ready;
 
     wire commit_fire = alu_commit_fire
                     || ld_commit_fire
                     || st_commit_fire
                     || csr_commit_fire
+                `ifdef EXT_F_ENABLE
                     || fpu_commit_fire
+                `endif
                     || gpu_commit_fire;
 
     wire [`NUM_THREADS-1:0] commit_tmask1, commit_tmask2, commit_tmask3; 
@@ -41,7 +47,9 @@ module VX_commit #(
     assign commit_tmask1 = alu_commit_fire ? alu_commit_if.tmask:
                            ld_commit_fire  ? ld_commit_if.tmask:                                           
                            csr_commit_fire ? csr_commit_if.tmask:
+                        `ifdef EXT_F_ENABLE
                            fpu_commit_fire ? fpu_commit_if.tmask:
+                        `endif
                                              0;
 
     assign commit_tmask2 = st_commit_fire ? st_commit_if.tmask : 0;
@@ -72,8 +80,9 @@ module VX_commit #(
         .alu_commit_if  (alu_commit_if),
         .ld_commit_if   (ld_commit_if),        
         .csr_commit_if  (csr_commit_if),
+    `ifdef EXT_F_ENABLE
         .fpu_commit_if  (fpu_commit_if),
-
+    `endif
         .writeback_if   (writeback_if)
     );
 
@@ -101,19 +110,19 @@ module VX_commit #(
             `PRINT_ARRAY1D(csr_commit_if.data, `NUM_THREADS);
             $write("\n");
         end      
+    `ifdef EXT_F_ENABLE
         if (fpu_commit_if.valid && fpu_commit_if.ready) begin
             $write("%t: core%0d-commit: wid=%0d, PC=%0h, ex=FPU, tmask=%b, wb=%0d, rd=%0d, data=", $time, CORE_ID, fpu_commit_if.wid, fpu_commit_if.PC, fpu_commit_if.tmask, fpu_commit_if.wb, fpu_commit_if.rd);
             `PRINT_ARRAY1D(fpu_commit_if.data, `NUM_THREADS);
             $write("\n");
         end
+    `endif
         if (gpu_commit_if.valid && gpu_commit_if.ready) begin
             $write("%t: core%0d-commit: wid=%0d, PC=%0h, ex=GPU, tmask=%b, wb=%0d, rd=%0d, data=", $time, CORE_ID, gpu_commit_if.wid, gpu_commit_if.PC, gpu_commit_if.tmask, gpu_commit_if.wb, gpu_commit_if.rd);
             `PRINT_ARRAY1D(gpu_commit_if.data, `NUM_THREADS);
             $write("\n");
         end
     end
-`else    
-    `UNUSED_VAR (fpu_commit_if.PC)
 `endif
 
 endmodule

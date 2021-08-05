@@ -129,9 +129,9 @@ wire                      cmd_scope_write;
 
 // MMIO controller ////////////////////////////////////////////////////////////
 
-`IGNORE_WARNINGS_BEGIN
+`IGNORE_UNUSED_BEGIN
 t_ccip_c0_ReqMmioHdr mmio_hdr;
-`IGNORE_WARNINGS_END
+`IGNORE_UNUSED_END
 assign mmio_hdr = t_ccip_c0_ReqMmioHdr'(cp2af_sRxPort.c0.hdr);
 
 `STATIC_ASSERT(($bits(t_ccip_c0_ReqMmioHdr)-$bits(mmio_hdr.address)) == 12, ("Oops!"))
@@ -147,21 +147,6 @@ assign cmd_scope_write = cp2af_sRxPort.c0.mmioWrValid && (MMIO_SCOPE_WRITE == mm
 
 wire [COUT_QUEUE_DATAW-1:0] cout_q_dout;
 wire cout_q_full, cout_q_empty;
-
-/*
-`DEBUG_BEGIN
-wire cp2af_sRxPort_c0_mmioWrValid = cp2af_sRxPort.c0.mmioWrValid;
-wire cp2af_sRxPort_c0_mmioRdValid = cp2af_sRxPort.c0.mmioRdValid;
-wire cp2af_sRxPort_c0_rspValid = cp2af_sRxPort.c0.rspValid;
-wire cp2af_sRxPort_c1_rspValid = cp2af_sRxPort.c1.rspValid;
-wire cp2af_sRxPort_c0TxAlmFull = cp2af_sRxPort.c0TxAlmFull;
-wire cp2af_sRxPort_c1TxAlmFull = cp2af_sRxPort.c1TxAlmFull;
-wire[$bits(mmio_hdr.address)-1:0] mmio_hdr_address = mmio_hdr.address;
-wire[$bits(mmio_hdr.length)-1:0] mmio_hdr_length = mmio_hdr.length;
-wire[$bits(mmio_hdr.tid)-1:0] mmio_hdr_tid = mmio_hdr.tid;
-wire[$bits(cp2af_sRxPort.c0.hdr.mdata)-1:0] cp2af_sRxPort_c0_hdr_mdata = cp2af_sRxPort.c0.hdr.mdata;
-`DEBUG_END
-*/
 
 wire [2:0] cmd_type = (cp2af_sRxPort.c0.mmioWrValid 
                     && (MMIO_CMD_TYPE == mmio_hdr.address)) ? 3'(cp2af_sRxPort.c0.data) : 3'h0;

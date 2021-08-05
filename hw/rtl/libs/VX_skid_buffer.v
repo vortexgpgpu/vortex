@@ -115,9 +115,7 @@ module VX_skid_buffer #(
                         ready_in_r  <= 1;
                         valid_out_r <= rd_ptr_r;
                     end
-                `IGNORE_WARNINGS_BEGIN
                     rd_ptr_r <= rd_ptr_r ^ (push ^ pop);
-                `IGNORE_WARNINGS_END   
                 end                   
             end
 

@@ -18,7 +18,9 @@ module VX_issue #(
     VX_alu_req_if   alu_req_if,
     VX_lsu_req_if   lsu_req_if,    
     VX_csr_req_if   csr_req_if,
+`ifdef EXT_F_ENABLE
     VX_fpu_req_if   fpu_req_if,    
+`endif
     VX_gpu_req_if   gpu_req_if
 );
     VX_ibuffer_if ibuffer_if();
@@ -84,7 +86,9 @@ module VX_issue #(
         .alu_req_if (alu_req_if),
         .lsu_req_if (lsu_req_if),        
         .csr_req_if (csr_req_if),
+    `ifdef EXT_F_ENABLE
         .fpu_req_if (fpu_req_if),
+    `endif
         .gpu_req_if (gpu_req_if)
     );     
 
@@ -203,6 +207,7 @@ module VX_issue #(
             `PRINT_ARRAY1D(csr_req_if.rs1_data, `NUM_THREADS);
             $write("\n");
         end
+    `ifdef EXT_F_ENABLE
         if (fpu_req_if.valid && fpu_req_if.ready) begin
             $write("%t: core%0d-issue: wid=%0d, PC=%0h, ex=FPU, tmask=%b, rd=%0d, rs1_data=", 
                 $time, CORE_ID, fpu_req_if.wid, fpu_req_if.PC, fpu_req_if.tmask, fpu_req_if.rd);   
@@ -213,6 +218,7 @@ module VX_issue #(
             `PRINT_ARRAY1D(fpu_req_if.rs3_data, `NUM_THREADS);
             $write("\n");
         end
+    `endif
         if (gpu_req_if.valid && gpu_req_if.ready) begin
             $write("%t: core%0d-issue: wid=%0d, PC=%0h, ex=GPU, tmask=%b, rd=%0d, rs1_data=", 
                 $time, CORE_ID, gpu_req_if.wid, gpu_req_if.PC, gpu_req_if.tmask, gpu_req_if.rd);   

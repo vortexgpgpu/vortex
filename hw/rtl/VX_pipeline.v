@@ -115,8 +115,10 @@ module VX_pipeline #(
     VX_ifetch_rsp_if    ifetch_rsp_if();
     VX_alu_req_if       alu_req_if();
     VX_lsu_req_if       lsu_req_if();
-    VX_csr_req_if       csr_req_if(); 
+    VX_csr_req_if       csr_req_if();
+`ifdef EXT_F_ENABLE 
     VX_fpu_req_if       fpu_req_if(); 
+`endif
     VX_gpu_req_if       gpu_req_if();
     VX_writeback_if     writeback_if();     
     VX_wstall_if        wstall_if();
@@ -125,7 +127,9 @@ module VX_pipeline #(
     VX_commit_if        ld_commit_if();
     VX_commit_if        st_commit_if();
     VX_commit_if        csr_commit_if();  
+`ifdef EXT_F_ENABLE
     VX_commit_if        fpu_commit_if();     
+`endif
     VX_commit_if        gpu_commit_if();     
 
 `ifdef PERF_ENABLE
@@ -183,7 +187,9 @@ module VX_pipeline #(
         .alu_req_if     (alu_req_if),
         .lsu_req_if     (lsu_req_if),        
         .csr_req_if     (csr_req_if),
+    `ifdef EXT_F_ENABLE
         .fpu_req_if     (fpu_req_if),
+    `endif
         .gpu_req_if     (gpu_req_if)
     );
 
@@ -208,7 +214,9 @@ module VX_pipeline #(
         .alu_req_if     (alu_req_if),
         .lsu_req_if     (lsu_req_if),        
         .csr_req_if     (csr_req_if),
+    `ifdef EXT_F_ENABLE
         .fpu_req_if     (fpu_req_if),
+    `endif
         .gpu_req_if     (gpu_req_if),
 
         .warp_ctl_if    (warp_ctl_if),
@@ -217,7 +225,9 @@ module VX_pipeline #(
         .ld_commit_if   (ld_commit_if),        
         .st_commit_if   (st_commit_if),       
         .csr_commit_if  (csr_commit_if),
+    `ifdef EXT_F_ENABLE
         .fpu_commit_if  (fpu_commit_if),
+    `endif
         .gpu_commit_if  (gpu_commit_if),        
         
         .busy           (busy)
@@ -233,7 +243,9 @@ module VX_pipeline #(
         .ld_commit_if   (ld_commit_if),        
         .st_commit_if   (st_commit_if),
         .csr_commit_if  (csr_commit_if),
+    `ifdef EXT_F_ENABLE
         .fpu_commit_if  (fpu_commit_if),
+    `endif
         .gpu_commit_if  (gpu_commit_if),
         
         .writeback_if   (writeback_if),

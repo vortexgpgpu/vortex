@@ -12,14 +12,18 @@ module VX_instr_demux (
     VX_alu_req_if   alu_req_if,
     VX_lsu_req_if   lsu_req_if,
     VX_csr_req_if   csr_req_if,
+`ifdef EXT_F_ENABLE
     VX_fpu_req_if   fpu_req_if,
+`endif
     VX_gpu_req_if   gpu_req_if    
 );
     wire [`NT_BITS-1:0] tid;
     wire alu_req_ready;
     wire lsu_req_ready;
     wire csr_req_ready;
+`ifdef EXT_F_ENABLE
     wire fpu_req_ready;
+`endif
     wire gpu_req_ready;
 
     VX_priority_encoder #(
@@ -108,7 +112,6 @@ module VX_instr_demux (
     );
 `else
     `UNUSED_VAR (gpr_rsp_if.rs3_data)
-    assign fpu_req_ready = 0;
 `endif
 
     // gpu unit
@@ -136,7 +139,9 @@ module VX_instr_demux (
         `EX_ALU: ready_r = alu_req_ready;
         `EX_LSU: ready_r = lsu_req_ready;
         `EX_CSR: ready_r = csr_req_ready;
+    `ifdef EXT_F_ENABLE
         `EX_FPU: ready_r = fpu_req_ready;
+    `endif
         `EX_GPU: ready_r = gpu_req_ready;
         default: ready_r = 1'b1; // ignore NOPs
         endcase

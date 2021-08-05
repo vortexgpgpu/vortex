@@ -11,16 +11,17 @@ module VX_csr_unit #(
     VX_perf_pipeline_if perf_pipeline_if,
 `endif
 
-    VX_cmt_to_csr_if    cmt_to_csr_if, 
-    VX_fpu_to_csr_if    fpu_to_csr_if,
-    
+    VX_cmt_to_csr_if    cmt_to_csr_if,
     VX_csr_req_if       csr_req_if,
     VX_commit_if        csr_commit_if,
-
-    input wire          busy,
-
+    
+`ifdef EXT_F_ENABLE
+    VX_fpu_to_csr_if    fpu_to_csr_if,
     input wire[`NUM_WARPS-1:0] fpu_pending,
-    output wire[`NUM_WARPS-1:0] pending
+`endif
+
+    output wire[`NUM_WARPS-1:0] pending,
+    input wire          busy
 );    
     wire csr_we_s1;
     wire [`CSR_ADDR_BITS-1:0] csr_addr_s1;    
@@ -41,7 +42,9 @@ module VX_csr_unit #(
         .perf_pipeline_if (perf_pipeline_if),
     `endif
         .cmt_to_csr_if  (cmt_to_csr_if),
+    `ifdef EXT_F_ENABLE
         .fpu_to_csr_if  (fpu_to_csr_if), 
+    `endif
         .read_enable    (csr_req_if.valid),
         .read_addr      (csr_req_if.addr),
         .read_wid       (csr_req_if.wid),      
@@ -79,7 +82,11 @@ module VX_csr_unit #(
         endcase
     end
 
+`ifdef EXT_F_ENABLE
     wire stall_in = fpu_pending[csr_req_if.wid];
+`else 
+    wire stall_in = 0;
+`endif
 
     wire csr_req_valid = csr_req_if.valid && !stall_in;  
 

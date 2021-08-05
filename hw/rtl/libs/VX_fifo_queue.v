@@ -95,9 +95,7 @@ module VX_fifo_queue #(
                     used_r <= used_r + ADDRW'($signed(2'(push) - 2'(pop)));
                 end else begin 
                     // (SIZE == 2);
-                `IGNORE_WARNINGS_BEGIN
-                    used_r <= used_r ^ (push ^ pop);
-                `IGNORE_WARNINGS_END
+                    used_r[0] <= used_r[0] ^ (push ^ pop);
                 end                
             end                   
         end

@@ -93,10 +93,10 @@ module VX_bank #(
     `UNUSED_PARAM (CORE_TAG_ID_BITS)
     
 `ifdef DBG_CACHE_REQ_INFO
-`IGNORE_WARNINGS_BEGIN
+`IGNORE_UNUSED_BEGIN
     wire [31:0]         debug_pc_sel, debug_pc_st0,  debug_pc_st1;
     wire [`NW_BITS-1:0] debug_wid_sel, debug_wid_st0, debug_wid_st1;
-`IGNORE_WARNINGS_END
+`IGNORE_UNUSED_END
 `endif    
 
     wire [NUM_PORTS-1:0] creq_pmask;

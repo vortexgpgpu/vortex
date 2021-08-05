@@ -83,9 +83,9 @@ module VX_muldiv (
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         wire [32:0] mul_in1 = {is_signed_mul_a & alu_in1[i][31], alu_in1[i]};
         wire [32:0] mul_in2 = {is_signed_mul_b & alu_in2[i][31], alu_in2[i]};
-    `IGNORE_WARNINGS_BEGIN
+    `IGNORE_UNUSED_BEGIN
         wire [65:0] mul_result_tmp;
-    `IGNORE_WARNINGS_END
+    `IGNORE_UNUSED_END
 
         VX_multiplier #(
             .WIDTHA  (33),
