@@ -1,9 +1,9 @@
 `include "VX_tex_define.vh"
 
 module VX_tex_sampler #(
-    parameter CORE_ID        = 0,
-    parameter REQ_INFO_WIDTH = 1,
-    parameter NUM_REQS       = 1   
+    parameter CORE_ID   = 0,
+    parameter REQ_INFOW = 1,
+    parameter NUM_REQS  = 1   
 ) (
     input wire clk,
     input wire reset,
@@ -14,14 +14,14 @@ module VX_tex_sampler #(
     input wire [`TEX_FORMAT_BITS-1:0]   req_format,    
     input wire [NUM_REQS-1:0][1:0][`BLEND_FRAC-1:0] req_blends,
     input wire [NUM_REQS-1:0][3:0][31:0] req_data,
-    input wire [REQ_INFO_WIDTH-1:0]     req_info,
+    input wire [REQ_INFOW-1:0]          req_info,
     output wire                         req_ready,
 
     // ouputs
     output wire                         rsp_valid,
     output wire [NUM_REQS-1:0]          rsp_tmask, 
     output wire [NUM_REQS-1:0][31:0]    rsp_data,
-    output wire [REQ_INFO_WIDTH-1:0]    rsp_info,    
+    output wire [REQ_INFOW-1:0]         rsp_info,    
     input wire                          rsp_ready
 );
     
@@ -29,7 +29,7 @@ module VX_tex_sampler #(
    
     wire valid_s0;
     wire [NUM_REQS-1:0]       tmask_s0; 
-    wire [REQ_INFO_WIDTH-1:0] req_info_s0;
+    wire [REQ_INFOW-1:0] req_info_s0;
     wire [NUM_REQS-1:0][31:0] texel_ul, texel_uh;
     wire [NUM_REQS-1:0][31:0] texel_ul_s0, texel_uh_s0;
     wire [NUM_REQS-1:0][`BLEND_FRAC-1:0] blend_v, blend_v_s0;
@@ -76,7 +76,7 @@ module VX_tex_sampler #(
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_REQS + REQ_INFO_WIDTH + (NUM_REQS * `BLEND_FRAC) + (2 * NUM_REQS * 32)),
+        .DATAW  (1 + NUM_REQS + REQ_INFOW + (NUM_REQS * `BLEND_FRAC) + (2 * NUM_REQS * 32)),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
@@ -103,7 +103,7 @@ module VX_tex_sampler #(
     assign stall_out = rsp_valid && ~rsp_ready;
     
     VX_pipe_register #(
-        .DATAW  (1 + NUM_REQS + REQ_INFO_WIDTH + (NUM_REQS * 32)),
+        .DATAW  (1 + NUM_REQS + REQ_INFOW + (NUM_REQS * 32)),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
