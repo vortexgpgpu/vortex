@@ -13,9 +13,9 @@
     `define DEBUG_BLOCK(x)
 `endif
 
-`define DEBUG_BEGIN /* verilator lint_off UNUSED */ 
+`define IGNORE_UNUSED_BEGIN   /* verilator lint_off UNUSED */
 
-`define DEBUG_END   /* verilator lint_on UNUSED */     
+`define IGNORE_UNUSED_END     /* verilator lint_on UNUSED */
 
 `define IGNORE_WARNINGS_BEGIN /* verilator lint_off UNUSED */ \
                               /* verilator lint_off PINCONNECTEMPTY */ \

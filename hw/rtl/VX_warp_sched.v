@@ -155,9 +155,9 @@ module VX_warp_sched #(
 
     // calculate active barrier status
 
-`IGNORE_WARNINGS_BEGIN
+`IGNORE_UNUSED_BEGIN
     wire [`NW_BITS:0] active_barrier_count;
-`IGNORE_WARNINGS_END
+`IGNORE_UNUSED_END
     assign active_barrier_count = $countones(barrier_stall_mask[warp_ctl_if.barrier.id]);
 
     assign reached_barrier_limit = (active_barrier_count[`NW_BITS-1:0] == warp_ctl_if.barrier.size_m1);

@@ -12,7 +12,10 @@ module VX_csr_data #(
 `endif
 
     VX_cmt_to_csr_if                cmt_to_csr_if,
+
+`ifdef EXT_F_ENABLE
     VX_fpu_to_csr_if                fpu_to_csr_if,  
+`endif
 
     input wire                      read_enable,
     input wire[`CSR_ADDR_BITS-1:0]  read_addr,
@@ -41,15 +44,17 @@ module VX_csr_data #(
     reg [`NUM_WARPS-1:0][`FRM_BITS+`FFG_BITS-1:0] fcsr;
 
     always @(posedge clk) begin
-
+    
+    `ifdef EXT_F_ENABLE
         if (reset) begin
             fcsr <= '0;
         end
-
+    
         if (fpu_to_csr_if.write_enable) begin
             fcsr[fpu_to_csr_if.write_wid][`FFG_BITS-1:0] <= fcsr[fpu_to_csr_if.write_wid][`FFG_BITS-1:0] 
                                                           | fpu_to_csr_if.write_fflags;
         end
+    `endif
 
         if (write_enable) begin
             case (write_addr)
@@ -211,7 +216,9 @@ module VX_csr_data #(
     `RUNTIME_ASSERT(~read_enable || read_addr_valid_r, ("invalid CSR read address: %0h", read_addr))
 
     assign read_data = read_data_r;
-    
+
+`ifdef EXT_F_ENABLE    
     assign fpu_to_csr_if.read_frm = fcsr[fpu_to_csr_if.read_wid][`FRM_BITS+`FFG_BITS-1:`FFG_BITS];
+`endif
 
 endmodule

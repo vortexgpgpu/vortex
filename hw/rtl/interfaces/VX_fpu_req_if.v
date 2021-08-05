@@ -3,10 +3,6 @@
 
 `include "VX_define.vh"
 
-`ifndef EXTF_F_ENABLE
-    `IGNORE_WARNINGS_BEGIN
-`endif
-
 interface VX_fpu_req_if ();
 
     wire                    valid;

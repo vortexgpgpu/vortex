@@ -67,10 +67,7 @@ module VX_onehot_encoder #(
         for (genvar j = 0; j < LN; ++j) begin
             wire [N-1:0] mask;
             for (genvar i = 0; i < N; ++i) begin
-            `IGNORE_WARNINGS_BEGIN
-                wire [LN-1:0] i_w = i;
-            `IGNORE_WARNINGS_END
-                assign mask[i] = i_w[j];
+                assign mask[i] = i[j];
             end
             assign data_out[j] = |(mask & data_in);
         end

@@ -24,7 +24,9 @@ module VX_execute #(
     VX_alu_req_if       alu_req_if,
     VX_lsu_req_if       lsu_req_if,    
     VX_csr_req_if       csr_req_if,  
+`ifdef EXT_F_ENABLE
     VX_fpu_req_if       fpu_req_if,    
+`endif
     VX_gpu_req_if       gpu_req_if,
     
     // outputs
@@ -34,14 +36,18 @@ module VX_execute #(
     VX_commit_if        ld_commit_if,
     VX_commit_if        st_commit_if,
     VX_commit_if        csr_commit_if,
+`ifdef EXT_F_ENABLE
     VX_commit_if        fpu_commit_if,
+`endif
     VX_commit_if        gpu_commit_if,
     
     input wire          busy
 );
-    VX_fpu_to_csr_if     fpu_to_csr_if(); 
-    wire[`NUM_WARPS-1:0] csr_pending;
+`ifdef EXT_F_ENABLE
+    VX_fpu_to_csr_if     fpu_to_csr_if();     
     wire[`NUM_WARPS-1:0] fpu_pending;
+    wire[`NUM_WARPS-1:0] csr_pending;
+`endif    
 
     `RESET_RELAY (alu_reset);
     `RESET_RELAY (lsu_reset);
@@ -80,12 +86,16 @@ module VX_execute #(
         .perf_memsys_if (perf_memsys_if),
         .perf_pipeline_if (perf_pipeline_if),
     `endif    
-        .cmt_to_csr_if  (cmt_to_csr_if),    
-        .fpu_to_csr_if  (fpu_to_csr_if), 
+        .cmt_to_csr_if  (cmt_to_csr_if),  
         .csr_req_if     (csr_req_if),   
         .csr_commit_if  (csr_commit_if),
-        .fpu_pending    (fpu_pending),
+    `ifdef EXT_F_ENABLE  
+        .fpu_to_csr_if  (fpu_to_csr_if),
+        .fpu_pending    (fpu_pending),        
         .pending        (csr_pending),
+    `else
+        `UNUSED_PIN (pending),
+    `endif        
         .busy           (busy)
     );
 
@@ -103,22 +113,6 @@ module VX_execute #(
         .csr_pending    (csr_pending),
         .pending        (fpu_pending) 
     );
-`else
-    `UNUSED_VAR (csr_pending)
-    `UNUSED_VAR (fpu_to_csr_if.read_frm)
-    assign fpu_req_if.ready     = 0;
-    assign fpu_commit_if.valid  = 0;
-    assign fpu_commit_if.wid    = 0;
-    assign fpu_commit_if.PC     = 0;
-    assign fpu_commit_if.tmask  = 0;
-    assign fpu_commit_if.wb     = 0;
-    assign fpu_commit_if.rd     = 0;
-    assign fpu_commit_if.data   = 0;  
-    assign fpu_to_csr_if.write_enable = 0;  
-    assign fpu_to_csr_if.write_wid = 0;
-    assign fpu_to_csr_if.write_fflags = 0;
-    assign fpu_to_csr_if.read_wid = 0;
-    assign fpu_pending = 0;
 `endif
 
     VX_gpu_unit #(

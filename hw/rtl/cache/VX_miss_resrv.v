@@ -25,12 +25,12 @@ module VX_miss_resrv #(
     input wire reset,
 
 `ifdef DBG_CACHE_REQ_INFO
-`IGNORE_WARNINGS_BEGIN
+`IGNORE_UNUSED_BEGIN
     input wire[31:0]                    deq_debug_pc,
     input wire[`NW_BITS-1:0]            deq_debug_wid,
     input wire[31:0]                    enq_debug_pc,
     input wire[`NW_BITS-1:0]            enq_debug_wid,
-`IGNORE_WARNINGS_END
+`IGNORE_UNUSED_END
 `endif
 
     // enqueue

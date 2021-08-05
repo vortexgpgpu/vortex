@@ -257,10 +257,10 @@ module VX_shared_mem #(
     );
 
 `ifdef DBG_CACHE_REQ_INFO
-`IGNORE_WARNINGS_BEGIN
+`IGNORE_UNUSED_BEGIN
     wire [NUM_BANKS-1:0][31:0]         debug_pc_st0, debug_pc_st1;
     wire [NUM_BANKS-1:0][`NW_BITS-1:0] debug_wid_st0, debug_wid_st1;
-`IGNORE_WARNINGS_END
+`IGNORE_UNUSED_END
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin        
@@ -276,9 +276,9 @@ module VX_shared_mem #(
 `ifdef DBG_PRINT_CACHE_BANK
     
     reg is_multi_tag_req;
-`IGNORE_WARNINGS_BEGIN
+`IGNORE_UNUSED_BEGIN
     reg [CORE_TAG_WIDTH-1:0] core_req_tag_sel;
-`IGNORE_WARNINGS_END
+`IGNORE_UNUSED_END
 
     always @(*) begin                      
         core_req_tag_sel ='x;

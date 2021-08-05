@@ -18,10 +18,10 @@ module VX_tag_access #(
     input wire                          reset,
 
 `ifdef DBG_CACHE_REQ_INFO
-`IGNORE_WARNINGS_BEGIN
+`IGNORE_UNUSED_BEGIN
     input wire[31:0]                    debug_pc,
     input wire[`NW_BITS-1:0]            debug_wid,
-`IGNORE_WARNINGS_END
+`IGNORE_UNUSED_END
 `endif
     
     // read/fill
