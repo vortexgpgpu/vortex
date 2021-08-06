@@ -43,7 +43,8 @@ inline int fast_log2(int x) {
 }
 
 static void spawn_tasks_callback() {  
-  vx_tmc(vx_num_threads());
+  // activate all threads
+  vx_tmc(-1);
 
   int core_id = vx_core_id();
   int wid     = vx_warp_id();
@@ -60,11 +61,13 @@ static void spawn_tasks_callback() {
     (p_wspawn_args->callback)(task_id, p_wspawn_args->arg);
   }
 
+  // set warp0 to single-threaded and stop other warps
   vx_tmc(0 == wid);
 }
 
-void spawn_remaining_tasks_callback(int nthreads) {    
-  vx_tmc(nthreads);
+void spawn_remaining_tasks_callback(int thread_mask) {  
+  // activate threads  
+  vx_tmc(thread_mask);
 
   int core_id = vx_core_id(); 
   int tid = vx_thread_gid();
@@ -74,6 +77,7 @@ void spawn_remaining_tasks_callback(int nthreads) {
   int task_id = p_wspawn_args->offset + tid;
   (p_wspawn_args->callback)(task_id, p_wspawn_args->arg);
 
+  // back to single-threaded
   vx_tmc(1);
 }
 
@@ -132,7 +136,8 @@ void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback , void * arg) {
 ///////////////////////////////////////////////////////////////////////////////
 
 static void spawn_kernel_callback() {  
-  vx_tmc(vx_num_threads());
+  // activate all threads
+  vx_tmc(-1);
 
   int core_id = vx_core_id();
   int wid     = vx_warp_id();
@@ -162,11 +167,13 @@ static void spawn_kernel_callback() {
     (p_wspawn_args->callback)(p_wspawn_args->arg, p_wspawn_args->ctx, gid0, gid1, gid2);
   }
 
+  // set warp0 to single-threaded and stop other warps
   vx_tmc(0 == wid);
 }
 
-static void spawn_kernel_remaining_callback(int nthreads) {    
-  vx_tmc(nthreads);
+static void spawn_kernel_remaining_callback(int thread_mask) {    
+  // activate threads
+  vx_tmc(thread_mask);
 
   int core_id = vx_core_id(); 
   int tid = vx_thread_gid();
@@ -190,6 +197,7 @@ static void spawn_kernel_remaining_callback(int nthreads) {
 
   (p_wspawn_args->callback)(p_wspawn_args->arg, p_wspawn_args->ctx, gid0, gid1, gid2);
 
+  // back to single-threaded
   vx_tmc(1);
 }
 

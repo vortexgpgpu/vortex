@@ -48,20 +48,20 @@ module VX_gpu_unit #(
 
     // split
 
-    wire [`NUM_THREADS-1:0] split_then_mask;
-    wire [`NUM_THREADS-1:0] split_else_mask;
+    wire [`NUM_THREADS-1:0] split_then_tmask;
+    wire [`NUM_THREADS-1:0] split_else_tmask;
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        wire taken = gpu_req_if.rs1_data[i][gpu_req_if.tid];
-        assign split_then_mask[i] = gpu_req_if.tmask[i] & taken;
-        assign split_else_mask[i] = gpu_req_if.tmask[i] & ~taken;
+        wire taken = gpu_req_if.rs1_data[i][0];
+        assign split_then_tmask[i] = gpu_req_if.tmask[i] & taken;
+        assign split_else_tmask[i] = gpu_req_if.tmask[i] & ~taken;
     end
 
-    assign split.valid     = is_split;
-    assign split.diverged  = (| split_then_mask) && (| split_else_mask);
-    assign split.then_mask = split_then_mask;
-    assign split.else_mask = split_else_mask;
-    assign split.pc        = gpu_req_if.next_PC;
+    assign split.valid      = is_split;
+    assign split.diverged   = (| split_then_tmask) && (| split_else_tmask);
+    assign split.then_tmask = split_then_tmask;
+    assign split.else_tmask = split_else_tmask;
+    assign split.pc         = gpu_req_if.next_PC;
 
     // barrier
     
