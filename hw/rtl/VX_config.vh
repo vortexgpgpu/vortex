@@ -223,6 +223,7 @@
 `define CSR_LWID        12'hCC3
 `define CSR_GWID        `CSR_MHARTID
 `define CSR_GCID        12'hCC5
+`define CSR_TMASK       12'hCC4
 
 // Machine SIMT CSRs
 `define CSR_NT          12'hFC0

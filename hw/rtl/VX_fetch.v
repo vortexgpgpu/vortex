@@ -21,6 +21,10 @@ module VX_fetch #(
     // outputs
     VX_ifetch_rsp_if    ifetch_rsp_if,
 
+    // csr interface
+    VX_fetch_to_csr_if  fetch_to_csr_if,
+
+    // busy status
     output wire         busy
 );
 
@@ -32,13 +36,18 @@ module VX_fetch #(
         `SCOPE_BIND_VX_fetch_warp_sched
 
         .clk              (clk),
-        .reset            (reset),        
+        .reset            (reset),     
+
         .warp_ctl_if      (warp_ctl_if),
         .wstall_if        (wstall_if),
         .join_if          (join_if),
         .branch_ctl_if    (branch_ctl_if),
+
         .ifetch_req_if    (ifetch_req_if),
         .ifetch_rsp_if    (ifetch_rsp_if),
+
+        .fetch_to_csr_if  (fetch_to_csr_if),
+        
         .busy             (busy)
     ); 
 

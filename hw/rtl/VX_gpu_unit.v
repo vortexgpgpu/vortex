@@ -32,19 +32,15 @@ module VX_gpu_unit #(
 
     // tmc
 
-    wire [`NUM_THREADS-1:0] tmc_new_mask;           
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        assign tmc_new_mask[i] = (i < gpu_req_if.rs1_data[0]);
-    end    
     assign tmc.valid = is_tmc;
-    assign tmc.tmask = tmc_new_mask;
+    assign tmc.tmask = `NUM_THREADS'(gpu_req_if.rs1_data[gpu_req_if.tid]);
 
     // wspawn
 
     wire [31:0] wspawn_pc = gpu_req_if.rs2_data;
     wire [`NUM_WARPS-1:0] wspawn_wmask;
     for (genvar i = 0; i < `NUM_WARPS; i++) begin
-        assign wspawn_wmask[i] = (i < gpu_req_if.rs1_data[0]);
+        assign wspawn_wmask[i] = (i < gpu_req_if.rs1_data[gpu_req_if.tid]);
     end
     assign wspawn.valid = is_wspawn;
     assign wspawn.wmask = wspawn_wmask;
@@ -56,7 +52,7 @@ module VX_gpu_unit #(
     wire [`NUM_THREADS-1:0] split_else_mask;
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        wire taken = gpu_req_if.rs1_data[i][0];
+        wire taken = gpu_req_if.rs1_data[i][gpu_req_if.tid];
         assign split_then_mask[i] = gpu_req_if.tmask[i] & taken;
         assign split_else_mask[i] = gpu_req_if.tmask[i] & ~taken;
     end
@@ -70,7 +66,7 @@ module VX_gpu_unit #(
     // barrier
     
     assign barrier.valid   = is_bar;
-    assign barrier.id      = gpu_req_if.rs1_data[0][`NB_BITS-1:0];
+    assign barrier.id      = gpu_req_if.rs1_data[gpu_req_if.tid][`NB_BITS-1:0];
     assign barrier.size_m1 = (`NW_BITS)'(gpu_req_if.rs2_data - 1);
 
     // output

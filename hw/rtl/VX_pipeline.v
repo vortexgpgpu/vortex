@@ -108,6 +108,7 @@ module VX_pipeline #(
 
     ///////////////////////////////////////////////////////////////////////////
 
+    VX_fetch_to_csr_if  fetch_to_csr_if();
     VX_cmt_to_csr_if    cmt_to_csr_if();
     VX_decode_if        decode_if();
     VX_branch_ctl_if    branch_ctl_if();
@@ -155,6 +156,7 @@ module VX_pipeline #(
         .warp_ctl_if    (warp_ctl_if),
         .branch_ctl_if  (branch_ctl_if),
         .ifetch_rsp_if  (ifetch_rsp_if),
+        .fetch_to_csr_if(fetch_to_csr_if),
         .busy           (busy)
     );
 
@@ -209,7 +211,8 @@ module VX_pipeline #(
         .dcache_req_if  (dcache_req_if),
         .dcache_rsp_if  (dcache_rsp_if),
 
-        .cmt_to_csr_if  (cmt_to_csr_if),                 
+        .cmt_to_csr_if  (cmt_to_csr_if),   
+        .fetch_to_csr_if(fetch_to_csr_if),              
         
         .alu_req_if     (alu_req_if),
         .lsu_req_if     (lsu_req_if),        

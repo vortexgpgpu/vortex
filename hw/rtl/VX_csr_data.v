@@ -12,6 +12,7 @@ module VX_csr_data #(
 `endif
 
     VX_cmt_to_csr_if                cmt_to_csr_if,
+    VX_fetch_to_csr_if              fetch_to_csr_if,
 
 `ifdef EXT_F_ENABLE
     VX_fpu_to_csr_if                fpu_to_csr_if,  
@@ -62,15 +63,15 @@ module VX_csr_data #(
                 `CSR_FRM:      fcsr[write_wid][`FRM_BITS+`FFG_BITS-1:`FFG_BITS] <= write_data[`FRM_BITS-1:0];
                 `CSR_FCSR:     fcsr[write_wid] <= write_data[`FFG_BITS+`FRM_BITS-1:0];
                 
-                `CSR_SATP:     csr_satp   <= write_data;
+                `CSR_SATP:     csr_satp       <= write_data;
                 
-                `CSR_MSTATUS:  csr_mstatus <= write_data;
-                `CSR_MEDELEG:  csr_medeleg <= write_data;
-                `CSR_MIDELEG:  csr_mideleg <= write_data;
-                `CSR_MIE:      csr_mie     <= write_data;
-                `CSR_MTVEC:    csr_mtvec   <= write_data;
+                `CSR_MSTATUS:  csr_mstatus    <= write_data;
+                `CSR_MEDELEG:  csr_medeleg    <= write_data;
+                `CSR_MIDELEG:  csr_mideleg    <= write_data;
+                `CSR_MIE:      csr_mie        <= write_data;
+                `CSR_MTVEC:    csr_mtvec      <= write_data;
 
-                `CSR_MEPC:     csr_mepc    <= write_data;
+                `CSR_MEPC:     csr_mepc       <= write_data;
 
                 `CSR_PMPCFG0:  csr_pmpcfg[0]  <= write_data;
                 `CSR_PMPADDR0: csr_pmpaddr[0] <= write_data;
@@ -114,6 +115,9 @@ module VX_csr_data #(
             /*`CSR_MHARTID ,*/
             `CSR_GWID       : read_data_r = CORE_ID * `NUM_WARPS + 32'(read_wid);
             `CSR_GCID       : read_data_r = CORE_ID;
+
+            `CSR_TMASK      : read_data_r = 32'(fetch_to_csr_if.thread_masks[read_wid]);
+
             `CSR_NT         : read_data_r = `NUM_THREADS;
             `CSR_NW         : read_data_r = `NUM_WARPS;
             `CSR_NC         : read_data_r = `NUM_CORES * `NUM_CLUSTERS;
