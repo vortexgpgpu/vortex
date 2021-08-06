@@ -267,6 +267,9 @@ Word Core::get_csr(Addr addr, int tid, int wid) {
   } else if (addr == CSR_GCID) {
     // Processor coreID
     return id_;
+  } else if (addr == CSR_TMASK) {
+    // Processor coreID
+    return warps_.at(wid)->getTmask();
   } else if (addr == CSR_NT) {
     // Number of threads per warp
     return arch_.num_threads();

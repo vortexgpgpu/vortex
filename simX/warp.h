@@ -74,6 +74,12 @@ public:
     active_ = tmask_.any();
   }
 
+  Word getTmask() const {
+    if (active_)
+      return tmask_.to_ulong();
+    return 0;
+  }
+
   Word getIRegValue(int reg) const {
     return iRegFile_[0][reg];
   }

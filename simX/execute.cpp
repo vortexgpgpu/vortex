@@ -817,10 +817,9 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       switch (func3) {
       case 0: {
         // TMC
-        int active_threads = std::min<int>(rsdata[0], num_threads);          
         tmask_.reset();
-        for (int i = 0; i < active_threads; ++i) {
-          tmask_[i] = true;
+        for (size_t i = 0; i < tmask_.size(); ++i) {
+          tmask_[i] = rsdata[0] & (1 << i);
         }
         active_ = tmask_.any();
         pipeline->stall_warp = true;

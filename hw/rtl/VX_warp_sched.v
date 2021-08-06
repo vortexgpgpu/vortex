@@ -47,7 +47,9 @@ module VX_warp_sched #(
     reg [`NW_BITS-1:0]      scheduled_warp;
     wire                    warp_scheduled;
 
-    wire ifetch_rsp_fire = ifetch_rsp_if.valid && ifetch_rsp_if.ready;    
+    wire ifetch_rsp_fire = ifetch_rsp_if.valid && ifetch_rsp_if.ready; 
+
+    wire tmc_active = (warp_ctl_if.tmc.tmask != 0);   
 
     always @(*) begin
         active_warps_n = active_warps;
@@ -55,14 +57,14 @@ module VX_warp_sched #(
             active_warps_n = warp_ctl_if.wspawn.wmask;
         end
         if (warp_ctl_if.valid && warp_ctl_if.tmc.valid) begin
-            active_warps_n[warp_ctl_if.wid] = (warp_ctl_if.tmc.tmask != 0);
+            active_warps_n[warp_ctl_if.wid] = tmc_active;
         end        
     end
 
     always @(*) begin
         schedule_table_n = schedule_table;
         if (warp_ctl_if.valid && warp_ctl_if.tmc.valid) begin
-            schedule_table_n[warp_ctl_if.wid] = (warp_ctl_if.tmc.tmask != 0);
+            schedule_table_n[warp_ctl_if.wid] = tmc_active;
         end        
         if (warp_scheduled) begin // remove scheduled warp (round-robin)
             schedule_table_n[scheduled_warp] = 0;
@@ -104,12 +106,12 @@ module VX_warp_sched #(
                     barrier_stall_mask[warp_ctl_if.barrier.id][warp_ctl_if.wid] <= 1;
                 end
             end else if (warp_ctl_if.valid && warp_ctl_if.tmc.valid) begin
-                thread_masks[warp_ctl_if.wid] <= warp_ctl_if.tmc.tmask;
+                thread_masks[warp_ctl_if.wid]  <= warp_ctl_if.tmc.tmask;
                 stalled_warps[warp_ctl_if.wid] <= 0;
             end else if (warp_ctl_if.valid && warp_ctl_if.split.valid) begin
                 stalled_warps[warp_ctl_if.wid] <= 0;
                 if (warp_ctl_if.split.diverged) begin
-                    thread_masks[warp_ctl_if.wid] <= warp_ctl_if.split.then_mask;
+                    thread_masks[warp_ctl_if.wid] <= warp_ctl_if.split.then_tmask;
                 end
             end          
 
@@ -178,6 +180,8 @@ module VX_warp_sched #(
     // split/join stack management    
 
     wire [(1+32+`NUM_THREADS-1):0] ipdom [`NUM_WARPS-1:0];
+
+    wire [`NUM_THREADS-1:0] curr_tmask = thread_masks[warp_ctl_if.wid];
     
     for (genvar i = 0; i < `NUM_WARPS; i++) begin
         wire push = warp_ctl_if.valid 
@@ -186,9 +190,9 @@ module VX_warp_sched #(
 
         wire pop = join_if.valid && (i == join_if.wid);
 
-        wire [`NUM_THREADS-1:0] else_mask = warp_ctl_if.split.diverged ? warp_ctl_if.split.else_mask : thread_masks[warp_ctl_if.wid];
-        wire [(1+32+`NUM_THREADS-1):0] q_end  = {1'b0, 32'b0,                thread_masks[warp_ctl_if.wid]};
-        wire [(1+32+`NUM_THREADS-1):0] q_else = {1'b1, warp_ctl_if.split.pc, else_mask};
+        wire [`NUM_THREADS-1:0] else_tmask = warp_ctl_if.split.diverged ? warp_ctl_if.split.else_tmask : curr_tmask;
+        wire [(1+32+`NUM_THREADS-1):0] q_end  = {1'b0, 32'b0,                curr_tmask};
+        wire [(1+32+`NUM_THREADS-1):0] q_else = {1'b1, warp_ctl_if.split.pc, else_tmask};
 
         VX_ipdom_stack #(
             .WIDTH (1+32+`NUM_THREADS), 

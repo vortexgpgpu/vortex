@@ -59,7 +59,7 @@ label_exit_next:
 .global vx_set_sp
 vx_set_sp:
   # activate all threads
-  csrr a0, CSR_NT             # get num threads
+  li a0, -1
   .insn s 0x6b, 0, x0, 0(a0)  # tmc a0
   
   # set global pointer register

@@ -41,8 +41,8 @@ typedef struct packed {
 typedef struct packed {
     logic                   valid;
     logic                   diverged;
-    logic [`NUM_THREADS-1:0] then_mask;
-    logic [`NUM_THREADS-1:0] else_mask;
+    logic [`NUM_THREADS-1:0] then_tmask;
+    logic [`NUM_THREADS-1:0] else_tmask;
     logic [31:0]            pc;
 } gpu_split_t;
 
