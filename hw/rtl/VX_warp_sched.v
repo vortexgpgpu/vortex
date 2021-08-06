@@ -16,6 +16,8 @@ module VX_warp_sched #(
     VX_ifetch_rsp_if    ifetch_rsp_if,
     VX_ifetch_req_if    ifetch_req_if,
 
+    VX_fetch_to_csr_if  fetch_to_csr_if,
+
     output wire         busy
 );
 
@@ -152,6 +154,9 @@ module VX_warp_sched #(
             schedule_table <= (| schedule_table_n) ? schedule_table_n : active_warps_n;
         end
     end
+
+    // export thread mask register
+    assign fetch_to_csr_if.thread_masks = thread_masks;
 
     // calculate active barrier status
 

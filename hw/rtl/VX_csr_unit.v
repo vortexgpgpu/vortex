@@ -12,6 +12,7 @@ module VX_csr_unit #(
 `endif
 
     VX_cmt_to_csr_if    cmt_to_csr_if,
+    VX_fetch_to_csr_if  fetch_to_csr_if,
     VX_csr_req_if       csr_req_if,
     VX_commit_if        csr_commit_if,
     
@@ -42,6 +43,7 @@ module VX_csr_unit #(
         .perf_pipeline_if (perf_pipeline_if),
     `endif
         .cmt_to_csr_if  (cmt_to_csr_if),
+        .fetch_to_csr_if(fetch_to_csr_if),
     `ifdef EXT_F_ENABLE
         .fpu_to_csr_if  (fpu_to_csr_if), 
     `endif

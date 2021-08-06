@@ -12,8 +12,11 @@ module VX_execute #(
     VX_dcache_req_if    dcache_req_if,
     VX_dcache_rsp_if    dcache_rsp_if,
 
-    // commit status
+    // commit interface
     VX_cmt_to_csr_if    cmt_to_csr_if,
+
+    // fetch interface
+    VX_fetch_to_csr_if  fetch_to_csr_if,
 
 `ifdef PERF_ENABLE
     VX_perf_memsys_if   perf_memsys_if,
@@ -84,9 +87,10 @@ module VX_execute #(
         .reset          (csr_reset),   
     `ifdef PERF_ENABLE
         .perf_memsys_if (perf_memsys_if),
-        .perf_pipeline_if (perf_pipeline_if),
+        .perf_pipeline_if(perf_pipeline_if),
     `endif    
         .cmt_to_csr_if  (cmt_to_csr_if),  
+        .fetch_to_csr_if(fetch_to_csr_if),
         .csr_req_if     (csr_req_if),   
         .csr_commit_if  (csr_commit_if),
     `ifdef EXT_F_ENABLE  

@@ -17,8 +17,8 @@ module VX_commit #(
     VX_commit_if    gpu_commit_if,
 
     // outputs
-    VX_writeback_if     writeback_if,
-    VX_cmt_to_csr_if    cmt_to_csr_if
+    VX_writeback_if writeback_if,
+    VX_cmt_to_csr_if cmt_to_csr_if
 );
     localparam CMTW = $clog2(3*`NUM_THREADS+1);
 

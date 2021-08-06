@@ -121,6 +121,13 @@ inline int vx_core_id() {
     return result; 
 }
 
+// Return current threadk mask
+inline int vx_thread_mask() {
+    int result;
+    asm volatile ("csrr %0, %1" : "=r"(result) : "i"(CSR_TMASK));
+    return result; 
+}
+
 // Return the number of threads in a warp
 inline int vx_num_threads() {
     int result;
