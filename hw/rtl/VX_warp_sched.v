@@ -34,18 +34,20 @@ module VX_warp_sched #(
     // Lock warp until instruction decode to resolve branches
     reg [`NUM_WARPS-1:0] fetch_lock;
 
-    reg [`NUM_THREADS-1:0] thread_masks [`NUM_WARPS-1:0];
-    reg [31:0] warp_pcs [`NUM_WARPS-1:0];
+    reg [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks;
+    reg [`NUM_WARPS-1:0][31:0] warp_pcs, warp_next_pcs;
 
     // barriers
-    reg [`NUM_WARPS-1:0] barrier_stall_mask [`NUM_BARRIERS-1:0]; // warps waiting on barrier
+    reg [`NUM_BARRIERS-1:0][`NUM_WARPS-1:0] barrier_stall_mask; // warps waiting on barrier
     wire reached_barrier_limit; // the expected number of warps reached the barrier
     
     // wspawn
     reg [31:0]              use_wspawn_pc;
     reg [`NUM_WARPS-1:0]    use_wspawn;   
-    reg [`NW_BITS-1:0]      scheduled_warp;
+    reg [`NW_BITS-1:0]      schedule_warp;
     wire                    warp_scheduled;
+
+    wire ifetch_req_fire = ifetch_req_if.valid && ifetch_req_if.ready;
 
     wire ifetch_rsp_fire = ifetch_rsp_if.valid && ifetch_rsp_if.ready; 
 
@@ -67,7 +69,7 @@ module VX_warp_sched #(
             schedule_table_n[warp_ctl_if.wid] = tmc_active;
         end        
         if (warp_scheduled) begin // remove scheduled warp (round-robin)
-            schedule_table_n[scheduled_warp] = 0;
+            schedule_table_n[schedule_warp] = 0;
         end
     end    
 
@@ -115,9 +117,9 @@ module VX_warp_sched #(
                 end
             end          
 
-            if (use_wspawn[scheduled_warp] && warp_scheduled) begin
-                use_wspawn[scheduled_warp]   <= 0;
-                thread_masks[scheduled_warp] <= 1;
+            if (use_wspawn[schedule_warp] && warp_scheduled) begin
+                use_wspawn[schedule_warp]   <= 0;
+                thread_masks[schedule_warp] <= 1;
             end
 
             // Stalling the scheduling of warps
@@ -135,11 +137,16 @@ module VX_warp_sched #(
 
             // Lock warp until instruction decode to resolve branches
             if (warp_scheduled) begin
-                fetch_lock[scheduled_warp] <= 1;
+                fetch_lock[schedule_warp] <= 1;
             end
+
+            if (ifetch_req_fire) begin
+                warp_next_pcs[ifetch_req_if.wid] <= ifetch_req_if.PC + 4;
+            end
+            
             if (ifetch_rsp_fire) begin
                 fetch_lock[ifetch_rsp_if.wid] <= 0;
-                warp_pcs[ifetch_rsp_if.wid] <= ifetch_rsp_if.PC + 4;
+                warp_pcs[ifetch_rsp_if.wid] <= warp_next_pcs[ifetch_rsp_if.wid];
             end
 
             // join handling
@@ -224,13 +231,13 @@ module VX_warp_sched #(
         schedule_valid = 0;
         thread_mask    = 'x;
         warp_pc        = 'x;
-        scheduled_warp = 'x;
+        schedule_warp = 'x;
         for (integer i = 0; i < `NUM_WARPS; ++i) begin
             if (schedule_ready[i]) begin
                 schedule_valid = 1;
                 thread_mask = use_wspawn[i] ? `NUM_THREADS'(1) : thread_masks[i];
                 warp_pc = use_wspawn[i] ? use_wspawn_pc : warp_pcs[i];
-                scheduled_warp = `NW_BITS'(i);
+                schedule_warp = `NW_BITS'(i);
                 break;
             end
         end    
@@ -247,7 +254,7 @@ module VX_warp_sched #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_out),
-        .data_in  ({warp_scheduled,      thread_mask,         warp_pc,          scheduled_warp}),
+        .data_in  ({schedule_valid,      thread_mask,         warp_pc,          schedule_warp}),
         .data_out ({ifetch_req_if.valid, ifetch_req_if.tmask, ifetch_req_if.PC, ifetch_req_if.wid})
     );
 
@@ -257,7 +264,7 @@ module VX_warp_sched #(
     `SCOPE_ASSIGN (wsched_active_warps,   active_warps);
     `SCOPE_ASSIGN (wsched_schedule_table, schedule_table);
     `SCOPE_ASSIGN (wsched_schedule_ready, schedule_ready);
-    `SCOPE_ASSIGN (wsched_warp_to_schedule, scheduled_warp);
+    `SCOPE_ASSIGN (wsched_warp_to_schedule, schedule_warp);
     `SCOPE_ASSIGN (wsched_warp_pc, warp_pc);
 
 endmodule
