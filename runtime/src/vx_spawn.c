@@ -129,7 +129,8 @@ void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback , void * arg) {
   //--    
   if (rT != 0) {
     wspawn_args.offset = tasks_per_core0 - rT;
-    spawn_remaining_tasks_callback(rT);
+    int tmask = (1 << rT) - 1;
+    spawn_remaining_tasks_callback(tmask);
   }
 }
 
@@ -264,7 +265,8 @@ void vx_spawn_kernel(struct context_t * ctx, vx_spawn_kernel_cb callback, void *
   //--    
   if (rT != 0) {
     wspawn_args.offset = wgs_per_core0 - rT;
-    spawn_kernel_remaining_callback(rT);
+    int tmask = (1 << rT) - 1;
+    spawn_kernel_remaining_callback(tmask);
   }
 }
 
