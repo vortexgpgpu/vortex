@@ -15,4 +15,6 @@ int test_wsapwn();
 
 int test_spawn_tasks();
 
+int test_tmask();
+
 #endif

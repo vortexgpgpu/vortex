@@ -4,8 +4,6 @@
 int main() {
 	int errors = 0;
 
-	vx_printf("Simple Test\n");
-
 	errors += test_global_memory();
 
 	errors += test_stack_memory();
@@ -19,6 +17,8 @@ int main() {
 	errors += test_wsapwn();
 
 	errors += test_spawn_tasks();
+
+	errors += test_tmask();
 
 	if (0 == errors) {	
 		vx_printf("Passed!\n");

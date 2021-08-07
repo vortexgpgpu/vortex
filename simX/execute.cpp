@@ -818,9 +818,10 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       case 0: {
         // TMC
         tmask_.reset();
-        for (size_t i = 0; i < tmask_.size(); ++i) {
+        for (int i = 0; i < num_threads; ++i) {
           tmask_[i] = rsdata[0] & (1 << i);
         }
+        D(3, "*** TMC " << tmask_);
         active_ = tmask_.any();
         pipeline->stall_warp = true;
         runOnce = true;
@@ -859,7 +860,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
           for (int i = 0; i < num_threads; ++i) DPN(3, e.tmask[num_threads-i-1]);
           DPN(3, ", PC=0x" << std::hex << e.PC << "\n");
         } else {
-          D(3, "*** Unanimous pred: r" << rsrc0 << ", val: " << rsdata[0]);
+          D(3, "*** Unanimous pred");
           DomStackEntry e(tmask_);
           e.unanimous = true;
           domStack_.push(e);
