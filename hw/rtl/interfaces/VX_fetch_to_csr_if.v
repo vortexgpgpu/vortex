@@ -5,7 +5,7 @@
 
 interface VX_fetch_to_csr_if ();
 
-    wire [`NUM_THREADS-1:0] thread_masks [`NUM_WARPS-1:0];
+    wire [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks;
 
 endinterface
 
