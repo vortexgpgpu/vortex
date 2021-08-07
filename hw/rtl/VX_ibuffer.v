@@ -114,11 +114,11 @@ module VX_ibuffer #(
     ) rr_arbiter (
         .clk      (clk),
         .reset    (reset),          
-        .enable   (ibuffer_if.ready),
         .requests (valid_table_n), 
         .grant_index (deq_wid_rr_n),
-        `UNUSED_PIN (grant_onehot),   
-        `UNUSED_PIN (grant_valid)
+        `UNUSED_PIN (grant_valid),
+        `UNUSED_PIN (grant_onehot),
+        `UNUSED_PIN (enable)
     );
 
     // schedule the next instruction to issue
