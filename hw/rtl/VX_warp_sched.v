@@ -28,12 +28,10 @@ module VX_warp_sched #(
     wire [`NUM_THREADS-1:0] join_tm;
 
     reg [`NUM_WARPS-1:0] active_warps, active_warps_n;   // real active warps (updated when a warp is activated or disabled)
-    reg [`NUM_WARPS-1:0] schedule_table, schedule_table_n; // enforces round-robin, barrier, and non-speculating branches
     reg [`NUM_WARPS-1:0] stalled_warps;  // asserted when a branch/gpgpu instructions are issued
     
     // Lock warp until instruction decode to resolve branches
     reg [`NUM_WARPS-1:0] fetch_lock;
-
     reg [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks;
     reg [`NUM_WARPS-1:0][31:0] warp_pcs, warp_next_pcs;
 
@@ -44,12 +42,13 @@ module VX_warp_sched #(
     // wspawn
     reg [31:0]              use_wspawn_pc;
     reg [`NUM_WARPS-1:0]    use_wspawn;   
-    reg [`NW_BITS-1:0]      schedule_warp;
+
+    wire [`NW_BITS-1:0]     schedule_warp;
     wire                    warp_scheduled;
 
     wire ifetch_req_fire = ifetch_req_if.valid && ifetch_req_if.ready;
 
-    wire ifetch_rsp_fire = ifetch_rsp_if.valid && ifetch_rsp_if.ready; 
+    wire ifetch_rsp_fire = ifetch_rsp_if.valid && ifetch_rsp_if.ready;
 
     wire tmc_active = (warp_ctl_if.tmc.tmask != 0);   
 
@@ -63,16 +62,6 @@ module VX_warp_sched #(
         end        
     end
 
-    always @(*) begin
-        schedule_table_n = schedule_table;
-        if (warp_ctl_if.valid && warp_ctl_if.tmc.valid) begin
-            schedule_table_n[warp_ctl_if.wid] = tmc_active;
-        end        
-        if (warp_scheduled) begin // remove scheduled warp (round-robin)
-            schedule_table_n[schedule_warp] = 0;
-        end
-    end    
-
     always @(posedge clk) begin
         if (reset) begin
             for (integer i = 0; i < `NUM_BARRIERS; i++) begin
@@ -83,16 +72,14 @@ module VX_warp_sched #(
             use_wspawn        <= 0;
             warp_pcs[0]       <= `STARTUP_ADDR;
             active_warps[0]   <= 1; // Activating first warp
-            schedule_table[0] <= 1; // set first warp as ready
             thread_masks[0]   <= 1; // Activating first thread in first warp
             stalled_warps     <= 0;
             fetch_lock        <= 0;      
             
             for (integer i = 1; i < `NUM_WARPS; i++) begin
-                warp_pcs[i]       <= 0;
-                active_warps[i]   <= 0;
-                schedule_table[i] <= 0;
-                thread_masks[i]   <= 0;
+                warp_pcs[i]     <= 0;
+                active_warps[i] <= 0;
+                thread_masks[i] <= 0;
             end
         end else begin            
             if (warp_ctl_if.valid && warp_ctl_if.wspawn.valid) begin
@@ -158,9 +145,6 @@ module VX_warp_sched #(
             end
 
             active_warps <= active_warps_n;
-
-            // reset 'schedule_table' when it goes to zero
-            schedule_table <= (| schedule_table_n) ? schedule_table_n : active_warps_n;
         end
     end
 
@@ -219,29 +203,24 @@ module VX_warp_sched #(
 
     assign {join_else, join_pc, join_tm} = ipdom [join_if.wid];
 
-    // calculate next warp schedule
+    // round-robin warp scheduling
 
-    reg [`NUM_THREADS-1:0] thread_mask;
-    reg schedule_valid;
-    reg [31:0] warp_pc;
-    
-    wire [`NUM_WARPS-1:0] schedule_ready = schedule_table & ~(stalled_warps | total_barrier_stall | fetch_lock);
+    wire schedule_valid;
 
-    always @(*) begin
-        schedule_valid = 0;
-        thread_mask    = 'x;
-        warp_pc        = 'x;
-        schedule_warp = 'x;
-        for (integer i = 0; i < `NUM_WARPS; ++i) begin
-            if (schedule_ready[i]) begin
-                schedule_valid = 1;
-                thread_mask = use_wspawn[i] ? `NUM_THREADS'(1) : thread_masks[i];
-                warp_pc = use_wspawn[i] ? use_wspawn_pc : warp_pcs[i];
-                schedule_warp = `NW_BITS'(i);
-                break;
-            end
-        end    
-    end
+    VX_rr_arbiter #(
+        .NUM_REQS (`NUM_WARPS)
+    ) rr_arbiter (
+        .clk      (clk),
+        .reset    (reset),
+        .requests (active_warps & ~(stalled_warps | total_barrier_stall | fetch_lock)),
+        .grant_index (schedule_warp),
+        .grant_valid (schedule_valid),
+        `UNUSED_PIN (grant_onehot),
+        `UNUSED_PIN (enable)
+    );
+
+    wire [`NUM_THREADS-1:0] thread_mask = use_wspawn[schedule_warp] ? `NUM_THREADS'(1) : thread_masks[schedule_warp];    
+    wire [31:0] warp_pc = use_wspawn[schedule_warp] ? use_wspawn_pc : warp_pcs[schedule_warp];
 
     wire stall_out = ~ifetch_req_if.ready && ifetch_req_if.valid;   
 
