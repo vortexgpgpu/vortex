@@ -15,7 +15,7 @@ SRCS = util.cpp args.cpp mem.cpp pipeline.cpp warp.cpp core.cpp decode.cpp execu
 
 # Debugigng
 ifdef DEBUG
-	CXXFLAGS += -DDEBUG_LEVEL=3
+	CXXFLAGS += -DDEBUG_LEVEL=$(DEBUG)
 else    
 	CXXFLAGS += -DNDEBUG
 endif
