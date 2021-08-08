@@ -38,7 +38,7 @@ task print_ex_op (
                 `BR_MRET:  $write("MRET");    
                 `BR_SRET:  $write("SRET");    
                 `BR_DRET:  $write("DRET");    
-                default:    $write("?");
+                default:   $write("?");
             endcase                
         end else if (`ALU_IS_MUL(op_mod)) begin
             case (`MUL_BITS'(op_type))

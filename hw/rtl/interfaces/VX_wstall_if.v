@@ -7,6 +7,7 @@ interface VX_wstall_if();
 
     wire                valid;    
     wire [`NW_BITS-1:0] wid;
+    wire                stalled;
 
 endinterface
 

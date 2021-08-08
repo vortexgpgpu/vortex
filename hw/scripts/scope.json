@@ -140,9 +140,9 @@
         "afu/vortex/cluster/core/pipeline/fetch/warp_sched": {
             "?wsched_scheduled_warp": 1,
             "wsched_active_warps": "`NUM_WARPS",
-            "wsched_schedule_table": "`NUM_WARPS",
-            "wsched_schedule_ready": "`NUM_WARPS",
-            "wsched_warp_to_schedule": "`NW_BITS",
+            "wsched_stalled_warps": "`NUM_WARPS",
+            "wsched_schedule_tmask": "`NUM_THREADS",
+            "wsched_schedule_wid": "`NW_BITS",
             "wsched_warp_pc": "32"
         },
         "afu/vortex/cluster/core/pipeline/execute/gpu_unit": {

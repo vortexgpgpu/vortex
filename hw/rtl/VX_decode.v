@@ -221,6 +221,7 @@ module VX_decode  #(
                     use_rd  = 1;
                     use_imm = 1;
                     use_PC  = 1;
+                    is_wstall = 1;
                     imm     = 32'd4;
                     `USED_IREG (rd);
                 end
@@ -406,8 +407,9 @@ module VX_decode  #(
     assign join_if.valid = ifetch_rsp_fire && is_join;
     assign join_if.wid = ifetch_rsp_if.wid;
 
-    assign wstall_if.valid = ifetch_rsp_fire && is_wstall;
+    assign wstall_if.valid = ifetch_rsp_fire;
     assign wstall_if.wid = ifetch_rsp_if.wid;
+    assign wstall_if.stalled = is_wstall;
 
     assign ifetch_rsp_if.ready = decode_if.ready;
 
