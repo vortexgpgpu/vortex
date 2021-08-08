@@ -232,6 +232,11 @@
 
 // Pipeline Queues ////////////////////////////////////////////////////////////
 
+// Size of Instruction Buffer
+`ifndef IBUF_SIZE
+`define IBUF_SIZE 4
+`endif
+
 // Size of LSU Request Queue
 `ifndef LSUQ_SIZE
 `define LSUQ_SIZE (`NUM_WARPS * 2)

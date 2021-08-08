@@ -16,8 +16,7 @@ module VX_ibuffer #(
     `UNUSED_PARAM (CORE_ID)
     
     localparam DATAW   = `NUM_THREADS + 32 + `EX_BITS + `OP_BITS + `FRM_BITS + 1 + (`NR_BITS * 4) + 32 + 1 + 1 + `NUM_REGS;
-    localparam SIZE    = 3;
-    localparam ADDRW   = $clog2(SIZE);
+    localparam ADDRW   = $clog2(`IBUF_SIZE+1);
     localparam NWARPSW = $clog2(`NUM_WARPS+1);
 
     reg [`NUM_WARPS-1:0][ADDRW-1:0] used_r;
@@ -38,8 +37,9 @@ module VX_ibuffer #(
 
         wire is_head_ptr = empty_r[i] || (alm_empty_r[i] && reading);
 
-        VX_skid_buffer #(
-            .DATAW (DATAW)
+        VX_elastic_buffer #(
+            .DATAW (DATAW),
+            .SIZE  (`IBUF_SIZE)
         ) queue (
             .clk      (clk),
             .reset    (reset),
@@ -63,7 +63,7 @@ module VX_ibuffer #(
                         empty_r[i] <= 0;
                         if (used_r[i] == 1)
                             alm_empty_r[i] <= 0;
-                        if (used_r[i] == ADDRW'(SIZE-1))
+                        if (used_r[i] == ADDRW'(`IBUF_SIZE))
                             full_r[i] <= 1;
                     end
                 end else if (reading) begin
@@ -160,10 +160,11 @@ module VX_ibuffer #(
         end
             
         deq_wid   <= deq_wid_n;
-        deq_instr <= deq_instr_n;     
+        deq_instr <= deq_instr_n;
     end
     
     assign decode_if.ready = ~q_full[decode_if.wid];
+    
     assign q_data_in = {decode_if.tmask, 
                         decode_if.PC, 
                         decode_if.ex_type, 
