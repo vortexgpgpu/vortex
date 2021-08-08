@@ -44,7 +44,6 @@ module VX_fetch #(
         .branch_ctl_if    (branch_ctl_if),
 
         .ifetch_req_if    (ifetch_req_if),
-        .ifetch_rsp_if    (ifetch_rsp_if),
 
         .fetch_to_csr_if  (fetch_to_csr_if),
         
