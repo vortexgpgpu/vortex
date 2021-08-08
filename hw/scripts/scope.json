@@ -138,7 +138,7 @@
             "icache_rsp_tag":"`ICORE_TAG_ID_BITS"
         },
         "afu/vortex/cluster/core/pipeline/fetch/warp_sched": {
-            "?wsched_scheduled_warp": 1,
+            "?wsched_scheduled": 1,
             "wsched_active_warps": "`NUM_WARPS",
             "wsched_stalled_warps": "`NUM_WARPS",
             "wsched_schedule_tmask": "`NUM_THREADS",
