@@ -41,11 +41,14 @@ jobs:
       name: config
       script: cp -r $PWD ../build4 && cd ../build4 && ./ci/regression.sh -config
     - stage: test
-      name: stress
-      script: cp -r $PWD ../build5 && cd ../build5 && ./ci/regression.sh -stress
+      name: stress1
+      script: cp -r $PWD ../build5 && cd ../build5 && ./ci/regression.sh -stress1
+    - stage: test
+      name: stress2
+      script: cp -r $PWD ../build6 && cd ../build6 && ./ci/regression.sh -stress2
     - stage: test
       name: compiler
-      script: cp -r $PWD ../build6 && cd ../build6 && ./ci/test_compiler.sh
+      script: cp -r $PWD ../build7 && cd ../build7 && ./ci/test_compiler.sh
   
 after_success:
   # Gather code coverage

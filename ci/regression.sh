@@ -102,7 +102,16 @@ CONFIGS="-DMEM_LATENCY=100 -DMEM_RQ_SIZE=4 -DMEM_STALLS_MODULO=4" ./ci/blackbox.
 echo "configuration tests done!"
 }
 
-stress() 
+stress1() 
+{
+echo "begin stress tests..."
+
+./ci/travis_run.py ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm --args="-n256"
+
+echo "stress tests done!"
+}
+
+stress2() 
 {
 echo "begin stress tests..."
 
@@ -113,7 +122,7 @@ echo "stress tests done!"
 
 usage()
 {
-    echo "usage: regression [-coverage] [-cluster] [-debug] [-config] [-stress] [-all] [-h|--help]"
+    echo "usage: regression [-coverage] [-cluster] [-debug] [-config] [-stress#n] [-all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
@@ -126,13 +135,16 @@ while [ "$1" != "" ]; do
                     ;;
         -config ) config
                 ;;
-        -stress ) stress
+        -stress1 ) stress1
+                ;;
+        -stress2 ) stress2
                 ;;
         -all ) coverage
                cluster
                debug
                config
-               stress
+               stress1
+               stress2
                ;;
         -h | --help ) usage
                       exit
