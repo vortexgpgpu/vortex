@@ -47,6 +47,8 @@ module VX_icache_stage #(
         .dout({rsp_PC,           rsp_tmask})
     );
 
+    `RUNTIME_ASSERT((!ifetch_req_if.valid || ifetch_req_if.PC >= `STARTUP_ADDR), ("invalid PC=%0h", ifetch_req_if.PC))
+
     // Icache Request
     assign icache_req_if.valid = ifetch_req_if.valid;
     assign icache_req_if.addr  = ifetch_req_if.PC[31:2];
