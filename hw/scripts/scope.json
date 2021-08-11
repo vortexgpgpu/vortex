@@ -111,9 +111,9 @@
             "!cci_pending_writes_full": 1,
             "?afu_mem_req_fire": 1,            
             "afu_mem_req_addr": 26,
-            "afu_mem_req_tag": 29,
+            "afu_mem_req_tag": 32,
             "?afu_mem_rsp_fire": 1,
-            "afu_mem_rsp_tag": 29
+            "afu_mem_rsp_tag": 32
         },
         "afu/vortex": {
             "!reset": 1,
@@ -203,9 +203,7 @@
             "is_fill_st0": 1,
             "is_mshr_st0": 1,
             "miss_st0": 1,
-            "force_miss_st0": 1, 
-            "mshr_push": 1,
-            "?crsq_in_stall": 1,
+            "?crsq_stall": 1,
             "?mreq_alm_full": 1,
             "?mshr_alm_full": 1
         }

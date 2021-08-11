@@ -148,6 +148,7 @@ module VX_cluster #(
             .DATA_WIDTH     (`L2MEM_DATA_WIDTH), 
             .ADDR_WIDTH     (`L2MEM_ADDR_WIDTH),           
             .TAG_IN_WIDTH   (`XMEM_TAG_WIDTH),
+            .TAG_SEL_IDX    (1), // Skip 0 for NC flag
             .BUFFERED_REQ   (1),
             .BUFFERED_RSP   (1)
         ) mem_arb (

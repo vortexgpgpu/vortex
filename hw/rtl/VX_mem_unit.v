@@ -307,6 +307,7 @@ module VX_mem_unit # (
         .DATA_WIDTH    (`DMEM_DATA_WIDTH),
         .ADDR_WIDTH    (`DMEM_ADDR_WIDTH),
         .TAG_IN_WIDTH  (`DMEM_TAG_WIDTH),
+        .TAG_SEL_IDX   (1), // Skip 0 for NC flag
         .BUFFERED_REQ  (1),
         .BUFFERED_RSP  (2)
     ) mem_arb (
