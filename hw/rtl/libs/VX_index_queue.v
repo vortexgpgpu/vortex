@@ -1,5 +1,6 @@
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_index_queue #(
     parameter DATAW = 1,
     parameter SIZE = 1
@@ -62,3 +63,4 @@ module VX_index_queue #(
     assign read_data = entries[read_addr];
 
 endmodule
+`TRACING_ON

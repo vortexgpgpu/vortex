@@ -1,5 +1,6 @@
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_elastic_buffer #(
     parameter DATAW      = 1,
     parameter SIZE       = 2,
@@ -76,3 +77,4 @@ module VX_elastic_buffer #(
     end
 
 endmodule
+`TRACING_ON

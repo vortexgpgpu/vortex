@@ -1,5 +1,6 @@
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_scope #(     
     parameter DATAW  = 64,
     parameter BUSW   = 64,
@@ -94,13 +95,13 @@ module VX_scope #(
                         delay_val <= $bits(delay_val)'(cmd_data); 
                         cmd_start <= 1;
                     `ifdef DBG_PRINT_SCOPE
-                        $display("%t: *** scope: CMD_SET_START: delay_val=%0d", $time, $bits(delay_val)'(cmd_data));
+                        dpi_trace("%d: *** scope: CMD_SET_START: delay_val=%0d\n", $time, $bits(delay_val)'(cmd_data));
                     `endif
                     end
                     CMD_SET_STOP: begin
                         waddr_end <= $bits(waddr)'(cmd_data);
                     `ifdef DBG_PRINT_SCOPE
-                        $display("%t: *** scope: CMD_SET_STOP: waddr_end=%0d", $time, $bits(waddr)'(cmd_data));
+                        dpi_trace("%d: *** scope: CMD_SET_STOP: waddr_end=%0d\n", $time, $bits(waddr)'(cmd_data));
                     `endif
                     end
                     default:;
@@ -117,7 +118,7 @@ module VX_scope #(
                     delay_cntr  <= 0;
                     start_time  <= timestamp;
                 `ifdef DBG_PRINT_SCOPE
-                    $display("%t: *** scope: recording start - start_time=%0d", $time, timestamp);
+                    dpi_trace("%d: *** scope: recording start - start_time=%0d\n", $time, timestamp);
                 `endif
                 end else begin
                     start_wait <= 1;
@@ -133,7 +134,7 @@ module VX_scope #(
                     delta      <= 0;
                     start_time <= timestamp;
                 `ifdef DBG_PRINT_SCOPE
-                    $display("%t: *** scope: recording start - start_time=%0d", $time, timestamp);
+                    dpi_trace("%d: *** scope: recording start - start_time=%0d\n", $time, timestamp);
                 `endif
                 end 
             end
@@ -162,7 +163,7 @@ module VX_scope #(
                 if (stop
                  || (waddr >= waddr_end)) begin
                 `ifdef DBG_PRINT_SCOPE
-                    $display("%t: *** scope: recording stop - waddr=(%0d, %0d)", $time, waddr, waddr_end);
+                    dpi_trace("%d: *** scope: recording stop - waddr=(%0d, %0d)\n", $time, waddr, waddr_end);
                 `endif
                     waddr      <= waddr;  // keep last address
                     recording  <= 0;
@@ -232,12 +233,13 @@ module VX_scope #(
 `ifdef DBG_PRINT_SCOPE
     always @(posedge clk) begin
         if (bus_read) begin
-            $display("%t: scope-read: cmd=%0d, addr=%0d, value=%0h", $time, get_cmd, raddr, bus_out);
+            dpi_trace("%d: scope-read: cmd=%0d, addr=%0d, value=%0h\n", $time, get_cmd, raddr, bus_out);
         end
         if (bus_write) begin
-            $display("%t: scope-write: cmd=%0d, value=%0d", $time, cmd_type, cmd_data);
+            dpi_trace("%d: scope-write: cmd=%0d, value=%0d\n", $time, cmd_type, cmd_data);
         end
     end
 `endif
 
 endmodule
+`TRACING_ON

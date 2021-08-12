@@ -3,6 +3,7 @@
 // Fast Paralllel scan using Kogge-Stone style prefix tree with configurable operator
 // Adapted from BaseJump STL: http://bjump.org/index.html
 
+`TRACING_OFF
 module VX_scan #(
     parameter N       = 1,
     parameter OP      = 0,  // 0: XOR, 1: AND, 2: OR
@@ -58,3 +59,4 @@ module VX_scan #(
 
 `IGNORE_WARNINGS_END
 endmodule
+`TRACING_ON

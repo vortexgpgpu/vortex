@@ -13,6 +13,7 @@
 /// Furthermore, this unit contains a more efficient implementation for Verilator (simulation only).
 /// This speeds up simulation significantly.
 
+`TRACING_OFF
 module VX_lzc #(
     /// The width of the input vector.
     parameter int unsigned WIDTH = 2,
@@ -84,3 +85,4 @@ module VX_lzc #(
 `IGNORE_WARNINGS_END
   
 endmodule
+`TRACING_ON

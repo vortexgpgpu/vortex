@@ -1,5 +1,6 @@
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_priority_encoder #( 
     parameter N       = 1,  
     parameter REVERSE = 0,
@@ -127,3 +128,4 @@ module VX_priority_encoder #(
     end    
 
 endmodule
+`TRACING_ON

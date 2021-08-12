@@ -1,5 +1,6 @@
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_pending_size #(
     parameter SIZE  = 1,
     parameter SIZEW = $clog2(SIZE+1)
@@ -45,3 +46,4 @@ module VX_pending_size #(
     assign size  = {full_r, used_r};
   
 endmodule
+`TRACING_ON

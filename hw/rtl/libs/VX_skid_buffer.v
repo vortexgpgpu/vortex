@@ -1,5 +1,6 @@
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_skid_buffer #(
     parameter DATAW          = 1,
     parameter PASSTHRU       = 0,
@@ -133,3 +134,4 @@ module VX_skid_buffer #(
     end
 
 endmodule
+`TRACING_ON

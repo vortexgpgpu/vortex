@@ -1,5 +1,6 @@
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_multiplier #(
     parameter WIDTHA  = 1,
     parameter WIDTHB  = 1,
@@ -63,3 +64,4 @@ module VX_multiplier #(
 `endif
 
 endmodule
+`TRACING_ON

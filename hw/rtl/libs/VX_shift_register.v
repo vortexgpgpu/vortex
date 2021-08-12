@@ -1,5 +1,6 @@
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_shift_register_nr #( 
     parameter DATAW  = 1,
     parameter DEPTH  = 1,
@@ -152,3 +153,4 @@ module VX_shift_register #(
     end    
 
 endmodule
+`TRACING_ON

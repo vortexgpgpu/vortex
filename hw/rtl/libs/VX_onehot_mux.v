@@ -1,5 +1,6 @@
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_onehot_mux #(
     parameter DATAW = 1,
     parameter N     = 1,
@@ -53,3 +54,4 @@ module VX_onehot_mux #(
     end
 
 endmodule
+`TRACING_ON
