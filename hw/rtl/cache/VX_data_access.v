@@ -24,6 +24,8 @@ module VX_data_access #(
 `IGNORE_UNUSED_END
 `endif
 
+    input wire                          stall,
+
 `IGNORE_UNUSED_BEGIN
     input wire[`LINE_ADDR_WIDTH-1:0]    addr,
 `IGNORE_UNUSED_END
@@ -75,16 +77,18 @@ module VX_data_access #(
         .dout(rdata)
     );
 
+    `UNUSED_VAR (stall)
+
 `ifdef DBG_PRINT_CACHE_DATA
     always @(posedge clk) begin 
-        if (writeen) begin
+        if (writeen && ~stall) begin
             if (is_fill) begin
                 $display("%t: cache%0d:%0d data-fill: addr=%0h, blk_addr=%0d, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, wdata);
             end else begin
                 $display("%t: cache%0d:%0d data-write: addr=%0h, wid=%0d, PC=%0h, byteen=%b, blk_addr=%0d, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), debug_wid, debug_pc, byte_enable, line_addr, wdata);
             end
         end 
-        if (readen) begin
+        if (readen && ~stall) begin
             $display("%t: cache%0d:%0d data-read: addr=%0h, wid=%0d, PC=%0h, blk_addr=%0d, data=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), debug_wid, debug_pc, line_addr, rdata);
         end            
     end    

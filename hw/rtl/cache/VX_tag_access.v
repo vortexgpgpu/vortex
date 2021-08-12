@@ -23,6 +23,8 @@ module VX_tag_access #(
     input wire[`NW_BITS-1:0]            debug_wid,
 `IGNORE_UNUSED_END
 `endif
+
+    input wire                          stall,
     
     // read/fill
     input wire                          lookup,
@@ -51,7 +53,7 @@ module VX_tag_access #(
     ) tag_store (
         .clk(clk),                 
         .addr(line_addr),   
-        .wren(fill),
+        .wren(fill && ~stall),
         .byteen(1'b1),
         .rden(1'b1),
         .din({!is_flush, line_tag}),
@@ -60,18 +62,18 @@ module VX_tag_access #(
 
     assign tag_match = read_valid && (line_tag == read_tag);
 
+    `RUNTIME_ASSERT((~(fill && ~stall && ~is_flush) || ~tag_match), ("%t: redundant fill - addr=%0h, tag_id=%0h", $time, `LINE_TO_BYTE_ADDR(addr, BANK_ID), read_tag))
+    
 `ifdef DBG_PRINT_CACHE_TAG
     always @(posedge clk) begin          
-        if (fill) begin
+        if (fill && ~stall) begin
             if (is_flush) begin
                 $display("%t: cache%0d:%0d tag-flush: addr=%0h, blk_addr=%0d", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr);
             end else begin
                 $display("%t: cache%0d:%0d tag-fill: addr=%0h, blk_addr=%0d, tag_id=%0h, old_tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, line_tag, read_tag);
-                if (tag_match) begin
-                    $display("%t: warning: redundant fill - addr=%0h", $time, `LINE_TO_BYTE_ADDR(addr, BANK_ID));
-                end
             end
-        end else if (lookup) begin                
+        end
+        if (lookup && ~stall) begin                
             if (tag_match) begin
                 $display("%t: cache%0d:%0d tag-hit: addr=%0h, wid=%0d, PC=%0h, blk_addr=%0d, tag_id=%0h", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), debug_wid, debug_pc, line_addr, line_tag);                
             end else begin

@@ -91,6 +91,8 @@ module VX_cache #(
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))
     `STATIC_ASSERT(NUM_PORTS <= NUM_BANKS, ("invalid value"))
 
+    localparam MSHR_ADDR_WIDTH = $clog2(MSHR_SIZE);
+    localparam MEM_TAG_IN_WIDTH = `MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH;
     localparam CORE_TAG_X_WIDTH = CORE_TAG_WIDTH - NC_ENABLE;
     localparam CORE_TAG_ID_X_BITS = (CORE_TAG_ID_BITS != 0) ? (CORE_TAG_ID_BITS - NC_ENABLE) : CORE_TAG_ID_BITS;
 
@@ -125,13 +127,13 @@ module VX_cache #(
     wire [CACHE_LINE_SIZE-1:0]      mem_req_byteen_nc; 
     wire [`MEM_ADDR_WIDTH-1:0]      mem_req_addr_nc;
     wire [`CACHE_LINE_WIDTH-1:0]    mem_req_data_nc;
-    wire [`MEM_ADDR_WIDTH-1:0]      mem_req_tag_nc;
+    wire [MEM_TAG_IN_WIDTH-1:0]     mem_req_tag_nc;
     wire                            mem_req_ready_nc;
     
     // Memory response
     wire                            mem_rsp_valid_nc;
     wire [`CACHE_LINE_WIDTH-1:0]    mem_rsp_data_nc;
-    wire [`MEM_ADDR_WIDTH-1:0]      mem_rsp_tag_nc;
+    wire [MEM_TAG_IN_WIDTH-1:0]     mem_rsp_tag_nc;
     wire                            mem_rsp_ready_nc; 
 
     if (NC_ENABLE) begin
@@ -146,7 +148,7 @@ module VX_cache #(
                 
             .MEM_ADDR_WIDTH    (`MEM_ADDR_WIDTH),
             .MEM_DATA_SIZE     (CACHE_LINE_SIZE),   
-            .MEM_TAG_IN_WIDTH  (`MEM_ADDR_WIDTH),
+            .MEM_TAG_IN_WIDTH  (MEM_TAG_IN_WIDTH),
             .MEM_TAG_OUT_WIDTH (MEM_TAG_WIDTH)
         ) nc_bypass (
             .clk       (clk),
@@ -246,12 +248,12 @@ module VX_cache #(
     ///////////////////////////////////////////////////////////////////////////
 
     wire [`CACHE_LINE_WIDTH-1:0] mem_rsp_data_qual;
-    wire [`MEM_ADDR_WIDTH-1:0] mem_rsp_tag_qual;
+    wire [MEM_TAG_IN_WIDTH-1:0] mem_rsp_tag_qual;
 
     wire mrsq_out_valid, mrsq_out_ready;
     
     VX_elastic_buffer #(
-        .DATAW      (`MEM_ADDR_WIDTH + `CACHE_LINE_WIDTH), 
+        .DATAW      (MEM_TAG_IN_WIDTH + `CACHE_LINE_WIDTH), 
         .SIZE       (MRSQ_SIZE),
         .OUTPUT_REG (MRSQ_SIZE > 2)
     ) mem_rsp_queue (
@@ -307,6 +309,7 @@ module VX_cache #(
     wire [NUM_BANKS-1:0]                        per_bank_mem_req_rw;
     wire [NUM_BANKS-1:0][CACHE_LINE_SIZE-1:0]   per_bank_mem_req_byteen;    
     wire [NUM_BANKS-1:0][`MEM_ADDR_WIDTH-1:0]   per_bank_mem_req_addr;
+    wire [NUM_BANKS-1:0][MSHR_ADDR_WIDTH-1:0]   per_bank_mem_req_id;
     wire [NUM_BANKS-1:0][`CACHE_LINE_WIDTH-1:0] per_bank_mem_req_data;
     wire [NUM_BANKS-1:0]                        per_bank_mem_req_ready;
 
@@ -316,7 +319,7 @@ module VX_cache #(
         `UNUSED_VAR (mem_rsp_tag_qual)
         assign mrsq_out_ready = per_bank_mem_rsp_ready;
     end else begin
-        assign mrsq_out_ready = per_bank_mem_rsp_ready[`MEM_ADDR_BANK(mem_rsp_tag_qual)];
+        assign mrsq_out_ready = per_bank_mem_rsp_ready[`MEM_TAG_TO_BANK_ID(mem_rsp_tag_qual)];
     end
 
     VX_core_req_bank_sel #(
@@ -378,11 +381,13 @@ module VX_cache #(
         wire                        curr_bank_mem_req_rw;
         wire [CACHE_LINE_SIZE-1:0]  curr_bank_mem_req_byteen;
         wire [`LINE_ADDR_WIDTH-1:0] curr_bank_mem_req_addr;
+        wire [MSHR_ADDR_WIDTH-1:0]  curr_bank_mem_req_id;
         wire[`CACHE_LINE_WIDTH-1:0] curr_bank_mem_req_data;
         wire                        curr_bank_mem_req_ready;
 
         wire                        curr_bank_mem_rsp_valid;    
-        wire [`LINE_ADDR_WIDTH-1:0] curr_bank_mem_rsp_addr;        
+        wire [`LINE_ADDR_WIDTH-1:0] curr_bank_mem_rsp_addr;
+        wire [MSHR_ADDR_WIDTH-1:0]  curr_bank_mem_rsp_id;
         wire [`CACHE_LINE_WIDTH-1:0] curr_bank_mem_rsp_data;
         wire                        curr_bank_mem_rsp_ready;
 
@@ -407,25 +412,27 @@ module VX_cache #(
         assign per_bank_core_rsp_data [i] = curr_bank_core_rsp_data;
 
         // Memory request            
-        assign per_bank_mem_req_valid[i] = curr_bank_mem_req_valid;          
-        assign per_bank_mem_req_rw[i] = curr_bank_mem_req_rw;
+        assign per_bank_mem_req_valid[i]  = curr_bank_mem_req_valid;          
+        assign per_bank_mem_req_rw[i]     = curr_bank_mem_req_rw;
         assign per_bank_mem_req_byteen[i] = curr_bank_mem_req_byteen;
         if (NUM_BANKS == 1) begin  
             assign per_bank_mem_req_addr[i] = curr_bank_mem_req_addr;
         end else begin
             assign per_bank_mem_req_addr[i] = `LINE_TO_MEM_ADDR(curr_bank_mem_req_addr, i); 
         end
+        assign per_bank_mem_req_id[i]   = curr_bank_mem_req_id;
         assign per_bank_mem_req_data[i] = curr_bank_mem_req_data;
-        assign curr_bank_mem_req_ready = per_bank_mem_req_ready[i];
+        assign curr_bank_mem_req_ready  = per_bank_mem_req_ready[i];
 
         // Memory response
         if (NUM_BANKS == 1) begin
             assign curr_bank_mem_rsp_valid = mrsq_out_valid;
-            assign curr_bank_mem_rsp_addr  = mem_rsp_tag_qual;
+            assign curr_bank_mem_rsp_addr  = `MEM_TAG_TO_LINE_ADDR(mem_rsp_tag_qual);            
         end else begin
-            assign curr_bank_mem_rsp_valid = mrsq_out_valid && (`MEM_ADDR_BANK(mem_rsp_tag_qual) == i);
-            assign curr_bank_mem_rsp_addr  = `MEM_TO_LINE_ADDR(mem_rsp_tag_qual); 
+            assign curr_bank_mem_rsp_valid = mrsq_out_valid && (`MEM_TAG_TO_BANK_ID(mem_rsp_tag_qual) == i);
+            assign curr_bank_mem_rsp_addr  = `MEM_TAG_TO_LINE_ADDR(mem_rsp_tag_qual);
         end
+        assign curr_bank_mem_rsp_id      = `MEM_TAG_TO_REQ_ID(mem_rsp_tag_qual);
         assign curr_bank_mem_rsp_data    = mem_rsp_data_qual;
         assign per_bank_mem_rsp_ready[i] = curr_bank_mem_rsp_ready;
         
@@ -484,12 +491,14 @@ module VX_cache #(
             .mem_req_rw         (curr_bank_mem_req_rw),
             .mem_req_byteen     (curr_bank_mem_req_byteen),
             .mem_req_addr       (curr_bank_mem_req_addr),
+            .mem_req_id         (curr_bank_mem_req_id),
             .mem_req_data       (curr_bank_mem_req_data),   
             .mem_req_ready      (curr_bank_mem_req_ready),
 
             // Memory response
             .mem_rsp_valid      (curr_bank_mem_rsp_valid),    
             .mem_rsp_addr       (curr_bank_mem_rsp_addr),            
+            .mem_rsp_id         (curr_bank_mem_rsp_id),            
             .mem_rsp_data       (curr_bank_mem_rsp_data),
             .mem_rsp_ready      (curr_bank_mem_rsp_ready),
 
@@ -523,14 +532,16 @@ module VX_cache #(
         .core_rsp_ready          (core_rsp_ready_nc)
     ); 
 
-    wire [NUM_BANKS-1:0][(`MEM_ADDR_WIDTH + 1 + CACHE_LINE_SIZE + `CACHE_LINE_WIDTH)-1:0] data_in;
+    wire [NUM_BANKS-1:0][(MEM_TAG_IN_WIDTH + 1 + CACHE_LINE_SIZE + `CACHE_LINE_WIDTH)-1:0] data_in;
     for (genvar i = 0; i < NUM_BANKS; i++) begin
-        assign data_in[i] = {per_bank_mem_req_addr[i], per_bank_mem_req_rw[i], per_bank_mem_req_byteen[i], per_bank_mem_req_data[i]};
+        assign data_in[i] = {per_bank_mem_req_addr[i], per_bank_mem_req_id[i], per_bank_mem_req_rw[i], per_bank_mem_req_byteen[i], per_bank_mem_req_data[i]};
     end
+
+    wire [MSHR_ADDR_WIDTH-1:0] mem_req_id;
 
     VX_stream_arbiter #(
         .NUM_REQS (NUM_BANKS),
-        .DATAW    (`MEM_ADDR_WIDTH + 1 + CACHE_LINE_SIZE + `CACHE_LINE_WIDTH),
+        .DATAW    (`MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + CACHE_LINE_SIZE + `CACHE_LINE_WIDTH),
         .BUFFERED (1)
     ) mem_req_arb (
         .clk       (clk),
@@ -539,11 +550,11 @@ module VX_cache #(
         .data_in   (data_in),
         .ready_in  (per_bank_mem_req_ready),   
         .valid_out (mem_req_valid_nc),   
-        .data_out  ({mem_req_addr_nc, mem_req_rw_nc, mem_req_byteen_nc, mem_req_data_nc}),
+        .data_out  ({mem_req_addr_nc, mem_req_id, mem_req_rw_nc, mem_req_byteen_nc, mem_req_data_nc}),
         .ready_out (mem_req_ready_nc)
     );
 
-    assign mem_req_tag_nc = mem_req_addr_nc;
+    assign mem_req_tag_nc = MEM_TAG_IN_WIDTH'({mem_req_addr_nc, mem_req_id});
 
 `ifdef PERF_ENABLE
     // per cycle: core_reads, core_writes

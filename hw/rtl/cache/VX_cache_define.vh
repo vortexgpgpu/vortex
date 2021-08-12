@@ -59,11 +59,13 @@
 
 `define BANK_READY_COUNT        ((SHARED_BANK_READY != 0) ? 1 : NUM_BANKS)
 
-`define MEM_ADDR_BANK(x)        x[`BANK_SELECT_BITS+BANK_ADDR_OFFSET-1 : BANK_ADDR_OFFSET]
-
-`define MEM_TO_LINE_ADDR(x)     x[`MEM_ADDR_WIDTH-1 : `BANK_SELECT_BITS]
-
 `define LINE_TO_MEM_ADDR(x, i)  {x, `BANK_SELECT_BITS'(i)}
+
+`define MEM_TAG_TO_REQ_ID(x)    x[MSHR_ADDR_WIDTH-1:0]
+
+`define MEM_TAG_TO_BANK_ID(x)   x[MSHR_ADDR_WIDTH +: `BANK_SELECT_BITS]
+
+`define MEM_TAG_TO_LINE_ADDR(x) x[(MSHR_ADDR_WIDTH+`BANK_SELECT_BITS) +: `LINE_ADDR_WIDTH]
 
 `define LINE_TO_BYTE_ADDR(x, i) {x, (32-$bits(x))'(i << (32-$bits(x)-`BANK_SELECT_BITS))}
 
