@@ -1,5 +1,6 @@
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_serial_div #(
     parameter WIDTHN = 1,
     parameter WIDTHD = 1,
@@ -98,3 +99,4 @@ module VX_serial_div #(
     assign valid_out = is_busy && done;
 
 endmodule
+`TRACING_ON

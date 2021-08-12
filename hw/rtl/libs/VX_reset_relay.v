@@ -1,5 +1,6 @@
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_reset_relay #(
     parameter ASYNC = 0
 ) (
@@ -22,3 +23,4 @@ module VX_reset_relay #(
     assign reset_o = reset_r;
   
 endmodule
+`TRACING_ON

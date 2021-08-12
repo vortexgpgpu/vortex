@@ -1,5 +1,6 @@
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_divider #(
     parameter WIDTHN  = 1,
     parameter WIDTHD  = 1,
@@ -92,3 +93,4 @@ module VX_divider #(
 `endif
 
 endmodule
+`TRACING_ON

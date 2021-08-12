@@ -1,5 +1,6 @@
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_pipe_register #( 
     parameter DATAW  = 1, 
     parameter RESETW = DATAW, 
@@ -73,3 +74,4 @@ module VX_pipe_register #(
     end
 
 endmodule
+`TRACING_ON

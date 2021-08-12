@@ -1,5 +1,6 @@
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_fixed_arbiter #(
     parameter NUM_REQS     = 1,
     parameter LOCK_ENABLE  = 0,
@@ -39,3 +40,4 @@ module VX_fixed_arbiter #(
     end
     
 endmodule
+`TRACING_ON
