@@ -277,7 +277,7 @@
 `define IMEM_BYTEEN_WIDTH       `ICACHE_LINE_SIZE
 
 // Memory request tag bits
-`define IMEM_TAG_WIDTH          `IMEM_ADDR_WIDTH
+`define IMEM_TAG_WIDTH          (`IMEM_ADDR_WIDTH + `CLOG2(`IMSHR_SIZE))
 
 ////////////////////////// Dcache Configurable Knobs //////////////////////////
 
@@ -315,7 +315,7 @@
 // Memory request tag bits
 `define _DMEM_ADDR_RATIO_W      $clog2(`DCACHE_LINE_SIZE / `DWORD_SIZE)
 `define _DNC_MEM_TAG_WIDTH      ($clog2(`DNUM_REQS) + `_DMEM_ADDR_RATIO_W + `DCORE_TAG_WIDTH)
-`define DMEM_TAG_WIDTH          `MAX((`DMEM_ADDR_WIDTH + `NC_ADDR_BITS), `_DNC_MEM_TAG_WIDTH)
+`define DMEM_TAG_WIDTH          `MAX((`DMEM_ADDR_WIDTH + `CLOG2(`DMSHR_SIZE) + `NC_ADDR_BITS), `_DNC_MEM_TAG_WIDTH)
 
 ////////////////////////// SM Configurable Knobs //////////////////////////////
 
@@ -360,7 +360,7 @@
 // Memory request tag bits
 `define _L2MEM_ADDR_RATIO_W     $clog2(`L2CACHE_LINE_SIZE / `L2WORD_SIZE)
 `define _L2NC_MEM_TAG_WIDTH     ($clog2(`L2NUM_REQS) + `_L2MEM_ADDR_RATIO_W + `XMEM_TAG_WIDTH)
-`define _L2MEM_TAG_WIDTH        `MAX((`L2MEM_ADDR_WIDTH + `NC_ADDR_BITS), `_L2NC_MEM_TAG_WIDTH)
+`define _L2MEM_TAG_WIDTH        `MAX((`L2MEM_ADDR_WIDTH + `CLOG2(`L2MSHR_SIZE) + `NC_ADDR_BITS), `_L2NC_MEM_TAG_WIDTH)
 `define L2MEM_TAG_WIDTH         (`L2_ENABLE ? `_L2MEM_TAG_WIDTH : (`XMEM_TAG_WIDTH + `CLOG2(`L2NUM_REQS)))
 
 ////////////////////////// L3cache Configurable Knobs /////////////////////////
@@ -392,7 +392,7 @@
 // Memory request tag bits
 `define _L3MEM_ADDR_RATIO_W     $clog2(`L3CACHE_LINE_SIZE / `L3WORD_SIZE)
 `define _L3NC_MEM_TAG_WIDTH     ($clog2(`L3NUM_REQS) + `_L3MEM_ADDR_RATIO_W + `L2MEM_TAG_WIDTH)
-`define _L3MEM_TAG_WIDTH        `MAX((`L3MEM_ADDR_WIDTH + `NC_ADDR_BITS), `_L3NC_MEM_TAG_WIDTH)
+`define _L3MEM_TAG_WIDTH        `MAX((`L3MEM_ADDR_WIDTH + `CLOG2(`L3MSHR_SIZE) + `NC_ADDR_BITS), `_L3NC_MEM_TAG_WIDTH)
 `define L3MEM_TAG_WIDTH         (`L3_ENABLE ? `_L3MEM_TAG_WIDTH : (`L2MEM_TAG_WIDTH + `CLOG2(`L3NUM_REQS)))
 
 ///////////////////////////////////////////////////////////////////////////////
