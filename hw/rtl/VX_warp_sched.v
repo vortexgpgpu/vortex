@@ -196,20 +196,17 @@ module VX_warp_sched #(
 
     assign {join_else, join_pc, join_tm} = ipdom [join_if.wid];
 
-    // round-robin warp scheduling
+    // schedule the next ready warp
 
     wire [`NUM_WARPS-1:0] ready_warps = active_warps & ~(stalled_warps | barrier_stalls);
 
-    VX_rr_arbiter #(
-        .NUM_REQS (`NUM_WARPS)
+    VX_priority_encoder #(
+        .N (`NUM_WARPS)
     ) rr_arbiter (
-        .clk      (clk),
-        .reset    (reset),
-        .requests (ready_warps),
-        .grant_index (schedule_wid),
-        .grant_valid (schedule_valid),
-        `UNUSED_PIN (grant_onehot),
-        `UNUSED_PIN (enable)
+        .data_in    (ready_warps),
+        .index      (schedule_wid),
+        .valid_out  (schedule_valid),
+        `UNUSED_PIN (onehot)
     );
 
     wire [`NUM_WARPS-1:0][(`NUM_THREADS + 32)-1:0] schedule_data;
