@@ -92,10 +92,10 @@ module VX_icache_stage #(
 `ifdef DBG_PRINT_CORE_ICACHE
     always @(posedge clk) begin
         if (icache_req_if.valid && icache_req_if.ready) begin
-            $display("%t: I$%0d req: wid=%0d, PC=%0h", $time, CORE_ID, ifetch_req_if.wid, ifetch_req_if.PC);
+            dpi_trace("%d: I$%0d req: wid=%0d, PC=%0h\n", $time, CORE_ID, ifetch_req_if.wid, ifetch_req_if.PC);
         end
         if (ifetch_rsp_if.valid && ifetch_rsp_if.ready) begin
-            $display("%t: I$%0d rsp: wid=%0d, PC=%0h, data=%0h", $time, CORE_ID, ifetch_rsp_if.wid, ifetch_rsp_if.PC, ifetch_rsp_if.data);
+            dpi_trace("%d: I$%0d rsp: wid=%0d, PC=%0h, data=%0h\n", $time, CORE_ID, ifetch_rsp_if.wid, ifetch_rsp_if.PC, ifetch_rsp_if.data);
         end
     end
 `endif

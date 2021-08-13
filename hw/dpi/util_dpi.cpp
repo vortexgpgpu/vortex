@@ -14,7 +14,13 @@ extern "C" {
 
   int dpi_register();
   void dpi_assert(int inst, bool cond, int delay);
+
+  void dpi_trace(const char* format, ...);  
 }
+
+double sc_time_stamp();
+
+extern uint64_t sim_trace_delay;
 
 class ShiftRegister {
 public:
@@ -133,4 +139,14 @@ void dpi_idiv(int a, int b, bool is_signed, int* quotient, int* remainder) {
       *remainder = dividen % divisor;
     }
   }
+}
+
+void dpi_trace(const char* format, ...) {  
+  uint64_t timestamp = (uint64_t)sc_time_stamp();
+  if (timestamp < sim_trace_delay)
+    return;
+  va_list va;
+	va_start(va, format);  
+	vprintf(format, va);
+	va_end(va);		  
 }

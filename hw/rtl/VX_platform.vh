@@ -1,6 +1,10 @@
 `ifndef VX_PLATFORM
 `define VX_PLATFORM
 
+`ifndef SYNTHESIS
+`include "util_dpi.vh"
+`endif
+
 `include "VX_scope.vh"
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -91,25 +95,25 @@
 
 `define LTRIM(x,s)  x[s-1:0]
 
-`define PRINT_ARRAY1D(a, m)                     \
-    $write("{");                                \
+`define TRACE_ARRAY1D(a, m)                     \
+    dpi_trace("{");                             \
     for (integer i = (m-1); i >= 0; --i) begin  \
-        if (i != (m-1)) $write(", ");           \
-        $write("0x%0h", a[i]);                  \
+        if (i != (m-1)) dpi_trace(", ");        \
+        dpi_trace("0x%0h", a[i]);               \
     end                                         \
-    $write("}");                                \
+    dpi_trace("}");                             \
 
-`define PRINT_ARRAY2D(a, m, n)                  \
-    $write("{");                                \
+`define TRACE_ARRAY2D(a, m, n)                  \
+    dpi_trace("{");                             \
     for (integer i = n-1; i >= 0; --i) begin    \
-        if (i != (n-1)) $write(", ");           \
-        $write("{");                            \
+        if (i != (n-1)) dpi_trace(", ");        \
+        dpi_trace("{");                         \
         for (integer j = (m-1); j >= 0; --j) begin \
-            if (j != (m-1)) $write(", ");       \
-            $write("0x%0h", a[i][j]);           \
+            if (j != (m-1)) dpi_trace(", ");    \
+            dpi_trace("0x%0h", a[i][j]);        \
         end                                     \
-        $write("}");                            \
+        dpi_trace("}");                         \
     end                                         \
-    $write("}")
+    dpi_trace("}")
 
 `endif

@@ -93,34 +93,34 @@ module VX_commit #(
 `ifdef DBG_PRINT_PIPELINE
     always @(posedge clk) begin
         if (alu_commit_if.valid && alu_commit_if.ready) begin
-            $write("%t: core%0d-commit: wid=%0d, PC=%0h, ex=ALU, tmask=%b, wb=%0d, rd=%0d, data=", $time, CORE_ID, alu_commit_if.wid, alu_commit_if.PC, alu_commit_if.tmask, alu_commit_if.wb, alu_commit_if.rd);
-            `PRINT_ARRAY1D(alu_commit_if.data, `NUM_THREADS);
-            $write("\n");
+             dpi_trace("%d: core%0d-commit: wid=%0d, PC=%0h, ex=ALU, tmask=%b, wb=%0d, rd=%0d, data=", $time, CORE_ID, alu_commit_if.wid, alu_commit_if.PC, alu_commit_if.tmask, alu_commit_if.wb, alu_commit_if.rd);
+            `TRACE_ARRAY1D(alu_commit_if.data, `NUM_THREADS);
+             dpi_trace("\n");
         end
         if (ld_commit_if.valid && ld_commit_if.ready) begin
-            $write("%t: core%0d-commit: wid=%0d, PC=%0h, ex=LSU, tmask=%b, wb=%0d, rd=%0d, data=", $time, CORE_ID, ld_commit_if.wid, ld_commit_if.PC, ld_commit_if.tmask, ld_commit_if.wb, ld_commit_if.rd);
-            `PRINT_ARRAY1D(ld_commit_if.data, `NUM_THREADS);
-            $write("\n");
+             dpi_trace("%d: core%0d-commit: wid=%0d, PC=%0h, ex=LSU, tmask=%b, wb=%0d, rd=%0d, data=", $time, CORE_ID, ld_commit_if.wid, ld_commit_if.PC, ld_commit_if.tmask, ld_commit_if.wb, ld_commit_if.rd);
+            `TRACE_ARRAY1D(ld_commit_if.data, `NUM_THREADS);
+             dpi_trace("\n");
         end
         if (st_commit_if.valid && st_commit_if.ready) begin
-            $display("%t: core%0d-commit: wid=%0d, PC=%0h, ex=LSU, tmask=%b, wb=%0d, rd=%0d", $time, CORE_ID, st_commit_if.wid, st_commit_if.PC, st_commit_if.tmask, st_commit_if.wb, st_commit_if.rd);
+            dpi_trace("%d: core%0d-commit: wid=%0d, PC=%0h, ex=LSU, tmask=%b, wb=%0d, rd=%0d\n", $time, CORE_ID, st_commit_if.wid, st_commit_if.PC, st_commit_if.tmask, st_commit_if.wb, st_commit_if.rd);
         end
         if (csr_commit_if.valid && csr_commit_if.ready) begin
-            $write("%t: core%0d-commit: wid=%0d, PC=%0h, ex=CSR, tmask=%b, wb=%0d, rd=%0d, data=", $time, CORE_ID, csr_commit_if.wid, csr_commit_if.PC, csr_commit_if.tmask, csr_commit_if.wb, csr_commit_if.rd);
-            `PRINT_ARRAY1D(csr_commit_if.data, `NUM_THREADS);
-            $write("\n");
+             dpi_trace("%d: core%0d-commit: wid=%0d, PC=%0h, ex=CSR, tmask=%b, wb=%0d, rd=%0d, data=", $time, CORE_ID, csr_commit_if.wid, csr_commit_if.PC, csr_commit_if.tmask, csr_commit_if.wb, csr_commit_if.rd);
+            `TRACE_ARRAY1D(csr_commit_if.data, `NUM_THREADS);
+             dpi_trace("\n");
         end      
     `ifdef EXT_F_ENABLE
         if (fpu_commit_if.valid && fpu_commit_if.ready) begin
-            $write("%t: core%0d-commit: wid=%0d, PC=%0h, ex=FPU, tmask=%b, wb=%0d, rd=%0d, data=", $time, CORE_ID, fpu_commit_if.wid, fpu_commit_if.PC, fpu_commit_if.tmask, fpu_commit_if.wb, fpu_commit_if.rd);
-            `PRINT_ARRAY1D(fpu_commit_if.data, `NUM_THREADS);
-            $write("\n");
+             dpi_trace("%d: core%0d-commit: wid=%0d, PC=%0h, ex=FPU, tmask=%b, wb=%0d, rd=%0d, data=", $time, CORE_ID, fpu_commit_if.wid, fpu_commit_if.PC, fpu_commit_if.tmask, fpu_commit_if.wb, fpu_commit_if.rd);
+            `TRACE_ARRAY1D(fpu_commit_if.data, `NUM_THREADS);
+             dpi_trace("\n");
         end
     `endif
         if (gpu_commit_if.valid && gpu_commit_if.ready) begin
-            $write("%t: core%0d-commit: wid=%0d, PC=%0h, ex=GPU, tmask=%b, wb=%0d, rd=%0d, data=", $time, CORE_ID, gpu_commit_if.wid, gpu_commit_if.PC, gpu_commit_if.tmask, gpu_commit_if.wb, gpu_commit_if.rd);
-            `PRINT_ARRAY1D(gpu_commit_if.data, `NUM_THREADS);
-            $write("\n");
+             dpi_trace("%d: core%0d-commit: wid=%0d, PC=%0h, ex=GPU, tmask=%b, wb=%0d, rd=%0d, data=", $time, CORE_ID, gpu_commit_if.wid, gpu_commit_if.PC, gpu_commit_if.tmask, gpu_commit_if.wb, gpu_commit_if.rd);
+            `TRACE_ARRAY1D(gpu_commit_if.data, `NUM_THREADS);
+             dpi_trace("\n");
         end
     end
 `endif

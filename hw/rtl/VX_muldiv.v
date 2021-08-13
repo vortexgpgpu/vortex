@@ -1,9 +1,5 @@
 `include "VX_define.vh"
 
-`ifndef SYNTHESIS
-`include "util_dpi.vh"
-`endif
-
 module VX_muldiv (
     input wire clk,
     input wire reset,

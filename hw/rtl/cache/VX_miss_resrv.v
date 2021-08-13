@@ -202,33 +202,33 @@ module VX_miss_resrv #(
     always @(posedge clk) begin
         if (allocate_fire || fill_valid || dequeue_fire || lookup_replay || lookup_valid || release_valid) begin
             if (allocate_fire)
-                $display("%t: cache%0d:%0d mshr-allocate: addr=%0h, id=%0d, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID,
+                dpi_trace("%d: cache%0d:%0d mshr-allocate: addr=%0h, id=%0d, wid=%0d, PC=%0h\n", $time, CACHE_ID, BANK_ID,
                     `LINE_TO_BYTE_ADDR(allocate_addr, BANK_ID), allocate_id, deq_debug_wid, deq_debug_pc);
             if (fill_valid)
-                $display("%t: cache%0d:%0d mshr-fill: addr=%0h, id=%0d", $time, CACHE_ID, BANK_ID, 
+                dpi_trace("%d: cache%0d:%0d mshr-fill: addr=%0h, id=%0d\n", $time, CACHE_ID, BANK_ID, 
                     `LINE_TO_BYTE_ADDR(addr_table[fill_id], BANK_ID), fill_id);
             if (dequeue_fire)
-                $display("%t: cache%0d:%0d mshr-dequeue: addr=%0h, id=%0d, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, 
+                dpi_trace("%d: cache%0d:%0d mshr-dequeue: addr=%0h, id=%0d, wid=%0d, PC=%0h\n", $time, CACHE_ID, BANK_ID, 
                     `LINE_TO_BYTE_ADDR(dequeue_addr, BANK_ID), dequeue_id_r, deq_debug_wid, deq_debug_pc);      
             if (lookup_replay)
-                $display("%t: cache%0d:%0d mshr-replay: addr=%0h, id=%0d", $time, CACHE_ID, BANK_ID, 
+                dpi_trace("%d: cache%0d:%0d mshr-replay: addr=%0h, id=%0d\n", $time, CACHE_ID, BANK_ID, 
                     `LINE_TO_BYTE_ADDR(lookup_addr, BANK_ID), lookup_id);
             if (lookup_valid)
-                $display("%t: cache%0d:%0d mshr-lookup: addr=%0h, id=%0d, match=%b, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, 
+                dpi_trace("%d: cache%0d:%0d mshr-lookup: addr=%0h, id=%0d, match=%b, wid=%0d, PC=%0h\n", $time, CACHE_ID, BANK_ID, 
                     `LINE_TO_BYTE_ADDR(lookup_addr, BANK_ID), lookup_id, lookup_match, lkp_debug_wid, lkp_debug_pc);
             if (release_valid)
-                $display("%t: cache%0d:%0d mshr-release id=%0d, wid=%0d, PC=%0h", $time, CACHE_ID, BANK_ID, 
+                dpi_trace("%d: cache%0d:%0d mshr-release id=%0d, wid=%0d, PC=%0h\n", $time, CACHE_ID, BANK_ID, 
                     release_id, rel_debug_wid, rel_debug_pc);
-            $write("%t: cache%0d:%0d mshr-table", $time, CACHE_ID, BANK_ID);
+            dpi_trace("%d: cache%0d:%0d mshr-table", $time, CACHE_ID, BANK_ID);
             for (integer i = 0; i < MSHR_SIZE; ++i) begin
                 if (valid_table[i]) begin
-                    $write(" ");                    
+                    dpi_trace(" ");                    
                     if (ready_table[i]) 
-                        $write("*");
-                    $write("%0d=%0h", i, `LINE_TO_BYTE_ADDR(addr_table[i], BANK_ID));
+                        dpi_trace("*");
+                    dpi_trace("%0d=%0h", i, `LINE_TO_BYTE_ADDR(addr_table[i], BANK_ID));
                 end
             end
-            $write("\n");
+            dpi_trace("\n");
         end        
     end
 `endif
