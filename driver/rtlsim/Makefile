@@ -40,7 +40,7 @@ FPU_INCLUDE = -I$(RTL_DIR)/fp_cores -I$(DPI_DIR) -I$(RTL_DIR)/fp_cores/fpnew/src
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 
 VL_FLAGS += -O2 --language 1800-2009 --assert -Wall -Wpedantic
-VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
+VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO -Wno-EOFNEWLINE
 VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
 VL_FLAGS += $(CONFIGS)
