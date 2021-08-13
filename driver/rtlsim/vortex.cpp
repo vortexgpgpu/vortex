@@ -154,6 +154,34 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
+class AutoDeviceCleanup {
+private:
+    std::list<vx_device_h> devices_;
+
+public:
+    AutoDeviceCleanup() {} 
+
+    ~AutoDeviceCleanup() {
+        for (auto it = devices_.begin(), it_end = devices_.end(); it != it_end;) {
+            auto device = *it;
+            it = devices_.erase(it);
+            vx_dev_close(device);
+        }
+    }
+
+    void add_device(vx_device_h device) {
+        devices_.push_back(device);
+    }
+
+    void remove_device(vx_device_h device) {
+        devices_.remove(device);
+    }    
+};
+
+AutoDeviceCleanup gAutoDeviceCleanup;
+
+///////////////////////////////////////////////////////////////////////////////
+
 extern int vx_dev_caps(vx_device_h hdevice, unsigned caps_id, unsigned *value) {
    if (nullptr == hdevice)
         return  -1;
@@ -198,12 +226,16 @@ extern int vx_dev_open(vx_device_h* hdevice) {
 
     *hdevice = new vx_device();
 
+    gAutoDeviceCleanup.add_device(*hdevice);
+
     return 0;
 }
 
 extern int vx_dev_close(vx_device_h hdevice) {
     if (nullptr == hdevice)
         return -1;
+
+    gAutoDeviceCleanup.remove_device(hdevice);
 
     vx_device *device = ((vx_device*)hdevice);
     

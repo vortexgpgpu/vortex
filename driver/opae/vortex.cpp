@@ -8,6 +8,7 @@
 #include <cmath>
 #include <sstream>
 #include <unordered_map>
+#include <list>
 
 #if defined(USE_FPGA) || defined(USE_ASE) 
 #include <opae/fpga.h>
@@ -75,6 +76,34 @@ inline bool is_aligned(size_t addr, size_t alignment) {
     assert(0 == (alignment & (alignment - 1)));
     return 0 == (addr & (alignment - 1));
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+class AutoDeviceCleanup {
+private:
+    std::list<vx_device_h> devices_;
+
+public:
+    AutoDeviceCleanup() {} 
+
+    ~AutoDeviceCleanup() {
+        for (auto it = devices_.begin(), it_end = devices_.end(); it != it_end;) {
+            auto device = *it;
+            it = devices_.erase(it);
+            vx_dev_close(device);
+        }
+    }
+
+    void add_device(vx_device_h device) {
+        devices_.push_back(device);
+    }
+
+    void remove_device(vx_device_h device) {
+        devices_.remove(device);
+    }    
+};
+
+AutoDeviceCleanup gAutoDeviceCleanup;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -223,12 +252,16 @@ extern int vx_dev_open(vx_device_h* hdevice) {
 
     *hdevice = device;
 
+    gAutoDeviceCleanup.add_device(device);
+
     return 0;
 }
 
 extern int vx_dev_close(vx_device_h hdevice) {
     if (nullptr == hdevice)
         return -1;
+
+    gAutoDeviceCleanup.remove_device(hdevice);
 
     vx_device_t *device = ((vx_device_t*)hdevice);
 
