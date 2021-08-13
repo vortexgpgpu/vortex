@@ -94,6 +94,7 @@ opae_sim::~opae_sim() {
   }
 #ifdef VCD_OUTPUT
   trace_->close();
+  delete trace_;
 #endif  
   for (auto& buffer : host_buffers_) {
     __aligned_free(buffer.second.data);

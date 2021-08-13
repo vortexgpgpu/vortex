@@ -379,7 +379,6 @@ module VX_bank #(
         .WORD_SIZE          (WORD_SIZE),
         .NUM_REQS           (NUM_REQS),
         .MSHR_SIZE          (MSHR_SIZE),
-        .ALM_FULL           (MSHR_SIZE-2),
         .CORE_TAG_WIDTH     (CORE_TAG_WIDTH)
     ) miss_resrv (
         .clk                (clk),
