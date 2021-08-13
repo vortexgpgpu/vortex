@@ -1,17 +1,15 @@
 `include "VX_define.vh"
 
-module VX_avs_wrapper #(
-    parameter NUM_BANKS       = 1, 
+module VX_avs_wrapper #(    
     parameter AVS_DATA_WIDTH  = 1, 
     parameter AVS_ADDR_WIDTH  = 1,    
     parameter AVS_BURST_WIDTH = 1,
-    parameter AVS_BANKS       = 1,
+    parameter AVS_BANKS       = 1, 
     parameter REQ_TAG_WIDTH   = 1,
     parameter RD_QUEUE_SIZE   = 1,
         
-    parameter AVS_BYTEENW     = (AVS_DATA_WIDTH / 8),
-    parameter RD_QUEUE_ADDR_WIDTH = $clog2(RD_QUEUE_SIZE+1),
-    parameter AVS_BANKS_BITS  = $clog2(AVS_BANKS)
+    localparam AVS_BYTEENW    = (AVS_DATA_WIDTH / 8),
+    localparam RD_QUEUE_ADDR_WIDTH = $clog2(RD_QUEUE_SIZE+1)
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -32,40 +30,40 @@ module VX_avs_wrapper #(
     input wire                          mem_rsp_ready,
 
     // AVS bus
-    output  wire [AVS_DATA_WIDTH-1:0]   avs_writedata [NUM_BANKS],
-    input   wire [AVS_DATA_WIDTH-1:0]   avs_readdata [NUM_BANKS],
-    output  wire [AVS_ADDR_WIDTH-1:0]   avs_address [NUM_BANKS],
-    input   wire                        avs_waitrequest [NUM_BANKS],
-    output  wire                        avs_write [NUM_BANKS],
-    output  wire                        avs_read [NUM_BANKS],
-    output  wire [AVS_BYTEENW-1:0]      avs_byteenable [NUM_BANKS],
-    output  wire [AVS_BURST_WIDTH-1:0]  avs_burstcount [NUM_BANKS],
-    input                               avs_readdatavalid [NUM_BANKS]
+    output  wire [AVS_DATA_WIDTH-1:0]   avs_writedata [AVS_BANKS],
+    input   wire [AVS_DATA_WIDTH-1:0]   avs_readdata [AVS_BANKS],
+    output  wire [AVS_ADDR_WIDTH-1:0]   avs_address [AVS_BANKS],
+    input   wire                        avs_waitrequest [AVS_BANKS],
+    output  wire                        avs_write [AVS_BANKS],
+    output  wire                        avs_read [AVS_BANKS],
+    output  wire [AVS_BYTEENW-1:0]      avs_byteenable [AVS_BANKS],
+    output  wire [AVS_BURST_WIDTH-1:0]  avs_burstcount [AVS_BANKS],
+    input                               avs_readdatavalid [AVS_BANKS]
 );
 
-    localparam BANK_ADDRW = `LOG2UP(NUM_BANKS);
-    localparam OUTPUT_REG = (NUM_BANKS > 2);
+    localparam BANK_ADDRW = `LOG2UP(AVS_BANKS);
+    localparam OUTPUT_REG = (AVS_BANKS > 2);
 
     // Requests handling
     
-    wire [NUM_BANKS-1:0] avs_reqq_push, avs_reqq_pop, avs_reqq_ready;
-    wire [NUM_BANKS-1:0][REQ_TAG_WIDTH-1:0] avs_reqq_tag_out;
-    wire [NUM_BANKS-1:0] req_queue_going_full;
-    wire [NUM_BANKS-1:0][RD_QUEUE_ADDR_WIDTH-1:0] req_queue_size;
+    wire [AVS_BANKS-1:0] avs_reqq_push, avs_reqq_pop, avs_reqq_ready;
+    wire [AVS_BANKS-1:0][REQ_TAG_WIDTH-1:0] avs_reqq_tag_out;
+    wire [AVS_BANKS-1:0] req_queue_going_full;
+    wire [AVS_BANKS-1:0][RD_QUEUE_ADDR_WIDTH-1:0] req_queue_size;
     wire [BANK_ADDRW-1:0] req_bank_sel;
 
-    if (NUM_BANKS >= 2) begin
+    if (AVS_BANKS >= 2) begin
         assign req_bank_sel = mem_req_addr[BANK_ADDRW-1:0];        
     end else begin
         assign req_bank_sel = 0;
     end
 
-    for (genvar i = 0; i < NUM_BANKS; i++) begin
+    for (genvar i = 0; i < AVS_BANKS; i++) begin
         assign avs_reqq_ready[i] = !req_queue_going_full[i] && !avs_waitrequest[i];
         assign avs_reqq_push[i] = mem_req_valid && !mem_req_rw && avs_reqq_ready[i] && (req_bank_sel == i);  
     end
 
-    for (genvar i = 0; i < NUM_BANKS; i++) begin
+    for (genvar i = 0; i < AVS_BANKS; i++) begin
         VX_pending_size #( 
             .SIZE (RD_QUEUE_SIZE)
         ) pending_size (
@@ -98,7 +96,7 @@ module VX_avs_wrapper #(
         );
     end    
 
-    for (genvar i = 0; i < NUM_BANKS; i++) begin
+    for (genvar i = 0; i < AVS_BANKS; i++) begin
         assign avs_read[i]       = mem_req_valid && !mem_req_rw && !req_queue_going_full[i] && (req_bank_sel == i);
         assign avs_write[i]      = mem_req_valid && mem_req_rw && !req_queue_going_full[i] && (req_bank_sel == i);
         assign avs_address[i]    = mem_req_addr;
@@ -107,7 +105,7 @@ module VX_avs_wrapper #(
         assign avs_burstcount[i] = AVS_BURST_WIDTH'(1);
     end
 
-    if (NUM_BANKS >= 2) begin
+    if (AVS_BANKS >= 2) begin
         assign mem_req_ready = avs_reqq_ready[req_bank_sel];
     end else begin
         assign mem_req_ready = avs_reqq_ready;
@@ -115,14 +113,14 @@ module VX_avs_wrapper #(
 
     // Responses handling
 
-    wire [NUM_BANKS-1:0] rsp_arb_valid_in;
-    wire [NUM_BANKS-1:0][AVS_DATA_WIDTH+REQ_TAG_WIDTH-1:0] rsp_arb_data_in;
-    wire [NUM_BANKS-1:0] rsp_arb_ready_in;
+    wire [AVS_BANKS-1:0] rsp_arb_valid_in;
+    wire [AVS_BANKS-1:0][AVS_DATA_WIDTH+REQ_TAG_WIDTH-1:0] rsp_arb_data_in;
+    wire [AVS_BANKS-1:0] rsp_arb_ready_in;
 
-    wire [NUM_BANKS-1:0][AVS_DATA_WIDTH-1:0] avs_rspq_data_out;
-    wire [NUM_BANKS-1:0] avs_rspq_empty;
+    wire [AVS_BANKS-1:0][AVS_DATA_WIDTH-1:0] avs_rspq_data_out;
+    wire [AVS_BANKS-1:0] avs_rspq_empty;
 
-    for (genvar i = 0; i < NUM_BANKS; i++) begin
+    for (genvar i = 0; i < AVS_BANKS; i++) begin
         VX_fifo_queue #(
             .DATAW      (AVS_DATA_WIDTH),
             .SIZE       (RD_QUEUE_SIZE),
@@ -142,14 +140,14 @@ module VX_avs_wrapper #(
         );
     end     
     
-    for (genvar i = 0; i < NUM_BANKS; i++) begin
+    for (genvar i = 0; i < AVS_BANKS; i++) begin
         assign rsp_arb_valid_in[i] = !avs_rspq_empty[i];
         assign rsp_arb_data_in[i]  = {avs_rspq_data_out[i], avs_reqq_tag_out[i]};
         assign avs_reqq_pop[i]     = rsp_arb_valid_in[i] && rsp_arb_ready_in[i];
     end
 
     VX_stream_arbiter #(
-        .NUM_REQS (NUM_BANKS),
+        .NUM_REQS (AVS_BANKS),
         .DATAW    (AVS_DATA_WIDTH + REQ_TAG_WIDTH),
         .BUFFERED (OUTPUT_REG ? 1 : 0)
     ) rsp_arb (

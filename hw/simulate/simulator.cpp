@@ -67,6 +67,7 @@ Simulator::~Simulator() {
   }
 #ifdef VCD_OUTPUT
   trace_->close();
+  delete trace_;
 #endif
   delete vortex_;
 }

@@ -19,8 +19,6 @@ module VX_stream_arbiter #(
     output wire [LANES-1:0][DATAW-1:0] data_out,    
     input  wire [LANES-1:0]            ready_out
 );
-  
-    localparam LOG_NUM_REQS = $clog2(NUM_REQS);
 
     if (NUM_REQS > 1)  begin
         wire                sel_valid;

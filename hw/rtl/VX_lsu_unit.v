@@ -23,7 +23,6 @@ module VX_lsu_unit #(
     localparam MEM_ADDRW  = 32 - MEM_ASHIFT;
 
     localparam REQ_ASHIFT = `CLOG2(`DWORD_SIZE);
-    localparam REQ_ADDRW  = 32 - REQ_ASHIFT;
 
     localparam ADDR_TYPEW = `NC_ADDR_BITS + `SM_ENABLE;
 

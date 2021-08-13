@@ -16,8 +16,7 @@ module VX_miss_resrv #(
     // Size of a word in bytes
     parameter WORD_SIZE         = 1, 
     // Miss Reserv Queue Knob
-    parameter MSHR_SIZE         = 1, 
-    parameter ALM_FULL          = (MSHR_SIZE-1),
+    parameter MSHR_SIZE         = 1,
     // core request tag size
     parameter CORE_TAG_WIDTH    = 1,
 
