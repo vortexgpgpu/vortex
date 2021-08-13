@@ -5,6 +5,10 @@
 
 #define ENABLE_MEM_STALLS
 
+#ifndef TRACE_DELAY
+#define TRACE_DELAY 0
+#endif
+
 #ifndef MEM_LATENCY
 #define MEM_LATENCY 24
 #endif
@@ -24,7 +28,9 @@
 #define VL_WDATA_GETW(lwp, i, n, w) \
   VL_SEL_IWII(0, n * w, 0, 0, lwp, i * w, w)
 
-uint64_t timestamp = 0;
+uint64_t sim_trace_delay = TRACE_DELAY;
+
+static uint64_t timestamp = 0;
 
 double sc_time_stamp() { 
   return timestamp;
@@ -120,7 +126,9 @@ void Simulator::step() {
 void Simulator::eval() {
   vortex_->eval();
 #ifdef VCD_OUTPUT
-  trace_->dump(timestamp);
+  if (timestamp >= sim_trace_delay) {
+    trace_->dump(timestamp);
+  }
 #endif
   ++timestamp;
 }
@@ -141,11 +149,11 @@ void Simulator::eval_mem_bus() {
 
   bool has_response = false;
 
-  // schedule memory responses in FIFO order
+  // schedule memory responses that are ready
   for (int i = 0; i < MEMORY_BANKS; ++i) {
     uint32_t b = (i + last_mem_rsp_bank_ + 1) % MEMORY_BANKS;
     if (!mem_rsp_vec_[b].empty()
-    && (0 == mem_rsp_vec_[b].begin()->cycles_left)) {
+    && (mem_rsp_vec_[b].begin()->cycles_left) <= 0) {
         has_response = true;
         last_mem_rsp_bank_ = b;
         break;

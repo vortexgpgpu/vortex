@@ -10,6 +10,10 @@
 
 #define ENABLE_MEM_STALLS
 
+#ifndef TRACE_DELAY
+#define TRACE_DELAY 0
+#endif
+
 #ifndef MEM_LATENCY
 #define MEM_LATENCY 24
 #endif
@@ -26,7 +30,9 @@
 #define VERILATOR_RESET_VALUE 2
 #endif
 
-uint64_t timestamp = 0;
+uint64_t sim_trace_delay = TRACE_DELAY;
+
+static uint64_t timestamp = 0;
 
 double sc_time_stamp() { 
   return timestamp;
@@ -198,7 +204,9 @@ void opae_sim::step() {
 void opae_sim::eval() {  
   vortex_afu_->eval();
 #ifdef VCD_OUTPUT
-  trace_->dump(timestamp);
+  if (timestamp >= sim_trace_delay) {
+    trace_->dump(timestamp);
+  }
 #endif
   ++timestamp;
 }

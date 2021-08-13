@@ -201,12 +201,12 @@ module Vortex (
     always @(posedge clk) begin
         if (mem_req_valid && mem_req_ready) begin
             if (mem_req_rw)
-                $display("%t: MEM Wr Req: addr=%0h, tag=%0h, byteen=%0h data=%0h", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_data);
+                dpi_trace("%d: MEM Wr Req: addr=%0h, tag=%0h, byteen=%0h data=%0h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_data);
             else
-                $display("%t: MEM Rd Req: addr=%0h, tag=%0h, byteen=%0h", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen);
+                dpi_trace("%d: MEM Rd Req: addr=%0h, tag=%0h, byteen=%0h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen);
         end
         if (mem_rsp_valid && mem_rsp_ready) begin
-            $display("%t: MEM Rsp: tag=%0h, data=%0h", $time, mem_rsp_tag, mem_rsp_data);
+            dpi_trace("%d: MEM Rsp: tag=%0h, data=%0h\n", $time, mem_rsp_tag, mem_rsp_data);
         end
     end
 `endif

@@ -47,9 +47,9 @@ module VX_scoreboard  #(
         end else begin
         `ifdef DBG_PRINT_PIPELINE
             if (ibuffer_if.valid && ~ibuffer_if.ready) begin            
-                $display("%t: *** core%0d-stall: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b",
-                        $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.rd, ibuffer_if.wb, 
-                        deq_inuse_regs[ibuffer_if.rd], deq_inuse_regs[ibuffer_if.rs1], deq_inuse_regs[ibuffer_if.rs2], deq_inuse_regs[ibuffer_if.rs3]);            
+                dpi_trace("%d: *** core%0d-stall: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b\n", 
+                    $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.rd, ibuffer_if.wb, 
+                    deq_inuse_regs[ibuffer_if.rd], deq_inuse_regs[ibuffer_if.rs1], deq_inuse_regs[ibuffer_if.rs2], deq_inuse_regs[ibuffer_if.rs3]);
             end
         `endif
             if (release_reg) begin

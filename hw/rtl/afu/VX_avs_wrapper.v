@@ -166,13 +166,14 @@ module VX_avs_wrapper #(
 `ifdef DBG_PRINT_AVS
     always @(posedge clk) begin
         if (mem_req_valid && mem_req_ready) begin
-            if (mem_req_rw) 
-                $display("%t: AVS Wr Req: addr=%0h, byteen=%0h, tag=%0h, data=%0h", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_byteen, mem_req_tag, mem_req_data);                
-            else    
-                $display("%t: AVS Rd Req: addr=%0h, byteen=%0h, tag=%0h, pending=%0d", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_byteen, mem_req_tag, req_queue_size);
+            if (mem_req_rw) begin
+                dpi_trace("%d: AVS Wr Req: addr=%0h, byteen=%0h, tag=%0h, data=%0h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_byteen, mem_req_tag, mem_req_data);                
+            end else begin   
+                dpi_trace("%d: AVS Rd Req: addr=%0h, byteen=%0h, tag=%0h, pending=%0d\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_byteen, mem_req_tag, req_queue_size);
+            end
         end   
         if (mem_rsp_valid && mem_rsp_ready) begin
-            $display("%t: AVS Rd Rsp: tag=%0h, data=%0h, pending=%0d", $time, mem_rsp_tag, mem_rsp_data, req_queue_size);
+            dpi_trace("%d: AVS Rd Rsp: tag=%0h, data=%0h, pending=%0d\n", $time, mem_rsp_tag, mem_rsp_data, req_queue_size);
         end
     end
 `endif
