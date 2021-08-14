@@ -70,9 +70,7 @@ module VX_data_access #(
     ) data_store (
         .clk(clk),        
         .addr(line_addr),
-        .wren(writeen),
-        .byteen(byte_enable),
-        .rden(1'b1),
+        .wren({BYTEENW{writeen}} & byte_enable),
         .din(wdata),
         .dout(rdata)
     );

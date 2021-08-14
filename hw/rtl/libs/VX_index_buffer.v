@@ -78,8 +78,6 @@ module VX_index_buffer #(
         .waddr(write_addr),                                
         .raddr(read_addr),
         .wren(acquire_slot),
-        .byteen(1'b1),
-        .rden(1'b1),
         .din(write_data),
         .dout(read_data)
     );       

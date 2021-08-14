@@ -41,10 +41,8 @@ module VX_icache_stage #(
         .waddr(req_tag),                                
         .raddr(rsp_tag),
         .wren(icache_req_fire),
-        .byteen(1'b1),
-        .rden(ifetch_rsp_if.valid),
-        .din({ifetch_req_if.PC,  ifetch_req_if.tmask}),
-        .dout({rsp_PC,           rsp_tmask})
+        .din({ifetch_req_if.PC, ifetch_req_if.tmask}),
+        .dout({rsp_PC,          rsp_tmask})
     );
 
     `RUNTIME_ASSERT((!ifetch_req_if.valid || ifetch_req_if.PC >= `STARTUP_ADDR), ("invalid PC=%0h", ifetch_req_if.PC))

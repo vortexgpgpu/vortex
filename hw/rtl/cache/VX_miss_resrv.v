@@ -180,8 +180,6 @@ module VX_miss_resrv #(
         .waddr  (allocate_id_r),                                
         .raddr  (dequeue_id_r),
         .wren   (allocate_valid),
-        .byteen (1'b1),
-        .rden   (1'b1),
         .din    (allocate_data),
         .dout   (dequeue_data)
     );
