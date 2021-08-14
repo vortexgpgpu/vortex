@@ -223,18 +223,17 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class AutoDeviceCleanup {
+#ifdef DUMP_PERF_STATS
+class AutoPerfDump {
 private:
     std::list<vx_device_h> devices_;
 
 public:
-    AutoDeviceCleanup() {} 
+    AutoPerfDump() {} 
 
-    ~AutoDeviceCleanup() {
-        for (auto it = devices_.begin(), it_end = devices_.end(); it != it_end;) {
-            auto device = *it;
-            it = devices_.erase(it);
-            vx_dev_close(device);
+    ~AutoPerfDump() {
+        for (auto device : devices_) {
+            vx_dump_perf(device, stdout);
         }
     }
 
@@ -247,7 +246,8 @@ public:
     }    
 };
 
-AutoDeviceCleanup gAutoDeviceCleanup;
+AutoPerfDump gAutoPerfDump;
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -257,7 +257,9 @@ extern int vx_dev_open(vx_device_h* hdevice) {
 
     *hdevice = new vx_device();    
 
-    gAutoDeviceCleanup.add_device(*hdevice);
+#ifdef DUMP_PERF_STATS
+    gAutoPerfDump.add_device(*hdevice);
+#endif
 
     return 0;
 }
@@ -266,12 +268,11 @@ extern int vx_dev_close(vx_device_h hdevice) {
     if (nullptr == hdevice)
         return -1;
 
-    gAutoDeviceCleanup.remove_device(hdevice);
-
     vx_device *device = ((vx_device*)hdevice);
 
 #ifdef DUMP_PERF_STATS
-    vx_dump_perf(device, stdout);
+    gAutoPerfDump.remove_device(hdevice);
+    vx_dump_perf(hdevice, stdout);
 #endif
 
     delete device;
