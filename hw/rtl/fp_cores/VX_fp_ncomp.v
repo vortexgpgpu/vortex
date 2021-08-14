@@ -38,7 +38,7 @@ module VX_fp_ncomp #(
                 POS_SUBNORM = 32'h00000020,
                 POS_NORM    = 32'h00000040,
                 POS_INF     = 32'h00000080,
-                SIG_NAN     = 32'h00000100,
+                //SIG_NAN   = 32'h00000100,
                 QUT_NAN     = 32'h00000200;
 
     wire [LANES-1:0]        tmp_a_sign, tmp_b_sign;

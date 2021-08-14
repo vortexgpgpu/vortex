@@ -29,7 +29,6 @@ module VX_scope #(
     localparam CMD_SET_START = 3'd4;
     localparam CMD_SET_STOP  = 3'd5;
     localparam CMD_GET_OFFSET= 3'd6;
-    localparam CMD_RESERVED2 = 3'd7;
 
     localparam GET_VALID  = 3'd0;
     localparam GET_DATA   = 3'd1;
