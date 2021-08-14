@@ -177,10 +177,8 @@ module VX_shared_mem #(
             .RWCHECK (1)
         ) data_store (
             .clk    (clk),
-            .addr   (per_bank_core_req_addr[i]),          
-            .wren   (wren),  
-            .byteen (per_bank_core_req_byteen[i]),
-            .rden   (1'b1),
+            .addr   (per_bank_core_req_addr[i]),
+            .wren   ({WORD_SIZE{wren}} & per_bank_core_req_byteen[i]),
             .din    (per_bank_core_req_data[i]),
             .dout   (per_bank_core_rsp_data[i])
         );
