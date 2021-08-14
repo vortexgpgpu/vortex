@@ -47,8 +47,6 @@ module VX_ipdom_stack #(
         .waddr(wr_ptr),                                
         .raddr(rd_ptr),
         .wren(push),
-        .byteen(1'b1),
-        .rden(pop),
         .din({q2, q1}),
         .dout({d2, d1})
     );

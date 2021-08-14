@@ -53,16 +53,14 @@ module VX_tag_access #(
     ) tag_store (
         .clk(clk),                 
         .addr(line_addr),   
-        .wren(fill && ~stall),
-        .byteen(1'b1),
-        .rden(1'b1),
+        .wren(fill),
         .din({!is_flush, line_tag}),
         .dout({read_valid, read_tag})
     );
 
     assign tag_match = read_valid && (line_tag == read_tag);
 
-    `RUNTIME_ASSERT((~(fill && ~stall && ~is_flush) || ~tag_match), ("%t: redundant fill - addr=%0h, tag_id=%0h", $time, `LINE_TO_BYTE_ADDR(addr, BANK_ID), read_tag))
+    `UNUSED_VAR (stall)
     
 `ifdef DBG_PRINT_CACHE_TAG
     always @(posedge clk) begin          

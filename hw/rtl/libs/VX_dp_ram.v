@@ -14,9 +14,7 @@ module VX_dp_ram #(
     input wire              clk,
     input wire [ADDRW-1:0]  waddr,
     input wire [ADDRW-1:0]  raddr,
-    input wire              wren,
-    input wire [BYTEENW-1:0] byteen,
-    input wire              rden,
+    input wire [BYTEENW-1:0] wren,
     input wire [DATAW-1:0]  din,
     output wire [DATAW-1:0] dout
 );
@@ -35,14 +33,11 @@ module VX_dp_ram #(
                 end
 
                 always @(posedge clk) begin
-                    if (wren) begin
-                        for (integer i = 0; i < BYTEENW; i++) begin
-                            if (byteen[i])
-                                mem[waddr][i] <= din[i * 8 +: 8];
-                        end
+                    for (integer i = 0; i < BYTEENW; i++) begin
+                        if (wren[i])
+                            mem[waddr][i] <= din[i * 8 +: 8];
                     end
-                    if (rden)
-                        dout_r <= mem[raddr];
+                    dout_r <= mem[raddr];
                 end
             end else begin
                 `USE_FAST_BRAM reg [DATAW-1:0] mem [SIZE-1:0];
@@ -52,16 +47,13 @@ module VX_dp_ram #(
                 end
 
                 always @(posedge clk) begin
-                    if (wren && byteen)
+                    if (wren)
                         mem[waddr] <= din;
-                    if (rden)
-                        dout_r <= mem[raddr];
+                    dout_r <= mem[raddr];
                 end
             end
             assign dout = dout_r;
         end else begin
-            `UNUSED_VAR (rden)
-
             if (BYTEENW > 1) begin
                 `USE_FAST_BRAM reg [BYTEENW-1:0][7:0] mem [SIZE-1:0];
 
@@ -70,11 +62,9 @@ module VX_dp_ram #(
                 end
 
                 always @(posedge clk) begin
-                    if (wren) begin
-                        for (integer i = 0; i < BYTEENW; i++) begin
-                            if (byteen[i])
-                                mem[waddr][i] <= din[i * 8 +: 8];
-                        end
+                    for (integer i = 0; i < BYTEENW; i++) begin
+                        if (wren[i])
+                            mem[waddr][i] <= din[i * 8 +: 8];
                     end
                 end
                 assign dout = mem[raddr];
@@ -86,7 +76,7 @@ module VX_dp_ram #(
                 end
 
                 always @(posedge clk) begin
-                    if (wren && byteen)
+                    if (wren)
                         mem[waddr] <= din;
                 end
                 assign dout = mem[raddr];
@@ -104,14 +94,11 @@ module VX_dp_ram #(
                 end
 
                 always @(posedge clk) begin
-                    if (wren) begin
-                        for (integer i = 0; i < BYTEENW; i++) begin
-                            if (byteen[i])
-                                mem[waddr][i] <= din[i * 8 +: 8];
-                        end
+                    for (integer i = 0; i < BYTEENW; i++) begin
+                        if (wren[i])
+                            mem[waddr][i] <= din[i * 8 +: 8];
                     end
-                    if (rden)
-                        dout_r <= mem[raddr];
+                    dout_r <= mem[raddr];
                 end
             end else begin
                 reg [DATAW-1:0] mem [SIZE-1:0];
@@ -121,16 +108,13 @@ module VX_dp_ram #(
                 end
 
                 always @(posedge clk) begin
-                    if (wren && byteen)
+                    if (wren)
                         mem[waddr] <= din;
-                    if (rden)
-                        dout_r <= mem[raddr];
+                    dout_r <= mem[raddr];
                 end
             end
             assign dout = dout_r;
         end else begin
-            `UNUSED_VAR (rden)
-
             if (RWCHECK) begin
                 if (BYTEENW > 1) begin
                     reg [BYTEENW-1:0][7:0] mem [SIZE-1:0];
@@ -140,11 +124,9 @@ module VX_dp_ram #(
                     end
 
                     always @(posedge clk) begin
-                        if (wren) begin
-                            for (integer i = 0; i < BYTEENW; i++) begin
-                                if (byteen[i])
-                                    mem[waddr][i] <= din[i * 8 +: 8];
-                            end
+                        for (integer i = 0; i < BYTEENW; i++) begin
+                            if (wren[i])
+                                mem[waddr][i] <= din[i * 8 +: 8];
                         end
                     end
                     assign dout = mem[raddr];
@@ -156,7 +138,7 @@ module VX_dp_ram #(
                     end
 
                     always @(posedge clk) begin
-                        if (wren && byteen)
+                        if (wren)
                             mem[waddr] <= din;
                     end
                     assign dout = mem[raddr];
@@ -170,11 +152,9 @@ module VX_dp_ram #(
                     end
 
                     always @(posedge clk) begin
-                        if (wren) begin
-                            for (integer i = 0; i < BYTEENW; i++) begin
-                                if (byteen[i])
-                                    mem[waddr][i] <= din[i * 8 +: 8];
-                            end
+                        for (integer i = 0; i < BYTEENW; i++) begin
+                            if (wren[i])
+                                mem[waddr][i] <= din[i * 8 +: 8];
                         end
                     end
                     assign dout = mem[raddr];
@@ -186,7 +166,7 @@ module VX_dp_ram #(
                     end  
 
                     always @(posedge clk) begin
-                        if (wren && byteen)
+                        if (wren)
                             mem[waddr] <= din;
                     end
                     assign dout = mem[raddr];

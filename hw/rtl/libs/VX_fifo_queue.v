@@ -164,8 +164,6 @@ module VX_fifo_queue #(
                     .waddr(wr_ptr_r),                            
                     .raddr(rd_ptr_r),
                     .wren(push),
-                    .byteen(1'b1),
-                    .rden(1'b1),
                     .din(data_in),
                     .dout(data_out)
                 );
@@ -209,8 +207,6 @@ module VX_fifo_queue #(
                     .waddr(wr_ptr_r),                            
                     .raddr(rd_ptr_n_r),
                     .wren(push),
-                    .byteen(1'b1),
-                    .rden(1'b1),
                     .din(data_in),
                     .dout(dout)
                 ); 
