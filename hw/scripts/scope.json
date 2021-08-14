@@ -1,8 +1,9 @@
 {
     "version": 1,
     "includes":[
+        "../dpi/util_dpi.vh",
         "../rtl/VX_config.vh", 
-        "../rtl/VX_platform.vh", 
+        "../rtl/VX_platform.vh",         
         "../rtl/VX_define.vh", 
         "../rtl/cache/VX_cache_define.vh"
     ],
