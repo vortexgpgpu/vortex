@@ -74,7 +74,7 @@ json: ../../hw/opae/vortex_afu.json
 	afu_json_mgr json-info --afu-json=$^ --c-hdr=$@
 
 scope-defs.h: $(SCRIPT_DIR)/scope.json
-	$(SCRIPT_DIR)/scope.py $(RTL_INCLUDE) $(CONFIGS) -cc scope-defs.h -vl $(RTL_DIR)/scope-defs.vh $(SCRIPT_DIR)/scope.json
+	$(SCRIPT_DIR)/scope.py $(CONFIGS) -cc scope-defs.h -vl $(RTL_DIR)/scope-defs.vh $(SCRIPT_DIR)/scope.json
 
 # generate scope data
 scope: scope-defs.h
