@@ -878,7 +878,7 @@ Vortex #() vortex (
   `SCOPE_BIND_afu_vortex
 
   .clk            (clk),
-  .reset          (vx_reset),
+  .reset          (reset | vx_reset),
 
   // Memory request 
   .mem_req_valid  (vx_mem_req_valid),
