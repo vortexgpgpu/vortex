@@ -76,7 +76,7 @@ inline void vx_join() {
 
 // Warp Barrier
 inline void vx_barrier(unsigned barried_id, unsigned num_warps) {
-    asm volatile (".insn s 0x6b, 4, %1, 0cd (%0)" :: "r"(barried_id), "r"(num_warps));
+    asm volatile (".insn s 0x6b, 4, %1, 0(%0)" :: "r"(barried_id), "r"(num_warps));
 }
 
 // Return active warp's thread id 

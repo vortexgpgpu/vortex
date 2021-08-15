@@ -17,4 +17,6 @@ int test_spawn_tasks();
 
 int test_tmask();
 
+int test_barrier();
+
 #endif
