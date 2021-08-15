@@ -1,8 +1,8 @@
 #pragma once
 
+#include <verilated.h>
 #include "VVortex.h"
 #include "VVortex__Syms.h"
-#include "verilated.h"
 
 #ifdef VCD_OUTPUT
 #include <verilated_vcd_c.h>
@@ -51,7 +51,7 @@ private:
   typedef struct {
     int cycles_left;  
     std::array<uint8_t, MEM_BLOCK_SIZE> block;
-    uint32_t addr;
+    uint64_t addr;
     uint64_t tag;
   } mem_req_t;
 
