@@ -98,7 +98,7 @@ int test_tmc() {
 
 int wspawn_buffer[8];
 
-void simple_kernel() {
+void wspawn_kernel() {
 	unsigned wid = vx_warp_id();
 	wspawn_buffer[wid] = 65 + wid;
 	vx_tmc(0 == wid);
@@ -107,8 +107,8 @@ void simple_kernel() {
 int test_wsapwn() {
 	vx_printf("Wspawn Test\n");
 	int num_warps = std::min(vx_num_warps(), 8);
-	vx_wspawn(num_warps, simple_kernel);
-	simple_kernel();
+	vx_wspawn(num_warps, wspawn_kernel);
+	wspawn_kernel();
 
 	return check_error(wspawn_buffer, num_warps);
 }
@@ -216,4 +216,30 @@ l_start:
 	vx_tmc(1);
 
 	return check_error(tmask_buffer, num_threads);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+int barrier_buffer[8];
+volatile int barrier_ctr;
+volatile int barrier_stall;
+
+void barrier_kernel() {
+	unsigned wid = vx_warp_id();
+	for (int i = 0; i <= (wid * 256); ++i) {
+		++barrier_stall;
+	}	
+	barrier_buffer[wid] = 65 + wid;
+	vx_barrier(0, barrier_ctr);
+	vx_tmc(0 == wid);
+}
+
+int test_barrier() {
+	vx_printf("Barrier Test\n");
+	int num_warps = std::min(vx_num_warps(), 8);
+	barrier_ctr = num_warps;
+	barrier_stall = 0;
+	vx_wspawn(num_warps, barrier_kernel);
+	barrier_kernel();	
+	return check_error(barrier_buffer, num_warps);
 }

@@ -20,6 +20,8 @@ int main() {
 
 	errors += test_tmask();
 
+	errors += test_barrier();
+
 	if (0 == errors) {	
 		vx_printf("Passed!\n");
 	} else {
