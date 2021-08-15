@@ -1,7 +1,6 @@
 #pragma once
 
-#include "verilated.h"
-//#include "verilated_stub.h"
+#include <verilated.h>
 #include "Vvortex_afu_shim.h"
 #include "Vvortex_afu_shim__Syms.h"
 
