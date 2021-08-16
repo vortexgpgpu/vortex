@@ -39,7 +39,8 @@ module VX_ibuffer #(
 
         VX_elastic_buffer #(
             .DATAW (DATAW),
-            .SIZE  (`IBUF_SIZE)
+            .SIZE  (`IBUF_SIZE),
+            .OUTPUT_REG (`IBUF_SIZE > 2)
         ) queue (
             .clk      (clk),
             .reset    (reset),
