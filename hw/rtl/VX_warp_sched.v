@@ -202,7 +202,7 @@ module VX_warp_sched #(
 
     VX_priority_encoder #(
         .N (`NUM_WARPS)
-    ) rr_arbiter (
+    ) pri_enc (
         .data_in    (ready_warps),
         .index      (schedule_wid),
         .valid_out  (schedule_valid),

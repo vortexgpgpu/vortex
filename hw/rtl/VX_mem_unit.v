@@ -65,6 +65,7 @@ module VX_mem_unit # (
 
     `RESET_RELAY (icache_reset);
     `RESET_RELAY (dcache_reset);
+    `RESET_RELAY (mem_arb_reset);
 
     VX_cache #(
         .CACHE_ID           (`ICACHE_ID),
@@ -197,6 +198,9 @@ module VX_mem_unit # (
             .TAG_WIDTH (`DCORE_TAG_WIDTH-`SM_ENABLE)
         ) smem_rsp_if();
 
+        `RESET_RELAY (smem_arb_reset);
+        `RESET_RELAY (smem_reset);
+
         VX_smem_arb #(
             .NUM_REQS      (2),
             .LANES         (`NUM_THREADS),
@@ -207,7 +211,7 @@ module VX_mem_unit # (
             .BUFFERED_RSP  (1)
         ) smem_arb (
             .clk          (clk),
-            .reset        (reset),
+            .reset        (smem_arb_reset),
 
             // input request
             .req_valid_in   (dcache_req_if.valid),
@@ -241,8 +245,6 @@ module VX_mem_unit # (
             .rsp_data_out   (dcache_rsp_if.data),
             .rsp_ready_out  (dcache_rsp_if.ready)
         );
-
-        `RESET_RELAY (smem_reset);
 
         VX_shared_mem #(
             .CACHE_ID           (`SCACHE_ID),
@@ -312,7 +314,7 @@ module VX_mem_unit # (
         .BUFFERED_RSP  (2)
     ) mem_arb (
         .clk            (clk),
-        .reset          (reset),
+        .reset          (mem_arb_reset),
 
         // Source request
         .req_valid_in   ({dcache_mem_req_if.valid,  icache_mem_req_if.valid}),

@@ -143,6 +143,8 @@ module VX_cluster #(
 
     end else begin
 
+        `RESET_RELAY (mem_arb_reset);
+
         VX_mem_arb #(
             .NUM_REQS       (`NUM_CORES),
             .DATA_WIDTH     (`L2MEM_DATA_WIDTH), 
@@ -153,7 +155,7 @@ module VX_cluster #(
             .BUFFERED_RSP   (1)
         ) mem_arb (
             .clk            (clk),
-            .reset          (reset),
+            .reset          (mem_arb_reset),
 
             // Core request
             .req_valid_in   (per_core_mem_req_valid),

@@ -134,7 +134,7 @@ module VX_cache #(
     wire                            mem_rsp_valid_nc;
     wire [`CACHE_LINE_WIDTH-1:0]    mem_rsp_data_nc;
     wire [MEM_TAG_IN_WIDTH-1:0]     mem_rsp_tag_nc;
-    wire                            mem_rsp_ready_nc; 
+    wire                            mem_rsp_ready_nc;
 
     if (NC_ENABLE) begin
         VX_nc_bypass #( 
@@ -151,8 +151,8 @@ module VX_cache #(
             .MEM_TAG_IN_WIDTH  (MEM_TAG_IN_WIDTH),
             .MEM_TAG_OUT_WIDTH (MEM_TAG_WIDTH)
         ) nc_bypass (
-            .clk       (clk),
-            .reset     (reset),
+            .clk                (clk),
+            .reset              (reset),
 
             // Core request in
             .core_req_valid_in  (core_req_valid),
@@ -251,6 +251,8 @@ module VX_cache #(
     wire [MEM_TAG_IN_WIDTH-1:0] mem_rsp_tag_qual;
 
     wire mrsq_out_valid, mrsq_out_ready;
+
+    `RESET_RELAY (mrsq_reset);
     
     VX_elastic_buffer #(
         .DATAW      (MEM_TAG_IN_WIDTH + `CACHE_LINE_WIDTH), 
@@ -258,7 +260,7 @@ module VX_cache #(
         .OUTPUT_REG (MRSQ_SIZE > 2)
     ) mem_rsp_queue (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (mrsq_reset),
         .ready_in   (mem_rsp_ready_nc),
         .valid_in   (mem_rsp_valid_nc),
         .data_in    ({mem_rsp_tag_nc,   mem_rsp_data_nc}),                
@@ -274,13 +276,15 @@ module VX_cache #(
     wire [`LINE_SELECT_BITS-1:0] flush_addr;
     wire                         flush_enable;
 
+    `RESET_RELAY (flush_reset);
+
     VX_flush_ctrl #( 
         .CACHE_SIZE (CACHE_SIZE),
         .CACHE_LINE_SIZE (CACHE_LINE_SIZE),
         .NUM_BANKS  (NUM_BANKS)
     ) flush_ctrl (
         .clk       (clk),
-        .reset     (reset),
+        .reset     (flush_reset),
         .addr_out  (flush_addr),
         .valid_out (flush_enable)
     );
@@ -435,6 +439,8 @@ module VX_cache #(
         assign curr_bank_mem_rsp_id      = `MEM_TAG_TO_REQ_ID(mem_rsp_tag_qual);
         assign curr_bank_mem_rsp_data    = mem_rsp_data_qual;
         assign per_bank_mem_rsp_ready[i] = curr_bank_mem_rsp_ready;
+
+        `RESET_RELAY (bank_reset);
         
         VX_bank #(                
             .BANK_ID            (i),
@@ -457,7 +463,7 @@ module VX_cache #(
             `SCOPE_BIND_VX_cache_bank(i)
             
             .clk                (clk),
-            .reset              (reset),
+            .reset              (bank_reset),
 
         `ifdef PERF_ENABLE
             .perf_read_misses   (perf_read_miss_per_bank[i]),
@@ -539,13 +545,15 @@ module VX_cache #(
 
     wire [MSHR_ADDR_WIDTH-1:0] mem_req_id;
 
+    `RESET_RELAY (mreq_reset);
+
     VX_stream_arbiter #(
         .NUM_REQS (NUM_BANKS),
         .DATAW    (`MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + CACHE_LINE_SIZE + `CACHE_LINE_WIDTH),
         .BUFFERED (1)
     ) mem_req_arb (
         .clk       (clk),
-        .reset     (reset),
+        .reset     (mreq_reset),
         .valid_in  (per_bank_mem_req_valid),
         .data_in   (data_in),
         .ready_in  (per_bank_mem_req_ready),   
