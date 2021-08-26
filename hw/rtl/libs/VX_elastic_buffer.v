@@ -5,7 +5,7 @@ module VX_elastic_buffer #(
     parameter DATAW      = 1,
     parameter SIZE       = 2,
     parameter OUTPUT_REG = 0,
-    parameter FASTRAM    = 0
+    parameter LUTRAM     = 0
 ) ( 
     input  wire             clk,
     input  wire             reset,
@@ -56,7 +56,7 @@ module VX_elastic_buffer #(
             .DATAW      (DATAW),
             .SIZE       (SIZE),
             .OUTPUT_REG (OUTPUT_REG),
-            .FASTRAM    (FASTRAM)
+            .LUTRAM     (LUTRAM)
         ) queue (
             .clk    (clk),
             .reset  (reset),

@@ -21,9 +21,9 @@ module VX_gpr_stage #(
     wire write_enable = writeback_if.valid && (writeback_if.rd != 0);
     
 `ifdef EXT_F_ENABLE
-    localparam RAM_DEPTH = `NUM_WARPS * `NUM_REGS;
+    localparam RAM_SIZE = `NUM_WARPS * `NUM_REGS;
     wire [`NUM_THREADS-1:0][31:0] rdata1, rdata2, rdata3;
-    wire [$clog2(RAM_DEPTH)-1:0] waddr, raddr1, raddr2, raddr3;
+    wire [$clog2(RAM_SIZE)-1:0] waddr, raddr1, raddr2, raddr3;
     
     assign waddr  = {writeback_if.wid, writeback_if.rd};
     assign raddr1 = {gpr_req_if.wid,   gpr_req_if.rs1};
@@ -31,20 +31,20 @@ module VX_gpr_stage #(
     assign raddr3 = {gpr_req_if.wid,   gpr_req_if.rs3};
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        VX_gpr_ram_f #(
-            .DATAW (32),
-            .DEPTH (RAM_DEPTH)
-        ) gpr_ram_f (
-            .clk    (clk),
-            .wren   (write_enable && writeback_if.tmask[i]),
-            .waddr  (waddr),
-            .wdata  (writeback_if.data[i]),
-            .raddr1 (raddr1),
-            .raddr2 (raddr2),
-            .raddr3 (raddr3),
-            .rdata1 (rdata1[i]),
-            .rdata2 (rdata2[i]),
-            .rdata3 (rdata3[i])
+        VX_dp_ram #(
+            .RD_PORTS    (3),
+            .DATAW       (32),
+            .SIZE        (RAM_SIZE),
+            .INIT_ENABLE (1),
+            .INIT_VALUE  (0)
+        ) dp_ram (
+            .clk   (clk),
+            .wren  (write_enable && writeback_if.tmask[i]),
+            .waddr (waddr),
+            .wdata (writeback_if.data[i]),
+            .rden  (3'b111),
+            .raddr ({raddr3, raddr2, raddr1}),
+            .rdata ({rdata3[i], rdata2[i], rdata1[i]})
         );      
     end
     
@@ -52,9 +52,9 @@ module VX_gpr_stage #(
     assign gpr_rsp_if.rs2_data = rdata2;
     assign gpr_rsp_if.rs3_data = rdata3;
 `else
-    localparam RAM_DEPTH = `NUM_WARPS * `NUM_REGS;
+    localparam RAM_SIZE = `NUM_WARPS * `NUM_REGS;
     wire [`NUM_THREADS-1:0][31:0] rdata1, rdata2;
-    wire [$clog2(RAM_DEPTH)-1:0] waddr, raddr1, raddr2;
+    wire [$clog2(RAM_SIZE)-1:0] waddr, raddr1, raddr2;
     
     assign waddr  = {writeback_if.wid, writeback_if.rd};
     assign raddr1 = {gpr_req_if.wid,   gpr_req_if.rs1};
@@ -62,18 +62,20 @@ module VX_gpr_stage #(
     `UNUSED_VAR (gpr_req_if.rs3)  
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        VX_gpr_ram_i #(
-            .DATAW (32),
-            .DEPTH (RAM_DEPTH)
-        ) gpr_ram_i (
-            .clk    (clk),
-            .wren   (write_enable && writeback_if.tmask[i]),
-            .waddr  (waddr),
-            .wdata  (writeback_if.data[i]),
-            .raddr1 (raddr1),
-            .raddr2 (raddr2),
-            .rdata1 (rdata1[i]),
-            .rdata2 (rdata2[i])
+        VX_dp_ram #(
+            .RD_PORTS    (2),
+            .DATAW       (32),
+            .SIZE        (RAM_SIZE),
+            .INIT_ENABLE (1),
+            .INIT_VALUE  (0)
+        ) dp_ram (
+            .clk   (clk),
+            .wren  (write_enable && writeback_if.tmask[i]),
+            .waddr (waddr),
+            .wdata (writeback_if.data[i]),
+            .rden  (2'b11),
+            .raddr ({raddr2, raddr1}),
+            .rdata ({rdata2[i], rdata1[i]})
         );
     end
 

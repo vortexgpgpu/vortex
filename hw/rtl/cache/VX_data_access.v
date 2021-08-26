@@ -65,14 +65,14 @@ module VX_data_access #(
     VX_sp_ram #(
         .DATAW   (CACHE_LINE_SIZE * 8),
         .SIZE    (`LINES_PER_BANK),
-        .BYTEENW (BYTEENW),
-        .RWCHECK (1)
+        .BYTEENW (BYTEENW)
     ) data_store (
-        .clk(clk),        
-        .addr(line_addr),
-        .wren({BYTEENW{writeen}} & byte_enable),
-        .din(wdata),
-        .dout(rdata)
+        .clk   (clk),        
+        .addr  (line_addr),
+        .wren  ({BYTEENW{writeen}} & byte_enable),
+        .wdata (wdata),
+        .rden  (1'b1),
+        .rdata (rdata)
     );
 
     `UNUSED_VAR (stall)
