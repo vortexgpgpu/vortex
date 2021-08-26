@@ -46,10 +46,11 @@ module VX_tag_access #(
     wire [`LINE_SELECT_BITS-1:0] line_addr = addr [`LINE_SELECT_BITS-1:0];
 
     VX_sp_ram #(
-        .DATAW(`TAG_SELECT_BITS + 1),
-        .SIZE(`LINES_PER_BANK),
-        .INIT_ENABLE(1),
-        .INIT_VALUE(0)
+        .DATAW       (`TAG_SELECT_BITS + 1),
+        .SIZE        (`LINES_PER_BANK),
+        .INIT_ENABLE (1),
+        .INIT_VALUE  (0),
+        .NO_RWCHECK  (1)
     ) tag_store (
         .clk(  clk),                 
         .addr  (line_addr),   

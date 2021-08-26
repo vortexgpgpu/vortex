@@ -63,9 +63,10 @@ module VX_data_access #(
     end
 
     VX_sp_ram #(
-        .DATAW   (CACHE_LINE_SIZE * 8),
-        .SIZE    (`LINES_PER_BANK),
-        .BYTEENW (BYTEENW)
+        .DATAW      (CACHE_LINE_SIZE * 8),
+        .SIZE       (`LINES_PER_BANK),
+        .BYTEENW    (BYTEENW),
+        .NO_RWCHECK (1)
     ) data_store (
         .clk   (clk),        
         .addr  (line_addr),

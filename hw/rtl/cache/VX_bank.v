@@ -161,6 +161,8 @@ module VX_bank #(
     wire mreq_alm_full;
 
     wire creq_fire = creq_valid && creq_ready;
+
+    wire fill_in_st0 = valid_st0 && is_fill_st0;
     
     // determine which queue to pop next in priority order 
     wire mshr_grant  = 1;
@@ -172,6 +174,7 @@ module VX_bank #(
     wire creq_grant  = !mshr_enable && !mrsq_enable && !flush_enable;
     
     wire mshr_ready = mshr_grant
+                   && !fill_in_st0      // prevent tag read-during-write with fill
                    && !crsq_stall;      // ensure core response ready
 
     assign mem_rsp_ready = mrsq_grant
