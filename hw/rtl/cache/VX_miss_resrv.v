@@ -102,22 +102,20 @@ module VX_miss_resrv #(
         end
     end
 
-    VX_priority_encoder #(
-        .N (MSHR_SIZE)
-    ) dequeue_pe (
-        .data_in    (valid_table_x & ready_table_x),
-        .index      (dequeue_id_x),
-        .valid_out  (dequeue_val_x),
-        `UNUSED_PIN (onehot)    
+    VX_lzc #(
+        .WIDTH (MSHR_SIZE)
+    ) dequeue_sel (
+        .in_i    (valid_table_x & ready_table_x),
+        .cnt_o   (dequeue_id_x),
+        .valid_o (dequeue_val_x)
     );
 
-    VX_priority_encoder #(
-        .N (MSHR_SIZE)
-    ) allocate_pe (
-        .data_in    (~valid_table_n),
-        .index      (allocate_id_n),
-        .valid_out  (allocate_rdy_n),
-        `UNUSED_PIN (onehot)    
+    VX_lzc #(
+        .WIDTH (MSHR_SIZE)
+    ) allocate_sel (
+        .in_i    (~valid_table_n),
+        .cnt_o   (allocate_id_n),
+        .valid_o (allocate_rdy_n)
     );
 
     always @(*) begin

@@ -30,7 +30,7 @@ module VX_warp_sched #(
     reg [`NUM_WARPS-1:0] stalled_warps;  // asserted when a branch/gpgpu instructions are issued
     
     reg [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks;
-    reg [`NUM_WARPS-1:0][31:0] warp_pcs, warp_next_pcs;
+    reg [`NUM_WARPS-1:0][31:0] warp_pcs;
 
     // barriers
     reg [`NUM_BARRIERS-1:0][`NUM_WARPS-1:0] barrier_masks; // warps waiting on barrier
@@ -121,12 +121,11 @@ module VX_warp_sched #(
             end
 
             if (ifetch_req_fire) begin
-                warp_next_pcs[ifetch_req_if.wid] <= ifetch_req_if.PC + 4;
+                warp_pcs[ifetch_req_if.wid] <= ifetch_req_if.PC + 4;
             end
 
             if (wstall_if.valid) begin
                 stalled_warps[wstall_if.wid] <= wstall_if.stalled;
-                warp_pcs[wstall_if.wid] <= warp_next_pcs[wstall_if.wid];
             end
 
             // join handling
@@ -200,13 +199,12 @@ module VX_warp_sched #(
 
     wire [`NUM_WARPS-1:0] ready_warps = active_warps & ~(stalled_warps | barrier_stalls);
 
-    VX_priority_encoder #(
-        .N (`NUM_WARPS)
-    ) pri_enc (
-        .data_in    (ready_warps),
-        .index      (schedule_wid),
-        .valid_out  (schedule_valid),
-        `UNUSED_PIN (onehot)
+    VX_lzc #(
+        .WIDTH (`NUM_WARPS)
+    ) wid_select (
+        .in_i    (ready_warps),
+        .cnt_o   (schedule_wid),
+        .valid_o (schedule_valid)
     );
 
     wire [`NUM_WARPS-1:0][(`NUM_THREADS + 32)-1:0] schedule_data;

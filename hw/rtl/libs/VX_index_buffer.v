@@ -29,13 +29,12 @@ module VX_index_buffer #(
     wire free_valid;
     wire [ADDRW-1:0] free_index;
 
-    VX_priority_encoder #(
-        .N (SIZE)
+    VX_lzc #(
+        .WIDTH (SIZE)
     ) free_slots_encoder (
-        .data_in    (free_slots_n),
-        .index      (free_index),  
-        `UNUSED_PIN (onehot),
-        .valid_out  (free_valid)
+        .in_i    (free_slots_n),
+        .cnt_o   (free_index),
+        .valid_o (free_valid)
     );  
 
     always @(*) begin
