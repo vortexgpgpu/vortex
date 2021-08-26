@@ -99,7 +99,6 @@ module VX_nc_bypass #(
     // core request handling
 
     wire [NUM_REQS-1:0] core_req_valid_in_nc;
-    wire [NUM_REQS-1:0] core_req_nc_sel;
     wire [NUM_REQS-1:0] core_req_nc_tids;    
     wire [`UP(CORE_REQ_TIDW)-1:0] core_req_nc_tid;
     wire core_req_nc_valid;    
@@ -110,13 +109,12 @@ module VX_nc_bypass #(
 
     assign core_req_valid_in_nc = core_req_valid_in & core_req_nc_tids;
 
-    VX_priority_encoder #(
-        .N (NUM_REQS)
+    VX_lzc #(
+        .WIDTH (NUM_REQS)
     ) core_req_sel (
-        .data_in   (core_req_valid_in_nc),
-        .index     (core_req_nc_tid),
-        .onehot    (core_req_nc_sel),
-        .valid_out (core_req_nc_valid)
+        .in_i    (core_req_valid_in_nc),
+        .cnt_o   (core_req_nc_tid),
+        .valid_o (core_req_nc_valid)
     );
 
     assign core_req_valid_out  = core_req_valid_in & ~core_req_nc_tids;
@@ -139,10 +137,9 @@ module VX_nc_bypass #(
     if (NUM_REQS > 1) begin
         for (genvar i = 0; i < NUM_REQS; ++i) begin
             assign core_req_ready_in[i] = core_req_valid_in_nc[i] ? 
-                (~mem_req_valid_in && mem_req_ready_out && core_req_nc_sel[i]) : core_req_ready_out[i];
+                (~mem_req_valid_in && mem_req_ready_out && (core_req_nc_tid == i)) : core_req_ready_out[i];
         end 
     end else begin
-        `UNUSED_VAR (core_req_nc_sel)
         assign core_req_ready_in = core_req_valid_in_nc ? (~mem_req_valid_in && mem_req_ready_out) : core_req_ready_out;
     end
 
@@ -176,14 +173,7 @@ module VX_nc_bypass #(
             assign core_req_nc_mux_in[i] = {core_req_tag_in[i], core_req_data_in[i], core_req_byteen_in[i], core_req_addr_in[i], core_req_rw_in[i]};
         end
 
-        VX_onehot_mux #(
-            .DATAW (MUX_DATAW),
-            .N     (NUM_REQS)
-        ) core_req_nc_mux (
-            .data_in  (core_req_nc_mux_in),
-            .sel_in   (core_req_nc_sel),
-            .data_out ({core_req_tag_in_sel, core_req_data_in_sel, core_req_byteen_in_sel, core_req_addr_in_sel, core_req_rw_in_sel})
-        );
+        assign {core_req_tag_in_sel, core_req_data_in_sel, core_req_byteen_in_sel, core_req_addr_in_sel, core_req_rw_in_sel} = core_req_nc_mux_in[core_req_nc_tid];
       
         assign mem_req_rw_out   = mem_req_valid_in ? mem_req_rw_in : core_req_rw_in_sel;
         assign mem_req_addr_out = mem_req_valid_in ? mem_req_addr_in : core_req_addr_in_sel[D +: MEM_ADDR_WIDTH];
