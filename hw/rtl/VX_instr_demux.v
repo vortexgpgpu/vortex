@@ -26,13 +26,12 @@ module VX_instr_demux (
 `endif
     wire gpu_req_ready;
 
-    VX_priority_encoder #(
-        .N (`NUM_THREADS)
+    VX_lzc #(
+        .WIDTH (`NUM_THREADS)
     ) tid_select (
-        .data_in    (ibuffer_if.tmask),
-        .index      (tid),
-        `UNUSED_PIN (onehot),
-        `UNUSED_PIN (valid_out)
+        .in_i       (ibuffer_if.tmask),
+        .cnt_o      (tid),
+        `UNUSED_PIN (valid_o)
     );
 
     wire [31:0] next_PC = ibuffer_if.PC + 4;
