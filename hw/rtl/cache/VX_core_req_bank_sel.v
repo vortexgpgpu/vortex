@@ -101,7 +101,7 @@ module VX_core_req_bank_sel #(
                 end
             end
             
-            for (genvar i = NUM_REQS-1; i >= 0; --i) begin
+            for (genvar i = 0; i < NUM_REQS; ++i) begin
                 assign core_req_line_match[i] = (core_req_line_addr[i] == per_bank_line_addr_r[core_req_bid[i]]);
             end
 
@@ -186,22 +186,16 @@ module VX_core_req_bank_sel #(
 
                 if (SHARED_BANK_READY == 0) begin
                     always @(*) begin
-                        core_req_ready_r = 'x;
-                        for (integer i = NUM_REQS-1; i >= 0; --i) begin                        
-                            if (core_req_valid[i]) begin
-                                core_req_ready_r[i] = per_bank_core_req_ready[core_req_bid[i]]
-                                                   && core_req_line_match[i];
-                            end
+                        for (integer i = 0; i < NUM_REQS; ++i) begin
+                            core_req_ready_r[i] = per_bank_core_req_ready[core_req_bid[i]]
+                                               && core_req_line_match[i];
                         end
                     end
                 end else begin
                     always @(*) begin
-                        core_req_ready_r = 'x;
-                        for (integer i = NUM_REQS-1; i >= 0; --i) begin                        
-                            if (core_req_valid[i]) begin
-                                core_req_ready_r[i] = per_bank_core_req_ready 
-                                                   && core_req_line_match[i];
-                            end
+                        for (integer i = 0; i < NUM_REQS; ++i) begin
+                            core_req_ready_r[i] = per_bank_core_req_ready
+                                               && core_req_line_match[i];
                         end
                     end
                 end
