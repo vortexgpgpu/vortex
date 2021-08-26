@@ -171,9 +171,10 @@ module VX_shared_mem #(
                  && creq_out_fire;
 
         VX_sp_ram #(
-            .DATAW   (`WORD_WIDTH),
-            .SIZE    (`LINES_PER_BANK),
-            .BYTEENW (WORD_SIZE)
+            .DATAW      (`WORD_WIDTH),
+            .SIZE       (`LINES_PER_BANK),
+            .BYTEENW    (WORD_SIZE),
+            .NO_RWCHECK (1)
         ) data_store (
             .clk   (clk),
             .addr  (per_bank_core_req_addr[i]),
