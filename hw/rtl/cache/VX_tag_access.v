@@ -48,14 +48,15 @@ module VX_tag_access #(
     VX_sp_ram #(
         .DATAW(`TAG_SELECT_BITS + 1),
         .SIZE(`LINES_PER_BANK),
-        .INITZERO(1),
-        .RWCHECK(1)
+        .INIT_ENABLE(1),
+        .INIT_VALUE(0)
     ) tag_store (
-        .clk(clk),                 
-        .addr(line_addr),   
-        .wren(fill),
-        .din({!is_flush, line_tag}),
-        .dout({read_valid, read_tag})
+        .clk(  clk),                 
+        .addr  (line_addr),   
+        .wren  (fill),
+        .wdata ({!is_flush, line_tag}),
+        .rden  (1'b1),
+        .rdata ({read_valid, read_tag})
     );
 
     assign tag_match = read_valid && (line_tag == read_tag);

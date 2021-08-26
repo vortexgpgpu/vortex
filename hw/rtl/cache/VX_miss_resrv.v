@@ -169,17 +169,17 @@ module VX_miss_resrv #(
         `LINE_TO_BYTE_ADDR(addr_table[fill_id], BANK_ID), fill_id))
 
     VX_dp_ram #(
-        .DATAW   (`MSHR_DATA_WIDTH),
-        .SIZE    (MSHR_SIZE),
-        .RWCHECK (1),
-        .FASTRAM (1)
+        .DATAW  (`MSHR_DATA_WIDTH),
+        .SIZE   (MSHR_SIZE),
+        .LUTRAM (1)
     ) entries (
-        .clk    (clk),
-        .waddr  (allocate_id_r),                                
-        .raddr  (dequeue_id_r),
-        .wren   (allocate_valid),
-        .din    (allocate_data),
-        .dout   (dequeue_data)
+        .clk   (clk),
+        .waddr (allocate_id_r),                                
+        .raddr (dequeue_id_r),
+        .wren  (allocate_valid),
+        .wdata (allocate_data),
+        .rden  (1'b1),
+        .rdata (dequeue_data)
     );
 
     assign allocate_ready = allocate_rdy_r;
