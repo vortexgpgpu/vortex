@@ -2,7 +2,6 @@
 
 `TRACING_OFF
 module VX_dp_ram #(
-    parameter RD_PORTS    = 1,
     parameter DATAW       = 1,
     parameter SIZE        = 1,
     parameter BYTEENW     = 1,
@@ -14,18 +13,16 @@ module VX_dp_ram #(
     parameter INIT_FILE   = "",
     parameter [DATAW-1:0] INIT_VALUE = 0
 ) ( 
-    input wire                clk,
-    input wire [BYTEENW-1:0]  wren,
-    input wire [ADDRW-1:0]    waddr,        
-    input wire [DATAW-1:0]    wdata,
-    input wire [RD_PORTS-1:0] rden,
-    input wire [RD_PORTS-1:0][ADDRW-1:0] raddr,
-    output wire [RD_PORTS-1:0][DATAW-1:0] rdata
+    input wire               clk,
+    input wire [BYTEENW-1:0] wren,
+    input wire [ADDRW-1:0]   waddr,        
+    input wire [DATAW-1:0]   wdata,
+    input wire               rden,
+    input wire [ADDRW-1:0]   raddr,
+    output wire [DATAW-1:0]  rdata
 );
 
     `STATIC_ASSERT((1 == BYTEENW) || ((BYTEENW > 1) && 0 == (BYTEENW % 4)), ("invalid parameter"))
-    `STATIC_ASSERT(!LUTRAM || (RD_PORTS == 1), ("multi-porting not supported on LUTRAM"))
-
 
 `define RAM_INITIALIZATION                        \
     if (INIT_ENABLE) begin                        \
@@ -94,7 +91,7 @@ module VX_dp_ram #(
         end
     end else begin
         if (OUTPUT_REG) begin
-            reg [RD_PORTS-1:0][DATAW-1:0] rdata_r;
+            reg [DATAW-1:0] rdata_r;
 
             if (BYTEENW > 1) begin
                 reg [BYTEENW-1:0][7:0] ram [SIZE-1:0];
@@ -106,10 +103,8 @@ module VX_dp_ram #(
                         if (wren[i])
                             ram[waddr][i] <= wdata[i * 8 +: 8];
                     end
-                    for (integer i = 0; i < RD_PORTS; ++i) begin
-                        if (rden[i])
-                            rdata_r[i] <= ram[raddr[i]];
-                    end
+                    if (rden)
+                        rdata_r <= ram[raddr];
                 end
             end else begin
                 reg [DATAW-1:0] ram [SIZE-1:0];
@@ -119,10 +114,8 @@ module VX_dp_ram #(
                 always @(posedge clk) begin
                     if (wren)
                         ram[waddr] <= wdata;
-                    for (integer i = 0; i < RD_PORTS; ++i) begin
-                        if (rden[i])
-                            rdata_r[i] <= ram[raddr[i]];
-                    end
+                    if (rden)
+                        rdata_r <= ram[raddr];
                 end
             end
             assign rdata = rdata_r;
@@ -140,9 +133,7 @@ module VX_dp_ram #(
                                 ram[waddr][i] <= wdata[i * 8 +: 8];
                         end
                     end
-                    for (genvar i = 0; i < RD_PORTS; ++i) begin
-                        assign rdata[i] = ram[raddr[i]];
-                    end
+                    assign rdata = ram[raddr];
                 end else begin
                     `NO_RW_RAM_CHECK reg [DATAW-1:0] ram [SIZE-1:0];
 
@@ -152,9 +143,7 @@ module VX_dp_ram #(
                         if (wren)
                             ram[waddr] <= wdata;
                     end
-                    for (genvar i = 0; i < RD_PORTS; ++i) begin
-                        assign rdata[i] = ram[raddr[i]];
-                    end
+                    assign rdata = ram[raddr];
                 end
             end else begin
                 if (BYTEENW > 1) begin
@@ -168,9 +157,7 @@ module VX_dp_ram #(
                                 ram[waddr][i] <= wdata[i * 8 +: 8];
                         end
                     end
-                    for (genvar i = 0; i < RD_PORTS; ++i) begin
-                        assign rdata[i] = ram[raddr[i]];
-                    end
+                    assign rdata = ram[raddr];
                 end else begin
                     reg [DATAW-1:0] ram [SIZE-1:0];
 
@@ -180,16 +167,14 @@ module VX_dp_ram #(
                         if (wren)
                             ram[waddr] <= wdata;
                     end
-                    for (genvar i = 0; i < RD_PORTS; ++i) begin
-                        assign rdata[i] = ram[raddr[i]];
-                    end
+                    assign rdata = ram[raddr];
                 end                
             end
         end
     end
 `else
     if (OUTPUT_REG) begin
-        reg [RD_PORTS-1:0][DATAW-1:0] rdata_r;
+        reg [DATAW-1:0] rdata_r;
         if (BYTEENW > 1) begin
             reg [BYTEENW-1:0][7:0] ram [SIZE-1:0];
 
@@ -200,10 +185,8 @@ module VX_dp_ram #(
                     if (wren[i])
                         ram[waddr][i] <= wdata[i * 8 +: 8];
                 end
-                for (integer i = 0; i < RD_PORTS; ++i) begin
-                    if (rden[i])
-                        rdata_r[i] <= ram[raddr[i]];
-                end
+                if (rden)
+                    rdata_r <= ram[raddr];
             end
         end else begin
             reg [DATAW-1:0] ram [SIZE-1:0];
@@ -213,10 +196,8 @@ module VX_dp_ram #(
             always @(posedge clk) begin
                 if (wren)
                     ram[waddr] <= wdata;
-                for (integer i = 0; i < RD_PORTS; ++i) begin
-                    if (rden[i])
-                        rdata_r[i] <= ram[raddr[i]];
-                end
+                if (rden)
+                    rdata_r <= ram[raddr];
             end
         end
         assign rdata = rdata_r;
@@ -244,13 +225,9 @@ module VX_dp_ram #(
                 `UNUSED_VAR (prev_write)
                 `UNUSED_VAR (prev_data)
                 `UNUSED_VAR (prev_waddr)
-                for (genvar i = 0; i < RD_PORTS; ++i) begin
-                    assign rdata[i] = ram[raddr[i]];
-                end
+                assign rdata = ram[raddr];
             end else begin
-                for (genvar i = 0; i < RD_PORTS; ++i) begin
-                    assign rdata[i] = (prev_write && (prev_waddr == raddr[i])) ? prev_data : ram[raddr[i]];
-                end
+                assign rdata = (prev_write && (prev_waddr == raddr)) ? prev_data : ram[raddr];
             end
         end else begin
             reg [DATAW-1:0] ram [SIZE-1:0];
@@ -271,17 +248,13 @@ module VX_dp_ram #(
                 `UNUSED_VAR (prev_write)
                 `UNUSED_VAR (prev_data)
                 `UNUSED_VAR (prev_waddr)
-                for (genvar i = 0; i < RD_PORTS; ++i) begin
-                    assign rdata[i] = ram[raddr[i]];
-                end
+                assign rdata = ram[raddr];
             end else begin
-                for (genvar i = 0; i < RD_PORTS; ++i) begin
-                    assign rdata[i] = (prev_write && (prev_waddr == raddr[i])) ? prev_data : ram[raddr[i]];
-                end
+                assign rdata = (prev_write && (prev_waddr == raddr)) ? prev_data : ram[raddr];
             end
         end
     end
-`endif    
+`endif
 
 endmodule
 `TRACING_ON
