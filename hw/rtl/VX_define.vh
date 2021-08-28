@@ -154,6 +154,10 @@
 `define LSU_OP(x)       x[`LSU_BITS-1:0]
 `define LSU_IS_FENCE(x) x[0]
 
+`define FENCE_BITS      1
+`define FENCE_D         1'h0
+`define FENCE_I         1'h1
+
 `define CSR_RW          2'h1
 `define CSR_RS          2'h2
 `define CSR_RC          2'h3

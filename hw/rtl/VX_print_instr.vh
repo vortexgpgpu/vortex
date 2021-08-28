@@ -71,17 +71,25 @@ task print_ex_op (
         end
     end
     `EX_LSU: begin
-        case (`LSU_BITS'(op_type))
-            `LSU_LB: dpi_trace("LB");
-            `LSU_LH: dpi_trace("LH");
-            `LSU_LW: dpi_trace("LW");
-            `LSU_LBU:dpi_trace("LBU");
-            `LSU_LHU:dpi_trace("LHU");
-            `LSU_SB: dpi_trace("SB");
-            `LSU_SH: dpi_trace("SH");
-            `LSU_SW: dpi_trace("SW");
-            default: dpi_trace("?");
-        endcase
+        if (op_mod == 0) begin
+            case (`LSU_BITS'(op_type))
+                `LSU_LB: dpi_trace("LB");
+                `LSU_LH: dpi_trace("LH");
+                `LSU_LW: dpi_trace("LW");
+                `LSU_LBU:dpi_trace("LBU");
+                `LSU_LHU:dpi_trace("LHU");
+                `LSU_SB: dpi_trace("SB");
+                `LSU_SH: dpi_trace("SH");
+                `LSU_SW: dpi_trace("SW");
+                default: dpi_trace("?");
+            endcase
+        end else if (op_mod == 1) begin
+            case (`FENCE_BITS'(op_type))
+                `FENCE_D: dpi_trace("DFENCE");
+                `FENCE_I: dpi_trace("IFENCE");
+                default: dpi_trace("?");
+            endcase
+        end
     end
     `EX_CSR: begin
         case (`CSR_BITS'(op_type))

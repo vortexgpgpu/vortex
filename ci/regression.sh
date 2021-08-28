@@ -77,8 +77,9 @@ CONFIGS="-DDNUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo
 CONFIGS="-DDNUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo
 
 # test cache multi-porting
-CONFIGS="-DDNUM_PORTS=2" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo
-CONFIGS="-DDNUM_PORTS=4" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo
+CONFIGS="-DDNUM_PORTS=2" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=io_addr
+CONFIGS="-DDNUM_PORTS=4" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=io_addr
+CONFIGS="-DL2NUM_PORTS=2" ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=io_addr
 
 # test 128-bit MEM block
 CONFIGS=-DMEM_BLOCK_SIZE=16 ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
