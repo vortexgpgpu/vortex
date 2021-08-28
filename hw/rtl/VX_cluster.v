@@ -87,6 +87,7 @@ module VX_cluster #(
             .CACHE_SIZE         (`L2CACHE_SIZE),
             .CACHE_LINE_SIZE    (`L2CACHE_LINE_SIZE),
             .NUM_BANKS          (`L2NUM_BANKS),
+            .NUM_PORTS          (`L2NUM_PORTS),
             .WORD_SIZE          (`L2WORD_SIZE),
             .NUM_REQS           (`L2NUM_REQS),
             .CREQ_SIZE          (`L2CREQ_SIZE),

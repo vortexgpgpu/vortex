@@ -192,7 +192,8 @@ module VX_decode  #(
             end
             `INST_F: begin
                 ex_type = `EX_LSU;
-                op_mod  = `MOD_BITS'(!func3[0]); // data fence
+                op_type = `OP_BITS'(func3[0]);
+                op_mod  = `MOD_BITS'(1);
             end
             `INST_SYS : begin 
                 if (func3[1:0] != 0) begin                    
