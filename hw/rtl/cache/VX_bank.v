@@ -149,7 +149,7 @@ module VX_bank #(
     wire [NUM_PORTS-1:0]            pmask_st0, pmask_st1;
     wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] tag_st0, tag_st1;
     wire [`CACHE_LINE_WIDTH-1:0]    rdata_st1;
-    wire [`CACHE_LINE_WIDTH-1:0]    wdata_st0, wdata_st1;  
+    wire [`CACHE_LINE_WIDTH-1:0]    wdata_st0, wdata_st1;
     wire [MSHR_ADDR_WIDTH-1:0]      mshr_id_st0, mshr_id_st1;
     wire                            valid_st0, valid_st1;        
     wire                            is_fill_st0, is_fill_st1;
@@ -198,27 +198,6 @@ module VX_bank #(
     end
 `endif
 
-    wire [`CACHE_LINE_WIDTH-1:0] creq_line_data;
-
-    if (`WORDS_PER_LINE > 1) begin
-        if (NUM_PORTS > 1) begin
-            reg [`CACHE_LINE_WIDTH-1:0] creq_line_data_r;
-            always @(*) begin
-                creq_line_data_r = 'x;
-                for (integer p = 0; p < NUM_PORTS; p++) begin
-                    if (creq_pmask[p]) begin
-                        creq_line_data_r[creq_wsel[p] * `WORD_WIDTH +: `WORD_WIDTH] = creq_data[p];
-                    end
-                end
-            end
-            assign creq_line_data = creq_line_data_r;
-        end else begin
-            assign creq_line_data = {`WORDS_PER_LINE{creq_data}};
-        end
-    end else begin
-        assign creq_line_data = creq_data;
-    end
-    
     VX_pipe_register #(
         .DATAW  (1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH + NUM_PORTS * (WORD_SELECT_BITS + WORD_SIZE + `REQS_BITS + 1 + CORE_TAG_WIDTH) + MSHR_ADDR_WIDTH),
         .RESETW (1)
@@ -233,7 +212,7 @@ module VX_bank #(
             mshr_enable,
             creq_fire && creq_rw,
             mshr_enable ? mshr_addr : (mem_rsp_valid ? mem_rsp_addr : (flush_enable ? `LINE_ADDR_WIDTH'(flush_addr) : creq_addr)),
-            (mem_rsp_valid || !WRITE_ENABLE) ? mem_rsp_data : creq_line_data,
+            (mem_rsp_valid || !WRITE_ENABLE) ? mem_rsp_data : `CACHE_LINE_WIDTH'(creq_data),
             mshr_enable ? mshr_wsel : creq_wsel,
             creq_byteen,
             mshr_enable ? mshr_tid : creq_tid,
@@ -315,23 +294,36 @@ module VX_bank #(
     wire mreq_push_st1 = (read_st1 && miss_st1 && !mshr_pending_st1)
                       || write_st1;
 
-    wire [`WORDS_PER_LINE-1:0][WORD_SIZE-1:0] line_byteen_st1;
+    wire [`CACHE_LINE_WIDTH-1:0] line_wdata_st1;
+    wire [CACHE_LINE_SIZE-1:0] line_byteen_st1;
+
+    wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] creq_data_st1 = wdata_st1[0 +: NUM_PORTS * `WORD_WIDTH];
 
     if (`WORDS_PER_LINE > 1) begin
+        reg [`CACHE_LINE_WIDTH-1:0] line_wdata_r;
         reg [CACHE_LINE_SIZE-1:0] line_byteen_r;
         always @(*) begin
-            line_byteen_r = 0;           
-            for (integer p = 0; p < NUM_PORTS; p++) begin
-                if ((NUM_PORTS == 1) || pmask_st1[p]) begin
-                    line_byteen_r[wsel_st1[p] * WORD_SIZE +: WORD_SIZE] = byteen_st1[p];
+            line_wdata_r  = 'x;
+            line_byteen_r = 0;
+            if (NUM_PORTS > 1) begin      
+                for (integer p = 0; p < NUM_PORTS; p++) begin
+                    if (creq_pmask[p]) begin
+                        line_wdata_r[creq_wsel[p] * `WORD_WIDTH +: `WORD_WIDTH] = creq_data_st1[p];
+                        line_byteen_r[wsel_st1[p] * WORD_SIZE +: WORD_SIZE] = byteen_st1[p];
+                    end
                 end
+            end else begin
+                line_wdata_r = {`WORDS_PER_LINE{creq_data_st1}};
+                line_byteen_r[wsel_st1[0] * WORD_SIZE +: WORD_SIZE] = byteen_st1[0];
             end
         end
+        assign line_wdata_st1  = line_wdata_r;
         assign line_byteen_st1 = line_byteen_r;
     end else begin
-        assign line_byteen_st1 = byteen_st1;
         `UNUSED_VAR (wsel_st1)
-    end   
+        assign line_wdata_st1  = creq_data_st1;
+        assign line_byteen_st1 = byteen_st1;
+    end
 
     VX_data_access #(
         .BANK_ID        (BANK_ID),
@@ -356,13 +348,14 @@ module VX_bank #(
 
         // reading
         .readen     (valid_st1 && read_st1),
-        .rdata      (rdata_st1),
+        .read_data  (rdata_st1),
 
         // writing        
         .writeen    (valid_st1 && writeen_st1),
         .is_fill    (is_fill_st1),
-        .byteen     (line_byteen_st1),        
-        .wdata      (wdata_st1)
+        .byteen     (line_byteen_st1),
+        .write_data (line_wdata_st1),
+        .fill_data  (wdata_st1)
     );
     
     wire mshr_allocate = creq_fire && ~creq_rw;
@@ -482,6 +475,7 @@ module VX_bank #(
     assign mreq_addr = addr_st1;
     assign mreq_id   = mshr_id_st1;
     assign mreq_wsel = wsel_st1;
+    assign mreq_data = creq_data_st1;
 
     if (NUM_PORTS > 1) begin
         for (genvar p = 0; p < NUM_PORTS; ++p) begin
@@ -489,10 +483,6 @@ module VX_bank #(
         end
     end else begin
         assign mreq_byteen[0] = byteen_st1[0];
-    end
-    
-    for (genvar p = 0; p < NUM_PORTS; ++p) begin
-        assign mreq_data[p] = wdata_st1[wsel_st1[p] * `WORD_WIDTH +: `WORD_WIDTH];
     end
 
     VX_fifo_queue #(
