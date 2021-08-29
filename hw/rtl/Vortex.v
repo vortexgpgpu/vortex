@@ -85,6 +85,7 @@ module Vortex (
             .CACHE_SIZE         (`L3CACHE_SIZE),
             .CACHE_LINE_SIZE    (`L3CACHE_LINE_SIZE),
             .NUM_BANKS          (`L3NUM_BANKS),
+            .NUM_PORTS          (`L3NUM_PORTS),
             .WORD_SIZE          (`L3WORD_SIZE),
             .NUM_REQS           (`L3NUM_REQS),
             .CREQ_SIZE          (`L3CREQ_SIZE),

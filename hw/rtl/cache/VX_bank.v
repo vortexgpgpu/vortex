@@ -39,7 +39,8 @@ module VX_bank #(
     // bank offset from beginning of index range
     parameter BANK_ADDR_OFFSET              = 0,
 
-    localparam MSHR_ADDR_WIDTH = $clog2(MSHR_SIZE)
+    localparam MSHR_ADDR_WIDTH  = $clog2(MSHR_SIZE),
+    localparam WORD_SELECT_BITS = `UP(`WORD_SELECT_BITS)
 ) (
     `SCOPE_IO_VX_bank
 
@@ -56,13 +57,13 @@ module VX_bank #(
     // Core Request    
     input wire                          core_req_valid, 
     input wire [NUM_PORTS-1:0]          core_req_pmask,
-    input wire [NUM_PORTS-1:0][`UP(`WORD_SELECT_BITS)-1:0] core_req_wsel,
+    input wire [NUM_PORTS-1:0][WORD_SELECT_BITS-1:0] core_req_wsel,
     input wire [NUM_PORTS-1:0][WORD_SIZE-1:0] core_req_byteen,
     input wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] core_req_data,  
     input wire [NUM_PORTS-1:0][`REQS_BITS-1:0] core_req_tid,
+    input wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] core_req_tag,
     input wire                          core_req_rw,  
     input wire [`LINE_ADDR_WIDTH-1:0]   core_req_addr,
-    input wire [CORE_TAG_WIDTH-1:0]     core_req_tag,
     output wire                         core_req_ready,
     
     // Core Response    
@@ -70,16 +71,17 @@ module VX_bank #(
     output wire [NUM_PORTS-1:0]         core_rsp_pmask,
     output wire [NUM_PORTS-1:0][`REQS_BITS-1:0] core_rsp_tid,
     output wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] core_rsp_data,
-    output wire [CORE_TAG_WIDTH-1:0]    core_rsp_tag,
+    output wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag,
     input  wire                         core_rsp_ready,
 
     // Memory request
     output wire                         mem_req_valid,
     output wire                         mem_req_rw,
-    output wire [CACHE_LINE_SIZE-1:0]   mem_req_byteen,    
+    output wire [NUM_PORTS-1:0][WORD_SIZE-1:0] mem_req_byteen,
+    output wire [NUM_PORTS-1:0][WORD_SELECT_BITS-1:0] mem_req_wsel,
     output wire [`LINE_ADDR_WIDTH-1:0]  mem_req_addr,
     output wire [MSHR_ADDR_WIDTH-1:0]   mem_req_id,
-    output wire [`CACHE_LINE_WIDTH-1:0] mem_req_data,
+    output wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] mem_req_data,
     input  wire                         mem_req_ready,
     
     // Memory response
@@ -104,18 +106,18 @@ module VX_bank #(
 `endif    
 
     wire [NUM_PORTS-1:0] creq_pmask;
-    wire [NUM_PORTS-1:0][`UP(`WORD_SELECT_BITS)-1:0] creq_wsel;
+    wire [NUM_PORTS-1:0][WORD_SELECT_BITS-1:0] creq_wsel;
     wire [NUM_PORTS-1:0][WORD_SIZE-1:0] creq_byteen;
     wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] creq_data;
     wire [NUM_PORTS-1:0][`REQS_BITS-1:0] creq_tid;  
+    wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] creq_tag;
     wire                        creq_rw;  
     wire [`LINE_ADDR_WIDTH-1:0] creq_addr;
-    wire [CORE_TAG_WIDTH-1:0]   creq_tag;
-
+    
     wire creq_valid, creq_ready;
 
     VX_elastic_buffer #(
-        .DATAW      (CORE_TAG_WIDTH + 1 + `LINE_ADDR_WIDTH + (1 + `UP(`WORD_SELECT_BITS) + WORD_SIZE + `WORD_WIDTH + `REQS_BITS) * NUM_PORTS),
+        .DATAW      (1 + `LINE_ADDR_WIDTH + NUM_PORTS * (1 + WORD_SELECT_BITS + WORD_SIZE + `WORD_WIDTH + `REQS_BITS + CORE_TAG_WIDTH)),
         .SIZE       (CREQ_SIZE),
         .OUTPUT_REG (CREQ_SIZE > 2)
     ) core_req_queue (
@@ -123,8 +125,8 @@ module VX_bank #(
         .reset      (reset),
         .ready_in   (core_req_ready),
         .valid_in   (core_req_valid),
-        .data_in    ({core_req_tag, core_req_rw, core_req_addr, core_req_pmask, core_req_wsel, core_req_byteen, core_req_data, core_req_tid}),                
-        .data_out   ({creq_tag,     creq_rw,     creq_addr,     creq_pmask,     creq_wsel,     creq_byteen,     creq_data,     creq_tid}),
+        .data_in    ({core_req_rw, core_req_addr, core_req_pmask, core_req_wsel, core_req_byteen, core_req_data, core_req_tid, core_req_tag}),                
+        .data_out   ({creq_rw,     creq_addr,     creq_pmask,     creq_wsel,     creq_byteen,     creq_data,     creq_tid,     creq_tag}),
         .ready_out  (creq_ready),
         .valid_out  (creq_valid)
     );  
@@ -134,35 +136,33 @@ module VX_bank #(
     wire                            mshr_valid;
     wire [MSHR_ADDR_WIDTH-1:0]      mshr_dequeue_id;
     wire [`LINE_ADDR_WIDTH-1:0]     mshr_addr;
-    wire [CORE_TAG_WIDTH-1:0]       mshr_tag;
-    wire [NUM_PORTS-1:0]            mshr_pmask;
-    wire [NUM_PORTS-1:0][`UP(`WORD_SELECT_BITS)-1:0] mshr_wsel;
+    wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] mshr_tag;    
+    wire [NUM_PORTS-1:0][WORD_SELECT_BITS-1:0] mshr_wsel;
     wire [NUM_PORTS-1:0][`REQS_BITS-1:0] mshr_tid;
+    wire [NUM_PORTS-1:0]            mshr_pmask;
     
     wire [`LINE_ADDR_WIDTH-1:0]     addr_st0, addr_st1;
-    wire                            mem_rw_st0, mem_rw_st1;
-    wire [NUM_PORTS-1:0][`UP(`WORD_SELECT_BITS)-1:0] wsel_st0, wsel_st1;        
+    wire                            write_st0, write_st1;
+    wire [NUM_PORTS-1:0][WORD_SELECT_BITS-1:0] wsel_st0, wsel_st1;        
     wire [NUM_PORTS-1:0][WORD_SIZE-1:0] byteen_st0, byteen_st1;
     wire [NUM_PORTS-1:0][`REQS_BITS-1:0] req_tid_st0, req_tid_st1;
     wire [NUM_PORTS-1:0]            pmask_st0, pmask_st1;
+    wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] tag_st0, tag_st1;
     wire [`CACHE_LINE_WIDTH-1:0]    rdata_st1;
     wire [`CACHE_LINE_WIDTH-1:0]    wdata_st0, wdata_st1;  
     wire [MSHR_ADDR_WIDTH-1:0]      mshr_id_st0, mshr_id_st1;
-    wire [CORE_TAG_WIDTH-1:0]       tag_st0, tag_st1;
     wire                            valid_st0, valid_st1;        
     wire                            is_fill_st0, is_fill_st1;
     wire                            is_mshr_st0, is_mshr_st1;    
     wire                            miss_st0, miss_st1;
-    wire                            writeen_unqual_st1;
     wire                            is_flush_st0;
     wire                            mshr_pending_st0, mshr_pending_st1;
 
     wire crsq_valid, crsq_ready, crsq_stall;
     wire mreq_alm_full;
-
-    wire creq_fire = creq_valid && creq_ready;
-
-    wire fill_in_st0 = valid_st0 && is_fill_st0;
+    
+    wire rdw_fill_hazard  = valid_st0 && is_fill_st0;
+    wire rdw_write_hazard = valid_st0 && write_st0 && ~creq_rw;
     
     // determine which queue to pop next in priority order 
     wire mshr_grant  = 1;
@@ -174,24 +174,25 @@ module VX_bank #(
     wire creq_grant  = !mshr_enable && !mrsq_enable && !flush_enable;
     
     wire mshr_ready = mshr_grant
-                   && !fill_in_st0      // prevent tag read-during-write with fill
-                   && !crsq_stall;      // ensure core response ready
+                   && !rdw_fill_hazard      // prevent read-during-write
+                   && !crsq_stall;          // ensure core response ready
 
     assign mem_rsp_ready = mrsq_grant
-                        && !crsq_stall; // ensure core response ready
+                        && !crsq_stall;     // ensure core response ready
                    
-    assign creq_ready = creq_grant 
-                     && !mreq_alm_full  // ensure memory request ready                   
-                     && !mshr_alm_full  // ensure mshr enqueue ready
-                     && !crsq_stall;    // ensure core response ready
+    assign creq_ready = creq_grant
+                     && !rdw_write_hazard   // prevent read-during-write
+                     && !mreq_alm_full      // ensure memory request ready                   
+                     && !mshr_alm_full      // ensure mshr enqueue ready
+                     && !crsq_stall;        // ensure core response ready
 
-    wire mshr_fire = mshr_valid && mshr_ready;
-
+    wire mshr_fire    = mshr_valid && mshr_ready;
     wire mem_rsp_fire = mem_rsp_valid && mem_rsp_ready;
+    wire creq_fire    = creq_valid && creq_ready;
 
 `ifdef DBG_CACHE_REQ_INFO
     if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
-        assign {debug_wid_sel, debug_pc_sel} = mshr_enable ? mshr_tag[`CACHE_REQ_INFO_RNG] : creq_tag[`CACHE_REQ_INFO_RNG];
+        assign {debug_wid_sel, debug_pc_sel} = mshr_enable ? mshr_tag[0][`CACHE_REQ_INFO_RNG] : creq_tag[0][`CACHE_REQ_INFO_RNG];
     end else begin        
         assign {debug_wid_sel, debug_pc_sel} = 0;
     end
@@ -219,7 +220,7 @@ module VX_bank #(
     end
     
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH + (`UP(`WORD_SELECT_BITS) + WORD_SIZE + `REQS_BITS + 1) * NUM_PORTS + CORE_TAG_WIDTH + MSHR_ADDR_WIDTH),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH + NUM_PORTS * (WORD_SELECT_BITS + WORD_SIZE + `REQS_BITS + 1 + CORE_TAG_WIDTH) + MSHR_ADDR_WIDTH),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
@@ -230,7 +231,7 @@ module VX_bank #(
             flush_enable,
             mrsq_enable || flush_enable,
             mshr_enable,
-            mshr_enable ? 1'b0 : creq_rw,
+            creq_fire && creq_rw,
             mshr_enable ? mshr_addr : (mem_rsp_valid ? mem_rsp_addr : (flush_enable ? `LINE_ADDR_WIDTH'(flush_addr) : creq_addr)),
             (mem_rsp_valid || !WRITE_ENABLE) ? mem_rsp_data : creq_line_data,
             mshr_enable ? mshr_wsel : creq_wsel,
@@ -240,12 +241,12 @@ module VX_bank #(
             mshr_enable ? mshr_tag : creq_tag,
             mshr_enable ? mshr_dequeue_id : (mem_rsp_valid ? mem_rsp_id : mshr_alloc_id)
         }),
-        .data_out ({valid_st0, is_flush_st0, is_fill_st0, is_mshr_st0, mem_rw_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_tid_st0, pmask_st0, tag_st0, mshr_id_st0})
+        .data_out ({valid_st0, is_flush_st0, is_fill_st0, is_mshr_st0, write_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_tid_st0, pmask_st0, tag_st0, mshr_id_st0})
     );
 
 `ifdef DBG_CACHE_REQ_INFO
     if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
-        assign {debug_wid_st0, debug_pc_st0} = tag_st0[`CACHE_REQ_INFO_RNG];
+        assign {debug_wid_st0, debug_pc_st0} = tag_st0[0][`CACHE_REQ_INFO_RNG];
     end else begin
         assign {debug_wid_st0, debug_pc_st0} = 0;
     end
@@ -286,35 +287,33 @@ module VX_bank #(
     assign miss_st0 = !is_fill_st0 && !tag_match_st0;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH + (`UP(`WORD_SELECT_BITS) + WORD_SIZE + `REQS_BITS + 1) * NUM_PORTS + CORE_TAG_WIDTH + MSHR_ADDR_WIDTH + 1),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH + NUM_PORTS * (WORD_SELECT_BITS + WORD_SIZE + `REQS_BITS + 1 + CORE_TAG_WIDTH) + MSHR_ADDR_WIDTH + 1),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (!crsq_stall),
-        .data_in  ({valid_st0, is_fill_st0, is_mshr_st0, is_fill_st0,        miss_st0, mem_rw_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_tid_st0, pmask_st0, tag_st0, mshr_id_st0, mshr_pending_st0}),
-        .data_out ({valid_st1, is_fill_st1, is_mshr_st1, writeen_unqual_st1, miss_st1, mem_rw_st1, addr_st1, wdata_st1, wsel_st1, byteen_st1, req_tid_st1, pmask_st1, tag_st1, mshr_id_st1, mshr_pending_st1})
+        .data_in  ({valid_st0, is_fill_st0, is_mshr_st0, miss_st0, write_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_tid_st0, pmask_st0, tag_st0, mshr_id_st0, mshr_pending_st0}),
+        .data_out ({valid_st1, is_fill_st1, is_mshr_st1, miss_st1, write_st1, addr_st1, wdata_st1, wsel_st1, byteen_st1, req_tid_st1, pmask_st1, tag_st1, mshr_id_st1, mshr_pending_st1})
     ); 
 
 `ifdef DBG_CACHE_REQ_INFO
     if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
-        assign {debug_wid_st1, debug_pc_st1} = tag_st1[`CACHE_REQ_INFO_RNG];
+        assign {debug_wid_st1, debug_pc_st1} = tag_st1[0][`CACHE_REQ_INFO_RNG];
     end else begin        
         assign {debug_wid_st1, debug_pc_st1} = 0;
     end
 `endif
 
-    wire writeen_st1 = (WRITE_ENABLE && !is_fill_st1 && mem_rw_st1 && !miss_st1)
-                    || writeen_unqual_st1;
+    wire read_st1 = !is_fill_st1 && !write_st1;
 
-    wire readen_st1 = !is_fill_st1 && !mem_rw_st1;
+    wire writeen_st1 = (WRITE_ENABLE && write_st1 && !miss_st1)
+                    || is_fill_st1;
 
-    wire crsq_push_st1 = readen_st1 && !miss_st1;
-
-    wire do_writeback_st1 = !is_fill_st1 && mem_rw_st1;
+    wire crsq_push_st1 = read_st1 && !miss_st1;
     
-    wire mreq_push_st1 = (readen_st1 && miss_st1 && !mshr_pending_st1)
-                      || do_writeback_st1;
+    wire mreq_push_st1 = (read_st1 && miss_st1 && !mshr_pending_st1)
+                      || write_st1;
 
     wire [`WORDS_PER_LINE-1:0][WORD_SIZE-1:0] line_byteen_st1;
 
@@ -356,7 +355,7 @@ module VX_bank #(
         .addr       (addr_st1),
 
         // reading
-        .readen     (valid_st1 && readen_st1),
+        .readen     (valid_st1 && read_st1),
         .rdata      (rdata_st1),
 
         // writing        
@@ -368,8 +367,8 @@ module VX_bank #(
     
     wire mshr_allocate = creq_fire && ~creq_rw;
     wire mshr_replay   = do_fill_st0 && ~crsq_stall;
-    wire mshr_lookup   = valid_st0 && !is_fill_st0 && ~is_mshr_st0 && ~mem_rw_st0 && ~crsq_stall;
-    wire mshr_release  = valid_st1 && readen_st1 && ~is_mshr_st1 && ~miss_st1 && ~crsq_stall;
+    wire mshr_lookup   = valid_st0 && ~write_st0 && ~is_mshr_st0 && ~crsq_stall;
+    wire mshr_release  = valid_st1 && read_st1 && ~is_mshr_st1 && ~miss_st1 && ~crsq_stall;
 
     wire mshr_not_full;
 
@@ -433,7 +432,7 @@ module VX_bank #(
     wire [NUM_PORTS-1:0] crsq_pmask;
     wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] crsq_data;
     wire [NUM_PORTS-1:0][`REQS_BITS-1:0] crsq_tid;
-    wire [CORE_TAG_WIDTH-1:0] crsq_tag;
+    wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] crsq_tag;
 
     assign crsq_valid = valid_st1 && crsq_push_st1;
     assign crsq_stall = crsq_valid && !crsq_ready;
@@ -451,7 +450,7 @@ module VX_bank #(
     end
 
     VX_elastic_buffer #(
-        .DATAW      (CORE_TAG_WIDTH + (1 + `WORD_WIDTH + `REQS_BITS) * NUM_PORTS),
+        .DATAW      ((CORE_TAG_WIDTH + 1 + `WORD_WIDTH + `REQS_BITS) * NUM_PORTS),
         .SIZE       (CRSQ_SIZE),
         .OUTPUT_REG (1 == NUM_BANKS)
     ) core_rsp_req (
@@ -467,24 +466,37 @@ module VX_bank #(
 
     // Enqueue memory request
 
-    wire [CACHE_LINE_SIZE-1:0] mreq_byteen;
+    wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] mreq_data;
+    wire [NUM_PORTS-1:0][WORD_SIZE-1:0] mreq_byteen;
+    wire [NUM_PORTS-1:0][WORD_SELECT_BITS-1:0] mreq_wsel;
     wire [`LINE_ADDR_WIDTH-1:0] mreq_addr;
     wire [MSHR_ADDR_WIDTH-1:0] mreq_id;
-    wire [`CACHE_LINE_WIDTH-1:0] mreq_data;
+
     wire mreq_push, mreq_pop, mreq_empty, mreq_rw;
         
     assign mreq_push = valid_st1 && mreq_push_st1;
 
     assign mreq_pop = mem_req_valid && mem_req_ready;
 
-    assign mreq_rw     = WRITE_ENABLE && do_writeback_st1;
-    assign mreq_byteen = mreq_rw ? line_byteen_st1 : {CACHE_LINE_SIZE{1'b1}};
-    assign mreq_addr   = addr_st1;
-    assign mreq_id     = mshr_id_st1;
-    assign mreq_data   = wdata_st1;
+    assign mreq_rw   = WRITE_ENABLE && write_st1;
+    assign mreq_addr = addr_st1;
+    assign mreq_id   = mshr_id_st1;
+    assign mreq_wsel = wsel_st1;
+
+    if (NUM_PORTS > 1) begin
+        for (genvar p = 0; p < NUM_PORTS; ++p) begin
+            assign mreq_byteen[p] = pmask_st1[p] ? byteen_st1[p] : WORD_SIZE'(0);
+        end
+    end else begin
+        assign mreq_byteen[0] = byteen_st1[0];
+    end
+    
+    for (genvar p = 0; p < NUM_PORTS; ++p) begin
+        assign mreq_data[p] = wdata_st1[wsel_st1[p] * `WORD_WIDTH +: `WORD_WIDTH];
+    end
 
     VX_fifo_queue #(
-        .DATAW    (1 + CACHE_LINE_SIZE + `LINE_ADDR_WIDTH + MSHR_ADDR_WIDTH + `CACHE_LINE_WIDTH), 
+        .DATAW    (1 + `LINE_ADDR_WIDTH + MSHR_ADDR_WIDTH + NUM_PORTS * (WORD_SIZE + WORD_SELECT_BITS + `WORD_WIDTH)), 
         .SIZE     (MREQ_SIZE),
         .ALM_FULL (MREQ_SIZE-2)
     ) mem_req_queue (
@@ -492,8 +504,8 @@ module VX_bank #(
         .reset      (reset),
         .push       (mreq_push),
         .pop        (mreq_pop),
-        .data_in    ({mreq_rw,    mreq_byteen,    mreq_addr,    mreq_id,    mreq_data}),
-        .data_out   ({mem_req_rw, mem_req_byteen, mem_req_addr, mem_req_id, mem_req_data}),
+        .data_in    ({mreq_rw,    mreq_addr,    mreq_id,    mreq_byteen,    mreq_wsel,    mreq_data}),
+        .data_out   ({mem_req_rw, mem_req_addr, mem_req_id, mem_req_byteen, mem_req_wsel, mem_req_data}),
         .empty      (mreq_empty),        
         .alm_full   (mreq_alm_full),
         `UNUSED_PIN (full),
@@ -515,8 +527,8 @@ module VX_bank #(
     `SCOPE_ASSIGN (addr_st1, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID));
 
 `ifdef PERF_ENABLE
-    assign perf_read_misses  = valid_st1 && !is_fill_st1 && !is_mshr_st1 && miss_st1 && !mem_rw_st1;
-    assign perf_write_misses = valid_st1 && !is_fill_st1 && !is_mshr_st1 && miss_st1 && mem_rw_st1;
+    assign perf_read_misses  = valid_st1 && read_st1 && !is_mshr_st1 && miss_st1;
+    assign perf_write_misses = valid_st1 && write_st1 && !is_mshr_st1 && miss_st1;
     assign perf_pipe_stalls  = crsq_stall || mreq_alm_full || mshr_alm_full;
     assign perf_mshr_stalls  = mshr_alm_full;
 `endif
@@ -550,7 +562,7 @@ module VX_bank #(
             dpi_trace("%d: cache%0d:%0d core-rsp: addr=%0h, tag=%0h, pmask=%b, tid=%0d, data=%0h, wid=%0d, PC=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), crsq_tag, crsq_pmask, crsq_tid, crsq_data, debug_wid_st1, debug_pc_st1);
         end
         if (mreq_push) begin
-            if (do_writeback_st1)
+            if (write_st1)
                 dpi_trace("%d: cache%0d:%0d writeback: addr=%0h, data=%0h, byteen=%b, wid=%0d, PC=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mreq_addr, BANK_ID), mreq_data, mreq_byteen, debug_wid_st1, debug_pc_st1);
             else
                 dpi_trace("%d: cache%0d:%0d fill-req: addr=%0h, id=%0d, wid=%0d, PC=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mreq_addr, BANK_ID), mreq_id, debug_wid_st1, debug_pc_st1);

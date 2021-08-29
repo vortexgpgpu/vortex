@@ -48,8 +48,6 @@ module VX_tag_access #(
     VX_sp_ram #(
         .DATAW       (`TAG_SELECT_BITS + 1),
         .SIZE        (`LINES_PER_BANK),
-        .INIT_ENABLE (1),
-        .INIT_VALUE  (0),
         .NO_RWCHECK  (1)
     ) tag_store (
         .clk(  clk),                 
