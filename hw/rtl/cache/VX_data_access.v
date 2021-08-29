@@ -32,13 +32,14 @@ module VX_data_access #(
 
     // reading
     input wire                          readen,
-    output wire [`CACHE_LINE_WIDTH-1:0] rdata,
+    output wire [`CACHE_LINE_WIDTH-1:0] read_data,
 
     // writing
     input wire                          writeen,
     input wire                          is_fill,
     input wire [CACHE_LINE_SIZE-1:0]    byteen,
-    input wire [`CACHE_LINE_WIDTH-1:0]  wdata
+    input wire [`CACHE_LINE_WIDTH-1:0]  write_data,
+    input wire [`CACHE_LINE_WIDTH-1:0]  fill_data
 );
 
     `UNUSED_PARAM (CACHE_ID)
@@ -50,16 +51,20 @@ module VX_data_access #(
     localparam BYTEENW = WRITE_ENABLE ? CACHE_LINE_SIZE : 1;
 
     wire [`LINE_SELECT_BITS-1:0] line_addr;
-    wire [BYTEENW-1:0] byte_enable;
+    wire [`CACHE_LINE_WIDTH-1:0] wdata;
+    wire [BYTEENW-1:0] wren;
     
     assign line_addr = addr[`LINE_SELECT_BITS-1:0];
 
     if (WRITE_ENABLE) begin
-        assign byte_enable = is_fill ? {BYTEENW{1'b1}} : byteen;
+        assign wren  = is_fill ? {BYTEENW{writeen}} : (byteen & {BYTEENW{writeen}});
+        assign wdata = is_fill ? fill_data : write_data;
     end else begin
-        `UNUSED_VAR (byteen)
         `UNUSED_VAR (is_fill)
-        assign byte_enable = 1'b1;
+        `UNUSED_VAR (byteen)        
+        `UNUSED_VAR (write_data)
+        assign wren  = writeen;
+        assign wdata = fill_data;
     end
 
     VX_sp_ram #(
@@ -70,10 +75,10 @@ module VX_data_access #(
     ) data_store (
         .clk   (clk),        
         .addr  (line_addr),
-        .wren  ({BYTEENW{writeen}} & byte_enable),
+        .wren  (wren),
         .wdata (wdata),
         .rden  (1'b1),
-        .rdata (rdata)
+        .rdata (read_data)
     );
 
     `UNUSED_VAR (stall)
@@ -82,13 +87,13 @@ module VX_data_access #(
     always @(posedge clk) begin 
         if (writeen && ~stall) begin
             if (is_fill) begin
-                dpi_trace("%d: cache%0d:%0d data-fill: addr=%0h, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, wdata);
+                dpi_trace("%d: cache%0d:%0d data-fill: addr=%0h, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, fill_data);
             end else begin
-                dpi_trace("%d: cache%0d:%0d data-write: addr=%0h, wid=%0d, PC=%0h, byteen=%b, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), debug_wid, debug_pc, byte_enable, line_addr, wdata);
+                dpi_trace("%d: cache%0d:%0d data-write: addr=%0h, wid=%0d, PC=%0h, byteen=%b, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), debug_wid, debug_pc, byte_enable, line_addr, write_data);
             end
         end 
         if (readen && ~stall) begin
-            dpi_trace("%d: cache%0d:%0d data-read: addr=%0h, wid=%0d, PC=%0h, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), debug_wid, debug_pc, line_addr, rdata);
+            dpi_trace("%d: cache%0d:%0d data-read: addr=%0h, wid=%0d, PC=%0h, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), debug_wid, debug_pc, line_addr, read_data);
         end            
     end    
 `endif
