@@ -110,23 +110,42 @@ module VX_cache #(
     wire [NUM_PORTS-1:0][WORD_SIZE-1:0]        mem_req_byteen_p; 
     wire [NUM_PORTS-1:0][WORD_SELECT_BITS-1:0] mem_req_wsel_p;
     wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0]      mem_req_data_p;
+    wire mem_req_rw_p;
 
-    reg [CACHE_LINE_SIZE-1:0]   mem_req_byteen_r;    
-    reg [`CACHE_LINE_WIDTH-1:0] mem_req_data_r;
+    if (WRITE_ENABLE) begin
 
-    always @(*) begin
-        mem_req_byteen_r = 0;
-        mem_req_data_r   = 'x;
-        for (integer p = 0; p < NUM_PORTS; ++p) begin
-            if (mem_req_byteen_p[p] != 0) begin
-                mem_req_byteen_r[mem_req_wsel_p[p] * WORD_SIZE +: WORD_SIZE] = mem_req_byteen_p[p];
-                mem_req_data_r[mem_req_wsel_p[p] * `WORD_WIDTH +: `WORD_WIDTH] = mem_req_data_p[p];
+        reg [CACHE_LINE_SIZE-1:0]   mem_req_byteen_r;
+        reg [`CACHE_LINE_WIDTH-1:0] mem_req_data_r;
+
+        always @(*) begin
+            mem_req_byteen_r = 0;
+            mem_req_data_r   = 'x;
+            for (integer p = 0; p < NUM_PORTS; ++p) begin
+                if (mem_req_byteen_p[p] != 0) begin
+                    mem_req_byteen_r[mem_req_wsel_p[p] * WORD_SIZE +: WORD_SIZE] = mem_req_byteen_p[p];
+                    mem_req_data_r[mem_req_wsel_p[p] * `WORD_WIDTH +: `WORD_WIDTH] = mem_req_data_p[p];
+                end
             end
         end
+
+        assign mem_req_rw     = mem_req_rw_p;
+        assign mem_req_byteen = mem_req_byteen_r;
+        assign mem_req_data   = mem_req_data_r;
+
+    end else begin
+
+        `UNUSED_VAR (mem_req_byteen_p)
+        `UNUSED_VAR (mem_req_wsel_p)
+        `UNUSED_VAR (mem_req_data_p)
+        `UNUSED_VAR (mem_req_rw_p)
+        
+        assign mem_req_rw     = 0;
+        assign mem_req_byteen = 'x;
+        assign mem_req_data   = 'x;
+
     end
 
-    assign mem_req_byteen = mem_req_byteen_r;
-    assign mem_req_data   = mem_req_data_r;
+    
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -225,8 +244,8 @@ module VX_cache #(
 
             // Memory request out
             .mem_req_valid_out  (mem_req_valid),
-            .mem_req_rw_out     (mem_req_rw),    
             .mem_req_addr_out   (mem_req_addr),
+            .mem_req_rw_out     (mem_req_rw_p),
             .mem_req_byteen_out (mem_req_byteen_p),
             .mem_req_wsel_out   (mem_req_wsel_p),
             .mem_req_data_out   (mem_req_data_p),
@@ -261,8 +280,8 @@ module VX_cache #(
         assign core_rsp_ready_nc    = core_rsp_ready;
 
         assign mem_req_valid        = mem_req_valid_nc;
-        assign mem_req_rw           = mem_req_rw_nc;
         assign mem_req_addr         = mem_req_addr_nc;
+        assign mem_req_rw_p         = mem_req_rw_nc;
         assign mem_req_byteen_p     = mem_req_byteen_nc;
         assign mem_req_wsel_p       = mem_req_wsel_nc;
         assign mem_req_data_p       = mem_req_data_nc;
