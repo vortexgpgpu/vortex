@@ -291,7 +291,7 @@
 `define DNUM_BANKS `NUM_THREADS
 `endif
 
-// Number of bank ports
+// Number of ports per bank
 `ifndef DNUM_PORTS
 `define DNUM_PORTS 1
 `endif
@@ -361,6 +361,11 @@
 `define L2NUM_BANKS `MIN(`NUM_CORES, 4)
 `endif
 
+// Number of ports per bank
+`ifndef L2NUM_PORTS
+`define L2NUM_PORTS 1
+`endif
+
 // Core Request Queue Size
 `ifndef L2CREQ_SIZE
 `define L2CREQ_SIZE 0
@@ -396,6 +401,11 @@
 // Number of banks
 `ifndef L3NUM_BANKS
 `define L3NUM_BANKS `MIN(`NUM_CLUSTERS, 4)
+`endif
+
+// Number of ports per bank
+`ifndef L3NUM_PORTS
+`define L3NUM_PORTS 1
 `endif
 
 // Core Request Queue Size
