@@ -237,7 +237,7 @@ module VX_core_rsp_merge #(
                             core_rsp_valid_unqual[per_bank_core_rsp_tid[i]] = 1;     
                             core_rsp_tag_unqual[per_bank_core_rsp_tid[i]]   = per_bank_core_rsp_tag[i];
                             core_rsp_data_unqual[per_bank_core_rsp_tid[i]]  = per_bank_core_rsp_data[i];
-                            bank_select_table[per_bank_core_rsp_tid[i][i]]  = (1 << i);
+                            bank_select_table[per_bank_core_rsp_tid[i]]  = (1 << i);
                         end
                     end    
                 end

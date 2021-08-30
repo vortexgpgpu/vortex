@@ -251,7 +251,7 @@
 `define ICACHE_ID               (32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 0)
 
 // Block size in bytes
-`define ICACHE_LINE_SIZE        (`L2_ENABLE ? `L1_BLOCK_SIZE : `MEM_BLOCK_SIZE)
+`define ICACHE_LINE_SIZE        `L1_BLOCK_SIZE
 
 // Word size in bytes
 `define IWORD_SIZE              4
@@ -289,7 +289,7 @@
 `define DCACHE_ID               (32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 1)
 
 // Block size in bytes
-`define DCACHE_LINE_SIZE        (`L2_ENABLE ? `L1_BLOCK_SIZE : `MEM_BLOCK_SIZE)
+`define DCACHE_LINE_SIZE        `L1_BLOCK_SIZE
 
 // Word size in bytes
 `define DWORD_SIZE              4
