@@ -25,10 +25,10 @@ module VX_gpu_unit #(
     gpu_barrier_t   barrier;
     gpu_split_t     split;
     
-    wire is_wspawn = (gpu_req_if.op_type == `GPU_WSPAWN);
-    wire is_tmc    = (gpu_req_if.op_type == `GPU_TMC);
-    wire is_split  = (gpu_req_if.op_type == `GPU_SPLIT);
-    wire is_bar    = (gpu_req_if.op_type == `GPU_BAR);
+    wire is_wspawn = (gpu_req_if.op_type == `INST_GPU_WSPAWN);
+    wire is_tmc    = (gpu_req_if.op_type == `INST_GPU_TMC);
+    wire is_split  = (gpu_req_if.op_type == `INST_GPU_SPLIT);
+    wire is_bar    = (gpu_req_if.op_type == `INST_GPU_BAR);
 
     // tmc
 

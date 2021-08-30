@@ -11,8 +11,8 @@ module VX_fpu_fpga #(
 
     input wire [TAGW-1:0] tag_in,
     
-    input wire [`FPU_BITS-1:0] op_type,
-    input wire [`MOD_BITS-1:0] frm,
+    input wire [`INST_FPU_BITS-1:0] op_type,
+    input wire [`INST_MOD_BITS-1:0] frm,
 
     input wire [`NUM_THREADS-1:0][31:0]  dataa,
     input wire [`NUM_THREADS-1:0][31:0]  datab,
@@ -54,19 +54,19 @@ module VX_fpu_fpga #(
         is_itof   = 0;
         is_signed = 0;
         case (op_type)
-            `FPU_ADD:    begin core_select = FPU_FMA; end
-            `FPU_SUB:    begin core_select = FPU_FMA; do_sub = 1; end
-            `FPU_MUL:    begin core_select = FPU_FMA; do_neg = 1; end
-            `FPU_MADD:   begin core_select = FPU_FMA; do_madd = 1; end
-            `FPU_MSUB:   begin core_select = FPU_FMA; do_madd = 1; do_sub = 1; end
-            `FPU_NMADD:  begin core_select = FPU_FMA; do_madd = 1; do_neg = 1; end
-            `FPU_NMSUB:  begin core_select = FPU_FMA; do_madd = 1; do_sub = 1; do_neg = 1; end
-            `FPU_DIV:    begin core_select = FPU_DIV; end
-            `FPU_SQRT:   begin core_select = FPU_SQRT; end
-            `FPU_CVTWS:  begin core_select = FPU_CVT; is_signed = 1; end
-            `FPU_CVTWUS: begin core_select = FPU_CVT; end
-            `FPU_CVTSW:  begin core_select = FPU_CVT; is_itof = 1; is_signed = 1; end
-            `FPU_CVTSWU: begin core_select = FPU_CVT; is_itof = 1; end
+            `INST_FPU_ADD:    begin core_select = FPU_FMA; end
+            `INST_FPU_SUB:    begin core_select = FPU_FMA; do_sub = 1; end
+            `INST_FPU_MUL:    begin core_select = FPU_FMA; do_neg = 1; end
+            `INST_FPU_MADD:   begin core_select = FPU_FMA; do_madd = 1; end
+            `INST_FPU_MSUB:   begin core_select = FPU_FMA; do_madd = 1; do_sub = 1; end
+            `INST_FPU_NMADD:  begin core_select = FPU_FMA; do_madd = 1; do_neg = 1; end
+            `INST_FPU_NMSUB:  begin core_select = FPU_FMA; do_madd = 1; do_sub = 1; do_neg = 1; end
+            `INST_FPU_DIV:    begin core_select = FPU_DIV; end
+            `INST_FPU_SQRT:   begin core_select = FPU_SQRT; end
+            `INST_FPU_CVTWS:  begin core_select = FPU_CVT; is_signed = 1; end
+            `INST_FPU_CVTWUS: begin core_select = FPU_CVT; end
+            `INST_FPU_CVTSW:  begin core_select = FPU_CVT; is_itof = 1; is_signed = 1; end
+            `INST_FPU_CVTSWU: begin core_select = FPU_CVT; is_itof = 1; end
             default:     begin core_select = FPU_NCP; end
         endcase
     end

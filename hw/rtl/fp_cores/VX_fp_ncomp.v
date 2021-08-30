@@ -15,8 +15,8 @@ module VX_fp_ncomp #(
 
     input wire [TAGW-1:0] tag_in,
     
-    input wire [`FPU_BITS-1:0] op_type,
-    input wire [`FRM_BITS-1:0] frm,
+    input wire [`INST_FPU_BITS-1:0] op_type,
+    input wire [`INST_FRM_BITS-1:0] frm,
 
     input wire [LANES-1:0][31:0]  dataa,
     input wire [LANES-1:0][31:0]  datab,
@@ -77,8 +77,8 @@ module VX_fp_ncomp #(
 
     wire                    valid_in_s0;
     wire [TAGW-1:0]         tag_in_s0;
-    wire [`FPU_BITS-1:0]    op_type_s0;
-    wire [`FRM_BITS-1:0]    frm_s0;
+    wire [`INST_FPU_BITS-1:0] op_type_s0;
+    wire [`INST_FRM_BITS-1:0] frm_s0;
     wire [LANES-1:0][31:0]  dataa_s0, datab_s0;
     wire [LANES-1:0]        a_sign_s0, b_sign_s0;
     wire [LANES-1:0][7:0]   a_exponent_s0;
@@ -89,7 +89,7 @@ module VX_fp_ncomp #(
     wire stall;
 
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + `FPU_BITS + `FRM_BITS + LANES * (2 * 32 + 1 + 1 + 8 + 23 + 2 * $bits(fp_type_t) + 1 + 1)),
+        .DATAW  (1 + TAGW + `INST_FPU_BITS + `INST_FRM_BITS + LANES * (2 * 32 + 1 + 1 + 8 + 23 + 2 * $bits(fp_type_t) + 1 + 1)),
         .RESETW (1),
         .DEPTH  (0)
     ) pipe_reg0 (
@@ -164,7 +164,7 @@ module VX_fp_ncomp #(
     for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin
             case (frm_s0)
-                `FRM_RNE: begin // LE
+                `INST_FRM_RNE: begin // LE
                     fcmp_fflags[i] = 5'h0;
                     if (a_type_s0[i].is_nan || b_type_s0[i].is_nan) begin
                         fcmp_res[i]       = 32'h0;
@@ -173,7 +173,7 @@ module VX_fp_ncomp #(
                         fcmp_res[i] = {31'h0, (a_smaller_s0[i] | ab_equal_s0[i])};
                     end
                 end
-                `FRM_RTZ: begin // LS
+                `INST_FRM_RTZ: begin // LS
                     fcmp_fflags[i] = 5'h0;
                     if (a_type_s0[i].is_nan || b_type_s0[i].is_nan) begin
                         fcmp_res[i]       = 32'h0;
@@ -182,7 +182,7 @@ module VX_fp_ncomp #(
                         fcmp_res[i] = {31'h0, (a_smaller_s0[i] & ~ab_equal_s0[i])};
                     end                    
                 end
-                `FRM_RDN: begin // EQ
+                `INST_FRM_RDN: begin // EQ
                     fcmp_fflags[i] = 5'h0;
                     if (a_type_s0[i].is_nan || b_type_s0[i].is_nan) begin
                         fcmp_res[i]       = 32'h0;
@@ -207,11 +207,11 @@ module VX_fp_ncomp #(
     for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin
             case (op_type_s0)
-                `FPU_CLASS: begin
+                `INST_FPU_CLASS: begin
                     tmp_result[i] = fclass_mask[i];
                     tmp_fflags[i] = 'x;
                 end   
-                `FPU_CMP: begin 
+                `INST_FPU_CMP: begin 
                     tmp_result[i] = fcmp_res[i];
                     tmp_fflags[i] = fcmp_fflags[i];
                 end      
@@ -238,15 +238,15 @@ module VX_fp_ncomp #(
         end
     end
 
-    wire has_fflags_s0 = ((op_type_s0 == `FPU_MISC) 
-                       && (frm_s0 == 3             // MIN
-                        || frm_s0 == 4))           // MAX 
-                      || (op_type_s0 == `FPU_CMP); // CMP
+    wire has_fflags_s0 = ((op_type_s0 == `INST_FPU_MISC) 
+                       && (frm_s0 == 3                  // MIN
+                        || frm_s0 == 4))                // MAX 
+                      || (op_type_s0 == `INST_FPU_CMP); // CMP
 
     assign stall = ~ready_out && valid_out;
 
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + (LANES * 32) + 1 + (LANES * `FFG_BITS)),
+        .DATAW  (1 + TAGW + (LANES * 32) + 1 + (LANES * `FFLAGS_BITS)),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),

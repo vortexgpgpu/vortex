@@ -61,7 +61,7 @@ module VX_fpu_unit #(
 
     // resolve dynamic FRM from CSR   
     assign fpu_to_csr_if.read_wid = fpu_req_if.wid;
-    wire [`FRM_BITS-1:0] fpu_frm = (fpu_req_if.op_mod == `FRM_DYN) ? fpu_to_csr_if.read_frm : fpu_req_if.op_mod;
+    wire [`INST_FRM_BITS-1:0] fpu_frm = (fpu_req_if.op_mod == `INST_FRM_DYN) ? fpu_to_csr_if.read_frm : fpu_req_if.op_mod;
 
 `ifdef FPU_DPI
 
@@ -179,7 +179,7 @@ module VX_fpu_unit #(
     wire stall_out = ~fpu_commit_if.ready && fpu_commit_if.valid;
 
     VX_pipe_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `FFG_BITS),
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `FFLAGS_BITS),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),

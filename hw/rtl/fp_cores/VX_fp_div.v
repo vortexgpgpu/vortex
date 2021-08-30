@@ -16,7 +16,7 @@ module VX_fp_div #(
 
     input wire [TAGW-1:0] tag_in,
 
-    input wire [`FRM_BITS-1:0] frm,
+    input wire [`INST_FRM_BITS-1:0] frm,
     
     input wire [LANES-1:0][31:0]  dataa,
     input wire [LANES-1:0][31:0]  datab,
