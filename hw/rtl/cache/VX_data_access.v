@@ -73,7 +73,7 @@ module VX_data_access #(
         .BYTEENW    (BYTEENW),
         .NO_RWCHECK (1)
     ) data_store (
-        .clk   (clk),        
+        .clk   (clk),
         .addr  (line_addr),
         .wren  (wren),
         .wdata (wdata),
@@ -89,7 +89,7 @@ module VX_data_access #(
             if (is_fill) begin
                 dpi_trace("%d: cache%0d:%0d data-fill: addr=%0h, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, fill_data);
             end else begin
-                dpi_trace("%d: cache%0d:%0d data-write: addr=%0h, wid=%0d, PC=%0h, byteen=%b, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), debug_wid, debug_pc, byte_enable, line_addr, write_data);
+                dpi_trace("%d: cache%0d:%0d data-write: addr=%0h, wid=%0d, PC=%0h, byteen=%b, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), debug_wid, debug_pc, wren, line_addr, write_data);
             end
         end 
         if (readen && ~stall) begin

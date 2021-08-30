@@ -59,7 +59,8 @@ module VX_nc_bypass #(
     input wire                          mem_req_valid_in,
     input wire                          mem_req_rw_in,      
     input wire [MEM_ADDR_WIDTH-1:0]     mem_req_addr_in,
-    input wire [NUM_PORTS-1:0][CORE_DATA_SIZE-1:0] mem_req_byteen_in,  
+    input wire [NUM_PORTS-1:0]          mem_req_pmask_in,
+    input wire [NUM_PORTS-1:0][CORE_DATA_SIZE-1:0] mem_req_byteen_in,
     input wire [NUM_PORTS-1:0][MEM_SELECT_BITS-1:0] mem_req_wsel_in,
     input wire [NUM_PORTS-1:0][CORE_DATA_WIDTH-1:0] mem_req_data_in,
     input wire [MEM_TAG_IN_WIDTH-1:0]   mem_req_tag_in,
@@ -69,6 +70,7 @@ module VX_nc_bypass #(
     output wire                         mem_req_valid_out,
     output wire                         mem_req_rw_out,       
     output wire [MEM_ADDR_WIDTH-1:0]    mem_req_addr_out,
+    output wire [NUM_PORTS-1:0]         mem_req_pmask_out,
     output wire [NUM_PORTS-1:0][CORE_DATA_SIZE-1:0] mem_req_byteen_out, 
     output wire [NUM_PORTS-1:0][MEM_SELECT_BITS-1:0] mem_req_wsel_out,
     output wire [NUM_PORTS-1:0][CORE_DATA_WIDTH-1:0] mem_req_data_out,
@@ -188,7 +190,7 @@ module VX_nc_bypass #(
     assign mem_req_rw_out   = mem_req_valid_in ? mem_req_rw_in : core_req_rw_in_sel;
     assign mem_req_addr_out = mem_req_valid_in ? mem_req_addr_in : core_req_addr_in_sel[D +: MEM_ADDR_WIDTH];        
     
-    if (D != 0) begin            
+    if (D != 0) begin
         reg [NUM_PORTS-1:0][CORE_DATA_SIZE-1:0]  mem_req_byteen_in_r;
         reg [NUM_PORTS-1:0][MEM_SELECT_BITS-1:0] mem_req_wsel_in_r;
         reg [NUM_PORTS-1:0][CORE_DATA_WIDTH-1:0] mem_req_data_in_r;
@@ -206,12 +208,15 @@ module VX_nc_bypass #(
             mem_req_data_in_r[0] = core_req_data_in_sel;
         end
 
+        assign mem_req_pmask_out  = mem_req_valid_in ? mem_req_pmask_in : NUM_PORTS'(1'b1);
         assign mem_req_byteen_out = mem_req_valid_in ? mem_req_byteen_in : mem_req_byteen_in_r;
         assign mem_req_wsel_out   = mem_req_valid_in ? mem_req_wsel_in : mem_req_wsel_in_r;
         assign mem_req_data_out   = mem_req_valid_in ? mem_req_data_in : mem_req_data_in_r;
         assign mem_req_tag_out    = mem_req_valid_in ? MEM_TAG_OUT_WIDTH'(mem_req_tag_in_c) : MEM_TAG_OUT_WIDTH'({core_req_nc_tid, req_addr_idx, core_req_tag_in_sel});
     end else begin
         `UNUSED_VAR (mem_req_wsel_in)
+        `UNUSED_VAR (mem_req_pmask_in)
+        assign mem_req_pmask_out  = 0;
         assign mem_req_byteen_out = mem_req_valid_in ? mem_req_byteen_in : core_req_byteen_in_sel;
         assign mem_req_data_out   = mem_req_valid_in ? mem_req_data_in : core_req_data_in_sel;
         assign mem_req_wsel_out   = 0;

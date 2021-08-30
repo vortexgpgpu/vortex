@@ -107,34 +107,41 @@ module VX_cache #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire [NUM_PORTS-1:0][WORD_SIZE-1:0]        mem_req_byteen_p; 
+    wire [NUM_PORTS-1:0][WORD_SIZE-1:0]        mem_req_byteen_p;
+    wire [NUM_PORTS-1:0]                       mem_req_pmask_p;    
     wire [NUM_PORTS-1:0][WORD_SELECT_BITS-1:0] mem_req_wsel_p;
     wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0]      mem_req_data_p;
-    wire mem_req_rw_p;
+    wire                                       mem_req_rw_p;
 
     if (WRITE_ENABLE) begin
+        if (`WORDS_PER_LINE > 1) begin
+            reg [CACHE_LINE_SIZE-1:0]   mem_req_byteen_r;
+            reg [`CACHE_LINE_WIDTH-1:0] mem_req_data_r;
 
-        reg [CACHE_LINE_SIZE-1:0]   mem_req_byteen_r;
-        reg [`CACHE_LINE_WIDTH-1:0] mem_req_data_r;
-
-        always @(*) begin
-            mem_req_byteen_r = 0;
-            mem_req_data_r   = 'x;
-            for (integer p = 0; p < NUM_PORTS; ++p) begin
-                if (mem_req_byteen_p[p] != 0) begin
-                    mem_req_byteen_r[mem_req_wsel_p[p] * WORD_SIZE +: WORD_SIZE] = mem_req_byteen_p[p];
-                    mem_req_data_r[mem_req_wsel_p[p] * `WORD_WIDTH +: `WORD_WIDTH] = mem_req_data_p[p];
+            always @(*) begin
+                mem_req_byteen_r = 0;
+                mem_req_data_r   = 'x;
+                for (integer i = 0; i < NUM_PORTS; ++i) begin
+                    if ((1 == NUM_PORTS) || mem_req_pmask_p[i]) begin
+                        mem_req_byteen_r[mem_req_wsel_p[i] * WORD_SIZE +: WORD_SIZE] = mem_req_byteen_p[i];
+                        mem_req_data_r[mem_req_wsel_p[i] * `WORD_WIDTH +: `WORD_WIDTH] = mem_req_data_p[i];
+                    end
                 end
             end
+
+            assign mem_req_rw     = mem_req_rw_p;
+            assign mem_req_byteen = mem_req_byteen_r;
+            assign mem_req_data   = mem_req_data_r;
+        end else begin
+            `UNUSED_VAR (mem_req_pmask_p)
+            `UNUSED_VAR (mem_req_wsel_p)  
+            assign mem_req_rw     = mem_req_rw_p;
+            assign mem_req_byteen = mem_req_byteen_p;
+            assign mem_req_data   = mem_req_data_p;
         end
-
-        assign mem_req_rw     = mem_req_rw_p;
-        assign mem_req_byteen = mem_req_byteen_r;
-        assign mem_req_data   = mem_req_data_r;
-
     end else begin
-
         `UNUSED_VAR (mem_req_byteen_p)
+        `UNUSED_VAR (mem_req_pmask_p)
         `UNUSED_VAR (mem_req_wsel_p)
         `UNUSED_VAR (mem_req_data_p)
         `UNUSED_VAR (mem_req_rw_p)
@@ -142,7 +149,6 @@ module VX_cache #(
         assign mem_req_rw     = 0;
         assign mem_req_byteen = 'x;
         assign mem_req_data   = 'x;
-
     end
 
     
@@ -169,7 +175,8 @@ module VX_cache #(
     wire                            mem_req_valid_nc;
     wire                            mem_req_rw_nc;
     wire [`MEM_ADDR_WIDTH-1:0]      mem_req_addr_nc;
-    wire [NUM_PORTS-1:0][WORD_SIZE-1:0] mem_req_byteen_nc; 
+    wire [NUM_PORTS-1:0]            mem_req_pmask_nc;
+    wire [NUM_PORTS-1:0][WORD_SIZE-1:0] mem_req_byteen_nc;
     wire [NUM_PORTS-1:0][WORD_SELECT_BITS-1:0] mem_req_wsel_nc;
     wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] mem_req_data_nc;
     wire [MEM_TAG_IN_WIDTH-1:0]     mem_req_tag_nc;
@@ -236,6 +243,7 @@ module VX_cache #(
             .mem_req_valid_in   (mem_req_valid_nc),
             .mem_req_rw_in      (mem_req_rw_nc),  
             .mem_req_addr_in    (mem_req_addr_nc),
+            .mem_req_pmask_in   (mem_req_pmask_nc),
             .mem_req_byteen_in  (mem_req_byteen_nc),
             .mem_req_wsel_in    (mem_req_wsel_nc),
             .mem_req_data_in    (mem_req_data_nc),
@@ -246,6 +254,7 @@ module VX_cache #(
             .mem_req_valid_out  (mem_req_valid),
             .mem_req_addr_out   (mem_req_addr),
             .mem_req_rw_out     (mem_req_rw_p),
+            .mem_req_pmask_out  (mem_req_pmask_p),
             .mem_req_byteen_out (mem_req_byteen_p),
             .mem_req_wsel_out   (mem_req_wsel_p),
             .mem_req_data_out   (mem_req_data_p),
@@ -282,6 +291,7 @@ module VX_cache #(
         assign mem_req_valid        = mem_req_valid_nc;
         assign mem_req_addr         = mem_req_addr_nc;
         assign mem_req_rw_p         = mem_req_rw_nc;
+        assign mem_req_pmask_p      = mem_req_pmask_nc;
         assign mem_req_byteen_p     = mem_req_byteen_nc;
         assign mem_req_wsel_p       = mem_req_wsel_nc;
         assign mem_req_data_p       = mem_req_data_nc;
@@ -360,7 +370,8 @@ module VX_cache #(
 
     wire [NUM_BANKS-1:0]                        per_bank_mem_req_valid;    
     wire [NUM_BANKS-1:0]                        per_bank_mem_req_rw;
-    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_mem_req_byteen;    
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0]         per_bank_mem_req_pmask;  
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_mem_req_byteen;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SELECT_BITS-1:0] per_bank_mem_req_wsel;
     wire [NUM_BANKS-1:0][`MEM_ADDR_WIDTH-1:0]   per_bank_mem_req_addr;
     wire [NUM_BANKS-1:0][MSHR_ADDR_WIDTH-1:0]   per_bank_mem_req_id;
@@ -433,6 +444,7 @@ module VX_cache #(
 
         wire                        curr_bank_mem_req_valid;
         wire                        curr_bank_mem_req_rw;
+        wire [NUM_PORTS-1:0]        curr_bank_mem_req_pmask;
         wire [NUM_PORTS-1:0][WORD_SIZE-1:0] curr_bank_mem_req_byteen;
         wire [NUM_PORTS-1:0][WORD_SELECT_BITS-1:0] curr_bank_mem_req_wsel;
         wire [`LINE_ADDR_WIDTH-1:0] curr_bank_mem_req_addr;
@@ -469,6 +481,7 @@ module VX_cache #(
         // Memory request            
         assign per_bank_mem_req_valid[i]  = curr_bank_mem_req_valid;          
         assign per_bank_mem_req_rw[i]     = curr_bank_mem_req_rw;
+        assign per_bank_mem_req_pmask[i]  = curr_bank_mem_req_pmask;
         assign per_bank_mem_req_byteen[i] = curr_bank_mem_req_byteen;
         assign per_bank_mem_req_wsel[i]   = curr_bank_mem_req_wsel;
         if (NUM_BANKS == 1) begin  
@@ -547,6 +560,7 @@ module VX_cache #(
             // Memory request
             .mem_req_valid      (curr_bank_mem_req_valid),
             .mem_req_rw         (curr_bank_mem_req_rw),
+            .mem_req_pmask      (curr_bank_mem_req_pmask),
             .mem_req_byteen     (curr_bank_mem_req_byteen),
             .mem_req_wsel       (curr_bank_mem_req_wsel),
             .mem_req_addr       (curr_bank_mem_req_addr),
@@ -591,9 +605,9 @@ module VX_cache #(
         .core_rsp_ready          (core_rsp_ready_nc)
     ); 
 
-    wire [NUM_BANKS-1:0][(MEM_TAG_IN_WIDTH + 1 + NUM_PORTS * (WORD_SIZE + WORD_SELECT_BITS + `WORD_WIDTH))-1:0] data_in;
-    for (genvar i = 0; i < NUM_BANKS; i++) begin
-        assign data_in[i] = {per_bank_mem_req_addr[i], per_bank_mem_req_id[i], per_bank_mem_req_rw[i], per_bank_mem_req_byteen[i], per_bank_mem_req_wsel[i], per_bank_mem_req_data[i]};
+    wire [NUM_BANKS-1:0][(MEM_TAG_IN_WIDTH + 1 + NUM_PORTS * (1 + WORD_SIZE + WORD_SELECT_BITS + `WORD_WIDTH))-1:0] data_in;
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+        assign data_in[i] = {per_bank_mem_req_addr[i], per_bank_mem_req_id[i], per_bank_mem_req_rw[i], per_bank_mem_req_pmask[i], per_bank_mem_req_byteen[i], per_bank_mem_req_wsel[i], per_bank_mem_req_data[i]};
     end
 
     wire [MSHR_ADDR_WIDTH-1:0] mem_req_id;
@@ -602,7 +616,7 @@ module VX_cache #(
 
     VX_stream_arbiter #(
         .NUM_REQS (NUM_BANKS),
-        .DATAW    (`MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + NUM_PORTS * (WORD_SIZE + WORD_SELECT_BITS + `WORD_WIDTH)),
+        .DATAW    (`MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + NUM_PORTS * (1 + WORD_SIZE + WORD_SELECT_BITS + `WORD_WIDTH)),
         .BUFFERED (1)
     ) mem_req_arb (
         .clk       (clk),
@@ -611,7 +625,7 @@ module VX_cache #(
         .data_in   (data_in),
         .ready_in  (per_bank_mem_req_ready),   
         .valid_out (mem_req_valid_nc),   
-        .data_out  ({mem_req_addr_nc, mem_req_id, mem_req_rw_nc, mem_req_byteen_nc, mem_req_wsel_nc, mem_req_data_nc}),
+        .data_out  ({mem_req_addr_nc, mem_req_id, mem_req_rw_nc, mem_req_pmask_nc, mem_req_byteen_nc, mem_req_wsel_nc, mem_req_data_nc}),
         .ready_out (mem_req_ready_nc)
     );
 
