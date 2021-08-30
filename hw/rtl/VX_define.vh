@@ -247,14 +247,14 @@
 // Cache ID
 `define ICACHE_ID               (32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 0)
 
-// Block size in bytes
-`define ICACHE_LINE_SIZE        `L1_BLOCK_SIZE
+// Number of banks
+`define INUM_BANKS              1
 
 // Word size in bytes
 `define IWORD_SIZE              4
 
-// Number of banks
-`define INUM_BANKS              1
+// Block size in bytes
+`define ICACHE_LINE_SIZE        `L1_BLOCK_SIZE
 
 // Core request address bits
 `define ICORE_ADDR_WIDTH        (32-`CLOG2(`IWORD_SIZE))
@@ -285,11 +285,11 @@
 // Cache ID
 `define DCACHE_ID               (32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 1)
 
-// Block size in bytes
-`define DCACHE_LINE_SIZE        `L1_BLOCK_SIZE
-
 // Word size in bytes
 `define DWORD_SIZE              4
+
+// Block size in bytes
+`define DCACHE_LINE_SIZE        `L1_BLOCK_SIZE
 
 // Core request address bits
 `define DCORE_ADDR_WIDTH        (32-`CLOG2(`DWORD_SIZE))
@@ -337,11 +337,11 @@
 // Cache ID
 `define L2CACHE_ID              (32'(`L3_ENABLE) + CLUSTER_ID)
 
-// Block size in bytes
-`define L2CACHE_LINE_SIZE       `MEM_BLOCK_SIZE
-
 // Word size in bytes
 `define L2WORD_SIZE             `DCACHE_LINE_SIZE
+
+// Block size in bytes
+`define L2CACHE_LINE_SIZE       (`L2_ENABLE ? `MEM_BLOCK_SIZE : `L2WORD_SIZE)
 
 // Input request tag bits
 `define L2CORE_TAG_WIDTH        (`DCORE_TAG_WIDTH + `CLOG2(`NUM_CORES))
@@ -369,11 +369,11 @@
 // Cache ID
 `define L3CACHE_ID              0
 
-// Block size in bytes
-`define L3CACHE_LINE_SIZE       `MEM_BLOCK_SIZE
-
 // Word size in bytes
 `define L3WORD_SIZE             `L2CACHE_LINE_SIZE
+
+// Block size in bytes
+`define L3CACHE_LINE_SIZE       (`L3_ENABLE ? `MEM_BLOCK_SIZE : `L3WORD_SIZE)
 
 // Input request tag bits
 `define L3CORE_TAG_WIDTH        (`L2CORE_TAG_WIDTH + `CLOG2(`NUM_CLUSTERS))
