@@ -97,32 +97,45 @@ CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=27" ./ci/blackbox.sh --driver=
 # test 128-bit DRAM block
 CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH=128 -DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=28 -DPLATFORM_PARAM_LOCAL_MEMORY_BANKS=1" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
 
-# test verilator reset values
-CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=vlsim --cores=4 --app=sgemm
-CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=vlsim --cores=4 --app=sgemm
-
 # test long memory latency
 CONFIGS="-DMEM_LATENCY=100 -DMEM_RQ_SIZE=4 -DMEM_STALLS_MODULO=4" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
 
 echo "configuration tests done!"
 }
 
+stress0() 
+{
+echo "begin stress0 tests..."
+
+# test verilator reset values
+CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --l3cache --app=sgemm
+CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --l3cache --app=sgemm
+FPU_CORE=FPU_DEFAULT CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
+FPU_CORE=FPU_DEFAULT CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
+CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr
+CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr
+CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=vlsim --cores=4 --app=printf
+CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=vlsim --cores=4 --app=printf
+
+echo "stress0 tests done!"
+}
+
 stress1() 
 {
-echo "begin stress tests..."
+echo "begin stress1 tests..."
 
 ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm --args="-n256"
 
-echo "stress tests done!"
+echo "stress1 tests done!"
 }
 
 stress2() 
 {
-echo "begin stress tests..."
+echo "begin stress2 tests..."
 
 ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --clusters=2 --l3cache --app=sgemm --args="-n256"
 
-echo "stress tests done!"
+echo "stress2 tests done!"
 }
 
 usage()
@@ -133,12 +146,14 @@ usage()
 while [ "$1" != "" ]; do
     case $1 in
         -coverage ) coverage
-                    ;;
+                ;;
         -cluster ) cluster
-                     ;;
+                ;;
         -debug ) debug
-                    ;;
+                ;;
         -config ) config
+                ;;
+        -stress0 ) stress0
                 ;;
         -stress1 ) stress1
                 ;;
@@ -148,12 +163,13 @@ while [ "$1" != "" ]; do
                cluster
                debug
                config
+               stress0
                stress1
                stress2
-               ;;
+                ;;
         -h | --help ) usage
                       exit
-                      ;;
+                ;;
         * )           usage
                       exit 1
     esac
