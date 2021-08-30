@@ -18,104 +18,104 @@ endtask
 
 task print_ex_op (
   input [`EX_BITS-1:0] ex_type,
-  input [`OP_BITS-1:0] op_type,
-  input [`MOD_BITS-1:0] op_mod
+  input [`INST_OP_BITS-1:0] op_type,
+  input [`INST_MOD_BITS-1:0] op_mod
 );
     case (ex_type)        
     `EX_ALU: begin
-        if (`ALU_IS_BR(op_mod)) begin
-            case (`BR_BITS'(op_type))
-                `BR_EQ:    dpi_trace("BEQ");
-                `BR_NE:    dpi_trace("BNE");
-                `BR_LT:    dpi_trace("BLT");
-                `BR_GE:    dpi_trace("BGE");
-                `BR_LTU:   dpi_trace("BLTU");
-                `BR_GEU:   dpi_trace("BGEU");           
-                `BR_JAL:   dpi_trace("JAL");
-                `BR_JALR:  dpi_trace("JALR");
-                `BR_ECALL: dpi_trace("ECALL");
-                `BR_EBREAK:dpi_trace("EBREAK");    
-                `BR_MRET:  dpi_trace("MRET");    
-                `BR_SRET:  dpi_trace("SRET");    
-                `BR_DRET:  dpi_trace("DRET");    
+        if (`INST_ALU_IS_BR(op_mod)) begin
+            case (`INST_BR_BITS'(op_type))
+                `INST_BR_EQ:    dpi_trace("BEQ");
+                `INST_BR_NE:    dpi_trace("BNE");
+                `INST_BR_LT:    dpi_trace("BLT");
+                `INST_BR_GE:    dpi_trace("BGE");
+                `INST_BR_LTU:   dpi_trace("BLTU");
+                `INST_BR_GEU:   dpi_trace("BGEU");           
+                `INST_BR_JAL:   dpi_trace("JAL");
+                `INST_BR_JALR:  dpi_trace("JALR");
+                `INST_BR_ECALL: dpi_trace("ECALL");
+                `INST_BR_EBREAK:dpi_trace("EBREAK");    
+                `INST_BR_MRET:  dpi_trace("MRET");    
+                `INST_BR_SRET:  dpi_trace("SRET");    
+                `INST_BR_DRET:  dpi_trace("DRET");    
                 default:   dpi_trace("?");
             endcase                
-        end else if (`ALU_IS_MUL(op_mod)) begin
-            case (`MUL_BITS'(op_type))
-                `MUL_MUL:   dpi_trace("MUL");
-                `MUL_MULH:  dpi_trace("MULH");
-                `MUL_MULHSU:dpi_trace("MULHSU");
-                `MUL_MULHU: dpi_trace("MULHU");
-                `MUL_DIV:   dpi_trace("DIV");
-                `MUL_DIVU:  dpi_trace("DIVU");
-                `MUL_REM:   dpi_trace("REM");
-                `MUL_REMU:  dpi_trace("REMU");
+        end else if (`INST_ALU_IS_MUL(op_mod)) begin
+            case (`INST_MUL_BITS'(op_type))
+                `INST_MUL_MUL:   dpi_trace("MUL");
+                `INST_MUL_MULH:  dpi_trace("MULH");
+                `INST_MUL_MULHSU:dpi_trace("MULHSU");
+                `INST_MUL_MULHU: dpi_trace("MULHU");
+                `INST_MUL_DIV:   dpi_trace("DIV");
+                `INST_MUL_DIVU:  dpi_trace("DIVU");
+                `INST_MUL_REM:   dpi_trace("REM");
+                `INST_MUL_REMU:  dpi_trace("REMU");
                 default:    dpi_trace("?");
             endcase
         end else begin
-            case (`ALU_BITS'(op_type))
-                `ALU_ADD:   dpi_trace("ADD");
-                `ALU_SUB:   dpi_trace("SUB");
-                `ALU_SLL:   dpi_trace("SLL");
-                `ALU_SRL:   dpi_trace("SRL");
-                `ALU_SRA:   dpi_trace("SRA");
-                `ALU_SLT:   dpi_trace("SLT");
-                `ALU_SLTU:  dpi_trace("SLTU");
-                `ALU_XOR:   dpi_trace("XOR");
-                `ALU_OR:    dpi_trace("OR");
-                `ALU_AND:   dpi_trace("AND");
-                `ALU_LUI:   dpi_trace("LUI");
-                `ALU_AUIPC: dpi_trace("AUIPC");
+            case (`INST_ALU_BITS'(op_type))
+                `INST_ALU_ADD:   dpi_trace("ADD");
+                `INST_ALU_SUB:   dpi_trace("SUB");
+                `INST_ALU_SLL:   dpi_trace("SLL");
+                `INST_ALU_SRL:   dpi_trace("SRL");
+                `INST_ALU_SRA:   dpi_trace("SRA");
+                `INST_ALU_SLT:   dpi_trace("SLT");
+                `INST_ALU_SLTU:  dpi_trace("SLTU");
+                `INST_ALU_XOR:   dpi_trace("XOR");
+                `INST_ALU_OR:    dpi_trace("OR");
+                `INST_ALU_AND:   dpi_trace("AND");
+                `INST_ALU_LUI:   dpi_trace("LUI");
+                `INST_ALU_AUIPC: dpi_trace("AUIPC");
                 default:    dpi_trace("?");
             endcase         
         end
     end
     `EX_LSU: begin
         if (op_mod == 0) begin
-            case (`LSU_BITS'(op_type))
-                `LSU_LB: dpi_trace("LB");
-                `LSU_LH: dpi_trace("LH");
-                `LSU_LW: dpi_trace("LW");
-                `LSU_LBU:dpi_trace("LBU");
-                `LSU_LHU:dpi_trace("LHU");
-                `LSU_SB: dpi_trace("SB");
-                `LSU_SH: dpi_trace("SH");
-                `LSU_SW: dpi_trace("SW");
+            case (`INST_LSU_BITS'(op_type))
+                `INST_LSU_LB: dpi_trace("LB");
+                `INST_LSU_LH: dpi_trace("LH");
+                `INST_LSU_LW: dpi_trace("LW");
+                `INST_LSU_LBU:dpi_trace("LBU");
+                `INST_LSU_LHU:dpi_trace("LHU");
+                `INST_LSU_SB: dpi_trace("SB");
+                `INST_LSU_SH: dpi_trace("SH");
+                `INST_LSU_SW: dpi_trace("SW");
                 default: dpi_trace("?");
             endcase
         end else if (op_mod == 1) begin
-            case (`FENCE_BITS'(op_type))
-                `FENCE_D: dpi_trace("DFENCE");
-                `FENCE_I: dpi_trace("IFENCE");
+            case (`INST_FENCE_BITS'(op_type))
+                `INST_FENCE_D: dpi_trace("DFENCE");
+                `INST_FENCE_I: dpi_trace("IFENCE");
                 default: dpi_trace("?");
             endcase
         end
     end
     `EX_CSR: begin
-        case (`CSR_BITS'(op_type))
-            `CSR_RW: dpi_trace("CSRW");
-            `CSR_RS: dpi_trace("CSRS");
-            `CSR_RC: dpi_trace("CSRC");
+        case (`INST_CSR_BITS'(op_type))
+            `INST_CSR_RW: dpi_trace("CSRW");
+            `INST_CSR_RS: dpi_trace("CSRS");
+            `INST_CSR_RC: dpi_trace("CSRC");
             default: dpi_trace("?");
         endcase
     end
     `EX_FPU: begin
-        case (`FPU_BITS'(op_type))
-            `FPU_ADD:   dpi_trace("ADD");
-            `FPU_SUB:   dpi_trace("SUB");
-            `FPU_MUL:   dpi_trace("MUL");
-            `FPU_DIV:   dpi_trace("DIV");
-            `FPU_SQRT:  dpi_trace("SQRT");
-            `FPU_MADD:  dpi_trace("MADD");
-            `FPU_NMSUB: dpi_trace("NMSUB");
-            `FPU_NMADD: dpi_trace("NMADD");                
-            `FPU_CVTWS: dpi_trace("CVTWS");
-            `FPU_CVTWUS:dpi_trace("CVTWUS");
-            `FPU_CVTSW: dpi_trace("CVTSW");
-            `FPU_CVTSWU:dpi_trace("CVTSWU");
-            `FPU_CLASS: dpi_trace("CLASS");
-            `FPU_CMP:   dpi_trace("CMP");
-            `FPU_MISC: begin
+        case (`INST_FPU_BITS'(op_type))
+            `INST_FPU_ADD:   dpi_trace("ADD");
+            `INST_FPU_SUB:   dpi_trace("SUB");
+            `INST_FPU_MUL:   dpi_trace("MUL");
+            `INST_FPU_DIV:   dpi_trace("DIV");
+            `INST_FPU_SQRT:  dpi_trace("SQRT");
+            `INST_FPU_MADD:  dpi_trace("MADD");
+            `INST_FPU_NMSUB: dpi_trace("NMSUB");
+            `INST_FPU_NMADD: dpi_trace("NMADD");                
+            `INST_FPU_CVTWS: dpi_trace("CVTWS");
+            `INST_FPU_CVTWUS:dpi_trace("CVTWUS");
+            `INST_FPU_CVTSW: dpi_trace("CVTSW");
+            `INST_FPU_CVTSWU:dpi_trace("CVTSWU");
+            `INST_FPU_CLASS: dpi_trace("CLASS");
+            `INST_FPU_CMP:   dpi_trace("CMP");
+            `INST_FPU_MISC: begin
                 case (op_mod)
                 0: dpi_trace("SGNJ");   
                 1: dpi_trace("SGNJN");
@@ -130,12 +130,12 @@ task print_ex_op (
         endcase
     end
     `EX_GPU: begin
-        case (`GPU_BITS'(op_type))
-            `GPU_TMC:   dpi_trace("TMC");
-            `GPU_WSPAWN:dpi_trace("WSPAWN");
-            `GPU_SPLIT: dpi_trace("SPLIT");
-            `GPU_JOIN:  dpi_trace("JOIN");
-            `GPU_BAR:   dpi_trace("BAR");
+        case (`INST_GPU_BITS'(op_type))
+            `INST_GPU_TMC:   dpi_trace("TMC");
+            `INST_GPU_WSPAWN:dpi_trace("WSPAWN");
+            `INST_GPU_SPLIT: dpi_trace("SPLIT");
+            `INST_GPU_JOIN:  dpi_trace("JOIN");
+            `INST_GPU_BAR:   dpi_trace("BAR");
             default:    dpi_trace("?");
         endcase
     end    

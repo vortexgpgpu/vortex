@@ -14,8 +14,8 @@ module VX_fpu_dpi #(
 
     input wire [TAGW-1:0] tag_in,
     
-    input wire [`FPU_BITS-1:0] op_type,
-    input wire [`MOD_BITS-1:0] frm,
+    input wire [`INST_FPU_BITS-1:0] op_type,
+    input wire [`INST_MOD_BITS-1:0] frm,
 
     input wire [`NUM_THREADS-1:0][31:0]  dataa,
     input wire [`NUM_THREADS-1:0][31:0]  datab,
@@ -76,21 +76,21 @@ module VX_fpu_dpi #(
         is_fsgnjx = 0;
 
         case (op_type)
-            `FPU_ADD:   begin core_select = FPU_FMA; is_fadd = 1; end
-            `FPU_SUB:   begin core_select = FPU_FMA; is_fsub = 1; end
-            `FPU_MUL:   begin core_select = FPU_FMA; is_fmul = 1; end
-            `FPU_MADD:  begin core_select = FPU_FMA; is_fmadd = 1; end
-            `FPU_MSUB:  begin core_select = FPU_FMA; is_fmsub = 1; end
-            `FPU_NMADD: begin core_select = FPU_FMA; is_fnmadd = 1; end
-            `FPU_NMSUB: begin core_select = FPU_FMA; is_fnmsub = 1; end
-            `FPU_DIV:   begin core_select = FPU_DIV; end
-            `FPU_SQRT:  begin core_select = FPU_SQRT; end
-            `FPU_CVTWS: begin core_select = FPU_CVT; is_ftoi = 1; end
-            `FPU_CVTWUS:begin core_select = FPU_CVT; is_ftou = 1; end
-            `FPU_CVTSW: begin core_select = FPU_CVT; is_itof = 1; end
-            `FPU_CVTSWU:begin core_select = FPU_CVT; is_utof = 1; end
-            `FPU_CLASS: begin core_select = FPU_NCP; is_fclss = 1; end  
-            `FPU_CMP:   begin core_select = FPU_NCP; 
+            `INST_FPU_ADD:   begin core_select = FPU_FMA; is_fadd = 1; end
+            `INST_FPU_SUB:   begin core_select = FPU_FMA; is_fsub = 1; end
+            `INST_FPU_MUL:   begin core_select = FPU_FMA; is_fmul = 1; end
+            `INST_FPU_MADD:  begin core_select = FPU_FMA; is_fmadd = 1; end
+            `INST_FPU_MSUB:  begin core_select = FPU_FMA; is_fmsub = 1; end
+            `INST_FPU_NMADD: begin core_select = FPU_FMA; is_fnmadd = 1; end
+            `INST_FPU_NMSUB: begin core_select = FPU_FMA; is_fnmsub = 1; end
+            `INST_FPU_DIV:   begin core_select = FPU_DIV; end
+            `INST_FPU_SQRT:  begin core_select = FPU_SQRT; end
+            `INST_FPU_CVTWS: begin core_select = FPU_CVT; is_ftoi = 1; end
+            `INST_FPU_CVTWUS:begin core_select = FPU_CVT; is_ftou = 1; end
+            `INST_FPU_CVTSW: begin core_select = FPU_CVT; is_itof = 1; end
+            `INST_FPU_CVTSWU:begin core_select = FPU_CVT; is_utof = 1; end
+            `INST_FPU_CLASS: begin core_select = FPU_NCP; is_fclss = 1; end  
+            `INST_FPU_CMP:   begin core_select = FPU_NCP; 
                             is_fle = (frm == 0); 
                             is_flt = (frm == 1); 
                             is_feq = (frm == 2); 

@@ -33,7 +33,7 @@ module VX_lsu_unit #(
     wire                          req_valid;
     wire [`NUM_THREADS-1:0]       req_tmask;
     wire [`NUM_THREADS-1:0][31:0] req_addr;       
-    wire [`LSU_BITS-1:0]          req_type;
+    wire [`INST_LSU_BITS-1:0]     req_type;
     wire [`NUM_THREADS-1:0][31:0] req_data;   
     wire [`NR_BITS-1:0]           req_rd;
     wire                          req_wb;
@@ -80,7 +80,7 @@ module VX_lsu_unit #(
     wire lsu_valid = lsu_req_if.valid && ~fence_wait;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + `NW_BITS + `NUM_THREADS + 32 + (`NUM_THREADS * 32) + (`NUM_THREADS * ADDR_TYPEW) + `LSU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32)),
+        .DATAW  (1 + 1 + `NW_BITS + `NUM_THREADS + 32 + (`NUM_THREADS * 32) + (`NUM_THREADS * ADDR_TYPEW) + `INST_LSU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32)),
         .RESETW (1)
     ) req_pipe_reg (
         .clk      (clk),
@@ -97,7 +97,7 @@ module VX_lsu_unit #(
     wire [31:0] rsp_pc;
     wire [`NR_BITS-1:0] rsp_rd;
     wire rsp_wb;
-    wire [`LSU_BITS-1:0] rsp_type;
+    wire [`INST_LSU_BITS-1:0] rsp_type;
     wire rsp_is_dup;
 
     `UNUSED_VAR (rsp_type)
@@ -132,8 +132,8 @@ module VX_lsu_unit #(
     assign mbuf_raddr = dcache_rsp_if.tag[ADDR_TYPEW +: `LSUQ_ADDR_BITS];    
 
     VX_index_buffer #(
-        .DATAW   (`NW_BITS + 32 + `NUM_THREADS + `NR_BITS + 1 + `LSU_BITS + (`NUM_THREADS * REQ_ASHIFT) + 1),
-        .SIZE    (`LSUQ_SIZE)
+        .DATAW (`NW_BITS + 32 + `NUM_THREADS + `NR_BITS + 1 + `INST_LSU_BITS + (`NUM_THREADS * REQ_ASHIFT) + 1),
+        .SIZE  (`LSUQ_SIZE)
     ) req_metadata (
         .clk          (clk),
         .reset        (reset),
@@ -202,7 +202,7 @@ module VX_lsu_unit #(
 
         always @(*) begin
             mem_req_byteen = {4{req_wb}};
-            case (`LSU_WSIZE(req_type))
+            case (`INST_LSU_WSIZE(req_type))
                 0: mem_req_byteen[req_offset[i]] = 1;
                 1: begin
                     mem_req_byteen[req_offset[i]] = 1;
@@ -261,11 +261,11 @@ module VX_lsu_unit #(
         wire [7:0]  rsp_data8  = rsp_offset[i][0] ? rsp_data16[15:8] : rsp_data16[7:0];
 
         always @(*) begin
-            case (`LSU_FMT(rsp_type))
-            `FMT_B:  rsp_data[i] = 32'(signed'(rsp_data8));
-            `FMT_H:  rsp_data[i] = 32'(signed'(rsp_data16));
-            `FMT_BU: rsp_data[i] = 32'(unsigned'(rsp_data8));
-            `FMT_HU: rsp_data[i] = 32'(unsigned'(rsp_data16));
+            case (`INST_LSU_FMT(rsp_type))
+            `INST_FMT_B:  rsp_data[i] = 32'(signed'(rsp_data8));
+            `INST_FMT_H:  rsp_data[i] = 32'(signed'(rsp_data16));
+            `INST_FMT_BU: rsp_data[i] = 32'(unsigned'(rsp_data8));
+            `INST_FMT_HU: rsp_data[i] = 32'(unsigned'(rsp_data16));
             default: rsp_data[i] = rsp_data32;
             endcase
         end        

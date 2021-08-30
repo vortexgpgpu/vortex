@@ -34,7 +34,7 @@ module VX_fp_rounding #(
 
     always @(*) begin
         case (rnd_mode_i)
-            `FRM_RNE: // Decide accoring to round/sticky bits
+            `INST_FRM_RNE: // Decide accoring to round/sticky bits
                 case (round_sticky_bits_i)
                       2'b00, 
                       2'b01: round_up = 1'b0;            // < ulp/2 away, round down
@@ -42,10 +42,10 @@ module VX_fp_rounding #(
                       2'b11: round_up = 1'b1;            // > ulp/2 away, round up
                     default: round_up = 1'bx;
                 endcase
-            `FRM_RTZ: round_up = 1'b0; // always round down
-            `FRM_RDN: round_up = (| round_sticky_bits_i) & sign_i;  // to 0 if +, away if -
-            `FRM_RUP: round_up = (| round_sticky_bits_i) & ~sign_i; // to 0 if -, away if +
-            `FRM_RMM: round_up = round_sticky_bits_i[1]; // round down if < ulp/2 away, else up
+            `INST_FRM_RTZ: round_up = 1'b0; // always round down
+            `INST_FRM_RDN: round_up = (| round_sticky_bits_i) & sign_i;  // to 0 if +, away if -
+            `INST_FRM_RUP: round_up = (| round_sticky_bits_i) & ~sign_i; // to 0 if -, away if +
+            `INST_FRM_RMM: round_up = round_sticky_bits_i[1]; // round down if < ulp/2 away, else up
             default:  round_up = 1'bx; // propagate x
         endcase
     end
@@ -58,7 +58,7 @@ module VX_fp_rounding #(
 
     // In case of effective subtraction (thus signs of addition operands must have differed) and a
     // true zero result, the result sign is '-' in case of RDN and '+' for other modes.
-    assign sign_o = (exact_zero_o && effective_subtraction_i) ? (rnd_mode_i == `FRM_RDN)
+    assign sign_o = (exact_zero_o && effective_subtraction_i) ? (rnd_mode_i == `INST_FRM_RDN)
                                                               : sign_i;
 
 endmodule
