@@ -23,12 +23,12 @@ set_global_assignment -name ROUTER_LCELL_INSERTION_AND_LOGIC_DUPLICATION ON
 set_global_assignment -name SYNTH_TIMING_DRIVEN_SYNTHESIS ON
 set_global_assignment -name TIMEQUEST_MULTICORNER_ANALYSIS ON
 
-set_global_assignment -name USE_HIGH_SPEED_ADDER ON
-set_global_assignment -name MUX_RESTRUCTURE ON
-set_global_assignment -name ADV_NETLIST_OPT_SYNTH_WYSIWYG_REMAP ON
-set_global_assignment -name PROGRAMMABLE_POWER_TECHNOLOGY_SETTING "FORCE ALL TILES WITH FAILING TIMING PATHS TO HIGH SPEED"
-set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC ON
-set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_RETIMING ON
+#set_global_assignment -name USE_HIGH_SPEED_ADDER ON
+#set_global_assignment -name MUX_RESTRUCTURE ON
+#set_global_assignment -name ADV_NETLIST_OPT_SYNTH_WYSIWYG_REMAP ON
+#set_global_assignment -name PROGRAMMABLE_POWER_TECHNOLOGY_SETTING "FORCE ALL TILES WITH FAILING TIMING PATHS TO HIGH SPEED"
+#set_global_assignment -name PHYSICAL_SYNTHESIS_COMBO_LOGIC ON
+#set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_RETIMING ON
 
 set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
 set_global_assignment -name MAX_CORE_JUNCTION_TEMP 100

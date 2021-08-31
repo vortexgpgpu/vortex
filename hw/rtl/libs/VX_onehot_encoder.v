@@ -1,7 +1,7 @@
 `include "VX_platform.vh"
 
 // Fast encoder using parallel prefix computation
-// Adapter from BaseJump STL: http://bjump.org/data_out.html
+// Adapted from BaseJump STL: http://bjump.org/data_out.html
 
 `TRACING_OFF
 module VX_onehot_encoder #(

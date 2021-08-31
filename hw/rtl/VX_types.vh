@@ -21,7 +21,7 @@ typedef struct packed {
     logic NX; // 0-Inexact
 } fflags_t;
 
-`define FFG_BITS  $bits(fflags_t)
+`define FFLAGS_BITS  $bits(fflags_t)
 
 typedef struct packed {
     logic                    valid;

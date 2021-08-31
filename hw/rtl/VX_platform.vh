@@ -74,6 +74,7 @@
 `define USE_FAST_BRAM   (* ramstyle = "MLAB, no_rw_check" *)
 `define NO_RW_RAM_CHECK (* altera_attribute = "-name add_pass_through_logic_to_inferred_rams off" *)
 `define DISABLE_BRAM    (* ramstyle = "logic" *)
+`define PRESERVE_REG    (* preserve *)
 
 ///////////////////////////////////////////////////////////////////////////////
 

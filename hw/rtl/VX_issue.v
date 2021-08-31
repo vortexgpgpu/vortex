@@ -30,11 +30,15 @@ module VX_issue #(
 
     wire scoreboard_delay;
 
+    `RESET_RELAY (ibuf_reset);
+    `RESET_RELAY (gpr_reset);
+    `RESET_RELAY (demux_reset);
+
     VX_ibuffer #(
         .CORE_ID(CORE_ID)
     ) ibuffer (
         .clk        (clk),
-        .reset      (reset), 
+        .reset      (ibuf_reset), 
         .decode_if  (decode_if),
         .ibuffer_if (ibuffer_if) 
     );
@@ -58,7 +62,7 @@ module VX_issue #(
         .CORE_ID(CORE_ID)
     ) gpr_stage (
         .clk          (clk),      
-        .reset        (reset),          
+        .reset        (gpr_reset),          
         .writeback_if (writeback_if),
         .gpr_req_if   (gpr_req_if),
         .gpr_rsp_if   (gpr_rsp_if)
@@ -80,7 +84,7 @@ module VX_issue #(
 
     VX_instr_demux instr_demux (
         .clk        (clk),      
-        .reset      (reset),
+        .reset      (demux_reset),
         .ibuffer_if (execute_if),
         .gpr_rsp_if (gpr_rsp_if),
         .alu_req_if (alu_req_if),

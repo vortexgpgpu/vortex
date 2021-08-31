@@ -16,7 +16,7 @@ module VX_fp_fma #(
 
     input wire [TAGW-1:0] tag_in,
     
-    input wire [`FRM_BITS-1:0] frm,
+    input wire [`INST_FRM_BITS-1:0] frm,
 
     input wire  do_madd,
     input wire  do_sub,

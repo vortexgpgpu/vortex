@@ -9,7 +9,7 @@ module VX_fifo_queue #(
     parameter ADDRW      = $clog2(SIZE),
     parameter SIZEW      = $clog2(SIZE+1),
     parameter OUTPUT_REG = 0,
-    parameter FASTRAM    = 1
+    parameter LUTRAM     = 1
 ) ( 
     input  wire             clk,
     input  wire             reset,    
@@ -157,15 +157,15 @@ module VX_fifo_queue #(
                     .DATAW      (DATAW),
                     .SIZE       (SIZE),
                     .OUTPUT_REG (0),
-                    .RWCHECK    (1),
-                    .FASTRAM    (FASTRAM)
+                    .LUTRAM     (LUTRAM)
                 ) dp_ram (
                     .clk(clk),
-                    .waddr(wr_ptr_r),                            
-                    .raddr(rd_ptr_r),
-                    .wren(push),
-                    .din(data_in),
-                    .dout(data_out)
+                    .wren  (push),
+                    .waddr (wr_ptr_r),
+                    .wdata (data_in),
+                    .rden  (1'b1),
+                    .raddr (rd_ptr_r),
+                    .rdata (data_out)
                 );
 
             end else begin
@@ -200,15 +200,15 @@ module VX_fifo_queue #(
                     .DATAW      (DATAW),
                     .SIZE       (SIZE),
                     .OUTPUT_REG (0),
-                    .RWCHECK    (1),
-                    .FASTRAM    (FASTRAM)
+                    .LUTRAM     (LUTRAM)
                 ) dp_ram (
-                    .clk(clk),
-                    .waddr(wr_ptr_r),                            
-                    .raddr(rd_ptr_n_r),
-                    .wren(push),
-                    .din(data_in),
-                    .dout(dout)
+                    .clk   (clk),
+                    .wren  (push),
+                    .waddr (wr_ptr_r),
+                    .wdata (data_in),
+                    .rden  (1'b1),
+                    .raddr (rd_ptr_n_r),
+                    .rdata (dout)
                 ); 
 
                 always @(posedge clk) begin

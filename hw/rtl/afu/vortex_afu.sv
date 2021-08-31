@@ -512,6 +512,8 @@ t_local_mem_data        mem_rsp_data;
 wire [AVS_REQ_TAGW:0]   mem_rsp_tag;
 wire                    mem_rsp_ready;
 
+`RESET_RELAY (mem_arb_reset);
+
 VX_mem_arb #(
   .NUM_REQS       (2),
   .DATA_WIDTH     (LMEM_DATA_WIDTH),
@@ -522,7 +524,7 @@ VX_mem_arb #(
   .TYPE           ("X")
 ) mem_arb (
   .clk            (clk),
-  .reset          (reset),
+  .reset          (mem_arb_reset),
 
   // Source request
   .req_valid_in   ({vx_mem_req_arb_valid,  cci_mem_req_arb_valid}),
@@ -557,6 +559,8 @@ VX_mem_arb #(
 
 //--
 
+`RESET_RELAY (avs_wrapper_reset);
+
 VX_avs_wrapper #(
   .AVS_DATA_WIDTH  (LMEM_DATA_WIDTH), 
   .AVS_ADDR_WIDTH  (LMEM_ADDR_WIDTH),
@@ -566,7 +570,7 @@ VX_avs_wrapper #(
   .RD_QUEUE_SIZE   (AVS_RD_QUEUE_SIZE)
 ) avs_wrapper (
   .clk              (clk),
-  .reset            (reset),
+  .reset            (avs_wrapper_reset),
 
   // Memory request 
   .mem_req_valid    (mem_req_valid),
@@ -724,13 +728,15 @@ always @(posedge clk) begin
   end
 end
 
+`RESET_RELAY (cci_rdq_reset);
+
 VX_fifo_queue #(
   .DATAW      (CCI_RD_QUEUE_DATAW),
   .SIZE       (CCI_RD_QUEUE_SIZE),
   .OUTPUT_REG (1)
 ) cci_rd_req_queue (
   .clk      (clk),
-  .reset    (reset),
+  .reset    (cci_rdq_reset),
   .push     (cci_rdq_push),
   .pop      (cci_rdq_pop),
   .data_in  (cci_rdq_din),
@@ -878,7 +884,7 @@ Vortex #() vortex (
   `SCOPE_BIND_afu_vortex
 
   .clk            (clk),
-  .reset          (reset | vx_reset),
+  .reset          (reset || vx_reset),
 
   // Memory request 
   .mem_req_valid  (vx_mem_req_valid),
@@ -997,6 +1003,8 @@ VX_fifo_queue #(
 
 wire scope_changed = `SCOPE_TRIGGER;
 
+`RESET_RELAY (scope_reset);
+
 VX_scope #(
   .DATAW ($bits({`SCOPE_DATA_LIST,`SCOPE_UPDATE_LIST})),
   .BUSW  (64),
@@ -1004,7 +1012,7 @@ VX_scope #(
   .UPDW  ($bits({`SCOPE_UPDATE_LIST}))
 ) scope (
   .clk      (clk),
-  .reset    (reset),
+  .reset    (scope_reset),
   .start    (1'b0),
   .stop     (1'b0),
   .changed  (scope_changed),

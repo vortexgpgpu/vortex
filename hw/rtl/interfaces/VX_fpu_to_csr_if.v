@@ -10,7 +10,7 @@ interface VX_fpu_to_csr_if ();
     fflags_t             write_fflags;
 
     wire [`NW_BITS-1:0]  read_wid;
-    wire [`FRM_BITS-1:0] read_frm;
+    wire [`INST_FRM_BITS-1:0] read_frm;
 
 endinterface
 
