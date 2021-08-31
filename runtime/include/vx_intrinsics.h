@@ -53,8 +53,13 @@ extern "C" {
 })
 
 // Set thread mask
-inline void vx_tmc(unsigned num_threads) {
-    asm volatile (".insn s 0x6b, 0, x0, 0(%0)" :: "r"(num_threads));
+inline void vx_tmc(unsigned mask) {
+    asm volatile (".insn s 0x6b, 0, x0, 0(%0)" :: "r"(mask));
+}
+
+// Set thread predicate
+inline void vx_pred(unsigned condition) {
+    asm volatile (".insn s 0x6b, 0, x1, 0(%0)" :: "r"(condition));
 }
 
 typedef void (*vx_wspawn_pfn)();

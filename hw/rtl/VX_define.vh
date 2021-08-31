@@ -185,7 +185,7 @@
 `define GPU_SPLIT       3'h2
 `define GPU_JOIN        3'h3
 `define GPU_BAR         3'h4
-`define GPU_OTHER       3'h7
+`define GPU_PRED        3'h5
 `define GPU_BITS        3
 `define GPU_OP(x)       x[`GPU_BITS-1:0]
 

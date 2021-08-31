@@ -816,10 +816,21 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
     case GPGPU:
       switch (func3) {
       case 0: {
-        // TMC
-        tmask_.reset();
-        for (int i = 0; i < num_threads; ++i) {
-          tmask_[i] = rsdata[0] & (1 << i);
+        // TMC        
+        if (rsrc1) {
+          // predicate mode
+          ThreadMask pred;
+          for (int i = 0; i < num_threads; ++i) {
+            pred[i] = tmask_[i] ? (iRegFile_[i][rsrc0] != 0) : 0;
+          }
+          if (pred.any()) {
+            tmask_ &= pred;
+          }
+        } else {
+          tmask_.reset();
+          for (int i = 0; i < num_threads; ++i) {
+            tmask_[i] = rsdata[0] & (1 << i);
+          }
         }
         D(3, "*** TMC " << tmask_);
         active_ = tmask_.any();
