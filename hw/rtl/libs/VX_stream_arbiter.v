@@ -19,11 +19,12 @@ module VX_stream_arbiter #(
     output wire [LANES-1:0][DATAW-1:0] data_out,    
     input  wire [LANES-1:0]            ready_out
 );
+    localparam LOG_NUM_REQS = `CLOG2(NUM_REQS);
 
     if (NUM_REQS > 1)  begin
-        wire                sel_valid;
-        wire                sel_ready;
-        wire [NUM_REQS-1:0] sel_1hot;
+        wire                    sel_valid;
+        wire                    sel_ready;
+        wire [LOG_NUM_REQS-1:0] sel_index;
 
         wire [NUM_REQS-1:0] valid_in_any;
         wire [LANES-1:0] ready_in_sel;
@@ -50,8 +51,8 @@ module VX_stream_arbiter #(
                 .requests     (valid_in_any),  
                 .enable       (sel_ready),     
                 .grant_valid  (sel_valid),
-                .grant_onehot (sel_1hot),
-				`UNUSED_PIN (grant_index)
+				.grant_index  (sel_index),
+                `UNUSED_PIN (grant_onehot)
             );
         end else if (TYPE == "R") begin
             VX_rr_arbiter #(
@@ -63,8 +64,8 @@ module VX_stream_arbiter #(
                 .requests     (valid_in_any),  
                 .enable       (sel_ready),
                 .grant_valid  (sel_valid),
-                .grant_onehot (sel_1hot),
-				`UNUSED_PIN (grant_index)
+				.grant_index  (sel_index),
+                `UNUSED_PIN (grant_onehot)
             );
         end else if (TYPE == "F") begin
             VX_fair_arbiter #(
@@ -76,8 +77,8 @@ module VX_stream_arbiter #(
                 .requests     (valid_in_any),  
                 .enable       (sel_ready),     
                 .grant_valid  (sel_valid),
-                .grant_onehot (sel_1hot),
-				`UNUSED_PIN (grant_index)
+				.grant_index  (sel_index),
+                `UNUSED_PIN (grant_onehot)
             );
         end else if (TYPE == "M") begin
             VX_matrix_arbiter #(
@@ -89,8 +90,8 @@ module VX_stream_arbiter #(
                 .requests     (valid_in_any),  
                 .enable       (sel_ready),     
                 .grant_valid  (sel_valid),
-                .grant_onehot (sel_1hot),
-				`UNUSED_PIN (grant_index)
+				.grant_index  (sel_index),
+                `UNUSED_PIN (grant_onehot)
             );
         end else begin
             $error ("invalid parameter");
@@ -105,32 +106,16 @@ module VX_stream_arbiter #(
             for (genvar i = 0; i < NUM_REQS; i++) begin
                 assign valid_data_in[i] = {valid_in[i], data_in[i]};
             end
-
-            VX_onehot_mux #(
-                .DATAW (LANES * (1 + DATAW)),
-                .N     (NUM_REQS)
-            ) data_in_mux (
-                .data_in  (valid_data_in),
-                .sel_in   (sel_1hot),
-                .data_out ({valid_in_sel, data_in_sel})
-            );
+            assign {valid_in_sel, data_in_sel} = valid_data_in[sel_index];
 
             `UNUSED_VAR (sel_valid)
         end else begin
-            VX_onehot_mux #(
-                .DATAW (DATAW),
-                .N     (NUM_REQS)
-            ) data_in_mux (
-                .data_in  (data_in),
-                .sel_in   (sel_1hot),
-                .data_out (data_in_sel)
-            );
-
+            assign data_in_sel  = data_in[sel_index];
             assign valid_in_sel = sel_valid;
         end
 
         for (genvar i = 0; i < NUM_REQS; i++) begin
-            assign ready_in[i] = ready_in_sel & {LANES{sel_1hot[i]}};
+            assign ready_in[i] = ready_in_sel & {LANES{(sel_index == LOG_NUM_REQS'(i))}};
         end
 
         for (genvar i = 0; i < LANES; ++i) begin

@@ -15,7 +15,7 @@ module VX_fp_cvt #(
 
     input wire [TAGW-1:0] tag_in,
 
-    input wire [`FRM_BITS-1:0] frm,
+    input wire [`INST_FRM_BITS-1:0] frm,
 
     input wire is_itof,
     input wire is_signed,
@@ -101,7 +101,7 @@ module VX_fp_cvt #(
     wire stall;
 
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + 1 + `FRM_BITS + 1 + LANES * ($bits(fp_type_t) + 1 + INT_EXP_WIDTH + INT_MAN_WIDTH)),
+        .DATAW  (1 + TAGW + 1 + `INST_FRM_BITS + 1 + LANES * ($bits(fp_type_t) + 1 + INT_EXP_WIDTH + INT_MAN_WIDTH)),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
@@ -167,7 +167,7 @@ module VX_fp_cvt #(
     wire [LANES-1:0][INT_EXP_WIDTH-1:0] input_exp_s1;
 
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + 1 + `FRM_BITS + 1 + LANES * ($bits(fp_type_t) + 1 + 1 + INT_MAN_WIDTH + INT_EXP_WIDTH)),
+        .DATAW  (1 + TAGW + 1 + `INST_FRM_BITS + 1 + LANES * ($bits(fp_type_t) + 1 + 1 + INT_MAN_WIDTH + INT_EXP_WIDTH)),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
@@ -253,7 +253,7 @@ module VX_fp_cvt #(
     wire [LANES-1:0]        of_before_round_s2;
     
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + 1 + 1 + `FRM_BITS + LANES * ($bits(fp_type_t) + 1 + 1 + (2*INT_MAN_WIDTH+1) + INT_EXP_WIDTH + 1)),
+        .DATAW  (1 + TAGW + 1 + 1 + `INST_FRM_BITS + LANES * ($bits(fp_type_t) + 1 + 1 + (2*INT_MAN_WIDTH+1) + INT_EXP_WIDTH + 1)),
         .RESETW (1)
     ) pipe_reg2 (
         .clk      (clk),
@@ -435,7 +435,7 @@ module VX_fp_cvt #(
     assign stall = ~ready_out && valid_out;
 
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + (LANES * 32) + (LANES * `FFG_BITS)),
+        .DATAW  (1 + TAGW + (LANES * 32) + (LANES * `FFLAGS_BITS)),
         .RESETW (1)
     ) pipe_reg4 (
         .clk      (clk),

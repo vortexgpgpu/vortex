@@ -42,7 +42,7 @@ module VX_csr_data #(
     reg [63:0] csr_cycle;
     reg [63:0] csr_instret;
     
-    reg [`NUM_WARPS-1:0][`FRM_BITS+`FFG_BITS-1:0] fcsr;
+    reg [`NUM_WARPS-1:0][`INST_FRM_BITS+`FFLAGS_BITS-1:0] fcsr;
 
     always @(posedge clk) begin
     
@@ -52,16 +52,16 @@ module VX_csr_data #(
         end
     
         if (fpu_to_csr_if.write_enable) begin
-            fcsr[fpu_to_csr_if.write_wid][`FFG_BITS-1:0] <= fcsr[fpu_to_csr_if.write_wid][`FFG_BITS-1:0] 
-                                                          | fpu_to_csr_if.write_fflags;
+            fcsr[fpu_to_csr_if.write_wid][`FFLAGS_BITS-1:0] <= fcsr[fpu_to_csr_if.write_wid][`FFLAGS_BITS-1:0] 
+                                                             | fpu_to_csr_if.write_fflags;
         end
     `endif
 
         if (write_enable) begin
             case (write_addr)
-                `CSR_FFLAGS:   fcsr[write_wid][`FFG_BITS-1:0] <= write_data[`FFG_BITS-1:0];
-                `CSR_FRM:      fcsr[write_wid][`FRM_BITS+`FFG_BITS-1:`FFG_BITS] <= write_data[`FRM_BITS-1:0];
-                `CSR_FCSR:     fcsr[write_wid] <= write_data[`FFG_BITS+`FRM_BITS-1:0];
+                `CSR_FFLAGS:   fcsr[write_wid][`FFLAGS_BITS-1:0] <= write_data[`FFLAGS_BITS-1:0];
+                `CSR_FRM:      fcsr[write_wid][`INST_FRM_BITS+`FFLAGS_BITS-1:`FFLAGS_BITS] <= write_data[`INST_FRM_BITS-1:0];
+                `CSR_FCSR:     fcsr[write_wid] <= write_data[`FFLAGS_BITS+`INST_FRM_BITS-1:0];
                 
                 `CSR_SATP:     csr_satp       <= write_data;
                 
@@ -104,8 +104,8 @@ module VX_csr_data #(
         read_data_r = 'x;
         read_addr_valid_r = 1;
         case (read_addr)
-            `CSR_FFLAGS     : read_data_r = 32'(fcsr[read_wid][`FFG_BITS-1:0]);
-            `CSR_FRM        : read_data_r = 32'(fcsr[read_wid][`FRM_BITS+`FFG_BITS-1:`FFG_BITS]);
+            `CSR_FFLAGS     : read_data_r = 32'(fcsr[read_wid][`FFLAGS_BITS-1:0]);
+            `CSR_FRM        : read_data_r = 32'(fcsr[read_wid][`INST_FRM_BITS+`FFLAGS_BITS-1:`FFLAGS_BITS]);
             `CSR_FCSR       : read_data_r = 32'(fcsr[read_wid]);
 
             `CSR_WTID       ,            
@@ -222,7 +222,7 @@ module VX_csr_data #(
     assign read_data = read_data_r;
 
 `ifdef EXT_F_ENABLE    
-    assign fpu_to_csr_if.read_frm = fcsr[fpu_to_csr_if.read_wid][`FRM_BITS+`FFG_BITS-1:`FFG_BITS];
+    assign fpu_to_csr_if.read_frm = fcsr[fpu_to_csr_if.read_wid][`INST_FRM_BITS+`FFLAGS_BITS-1:`FFLAGS_BITS];
 `endif
 
 endmodule

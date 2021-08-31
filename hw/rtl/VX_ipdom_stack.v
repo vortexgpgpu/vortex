@@ -38,17 +38,17 @@ module VX_ipdom_stack #(
     end    
 
     VX_dp_ram #(
-        .DATAW(WIDTH * 2),
-        .SIZE(DEPTH),
-        .RWCHECK(1),
-        .FASTRAM(1)
+        .DATAW  (WIDTH * 2),
+        .SIZE   (DEPTH),
+        .LUTRAM (1)
     ) store (
-        .clk(clk),
-        .waddr(wr_ptr),                                
-        .raddr(rd_ptr),
-        .wren(push),
-        .din({q2, q1}),
-        .dout({d2, d1})
+        .clk   (clk),
+        .wren  (push),
+        .waddr (wr_ptr),
+        .wdata ({q2, q1}),
+        .rden  (1'b1),
+        .raddr (rd_ptr),
+        .rdata ({d2, d1})
     );
     
     always @(posedge clk) begin

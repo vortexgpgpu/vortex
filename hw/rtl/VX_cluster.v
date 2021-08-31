@@ -87,6 +87,7 @@ module VX_cluster #(
             .CACHE_SIZE         (`L2CACHE_SIZE),
             .CACHE_LINE_SIZE    (`L2CACHE_LINE_SIZE),
             .NUM_BANKS          (`L2NUM_BANKS),
+            .NUM_PORTS          (`L2NUM_PORTS),
             .WORD_SIZE          (`L2WORD_SIZE),
             .NUM_REQS           (`L2NUM_REQS),
             .CREQ_SIZE          (`L2CREQ_SIZE),
@@ -143,17 +144,19 @@ module VX_cluster #(
 
     end else begin
 
+        `RESET_RELAY (mem_arb_reset);
+
         VX_mem_arb #(
             .NUM_REQS       (`NUM_CORES),
-            .DATA_WIDTH     (`L2MEM_DATA_WIDTH), 
-            .ADDR_WIDTH     (`L2MEM_ADDR_WIDTH),           
+            .DATA_WIDTH     (`DMEM_DATA_WIDTH),
+            .ADDR_WIDTH     (`DMEM_ADDR_WIDTH),           
             .TAG_IN_WIDTH   (`XMEM_TAG_WIDTH),
             .TAG_SEL_IDX    (1), // Skip 0 for NC flag
             .BUFFERED_REQ   (1),
             .BUFFERED_RSP   (1)
         ) mem_arb (
             .clk            (clk),
-            .reset          (reset),
+            .reset          (mem_arb_reset),
 
             // Core request
             .req_valid_in   (per_core_mem_req_valid),

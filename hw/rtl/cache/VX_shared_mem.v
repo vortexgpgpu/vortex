@@ -171,16 +171,17 @@ module VX_shared_mem #(
                  && creq_out_fire;
 
         VX_sp_ram #(
-            .DATAW   (`WORD_WIDTH),
-            .SIZE    (`LINES_PER_BANK),
-            .BYTEENW (WORD_SIZE),
-            .RWCHECK (1)
+            .DATAW      (`WORD_WIDTH),
+            .SIZE       (`LINES_PER_BANK),
+            .BYTEENW    (WORD_SIZE),
+            .NO_RWCHECK (1)
         ) data_store (
-            .clk    (clk),
-            .addr   (per_bank_core_req_addr[i]),
-            .wren   ({WORD_SIZE{wren}} & per_bank_core_req_byteen[i]),
-            .din    (per_bank_core_req_data[i]),
-            .dout   (per_bank_core_rsp_data[i])
+            .clk   (clk),
+            .addr  (per_bank_core_req_addr[i]),
+            .wren  ({WORD_SIZE{wren}} & per_bank_core_req_byteen[i]),
+            .wdata (per_bank_core_req_data[i]),
+            .rden  (1'b1),
+            .rdata (per_bank_core_rsp_data[i])
         );
     end  
 
@@ -216,18 +217,19 @@ module VX_shared_mem #(
     reg [NUM_REQS-1:0][`WORD_WIDTH-1:0] core_rsp_data_in;
     reg [CORE_TAG_WIDTH-1:0] core_rsp_tag_in;
     
-    always @(*) begin              
-        core_rsp_valids_in = 0;
-        core_rsp_data_in   = 'x;
-        core_rsp_tag_in    = 'x;
-        bank_rsp_sel_cur   = 0;
-
+    always @(*) begin        
+        core_rsp_tag_in = 'x;
         for (integer i = NUM_BANKS-1; i >= 0; --i) begin
             if (per_bank_req_reads[i] && ~bank_rsp_sel_prv[i]) begin
                 core_rsp_tag_in = per_bank_core_req_tag[i];
             end
         end
+    end
 
+    always @(*) begin
+        core_rsp_valids_in = 0;
+        core_rsp_data_in   = 'x;
+        bank_rsp_sel_cur   = 0;
         for (integer i = 0; i < NUM_BANKS; i++) begin 
             if (per_bank_core_req_valid[i] 
              && (core_rsp_tag_in[CORE_TAG_ID_BITS-1:0] == per_bank_core_req_tag[i][CORE_TAG_ID_BITS-1:0])) begin
@@ -278,13 +280,16 @@ module VX_shared_mem #(
     reg [CORE_TAG_WIDTH-1:0] core_req_tag_sel;
 `IGNORE_UNUSED_END
 
-    always @(*) begin                      
+    always @(*) begin
         core_req_tag_sel ='x;
         for (integer i = NUM_BANKS-1; i >= 0; --i) begin
             if (per_bank_core_req_valid[i]) begin
                 core_req_tag_sel = per_bank_core_req_tag[i];
             end
         end
+    end
+
+    always @(*) begin
         is_multi_tag_req = 0;
         for (integer i = 0; i < NUM_BANKS; ++i) begin
             if (per_bank_core_req_valid[i] 

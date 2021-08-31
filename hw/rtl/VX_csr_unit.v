@@ -70,14 +70,14 @@ module VX_csr_unit #(
     always @(*) begin        
         csr_we_s0_unqual = (csr_req_data != 0);
         case (csr_req_if.op_type)
-            `CSR_RW: begin
+            `INST_CSR_RW: begin
                 csr_updated_data = csr_req_data;
                 csr_we_s0_unqual = 1;
             end
-            `CSR_RS: begin
+            `INST_CSR_RS: begin
                 csr_updated_data = csr_read_data_qual | csr_req_data;
             end
-            //`CSR_RC
+            //`INST_CSR_RC
             default: begin
                 csr_updated_data = csr_read_data_qual & ~csr_req_data;
             end

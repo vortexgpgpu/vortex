@@ -2,10 +2,10 @@
 
 `TRACING_OFF
 module VX_index_buffer #(
-    parameter DATAW   = 1,
-    parameter SIZE    = 1,
-    parameter FASTRAM = 1,
-    parameter ADDRW   = `LOG2UP(SIZE)
+    parameter DATAW  = 1,
+    parameter SIZE   = 1,
+    parameter LUTRAM = 1,
+    parameter ADDRW  = `LOG2UP(SIZE)
 ) (
     input  wire clk,
     input  wire reset,
@@ -29,13 +29,12 @@ module VX_index_buffer #(
     wire free_valid;
     wire [ADDRW-1:0] free_index;
 
-    VX_priority_encoder #(
-        .N (SIZE)
+    VX_lzc #(
+        .WIDTH (SIZE)
     ) free_slots_encoder (
-        .data_in    (free_slots_n),
-        .index      (free_index),  
-        `UNUSED_PIN (onehot),
-        .valid_out  (free_valid)
+        .in_i    (free_slots_n),
+        .cnt_o   (free_index),
+        .valid_o (free_valid)
     );  
 
     always @(*) begin
@@ -69,17 +68,17 @@ module VX_index_buffer #(
     end
 
     VX_dp_ram #(
-        .DATAW(DATAW),
-        .SIZE(SIZE),
-        .RWCHECK(1),
-        .FASTRAM(FASTRAM)
+        .DATAW  (DATAW),
+        .SIZE   (SIZE),
+        .LUTRAM (LUTRAM)
     ) data_table (
-        .clk(clk),
-        .waddr(write_addr),                                
-        .raddr(read_addr),
-        .wren(acquire_slot),
-        .din(write_data),
-        .dout(read_data)
+        .clk   (clk), 
+        .wren  (acquire_slot),
+        .waddr (write_addr),
+        .wdata (write_data),
+        .rden  (1'b1),
+        .raddr (read_addr),
+        .rdata (read_data)
     );       
         
     assign write_addr = write_addr_r;

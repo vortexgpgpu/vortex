@@ -85,6 +85,7 @@ module Vortex (
             .CACHE_SIZE         (`L3CACHE_SIZE),
             .CACHE_LINE_SIZE    (`L3CACHE_LINE_SIZE),
             .NUM_BANKS          (`L3NUM_BANKS),
+            .NUM_PORTS          (`L3NUM_PORTS),
             .WORD_SIZE          (`L3WORD_SIZE),
             .NUM_REQS           (`L3NUM_REQS),
             .CREQ_SIZE          (`L3CREQ_SIZE),
@@ -141,6 +142,8 @@ module Vortex (
 
     end else begin
 
+        `RESET_RELAY (mem_arb_reset);
+
         VX_mem_arb #(
             .NUM_REQS       (`NUM_CLUSTERS),
             .DATA_WIDTH     (`L3MEM_DATA_WIDTH),            
@@ -150,7 +153,7 @@ module Vortex (
             .BUFFERED_RSP   (1)
         ) mem_arb (
             .clk            (clk),
-            .reset          (reset),
+            .reset          (mem_arb_reset),
 
             // Core request
             .req_valid_in   (per_cluster_mem_req_valid),
