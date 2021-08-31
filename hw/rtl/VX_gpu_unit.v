@@ -19,6 +19,7 @@ module VX_gpu_unit #(
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
+    `UNUSED_VAR (gpu_req_if.op_mod)
 
     gpu_tmc_t       tmc;
     gpu_wspawn_t    wspawn;
@@ -29,11 +30,18 @@ module VX_gpu_unit #(
     wire is_tmc    = (gpu_req_if.op_type == `GPU_TMC);
     wire is_split  = (gpu_req_if.op_type == `GPU_SPLIT);
     wire is_bar    = (gpu_req_if.op_type == `GPU_BAR);
+    wire is_pred   = (gpu_req_if.op_type == `GPU_PRED);
 
     // tmc
 
-    assign tmc.valid = is_tmc;
-    assign tmc.tmask = `NUM_THREADS'(gpu_req_if.rs1_data[gpu_req_if.tid]);
+    wire [`NUM_THREADS-1:0] pred_cond;
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+        assign pred_cond[i] = gpu_req_if.tmask[i] && gpu_req_if.rs1_data[i][0];
+    end
+    wire [`NUM_THREADS-1:0] pred = (pred_cond != 0) ? pred_cond : gpu_req_if.tmask;
+
+    assign tmc.valid = is_tmc || is_pred;
+    assign tmc.tmask = is_pred ? pred : `NUM_THREADS'(gpu_req_if.rs1_data[gpu_req_if.tid]);
 
     // wspawn
 
