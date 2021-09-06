@@ -30,6 +30,9 @@ module VX_fp_ncomp #(
     input wire  ready_out,
     output wire valid_out
 );  
+    localparam  EXP_BITS = 8;
+    localparam  MAN_BITS = 23;
+        
     localparam  NEG_INF     = 32'h00000001,
                 NEG_NORM    = 32'h00000002,
                 NEG_SUBNORM = 32'h00000004,
@@ -44,7 +47,7 @@ module VX_fp_ncomp #(
     wire [LANES-1:0]        tmp_a_sign, tmp_b_sign;
     wire [LANES-1:0][7:0]   tmp_a_exponent, tmp_b_exponent;
     wire [LANES-1:0][22:0]  tmp_a_mantissa, tmp_b_mantissa;
-    fp_type_t [LANES-1:0]   tmp_a_type, tmp_b_type;
+    fp_class_t [LANES-1:0]  tmp_a_clss, tmp_b_clss;
     wire [LANES-1:0]        tmp_a_smaller, tmp_ab_equal;
 
     // Setup
@@ -57,20 +60,26 @@ module VX_fp_ncomp #(
         assign tmp_b_exponent[i] = datab[i][30:23];
         assign tmp_b_mantissa[i] = datab[i][22:0];
 
-        VX_fp_type fp_type_a (
+        VX_fp_class #( 
+            .EXP_BITS (EXP_BITS),
+            .MAN_BITS (MAN_BITS)
+        ) fp_class_a (
             .exp_i  (tmp_a_exponent[i]),
             .man_i  (tmp_a_mantissa[i]),
-            .type_o (tmp_a_type[i])
+            .clss_o (tmp_a_clss[i])
         );
 
-        VX_fp_type fp_type_b (
+        VX_fp_class #( 
+            .EXP_BITS (EXP_BITS),
+            .MAN_BITS (MAN_BITS)
+        ) fp_class_b (
             .exp_i  (tmp_b_exponent[i]),
             .man_i  (tmp_b_mantissa[i]),
-            .type_o (tmp_b_type[i])
+            .clss_o (tmp_b_clss[i])
         );
 
         assign tmp_a_smaller[i] = $signed(dataa[i]) < $signed(datab[i]);
-        assign tmp_ab_equal[i]  = (dataa[i] == datab[i]) | (tmp_a_type[i].is_zero & tmp_b_type[i].is_zero);
+        assign tmp_ab_equal[i]  = (dataa[i] == datab[i]) | (tmp_a_clss[i].is_zero & tmp_b_clss[i].is_zero);
     end  
 
     // Pipeline stage0
@@ -83,41 +92,41 @@ module VX_fp_ncomp #(
     wire [LANES-1:0]        a_sign_s0, b_sign_s0;
     wire [LANES-1:0][7:0]   a_exponent_s0;
     wire [LANES-1:0][22:0]  a_mantissa_s0;
-    fp_type_t [LANES-1:0]   a_type_s0, b_type_s0;
+    fp_class_t [LANES-1:0]  a_clss_s0, b_clss_s0;
     wire [LANES-1:0]        a_smaller_s0, ab_equal_s0;
 
     wire stall;
 
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + `INST_FPU_BITS + `INST_FRM_BITS + LANES * (2 * 32 + 1 + 1 + 8 + 23 + 2 * $bits(fp_type_t) + 1 + 1)),
+        .DATAW  (1 + TAGW + `INST_FPU_BITS + `INST_FRM_BITS + LANES * (2 * 32 + 1 + 1 + 8 + 23 + 2 * $bits(fp_class_t) + 1 + 1)),
         .RESETW (1),
         .DEPTH  (0)
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall),
-        .data_in  ({valid_in,    tag_in,    op_type,    frm,    dataa,    datab,    tmp_a_sign, tmp_b_sign, tmp_a_exponent, tmp_a_mantissa, tmp_a_type, tmp_b_type, tmp_a_smaller, tmp_ab_equal}),
-        .data_out ({valid_in_s0, tag_in_s0, op_type_s0, frm_s0, dataa_s0, datab_s0, a_sign_s0,  b_sign_s0,  a_exponent_s0,  a_mantissa_s0,  a_type_s0,  b_type_s0,  a_smaller_s0,  ab_equal_s0})
+        .data_in  ({valid_in,    tag_in,    op_type,    frm,    dataa,    datab,    tmp_a_sign, tmp_b_sign, tmp_a_exponent, tmp_a_mantissa, tmp_a_clss, tmp_b_clss, tmp_a_smaller, tmp_ab_equal}),
+        .data_out ({valid_in_s0, tag_in_s0, op_type_s0, frm_s0, dataa_s0, datab_s0, a_sign_s0,  b_sign_s0,  a_exponent_s0,  a_mantissa_s0,  a_clss_s0,  b_clss_s0,  a_smaller_s0,  ab_equal_s0})
     ); 
 
     // FCLASS
     reg [LANES-1:0][31:0] fclass_mask;  // generate a 10-bit mask for integer reg
     for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin 
-            if (a_type_s0[i].is_normal) begin
+            if (a_clss_s0[i].is_normal) begin
                 fclass_mask[i] = a_sign_s0[i] ? NEG_NORM : POS_NORM;
             end 
-            else if (a_type_s0[i].is_inf) begin
+            else if (a_clss_s0[i].is_inf) begin
                 fclass_mask[i] = a_sign_s0[i] ? NEG_INF : POS_INF;
             end 
-            else if (a_type_s0[i].is_zero) begin
+            else if (a_clss_s0[i].is_zero) begin
                 fclass_mask[i] = a_sign_s0[i] ? NEG_ZERO : POS_ZERO;
             end 
-            else if (a_type_s0[i].is_subnormal) begin
+            else if (a_clss_s0[i].is_subnormal) begin
                 fclass_mask[i] = a_sign_s0[i] ? NEG_SUBNORM : POS_SUBNORM;
             end 
-            else if (a_type_s0[i].is_nan) begin
-                fclass_mask[i] = {22'h0, a_type_s0[i].is_quiet, a_type_s0[i].is_signaling, 8'h0};
+            else if (a_clss_s0[i].is_nan) begin
+                fclass_mask[i] = {22'h0, a_clss_s0[i].is_quiet, a_clss_s0[i].is_signaling, 8'h0};
             end 
             else begin                     
                 fclass_mask[i] = QUT_NAN;
@@ -129,11 +138,11 @@ module VX_fp_ncomp #(
     reg [LANES-1:0][31:0] fminmax_res;  // result of fmin/fmax
     for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin
-            if (a_type_s0[i].is_nan && b_type_s0[i].is_nan)
+            if (a_clss_s0[i].is_nan && b_clss_s0[i].is_nan)
                 fminmax_res[i] = {1'b0, 8'hff, 1'b1, 22'd0}; // canonical qNaN
-            else if (a_type_s0[i].is_nan) 
+            else if (a_clss_s0[i].is_nan) 
                 fminmax_res[i] = datab_s0[i];
-            else if (b_type_s0[i].is_nan) 
+            else if (b_clss_s0[i].is_nan) 
                 fminmax_res[i] = dataa_s0[i];
             else begin 
                 case (frm_s0) // use LSB to distinguish MIN and MAX
@@ -166,7 +175,7 @@ module VX_fp_ncomp #(
             case (frm_s0)
                 `INST_FRM_RNE: begin // LE
                     fcmp_fflags[i] = 5'h0;
-                    if (a_type_s0[i].is_nan || b_type_s0[i].is_nan) begin
+                    if (a_clss_s0[i].is_nan || b_clss_s0[i].is_nan) begin
                         fcmp_res[i]       = 32'h0;
                         fcmp_fflags[i].NV = 1'b1;
                     end else begin
@@ -175,7 +184,7 @@ module VX_fp_ncomp #(
                 end
                 `INST_FRM_RTZ: begin // LS
                     fcmp_fflags[i] = 5'h0;
-                    if (a_type_s0[i].is_nan || b_type_s0[i].is_nan) begin
+                    if (a_clss_s0[i].is_nan || b_clss_s0[i].is_nan) begin
                         fcmp_res[i]       = 32'h0;
                         fcmp_fflags[i].NV = 1'b1;
                     end else begin
@@ -184,9 +193,9 @@ module VX_fp_ncomp #(
                 end
                 `INST_FRM_RDN: begin // EQ
                     fcmp_fflags[i] = 5'h0;
-                    if (a_type_s0[i].is_nan || b_type_s0[i].is_nan) begin
+                    if (a_clss_s0[i].is_nan || b_clss_s0[i].is_nan) begin
                         fcmp_res[i]       = 32'h0;
-                        fcmp_fflags[i].NV = a_type_s0[i].is_signaling | b_type_s0[i].is_signaling; 
+                        fcmp_fflags[i].NV = a_clss_s0[i].is_signaling | b_clss_s0[i].is_signaling; 
                     end else begin
                         fcmp_res[i] = {31'h0, ab_equal_s0[i]};
                     end
@@ -225,11 +234,11 @@ module VX_fp_ncomp #(
                         3,4: begin
                             tmp_result[i] = fminmax_res[i];
                             tmp_fflags[i] = 0;
-                            tmp_fflags[i].NV = a_type_s0[i].is_signaling | b_type_s0[i].is_signaling;
+                            tmp_fflags[i].NV = a_clss_s0[i].is_signaling | b_clss_s0[i].is_signaling;
                         end
                         //5,6,7: MOVE
                         default: begin
-                            tmp_result[i] = dataa[i];
+                            tmp_result[i] = dataa_s0[i];
                             tmp_fflags[i] = 'x;
                         end
                     endcase

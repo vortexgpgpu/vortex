@@ -11,7 +11,7 @@ typedef struct packed {
     logic is_nan;
     logic is_quiet;
     logic is_signaling;    
-} fp_type_t;
+} fp_class_t;
 
 typedef struct packed {
     logic NV; // 4-Invalid

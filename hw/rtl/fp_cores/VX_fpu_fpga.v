@@ -1,7 +1,7 @@
 `include "VX_define.vh"
 
 module VX_fpu_fpga #( 
-    parameter TAGW = 1
+    parameter TAGW = 4
 ) (
     input wire clk,
     input wire reset,
