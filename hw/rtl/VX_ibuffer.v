@@ -38,8 +38,8 @@ module VX_ibuffer #(
         wire is_head_ptr = empty_r[i] || (alm_empty_r[i] && reading);
 
         VX_elastic_buffer #(
-            .DATAW (DATAW),
-            .SIZE  (`IBUF_SIZE),
+            .DATAW      (DATAW),
+            .SIZE       (`IBUF_SIZE),
             .OUTPUT_REG (`IBUF_SIZE > 2)
         ) queue (
             .clk      (clk),
@@ -98,6 +98,8 @@ module VX_ibuffer #(
     reg [DATAW-1:0] deq_instr, deq_instr_n;
     reg [NWARPSW-1:0] num_warps;
 
+    `UNUSED_VAR (deq_instr)
+
     // calculate valid table
     always @(*) begin
         valid_table_n = valid_table;        
@@ -147,11 +149,10 @@ module VX_ibuffer #(
             valid_table <= 0;
             deq_valid   <= 0;  
             num_warps   <= 0;
-            deq_wid_rr  <= 0;
         end else begin
             valid_table <= valid_table_n;            
             deq_valid   <= deq_valid_n;
-            deq_wid_rr  <= deq_wid_rr_n;
+            
 
             if (warp_added && !warp_removed) begin
                 num_warps <= num_warps + NWARPSW'(1);
@@ -160,8 +161,9 @@ module VX_ibuffer #(
             end
         end
             
-        deq_wid   <= deq_wid_n;
-        deq_instr <= deq_instr_n;
+        deq_wid    <= deq_wid_n;
+        deq_wid_rr <= deq_wid_rr_n;
+        deq_instr  <= deq_instr_n;
     end
     
     assign decode_if.ready = ~q_full[decode_if.wid];
@@ -183,7 +185,6 @@ module VX_ibuffer #(
 
     assign ibuffer_if.valid = deq_valid;
     assign ibuffer_if.wid   = deq_wid;
-    assign ibuffer_if.wid_n = deq_wid_n;
     assign {ibuffer_if.tmask, 
             ibuffer_if.PC, 
             ibuffer_if.ex_type, 
@@ -195,8 +196,10 @@ module VX_ibuffer #(
             ibuffer_if.rs2, 
             ibuffer_if.rs3, 
             ibuffer_if.imm, 
-            ibuffer_if.use_PC, 
-            ibuffer_if.use_imm, 
-            ibuffer_if.used_regs} = deq_instr;
+            ibuffer_if.use_PC,
+            ibuffer_if.use_imm} = deq_instr[DATAW-1:`NUM_REGS];
+
+    assign ibuffer_if.used_regs_n = deq_instr_n[`NUM_REGS-1:0];
+    assign ibuffer_if.wid_n = deq_wid_n;
 
 endmodule

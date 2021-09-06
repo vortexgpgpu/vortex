@@ -283,13 +283,20 @@ module VX_mem_unit # (
         );    
     end else begin
         // core to D-cache request
-        assign dcache_req_tmp_if.valid  = dcache_req_if.valid;
-        assign dcache_req_tmp_if.addr   = dcache_req_if.addr;
-        assign dcache_req_tmp_if.rw     = dcache_req_if.rw;        
-        assign dcache_req_tmp_if.byteen = dcache_req_if.byteen;
-        assign dcache_req_tmp_if.data   = dcache_req_if.data;
-        assign dcache_req_tmp_if.tag    = dcache_req_if.tag;
-        assign dcache_req_if.ready  = dcache_req_tmp_if.ready;
+        for (genvar i = 0; i < `DNUM_REQS; ++i) begin
+            VX_skid_buffer #(
+                .DATAW ((32-`CLOG2(`DWORD_SIZE)) + 1 + `DWORD_SIZE + (8*`DWORD_SIZE) + `DCORE_TAG_WIDTH)
+            ) req_buf (
+                .clk       (clk),
+                .reset     (reset),
+                .valid_in  (dcache_req_if.valid[i]),        
+                .data_in   ({dcache_req_if.addr[i], dcache_req_if.rw[i], dcache_req_if.byteen[i], dcache_req_if.data[i], dcache_req_if.tag[i]}),
+                .ready_in  (dcache_req_if.ready[i]),
+                .valid_out (dcache_req_tmp_if.valid[i]),
+                .data_out  ({dcache_req_tmp_if.addr[i], dcache_req_tmp_if.rw[i], dcache_req_tmp_if.byteen[i], dcache_req_tmp_if.data[i], dcache_req_tmp_if.tag[i]}),
+                .ready_out (dcache_req_tmp_if.ready[i])
+            );
+        end
         
         // D-cache to core reponse
         assign dcache_rsp_if.valid  = dcache_rsp_tmp_if.valid;
