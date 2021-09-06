@@ -13,7 +13,7 @@ module VX_shift_register_nr #(
     input wire [DATAW-1:0]          data_in,
     output wire [(NTAPS*DATAW)-1:0] data_out
 );
-    `USE_FAST_BRAM reg [DATAW-1:0] entries [DEPTH-1:0];
+    reg [DEPTH-1:0][DATAW-1:0] entries;
 
     always @(posedge clk) begin
         if (enable) begin                    
@@ -22,7 +22,7 @@ module VX_shift_register_nr #(
             entries[0] <= data_in;
         end
     end
-    
+
     for (genvar i = 0; i < NTAPS; ++i) begin
         assign data_out [i*DATAW+:DATAW] = entries [TAPS[i*DEPTHW+:DEPTHW]];
     end
@@ -42,30 +42,15 @@ module VX_shift_register_wr #(
     input wire [DATAW-1:0]          data_in,
     output wire [(NTAPS*DATAW)-1:0] data_out
 );
-    `USE_FAST_BRAM reg [DEPTH-1:0][DATAW-1:0] entries;
+    reg [DEPTH-1:0][DATAW-1:0] entries;
 
-    if (1 == DEPTH) begin
-
-        always @(posedge clk) begin
-            if (reset) begin
-                entries <= (DEPTH * DATAW)'(0);
-            end else begin
-                if (enable) begin                    
-                    entries <= data_in;
-                end
-            end
-        end
-
-    end else begin                
-        
-        always @(posedge clk) begin
-            if (reset) begin
-                entries <= (DEPTH * DATAW)'(0);
-            end else begin
-                if (enable) begin                    
-                    entries <= {entries[DEPTH-2:0], data_in};
-                end
-            end
+    always @(posedge clk) begin
+        if (reset) begin
+            entries <= '0;
+        end else if (enable) begin                    
+            for (integer i = DEPTH-1; i > 0; --i)
+                entries[i] <= entries[i-1];
+            entries[0] <= data_in;
         end
     end
 

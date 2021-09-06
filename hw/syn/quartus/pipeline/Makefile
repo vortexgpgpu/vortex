@@ -1,7 +1,7 @@
 PROJECT = VX_pipeline
 TOP_LEVEL_ENTITY = VX_pipeline
 SRC_FILE = VX_pipeline.v
-RTL_DIR = ../../../rtl
+RTL_DIR = ../../../../rtl
 
 FAMILY = "Arria 10"
 DEVICE = 10AX115N3F40E2SG
