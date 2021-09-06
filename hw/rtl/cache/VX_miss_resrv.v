@@ -81,14 +81,14 @@ module VX_miss_resrv #(
     reg [MSHR_SIZE-1:0] valid_table_x;
     reg [MSHR_SIZE-1:0] ready_table_x;
 
-    wire [MSHR_SIZE-1:0] addr_match;
+    wire [MSHR_SIZE-1:0] addr_matches;
     
     wire allocate_fire = allocate_valid && allocate_ready;
     
     wire dequeue_fire = dequeue_valid && dequeue_ready;
 
     for (genvar i = 0; i < MSHR_SIZE; ++i) begin
-        assign addr_match[i] = (i != lookup_id) && valid_table[i] && (addr_table[i] == lookup_addr);
+        assign addr_matches[i] = (addr_table[i] == lookup_addr);
     end
     
     always @(*) begin
@@ -98,12 +98,12 @@ module VX_miss_resrv #(
             valid_table_x[dequeue_id] = 0;
         end
         if (lookup_replay) begin            
-            ready_table_x |= addr_match;
+            ready_table_x |= addr_matches;
         end
     end
 
     VX_lzc #(
-        .WIDTH (MSHR_SIZE)
+        .N (MSHR_SIZE)
     ) dequeue_sel (
         .in_i    (valid_table_x & ready_table_x),
         .cnt_o   (dequeue_id_x),
@@ -111,7 +111,7 @@ module VX_miss_resrv #(
     );
 
     VX_lzc #(
-        .WIDTH (MSHR_SIZE)
+        .N (MSHR_SIZE)
     ) allocate_sel (
         .in_i    (~valid_table_n),
         .cnt_o   (allocate_id_n),
@@ -189,7 +189,11 @@ module VX_miss_resrv #(
     assign dequeue_id     = dequeue_id_r;
     assign dequeue_addr   = addr_table[dequeue_id_r];
 
-    assign lookup_match  = (| addr_match);
+    wire [MSHR_SIZE-1:0] lookup_entries;
+    for (genvar i = 0; i < MSHR_SIZE; ++i) begin
+        assign lookup_entries[i] = (i != lookup_id);
+    end
+    assign lookup_match = |(lookup_entries & valid_table & addr_matches);
 
     `UNUSED_VAR (lookup_valid)
 

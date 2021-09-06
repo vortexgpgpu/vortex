@@ -51,9 +51,9 @@ module VX_lsu_unit #(
     end
 
     // detect duplicate addresses
-    wire [`NUM_THREADS-1:0] addr_matches;
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        assign addr_matches[i] = (full_addr[0] == full_addr[i]) || ~lsu_req_if.tmask[i];
+    wire [`NUM_THREADS-2:0] addr_matches;
+    for (genvar i = 0; i < (`NUM_THREADS-1); i++) begin
+        assign addr_matches[i] = (lsu_req_if.base_addr[i+1] == lsu_req_if.base_addr[0]) || ~lsu_req_if.tmask[i+1];
     end    
     wire lsu_is_dup = lsu_req_if.tmask[0] && (& addr_matches);
 
@@ -150,7 +150,7 @@ module VX_lsu_unit #(
 
     wire [`NUM_THREADS-1:0] req_tmask_dup = req_tmask & {{(`NUM_THREADS-1){~req_is_dup}}, 1'b1};
     
-    wire req_ready_all = &(dcache_req_if.ready | req_sent_mask | ~req_tmask_dup);
+    wire dcache_req_ready = &(dcache_req_if.ready | req_sent_mask | ~req_tmask_dup);
 
     wire [`NUM_THREADS-1:0] req_sent_mask_n = req_sent_mask | dcache_req_fire;
 
@@ -159,7 +159,7 @@ module VX_lsu_unit #(
             req_sent_mask <= 0;
             is_req_start  <= 1;
         end else begin
-            if (req_ready_all) begin
+            if (dcache_req_ready) begin
                 req_sent_mask <= 0;
                 is_req_start  <= 1;
             end else begin
@@ -235,11 +235,11 @@ module VX_lsu_unit #(
     `endif
     end
     
-    assign ready_in = req_dep_ready && req_ready_all;
+    assign ready_in = req_dep_ready && dcache_req_ready;
 
     // send store commit
 
-    wire is_store_rsp = req_valid && ~req_wb && req_ready_all;
+    wire is_store_rsp = req_valid && ~req_wb && dcache_req_ready;
 
     assign st_commit_if.valid = is_store_rsp;
     assign st_commit_if.wid   = req_wid;

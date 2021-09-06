@@ -116,7 +116,7 @@ module VX_nc_bypass #(
     assign core_req_valid_in_nc = core_req_valid_in & core_req_nc_tids;
 
     VX_lzc #(
-        .WIDTH (NUM_REQS)
+        .N (NUM_REQS)
     ) core_req_sel (
         .in_i    (core_req_valid_in_nc),
         .cnt_o   (core_req_nc_tid),

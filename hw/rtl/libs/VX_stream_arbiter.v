@@ -42,22 +42,18 @@ module VX_stream_arbiter #(
         end
 
         if (TYPE == "X") begin
-            VX_fixed_arbiter #(
-                .NUM_REQS(NUM_REQS),
-                .LOCK_ENABLE(LOCK_ENABLE)
+            `UNUSED_VAR (sel_ready)
+            VX_lzc #(
+                .N (NUM_REQS)
             ) sel_arb (
-                .clk          (clk),
-                .reset        (reset),
-                .requests     (valid_in_any),  
-                .enable       (sel_ready),     
-                .grant_valid  (sel_valid),
-				.grant_index  (sel_index),
-                `UNUSED_PIN (grant_onehot)
+                .in_i    (valid_in_any),                
+                .cnt_o   (sel_index),
+                .valid_o (sel_valid)
             );
         end else if (TYPE == "R") begin
             VX_rr_arbiter #(
-                .NUM_REQS(NUM_REQS),
-                .LOCK_ENABLE(LOCK_ENABLE)
+                .NUM_REQS    (NUM_REQS),
+                .LOCK_ENABLE (LOCK_ENABLE)
             ) sel_arb (
                 .clk          (clk),
                 .reset        (reset),
@@ -69,8 +65,8 @@ module VX_stream_arbiter #(
             );
         end else if (TYPE == "F") begin
             VX_fair_arbiter #(
-                .NUM_REQS(NUM_REQS),
-                .LOCK_ENABLE(LOCK_ENABLE)
+                .NUM_REQS    (NUM_REQS),
+                .LOCK_ENABLE (LOCK_ENABLE)
             ) sel_arb (
                 .clk          (clk),
                 .reset        (reset),
@@ -82,8 +78,8 @@ module VX_stream_arbiter #(
             );
         end else if (TYPE == "M") begin
             VX_matrix_arbiter #(
-                .NUM_REQS(NUM_REQS),
-                .LOCK_ENABLE(LOCK_ENABLE)
+                .NUM_REQS    (NUM_REQS),
+                .LOCK_ENABLE (LOCK_ENABLE)
             ) sel_arb (
                 .clk          (clk),
                 .reset        (reset),

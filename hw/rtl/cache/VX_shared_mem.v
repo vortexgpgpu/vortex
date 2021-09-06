@@ -215,16 +215,17 @@ module VX_shared_mem #(
     
     reg [NUM_REQS-1:0] core_rsp_valids_in;
     reg [NUM_REQS-1:0][`WORD_WIDTH-1:0] core_rsp_data_in;
-    reg [CORE_TAG_WIDTH-1:0] core_rsp_tag_in;
-    
-    always @(*) begin        
-        core_rsp_tag_in = 'x;
-        for (integer i = NUM_BANKS-1; i >= 0; --i) begin
-            if (per_bank_req_reads[i] && ~bank_rsp_sel_prv[i]) begin
-                core_rsp_tag_in = per_bank_core_req_tag[i];
-            end
-        end
-    end
+    wire [CORE_TAG_WIDTH-1:0] core_rsp_tag_in;
+
+    VX_find_first #(
+        .N     (NUM_BANKS),
+        .DATAW (CORE_TAG_WIDTH)
+    ) find_first (
+        .valid_i (per_bank_req_reads & ~bank_rsp_sel_prv),
+        .data_i  (per_bank_core_req_tag),
+        .data_o  (core_rsp_tag_in),
+        `UNUSED_PIN (valid_o)
+    );
 
     always @(*) begin
         core_rsp_valids_in = 0;
@@ -280,14 +281,15 @@ module VX_shared_mem #(
     reg [CORE_TAG_WIDTH-1:0] core_req_tag_sel;
 `IGNORE_UNUSED_END
 
-    always @(*) begin
-        core_req_tag_sel ='x;
-        for (integer i = NUM_BANKS-1; i >= 0; --i) begin
-            if (per_bank_core_req_valid[i]) begin
-                core_req_tag_sel = per_bank_core_req_tag[i];
-            end
-        end
-    end
+    VX_find_first #(
+        .N     (NUM_BANKS),
+        .DATAW (CORE_TAG_WIDTH)
+    ) find_first_d (
+        .valid_i (per_bank_core_req_valid),
+        .data_i  (per_bank_core_req_tag),
+        .data_o  (core_req_tag_sel),
+        `UNUSED_PIN (valid_o)
+    );
 
     always @(*) begin
         is_multi_tag_req = 0;

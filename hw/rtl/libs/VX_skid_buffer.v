@@ -68,8 +68,7 @@ module VX_skid_buffer #(
                 end else begin             
                     if (ready_out) begin
                         use_buffer <= 0;
-                    end else if (push && valid_out_r) begin
-                        assert(!use_buffer);
+                    end else if (valid_in && valid_out_r) begin
                         use_buffer <= 1;
                     end
                     if (pop) begin
@@ -81,7 +80,7 @@ module VX_skid_buffer #(
             always @(posedge clk) begin
                 if (push) begin
                     buffer <= data_in;
-                end                
+                end
                 if (pop && !use_buffer) begin
                     data_out_r <= data_in;                    
                 end else if (ready_out) begin
