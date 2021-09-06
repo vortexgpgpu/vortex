@@ -1,6 +1,6 @@
 BUILD_DIR ?= build
 
-.PHONY: unittest pipeline smem cache core vortex top1 top2 top4 top8 top16 top32 top64
+.PHONY: unittest pipeline smem cache fpu_core core vortex top1 top2 top4 top8 top16 top32 top64
 
 unittest:
 	mkdir -p unittest/$(BUILD_DIR)
@@ -21,6 +21,11 @@ cache:
 	mkdir -p cache/$(BUILD_DIR)
 	cp cache/Makefile cache/$(BUILD_DIR)
 	$(MAKE) -C cache/$(BUILD_DIR) clean && $(MAKE) -C cache/$(BUILD_DIR) > cache/$(BUILD_DIR)/build.log 2>&1 &
+
+fpu_core:
+	mkdir -p fpu_core/$(BUILD_DIR)
+	cp fpu_core/Makefile fpu_core/$(BUILD_DIR)
+	$(MAKE) -C fpu_core/$(BUILD_DIR) clean && $(MAKE) -C fpu_core/$(BUILD_DIR) > fpu_core/$(BUILD_DIR)/build.log 2>&1 &
 
 core:
 	mkdir -p core/$(BUILD_DIR)
