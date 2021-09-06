@@ -59,13 +59,16 @@ module VX_fp_cvt #(
     
     // Input processing
     
-    fp_type_t [LANES-1:0] in_a_type;
+    fp_class_t [LANES-1:0] fp_clss;
       
     for (genvar i = 0; i < LANES; ++i) begin
-        VX_fp_type fp_type (
+        VX_fp_class #( 
+            .EXP_BITS (EXP_BITS),
+            .MAN_BITS (MAN_BITS)
+        ) fp_class (
             .exp_i  (dataa[i][30:23]),
             .man_i  (dataa[i][22:0]),
-            .type_o (in_a_type[i])
+            .clss_o (fp_clss[i])
         );
     end
 
@@ -74,16 +77,19 @@ module VX_fp_cvt #(
     wire [LANES-1:0]                    input_sign;
     
     for (genvar i = 0; i < LANES; ++i) begin
+    `IGNORE_WARNINGS_BEGIN
         wire [INT_MAN_WIDTH-1:0] int_mantissa;
         wire [INT_MAN_WIDTH-1:0] fmt_mantissa;
         wire fmt_sign       = dataa[i][31];
         wire int_sign       = dataa[i][31] & is_signed;
         assign int_mantissa = int_sign ? (-dataa[i]) : dataa[i];
-        assign fmt_mantissa = INT_MAN_WIDTH'({in_a_type[i].is_normal, dataa[i][MAN_BITS-1:0]});            
-
-        assign fmt_exponent[i] = {1'b0, dataa[i][MAN_BITS+EXP_BITS-1:MAN_BITS]};
+        assign fmt_mantissa = INT_MAN_WIDTH'({fp_clss[i].is_normal, dataa[i][MAN_BITS-1:0]});
+        assign fmt_exponent[i] = {1'b0, dataa[i][MAN_BITS +: EXP_BITS]} +
+                                 {1'b0, fp_clss[i].is_subnormal} +
+                                 (FMT_SHIFT_COMPENSATION - EXP_BIAS);
         assign encoded_mant[i] = is_itof ? int_mantissa : fmt_mantissa;
         assign input_sign[i]   = is_itof ? int_sign : fmt_sign;
+    `IGNORE_WARNINGS_END
     end
 
     // Pipeline stage0
@@ -93,7 +99,7 @@ module VX_fp_cvt #(
     wire                    is_itof_s0;
     wire                    unsigned_s0;
     wire [2:0]              rnd_mode_s0;
-    fp_type_t [LANES-1:0]   in_a_type_s0;
+    fp_class_t [LANES-1:0]  fp_clss_s0;
     wire [LANES-1:0]        input_sign_s0;
     wire [LANES-1:0][INT_EXP_WIDTH-1:0] fmt_exponent_s0;
     wire [LANES-1:0][INT_MAN_WIDTH-1:0] encoded_mant_s0;
@@ -101,14 +107,14 @@ module VX_fp_cvt #(
     wire stall;
 
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + 1 + `INST_FRM_BITS + 1 + LANES * ($bits(fp_type_t) + 1 + INT_EXP_WIDTH + INT_MAN_WIDTH)),
+        .DATAW  (1 + TAGW + 1 + `INST_FRM_BITS + 1 + LANES * ($bits(fp_class_t) + 1 + INT_EXP_WIDTH + INT_MAN_WIDTH)),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),
-        .data_in  ({valid_in,    tag_in,    is_itof,    !is_signed,  frm,         in_a_type,    input_sign,    fmt_exponent,    encoded_mant}),
-        .data_out ({valid_in_s0, tag_in_s0, is_itof_s0, unsigned_s0, rnd_mode_s0, in_a_type_s0, input_sign_s0, fmt_exponent_s0, encoded_mant_s0})
+        .data_in  ({valid_in,    tag_in,    is_itof,    !is_signed,  frm,         fp_clss,    input_sign,    fmt_exponent,    encoded_mant}),
+        .data_out ({valid_in_s0, tag_in_s0, is_itof_s0, unsigned_s0, rnd_mode_s0, fp_clss_s0, input_sign_s0, fmt_exponent_s0, encoded_mant_s0})
     );
     
     // Normalization
@@ -119,8 +125,8 @@ module VX_fp_cvt #(
     for (genvar i = 0; i < LANES; ++i) begin
         wire mant_is_nonzero;
         VX_lzc #(
-            .WIDTH (INT_MAN_WIDTH),
-            .MODE  (1)
+            .N    (INT_MAN_WIDTH),
+            .MODE (1)
         ) lzc (
             .in_i    (encoded_mant_s0[i]),
             .cnt_o   (renorm_shamt_s0[i]),
@@ -134,20 +140,12 @@ module VX_fp_cvt #(
     
     for (genvar i = 0; i < LANES; ++i) begin
     `IGNORE_WARNINGS_BEGIN
-        // Input mantissa needs to be normalized
-        wire [INT_EXP_WIDTH-1:0] fp_input_exp;
-        wire [INT_EXP_WIDTH-1:0] int_input_exp;
-
-        // Realign input mantissa, append zeroes if destination is wider
+       // Realign input mantissa, append zeroes if destination is wider
         assign input_mant_s0[i] = encoded_mant_s0[i] << renorm_shamt_s0[i];
 
         // Unbias exponent and compensate for shift
-        assign fp_input_exp = fmt_exponent_s0[i] + 
-                                {1'b0, in_a_type_s0[i].is_subnormal} + 
-                                    (FMT_SHIFT_COMPENSATION - EXP_BIAS) - 
-                                        {1'b0, renorm_shamt_s0[i]};
-                                 
-        assign int_input_exp = (INT_MAN_WIDTH-1) - {1'b0, renorm_shamt_s0[i]};
+        wire [INT_EXP_WIDTH-1:0] fp_input_exp = fmt_exponent_s0[i] - {1'b0, renorm_shamt_s0[i]};                                 
+        wire [INT_EXP_WIDTH-1:0] int_input_exp = (INT_MAN_WIDTH-1) - {1'b0, renorm_shamt_s0[i]};
 
         assign input_exp_s0[i] = is_itof_s0 ? int_input_exp : fp_input_exp;
     `IGNORE_WARNINGS_END
@@ -160,21 +158,21 @@ module VX_fp_cvt #(
     wire                    is_itof_s1;
     wire                    unsigned_s1;
     wire [2:0]              rnd_mode_s1;
-    fp_type_t [LANES-1:0]   in_a_type_s1;
+    fp_class_t [LANES-1:0]  fp_clss_s1;
     wire [LANES-1:0]        input_sign_s1;
     wire [LANES-1:0]        mant_is_zero_s1;
     wire [LANES-1:0][INT_MAN_WIDTH-1:0] input_mant_s1;
     wire [LANES-1:0][INT_EXP_WIDTH-1:0] input_exp_s1;
 
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + 1 + `INST_FRM_BITS + 1 + LANES * ($bits(fp_type_t) + 1 + 1 + INT_MAN_WIDTH + INT_EXP_WIDTH)),
+        .DATAW  (1 + TAGW + 1 + `INST_FRM_BITS + 1 + LANES * ($bits(fp_class_t) + 1 + 1 + INT_MAN_WIDTH + INT_EXP_WIDTH)),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),
-        .data_in  ({valid_in_s0, tag_in_s0, is_itof_s0, unsigned_s0, rnd_mode_s0, in_a_type_s0, input_sign_s0, mant_is_zero_s0, input_mant_s0, input_exp_s0}),
-        .data_out ({valid_in_s1, tag_in_s1, is_itof_s1, unsigned_s1, rnd_mode_s1, in_a_type_s1, input_sign_s1, mant_is_zero_s1, input_mant_s1, input_exp_s1})
+        .data_in  ({valid_in_s0, tag_in_s0, is_itof_s0, unsigned_s0, rnd_mode_s0, fp_clss_s0, input_sign_s0, mant_is_zero_s0, input_mant_s0, input_exp_s0}),
+        .data_out ({valid_in_s1, tag_in_s1, is_itof_s1, unsigned_s1, rnd_mode_s1, fp_clss_s1, input_sign_s1, mant_is_zero_s1, input_mant_s1, input_exp_s1})
     );
 
     // Perform adjustments to mantissa and exponent
@@ -245,7 +243,7 @@ module VX_fp_cvt #(
     wire                    is_itof_s2;
     wire                    unsigned_s2;
     wire [2:0]              rnd_mode_s2;
-    fp_type_t [LANES-1:0]   in_a_type_s2;   
+    fp_class_t [LANES-1:0]  fp_clss_s2;   
     wire [LANES-1:0]        mant_is_zero_s2;
     wire [LANES-1:0]        input_sign_s2;
     wire [LANES-1:0][2*INT_MAN_WIDTH:0] destination_mant_s2;
@@ -253,14 +251,14 @@ module VX_fp_cvt #(
     wire [LANES-1:0]        of_before_round_s2;
     
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + 1 + 1 + `INST_FRM_BITS + LANES * ($bits(fp_type_t) + 1 + 1 + (2*INT_MAN_WIDTH+1) + INT_EXP_WIDTH + 1)),
+        .DATAW  (1 + TAGW + 1 + 1 + `INST_FRM_BITS + LANES * ($bits(fp_class_t) + 1 + 1 + (2*INT_MAN_WIDTH+1) + INT_EXP_WIDTH + 1)),
         .RESETW (1)
     ) pipe_reg2 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),
-        .data_in  ({valid_in_s1, tag_in_s1, is_itof_s1, unsigned_s1, rnd_mode_s1, in_a_type_s1, mant_is_zero_s1, input_sign_s1, destination_mant_s1, final_exp_s1, of_before_round_s1}),
-        .data_out ({valid_in_s2, tag_in_s2, is_itof_s2, unsigned_s2, rnd_mode_s2, in_a_type_s2, mant_is_zero_s2, input_sign_s2, destination_mant_s2, final_exp_s2, of_before_round_s2})
+        .data_in  ({valid_in_s1, tag_in_s1, is_itof_s1, unsigned_s1, rnd_mode_s1, fp_clss_s1, mant_is_zero_s1, input_sign_s1, destination_mant_s1, final_exp_s1, of_before_round_s1}),
+        .data_out ({valid_in_s2, tag_in_s2, is_itof_s2, unsigned_s2, rnd_mode_s2, fp_clss_s2, mant_is_zero_s2, input_sign_s2, destination_mant_s2, final_exp_s2, of_before_round_s2})
     );
 
     wire [LANES-1:0]       rounded_sign;
@@ -314,7 +312,7 @@ module VX_fp_cvt #(
     wire [TAGW-1:0]         tag_in_s3;
     wire                    is_itof_s3;
     wire                    unsigned_s3;
-    fp_type_t [LANES-1:0]   in_a_type_s3;   
+    fp_class_t [LANES-1:0]  fp_clss_s3;   
     wire [LANES-1:0]        mant_is_zero_s3;
     wire [LANES-1:0]        input_sign_s3;
     wire [LANES-1:0]        rounded_sign_s3;
@@ -322,14 +320,14 @@ module VX_fp_cvt #(
     wire [LANES-1:0]        of_before_round_s3;
 
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + 1 + 1 + LANES * ($bits(fp_type_t) + 1 + 1 + 32 + 1 + 1)),
+        .DATAW  (1 + TAGW + 1 + 1 + LANES * ($bits(fp_class_t) + 1 + 1 + 32 + 1 + 1)),
         .RESETW (1)
     ) pipe_reg3 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),
-        .data_in  ({valid_in_s2, tag_in_s2, is_itof_s2, unsigned_s2, in_a_type_s2, mant_is_zero_s2, input_sign_s2, rounded_abs,    rounded_sign,    of_before_round_s2}),
-        .data_out ({valid_in_s3, tag_in_s3, is_itof_s3, unsigned_s3, in_a_type_s3, mant_is_zero_s3, input_sign_s3, rounded_abs_s3, rounded_sign_s3, of_before_round_s3})
+        .data_in  ({valid_in_s2, tag_in_s2, is_itof_s2, unsigned_s2, fp_clss_s2, mant_is_zero_s2, input_sign_s2, rounded_abs,    rounded_sign,    of_before_round_s2}),
+        .data_out ({valid_in_s3, tag_in_s3, is_itof_s3, unsigned_s3, fp_clss_s3, mant_is_zero_s3, input_sign_s3, rounded_abs_s3, rounded_sign_s3, of_before_round_s3})
     );
      
     wire [LANES-1:0] of_after_round;
@@ -362,14 +360,14 @@ module VX_fp_cvt #(
 
     for (genvar i = 0; i < LANES; ++i) begin
         // Detect special case from source format, I2F casts don't produce a special result
-        assign fp_result_is_special[i] = ~is_itof_s3 & (in_a_type_s3[i].is_zero | in_a_type_s3[i].is_nan);
+        assign fp_result_is_special[i] = ~is_itof_s3 & (fp_clss_s3[i].is_zero | fp_clss_s3[i].is_nan);
 
         // Signalling input NaNs raise invalid flag, otherwise no flags set
-        assign fp_special_status[i] = in_a_type_s3[i].is_signaling ? {1'b1, 4'h0} : 5'h0;   // invalid operation
+        assign fp_special_status[i] = fp_clss_s3[i].is_signaling ? {1'b1, 4'h0} : 5'h0;   // invalid operation
 
         // Assemble result according to destination format
-        assign fp_special_result[i] = in_a_type_s3[i].is_zero ? (32'(input_sign_s3) << 31) // signed zero
-                                                              : {1'b0, QNAN_EXPONENT, QNAN_MANTISSA}; // qNaN
+        assign fp_special_result[i] = fp_clss_s3[i].is_zero ? (32'(input_sign_s3) << 31) // signed zero
+                                                            : {1'b0, QNAN_EXPONENT, QNAN_MANTISSA}; // qNaN
     end
 
     // INT Special case handling
@@ -381,7 +379,7 @@ module VX_fp_cvt #(
     for (genvar i = 0; i < LANES; ++i) begin
          // Assemble result according to destination format
         always @(*) begin
-            if (input_sign_s3[i] && !in_a_type_s3[i].is_nan) begin
+            if (input_sign_s3[i] && !fp_clss_s3[i].is_nan) begin
                 int_special_result[i][30:0] = 0;               // alone yields 2**(31)-1
                 int_special_result[i][31]   = ~unsigned_s3;    // for unsigned casts yields 2**31
             end else begin
@@ -391,8 +389,8 @@ module VX_fp_cvt #(
         end            
 
         // Detect special case from source format (inf, nan, overflow, nan-boxing or negative unsigned)
-        assign int_result_is_special[i] = in_a_type_s3[i].is_nan 
-                                        | in_a_type_s3[i].is_inf 
+        assign int_result_is_special[i] = fp_clss_s3[i].is_nan 
+                                        | fp_clss_s3[i].is_inf 
                                         | of_before_round_s3[i] 
                                         | (input_sign_s3[i] & unsigned_s3 & ~rounded_int_res_zero[i]);
                                         
@@ -411,11 +409,11 @@ module VX_fp_cvt #(
         wire [31:0] fp_result, int_result;
 
         wire inexact = is_itof_s3 ? (| fp_round_sticky_bits[i]) // overflow is invalid in i2f;        
-                                  : (| fp_round_sticky_bits[i]) | (~in_a_type_s3[i].is_inf & (of_before_round_s3[i] | of_after_round[i]));
+                                  : (| fp_round_sticky_bits[i]) | (~fp_clss_s3[i].is_inf & (of_before_round_s3[i] | of_after_round[i]));
                                   
         assign fp_regular_status.NV = is_itof_s3 & (of_before_round_s3[i] | of_after_round[i]); // overflow is invalid for I2F casts
         assign fp_regular_status.DZ = 1'b0; // no divisions
-        assign fp_regular_status.OF = ~is_itof_s3 & (~in_a_type_s3[i].is_inf & (of_before_round_s3[i] | of_after_round[i])); // inf casts no OF
+        assign fp_regular_status.OF = ~is_itof_s3 & (~fp_clss_s3[i].is_inf & (of_before_round_s3[i] | of_after_round[i])); // inf casts no OF
         assign fp_regular_status.UF = uf_after_round[i] & inexact;
         assign fp_regular_status.NX = inexact;
 
