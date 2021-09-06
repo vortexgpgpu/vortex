@@ -14,7 +14,7 @@ module VX_scoreboard  #(
 
     reg [`NUM_REGS-1:0] deq_inuse_regs;
 
-    assign delay = |(deq_inuse_regs & ibuffer_if.used_regs);
+    assign delay = (| deq_inuse_regs);
 
     wire reserve_reg = ibuffer_if.valid && ibuffer_if.ready && ibuffer_if.wb;
 
@@ -36,7 +36,7 @@ module VX_scoreboard  #(
         end else begin
             inuse_regs <= inuse_regs_n;
         end
-        deq_inuse_regs <= inuse_regs_n[ibuffer_if.wid_n];
+        deq_inuse_regs <= inuse_regs_n[ibuffer_if.wid_n] & ibuffer_if.used_regs_n;
     end
 
     reg [31:0] deadlock_ctr;

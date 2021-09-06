@@ -27,7 +27,7 @@ module VX_instr_demux (
     wire gpu_req_ready;
 
     VX_lzc #(
-        .WIDTH (`NUM_THREADS)
+        .N (`NUM_THREADS)
     ) tid_select (
         .in_i       (ibuffer_if.tmask),
         .cnt_o      (tid),
