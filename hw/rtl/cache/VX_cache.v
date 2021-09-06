@@ -18,15 +18,15 @@ module VX_cache #(
     parameter WORD_SIZE                     = 4, 
 
     // Core Request Queue Size
-    parameter CREQ_SIZE                     = 2,
+    parameter CREQ_SIZE                     = 0,
     // Core Response Queue Size
     parameter CRSQ_SIZE                     = 2,
     // Miss Reserv Queue Knob
     parameter MSHR_SIZE                     = 8, 
     // Memory Response Queue Size
-    parameter MRSQ_SIZE                     = 4,
+    parameter MRSQ_SIZE                     = 0,
     // Memory Request Queue Size
-    parameter MREQ_SIZE                     = 2,
+    parameter MREQ_SIZE                     = 4,
 
     // Enable cache writeable
     parameter WRITE_ENABLE                  = 1,

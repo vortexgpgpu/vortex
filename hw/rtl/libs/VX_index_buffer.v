@@ -30,7 +30,7 @@ module VX_index_buffer #(
     wire [ADDRW-1:0] free_index;
 
     VX_lzc #(
-        .WIDTH (SIZE)
+        .N (SIZE)
     ) free_slots_encoder (
         .in_i    (free_slots_n),
         .cnt_o   (free_index),
@@ -43,7 +43,6 @@ module VX_index_buffer #(
             free_slots_n[release_addr] = 1;                
         end
         if (acquire_slot)  begin
-             assert(1 == free_slots[write_addr]) else $error("%t: acquiring used slot at port %d", $time, write_addr);
              free_slots_n[write_addr_r] = 0;
         end            
     end    
@@ -58,12 +57,13 @@ module VX_index_buffer #(
             if (release_slot) begin
                 assert(0 == free_slots[release_addr]) else $error("%t: releasing invalid slot at port %d", $time, release_addr);
             end
-            if (acquire_slot || full_r) begin
-                 write_addr_r <= free_index;
+            if (acquire_slot) begin
+                assert(1 == free_slots[write_addr]) else $error("%t: acquiring used slot at port %d", $time, write_addr);                 
             end
-            free_slots <= free_slots_n;           
-            empty_r    <= (& free_slots_n);
-            full_r     <= ~free_valid;
+            write_addr_r <= free_index;
+            free_slots   <= free_slots_n;           
+            empty_r      <= (& free_slots_n);
+            full_r       <= ~free_valid;
         end        
     end
 
@@ -74,7 +74,7 @@ module VX_index_buffer #(
     ) data_table (
         .clk   (clk), 
         .wren  (acquire_slot),
-        .waddr (write_addr),
+        .waddr (write_addr_r),
         .wdata (write_data),
         .rden  (1'b1),
         .raddr (read_addr),
