@@ -48,7 +48,7 @@ module VX_core_rsp_merge #(
             // We first need to select the current tag to process,
             // then send all bank responses for that tag as a batch
 
-            reg [CORE_TAG_WIDTH-1:0] core_rsp_tag_unqual;
+            wire [CORE_TAG_WIDTH-1:0] core_rsp_tag_unqual;
             wire core_rsp_ready_unqual;
 
             if (NUM_PORTS > 1) begin
@@ -74,18 +74,24 @@ module VX_core_rsp_merge #(
                     end
                 end
 
-                always @(*) begin              
-                    core_rsp_tag_unqual = 'x;
-                    for (integer i = NUM_BANKS-1; i >= 0; --i) begin
-                        for (integer p = 0; p < NUM_PORTS; ++p) begin 
-                            if (per_bank_core_rsp_valid[i]                             
-                            && per_bank_core_rsp_pmask[i][p]
-                            && !per_bank_core_rsp_sent_r[i][p]) begin
-                                core_rsp_tag_unqual = per_bank_core_rsp_tag[i][p];
-                            end
-                        end
+                wire [NUM_BANKS-1:0][NUM_PORTS-1:0] per_bank_core_rsp_valid_p;
+                for (genvar i = 0; i < NUM_BANKS; ++i) begin
+                    for (genvar p = 0; p < NUM_PORTS; ++p) begin
+                        assign per_bank_core_rsp_valid_p[i][p] = per_bank_core_rsp_valid[i] 
+                                                              && per_bank_core_rsp_pmask[i][p]
+                                                              && !per_bank_core_rsp_sent_r[i][p];
                     end
                 end
+
+                VX_find_first #(
+                    .N     (NUM_BANKS * NUM_PORTS),
+                    .DATAW (CORE_TAG_WIDTH)
+                ) find_first (
+                    .valid_i (per_bank_core_rsp_valid_p),
+                    .data_i  (per_bank_core_rsp_tag),
+                    .data_o  (core_rsp_tag_unqual),
+                    `UNUSED_PIN (valid_o)
+                );
 
                 always @(*) begin            
                     core_rsp_valid_unqual  = 0;
@@ -116,14 +122,15 @@ module VX_core_rsp_merge #(
 
                 `UNUSED_VAR (per_bank_core_rsp_pmask)
 
-                 always @(*) begin        
-                    core_rsp_tag_unqual = 'x;
-                    for (integer i = NUM_BANKS-1; i >= 0; --i) begin
-                        if (per_bank_core_rsp_valid[i]) begin
-                            core_rsp_tag_unqual = per_bank_core_rsp_tag[i];
-                        end
-                    end
-                end
+                VX_find_first #(
+                    .N     (NUM_BANKS),
+                    .DATAW (CORE_TAG_WIDTH)
+                ) find_first (
+                    .valid_i (per_bank_core_rsp_valid),
+                    .data_i  (per_bank_core_rsp_tag),
+                    .data_o  (core_rsp_tag_unqual),
+                    `UNUSED_PIN (valid_o)
+                );
                 
                 always @(*) begin                
                     core_rsp_valid_unqual     = 0;

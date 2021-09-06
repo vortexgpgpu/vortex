@@ -20,8 +20,6 @@ module VX_commit #(
     VX_writeback_if writeback_if,
     VX_cmt_to_csr_if cmt_to_csr_if
 );
-    localparam CMTW = $clog2(3*`NUM_THREADS+1);
-
     // CSRs update
 
     wire alu_commit_fire = alu_commit_if.valid && alu_commit_if.ready;
@@ -42,30 +40,24 @@ module VX_commit #(
                 `endif
                     || gpu_commit_fire;
 
-    wire [`NUM_THREADS-1:0] commit_tmask1, commit_tmask2, commit_tmask3; 
-
-    assign commit_tmask1 = alu_commit_fire ? alu_commit_if.tmask:
-                           ld_commit_fire  ? ld_commit_if.tmask:                                           
-                           csr_commit_fire ? csr_commit_if.tmask:
+    wire [`NUM_THREADS-1:0] commit_tmask;
+    assign commit_tmask = alu_commit_fire ? alu_commit_if.tmask:
+                          ld_commit_fire  ? ld_commit_if.tmask: 
+                          st_commit_fire  ? st_commit_if.tmask:
+                          csr_commit_fire ? csr_commit_if.tmask:
                         `ifdef EXT_F_ENABLE
-                           fpu_commit_fire ? fpu_commit_if.tmask:
+                          fpu_commit_fire ? fpu_commit_if.tmask:
                         `endif
-                                             0;
-
-    assign commit_tmask2 = st_commit_fire ? st_commit_if.tmask : 0;
-    assign commit_tmask3 = gpu_commit_fire ? gpu_commit_if.tmask : 0;
-
-    wire [CMTW-1:0] commit_size;
-    assign commit_size = $countones({commit_tmask3, commit_tmask2, commit_tmask1});
+                          /*gpu_commit_fire ?*/ gpu_commit_if.tmask;
 
     VX_pipe_register #(
-        .DATAW  (1 + CMTW),
+        .DATAW  (1 + $clog2(`NUM_THREADS+1)),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (1'b1),
-        .data_in  ({commit_fire,         commit_size}),
+        .data_in  ({commit_fire,         $countones(commit_tmask)}),
         .data_out ({cmt_to_csr_if.valid, cmt_to_csr_if.commit_size})
     );
 
