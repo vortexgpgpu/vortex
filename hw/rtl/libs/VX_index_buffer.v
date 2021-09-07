@@ -31,7 +31,7 @@ module VX_index_buffer #(
 
     VX_lzc #(
         .N (SIZE)
-    ) free_slots_encoder (
+    ) free_slots_sel (
         .in_i    (free_slots_n),
         .cnt_o   (free_index),
         .valid_o (free_valid)

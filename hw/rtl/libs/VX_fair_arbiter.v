@@ -25,30 +25,31 @@ module VX_fair_arbiter #(
 
     end else begin    
 
-        reg [NUM_REQS-1:0] remaining;
+        reg [NUM_REQS-1:0] buffer;
         reg use_buffer;     
 
-        wire [NUM_REQS-1:0] requests_use = use_buffer ? remaining : requests;
-        wire [NUM_REQS-1:0] remaining_next = requests_use & ~grant_onehot;
+        wire [NUM_REQS-1:0] requests_qual = use_buffer ? buffer : requests;
+        wire [NUM_REQS-1:0] buffer_n = requests_qual & ~grant_onehot;
 
         always @(posedge clk) begin
             if (reset) begin
-                remaining  <= 0;
                 use_buffer <= 0;
             end else if (!LOCK_ENABLE || enable) begin
-                remaining  <= remaining_next;
-                use_buffer <= (remaining_next != 0);
+                use_buffer <= (buffer_n != 0);
+            end
+            if (!LOCK_ENABLE || enable) begin
+                buffer <= buffer_n;
             end
         end
                
         VX_fixed_arbiter #(
-            .NUM_REQS(NUM_REQS),
-            .LOCK_ENABLE(LOCK_ENABLE)
+            .NUM_REQS    (NUM_REQS),
+            .LOCK_ENABLE (LOCK_ENABLE)
         ) fixed_arbiter (
             .clk          (clk),
             .reset        (reset),
             .enable       (enable),
-            .requests     (requests_use), 
+            .requests     (requests_qual), 
             .grant_index  (grant_index),
             .grant_onehot (grant_onehot),
             .grant_valid  (grant_valid)
