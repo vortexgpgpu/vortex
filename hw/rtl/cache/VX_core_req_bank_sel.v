@@ -16,9 +16,7 @@ module VX_core_req_bank_sel #(
     // core request tag size
     parameter CORE_TAG_WIDTH    = 3,
     // bank offset from beginning of index range
-    parameter BANK_ADDR_OFFSET  = 0,
-    // shared bank ready signal
-    parameter SHARED_BANK_READY = 0
+    parameter BANK_ADDR_OFFSET  = 0
 ) (
     input wire                                      clk,
     input wire                                      reset,
@@ -44,7 +42,7 @@ module VX_core_req_bank_sel #(
     output wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`WORD_WIDTH-1:0] per_bank_core_req_data,  
     output wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`REQS_BITS-1:0]  per_bank_core_req_tid,
     output wire [NUM_BANKS-1:0][NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] per_bank_core_req_tag,
-    input  wire [`BANK_READY_COUNT-1:0]             per_bank_core_req_ready
+    input  wire [NUM_BANKS-1:0]                     per_bank_core_req_ready
 );
     `UNUSED_PARAM (CACHE_ID)
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))
@@ -137,21 +135,11 @@ module VX_core_req_bank_sel #(
                     end
                 end
 
-                if (SHARED_BANK_READY == 0) begin
-                    always @(*) begin
-                        for (integer i = 0; i < NUM_REQS; ++i) begin
-                            core_req_ready_r[i] = per_bank_core_req_ready[core_req_bid[i]]
-                                               && core_req_line_match[i]
-                                               && req_select_table_r[core_req_bid[i]][i % NUM_PORTS][i];
-                        end
-                    end
-                end else begin
-                    always @(*) begin
-                        for (integer i = 0; i < NUM_REQS; ++i) begin
-                            core_req_ready_r[i] = per_bank_core_req_ready
-                                               && core_req_line_match[i]
-                                               && req_select_table_r[core_req_bid[i]][i % NUM_PORTS][i];
-                        end
+                always @(*) begin
+                    for (integer i = 0; i < NUM_REQS; ++i) begin
+                        core_req_ready_r[i] = per_bank_core_req_ready[core_req_bid[i]]
+                                           && core_req_line_match[i]
+                                           && req_select_table_r[core_req_bid[i]][i % NUM_PORTS][i];
                     end
                 end
                 
@@ -183,19 +171,10 @@ module VX_core_req_bank_sel #(
                     end
                 end
 
-                if (SHARED_BANK_READY == 0) begin
-                    always @(*) begin
-                        for (integer i = 0; i < NUM_REQS; ++i) begin
-                            core_req_ready_r[i] = per_bank_core_req_ready[core_req_bid[i]]
-                                               && core_req_line_match[i];
-                        end
-                    end
-                end else begin
-                    always @(*) begin
-                        for (integer i = 0; i < NUM_REQS; ++i) begin
-                            core_req_ready_r[i] = per_bank_core_req_ready
-                                               && core_req_line_match[i];
-                        end
+                always @(*) begin
+                    for (integer i = 0; i < NUM_REQS; ++i) begin
+                        core_req_ready_r[i] = per_bank_core_req_ready[core_req_bid[i]]
+                                           && core_req_line_match[i];
                     end
                 end
             end
@@ -229,22 +208,11 @@ module VX_core_req_bank_sel #(
             end
 
             if (NUM_BANKS > 1) begin
-                if (SHARED_BANK_READY == 0) begin
-                    always @(*) begin
-                        core_req_ready_r = 0;
-                        for (integer i = 0; i < NUM_BANKS; ++i) begin
-							if (per_bank_core_req_valid_r[i]) begin
-								core_req_ready_r[per_bank_core_req_tid_r[i]] = per_bank_core_req_ready[i];
-							end
-                        end
-                    end
-                end else begin
-                    always @(*) begin
-                        core_req_ready_r = 0;
-                        for (integer i = 0; i < NUM_BANKS; ++i) begin
-							if (per_bank_core_req_valid_r[i]) begin
-								core_req_ready_r[per_bank_core_req_tid_r[i]] = per_bank_core_req_ready;
-							end
+                always @(*) begin
+                    core_req_ready_r = 0;
+                    for (integer i = 0; i < NUM_BANKS; ++i) begin
+                        if (per_bank_core_req_valid_r[i]) begin
+                            core_req_ready_r[per_bank_core_req_tid_r[i]] = per_bank_core_req_ready[i];
                         end
                     end
                 end

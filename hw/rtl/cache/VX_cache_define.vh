@@ -59,8 +59,6 @@
 
 `define CORE_RSP_TAGS           ((CORE_TAG_ID_BITS != 0) ? 1 : NUM_REQS)
 
-`define BANK_READY_COUNT        ((SHARED_BANK_READY != 0) ? 1 : NUM_BANKS)
-
 `define LINE_TO_MEM_ADDR(x, i)  {x, `BANK_SELECT_BITS'(i)}
 
 `define MEM_TAG_TO_REQ_ID(x)    x[MSHR_ADDR_WIDTH-1:0]
