@@ -119,11 +119,12 @@ module VX_lsu_unit #(
 
     wire [`NUM_THREADS-1:0] dcache_req_fire = dcache_req_if.valid & dcache_req_if.ready;
 
-    wire dcache_req_fire_any = (| dcache_req_fire);
-
     wire dcache_rsp_fire = dcache_rsp_if.valid && dcache_rsp_if.ready;
 
-    wire mbuf_push = dcache_req_fire_any                  
+    wire [`NUM_THREADS-1:0] req_tmask_dup = req_tmask & {{(`NUM_THREADS-1){~req_is_dup}}, 1'b1};
+
+    wire mbuf_push = ~mbuf_full
+                  && (| ({`NUM_THREADS{req_valid}} & req_tmask_dup & dcache_req_if.ready))
                   && is_req_start   // first submission only                  
                   && req_wb;        // loads only
 
@@ -148,8 +149,6 @@ module VX_lsu_unit #(
         .empty        (mbuf_empty)
     );
 
-    wire [`NUM_THREADS-1:0] req_tmask_dup = req_tmask & {{(`NUM_THREADS-1){~req_is_dup}}, 1'b1};
-    
     wire dcache_req_ready = &(dcache_req_if.ready | req_sent_mask | ~req_tmask_dup);
 
     wire [`NUM_THREADS-1:0] req_sent_mask_n = req_sent_mask | dcache_req_fire;
@@ -331,7 +330,8 @@ module VX_lsu_unit #(
 `endif
     
 `ifdef DBG_PRINT_CORE_DCACHE
-   always @(posedge clk) begin     
+    wire dcache_req_fire_any = (| dcache_req_fire);
+    always @(posedge clk) begin    
         if (lsu_req_if.valid && fence_wait) begin
             dpi_trace("%d: *** D$%0d fence wait\n", $time, CORE_ID);
         end
