@@ -145,12 +145,13 @@ module Vortex (
         `RESET_RELAY (mem_arb_reset);
 
         VX_mem_arb #(
-            .NUM_REQS       (`NUM_CLUSTERS),
-            .DATA_WIDTH     (`L3MEM_DATA_WIDTH),            
-            .ADDR_WIDTH     (`L3MEM_ADDR_WIDTH),
-            .TAG_IN_WIDTH   (`L2MEM_TAG_WIDTH),
-            .BUFFERED_REQ   (1),
-            .BUFFERED_RSP   (1)
+            .NUM_REQS     (`NUM_CLUSTERS),
+            .DATA_WIDTH   (`L3MEM_DATA_WIDTH),            
+            .ADDR_WIDTH   (`L3MEM_ADDR_WIDTH),
+            .TAG_IN_WIDTH (`L2MEM_TAG_WIDTH),
+            .TYPE         ("R"),
+            .BUFFERED_REQ (1),
+            .BUFFERED_RSP (1)
         ) mem_arb (
             .clk            (clk),
             .reset          (mem_arb_reset),

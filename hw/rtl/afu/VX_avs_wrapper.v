@@ -149,6 +149,7 @@ module VX_avs_wrapper #(
     VX_stream_arbiter #(
         .NUM_REQS (AVS_BANKS),
         .DATAW    (AVS_DATA_WIDTH + REQ_TAG_WIDTH),
+        .TYPE     ("R"),
         .BUFFERED (OUTPUT_REG ? 1 : 0)
     ) rsp_arb (
         .clk       (clk),
