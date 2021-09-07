@@ -44,42 +44,42 @@ module VX_fp_ncomp #(
                 //SIG_NAN   = 32'h00000100,
                 QUT_NAN     = 32'h00000200;
 
-    wire [LANES-1:0]        tmp_a_sign, tmp_b_sign;
-    wire [LANES-1:0][7:0]   tmp_a_exponent, tmp_b_exponent;
-    wire [LANES-1:0][22:0]  tmp_a_mantissa, tmp_b_mantissa;
-    fp_class_t [LANES-1:0]  tmp_a_clss, tmp_b_clss;
-    wire [LANES-1:0]        tmp_a_smaller, tmp_ab_equal;
+    wire [LANES-1:0]        a_sign, b_sign;
+    wire [LANES-1:0][7:0]   a_exponent, b_exponent;
+    wire [LANES-1:0][22:0]  a_mantissa, b_mantissa;
+    fp_class_t [LANES-1:0]  a_clss, b_clss;
+    wire [LANES-1:0]        a_smaller, ab_equal;
 
     // Setup
     for (genvar i = 0; i < LANES; i++) begin
-        assign     tmp_a_sign[i] = dataa[i][31]; 
-        assign tmp_a_exponent[i] = dataa[i][30:23];
-        assign tmp_a_mantissa[i] = dataa[i][22:0];
+        assign     a_sign[i] = dataa[i][31]; 
+        assign a_exponent[i] = dataa[i][30:23];
+        assign a_mantissa[i] = dataa[i][22:0];
 
-        assign     tmp_b_sign[i] = datab[i][31]; 
-        assign tmp_b_exponent[i] = datab[i][30:23];
-        assign tmp_b_mantissa[i] = datab[i][22:0];
+        assign     b_sign[i] = datab[i][31]; 
+        assign b_exponent[i] = datab[i][30:23];
+        assign b_mantissa[i] = datab[i][22:0];
 
         VX_fp_class #( 
             .EXP_BITS (EXP_BITS),
             .MAN_BITS (MAN_BITS)
         ) fp_class_a (
-            .exp_i  (tmp_a_exponent[i]),
-            .man_i  (tmp_a_mantissa[i]),
-            .clss_o (tmp_a_clss[i])
+            .exp_i  (a_exponent[i]),
+            .man_i  (a_mantissa[i]),
+            .clss_o (a_clss[i])
         );
 
         VX_fp_class #( 
             .EXP_BITS (EXP_BITS),
             .MAN_BITS (MAN_BITS)
         ) fp_class_b (
-            .exp_i  (tmp_b_exponent[i]),
-            .man_i  (tmp_b_mantissa[i]),
-            .clss_o (tmp_b_clss[i])
+            .exp_i  (b_exponent[i]),
+            .man_i  (b_mantissa[i]),
+            .clss_o (b_clss[i])
         );
 
-        assign tmp_a_smaller[i] = $signed(dataa[i]) < $signed(datab[i]);
-        assign tmp_ab_equal[i]  = (dataa[i] == datab[i]) | (tmp_a_clss[i].is_zero & tmp_b_clss[i].is_zero);
+        assign a_smaller[i] = $signed(dataa[i]) < $signed(datab[i]);
+        assign ab_equal[i]  = (dataa[i] == datab[i]) | (a_clss[i].is_zero & b_clss[i].is_zero);
     end  
 
     // Pipeline stage0
@@ -105,8 +105,8 @@ module VX_fp_ncomp #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall),
-        .data_in  ({valid_in,    tag_in,    op_type,    frm,    dataa,    datab,    tmp_a_sign, tmp_b_sign, tmp_a_exponent, tmp_a_mantissa, tmp_a_clss, tmp_b_clss, tmp_a_smaller, tmp_ab_equal}),
-        .data_out ({valid_in_s0, tag_in_s0, op_type_s0, frm_s0, dataa_s0, datab_s0, a_sign_s0,  b_sign_s0,  a_exponent_s0,  a_mantissa_s0,  a_clss_s0,  b_clss_s0,  a_smaller_s0,  ab_equal_s0})
+        .data_in  ({valid_in,    tag_in,    op_type,    frm,    dataa,    datab,    a_sign,    b_sign,    a_exponent,    a_mantissa,    a_clss,    b_clss,    a_smaller,    ab_equal}),
+        .data_out ({valid_in_s0, tag_in_s0, op_type_s0, frm_s0, dataa_s0, datab_s0, a_sign_s0, b_sign_s0, a_exponent_s0, a_mantissa_s0, a_clss_s0, b_clss_s0, a_smaller_s0, ab_equal_s0})
     ); 
 
     // FCLASS
@@ -169,7 +169,7 @@ module VX_fp_ncomp #(
 
     // Comparison    
     reg [LANES-1:0][31:0] fcmp_res;     // result of comparison
-    fflags_t [LANES-1:0]   fcmp_fflags;  // comparison fflags
+    fflags_t [LANES-1:0]  fcmp_fflags;  // comparison fflags
     for (genvar i = 0; i < LANES; i++) begin
         always @(*) begin
             case (frm_s0)

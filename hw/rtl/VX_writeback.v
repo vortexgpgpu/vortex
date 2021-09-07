@@ -61,8 +61,8 @@ module VX_writeback #(
     
     VX_stream_arbiter #(            
         .NUM_REQS (NUM_RSPS),
-        .DATAW    (DATAW),        
-        .TYPE     ("X")
+        .DATAW    (DATAW),
+        .TYPE     ("P")
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),
