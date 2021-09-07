@@ -4,7 +4,7 @@ module VX_stream_arbiter #(
     parameter NUM_REQS    = 1,
     parameter LANES       = 1,
     parameter DATAW       = 1,
-    parameter TYPE        = "R",
+    parameter TYPE        = "P",
     parameter LOCK_ENABLE = 1,
     parameter BUFFERED    = 0
 ) (
@@ -41,7 +41,7 @@ module VX_stream_arbiter #(
             assign sel_ready = ready_in_sel;
         end
 
-        if (TYPE == "X") begin
+        if (TYPE == "P") begin
             `UNUSED_VAR (sel_ready)
             VX_lzc #(
                 .N (NUM_REQS)

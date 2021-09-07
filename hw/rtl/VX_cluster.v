@@ -147,13 +147,14 @@ module VX_cluster #(
         `RESET_RELAY (mem_arb_reset);
 
         VX_mem_arb #(
-            .NUM_REQS       (`NUM_CORES),
-            .DATA_WIDTH     (`DMEM_DATA_WIDTH),
-            .ADDR_WIDTH     (`DMEM_ADDR_WIDTH),           
-            .TAG_IN_WIDTH   (`XMEM_TAG_WIDTH),
-            .TAG_SEL_IDX    (1), // Skip 0 for NC flag
-            .BUFFERED_REQ   (1),
-            .BUFFERED_RSP   (1)
+            .NUM_REQS     (`NUM_CORES),
+            .DATA_WIDTH   (`DMEM_DATA_WIDTH),
+            .ADDR_WIDTH   (`DMEM_ADDR_WIDTH),           
+            .TAG_IN_WIDTH (`XMEM_TAG_WIDTH),            
+            .TYPE         ("R"),
+            .TAG_SEL_IDX  (1), // Skip 0 for NC flag
+            .BUFFERED_REQ (1),
+            .BUFFERED_RSP (1)
         ) mem_arb (
             .clk            (clk),
             .reset          (mem_arb_reset),

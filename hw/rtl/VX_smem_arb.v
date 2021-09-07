@@ -8,7 +8,7 @@ module VX_smem_arb #(
     parameter TAG_SEL_IDX   = 0,   
     parameter BUFFERED_REQ  = 0,
     parameter BUFFERED_RSP  = 0,
-    parameter TYPE          = "R",
+    parameter TYPE          = "P",
 
     localparam ADDR_WIDTH   = (32-`CLOG2(DATA_SIZE)),
     localparam DATA_WIDTH   = (8 * DATA_SIZE),

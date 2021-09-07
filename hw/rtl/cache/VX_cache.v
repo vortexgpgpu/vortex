@@ -617,7 +617,8 @@ module VX_cache #(
     VX_stream_arbiter #(
         .NUM_REQS (NUM_BANKS),
         .DATAW    (`MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + NUM_PORTS * (1 + WORD_SIZE + WORD_SELECT_BITS + `WORD_WIDTH)),
-        .BUFFERED (1)
+        .BUFFERED (1),
+        .TYPE     ("R")
     ) mem_req_arb (
         .clk       (clk),
         .reset     (mreq_reset),

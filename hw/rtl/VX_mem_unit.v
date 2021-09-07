@@ -206,7 +206,7 @@ module VX_mem_unit # (
             .LANES         (`NUM_THREADS),
             .DATA_SIZE     (4),            
             .TAG_IN_WIDTH  (`DCORE_TAG_WIDTH),
-            .TYPE          ("X"),
+            .TYPE          ("P"),
             .BUFFERED_REQ  (2),
             .BUFFERED_RSP  (1)
         ) smem_arb (
@@ -316,6 +316,7 @@ module VX_mem_unit # (
         .DATA_WIDTH    (`DMEM_DATA_WIDTH),
         .ADDR_WIDTH    (`DMEM_ADDR_WIDTH),
         .TAG_IN_WIDTH  (`DMEM_TAG_WIDTH),
+        .TYPE          ("R"),
         .TAG_SEL_IDX   (1), // Skip 0 for NC flag
         .BUFFERED_REQ  (1),
         .BUFFERED_RSP  (2)

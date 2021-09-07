@@ -8,7 +8,7 @@ module VX_mem_arb #(
     parameter TAG_SEL_IDX   = 0,
     parameter BUFFERED_REQ  = 0,
     parameter BUFFERED_RSP  = 0,
-    parameter TYPE          = "R",
+    parameter TYPE          = "P",
     
     localparam DATA_SIZE     = (DATA_WIDTH / 8),
     localparam LOG_NUM_REQS  = `CLOG2(NUM_REQS),
