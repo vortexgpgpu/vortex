@@ -134,7 +134,7 @@ module VX_execute #(
     wire ebreak /* verilator public */;
     assign ebreak = alu_req_if.valid && alu_req_if.ready
                  && `INST_ALU_IS_BR(alu_req_if.op_mod)
-                 && (`INST_BR_OP(alu_req_if.op_type) == `INST_BR_EBREAK 
-                  || `INST_BR_OP(alu_req_if.op_type) == `INST_BR_ECALL);
+                 && (`INST_BR_BITS'(alu_req_if.op_type) == `INST_BR_EBREAK 
+                  || `INST_BR_BITS'(alu_req_if.op_type) == `INST_BR_ECALL);
 
 endmodule

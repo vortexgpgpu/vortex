@@ -14,10 +14,14 @@
 
 `define NB_BITS         `LOG2UP(`NUM_BARRIERS)
 
+`define NUM_IREGS       32
+
+`define NRI_BITS        `LOG2UP(`NUM_IREGS)
+
 `ifdef EXT_F_ENABLE
-`define NUM_REGS        64
+`define NUM_REGS        (2 * `NUM_IREGS)
 `else
-`define NUM_REGS        32
+`define NUM_REGS        `NUM_IREGS
 `endif
 
 `define NR_BITS         `LOG2UP(`NUM_REGS)
@@ -114,7 +118,6 @@
 `define INST_BR_DRET         4'b1110
 `define INST_BR_OTHER        4'b1111
 `define INST_BR_BITS         4
-`define INST_BR_OP(x)        x[`INST_BR_BITS-1:0]
 `define INST_BR_NEG(x)       x[1]
 `define INST_BR_LESS(x)      x[2]
 `define INST_BR_STATIC(x)    x[3]
@@ -128,7 +131,6 @@
 `define INST_MUL_REM         3'h6
 `define INST_MUL_REMU        3'h7
 `define INST_MUL_BITS        3
-`define INST_MUL_OP(x)       x[`INST_MUL_BITS-1:0]
 `define INST_MUL_IS_DIV(x)   x[2]
 
 `define INST_FMT_B           3'b000
@@ -148,7 +150,6 @@
 `define INST_LSU_BITS        4
 `define INST_LSU_FMT(x)      x[2:0]
 `define INST_LSU_WSIZE(x)    x[1:0]
-`define INST_LSU_OP(x)       x[`INST_LSU_BITS-1:0]
 `define INST_LSU_IS_FENCE(x) x[0]
 
 `define INST_FENCE_BITS      1
@@ -160,7 +161,6 @@
 `define INST_CSR_RC          2'h3
 `define INST_CSR_OTHER       2'h0
 `define INST_CSR_BITS        2
-`define INST_CSR_OP(x)       x[`INST_CSR_BITS-1:0]
 
 `define INST_FPU_ADD         4'h0 
 `define INST_FPU_SUB         4'h4 
@@ -179,7 +179,6 @@
 `define INST_FPU_NMSUB       4'hB   
 `define INST_FPU_NMADD       4'hF
 `define INST_FPU_BITS        4
-`define INST_FPU_OP(x)       x[`INST_FPU_BITS-1:0]
 
 `define INST_GPU_TMC         3'h0
 `define INST_GPU_WSPAWN      3'h1 
@@ -188,7 +187,6 @@
 `define INST_GPU_BAR         3'h4
 `define INST_GPU_OTHER       3'h7
 `define INST_GPU_BITS        3
-`define INST_GPU_OP(x)       x[`INST_GPU_BITS-1:0]
 
 ///////////////////////////////////////////////////////////////////////////////
 
