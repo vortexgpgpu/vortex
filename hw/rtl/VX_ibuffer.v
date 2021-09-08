@@ -10,12 +10,12 @@ module VX_ibuffer #(
     VX_decode_if  decode_if,  
 
     // outputs
-    VX_ibuffer_if  ibuffer_if
+    VX_ibuffer_if ibuffer_if
 );
 
     `UNUSED_PARAM (CORE_ID)
     
-    localparam DATAW   = `NUM_THREADS + 32 + `EX_BITS + `INST_OP_BITS + `INST_FRM_BITS + 1 + (`NR_BITS * 4) + 32 + 1 + 1 + `NUM_REGS;
+    localparam DATAW   = `NUM_THREADS + 32 + `EX_BITS + `INST_OP_BITS + `INST_FRM_BITS + 1 + (`NR_BITS * 4) + 32 + 1 + 1;
     localparam ADDRW   = $clog2(`IBUF_SIZE+1);
     localparam NWARPSW = $clog2(`NUM_WARPS+1);
 
@@ -35,16 +35,16 @@ module VX_ibuffer #(
         wire writing = enq_fire && (i == decode_if.wid); 
         wire reading = deq_fire && (i == ibuffer_if.wid);
 
-        wire is_head_ptr = empty_r[i] || (alm_empty_r[i] && reading);
+        wire going_empty = empty_r[i] || (alm_empty_r[i] && reading);
 
         VX_elastic_buffer #(
             .DATAW      (DATAW),
             .SIZE       (`IBUF_SIZE),
-            .OUTPUT_REG (`IBUF_SIZE > 2)
+            .OUTPUT_REG (1)
         ) queue (
             .clk      (clk),
             .reset    (reset),
-            .valid_in (writing && !is_head_ptr),
+            .valid_in (writing && !going_empty),
             .data_in  (q_data_in),            
             .ready_out(reading),
             .data_out (q_data_prev[i]),            
@@ -77,7 +77,7 @@ module VX_ibuffer #(
                 used_r[i] <= used_r[i] + ADDRW'($signed(2'(writing) - 2'(reading)));
             end 
 
-            if (writing && is_head_ptr) begin                                                       
+            if (writing && going_empty) begin                                                       
                 q_data_out[i] <= q_data_in;
             end else if (reading) begin
                 q_data_out[i] <= q_data_prev[i];
@@ -173,15 +173,14 @@ module VX_ibuffer #(
                         decode_if.ex_type, 
                         decode_if.op_type, 
                         decode_if.op_mod, 
-                        decode_if.wb, 
+                        decode_if.wb,
+                        decode_if.use_PC,
+                        decode_if.use_imm,
+                        decode_if.imm,
                         decode_if.rd, 
                         decode_if.rs1, 
                         decode_if.rs2, 
-                        decode_if.rs3, 
-                        decode_if.imm, 
-                        decode_if.use_PC, 
-                        decode_if.use_imm,
-                        decode_if.used_regs};
+                        decode_if.rs3};
 
     assign ibuffer_if.valid = deq_valid;
     assign ibuffer_if.wid   = deq_wid;
@@ -190,16 +189,20 @@ module VX_ibuffer #(
             ibuffer_if.ex_type, 
             ibuffer_if.op_type, 
             ibuffer_if.op_mod, 
-            ibuffer_if.wb, 
+            ibuffer_if.wb,
+            ibuffer_if.use_PC,
+            ibuffer_if.use_imm,
+            ibuffer_if.imm,
             ibuffer_if.rd, 
             ibuffer_if.rs1, 
             ibuffer_if.rs2, 
-            ibuffer_if.rs3, 
-            ibuffer_if.imm, 
-            ibuffer_if.use_PC,
-            ibuffer_if.use_imm} = deq_instr[DATAW-1:`NUM_REGS];
+            ibuffer_if.rs3} = deq_instr;
 
-    assign ibuffer_if.used_regs_n = deq_instr_n[`NUM_REGS-1:0];
+    // scoreboard forwarding
     assign ibuffer_if.wid_n = deq_wid_n;
+    assign ibuffer_if.rd_n  = deq_instr_n[3*`NR_BITS +: `NR_BITS];
+    assign ibuffer_if.rs1_n = deq_instr_n[2*`NR_BITS +: `NR_BITS];    
+    assign ibuffer_if.rs2_n = deq_instr_n[1*`NR_BITS +: `NR_BITS];
+    assign ibuffer_if.rs3_n = deq_instr_n[0*`NR_BITS +: `NR_BITS];
 
 endmodule
