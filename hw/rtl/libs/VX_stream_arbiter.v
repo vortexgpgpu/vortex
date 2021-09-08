@@ -102,11 +102,27 @@ module VX_stream_arbiter #(
             for (genvar i = 0; i < NUM_REQS; i++) begin
                 assign valid_data_in[i] = {valid_in[i], data_in[i]};
             end
-            assign {valid_in_sel, data_in_sel} = valid_data_in[sel_index];
+
+            VX_mux #(
+                .DATAW (LANES * (1 + DATAW)),
+                .N     (NUM_REQS)
+            ) data_in_mux (
+                .data_in  (valid_data_in),
+                .sel_in   (sel_index),
+                .data_out ({valid_in_sel, data_in_sel})
+            );
 
             `UNUSED_VAR (sel_valid)
         end else begin
-            assign data_in_sel  = data_in[sel_index];
+            VX_mux #(
+                .DATAW (DATAW),
+                .N     (NUM_REQS)
+            ) data_in_mux (
+                .data_in  (data_in),
+                .sel_in   (sel_index),
+                .data_out (data_in_sel)
+            );
+            
             assign valid_in_sel = sel_valid;
         end
 
