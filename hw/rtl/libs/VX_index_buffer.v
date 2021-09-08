@@ -42,8 +42,8 @@ module VX_index_buffer #(
         if (release_slot) begin
             free_slots_n[release_addr] = 1;                
         end
-        if (acquire_slot)  begin
-             free_slots_n[write_addr_r] = 0;
+        if (acquire_slot) begin
+            free_slots_n[write_addr_r] = 0;
         end            
     end    
 

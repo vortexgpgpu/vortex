@@ -7,8 +7,8 @@ module VX_pending_size #(
 ) (
     input wire  clk,
     input wire  reset,
-    input wire  push,
-    input wire  pop,
+    input wire  incr,
+    input wire  decr,
     output wire empty,
     output wire full,
     output wire [SIZEW-1:0] size
@@ -25,19 +25,19 @@ module VX_pending_size #(
             empty_r <= 1;
             full_r  <= 0;
         end else begin
-            assert(!push || !full);
-            if (push) begin
-                if (!pop) begin
+            assert(!incr || !full);
+            if (incr) begin
+                if (!decr) begin
                     empty_r <= 0;
                     if (used_r == ADDRW'(SIZE-1))
                         full_r <= 1;
                 end
-            end else if (pop) begin
+            end else if (decr) begin
                 full_r <= 0;
                 if (used_r == ADDRW'(1))
                     empty_r <= 1;                
             end
-            used_r <= used_r + ADDRW'($signed(2'(push && !pop) - 2'(pop && !push)));
+            used_r <= used_r + ADDRW'($signed(2'(incr && !decr) - 2'(decr && !incr)));
         end
     end
 

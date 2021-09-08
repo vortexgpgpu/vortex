@@ -140,7 +140,7 @@ echo "stress2 tests done!"
 
 usage()
 {
-    echo "usage: regression [-coverage] [-cluster] [-debug] [-config] [-stress#n] [-all] [-h|--help]"
+    echo "usage: regression [-coverage] [-cluster] [-debug] [-config] [-stress[#n]] [-all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
@@ -158,6 +158,10 @@ while [ "$1" != "" ]; do
         -stress1 ) stress1
                 ;;
         -stress2 ) stress2
+                ;;
+        -stress ) stress0
+                  stress1
+                  stress2
                 ;;
         -all ) coverage
                cluster
