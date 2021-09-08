@@ -74,30 +74,29 @@ module VX_warp_sched #(
             active_warps[0] <= '1;
             thread_masks[0] <= '1;
         end else begin            
-            if (warp_ctl_if.valid) begin
-                if (warp_ctl_if.wspawn.valid) begin
-                    use_wspawn <= warp_ctl_if.wspawn.wmask & (~`NUM_WARPS'(1));
-                    wspawn_pc  <= warp_ctl_if.wspawn.pc;
-                end else begin
-                    stalled_warps[warp_ctl_if.wid] <= 0;                        
-                end
+            if (warp_ctl_if.valid && warp_ctl_if.wspawn.valid) begin
+                use_wspawn <= warp_ctl_if.wspawn.wmask & (~`NUM_WARPS'(1));
+                wspawn_pc  <= warp_ctl_if.wspawn.pc;
+            end
 
-                if (warp_ctl_if.barrier.valid) begin                
-                    if (reached_barrier_limit) begin
-                        barrier_masks[warp_ctl_if.barrier.id] <= 0;
-                    end else begin
-                        barrier_masks[warp_ctl_if.barrier.id][warp_ctl_if.wid] <= 1;
-                    end
+            if (warp_ctl_if.valid && warp_ctl_if.barrier.valid) begin
+                stalled_warps[warp_ctl_if.wid] <= 0;
+                if (reached_barrier_limit) begin
+                    barrier_masks[warp_ctl_if.barrier.id] <= 0;
+                end else begin
+                    barrier_masks[warp_ctl_if.barrier.id][warp_ctl_if.wid] <= 1;
                 end
-                
-                if (warp_ctl_if.tmc.valid) begin
-                    thread_masks[warp_ctl_if.wid] <= warp_ctl_if.tmc.tmask;
-                end
-                
-                if (warp_ctl_if.split.valid) begin
-                    if (warp_ctl_if.split.diverged) begin
-                        thread_masks[warp_ctl_if.wid] <= warp_ctl_if.split.then_tmask;
-                    end
+            end 
+            
+            if (warp_ctl_if.valid && warp_ctl_if.tmc.valid) begin
+                thread_masks[warp_ctl_if.wid]  <= warp_ctl_if.tmc.tmask;
+                stalled_warps[warp_ctl_if.wid] <= 0;
+            end 
+            
+            if (warp_ctl_if.valid && warp_ctl_if.split.valid) begin
+                stalled_warps[warp_ctl_if.wid] <= 0;
+                if (warp_ctl_if.split.diverged) begin
+                    thread_masks[warp_ctl_if.wid] <= warp_ctl_if.split.then_tmask;
                 end
             end
 
