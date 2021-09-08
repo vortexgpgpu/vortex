@@ -136,6 +136,7 @@ task print_ex_op (
             `INST_GPU_SPLIT: dpi_trace("SPLIT");
             `INST_GPU_JOIN:  dpi_trace("JOIN");
             `INST_GPU_BAR:   dpi_trace("BAR");
+            `INST_GPU_PRED:  dpi_trace("PRED");
             default:    dpi_trace("?");
         endcase
     end    

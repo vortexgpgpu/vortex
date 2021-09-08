@@ -185,7 +185,7 @@
 `define INST_GPU_SPLIT       3'h2
 `define INST_GPU_JOIN        3'h3
 `define INST_GPU_BAR         3'h4
-`define INST_GPU_OTHER       3'h7
+`define INST_GPU_PRED        3'h5
 `define INST_GPU_BITS        3
 
 ///////////////////////////////////////////////////////////////////////////////
