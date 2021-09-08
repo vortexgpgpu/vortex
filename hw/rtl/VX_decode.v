@@ -349,7 +349,7 @@ module VX_decode  #(
                 ex_type = `EX_GPU;
                 case (func3)
                     3'h0: begin
-                        op_type = `INST_OP_BITS'(`INST_GPU_TMC);
+                        op_type = rs2[0] ? `INST_OP_BITS'(`INST_GPU_PRED) : `INST_OP_BITS'(`INST_GPU_TMC);
                         is_wstall = 1;
                         `USED_IREG (rs1);
                     end
