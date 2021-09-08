@@ -31,7 +31,7 @@ module VX_csr_unit #(
 
     wire write_enable = csr_commit_if.valid && csr_we_s1;
 
-    wire [31:0] csr_req_data = csr_req_if.use_imm ? 32'(csr_req_if.rs1) : csr_req_if.rs1_data;
+    wire [31:0] csr_req_data = csr_req_if.use_imm ? 32'(csr_req_if.imm) : csr_req_if.rs1_data;
 
     VX_csr_data #(
         .CORE_ID(CORE_ID)

@@ -201,10 +201,10 @@ module VX_decode  #(
                     op_type = `INST_OP_BITS'(func3[1:0]);
                     use_rd  = 1;
                     use_imm = func3[2]; 
-                    imm     = 32'(u_12); // addr
+                    imm[`CSR_ADDR_BITS-1:0] = u_12; // addr
                     `USED_IREG (rd);
                     if (func3[2]) begin
-                        rs1_r = `NR_BITS'(rs1); // imm
+                        imm[`CSR_ADDR_BITS +: `NRI_BITS] = rs1; // imm
                     end else begin
                         `USED_IREG (rs1);
                     end                    

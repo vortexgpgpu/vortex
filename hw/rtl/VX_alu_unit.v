@@ -22,12 +22,12 @@ module VX_alu_unit #(
     wire [`NUM_THREADS-1:0][31:0] shr_result;
     reg [`NUM_THREADS-1:0][31:0]  msc_result;
 
-    wire stall_in, stall_out;    
+    wire ready_in;    
 
     `UNUSED_VAR (alu_req_if.op_mod)
     wire                    is_br_op = `INST_ALU_IS_BR(alu_req_if.op_mod);
-    wire [`INST_ALU_BITS-1:0] alu_op = `INST_ALU_OP(alu_req_if.op_type);
-    wire [`INST_BR_BITS-1:0]   br_op = `INST_BR_OP(alu_req_if.op_type);
+    wire [`INST_ALU_BITS-1:0] alu_op = `INST_ALU_BITS'(alu_req_if.op_type);
+    wire [`INST_BR_BITS-1:0]   br_op = `INST_BR_BITS'(alu_req_if.op_type);
     wire                  alu_signed = `INST_ALU_SIGNED(alu_op);   
     wire [1:0]          alu_op_class = `INST_ALU_OP_CLASS(alu_op); 
     wire                      is_sub = (alu_op == `INST_ALU_SUB);
@@ -92,17 +92,49 @@ module VX_alu_unit #(
 
     // output
 
-    wire                          result_valid;
-    wire [`NW_BITS-1:0]           result_wid;
-    wire [`NUM_THREADS-1:0]       result_tmask;
-    wire [31:0]                   result_PC;
-    wire [`NR_BITS-1:0]           result_rd;   
-    wire                          result_wb; 
-    wire [`NUM_THREADS-1:0][31:0] result_data;
-    wire                          result_is_br;
+    wire                          alu_valid_in;
+    wire                          alu_ready_in;
+    wire                          alu_valid_out;
+    wire                          alu_ready_out;
+    wire [`NW_BITS-1:0]           alu_wid;
+    wire [`NUM_THREADS-1:0]       alu_tmask;
+    wire [31:0]                   alu_PC;
+    wire [`NR_BITS-1:0]           alu_rd;   
+    wire                          alu_wb; 
+    wire [`NUM_THREADS-1:0][31:0] alu_data;
+
+    wire [`INST_BR_BITS-1:0] br_op_r;
+    wire [31:0] br_dest_r;
+    wire is_less_r;
+    wire is_equal_r;
+    wire is_br_op_r;
+
+    assign alu_ready_in = alu_ready_out || ~alu_valid_out;
+
+    VX_pipe_register #(
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `INST_BR_BITS + 1 + 1 + 32),
+        .RESETW (1)
+    ) pipe_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (alu_ready_in),
+        .data_in  ({alu_valid_in,  alu_req_if.wid, alu_req_if.tmask, alu_req_if.PC, alu_req_if.rd, alu_req_if.wb, alu_jal_result, is_br_op,   br_op,   is_less,   is_equal,   br_dest}),
+        .data_out ({alu_valid_out, alu_wid,        alu_tmask,        alu_PC,        alu_rd,        alu_wb,        alu_data,       is_br_op_r, br_op_r, is_less_r, is_equal_r, br_dest_r})
+    );
+
+    `UNUSED_VAR (br_op_r)
+    wire br_neg    = `INST_BR_NEG(br_op_r);
+    wire br_less   = `INST_BR_LESS(br_op_r);
+    wire br_static = `INST_BR_STATIC(br_op_r);
+
+    assign branch_ctl_if.valid = alu_valid_out && alu_ready_out && is_br_op_r;
+    assign branch_ctl_if.taken = ((br_less ? is_less_r : is_equal_r) ^ br_neg) | br_static;
+    assign branch_ctl_if.wid   = alu_wid;
+    assign branch_ctl_if.dest  = br_dest_r;
 
 `ifdef EXT_M_ENABLE
 
+    wire                          mul_valid_in;
     wire                          mul_ready_in;
     wire                          mul_valid_out;    
     wire                          mul_ready_out;
@@ -113,14 +145,14 @@ module VX_alu_unit #(
     wire                          mul_wb;
     wire [`NUM_THREADS-1:0][31:0] mul_data;
 
-    wire is_mul_op = `INST_ALU_IS_MUL(alu_req_if.op_mod);
-    
+    wire [`INST_MUL_BITS-1:0] mul_op = `INST_MUL_BITS'(alu_req_if.op_type);
+
     VX_muldiv muldiv (
         .clk        (clk),
         .reset      (reset),
         
         // Inputs
-        .alu_op     (`INST_MUL_OP(alu_req_if.op_type)),
+        .alu_op     (mul_op),
         .wid_in     (alu_req_if.wid),
         .tmask_in   (alu_req_if.tmask),
         .PC_in      (alu_req_if.PC),
@@ -138,72 +170,52 @@ module VX_alu_unit #(
         .data_out   (mul_data),
 
         // handshake
-        .valid_in   (alu_req_if.valid && is_mul_op),
+        .valid_in   (mul_valid_in),
         .ready_in   (mul_ready_in),
         .valid_out  (mul_valid_out),
         .ready_out  (mul_ready_out)
     );
 
-    assign stall_in = (is_mul_op && ~mul_ready_in) 
-                   || (~is_mul_op && (mul_valid_out || stall_out));
-    
-    assign mul_ready_out = ~stall_out;
+    wire is_mul_op = `INST_ALU_IS_MUL(alu_req_if.op_mod);
 
-    assign result_valid = mul_valid_out || (alu_req_if.valid && ~is_mul_op);
-    assign result_wid   = mul_valid_out ? mul_wid   : alu_req_if.wid;    
-    assign result_tmask = mul_valid_out ? mul_tmask : alu_req_if.tmask;    
-    assign result_PC    = mul_valid_out ? mul_PC    : alu_req_if.PC;    
-    assign result_rd    = mul_valid_out ? mul_rd    : alu_req_if.rd;    
-    assign result_wb    = mul_valid_out ? mul_wb    : alu_req_if.wb;    
-    assign result_data  = mul_valid_out ? mul_data  : alu_jal_result;
-    assign result_is_br = ~mul_valid_out && is_br_op;
+    assign ready_in = is_mul_op ? mul_ready_in : alu_ready_in;
+
+    assign alu_valid_in = alu_req_if.valid && ~is_mul_op;
+    assign mul_valid_in = alu_req_if.valid && is_mul_op;
+
+    assign alu_commit_if.valid = alu_valid_out || mul_valid_out;
+    assign alu_commit_if.wid   = alu_valid_out ? alu_wid   : mul_wid;
+    assign alu_commit_if.tmask = alu_valid_out ? alu_tmask : mul_tmask;
+    assign alu_commit_if.PC    = alu_valid_out ? alu_PC    : mul_PC;
+    assign alu_commit_if.rd    = alu_valid_out ? alu_rd    : mul_rd;
+    assign alu_commit_if.wb    = alu_valid_out ? alu_wb    : mul_wb;
+    assign alu_commit_if.data  = alu_valid_out ? alu_data  : mul_data;
+
+    assign alu_ready_out = alu_commit_if.ready;
+    assign mul_ready_out = alu_commit_if.ready & ~alu_valid_out; // ALU takes priority
 
 `else 
 
-    assign stall_in = stall_out;
+    assign ready_in = alu_ready_in;
 
-    assign result_valid = alu_req_if.valid;
-    assign result_wid   = alu_req_if.wid;  
-    assign result_tmask = alu_req_if.tmask;    
-    assign result_PC    = alu_req_if.PC; 
-    assign result_rd    = alu_req_if.rd;    
-    assign result_wb    = alu_req_if.wb;   
-    assign result_data  = alu_jal_result;
-    assign result_is_br = is_br_op;
+    assign alu_valid_in = alu_req_if.valid;
+
+    assign alu_commit_if.valid = alu_valid_out;
+    assign alu_commit_if.wid   = alu_wid;
+    assign alu_commit_if.tmask = alu_tmask;
+    assign alu_commit_if.PC    = alu_PC; 
+    assign alu_commit_if.rd    = alu_rd;    
+    assign alu_commit_if.wb    = alu_wb;
+    assign alu_commit_if.data  = alu_data;
+
+    assign alu_ready_out = alu_commit_if.ready;
 
 `endif
 
-    wire [`INST_BR_BITS-1:0] br_op_r;    
-    wire is_less_r;
-    wire is_equal_r;
-    wire is_br_op_r;
-
-    assign stall_out = ~alu_commit_if.ready && alu_commit_if.valid;
-
-    VX_pipe_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `INST_BR_BITS + 1 + 1 + 32),
-        .RESETW (1)
-    ) pipe_reg (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (!stall_out),
-        .data_in  ({result_valid,        result_wid,        result_tmask,        result_PC,        result_rd,        result_wb,        result_data,        result_is_br, br_op,   is_less,   is_equal,   br_dest}),
-        .data_out ({alu_commit_if.valid, alu_commit_if.wid, alu_commit_if.tmask, alu_commit_if.PC, alu_commit_if.rd, alu_commit_if.wb, alu_commit_if.data, is_br_op_r,   br_op_r, is_less_r, is_equal_r, branch_ctl_if.dest})
-    );
-
     assign alu_commit_if.eop = 1'b1;
 
-    `UNUSED_VAR (br_op_r)
-    wire br_neg    = `INST_BR_NEG(br_op_r);
-    wire br_less   = `INST_BR_LESS(br_op_r);
-    wire br_static = `INST_BR_STATIC(br_op_r);
-
-    assign branch_ctl_if.valid = alu_commit_if.valid && alu_commit_if.ready && is_br_op_r;
-    assign branch_ctl_if.taken = ((br_less ? is_less_r : is_equal_r) ^ br_neg) | br_static;
-    assign branch_ctl_if.wid   = alu_commit_if.wid;
-
     // can accept new request?
-    assign alu_req_if.ready = ~stall_in;
+    assign alu_req_if.ready = ready_in;
 
 `ifdef DBG_PRINT_PIPELINE
     always @(posedge clk) begin
