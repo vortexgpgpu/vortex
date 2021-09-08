@@ -225,7 +225,7 @@ module VX_bank #(
             mshr_enable ? mshr_tid : creq_tid,
             mshr_enable ? mshr_pmask : creq_pmask,
             mshr_enable ? mshr_tag : creq_tag,
-            mshr_enable ? mshr_dequeue_id : (mem_rsp_valid ? mem_rsp_id : mshr_alloc_id)
+            mshr_enable ? mshr_dequeue_id : mem_rsp_id
         }),
         .data_out ({valid_st0, is_flush_st0, is_fill_st0, is_mshr_st0, write_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_tid_st0, pmask_st0, tag_st0, mshr_id_st0})
     );
@@ -274,6 +274,8 @@ module VX_bank #(
 
     wire read_st0 = !is_fill_st0 && !write_st0;
 
+    wire [MSHR_ADDR_WIDTH-1:0] mshr_id_qual_st0 = (!is_fill_st0 && !is_mshr_st0) ? mshr_alloc_id : mshr_id_st0;
+
     VX_pipe_register #(
         .DATAW  (1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH + NUM_PORTS * (WORD_SELECT_BITS + WORD_SIZE + `REQS_BITS + 1 + CORE_TAG_WIDTH) + MSHR_ADDR_WIDTH + 1),
         .RESETW (1)
@@ -281,8 +283,8 @@ module VX_bank #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!crsq_stall),
-        .data_in  ({valid_st0, is_fill_st0, is_mshr_st0, miss_st0, write_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_tid_st0, pmask_st0, tag_st0, mshr_id_st0, mshr_pending_st0}),
-        .data_out ({valid_st1, is_fill_st1, is_mshr_st1, miss_st1, write_st1, addr_st1, wdata_st1, wsel_st1, byteen_st1, req_tid_st1, pmask_st1, tag_st1, mshr_id_st1, mshr_pending_st1})
+        .data_in  ({valid_st0, is_fill_st0, is_mshr_st0, miss_st0, write_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_tid_st0, pmask_st0, tag_st0, mshr_id_qual_st0, mshr_pending_st0}),
+        .data_out ({valid_st1, is_fill_st1, is_mshr_st1, miss_st1, write_st1, addr_st1, wdata_st1, wsel_st1, byteen_st1, req_tid_st1, pmask_st1, tag_st1, mshr_id_st1,      mshr_pending_st1})
     ); 
 
 `ifdef DBG_CACHE_REQ_INFO
@@ -370,12 +372,22 @@ module VX_bank #(
         .fill_data  (wdata_st1)
     );
     
-    wire mshr_allocate = creq_fire && ~creq_rw;
+    wire mshr_allocate = valid_st0 && read_st0 && !is_mshr_st0 && !crsq_stall;
     wire mshr_replay   = do_fill_st0 && ~crsq_stall;
-    wire mshr_lookup   = valid_st0 && read_st0 && !is_mshr_st0 && !crsq_stall;
+    wire mshr_lookup   = mshr_allocate;
     wire mshr_release  = valid_st1 && read_st1 && !is_mshr_st1 && !miss_st1 && !crsq_stall;
 
-    wire mshr_not_full;
+    VX_pending_size #( 
+        .SIZE (MSHR_SIZE)
+    ) mshr_pending_size (
+        .clk   (clk),
+        .reset (reset),
+        .incr  (creq_fire && ~creq_rw),
+        .decr  (mshr_fire || mshr_release),
+        .full  (mshr_alm_full),
+        `UNUSED_PIN (size),
+        `UNUSED_PIN (empty)
+    );
 
     VX_miss_resrv #(
         .BANK_ID            (BANK_ID),
@@ -402,15 +414,15 @@ module VX_bank #(
 
         // allocate
         .allocate_valid     (mshr_allocate),
-        .allocate_addr      (creq_addr),
-        .allocate_data      ({creq_wsel, creq_tag, creq_tid, creq_pmask}),
+        .allocate_addr      (addr_st0),
+        .allocate_data      ({wsel_st0, tag_st0, req_tid_st0, pmask_st0}),
         .allocate_id        (mshr_alloc_id),
-        .allocate_ready     (mshr_not_full),
+        `UNUSED_PIN (allocate_ready),
 
         // lookup
         .lookup_valid       (mshr_lookup),
         .lookup_replay      (mshr_replay),
-        .lookup_id          (mshr_id_st0),
+        .lookup_id          (mshr_alloc_id),
         .lookup_addr        (addr_st0),
         .lookup_match       (mshr_pending_st0),
 
@@ -429,8 +441,6 @@ module VX_bank #(
         .release_valid      (mshr_release),
         .release_id         (mshr_id_st1)
     );
-
-    assign mshr_alm_full = ~mshr_not_full;
 
     // Enqueue core response
      

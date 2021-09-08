@@ -164,7 +164,10 @@ module VX_miss_resrv #(
         assert(!allocate_fire || !valid_table[allocate_id_r]);        
         assert(!release_valid || valid_table[release_id]);
     end
-
+    
+    `RUNTIME_ASSERT((!allocate_fire || ~valid_table[allocate_id]), ("%t: *** cache%0d:%0d in-use allocation: addr=%0h, id=%0d", $time, CACHE_ID, BANK_ID, 
+        `LINE_TO_BYTE_ADDR(allocate_addr, BANK_ID), allocate_id))
+    
     `RUNTIME_ASSERT((!fill_valid || valid_table[fill_id]), ("%t: *** cache%0d:%0d invalid fill: addr=%0h, id=%0d", $time, CACHE_ID, BANK_ID, 
         `LINE_TO_BYTE_ADDR(addr_table[fill_id], BANK_ID), fill_id))
 
