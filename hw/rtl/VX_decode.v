@@ -2,15 +2,14 @@
 `include "VX_print_instr.vh"
 
 `ifdef EXT_F_ENABLE
-    `define USED_IREG(r)    \
-        used_regs[{1'b0, r}] = 1
+    `define USED_IREG(r) \
+        r``_r = {1'b0, ``r}
 
-    `define USED_FREG(r)    \
-        r``_r[5] = 1;       \
-        used_regs[{1'b1, r}] = 1
+    `define USED_FREG(r) \
+        r``_r = {1'b1, ``r}
 `else
     `define USED_IREG(r) \
-        used_regs[r] = 1
+        r``_r = ``r
 `endif
 
 module VX_decode  #(
@@ -38,7 +37,6 @@ module VX_decode  #(
     reg [31:0]          imm;    
     reg use_rd, use_PC, use_imm;
     reg is_join, is_wstall;
-    reg [`NUM_REGS-1:0] used_regs;
 
     wire [31:0] instr = ifetch_rsp_if.data;
     wire [6:0] opcode = instr[6:0];  
@@ -57,23 +55,24 @@ module VX_decode  #(
     wire [12:0] b_imm     = {instr[31], instr[7], instr[30:25], instr[11:8], 1'b0};
     wire [20:0] jal_imm   = {instr[31], instr[19:12], instr[20], instr[30:21], 1'b0};
     wire [11:0] jalr_imm  = {func7, rs2};
+
+    `UNUSED_VAR (rs3)
     
     always @(*) begin
 
         ex_type   = 0;
         op_type   = 'x;
         op_mod    = 0;
-        rd_r      = `NR_BITS'(rd);
-        rs1_r     = `NR_BITS'(rs1);
-        rs2_r     = `NR_BITS'(rs2);
-        rs3_r     = `NR_BITS'(rs3);
+        rd_r      = 0;
+        rs1_r     = 0;
+        rs2_r     = 0;
+        rs3_r     = 0;
         imm       = 'x;
         use_imm   = 0;
         use_PC    = 0;
         use_rd    = 0;
         is_join   = 0;
         is_wstall = 0;
-        used_regs = 0;
 
         case (opcode)            
             `INST_I: begin
@@ -399,7 +398,6 @@ module VX_decode  #(
     assign decode_if.imm       = imm;
     assign decode_if.use_PC    = use_PC;
     assign decode_if.use_imm   = use_imm;
-    assign decode_if.used_regs = used_regs;
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -421,7 +419,7 @@ module VX_decode  #(
             print_ex_type(decode_if.ex_type);
             dpi_trace(", op=");
             print_ex_op(decode_if.ex_type, decode_if.op_type, decode_if.op_mod);
-            dpi_trace(", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=%0h, use_pc=%b, use_imm=%b, use_regs=%b\n", decode_if.op_mod, decode_if.tmask, decode_if.wb, decode_if.rd, decode_if.rs1, decode_if.rs2, decode_if.rs3, decode_if.imm, decode_if.use_PC, decode_if.use_imm, decode_if.used_regs);                        
+            dpi_trace(", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=%0h, use_pc=%b, use_imm=%b\n", decode_if.op_mod, decode_if.tmask, decode_if.wb, decode_if.rd, decode_if.rs1, decode_if.rs2, decode_if.rs3, decode_if.imm, decode_if.use_PC, decode_if.use_imm);                        
         end
     end
 `endif

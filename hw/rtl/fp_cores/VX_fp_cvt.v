@@ -85,8 +85,7 @@ module VX_fp_cvt #(
         assign int_mantissa = int_sign ? (-dataa[i]) : dataa[i];
         assign fmt_mantissa = INT_MAN_WIDTH'({fp_clss[i].is_normal, dataa[i][MAN_BITS-1:0]});
         assign fmt_exponent[i] = {1'b0, dataa[i][MAN_BITS +: EXP_BITS]} +
-                                 {1'b0, fp_clss[i].is_subnormal} +
-                                 (FMT_SHIFT_COMPENSATION - EXP_BIAS);
+                                 {1'b0, fp_clss[i].is_subnormal};
         assign encoded_mant[i] = is_itof ? int_mantissa : fmt_mantissa;
         assign input_sign[i]   = is_itof ? int_sign : fmt_sign;
     `IGNORE_WARNINGS_END
@@ -144,7 +143,7 @@ module VX_fp_cvt #(
         assign input_mant_s0[i] = encoded_mant_s0[i] << renorm_shamt_s0[i];
 
         // Unbias exponent and compensate for shift
-        wire [INT_EXP_WIDTH-1:0] fp_input_exp = fmt_exponent_s0[i] - {1'b0, renorm_shamt_s0[i]};                                 
+        wire [INT_EXP_WIDTH-1:0] fp_input_exp = fmt_exponent_s0[i] + (FMT_SHIFT_COMPENSATION - EXP_BIAS) - {1'b0, renorm_shamt_s0[i]};                                 
         wire [INT_EXP_WIDTH-1:0] int_input_exp = (INT_MAN_WIDTH-1) - {1'b0, renorm_shamt_s0[i]};
 
         assign input_exp_s0[i] = is_itof_s0 ? int_input_exp : fp_input_exp;
