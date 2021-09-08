@@ -69,8 +69,8 @@ module VX_avs_wrapper #(
         ) pending_size (
             .clk   (clk),
             .reset (reset),
-            .push  (avs_reqq_push[i]),
-            .pop   (avs_reqq_pop[i]),            
+            .incr  (avs_reqq_push[i]),
+            .decr  (avs_reqq_pop[i]),            
             .full  (req_queue_going_full[i]),
             .size  (req_queue_size[i]),
             `UNUSED_PIN (empty)

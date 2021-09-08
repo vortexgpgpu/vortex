@@ -645,8 +645,8 @@ VX_pending_size #(
 ) cci_rd_pending_size (
     .clk   (clk),
     .reset (reset),
-    .push  (cci_rd_req_fire),
-    .pop   (cci_rdq_pop),
+    .incr  (cci_rd_req_fire),
+    .decr  (cci_rdq_pop),
     .full  (cci_pending_reads_full),
     .size  (cci_pending_reads),
     `UNUSED_PIN (empty)
@@ -804,8 +804,8 @@ VX_pending_size #(
 ) cci_wr_pending_size (
     .clk   (clk),
     .reset (reset),
-    .push  (cci_mem_rd_rsp_fire),
-    .pop   (cci_wr_rsp_fire),
+    .incr  (cci_mem_rd_rsp_fire),
+    .decr  (cci_wr_rsp_fire),
     .empty (cci_pending_writes_empty),
     .full  (cci_pending_writes_full),
     .size  (cci_pending_writes)

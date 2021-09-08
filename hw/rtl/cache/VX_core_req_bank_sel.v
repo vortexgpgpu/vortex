@@ -281,22 +281,11 @@ module VX_core_req_bank_sel #(
 `ifdef PERF_ENABLE
     reg [NUM_REQS-1:0] core_req_sel_r;
 
-    if (SHARED_BANK_READY == 0) begin
-        always @(*) begin
-            core_req_sel_r = 0;
-            for (integer i = 0; i < NUM_REQS; ++i) begin
-                if (core_req_valid[i]) begin
-                    core_req_sel_r[i] = per_bank_core_req_ready[core_req_bid[i]];
-                end
-            end
-        end
-    end else begin
-        always @(*) begin
-            core_req_sel_r = 0;
-            for (integer i = 0; i < NUM_REQS; ++i) begin
-                if (core_req_valid[i]) begin
-                    core_req_sel_r[i] = per_bank_core_req_ready;
-                end
+    always @(*) begin
+        core_req_sel_r = 0;
+        for (integer i = 0; i < NUM_REQS; ++i) begin
+            if (core_req_valid[i]) begin
+                core_req_sel_r[i] = per_bank_core_req_ready[core_req_bid[i]];
             end
         end
     end
