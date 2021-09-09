@@ -9,6 +9,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+`ifndef SYNTHESIS
 `ifndef NDEBUG
     `define DEBUG_BLOCK(x) /* verilator lint_off UNUSED */ \
                            x \
@@ -47,8 +48,6 @@
                        . x () \
                        /* verilator lint_on PINCONNECTEMPTY */
 
-`define STRINGIFY(x) `"x`"
-
 `define STATIC_ASSERT(cond, msg) \
     generate                     \
         if (!(cond)) $error msg; \
@@ -60,23 +59,38 @@
 
 `define TRACING_ON  /* verilator tracing_on */
 `define TRACING_OFF /* verilator tracing_off */
-
-`define RESET_RELAY(signal) \
-    wire signal;            \
-    VX_reset_relay __``signal ( \
-        .clk     (clk),     \
-        .reset   (reset),   \
-        .reset_o (signal)   \
-    )
+`else // SYNTHESIS
+`define DEBUG_BLOCK(x)
+`define IGNORE_UNUSED_BEGIN
+`define IGNORE_UNUSED_END
+`define IGNORE_WARNINGS_BEGIN
+`define IGNORE_WARNINGS_END
+`define UNUSED_PARAM(x)
+`define UNUSED_VAR(x)
+`define UNUSED_PIN(x) . x ()
+`define STATIC_ASSERT(cond, msg)
+`define RUNTIME_ASSERT(cond, msg)
+`define TRACING_ON
+`define TRACING_OFF
+`endif // SYNTHESIS
 
 ///////////////////////////////////////////////////////////////////////////////
 
+`ifdef QUARTUS
 `define USE_FAST_BRAM   (* ramstyle = "MLAB, no_rw_check" *)
 `define NO_RW_RAM_CHECK (* altera_attribute = "-name add_pass_through_logic_to_inferred_rams off" *)
 `define DISABLE_BRAM    (* ramstyle = "logic" *)
 `define PRESERVE_REG    (* preserve *)
+`else
+`define USE_FAST_BRAM
+`define NO_RW_RAM_CHECK
+`define DISABLE_BRAM
+`define PRESERVE_REG
+`endif
 
 ///////////////////////////////////////////////////////////////////////////////
+
+`define STRINGIFY(x) `"x`"
 
 `define CLOG2(x)    $clog2(x)
 `define FLOG2(x)    ($clog2(x) - (((1 << $clog2(x)) > (x)) ? 1 : 0))
@@ -116,5 +130,13 @@
         dpi_trace("}");                         \
     end                                         \
     dpi_trace("}")
+
+`define RESET_RELAY(signal) \
+    wire signal;            \
+    VX_reset_relay __``signal ( \
+        .clk     (clk),     \
+        .reset   (reset),   \
+        .reset_o (signal)   \
+    )
 
 `endif
