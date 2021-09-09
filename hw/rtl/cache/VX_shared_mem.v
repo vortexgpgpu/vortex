@@ -127,9 +127,9 @@ module VX_shared_mem #(
     assign core_req_writeonly_unqual = ~(| core_req_read_mask_unqual);
 
     VX_elastic_buffer #(
-        .DATAW      (NUM_BANKS * (1 + 1 + `LINE_ADDR_WIDTH + WORD_SIZE + `WORD_WIDTH + CORE_TAG_WIDTH + `REQS_BITS) + NUM_BANKS + 1), 
-        .SIZE       (CREQ_SIZE),
-        .OUTPUT_REG (1)   // output should be registered for the data_store addr port
+        .DATAW   (NUM_BANKS * (1 + 1 + `LINE_ADDR_WIDTH + WORD_SIZE + `WORD_WIDTH + CORE_TAG_WIDTH + `REQS_BITS) + NUM_BANKS + 1), 
+        .SIZE    (CREQ_SIZE),
+        .OUT_REG (1)   // output should be registered for the data_store addr port
     ) core_req_queue (
         .clk        (clk),
         .reset      (reset),

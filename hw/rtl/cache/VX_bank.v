@@ -465,9 +465,9 @@ module VX_bank #(
     end
 
     VX_elastic_buffer #(
-        .DATAW      (NUM_PORTS * (CORE_TAG_WIDTH + 1 + `WORD_WIDTH + `REQS_BITS)),
-        .SIZE       (CRSQ_SIZE),
-        .OUTPUT_REG (1 == NUM_BANKS)
+        .DATAW   (NUM_PORTS * (CORE_TAG_WIDTH + 1 + `WORD_WIDTH + `REQS_BITS)),
+        .SIZE    (CRSQ_SIZE),
+        .OUT_REG (1 == NUM_BANKS)
     ) core_rsp_req (
         .clk       (clk),
         .reset     (reset),

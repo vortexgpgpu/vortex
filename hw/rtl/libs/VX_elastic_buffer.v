@@ -4,7 +4,7 @@
 module VX_elastic_buffer #(
     parameter DATAW      = 1,
     parameter SIZE       = 2,
-    parameter OUTPUT_REG = 0,
+    parameter OUT_REG = 0,
     parameter LUTRAM     = 0
 ) ( 
     input  wire             clk,
@@ -32,8 +32,8 @@ module VX_elastic_buffer #(
     end else if (SIZE == 2) begin
 
         VX_skid_buffer #(
-            .DATAW      (DATAW),
-            .OUTPUT_REG (OUTPUT_REG)
+            .DATAW   (DATAW),
+            .OUT_REG (OUT_REG)
         ) queue (
             .clk       (clk),
             .reset     (reset),
@@ -53,10 +53,10 @@ module VX_elastic_buffer #(
         wire pop  = valid_out && ready_out;
 
         VX_fifo_queue #(
-            .DATAW      (DATAW),
-            .SIZE       (SIZE),
-            .OUTPUT_REG (OUTPUT_REG),
-            .LUTRAM     (LUTRAM)
+            .DATAW   (DATAW),
+            .SIZE    (SIZE),
+            .OUT_REG (OUT_REG),
+            .LUTRAM  (LUTRAM)
         ) queue (
             .clk    (clk),
             .reset  (reset),
