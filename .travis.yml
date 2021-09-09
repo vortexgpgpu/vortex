@@ -47,11 +47,8 @@ jobs:
       name: stress1
       script: cp -r $PWD ../build6 && cd ../build6 && ./ci/travis_run.py ./ci/regression.sh -stress1
     - stage: test
-      name: stress2
-      script: cp -r $PWD ../build7 && cd ../build7 && ./ci/travis_run.py ./ci/regression.sh -stress2
-    - stage: test
       name: compiler
-      script: cp -r $PWD ../build8 && cd ../build8 && ./ci/travis_run.py /ci/test_compiler.sh
+      script: cp -r $PWD ../build7 && cd ../build7 && ./ci/travis_run.py ./ci/test_compiler.sh
   
 after_success:
   # Gather code coverage

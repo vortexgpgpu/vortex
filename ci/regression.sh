@@ -124,18 +124,9 @@ stress1()
 {
 echo "begin stress1 tests..."
 
-./ci/blackbox.sh --driver=rtlsim --cores=1 --app=sgemm --args="-n256"
-
-echo "stress1 tests done!"
-}
-
-stress2() 
-{
-echo "begin stress2 tests..."
-
 ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --clusters=2 --l3cache --app=sgemm --args="-n256"
 
-echo "stress2 tests done!"
+echo "stress1 tests done!"
 }
 
 usage()
@@ -157,11 +148,8 @@ while [ "$1" != "" ]; do
                 ;;
         -stress1 ) stress1
                 ;;
-        -stress2 ) stress2
-                ;;
         -stress ) stress0
                   stress1
-                  stress2
                 ;;
         -all ) coverage
                cluster
@@ -169,7 +157,6 @@ while [ "$1" != "" ]; do
                config
                stress0
                stress1
-               stress2
                 ;;
         -h | --help ) usage
                       exit
