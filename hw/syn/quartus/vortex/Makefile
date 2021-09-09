@@ -1,6 +1,6 @@
 PROJECT = Vortex
 TOP_LEVEL_ENTITY = Vortex
-SRC_FILE = Vortex.sv
+SRC_FILE = Vortex.v
 RTL_DIR = ../../../../rtl
 
 FAMILY = "Arria 10"
