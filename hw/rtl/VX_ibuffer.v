@@ -38,9 +38,9 @@ module VX_ibuffer #(
         wire going_empty = empty_r[i] || (alm_empty_r[i] && reading);
 
         VX_elastic_buffer #(
-            .DATAW      (DATAW),
-            .SIZE       (`IBUF_SIZE),
-            .OUTPUT_REG (1)
+            .DATAW   (DATAW),
+            .SIZE    (`IBUF_SIZE),
+            .OUT_REG (1)
         ) queue (
             .clk      (clk),
             .reset    (reset),

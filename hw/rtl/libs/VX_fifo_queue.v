@@ -8,7 +8,7 @@ module VX_fifo_queue #(
     parameter ALM_EMPTY  = 1,
     parameter ADDRW      = $clog2(SIZE),
     parameter SIZEW      = $clog2(SIZE+1),
-    parameter OUTPUT_REG = 0,
+    parameter OUT_REG = 0,
     parameter LUTRAM     = 1
 ) ( 
     input  wire             clk,
@@ -103,7 +103,7 @@ module VX_fifo_queue #(
 
         if (SIZE == 2) begin
 
-            if (0 == OUTPUT_REG) begin 
+            if (0 == OUT_REG) begin 
 
                 reg [DATAW-1:0] shift_reg [1:0];
 
@@ -138,7 +138,7 @@ module VX_fifo_queue #(
         
         end else begin
 
-            if (0 == OUTPUT_REG) begin          
+            if (0 == OUT_REG) begin          
 
                 reg [ADDRW-1:0] rd_ptr_r;
                 reg [ADDRW-1:0] wr_ptr_r;
@@ -154,10 +154,10 @@ module VX_fifo_queue #(
                 end
 
                 VX_dp_ram #(
-                    .DATAW      (DATAW),
-                    .SIZE       (SIZE),
-                    .OUTPUT_REG (0),
-                    .LUTRAM     (LUTRAM)
+                    .DATAW   (DATAW),
+                    .SIZE    (SIZE),
+                    .OUT_REG (0),
+                    .LUTRAM  (LUTRAM)
                 ) dp_ram (
                     .clk(clk),
                     .wren  (push),
@@ -197,10 +197,10 @@ module VX_fifo_queue #(
                 end
 
                 VX_dp_ram #(
-                    .DATAW      (DATAW),
-                    .SIZE       (SIZE),
-                    .OUTPUT_REG (0),
-                    .LUTRAM     (LUTRAM)
+                    .DATAW   (DATAW),
+                    .SIZE    (SIZE),
+                    .OUT_REG (0),
+                    .LUTRAM  (LUTRAM)
                 ) dp_ram (
                     .clk   (clk),
                     .wren  (push),

@@ -22,7 +22,7 @@ module VX_icache_stage #(
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (reset)
 
-    localparam OUTPUT_REG = 0;
+    localparam OUT_REG = 0;
 
     wire icache_req_fire = icache_req_if.valid && icache_req_if.ready;
     
@@ -64,12 +64,12 @@ module VX_icache_stage #(
 
     wire [`NW_BITS-1:0] rsp_wid = rsp_tag;
 
-    wire stall_out = ~ifetch_rsp_if.ready && (0 == OUTPUT_REG && ifetch_rsp_if.valid);
+    wire stall_out = ~ifetch_rsp_if.ready && (0 == OUT_REG && ifetch_rsp_if.valid);
 
     VX_pipe_register #(
         .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + 32),
         .RESETW (1),
-        .DEPTH  (OUTPUT_REG)
+        .DEPTH  (OUT_REG)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
