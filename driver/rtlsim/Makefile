@@ -28,7 +28,12 @@ CFLAGS += -DDUMP_PERF_STATS
 LDFLAGS += -shared -pthread
 #LDFLAGS += -dynamiclib -pthread
 
-TOP = Vortex
+ifdef AXI_BUS
+	TOP = Vortex_axi
+	CFLAGS += -DAXI_BUS
+else
+	TOP = Vortex
+endif
 
 RTL_DIR = ../../hw/rtl
 DPI_DIR = ../../hw/dpi

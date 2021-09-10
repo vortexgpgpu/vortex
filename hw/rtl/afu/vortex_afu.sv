@@ -520,8 +520,8 @@ VX_mem_arb #(
   .ADDR_WIDTH     (LMEM_ADDR_WIDTH),
   .TAG_IN_WIDTH   (AVS_REQ_TAGW),
   .TYPE           ("P"),
-  .BUFFERED_REQ   (0),
-  .BUFFERED_RSP   (0)
+  .BUFFERED_REQ   (1),
+  .BUFFERED_RSP   (1)
 ) mem_arb (
   .clk            (clk),
   .reset          (mem_arb_reset),
@@ -731,9 +731,9 @@ end
 `RESET_RELAY (cci_rdq_reset);
 
 VX_fifo_queue #(
-  .DATAW      (CCI_RD_QUEUE_DATAW),
-  .SIZE       (CCI_RD_QUEUE_SIZE),
-  .OUTPUT_REG (1)
+  .DATAW   (CCI_RD_QUEUE_DATAW),
+  .SIZE    (CCI_RD_QUEUE_SIZE),
+  .OUT_REG (1)
 ) cci_rd_req_queue (
   .clk      (clk),
   .reset    (cci_rdq_reset),
@@ -880,7 +880,7 @@ assign cci_mem_req_tag   = cci_mem_req_rw ? cci_mem_wr_req_ctr : cci_mem_rd_req_
 
 assign cmd_run_done = !vx_busy;
 
-Vortex #() vortex (
+Vortex vortex (
   `SCOPE_BIND_afu_vortex
 
   .clk            (clk),

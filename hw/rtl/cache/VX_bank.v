@@ -148,7 +148,7 @@ module VX_bank #(
     wire [NUM_PORTS-1:0][`REQS_BITS-1:0] req_tid_st0, req_tid_st1;
     wire [NUM_PORTS-1:0]            pmask_st0, pmask_st1;
     wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] tag_st0, tag_st1;
-    wire [`CACHE_LINE_WIDTH-1:0]    rdata_st1;
+    wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] rdata_st1;
     wire [`CACHE_LINE_WIDTH-1:0]    wdata_st0, wdata_st1;
     wire [MSHR_ADDR_WIDTH-1:0]      mshr_id_st0, mshr_id_st1;
     wire                            valid_st0, valid_st1;        
@@ -305,39 +305,7 @@ module VX_bank #(
     wire mreq_push_st1 = (read_st1 && miss_st1 && !mshr_pending_st1)
                       || write_st1;
 
-    wire [`CACHE_LINE_WIDTH-1:0] line_wdata_st1;
-    wire [CACHE_LINE_SIZE-1:0] line_byteen_st1;
-
     wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] creq_data_st1 = wdata_st1[0 +: NUM_PORTS * `WORD_WIDTH];
-
-    if (`WORDS_PER_LINE > 1) begin
-        reg [`CACHE_LINE_WIDTH-1:0] line_wdata_r;
-        reg [CACHE_LINE_SIZE-1:0] line_byteen_r;
-        if (NUM_PORTS > 1) begin
-            always @(*) begin
-                line_wdata_r  = 'x;
-                line_byteen_r = 0;
-                for (integer i = 0; i < NUM_PORTS; ++i) begin
-                    if (pmask_st1[i]) begin
-                        line_wdata_r[wsel_st1[i] * `WORD_WIDTH +: `WORD_WIDTH] = creq_data_st1[i];
-                        line_byteen_r[wsel_st1[i] * WORD_SIZE +: WORD_SIZE] = byteen_st1[i];
-                    end
-                end
-            end
-        end else begin
-            always @(*) begin                
-                line_wdata_r = {`WORDS_PER_LINE{creq_data_st1}};
-                line_byteen_r = 0;
-                line_byteen_r[wsel_st1 * WORD_SIZE +: WORD_SIZE] = byteen_st1;
-            end
-        end
-        assign line_wdata_st1  = line_wdata_r;
-        assign line_byteen_st1 = line_byteen_r;
-    end else begin
-        `UNUSED_VAR (wsel_st1)
-        assign line_wdata_st1  = creq_data_st1;
-        assign line_byteen_st1 = byteen_st1;
-    end
 
     VX_data_access #(
         .BANK_ID        (BANK_ID),
@@ -345,6 +313,7 @@ module VX_bank #(
         .CACHE_SIZE     (CACHE_SIZE),
         .CACHE_LINE_SIZE(CACHE_LINE_SIZE),
         .NUM_BANKS      (NUM_BANKS),
+        .NUM_PORTS      (NUM_PORTS),
         .WORD_SIZE      (WORD_SIZE),
         .WRITE_ENABLE   (WRITE_ENABLE)
      ) data_access (
@@ -359,6 +328,8 @@ module VX_bank #(
         .stall      (crsq_stall),
 
         .addr       (addr_st1),
+        .wsel       (wsel_st1),
+        .pmask      (pmask_st1),
 
         // reading
         .readen     (valid_st1 && read_st1),
@@ -367,8 +338,8 @@ module VX_bank #(
         // writing        
         .writeen    (valid_st1 && writeen_st1),
         .is_fill    (is_fill_st1),
-        .byteen     (line_byteen_st1),
-        .write_data (line_wdata_st1),
+        .byteen     (byteen_st1),
+        .write_data (creq_data_st1),
         .fill_data  (wdata_st1)
     );
     
@@ -454,20 +425,13 @@ module VX_bank #(
 
     assign crsq_pmask = pmask_st1;
     assign crsq_tid   = req_tid_st1;
+    assign crsq_data  = rdata_st1;
     assign crsq_tag   = tag_st1;
 
-    if (`WORDS_PER_LINE > 1) begin
-        for (genvar i = 0; i < NUM_PORTS; ++i) begin
-            assign crsq_data[i] = rdata_st1[wsel_st1[i] * `WORD_WIDTH +: `WORD_WIDTH];
-        end
-    end else begin
-        assign crsq_data = rdata_st1;
-    end
-
     VX_elastic_buffer #(
-        .DATAW      (NUM_PORTS * (CORE_TAG_WIDTH + 1 + `WORD_WIDTH + `REQS_BITS)),
-        .SIZE       (CRSQ_SIZE),
-        .OUTPUT_REG (1 == NUM_BANKS)
+        .DATAW   (NUM_PORTS * (CORE_TAG_WIDTH + 1 + `WORD_WIDTH + `REQS_BITS)),
+        .SIZE    (CRSQ_SIZE),
+        .OUT_REG (1 == NUM_BANKS)
     ) core_rsp_req (
         .clk       (clk),
         .reset     (reset),
