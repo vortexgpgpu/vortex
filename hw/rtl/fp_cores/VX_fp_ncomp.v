@@ -100,7 +100,7 @@ module VX_fp_ncomp #(
     VX_pipe_register #(
         .DATAW  (1 + TAGW + `INST_FPU_BITS + `INST_FRM_BITS + LANES * (2 * 32 + 1 + 1 + 8 + 23 + 2 * $bits(fp_class_t) + 1 + 1)),
         .RESETW (1),
-        .DEPTH  (1)
+        .DEPTH  (0)
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),

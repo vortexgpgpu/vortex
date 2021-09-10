@@ -42,7 +42,8 @@ module VX_instr_demux (
     wire [`INST_ALU_BITS-1:0] alu_op_type = `INST_ALU_BITS'(ibuffer_if.op_type);
     
     VX_skid_buffer #(
-        .DATAW (`NW_BITS + `NUM_THREADS + 32 + 32 + `INST_ALU_BITS + `INST_MOD_BITS + 32 + 1 + 1 + `NR_BITS + 1 + `NT_BITS + (2 * `NUM_THREADS * 32))
+        .DATAW   (`NW_BITS + `NUM_THREADS + 32 + 32 + `INST_ALU_BITS + `INST_MOD_BITS + 32 + 1 + 1 + `NR_BITS + 1 + `NT_BITS + (2 * `NUM_THREADS * 32)),
+        .OUT_REG (1)
     ) alu_buffer (
         .clk       (clk),
         .reset     (reset),
@@ -61,7 +62,8 @@ module VX_instr_demux (
     wire lsu_is_fence = `INST_LSU_IS_FENCE(ibuffer_if.op_mod);
 
     VX_skid_buffer #(
-        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `INST_LSU_BITS + 1 + 32 + `NR_BITS + 1 + (2 * `NUM_THREADS * 32))
+        .DATAW   (`NW_BITS + `NUM_THREADS + 32 + `INST_LSU_BITS + 1 + 32 + `NR_BITS + 1 + (2 * `NUM_THREADS * 32)),
+        .OUT_REG (1)
     ) lsu_buffer (
         .clk       (clk),
         .reset     (reset),
@@ -82,7 +84,8 @@ module VX_instr_demux (
     wire [31:0] csr_rs1_data = gpr_rsp_if.rs1_data[tid];
 
     VX_skid_buffer #(
-        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `INST_CSR_BITS + `CSR_ADDR_BITS + `NR_BITS + 1 + 1 + `NRI_BITS + 32)
+        .DATAW   (`NW_BITS + `NUM_THREADS + 32 + `INST_CSR_BITS + `CSR_ADDR_BITS + `NR_BITS + 1 + 1 + `NRI_BITS + 32),
+        .OUT_REG (1)
     ) csr_buffer (
         .clk       (clk),
         .reset     (reset),
@@ -101,7 +104,8 @@ module VX_instr_demux (
     wire [`INST_FPU_BITS-1:0] fpu_op_type = `INST_FPU_BITS'(ibuffer_if.op_type);
         
     VX_skid_buffer #(
-        .DATAW (`NW_BITS + `NUM_THREADS + 32 + `INST_FPU_BITS + `INST_MOD_BITS + `NR_BITS + 1 + (3 * `NUM_THREADS * 32))
+        .DATAW   (`NW_BITS + `NUM_THREADS + 32 + `INST_FPU_BITS + `INST_MOD_BITS + `NR_BITS + 1 + (3 * `NUM_THREADS * 32)),
+        .OUT_REG (1)
     ) fpu_buffer (
         .clk       (clk),
         .reset     (reset),
@@ -123,7 +127,8 @@ module VX_instr_demux (
     wire [31:0] gpu_rs2_data = gpr_rsp_if.rs2_data[tid];
 
     VX_skid_buffer #(
-        .DATAW (`NW_BITS + `NUM_THREADS + 32 + 32 + `INST_GPU_BITS + `NR_BITS + 1 +  + `NT_BITS + (`NUM_THREADS * 32 + 32))
+        .DATAW   (`NW_BITS + `NUM_THREADS + 32 + 32 + `INST_GPU_BITS + `NR_BITS + 1 +  + `NT_BITS + (`NUM_THREADS * 32 + 32)),
+        .OUT_REG (1)
     ) gpu_buffer (
         .clk       (clk),
         .reset     (reset),
