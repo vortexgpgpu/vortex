@@ -98,31 +98,13 @@ module VX_stream_arbiter #(
 
         if (LANES > 1) begin
             wire [NUM_REQS-1:0][(LANES * (1 + DATAW))-1:0] valid_data_in;
-
             for (genvar i = 0; i < NUM_REQS; i++) begin
                 assign valid_data_in[i] = {valid_in[i], data_in[i]};
             end
-
-            VX_mux #(
-                .DATAW (LANES * (1 + DATAW)),
-                .N     (NUM_REQS)
-            ) data_in_mux (
-                .data_in  (valid_data_in),
-                .sel_in   (sel_index),
-                .data_out ({valid_in_sel, data_in_sel})
-            );
-
+            assign {valid_in_sel, data_in_sel} = valid_data_in[sel_index];
             `UNUSED_VAR (sel_valid)
         end else begin
-            VX_mux #(
-                .DATAW (DATAW),
-                .N     (NUM_REQS)
-            ) data_in_mux (
-                .data_in  (data_in),
-                .sel_in   (sel_index),
-                .data_out (data_in_sel)
-            );
-            
+            assign data_in_sel  = data_in[sel_index];            
             assign valid_in_sel = sel_valid;
         end
 

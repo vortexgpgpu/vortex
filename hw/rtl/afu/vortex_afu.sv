@@ -880,7 +880,7 @@ assign cci_mem_req_tag   = cci_mem_req_rw ? cci_mem_wr_req_ctr : cci_mem_rd_req_
 
 assign cmd_run_done = !vx_busy;
 
-Vortex #() vortex (
+Vortex vortex (
   `SCOPE_BIND_afu_vortex
 
   .clk            (clk),
