@@ -314,9 +314,9 @@ module VX_cache #(
     `RESET_RELAY (mrsq_reset);
     
     VX_elastic_buffer #(
-        .DATAW      (MEM_TAG_IN_WIDTH + `CACHE_LINE_WIDTH), 
-        .SIZE       (MRSQ_SIZE),
-        .OUTPUT_REG (MRSQ_SIZE > 2)
+        .DATAW   (MEM_TAG_IN_WIDTH + `CACHE_LINE_WIDTH), 
+        .SIZE    (MRSQ_SIZE),
+        .OUT_REG (MRSQ_SIZE > 2)
     ) mem_rsp_queue (
         .clk        (clk),
         .reset      (mrsq_reset),

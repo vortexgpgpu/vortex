@@ -5,7 +5,7 @@ module VX_skid_buffer #(
     parameter DATAW          = 1,
     parameter PASSTHRU       = 0,
     parameter NOBACKPRESSURE = 0,
-    parameter OUTPUT_REG     = 0
+    parameter OUT_REG     = 0
 ) ( 
     input  wire             clk,
     input  wire             reset,
@@ -51,7 +51,7 @@ module VX_skid_buffer #(
     
     end else begin
 
-        if (OUTPUT_REG) begin
+        if (OUT_REG) begin
 
             reg [DATAW-1:0] data_out_r;
             reg [DATAW-1:0] buffer;

@@ -1,8 +1,14 @@
 #pragma once
 
 #include <verilated.h>
+
+#ifdef AXI_BUS
+#include "VVortex_axi.h"
+#include "VVortex_axi__Syms.h"
+#else
 #include "VVortex.h"
 #include "VVortex__Syms.h"
+#endif
 
 #ifdef VCD_OUTPUT
 #include <verilated_vcd_c.h>
@@ -58,8 +64,14 @@ private:
   std::unordered_map<int, std::stringstream> print_bufs_;
 
   void eval();  
-
-  void eval_mem_bus();  
+  
+#ifdef AXI_BUS
+  void reset_axi_bus();  
+  void eval_axi_bus(bool clk); 
+#else
+  void reset_mem_bus();  
+  void eval_mem_bus(bool clk);
+#endif
 
   int get_last_wb_value(int reg) const;  
   
@@ -73,7 +85,13 @@ private:
   bool mem_rsp_ready_;
 
   RAM *ram_;
+
+#ifdef AXI_BUS
+  VVortex_axi *vortex_;
+#else
   VVortex *vortex_;
+#endif
+
 #ifdef VCD_OUTPUT
   VerilatedVcdC *trace_;
 #endif

@@ -207,7 +207,7 @@ module VX_mem_unit # (
             .DATA_SIZE     (4),            
             .TAG_IN_WIDTH  (`DCORE_TAG_WIDTH),
             .TYPE          ("P"),
-            .BUFFERED_REQ  (1),
+            .BUFFERED_REQ  (2),
             .BUFFERED_RSP  (1)
         ) smem_arb (
             .clk          (clk),
@@ -319,7 +319,7 @@ module VX_mem_unit # (
         .TYPE          ("R"),
         .TAG_SEL_IDX   (1), // Skip 0 for NC flag
         .BUFFERED_REQ  (1),
-        .BUFFERED_RSP  (1)
+        .BUFFERED_RSP  (2)
     ) mem_arb (
         .clk            (clk),
         .reset          (mem_arb_reset),

@@ -5,7 +5,7 @@ module VX_sp_ram #(
     parameter DATAW       = 1,
     parameter SIZE        = 1,
     parameter BYTEENW     = 1,
-    parameter OUTPUT_REG  = 0,
+    parameter OUT_REG  = 0,
     parameter NO_RWCHECK  = 0,
     parameter ADDRW       = $clog2(SIZE),
     parameter LUTRAM      = 0,
@@ -34,7 +34,7 @@ module VX_sp_ram #(
 
 `ifdef SYNTHESIS
     if (LUTRAM) begin
-        if (OUTPUT_REG) begin        
+        if (OUT_REG) begin        
             reg [DATAW-1:0] rdata_r;
 
             if (BYTEENW > 1) begin
@@ -90,7 +90,7 @@ module VX_sp_ram #(
             end         
         end
     end else begin
-        if (OUTPUT_REG) begin
+        if (OUT_REG) begin
             reg [DATAW-1:0] rdata_r;
 
             if (BYTEENW > 1) begin
@@ -173,7 +173,7 @@ module VX_sp_ram #(
         end
     end
 `else
-    if (OUTPUT_REG) begin
+    if (OUT_REG) begin
         reg [DATAW-1:0] rdata_r;
         if (BYTEENW > 1) begin
             reg [BYTEENW-1:0][7:0] ram [SIZE-1:0];
