@@ -10,29 +10,40 @@ module Vortex_axi #(
     input  wire                         clk,
     input  wire                         reset,
 
-     // AXI write request
-    output wire                         m_axi_wvalid,
+    // AXI write address channel    
     output wire                         m_axi_awvalid,
     output wire [AXI_TID_WIDTH-1:0]     m_axi_awid,
     output wire [AXI_ADDR_WIDTH-1:0]    m_axi_awaddr,
     output wire [7:0]                   m_axi_awlen,
     output wire [2:0]                   m_axi_awsize,
-    output wire [1:0]                   m_axi_awburst,    
+    output wire [1:0]                   m_axi_awburst,  
+    output wire                         m_axi_awlock,    
+    output wire [3:0]                   m_axi_awcache,
+    output wire [2:0]                   m_axi_awprot,        
+    output wire [3:0]                   m_axi_awqos,  
+    input wire                          m_axi_awready,
+
+    // AXI write data channel    
+    output wire                         m_axi_wvalid,    
     output wire [AXI_DATA_WIDTH-1:0]    m_axi_wdata,
     output wire [AXI_STROBE_WIDTH-1:0]  m_axi_wstrb,    
+    output wire                         m_axi_wlast,    
     input wire                          m_axi_wready,
-    input wire                          m_axi_awready,
     
-    // AXI read request
+    // AXI read address channel
     output wire                         m_axi_arvalid,
     output wire [AXI_TID_WIDTH-1:0]     m_axi_arid,
     output wire [AXI_ADDR_WIDTH-1:0]    m_axi_araddr,
     output wire [7:0]                   m_axi_arlen,
     output wire [2:0]                   m_axi_arsize,
-    output wire [1:0]                   m_axi_arburst,    
+    output wire [1:0]                   m_axi_arburst,            
+    output wire                         m_axi_arlock,    
+    output wire [3:0]                   m_axi_arcache,
+    output wire [2:0]                   m_axi_arprot,        
+    output wire [3:0]                   m_axi_arqos, 
     input wire                          m_axi_arready,
     
-    // AXI read response
+    // AXI read data channel
     input wire                          m_axi_rvalid,
     input wire [AXI_TID_WIDTH-1:0]      m_axi_rid,
     input wire [AXI_DATA_WIDTH-1:0]     m_axi_rdata,  
@@ -62,6 +73,9 @@ module Vortex_axi #(
         .AXI_ADDR_WIDTH (AXI_ADDR_WIDTH),
         .AXI_TID_WIDTH  (AXI_TID_WIDTH)
     ) axi_adapter (
+        .clk            (clk),
+        .reset          (reset),
+
         .mem_req_valid  (mem_req_valid),
         .mem_req_rw     (mem_req_rw),
         .mem_req_byteen (mem_req_byteen),
@@ -75,24 +89,34 @@ module Vortex_axi #(
         .mem_rsp_tag    (mem_rsp_tag),
         .mem_rsp_ready  (mem_rsp_ready),
         
-        .m_axi_wvalid   (m_axi_wvalid),
         .m_axi_awvalid  (m_axi_awvalid),
         .m_axi_awid     (m_axi_awid),
         .m_axi_awaddr   (m_axi_awaddr),
         .m_axi_awlen    (m_axi_awlen),
         .m_axi_awsize   (m_axi_awsize),
-        .m_axi_awburst  (m_axi_awburst),
+        .m_axi_awburst  (m_axi_awburst),  
+        .m_axi_awlock   (m_axi_awlock),    
+        .m_axi_awcache  (m_axi_awcache),
+        .m_axi_awprot   (m_axi_awprot),        
+        .m_axi_awqos    (m_axi_awqos),  
+        .m_axi_awready  (m_axi_awready),
+
+        .m_axi_wvalid   (m_axi_wvalid),
         .m_axi_wdata    (m_axi_wdata),
         .m_axi_wstrb    (m_axi_wstrb),
+        .m_axi_wlast    (m_axi_wlast),
         .m_axi_wready   (m_axi_wready),
-        .m_axi_awready  (m_axi_awready),
         
         .m_axi_arvalid  (m_axi_arvalid),
         .m_axi_arid     (m_axi_arid),
         .m_axi_araddr   (m_axi_araddr),
         .m_axi_arlen    (m_axi_arlen),
         .m_axi_arsize   (m_axi_arsize),
-        .m_axi_arburst  (m_axi_arburst),
+        .m_axi_arburst  (m_axi_arburst), 
+        .m_axi_arlock   (m_axi_arlock),    
+        .m_axi_arcache  (m_axi_arcache),
+        .m_axi_arprot   (m_axi_arprot),        
+        .m_axi_arqos    (m_axi_arqos),
         .m_axi_arready  (m_axi_arready),
         
         .m_axi_rvalid   (m_axi_rvalid),
