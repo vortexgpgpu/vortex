@@ -520,8 +520,8 @@ VX_mem_arb #(
   .ADDR_WIDTH     (LMEM_ADDR_WIDTH),
   .TAG_IN_WIDTH   (AVS_REQ_TAGW),
   .TYPE           ("P"),
-  .BUFFERED_REQ   (1),
-  .BUFFERED_RSP   (1)
+  .BUFFERED_REQ   (2),
+  .BUFFERED_RSP   (2)
 ) mem_arb (
   .clk            (clk),
   .reset          (mem_arb_reset),
