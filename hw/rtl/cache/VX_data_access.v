@@ -44,7 +44,7 @@ module VX_data_access #(
     // writing
     input wire                          writeen,
     input wire                          is_fill,
-    input wire [WORD_SIZE-1:0]          byteen,
+    input wire [NUM_PORTS-1:0][WORD_SIZE-1:0] byteen,
     input wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] write_data,
     input wire [`CACHE_LINE_WIDTH-1:0]  fill_data
 );
@@ -123,7 +123,7 @@ module VX_data_access #(
 
     if (`WORDS_PER_LINE > 1) begin
         for (genvar i = 0; i < NUM_PORTS; ++i) begin
-            assign read_data = rdata[wsel[i] * `WORD_WIDTH +: `WORD_WIDTH];
+            assign read_data[i] = rdata[wsel[i] * `WORD_WIDTH +: `WORD_WIDTH];
         end
     end else begin
         assign read_data = rdata;
