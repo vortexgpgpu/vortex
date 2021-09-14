@@ -76,7 +76,6 @@ module VX_index_buffer #(
         .wren  (acquire_slot),
         .waddr (write_addr_r),
         .wdata (write_data),
-        .rden  (1'b1),
         .raddr (read_addr),
         .rdata (read_data)
     );       

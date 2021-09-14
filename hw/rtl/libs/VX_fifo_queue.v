@@ -2,14 +2,14 @@
 
 `TRACING_OFF
 module VX_fifo_queue #(
-    parameter DATAW      = 1,
-    parameter SIZE       = 2,
-    parameter ALM_FULL   = (SIZE - 1),
-    parameter ALM_EMPTY  = 1,
-    parameter ADDRW      = $clog2(SIZE),
-    parameter SIZEW      = $clog2(SIZE+1),
-    parameter OUT_REG = 0,
-    parameter LUTRAM     = 1
+    parameter DATAW     = 1,
+    parameter SIZE      = 2,
+    parameter ALM_FULL  = (SIZE - 1),
+    parameter ALM_EMPTY = 1,
+    parameter ADDRW     = $clog2(SIZE),
+    parameter SIZEW     = $clog2(SIZE+1),
+    parameter OUT_REG   = 0,
+    parameter LUTRAM    = 1
 ) ( 
     input  wire             clk,
     input  wire             reset,    
@@ -163,7 +163,6 @@ module VX_fifo_queue #(
                     .wren  (push),
                     .waddr (wr_ptr_r),
                     .wdata (data_in),
-                    .rden  (1'b1),
                     .raddr (rd_ptr_r),
                     .rdata (data_out)
                 );
@@ -206,7 +205,6 @@ module VX_fifo_queue #(
                     .wren  (push),
                     .waddr (wr_ptr_r),
                     .wdata (data_in),
-                    .rden  (1'b1),
                     .raddr (rd_ptr_n_r),
                     .rdata (dout)
                 ); 

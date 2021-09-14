@@ -181,7 +181,6 @@ module VX_shared_mem #(
             .addr  (addr),
             .wren  (wren),
             .wdata (per_bank_core_req_data[i]),
-            .rden  (1'b1),
             .rdata (per_bank_core_rsp_data[i])
         );
     end  
