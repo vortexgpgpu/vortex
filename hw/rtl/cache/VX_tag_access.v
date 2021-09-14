@@ -25,12 +25,12 @@ module VX_tag_access #(
 `endif
 
     input wire                          stall,
-    
+
     // read/fill
     input wire                          lookup,
-    input wire[`LINE_ADDR_WIDTH-1:0]    addr,   
+    input wire[`LINE_ADDR_WIDTH-1:0]    addr,
     input wire                          fill,    
-    input wire                          is_flush,
+    input wire                          flush,
     output wire                         tag_match
 );
 
@@ -39,11 +39,11 @@ module VX_tag_access #(
     `UNUSED_VAR (reset)
     `UNUSED_VAR (lookup)
 
-    wire                        read_valid;
     wire [`TAG_SELECT_BITS-1:0] read_tag;
+    wire read_valid;
     
+    wire [`LINE_SELECT_BITS-1:0] line_addr = addr[`LINE_SELECT_BITS-1:0];
     wire [`TAG_SELECT_BITS-1:0] line_tag = `LINE_TAG_ADDR(addr);
-    wire [`LINE_SELECT_BITS-1:0] line_addr = addr [`LINE_SELECT_BITS-1:0];
 
     VX_sp_ram #(
         .DATAW      (`TAG_SELECT_BITS + 1),
@@ -52,8 +52,8 @@ module VX_tag_access #(
     ) tag_store (
         .clk(  clk),                 
         .addr  (line_addr),   
-        .wren  (fill),
-        .wdata ({!is_flush, line_tag}),
+        .wren  (fill || flush),
+        .wdata ({!flush, line_tag}),
         .rdata ({read_valid, read_tag})
     );
 
@@ -62,20 +62,19 @@ module VX_tag_access #(
     `UNUSED_VAR (stall)
     
 `ifdef DBG_PRINT_CACHE_TAG
-    always @(posedge clk) begin          
+    always @(posedge clk) begin
         if (fill && ~stall) begin
-            if (is_flush) begin
-                dpi_trace("%d: cache%0d:%0d tag-flush: addr=%0h, blk_addr=%0d\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr);
-            end else begin
-                dpi_trace("%d: cache%0d:%0d tag-fill: addr=%0h, blk_addr=%0d, tag_id=%0h, old_tag_id=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, line_tag, read_tag);
-            end
+            dpi_trace("%d: cache%0d:%0d tag-fill: addr=%0h, blk_addr=%0d, tag_id=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, line_tag);
+        end
+        if (flush) begin
+            dpi_trace("%d: cache%0d:%0d tag-flush: addr=%0h, blk_addr=%0d\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr);
         end
         if (lookup && ~stall) begin                
             if (tag_match) begin
                 dpi_trace("%d: cache%0d:%0d tag-hit: addr=%0h, wid=%0d, PC=%0h, blk_addr=%0d, tag_id=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), debug_wid, debug_pc, line_addr, line_tag);                
             end else begin
                 dpi_trace("%d: cache%0d:%0d tag-miss: addr=%0h, wid=%0d, PC=%0h, blk_addr=%0d, tag_id=%0h, old_tag_id=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), debug_wid, debug_pc, line_addr, line_tag, read_tag);
-            end  
+            end
         end          
     end    
 `endif

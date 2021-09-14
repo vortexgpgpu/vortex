@@ -173,9 +173,10 @@ module VX_shared_mem #(
         wire [`LINE_SELECT_BITS-1:0] addr = per_bank_core_req_addr[i][`LINE_SELECT_BITS-1:0];
 
         VX_sp_ram #(
-            .DATAW   (`WORD_WIDTH),
-            .SIZE    (`LINES_PER_BANK),
-            .BYTEENW (WORD_SIZE)
+            .DATAW      (`WORD_WIDTH),
+            .SIZE       (`LINES_PER_BANK),
+            .BYTEENW    (WORD_SIZE),
+            .NO_RWCHECK (1)
         ) data_store (
             .clk   (clk),
             .addr  (addr),

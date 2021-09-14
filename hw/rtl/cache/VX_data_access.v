@@ -30,81 +30,70 @@ module VX_data_access #(
 
     input wire                          stall,
 
-`IGNORE_UNUSED_BEGIN
+    input wire                          read,
+    input wire                          fill, 
+    input wire                          write,
     input wire[`LINE_ADDR_WIDTH-1:0]    addr,
-`IGNORE_UNUSED_END
-
     input wire [NUM_PORTS-1:0][WORD_SELECT_BITS-1:0] wsel,
     input wire [NUM_PORTS-1:0]          pmask,
-
-    // reading
-    input wire                          readen,
-    output wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] read_data,
-
-    // writing
-    input wire                          writeen,
-    input wire                          is_fill,
     input wire [NUM_PORTS-1:0][WORD_SIZE-1:0] byteen,
+    input wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] fill_data,
     input wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] write_data,
-    input wire [`CACHE_LINE_WIDTH-1:0]  fill_data
+    output wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] read_data
 );
-
     `UNUSED_PARAM (CACHE_ID)
     `UNUSED_PARAM (BANK_ID)
     `UNUSED_PARAM (WORD_SIZE)
     `UNUSED_VAR (reset)
-    `UNUSED_VAR (readen)
+    `UNUSED_VAR (addr)
+    `UNUSED_VAR (read)
 
     localparam BYTEENW = WRITE_ENABLE ? CACHE_LINE_SIZE : 1;
 
-    wire [`CACHE_LINE_WIDTH-1:0] rdata;
-    wire [`CACHE_LINE_WIDTH-1:0] wdata;
+    wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] rdata;
+    wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] wdata;
     wire [BYTEENW-1:0] wren;
 
-    wire [`LINE_SELECT_BITS-1:0]  line_addr = addr[`LINE_SELECT_BITS-1:0];
+    wire [`LINE_SELECT_BITS-1:0] line_addr = addr[`LINE_SELECT_BITS-1:0];
 
     if (WRITE_ENABLE) begin
-        wire [`CACHE_LINE_WIDTH-1:0] line_wdata;
-        wire [CACHE_LINE_SIZE-1:0] line_byteen;
         if (`WORDS_PER_LINE > 1) begin
-            reg [`CACHE_LINE_WIDTH-1:0] line_wdata_r;
-            reg [CACHE_LINE_SIZE-1:0] line_byteen_r;
+            reg [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] wdata_r;
+            reg [`WORDS_PER_LINE-1:0][WORD_SIZE-1:0] wren_r;
             if (NUM_PORTS > 1) begin
                 always @(*) begin
-                    line_wdata_r  = 'x;
-                    line_byteen_r = 0;
+                    wdata_r = 'x;
+                    wren_r  = 0;
                     for (integer i = 0; i < NUM_PORTS; ++i) begin
                         if (pmask[i]) begin
-                            line_wdata_r[wsel[i] * `WORD_WIDTH +: `WORD_WIDTH] = write_data[i];
-                            line_byteen_r[wsel[i] * WORD_SIZE +: WORD_SIZE] = byteen[i];
+                            wdata_r[wsel[i]] = write_data[i];
+                            wren_r[wsel[i]] = byteen[i];
                         end
                     end
                 end
             end else begin
                 `UNUSED_VAR (pmask)
                 always @(*) begin                
-                    line_wdata_r = {`WORDS_PER_LINE{write_data}};
-                    line_byteen_r = 0;
-                    line_byteen_r[wsel * WORD_SIZE +: WORD_SIZE] = byteen;
+                    wdata_r = {`WORDS_PER_LINE{write_data}};
+                    wren_r  = 0;
+                    wren_r[wsel] = byteen;
                 end
             end
-            assign line_wdata  = line_wdata_r;
-            assign line_byteen = line_byteen_r;
+            assign wdata = write ? wdata_r : fill_data;
+            assign wren  = write ? wren_r : {BYTEENW{fill}};
         end else begin
             `UNUSED_VAR (wsel)
             `UNUSED_VAR (pmask)
-            assign line_wdata  = write_data;
-            assign line_byteen = byteen;
+            assign wdata = write ? write_data : fill_data;
+            assign wren  = write ? byteen : {BYTEENW{fill}};
         end
-        assign wren  = is_fill ? {BYTEENW{writeen}} : ({BYTEENW{writeen}} & line_byteen);
-        assign wdata = is_fill ? fill_data : line_wdata;
-    end else begin        
-        `UNUSED_VAR (is_fill)
+    end else begin
+        `UNUSED_VAR (write)
         `UNUSED_VAR (byteen)
         `UNUSED_VAR (pmask)
         `UNUSED_VAR (write_data)
-        assign wren  = writeen;
         assign wdata = fill_data;
+        assign wren  = fill;
     end
 
     VX_sp_ram #(
@@ -122,7 +111,7 @@ module VX_data_access #(
 
     if (`WORDS_PER_LINE > 1) begin
         for (genvar i = 0; i < NUM_PORTS; ++i) begin
-            assign read_data[i] = rdata[wsel[i] * `WORD_WIDTH +: `WORD_WIDTH];
+            assign read_data[i] = rdata[wsel[i]];
         end
     end else begin
         assign read_data = rdata;
@@ -132,16 +121,15 @@ module VX_data_access #(
 
 `ifdef DBG_PRINT_CACHE_DATA
     always @(posedge clk) begin 
-        if (writeen && ~stall) begin
-            if (is_fill) begin
-                dpi_trace("%d: cache%0d:%0d data-fill: addr=%0h, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, fill_data);
-            end else begin
-                dpi_trace("%d: cache%0d:%0d data-write: addr=%0h, wid=%0d, PC=%0h, byteen=%b, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), debug_wid, debug_pc, wren, line_addr, write_data);
-            end
-        end 
-        if (readen && ~stall) begin
+        if (fill && ~stall) begin
+            dpi_trace("%d: cache%0d:%0d data-fill: addr=%0h, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, fill_data);
+        end
+        if (read && ~stall) begin
             dpi_trace("%d: cache%0d:%0d data-read: addr=%0h, wid=%0d, PC=%0h, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), debug_wid, debug_pc, line_addr, read_data);
-        end            
+        end 
+        if (write && ~stall) begin
+            dpi_trace("%d: cache%0d:%0d data-write: addr=%0h, wid=%0d, PC=%0h, byteen=%b, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), debug_wid, debug_pc, byteen, line_addr, write_data);
+        end      
     end    
 `endif
 
