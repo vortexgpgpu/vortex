@@ -43,7 +43,6 @@ module VX_gpr_stage #(
             .wren  (wren[i]),
             .waddr (waddr),
             .wdata (writeback_if.data[i]),
-            .rden  (1'b1),
             .raddr (raddr1),
             .rdata (gpr_rsp_if.rs1_data[i])
         );
@@ -58,7 +57,6 @@ module VX_gpr_stage #(
             .wren  (wren[i]),
             .waddr (waddr),
             .wdata (writeback_if.data[i]),
-            .rden  (1'b1),
             .raddr (raddr2),
             .rdata (gpr_rsp_if.rs2_data[i])
         );
@@ -79,7 +77,6 @@ module VX_gpr_stage #(
             .wren  (wren[i]),
             .waddr (waddr),
             .wdata (writeback_if.data[i]),
-            .rden  (1'b1),
             .raddr (raddr3),
             .rdata (gpr_rsp_if.rs3_data[i])
         );
