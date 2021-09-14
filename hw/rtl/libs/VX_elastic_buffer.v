@@ -2,10 +2,10 @@
 
 `TRACING_OFF
 module VX_elastic_buffer #(
-    parameter DATAW      = 1,
-    parameter SIZE       = 2,
+    parameter DATAW   = 1,
+    parameter SIZE    = 2,
     parameter OUT_REG = 0,
-    parameter LUTRAM     = 0
+    parameter LUTRAM  = 0
 ) ( 
     input  wire             clk,
     input  wire             reset,

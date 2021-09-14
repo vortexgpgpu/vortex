@@ -117,7 +117,6 @@ module VX_data_access #(
         .addr  (line_addr),
         .wren  (wren),
         .wdata (wdata),
-        .rden  (1'b1),
         .rdata (rdata)
     );
 
