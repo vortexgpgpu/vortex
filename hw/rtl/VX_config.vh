@@ -38,7 +38,7 @@
 `endif
 
 `ifndef L1_BLOCK_SIZE
-`define L1_BLOCK_SIZE ((`L2_ENABLE || `L3_ENABLE) ? (`NUM_THREADS * 4) : `MEM_BLOCK_SIZE)
+`define L1_BLOCK_SIZE ((`L2_ENABLE || `L3_ENABLE) ? 16 : `MEM_BLOCK_SIZE)
 `endif
 
 `ifndef STARTUP_ADDR
