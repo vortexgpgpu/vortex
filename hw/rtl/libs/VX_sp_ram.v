@@ -5,10 +5,10 @@ module VX_sp_ram #(
     parameter DATAW       = 1,
     parameter SIZE        = 1,
     parameter BYTEENW     = 1,
-    parameter OUT_REG  = 0,
+    parameter OUT_REG     = 0,
     parameter NO_RWCHECK  = 0,
-    parameter ADDRW       = $clog2(SIZE),
     parameter LUTRAM      = 0,
+    parameter ADDRW       = $clog2(SIZE),
     parameter INIT_ENABLE = 0,
     parameter INIT_FILE   = "",
     parameter [DATAW-1:0] INIT_VALUE = 0
@@ -16,8 +16,7 @@ module VX_sp_ram #(
     input wire               clk,
     input wire [ADDRW-1:0]   addr,
     input wire [BYTEENW-1:0] wren,
-    input wire [DATAW-1:0]   wdata,    
-    input wire               rden,    
+    input wire [DATAW-1:0]   wdata,
     output wire [DATAW-1:0]  rdata
 );
 
@@ -47,8 +46,7 @@ module VX_sp_ram #(
                         if (wren[i])
                             ram[addr][i] <= wdata[i * 8 +: 8];
                     end
-                    if (rden)
-                        rdata_r <= ram[addr];
+                    rdata_r <= ram[addr];
                 end
             end else begin
                 `USE_FAST_BRAM reg [DATAW-1:0] ram [SIZE-1:0];
@@ -58,13 +56,11 @@ module VX_sp_ram #(
                 always @(posedge clk) begin
                     if (wren)
                         ram[addr] <= wdata;
-                    if (rden)
-                        rdata_r <= ram[addr];
+                    rdata_r <= ram[addr];
                 end
             end
             assign rdata = rdata_r;
         end else begin
-            `UNUSED_VAR (rden)
             if (BYTEENW > 1) begin
                 `USE_FAST_BRAM reg [BYTEENW-1:0][7:0] ram [SIZE-1:0];
 
@@ -103,8 +99,7 @@ module VX_sp_ram #(
                         if (wren[i])
                             ram[addr][i] <= wdata[i * 8 +: 8];
                     end
-                    if (rden)
-                        rdata_r <= ram[addr];
+                    rdata_r <= ram[addr];
                 end
             end else begin
                 reg [DATAW-1:0] ram [SIZE-1:0];
@@ -114,13 +109,11 @@ module VX_sp_ram #(
                 always @(posedge clk) begin
                     if (wren)
                         ram[addr] <= wdata;
-                    if (rden)
-                        rdata_r <= ram[addr];
+                    rdata_r <= ram[addr];
                 end
             end
             assign rdata = rdata_r;
         end else begin
-            `UNUSED_VAR (rden)
             if (NO_RWCHECK) begin
                 if (BYTEENW > 1) begin
                     `NO_RW_RAM_CHECK reg [BYTEENW-1:0][7:0] ram [SIZE-1:0];
@@ -185,8 +178,7 @@ module VX_sp_ram #(
                     if (wren[i])
                         ram[addr][i] <= wdata[i * 8 +: 8];
                 end
-                if (rden)
-                    rdata_r <= ram[addr];
+                rdata_r <= ram[addr];
             end
         end else begin
             reg [DATAW-1:0] ram [SIZE-1:0];
@@ -196,13 +188,11 @@ module VX_sp_ram #(
             always @(posedge clk) begin
                 if (wren)
                     ram[addr] <= wdata;
-                if (rden)
-                    rdata_r <= ram[addr];
+                rdata_r <= ram[addr];
             end
         end
         assign rdata = rdata_r;
     end else begin
-        `UNUSED_VAR (rden)
         if (BYTEENW > 1) begin
             reg [BYTEENW-1:0][7:0] ram [SIZE-1:0];
             reg [DATAW-1:0] prev_data;

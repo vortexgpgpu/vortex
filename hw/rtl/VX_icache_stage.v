@@ -41,7 +41,6 @@ module VX_icache_stage #(
         .wren  (icache_req_fire),
         .waddr (req_tag),
         .wdata ({ifetch_req_if.PC, ifetch_req_if.tmask}),
-        .rden  (1'b1),
         .raddr (rsp_tag),
         .rdata ({rsp_PC, rsp_tmask})
     );

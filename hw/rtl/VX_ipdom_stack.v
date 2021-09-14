@@ -46,7 +46,6 @@ module VX_ipdom_stack #(
         .wren  (push),
         .waddr (wr_ptr),
         .wdata ({q2, q1}),
-        .rden  (1'b1),
         .raddr (rd_ptr),
         .rdata ({d2, d1})
     );
