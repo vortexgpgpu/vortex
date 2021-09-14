@@ -324,8 +324,8 @@ module VX_bank #(
         .reset      (reset),
 
     `ifdef DBG_CACHE_REQ_INFO
-        .debug_pc_st1  (debug_pc_st1),
-        .debug_wid_st1 (debug_wid_st1),
+        .debug_pc   (debug_pc_st1),
+        .debug_wid  (debug_wid_st1),
     `endif
         .stall      (crsq_stall),
 
