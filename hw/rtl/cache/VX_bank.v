@@ -221,7 +221,7 @@ module VX_bank #(
         .data_in  ({
             flush_fire || mshr_fire || mem_rsp_fire || creq_fire,
             flush_enable,
-            mshr_valid,
+            mshr_enable,
             mrsq_enable,
             creq_enable && ~creq_rw,
             creq_enable && creq_rw,
@@ -278,7 +278,7 @@ module VX_bank #(
     );
 
     // we have a core request hit
-    wire miss_st0 = (is_read_st0 || is_write_st0) && ~tag_match_st0;
+    assign miss_st0 = (is_read_st0 || is_write_st0) && ~tag_match_st0;
 
     wire [MSHR_ADDR_WIDTH-1:0] mshr_id_a_st0 = (is_read_st0 || is_write_st0) ? mshr_alloc_id : mshr_id_st0;
 
