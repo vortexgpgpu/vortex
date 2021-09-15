@@ -180,39 +180,35 @@ module VX_fp_cvt #(
     wire [LANES-1:0][INT_EXP_WIDTH-1:0] final_exp_s1;
     wire [LANES-1:0]                    of_before_round_s1;
 
-    for (genvar i = 0; i < LANES; ++i) begin            
-        wire [INT_EXP_WIDTH-1:0] destination_exp;   // re-biased exponent for destination
+    for (genvar i = 0; i < LANES; ++i) begin
         reg [2*INT_MAN_WIDTH:0] preshift_mant;      // mantissa before final shift                
         reg [SHAMT_BITS-1:0]    denorm_shamt;       // shift amount for denormalization
         reg [INT_EXP_WIDTH-1:0] final_exp;          // after eventual adjustments
         reg                     of_before_round;
 
-        // Rebias the exponent
-        assign destination_exp = input_exp_s1[i] + EXP_BIAS;
-        
         always @(*) begin           
         `IGNORE_WARNINGS_BEGIN     
             // Default assignment
-            final_exp       = destination_exp; // take exponent as is, only look at lower bits
-            preshift_mant   = {input_mant_s1[i], 33'b0}; // Place mantissa to the left of the shifter
+            final_exp       = input_exp_s1[i] + EXP_BIAS; // take exponent as is, only look at lower bits
+            preshift_mant   = {input_mant_s1[i], 33'b0};  // Place mantissa to the left of the shifter
             denorm_shamt    = 0;      // right of mantissa
             of_before_round = 1'b0;
 
             // Handle INT casts
             if (is_itof_s1) begin                   
-                if ($signed(destination_exp) >= $signed(2**EXP_BITS-1)) begin
+                if ($signed(input_exp_s1[i]) >= $signed(2**EXP_BITS-1-EXP_BIAS)) begin
                     // Overflow or infinities (for proper rounding)
                     final_exp     = (2**EXP_BITS-2); // largest normal value
                     preshift_mant = ~0;  // largest normal value and RS bits set
                     of_before_round = 1'b1;
-                end else if ($signed(destination_exp) < $signed(-MAN_BITS)) begin
+                end else if ($signed(input_exp_s1[i]) < $signed(-MAN_BITS-EXP_BIAS)) begin
                     // Limit the shift to retain sticky bits
                     final_exp     = 0; // denormal result
-                    denorm_shamt  = denorm_shamt + (2 + MAN_BITS); // to sticky                
-                end else if ($signed(destination_exp) < $signed(1)) begin
+                    denorm_shamt  = (2 + MAN_BITS); // to sticky                
+                end else if ($signed(input_exp_s1[i]) < $signed(1-EXP_BIAS)) begin
                     // Denormalize underflowing values
                     final_exp     = 0; // denormal result
-                    denorm_shamt  = denorm_shamt + 1 - destination_exp; // adjust right shifting               
+                    denorm_shamt  = (1-EXP_BIAS) - input_exp_s1[i]; // adjust right shifting               
                 end
             end else begin                                
                 if ($signed(input_exp_s1[i]) >= $signed((MAX_INT_WIDTH-1) + unsigned_s1)) begin
@@ -221,7 +217,7 @@ module VX_fp_cvt #(
                     of_before_round = 1'b1;                
                 end else if ($signed(input_exp_s1[i]) < $signed(-1)) begin
                     // underflow
-                    denorm_shamt = MAX_INT_WIDTH + 1; // all bits go to the sticky
+                    denorm_shamt = MAX_INT_WIDTH+1; // all bits go to the sticky
                 end else begin
                     // By default right shift mantissa to be an integer
                     denorm_shamt = (MAX_INT_WIDTH-1) - input_exp_s1[i];

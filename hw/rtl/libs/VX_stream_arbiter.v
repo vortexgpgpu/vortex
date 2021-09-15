@@ -25,6 +25,7 @@ module VX_stream_arbiter #(
         wire                    sel_valid;
         wire                    sel_ready;
         wire [LOG_NUM_REQS-1:0] sel_index;
+        wire [NUM_REQS-1:0]     sel_onehot;
 
         wire [NUM_REQS-1:0] valid_in_any;
         wire [LANES-1:0] ready_in_sel;
@@ -42,13 +43,17 @@ module VX_stream_arbiter #(
         end
 
         if (TYPE == "P") begin
-            `UNUSED_VAR (sel_ready)
-            VX_lzc #(
-                .N (NUM_REQS)
+            VX_fixed_arbiter #(
+                .NUM_REQS    (NUM_REQS),
+                .LOCK_ENABLE (LOCK_ENABLE)
             ) sel_arb (
-                .in_i    (valid_in_any),                
-                .cnt_o   (sel_index),
-                .valid_o (sel_valid)
+                .clk          (clk),
+                .reset        (reset),
+                .requests     (valid_in_any),  
+                .enable       (sel_ready),
+                .grant_valid  (sel_valid),
+				.grant_index  (sel_index),
+                .grant_onehot (sel_onehot)
             );
         end else if (TYPE == "R") begin
             VX_rr_arbiter #(
@@ -61,7 +66,7 @@ module VX_stream_arbiter #(
                 .enable       (sel_ready),
                 .grant_valid  (sel_valid),
 				.grant_index  (sel_index),
-                `UNUSED_PIN (grant_onehot)
+                .grant_onehot (sel_onehot)
             );
         end else if (TYPE == "F") begin
             VX_fair_arbiter #(
@@ -74,7 +79,7 @@ module VX_stream_arbiter #(
                 .enable       (sel_ready),     
                 .grant_valid  (sel_valid),
 				.grant_index  (sel_index),
-                `UNUSED_PIN (grant_onehot)
+                .grant_onehot (sel_onehot)
             );
         end else if (TYPE == "M") begin
             VX_matrix_arbiter #(
@@ -87,7 +92,7 @@ module VX_stream_arbiter #(
                 .enable       (sel_ready),     
                 .grant_valid  (sel_valid),
 				.grant_index  (sel_index),
-                `UNUSED_PIN (grant_onehot)
+                .grant_onehot (sel_onehot)
             );
         end else begin
             $error ("invalid parameter");
@@ -109,7 +114,7 @@ module VX_stream_arbiter #(
         end
 
         for (genvar i = 0; i < NUM_REQS; i++) begin
-            assign ready_in[i] = ready_in_sel & {LANES{(sel_index == LOG_NUM_REQS'(i))}};
+            assign ready_in[i] = ready_in_sel & {LANES{sel_onehot[i]}};
         end
 
         for (genvar i = 0; i < LANES; ++i) begin

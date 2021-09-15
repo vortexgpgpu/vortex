@@ -46,16 +46,16 @@ module VX_priority_encoder #(
             .data_out (scan_lo)
         );
 
+        VX_lzc #(
+            .N (N)
+        ) lzc (
+            .in_i  (reversed),            
+            .cnt_o (index),
+            `UNUSED_PIN (valid_o)
+        );
+
         assign onehot    = scan_lo & {(~scan_lo[N-2:0]), 1'b1};
         assign valid_out = scan_lo[N-1];
-
-        VX_onehot_encoder #(
-            .N (N)
-        ) onehot_encoder (
-            .data_in  (onehot),
-            .data_out (index),   
-            `UNUSED_PIN (valid_out)
-        );
 
     end else if (MODEL == 2) begin
 
@@ -66,29 +66,25 @@ module VX_priority_encoder #(
         assign higher_pri_regs[0]     = 1'b0;
         assign onehot[N-1:0] = reversed[N-1:0] & ~higher_pri_regs[N-1:0];
 
-        VX_onehot_encoder #(
+        VX_lzc #(
             .N (N)
-        ) onehot_encoder (
-            .data_in  (onehot),
-            .data_out (index),        
-            `UNUSED_PIN (valid_out)
+        ) lzc (
+            .in_i    (reversed),            
+            .cnt_o   (index),
+            .valid_o (valid_out)
         );
-        
-        assign valid_out = (| reversed);
 
     end else if (MODEL == 3) begin
 
         assign onehot = reversed & ~(reversed-1);
 
-        VX_onehot_encoder #(
+        VX_lzc #(
             .N (N)
-        ) onehot_encoder (
-            .data_in  (onehot),
-            .data_out (index),        
-            `UNUSED_PIN (valid_out)
+        ) lzc (
+            .in_i    (reversed),           
+            .cnt_o   (index),
+            .valid_o (valid_out)
         );
-
-        assign valid_out = (| reversed);
 
     end else begin
 
