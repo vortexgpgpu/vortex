@@ -8,7 +8,11 @@ Vortex is a full-system RISCV-based GPGPU processor.
 ## Specifications
 
 - Support RISC-V RV32IMF ISA
-- Scalability: 1 to 32 cores with optional L2 and L3 caches
+- Performance: 
+    - 1024 total threads running at 250 MHz
+    - 128 Gflops of compute bandwidth
+    - 16 GB/s of memory bandwidth
+- Scalability: up to 64 cores with optional L2 and L3 caches
 - Software: OpenCL 1.2 Support 
 - Supported FPGAs: 
     - Intel Arria 10

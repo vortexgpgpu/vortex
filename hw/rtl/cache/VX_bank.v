@@ -431,7 +431,7 @@ module VX_bank #(
     VX_elastic_buffer #(
         .DATAW   (NUM_PORTS * (CORE_TAG_WIDTH + 1 + `WORD_WIDTH + `REQS_BITS)),
         .SIZE    (CRSQ_SIZE),
-        .OUT_REG (1 == NUM_BANKS)
+        .OUT_REG (1)
     ) core_rsp_req (
         .clk       (clk),
         .reset     (reset),
@@ -470,7 +470,8 @@ module VX_bank #(
     VX_fifo_queue #(
         .DATAW    (1 + `LINE_ADDR_WIDTH + MSHR_ADDR_WIDTH + NUM_PORTS * (1 + WORD_SIZE + WORD_SELECT_BITS + `WORD_WIDTH)), 
         .SIZE     (MREQ_SIZE),
-        .ALM_FULL (MREQ_SIZE-2)
+        .ALM_FULL (MREQ_SIZE-2),
+        .OUT_REG  (1 == NUM_BANKS)
     ) mem_req_queue (
         .clk        (clk),
         .reset      (reset),

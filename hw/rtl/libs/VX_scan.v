@@ -14,7 +14,9 @@ module VX_scan #(
 );
 `IGNORE_WARNINGS_BEGIN
 
-    wire [$clog2(N):0][N-1:0] t;   
+    localparam LOGN = $clog2(N);
+
+    wire [LOGN:0][N-1:0] t;   
 
     // reverses bits
     if (REVERSE) begin
@@ -25,15 +27,15 @@ module VX_scan #(
 
     // optimize for the common case of small and-scans
     if ((N == 2) && (OP == 1)) begin
-	    assign t[$clog2(N)] = {t[0][1], &t[0][1:0]};
+	    assign t[LOGN] = {t[0][1], &t[0][1:0]};
     end else if ((N == 3) && (OP == 1)) begin
-	    assign t[$clog2(N)] = {t[0][2], &t[0][2:1], &t[0][2:0]};
+	    assign t[LOGN] = {t[0][2], &t[0][2:1], &t[0][2:0]};
     end else if ((N == 4) && (OP == 1)) begin
-	    assign t[$clog2(N)] = {t[0][3], &t[0][3:2], &t[0][3:1], &t[0][3:0]};
+	    assign t[LOGN] = {t[0][3], &t[0][3:2], &t[0][3:1], &t[0][3:0]};
     end else begin
         // general case
         wire [N-1:0] fill;
-	    for (genvar i = 0; i < $clog2(N); i++) begin
+	    for (genvar i = 0; i < LOGN; i++) begin
             wire [N-1:0] shifted = N'({fill, t[i]} >> (1<<i));
             if (OP == 0) begin
 		        assign fill = {N{1'b0}};
@@ -50,10 +52,10 @@ module VX_scan #(
 
     // reverse bits
     if (REVERSE) begin
-        assign data_out = t[$clog2(N)];
+        assign data_out = t[LOGN];
     end else begin
         for (genvar i = 0; i < N; i++) begin
-            assign data_out[i] = t[$clog2(N)][N-1-i];
+            assign data_out[i] = t[LOGN][N-1-i];
         end        
     end
 
