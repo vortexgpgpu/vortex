@@ -14,7 +14,9 @@ module VX_core_rsp_merge #(
     // core request tag size
     parameter CORE_TAG_WIDTH    = 1,    
     // size of tag id in core request tag
-    parameter CORE_TAG_ID_BITS  = 0
+    parameter CORE_TAG_ID_BITS  = 0,
+    // output register
+    parameter OUT_REG           = 0
 ) (
     input wire clk,
     input wire reset,
@@ -151,8 +153,9 @@ module VX_core_rsp_merge #(
             wire core_rsp_valid_any = (| per_bank_core_rsp_valid);
             
             VX_skid_buffer #(
-                .DATAW (NUM_REQS + CORE_TAG_WIDTH + (NUM_REQS *`WORD_WIDTH))
-            ) skid_buf (
+                .DATAW    (NUM_REQS + CORE_TAG_WIDTH + (NUM_REQS *`WORD_WIDTH)),
+                .PASSTHRU (0 == OUT_REG)
+            ) out_sbuf (
                 .clk       (clk),
                 .reset     (reset),
                 .valid_in  (core_rsp_valid_any),        
@@ -259,8 +262,9 @@ module VX_core_rsp_merge #(
 
             for (genvar i = 0; i < NUM_REQS; i++) begin
                 VX_skid_buffer #(
-                    .DATAW (CORE_TAG_WIDTH + `WORD_WIDTH)
-                ) skid_buf (
+                    .DATAW    (CORE_TAG_WIDTH + `WORD_WIDTH),
+                    .PASSTHRU (0 == OUT_REG)
+                ) out_sbuf (
                     .clk       (clk),
                     .reset     (reset),
                     .valid_in  (core_rsp_valid_unqual[i]),        
