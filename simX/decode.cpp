@@ -294,7 +294,13 @@ std::shared_ptr<Instr> Decoder::decode(Word code) {
   int rs2 = (code >> shift_rs2_) & reg_mask_;
   int rs3 = (code >> shift_rs3_) & reg_mask_;
 
-  auto iType = sc_instTable.at(op).iType;
+  auto op_it = sc_instTable.find(op);
+  if (op_it == sc_instTable.end()) {
+    std::cout << std::hex << "invalid opcode: 0x" << op << ", instruction=0x" << code << std::endl;
+    std::abort();
+  }
+
+  auto iType = op_it->second.iType;
   if (op == Opcode::FL || op == Opcode::FS) { 
     if (func3 != 0x2) {
       iType = InstType::V_TYPE;
