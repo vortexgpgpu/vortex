@@ -18,6 +18,26 @@ interface VX_mem_req_if #(
     wire [TAG_WIDTH-1:0]    tag;  
     wire                    ready;
 
+    modport master (
+        output valid,    
+        output rw,
+        output byteen,
+        output addr,
+        output data,
+        output tag,
+        input  ready
+    );
+
+    modport slave (
+        input  valid,   
+        input  rw,
+        input  byteen,
+        input  addr,
+        input  data,
+        input  tag,
+        output ready
+    );
+
 endinterface
 
 `endif

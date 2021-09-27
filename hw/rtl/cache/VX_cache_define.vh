@@ -61,11 +61,11 @@
 
 `define LINE_TO_MEM_ADDR(x, i)  {x, `BANK_SELECT_BITS'(i)}
 
+`define MEM_ADDR_TO_BANK_ID(x)  x[0 +: `BANK_SELECT_BITS]
+
 `define MEM_TAG_TO_REQ_ID(x)    x[MSHR_ADDR_WIDTH-1:0]
 
 `define MEM_TAG_TO_BANK_ID(x)   x[MSHR_ADDR_WIDTH +: `BANK_SELECT_BITS]
-
-`define MEM_TAG_TO_LINE_ADDR(x) x[(MSHR_ADDR_WIDTH+`BANK_SELECT_BITS) +: `LINE_ADDR_WIDTH]
 
 `define LINE_TO_BYTE_ADDR(x, i) {x, (32-$bits(x))'(i << (32-$bits(x)-`BANK_SELECT_BITS))}
 

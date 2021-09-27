@@ -2,9 +2,9 @@
 
 `TRACING_OFF
 module VX_lzc #(
-    parameter N     = 2,
-    parameter MODE  = 0, // 0 -> trailing zero, 1 -> leading zero
-    localparam LOGN = $clog2(N)
+    parameter N    = 2,
+    parameter MODE = 0, // 0 -> trailing zero, 1 -> leading zero
+    parameter LOGN = $clog2(N)
 ) (
     input  wire [N-1:0]    in_i,
     output wire [LOGN-1:0] cnt_o,

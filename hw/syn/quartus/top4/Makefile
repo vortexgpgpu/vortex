@@ -58,7 +58,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES):
-	quartus_sh -t ../../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../../project.sdc -inc "$(RTL_INCLUDE)" -set "NOPAE" -set "NUM_CORES=4" -set "NUM_CLUSTERS=1" -set "L2_ENABLE=1" -set "L3_ENABLE=0" -set "ICACHE_SIZE=8192" -set "DCACHE_SIZE=8192" -set "L2CACHE_SIZE=65536"
+	quartus_sh -t ../../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../../project.sdc -inc "$(RTL_INCLUDE)" -set "NOPAE" -set "NUM_CORES=4" -set "NUM_CLUSTERS=1" -set "L2_ENABLE=1" -set "L3_ENABLE=0" -set "ICACHE_SIZE=8192" -set "DCACHE_SIZE=8192" -set "L2_CACHE_SIZE=65536"
 syn.chg:
 	$(STAMP) syn.chg
 

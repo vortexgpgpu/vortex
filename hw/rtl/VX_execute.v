@@ -9,42 +9,42 @@ module VX_execute #(
     input wire reset,    
 
     // Dcache interface
-    VX_dcache_req_if    dcache_req_if,
-    VX_dcache_rsp_if    dcache_rsp_if,
+    VX_dcache_req_if.master dcache_req_if,
+    VX_dcache_rsp_if.slave dcache_rsp_if,
 
     // commit interface
-    VX_cmt_to_csr_if    cmt_to_csr_if,
+    VX_cmt_to_csr_if.slave  cmt_to_csr_if,
 
     // fetch interface
-    VX_fetch_to_csr_if  fetch_to_csr_if,
+    VX_fetch_to_csr_if.slave fetch_to_csr_if,
 
 `ifdef PERF_ENABLE
-    VX_perf_memsys_if   perf_memsys_if,
-    VX_perf_pipeline_if perf_pipeline_if,
+    VX_perf_memsys_if.slave perf_memsys_if,
+    VX_perf_pipeline_if.slave perf_pipeline_if,
  `endif
     
     // inputs    
-    VX_alu_req_if       alu_req_if,
-    VX_lsu_req_if       lsu_req_if,    
-    VX_csr_req_if       csr_req_if,  
+    VX_alu_req_if.slave     alu_req_if,
+    VX_lsu_req_if.slave     lsu_req_if,    
+    VX_csr_req_if.slave     csr_req_if,  
 `ifdef EXT_F_ENABLE
-    VX_fpu_req_if       fpu_req_if,    
+    VX_fpu_req_if.slave     fpu_req_if,    
 `endif
-    VX_gpu_req_if       gpu_req_if,
+    VX_gpu_req_if.slave     gpu_req_if,
     
     // outputs
-    VX_branch_ctl_if    branch_ctl_if,    
-    VX_warp_ctl_if      warp_ctl_if,
-    VX_commit_if        alu_commit_if,
-    VX_commit_if        ld_commit_if,
-    VX_commit_if        st_commit_if,
-    VX_commit_if        csr_commit_if,
+    VX_branch_ctl_if.master branch_ctl_if,    
+    VX_warp_ctl_if.master   warp_ctl_if,
+    VX_commit_if.master     alu_commit_if,
+    VX_commit_if.master     ld_commit_if,
+    VX_commit_if.master     st_commit_if,
+    VX_commit_if.master     csr_commit_if,
 `ifdef EXT_F_ENABLE
-    VX_commit_if        fpu_commit_if,
+    VX_commit_if.master     fpu_commit_if,
 `endif
-    VX_commit_if        gpu_commit_if,
+    VX_commit_if.master     gpu_commit_if,
     
-    input wire          busy
+    input wire              busy
 );
 `ifdef EXT_F_ENABLE
     VX_fpu_to_csr_if     fpu_to_csr_if();     

@@ -35,8 +35,8 @@ module VX_fifo_queue #(
                 head_r <= 0;
                 size_r <= 0;                    
             end else begin
-                assert(!push || !full);
-                assert(!pop || !empty);
+                `ASSERT(!push || !full, ("runtime error"));
+                `ASSERT(!pop || !empty, ("runtime error"));
                 if (push) begin
                     if (!pop) begin
                         size_r <= 1;
@@ -71,8 +71,8 @@ module VX_fifo_queue #(
                 alm_full_r  <= 0;
                 used_r      <= 0;
             end else begin
-                assert(!push || !full);
-                assert(!pop || !empty);
+                `ASSERT(!push || !full, ("runtime error"));
+                `ASSERT(!pop || !empty, ("runtime error"));
                 if (push) begin
                     if (!pop) begin
                         empty_r <= 0;

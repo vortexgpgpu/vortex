@@ -5,26 +5,26 @@ module VX_lsu_unit #(
 ) (    
     `SCOPE_IO_VX_lsu_unit
 
-    input wire clk,
-    input wire reset,
+    input wire              clk,
+    input wire              reset,
 
    // Dcache interface
-    VX_dcache_req_if dcache_req_if,
-    VX_dcache_rsp_if dcache_rsp_if,
+    VX_dcache_req_if.master dcache_req_if,
+    VX_dcache_rsp_if.slave  dcache_rsp_if,
 
     // inputs
-    VX_lsu_req_if   lsu_req_if,
+    VX_lsu_req_if.slave     lsu_req_if,
 
     // outputs
-    VX_commit_if    ld_commit_if,
-    VX_commit_if    st_commit_if
+    VX_commit_if.master     ld_commit_if,
+    VX_commit_if.master     st_commit_if
 );
     localparam MEM_ASHIFT = `CLOG2(`MEM_BLOCK_SIZE);    
     localparam MEM_ADDRW  = 32 - MEM_ASHIFT;
 
-    localparam REQ_ASHIFT = `CLOG2(`DWORD_SIZE);
+    localparam REQ_ASHIFT = `CLOG2(`DCACHE_WORD_SIZE);
 
-    localparam ADDR_TYPEW = `NC_ADDR_BITS + `SM_ENABLE;
+    localparam ADDR_TYPEW = `NC_FLAG_BITS + `SM_ENABLE;
 
     `STATIC_ASSERT(0 == (`IO_BASE_ADDR % MEM_ASHIFT), ("invalid parameter"))
     `STATIC_ASSERT(0 == (`SMEM_BASE_ADDR % MEM_ASHIFT), ("invalid parameter"))
@@ -321,9 +321,9 @@ module VX_lsu_unit #(
 
         for (integer i = 0; i < `LSUQ_SIZE; ++i) begin
             if (pending_reqs[i][0]) begin 
-                assert(($time - pending_reqs[i][1 +: 64]) < delay_timeout) else
-                    $error("%t: *** D$%0d response timeout: remaining=%b, wid=%0d, PC=%0h, rd=%0d", 
-                        $time, CORE_ID, rsp_rem_mask[i], pending_reqs[i][1+64+32+`NR_BITS +: `NW_BITS], pending_reqs[i][1+64+`NR_BITS +: 32], pending_reqs[i][1+64 +: `NR_BITS]);
+                `ASSERT(($time - pending_reqs[i][1 +: 64]) < delay_timeout, 
+                    ("%t: *** D$%0d response timeout: remaining=%b, wid=%0d, PC=%0h, rd=%0d", 
+                        $time, CORE_ID, rsp_rem_mask[i], pending_reqs[i][1+64+32+`NR_BITS +: `NW_BITS], pending_reqs[i][1+64+`NR_BITS +: 32], pending_reqs[i][1+64 +: `NR_BITS]));
             end
         end
     end

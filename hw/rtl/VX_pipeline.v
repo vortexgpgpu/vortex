@@ -15,30 +15,30 @@ module VX_pipeline #(
     output wire [`NUM_THREADS-1:0][3:0]     dcache_req_byteen,
     output wire [`NUM_THREADS-1:0][29:0]    dcache_req_addr,
     output wire [`NUM_THREADS-1:0][31:0]    dcache_req_data,
-    output wire [`NUM_THREADS-1:0][`DCORE_TAG_WIDTH-1:0] dcache_req_tag,    
+    output wire [`NUM_THREADS-1:0][`DCACHE_CORE_TAG_WIDTH-1:0] dcache_req_tag,    
     input wire [`NUM_THREADS-1:0]           dcache_req_ready,
 
     // Dcache core reponse    
     input wire                              dcache_rsp_valid,
     input wire [`NUM_THREADS-1:0]           dcache_rsp_tmask,
     input wire [`NUM_THREADS-1:0][31:0]     dcache_rsp_data,
-    input wire [`DCORE_TAG_WIDTH-1:0]       dcache_rsp_tag,    
+    input wire [`DCACHE_CORE_TAG_WIDTH-1:0]       dcache_rsp_tag,    
     output wire                             dcache_rsp_ready,      
 
     // Icache core request
     output wire                             icache_req_valid,
     output wire [29:0]                      icache_req_addr,
-    output wire [`ICORE_TAG_WIDTH-1:0]      icache_req_tag,
+    output wire [`ICACHE_CORE_TAG_WIDTH-1:0]      icache_req_tag,
     input wire                              icache_req_ready,
 
     // Icache core response    
     input wire                              icache_rsp_valid,
     input wire [31:0]                       icache_rsp_data,
-    input wire [`ICORE_TAG_WIDTH-1:0]       icache_rsp_tag,    
+    input wire [`ICACHE_CORE_TAG_WIDTH-1:0]       icache_rsp_tag,    
     output wire                             icache_rsp_ready,   
 
 `ifdef PERF_ENABLE
-    VX_perf_memsys_if                       perf_memsys_if,
+    VX_perf_memsys_if.slave                 perf_memsys_if,
 `endif
 
     // Status
@@ -51,7 +51,7 @@ module VX_pipeline #(
     VX_dcache_req_if #(
         .NUM_REQS  (`NUM_THREADS), 
         .WORD_SIZE (4), 
-        .TAG_WIDTH (`DCORE_TAG_WIDTH)
+        .TAG_WIDTH (`DCACHE_CORE_TAG_WIDTH)
     ) dcache_req_if();
 
     assign dcache_req_valid  = dcache_req_if.valid;
@@ -69,7 +69,7 @@ module VX_pipeline #(
     VX_dcache_rsp_if #(
         .NUM_REQS  (`NUM_THREADS), 
         .WORD_SIZE (4), 
-        .TAG_WIDTH (`DCORE_TAG_WIDTH)
+        .TAG_WIDTH (`DCACHE_CORE_TAG_WIDTH)
     ) dcache_rsp_if();
 
     assign dcache_rsp_if.valid = dcache_rsp_valid;
@@ -84,7 +84,7 @@ module VX_pipeline #(
 
     VX_icache_req_if #(
         .WORD_SIZE (4), 
-        .TAG_WIDTH (`ICORE_TAG_WIDTH)
+        .TAG_WIDTH (`ICACHE_CORE_TAG_WIDTH)
     ) icache_req_if();       
 
     assign icache_req_valid  = icache_req_if.valid;
@@ -98,7 +98,7 @@ module VX_pipeline #(
 
     VX_icache_rsp_if #(
         .WORD_SIZE (4), 
-        .TAG_WIDTH (`ICORE_TAG_WIDTH)
+        .TAG_WIDTH (`ICACHE_CORE_TAG_WIDTH)
     ) icache_rsp_if();    
 
     assign icache_rsp_if.valid = icache_rsp_valid;

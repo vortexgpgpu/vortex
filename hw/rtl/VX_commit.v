@@ -3,22 +3,22 @@
 module VX_commit #(
     parameter CORE_ID = 0
 ) (
-    input wire      clk,
-    input wire      reset,
+    input wire              clk,
+    input wire              reset,
 
     // inputs
-    VX_commit_if    alu_commit_if,
-    VX_commit_if    ld_commit_if,
-    VX_commit_if    st_commit_if, 
-    VX_commit_if    csr_commit_if,
+    VX_commit_if.slave      alu_commit_if,
+    VX_commit_if.slave      ld_commit_if,
+    VX_commit_if.slave      st_commit_if, 
+    VX_commit_if.slave      csr_commit_if,
 `ifdef EXT_F_ENABLE
-    VX_commit_if    fpu_commit_if,
+    VX_commit_if.slave      fpu_commit_if,
 `endif
-    VX_commit_if    gpu_commit_if,
+    VX_commit_if.slave      gpu_commit_if,
 
     // outputs
-    VX_writeback_if writeback_if,
-    VX_cmt_to_csr_if cmt_to_csr_if
+    VX_writeback_if.master  writeback_if,
+    VX_cmt_to_csr_if.master cmt_to_csr_if
 );
     // CSRs update
 
@@ -50,6 +50,9 @@ module VX_commit #(
                         `endif
                           /*gpu_commit_fire ?*/ gpu_commit_if.tmask;
 
+    wire [$clog2(`NUM_THREADS+1)-1:0] commit_cnt;
+    `POP_COUNT(commit_cnt, commit_tmask);
+
     VX_pipe_register #(
         .DATAW  (1 + $clog2(`NUM_THREADS+1)),
         .RESETW (1)
@@ -57,7 +60,7 @@ module VX_commit #(
         .clk      (clk),
         .reset    (reset),
         .enable   (1'b1),
-        .data_in  ({commit_fire,         $countones(commit_tmask)}),
+        .data_in  ({commit_fire,         commit_cnt}),
         .data_out ({cmt_to_csr_if.valid, cmt_to_csr_if.commit_size})
     );
 

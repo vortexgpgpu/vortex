@@ -27,7 +27,9 @@ module VX_sp_ram #(
         if (INIT_FILE != "") begin                \
             initial $readmemh(INIT_FILE, ram);    \
         end else begin                            \
-            initial ram = '{default: INIT_VALUE}; \
+            initial                               \
+                for (integer i = 0; i < SIZE; ++i)\
+                    ram[i] = INIT_VALUE;          \
         end                                       \
     end
 

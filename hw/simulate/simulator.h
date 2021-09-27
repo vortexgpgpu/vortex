@@ -54,11 +54,12 @@ public:
 
 private:  
 
-  typedef struct {
+  typedef struct {    
     int cycles_left;  
     std::array<uint8_t, MEM_BLOCK_SIZE> block;
     uint64_t addr;
     uint64_t tag;
+    bool write;
   } mem_req_t;
 
   std::unordered_map<int, std::stringstream> print_bufs_;
@@ -80,9 +81,11 @@ private:
   std::list<mem_req_t> mem_rsp_vec_ [MEMORY_BANKS];
   uint32_t last_mem_rsp_bank_;
 
-  bool mem_rsp_active_;
+  bool mem_rd_rsp_active_;
+  bool mem_rd_rsp_ready_;
 
-  bool mem_rsp_ready_;
+  bool mem_wr_rsp_active_;
+  bool mem_wr_rsp_ready_;
 
   RAM *ram_;
 

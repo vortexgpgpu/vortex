@@ -10,9 +10,9 @@ module VX_mem_arb #(
     parameter BUFFERED_RSP  = 0,
     parameter TYPE          = "P",
     
-    localparam DATA_SIZE     = (DATA_WIDTH / 8),
-    localparam LOG_NUM_REQS  = `CLOG2(NUM_REQS),
-    localparam TAG_OUT_WIDTH = TAG_IN_WIDTH + LOG_NUM_REQS
+    parameter DATA_SIZE     = (DATA_WIDTH / 8),
+    parameter LOG_NUM_REQS  = `CLOG2(NUM_REQS),
+    parameter TAG_OUT_WIDTH = TAG_IN_WIDTH + LOG_NUM_REQS
 ) (
     input wire clk,
     input wire reset,

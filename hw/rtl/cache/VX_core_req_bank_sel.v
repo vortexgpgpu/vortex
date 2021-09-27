@@ -291,12 +291,16 @@ module VX_core_req_bank_sel #(
     end
 
     reg [`PERF_CTR_BITS-1:0] bank_stalls_r;
+    wire [$clog2(NUM_REQS+1)-1:0] bank_stall_cnt;
+
+    wire [NUM_REQS-1:0] bank_stall_mask = core_req_sel_r & ~core_req_ready;
+    `POP_COUNT(bank_stall_cnt, bank_stall_mask);
 
     always @(posedge clk) begin
         if (reset) begin
             bank_stalls_r <= 0;
         end else begin
-            bank_stalls_r <= bank_stalls_r + `PERF_CTR_BITS'($countones(core_req_sel_r & ~core_req_ready));
+            bank_stalls_r <= bank_stalls_r + `PERF_CTR_BITS'(bank_stall_cnt);
         end
     end
 

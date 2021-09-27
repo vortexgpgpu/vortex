@@ -10,6 +10,20 @@ interface VX_branch_ctl_if ();
     wire                taken;
     wire [31:0]         dest;
 
+    modport master (
+        output valid,    
+        output wid,
+        output taken,
+        output dest
+    );
+
+    modport slave (
+        input valid,   
+        input wid,
+        input taken,
+        input dest
+    );
+
 endinterface
 
 `endif

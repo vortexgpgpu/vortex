@@ -39,8 +39,8 @@ module VX_bank #(
     // bank offset from beginning of index range
     parameter BANK_ADDR_OFFSET              = 0,
 
-    localparam MSHR_ADDR_WIDTH  = $clog2(MSHR_SIZE),
-    localparam WORD_SELECT_BITS = `UP(`WORD_SELECT_BITS)
+    parameter MSHR_ADDR_WIDTH  = $clog2(MSHR_SIZE),
+    parameter WORD_SELECT_BITS = `UP(`WORD_SELECT_BITS)
 ) (
     `SCOPE_IO_VX_bank
 
@@ -86,8 +86,7 @@ module VX_bank #(
     input  wire                         mem_req_ready,
     
     // Memory response
-    input wire                          mem_rsp_valid,  
-    input wire [`LINE_ADDR_WIDTH-1:0]   mem_rsp_addr,
+    input wire                          mem_rsp_valid,
     input wire [MSHR_ADDR_WIDTH-1:0]    mem_rsp_id,
     input wire [`CACHE_LINE_WIDTH-1:0]  mem_rsp_data,
     output wire                         mem_rsp_ready,
@@ -130,8 +129,12 @@ module VX_bank #(
         .ready_out  (creq_ready),
         .valid_out  (creq_valid)
     );
-
     
+    wire                            mreq_alm_full;    
+    wire [`LINE_ADDR_WIDTH-1:0]     mem_rsp_addr;
+    wire                            crsq_valid, crsq_ready;
+    wire                            crsq_stall;
+        
     wire                            mshr_valid;
     wire                            mshr_ready;
     wire [MSHR_ADDR_WIDTH-1:0]      mshr_alloc_id;
@@ -160,9 +163,6 @@ module VX_bank #(
     wire                            miss_st0, miss_st1;
     wire                            is_flush_st0;
     wire                            mshr_pending_st0, mshr_pending_st1;
-
-    wire crsq_valid, crsq_ready, crsq_stall;
-    wire mreq_alm_full;
 
     // prevent read-during-write hazard when accessing tags/data block RAMs
     wire rdw_fill_hazard  = valid_st0 && is_fill_st0;
@@ -398,6 +398,7 @@ module VX_bank #(
         // fill
         .fill_valid         (mem_rsp_fire),
         .fill_id            (mem_rsp_id),
+        .fill_addr          (mem_rsp_addr),
 
         // dequeue
         .dequeue_valid      (mshr_valid),
