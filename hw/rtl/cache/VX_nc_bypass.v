@@ -15,10 +15,10 @@ module VX_nc_bypass #(
     parameter MEM_TAG_IN_WIDTH  = 1,
     parameter MEM_TAG_OUT_WIDTH = 1,
        
-    localparam CORE_DATA_WIDTH  = CORE_DATA_SIZE * 8,
-    localparam MEM_DATA_WIDTH   = MEM_DATA_SIZE * 8,
-    localparam CORE_TAG_OUT_WIDTH = CORE_TAG_IN_WIDTH - 1,
-    localparam MEM_SELECT_BITS = `UP(`CLOG2(MEM_DATA_SIZE / CORE_DATA_SIZE))
+    parameter CORE_DATA_WIDTH   = CORE_DATA_SIZE * 8,
+    parameter MEM_DATA_WIDTH    = MEM_DATA_SIZE * 8,
+    parameter CORE_TAG_OUT_WIDTH = CORE_TAG_IN_WIDTH - 1,
+    parameter MEM_SELECT_BITS   = `UP(`CLOG2(MEM_DATA_SIZE / CORE_DATA_SIZE))
  ) ( 
     input wire clk,
     input wire reset,

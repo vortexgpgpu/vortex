@@ -32,10 +32,8 @@ module VX_index_queue #(
     assign enqueue = push;       
     assign dequeue = !empty && !valid[rd_a]; // auto-remove when head is invalid
 
-    always @(*) begin
-        assert(!push || !full);
-    end
-
+    `RUNTIME_ASSERT(!push || !full, ("invalid inputs"));
+    
     always @(posedge clk) begin
         if (reset) begin
             rd_ptr <= 0;

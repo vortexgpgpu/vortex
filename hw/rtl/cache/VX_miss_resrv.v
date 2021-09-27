@@ -20,7 +20,7 @@ module VX_miss_resrv #(
     // core request tag size
     parameter CORE_TAG_WIDTH    = 1,
 
-    localparam MSHR_ADDR_WIDTH = $clog2(MSHR_SIZE)
+    parameter MSHR_ADDR_WIDTH   = $clog2(MSHR_SIZE)
 ) (
     input wire clk,
     input wire reset,
@@ -46,6 +46,7 @@ module VX_miss_resrv #(
     // fill
     input wire                          fill_valid,
     input wire [MSHR_ADDR_WIDTH-1:0]    fill_id,
+    output wire [`LINE_ADDR_WIDTH-1:0]  fill_addr,
 
     // lookup
     input wire                          lookup_valid,
@@ -161,8 +162,8 @@ module VX_miss_resrv #(
         dequeue_id_r  <= dequeue_id_n;
         allocate_id_r <= allocate_id_n;
 
-        assert(!allocate_fire || !valid_table[allocate_id_r]);        
-        assert(!release_valid || valid_table[release_id]);
+        `ASSERT(!allocate_fire || !valid_table[allocate_id_r], ("runtime error"));        
+        `ASSERT(!release_valid || valid_table[release_id], ("runtime error"));
     end
     
     `RUNTIME_ASSERT((!allocate_fire || ~valid_table[allocate_id]), ("%t: *** cache%0d:%0d in-use allocation: addr=%0h, id=%0d", $time, CACHE_ID, BANK_ID, 
@@ -183,6 +184,8 @@ module VX_miss_resrv #(
         .wdata (allocate_data),
         .rdata (dequeue_data)
     );
+
+    assign fill_addr = addr_table[fill_id];
 
     assign allocate_ready = allocate_rdy_r;
     assign allocate_id    = allocate_id_r;
@@ -206,8 +209,8 @@ module VX_miss_resrv #(
                 dpi_trace("%d: cache%0d:%0d mshr-allocate: addr=%0h, id=%0d, wid=%0d, PC=%0h\n", $time, CACHE_ID, BANK_ID,
                     `LINE_TO_BYTE_ADDR(allocate_addr, BANK_ID), allocate_id, deq_debug_wid, deq_debug_pc);
             if (fill_valid)
-                dpi_trace("%d: cache%0d:%0d mshr-fill: addr=%0h, id=%0d\n", $time, CACHE_ID, BANK_ID, 
-                    `LINE_TO_BYTE_ADDR(addr_table[fill_id], BANK_ID), fill_id);
+                dpi_trace("%d: cache%0d:%0d mshr-fill: addr=%0h, id=%0d, addr=%0h\n", $time, CACHE_ID, BANK_ID, 
+                    `LINE_TO_BYTE_ADDR(addr_table[fill_id], BANK_ID), fill_id, `LINE_TO_BYTE_ADDR(fill_addr, BANK_ID));
             if (dequeue_fire)
                 dpi_trace("%d: cache%0d:%0d mshr-dequeue: addr=%0h, id=%0d, wid=%0d, PC=%0h\n", $time, CACHE_ID, BANK_ID, 
                     `LINE_TO_BYTE_ADDR(dequeue_addr, BANK_ID), dequeue_id_r, deq_debug_wid, deq_debug_pc);      

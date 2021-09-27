@@ -12,16 +12,16 @@ module VX_cluster #(
     // Memory request
     output wire                             mem_req_valid,
     output wire                             mem_req_rw,    
-    output wire [`L2MEM_BYTEEN_WIDTH-1:0]   mem_req_byteen,    
-    output wire [`L2MEM_ADDR_WIDTH-1:0]     mem_req_addr,
-    output wire [`L2MEM_DATA_WIDTH-1:0]     mem_req_data,
-    output wire [`L2MEM_TAG_WIDTH-1:0]      mem_req_tag,
+    output wire [`L2_MEM_BYTEEN_WIDTH-1:0]   mem_req_byteen,    
+    output wire [`L2_MEM_ADDR_WIDTH-1:0]     mem_req_addr,
+    output wire [`L2_MEM_DATA_WIDTH-1:0]     mem_req_data,
+    output wire [`L2_MEM_TAG_WIDTH-1:0]      mem_req_tag,
     input  wire                             mem_req_ready,
 
     // Memory response    
     input wire                              mem_rsp_valid,        
-    input wire [`L2MEM_DATA_WIDTH-1:0]      mem_rsp_data,
-    input wire [`L2MEM_TAG_WIDTH-1:0]       mem_rsp_tag,
+    input wire [`L2_MEM_DATA_WIDTH-1:0]      mem_rsp_data,
+    input wire [`L2_MEM_TAG_WIDTH-1:0]       mem_rsp_tag,
     output wire                             mem_rsp_ready,
 
     // Status
@@ -31,14 +31,14 @@ module VX_cluster #(
 
     wire [`NUM_CORES-1:0]                       per_core_mem_req_valid;
     wire [`NUM_CORES-1:0]                       per_core_mem_req_rw;    
-    wire [`NUM_CORES-1:0][`DMEM_BYTEEN_WIDTH-1:0] per_core_mem_req_byteen;    
-    wire [`NUM_CORES-1:0][`DMEM_ADDR_WIDTH-1:0] per_core_mem_req_addr;
-    wire [`NUM_CORES-1:0][`DMEM_DATA_WIDTH-1:0] per_core_mem_req_data;
+    wire [`NUM_CORES-1:0][`DCACHE_MEM_BYTEEN_WIDTH-1:0] per_core_mem_req_byteen;    
+    wire [`NUM_CORES-1:0][`DCACHE_MEM_ADDR_WIDTH-1:0] per_core_mem_req_addr;
+    wire [`NUM_CORES-1:0][`DCACHE_MEM_DATA_WIDTH-1:0] per_core_mem_req_data;
     wire [`NUM_CORES-1:0][`XMEM_TAG_WIDTH-1:0]  per_core_mem_req_tag;
     wire [`NUM_CORES-1:0]                       per_core_mem_req_ready;
 
     wire [`NUM_CORES-1:0]                       per_core_mem_rsp_valid;            
-    wire [`NUM_CORES-1:0][`DMEM_DATA_WIDTH-1:0] per_core_mem_rsp_data;
+    wire [`NUM_CORES-1:0][`DCACHE_MEM_DATA_WIDTH-1:0] per_core_mem_rsp_data;
     wire [`NUM_CORES-1:0][`XMEM_TAG_WIDTH-1:0]  per_core_mem_rsp_tag;
     wire [`NUM_CORES-1:0]                       per_core_mem_rsp_ready;
 
@@ -83,22 +83,22 @@ module VX_cluster #(
         `RESET_RELAY (l2_reset);
 
         VX_cache #(
-            .CACHE_ID           (`L2CACHE_ID),
-            .CACHE_SIZE         (`L2CACHE_SIZE),
-            .CACHE_LINE_SIZE    (`L2CACHE_LINE_SIZE),
-            .NUM_BANKS          (`L2NUM_BANKS),
-            .NUM_PORTS          (`L2NUM_PORTS),
-            .WORD_SIZE          (`L2WORD_SIZE),
-            .NUM_REQS           (`L2NUM_REQS),
-            .CREQ_SIZE          (`L2CREQ_SIZE),
-            .CRSQ_SIZE          (`L2CRSQ_SIZE),
-            .MSHR_SIZE          (`L2MSHR_SIZE),
-            .MRSQ_SIZE          (`L2MRSQ_SIZE),
-            .MREQ_SIZE          (`L2MREQ_SIZE),
+            .CACHE_ID           (`L2_CACHE_ID),
+            .CACHE_SIZE         (`L2_CACHE_SIZE),
+            .CACHE_LINE_SIZE    (`L2_CACHE_LINE_SIZE),
+            .NUM_BANKS          (`L2_NUM_BANKS),
+            .NUM_PORTS          (`L2_NUM_PORTS),
+            .WORD_SIZE          (`L2_WORD_SIZE),
+            .NUM_REQS           (`L2_NUM_REQS),
+            .CREQ_SIZE          (`L2_CREQ_SIZE),
+            .CRSQ_SIZE          (`L2_CRSQ_SIZE),
+            .MSHR_SIZE          (`L2_MSHR_SIZE),
+            .MRSQ_SIZE          (`L2_MRSQ_SIZE),
+            .MREQ_SIZE          (`L2_MREQ_SIZE),
             .WRITE_ENABLE       (1),          
             .CORE_TAG_WIDTH     (`XMEM_TAG_WIDTH),
             .CORE_TAG_ID_BITS   (0),
-            .MEM_TAG_WIDTH      (`L2MEM_TAG_WIDTH),
+            .MEM_TAG_WIDTH      (`L2_MEM_TAG_WIDTH),
             .NC_ENABLE          (1)
         ) l2cache (
             `SCOPE_BIND_VX_cluster_l2cache
@@ -148,8 +148,8 @@ module VX_cluster #(
 
         VX_mem_arb #(
             .NUM_REQS     (`NUM_CORES),
-            .DATA_WIDTH   (`DMEM_DATA_WIDTH),
-            .ADDR_WIDTH   (`DMEM_ADDR_WIDTH),           
+            .DATA_WIDTH   (`DCACHE_MEM_DATA_WIDTH),
+            .ADDR_WIDTH   (`DCACHE_MEM_ADDR_WIDTH),           
             .TAG_IN_WIDTH (`XMEM_TAG_WIDTH),            
             .TYPE         ("R"),
             .TAG_SEL_IDX  (1), // Skip 0 for NC flag

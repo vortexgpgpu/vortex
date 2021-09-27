@@ -5,18 +5,18 @@ module VX_icache_stage #(
 ) (
     `SCOPE_IO_VX_icache_stage
 
-    input  wire         clk,
-    input  wire         reset,
+    input  wire             clk,
+    input  wire             reset,
     
     // Icache interface
-    VX_icache_req_if    icache_req_if,
-    VX_icache_rsp_if    icache_rsp_if,
+    VX_icache_req_if.master icache_req_if,
+    VX_icache_rsp_if.slave  icache_rsp_if,
     
     // request
-    VX_ifetch_req_if    ifetch_req_if,
+    VX_ifetch_req_if.slave  ifetch_req_if,
 
     // reponse
-    VX_ifetch_rsp_if    ifetch_rsp_if
+    VX_ifetch_rsp_if.master ifetch_rsp_if
 );
 
     `UNUSED_PARAM (CORE_ID)

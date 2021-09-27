@@ -17,6 +17,26 @@ interface VX_dcache_req_if #(
     wire [NUM_REQS-1:0][TAG_WIDTH-1:0]          tag;    
     wire [NUM_REQS-1:0]                         ready;
 
+    modport master (
+        output valid,
+        output rw,
+        output byteen,
+        output addr,
+        output data,        
+        output tag,
+        input  ready
+    );
+
+    modport slave (
+        input  valid,
+        input  rw,
+        input  byteen,
+        input  addr,
+        input  data,
+        input  tag,
+        output ready
+    );
+
 endinterface
 
 `endif

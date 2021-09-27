@@ -22,6 +22,44 @@ interface VX_decode_if ();
     wire [`NR_BITS-1:0]     rs3;
     wire                    ready;
 
+    modport master (
+        output valid,    
+        output wid,
+        output tmask,
+        output PC,
+        output ex_type,  
+        output op_type,
+        output op_mod,   
+        output wb,
+        output use_PC,
+        output use_imm,
+        output imm,
+        output rd,
+        output rs1,
+        output rs2,
+        output rs3,
+        input  ready
+    );
+
+    modport slave (
+        input  valid,    
+        input  wid,
+        input  tmask,
+        input  PC,
+        input  ex_type,  
+        input  op_type,
+        input  op_mod,   
+        input  wb,
+        input  use_PC,
+        input  use_imm,
+        input  imm,
+        input  rd,
+        input  rs1,
+        input  rs2,
+        input  rs3,
+        output ready
+    );
+
 endinterface
 
 `endif

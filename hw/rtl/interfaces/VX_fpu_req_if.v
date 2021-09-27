@@ -18,6 +18,36 @@ interface VX_fpu_req_if ();
     wire                    wb;        
     wire                    ready;
 
+    modport master (
+        output valid,
+        output wid,
+        output tmask,
+        output PC,
+        output op_type,
+        output op_mod,
+        output rs1_data,
+        output rs2_data,
+        output rs3_data,
+        output rd,
+        output wb,
+        input  ready
+    );
+
+    modport slave (
+        input  valid,
+        input  wid,
+        input  tmask,
+        input  PC,
+        input  op_type,
+        input  op_mod,
+        input  rs1_data,
+        input  rs2_data,
+        input  rs3_data,
+        input  rd,
+        input  wb,
+        output ready
+    );
+
 endinterface
 
 `endif

@@ -19,12 +19,12 @@ module VX_decode  #(
     input  wire         reset,
 
     // inputs
-    VX_ifetch_rsp_if    ifetch_rsp_if,
+    VX_ifetch_rsp_if.slave ifetch_rsp_if,
 
     // outputs      
-    VX_decode_if        decode_if,
-    VX_wstall_if        wstall_if,
-    VX_join_if          join_if
+    VX_decode_if.master decode_if,
+    VX_wstall_if.master wstall_if,
+    VX_join_if.master   join_if
 );
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (clk)

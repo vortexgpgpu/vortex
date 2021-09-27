@@ -46,13 +46,13 @@ module VX_cache #(
     // enable bypass for non-cacheable addresses
     parameter NC_ENABLE                     = 0,
 
-    localparam WORD_SELECT_BITS = `UP(`WORD_SELECT_BITS)
+    parameter WORD_SELECT_BITS              = `UP(`WORD_SELECT_BITS)
  ) (
     `SCOPE_IO_VX_cache    
     
     // PERF
 `ifdef PERF_ENABLE
-    VX_perf_cache_if perf_cache_if,
+    VX_perf_cache_if.master perf_cache_if,
 `endif
     
     input wire clk,
@@ -94,7 +94,7 @@ module VX_cache #(
     `STATIC_ASSERT(NUM_PORTS <= NUM_BANKS, ("invalid value"))
 
     localparam MSHR_ADDR_WIDTH = $clog2(MSHR_SIZE);
-    localparam MEM_TAG_IN_WIDTH = `MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH;
+    localparam MEM_TAG_IN_WIDTH = `BANK_SELECT_BITS + MSHR_ADDR_WIDTH;
     localparam CORE_TAG_X_WIDTH = CORE_TAG_WIDTH - NC_ENABLE;
     localparam CORE_TAG_ID_X_BITS = (CORE_TAG_ID_BITS != 0) ? (CORE_TAG_ID_BITS - NC_ENABLE) : CORE_TAG_ID_BITS;
 
@@ -444,7 +444,6 @@ module VX_cache #(
     wire [NUM_BANKS-1:0]                        per_bank_mem_rsp_ready;
     
     if (NUM_BANKS == 1) begin
-        `UNUSED_VAR (mem_rsp_tag_qual)
         assign mrsq_out_ready = per_bank_mem_rsp_ready;
     end else begin
         assign mrsq_out_ready = per_bank_mem_rsp_ready[`MEM_TAG_TO_BANK_ID(mem_rsp_tag_qual)];
@@ -515,8 +514,7 @@ module VX_cache #(
         wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] curr_bank_mem_req_data;
         wire                        curr_bank_mem_req_ready;
 
-        wire                        curr_bank_mem_rsp_valid;    
-        wire [`LINE_ADDR_WIDTH-1:0] curr_bank_mem_rsp_addr;
+        wire                        curr_bank_mem_rsp_valid;
         wire [MSHR_ADDR_WIDTH-1:0]  curr_bank_mem_rsp_id;
         wire [`CACHE_LINE_WIDTH-1:0] curr_bank_mem_rsp_data;
         wire                        curr_bank_mem_rsp_ready;
@@ -558,11 +556,9 @@ module VX_cache #(
 
         // Memory response
         if (NUM_BANKS == 1) begin
-            assign curr_bank_mem_rsp_valid = mrsq_out_valid;
-            assign curr_bank_mem_rsp_addr  = `MEM_TAG_TO_LINE_ADDR(mem_rsp_tag_qual);            
+            assign curr_bank_mem_rsp_valid = mrsq_out_valid;        
         end else begin
             assign curr_bank_mem_rsp_valid = mrsq_out_valid && (`MEM_TAG_TO_BANK_ID(mem_rsp_tag_qual) == i);
-            assign curr_bank_mem_rsp_addr  = `MEM_TAG_TO_LINE_ADDR(mem_rsp_tag_qual);
         end
         assign curr_bank_mem_rsp_id      = `MEM_TAG_TO_REQ_ID(mem_rsp_tag_qual);
         assign curr_bank_mem_rsp_data    = mem_rsp_data_qual;
@@ -633,7 +629,6 @@ module VX_cache #(
 
             // Memory response
             .mem_rsp_valid      (curr_bank_mem_rsp_valid),    
-            .mem_rsp_addr       (curr_bank_mem_rsp_addr),            
             .mem_rsp_id         (curr_bank_mem_rsp_id),            
             .mem_rsp_data       (curr_bank_mem_rsp_data),
             .mem_rsp_ready      (curr_bank_mem_rsp_ready),
@@ -668,7 +663,7 @@ module VX_cache #(
         .core_rsp_ready          (core_rsp_ready_nc)
     ); 
 
-    wire [NUM_BANKS-1:0][(MEM_TAG_IN_WIDTH + 1 + NUM_PORTS * (1 + WORD_SIZE + WORD_SELECT_BITS + `WORD_WIDTH))-1:0] data_in;
+    wire [NUM_BANKS-1:0][(`MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + NUM_PORTS * (1 + WORD_SIZE + WORD_SELECT_BITS + `WORD_WIDTH))-1:0] data_in;
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         assign data_in[i] = {per_bank_mem_req_addr[i], per_bank_mem_req_id[i], per_bank_mem_req_rw[i], per_bank_mem_req_pmask[i], per_bank_mem_req_byteen[i], per_bank_mem_req_wsel[i], per_bank_mem_req_data[i]};
     end
@@ -692,33 +687,42 @@ module VX_cache #(
         .ready_out (mem_req_ready_nc)
     );
 
-    assign mem_req_tag_nc = MEM_TAG_IN_WIDTH'({mem_req_addr_nc, mem_req_id});
+    if (NUM_BANKS == 1) begin
+        assign mem_req_tag_nc = MEM_TAG_IN_WIDTH'(mem_req_id);
+    end else begin
+        assign mem_req_tag_nc = MEM_TAG_IN_WIDTH'({`MEM_ADDR_TO_BANK_ID(mem_req_addr_nc), mem_req_id});
+    end    
 
 `ifdef PERF_ENABLE
     // per cycle: core_reads, core_writes
-    reg [($clog2(NUM_REQS+1)-1):0] perf_core_reads_per_cycle;
-    reg [($clog2(NUM_REQS+1)-1):0] perf_core_writes_per_cycle;
-    reg [($clog2(NUM_REQS+1)-1):0] perf_crsp_stall_per_cycle;
+    wire [$clog2(NUM_REQS+1)-1:0] perf_core_reads_per_cycle;
+    wire [$clog2(NUM_REQS+1)-1:0] perf_core_writes_per_cycle;
+    wire [$clog2(NUM_REQS+1)-1:0] perf_crsp_stall_per_cycle;
 
-    assign perf_core_reads_per_cycle  = $countones(core_req_valid & core_req_ready & ~core_req_rw);
-    assign perf_core_writes_per_cycle = $countones(core_req_valid & core_req_ready & core_req_rw);
+    wire [NUM_REQS-1:0] perf_core_reads_per_mask = core_req_valid & core_req_ready & ~core_req_rw;
+    wire [NUM_REQS-1:0] perf_core_writes_per_mask = core_req_valid & core_req_ready & core_req_rw;
+
+    `POP_COUNT(perf_core_reads_per_cycle, perf_core_reads_per_mask);
+    `POP_COUNT(perf_core_writes_per_cycle, perf_core_writes_per_mask);
     
     if (CORE_TAG_ID_BITS != 0) begin
-        assign perf_crsp_stall_per_cycle = $countones(core_rsp_tmask & {NUM_REQS{core_rsp_valid && ~core_rsp_ready}});
+        wire [NUM_REQS-1:0] perf_crsp_stall_per_mask = core_rsp_tmask & {NUM_REQS{core_rsp_valid && ~core_rsp_ready}};
+        `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_mask);
     end else begin
-        assign perf_crsp_stall_per_cycle = $countones(core_rsp_valid & ~core_rsp_ready);
+        wire [NUM_REQS-1:0] perf_crsp_stall_per_mask = core_rsp_valid & ~core_rsp_ready;
+        `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_mask);
     end
 
     // per cycle: read misses, write misses, msrq stalls, pipeline stalls
-    reg [($clog2(NUM_BANKS+1)-1):0] perf_read_miss_per_cycle;
-    reg [($clog2(NUM_BANKS+1)-1):0] perf_write_miss_per_cycle;
-    reg [($clog2(NUM_BANKS+1)-1):0] perf_mshr_stall_per_cycle;
-    reg [($clog2(NUM_BANKS+1)-1):0] perf_pipe_stall_per_cycle; 
+    wire [$clog2(NUM_BANKS+1)-1:0] perf_read_miss_per_cycle;
+    wire [$clog2(NUM_BANKS+1)-1:0] perf_write_miss_per_cycle;
+    wire [$clog2(NUM_BANKS+1)-1:0] perf_mshr_stall_per_cycle;
+    wire [$clog2(NUM_BANKS+1)-1:0] perf_pipe_stall_per_cycle; 
     
-    assign perf_read_miss_per_cycle  = $countones(perf_read_miss_per_bank);
-    assign perf_write_miss_per_cycle = $countones(perf_write_miss_per_bank);    
-    assign perf_mshr_stall_per_cycle = $countones(perf_mshr_stall_per_bank);
-    assign perf_pipe_stall_per_cycle = $countones(perf_pipe_stall_per_bank);
+    `POP_COUNT(perf_read_miss_per_cycle, perf_read_miss_per_bank);
+    `POP_COUNT(perf_write_miss_per_cycle, perf_write_miss_per_bank);    
+    `POP_COUNT(perf_mshr_stall_per_cycle, perf_mshr_stall_per_bank);
+    `POP_COUNT(perf_pipe_stall_per_cycle, perf_pipe_stall_per_bank);
 
     reg [`PERF_CTR_BITS-1:0] perf_core_reads;
     reg [`PERF_CTR_BITS-1:0] perf_core_writes;

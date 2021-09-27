@@ -5,19 +5,19 @@ module VX_warp_sched #(
 ) (
     `SCOPE_IO_VX_warp_sched
     
-    input wire          clk,
-    input wire          reset,
+    input wire              clk,
+    input wire              reset,
 
-    VX_warp_ctl_if      warp_ctl_if,
-    VX_wstall_if        wstall_if,
-    VX_join_if          join_if,
-    VX_branch_ctl_if    branch_ctl_if,
+    VX_warp_ctl_if.slave    warp_ctl_if,
+    VX_wstall_if.slave      wstall_if,
+    VX_join_if.slave        join_if,
+    VX_branch_ctl_if.slave  branch_ctl_if,
 
-    VX_ifetch_req_if    ifetch_req_if,
+    VX_ifetch_req_if.master ifetch_req_if,
 
-    VX_fetch_to_csr_if  fetch_to_csr_if,
+    VX_fetch_to_csr_if.master fetch_to_csr_if,
 
-    output wire         busy
+    output wire             busy
 );
 
     `UNUSED_PARAM (CORE_ID)
@@ -147,7 +147,8 @@ module VX_warp_sched #(
 `IGNORE_UNUSED_BEGIN
     wire [`NW_BITS:0] active_barrier_count;
 `IGNORE_UNUSED_END
-    assign active_barrier_count = $countones(barrier_masks[warp_ctl_if.barrier.id]);
+    wire [`NUM_WARPS-1:0] barrier_mask = barrier_masks[warp_ctl_if.barrier.id];
+    `POP_COUNT(active_barrier_count, barrier_mask);
 
     assign reached_barrier_limit = (active_barrier_count[`NW_BITS-1:0] == warp_ctl_if.barrier.size_m1);
 
@@ -161,7 +162,7 @@ module VX_warp_sched #(
 
     // split/join stack management    
 
-    wire [(1+32+`NUM_THREADS-1):0] ipdom [`NUM_WARPS-1:0];
+    wire [(1+32+`NUM_THREADS)-1:0] ipdom [`NUM_WARPS-1:0];
 
     wire [`NUM_THREADS-1:0] curr_tmask = thread_masks[warp_ctl_if.wid];
     
@@ -173,8 +174,8 @@ module VX_warp_sched #(
         wire pop = join_if.valid && (i == join_if.wid);
 
         wire [`NUM_THREADS-1:0] else_tmask = warp_ctl_if.split.diverged ? warp_ctl_if.split.else_tmask : curr_tmask;
-        wire [(1+32+`NUM_THREADS-1):0] q_end  = {1'b0, 32'b0,                curr_tmask};
-        wire [(1+32+`NUM_THREADS-1):0] q_else = {1'b1, warp_ctl_if.split.pc, else_tmask};
+        wire [(1+32+`NUM_THREADS)-1:0] q_end  = {1'b0, 32'b0,                curr_tmask};
+        wire [(1+32+`NUM_THREADS)-1:0] q_else = {1'b1, warp_ctl_if.split.pc, else_tmask};
 
         VX_ipdom_stack #(
             .WIDTH (1+32+`NUM_THREADS), 

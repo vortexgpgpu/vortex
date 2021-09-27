@@ -13,6 +13,20 @@ interface VX_icache_req_if #(
     wire [TAG_WIDTH-1:0]        tag;    
     wire                        ready;
 
+    modport master (
+        output valid,
+        output addr,
+        output tag,
+        input  ready
+    );
+
+    modport slave (
+        input  valid,
+        input  addr,
+        input  tag,
+        output ready
+    );
+
 endinterface
 
 `endif

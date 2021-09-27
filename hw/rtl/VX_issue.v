@@ -9,19 +9,19 @@ module VX_issue #(
     input wire      reset,
 
 `ifdef PERF_ENABLE
-    VX_perf_pipeline_if perf_pipeline_if,
+    VX_perf_pipeline_if.master perf_pipeline_if,
 `endif
 
-    VX_decode_if    decode_if,
-    VX_writeback_if writeback_if,   
+    VX_decode_if.slave      decode_if,
+    VX_writeback_if.slave   writeback_if,   
     
-    VX_alu_req_if   alu_req_if,
-    VX_lsu_req_if   lsu_req_if,    
-    VX_csr_req_if   csr_req_if,
+    VX_alu_req_if.master    alu_req_if,
+    VX_lsu_req_if.master    lsu_req_if,    
+    VX_csr_req_if.master    csr_req_if,
 `ifdef EXT_F_ENABLE
-    VX_fpu_req_if   fpu_req_if,    
+    VX_fpu_req_if.master    fpu_req_if,    
 `endif
-    VX_gpu_req_if   gpu_req_if
+    VX_gpu_req_if.master    gpu_req_if
 );
     VX_ibuffer_if ibuffer_if();
     VX_ibuffer_if execute_if();

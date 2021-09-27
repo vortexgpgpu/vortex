@@ -6,9 +6,9 @@ module VX_fpu_unit #(
     input wire clk,
     input wire reset,
 
-    VX_fpu_req_if       fpu_req_if,
-    VX_fpu_to_csr_if    fpu_to_csr_if,
-    VX_commit_if        fpu_commit_if,
+    VX_fpu_req_if.slave     fpu_req_if,
+    VX_fpu_to_csr_if.master fpu_to_csr_if,
+    VX_commit_if.master     fpu_commit_if,
 
     input wire[`NUM_WARPS-1:0] csr_pending,
     output wire[`NUM_WARPS-1:0] pending

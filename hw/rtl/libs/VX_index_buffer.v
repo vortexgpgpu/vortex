@@ -55,10 +55,10 @@ module VX_index_buffer #(
             full_r       <= 1'b0;            
         end else begin
             if (release_slot) begin
-                assert(0 == free_slots[release_addr]) else $error("%t: releasing invalid slot at port %d", $time, release_addr);
+                `ASSERT(0 == free_slots[release_addr], ("%t: releasing invalid slot at port %d", $time, release_addr));
             end
             if (acquire_slot) begin
-                assert(1 == free_slots[write_addr]) else $error("%t: acquiring used slot at port %d", $time, write_addr);                 
+                `ASSERT(1 == free_slots[write_addr], ("%t: acquiring used slot at port %d", $time, write_addr));
             end
             write_addr_r <= free_index;
             free_slots   <= free_slots_n;           

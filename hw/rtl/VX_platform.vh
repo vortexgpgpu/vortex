@@ -10,6 +10,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 `ifndef SYNTHESIS
+
 `ifndef NDEBUG
     `define DEBUG_BLOCK(x) /* verilator lint_off UNUSED */ \
                            x \
@@ -48,18 +49,24 @@
                        . x () \
                        /* verilator lint_on PINCONNECTEMPTY */
 
+`define ASSERT(cond, msg) \
+    assert(cond) else $error msg
+
 `define STATIC_ASSERT(cond, msg) \
     generate                     \
         if (!(cond)) $error msg; \
     endgenerate
 
 `define RUNTIME_ASSERT(cond, msg)     \
-    always @(posedge clk)             \
+    always @(posedge clk) begin       \
         assert(cond) else $error msg; \
+    end
 
 `define TRACING_ON  /* verilator tracing_on */
 `define TRACING_OFF /* verilator tracing_off */
+
 `else // SYNTHESIS
+
 `define DEBUG_BLOCK(x)
 `define IGNORE_UNUSED_BEGIN
 `define IGNORE_UNUSED_END
@@ -68,10 +75,12 @@
 `define UNUSED_PARAM(x)
 `define UNUSED_VAR(x)
 `define UNUSED_PIN(x) . x ()
+`define ASSERT(cond, msg) if (cond);
 `define STATIC_ASSERT(cond, msg)
 `define RUNTIME_ASSERT(cond, msg)
 `define TRACING_ON
 `define TRACING_OFF
+
 `endif // SYNTHESIS
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -131,12 +140,20 @@
     end                                         \
     dpi_trace("}")
 
-`define RESET_RELAY(signal) \
-    wire signal;            \
+`define RESET_RELAY(signal)     \
+    wire signal;                \
     VX_reset_relay __``signal ( \
-        .clk     (clk),     \
-        .reset   (reset),   \
-        .reset_o (signal)   \
+        .clk     (clk),         \
+        .reset   (reset),       \
+        .reset_o (signal)       \
+    )
+
+`define POP_COUNT(out, in)  \
+    VX_popcount #(          \
+        .N ($bits(in))      \
+    ) __``out (             \
+        .in_i  (in),        \
+        .cnt_o (out)        \
     )
 
 `endif
