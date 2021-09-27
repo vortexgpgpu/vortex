@@ -29,15 +29,15 @@ module Vortex (
 
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_req_valid;
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_req_rw;
-    wire [`NUM_CLUSTERS-1:0][`L2MEM_BYTEEN_WIDTH-1:0] per_cluster_mem_req_byteen;
-    wire [`NUM_CLUSTERS-1:0][`L2MEM_ADDR_WIDTH-1:0]  per_cluster_mem_req_addr;
-    wire [`NUM_CLUSTERS-1:0][`L2MEM_DATA_WIDTH-1:0]  per_cluster_mem_req_data;
-    wire [`NUM_CLUSTERS-1:0][`L2MEM_TAG_WIDTH-1:0]   per_cluster_mem_req_tag;
+    wire [`NUM_CLUSTERS-1:0][`L2_MEM_BYTEEN_WIDTH-1:0] per_cluster_mem_req_byteen;
+    wire [`NUM_CLUSTERS-1:0][`L2_MEM_ADDR_WIDTH-1:0]  per_cluster_mem_req_addr;
+    wire [`NUM_CLUSTERS-1:0][`L2_MEM_DATA_WIDTH-1:0]  per_cluster_mem_req_data;
+    wire [`NUM_CLUSTERS-1:0][`L2_MEM_TAG_WIDTH-1:0]   per_cluster_mem_req_tag;
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_req_ready;
 
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_rsp_valid;
-    wire [`NUM_CLUSTERS-1:0][`L2MEM_DATA_WIDTH-1:0]  per_cluster_mem_rsp_data;
-    wire [`NUM_CLUSTERS-1:0][`L2MEM_TAG_WIDTH-1:0]   per_cluster_mem_rsp_tag;
+    wire [`NUM_CLUSTERS-1:0][`L2_MEM_DATA_WIDTH-1:0]  per_cluster_mem_rsp_data;
+    wire [`NUM_CLUSTERS-1:0][`L2_MEM_TAG_WIDTH-1:0]   per_cluster_mem_rsp_tag;
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_rsp_ready;
 
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_busy;
@@ -81,22 +81,22 @@ module Vortex (
         `RESET_RELAY (l3_reset);
 
         VX_cache #(
-            .CACHE_ID           (`L3CACHE_ID),
-            .CACHE_SIZE         (`L3CACHE_SIZE),
-            .CACHE_LINE_SIZE    (`L3CACHE_LINE_SIZE),
-            .NUM_BANKS          (`L3NUM_BANKS),
-            .NUM_PORTS          (`L3NUM_PORTS),
-            .WORD_SIZE          (`L3WORD_SIZE),
-            .NUM_REQS           (`L3NUM_REQS),
-            .CREQ_SIZE          (`L3CREQ_SIZE),
-            .CRSQ_SIZE          (`L3CRSQ_SIZE),
-            .MSHR_SIZE          (`L3MSHR_SIZE),
-            .MRSQ_SIZE          (`L3MRSQ_SIZE),
-            .MREQ_SIZE          (`L3MREQ_SIZE),
+            .CACHE_ID           (`L3_CACHE_ID),
+            .CACHE_SIZE         (`L3_CACHE_SIZE),
+            .CACHE_LINE_SIZE    (`L3_CACHE_LINE_SIZE),
+            .NUM_BANKS          (`L3_NUM_BANKS),
+            .NUM_PORTS          (`L3_NUM_PORTS),
+            .WORD_SIZE          (`L3_WORD_SIZE),
+            .NUM_REQS           (`L3_NUM_REQS),
+            .CREQ_SIZE          (`L3_CREQ_SIZE),
+            .CRSQ_SIZE          (`L3_CRSQ_SIZE),
+            .MSHR_SIZE          (`L3_MSHR_SIZE),
+            .MRSQ_SIZE          (`L3_MRSQ_SIZE),
+            .MREQ_SIZE          (`L3_MREQ_SIZE),
             .WRITE_ENABLE       (1),
-            .CORE_TAG_WIDTH     (`L2MEM_TAG_WIDTH),
+            .CORE_TAG_WIDTH     (`L2_MEM_TAG_WIDTH),
             .CORE_TAG_ID_BITS   (0),
-            .MEM_TAG_WIDTH      (`L3MEM_TAG_WIDTH),
+            .MEM_TAG_WIDTH      (`L3_MEM_TAG_WIDTH),
             .NC_ENABLE          (1)
         ) l3cache (
             `SCOPE_BIND_Vortex_l3cache
@@ -146,9 +146,9 @@ module Vortex (
 
         VX_mem_arb #(
             .NUM_REQS     (`NUM_CLUSTERS),
-            .DATA_WIDTH   (`L3MEM_DATA_WIDTH),            
-            .ADDR_WIDTH   (`L3MEM_ADDR_WIDTH),
-            .TAG_IN_WIDTH (`L2MEM_TAG_WIDTH),
+            .DATA_WIDTH   (`L3_MEM_DATA_WIDTH),            
+            .ADDR_WIDTH   (`L3_MEM_ADDR_WIDTH),
+            .TAG_IN_WIDTH (`L2_MEM_TAG_WIDTH),
             .TYPE         ("R"),
             .BUFFERED_REQ (1),
             .BUFFERED_RSP (1)

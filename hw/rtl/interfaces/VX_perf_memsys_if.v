@@ -28,6 +28,50 @@ interface VX_perf_memsys_if ();
     wire [`PERF_CTR_BITS-1:0] mem_stalls;    
     wire [`PERF_CTR_BITS-1:0] mem_latency;
 
+    modport master (
+        output icache_reads,
+        output icache_read_misses,
+        output icache_pipe_stalls,
+        output icache_crsp_stalls,
+        output dcache_reads,
+        output dcache_writes,    
+        output dcache_read_misses,
+        output dcache_write_misses,
+        output dcache_bank_stalls,
+        output dcache_mshr_stalls,
+        output dcache_pipe_stalls,
+        output dcache_crsp_stalls,
+        output smem_reads,
+        output smem_writes,
+        output smem_bank_stalls,
+        output mem_reads,
+        output mem_writes,
+        output mem_stalls,    
+        output mem_latency
+    );
+
+    modport slave (
+        input icache_reads,
+        input icache_read_misses,
+        input icache_pipe_stalls,
+        input icache_crsp_stalls,
+        input dcache_reads,
+        input dcache_writes,    
+        input dcache_read_misses,
+        input dcache_write_misses,
+        input dcache_bank_stalls,
+        input dcache_mshr_stalls,
+        input dcache_pipe_stalls,
+        input dcache_crsp_stalls,
+        input smem_reads,
+        input smem_writes,
+        input smem_bank_stalls,
+        input mem_reads,
+        input mem_writes,
+        input mem_stalls,    
+        input mem_latency
+    );
+
 endinterface
 
 `endif

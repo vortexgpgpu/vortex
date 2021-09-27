@@ -3,15 +3,15 @@
 module VX_gpr_stage #(
     parameter CORE_ID = 0
 ) (
-    input wire      clk,
-    input wire      reset,
+    input wire              clk,
+    input wire              reset,
 
     // inputs    
-    VX_writeback_if writeback_if,  
-    VX_gpr_req_if   gpr_req_if,
+    VX_writeback_if.slave   writeback_if,  
+    VX_gpr_req_if.slave     gpr_req_if,
 
     // outputs
-    VX_gpr_rsp_if   gpr_rsp_if
+    VX_gpr_rsp_if.master    gpr_rsp_if
 );
 
     `UNUSED_PARAM (CORE_ID)

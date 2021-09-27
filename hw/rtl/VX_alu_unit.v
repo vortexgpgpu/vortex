@@ -3,15 +3,15 @@
 module VX_alu_unit #(
     parameter CORE_ID = 0
 ) (
-    input wire          clk,
-    input wire          reset,
+    input wire              clk,
+    input wire              reset,
     
     // Inputs
-    VX_alu_req_if       alu_req_if,
+    VX_alu_req_if.slave     alu_req_if,
 
     // Outputs
-    VX_branch_ctl_if    branch_ctl_if,
-    VX_commit_if        alu_commit_if    
+    VX_branch_ctl_if.master branch_ctl_if,
+    VX_commit_if.master     alu_commit_if    
 );   
 
     `UNUSED_PARAM (CORE_ID)

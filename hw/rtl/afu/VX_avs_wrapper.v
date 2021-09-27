@@ -8,8 +8,8 @@ module VX_avs_wrapper #(
     parameter REQ_TAG_WIDTH   = 1,
     parameter RD_QUEUE_SIZE   = 1,
         
-    localparam AVS_BYTEENW    = (AVS_DATA_WIDTH / 8),
-    localparam RD_QUEUE_ADDR_WIDTH = $clog2(RD_QUEUE_SIZE+1)
+    parameter AVS_BYTEENW     = (AVS_DATA_WIDTH / 8),
+    parameter RD_QUEUE_ADDR_WIDTH = $clog2(RD_QUEUE_SIZE+1)
 ) (
     input wire                          clk,
     input wire                          reset,

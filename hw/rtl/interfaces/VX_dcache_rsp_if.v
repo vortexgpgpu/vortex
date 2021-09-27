@@ -15,6 +15,22 @@ interface VX_dcache_rsp_if #(
     wire [TAG_WIDTH-1:0]                    tag;
     wire                                    ready;
 
+    modport master (
+        output valid,
+        output tmask,
+        output data,        
+        output tag,
+        input  ready
+    );
+
+    modport slave (
+        input  valid,
+        input  tmask,
+        input  data,
+        input  tag,
+        output ready
+    );
+
 endinterface
 
 `endif

@@ -3,26 +3,26 @@
 module VX_csr_unit #(
     parameter CORE_ID = 0
 ) (
-    input wire          clk,
-    input wire          reset,
+    input wire                  clk,
+    input wire                  reset,
 
 `ifdef PERF_ENABLE
-    VX_perf_memsys_if   perf_memsys_if,
-    VX_perf_pipeline_if perf_pipeline_if,
+    VX_perf_memsys_if.slave     perf_memsys_if,
+    VX_perf_pipeline_if.slave   perf_pipeline_if,
 `endif
 
-    VX_cmt_to_csr_if    cmt_to_csr_if,
-    VX_fetch_to_csr_if  fetch_to_csr_if,
-    VX_csr_req_if       csr_req_if,
-    VX_commit_if        csr_commit_if,
+    VX_cmt_to_csr_if.slave      cmt_to_csr_if,
+    VX_fetch_to_csr_if.slave    fetch_to_csr_if,
+    VX_csr_req_if.slave         csr_req_if,
+    VX_commit_if.master         csr_commit_if,
     
 `ifdef EXT_F_ENABLE
-    VX_fpu_to_csr_if    fpu_to_csr_if,
-    input wire[`NUM_WARPS-1:0] fpu_pending,
+    VX_fpu_to_csr_if.slave      fpu_to_csr_if,
+    input wire[`NUM_WARPS-1:0]  fpu_pending,
 `endif
 
     output wire[`NUM_WARPS-1:0] pending,
-    input wire          busy
+    input wire                  busy
 );    
     wire csr_we_s1;
     wire [`CSR_ADDR_BITS-1:0] csr_addr_s1;    

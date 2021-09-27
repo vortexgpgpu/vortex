@@ -9,6 +9,18 @@ interface VX_wstall_if();
     wire [`NW_BITS-1:0] wid;
     wire                stalled;
 
+    modport master (
+        output valid,
+        output wid,
+        output stalled
+    );
+
+    modport slave (
+        input valid,
+        input wid,
+        input stalled
+    );
+
 endinterface
 
 `endif

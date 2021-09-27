@@ -31,7 +31,7 @@ module VX_shared_mem #(
 
     // PERF
 `ifdef PERF_ENABLE
-    VX_perf_cache_if                            perf_cache_if,
+    VX_perf_cache_if.master perf_cache_if,
 `endif
 
     // Core request    
@@ -337,16 +337,22 @@ module VX_shared_mem #(
 
 `ifdef PERF_ENABLE
     // per cycle: core_reads, core_writes
-    reg [($clog2(NUM_REQS+1)-1):0] perf_core_reads_per_cycle, perf_core_writes_per_cycle;
-    reg [($clog2(NUM_REQS+1)-1):0] perf_crsp_stall_per_cycle;
+    wire [$clog2(NUM_REQS+1)-1:0] perf_core_reads_per_cycle;
+    wire [$clog2(NUM_REQS+1)-1:0] perf_core_writes_per_cycle;
+    wire [$clog2(NUM_REQS+1)-1:0] perf_crsp_stall_per_cycle;
 
-    assign perf_core_reads_per_cycle  = $countones(core_req_valid & core_req_ready & ~core_req_rw);
-    assign perf_core_writes_per_cycle = $countones(core_req_valid & core_req_ready & core_req_rw);
+    wire [NUM_REQS-1:0] perf_core_reads_per_mask = core_req_valid & core_req_ready & ~core_req_rw;
+    wire [NUM_REQS-1:0] perf_core_writes_per_mask = core_req_valid & core_req_ready & core_req_rw;
+
+    `POP_COUNT(perf_core_reads_per_cycle, perf_core_reads_per_mask);
+    `POP_COUNT(perf_core_writes_per_cycle, perf_core_writes_per_mask);
     
     if (CORE_TAG_ID_BITS != 0) begin
-        assign perf_crsp_stall_per_cycle = $countones(core_rsp_tmask & {NUM_REQS{core_rsp_valid && ~core_rsp_ready}});
+        wire [NUM_REQS-1:0] perf_crsp_stall_per_mask = core_rsp_tmask & {NUM_REQS{core_rsp_valid && ~core_rsp_ready}};
+        `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_mask);
     end else begin
-        assign perf_crsp_stall_per_cycle = $countones(core_rsp_valid & ~core_rsp_ready);
+        wire [NUM_REQS-1:0] perf_crsp_stall_per_mask = core_rsp_valid & ~core_rsp_ready;
+        `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_mask);
     end
 
     reg [`PERF_CTR_BITS-1:0] perf_core_reads;

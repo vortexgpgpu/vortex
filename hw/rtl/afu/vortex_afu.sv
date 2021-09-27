@@ -851,7 +851,7 @@ begin
   cci_wr_req_data <= t_ccip_clData'(cci_mem_rsp_data);  
 
   if (cci_wr_req_fire) begin
-    assert(cci_wr_req_ctr != 0);               
+    `ASSERT(cci_wr_req_ctr != 0, ("runtime error"));               
     cci_wr_req_ctr <= cci_wr_req_ctr - CCI_ADDR_WIDTH'(1);
     if (cci_wr_req_ctr == CCI_ADDR_WIDTH'(1)) begin
       cci_wr_req_done <= 1;

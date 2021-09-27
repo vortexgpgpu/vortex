@@ -17,6 +17,36 @@ interface VX_csr_req_if ();
     wire [`NR_BITS-1:0]     rd;
     wire                    wb;    
     wire                    ready;
+
+    modport master (
+        output valid,
+        output wid,
+        output tmask,
+        output PC,
+        output op_type,
+        output addr,
+        output rs1_data,        
+        output use_imm,
+        output imm,
+        output rd,
+        output wb,
+        input  ready
+    );
+
+    modport slave (
+        input  valid,
+        input  wid,
+        input  tmask,
+        input  PC,
+        input  op_type,
+        input  addr,
+        input  rs1_data,        
+        input  use_imm,
+        input  imm,
+        input  rd,
+        input  wb,
+        output ready
+    );
     
 endinterface
 

@@ -10,10 +10,10 @@ module VX_smem_arb #(
     parameter BUFFERED_RSP  = 0,
     parameter TYPE          = "P",
 
-    localparam ADDR_WIDTH   = (32-`CLOG2(DATA_SIZE)),
-    localparam DATA_WIDTH   = (8 * DATA_SIZE),
-    localparam LOG_NUM_REQS = `CLOG2(NUM_REQS),
-    localparam TAG_OUT_WIDTH = TAG_IN_WIDTH - LOG_NUM_REQS
+    parameter ADDR_WIDTH    = (32-`CLOG2(DATA_SIZE)),
+    parameter DATA_WIDTH    = (8 * DATA_SIZE),
+    parameter LOG_NUM_REQS  = `CLOG2(NUM_REQS),
+    parameter TAG_OUT_WIDTH = TAG_IN_WIDTH - LOG_NUM_REQS
 ) (
     input wire clk,
     input wire reset,

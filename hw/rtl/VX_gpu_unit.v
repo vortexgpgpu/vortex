@@ -5,15 +5,15 @@ module VX_gpu_unit #(
 ) (
     `SCOPE_IO_VX_gpu_unit
     
-    input wire      clk,
-    input wire      reset,
+    input wire          clk,
+    input wire          reset,
 
     // Inputs
-    VX_gpu_req_if   gpu_req_if,
+    VX_gpu_req_if.slave gpu_req_if,
 
     // Outputs
-    VX_warp_ctl_if  warp_ctl_if,
-    VX_commit_if    gpu_commit_if
+    VX_warp_ctl_if.master warp_ctl_if,
+    VX_commit_if.master gpu_commit_if
 );
 
     `UNUSED_PARAM (CORE_ID)
