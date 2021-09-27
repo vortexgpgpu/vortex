@@ -11,7 +11,21 @@ interface VX_icache_rsp_if #(
     wire                    valid;    
     wire [`WORD_WIDTH-1:0]  data;
     wire [TAG_WIDTH-1:0]    tag;    
-    wire                    ready;      
+    wire                    ready;    
+
+    modport master (
+        output valid,
+        output data,
+        output tag,
+        input  ready
+    );
+
+    modport slave (
+        input  valid,
+        input  data,
+        input  tag,
+        output ready
+    );  
 
 endinterface
 

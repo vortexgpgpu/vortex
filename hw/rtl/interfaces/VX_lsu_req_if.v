@@ -18,6 +18,36 @@ interface VX_lsu_req_if ();
     wire                            wb;
     wire                            ready;
 
+    modport master (
+        output valid,
+        output wid,
+        output tmask,
+        output PC,
+        output op_type,
+        output is_fence,
+        output store_data,
+        output base_addr,   
+        output offset,
+        output rd,
+        output wb,
+        input  ready
+    );
+
+    modport slave (
+        input  valid,
+        input  wid,
+        input  tmask,
+        input  PC,
+        input  op_type,
+        input  is_fence,
+        input  store_data,
+        input  base_addr,   
+        input  offset,
+        input  rd,
+        input  wb,
+        output ready
+    );
+
 endinterface
 
 `endif

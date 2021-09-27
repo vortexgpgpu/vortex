@@ -12,6 +12,24 @@ interface VX_warp_ctl_if ();
     gpu_barrier_t       barrier;
     gpu_split_t         split;
 
+    modport master (
+        output valid,
+        output wid,
+        output tmc,
+        output wspawn,
+        output barrier,
+        output split
+    );
+
+    modport slave (
+        input valid,
+        input wid,
+        input tmc,
+        input wspawn,
+        input barrier,
+        input split
+    );
+
 endinterface
 
 `endif

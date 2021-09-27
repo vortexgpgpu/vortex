@@ -1,21 +1,21 @@
 `include "VX_define.vh"
 
 module VX_instr_demux (
-    input wire      clk,
-    input wire      reset,
+    input wire              clk,
+    input wire              reset,
 
     // inputs
-    VX_ibuffer_if   ibuffer_if,
-    VX_gpr_rsp_if   gpr_rsp_if,
+    VX_ibuffer_if.slave     ibuffer_if,
+    VX_gpr_rsp_if.slave     gpr_rsp_if,
 
     // outputs
-    VX_alu_req_if   alu_req_if,
-    VX_lsu_req_if   lsu_req_if,
-    VX_csr_req_if   csr_req_if,
+    VX_alu_req_if.master    alu_req_if,
+    VX_lsu_req_if.master    lsu_req_if,
+    VX_csr_req_if.master    csr_req_if,
 `ifdef EXT_F_ENABLE
-    VX_fpu_req_if   fpu_req_if,
+    VX_fpu_req_if.master    fpu_req_if,
 `endif
-    VX_gpu_req_if   gpu_req_if    
+    VX_gpu_req_if.master    gpu_req_if    
 );
     wire [`NT_BITS-1:0] tid;
     wire alu_req_ready;

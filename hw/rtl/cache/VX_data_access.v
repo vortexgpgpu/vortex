@@ -16,7 +16,7 @@ module VX_data_access #(
     // Enable cache writeable
     parameter WRITE_ENABLE      = 1,
 
-    localparam WORD_SELECT_BITS = `UP(`WORD_SELECT_BITS)
+    parameter WORD_SELECT_BITS  = `UP(`WORD_SELECT_BITS)
 ) (
     input wire                          clk,
     input wire                          reset,

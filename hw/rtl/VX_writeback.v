@@ -3,19 +3,19 @@
 module VX_writeback #(
     parameter CORE_ID = 0
 ) (
-    input wire      clk,
-    input wire      reset,
+    input wire          clk,
+    input wire          reset,
 
     // inputs
-    VX_commit_if    alu_commit_if,
-    VX_commit_if    ld_commit_if,  
-    VX_commit_if    csr_commit_if,
+    VX_commit_if.slave  alu_commit_if,
+    VX_commit_if.slave  ld_commit_if,  
+    VX_commit_if.slave  csr_commit_if,
 `ifdef EXT_F_ENABLE
-    VX_commit_if    fpu_commit_if,
+    VX_commit_if.slave  fpu_commit_if,
 `endif
 
     // outputs
-    VX_writeback_if writeback_if
+    VX_writeback_if.master writeback_if
 );
 
     `UNUSED_PARAM (CORE_ID)

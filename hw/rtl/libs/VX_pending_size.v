@@ -25,7 +25,7 @@ module VX_pending_size #(
             empty_r <= 1;
             full_r  <= 0;
         end else begin
-            assert(!incr || !full);
+            `ASSERT(!incr || !full, ("runtime error"));
             if (incr) begin
                 if (!decr) begin
                     empty_r <= 0;

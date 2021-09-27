@@ -7,15 +7,15 @@ module VX_csr_data #(
     input wire reset,
 
 `ifdef PERF_ENABLE
-    VX_perf_memsys_if               perf_memsys_if,
-    VX_perf_pipeline_if             perf_pipeline_if,
+    VX_perf_memsys_if.slave         perf_memsys_if,
+    VX_perf_pipeline_if.slave       perf_pipeline_if,
 `endif
 
-    VX_cmt_to_csr_if                cmt_to_csr_if,
-    VX_fetch_to_csr_if              fetch_to_csr_if,
+    VX_cmt_to_csr_if.slave          cmt_to_csr_if,
+    VX_fetch_to_csr_if.slave        fetch_to_csr_if,
 
 `ifdef EXT_F_ENABLE
-    VX_fpu_to_csr_if                fpu_to_csr_if,  
+    VX_fpu_to_csr_if.slave          fpu_to_csr_if,
 `endif
 
     input wire                      read_enable,
@@ -44,19 +44,16 @@ module VX_csr_data #(
     
     reg [`NUM_WARPS-1:0][`INST_FRM_BITS+`FFLAGS_BITS-1:0] fcsr;
 
-    always @(posedge clk) begin
-    
+    always @(posedge clk) begin    
     `ifdef EXT_F_ENABLE
         if (reset) begin
             fcsr <= '0;
-        end
-    
+        end    
         if (fpu_to_csr_if.write_enable) begin
             fcsr[fpu_to_csr_if.write_wid][`FFLAGS_BITS-1:0] <= fcsr[fpu_to_csr_if.write_wid][`FFLAGS_BITS-1:0] 
                                                              | fpu_to_csr_if.write_fflags;
         end
     `endif
-
         if (write_enable) begin
             case (write_addr)
                 `CSR_FFLAGS:   fcsr[write_wid][`FFLAGS_BITS-1:0] <= write_data[`FFLAGS_BITS-1:0];
@@ -77,7 +74,7 @@ module VX_csr_data #(
                 `CSR_PMPADDR0: csr_pmpaddr[0] <= write_data;
 
                 default: begin           
-                    assert(~write_enable) else $error("%t: invalid CSR write address: %0h", $time, write_addr);
+                    `ASSERT(~write_enable, ("%t: invalid CSR write address: %0h", $time, write_addr));
                 end
             endcase                
         end

@@ -30,9 +30,7 @@ module VX_skid_buffer #(
 
     end else if (NOBACKPRESSURE) begin
 
-        always @(posedge clk) begin
-            assert(ready_out) else $error("ready_out should always be asserted");
-        end
+        `RUNTIME_ASSERT(ready_out, ("ready_out should always be asserted"))
 
         wire stall = valid_out && ~ready_out;
 

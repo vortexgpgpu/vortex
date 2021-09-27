@@ -10,11 +10,12 @@ set -e
 source=""
 top_level=""
 dir_list=()
-defines=""
+inc_args=""
+macro_args=""
 
 usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
 [ $# -eq 0 ] && usage
-while getopts "hs:t:I:D:" arg; do
+while getopts "s:t:I:D:h" arg; do
     case $arg in
     s) # source
         source=${OPTARG}
@@ -24,9 +25,10 @@ while getopts "hs:t:I:D:" arg; do
         ;;
     I) # include directory
         dir_list+=(${OPTARG})
+        inc_args="$inc_args -I${OPTARG}"
         ;;
     D) # macro definition
-        defines="$defines -D${OPTARG}"
+        macro_args="$macro_args -D${OPTARG}"
         ;;
     h | *) 
       usage
@@ -35,41 +37,29 @@ while getopts "hs:t:I:D:" arg; do
   esac
 done
 
-echo "top_level=$top_level, source=$source, defines=$defines"
-
-# process include paths
-inc_list=""
-for dir in "${dir_list[@]}" 
-do
-    echo "include: $dir" >> synth.log
-	inc_list="$inc_list -I$dir"
-done
-
-# process source files
-file_list=""
-for dir in "${dir_list[@]}" 
-do
-    for file in $(find $dir -maxdepth 1 -name '*.v' -o -name '*.sv' -type f) 
+{    
+    # read design sources
+    for dir in "${dir_list[@]}" 
     do
-        echo "file: $file" >> synth.log
-        file_list="$file_list $file"
+        for file in $(find $dir -maxdepth 1 -name '*.v' -o -name '*.sv' -type f) 
+        do
+            echo "read_verilog $macro_args $inc_args -sv $file"
+        done
     done
-done
+    if [ -n "$source" ]; then
+        echo "read_verilog $macro_args $inc_args -sv $source"
+    fi
 
-# system-verilog to verilog conversion
-sv2v $defines -w output.v $inc_list $file_list
+    # generic synthesis
+    echo "synth -top $top_level"
 
-{
-    echo "read_verilog -sv output.v"
-    echo "hierarchy -check -top $top_level"
+    # mapping to mycells.lib
+    echo "dfflibmap -liberty mycells.lib"
+    echo "abc -liberty mycells.lib"
+    echo "clean"
 
-    # insertation of global reset
-	echo "add -global_input reset 1"
-	echo "proc -global_arst reset"
-
-    echo "synth -run coarse; opt -fine"
-	echo "tee -o brams.log memory_bram -rules scripts/brams.txt;;"
-    echo "write_verilog -noexpr -noattr synth.v"
+    # write synthesized design
+    echo "write_verilog synth.v"
 } > synth.ys
 
 yosys -l yosys.log synth.ys

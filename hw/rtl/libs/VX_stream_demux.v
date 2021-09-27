@@ -5,7 +5,7 @@ module VX_stream_demux #(
     parameter LANES    = 1,
     parameter DATAW    = 1,
     parameter BUFFERED = 0,
-    localparam LOG_NUM_REQS = `LOG2UP(NUM_REQS)
+    parameter LOG_NUM_REQS = `LOG2UP(NUM_REQS)
 ) (
     input  wire clk,
     input  wire reset,

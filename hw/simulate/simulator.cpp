@@ -113,7 +113,8 @@ void Simulator::reset() {
     mem_rsp_vec_[b].clear();
   }
   last_mem_rsp_bank_ = 0;
-  mem_rsp_active_ = false;
+  mem_rd_rsp_active_ = false;
+  mem_wr_rsp_active_ = false;
 
 #ifdef AXI_BUS
   this->reset_axi_bus();
@@ -182,9 +183,11 @@ void Simulator::reset_axi_bus() {
   
 void Simulator::eval_axi_bus(bool clk) {
   if (!clk) {
-    mem_rsp_ready_ = vortex_->m_axi_rready;
+    mem_rd_rsp_ready_ = vortex_->m_axi_rready;
+    mem_wr_rsp_ready_ = vortex_->m_axi_bready;
     return;
   }
+
   if (ram_ == nullptr) {
     vortex_->m_axi_wready  = 0;
     vortex_->m_axi_awready = 0;
@@ -200,41 +203,68 @@ void Simulator::eval_axi_bus(bool clk) {
     }
   }
 
-  bool has_response = false;
+  bool has_rd_response = false;
+  bool has_wr_response = false;
 
   // schedule memory responses that are ready
   for (int i = 0; i < MEMORY_BANKS; ++i) {
     uint32_t b = (i + last_mem_rsp_bank_ + 1) % MEMORY_BANKS;
-    if (!mem_rsp_vec_[b].empty()
-    && (mem_rsp_vec_[b].begin()->cycles_left) <= 0) {
-        has_response = true;
-        last_mem_rsp_bank_ = b;
-        break;
+    if (!mem_rsp_vec_[b].empty()) {
+      auto mem_rsp_it = mem_rsp_vec_[b].begin();
+      if (mem_rsp_it->cycles_left <= 0) {
+          has_rd_response = !mem_rsp_it->write;
+          has_wr_response = mem_rsp_it->write;
+          last_mem_rsp_bank_ = b;
+          break;
+      }
     }
   }
 
-  // send memory response  
-  if (mem_rsp_active_
-  && vortex_->m_axi_rvalid && mem_rsp_ready_) {
-    mem_rsp_active_ = false;
+  // send memory read response  
+  if (mem_rd_rsp_active_
+  && vortex_->m_axi_rvalid && mem_rd_rsp_ready_) {
+    mem_rd_rsp_active_ = false;
   }
-  if (!mem_rsp_active_) {
-    if (has_response) {
-      vortex_->m_axi_rvalid = 1;      
-      std::list<mem_req_t>::iterator mem_rsp_it = mem_rsp_vec_[last_mem_rsp_bank_].begin();      
+  if (!mem_rd_rsp_active_) {
+    if (has_rd_response) {      
+      auto mem_rsp_it = mem_rsp_vec_[last_mem_rsp_bank_].begin();
       /*
-        printf("%0ld: [sim] MEM Rd: bank=%d, addr=%0lx, data=", timestamp, last_mem_rsp_bank_, mem_rsp_it->addr);
+        printf("%0ld: [sim] MEM Rd Rsp: bank=%d, addr=%0lx, data=", timestamp, last_mem_rsp_bank_, mem_rsp_it->addr);
         for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
           printf("%02x", mem_rsp_it->block[(MEM_BLOCK_SIZE-1)-i]);
         }
         printf("\n");
-      */
+      */      
+      vortex_->m_axi_rvalid = 1;
+      vortex_->m_axi_rid    = mem_rsp_it->tag;   
+      vortex_->m_axi_rresp  = 0;
+      vortex_->m_axi_rlast  = 1;
       memcpy((uint8_t*)vortex_->m_axi_rdata, mem_rsp_it->block.data(), MEM_BLOCK_SIZE);
-      vortex_->m_axi_rid = mem_rsp_it->tag;   
       mem_rsp_vec_[last_mem_rsp_bank_].erase(mem_rsp_it);
-      mem_rsp_active_ = true;
+      mem_rd_rsp_active_ = true;
     } else {
       vortex_->m_axi_rvalid = 0;
+    }
+  }
+
+  // send memory write response  
+  if (mem_wr_rsp_active_
+  && vortex_->m_axi_bvalid && mem_wr_rsp_ready_) {
+    mem_wr_rsp_active_ = false;
+  }
+  if (!mem_wr_rsp_active_) {
+    if (has_wr_response) {
+      auto mem_rsp_it = mem_rsp_vec_[last_mem_rsp_bank_].begin();
+      /*
+        printf("%0ld: [sim] MEM Wr Rsp: bank=%d, addr=%0lx\n", timestamp, last_mem_rsp_bank_, mem_rsp_it->addr);        
+      */
+      vortex_->m_axi_bvalid = 1;      
+      vortex_->m_axi_bid    = mem_rsp_it->tag;
+      vortex_->m_axi_bresp  = 0;
+      mem_rsp_vec_[last_mem_rsp_bank_].erase(mem_rsp_it);
+      mem_wr_rsp_active_ = true;
+    } else {
+      vortex_->m_axi_bvalid = 0;
     }
   }
 
@@ -260,6 +290,8 @@ void Simulator::eval_axi_bus(bool clk) {
         uint64_t byteen = vortex_->m_axi_wstrb;
         unsigned base_addr = vortex_->m_axi_awaddr;
         uint8_t* data = (uint8_t*)(vortex_->m_axi_wdata);
+
+        // detect stdout write
         if (base_addr >= IO_COUT_ADDR 
          && base_addr <= (IO_COUT_ADDR + IO_COUT_SIZE - 1)) {          
           for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
@@ -286,13 +318,20 @@ void Simulator::eval_axi_bus(bool clk) {
               (*ram_)[base_addr + i] = data[i];
             }
           }
-        }
+          mem_req_t mem_req;
+          mem_req.tag  = vortex_->m_axi_arid;
+          mem_req.addr = vortex_->m_axi_araddr;        
+          mem_req.cycles_left = 0;
+          mem_req.write = 1;
+          mem_rsp_vec_[req_bank].emplace_back(mem_req);
+        }        
       } else {
         mem_req_t mem_req;        
         mem_req.tag  = vortex_->m_axi_arid;   
         mem_req.addr = vortex_->m_axi_araddr;
         ram_->read(vortex_->m_axi_araddr, MEM_BLOCK_SIZE, mem_req.block.data());
         mem_req.cycles_left = MEM_LATENCY;
+        mem_req.write = 0;
         for (auto& rsp : mem_rsp_vec_[req_bank]) {
           if (mem_req.addr == rsp.addr) {
             // duplicate requests receive the same cycle delay
@@ -319,7 +358,7 @@ void Simulator::reset_mem_bus() {
 
 void Simulator::eval_mem_bus(bool clk) {
   if (!clk) {
-    mem_rsp_ready_ = vortex_->mem_rsp_ready;
+    mem_rd_rsp_ready_ = vortex_->mem_rsp_ready;
     return;
   }
 
@@ -350,14 +389,14 @@ void Simulator::eval_mem_bus(bool clk) {
   }
 
   // send memory response  
-  if (mem_rsp_active_
-  && vortex_->mem_rsp_valid && mem_rsp_ready_) {
-    mem_rsp_active_ = false;
+  if (mem_rd_rsp_active_
+  && vortex_->mem_rsp_valid && mem_rd_rsp_ready_) {
+    mem_rd_rsp_active_ = false;
   }
-  if (!mem_rsp_active_) {
+  if (!mem_rd_rsp_active_) {
     if (has_response) {
       vortex_->mem_rsp_valid = 1;      
-      std::list<mem_req_t>::iterator mem_rsp_it = mem_rsp_vec_[last_mem_rsp_bank_].begin();      
+      auto mem_rsp_it = mem_rsp_vec_[last_mem_rsp_bank_].begin();      
       /*
         printf("%0ld: [sim] MEM Rd: bank=%d, addr=%0lx, data=", timestamp, last_mem_rsp_bank_, mem_rsp_it->addr);
         for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
@@ -368,7 +407,7 @@ void Simulator::eval_mem_bus(bool clk) {
       memcpy((uint8_t*)vortex_->mem_rsp_data, mem_rsp_it->block.data(), MEM_BLOCK_SIZE);
       vortex_->mem_rsp_tag = mem_rsp_it->tag;   
       mem_rsp_vec_[last_mem_rsp_bank_].erase(mem_rsp_it);
-      mem_rsp_active_ = true;
+      mem_rd_rsp_active_ = true;
     } else {
       vortex_->mem_rsp_valid = 0;
     }

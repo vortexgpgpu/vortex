@@ -7,10 +7,10 @@ module VX_ibuffer #(
     input wire reset,
 
     // inputs
-    VX_decode_if  decode_if,  
+    VX_decode_if.slave  decode_if,  
 
     // outputs
-    VX_ibuffer_if ibuffer_if
+    VX_ibuffer_if.master ibuffer_if
 );
 
     `UNUSED_PARAM (CORE_ID)

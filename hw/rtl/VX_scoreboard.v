@@ -3,12 +3,12 @@
 module VX_scoreboard  #(
     parameter CORE_ID = 0
 ) (
-    input wire      clk,
-    input wire      reset,
+    input wire          clk,
+    input wire          reset,
 
-    VX_ibuffer_if   ibuffer_if,
-    VX_writeback_if writeback_if,
-    output wire     delay
+    VX_ibuffer_if.slave ibuffer_if,
+    VX_writeback_if.slave writeback_if,
+    output wire         delay
 );
     reg [`NUM_WARPS-1:0][`NUM_REGS-1:0] inuse_regs, inuse_regs_n;
 
@@ -61,15 +61,16 @@ module VX_scoreboard  #(
             end
         `endif
             if (release_reg) begin
-                assert(inuse_regs[writeback_if.wid][writeback_if.rd] != 0) 
-                    else $error("%t: *** core%0d: invalid writeback register: wid=%0d, PC=%0h, rd=%0d",
-                                $time, CORE_ID, writeback_if.wid, writeback_if.PC, writeback_if.rd);
+                `ASSERT(inuse_regs[writeback_if.wid][writeback_if.rd] != 0,
+                    ("%t: *** core%0d: invalid writeback register: wid=%0d, PC=%0h, rd=%0d",
+                                $time, CORE_ID, writeback_if.wid, writeback_if.PC, writeback_if.rd));
             end
             if (ibuffer_if.valid && ~ibuffer_if.ready) begin            
                 deadlock_ctr <= deadlock_ctr + 1;
-                assert(deadlock_ctr < deadlock_timeout) else $error("%t: *** core%0d-deadlock: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b",
+                `ASSERT(deadlock_ctr < deadlock_timeout,
+                    ("%t: *** core%0d-deadlock: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b",
                         $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.rd, ibuffer_if.wb, 
-                        deq_inuse_rd, deq_inuse_rs1, deq_inuse_rs2, deq_inuse_rs3);
+                        deq_inuse_rd, deq_inuse_rs1, deq_inuse_rs2, deq_inuse_rs3));
             end else if (ibuffer_if.valid && ibuffer_if.ready) begin
                 deadlock_ctr <= 0;
             end
