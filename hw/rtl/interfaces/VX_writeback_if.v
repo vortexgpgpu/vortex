@@ -36,6 +36,15 @@ interface VX_writeback_if ();
         output ready
     );
 
+    modport scoreboard (
+        input  valid,
+        input  wid,
+        input  PC,
+        input  rd,
+        input  eop,    
+        output ready
+    );
+
 endinterface
 
 `endif

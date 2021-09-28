@@ -24,11 +24,51 @@ module VX_issue #(
     VX_gpu_req_if.master    gpu_req_if
 );
     VX_ibuffer_if ibuffer_if();
-    VX_ibuffer_if execute_if();
-    VX_gpr_req_if gpr_req_if();
     VX_gpr_rsp_if gpr_rsp_if();
 
-    wire scoreboard_delay;
+    VX_gpr_req_if gpr_req_if();
+    assign gpr_req_if.wid = ibuffer_if.wid;
+    assign gpr_req_if.rs1 = ibuffer_if.rs1;
+    assign gpr_req_if.rs2 = ibuffer_if.rs2;
+    assign gpr_req_if.rs3 = ibuffer_if.rs3;
+
+    VX_writeback_if sboard_wb_if();
+    assign sboard_wb_if.valid  = writeback_if.valid;
+    assign sboard_wb_if.wid    = writeback_if.wid;
+    assign sboard_wb_if.PC     = writeback_if.PC;
+    assign sboard_wb_if.rd     = writeback_if.rd;
+    assign sboard_wb_if.eop    = writeback_if.eop;
+    assign sboard_wb_if.ready  = writeback_if.ready;
+        
+    VX_ibuffer_if sboard_ib_if();
+    assign sboard_ib_if.valid  = ibuffer_if.valid && idmux_ib_if.ready;
+    assign sboard_ib_if.wid    = ibuffer_if.wid;
+    assign sboard_ib_if.PC     = ibuffer_if.PC;   
+    assign sboard_ib_if.wb     = ibuffer_if.wb;      
+    assign sboard_ib_if.rd     = ibuffer_if.rd;
+    assign sboard_ib_if.rd_n   = ibuffer_if.rd_n;        
+    assign sboard_ib_if.rs1_n  = ibuffer_if.rs1_n;        
+    assign sboard_ib_if.rs2_n  = ibuffer_if.rs2_n;        
+    assign sboard_ib_if.rs3_n  = ibuffer_if.rs3_n;        
+    assign sboard_ib_if.wid_n  = ibuffer_if.wid_n;
+
+    VX_ibuffer_if idmux_ib_if();
+    assign idmux_ib_if.valid   = ibuffer_if.valid && sboard_ib_if.ready;
+    assign idmux_ib_if.wid     = ibuffer_if.wid;
+    assign idmux_ib_if.tmask   = ibuffer_if.tmask;
+    assign idmux_ib_if.PC      = ibuffer_if.PC;
+    assign idmux_ib_if.ex_type = ibuffer_if.ex_type;    
+    assign idmux_ib_if.op_type = ibuffer_if.op_type; 
+    assign idmux_ib_if.op_mod  = ibuffer_if.op_mod;    
+    assign idmux_ib_if.wb      = ibuffer_if.wb;
+    assign idmux_ib_if.rd      = ibuffer_if.rd;
+    assign idmux_ib_if.rs1     = ibuffer_if.rs1;
+    assign idmux_ib_if.imm     = ibuffer_if.imm;        
+    assign idmux_ib_if.use_PC  = ibuffer_if.use_PC;
+    assign idmux_ib_if.use_imm = ibuffer_if.use_imm;
+
+    // issue the instruction
+    assign ibuffer_if.ready = sboard_ib_if.ready && idmux_ib_if.ready;
 
     `RESET_RELAY (ibuf_reset);
     `RESET_RELAY (gpr_reset);
@@ -48,15 +88,9 @@ module VX_issue #(
     ) scoreboard (
         .clk        (clk),
         .reset      (reset), 
-        .ibuffer_if (ibuffer_if),
-        .writeback_if(writeback_if),
-        .delay      (scoreboard_delay)
+        .ibuffer_if (sboard_ib_if),
+        .writeback_if(sboard_wb_if)
     );
-        
-    assign gpr_req_if.wid = ibuffer_if.wid;
-    assign gpr_req_if.rs1 = ibuffer_if.rs1;
-    assign gpr_req_if.rs2 = ibuffer_if.rs2;
-    assign gpr_req_if.rs3 = ibuffer_if.rs3;
 
     VX_gpr_stage #(
         .CORE_ID(CORE_ID)
@@ -68,24 +102,10 @@ module VX_issue #(
         .gpr_rsp_if   (gpr_rsp_if)
     );
 
-    assign execute_if.valid     = ibuffer_if.valid && ~scoreboard_delay;
-    assign execute_if.wid       = ibuffer_if.wid;
-    assign execute_if.tmask     = ibuffer_if.tmask;
-    assign execute_if.PC        = ibuffer_if.PC;
-    assign execute_if.ex_type   = ibuffer_if.ex_type;    
-    assign execute_if.op_type   = ibuffer_if.op_type; 
-    assign execute_if.op_mod    = ibuffer_if.op_mod;    
-    assign execute_if.wb        = ibuffer_if.wb;
-    assign execute_if.rd        = ibuffer_if.rd;
-    assign execute_if.rs1       = ibuffer_if.rs1;
-    assign execute_if.imm       = ibuffer_if.imm;        
-    assign execute_if.use_PC    = ibuffer_if.use_PC;
-    assign execute_if.use_imm   = ibuffer_if.use_imm;
-
     VX_instr_demux instr_demux (
         .clk        (clk),      
         .reset      (demux_reset),
-        .ibuffer_if (execute_if),
+        .ibuffer_if (idmux_ib_if),
         .gpr_rsp_if (gpr_rsp_if),
         .alu_req_if (alu_req_if),
         .lsu_req_if (lsu_req_if),        
@@ -94,10 +114,7 @@ module VX_issue #(
         .fpu_req_if (fpu_req_if),
     `endif
         .gpu_req_if (gpu_req_if)
-    );     
-
-    // issue the instruction
-    assign ibuffer_if.ready = !scoreboard_delay && execute_if.ready;     
+    );
 
     `SCOPE_ASSIGN (issue_fire,        ibuffer_if.valid && ibuffer_if.ready);
     `SCOPE_ASSIGN (issue_wid,         ibuffer_if.wid);
@@ -115,7 +132,7 @@ module VX_issue #(
     `SCOPE_ASSIGN (issue_use_pc,      ibuffer_if.use_PC);
     `SCOPE_ASSIGN (issue_use_imm,     ibuffer_if.use_imm);
     `SCOPE_ASSIGN (scoreboard_delay,  scoreboard_delay); 
-    `SCOPE_ASSIGN (execute_delay,     ~execute_if.ready);    
+    `SCOPE_ASSIGN (execute_delay,     ~idmux_ib_if.ready);    
     `SCOPE_ASSIGN (gpr_rsp_a,         gpr_rsp_if.rs1_data);
     `SCOPE_ASSIGN (gpr_rsp_b,         gpr_rsp_if.rs2_data);
     `SCOPE_ASSIGN (gpr_rsp_c,         gpr_rsp_if.rs3_data);
