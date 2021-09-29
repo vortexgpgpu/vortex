@@ -1,7 +1,7 @@
 `ifndef VX_PLATFORM
 `define VX_PLATFORM
 
-`ifndef __SYNTHESIS__
+`ifndef SYNTHESIS
 `include "util_dpi.vh"
 `endif
 
@@ -9,7 +9,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`ifndef __SYNTHESIS__
+`ifndef SYNTHESIS
 
 `ifndef NDEBUG
     `define DEBUG_BLOCK(x) /* verilator lint_off UNUSED */ \
@@ -70,7 +70,7 @@
 `define TRACING_ON  /* verilator tracing_on */
 `define TRACING_OFF /* verilator tracing_off */
 
-`else // __SYNTHESIS__
+`else // SYNTHESIS
 
 `define DEBUG_BLOCK(x)
 `define IGNORE_UNUSED_BEGIN
@@ -87,7 +87,7 @@
 `define TRACING_ON
 `define TRACING_OFF
 
-`endif // __SYNTHESIS__
+`endif // SYNTHESIS
 
 ///////////////////////////////////////////////////////////////////////////////
 
