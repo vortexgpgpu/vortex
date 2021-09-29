@@ -1,6 +1,11 @@
 BUILD_DIR ?= build
 
-.PHONY: unittest pipeline smem cache fpu_core core vortex top1 top2 top4 top8 top16 top32 top64
+.PHONY: dogfood unittest pipeline smem cache fpu_core core vortex top1 top2 top4 top8 top16 top32 top64
+
+dogfood:
+	mkdir -p dogfood/$(BUILD_DIR)
+	cp dogfood/Makefile dogfood/$(BUILD_DIR)
+	$(MAKE) -C dogfood/$(BUILD_DIR) clean && $(MAKE) -C dogfood/$(BUILD_DIR) > dogfood/$(BUILD_DIR)/build.log 2>&1 &
 
 unittest:
 	mkdir -p unittest/$(BUILD_DIR)
