@@ -13,7 +13,8 @@ module VX_fpu_unit #(
     input wire[`NUM_WARPS-1:0] csr_pending,
     output wire[`NUM_WARPS-1:0] pending
 ); 
-
+    import fpu_types::*;
+    
     `UNUSED_PARAM (CORE_ID)    
     localparam FPUQ_BITS = `LOG2UP(`FPUQ_SIZE);
 

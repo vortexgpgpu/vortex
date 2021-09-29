@@ -12,16 +12,16 @@ module VX_core #(
     // Memory request
     output wire                             mem_req_valid,
     output wire                             mem_req_rw,    
-    output wire [`DCACHE_MEM_BYTEEN_WIDTH-1:0]    mem_req_byteen,
-    output wire [`DCACHE_MEM_ADDR_WIDTH-1:0]      mem_req_addr,
-    output wire [`DCACHE_MEM_DATA_WIDTH-1:0]      mem_req_data,
-    output wire [`XMEM_TAG_WIDTH-1:0]       mem_req_tag,
+    output wire [`DCACHE_MEM_BYTEEN_WIDTH-1:0] mem_req_byteen,
+    output wire [`DCACHE_MEM_ADDR_WIDTH-1:0] mem_req_addr,
+    output wire [`DCACHE_MEM_DATA_WIDTH-1:0] mem_req_data,
+    output wire [`L1_MEM_TAG_WIDTH-1:0]     mem_req_tag,
     input  wire                             mem_req_ready,
 
     // Memory reponse    
     input  wire                             mem_rsp_valid,
-    input  wire [`DCACHE_MEM_DATA_WIDTH-1:0]      mem_rsp_data,
-    input  wire [`XMEM_TAG_WIDTH-1:0]       mem_rsp_tag,
+    input  wire [`DCACHE_MEM_DATA_WIDTH-1:0] mem_rsp_data,
+    input  wire [`L1_MEM_TAG_WIDTH-1:0]     mem_rsp_tag,
     output wire                             mem_rsp_ready,
 
     // Status
@@ -34,12 +34,12 @@ module VX_core #(
     VX_mem_req_if #(
         .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
         .ADDR_WIDTH (`DCACHE_MEM_ADDR_WIDTH),
-        .TAG_WIDTH  (`XMEM_TAG_WIDTH)
+        .TAG_WIDTH  (`L1_MEM_TAG_WIDTH)
     ) mem_req_if();
 
     VX_mem_rsp_if #(
         .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (`XMEM_TAG_WIDTH)
+        .TAG_WIDTH  (`L1_MEM_TAG_WIDTH)
     ) mem_rsp_if();
 
     assign mem_req_valid = mem_req_if.valid;

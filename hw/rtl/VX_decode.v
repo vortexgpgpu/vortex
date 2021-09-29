@@ -1,5 +1,7 @@
 `include "VX_define.vh"
+`ifdef DBG_PRINT_PIPELINE
 `include "VX_print_instr.vh"
+`endif
 
 `ifdef EXT_F_ENABLE
     `define USED_IREG(r) \

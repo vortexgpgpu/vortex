@@ -15,6 +15,7 @@ module VX_gpu_unit #(
     VX_warp_ctl_if.master warp_ctl_if,
     VX_commit_if.master gpu_commit_if
 );
+    import gpu_types::*;
 
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (clk)

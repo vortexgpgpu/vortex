@@ -1,4 +1,4 @@
-`include "VX_define.vh"
+`include "VX_fpu_define.vh"
 
 module VX_fpu_fpga #( 
     parameter TAGW = 4

@@ -12,16 +12,16 @@ module VX_cluster #(
     // Memory request
     output wire                             mem_req_valid,
     output wire                             mem_req_rw,    
-    output wire [`L2_MEM_BYTEEN_WIDTH-1:0]   mem_req_byteen,    
-    output wire [`L2_MEM_ADDR_WIDTH-1:0]     mem_req_addr,
-    output wire [`L2_MEM_DATA_WIDTH-1:0]     mem_req_data,
-    output wire [`L2_MEM_TAG_WIDTH-1:0]      mem_req_tag,
+    output wire [`L2_MEM_BYTEEN_WIDTH-1:0]  mem_req_byteen,    
+    output wire [`L2_MEM_ADDR_WIDTH-1:0]    mem_req_addr,
+    output wire [`L2_MEM_DATA_WIDTH-1:0]    mem_req_data,
+    output wire [`L2_MEM_TAG_WIDTH-1:0]     mem_req_tag,
     input  wire                             mem_req_ready,
 
     // Memory response    
     input wire                              mem_rsp_valid,        
-    input wire [`L2_MEM_DATA_WIDTH-1:0]      mem_rsp_data,
-    input wire [`L2_MEM_TAG_WIDTH-1:0]       mem_rsp_tag,
+    input wire [`L2_MEM_DATA_WIDTH-1:0]     mem_rsp_data,
+    input wire [`L2_MEM_TAG_WIDTH-1:0]      mem_rsp_tag,
     output wire                             mem_rsp_ready,
 
     // Status
@@ -34,12 +34,12 @@ module VX_cluster #(
     wire [`NUM_CORES-1:0][`DCACHE_MEM_BYTEEN_WIDTH-1:0] per_core_mem_req_byteen;    
     wire [`NUM_CORES-1:0][`DCACHE_MEM_ADDR_WIDTH-1:0] per_core_mem_req_addr;
     wire [`NUM_CORES-1:0][`DCACHE_MEM_DATA_WIDTH-1:0] per_core_mem_req_data;
-    wire [`NUM_CORES-1:0][`XMEM_TAG_WIDTH-1:0]  per_core_mem_req_tag;
+    wire [`NUM_CORES-1:0][`L1_MEM_TAG_WIDTH-1:0] per_core_mem_req_tag;
     wire [`NUM_CORES-1:0]                       per_core_mem_req_ready;
 
     wire [`NUM_CORES-1:0]                       per_core_mem_rsp_valid;            
     wire [`NUM_CORES-1:0][`DCACHE_MEM_DATA_WIDTH-1:0] per_core_mem_rsp_data;
-    wire [`NUM_CORES-1:0][`XMEM_TAG_WIDTH-1:0]  per_core_mem_rsp_tag;
+    wire [`NUM_CORES-1:0][`L1_MEM_TAG_WIDTH-1:0] per_core_mem_rsp_tag;
     wire [`NUM_CORES-1:0]                       per_core_mem_rsp_ready;
 
     wire [`NUM_CORES-1:0]                       per_core_busy;
@@ -69,7 +69,7 @@ module VX_cluster #(
             .mem_rsp_tag    (per_core_mem_rsp_tag  [i]),
             .mem_rsp_ready  (per_core_mem_rsp_ready[i]),
 
-            .busy           (per_core_busy          [i])
+            .busy           (per_core_busy         [i])
         );
     end
     
@@ -96,7 +96,7 @@ module VX_cluster #(
             .MRSQ_SIZE          (`L2_MRSQ_SIZE),
             .MREQ_SIZE          (`L2_MREQ_SIZE),
             .WRITE_ENABLE       (1),          
-            .CORE_TAG_WIDTH     (`XMEM_TAG_WIDTH),
+            .CORE_TAG_WIDTH     (`L1_MEM_TAG_WIDTH),
             .CORE_TAG_ID_BITS   (0),
             .MEM_TAG_WIDTH      (`L2_MEM_TAG_WIDTH),
             .NC_ENABLE          (1)
@@ -150,7 +150,7 @@ module VX_cluster #(
             .NUM_REQS     (`NUM_CORES),
             .DATA_WIDTH   (`DCACHE_MEM_DATA_WIDTH),
             .ADDR_WIDTH   (`DCACHE_MEM_ADDR_WIDTH),           
-            .TAG_IN_WIDTH (`XMEM_TAG_WIDTH),            
+            .TAG_IN_WIDTH (`L1_MEM_TAG_WIDTH),            
             .TYPE         ("R"),
             .TAG_SEL_IDX  (1), // Skip 0 for NC flag
             .BUFFERED_REQ (1),

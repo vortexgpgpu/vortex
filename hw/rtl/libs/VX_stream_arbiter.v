@@ -95,7 +95,7 @@ module VX_stream_arbiter #(
                 .grant_onehot (sel_onehot)
             );
         end else begin
-            $error ("invalid parameter");
+            `ERROR(("invalid parameter"));
         end
 
         wire [LANES-1:0] valid_in_sel;
