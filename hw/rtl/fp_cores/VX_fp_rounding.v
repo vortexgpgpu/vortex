@@ -1,5 +1,4 @@
-
-`include "VX_define.vh"
+`include "VX_fpu_define.vh"
 
 /// Modified port of rouding module from fpnew Libray
 /// reference: https://github.com/pulp-platform/fpnew

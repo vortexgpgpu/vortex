@@ -1,7 +1,4 @@
-`ifndef SYNTHESIS
-
-`include "VX_define.vh"
-`include "float_dpi.vh"
+`include "VX_fpu_define.vh"
 
 module VX_fpu_dpi #( 
     parameter TAGW = 1
@@ -411,5 +408,3 @@ module VX_fpu_dpi #(
     assign ready_in = per_core_ready_in[core_select];
 
 endmodule
-
-`endif

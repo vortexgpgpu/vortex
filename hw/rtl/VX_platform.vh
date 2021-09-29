@@ -1,7 +1,7 @@
 `ifndef VX_PLATFORM
 `define VX_PLATFORM
 
-`ifndef SYNTHESIS
+`ifndef __SYNTHESIS__
 `include "util_dpi.vh"
 `endif
 
@@ -9,7 +9,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`ifndef SYNTHESIS
+`ifndef __SYNTHESIS__
 
 `ifndef NDEBUG
     `define DEBUG_BLOCK(x) /* verilator lint_off UNUSED */ \
@@ -29,7 +29,8 @@
                               /* verilator lint_off UNOPTFLAT */ \
                               /* verilator lint_off UNDRIVEN */ \
                               /* verilator lint_off DECLFILENAME */ \
-                              /* verilator lint_off IMPLICIT */
+                              /* verilator lint_off IMPLICIT */ \
+                              /* verilator lint_off IMPORTSTAR */
 
 `define IGNORE_WARNINGS_END   /* verilator lint_on UNUSED */ \
                               /* verilator lint_on PINCONNECTEMPTY */ \
@@ -37,7 +38,8 @@
                               /* verilator lint_on UNOPTFLAT */ \
                               /* verilator lint_on UNDRIVEN */ \
                               /* verilator lint_on DECLFILENAME */ \
-                              /* verilator lint_on IMPLICIT */
+                              /* verilator lint_on IMPLICIT */ \
+                              /* verilator lint_on IMPORTSTAR */
 
 `define UNUSED_PARAM(x)  /* verilator lint_off UNUSED */ \
                          localparam  __``x = x; \
@@ -48,6 +50,9 @@
 `define UNUSED_PIN(x)  /* verilator lint_off PINCONNECTEMPTY */ \
                        . x () \
                        /* verilator lint_on PINCONNECTEMPTY */
+
+`define ERROR(msg) \
+    $error msg
 
 `define ASSERT(cond, msg) \
     assert(cond) else $error msg
@@ -65,7 +70,7 @@
 `define TRACING_ON  /* verilator tracing_on */
 `define TRACING_OFF /* verilator tracing_off */
 
-`else // SYNTHESIS
+`else // __SYNTHESIS__
 
 `define DEBUG_BLOCK(x)
 `define IGNORE_UNUSED_BEGIN
@@ -75,13 +80,14 @@
 `define UNUSED_PARAM(x)
 `define UNUSED_VAR(x)
 `define UNUSED_PIN(x) . x ()
+`define ERROR(msg)
 `define ASSERT(cond, msg) if (cond);
 `define STATIC_ASSERT(cond, msg)
 `define RUNTIME_ASSERT(cond, msg)
 `define TRACING_ON
 `define TRACING_OFF
 
-`endif // SYNTHESIS
+`endif // __SYNTHESIS__
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -106,14 +112,12 @@
 `define LOG2UP(x)   (((x) > 1) ? $clog2(x) : 1)
 `define ISPOW2(x)   (((x) != 0) && (0 == ((x) & ((x) - 1))))
 
-`define ABS(x)      (($signed(x) < 0) ? (-$signed(x)) : x);
+`define ABS(x)      (($signed(x) < 0) ? (-$signed(x)) : (x));
 
-`define MIN(x, y)   ((x < y) ? (x) : (y))
-`define MAX(x, y)   ((x > y) ? (x) : (y))
+`define MIN(x, y)   (((x) < (y)) ? (x) : (y))
+`define MAX(x, y)   (((x) > (y)) ? (x) : (y))
 
-`define UP(x)       (((x) > 0) ? x : 1)
-
-`define SAFE_RNG(h,l) `MAX(h,l) : l
+`define UP(x)       (((x) > 0) ? (x) : 1)
 
 `define RTRIM(x,s)  x[$bits(x)-1:($bits(x)-s)]
 

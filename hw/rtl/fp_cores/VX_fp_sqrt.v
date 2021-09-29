@@ -1,8 +1,4 @@
-`include "VX_define.vh"
-
-`ifndef SYNTHESIS
-`include "float_dpi.vh"
-`endif
+`include "VX_fpu_define.vh"
 
 module VX_fp_sqrt #( 
     parameter TAGW = 1,
