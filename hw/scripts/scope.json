@@ -1,10 +1,21 @@
 {
     "version": 1,
+    "include_paths":[
+        "../dpi",
+        "../rtl",
+        "../rtl/afu",        
+        "../rtl/cache",        
+        "../rtl/fp_cores",
+        "../rtl/interfaces",
+        "../rtl/libs"        
+    ],
     "includes":[
-        "../dpi/util_dpi.vh",
-        "../rtl/VX_config.vh", 
-        "../rtl/VX_platform.vh",         
-        "../rtl/VX_define.vh", 
+        "../rtl/VX_config.vh",
+        "../rtl/VX_platform.vh",
+        "../rtl/VX_define.vh",
+        "../rtl/VX_gpu_types.vh",
+        "../rtl/fp_cores/VX_fpu_types.vh",
+        "../rtl/fp_cores/VX_fpu_define.vh",
         "../rtl/cache/VX_cache_define.vh"
     ],
     "modules": {
@@ -61,8 +72,8 @@
         "VX_gpu_unit": {},
         "VX_mem_unit": {
             "submodules": {                
-                "dcache": {"type":"VX_cache", "params":{"NUM_BANKS":"`DNUM_BANKS"}},
-                "icache": {"type":"VX_cache", "params":{"NUM_BANKS":"`INUM_BANKS"}}
+                "dcache": {"type":"VX_cache", "params":{"NUM_BANKS":"`DCACHE_NUM_BANKS"}},
+                "icache": {"type":"VX_cache", "params":{"NUM_BANKS":"1"}}
             }
         },
         "VX_cache": {
@@ -112,9 +123,9 @@
             "!cci_pending_writes_full": 1,
             "?afu_mem_req_fire": 1,            
             "afu_mem_req_addr": 26,
-            "afu_mem_req_tag": 32,
+            "afu_mem_req_tag": 27,
             "?afu_mem_rsp_fire": 1,
-            "afu_mem_rsp_tag": 32
+            "afu_mem_rsp_tag": 27
         },
         "afu/vortex": {
             "!reset": 1,
@@ -133,10 +144,10 @@
             "?icache_req_fire": 1,            
             "icache_req_wid":"`NW_BITS",
             "icache_req_addr": 32,
-            "icache_req_tag":"`ICORE_TAG_ID_BITS",
+            "icache_req_tag":"`ICACHE_CORE_TAG_ID_BITS",
             "?icache_rsp_fire": 1,
             "icache_rsp_data": 32,
-            "icache_rsp_tag":"`ICORE_TAG_ID_BITS"
+            "icache_rsp_tag":"`ICACHE_CORE_TAG_ID_BITS"
         },
         "afu/vortex/cluster/core/pipeline/fetch/warp_sched": {
             "?wsched_scheduled": 1,

@@ -278,6 +278,7 @@ def expand_text(text, params):
     return None
 
 def parse_include(filename, nesting):    
+    print("*** parsing: " + filename + "...")        
     if nesting > 99:
         raise Exception("include recursion!")    
     #print("*** parsing '" + filename + "'...")    
@@ -811,6 +812,10 @@ def main():
     config = load_config(args.config) 
     
     exclude_files.append(os.path.basename(args.vl))
+
+    if "include_paths" in config:
+        for path in config["include_paths"]:
+            load_include_path(path)
 
     if "includes" in config:
         parse_includes(config["includes"])
