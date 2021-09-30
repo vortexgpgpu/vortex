@@ -3,9 +3,6 @@
 # exit when any command fails
 set -e
 
-# build sources
-make -s
-
 coverage() 
 {
 echo "begin coverage tests..."

@@ -47,7 +47,7 @@ VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
 
 VL_FLAGS += --exe $(SRCS) $(RTL_INCLUDE)
-VL_FLAGS += --cc Vortex.v --top-module $(TOP)
+VL_FLAGS += --cc $(TOP) --top-module $(TOP)
 
 # FPU backend
 FPU_CORE ?= FPU_FPNEW

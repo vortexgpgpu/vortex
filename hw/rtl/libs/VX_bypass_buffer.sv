@@ -31,7 +31,7 @@ module VX_bypass_buffer #(
                     buffer_valid <= 0;
                 end
                 if (valid_in && ~ready_out) begin
-                    `ASSERT(!buffer_valid, "runtime error");
+                    `ASSERT(!buffer_valid, ("runtime error"));
                     buffer_valid <= 1;
                 end
             end

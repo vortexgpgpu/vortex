@@ -30,6 +30,8 @@ module VX_csr_data #(
     
     input wire                      busy
 );
+    import fpu_types::*;
+    
     reg [`CSR_WIDTH-1:0] csr_satp;
     reg [`CSR_WIDTH-1:0] csr_mstatus;
     reg [`CSR_WIDTH-1:0] csr_medeleg;

@@ -22,19 +22,19 @@ module VX_pipeline #(
     input wire                              dcache_rsp_valid,
     input wire [`NUM_THREADS-1:0]           dcache_rsp_tmask,
     input wire [`NUM_THREADS-1:0][31:0]     dcache_rsp_data,
-    input wire [`DCACHE_CORE_TAG_WIDTH-1:0]       dcache_rsp_tag,    
+    input wire [`DCACHE_CORE_TAG_WIDTH-1:0] dcache_rsp_tag,    
     output wire                             dcache_rsp_ready,      
 
     // Icache core request
     output wire                             icache_req_valid,
     output wire [29:0]                      icache_req_addr,
-    output wire [`ICACHE_CORE_TAG_WIDTH-1:0]      icache_req_tag,
+    output wire [`ICACHE_CORE_TAG_WIDTH-1:0] icache_req_tag,
     input wire                              icache_req_ready,
 
     // Icache core response    
     input wire                              icache_rsp_valid,
     input wire [31:0]                       icache_rsp_data,
-    input wire [`ICACHE_CORE_TAG_WIDTH-1:0]       icache_rsp_tag,    
+    input wire [`ICACHE_CORE_TAG_WIDTH-1:0] icache_rsp_tag,    
     output wire                             icache_rsp_ready,   
 
 `ifdef PERF_ENABLE

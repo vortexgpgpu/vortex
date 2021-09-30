@@ -94,7 +94,7 @@ localparam STATE_WIDTH        = $clog2(STATE_MAX_VALUE);
 
 wire [127:0] afu_id = `AFU_ACCEL_UUID;
 
-wire [63:0] dev_caps = {16'(`NUM_THREADS), 16'(`NUM_WARPS), 16'(`NUM_CORES), 16'(`IMPLEMENTATION_ID)};
+wire [63:0] dev_caps = {16'(`NUM_THREADS), 16'(`NUM_WARPS), 16'(`NUM_CORES * `NUM_CLUSTERS), 16'(`IMPLEMENTATION_ID)};
 
 reg [STATE_WIDTH-1:0] state;
 

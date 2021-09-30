@@ -1,10 +1,6 @@
-`include "VX_define.vh"
+`include "VX_fpu_define.vh"
 
-`ifndef SYNTHESIS
-`include "float_dpi.vh"
-`endif
-
-module VX_fp_fma #( 
+module VX_fp_div #( 
     parameter TAGW = 1,
     parameter LANES = 1
 ) (
@@ -15,16 +11,11 @@ module VX_fp_fma #(
     input wire  valid_in,
 
     input wire [TAGW-1:0] tag_in,
-    
+
     input wire [`INST_FRM_BITS-1:0] frm,
-
-    input wire  do_madd,
-    input wire  do_sub,
-    input wire  do_neg,
-
+    
     input wire [LANES-1:0][31:0]  dataa,
     input wire [LANES-1:0][31:0]  datab,
-    input wire [LANES-1:0][31:0]  datac,
     output wire [LANES-1:0][31:0] result,  
 
     output wire has_fflags,
@@ -34,47 +25,23 @@ module VX_fp_fma #(
 
     input wire  ready_out,
     output wire valid_out
-);
-
+);    
     wire stall = ~ready_out && valid_out;
     wire enable = ~stall;
 
-    for (genvar i = 0; i < LANES; i++) begin       
-        reg [31:0] a, b, c;
-
-        always @(*) begin
-            if (do_madd) begin
-                // MADD/MSUB/NMADD/NMSUB
-                a = do_neg ? {~dataa[i][31], dataa[i][30:0]} : dataa[i];                    
-                b = datab[i];
-                c = (do_neg ^ do_sub) ? {~datac[i][31], datac[i][30:0]} : datac[i];
-            end else begin
-                if (do_neg) begin
-                    // MUL
-                    a = dataa[i];
-                    b = datab[i];
-                    c = 0;
-                end else begin
-                    // ADD/SUB
-                    a = 32'h3f800000; // 1.0f
-                    b = dataa[i];
-                    c = do_sub ? {~datab[i][31], datab[i][30:0]} : datab[i];
-                end
-            end    
-        end
-
+    for (genvar i = 0; i < LANES; i++) begin        
     `ifdef VERILATOR
         reg [31:0] r;
         fflags_t f;
 
         always @(*) begin        
-            dpi_fmadd (a, b, c, frm, r, f);
+            dpi_fdiv (dataa[i], datab[i], frm, r, f);
         end
         `UNUSED_VAR (f)
 
         VX_shift_register #(
             .DATAW  (32),
-            .DEPTH  (`LATENCY_FMA),
+            .DEPTH  (`LATENCY_FDIV),
             .RESETW (1)
         ) shift_req_dpi (
             .clk      (clk),
@@ -84,26 +51,25 @@ module VX_fp_fma #(
             .data_out (result[i])
         );
     `else
-        `RESET_RELAY (fma_reset);
+        `RESET_RELAY (fdiv_reset);
 
-        acl_fmadd fmadd (
+        acl_fdiv fdiv (
             .clk    (clk),
-            .areset (fma_reset),
+            .areset (fdiv_reset),
             .en     (enable),
-            .a      (a),
-            .b      (b),
-            .c      (c),
+            .a      (dataa[i]),
+            .b      (datab[i]),
             .q      (result[i])
         );
     `endif
     end
-    
+
     VX_shift_register #(
         .DATAW  (1 + TAGW),
-        .DEPTH  (`LATENCY_FMA),
+        .DEPTH  (`LATENCY_FDIV),
         .RESETW (1)
     ) shift_reg (
-        .clk(clk),
+        .clk      (clk),
         .reset    (reset),
         .enable   (enable),
         .data_in  ({valid_in,  tag_in}),
