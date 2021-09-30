@@ -131,8 +131,8 @@ module VX_issue #(
     `SCOPE_ASSIGN (issue_imm,         ibuffer_if.imm);
     `SCOPE_ASSIGN (issue_use_pc,      ibuffer_if.use_PC);
     `SCOPE_ASSIGN (issue_use_imm,     ibuffer_if.use_imm);
-    `SCOPE_ASSIGN (scoreboard_delay,  scoreboard_delay); 
-    `SCOPE_ASSIGN (execute_delay,     ~idmux_ib_if.ready);    
+    `SCOPE_ASSIGN (scoreboard_delay,  !sboard_wb_if.ready); 
+    `SCOPE_ASSIGN (execute_delay,     !idmux_ib_if.ready);    
     `SCOPE_ASSIGN (gpr_rsp_a,         gpr_rsp_if.rs1_data);
     `SCOPE_ASSIGN (gpr_rsp_b,         gpr_rsp_if.rs2_data);
     `SCOPE_ASSIGN (gpr_rsp_c,         gpr_rsp_if.rs3_data);
@@ -170,7 +170,7 @@ module VX_issue #(
             if (decode_if.valid & !decode_if.ready) begin
                 perf_ibf_stalls <= perf_ibf_stalls  + `PERF_CTR_BITS'd1;
             end
-            if (ibuffer_if.valid & scoreboard_delay) begin 
+            if (ibuffer_if.valid & !sboard_wb_if.ready) begin 
                 perf_scb_stalls <= perf_scb_stalls  + `PERF_CTR_BITS'd1;
             end
             if (alu_req_if.valid & !alu_req_if.ready) begin
