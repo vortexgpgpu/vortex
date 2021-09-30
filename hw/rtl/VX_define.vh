@@ -301,6 +301,9 @@
 `define _DNC_MEM_TAG_WIDTH      ($clog2(`DCACHE_NUM_REQS) + `_DMEM_ADDR_RATIO_W + `DCACHE_CORE_TAG_WIDTH)
 `define DCACHE_MEM_TAG_WIDTH    `MAX((`CLOG2(`DCACHE_NUM_BANKS) + `CLOG2(`DCACHE_MSHR_SIZE) + `NC_FLAG_BITS), `_DNC_MEM_TAG_WIDTH)
 
+// Merged D-cache/I-cache memory tag
+`define L1_MEM_TAG_WIDTH        (`MAX(`ICACHE_MEM_TAG_WIDTH, `DCACHE_MEM_TAG_WIDTH) + `CLOG2(2))
+
 ////////////////////////// SM Configurable Knobs //////////////////////////////
 
 // Cache ID
@@ -343,9 +346,9 @@
 
 // Memory request tag bits
 `define _L2_MEM_ADDR_RATIO_W     $clog2(`L2_CACHE_LINE_SIZE / `L2_WORD_SIZE)
-`define _L2_NC_MEM_TAG_WIDTH     ($clog2(`L2_NUM_REQS) + `_L2_MEM_ADDR_RATIO_W + `XMEM_TAG_WIDTH)
+`define _L2_NC_MEM_TAG_WIDTH     ($clog2(`L2_NUM_REQS) + `_L2_MEM_ADDR_RATIO_W + `L1_MEM_TAG_WIDTH)
 `define _L2_MEM_TAG_WIDTH        `MAX((`CLOG2(`L2_NUM_BANKS) + `CLOG2(`L2_MSHR_SIZE) + `NC_FLAG_BITS), `_L2_NC_MEM_TAG_WIDTH)
-`define L2_MEM_TAG_WIDTH         ((`L2_ENABLE) ? `_L2_MEM_TAG_WIDTH : (`XMEM_TAG_WIDTH + `CLOG2(`L2_NUM_REQS)))
+`define L2_MEM_TAG_WIDTH         ((`L2_ENABLE) ? `_L2_MEM_TAG_WIDTH : (`L1_MEM_TAG_WIDTH + `CLOG2(`L2_NUM_REQS)))
 
 ////////////////////////// L3cache Configurable Knobs /////////////////////////
 
@@ -390,9 +393,9 @@
 
 `define TO_FULL_ADDR(x)         {x, (32-$bits(x))'(0)}
 
-// Merged D-cache/I-cache memory tag
-`define XMEM_TAG_WIDTH          (`DCACHE_MEM_TAG_WIDTH + `CLOG2(2))
+///////////////////////////////////////////////////////////////////////////////
 
-`include "VX_types.vh"
+`include "VX_fpu_types.vh"
+`include "VX_gpu_types.vh"
 
 `endif

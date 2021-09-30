@@ -30,14 +30,14 @@ module Vortex (
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_req_valid;
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_req_rw;
     wire [`NUM_CLUSTERS-1:0][`L2_MEM_BYTEEN_WIDTH-1:0] per_cluster_mem_req_byteen;
-    wire [`NUM_CLUSTERS-1:0][`L2_MEM_ADDR_WIDTH-1:0]  per_cluster_mem_req_addr;
-    wire [`NUM_CLUSTERS-1:0][`L2_MEM_DATA_WIDTH-1:0]  per_cluster_mem_req_data;
-    wire [`NUM_CLUSTERS-1:0][`L2_MEM_TAG_WIDTH-1:0]   per_cluster_mem_req_tag;
+    wire [`NUM_CLUSTERS-1:0][`L2_MEM_ADDR_WIDTH-1:0] per_cluster_mem_req_addr;
+    wire [`NUM_CLUSTERS-1:0][`L2_MEM_DATA_WIDTH-1:0] per_cluster_mem_req_data;
+    wire [`NUM_CLUSTERS-1:0][`L2_MEM_TAG_WIDTH-1:0]  per_cluster_mem_req_tag;
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_req_ready;
 
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_rsp_valid;
-    wire [`NUM_CLUSTERS-1:0][`L2_MEM_DATA_WIDTH-1:0]  per_cluster_mem_rsp_data;
-    wire [`NUM_CLUSTERS-1:0][`L2_MEM_TAG_WIDTH-1:0]   per_cluster_mem_rsp_tag;
+    wire [`NUM_CLUSTERS-1:0][`L2_MEM_DATA_WIDTH-1:0] per_cluster_mem_rsp_data;
+    wire [`NUM_CLUSTERS-1:0][`L2_MEM_TAG_WIDTH-1:0]  per_cluster_mem_rsp_tag;
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_rsp_ready;
 
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_busy;

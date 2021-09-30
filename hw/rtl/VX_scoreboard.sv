@@ -3,12 +3,11 @@
 module VX_scoreboard  #(
     parameter CORE_ID = 0
 ) (
-    input wire          clk,
-    input wire          reset,
+    input wire clk,
+    input wire reset,
 
-    VX_ibuffer_if.slave ibuffer_if,
-    VX_writeback_if.slave writeback_if,
-    output wire         delay
+    VX_ibuffer_if.scoreboard ibuffer_if,
+    VX_writeback_if.scoreboard writeback_if
 );
     reg [`NUM_WARPS-1:0][`NUM_REGS-1:0] inuse_regs, inuse_regs_n;
 
@@ -43,7 +42,12 @@ module VX_scoreboard  #(
         deq_inuse_rs3 <= inuse_regs_n[ibuffer_if.wid_n][ibuffer_if.rs3_n];
     end
 
-    assign delay = deq_inuse_rd | deq_inuse_rs1 | deq_inuse_rs2 | deq_inuse_rs3;
+    assign writeback_if.ready = 1'b1;
+
+    assign ibuffer_if.ready = ~(deq_inuse_rd 
+                             | deq_inuse_rs1 
+                             | deq_inuse_rs2 
+                             | deq_inuse_rs3);
 
     `UNUSED_VAR (writeback_if.PC)
 

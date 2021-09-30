@@ -157,7 +157,8 @@ module VX_shared_mem #(
         .valid_out  (creq_out_valid)
     );
 
-    wire crsq_last_read;  
+    wire crsq_in_valid, crsq_in_ready;
+    wire crsq_last_read;
     
     assign creq_out_ready = core_req_writeonly 
                          || (crsq_in_ready && crsq_last_read);
@@ -194,8 +195,6 @@ module VX_shared_mem #(
     reg [NUM_REQS-1:0][`WORD_WIDTH-1:0] core_rsp_data_in;
     wire [CORE_TAG_WIDTH-1:0] core_rsp_tag_in;
     reg [NUM_BANKS-1:0] bank_rsp_sel_r, bank_rsp_sel_n;
-
-    wire crsq_in_valid, crsq_in_ready;
 
     wire crsq_in_fire = crsq_in_valid && crsq_in_ready;
 
