@@ -15,7 +15,7 @@ typedef struct packed {
     logic is_signaling;    
 } fp_class_t;
 
-`define FP_CLASS_BITS  $bits(fp_class_t)
+`define FP_CLASS_BITS  $bits(fpu_types::fp_class_t)
 
 typedef struct packed {
     logic NV; // 4-Invalid
@@ -25,7 +25,7 @@ typedef struct packed {
     logic NX; // 0-Inexact
 } fflags_t;
 
-`define FFLAGS_BITS  $bits(fflags_t)
+`define FFLAGS_BITS  $bits(fpu_types::fflags_t)
 
 endpackage
 
