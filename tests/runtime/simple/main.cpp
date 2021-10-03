@@ -12,6 +12,8 @@ int main() {
 
 	errors += test_tmc();
 
+	errors += test_pred();
+
 	errors += test_divergence();
 
 	errors += test_wsapwn();

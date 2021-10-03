@@ -9,6 +9,8 @@ int test_shared_memory();
 
 int test_tmc();
 
+int test_pred();
+
 int test_divergence();
 
 int test_wsapwn();
