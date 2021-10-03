@@ -5,9 +5,9 @@
 #include <vx_print.h>
 #include <vx_spawn.h>
 
-int __attribute__ ((noinline)) check_error(const int* buffer, int size) {
+int __attribute__ ((noinline)) check_error(const int* buffer, int offset, int size) {
 	int errors = 0;
-	for (int i = 0; i < size; i++)	{
+	for (int i = offset; i < size; i++)	{
 		int value = buffer[i];
 		int ref_value = 65 + i;
 		if (value == ref_value)	{
@@ -40,7 +40,7 @@ int test_global_memory() {
 		global_buffer[i] = 65 + i;
 	}
 
-	return check_error(global_buffer, GLOBAL_MEM_SZ);
+	return check_error(global_buffer, 0, GLOBAL_MEM_SZ);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -55,7 +55,7 @@ int test_stack_memory() {
 		stack_buffer[i] = 65 + i;
 	}
 
-	return check_error(stack_buffer, STACK_MEM_SZ);
+	return check_error(stack_buffer, 0, STACK_MEM_SZ);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -70,7 +70,7 @@ int test_shared_memory() {
 		shared_buffer[i] = 65 + i;
 	}
 
-	return check_error(shared_buffer, SHARED_MEM_SZ);
+	return check_error(shared_buffer, 0, SHARED_MEM_SZ);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -91,7 +91,35 @@ int test_tmc() {
 	do_tmc();
 	vx_tmc(1);
 
-	return check_error(tmc_buffer, num_threads);
+	return check_error(tmc_buffer, 0, num_threads);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+int pred_buffer[8];
+
+void __attribute__ ((noinline)) do_pred() {
+	unsigned tid = vx_thread_id();
+	pred_buffer[tid] = 65 + tid;
+}
+
+int test_pred() {
+	vx_printf("PRED Test\n");
+
+	int num_threads = std::min(vx_num_threads(), 8);
+	int tmask = make_full_tmask(num_threads);
+
+	for (int i = 0; i < num_threads; i++) {
+		pred_buffer[i] = 0;
+	}
+
+	vx_pred(~1);
+	do_pred();
+	vx_tmc(1);
+
+	int status_n0 = (0 == tmc_buffer[0]);
+	int status_n1 = check_error(tmc_buffer, 1, num_threads);
+	return status_n0 && status_n1;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -110,7 +138,7 @@ int test_wsapwn() {
 	vx_wspawn(num_warps, wspawn_kernel);
 	wspawn_kernel();
 
-	return check_error(wspawn_buffer, num_warps);
+	return check_error(wspawn_buffer, 0, num_warps);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -151,7 +179,7 @@ int test_divergence() {
 	do_divergence();
 	vx_tmc(1);
 
-	return check_error(dvg_buffer, num_threads);
+	return check_error(dvg_buffer, 0, num_threads);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -183,7 +211,7 @@ int test_spawn_tasks() {
 
 	vx_spawn_tasks(ST_BUF_SZ, st_kernel, &arg);
 
-	return check_error(st_buffer_dst, ST_BUF_SZ);
+	return check_error(st_buffer_dst, 0, ST_BUF_SZ);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -215,7 +243,7 @@ l_start:
 		goto l_start;
 	vx_tmc(1);
 
-	return check_error(tmask_buffer, num_threads);
+	return check_error(tmask_buffer, 0, num_threads);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -241,5 +269,5 @@ int test_barrier() {
 	barrier_stall = 0;
 	vx_wspawn(num_warps, barrier_kernel);
 	barrier_kernel();	
-	return check_error(barrier_buffer, num_warps);
+	return check_error(barrier_buffer, 0, num_warps);
 }
