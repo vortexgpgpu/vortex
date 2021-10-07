@@ -193,7 +193,7 @@ void dpi_flt(int a, int b, int* result, int* fflags) {
 
   fa.i = a;
   fb.i = b;
-  fr.f = fa.f < fb.f;
+  fr.i = fa.f < fb.f;
 
   *result = fr.i;
   *fflags = 0;
@@ -204,7 +204,7 @@ void dpi_fle(int a, int b, int* result, int* fflags) {
 
   fa.i = a;
   fb.i = b;
-  fr.f = fa.f <= fb.f;
+  fr.i = fa.f <= fb.f;
 
   *result = fr.i;
   *fflags = 0;
@@ -215,7 +215,7 @@ void dpi_feq(int a, int b, int* result, int* fflags) {
 
   fa.i = a;
   fb.i = b;
-  fr.f = fa.f == fb.f;
+  fr.i = fa.f == fb.f;
 
   *result = fr.i;
   *fflags = 0;
