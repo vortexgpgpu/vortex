@@ -1,3 +1,5 @@
+#include <VX_config.h>
+
 .type vx_serial, @function
 .global vx_serial
 vx_serial: 
@@ -8,23 +10,22 @@ vx_serial:
     sw   s2, 8(sp)
     sw   s1, 4(sp)
     sw   s0, 0(sp)
-    mv   s4, a0     # callback
-    mv   s3, a1     # arg
-    csrr s2, 0xfc0  # NT
-    csrr s1, 0xcc0  # tid    
-    li	 s0, 0      # index
+    mv   s4, a0                 # s4 <- callback
+    mv   s3, a1                 # s3 <- arg
+    csrr s2, CSR_NT             # s2 <- NT
+    csrr s1, CSR_WTID           # s1 <- tid    
+    li	 s0, 0                  # s0 <- index
 label_loop:
     sub	 t0, s0, s1
-    snez t0, t0
-    .insn s 0x6b, 2, x0, 0(t0)  # split t0
+    seqz t1, t0                 # (index != tid)
+    .insn s 0x6b, 2, x0, 0(t1)  # split t0
     bnez t0, label_join
-    mv   a0, s0     # a0 <- index
-    mv   a1, s3     # a1 <- arg
-    jalr s4         # callback(index, arg)
+    mv   a0, s3                 # a0 <- arg
+    jalr s4                     # callback(arg)
 label_join:
     .insn s 0x6b, 3, x0, 0(x0)  # join
-    addi s0, s0, 1
-    blt	 s0, s2, label_loop
+    addi s0, s0, 1              # index++
+    blt	 s0, s2, label_loop     # loop back
     lw   ra, 20(sp)
     lw   s4, 16(sp)
     lw   s3, 12(sp)
