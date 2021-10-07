@@ -38,7 +38,7 @@ module VX_gpu_unit #(
     wire [`NUM_THREADS-1:0] not_taken_tmask;
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        wire taken = gpu_req_if.rs1_data[i][0];
+        wire taken = (gpu_req_if.rs1_data[i] != 0);
         assign taken_tmask[i]     = gpu_req_if.tmask[i] & taken;
         assign not_taken_tmask[i] = gpu_req_if.tmask[i] & ~taken;
     end
