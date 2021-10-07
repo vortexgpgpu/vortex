@@ -143,7 +143,9 @@ public:
   void read(Addr addr, void *data, Size size) override;  
   void write(Addr addr, const void *data, Size size) override;
 
-  void loadHexImage(std::string path);
+  void loadBinImage(const char* path);
+
+  void loadHexImage(const char* path);
 
 private:
 

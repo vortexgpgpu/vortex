@@ -114,15 +114,19 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       }
       DPN(2, std::endl);
     }
+
+    bool rd_write = false;
   
     switch (opcode) {
     case NOP:
       break;
     case LUI_INST:
       rddata = (immsrc << 12) & 0xfffff000;
+      rd_write = true;
       break;
     case AUIPC_INST:
       rddata = ((immsrc << 12) & 0xfffff000) + PC_;
+      rd_write = true;
       break;
     case R_INST: {
       if (func7 & 0x1) {
@@ -245,6 +249,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
           std::abort();
         }
       }
+      rd_write = true;
     } break;
     case I_INST:
       switch (func3) {
@@ -290,6 +295,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       default:
         std::abort();
       }
+      rd_write = true;
       break;
     case B_INST:
       switch (func3) {
@@ -338,12 +344,14 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       nextPC = PC_ + immsrc;  
       pipeline->stall_warp = true;
       runOnce = true;
+      rd_write = true;
       break;
     case JALR_INST:
       rddata = nextPC;
       nextPC = rsdata[0] + immsrc;
       pipeline->stall_warp = true;
       runOnce = true;
+      rd_write = true;
       break;
     case L_INST: {
       Word memAddr   = ((rsdata[0] + immsrc) & 0xFFFFFFFC); // word aligned
@@ -374,6 +382,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       default:
         std::abort();        
       }
+      rd_write = true;
     } break;
     case S_INST: {
       Word memAddr = rsdata[0] + immsrc;
@@ -409,31 +418,37 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         // CSRRW
         rddata = csr_value;
         core_->set_csr(csr_addr, rsdata[0], t, id_);
+        rd_write = true;
         break;
       case 2:
         // CSRRS
         rddata = csr_value;
         core_->set_csr(csr_addr, csr_value | rsdata[0], t, id_);
+        rd_write = true;
         break;
       case 3:
         // CSRRC
         rddata = csr_value;
         core_->set_csr(csr_addr, csr_value & ~rsdata[0], t, id_);
+        rd_write = true;
         break;
       case 5:
         // CSRRWI
         rddata = csr_value;
         core_->set_csr(csr_addr, rsrc0, t, id_);
+        rd_write = true;
         break;
       case 6:
         // CSRRSI
         rddata = csr_value;
         core_->set_csr(csr_addr, csr_value | rsrc0, t, id_);
+        rd_write = true;
         break;
       case 7:
         // CSRRCI
         rddata = csr_value;
         core_->set_csr(csr_addr, csr_value & ~rsrc0, t, id_);
+        rd_write = true;
         break;
       default:
         break;
@@ -475,6 +490,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         }
         break;
       } 
+      rd_write = true;
       break;
     case (FS | VS):
       if (func3 == 0x2) {
@@ -764,7 +780,8 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         }
         break;
       }
-    break;
+      rd_write = true;
+      break;
 
     case FMADD:      
     case FMSUB:      
@@ -811,8 +828,8 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
 
         rddata = floatToBin(fpDest);
       }
-    }
-    break;
+      rd_write = true;
+    } break;
     case GPGPU:
       switch (func3) {
       case 0: {
@@ -1767,20 +1784,22 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       std::abort();
     }
 
-    int rdt = instr.getRDType();
-    switch (rdt) {
-    case 1:      
-      if (rdest) {
-        D(2, "[" << std::dec << t << "] Dest Regs: r" << rdest << "=0x" << std::hex << std::hex << rddata);
-        iregs[rdest] = rddata;
+    if (rd_write) {
+      int rdt = instr.getRDType();
+      switch (rdt) {
+      case 1:      
+        if (rdest) {
+          D(2, "[" << std::dec << t << "] Dest Regs: r" << rdest << "=0x" << std::hex << std::hex << rddata);
+          iregs[rdest] = rddata;
+        }
+        break;
+      case 2:
+        D(2, "[" << std::dec << t << "] Dest Regs: fr" << rdest << "=0x" << std::hex << std::hex << rddata);
+        fregs[rdest] = rddata;
+        break;
+      default:
+        break;
       }
-      break;
-    case 2:
-      D(2, "[" << std::dec << t << "] Dest Regs: fr" << rdest << "=0x" << std::hex << std::hex << rddata);
-      fregs[rdest] = rddata;
-      break;
-    default:
-      break;
     }
   }
 

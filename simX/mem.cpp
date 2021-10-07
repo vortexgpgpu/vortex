@@ -232,74 +232,85 @@ void RAM::write(Addr addr, const void *data, Size size) {
   }
 }
 
-static uint32_t hti_old(char c) {
-  if (c >= 'A' && c <= 'F')
-    return c - 'A' + 10;
-  if (c >= 'a' && c <= 'f')
-    return c - 'a' + 10;
-  return c - '0';
-}
-
-static uint32_t hToI_old(char *c, uint32_t size) {
-  uint32_t value = 0;
-  for (uint32_t i = 0; i < size; i++) {
-    value += hti_old(c[i]) << ((size - i - 1) * 4);
+void RAM::loadBinImage(const char* path) {
+  std::ifstream ifs(path);
+  if (!ifs) {
+    std::cout << "error: " << path << " not found" << std::endl;
   }
-  return value;
-}
 
-void RAM::loadHexImage(std::string path) {
+  ifs.seekg(0, ifs.end);
+  auto size = ifs.tellg();
+  std::vector<uint8_t> content(size);
+  ifs.seekg(0, ifs.beg);
+  ifs.read((char*)content.data(), size);
+
   this->clear();
-  FILE *fp = fopen(&path[0], "r");
-  if (fp == 0) {
-    std::cout << path << " not found" << std::endl;
+  this->write(STARTUP_ADDR, content.data(), size);
+}
+
+void RAM::loadHexImage(const char* path) {
+  auto hti = [&](char c)->uint32_t {
+    if (c >= 'A' && c <= 'F')
+      return c - 'A' + 10;
+    if (c >= 'a' && c <= 'f')
+      return c - 'a' + 10;
+    return c - '0';
+  };
+
+  auto hToI = [&](const char *c, uint32_t size)->uint32_t {
+    uint32_t value = 0;
+    for (uint32_t i = 0; i < size; i++) {
+      value += hti(c[i]) << ((size - i - 1) * 4);
+    }
+    return value;
+  };
+
+  std::ifstream ifs(path);
+  if (!ifs) {
+    std::cout << "error: " << path << " not found" << std::endl;
   }
 
-  fseek(fp, 0, SEEK_END);
-  uint32_t size = ftell(fp);
-  fseek(fp, 0, SEEK_SET);
-  char *content = new char[size];
-  int x = fread(content, 1, size, fp);
-  if (!x) {
-    std::cout << "COULD NOT READ FILE\n";
-    std::abort();
-  }
+  ifs.seekg(0, ifs.end);
+  uint32_t size = ifs.tellg();
+  std::vector<char> content(size);
+  ifs.seekg(0, ifs.beg);
+  ifs.read(content.data(), size);
 
   int offset = 0;
-  char *line = content;
-  
-  while (1) {
+  char *line = content.data();
+
+  this->clear();
+
+  while (true) {
     if (line[0] == ':') {
-      uint32_t byteCount = hToI_old(line + 1, 2);
-      uint32_t nextAddr = hToI_old(line + 3, 4) + offset;
-      uint32_t key = hToI_old(line + 7, 2);
+      uint32_t byteCount = hToI(line + 1, 2);
+      uint32_t nextAddr = hToI(line + 3, 4) + offset;
+      uint32_t key = hToI(line + 7, 2);
       switch (key) {
       case 0:
         for (uint32_t i = 0; i < byteCount; i++) {
-          unsigned add = nextAddr + i;
-          *this->get(add) = hToI_old(line + 9 + i * 2, 2);
+          uint32_t addr  = nextAddr + i;
+          uint32_t value = hToI(line + 9 + i * 2, 2);
+          *this->get(addr) = value;
         }
         break;
       case 2:
-        offset = hToI_old(line + 9, 4) << 4;
+        offset = hToI(line + 9, 4) << 4;
         break;
       case 4:
-        offset = hToI_old(line + 9, 4) << 16;
+        offset = hToI(line + 9, 4) << 16;
         break;
       default:
         break;
       }
     }
     while (*line != '\n' && size != 0) {
-      line++;
-      size--;
+      ++line;
+      --size;
     }
     if (size <= 1)
       break;
-    line++;
-    size--;
+    ++line;
+    --size;
   }
-
-  if (content)
-    delete[] content;
 }

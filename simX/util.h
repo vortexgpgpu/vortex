@@ -45,4 +45,7 @@ uint8_t fpBinIsZero(uint32_t din);
 // check floating-point number in binary format is infinity
 uint8_t fpBinIsInf(uint32_t din);
 
+// return file extension
+const char* fileExtension(const char* filepath);
+
 }

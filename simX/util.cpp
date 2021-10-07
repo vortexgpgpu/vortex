@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <math.h>
 #include <climits>
+#include <string.h>
 #include <fcntl.h>
 #include "types.h"
 #include "util.h"
@@ -177,4 +178,11 @@ uint8_t vortex::fpBinIsInf(uint32_t din) {
       return 2; // positive infinity
   }
   return 0;  // not infinity
+}
+
+const char* vortex::fileExtension(const char* filepath) {
+    const char *ext = strrchr(filepath, '.');
+    if (ext == NULL || ext == filepath) 
+      return "";
+    return ext + 1;
 }

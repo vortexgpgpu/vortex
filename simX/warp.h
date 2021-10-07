@@ -37,6 +37,7 @@ struct vtype {
   int vsew;
   int vlmul;
 };
+
 class Warp {
 public:
   Warp(Core *core, Word id);

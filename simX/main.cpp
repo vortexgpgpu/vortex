@@ -53,10 +53,19 @@ int main(int argc, char **argv) {
   Decoder decoder(arch);
   MemoryUnit mu(0, arch.wsize(), true);
   
-  RAM old_ram((1<<12), (1<<20));
-  old_ram.loadHexImage(imgFileName.c_str());
+  RAM ram((1<<12), (1<<20));
 
-  mu.attach(old_ram, 0, 0xFFFFFFFF);
+  std::string program_ext(fileExtension(imgFileName.c_str()));
+  if (program_ext == "bin") {
+    ram.loadBinImage(imgFileName.c_str());
+  } else if (program_ext == "hex") {
+    ram.loadHexImage(imgFileName.c_str());
+  } else {
+    std::cout << "*** error: only *.bin or *.hex images supported." << std::endl;
+    return -1;
+  }
+
+  mu.attach(ram, 0, 0xFFFFFFFF);
 
   struct stat hello;
   fstat(0, &hello);
