@@ -33,6 +33,13 @@ static void parse_args(int argc, char **argv) {
 	}
 }
 
+inline const char* fileExtension(const char* filepath) {
+    const char *ext = strrchr(filepath, '.');
+    if (ext == NULL || ext == filepath) 
+      return "";
+    return ext + 1;
+}
+
 int main(int argc, char **argv) {
 
 	int exitcode = 0;
@@ -46,7 +53,17 @@ int main(int argc, char **argv) {
 		RAM ram;
 		Simulator simulator;
 		simulator.attach_ram(&ram);
-		simulator.load_ihex(program);
+
+		std::string program_ext(fileExtension(program));
+		if (program_ext == "bin") {
+			simulator.load_bin(program);
+		} else if (program_ext == "hex") {
+			simulator.load_ihex(program);
+		} else {
+			std::cout << "*** error: only *.bin or *.hex images supported." << std::endl;
+			return -1;
+		}
+
 		exitcode = simulator.run();
 		
 		if (riscv_test) {
