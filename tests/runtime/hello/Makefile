@@ -15,25 +15,25 @@ PROJECT = hello
 
 SRCS = main.cpp
 
-all: $(PROJECT).elf $(PROJECT).hex $(PROJECT).dump
+all: $(PROJECT).elf $(PROJECT).bin $(PROJECT).dump
 
 $(PROJECT).dump: $(PROJECT).elf
 	$(DP) -D $(PROJECT).elf > $(PROJECT).dump
 
-$(PROJECT).hex: $(PROJECT).elf
-	$(CP) -O ihex $(PROJECT).elf $(PROJECT).hex
+$(PROJECT).bin: $(PROJECT).elf
+	$(CP) -O binary $(PROJECT).elf $(PROJECT).bin
 
 $(PROJECT).elf: $(SRCS)
 	$(CC) $(CFLAGS) $(SRCS) $(LDFLAGS) -o $(PROJECT).elf
 
-run-rtlsim: $(PROJECT).hex
-	../../../hw/simulate/obj_dir/VVortex $(PROJECT).hex
+run-rtlsim: $(PROJECT).bin
+	../../../sim/rtlsim/rtlsim $(PROJECT).bin
 
-run-simx: $(PROJECT).hex
-	../../../simX/simX -a rv32i -c 1 -i $(PROJECT).hex
+run-simx: $(PROJECT).bin
+	../../../sim/simX/simX -a rv32i -c 1 -i $(PROJECT).bin
 
 .depend: $(SRCS)
 	$(CC) $(CFLAGS) -MM $^ > .depend;
 
 clean:
-	rm -rf *.elf *.hex *.dump .depend 
+	rm -rf *.elf *.bin *.dump .depend 

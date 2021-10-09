@@ -8,15 +8,11 @@
 
 #include <vortex.h>
 #include <VX_config.h>
-#include <ram.h>
+#include <mem.h>
+#include <util.h>
 #include <simulator.h>
 
-///////////////////////////////////////////////////////////////////////////////
-
-inline size_t align_size(size_t size, size_t alignment) {        
-    assert(0 == (alignment & (alignment - 1)));
-    return (size + alignment - 1) & ~(alignment - 1);
-}
+using namespace vortex;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -58,7 +54,7 @@ private:
 
 class vx_device {    
 public:
-    vx_device() {        
+    vx_device() : ram_((1<<12), (1<<20)) {        
         mem_allocation_ = ALLOC_BASE_ADDR;        
     } 
 
@@ -92,7 +88,7 @@ public:
         }
         printf("\n");*/
         
-        ram_.write(dest_addr, asize, (const uint8_t*)src + src_offset);
+        ram_.write((const uint8_t*)src + src_offset, dest_addr, asize);
         return 0;
     }
 
@@ -101,7 +97,7 @@ public:
         if (src_addr + asize > ram_.size())
             return -1;
 
-        ram_.read(src_addr, asize, (uint8_t*)dest + dest_offset);
+        ram_.read((uint8_t*)dest + dest_offset, src_addr, asize);
         
         /*printf("VXDRV: download %ld bytes to 0x%lx:", size, uintptr_t((uint8_t*)dest + dest_offset));
         for (int i = 0;  i < (asize / CACHE_BLOCK_SIZE); ++i) {

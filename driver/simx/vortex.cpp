@@ -10,15 +10,11 @@
 #include <vortex.h>
 #include <core.h>
 #include <VX_config.h>
+#include <util.h>
 
-#define PAGE_SIZE       4096
+#define PAGE_SIZE   4096
 
-///////////////////////////////////////////////////////////////////////////////
-
-inline size_t align_size(size_t size, size_t alignment) {        
-    assert(0 == (alignment & (alignment - 1)));
-    return (size + alignment - 1) & ~(alignment - 1);
-}
+using namespace vortex;
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -74,7 +70,7 @@ public:
         mem_allocation_ = ALLOC_BASE_ADDR;               
         mmu_.attach(ram_, 0, 0xffffffff);  
         for (int i = 0; i < arch_.num_cores(); ++i) {
-            cores_[i] = std::make_shared<vortex::Core>(arch_, decoder_, mmu_, i);
+            cores_[i] = std::make_shared<Core>(arch_, decoder_, mmu_, i);
         }
     }
 
@@ -101,7 +97,7 @@ public:
         if (dest_addr + asize > ram_.size())
             return -1;
 
-        ram_.write(dest_addr, (const uint8_t*)src + src_offset, asize);
+        ram_.write((const uint8_t*)src + src_offset, dest_addr, asize);
         
         /*printf("VXDRV: upload %d bytes to 0x%x\n", size, dest_addr);
         for (int i = 0; i < size; i += 4) {
@@ -116,7 +112,7 @@ public:
         if (src_addr + asize > ram_.size())
             return -1;
 
-        ram_.read(src_addr, (uint8_t*)dest + dest_offset, asize);
+        ram_.read((uint8_t*)dest + dest_offset, src_addr, asize);
         
         /*printf("VXDRV: download %d bytes from 0x%x\n", size, src_addr);
         for (int i = 0; i < size; i += 4) {
@@ -209,15 +205,15 @@ private:
         device->thread_proc();
     }
 
-    vortex::ArchDef arch_;
-    vortex::Decoder decoder_;
-    vortex::MemoryUnit mmu_;
-    std::vector<std::shared_ptr<vortex::Core>> cores_;
+    ArchDef arch_;
+    Decoder decoder_;
+    MemoryUnit mmu_;
+    std::vector<std::shared_ptr<Core>> cores_;
     bool is_done_;
     bool is_running_;   
     size_t mem_allocation_; 
     std::thread thread_;   
-    vortex::RAM ram_;
+    RAM ram_;
     std::mutex mutex_;
 };
 
