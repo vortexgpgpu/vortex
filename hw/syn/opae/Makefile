@@ -54,7 +54,11 @@ ifdef PERF
 	CFLAGS += -DPERF_ENABLE
 endif
 
-all: ase-1c
+all: vortex_afu.h ase-1c
+
+# AFU info from JSON file, including AFU UUID
+vortex_afu.h: vortex_afu.json
+	afu_json_mgr json-info --afu-json=$^ --c-hdr=$@
 
 $(BUILD_DIR)_ase_1c/Makefile:
 	afu_sim_setup -s setup.cfg $(BUILD_DIR)_ase_1c
@@ -196,4 +200,4 @@ clean-fpga-32c:
 clean-fpga-64c:
 	rm -rf $(BUILD_DIR)_fpga_64c sources.txt
 
-clean: clean-ase-1c	clean-ase-2c clean-ase-4c clean-fpga-1c clean-fpga-2c clean-fpga-4c clean-fpga-8c clean-fpga-16c clean-fpga-32c clean-fpga-64c
+clean: vortex_afu.h clean-ase-1c clean-ase-2c clean-ase-4c clean-fpga-1c clean-fpga-2c clean-fpga-4c clean-fpga-8c clean-fpga-16c clean-fpga-32c clean-fpga-64c

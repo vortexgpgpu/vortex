@@ -1,5 +1,9 @@
 VLSIM_DIR = ../../sim/vlsim
 
+RTL_DIR=../../hw/rtl
+
+SCRIPT_DIR=../../hw/scripts
+
 CXXFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -pedantic -Wfatal-errors
 #CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
 
@@ -17,10 +21,6 @@ CXXFLAGS += $(CONFIGS)
 CXXFLAGS += -DDUMP_PERF_STATS
 
 LDFLAGS += -shared
-
-RTL_DIR=../../hw/rtl
-
-SCRIPT_DIR=../../hw/scripts
 
 AFU_JSON_INFO = vortex_afu.h
 
@@ -56,7 +56,7 @@ $(PROJECT): $(SRCS) $(SCOPE_H)
 	$(CXX) $(CXXFLAGS) -MM $(SRCS) > .depend;
 
 clean:
-	$(MAKE) -C $(VLSIM_DIR) clean-objdir
+	$(MAKE) -C $(VLSIM_DIR) clean-static
 	rm -rf $(PROJECT) *.o .depend
 
 ifneq ($(MAKECMDGOALS),clean)

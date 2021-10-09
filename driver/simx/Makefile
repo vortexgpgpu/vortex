@@ -1,5 +1,3 @@
-PROJECT = libvortex.so
-
 SIMX_DIR = ../../sim/simX
 
 CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors 
@@ -15,6 +13,8 @@ LDFLAGS += $(SIMX_DIR)/libsimX.a
 
 SRCS = vortex.cpp ../common/vx_utils.cpp 
 
+PROJECT = libvortex.so
+
 all: $(PROJECT)
 
 $(PROJECT): $(SRCS)
@@ -25,5 +25,5 @@ $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;	
 
 clean:
-	$(MAKE) -C $(SIMX_DIR) clean-objdir
+	$(MAKE) -C $(SIMX_DIR) clean-static
 	rm -rf $(PROJECT) *.o .depend

@@ -34,5 +34,5 @@ $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $(PROJECT)
 
 clean:
-	$(MAKE) -C $(RTLSIM_DIR) clean-objdir
+	$(MAKE) -C $(RTLSIM_DIR) clean-static
 	rm -rf $(PROJECT) *.o .depend

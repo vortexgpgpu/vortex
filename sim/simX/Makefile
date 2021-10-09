@@ -42,8 +42,8 @@ static: $(OBJS)
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
 
-clean-objdir:
-	rm -rf obj_dir .depend
+clean-static:
+	rm -rf lib$(PROJECT).a obj_dir .depend
 
-clean: clean-objdir
-	rm -rf $(PROJECT) lib$(PROJECT).a
+clean: clean-static
+	rm -rf $(PROJECT)
