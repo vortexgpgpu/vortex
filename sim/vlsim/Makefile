@@ -2,8 +2,7 @@ CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors
 #CXXFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
 
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
-CXXFLAGS += -I. -I../../../hw -I../../common
-CXXFLAGS += -I$(VERILATOR_ROOT)/include -I$(VERILATOR_ROOT)/include/vltstd
+CXXFLAGS += -I.. -I../../../hw -I../../common
 
 # control RTL debug print states
 DBG_PRINT_FLAGS += -DDBG_PRINT_PIPELINE  
@@ -30,6 +29,7 @@ LDFLAGS += -shared
 
 RTL_DIR = ../../hw/rtl
 DPI_DIR = ../../hw/dpi
+SCRIPT_DIR=../../hw/scripts
 
 SRCS = ../common/util.cpp ../common/mem.cpp
 SRCS += $(DPI_DIR)/util_dpi.cpp $(DPI_DIR)/float_dpi.cpp
@@ -41,7 +41,7 @@ RTL_INCLUDE += -I$(RTL_DIR)/afu -I$(RTL_DIR)/afu/ccip
 
 TOP = vortex_afu_shim
 
-VL_FLAGS = --cc $(TOP) --top-module $(TOP)
+VL_FLAGS = --exe --cc $(TOP) --top-module $(TOP)
 VL_FLAGS += -O2 --language 1800-2009 --assert -Wall -Wpedantic
 VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
 VL_FLAGS += --x-initial unique --x-assign unique
@@ -86,31 +86,22 @@ VL_FLAGS += -DIDIV_DPI
 FPU_CORE ?= FPU_DPI
 VL_FLAGS += -D$(FPU_CORE)
 
-OBJS := $(patsubst %.cpp, obj_dir/%.o, $(notdir $(SRCS)))
-VPATH := $(sort $(dir $(SRCS)))
-
-#$(info OBJS is $(OBJS))
-#$(info VPATH is $(VPATH))
-
 PROJECT = libopae-c-vlsim
 
 all: shared
 
-shared: $(SRCS)
-	verilator --build --exe $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT).so
+vortex_afu.h : $(RTL_DIR)/afu/vortex_afu.vh
+	$(SCRIPT_DIR)/gen_config.py -i $(RTL_DIR)/afu/vortex_afu.vh -o vortex_afu.h
 
-obj_dir/V$(TOP)__ALL.a:
-	verilator --build $(VL_FLAGS) -CFLAGS '$(CXXFLAGS)'
+shared: $(SRCS) vortex_afu.h
+	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT).so
 
-obj_dir/%.o: %.cpp
-	cd obj_dir && $(CXX) $(CXXFLAGS) -c ../$< -o $(notdir $@)
+static: $(SRCS) vortex_afu.h
+	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)'
+	$(AR) rs $(PROJECT).a obj_dir/*.o
 
-static: obj_dir/V$(TOP)__ALL.a $(OBJS)
-	cp obj_dir/V$(TOP)__ALL.a $(PROJECT).a
-	$(AR) rs $(PROJECT).a $(OBJS)
+clean-static:
+	rm -rf $(PROJECT).a obj_dir vortex_afu.h
 
-clean-objdir:
-	rm -rf obj_dir
-
-clean: clean-objdir
-	rm -rf $(PROJECT).a $(PROJECT).so
+clean: clean-static
+	rm -rf $(PROJECT).so

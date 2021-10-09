@@ -6,7 +6,7 @@ all:
 	$(MAKE) -C nearn
 	$(MAKE) -C guassian
 	$(MAKE) -C oclprintf
-	$(MAKE) -C psort
+	#$(MAKE) -C psort
 	
 run-simx:
 	$(MAKE) -C vecadd run-simx 

@@ -2,8 +2,7 @@ CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors
 #CXXFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
 
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
-CXXFLAGS += -I. -I../../../hw -I../../common
-CXXFLAGS += -I$(VERILATOR_ROOT)/include -I$(VERILATOR_ROOT)/include/vltstd
+CXXFLAGS += -I../../../hw -I../../common
 
 # control RTL debug print states
 DBG_PRINT_FLAGS += -DDBG_PRINT_PIPELINE  
@@ -33,7 +32,7 @@ RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interface
 
 SRCS = ../common/util.cpp ../common/mem.cpp
 SRCS += $(DPI_DIR)/util_dpi.cpp $(DPI_DIR)/float_dpi.cpp
-SRCS += simulator.cpp
+SRCS += main.cpp simulator.cpp
 
 ifdef AXI_BUS
 	TOP = Vortex_axi
@@ -42,7 +41,7 @@ else
 	TOP = Vortex
 endif
 
-VL_FLAGS = --cc $(TOP) --top-module $(TOP)
+VL_FLAGS = --exe --cc $(TOP) --top-module $(TOP)
 VL_FLAGS += -O2 --language 1800-2009 --assert -Wall -Wpedantic
 VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
 VL_FLAGS += --x-initial unique --x-assign unique
@@ -75,49 +74,34 @@ VL_FLAGS += -D$(FPU_CORE)
 
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
 
-OBJS := $(patsubst %.cpp, obj_dir/%.o, $(notdir $(SRCS)))
-VPATH := $(sort $(dir $(SRCS)))
-
-#$(info OBJS is $(OBJS))
-#$(info VPATH is $(VPATH))
-
 PROJECT = rtlsim
 
 all: build-s
 
-build-s:
-	verilator --build --exe main.cpp $(SRCS) $(VL_FLAGS) -DNDEBUG  $(SINGLECORE) -CFLAGS '$(CXXFLAGS) -DNDEBUG $(SINGLECORE)' -o ../$(PROJECT)
+build-s: $(SRCS)
+	verilator --build $(VL_FLAGS) -DNDEBUG $(SRCS) $(SINGLECORE) -CFLAGS '$(CXXFLAGS) -DNDEBUG $(SINGLECORE)' -o ../$(PROJECT)
 	
-build-sd: 
-	verilator --build --exe main.cpp $(SRCS) $(VL_FLAGS) $(SINGLECORE) -CFLAGS '$(CXXFLAGS) $(DBG_FLAGS) $(SINGLECORE)' --trace --trace-structs $(DBG_FLAGS) -o ../$(PROJECT)
+build-sd: $(SRCS)
+	verilator --build $(VL_FLAGS) $(SRCS) $(SINGLECORE) -CFLAGS '$(CXXFLAGS) $(DBG_FLAGS) $(SINGLECORE)' --trace --trace-structs $(DBG_FLAGS) -o ../$(PROJECT)
 
-build-st:
-	verilator --build --exe main.cpp $(SRCS) $(VL_FLAGS) -DNDEBUG $(SINGLECORE) -CFLAGS '$(CXXFLAGS) -DNDEBUG $(SINGLECORE)' --threads $(THREADS) -o ../$(PROJECT)
+build-st: $(SRCS)
+	verilator --build $(VL_FLAGS) -DNDEBUG $(SRCS) $(SINGLECORE) -CFLAGS '$(CXXFLAGS) -DNDEBUG $(SINGLECORE)' --threads $(THREADS) -o ../$(PROJECT)
 
-build-m:
-	verilator --build --exe main.cpp $(SRCS) $(VL_FLAGS) -DNDEBUG $(MULTICORE) -CFLAGS '$(CXXFLAGS) -DNDEBUG $(MULTICORE)' -o ../$(PROJECT)
+build-m: $(SRCS)
+	verilator --build $(VL_FLAGS) -DNDEBUG $(SRCS) $(MULTICORE) -CFLAGS '$(CXXFLAGS) -DNDEBUG $(MULTICORE)' -o ../$(PROJECT)
 
-build-md:
-	verilator --build --exe main.cpp $(SRCS) $(VL_FLAGS) $(MULTICORE) -CFLAGS '$(CXXFLAGS) $(DBG_FLAGS) $(MULTICORE)' --trace --trace-structs $(DBG_FLAGS) -o ../$(PROJECT)
+build-md: $(SRCS)
+	verilator --build $(VL_FLAGS) $(SRCS) $(MULTICORE) -CFLAGS '$(CXXFLAGS) $(DBG_FLAGS) $(MULTICORE)' --trace --trace-structs $(DBG_FLAGS) -o ../$(PROJECT)
 
-build-mt:
-	verilator --build --exe main.cpp $(SRCS) $(VL_FLAGS) -DNDEBUG $(MULTICORE) -CFLAGS '$(CXXFLAGS) -DNDEBUG $(MULTICORE)' --threads $(THREADS) -o ../$(PROJECT)
+build-mt: $(SRCS)
+	verilator --build $(VL_FLAGS) -DNDEBUG $(SRCS) $(MULTICORE) -CFLAGS '$(CXXFLAGS) -DNDEBUG $(MULTICORE)' --threads $(THREADS) -o ../$(PROJECT)
 
-obj_dir/V$(TOP)__ALL.a:
-	verilator --build $(VL_FLAGS) -CFLAGS '$(CXXFLAGS)'
+static: $(SRCS)
+	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)'
+	$(AR) rs lib$(PROJECT).a obj_dir/*.o
 
-obj_dir/%.o: %.cpp
-	cd obj_dir && $(CXX) $(CXXFLAGS) -c ../$< -o $(notdir $@)
+clean-static:
+	rm -rf lib$(PROJECT).a obj_dir
 
-obj_dir/verilated.o: $(VERILATOR_ROOT)/include/verilated.cpp
-	cd obj_dir && $(CXX) $(CXXFLAGS) -c $< -o verilated.o
-
-static: obj_dir/V$(TOP)__ALL.a $(OBJS) obj_dir/verilated.o
-	cp obj_dir/V$(TOP)__ALL.a lib$(PROJECT).a
-	$(AR) rs lib$(PROJECT).a $(OBJS) obj_dir/verilated.o
-
-clean-objdir:
-	rm -rf obj_dir
-
-clean: clean-objdir
-	rm -rf $(PROJECT) lib$(PROJECT).a
+clean: clean-static
+	rm -rf $(PROJECT)

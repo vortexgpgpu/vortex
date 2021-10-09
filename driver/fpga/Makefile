@@ -1,9 +1,15 @@
 OPAE_HOME ?= /tools/opae/1.4.0
 
+RTL_DIR=../../hw/rtl
+
+SCRIPT_DIR=../../hw/scripts
+
+OPAE_SYN_DIR=../../hw/syn/opae
+
 CXXFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -pedantic -Wfatal-errors
 #CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
 
-CXXFLAGS += -I../include -I$(OPAE_HOME)/include  -I../../hw
+CXXFLAGS += -I../include -I../../hw -I$(OPAE_HOME)/include -I$(OPAE_SYN_DIR)
 
 LDFLAGS += -L$(OPAE_HOME)/lib -luuid -lopae-c
 
@@ -29,10 +35,6 @@ CXXFLAGS += -DDUMP_PERF_STATS
 
 LDFLAGS += -shared
 
-RTL_DIR=../../hw/rtl
-
-SCRIPT_DIR=../../hw/scripts
-
 PROJECT = libvortex.so
 
 AFU_JSON_INFO = vortex_afu.h
@@ -53,9 +55,8 @@ endif
 
 all: $(PROJECT)
 
-# AFU info from JSON file, including AFU UUID
-json: ../../hw/opae/vortex_afu.json
-	afu_json_mgr json-info --afu-json=$^ --c-hdr=$@
+$(OPAE_SYN_DIR)/vortex_afu.h:
+	$(MAKE) -C $(OPAE_SYN_DIR) vortex_afu.h
 
 scope-defs.h: $(SCRIPT_DIR)/scope.json
 	$(SCRIPT_DIR)/scope.py $(CONFIGS) -cc scope-defs.h -vl $(RTL_DIR)/scope-defs.vh $(SCRIPT_DIR)/scope.json
@@ -63,7 +64,7 @@ scope-defs.h: $(SCRIPT_DIR)/scope.json
 # generate scope data
 scope: scope-defs.h
 
-$(PROJECT): $(SRCS) $(SCOPE_H)
+$(PROJECT): $(SRCS) $(OPAE_SYN_DIR)/vortex_afu.h $(SCOPE_H)
 	$(CXX) $(CXXFLAGS) -DUSE_FPGA $^ $(LDFLAGS) -o $(PROJECT)
 
 .depend: $(SRCS)
