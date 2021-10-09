@@ -9,6 +9,8 @@
 #include "opae_sim.h"
 #include <VX_config.h>
 
+using namespace vortex;
+
 extern fpga_result fpgaOpen(fpga_token token, fpga_handle *handle, int flags) {
   if (NULL == handle || flags != 0)
     return FPGA_INVALID_PARAM;

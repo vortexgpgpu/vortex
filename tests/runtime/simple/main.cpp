@@ -20,6 +20,8 @@ int main() {
 
 	errors += test_spawn_tasks();
 
+	errors += test_serial();
+
 	errors += test_tmask();
 
 	errors += test_barrier();
