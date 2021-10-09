@@ -24,11 +24,11 @@ Vortex is a full-system RISCV-based GPGPU processor.
 
 - `hw`: Hardware sources.
 
-- `driver`: Host driver software.
+- `driver`: Host drivers repository.
 
 - `runtime`: Kernel Runtime software.
 
-- `simX`: Cycle-approximate simulator.
+- `sim`: Simulators repository.
 
 - `tests`: Tests repository.
 
