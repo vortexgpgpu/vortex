@@ -193,9 +193,8 @@ typedef struct {
 int st_buffer_src[ST_BUF_SZ];
 int st_buffer_dst[ST_BUF_SZ];
 
-void st_kernel(int task_id, void * arg) {
-	st_args_t * arguments = (st_args_t *) arg;
-  	arguments->dst[task_id] = arguments->src[task_id];
+void st_kernel(int task_id, const st_args_t * arg) {
+  	arg->dst[task_id] = arg->src[task_id];
 }
 
 int test_spawn_tasks() {
@@ -212,6 +211,37 @@ int test_spawn_tasks() {
 	vx_spawn_tasks(ST_BUF_SZ, st_kernel, &arg);
 
 	return check_error(st_buffer_dst, 0, ST_BUF_SZ);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+#define SR_BUF_SZ 8
+typedef struct {
+	int * buf;
+} sr_args_t;
+
+int sr_buffer[SR_BUF_SZ];
+
+void sr_kernel(const sr_args_t * arg) {
+	int tid = vx_thread_id();
+  	arg->buf[tid] = 65 + tid;
+}
+
+void __attribute__ ((noinline)) do_serial() {
+	sr_args_t arg;
+	arg.buf = sr_buffer;
+	vx_serial(sr_kernel, &arg);
+}
+
+int test_serial() {
+	vx_printf("Serial Test\n");	
+	int num_threads = std::min(vx_num_threads(), 8);
+	int tmask = make_full_tmask(num_threads);	
+	vx_tmc(tmask);
+	do_serial();
+	vx_tmc(1);
+
+	return check_error(sr_buffer, 0, num_threads);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

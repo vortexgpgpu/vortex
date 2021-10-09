@@ -7,7 +7,8 @@
 #include <string.h>
 #include <chrono>
 
-#define KERNEL_NAME "psort"
+#define KERNEL0_NAME "psorti"
+#define KERNEL1_NAME "psortf"
 
 #define CL_CHECK(_expr)                                                \
    do {                                                                \
@@ -52,14 +53,6 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
   return 0;
 }
 
-static bool almost_equal(float a, float b, int ulp = 4) {
-  union fi_t { int i; float f; };
-  fi_t fa, fb;
-  fa.f = a;
-  fb.f = b;
-  return std::abs(fa.i - fb.i) <= ulp;
-}
-
 cl_device_id device_id = NULL;
 cl_context context = NULL;
 cl_command_queue commandQueue = NULL;
@@ -67,8 +60,8 @@ cl_program program = NULL;
 cl_kernel kernel = NULL;
 cl_mem a_memobj = NULL;
 cl_mem c_memobj = NULL;  
-float *h_a = NULL;
-float *h_c = NULL;
+int *h_a = NULL;
+int *h_c = NULL;
 uint8_t *kernel_bin = NULL;
 
 static void cleanup() {
@@ -86,15 +79,19 @@ static void cleanup() {
 }
 
 int size = 64;
+bool float_enable = false;
 
 static void show_usage() {
-  printf("Usage: [-n size] [-h: help]\n");
+  printf("Usage: [-f] [-n size] [-h: help]\n");
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "n:h?")) != -1) {
+  while ((c = getopt(argc, argv, "fn:h?")) != -1) {
     switch (c) {
+    case 'f':
+      float_enable = 1;
+      break;
     case 'n':
       size = atoi(optarg);
       break;
@@ -132,7 +129,7 @@ int main (int argc, char **argv) {
   context = CL_CHECK2(clCreateContext(NULL, 1, &device_id, NULL, NULL,  &_err));
 
   printf("Allocate device buffers\n");
-  size_t nbytes = size * sizeof(float);
+  size_t nbytes = size * sizeof(int);
   a_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_READ_ONLY, nbytes, NULL, &_err));
   c_memobj = CL_CHECK2(clCreateBuffer(context, CL_MEM_WRITE_ONLY, nbytes, NULL, &_err));
 
@@ -148,21 +145,28 @@ int main (int argc, char **argv) {
   CL_CHECK(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
   
   // Create kernel
-  kernel = CL_CHECK2(clCreateKernel(program, KERNEL_NAME, &_err));
+  kernel = CL_CHECK2(clCreateKernel(program, (float_enable ? KERNEL1_NAME : KERNEL0_NAME), &_err));
 
   // Set kernel arguments
   CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&a_memobj));	
   CL_CHECK(clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&c_memobj));
 
   // Allocate memories for input arrays and output arrays.    
-  h_a = (float*)malloc(nbytes);
-  h_c = (float*)malloc(nbytes);	
+  h_a = (int*)malloc(nbytes);
+  h_c = (int*)malloc(nbytes);	
 	
   // Initialize values for array members.  
   for (int i = 0; i < size; ++i) {
-    h_a[i] = sinf(i)*sinf(i);
     h_c[i] = 0xdeadbeef;
-    printf("*** [%d]: h_a=%f\n", i, h_a[i]);
+    if (float_enable) {
+      float value = sinf(i)*sinf(i);
+      h_a[i] = *(int*)&value;
+      printf("*** [%d]: h_a=%f\n", i, value);
+    } else {      
+      int value = size*sinf(i);
+      h_a[i] = value;
+      printf("*** [%d]: h_a=%d\n", i, value);
+    }
   }
 
   // Creating command queue
@@ -185,17 +189,37 @@ int main (int argc, char **argv) {
   CL_CHECK(clEnqueueReadBuffer(commandQueue, c_memobj, CL_TRUE, 0, nbytes, h_c, 0, NULL, NULL));
 
   printf("Verify result\n");
+  for (int i = 0; i < size; ++i) {
+    int value = h_c[i];
+    if (float_enable) {
+      printf("*** [%d]: h_a=%f\n", i, *(float*)&value);
+    } else {
+      printf("*** [%d]: h_a=%d\n", i, value);
+    }
+  }
   int errors = 0;
   for (int i = 0; i < size; ++i) {
-    float ref = h_a[i];
+    int ref = h_a[i];
+    float ref_f = *(float*)&ref;
     int pos = 0;
     for (int j = 0; j < size; ++j) {
-      float cur = h_a[j];
-      pos += (cur < ref) || (cur == ref && j < i);
+      int cur = h_a[j];
+      if (float_enable) {
+        float cur_f = *(float*)&cur;
+        pos += (cur_f < ref_f) || (cur_f == ref_f && j < i);
+      } else {
+        pos += (cur < ref) || (cur == ref && j < i);
+      }
     }
-    if (!almost_equal(h_c[pos], ref)) {
-      if (errors < 100) 
-        printf("*** error: [%d] expected=%f, actual=%f\n", pos, ref, h_c[pos]);
+    int value = h_c[pos];
+    if (value != ref) {
+      if (errors < 100) {
+        if (float_enable) {
+          printf("*** error: [%d] expected=%f, actual=%f\n", pos, ref_f, *(float*)&value);
+        } else {
+          printf("*** error: [%d] expected=%d, actual=%d\n", pos, ref, value);
+        }
+      }
       ++errors;
     }
   }

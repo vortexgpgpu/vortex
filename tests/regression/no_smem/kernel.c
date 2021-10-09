@@ -4,7 +4,7 @@
 #include "common.h"
 
 void main() {
-	struct kernel_arg_t* arg = (struct kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
+	const kernel_arg_t* arg = (const kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
 
 	uint32_t size    = arg->size;
 	int32_t* src_ptr = (int32_t*)arg->src_ptr;
