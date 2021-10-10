@@ -7,8 +7,12 @@ EXCLUDED_TESTS := $(V_TESTS) $(D_TESTS) rv32si-p-scall.hex rv32si-p-sbreak.hex r
 
 TESTS := $(filter-out $(EXCLUDED_TESTS), $(ALL_TESTS))
 
+all:
+
 run-simx:	
 	$(foreach test, $(TESTS), ../../../sim/simX/simX -r -a rv32i -c 1 -i $(test) || exit;)
 
 run-rtlsim:
 	$(foreach test, $(TESTS), ../../../sim/rtlsim/rtlsim -r $(test) || exit;)
+
+clean:

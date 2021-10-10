@@ -50,12 +50,14 @@ module VX_muldiv (
 
 `ifdef IMUL_DPI
 
-    wire [`NUM_THREADS-1:0][31:0] mul_result_tmp;    
+    wire [`NUM_THREADS-1:0][31:0] mul_result_tmp;  
+
+    wire mul_fire_in = mul_valid_in && mul_ready_in;
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         wire [31:0] mul_resultl, mul_resulth;
         always @(*) begin        
-            dpi_imul (alu_in1[i], alu_in2[i], is_signed_mul_a, is_signed_mul_b, mul_resultl, mul_resulth);
+            dpi_imul (mul_fire_in, alu_in1[i], alu_in2[i], is_signed_mul_a, is_signed_mul_b, mul_resultl, mul_resulth);
         end
         assign mul_result_tmp[i] = is_mulh_in ? mul_resulth : mul_resultl;
     end
@@ -133,11 +135,13 @@ module VX_muldiv (
 `ifdef IDIV_DPI    
 
     wire [`NUM_THREADS-1:0][31:0] div_result_tmp;
+
+    wire div_fire_in = div_valid_in && div_ready_in;
     
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         wire [31:0] div_quotient, div_remainder;
         always @(*) begin        
-            dpi_idiv (alu_in1[i], alu_in2[i], is_signed_div, div_quotient, div_remainder);
+            dpi_idiv (div_fire_in, alu_in1[i], alu_in2[i], is_signed_div, div_quotient, div_remainder);
         end
         assign div_result_tmp[i] = is_rem_op_in ? div_remainder : div_quotient;
     end
