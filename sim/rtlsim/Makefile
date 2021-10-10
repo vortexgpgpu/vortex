@@ -1,8 +1,12 @@
-CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors
-#CXXFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
+RTL_DIR=../../hw/rtl
+DPI_DIR=../../hw/dpi
 
+CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I../../../hw -I../../common
+CXXFLAGS += -I../../common/softfloat/source/include
+
+LDFLAGS += ../../common/softfloat/build/Linux-x86_64-GCC/softfloat.a
 
 # control RTL debug print states
 DBG_PRINT_FLAGS += -DDBG_PRINT_PIPELINE  
@@ -21,16 +25,10 @@ DBG_FLAGS += $(DBG_PRINT_FLAGS)
 DBG_FLAGS += -DDBG_CACHE_REQ_INFO
 DBG_FLAGS += -DVCD_OUTPUT
 
-SINGLECORE = -DNUM_CLUSTERS=1 -DNUM_CORES=1 -DL2_ENABLE=0
-MULTICORE  = -DNUM_CLUSTERS=1 -DNUM_CORES=2 -DL2_ENABLE=0
-
-RTL_DIR=../../hw/rtl
-DPI_DIR=../../hw/dpi
-
 FPU_INCLUDE = -I$(RTL_DIR)/fp_cores -I$(RTL_DIR)/fp_cores/fpnew/src/common_cells/include -I$(RTL_DIR)/fp_cores/fpnew/src/common_cells/src -I$(RTL_DIR)/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(RTL_DIR)/fp_cores/fpnew/src
 RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache -I$(RTL_DIR)/simulate $(FPU_INCLUDE)
 
-SRCS = ../common/util.cpp ../common/mem.cpp
+SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp
 SRCS += $(DPI_DIR)/util_dpi.cpp $(DPI_DIR)/float_dpi.cpp
 SRCS += main.cpp simulator.cpp
 
@@ -52,10 +50,10 @@ VL_FLAGS += $(RTL_INCLUDE)
 # Debugigng
 ifdef DEBUG
 	VL_FLAGS += -DVCD_OUTPUT --trace --trace-structs $(DBG_FLAGS)
-	CXXFLAGS += -DVCD_OUTPUT $(DBG_FLAGS)
+	CXXFLAGS += -g -O0 -DVCD_OUTPUT $(DBG_FLAGS)
 else    
 	VL_FLAGS += -DNDEBUG
-	CXXFLAGS += -DNDEBUG
+	CXXFLAGS += -O2 -DNDEBUG
 endif
 
 # Enable perf counters
@@ -69,36 +67,21 @@ VL_FLAGS += -DIMUL_DPI
 VL_FLAGS += -DIDIV_DPI
 
 # FPU backend
-FPU_CORE ?= FPU_FPNEW
+FPU_CORE ?= FPU_DPI
 VL_FLAGS += -D$(FPU_CORE)
 
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
 
 PROJECT = rtlsim
 
-all: build-s
+all: $(PROJECT)
 
-build-s: $(SRCS)
-	verilator --build $(VL_FLAGS) -DNDEBUG $(SRCS) $(SINGLECORE) -CFLAGS '$(CXXFLAGS) -DNDEBUG $(SINGLECORE)' -o ../$(PROJECT)
+$(PROJECT): $(SRCS)
+	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT)
 	
-build-sd: $(SRCS)
-	verilator --build $(VL_FLAGS) $(SRCS) $(SINGLECORE) -CFLAGS '$(CXXFLAGS) $(DBG_FLAGS) $(SINGLECORE)' --trace --trace-structs $(DBG_FLAGS) -o ../$(PROJECT)
-
-build-st: $(SRCS)
-	verilator --build $(VL_FLAGS) -DNDEBUG $(SRCS) $(SINGLECORE) -CFLAGS '$(CXXFLAGS) -DNDEBUG $(SINGLECORE)' --threads $(THREADS) -o ../$(PROJECT)
-
-build-m: $(SRCS)
-	verilator --build $(VL_FLAGS) -DNDEBUG $(SRCS) $(MULTICORE) -CFLAGS '$(CXXFLAGS) -DNDEBUG $(MULTICORE)' -o ../$(PROJECT)
-
-build-md: $(SRCS)
-	verilator --build $(VL_FLAGS) $(SRCS) $(MULTICORE) -CFLAGS '$(CXXFLAGS) $(DBG_FLAGS) $(MULTICORE)' --trace --trace-structs $(DBG_FLAGS) -o ../$(PROJECT)
-
-build-mt: $(SRCS)
-	verilator --build $(VL_FLAGS) -DNDEBUG $(SRCS) $(MULTICORE) -CFLAGS '$(CXXFLAGS) -DNDEBUG $(MULTICORE)' --threads $(THREADS) -o ../$(PROJECT)
-
 static: $(SRCS)
-	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)'
-	$(AR) rs lib$(PROJECT).a obj_dir/*.o
+	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)'
+	$(AR) rcs lib$(PROJECT).a obj_dir/*.o
 
 clean-static:
 	rm -rf lib$(PROJECT).a obj_dir

@@ -123,15 +123,20 @@ module VX_fpu_dpi #(
         fflags_t [`NUM_THREADS-1:0] fflags_fnmadd;
         fflags_t [`NUM_THREADS-1:0] fflags_fnmsub;
 
+        wire fma_valid = (valid_in && core_select == FPU_FMA);
+        wire fma_ready = per_core_ready_out[FPU_FMA] || ~per_core_valid_out[FPU_FMA];
+
+        wire fma_fire = fma_valid && fma_ready;
+
         always @(*) begin        
             for (integer i = 0; i < `NUM_THREADS; i++) begin
-                dpi_fadd   (dataa[i], datab[i], frm, result_fadd[i], fflags_fadd[i]);
-                dpi_fsub   (dataa[i], datab[i], frm, result_fsub[i], fflags_fsub[i]);
-                dpi_fmul   (dataa[i], datab[i], frm, result_fmul[i], fflags_fmul[i]);
-                dpi_fmadd  (dataa[i], datab[i], datac[i], frm, result_fmadd[i], fflags_fmadd[i]);
-                dpi_fmsub  (dataa[i], datab[i], datac[i], frm, result_fmsub[i], fflags_fmsub[i]);
-                dpi_fnmadd (dataa[i], datab[i], datac[i], frm, result_fnmadd[i], fflags_fnmadd[i]);
-                dpi_fnmsub (dataa[i], datab[i], datac[i], frm, result_fnmsub[i], fflags_fnmsub[i]);
+                dpi_fadd   (fma_fire, dataa[i], datab[i], frm, result_fadd[i], fflags_fadd[i]);
+                dpi_fsub   (fma_fire, dataa[i], datab[i], frm, result_fsub[i], fflags_fsub[i]);
+                dpi_fmul   (fma_fire, dataa[i], datab[i], frm, result_fmul[i], fflags_fmul[i]);
+                dpi_fmadd  (fma_fire, dataa[i], datab[i], datac[i], frm, result_fmadd[i], fflags_fmadd[i]);
+                dpi_fmsub  (fma_fire, dataa[i], datab[i], datac[i], frm, result_fmsub[i], fflags_fmsub[i]);
+                dpi_fnmadd (fma_fire, dataa[i], datab[i], datac[i], frm, result_fnmadd[i], fflags_fnmadd[i]);
+                dpi_fnmsub (fma_fire, dataa[i], datab[i], datac[i], frm, result_fnmsub[i], fflags_fnmsub[i]);
             end
         end
 
@@ -151,10 +156,7 @@ module VX_fpu_dpi #(
                             is_fmsub  ? fflags_fmsub :
                             is_fnmadd ? fflags_fnmadd :               
                             is_fnmsub ? fflags_fnmsub : 
-                                        0;
-
-        wire enable = per_core_ready_out[FPU_FMA] || ~per_core_valid_out[FPU_FMA];
-        wire valid  = (valid_in && core_select == FPU_FMA);
+                                        0;                
 
         VX_shift_register #(
             .DATAW  (1 + TAGW + `NUM_THREADS * (32 + $bits(fflags_t))),
@@ -163,13 +165,13 @@ module VX_fpu_dpi #(
         ) shift_reg (
             .clk      (clk),
             .reset    (reset),
-            .enable   (enable),
-            .data_in  ({valid,                       tag_in,                    result_fma,               fflags_fma}),
+            .enable   (fma_ready),
+            .data_in  ({fma_valid,                   tag_in,                    result_fma,               fflags_fma}),
             .data_out ({per_core_valid_out[FPU_FMA], per_core_tag_out[FPU_FMA], per_core_result[FPU_FMA], per_core_fflags[FPU_FMA]})
         );
 
         assign per_core_has_fflags[FPU_FMA] = 1;
-        assign per_core_ready_in[FPU_FMA] = enable;
+        assign per_core_ready_in[FPU_FMA] = fma_ready;
 
     end
     endgenerate
@@ -179,15 +181,17 @@ module VX_fpu_dpi #(
 
         wire [`NUM_THREADS-1:0][31:0] result_fdiv;
         fflags_t [`NUM_THREADS-1:0] fflags_fdiv;
+
+        wire fdiv_valid = (valid_in && core_select == FPU_DIV);
+        wire fdiv_ready = per_core_ready_out[FPU_DIV] || ~per_core_valid_out[FPU_DIV];
+
+        wire fdiv_fire = fdiv_valid && fdiv_ready;
         
         always @(*) begin        
             for (integer i = 0; i < `NUM_THREADS; i++) begin
-                dpi_fdiv (dataa[i], datab[i], frm, result_fdiv[i], fflags_fdiv[i]);
+                dpi_fdiv (fdiv_fire, dataa[i], datab[i], frm, result_fdiv[i], fflags_fdiv[i]);
             end
         end
-
-        wire enable = per_core_ready_out[FPU_DIV] || ~per_core_valid_out[FPU_DIV];
-        wire valid  = (valid_in && core_select == FPU_DIV);
 
         VX_shift_register #(
             .DATAW  (1 + TAGW + `NUM_THREADS * (32 + $bits(fflags_t))),
@@ -196,13 +200,13 @@ module VX_fpu_dpi #(
         ) shift_reg (
             .clk      (clk),
             .reset    (reset),
-            .enable   (enable),
-            .data_in  ({valid,                       tag_in,                    result_fdiv,               fflags_fdiv}),
+            .enable   (fdiv_ready),
+            .data_in  ({fdiv_valid,                  tag_in,                    result_fdiv,              fflags_fdiv}),
             .data_out ({per_core_valid_out[FPU_DIV], per_core_tag_out[FPU_DIV], per_core_result[FPU_DIV], per_core_fflags[FPU_DIV]})
         );
 
         assign per_core_has_fflags[FPU_DIV] = 1;
-        assign per_core_ready_in[FPU_DIV] = enable;
+        assign per_core_ready_in[FPU_DIV] = fdiv_ready;
 
     end
     endgenerate
@@ -212,15 +216,17 @@ module VX_fpu_dpi #(
 
         wire [`NUM_THREADS-1:0][31:0] result_fsqrt;
         fflags_t [`NUM_THREADS-1:0] fflags_fsqrt;
+
+        wire fsqrt_valid = (valid_in && core_select == FPU_SQRT);
+        wire fsqrt_ready = per_core_ready_out[FPU_SQRT] || ~per_core_valid_out[FPU_SQRT];
+                
+        wire fsqrt_fire = fsqrt_valid && fsqrt_ready;
         
         always @(*) begin        
             for (integer i = 0; i < `NUM_THREADS; i++) begin
-                dpi_fsqrt (dataa[i], frm, result_fsqrt[i], fflags_fsqrt[i]);
+                dpi_fsqrt (fsqrt_fire, dataa[i], frm, result_fsqrt[i], fflags_fsqrt[i]);
             end
         end
-
-        wire enable = per_core_ready_out[FPU_SQRT] || ~per_core_valid_out[FPU_SQRT];
-        wire valid  = (valid_in && core_select == FPU_SQRT);
 
         VX_shift_register #(
             .DATAW  (1 + TAGW + `NUM_THREADS * (32 + $bits(fflags_t))),
@@ -229,13 +235,13 @@ module VX_fpu_dpi #(
         ) shift_reg (
             .clk      (clk),
             .reset    (reset),
-            .enable   (enable),
-            .data_in  ({valid,                        tag_in,                     result_fsqrt,              fflags_fsqrt}),
+            .enable   (fsqrt_ready),
+            .data_in  ({fsqrt_valid,                  tag_in,                     result_fsqrt,              fflags_fsqrt}),
             .data_out ({per_core_valid_out[FPU_SQRT], per_core_tag_out[FPU_SQRT], per_core_result[FPU_SQRT], per_core_fflags[FPU_SQRT]})
         );
 
         assign per_core_has_fflags[FPU_SQRT] = 1;
-        assign per_core_ready_in[FPU_SQRT] = enable;
+        assign per_core_ready_in[FPU_SQRT] = fsqrt_ready;
 
     end
     endgenerate
@@ -254,13 +260,18 @@ module VX_fpu_dpi #(
         fflags_t [`NUM_THREADS-1:0] fflags_utof;
         fflags_t [`NUM_THREADS-1:0] fflags_ftoi;
         fflags_t [`NUM_THREADS-1:0] fflags_ftou;
-        
+
+        wire fcvt_valid = (valid_in && core_select == FPU_CVT);
+        wire fcvt_ready = per_core_ready_out[FPU_CVT] || ~per_core_valid_out[FPU_CVT];
+
+        wire fcvt_fire = fcvt_valid && fcvt_ready;
+                
         always @(*) begin        
             for (integer i = 0; i < `NUM_THREADS; i++) begin
-                dpi_itof (dataa[i], frm, result_itof[i], fflags_itof[i]);
-                dpi_utof (dataa[i], frm, result_utof[i], fflags_utof[i]);
-                dpi_ftoi (dataa[i], frm, result_ftoi[i], fflags_ftoi[i]);
-                dpi_ftou (dataa[i], frm, result_ftou[i], fflags_ftou[i]);
+                dpi_itof (fcvt_fire, dataa[i], frm, result_itof[i], fflags_itof[i]);
+                dpi_utof (fcvt_fire, dataa[i], frm, result_utof[i], fflags_utof[i]);
+                dpi_ftoi (fcvt_fire, dataa[i], frm, result_ftoi[i], fflags_ftoi[i]);
+                dpi_ftou (fcvt_fire, dataa[i], frm, result_ftou[i], fflags_ftou[i]);
             end
         end
 
@@ -276,9 +287,6 @@ module VX_fpu_dpi #(
                              is_ftou ? fflags_ftou : 
                                        0;
 
-        wire enable = per_core_ready_out[FPU_CVT] || ~per_core_valid_out[FPU_CVT];
-        wire valid  = (valid_in && core_select == FPU_CVT);
-
         VX_shift_register #(
             .DATAW  (1 + TAGW + `NUM_THREADS * (32 + $bits(fflags_t))),
             .DEPTH  (`LATENCY_FCVT),
@@ -286,13 +294,13 @@ module VX_fpu_dpi #(
         ) shift_reg (
             .clk      (clk),
             .reset    (reset),
-            .enable   (enable),
-            .data_in  ({valid,                       tag_in,                    result_fcvt,              fflags_fcvt}),
+            .enable   (fcvt_ready),
+            .data_in  ({fcvt_valid,                  tag_in,                    result_fcvt,              fflags_fcvt}),
             .data_out ({per_core_valid_out[FPU_CVT], per_core_tag_out[FPU_CVT], per_core_result[FPU_CVT], per_core_fflags[FPU_CVT]})
         );
 
         assign per_core_has_fflags[FPU_CVT] = 1;
-        assign per_core_ready_in[FPU_CVT] = enable;
+        assign per_core_ready_in[FPU_CVT] = fcvt_ready;
 
     end
     endgenerate
@@ -318,18 +326,23 @@ module VX_fpu_dpi #(
         fflags_t [`NUM_THREADS-1:0] fflags_feq;
         fflags_t [`NUM_THREADS-1:0] fflags_fmin;
         fflags_t [`NUM_THREADS-1:0] fflags_fmax;
-        
+
+        wire fncp_valid = (valid_in && core_select == FPU_NCP);
+        wire fncp_ready = per_core_ready_out[FPU_NCP] || ~per_core_valid_out[FPU_NCP];
+
+        wire fncp_fire = fncp_valid && fncp_ready;
+                
         always @(*) begin        
             for (integer i = 0; i < `NUM_THREADS; i++) begin
-                dpi_fclss  (dataa[i], result_fclss[i]);
-                dpi_flt    (dataa[i], datab[i], result_flt[i], fflags_flt[i]);
-                dpi_fle    (dataa[i], datab[i], result_fle[i], fflags_fle[i]);
-                dpi_feq    (dataa[i], datab[i], result_feq[i], fflags_feq[i]);
-                dpi_fmin   (dataa[i], datab[i], result_fmin[i], fflags_fmin[i]);
-                dpi_fmax   (dataa[i], datab[i], result_fmax[i], fflags_fmax[i]);            
-                dpi_fsgnj  (dataa[i], datab[i], result_fsgnj[i]);
-                dpi_fsgnjn (dataa[i], datab[i], result_fsgnjn[i]);
-                dpi_fsgnjx (dataa[i], datab[i], result_fsgnjx[i]);
+                dpi_fclss  (fncp_fire, dataa[i], result_fclss[i]);
+                dpi_flt    (fncp_fire, dataa[i], datab[i], result_flt[i], fflags_flt[i]);
+                dpi_fle    (fncp_fire, dataa[i], datab[i], result_fle[i], fflags_fle[i]);
+                dpi_feq    (fncp_fire, dataa[i], datab[i], result_feq[i], fflags_feq[i]);
+                dpi_fmin   (fncp_fire, dataa[i], datab[i], result_fmin[i], fflags_fmin[i]);
+                dpi_fmax   (fncp_fire, dataa[i], datab[i], result_fmax[i], fflags_fmax[i]);            
+                dpi_fsgnj  (fncp_fire, dataa[i], datab[i], result_fsgnj[i]);
+                dpi_fsgnjn (fncp_fire, dataa[i], datab[i], result_fsgnjn[i]);
+                dpi_fsgnjx (fncp_fire, dataa[i], datab[i], result_fsgnjx[i]);
                 result_fmv[i] = dataa[i];
             end
         end
@@ -354,9 +367,6 @@ module VX_fpu_dpi #(
                              is_fmax ? fflags_fmax : 
                                        0;
 
-        wire enable = per_core_ready_out[FPU_NCP] || ~per_core_valid_out[FPU_NCP];
-        wire valid  = (valid_in && core_select == FPU_NCP);
-
         VX_shift_register #(
             .DATAW  (1 + TAGW + 1 + `NUM_THREADS * (32 + $bits(fflags_t))),
             .DEPTH  (`LATENCY_FNCP),
@@ -364,12 +374,12 @@ module VX_fpu_dpi #(
         ) shift_reg (
             .clk      (clk),
             .reset    (reset),
-            .enable   (enable),
-            .data_in  ({valid,                       tag_in,                    has_fflags_fncp,              result_fncp,              fflags_fncp}),
+            .enable   (fncp_ready),
+            .data_in  ({fncp_valid,                  tag_in,                    has_fflags_fncp,              result_fncp,              fflags_fncp}),
             .data_out ({per_core_valid_out[FPU_NCP], per_core_tag_out[FPU_NCP], per_core_has_fflags[FPU_NCP], per_core_result[FPU_NCP], per_core_fflags[FPU_NCP]})
         );
         
-        assign per_core_ready_in[FPU_NCP] = enable;
+        assign per_core_ready_in[FPU_NCP] = fncp_ready;
 
     end
     endgenerate

@@ -3,8 +3,6 @@
 #include <cstdint>
 #include <assert.h>
 
-namespace vortex {
-
 template <typename... Args>
 void unused(Args&&...) {}
 
@@ -24,21 +22,11 @@ inline uint64_t align_size(uint64_t size, uint64_t alignment) {
 }
 
 // Apply integer sign extension
-uint32_t signExt(uint32_t w, uint32_t bit, uint32_t mask);
-
-// Convert a floating point number to IEEE-754 32-bit representation
-uint32_t floatToBin(float in_value);
-
-// check floating-point number in binary format is NaN
-uint8_t fpBinIsNan(uint32_t din);
-
-// check floating-point number in binary format is zero
-uint8_t fpBinIsZero(uint32_t din);
-
-// check floating-point number in binary format is infinity
-uint8_t fpBinIsInf(uint32_t din);
+inline uint32_t signExt(uint32_t w, uint32_t bit, uint32_t mask) {
+  if (w >> (bit - 1))
+    w |= ~mask;
+  return w;
+}
 
 // return file extension
 const char* fileExtension(const char* filepath);
-
-}

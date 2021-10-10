@@ -35,7 +35,7 @@ module VX_fp_div #(
         fflags_t f;
 
         always @(*) begin        
-            dpi_fdiv (dataa[i], datab[i], frm, r, f);
+            dpi_fdiv (enable && valid_in, dataa[i], datab[i], frm, r, f);
         end
         `UNUSED_VAR (f)
 

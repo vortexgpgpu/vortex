@@ -1,17 +1,15 @@
-#CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors 
-CXXFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
+RTL_DIR = ../hw/rtl
 
+CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I. -I../common -I../../hw
-CXXFLAGS += -DDUMP_PERF_STATS
+CXXFLAGS += -I../common/softfloat/source/include
+
+LDFLAGS += ../common/softfloat/build/Linux-x86_64-GCC/softfloat.a
 
 TOP = vx_cache_sim
 
-RTL_DIR = ../hw/rtl
-
-PROJECT = simX
-
-SRCS = ../common/util.cpp ../common/mem.cpp 
+SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp 
 SRCS += args.cpp pipeline.cpp warp.cpp core.cpp decode.cpp execute.cpp main.cpp
 
 OBJS := $(patsubst %.cpp, obj_dir/%.o, $(notdir $(SRCS)))
@@ -22,10 +20,12 @@ VPATH := $(sort $(dir $(SRCS)))
 
 # Debugigng
 ifdef DEBUG
-	CXXFLAGS += -DDEBUG_LEVEL=$(DEBUG)
+	CXXFLAGS += -g -O0 -DDEBUG_LEVEL=$(DEBUG)
 else    
-	CXXFLAGS += -DNDEBUG
+	CXXFLAGS += -O2 -DNDEBUG
 endif
+
+PROJECT = simX
 
 all: $(PROJECT)
 
@@ -37,7 +37,7 @@ obj_dir/%.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 static: $(OBJS)
-	$(AR) rs lib$(PROJECT).a $(OBJS)
+	$(AR) rcs lib$(PROJECT).a $(OBJS)
 
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;

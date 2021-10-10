@@ -26,7 +26,7 @@ $(PROJECT).dump: $(PROJECT).a
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(PROJECT).a: $(OBJS)
-	$(AR) rc $(PROJECT).a $^
+	$(AR) rcs $(PROJECT).a $^
 
 .depend: $(SRCS)
 	$(CC) $(CFLAGS) -MM $^ > .depend;

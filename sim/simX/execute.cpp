@@ -6,9 +6,9 @@
 #include <climits>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <cfenv>
 #include <assert.h>
 #include <util.h>
+#include <rvfloats.h>
 #include "warp.h"
 #include "instr.h"
 #include "core.h"
@@ -38,30 +38,14 @@ static bool HasDivergentThreads(const ThreadMask &thread_mask,
   return false;
 }
 
-static void update_fcrs(Core* core, int tid, int wid, bool outOfRange = false) {
-  if (fetestexcept(FE_INEXACT)) {
-    core->set_csr(CSR_FCSR, core->get_csr(CSR_FCSR, tid, wid) | 0x1, tid, wid); // set NX bit
-    core->set_csr(CSR_FFLAGS, core->get_csr(CSR_FFLAGS, tid, wid) | 0x1, tid, wid); // set NX bit
-  }
-  
-  if (fetestexcept(FE_UNDERFLOW)) {
-    core->set_csr(CSR_FCSR, core->get_csr(CSR_FCSR, tid, wid) | 0x2, tid, wid); // set UF bit
-    core->set_csr(CSR_FFLAGS, core->get_csr(CSR_FFLAGS, tid, wid) | 0x2, tid, wid); // set UF bit
-  }
+inline uint32_t get_fpu_rm(uint32_t func3, Core* core, uint32_t tid, uint32_t wid) {
+  return (func3 == 0x7) ? core->get_csr(CSR_FRM, tid, wid) : func3;
+}
 
-  if (fetestexcept(FE_OVERFLOW)) {
-    core->set_csr(CSR_FCSR, core->get_csr(CSR_FCSR, tid, wid) | 0x4, tid, wid); // set OF bit
-    core->set_csr(CSR_FFLAGS, core->get_csr(CSR_FFLAGS, tid, wid) | 0x4, tid, wid); // set OF bit
-  }
-
-  if (fetestexcept(FE_DIVBYZERO)) {
-    core->set_csr(CSR_FCSR, core->get_csr(CSR_FCSR, tid, wid) | 0x8, tid, wid); // set DZ bit
-    core->set_csr(CSR_FFLAGS, core->get_csr(CSR_FFLAGS, tid, wid) | 0x8, tid, wid); // set DZ bit
-  } 
-
-  if (fetestexcept(FE_INVALID) || outOfRange) {
-    core->set_csr(CSR_FCSR, core->get_csr(CSR_FCSR, tid, wid) | 0x10, tid, wid); // set NV bit
-    core->set_csr(CSR_FFLAGS, core->get_csr(CSR_FFLAGS, tid, wid) | 0x10, tid, wid); // set NV bit
+inline void update_fcrs(uint32_t fflags, Core* core, uint32_t tid, uint32_t wid) {
+  if (fflags) {
+    core->set_csr(CSR_FCSR, core->get_csr(CSR_FCSR, tid, wid) | fflags, tid, wid);
+    core->set_csr(CSR_FFLAGS, core->get_csr(CSR_FFLAGS, tid, wid) | fflags, tid, wid);
   }
 }
 
@@ -514,320 +498,120 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         }
       }
       break;    
-    case FCI: // floating point computational instruction
+    case FCI: { 
+      uint32_t frm = get_fpu_rm(func3, core_, t, id_);
+      uint32_t fflags = 0;
       switch (func7) {
-        case 0x00: //FADD
-        case 0x04: //FSUB
-        case 0x08: //FMUL
-        case 0x0c: //FDIV
-        case 0x2c: //FSQRT
-        {
-          if (fpBinIsNan(rsdata[0]) || fpBinIsNan(rsdata[1])) { 
-            // if one of op is NaN, one of them is not quiet NaN, them set FCSR
-            if ((fpBinIsNan(rsdata[0])==2) | (fpBinIsNan(rsdata[1])==2)) {
-              core_->set_csr(CSR_FCSR, core_->get_csr(CSR_FCSR, t, id_) | 0x10, t, id_); // set NV bit                
-              core_->set_csr(CSR_FFLAGS, core_->get_csr(CSR_FFLAGS, t, id_) | 0x10, t, id_); // set NV bit
-            }
-            if (fpBinIsNan(rsdata[0]) && fpBinIsNan(rsdata[1])) 
-              rddata = 0x7fc00000;  // canonical(quiet) NaN 
-            else if (fpBinIsNan(rsdata[0]))
-              rddata = rsdata[1];
-            else
-              rddata = rsdata[0];
-          } else {
-            float fpsrc_0 = *(float*)&rsdata[0];
-            float fpsrc_1 = *(float*)&rsdata[1];
-            float fpDest;                          
-            
-            feclearexcept(FE_ALL_EXCEPT);
-
-            if (func7 == 0x00)    // FADD 
-              fpDest = fpsrc_0 + fpsrc_1;
-            else if (func7==0x04) // FSUB
-              fpDest = fpsrc_0 - fpsrc_1;
-            else if (func7==0x08) // FMUL
-              fpDest = fpsrc_0 * fpsrc_1;
-            else if (func7==0x0c) // FDIV
-              fpDest = fpsrc_0 / fpsrc_1;
-            else if (func7==0x2c) // FSQRT
-              fpDest = sqrt(fpsrc_0);  
-            else {
-              std::abort();
-            }            
-            
-            // update fcsrs
-            update_fcrs(core_, t, id_);
-
-            D(3, "fpDest: " << fpDest);
-            if (fpBinIsNan(floatToBin(fpDest)) == 0) {
-              rddata = floatToBin(fpDest);
-            } else  {              
-              // According to risc-v spec p.64 section 11.3
-              // If the result is NaN, it is the canonical NaN
-              rddata = 0x7fc00000;
-            }          
-          }
-        } break;
-
-        // FSGNJ.S, FSGNJN.S, FSGNJX.S
-        case 0x10: {
-          bool     fsign1 = rsdata[0] & 0x80000000;
-          uint32_t fdata1 = rsdata[0] & 0x7FFFFFFF;
-          bool     fsign2 = rsdata[1] & 0x80000000;
-          switch (func3) {            
-          case 0: // FSGNJ.S
-            rddata = (fsign2 << 31) | fdata1;
-            break;          
-          case 1: // FSGNJN.S
-            fsign2 = !fsign2;
-            rddata = (fsign2 << 31) | fdata1;
-            break;          
-          case 2: { // FSGNJX.S
-            bool sign = fsign1 ^ fsign2;
-            rddata = (sign << 31) | fdata1;
-            } break;
-          }
-        } break;
-
-        // FMIN.S, FMAX.S
-        case 0x14: {
-          if (fpBinIsNan(rsdata[0]) || fpBinIsNan(rsdata[1])) { // if one of src is NaN
-            // one of them is not quiet NaN, them set FCSR
-            if ((fpBinIsNan(rsdata[0])==2) | (fpBinIsNan(rsdata[1])==2)) {
-              core_->set_csr(CSR_FCSR, core_->get_csr(CSR_FCSR, t, id_) | 0x10, t, id_); // set NV bit
-              core_->set_csr(CSR_FFLAGS, core_->get_csr(CSR_FFLAGS, t, id_) | 0x10, t, id_); // set NV bit
-            }
-            if (fpBinIsNan(rsdata[0]) && fpBinIsNan(rsdata[1])) 
-              rddata = 0x7fc00000;  // canonical(quiet) NaN 
-            else if (fpBinIsNan(rsdata[0]))
-              rddata = rsdata[1];
-            else
-              rddata = rsdata[0];
-          } else {
-            uint8_t sr0IsZero = fpBinIsZero(rsdata[0]);
-            uint8_t sr1IsZero = fpBinIsZero(rsdata[1]);
-
-            if (sr0IsZero && sr1IsZero && (sr0IsZero != sr1IsZero)) { 
-              // both are zero and not equal
-              // handle corner case that compare +0 and -0              
-              if (func3) {
-                // FMAX.S
-                rddata = (sr1IsZero==2) ? rsdata[1] : rsdata[0];
-              } else {
-                // FMIM.S
-                rddata = (sr1IsZero==2) ? rsdata[0] : rsdata[1];
-              }
-            } else {
-              float rs1 = *(float*)&rsdata[0];
-              float rs2 = *(float*)&rsdata[1];              
-              if (func3) {
-                // FMAX.S
-                float fmax = std::max(rs1, rs2); 
-                rddata = floatToBin(fmax);
-              } else {
-                // FMIN.S
-                float fmin = std::min(rs1, rs2);
-                rddata = floatToBin(fmin);
-              }
-            }
-          }
-        } break;
-        
-        // FCVT.W.S FCVT.WU.S
-        case 0x60: {          
-          float fpSrc = *(float*)&rsdata[0];
-          Word result;
-          bool outOfRange = false;          
-          if (rsrc1 == 0) { 
-            // FCVT.W.S
-            // Convert floating point to 32-bit signed integer
-            if (fpSrc > pow(2.0, 31) - 1 || fpBinIsNan(rsdata[0]) || fpBinIsInf(rsdata[0]) == 2) {
-              feclearexcept(FE_ALL_EXCEPT);              
-              outOfRange = true;
-              // result = 2^31 - 1
-              result = 0x7FFFFFFF;
-            } else if (fpSrc < -1*pow(2.0, 31) || fpBinIsInf(rsdata[0]) == 1) {
-              feclearexcept(FE_ALL_EXCEPT);              
-              outOfRange = true;
-              // result = -1*2^31
-              result = 0x80000000;
-            } else {
-              feclearexcept(FE_ALL_EXCEPT);              
-              result = (int32_t) fpSrc;
-            }
-          } else {
-            // FCVT.WU.S
-            // Convert floating point to 32-bit unsigned integer
-            if (fpSrc > pow(2.0, 32) - 1 || fpBinIsNan(rsdata[0]) || fpBinIsInf(rsdata[0]) == 2) {
-              feclearexcept(FE_ALL_EXCEPT);              
-              outOfRange = true;
-              // result = 2^32 - 1
-              result = 0xFFFFFFFF;
-            } else if (fpSrc <= -1.0 || fpBinIsInf(rsdata[0]) == 1) {
-              feclearexcept(FE_ALL_EXCEPT);              
-              outOfRange = true;
-              // result = 0
-              result = 0x00000000;
-            } else {
-              feclearexcept(FE_ALL_EXCEPT);              
-              result = (uint32_t) fpSrc;
-            }
-          }
-
-          // update fcsrs
-          update_fcrs(core_, t, id_, outOfRange);
-
-          rddata = result;
-        } break;
-        
-        // FMV.X.W FCLASS.S
-        case 0x70: {
-          // FCLASS.S
-          if (func3) {
-            // Examine the value in fpReg rs1 and write to integer rd
-            // a 10-bit mask to indicate the class of the fp number
-            rddata = 0; // clear all bits
-
-            bool fsign = rsdata[0] & 0x80000000;
-            uint32_t expo = (rsdata[0]>>23) & 0x000000FF;
-            uint32_t fraction = rsdata[0] & 0x007FFFFF;
-
-            if ((expo==0) && (fraction==0)) {
-             rddata = fsign ? (1<<3) : (1<<4); // +/- 0
-            } else if ((expo==0) && (fraction!=0)) {
-              rddata = fsign ? (1<<2) : (1<<5); // +/- subnormal
-            } else if ((expo==0xFF) && (fraction==0)) {
-              rddata = fsign ? (1<<0) : (1<<7); // +/- infinity
-            } else if ((expo==0xFF) && (fraction!=0)) { 
-              if (!fsign && (fraction == 0x00400000)) {
-                rddata = (1<<9);               // quiet NaN
-              } else { 
-                rddata = (1<<8);               // signaling NaN
-              }
-            } else {
-              rddata = fsign ? (1<<1) : (1<<6); // +/- normal
-            }
-          } else {          
-            // FMV.X.W
-            // Move bit values from floating-point register rs1 to integer register rd
-            // Since we are using integer register to represent floating point register, 
-            // just simply assign here.
-            rddata = rsdata[0];
-          } 
-        } break;
-        
-        // FEQ.S FLT.S FLE.S
-        // rdest is integer register
-        case 0x50: {
-          // TODO: FLT.S and FLE.S perform IEEE 754-2009, signaling comparisons, set
-          // TODO: the invalid operation exception flag if either input is NaN
-          if (fpBinIsNan(rsdata[0]) || fpBinIsNan(rsdata[1])) {
-            // FLE.S or FLT.S
-            if (func3 == 0 || func3 == 1) {
-              // If either input is NaN, set NV bit
-              core_->set_csr(CSR_FCSR, core_->get_csr(CSR_FCSR, t, id_) | 0x10, t, id_); // set NV bit
-              core_->set_csr(CSR_FFLAGS, core_->get_csr(CSR_FFLAGS, t, id_) | 0x10, t, id_); // set NV bit
-            } else { // FEQ.S
-              // Only set NV bit if it is signaling NaN
-              if (fpBinIsNan(rsdata[0]) == 2 || fpBinIsNan(rsdata[1]) == 2) {
-                // If either input is NaN, set NV bit
-                core_->set_csr(CSR_FCSR, core_->get_csr(CSR_FCSR, t, id_) | 0x10, t, id_); // set NV bit
-                core_->set_csr(CSR_FFLAGS, core_->get_csr(CSR_FFLAGS, t, id_) | 0x10, t, id_); // set NV bit
-              }
-            }
-            // The result is 0 if either operand is NaN
-            rddata = 0;
-          } else {
-            switch(func3) {              
-            case 0: {
-              // FLE.S
-              rddata = (*(float*)&rsdata[0] <= *(float*)&rsdata[1]);
-            } break;              
-            case 1: {
-              // FLT.S
-              rddata = (*(float*)&rsdata[0] < *(float*)&rsdata[1]);
-            } break;              
-            case 2: {
-              // FEQ.S
-              rddata = (*(float*)&rsdata[0] == *(float*)&rsdata[1]);
-            } break;
-            default:
-              std::abort();
-            }
-          }
-        } break;
-        
-        case 0x68:
-          // Cast integer to floating point              
-          if (rsrc1) {
-            // FCVT.S.WU: convert 32-bit unsigned integer to floating point
-            float data = rsdata[0];      
-            rddata = floatToBin(data);
-          } else {
-            // FCVT.S.W: convert 32-bit signed integer to floating point
-            // rsdata[0] is actually a unsigned number
-            float data = (WordI)rsdata[0];
-            rddata = floatToBin(data);
-          }
+      case 0x00: //FADD
+        rddata = rv_fadd(rsdata[0], rsdata[1], frm, &fflags);
         break;
-
-        case 0x78: {
-          // FMV.W.X
-          // Move bit values from integer register rs1 to floating register rd
-          // Since we are using integer register to represent floating point register, 
-          // just simply assign here.
-          rddata = rsdata[0];
+      case 0x04: //FSUB
+        rddata = rv_fsub(rsdata[0], rsdata[1], frm, &fflags);
+        break;
+      case 0x08: //FMUL
+        rddata = rv_fmul(rsdata[0], rsdata[1], frm, &fflags);
+        break;
+      case 0x0c: //FDIV
+        rddata = rv_fdiv(rsdata[0], rsdata[1], frm, &fflags);
+        break;
+      case 0x2c: //FSQRT
+        rddata = rv_fsqrt(rsdata[0], frm, &fflags);
+        break;        
+      case 0x10:
+        switch (func3) {            
+        case 0: // FSGNJ.S
+          rddata = rv_fsgnj(rsdata[0], rsdata[1]);
+          break;          
+        case 1: // FSGNJN.S
+          rddata = rv_fsgnjn(rsdata[0], rsdata[1]);
+          break;          
+        case 2: // FSGNJX.S
+          rddata = rv_fsgnjx(rsdata[0], rsdata[1]);
+          break;
         }
         break;
+      case 0x14:                
+        if (func3) {
+          // FMAX.S
+          rddata = rv_fmax(rsdata[0], rsdata[1], &fflags);
+        } else {
+          // FMIN.S
+          rddata = rv_fmin(rsdata[0], rsdata[1], &fflags);
+        }
+        break;
+      case 0x60:
+        if (rsrc1 == 0) { 
+          // FCVT.W.S
+          rddata = rv_ftoi(rsdata[0], frm, &fflags);
+        } else {
+          // FCVT.WU.S
+          rddata = rv_ftou(rsdata[0], frm, &fflags);
+        }
+        break;
+      case 0x70:      
+        if (func3) {
+          // FCLASS.S
+          rddata = rv_fclss(rsdata[0]);
+        } else {          
+          // FMV.X.W
+          rddata = rsdata[0];
+        } 
+        break;
+      case 0x50:          
+        switch(func3) {              
+        case 0:
+          // FLE.S
+          rddata = rv_fle(rsdata[0], rsdata[1], &fflags);    
+          break;              
+        case 1:
+          // FLT.S
+          rddata = rv_flt(rsdata[0], rsdata[1], &fflags);
+          break;              
+        case 2:
+          // FEQ.S
+          rddata = rv_feq(rsdata[0], rsdata[1], &fflags);
+          break;
+        } break;        
+      case 0x68:
+        if (rsrc1) {
+          // FCVT.S.WU:
+          rddata = rv_utof(rsdata[0], frm, &fflags);
+        } else {
+          // FCVT.S.W:
+          rddata = rv_itof(rsdata[0], frm, &fflags);
+        }
+        break;
+      case 0x78:
+        // FMV.W.X
+        rddata = rsdata[0];
+        break;
       }
+      update_fcrs(fflags, core_, t, id_);
       rd_write = true;
-      break;
-
+    } break;
     case FMADD:      
     case FMSUB:      
     case FMNMADD:
     case FMNMSUB: {
-      // multiplicands are infinity and zero, them set FCSR
-      if (fpBinIsZero(rsdata[0]) || fpBinIsZero(rsdata[1]) || fpBinIsInf(rsdata[0]) || fpBinIsInf(rsdata[1])) {
-        core_->set_csr(CSR_FCSR, core_->get_csr(CSR_FCSR, t, id_) | 0x10, t, id_); // set NV bit
-        core_->set_csr(CSR_FFLAGS, core_->get_csr(CSR_FFLAGS, t, id_) | 0x10, t, id_); // set NV bit
-      }
-      if (fpBinIsNan(rsdata[0]) || fpBinIsNan(rsdata[1]) || fpBinIsNan(rsdata[2])) { 
-        // if one of op is NaN, if addend is not quiet NaN, them set FCSR
-        if ((fpBinIsNan(rsdata[0])==2) | (fpBinIsNan(rsdata[1])==2) | (fpBinIsNan(rsdata[1])==2)) {
-          core_->set_csr(CSR_FCSR, core_->get_csr(CSR_FCSR, t, id_) | 0x10, t, id_); // set NV bit
-          core_->set_csr(CSR_FFLAGS, core_->get_csr(CSR_FFLAGS, t, id_) | 0x10, t, id_); // set NV bit          
-        }
-        rddata = 0x7fc00000;  // canonical(quiet) NaN 
-      } else {
-        float rs1 = *(float*)&rsdata[0];
-        float rs2 = *(float*)&rsdata[1];
-        float rs3 = *(float*)&rsdata[2];
-        float fpDest(0.0);
-        feclearexcept(FE_ALL_EXCEPT);          
-        switch (opcode) {
-          case FMADD:    
-            // rd = (rs1*rs2)+rs3
-            fpDest = (rs1 * rs2) + rs3;  break;
-          case FMSUB:      
-            // rd = (rs1*rs2)-rs3
-            fpDest = (rs1 * rs2) - rs3; break;
-          case FMNMADD:
-            // rd = -(rs1*rs2)+rs3
-            fpDest = -1*(rs1 * rs2) - rs3; break;        
-          case FMNMSUB: 
-            // rd = -(rs1*rs2)-rs3
-            fpDest = -1*(rs1 * rs2) + rs3; break;
-          default:
-            std::abort();
-            break;                 
-        }  
-
-        // update fcsrs
-        update_fcrs(core_, t, id_);
-
-        rddata = floatToBin(fpDest);
-      }
+      int frm = get_fpu_rm(func3, core_, t, id_);
+      Word fflags = 0;
+      switch (opcode) {
+      case FMADD:
+        rddata = rv_fmadd(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
+        break;
+      case FMSUB:
+        rddata = rv_fmsub(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
+        break;
+      case FMNMADD:
+        rddata = rv_fnmadd(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
+        break;  
+      case FMNMSUB:
+        rddata = rv_fnmsub(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
+        break;
+      default:
+        break;
+      }              
+      update_fcrs(fflags, core_, t, id_);
       rd_write = true;
     } break;
     case GPGPU:

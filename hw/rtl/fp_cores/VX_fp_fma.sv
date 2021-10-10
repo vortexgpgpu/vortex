@@ -64,7 +64,7 @@ module VX_fp_fma #(
         fflags_t f;
 
         always @(*) begin        
-            dpi_fmadd (a, b, c, frm, r, f);
+            dpi_fmadd (enable && valid_in, a, b, c, frm, r, f);
         end
         `UNUSED_VAR (f)
 

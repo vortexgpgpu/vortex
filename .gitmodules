@@ -1,3 +1,6 @@
 [submodule "hw/rtl/fp_cores/fpnew"]
 	path = hw/rtl/fp_cores/fpnew
 	url = https://github.com/pulp-platform/fpnew.git
+[submodule "sim/common/softfloat"]
+	path = sim/common/softfloat
+	url = https://github.com/ucb-bar/berkeley-softfloat-3.git

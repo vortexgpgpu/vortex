@@ -1,8 +1,13 @@
-CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors
-#CXXFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
+RTL_DIR = ../../hw/rtl
+DPI_DIR = ../../hw/dpi
+SCRIPT_DIR=../../hw/scripts
 
+CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I.. -I../../../hw -I../../common
+CXXFLAGS += -I../../common/softfloat/source/include
+
+LDFLAGS += -shared ../../common/softfloat/build/Linux-x86_64-GCC/softfloat.a
 
 # control RTL debug print states
 DBG_PRINT_FLAGS += -DDBG_PRINT_PIPELINE  
@@ -23,15 +28,9 @@ DBG_FLAGS += -DDBG_CACHE_REQ_INFO
 CONFIGS ?= -DNUM_CLUSTERS=1 -DNUM_CORES=1
 
 CXXFLAGS += $(CONFIGS)
-CXXFLAGS += -DDUMP_PERF_STATS
+CXXFLAGS += -D
 
-LDFLAGS += -shared
-
-RTL_DIR = ../../hw/rtl
-DPI_DIR = ../../hw/dpi
-SCRIPT_DIR=../../hw/scripts
-
-SRCS = ../common/util.cpp ../common/mem.cpp
+SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp
 SRCS += $(DPI_DIR)/util_dpi.cpp $(DPI_DIR)/float_dpi.cpp
 SRCS += fpga.cpp opae_sim.cpp
 
@@ -56,10 +55,10 @@ VL_FLAGS += $(RTL_INCLUDE)
 # Debugigng
 ifdef DEBUG
 	VL_FLAGS += -DVCD_OUTPUT --trace --trace-structs $(DBG_FLAGS)
-	CXXFLAGS += -DVCD_OUTPUT $(DBG_FLAGS)
+	CXXFLAGS += -g -O0 -DVCD_OUTPUT $(DBG_FLAGS)
 else    
 	VL_FLAGS += -DNDEBUG
-	CXXFLAGS += -DNDEBUG
+	CXXFLAGS += -O2 -DNDEBUG
 endif
 
 # Enable scope analyzer
@@ -98,7 +97,7 @@ shared: $(SRCS) vortex_afu.h
 
 static: $(SRCS) vortex_afu.h
 	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)'
-	$(AR) rs $(PROJECT).a obj_dir/*.o
+	$(AR) rcs $(PROJECT).a obj_dir/*.o
 
 clean-static:
 	rm -rf $(PROJECT).a obj_dir vortex_afu.h

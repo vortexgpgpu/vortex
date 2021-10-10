@@ -34,7 +34,7 @@ module VX_fp_sqrt #(
         fflags_t f;
 
         always @(*) begin        
-            dpi_fsqrt (dataa[i], frm, r, f);
+            dpi_fsqrt (enable && valid_in, dataa[i], frm, r, f);
         end
         `UNUSED_VAR (f)
 
