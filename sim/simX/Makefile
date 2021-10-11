@@ -37,7 +37,7 @@ obj_dir/%.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 static: $(OBJS)
-	$(AR) rcs lib$(PROJECT).a $(OBJS)
+	$(AR) rcs lib$(PROJECT).a $(OBJS) ../common/softfloat/build/Linux-x86_64-GCC/*.o
 
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;

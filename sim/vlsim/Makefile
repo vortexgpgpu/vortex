@@ -28,7 +28,6 @@ DBG_FLAGS += -DDBG_CACHE_REQ_INFO
 CONFIGS ?= -DNUM_CLUSTERS=1 -DNUM_CORES=1
 
 CXXFLAGS += $(CONFIGS)
-CXXFLAGS += -D
 
 SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp
 SRCS += $(DPI_DIR)/util_dpi.cpp $(DPI_DIR)/float_dpi.cpp
@@ -97,7 +96,7 @@ shared: $(SRCS) vortex_afu.h
 
 static: $(SRCS) vortex_afu.h
 	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)'
-	$(AR) rcs $(PROJECT).a obj_dir/*.o
+	$(AR) rcs $(PROJECT).a obj_dir/*.o ../common/softfloat/build/Linux-x86_64-GCC/*.o
 
 clean-static:
 	rm -rf $(PROJECT).a obj_dir vortex_afu.h
