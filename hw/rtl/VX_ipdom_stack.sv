@@ -6,11 +6,13 @@ module VX_ipdom_stack #(
 ) (
     input  wire               clk,
     input  wire               reset,
+    input  wire               pair,
     input  wire [WIDTH - 1:0] q1,
     input  wire [WIDTH - 1:0] q2,
     output wire [WIDTH - 1:0] d,
     input  wire               push,
     input  wire               pop,
+    output wire               index,
     output wire               empty,
     output wire               full
 );
@@ -52,15 +54,15 @@ module VX_ipdom_stack #(
     
     always @(posedge clk) begin
         if (push) begin
-            is_part[wr_ptr] <= 0;   
+            is_part[wr_ptr] <= ~pair;   
         end else if (pop) begin            
             is_part[rd_ptr] <= 1;
         end
     end
-    wire p = is_part[rd_ptr];
 
-    assign d     = p ? d1 : d2;
-    assign empty = ~(| wr_ptr);
+    assign index = is_part[rd_ptr];
+    assign d     = index ? d1 : d2;
+    assign empty = (ADDRW'(0) == wr_ptr);
     assign full  = (ADDRW'(DEPTH-1) == wr_ptr);
 
 endmodule
