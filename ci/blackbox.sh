@@ -20,6 +20,7 @@ L3=0
 DEBUG=0
 SCOPE=0
 HAS_ARGS=0
+DEBUG_LEVEL=1
 
 for i in "$@"
 do
@@ -100,6 +101,7 @@ case $DRIVER in
         ;; 
     simx)
         DRIVER_PATH=$VORTEX_HOME/driver/simx
+        DEBUG_LEVEL=3
         ;;
     *)
         echo "invalid driver: $DRIVER"
@@ -130,9 +132,9 @@ if [ $DEBUG -eq 1 ]
 then    
     if [ $SCOPE -eq 1 ]
     then
-        DEBUG=1 SCOPE=1 CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH
+        DEBUG=$DEBUG_LEVEL SCOPE=1 CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH
     else
-        DEBUG=1 CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH
+        DEBUG=$DEBUG_LEVEL CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH
     fi    
     
     if [ $HAS_ARGS -eq 1 ]

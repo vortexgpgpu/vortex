@@ -16,7 +16,7 @@ CXXFLAGS += $(CONFIGS)
 # Dump perf stats
 CXXFLAGS += -DDUMP_PERF_STATS
 
-LDFLAGS += -shared
+LDFLAGS += -shared -pthread
 
 SRCS = vortex.cpp ../common/vx_utils.cpp
 

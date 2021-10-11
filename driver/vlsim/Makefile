@@ -20,7 +20,7 @@ CXXFLAGS += $(CONFIGS)
 # Dump perf stats
 CXXFLAGS += -DDUMP_PERF_STATS
 
-LDFLAGS += -shared
+LDFLAGS += -shared -pthread
 
 AFU_JSON_INFO = vortex_afu.h
 
