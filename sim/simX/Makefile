@@ -4,6 +4,7 @@ CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I. -I../common -I../../hw
 CXXFLAGS += -I../common/softfloat/source/include
+CXXFLAGS += $(CONFIGS)
 
 LDFLAGS += ../common/softfloat/build/Linux-x86_64-GCC/softfloat.a
 

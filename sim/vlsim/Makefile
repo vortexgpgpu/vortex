@@ -25,10 +25,6 @@ DBG_PRINT_FLAGS += -DDBG_PRINT_SCOPE
 DBG_FLAGS += $(DBG_PRINT_FLAGS)
 DBG_FLAGS += -DDBG_CACHE_REQ_INFO
 
-CONFIGS ?= -DNUM_CLUSTERS=1 -DNUM_CORES=1
-
-CXXFLAGS += $(CONFIGS)
-
 SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp
 SRCS += $(DPI_DIR)/util_dpi.cpp $(DPI_DIR)/float_dpi.cpp
 SRCS += fpga.cpp opae_sim.cpp
@@ -44,8 +40,10 @@ VL_FLAGS += -O2 --language 1800-2009 --assert -Wall -Wpedantic
 VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
 VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
-VL_FLAGS += $(CONFIGS)
 VL_FLAGS += $(RTL_INCLUDE)
+
+VL_FLAGS += $(CONFIGS)
+CXXFLAGS += $(CONFIGS)
 
 # Enable Verilator multithreaded simulation
 #THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')

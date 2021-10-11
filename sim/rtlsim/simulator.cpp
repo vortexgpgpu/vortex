@@ -219,6 +219,7 @@ void Simulator::reset_axi_bus() {
   vl_obj_->device->m_axi_awready = 0;
   vl_obj_->device->m_axi_arready = 0;  
   vl_obj_->device->m_axi_rvalid  = 0;
+  vl_obj_->device->m_axi_bvalid  = 0;
 }
   
 void Simulator::eval_axi_bus(bool clk) {
@@ -369,7 +370,7 @@ void Simulator::eval_axi_bus(bool clk) {
         mem_req_t mem_req;        
         mem_req.tag  = vl_obj_->device->m_axi_arid;   
         mem_req.addr = vl_obj_->device->m_axi_araddr;
-        ram_->read(vl_obj_->device->m_axi_araddr, MEM_BLOCK_SIZE, mem_req.block.data());
+        ram_->read(mem_req.block.data(), vl_obj_->device->m_axi_araddr, MEM_BLOCK_SIZE);
         mem_req.cycles_left = MEM_LATENCY;
         mem_req.write = 0;
         for (auto& rsp : mem_rsp_vec_[req_bank]) {

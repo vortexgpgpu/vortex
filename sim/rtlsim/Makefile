@@ -34,7 +34,7 @@ SRCS += main.cpp simulator.cpp
 
 ifdef AXI_BUS
 	TOP = Vortex_axi
-	CFLAGS += -DAXI_BUS
+	CXXFLAGS += -DAXI_BUS
 else
 	TOP = Vortex
 endif
@@ -44,8 +44,10 @@ VL_FLAGS += -O2 --language 1800-2009 --assert -Wall -Wpedantic
 VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
 VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
-VL_FLAGS += $(CONFIGS)
 VL_FLAGS += $(RTL_INCLUDE)
+
+VL_FLAGS += $(CONFIGS)
+CXXFLAGS += $(CONFIGS)
 
 # Debugigng
 ifdef DEBUG
