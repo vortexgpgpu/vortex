@@ -24,6 +24,12 @@ __kernel void psortf (__global const float *in, __global float *out)
   for (int i = 0; i < n; ++i) {
     float cur = in[i];
     pos += (cur < ref) || ((cur == ref) && (i < gid));
+    /*int cl = (cur < ref);
+    int ce = (cur == ref);
+    int ls = (i < gid);
+    int x = ce && ls;
+    int y = cl || x;
+    pos += y;*/
   }
   out[pos] = ref;
 }
