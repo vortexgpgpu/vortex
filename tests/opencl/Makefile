@@ -6,7 +6,7 @@ all:
 	$(MAKE) -C nearn
 	$(MAKE) -C guassian
 	$(MAKE) -C oclprintf
-	#$(MAKE) -C psort
+	$(MAKE) -C psort
 	
 run-simx:
 	$(MAKE) -C vecadd run-simx 
@@ -16,7 +16,7 @@ run-simx:
 	$(MAKE) -C nearn run-simx
 	$(MAKE) -C guassian run-simx
 	$(MAKE) -C oclprintf run-simx
-    #$(MAKE) -C psort run-simx
+    $(MAKE) -C psort run-simx
 
 run-rtlsim:
 	$(MAKE) -C vecadd run-rtlsim 
@@ -26,7 +26,7 @@ run-rtlsim:
 	$(MAKE) -C nearn run-rtlsim
 	$(MAKE) -C guassian run-rtlsim
 	$(MAKE) -C oclprintf run-rtlsim
-    #$(MAKE) -C psort run-rtlsim
+    $(MAKE) -C psort run-rtlsim
 
 run-vlsim:
 	$(MAKE) -C vecadd run-vlsim 
@@ -36,7 +36,7 @@ run-vlsim:
 	$(MAKE) -C nearn run-vlsim
 	$(MAKE) -C guassian run-vlsim
 	$(MAKE) -C oclprintf run-vlsim
-    #$(MAKE) -C psort run-vlsim
+    $(MAKE) -C psort run-vlsim
 
 clean:
 	$(MAKE) -C vecadd clean

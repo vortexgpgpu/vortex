@@ -81,7 +81,7 @@ $(PROJECT): $(SRCS)
 	
 static: $(SRCS)
 	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)'
-	$(AR) rcs lib$(PROJECT).a obj_dir/*.o
+	$(AR) rcs lib$(PROJECT).a obj_dir/*.o ../common/softfloat/build/Linux-x86_64-GCC/*.o
 
 clean-static:
 	rm -rf lib$(PROJECT).a obj_dir
