@@ -7,7 +7,7 @@ SCRIPT_DIR=../../hw/scripts
 CXXFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -pedantic -Wfatal-errors
 #CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
 
-CXXFLAGS += -I../include -I../../hw -I$(VLSIM_DIR)
+CXXFLAGS += -I. -I../include -I../../hw -I$(VLSIM_DIR)
 
 LDFLAGS += $(VLSIM_DIR)/libopae-c-vlsim.a
 
@@ -21,8 +21,6 @@ CXXFLAGS += $(CONFIGS)
 CXXFLAGS += -DDUMP_PERF_STATS
 
 LDFLAGS += -shared -pthread
-
-AFU_JSON_INFO = vortex_afu.h
 
 SRCS = ../common/opae.cpp ../common/vx_utils.cpp
 
@@ -57,7 +55,7 @@ $(PROJECT): $(SRCS) $(SCOPE_H)
 
 clean:
 	$(MAKE) -C $(VLSIM_DIR) clean-static
-	rm -rf $(PROJECT) *.o .depend
+	rm -rf $(PROJECT) *.o .depend scope-defs.h
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend
