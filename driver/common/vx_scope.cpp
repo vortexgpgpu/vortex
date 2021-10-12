@@ -1,3 +1,4 @@
+#include "vx_scope.h"
 #include <iostream>
 #include <fstream>
 #include <thread>
@@ -7,17 +8,9 @@
 #include <chrono>
 #include <thread>
 #include <mutex>
-
-#ifdef USE_VLSIM
-#include "vlsim/fpga.h"
-#else
-#include <opae/fpga.h>
-#endif
-
 #include <VX_config.h>
-#include "vx_scope.h"
-#include "vortex_afu.h"
-#include "scope-defs.h"
+#include <vortex_afu.h>
+#include <scope-defs.h>
 
 #define FRAME_FLUSH_SIZE 100
 

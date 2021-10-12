@@ -100,9 +100,9 @@ module VX_gpu_unit #(
 
     `SCOPE_ASSIGN (gpu_rsp_valid, warp_ctl_if.valid);
     `SCOPE_ASSIGN (gpu_rsp_wid, warp_ctl_if.wid);
-    `SCOPE_ASSIGN (gpu_rsp_tmc, warp_ctl_if.tmc);
-    `SCOPE_ASSIGN (gpu_rsp_wspawn, warp_ctl_if.wspawn);          
-    `SCOPE_ASSIGN (gpu_rsp_split, warp_ctl_if.split);
-    `SCOPE_ASSIGN (gpu_rsp_barrier, warp_ctl_if.barrier);
+    `SCOPE_ASSIGN (gpu_rsp_tmc, warp_ctl_if.tmc.valid);
+    `SCOPE_ASSIGN (gpu_rsp_wspawn, warp_ctl_if.wspawn.valid);          
+    `SCOPE_ASSIGN (gpu_rsp_split, warp_ctl_if.split.valid);
+    `SCOPE_ASSIGN (gpu_rsp_barrier, warp_ctl_if.barrier.valid);
 
 endmodule

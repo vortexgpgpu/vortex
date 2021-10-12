@@ -398,6 +398,8 @@ def eval_node(text, params):
     try:        
         __text = text.replace('$clog2', '__clog2')
         __text = translate_ternary(__text)
+        __text = __text.replace('||', 'or')
+        __text = __text.replace('&&', 'and')
         e = eval(__text, {'__clog2': clog2})
         return e
     except (NameError, SyntaxError):

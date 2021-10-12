@@ -1,5 +1,13 @@
 #pragma once
 
+#include <cstdint>
+
+#ifdef USE_VLSIM
+#include <fpga.h>
+#else
+#include <opae/fpga.h>
+#endif
+
 #if defined(USE_FPGA)
 #define HANG_TIMEOUT 60
 #else

@@ -9,7 +9,7 @@ OPAE_SYN_DIR=../../hw/syn/opae
 CXXFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -pedantic -Wfatal-errors
 #CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
 
-CXXFLAGS += -I../include -I../../hw -I$(OPAE_HOME)/include -I$(OPAE_SYN_DIR)
+CXXFLAGS += -I. -I../include -I../../hw -I$(OPAE_HOME)/include -I$(OPAE_SYN_DIR)
 
 LDFLAGS += -L$(OPAE_HOME)/lib -luuid -lopae-c-ase
 
@@ -34,8 +34,6 @@ CXXFLAGS += -DDUMP_PERF_STATS
 LDFLAGS += -shared
 
 PROJECT = libvortex.so
-
-AFU_JSON_INFO = vortex_afu.h
 
 SRCS = ../common/opae.cpp ../common/vx_utils.cpp
 
@@ -69,7 +67,7 @@ $(PROJECT): $(SRCS) $(OPAE_SYN_DIR)/vortex_afu.h $(SCOPE_H)
 	$(CXX) $(CXXFLAGS) -MM $(SRCS) > .depend;
 
 clean:
-	rm -rf $(PROJECT) *.o .depend
+	rm -rf $(PROJECT) *.o .depend scope-defs.h
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend
