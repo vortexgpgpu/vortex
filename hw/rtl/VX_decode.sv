@@ -375,6 +375,13 @@ module VX_decode  #(
                         `USED_IREG (rs1);
                         `USED_IREG (rs2);
                     end
+                    3'h5: begin
+                        ex_type = `EX_LSU;
+                        op_type = `INST_OP_BITS'(`INST_GPU_PRED);
+                        imm     = {{20{u_12[11]}}, u_12};   
+                        use_rd = 0;      
+                        `USED_IREG (rs1);
+                    end
                     default:;
                 endcase
             end
