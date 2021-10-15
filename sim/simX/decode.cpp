@@ -182,6 +182,7 @@ static const char* op_string(const Instr &instr) {
     case 2: return "SPLIT";
     case 3: return "JOIN";
     case 4: return "BAR"; 
+    case 5: return "PREFETCH";
     default:
       std::abort();
     }
