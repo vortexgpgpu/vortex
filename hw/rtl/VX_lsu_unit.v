@@ -326,7 +326,7 @@ module VX_lsu_unit #(
             end else begin
                  $write("%t: D$%0d Rd Req: wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, dcache_req_fire);
                 `PRINT_ARRAY1D(req_addr, `NUM_THREADS);
-                 $write(", tag=%0h, byteen=%0h, rd=%0d, is_dup=%b\n", dcache_req_if.tag[0], dcache_req_if.byteen, req_rd, req_is_dup);
+                 $write(", tag=%0h, byteen=%0h, rd=%0d, is_dup=%b is_prefetch=%b\n", dcache_req_if.tag[0], dcache_req_if.byteen, req_rd, req_is_dup, req_is_prefetch);
             end
         end
         if (dcache_rsp_fire) begin
