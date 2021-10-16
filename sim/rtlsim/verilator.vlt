@@ -1,0 +1,10 @@
+`verilator_config
+
+lint_off -rule BLKANDNBLK -file "../../hw/rtl/fp_cores/fpnew/*"
+lint_off -rule UNOPTFLAT -file "../../hw/rtl/fp_cores/fpnew/*"
+lint_off -rule WIDTH -file "../../hw/rtl/fp_cores/fpnew/*"
+lint_off -rule UNUSED -file "../../hw/rtl/fp_cores/fpnew/*"
+lint_off -rule LITENDIAN -file "../../hw/rtl/fp_cores/fpnew/*"
+lint_off -rule IMPORTSTAR -file "../../hw/rtl/fp_cores/fpnew/*"
+lint_off -rule PINCONNECTEMPTY -file "../../hw/rtl/fp_cores/fpnew/*"
+lint_off -file "../../hw/rtl/fp_cores/fpnew/*"

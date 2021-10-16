@@ -7,132 +7,141 @@ task print_ex_type (
     input [`EX_BITS-1:0] ex_type
 );
     case (ex_type)
-        `EX_ALU: $write("ALU");     
-        `EX_LSU: $write("LSU");
-        `EX_CSR: $write("CSR");
-        `EX_FPU: $write("FPU");
-        `EX_GPU: $write("GPU");
-        default: $write("NOP");
+        `EX_ALU: dpi_trace("ALU");     
+        `EX_LSU: dpi_trace("LSU");
+        `EX_CSR: dpi_trace("CSR");
+        `EX_FPU: dpi_trace("FPU");
+        `EX_GPU: dpi_trace("GPU");
+        default: dpi_trace("NOP");
     endcase  
 endtask
 
 task print_ex_op (
   input [`EX_BITS-1:0] ex_type,
-  input [`OP_BITS-1:0] op_type,
-  input [`MOD_BITS-1:0] op_mod
+  input [`INST_OP_BITS-1:0] op_type,
+  input [`INST_MOD_BITS-1:0] op_mod
 );
     case (ex_type)        
     `EX_ALU: begin
-        if (`ALU_IS_BR(op_mod)) begin
-            case (`BR_BITS'(op_type))
-                `BR_EQ:    $write("BEQ");
-                `BR_NE:    $write("BNE");
-                `BR_LT:    $write("BLT");
-                `BR_GE:    $write("BGE");
-                `BR_LTU:   $write("BLTU");
-                `BR_GEU:   $write("BGEU");           
-                `BR_JAL:   $write("JAL");
-                `BR_JALR:  $write("JALR");
-                `BR_ECALL: $write("ECALL");
-                `BR_EBREAK:$write("EBREAK");    
-                `BR_MRET:  $write("MRET");    
-                `BR_SRET:  $write("SRET");    
-                `BR_DRET:  $write("DRET");    
-                default:    $write("?");
+        if (`INST_ALU_IS_BR(op_mod)) begin
+            case (`INST_BR_BITS'(op_type))
+                `INST_BR_EQ:    dpi_trace("BEQ");
+                `INST_BR_NE:    dpi_trace("BNE");
+                `INST_BR_LT:    dpi_trace("BLT");
+                `INST_BR_GE:    dpi_trace("BGE");
+                `INST_BR_LTU:   dpi_trace("BLTU");
+                `INST_BR_GEU:   dpi_trace("BGEU");           
+                `INST_BR_JAL:   dpi_trace("JAL");
+                `INST_BR_JALR:  dpi_trace("JALR");
+                `INST_BR_ECALL: dpi_trace("ECALL");
+                `INST_BR_EBREAK:dpi_trace("EBREAK");    
+                `INST_BR_MRET:  dpi_trace("MRET");    
+                `INST_BR_SRET:  dpi_trace("SRET");    
+                `INST_BR_DRET:  dpi_trace("DRET");    
+                default:   dpi_trace("?");
             endcase                
-        end else if (`ALU_IS_MUL(op_mod)) begin
-            case (`MUL_BITS'(op_type))
-                `MUL_MUL:   $write("MUL");
-                `MUL_MULH:  $write("MULH");
-                `MUL_MULHSU:$write("MULHSU");
-                `MUL_MULHU: $write("MULHU");
-                `MUL_DIV:   $write("DIV");
-                `MUL_DIVU:  $write("DIVU");
-                `MUL_REM:   $write("REM");
-                `MUL_REMU:  $write("REMU");
-                default:    $write("?");
+        end else if (`INST_ALU_IS_MUL(op_mod)) begin
+            case (`INST_MUL_BITS'(op_type))
+                `INST_MUL_MUL:   dpi_trace("MUL");
+                `INST_MUL_MULH:  dpi_trace("MULH");
+                `INST_MUL_MULHSU:dpi_trace("MULHSU");
+                `INST_MUL_MULHU: dpi_trace("MULHU");
+                `INST_MUL_DIV:   dpi_trace("DIV");
+                `INST_MUL_DIVU:  dpi_trace("DIVU");
+                `INST_MUL_REM:   dpi_trace("REM");
+                `INST_MUL_REMU:  dpi_trace("REMU");
+                default:    dpi_trace("?");
             endcase
         end else begin
-            case (`ALU_BITS'(op_type))
-                `ALU_ADD:   $write("ADD");
-                `ALU_SUB:   $write("SUB");
-                `ALU_SLL:   $write("SLL");
-                `ALU_SRL:   $write("SRL");
-                `ALU_SRA:   $write("SRA");
-                `ALU_SLT:   $write("SLT");
-                `ALU_SLTU:  $write("SLTU");
-                `ALU_XOR:   $write("XOR");
-                `ALU_OR:    $write("OR");
-                `ALU_AND:   $write("AND");
-                `ALU_LUI:   $write("LUI");
-                `ALU_AUIPC: $write("AUIPC");
-                default:    $write("?");
+            case (`INST_ALU_BITS'(op_type))
+                `INST_ALU_ADD:   dpi_trace("ADD");
+                `INST_ALU_SUB:   dpi_trace("SUB");
+                `INST_ALU_SLL:   dpi_trace("SLL");
+                `INST_ALU_SRL:   dpi_trace("SRL");
+                `INST_ALU_SRA:   dpi_trace("SRA");
+                `INST_ALU_SLT:   dpi_trace("SLT");
+                `INST_ALU_SLTU:  dpi_trace("SLTU");
+                `INST_ALU_XOR:   dpi_trace("XOR");
+                `INST_ALU_OR:    dpi_trace("OR");
+                `INST_ALU_AND:   dpi_trace("AND");
+                `INST_ALU_LUI:   dpi_trace("LUI");
+                `INST_ALU_AUIPC: dpi_trace("AUIPC");
+                default:    dpi_trace("?");
             endcase         
         end
     end
     `EX_LSU: begin
-        case (`LSU_BITS'(op_type))
-            `LSU_LB: $write("LB");
-            `LSU_LH: $write("LH");
-            `LSU_LW: $write("LW");
-            `LSU_LBU:$write("LBU");
-            `LSU_LHU:$write("LHU");
-            `LSU_SB: $write("SB");
-            `LSU_SH: $write("SH");
-            `LSU_SW: $write("SW");
-            default: $write("?");
-        endcase
+        if (op_mod == 0) begin
+            case (`INST_LSU_BITS'(op_type))
+                `INST_LSU_LB: dpi_trace("LB");
+                `INST_LSU_LH: dpi_trace("LH");
+                `INST_LSU_LW: dpi_trace("LW");
+                `INST_LSU_LBU:dpi_trace("LBU");
+                `INST_LSU_LHU:dpi_trace("LHU");
+                `INST_LSU_SB: dpi_trace("SB");
+                `INST_LSU_SH: dpi_trace("SH");
+                `INST_LSU_SW: dpi_trace("SW");
+                default: dpi_trace("?");
+            endcase
+        end else if (op_mod == 1) begin
+            case (`INST_FENCE_BITS'(op_type))
+                `INST_FENCE_D: dpi_trace("DFENCE");
+                `INST_FENCE_I: dpi_trace("IFENCE");
+                default: dpi_trace("?");
+            endcase
+        end
     end
     `EX_CSR: begin
-        case (`CSR_BITS'(op_type))
-            `CSR_RW: $write("CSRW");
-            `CSR_RS: $write("CSRS");
-            `CSR_RC: $write("CSRC");
-            default: $write("?");
+        case (`INST_CSR_BITS'(op_type))
+            `INST_CSR_RW: dpi_trace("CSRW");
+            `INST_CSR_RS: dpi_trace("CSRS");
+            `INST_CSR_RC: dpi_trace("CSRC");
+            default: dpi_trace("?");
         endcase
     end
     `EX_FPU: begin
-        case (`FPU_BITS'(op_type))
-            `FPU_ADD:   $write("ADD");
-            `FPU_SUB:   $write("SUB");
-            `FPU_MUL:   $write("MUL");
-            `FPU_DIV:   $write("DIV");
-            `FPU_SQRT:  $write("SQRT");
-            `FPU_MADD:  $write("MADD");
-            `FPU_NMSUB: $write("NMSUB");
-            `FPU_NMADD: $write("NMADD");                
-            `FPU_CVTWS: $write("CVTWS");
-            `FPU_CVTWUS:$write("CVTWUS");
-            `FPU_CVTSW: $write("CVTSW");
-            `FPU_CVTSWU:$write("CVTSWU");
-            `FPU_CLASS: $write("CLASS");
-            `FPU_CMP:   $write("CMP");
-            `FPU_MISC: begin
+        case (`INST_FPU_BITS'(op_type))
+            `INST_FPU_ADD:   dpi_trace("ADD");
+            `INST_FPU_SUB:   dpi_trace("SUB");
+            `INST_FPU_MUL:   dpi_trace("MUL");
+            `INST_FPU_DIV:   dpi_trace("DIV");
+            `INST_FPU_SQRT:  dpi_trace("SQRT");
+            `INST_FPU_MADD:  dpi_trace("MADD");
+            `INST_FPU_NMSUB: dpi_trace("NMSUB");
+            `INST_FPU_NMADD: dpi_trace("NMADD");                
+            `INST_FPU_CVTWS: dpi_trace("CVTWS");
+            `INST_FPU_CVTWUS:dpi_trace("CVTWUS");
+            `INST_FPU_CVTSW: dpi_trace("CVTSW");
+            `INST_FPU_CVTSWU:dpi_trace("CVTSWU");
+            `INST_FPU_CLASS: dpi_trace("CLASS");
+            `INST_FPU_CMP:   dpi_trace("CMP");
+            `INST_FPU_MISC: begin
                 case (op_mod)
-                0: $write("SGNJ");   
-                1: $write("SGNJN");
-                2: $write("SGNJX");
-                3: $write("MIN");
-                4: $write("MAX");
-                5: $write("MVXW");
-                6: $write("MVWX");
+                0: dpi_trace("SGNJ");   
+                1: dpi_trace("SGNJN");
+                2: dpi_trace("SGNJX");
+                3: dpi_trace("MIN");
+                4: dpi_trace("MAX");
+                5: dpi_trace("MVXW");
+                6: dpi_trace("MVWX");
                 endcase
             end 
-            default:    $write("?");
+            default:    dpi_trace("?");
         endcase
     end
     `EX_GPU: begin
-        case (`GPU_BITS'(op_type))
-            `GPU_TMC:   $write("TMC");
-            `GPU_WSPAWN:$write("WSPAWN");
-            `GPU_SPLIT: $write("SPLIT");
-            `GPU_JOIN:  $write("JOIN");
-            `GPU_BAR:   $write("BAR");
-            `GPU_TEX:   $write("TEX");
-            default:    $write("?");
+        case (`INST_GPU_BITS'(op_type))
+            `INST_GPU_TMC:   dpi_trace("TMC");
+            `INST_GPU_WSPAWN:dpi_trace("WSPAWN");
+            `INST_GPU_SPLIT: dpi_trace("SPLIT");
+            `INST_GPU_JOIN:  dpi_trace("JOIN");
+            `INST_GPU_BAR:   dpi_trace("BAR");
+            `INST_GPU_PRED:  dpi_trace("PRED");
+            `INST_GPU_TEX:   dpi_trace("TEX");
+            default:    dpi_trace("?");
         endcase
     end    
-    default: $write("?");
+    default: dpi_trace("?");
     endcase 
 endtask
 

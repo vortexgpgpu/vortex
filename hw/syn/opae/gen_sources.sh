@@ -1,6 +1,6 @@
 #!/bin/bash
 
-exclude_list="VX_fpu_fpnew.v"
+exclude_list="VX_fpu_fpnew.sv"
 macros=()
 includes=()
 

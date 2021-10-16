@@ -3,12 +3,11 @@
 #include <vx_spawn.h>
 #include "common.h"
 
-void kernel_body(int task_id, void* arg) {
-	struct kernel_arg_t* _arg = (struct kernel_arg_t*)(arg);
-	uint32_t count    = _arg->task_size;
-	int32_t* src0_ptr = (int32_t*)_arg->src0_ptr;
-	int32_t* src1_ptr = (int32_t*)_arg->src1_ptr;
-	int32_t* dst_ptr  = (int32_t*)_arg->dst_ptr;
+void kernel_body(int task_id, const kernel_arg_t* arg) {
+	uint32_t count    = arg->task_size;
+	int32_t* src0_ptr = (int32_t*)arg->src0_ptr;
+	int32_t* src1_ptr = (int32_t*)arg->src1_ptr;
+	int32_t* dst_ptr  = (int32_t*)arg->dst_ptr;
 	
 	uint32_t offset = task_id * count;
 
@@ -18,6 +17,6 @@ void kernel_body(int task_id, void* arg) {
 }
 
 void main() {
-	struct kernel_arg_t* arg = (struct kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
+	const kernel_arg_t* arg = (const kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
 	vx_spawn_tasks(arg->num_tasks, kernel_body, arg);
 }

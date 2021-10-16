@@ -3,9 +3,13 @@
 # exit when any command fails
 set -e
 
-OS_DIR=ubuntu/bionic
-SRCDIR=/opt
-DESTDIR=.
+OS_DIR=${OS_DIR:-'ubuntu/bionic'}
+SRCDIR=${SRCDIR:-'/opt'}
+DESTDIR=${DESTDIR:-'.'}
+
+echo "OS_DIR=${OS_DIR}"
+echo "SRCDIR=${SRCDIR}"
+echo "DESTDIR=${DESTDIR}"
 
 riscv() 
 {

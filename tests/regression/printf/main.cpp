@@ -58,9 +58,7 @@ void cleanup() {
   }
 }
 
-int run_test(const kernel_arg_t& kernel_arg,
-             uint32_t buf_size, 
-             uint32_t num_points) {
+int run_test() {
   // start device
   std::cout << "start device" << std::endl;
   RT_CHECK(vx_start(device));
@@ -137,7 +135,7 @@ int main(int argc, char *argv[]) {
 
   // run tests
   std::cout << "run tests" << std::endl;
-  RT_CHECK(run_test(kernel_arg, buf_size, num_points));
+  RT_CHECK(run_test());
 
   // cleanup
   std::cout << "cleanup" << std::endl;  

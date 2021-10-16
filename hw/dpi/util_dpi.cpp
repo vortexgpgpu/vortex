@@ -9,12 +9,19 @@
 #include "VX_config.h"
 
 extern "C" {
-  void dpi_imul(int a, int b, bool is_signed_a, bool is_signed_b, int* resultl, int* resulth);
-  void dpi_idiv(int a, int b, bool is_signed, int* quotient, int* remainder);
+  void dpi_imul(bool enable, int a, int b, bool is_signed_a, bool is_signed_b, int* resultl, int* resulth);
+  void dpi_idiv(bool enable, int a, int b, bool is_signed, int* quotient, int* remainder);
 
   int dpi_register();
   void dpi_assert(int inst, bool cond, int delay);
+
+  void dpi_trace(const char* format, ...);
+  void dpi_trace_start();
+  void dpi_trace_stop();
 }
+
+bool sim_trace_enabled();
+void sim_trace_enable(bool enable);
 
 class ShiftRegister {
 public:
@@ -86,15 +93,18 @@ void dpi_assert(int inst, bool cond, int delay) {
   }
 }
 
-void dpi_imul(int a, int b, bool is_signed_a, bool is_signed_b, int* resultl, int* resulth) {
-  uint64_t first  = a;
-  uint64_t second = b;
+void dpi_imul(bool enable, int a, int b, bool is_signed_a, bool is_signed_b, int* resultl, int* resulth) {
+  if (!enable)
+    return;
     
-  if (is_signed_a && (a & 0x80000000)) {
+  uint64_t first  = *(uint32_t*)&a;
+  uint64_t second = *(uint32_t*)&b;
+    
+  if (is_signed_a && (first & 0x80000000)) {
     first |= 0xFFFFFFFF00000000;
   }
 
-  if (is_signed_b && (b & 0x80000000)) {
+  if (is_signed_b && (second & 0x80000000)) {
     second |= 0xFFFFFFFF00000000;
   }
 
@@ -109,9 +119,12 @@ void dpi_imul(int a, int b, bool is_signed_a, bool is_signed_b, int* resultl, in
   *resulth = (result >> 32) & 0xFFFFFFFF;
 }
 
-void dpi_idiv(int a, int b, bool is_signed, int* quotient, int* remainder) {
-  uint32_t dividen = a;
-  uint32_t divisor = b;
+void dpi_idiv(bool enable, int a, int b, bool is_signed, int* quotient, int* remainder) {
+  if (!enable)
+    return;
+
+  uint32_t dividen = *(uint32_t*)&a;
+  uint32_t divisor = *(uint32_t*)&b;
 
   if (is_signed) {
     if (b == 0) {
@@ -133,4 +146,21 @@ void dpi_idiv(int a, int b, bool is_signed, int* quotient, int* remainder) {
       *remainder = dividen % divisor;
     }
   }
+}
+
+void dpi_trace(const char* format, ...) { 
+  if (!sim_trace_enabled())
+    return;
+  va_list va;
+	va_start(va, format);  
+	vprintf(format, va);
+	va_end(va);		  
+}
+
+void dpi_trace_start() { 
+  sim_trace_enable(true);
+}
+
+void dpi_trace_stop() { 
+  sim_trace_enable(false);
 }
