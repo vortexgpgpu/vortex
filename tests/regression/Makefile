@@ -8,7 +8,6 @@ all:
 	$(MAKE) -C diverge
 	$(MAKE) -C sort
 	$(MAKE) -C fence
-	$(MAKE) -C tex
 	$(MAKE) -C no_mf_ext
 	$(MAKE) -C no_smem
 
@@ -20,9 +19,8 @@ run-simx:
 	$(MAKE) -C io_addr run-simx
 	$(MAKE) -C printf run-simx
 	$(MAKE) -C diverge run-simx
-	#$(MAKE) -C sort run-simx
+	$(MAKE) -C sort run-simx
 	$(MAKE) -C fence run-simx
-	#$(MAKE) -C tex run-simx
 	$(MAKE) -C no_mf_ext run-simx
 	$(MAKE) -C no_smem run-simx
 
@@ -34,7 +32,7 @@ run-rtlsim:
 	$(MAKE) -C io_addr run-rtlsim
 	$(MAKE) -C printf run-rtlsim
 	$(MAKE) -C diverge run-rtlsim
-	#$(MAKE) -C sort run-rtlsim
+	$(MAKE) -C sort run-rtlsim
 	$(MAKE) -C fence run-rtlsim
 	$(MAKE) -C no_mf_ext run-rtlsim
 	$(MAKE) -C no_smem run-rtlsim
@@ -47,9 +45,8 @@ run-vlsim:
 	$(MAKE) -C io_addr run-vlsim
 	$(MAKE) -C printf run-vlsim
 	$(MAKE) -C diverge run-vlsim
-	#$(MAKE) -C sort run-vlsim
+	$(MAKE) -C sort run-vlsim
 	$(MAKE) -C fence run-vlsim
-	$(MAKE) -C tex run-vlsim
 	$(MAKE) -C no_mf_ext run-vlsim
 	$(MAKE) -C no_smem run-vlsim
 
@@ -63,7 +60,6 @@ clean:
 	$(MAKE) -C diverge clean
 	$(MAKE) -C sort clean
 	$(MAKE) -C fence clean
-	$(MAKE) -C tex clean
 	$(MAKE) -C no_mf_ext clean
 	$(MAKE) -C no_smem clean
 
@@ -77,7 +73,5 @@ clean-all:
 	$(MAKE) -C diverge clean-all
 	$(MAKE) -C sort clean-all
 	$(MAKE) -C fence clean-all
-	$(MAKE) -C tex clean-all
 	$(MAKE) -C no_mf_ext clean-all
 	$(MAKE) -C no_smem clean-all
-

@@ -52,8 +52,13 @@ module VX_gpu_unit #(
     wire is_tmc    = (gpu_req_if.op_type == `INST_GPU_TMC);
     wire is_split  = (gpu_req_if.op_type == `INST_GPU_SPLIT);
     wire is_bar    = (gpu_req_if.op_type == `INST_GPU_BAR);
+    wire is_pred   = (gpu_req_if.op_type == `INST_GPU_PRED);
+
+    wire [31:0] rs1_data = gpu_req_if.rs1_data[gpu_req_if.tid];
+    wire [31:0] rs2_data = gpu_req_if.rs2_data[gpu_req_if.tid];
     
-    // tmc
+    wire [`NUM_THREADS-1:0] taken_tmask;
+    wire [`NUM_THREADS-1:0] not_taken_tmask;
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         wire taken = (gpu_req_if.rs1_data[i] != 0);
@@ -70,7 +75,7 @@ module VX_gpu_unit #(
 
     // wspawn
 
-    wire [31:0] wspawn_pc = gpu_req_if.rs2_data[0];
+    wire [31:0] wspawn_pc = rs2_data;
     wire [`NUM_WARPS-1:0] wspawn_wmask;
     for (genvar i = 0; i < `NUM_WARPS; i++) begin
         assign wspawn_wmask[i] = (i < rs1_data);
@@ -90,8 +95,8 @@ module VX_gpu_unit #(
     // barrier
     
     assign barrier.valid   = is_bar;
-    assign barrier.id      = gpu_req_if.rs1_data[0][`NB_BITS-1:0];
-    assign barrier.size_m1 = (`NW_BITS)'(gpu_req_if.rs2_data[0] - 1);       
+    assign barrier.id      = rs1_data[`NB_BITS-1:0];
+    assign barrier.size_m1 = (`NW_BITS)'(rs2_data - 1);       
 
     // pack warp ctl result
     assign warp_ctl_data = {tmc, wspawn, split, barrier};
@@ -105,7 +110,7 @@ module VX_gpu_unit #(
     VX_tex_req_if   tex_req_if();
     VX_tex_rsp_if   tex_rsp_if();    
 
-    wire is_tex = (gpu_req_if.op_type == `GPU_TEX);
+    wire is_tex = (gpu_req_if.op_type == `INST_GPU_TEX);
 
     assign tex_req_if.valid = gpu_req_if.valid && is_tex;
     assign tex_req_if.wid   = gpu_req_if.wid;
@@ -114,19 +119,19 @@ module VX_gpu_unit #(
     assign tex_req_if.rd    = gpu_req_if.rd;
     assign tex_req_if.wb    = gpu_req_if.wb;
     
-    assign tex_req_if.unit  = gpu_req_if.op_mod[`NTEX_BITS-1:0];
+    assign tex_req_if.unit      = gpu_req_if.op_mod[`NTEX_BITS-1:0];
     assign tex_req_if.coords[0] = gpu_req_if.rs1_data;
     assign tex_req_if.coords[1] = gpu_req_if.rs2_data;
-    assign tex_req_if.lod   = gpu_req_if.rs3_data;        
+    assign tex_req_if.lod       = gpu_req_if.rs3_data;        
 
     VX_tex_unit #(
         .CORE_ID(CORE_ID)
     ) tex_unit (
-        .clk        (clk),
-        .reset      (reset),
-        .tex_req_if (tex_req_if),
-        .tex_csr_if (tex_csr_if),
-        .tex_rsp_if (tex_rsp_if),
+        .clk           (clk),
+        .reset         (reset),
+        .tex_req_if    (tex_req_if),
+        .tex_csr_if    (tex_csr_if),
+        .tex_rsp_if    (tex_rsp_if),
         .dcache_req_if (dcache_req_if),
         .dcache_rsp_if (dcache_rsp_if)
     );
@@ -149,7 +154,6 @@ module VX_gpu_unit #(
 `else   
 
     `UNUSED_VAR (gpu_req_if.op_mod)
-    `UNUSED_VAR (gpu_req_if.rs2_data)
     `UNUSED_VAR (gpu_req_if.rs3_data)
     `UNUSED_VAR (gpu_req_if.wb)
     `UNUSED_VAR (gpu_req_if.rd)

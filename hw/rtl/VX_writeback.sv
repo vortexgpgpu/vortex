@@ -10,7 +10,6 @@ module VX_writeback #(
     VX_commit_if.slave  alu_commit_if,
     VX_commit_if.slave  ld_commit_if,  
     VX_commit_if.slave  csr_commit_if,
-    VX_commit_if.slave  csr_commit_if,
 `ifdef EXT_F_ENABLE
     VX_commit_if.slave  fpu_commit_if,
 `endif    
@@ -50,28 +49,28 @@ module VX_writeback #(
     wire [NUM_RSPS-1:0] rsp_ready;
     wire stall;
 
-    assign rsp_valid = {
+    assign rsp_valid = {            
+    `ifdef EXT_TEX_ENABLE
+        gpu_commit_if.valid && gpu_commit_if.wb,
+    `endif
         csr_commit_if.valid && csr_commit_if.wb,
         alu_commit_if.valid && alu_commit_if.wb,        
     `ifdef EXT_F_ENABLE
         fpu_commit_if.valid && fpu_commit_if.wb,
     `endif
-        ld_commit_if.valid  && ld_commit_if.wb,
-    `ifdef EXT_TEX_ENABLE
-        gpu_commit_if.valid && gpu_commit_if.wb,
-    `ifend
+        ld_commit_if.valid  && ld_commit_if.wb
     };
 
-    assign rsp_data = {            
+    assign rsp_data = {                                       
+    `ifdef EXT_TEX_ENABLE
+        {gpu_commit_if.wid, gpu_commit_if.PC, gpu_commit_if.tmask, gpu_commit_if.rd, gpu_commit_if.data, gpu_commit_if.eop},
+    `endif         
         {csr_commit_if.wid, csr_commit_if.PC, csr_commit_if.tmask, csr_commit_if.rd, csr_commit_if.data, csr_commit_if.eop},
         {alu_commit_if.wid, alu_commit_if.PC, alu_commit_if.tmask, alu_commit_if.rd, alu_commit_if.data, alu_commit_if.eop},
     `ifdef EXT_F_ENABLE
         {fpu_commit_if.wid, fpu_commit_if.PC, fpu_commit_if.tmask, fpu_commit_if.rd, fpu_commit_if.data, fpu_commit_if.eop},
-    `endif                        
-        { ld_commit_if.wid, ld_commit_if.PC,  ld_commit_if.tmask,  ld_commit_if.rd,  ld_commit_if.data,  ld_commit_if.eop},
-    `ifdef EXT_TEX_ENABLE
-        {gpu_commit_if.wid, gpu_commit_if.PC, gpu_commit_if.tmask, gpu_commit_if.rd, gpu_commit_if.data, gpu_commit_if.eop},
     `endif
+        { ld_commit_if.wid, ld_commit_if.PC,  ld_commit_if.tmask,  ld_commit_if.rd,  ld_commit_if.data,  ld_commit_if.eop}
     };
     
     VX_stream_arbiter #(            
@@ -103,8 +102,7 @@ module VX_writeback #(
 `ifdef EXT_TEX_ENABLE
     assign gpu_commit_if.ready = rsp_ready[3] || ~gpu_commit_if.wb;
 `endif
-`endif
-    
+`endif    
     
     assign stall = ~writeback_if.ready && writeback_if.valid;
     

@@ -124,18 +124,17 @@ module VX_instr_demux (
 
     wire gpu_req_valid = ibuffer_if.valid && (ibuffer_if.ex_type == `EX_GPU);
     wire [`INST_GPU_BITS-1:0] gpu_op_type = `INST_GPU_BITS'(ibuffer_if.op_type);
-    wire [31:0] gpu_rs2_data = gpr_rsp_if.rs2_data[tid];
 
     VX_skid_buffer #(
-        .DATAW   (`NW_BITS + `NUM_THREADS + 32 + 32 + `INST_GPU_BITS + `NR_BITS + 1 +  + `NT_BITS + (`NUM_THREADS * 32 + 32)),
+        .DATAW   (`NW_BITS + `NUM_THREADS + 32 + 32 + `INST_GPU_BITS + `INST_MOD_BITS + `NR_BITS + 1 + `NT_BITS  + (3 * `NUM_THREADS * 32)),
         .OUT_REG (1)
     ) gpu_buffer (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (gpu_req_valid),
         .ready_in  (gpu_req_ready),
-        .data_in   ({ibuffer_if.wid, ibuffer_if.tmask, ibuffer_if.PC, next_PC,            gpu_op_type,        ibuffer_if.rd, ibuffer_if.wb, tid,            gpr_rsp_if.rs1_data, gpu_rs2_data}),
-        .data_out  ({gpu_req_if.wid, gpu_req_if.tmask, gpu_req_if.PC, gpu_req_if.next_PC, gpu_req_if.op_type, gpu_req_if.rd, gpu_req_if.wb, gpu_req_if.tid, gpu_req_if.rs1_data, gpu_req_if.rs2_data}),
+        .data_in   ({ibuffer_if.wid, ibuffer_if.tmask, ibuffer_if.PC, next_PC,            gpu_op_type,        ibuffer_if.op_mod, ibuffer_if.rd, ibuffer_if.wb, tid,            gpr_rsp_if.rs1_data, gpr_rsp_if.rs2_data, gpr_rsp_if.rs3_data}),
+        .data_out  ({gpu_req_if.wid, gpu_req_if.tmask, gpu_req_if.PC, gpu_req_if.next_PC, gpu_req_if.op_type, gpu_req_if.op_mod, gpu_req_if.rd, gpu_req_if.wb, gpu_req_if.tid, gpu_req_if.rs1_data, gpu_req_if.rs2_data, gpu_req_if.rs3_data}),
         .valid_out (gpu_req_if.valid),
         .ready_out (gpu_req_if.ready)
     ); 

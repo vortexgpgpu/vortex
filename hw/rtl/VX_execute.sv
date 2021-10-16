@@ -103,7 +103,7 @@ module VX_execute #(
         .LANES         (`NUM_THREADS),
         .DATA_SIZE     (4),            
         .TAG_IN_WIDTH  (`LSU_TEX_DCACHE_TAG_BITS),
-        .TAG_SEL_IDX   (`NC_ADDR_BITS + `SM_ENABLE)
+        .TAG_SEL_IDX   (`NC_FLAG_BITS + `SM_ENABLE)
     ) tex_lsu_arb (
         .clk            (clk),
         .reset          (reset),
@@ -189,10 +189,7 @@ module VX_execute #(
         .perf_pipeline_if(perf_pipeline_if),
     `endif    
         .cmt_to_csr_if  (cmt_to_csr_if),    
-        .fpu_to_csr_if  (fpu_to_csr_if), 
-    `ifdef EXT_TEX_ENABLE
-        .tex_csr_if     (tex_csr_if),
-    `endif
+        .fetch_to_csr_if(fetch_to_csr_if),
         .csr_req_if     (csr_req_if),   
         .csr_commit_if  (csr_commit_if),
     `ifdef EXT_F_ENABLE  
@@ -202,6 +199,9 @@ module VX_execute #(
     `else
         `UNUSED_PIN (pending),
     `endif        
+    `ifdef EXT_TEX_ENABLE
+        .tex_csr_if     (tex_csr_if),
+    `endif
         .busy           (busy)
     );
 

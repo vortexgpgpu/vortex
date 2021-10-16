@@ -7,15 +7,15 @@ module VX_tex_unit #(
     input wire  reset,    
 
     // Texture unit <-> Memory Unit
-    VX_dcache_req_if dcache_req_if,
-    VX_dcache_rsp_if dcache_rsp_if,
+    VX_dcache_req_if.master dcache_req_if,
+    VX_dcache_rsp_if.slave  dcache_rsp_if,
 
     // Inputs
-    VX_tex_req_if   tex_req_if,
-    VX_tex_csr_if   tex_csr_if,
+    VX_tex_req_if.slave     tex_req_if,
+    VX_tex_csr_if.slave     tex_csr_if,
 
     // Outputs
-    VX_tex_rsp_if   tex_rsp_if
+    VX_tex_rsp_if.master    tex_rsp_if
 );
 
     localparam REQ_INFOW_S = `NR_BITS + 1 + `NW_BITS + 32;

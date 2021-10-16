@@ -18,6 +18,32 @@ interface VX_tex_req_if ();
     
     wire                            ready;
 
+    modport master (
+        output valid,
+        output wid,
+        output tmask,
+        output PC,
+        output rd,
+        output wb,
+        output unit,
+        output coords,
+        output lod,
+        input  ready
+    );
+
+    modport slave (
+        input  valid,
+        input  wid,
+        input  tmask,
+        input  PC,
+        input  rd,
+        input  wb,
+        input  unit,
+        input  coords,
+        input  lod,
+        output ready
+    );
+
 endinterface
 `endif
 

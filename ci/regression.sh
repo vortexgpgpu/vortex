@@ -22,6 +22,15 @@ make -C tests/opencl run-simx
 echo "coverage tests done!"
 }
 
+tex()
+{
+echo "begin texture tests..."
+
+CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --app=tex
+
+echo "coverage texture done!"
+}
+
 cluster() 
 {
 echo "begin clustering tests..."
@@ -137,12 +146,14 @@ echo "stress1 tests done!"
 
 usage()
 {
-    echo "usage: regression [-coverage] [-cluster] [-debug] [-config] [-stress[#n]] [-all] [-h|--help]"
+    echo "usage: regression [-coverage] [-tex] [-cluster] [-debug] [-config] [-stress[#n]] [-all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
     case $1 in
         -coverage ) coverage
+                ;;
+        -tex ) tex
                 ;;
         -cluster ) cluster
                 ;;
