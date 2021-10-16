@@ -2,7 +2,7 @@ RTL_DIR = ../../hw/rtl
 DPI_DIR = ../../hw/dpi
 SCRIPT_DIR=../../hw/scripts
 
-CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
+CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I.. -I../../../hw -I../../common
 CXXFLAGS += -I../../common/softfloat/source/include
