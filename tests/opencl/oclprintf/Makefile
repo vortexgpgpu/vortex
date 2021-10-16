@@ -22,7 +22,7 @@ CXXFLAGS += -I$(POCL_RT_PATH)/include
 
 LDFLAGS += -L$(POCL_RT_PATH)/lib -L$(VORTEX_DRV_PATH)/stub -lOpenCL -lvortex
 
-PROJECT = printf
+PROJECT = oclprintf
 
 SRCS = main.cc
 

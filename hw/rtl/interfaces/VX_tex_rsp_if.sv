@@ -14,6 +14,28 @@ interface VX_tex_rsp_if ();
     wire [`NUM_THREADS-1:0][31:0] data;
     wire                    ready;
 
+    modport master (
+        output valid,
+        output wid,
+        output tmask,
+        output PC,
+        output rd,
+        output wb,
+        output data,
+        input  ready
+    );
+
+    modport slave (
+        input  valid,
+        input  wid,
+        input  tmask,
+        input  PC,
+        input  rd,
+        input  wb,
+        input  data,
+        output ready
+    );
+
 endinterface
 
 `endif

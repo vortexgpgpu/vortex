@@ -21,7 +21,7 @@ module VX_csr_unit #(
     input wire[`NUM_WARPS-1:0]  fpu_pending,
 `endif
 `ifdef EXT_TEX_ENABLE
-    VX_tex_csr_if.slave         tex_csr_if,
+    VX_tex_csr_if.master        tex_csr_if,
 `endif
 
     output wire[`NUM_WARPS-1:0] pending,
@@ -49,6 +49,7 @@ module VX_csr_unit #(
         .fetch_to_csr_if(fetch_to_csr_if),
     `ifdef EXT_F_ENABLE
         .fpu_to_csr_if  (fpu_to_csr_if), 
+    `endif
     `ifdef EXT_TEX_ENABLE
         .tex_csr_if     (tex_csr_if),
     `endif

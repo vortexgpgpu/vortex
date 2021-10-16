@@ -70,9 +70,9 @@ module VX_tex_memory #(
     assign reqq_push = req_valid && req_ready;
     
     VX_fifo_queue #(
-        .DATAW      ((NUM_REQS * 4 * 30) + NUM_REQS + REQ_INFOW + `TEX_FILTER_BITS + `TEX_STRIDE_BITS + (4 * NUM_REQS * 2) + 4), 
-        .SIZE       (`LSUQ_SIZE),
-        .OUTPUT_REG (1)
+        .DATAW   ((NUM_REQS * 4 * 30) + NUM_REQS + REQ_INFOW + `TEX_FILTER_BITS + `TEX_STRIDE_BITS + (4 * NUM_REQS * 2) + 4), 
+        .SIZE    (`LSUQ_SIZE),
+        .OUT_REG (1)
     ) req_queue (
         .clk        (clk),
         .reset      (reset),
