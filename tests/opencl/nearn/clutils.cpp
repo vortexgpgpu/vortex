@@ -421,7 +421,7 @@ cl_context cl_init_context(int platform, int dev,int quiet) {
 #else
 
 	commandQueue = clCreateCommandQueue(context,
-						devices[device_touse], NULL, &status);
+						devices[device_touse], 0, &status);
 
 #endif // PROFILING
 
@@ -451,8 +451,8 @@ void cl_cleanup()
         printf("clReleaseContext()\n");
     }
     
-    for (int p = 0; p < numPlatforms; ++p) {
-        for (int d = 0; d < numDevices[p]; ++d) {
+    for (cl_uint p = 0; p < numPlatforms; ++p) {
+        for (cl_uint d = 0; d < numDevices[p]; ++d) {
             status = clReleaseDevice(devices[d]);
             cl_errChk(status, "Oops!", true);
             printf("clReleaseDevice()\n");
