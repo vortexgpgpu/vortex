@@ -14,14 +14,16 @@
 
 `define NB_BITS         `LOG2UP(`NUM_BARRIERS)
 
-`define REQS_BITS       `LOG2UP(NUM_REQS)
+`define NUM_IREGS       32
+
+`define NRI_BITS        `LOG2UP(`NUM_IREGS)
 
 `define NTEX_BITS       `LOG2UP(`NUM_TEX_UNITS)
 
 `ifdef EXT_F_ENABLE
-`define NUM_REGS        64
+`define NUM_REGS        (2 * `NUM_IREGS)
 `else
-`define NUM_REGS        32
+`define NUM_REGS        `NUM_IREGS
 `endif
 
 `define NR_BITS         `LOG2UP(`NUM_REGS)
@@ -31,6 +33,16 @@
 `define CSR_WIDTH       12
 
 `define PERF_CTR_BITS   44
+
+///////////////////////////////////////////////////////////////////////////////
+
+`define EX_NOP          3'h0
+`define EX_ALU          3'h1
+`define EX_LSU          3'h2
+`define EX_CSR          3'h3
+`define EX_FPU          3'h4
+`define EX_GPU          3'h5
+`define EX_BITS         3
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -60,139 +72,126 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define FRM_RNE         3'b000  // round to nearest even
-`define FRM_RTZ         3'b001  // round to zero
-`define FRM_RDN         3'b010  // round to -inf
-`define FRM_RUP         3'b011  // round to +inf
-`define FRM_RMM         3'b100  // round to nearest max magnitude
-`define FRM_DYN         3'b111  // dynamic mode
-`define FRM_BITS        3
+`define INST_FRM_RNE    3'b000  // round to nearest even
+`define INST_FRM_RTZ    3'b001  // round to zero
+`define INST_FRM_RDN    3'b010  // round to -inf
+`define INST_FRM_RUP    3'b011  // round to +inf
+`define INST_FRM_RMM    3'b100  // round to nearest max magnitude
+`define INST_FRM_DYN    3'b111  // dynamic mode
+`define INST_FRM_BITS   3
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define EX_NOP          3'h0
-`define EX_ALU          3'h1
-`define EX_LSU          3'h2
-`define EX_CSR          3'h3
-`define EX_FPU          3'h4
-`define EX_GPU          3'h5
-`define EX_BITS         3
-
-`define NUM_EXS         6
-`define NE_BITS         `LOG2UP(`NUM_EXS)
+`define INST_OP_BITS    4
+`define INST_MOD_BITS   3
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define OP_BITS         4
-`define MOD_BITS        3
+`define INST_ALU_ADD         4'b0000
+`define INST_ALU_LUI         4'b0010
+`define INST_ALU_AUIPC       4'b0011
+`define INST_ALU_SLTU        4'b0100
+`define INST_ALU_SLT         4'b0101
+`define INST_ALU_SRL         4'b1000
+`define INST_ALU_SRA         4'b1001
+`define INST_ALU_SUB         4'b1011
+`define INST_ALU_AND         4'b1100
+`define INST_ALU_OR          4'b1101
+`define INST_ALU_XOR         4'b1110
+`define INST_ALU_SLL         4'b1111
+`define INST_ALU_OTHER       4'b0111
+`define INST_ALU_BITS        4
+`define INST_ALU_OP(x)       x[`INST_ALU_BITS-1:0]
+`define INST_ALU_OP_CLASS(x) x[3:2]
+`define INST_ALU_SIGNED(x)   x[0]
+`define INST_ALU_IS_BR(x)    x[0]
+`define INST_ALU_IS_MUL(x)   x[1]
 
-`define ALU_ADD         4'b0000
-`define ALU_LUI         4'b0010
-`define ALU_AUIPC       4'b0011
-`define ALU_SLTU        4'b0100
-`define ALU_SLT         4'b0101
-`define ALU_SRL         4'b1000
-`define ALU_SRA         4'b1001
-`define ALU_SUB         4'b1011
-`define ALU_AND         4'b1100
-`define ALU_OR          4'b1101
-`define ALU_XOR         4'b1110
-`define ALU_SLL         4'b1111
-`define ALU_OTHER       4'b0111
-`define ALU_BITS        4
-`define ALU_OP(x)       x[`ALU_BITS-1:0]
-`define ALU_OP_CLASS(x) x[3:2]
-`define ALU_SIGNED(x)   x[0]
-`define ALU_IS_BR(x)    x[0]
-`define ALU_IS_MUL(x)   x[1]
+`define INST_BR_EQ           4'b0000
+`define INST_BR_NE           4'b0010
+`define INST_BR_LTU          4'b0100 
+`define INST_BR_GEU          4'b0110 
+`define INST_BR_LT           4'b0101
+`define INST_BR_GE           4'b0111
+`define INST_BR_JAL          4'b1000
+`define INST_BR_JALR         4'b1001
+`define INST_BR_ECALL        4'b1010
+`define INST_BR_EBREAK       4'b1011
+`define INST_BR_MRET         4'b1100
+`define INST_BR_SRET         4'b1101
+`define INST_BR_DRET         4'b1110
+`define INST_BR_OTHER        4'b1111
+`define INST_BR_BITS         4
+`define INST_BR_NEG(x)       x[1]
+`define INST_BR_LESS(x)      x[2]
+`define INST_BR_STATIC(x)    x[3]
 
-`define BR_EQ           4'b0000
-`define BR_NE           4'b0010
-`define BR_LTU          4'b0100 
-`define BR_GEU          4'b0110 
-`define BR_LT           4'b0101
-`define BR_GE           4'b0111
-`define BR_JAL          4'b1000
-`define BR_JALR         4'b1001
-`define BR_ECALL        4'b1010
-`define BR_EBREAK       4'b1011
-`define BR_MRET         4'b1100
-`define BR_SRET         4'b1101
-`define BR_DRET         4'b1110
-`define BR_OTHER        4'b1111
-`define BR_BITS         4
-`define BR_OP(x)        x[`BR_BITS-1:0]
-`define BR_NEG(x)       x[1]
-`define BR_LESS(x)      x[2]
-`define BR_STATIC(x)    x[3]
+`define INST_MUL_MUL         3'h0
+`define INST_MUL_MULH        3'h1
+`define INST_MUL_MULHSU      3'h2
+`define INST_MUL_MULHU       3'h3
+`define INST_MUL_DIV         3'h4
+`define INST_MUL_DIVU        3'h5
+`define INST_MUL_REM         3'h6
+`define INST_MUL_REMU        3'h7
+`define INST_MUL_BITS        3
+`define INST_MUL_IS_DIV(x)   x[2]
 
-`define MUL_MUL         3'h0
-`define MUL_MULH        3'h1
-`define MUL_MULHSU      3'h2
-`define MUL_MULHU       3'h3
-`define MUL_DIV         3'h4
-`define MUL_DIVU        3'h5
-`define MUL_REM         3'h6
-`define MUL_REMU        3'h7
-`define MUL_BITS        3
-`define MUL_OP(x)       x[`MUL_BITS-1:0]
-`define MUL_IS_DIV(x)   x[2]
+`define INST_FMT_B           3'b000
+`define INST_FMT_H           3'b001
+`define INST_FMT_W           3'b010
+`define INST_FMT_BU          3'b100
+`define INST_FMT_HU          3'b101
 
-`define FMT_B           3'b000
-`define FMT_H           3'b001
-`define FMT_W           3'b010
-`define FMT_BU          3'b100
-`define FMT_HU          3'b101
+`define INST_LSU_LB          4'b0000 
+`define INST_LSU_LH          4'b0001
+`define INST_LSU_LW          4'b0010
+`define INST_LSU_LBU         4'b0100
+`define INST_LSU_LHU         4'b0101
+`define INST_LSU_SB          4'b1000 
+`define INST_LSU_SH          4'b1001
+`define INST_LSU_SW          4'b1010
+`define INST_LSU_BITS        4
+`define INST_LSU_FMT(x)      x[2:0]
+`define INST_LSU_WSIZE(x)    x[1:0]
+`define INST_LSU_IS_FENCE(x) x[0]
 
-`define LSU_LB          4'b0000 
-`define LSU_LH          4'b0001
-`define LSU_LW          4'b0010
-`define LSU_LBU         4'b0100
-`define LSU_LHU         4'b0101
-`define LSU_SB          4'b1000 
-`define LSU_SH          4'b1001
-`define LSU_SW          4'b1010
-`define LSU_BITS        4
-`define LSU_FMT(x)      x[2:0]
-`define LSU_WSIZE(x)    x[1:0]
-`define LSU_OP(x)       x[`LSU_BITS-1:0]
-`define LSU_IS_FENCE(x) x[0]
+`define INST_FENCE_BITS      1
+`define INST_FENCE_D         1'h0
+`define INST_FENCE_I         1'h1
 
-`define CSR_RW          2'h1
-`define CSR_RS          2'h2
-`define CSR_RC          2'h3
-`define CSR_OTHER       2'h0
-`define CSR_BITS        2
-`define CSR_OP(x)       x[`CSR_BITS-1:0]
+`define INST_CSR_RW          2'h1
+`define INST_CSR_RS          2'h2
+`define INST_CSR_RC          2'h3
+`define INST_CSR_OTHER       2'h0
+`define INST_CSR_BITS        2
 
-`define FPU_ADD         4'h0 
-`define FPU_SUB         4'h4 
-`define FPU_MUL         4'h8 
-`define FPU_DIV         4'hC
-`define FPU_CVTWS       4'h1  // FCVT.W.S
-`define FPU_CVTWUS      4'h5  // FCVT.WU.S
-`define FPU_CVTSW       4'h9  // FCVT.S.W
-`define FPU_CVTSWU      4'hD  // FCVT.S.WU
-`define FPU_SQRT        4'h2
-`define FPU_CLASS       4'h6  
-`define FPU_CMP         4'hA
-`define FPU_MISC        4'hE  // SGNJ, SGNJN, SGNJX, FMIN, FMAX, MVXW, MVWX 
-`define FPU_MADD        4'h3 
-`define FPU_MSUB        4'h7   
-`define FPU_NMSUB       4'hB   
-`define FPU_NMADD       4'hF
-`define FPU_BITS        4
-`define FPU_OP(x)       x[`FPU_BITS-1:0]
+`define INST_FPU_ADD         4'h0 
+`define INST_FPU_SUB         4'h4 
+`define INST_FPU_MUL         4'h8 
+`define INST_FPU_DIV         4'hC
+`define INST_FPU_CVTWS       4'h1  // FCVT.W.S
+`define INST_FPU_CVTWUS      4'h5  // FCVT.WU.S
+`define INST_FPU_CVTSW       4'h9  // FCVT.S.W
+`define INST_FPU_CVTSWU      4'hD  // FCVT.S.WU
+`define INST_FPU_SQRT        4'h2
+`define INST_FPU_CLASS       4'h6  
+`define INST_FPU_CMP         4'hA
+`define INST_FPU_MISC        4'hE  // SGNJ, SGNJN, SGNJX, FMIN, FMAX, MVXW, MVWX 
+`define INST_FPU_MADD        4'h3 
+`define INST_FPU_MSUB        4'h7   
+`define INST_FPU_NMSUB       4'hB   
+`define INST_FPU_NMADD       4'hF
+`define INST_FPU_BITS        4
 
-`define GPU_TMC         3'h0
-`define GPU_WSPAWN      3'h1 
-`define GPU_SPLIT       3'h2
-`define GPU_JOIN        3'h3
-`define GPU_BAR         3'h4
-`define GPU_TEX         3'h5
-`define GPU_OTHER       3'h7
-`define GPU_BITS        3
-`define GPU_OP(x)       x[`GPU_BITS-1:0]
+`define INST_GPU_TMC         3'h0
+`define INST_GPU_WSPAWN      3'h1 
+`define INST_GPU_SPLIT       3'h2
+`define INST_GPU_JOIN        3'h3
+`define INST_GPU_BAR         3'h4
+`define INST_GPU_PRED        3'h5
+`define INST_GPU_TEX         3'h6
+`define INST_GPU_BITS        3
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -244,59 +243,44 @@
 `endif
 
 // non-cacheable address bit
-`define NC_ADDR_BITS            1
+`define NC_FLAG_BITS            1
 
 ////////////////////////// Icache Configurable Knobs //////////////////////////
 
 // Cache ID
 `define ICACHE_ID               (32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 0)
 
-// Block size in bytes
-`define ICACHE_LINE_SIZE        (`L2_ENABLE ? `L1_BLOCK_SIZE : `MEM_BLOCK_SIZE)
-
 // Word size in bytes
-`define IWORD_SIZE              4
+`define ICACHE_WORD_SIZE        4
 
-// Number of banks
-`define INUM_BANKS              1
-
-// Core request address bits
-`define ICORE_ADDR_WIDTH        (32-`CLOG2(`IWORD_SIZE))
-
-// Core request byte enable bits
-`define ICORE_BYTEEN_WIDTH      `DWORD_SIZE
+// Block size in bytes
+`define ICACHE_LINE_SIZE        `L1_BLOCK_SIZE
 
 // TAG sharing enable       
-`define ICORE_TAG_ID_BITS       `NW_BITS
+`define ICACHE_CORE_TAG_ID_BITS `NW_BITS
 
 // Core request tag bits
-`define ICORE_TAG_WIDTH         (`DBG_CACHE_REQ_MDATAW + `ICORE_TAG_ID_BITS)
+`define ICACHE_CORE_TAG_WIDTH   (`DBG_CACHE_REQ_MDATAW + `ICACHE_CORE_TAG_ID_BITS)
 
 // Memory request data bits
-`define IMEM_DATA_WIDTH         (`ICACHE_LINE_SIZE * 8)
+`define ICACHE_MEM_DATA_WIDTH   (`ICACHE_LINE_SIZE * 8)
 
 // Memory request address bits
-`define IMEM_ADDR_WIDTH         (32 - `CLOG2(`ICACHE_LINE_SIZE))
-
-// Memory byte enable bits
-`define IMEM_BYTEEN_WIDTH       `ICACHE_LINE_SIZE
+`define ICACHE_MEM_ADDR_WIDTH   (32 - `CLOG2(`ICACHE_LINE_SIZE))
 
 // Memory request tag bits
-`define IMEM_TAG_WIDTH          `IMEM_ADDR_WIDTH
+`define ICACHE_MEM_TAG_WIDTH    `CLOG2(`ICACHE_MSHR_SIZE)
 
 ////////////////////////// Dcache Configurable Knobs //////////////////////////
 
 // Cache ID
 `define DCACHE_ID               (32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 1)
 
-// Block size in bytes
-`define DCACHE_LINE_SIZE        (`L2_ENABLE ? `L1_BLOCK_SIZE : `MEM_BLOCK_SIZE)
-
 // Word size in bytes
-`define DWORD_SIZE              4
+`define DCACHE_WORD_SIZE        4
 
-// Core request address bits
-`define DCORE_ADDR_WIDTH        (32-`CLOG2(`DWORD_SIZE))
+// Block size in bytes
+`define DCACHE_LINE_SIZE        `L1_BLOCK_SIZE
 
 // Core request tag bits
 `define LSUQ_ADDR_BITS          `LOG2UP(`LSUQ_SIZE)
@@ -304,126 +288,127 @@
 `define LSU_TAG_ID_BITS         (`LSUQ_ADDR_BITS + `NC_ADDR_BITS + `SM_ENABLE)
 `define TEX_TAG_ID_BITS         (2)
 `define LSU_TEX_TAG_ID_BITS     `MAX(`LSU_TAG_ID_BITS, `TEX_TAG_ID_BITS) 
-`define DCORE_TAG_ID_BITS       (`LSU_TEX_TAG_ID_BITS + 1)
+`define DCACHE_DCORE_TAG_ID_BITS (`LSU_TEX_TAG_ID_BITS + `NC_FLAG_BITS)
 `define LSU_DCACHE_TAG_BITS     (`DBG_CACHE_REQ_MDATAW + `LSU_TAG_ID_BITS)
 `define TEX_DCACHE_TAG_BITS     (`DBG_CACHE_REQ_MDATAW + `TEX_TAG_ID_BITS)
 `define LSU_TEX_DCACHE_TAG_BITS (`DBG_CACHE_REQ_MDATAW + `LSU_TEX_TAG_ID_BITS)
 `else 
-`define DCORE_TAG_ID_BITS       (`LSUQ_ADDR_BITS + `NC_ADDR_BITS + `SM_ENABLE)
+`define DCACHE_DCORE_TAG_ID_BITS (`LSUQ_ADDR_BITS + `NC_ADDR_BITS + `SM_ENABLE)
 `endif
-`define DCORE_TAG_WIDTH         (`DBG_CACHE_REQ_MDATAW + `DCORE_TAG_ID_BITS)
+`define DCACHE_DCORE_TAG_WIDTH  (`DBG_CACHE_REQ_MDATAW + `DCACHE_CORE_TAG_ID_BITS)
  
 // Memory request data bits
-`define DMEM_DATA_WIDTH         (`DCACHE_LINE_SIZE * 8)
+`define DCACHE_MEM_DATA_WIDTH   (`DCACHE_LINE_SIZE * 8)
 
 // Memory request address bits
-`define DMEM_ADDR_WIDTH         (32 - `CLOG2(`DCACHE_LINE_SIZE))
+`define DCACHE_MEM_ADDR_WIDTH   (32 - `CLOG2(`DCACHE_LINE_SIZE))
 
 // Memory byte enable bits
-`define DMEM_BYTEEN_WIDTH       `DCACHE_LINE_SIZE
+`define DCACHE_MEM_BYTEEN_WIDTH `DCACHE_LINE_SIZE
 
 // Input request size
-`define DNUM_REQS               `NUM_THREADS
+`define DCACHE_NUM_REQS         `NUM_THREADS
 
 // Memory request tag bits
-`define _DMEM_ADDR_RATIO_W      $clog2(`DCACHE_LINE_SIZE / `DWORD_SIZE)
-`define _DNC_MEM_TAG_WIDTH      ($clog2(`DNUM_REQS) + `_DMEM_ADDR_RATIO_W + `DCORE_TAG_WIDTH)
-`define DMEM_TAG_WIDTH          `MAX((`DMEM_ADDR_WIDTH + `NC_ADDR_BITS), `_DNC_MEM_TAG_WIDTH)
+`define _DMEM_ADDR_RATIO_W      $clog2(`DCACHE_LINE_SIZE / `DCACHE_WORD_SIZE)
+`define _DNC_MEM_TAG_WIDTH      ($clog2(`DCACHE_NUM_REQS) + `_DMEM_ADDR_RATIO_W + `DCACHE_CORE_TAG_WIDTH)
+`define DCACHE_MEM_TAG_WIDTH    `MAX((`CLOG2(`DCACHE_NUM_BANKS) + `CLOG2(`DCACHE_MSHR_SIZE) + `NC_FLAG_BITS), `_DNC_MEM_TAG_WIDTH)
+
+// Merged D-cache/I-cache memory tag
+`define L1_MEM_TAG_WIDTH        (`MAX(`ICACHE_MEM_TAG_WIDTH, `DCACHE_MEM_TAG_WIDTH) + `CLOG2(2))
 
 ////////////////////////// SM Configurable Knobs //////////////////////////////
 
 // Cache ID
-`define SCACHE_ID               (32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 2)
+`define SMEM_ID                 (32'(`L3_ENABLE) + 32'(`L2_ENABLE) * `NUM_CLUSTERS + CORE_ID * 3 + 2)
 
 // Word size in bytes
-`define SWORD_SIZE              4
+`define SMEM_WORD_SIZE          4
 
 // bank address offset
-`define SBANK_ADDR_OFFSET       `CLOG2(`STACK_SIZE / `SWORD_SIZE)
+`define SMEM_BANK_ADDR_OFFSET   `CLOG2(`STACK_SIZE / `SMEM_WORD_SIZE)
 
 // Input request size
-`define SNUM_REQS               `NUM_THREADS
+`define SMEM_NUM_REQS           `NUM_THREADS
 
 ////////////////////////// L2cache Configurable Knobs /////////////////////////
 
 // Cache ID
-`define L2CACHE_ID              (32'(`L3_ENABLE) + CLUSTER_ID)
-
-// Block size in bytes
-`define L2CACHE_LINE_SIZE       `MEM_BLOCK_SIZE
+`define L2_CACHE_ID              (32'(`L3_ENABLE) + CLUSTER_ID)
 
 // Word size in bytes
-`define L2WORD_SIZE             `DCACHE_LINE_SIZE
+`define L2_WORD_SIZE             `DCACHE_LINE_SIZE
+
+// Block size in bytes
+`define L2_CACHE_LINE_SIZE       ((`L2_ENABLE) ? `MEM_BLOCK_SIZE : `L2_WORD_SIZE)
 
 // Input request tag bits
-`define L2CORE_TAG_WIDTH        (`DCORE_TAG_WIDTH + `CLOG2(`NUM_CORES))
+`define L2_CORE_TAG_WIDTH        (`DCACHE_CORE_TAG_WIDTH + `CLOG2(`NUM_CORES))
 
 // Memory request data bits
-`define L2MEM_DATA_WIDTH        (`L2CACHE_LINE_SIZE * 8)
+`define L2_MEM_DATA_WIDTH        (`L2_CACHE_LINE_SIZE * 8)
 
 // Memory request address bits
-`define L2MEM_ADDR_WIDTH        (32 - `CLOG2(`L2CACHE_LINE_SIZE))
+`define L2_MEM_ADDR_WIDTH        (32 - `CLOG2(`L2_CACHE_LINE_SIZE))
 
 // Memory byte enable bits
-`define L2MEM_BYTEEN_WIDTH      `L2CACHE_LINE_SIZE
+`define L2_MEM_BYTEEN_WIDTH      `L2_CACHE_LINE_SIZE
 
 // Input request size
-`define L2NUM_REQS              `NUM_CORES
+`define L2_NUM_REQS              `NUM_CORES
 
 // Memory request tag bits
-`define _L2MEM_ADDR_RATIO_W     $clog2(`L2CACHE_LINE_SIZE / `L2WORD_SIZE)
-`define _L2NC_MEM_TAG_WIDTH     ($clog2(`L2NUM_REQS) + `_L2MEM_ADDR_RATIO_W + `XMEM_TAG_WIDTH)
-`define _L2MEM_TAG_WIDTH        `MAX((`L2MEM_ADDR_WIDTH + `NC_ADDR_BITS), `_L2NC_MEM_TAG_WIDTH)
-`define L2MEM_TAG_WIDTH         (`L2_ENABLE ? `_L2MEM_TAG_WIDTH : (`XMEM_TAG_WIDTH + `CLOG2(`L2NUM_REQS)))
+`define _L2_MEM_ADDR_RATIO_W     $clog2(`L2_CACHE_LINE_SIZE / `L2_WORD_SIZE)
+`define _L2_NC_MEM_TAG_WIDTH     ($clog2(`L2_NUM_REQS) + `_L2_MEM_ADDR_RATIO_W + `L1_MEM_TAG_WIDTH)
+`define _L2_MEM_TAG_WIDTH        `MAX((`CLOG2(`L2_NUM_BANKS) + `CLOG2(`L2_MSHR_SIZE) + `NC_FLAG_BITS), `_L2_NC_MEM_TAG_WIDTH)
+`define L2_MEM_TAG_WIDTH         ((`L2_ENABLE) ? `_L2_MEM_TAG_WIDTH : (`L1_MEM_TAG_WIDTH + `CLOG2(`L2_NUM_REQS)))
 
 ////////////////////////// L3cache Configurable Knobs /////////////////////////
 
 // Cache ID
-`define L3CACHE_ID              0
-
-// Block size in bytes
-`define L3CACHE_LINE_SIZE       `MEM_BLOCK_SIZE
+`define L3_CACHE_ID              0
 
 // Word size in bytes
-`define L3WORD_SIZE             `L2CACHE_LINE_SIZE
+`define L3_WORD_SIZE             `L2_CACHE_LINE_SIZE
+
+// Block size in bytes
+`define L3_CACHE_LINE_SIZE       ((`L3_ENABLE) ? `MEM_BLOCK_SIZE : `L3_WORD_SIZE)
 
 // Input request tag bits
-`define L3CORE_TAG_WIDTH        (`L2CORE_TAG_WIDTH + `CLOG2(`NUM_CLUSTERS))
+`define L3_CORE_TAG_WIDTH        (`L2_CORE_TAG_WIDTH + `CLOG2(`NUM_CLUSTERS))
 
 // Memory request data bits
-`define L3MEM_DATA_WIDTH        (`L3CACHE_LINE_SIZE * 8)
+`define L3_MEM_DATA_WIDTH        (`L3_CACHE_LINE_SIZE * 8)
 
 // Memory request address bits
-`define L3MEM_ADDR_WIDTH        (32 - `CLOG2(`L3CACHE_LINE_SIZE))
+`define L3_MEM_ADDR_WIDTH        (32 - `CLOG2(`L3_CACHE_LINE_SIZE))
 
 // Memory byte enable bits
-`define L3MEM_BYTEEN_WIDTH      `L3CACHE_LINE_SIZE
+`define L3_MEM_BYTEEN_WIDTH      `L3_CACHE_LINE_SIZE
 
 // Input request size
-`define L3NUM_REQS              `NUM_CLUSTERS
+`define L3_NUM_REQS              `NUM_CLUSTERS
 
 // Memory request tag bits
-`define _L3MEM_ADDR_RATIO_W     $clog2(`L3CACHE_LINE_SIZE / `L3WORD_SIZE)
-`define _L3NC_MEM_TAG_WIDTH     ($clog2(`L3NUM_REQS) + `_L3MEM_ADDR_RATIO_W + `L2MEM_TAG_WIDTH)
-`define _L3MEM_TAG_WIDTH        `MAX((`L3MEM_ADDR_WIDTH + `NC_ADDR_BITS), `_L3NC_MEM_TAG_WIDTH)
-`define L3MEM_TAG_WIDTH         (`L3_ENABLE ? `_L3MEM_TAG_WIDTH : (`L2MEM_TAG_WIDTH + `CLOG2(`L3NUM_REQS)))
+`define _L3_MEM_ADDR_RATIO_W     $clog2(`L3_CACHE_LINE_SIZE / `L3_WORD_SIZE)
+`define _L3_NC_MEM_TAG_WIDTH     ($clog2(`L3_NUM_REQS) + `_L3_MEM_ADDR_RATIO_W + `L2_MEM_TAG_WIDTH)
+`define _L3_MEM_TAG_WIDTH        `MAX((`CLOG2(`L3_NUM_BANKS) + `CLOG2(`L3_MSHR_SIZE) + `NC_FLAG_BITS), `_L3_NC_MEM_TAG_WIDTH)
+`define L3_MEM_TAG_WIDTH         ((`L3_ENABLE) ? `_L3_MEM_TAG_WIDTH : (`L2_MEM_TAG_WIDTH + `CLOG2(`L3_NUM_REQS)))
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define VX_MEM_BYTEEN_WIDTH     `L3MEM_BYTEEN_WIDTH   
-`define VX_MEM_ADDR_WIDTH       `L3MEM_ADDR_WIDTH
-`define VX_MEM_DATA_WIDTH       `L3MEM_DATA_WIDTH
-`define VX_MEM_TAG_WIDTH        `L3MEM_TAG_WIDTH
-`define VX_CORE_TAG_WIDTH       `L3CORE_TAG_WIDTH 
+`define VX_MEM_BYTEEN_WIDTH     `L3_MEM_BYTEEN_WIDTH   
+`define VX_MEM_ADDR_WIDTH       `L3_MEM_ADDR_WIDTH
+`define VX_MEM_DATA_WIDTH       `L3_MEM_DATA_WIDTH
+`define VX_MEM_TAG_WIDTH        `L3_MEM_TAG_WIDTH
+`define VX_CORE_TAG_WIDTH       `L3_CORE_TAG_WIDTH 
 `define VX_CSR_ID_WIDTH         `LOG2UP(`NUM_CLUSTERS * `NUM_CORES)
 
 `define TO_FULL_ADDR(x)         {x, (32-$bits(x))'(0)}
 
-// Merged D-cache/I-cache memory tag
-`define XMEM_TAG_WIDTH          (`DMEM_TAG_WIDTH + `CLOG2(2))
+///////////////////////////////////////////////////////////////////////////////
 
-////////////////////////////////////////////////////////////////////////////////////////
-
-`include "VX_types.vh"
+`include "VX_fpu_types.vh"
+`include "VX_gpu_types.vh"
 
 `endif

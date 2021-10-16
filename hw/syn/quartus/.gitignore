@@ -7,6 +7,9 @@
 /cache/*
 !/cache/Makefile
 
+/fpu_core/*
+!/fpu_core/Makefile
+
 /vortex/*
 !/vortex/Makefile
 

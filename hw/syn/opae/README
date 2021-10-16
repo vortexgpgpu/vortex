@@ -63,13 +63,13 @@ qsub-sim
 make ase
 
 # tests
-./run_ase.sh build_ase_arria10_1c ../../../driver/tests/basic/basic -n1 -t0
-./run_ase.sh build_ase_arria10_1c ../../../driver/tests/basic/basic -n1 -t1
-./run_ase.sh build_ase_arria10_1c ../../../driver/tests/basic/basic -n16
-./run_ase.sh build_ase_arria10_1c ../../../driver/tests/demo/demo -n16
-./run_ase.sh build_ase_arria10_1c ../../../driver/tests/dogfood/dogfood -n16
-./run_ase.sh build_ase_arria10_1c ../../../benchmarks/opencl/vecadd/vecadd
-./run_ase.sh build_ase_arria10_1c ../../../benchmarks/opencl/sgemm/sgemm -n4
+./run_ase.sh build_arria10_ase_1c ../../../tests/regression/basic/basic -n1 -t0
+./run_ase.sh build_arria10_ase_1c ../../../tests/regression/basic/basic -n1 -t1
+./run_ase.sh build_arria10_ase_1c ../../../tests/regression/basic/basic -n16
+./run_ase.sh build_arria10_ase_1c ../../../tests/regression/demo/demo -n16
+./run_ase.sh build_arria10_ase_1c ../../../tests/regression/dogfood/dogfood -n16
+./run_ase.sh build_arria10_ase_1c ../../../tests/opencl/vecadd/vecadd
+./run_ase.sh build_arria10_ase_1c ../../../tests/opencl/sgemm/sgemm -n4
 
 # modify "vsim_run.tcl" to dump VCD trace
 vcd file trace.vcd
@@ -82,7 +82,7 @@ tar -zcvf output_files_1c.tar.gz `find ./build_fpga_1c -type f \( -iname \*.rpt 
 # compress log trace
 tar -zcvf run.log.tar.gz run.log
 tar -cvjf trace.vcd.tar.bz2 trace.vcd run.log
-tar -cvjf trace.vcd.tar.bz2 build_ase_arria10_1c/work/run.log build_ase_arria10_1c/work/trace.vcd
+tar -cvjf trace.vcd.tar.bz2 build_arria10_ase_1c/work/run.log build_arria10_ase_1c/work/trace.vcd
 
 # decompress log trace
 tar -zxvf vortex.vcd.tar.gz

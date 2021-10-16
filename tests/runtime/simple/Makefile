@@ -6,7 +6,7 @@ AR = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc-ar
 DP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
 CP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
-CFLAGS += -march=rv32imf -mabi=ilp32f -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
+CFLAGS += -march=rv32imf -mabi=ilp32f -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections -fpermissive
 CFLAGS += -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw
 
 LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link.ld -Wl,--gc-sections $(VORTEX_RT_PATH)/libvortexrt.a
@@ -15,25 +15,25 @@ PROJECT = simple
 
 SRCS = main.cpp tests.cpp
 
-all: $(PROJECT).elf $(PROJECT).hex $(PROJECT).dump
+all: $(PROJECT).elf $(PROJECT).bin $(PROJECT).dump
 
 $(PROJECT).dump: $(PROJECT).elf
 	$(DP) -D $(PROJECT).elf > $(PROJECT).dump
 
-$(PROJECT).hex: $(PROJECT).elf
-	$(CP) -O ihex $(PROJECT).elf $(PROJECT).hex
+$(PROJECT).bin: $(PROJECT).elf
+	$(CP) -O binary $(PROJECT).elf $(PROJECT).bin
 
 $(PROJECT).elf: $(SRCS)
 	$(CC) $(CFLAGS) $(SRCS) $(LDFLAGS) -o $(PROJECT).elf
 
-run-rtlsim: $(PROJECT).hex
-	../../../hw/simulate/obj_dir/VVortex $(PROJECT).hex
+run-rtlsim: $(PROJECT).bin
+	../../../sim/rtlsim/rtlsim $(PROJECT).bin
 
-run-simx: $(PROJECT).hex
-	../../../simX/simX -a rv32i -c 1 -i $(PROJECT).hex
+run-simx: $(PROJECT).bin
+	../../../sim/simX/simX -a rv32i -c 1 -i $(PROJECT).bin
 
 .depend: $(SRCS)
 	$(CC) $(CFLAGS) -MM $^ > .depend;
 
 clean:
-	rm -rf *.elf *.hex *.dump .depend 
+	rm -rf *.elf *.bin *.dump .depend 

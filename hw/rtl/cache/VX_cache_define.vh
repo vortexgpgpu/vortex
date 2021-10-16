@@ -9,8 +9,10 @@
 
 `define REQS_BITS               `LOG2UP(NUM_REQS)
 
-//                               tag               valid  tid          word_sel              
-`define MSHR_DATA_WIDTH         (CORE_TAG_WIDTH + (1 +    `REQS_BITS + `UP(`WORD_SELECT_BITS)) * NUM_PORTS)
+`define PORTS_BITS              `LOG2UP(NUM_PORTS)
+
+//                                tag              valid  tid          word_sel              
+`define MSHR_DATA_WIDTH         ((CORE_TAG_WIDTH + 1 +    `REQS_BITS + `UP(`WORD_SELECT_BITS)) * NUM_PORTS)
 
 `define WORD_WIDTH              (8 * WORD_SIZE)
 
@@ -57,13 +59,13 @@
 
 `define CORE_RSP_TAGS           ((CORE_TAG_ID_BITS != 0) ? 1 : NUM_REQS)
 
-`define BANK_READY_COUNT        ((SHARED_BANK_READY != 0) ? 1 : NUM_BANKS)
-
-`define MEM_ADDR_BANK(x)        x[`BANK_SELECT_BITS+BANK_ADDR_OFFSET-1 : BANK_ADDR_OFFSET]
-
-`define MEM_TO_LINE_ADDR(x)     x[`MEM_ADDR_WIDTH-1 : `BANK_SELECT_BITS]
-
 `define LINE_TO_MEM_ADDR(x, i)  {x, `BANK_SELECT_BITS'(i)}
+
+`define MEM_ADDR_TO_BANK_ID(x)  x[0 +: `BANK_SELECT_BITS]
+
+`define MEM_TAG_TO_REQ_ID(x)    x[MSHR_ADDR_WIDTH-1:0]
+
+`define MEM_TAG_TO_BANK_ID(x)   x[MSHR_ADDR_WIDTH +: `BANK_SELECT_BITS]
 
 `define LINE_TO_BYTE_ADDR(x, i) {x, (32-$bits(x))'(i << (32-$bits(x)-`BANK_SELECT_BITS))}
 

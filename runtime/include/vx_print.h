@@ -9,7 +9,10 @@ extern "C" {
 
 int vx_vprintf(const char* format, va_list va);
 int vx_printf(const char * format, ...);
-int vx_putchar(int c);
+
+void vx_putchar(int c);
+void vx_putint(int value, int base);
+void vx_putfloat(float value, int precision);
 
 #ifdef __cplusplus
 }

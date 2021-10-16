@@ -1,32 +1,65 @@
 #!/bin/bash
 
-dir_list='../../rtl/libs ../../rtl/cache ../../rtl/interfaces ../../rtl'
+# this script uses sv2v and yosys tools to run.
+# sv2v: https://github.com/zachjs/sv2v
+# yosys: http://www.clifford.at/yosys/
 
-inc_list=""
-for dir in $dir_list; do
-	inc_list="$inc_list -I$dir"
+# exit when any command fails
+set -e
+
+source=""
+top_level=""
+dir_list=()
+inc_args=""
+macro_args=""
+
+usage() { echo "$0 usage:" && grep " .)\ #" $0; exit 0; }
+[ $# -eq 0 ] && usage
+while getopts "s:t:I:D:h" arg; do
+    case $arg in
+    s) # source
+        source=${OPTARG}
+        ;;
+    t) # top-level
+        top_level=${OPTARG}
+        ;;
+    I) # include directory
+        dir_list+=(${OPTARG})
+        inc_args="$inc_args -I${OPTARG}"
+        ;;
+    D) # macro definition
+        macro_args="$macro_args -D${OPTARG}"
+        ;;
+    h | *) 
+      usage
+      exit 0
+      ;;
+  esac
 done
 
-echo "inc_list=$inc_list"
-
-{
+{    
     # read design sources
-    for dir in $dir_list; do
+    for dir in "${dir_list[@]}" 
+    do
         for file in $(find $dir -maxdepth 1 -name '*.v' -o -name '*.sv' -type f) 
         do
-            echo "read_verilog -sv $inc_list $file"
+            echo "read_verilog $macro_args $inc_args -sv $file"
         done
     done
+    if [ -n "$source" ]; then
+        echo "read_verilog $macro_args $inc_args -sv $source"
+    fi
 
-    echo "hierarchy -check -top Vortex"
+    # generic synthesis
+    echo "synth -top $top_level"
 
-    # insertation of global reset
-	echo "add -global_input reset 1"
-	echo "proc -global_arst reset"
+    # mapping to mycells.lib
+    echo "dfflibmap -liberty mycells.lib"
+    echo "abc -liberty mycells.lib"
+    echo "clean"
 
-    echo "synth -run coarse; opt -fine"
-	echo "tee -o brams.log memory_bram -rules scripts/brams.txt;;"
-    echo "write_verilog -noexpr -noattr synth.v"
+    # write synthesized design
+    echo "write_verilog synth.v"
 } > synth.ys
 
-yosys -l synth.log synth.ys
+yosys -l yosys.log synth.ys

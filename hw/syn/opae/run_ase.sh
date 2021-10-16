@@ -35,5 +35,5 @@ done
 # run application
 pushd $PROGRAM_DIR
 echo "  [DBG]  running ./$PROGRAM $*"
-ASE_LOG=0 LD_LIBRARY_PATH=$POCL_RT_PATH/lib:$VORTEX_DRV_PATH/opae/ase:$LD_LIBRARY_PATH ./$PROGRAM $*
+ASE_LOG=0 LD_LIBRARY_PATH=$POCL_RT_PATH/lib:$VORTEX_DRV_PATH/asesim:$LD_LIBRARY_PATH ./$PROGRAM $*
 popd

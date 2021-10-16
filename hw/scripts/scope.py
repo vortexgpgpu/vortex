@@ -125,6 +125,11 @@ def parse_func_args(text):
 
     return (args, l)
 
+def load_include_path(dir):
+    if not dir in include_dirs:
+        print("*** include path: " + dir)
+        include_dirs.append(dir)
+
 def resolve_include_path(filename, parent_dir):    
     if os.path.basename(filename) in exclude_files:
         return None
@@ -137,7 +142,7 @@ def resolve_include_path(filename, parent_dir):
         filepath = os.path.join(dir, filename)
         if os.path.isfile(filepath):
             return os.path.abspath(filepath)    
-    raise Exception("couldn't find include file: " + filename)
+    raise Exception("couldn't find include file: " + filename + " in " + parent_dir)
 
 def remove_comments(text):
     text = re.sub(re.compile("/\*.*?\*/",re.DOTALL ), "", text) # multiline
@@ -273,6 +278,7 @@ def expand_text(text, params):
     return None
 
 def parse_include(filename, nesting):    
+    print("*** parsing: " + filename + "...")        
     if nesting > 99:
         raise Exception("include recursion!")    
     #print("*** parsing '" + filename + "'...")    
@@ -356,14 +362,10 @@ def parse_includes(includes):
 
     for include in includes:
         parse_include(include, 0)
+        load_include_path(os.path.dirname(include))
 
     # restore current directory
     os.chdir(old_dir)      
-
-def load_include_dirs(dirs):
-    for dir in dirs:
-        #print("*** include dir: " + dir)
-        include_dirs.append(dir)
 
 def load_defines(defines):
     for define in defines:
@@ -396,6 +398,8 @@ def eval_node(text, params):
     try:        
         __text = text.replace('$clog2', '__clog2')
         __text = translate_ternary(__text)
+        __text = __text.replace('||', 'or')
+        __text = __text.replace('&&', 'and')
         e = eval(__text, {'__clog2': clog2})
         return e
     except (NameError, SyntaxError):
@@ -801,7 +805,8 @@ def main():
     global br_stack
 
     if args.I:
-        load_include_dirs(args.I)
+        for dir in args.I:
+            load_include_path(dir)
     
     if args.D:
         load_defines(args.D)
@@ -809,6 +814,10 @@ def main():
     config = load_config(args.config) 
     
     exclude_files.append(os.path.basename(args.vl))
+
+    if "include_paths" in config:
+        for path in config["include_paths"]:
+            load_include_path(path)
 
     if "includes" in config:
         parse_includes(config["includes"])

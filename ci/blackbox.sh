@@ -20,6 +20,7 @@ L3=0
 DEBUG=0
 SCOPE=0
 HAS_ARGS=0
+DEBUG_LEVEL=1
 
 for i in "$@"
 do
@@ -88,28 +89,19 @@ done
 case $DRIVER in
     rtlsim)
         DRIVER_PATH=$VORTEX_HOME/driver/rtlsim
-        DRIVER_EXTRA=
-        CLEAN_TOKEN=clean
         ;;
     vlsim)
-        DRIVER_PATH=$VORTEX_HOME/driver/opae
-        DRIVER_EXTRA=vlsim
-        CLEAN_TOKEN=clean-vlsim
+        DRIVER_PATH=$VORTEX_HOME/driver/vlsim
         ;;
     asesim)
-        DRIVER_PATH=$VORTEX_HOME/driver/opae
-        DRIVER_EXTRA=asesim
-        CLEAN_TOKEN=clean-asesim
+        DRIVER_PATH=$VORTEX_HOME/driver/asesim
         ;;
     fpga)
-        DRIVER_PATH=$VORTEX_HOME/driver/opae
-        DRIVER_EXTRA=fpga
-        CLEAN_TOKEN=clean-fpga
+        DRIVER_PATH=$VORTEX_HOME/driver/fpga
         ;; 
     simx)
         DRIVER_PATH=$VORTEX_HOME/driver/simx
-        DRIVER_EXTRA=
-        CLEAN_TOKEN=clean
+        DEBUG_LEVEL=3
         ;;
     *)
         echo "invalid driver: $DRIVER"
@@ -132,7 +124,7 @@ CONFIGS="-DNUM_CLUSTERS=$CLUSTERS -DNUM_CORES=$CORES -DNUM_WARPS=$WARPS -DNUM_TH
 
 echo "CONFIGS=$CONFIGS"
 
-make -C $DRIVER_PATH $CLEAN_TOKEN
+make -C $DRIVER_PATH clean
 
 status=0
 
@@ -140,9 +132,9 @@ if [ $DEBUG -eq 1 ]
 then    
     if [ $SCOPE -eq 1 ]
     then
-        DEBUG=1 SCOPE=1 CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH $DRIVER_EXTRA
+        DEBUG=$DEBUG_LEVEL SCOPE=1 CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH
     else
-        DEBUG=1 CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH $DRIVER_EXTRA
+        DEBUG=$DEBUG_LEVEL CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH
     fi    
     
     if [ $HAS_ARGS -eq 1 ]
@@ -161,9 +153,9 @@ then
 else
     if [ $SCOPE -eq 1 ]
     then
-        SCOPE=1 CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH $DRIVER_EXTRA
+        SCOPE=1 CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH
     else
-        CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH $DRIVER_EXTRA
+        CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH
     fi
     
     if [ $HAS_ARGS -eq 1 ]

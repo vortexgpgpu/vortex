@@ -1,9 +1,21 @@
 {
     "version": 1,
+    "include_paths":[
+        "../dpi",
+        "../rtl",
+        "../rtl/afu",        
+        "../rtl/cache",        
+        "../rtl/fp_cores",
+        "../rtl/interfaces",
+        "../rtl/libs"        
+    ],
     "includes":[
-        "../rtl/VX_config.vh", 
-        "../rtl/VX_platform.vh", 
-        "../rtl/VX_define.vh", 
+        "../rtl/VX_config.vh",
+        "../rtl/VX_platform.vh",
+        "../rtl/VX_define.vh",
+        "../rtl/VX_gpu_types.vh",
+        "../rtl/fp_cores/VX_fpu_types.vh",
+        "../rtl/fp_cores/VX_fpu_define.vh",
         "../rtl/cache/VX_cache_define.vh"
     ],
     "modules": {
@@ -60,8 +72,8 @@
         "VX_gpu_unit": {},
         "VX_mem_unit": {
             "submodules": {                
-                "dcache": {"type":"VX_cache", "params":{"NUM_BANKS":"`DNUM_BANKS"}},
-                "icache": {"type":"VX_cache", "params":{"NUM_BANKS":"`INUM_BANKS"}}
+                "dcache": {"type":"VX_cache", "params":{"NUM_BANKS":"`DCACHE_NUM_BANKS"}},
+                "icache": {"type":"VX_cache", "params":{"NUM_BANKS":"1"}}
             }
         },
         "VX_cache": {
@@ -111,9 +123,9 @@
             "!cci_pending_writes_full": 1,
             "?afu_mem_req_fire": 1,            
             "afu_mem_req_addr": 26,
-            "afu_mem_req_tag": 29,
+            "afu_mem_req_tag": 27,
             "?afu_mem_rsp_fire": 1,
-            "afu_mem_rsp_tag": 29
+            "afu_mem_rsp_tag": 27
         },
         "afu/vortex": {
             "!reset": 1,
@@ -132,26 +144,26 @@
             "?icache_req_fire": 1,            
             "icache_req_wid":"`NW_BITS",
             "icache_req_addr": 32,
-            "icache_req_tag":"`ICORE_TAG_ID_BITS",
+            "icache_req_tag":"`ICACHE_CORE_TAG_ID_BITS",
             "?icache_rsp_fire": 1,
             "icache_rsp_data": 32,
-            "icache_rsp_tag":"`ICORE_TAG_ID_BITS"
+            "icache_rsp_tag":"`ICACHE_CORE_TAG_ID_BITS"
         },
         "afu/vortex/cluster/core/pipeline/fetch/warp_sched": {
-            "?wsched_scheduled_warp": 1,
+            "?wsched_scheduled": 1,
             "wsched_active_warps": "`NUM_WARPS",
-            "wsched_schedule_table": "`NUM_WARPS",
-            "wsched_schedule_ready": "`NUM_WARPS",
-            "wsched_warp_to_schedule": "`NW_BITS",
-            "wsched_warp_pc": "32"
+            "wsched_stalled_warps": "`NUM_WARPS",
+            "wsched_schedule_tmask": "`NUM_THREADS",
+            "wsched_schedule_wid": "`NW_BITS",
+            "wsched_schedule_pc": "32"
         },
         "afu/vortex/cluster/core/pipeline/execute/gpu_unit": {
             "?gpu_rsp_valid": 1, 
             "gpu_rsp_wid": "`NW_BITS", 
-            "gpu_rsp_tmc": "`GPU_TMC_BITS", 
-            "gpu_rsp_wspawn": "`GPU_WSPAWN_BITS",             
-            "gpu_rsp_split": "`GPU_SPLIT_BITS",
-            "gpu_rsp_barrier": "`GPU_BARRIER_BITS"
+            "gpu_rsp_tmc": 1, 
+            "gpu_rsp_wspawn": 1,             
+            "gpu_rsp_split": 1,
+            "gpu_rsp_barrier": 1    
         },
         "afu/vortex/cluster/core/pipeline/execute/lsu_unit": {
             "?dcache_req_fire":"`NUM_THREADS",
@@ -172,8 +184,8 @@
             "issue_tmask":"`NUM_THREADS",
             "issue_pc": 32,
             "issue_ex_type":"`EX_BITS",
-            "issue_op_type":"`OP_BITS",
-            "issue_op_mod":"`MOD_BITS",
+            "issue_op_type":"`INST_OP_BITS",
+            "issue_op_mod":"`INST_MOD_BITS",
             "issue_wb": 1,
             "issue_rd":"`NR_BITS",
             "issue_rs1":"`NR_BITS",
@@ -203,9 +215,7 @@
             "is_fill_st0": 1,
             "is_mshr_st0": 1,
             "miss_st0": 1,
-            "force_miss_st0": 1, 
-            "mshr_push": 1,
-            "?crsq_in_stall": 1,
+            "?crsq_stall": 1,
             "?mreq_alm_full": 1,
             "?mshr_alm_full": 1
         }
