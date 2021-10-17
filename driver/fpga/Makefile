@@ -65,12 +65,5 @@ scope: scope-defs.h
 $(PROJECT): $(SRCS) $(OPAE_SYN_DIR)/vortex_afu.h $(SCOPE_H)
 	$(CXX) $(CXXFLAGS) -DUSE_FPGA $^ $(LDFLAGS) -o $(PROJECT)
 
-.depend: $(SRCS)
-	$(CXX) $(CXXFLAGS) -MM $(SRCS) > .depend;
-
 clean:
-	rm -rf $(PROJECT) *.o .depend scope-defs.h
-
-ifneq ($(MAKECMDGOALS),clean)
-    -include .depend
-endif
+	rm -rf $(PROJECT) *.o scope-defs.h

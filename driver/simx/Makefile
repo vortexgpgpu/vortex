@@ -21,9 +21,6 @@ $(PROJECT): $(SRCS)
 	$(MAKE) -C $(SIMX_DIR) static
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
-.depend: $(SRCS)
-	$(CXX) $(CXXFLAGS) -MM $^ > .depend;	
-
 clean:
 	$(MAKE) -C $(SIMX_DIR) clean-static
-	rm -rf $(PROJECT) *.o .depend
+	rm -rf $(PROJECT) *.o
