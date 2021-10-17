@@ -88,7 +88,7 @@ module VX_icache_stage #(
     `SCOPE_ASSIGN (icache_rsp_data, icache_rsp_if.data);
     `SCOPE_ASSIGN (icache_rsp_tag,  rsp_tag);
 
-`ifdef DBG_PRINT_CORE_ICACHE
+`ifdef DBG_TRACE_CORE_ICACHE
     always @(posedge clk) begin
         if (icache_req_if.valid && icache_req_if.ready) begin
             dpi_trace("%d: I$%0d req: wid=%0d, PC=%0h\n", $time, CORE_ID, ifetch_req_if.wid, ifetch_req_if.PC);

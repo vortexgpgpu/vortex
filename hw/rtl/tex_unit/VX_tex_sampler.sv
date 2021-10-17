@@ -116,7 +116,7 @@ module VX_tex_sampler #(
     // can accept new request?
     assign req_ready = ~stall_out;   
 
-`ifdef DBG_PRINT_TEX
+`ifdef DBG_TRACE_TEX
     wire [`NW_BITS-1:0] req_wid, rsp_wid;
     wire [31:0]         req_PC, rsp_PC;
 
@@ -125,20 +125,20 @@ module VX_tex_sampler #(
 
     always @(posedge clk) begin        
         if (req_valid && req_ready) begin
-            $write("%t: core%0d-tex-sampler-req: wid=%0d, PC=%0h, tmask=%b, format=%0d, data=", 
+            dpi_trace("%d: core%0d-tex-sampler-req: wid=%0d, PC=%0h, tmask=%b, format=%0d, data=", 
                     $time, CORE_ID, req_wid, req_PC, req_tmask, req_format);
-            `PRINT_ARRAY2D(req_data, 4, NUM_REQS);
-            $write(", u0=");
-            `PRINT_ARRAY1D(req_blends[0], NUM_REQS);
-            $write(", v0=");
-            `PRINT_ARRAY1D(req_blends[1], NUM_REQS);
-            $write("\n");
+            `TRACE_ARRAY2D(req_data, 4, NUM_REQS);
+            dpi_trace(", u0=");
+            `TRACE_ARRAY1D(req_blends[0], NUM_REQS);
+            dpi_trace(", v0=");
+            `TRACE_ARRAY1D(req_blends[1], NUM_REQS);
+            dpi_trace("\n");
         end
         if (rsp_valid && rsp_ready) begin
-            $write("%t: core%0d-tex-sampler-rsp: wid=%0d, PC=%0h, tmask=%b, data=", 
+            dpi_trace("%d: core%0d-tex-sampler-rsp: wid=%0d, PC=%0h, tmask=%b, data=", 
                     $time, CORE_ID, rsp_wid, rsp_PC, rsp_tmask);
-            `PRINT_ARRAY1D(rsp_data, NUM_REQS);
-            $write("\n");
+            `TRACE_ARRAY1D(rsp_data, NUM_REQS);
+            dpi_trace("\n");
         end        
     end
 `endif  

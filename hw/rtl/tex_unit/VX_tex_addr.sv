@@ -150,7 +150,7 @@ module VX_tex_addr #(
 
     assign req_ready = ~stall_out;
 
-`ifdef DBG_PRINT_TEX
+`ifdef DBG_TRACE_TEX
     wire [`NW_BITS-1:0] rsp_wid;
     wire [31:0]         rsp_PC;
 
@@ -158,10 +158,10 @@ module VX_tex_addr #(
     
     always @(posedge clk) begin
         if (rsp_valid && rsp_ready) begin
-            $write("%t: core%0d-tex-addr: wid=%0d, PC=%0h, tmask=%b, req_filter=%0d, tride=%0d, addr=", 
+            dpi_trace("%d: core%0d-tex-addr: wid=%0d, PC=%0h, tmask=%b, req_filter=%0d, tride=%0d, addr=", 
                     $time, CORE_ID, rsp_wid, rsp_PC, rsp_tmask, rsp_filter, rsp_stride);
-            `PRINT_ARRAY2D(rsp_addr, 4, NUM_REQS);
-            $write("\n");
+            `TRACE_ARRAY2D(rsp_addr, 4, NUM_REQS);
+            dpi_trace("\n");
         end
     end
 `endif

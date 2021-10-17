@@ -271,7 +271,7 @@ module VX_shared_mem #(
     end
 `endif
 
-`ifdef DBG_PRINT_CACHE_BANK
+`ifdef DBG_TRACE_CACHE_BANK
     
     reg is_multi_tag_req;
 `IGNORE_UNUSED_BEGIN

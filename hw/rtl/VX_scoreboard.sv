@@ -57,7 +57,7 @@ module VX_scoreboard  #(
         if (reset) begin
             deadlock_ctr <= 0;
         end else begin
-        `ifdef DBG_PRINT_PIPELINE
+        `ifdef DBG_TRACE_PIPELINE
             if (ibuffer_if.valid && ~ibuffer_if.ready) begin
                 dpi_trace("%d: *** core%0d-stall: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b\n", 
                     $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.rd, ibuffer_if.wb, 

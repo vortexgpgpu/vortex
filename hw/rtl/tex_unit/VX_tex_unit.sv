@@ -199,34 +199,34 @@ module VX_tex_unit #(
         .rsp_ready  (tex_rsp_if.ready)
     );    
 
-`ifdef DBG_PRINT_TEX
+`ifdef DBG_TRACE_TEX
     always @(posedge clk) begin
         if (tex_req_if.valid && tex_req_if.ready) begin
             for (integer i = 0; i < `NUM_TEX_UNITS; ++i) begin
                 if (csrs_dirty[i]) begin
-                    $display("%t: core%0d-tex-csr: tex%0d_addr=%0h", $time, CORE_ID, i, tex_baddr[i]);
-                    $display("%t: core%0d-tex-csr: tex%0d_format=%0h", $time, CORE_ID, i, tex_format[i]);
-                    $display("%t: core%0d-tex-csr: tex%0d_wrap_u=%0h", $time, CORE_ID, i, tex_wraps[i][0]);
-                    $display("%t: core%0d-tex-csr: tex%0d_wrap_v=%0h", $time, CORE_ID, i, tex_wraps[i][1]);
-                    $display("%t: core%0d-tex-csr: tex%0d_filter=%0h", $time, CORE_ID, i, tex_filter[i]);
-                    $display("%t: core%0d-tex-csr: tex%0d_mipoff[0]=%0h", $time, CORE_ID, i, tex_mipoff[i][0]);
-                    $display("%t: core%0d-tex-csr: tex%0d_width[0]=%0h", $time, CORE_ID, i, tex_dims[i][0][0]);
-                    $display("%t: core%0d-tex-csr: tex%0d_height[0]=%0h", $time, CORE_ID, i, tex_dims[i][0][1]);
+                    dpi_trace("%d: core%0d-tex-csr: tex%0d_addr=%0h\n", $time, CORE_ID, i, tex_baddr[i]);
+                    dpi_trace("%d: core%0d-tex-csr: tex%0d_format=%0h\n", $time, CORE_ID, i, tex_format[i]);
+                    dpi_trace("%d: core%0d-tex-csr: tex%0d_wrap_u=%0h\n", $time, CORE_ID, i, tex_wraps[i][0]);
+                    dpi_trace("%d: core%0d-tex-csr: tex%0d_wrap_v=%0h\n", $time, CORE_ID, i, tex_wraps[i][1]);
+                    dpi_trace("%d: core%0d-tex-csr: tex%0d_filter=%0h\n", $time, CORE_ID, i, tex_filter[i]);
+                    dpi_trace("%d: core%0d-tex-csr: tex%0d_mipoff[0]=%0h\n", $time, CORE_ID, i, tex_mipoff[i][0]);
+                    dpi_trace("%d: core%0d-tex-csr: tex%0d_width[0]=%0h\n", $time, CORE_ID, i, tex_dims[i][0][0]);
+                    dpi_trace("%d: core%0d-tex-csr: tex%0d_height[0]=%0h\n", $time, CORE_ID, i, tex_dims[i][0][1]);
                 end
             end
             
-            $write("%t: core%0d-tex-req: wid=%0d, PC=%0h, tmask=%b, unit=%0d, lod=%0h, u=", 
+            dpi_trace("%d: core%0d-tex-req: wid=%0d, PC=%0h, tmask=%b, unit=%0d, lod=%0h, u=", 
                     $time, CORE_ID, tex_req_if.wid, tex_req_if.PC, tex_req_if.tmask, tex_req_if.unit, tex_req_if.lod);
-            `PRINT_ARRAY1D(tex_req_if.coords[0], `NUM_THREADS);
-            $write(", v=");
-            `PRINT_ARRAY1D(tex_req_if.coords[1], `NUM_THREADS);
-            $write("\n");
+            `TRACE_ARRAY1D(tex_req_if.coords[0], `NUM_THREADS);
+            dpi_trace(", v=");
+            `TRACE_ARRAY1D(tex_req_if.coords[1], `NUM_THREADS);
+            dpi_trace("\n");
         end
         if (tex_rsp_if.valid && tex_rsp_if.ready) begin
-             $write("%t: core%0d-tex-rsp: wid=%0d, PC=%0h, tmask=%b, data=", 
+             dpi_trace("%d: core%0d-tex-rsp: wid=%0d, PC=%0h, tmask=%b, data=", 
                     $time, CORE_ID, tex_rsp_if.wid, tex_rsp_if.PC, tex_rsp_if.tmask);
-            `PRINT_ARRAY1D(tex_rsp_if.data, `NUM_THREADS);
-            $write("\n");
+            `TRACE_ARRAY1D(tex_rsp_if.data, `NUM_THREADS);
+            dpi_trace("\n");
         end
     end
 `endif
