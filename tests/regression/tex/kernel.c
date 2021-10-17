@@ -1,31 +1,31 @@
 #include <stdint.h>
 #include <vx_intrinsics.h>
+#include <vx_spawn.h>
 #include "common.h"
 #include "texsw.h"
 
 #define ENABLE_SW
 
-struct tile_arg_t {
-  	struct kernel_arg_t* state;	
+typedef struct {
+  	kernel_arg_t* state;	
   	uint32_t tile_width;
  	uint32_t tile_height;
   	float deltaX;
   	float deltaY;
-};
+} tile_arg_t;
 
-void kernel_body(int task_id, void* arg) {
-	struct tile_arg_t* _arg = (struct tile_arg_t*)(arg);
-	struct kernel_arg_t* state = _arg->state;
+void kernel_body(int task_id, tile_arg_t* arg) {
+	kernel_arg_t* state = arg->state;
 	
 	uint32_t xoffset = 0;
-	uint32_t yoffset = task_id * _arg->tile_height;	
+	uint32_t yoffset = task_id * arg->tile_height;	
 	uint8_t* dst_ptr = (uint8_t*)(state->dst_ptr + xoffset * state->dst_stride + yoffset * state->dst_pitch);
 
-	float fv = yoffset * _arg->deltaY;
-	for (uint32_t y = 0; y < _arg->tile_height; ++y) {
+	float fv = yoffset * arg->deltaY;
+	for (uint32_t y = 0; y < arg->tile_height; ++y) {
 		uint32_t* dst_row = (uint32_t*)dst_ptr;
-		float fu = xoffset * _arg->deltaX;
-		for (uint32_t x = 0; x < _arg->tile_width; ++x) {
+		float fu = xoffset * arg->deltaX;
+		for (uint32_t x = 0; x < arg->tile_width; ++x) {
 			int32_t u = (int32_t)(fu * (1<<20));
 			int32_t v = (int32_t)(fv * (1<<20));
 		#ifdef ENABLE_SW
@@ -37,15 +37,15 @@ void kernel_body(int task_id, void* arg) {
 		#ifdef ENABLE_SW
 			}
 		#endif
-			fu += _arg->deltaX;
+			fu += arg->deltaX;
 		}
 		dst_ptr += state->dst_pitch;
-		fv += _arg->deltaY;
+		fv += arg->deltaY;
 	}
 }
 
 int main() {
-	struct kernel_arg_t* arg = (struct kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
+	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
 
 	// configure texture unit
 	vx_csr_write(CSR_TEX_ADDR(0),   arg->src_ptr);
@@ -56,12 +56,12 @@ int main() {
 	vx_csr_write(CSR_TEX_WRAP(0),   (arg->wrap << 2) | arg->wrap);
 	vx_csr_write(CSR_TEX_FILTER(0), (arg->filter ? 1 : 0));
 
-	struct tile_arg_t targ;
+	tile_arg_t targ;
 	targ.state       = arg;
 	targ.tile_width  = arg->dst_width;
 	targ.tile_height = (arg->dst_height + arg->num_tasks - 1) / arg->num_tasks;    
 	targ.deltaX      = 1.0f / arg->dst_width;
 	targ.deltaY      = 1.0f / arg->dst_height;
 	
-	vx_spawn_tasks(arg->num_tasks, kernel_body, &targ);
+	vx_spawn_tasks(arg->num_tasks, (vx_spawn_tasks_cb)kernel_body, &targ);
 }

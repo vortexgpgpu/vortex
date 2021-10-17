@@ -3,7 +3,7 @@
 #include <vx_spawn.h>
 #include "common.h"
 
-void kernel_body(int task_id, const kernel_arg_t* arg) {
+void kernel_body(int task_id, kernel_arg_t* arg) {
 	uint32_t* src_ptr = (uint32_t*)arg->src_ptr;
 	uint32_t* dst_ptr = (uint32_t*)arg->dst_ptr;
 
@@ -13,6 +13,6 @@ void kernel_body(int task_id, const kernel_arg_t* arg) {
 }
 
 void main() {
-	const kernel_arg_t* arg = (const kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
-	vx_spawn_tasks(arg->num_points, kernel_body, arg);
+	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
+	vx_spawn_tasks(arg->num_points, (vx_spawn_tasks_cb)kernel_body, arg);
 }
