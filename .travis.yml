@@ -30,25 +30,28 @@ jobs:
   include:
     - stage: test
       name: coverage
-      script: cp -r $PWD ../build1 && cd ../build1 && ./ci/travis_run.py ./ci/regression.sh -coverage
+      script: cp -r $PWD ../build_coverage && cd ../build_coverage && ./ci/travis_run.py ./ci/regression.sh -coverage
+    - stage: test
+      name: tex
+      script: cp -r $PWD ../build_tex && cd ../build_tex && ./ci/travis_run.py ./ci/regression.sh -tex
     - stage: test
       name: cluster
-      script: cp -r $PWD ../build2 && cd ../build2 && ./ci/travis_run.py ./ci/regression.sh -cluster
+      script: cp -r $PWD ../build_cluster && cd ../build_cluster && ./ci/travis_run.py ./ci/regression.sh -cluster
     - stage: test
       name: debug
-      script: cp -r $PWD ../build3 && cd ../build3 && ./ci/travis_run.py ./ci/regression.sh -debug
+      script: cp -r $PWD ../build_debug && cd ../build_debug && ./ci/travis_run.py ./ci/regression.sh -debug
     - stage: test
       name: config
-      script: cp -r $PWD ../build4 && cd ../build4 && ./ci/travis_run.py ./ci/regression.sh -config
+      script: cp -r $PWD ../build_config && cd ../build_config && ./ci/travis_run.py ./ci/regression.sh -config
     - stage: test
       name: stress0
-      script: cp -r $PWD ../build5 && cd ../build5 && ./ci/travis_run.py ./ci/regression.sh -stress0
+      script: cp -r $PWD ../build_stress0 && cd ../build_stress0 && ./ci/travis_run.py ./ci/regression.sh -stress0
     - stage: test
       name: stress1
-      script: cp -r $PWD ../build6 && cd ../build6 && ./ci/travis_run.py ./ci/regression.sh -stress1
+      script: cp -r $PWD ../build_stress1 && cd ../build_stress1 && ./ci/travis_run.py ./ci/regression.sh -stress1
     - stage: test
       name: compiler
-      script: cp -r $PWD ../build7 && cd ../build7 && ./ci/travis_run.py ./ci/test_compiler.sh
+      script: cp -r $PWD ../build_compiler && cd ../build_compiler && ./ci/travis_run.py ./ci/test_compiler.sh
   
 after_success:
   # Gather code coverage
