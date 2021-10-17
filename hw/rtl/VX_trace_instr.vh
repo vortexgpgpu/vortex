@@ -1,9 +1,9 @@
-`ifndef VX_PRINT_INSTR
-`define VX_PRINT_INSTR
+`ifndef VX_TRACE_INSTR
+`define VX_TRACE_INSTR
 
 `include "VX_define.vh"
 
-task print_ex_type (
+task trace_ex_type (
     input [`EX_BITS-1:0] ex_type
 );
     case (ex_type)
@@ -16,7 +16,7 @@ task print_ex_type (
     endcase  
 endtask
 
-task print_ex_op (
+task trace_ex_op (
   input [`EX_BITS-1:0] ex_type,
   input [`INST_OP_BITS-1:0] op_type,
   input [`INST_MOD_BITS-1:0] op_mod

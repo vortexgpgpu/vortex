@@ -257,7 +257,7 @@ module VX_tex_mem #(
     // Can accept new cache response?
     assign dcache_rsp_if.ready = ~(is_last_rsp && stall_out);
 
-`ifdef DBG_PRINT_TEX
+`ifdef DBG_TRACE_TEX
     wire [`NW_BITS-1:0] q_req_wid, req_wid, rsp_wid;
     wire [31:0]         q_req_PC, req_PC, rsp_PC;
     assign {q_req_wid, q_req_PC} = q_req_info[`NW_BITS+32-1:0];
@@ -266,28 +266,28 @@ module VX_tex_mem #(
 
     always @(posedge clk) begin        
         if (dcache_req_fire_any) begin
-            $write("%t: core%0d-tex-cache-req: wid=%0d, PC=%0h, tmask=%b, tag=%0h, addr=", 
+            dpi_trace("%d: core%0d-tex-cache-req: wid=%0d, PC=%0h, tmask=%b, tag=%0h, addr=", 
                     $time, CORE_ID, q_req_wid, q_req_PC, dcache_req_fire, req_texel_idx);
-            `PRINT_ARRAY1D(req_texel_addr, NUM_REQS);
-            $write(", is_dup=%b\n", req_texel_dup);
+            `TRACE_ARRAY1D(req_texel_addr, NUM_REQS);
+            dpi_trace(", is_dup=%b\n", req_texel_dup);
         end
         if (dcache_rsp_fire) begin
-            $write("%t: core%0d-tex-cache-rsp: wid=%0d, PC=%0h, tmask=%b, tag=%0h, data=", 
+            dpi_trace("%d: core%0d-tex-cache-rsp: wid=%0d, PC=%0h, tmask=%b, tag=%0h, data=", 
                     $time, CORE_ID, q_req_wid, q_req_PC, dcache_rsp_if.tmask, rsp_texel_idx);
-            `PRINT_ARRAY1D(dcache_rsp_if.data, NUM_REQS);
-            $write("\n");
+            `TRACE_ARRAY1D(dcache_rsp_if.data, NUM_REQS);
+            dpi_trace("\n");
         end
         if (req_valid && req_ready) begin
-            $write("%t: core%0d-tex-mem-req: wid=%0d, PC=%0h, tmask=%b, filter=%0d, stride=%0d, addr=", 
+            dpi_trace("%d: core%0d-tex-mem-req: wid=%0d, PC=%0h, tmask=%b, filter=%0d, stride=%0d, addr=", 
                     $time, CORE_ID, req_wid, req_PC, req_tmask, req_filter, req_stride);
-            `PRINT_ARRAY2D(req_addr, 4, NUM_REQS);
-            $write("\n");
+            `TRACE_ARRAY2D(req_addr, 4, NUM_REQS);
+            dpi_trace("\n");
         end
         if (rsp_valid && rsp_ready) begin
-            $write("%t: core%0d-tex-mem-rsp: wid=%0d, PC=%0h, tmask=%b, data=", 
+            dpi_trace("%d: core%0d-tex-mem-rsp: wid=%0d, PC=%0h, tmask=%b, data=", 
                     $time, CORE_ID, rsp_wid, rsp_PC, rsp_tmask);
-            `PRINT_ARRAY2D(rsp_data, 4, NUM_REQS);
-            $write("\n");
+            `TRACE_ARRAY2D(rsp_data, 4, NUM_REQS);
+            dpi_trace("\n");
         end        
     end
 `endif

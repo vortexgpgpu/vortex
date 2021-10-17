@@ -93,13 +93,13 @@ module VX_scope #(
                     CMD_SET_START: begin 
                         delay_val <= $bits(delay_val)'(cmd_data); 
                         cmd_start <= 1;
-                    `ifdef DBG_PRINT_SCOPE
+                    `ifdef DBG_TRACE_SCOPE
                         dpi_trace("%d: *** scope: CMD_SET_START: delay_val=%0d\n", $time, $bits(delay_val)'(cmd_data));
                     `endif
                     end
                     CMD_SET_STOP: begin
                         waddr_end <= $bits(waddr)'(cmd_data);
-                    `ifdef DBG_PRINT_SCOPE
+                    `ifdef DBG_TRACE_SCOPE
                         dpi_trace("%d: *** scope: CMD_SET_STOP: waddr_end=%0d\n", $time, $bits(waddr)'(cmd_data));
                     `endif
                     end
@@ -116,7 +116,7 @@ module VX_scope #(
                     delta       <= 0;
                     delay_cntr  <= 0;
                     start_time  <= timestamp;
-                `ifdef DBG_PRINT_SCOPE
+                `ifdef DBG_TRACE_SCOPE
                     dpi_trace("%d: *** scope: recording start - start_time=%0d\n", $time, timestamp);
                 `endif
                 end else begin
@@ -132,7 +132,7 @@ module VX_scope #(
                     recording  <= 1;
                     delta      <= 0;
                     start_time <= timestamp;
-                `ifdef DBG_PRINT_SCOPE
+                `ifdef DBG_TRACE_SCOPE
                     dpi_trace("%d: *** scope: recording start - start_time=%0d\n", $time, timestamp);
                 `endif
                 end 
@@ -161,7 +161,7 @@ module VX_scope #(
 
                 if (stop
                  || (waddr >= waddr_end)) begin
-                `ifdef DBG_PRINT_SCOPE
+                `ifdef DBG_TRACE_SCOPE
                     dpi_trace("%d: *** scope: recording stop - waddr=(%0d, %0d)\n", $time, waddr, waddr_end);
                 `endif
                     waddr      <= waddr;  // keep last address
@@ -229,7 +229,7 @@ module VX_scope #(
 
     assign bus_out = bus_out_r;
 
-`ifdef DBG_PRINT_SCOPE
+`ifdef DBG_TRACE_SCOPE
     always @(posedge clk) begin
         if (bus_read) begin
             dpi_trace("%d: scope-read: cmd=%0d, addr=%0d, value=%0h\n", $time, get_cmd, raddr, bus_out);

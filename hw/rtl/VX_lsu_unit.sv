@@ -330,7 +330,7 @@ module VX_lsu_unit #(
     end
 `endif
     
-`ifdef DBG_PRINT_CORE_DCACHE
+`ifdef DBG_TRACE_CORE_DCACHE
     wire dcache_req_fire_any = (| dcache_req_fire);
     always @(posedge clk) begin    
         if (lsu_req_if.valid && fence_wait) begin
