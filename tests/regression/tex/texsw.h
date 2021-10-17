@@ -65,7 +65,7 @@ inline int pack(int format, int l, int h) {
     }
 }
 
-inline int tex_sw(struct kernel_arg_t* state, int stage, int u, int v, int lod) {
+inline int tex_sw(kernel_arg_t* state, int stage, int u, int v, int lod) {
     int base_addr  = state->src_ptr;
 	int mip_offset = 0;
 	int log_width  = state->src_logWidth;
@@ -148,7 +148,7 @@ inline int vx_tex3(int stage, int u, int v, int lod) {
     return c;
 }
 
-inline int tex3_sw(struct kernel_arg_t* state, int stage, int u, int v, int lod) {
+inline int tex3_sw(kernel_arg_t* state, int stage, int u, int v, int lod) {
     int lodn = MIN(lod + 0x10000, TEX_LOD_MAX);
     int a = tex_sw(state, 0, u, v, lod);    
     int b = tex_sw(state, 0, u, v, lodn);

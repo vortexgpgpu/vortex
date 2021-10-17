@@ -3,7 +3,7 @@
 
 #define KERNEL_ARG_DEV_MEM_ADDR 0x7ffff000
 
-struct kernel_arg_t {
+typedef struct {
   uint32_t num_tasks;
   uint8_t format;
   uint8_t filter;
@@ -20,6 +20,6 @@ struct kernel_arg_t {
   uint8_t dst_stride;  
   uint32_t dst_pitch;
   uint32_t dst_ptr;  
-};
+} kernel_arg_t;
 
 #endif

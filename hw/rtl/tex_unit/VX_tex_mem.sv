@@ -1,5 +1,5 @@
 `include "VX_tex_define.vh"
-module VX_tex_memory #(
+module VX_tex_mem #(
     parameter CORE_ID   = 0,
     parameter REQ_INFOW = 1,
     parameter NUM_REQS  = 1

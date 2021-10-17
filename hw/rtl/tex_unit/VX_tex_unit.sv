@@ -137,11 +137,11 @@ module VX_tex_unit #(
     wire [REQ_INFOW_M-1:0] mem_rsp_info;
     wire mem_rsp_ready;        
 
-    VX_tex_memory #(
+    VX_tex_mem #(
         .CORE_ID   (CORE_ID),
         .REQ_INFOW (REQ_INFOW_M),
         .NUM_REQS  (`NUM_THREADS)
-    ) tex_memory (
+    ) tex_mem (
         .clk           (clk),
         .reset         (reset),
 
