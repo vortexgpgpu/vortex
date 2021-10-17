@@ -93,9 +93,6 @@ module VX_writeback #(
     assign fpu_commit_if.ready = rsp_ready[1] || ~fpu_commit_if.wb;
     assign alu_commit_if.ready = rsp_ready[2] || ~alu_commit_if.wb;
     assign csr_commit_if.ready = rsp_ready[3] || ~csr_commit_if.wb;
-`ifdef EXT_TEX_ENABLE
-    assign gpu_commit_if.ready = rsp_ready[4] || ~gpu_commit_if.wb;
-`endif
 `else
     assign alu_commit_if.ready = rsp_ready[1] || ~alu_commit_if.wb;
     assign csr_commit_if.ready = rsp_ready[2] || ~csr_commit_if.wb;
@@ -103,6 +100,16 @@ module VX_writeback #(
     assign gpu_commit_if.ready = rsp_ready[3] || ~gpu_commit_if.wb;
 `endif
 `endif    
+
+`ifdef EXT_TEX_ENABLE
+`ifdef EXT_F_ENABLE
+    assign gpu_commit_if.ready = rsp_ready[4] || ~gpu_commit_if.wb;
+`else
+    assign gpu_commit_if.ready = rsp_ready[3] || ~gpu_commit_if.wb;
+`endif
+`else
+    assign gpu_commit_if.ready = 1;
+`endif
     
     assign stall = ~writeback_if.ready && writeback_if.valid;
     
