@@ -40,6 +40,7 @@ module VX_lsu_unit #(
     wire [`NW_BITS-1:0]           req_wid;
     wire [31:0]                   req_pc;
     wire                          req_is_dup;
+    wire                          req_is_prefetch;
     
     wire mbuf_empty;
 
@@ -80,14 +81,14 @@ module VX_lsu_unit #(
     wire lsu_valid = lsu_req_if.valid && ~fence_wait;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + `NW_BITS + `NUM_THREADS + 32 + (`NUM_THREADS * 32) + (`NUM_THREADS * ADDR_TYPEW) + `INST_LSU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32)),
+        .DATAW  (1 + 1 + 1 + `NW_BITS + `NUM_THREADS + 32 + (`NUM_THREADS * 32) + (`NUM_THREADS * ADDR_TYPEW) + `INST_LSU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32)),
         .RESETW (1)
     ) req_pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_in),
-        .data_in  ({lsu_valid, lsu_is_dup, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, full_addr, lsu_addr_type, lsu_req_if.op_type, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.store_data}),
-        .data_out ({req_valid, req_is_dup, req_wid,        req_tmask,        req_pc,        req_addr,  req_addr_type, req_type,           req_rd,        req_wb,        req_data})
+        .data_in  ({lsu_valid, lsu_is_dup, lsu_req_if.is_prefetch, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, full_addr, lsu_addr_type, lsu_req_if.op_type, lsu_req_if.rd, lsu_req_if.wb | lsu_req_if.is_prefetch, lsu_req_if.store_data}),
+        .data_out ({req_valid, req_is_dup, req_is_prefetch,        req_wid,        req_tmask,        req_pc,        req_addr,  req_addr_type, req_type,           req_rd,        req_wb,        req_data})
     );
 
     // Can accept new request?
@@ -99,6 +100,7 @@ module VX_lsu_unit #(
     wire rsp_wb;
     wire [`INST_LSU_BITS-1:0] rsp_type;
     wire rsp_is_dup;
+    wire rsp_is_prefetch;
 
     `UNUSED_VAR (rsp_type)
     
@@ -133,7 +135,7 @@ module VX_lsu_unit #(
     assign mbuf_raddr = dcache_rsp_if.tag[ADDR_TYPEW +: `LSUQ_ADDR_BITS];    
 
     VX_index_buffer #(
-        .DATAW (`NW_BITS + 32 + `NUM_THREADS + `NR_BITS + 1 + `INST_LSU_BITS + (`NUM_THREADS * REQ_ASHIFT) + 1),
+        .DATAW (`NW_BITS + 32 + `NUM_THREADS + `NR_BITS + 1 + `INST_LSU_BITS + (`NUM_THREADS * REQ_ASHIFT) + 1 + 1),
         .SIZE  (`LSUQ_SIZE)
     ) req_metadata (
         .clk          (clk),
@@ -141,8 +143,8 @@ module VX_lsu_unit #(
         .write_addr   (mbuf_waddr),  
         .acquire_slot (mbuf_push),       
         .read_addr    (mbuf_raddr),
-        .write_data   ({req_wid, req_pc, req_tmask, req_rd, req_wb, req_type, req_offset, req_is_dup}),                    
-        .read_data    ({rsp_wid, rsp_pc, rsp_tmask, rsp_rd, rsp_wb, rsp_type, rsp_offset, rsp_is_dup}),
+        .write_data   ({req_wid, req_pc, req_tmask, req_rd, req_wb, req_type, req_offset, req_is_dup, req_is_prefetch}),                    
+        .read_data    ({rsp_wid, rsp_pc, rsp_tmask, rsp_rd, rsp_wb, rsp_type, rsp_offset, rsp_is_dup, rsp_is_prefetch}),
         .release_addr (mbuf_raddr),
         .release_slot (mbuf_pop),     
         .full         (mbuf_full),
@@ -274,6 +276,8 @@ module VX_lsu_unit #(
 
     // send load commit
 
+    // ignore responce from software prefetch
+    wire rsp_valid = (rsp_is_prefetch)? 0:(| dcache_rsp_if.valid);
     wire load_rsp_stall = ~ld_commit_if.ready && ld_commit_if.valid;
     
     VX_pipe_register #(
@@ -283,12 +287,12 @@ module VX_lsu_unit #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!load_rsp_stall),
-        .data_in  ({dcache_rsp_if.valid, rsp_wid,          rsp_tmask_qual,     rsp_pc,          rsp_rd,          rsp_wb,          rsp_data,          mbuf_pop}),
+        .data_in  ({rsp_valid,           rsp_wid,          rsp_tmask_qual,     rsp_pc,          rsp_rd,          rsp_wb,          rsp_data,          mbuf_pop}),
         .data_out ({ld_commit_if.valid,  ld_commit_if.wid, ld_commit_if.tmask, ld_commit_if.PC, ld_commit_if.rd, ld_commit_if.wb, ld_commit_if.data, ld_commit_if.eop})
     );
 
     // Can accept new cache response?
-    assign dcache_rsp_if.ready = ~load_rsp_stall;
+    assign dcache_rsp_if.ready = rsp_is_prefetch ? 1 : ~load_rsp_stall;
 
     // scope registration
     `SCOPE_ASSIGN (dcache_req_fire,  dcache_req_fire);
@@ -345,7 +349,7 @@ module VX_lsu_unit #(
                 `TRACE_ARRAY1D(dcache_req_if.data, `NUM_THREADS);
                 dpi_trace("\n");
             end else begin
-                dpi_trace("%d: D$%0d Rd Req: wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, dcache_req_fire);
+                dpi_trace("%d: D$%0d Rd Req: req_is_prefetch=%b, wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_is_prefetch, req_wid, req_pc, dcache_req_fire);
                 `TRACE_ARRAY1D(req_addr, `NUM_THREADS);
                 dpi_trace(", tag=%0h, byteen=%0h, type=", req_tag, dcache_req_if.byteen);
                 `TRACE_ARRAY1D(req_addr_type, `NUM_THREADS);
@@ -353,8 +357,8 @@ module VX_lsu_unit #(
             end
         end
         if (dcache_rsp_fire) begin
-            dpi_trace("%d: D$%0d Rsp: wid=%0d, PC=%0h, tmask=%b, tag=%0h, rd=%0d, data=", 
-                $time, CORE_ID, rsp_wid, rsp_pc, dcache_rsp_if.tmask, mbuf_raddr, rsp_rd);
+            dpi_trace("%d: D$%0d Rsp: rsp_is_prefetch=%b, wid=%0d, PC=%0h, tmask=%b, tag=%0h, rd=%0d, data=", 
+                $time, CORE_ID, rsp_is_prefetch, rsp_wid, rsp_pc, dcache_rsp_if.tmask, mbuf_raddr, rsp_rd);
             `TRACE_ARRAY1D(dcache_rsp_if.data, `NUM_THREADS);
             dpi_trace(", is_dup=%b\n", rsp_is_dup);
         end
