@@ -230,6 +230,8 @@ inline void vx_fence() {
 
 #define __endif vx_join();
 
+#define __DIVERGENT__ __attribute__((annotate("divergent")))
+
 #ifdef __cplusplus
 }
 #endif
