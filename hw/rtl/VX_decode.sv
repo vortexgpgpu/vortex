@@ -380,7 +380,8 @@ module VX_decode  #(
                     3'h5: begin
                         op_type = `INST_OP_BITS'(`INST_GPU_TEX);
                         op_mod  = `INST_MOD_BITS'(func2);
-                        use_rd  = 1;                     
+                        use_rd  = 1;       
+                        `USED_IREG (rd);              
                         `USED_IREG (rs1);
                         `USED_IREG (rs2);
                         `USED_IREG (rs3);
