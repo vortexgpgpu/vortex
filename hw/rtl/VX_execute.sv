@@ -45,8 +45,7 @@ module VX_execute #(
     VX_commit_if.master     gpu_commit_if,
     
     input wire              busy
-);
-    VX_fpu_to_csr_if fpu_to_csr_if(); 
+);     
 
 `ifdef EXT_TEX_ENABLE
 
@@ -143,8 +142,11 @@ module VX_execute #(
 
 `endif
 
+`ifdef EXT_TEX_ENABLE
     wire [`NUM_WARPS-1:0] csr_pending;
     wire [`NUM_WARPS-1:0] fpu_pending;
+    VX_fpu_to_csr_if fpu_to_csr_if();
+`endif
 
     `RESET_RELAY (alu_reset);
     `RESET_RELAY (lsu_reset);
