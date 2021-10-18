@@ -71,8 +71,8 @@ module VX_warp_sched #(
 
             // activate first warp
             warp_pcs[0]     <= `STARTUP_ADDR;
-            active_warps[0] <= '1;
-            thread_masks[0] <= '1;
+            active_warps[0] <= 1;
+            thread_masks[0] <= 1;
         end else begin            
             if (warp_ctl_if.valid && warp_ctl_if.wspawn.valid) begin
                 use_wspawn <= warp_ctl_if.wspawn.wmask & (~`NUM_WARPS'(1));
