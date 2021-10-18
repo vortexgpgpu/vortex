@@ -151,6 +151,7 @@
 `define INST_LSU_FMT(x)      x[2:0]
 `define INST_LSU_WSIZE(x)    x[1:0]
 `define INST_LSU_IS_FENCE(x) x[0]
+`define INST_LSU_IS_PREF(x)  (x==3'b111)
 
 `define INST_FENCE_BITS      1
 `define INST_FENCE_D         1'h0
