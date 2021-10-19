@@ -6,7 +6,7 @@
 - [riscv-toolchain](https://github.com/riscv-collab/riscv-gnu-toolchain)
 - [llvm-riscv](https://github.com/llvm-mirror/llvm)
 
-For installation, please see [Basic Installation](https://github.com/vortexgpgpu/vortex#basic-installation) for more details.
+For installation, please see [Build Instructions](../README.md) for more details.
 
 **For Ubuntu18.04 users, you can directly download pre-build toolchains with [toolchain_install.sh](https://github.com/vortexgpgpu/vortex/blob/master/ci/toolchain_install.sh) script.**
 ```bash
