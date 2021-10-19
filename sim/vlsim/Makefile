@@ -86,12 +86,12 @@ VL_FLAGS += -D$(FPU_CORE)
 
 PROJECT = libopae-c-vlsim
 
-all: shared
+all: $(PROJECT).so
 
 vortex_afu.h : $(RTL_DIR)/afu/vortex_afu.vh
 	$(SCRIPT_DIR)/gen_config.py -i $(RTL_DIR)/afu/vortex_afu.vh -o vortex_afu.h
 
-shared: $(SRCS) vortex_afu.h
+$(PROJECT).so: $(SRCS) vortex_afu.h
 	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT).so
 
 static: $(SRCS) vortex_afu.h

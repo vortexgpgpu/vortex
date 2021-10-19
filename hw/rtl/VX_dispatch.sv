@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_instr_demux (
+module VX_dispatch (
     input wire              clk,
     input wire              reset,
 
