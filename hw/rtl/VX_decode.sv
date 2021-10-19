@@ -194,7 +194,6 @@ module VX_decode  #(
             end
             `INST_F: begin
                 ex_type = `EX_LSU;
-                op_type = `INST_OP_BITS'(func3[0]);
                 op_mod  = `INST_MOD_BITS'(1);
             end
             `INST_SYS : begin 
@@ -387,6 +386,12 @@ module VX_decode  #(
                         `USED_IREG (rs3);
                     end
                 `endif
+                    3'h6: begin
+                        ex_type = `EX_LSU;
+                        op_type = `INST_OP_BITS'(`INST_LSU_LW);
+                        op_mod  = `INST_MOD_BITS'(2);
+                        `USED_IREG (rs1);
+                    end
                     default:;
                 endcase
             end

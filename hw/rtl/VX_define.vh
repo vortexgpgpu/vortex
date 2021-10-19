@@ -154,7 +154,8 @@
 `define INST_LSU_BITS        4
 `define INST_LSU_FMT(x)      x[2:0]
 `define INST_LSU_WSIZE(x)    x[1:0]
-`define INST_LSU_IS_FENCE(x) x[0]
+`define INST_LSU_IS_FENCE(x) (3'h1 == x)
+`define INST_LSU_IS_PREFETCH(x) (3'h2 == x)
 
 `define INST_FENCE_BITS      1
 `define INST_FENCE_D         1'h0
