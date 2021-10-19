@@ -60,17 +60,18 @@ module VX_instr_demux (
     wire lsu_req_valid = ibuffer_if.valid && (ibuffer_if.ex_type == `EX_LSU);
     wire [`INST_LSU_BITS-1:0] lsu_op_type = `INST_LSU_BITS'(ibuffer_if.op_type);
     wire lsu_is_fence = `INST_LSU_IS_FENCE(ibuffer_if.op_mod);
+    wire lsu_is_prefetch = `INST_LSU_IS_PREFETCH(ibuffer_if.op_mod);
 
     VX_skid_buffer #(
-        .DATAW   (`NW_BITS + `NUM_THREADS + 32 + `INST_LSU_BITS + 1 + 32 + `NR_BITS + 1 + (2 * `NUM_THREADS * 32)),
+        .DATAW   (`NW_BITS + `NUM_THREADS + 32 + `INST_LSU_BITS + 1 + 32 + `NR_BITS + 1 + (2 * `NUM_THREADS * 32) + 1),
         .OUT_REG (1)
     ) lsu_buffer (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (lsu_req_valid),
         .ready_in  (lsu_req_ready),
-        .data_in   ({ibuffer_if.wid, ibuffer_if.tmask, ibuffer_if.PC, lsu_op_type,        lsu_is_fence,        ibuffer_if.imm,    ibuffer_if.rd, ibuffer_if.wb, gpr_rsp_if.rs1_data,  gpr_rsp_if.rs2_data}),
-        .data_out  ({lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, lsu_req_if.op_type, lsu_req_if.is_fence, lsu_req_if.offset, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.base_addr, lsu_req_if.store_data}),
+        .data_in   ({ibuffer_if.wid, ibuffer_if.tmask, ibuffer_if.PC, lsu_op_type,        lsu_is_fence,        ibuffer_if.imm,    ibuffer_if.rd, ibuffer_if.wb, gpr_rsp_if.rs1_data,  gpr_rsp_if.rs2_data, lsu_is_prefetch}),
+        .data_out  ({lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, lsu_req_if.op_type, lsu_req_if.is_fence, lsu_req_if.offset, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.base_addr, lsu_req_if.store_data, lsu_req_if.is_prefetch}),
         .valid_out (lsu_req_if.valid),
         .ready_out (lsu_req_if.ready)
     );
