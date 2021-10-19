@@ -14,7 +14,7 @@
 
 ## Installation
 
-- Refer to the install instructions in [README](../README.md). 
+- Refer to the build instructions in [README](../README.md). 
 
 ## Quick Start Scenarios
 
