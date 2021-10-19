@@ -102,7 +102,7 @@ module VX_execute #(
         .LANES         (`NUM_THREADS),
         .DATA_SIZE     (4),            
         .TAG_IN_WIDTH  (`LSU_TEX_DCACHE_TAG_BITS),
-        .TAG_SEL_IDX   (`NC_FLAG_BITS + `SM_ENABLE)
+        .TAG_SEL_IDX   (`NC_TAG_BIT + `SM_ENABLE)
     ) tex_lsu_arb (
         .clk            (clk),
         .reset          (reset),
@@ -142,7 +142,7 @@ module VX_execute #(
 
 `endif
 
-`ifdef EXT_TEX_ENABLE
+`ifdef EXT_F_ENABLE
     wire [`NUM_WARPS-1:0] csr_pending;
     wire [`NUM_WARPS-1:0] fpu_pending;
     VX_fpu_to_csr_if fpu_to_csr_if();
