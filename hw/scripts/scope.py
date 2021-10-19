@@ -262,7 +262,7 @@ def expand_text(text, params):
             has_func = do_repl.has_func            
             if not (params_updated or do_repl.expanded):
                 break
-            text = new_text            
+            text = new_text    
             changed = True
         if not has_func:
             break

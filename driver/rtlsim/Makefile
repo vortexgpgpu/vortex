@@ -35,4 +35,4 @@ $(PROJECT): $(SRCS)
 
 clean:
 	$(MAKE) -C $(RTLSIM_DIR) clean-static
-	rm -rf $(PROJECT) *.o .depend
+	rm -rf $(PROJECT) *.o

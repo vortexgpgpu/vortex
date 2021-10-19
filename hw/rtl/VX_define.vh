@@ -18,6 +18,8 @@
 
 `define NRI_BITS        `LOG2UP(`NUM_IREGS)
 
+`define NTEX_BITS       `LOG2UP(`NUM_TEX_UNITS)
+
 `ifdef EXT_F_ENABLE
 `define NUM_REGS        (2 * `NUM_IREGS)
 `else
@@ -65,6 +67,8 @@
 `define INST_FCI        7'b1010011 // float common instructions
 
 `define INST_GPU        7'b1101011
+
+`define INST_TEX       7'b0101011
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -150,8 +154,8 @@
 `define INST_LSU_BITS        4
 `define INST_LSU_FMT(x)      x[2:0]
 `define INST_LSU_WSIZE(x)    x[1:0]
-`define INST_LSU_IS_FENCE(x) x[0]
-`define INST_LSU_IS_PREF(x)  (x==3'b111)
+`define INST_LSU_IS_FENCE(x) (3'h1 == x)
+`define INST_LSU_IS_PREFETCH(x) (3'h2 == x)
 
 `define INST_FENCE_BITS      1
 `define INST_FENCE_D         1'h0
@@ -187,6 +191,7 @@
 `define INST_GPU_JOIN        3'h3
 `define INST_GPU_BAR         3'h4
 `define INST_GPU_PRED        3'h5
+`define INST_GPU_TEX         3'h6
 `define INST_GPU_BITS        3
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -238,8 +243,11 @@
 `define DBG_CACHE_REQ_MDATAW    0
 `endif
 
-// non-cacheable address bit
-`define NC_FLAG_BITS            1
+// non-cacheable tag bits
+`define NC_TAG_BIT              1
+
+// texture tag bits
+`define TEX_TAG_BIT             1
 
 ////////////////////////// Icache Configurable Knobs //////////////////////////
 
@@ -278,12 +286,20 @@
 // Block size in bytes
 `define DCACHE_LINE_SIZE        `L1_BLOCK_SIZE
 
-// TAG sharing enable     
-`define LSUQ_ADDR_BITS          `LOG2UP(`LSUQ_SIZE)  
-`define DCACHE_CORE_TAG_ID_BITS (`LSUQ_ADDR_BITS + `NC_FLAG_BITS + `SM_ENABLE)
-
-// Input request tag bits
-`define DCACHE_CORE_TAG_WIDTH   (`DBG_CACHE_REQ_MDATAW + `DCACHE_CORE_TAG_ID_BITS)
+// Core request tag bits
+`define LSUQ_ADDR_BITS          `LOG2UP(`LSUQ_SIZE)
+`ifdef EXT_TEX_ENABLE
+`define LSU_TAG_ID_BITS         (`LSUQ_ADDR_BITS + `NC_TAG_BIT + `SM_ENABLE)
+`define TEX_TAG_ID_BITS         (2)
+`define LSU_TEX_TAG_ID_BITS     `MAX(`LSU_TAG_ID_BITS, `TEX_TAG_ID_BITS) 
+`define DCACHE_CORE_TAG_ID_BITS (`LSU_TEX_TAG_ID_BITS + `TEX_TAG_BIT)
+`define LSU_DCACHE_TAG_BITS     (`DBG_CACHE_REQ_MDATAW + `LSU_TAG_ID_BITS)
+`define TEX_DCACHE_TAG_BITS     (`DBG_CACHE_REQ_MDATAW + `TEX_TAG_ID_BITS)
+`define LSU_TEX_DCACHE_TAG_BITS (`DBG_CACHE_REQ_MDATAW + `LSU_TEX_TAG_ID_BITS)
+`else 
+`define DCACHE_CORE_TAG_ID_BITS (`LSUQ_ADDR_BITS + `NC_TAG_BIT + `SM_ENABLE)
+`endif
+`define DCACHE_CORE_TAG_WIDTH  (`DBG_CACHE_REQ_MDATAW + `DCACHE_CORE_TAG_ID_BITS)
  
 // Memory request data bits
 `define DCACHE_MEM_DATA_WIDTH   (`DCACHE_LINE_SIZE * 8)
@@ -300,7 +316,7 @@
 // Memory request tag bits
 `define _DMEM_ADDR_RATIO_W      $clog2(`DCACHE_LINE_SIZE / `DCACHE_WORD_SIZE)
 `define _DNC_MEM_TAG_WIDTH      ($clog2(`DCACHE_NUM_REQS) + `_DMEM_ADDR_RATIO_W + `DCACHE_CORE_TAG_WIDTH)
-`define DCACHE_MEM_TAG_WIDTH    `MAX((`CLOG2(`DCACHE_NUM_BANKS) + `CLOG2(`DCACHE_MSHR_SIZE) + `NC_FLAG_BITS), `_DNC_MEM_TAG_WIDTH)
+`define DCACHE_MEM_TAG_WIDTH    `MAX((`CLOG2(`DCACHE_NUM_BANKS) + `CLOG2(`DCACHE_MSHR_SIZE) + `NC_TAG_BIT), `_DNC_MEM_TAG_WIDTH)
 
 // Merged D-cache/I-cache memory tag
 `define L1_MEM_TAG_WIDTH        (`MAX(`ICACHE_MEM_TAG_WIDTH, `DCACHE_MEM_TAG_WIDTH) + `CLOG2(2))
@@ -348,7 +364,7 @@
 // Memory request tag bits
 `define _L2_MEM_ADDR_RATIO_W     $clog2(`L2_CACHE_LINE_SIZE / `L2_WORD_SIZE)
 `define _L2_NC_MEM_TAG_WIDTH     ($clog2(`L2_NUM_REQS) + `_L2_MEM_ADDR_RATIO_W + `L1_MEM_TAG_WIDTH)
-`define _L2_MEM_TAG_WIDTH        `MAX((`CLOG2(`L2_NUM_BANKS) + `CLOG2(`L2_MSHR_SIZE) + `NC_FLAG_BITS), `_L2_NC_MEM_TAG_WIDTH)
+`define _L2_MEM_TAG_WIDTH        `MAX((`CLOG2(`L2_NUM_BANKS) + `CLOG2(`L2_MSHR_SIZE) + `NC_TAG_BIT), `_L2_NC_MEM_TAG_WIDTH)
 `define L2_MEM_TAG_WIDTH         ((`L2_ENABLE) ? `_L2_MEM_TAG_WIDTH : (`L1_MEM_TAG_WIDTH + `CLOG2(`L2_NUM_REQS)))
 
 ////////////////////////// L3cache Configurable Knobs /////////////////////////
@@ -380,7 +396,7 @@
 // Memory request tag bits
 `define _L3_MEM_ADDR_RATIO_W     $clog2(`L3_CACHE_LINE_SIZE / `L3_WORD_SIZE)
 `define _L3_NC_MEM_TAG_WIDTH     ($clog2(`L3_NUM_REQS) + `_L3_MEM_ADDR_RATIO_W + `L2_MEM_TAG_WIDTH)
-`define _L3_MEM_TAG_WIDTH        `MAX((`CLOG2(`L3_NUM_BANKS) + `CLOG2(`L3_MSHR_SIZE) + `NC_FLAG_BITS), `_L3_NC_MEM_TAG_WIDTH)
+`define _L3_MEM_TAG_WIDTH        `MAX((`CLOG2(`L3_NUM_BANKS) + `CLOG2(`L3_MSHR_SIZE) + `NC_TAG_BIT), `_L3_NC_MEM_TAG_WIDTH)
 `define L3_MEM_TAG_WIDTH         ((`L3_ENABLE) ? `_L3_MEM_TAG_WIDTH : (`L2_MEM_TAG_WIDTH + `CLOG2(`L3_NUM_REQS)))
 
 ///////////////////////////////////////////////////////////////////////////////

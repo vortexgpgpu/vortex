@@ -3,7 +3,7 @@
 #include "common.h"
 
 void main() {
-	const kernel_arg_t* arg = (const kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
+	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
 	uint32_t count   = arg->count;
 	int32_t* src_ptr = (int32_t*)arg->src_ptr;
 	int32_t* dst_ptr = (int32_t*)arg->dst_ptr;

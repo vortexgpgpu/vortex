@@ -206,6 +206,7 @@ module VX_mem_unit # (
             .LANES         (`NUM_THREADS),
             .DATA_SIZE     (4),            
             .TAG_IN_WIDTH  (`DCACHE_CORE_TAG_WIDTH),
+            .TAG_SEL_IDX   (0), // SM flag
             .TYPE          ("P"),
             .BUFFERED_REQ  (2),
             .BUFFERED_RSP  (1)

@@ -20,6 +20,9 @@ module VX_csr_unit #(
     VX_fpu_to_csr_if.slave      fpu_to_csr_if,
     input wire[`NUM_WARPS-1:0]  fpu_pending,
 `endif
+`ifdef EXT_TEX_ENABLE
+    VX_tex_csr_if.master        tex_csr_if,
+`endif
 
     output wire[`NUM_WARPS-1:0] pending,
     input wire                  busy
@@ -47,6 +50,9 @@ module VX_csr_unit #(
     `ifdef EXT_F_ENABLE
         .fpu_to_csr_if  (fpu_to_csr_if), 
     `endif
+    `ifdef EXT_TEX_ENABLE
+        .tex_csr_if     (tex_csr_if),
+    `endif
         .read_enable    (csr_req_if.valid),
         .read_addr      (csr_req_if.addr),
         .read_wid       (csr_req_if.wid),      
@@ -54,7 +60,7 @@ module VX_csr_unit #(
         .write_enable   (write_enable),        
         .write_addr     (csr_addr_s1), 
         .write_wid      (csr_commit_if.wid),
-        .write_data     (csr_updated_data_s1[`CSR_WIDTH-1:0]),
+        .write_data     (csr_updated_data_s1),
         .busy           (busy)
     );    
 

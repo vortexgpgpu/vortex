@@ -53,7 +53,7 @@
 
 `define LINE_TAG_ADDR(x)        x[`LINE_ADDR_WIDTH-1 : `LINE_SELECT_BITS]
 
-`define CACHE_REQ_INFO_RNG      CORE_TAG_WIDTH-1:(CORE_TAG_WIDTH-`NW_BITS-32)
+`define CACHE_REQ_INFO_RNG      CORE_TAG_WIDTH-1 : (CORE_TAG_WIDTH-`DBG_CACHE_REQ_MDATAW)
 
 ///////////////////////////////////////////////////////////////////////////////
 

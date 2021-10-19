@@ -22,6 +22,17 @@ make -C tests/opencl run-simx
 echo "coverage tests done!"
 }
 
+tex()
+{
+echo "begin texture tests..."
+
+CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=vlsim --app=tex --args="-isoccer.png -osoccer_result.png -g0"
+CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-itoad.png -otoad_result.png -g1"
+CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-irainbow.png -orainbow_result.png -g1"
+
+echo "coverage texture done!"
+}
+
 cluster() 
 {
 echo "begin clustering tests..."
@@ -134,12 +145,14 @@ echo "stress1 tests done!"
 
 usage()
 {
-    echo "usage: regression [-coverage] [-cluster] [-debug] [-config] [-stress[#n]] [-all] [-h|--help]"
+    echo "usage: regression [-coverage] [-tex] [-cluster] [-debug] [-config] [-stress[#n]] [-all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
     case $1 in
         -coverage ) coverage
+                ;;
+        -tex ) tex
                 ;;
         -cluster ) cluster
                 ;;
@@ -155,6 +168,7 @@ while [ "$1" != "" ]; do
                   stress1
                 ;;
         -all ) coverage
+               tex
                cluster
                debug
                config
