@@ -1,6 +1,6 @@
 `include "VX_define.vh"
-`ifdef DBG_PRINT_PIPELINE
-`include "VX_print_instr.vh"
+`ifdef DBG_TRACE_PIPELINE
+`include "VX_trace_instr.vh"
 `endif
 
 `ifdef EXT_F_ENABLE
@@ -42,6 +42,7 @@ module VX_decode  #(
 
     wire [31:0] instr = ifetch_rsp_if.data;
     wire [6:0] opcode = instr[6:0];  
+    wire [1:0] func2  = instr[26:25];
     wire [2:0] func3  = instr[14:12];
     wire [6:0] func7  = instr[31:25];
     wire [11:0] u_12  = instr[31:20]; 
@@ -193,7 +194,6 @@ module VX_decode  #(
             end
             `INST_F: begin
                 ex_type = `EX_LSU;
-                op_type = `INST_OP_BITS'(func3[0]);
                 op_mod  = `INST_MOD_BITS'(1);
             end
             `INST_SYS : begin 
@@ -375,11 +375,21 @@ module VX_decode  #(
                         `USED_IREG (rs1);
                         `USED_IREG (rs2);
                     end
+                `ifdef EXT_TEX_ENABLE
                     3'h5: begin
+                        op_type = `INST_OP_BITS'(`INST_GPU_TEX);
+                        op_mod  = `INST_MOD_BITS'(func2);
+                        use_rd  = 1;       
+                        `USED_IREG (rd);              
+                        `USED_IREG (rs1);
+                        `USED_IREG (rs2);
+                        `USED_IREG (rs3);
+                    end
+                `endif
+                    3'h6: begin
                         ex_type = `EX_LSU;
-                        op_type = `INST_OP_BITS'(`INST_GPU_PRED);
-                        imm     = {{20{u_12[11]}}, u_12};   
-                        use_rd = 0;      
+                        op_type = `INST_OP_BITS'(`INST_LSU_LW);
+                        op_mod  = `INST_MOD_BITS'(2);
                         `USED_IREG (rs1);
                     end
                     default:;
@@ -388,6 +398,8 @@ module VX_decode  #(
             default:;
         endcase
     end
+
+    `UNUSED_VAR (func2)
 
     // disable write to integer register r0
     wire wb = use_rd && (| rd_r);
@@ -421,13 +433,13 @@ module VX_decode  #(
 
     assign ifetch_rsp_if.ready = decode_if.ready;
 
-`ifdef DBG_PRINT_PIPELINE
+`ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (decode_if.valid && decode_if.ready) begin
             dpi_trace("%d: core%0d-decode: wid=%0d, PC=%0h, ex=", $time, CORE_ID, decode_if.wid, decode_if.PC);
-            print_ex_type(decode_if.ex_type);
+            trace_ex_type(decode_if.ex_type);
             dpi_trace(", op=");
-            print_ex_op(decode_if.ex_type, decode_if.op_type, decode_if.op_mod);
+            trace_ex_op(decode_if.ex_type, decode_if.op_type, decode_if.op_mod);
             dpi_trace(", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=%0h, use_pc=%b, use_imm=%b\n", decode_if.op_mod, decode_if.tmask, decode_if.wb, decode_if.rd, decode_if.rs1, decode_if.rs2, decode_if.rs3, decode_if.imm, decode_if.use_PC, decode_if.use_imm);                        
         end
     end

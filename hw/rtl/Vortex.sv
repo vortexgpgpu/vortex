@@ -201,7 +201,7 @@ module Vortex (
     `SCOPE_ASSIGN (mem_rsp_tag,  mem_rsp_tag);
     `SCOPE_ASSIGN (busy, busy);
 
-`ifdef DBG_PRINT_MEM
+`ifdef DBG_TRACE_MEM
     always @(posedge clk) begin
         if (mem_req_valid && mem_req_ready) begin
             if (mem_req_rw)

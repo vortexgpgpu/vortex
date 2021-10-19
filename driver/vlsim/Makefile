@@ -50,13 +50,6 @@ $(PROJECT): $(SRCS) $(SCOPE_H)
 	$(SCOPE_ENABLE) $(PERF_ENABLE) $(MAKE) -C $(VLSIM_DIR) static
 	$(CXX) $(CXXFLAGS) -DUSE_VLSIM $(SRCS) $(LDFLAGS) -o $(PROJECT)
 
-.depend: $(SRCS)
-	$(CXX) $(CXXFLAGS) -MM $(SRCS) > .depend;
-
 clean:
 	$(MAKE) -C $(VLSIM_DIR) clean-static
-	rm -rf $(PROJECT) *.o .depend scope-defs.h
-
-ifneq ($(MAKECMDGOALS),clean)
-    -include .depend
-endif
+	rm -rf $(PROJECT) *.o scope-defs.h

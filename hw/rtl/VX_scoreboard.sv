@@ -6,8 +6,8 @@ module VX_scoreboard  #(
     input wire clk,
     input wire reset,
 
-    VX_ibuffer_if.scoreboard ibuffer_if,
-    VX_writeback_if.scoreboard writeback_if
+    VX_ibuffer_if.slave ibuffer_if,
+    VX_writeback_if.slave writeback_if
 );
     reg [`NUM_WARPS-1:0][`NUM_REGS-1:0] inuse_regs, inuse_regs_n;
 
@@ -53,11 +53,12 @@ module VX_scoreboard  #(
 
     reg [31:0] deadlock_ctr;
     wire [31:0] deadlock_timeout = 10000 * (1 ** (`L2_ENABLE + `L3_ENABLE));
+
     always @(posedge clk) begin
         if (reset) begin
             deadlock_ctr <= 0;
         end else begin
-        `ifdef DBG_PRINT_PIPELINE
+        `ifdef DBG_TRACE_PIPELINE
             if (ibuffer_if.valid && ~ibuffer_if.ready) begin
                 dpi_trace("%d: *** core%0d-stall: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b\n", 
                     $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.rd, ibuffer_if.wb, 

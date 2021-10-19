@@ -16,13 +16,13 @@ K_LDFLAGS  += "-Wl,-Bstatic,-T$(VORTEX_RT_PATH)/linker/vx_link.ld -Wl,--gc-secti
 CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors
 #CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -Wfatal-errors
 
-CXXFLAGS += -Wno-deprecated-declarations -Wno-unused-parameter
+CXXFLAGS += -Wno-deprecated-declarations -Wno-unused-parameter -Wno-narrowing
 
 CXXFLAGS += -I$(POCL_RT_PATH)/include
 
 LDFLAGS += -L$(POCL_RT_PATH)/lib -L$(VORTEX_DRV_PATH)/stub -lOpenCL -lvortex
 
-PROJECT = printf
+PROJECT = oclprintf
 
 SRCS = main.cc
 

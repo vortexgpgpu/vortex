@@ -202,7 +202,7 @@ module VX_miss_resrv #(
 
     `UNUSED_VAR (lookup_valid)
 
-`ifdef DBG_PRINT_CACHE_MSHR        
+`ifdef DBG_TRACE_CACHE_MSHR        
     always @(posedge clk) begin
         if (allocate_fire || fill_valid || dequeue_fire || lookup_replay || lookup_valid || release_valid) begin
             if (allocate_fire)
