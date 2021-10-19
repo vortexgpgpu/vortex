@@ -12,10 +12,9 @@ module VX_gpu_unit #(
     VX_gpu_req_if.slave gpu_req_if,
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_csr_if   tex_csr_if,
-
-    VX_dcache_req_if dcache_req_if,
-    VX_dcache_rsp_if dcache_rsp_if,
+    VX_dcache_req_if.master dcache_req_if,
+    VX_dcache_rsp_if.slave  dcache_rsp_if,
+    VX_tex_csr_if.slave tex_csr_if,
 `endif
 
     // Outputs

@@ -24,7 +24,7 @@ module VX_lsu_unit #(
 
     localparam REQ_ASHIFT = `CLOG2(`DCACHE_WORD_SIZE);
 
-    localparam ADDR_TYPEW = `NC_FLAG_BITS + `SM_ENABLE;
+    localparam ADDR_TYPEW = `NC_TAG_BIT + `SM_ENABLE;
 
     `STATIC_ASSERT(0 == (`IO_BASE_ADDR % MEM_ASHIFT), ("invalid parameter"))
     `STATIC_ASSERT(0 == (`SMEM_BASE_ADDR % MEM_ASHIFT), ("invalid parameter"))

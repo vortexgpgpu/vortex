@@ -8,8 +8,8 @@ module VX_tex_mem #(
     input wire reset,
 
    // memory interface
-    VX_dcache_req_if    dcache_req_if,
-    VX_dcache_rsp_if    dcache_rsp_if,
+    VX_dcache_req_if.master dcache_req_if,
+    VX_dcache_rsp_if.slave  dcache_rsp_if,
 
     // inputs
     input wire                          req_valid,
