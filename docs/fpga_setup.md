@@ -13,17 +13,6 @@ OPAE Environment Setup
     $ export PATH=:/opt/verilator/bin:$PATH
     $ export VERILATOR_ROOT=/opt/verilator
 
-OPAE Build Configuration
-------------------------
-
-Within the `/hw/syn/opae` directory, there are source text files for each core-option for the fpga build (the 32 and 64 core options are not currently implemented) which have the following parameters that can be configured:
-- NUM_CORES: the number of cores per cluster
-- NUM_CLUSTERS: the number of clusters alotted to the processor
-- L2_ENABLE: enable the use of the L2 cache
-- PERF_ENABLE: enable the use of all profile counters
-
-To enable L3 cache and profile counters for a build, simply uncomment the definition within the respective source file.
-
 OPAE Build
 ------------------
 
@@ -44,6 +33,19 @@ Command line:
 Example: `make fpga-4c`
 
 A new folder (ex: `build_fpga_4c`) will be created and the build will start and take ~30-480 min to complete.
+
+
+OPAE Build Configuration
+------------------------
+
+The hardware configuration file `/hw/rtl/VX_config.vh` defines all the hardware parameters that can be modified when build the processor.For example, have the following parameters that can be configured:
+- `NUM_WARPS`:   Number of warps per cores
+- `NUM_THREADS`: Number of threads per warps
+- `PERF_ENABLE`: enable the use of all profile counters
+
+You configure the syntesis build from the command line:
+
+    $ CONFIGS="-DPERF_ENABLE -DNUM_THREADS=8" make fpga-4c
 
 OPAE Build Progress
 -------------------
