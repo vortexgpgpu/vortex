@@ -76,20 +76,6 @@ interface VX_ibuffer_if ();
         input  wid_n,        
         output ready
     );
-
-    modport scoreboard (
-        input  valid,
-        input  wid,
-        input  PC,   
-        input  wb,
-        input  rd,
-        input  rd_n,
-        input  rs1_n,
-        input  rs2_n,
-        input  rs3_n,
-        input  wid_n,        
-        output ready
-    );
     
 endinterface
 

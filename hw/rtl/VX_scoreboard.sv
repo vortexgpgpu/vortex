@@ -6,8 +6,8 @@ module VX_scoreboard  #(
     input wire clk,
     input wire reset,
 
-    VX_ibuffer_if.scoreboard ibuffer_if,
-    VX_writeback_if.scoreboard writeback_if
+    VX_ibuffer_if.slave ibuffer_if,
+    VX_writeback_if.slave writeback_if
 );
     reg [`NUM_WARPS-1:0][`NUM_REGS-1:0] inuse_regs, inuse_regs_n;
 
@@ -53,6 +53,7 @@ module VX_scoreboard  #(
 
     reg [31:0] deadlock_ctr;
     wire [31:0] deadlock_timeout = 10000 * (1 ** (`L2_ENABLE + `L3_ENABLE));
+
     always @(posedge clk) begin
         if (reset) begin
             deadlock_ctr <= 0;
