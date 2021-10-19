@@ -77,9 +77,6 @@ CONFIGS=-DEXT_F_DISABLE ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=no_mf_e
 # disable shared memory
 CONFIGS=-DSM_ENABLE=0 ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=no_smem
 
-# disabling tex extension
-CONFIGS=-DEXT_TEX_DISABLE make -C hw/simulate
-
 # using Default FPU core
 FPU_CORE=FPU_DEFAULT ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
 
