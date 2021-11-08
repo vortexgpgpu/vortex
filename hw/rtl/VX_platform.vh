@@ -119,9 +119,9 @@
 
 `define UP(x)       (((x) > 0) ? (x) : 1)
 
-`define RTRIM(x,s)  x[$bits(x)-1:($bits(x)-s)]
+`define RTRIM(x, s) x[$bits(x)-1:($bits(x)-s)]
 
-`define LTRIM(x,s)  x[s-1:0]
+`define LTRIM(x, s) x[s-1:0]
 
 `define TRACE_ARRAY1D(a, m)                     \
     dpi_trace("{");                             \

@@ -119,7 +119,7 @@ module VX_data_access #(
 
     `UNUSED_VAR (stall)
 
-`ifdef DBG_PRINT_CACHE_DATA
+`ifdef DBG_TRACE_CACHE_DATA
     always @(posedge clk) begin 
         if (fill && ~stall) begin
             dpi_trace("%d: cache%0d:%0d data-fill: addr=%0h, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, fill_data);

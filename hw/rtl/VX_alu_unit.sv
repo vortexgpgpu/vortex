@@ -217,7 +217,7 @@ module VX_alu_unit #(
     // can accept new request?
     assign alu_req_if.ready = ready_in;
 
-`ifdef DBG_PRINT_PIPELINE
+`ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (branch_ctl_if.valid) begin
             dpi_trace("%d: core%0d-branch: wid=%0d, PC=%0h, taken=%b, dest=%0h\n", 

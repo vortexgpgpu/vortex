@@ -229,7 +229,7 @@ module VX_shared_mem #(
         core_rsp_data_in   = 'x;
         bank_rsp_sel_n     = bank_rsp_sel_r;
         for (integer i = 0; i < NUM_BANKS; i++) begin 
-            if (per_bank_core_req_valid[i] 
+            if (core_req_read_mask[i] 
              && (core_rsp_tag_in[CORE_TAG_ID_BITS-1:0] == per_bank_core_req_tag[i][CORE_TAG_ID_BITS-1:0])) begin
                 core_rsp_valids_in[per_bank_core_req_tid[i]] = 1;
                 core_rsp_data_in[per_bank_core_req_tid[i]] = per_bank_core_rsp_data[i];
@@ -271,7 +271,7 @@ module VX_shared_mem #(
     end
 `endif
 
-`ifdef DBG_PRINT_CACHE_BANK
+`ifdef DBG_TRACE_CACHE_BANK
     
     reg is_multi_tag_req;
 `IGNORE_UNUSED_BEGIN

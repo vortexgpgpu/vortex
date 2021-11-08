@@ -712,7 +712,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         pipeline->stall_warp = true; 
         runOnce = true;       
       } break;
-      case 5: {
+      case 6: {
         // PREFETCH
         int addr = rsdata[0];
         printf("*** PREFETCHED %d ***\n", addr);
