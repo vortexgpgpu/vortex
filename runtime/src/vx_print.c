@@ -34,7 +34,7 @@ int vx_vprintf(const char* format, va_list va) {
 	printf_arg_t arg;
 	arg.format = format;
 	arg.va = &va;
-	vx_serial(__printf_cb, &arg);
+	vx_serial((vx_serial_cb)__printf_cb, &arg);
   	return arg.ret;
 }
 
@@ -63,7 +63,7 @@ void vx_putint(int value, int base) {
 	putint_arg_t arg;
 	arg.value = value;
 	arg.base = base;
-	vx_serial(__putint_cb, &arg);
+	vx_serial((vx_serial_cb)__putint_cb, &arg);
 }
 
 static void __putfloat_cb(const putfloat_arg_t* arg) {
@@ -83,7 +83,7 @@ void vx_putfloat(float value, int precision) {
 	putfloat_arg_t arg;
 	arg.value = value;
 	arg.precision = precision;
-	vx_serial(__putfloat_cb, &arg);
+	vx_serial((vx_serial_cb)__putfloat_cb, &arg);
 }
 
 #ifdef __cplusplus

@@ -173,10 +173,10 @@ void CacheSim::stall_mem(){
 }
 
 void CacheSim::send_snoop_req(){
-    cache_->snp_req_valid = 1;
+    /*cache_->snp_req_valid = 1;
     cache_->snp_req_addr = 0x12222222;
     cache_->snp_req_invalidate = 1; 
-    cache_->snp_req_tag = 0xff; 
+    cache_->snp_req_tag = 0xff; */
 }
 
 void CacheSim::eval_mem_bus() {
@@ -274,9 +274,9 @@ bool CacheSim::assert_equal(unsigned int* data, unsigned int tag){
 //DEBUG
 
 void CacheSim::display_miss(){
-  int i = (unsigned int)cache_->miss_vec; 
-  std::bitset<8> x(i); 
-  if (i) std::cout << "Miss Vec " << x << std::endl;
+  //int i = (unsigned int)cache_->miss_vec; 
+  //std::bitset<8> x(i); 
+  //if (i) std::cout << "Miss Vec " << x << std::endl;
   //std::cout << "Miss Vec 0" << cache_->miss_vec[0] << std::endl;
 }
 

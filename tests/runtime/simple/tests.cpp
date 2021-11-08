@@ -208,7 +208,7 @@ int test_spawn_tasks() {
 		st_buffer_src[i] = 65 + i;
 	}
 
-	vx_spawn_tasks(ST_BUF_SZ, st_kernel, &arg);
+	vx_spawn_tasks(ST_BUF_SZ, (vx_spawn_tasks_cb)st_kernel, &arg);
 
 	return check_error(st_buffer_dst, 0, ST_BUF_SZ);
 }
@@ -230,7 +230,7 @@ void sr_kernel(const sr_args_t * arg) {
 void __attribute__ ((noinline)) do_serial() {
 	sr_args_t arg;
 	arg.buf = sr_buffer;
-	vx_serial(sr_kernel, &arg);
+	vx_serial((vx_serial_cb)sr_kernel, &arg);
 }
 
 int test_serial() {

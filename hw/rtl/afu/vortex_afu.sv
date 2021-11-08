@@ -45,12 +45,14 @@ localparam CCI_DATA_WIDTH     = $bits(t_ccip_clData);
 localparam CCI_DATA_SIZE      = CCI_DATA_WIDTH / 8;
 localparam CCI_ADDR_WIDTH     = 32 - $clog2(CCI_DATA_SIZE);
 
+
 localparam AVS_RD_QUEUE_SIZE  = 4;
-localparam AVS_REQ_TAGW_VX_   = `VX_MEM_TAG_WIDTH + $clog2(LMEM_DATA_WIDTH) - $clog2(`VX_MEM_DATA_WIDTH);
-localparam AVS_REQ_TAGW_VX    = `MAX(`VX_MEM_TAG_WIDTH, AVS_REQ_TAGW_VX_);
-localparam AVS_REQ_TAGW_CCI_  = CCI_ADDR_WIDTH + $clog2(LMEM_DATA_WIDTH) - $clog2(CCI_DATA_WIDTH);
-localparam AVS_REQ_TAGW_CCI   = `MAX(CCI_ADDR_WIDTH, AVS_REQ_TAGW_CCI_);
-localparam AVS_REQ_TAGW       = `MAX(AVS_REQ_TAGW_VX, AVS_REQ_TAGW_CCI);
+localparam _VX_MEM_TAG_WIDTH  = `VX_MEM_TAG_WIDTH;
+localparam _AVS_REQ_TAGW_VX   = _VX_MEM_TAG_WIDTH + $clog2(LMEM_DATA_WIDTH) - $clog2(`VX_MEM_DATA_WIDTH);
+localparam _AVS_REQ_TAGW_VX2  = `MAX(_VX_MEM_TAG_WIDTH, _AVS_REQ_TAGW_VX);
+localparam _AVS_REQ_TAGW_CCI  = CCI_ADDR_WIDTH + $clog2(LMEM_DATA_WIDTH) - $clog2(CCI_DATA_WIDTH);
+localparam _AVS_REQ_TAGW_CCI2 = `MAX(CCI_ADDR_WIDTH, _AVS_REQ_TAGW_CCI);
+localparam AVS_REQ_TAGW       = `MAX(_AVS_REQ_TAGW_VX2, _AVS_REQ_TAGW_CCI2);
 
 localparam CCI_RD_WINDOW_SIZE = 8;
 localparam CCI_RW_PENDING_SIZE= 256;
@@ -185,36 +187,36 @@ always @(posedge clk) begin
     case (mmio_hdr.address)
       MMIO_IO_ADDR: begin
         cmd_io_addr <= t_ccip_clAddr'(cp2af_sRxPort.c0.data);
-      `ifdef DBG_PRINT_OPAE 
+      `ifdef DBG_TRACE_OPAE 
         dpi_trace("%d: MMIO_IO_ADDR: addr=%0h, data=0x%0h\n", $time, mmio_hdr.address, t_ccip_clAddr'(cp2af_sRxPort.c0.data));
       `endif
       end
       MMIO_MEM_ADDR: begin
         cmd_mem_addr <= $bits(cmd_mem_addr)'(cp2af_sRxPort.c0.data);
-      `ifdef DBG_PRINT_OPAE
+      `ifdef DBG_TRACE_OPAE
         dpi_trace("%d: MMIO_MEM_ADDR: addr=%0h, data=0x%0h\n", $time, mmio_hdr.address, $bits(cmd_mem_addr)'(cp2af_sRxPort.c0.data));
       `endif
       end
       MMIO_DATA_SIZE: begin
         cmd_data_size <= $bits(cmd_data_size)'(cp2af_sRxPort.c0.data);
-      `ifdef DBG_PRINT_OPAE
+      `ifdef DBG_TRACE_OPAE
         dpi_trace("%d: MMIO_DATA_SIZE: addr=%0h, data=%0d\n", $time, mmio_hdr.address, $bits(cmd_data_size)'(cp2af_sRxPort.c0.data));
       `endif
       end
       MMIO_CMD_TYPE: begin
-      `ifdef DBG_PRINT_OPAE
+      `ifdef DBG_TRACE_OPAE
         dpi_trace("%d: MMIO_CMD_TYPE: addr=%0h, data=%0d\n", $time, mmio_hdr.address, $bits(cmd_type)'(cp2af_sRxPort.c0.data));
       `endif
       end
     `ifdef SCOPE
       MMIO_SCOPE_WRITE: begin
-      `ifdef DBG_PRINT_OPAE
+      `ifdef DBG_TRACE_OPAE
         dpi_trace("%d: MMIO_SCOPE_WRITE: addr=%0h, data=%0h\n", $time, mmio_hdr.address, 64'(cp2af_sRxPort.c0.data));
       `endif
       end
     `endif
       default: begin
-        `ifdef DBG_PRINT_OPAE
+        `ifdef DBG_TRACE_OPAE
           dpi_trace("%d: Unknown MMIO Wr: addr=%0h, data=%0h\n", $time, mmio_hdr.address, $bits(cmd_data_size)'(cp2af_sRxPort.c0.data));
         `endif
       end
@@ -241,7 +243,7 @@ always @(posedge clk) begin
       16'h0008: mmio_tx.data <= 64'h0; // reserved
       MMIO_STATUS: begin
         mmio_tx.data <= 64'({cout_q_dout, !cout_q_empty, 8'(state)});
-      `ifdef DBG_PRINT_OPAE
+      `ifdef DBG_TRACE_OPAE
         if (state != STATE_WIDTH'(mmio_tx.data)) begin
           dpi_trace("%d: MMIO_STATUS: addr=%0h, state=%0d\n", $time, mmio_hdr.address, state);
         end
@@ -250,20 +252,20 @@ always @(posedge clk) begin
     `ifdef SCOPE
       MMIO_SCOPE_READ: begin
         mmio_tx.data <= cmd_scope_rdata;
-      `ifdef DBG_PRINT_OPAE
+      `ifdef DBG_TRACE_OPAE
         dpi_trace("%d: MMIO_SCOPE_READ: addr=%0h, data=%0h\n", $time, mmio_hdr.address, cmd_scope_rdata);
       `endif
       end
     `endif
       MMIO_DEV_CAPS: begin
         mmio_tx.data <= dev_caps;
-      `ifdef DBG_PRINT_OPAE
+      `ifdef DBG_TRACE_OPAE
         dpi_trace("%d: MMIO_DEV_CAPS: addr=%0h, data=%0h\n", $time, mmio_hdr.address, dev_caps);
       `endif
       end
       default: begin
         mmio_tx.data <= 64'h0;
-      `ifdef DBG_PRINT_OPAE
+      `ifdef DBG_TRACE_OPAE
         dpi_trace("%d: Unknown MMIO Rd: addr=%0h\n", $time, mmio_hdr.address);
       `endif
       end
@@ -297,19 +299,19 @@ always @(posedge clk) begin
       STATE_IDLE: begin             
         case (cmd_type)
           CMD_MEM_READ: begin     
-          `ifdef DBG_PRINT_OPAE
+          `ifdef DBG_TRACE_OPAE
             dpi_trace("%d: STATE READ: ia=%0h addr=%0h size=%0d\n", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size);
           `endif
             state <= STATE_READ;   
           end 
           CMD_MEM_WRITE: begin      
-          `ifdef DBG_PRINT_OPAE
+          `ifdef DBG_TRACE_OPAE
             dpi_trace("%d: STATE WRITE: ia=%0h addr=%0h size=%0d\n", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size);
           `endif
             state <= STATE_WRITE;
           end
           CMD_RUN: begin        
-          `ifdef DBG_PRINT_OPAE
+          `ifdef DBG_TRACE_OPAE
             dpi_trace("%d: STATE START\n", $time);
           `endif
             vx_reset <= 1;            
@@ -324,7 +326,7 @@ always @(posedge clk) begin
       STATE_READ: begin
         if (cmd_read_done) begin
           state <= STATE_IDLE;
-        `ifdef DBG_PRINT_OPAE
+        `ifdef DBG_TRACE_OPAE
           dpi_trace("%d: STATE IDLE\n", $time);
         `endif
         end
@@ -333,7 +335,7 @@ always @(posedge clk) begin
       STATE_WRITE: begin
         if (cmd_write_done) begin
           state <= STATE_IDLE;
-        `ifdef DBG_PRINT_OPAE
+        `ifdef DBG_TRACE_OPAE
           dpi_trace("%d: STATE IDLE\n", $time);
         `endif
         end
@@ -345,7 +347,7 @@ always @(posedge clk) begin
           if (cmd_run_done) begin
             vx_started <= 0;
             state <= STATE_IDLE;
-          `ifdef DBG_PRINT_OPAE
+          `ifdef DBG_TRACE_OPAE
             dpi_trace("%d: STATE IDLE\n", $time);
           `endif
           end
@@ -699,7 +701,7 @@ always @(posedge clk) begin
   if (cci_rd_req_fire) begin  
     cci_rd_req_addr <= cci_rd_req_addr + 1;
     cci_rd_req_ctr  <= cci_rd_req_ctr + 1;
-  `ifdef DBG_PRINT_OPAE
+  `ifdef DBG_TRACE_OPAE
     dpi_trace("%d: CCI Rd Req: addr=%0h, tag=%0h, rem=%0d, pending=%0d\n", $time, cci_rd_req_addr, cci_rd_req_tag, (cmd_data_size - cci_rd_req_ctr - 1), cci_pending_reads);
   `endif
   end
@@ -709,13 +711,13 @@ always @(posedge clk) begin
     if (CCI_RD_QUEUE_TAGW'(cci_rd_rsp_ctr) == CCI_RD_QUEUE_TAGW'(CCI_RD_WINDOW_SIZE-1)) begin
       cci_mem_wr_req_addr_base <= cci_mem_wr_req_addr_base + CCI_ADDR_WIDTH'(CCI_RD_WINDOW_SIZE);
     end
-  `ifdef DBG_PRINT_OPAE
+  `ifdef DBG_TRACE_OPAE
     dpi_trace("%d: CCI Rd Rsp: idx=%0d, ctr=%0d, data=%0h\n", $time, cci_rd_rsp_tag, cci_rd_rsp_ctr, cp2af_sRxPort.c0.data);
   `endif
   end 
 
   if (cci_rdq_pop) begin
-  `ifdef DBG_PRINT_OPAE
+  `ifdef DBG_TRACE_OPAE
     dpi_trace("%d: CCI Rd Queue Pop: pending=%0d\n", $time, cci_pending_reads);
   `endif
   end
@@ -856,13 +858,13 @@ begin
     if (cci_wr_req_ctr == CCI_ADDR_WIDTH'(1)) begin
       cci_wr_req_done <= 1;
     end
-  `ifdef DBG_PRINT_OPAE
+  `ifdef DBG_TRACE_OPAE
     dpi_trace("%d: CCI Wr Req: addr=%0h, rem=%0d, pending=%0d, data=%0h\n", $time, cci_wr_req_addr, (cci_wr_req_ctr - 1), cci_pending_writes, af2cp_sTxPort.c1.data);
   `endif
   end
 
   if (cci_wr_rsp_fire) begin 
-  `ifdef DBG_PRINT_OPAE     
+  `ifdef DBG_TRACE_OPAE     
     dpi_trace("%d: CCI Wr Rsp: pending=%0d\n", $time, cci_pending_writes);  
   `endif    
   end

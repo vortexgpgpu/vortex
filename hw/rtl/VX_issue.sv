@@ -23,56 +23,60 @@ module VX_issue #(
 `endif
     VX_gpu_req_if.master    gpu_req_if
 );
-    VX_ibuffer_if ibuffer_if();
-    VX_gpr_rsp_if gpr_rsp_if();
-
-    VX_gpr_req_if gpr_req_if();
-    assign gpr_req_if.wid = ibuffer_if.wid;
-    assign gpr_req_if.rs1 = ibuffer_if.rs1;
-    assign gpr_req_if.rs2 = ibuffer_if.rs2;
-    assign gpr_req_if.rs3 = ibuffer_if.rs3;
-
+    VX_ibuffer_if   ibuffer_if();    
+    VX_gpr_req_if   gpr_req_if();
+    VX_gpr_rsp_if   gpr_rsp_if();
     VX_writeback_if sboard_wb_if();
-    assign sboard_wb_if.valid  = writeback_if.valid;
-    assign sboard_wb_if.wid    = writeback_if.wid;
-    assign sboard_wb_if.PC     = writeback_if.PC;
-    assign sboard_wb_if.rd     = writeback_if.rd;
-    assign sboard_wb_if.eop    = writeback_if.eop;
-    assign sboard_wb_if.ready  = writeback_if.ready;
-        
-    VX_ibuffer_if sboard_ib_if();
-    assign sboard_ib_if.valid  = ibuffer_if.valid && idmux_ib_if.ready;
-    assign sboard_ib_if.wid    = ibuffer_if.wid;
-    assign sboard_ib_if.PC     = ibuffer_if.PC;   
-    assign sboard_ib_if.wb     = ibuffer_if.wb;      
-    assign sboard_ib_if.rd     = ibuffer_if.rd;
-    assign sboard_ib_if.rd_n   = ibuffer_if.rd_n;        
-    assign sboard_ib_if.rs1_n  = ibuffer_if.rs1_n;        
-    assign sboard_ib_if.rs2_n  = ibuffer_if.rs2_n;        
-    assign sboard_ib_if.rs3_n  = ibuffer_if.rs3_n;        
-    assign sboard_ib_if.wid_n  = ibuffer_if.wid_n;
+    VX_ibuffer_if   scoreboard_if();
+    VX_ibuffer_if   dispatch_if();
 
-    VX_ibuffer_if idmux_ib_if();
-    assign idmux_ib_if.valid   = ibuffer_if.valid && sboard_ib_if.ready;
-    assign idmux_ib_if.wid     = ibuffer_if.wid;
-    assign idmux_ib_if.tmask   = ibuffer_if.tmask;
-    assign idmux_ib_if.PC      = ibuffer_if.PC;
-    assign idmux_ib_if.ex_type = ibuffer_if.ex_type;    
-    assign idmux_ib_if.op_type = ibuffer_if.op_type; 
-    assign idmux_ib_if.op_mod  = ibuffer_if.op_mod;    
-    assign idmux_ib_if.wb      = ibuffer_if.wb;
-    assign idmux_ib_if.rd      = ibuffer_if.rd;
-    assign idmux_ib_if.rs1     = ibuffer_if.rs1;
-    assign idmux_ib_if.imm     = ibuffer_if.imm;        
-    assign idmux_ib_if.use_PC  = ibuffer_if.use_PC;
-    assign idmux_ib_if.use_imm = ibuffer_if.use_imm;
+    // GPR request interface
+    assign gpr_req_if.wid       = ibuffer_if.wid;
+    assign gpr_req_if.rs1       = ibuffer_if.rs1;
+    assign gpr_req_if.rs2       = ibuffer_if.rs2;
+    assign gpr_req_if.rs3       = ibuffer_if.rs3;
+
+    // scoreboard writeback interface
+    assign sboard_wb_if.valid   = writeback_if.valid;
+    assign sboard_wb_if.wid     = writeback_if.wid;
+    assign sboard_wb_if.PC      = writeback_if.PC;
+    assign sboard_wb_if.rd      = writeback_if.rd;
+    assign sboard_wb_if.eop     = writeback_if.eop;
+        
+    // scoreboard interface
+    assign scoreboard_if.valid  = ibuffer_if.valid && dispatch_if.ready;
+    assign scoreboard_if.wid    = ibuffer_if.wid;
+    assign scoreboard_if.PC     = ibuffer_if.PC;   
+    assign scoreboard_if.wb     = ibuffer_if.wb;      
+    assign scoreboard_if.rd     = ibuffer_if.rd;
+    assign scoreboard_if.rd_n   = ibuffer_if.rd_n;        
+    assign scoreboard_if.rs1_n  = ibuffer_if.rs1_n;        
+    assign scoreboard_if.rs2_n  = ibuffer_if.rs2_n;        
+    assign scoreboard_if.rs3_n  = ibuffer_if.rs3_n;        
+    assign scoreboard_if.wid_n  = ibuffer_if.wid_n;
+    
+    // dispatch interface
+    assign dispatch_if.valid    = ibuffer_if.valid && scoreboard_if.ready;
+    assign dispatch_if.wid      = ibuffer_if.wid;
+    assign dispatch_if.tmask    = ibuffer_if.tmask;
+    assign dispatch_if.PC       = ibuffer_if.PC;
+    assign dispatch_if.ex_type  = ibuffer_if.ex_type;    
+    assign dispatch_if.op_type  = ibuffer_if.op_type; 
+    assign dispatch_if.op_mod   = ibuffer_if.op_mod;    
+    assign dispatch_if.wb       = ibuffer_if.wb;
+    assign dispatch_if.rd       = ibuffer_if.rd;
+    assign dispatch_if.rs1      = ibuffer_if.rs1;
+    assign dispatch_if.imm      = ibuffer_if.imm;        
+    assign dispatch_if.use_PC   = ibuffer_if.use_PC;
+    assign dispatch_if.use_imm  = ibuffer_if.use_imm;
 
     // issue the instruction
-    assign ibuffer_if.ready = sboard_ib_if.ready && idmux_ib_if.ready;
+    assign ibuffer_if.ready = scoreboard_if.ready && dispatch_if.ready;
 
     `RESET_RELAY (ibuf_reset);
+    `RESET_RELAY (scoreboard_reset);
     `RESET_RELAY (gpr_reset);
-    `RESET_RELAY (demux_reset);
+    `RESET_RELAY (dispatch_reset);
 
     VX_ibuffer #(
         .CORE_ID(CORE_ID)
@@ -87,9 +91,9 @@ module VX_issue #(
         .CORE_ID(CORE_ID)
     ) scoreboard (
         .clk        (clk),
-        .reset      (reset), 
-        .ibuffer_if (sboard_ib_if),
-        .writeback_if(sboard_wb_if)
+        .reset      (scoreboard_reset),         
+        .writeback_if(sboard_wb_if),
+        .ibuffer_if (scoreboard_if)
     );
 
     VX_gpr_stage #(
@@ -102,10 +106,10 @@ module VX_issue #(
         .gpr_rsp_if   (gpr_rsp_if)
     );
 
-    VX_instr_demux instr_demux (
+    VX_dispatch dispatch (
         .clk        (clk),      
-        .reset      (demux_reset),
-        .ibuffer_if (idmux_ib_if),
+        .reset      (dispatch_reset),
+        .ibuffer_if (dispatch_if),
         .gpr_rsp_if (gpr_rsp_if),
         .alu_req_if (alu_req_if),
         .lsu_req_if (lsu_req_if),        
@@ -131,11 +135,11 @@ module VX_issue #(
     `SCOPE_ASSIGN (issue_imm,         ibuffer_if.imm);
     `SCOPE_ASSIGN (issue_use_pc,      ibuffer_if.use_PC);
     `SCOPE_ASSIGN (issue_use_imm,     ibuffer_if.use_imm);
-    `SCOPE_ASSIGN (scoreboard_delay,  !sboard_wb_if.ready); 
-    `SCOPE_ASSIGN (execute_delay,     !idmux_ib_if.ready);    
-    `SCOPE_ASSIGN (gpr_rsp_a,         gpr_rsp_if.rs1_data);
-    `SCOPE_ASSIGN (gpr_rsp_b,         gpr_rsp_if.rs2_data);
-    `SCOPE_ASSIGN (gpr_rsp_c,         gpr_rsp_if.rs3_data);
+    `SCOPE_ASSIGN (scoreboard_delay,  !scoreboard_if.ready); 
+    `SCOPE_ASSIGN (dispatch_delay,    !dispatch_if.ready);    
+    `SCOPE_ASSIGN (gpr_rs1,           gpr_rsp_if.rs1_data);
+    `SCOPE_ASSIGN (gpr_rs2,           gpr_rsp_if.rs2_data);
+    `SCOPE_ASSIGN (gpr_rs3,           gpr_rsp_if.rs3_data);
     `SCOPE_ASSIGN (writeback_valid,   writeback_if.valid);    
     `SCOPE_ASSIGN (writeback_tmask,   writeback_if.tmask);
     `SCOPE_ASSIGN (writeback_wid,     writeback_if.wid);
@@ -170,7 +174,7 @@ module VX_issue #(
             if (decode_if.valid & !decode_if.ready) begin
                 perf_ibf_stalls <= perf_ibf_stalls  + `PERF_CTR_BITS'd1;
             end
-            if (ibuffer_if.valid & !sboard_wb_if.ready) begin 
+            if (scoreboard_if.valid & !scoreboard_if.ready) begin 
                 perf_scb_stalls <= perf_scb_stalls  + `PERF_CTR_BITS'd1;
             end
             if (alu_req_if.valid & !alu_req_if.ready) begin
@@ -204,7 +208,7 @@ module VX_issue #(
 `endif
 `endif
 
-`ifdef DBG_PRINT_PIPELINE
+`ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (alu_req_if.valid && alu_req_if.ready) begin
             dpi_trace("%d: core%0d-issue: wid=%0d, PC=%0h, ex=ALU, tmask=%b, rd=%0d, rs1_data=", 
@@ -246,6 +250,8 @@ module VX_issue #(
             `TRACE_ARRAY1D(gpu_req_if.rs1_data, `NUM_THREADS);
             dpi_trace(", rs2_data=");
             `TRACE_ARRAY1D(gpu_req_if.rs2_data, `NUM_THREADS);
+            dpi_trace(", rs3_data=");
+            `TRACE_ARRAY1D(gpu_req_if.rs3_data, `NUM_THREADS);
             dpi_trace("\n");   
         end
     end

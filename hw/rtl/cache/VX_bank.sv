@@ -509,7 +509,7 @@ module VX_bank #(
     assign perf_mshr_stalls  = mshr_alm_full;
 `endif
 
-`ifdef DBG_PRINT_CACHE_BANK
+`ifdef DBG_TRACE_CACHE_BANK
     wire crsq_fire = crsq_valid && crsq_ready;
     wire pipeline_stall = (mshr_valid || mem_rsp_valid || creq_valid) 
                        && ~(mshr_fire || mem_rsp_fire || creq_fire);

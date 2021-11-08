@@ -230,6 +230,21 @@
 `define CSR_NW          12'hFC1
 `define CSR_NC          12'hFC2
 
+////////// Texture Units //////////////////////////////////////////////////////
+
+`define NUM_TEX_UNITS       2
+
+`define CSR_TEX_STATES      7
+`define CSR_TEX_BEGIN(x)    (12'hFD0 + (x) * `CSR_TEX_STATES)
+
+`define CSR_TEX_ADDR(x)     (`CSR_TEX_BEGIN(x) + 12'h00)
+`define CSR_TEX_FORMAT(x)   (`CSR_TEX_BEGIN(x) + 12'h01)
+`define CSR_TEX_WRAP(x)     (`CSR_TEX_BEGIN(x) + 12'h02)
+`define CSR_TEX_FILTER(x)   (`CSR_TEX_BEGIN(x) + 12'h03)
+`define CSR_TEX_MIPOFF(x)   (`CSR_TEX_BEGIN(x) + 12'h04)
+`define CSR_TEX_WIDTH(x)    (`CSR_TEX_BEGIN(x) + 12'h05)
+`define CSR_TEX_HEIGHT(x)   (`CSR_TEX_BEGIN(x) + 12'h06)
+
 // Pipeline Queues ////////////////////////////////////////////////////////////
 
 // Size of Instruction Buffer

@@ -12,7 +12,7 @@ VORTEX_HOME=$SCRIPT_DIR/..
 DRIVER=vlsim
 APP=sgemm
 CLUSTERS=1
-CORES=2
+CORES=1
 WARPS=4
 THREADS=4
 L2=0
@@ -132,9 +132,9 @@ if [ $DEBUG -eq 1 ]
 then    
     if [ $SCOPE -eq 1 ]
     then
-        DEBUG=$DEBUG_LEVEL SCOPE=1 CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH
+        DEBUG=$DEBUG_LEVEL SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH
     else
-        DEBUG=$DEBUG_LEVEL CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH
+        DEBUG=$DEBUG_LEVEL CONFIGS="$CONFIGS" make -C $DRIVER_PATH
     fi    
     
     if [ $HAS_ARGS -eq 1 ]
@@ -153,9 +153,9 @@ then
 else
     if [ $SCOPE -eq 1 ]
     then
-        SCOPE=1 CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH
+        SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH
     else
-        CONFIGS="$CONFIGS" make -s -C $DRIVER_PATH
+        CONFIGS="$CONFIGS" make -C $DRIVER_PATH
     fi
     
     if [ $HAS_ARGS -eq 1 ]
