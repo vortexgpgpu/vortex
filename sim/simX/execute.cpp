@@ -16,7 +16,7 @@
 using namespace vortex;
 
 static bool HasDivergentThreads(const ThreadMask &thread_mask,                                
-                                const std::vector<std::vector<Word>> &reg_file,
+                                const std::vector<std::vector<DoubleWord>> &reg_file,
                                 unsigned reg) {
   bool cond;
   size_t thread_idx = 0;
