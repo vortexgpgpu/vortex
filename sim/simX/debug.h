@@ -1,7 +1,7 @@
 #pragma once
 
 #ifndef DEBUG_LEVEL
-#define DEBUG_LEVEL 3
+#define DEBUG_LEVEL 4
 #endif
 
 #define DEBUG_HEADER << "DEBUG "
