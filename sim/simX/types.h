@@ -12,7 +12,8 @@ typedef int32_t  WordI;
 // simx64
 typedef uint64_t DoubleWord;
 
-typedef uint32_t Addr;
+// simx64
+typedef uint64_t Addr;
 typedef uint32_t Size;
 
 typedef std::bitset<32> RegMask;

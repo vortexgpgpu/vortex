@@ -100,7 +100,7 @@ private:
   
   // simx64
   std::vector<std::vector<DoubleWord>> iRegFile_;
-  std::vector<std::vector<Word>> fRegFile_;
+  std::vector<std::vector<DoubleWord>> fRegFile_;
   std::vector<std::vector<Byte>> vRegFile_;
   std::stack<DomStackEntry> domStack_;
 

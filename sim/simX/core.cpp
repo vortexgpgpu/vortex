@@ -321,12 +321,14 @@ void Core::barrier(int bar_id, int count, int warp_id) {
   barrier.reset();
 }
 
+// simx64
 Word Core::icache_fetch(Addr addr) {
   Word data;
   mem_.read(&data, addr, sizeof(Word), 0);
   return data;
 }
 
+// simx64
 Word Core::dcache_read(Addr addr, Size size) {
   ++loads_;
   Word data = 0;

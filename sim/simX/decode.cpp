@@ -41,6 +41,8 @@ static const std::unordered_map<int, struct InstTableEntry_t> sc_instTable = {
   {Opcode::FMNMSUB,    {false, InstType::R4_TYPE}},  
   {Opcode::VSET,       {false, InstType::V_TYPE}}, 
   {Opcode::GPGPU,      {false, InstType::R_TYPE}},
+  {Opcode::R_INST_64,  {false, InstType::R_TYPE}},
+  {Opcode::I_INST_64,  {false, InstType::I_TYPE}},
 };
 
 static const char* op_string(const Instr &instr) {  
@@ -117,6 +119,24 @@ static const char* op_string(const Instr &instr) {
     case 2: return "SW";
     default:
       std::abort();
+    }
+  // simx64
+  case Opcode::R_INST_64:
+    switch (func3) {
+    case 0: return func7 ? "SUBW" : "ADDW";
+    case 1: return "SLLW";
+    case 5: return func7 ? "SRAW" : "SRLW";  
+    default:
+      std::abort();
+    }
+  // simx64  
+  case Opcode::I_INST_64:
+    switch (func3) {
+      case 0: return "ADDIW";
+      case 1: return "SLLIW";
+      case 5: return func7 ? "SRAIW" : "SRLIW";
+      default:
+        std::abort();
     }
   case Opcode::SYS_INST: 
     switch (func3) {

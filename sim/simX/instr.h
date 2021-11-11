@@ -33,6 +33,10 @@ enum Opcode {
   VS        = 0x27,
   // GPGPU Extension
   GPGPU     = 0x6b,
+  // simx64
+  // RV64I Extension
+  R_INST_64 = 0x3b,
+  I_INST_64 = 0x1b,
 };
 
 enum InstType { 
