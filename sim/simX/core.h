@@ -66,10 +66,11 @@ public:
 
   void barrier(int bar_id, int count, int warp_id);
 
+  // simx64
   Word icache_fetch(Addr);
-
+  // simx64
   Word dcache_read(Addr, Size);
-
+  // simx64
   void dcache_write(Addr, Word, Size);
 
   void trigger_ebreak();

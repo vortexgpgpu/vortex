@@ -205,6 +205,9 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
           }
           break;
         case 1:
+          // simx64
+          // In RV64I, only the low 6 bits of rs2 are considered for the shift amount.
+          // In RV32I, the value in register rs1 is shifted by the amount held in the lower 5 bits of register rs2.
           rddata = rsdata[0] << rsdata[1];
           break;
         case 2:
@@ -386,6 +389,71 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         break;
       default:
         std::abort();
+      }
+    } break;
+    // simx64
+    case R_INST_64: {
+      switch (func3) {
+        case 0: 
+          if (func7){
+            // SUBW
+            rddata = DoubleWord(rsdata[0] - rsdata[1]);
+          }
+          else{
+            // ADDW
+            rddata = DoubleWord(rsdata[0] + rsdata[1]);
+          }    
+          break;
+        case 1: 
+          // SLLW
+          // shift amount given by rs2[4:0]
+          rddata = DoubleWord(rsdata[0] << rsdata[1]);
+          break;
+        case 5:
+          if (func7) {
+            // SRAW
+            // shift amount given by rs2[4:0]
+            rddata = DoubleWord(WordI(rsdata[0]) >> WordI(rsdata[1]));
+          } else {
+            // SRLW
+            // shift amount given by rs2[4:0]
+            rddata = DoubleWord(Word(rsdata[0]) >> Word(rsdata[1]));
+          }
+          break;
+        default:
+          std::abort();
+      }
+    } break;
+    // simx64
+    case I_INST_64: {
+      switch (func3) {
+        case 0:
+          // ADDIW
+          rddata = DoubleWord(rsdata[0] + immsrc);
+          break;
+        case 1: 
+          // SLLIW
+          // rs1 shifted by lower 5 bits of imm
+          // Illegal exception if imm[5] != 0
+          rddata = DoubleWord(rsdata[0] << immsrc);
+          break;
+        case 5:
+          if (func7) {
+            // SRAI
+            // rs1 shifted by lower 5 bits of imm
+            // Illegal exception if imm[5] != 0
+            Word result = DoubleWord(WordI(rsdata[0]) >> immsrc);
+            rddata = result;
+          } else {
+            // SRLI
+            // rs1 shifted by lower 5 bits of imm
+            // Illegal exception if imm[5] != 0
+            Word result = DoubleWord(Word(rsdata[0]) >> immsrc);
+            rddata = result;
+          }
+          break;
+        default:
+          std::abort();
       }
     } break;
     case SYS_INST: {
