@@ -453,9 +453,10 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               //rsdata[0]: data in rs1
               Word memAddr   = ((rsdata[0]) & 0xFFFFFFFC); // word aligned
               Word data_read = core_->dcache_read(memAddr, 4);
+              rddata = data_read;
               Word sum = data_read + rsdata[1];
               core_->dcache_write(memAddr, sum, 4);
-              rddata = sum;
+              rd_write = true;
               break;
             }
             
@@ -464,31 +465,35 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               Word data_read = core_->dcache_read(memAddr, 4);
               rddata = data_read;
               core_->dcache_write(memAddr, rsdata[1], 4);
+              rd_write = true;
               break;
             }
             
             case 0x4: { // AMOXOR
               Word memAddr   = ((rsdata[0]) & 0xFFFFFFFC); // word aligned
               Word data_read = core_->dcache_read(memAddr, 4);
+              rddata = data_read;
               Word result = data_read ^ rsdata[1];
               core_->dcache_write(memAddr, result, 4);
-              rddata = result;
+              rd_write = true;
               break;
             }
             case 0x8: { // AMOOR
               Word memAddr   = ((rsdata[0]) & 0xFFFFFFFC); // word aligned
               Word data_read = core_->dcache_read(memAddr, 4);
+              rddata = data_read;
               Word result = data_read | rsdata[1];
               core_->dcache_write(memAddr, result, 4);
-              rddata = result;
+              rd_write = true;
               break;
             }
             case 0x0C: { // AMOAND
               Word memAddr   = ((rsdata[0]) & 0xFFFFFFFC); // word aligned
               Word data_read = core_->dcache_read(memAddr, 4);
+              rddata = data_read;
               Word result = data_read & rsdata[1];
               core_->dcache_write(memAddr, result, 4);
-              rddata = result;
+              rd_write = true;
               break;
             }
             case 0x10: { // AMOMIN
@@ -500,6 +505,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               } else {
                 rddata = data_read;
               }
+              rd_write = true;
               break;
             }
             case 0x14: { // AMOMAX
@@ -511,6 +517,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               } else {
                 rddata = data_read;
               }
+              rd_write = true;
               break;
             }
             case 0x18: { // AMOMINU
@@ -522,6 +529,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               } else {
                 rddata = data_read;
               }
+              rd_write = true;
               break;
             }
             case 0x1C: { // AMOMAXU
@@ -533,6 +541,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
               } else {
                 rddata = data_read;
               }
+              rd_write = true;
               break;
             }
             default:
