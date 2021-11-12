@@ -22,6 +22,8 @@ private:
   Word reg_s_;
   Word func2_s_;
   Word func3_s_;
+  Word aq_s_;
+  Word rl_s_;
   Word shift_opcode_;
   Word shift_rd_;
   Word shift_rs1_;
@@ -34,7 +36,6 @@ private:
   Word shift_j_u_immed_;
   Word shift_s_b_immed_;
   Word shift_i_immed_;
-  Word shift_aqrl;
 
   Word reg_mask_;
   Word func2_mask_;

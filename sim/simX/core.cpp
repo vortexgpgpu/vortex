@@ -93,6 +93,8 @@ void Core::clear() {
   warps_[0]->setTmask(0, true);
 
   ebreak_ = false;
+
+  clear_reservation();
 }
 
 void Core::step() {
@@ -382,6 +384,22 @@ void Core::writeToStdOut(Addr addr, Word data) {
     std::cout << std::dec << "#" << tid << ": " << ss_buf.str() << std::flush;
     ss_buf.str("");
   }
+}
+
+void Core::make_reservation(Addr addr) {
+  reservation_.addr = addr;
+  reservation_.reserved = true;
+  D(3, "Reserved addr " << addr << std::endl);
+}
+
+bool Core::check_reservation(Addr addr) {
+  return reservation_.reserved && (reservation_.addr == addr);
+}
+
+void Core::clear_reservation() {
+  reservation_.addr = 0;
+  reservation_.reserved = false;
+  D(3, "Cleared reservation");
 }
 
 void Core::trigger_ebreak() {

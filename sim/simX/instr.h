@@ -34,7 +34,7 @@ enum Opcode {
   VL        = 0x7,
   VS        = 0x27,
   // GPGPU Extension
-  GPGPU     = 0x6b,
+  GPGPU     = 0x6b
 };
 
 enum InstType { 

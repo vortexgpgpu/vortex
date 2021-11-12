@@ -139,6 +139,8 @@ static const char* op_string(const Instr &instr) {
       switch (func5) {
       case 0x00: return "AMOADD.W";
       case 0x01: return "AMOSWAP.W";
+      case 0x02: return "LR.W";
+      case 0x03: return "SC.W";
       case 0x04: return "AMOXOR.W";
       case 0x08: return "AMOOR.W";
       case 0x0c: return "AMOAND.W";
@@ -273,6 +275,8 @@ Decoder::Decoder(const ArchDef &arch) {
   reg_s_    = 5;
   func2_s_  = 2;
   func3_s_  = 3;
+  aq_s_     = 1;
+  rl_s_     = 1;
   mop_s_    = 3;
   vmask_s_  = 1;
 
@@ -281,12 +285,11 @@ Decoder::Decoder(const ArchDef &arch) {
   shift_func3_  = shift_rd_ + reg_s_;
   shift_rs1_    = shift_func3_ + func3_s_;
   shift_rs2_    = shift_rs1_ + reg_s_;
-  shift_aqrl    = shift_rs2_ + reg_s_;
   shift_func7_  = shift_rs2_ + reg_s_;
   shift_rs3_    = shift_func7_ + func2_s_;
   shift_vmop_   = shift_func7_ + vmask_s_;
   shift_vnf_    = shift_vmop_ + mop_s_;
-  shift_func5_  = shift_func7_ + 2;
+  shift_func5_  = shift_func7_ + aq_s_ + rl_s_;
   shift_func6_  = shift_func7_ + 1;
   shift_vset_   = shift_func7_ + 6;
 

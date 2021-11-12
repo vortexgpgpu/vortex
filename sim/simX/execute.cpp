@@ -461,6 +461,23 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
           // AMOSWAP.W
           result = rsdata[1];
           break;
+        case 0x02: {
+          // LR.W
+          result = data_read; // QUESTION sign-extended value?
+          core_->make_reservation(memAddr);
+          break;
+        }
+        case 0x03: {
+          // SC.W
+          if (core_->check_reservation(memAddr)) {
+            core_->dcache_write(memAddr, rsdata[1], 4);
+            rddata = 0;
+          } else {
+            rddata = 1; // using the unspecified failure code
+          }
+          core_->clear_reservation();
+          break;
+        }
         case 0x04:
           // AMOXOR.W
           result = data_read ^ rsdata[1];
@@ -1629,9 +1646,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       default:
         std::abort();
       }
-    } break;    
-    default:
-      std::abort();
+    } break;
     }
 
     if (rd_write) {
