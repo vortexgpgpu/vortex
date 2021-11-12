@@ -32,7 +32,7 @@ static const std::unordered_map<int, struct InstTableEntry_t> sc_instTable = {
   {Opcode::JALR_INST,  {true , InstType::I_TYPE}},
   {Opcode::SYS_INST,   {true , InstType::I_TYPE}},
   {Opcode::FENCE,      {true , InstType::I_TYPE}},
-  {Opcode::AMO,        {false , InstType::R_TYPE}},
+  {Opcode::AMO,        {false, InstType::R_TYPE}},
   {Opcode::FL,         {false, InstType::I_TYPE}},
   {Opcode::FS,         {false, InstType::S_TYPE}},
   {Opcode::FCI,        {false, InstType::R_TYPE}}, 
@@ -134,18 +134,24 @@ static const char* op_string(const Instr &instr) {
     }
   case Opcode::FENCE: return "FENCE";
   case Opcode::AMO:
-    switch (func5) {
-      case 0x0: return "AMOADD";
-      case 0x01: return "AMOSWAP";
-      case 0x04: return "AMOXOR";
-      case 0x08: return "AMOOR";
-      case 0x0C: return "AMOAND";
-      case 0x10: return "AMOMIN";
-      case 0x14: return "AMOMAX";
+    switch (func3) {
+    case 2:
+      switch (func5) {
+      case 0x00: return "AMOADD.W";
+      case 0x01: return "AMOSWAP.W";
+      case 0x04: return "AMOXOR.W";
+      case 0x08: return "AMOOR.W";
+      case 0x0c: return "AMOAND.W";
+      case 0x10: return "AMOMIN.W";
+      case 0x14: return "AMOMAX.W";
+      case 0x18: return "AMOMINU.W";
+      case 0x1c: return "AMOMAXU.W";
       default:
         std::abort();
+      }
+    default:
+      std::abort();
     }
-
   case Opcode::FL: return (func3 == 0x2) ? "FL" : "VL";
   case Opcode::FS: return (func3 == 0x2) ? "FS" : "VS";
   case Opcode::FCI: 
@@ -275,13 +281,12 @@ Decoder::Decoder(const ArchDef &arch) {
   shift_func3_  = shift_rd_ + reg_s_;
   shift_rs1_    = shift_func3_ + func3_s_;
   shift_rs2_    = shift_rs1_ + reg_s_;
-  // same as shift_func7_
   shift_aqrl    = shift_rs2_ + reg_s_;
   shift_func7_  = shift_rs2_ + reg_s_;
-  shift_func5_  = shift_aqrl + func2_s_;
   shift_rs3_    = shift_func7_ + func2_s_;
   shift_vmop_   = shift_func7_ + vmask_s_;
   shift_vnf_    = shift_vmop_ + mop_s_;
+  shift_func5_  = shift_func7_ + 2;
   shift_func6_  = shift_func7_ + 1;
   shift_vset_   = shift_func7_ + 6;
 

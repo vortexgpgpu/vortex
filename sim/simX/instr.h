@@ -58,8 +58,7 @@ public:
     , rdest_(0)
     , func3_(0)
     , func5_(0)
-    , func7_(0) 
-    {
+    , func7_(0) {
     for (int i = 0; i < MAX_REG_SOURCES; ++i) {
        rsrc_type_[i] = 0;
     }
