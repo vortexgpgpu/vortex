@@ -443,122 +443,66 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       pipeline->stall_warp = true; 
       runOnce = true;
       break;
-    // add AMO instructions
-    
-    case AMO:
+    case AMO: {
       switch (func3) {
-        case 0x02: {
-          switch (func5) {
-            case 0x0: { // AMOADD
-              //rsdata[0]: data in rs1
-              Word memAddr   = ((rsdata[0]) & 0xFFFFFFFC); // word aligned
-              Word data_read = core_->dcache_read(memAddr, 4);
-              rddata = data_read;
-              Word sum = data_read + rsdata[1];
-              core_->dcache_write(memAddr, sum, 4);
-              rd_write = true;
-              break;
-            }
-            
-            case 0x1: { // AMOSWAP
-              Word memAddr   = ((rsdata[0]) & 0xFFFFFFFC); // word aligned
-              Word data_read = core_->dcache_read(memAddr, 4);
-              rddata = data_read;
-              core_->dcache_write(memAddr, rsdata[1], 4);
-              rd_write = true;
-              break;
-            }
-            
-            case 0x4: { // AMOXOR
-              Word memAddr   = ((rsdata[0]) & 0xFFFFFFFC); // word aligned
-              Word data_read = core_->dcache_read(memAddr, 4);
-              rddata = data_read;
-              Word result = data_read ^ rsdata[1];
-              core_->dcache_write(memAddr, result, 4);
-              rd_write = true;
-              break;
-            }
-            case 0x8: { // AMOOR
-              Word memAddr   = ((rsdata[0]) & 0xFFFFFFFC); // word aligned
-              Word data_read = core_->dcache_read(memAddr, 4);
-              rddata = data_read;
-              Word result = data_read | rsdata[1];
-              core_->dcache_write(memAddr, result, 4);
-              rd_write = true;
-              break;
-            }
-            case 0x0C: { // AMOAND
-              Word memAddr   = ((rsdata[0]) & 0xFFFFFFFC); // word aligned
-              Word data_read = core_->dcache_read(memAddr, 4);
-              rddata = data_read;
-              Word result = data_read & rsdata[1];
-              core_->dcache_write(memAddr, result, 4);
-              rd_write = true;
-              break;
-            }
-            case 0x10: { // AMOMIN
-              Word memAddr   = ((rsdata[0]) & 0xFFFFFFFC); // word aligned
-              WordI data_read = (WordI)core_->dcache_read(memAddr, 4);
-              if (data_read > (WordI)rsdata[1]) {
-                core_->dcache_write(memAddr, rsdata[1], 4);
-                rddata = rsdata[1];
-              } else {
-                rddata = data_read;
-              }
-              rd_write = true;
-              break;
-            }
-            case 0x14: { // AMOMAX
-              Word memAddr   = ((rsdata[0]) & 0xFFFFFFFC); // word aligned
-              WordI data_read = (WordI)core_->dcache_read(memAddr, 4);
-              if (data_read < (WordI)rsdata[1]) {
-                core_->dcache_write(memAddr, rsdata[1], 4);
-                rddata = rsdata[1];
-              } else {
-                rddata = data_read;
-              }
-              rd_write = true;
-              break;
-            }
-            case 0x18: { // AMOMINU
-              Word memAddr   = ((rsdata[0]) & 0xFFFFFFFC); // word aligned
-              Word data_read = core_->dcache_read(memAddr, 4);
-              if (data_read > rsdata[1]) {
-                core_->dcache_write(memAddr, rsdata[1], 4);
-                rddata = rsdata[1];
-              } else {
-                rddata = data_read;
-              }
-              rd_write = true;
-              break;
-            }
-            case 0x1C: { // AMOMAXU
-              Word memAddr   = ((rsdata[0]) & 0xFFFFFFFC); // word aligned
-              Word data_read = core_->dcache_read(memAddr, 4);
-              if (data_read < rsdata[1]) {
-                core_->dcache_write(memAddr, rsdata[1], 4);
-                rddata = rsdata[1];
-              } else {
-                rddata = data_read;
-              }
-              rd_write = true;
-              break;
-            }
-            default:
-              break;
-          }
+      case 0x02: {
+        Word memAddr   = ((rsdata[0]) & 0xFFFFFFFC); // word aligned
+        Word data_read = core_->dcache_read(memAddr, 4);
+        Word result = data_read;
+        rddata = data_read;
+        rd_write = true;
+
+        switch (func5) {
+        case 0x00:
+          // AMOADD.W
+          result = data_read + rsdata[1];
           break;
-        }
-        // leave room for .D instructions
-        case 0x03: {
+        case 0x01:
+          // AMOSWAP.W
+          result = rsdata[1];
           break;
-        }
+        case 0x04:
+          // AMOXOR.W
+          result = data_read ^ rsdata[1];
+          break;
+        case 0x08:
+          // AMOOR.W
+          result = data_read | rsdata[1];
+          break;
+        case 0x0c:
+          // AMOAND.W
+          result = data_read & rsdata[1];
+          break;
+        case 0x10:
+          // AMOMIN.W
+          result = std::min((WordI)data_read, (WordI)rsdata[1]);
+          break;
+        case 0x14:
+          // AMOMAX.W
+          result = std::max((WordI)data_read, (WordI)rsdata[1]);
+          break;
+        case 0x18:
+          // AMOMINU.W
+          result = std::min(data_read, rsdata[1]);
+          break;
+        case 0x1c:
+          // AMOMAXU.W
+          result = std::max(data_read, rsdata[1]);
+          break;
         default:
-          break;
-      }
-      pipeline->stall_warp = true; 
-      break;
-    
+          std::cout << "unsupported AMO.W instr" << std::endl;
+          std::abort();
+        }
+
+        if (result != data_read) {
+          core_->dcache_write(memAddr, result, 4);
+        }
+      } break;
+      default:
+        std::cout << "unsupported AMO width" << std::endl;
+        std::abort();
+      } break;
+    }
     case (FL | VL):
       if (func3 == 0x2) {
         Word memAddr = rsdata[0] + immsrc;
