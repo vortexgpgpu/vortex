@@ -41,11 +41,13 @@ static const std::unordered_map<int, struct InstTableEntry_t> sc_instTable = {
   {Opcode::FMNMSUB,    {false, InstType::R4_TYPE}},  
   {Opcode::VSET,       {false, InstType::V_TYPE}}, 
   {Opcode::GPGPU,      {false, InstType::R_TYPE}},
+  {Opcode::AMO,        {false, InstType::R_TYPE}},
 };
 
 static const char* op_string(const Instr &instr) {  
   Word func3 = instr.getFunc3();
   Word func7 = instr.getFunc7();
+  Word func5 = instr.getFunc5();
   Word rs2   = instr.getRSrc(1);
   Word imm   = instr.getImm();
   switch (instr.getOpcode()) {
@@ -186,6 +188,15 @@ static const char* op_string(const Instr &instr) {
     default:
       std::abort();
     }
+  case Opcode::AMO:
+    D(2, "FUNC_5 " << func5 << std::endl << std::flush);
+    switch (func5) {
+      case 0: return "AMOADD.W";
+      case 2: return "LR.W";
+      case 3: return "SC.W";
+      default:
+        std::abort();
+    }
   default:
     std::abort();
   }  
@@ -279,6 +290,11 @@ Decoder::Decoder(const ArchDef &arch) {
   u_imm_mask_  = 0xfffff;
   j_imm_mask_  = 0xfffff;
   v_imm_mask_  = 0x7ff;  
+
+  aq_s_         = 1;
+  rl_s_         = 1;
+  shift_func5_  = shift_func7_ + aq_s_ + rl_s_;
+  func5_mask_   = 0x1f;
 }
 
 std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) {  
@@ -287,6 +303,7 @@ std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) {
   instr->setOpcode(op);
 
   Word func3 = (code >> shift_func3_) & func3_mask_;
+  Word func5 = (code >> shift_func5_) & func5_mask_;
   Word func6 = (code >> shift_func6_) & func6_mask_;
   Word func7 = (code >> shift_func7_) & func7_mask_;
 
@@ -338,6 +355,9 @@ std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) {
       instr->setSrcReg(rs2);
     }
     instr->setFunc3(func3);
+    if (op == Opcode::AMO) {
+      instr->setFunc5(func5);
+    }
     instr->setFunc7(func7);
     break;
 

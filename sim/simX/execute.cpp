@@ -56,6 +56,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
   bool runOnce = false;
   
   Word func3 = instr.getFunc3();
+  Word func5 = instr.getFunc5();
   Word func6 = instr.getFunc6();
   Word func7 = instr.getFunc7();
 
@@ -1568,7 +1569,43 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       default:
         std::abort();
       }
-    } break;    
+    } break;
+    case AMO:
+      switch (func5) {
+        case 0: {
+          // amoadd.w
+          Addr memAddr = rsdata[0];
+          Word data = core_->dcache_read(memAddr, 4);
+          rddata = data;
+          Word result = data + rsdata[1];
+          core_->dcache_write(memAddr, result, 4);
+          rd_write = true;
+          break;
+        }
+        case 2: {
+          // lr.w
+          Addr memAddr = rsdata[0];
+          Word data = core_->dcache_read(memAddr, 4);
+          rddata = data; // QUESTION sign-extended value?
+          core_->make_reservation(memAddr);
+          rd_write = true;
+          break;
+        }
+        case 3: {
+          // sc.w
+          Addr memAddr = rsdata[0];
+          if (core_->check_reservation(memAddr)) {
+            core_->dcache_write(memAddr, rsdata[1], 4);
+            rddata = 0;
+          } else {
+            rddata = 1; // using the unspecified failure code
+          }
+          core_->clear_reservation();
+          rd_write = true;
+          break;
+        }
+      }
+      break;
     default:
       std::abort();
     }

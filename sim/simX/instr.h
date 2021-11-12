@@ -33,6 +33,8 @@ enum Opcode {
   VS        = 0x27,
   // GPGPU Extension
   GPGPU     = 0x6b,
+  // Atomic Extension
+  AMO       = 0x2f
 };
 
 enum InstType { 
@@ -55,7 +57,8 @@ public:
     , has_imm_(false)
     , rdest_(0)
     , func3_(0)
-    , func7_(0) {
+    , func7_(0)
+    , func5_(0) {
     for (int i = 0; i < MAX_REG_SOURCES; ++i) {
        rsrc_type_[i] = 0;
     }
@@ -70,6 +73,7 @@ public:
   void setDestVReg(int destReg) { rdest_type_ = 3; rdest_ = destReg; }
   void setSrcVReg(int srcReg) { rsrc_type_[num_rsrcs_] = 3; rsrc_[num_rsrcs_++] = srcReg;  }
   void setFunc3(Word func3) { func3_ = func3; }
+  void setFunc5(Word func5) { func5_ = func5; }
   void setFunc7(Word func7) { func7_ = func7; }
   void setImm(Word imm) { has_imm_ = true; imm_ = imm; }
   void setVlsWidth(Word width) { vlsWidth_ = width; }
@@ -85,6 +89,7 @@ public:
   /* Getters used by encoders. */
   Opcode getOpcode() const { return opcode_; }
   Word getFunc3() const { return func3_; }
+  Word getFunc5() const { return func5_; }
   Word getFunc6() const { return func6_; }
   Word getFunc7() const { return func7_; }
   int getNRSrc() const { return num_rsrcs_; }
@@ -133,6 +138,9 @@ private:
   Word vsew_;
   Word vediv_;
   Word func6_;
+
+  //Atomic
+  Word func5_;
 
   friend std::ostream &operator<<(std::ostream &, const Instr&);
 };

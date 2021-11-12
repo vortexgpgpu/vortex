@@ -56,6 +56,12 @@ private:
   Word shift_func6_;
   Word vmask_s_;
   Word mop_s_;
+
+  // Atomic
+  Word aq_s_;
+  Word rl_s_;
+  Word shift_func5_;
+  Word func5_mask_;
 };
 
 }
