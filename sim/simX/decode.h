@@ -29,14 +29,17 @@ private:
   Word shift_rs3_;
   Word shift_func2_;
   Word shift_func3_;
+  Word shift_func5_;
   Word shift_func7_;
   Word shift_j_u_immed_;
   Word shift_s_b_immed_;
   Word shift_i_immed_;
+  Word shift_aqrl;
 
   Word reg_mask_;
   Word func2_mask_;
   Word func3_mask_;
+  Word func5_mask_;
   Word func6_mask_;
   Word func7_mask_;
   Word opcode_mask_;

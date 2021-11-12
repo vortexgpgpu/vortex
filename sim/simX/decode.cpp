@@ -32,6 +32,7 @@ static const std::unordered_map<int, struct InstTableEntry_t> sc_instTable = {
   {Opcode::JALR_INST,  {true , InstType::I_TYPE}},
   {Opcode::SYS_INST,   {true , InstType::I_TYPE}},
   {Opcode::FENCE,      {true , InstType::I_TYPE}},
+  {Opcode::AMO,        {false , InstType::R_TYPE}},
   {Opcode::FL,         {false, InstType::I_TYPE}},
   {Opcode::FS,         {false, InstType::S_TYPE}},
   {Opcode::FCI,        {false, InstType::R_TYPE}}, 
@@ -45,6 +46,7 @@ static const std::unordered_map<int, struct InstTableEntry_t> sc_instTable = {
 
 static const char* op_string(const Instr &instr) {  
   Word func3 = instr.getFunc3();
+  Word func5 = instr.getFunc5();
   Word func7 = instr.getFunc7();
   Word rs2   = instr.getRSrc(1);
   Word imm   = instr.getImm();
@@ -131,6 +133,19 @@ static const char* op_string(const Instr &instr) {
       std::abort();
     }
   case Opcode::FENCE: return "FENCE";
+  case Opcode::AMO:
+    switch (func5) {
+      case 0x0: return "AMOADD";
+      case 0x01: return "AMOSWAP";
+      case 0x04: return "AMOXOR";
+      case 0x08: return "AMOOR";
+      case 0x0C: return "AMOAND";
+      case 0x10: return "AMOMIN";
+      case 0x14: return "AMOMAX";
+      default:
+        std::abort();
+    }
+
   case Opcode::FL: return (func3 == 0x2) ? "FL" : "VL";
   case Opcode::FS: return (func3 == 0x2) ? "FS" : "VS";
   case Opcode::FCI: 
@@ -260,7 +275,10 @@ Decoder::Decoder(const ArchDef &arch) {
   shift_func3_  = shift_rd_ + reg_s_;
   shift_rs1_    = shift_func3_ + func3_s_;
   shift_rs2_    = shift_rs1_ + reg_s_;
+  // same as shift_func7_
+  shift_aqrl    = shift_rs2_ + reg_s_;
   shift_func7_  = shift_rs2_ + reg_s_;
+  shift_func5_  = shift_aqrl + func2_s_;
   shift_rs3_    = shift_func7_ + func2_s_;
   shift_vmop_   = shift_func7_ + vmask_s_;
   shift_vnf_    = shift_vmop_ + mop_s_;
@@ -270,6 +288,7 @@ Decoder::Decoder(const ArchDef &arch) {
   reg_mask_    = 0x1f;
   func2_mask_  = 0x2;
   func3_mask_  = 0x7;
+  func5_mask_  = 0x1f;
   func6_mask_  = 0x3f;
   func7_mask_  = 0x7f;
   opcode_mask_ = 0x7f;
@@ -287,6 +306,7 @@ std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) {
   instr->setOpcode(op);
 
   Word func3 = (code >> shift_func3_) & func3_mask_;
+  Word func5 = (code >> shift_func5_) & func5_mask_;
   Word func6 = (code >> shift_func6_) & func6_mask_;
   Word func7 = (code >> shift_func7_) & func7_mask_;
 
@@ -338,6 +358,7 @@ std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) {
       instr->setSrcReg(rs2);
     }
     instr->setFunc3(func3);
+    instr->setFunc5(func5);
     instr->setFunc7(func7);
     break;
 
