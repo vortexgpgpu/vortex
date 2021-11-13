@@ -464,18 +464,18 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         case 0x02: {
           // LR.W
           result = data_read; // QUESTION sign-extended value?
-          core_->make_reservation(memAddr);
+          core_->dcache_make_reservation(memAddr);
           break;
         }
         case 0x03: {
           // SC.W
-          if (core_->check_reservation(memAddr)) {
+          if (core_->dcache_check_reservation(memAddr)) {
             core_->dcache_write(memAddr, rsdata[1], 4);
             rddata = 0;
           } else {
             rddata = 1; // using the unspecified failure code
           }
-          core_->clear_reservation();
+          core_->dcache_clear_reservation();
           break;
         }
         case 0x04:

@@ -93,8 +93,8 @@ void Core::clear() {
   warps_[0]->setTmask(0, true);
 
   ebreak_ = false;
-
-  clear_reservation();
+  
+  mem_.clear_reservation();
 }
 
 void Core::step() {
@@ -386,20 +386,29 @@ void Core::writeToStdOut(Addr addr, Word data) {
   }
 }
 
-void Core::make_reservation(Addr addr) {
-  reservation_.addr = addr;
-  reservation_.reserved = true;
-  D(3, "Reserved addr " << addr << std::endl);
+void Core::dcache_make_reservation(uint64_t addr) {
+#ifdef SM_ENABLE
+  shared_mem_.make_reservation(addr);
+  return;
+#endif
+  mem_.make_reservation(addr);
+  return;
 }
 
-bool Core::check_reservation(Addr addr) {
-  return reservation_.reserved && (reservation_.addr == addr);
+bool Core::dcache_check_reservation(uint64_t addr) {
+#ifdef SM_ENABLE
+  return shared_mem_.check_reservation(addr);
+#endif
+  return mem_.check_reservation(addr);
 }
 
-void Core::clear_reservation() {
-  reservation_.addr = 0;
-  reservation_.reserved = false;
-  D(3, "Cleared reservation");
+void Core::dcache_clear_reservation() {
+#ifdef SM_ENABLE
+  shared_mem_.clear_reservation();
+  return;
+#endif
+  mem_.clear_reservation();
+  return;
 }
 
 void Core::trigger_ebreak() {

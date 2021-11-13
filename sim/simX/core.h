@@ -18,11 +18,6 @@
 
 namespace vortex {
 
-struct Reservation {
-  Word addr;
-  bool reserved;
-};
-
 class Core {
 public:
   Core(const ArchDef &arch, Decoder &decoder, MemoryUnit &mem, Word id);
@@ -77,11 +72,9 @@ public:
 
   void dcache_write(Addr, Word, Size);
 
-  void make_reservation(Addr);
-
-  bool check_reservation(Addr);
-
-  void clear_reservation();
+  void dcache_make_reservation(uint64_t addr);
+  bool dcache_check_reservation(uint64_t addr);
+  void dcache_clear_reservation();
 
   void trigger_ebreak();
   bool check_ebreak() const;
@@ -114,7 +107,6 @@ private:
 #ifdef SM_ENABLE
   RAM shared_mem_;
 #endif 
-  Reservation reservation_;
 
   bool ebreak_;
 
