@@ -9,7 +9,7 @@ namespace vortex {
 
 class Core;
 class Instr;
-class Pipeline;
+class pipeline_state_t;
 struct DomStackEntry {
   DomStackEntry(const ThreadMask &tmask, Word PC) 
     : tmask(tmask)
@@ -41,8 +41,6 @@ struct vtype {
 class Warp {
 public:
   Warp(Core *core, Word id);
-
-  void clear();
   
   bool active() const {
     return active_;
@@ -71,7 +69,7 @@ public:
   }
 
   void setTmask(size_t index, bool value) {
-    tmask_[index] = value;
+    tmask_.set(index, value);
     active_ = tmask_.any();
   }
 
@@ -82,18 +80,18 @@ public:
   }
 
   Word getIRegValue(int reg) const {
-    return iRegFile_[0][reg];
+    return iRegFile_.at(0).at(reg);
   }
 
-  void step(Pipeline *);
+  void eval(pipeline_state_t *);
 
 private:
 
-  void execute(const Instr &instr, Pipeline *);
+  void execute(const Instr &instr, pipeline_state_t *pipeline_state);
   
   Word id_;
-  bool active_;
   Core *core_;
+  bool active_;
   
   Word PC_;
   ThreadMask tmask_;  

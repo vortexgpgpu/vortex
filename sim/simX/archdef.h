@@ -9,21 +9,31 @@
 
 namespace vortex {
 
-class ArchDef {
+class ArchDef {  
+private:
+  int num_cores_;
+  int num_warps_;
+  int num_threads_;
+  int wsize_;
+  int vsize_;
+  int num_regs_;
+  int num_csrs_;
+  int num_barriers_;
+  
 public:
-  ArchDef(const std::string &/*arch*/,
+  ArchDef(const std::string& /*arch*/,
           int num_cores, 
           int num_warps, 
-          int num_threads) {         
-    wsize_       = 4;
-    vsize_       = 16;
-    num_regs_    = 32;
-    num_csrs_    = 4096;
-    num_barriers_= NUM_BARRIERS;
-    num_cores_   = num_cores;
-    num_warps_   = num_warps;
-    num_threads_ = num_threads;
-  }
+          int num_threads)   
+    : num_cores_(num_cores)
+    , num_warps_(num_warps)
+    , num_threads_(num_threads)
+    , wsize_(4)
+    , vsize_(16)
+    , num_regs_(32)
+    , num_csrs_(4096)
+    , num_barriers_(NUM_BARRIERS)
+  {}
 
   int wsize() const { 
     return wsize_; 
@@ -56,17 +66,6 @@ public:
   int num_cores() const {
     return num_cores_;
   }
-  
-private:
-
-  int wsize_;
-  int vsize_;
-  int num_regs_;
-  int num_csrs_;
-  int num_barriers_;
-  int num_threads_;
-  int num_warps_;
-  int num_cores_;
 };
 
 }
