@@ -72,6 +72,10 @@ public:
 
   void dcache_write(Addr, Word, Size);
 
+  void dcache_make_reservation(uint64_t addr);
+  bool dcache_check_reservation(uint64_t addr);
+  void dcache_clear_reservation();
+
   void trigger_ebreak();
   bool check_ebreak() const;
 

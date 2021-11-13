@@ -155,6 +155,24 @@ void MemoryUnit::write(const void *data, uint64_t addr, uint64_t size, bool sup)
     pAddr = t.pfn * pageSize_ + addr % pageSize_;
   }
   decoder_.write(data, pAddr, size);
+
+  if (addr == reservation_.addr) {
+    reservation_.reserved = false;
+  }
+}
+
+void MemoryUnit::make_reservation(uint64_t addr) {
+  reservation_.addr = addr;
+  reservation_.reserved = true;
+}
+
+bool MemoryUnit::check_reservation(uint64_t addr) {
+  return reservation_.reserved && (reservation_.addr == addr);
+}
+
+void MemoryUnit::clear_reservation() {
+  reservation_.addr = 0;
+  reservation_.reserved = false;
 }
 
 void MemoryUnit::tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags) {
@@ -302,4 +320,18 @@ void RAM::loadHexImage(const char* filename) {
     ++line;
     --size;
   }
+}
+
+void RAM::make_reservation(uint64_t addr) {
+  reservation_.addr = addr;
+  reservation_.reserved = true;
+}
+
+bool RAM::check_reservation(uint64_t addr) {
+  return reservation_.reserved && (reservation_.addr == addr);
+}
+
+void RAM::clear_reservation() {
+  reservation_.addr = 0;
+  reservation_.reserved = false;
 }

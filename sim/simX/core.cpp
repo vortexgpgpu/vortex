@@ -93,6 +93,8 @@ void Core::clear() {
   warps_[0]->setTmask(0, true);
 
   ebreak_ = false;
+  
+  mem_.clear_reservation();
 }
 
 void Core::step() {
@@ -382,6 +384,31 @@ void Core::writeToStdOut(Addr addr, Word data) {
     std::cout << std::dec << "#" << tid << ": " << ss_buf.str() << std::flush;
     ss_buf.str("");
   }
+}
+
+void Core::dcache_make_reservation(uint64_t addr) {
+#ifdef SM_ENABLE
+  shared_mem_.make_reservation(addr);
+  return;
+#endif
+  mem_.make_reservation(addr);
+  return;
+}
+
+bool Core::dcache_check_reservation(uint64_t addr) {
+#ifdef SM_ENABLE
+  return shared_mem_.check_reservation(addr);
+#endif
+  return mem_.check_reservation(addr);
+}
+
+void Core::dcache_clear_reservation() {
+#ifdef SM_ENABLE
+  shared_mem_.clear_reservation();
+  return;
+#endif
+  mem_.clear_reservation();
+  return;
 }
 
 void Core::trigger_ebreak() {

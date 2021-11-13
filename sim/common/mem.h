@@ -72,6 +72,10 @@ public:
   void read(void *data, uint64_t addr, uint64_t size, bool sup);  
   void write(const void *data, uint64_t addr, uint64_t size, bool sup);
 
+  void make_reservation(uint64_t addr);
+  bool check_reservation(uint64_t addr);
+  void clear_reservation();
+
   void tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags);
   void tlbRm(uint64_t va);
   void tlbFlush() {
@@ -118,6 +122,12 @@ private:
 
   TLBEntry tlbLookup(uint64_t vAddr, uint32_t flagMask);
 
+  struct Reservation {
+    uint64_t addr;
+    bool reserved;
+  };
+
+  Reservation reservation_;
   std::unordered_map<uint64_t, TLBEntry> tlb_;
   uint64_t pageSize_;
   uint64_t addrBytes_;
@@ -151,7 +161,17 @@ public:
     return *this->get(address);
   }
 
+  void make_reservation(uint64_t addr);
+  bool check_reservation(uint64_t addr);
+  void clear_reservation();
+
 private:
+  struct Reservation {
+    uint64_t addr;
+    bool reserved;
+  };
+
+  Reservation reservation_;
 
   uint8_t *get(uint32_t address) const;
 

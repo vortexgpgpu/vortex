@@ -56,6 +56,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
   bool runOnce = false;
   
   Word func3 = instr.getFunc3();
+  Word func5 = instr.getFunc5();
   Word func6 = instr.getFunc6();
   Word func7 = instr.getFunc7();
 
@@ -442,6 +443,83 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       pipeline->stall_warp = true; 
       runOnce = true;
       break;
+    case AMO: {
+      switch (func3) {
+      case 0x02: {
+        Word memAddr   = ((rsdata[0]) & 0xFFFFFFFC); // word aligned
+        Word data_read = core_->dcache_read(memAddr, 4);
+        Word result = data_read;
+        rddata = data_read;
+        rd_write = true;
+
+        switch (func5) {
+        case 0x00:
+          // AMOADD.W
+          result = data_read + rsdata[1];
+          break;
+        case 0x01:
+          // AMOSWAP.W
+          result = rsdata[1];
+          break;
+        case 0x02: {
+          // LR.W
+          result = data_read; // QUESTION sign-extended value?
+          core_->dcache_make_reservation(memAddr);
+          break;
+        }
+        case 0x03: {
+          // SC.W
+          if (core_->dcache_check_reservation(memAddr)) {
+            core_->dcache_write(memAddr, rsdata[1], 4);
+            rddata = 0;
+          } else {
+            rddata = 1; // using the unspecified failure code
+          }
+          core_->dcache_clear_reservation();
+          break;
+        }
+        case 0x04:
+          // AMOXOR.W
+          result = data_read ^ rsdata[1];
+          break;
+        case 0x08:
+          // AMOOR.W
+          result = data_read | rsdata[1];
+          break;
+        case 0x0c:
+          // AMOAND.W
+          result = data_read & rsdata[1];
+          break;
+        case 0x10:
+          // AMOMIN.W
+          result = std::min((WordI)data_read, (WordI)rsdata[1]);
+          break;
+        case 0x14:
+          // AMOMAX.W
+          result = std::max((WordI)data_read, (WordI)rsdata[1]);
+          break;
+        case 0x18:
+          // AMOMINU.W
+          result = std::min(data_read, rsdata[1]);
+          break;
+        case 0x1c:
+          // AMOMAXU.W
+          result = std::max(data_read, rsdata[1]);
+          break;
+        default:
+          std::cout << "unsupported AMO.W instr" << std::endl;
+          std::abort();
+        }
+
+        if (result != data_read) {
+          core_->dcache_write(memAddr, result, 4);
+        }
+      } break;
+      default:
+        std::cout << "unsupported AMO width" << std::endl;
+        std::abort();
+      } break;
+    }
     case (FL | VL):
       if (func3 == 0x2) {
         Word memAddr = rsdata[0] + immsrc;
@@ -1568,9 +1646,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       default:
         std::abort();
       }
-    } break;    
-    default:
-      std::abort();
+    } break;
     }
 
     if (rd_write) {
