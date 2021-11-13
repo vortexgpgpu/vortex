@@ -113,15 +113,12 @@ private:
   int num_rsrcs_;
   bool has_imm_;
   int rdest_type_;
-  int isrc_mask_;
-  int fsrc_mask_;  
-  int vsrc_mask_;
   Word imm_;
   int rsrc_type_[MAX_REG_SOURCES];
   int rsrc_[MAX_REG_SOURCES];  
   int rdest_;
   Word func3_;
-  Word func7_;
+  Word func6_;
 
   //Vector
   Word vmask_;
@@ -132,7 +129,7 @@ private:
   Word vlmul_;
   Word vsew_;
   Word vediv_;
-  Word func6_;
+  Word func7_;  
 
   friend std::ostream &operator<<(std::ostream &, const Instr&);
 };

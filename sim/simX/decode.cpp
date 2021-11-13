@@ -281,7 +281,7 @@ Decoder::Decoder(const ArchDef &arch) {
   v_imm_mask_  = 0x7ff;  
 }
 
-std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) {  
+std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) const {  
   auto instr = std::make_shared<Instr>();
   Opcode op = (Opcode)((code >> shift_opcode_) & opcode_mask_);
   instr->setOpcode(op);
@@ -351,9 +351,9 @@ std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) {
     instr->setFunc3(func3);
     instr->setFunc7(func7);    
     if ((func3 == 5) && (op != L_INST) && (op != Opcode::FL)) {
-      instr->setImm(signExt(rs2, 5, reg_mask_));
+      instr->setImm(sext32(rs2, 5));
     } else {
-      instr->setImm(signExt(code >> shift_rs2_, 12, i_imm_mask_));
+      instr->setImm(sext32(code >> shift_rs2_, 12));
     }
   } break;
 
@@ -366,7 +366,7 @@ std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) {
     }
     instr->setFunc3(func3);
     Word imeed = (func7 << reg_s_) | rd;
-    instr->setImm(signExt(imeed, 12, s_imm_mask_));
+    instr->setImm(sext32(imeed, 12));
   } break;
 
   case InstType::B_TYPE: {
@@ -378,12 +378,12 @@ std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) {
     Word bit_10_5 = func7 & 0x3f;
     Word bit_12   = func7 >> 6;
     Word imeed = (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
-    instr->setImm(signExt(imeed, 13, b_imm_mask_));
+    instr->setImm(sext32(imeed, 13));
   } break;
 
   case InstType::U_TYPE:
     instr->setDestReg(rd);
-    instr->setImm(signExt(code >> shift_func3_, 20, u_imm_mask_));
+    instr->setImm(sext32(code >> shift_func3_, 20));
     break;
 
   case InstType::J_TYPE: {
