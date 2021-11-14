@@ -1,6 +1,10 @@
 `ifndef VX_CONFIG
 `define VX_CONFIG
 
+`ifndef XLEN
+`define XLEN 32
+`endif
+
 `ifndef NUM_CLUSTERS
 `define NUM_CLUSTERS 1
 `endif
@@ -373,7 +377,7 @@
 
 // Number of banks
 `ifndef L2_NUM_BANKS
-`define L2_NUM_BANKS `MIN(`NUM_CORES, 4)
+`define L2_NUM_BANKS ((`NUM_CORES < 4) ? `NUM_CORES : 4)
 `endif
 
 // Number of ports per bank
@@ -415,7 +419,7 @@
 
 // Number of banks
 `ifndef L3_NUM_BANKS
-`define L3_NUM_BANKS `MIN(`NUM_CLUSTERS, 4)
+`define L3_NUM_BANKS ((`NUM_CLUSTERS < 4) ? `NUM_CORES : 4)
 `endif
 
 // Number of ports per bank
