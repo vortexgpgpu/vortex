@@ -67,7 +67,7 @@ typedef struct vx_buffer_ {
     size_t size;
 } vx_buffer_t;
 
-inline size_t align_size(size_t size, size_t alignment) {        
+inline size_t aligned_size(size_t size, size_t alignment) {        
     assert(0 == (alignment & (alignment - 1)));
     return (size + alignment - 1) & ~(alignment - 1);
 }
@@ -288,7 +288,7 @@ extern int vx_alloc_dev_mem(vx_device_h hdevice, size_t size, size_t* dev_maddr)
     vx_device_t *device = ((vx_device_t*)hdevice);
 
     size_t dev_mem_size = LOCAL_MEM_SIZE;
-    size_t asize = align_size(size, CACHE_BLOCK_SIZE);
+    size_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
     
     if (device->mem_allocation + asize > dev_mem_size)
         return -1;   
@@ -313,7 +313,7 @@ extern int vx_alloc_shared_mem(vx_device_h hdevice, size_t size, vx_buffer_h* hb
 
     vx_device_t *device = ((vx_device_t*)hdevice);
 
-    size_t asize = align_size(size, CACHE_BLOCK_SIZE);
+    size_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
 
     res = fpgaPrepareBuffer(device->fpga, asize, &host_ptr, &wsid, 0);
     if (FPGA_OK != res) {
@@ -439,7 +439,7 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, si
     vx_device_t *device = ((vx_device_t*)buffer->hdevice);
 
     size_t dev_mem_size = LOCAL_MEM_SIZE; 
-    size_t asize = align_size(size, CACHE_BLOCK_SIZE);
+    size_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
 
     // check alignment
     if (!is_aligned(dev_maddr, CACHE_BLOCK_SIZE))
@@ -480,7 +480,7 @@ extern int vx_copy_from_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, 
     vx_device_t *device = ((vx_device_t*)buffer->hdevice);
 
     size_t dev_mem_size = LOCAL_MEM_SIZE;  
-    size_t asize = align_size(size, CACHE_BLOCK_SIZE);
+    size_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
 
     // check alignment
     if (!is_aligned(dev_maddr, CACHE_BLOCK_SIZE))

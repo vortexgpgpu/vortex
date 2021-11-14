@@ -22,7 +22,7 @@ public:
     vx_buffer(size_t size, vx_device* device) 
         : size_(size)
         , device_(device) {
-        auto aligned_asize = align_size(size, CACHE_BLOCK_SIZE);
+        auto aligned_asize = aligned_size(size, CACHE_BLOCK_SIZE);
         data_ = malloc(aligned_asize);
     }
 
@@ -66,7 +66,7 @@ public:
 
     int alloc_local_mem(size_t size, size_t* dev_maddr) {
         auto dev_mem_size = LOCAL_MEM_SIZE;
-        size_t asize = align_size(size, CACHE_BLOCK_SIZE);        
+        size_t asize = aligned_size(size, CACHE_BLOCK_SIZE);        
         if (mem_allocation_ + asize > dev_mem_size)
             return -1;
         *dev_maddr = mem_allocation_;
@@ -75,7 +75,7 @@ public:
     }
 
     int upload(const void* src, size_t dest_addr, size_t size, size_t src_offset) {
-        size_t asize = align_size(size, CACHE_BLOCK_SIZE);
+        size_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
         if (dest_addr + asize > ram_.size())
             return -1;
 
@@ -93,7 +93,7 @@ public:
     }
 
     int download(void* dest, size_t src_addr, size_t size, size_t dest_offset) {
-        size_t asize = align_size(size, CACHE_BLOCK_SIZE);
+        size_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
         if (src_addr + asize > ram_.size())
             return -1;
 
