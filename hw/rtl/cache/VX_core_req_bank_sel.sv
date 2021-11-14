@@ -57,16 +57,16 @@ module VX_core_req_bank_sel #(
 
     for (genvar i = 0; i < NUM_REQS; i++) begin    
         if (BANK_ADDR_OFFSET == 0) begin
-            assign core_req_line_addr[i] = `LINE_SELECT_ADDR0(core_req_addr[i]);
+            assign core_req_line_addr[i] = `SELECT_LINE_ADDR0(core_req_addr[i]);
         end else begin
-            assign core_req_line_addr[i] = `LINE_SELECT_ADDRX(core_req_addr[i]);
+            assign core_req_line_addr[i] = `SELECT_LINE_ADDRX(core_req_addr[i]);
         end
         assign core_req_wsel[i] = core_req_addr[i][`UP(`WORD_SELECT_BITS)-1:0];
     end   
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         if (NUM_BANKS > 1) begin
-            assign core_req_bid[i] = `BANK_SELECT_ADDR(core_req_addr[i]);
+            assign core_req_bid[i] = `SELECT_BANK_ID(core_req_addr[i]);
         end else begin
             assign core_req_bid[i] = 0;
         end
@@ -88,6 +88,7 @@ module VX_core_req_bank_sel #(
         if (NUM_PORTS > 1) begin
             
             reg [NUM_BANKS-1:0][`LINE_ADDR_WIDTH-1:0] per_bank_line_addr_r;
+            reg [NUM_BANKS-1:0] per_bank_rw_r;
             wire [NUM_REQS-1:0] core_req_line_match;
             
             always @(*) begin
@@ -95,12 +96,14 @@ module VX_core_req_bank_sel #(
                 for (integer i = NUM_REQS-1; i >= 0; --i) begin                                    
                     if (core_req_valid[i]) begin
                         per_bank_line_addr_r[core_req_bid[i]] = core_req_line_addr[i];
+                        per_bank_rw_r[core_req_bid[i]] = core_req_rw[i];
                     end     
                 end
             end
             
             for (genvar i = 0; i < NUM_REQS; ++i) begin
-                assign core_req_line_match[i] = (core_req_line_addr[i] == per_bank_line_addr_r[core_req_bid[i]]);
+                assign core_req_line_match[i] = (core_req_line_addr[i] == per_bank_line_addr_r[core_req_bid[i]]) 
+                                             && (core_req_rw[i] == per_bank_rw_r[core_req_bid[i]]);
             end
 
             if (NUM_PORTS < NUM_REQS) begin 
