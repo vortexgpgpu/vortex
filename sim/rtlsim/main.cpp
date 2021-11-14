@@ -7,6 +7,8 @@
 #include <mem.h>
 #include "simulator.h"
 
+#define RAM_PAGE_SIZE 4096
+
 using namespace vortex;
 
 static void show_usage() {
@@ -49,7 +51,7 @@ int main(int argc, char **argv) {
 	for (auto program : programs) {
 		std::cout << "Running " << program << "..." << std::endl;
 
-		vortex::RAM ram((1<<12), (1<<20));
+		vortex::RAM ram(RAM_PAGE_SIZE);
 		vortex::Simulator simulator;
 		simulator.attach_ram(&ram);
 

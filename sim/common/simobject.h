@@ -282,6 +282,10 @@ public:
     return true;
   }
 
+  void flush() {
+    instance().clear();
+  }
+
   void finalize() {
     instance().clear();
   }

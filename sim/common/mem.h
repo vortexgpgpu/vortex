@@ -130,13 +130,13 @@ private:
 class RAM : public MemDevice {
 public:
   
-  RAM(uint32_t num_pages, uint32_t page_size);
-
+  RAM(uint32_t page_size);
   ~RAM();
 
   void clear();
 
   uint64_t size() const override;
+
   void read(void *data, uint64_t addr, uint64_t size) override;  
   void write(const void *data, uint64_t addr, uint64_t size) override;
 
@@ -153,11 +153,13 @@ public:
 
 private:
 
-  uint8_t *get(uint32_t address) const;
+  uint8_t *get(uint64_t address) const;
 
-  mutable std::vector<uint8_t*> mem_;
-  uint32_t page_bits_;
   uint64_t size_;
+  uint32_t page_bits_;  
+  mutable std::unordered_map<uint64_t, uint8_t*> pages_;
+  mutable uint8_t* last_page_;
+  mutable uint64_t last_page_index_;
 };
 
 } // namespace vortex

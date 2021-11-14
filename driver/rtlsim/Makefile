@@ -3,7 +3,7 @@ RTLSIM_DIR = ../../sim/rtlsim
 CXXFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -pedantic -Wfatal-errors
 #CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
 
-CXXFLAGS += -I../include -I../../hw -I$(RTLSIM_DIR) -I$(RTLSIM_DIR)/../common
+CXXFLAGS += -I../include -I../common -I../../hw -I$(RTLSIM_DIR) -I$(RTLSIM_DIR)/../common
 
 LDFLAGS += $(RTLSIM_DIR)/librtlsim.a
 

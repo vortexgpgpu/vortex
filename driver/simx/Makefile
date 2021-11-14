@@ -4,7 +4,7 @@ CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors
 #CXXFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
 
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
-CXXFLAGS += -I../include -I../../hw -I$(SIMX_DIR) -I$(SIMX_DIR)/../common
+CXXFLAGS += -I../include -I../common -I../../hw -I$(SIMX_DIR) -I$(SIMX_DIR)/../common
 CXXFLAGS += $(CONFIGS)
 CXXFLAGS += -DDUMP_PERF_STATS
 

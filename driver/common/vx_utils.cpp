@@ -1,17 +1,29 @@
+#include "vx_utils.h"
 #include <iostream>
 #include <fstream>
 #include <cstring>
 #include <vortex.h>
 #include <VX_config.h>
+#include <assert.h>
 
-extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, size_t size) {
+uint64_t aligned_size(uint64_t size, uint64_t alignment) {        
+    assert(0 == (alignment & (alignment - 1)));
+    return (size + alignment - 1) & ~(alignment - 1);
+}
+
+bool is_aligned(uint64_t addr, uint64_t alignment) {
+    assert(0 == (alignment & (alignment - 1)));
+    return 0 == (addr & (alignment - 1));
+}
+
+extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint64_t size) {
   int err = 0;
 
   if (NULL == content || 0 == size)
     return -1;
 
   uint32_t buffer_transfer_size = 65536;
-  unsigned kernel_base_addr;
+  uint64_t kernel_base_addr;
   err = vx_dev_caps(device, VX_CAPS_KERNEL_BASE_ADDR, &kernel_base_addr);
   if (err != 0)
     return -1;
@@ -29,9 +41,9 @@ extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, size_
   // upload content
   //
 
-  size_t offset = 0;
+  uint64_t offset = 0;
   while (offset < size) {
-    auto chunk_size = std::min<size_t>(buffer_transfer_size, size - offset);
+    auto chunk_size = std::min<uint64_t>(buffer_transfer_size, size - offset);
     std::memcpy(buf_ptr, (uint8_t*)content + offset, chunk_size);
 
     /*printf("***  Upload Kernel to 0x%0x: data=", kernel_base_addr + offset);
@@ -127,7 +139,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   uint64_t mem_lat = 0;
 #endif     
 
-  unsigned num_cores;
+  uint64_t num_cores;
   ret = vx_dev_caps(device, VX_CAPS_MAX_CORES, &num_cores);
   if (ret != 0)
     return ret;
