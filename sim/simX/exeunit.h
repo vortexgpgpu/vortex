@@ -43,7 +43,16 @@ public:
         return outputs_.try_pop(state);
     }
 
-    virtual void step() = 0;
+    virtual void step(uint64_t cycle) = 0;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+class NopUnit : public ExeUnit {
+public:
+    NopUnit(Core*);
+    
+    void step(uint64_t cycle);
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -59,9 +68,7 @@ private:
 public:
     LsuUnit(Core*);
 
-    void handleCacheReponse(const MemRsp& response, uint32_t port_id);
-
-    void step();
+    void step(uint64_t cycle);
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -70,7 +77,7 @@ class AluUnit : public ExeUnit {
 public:
     AluUnit(Core*);
     
-    void step();
+    void step(uint64_t cycle);
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -79,7 +86,7 @@ class CsrUnit : public ExeUnit {
 public:
     CsrUnit(Core*);
     
-    void step();
+    void step(uint64_t cycle);
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -88,7 +95,7 @@ class FpuUnit : public ExeUnit {
 public:
     FpuUnit(Core*);
     
-    void step();
+    void step(uint64_t cycle);
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -97,7 +104,7 @@ class GpuUnit : public ExeUnit {
 public:
     GpuUnit(Core*);
     
-    void step();
+    void step(uint64_t cycle);
 };
 
 }

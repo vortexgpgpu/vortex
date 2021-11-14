@@ -20,11 +20,7 @@ struct CacheConfig {
     uint8_t latency;        // pipeline latency 
 };
 
-class Cache : public SimObject<Cache> {
-private:
-    class Impl;
-    Impl* impl_;
-    
+class Cache : public SimObject<Cache> {  
 public:
     Cache(const SimContext& ctx, const char* name, const CacheConfig& config);
     ~Cache();
@@ -35,6 +31,10 @@ public:
     std::vector<MasterPort<MemRsp>> CoreRspPorts;
     MasterPort<MemReq>              MemReqPort;
     SlavePort<MemRsp>               MemRspPort;
+    
+private:
+    class Impl;
+    Impl* impl_;
 };
 
 }

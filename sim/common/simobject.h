@@ -11,6 +11,128 @@ namespace vortex {
 
 class SimObjectBase;
 
+///////////////////////////////////////////////////////////////////////////////
+
+class SimPortBase {
+public:  
+  virtual ~SimPortBase() {}
+  
+  SimObjectBase* module() const {
+    return module_;
+  }
+
+  SimPortBase* peer() const {
+    return peer_;
+  }
+
+  bool connected() const {
+    return (peer_ != nullptr);
+  }
+
+protected:
+  SimPortBase(SimObjectBase* module)
+    : module_(module)
+    , peer_(nullptr)
+  {}
+
+  void connect(SimPortBase* peer) {
+    assert(peer_ == nullptr);
+    peer_ = peer;
+  }
+
+  void disconnect() {    
+    assert(peer_ == nullptr);  
+    peer_ = nullptr;
+  }
+
+  SimPortBase& operator=(const SimPortBase&) = delete;
+
+  SimObjectBase* module_;
+  SimPortBase*   peer_;
+
+  template <typename U> friend class SlavePort;
+  template <typename U> friend class MasterPort;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+template <typename Pkt>
+class SimPort : public SimPortBase {
+public:
+  void send(const Pkt& pkt, uint64_t delay) const; 
+
+  bool read(Pkt* out) {
+    if (!valid_)
+      return false;
+    *out = data_;
+    valid_ = false;
+    return true;
+  }
+
+protected:
+  SimPort(SimObjectBase* module)
+    : SimPortBase(module)
+    , valid_(false)
+  {}
+
+  void write(const Pkt& data) {
+    assert(!valid_);
+    data_  = data;
+    valid_ = true;
+  }
+
+  SimPort& operator=(const SimPort&) = delete;
+
+  Pkt data_;
+  bool valid_;
+
+  template <typename U> friend class SimPortEvent;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+template <typename Pkt>
+class SlavePort : public SimPort<Pkt> {
+public:
+  SlavePort(SimObjectBase* module) : SimPort<Pkt>(module) {}
+
+  void bind(SlavePort<Pkt>* peer) {
+    this->connect(peer);
+  }
+
+  void unbind() {    
+    this->disconnect();
+  }
+
+protected:
+  SlavePort& operator=(const SlavePort&) = delete;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+template <typename Pkt>
+class MasterPort : public SimPort<Pkt> {
+public:
+  MasterPort(SimObjectBase* module) : SimPort<Pkt>(module) {}
+
+  void bind(SlavePort<Pkt>* peer) {
+    this->connect(peer);
+  }
+
+  void bind(MasterPort<Pkt>* peer) {
+    this->connect(peer);
+  }
+
+  void unbind() {    
+    this->disconnect();
+  }
+
+protected:
+  MasterPort& operator=(const MasterPort&) = delete;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 class SimEventBase {
 public:
   typedef std::shared_ptr<SimEventBase> Ptr;
@@ -32,16 +154,16 @@ protected:
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename Pkt>
-class SimSimpleEvent : public SimEventBase {
+class SimCallEvent : public SimEventBase {
 public:
   typedef std::function<void (const Pkt&)> Func;
 
   template <typename... Args>
   static Ptr Create(const Func& func, const Pkt& pkt, uint64_t delay) {
-    return std::make_shared<SimSimpleEvent>(func, pkt, delay);
+    return std::make_shared<SimCallEvent>(func, pkt, delay);
   }   
 
-  SimSimpleEvent(const Func& func, const Pkt& pkt, uint64_t delay) 
+  SimCallEvent(const Func& func, const Pkt& pkt, uint64_t delay) 
     : SimEventBase(delay)
     , func_(func)
     , pkt_(pkt)
@@ -61,167 +183,23 @@ protected:
 template <typename Pkt>
 class SimPortEvent : public SimEventBase {
 public:
-  typedef std::function<void (const Pkt&, uint32_t)> Func;
-
-  template <typename... Args>
-  static Ptr Create(const Func& func, const Pkt& pkt, uint32_t port_id, uint64_t delay) {
-    return std::make_shared<SimPortEvent>(func, pkt, port_id, delay);
+  static Ptr Create(const SimPort<Pkt>* port, const Pkt& pkt, uint64_t delay) {
+    return std::make_shared<SimPortEvent>(port, pkt, delay);
   }
 
-  SimPortEvent(const Func& func, const Pkt& pkt, uint32_t port_id, uint64_t delay) 
+  SimPortEvent(const SimPort<Pkt>* port, const Pkt& pkt, uint64_t delay) 
     : SimEventBase(delay) 
-    , func_(func)
+    , port_(port)
     , pkt_(pkt)
-    , port_id_(port_id)
   {}
   
   void fire() const override {
-    func_(pkt_, port_id_);
+    const_cast<SimPort<Pkt>*>(port_)->write(pkt_);
   }
 
 private:  
-  Func     func_;
-  Pkt      pkt_;  
-  uint32_t port_id_;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-class SimPortBase {
-public:
-  typedef std::shared_ptr<SimPortBase> Ptr;  
-
-  virtual ~SimPortBase() {}
-  
-  SimObjectBase* module() const {
-    return module_;
-  }
-  
-  uint32_t port_id() const {
-    return port_id_;
-  }
-
-  SimPortBase* peer() const {
-    return peer_;
-  }
-
-  bool connected() const {
-    return (peer_ != nullptr);
-  }
-
-  bool is_slave() const {
-    return is_slave_;
-  }
-
-protected:
-
-  SimPortBase(SimObjectBase* module, bool is_slave);
-
-  void connect(SimPortBase* peer) {
-    assert(peer_ == nullptr);
-    peer_ = peer;
-  }
-
-  void disconnect() { 
-    assert(peer_ == nullptr);  
-    peer_ = nullptr;
-  }
-
-  SimObjectBase* module_;
-  uint32_t       port_id_;
-  bool           is_slave_;
-  SimPortBase*   peer_;
-
-  template <typename Pkt> friend class MasterPort;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-template <typename Pkt>
-class SlavePort : public SimPortBase {
-public:
-  typedef std::shared_ptr<SlavePort<Ptr>> Ptr;
-  typedef std::function<void (const Pkt&, uint32_t)> Func;
-
-  static Ptr Create(SimObjectBase* module, const Func& func) {
-    return std::make_shared<SlavePort<Pkt>>(module, func);
-  }
-
-  template <typename T>
-  static Ptr Create(SimObjectBase* module, T *obj, void (T::*entry)(const Pkt&, uint32_t)) {
-    return std::make_shared<SlavePort<Pkt>>(module, obj, entry);
-  } 
-
-  SlavePort(SimObjectBase* module, const Func& func)
-    : SimPortBase(module, true)
-    , func_(func)
-  {}
-
-  template <typename T>
-  SlavePort(SimObjectBase* module, T *obj, void (T::*entry)(const Pkt&, uint32_t))
-    : SimPortBase(module, true)
-    , func_(std::bind(entry, obj, std::placeholders::_1, std::placeholders::_2))
-  {}
-
-  SlavePort(SimObjectBase* module, SlavePort* peer) 
-    : SimPortBase(module, false) 
-  {
-    this->connect(peer);
-  }
-
-  void send(const Pkt& pkt, uint64_t delay) const;
-
-  const Func& func() const {
-    return func_;
-  }
-
-protected:
-  SlavePort& operator=(const SlavePort&);
-  Func func_;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-template <typename Pkt>
-class MasterPort : public SimPortBase {
-public:
-  typedef std::shared_ptr<MasterPort<Ptr>> Ptr;
-  typedef std::function<void (const Pkt&, uint32_t)> Func;
-
-  static Ptr Create() {
-    return std::make_shared<MasterPort<Ptr>>(module);
-  }  
-
-  MasterPort(SimObjectBase* module) : SimPortBase(module, false) {}
-
-  MasterPort(SimObjectBase* module, MasterPort* peer) 
-    : SimPortBase(module, false) 
-  {
-    peer->connect(this);
-  }
-
-  void bind(SlavePort<Pkt>* peer) {
-    this->connect(peer);
-  }
-
-  void unbind() {    
-    peer_->disconnect();
-    this->disconnect();
-  }
-
-  void send(const Pkt& pkt, uint64_t delay) const {
-    assert(peer_ != nullptr);
-    if (peer_->is_slave()) {
-      auto slave = reinterpret_cast<const SlavePort<Pkt>*>(peer_);
-      slave->send(pkt, delay);
-    } else {
-      auto master = reinterpret_cast<const MasterPort<Pkt>*>(peer_);
-      master->send(pkt, delay);
-    }  
-  }
-
-private:
-  MasterPort& operator=(const MasterPort&);
+  const SimPort<Pkt>* port_; 
+  Pkt pkt_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -237,25 +215,18 @@ public:
   template <typename T, typename Pkt>
   void schedule(T *obj, void (T::*entry)(const Pkt&), const Pkt& pkt, uint64_t delay);
 
-  virtual void step(uint64_t cycle) = 0;
-
   const std::string& name() const {
     return name_;
   }
 
 protected:
 
-  SimObjectBase(const SimContext& ctx, const char* name);
+  virtual void step(uint64_t cycle) = 0;
 
-  uint32_t allocate_port(SimPortBase* port) {
-      uint32_t id = ports_.size();
-      ports_.push_back(port);
-      return id;
-  }
+  SimObjectBase(const SimContext& ctx, const char* name);
 
 private:
   std::string name_;
-  std::vector<SimPortBase*> ports_;
 
   friend class SimPlatform;
   friend class SimPortBase;
@@ -320,20 +291,19 @@ public:
   }
 
   template <typename Pkt>
-  void schedule(const typename SimSimpleEvent<Pkt>::Func& callback, 
+  void schedule(const typename SimCallEvent<Pkt>::Func& callback, 
                 const Pkt& pkt, 
                 uint64_t delay) {    
-    auto evt = SimSimpleEvent<Pkt>::Create(callback, pkt, delay);
+    auto evt = SimCallEvent<Pkt>::Create(callback, pkt, delay);
     assert(delay != 0);
     events_.emplace_back(evt);
   }
 
   template <typename Pkt>
-  void schedule(const typename SimPortEvent<Pkt>::Func& callback, 
+  void schedule(const SimPort<Pkt>* port, 
                 const Pkt& pkt, 
-                uint32_t port_id, 
                 uint64_t delay) {
-    auto evt = SimPortEvent<Pkt>::Create(callback, pkt, port_id, delay);
+    auto evt = SimPortEvent<Pkt>::Create(port, pkt, delay);
     assert(delay != 0);
     events_.emplace_back(evt);
   }
@@ -383,13 +353,6 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-inline SimPortBase::SimPortBase(SimObjectBase* module, bool is_slave) 
-  : module_(module)  
-  , port_id_(module->allocate_port(this))
-  , is_slave_(is_slave)
-  , peer_(nullptr) 
-{}
-
 inline SimObjectBase::SimObjectBase(const SimContext&, const char* name) 
   : name_(name) 
 {}
@@ -403,18 +366,11 @@ typename SimObject<Impl>::Ptr SimObject<Impl>::Create(Args&&... args) {
 }
 
 template <typename Pkt>
-void SlavePort<Pkt>::send(const Pkt& pkt, uint64_t delay) const {
-  if (func_) {
-    SimPlatform::instance().schedule(func_, pkt, port_id_, delay);
+void SimPort<Pkt>::send(const Pkt& pkt, uint64_t delay) const {
+  if (peer_) {
+    reinterpret_cast<const SimPort<Pkt>*>(peer_)->send(pkt, delay);    
   } else {
-    assert(peer_ != nullptr);
-    if (peer_->is_slave()) {
-      auto slave = reinterpret_cast<const SlavePort<Pkt>*>(peer_);
-      slave->send(pkt, delay);
-    } else {
-      auto master = reinterpret_cast<const MasterPort<Pkt>*>(peer_);
-      master->send(pkt, delay);
-    }
+    SimPlatform::instance().schedule(this, pkt, delay);
   }  
 }
 

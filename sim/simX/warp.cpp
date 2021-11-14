@@ -24,30 +24,34 @@ Warp::Warp(Core *core, Word id)
 void Warp::eval(pipeline_state_t *pipeline_state) {
   assert(tmask_.any());
 
-  DPH(2, "Step: wid=" << id_ << ", PC=0x" << std::hex << PC_ << ", tmask=");
+  DPH(2, "Fetch: coreid=" << core_->id() << ", wid=" << id_ << ", tmask=");
   for (int i = 0, n = core_->arch().num_threads(); i < n; ++i)
     DPN(2, tmask_.test(n-i-1));
-  DPN(2, "\n");
+  DPN(2, ", PC=0x" << std::hex << PC_ << std::endl);
 
   /* Fetch and decode. */    
 
-  Word fetched = core_->icache_fetch(PC_);
-  auto instr = core_->decoder().decode(fetched, PC_);
+  Word instr_code = core_->icache_read(PC_, sizeof(Word));
+  auto instr = core_->decoder().decode(instr_code);
+  if (!instr) {
+    std::cout << std::hex << "Error: invalid instruction 0x" << instr_code << ", at PC=" << PC_ << std::endl;
+    std::abort();
+  }  
+
+  DP(2, "Instr 0x" << std::hex << instr_code << ": " << *instr);
 
   // Update state
+  pipeline_state->cid   = core_->id();
   pipeline_state->wid   = id_;
   pipeline_state->PC    = PC_;
   pipeline_state->tmask = tmask_;
   pipeline_state->rdest = instr->getRDest();
   pipeline_state->rdest_type = instr->getRDType();
-  pipeline_state->used_iregs.reset();
-  pipeline_state->used_fregs.reset();
-  pipeline_state->used_vregs.reset();
-  
+    
   // Execute
   this->execute(*instr, pipeline_state);
 
-  D(4, "Register state:");
+  DP(4, "Register state:");
   for (int i = 0; i < core_->arch().num_regs(); ++i) {
     DPN(4, "  %r" << std::setfill('0') << std::setw(2) << std::dec << i << ':');
     for (int j = 0; j < core_->arch().num_threads(); ++j) {

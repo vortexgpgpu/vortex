@@ -53,22 +53,23 @@ public:
     : opcode_(Opcode::NOP)
     , num_rsrcs_(0)
     , has_imm_(false)
+    , rdest_type_(RegType::None)
     , rdest_(0)
     , func3_(0)
     , func7_(0) {
     for (int i = 0; i < MAX_REG_SOURCES; ++i) {
-       rsrc_type_[i] = 0;
+       rsrc_type_[i] = RegType::None;
     }
   }
 
   /* Setters used to "craft" the instruction. */
   void setOpcode(Opcode opcode)  { opcode_ = opcode; }
-  void setDestReg(int destReg) { rdest_type_ = 1; rdest_ = destReg; }
-  void setSrcReg(int srcReg) { rsrc_type_[num_rsrcs_] = 1; rsrc_[num_rsrcs_++] = srcReg; }
-  void setDestFReg(int destReg) { rdest_type_ = 2; rdest_ = destReg; }
-  void setSrcFReg(int srcReg) { rsrc_type_[num_rsrcs_] = 2; rsrc_[num_rsrcs_++] = srcReg;  }
-  void setDestVReg(int destReg) { rdest_type_ = 3; rdest_ = destReg; }
-  void setSrcVReg(int srcReg) { rsrc_type_[num_rsrcs_] = 3; rsrc_[num_rsrcs_++] = srcReg;  }
+  void setDestReg(int destReg) { rdest_type_ = RegType::Integer; rdest_ = destReg; }
+  void setSrcReg(int srcReg) { rsrc_type_[num_rsrcs_] = RegType::Integer; rsrc_[num_rsrcs_++] = srcReg; }
+  void setDestFReg(int destReg) { rdest_type_ = RegType::Float; rdest_ = destReg; }
+  void setSrcFReg(int srcReg) { rsrc_type_[num_rsrcs_] = RegType::Float; rsrc_[num_rsrcs_++] = srcReg;  }
+  void setDestVReg(int destReg) { rdest_type_ = RegType::Vector; rdest_ = destReg; }
+  void setSrcVReg(int srcReg) { rsrc_type_[num_rsrcs_] = RegType::Vector; rsrc_[num_rsrcs_++] = srcReg;  }
   void setFunc3(Word func3) { func3_ = func3; }
   void setFunc7(Word func7) { func7_ = func7; }
   void setImm(Word imm) { has_imm_ = true; imm_ = imm; }
@@ -89,9 +90,9 @@ public:
   Word getFunc7() const { return func7_; }
   int getNRSrc() const { return num_rsrcs_; }
   int getRSrc(int i) const { return rsrc_[i]; }
-  int getRSType(int i) const { return rsrc_type_[i]; }
+  RegType getRSType(int i) const { return rsrc_type_[i]; }
   int getRDest() const { return rdest_; }  
-  int getRDType() const { return rdest_type_; }  
+  RegType getRDType() const { return rdest_type_; }  
   bool hasImm() const { return has_imm_; }
   Word getImm() const { return imm_; }
   Word getVlsWidth() const { return vlsWidth_; }
@@ -112,15 +113,15 @@ private:
   Opcode opcode_;
   int num_rsrcs_;
   bool has_imm_;
-  int rdest_type_;
+  RegType rdest_type_;
   Word imm_;
-  int rsrc_type_[MAX_REG_SOURCES];
+  RegType rsrc_type_[MAX_REG_SOURCES];
   int rsrc_[MAX_REG_SOURCES];  
   int rdest_;
   Word func3_;
   Word func6_;
 
-  //Vector
+  // Vector
   Word vmask_;
   Word vlsWidth_;
   Word vMop_;

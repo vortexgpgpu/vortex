@@ -6,12 +6,15 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include "processor.h"
+#include <util.h>
 #include "args.h"
+
+#define RAM_PAGE_SIZE 4096
 
 using namespace vortex;
 
 int main(int argc, char **argv) {
-  int ret;
+  int exitcode;
 
   std::string archStr("rv32imf");
   std::string imgFileName;
@@ -53,11 +56,42 @@ int main(int argc, char **argv) {
 
   {
     ArchDef arch(archStr, num_cores, num_warps, num_threads);
+
     Processor processor(arch);
-    ret = processor.run(imgFileName, riscv_test, showStats);
+
+    RAM ram(RAM_PAGE_SIZE);
+
+    {
+      std::string program_ext(fileExtension(imgFileName.c_str()));
+      if (program_ext == "bin") {
+        ram.loadBinImage(imgFileName.c_str(), STARTUP_ADDR);
+      } else if (program_ext == "hex") {
+        ram.loadHexImage(imgFileName.c_str());
+      } else {
+        std::cout << "*** error: only *.bin or *.hex images supported." << std::endl;
+        return -1;
+      }
+    }
+
+    processor.attach_ram(&ram);
+
+    exitcode = processor.run();
+
+    if (riscv_test) {
+      if (1 == exitcode) {
+        std::cout << "Passed." << std::endl;
+        exitcode = 0;
+      } else {
+        std::cout << "Failed." << std::endl;
+      }
+    } else {
+      if (exitcode != 0) {
+        std::cout << "*** error: exitcode=" << exitcode << std::endl;
+      }
+    }
   }  
 
   SimPlatform::instance().finalize();
 
-  return ret;
+  return exitcode;
 }

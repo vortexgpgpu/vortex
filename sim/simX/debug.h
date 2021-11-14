@@ -7,14 +7,15 @@
 #define DEBUG_HEADER << "DEBUG "
 //#define DEBUG_HEADER << "DEBUG " << __FILE__ << ':' << std::dec << __LINE__ << ": "
 
+#define TRACE_HEADER << "TRACE "
+//#define TRACE_HEADER << "DEBUG " << __FILE__ << ':' << std::dec << __LINE__ << ": "
+
 #ifndef NDEBUG
 
 #include <iostream>
 #include <iomanip>
 
-#define DX(x) x
-
-#define D(lvl, x) do { \
+#define DP(lvl, x) do { \
   if ((lvl) <= DEBUG_LEVEL) { \
     std::cout DEBUG_HEADER << x << std::endl; \
   } \
@@ -32,12 +33,33 @@
   } \
 } while(0)
 
+#define DT(lvl, t, x) do { \
+  if ((lvl) <= DEBUG_LEVEL) { \
+    std::cout TRACE_HEADER << std::setw(10) << std::dec << t << std::setw(0) << ": " << x << std::endl; \
+  } \
+} while(0)
+
+#define DTH(lvl, t, x) do { \
+  if ((lvl) <= DEBUG_LEVEL) { \
+    std::cout TRACE_HEADER << std::setw(10) << std::dec << t << std::setw(0) << ": " << x; \
+  } \
+} while(0)
+
+#define DTN(lvl, x) do { \
+  if ((lvl) <= DEBUG_LEVEL) { \
+    std::cout << x; \
+  } \
+} while(0)
+
+
 #else
 
-#define DX(x)
-#define D(lvl, x) do {} while(0)
+#define DP(lvl, x) do {} while(0)
 #define DPH(lvl, x) do {} while(0)
 #define DPN(lvl, x) do {} while(0)
-#define D_RAW(x) do {} while(0)
+
+#define DT(lvl, t, x) do {} while(0)
+#define DTH(lvl, t, x) do {} while(0)
+#define DTN(lvl, x) do {} while(0)
 
 #endif

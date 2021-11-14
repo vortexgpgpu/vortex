@@ -25,8 +25,10 @@ namespace vortex {
 
 class Core : public SimObject<Core> {
 public:
-  Core(const SimContext& ctx, const ArchDef &arch, Decoder &decoder, MemoryUnit &mem, Word id);
+  Core(const SimContext& ctx, const ArchDef &arch, Word id);
   ~Core();
+
+  void attach_ram(RAM* ram);
 
   bool running() const;
 
@@ -64,7 +66,7 @@ public:
 
   void barrier(int bar_id, int count, int warp_id);
 
-  Word icache_fetch(Addr);
+  Word icache_read(Addr, Size);
 
   Word dcache_read(Addr, Size);
 
@@ -76,22 +78,21 @@ public:
 
 private:
 
-  void fetch();
-  void decode();
-  void issue();
-  void execute();
-  void commit();
+  void fetch(uint64_t cycle);
+  void decode(uint64_t cycle);
+  void issue(uint64_t cycle);
+  void execute(uint64_t cycle);
+  void commit(uint64_t cycle);
 
-  void warp_scheduler();
-
-  void icache_handleCacheReponse(const MemRsp& response, uint32_t port_id);
+  void warp_scheduler(uint64_t cycle);
 
   void writeToStdOut(Addr addr, Word data);
 
   Word id_;
-  const ArchDef& arch_;
-  const Decoder& decoder_;
-  MemoryUnit& mem_;
+  const ArchDef arch_;
+  const Decoder decoder_;
+  MemoryUnit mmu_;
+
 #ifdef SM_ENABLE
   RAM shared_mem_;
 #endif 
@@ -106,8 +107,6 @@ private:
   Cache::Ptr icache_;
   Cache::Ptr dcache_;
   Switch<MemReq, MemRsp>::Ptr l1_mem_switch_;
-  SlavePort<MemRsp> icache_rsp_port_;
-  std::vector<SlavePort<MemRsp>> dcache_rsp_port_;
 
   PipelineStage fetch_stage_;
   PipelineStage decode_stage_;
@@ -118,10 +117,12 @@ private:
   HashTable<pipeline_state_t> pending_icache_;
   WarpMask stalled_warps_;  
   uint32_t last_schedule_wid_;
-  uint32_t pending_instrs_;
+  uint32_t issued_instrs_;
+  uint32_t committed_instrs_;
   bool ebreak_;
 
   std::unordered_map<int, std::stringstream> print_bufs_;
+  
   uint64_t stats_insts_;
   uint64_t stats_loads_;
   uint64_t stats_stores_;

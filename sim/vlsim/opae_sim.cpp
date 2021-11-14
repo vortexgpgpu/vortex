@@ -44,6 +44,8 @@
 #define VERILATOR_RESET_VALUE 2
 #endif
 
+#define RAM_PAGE_SIZE 4096
+
 using namespace vortex;
 
 static uint64_t timestamp = 0;
@@ -136,7 +138,7 @@ opae_sim::opae_sim()
   : stop_(false)
   , host_buffer_ids_(0) {  
   vl_obj_ = new VL_OBJ();
-  ram_ = new RAM((1<<12), (1<<20));
+  ram_ = new RAM(RAM_PAGE_SIZE);
 
   // reset the device
   this->reset();
