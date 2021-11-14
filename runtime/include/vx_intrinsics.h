@@ -117,6 +117,26 @@ extern "C" {
 	__r;							            \
 })
 
+// Lerp instruction
+#define vx_lerp(a, b, s)    ({                  \
+	unsigned __r;		                        \
+    unsigned __a = a;	                        \
+    unsigned __b = b;	                        \
+    unsigned __s = s;                           \
+    __asm__ __volatile__ (".insn r4 0x6b, 7, " __ASM_STR(unit) ", %0, %1, %2, %3" : "=r"(__r : "r"(__a), "r"(__b), "r"(__s)); \
+	__r;							            \
+})
+
+// Conditional move
+#define vx_cmov(c, t, f)    ({                  \
+	unsigned __r;		                        \
+    unsigned __c = c;	                        \
+    unsigned __t = t;	                        \
+    unsigned __f = f;                           \
+    __asm__ __volatile__ (".insn r4 0x6b, 6, " __ASM_STR(unit) ", %0, %1, %2, %3" : "=r"(__r : "r"(__c), "r"(__t), "r"(__f)); \
+	__r;							            \
+})
+
 // Set thread mask
 inline void vx_tmc(unsigned thread_mask) {
     asm volatile (".insn s 0x6b, 0, x0, 0(%0)" :: "r"(thread_mask));
