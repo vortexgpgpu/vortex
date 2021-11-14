@@ -169,7 +169,7 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
   std::cout << "start execution" << std::endl;
   auto t2 = std::chrono::high_resolution_clock::now();
   RT_CHECK(vx_start(device));
-  RT_CHECK(vx_ready_wait(device, -1));
+  RT_CHECK(vx_ready_wait(device, MAX_TIMEOUT));
   auto t3 = std::chrono::high_resolution_clock::now();
 
   // read destination buffer from local memory
@@ -228,7 +228,7 @@ int main(int argc, char *argv[]) {
   std::cout << "open device connection" << std::endl;
   RT_CHECK(vx_dev_open(&device));
   
-  unsigned max_cores;
+  uint64_t max_cores;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_CORES, &max_cores));
   uint32_t num_points = count;
   uint32_t num_blocks = (num_points * sizeof(int32_t) + 63) / 64;

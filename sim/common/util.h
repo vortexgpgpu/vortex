@@ -75,11 +75,6 @@ inline uint64_t bit_getw(uint64_t bits, uint32_t start, uint32_t end) {
     return (bits << shift) >> (shift + start);
 }
 
-inline uint64_t aligned_size(uint64_t size, uint32_t alignment) {        
-    assert(0 == (alignment & (alignment - 1)));
-    return (size + alignment - 1) & ~(alignment - 1);
-}
-
 // Apply integer sign extension
 inline uint32_t sext32(uint32_t word, uint32_t width) {
   assert(width > 1);
