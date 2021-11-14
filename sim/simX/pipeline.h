@@ -10,14 +10,19 @@
 namespace vortex {
 
 struct pipeline_state_t {
-  //--    
+  //--
+  uint64_t    id;
+  
+  //--
+  int         cid;
   int         wid;  
   ThreadMask  tmask;
   Word        PC;
 
   //--
   bool        stall_warp;
-  int         rdest_type;
+  bool        wb;  
+  RegType     rdest_type;
   int         rdest;
   RegMask     used_iregs;
   RegMask     used_fregs;
@@ -30,10 +35,7 @@ struct pipeline_state_t {
   //--
   union {
     struct {        
-      uint8_t load : 1;
-      uint8_t store: 1;
-      uint8_t fence : 1;
-      uint8_t prefetch: 1;
+      LsuType type;
     } lsu;
     struct {
       AluType type;
@@ -49,7 +51,36 @@ struct pipeline_state_t {
   // stats
   uint64_t icache_latency;
   uint64_t dcache_latency;
+
+  void clear() {
+    cid = 0;
+    wid = 0;
+    tmask.reset();
+    PC = 0;
+    stall_warp = false;
+    wb = false;
+    rdest = 0;
+    rdest_type = RegType::None;
+    used_iregs.reset();
+    used_fregs.reset();
+    used_vregs.reset();
+    exe_type = ExeType::NOP;
+    mem_addrs.clear();    
+    icache_latency = 0;
+    dcache_latency = 0;
+  }
 };
+
+inline std::ostream &operator<<(std::ostream &os, const pipeline_state_t& state) {
+  os << "coreid=" << state.cid << ", wid=" << state.wid << ", PC=" << std::hex << state.PC;
+  os << ", wb=" << state.wb;
+  if (state.wb) {
+     os << ", rd=" << state.rdest_type << std::dec << state.rdest;
+  }
+  os << ", ex=" << state.exe_type;
+  os << " (#" << std::dec << state.id << ")";
+  return os;
+}
 
 class PipelineStage : public Queue<pipeline_state_t> {
 protected:
@@ -61,16 +92,5 @@ public:
     : name_(name) 
   {}
 };
-
-inline std::ostream &operator<<(std::ostream &os, const pipeline_state_t& state) {
-  os << "stall_warp="   << state.stall_warp;
-  os << ", wid="        << state.wid;
-  os << ", PC="         << std::hex << state.PC;
-  os << ", used_iregs=" << state.used_iregs;
-  os << ", used_fregs=" << state.used_fregs;
-  os << ", used_vregs=" << state.used_vregs;
-  os << std::endl;
-  return os;
-}
 
 }

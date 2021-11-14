@@ -75,11 +75,11 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
   if (num_rsrcs) {              
     for (int i = 0; i < num_rsrcs; ++i) {    
       DPH(2, "Src Reg [" << std::dec << i << "]: ");
-      int type = instr.getRSType(i);
+      auto type = instr.getRSType(i);
       int reg = instr.getRSrc(i);        
       switch (type) {
-      case 1: 
-        DPH(2, "r" << std::dec << reg << "={");
+      case RegType::Integer: 
+        DPN(2, "r" << std::dec << reg << "={");
         for (int t = 0; t < num_threads; ++t) {
           if (t) DPN(2, ", ");
           if (!tmask_.test(t)) {
@@ -91,8 +91,8 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         }
         DPN(2, "}" << std::endl);
         break;
-      case 2: 
-        DPH(2, "fr" << std::dec << reg << "={");
+      case RegType::Float: 
+        DPN(2, "fr" << std::dec << reg << "={");
         for (int t = 0; t < num_threads; ++t) {
           if (t) DPN(2, ", ");
           if (!tmask_.test(t)) {
@@ -105,6 +105,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         DPN(2, "}" << std::endl);
         break;
       default: 
+        std::abort();
         break;
       }      
     }
@@ -415,7 +416,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
     break;
   case L_INST:
     pipeline_state->exe_type = ExeType::LSU;    
-    pipeline_state->lsu.load = 0;    
+    pipeline_state->lsu.type = LsuType::LOAD;
     pipeline_state->used_iregs[rsrc0] = 1;
     pipeline_state->mem_addrs.resize(num_threads);
     for (int t = 0; t < num_threads; ++t) {
@@ -425,7 +426,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
       Word shift_by  = ((rsdata[t][0] + immsrc) & 0x00000003) * 8;
       Word data_read = core_->dcache_read(memAddr, 4);
       pipeline_state->mem_addrs.at(t) = memAddr;
-      D(3, "LOAD MEM: ADDRESS=0x" << std::hex << memAddr << ", DATA=0x" << data_read);
+      DP(3, "LOAD MEM: ADDRESS=0x" << std::hex << memAddr << ", DATA=0x" << data_read);
       switch (func3) {
       case 0:
         // LBI
@@ -455,7 +456,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
     break;
   case S_INST:     
     pipeline_state->exe_type = ExeType::LSU;    
-    pipeline_state->lsu.store = 1;    
+    pipeline_state->lsu.type = LsuType::STORE;
     pipeline_state->used_iregs[rsrc0] = 1;
     pipeline_state->used_iregs[rsrc1] = 1;
     pipeline_state->mem_addrs.resize(num_threads);
@@ -464,7 +465,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         continue;
       Word memAddr = rsdata[t][0] + immsrc;
       pipeline_state->mem_addrs.at(t) = memAddr;
-      D(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
+      DP(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
       switch (func3) {
       case 0:
         // SB
@@ -543,12 +544,12 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
     break;
   case FENCE:
     pipeline_state->exe_type = ExeType::LSU;    
-    pipeline_state->lsu.fence = 1;
+    pipeline_state->lsu.type = LsuType::FENCE;
     pipeline_state->stall_warp = true;
     break;
   case (FL | VL):
     pipeline_state->exe_type = ExeType::LSU;       
-    pipeline_state->lsu.load = 1;
+    pipeline_state->lsu.type = LsuType::LOAD;
     pipeline_state->used_iregs[rsrc0] = 1;    
     if (func3 == 0x2) {
       pipeline_state->mem_addrs.resize(num_threads);
@@ -558,14 +559,14 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         Word memAddr = rsdata[t][0] + immsrc;
         pipeline_state->mem_addrs.at(t) = memAddr;
         Word data_read = core_->dcache_read(memAddr, 4);        
-        D(3, "LOAD MEM: ADDRESS=0x" << std::hex << memAddr << ", DATA=0x" << data_read);
+        DP(3, "LOAD MEM: ADDRESS=0x" << std::hex << memAddr << ", DATA=0x" << data_read);
         rddata[t] = data_read;
       }
     } else {  
-      D(3, "Executing vector load");      
-      D(3, "lmul: " << vtype_.vlmul << " VLEN:" << (core_->arch().vsize() * 8) << "sew: " << vtype_.vsew);
-      D(3, "dest: v" << rdest);
-      D(3, "width" << instr.getVlsWidth());
+      DP(3, "Executing vector load");      
+      DP(3, "lmul: " << vtype_.vlmul << " VLEN:" << (core_->arch().vsize() * 8) << "sew: " << vtype_.vsew);
+      DP(3, "dest: v" << rdest);
+      DP(3, "width" << instr.getVlsWidth());
       pipeline_state->mem_addrs.resize(vl_);
       auto &vd = vRegFile_.at(rdest);
       switch (instr.getVlsWidth()) {
@@ -574,9 +575,9 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         for (int i = 0; i < vl_; i++) {
           Word memAddr = ((rsdata[i][0]) & 0xFFFFFFFC) + (i * vtype_.vsew / 8);
           pipeline_state->mem_addrs.at(i) = memAddr;
-          D(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
+          DP(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
           Word data_read = core_->dcache_read(memAddr, 4);
-          D(3, "Mem addr: " << std::hex << memAddr << " Data read " << data_read);
+          DP(3, "Mem addr: " << std::hex << memAddr << " Data read " << data_read);
           int *result_ptr = (int *)(vd.data() + i);
           *result_ptr = data_read;            
         }
@@ -590,7 +591,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
     break;
   case (FS | VS):
     pipeline_state->exe_type = ExeType::LSU;       
-    pipeline_state->lsu.store = 1;
+    pipeline_state->lsu.type = LsuType::STORE;
     pipeline_state->used_iregs[rsrc0] = 1;
     pipeline_state->used_iregs[rsrc1] = 1;    
     if (func3 == 0x2) {
@@ -601,20 +602,20 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         Word memAddr = rsdata[t][0] + immsrc;
         pipeline_state->mem_addrs.at(t) = memAddr;
         core_->dcache_write(memAddr, rsdata[t][1], 4);
-        D(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
+        DP(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
       }
     } else {      
       pipeline_state->mem_addrs.resize(vl_);
       for (int i = 0; i < vl_; i++) {
         Word memAddr = rsdata[i][0] + (i * vtype_.vsew / 8);
         pipeline_state->mem_addrs.at(i) = memAddr;
-        D(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
+        DP(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
         switch (instr.getVlsWidth()) {
         case 6: {
           //store word and unit strided (not checking for unit stride)          
           uint32_t value = *(uint32_t *)(vRegFile_.at(instr.getVs3()).data() + i);
           core_->dcache_write(memAddr, value, 4);
-          D(3, "store: " << memAddr << " value:" << value);
+          DP(3, "store: " << memAddr << " value:" << value);
         } break;
         default:
           std::abort();
@@ -705,9 +706,9 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         } else {          
           // FMV.X.W
           rddata[t] = rsdata[t][0];
-          pipeline_state->fpu.type = FpuType::FNCP;
-          pipeline_state->used_fregs[rsrc0] = 1;
-        } 
+        }        
+        pipeline_state->fpu.type = FpuType::FNCP;
+        pipeline_state->used_fregs[rsrc0] = 1;
         break;
       case 0x50:             
         switch(func3) {              
@@ -783,132 +784,138 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
     }
     rd_write = true;
     break;
-  case GPGPU:
-    pipeline_state->exe_type = ExeType::GPU; 
+  case GPGPU: {
+    pipeline_state->exe_type = ExeType::GPU;
+    int ts = 0;
     for (int t = 0; t < num_threads; ++t) {
-      if (!tmask_.test(t))
-        continue;
-      switch (func3) {
-      case 0: {
-        // TMC        
-        pipeline_state->gpu.type = GpuType::TMC;
-        pipeline_state->used_iregs[rsrc0] = 1;
-        pipeline_state->stall_warp = true;
-        if (rsrc1) {
-          // predicate mode
-          ThreadMask pred;
-          for (int i = 0; i < num_threads; ++i) {
-            pred[i] = tmask_.test(i) ? (iRegFile_.at(i).at(rsrc0) != 0) : 0;
-          }
-          if (pred.any()) {
-            tmask_ &= pred;
-          }
-        } else {
-          tmask_.reset();
-          for (int i = 0; i < num_threads; ++i) {
-            tmask_.set(i, rsdata.at(t)[0] & (1 << i));
-          }
-        }
-        D(3, "*** TMC " << tmask_);
-        active_ = tmask_.any();
-        break; // runOnce
-      } break;
-      case 1: {
-        // WSPAWN
-        pipeline_state->gpu.type = GpuType::WSPAWN;
-        pipeline_state->used_iregs[rsrc0] = 1;
-        pipeline_state->used_iregs[rsrc1] = 1;
-        pipeline_state->stall_warp = true;
-        int active_warps = std::min<int>(rsdata.at(t)[0], core_->arch().num_warps());
-        D(3, "*** Spawning " << (active_warps-1) << " warps at PC: " << std::hex << rsdata.at(t)[1]);
-        for (int i = 1; i < active_warps; ++i) {
-          Warp &newWarp = core_->warp(i);
-          newWarp.setPC(rsdata[t][1]);
-          newWarp.setTmask(0, true);
-        }
-        break; // runOnce
-      } break;
-      case 2: {
-        // SPLIT    
-        pipeline_state->gpu.type = GpuType::SPLIT;
-        pipeline_state->used_iregs[rsrc0] = 1;
-        pipeline_state->stall_warp = true;
-        if (HasDivergentThreads(tmask_, iRegFile_, rsrc0)) {          
-          ThreadMask tmask;
-          for (int i = 0; i < num_threads; ++i) {
-            tmask[i] = tmask_.test(i) && !iRegFile_.at(i).at(rsrc0);
-          }
-
-          DomStackEntry e(tmask, nextPC);
-          domStack_.push(tmask_);
-          domStack_.push(e);
-          for (size_t i = 0; i < e.tmask.size(); ++i) {
-            tmask_.set(i, !e.tmask.test(i) && tmask_.test(i));
-          }
-          active_ = tmask_.any();
-
-          DPH(3, "*** Split: New TM=");
-          for (int i = 0; i < num_threads; ++i) DPN(3, tmask_.test(num_threads-i-1));
-          DPN(3, ", Pushed TM=");
-          for (int i = 0; i < num_threads; ++i) DPN(3, e.tmask.test(num_threads-i-1));
-          DPN(3, ", PC=0x" << std::hex << e.PC << "\n");
-        } else {
-          D(3, "*** Unanimous pred");
-          DomStackEntry e(tmask_);
-          e.unanimous = true;
-          domStack_.push(e);
-        }        
-        break; // runOnce
-      } break;
-      case 3: {
-        // JOIN
-        pipeline_state->gpu.type = GpuType::JOIN;        
-        pipeline_state->stall_warp = true;        
-        if (!domStack_.empty() && domStack_.top().unanimous) {
-          D(3, "*** Uninimous branch at join");
-          tmask_ = domStack_.top().tmask;
-          active_ = tmask_.any();
-          domStack_.pop();
-        } else {
-          if (!domStack_.top().fallThrough) {
-            nextPC = domStack_.top().PC;
-            D(3, "*** Join: next PC: " << std::hex << nextPC << std::dec);
-          }
-
-          tmask_ = domStack_.top().tmask;
-          active_ = tmask_.any();
-
-          DPH(3, "*** Join: New TM=");
-          for (int i = 0; i < num_threads; ++i) DPN(3, tmask_.test(num_threads-i-1));
-          DPN(3, "\n");
-
-          domStack_.pop();
-        }        
-        break; // runOnce
-      } break;
-      case 4: {
-        // BAR
-        pipeline_state->gpu.type = GpuType::BAR;
-        pipeline_state->used_iregs[rsrc0] = 1;
-        pipeline_state->used_iregs[rsrc1] = 1;
-        pipeline_state->stall_warp = true; 
-        active_ = false;
-        core_->barrier(rsdata[t][0], rsdata[t][1], id_);        
-        break; // runOnce
-      } break;
-      case 6: {
-        // PREFETCH
-        pipeline_state->exe_type = ExeType::LSU; 
-        pipeline_state->lsu.prefetch = 1; 
-        pipeline_state->used_iregs[rsrc0] = 1;
-        int addr = rsdata[t][0];
-        printf("*** PREFETCHED %d ***\n", addr);
-      } break;
-      default:
-        std::abort();
+      if (tmask_.test(t)) {
+        ts = t;
+        break;
       }
     }
-    break;
+    switch (func3) {
+    case 0: {
+      // TMC        
+      pipeline_state->gpu.type = GpuType::TMC;
+      pipeline_state->used_iregs[rsrc0] = 1;
+      pipeline_state->stall_warp = true;
+      if (rsrc1) {
+        // predicate mode
+        ThreadMask pred;
+        for (int i = 0; i < num_threads; ++i) {
+          pred[i] = tmask_.test(i) ? (iRegFile_.at(i).at(rsrc0) != 0) : 0;
+        }
+        if (pred.any()) {
+          tmask_ &= pred;
+        }
+      } else {
+        tmask_.reset();
+        for (int i = 0; i < num_threads; ++i) {
+          tmask_.set(i, rsdata.at(ts)[0] & (1 << i));
+        }
+      }
+      DPH(3, "*** New TMC: ");
+      for (int i = 0; i < num_threads; ++i)
+        DPN(3, tmask_.test(num_threads-i-1));
+      DPN(3, std::endl);
+
+      active_ = tmask_.any();
+    } break;
+    case 1: {
+      // WSPAWN
+      pipeline_state->gpu.type = GpuType::WSPAWN;
+      pipeline_state->used_iregs[rsrc0] = 1;
+      pipeline_state->used_iregs[rsrc1] = 1;
+      pipeline_state->stall_warp = true;
+      int active_warps = std::min<int>(rsdata.at(ts)[0], core_->arch().num_warps());
+      DP(3, "*** Activate " << (active_warps-1) << " warps at PC: " << std::hex << rsdata.at(ts)[1]);
+      for (int i = 1; i < active_warps; ++i) {
+        Warp &newWarp = core_->warp(i);
+        newWarp.setPC(rsdata[ts][1]);
+        newWarp.setTmask(0, true);
+      }
+    } break;
+    case 2: {
+      // SPLIT    
+      pipeline_state->gpu.type = GpuType::SPLIT;
+      pipeline_state->used_iregs[rsrc0] = 1;
+      pipeline_state->stall_warp = true;
+      if (HasDivergentThreads(tmask_, iRegFile_, rsrc0)) {          
+        ThreadMask tmask;
+        for (int i = 0; i < num_threads; ++i) {
+          tmask[i] = tmask_.test(i) && !iRegFile_.at(i).at(rsrc0);
+        }
+
+        DomStackEntry e(tmask, nextPC);
+        domStack_.push(tmask_);
+        domStack_.push(e);
+        for (size_t i = 0; i < e.tmask.size(); ++i) {
+          tmask_.set(i, !e.tmask.test(i) && tmask_.test(i));
+        }
+        active_ = tmask_.any();
+
+        DPH(3, "*** Split: New TM=");
+        for (int i = 0; i < num_threads; ++i) DPN(3, tmask_.test(num_threads-i-1));
+        DPN(3, ", Pushed TM=");
+        for (int i = 0; i < num_threads; ++i) DPN(3, e.tmask.test(num_threads-i-1));
+        DPN(3, ", PC=0x" << std::hex << e.PC << "\n");
+      } else {
+        DP(3, "*** Unanimous pred");
+        DomStackEntry e(tmask_);
+        e.unanimous = true;
+        domStack_.push(e);
+      }        
+    } break;
+    case 3: {
+      // JOIN
+      pipeline_state->gpu.type = GpuType::JOIN;        
+      pipeline_state->stall_warp = true;        
+      if (!domStack_.empty() && domStack_.top().unanimous) {
+        DP(3, "*** Uninimous branch at join");
+        tmask_ = domStack_.top().tmask;
+        active_ = tmask_.any();
+        domStack_.pop();
+      } else {
+        if (!domStack_.top().fallThrough) {
+          nextPC = domStack_.top().PC;
+          DP(3, "*** Join: next PC: " << std::hex << nextPC << std::dec);
+        }
+
+        tmask_ = domStack_.top().tmask;
+        active_ = tmask_.any();
+
+        DPH(3, "*** Join: New TM=");
+        for (int i = 0; i < num_threads; ++i) DPN(3, tmask_.test(num_threads-i-1));
+        DPN(3, "\n");
+
+        domStack_.pop();
+      }        
+    } break;
+    case 4: {
+      // BAR
+      pipeline_state->gpu.type = GpuType::BAR;
+      pipeline_state->used_iregs[rsrc0] = 1;
+      pipeline_state->used_iregs[rsrc1] = 1;
+      pipeline_state->stall_warp = true; 
+      active_ = false;
+      core_->barrier(rsdata[ts][0], rsdata[ts][1], id_); 
+    } break;
+    case 6: {
+      // PREFETCH
+      pipeline_state->exe_type = ExeType::LSU; 
+      pipeline_state->lsu.type = LsuType::PREFETCH; 
+      pipeline_state->used_iregs[rsrc0] = 1;
+      for (int t = 0; t < num_threads; ++t) {
+        if (!tmask_.test(t))
+          continue;
+        int addr = rsdata[t][0];
+        printf("*** PREFETCHED %d ***\n", addr);
+      }
+    } break;
+    default:
+      std::abort();
+    }
+    }  break;
   case VSET: {
     int VLEN = core_->arch().vsize() * 8;
     int VLMAX = (instr.getVlmul() * VLEN) / instr.getVsew();
@@ -928,7 +935,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
               uint8_t first  = *(uint8_t *)(vr1.data() + i);
               uint8_t second = *(uint8_t *)(vr2.data() + i);
               uint8_t result = first + second;
-              D(3, "Adding " << first << " + " << second << " = " << result);
+              DP(3, "Adding " << first << " + " << second << " = " << result);
               *(uint8_t *)(vd.data() + i) = result;
             }
           }
@@ -940,7 +947,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
               uint16_t first  = *(uint16_t *)(vr1.data() + i);
               uint16_t second = *(uint16_t *)(vr2.data() + i);
               uint16_t result = first + second;
-              D(3, "Adding " << first << " + " << second << " = " << result);
+              DP(3, "Adding " << first << " + " << second << " = " << result);
               *(uint16_t *)(vd.data() + i) = result;
             }
           }
@@ -952,7 +959,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
               uint32_t first  = *(uint32_t *)(vr1.data() + i);
               uint32_t second = *(uint32_t *)(vr2.data() + i);
               uint32_t result = first + second;
-              D(3, "Adding " << first << " + " << second << " = " << result);
+              DP(3, "Adding " << first << " + " << second << " = " << result);
               *(uint32_t *)(vd.data() + i) = result;
             }
           }
@@ -968,7 +975,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t result = (first == second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 16) {
@@ -976,7 +983,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t result = (first == second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 32) {
@@ -984,7 +991,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t result = (first == second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
         }
@@ -999,7 +1006,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t result = (first != second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 16) {
@@ -1007,7 +1014,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t result = (first != second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 32) {
@@ -1015,7 +1022,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t result = (first != second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
         }
@@ -1030,7 +1037,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t result = (first < second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 16) {
@@ -1038,7 +1045,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t result = (first < second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 32) {
@@ -1046,7 +1053,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t result = (first < second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
         }
@@ -1061,7 +1068,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             int8_t first  = *(int8_t *)(vr1.data() + i);
             int8_t second = *(int8_t *)(vr2.data() + i);
             int8_t result = (first < second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 16) {
@@ -1069,7 +1076,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             int16_t first  = *(int16_t *)(vr1.data() + i);
             int16_t second = *(int16_t *)(vr2.data() + i);
             int16_t result = (first < second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(int16_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 32) {
@@ -1077,7 +1084,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             int32_t first  = *(int32_t *)(vr1.data() + i);
             int32_t second = *(int32_t *)(vr2.data() + i);
             int32_t result = (first < second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(int32_t *)(vd.data() + i) = result;
           }
         }
@@ -1092,7 +1099,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t result = (first <= second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 16) {
@@ -1100,7 +1107,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t result = (first <= second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 32) {
@@ -1108,7 +1115,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t result = (first <= second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
         }
@@ -1123,7 +1130,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             int8_t first  = *(int8_t *)(vr1.data() + i);
             int8_t second = *(int8_t *)(vr2.data() + i);
             int8_t result = (first <= second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 16) {
@@ -1131,7 +1138,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             int16_t first  = *(int16_t *)(vr1.data() + i);
             int16_t second = *(int16_t *)(vr2.data() + i);
             int16_t result = (first <= second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(int16_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 32) {
@@ -1139,7 +1146,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             int32_t first  = *(int32_t *)(vr1.data() + i);
             int32_t second = *(int32_t *)(vr2.data() + i);
             int32_t result = (first <= second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(int32_t *)(vd.data() + i) = result;
           }
         }
@@ -1154,7 +1161,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t result = (first > second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 16) {
@@ -1162,7 +1169,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t result = (first > second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 32) {
@@ -1170,7 +1177,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t result = (first > second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
         }
@@ -1185,7 +1192,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             int8_t first  = *(int8_t *)(vr1.data() + i);
             int8_t second = *(int8_t *)(vr2.data() + i);
             int8_t result = (first > second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 16) {
@@ -1193,7 +1200,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             int16_t first  = *(int16_t *)(vr1.data() + i);
             int16_t second = *(int16_t *)(vr2.data() + i);
             int16_t result = (first > second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(int16_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 32) {
@@ -1201,7 +1208,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             int32_t first  = *(int32_t *)(vr1.data() + i);
             int32_t second = *(int32_t *)(vr2.data() + i);
             int32_t result = (first > second) ? 1 : 0;
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(int32_t *)(vd.data() + i) = result;
           }
         }
@@ -1222,7 +1229,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint8_t first_value  = (first & 0x1);
             uint8_t second_value = (second & 0x1);
             uint8_t result = (first_value & !second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }            
           for (int i = vl_; i < VLMAX; i++) {
@@ -1235,7 +1242,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint16_t first_value  = (first & 0x1);
             uint16_t second_value = (second & 0x1);
             uint16_t result = (first_value & !second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1248,7 +1255,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint32_t first_value  = (first & 0x1);
             uint32_t second_value = (second & 0x1);
             uint32_t result = (first_value & !second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1268,7 +1275,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint8_t first_value  = (first & 0x1);
             uint8_t second_value = (second & 0x1);
             uint8_t result = (first_value & second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1281,7 +1288,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint16_t first_value  = (first & 0x1);
             uint16_t second_value = (second & 0x1);
             uint16_t result = (first_value & second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1294,7 +1301,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint32_t first_value  = (first & 0x1);
             uint32_t second_value = (second & 0x1);
             uint32_t result = (first_value & second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1314,7 +1321,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint8_t first_value  = (first & 0x1);
             uint8_t second_value = (second & 0x1);
             uint8_t result = (first_value | second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1327,7 +1334,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint16_t first_value  = (first & 0x1);
             uint16_t second_value = (second & 0x1);
             uint16_t result = (first_value | second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1340,7 +1347,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint32_t first_value  = (first & 0x1);
             uint32_t second_value = (second & 0x1);
             uint32_t result = (first_value | second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1360,7 +1367,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint8_t first_value  = (first & 0x1);
             uint8_t second_value = (second & 0x1);
             uint8_t result = (first_value ^ second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1373,7 +1380,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint16_t first_value  = (first & 0x1);
             uint16_t second_value = (second & 0x1);
             uint16_t result = (first_value ^ second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1386,7 +1393,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint32_t first_value  = (first & 0x1);
             uint32_t second_value = (second & 0x1);
             uint32_t result = (first_value ^ second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1406,7 +1413,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint8_t first_value  = (first & 0x1);
             uint8_t second_value = (second & 0x1);
             uint8_t result = (first_value | !second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1419,7 +1426,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint16_t first_value  = (first & 0x1);
             uint16_t second_value = (second & 0x1);
             uint16_t result = (first_value | !second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1432,7 +1439,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint32_t first_value  = (first & 0x1);
             uint32_t second_value = (second & 0x1);
             uint32_t result = (first_value | !second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1452,7 +1459,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint8_t first_value  = (first & 0x1);
             uint8_t second_value = (second & 0x1);
             uint8_t result = !(first_value & second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1465,7 +1472,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint16_t first_value  = (first & 0x1);
             uint16_t second_value = (second & 0x1);
             uint16_t result = !(first_value & second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1478,7 +1485,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint32_t first_value  = (first & 0x1);
             uint32_t second_value = (second & 0x1);
             uint32_t result = !(first_value & second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1498,7 +1505,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint8_t first_value  = (first & 0x1);
             uint8_t second_value = (second & 0x1);
             uint8_t result = !(first_value | second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1511,7 +1518,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint16_t first_value  = (first & 0x1);
             uint16_t second_value = (second & 0x1);
             uint16_t result = !(first_value | second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1524,7 +1531,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint32_t first_value  = (first & 0x1);
             uint32_t second_value = (second & 0x1);
             uint32_t result = !(first_value | second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1544,7 +1551,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint8_t first_value  = (first & 0x1);
             uint8_t second_value = (second & 0x1);
             uint8_t result = !(first_value ^ second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1557,7 +1564,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint16_t first_value  = (first & 0x1);
             uint16_t second_value = (second & 0x1);
             uint16_t result = !(first_value ^ second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1570,7 +1577,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint32_t first_value  = (first & 0x1);
             uint32_t second_value = (second & 0x1);
             uint32_t result = !(first_value ^ second_value);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1588,7 +1595,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t result = (first * second);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1599,7 +1606,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t result = (first * second);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1610,7 +1617,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t result = (first * second);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1628,7 +1635,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t result = (first * second);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) += result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1639,7 +1646,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t result = (first * second);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) += result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1650,7 +1657,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t result = (first * second);
-            D(3, "Comparing " << first << " + " << second << " = " << result);
+            DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) += result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1669,7 +1676,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
           for (int i = 0; i < vl_; i++) {
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t result = (rsdata[i][0] + second);
-            D(3, "Comparing " << rsdata[i][0] << " + " << second << " = " << result);
+            DP(3, "Comparing " << rsdata[i][0] << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1679,7 +1686,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
           for (int i = 0; i < vl_; i++) {
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t result = (rsdata[i][0] + second);
-            D(3, "Comparing " << rsdata[i][0] << " + " << second << " = " << result);
+            DP(3, "Comparing " << rsdata[i][0] << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1689,7 +1696,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
           for (int i = 0; i < vl_; i++) {
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t result = (rsdata[i][0] + second);
-            D(3, "Comparing " << rsdata[i][0] << " + " << second << " = " << result);
+            DP(3, "Comparing " << rsdata[i][0] << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1705,7 +1712,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
           for (int i = 0; i < vl_; i++) {
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t result = (rsdata[i][0] * second);
-            D(3, "Comparing " << rsdata[i][0] << " + " << second << " = " << result);
+            DP(3, "Comparing " << rsdata[i][0] << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1715,7 +1722,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
           for (int i = 0; i < vl_; i++) {
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t result = (rsdata[i][0] * second);
-            D(3, "Comparing " << rsdata[i][0] << " + " << second << " = " << result);
+            DP(3, "Comparing " << rsdata[i][0] << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1725,7 +1732,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
           for (int i = 0; i < vl_; i++) {
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t result = (rsdata[i][0] * second);
-            D(3, "Comparing " << rsdata[i][0] << " + " << second << " = " << result);
+            DP(3, "Comparing " << rsdata[i][0] << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
           for (int i = vl_; i < VLMAX; i++) {
@@ -1741,7 +1748,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
       vtype_.vsew  = instr.getVsew();
       vtype_.vlmul = instr.getVlmul();
 
-      D(3, "lmul:" << vtype_.vlmul << " sew:" << vtype_.vsew  << " ediv: " << vtype_.vediv << "rsrc_" << rsdata[0][0] << "VLMAX" << VLMAX);
+      DP(3, "lmul:" << vtype_.vlmul << " sew:" << vtype_.vsew  << " ediv: " << vtype_.vediv << "rsrc_" << rsdata[0][0] << "VLMAX" << VLMAX);
 
       int s0 = rsdata[0][0];
       if (s0 <= VLMAX) {
@@ -1762,46 +1769,49 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
   }
 
   if (rd_write) {
+    pipeline_state->wb = true;
     DPH(2, "Dest Reg: ");
-    int rdt = instr.getRDType();    
+    auto rdt = instr.getRDType();    
     switch (rdt) {
-    case 1:      
+    case RegType::Integer:      
       if (rdest) {    
-        DPH(2, "r" << std::dec << rdest << "={");    
+        DPN(2, "r" << std::dec << rdest << "={");    
         for (int t = 0; t < num_threads; ++t) {
-          if (!tmask_.test(t))
-            continue;
-          iRegFile_.at(t)[rdest] = rddata[t];  
           if (t) DPN(2, ", ");
+          if (!tmask_.test(t)) {
+            DPN(2, "-");
+            continue;            
+          }
+          iRegFile_.at(t)[rdest] = rddata[t];
           DPN(2, "0x" << std::hex << rddata[t]);         
         }
         DPN(2, "}" << std::endl);
         pipeline_state->used_iregs[rdest] = 1;
       }
       break;
-    case 2:
-      DPH(2, "fr" << std::dec << rdest << "={");
+    case RegType::Float:
+      DPN(2, "fr" << std::dec << rdest << "={");
       for (int t = 0; t < num_threads; ++t) {
-        if (!tmask_.test(t))
-          continue;
-        fRegFile_.at(t)[rdest] = rddata[t];        
         if (t) DPN(2, ", ");
+        if (!tmask_.test(t)) {
+          DPN(2, "-");
+          continue;            
+        }
+        fRegFile_.at(t)[rdest] = rddata[t];        
         DPN(2, "0x" << std::hex << rddata[t]);         
       }
       DPN(2, "}" << std::endl);
       pipeline_state->used_fregs[rdest] = 1;
       break;
-    case 3:
-      pipeline_state->used_vregs[rdest] = 1;
-      break;
     default:
+      std::abort();
       break;
     }
   }
 
   PC_ += core_->arch().wsize();
   if (PC_ != nextPC) {
-    D(3, "*** Next PC: " << std::hex << nextPC << std::dec);
+    DP(3, "*** Next PC: " << std::hex << nextPC << std::dec);
     PC_ = nextPC;
   }
 }

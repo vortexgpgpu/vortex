@@ -1,5 +1,6 @@
 #include "cache.h"
 #include "debug.h"
+#include "types.h"
 #include <util.h>
 #include <unordered_map>
 #include <vector>
@@ -30,8 +31,7 @@ struct params_t {
         uint32_t offset_bits = config.B - config.W;
         uint32_t log2_bank_size  = config.C - bank_bits;
         uint32_t index_bits  = log2_bank_size - (config.B << config.A);        
-        assert(log2_bank_size >= config.B);
-        
+        assert(log2_bank_size >= config.B);        
         
         this->words_per_block = 1 << offset_bits;
         this->blocks_per_set  = 1 << config.A;
@@ -229,9 +229,10 @@ private:
     CacheConfig config_;
     params_t params_;
     std::vector<bank_t> banks_;
-    std::vector<std::pair<bool, MemReq>> core_reqs_;
-    std::pair<bool, MemRsp> mem_rsp_;
     std::vector<std::queue<uint32_t>> core_rsps_;
+    Switch<MemReq, MemRsp>::Ptr mem_switch_;
+    std::vector<MasterPort<MemReq>> mem_req_ports_;
+    std::vector<SlavePort<MemRsp>>  mem_rsp_ports_;
 
 public:
     Impl(Cache* simobject, const CacheConfig& config) 
@@ -239,16 +240,22 @@ public:
         , config_(config)
         , params_(config)
         , banks_(config.num_banks, {config, params_})
-        , core_reqs_(config.num_inputs)
         , core_rsps_(config.num_inputs)
-    {}    
-
-    void handleMemResponse(const MemRsp& response, uint32_t) {        
-        mem_rsp_ = {true, response};
-    }
-
-    void handleCoreRequest(const MemReq& request, uint32_t port_id) {
-        core_reqs_.at(port_id) = {true, request};
+        , mem_req_ports_(config.num_banks, simobject)
+        , mem_rsp_ports_(config.num_banks, simobject)
+    {
+        if (config.num_banks > 1) {
+            mem_switch_ = Switch<MemReq, MemRsp>::Create("mem_arb", ArbiterType::RoundRobin, config.num_banks);
+            for (uint32_t i = 0, n = config.num_banks; i < n; ++i) {
+                mem_req_ports_.at(i).bind(&mem_switch_->ReqIn.at(i));
+                mem_switch_->RspOut.at(i).bind(&mem_rsp_ports_.at(i));
+            }    
+            mem_switch_->ReqOut.bind(&simobject->MemReqPort);
+            simobject->MemRspPort.bind(&mem_switch_->RspIn);
+        } else {
+            mem_req_ports_.at(0).bind(&simobject->MemReqPort);
+            simobject->MemRspPort.bind(&mem_rsp_ports_.at(0));
+        }
     }
 
     void step(uint64_t /*cycle*/) {
@@ -269,31 +276,29 @@ public:
                 bank.mshr.try_pop(&active_req);
             }
 
-            // try schedule stall replay
+            // try schedule stall queue if MSHR has space
             if (!active_req.valid 
-             && !bank.stall_buffer.empty()) {            
+             && !bank.stall_buffer.empty()
+             && !bank.mshr.full()) {            
                 active_req = bank.stall_buffer.front();
                 bank.stall_buffer.pop();
             }
         }
 
         // handle memory fills
-        if (mem_rsp_.first) {
-            mem_rsp_.first = false;
-            auto bank_id = bit_getw(mem_rsp_.second.tag, 0, 15);
-            auto mshr_id = bit_getw(mem_rsp_.second.tag, 16, 31);
-            this->processMemoryFill(bank_id, mshr_id);        
+        for (uint32_t i = 0, n = config_.num_banks; i < n; ++i) {
+            MemRsp mem_rsp;
+            if (mem_rsp_ports_.at(i).read(&mem_rsp)) {
+                this->processMemoryFill(i, mem_rsp.tag);
+            }
         }
         
         // handle incoming core requests
-        for (uint32_t i = 0, n = core_reqs_.size(); i < n; ++i) {
-            auto& entry = core_reqs_.at(i);
-            if (!entry.first)
+        for (uint32_t i = 0, n = config_.num_inputs; i < n; ++i) {
+            MemReq core_req;
+            if (!simobject_->CoreReqPorts.at(i).read(&core_req))
                 continue;
-                
-            entry.first = false;
 
-            auto& core_req = entry.second;
             auto bank_id   = params_.addr_bank_id(core_req.addr);
             auto set_id    = params_.addr_set_id(core_req.addr);
             auto tag       = params_.addr_tag(core_req.addr);
@@ -417,7 +422,7 @@ public:
                         mem_req.addr  = params_.mem_addr(bank_id, active_req.set_id, hit_block.tag);
                         mem_req.write = true;
                         mem_req.tag   = 0;
-                        simobject_->MemReqPort.send(mem_req, 1);
+                        mem_req_ports_.at(bank_id).send(mem_req, 1);
                     } else {
                         // mark block as dirty
                         hit_block.dirty = true;
@@ -438,7 +443,8 @@ public:
                         MemReq mem_req;
                         mem_req.addr  = params_.mem_addr(bank_id, active_req.set_id, repl_block.tag);
                         mem_req.write = true;
-                        simobject_->MemReqPort.send(mem_req, 1);
+                        mem_req.tag   = 0;
+                        mem_req_ports_.at(bank_id).send(mem_req, 1);
                     }
                 }
 
@@ -449,7 +455,7 @@ public:
                         mem_req.addr  = params_.mem_addr(bank_id, active_req.set_id, active_req.tag);
                         mem_req.write = true;
                         mem_req.tag   = 0;
-                        simobject_->MemReqPort.send(mem_req, 1);
+                        mem_req_ports_.at(bank_id).send(mem_req, 1);
                     }
                     // send core response
                     for (auto& info : active_req.infos) {
@@ -467,9 +473,8 @@ public:
                         MemReq mem_req;
                         mem_req.addr  = params_.mem_addr(bank_id, active_req.set_id, active_req.tag);
                         mem_req.write = active_req.write;
-                        mem_req.tag = bit_setw(0,            0, 15, bank_id);
-                        mem_req.tag = bit_setw(mem_req.tag, 16, 31, mshr_id);
-                        simobject_->MemReqPort.send(mem_req, 1);
+                        mem_req.tag   = mshr_id;
+                        mem_req_ports_.at(bank_id).send(mem_req, 1);
                     }
                 }
             }
@@ -480,12 +485,12 @@ public:
 ///////////////////////////////////////////////////////////////////////////////
 
 Cache::Cache(const SimContext& ctx, const char* name, const CacheConfig& config) 
-    : SimObject<Cache>(ctx, name)
-    , impl_(new Impl(this, config))
-    , CoreReqPorts(config.num_inputs, {this, impl_, &Cache::Impl::handleCoreRequest})
+    : SimObject<Cache>(ctx, name)    
+    , CoreReqPorts(config.num_inputs, this)
     , CoreRspPorts(config.num_inputs, this)
     , MemReqPort(this)
-    , MemRspPort(this, impl_, &Impl::handleMemResponse)
+    , MemRspPort(this)
+    , impl_(new Impl(this, config))
 {}
 
 Cache::~Cache() {

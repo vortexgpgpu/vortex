@@ -4,6 +4,7 @@
 #include <bitset>
 #include <queue>
 #include <unordered_map>
+#include <util.h>
 #include <VX_config.h>
 #include <simobject.h>
 
@@ -20,7 +21,25 @@ typedef std::bitset<32> RegMask;
 typedef std::bitset<32> ThreadMask;
 typedef std::bitset<32> WarpMask;
 
+enum class RegType {
+  None,
+  Integer,
+  Float,
+  Vector
+};
+
+inline std::ostream &operator<<(std::ostream &os, const RegType& type) {
+  switch (type) {
+  case RegType::None: break;
+  case RegType::Integer: os << "r"; break;
+  case RegType::Float:   os << "fr"; break;
+  case RegType::Vector:  os << "vr"; break;
+  }
+  return os;
+}
+
 enum class ExeType {
+  NOP,
   ALU,
   LSU,
   CSR,
@@ -29,12 +48,52 @@ enum class ExeType {
   MAX,
 };
 
+inline std::ostream &operator<<(std::ostream &os, const ExeType& type) {
+  switch (type) {
+  case ExeType::NOP: os << "NOP"; break;
+  case ExeType::ALU: os << "ALU"; break;
+  case ExeType::LSU: os << "LSU"; break;
+  case ExeType::CSR: os << "CSR"; break;
+  case ExeType::FPU: os << "FPU"; break;
+  case ExeType::GPU: os << "GPU"; break;
+  case ExeType::MAX: break;
+  }
+  return os;
+}
+
 enum class AluType {
   ARITH,
   BRANCH,
   IMUL,
   IDIV,    
 };
+
+inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
+  switch (type) {
+  case AluType::ARITH:  os << "ARITH"; break;
+  case AluType::BRANCH: os << "BRANCH"; break;
+  case AluType::IMUL:   os << "IMUL"; break;
+  case AluType::IDIV:   os << "IDIV"; break;
+  }
+  return os;
+}
+
+enum class LsuType {
+  LOAD,
+  STORE,
+  FENCE,
+  PREFETCH,    
+};
+
+inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
+  switch (type) {
+  case LsuType::LOAD:     os << "LOAD"; break;
+  case LsuType::STORE:    os << "STORE"; break;
+  case LsuType::FENCE:    os << "FENCE"; break;
+  case LsuType::PREFETCH: os << "PREFETCH"; break;
+  }
+  return os;
+}
 
 enum class FpuType {
   FNCP,
@@ -43,6 +102,17 @@ enum class FpuType {
   FSQRT,
   FCVT,
 };
+
+inline std::ostream &operator<<(std::ostream &os, const FpuType& type) {
+  switch (type) {
+  case FpuType::FNCP:  os << "FNCP"; break;
+  case FpuType::FMA:   os << "FMA"; break;
+  case FpuType::FDIV:  os << "FDIV"; break;
+  case FpuType::FSQRT: os << "FSQRT"; break;
+  case FpuType::FCVT:  os << "FCVT"; break;
+  }
+  return os;
+}
 
 enum class GpuType {
   TMC,
@@ -53,10 +123,30 @@ enum class GpuType {
   TEX,
 };
 
+inline std::ostream &operator<<(std::ostream &os, const GpuType& type) {
+  switch (type) {
+  case GpuType::TMC:    os << "TMC"; break;
+  case GpuType::WSPAWN: os << "WSPAWN"; break;
+  case GpuType::SPLIT:  os << "SPLIT"; break;
+  case GpuType::JOIN:   os << "JOIN"; break;
+  case GpuType::BAR:    os << "BAR"; break;
+  case GpuType::TEX:    os << "TEX"; break;
+  }
+  return os;
+}
+
 enum class ArbiterType {
   Priority,
   RoundRobin
 };
+
+inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
+  switch (type) {
+  case ArbiterType::Priority:   os << "Priority"; break;
+  case ArbiterType::RoundRobin: os << "RoundRobin"; break;
+  }
+  return os;
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -64,6 +154,8 @@ template <typename T>
 class Queue {
 protected:
   std::queue<T> queue_;
+
+  uint32_t count;
 
 public:
   Queue() {}
@@ -77,6 +169,7 @@ public:
   }
 
   void push(const T& value) {
+    ++count;
     queue_.push(value);
   }
 
@@ -141,6 +234,7 @@ public:
         return i;
       }
     }
+    assert(false);
     return -1;
   }
 
@@ -148,6 +242,7 @@ public:
     auto& entry = entries_.at(index);
     assert(entry.first);
     entry.first = false;
+    --capacity_;
   }
 
   void remove(uint32_t index, T* value) {
@@ -155,6 +250,7 @@ public:
     assert(entry.first);
     *value = entry.second;
     entry.first = false;
+    --capacity_;
   }
 };
 
@@ -163,29 +259,21 @@ public:
 template <typename Req, typename Rsp, uint32_t MaxInputs = 32>
 class Switch : public SimObject<Switch<Req, Rsp>> {
 private:
-  struct req_t {  
+  struct req_batch_t {  
     std::vector<Req>       data;
     std::bitset<MaxInputs> valid;
-    req_t() {} 
-    req_t(uint32_t size) : data(size) {} 
+    req_batch_t() {} 
+    req_batch_t(uint32_t size) 
+      : data(size)
+      , valid(0)
+    {} 
   };
 
-  void handleIncomingRequest(const Req& req, uint32_t port_id) {
-    cur_req_.data.at(port_id) = req;
-    cur_req_.valid.set(port_id);
-  }
-
-  void handleIncomingResponse(const Rsp& rsp, uint32_t) {
-    rsps_.push(rsp);
-  }
-
   ArbiterType type_;
-  std::queue<req_t> reqs_;
-  std::queue<Rsp> rsps_;
-  req_t cur_req_; 
+  std::queue<req_batch_t> reqq_;
   uint32_t delay_;  
   uint32_t cursor_;
-  std::unordered_map<uint32_t, uint32_t> addr_table_;
+  uint32_t tag_shift_;
 
 public:
   Switch(
@@ -197,12 +285,12 @@ public:
   ) 
     : SimObject<Switch<Req, Rsp, MaxInputs>>(ctx, name)    
     , type_(type)
-    , cur_req_(num_inputs)
     , delay_(delay)
     , cursor_(0)
-    , ReqIn(num_inputs, {this, this, &Switch<Req, Rsp, MaxInputs>::handleIncomingRequest})
+    , tag_shift_(log2ceil(num_inputs))
+    , ReqIn(num_inputs, this)
     , ReqOut(this)
-    , RspIn(this, this, &Switch<Req, Rsp, MaxInputs>::handleIncomingResponse)    
+    , RspIn(this)    
     , RspOut(num_inputs, this)
   {
     assert(delay_ != 0);
@@ -210,36 +298,52 @@ public:
   }
 
   void step(uint64_t /*cycle*/) {    
-    if (cur_req_.valid.any()) {
-      reqs_.push(cur_req_);      
-      cur_req_.valid.reset();
-    }
-
-    while (!reqs_.empty()) {
-      auto& entry = reqs_.front();
-      bool found = false;
-      for (uint32_t i = 0, n = entry.data.size(); i < n; ++i) {
-        auto j = (cursor_ + i) % n;        
-        if (entry.valid.test(j)) {
-          auto& req = entry.data.at(j);
-          addr_table_[req.tag] = j;
-          ReqOut.send(req, delay_);
-          entry.valid.reset(j);
-          this->update_cursor(j);
-          found = true;
-          break;
+    // process incomming requests
+    {
+      req_batch_t req_batch(ReqIn.size());
+      for (uint32_t i = 0, n = ReqIn.size(); i < n; ++i) {
+        Req req;
+        if (ReqIn.at(i).read(&req)) {
+          req_batch.data.at(i) = req;
+          req_batch.valid.set(i);
         }
       }
-      if (found)
-        break;
-      reqs_.pop();
+      if (req_batch.valid.any()) {
+        reqq_.push(req_batch);
+      }
+    }
+
+    // apply arbitration
+    if (!reqq_.empty()) {
+      auto& req_batch = reqq_.front();
+      for (uint32_t i = 0, n = req_batch.data.size(); i < n; ++i) {
+        auto j = (cursor_ + i) % n;        
+        if (req_batch.valid.test(j)) {
+          auto& req = req_batch.data.at(j);
+          if (tag_shift_) {
+            req.tag = (req.tag << tag_shift_) | j;
+          }
+          ReqOut.send(req, delay_);
+          req_batch.valid.reset(j);
+          this->update_cursor(j);
+          if (!req_batch.valid.any())
+            reqq_.pop(); // pop when empty
+          break;
+        }
+      }      
     } 
 
-    if (!rsps_.empty()) {
-      auto& rsp = rsps_.front();
-      auto port_id = addr_table_.at(rsp.tag);
-      RspOut.at(port_id).send(rsp, 1);
-      rsps_.pop();
+    // process incoming reponses
+    {
+      Rsp rsp;
+      if (RspIn.read(&rsp)) {    
+        uint32_t port_id = 0;
+        if (tag_shift_) {
+          port_id = rsp.tag & ((1 << tag_shift_)-1);
+          rsp.tag >>= tag_shift_;
+        }      
+        RspOut.at(port_id).send(rsp, 1);
+      }
     }
   }
 

@@ -12,13 +12,13 @@
 
 using namespace vortex;
 
-Core::Core(const SimContext& ctx, const ArchDef &arch, Decoder &decoder, MemoryUnit &mem, Word id)
+Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
     : SimObject(ctx, "Core")
     , id_(id)
     , arch_(arch)
-    , decoder_(decoder)
-    , mem_(mem)
-    , shared_mem_(1, SMEM_SIZE)
+    , decoder_(arch)
+    , mmu_(0, arch.wsize(), true)
+    , shared_mem_(4096)
     , warps_(arch.num_warps())
     , barriers_(arch.num_barriers(), 0)
     , csrs_(arch.num_csrs(), 0)
@@ -54,9 +54,7 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, Decoder &decoder, MemoryU
         DCACHE_MSHR_SIZE,       // mshr
         2,                      // pipeline latency
       }))
-    , l1_mem_switch_(Switch<MemReq, MemRsp>::Create("l1_arb", ArbiterType::Priority, 2)) 
-    , icache_rsp_port_(this, this, &Core::icache_handleCacheReponse)
-    , dcache_rsp_port_(arch.num_threads(), {this, reinterpret_cast<LsuUnit*>(exe_units_.at((int)ExeType::LSU).get()) , &LsuUnit::handleCacheReponse})
+    , l1_mem_switch_(Switch<MemReq, MemRsp>::Create("l1_arb", ArbiterType::Priority, 2))
     , fetch_stage_("fetch")
     , decode_stage_("decode")
     , issue_stage_("issue")
@@ -65,36 +63,34 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, Decoder &decoder, MemoryU
     , pending_icache_(arch_.num_warps())
     , stalled_warps_(0)
     , last_schedule_wid_(0)
-    , pending_instrs_(0)
+    , issued_instrs_(0)
+    , committed_instrs_(0)
     , ebreak_(false)   
     , stats_insts_(0)
     , stats_loads_(0)
     , stats_stores_(0)
-    , MemRspPort(this, &l1_mem_switch_->RspIn)
-    , MemReqPort(this, &l1_mem_switch_->ReqOut)    
+    , MemRspPort(this)
+    , MemReqPort(this)    
 {  
   for (int i = 0; i < arch_.num_warps(); ++i) {
     warps_.at(i) = std::make_shared<Warp>(this, i);
   }
 
   // register execute units
+  exe_units_.at((int)ExeType::NOP) = std::make_shared<NopUnit>(this);
   exe_units_.at((int)ExeType::ALU) = std::make_shared<AluUnit>(this);
   exe_units_.at((int)ExeType::LSU) = std::make_shared<LsuUnit>(this);
   exe_units_.at((int)ExeType::CSR) = std::make_shared<CsrUnit>(this);
   exe_units_.at((int)ExeType::FPU) = std::make_shared<FpuUnit>(this);  
   exe_units_.at((int)ExeType::GPU) = std::make_shared<GpuUnit>(this);
 
-  // connect l1 caches
-  icache_->CoreRspPorts.at(0).bind(&icache_rsp_port_);
-  for (int i = 0; i < arch_.num_threads(); ++i) {
-    dcache_->CoreRspPorts.at(i).bind(&dcache_rsp_port_.at(i));
-  }
-
   // connect l1 switch
   icache_->MemReqPort.bind(&l1_mem_switch_->ReqIn[0]);
   dcache_->MemReqPort.bind(&l1_mem_switch_->ReqIn[1]);
   l1_mem_switch_->RspOut[0].bind(&icache_->MemRspPort);  
   l1_mem_switch_->RspOut[1].bind(&dcache_->MemRspPort);
+  this->MemRspPort.bind(&l1_mem_switch_->RspIn);
+  l1_mem_switch_->ReqOut.bind(&this->MemReqPort);
 
   // activate warp0
   warps_.at(0)->setTmask(0, true);
@@ -109,31 +105,24 @@ Core::~Core() {
   }
 }
 
-void Core::icache_handleCacheReponse(const MemRsp& response, uint32_t /*port_id*/) {
-  // advance to decode stage
-  uint32_t wid = response.tag;
-  pipeline_state_t state;
-  pending_icache_.remove(wid, &state);
-  auto latency = (SimPlatform::instance().cycles() - state.icache_latency);
-  state.icache_latency = latency;
-  decode_stage_.push(state);
+void Core::attach_ram(RAM* ram) {
+  // bind RAM to memory unit
+  mmu_.attach(*ram, 0, 0xFFFFFFFF);    
 }
 
 void Core::step(uint64_t cycle) {
-    __unused (cycle);
-  D(2, "###########################################################");
-  D(2, std::dec << "Core" << id_ << ": cycle: " << cycle);
-
-  this->commit();
-  this->execute();
-  this->issue();
-  this->decode();
-  this->fetch();
+  this->commit(cycle);
+  this->execute(cycle);
+  this->issue(cycle);
+  this->decode(cycle);
+  this->fetch(cycle);
 
   DPN(2, std::flush);
 }
 
-void Core::warp_scheduler() {
+void Core::warp_scheduler(uint64_t cycle) {
+  __unused (cycle);
+
   bool foundSchedule = false;
   int scheduled_warp = last_schedule_wid_;
 
@@ -159,53 +148,77 @@ void Core::warp_scheduler() {
   stats_insts_ += warp->getActiveThreads();
   
   pipeline_state_t state;
+  state.clear();
+  state.id = (issued_instrs_++ * arch_.num_cores()) + id_;
+
   warp->eval(&state);
 
-  D(4, state);  
+  DT(3, cycle, "pipeline-schedule: " << state);
 
-  // advance to fetch stage
-  ++pending_instrs_;
+  // advance to fetch stage  
   fetch_stage_.push(state);
 }
 
-void Core::fetch() {
-  // schedule icache request
-  pipeline_state_t state;
-  if (fetch_stage_.try_pop(&state)) {
-    state.icache_latency = SimPlatform::instance().cycles();
-    MemReq mem_req;
-    mem_req.addr  = state.PC;
-    mem_req.write = false;
-    mem_req.tag   = pending_icache_.allocate(state);    
-    icache_->CoreReqPorts.at(0).send(mem_req, 1);
+void Core::fetch(uint64_t cycle) {
+  // handle icache reponse
+  {
+    MemRsp mem_rsp;
+    if (icache_->CoreRspPorts.at(0).read(&mem_rsp)){
+      pipeline_state_t state;
+      pending_icache_.remove(mem_rsp.tag, &state);
+      auto latency = (SimPlatform::instance().cycles() - state.icache_latency);
+      state.icache_latency = latency;
+      decode_stage_.push(state);
+      DT(3, cycle, "icache-rsp: addr=" << std::hex << state.PC << ", tag=" << mem_rsp.tag << ", " << state);
+    }
+  }
+
+  // send icache request
+  {
+    pipeline_state_t state;
+    if (fetch_stage_.try_pop(&state)) {
+      state.icache_latency = SimPlatform::instance().cycles();
+      MemReq mem_req;
+      mem_req.addr  = state.PC;
+      mem_req.write = false;
+      mem_req.tag   = pending_icache_.allocate(state);    
+      icache_->CoreReqPorts.at(0).send(mem_req, 1);
+      DT(3, cycle, "icache-req: addr=" << std::hex << mem_req.addr << ", tag=" << mem_req.tag << ", " << state);
+    }
   }  
 
   // schedule next warp
-  this->warp_scheduler();  
+  this->warp_scheduler(cycle);  
 }
 
-void Core::decode() {
+void Core::decode(uint64_t cycle) {
+  __unused (cycle);
+
   pipeline_state_t state;
   if (!decode_stage_.try_pop(&state))
     return;    
   
-  if (state.stall_warp) {
-    D(3, "*** warp#" << state.wid << " fetch stalled");
-  } else {
-    // release warp
+  // release warp
+  if (!state.stall_warp) {
     stalled_warps_.reset(state.wid);
   }
+
+  DT(3, cycle, "pipeline-decode: " << state);
   
   // advance to issue stage
   issue_stage_.push(state);
 }
 
-void Core::issue() {
+void Core::issue(uint64_t cycle) {
+  __unused (cycle);
+
   if (!issue_stage_.empty()) {
     // insert to ibuffer 
     auto& state = issue_stage_.top();
     auto& ibuffer = ibuffers_.at(state.wid);
-    if (!ibuffer.full()) {
+    if (ibuffer.full()) {
+      DT(3, cycle, "*** ibuffer-stall: " << state);
+    } else {
       ibuffer.push(state);
       issue_stage_.pop();
     }
@@ -219,8 +232,18 @@ void Core::issue() {
     auto& state = ibuffer.top();
 
     // check scoreboard
-    if (scoreboard_.in_use(state))
+    if (scoreboard_.in_use(state)) {
+      DTH(3, cycle, "*** scoreboard-stall: dependents={");
+      auto owners = scoreboard_.owners(state);
+      for (uint32_t i = 0, n = owners.size(); i < n; ++i) {
+        if (i) DTN(3, ", ");
+        DTN(3, "#" << owners.at(i));  
+      }
+      DTN(3, "}, " << state << std::endl);
       continue;
+    }
+
+    DT(3, cycle, "pipeline-issue: " << state);
 
     // update scoreboard
     scoreboard_.reserve(state);
@@ -233,18 +256,19 @@ void Core::issue() {
   }
 }
 
-void Core::execute() {
+void Core::execute(uint64_t cycle) {
   // process stage inputs
   if (!execute_stage_.empty()) {
     auto& state = execute_stage_.top();
     auto& exe_unit = exe_units_.at((int)state.exe_type);
     exe_unit->push_input(state);
     execute_stage_.pop();
+    DT(3, cycle, "pipeline-execute: " << state);
   }
 
   // advance execute units
   for (auto& exe_unit : exe_units_) {
-    exe_unit->step();
+    exe_unit->step(cycle);
   }  
   
   // commit completed instructions
@@ -255,18 +279,29 @@ void Core::execute() {
         stalled_warps_.reset(state.wid);
       }
       // advance to commit stage
-      commit_stage_.push(state);      
+      commit_stage_.push(state);   
     }
   }
 }
 
-void Core::commit() {
+void Core::commit(uint64_t cycle) {
+  __unused (cycle);
+  
   pipeline_state_t state;
   if (!commit_stage_.try_pop(&state))
     return;
 
+  DT(3, cycle, "pipeline-commit: " << state);
+
   // update scoreboard
   scoreboard_.release(state);
+
+  assert(committed_instrs_ <= issued_instrs_);
+  ++committed_instrs_;
+}
+
+bool Core::running() const {
+  return (committed_instrs_ != issued_instrs_);
 }
 
 Word Core::get_csr(Addr addr, int tid, int wid) {
@@ -349,9 +384,9 @@ void Core::barrier(int bar_id, int count, int warp_id) {
   barrier.reset();
 }
 
-Word Core::icache_fetch(Addr addr) {
+Word Core::icache_read(Addr addr, Size size) {
   Word data;
-  mem_.read(&data, addr, sizeof(Word), 0);
+  mmu_.read(&data, addr, size, 0);
   return data;
 }
 
@@ -365,7 +400,7 @@ Word Core::dcache_read(Addr addr, Size size) {
      return data;
   }
 #endif
-  mem_.read(&data, addr, size, 0);
+  mmu_.read(&data, addr, size, 0);
   return data;
 }
 
@@ -383,11 +418,7 @@ void Core::dcache_write(Addr addr, Word data, Size size) {
      this->writeToStdOut(addr, data);
      return;
   }
-  mem_.write(&data, addr, size, 0);
-}
-
-bool Core::running() const {
-  return pending_instrs_;
+  mmu_.write(&data, addr, size, 0);
 }
 
 void Core::printStats() const {
@@ -399,7 +430,7 @@ void Core::printStats() const {
 
 void Core::writeToStdOut(Addr addr, Word data) {
   uint32_t tid = (addr - IO_COUT_ADDR) & (IO_COUT_SIZE-1);
-  auto& ss_buf = print_bufs_.at(tid);
+  auto& ss_buf = print_bufs_[tid];
   char c = (char)data;
   ss_buf << c;
   if (c == '\n') {

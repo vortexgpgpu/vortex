@@ -194,47 +194,26 @@ static const char* op_string(const Instr &instr) {
 namespace vortex {
 std::ostream &operator<<(std::ostream &os, const Instr &instr) {
   os << op_string(instr) << ": ";
-  auto opcode = instr.getOpcode();
-    
-  auto rd_to_string = [&]() {
-    int rdt = instr.getRDType();
-    int rd = instr.getRDest();
-    switch (rdt) {
-    case 1: os << "r" << std::dec << rd << " <- "; break;
-    case 2: os << "fr" << std::dec << rd << " <- "; break;
-    case 3: os << "vr" << std::dec << rd << " <- "; break;
-    default: break;
-    }
-  };
-
-  auto rs_to_string = [&](int i) {
-    int rst = instr.getRSType(i);
-    int rs = instr.getRSrc(i);    
-    switch (rst) {
-    case 1: os << "r" << std::dec << rs; break;
-    case 2: os << "fr" << std::dec << rs; break;
-    case 3: os << "vr" << std::dec << rs; break;
-    default: break;
-    }
-  };
-
+  auto opcode = instr.getOpcode();    
   if (opcode == S_INST 
    || opcode == FS
    || opcode == VS) {     
      os << "M[r" << std::dec << instr.getRSrc(0) << " + 0x" << std::hex << instr.getImm() << "] <- ";
-     rs_to_string(1);
+     os << instr.getRSType(1) << std::dec << instr.getRSrc(1);
   } else 
   if (opcode == L_INST 
    || opcode == FL
    || opcode == VL) {     
-     rd_to_string();
+     os << instr.getRDType() << std::dec << instr.getRDest() << " <- ";
      os << "M[r" << std::dec << instr.getRSrc(0) << " + 0x" << std::hex << instr.getImm() << "]";
   } else {
-    rd_to_string();
+    if (instr.getRDType() != RegType::None) {
+      os << instr.getRDType() << std::dec << instr.getRDest() << " <- ";
+    }
     int i = 0;
     for (; i < instr.getNRSrc(); ++i) {    
       if (i) os << ", ";
-      rs_to_string(i);
+      os << instr.getRSType(i) << std::dec << instr.getRSrc(i);
     }    
     if (instr.hasImm()) {
       if (i) os << ", ";
@@ -281,7 +260,7 @@ Decoder::Decoder(const ArchDef &arch) {
   v_imm_mask_  = 0x7ff;  
 }
 
-std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) const {  
+std::shared_ptr<Instr> Decoder::decode(Word code) const {  
   auto instr = std::make_shared<Instr>();
   Opcode op = (Opcode)((code >> shift_opcode_) & opcode_mask_);
   instr->setOpcode(op);
@@ -297,8 +276,8 @@ std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) const {
 
   auto op_it = sc_instTable.find(op);
   if (op_it == sc_instTable.end()) {
-    std::cout << std::hex << "invalid opcode: 0x" << op << ", instruction=0x" << code << ", PC=" << PC << std::endl;
-    std::abort();
+    std::cout << std::hex << "Error: invalid opcode: 0x" << op << std::endl;
+    return nullptr;
   }
 
   auto iType = op_it->second.iType;
@@ -458,8 +437,6 @@ std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) const {
   default:
     std::abort();
   }
-
-  D(2, "Instr 0x" << std::hex << code << ": " << *instr << std::flush);
 
   return instr;
 }
