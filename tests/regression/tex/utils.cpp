@@ -192,3 +192,111 @@ int ConvertImage(std::vector<uint8_t>& dst_pixels,
 
   return CopyBuffers(dstDesc, 0, 0, width, height, srcDesc, 0, 0);
 }
+
+
+
+int GenerateMipmaps(std::vector<uint8_t>& dst_pixels,
+                    std::vector<uint32_t>& mip_offsets,
+                    const std::vector<uint8_t>& src_pixels,
+                    ePixelFormat format,
+                    uint32_t src_width,
+                    uint32_t src_height) {
+  std::vector<uint8_t> src_staging, dst_staging;
+  const std::vector<uint8_t> *pSrcPixels;
+  std::vector<uint8_t> *pDstPixels;
+
+  // convert source image if needed
+  bool need_conversion = (format != FORMAT_A8R8G8B8);
+  if (need_conversion) {
+    ConvertImage(src_staging, src_pixels, src_width, src_height, format, FORMAT_A8R8G8B8);
+    pSrcPixels = &src_staging;
+    pDstPixels = &dst_staging;
+  } else {
+    pSrcPixels = &src_pixels;
+    pDstPixels = &dst_pixels;
+  }
+
+  uint32_t src_logwidth  = log2ceil(src_width);
+  uint32_t src_logheight = log2ceil(src_height);
+  uint32_t max_lod       = std::max(src_logwidth, src_logheight) + 1;
+
+  mip_offsets.resize(max_lod);
+
+  // Calculate mipmaps buffer size
+  uint32_t dst_height = 1;
+  uint32_t dst_width = 0;
+  for (uint32_t lod = 0, w = src_width, h = src_height; lod < max_lod; ++lod) {
+    assert((w > 0) || (w > 0));
+    uint32_t pw = std::max<int>(w, 1);
+    uint32_t ph = std::max<int>(h, 1);
+    mip_offsets.at(lod) = dst_width;
+    dst_width += pw * ph;
+    w >>= 1;
+    h >>= 1;
+  }
+
+  // allocate mipmap
+  pDstPixels->resize(dst_width * 4);
+
+  // generate mipmaps  
+  {
+    auto pSrc = reinterpret_cast<const uint32_t*>(pSrcPixels->data());
+    auto pDst = reinterpret_cast<uint32_t*>(pDstPixels->data());
+
+    // copy level 0
+    memcpy(pDst, pSrc, pSrcPixels->size());
+    assert(pSrcPixels->size() == 4 * src_width * src_height);
+    pSrc = pDst;
+    pDst += src_width * src_height;    
+
+    // copy lower levels
+    for (uint32_t lod = 1, w = (src_width/2), h = (src_height/2); lod < max_lod;) {
+      assert((w > 0) || (w > 0));
+      uint32_t pw = std::max<int>(w, 1);
+      uint32_t ph = std::max<int>(h, 1);
+      for (uint32_t y = 0; y < pw; ++y) {
+        auto v0 = 2 * y;
+        auto v1 = 2 * y + ((ph > 1) ? 1 : 0);
+        auto pSrc0 = pSrc + v0 * (2 * pw);
+        auto pSrc1 = pSrc + v1 * (2 * pw);
+
+        for (uint32_t x = 0; x <pw; ++x) {
+          auto u0 = 2 * x;
+          auto u1 = 2 * x + ((pw > 1) ? 1 : 0);
+
+          auto c00 = Format::ConvertFrom<FORMAT_A8R8G8B8, false>(pSrc0 + u0);
+          auto c01 = Format::ConvertFrom<FORMAT_A8R8G8B8, false>(pSrc0 + u1);
+          auto c10 = Format::ConvertFrom<FORMAT_A8R8G8B8, false>(pSrc1 + u0);
+          auto c11 = Format::ConvertFrom<FORMAT_A8R8G8B8, false>(pSrc1 + u1);
+
+          const ColorARGB color((c00.a + c01.a + c10.a + c11.a+2) >> 2,
+                                (c00.r + c01.r + c10.r + c11.r+2) >> 2,
+                                (c00.g + c01.g + c10.g + c11.g+2) >> 2,
+                                (c00.b + c01.b + c10.b + c11.b+2) >> 2);
+                                
+          uint32_t ncolor;
+          Format::ConvertTo<FORMAT_A8R8G8B8>(&ncolor, color);
+          pDst[x + y * pw] = ncolor;
+        }
+      } 
+      ++lod; 
+      pSrc = pDst;
+      pDst += pw * ph;
+      w >>= 1;
+      h >>= 1;  
+    }
+    assert((pDst - reinterpret_cast<uint32_t*>(pDstPixels->data())) == dst_width);
+  }
+
+  // convert destination image if needed
+  if (need_conversion) {
+    ConvertImage(dst_staging, dst_staging, dst_width, dst_height, FORMAT_A8R8G8B8, format);
+  }
+
+  uint32_t bpp = Format::GetInfo(format).BytePerPixel;
+  for (auto& offset : mip_offsets) {
+    offset *= bpp;
+  }
+
+  return 0;
+}

@@ -14,7 +14,8 @@ struct CacheConfig {
     uint8_t num_banks;      // number of banks
     uint8_t ports_per_bank; // number of ports per bank
     uint8_t num_inputs;     // number of inputs
-    bool    write_through;  // is write-through cache
+    bool    write_through;  // is write-through
+    bool    write_reponse;  // enable write response
     uint16_t victim_size;   // victim cache size
     uint16_t mshr_size;     // MSHR buffer size
     uint8_t latency;        // pipeline latency 

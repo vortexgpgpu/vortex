@@ -11,36 +11,43 @@ class Core;
 class ExeUnit {
 protected:
     const char* name_;
-    Queue<pipeline_state_t> inputs_;
-    Queue<pipeline_state_t> outputs_;
+    Queue<pipeline_trace_t*> inputs_;
+    Queue<pipeline_trace_t*> outputs_;
 
-    void schedule_output(const pipeline_state_t& state, uint32_t delay) {
+    void schedule_output(pipeline_trace_t* trace, uint32_t delay) {
         if (delay > 1) {
             SimPlatform::instance().schedule(
-                [&](const pipeline_state_t& req) { 
+                [&](pipeline_trace_t* req) { 
                     outputs_.push(req); 
                 },
-                state,
+                trace,
                 (delay - 1)
             );
         } else {
-            outputs_.push(state);
+            outputs_.push(trace);
         }
     }
 
 public:    
     typedef std::shared_ptr<ExeUnit> Ptr;
 
-    ExeUnit(const char* name) : name_(name) {}
-    
+    ExeUnit(const char* name) : name_(name) {}    
     virtual ~ExeUnit() {}
 
-    void push_input(const pipeline_state_t& state) {
-        inputs_.push(state);
+    void push(pipeline_trace_t* trace) {
+        inputs_.push(trace);
     }
 
-    bool pop_output(pipeline_state_t* state) {
-        return outputs_.try_pop(state);
+    bool empty() const {
+        return outputs_.empty();
+    }
+
+    pipeline_trace_t* top() const {
+        return outputs_.top();
+    }
+
+    void pop() {
+        outputs_.pop();
     }
 
     virtual void step(uint64_t cycle) = 0;
@@ -61,8 +68,8 @@ class LsuUnit : public ExeUnit {
 private:
     Core* core_;
     uint32_t num_threads_;
-    HashTable<std::pair<pipeline_state_t, ThreadMask>> pending_dcache_;
-    pipeline_state_t fence_state_;
+    HashTable<std::pair<pipeline_trace_t*, uint32_t>> pending_dcache_;
+    pipeline_trace_t* fence_state_;
     bool fence_lock_;
 
 public:
@@ -101,6 +108,13 @@ public:
 ///////////////////////////////////////////////////////////////////////////////
 
 class GpuUnit : public ExeUnit {
+private:
+    Core* core_;
+    uint32_t num_threads_;
+    HashTable<std::pair<pipeline_trace_t*, uint32_t>> pending_tex_reqs_;
+
+    bool processTexRequest(uint64_t cycle, pipeline_trace_t* trace);
+    
 public:
     GpuUnit(Core*);
     

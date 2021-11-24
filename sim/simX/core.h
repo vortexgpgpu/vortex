@@ -20,6 +20,7 @@
 #include "ibuffer.h"
 #include "scoreboard.h"
 #include "exeunit.h"
+#include "tex_unit.h"
 
 namespace vortex {
 
@@ -33,8 +34,6 @@ public:
   bool running() const;
 
   void step(uint64_t cycle);
-
-  void printStats() const;
 
   Word id() const {
     return id_;
@@ -72,9 +71,13 @@ public:
 
   void dcache_write(Addr, Word, Size);
 
+  Word tex_read(uint32_t unit, Word lod, Word u, Word v, std::vector<uint64_t>* mem_addrs);
+
+  void trigger_ecall();
+
   void trigger_ebreak();
 
-  bool check_ebreak() const;
+  bool check_exit() const;
 
 private:
 
@@ -92,10 +95,8 @@ private:
   const ArchDef arch_;
   const Decoder decoder_;
   MemoryUnit mmu_;
-
-#ifdef SM_ENABLE
   RAM shared_mem_;
-#endif 
+  std::vector<TexUnit> tex_units_;
 
   std::vector<std::shared_ptr<Warp>> warps_;  
   std::vector<WarpMask> barriers_;  
@@ -107,6 +108,7 @@ private:
   Cache::Ptr icache_;
   Cache::Ptr dcache_;
   Switch<MemReq, MemRsp>::Ptr l1_mem_switch_;
+  std::vector<Switch<MemReq, MemRsp>::Ptr> dcache_switch_;
 
   PipelineStage fetch_stage_;
   PipelineStage decode_stage_;
@@ -114,20 +116,20 @@ private:
   PipelineStage execute_stage_;
   PipelineStage commit_stage_;  
   
-  HashTable<pipeline_state_t> pending_icache_;
+  HashTable<pipeline_trace_t*> pending_icache_;
   WarpMask stalled_warps_;  
   uint32_t last_schedule_wid_;
   uint32_t issued_instrs_;
   uint32_t committed_instrs_;
+  bool ecall_;
   bool ebreak_;
 
   std::unordered_map<int, std::stringstream> print_bufs_;
   
   uint64_t stats_insts_;
-  uint64_t stats_loads_;
-  uint64_t stats_stores_;
 
   friend class LsuUnit;
+  friend class GpuUnit;
 
 public:
   SlavePort<MemRsp>  MemRspPort;

@@ -19,6 +19,7 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
     , decoder_(arch)
     , mmu_(0, arch.wsize(), true)
     , shared_mem_(4096)
+    , tex_units_(NUM_TEX_UNITS, this)
     , warps_(arch.num_warps())
     , barriers_(arch.num_barriers(), 0)
     , csrs_(arch.num_csrs(), 0)
@@ -35,7 +36,8 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
         1,                      // number of banks
         1,                      // number of ports
         1,                      // request size   
-        true,                   // write-throught
+        true,                   // write-through
+        false,                  // write response
         0,                      // victim size
         NUM_WARPS,              // mshr
         2,                      // pipeline latency
@@ -49,12 +51,14 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
         DCACHE_NUM_BANKS,       // number of banks
         DCACHE_NUM_PORTS,       // number of ports
         (uint8_t)arch.num_threads(), // request size   
-        true,                   // write-throught
+        true,                   // write-through
+        false,                  // write response
         0,                      // victim size
         DCACHE_MSHR_SIZE,       // mshr
         2,                      // pipeline latency
       }))
-    , l1_mem_switch_(Switch<MemReq, MemRsp>::Create("l1_arb", ArbiterType::Priority, 2))
+    , l1_mem_switch_(Switch<MemReq, MemRsp>::Create("l1_arb", ArbiterType::Priority, 2)) 
+    , dcache_switch_(arch.num_threads())
     , fetch_stage_("fetch")
     , decode_stage_("decode")
     , issue_stage_("issue")
@@ -65,10 +69,9 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
     , last_schedule_wid_(0)
     , issued_instrs_(0)
     , committed_instrs_(0)
+    , ecall_(false)
     , ebreak_(false)   
     , stats_insts_(0)
-    , stats_loads_(0)
-    , stats_stores_(0)
     , MemRspPort(this)
     , MemReqPort(this)    
 {  
@@ -91,6 +94,18 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
   l1_mem_switch_->RspOut[1].bind(&dcache_->MemRspPort);
   this->MemRspPort.bind(&l1_mem_switch_->RspIn);
   l1_mem_switch_->ReqOut.bind(&this->MemReqPort);
+
+  // lsu/tex switch
+  for (uint32_t i = 0, n = arch.num_threads(); i < n; ++i) {
+    auto& sw = dcache_switch_.at(i);
+#ifdef EXT_TEX_ENABLE
+    sw = Switch<MemReq, MemRsp>::Create("lsu_arb", ArbiterType::Priority, 2);
+#else
+    sw = Switch<MemReq, MemRsp>::Create("lsu_arb", ArbiterType::Priority, 1);
+#endif        
+    sw->ReqOut.bind(&dcache_->CoreReqPorts.at(i));
+    dcache_->CoreRspPorts.at(i).bind(&sw->RspIn);
+  }
 
   // activate warp0
   warps_.at(0)->setTmask(0, true);
@@ -147,44 +162,41 @@ void Core::warp_scheduler(uint64_t cycle) {
   auto& warp = warps_.at(scheduled_warp);  
   stats_insts_ += warp->getActiveThreads();
   
-  pipeline_state_t state;
-  state.clear();
-  state.id = (issued_instrs_++ * arch_.num_cores()) + id_;
+  auto trace = new pipeline_trace_t((issued_instrs_++ * arch_.num_cores()) + id_, arch_);
 
-  warp->eval(&state);
+  warp->eval(trace);
 
-  DT(3, cycle, "pipeline-schedule: " << state);
+  DT(3, cycle, "pipeline-schedule: " << *trace);
 
   // advance to fetch stage  
-  fetch_stage_.push(state);
+  fetch_stage_.push(trace);
 }
 
 void Core::fetch(uint64_t cycle) {
   // handle icache reponse
-  {
-    MemRsp mem_rsp;
-    if (icache_->CoreRspPorts.at(0).read(&mem_rsp)){
-      pipeline_state_t state;
-      pending_icache_.remove(mem_rsp.tag, &state);
-      auto latency = (SimPlatform::instance().cycles() - state.icache_latency);
-      state.icache_latency = latency;
-      decode_stage_.push(state);
-      DT(3, cycle, "icache-rsp: addr=" << std::hex << state.PC << ", tag=" << mem_rsp.tag << ", " << state);
-    }
+  auto& icache_rsp_port = icache_->CoreRspPorts.at(0);      
+  if (!icache_rsp_port.empty()){
+    auto& mem_rsp = icache_rsp_port.top();
+    auto trace = pending_icache_.at(mem_rsp.tag);
+    auto latency = (SimPlatform::instance().cycles() - trace->icache_latency);
+    trace->icache_latency = latency;
+    decode_stage_.push(trace);
+    DT(3, cycle, "icache-rsp: addr=" << std::hex << trace->PC << ", tag=" << mem_rsp.tag << ", " << *trace);
+    pending_icache_.release(mem_rsp.tag);
+    icache_rsp_port.pop();
   }
 
   // send icache request
-  {
-    pipeline_state_t state;
-    if (fetch_stage_.try_pop(&state)) {
-      state.icache_latency = SimPlatform::instance().cycles();
-      MemReq mem_req;
-      mem_req.addr  = state.PC;
-      mem_req.write = false;
-      mem_req.tag   = pending_icache_.allocate(state);    
-      icache_->CoreReqPorts.at(0).send(mem_req, 1);
-      DT(3, cycle, "icache-req: addr=" << std::hex << mem_req.addr << ", tag=" << mem_req.tag << ", " << state);
-    }
+  if (!fetch_stage_.empty()) {
+    auto trace = fetch_stage_.top();
+    trace->icache_latency = SimPlatform::instance().cycles();
+    MemReq mem_req;
+    mem_req.addr  = trace->PC;
+    mem_req.write = false;
+    mem_req.tag   = pending_icache_.allocate(trace);    
+    icache_->CoreReqPorts.at(0).send(mem_req, 1);
+    DT(3, cycle, "icache-req: addr=" << std::hex << mem_req.addr << ", tag=" << mem_req.tag << ", " << *trace);
+    fetch_stage_.pop();
   }  
 
   // schedule next warp
@@ -194,19 +206,21 @@ void Core::fetch(uint64_t cycle) {
 void Core::decode(uint64_t cycle) {
   __unused (cycle);
 
-  pipeline_state_t state;
-  if (!decode_stage_.try_pop(&state))
-    return;    
+  if (decode_stage_.empty())
+    return;
+
+  auto trace = decode_stage_.top();
   
   // release warp
-  if (!state.stall_warp) {
-    stalled_warps_.reset(state.wid);
+  if (!trace->fetch_stall) {
+    stalled_warps_.reset(trace->wid);
   }
 
-  DT(3, cycle, "pipeline-decode: " << state);
+  DT(3, cycle, "pipeline-decode: " << *trace);
   
   // advance to issue stage
-  issue_stage_.push(state);
+  issue_stage_.push(trace);
+  decode_stage_.pop();
 }
 
 void Core::issue(uint64_t cycle) {
@@ -214,12 +228,13 @@ void Core::issue(uint64_t cycle) {
 
   if (!issue_stage_.empty()) {
     // insert to ibuffer 
-    auto& state = issue_stage_.top();
-    auto& ibuffer = ibuffers_.at(state.wid);
-    if (ibuffer.full()) {
-      DT(3, cycle, "*** ibuffer-stall: " << state);
-    } else {
-      ibuffer.push(state);
+    auto trace = issue_stage_.top();
+    auto& ibuffer = ibuffers_.at(trace->wid);
+    if (!trace->check_stalled(ibuffer.full())) {
+      DT(3, cycle, "*** ibuffer-stall: " << *trace);
+    }
+    if (!ibuffer.full()) {
+      ibuffer.push(trace);
       issue_stage_.pop();
     }
   }
@@ -229,27 +244,30 @@ void Core::issue(uint64_t cycle) {
     if (ibuffer.empty())
       continue;
 
-    auto& state = ibuffer.top();
+    auto trace = ibuffer.top();
 
     // check scoreboard
-    if (scoreboard_.in_use(state)) {
+    if (!trace->check_stalled(scoreboard_.in_use(trace))) {
       DTH(3, cycle, "*** scoreboard-stall: dependents={");
-      auto owners = scoreboard_.owners(state);
-      for (uint32_t i = 0, n = owners.size(); i < n; ++i) {
-        if (i) DTN(3, ", ");
-        DTN(3, "#" << owners.at(i));  
+      auto uses = scoreboard_.get_uses(trace);
+      for (uint32_t i = 0, n = uses.size(); i < n; ++i) {
+        auto& use = uses.at(i);
+        __unused(use);
+        if (i) DTN(3, ", ");        
+        DTN(3, use.type << use.reg << "(#" << use.owner << ")");  
       }
-      DTN(3, "}, " << state << std::endl);
-      continue;
+      DTN(3, "}, " << *trace << std::endl);
     }
+    if (scoreboard_.in_use(trace))
+      continue;
 
-    DT(3, cycle, "pipeline-issue: " << state);
+    DT(3, cycle, "pipeline-issue: " << *trace);
 
     // update scoreboard
-    scoreboard_.reserve(state);
+    scoreboard_.reserve(trace);
 
     // advance to execute stage
-    execute_stage_.push(state);
+    execute_stage_.push(trace);
 
     ibuffer.pop();
     break;
@@ -259,11 +277,11 @@ void Core::issue(uint64_t cycle) {
 void Core::execute(uint64_t cycle) {
   // process stage inputs
   if (!execute_stage_.empty()) {
-    auto& state = execute_stage_.top();
-    auto& exe_unit = exe_units_.at((int)state.exe_type);
-    exe_unit->push_input(state);
+    auto trace = execute_stage_.top();
+    auto& exe_unit = exe_units_.at((int)trace->exe_type);
+    exe_unit->push(trace);    
+    DT(3, cycle, "pipeline-execute: " << *trace);
     execute_stage_.pop();
-    DT(3, cycle, "pipeline-execute: " << state);
   }
 
   // advance execute units
@@ -273,13 +291,14 @@ void Core::execute(uint64_t cycle) {
   
   // commit completed instructions
   for (auto& exe_unit : exe_units_) {
-    pipeline_state_t state;
-    if (exe_unit->pop_output(&state)) {
-      if (state.stall_warp) {
-        stalled_warps_.reset(state.wid);
+    if (!exe_unit->empty()) {
+      auto trace = exe_unit->top();
+      if (trace->fetch_stall) {
+        stalled_warps_.reset(trace->wid);
       }
       // advance to commit stage
-      commit_stage_.push(state);   
+      commit_stage_.push(trace);   
+      exe_unit->pop();
     }
   }
 }
@@ -287,21 +306,28 @@ void Core::execute(uint64_t cycle) {
 void Core::commit(uint64_t cycle) {
   __unused (cycle);
   
-  pipeline_state_t state;
-  if (!commit_stage_.try_pop(&state))
+  if (commit_stage_.empty())
     return;
 
-  DT(3, cycle, "pipeline-commit: " << state);
+  auto trace = commit_stage_.top();
+
+  DT(3, cycle, "pipeline-commit: " << *trace);
 
   // update scoreboard
-  scoreboard_.release(state);
+  scoreboard_.release(trace);
 
   assert(committed_instrs_ <= issued_instrs_);
   ++committed_instrs_;
+
+  commit_stage_.pop();
+
+  // delete the trace
+  delete trace;
 }
 
 bool Core::running() const {
-  return (committed_instrs_ != issued_instrs_);
+  bool is_running = (committed_instrs_ != issued_instrs_);
+  return is_running;
 }
 
 Word Core::get_csr(Addr addr, int tid, int wid) {
@@ -355,6 +381,12 @@ Word Core::get_csr(Addr addr, int tid, int wid) {
     // NumCycles
     return (Word)(SimPlatform::instance().cycles() >> 32);
   } else {
+    if (addr >= CSR_TEX(0,0)
+     && addr < CSR_TEX(NUM_TEX_UNITS,0)) {
+      uint32_t unit = CSR_TEX_UNIT(addr);
+      uint32_t state = CSR_TEX_STATE(addr);
+      return tex_units_.at(unit).get_state(state);
+    }
     return csrs_.at(addr);
   }
 }
@@ -367,6 +399,13 @@ void Core::set_csr(Addr addr, Word value, int /*tid*/, int wid) {
   } else if (addr == CSR_FCSR) {
     fcsrs_.at(wid) = value & 0xff;
   } else {
+    if (addr >= CSR_TEX(0,0)
+     && addr < CSR_TEX(NUM_TEX_UNITS,0)) {
+      uint32_t unit = CSR_TEX_UNIT(addr);
+      uint32_t state = CSR_TEX_STATE(addr);
+      tex_units_.at(unit).set_state(state, value);
+      return;
+    }
     csrs_.at(addr) = value;
   }
 }
@@ -390,29 +429,27 @@ Word Core::icache_read(Addr addr, Size size) {
   return data;
 }
 
-Word Core::dcache_read(Addr addr, Size size) {
-  ++stats_loads_;
+Word Core::dcache_read(Addr addr, Size size) {  
   Word data = 0;
-#ifdef SM_ENABLE
-  if ((addr >= (SMEM_BASE_ADDR - SMEM_SIZE))
-   && ((addr + 3) < SMEM_BASE_ADDR)) {
-     shared_mem_.read(&data, addr & (SMEM_SIZE-1), size);
-     return data;
+  if (SM_ENABLE) {
+    if ((addr >= (SMEM_BASE_ADDR - SMEM_SIZE))
+    && ((addr + 3) < SMEM_BASE_ADDR)) {
+      shared_mem_.read(&data, addr & (SMEM_SIZE-1), size);
+      return data;
+    }
   }
-#endif
   mmu_.read(&data, addr, size, 0);
   return data;
 }
 
-void Core::dcache_write(Addr addr, Word data, Size size) {
-  ++stats_stores_;
-#ifdef SM_ENABLE
-  if ((addr >= (SMEM_BASE_ADDR - SMEM_SIZE))
-   && ((addr + 3) < SMEM_BASE_ADDR)) {
-     shared_mem_.write(&data, addr & (SMEM_SIZE-1), size);
-     return;
+void Core::dcache_write(Addr addr, Word data, Size size) {  
+  if (SM_ENABLE) {
+    if ((addr >= (SMEM_BASE_ADDR - SMEM_SIZE))
+    && ((addr + 3) < SMEM_BASE_ADDR)) {
+      shared_mem_.write(&data, addr & (SMEM_SIZE-1), size);
+      return;
+    }
   }
-#endif
   if (addr >= IO_COUT_ADDR 
    && addr <= (IO_COUT_ADDR + IO_COUT_SIZE - 1)) {
      this->writeToStdOut(addr, data);
@@ -421,11 +458,8 @@ void Core::dcache_write(Addr addr, Word data, Size size) {
   mmu_.write(&data, addr, size, 0);
 }
 
-void Core::printStats() const {
-  std::cout << "Cycles: " << SimPlatform::instance().cycles() << std::endl
-            << "Insts : " << stats_insts_ << std::endl
-            << "Loads : " << stats_loads_ << std::endl
-            << "Stores: " << stats_stores_ << std::endl;
+Word Core::tex_read(uint32_t unit, Word u, Word v, Word lod, std::vector<uint64_t>* mem_addrs) {
+  return tex_units_.at(unit).read(u, v, lod, mem_addrs);
 }
 
 void Core::writeToStdOut(Addr addr, Word data) {
@@ -439,10 +473,14 @@ void Core::writeToStdOut(Addr addr, Word data) {
   }
 }
 
+void Core::trigger_ecall() {
+  ecall_ = true;
+}
+
 void Core::trigger_ebreak() {
   ebreak_ = true;
 }
 
-bool Core::check_ebreak() const {
-  return ebreak_;
+bool Core::check_exit() const {
+  return ebreak_ || ecall_;
 }

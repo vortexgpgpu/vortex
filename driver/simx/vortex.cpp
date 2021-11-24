@@ -3,8 +3,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <iostream>
-#include <thread>
-#include <mutex>
+#include <future>
 #include <chrono>
 
 #include <vortex.h>
@@ -60,18 +59,14 @@ class vx_device {
 public:
     vx_device() 
         : arch_("rv32i", NUM_CORES, NUM_WARPS, NUM_THREADS)
-        , is_done_(false)
-        , is_running_(false)
-        , mem_allocation_(ALLOC_BASE_ADDR)
-        , thread_(__thread_proc__, this)
         , ram_(RAM_PAGE_SIZE)
+        , mem_allocation_(ALLOC_BASE_ADDR)
     {}
 
     ~vx_device() {
-        mutex_.lock();
-        is_done_ = true;
-        mutex_.unlock();        
-        thread_.join();
+        if (future_.valid()) {
+            future_.wait();
+        }
     }
 
     int alloc_local_mem(uint64_t size, uint64_t* dev_maddr) {
@@ -115,72 +110,41 @@ public:
     }
 
     int start() {  
-        mutex_.lock();     
+        // ensure prior run completed
+        if (future_.valid()) {
+            future_.wait();
+        }
+        // start new run
         SimPlatform::instance().flush();
         processor_ = std::make_shared<Processor>(arch_);
         processor_->attach_ram(&ram_);
-        is_running_ = true;        
-        mutex_.unlock();
+        future_ = std::async(std::launch::async, [&]{
+            processor_->run();
+        });
         return 0;
     }
 
     int wait(uint64_t timeout) {
+        if (!future_.valid())
+            return 0;
         uint64_t timeout_sec = timeout / 1000;
+        std::chrono::seconds wait_time(1);
         for (;;) {
-            mutex_.lock();
-            bool is_running = is_running_;
-            mutex_.unlock();
-
-            if (!is_running || 0 == timeout_sec--)
+            // wait for 1 sec and check status
+            auto status = future_.wait_for(wait_time);
+            if (status == std::future_status::ready 
+             || 0 == timeout_sec--)
                 break;
-
-            std::this_thread::sleep_for(std::chrono::seconds(1));            
         }
         return 0;
     } 
 
 private:
-
-    void thread_proc() {
-        std::cout << "Device ready..." << std::flush << std::endl;
-
-        for (;;) {
-            mutex_.lock();
-            bool is_done = is_done_;
-            bool is_running = is_running_;
-            mutex_.unlock();
-
-            if (is_done)
-                break;
-
-            if (is_running) {                                
-                std::cout << "Device running..." << std::flush << std::endl;
-                
-                processor_->run();
-
-                mutex_.lock();
-                is_running_ = false;
-                mutex_.unlock();
-
-                std::cout << "Device ready..." << std::flush << std::endl;
-            }
-        }
-
-        std::cout << "Device shutdown..." << std::flush << std::endl;
-    }
-
-    static void __thread_proc__(vx_device* device) {
-        device->thread_proc();
-    }
-
     ArchDef arch_;
-    Processor::Ptr processor_;
-    bool is_done_;
-    bool is_running_;   
-    uint64_t mem_allocation_; 
-    std::thread thread_;   
     RAM ram_;
-    std::mutex mutex_;
+    Processor::Ptr processor_;
+    uint64_t mem_allocation_;        
+    std::future<void> future_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

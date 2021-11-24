@@ -236,18 +236,30 @@
 
 ////////// Texture Units //////////////////////////////////////////////////////
 
-`define NUM_TEX_UNITS       2
+`define NUM_TEX_UNITS           2
+`define TEX_SUBPIXEL_BITS       8
 
-`define CSR_TEX_STATES      7
-`define CSR_TEX_BEGIN(x)    (12'hFD0 + (x) * `CSR_TEX_STATES)
+`define TEX_DIM_BITS            15
+`define TEX_LOD_MAX             `TEX_DIM_BITS
+`define TEX_LOD_BITS            4
 
-`define CSR_TEX_ADDR(x)     (`CSR_TEX_BEGIN(x) + 12'h00)
-`define CSR_TEX_FORMAT(x)   (`CSR_TEX_BEGIN(x) + 12'h01)
-`define CSR_TEX_WRAP(x)     (`CSR_TEX_BEGIN(x) + 12'h02)
-`define CSR_TEX_FILTER(x)   (`CSR_TEX_BEGIN(x) + 12'h03)
-`define CSR_TEX_MIPOFF(x)   (`CSR_TEX_BEGIN(x) + 12'h04)
-`define CSR_TEX_WIDTH(x)    (`CSR_TEX_BEGIN(x) + 12'h05)
-`define CSR_TEX_HEIGHT(x)   (`CSR_TEX_BEGIN(x) + 12'h06)
+`define TEX_FXD_BITS            32
+`define TEX_FXD_FRAC            (`TEX_DIM_BITS+`TEX_SUBPIXEL_BITS)
+
+`define TEX_STATE_ADDR          0
+`define TEX_STATE_WIDTH         1
+`define TEX_STATE_HEIGHT        2
+`define TEX_STATE_FORMAT        3
+`define TEX_STATE_FILTER        4
+`define TEX_STATE_WRAPU         5
+`define TEX_STATE_WRAPV         6
+`define TEX_STATE_MIPOFF(lod)   (7+(lod))
+
+`define NUM_TEX_STATES          (7+`TEX_LOD_MAX)
+
+`define CSR_TEX(unit,state)     (12'hFD0 + ((unit) * `NUM_TEX_STATES) + (state))
+`define CSR_TEX_UNIT(csr)       (((csr) - 12'hFD0) / `NUM_TEX_STATES)
+`define CSR_TEX_STATE(csr)      (((csr) - 12'hFD0) % `NUM_TEX_STATES)
 
 // Pipeline Queues ////////////////////////////////////////////////////////////
 
@@ -264,6 +276,11 @@
 // Size of FPU Request Queue
 `ifndef FPUQ_SIZE
 `define FPUQ_SIZE 8
+`endif
+
+// Texture Unit Request Queue
+`ifndef TEXQ_SIZE
+`define TEXQ_SIZE (`NUM_WARPS * 2)
 `endif
 
 // Icache Configurable Knobs //////////////////////////////////////////////////

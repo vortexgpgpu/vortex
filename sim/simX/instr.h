@@ -29,10 +29,9 @@ enum Opcode {
   FMNMADD   = 0x4f,
   // Vector Extension  
   VSET      = 0x57,
-  VL        = 0x7,
-  VS        = 0x27,
   // GPGPU Extension
   GPGPU     = 0x6b,
+  GPU       = 0x5b,
 };
 
 enum InstType { 
@@ -70,6 +69,7 @@ public:
   void setSrcFReg(int srcReg) { rsrc_type_[num_rsrcs_] = RegType::Float; rsrc_[num_rsrcs_++] = srcReg;  }
   void setDestVReg(int destReg) { rdest_type_ = RegType::Vector; rdest_ = destReg; }
   void setSrcVReg(int srcReg) { rsrc_type_[num_rsrcs_] = RegType::Vector; rsrc_[num_rsrcs_++] = srcReg;  }
+  void setFunc2(Word func2) { func2_ = func2; }
   void setFunc3(Word func3) { func3_ = func3; }
   void setFunc7(Word func7) { func7_ = func7; }
   void setImm(Word imm) { has_imm_ = true; imm_ = imm; }
@@ -85,6 +85,7 @@ public:
 
   /* Getters used by encoders. */
   Opcode getOpcode() const { return opcode_; }
+  Word getFunc2() const { return func2_; }
   Word getFunc3() const { return func3_; }
   Word getFunc6() const { return func6_; }
   Word getFunc7() const { return func7_; }
@@ -118,6 +119,7 @@ private:
   RegType rsrc_type_[MAX_REG_SOURCES];
   int rsrc_[MAX_REG_SOURCES];  
   int rdest_;
+  Word func2_;
   Word func3_;
   Word func6_;
 

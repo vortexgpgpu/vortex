@@ -66,6 +66,7 @@ enum class AluType {
   BRANCH,
   IMUL,
   IDIV,    
+  CMOV,
 };
 
 inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
@@ -74,6 +75,7 @@ inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
   case AluType::BRANCH: os << "BRANCH"; break;
   case AluType::IMUL:   os << "IMUL"; break;
   case AluType::IDIV:   os << "IDIV"; break;
+  case AluType::CMOV:   os << "CMOV"; break;
   }
   return os;
 }
@@ -155,8 +157,6 @@ class Queue {
 protected:
   std::queue<T> queue_;
 
-  uint32_t count;
-
 public:
   Queue() {}
 
@@ -168,21 +168,16 @@ public:
     return queue_.front();
   }
 
-  void push(const T& value) {
-    ++count;
-    queue_.push(value);
+  T& top() {
+    return queue_.front();
   }
 
   void pop() {
     queue_.pop();
   }
 
-  bool try_pop(T* value) {
-    if (queue_.empty())
-      return false;
-    *value = queue_.front();
-    queue_.pop();
-    return true;
+  void push(const T& value) {    
+    queue_.push(value);
   }
 };
 
@@ -244,14 +239,6 @@ public:
     entry.first = false;
     --capacity_;
   }
-
-  void remove(uint32_t index, T* value) {
-    auto& entry = entries_.at(index);
-    assert(entry.first);
-    *value = entry.second;
-    entry.first = false;
-    --capacity_;
-  }
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -259,18 +246,7 @@ public:
 template <typename Req, typename Rsp, uint32_t MaxInputs = 32>
 class Switch : public SimObject<Switch<Req, Rsp>> {
 private:
-  struct req_batch_t {  
-    std::vector<Req>       data;
-    std::bitset<MaxInputs> valid;
-    req_batch_t() {} 
-    req_batch_t(uint32_t size) 
-      : data(size)
-      , valid(0)
-    {} 
-  };
-
   ArbiterType type_;
-  std::queue<req_batch_t> reqq_;
   uint32_t delay_;  
   uint32_t cursor_;
   uint32_t tag_shift_;
@@ -295,55 +271,43 @@ public:
   {
     assert(delay_ != 0);
     assert(num_inputs <= MaxInputs);
+    if (num_inputs == 1) {
+      // bypass
+      ReqIn.at(0).bind(&ReqOut);
+      RspIn.bind(&RspOut.at(0));
+    }
   }
 
-  void step(uint64_t /*cycle*/) {    
-    // process incomming requests
-    {
-      req_batch_t req_batch(ReqIn.size());
-      for (uint32_t i = 0, n = ReqIn.size(); i < n; ++i) {
-        Req req;
-        if (ReqIn.at(i).read(&req)) {
-          req_batch.data.at(i) = req;
-          req_batch.valid.set(i);
+  void step(uint64_t /*cycle*/) {  
+    if (ReqIn.size() == 1)
+      return;
+        
+    // process incomming requests    
+    for (uint32_t i = 0, n = ReqIn.size(); i < n; ++i) {      
+      uint32_t j = (cursor_ + i) % n;
+      auto& req_in = ReqIn.at(j);      
+      if (!req_in.empty()) {
+        auto& req = req_in.top();
+        if (tag_shift_) {
+          req.tag = (req.tag << tag_shift_) | j;
         }
+        ReqOut.send(req, delay_);                
+        req_in.pop();
+        this->update_cursor(j);
+        break;
       }
-      if (req_batch.valid.any()) {
-        reqq_.push(req_batch);
-      }
-    }
-
-    // apply arbitration
-    if (!reqq_.empty()) {
-      auto& req_batch = reqq_.front();
-      for (uint32_t i = 0, n = req_batch.data.size(); i < n; ++i) {
-        auto j = (cursor_ + i) % n;        
-        if (req_batch.valid.test(j)) {
-          auto& req = req_batch.data.at(j);
-          if (tag_shift_) {
-            req.tag = (req.tag << tag_shift_) | j;
-          }
-          ReqOut.send(req, delay_);
-          req_batch.valid.reset(j);
-          this->update_cursor(j);
-          if (!req_batch.valid.any())
-            reqq_.pop(); // pop when empty
-          break;
-        }
-      }      
     } 
 
     // process incoming reponses
-    {
-      Rsp rsp;
-      if (RspIn.read(&rsp)) {    
-        uint32_t port_id = 0;
-        if (tag_shift_) {
-          port_id = rsp.tag & ((1 << tag_shift_)-1);
-          rsp.tag >>= tag_shift_;
-        }      
-        RspOut.at(port_id).send(rsp, 1);
-      }
+    if (!RspIn.empty()) {
+      auto& rsp = RspIn.top();    
+      uint32_t port_id = 0;
+      if (tag_shift_) {
+        port_id = rsp.tag & ((1 << tag_shift_)-1);
+        rsp.tag >>= tag_shift_;
+      }      
+      RspOut.at(port_id).send(rsp, 1);
+      RspIn.pop();
     }
   }
 

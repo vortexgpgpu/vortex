@@ -4,11 +4,11 @@ module VX_tex_stride #(
     parameter CORE_ID = 0
 ) (
     input wire [`TEX_FORMAT_BITS-1:0]  format,
-    output wire [`TEX_STRIDE_BITS-1:0] log_stride
+    output wire [`TEX_LGSTRIDE_BITS-1:0] log_stride
 );  
     `UNUSED_PARAM (CORE_ID)
 
-    reg [`TEX_STRIDE_BITS-1:0] log_stride_r;  
+    reg [`TEX_LGSTRIDE_BITS-1:0] log_stride_r;  
 
     always @(*) begin
         case (format)

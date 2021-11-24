@@ -23,8 +23,6 @@ DBG_TRACE_FLAGS += -DDBG_TRACE_SCOPE
 DBG_TRACE_FLAGS += -DDBG_TRACE_TEX
 
 DBG_FLAGS += $(DBG_TRACE_FLAGS)
-DBG_FLAGS += -DDBG_CACHE_REQ_INFO
-DBG_FLAGS += -DVCD_OUTPUT
 
 FPU_INCLUDE = -I$(RTL_DIR)/fp_cores -I$(RTL_DIR)/fp_cores/fpnew/src/common_cells/include -I$(RTL_DIR)/fp_cores/fpnew/src/common_cells/src -I$(RTL_DIR)/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(RTL_DIR)/fp_cores/fpnew/src
 TEX_INCLUDE = -I$(RTL_DIR)/tex_unit
@@ -51,10 +49,17 @@ VL_FLAGS += $(RTL_INCLUDE)
 VL_FLAGS += $(CONFIGS)
 CXXFLAGS += $(CONFIGS)
 
+# Enable Verilator multithreaded simulation
+#THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
+#VL_FLAGS += --threads $(THREADS)
+
+# Enable VCD trace
+VCD_TRACE = -DVCD_OUTPUT
+
 # Debugigng
 ifdef DEBUG
-	VL_FLAGS += -DVCD_OUTPUT --trace --trace-structs $(DBG_FLAGS)
-	CXXFLAGS += -g -O0 -DVCD_OUTPUT $(DBG_FLAGS)
+	VL_FLAGS += $(VCD_TRACE) --trace --trace-structs $(DBG_FLAGS)
+	CXXFLAGS += -g -O0 $(VCD_TRACE) $(DBG_FLAGS)
 else    
 	VL_FLAGS += -DNDEBUG
 	CXXFLAGS += -O2 -DNDEBUG

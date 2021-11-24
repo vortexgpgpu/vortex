@@ -12,7 +12,7 @@ module VX_tex_sampler #(
     input wire                          req_valid,   
     input wire [NUM_REQS-1:0]           req_tmask, 
     input wire [`TEX_FORMAT_BITS-1:0]   req_format,    
-    input wire [NUM_REQS-1:0][1:0][`BLEND_FRAC-1:0] req_blends,
+    input wire [NUM_REQS-1:0][1:0][`TEX_BLEND_FRAC-1:0] req_blends,
     input wire [NUM_REQS-1:0][3:0][31:0] req_data,
     input wire [REQ_INFOW-1:0]          req_info,
     output wire                         req_ready,
@@ -32,7 +32,7 @@ module VX_tex_sampler #(
     wire [REQ_INFOW-1:0] req_info_s0;
     wire [NUM_REQS-1:0][31:0] texel_ul, texel_uh;
     wire [NUM_REQS-1:0][31:0] texel_ul_s0, texel_uh_s0;
-    wire [NUM_REQS-1:0][`BLEND_FRAC-1:0] blend_v, blend_v_s0;
+    wire [NUM_REQS-1:0][`TEX_BLEND_FRAC-1:0] blend_v, blend_v_s0;
     wire [NUM_REQS-1:0][31:0] texel_v;
 
     wire stall_out;
@@ -52,7 +52,7 @@ module VX_tex_sampler #(
         end 
 
         wire [7:0] beta  = req_blends[i][0];
-        wire [8:0] alpha = `BLEND_ONE - beta;
+        wire [8:0] alpha = `TEX_BLEND_ONE - beta;
 
         VX_tex_lerp #(
         ) tex_lerp_ul (
@@ -76,7 +76,7 @@ module VX_tex_sampler #(
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_REQS + REQ_INFOW + (NUM_REQS * `BLEND_FRAC) + (2 * NUM_REQS * 32)),
+        .DATAW  (1 + NUM_REQS + REQ_INFOW + (NUM_REQS * `TEX_BLEND_FRAC) + (2 * NUM_REQS * 32)),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
@@ -88,7 +88,7 @@ module VX_tex_sampler #(
 
     for (genvar i = 0; i < NUM_REQS; i++) begin
         wire [7:0] beta  = blend_v_s0[i];
-        wire [8:0] alpha = `BLEND_ONE - beta;
+        wire [8:0] alpha = `TEX_BLEND_ONE - beta;
 
         VX_tex_lerp #(
         ) tex_lerp_v (

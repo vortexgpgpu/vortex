@@ -41,14 +41,18 @@ static const std::unordered_map<int, struct InstTableEntry_t> sc_instTable = {
   {Opcode::FMNMSUB,    {false, InstType::R4_TYPE}},  
   {Opcode::VSET,       {false, InstType::V_TYPE}}, 
   {Opcode::GPGPU,      {false, InstType::R_TYPE}},
+  {Opcode::GPU,        {false, InstType::R4_TYPE}},
 };
 
-static const char* op_string(const Instr &instr) {  
-  Word func3 = instr.getFunc3();
-  Word func7 = instr.getFunc7();
-  Word rs2   = instr.getRSrc(1);
-  Word imm   = instr.getImm();
-  switch (instr.getOpcode()) {
+static const char* op_string(const Instr &instr) {
+  auto opcode = instr.getOpcode();
+  Word func2  = instr.getFunc2();
+  Word func3  = instr.getFunc3();
+  Word func7  = instr.getFunc7();
+  Word rs2    = instr.getRSrc(1);
+  Word imm    = instr.getImm();
+
+  switch (opcode) {
   case Opcode::NOP:        return "NOP";
   case Opcode::LUI_INST:   return "LUI";
   case Opcode::AUIPC_INST: return "AUIPC";
@@ -120,7 +124,16 @@ static const char* op_string(const Instr &instr) {
     }
   case Opcode::SYS_INST: 
     switch (func3) {
-    case 0: return imm ? "EBREAK" : "ECALL";
+    case 0:
+      switch (imm) {
+      case 0x000: return "ECALL";
+      case 0x001: return "EBREAK";
+      case 0x002: return "URET";
+      case 0x102: return "SRET";
+      case 0x302: return "MRET";
+      default:
+        std::abort();      
+      }
     case 1: return "CSRRW";
     case 2: return "CSRRS";
     case 3: return "CSRRC";
@@ -181,29 +194,43 @@ static const char* op_string(const Instr &instr) {
     case 1: return "WSPAWN";
     case 2: return "SPLIT";
     case 3: return "JOIN";
-    case 4: return "BAR"; 
-    case 6: return "PREFETCH";
+    case 4: return "BAR";
+    default:
+      std::abort();
+    }
+  case Opcode::GPU:
+    switch (func3) {
+    case 0: return "TEX";
+    case 1: {
+      switch (func2) {
+      case 0: return "CMOV";
+      default:
+        std::abort();
+      }
+    }
     default:
       std::abort();
     }
   default:
     std::abort();
-  }  
+  }
 }
 
 namespace vortex {
-std::ostream &operator<<(std::ostream &os, const Instr &instr) {
-  os << op_string(instr) << ": ";
+std::ostream &operator<<(std::ostream &os, const Instr &instr) {  
   auto opcode = instr.getOpcode();    
+  Word func2  = instr.getFunc2();
+  Word func3  = instr.getFunc3();
+
+  os << op_string(instr) << ": ";
+
   if (opcode == S_INST 
-   || opcode == FS
-   || opcode == VS) {     
+   || opcode == FS) {     
      os << "M[r" << std::dec << instr.getRSrc(0) << " + 0x" << std::hex << instr.getImm() << "] <- ";
      os << instr.getRSType(1) << std::dec << instr.getRSrc(1);
   } else 
   if (opcode == L_INST 
-   || opcode == FL
-   || opcode == VL) {     
+   || opcode == FL) {     
      os << instr.getRDType() << std::dec << instr.getRDest() << " <- ";
      os << "M[r" << std::dec << instr.getRSrc(0) << " + 0x" << std::hex << instr.getImm() << "]";
   } else {
@@ -219,8 +246,10 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
       if (i) os << ", ";
       os << "imm=0x" << std::hex << instr.getImm();
     }
-  } 
-
+    if (opcode == GPU && func3 == 0) {
+      os << ", unit=" << std::dec << func2;
+    }
+  }
   return os;
 }
 }
@@ -239,6 +268,7 @@ Decoder::Decoder(const ArchDef &arch) {
   shift_func3_  = shift_rd_ + reg_s_;
   shift_rs1_    = shift_func3_ + func3_s_;
   shift_rs2_    = shift_rs1_ + reg_s_;
+  shift_func2_  = shift_rs2_ + reg_s_;
   shift_func7_  = shift_rs2_ + reg_s_;
   shift_rs3_    = shift_func7_ + func2_s_;
   shift_vmop_   = shift_func7_ + vmask_s_;
@@ -247,7 +277,7 @@ Decoder::Decoder(const ArchDef &arch) {
   shift_vset_   = shift_func7_ + 6;
 
   reg_mask_    = 0x1f;
-  func2_mask_  = 0x2;
+  func2_mask_  = 0x3;
   func3_mask_  = 0x7;
   func6_mask_  = 0x3f;
   func7_mask_  = 0x7f;
@@ -265,6 +295,7 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
   Opcode op = (Opcode)((code >> shift_opcode_) & opcode_mask_);
   instr->setOpcode(op);
 
+  Word func2 = (code >> shift_func2_) & func2_mask_;
   Word func3 = (code >> shift_func3_) & func3_mask_;
   Word func6 = (code >> shift_func6_) & func6_mask_;
   Word func7 = (code >> shift_func7_) & func7_mask_;
@@ -403,7 +434,7 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
       }
     } break;
 
-    case Opcode::VL:
+    case Opcode::FL:
       instr->setDestVReg(rd);
       instr->setSrcVReg(rs1);
       instr->setVlsWidth(func3);
@@ -413,7 +444,7 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
       instr->setVnf((code >> shift_vnf_) & func3_mask_);
       break;
 
-    case Opcode::VS:
+    case Opcode::FS:
       instr->setVs3(rd);
       instr->setSrcVReg(rs1);
       instr->setVlsWidth(func3);
@@ -428,10 +459,18 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
     }
     break;
   case R4_TYPE:
-    instr->setDestFReg(rd);
-    instr->setSrcFReg(rs1);
-    instr->setSrcFReg(rs2);
-    instr->setSrcFReg(rs3);
+    if (op == Opcode::GPU) {
+      instr->setDestReg(rd);
+      instr->setSrcReg(rs1);
+      instr->setSrcReg(rs2);
+      instr->setSrcReg(rs3);
+    } else {
+      instr->setDestFReg(rd);
+      instr->setSrcFReg(rs1);
+      instr->setSrcFReg(rs2);
+      instr->setSrcFReg(rs3);
+    }
+    instr->setFunc2(func2);
     instr->setFunc3(func3);
     break;
   default:

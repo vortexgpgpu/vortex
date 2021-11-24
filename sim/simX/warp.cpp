@@ -21,7 +21,7 @@ Warp::Warp(Core *core, Word id)
   vRegFile_.resize(core_->arch().num_regs(), std::vector<Byte>(core_->arch().vsize(), 0));
 }
 
-void Warp::eval(pipeline_state_t *pipeline_state) {
+void Warp::eval(pipeline_trace_t *trace) {
   assert(tmask_.any());
 
   DPH(2, "Fetch: coreid=" << core_->id() << ", wid=" << id_ << ", tmask=");
@@ -38,18 +38,18 @@ void Warp::eval(pipeline_state_t *pipeline_state) {
     std::abort();
   }  
 
-  DP(2, "Instr 0x" << std::hex << instr_code << ": " << *instr);
+  DP(2, "Instr 0x" << std::hex << instr_code << ": " << *instr << " (#" << trace->id << ")");
 
-  // Update state
-  pipeline_state->cid   = core_->id();
-  pipeline_state->wid   = id_;
-  pipeline_state->PC    = PC_;
-  pipeline_state->tmask = tmask_;
-  pipeline_state->rdest = instr->getRDest();
-  pipeline_state->rdest_type = instr->getRDType();
+  // Update trace
+  trace->cid   = core_->id();
+  trace->wid   = id_;
+  trace->PC    = PC_;
+  trace->tmask = tmask_;
+  trace->rdest = instr->getRDest();
+  trace->rdest_type = instr->getRDType();
     
   // Execute
-  this->execute(*instr, pipeline_state);
+  this->execute(*instr, trace);
 
   DP(4, "Register state:");
   for (int i = 0; i < core_->arch().num_regs(); ++i) {

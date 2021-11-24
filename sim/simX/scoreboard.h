@@ -7,6 +7,12 @@ namespace vortex {
 
 class Scoreboard {
 private:
+    struct reg_use_t {
+        RegType  type;
+        uint32_t reg;        
+        uint64_t owner;
+    };
+
     std::vector<RegMask> in_use_iregs_;
     std::vector<RegMask> in_use_fregs_;
     std::vector<RegMask> in_use_vregs_;
@@ -25,21 +31,21 @@ public:
         }
     }
 
-    bool in_use(const pipeline_state_t& state) const {
-        return (state.used_iregs & in_use_iregs_.at(state.wid)) != 0 
-            || (state.used_fregs & in_use_fregs_.at(state.wid)) != 0
-            || (state.used_vregs & in_use_vregs_.at(state.wid)) != 0;
+    bool in_use(pipeline_trace_t* state) const {
+        return (state->used_iregs & in_use_iregs_.at(state->wid)) != 0 
+            || (state->used_fregs & in_use_fregs_.at(state->wid)) != 0
+            || (state->used_vregs & in_use_vregs_.at(state->wid)) != 0;
     }
 
-    std::vector<uint64_t> owners(const pipeline_state_t& state) const {
-        std::vector<uint64_t> out;        
+    std::vector<reg_use_t> get_uses(pipeline_trace_t* state) const {
+        std::vector<reg_use_t> out;        
         {
             uint32_t r = 0;
-            auto used_iregs = state.used_iregs & in_use_iregs_.at(state.wid);        
+            auto used_iregs = state->used_iregs & in_use_iregs_.at(state->wid);        
             while (used_iregs.any()) {
                 if (used_iregs.test(0)) {
-                    uint32_t tag = (r << 16) | (state.wid << 4) | (int)RegType::Integer;
-                    out.push_back(owners_.at(tag));
+                    uint32_t tag = (r << 16) | (state->wid << 4) | (int)RegType::Integer;
+                    out.push_back({RegType::Integer, r, owners_.at(tag)});
                 }
                 used_iregs >>= 1;
                 ++r;
@@ -47,11 +53,11 @@ public:
         }
         {
             uint32_t r = 0;
-            auto used_fregs = state.used_fregs & in_use_fregs_.at(state.wid);
+            auto used_fregs = state->used_fregs & in_use_fregs_.at(state->wid);
             while (used_fregs.any()) {
                 if (used_fregs.test(0)) {
-                    uint32_t tag = (r << 16) | (state.wid << 4) | (int)RegType::Float;
-                    out.push_back(owners_.at(tag));
+                    uint32_t tag = (r << 16) | (state->wid << 4) | (int)RegType::Float;
+                    out.push_back({RegType::Float, r, owners_.at(tag)});
                 }
                 used_fregs >>= 1;
                 ++r;
@@ -59,11 +65,11 @@ public:
         }
         {
             uint32_t r = 0;
-            auto used_vregs = state.used_vregs & in_use_vregs_.at(state.wid);
+            auto used_vregs = state->used_vregs & in_use_vregs_.at(state->wid);
             while (used_vregs.any()) {
                 if (used_vregs.test(0)) {
-                    uint32_t tag = (r << 16) | (state.wid << 4) | (int)RegType::Vector;
-                    out.push_back(owners_.at(tag));
+                    uint32_t tag = (r << 16) | (state->wid << 4) | (int)RegType::Vector;
+                    out.push_back({RegType::Vector, r, owners_.at(tag)});
                 }
                 used_vregs >>= 1;
                 ++r;
@@ -72,44 +78,44 @@ public:
         return std::move(out);
     }
     
-    void reserve(const pipeline_state_t& state) {
-        if (!state.wb)
+    void reserve(pipeline_trace_t* state) {
+        if (!state->wb)
             return;  
-        switch (state.rdest_type) {
+        switch (state->rdest_type) {
         case RegType::Integer:            
-            in_use_iregs_.at(state.wid).set(state.rdest);
+            in_use_iregs_.at(state->wid).set(state->rdest);
             break;
         case RegType::Float:
-            in_use_fregs_.at(state.wid).set(state.rdest);
+            in_use_fregs_.at(state->wid).set(state->rdest);
             break;
         case RegType::Vector:
-            in_use_vregs_.at(state.wid).set(state.rdest);
+            in_use_vregs_.at(state->wid).set(state->rdest);
             break;
         default:  
             break;
         }      
-        uint32_t tag = (state.rdest << 16) | (state.wid << 4) | (int)state.rdest_type;
+        uint32_t tag = (state->rdest << 16) | (state->wid << 4) | (int)state->rdest_type;
         assert(owners_.count(tag) == 0);
-        owners_[tag] = state.id;
+        owners_[tag] = state->id;
     }
 
-    void release(const pipeline_state_t& state) {
-        if (!state.wb)
+    void release(pipeline_trace_t* state) {
+        if (!state->wb)
             return;       
-        switch (state.rdest_type) {
+        switch (state->rdest_type) {
         case RegType::Integer:
-            in_use_iregs_.at(state.wid).reset(state.rdest);
+            in_use_iregs_.at(state->wid).reset(state->rdest);
             break;
         case RegType::Float:
-            in_use_fregs_.at(state.wid).reset(state.rdest);
+            in_use_fregs_.at(state->wid).reset(state->rdest);
             break;
         case RegType::Vector:
-            in_use_vregs_.at(state.wid).reset(state.rdest);
+            in_use_vregs_.at(state->wid).reset(state->rdest);
             break;
         default:  
             break;
         }      
-        uint32_t tag = (state.rdest << 16) | (state.wid << 4) | (int)state.rdest_type;
+        uint32_t tag = (state->rdest << 16) | (state->wid << 4) | (int)state->rdest_type;
         owners_.erase(tag);
     }
 };

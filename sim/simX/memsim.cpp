@@ -20,14 +20,16 @@ public:
 
     void step(uint64_t /*cycle*/) {
         for (uint32_t i = 0, n = num_banks_; i < n; ++i) {
-            MemReq mem_req;     
-            if (!simobject_->MemReqPorts.at(i).read(&mem_req))
+            auto& mem_req_port = simobject_->MemReqPorts.at(i); 
+            if (mem_req_port.empty())
                 continue;
+            auto& mem_req = mem_req_port.top();
             if (!mem_req.write) {
                 MemRsp mem_rsp;
                 mem_rsp.tag = mem_req.tag;
                 simobject_->MemRspPorts.at(i).send(mem_rsp, latency_);
             }
+            mem_req_port.pop();
         }
     }
 };

@@ -49,11 +49,12 @@ inline void update_fcrs(uint32_t fflags, Core* core, uint32_t tid, uint32_t wid)
   }
 }
 
-void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
+void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   assert(tmask_.any());
 
   Word nextPC = PC_ + core_->arch().wsize();
 
+  Word func2  = instr.getFunc2();
   Word func3  = instr.getFunc3();
   Word func6  = instr.getFunc6();
   Word func7  = instr.getFunc7();
@@ -117,8 +118,8 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
   case NOP:
     break;
   case LUI_INST:
-    pipeline_state->exe_type = ExeType::ALU;
-    pipeline_state->alu.type = AluType::ARITH;
+    trace->exe_type = ExeType::ALU;
+    trace->alu.type = AluType::ARITH;
     for (int t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
@@ -127,8 +128,8 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
     rd_write = true;
     break;
   case AUIPC_INST:
-    pipeline_state->exe_type = ExeType::ALU;
-    pipeline_state->alu.type = AluType::ARITH;
+    trace->exe_type = ExeType::ALU;
+    trace->alu.type = AluType::ARITH;
     for (int t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
@@ -137,10 +138,10 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
     rd_write = true;
     break;
   case R_INST:
-    pipeline_state->exe_type = ExeType::ALU;    
-    pipeline_state->alu.type = AluType::ARITH;
-    pipeline_state->used_iregs[rsrc0] = 1;
-    pipeline_state->used_iregs[rsrc1] = 1;
+    trace->exe_type = ExeType::ALU;    
+    trace->alu.type = AluType::ARITH;
+    trace->used_iregs.set(rsrc0);
+    trace->used_iregs.set(rsrc1);
     for (int t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
@@ -149,7 +150,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         case 0:
           // MUL
           rddata[t] = ((WordI)rsdata[t][0]) * ((WordI)rsdata[t][1]);
-          pipeline_state->alu.type = AluType::IMUL;
+          trace->alu.type = AluType::IMUL;
           break;
         case 1: {
           // MULH
@@ -163,7 +164,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
           }
           uint64_t result = first * second;
           rddata[t] = (result >> 32) & 0xFFFFFFFF;
-          pipeline_state->alu.type = AluType::IMUL;
+          trace->alu.type = AluType::IMUL;
         } break;
         case 2: {
           // MULHSU          
@@ -173,14 +174,14 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
           }
           int64_t second = (int64_t)rsdata[t][1];
           rddata[t] = ((first * second) >> 32) & 0xFFFFFFFF;
-          pipeline_state->alu.type = AluType::IMUL;
+          trace->alu.type = AluType::IMUL;
         } break;
         case 3: {
           // MULHU
           uint64_t first = (uint64_t)rsdata[t][0];
           uint64_t second = (uint64_t)rsdata[t][1];
           rddata[t] = ((first * second) >> 32) & 0xFFFFFFFF;
-          pipeline_state->alu.type = AluType::IMUL;
+          trace->alu.type = AluType::IMUL;
         } break;
         case 4: {
           // DIV
@@ -193,7 +194,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
           } else {
             rddata[t] = dividen / divisor;
           }
-          pipeline_state->alu.type = AluType::IDIV;
+          trace->alu.type = AluType::IDIV;
         } break;
         case 5: {
           // DIVU
@@ -204,7 +205,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
           } else {
             rddata[t] = dividen / divisor;
           }
-          pipeline_state->alu.type = AluType::IDIV;
+          trace->alu.type = AluType::IDIV;
         } break;
         case 6: {
           // REM
@@ -217,7 +218,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
           } else {
             rddata[t] = dividen % divisor;
           }
-          pipeline_state->alu.type = AluType::IDIV;
+          trace->alu.type = AluType::IDIV;
         } break;
         case 7: {
           // REMU
@@ -228,7 +229,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
           } else {
             rddata[t] = dividen % divisor;
           }
-          pipeline_state->alu.type = AluType::IDIV;
+          trace->alu.type = AluType::IDIV;
         } break;
         default:
           std::abort();
@@ -285,9 +286,9 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
     rd_write = true;
     break;
   case I_INST:
-    pipeline_state->exe_type = ExeType::ALU;    
-    pipeline_state->alu.type = AluType::ARITH;    
-    pipeline_state->used_iregs[rsrc0] = 1;
+    trace->exe_type = ExeType::ALU;    
+    trace->alu.type = AluType::ARITH;    
+    trace->used_iregs.set(rsrc0);
     for (int t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
@@ -336,10 +337,10 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
     rd_write = true;
     break;
   case B_INST:    
-    pipeline_state->exe_type = ExeType::ALU;    
-    pipeline_state->alu.type = AluType::BRANCH;    
-    pipeline_state->used_iregs[rsrc0] = 1;
-    pipeline_state->used_iregs[rsrc1] = 1;
+    trace->exe_type = ExeType::ALU;    
+    trace->alu.type = AluType::BRANCH;    
+    trace->used_iregs.set(rsrc0);
+    trace->used_iregs.set(rsrc1);
     for (int t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
@@ -385,107 +386,149 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
       }
       break; // runonce
     }
-    pipeline_state->stall_warp = true;
+    trace->fetch_stall = true;
     break;
   case JAL_INST:    
-    pipeline_state->exe_type = ExeType::ALU;    
-    pipeline_state->alu.type = AluType::BRANCH;
+    trace->exe_type = ExeType::ALU;    
+    trace->alu.type = AluType::BRANCH;
     for (int t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       rddata[t] = nextPC;
       nextPC = PC_ + immsrc;  
-      pipeline_state->stall_warp = true;
+      trace->fetch_stall = true;
       break; // runonce
     }
     rd_write = true;
     break;
   case JALR_INST:
-    pipeline_state->exe_type = ExeType::ALU;    
-    pipeline_state->alu.type = AluType::BRANCH;    
-    pipeline_state->used_iregs[rsrc0] = 1;
+    trace->exe_type = ExeType::ALU;    
+    trace->alu.type = AluType::BRANCH;    
+    trace->used_iregs.set(rsrc0);
     for (int t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       rddata[t] = nextPC;
       nextPC = rsdata[t][0] + immsrc;
-      pipeline_state->stall_warp = true;
+      trace->fetch_stall = true;
       break; // runOnce
     }
     rd_write = true;
     break;
   case L_INST:
-    pipeline_state->exe_type = ExeType::LSU;    
-    pipeline_state->lsu.type = LsuType::LOAD;
-    pipeline_state->used_iregs[rsrc0] = 1;
-    pipeline_state->mem_addrs.resize(num_threads);
-    for (int t = 0; t < num_threads; ++t) {
-      if (!tmask_.test(t))
-        continue;
-      Word memAddr   = ((rsdata[t][0] + immsrc) & 0xFFFFFFFC); // word aligned
-      Word shift_by  = ((rsdata[t][0] + immsrc) & 0x00000003) * 8;
-      Word data_read = core_->dcache_read(memAddr, 4);
-      pipeline_state->mem_addrs.at(t) = memAddr;
-      DP(3, "LOAD MEM: ADDRESS=0x" << std::hex << memAddr << ", DATA=0x" << data_read);
-      switch (func3) {
-      case 0:
-        // LBI
-        rddata[t] = sext32((data_read >> shift_by) & 0xFF, 8);
-        break;
-      case 1:
-        // LHI
-        rddata[t] = sext32((data_read >> shift_by) & 0xFFFF, 16);
-        break;
-      case 2:
-        // LW
-        rddata[t] = data_read;
-        break;
-      case 4:
-        // LBU
-        rddata[t] = Word((data_read >> shift_by) & 0xFF);
-        break;
-      case 5:
-        // LHU
-        rddata[t] = Word((data_read >> shift_by) & 0xFFFF);
-        break; 
-      default:
-        std::abort();      
+  case FL:
+    trace->exe_type = ExeType::LSU;    
+    trace->lsu.type = LsuType::LOAD;
+    trace->used_iregs.set(rsrc0);
+    if (opcode == L_INST 
+    || (opcode == FL && func3 == 2)) {
+      for (int t = 0; t < num_threads; ++t) {
+        if (!tmask_.test(t))
+          continue;
+        Word memAddr   = ((rsdata[t][0] + immsrc) & 0xFFFFFFFC); // word aligned
+        Word shift_by  = ((rsdata[t][0] + immsrc) & 0x00000003) * 8;
+        Word data_read = core_->dcache_read(memAddr, 4);
+        trace->mem_addrs.at(t).push_back(memAddr);
+        DP(4, "LOAD MEM: ADDRESS=0x" << std::hex << memAddr << ", DATA=0x" << data_read);
+        switch (func3) {
+        case 0:
+          // LBI
+          rddata[t] = sext32((data_read >> shift_by) & 0xFF, 8);
+          break;
+        case 1:
+          // LHI
+          rddata[t] = sext32((data_read >> shift_by) & 0xFFFF, 16);
+          break;
+        case 2:
+          // LW
+          rddata[t] = data_read;
+          break;
+        case 4:
+          // LBU
+          rddata[t] = Word((data_read >> shift_by) & 0xFF);
+          break;
+        case 5:
+          // LHU
+          rddata[t] = Word((data_read >> shift_by) & 0xFFFF);
+          break; 
+        default:
+          std::abort();      
+        }
       }
-    }
-    rd_write = true;
-    break;
-  case S_INST:     
-    pipeline_state->exe_type = ExeType::LSU;    
-    pipeline_state->lsu.type = LsuType::STORE;
-    pipeline_state->used_iregs[rsrc0] = 1;
-    pipeline_state->used_iregs[rsrc1] = 1;
-    pipeline_state->mem_addrs.resize(num_threads);
-    for (int t = 0; t < num_threads; ++t) {
-      if (!tmask_.test(t))
-        continue;
-      Word memAddr = rsdata[t][0] + immsrc;
-      pipeline_state->mem_addrs.at(t) = memAddr;
-      DP(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
-      switch (func3) {
-      case 0:
-        // SB
-        core_->dcache_write(memAddr, rsdata[t][1] & 0x000000FF, 1);
-        break;
-      case 1:
-        // SH
-        core_->dcache_write(memAddr, rsdata[t][1], 2);
-        break;
-      case 2:
-        // SW
-        core_->dcache_write(memAddr, rsdata[t][1], 4);
-        break;
+    } else {
+      DP(4, "Executing vector load");      
+      DP(4, "lmul: " << vtype_.vlmul << " VLEN:" << (core_->arch().vsize() * 8) << "sew: " << vtype_.vsew);
+      DP(4, "dest: v" << rdest);
+      DP(4, "width" << instr.getVlsWidth());
+      auto &vd = vRegFile_.at(rdest);
+      switch (instr.getVlsWidth()) {
+      case 6: { 
+        // load word and unit strided (not checking for unit stride)
+        for (int i = 0; i < vl_; i++) {
+          Word memAddr = ((rsdata[i][0]) & 0xFFFFFFFC) + (i * vtype_.vsew / 8);
+          DP(4, "LOAD MEM: ADDRESS=0x" << std::hex << memAddr);
+          Word data_read = core_->dcache_read(memAddr, 4);
+          DP(4, "Mem addr: " << std::hex << memAddr << " Data read " << data_read);
+          int *result_ptr = (int *)(vd.data() + i);
+          *result_ptr = data_read;            
+        }
+      } break;
       default:
         std::abort();
       }
     }
+    rd_write = true;
+    break;
+  case S_INST:   
+  case FS:  
+    trace->exe_type = ExeType::LSU;    
+    trace->lsu.type = LsuType::STORE;
+    trace->used_iregs.set(rsrc0);
+    trace->used_iregs.set(rsrc1);
+    if (opcode == S_INST 
+    || (opcode == FS && func3 == 2)) {
+      for (int t = 0; t < num_threads; ++t) {
+        if (!tmask_.test(t))
+          continue;
+        Word memAddr = rsdata[t][0] + immsrc;
+        trace->mem_addrs.at(t).push_back(memAddr);
+        DP(4, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
+        switch (func3) {
+        case 0:
+          // SB
+          core_->dcache_write(memAddr, rsdata[t][1] & 0x000000FF, 1);
+          break;
+        case 1:
+          // SH
+          core_->dcache_write(memAddr, rsdata[t][1], 2);
+          break;
+        case 2:
+          // SW
+          core_->dcache_write(memAddr, rsdata[t][1], 4);
+          break;
+        default:
+          std::abort();
+        }
+      }
+    } else {
+      for (int i = 0; i < vl_; i++) {
+        Word memAddr = rsdata[i][0] + (i * vtype_.vsew / 8);
+        DP(4, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
+        switch (instr.getVlsWidth()) {
+        case 6: {
+          // store word and unit strided (not checking for unit stride)          
+          uint32_t value = *(uint32_t *)(vRegFile_.at(instr.getVs3()).data() + i);
+          core_->dcache_write(memAddr, value, 4);
+          DP(4, "store: " << memAddr << " value:" << value);
+        } break;
+        default:
+          std::abort();
+        }          
+      }
+    }
     break;
   case SYS_INST:
-    pipeline_state->exe_type = ExeType::CSR;
+    trace->exe_type = ExeType::CSR;
     for (int t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
@@ -493,30 +536,40 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
       Word csr_value = core_->get_csr(csr_addr, t, id_);
       switch (func3) {
       case 0:
-        if (csr_addr < 2) {
-          // ECALL/EBREAK
+        switch (csr_addr) {
+        case 0: // ECALL
+          core_->trigger_ecall();
+          break;
+        case 1: // EBREAK
           core_->trigger_ebreak();
-        }
+          break;
+        case 0x002: // URET
+        case 0x102: // SRET
+        case 0x302: // MRET
+          break;
+        default:
+          std::abort();
+        }            
         break;
       case 1:
         // CSRRW
         rddata[t] = csr_value;
         core_->set_csr(csr_addr, rsdata[t][0], t, id_);        
-        pipeline_state->used_iregs[rsrc0] = 1;
+        trace->used_iregs.set(rsrc0);
         rd_write = true;
         break;
       case 2:
         // CSRRS
         rddata[t] = csr_value;
         core_->set_csr(csr_addr, csr_value | rsdata[t][0], t, id_);
-        pipeline_state->used_iregs[rsrc0] = 1;
+        trace->used_iregs.set(rsrc0);
         rd_write = true;
         break;
       case 3:
         // CSRRC
         rddata[t] = csr_value;
         core_->set_csr(csr_addr, csr_value & ~rsdata[t][0], t, id_);
-        pipeline_state->used_iregs[rsrc0] = 1;
+        trace->used_iregs.set(rsrc0);
         rd_write = true;
         break;
       case 5:
@@ -543,88 +596,12 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
     } 
     break;
   case FENCE:
-    pipeline_state->exe_type = ExeType::LSU;    
-    pipeline_state->lsu.type = LsuType::FENCE;
-    pipeline_state->stall_warp = true;
-    break;
-  case (FL | VL):
-    pipeline_state->exe_type = ExeType::LSU;       
-    pipeline_state->lsu.type = LsuType::LOAD;
-    pipeline_state->used_iregs[rsrc0] = 1;    
-    if (func3 == 0x2) {
-      pipeline_state->mem_addrs.resize(num_threads);
-      for (int t = 0; t < num_threads; ++t) {
-        if (!tmask_.test(t))
-          continue;
-        Word memAddr = rsdata[t][0] + immsrc;
-        pipeline_state->mem_addrs.at(t) = memAddr;
-        Word data_read = core_->dcache_read(memAddr, 4);        
-        DP(3, "LOAD MEM: ADDRESS=0x" << std::hex << memAddr << ", DATA=0x" << data_read);
-        rddata[t] = data_read;
-      }
-    } else {  
-      DP(3, "Executing vector load");      
-      DP(3, "lmul: " << vtype_.vlmul << " VLEN:" << (core_->arch().vsize() * 8) << "sew: " << vtype_.vsew);
-      DP(3, "dest: v" << rdest);
-      DP(3, "width" << instr.getVlsWidth());
-      pipeline_state->mem_addrs.resize(vl_);
-      auto &vd = vRegFile_.at(rdest);
-      switch (instr.getVlsWidth()) {
-      case 6: { 
-        // load word and unit strided (not checking for unit stride)
-        for (int i = 0; i < vl_; i++) {
-          Word memAddr = ((rsdata[i][0]) & 0xFFFFFFFC) + (i * vtype_.vsew / 8);
-          pipeline_state->mem_addrs.at(i) = memAddr;
-          DP(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
-          Word data_read = core_->dcache_read(memAddr, 4);
-          DP(3, "Mem addr: " << std::hex << memAddr << " Data read " << data_read);
-          int *result_ptr = (int *)(vd.data() + i);
-          *result_ptr = data_read;            
-        }
-      } break;
-      default:
-        std::abort();
-      }
-      break;
-    }
-    rd_write = true;
-    break;
-  case (FS | VS):
-    pipeline_state->exe_type = ExeType::LSU;       
-    pipeline_state->lsu.type = LsuType::STORE;
-    pipeline_state->used_iregs[rsrc0] = 1;
-    pipeline_state->used_iregs[rsrc1] = 1;    
-    if (func3 == 0x2) {
-      pipeline_state->mem_addrs.resize(num_threads);
-      for (int t = 0; t < num_threads; ++t) {
-        if (!tmask_.test(t))
-          continue;
-        Word memAddr = rsdata[t][0] + immsrc;
-        pipeline_state->mem_addrs.at(t) = memAddr;
-        core_->dcache_write(memAddr, rsdata[t][1], 4);
-        DP(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
-      }
-    } else {      
-      pipeline_state->mem_addrs.resize(vl_);
-      for (int i = 0; i < vl_; i++) {
-        Word memAddr = rsdata[i][0] + (i * vtype_.vsew / 8);
-        pipeline_state->mem_addrs.at(i) = memAddr;
-        DP(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
-        switch (instr.getVlsWidth()) {
-        case 6: {
-          //store word and unit strided (not checking for unit stride)          
-          uint32_t value = *(uint32_t *)(vRegFile_.at(instr.getVs3()).data() + i);
-          core_->dcache_write(memAddr, value, 4);
-          DP(3, "store: " << memAddr << " value:" << value);
-        } break;
-        default:
-          std::abort();
-        }          
-      }
-    }
-    break;    
+    trace->exe_type = ExeType::LSU;    
+    trace->lsu.type = LsuType::FENCE;
+    trace->fetch_stall = true;
+    break;   
   case FCI:        
-    pipeline_state->exe_type = ExeType::FPU;     
+    trace->exe_type = ExeType::FPU;     
     for (int t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue; 
@@ -633,32 +610,32 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
       switch (func7) {
       case 0x00: //FADD
         rddata[t] = rv_fadd(rsdata[t][0], rsdata[t][1], frm, &fflags);
-        pipeline_state->fpu.type = FpuType::FMA;
-        pipeline_state->used_fregs[rsrc0] = 1;
-        pipeline_state->used_fregs[rsrc1] = 1;
+        trace->fpu.type = FpuType::FMA;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);
         break;
       case 0x04: //FSUB
         rddata[t] = rv_fsub(rsdata[t][0], rsdata[t][1], frm, &fflags);
-        pipeline_state->fpu.type = FpuType::FMA;
-        pipeline_state->used_fregs[rsrc0] = 1;
-        pipeline_state->used_fregs[rsrc1] = 1;
+        trace->fpu.type = FpuType::FMA;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);
         break;
       case 0x08: //FMUL
         rddata[t] = rv_fmul(rsdata[t][0], rsdata[t][1], frm, &fflags);
-        pipeline_state->fpu.type = FpuType::FMA;
-        pipeline_state->used_fregs[rsrc0] = 1;
-        pipeline_state->used_fregs[rsrc1] = 1;
+        trace->fpu.type = FpuType::FMA;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);
         break;
       case 0x0c: //FDIV
         rddata[t] = rv_fdiv(rsdata[t][0], rsdata[t][1], frm, &fflags);
-        pipeline_state->fpu.type = FpuType::FDIV;
-        pipeline_state->used_fregs[rsrc0] = 1;
-        pipeline_state->used_fregs[rsrc1] = 1;
+        trace->fpu.type = FpuType::FDIV;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);
         break;
       case 0x2c: //FSQRT
         rddata[t] = rv_fsqrt(rsdata[t][0], frm, &fflags);
-        pipeline_state->fpu.type = FpuType::FSQRT;
-        pipeline_state->used_fregs[rsrc0] = 1;
+        trace->fpu.type = FpuType::FSQRT;
+        trace->used_fregs.set(rsrc0);
         break;        
       case 0x10:
         switch (func3) {            
@@ -672,9 +649,9 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
           rddata[t] = rv_fsgnjx(rsdata[t][0], rsdata[t][1]);
           break;
         }
-        pipeline_state->fpu.type = FpuType::FNCP;
-        pipeline_state->used_fregs[rsrc0] = 1;
-        pipeline_state->used_fregs[rsrc1] = 1;
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);
         break;
       case 0x14:              
         if (func3) {
@@ -684,9 +661,9 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
           // FMIN.S
           rddata[t] = rv_fmin(rsdata[t][0], rsdata[t][1], &fflags);
         }
-        pipeline_state->fpu.type = FpuType::FNCP;
-        pipeline_state->used_fregs[rsrc0] = 1;
-        pipeline_state->used_fregs[rsrc1] = 1;        
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);        
         break;
       case 0x60:
         if (rsrc1 == 0) { 
@@ -696,8 +673,8 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
           // FCVT.WU.S
           rddata[t] = rv_ftou(rsdata[t][0], frm, &fflags);
         }
-        pipeline_state->fpu.type = FpuType::FCVT;
-        pipeline_state->used_fregs[rsrc0] = 1;
+        trace->fpu.type = FpuType::FCVT;
+        trace->used_fregs.set(rsrc0);
         break;
       case 0x70:      
         if (func3) {
@@ -707,8 +684,8 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
           // FMV.X.W
           rddata[t] = rsdata[t][0];
         }        
-        pipeline_state->fpu.type = FpuType::FNCP;
-        pipeline_state->used_fregs[rsrc0] = 1;
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_fregs.set(rsrc0);
         break;
       case 0x50:             
         switch(func3) {              
@@ -725,9 +702,9 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
           rddata[t] = rv_feq(rsdata[t][0], rsdata[t][1], &fflags);
           break;
         } 
-        pipeline_state->fpu.type = FpuType::FNCP;
-        pipeline_state->used_fregs[rsrc0] = 1;
-        pipeline_state->used_fregs[rsrc1] = 1;
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);
         break;        
       case 0x68:
         if (rsrc1) {
@@ -737,14 +714,14 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
           // FCVT.S.W:
           rddata[t] = rv_itof(rsdata[t][0], frm, &fflags);
         }
-        pipeline_state->fpu.type = FpuType::FCVT;
-        pipeline_state->used_iregs[rsrc0] = 1;
+        trace->fpu.type = FpuType::FCVT;
+        trace->used_iregs.set(rsrc0);
         break;
       case 0x78:
         // FMV.W.X
         rddata[t] = rsdata[t][0];
-        pipeline_state->fpu.type = FpuType::FNCP;
-        pipeline_state->used_iregs[rsrc0] = 1;
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_iregs.set(rsrc0);
         break;
       }
       update_fcrs(fflags, core_, t, id_);
@@ -755,10 +732,10 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
   case FMSUB:      
   case FMNMADD:
   case FMNMSUB: 
-    pipeline_state->fpu.type = FpuType::FMA;
-    pipeline_state->used_fregs[rsrc0] = 1;
-    pipeline_state->used_fregs[rsrc1] = 1;
-    pipeline_state->used_fregs[rsrc2] = 1;
+    trace->fpu.type = FpuType::FMA;
+    trace->used_fregs.set(rsrc0);
+    trace->used_fregs.set(rsrc1);
+    trace->used_fregs.set(rsrc2);
     for (int t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
@@ -784,8 +761,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
     }
     rd_write = true;
     break;
-  case GPGPU: {
-    pipeline_state->exe_type = ExeType::GPU;
+  case GPGPU: {    
     int ts = 0;
     for (int t = 0; t < num_threads; ++t) {
       if (tmask_.test(t)) {
@@ -795,10 +771,11 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
     }
     switch (func3) {
     case 0: {
-      // TMC        
-      pipeline_state->gpu.type = GpuType::TMC;
-      pipeline_state->used_iregs[rsrc0] = 1;
-      pipeline_state->stall_warp = true;
+      // TMC   
+      trace->exe_type = ExeType::GPU;     
+      trace->gpu.type = GpuType::TMC;
+      trace->used_iregs.set(rsrc0);
+      trace->fetch_stall = true;
       if (rsrc1) {
         // predicate mode
         ThreadMask pred;
@@ -823,10 +800,11 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
     } break;
     case 1: {
       // WSPAWN
-      pipeline_state->gpu.type = GpuType::WSPAWN;
-      pipeline_state->used_iregs[rsrc0] = 1;
-      pipeline_state->used_iregs[rsrc1] = 1;
-      pipeline_state->stall_warp = true;
+      trace->exe_type = ExeType::GPU;
+      trace->gpu.type = GpuType::WSPAWN;
+      trace->used_iregs.set(rsrc0);
+      trace->used_iregs.set(rsrc1);
+      trace->fetch_stall = true;
       int active_warps = std::min<int>(rsdata.at(ts)[0], core_->arch().num_warps());
       DP(3, "*** Activate " << (active_warps-1) << " warps at PC: " << std::hex << rsdata.at(ts)[1]);
       for (int i = 1; i < active_warps; ++i) {
@@ -837,9 +815,10 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
     } break;
     case 2: {
       // SPLIT    
-      pipeline_state->gpu.type = GpuType::SPLIT;
-      pipeline_state->used_iregs[rsrc0] = 1;
-      pipeline_state->stall_warp = true;
+      trace->exe_type = ExeType::GPU;
+      trace->gpu.type = GpuType::SPLIT;
+      trace->used_iregs.set(rsrc0);
+      trace->fetch_stall = true;
       if (HasDivergentThreads(tmask_, iRegFile_, rsrc0)) {          
         ThreadMask tmask;
         for (int i = 0; i < num_threads; ++i) {
@@ -868,8 +847,9 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
     } break;
     case 3: {
       // JOIN
-      pipeline_state->gpu.type = GpuType::JOIN;        
-      pipeline_state->stall_warp = true;        
+      trace->exe_type = ExeType::GPU;
+      trace->gpu.type = GpuType::JOIN;        
+      trace->fetch_stall = true;        
       if (!domStack_.empty() && domStack_.top().unanimous) {
         DP(3, "*** Uninimous branch at join");
         tmask_ = domStack_.top().tmask;
@@ -893,18 +873,19 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
     } break;
     case 4: {
       // BAR
-      pipeline_state->gpu.type = GpuType::BAR;
-      pipeline_state->used_iregs[rsrc0] = 1;
-      pipeline_state->used_iregs[rsrc1] = 1;
-      pipeline_state->stall_warp = true; 
+      trace->exe_type = ExeType::GPU; 
+      trace->gpu.type = GpuType::BAR;
+      trace->used_iregs.set(rsrc0);
+      trace->used_iregs.set(rsrc1);
+      trace->fetch_stall = true; 
       active_ = false;
       core_->barrier(rsdata[ts][0], rsdata[ts][1], id_); 
     } break;
-    case 6: {
+    case 5: {
       // PREFETCH
-      pipeline_state->exe_type = ExeType::LSU; 
-      pipeline_state->lsu.type = LsuType::PREFETCH; 
-      pipeline_state->used_iregs[rsrc0] = 1;
+      trace->exe_type = ExeType::LSU; 
+      trace->lsu.type = LsuType::PREFETCH; 
+      trace->used_iregs.set(rsrc0);
       for (int t = 0; t < num_threads; ++t) {
         if (!tmask_.test(t))
           continue;
@@ -915,7 +896,50 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
     default:
       std::abort();
     }
-    }  break;
+  }  break;
+  case GPU: {    
+    switch (func3) {
+    case 0: { // TEX
+      trace->exe_type = ExeType::GPU; 
+      trace->gpu.type = GpuType::TEX;
+      trace->used_iregs.set(rsrc0);
+      trace->used_iregs.set(rsrc1);
+      trace->used_iregs.set(rsrc2);
+      for (int t = 0; t < num_threads; ++t) {
+        if (!tmask_.test(t))
+          continue;        
+        auto unit  = func2;
+        auto u     = rsdata[t][0];
+        auto v     = rsdata[t][1];
+        auto lod   = rsdata[t][2];
+        auto color = core_->tex_read(unit, u, v, lod, &trace->mem_addrs.at(t));
+        rddata[t] = color;
+      }
+      rd_write = true;
+    } break;
+    case 1: 
+      switch (func2) {
+      case 0: { // CMOV
+        trace->exe_type = ExeType::ALU;
+        trace->alu.type = AluType::CMOV;
+        trace->used_iregs.set(rsrc0);
+        trace->used_iregs.set(rsrc1);
+        trace->used_iregs.set(rsrc2);
+        for (int t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t))
+            continue;     
+          rddata[t] = rsdata[t][0] ? rsdata[t][1] : rsdata[t][2];
+        }
+        rd_write = true;
+      } break;
+      default:
+        std::abort();
+      }
+      break;
+    default:
+      std::abort();
+    }
+  } break;
   case VSET: {
     int VLEN = core_->arch().vsize() * 8;
     int VLMAX = (instr.getVlmul() * VLEN) / instr.getVsew();
@@ -966,7 +990,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         }                
       } break;
       case 24: {
-        //vmseq
+        // vmseq
         auto &vr1 = vRegFile_.at(rsrc0);
         auto &vr2 = vRegFile_.at(rsrc1);
         auto &vd = vRegFile_.at(rdest);
@@ -997,7 +1021,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         }
       } break;
       case 25: { 
-        //vmsne
+        // vmsne
         auto &vr1 = vRegFile_.at(rsrc0);
         auto &vr2 = vRegFile_.at(rsrc1);
         auto &vd = vRegFile_.at(rdest);
@@ -1028,7 +1052,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         }
       } break;
       case 26: {
-        //vmsltu
+        // vmsltu
         auto &vr1 = vRegFile_.at(rsrc0);
         auto &vr2 = vRegFile_.at(rsrc1);
         auto &vd = vRegFile_.at(rdest);
@@ -1059,7 +1083,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         }
       } break;
       case 27: {
-        //vmslt
+        // vmslt
         auto &vr1 = vRegFile_.at(rsrc0);
         auto &vr2 = vRegFile_.at(rsrc1);
         auto &vd = vRegFile_.at(rdest);
@@ -1090,7 +1114,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         }
       } break;
       case 28: {
-        //vmsleu
+        // vmsleu
         auto &vr1 = vRegFile_.at(rsrc0);
         auto &vr2 = vRegFile_.at(rsrc1);
         auto &vd = vRegFile_.at(rdest);
@@ -1121,7 +1145,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         }
       } break;
       case 29: {
-        //vmsle
+        // vmsle
         auto &vr1 = vRegFile_.at(rsrc0);
         auto &vr2 = vRegFile_.at(rsrc1);
         auto &vd = vRegFile_.at(rdest);
@@ -1152,7 +1176,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         }
       } break;
       case 30: {
-        //vmsgtu
+        // vmsgtu
         auto &vr1 = vRegFile_.at(rsrc0);
         auto &vr2 = vRegFile_.at(rsrc1);
         auto &vd = vRegFile_.at(rdest);
@@ -1183,7 +1207,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         }
       } break;
       case 31: {
-        //vmsgt
+        // vmsgt
         auto &vr1 = vRegFile_.at(rsrc0);
         auto &vr2 = vRegFile_.at(rsrc1);
         auto &vd = vRegFile_.at(rdest);
@@ -1356,7 +1380,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         }
       } break;
       case 27: { 
-        //vmxor
+        // vmxor
         auto &vr1 = vRegFile_.at(rsrc0);
         auto &vr2 = vRegFile_.at(rsrc1);
         auto &vd = vRegFile_.at(rdest);
@@ -1402,7 +1426,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         }
       } break;
       case 28: {
-        //vmornot
+        // vmornot
         auto &vr1 = vRegFile_.at(rsrc0);
         auto &vr2 = vRegFile_.at(rsrc1);
         auto &vd = vRegFile_.at(rdest);
@@ -1448,7 +1472,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         }
       } break;
       case 29: {
-        //vmnand
+        // vmnand
         auto &vr1 = vRegFile_.at(rsrc0);
         auto &vr2 = vRegFile_.at(rsrc1);
         auto &vd = vRegFile_.at(rdest);
@@ -1494,7 +1518,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         }
       } break;
       case 30: {
-        //vmnor
+        // vmnor
         auto &vr1 = vRegFile_.at(rsrc0);
         auto &vr2 = vRegFile_.at(rsrc1);
         auto &vd = vRegFile_.at(rdest);
@@ -1540,7 +1564,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         }
       } break;
       case 31: {
-        //vmxnor
+        // vmxnor
         auto &vr1 = vRegFile_.at(rsrc0);
         auto &vr2 = vRegFile_.at(rsrc1);
         auto &vd = vRegFile_.at(rdest);
@@ -1586,7 +1610,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         }
       } break;
       case 37: {
-        //vmul
+        // vmul
         auto &vr1 = vRegFile_.at(rsrc0);
         auto &vr2 = vRegFile_.at(rsrc1);
         auto &vd = vRegFile_.at(rdest);
@@ -1769,7 +1793,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
   }
 
   if (rd_write) {
-    pipeline_state->wb = true;
+    trace->wb = true;
     DPH(2, "Dest Reg: ");
     auto rdt = instr.getRDType();    
     switch (rdt) {
@@ -1786,7 +1810,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
           DPN(2, "0x" << std::hex << rddata[t]);         
         }
         DPN(2, "}" << std::endl);
-        pipeline_state->used_iregs[rdest] = 1;
+        trace->used_iregs[rdest] = 1;
       }
       break;
     case RegType::Float:
@@ -1801,7 +1825,7 @@ void Warp::execute(const Instr &instr, pipeline_state_t *pipeline_state) {
         DPN(2, "0x" << std::hex << rddata[t]);         
       }
       DPN(2, "}" << std::endl);
-      pipeline_state->used_fregs[rdest] = 1;
+      trace->used_fregs[rdest] = 1;
       break;
     default:
       std::abort();

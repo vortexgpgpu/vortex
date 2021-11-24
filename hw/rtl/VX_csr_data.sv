@@ -50,35 +50,40 @@ module VX_csr_data #(
     reg [`NUM_WARPS-1:0][`INST_FRM_BITS+`FFLAGS_BITS-1:0] fcsr;
 
     always @(posedge clk) begin
-    `ifdef EXT_F_ENABLE
         if (reset) begin
             fcsr <= '0;
-        end
-        if (fpu_to_csr_if.write_enable) begin
-            fcsr[fpu_to_csr_if.write_wid][`FFLAGS_BITS-1:0] <= fcsr[fpu_to_csr_if.write_wid][`FFLAGS_BITS-1:0]
-                                                             | fpu_to_csr_if.write_fflags;
-        end
-    `endif
-        if (write_enable) begin
-            case (write_addr)
-                `CSR_FFLAGS:   fcsr[write_wid][`FFLAGS_BITS-1:0] <= write_data[`FFLAGS_BITS-1:0];
-                `CSR_FRM:      fcsr[write_wid][`INST_FRM_BITS+`FFLAGS_BITS-1:`FFLAGS_BITS] <= write_data[`INST_FRM_BITS-1:0];
-                `CSR_FCSR:     fcsr[write_wid] <= write_data[`FFLAGS_BITS+`INST_FRM_BITS-1:0];
-                `CSR_SATP:     csr_satp       <= write_data[`CSR_WIDTH-1:0];
-                `CSR_MSTATUS:  csr_mstatus    <= write_data[`CSR_WIDTH-1:0];
-                `CSR_MEDELEG:  csr_medeleg    <= write_data[`CSR_WIDTH-1:0];
-                `CSR_MIDELEG:  csr_mideleg    <= write_data[`CSR_WIDTH-1:0];
-                `CSR_MIE:      csr_mie        <= write_data[`CSR_WIDTH-1:0];
-                `CSR_MTVEC:    csr_mtvec      <= write_data[`CSR_WIDTH-1:0];
-                `CSR_MEPC:     csr_mepc       <= write_data[`CSR_WIDTH-1:0];
-                `CSR_PMPCFG0:  csr_pmpcfg[0]  <= write_data[`CSR_WIDTH-1:0];
-                `CSR_PMPADDR0: csr_pmpaddr[0] <= write_data[`CSR_WIDTH-1:0];
-                default: begin
-                    `ASSERT(write_addr >= `CSR_TEX_BEGIN(0)
-                         && write_addr < `CSR_TEX_BEGIN(`CSR_TEX_STATES),
-                            ("%t: invalid CSR write address: %0h", $time, write_addr));
-                end
-            endcase
+        end else begin
+        `ifdef EXT_F_ENABLE
+            if (fpu_to_csr_if.write_enable) begin
+                fcsr[fpu_to_csr_if.write_wid][`FFLAGS_BITS-1:0] <= fcsr[fpu_to_csr_if.write_wid][`FFLAGS_BITS-1:0]
+                                                                | fpu_to_csr_if.write_fflags;
+            end
+        `endif
+            if (write_enable) begin
+                case (write_addr)
+                    `CSR_FFLAGS:   fcsr[write_wid][`FFLAGS_BITS-1:0] <= write_data[`FFLAGS_BITS-1:0];
+                    `CSR_FRM:      fcsr[write_wid][`INST_FRM_BITS+`FFLAGS_BITS-1:`FFLAGS_BITS] <= write_data[`INST_FRM_BITS-1:0];
+                    `CSR_FCSR:     fcsr[write_wid] <= write_data[`FFLAGS_BITS+`INST_FRM_BITS-1:0];
+                    `CSR_SATP:     csr_satp       <= write_data[`CSR_WIDTH-1:0];
+                    `CSR_MSTATUS:  csr_mstatus    <= write_data[`CSR_WIDTH-1:0];
+                    `CSR_MEDELEG:  csr_medeleg    <= write_data[`CSR_WIDTH-1:0];
+                    `CSR_MIDELEG:  csr_mideleg    <= write_data[`CSR_WIDTH-1:0];
+                    `CSR_MIE:      csr_mie        <= write_data[`CSR_WIDTH-1:0];
+                    `CSR_MTVEC:    csr_mtvec      <= write_data[`CSR_WIDTH-1:0];
+                    `CSR_MEPC:     csr_mepc       <= write_data[`CSR_WIDTH-1:0];
+                    `CSR_PMPCFG0:  csr_pmpcfg[0]  <= write_data[`CSR_WIDTH-1:0];
+                    `CSR_PMPADDR0: csr_pmpaddr[0] <= write_data[`CSR_WIDTH-1:0];
+                    default: begin
+                    `ifdef EXT_TEX_ENABLE
+                        `ASSERT(write_addr >= `CSR_TEX(0,0)
+                            && write_addr < `CSR_TEX(`NUM_TEX_UNITS, 0),
+                                ("%t: invalid CSR write address: %0h", $time, write_addr));
+                    `else
+                        `ASSERT(~write_enable, ("%t: invalid CSR write address: %0h", $time, write_addr));
+                    `endif
+                    end
+                endcase
+            end
         end
     end
 
@@ -217,11 +222,16 @@ module VX_csr_data #(
             `CSR_MIMPID    : read_data_r = `IMPLEMENTATION_ID;
 
             default: begin
-                if (!((read_addr >= `CSR_MPM_BASE && read_addr < (`CSR_MPM_BASE + 32))
-                   || (read_addr >= `CSR_MPM_BASE_H && read_addr < (`CSR_MPM_BASE_H + 32)
-                   || (read_addr >= `CSR_TEX_BEGIN(0) && read_addr < `CSR_TEX_BEGIN(`CSR_TEX_STATES))))) begin
+                if ((read_addr >= `CSR_MPM_BASE && read_addr < (`CSR_MPM_BASE + 32))
+                 || (read_addr >= `CSR_MPM_BASE_H && read_addr < (`CSR_MPM_BASE_H + 32))) begin
+                     read_addr_valid_r = 1;
+                end else     
+            `ifdef EXT_TEX_ENABLE    
+                if (read_addr >= `CSR_TEX(0,0) && read_addr < `CSR_TEX(`NUM_TEX_UNITS,0)) begin
+                    read_addr_valid_r = 1;
+                end else
+            `endif
                     read_addr_valid_r = 0;
-                end
             end
         endcase
     end 
