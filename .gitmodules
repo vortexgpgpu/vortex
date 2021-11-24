@@ -4,3 +4,6 @@
 [submodule "sim/common/softfloat"]
 	path = sim/common/softfloat
 	url = https://github.com/ucb-bar/berkeley-softfloat-3.git
+[submodule "third_party/cocogfx"]
+	path = third_party/cocogfx
+	url = https://github.com/gtcasl/cocogfx.git
