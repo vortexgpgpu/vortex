@@ -1,13 +1,8 @@
 #include <cstdint>
 #include <vector>
 #include <iostream>
+#include <bitmanip.h>
 #include "surfacedesc.h"
-
-#define ISPOW2(x)   (((x) != 0) && (0 == ((x) & ((x) - 1))))
-
-inline uint32_t ilog2 (uint32_t value) {
-  	return (uint32_t)(sizeof(uint32_t) * 8UL) - (uint32_t)__builtin_clzl((value << 1) - 1UL) - 1;
-}
 
 int LoadImage(const char *filename,
               ePixelFormat format,
@@ -36,6 +31,13 @@ int ConvertImage(std::vector<uint8_t>& dst_pixels,
                  uint32_t height,
                  ePixelFormat src_format,
                  ePixelFormat dst_format);
+
+int GenerateMipmaps(std::vector<uint8_t>& dst_pixels,
+                    std::vector<uint32_t>& mip_offsets,
+                    const std::vector<uint8_t>& src_pixels,
+                    ePixelFormat format,
+                    uint32_t src_width,
+                    uint32_t src_height);
 
 void dump_image(const std::vector<uint8_t>& pixels, 
                 uint32_t width, 

@@ -33,7 +33,8 @@ Processor::Processor(const ArchDef& arch)
       L3_NUM_BANKS,           // number of banks
       L3_NUM_PORTS,           // number of ports
       NUM_CLUSTERS,           // request size   
-      true,                   // write-throught
+      true,                   // write-through
+      false,                  // write response
       0,                      // victim size
       L3_MSHR_SIZE,           // mshr
       2,                      // pipeline latency
@@ -74,7 +75,8 @@ Processor::Processor(const ArchDef& arch)
         L2_NUM_BANKS,           // number of banks
         L2_NUM_PORTS,           // number of ports
         NUM_CORES,              // request size   
-        true,                   // write-throught
+        true,                   // write-through
+        false,                  // write response
         0,                      // victim size
         L2_MSHR_SIZE,           // mshr
         2,                      // pipeline latency
@@ -129,13 +131,15 @@ int Processor::run() {
       if (core->running()) {
         running = true;
       }
-      if (core->check_ebreak()) {
+      if (core->check_exit()) {
         exitcode = core->getIRegValue(3);
         running = false;
         break;
       }
     }
   } while (running);
+
+  std::cout << std::flush;
 
   return exitcode;
 }

@@ -1,10 +1,8 @@
 #include <stdint.h>
 #include <vx_intrinsics.h>
 #include <vx_spawn.h>
-#include "common.h"
+#include <vx_print.h>
 #include "texsw.h"
-
-#define ENABLE_SW
 
 typedef struct {
   	kernel_arg_t* state;	
@@ -14,29 +12,50 @@ typedef struct {
   	float deltaY;
 } tile_arg_t;
 
+template <typename T, T Start, T End>
+struct static_for_t {
+    template <typename Fn>
+    inline void operator()(const Fn& callback) const {
+        callback(Start);
+        static_for_t<T, Start+1, End>()(callback);
+    }
+};
+
+template <typename T, T N>
+struct static_for_t<T, N, N> {
+    template <typename Fn>
+    inline void operator()(const Fn& callback) const {}
+};
+
 void kernel_body(int task_id, tile_arg_t* arg) {
 	kernel_arg_t* state = arg->state;
 	
 	uint32_t xoffset = 0;
-	uint32_t yoffset = task_id * arg->tile_height;	
-	uint8_t* dst_ptr = (uint8_t*)(state->dst_ptr + xoffset * state->dst_stride + yoffset * state->dst_pitch);
+	uint32_t yoffset = task_id * arg->tile_height;
 
-	float fv = yoffset * arg->deltaY;
+	uint8_t* dst_ptr = (uint8_t*)(state->dst_addr + xoffset * state->dst_stride + yoffset * state->dst_pitch);
+
+	Fixed<16> xlod(state->lod);
+
+	/*vx_printf("task_id=%d, deltaX=%f, deltaY=%f, tile_width=%d, tile_height=%d\n", 
+		task_id, arg->deltaX, arg->deltaY, arg->tile_width, arg->tile_height);*/
+
+	float fv = (yoffset + 0.5f) * arg->deltaY;
 	for (uint32_t y = 0; y < arg->tile_height; ++y) {
 		uint32_t* dst_row = (uint32_t*)dst_ptr;
-		float fu = xoffset * arg->deltaX;
+		float fu = (xoffset + 0.5f) * arg->deltaX;
 		for (uint32_t x = 0; x < arg->tile_width; ++x) {
-			int32_t u = (int32_t)(fu * (1<<20));
-			int32_t v = (int32_t)(fv * (1<<20));
+			Fixed<TEX_FXD_FRAC> xu(fu);
+			Fixed<TEX_FXD_FRAC> xv(fv);
+			uint32_t color;
 		#ifdef ENABLE_SW
-			if (state->use_sw) {
-				dst_row[x] = (state->filter == 2) ? tex3_sw(state, 0, u, v, state->lod) : tex_sw(state, 0, u, v, state->lod);
-			} else {
+			if (state->use_sw)
+				color = tex_load_sw(state, xu, xv, xlod);
+			else
 		#endif
-			dst_row[x] = (state->filter == 2) ? vx_tex3(0, u, v, state->lod) : vx_tex(0, u, v, state->lod);
-		#ifdef ENABLE_SW
-			}
-		#endif
+			color = tex_load_hw(state, xu, xv, xlod);						
+			//vx_printf("task_id=%d, x=%d, y=%d, fu=%f, fv=%f, xu=0x%x, xv=0x%x, color=0x%x\n", task_id, x, y, fu, fv, xu.data(), xv.data(), color);			
+			dst_row[x] = color;
 			fu += arg->deltaX;
 		}
 		dst_ptr += state->dst_pitch;
@@ -48,13 +67,16 @@ int main() {
 	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
 
 	// configure texture unit
-	vx_csr_write(CSR_TEX_ADDR(0),   arg->src_ptr);
-	vx_csr_write(CSR_TEX_MIPOFF(0), 0);	
-	vx_csr_write(CSR_TEX_WIDTH(0),  arg->src_logWidth);
-	vx_csr_write(CSR_TEX_HEIGHT(0), arg->src_logHeight);
-	vx_csr_write(CSR_TEX_FORMAT(0), arg->format);
-	vx_csr_write(CSR_TEX_WRAP(0),   (arg->wrap << 2) | arg->wrap);
-	vx_csr_write(CSR_TEX_FILTER(0), (arg->filter ? 1 : 0));
+	csr_write(CSR_TEX(0, TEX_STATE_WIDTH),  arg->src_logwidth);	
+	csr_write(CSR_TEX(0, TEX_STATE_HEIGHT), arg->src_logheight);
+	csr_write(CSR_TEX(0, TEX_STATE_FORMAT), arg->format);
+	csr_write(CSR_TEX(0, TEX_STATE_WRAPU),  arg->wrapu);
+	csr_write(CSR_TEX(0, TEX_STATE_WRAPV),  arg->wrapv);
+	csr_write(CSR_TEX(0, TEX_STATE_FILTER), (arg->filter ? 1 : 0));
+	csr_write(CSR_TEX(0, TEX_STATE_ADDR),   arg->src_addr);
+	static_for_t<int, 0, TEX_LOD_MAX+1>()([&](int i) {
+		csr_write(CSR_TEX(0, TEX_STATE_MIPOFF(i)), arg->mip_offs[i]);
+	});	
 
 	tile_arg_t targ;
 	targ.state       = arg;
@@ -64,4 +86,9 @@ int main() {
 	targ.deltaY      = 1.0f / arg->dst_height;
 	
 	vx_spawn_tasks(arg->num_tasks, (vx_spawn_tasks_cb)kernel_body, &targ);
+	/*for (uint32_t t=0; t < arg->num_tasks; ++t) {		
+		kernel_body(t, &targ);
+	}*/
+
+	return 0;
 }

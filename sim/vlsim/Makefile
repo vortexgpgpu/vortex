@@ -24,7 +24,6 @@ DBG_TRACE_FLAGS += -DDBG_TRACE_SCOPE
 DBG_TRACE_FLAGS += -DDBG_TRACE_TEX
 
 DBG_FLAGS += $(DBG_TRACE_FLAGS)
-DBG_FLAGS += -DDBG_CACHE_REQ_INFO
 
 SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp
 SRCS += $(DPI_DIR)/util_dpi.cpp $(DPI_DIR)/float_dpi.cpp
@@ -51,10 +50,13 @@ CXXFLAGS += $(CONFIGS)
 #THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
 #VL_FLAGS += --threads $(THREADS)
 
+# Enable VCD trace
+#VCD_TRACE = -DVCD_OUTPUT
+
 # Debugigng
 ifdef DEBUG
-	VL_FLAGS += -DVCD_OUTPUT --trace --trace-structs $(DBG_FLAGS)
-	CXXFLAGS += -g -O0 -DVCD_OUTPUT $(DBG_FLAGS)
+	VL_FLAGS += $(VCD_TRACE) --trace --trace-structs $(DBG_FLAGS)
+	CXXFLAGS += -g -O0 $(VCD_TRACE) $(DBG_FLAGS)
 else    
 	VL_FLAGS += -DNDEBUG
 	CXXFLAGS += -O2 -DNDEBUG

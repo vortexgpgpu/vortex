@@ -24,10 +24,17 @@ module VX_icache_stage #(
 
     localparam OUT_REG = 0;
 
+    reg [`DBG_CACHE_REQ_IDW-1:0] req_id;
+    wire [`DBG_CACHE_REQ_IDW-1:0] rsp_req_id;
+    wire [`NW_BITS-1:0] req_tag, rsp_tag;
+
+    `UNUSED_VAR (rsp_req_id)
+
     wire icache_req_fire = icache_req_if.valid && icache_req_if.ready;
     
-    wire [`NW_BITS-1:0] req_tag = ifetch_req_if.wid;
-    wire [`NW_BITS-1:0] rsp_tag = icache_rsp_if.tag[`NW_BITS-1:0];
+    assign req_tag    = ifetch_req_if.wid;
+    assign rsp_tag    = icache_rsp_if.tag[`NW_BITS-1:0];
+    assign rsp_req_id = icache_rsp_if.tag[`NW_BITS +: `DBG_CACHE_REQ_IDW];
 
     wire [31:0] rsp_PC;
     wire [`NUM_THREADS-1:0] rsp_tmask;
@@ -51,15 +58,20 @@ module VX_icache_stage #(
     // Icache Request
     assign icache_req_if.valid = ifetch_req_if.valid;
     assign icache_req_if.addr  = ifetch_req_if.PC[31:2];
+    assign icache_req_if.tag   = {req_id, req_tag};
+
+    always @(posedge clk) begin
+        if (reset) begin
+            req_id <= `DBG_CACHE_REQ_ID(0, 0);
+        end else begin
+            if (icache_req_fire) begin
+                req_id <= req_id + 1;
+            end
+        end
+    end
 
     // Can accept new request?
     assign ifetch_req_if.ready = icache_req_if.ready;
-
-`ifdef DBG_CACHE_REQ_INFO  
-    assign icache_req_if.tag = {ifetch_req_if.wid, ifetch_req_if.PC, req_tag};
-`else
-    assign icache_req_if.tag = req_tag;
-`endif
 
     wire [`NW_BITS-1:0] rsp_wid = rsp_tag;
 
@@ -90,11 +102,11 @@ module VX_icache_stage #(
 
 `ifdef DBG_TRACE_CORE_ICACHE
     always @(posedge clk) begin
-        if (icache_req_if.valid && icache_req_if.ready) begin
-            dpi_trace("%d: I$%0d req: wid=%0d, PC=%0h\n", $time, CORE_ID, ifetch_req_if.wid, ifetch_req_if.PC);
+        if (icache_req_fire) begin
+            dpi_trace("%d: I$%0d req: wid=%0d, PC=%0h, req_id=%0h\n", $time, CORE_ID, ifetch_req_if.wid, ifetch_req_if.PC, req_id);
         end
         if (ifetch_rsp_if.valid && ifetch_rsp_if.ready) begin
-            dpi_trace("%d: I$%0d rsp: wid=%0d, PC=%0h, data=%0h\n", $time, CORE_ID, ifetch_rsp_if.wid, ifetch_rsp_if.PC, ifetch_rsp_if.data);
+            dpi_trace("%d: I$%0d rsp: wid=%0d, PC=%0h, req_id=%0h, data=%0h\n", $time, CORE_ID, ifetch_rsp_if.wid, ifetch_rsp_if.PC, rsp_req_id, ifetch_rsp_if.data);
         end
     end
 `endif

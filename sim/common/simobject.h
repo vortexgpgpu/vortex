@@ -5,9 +5,8 @@
 #include <memory>
 #include <vector>
 #include <list>
+#include <queue>
 #include <assert.h>
-
-namespace vortex {
 
 class SimObjectBase;
 
@@ -59,32 +58,44 @@ protected:
 template <typename Pkt>
 class SimPort : public SimPortBase {
 public:
-  void send(const Pkt& pkt, uint64_t delay) const; 
+  void send(const Pkt& pkt, uint64_t delay) const;
 
-  bool read(Pkt* out) {
-    if (!valid_)
-      return false;
-    *out = data_;
-    valid_ = false;
-    return true;
+  void bind(SimPort<Pkt>* peer) {
+    this->connect(peer);
   }
+
+  void unbind() {    
+    this->disconnect();
+  }
+
+  bool empty() const {
+    return queue_.empty();
+  }
+
+  const Pkt& top() const {
+    return queue_.front();
+  }
+
+  Pkt& top() {
+    return queue_.front();
+  }
+
+  void pop() {
+    queue_.pop();
+  } 
 
 protected:
   SimPort(SimObjectBase* module)
     : SimPortBase(module)
-    , valid_(false)
   {}
 
-  void write(const Pkt& data) {
-    assert(!valid_);
-    data_  = data;
-    valid_ = true;
+  void push(const Pkt& data) {
+    queue_.push(data);
   }
 
   SimPort& operator=(const SimPort&) = delete;
 
-  Pkt data_;
-  bool valid_;
+  std::queue<Pkt> queue_;
 
   template <typename U> friend class SimPortEvent;
 };
@@ -94,15 +105,7 @@ protected:
 template <typename Pkt>
 class SlavePort : public SimPort<Pkt> {
 public:
-  SlavePort(SimObjectBase* module) : SimPort<Pkt>(module) {}
-
-  void bind(SlavePort<Pkt>* peer) {
-    this->connect(peer);
-  }
-
-  void unbind() {    
-    this->disconnect();
-  }
+  SlavePort(SimObjectBase* module) : SimPort<Pkt>(module) {}  
 
 protected:
   SlavePort& operator=(const SlavePort&) = delete;
@@ -114,18 +117,6 @@ template <typename Pkt>
 class MasterPort : public SimPort<Pkt> {
 public:
   MasterPort(SimObjectBase* module) : SimPort<Pkt>(module) {}
-
-  void bind(SlavePort<Pkt>* peer) {
-    this->connect(peer);
-  }
-
-  void bind(MasterPort<Pkt>* peer) {
-    this->connect(peer);
-  }
-
-  void unbind() {    
-    this->disconnect();
-  }
 
 protected:
   MasterPort& operator=(const MasterPort&) = delete;
@@ -194,7 +185,7 @@ public:
   {}
   
   void fire() const override {
-    const_cast<SimPort<Pkt>*>(port_)->write(pkt_);
+    const_cast<SimPort<Pkt>*>(port_)->push(pkt_);
   }
 
 private:  
@@ -382,6 +373,4 @@ template <typename T, typename Pkt>
 void SimObjectBase::schedule(T *obj, void (T::*entry)(const Pkt&), const Pkt& pkt, uint64_t delay) {
   auto callback = std::bind(entry, obj, std::placeholders::_1);
   SimPlatform::instance().schedule(callback, pkt, delay);
-}
-
 }

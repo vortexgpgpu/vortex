@@ -3,9 +3,8 @@
 
 `include "VX_platform.vh"
 
-`ifdef DBG_CACHE_REQ_INFO
-`include "VX_define.vh"
-`endif
+// cache request identifier
+`define DBG_CACHE_REQ_IDW       48
 
 `define REQS_BITS               `LOG2UP(NUM_REQS)
 
@@ -52,7 +51,7 @@
 
 `define LINE_TAG_ADDR(x)        x[`LINE_ADDR_WIDTH-1 : `LINE_SELECT_BITS]
 
-`define CACHE_REQ_INFO_RNG      CORE_TAG_WIDTH-1 : (CORE_TAG_WIDTH-`DBG_CACHE_REQ_MDATAW)
+`define CACHE_REQ_ID_RNG        CORE_TAG_WIDTH-1 : (CORE_TAG_WIDTH-`DBG_CACHE_REQ_IDW)
 
 ///////////////////////////////////////////////////////////////////////////////
 

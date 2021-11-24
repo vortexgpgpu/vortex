@@ -116,9 +116,11 @@ public:
     }
 
     int start() {   
+        // ensure prior run completed
         if (future_.valid()) {
-            future_.wait(); // ensure prior run completed
+            future_.wait();
         }
+        // start new run
         simulator_.attach_ram(&ram_);
         future_ = std::async(std::launch::async, [&]{             
             simulator_.reset();        
@@ -135,7 +137,8 @@ public:
         uint64_t timeout_sec = timeout / 1000;
         std::chrono::seconds wait_time(1);
         for (;;) {
-            auto status = future_.wait_for(wait_time); // wait for 1 sec and check status
+            // wait for 1 sec and check status
+            auto status = future_.wait_for(wait_time);
             if (status == std::future_status::ready 
              || 0 == timeout_sec--)
                 break;

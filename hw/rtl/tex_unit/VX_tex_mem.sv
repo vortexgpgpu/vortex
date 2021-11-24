@@ -15,7 +15,7 @@ module VX_tex_mem #(
     input wire                          req_valid,
     input wire [NUM_REQS-1:0]           req_tmask,
     input wire [`TEX_FILTER_BITS-1:0]   req_filter,
-    input wire [`TEX_STRIDE_BITS-1:0]   req_stride,
+    input wire [`TEX_LGSTRIDE_BITS-1:0] req_lgstride,
     input wire [NUM_REQS-1:0][3:0][31:0] req_addr,
     input wire [REQ_INFOW-1:0]          req_info,
     output wire                         req_ready,
@@ -63,23 +63,23 @@ module VX_tex_mem #(
     wire [NUM_REQS-1:0]             q_req_tmask;
     wire [`TEX_FILTER_BITS-1:0]     q_req_filter;
     wire [REQ_INFOW-1:0]            q_req_info;
-    wire [`TEX_STRIDE_BITS-1:0]     q_req_stride;
+    wire [`TEX_LGSTRIDE_BITS-1:0]   q_req_lgstride;
     wire [3:0][NUM_REQS-1:0][1:0]   q_align_offs;
     wire [3:0]                      q_dup_reqs;
 
     assign reqq_push = req_valid && req_ready;
     
     VX_fifo_queue #(
-        .DATAW   ((NUM_REQS * 4 * 30) + NUM_REQS + REQ_INFOW + `TEX_FILTER_BITS + `TEX_STRIDE_BITS + (4 * NUM_REQS * 2) + 4), 
-        .SIZE    (`LSUQ_SIZE),
+        .DATAW   ((NUM_REQS * 4 * 30) + NUM_REQS + REQ_INFOW + `TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + (4 * NUM_REQS * 2) + 4), 
+        .SIZE    (`TEXQ_SIZE),
         .OUT_REG (1)
     ) req_queue (
         .clk        (clk),
         .reset      (reset),
         .push       (reqq_push),
         .pop        (reqq_pop),
-        .data_in    ({req_addr_w, req_tmask,   req_info,   req_filter,   req_stride,   align_offs,   dup_reqs}),                
-        .data_out   ({q_req_addr, q_req_tmask, q_req_info, q_req_filter, q_req_stride, q_align_offs, q_dup_reqs}),
+        .data_in    ({req_addr_w, req_tmask,   req_info,   req_filter,   req_lgstride,   align_offs,   dup_reqs}),                
+        .data_out   ({q_req_addr, q_req_tmask, q_req_info, q_req_filter, q_req_lgstride, q_align_offs, q_dup_reqs}),
         .empty      (reqq_empty),
         .full       (reqq_full),
         `UNUSED_PIN (alm_full),
@@ -96,8 +96,12 @@ module VX_tex_mem #(
     wire sent_all_ready, last_texel_sent;
     wire req_texel_dup;
     wire [NUM_REQS-1:0][29:0] req_texel_addr;
+    reg [`DBG_CACHE_REQ_IDW-1:0] req_id;
+    wire [`DBG_CACHE_REQ_IDW-1:0] rsp_req_id;
     reg [1:0] req_texel_idx;
     reg req_texels_done;
+    
+    `UNUSED_VAR (rsp_req_id)
 
     always @(posedge clk) begin
         if (reset || last_texel_sent) begin
@@ -146,14 +150,19 @@ module VX_tex_mem #(
     assign dcache_req_if.valid  = {NUM_REQS{req_texel_valid}} & q_req_tmask & req_dup_mask & ~texel_sent_mask;
     assign dcache_req_if.rw     = {NUM_REQS{1'b0}};
     assign dcache_req_if.addr   = req_texel_addr;
-    assign dcache_req_if.byteen = {NUM_REQS{4'b1111}};
+    assign dcache_req_if.byteen = {NUM_REQS{4'b0}};
     assign dcache_req_if.data   = 'x;
+    assign dcache_req_if.tag    = {NUM_REQS{req_id, `LSU_TAG_ID_BITS'(req_texel_idx), `CACHE_ADDR_TYPE_BITS'(0)}};
 
-`ifdef DBG_CACHE_REQ_INFO
-    assign dcache_req_if.tag = {NUM_REQS{q_req_info[`DBG_CACHE_REQ_MDATAW-1:0], req_texel_idx}};
-`else
-    assign dcache_req_if.tag = {NUM_REQS{req_texel_idx}};
-`endif
+    always @(posedge clk) begin
+        if (reset) begin
+            req_id <= `DBG_CACHE_REQ_ID(2, 0);
+        end else begin
+            if (dcache_req_fire_any) begin
+                req_id <= req_id + 1;
+            end
+        end
+    end
 
     // Dcache Response
 
@@ -162,14 +171,17 @@ module VX_tex_mem #(
     reg [NUM_REQS-1:0][31:0] rsp_data_qual;
     reg [RSP_CTR_W-1:0] rsp_rem_ctr, rsp_rem_ctr_init;
     wire [RSP_CTR_W-1:0] rsp_rem_ctr_n;
+    wire [NUM_REQS-1:0][1:0] rsp_align_offs;
     wire dcache_rsp_fire;
     wire [1:0] rsp_texel_idx;
     wire rsp_texel_dup;
-
-    assign rsp_texel_idx = dcache_rsp_if.tag[1:0];
+    
+    assign rsp_texel_idx = dcache_rsp_if.tag[`CACHE_ADDR_TYPE_BITS +: 2];
+    assign rsp_req_id = dcache_rsp_if.tag[`CACHE_ADDR_TYPE_BITS + `LSU_TAG_ID_BITS +: `DBG_CACHE_REQ_IDW];
     `UNUSED_VAR (dcache_rsp_if.tag)
 
     assign rsp_texel_dup = q_dup_reqs[rsp_texel_idx];
+    assign rsp_align_offs = q_align_offs[rsp_texel_idx];
 
     assign dcache_rsp_fire = dcache_rsp_if.valid && dcache_rsp_if.ready;
 
@@ -180,12 +192,12 @@ module VX_tex_mem #(
         reg [31:0] rsp_data_shifted;
         always @(*) begin
             rsp_data_shifted[31:16] = src_data[31:16];
-            rsp_data_shifted[15:0]  = q_align_offs[rsp_texel_idx][i][1] ? src_data[31:16] : src_data[15:0];
-            rsp_data_shifted[7:0]   = q_align_offs[rsp_texel_idx][i][0] ? rsp_data_shifted[15:8] : rsp_data_shifted[7:0];
+            rsp_data_shifted[15:0]  = rsp_align_offs[i][1] ? src_data[31:16] : src_data[15:0];
+            rsp_data_shifted[7:0]   = rsp_align_offs[i][0] ? rsp_data_shifted[15:8] : rsp_data_shifted[7:0];
         end
 
         always @(*) begin
-            case (q_req_stride)
+            case (q_req_lgstride)
             0: rsp_data_qual[i] = 32'(rsp_data_shifted[7:0]);
             1: rsp_data_qual[i] = 32'(rsp_data_shifted[15:0]);
             default: rsp_data_qual[i] = rsp_data_shifted;     
@@ -266,20 +278,20 @@ module VX_tex_mem #(
 
     always @(posedge clk) begin        
         if (dcache_req_fire_any) begin
-            dpi_trace("%d: core%0d-tex-cache-req: wid=%0d, PC=%0h, tmask=%b, tag=%0h, addr=", 
-                    $time, CORE_ID, q_req_wid, q_req_PC, dcache_req_fire, req_texel_idx);
+            dpi_trace("%d: core%0d-tex-cache-req: wid=%0d, PC=%0h, tmask=%b, req_id=%0h, tag=%0h, addr=", 
+                    $time, CORE_ID, q_req_wid, q_req_PC, dcache_req_fire, req_id, req_texel_idx);
             `TRACE_ARRAY1D(req_texel_addr, NUM_REQS);
             dpi_trace(", is_dup=%b\n", req_texel_dup);
         end
         if (dcache_rsp_fire) begin
-            dpi_trace("%d: core%0d-tex-cache-rsp: wid=%0d, PC=%0h, tmask=%b, tag=%0h, data=", 
-                    $time, CORE_ID, q_req_wid, q_req_PC, dcache_rsp_if.tmask, rsp_texel_idx);
+            dpi_trace("%d: core%0d-tex-cache-rsp: wid=%0d, PC=%0h, tmask=%b, req_id=%0h, tag=%0h, data=", 
+                    $time, CORE_ID, q_req_wid, q_req_PC, dcache_rsp_if.tmask, rsp_req_id, rsp_texel_idx);
             `TRACE_ARRAY1D(dcache_rsp_if.data, NUM_REQS);
             dpi_trace("\n");
         end
         if (req_valid && req_ready) begin
-            dpi_trace("%d: core%0d-tex-mem-req: wid=%0d, PC=%0h, tmask=%b, filter=%0d, stride=%0d, addr=", 
-                    $time, CORE_ID, req_wid, req_PC, req_tmask, req_filter, req_stride);
+            dpi_trace("%d: core%0d-tex-mem-req: wid=%0d, PC=%0h, tmask=%b, filter=%0d, lgstride=%0d, addr=", 
+                    $time, CORE_ID, req_wid, req_PC, req_tmask, req_filter, req_lgstride);
             `TRACE_ARRAY2D(req_addr, 4, NUM_REQS);
             dpi_trace("\n");
         end

@@ -580,8 +580,7 @@ module VX_cache #(
             .MSHR_SIZE          (MSHR_SIZE),
             .MREQ_SIZE          (MREQ_SIZE),
             .WRITE_ENABLE       (WRITE_ENABLE),
-            .CORE_TAG_WIDTH     (CORE_TAG_X_WIDTH),                
-            .CORE_TAG_ID_BITS   (CORE_TAG_ID_X_BITS),
+            .CORE_TAG_WIDTH     (CORE_TAG_X_WIDTH),
             .BANK_ADDR_OFFSET   (BANK_ADDR_OFFSET)
         ) bank (
             `SCOPE_BIND_VX_cache_bank(i)

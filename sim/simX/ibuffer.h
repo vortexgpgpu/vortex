@@ -7,7 +7,7 @@ namespace vortex {
 
 class IBuffer {
 private:
-    std::queue<pipeline_state_t> entries_;
+    std::queue<pipeline_trace_t*> entries_;
     uint32_t capacity_;
 
 public:    
@@ -23,12 +23,12 @@ public:
         return (entries_.size() == capacity_);
     }
 
-    const pipeline_state_t& top() const {
+    pipeline_trace_t* top() const {
         return entries_.front();
     }
 
-    void push(const pipeline_state_t& state) {
-        entries_.emplace(state);
+    void push(pipeline_trace_t* trace) {
+        entries_.emplace(trace);
     }
 
     void pop() {

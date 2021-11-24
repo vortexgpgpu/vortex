@@ -214,9 +214,9 @@ module VX_decode  #(
                     case (u_12)
                         12'h000: op_type = `INST_OP_BITS'(`INST_BR_ECALL);
                         12'h001: op_type = `INST_OP_BITS'(`INST_BR_EBREAK);             
+                        12'h002: op_type = `INST_OP_BITS'(`INST_BR_URET);                        
+                        12'h102: op_type = `INST_OP_BITS'(`INST_BR_SRET);                        
                         12'h302: op_type = `INST_OP_BITS'(`INST_BR_MRET);
-                        12'h102: op_type = `INST_OP_BITS'(`INST_BR_SRET);
-                        12'h7B2: op_type = `INST_OP_BITS'(`INST_BR_DRET);
                         default:;
                     endcase
                     op_mod  = 1;
@@ -347,7 +347,7 @@ module VX_decode  #(
                 endcase
             end
         `endif
-            `INST_GPU: begin 
+            `INST_GPGPU: begin 
                 ex_type = `EX_GPU;
                 case (func3)
                     3'h0: begin
@@ -374,9 +374,21 @@ module VX_decode  #(
                         is_wstall = 1;
                         `USED_IREG (rs1);
                         `USED_IREG (rs2);
-                    end
-                `ifdef EXT_TEX_ENABLE
+                    end                
                     3'h5: begin
+                        ex_type = `EX_LSU;
+                        op_type = `INST_OP_BITS'(`INST_LSU_LW);
+                        op_mod  = `INST_MOD_BITS'(2);
+                        `USED_IREG (rs1);
+                    end
+                    default:;
+                endcase
+            end
+            `INST_GPU: begin                
+                case (func3)
+                `ifdef EXT_TEX_ENABLE
+                    3'h0: begin
+                        ex_type = `EX_GPU;
                         op_type = `INST_OP_BITS'(`INST_GPU_TEX);
                         op_mod  = `INST_MOD_BITS'(func2);
                         use_rd  = 1;       
@@ -386,12 +398,6 @@ module VX_decode  #(
                         `USED_IREG (rs3);
                     end
                 `endif
-                    3'h6: begin
-                        ex_type = `EX_LSU;
-                        op_type = `INST_OP_BITS'(`INST_LSU_LW);
-                        op_mod  = `INST_MOD_BITS'(2);
-                        `USED_IREG (rs1);
-                    end
                     default:;
                 endcase
             end

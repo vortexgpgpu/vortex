@@ -25,10 +25,11 @@ const char* kernel_file = "kernel.bin";
 const char* input_file  = "palette64.png";
 const char* output_file = "output.png";
 int wrap    = 0;
-int filter  = 0;
+int filter  = 0;    // 0-> point, 1->bilinear, 2->trilinear
 float scale = 1.0f;
 int format  = 0;
 bool use_sw = false;
+float lod   = 1.0f;  // >= 1.0f 
 ePixelFormat eformat = FORMAT_A8R8G8B8;
 
 vx_device_h device = nullptr;
@@ -36,7 +37,7 @@ vx_buffer_h buffer = nullptr;
 
 static void show_usage() {
    std::cout << "Vortex Texture Test." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-s scale] [-w wrap] [-f format] [-g filter] [-z no_hw] [-h: help]" << std::endl;
+   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-s scale] [-w wrap] [-f format] [-g filter] [-l lod] [-z no_hw] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
@@ -54,6 +55,9 @@ static void parse_args(int argc, char **argv) {
       break;
     case 'w':
       wrap = std::atoi(optarg);
+      break;
+    case 'l':
+      lod = std::stof(optarg, NULL);
       break;
     case 'z':
       use_sw = true;
@@ -118,7 +122,7 @@ int run_test(const kernel_arg_t& kernel_arg,
 
   // download destination buffer
   std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(buffer, kernel_arg.dst_ptr, buf_size, 0));
+  RT_CHECK(vx_copy_from_dev(buffer, kernel_arg.dst_addr, buf_size, 0));
 
   std::vector<uint8_t> dst_pixels(buf_size);
   auto buf_ptr = (uint8_t*)vx_host_ptr(buffer);
@@ -137,25 +141,39 @@ int run_test(const kernel_arg_t& kernel_arg,
 int main(int argc, char *argv[]) {
   kernel_arg_t kernel_arg;  
   std::vector<uint8_t> src_pixels;
+  std::vector<uint32_t> mip_offsets;
   uint32_t src_width;
   uint32_t src_height;
   
   // parse command arguments
   parse_args(argc, argv);
 
-  RT_CHECK(LoadImage(input_file, eformat, src_pixels, &src_width, &src_height));
+  {
+    std::vector<uint8_t> staging;  
+    RT_CHECK(LoadImage(input_file, eformat, staging, &src_width, &src_height));  
+    
+    RT_CHECK(GenerateMipmaps(src_pixels, mip_offsets, staging, eformat, src_width, src_height));
+
+    //uint32_t src_bpp = Format::GetInfo(eformat).BytePerPixel;  
+    //dump_image(src_pixels, src_pixels.size() / src_bpp, 1, src_bpp);
+  }
 
   // check power of two support
-  if (!ISPOW2(src_width) || !ISPOW2(src_height)) {
+  if (!ispow2(src_width) || !ispow2(src_height)) {
     std::cout << "Error: only power of two textures supported: width=" << src_width << ", heigth=" << src_height << std::endl;
     return -1;
   }
 
-  uint32_t src_bpp = Format::GetInfo(eformat).BytePerPixel;
-  
-  //dump_image(src_pixels, src_width, src_height, src_bpp);
+  uint32_t src_logwidth  = log2ceil(src_width);
+  uint32_t src_logheight = log2ceil(src_height);
 
-  uint32_t src_bufsize = src_bpp * src_width * src_height;
+  uint32_t src_max_lod = std::max(src_logwidth, src_logheight);
+  if (lod > src_max_lod) {
+    std::cout << "Error: out-of-bound level-of-detail: lod=" << lod << ", source image=" << src_max_lod << std::endl;
+    return -1;
+  }
+
+  uint32_t src_bufsize = src_pixels.size();
 
   uint32_t dst_width   = (uint32_t)(src_width * scale);
   uint32_t dst_height  = (uint32_t)(src_height * scale);
@@ -183,7 +201,7 @@ int main(int argc, char *argv[]) {
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;  
-  size_t src_addr, dst_addr;
+  uint64_t src_addr, dst_addr;
   RT_CHECK(vx_alloc_dev_mem(device, src_bufsize, &src_addr));
   RT_CHECK(vx_alloc_dev_mem(device, dst_bufsize, &dst_addr));
 
@@ -192,32 +210,37 @@ int main(int argc, char *argv[]) {
 
   // allocate staging shared memory  
   std::cout << "allocate shared memory" << std::endl;    
-  uint32_t alloc_size = std::max<uint32_t>(sizeof(kernel_arg_t), std::max<uint32_t>(src_bufsize, dst_bufsize));
+  uint32_t alloc_size = std::max<uint32_t>(sizeof(kernel_arg_t), 
+                            std::max<uint32_t>(src_bufsize, dst_bufsize));
   RT_CHECK(vx_alloc_shared_mem(device, alloc_size, &buffer));
   
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
   {
+    kernel_arg.use_sw     = use_sw;
     kernel_arg.num_tasks  = std::min<uint32_t>(num_tasks, dst_height);
     kernel_arg.format     = format;
     kernel_arg.filter     = filter;
-    kernel_arg.wrap       = wrap;
-    kernel_arg.use_sw     = use_sw;
-    kernel_arg.lod        = 0x0;
+    kernel_arg.wrapu      = wrap;
+    kernel_arg.wrapv      = wrap;    
     
-    kernel_arg.src_logWidth  = (uint32_t)std::log2(src_width);
-    kernel_arg.src_logHeight = (uint32_t)std::log2(src_height);
-    kernel_arg.src_stride = src_bpp;
-    kernel_arg.src_pitch  = src_bpp * src_width;
-    kernel_arg.src_ptr    = src_addr;
+    kernel_arg.src_logwidth  = src_logwidth;
+    kernel_arg.src_logheight = src_logheight;
+    kernel_arg.src_addr      = src_addr;
+    kernel_arg.lod           = lod;
+
+    for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
+      assert(i < TEX_LOD_MAX);
+      kernel_arg.mip_offs[i] = mip_offsets.at(i); 
+    }
 
     kernel_arg.dst_width  = dst_width;
     kernel_arg.dst_height = dst_height;
     kernel_arg.dst_stride = dst_bpp;
     kernel_arg.dst_pitch  = dst_bpp * dst_width;    
-    kernel_arg.dst_ptr    = dst_addr;
+    kernel_arg.dst_addr   = dst_addr;
 
-    auto buf_ptr = (int*)vx_host_ptr(buffer);
+    auto buf_ptr = (uint8_t*)vx_host_ptr(buffer);
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
     RT_CHECK(vx_copy_to_dev(buffer, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
   }
@@ -225,21 +248,21 @@ int main(int argc, char *argv[]) {
   // upload source buffer
   std::cout << "upload source buffer" << std::endl;      
   {    
-    auto buf_ptr = (int8_t*)vx_host_ptr(buffer);
+    auto buf_ptr = (uint8_t*)vx_host_ptr(buffer);
     for (uint32_t i = 0; i < src_bufsize; ++i) {
       buf_ptr[i] = src_pixels[i];
     }      
-    RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.src_ptr, src_bufsize, 0));
+    RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.src_addr, src_bufsize, 0));
   }
 
   // clear destination buffer
   std::cout << "clear destination buffer" << std::endl;      
   {    
-    auto buf_ptr = (int32_t*)vx_host_ptr(buffer);
+    auto buf_ptr = (uint32_t*)vx_host_ptr(buffer);
     for (uint32_t i = 0; i < (dst_bufsize/4); ++i) {
       buf_ptr[i] = 0xdeadbeef;
     }    
-    RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.dst_ptr, dst_bufsize, 0));  
+    RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.dst_addr, dst_bufsize, 0));  
   }
 
   // run tests
