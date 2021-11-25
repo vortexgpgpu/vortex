@@ -10,6 +10,7 @@ typedef struct {
  	uint32_t tile_height;
   	float deltaX;
   	float deltaY;
+	float minification;
 } tile_arg_t;
 
 template <typename T, T Start, T End>
@@ -35,10 +36,10 @@ void kernel_body(int task_id, tile_arg_t* arg) {
 
 	uint8_t* dst_ptr = (uint8_t*)(state->dst_addr + xoffset * state->dst_stride + yoffset * state->dst_pitch);
 
-	Fixed<16> xlod(state->lod);
+	Fixed<16> xj(arg->minification);
 
-	/*vx_printf("task_id=%d, deltaX=%f, deltaY=%f, tile_width=%d, tile_height=%d\n", 
-		task_id, arg->deltaX, arg->deltaY, arg->tile_width, arg->tile_height);*/
+	/*vx_printf("task_id=%d, tile_width=%d, tile_height=%d, deltaX=%f, deltaY=%f, minification=%f\n", 
+	 	task_id, arg->tile_width, arg->tile_height, arg->deltaX, arg->deltaY, arg->minification);*/
 
 	float fv = (yoffset + 0.5f) * arg->deltaY;
 	for (uint32_t y = 0; y < arg->tile_height; ++y) {
@@ -47,13 +48,7 @@ void kernel_body(int task_id, tile_arg_t* arg) {
 		for (uint32_t x = 0; x < arg->tile_width; ++x) {
 			Fixed<TEX_FXD_FRAC> xu(fu);
 			Fixed<TEX_FXD_FRAC> xv(fv);
-			uint32_t color;
-		#ifdef ENABLE_SW
-			if (state->use_sw)
-				color = tex_load_sw(state, xu, xv, xlod);
-			else
-		#endif
-			color = tex_load_hw(state, xu, xv, xlod);						
+			uint32_t color = tex_load(state, xu, xv, xj);
 			//vx_printf("task_id=%d, x=%d, y=%d, fu=%f, fv=%f, xu=0x%x, xv=0x%x, color=0x%x\n", task_id, x, y, fu, fv, xu.data(), xv.data(), color);			
 			dst_row[x] = color;
 			fu += arg->deltaX;
@@ -76,7 +71,7 @@ int main() {
 	csr_write(CSR_TEX(0, TEX_STATE_ADDR),   arg->src_addr);
 	static_for_t<int, 0, TEX_LOD_MAX+1>()([&](int i) {
 		csr_write(CSR_TEX(0, TEX_STATE_MIPOFF(i)), arg->mip_offs[i]);
-	});	
+	});
 
 	tile_arg_t targ;
 	targ.state       = arg;
@@ -84,6 +79,14 @@ int main() {
 	targ.tile_height = (arg->dst_height + arg->num_tasks - 1) / arg->num_tasks;    
 	targ.deltaX      = 1.0f / arg->dst_width;
 	targ.deltaY      = 1.0f / arg->dst_height;
+
+	{
+		uint32_t src_width  = (1 << arg->src_logwidth);
+		uint32_t src_height = (1 << arg->src_logheight);
+		float width_ratio   = float(src_width) / arg->dst_width;
+		float height_ratio  = float(src_height) / arg->dst_height;
+		targ.minification   = std::max<float>(width_ratio, height_ratio);
+	}
 	
 	vx_spawn_tasks(arg->num_tasks, (vx_spawn_tasks_cb)kernel_body, &targ);
 	/*for (uint32_t t=0; t < arg->num_tasks; ++t) {		

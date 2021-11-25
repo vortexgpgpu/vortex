@@ -1,9 +1,10 @@
 #pragma once
 
 #include <cstdint>
-#include <cstdlib>
 #include <fixed.h>
 #include <bitmanip.h>
+
+using namespace cocogfx;
 
 enum class WrapMode {
   Clamp,
@@ -12,10 +13,11 @@ enum class WrapMode {
 };
 
 enum class TexFormat {
-  R8G8B8A8,
-  R5G6B5,  
-  R4G4B4A4,
-  L8A8,
+  A8R8G8B8,
+  R5G6B5,
+  A1R5G5B5,
+  A4R4G4B4,
+  A8L8,
   L8,  
   A8,  
 };
@@ -34,11 +36,12 @@ T Clamp(Fixed<F,T> fx, WrapMode mode) {
 
 inline uint32_t Stride(TexFormat format) {
   switch (format) {
-  case TexFormat::R8G8B8A8: 
+  case TexFormat::A8R8G8B8: 
     return 4;
   case TexFormat::R5G6B5:
-  case TexFormat::R4G4B4A4:
-  case TexFormat::L8A8:
+  case TexFormat::A1R5G5B5:
+  case TexFormat::A4R4G4B4:
+  case TexFormat::A8L8:
     return 2;
   case TexFormat::L8:
   case TexFormat::A8:
@@ -53,61 +56,68 @@ inline void Unpack8888(TexFormat format,
                        uint32_t texel, 
                        uint32_t* lo, 
                        uint32_t* hi) {
+  int r, g, b, a;
   switch (format) {
-  case TexFormat::R8G8B8A8: 
-    *lo = texel & 0x00ff00ff;
-    *hi = (texel >> 8) & 0x00ff00ff;
+  case TexFormat::A8R8G8B8:    
+    r = (texel >> 16) & 0xff;
+    g = (texel >> 8) & 0xff;
+    b = texel & 0xff;
+    a = texel >> 24;
     break;
-  case TexFormat::R5G6B5:
-  case TexFormat::R4G4B4A4:
-    *lo = texel;
-    *hi= 0;
+  case TexFormat::R5G6B5: 
+    r = ((texel >> 11) << 3) | (texel >> 13);    
+    g = ((texel >> 3) & 0xfc) | ((texel >> 9) & 0x3);
+    b = ((texel & 0x1f) << 3) | ((texel & 0x1c) >> 2);    
+    a = 0xff;
     break;
-  case TexFormat::L8A8:
-    *lo = (texel | (texel << 8)) & 0x00ff00ff;
-    *hi = 0;
+  case TexFormat::A1R5G5B5:         
+    r = ((texel >> 7) & 0xf8) | ((texel << 1) >> 13);
+    g = ((texel >> 2) & 0xf8) | ((texel >> 7) & 7);
+    b = ((texel & 0x1f) << 3) | ((texel & 0x1c) >> 2);
+    a = 0xff * (texel >> 15);
+    break;
+  case TexFormat::A4R4G4B4:   
+    r = ((texel >> 4) & 0xf0) | ((texel >> 8) & 0x0f);
+    g = ((texel & 0xf0) >> 0) | ((texel & 0xf0) >> 4);
+    b = ((texel & 0x0f) << 4) | ((texel & 0x0f) >> 0);
+    a = ((texel >> 8) & 0xf0) | (texel >> 12);
+    break;
+  case TexFormat::A8L8:
+    r = texel & 0xff;
+    g = r;
+    b = r;
+    a = texel >> 8;
     break;
   case TexFormat::L8:
-    *lo = (texel | (texel << 16)) & 0x07e0f81f;
-    *hi = 0;
+    r = texel & 0xff;
+    g = r;
+    b = r;
+    a = 0xff;
     break;
   case TexFormat::A8:
-    *lo = (texel | (texel << 12)) & 0x0f0f0f0f;
-    *hi = 0;
+    r = 0xff;
+    g = 0xff;
+    b = 0xff;
+    a = texel & 0xff;
     break;
   default: 
     std::abort();
-  }
+  } 
+  *lo = (r << 16) + b;
+  *hi = (a << 16) + g;
 }
 
-inline uint32_t Pack8888(TexFormat format, uint32_t lo, uint32_t hi) {
-  switch (format) {
-  case TexFormat::R8G8B8A8: 
-    return (hi << 8) | lo;
-  case TexFormat::R5G6B5:
-  case TexFormat::R4G4B4A4:
-    return lo;
-  case TexFormat::L8A8:
-    return (lo | (lo >> 8)) & 0xffff;
-  case TexFormat::L8:
-    return (lo | (lo >> 16)) & 0xffff;
-  case TexFormat::A8:
-    return (lo | (lo >> 12)) & 0xffff;  
-  default: 
-    std::abort();
-    return 0;
-  }
+inline void Unpack8888(uint32_t texel, uint32_t* lo, uint32_t* hi) {
+  *lo = texel & 0x00ff00ff;
+  *hi = (texel >> 8) & 0x00ff00ff;
 }
 
-inline void Lerp8888(uint32_t al, 
-                     uint32_t ah, 
-                     uint32_t bl, 
-                     uint32_t bh, 
-                     uint32_t frac, 
-                     uint32_t* lo, 
-                     uint32_t* hi) {
-    *lo = (al + (((bl - al) * frac) >> 8)) & 0x00ff00ff;
-    *hi = (ah + (((bh - ah) * frac) >> 8)) & 0x00ff00ff;
+inline uint32_t Pack8888(uint32_t lo, uint32_t hi) {
+  return (hi << 8) | lo;
+}
+
+inline uint32_t Lerp8888(uint32_t a, uint32_t b, uint32_t f) {
+  return (a + (((b - a) * f) >> 8)) & 0x00ff00ff;
 }
 
 template <uint32_t F, typename T = int32_t>
@@ -185,25 +195,28 @@ inline uint32_t TexFilterLinear(
 ) {
   uint32_t c01l, c01h;
   {
-    uint32_t c0l, c0h;  
-    uint32_t c1l, c1h;
+    uint32_t c0l, c0h, c1l, c1h;
     Unpack8888(format, texel00, &c0l, &c0h);
     Unpack8888(format, texel01, &c1l, &c1h);
-    Lerp8888(c0l, c0h, c1l, c1h, alpha, &c01l, &c01h);
+    c01l = Lerp8888(c0l, c1l, alpha);
+    c01h = Lerp8888(c0h, c1h, alpha);
   }
 
   uint32_t c23l, c23h;
   {
-    uint32_t c2l, c2h;  
-    uint32_t c3l, c3h;
+    uint32_t c2l, c2h, c3l, c3h;
     Unpack8888(format, texel10, &c2l, &c2h);
     Unpack8888(format, texel11, &c3l, &c3h);
-    Lerp8888(c2l, c2h, c3l, c3h, alpha, &c23l, &c23h);
+    c23l = Lerp8888(c2l, c3l, alpha);
+    c23h = Lerp8888(c2h, c3h, alpha);
   }
 
-  uint32_t cl, ch;
-  Lerp8888(c01l, c01h, c23l, c23h, beta, &cl, &ch);
-  uint32_t color = Pack8888(TexFormat::R8G8B8A8, cl, ch);
+  uint32_t color;
+  {
+    uint32_t cl = Lerp8888(c01l, c23l, beta);
+    uint32_t ch = Lerp8888(c01h, c23h, beta);
+    color = Pack8888(cl, ch);
+  }
 
   //printf("*** texel00=0x%x, texel01=0x%x, texel10=0x%x, texel11=0x%x, color=0x%x\n", texel00, texel01, texel10, texel11, color);
 
@@ -211,9 +224,12 @@ inline uint32_t TexFilterLinear(
 }
 
 inline uint32_t TexFilterPoint(TexFormat format, uint32_t texel) {
-  uint32_t cl, ch;  
-  Unpack8888(format, texel, &cl, &ch);
-  uint32_t color = Pack8888(TexFormat::R8G8B8A8, cl, ch);
+  uint32_t color;
+  {
+    uint32_t cl, ch;
+    Unpack8888(format, texel, &cl, &ch);
+    color = Pack8888(cl, ch);
+  }
 
   //printf("*** texel=0x%x, color=0x%x\n", texel, color);
 

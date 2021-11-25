@@ -1,12 +1,13 @@
-RTL_DIR=../../hw/rtl
-DPI_DIR=../../hw/dpi
+RTL_DIR = ../../hw/rtl
+DPI_DIR = ../../hw/dpi
+THIRD_PARTY_DIR = ../../third_party
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I../../../hw -I../../common
-CXXFLAGS += -I../../common/softfloat/source/include
+CXXFLAGS += -I../$(THIRD_PARTY_DIR)/softfloat/source/include
 
-LDFLAGS += ../../common/softfloat/build/Linux-x86_64-GCC/softfloat.a
+LDFLAGS += ../$(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 
 # control RTL debug tracing states
 DBG_TRACE_FLAGS += -DDBG_TRACE_PIPELINE  
@@ -24,7 +25,7 @@ DBG_TRACE_FLAGS += -DDBG_TRACE_TEX
 
 DBG_FLAGS += $(DBG_TRACE_FLAGS)
 
-FPU_INCLUDE = -I$(RTL_DIR)/fp_cores -I$(RTL_DIR)/fp_cores/fpnew/src/common_cells/include -I$(RTL_DIR)/fp_cores/fpnew/src/common_cells/src -I$(RTL_DIR)/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(RTL_DIR)/fp_cores/fpnew/src
+FPU_INCLUDE = -I$(RTL_DIR)/fp_cores -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src -I$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/fpnew/src
 TEX_INCLUDE = -I$(RTL_DIR)/tex_unit
 RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache -I$(RTL_DIR)/simulate $(FPU_INCLUDE) $(TEX_INCLUDE)
 
@@ -90,7 +91,7 @@ $(PROJECT): $(SRCS)
 	
 static: $(SRCS)
 	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)'
-	$(AR) rcs lib$(PROJECT).a obj_dir/*.o ../common/softfloat/build/Linux-x86_64-GCC/*.o
+	$(AR) rcs lib$(PROJECT).a obj_dir/*.o $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/*.o
 
 clean-static:
 	rm -rf lib$(PROJECT).a obj_dir

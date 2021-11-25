@@ -4,6 +4,7 @@
 #include <VX_config.h>
 
 using namespace vortex;
+using namespace cocogfx;
 
 enum class FilterMode {
   Point,
