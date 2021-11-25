@@ -9,6 +9,8 @@
 #include "common.h"
 #include "utils.h"
 
+using namespace cocogfx;
+
 #define RT_CHECK(_expr)                                         \
    do {                                                         \
      int _ret = _expr;                                          \
@@ -29,7 +31,6 @@ int filter  = 0;    // 0-> point, 1->bilinear, 2->trilinear
 float scale = 1.0f;
 int format  = 0;
 bool use_sw = false;
-float lod   = 1.0f;  // >= 1.0f 
 ePixelFormat eformat = FORMAT_A8R8G8B8;
 
 vx_device_h device = nullptr;
@@ -37,27 +38,24 @@ vx_buffer_h buffer = nullptr;
 
 static void show_usage() {
    std::cout << "Vortex Texture Test." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-s scale] [-w wrap] [-f format] [-g filter] [-l lod] [-z no_hw] [-h: help]" << std::endl;
+   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-s scale] [-w wrap] [-f format] [-g filter] [-z no_hw] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "zi:o:k:w:f:g:h?")) != -1) {
+  while ((c = getopt(argc, argv, "zi:o:k:w:f:g:s:h?")) != -1) {
     switch (c) {
     case 'i':
-       input_file = optarg;
+      input_file = optarg;
       break;
     case 'o':
-       output_file = optarg;
+      output_file = optarg;
       break;
     case 's':
       scale = std::stof(optarg, NULL);
       break;
     case 'w':
       wrap = std::atoi(optarg);
-      break;
-    case 'l':
-      lod = std::stof(optarg, NULL);
       break;
     case 'z':
       use_sw = true;
@@ -67,9 +65,11 @@ static void parse_args(int argc, char **argv) {
       switch (format) {
       case 0: eformat = FORMAT_A8R8G8B8; break;
       case 1: eformat = FORMAT_R5G6B5; break;
-      case 2: eformat = FORMAT_R4G4B4A4; break;
-      case 3: eformat = FORMAT_L8; break;
-      case 4: eformat = FORMAT_A8; break;
+      case 2: eformat = FORMAT_A1R5G5B5; break;
+      case 3: eformat = FORMAT_A4R4G4B4; break;
+      case 4: eformat = FORMAT_A8L8; break;
+      case 5: eformat = FORMAT_L8; break;
+      case 6: eformat = FORMAT_A8; break;
       default:
         std::cout << "Error: invalid format: " << format << std::endl;
         exit(1);
@@ -105,7 +105,9 @@ void cleanup() {
 int run_test(const kernel_arg_t& kernel_arg, 
              uint32_t buf_size, 
              uint32_t width, 
-             uint32_t height) {
+             uint32_t height,
+             uint32_t bpp) {
+  (void)bpp;
   auto time_start = std::chrono::high_resolution_clock::now();
 
   // start device
@@ -132,7 +134,7 @@ int run_test(const kernel_arg_t& kernel_arg,
 
   // save output image
   std::cout << "save output image" << std::endl;  
-  //dump_image(dst_pixels, width, height, bpp);
+  //dump_image(dst_pixels, width, height, bpp);  
   RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, dst_pixels, width, height));
 
   return 0;
@@ -151,11 +153,9 @@ int main(int argc, char *argv[]) {
   {
     std::vector<uint8_t> staging;  
     RT_CHECK(LoadImage(input_file, eformat, staging, &src_width, &src_height));  
-    
-    RT_CHECK(GenerateMipmaps(src_pixels, mip_offsets, staging, eformat, src_width, src_height));
-
-    //uint32_t src_bpp = Format::GetInfo(eformat).BytePerPixel;  
-    //dump_image(src_pixels, src_pixels.size() / src_bpp, 1, src_bpp);
+    uint32_t src_bpp = GetInfo(eformat).BytePerPixel;
+    //dump_image(staging, src_width, src_height, src_bpp);
+    RT_CHECK(GenerateMipmaps(src_pixels, mip_offsets, staging, eformat, src_width, src_height, src_width * src_bpp));    
   }
 
   // check power of two support
@@ -166,12 +166,6 @@ int main(int argc, char *argv[]) {
 
   uint32_t src_logwidth  = log2ceil(src_width);
   uint32_t src_logheight = log2ceil(src_height);
-
-  uint32_t src_max_lod = std::max(src_logwidth, src_logheight);
-  if (lod > src_max_lod) {
-    std::cout << "Error: out-of-bound level-of-detail: lod=" << lod << ", source image=" << src_max_lod << std::endl;
-    return -1;
-  }
 
   uint32_t src_bufsize = src_pixels.size();
 
@@ -227,7 +221,6 @@ int main(int argc, char *argv[]) {
     kernel_arg.src_logwidth  = src_logwidth;
     kernel_arg.src_logheight = src_logheight;
     kernel_arg.src_addr      = src_addr;
-    kernel_arg.lod           = lod;
 
     for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
       assert(i < TEX_LOD_MAX);
@@ -267,7 +260,7 @@ int main(int argc, char *argv[]) {
 
   // run tests
   std::cout << "run tests" << std::endl;
-  RT_CHECK(run_test(kernel_arg, dst_bufsize, dst_width, dst_height));
+  RT_CHECK(run_test(kernel_arg, dst_bufsize, dst_width, dst_height, dst_bpp));
 
   // cleanup
   std::cout << "cleanup" << std::endl;  

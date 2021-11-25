@@ -2,6 +2,7 @@ PROJECT = Core
 TOP_LEVEL_ENTITY = VX_core
 SRC_FILE = VX_core.v
 RTL_DIR = ../../../../rtl
+THIRD_PARTY_DIR = ../../../../../third_party
 
 FAMILY = "Arria 10"
 DEVICE = 10AX115N3F40E2SG
@@ -11,7 +12,7 @@ FPU_CORE_PATH = $(RTL_DIR)/fp_cores/altera/arria10
 #DEVICE = 1SX280HN2F43E2VG
 #FPU_CORE_PATH = $(RTL_DIR)/fp_cores/altera/stratix10
 
-FPU_INCLUDE = $(RTL_DIR)/fp_cores;$(FPU_CORE_PATH);$(RTL_DIR)/fp_cores/fpnew/src;$(RTL_DIR)/fp_cores/fpnew/src/fpu_div_sqrt_mvp/hdl;$(RTL_DIR)/fp_cores/fpnew/src/common_cells/include;$(RTL_DIR)/fp_cores/fpnew/src/common_cells/src
+FPU_INCLUDE = $(RTL_DIR)/fp_cores;$(FPU_CORE_PATH);$(THIRD_PARTY_DIR)/fpnew/src;$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl;$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include;$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src
 TEX_INCLUDE = $(RTL_DIR)/tex_unit
 RTL_INCLUDE = $(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces;$(RTL_DIR)/cache;$(FPU_INCLUDE);$(TEX_INCLUDE)
 

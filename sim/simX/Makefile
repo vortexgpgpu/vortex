@@ -1,12 +1,14 @@
 RTL_DIR = ../hw/rtl
+THIRD_PARTY_DIR = ../../third_party
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I. -I../common -I../../hw
-CXXFLAGS += -I../common/softfloat/source/include
+CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
+CXXFLAGS += -I$(THIRD_PARTY_DIR)/cocogfx/include
 CXXFLAGS += $(CONFIGS)
 
-LDFLAGS += ../common/softfloat/build/Linux-x86_64-GCC/softfloat.a
+LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a -L$(THIRD_PARTY_DIR)/cocogfx -lcocogfx
 
 TOP = vx_cache_sim
 
@@ -38,7 +40,7 @@ obj_dir/%.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 static: $(OBJS)
-	$(AR) rcs lib$(PROJECT).a $(OBJS) ../common/softfloat/build/Linux-x86_64-GCC/*.o
+	$(AR) rcs lib$(PROJECT).a $(OBJS) $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/*.o
 
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;

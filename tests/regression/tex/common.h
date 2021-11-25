@@ -15,7 +15,6 @@ typedef struct {
   uint8_t   src_logwidth;
   uint8_t   src_logheight;
   uint32_t  src_addr;
-  float     lod;
   uint32_t  mip_offs[TEX_LOD_MAX+1];  
   uint32_t  dst_width;
   uint32_t  dst_height;
