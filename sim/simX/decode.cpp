@@ -107,8 +107,12 @@ static const char* op_string(const Instr &instr) {
     case 0: return "LBI";
     case 1: return "LHI";
     case 2: return "LW";
+    // simx64
+    case 3: return "LD";
     case 4: return "LBU";
     case 5: return "LHU";
+    // simx64
+    case 6: return "LWU";
     default:
       std::abort();
     }
@@ -117,6 +121,8 @@ static const char* op_string(const Instr &instr) {
     case 0: return "SB";
     case 1: return "SH";
     case 2: return "SW";
+    // simx64
+    case 3: return "SD";
     default:
       std::abort();
     }
@@ -301,7 +307,7 @@ Decoder::Decoder(const ArchDef &arch) {
   v_imm_mask_  = 0x7ff;  
 }
 
-std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) {  
+std::shared_ptr<Instr> Decoder::decode(uint32_t code, uint32_t PC) {  
   auto instr = std::make_shared<Instr>();
   Opcode op = (Opcode)((code >> shift_opcode_) & opcode_mask_);
   instr->setOpcode(op);
@@ -310,10 +316,11 @@ std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) {
   Word func6 = (code >> shift_func6_) & func6_mask_;
   Word func7 = (code >> shift_func7_) & func7_mask_;
 
-  int rd  = (code >> shift_rd_)  & reg_mask_;
-  int rs1 = (code >> shift_rs1_) & reg_mask_;
-  int rs2 = (code >> shift_rs2_) & reg_mask_;
-  int rs3 = (code >> shift_rs3_) & reg_mask_;
+  // simx64
+  long rd  = (code >> shift_rd_)  & reg_mask_;
+  long rs1 = (code >> shift_rs1_) & reg_mask_;
+  long rs2 = (code >> shift_rs2_) & reg_mask_;
+  long rs3 = (code >> shift_rs3_) & reg_mask_;
 
   auto op_it = sc_instTable.find(op);
   if (op_it == sc_instTable.end()) {
@@ -371,7 +378,7 @@ std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) {
     instr->setFunc3(func3);
     instr->setFunc7(func7);    
     if ((func3 == 5) && (op != L_INST) && (op != Opcode::FL)) {
-      instr->setImm(signExt(rs2, 5, reg_mask_));
+      instr->setImm(signExt(rs2, 6, 0x3F));
     } else {
       instr->setImm(signExt(code >> shift_rs2_, 12, i_imm_mask_));
     }

@@ -16,7 +16,7 @@
 using namespace vortex;
 
 static bool HasDivergentThreads(const ThreadMask &thread_mask,                                
-                                const std::vector<std::vector<DoubleWord>> &reg_file,
+                                const std::vector<std::vector<Word>> &reg_file,
                                 unsigned reg) {
   bool cond;
   size_t thread_idx = 0;
@@ -109,7 +109,8 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       rd_write = true;
       break;
     case AUIPC_INST:
-      rddata = ((immsrc << 12) & 0xfffff000) + PC_;
+      // simx64
+      rddata = signExt(((immsrc << 12) & 0xfffff000), 32, 0xFFFFFFFF) + PC_;
       rd_write = true;
       break;
     case R_INST: {
@@ -199,8 +200,10 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         switch (func3) {
         case 0:
           if (func7) {
+            // RV32I: SUB
             rddata = rsdata[0] - rsdata[1];
           } else {
+            // RV32I: ADD
             rddata = rsdata[0] + rsdata[1];
           }
           break;
@@ -211,25 +214,32 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
           rddata = rsdata[0] << rsdata[1];
           break;
         case 2:
+          // RV32I: SLT (signed)
           rddata = (WordI(rsdata[0]) < WordI(rsdata[1]));
           break;
         case 3:
+          // RV32I: SLTU (unsigned)
           rddata = (Word(rsdata[0]) < Word(rsdata[1]));
           break;
         case 4:
+          // RV32I: XOR
           rddata = rsdata[0] ^ rsdata[1];
           break;
         case 5:
           if (func7) {
+            // RV32I: SRA
             rddata = WordI(rsdata[0]) >> WordI(rsdata[1]);
           } else {
+            // RV32I: SRL
             rddata = Word(rsdata[0]) >> Word(rsdata[1]);
           }
           break;
         case 6:
+          // RV32I: OR
           rddata = rsdata[0] | rsdata[1];
           break;
         case 7:
+          // RV32I: AND
           rddata = rsdata[0] & rsdata[1];
           break;
         default:
@@ -241,42 +251,42 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
     case I_INST:
       switch (func3) {
       case 0:
-        // ADDI
+        // RV32I: ADDI
         rddata = rsdata[0] + immsrc;
         break;
       case 1:
-        // SLLI
+        // RV64I: SLLI
         rddata = rsdata[0] << immsrc;
         break;
       case 2:
-        // SLTI
+        // RV32I: SLTI
         rddata = (WordI(rsdata[0]) < WordI(immsrc));
         break;
       case 3: {
-        // SLTIU
+        // RV32I: SLTIU
         rddata = (Word(rsdata[0]) < Word(immsrc));
       } break;
       case 4:
-        // XORI
+        // RV32I: XORI
         rddata = rsdata[0] ^ immsrc;
         break;
       case 5:
         if (func7) {
-          // SRAI
+          // RV64I: SRAI
           Word result = WordI(rsdata[0]) >> immsrc;
           rddata = result;
         } else {
-          // SRLI
+          // RV64I: SRLI
           Word result = Word(rsdata[0]) >> immsrc;
           rddata = result;
         }
         break;
       case 6:
-        // ORI
+        // RV32I: ORI
         rddata = rsdata[0] | immsrc;
         break;
       case 7:
-        // ANDI
+        // RV32I: ANDI
         rddata = rsdata[0] & immsrc;
         break;
       default:
@@ -287,37 +297,37 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
     case B_INST:
       switch (func3) {
       case 0:
-        // BEQ
+        // RV32I: BEQ
         if (rsdata[0] == rsdata[1]) {
           nextPC = PC_ + immsrc;
         }
         break;
       case 1:
-        // BNE
+        // RV32I: BNE
         if (rsdata[0] != rsdata[1]) {
           nextPC = PC_ + immsrc;
         }
         break;
       case 4:
-        // BLT
+        // RV32I: BLT
         if (WordI(rsdata[0]) < WordI(rsdata[1])) {
           nextPC = PC_ + immsrc;
         }
         break;
       case 5:
-        // BGE
+        // RV32I: BGE
         if (WordI(rsdata[0]) >= WordI(rsdata[1])) {
           nextPC = PC_ + immsrc;
         }
         break;
       case 6:
-        // BLTU
+        // RV32I: BLTU
         if (Word(rsdata[0]) < Word(rsdata[1])) {
           nextPC = PC_ + immsrc;
         }
         break;
       case 7:
-        // BGEU
+        // RV32I: BGEU
         if (Word(rsdata[0]) >= Word(rsdata[1])) {
           nextPC = PC_ + immsrc;
         }
@@ -326,6 +336,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       pipeline->stall_warp = true;
       runOnce = true;
       break;
+    // RV32I: JAL
     case JAL_INST:
       rddata = nextPC;
       nextPC = PC_ + immsrc;  
@@ -333,9 +344,10 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       runOnce = true;
       rd_write = true;
       break;
+    // RV32I: JALR
     case JALR_INST:
       rddata = nextPC;
-      nextPC = rsdata[0] + immsrc;
+      nextPC = HalfWord(rsdata[0]) + HalfWord(immsrc);
       pipeline->stall_warp = true;
       runOnce = true;
       rd_write = true;
@@ -343,28 +355,36 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
     case L_INST: {
       Word memAddr   = ((rsdata[0] + immsrc) & 0xFFFFFFFC); // word aligned
       Word shift_by  = ((rsdata[0] + immsrc) & 0x00000003) * 8;
-      Word data_read = core_->dcache_read(memAddr, 4);
+      Word data_read = core_->dcache_read(memAddr, 8);
       D(3, "LOAD MEM: ADDRESS=0x" << std::hex << memAddr << ", DATA=0x" << data_read);
       switch (func3) {
       case 0:
-        // LBI
+        // RV32I: LBI
         rddata = signExt((data_read >> shift_by) & 0xFF, 8, 0xFF);
         break;
       case 1:
-        // LHI
+        // RV32I: LHI
         rddata = signExt((data_read >> shift_by) & 0xFFFF, 16, 0xFFFF);
         break;
       case 2:
-        // LW
+        // RV32I: LW
+        rddata = signExt((data_read >> shift_by) & 0xFFFFFFFF, 32, 0xFFFFFFFF);
+        break;
+      case 3:
+        // RV64I: LD
         rddata = data_read;
         break;
       case 4:
-        // LBU
+        // RV32I: LBU
         rddata = Word((data_read >> shift_by) & 0xFF);
         break;
       case 5:
-        // LHU
+        // RV32I: LHU
         rddata = Word((data_read >> shift_by) & 0xFFFF);
+        break;
+      case 6:
+        // RV64I: LWU
+        rddata = Word((data_read >> shift_by) & 0xFFFFFFFF);
         break;
       default:
         std::abort();        
@@ -376,16 +396,20 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       D(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
       switch (func3) {
       case 0:
-        // SB
+        // RV32I: SB
         core_->dcache_write(memAddr, rsdata[1] & 0x000000FF, 1);
         break;
       case 1:
-        // SH
-        core_->dcache_write(memAddr, rsdata[1], 2);
+        // RV32I: SH
+        core_->dcache_write(memAddr, rsdata[1] & 0x0000FFFF, 2);
         break;
       case 2:
-        // SW
-        core_->dcache_write(memAddr, rsdata[1], 4);
+        // RV32I: SW
+        core_->dcache_write(memAddr, rsdata[1] & 0xFFFFFFFF, 4);
+        break;
+      case 3:
+        // RV64I: SD
+        core_ ->dcache_write(memAddr, rsdata[1], 8);
         break;
       default:
         std::abort();
@@ -396,65 +420,68 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       switch (func3) {
         case 0: 
           if (func7){
-            // SUBW
-            rddata = DoubleWord(rsdata[0] - rsdata[1]);
+            // RV64I: SUBW
+            rddata = signExt((HalfWord)rsdata[0] - (HalfWord)rsdata[1], 32, 0xFFFFFFFF);
           }
           else{
-            // ADDW
-            rddata = DoubleWord(rsdata[0] + rsdata[1]);
+            // RV64I: ADDW
+            rddata = signExt((HalfWord)rsdata[0] + (HalfWord)rsdata[1], 32, 0xFFFFFFFF);
           }    
           break;
         case 1: 
-          // SLLW
+          // RV64I: SLLW
           // shift amount given by rs2[4:0]
-          rddata = DoubleWord(rsdata[0] << rsdata[1]);
+          rddata = signExt((HalfWord)rsdata[0] << (HalfWord)rsdata[1], 32, 0xFFFFFFFF);
           break;
         case 5:
           if (func7) {
-            // SRAW
+            // RV64I: SRAW
             // shift amount given by rs2[4:0]
-            rddata = DoubleWord(WordI(rsdata[0]) >> WordI(rsdata[1]));
+            rddata = signExt((HalfWordI)rsdata[0] >> (HalfWordI)rsdata[1], 32, 0xFFFFFFFF);
           } else {
-            // SRLW
+            // RV64I: SRLW
             // shift amount given by rs2[4:0]
-            rddata = DoubleWord(Word(rsdata[0]) >> Word(rsdata[1]));
+            rddata = signExt((HalfWord)rsdata[0] >> (HalfWord)rsdata[1], 32, 0xFFFFFFFF);
           }
           break;
         default:
           std::abort();
       }
+      rd_write = true;
     } break;
     // simx64
     case I_INST_64: {
       switch (func3) {
         case 0:
-          // ADDIW
-          rddata = DoubleWord(rsdata[0] + immsrc);
+          // RV64I: ADDIW
+          rddata = signExt((HalfWord)rsdata[0] + (HalfWord)immsrc, 32, 0xFFFFFFFF);
+          printf("rddata\n");
           break;
         case 1: 
-          // SLLIW
+          // RV64I: SLLIW
           // rs1 shifted by lower 5 bits of imm
           // Illegal exception if imm[5] != 0
-          rddata = DoubleWord(rsdata[0] << immsrc);
+          rddata = signExt((HalfWord)rsdata[0] << (HalfWord)immsrc, 32, 0xFFFFFFFF);
           break;
         case 5:
           if (func7) {
-            // SRAI
+            // RV64I: SRAI
             // rs1 shifted by lower 5 bits of imm
             // Illegal exception if imm[5] != 0
-            Word result = DoubleWord(WordI(rsdata[0]) >> immsrc);
+            Word result = signExt((HalfWordI)rsdata[0] >> (HalfWordI)immsrc, 32, 0xFFFFFFFF);
             rddata = result;
           } else {
-            // SRLI
+            // RV64I: SRLI
             // rs1 shifted by lower 5 bits of imm
             // Illegal exception if imm[5] != 0
-            Word result = DoubleWord(Word(rsdata[0]) >> immsrc);
+            Word result = signExt((HalfWord)rsdata[0] >> (HalfWord)immsrc, 32, 0xFFFFFFFF);
             rddata = result;
           }
           break;
         default:
           std::abort();
       }
+      rd_write = true;
     } break;
     case SYS_INST: {
       Word csr_addr = immsrc & 0x00000FFF;
@@ -467,37 +494,37 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         }
         break;
       case 1:
-        // CSRRW
+        // RV32I: CSRRW
         rddata = csr_value;
         core_->set_csr(csr_addr, rsdata[0], t, id_);
         rd_write = true;
         break;
       case 2:
-        // CSRRS
+        // RV32I: CSRRS
         rddata = csr_value;
         core_->set_csr(csr_addr, csr_value | rsdata[0], t, id_);
         rd_write = true;
         break;
       case 3:
-        // CSRRC
+        // RV32I: CSRRC
         rddata = csr_value;
         core_->set_csr(csr_addr, csr_value & ~rsdata[0], t, id_);
         rd_write = true;
         break;
       case 5:
-        // CSRRWI
+        // RV32I: CSRRWI
         rddata = csr_value;
         core_->set_csr(csr_addr, rsrc0, t, id_);
         rd_write = true;
         break;
       case 6:
-        // CSRRSI
+        // RV32I: CSRRSI
         rddata = csr_value;
         core_->set_csr(csr_addr, csr_value | rsrc0, t, id_);
         rd_write = true;
         break;
       case 7:
-        // CSRRCI
+        // RV32I: CSRRCI
         rddata = csr_value;
         core_->set_csr(csr_addr, csr_value & ~rsrc0, t, id_);
         rd_write = true;
@@ -506,6 +533,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         break;
       }
     } break;
+    // RV32I: FENCE
     case FENCE:
       pipeline->stall_warp = true; 
       runOnce = true;
@@ -661,20 +689,21 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
     case FMSUB:      
     case FMNMADD:
     case FMNMSUB: {
-      int frm = get_fpu_rm(func3, core_, t, id_);
+      // int frm = get_fpu_rm(func3, core_, t, id_);
+      // simx64
       Word fflags = 0;
       switch (opcode) {
       case FMADD:
-        rddata = rv_fmadd(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
+        // rddata = rv_fmadd(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
         break;
       case FMSUB:
-        rddata = rv_fmsub(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
+        // rddata = rv_fmsub(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
         break;
       case FMNMADD:
-        rddata = rv_fnmadd(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
+        // rddata = rv_fnmadd(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
         break;  
       case FMNMSUB:
-        rddata = rv_fnmsub(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
+        // rddata = rv_fnmsub(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
         break;
       default:
         break;
