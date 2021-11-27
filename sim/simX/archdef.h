@@ -14,8 +14,9 @@ public:
   ArchDef(const std::string &/*arch*/,
           int num_cores, 
           int num_warps, 
-          int num_threads) {         
-    wsize_       = 4;
+          int num_threads) {  
+    // simx64               
+    wsize_       = 8;
     vsize_       = 16;
     num_regs_    = 32;
     num_csrs_    = 4096;

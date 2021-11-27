@@ -22,7 +22,14 @@ inline uint64_t align_size(uint64_t size, uint64_t alignment) {
 }
 
 // Apply integer sign extension
-inline uint32_t signExt(uint32_t w, uint32_t bit, uint32_t mask) {
+inline uint64_t signExt(uint64_t w, uint64_t bit, uint64_t mask) {
+  if (w >> (bit - 1))
+    w |= ~mask;
+  return w;
+}
+
+// Apply integer sign extension
+inline uint32_t signExt32(uint32_t w, uint32_t bit, uint32_t mask) {
   if (w >> (bit - 1))
     w |= ~mask;
   return w;

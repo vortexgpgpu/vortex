@@ -14,8 +14,8 @@ Warp::Warp(Core *core, Word id)
     : id_(id)
     , core_(core) {
   // simx64
-  iRegFile_.resize(core_->arch().num_threads(), std::vector<DoubleWord>(core_->arch().num_regs(), 0));
-  fRegFile_.resize(core_->arch().num_threads(), std::vector<DoubleWord>(core_->arch().num_regs(), 0));
+  iRegFile_.resize(core_->arch().num_threads(), std::vector<Word>(core_->arch().num_regs(), 0));
+  fRegFile_.resize(core_->arch().num_threads(), std::vector<Word>(core_->arch().num_regs(), 0));
   vRegFile_.resize(core_->arch().num_regs(), std::vector<Byte>(core_->arch().vsize(), 0));
   this->clear();
 }

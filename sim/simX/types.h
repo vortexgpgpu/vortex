@@ -7,13 +7,15 @@
 namespace vortex {
 
 typedef uint8_t  Byte;
-typedef uint32_t Word;
-typedef int32_t  WordI;
-// simx64
-typedef uint64_t DoubleWord;
+typedef uint64_t Word;
+typedef int64_t  WordI;
 
 // simx64
-typedef uint64_t Addr;
+typedef uint32_t HalfWord;
+typedef int32_t HalfWordI;
+
+// simx64
+typedef uint32_t Addr;
 typedef uint32_t Size;
 
 typedef std::bitset<32> RegMask;
