@@ -1,4 +1,4 @@
-SIMX_DIR = ../../sim/simX
+SIMX_DIR = ../../sim/simx
 
 CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors 
 #CXXFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
@@ -9,7 +9,7 @@ CXXFLAGS += $(CONFIGS)
 CXXFLAGS += -DDUMP_PERF_STATS
 
 LDFLAGS += -shared -pthread
-LDFLAGS += $(SIMX_DIR)/libsimX.a
+LDFLAGS += $(SIMX_DIR)/libsimx.a
 
 SRCS = vortex.cpp ../common/vx_utils.cpp 
 
