@@ -3,14 +3,14 @@
 #include "types.h"
 
 #ifndef MEM_LATENCY
-#define MEM_LATENCY 18
+#define MEM_LATENCY 24
 #endif
 
 namespace vortex {
 
-struct Constants {
+enum Constants {
 
-static constexpr uint32_t SMEM_DELAY = 1 + SM_ENABLE;
+    SMEM_BANK_OFFSET = log2ceil(sizeof(Word)) + log2ceil(STACK_SIZE / sizeof(Word)),
 
 };
 

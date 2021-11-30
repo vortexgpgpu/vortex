@@ -18,13 +18,13 @@ Processor::Processor(const ArchDef& arch)
 
   // connect memory sub-systen
   memsim_ = MemSim::Create(1, MEM_LATENCY);
-  std::vector<SlavePort<MemReq>*>  mem_req_ports(1); 
-  std::vector<MasterPort<MemRsp>*> mem_rsp_ports(1);
+  std::vector<SimPort<MemReq>*>  mem_req_ports(1); 
+  std::vector<SimPort<MemRsp>*> mem_rsp_ports(1);
   mem_req_ports.at(0) = &memsim_->MemReqPorts.at(0);
   mem_rsp_ports.at(0) = &memsim_->MemRspPorts.at(0);
 
   if (L3_ENABLE) {
-    l3cache_ = Cache::Create("l3cache", CacheConfig{
+    l3cache_ = Cache::Create("l3cache", Cache::Config{
       log2ceil(L3_CACHE_SIZE),  // C
       log2ceil(MEM_BLOCK_SIZE), // B
       2,                      // W
@@ -66,7 +66,7 @@ Processor::Processor(const ArchDef& arch)
   for (uint32_t i = 0; i < NUM_CLUSTERS; ++i) {      
     if (L2_ENABLE) {
       auto& l2cache = l2caches_.at(i);
-      l2cache = Cache::Create("l2cache", CacheConfig{
+      l2cache = Cache::Create("l2cache", Cache::Config{
         log2ceil(L2_CACHE_SIZE),  // C
         log2ceil(MEM_BLOCK_SIZE), // B
         2,                      // W

@@ -428,7 +428,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         Word memAddr   = ((rsdata[t][0] + immsrc) & 0xFFFFFFFC); // word aligned
         Word shift_by  = ((rsdata[t][0] + immsrc) & 0x00000003) * 8;
         Word data_read = core_->dcache_read(memAddr, 4);
-        trace->mem_addrs.at(t).push_back(memAddr);
+        trace->mem_addrs.at(t).push_back({memAddr, 4});
         DP(4, "LOAD MEM: ADDRESS=0x" << std::hex << memAddr << ", DATA=0x" << data_read);
         switch (func3) {
         case 0:
@@ -491,7 +491,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         if (!tmask_.test(t))
           continue;
         Word memAddr = rsdata[t][0] + immsrc;
-        trace->mem_addrs.at(t).push_back(memAddr);
+        trace->mem_addrs.at(t).push_back({memAddr, (1u << func3)});
         DP(4, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
         switch (func3) {
         case 0:
@@ -528,14 +528,14 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     }
     break;
   case SYS_INST:
-    trace->exe_type = ExeType::CSR;
     for (int t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
-      Word csr_addr = immsrc & 0x00000FFF;
-      Word csr_value = core_->get_csr(csr_addr, t, id_);
-      switch (func3) {
-      case 0:
+      Word csr_addr = immsrc;
+      Word csr_value;
+      if (func3 == 0) {
+        trace->exe_type = ExeType::ALU;
+        trace->fetch_stall = true;
         switch (csr_addr) {
         case 0: // ECALL
           core_->trigger_ecall();
@@ -549,56 +549,59 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           break;
         default:
           std::abort();
-        }            
-        break;
-      case 1:
-        // CSRRW
-        rddata[t] = csr_value;
-        core_->set_csr(csr_addr, rsdata[t][0], t, id_);        
-        trace->used_iregs.set(rsrc0);
-        rd_write = true;
-        break;
-      case 2:
-        // CSRRS
-        rddata[t] = csr_value;
-        core_->set_csr(csr_addr, csr_value | rsdata[t][0], t, id_);
-        trace->used_iregs.set(rsrc0);
-        rd_write = true;
-        break;
-      case 3:
-        // CSRRC
-        rddata[t] = csr_value;
-        core_->set_csr(csr_addr, csr_value & ~rsdata[t][0], t, id_);
-        trace->used_iregs.set(rsrc0);
-        rd_write = true;
-        break;
-      case 5:
-        // CSRRWI
-        rddata[t] = csr_value;
-        core_->set_csr(csr_addr, rsrc0, t, id_);        
-        rd_write = true;
-        break;
-      case 6:
-        // CSRRSI
-        rddata[t] = csr_value;
-        core_->set_csr(csr_addr, csr_value | rsrc0, t, id_);
-        rd_write = true;
-        break;
-      case 7:
-        // CSRRCI
-        rddata[t] = csr_value;
-        core_->set_csr(csr_addr, csr_value & ~rsrc0, t, id_);
-        rd_write = true;
-        break;
-      default:
-        break;
+        }                
+      } else {
+        trace->exe_type = ExeType::CSR;
+        csr_value = core_->get_csr(csr_addr, t, id_);
+        switch (func3) {
+        case 1:
+          // CSRRW
+          rddata[t] = csr_value;
+          core_->set_csr(csr_addr, rsdata[t][0], t, id_);      
+          trace->used_iregs.set(rsrc0);
+          rd_write = true;
+          break;
+        case 2:
+          // CSRRS
+          rddata[t] = csr_value;
+          core_->set_csr(csr_addr, csr_value | rsdata[t][0], t, id_);
+          trace->used_iregs.set(rsrc0);
+          rd_write = true;
+          break;
+        case 3:
+          // CSRRC
+          rddata[t] = csr_value;
+          core_->set_csr(csr_addr, csr_value & ~rsdata[t][0], t, id_);
+          trace->used_iregs.set(rsrc0);
+          rd_write = true;
+          break;
+        case 5:
+          // CSRRWI
+          rddata[t] = csr_value;
+          core_->set_csr(csr_addr, rsrc0, t, id_);      
+          rd_write = true;
+          break;
+        case 6:
+          // CSRRSI;
+          rddata[t] = csr_value;
+          core_->set_csr(csr_addr, csr_value | rsrc0, t, id_);
+          rd_write = true;
+          break;
+        case 7:
+          // CSRRCI
+          rddata[t] = csr_value;
+          core_->set_csr(csr_addr, csr_value & ~rsrc0, t, id_);
+          rd_write = true;
+          break;
+        default:
+          break;
+        }
       }
     } 
     break;
   case FENCE:
     trace->exe_type = ExeType::LSU;    
     trace->lsu.type = LsuType::FENCE;
-    trace->fetch_stall = true;
     break;   
   case FCI:        
     trace->exe_type = ExeType::FPU;     
@@ -797,6 +800,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       DPN(3, std::endl);
 
       active_ = tmask_.any();
+      trace->gpu.active_warps.reset();
+      trace->gpu.active_warps.set(id_, active_);
     } break;
     case 1: {
       // WSPAWN
@@ -805,13 +810,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       trace->used_iregs.set(rsrc0);
       trace->used_iregs.set(rsrc1);
       trace->fetch_stall = true;
-      int active_warps = std::min<int>(rsdata.at(ts)[0], core_->arch().num_warps());
-      DP(3, "*** Activate " << (active_warps-1) << " warps at PC: " << std::hex << rsdata.at(ts)[1]);
-      for (int i = 1; i < active_warps; ++i) {
-        Warp &newWarp = core_->warp(i);
-        newWarp.setPC(rsdata[ts][1]);
-        newWarp.setTmask(0, true);
-      }
+      trace->gpu.active_warps = core_->wspawn(rsdata.at(ts)[0], rsdata.at(ts)[1]);
     } break;
     case 2: {
       // SPLIT    
@@ -877,9 +876,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       trace->gpu.type = GpuType::BAR;
       trace->used_iregs.set(rsrc0);
       trace->used_iregs.set(rsrc1);
-      trace->fetch_stall = true; 
-      active_ = false;
-      core_->barrier(rsdata[ts][0], rsdata[ts][1], id_); 
+      trace->fetch_stall = true;
+      trace->gpu.active_warps = core_->barrier(rsdata[ts][0], rsdata[ts][1], id_);
     } break;
     case 5: {
       // PREFETCH

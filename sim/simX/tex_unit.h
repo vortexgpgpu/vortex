@@ -15,7 +15,7 @@ public:
   
     void set_state(uint32_t state, uint32_t value);
 
-    uint32_t read(int32_t u, int32_t v, int32_t lod, std::vector<uint64_t>* mem_addrs);
+    uint32_t read(int32_t u, int32_t v, int32_t lod, std::vector<mem_addr_size_t>* mem_addrs);
 
 private:
 

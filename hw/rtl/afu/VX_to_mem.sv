@@ -124,7 +124,8 @@ module VX_to_mem #(
             end 
         end
         assign mem_rsp_tag_in_w = (rsp_ctr != 0) ? mem_rsp_tag_in_r : mem_rsp_tag_in;
-        `RUNTIME_ASSERT(!mem_rsp_in_fire || (mem_rsp_tag_in_w == mem_rsp_tag_in), ("out-of-order memory reponse! cur=%d, expected=%d", mem_rsp_tag_in_w, mem_rsp_tag_in))
+        `RUNTIME_ASSERT(!mem_rsp_in_fire || (mem_rsp_tag_in_w == mem_rsp_tag_in), 
+            ("%t: *** out-of-order memory reponse! cur=%d, expected=%d", $time, mem_rsp_tag_in_w, mem_rsp_tag_in))
 
         wire [SRC_ADDR_WIDTH+D-1:0] mem_req_addr_in_qual = {mem_req_addr_in, req_ctr};
         

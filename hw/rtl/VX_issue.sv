@@ -9,7 +9,7 @@ module VX_issue #(
     input wire      reset,
 
 `ifdef PERF_ENABLE
-    VX_perf_pipeline_if.master perf_pipeline_if,
+    VX_perf_pipeline_if.issue perf_issue_if,
 `endif
 
     VX_decode_if.slave      decode_if,
@@ -38,6 +38,7 @@ module VX_issue #(
 
     // scoreboard writeback interface
     assign sboard_wb_if.valid   = writeback_if.valid;
+    assign sboard_wb_if.uuid    = writeback_if.uuid;
     assign sboard_wb_if.wid     = writeback_if.wid;
     assign sboard_wb_if.PC      = writeback_if.PC;
     assign sboard_wb_if.rd      = writeback_if.rd;
@@ -45,6 +46,7 @@ module VX_issue #(
         
     // scoreboard interface
     assign scoreboard_if.valid  = ibuffer_if.valid && dispatch_if.ready;
+    assign scoreboard_if.uuid   = ibuffer_if.uuid;
     assign scoreboard_if.wid    = ibuffer_if.wid;
     assign scoreboard_if.PC     = ibuffer_if.PC;   
     assign scoreboard_if.wb     = ibuffer_if.wb;      
@@ -57,6 +59,7 @@ module VX_issue #(
     
     // dispatch interface
     assign dispatch_if.valid    = ibuffer_if.valid && scoreboard_if.ready;
+    assign dispatch_if.uuid     = ibuffer_if.uuid;
     assign dispatch_if.wid      = ibuffer_if.wid;
     assign dispatch_if.tmask    = ibuffer_if.tmask;
     assign dispatch_if.PC       = ibuffer_if.PC;
@@ -121,9 +124,8 @@ module VX_issue #(
     );
 
     `SCOPE_ASSIGN (issue_fire,        ibuffer_if.valid && ibuffer_if.ready);
-    `SCOPE_ASSIGN (issue_wid,         ibuffer_if.wid);
+    `SCOPE_ASSIGN (issue_uuid,        ibuffer_if.uuid);
     `SCOPE_ASSIGN (issue_tmask,       ibuffer_if.tmask);
-    `SCOPE_ASSIGN (issue_pc,          ibuffer_if.PC);
     `SCOPE_ASSIGN (issue_ex_type,     ibuffer_if.ex_type);
     `SCOPE_ASSIGN (issue_op_type,     ibuffer_if.op_type);
     `SCOPE_ASSIGN (issue_op_mod,      ibuffer_if.op_mod);
@@ -140,10 +142,9 @@ module VX_issue #(
     `SCOPE_ASSIGN (gpr_rs1,           gpr_rsp_if.rs1_data);
     `SCOPE_ASSIGN (gpr_rs2,           gpr_rsp_if.rs2_data);
     `SCOPE_ASSIGN (gpr_rs3,           gpr_rsp_if.rs3_data);
-    `SCOPE_ASSIGN (writeback_valid,   writeback_if.valid);    
+    `SCOPE_ASSIGN (writeback_valid,   writeback_if.valid);
+    `SCOPE_ASSIGN (writeback_uuid,    writeback_if.uuid);
     `SCOPE_ASSIGN (writeback_tmask,   writeback_if.tmask);
-    `SCOPE_ASSIGN (writeback_wid,     writeback_if.wid);
-    `SCOPE_ASSIGN (writeback_pc,      writeback_if.PC);  
     `SCOPE_ASSIGN (writeback_rd,      writeback_if.rd);
     `SCOPE_ASSIGN (writeback_data,    writeback_if.data);
     `SCOPE_ASSIGN (writeback_eop,     writeback_if.eop);
@@ -171,40 +172,35 @@ module VX_issue #(
             perf_fpu_stalls <= 0;
         `endif
         end else begin
-            if (decode_if.valid & !decode_if.ready) begin
+            if (decode_if.valid & ~decode_if.ready) begin
                 perf_ibf_stalls <= perf_ibf_stalls  + `PERF_CTR_BITS'd1;
             end
-            if (scoreboard_if.valid & !scoreboard_if.ready) begin 
+            if (scoreboard_if.valid & ~scoreboard_if.ready) begin 
                 perf_scb_stalls <= perf_scb_stalls  + `PERF_CTR_BITS'd1;
             end
-            if (alu_req_if.valid & !alu_req_if.ready) begin
-                perf_alu_stalls <= perf_alu_stalls + `PERF_CTR_BITS'd1;
+            if (dispatch_if.valid & ~dispatch_if.ready) begin
+                case (dispatch_if.ex_type)
+                `EX_ALU: perf_alu_stalls <= perf_alu_stalls + `PERF_CTR_BITS'd1;
+            `ifdef EXT_F_ENABLE
+                `EX_FPU: perf_fpu_stalls <= perf_fpu_stalls + `PERF_CTR_BITS'd1;
+            `endif
+                `EX_LSU: perf_lsu_stalls <= perf_lsu_stalls + `PERF_CTR_BITS'd1;
+                `EX_CSR: perf_csr_stalls <= perf_csr_stalls + `PERF_CTR_BITS'd1;
+                //`EX_GPU:
+                default: perf_gpu_stalls <= perf_gpu_stalls + `PERF_CTR_BITS'd1;
+                endcase
             end
-            if (lsu_req_if.valid & !lsu_req_if.ready) begin
-                perf_lsu_stalls <= perf_lsu_stalls + `PERF_CTR_BITS'd1;
-            end
-            if (csr_req_if.valid & !csr_req_if.ready) begin
-                perf_csr_stalls <= perf_csr_stalls + `PERF_CTR_BITS'd1;
-            end
-            if (gpu_req_if.valid & !gpu_req_if.ready) begin
-                perf_gpu_stalls <= perf_gpu_stalls + `PERF_CTR_BITS'd1;
-            end
-        `ifdef EXT_F_ENABLE
-            if (fpu_req_if.valid & !fpu_req_if.ready) begin
-                perf_fpu_stalls <= perf_fpu_stalls + `PERF_CTR_BITS'd1;
-            end
-        `endif
         end
     end
     
-    assign perf_pipeline_if.ibf_stalls = perf_ibf_stalls;
-    assign perf_pipeline_if.scb_stalls = perf_scb_stalls; 
-    assign perf_pipeline_if.alu_stalls = perf_alu_stalls;
-    assign perf_pipeline_if.lsu_stalls = perf_lsu_stalls;
-    assign perf_pipeline_if.csr_stalls = perf_csr_stalls;
-    assign perf_pipeline_if.gpu_stalls = perf_gpu_stalls;
+    assign perf_issue_if.ibf_stalls = perf_ibf_stalls;
+    assign perf_issue_if.scb_stalls = perf_scb_stalls; 
+    assign perf_issue_if.alu_stalls = perf_alu_stalls;
+    assign perf_issue_if.lsu_stalls = perf_lsu_stalls;
+    assign perf_issue_if.csr_stalls = perf_csr_stalls;
+    assign perf_issue_if.gpu_stalls = perf_gpu_stalls;
 `ifdef EXT_F_ENABLE
-    assign perf_pipeline_if.fpu_stalls = perf_fpu_stalls;
+    assign perf_issue_if.fpu_stalls = perf_fpu_stalls;
 `endif
 `endif
 
@@ -216,7 +212,7 @@ module VX_issue #(
             `TRACE_ARRAY1D(alu_req_if.rs1_data, `NUM_THREADS);
             dpi_trace(", rs2_data=");
             `TRACE_ARRAY1D(alu_req_if.rs2_data, `NUM_THREADS);
-            dpi_trace("\n");
+            dpi_trace(" (#%0d)\n", alu_req_if.uuid);
         end
         if (lsu_req_if.valid && lsu_req_if.ready) begin
             dpi_trace("%d: core%0d-issue: wid=%0d, PC=%0h, ex=LSU, tmask=%b, rd=%0d, offset=%0h, addr=", 
@@ -224,13 +220,13 @@ module VX_issue #(
             `TRACE_ARRAY1D(lsu_req_if.base_addr, `NUM_THREADS);
             dpi_trace(", data=");
             `TRACE_ARRAY1D(lsu_req_if.store_data, `NUM_THREADS);
-            dpi_trace("\n");
+            dpi_trace(" (#%0d)\n", lsu_req_if.uuid);
         end
         if (csr_req_if.valid && csr_req_if.ready) begin
             dpi_trace("%d: core%0d-issue: wid=%0d, PC=%0h, ex=CSR, tmask=%b, rd=%0d, addr=%0h, rs1_data=", 
                 $time, CORE_ID, csr_req_if.wid, csr_req_if.PC, csr_req_if.tmask, csr_req_if.rd, csr_req_if.addr);   
             `TRACE_ARRAY1D(csr_req_if.rs1_data, `NUM_THREADS);
-            dpi_trace("\n");
+            dpi_trace(" (#%0d)\n", csr_req_if.uuid);
         end
     `ifdef EXT_F_ENABLE
         if (fpu_req_if.valid && fpu_req_if.ready) begin
@@ -241,7 +237,7 @@ module VX_issue #(
             `TRACE_ARRAY1D(fpu_req_if.rs2_data, `NUM_THREADS);
             dpi_trace(", rs3_data=");
             `TRACE_ARRAY1D(fpu_req_if.rs3_data, `NUM_THREADS);
-            dpi_trace("\n");
+            dpi_trace(" (#%0d)\n", fpu_req_if.uuid);
         end
     `endif
         if (gpu_req_if.valid && gpu_req_if.ready) begin
@@ -252,7 +248,7 @@ module VX_issue #(
             `TRACE_ARRAY1D(gpu_req_if.rs2_data, `NUM_THREADS);
             dpi_trace(", rs3_data=");
             `TRACE_ARRAY1D(gpu_req_if.rs3_data, `NUM_THREADS);
-            dpi_trace("\n");   
+            dpi_trace(" (#%0d)\n", gpu_req_if.uuid);   
         end
     end
 `endif

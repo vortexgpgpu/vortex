@@ -7,6 +7,7 @@
 #include <list>
 #include <queue>
 #include <assert.h>
+#include "mempool.h"
 
 class SimObjectBase;
 
@@ -20,37 +21,14 @@ public:
     return module_;
   }
 
-  SimPortBase* peer() const {
-    return peer_;
-  }
-
-  bool connected() const {
-    return (peer_ != nullptr);
-  }
-
 protected:
   SimPortBase(SimObjectBase* module)
     : module_(module)
-    , peer_(nullptr)
   {}
-
-  void connect(SimPortBase* peer) {
-    assert(peer_ == nullptr);
-    peer_ = peer;
-  }
-
-  void disconnect() {    
-    assert(peer_ == nullptr);  
-    peer_ = nullptr;
-  }
 
   SimPortBase& operator=(const SimPortBase&) = delete;
 
   SimObjectBase* module_;
-  SimPortBase*   peer_;
-
-  template <typename U> friend class SlavePort;
-  template <typename U> friend class MasterPort;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -58,68 +36,88 @@ protected:
 template <typename Pkt>
 class SimPort : public SimPortBase {
 public:
-  void send(const Pkt& pkt, uint64_t delay) const;
+  typedef std::function<void (const Pkt&, uint64_t)> TxCallback;
+
+  SimPort(SimObjectBase* module)
+    : SimPortBase(module)
+    , peer_(nullptr)
+    , tx_cb_(nullptr)
+  {}
+
+  void send(const Pkt& pkt, uint64_t delay = 1) const;
 
   void bind(SimPort<Pkt>* peer) {
-    this->connect(peer);
+    assert(peer_ == nullptr);
+    peer_ = peer;
   }
 
   void unbind() {    
-    this->disconnect();
+    assert(peer_ == nullptr);
+    peer_ = nullptr;
+  }
+
+  bool connected() const {
+    return (peer_ != nullptr);
+  }
+
+  SimPort* peer() const {
+    return peer_;
   }
 
   bool empty() const {
     return queue_.empty();
   }
 
-  const Pkt& top() const {
+  const Pkt& front() const {
     return queue_.front();
   }
 
-  Pkt& top() {
-    return queue_.front();
+  Pkt& front() {
+    return queue_.front().pkt;
   }
 
-  void pop() {
+  const Pkt& back() const {
+    return queue_.back();
+  }
+
+  Pkt& back() {
+    return queue_.back().pkt;
+  }
+
+  uint64_t pop() {
+    auto cycle = queue_.front().cycle;
     queue_.pop();
-  } 
+    return cycle;
+  }  
+
+  void tx_callback(const TxCallback& callback) {
+    tx_cb_ = callback;
+  }
 
 protected:
-  SimPort(SimObjectBase* module)
-    : SimPortBase(module)
-  {}
+  struct timed_pkt_t {
+    Pkt      pkt;
+    uint64_t cycle;
+  };
 
-  void push(const Pkt& data) {
-    queue_.push(data);
+  std::queue<timed_pkt_t> queue_;
+  SimPort*   peer_;
+  TxCallback tx_cb_;
+
+  void push(const Pkt& data, uint64_t cycle) {
+    if (tx_cb_) {
+      tx_cb_(data, cycle);
+    }
+    if (peer_) {
+      peer_->push(data, cycle);
+    } else {
+      queue_.push({data, cycle});
+    }
   }
 
   SimPort& operator=(const SimPort&) = delete;
 
-  std::queue<Pkt> queue_;
-
   template <typename U> friend class SimPortEvent;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-template <typename Pkt>
-class SlavePort : public SimPort<Pkt> {
-public:
-  SlavePort(SimObjectBase* module) : SimPort<Pkt>(module) {}  
-
-protected:
-  SlavePort& operator=(const SlavePort&) = delete;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-template <typename Pkt>
-class MasterPort : public SimPort<Pkt> {
-public:
-  MasterPort(SimObjectBase* module) : SimPort<Pkt>(module) {}
-
-protected:
-  MasterPort& operator=(const MasterPort&) = delete;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -132,14 +130,14 @@ public:
   
   virtual void fire() const  = 0;
 
-  bool step() {
-    return (0 == --delay_);
+  uint64_t time() const {
+    return time_;
   }
 
 protected:
-  SimEventBase(uint64_t delay) : delay_(delay) {}
+  SimEventBase(uint64_t time) : time_(time) {}
 
-  uint64_t delay_;
+  uint64_t time_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -147,26 +145,34 @@ protected:
 template <typename Pkt>
 class SimCallEvent : public SimEventBase {
 public:
-  typedef std::function<void (const Pkt&)> Func;
-
-  template <typename... Args>
-  static Ptr Create(const Func& func, const Pkt& pkt, uint64_t delay) {
-    return std::make_shared<SimCallEvent>(func, pkt, delay);
-  }   
-
-  SimCallEvent(const Func& func, const Pkt& pkt, uint64_t delay) 
-    : SimEventBase(delay)
-    , func_(func)
-    , pkt_(pkt)
-  {}
-
   void fire() const override {
     func_(pkt_);
   }
 
-protected:  
+  typedef std::function<void (const Pkt&)> Func;
+
+  SimCallEvent(const Func& func, const Pkt& pkt, uint64_t time) 
+    : SimEventBase(time)
+    , func_(func)
+    , pkt_(pkt)
+  {}
+
+  void* operator new(size_t /*size*/) {
+    return allocator().allocate();
+  }
+
+  void operator delete(void* ptr) {
+    allocator().deallocate(ptr);
+  }
+
+protected:
   Func func_;
-  Pkt  pkt_; 
+  Pkt  pkt_;
+
+  static MemoryPool<SimCallEvent<Pkt>>& allocator() {
+    static MemoryPool<SimCallEvent<Pkt>> instance(64);
+    return instance;
+  }
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -174,23 +180,32 @@ protected:
 template <typename Pkt>
 class SimPortEvent : public SimEventBase {
 public:
-  static Ptr Create(const SimPort<Pkt>* port, const Pkt& pkt, uint64_t delay) {
-    return std::make_shared<SimPortEvent>(port, pkt, delay);
+  void fire() const override {
+    const_cast<SimPort<Pkt>*>(port_)->push(pkt_, time_);
   }
 
-  SimPortEvent(const SimPort<Pkt>* port, const Pkt& pkt, uint64_t delay) 
-    : SimEventBase(delay) 
+  SimPortEvent(const SimPort<Pkt>* port, const Pkt& pkt, uint64_t time) 
+    : SimEventBase(time) 
     , port_(port)
     , pkt_(pkt)
   {}
-  
-  void fire() const override {
-    const_cast<SimPort<Pkt>*>(port_)->push(pkt_);
+
+  void* operator new(size_t /*size*/) {
+    return allocator().allocate();
   }
 
-private:  
+  void operator delete(void* ptr) {
+    allocator().deallocate(ptr);
+  }
+
+protected:
   const SimPort<Pkt>* port_; 
   Pkt pkt_;
+
+  static MemoryPool<SimPortEvent<Pkt>>& allocator() {
+    static MemoryPool<SimPortEvent<Pkt>> instance(64);
+    return instance;
+  }
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -203,24 +218,17 @@ public:
 
   virtual ~SimObjectBase() {}
 
-  template <typename T, typename Pkt>
-  void schedule(T *obj, void (T::*entry)(const Pkt&), const Pkt& pkt, uint64_t delay);
-
   const std::string& name() const {
     return name_;
   }
 
-protected:
-
   virtual void step(uint64_t cycle) = 0;
 
-  SimObjectBase(const SimContext& ctx, const char* name);
+protected:
 
-private:
+  SimObjectBase(const SimContext& ctx, const char* name); 
+
   std::string name_;
-
-  friend class SimPlatform;
-  friend class SimPortBase;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -228,14 +236,16 @@ private:
 template <typename Impl>
 class SimObject : public SimObjectBase {
 public:
-  typedef std::shared_ptr<Impl> Ptr;  
+  typedef std::shared_ptr<Impl> Ptr;
 
   template <typename... Args>
   static Ptr Create(Args&&... args);
 
 protected:
 
-  SimObject(const SimContext& ctx, const char* name) : SimObjectBase(ctx, name) {}
+  SimObject(const SimContext& ctx, const char* name) 
+    : SimObjectBase(ctx, name) 
+  {}
 
   void step(uint64_t cycle) override {
     this->impl().step(cycle);
@@ -255,8 +265,8 @@ private:
 class SimContext {
 private:    
   SimContext() {}
-  template <typename Impl> template <typename... Args> 
-  friend typename SimObject<Impl>::Ptr SimObject<Impl>::Create(Args&&... args);
+  
+  friend class SimPlatform;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -281,25 +291,19 @@ public:
     instance().clear();
   }
 
-  void register_object(const SimObjectBase::Ptr& obj) {
+  template <typename Impl, typename... Args>
+  typename SimObject<Impl>::Ptr CreateObject(Args&&... args) {
+    auto obj = std::make_shared<Impl>(SimContext{}, std::forward<Args>(args)...);
     objects_.push_back(obj);
+    return obj;
   }
 
   template <typename Pkt>
-  void schedule(const typename SimCallEvent<Pkt>::Func& callback, 
+  void schedule(const typename SimCallEvent<Pkt>::Func& callback,
                 const Pkt& pkt, 
                 uint64_t delay) {    
-    auto evt = SimCallEvent<Pkt>::Create(callback, pkt, delay);
     assert(delay != 0);
-    events_.emplace_back(evt);
-  }
-
-  template <typename Pkt>
-  void schedule(const SimPort<Pkt>* port, 
-                const Pkt& pkt, 
-                uint64_t delay) {
-    auto evt = SimPortEvent<Pkt>::Create(port, pkt, delay);
-    assert(delay != 0);
+    auto evt = std::make_shared<SimCallEvent<Pkt>>(callback, pkt, cycles_ + delay);    
     events_.emplace_back(evt);
   }
 
@@ -309,7 +313,7 @@ public:
     auto evt_it_end = events_.end();
     while (evt_it != evt_it_end) {
       auto& event = *evt_it;
-      if (event->step()) {        
+      if (cycles_ >= event->time()) {        
         event->fire();
         evt_it = events_.erase(evt_it);
       } else {        
@@ -341,9 +345,19 @@ private:
     events_.clear();
   }
 
+  template <typename Pkt>
+  void schedule(const SimPort<Pkt>* port, const Pkt& pkt, uint64_t delay) {
+    assert(delay != 0);
+    auto evt = SimEventBase::Ptr(new SimPortEvent<Pkt>(port, pkt, cycles_ + delay));
+    events_.emplace_back(evt);
+  }
+
   std::vector<SimObjectBase::Ptr> objects_;
   std::list<SimEventBase::Ptr> events_;
   uint64_t cycles_;
+
+  template <typename U> friend class SimPort;
+  friend class SimObjectBase;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -355,22 +369,14 @@ inline SimObjectBase::SimObjectBase(const SimContext&, const char* name)
 template <typename Impl>
 template <typename... Args>
 typename SimObject<Impl>::Ptr SimObject<Impl>::Create(Args&&... args) {
-  auto obj = std::make_shared<Impl>(SimContext{}, std::forward<Args>(args)...);
-  SimPlatform::instance().register_object(obj);
-  return obj;
+  return SimPlatform::instance().CreateObject<Impl>(std::forward<Args>(args)...);
 }
 
 template <typename Pkt>
 void SimPort<Pkt>::send(const Pkt& pkt, uint64_t delay) const {
-  if (peer_) {
+  if (peer_ && !tx_cb_) {
     reinterpret_cast<const SimPort<Pkt>*>(peer_)->send(pkt, delay);    
   } else {
     SimPlatform::instance().schedule(this, pkt, delay);
   }  
-}
-
-template <typename T, typename Pkt>
-void SimObjectBase::schedule(T *obj, void (T::*entry)(const Pkt&), const Pkt& pkt, uint64_t delay) {
-  auto callback = std::bind(entry, obj, std::placeholders::_1);
-  SimPlatform::instance().schedule(callback, pkt, delay);
 }

@@ -46,6 +46,10 @@ public:
     return active_;
   }
 
+  void suspend() {
+    active_ = false;
+  }
+
   void activate() {
     active_ = true;
   }

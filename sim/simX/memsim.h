@@ -1,47 +1,36 @@
 #pragma once
 
 #include <simobject.h>
+#include "types.h"
 #include <vector>
-#include <list>
 
 namespace vortex {
 
-struct MemReq {
-    uint64_t addr;
-    uint32_t tag;
-    bool write;
-    bool is_io;
-
-    MemReq(uint64_t _addr = 0, 
-           uint64_t _tag = 0, 
-           bool _write = false, 
-           bool _is_io = false
-    )   : addr(_addr)
-        , tag(_tag)
-        , write(_write)
-        , is_io(_is_io) 
-    {}
-};
-
-struct MemRsp {
-    uint64_t tag;    
-    MemRsp(uint64_t _tag = 0) : tag (_tag) {}
-};
-
 class MemSim : public SimObject<MemSim>{
-private:
-    class Impl;
-    Impl* impl_;
-
 public:
+    struct PerfStats {
+        uint64_t reads;
+        uint64_t writes;
 
-    MemSim(const SimContext& ctx, uint32_t num_inputs, uint32_t latency);
+        PerfStats() 
+            : reads(0)
+            , writes(0)
+        {}
+    };
+
+    std::vector<SimPort<MemReq>> MemReqPorts;
+    std::vector<SimPort<MemRsp>> MemRspPorts;
+
+    MemSim(const SimContext& ctx, uint32_t num_banks, uint32_t latency);
     ~MemSim();
 
     void step(uint64_t cycle);
 
-    std::vector<SlavePort<MemReq>>  MemReqPorts;
-    std::vector<MasterPort<MemRsp>> MemRspPorts;
+    const PerfStats& perf_stats() const;
+    
+private:
+    class Impl;
+    Impl* impl_;
 };
 
 };

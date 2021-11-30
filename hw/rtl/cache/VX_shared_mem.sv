@@ -335,21 +335,13 @@ module VX_shared_mem #(
     // per cycle: core_reads, core_writes
     wire [$clog2(NUM_REQS+1)-1:0] perf_core_reads_per_cycle;
     wire [$clog2(NUM_REQS+1)-1:0] perf_core_writes_per_cycle;
-    wire [$clog2(NUM_REQS+1)-1:0] perf_crsp_stall_per_cycle;
 
     wire [NUM_REQS-1:0] perf_core_reads_per_mask = core_req_valid & core_req_ready & ~core_req_rw;
     wire [NUM_REQS-1:0] perf_core_writes_per_mask = core_req_valid & core_req_ready & core_req_rw;
 
     `POP_COUNT(perf_core_reads_per_cycle, perf_core_reads_per_mask);
     `POP_COUNT(perf_core_writes_per_cycle, perf_core_writes_per_mask);
-    
-    if (CORE_TAG_ID_BITS != 0) begin
-        wire [NUM_REQS-1:0] perf_crsp_stall_per_mask = core_rsp_tmask & {NUM_REQS{core_rsp_valid && ~core_rsp_ready}};
-        `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_mask);
-    end else begin
-        wire [NUM_REQS-1:0] perf_crsp_stall_per_mask = core_rsp_valid & ~core_rsp_ready;
-        `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_mask);
-    end
+    wire perf_crsp_stall_per_cycle = core_rsp_valid & ~core_rsp_ready;
 
     reg [`PERF_CTR_BITS-1:0] perf_core_reads;
     reg [`PERF_CTR_BITS-1:0] perf_core_writes;
@@ -357,13 +349,13 @@ module VX_shared_mem #(
 
     always @(posedge clk) begin
         if (reset) begin
-            perf_core_reads   <= 0;
-            perf_core_writes  <= 0;
-            perf_crsp_stalls  <= 0;
+            perf_core_reads  <= 0;
+            perf_core_writes <= 0;
+            perf_crsp_stalls <= 0;
         end else begin
-            perf_core_reads   <= perf_core_reads  + `PERF_CTR_BITS'(perf_core_reads_per_cycle);
-            perf_core_writes  <= perf_core_writes + `PERF_CTR_BITS'(perf_core_writes_per_cycle);
-            perf_crsp_stalls  <= perf_crsp_stalls + `PERF_CTR_BITS'(perf_crsp_stall_per_cycle);
+            perf_core_reads  <= perf_core_reads  + `PERF_CTR_BITS'(perf_core_reads_per_cycle);
+            perf_core_writes <= perf_core_writes + `PERF_CTR_BITS'(perf_core_writes_per_cycle);
+            perf_crsp_stalls <= perf_crsp_stalls + `PERF_CTR_BITS'(perf_crsp_stall_per_cycle);
         end
     end
 
@@ -371,7 +363,8 @@ module VX_shared_mem #(
     assign perf_cache_if.writes       = perf_core_writes;
     assign perf_cache_if.read_misses  = '0;
     assign perf_cache_if.write_misses = '0;
-    assign perf_cache_if.pipe_stalls  = '0;
+    assign perf_cache_if.mshr_stalls  = '0;
+    assign perf_cache_if.mem_stalls   = '0;
     assign perf_cache_if.crsp_stalls  = perf_crsp_stalls;
 `endif
 

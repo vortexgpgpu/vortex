@@ -12,7 +12,7 @@ namespace vortex {
 
 struct pipeline_trace_t {
   //--
-  uint64_t    id;
+  uint64_t    uuid;
   
   //--
   int         cid;
@@ -22,7 +22,6 @@ struct pipeline_trace_t {
 
   //--
   bool        fetch_stall;
-  bool        pipeline_stall;
 
   //--
   bool        wb;  
@@ -38,7 +37,7 @@ struct pipeline_trace_t {
   ExeType     exe_type; 
 
   //--
-  std::vector<std::vector<uint64_t>> mem_addrs;
+  std::vector<std::vector<mem_addr_size_t>> mem_addrs;
   
   //--
   union {
@@ -53,22 +52,19 @@ struct pipeline_trace_t {
     } fpu;
     struct {
       GpuType type;
+      WarpMask active_warps;
     } gpu;
   };
 
-  // stats
-  uint64_t icache_latency;
-  uint64_t dcache_latency;
-  uint64_t tex_latency;
+  bool stalled;
 
-  pipeline_trace_t(uint64_t id_, const ArchDef& arch) {
-    id  = id_;
+  pipeline_trace_t(uint64_t uuid_, const ArchDef& arch) {
+    uuid = uuid_;
     cid = 0;
     wid = 0;
     tmask.reset();
-    PC  = 0;
+    PC = 0;
     fetch_stall = false;
-    pipeline_stall = false;
     wb  = false;
     rdest = 0;
     rdest_type = RegType::None;
@@ -76,16 +72,18 @@ struct pipeline_trace_t {
     used_fregs.reset();
     used_vregs.reset();
     exe_type = ExeType::NOP;
-    mem_addrs.resize(arch.num_threads());    
-    icache_latency = 0;
-    dcache_latency = 0;
-    tex_latency    = 0;
+    mem_addrs.resize(arch.num_threads());
+    stalled = false;
   }
 
-  bool check_stalled(bool stall) {
-    bool old = pipeline_stall;
-    pipeline_stall = stall;
-    return stall ? old : true;
+  bool suspend() {
+    bool old = stalled;
+    stalled = true;
+    return old;
+  }
+
+  void resume() {
+    stalled = false;
   }
 };
 
@@ -96,16 +94,16 @@ inline std::ostream &operator<<(std::ostream &os, const pipeline_trace_t& state)
      os << ", rd=" << state.rdest_type << std::dec << state.rdest;
   }
   os << ", ex=" << state.exe_type;
-  os << " (#" << std::dec << state.id << ")";
+  os << " (#" << std::dec << state.uuid << ")";
   return os;
 }
 
-class PipelineStage : public Queue<pipeline_trace_t*> {
+class PipelineLatch : public Queue<pipeline_trace_t*> {
 protected:
   const char* name_;
 
 public:
-  PipelineStage(const char* name = nullptr) 
+  PipelineLatch(const char* name = nullptr) 
     : name_(name) 
   {}
 };

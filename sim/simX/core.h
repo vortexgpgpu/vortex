@@ -17,6 +17,7 @@
 #include "warp.h"
 #include "pipeline.h"
 #include "cache.h"
+#include "sharedmem.h"
 #include "ibuffer.h"
 #include "scoreboard.h"
 #include "exeunit.h"
@@ -26,6 +27,47 @@ namespace vortex {
 
 class Core : public SimObject<Core> {
 public:
+  struct PerfStats {
+    uint64_t instrs;
+    uint64_t ibuf_stalls;
+    uint64_t scrb_stalls;
+    uint64_t alu_stalls;
+    uint64_t lsu_stalls;
+    uint64_t csr_stalls;
+    uint64_t fpu_stalls;
+    uint64_t gpu_stalls;
+    uint64_t loads;
+    uint64_t stores;
+    uint64_t branches;
+    uint64_t mem_reads;
+    uint64_t mem_writes;
+    uint64_t mem_latency;
+    uint64_t tex_reads;
+    uint64_t tex_latency;
+
+    PerfStats() 
+      : instrs(0)
+      , ibuf_stalls(0)
+      , scrb_stalls(0)
+      , alu_stalls(0)
+      , lsu_stalls(0)
+      , csr_stalls(0)
+      , fpu_stalls(0)
+      , gpu_stalls(0)
+      , loads(0)
+      , stores(0)
+      , branches(0)
+      , mem_reads(0)
+      , mem_writes(0)
+      , mem_latency(0)
+      , tex_reads(0)
+      , tex_latency(0)
+    {}
+  };
+
+  SimPort<MemRsp> MemRspPort;
+  SimPort<MemReq> MemReqPort;
+
   Core(const SimContext& ctx, const ArchDef &arch, Word id);
   ~Core();
 
@@ -51,8 +93,8 @@ public:
     return arch_;
   }
 
-  unsigned long stats_insts() const {
-    return stats_insts_;
+  const PerfStats& perf_stats() const {
+    return perf_stats_;
   } 
 
   Word getIRegValue(int reg) const {
@@ -63,7 +105,9 @@ public:
   
   void set_csr(Addr addr, Word value, int tid, int wid);
 
-  void barrier(int bar_id, int count, int warp_id);
+  WarpMask wspawn(int num_warps, int nextPC);
+  
+  WarpMask barrier(int bar_id, int count, int warp_id);
 
   Word icache_read(Addr, Size);
 
@@ -71,7 +115,7 @@ public:
 
   void dcache_write(Addr, Word, Size);
 
-  Word tex_read(uint32_t unit, Word lod, Word u, Word v, std::vector<uint64_t>* mem_addrs);
+  Word tex_read(uint32_t unit, Word lod, Word u, Word v, std::vector<mem_addr_size_t>* mem_addrs);
 
   void trigger_ecall();
 
@@ -81,21 +125,18 @@ public:
 
 private:
 
+  void schedule(uint64_t cycle);
   void fetch(uint64_t cycle);
   void decode(uint64_t cycle);
-  void issue(uint64_t cycle);
   void execute(uint64_t cycle);
   void commit(uint64_t cycle);
-
-  void warp_scheduler(uint64_t cycle);
-
+  
   void writeToStdOut(Addr addr, Word data);
 
   Word id_;
   const ArchDef arch_;
   const Decoder decoder_;
   MemoryUnit mmu_;
-  RAM shared_mem_;
   std::vector<TexUnit> tex_units_;
 
   std::vector<std::shared_ptr<Warp>> warps_;  
@@ -107,33 +148,33 @@ private:
   std::vector<ExeUnit::Ptr> exe_units_;
   Cache::Ptr icache_;
   Cache::Ptr dcache_;
+  SharedMem::Ptr shared_mem_;
   Switch<MemReq, MemRsp>::Ptr l1_mem_switch_;
   std::vector<Switch<MemReq, MemRsp>::Ptr> dcache_switch_;
 
-  PipelineStage fetch_stage_;
-  PipelineStage decode_stage_;
-  PipelineStage issue_stage_;
-  PipelineStage execute_stage_;
-  PipelineStage commit_stage_;  
+  PipelineLatch fetch_latch_;
+  PipelineLatch decode_latch_;
   
   HashTable<pipeline_trace_t*> pending_icache_;
-  WarpMask stalled_warps_;  
+  WarpMask active_warps_;
+  WarpMask stalled_warps_;
   uint32_t last_schedule_wid_;
-  uint32_t issued_instrs_;
-  uint32_t committed_instrs_;
+  uint64_t issued_instrs_;
+  uint64_t committed_instrs_;
+  uint32_t csr_tex_unit_;
   bool ecall_;
   bool ebreak_;
 
   std::unordered_map<int, std::stringstream> print_bufs_;
   
-  uint64_t stats_insts_;
+  PerfStats perf_stats_;
+  uint64_t perf_mem_pending_reads_;
 
   friend class LsuUnit;
+  friend class AluUnit;
+  friend class CsrUnit;
+  friend class FpuUnit;
   friend class GpuUnit;
-
-public:
-  SlavePort<MemRsp>  MemRspPort;
-  MasterPort<MemReq> MemReqPort;
 };
 
 } // namespace vortex

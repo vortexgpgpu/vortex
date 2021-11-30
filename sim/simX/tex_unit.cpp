@@ -27,7 +27,7 @@ void TexUnit::set_state(uint32_t state, uint32_t value) {
 uint32_t TexUnit::read(int32_t u, 
                        int32_t v, 
                        int32_t lod, 
-                       std::vector<uint64_t>* mem_addrs) {
+                       std::vector<mem_addr_size_t>* mem_addrs) {
   //--
   auto xu = Fixed<TEX_FXD_FRAC>::make(u);
   auto xv = Fixed<TEX_FXD_FRAC>::make(v);
@@ -60,10 +60,10 @@ uint32_t TexUnit::read(int32_t u,
     uint32_t texel10 = core_->dcache_read(addr10, stride);
     uint32_t texel11 = core_->dcache_read(addr11, stride);
 
-    mem_addrs->push_back(addr00);
-    mem_addrs->push_back(addr01);
-    mem_addrs->push_back(addr10);
-    mem_addrs->push_back(addr11);
+    mem_addrs->push_back({addr00, stride});
+    mem_addrs->push_back({addr01, stride});
+    mem_addrs->push_back({addr10, stride});
+    mem_addrs->push_back({addr11, stride});
 
     // filtering
     auto color = TexFilterLinear(
@@ -79,7 +79,7 @@ uint32_t TexUnit::read(int32_t u,
 
     // memory lookup
     uint32_t texel = core_->dcache_read(addr, stride);
-    mem_addrs->push_back(addr);
+    mem_addrs->push_back({addr, stride});
 
     // filtering
     auto color = TexFilterPoint(format, texel);

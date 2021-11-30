@@ -27,7 +27,7 @@ void Warp::eval(pipeline_trace_t *trace) {
   DPH(2, "Fetch: coreid=" << core_->id() << ", wid=" << id_ << ", tmask=");
   for (int i = 0, n = core_->arch().num_threads(); i < n; ++i)
     DPN(2, tmask_.test(n-i-1));
-  DPN(2, ", PC=0x" << std::hex << PC_ << std::endl);
+  DPN(2, ", PC=0x" << std::hex << PC_ << " (#" << std::dec << trace->uuid << ")" << std::endl);
 
   /* Fetch and decode. */    
 
@@ -38,7 +38,7 @@ void Warp::eval(pipeline_trace_t *trace) {
     std::abort();
   }  
 
-  DP(2, "Instr 0x" << std::hex << instr_code << ": " << *instr << " (#" << trace->id << ")");
+  DP(2, "Instr 0x" << std::hex << instr_code << ": " << *instr);
 
   // Update trace
   trace->cid   = core_->id();
