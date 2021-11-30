@@ -358,19 +358,17 @@ module VX_mem_unit # (
 
 `ifdef PERF_ENABLE
     
+    `UNUSED_VAR (perf_dcache_if.mem_stalls)
+    `UNUSED_VAR (perf_dcache_if.crsp_stalls)
+
     assign perf_memsys_if.icache_reads       = perf_icache_if.reads;
     assign perf_memsys_if.icache_read_misses = perf_icache_if.read_misses;
-    assign perf_memsys_if.icache_pipe_stalls = perf_icache_if.pipe_stalls;
-    assign perf_memsys_if.icache_crsp_stalls = perf_icache_if.crsp_stalls;
-
     assign perf_memsys_if.dcache_reads       = perf_dcache_if.reads;
     assign perf_memsys_if.dcache_writes      = perf_dcache_if.writes;
     assign perf_memsys_if.dcache_read_misses = perf_dcache_if.read_misses;
     assign perf_memsys_if.dcache_write_misses= perf_dcache_if.write_misses;
     assign perf_memsys_if.dcache_bank_stalls = perf_dcache_if.bank_stalls;
     assign perf_memsys_if.dcache_mshr_stalls = perf_dcache_if.mshr_stalls;    
-    assign perf_memsys_if.dcache_pipe_stalls = perf_dcache_if.pipe_stalls;
-    assign perf_memsys_if.dcache_crsp_stalls = perf_dcache_if.crsp_stalls;
 
 if (`SM_ENABLE) begin
     assign perf_memsys_if.smem_reads         = perf_smem_if.reads;
@@ -382,47 +380,41 @@ end else begin
     assign perf_memsys_if.smem_bank_stalls   = 0;
 end
     
-    reg [`PERF_CTR_BITS-1:0] perf_mem_lat_per_cycle;
+    reg [`PERF_CTR_BITS-1:0] perf_mem_pending_reads;
 
     always @(posedge clk) begin
         if (reset) begin
-            perf_mem_lat_per_cycle <= 0;
+            perf_mem_pending_reads <= 0;
         end else begin
-            perf_mem_lat_per_cycle <= perf_mem_lat_per_cycle + 
-                `PERF_CTR_BITS'($signed(2'((mem_req_if.valid && !mem_req_if.rw && mem_req_if.ready) && !(mem_rsp_if.valid && mem_rsp_if.ready)) - 
-                    2'((mem_rsp_if.valid && mem_rsp_if.ready) && !(mem_req_if.valid && !mem_req_if.rw && mem_req_if.ready))));
+            perf_mem_pending_reads <= perf_mem_pending_reads + 
+                `PERF_CTR_BITS'($signed(2'((mem_req_if.valid && mem_req_if.ready && !mem_req_if.rw) && !(mem_rsp_if.valid && mem_rsp_if.ready)) - 
+                    2'((mem_rsp_if.valid && mem_rsp_if.ready) && !(mem_req_if.valid && mem_req_if.ready && !mem_req_if.rw))));
         end
     end
     
     reg [`PERF_CTR_BITS-1:0] perf_mem_reads;
     reg [`PERF_CTR_BITS-1:0] perf_mem_writes;
     reg [`PERF_CTR_BITS-1:0] perf_mem_lat;
-    reg [`PERF_CTR_BITS-1:0] perf_mem_stalls;
 
     always @(posedge clk) begin
         if (reset) begin       
             perf_mem_reads  <= 0;     
             perf_mem_writes <= 0;            
             perf_mem_lat    <= 0;
-            perf_mem_stalls <= 0;
         end else begin  
             if (mem_req_if.valid && mem_req_if.ready && !mem_req_if.rw) begin
                 perf_mem_reads <= perf_mem_reads + `PERF_CTR_BITS'd1;
             end
             if (mem_req_if.valid && mem_req_if.ready && mem_req_if.rw) begin
                 perf_mem_writes <= perf_mem_writes + `PERF_CTR_BITS'd1;
-            end            
-            if (mem_req_if.valid && !mem_req_if.ready) begin
-                perf_mem_stalls <= perf_mem_stalls + `PERF_CTR_BITS'd1;
-            end       
-            perf_mem_lat <= perf_mem_lat + perf_mem_lat_per_cycle;
+            end      
+            perf_mem_lat <= perf_mem_lat + perf_mem_pending_reads;
         end
     end
 
     assign perf_memsys_if.mem_reads   = perf_mem_reads;       
     assign perf_memsys_if.mem_writes  = perf_mem_writes;
-    assign perf_memsys_if.mem_latency = perf_mem_lat; 
-    assign perf_memsys_if.mem_stalls  = perf_mem_stalls;
+    assign perf_memsys_if.mem_latency = perf_mem_lat;
 `endif
     
 endmodule

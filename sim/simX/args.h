@@ -35,7 +35,7 @@ public:
     CommandLineArg(l, ht), arg_(x) {}
 
   int read(int argc, char **argv) {
-    __unused(argc);
+    __unused (argc);
     std::istringstream iss(argv[1]);
     iss >> arg_;
     return 1;
@@ -53,7 +53,7 @@ public:
     CommandLineArg(l, ht), arg_(x) { arg_ = false; }
 
   int read(int argc, char **argv) { 
-    __unused(argc, argv);
+    __unused (argc, argv);
     arg_ = true; 
     return 0; 
   }

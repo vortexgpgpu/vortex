@@ -96,7 +96,7 @@ public:
         }      
         uint32_t tag = (state->rdest << 16) | (state->wid << 4) | (int)state->rdest_type;
         assert(owners_.count(tag) == 0);
-        owners_[tag] = state->id;
+        owners_[tag] = state->uuid;
     }
 
     void release(pipeline_trace_t* state) {

@@ -8,56 +8,29 @@ namespace vortex {
 
 class Core;
 
-class ExeUnit {
-protected:
-    const char* name_;
-    Queue<pipeline_trace_t*> inputs_;
-    Queue<pipeline_trace_t*> outputs_;
+class ExeUnit : public SimObject<ExeUnit> {
+public:
+    SimPort<pipeline_trace_t*> Input;
+    SimPort<pipeline_trace_t*> Output;
 
-    void schedule_output(pipeline_trace_t* trace, uint32_t delay) {
-        if (delay > 1) {
-            SimPlatform::instance().schedule(
-                [&](pipeline_trace_t* req) { 
-                    outputs_.push(req); 
-                },
-                trace,
-                (delay - 1)
-            );
-        } else {
-            outputs_.push(trace);
-        }
-    }
-
-public:    
-    typedef std::shared_ptr<ExeUnit> Ptr;
-
-    ExeUnit(const char* name) : name_(name) {}    
+    ExeUnit(const SimContext& ctx, Core* core, const char* name) 
+        : SimObject<ExeUnit>(ctx, name) 
+        , Input(this)
+        , Output(this)
+        , core_(core)
+    {}    
+    
     virtual ~ExeUnit() {}
 
-    void push(pipeline_trace_t* trace) {
-        inputs_.push(trace);
-    }
-
-    bool empty() const {
-        return outputs_.empty();
-    }
-
-    pipeline_trace_t* top() const {
-        return outputs_.top();
-    }
-
-    void pop() {
-        outputs_.pop();
-    }
-
-    virtual void step(uint64_t cycle) = 0;
+protected:
+    Core* core_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
 class NopUnit : public ExeUnit {
 public:
-    NopUnit(Core*);
+    NopUnit(const SimContext& ctx, Core*);
     
     void step(uint64_t cycle);
 };
@@ -65,15 +38,14 @@ public:
 ///////////////////////////////////////////////////////////////////////////////
 
 class LsuUnit : public ExeUnit {
-private:
-    Core* core_;
+private:    
     uint32_t num_threads_;
     HashTable<std::pair<pipeline_trace_t*, uint32_t>> pending_dcache_;
     pipeline_trace_t* fence_state_;
     bool fence_lock_;
 
 public:
-    LsuUnit(Core*);
+    LsuUnit(const SimContext& ctx, Core*);
 
     void step(uint64_t cycle);
 };
@@ -82,7 +54,7 @@ public:
 
 class AluUnit : public ExeUnit {
 public:
-    AluUnit(Core*);
+    AluUnit(const SimContext& ctx, Core*);
     
     void step(uint64_t cycle);
 };
@@ -91,7 +63,7 @@ public:
 
 class CsrUnit : public ExeUnit {
 public:
-    CsrUnit(Core*);
+    CsrUnit(const SimContext& ctx, Core*);
     
     void step(uint64_t cycle);
 };
@@ -100,7 +72,7 @@ public:
 
 class FpuUnit : public ExeUnit {
 public:
-    FpuUnit(Core*);
+    FpuUnit(const SimContext& ctx, Core*);
     
     void step(uint64_t cycle);
 };
@@ -109,14 +81,13 @@ public:
 
 class GpuUnit : public ExeUnit {
 private:
-    Core* core_;
     uint32_t num_threads_;
     HashTable<std::pair<pipeline_trace_t*, uint32_t>> pending_tex_reqs_;
 
     bool processTexRequest(uint64_t cycle, pipeline_trace_t* trace);
     
 public:
-    GpuUnit(Core*);
+    GpuUnit(const SimContext& ctx, Core*);
     
     void step(uint64_t cycle);
 };

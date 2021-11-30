@@ -30,7 +30,7 @@ module VX_skid_buffer #(
 
     end else if (NOBACKPRESSURE) begin
 
-        `RUNTIME_ASSERT(ready_out, ("ready_out should always be asserted"))
+        `RUNTIME_ASSERT(ready_out, ("%t: *** ready_out should always be asserted", $time))
 
         wire stall = valid_out && ~ready_out;
 

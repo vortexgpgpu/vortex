@@ -124,7 +124,17 @@ CONFIGS="-DNUM_CLUSTERS=$CLUSTERS -DNUM_CORES=$CORES -DNUM_WARPS=$WARPS -DNUM_TH
 
 echo "CONFIGS=$CONFIGS"
 
-make -C $DRIVER_PATH clean
+if [ -f "blackbox.cache" ]
+then 
+    LAST_CONFIGS=`cat blackbox.cache`
+fi
+
+if [ "$CONFIGS+$DEBUG+$SCOPE" != "$LAST_CONFIGS" ]; 
+then
+    make -C $DRIVER_PATH clean
+fi
+
+echo "$CONFIGS+$DEBUG+$SCOPE" > blackbox.cache
 
 status=0
 

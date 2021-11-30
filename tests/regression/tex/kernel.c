@@ -62,15 +62,16 @@ int main() {
 	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
 
 	// configure texture unit
-	csr_write(CSR_TEX(0, TEX_STATE_WIDTH),  arg->src_logwidth);	
-	csr_write(CSR_TEX(0, TEX_STATE_HEIGHT), arg->src_logheight);
-	csr_write(CSR_TEX(0, TEX_STATE_FORMAT), arg->format);
-	csr_write(CSR_TEX(0, TEX_STATE_WRAPU),  arg->wrapu);
-	csr_write(CSR_TEX(0, TEX_STATE_WRAPV),  arg->wrapv);
-	csr_write(CSR_TEX(0, TEX_STATE_FILTER), (arg->filter ? 1 : 0));
-	csr_write(CSR_TEX(0, TEX_STATE_ADDR),   arg->src_addr);
+	csr_write(CSR_TEX_UNIT,   0);
+	csr_write(CSR_TEX_WIDTH,  arg->src_logwidth);	
+	csr_write(CSR_TEX_HEIGHT, arg->src_logheight);
+	csr_write(CSR_TEX_FORMAT, arg->format);
+	csr_write(CSR_TEX_WRAPU,  arg->wrapu);
+	csr_write(CSR_TEX_WRAPV,  arg->wrapv);
+	csr_write(CSR_TEX_FILTER, (arg->filter ? 1 : 0));
+	csr_write(CSR_TEX_ADDR,   arg->src_addr);
 	static_for_t<int, 0, TEX_LOD_MAX+1>()([&](int i) {
-		csr_write(CSR_TEX(0, TEX_STATE_MIPOFF(i)), arg->mip_offs[i]);
+		csr_write(CSR_TEX_MIPOFF(i), arg->mip_offs[i]);
 	});
 
 	tile_arg_t targ;

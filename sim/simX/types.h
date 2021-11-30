@@ -21,6 +21,8 @@ typedef std::bitset<32> RegMask;
 typedef std::bitset<32> ThreadMask;
 typedef std::bitset<32> WarpMask;
 
+///////////////////////////////////////////////////////////////////////////////
+
 enum class RegType {
   None,
   Integer,
@@ -37,6 +39,8 @@ inline std::ostream &operator<<(std::ostream &os, const RegType& type) {
   }
   return os;
 }
+
+///////////////////////////////////////////////////////////////////////////////
 
 enum class ExeType {
   NOP,
@@ -61,6 +65,8 @@ inline std::ostream &operator<<(std::ostream &os, const ExeType& type) {
   return os;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
 enum class AluType {
   ARITH,
   BRANCH,
@@ -80,6 +86,8 @@ inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
   return os;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
 enum class LsuType {
   LOAD,
   STORE,
@@ -96,6 +104,47 @@ inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
   }
   return os;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+enum class AddrType {
+  Global,
+  Shared,
+  IO,
+};
+
+inline std::ostream &operator<<(std::ostream &os, const AddrType& type) {
+  switch (type) {
+  case AddrType::Global: os << "Global"; break;
+  case AddrType::Shared: os << "Shared"; break;
+  case AddrType::IO:     os << "IO"; break;
+  }
+  return os;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+struct mem_addr_size_t {
+  uint64_t addr;
+  uint32_t size;
+};
+
+inline AddrType get_addr_type(Word addr, uint32_t size) {
+  __unused (size);
+  if (SM_ENABLE) {
+    if (addr >= (SMEM_BASE_ADDR - SMEM_SIZE)
+    &&  addr < SMEM_BASE_ADDR) {      
+      assert((addr + size) <= SMEM_BASE_ADDR);
+      return AddrType::Shared;
+    }
+  }
+  if (addr >= IO_BASE_ADDR) {
+     return AddrType::IO;
+  }
+  return AddrType::Global;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 
 enum class FpuType {
   FNCP,
@@ -115,6 +164,8 @@ inline std::ostream &operator<<(std::ostream &os, const FpuType& type) {
   }
   return os;
 }
+
+///////////////////////////////////////////////////////////////////////////////
 
 enum class GpuType {
   TMC,
@@ -137,6 +188,8 @@ inline std::ostream &operator<<(std::ostream &os, const GpuType& type) {
   return os;
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
 enum class ArbiterType {
   Priority,
   RoundRobin
@@ -152,6 +205,30 @@ inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+struct MemReq {
+    uint64_t addr;
+    uint32_t tag;
+    bool write;
+    bool is_io;
+
+    MemReq(uint64_t _addr = 0, 
+           uint64_t _tag = 0, 
+           bool _write = false, 
+           bool _is_io = false
+    )   : addr(_addr)
+        , tag(_tag)
+        , write(_write)
+        , is_io(_is_io) 
+    {}
+};
+
+struct MemRsp {
+    uint64_t tag;    
+    MemRsp(uint64_t _tag = 0) : tag (_tag) {}
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 template <typename T>
 class Queue {
 protected:
@@ -164,20 +241,28 @@ public:
     return queue_.empty();
   }
 
-  const T& top() const {
+  const T& front() const {
     return queue_.front();
   }
 
-  T& top() {
+  T& front() {
     return queue_.front();
   }
 
-  void pop() {
-    queue_.pop();
+  const T& back() const {
+    return queue_.back();
+  }
+
+  T& back() {
+    return queue_.back();
   }
 
   void push(const T& value) {    
     queue_.push(value);
+  }
+
+  void pop() {
+    queue_.pop();
   }
 };
 
@@ -187,20 +272,24 @@ template <typename T>
 class HashTable {
 private:
   std::vector<std::pair<bool, T>> entries_;
-  uint32_t capacity_;
+  uint32_t size_;
 
 public:    
-  HashTable(uint32_t size)
-    : entries_(size)
-    , capacity_(0) 
+  HashTable(uint32_t capacity)
+    : entries_(capacity)
+    , size_(0) 
   {}
 
   bool empty() const {
-    return (0 == capacity_);
+    return (0 == size_);
   }
   
   bool full() const {
-    return (capacity_ == entries_.size());
+    return (size_ == entries_.size());
+  }
+
+  uint32_t size() const {
+    return size_;
   }
 
   bool contains(uint32_t index) const {
@@ -225,7 +314,7 @@ public:
       if (!entry.first) {
         entry.first = true;
         entry.second = value;
-        ++capacity_;              
+        ++size_;              
         return i;
       }
     }
@@ -237,7 +326,7 @@ public:
     auto& entry = entries_.at(index);
     assert(entry.first);
     entry.first = false;
-    --capacity_;
+    --size_;
   }
 };
 
@@ -287,7 +376,7 @@ public:
       uint32_t j = (cursor_ + i) % n;
       auto& req_in = ReqIn.at(j);      
       if (!req_in.empty()) {
-        auto& req = req_in.top();
+        auto& req = req_in.front();
         if (tag_shift_) {
           req.tag = (req.tag << tag_shift_) | j;
         }
@@ -300,7 +389,7 @@ public:
 
     // process incoming reponses
     if (!RspIn.empty()) {
-      auto& rsp = RspIn.top();    
+      auto& rsp = RspIn.front();    
       uint32_t port_id = 0;
       if (tag_shift_) {
         port_id = rsp.tag & ((1 << tag_shift_)-1);
@@ -317,10 +406,10 @@ public:
     }
   }
 
-  std::vector<SlavePort<Req>>  ReqIn;
-  MasterPort<Req>              ReqOut;
-  SlavePort<Rsp>               RspIn;    
-  std::vector<MasterPort<Rsp>> RspOut;
+  std::vector<SimPort<Req>>  ReqIn;
+  SimPort<Req>              ReqOut;
+  SimPort<Rsp>               RspIn;    
+  std::vector<SimPort<Rsp>> RspOut;
 };
 
 }

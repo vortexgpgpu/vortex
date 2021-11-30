@@ -48,7 +48,6 @@ module VX_bank #(
     output wire perf_read_misses,
     output wire perf_write_misses,
     output wire perf_mshr_stalls,
-    output wire perf_pipe_stalls,
 `endif
 
     // Core Request    
@@ -470,7 +469,6 @@ module VX_bank #(
 `ifdef PERF_ENABLE
     assign perf_read_misses  = do_read_st1 && miss_st1;
     assign perf_write_misses = do_write_st1 && miss_st1;
-    assign perf_pipe_stalls  = crsq_stall || mreq_alm_full || mshr_alm_full;
     assign perf_mshr_stalls  = mshr_alm_full;
 `endif
 

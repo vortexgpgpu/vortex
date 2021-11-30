@@ -9,16 +9,18 @@
 #include "decode.h"
 #include "core.h"
 #include "debug.h"
+#include "constants.h"
 
 using namespace vortex;
 
 Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
     : SimObject(ctx, "Core")
+    , MemRspPort(this)
+    , MemReqPort(this)
     , id_(id)
     , arch_(arch)
     , decoder_(arch)
     , mmu_(0, arch.wsize(), true)
-    , shared_mem_(4096)
     , tex_units_(NUM_TEX_UNITS, this)
     , warps_(arch.num_warps())
     , barriers_(arch.num_barriers(), 0)
@@ -27,7 +29,7 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
     , ibuffers_(arch.num_warps(), IBUF_SIZE)
     , scoreboard_(arch_) 
     , exe_units_((int)ExeType::MAX)
-    , icache_(Cache::Create("Icache", CacheConfig{
+    , icache_(Cache::Create("Icache", Cache::Config{
         log2ceil(ICACHE_SIZE),  // C
         log2ceil(L1_BLOCK_SIZE),// B
         2,                      // W
@@ -42,7 +44,7 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
         NUM_WARPS,              // mshr
         2,                      // pipeline latency
       }))
-    , dcache_(Cache::Create("Dcache", CacheConfig{
+    , dcache_(Cache::Create("Dcache", Cache::Config{
         log2ceil(DCACHE_SIZE),  // C
         log2ceil(L1_BLOCK_SIZE),// B
         2,                      // W
@@ -55,37 +57,41 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
         false,                  // write response
         0,                      // victim size
         DCACHE_MSHR_SIZE,       // mshr
-        2,                      // pipeline latency
+        4,                      // pipeline latency
+      }))
+    , shared_mem_(SharedMem::Create("sharedmem", SharedMem::Config{
+        arch.num_threads(), 
+        arch.num_threads(), 
+        Constants::SMEM_BANK_OFFSET,
+        1,
+        false
       }))
     , l1_mem_switch_(Switch<MemReq, MemRsp>::Create("l1_arb", ArbiterType::Priority, 2)) 
     , dcache_switch_(arch.num_threads())
-    , fetch_stage_("fetch")
-    , decode_stage_("decode")
-    , issue_stage_("issue")
-    , execute_stage_("execute")
-    , commit_stage_("writeback")
+    , fetch_latch_("fetch")
+    , decode_latch_("decode")
     , pending_icache_(arch_.num_warps())
+    , active_warps_(1)
     , stalled_warps_(0)
     , last_schedule_wid_(0)
     , issued_instrs_(0)
     , committed_instrs_(0)
+    , csr_tex_unit_(0)
     , ecall_(false)
     , ebreak_(false)   
-    , stats_insts_(0)
-    , MemRspPort(this)
-    , MemReqPort(this)    
+    , perf_mem_pending_reads_(0) 
 {  
   for (int i = 0; i < arch_.num_warps(); ++i) {
     warps_.at(i) = std::make_shared<Warp>(this, i);
   }
 
   // register execute units
-  exe_units_.at((int)ExeType::NOP) = std::make_shared<NopUnit>(this);
-  exe_units_.at((int)ExeType::ALU) = std::make_shared<AluUnit>(this);
-  exe_units_.at((int)ExeType::LSU) = std::make_shared<LsuUnit>(this);
-  exe_units_.at((int)ExeType::CSR) = std::make_shared<CsrUnit>(this);
-  exe_units_.at((int)ExeType::FPU) = std::make_shared<FpuUnit>(this);  
-  exe_units_.at((int)ExeType::GPU) = std::make_shared<GpuUnit>(this);
+  exe_units_.at((int)ExeType::NOP) = SimPlatform::instance().CreateObject<NopUnit>(this);
+  exe_units_.at((int)ExeType::ALU) = SimPlatform::instance().CreateObject<AluUnit>(this);
+  exe_units_.at((int)ExeType::LSU) = SimPlatform::instance().CreateObject<LsuUnit>(this);
+  exe_units_.at((int)ExeType::CSR) = SimPlatform::instance().CreateObject<CsrUnit>(this);
+  exe_units_.at((int)ExeType::FPU) = SimPlatform::instance().CreateObject<FpuUnit>(this);  
+  exe_units_.at((int)ExeType::GPU) = SimPlatform::instance().CreateObject<GpuUnit>(this);
 
   // connect l1 switch
   icache_->MemReqPort.bind(&l1_mem_switch_->ReqIn[0]);
@@ -109,6 +115,18 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
 
   // activate warp0
   warps_.at(0)->setTmask(0, true);
+
+  // memory perf callbacks
+  MemReqPort.tx_callback([&](const MemReq& req, uint64_t cycle){
+    __unused (cycle);
+    perf_stats_.mem_reads   += !req.write;
+    perf_stats_.mem_writes  += req.write;
+    perf_mem_pending_reads_ += !req.write;    
+  });
+  MemRspPort.tx_callback([&](const MemRsp&, uint64_t cycle){
+    __unused (cycle);
+    --perf_mem_pending_reads_;
+  });
 }
 
 Core::~Core() {
@@ -128,23 +146,26 @@ void Core::attach_ram(RAM* ram) {
 void Core::step(uint64_t cycle) {
   this->commit(cycle);
   this->execute(cycle);
-  this->issue(cycle);
   this->decode(cycle);
   this->fetch(cycle);
+  this->schedule(cycle);
+
+  // update perf counter  
+  perf_stats_.mem_latency += perf_mem_pending_reads_;
 
   DPN(2, std::flush);
 }
 
-void Core::warp_scheduler(uint64_t cycle) {
+void Core::schedule(uint64_t cycle) {
   __unused (cycle);
 
   bool foundSchedule = false;
   int scheduled_warp = last_schedule_wid_;
 
   // round robin scheduling
-  for (size_t wid = 0; wid < warps_.size(); ++wid) {    
-    scheduled_warp = (scheduled_warp + 1) % warps_.size();
-    bool warp_active  = warps_.at(scheduled_warp)->active();
+  for (size_t wid = 0, nw = arch_.num_warps(); wid < nw; ++wid) {    
+    scheduled_warp = (scheduled_warp + 1) % nw;
+    bool warp_active = active_warps_.test(scheduled_warp);
     bool warp_stalled = stalled_warps_.test(scheduled_warp); 
     if (warp_active && !warp_stalled) {      
       last_schedule_wid_ = scheduled_warp;
@@ -159,85 +180,91 @@ void Core::warp_scheduler(uint64_t cycle) {
   // suspend warp until decode
   stalled_warps_.set(scheduled_warp);
 
-  auto& warp = warps_.at(scheduled_warp);  
-  stats_insts_ += warp->getActiveThreads();
-  
-  auto trace = new pipeline_trace_t((issued_instrs_++ * arch_.num_cores()) + id_, arch_);
+  auto& warp = warps_.at(scheduled_warp);
+
+  uint64_t uuid = (issued_instrs_++ * arch_.num_cores()) + id_;
+
+  auto trace = new pipeline_trace_t(uuid, arch_);
 
   warp->eval(trace);
 
   DT(3, cycle, "pipeline-schedule: " << *trace);
 
   // advance to fetch stage  
-  fetch_stage_.push(trace);
+  fetch_latch_.push(trace);
 }
 
 void Core::fetch(uint64_t cycle) {
+  __unused (cycle);
+
   // handle icache reponse
   auto& icache_rsp_port = icache_->CoreRspPorts.at(0);      
   if (!icache_rsp_port.empty()){
-    auto& mem_rsp = icache_rsp_port.top();
+    auto& mem_rsp = icache_rsp_port.front();
     auto trace = pending_icache_.at(mem_rsp.tag);
-    auto latency = (SimPlatform::instance().cycles() - trace->icache_latency);
-    trace->icache_latency = latency;
-    decode_stage_.push(trace);
+    decode_latch_.push(trace);
     DT(3, cycle, "icache-rsp: addr=" << std::hex << trace->PC << ", tag=" << mem_rsp.tag << ", " << *trace);
     pending_icache_.release(mem_rsp.tag);
     icache_rsp_port.pop();
   }
 
   // send icache request
-  if (!fetch_stage_.empty()) {
-    auto trace = fetch_stage_.top();
-    trace->icache_latency = SimPlatform::instance().cycles();
+  if (!fetch_latch_.empty()) {
+    auto trace = fetch_latch_.front();
     MemReq mem_req;
     mem_req.addr  = trace->PC;
     mem_req.write = false;
     mem_req.tag   = pending_icache_.allocate(trace);    
     icache_->CoreReqPorts.at(0).send(mem_req, 1);
     DT(3, cycle, "icache-req: addr=" << std::hex << mem_req.addr << ", tag=" << mem_req.tag << ", " << *trace);
-    fetch_stage_.pop();
-  }  
-
-  // schedule next warp
-  this->warp_scheduler(cycle);  
+    fetch_latch_.pop();
+  }    
 }
 
 void Core::decode(uint64_t cycle) {
   __unused (cycle);
 
-  if (decode_stage_.empty())
+  if (decode_latch_.empty())
     return;
 
-  auto trace = decode_stage_.top();
+  auto trace = decode_latch_.front();
+
+  // check ibuffer capacity
+  auto& ibuffer = ibuffers_.at(trace->wid);
+  if (ibuffer.full()) {
+    if (!trace->suspend()) {
+      DT(3, cycle, "*** ibuffer-stall: " << *trace);
+    }
+    ++perf_stats_.ibuf_stalls;
+    return;
+  } else {
+    trace->resume();
+  }
   
   // release warp
   if (!trace->fetch_stall) {
     stalled_warps_.reset(trace->wid);
   }
 
+  // update perf counters
+  uint32_t active_threads = trace->tmask.count();
+  if (trace->exe_type == ExeType::LSU && trace->lsu.type == LsuType::LOAD)
+    perf_stats_.loads += active_threads;
+  if (trace->exe_type == ExeType::LSU && trace->lsu.type == LsuType::STORE) 
+    perf_stats_.stores += active_threads;
+  if (trace->exe_type == ExeType::ALU && trace->alu.type == AluType::BRANCH) 
+    perf_stats_.branches += active_threads;
+
   DT(3, cycle, "pipeline-decode: " << *trace);
-  
-  // advance to issue stage
-  issue_stage_.push(trace);
-  decode_stage_.pop();
+
+  // insert to ibuffer 
+  ibuffer.push(trace);
+
+  decode_latch_.pop();
 }
 
-void Core::issue(uint64_t cycle) {
-  __unused (cycle);
-
-  if (!issue_stage_.empty()) {
-    // insert to ibuffer 
-    auto trace = issue_stage_.top();
-    auto& ibuffer = ibuffers_.at(trace->wid);
-    if (!trace->check_stalled(ibuffer.full())) {
-      DT(3, cycle, "*** ibuffer-stall: " << *trace);
-    }
-    if (!ibuffer.full()) {
-      ibuffer.push(trace);
-      issue_stage_.pop();
-    }
-  }
+void Core::execute(uint64_t cycle) {
+  __unused (cycle);  
     
   // issue ibuffer instructions
   for (auto& ibuffer : ibuffers_) {
@@ -247,180 +274,102 @@ void Core::issue(uint64_t cycle) {
     auto trace = ibuffer.top();
 
     // check scoreboard
-    if (!trace->check_stalled(scoreboard_.in_use(trace))) {
-      DTH(3, cycle, "*** scoreboard-stall: dependents={");
-      auto uses = scoreboard_.get_uses(trace);
-      for (uint32_t i = 0, n = uses.size(); i < n; ++i) {
-        auto& use = uses.at(i);
-        __unused(use);
-        if (i) DTN(3, ", ");        
-        DTN(3, use.type << use.reg << "(#" << use.owner << ")");  
+    if (scoreboard_.in_use(trace)) {
+      if (!trace->suspend()) {
+        DTH(3, cycle, "*** scoreboard-stall: dependents={");
+        auto uses = scoreboard_.get_uses(trace);
+        for (uint32_t i = 0, n = uses.size(); i < n; ++i) {
+          auto& use = uses.at(i);
+          __unused (use);
+          if (i) DTN(3, ", ");      
+          DTN(3, use.type << use.reg << "(#" << use.owner << ")");
+        }
+        DTN(3, "}, " << *trace << std::endl);
       }
-      DTN(3, "}, " << *trace << std::endl);
-    }
-    if (scoreboard_.in_use(trace))
+      ++perf_stats_.scrb_stalls;
       continue;
-
-    DT(3, cycle, "pipeline-issue: " << *trace);
+    } else {
+      trace->resume();
+    }
 
     // update scoreboard
     scoreboard_.reserve(trace);
 
-    // advance to execute stage
-    execute_stage_.push(trace);
+    DT(3, cycle, "pipeline-issue: " << *trace);
+
+    // push to execute units
+    auto& exe_unit = exe_units_.at((int)trace->exe_type);
+    exe_unit->Input.send(trace, 1);
 
     ibuffer.pop();
     break;
   }
 }
 
-void Core::execute(uint64_t cycle) {
-  // process stage inputs
-  if (!execute_stage_.empty()) {
-    auto trace = execute_stage_.top();
-    auto& exe_unit = exe_units_.at((int)trace->exe_type);
-    exe_unit->push(trace);    
-    DT(3, cycle, "pipeline-execute: " << *trace);
-    execute_stage_.pop();
-  }
-
-  // advance execute units
-  for (auto& exe_unit : exe_units_) {
-    exe_unit->step(cycle);
-  }  
-  
-  // commit completed instructions
-  for (auto& exe_unit : exe_units_) {
-    if (!exe_unit->empty()) {
-      auto trace = exe_unit->top();
-      if (trace->fetch_stall) {
-        stalled_warps_.reset(trace->wid);
-      }
-      // advance to commit stage
-      commit_stage_.push(trace);   
-      exe_unit->pop();
-    }
-  }
-}
-
 void Core::commit(uint64_t cycle) {
   __unused (cycle);
   
-  if (commit_stage_.empty())
-    return;
+  // commit completed instructions
+  bool wb = false;
+  for (auto& exe_unit : exe_units_) {
+    if (!exe_unit->Output.empty()) {
+      auto trace = exe_unit->Output.front();    
 
-  auto trace = commit_stage_.top();
+      // allow only one commit that updates registers
+      if (trace->wb && wb)
+        continue;        
+      wb |= trace->wb;
 
-  DT(3, cycle, "pipeline-commit: " << *trace);
+      // advance to commit stage
+      DT(3, cycle, "pipeline-commit: " << *trace);
 
-  // update scoreboard
-  scoreboard_.release(trace);
+      // update scoreboard
+      scoreboard_.release(trace);
 
-  assert(committed_instrs_ <= issued_instrs_);
-  ++committed_instrs_;
+      assert(committed_instrs_ <= issued_instrs_);
+      ++committed_instrs_;
 
-  commit_stage_.pop();
+      perf_stats_.instrs += trace->tmask.count();
 
-  // delete the trace
-  delete trace;
-}
+      // delete the trace
+      delete trace;
 
-bool Core::running() const {
-  bool is_running = (committed_instrs_ != issued_instrs_);
-  return is_running;
-}
-
-Word Core::get_csr(Addr addr, int tid, int wid) {
-  if (addr == CSR_FFLAGS) {
-    return fcsrs_.at(wid) & 0x1F;
-  } else if (addr == CSR_FRM) {
-    return (fcsrs_.at(wid) >> 5);
-  } else if (addr == CSR_FCSR) {
-    return fcsrs_.at(wid);
-  } else if (addr == CSR_WTID) {
-    // Warp threadID
-    return tid;
-  } else if (addr == CSR_LTID) {
-    // Core threadID
-    return tid + (wid * arch_.num_threads());
-  } else if (addr == CSR_GTID) {
-    // Processor threadID
-    return tid + (wid * arch_.num_threads()) + 
-              (arch_.num_threads() * arch_.num_warps() * id_);
-  } else if (addr == CSR_LWID) {
-    // Core warpID
-    return wid;
-  } else if (addr == CSR_GWID) {
-    // Processor warpID        
-    return wid + (arch_.num_warps() * id_);
-  } else if (addr == CSR_GCID) {
-    // Processor coreID
-    return id_;
-  } else if (addr == CSR_TMASK) {
-    // Processor coreID
-    return warps_.at(wid)->getTmask();
-  } else if (addr == CSR_NT) {
-    // Number of threads per warp
-    return arch_.num_threads();
-  } else if (addr == CSR_NW) {
-    // Number of warps per core
-    return arch_.num_warps();
-  } else if (addr == CSR_NC) {
-    // Number of cores
-    return arch_.num_cores();
-  } else if (addr == CSR_MINSTRET) {
-    // NumInsts
-    return stats_insts_;
-  } else if (addr == CSR_MINSTRET_H) {
-    // NumInsts
-    return (Word)(stats_insts_ >> 32);
-  } else if (addr == CSR_MCYCLE) {
-    // NumCycles
-    return (Word)SimPlatform::instance().cycles();
-  } else if (addr == CSR_MCYCLE_H) {
-    // NumCycles
-    return (Word)(SimPlatform::instance().cycles() >> 32);
-  } else {
-    if (addr >= CSR_TEX(0,0)
-     && addr < CSR_TEX(NUM_TEX_UNITS,0)) {
-      uint32_t unit = CSR_TEX_UNIT(addr);
-      uint32_t state = CSR_TEX_STATE(addr);
-      return tex_units_.at(unit).get_state(state);
+      exe_unit->Output.pop();
     }
-    return csrs_.at(addr);
   }
 }
 
-void Core::set_csr(Addr addr, Word value, int /*tid*/, int wid) {
-  if (addr == CSR_FFLAGS) {
-    fcsrs_.at(wid) = (fcsrs_.at(wid) & ~0x1F) | (value & 0x1F);
-  } else if (addr == CSR_FRM) {
-    fcsrs_.at(wid) = (fcsrs_.at(wid) & ~0xE0) | (value << 5);
-  } else if (addr == CSR_FCSR) {
-    fcsrs_.at(wid) = value & 0xff;
-  } else {
-    if (addr >= CSR_TEX(0,0)
-     && addr < CSR_TEX(NUM_TEX_UNITS,0)) {
-      uint32_t unit = CSR_TEX_UNIT(addr);
-      uint32_t state = CSR_TEX_STATE(addr);
-      tex_units_.at(unit).set_state(state, value);
-      return;
-    }
-    csrs_.at(addr) = value;
+WarpMask Core::wspawn(int num_warps, int nextPC) {
+  WarpMask ret(1);
+  int active_warps = std::min<int>(num_warps, arch_.num_warps());
+  DP(3, "*** Activate " << (active_warps-1) << " warps at PC: " << std::hex << nextPC);
+  for (int i = 1; i < active_warps; ++i) {
+    auto warp = warps_.at(i);
+    warp->setPC(nextPC);
+    warp->setTmask(0, true);
+    ret.set(i); 
   }
+  return std::move(ret);
 }
 
-void Core::barrier(int bar_id, int count, int warp_id) {
+WarpMask Core::barrier(int bar_id, int count, int warp_id) {
+  WarpMask ret(0);
   auto& barrier = barriers_.at(bar_id);
   barrier.set(warp_id);
-  if (barrier.count() < (size_t)count)    
-    return;
+  if (barrier.count() < (size_t)count) {
+    warps_.at(warp_id)->suspend();
+    DP(3, "*** Suspend warp #" << warp_id << " at barrier #" << bar_id);
+    return std::move(ret);
+  }
   for (int i = 0; i < arch_.num_warps(); ++i) {
     if (barrier.test(i)) {
+      DP(3, "*** Resume warp #" << i << " at barrier #" << bar_id);
       warps_.at(i)->activate();
+      ret.set(i);
     }
   }
   barrier.reset();
+  return std::move(ret);
 }
 
 Word Core::icache_read(Addr addr, Size size) {
@@ -430,35 +379,21 @@ Word Core::icache_read(Addr addr, Size size) {
 }
 
 Word Core::dcache_read(Addr addr, Size size) {  
-  Word data = 0;
-  if (SM_ENABLE) {
-    if ((addr >= (SMEM_BASE_ADDR - SMEM_SIZE))
-    && ((addr + 3) < SMEM_BASE_ADDR)) {
-      shared_mem_.read(&data, addr & (SMEM_SIZE-1), size);
-      return data;
-    }
-  }
+  Word data;
   mmu_.read(&data, addr, size, 0);
   return data;
 }
 
 void Core::dcache_write(Addr addr, Word data, Size size) {  
-  if (SM_ENABLE) {
-    if ((addr >= (SMEM_BASE_ADDR - SMEM_SIZE))
-    && ((addr + 3) < SMEM_BASE_ADDR)) {
-      shared_mem_.write(&data, addr & (SMEM_SIZE-1), size);
-      return;
-    }
-  }
   if (addr >= IO_COUT_ADDR 
    && addr <= (IO_COUT_ADDR + IO_COUT_SIZE - 1)) {
      this->writeToStdOut(addr, data);
-     return;
+  } else {
+    mmu_.write(&data, addr, size, 0);
   }
-  mmu_.write(&data, addr, size, 0);
 }
 
-Word Core::tex_read(uint32_t unit, Word u, Word v, Word lod, std::vector<uint64_t>* mem_addrs) {
+Word Core::tex_read(uint32_t unit, Word u, Word v, Word lod, std::vector<mem_addr_size_t>* mem_addrs) {
   return tex_units_.at(unit).read(u, v, lod, mem_addrs);
 }
 
@@ -473,6 +408,228 @@ void Core::writeToStdOut(Addr addr, Word data) {
   }
 }
 
+Word Core::get_csr(Addr addr, int tid, int wid) {
+  switch (addr) {
+  case CSR_SATP:
+  case CSR_PMPCFG0:
+  case CSR_PMPADDR0:
+  case CSR_MSTATUS:
+  case CSR_MISA:
+  case CSR_MEDELEG:
+  case CSR_MIDELEG:
+  case CSR_MIE:
+  case CSR_MTVEC:
+  case CSR_MEPC:
+    return 0;
+
+  case CSR_FFLAGS:
+    return fcsrs_.at(wid) & 0x1F;
+  case CSR_FRM:
+    return (fcsrs_.at(wid) >> 5);
+  case CSR_FCSR:
+    return fcsrs_.at(wid);
+  case CSR_WTID:
+    // Warp threadID
+    return tid;
+  case CSR_LTID:
+    // Core threadID
+    return tid + (wid * arch_.num_threads());
+  case CSR_GTID:
+    // Processor threadID
+    return tid + (wid * arch_.num_threads()) + 
+        (arch_.num_threads() * arch_.num_warps() * id_);
+  case CSR_LWID:
+    // Core warpID
+    return wid;
+  case CSR_GWID:
+    // Processor warpID        
+    return wid + (arch_.num_warps() * id_);
+  case CSR_GCID:
+    // Processor coreID
+    return id_;
+  case CSR_TMASK:
+    // Processor coreID
+    return warps_.at(wid)->getTmask();
+  case CSR_NT:
+    // Number of threads per warp
+    return arch_.num_threads();
+  case CSR_NW:
+    // Number of warps per core
+    return arch_.num_warps();
+  case CSR_NC:
+    // Number of cores
+    return arch_.num_cores();
+  case CSR_MINSTRET:
+    // NumInsts
+    return perf_stats_.instrs & 0xffffffff;
+  case CSR_MINSTRET_H:
+    // NumInsts
+    return (Word)(perf_stats_.instrs >> 32);
+  case CSR_MCYCLE:
+    // NumCycles
+    return (Word)SimPlatform::instance().cycles();
+  case CSR_MCYCLE_H:
+    // NumCycles
+    return (Word)(SimPlatform::instance().cycles() >> 32);
+  case CSR_MPM_IBUF_ST:
+    return perf_stats_.ibuf_stalls & 0xffffffff; 
+  case CSR_MPM_IBUF_ST_H:
+    return perf_stats_.ibuf_stalls >> 32; 
+  case CSR_MPM_SCRB_ST:
+    return perf_stats_.scrb_stalls & 0xffffffff; 
+  case CSR_MPM_SCRB_ST_H:
+    return perf_stats_.scrb_stalls >> 32; 
+  case CSR_MPM_ALU_ST:
+    return perf_stats_.alu_stalls & 0xffffffff; 
+  case CSR_MPM_ALU_ST_H:
+    return perf_stats_.alu_stalls >> 32; 
+  case CSR_MPM_LSU_ST:
+    return perf_stats_.lsu_stalls & 0xffffffff; 
+  case CSR_MPM_LSU_ST_H:
+    return perf_stats_.lsu_stalls >> 32; 
+  case CSR_MPM_CSR_ST:
+    return perf_stats_.csr_stalls & 0xffffffff; 
+  case CSR_MPM_CSR_ST_H:
+    return perf_stats_.csr_stalls >> 32; 
+  case CSR_MPM_FPU_ST:
+    return perf_stats_.fpu_stalls & 0xffffffff; 
+  case CSR_MPM_FPU_ST_H:
+    return perf_stats_.fpu_stalls >> 32; 
+  case CSR_MPM_GPU_ST:
+    return perf_stats_.gpu_stalls & 0xffffffff; 
+  case CSR_MPM_GPU_ST_H:
+    return perf_stats_.gpu_stalls >> 32; 
+  
+  case CSR_MPM_LOADS:
+    return perf_stats_.loads & 0xffffffff; 
+  case CSR_MPM_LOADS_H:
+    return perf_stats_.loads >> 32; 
+  case CSR_MPM_STORES:
+    return perf_stats_.stores & 0xffffffff; 
+  case CSR_MPM_STORES_H:
+    return perf_stats_.stores >> 32;
+  case CSR_MPM_BRANCHES:
+    return perf_stats_.branches & 0xffffffff; 
+  case CSR_MPM_BRANCHES_H:
+    return perf_stats_.branches >> 32; 
+
+  case CSR_MPM_ICACHE_READS:
+    return icache_->perf_stats().reads & 0xffffffff; 
+  case CSR_MPM_ICACHE_READS_H:
+    return icache_->perf_stats().reads >> 32; 
+  case CSR_MPM_ICACHE_MISS_R:
+    return icache_->perf_stats().read_misses & 0xffffffff;
+  case CSR_MPM_ICACHE_MISS_R_H:
+    return icache_->perf_stats().read_misses >> 32;
+  
+  case CSR_MPM_DCACHE_READS:
+    return dcache_->perf_stats().reads & 0xffffffff; 
+  case CSR_MPM_DCACHE_READS_H:
+    return dcache_->perf_stats().reads >> 32; 
+  case CSR_MPM_DCACHE_WRITES:
+    return dcache_->perf_stats().writes & 0xffffffff; 
+  case CSR_MPM_DCACHE_WRITES_H:
+    return dcache_->perf_stats().writes >> 32; 
+  case CSR_MPM_DCACHE_MISS_R:
+    return dcache_->perf_stats().read_misses & 0xffffffff; 
+  case CSR_MPM_DCACHE_MISS_R_H:
+    return dcache_->perf_stats().read_misses >> 32; 
+  case CSR_MPM_DCACHE_MISS_W:
+    return dcache_->perf_stats().write_misses & 0xffffffff; 
+  case CSR_MPM_DCACHE_MISS_W_H:
+    return dcache_->perf_stats().write_misses >> 32; 
+  case CSR_MPM_DCACHE_BANK_ST:
+    return dcache_->perf_stats().bank_stalls & 0xffffffff; 
+  case CSR_MPM_DCACHE_BANK_ST_H:
+    return dcache_->perf_stats().bank_stalls >> 32;
+  case CSR_MPM_DCACHE_MSHR_ST:
+    return dcache_->perf_stats().mshr_stalls & 0xffffffff; 
+  case CSR_MPM_DCACHE_MSHR_ST_H:
+    return dcache_->perf_stats().mshr_stalls >> 32;
+  
+  case CSR_MPM_SMEM_READS:
+    return shared_mem_->perf_stats().reads & 0xffffffff;
+  case CSR_MPM_SMEM_READS_H:
+    return shared_mem_->perf_stats().reads >> 32;
+  case CSR_MPM_SMEM_WRITES:
+    return shared_mem_->perf_stats().writes & 0xffffffff;
+  case CSR_MPM_SMEM_WRITES_H:
+    return shared_mem_->perf_stats().writes >> 32;
+  case CSR_MPM_SMEM_BANK_ST:
+    return shared_mem_->perf_stats().bank_stalls & 0xffffffff; 
+  case CSR_MPM_SMEM_BANK_ST_H:
+    return shared_mem_->perf_stats().bank_stalls >> 32; 
+
+  case CSR_MPM_MEM_READS:
+    return perf_stats_.mem_reads & 0xffffffff; 
+  case CSR_MPM_MEM_READS_H:
+    return perf_stats_.mem_reads >> 32; 
+  case CSR_MPM_MEM_WRITES:
+    return perf_stats_.mem_writes & 0xffffffff; 
+  case CSR_MPM_MEM_WRITES_H:
+    return perf_stats_.mem_writes >> 32; 
+  case CSR_MPM_MEM_LAT:
+    return perf_stats_.mem_latency & 0xffffffff; 
+  case CSR_MPM_MEM_LAT_H:
+    return perf_stats_.mem_latency >> 32; 
+
+#ifdef EXT_TEX_ENABLE
+  case CSR_MPM_TEX_READS:
+    return perf_stats_.tex_reads & 0xffffffff;
+  case CSR_MPM_TEX_READS_H:
+     return perf_stats_.tex_reads >> 32;
+  case CSR_MPM_TEX_LAT:
+    return perf_stats_.tex_latency & 0xffffffff;
+  case CSR_MPM_TEX_LAT_H:
+    return perf_stats_.tex_latency >> 32;
+#endif  
+  default:
+    if ((addr >= CSR_MPM_BASE && addr < (CSR_MPM_BASE + 32))
+     || (addr >= CSR_MPM_BASE_H && addr < (CSR_MPM_BASE_H + 32))) {
+      // user-defined MPM CSRs
+    } else
+  #ifdef EXT_TEX_ENABLE
+    if (addr == CSR_TEX_UNIT) {
+      return csr_tex_unit_;
+    } else
+    if (addr >= CSR_TEX_STATE_BEGIN
+     && addr < CSR_TEX_STATE_END) {
+      uint32_t state = CSR_TEX_STATE(addr);
+      return tex_units_.at(csr_tex_unit_).get_state(state);
+    } else
+  #endif
+    {
+      std::cout << std::hex << "Error: invalid CSR read addr=0x" << addr << std::endl;
+      std::abort();
+    }
+  }
+  return 0;
+}
+
+void Core::set_csr(Addr addr, Word value, int /*tid*/, int wid) {
+  if (addr == CSR_FFLAGS) {
+    fcsrs_.at(wid) = (fcsrs_.at(wid) & ~0x1F) | (value & 0x1F);
+  } else if (addr == CSR_FRM) {
+    fcsrs_.at(wid) = (fcsrs_.at(wid) & ~0xE0) | (value << 5);
+  } else if (addr == CSR_FCSR) {
+    fcsrs_.at(wid) = value & 0xff;
+  } else 
+#ifdef EXT_TEX_ENABLE
+  if (addr == CSR_TEX_UNIT) {
+    csr_tex_unit_ = value;
+  } else
+  if (addr >= CSR_TEX_STATE_BEGIN
+   && addr < CSR_TEX_STATE_END) {
+      uint32_t state = CSR_TEX_STATE(addr);
+      tex_units_.at(csr_tex_unit_).set_state(state, value);
+      return;
+  } else
+#endif
+  {
+    csrs_.at(addr) = value;
+  }
+}
+
 void Core::trigger_ecall() {
   ecall_ = true;
 }
@@ -483,4 +640,9 @@ void Core::trigger_ebreak() {
 
 bool Core::check_exit() const {
   return ebreak_ || ecall_;
+}
+
+bool Core::running() const {
+  bool is_running = (committed_instrs_ != issued_instrs_);
+  return is_running;
 }

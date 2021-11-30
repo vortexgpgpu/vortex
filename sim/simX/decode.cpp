@@ -359,14 +359,28 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
       instr->setDestReg(rd);
     }    
     instr->setFunc3(func3);
-    instr->setFunc7(func7);    
-    if ((func3 == 5) && (op != L_INST) && (op != Opcode::FL)) {
-      instr->setImm(sext32(rs2, 5));
-    } else {
+    instr->setFunc7(func7);
+    switch (op) {
+    case Opcode::SYS_INST:
+    case Opcode::FENCE:
+      // uint12
+      instr->setImm(code >> shift_rs2_);
+      break;
+    case Opcode::I_INST:
+      if (func3 == 0x1 || func3 == 0x5) {
+        // int5
+        instr->setImm(sext32(rs2, 5));
+      } else {
+        // int12
+        instr->setImm(sext32(code >> shift_rs2_, 12));
+      }
+      break;
+    default:
+      // int12
       instr->setImm(sext32(code >> shift_rs2_, 12));
+      break;
     }
   } break;
-
   case InstType::S_TYPE: {    
     instr->setSrcReg(rs1);
     if (op == Opcode::FS) {
@@ -375,8 +389,8 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
       instr->setSrcReg(rs2);
     }
     instr->setFunc3(func3);
-    Word imeed = (func7 << reg_s_) | rd;
-    instr->setImm(sext32(imeed, 12));
+    Word imm = (func7 << reg_s_) | rd;
+    instr->setImm(sext32(imm, 12));
   } break;
 
   case InstType::B_TYPE: {
@@ -387,8 +401,8 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
     Word bits_4_1 = rd >> 1;
     Word bit_10_5 = func7 & 0x3f;
     Word bit_12   = func7 >> 6;
-    Word imeed = (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
-    instr->setImm(sext32(imeed, 13));
+    Word imm = (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
+    instr->setImm(sext32(imm, 13));
   } break;
 
   case InstType::U_TYPE:
@@ -403,11 +417,11 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
     Word bit_11 = (unordered >> 8) & 0x1;
     Word bits_10_1 = (unordered >> 9) & 0x3ff;
     Word bit_20 = (unordered >> 19) & 0x1;
-    Word imeed = 0 | (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
+    Word imm = 0 | (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
     if (bit_20) {
-      imeed |= ~j_imm_mask_;
+      imm |= ~j_imm_mask_;
     }
-    instr->setImm(imeed);
+    instr->setImm(imm);
   } break;
     
   case InstType::V_TYPE:

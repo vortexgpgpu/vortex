@@ -11,20 +11,20 @@ namespace vortex {
 
 class ArchDef {  
 private:
-  int num_cores_;
-  int num_warps_;
-  int num_threads_;
-  int wsize_;
-  int vsize_;
-  int num_regs_;
-  int num_csrs_;
-  int num_barriers_;
+  uint16_t num_cores_;
+  uint16_t num_warps_;
+  uint16_t num_threads_;
+  uint16_t wsize_;
+  uint16_t vsize_;
+  uint16_t num_regs_;
+  uint16_t num_csrs_;
+  uint16_t num_barriers_;
   
 public:
   ArchDef(const std::string& /*arch*/,
-          int num_cores, 
-          int num_warps, 
-          int num_threads)   
+          uint16_t num_cores, 
+          uint16_t num_warps, 
+          uint16_t num_threads)   
     : num_cores_(num_cores)
     , num_warps_(num_warps)
     , num_threads_(num_threads)
@@ -35,35 +35,35 @@ public:
     , num_barriers_(NUM_BARRIERS)
   {}
 
-  int wsize() const { 
+  uint16_t wsize() const { 
     return wsize_; 
   }
 
-  int vsize() const { 
+  uint16_t vsize() const { 
     return vsize_; 
   }
 
-  int num_regs() const {
+  uint16_t num_regs() const {
     return num_regs_;
   }
 
-  int num_csrs() const {
+  uint16_t num_csrs() const {
     return num_csrs_;
   }
 
-  int num_barriers() const {
+  uint16_t num_barriers() const {
     return num_barriers_;
   }
 
-  int num_threads() const {
+  uint16_t num_threads() const {
     return num_threads_;
   }
 
-  int num_warps() const {
+  uint16_t num_warps() const {
     return num_warps_;
   }
 
-  int num_cores() const {
+  uint16_t num_cores() const {
     return num_cores_;
   }
 };

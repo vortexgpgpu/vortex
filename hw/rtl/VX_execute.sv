@@ -75,6 +75,10 @@ module VX_execute #(
 
     VX_tex_csr_if tex_csr_if();
 
+`ifdef PERF_ENABLE
+    VX_perf_tex_if perf_tex_if();
+`endif
+
     VX_cache_arb #(
         .NUM_REQS      (2),
         .LANES         (`NUM_THREADS),
@@ -165,6 +169,9 @@ module VX_execute #(
         .clk            (clk),
         .reset          (csr_reset),   
     `ifdef PERF_ENABLE
+    `ifdef EXT_TEX_ENABLE
+        .perf_tex_if    (perf_tex_if),
+    `endif
         .perf_memsys_if (perf_memsys_if),
         .perf_pipeline_if(perf_pipeline_if),
     `endif    
@@ -209,6 +216,9 @@ module VX_execute #(
         .reset          (gpu_reset),    
         .gpu_req_if     (gpu_req_if),
     `ifdef EXT_TEX_ENABLE
+    `ifdef PERF_ENABLE
+        .perf_tex_if    (perf_tex_if),
+    `endif
         .tex_csr_if     (tex_csr_if),
         .dcache_req_if  (tex_dcache_req_if),
         .dcache_rsp_if  (tex_dcache_rsp_if),

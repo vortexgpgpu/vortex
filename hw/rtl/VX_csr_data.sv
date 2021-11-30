@@ -7,6 +7,9 @@ module VX_csr_data #(
     input wire reset,
 
 `ifdef PERF_ENABLE
+`ifdef EXT_TEX_ENABLE
+    VX_perf_tex_if.slave            perf_tex_if,
+`endif
     VX_perf_memsys_if.slave         perf_memsys_if,
     VX_perf_pipeline_if.slave       perf_pipeline_if,
 `endif
@@ -22,11 +25,13 @@ module VX_csr_data #(
 `endif 
 
     input wire                      read_enable,
+    input wire [63:0]               read_uuid,
     input wire[`CSR_ADDR_BITS-1:0]  read_addr,
     input wire[`NW_BITS-1:0]        read_wid,
     output wire[31:0]               read_data,
 
     input wire                      write_enable, 
+    input wire [63:0]               write_uuid,
     input wire[`CSR_ADDR_BITS-1:0]  write_addr,
     input wire[`NW_BITS-1:0]        write_wid,
     input wire[31:0]                write_data,
@@ -56,7 +61,7 @@ module VX_csr_data #(
         `ifdef EXT_F_ENABLE
             if (fpu_to_csr_if.write_enable) begin
                 fcsr[fpu_to_csr_if.write_wid][`FFLAGS_BITS-1:0] <= fcsr[fpu_to_csr_if.write_wid][`FFLAGS_BITS-1:0]
-                                                                | fpu_to_csr_if.write_fflags;
+                                                                 | fpu_to_csr_if.write_fflags;
             end
         `endif
             if (write_enable) begin
@@ -75,11 +80,12 @@ module VX_csr_data #(
                     `CSR_PMPADDR0: csr_pmpaddr[0] <= write_data[`CSR_WIDTH-1:0];
                     default: begin
                     `ifdef EXT_TEX_ENABLE
-                        `ASSERT(write_addr >= `CSR_TEX(0,0)
-                            && write_addr < `CSR_TEX(`NUM_TEX_UNITS, 0),
-                                ("%t: invalid CSR write address: %0h", $time, write_addr));
+                        `ASSERT((write_addr == `CSR_TEX_UNIT)
+                             || (write_addr >= `CSR_TEX_STATE_BEGIN 
+                              && write_addr < `CSR_TEX_STATE_END),
+                                ("%t: *** invalid CSR write address: %0h (#%0d)", $time, write_addr, write_uuid));
                     `else
-                        `ASSERT(~write_enable, ("%t: invalid CSR write address: %0h", $time, write_addr));
+                        `ASSERT(~write_enable, ("%t: *** invalid CSR write address: %0h (#%0d)", $time, write_addr, write_uuid));
                     `endif
                     end
                 endcase
@@ -152,20 +158,28 @@ module VX_csr_data #(
             `CSR_MPM_LSU_ST_H   : read_data_r = 32'(perf_pipeline_if.lsu_stalls[`PERF_CTR_BITS-1:32]);
             `CSR_MPM_CSR_ST     : read_data_r = perf_pipeline_if.csr_stalls[31:0];
             `CSR_MPM_CSR_ST_H   : read_data_r = 32'(perf_pipeline_if.csr_stalls[`PERF_CTR_BITS-1:32]);
+        `ifdef EXT_F_ENABLE    
             `CSR_MPM_FPU_ST     : read_data_r = perf_pipeline_if.fpu_stalls[31:0];
             `CSR_MPM_FPU_ST_H   : read_data_r = 32'(perf_pipeline_if.fpu_stalls[`PERF_CTR_BITS-1:32]);
+        `else        
+            `CSR_MPM_FPU_ST     : read_data_r = '0;
+            `CSR_MPM_FPU_ST_H   : read_data_r = '0;
+        `endif
             `CSR_MPM_GPU_ST     : read_data_r = perf_pipeline_if.gpu_stalls[31:0];
             `CSR_MPM_GPU_ST_H   : read_data_r = 32'(perf_pipeline_if.gpu_stalls[`PERF_CTR_BITS-1:32]);
+            // PERF: decode
+            `CSR_MPM_LOADS      : read_data_r = perf_pipeline_if.loads[31:0];
+            `CSR_MPM_LOADS_H    : read_data_r = 32'(perf_pipeline_if.loads[`PERF_CTR_BITS-1:32]);
+            `CSR_MPM_STORES     : read_data_r = perf_pipeline_if.stores[31:0];
+            `CSR_MPM_STORES_H   : read_data_r = 32'(perf_pipeline_if.stores[`PERF_CTR_BITS-1:32]);
+            `CSR_MPM_BRANCHES   : read_data_r = perf_pipeline_if.branches[31:0];
+            `CSR_MPM_BRANCHES_H : read_data_r = 32'(perf_pipeline_if.branches[`PERF_CTR_BITS-1:32]);
             // PERF: icache
             `CSR_MPM_ICACHE_READS       : read_data_r = perf_memsys_if.icache_reads[31:0];
             `CSR_MPM_ICACHE_READS_H     : read_data_r = 32'(perf_memsys_if.icache_reads[`PERF_CTR_BITS-1:32]);
             `CSR_MPM_ICACHE_MISS_R      : read_data_r = perf_memsys_if.icache_read_misses[31:0];
             `CSR_MPM_ICACHE_MISS_R_H    : read_data_r = 32'(perf_memsys_if.icache_read_misses[`PERF_CTR_BITS-1:32]);
-            `CSR_MPM_ICACHE_PIPE_ST     : read_data_r = perf_memsys_if.icache_pipe_stalls[31:0];
-            `CSR_MPM_ICACHE_PIPE_ST_H   : read_data_r = 32'(perf_memsys_if.icache_pipe_stalls[`PERF_CTR_BITS-1:32]);
-            `CSR_MPM_ICACHE_CRSP_ST     : read_data_r = perf_memsys_if.icache_crsp_stalls[31:0];
-            `CSR_MPM_ICACHE_CRSP_ST_H   : read_data_r = 32'(perf_memsys_if.icache_crsp_stalls[`PERF_CTR_BITS-1:32]);
-            // PERF: dcache            
+            // PERF: dcache
             `CSR_MPM_DCACHE_READS       : read_data_r = perf_memsys_if.dcache_reads[31:0];
             `CSR_MPM_DCACHE_READS_H     : read_data_r = 32'(perf_memsys_if.dcache_reads[`PERF_CTR_BITS-1:32]);
             `CSR_MPM_DCACHE_WRITES      : read_data_r = perf_memsys_if.dcache_writes[31:0];
@@ -178,26 +192,27 @@ module VX_csr_data #(
             `CSR_MPM_DCACHE_BANK_ST_H   : read_data_r = 32'(perf_memsys_if.dcache_bank_stalls[`PERF_CTR_BITS-1:32]);
             `CSR_MPM_DCACHE_MSHR_ST     : read_data_r = perf_memsys_if.dcache_mshr_stalls[31:0];
             `CSR_MPM_DCACHE_MSHR_ST_H   : read_data_r = 32'(perf_memsys_if.dcache_mshr_stalls[`PERF_CTR_BITS-1:32]);
-            `CSR_MPM_DCACHE_PIPE_ST     : read_data_r = perf_memsys_if.dcache_pipe_stalls[31:0];
-            `CSR_MPM_DCACHE_PIPE_ST_H   : read_data_r = 32'(perf_memsys_if.dcache_pipe_stalls[`PERF_CTR_BITS-1:32]);
-            `CSR_MPM_DCACHE_CRSP_ST     : read_data_r = perf_memsys_if.dcache_crsp_stalls[31:0];
-            `CSR_MPM_DCACHE_CRSP_ST_H   : read_data_r = 32'(perf_memsys_if.dcache_crsp_stalls[`PERF_CTR_BITS-1:32]);
-            // PERF: smem            
+            // PERF: smem          
             `CSR_MPM_SMEM_READS     : read_data_r = perf_memsys_if.smem_reads[31:0];
             `CSR_MPM_SMEM_READS_H   : read_data_r = 32'(perf_memsys_if.smem_reads[`PERF_CTR_BITS-1:32]);
             `CSR_MPM_SMEM_WRITES    : read_data_r = perf_memsys_if.smem_writes[31:0];
             `CSR_MPM_SMEM_WRITES_H  : read_data_r = 32'(perf_memsys_if.smem_writes[`PERF_CTR_BITS-1:32]);
             `CSR_MPM_SMEM_BANK_ST   : read_data_r = perf_memsys_if.smem_bank_stalls[31:0];
             `CSR_MPM_SMEM_BANK_ST_H : read_data_r = 32'(perf_memsys_if.smem_bank_stalls[`PERF_CTR_BITS-1:32]);
-            // PERF: MEM
+            // PERF: memory
             `CSR_MPM_MEM_READS      : read_data_r = perf_memsys_if.mem_reads[31:0];
             `CSR_MPM_MEM_READS_H    : read_data_r = 32'(perf_memsys_if.mem_reads[`PERF_CTR_BITS-1:32]);
             `CSR_MPM_MEM_WRITES     : read_data_r = perf_memsys_if.mem_writes[31:0];
             `CSR_MPM_MEM_WRITES_H   : read_data_r = 32'(perf_memsys_if.mem_writes[`PERF_CTR_BITS-1:32]);
-            `CSR_MPM_MEM_ST         : read_data_r = perf_memsys_if.mem_stalls[31:0];
-            `CSR_MPM_MEM_ST_H       : read_data_r = 32'(perf_memsys_if.mem_stalls[`PERF_CTR_BITS-1:32]);
             `CSR_MPM_MEM_LAT        : read_data_r = perf_memsys_if.mem_latency[31:0];
             `CSR_MPM_MEM_LAT_H      : read_data_r = 32'(perf_memsys_if.mem_latency[`PERF_CTR_BITS-1:32]);
+        `ifdef EXT_TEX_ENABLE
+            // PERF: texunit
+            `CSR_MPM_TEX_READS      : read_data_r = perf_tex_if.mem_reads[31:0];
+            `CSR_MPM_TEX_READS_H    : read_data_r = 32'(perf_tex_if.mem_reads[`PERF_CTR_BITS-1:32]);
+            `CSR_MPM_TEX_LAT        : read_data_r = perf_tex_if.mem_latency[31:0];
+            `CSR_MPM_TEX_LAT_H      : read_data_r = 32'(perf_tex_if.mem_latency[`PERF_CTR_BITS-1:32]);
+        `endif
             // PERF: reserved            
             `CSR_MPM_RESERVED       : read_data_r = '0;
             `CSR_MPM_RESERVED_H     : read_data_r = '0;
@@ -227,7 +242,9 @@ module VX_csr_data #(
                      read_addr_valid_r = 1;
                 end else     
             `ifdef EXT_TEX_ENABLE    
-                if (read_addr >= `CSR_TEX(0,0) && read_addr < `CSR_TEX(`NUM_TEX_UNITS,0)) begin
+                if ((read_addr == `CSR_TEX_UNIT)
+                 || (read_addr >= `CSR_TEX_STATE_BEGIN
+                  && read_addr < `CSR_TEX_STATE_END)) begin
                     read_addr_valid_r = 1;
                 end else
             `endif
@@ -236,7 +253,7 @@ module VX_csr_data #(
         endcase
     end 
 
-    `RUNTIME_ASSERT(~read_enable || read_addr_valid_r, ("invalid CSR read address: %0h", read_addr))
+    `RUNTIME_ASSERT(~read_enable || read_addr_valid_r, ("%t: *** invalid CSR read address: %0h (#%0d)", $time, read_addr, read_uuid))
 
     assign read_data = read_data_r;
 

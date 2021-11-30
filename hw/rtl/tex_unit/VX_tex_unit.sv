@@ -6,6 +6,11 @@ module VX_tex_unit #(
     input wire  clk,
     input wire  reset,    
 
+    // PERF
+`ifdef PERF_ENABLE
+    VX_perf_tex_if.master perf_tex_if,
+`endif
+
     // Texture unit <-> Memory Unit
     VX_dcache_req_if.master dcache_req_if,
     VX_dcache_rsp_if.slave  dcache_rsp_if,
@@ -18,10 +23,11 @@ module VX_tex_unit #(
     VX_tex_rsp_if.master    tex_rsp_if
 );
 
-    localparam REQ_INFOW_S = `NR_BITS + 1 + `NW_BITS + 32;
+    localparam REQ_INFOW_S = 64 + `NR_BITS + 1 + `NW_BITS + 32;
     localparam REQ_INFOW_A = `TEX_FORMAT_BITS + REQ_INFOW_S;
     localparam REQ_INFOW_M = (2 * `NUM_THREADS * `TEX_BLEND_FRAC) + REQ_INFOW_A;
     
+    reg [$clog2(`NUM_TEX_UNITS)-1:0] csr_tex_unit;
     reg [`TEX_MIPOFF_BITS-1:0]    tex_mipoff [`NUM_TEX_UNITS-1:0][`TEX_LOD_MAX+1-1:0];
     reg [1:0][`TEX_LOD_BITS-1:0]  tex_logdims [`NUM_TEX_UNITS-1:0];
     reg [1:0][`TEX_WRAP_BITS-1:0] tex_wraps  [`NUM_TEX_UNITS-1:0];
@@ -29,57 +35,60 @@ module VX_tex_unit #(
     reg [`TEX_FORMAT_BITS-1:0]    tex_format [`NUM_TEX_UNITS-1:0];
     reg [`TEX_FILTER_BITS-1:0]    tex_filter [`NUM_TEX_UNITS-1:0];
 
-    // CSRs programming    
+    // CSRs programming
 
-    reg [`NUM_TEX_UNITS-1:0] csrs_dirty;
+    reg csrs_dirty [`NUM_TEX_UNITS-1:0];
     `UNUSED_VAR (csrs_dirty)
 
-    for (genvar i = 0; i < `NUM_TEX_UNITS; ++i) begin
-        always @(posedge clk) begin  
-            if (tex_csr_if.write_enable) begin
-                case (tex_csr_if.write_addr)
-                    `CSR_TEX(i, `TEX_STATE_ADDR) : begin 
-                        tex_baddr[i]  <= tex_csr_if.write_data[`TEX_ADDR_BITS-1:0];
-                        csrs_dirty[i] <= 1;
-                    end
-                    `CSR_TEX(i, `TEX_STATE_FORMAT) : begin 
-                        tex_format[i] <= tex_csr_if.write_data[`TEX_FORMAT_BITS-1:0];
-                        csrs_dirty[i] <= 1;
-                    end
-                    `CSR_TEX(i, `TEX_STATE_WRAPU) : begin
-                        tex_wraps[i][0] <= tex_csr_if.write_data[`TEX_WRAP_BITS-1:0];
-                        csrs_dirty[i] <= 1;
-                    end
-                    `CSR_TEX(i, `TEX_STATE_WRAPV) : begin
-                        tex_wraps[i][1] <= tex_csr_if.write_data[`TEX_WRAP_BITS-1:0];
-                        csrs_dirty[i] <= 1;
-                    end
-                    `CSR_TEX(i, `TEX_STATE_FILTER) : begin 
-                        tex_filter[i] <= tex_csr_if.write_data[`TEX_FILTER_BITS-1:0];                        
-                        csrs_dirty[i] <= 1;
-                    end
-                    `CSR_TEX(i, `TEX_STATE_WIDTH) : begin 
-                        tex_logdims[i][0] <= tex_csr_if.write_data[`TEX_LOD_BITS-1:0];
-                        csrs_dirty[i] <= 1;
-                    end
-                    `CSR_TEX(i, `TEX_STATE_HEIGHT) : begin 
-                        tex_logdims[i][1] <= tex_csr_if.write_data[`TEX_LOD_BITS-1:0];
-                        csrs_dirty[i] <= 1;
-                    end
-                    default: begin
-                        for (integer j = 0; j <= `TEX_LOD_MAX; ++j) begin
-                        `IGNORE_WARNINGS_BEGIN
-                            if (tex_csr_if.write_addr == `CSR_ADDR_BITS'(`CSR_TEX(i, `TEX_STATE_MIPOFF(j)))) begin
-                        `IGNORE_WARNINGS_END    
-                                tex_mipoff[i][j] <= tex_csr_if.write_data[`TEX_MIPOFF_BITS-1:0];                            
-                                csrs_dirty[i] <= 1;
-                            end
+    always @(posedge clk) begin
+        if (tex_csr_if.write_enable) begin
+            case (tex_csr_if.write_addr)
+                `CSR_TEX_UNIT: begin 
+                    csr_tex_unit <= tex_csr_if.write_data[$clog2(`NUM_TEX_UNITS)-1:0];
+                end
+                `CSR_TEX_ADDR: begin 
+                    tex_baddr[csr_tex_unit] <= tex_csr_if.write_data[`TEX_ADDR_BITS-1:0];
+                    csrs_dirty[csr_tex_unit] <= 1;
+                end
+                `CSR_TEX_FORMAT: begin 
+                    tex_format[csr_tex_unit] <= tex_csr_if.write_data[`TEX_FORMAT_BITS-1:0];
+                    csrs_dirty[csr_tex_unit] <= 1;
+                end
+                `CSR_TEX_WRAPU: begin
+                    tex_wraps[csr_tex_unit][0] <= tex_csr_if.write_data[`TEX_WRAP_BITS-1:0];
+                    csrs_dirty[csr_tex_unit] <= 1;
+                end
+                `CSR_TEX_WRAPV: begin
+                    tex_wraps[csr_tex_unit][1] <= tex_csr_if.write_data[`TEX_WRAP_BITS-1:0];
+                    csrs_dirty[csr_tex_unit] <= 1;
+                end
+                `CSR_TEX_FILTER: begin 
+                    tex_filter[csr_tex_unit] <= tex_csr_if.write_data[`TEX_FILTER_BITS-1:0];                        
+                    csrs_dirty[csr_tex_unit] <= 1;
+                end
+                `CSR_TEX_WIDTH: begin 
+                    tex_logdims[csr_tex_unit][0] <= tex_csr_if.write_data[`TEX_LOD_BITS-1:0];
+                    csrs_dirty[csr_tex_unit] <= 1;
+                end
+                `CSR_TEX_HEIGHT: begin 
+                    tex_logdims[csr_tex_unit][1] <= tex_csr_if.write_data[`TEX_LOD_BITS-1:0];
+                    csrs_dirty[csr_tex_unit] <= 1;
+                end
+                default: begin
+                    for (integer j = 0; j <= `TEX_LOD_MAX; ++j) begin
+                    `IGNORE_WARNINGS_BEGIN
+                        if (tex_csr_if.write_addr == `CSR_TEX_MIPOFF(j)) begin
+                    `IGNORE_WARNINGS_END
+                            tex_mipoff[csr_tex_unit][j] <= tex_csr_if.write_data[`TEX_MIPOFF_BITS-1:0];                            
+                            csrs_dirty[csr_tex_unit] <= 1;
                         end
                     end
-                endcase
-            end
-            if (reset || (tex_req_if.valid && tex_req_if.ready)) begin                
-                csrs_dirty[i] <= '0;
+                end
+            endcase
+        end
+        if (reset || (tex_req_if.valid && tex_req_if.ready)) begin
+            for (integer i = 0; i < `NUM_TEX_UNITS; ++i) begin
+                csrs_dirty[i] <= 0;
             end
         end
     end
@@ -125,7 +134,7 @@ module VX_tex_unit #(
         .req_baseaddr(tex_baddr[tex_req_if.unit]),    
         .req_mipoff (sel_mipoff),
         .req_logdims(sel_logdims),
-        .req_info   ({tex_format[tex_req_if.unit], tex_req_if.rd, tex_req_if.wb, tex_req_if.wid, tex_req_if.PC}),
+        .req_info   ({tex_format[tex_req_if.unit], tex_req_if.uuid, tex_req_if.rd, tex_req_if.wb, tex_req_if.wid, tex_req_if.PC}),
         .req_ready  (tex_req_if.ready),
 
         .rsp_valid  (mem_req_valid), 
@@ -204,9 +213,47 @@ module VX_tex_unit #(
         .rsp_valid  (tex_rsp_if.valid),
         .rsp_tmask  (tex_rsp_if.tmask),
         .rsp_data   (tex_rsp_if.data),
-        .rsp_info   ({tex_rsp_if.rd, tex_rsp_if.wb, tex_rsp_if.wid, tex_rsp_if.PC}),
+        .rsp_info   ({tex_rsp_if.uuid, tex_rsp_if.rd, tex_rsp_if.wb, tex_rsp_if.wid, tex_rsp_if.PC}),
         .rsp_ready  (tex_rsp_if.ready)
-    );    
+    );  
+
+`ifdef PERF_ENABLE
+    wire [$clog2(`NUM_THREADS+1)-1:0] perf_mem_req_per_cycle;
+    wire [$clog2(`NUM_THREADS+1)-1:0] perf_mem_rsp_per_cycle;
+
+    wire [`NUM_THREADS-1:0] perf_mem_req_per_mask = dcache_req_if.valid & dcache_req_if.ready;
+    wire [`NUM_THREADS-1:0] perf_mem_rsp_per_mask = dcache_rsp_if.tmask & {`NUM_THREADS{dcache_rsp_if.valid & dcache_rsp_if.ready}};
+
+    `POP_COUNT(perf_mem_req_per_cycle, perf_mem_req_per_mask);    
+    `POP_COUNT(perf_mem_rsp_per_cycle, perf_mem_rsp_per_mask);
+
+    reg [`PERF_CTR_BITS-1:0] perf_pending_reads;   
+    wire [$clog2(`NUM_THREADS+1)+1-1:0] perf_pending_reads_cycle = perf_mem_req_per_cycle - perf_mem_rsp_per_cycle;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_pending_reads <= 0;
+        end else begin
+            perf_pending_reads <= perf_pending_reads + `PERF_CTR_BITS'($signed(perf_pending_reads_cycle));
+        end
+    end
+
+    reg [`PERF_CTR_BITS-1:0] perf_mem_reads;
+    reg [`PERF_CTR_BITS-1:0] perf_mem_latency;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_mem_reads   <= 0;
+            perf_mem_latency <= 0;
+        end else begin
+            perf_mem_reads   <= perf_mem_reads + `PERF_CTR_BITS'(perf_mem_req_per_cycle);
+            perf_mem_latency <= perf_mem_latency + `PERF_CTR_BITS'(perf_pending_reads);
+        end
+    end
+
+    assign perf_tex_if.mem_reads   = perf_mem_reads;
+    assign perf_tex_if.mem_latency = perf_mem_latency;
+`endif  
 
 `ifdef DBG_TRACE_TEX
     always @(posedge clk) begin

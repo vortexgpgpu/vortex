@@ -55,7 +55,7 @@
 `define INST_S          7'b0100011 // store instructions
 `define INST_I          7'b0010011 // immediate instructions
 `define INST_R          7'b0110011 // register instructions
-`define INST_F          7'b0001111 // Fence instructions
+`define INST_FENCE      7'b0001111 // Fence instructions
 `define INST_SYS        7'b1110011 // system instructions
 
 `define INST_FL         7'b0000111 // float load instruction
@@ -155,6 +155,7 @@
 `define INST_LSU_BITS        4
 `define INST_LSU_FMT(x)      x[2:0]
 `define INST_LSU_WSIZE(x)    x[1:0]
+`define INST_LSU_IS_MEM(x)   (3'h0 == x)
 `define INST_LSU_IS_FENCE(x) (3'h1 == x)
 `define INST_LSU_IS_PREFETCH(x) (3'h2 == x)
 

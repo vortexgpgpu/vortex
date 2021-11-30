@@ -25,35 +25,36 @@ module VX_icache_stage #(
     localparam OUT_REG = 0;
 
     reg [`DBG_CACHE_REQ_IDW-1:0] req_id;
-    wire [`DBG_CACHE_REQ_IDW-1:0] rsp_req_id;
+    wire [`DBG_CACHE_REQ_IDW-1:0] rsp_id;
     wire [`NW_BITS-1:0] req_tag, rsp_tag;
 
-    `UNUSED_VAR (rsp_req_id)
+    `UNUSED_VAR (rsp_id)
 
     wire icache_req_fire = icache_req_if.valid && icache_req_if.ready;
     
-    assign req_tag    = ifetch_req_if.wid;
-    assign rsp_tag    = icache_rsp_if.tag[`NW_BITS-1:0];
-    assign rsp_req_id = icache_rsp_if.tag[`NW_BITS +: `DBG_CACHE_REQ_IDW];
+    assign req_tag = ifetch_req_if.wid;
+    assign rsp_tag = icache_rsp_if.tag[`NW_BITS-1:0];
+    assign rsp_id  = icache_rsp_if.tag[`NW_BITS +: `DBG_CACHE_REQ_IDW];
 
+    wire [63:0] rsp_uuid;
     wire [31:0] rsp_PC;
     wire [`NUM_THREADS-1:0] rsp_tmask;
 
     VX_dp_ram #(
-        .DATAW  (32 + `NUM_THREADS),
+        .DATAW  (32 + `NUM_THREADS + 64),
         .SIZE   (`NUM_WARPS),
         .LUTRAM (1)
     ) req_metadata (
         .clk   (clk),        
         .wren  (icache_req_fire),
         .waddr (req_tag),
-        .wdata ({ifetch_req_if.PC, ifetch_req_if.tmask}),
+        .wdata ({ifetch_req_if.PC, ifetch_req_if.tmask, ifetch_req_if.uuid}),
         .raddr (rsp_tag),
-        .rdata ({rsp_PC, rsp_tmask})
+        .rdata ({rsp_PC, rsp_tmask, rsp_uuid})
     );
 
     `RUNTIME_ASSERT((!ifetch_req_if.valid || ifetch_req_if.PC >= `STARTUP_ADDR), 
-        ("invalid PC=%0h, wid=%0d, tmask=%b", ifetch_req_if.PC, ifetch_req_if.wid, ifetch_req_if.tmask))
+        ("%t: *** invalid PC=%0h, wid=%0d, tmask=%b (#%0d)", $time, ifetch_req_if.PC, ifetch_req_if.wid, ifetch_req_if.tmask, ifetch_req_if.uuid))
 
     // Icache Request
     assign icache_req_if.valid = ifetch_req_if.valid;
@@ -78,35 +79,37 @@ module VX_icache_stage #(
     wire stall_out = ~ifetch_rsp_if.ready && (0 == OUT_REG && ifetch_rsp_if.valid);
 
     VX_pipe_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + 32),
+        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + 32 + 64),
         .RESETW (1),
         .DEPTH  (OUT_REG)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_out),
-        .data_in  ({icache_rsp_if.valid, rsp_wid,           rsp_tmask,           rsp_PC,           icache_rsp_if.data}),
-        .data_out ({ifetch_rsp_if.valid, ifetch_rsp_if.wid, ifetch_rsp_if.tmask, ifetch_rsp_if.PC, ifetch_rsp_if.data})
+        .data_in  ({icache_rsp_if.valid, rsp_wid,           rsp_tmask,           rsp_PC,           icache_rsp_if.data, rsp_uuid}),
+        .data_out ({ifetch_rsp_if.valid, ifetch_rsp_if.wid, ifetch_rsp_if.tmask, ifetch_rsp_if.PC, ifetch_rsp_if.data, ifetch_rsp_if.uuid})
     );     
     
     // Can accept new response?
     assign icache_rsp_if.ready = ~stall_out;
 
     `SCOPE_ASSIGN (icache_req_fire, icache_req_fire);
-    `SCOPE_ASSIGN (icache_req_wid,  ifetch_req_if.wid);
+    `SCOPE_ASSIGN (icache_req_uuid, ifetch_req_if.uuid);
     `SCOPE_ASSIGN (icache_req_addr, {icache_req_if.addr, 2'b0});    
     `SCOPE_ASSIGN (icache_req_tag,  req_tag);
+
     `SCOPE_ASSIGN (icache_rsp_fire, icache_rsp_if.valid && icache_rsp_if.ready);
+    `SCOPE_ASSIGN (icache_rsp_uuid, rsp_uuid);
     `SCOPE_ASSIGN (icache_rsp_data, icache_rsp_if.data);
     `SCOPE_ASSIGN (icache_rsp_tag,  rsp_tag);
 
 `ifdef DBG_TRACE_CORE_ICACHE
     always @(posedge clk) begin
         if (icache_req_fire) begin
-            dpi_trace("%d: I$%0d req: wid=%0d, PC=%0h, req_id=%0h\n", $time, CORE_ID, ifetch_req_if.wid, ifetch_req_if.PC, req_id);
+            dpi_trace("%d: I$%0d req: wid=%0d, PC=%0h, req_id=%0h (#%0d)\n", $time, CORE_ID, ifetch_req_if.wid, ifetch_req_if.PC, req_id, ifetch_req_if.uuid);
         end
         if (ifetch_rsp_if.valid && ifetch_rsp_if.ready) begin
-            dpi_trace("%d: I$%0d rsp: wid=%0d, PC=%0h, req_id=%0h, data=%0h\n", $time, CORE_ID, ifetch_rsp_if.wid, ifetch_rsp_if.PC, rsp_req_id, ifetch_rsp_if.data);
+            dpi_trace("%d: I$%0d rsp: wid=%0d, PC=%0h, req_id=%0h, data=%0h (#%0d)\n", $time, CORE_ID, ifetch_rsp_if.wid, ifetch_rsp_if.PC, rsp_id, ifetch_rsp_if.data, ifetch_rsp_if.uuid);
         end
     end
 `endif
