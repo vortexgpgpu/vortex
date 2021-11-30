@@ -28,7 +28,7 @@ else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
-PROJECT = simX
+PROJECT = simx
 
 all: $(PROJECT)
 
