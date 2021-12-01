@@ -43,15 +43,20 @@ echo "begin clustering tests..."
 # warp/threads configurations
 ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=2 --threads=8 --app=demo
 ./ci/blackbox.sh --driver=rtlsim --cores=1 --warps=8 --threads=2 --app=demo
+./ci/blackbox.sh --driver=simx --cores=1 --warps=8 --threads=16 --app=demo
 
 # cores clustering
 ./ci/blackbox.sh --driver=rtlsim --cores=1 --clusters=1 --app=demo --args="-n1"
+./ci/blackbox.sh --driver=rtlsim --cores=4 --clusters=1 --app=demo --args="-n1"
 ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --app=demo --args="-n1"
+./ci/blackbox.sh --driver=simx --cores=4 --clusters=1 --app=demo --args="-n1"
+./ci/blackbox.sh --driver=simx --cores=4 --clusters=2 --app=demo --args="-n1"
 
 # L2/L3
 ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=demo --args="-n1"
 ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l3cache --app=demo --args="-n1"
 ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr --args="-n1"
+./ci/blackbox.sh --driver=simx --cores=4 --clusters=4 --l2cache --l3cache --app=demo --args="-n1"
 
 echo "clustering tests done!"
 }
@@ -101,12 +106,14 @@ CONFIGS="-DMEM_BLOCK_SIZE=16 -DL1_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=rtlsi
 # test cache banking
 CONFIGS="-DDNUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=io_addr
 CONFIGS="-DDNUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=io_addr
+CONFIGS="-DDNUM_BANKS=2" ./ci/blackbox.sh --driver=simx --cores=1 --app=io_addr
 
 # test cache multi-porting
 CONFIGS="-DDNUM_PORTS=2" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=io_addr
 CONFIGS="-DDNUM_PORTS=2" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo --debug --args="-n1"
 CONFIGS="-DL2_NUM_PORTS=2 -DDNUM_PORTS=2" ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=io_addr
 CONFIGS="-DL2_NUM_PORTS=4 -DDNUM_PORTS=4" ./ci/blackbox.sh --driver=rtlsim --cores=4 --l2cache --app=io_addr
+CONFIGS="-DL2_NUM_PORTS=4 -DDNUM_PORTS=4" ./ci/blackbox.sh --driver=simx --cores=4 --l2cache --app=io_addr
 
 # test 128-bit MEM block
 CONFIGS=-DMEM_BLOCK_SIZE=16 ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo

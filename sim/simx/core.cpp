@@ -21,6 +21,7 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
     , arch_(arch)
     , decoder_(arch)
     , mmu_(0, arch.wsize(), true)
+    , smem_(RAM_PAGE_SIZE)
     , tex_units_(NUM_TEX_UNITS, this)
     , warps_(arch.num_warps())
     , barriers_(arch.num_barriers(), 0)
@@ -380,7 +381,12 @@ Word Core::icache_read(Addr addr, Size size) {
 
 Word Core::dcache_read(Addr addr, Size size) {  
   Word data;
-  mmu_.read(&data, addr, size, 0);
+  auto type = get_addr_type(addr, size);
+  if (type == AddrType::Shared) {
+    smem_.read(&data, addr & (SMEM_SIZE-1), size);
+  } else {  
+    mmu_.read(&data, addr, size, 0);
+  }
   return data;
 }
 
@@ -389,7 +395,12 @@ void Core::dcache_write(Addr addr, Word data, Size size) {
    && addr <= (IO_COUT_ADDR + IO_COUT_SIZE - 1)) {
      this->writeToStdOut(addr, data);
   } else {
-    mmu_.write(&data, addr, size, 0);
+    auto type = get_addr_type(addr, size);
+    if (type == AddrType::Shared) {
+      smem_.write(&data, addr & (SMEM_SIZE-1), size);
+    } else {
+      mmu_.write(&data, addr, size, 0);
+    }
   }
 }
 
