@@ -9,10 +9,9 @@
 #include <vortex.h>
 #include <vx_utils.h>
 #include <processor.h>
+#include <constants.h>
 #include <VX_config.h>
 #include <util.h>
-
-#define RAM_PAGE_SIZE 4096
 
 using namespace vortex;
 
@@ -58,7 +57,7 @@ private:
 class vx_device {    
 public:
     vx_device() 
-        : arch_("rv32i", NUM_CORES, NUM_WARPS, NUM_THREADS)
+        : arch_("rv32i", NUM_CORES * NUM_CLUSTERS, NUM_WARPS, NUM_THREADS)
         , ram_(RAM_PAGE_SIZE)
         , mem_allocation_(ALLOC_BASE_ADDR)
     {}

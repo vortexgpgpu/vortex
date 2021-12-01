@@ -6,6 +6,8 @@
 #define MEM_LATENCY 24
 #endif
 
+#define RAM_PAGE_SIZE 4096
+
 namespace vortex {
 
 enum Constants {
