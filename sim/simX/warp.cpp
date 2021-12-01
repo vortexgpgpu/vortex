@@ -36,7 +36,7 @@ void Warp::step(Pipeline *pipeline) {
 
   /* Fetch and decode. */    
 
-  Word fetched = core_->icache_fetch(PC_);
+  HalfWord fetched = core_->icache_fetch(PC_);
   auto instr = core_->decoder().decode(fetched, PC_);
 
   // Update pipeline

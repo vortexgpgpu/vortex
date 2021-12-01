@@ -52,12 +52,13 @@ inline void update_fcrs(uint32_t fflags, Core* core, uint32_t tid, uint32_t wid)
 void Warp::execute(const Instr &instr, Pipeline *pipeline) {
   assert(tmask_.any());
 
-  Word nextPC = PC_ + core_->arch().wsize();
+  // simx64
+  Word nextPC = PC_ + 4;
   bool runOnce = false;
   
-  Word func3 = instr.getFunc3();
-  Word func6 = instr.getFunc6();
-  Word func7 = instr.getFunc7();
+  HalfWord func3 = instr.getFunc3();
+  HalfWord func6 = instr.getFunc6();
+  HalfWord func7 = instr.getFunc7();
 
   auto opcode = instr.getOpcode();
   int rdest  = instr.getRDest();
@@ -1689,7 +1690,8 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
     }
   }
 
-  PC_ += core_->arch().wsize();
+  // simx64
+  PC_ += 4;
   if (PC_ != nextPC) {
     D(3, "*** Next PC: " << std::hex << nextPC << std::dec);
     PC_ = nextPC;

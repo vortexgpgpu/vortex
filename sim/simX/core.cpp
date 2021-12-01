@@ -322,9 +322,9 @@ void Core::barrier(int bar_id, int count, int warp_id) {
 }
 
 // simx64
-Word Core::icache_fetch(Addr addr) {
-  Word data;
-  mem_.read(&data, addr, sizeof(Word), 0);
+HalfWord Core::icache_fetch(Addr addr) {
+  HalfWord data;
+  mem_.read(&data, addr, sizeof(HalfWord), 0);
   return data;
 }
 
