@@ -109,7 +109,7 @@ Processor::Processor(const ArchDef& arch)
     }
 
     for (uint32_t j = 0; j < cores_per_cluster; ++j) {
-      auto& core = cores_.at((i * NUM_CLUSTERS) + j);        
+      auto& core = cores_.at((i * cores_per_cluster) + j);        
       cluster_mem_rsp_ports.at(j)->bind(&core->MemRspPort);
       core->MemReqPort.bind(cluster_mem_req_ports.at(j));
     }
