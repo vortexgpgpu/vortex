@@ -106,7 +106,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
     case NOP:
       break;
     case LUI_INST:
-      rddata = (immsrc << 12) & 0xfffff000;
+      rddata = signExt(((immsrc << 12) & 0xfffff000), 32, 0xFFFFFFFF);
       rd_write = true;
       break;
     case AUIPC_INST:
@@ -205,7 +205,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
             rddata = rsdata[0] - rsdata[1];
           } else {
             // RV32I: ADD
-            rddata = rsdata[0] + rsdata[1];
+            rddata = WordI(rsdata[0]) + WordI(rsdata[1]);//(WordI(rsdata[0]) > 0) && (WordI(rsdata[1]) > 0)? ((rsdata[0] + rsdata[1]) & 0xFFFFFFFF) :          
           }
           break;
         case 1:
@@ -253,7 +253,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       switch (func3) {
       case 0:
         // RV32I: ADDI
-        rddata = rsdata[0] + immsrc;
+        rddata = WordI(rsdata[0]) + WordI(immsrc);
         break;
       case 1:
         // RV64I: SLLI
@@ -456,7 +456,6 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         case 0:
           // RV64I: ADDIW
           rddata = signExt((HalfWord)rsdata[0] + (HalfWord)immsrc, 32, 0xFFFFFFFF);
-          printf("rddata\n");
           break;
         case 1: 
           // RV64I: SLLIW

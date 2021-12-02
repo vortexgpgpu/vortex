@@ -1,4 +1,5 @@
-RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
+# RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
+RISCV_TOOLCHAIN_PATH = /nethome/ssrivatsan8/riscv32
 # simx64
 RISCV64_TOOLCHAIN_PATH ?= /nethome/ssrivatsan8/riscv
 

@@ -75,7 +75,7 @@ public:
   void setSrcVReg(int srcReg) { rsrc_type_[num_rsrcs_] = 3; rsrc_[num_rsrcs_++] = srcReg;  }
   void setFunc3(HalfWord func3) { func3_ = func3; }
   void setFunc7(HalfWord func7) { func7_ = func7; }
-  void setImm(HalfWord imm) { has_imm_ = true; imm_ = imm; }
+  void setImm(Word imm) { has_imm_ = true; imm_ = imm; }
   void setVlsWidth(HalfWord width) { vlsWidth_ = width; }
   void setVmop(HalfWord mop) { vMop_ = mop; }
   void setVnf(HalfWord nf) { vNf_ = nf; }
@@ -97,7 +97,7 @@ public:
   int getRDest() const { return rdest_; }  
   int getRDType() const { return rdest_type_; }  
   bool hasImm() const { return has_imm_; }
-  HalfWord getImm() const { return imm_; }
+  Word getImm() const { return imm_; }
   HalfWord getVlsWidth() const { return vlsWidth_; }
   HalfWord getVmop() const { return vMop_; }
   HalfWord getvNf() const { return vNf_; }
@@ -120,7 +120,7 @@ private:
   int isrc_mask_;
   int fsrc_mask_;  
   int vsrc_mask_;
-  HalfWord imm_;
+  Word imm_;
   int rsrc_type_[MAX_REG_SOURCES];
   int rsrc_[MAX_REG_SOURCES];  
   int rdest_;

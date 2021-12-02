@@ -49,7 +49,7 @@ static const char* op_string(const Instr &instr) {
   HalfWord func3 = instr.getFunc3();
   HalfWord func7 = instr.getFunc7();
   HalfWord rs2   = instr.getRSrc(1);
-  HalfWord imm   = instr.getImm();
+  Word imm   = instr.getImm();
   switch (instr.getOpcode()) {
   case Opcode::NOP:        return "NOP";
   case Opcode::LUI_INST:   return "LUI";
@@ -394,7 +394,7 @@ std::shared_ptr<Instr> Decoder::decode(HalfWord code, HalfWord PC) {
       instr->setSrcReg(rs2);
     }
     instr->setFunc3(func3);
-    HalfWord imeed = (func7 << reg_s_) | rd;
+    Word imeed = (func7 << reg_s_) | rd;
     instr->setImm(signExt(imeed, 12, s_imm_mask_));
   } break;
 
@@ -406,7 +406,7 @@ std::shared_ptr<Instr> Decoder::decode(HalfWord code, HalfWord PC) {
     HalfWord bits_4_1 = rd >> 1;
     HalfWord bit_10_5 = func7 & 0x3f;
     HalfWord bit_12   = func7 >> 6;
-    HalfWord imeed = (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
+    Word imeed = (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
     instr->setImm(signExt(imeed, 13, b_imm_mask_));
   } break;
 
@@ -422,7 +422,7 @@ std::shared_ptr<Instr> Decoder::decode(HalfWord code, HalfWord PC) {
     HalfWord bit_11 = (unordered >> 8) & 0x1;
     HalfWord bits_10_1 = (unordered >> 9) & 0x3ff;
     HalfWord bit_20 = (unordered >> 19) & 0x1;
-    HalfWord imeed = 0 | (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
+    Word imeed = 0 | (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
     if (bit_20) {
       imeed |= ~j_imm_mask_;
     }
