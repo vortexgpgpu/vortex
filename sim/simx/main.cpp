@@ -6,10 +6,9 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include "processor.h"
+#include "constants.h"
 #include <util.h>
 #include "args.h"
-
-#define RAM_PAGE_SIZE 4096
 
 using namespace vortex;
 
