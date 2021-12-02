@@ -18,8 +18,9 @@ Processor::Processor(const ArchDef& arch)
 
   // connect memory sub-systen
   memsim_ = MemSim::Create(1, MEM_LATENCY);
-  std::vector<SimPort<MemReq>*>  mem_req_ports(1); 
+  std::vector<SimPort<MemReq>*> mem_req_ports(1); 
   std::vector<SimPort<MemRsp>*> mem_rsp_ports(1);
+
   mem_req_ports.at(0) = &memsim_->MemReqPorts.at(0);
   mem_rsp_ports.at(0) = &memsim_->MemRspPorts.at(0);
 
@@ -46,6 +47,7 @@ Processor::Processor(const ArchDef& arch)
 
     mem_req_ports.resize(NUM_CLUSTERS);
     mem_rsp_ports.resize(NUM_CLUSTERS);
+
     for (uint32_t i = 0; i < NUM_CLUSTERS; ++i) {
       mem_req_ports.at(i) = &l3cache_->CoreReqPorts.at(i);
       mem_rsp_ports.at(i) = &l3cache_->CoreRspPorts.at(i);
@@ -57,13 +59,17 @@ Processor::Processor(const ArchDef& arch)
 
     mem_req_ports.resize(NUM_CLUSTERS);
     mem_rsp_ports.resize(NUM_CLUSTERS);
+
     for (uint32_t i = 0; i < NUM_CLUSTERS; ++i) {
       mem_req_ports.at(i) = &l3_mem_switch_->ReqIn.at(i);
       mem_rsp_ports.at(i) = &l3_mem_switch_->RspOut.at(i);
     }
   }
 
-  for (uint32_t i = 0; i < NUM_CLUSTERS; ++i) {      
+  for (uint32_t i = 0; i < NUM_CLUSTERS; ++i) {  
+    std::vector<SimPort<MemReq>*> cluster_mem_req_ports(cores_per_cluster); 
+    std::vector<SimPort<MemRsp>*> cluster_mem_rsp_ports(cores_per_cluster);
+
     if (L2_ENABLE) {
       auto& l2cache = l2caches_.at(i);
       l2cache = Cache::Create("l2cache", Cache::Config{
@@ -74,40 +80,38 @@ Processor::Processor(const ArchDef& arch)
         32,                     // address bits    
         L2_NUM_BANKS,           // number of banks
         L2_NUM_PORTS,           // number of ports
-        NUM_CORES,              // request size   
+        (uint8_t)cores_per_cluster, // request size   
         true,                   // write-through
         false,                  // write response
         0,                      // victim size
         L2_MSHR_SIZE,           // mshr
         2,                      // pipeline latency
       });
+
       mem_rsp_ports.at(i)->bind(&l2cache->MemRspPort);
       l2cache->MemReqPort.bind(mem_req_ports.at(i));
 
-      mem_req_ports.resize(cores_per_cluster);
-      mem_rsp_ports.resize(cores_per_cluster);
       for (uint32_t j = 0; j < cores_per_cluster; ++j) {
-        mem_req_ports.at(j) = &l2cache->CoreReqPorts.at(j);
-        mem_rsp_ports.at(j) = &l2cache->CoreRspPorts.at(j);
+        cluster_mem_req_ports.at(j) = &l2cache->CoreReqPorts.at(j);
+        cluster_mem_rsp_ports.at(j) = &l2cache->CoreRspPorts.at(j);
       }
-    } else if (cores_per_cluster > 1) {
+    } else {
       auto& l2_mem_switch = l2_mem_switches_.at(i);
-      l2_mem_switch = Switch<MemReq, MemRsp>::Create("l2_arb", ArbiterType::RoundRobin, NUM_CORES);
-      mem_rsp_ports.at(i)->bind(&l2_mem_switch->RspIn);
-      l2_mem_switch->ReqOut.bind(mem_req_ports.at(i));  
+      l2_mem_switch = Switch<MemReq, MemRsp>::Create("l2_arb", ArbiterType::RoundRobin, cores_per_cluster);
 
-      mem_req_ports.resize(cores_per_cluster);
-      mem_rsp_ports.resize(cores_per_cluster);
+      mem_rsp_ports.at(i)->bind(&l2_mem_switch->RspIn);
+      l2_mem_switch->ReqOut.bind(mem_req_ports.at(i));
+
       for (uint32_t j = 0; j < cores_per_cluster; ++j) {
-        mem_req_ports.at(j) = &l2_mem_switch->ReqIn.at(j);
-        mem_rsp_ports.at(j) = &l2_mem_switch->RspOut.at(j);
+        cluster_mem_req_ports.at(j) = &l2_mem_switch->ReqIn.at(j);
+        cluster_mem_rsp_ports.at(j) = &l2_mem_switch->RspOut.at(j);
       }
     }
 
     for (uint32_t j = 0; j < cores_per_cluster; ++j) {
-      auto& core = cores_.at((i * NUM_CLUSTERS) + j);        
-      mem_rsp_ports.at(i)->bind(&core->MemRspPort);
-      core->MemReqPort.bind(mem_req_ports.at(j));
+      auto& core = cores_.at((i * cores_per_cluster) + j);        
+      cluster_mem_rsp_ports.at(j)->bind(&core->MemRspPort);
+      core->MemReqPort.bind(cluster_mem_req_ports.at(j));
     }
   }
 }

@@ -137,6 +137,7 @@ private:
   const ArchDef arch_;
   const Decoder decoder_;
   MemoryUnit mmu_;
+  RAM smem_;
   std::vector<TexUnit> tex_units_;
 
   std::vector<std::shared_ptr<Warp>> warps_;  
