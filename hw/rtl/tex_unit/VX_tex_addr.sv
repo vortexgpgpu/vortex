@@ -17,6 +17,7 @@ module VX_tex_addr #(
     input wire [`TEX_FILTER_BITS-1:0]   req_filter,
     input wire [1:0][`TEX_WRAP_BITS-1:0] req_wraps,
     input wire [`TEX_ADDR_BITS-1:0]     req_baseaddr,
+    input wire [NUM_REQS-1:0][`TEX_LOD_BITS-1:0] mip_level,
     input wire [NUM_REQS-1:0][`TEX_MIPOFF_BITS-1:0] req_mipoff,    
     input wire [NUM_REQS-1:0][1:0][`TEX_LOD_BITS-1:0] req_logdims,
     input wire [REQ_INFOW-1:0]          req_info,    
@@ -28,6 +29,7 @@ module VX_tex_addr #(
     output wire [NUM_REQS-1:0]          rsp_tmask,
     output wire [`TEX_FILTER_BITS-1:0]  rsp_filter,
     output wire [`TEX_LGSTRIDE_BITS-1:0] rsp_lgstride,
+    output wire [NUM_REQS-1:0][31:0]    rsp_baseaddr,
     output wire [NUM_REQS-1:0][3:0][31:0] rsp_addr,
     output wire [NUM_REQS-1:0][1:0][`TEX_BLEND_FRAC-1:0] rsp_blends,
     output wire [REQ_INFOW-1:0]         rsp_info,  
@@ -38,6 +40,7 @@ module VX_tex_addr #(
 
     localparam SHIFT_BITS = $clog2(`TEX_FXD_FRAC+1);
     localparam PITCH_BITS = `MAX(`TEX_LOD_BITS, `TEX_LGSTRIDE_BITS) + 1;
+    localparam SCALED_DIM = `TEX_FXD_FRAC + `TEX_DIM_BITS;
     localparam SCALED_X_W = `TEX_DIM_BITS + `TEX_BLEND_FRAC;
     localparam OFFSET_U_W = `TEX_DIM_BITS + `TEX_LGSTRIDE_MAX;
     localparam OFFSET_V_W = `TEX_DIM_BITS + `TEX_DIM_BITS + `TEX_LGSTRIDE_MAX;
@@ -69,7 +72,7 @@ module VX_tex_addr #(
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         for (genvar j = 0; j < 2; ++j) begin
-            wire [`TEX_FXD_FRAC-1:0] delta = (`TEX_FXD_HALF >> req_logdims[i][j]);
+            wire [`TEX_FXD_FRAC-1:0] delta    = `TEX_FXD_FRAC'((SCALED_DIM'(`TEX_FXD_HALF) << mip_level[i]) >> req_logdims[i][j]);
             wire [`TEX_FXD_BITS-1:0] coord_lo = req_filter ? (req_coords[j][i] - `TEX_FXD_BITS'(delta)) : req_coords[j][i];
             wire [`TEX_FXD_BITS-1:0] coord_hi = req_filter ? (req_coords[j][i] + `TEX_FXD_BITS'(delta)) : req_coords[j][i];
 
@@ -89,14 +92,14 @@ module VX_tex_addr #(
                 .coord_o (clamped_hi[i][j])
             );
 
-            assign dim_shift[i][j] = (`TEX_FXD_FRAC - `TEX_BLEND_FRAC - req_logdims[i][j]);
+            assign dim_shift[i][j] = (`TEX_FXD_FRAC - `TEX_BLEND_FRAC - (req_logdims[i][j] - mip_level[i]));
         end
-        assign log_pitch[i] = PITCH_BITS'(req_logdims[i][0]) + PITCH_BITS'(log_stride);        
-        assign mip_addr[i]  = req_baseaddr + 32'(req_mipoff[i]);
+        assign log_pitch[i] = PITCH_BITS'(req_logdims[i][0] - mip_level[i]) + PITCH_BITS'(log_stride);        
+        assign mip_addr[i]  = req_baseaddr + `TEX_ADDR_BITS'(req_mipoff[i]);
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_REQS + `TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + REQ_INFOW + NUM_REQS * (PITCH_BITS + 2 * SHIFT_BITS + 32 + 2 * 2 * `TEX_FXD_FRAC)),
+        .DATAW  (1 + NUM_REQS + `TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + REQ_INFOW + NUM_REQS * (PITCH_BITS + 2 * SHIFT_BITS + `TEX_ADDR_BITS + 2 * 2 * `TEX_FXD_FRAC)),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
@@ -114,8 +117,6 @@ module VX_tex_addr #(
     wire [NUM_REQS-1:0][OFFSET_U_W-1:0] offset_u_hi;
     wire [NUM_REQS-1:0][OFFSET_V_W-1:0] offset_v_lo;
     wire [NUM_REQS-1:0][OFFSET_V_W-1:0] offset_v_hi;
-    wire [NUM_REQS-1:0][31:0] base_addr_lo;
-    wire [NUM_REQS-1:0][31:0] base_addr_hi;
     wire [NUM_REQS-1:0][1:0][`TEX_BLEND_FRAC-1:0] blends;
     wire [NUM_REQS-1:0][3:0][31:0] addr;
 
@@ -134,26 +135,23 @@ module VX_tex_addr #(
         assign offset_v_lo[i] = OFFSET_V_W'(scaled_lo[i][1][`TEX_BLEND_FRAC +: `TEX_DIM_BITS]) << log_pitch_s0[i];
         assign offset_v_hi[i] = OFFSET_V_W'(scaled_hi[i][1][`TEX_BLEND_FRAC +: `TEX_DIM_BITS]) << log_pitch_s0[i];
 
-        assign base_addr_lo[i] = mip_addr_s0[i] + 32'(offset_v_lo[i]);
-        assign base_addr_hi[i] = mip_addr_s0[i] + 32'(offset_v_hi[i]);
-
-        assign addr[i][0] = base_addr_lo[i] + 32'(offset_u_lo[i]);
-        assign addr[i][1] = base_addr_lo[i] + 32'(offset_u_hi[i]);
-        assign addr[i][2] = base_addr_hi[i] + 32'(offset_u_lo[i]);
-        assign addr[i][3] = base_addr_hi[i] + 32'(offset_u_hi[i]);
+        assign addr[i][0] = 32'(offset_v_lo[i]) + 32'(offset_u_lo[i]);
+        assign addr[i][1] = 32'(offset_v_lo[i]) + 32'(offset_u_hi[i]);
+        assign addr[i][2] = 32'(offset_v_hi[i]) + 32'(offset_u_lo[i]);
+        assign addr[i][3] = 32'(offset_v_hi[i]) + 32'(offset_u_hi[i]);
     end
 
     assign stall_out = rsp_valid && ~rsp_ready;
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_REQS + `TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + (NUM_REQS * 4 * 32) + (2 * NUM_REQS * `TEX_BLEND_FRAC) + REQ_INFOW),
+        .DATAW  (1 + NUM_REQS + `TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + (NUM_REQS * 32) + (NUM_REQS * 4 * 32) + (2 * NUM_REQS * `TEX_BLEND_FRAC) + REQ_INFOW),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({valid_s0,  tmask_s0,  filter_s0,  log_stride_s0, addr,     blends,     req_info_s0}),
-        .data_out ({rsp_valid, rsp_tmask, rsp_filter, rsp_lgstride, rsp_addr, rsp_blends, rsp_info})
+        .data_in  ({valid_s0,  tmask_s0,  filter_s0,  log_stride_s0, mip_addr_s0,  addr,     blends,     req_info_s0}),
+        .data_out ({rsp_valid, rsp_tmask, rsp_filter, rsp_lgstride,  rsp_baseaddr, rsp_addr, rsp_blends, rsp_info})
     );
 
     assign req_ready = ~stall_out;
@@ -176,6 +174,8 @@ module VX_tex_addr #(
             `TRACE_ARRAY2D(clamped_lo, 2, NUM_REQS);    
             dpi_trace(", clamped_hi=");
             `TRACE_ARRAY2D(clamped_hi, 2, NUM_REQS);
+            dpi_trace(", mip_addr=");
+            `TRACE_ARRAY1D(mip_addr, NUM_REQS);
             dpi_trace("\n");
         end
 
@@ -192,10 +192,6 @@ module VX_tex_addr #(
             `TRACE_ARRAY1D(offset_v_lo, NUM_REQS);
             dpi_trace(", offset_v_hi=");
             `TRACE_ARRAY1D(offset_v_hi, NUM_REQS);
-            dpi_trace(", base_addr_lo=");
-            `TRACE_ARRAY1D(base_addr_lo, NUM_REQS);
-            dpi_trace(", base_addr_hi=");
-            `TRACE_ARRAY1D(base_addr_hi, NUM_REQS);
             dpi_trace("\n");
         end
 
