@@ -16,6 +16,7 @@ module VX_tex_mem #(
     input wire [NUM_REQS-1:0]           req_tmask,
     input wire [`TEX_FILTER_BITS-1:0]   req_filter,
     input wire [`TEX_LGSTRIDE_BITS-1:0] req_lgstride,
+    input wire [NUM_REQS-1:0][31:0]     req_baseaddr,
     input wire [NUM_REQS-1:0][3:0][31:0] req_addr,
     input wire [REQ_INFOW-1:0]          req_info,
     output wire                         req_ready,
@@ -32,6 +33,14 @@ module VX_tex_mem #(
 
     localparam RSP_CTR_W = $clog2(NUM_REQS * 4 + 1);
 
+    // full address calculation
+    wire [NUM_REQS-1:0][3:0][31:0] full_addr;    
+    for (genvar i = 0; i < NUM_REQS; ++i) begin
+        for (genvar j = 0; j < 4; ++j) begin
+            assign full_addr[i][j] = req_baseaddr[i] + req_addr[i][j];
+        end
+    end
+
     wire [3:0] dup_reqs;
     wire [3:0][NUM_REQS-1:0][29:0] req_addr_w;
     wire [3:0][NUM_REQS-1:0][1:0] align_offs;
@@ -40,17 +49,17 @@ module VX_tex_mem #(
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         for (genvar j = 0; j < 4; ++j) begin
-            assign req_addr_w[j][i] = req_addr[i][j][31:2];       
-            assign align_offs[j][i] = req_addr[i][j][1:0];
+            assign req_addr_w[j][i] = full_addr[i][j][31:2];       
+            assign align_offs[j][i] = full_addr[i][j][1:0];
         end
     end
 
-    // find duplicate addresses
+    // detect duplicate addresses
 
     for (genvar i = 0; i < 4; ++i) begin
-        wire [NUM_REQS-1:0] addr_matches;
-        for (genvar j = 0; j < NUM_REQS; j++) begin
-            assign addr_matches[j] = (req_addr_w[i][0] == req_addr_w[i][j]) || ~req_tmask[j];
+        wire [NUM_REQS-2:0] addr_matches;
+        for (genvar j = 0; j < (NUM_REQS-1); ++j) begin
+            assign addr_matches[j] = (req_addr_w[i][j+1] == req_addr_w[i][0]) || ~req_tmask[j+1];
         end    
         assign dup_reqs[i] = req_tmask[0] && (& addr_matches);
     end
@@ -172,6 +181,8 @@ module VX_tex_mem #(
     reg [RSP_CTR_W-1:0] rsp_rem_ctr, rsp_rem_ctr_init;
     wire [RSP_CTR_W-1:0] rsp_rem_ctr_n;
     wire [NUM_REQS-1:0][1:0] rsp_align_offs;
+    wire [$clog2(NUM_REQS+1)-1:0] q_req_size;
+    wire [$clog2(NUM_REQS+1)-1:0] dcache_rsp_size;
     wire dcache_rsp_fire;
     wire [1:0] rsp_texel_idx;
     wire rsp_texel_dup;
@@ -218,16 +229,21 @@ module VX_tex_mem #(
         end
     end
 
+    `POP_COUNT(q_req_size, q_req_tmask);
+
     always @(*) begin
-        rsp_rem_ctr_init = RSP_CTR_W'($countones(q_dup_reqs[0] ? NUM_REQS'(1) : q_req_tmask));
+        rsp_rem_ctr_init = q_dup_reqs[0] ? RSP_CTR_W'(1) : RSP_CTR_W'(q_req_size);
         if (q_req_filter) begin
             for (integer i = 1; i < 4; ++i) begin
-                rsp_rem_ctr_init += RSP_CTR_W'($countones(q_dup_reqs[i] ? NUM_REQS'(1) : q_req_tmask));
+                rsp_rem_ctr_init += q_dup_reqs[i] ? RSP_CTR_W'(1) : RSP_CTR_W'(q_req_size);
             end
         end
     end
 
-    assign rsp_rem_ctr_n = rsp_rem_ctr - RSP_CTR_W'($countones(dcache_rsp_if.tmask));
+    wire [NUM_REQS-1:0] dcache_rsp_tmask = dcache_rsp_if.tmask;
+    `POP_COUNT(dcache_rsp_size, dcache_rsp_tmask);
+
+    assign rsp_rem_ctr_n = rsp_rem_ctr - RSP_CTR_W'(dcache_rsp_size);
 
     always @(posedge clk) begin
         if (reset) begin
@@ -249,7 +265,7 @@ module VX_tex_mem #(
 
     wire stall_out = rsp_valid && ~rsp_ready;
 
-    wire is_last_rsp = (0 == rsp_rem_ctr_n);
+    wire is_last_rsp = (rsp_rem_ctr == RSP_CTR_W'(dcache_rsp_size));
 
     wire rsp_texels_done = dcache_rsp_fire && is_last_rsp;
 
@@ -290,8 +306,10 @@ module VX_tex_mem #(
             dpi_trace("\n");
         end
         if (req_valid && req_ready) begin
-            dpi_trace("%d: core%0d-tex-mem-req: wid=%0d, PC=%0h, tmask=%b, filter=%0d, lgstride=%0d, addr=", 
+            dpi_trace("%d: core%0d-tex-mem-req: wid=%0d, PC=%0h, tmask=%b, filter=%0d, lgstride=%0d, baseaddr=", 
                     $time, CORE_ID, req_wid, req_PC, req_tmask, req_filter, req_lgstride);
+            `TRACE_ARRAY1D(req_baseaddr, NUM_REQS);
+            dpi_trace(", addr="); 
             `TRACE_ARRAY2D(req_addr, 4, NUM_REQS);
             dpi_trace("\n");
         end

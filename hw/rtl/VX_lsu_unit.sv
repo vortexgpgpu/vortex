@@ -44,6 +44,7 @@ module VX_lsu_unit #(
 
     wire [`NUM_THREADS-1:0][`CACHE_ADDR_TYPE_BITS-1:0] lsu_addr_type, req_addr_type;
 
+    // full address calculation
     wire [`NUM_THREADS-1:0][31:0] full_addr;    
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         assign full_addr[i] = lsu_req_if.base_addr[i] + lsu_req_if.offset;
