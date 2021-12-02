@@ -22,15 +22,19 @@ RUN apt update && apt install -y \
 ENV RISCV32=/opt/riscv32
 ENV RISCV64=/opt/riscv64
 ENV VERILATOR_ROOT=/opt/verilator
+ENV POCL_CC_PATH=/opt/pocl/compiler
+ENV POCL_RT_PATH=/opt/pocl/runtime
+ENV VORTEX_HOME=/home/vortex
 ENV PATH=$PATH:${RISCV32}/bin:${RISCV64}/bin:${RISCV64}/riscv64-unknown-elf/bin:${VERILATOR_ROOT}/bin/verilator
 
 # Install riscv-gnu-toolchain
 RUN git clone https://github.com/riscv/riscv-gnu-toolchain /tmp/riscv-gnu-toolchain
 RUN cd /tmp/riscv-gnu-toolchain; \
-    ./configure --prefix=${RISCV32} --with-arch=rv32imf --with-abi=ilp32f; \
+    ./configure --prefix=${RISCV64} --with-arch=rv64imfd --with-abi=lp64d; \
     make -j `nproc`
 RUN cd /tmp/riscv-gnu-toolchain; \
-    ./configure --prefix=${RISCV64} --with-arch=rv64imfd --with-abi=lp64d; \
+    make clean; \
+    ./configure --prefix=${RISCV32} --with-arch=rv32imf --with-abi=ilp32f; \
     make -j `nproc`
 RUN rm -rf /tmp/riscv-gnu-toolchain
 
@@ -70,5 +74,6 @@ RUN cd/tmp/verilator; \
 RUN rm -rf /tmp/verilator
 
 # set working directory
-WORKDIR /mnt
+RUN mkdir -p /home/vortex
+WORKDIR /home/vortex
 
