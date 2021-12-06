@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#include <fixed.h>
+#include <cocogfx/include/fixed.h>
 #include <bitmanip.h>
 
 using namespace cocogfx;

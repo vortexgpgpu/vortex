@@ -1,3 +1,4 @@
+DESTDIR ?= .
 RTL_DIR = ../../hw/rtl
 DPI_DIR = ../../hw/dpi
 THIRD_PARTY_DIR = ../../third_party
@@ -6,8 +7,10 @@ CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I../../../hw -I../../common
 CXXFLAGS += -I../$(THIRD_PARTY_DIR)/softfloat/source/include
+CXXFLAGS += -I../$(THIRD_PARTY_DIR)
 
 LDFLAGS += ../$(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
+LDFLAGS += -L../$(THIRD_PARTY_DIR)/ramulator -lramulator
 
 # control RTL debug tracing states
 DBG_TRACE_FLAGS += -DDBG_TRACE_PIPELINE  
@@ -31,7 +34,7 @@ RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interface
 
 SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp
 SRCS += $(DPI_DIR)/util_dpi.cpp $(DPI_DIR)/float_dpi.cpp
-SRCS += main.cpp simulator.cpp
+SRCS += processor.cpp
 
 ifdef AXI_BUS
 	TOP = Vortex_axi
@@ -86,15 +89,11 @@ PROJECT = rtlsim
 
 all: $(PROJECT)
 
-$(PROJECT): $(SRCS)
-	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT)
+$(DESTDIR)/$(PROJECT): $(SRCS) main.cpp
+	verilator --build $(VL_FLAGS) $^ $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$@
 	
-static: $(SRCS)
-	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)'
-	$(AR) rcs lib$(PROJECT).a obj_dir/*.o $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/*.o
+$(DESTDIR)/lib$(PROJECT).so: $(SRCS)
+	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS)' -LDFLAGS '-shared $(LDFLAGS)' -o ../$@
 
-clean-static:
-	rm -rf lib$(PROJECT).a obj_dir
-
-clean: clean-static
-	rm -rf $(PROJECT)
+clean:
+	rm -rf obj_dir $(DESTDIR)/$(PROJECT) $(DESTDIR)/lib$(PROJECT).so

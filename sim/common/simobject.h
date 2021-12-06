@@ -51,8 +51,7 @@ public:
     peer_ = peer;
   }
 
-  void unbind() {    
-    assert(peer_ == nullptr);
+  void unbind() {
     peer_ = nullptr;
   }
 
@@ -292,10 +291,14 @@ public:
   }
 
   template <typename Impl, typename... Args>
-  typename SimObject<Impl>::Ptr CreateObject(Args&&... args) {
+  typename SimObject<Impl>::Ptr create_object(Args&&... args) {
     auto obj = std::make_shared<Impl>(SimContext{}, std::forward<Args>(args)...);
     objects_.push_back(obj);
     return obj;
+  }
+
+  void release_object(const SimObjectBase::Ptr& object) {
+    objects_.remove(object);
   }
 
   template <typename Pkt>
@@ -352,7 +355,7 @@ private:
     events_.emplace_back(evt);
   }
 
-  std::vector<SimObjectBase::Ptr> objects_;
+  std::list<SimObjectBase::Ptr> objects_;
   std::list<SimEventBase::Ptr> events_;
   uint64_t cycles_;
 
@@ -369,7 +372,7 @@ inline SimObjectBase::SimObjectBase(const SimContext&, const char* name)
 template <typename Impl>
 template <typename... Args>
 typename SimObject<Impl>::Ptr SimObject<Impl>::Create(Args&&... args) {
-  return SimPlatform::instance().CreateObject<Impl>(std::forward<Args>(args)...);
+  return SimPlatform::instance().create_object<Impl>(std::forward<Args>(args)...);
 }
 
 template <typename Pkt>

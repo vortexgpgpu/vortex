@@ -5,7 +5,8 @@
 #include <unistd.h>
 #include <util.h>
 #include <mem.h>
-#include "simulator.h"
+#include <VX_config.h>
+#include "processor.h"
 
 #define RAM_PAGE_SIZE 4096
 
@@ -52,8 +53,8 @@ int main(int argc, char **argv) {
 		std::cout << "Running " << program << "..." << std::endl;
 
 		vortex::RAM ram(RAM_PAGE_SIZE);
-		vortex::Simulator simulator;
-		simulator.attach_ram(&ram);
+		vortex::Processor processor;
+		processor.attach_ram(&ram);
 
 		std::string program_ext(fileExtension(program));
 		if (program_ext == "bin") {
@@ -65,7 +66,7 @@ int main(int argc, char **argv) {
 			return -1;
 		}
 
-		exitcode = simulator.run();
+		exitcode = processor.run();
 		
 		if (riscv_test) {
 			if (1 == exitcode) {

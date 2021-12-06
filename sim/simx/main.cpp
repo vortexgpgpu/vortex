@@ -13,7 +13,7 @@
 using namespace vortex;
 
 int main(int argc, char **argv) {
-  int exitcode;
+  int exitcode = 0;
 
   std::string archStr("rv32imf");
   std::string imgFileName;
@@ -54,12 +54,7 @@ int main(int argc, char **argv) {
     return -1;
 
   {
-    ArchDef arch(archStr, num_cores, num_warps, num_threads);
-
-    Processor processor(arch);
-
     RAM ram(RAM_PAGE_SIZE);
-
     {
       std::string program_ext(fileExtension(imgFileName.c_str()));
       if (program_ext == "bin") {
@@ -72,25 +67,40 @@ int main(int argc, char **argv) {
       }
     }
 
-    processor.attach_ram(&ram);
+    ArchDef arch(archStr, num_cores, num_warps, num_threads);
+    auto processor = Processor::Create(arch);
+    processor->attach_ram(&ram);
 
-    exitcode = processor.run();
+    // setup memory simulator
+    auto memsim = MemSim::Create(MemSim::Config{
+      DRAM_CHANNELS,
+      arch.num_cores()
+    });    
+    processor->MemReqPort.bind(&memsim->MemReqPort);
+    memsim->MemRspPort.bind(&processor->MemRspPort);
 
-    if (riscv_test) {
-      if (1 == exitcode) {
-        std::cout << "Passed." << std::endl;
-        exitcode = 0;
-      } else {
-        std::cout << "Failed." << std::endl;
-      }
-    } else {
-      if (exitcode != 0) {
-        std::cout << "*** error: exitcode=" << exitcode << std::endl;
-      }
-    }
-  }  
+    // run simulation
+    for (;;) {
+      SimPlatform::instance().step();
+      if (processor->check_exit(&exitcode))
+          break;
+    };    
+  }
 
   SimPlatform::instance().finalize();
+
+  if (riscv_test) {
+    if (1 == exitcode) {
+      std::cout << "Passed." << std::endl;
+      exitcode = 0;
+    } else {
+      std::cout << "Failed." << std::endl;
+    }
+  } else {
+    if (exitcode != 0) {
+      std::cout << "*** error: exitcode=" << exitcode << std::endl;
+    }
+  }  
 
   return exitcode;
 }

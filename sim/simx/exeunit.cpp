@@ -143,8 +143,9 @@ void LsuUnit::step(uint64_t cycle) {
         MemReq mem_req;
         mem_req.addr  = mem_addr.addr;
         mem_req.write = is_write;
+        mem_req.non_cacheable = (type == AddrType::IO); 
         mem_req.tag   = tag;
-        mem_req.is_io = (type == AddrType::IO); 
+        mem_req.core_id = core_->id();
         
         if (type == AddrType::Shared) {
             core_->shared_mem_->Inputs.at(t).send(mem_req, 2);
@@ -153,7 +154,7 @@ void LsuUnit::step(uint64_t cycle) {
         } else {            
             dcache_req_port.send(mem_req, 2);
             DT(3, cycle, "dcache-req: addr=" << std::hex << mem_addr.addr << ", tag=" << tag 
-                << ", type=" << trace->lsu.type << ", tid=" << t << ", io=" << mem_req.is_io << ", " << *trace);
+                << ", type=" << trace->lsu.type << ", tid=" << t << ", nc=" << mem_req.non_cacheable << ", " << *trace);
         }        
         
         if (is_dup)
@@ -182,6 +183,7 @@ void AluUnit::step(uint64_t cycle) {
     switch (trace->alu.type) {
     case AluType::ARITH:        
     case AluType::BRANCH:
+    case AluType::SYSCALL:
     case AluType::CMOV:
         Output.send(trace, 1);
         break;
@@ -359,6 +361,7 @@ bool GpuUnit::processTexRequest(uint64_t cycle, pipeline_trace_t* trace) {
             mem_req.addr  = mem_addr.addr;
             mem_req.write = (trace->lsu.type == LsuType::STORE);
             mem_req.tag   = tag;
+            mem_req.core_id = core_->id();
             dcache_req_port.send(mem_req, 3);
             DT(3, cycle, "tex-req: addr=" << std::hex << mem_addr.addr << ", tag=" << tag 
                 << ", tid=" << t << ", "<< trace);

@@ -9,7 +9,7 @@ CXXFLAGS += $(CONFIGS)
 CXXFLAGS += -DDUMP_PERF_STATS
 
 LDFLAGS += -shared -pthread
-LDFLAGS += $(SIMX_DIR)/libsimx.a
+LDFLAGS += -L. -lsimx
 
 SRCS = vortex.cpp ../common/vx_utils.cpp 
 
@@ -18,9 +18,9 @@ PROJECT = libvortex.so
 all: $(PROJECT)
 
 $(PROJECT): $(SRCS)
-	$(MAKE) -C $(SIMX_DIR) static
+	DESTDIR=../../driver/simx $(MAKE) -C $(SIMX_DIR) ../../driver/simx/libsimx.so
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 clean:
-	$(MAKE) -C $(SIMX_DIR) clean-static
-	rm -rf $(PROJECT) *.o
+	DESTDIR=../../driver/simx $(MAKE) -C $(SIMX_DIR) clean
+	rm -rf libsimx.so $(PROJECT) *.o

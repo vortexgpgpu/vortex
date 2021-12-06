@@ -116,6 +116,7 @@ struct bank_req_t {
     bool mshr_replay;
     uint64_t tag;
     uint32_t set_id;
+    uint32_t core_id;
     std::vector<bank_req_info_t> infos;
 
     bank_req_t(uint32_t size) 
@@ -124,6 +125,7 @@ struct bank_req_t {
         , mshr_replay(false)
         , tag(0)
         , set_id(0)
+        , core_id(0)
         , infos(size)
     {}
 };
@@ -292,7 +294,7 @@ public:
             auto& mem_rsp = bypass_port.front();
             uint32_t req_id = mem_rsp.tag & ((1 << params_.log2_num_inputs)-1);                
             uint64_t tag = mem_rsp.tag >> params_.log2_num_inputs;
-            MemRsp core_rsp(tag);
+            MemRsp core_rsp{tag, mem_rsp.core_id};
             simobject_->CoreRspPorts.at(req_id).send(core_rsp, config_.latency);
             bypass_port.pop();
         }
@@ -327,7 +329,7 @@ public:
             auto& core_req = core_req_port.front();
 
             // check cache bypassing
-            if (core_req.is_io) {
+            if (core_req.non_cacheable) {
                 // send IO request
                 this->processIORequest(core_req, req_id);
 
@@ -348,6 +350,7 @@ public:
             bank_req.mshr_replay = false;
             bank_req.tag = tag;            
             bank_req.set_id = set_id;       
+            bank_req.core_id = core_req.core_id;
             bank_req.infos.at(port_id) = {true, req_id, core_req.tag};
 
             auto& bank = banks_.at(bank_id);            
@@ -439,7 +442,8 @@ public:
             if (pipeline_req.mshr_replay) {
                 // send core response
                 for (auto& info : pipeline_req.infos) {
-                    simobject_->CoreRspPorts.at(info.req_id).send(MemRsp{info.req_tag}, config_.latency);           
+                    MemRsp core_rsp{info.req_tag, pipeline_req.core_id};
+                    simobject_->CoreRspPorts.at(info.req_id).send(core_rsp, config_.latency);           
                 }
             } else {        
                 bool hit = false;
@@ -480,6 +484,7 @@ public:
                             MemReq mem_req;
                             mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, hit_block.tag);
                             mem_req.write = true;
+                            mem_req.core_id = pipeline_req.core_id;
                             mem_req_ports_.at(bank_id).send(mem_req, 1);
                         } else {
                             // mark block as dirty
@@ -488,8 +493,9 @@ public:
                     }
                     // send core response
                     if (!pipeline_req.write || config_.write_reponse) {
-                        for (auto& info : pipeline_req.infos) {          
-                            simobject_->CoreRspPorts.at(info.req_id).send(MemRsp{info.req_tag}, config_.latency);
+                        for (auto& info : pipeline_req.infos) {     
+                            MemRsp core_rsp{info.req_tag, pipeline_req.core_id};
+                            simobject_->CoreRspPorts.at(info.req_id).send(core_rsp, config_.latency);
                         }
                     }
                 } else {     
@@ -508,6 +514,7 @@ public:
                             MemReq mem_req;
                             mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, repl_block.tag);
                             mem_req.write = true;
+                            mem_req.core_id = pipeline_req.core_id;
                             mem_req_ports_.at(bank_id).send(mem_req, 1);
                             ++perf_stats_.evictions;
                         }
@@ -519,12 +526,14 @@ public:
                             MemReq mem_req;
                             mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, pipeline_req.tag);
                             mem_req.write = true;
+                            mem_req.core_id = pipeline_req.core_id;
                             mem_req_ports_.at(bank_id).send(mem_req, 1);
                         }
                         // send core response
                         if (config_.write_reponse) {
-                            for (auto& info : pipeline_req.infos) {            
-                                simobject_->CoreRspPorts.at(info.req_id).send(MemRsp{info.req_tag}, config_.latency);
+                            for (auto& info : pipeline_req.infos) {         
+                                MemRsp core_rsp{info.req_tag, pipeline_req.core_id};
+                                simobject_->CoreRspPorts.at(info.req_id).send(core_rsp, config_.latency);
                             }
                         }
                     } else {
@@ -540,6 +549,7 @@ public:
                             mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, pipeline_req.tag);
                             mem_req.write = false;
                             mem_req.tag   = mshr_id;
+                            mem_req.core_id = pipeline_req.core_id;
                             mem_req_ports_.at(bank_id).send(mem_req, 1);
                             ++pending_fill_reqs_;
                         }

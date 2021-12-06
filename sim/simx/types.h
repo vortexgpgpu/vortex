@@ -70,6 +70,7 @@ inline std::ostream &operator<<(std::ostream &os, const ExeType& type) {
 enum class AluType {
   ARITH,
   BRANCH,
+  SYSCALL,
   IMUL,
   IDIV,    
   CMOV,
@@ -77,11 +78,12 @@ enum class AluType {
 
 inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
   switch (type) {
-  case AluType::ARITH:  os << "ARITH"; break;
-  case AluType::BRANCH: os << "BRANCH"; break;
-  case AluType::IMUL:   os << "IMUL"; break;
-  case AluType::IDIV:   os << "IDIV"; break;
-  case AluType::CMOV:   os << "CMOV"; break;
+  case AluType::ARITH:   os << "ARITH"; break;
+  case AluType::BRANCH:  os << "BRANCH"; break;
+  case AluType::SYSCALL: os << "SYSCALL"; break;
+  case AluType::IMUL:    os << "IMUL"; break;
+  case AluType::IDIV:    os << "IDIV"; break;
+  case AluType::CMOV:    os << "CMOV"; break;
   }
   return os;
 }
@@ -207,24 +209,31 @@ inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
 
 struct MemReq {
     uint64_t addr;
-    uint32_t tag;
     bool write;
-    bool is_io;
+    bool non_cacheable;
+    uint32_t tag;
+    uint32_t core_id;    
 
     MemReq(uint64_t _addr = 0, 
+           bool _write = false,
+           bool _non_cacheable = false,
            uint64_t _tag = 0, 
-           bool _write = false, 
-           bool _is_io = false
+           uint32_t _core_id = 0
     )   : addr(_addr)
-        , tag(_tag)
         , write(_write)
-        , is_io(_is_io) 
+        , non_cacheable(_non_cacheable)
+        , tag(_tag)
+        , core_id(_core_id)
     {}
 };
 
 struct MemRsp {
     uint64_t tag;    
-    MemRsp(uint64_t _tag = 0) : tag (_tag) {}
+    uint32_t core_id;
+    MemRsp(uint64_t _tag = 0, uint32_t _core_id = 0)
+      : tag (_tag) 
+      , core_id(_core_id)
+    {}
 };
 
 ///////////////////////////////////////////////////////////////////////////////

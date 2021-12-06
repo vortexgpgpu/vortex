@@ -8,6 +8,11 @@ namespace vortex {
 
 class MemSim : public SimObject<MemSim>{
 public:
+    struct Config {        
+        uint32_t channels;      
+        uint32_t num_cores;
+    };
+
     struct PerfStats {
         uint64_t reads;
         uint64_t writes;
@@ -18,10 +23,10 @@ public:
         {}
     };
 
-    std::vector<SimPort<MemReq>> MemReqPorts;
-    std::vector<SimPort<MemRsp>> MemRspPorts;
+    SimPort<MemReq> MemReqPort;
+    SimPort<MemRsp> MemRspPort;
 
-    MemSim(const SimContext& ctx, uint32_t num_banks, uint32_t latency);
+    MemSim(const SimContext& ctx, const Config& config);
     ~MemSim();
 
     void step(uint64_t cycle);

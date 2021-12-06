@@ -102,7 +102,7 @@ FPU_CORE=FPU_FPNEW ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
 AXI_BUS=1 ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo
 
 # adjust l1 block size to match l2
-CONFIGS="-DMEM_BLOCK_SIZE=16 -DL1_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=io_addr --args="-n1"
+CONFIGS="-DL1_BLOCK_SIZE=64" ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=io_addr --args="-n1"
 
 # test cache banking
 CONFIGS="-DDNUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=io_addr
@@ -119,17 +119,11 @@ CONFIGS="-DL2_NUM_PORTS=4 -DDNUM_PORTS=4" ./ci/blackbox.sh --driver=simx --cores
 # test 128-bit MEM block
 CONFIGS=-DMEM_BLOCK_SIZE=16 ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
 
-# test 128-bit MEM and DRAM block
-CONFIGS="-DMEM_BLOCK_SIZE=16 -DPLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH=128 -DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=28 -DPLATFORM_PARAM_LOCAL_MEMORY_BANKS=1" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
+# test single-bank DRAM
+CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_BANKS=1" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
 
 # test 27-bit DRAM address
 CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=27" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
-
-# test 128-bit DRAM block
-CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH=128 -DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=28 -DPLATFORM_PARAM_LOCAL_MEMORY_BANKS=1" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
-
-# test long memory latency
-CONFIGS="-DMEM_LATENCY=100 -DMEM_RQ_SIZE=4 -DMEM_STALLS_MODULO=4" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
 
 echo "configuration tests done!"
 }
