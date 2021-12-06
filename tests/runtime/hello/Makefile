@@ -1,5 +1,4 @@
-# RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
-RISCV_TOOLCHAIN_PATH = /nethome/ssrivatsan8/riscv32
+RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 VORTEX_RT_PATH ?= $(realpath ../../../runtime)
 
 CC = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
@@ -10,7 +9,7 @@ CP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 CFLAGS += -march=rv32imf -mabi=ilp32f -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
 CFLAGS += -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw
 
-LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link.ld -Wl,--noinhibit-exec,--gc-sections $(VORTEX_RT_PATH)/libvortexrt.a
+LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link.ld -Wl,--gc-sections $(VORTEX_RT_PATH)/libvortexrt.a
 
 PROJECT = hello
 

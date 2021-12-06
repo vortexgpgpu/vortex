@@ -106,6 +106,21 @@ uint32_t rv_ftou(uint32_t a, uint32_t frm, uint32_t* fflags) {
   return r;
 }
 
+// simx64
+uint64_t rv_ftol(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  softfloat_roundingMode = frm;
+  auto r = f32_to_i64(to_float32_t(a), frm, true);
+  if (fflags) { *fflags = get_fflags(); }
+  return r;
+}
+
+uint64_t rv_ftolu(uint32_t a, uint32_t frm, uint32_t* fflags) {
+  softfloat_roundingMode = frm;
+  auto r = f32_to_ui64(to_float32_t(a), frm, true);
+  if (fflags) { *fflags = get_fflags(); }
+  return r;
+}
+
 uint32_t rv_itof(uint32_t a, uint32_t frm, uint32_t* fflags) {
   softfloat_roundingMode = frm;
   auto r = i32_to_f32(a);
@@ -116,6 +131,21 @@ uint32_t rv_itof(uint32_t a, uint32_t frm, uint32_t* fflags) {
 uint32_t rv_utof(uint32_t a, uint32_t frm, uint32_t* fflags) {
   softfloat_roundingMode = frm;
   auto r = ui32_to_f32(a);
+  if (fflags) { *fflags = get_fflags(); }
+  return from_float32_t(r);
+}
+
+// simx64
+uint32_t rv_ltof(uint64_t a, uint32_t frm, uint32_t* fflags) {
+  softfloat_roundingMode = frm;
+  auto r = i64_to_f32(a);
+  if (fflags) { *fflags = get_fflags(); }
+  return from_float32_t(r);
+}
+
+uint32_t rv_lutof(uint64_t a, uint32_t frm, uint32_t* fflags) {
+  softfloat_roundingMode = frm;
+  auto r = ui64_to_f32(a);
   if (fflags) { *fflags = get_fflags(); }
   return from_float32_t(r);
 }

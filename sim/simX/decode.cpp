@@ -46,10 +46,10 @@ static const std::unordered_map<int, struct InstTableEntry_t> sc_instTable = {
 };
 
 static const char* op_string(const Instr &instr) {  
-  HalfWord func3 = instr.getFunc3();
-  HalfWord func7 = instr.getFunc7();
-  HalfWord rs2   = instr.getRSrc(1);
-  Word imm   = instr.getImm();
+  Word func3 = instr.getFunc3();
+  Word func7 = instr.getFunc7();
+  Word rs2   = instr.getRSrc(1);
+  DoubleWord imm   = instr.getImm();
   switch (instr.getOpcode()) {
   case Opcode::NOP:        return "NOP";
   case Opcode::LUI_INST:   return "LUI";
@@ -128,12 +128,24 @@ static const char* op_string(const Instr &instr) {
     }
   // simx64
   case Opcode::R_INST_64:
-    switch (func3) {
-    case 0: return func7 ? "SUBW" : "ADDW";
-    case 1: return "SLLW";
-    case 5: return func7 ? "SRAW" : "SRLW";  
-    default:
-      std::abort();
+    if (func7 & 0x1){
+      switch (func3) {
+      case 0: return func7 ? "SUBW" : "ADDW";
+      case 1: return "SLLW";
+      case 5: return func7 ? "SRAW" : "SRLW";  
+      default:
+        std::abort();
+      }
+    } else {
+      switch (func3) {
+        case 0: return "MULW";
+        case 4: return "DIVW";
+        case 5: return "DIVUW";
+        case 6: return "REMW";
+        case 7: return "REMUW";
+        default:
+          std::abort();
+      }
     }
   // simx64  
   case Opcode::I_INST_64:
@@ -189,8 +201,25 @@ static const char* op_string(const Instr &instr) {
       default:
         std::abort();
       }
-    case 0x60: return rs2 ? "FCVT.WU.S" : "FCVT.W.S";
-    case 0x68: return rs2 ? "FCVT.S.WU" : "FCVT.S.W";
+    // simx64
+    case 0x60: 
+      switch (rs2) {
+      case 0: return "FCVT.W.S";
+      case 1: return "FCVT.WU.S";
+      case 2: return "FCVT.L.S";
+      case 3: return "FCVT.LU.S";
+      default:
+        std::abort();
+      }
+    case 0x68: 
+      switch (rs2) {
+      case 0: return "FCVT.S.W";
+      case 1: return "FCVT.S.WU";
+      case 2: return "FCVT.S.L";
+      case 3: return "FCVT.S.LU";
+      default:
+        std::abort();
+      }
     case 0x70: return func3 ? "FLASS" : "FMV.X.W";
     case 0x78: return "FMV.W.X";
     default:
@@ -309,14 +338,14 @@ Decoder::Decoder(const ArchDef &arch) {
 }
 
 // simx64
-std::shared_ptr<Instr> Decoder::decode(HalfWord code, HalfWord PC) {  
+std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) {  
   auto instr = std::make_shared<Instr>();
   Opcode op = (Opcode)((code >> shift_opcode_) & opcode_mask_);
   instr->setOpcode(op);
 
-  HalfWord func3 = (code >> shift_func3_) & func3_mask_;
-  HalfWord func6 = (code >> shift_func6_) & func6_mask_;
-  HalfWord func7 = (code >> shift_func7_) & func7_mask_;
+  Word func3 = (code >> shift_func3_) & func3_mask_;
+  Word func6 = (code >> shift_func6_) & func6_mask_;
+  Word func7 = (code >> shift_func7_) & func7_mask_;
 
   // simx64
   int rd  = (code >> shift_rd_)  & reg_mask_;
@@ -394,7 +423,7 @@ std::shared_ptr<Instr> Decoder::decode(HalfWord code, HalfWord PC) {
       instr->setSrcReg(rs2);
     }
     instr->setFunc3(func3);
-    Word imeed = (func7 << reg_s_) | rd;
+    DoubleWord imeed = (func7 << reg_s_) | rd;
     instr->setImm(signExt(imeed, 12, s_imm_mask_));
   } break;
 
@@ -402,11 +431,11 @@ std::shared_ptr<Instr> Decoder::decode(HalfWord code, HalfWord PC) {
     instr->setSrcReg(rs1);
     instr->setSrcReg(rs2);
     instr->setFunc3(func3);
-    HalfWord bit_11   = rd & 0x1;
-    HalfWord bits_4_1 = rd >> 1;
-    HalfWord bit_10_5 = func7 & 0x3f;
-    HalfWord bit_12   = func7 >> 6;
-    Word imeed = (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
+    Word bit_11   = rd & 0x1;
+    Word bits_4_1 = rd >> 1;
+    Word bit_10_5 = func7 & 0x3f;
+    Word bit_12   = func7 >> 6;
+    DoubleWord imeed = (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
     instr->setImm(signExt(imeed, 13, b_imm_mask_));
   } break;
 
@@ -417,12 +446,12 @@ std::shared_ptr<Instr> Decoder::decode(HalfWord code, HalfWord PC) {
 
   case InstType::J_TYPE: {
     instr->setDestReg(rd);
-    HalfWord unordered = code >> shift_func3_;
-    HalfWord bits_19_12 = unordered & 0xff;
-    HalfWord bit_11 = (unordered >> 8) & 0x1;
-    HalfWord bits_10_1 = (unordered >> 9) & 0x3ff;
-    HalfWord bit_20 = (unordered >> 19) & 0x1;
-    Word imeed = 0 | (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
+    Word unordered = code >> shift_func3_;
+    Word bits_19_12 = unordered & 0xff;
+    Word bit_11 = (unordered >> 8) & 0x1;
+    Word bits_10_1 = (unordered >> 9) & 0x3ff;
+    Word bit_20 = (unordered >> 19) & 0x1;
+    DoubleWord imeed = 0 | (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
     if (bit_20) {
       imeed |= ~j_imm_mask_;
     }
@@ -438,7 +467,7 @@ std::shared_ptr<Instr> Decoder::decode(HalfWord code, HalfWord PC) {
       if (func3 == 7) {
         instr->setImm(!(code >> shift_vset_));
         if (instr->getImm()) {
-          HalfWord immed = (code >> shift_rs2_) & v_imm_mask_;
+          Word immed = (code >> shift_rs2_) & v_imm_mask_;
           instr->setImm(immed);
           instr->setVlmul(immed & 0x3);
           instr->setVediv((immed >> 4) & 0x3);

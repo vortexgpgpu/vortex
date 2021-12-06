@@ -7,13 +7,12 @@
 namespace vortex {
 
 typedef uint8_t  Byte;
-// simx64
-typedef uint64_t Word;
-typedef int64_t  WordI;
+typedef uint32_t Word;
+typedef int32_t  WordI;
 
 // simx64
-typedef uint32_t HalfWord;
-typedef int32_t HalfWordI;
+typedef uint64_t DoubleWord;
+typedef int64_t DoubleWordI;
 
 // simx64
 typedef uint64_t Addr;

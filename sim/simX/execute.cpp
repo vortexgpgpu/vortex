@@ -16,7 +16,7 @@
 using namespace vortex;
 
 static bool HasDivergentThreads(const ThreadMask &thread_mask,                                
-                                const std::vector<std::vector<Word>> &reg_file,
+                                const std::vector<std::vector<DoubleWord>> &reg_file,
                                 unsigned reg) {
   bool cond;
   size_t thread_idx = 0;
@@ -53,19 +53,19 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
   assert(tmask_.any());
 
   // simx64
-  Word nextPC = PC_ + 4;
+  DoubleWord nextPC = PC_ + 4;
   bool runOnce = false;
   
-  HalfWord func3 = instr.getFunc3();
-  HalfWord func6 = instr.getFunc6();
-  HalfWord func7 = instr.getFunc7();
+  Word func3 = instr.getFunc3();
+  Word func6 = instr.getFunc6();
+  Word func7 = instr.getFunc7();
 
   auto opcode = instr.getOpcode();
   int rdest  = instr.getRDest();
   int rsrc0  = instr.getRSrc(0);
   int rsrc1  = instr.getRSrc(1);
-  Word immsrc= instr.getImm();
-  Word vmask = instr.getVmask();
+  DoubleWord immsrc= instr.getImm();
+  DoubleWord vmask = instr.getVmask();
 
   int num_threads = core_->arch().num_threads();
   for (int t = 0; t < num_threads; t++) {
@@ -75,8 +75,8 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
     auto &iregs = iRegFile_.at(t);
     auto &fregs = fRegFile_.at(t);
 
-    Word rsdata[3];
-    Word rddata;
+    DoubleWord rsdata[3];
+    DoubleWord rddata;
 
     int num_rsrcs = instr.getNRSrc();
     if (num_rsrcs) {    
@@ -106,65 +106,57 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
     case NOP:
       break;
     case LUI_INST:
-      rddata = signExt(((immsrc << 12) & 0xfffff000), 32, 0xFFFFFFFF);
+      rddata = (immsrc << 12) & 0xfffffffffffff000;
       rd_write = true;
       break;
     case AUIPC_INST:
       // simx64
-      rddata = signExt(((immsrc << 12) & 0xfffff000), 32, 0xFFFFFFFF) + PC_;
+      rddata = ((immsrc << 12) & 0xfffffffffffff000) + PC_;
       rd_write = true;
       break;
     case R_INST: {
       if (func7 & 0x1) {
         switch (func3) {
         case 0:
-          // MUL
-          rddata = ((WordI)rsdata[0]) * ((WordI)rsdata[1]);
+          // RV32M: MUL
+          rddata = ((DoubleWordI)rsdata[0]) * ((DoubleWordI)rsdata[1]);
           break;
         case 1: {
-          // MULH
-          int64_t first = (int64_t)rsdata[0];
-          if (rsdata[0] & 0x80000000) {
-            first = first | 0xFFFFFFFF00000000;
-          }
-          int64_t second = (int64_t)rsdata[1];
-          if (rsdata[1] & 0x80000000) {
-            second = second | 0xFFFFFFFF00000000;
-          }
-          uint64_t result = first * second;
-          rddata = (result >> 32) & 0xFFFFFFFF;
+          // RV32M: MULH
+          __int128_t first = signExt128((__int128_t)rsdata[0], 64, 0xFFFFFFFFFFFFFFFF);
+          __int128_t second = signExt128((__int128_t)rsdata[1], 64, 0xFFFFFFFFFFFFFFFF);
+          __uint128_t result = first * second;
+          rddata = (result >> 64) & 0xFFFFFFFFFFFFFFFF; 
         } break;
         case 2: {
-          // MULHSU          
-          int64_t first = (int64_t)rsdata[0];
-          if (rsdata[0] & 0x80000000) {
-            first = first | 0xFFFFFFFF00000000;
-          }
-          int64_t second = (int64_t)rsdata[1];
-          rddata = ((first * second) >> 32) & 0xFFFFFFFF;
+          // RV32M: MULHSU
+          __int128_t first = signExt128((__int128_t)rsdata[0], 64, 0xFFFFFFFFFFFFFFFF);
+          __int128_t second = (__int128_t)rsdata[1];
+          __uint128_t result = first * second;
+          rddata = (result >> 64) & 0xFFFFFFFFFFFFFFFF;           
         } break;
         case 3: {
-          // MULHU
-          uint64_t first = (uint64_t)rsdata[0];
-          uint64_t second = (uint64_t)rsdata[1];
-          rddata = ((first * second) >> 32) & 0xFFFFFFFF;
+          // RV32M: MULHU
+          __uint128_t first = (__uint128_t)rsdata[0];
+          __uint128_t second = (__uint128_t)rsdata[1];
+          rddata = ((first * second) >> 64) & 0xFFFFFFFFFFFFFFFF;
         } break;
         case 4: {
-          // DIV
-          WordI dividen = rsdata[0];
-          WordI divisor = rsdata[1];
+          // RV32M: DIV
+          DoubleWordI dividen = rsdata[0];
+          DoubleWordI divisor = rsdata[1];
           if (divisor == 0) {
             rddata = -1;
-          } else if (dividen == WordI(0x80000000) && divisor == WordI(0xffffffff)) {
+          } else if (dividen == DoubleWordI(0x8000000000000000) && divisor == DoubleWordI(0xFFFFFFFFFFFFFFFF)) {
             rddata = dividen;
           } else {
             rddata = dividen / divisor;
           }
         } break;
         case 5: {
-          // DIVU
-          Word dividen = rsdata[0];
-          Word divisor = rsdata[1];
+          // RV32M: DIVU
+          DoubleWord dividen = rsdata[0];
+          DoubleWord divisor = rsdata[1];
           if (divisor == 0) {
             rddata = -1;
           } else {
@@ -172,22 +164,22 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
           }
         } break;
         case 6: {
-          // REM
-          WordI dividen = rsdata[0];
-          WordI divisor = rsdata[1];
-          if (rsdata[1] == 0) {
+          // RV32M: REM
+          DoubleWordI dividen = rsdata[0];
+          DoubleWordI divisor = rsdata[1];
+          if (divisor == 0) {
             rddata = dividen;
-          } else if (dividen == WordI(0x80000000) && divisor == WordI(0xffffffff)) {
+          } else if (dividen == DoubleWordI(0x8000000000000000) && divisor == DoubleWordI(0xFFFFFFFFFFFFFFFF)) {
             rddata = 0;
           } else {
             rddata = dividen % divisor;
           }
         } break;
         case 7: {
-          // REMU
-          Word dividen = rsdata[0];
-          Word divisor = rsdata[1];
-          if (rsdata[1] == 0) {
+          // RV32M: REMU
+          DoubleWord dividen = rsdata[0];
+          DoubleWord divisor = rsdata[1];
+          if (divisor == 0) {
             rddata = dividen;
           } else {
             rddata = dividen % divisor;
@@ -205,22 +197,20 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
             rddata = rsdata[0] - rsdata[1];
           } else {
             // RV32I: ADD
-            rddata = WordI(rsdata[0]) + WordI(rsdata[1]);//(WordI(rsdata[0]) > 0) && (WordI(rsdata[1]) > 0)? ((rsdata[0] + rsdata[1]) & 0xFFFFFFFF) :          
+            rddata = rsdata[0] + rsdata[1];       
           }
           break;
         case 1:
-          // simx64
-          // In RV64I, only the low 6 bits of rs2 are considered for the shift amount.
-          // In RV32I, the value in register rs1 is shifted by the amount held in the lower 5 bits of register rs2.
+          // RV32I: SLL
           rddata = rsdata[0] << rsdata[1];
           break;
         case 2:
           // RV32I: SLT (signed)
-          rddata = (WordI(rsdata[0]) < WordI(rsdata[1]));
+          rddata = (DoubleWordI(rsdata[0]) < DoubleWordI(rsdata[1]));
           break;
         case 3:
           // RV32I: SLTU (unsigned)
-          rddata = (Word(rsdata[0]) < Word(rsdata[1]));
+          rddata = (DoubleWord(rsdata[0]) < DoubleWord(rsdata[1]));
           break;
         case 4:
           // RV32I: XOR
@@ -229,10 +219,10 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         case 5:
           if (func7) {
             // RV32I: SRA
-            rddata = WordI(rsdata[0]) >> WordI(rsdata[1]);
+            rddata = DoubleWordI(rsdata[0]) >> DoubleWordI(rsdata[1]);
           } else {
             // RV32I: SRL
-            rddata = Word(rsdata[0]) >> Word(rsdata[1]);
+            rddata = DoubleWord(rsdata[0]) >> DoubleWord(rsdata[1]);
           }
           break;
         case 6:
@@ -253,7 +243,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       switch (func3) {
       case 0:
         // RV32I: ADDI
-        rddata = WordI(rsdata[0]) + WordI(immsrc);
+        rddata = rsdata[0] + immsrc;
         break;
       case 1:
         // RV64I: SLLI
@@ -261,11 +251,11 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         break;
       case 2:
         // RV32I: SLTI
-        rddata = (WordI(rsdata[0]) < WordI(immsrc));
+        rddata = (DoubleWordI(rsdata[0]) < DoubleWordI(immsrc));
         break;
       case 3: {
         // RV32I: SLTIU
-        rddata = (Word(rsdata[0]) < Word(immsrc));
+        rddata = (DoubleWord(rsdata[0]) < DoubleWord(immsrc));
       } break;
       case 4:
         // RV32I: XORI
@@ -274,11 +264,13 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       case 5:
         if (func7) {
           // RV64I: SRAI
-          Word result = WordI(rsdata[0]) >> immsrc;
+          // rs1 shifted by lower 6 bits of immsrc
+          DoubleWord result = DoubleWordI(rsdata[0]) >> immsrc;
           rddata = result;
         } else {
           // RV64I: SRLI
-          Word result = Word(rsdata[0]) >> immsrc;
+          // rs1 shifted by lower 6 bits of immsrc
+          DoubleWord result = DoubleWord(rsdata[0]) >> immsrc;
           rddata = result;
         }
         break;
@@ -311,25 +303,25 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         break;
       case 4:
         // RV32I: BLT
-        if (WordI(rsdata[0]) < WordI(rsdata[1])) {
+        if (DoubleWordI(rsdata[0]) < DoubleWordI(rsdata[1])) {
           nextPC = PC_ + immsrc;
         }
         break;
       case 5:
         // RV32I: BGE
-        if (WordI(rsdata[0]) >= WordI(rsdata[1])) {
+        if (DoubleWordI(rsdata[0]) >= DoubleWordI(rsdata[1])) {
           nextPC = PC_ + immsrc;
         }
         break;
       case 6:
         // RV32I: BLTU
-        if (Word(rsdata[0]) < Word(rsdata[1])) {
+        if (DoubleWord(rsdata[0]) < DoubleWord(rsdata[1])) {
           nextPC = PC_ + immsrc;
         }
         break;
       case 7:
         // RV32I: BGEU
-        if (Word(rsdata[0]) >= Word(rsdata[1])) {
+        if (DoubleWord(rsdata[0]) >= DoubleWord(rsdata[1])) {
           nextPC = PC_ + immsrc;
         }
         break;
@@ -348,15 +340,15 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
     // RV32I: JALR
     case JALR_INST:
       rddata = nextPC;
-      nextPC = HalfWord(rsdata[0]) + HalfWord(immsrc);
+      nextPC = DoubleWord(rsdata[0]) + DoubleWord(immsrc);
       pipeline->stall_warp = true;
       runOnce = true;
       rd_write = true;
       break;
     case L_INST: {
-      Word memAddr   = ((rsdata[0] + immsrc) & 0xFFFFFFFC); // word aligned
-      Word shift_by  = ((rsdata[0] + immsrc) & 0x00000003) * 8;
-      Word data_read = core_->dcache_read(memAddr, 8);
+      DoubleWord memAddr   = ((rsdata[0] + immsrc) & 0xFFFFFFFC); // DoubleWord aligned
+      DoubleWord shift_by  = ((rsdata[0] + immsrc) & 0x00000003) * 8;
+      DoubleWord data_read = core_->dcache_read(memAddr, 8);
       D(3, "LOAD MEM: ADDRESS=0x" << std::hex << memAddr << ", DATA=0x" << data_read);
       switch (func3) {
       case 0:
@@ -373,19 +365,19 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         break;
       case 3:
         // RV64I: LD
-        rddata = data_read;
+        rddata = DoubleWord(data_read);
         break;
       case 4:
         // RV32I: LBU
-        rddata = Word((data_read >> shift_by) & 0xFF);
+        rddata = DoubleWord((data_read >> shift_by) & 0xFF);
         break;
       case 5:
         // RV32I: LHU
-        rddata = Word((data_read >> shift_by) & 0xFFFF);
+        rddata = DoubleWord((data_read >> shift_by) & 0xFFFF);
         break;
       case 6:
         // RV64I: LWU
-        rddata = Word((data_read >> shift_by) & 0xFFFFFFFF);
+        rddata = DoubleWord((data_read >> shift_by) & 0xFFFFFFFF);
         break;
       default:
         std::abort();        
@@ -393,7 +385,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       rd_write = true;
     } break;
     case S_INST: {
-      Word memAddr = rsdata[0] + immsrc;
+      DoubleWord memAddr = rsdata[0] + immsrc;
       D(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
       switch (func3) {
       case 0:
@@ -418,63 +410,110 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
     } break;
     // simx64
     case R_INST_64: {
-      switch (func3) {
+      if (func7 & 0x1){
+        switch (func3) {
+          case 0: 
+            // RV64M: MULW
+            rddata = signExt((WordI)rsdata[0] * (WordI)rsdata[1], 32, 0xFFFFFFFF);
+            break;
+          case 4: {
+            // RV64M: DIVW
+            int32_t dividen = (WordI) rsdata[0];
+            int32_t divisor = (WordI) rsdata[1];
+            if (divisor == 0){
+              rddata = -1;
+            } else if (dividen == WordI(0x80000000) && divisor == WordI(0xFFFFFFFF)) {
+              rddata = signExt(dividen, 32, 0xFFFFFFFF);
+            } else {
+              rddata = signExt(dividen / divisor, 32, 0xFFFFFFFF);
+            }
+          } break;     
+          case 5: {
+            // RV64M: DIVUW
+            uint32_t dividen = (Word) rsdata[0];
+            uint32_t divisor = (Word) rsdata[1];
+            if (divisor == 0){
+              rddata = -1;
+            } else {
+              rddata = signExt(dividen / divisor, 32, 0xFFFFFFFF);
+            }
+          } break;
+          case 6: {
+            // RV64M: REMW
+            int32_t dividen = (WordI) rsdata[0];
+            int32_t divisor = (WordI) rsdata[1];
+            if (divisor == 0){
+              rddata = signExt(dividen, 32, 0xFFFFFFFF);
+            } else if (dividen == WordI(0x80000000) && divisor == WordI(0xFFFFFFFF)) {
+              rddata = 0;
+            } else {
+              rddata = signExt(dividen % divisor, 32, 0xFFFFFFFF);
+            }
+          } break; 
+          case 7: {
+            // RV64M: REMUW
+            uint32_t dividen = (Word) rsdata[0];
+            uint32_t divisor = (Word) rsdata[1];
+            if (divisor == 0){
+              rddata = signExt(dividen, 32, 0xFFFFFFFF);
+            } else {
+              rddata = signExt(dividen % divisor, 32, 0xFFFFFFFF);
+            }
+          } break; 
+          default:
+            std::abort();
+        }
+      } else {
+        switch (func3) {
         case 0: 
           if (func7){
             // RV64I: SUBW
-            rddata = signExt((HalfWord)rsdata[0] - (HalfWord)rsdata[1], 32, 0xFFFFFFFF);
+            rddata = signExt((Word)rsdata[0] - (Word)rsdata[1], 32, 0xFFFFFFFF);
           }
           else{
             // RV64I: ADDW
-            rddata = signExt((HalfWord)rsdata[0] + (HalfWord)rsdata[1], 32, 0xFFFFFFFF);
+            rddata = signExt((Word)rsdata[0] + (Word)rsdata[1], 32, 0xFFFFFFFF);
           }    
           break;
         case 1: 
           // RV64I: SLLW
-          // shift amount given by rs2[4:0]
-          rddata = signExt((HalfWord)rsdata[0] << (HalfWord)rsdata[1], 32, 0xFFFFFFFF);
+          rddata = signExt((Word)rsdata[0] << (Word)rsdata[1], 32, 0xFFFFFFFF);
           break;
         case 5:
           if (func7) {
             // RV64I: SRAW
-            // shift amount given by rs2[4:0]
-            rddata = signExt((HalfWordI)rsdata[0] >> (HalfWordI)rsdata[1], 32, 0xFFFFFFFF);
+            rddata = signExt((WordI)rsdata[0] >> (WordI)rsdata[1], 32, 0xFFFFFFFF);
           } else {
             // RV64I: SRLW
-            // shift amount given by rs2[4:0]
-            rddata = signExt((HalfWord)rsdata[0] >> (HalfWord)rsdata[1], 32, 0xFFFFFFFF);
+            rddata = signExt((Word)rsdata[0] >> (Word)rsdata[1], 32, 0xFFFFFFFF);
           }
           break;
         default:
           std::abort();
+        }
       }
       rd_write = true;
     } break;
+      
     // simx64
     case I_INST_64: {
       switch (func3) {
         case 0:
           // RV64I: ADDIW
-          rddata = signExt((HalfWord)rsdata[0] + (HalfWord)immsrc, 32, 0xFFFFFFFF);
+          rddata = signExt((Word)rsdata[0] + (Word)immsrc, 32, 0xFFFFFFFF);
           break;
         case 1: 
           // RV64I: SLLIW
-          // rs1 shifted by lower 5 bits of imm
-          // Illegal exception if imm[5] != 0
-          rddata = signExt((HalfWord)rsdata[0] << (HalfWord)immsrc, 32, 0xFFFFFFFF);
+          rddata = signExt((Word)rsdata[0] << (Word)immsrc, 32, 0xFFFFFFFF);
           break;
         case 5:
           if (func7) {
-            // RV64I: SRAI
-            // rs1 shifted by lower 5 bits of imm
-            // Illegal exception if imm[5] != 0
-            Word result = signExt((HalfWordI)rsdata[0] >> (HalfWordI)immsrc, 32, 0xFFFFFFFF);
+            // RV64I: SRAIW
+            DoubleWord result = signExt((WordI)rsdata[0] >> (WordI)immsrc, 32, 0xFFFFFFFF);
             rddata = result;
           } else {
-            // RV64I: SRLI
-            // rs1 shifted by lower 5 bits of imm
-            // Illegal exception if imm[5] != 0
-            Word result = signExt((HalfWord)rsdata[0] >> (HalfWord)immsrc, 32, 0xFFFFFFFF);
+            // RV64I: SRLIW
+            DoubleWord result = signExt((Word)rsdata[0] >> (Word)immsrc, 32, 0xFFFFFFFF);
             rddata = result;
           }
           break;
@@ -484,8 +523,8 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       rd_write = true;
     } break;
     case SYS_INST: {
-      Word csr_addr = immsrc & 0x00000FFF;
-      Word csr_value = core_->get_csr(csr_addr, t, id_);
+      DoubleWord csr_addr = immsrc & 0x00000FFF;
+      DoubleWord csr_value = core_->get_csr(csr_addr, t, id_);
       switch (func3) {
       case 0:
         if (csr_addr < 2) {
@@ -540,10 +579,12 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       break;
     case (FL | VL):
       if (func3 == 0x2) {
-        Word memAddr = rsdata[0] + immsrc;
-        Word data_read = core_->dcache_read(memAddr, 4);        
+        // RV32F: FLW
+        DoubleWord memAddr = rsdata[0] + immsrc;
+        DoubleWord data_read = core_->dcache_read(memAddr, 4);        
         D(3, "LOAD MEM: ADDRESS=0x" << std::hex << memAddr << ", DATA=0x" << data_read);
-        rddata = data_read;
+        // simx64
+        rddata = data_read | 0xFFFFFFFF00000000;
       } else {  
         D(3, "Executing vector load");      
         D(3, "lmul: " << vtype_.vlmul << " VLEN:" << (core_->arch().vsize() * 8) << "sew: " << vtype_.vsew);
@@ -555,11 +596,11 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
 
         switch (instr.getVlsWidth()) {
         case 6: { 
-          //load word and unit strided (not checking for unit stride)
+          //load DoubleWord and unit strided (not checking for unit stride)
           for (int i = 0; i < vl_; i++) {
-            Word memAddr = ((rsdata[0]) & 0xFFFFFFFC) + (i * vtype_.vsew / 8);
+            DoubleWord memAddr = ((rsdata[0]) & 0xFFFFFFFC) + (i * vtype_.vsew / 8);
             D(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
-            Word data_read = core_->dcache_read(memAddr, 4);
+            DoubleWord data_read = core_->dcache_read(memAddr, 4);
             D(3, "Mem addr: " << std::hex << memAddr << " Data read " << data_read);
             int *result_ptr = (int *)(vd.data() + i);
             *result_ptr = data_read;            
@@ -574,16 +615,16 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       break;
     case (FS | VS):
       if (func3 == 0x2) {
-        Word memAddr = rsdata[0] + immsrc;
+        DoubleWord memAddr = rsdata[0] + immsrc;
         core_->dcache_write(memAddr, rsdata[1], 4);
         D(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
       } else {
         for (int i = 0; i < vl_; i++) {
-          Word memAddr = rsdata[0] + (i * vtype_.vsew / 8);
+          DoubleWord memAddr = rsdata[0] + (i * vtype_.vsew / 8);
           D(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
           switch (instr.getVlsWidth()) {
           case 6: {
-            //store word and unit strided (not checking for unit stride)          
+            //store DoubleWord and unit strided (not checking for unit stride)          
             uint32_t value = *(uint32_t *)(vRegFile_[instr.getVs3()].data() + i);
             core_->dcache_write(memAddr, value, 4);
             D(3, "store: " << memAddr << " value:" << value);
@@ -598,87 +639,109 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       uint32_t frm = get_fpu_rm(func3, core_, t, id_);
       uint32_t fflags = 0;
       switch (func7) {
-      case 0x00: //FADD
+      case 0x00: // RV32F: FADD
         rddata = rv_fadd(rsdata[0], rsdata[1], frm, &fflags);
         break;
-      case 0x04: //FSUB
+      case 0x04: // RV32F: FSUB
         rddata = rv_fsub(rsdata[0], rsdata[1], frm, &fflags);
         break;
-      case 0x08: //FMUL
+      case 0x08: // RV32F: FMUL
         rddata = rv_fmul(rsdata[0], rsdata[1], frm, &fflags);
         break;
-      case 0x0c: //FDIV
+      case 0x0c: // RV32F: FDIV
         rddata = rv_fdiv(rsdata[0], rsdata[1], frm, &fflags);
         break;
-      case 0x2c: //FSQRT
+      case 0x2c: // RV32F: FSQRT
         rddata = rv_fsqrt(rsdata[0], frm, &fflags);
         break;        
       case 0x10:
         switch (func3) {            
-        case 0: // FSGNJ.S
+        case 0: // RV32F: FSGNJ.S
           rddata = rv_fsgnj(rsdata[0], rsdata[1]);
           break;          
-        case 1: // FSGNJN.S
+        case 1: // RV32F: FSGNJN.S
           rddata = rv_fsgnjn(rsdata[0], rsdata[1]);
           break;          
-        case 2: // FSGNJX.S
+        case 2: // RV32F: FSGNJX.S
           rddata = rv_fsgnjx(rsdata[0], rsdata[1]);
           break;
         }
         break;
       case 0x14:                
         if (func3) {
-          // FMAX.S
+          // RV32F: FMAX.S
           rddata = rv_fmax(rsdata[0], rsdata[1], &fflags);
         } else {
-          // FMIN.S
+          // RV32F: FMIN.S
           rddata = rv_fmin(rsdata[0], rsdata[1], &fflags);
         }
         break;
       case 0x60:
-        if (rsrc1 == 0) { 
-          // FCVT.W.S
-          rddata = rv_ftoi(rsdata[0], frm, &fflags);
-        } else {
-          // FCVT.WU.S
-          rddata = rv_ftou(rsdata[0], frm, &fflags);
+        switch(rsrc1) {
+          case 0: 
+            // RV32F: FCVT.W.S
+            rddata = signExt(rv_ftoi(rsdata[0], frm, &fflags), 32, 0xFFFFFFFF);
+            break;
+          case 1:
+            // RV32F: FCVT.WU.S
+            rddata = signExt(rv_ftou(rsdata[0], frm, &fflags), 32, 0xFFFFFFFF);
+            break;
+          case 2:
+            // RV64F: FCVT.L.S
+            rddata = rv_ftol(rsdata[0], frm, &fflags);
+            break;
+          case 3:
+            // RV64F: FCVT.LU.S
+            rddata = rv_ftolu(rsdata[0], frm, &fflags);
+            break;
         }
         break;
       case 0x70:      
         if (func3) {
-          // FCLASS.S
+          // RV32F: FCLASS.S
           rddata = rv_fclss(rsdata[0]);
         } else {          
-          // FMV.X.W
-          rddata = rsdata[0];
+          // RV32F: FMV.X.W
+          rddata = signExt((Word)rsdata[0], 32, 0xFFFFFFFF);
         } 
         break;
       case 0x50:          
         switch(func3) {              
         case 0:
-          // FLE.S
+          // RV32F: FLE.S
           rddata = rv_fle(rsdata[0], rsdata[1], &fflags);    
           break;              
         case 1:
-          // FLT.S
+          // RV32F: FLT.S
           rddata = rv_flt(rsdata[0], rsdata[1], &fflags);
           break;              
         case 2:
-          // FEQ.S
+          // RV32F: FEQ.S
           rddata = rv_feq(rsdata[0], rsdata[1], &fflags);
           break;
         } break;        
       case 0x68:
-        if (rsrc1) {
-          // FCVT.S.WU:
-          rddata = rv_utof(rsdata[0], frm, &fflags);
-        } else {
-          // FCVT.S.W:
-          rddata = rv_itof(rsdata[0], frm, &fflags);
+        switch(rsrc1) {
+          case 0: 
+            // RV32F: FCVT.S.W
+            rddata = rv_itof(rsdata[0], frm, &fflags);
+            break;
+          case 1:
+            // RV32F: FCVT.S.WU
+            rddata = rv_utof(rsdata[0], frm, &fflags);
+            break;
+          case 2:
+            // RV64F: FCVT.S.L
+            rddata = rv_ltof(rsdata[0], frm, &fflags);
+            break;
+          case 3:
+            // RV64F: FCVT.S.LU
+            rddata = rv_lutof(rsdata[0], frm, &fflags);
+            break;
         }
         break;
       case 0x78:
-        // FMV.W.X
+        // RV32F: FMV.W.X
         rddata = rsdata[0];
         break;
       }
@@ -689,21 +752,25 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
     case FMSUB:      
     case FMNMADD:
     case FMNMSUB: {
-      // int frm = get_fpu_rm(func3, core_, t, id_);
+      int frm = get_fpu_rm(func3, core_, t, id_);
       // simx64
       Word fflags = 0;
       switch (opcode) {
       case FMADD:
-        // rddata = rv_fmadd(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
+        // RV32F: FMADD
+        rddata = rv_fmadd(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
         break;
       case FMSUB:
-        // rddata = rv_fmsub(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
+        // RV32F: FMSUB
+        rddata = rv_fmsub(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
         break;
       case FMNMADD:
-        // rddata = rv_fnmadd(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
+        // RV32F: FNMADD
+        rddata = rv_fnmadd(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
         break;  
       case FMNMSUB:
-        // rddata = rv_fnmsub(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
+        // RV32F: FNMSUB
+        rddata = rv_fnmsub(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
         break;
       default:
         break;
