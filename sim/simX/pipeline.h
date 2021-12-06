@@ -29,7 +29,7 @@ public:
 
   //--    
   int       wid;
-  Word      PC;
+  DoubleWord      PC;
 
   //--
   int       rdest_type;

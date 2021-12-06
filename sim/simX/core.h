@@ -60,18 +60,18 @@ public:
     return warps_[0]->getIRegValue(reg);
   }
 
-  Word get_csr(Addr addr, int tid, int wid);
+  DoubleWord get_csr(Addr addr, int tid, int wid);
   
-  void set_csr(Addr addr, Word value, int tid, int wid);
+  void set_csr(Addr addr, DoubleWord value, int tid, int wid);
 
   void barrier(int bar_id, int count, int warp_id);
 
   // simx64
-  HalfWord icache_fetch(Addr);
+  Word icache_fetch(Addr);
   // simx64
-  Word dcache_read(Addr, Size);
+  DoubleWord dcache_read(Addr, Size);
   // simx64
-  void dcache_write(Addr, Word, Size);
+  void dcache_write(Addr, DoubleWord, Size);
 
   void trigger_ebreak();
   bool check_ebreak() const;
@@ -85,7 +85,7 @@ private:
   void execute();
   void writeback();
 
-  void writeToStdOut(Addr addr, Word data);
+  void writeToStdOut(Addr addr, DoubleWord data);
   
   std::vector<RegMask> in_use_iregs_;
   std::vector<RegMask> in_use_fregs_;
@@ -93,7 +93,7 @@ private:
   WarpMask stalled_warps_;
   std::vector<std::shared_ptr<Warp>> warps_;  
   std::vector<WarpMask> barriers_;  
-  std::vector<Word> csrs_;
+  std::vector<DoubleWord> csrs_;
   std::vector<Byte> fcsrs_;
   std::unordered_map<int, std::stringstream> print_bufs_;
 

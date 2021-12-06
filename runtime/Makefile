@@ -1,15 +1,14 @@
-# RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
-RISCV_TOOLCHAIN_PATH = /nethome/ssrivatsan8/riscv32
+RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 # simx64
 RISCV64_TOOLCHAIN_PATH ?= /nethome/ssrivatsan8/riscv
 
 
-CC = $(RISCV64_TOOLCHAIN_PATH)/bin/riscv64-unknown-elf-gcc
-AR = $(RISCV64_TOOLCHAIN_PATH)/bin/riscv64-unknown-elf-gcc-ar
-DP = $(RISCV64_TOOLCHAIN_PATH)/bin/riscv64-unknown-elf-objdump
-CP = $(RISCV64_TOOLCHAIN_PATH)/bin/riscv64-unknown-elf-objcopy
+CC = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
+AR = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc-ar
+DP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
+CP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
-CFLAGS += -O3 -march=rv64imfd -mabi=lp64d -Wstack-usage=1024 -fno-exceptions -fdata-sections -ffunction-sections
+CFLAGS += -O3 -march=rv32imf -mabi=ilp32f -Wstack-usage=1024 -fno-exceptions -fdata-sections -ffunction-sections
 CFLAGS += -I./include -I../hw
 
 PROJECT = libvortexrt

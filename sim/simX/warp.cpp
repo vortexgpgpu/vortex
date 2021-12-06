@@ -14,8 +14,8 @@ Warp::Warp(Core *core, Word id)
     : id_(id)
     , core_(core) {
   // simx64
-  iRegFile_.resize(core_->arch().num_threads(), std::vector<Word>(core_->arch().num_regs(), 0));
-  fRegFile_.resize(core_->arch().num_threads(), std::vector<Word>(core_->arch().num_regs(), 0));
+  iRegFile_.resize(core_->arch().num_threads(), std::vector<DoubleWord>(core_->arch().num_regs(), 0));
+  fRegFile_.resize(core_->arch().num_threads(), std::vector<DoubleWord>(core_->arch().num_regs(), 0));
   vRegFile_.resize(core_->arch().num_regs(), std::vector<Byte>(core_->arch().vsize(), 0));
   this->clear();
 }
@@ -36,7 +36,7 @@ void Warp::step(Pipeline *pipeline) {
 
   /* Fetch and decode. */    
 
-  HalfWord fetched = core_->icache_fetch(PC_);
+  Word fetched = core_->icache_fetch(PC_);
   auto instr = core_->decoder().decode(fetched, PC_);
 
   // Update pipeline
@@ -86,10 +86,12 @@ void Warp::step(Pipeline *pipeline) {
   D(4, "Register state:");
   for (int i = 0; i < core_->arch().num_regs(); ++i) {
     DPN(4, "  %r" << std::setfill('0') << std::setw(2) << std::dec << i << ':');
-    for (int j = 0; j < core_->arch().num_threads(); ++j) {
-      // simx64
-      DPN(4, ' ' << std::setfill('0') << std::setw(16) << std::hex << iRegFile_[j][i] << std::setfill(' ') << ' ');
-    }
+    // for (int j = 0; j < core_->arch().num_threads(); ++j) {
+    //   // simx64
+    //   DPN(4, ' ' << std::setfill('0') << std::setw(16) << std::hex << iRegFile_[j][i] << std::setfill(' ') << ' ');
+    // }
+    DPN(4, ' ' << std::setfill('0') << std::setw(16) << std::hex << iRegFile_[0][i] << std::setfill(' ') << ' ');
+    DPN(4, ' ' << std::setfill('0') << std::setw(16) << std::hex << fRegFile_[0][i] << std::setfill(' ') << ' ');
     DPN(4, std::endl);
   }  
 }

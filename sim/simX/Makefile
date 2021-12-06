@@ -21,9 +21,7 @@ VPATH := $(sort $(dir $(SRCS)))
 
 # Debugigng
 ifdef DEBUG
-	# CXXFLAGS += -g -O0 -DDEBUG_LEVEL=$(DEBUG)
-	# simx64
-	CXXFLAGS += -g -O0 -DDEBUG_LEVEL=4
+	CXXFLAGS += -g -O0 -DDEBUG_LEVEL=$(DEBUG)
 else    
 	CXXFLAGS += -O2 -DNDEBUG
 endif

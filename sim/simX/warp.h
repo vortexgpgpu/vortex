@@ -11,7 +11,7 @@ class Core;
 class Instr;
 class Pipeline;
 struct DomStackEntry {
-  DomStackEntry(const ThreadMask &tmask, Word PC) 
+  DomStackEntry(const ThreadMask &tmask, DoubleWord PC) 
     : tmask(tmask)
     , PC(PC)
     , fallThrough(false)
@@ -26,7 +26,7 @@ struct DomStackEntry {
   {}
 
   ThreadMask tmask;
-  Word PC;
+  DoubleWord PC;
   bool fallThrough;
   bool unanimous;
 };
@@ -62,11 +62,11 @@ public:
     return id_;
   }
 
-  Word getPC() const {
+  DoubleWord getPC() const {
     return PC_;
   }
 
-  void setPC(Word PC) {
+  void setPC(DoubleWord PC) {
     PC_ = PC;
   }
 
@@ -95,12 +95,12 @@ private:
   bool active_;
   Core *core_;
   
-  Word PC_;
+  DoubleWord PC_;
   ThreadMask tmask_;  
   
   // simx64
-  std::vector<std::vector<Word>> iRegFile_;
-  std::vector<std::vector<Word>> fRegFile_;
+  std::vector<std::vector<DoubleWord>> iRegFile_;
+  std::vector<std::vector<DoubleWord>> fRegFile_;
   std::vector<std::vector<Byte>> vRegFile_;
   std::stack<DomStackEntry> domStack_;
 

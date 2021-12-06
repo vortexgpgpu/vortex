@@ -7,14 +7,16 @@ AR = $(RISCV64_TOOLCHAIN_PATH)/bin/riscv64-unknown-elf-gcc-ar
 DP = $(RISCV64_TOOLCHAIN_PATH)/bin/riscv64-unknown-elf-objdump
 CP = $(RISCV64_TOOLCHAIN_PATH)/bin/riscv64-unknown-elf-objcopy
 
-CFLAGS += -march=rv64i -mabi=lp64 -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
+CFLAGS += -march=rv64imfd -mabi=lp64d -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
 CFLAGS += -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw
 
-LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link64.ld -Wl,--noinhibit-exec,--gc-sections $(VORTEX_RT_PATH)/libvortexrt.a
+LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link64.ld -Wl,--gc-sections 
+
+# $(VORTEX_RT_PATH)/libvortexrt.a
 
 PROJECT = hello64
 
-SRCS = main.cpp
+SRCS = main.cpp $(VORTEX_RT_PATH)/src/vx_start.S $(VORTEX_RT_PATH)/src/vx_syscalls.c
 
 all: $(PROJECT).elf $(PROJECT).bin $(PROJECT).dump
 

@@ -20,8 +20,14 @@ uint32_t rv_fsqrt(uint32_t a, uint32_t frm, uint32_t* fflags);
 
 uint32_t rv_ftoi(uint32_t a, uint32_t frm, uint32_t* fflags);
 uint32_t rv_ftou(uint32_t a, uint32_t frm, uint32_t* fflags);
+// simx64
+uint64_t rv_ftol(uint32_t a, uint32_t frm, uint32_t* fflags);
+uint64_t rv_ftolu(uint32_t a, uint32_t frm, uint32_t* fflags);
 uint32_t rv_itof(uint32_t a, uint32_t frm, uint32_t* fflags);
 uint32_t rv_utof(uint32_t a, uint32_t frm, uint32_t* fflags);
+// simx64
+uint32_t rv_ltof(uint64_t a, uint32_t frm, uint32_t* fflags);
+uint32_t rv_lutof(uint64_t a, uint32_t frm, uint32_t* fflags);
 
 uint32_t rv_fclss(uint32_t a);
 uint32_t rv_fsgnj(uint32_t a, uint32_t b);

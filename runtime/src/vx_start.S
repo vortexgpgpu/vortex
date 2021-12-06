@@ -23,13 +23,13 @@ _start:
   call    memset
 
   # Register global termination functions
-  la      a0, __libc_fini_array   
+  # la      a0, __libc_fini_array   
 
   # to be called upon exit
   call    atexit                  
 
   # Run global initialization functions
-  call    __libc_init_array       
+  # call    __libc_init_array       
 
   # call main program routine
   call    main
