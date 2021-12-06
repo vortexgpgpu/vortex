@@ -1,8 +1,8 @@
 #include <cstdint>
 #include <vector>
-#include <format.h>
-#include <blitter.h>
 #include <bitmanip.h>
+#include <cocogfx/include/format.h>
+#include <cocogfx/include/blitter.h>
 
 int LoadImage(const char *filename,
               cocogfx::ePixelFormat format,
