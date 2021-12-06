@@ -403,7 +403,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     break;
   case JALR_INST:
     trace->exe_type = ExeType::ALU;    
-    trace->alu.type = AluType::BRANCH;    
+    trace->alu.type = AluType::BRANCH;
     trace->used_iregs.set(rsrc0);
     for (int t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
@@ -535,6 +535,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       Word csr_value;
       if (func3 == 0) {
         trace->exe_type = ExeType::ALU;
+        trace->alu.type = AluType::SYSCALL;
         trace->fetch_stall = true;
         switch (csr_addr) {
         case 0: // ECALL

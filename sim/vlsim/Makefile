@@ -1,3 +1,4 @@
+DESTDIR ?= .
 RTL_DIR = ../../hw/rtl
 DPI_DIR = ../../hw/dpi
 SCRIPT_DIR = ../../hw/scripts
@@ -7,8 +8,10 @@ CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I.. -I../../../hw -I../../common
 CXXFLAGS += -I../$(THIRD_PARTY_DIR)/softfloat/source/include
+CXXFLAGS += -I../$(THIRD_PARTY_DIR)
 
 LDFLAGS += -shared ../$(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
+LDFLAGS += -L../$(THIRD_PARTY_DIR)/ramulator -lramulator
 
 # control RTL debug tracing states
 DBG_TRACE_FLAGS += -DDBG_TRACE_PIPELINE  
@@ -87,22 +90,15 @@ VL_FLAGS += -DIDIV_DPI
 FPU_CORE ?= FPU_DPI
 VL_FLAGS += -D$(FPU_CORE)
 
-PROJECT = libopae-c-vlsim
+PROJECT = libopae-c-vlsim.so
 
-all: $(PROJECT).so
+all: $(PROJECT)
 
 vortex_afu.h : $(RTL_DIR)/afu/vortex_afu.vh
 	$(SCRIPT_DIR)/gen_config.py -i $(RTL_DIR)/afu/vortex_afu.vh -o vortex_afu.h
 
-$(PROJECT).so: $(SRCS) vortex_afu.h
-	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(PROJECT).so
+$(DESTDIR)/$(PROJECT): $(SRCS) vortex_afu.h
+	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(DESTDIR)/$(PROJECT)
 
-static: $(SRCS) vortex_afu.h
-	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)'
-	$(AR) rcs $(PROJECT).a obj_dir/*.o $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/*.o
-
-clean-static:
-	rm -rf $(PROJECT).a obj_dir vortex_afu.h
-
-clean: clean-static
-	rm -rf $(PROJECT).so
+clean:
+	rm -rf obj_dir $(DESTDIR)/$(PROJECT)

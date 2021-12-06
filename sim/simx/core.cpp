@@ -87,12 +87,12 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
   }
 
   // register execute units
-  exe_units_.at((int)ExeType::NOP) = SimPlatform::instance().CreateObject<NopUnit>(this);
-  exe_units_.at((int)ExeType::ALU) = SimPlatform::instance().CreateObject<AluUnit>(this);
-  exe_units_.at((int)ExeType::LSU) = SimPlatform::instance().CreateObject<LsuUnit>(this);
-  exe_units_.at((int)ExeType::CSR) = SimPlatform::instance().CreateObject<CsrUnit>(this);
-  exe_units_.at((int)ExeType::FPU) = SimPlatform::instance().CreateObject<FpuUnit>(this);  
-  exe_units_.at((int)ExeType::GPU) = SimPlatform::instance().CreateObject<GpuUnit>(this);
+  exe_units_.at((int)ExeType::NOP) = SimPlatform::instance().create_object<NopUnit>(this);
+  exe_units_.at((int)ExeType::ALU) = SimPlatform::instance().create_object<AluUnit>(this);
+  exe_units_.at((int)ExeType::LSU) = SimPlatform::instance().create_object<LsuUnit>(this);
+  exe_units_.at((int)ExeType::CSR) = SimPlatform::instance().create_object<CsrUnit>(this);
+  exe_units_.at((int)ExeType::FPU) = SimPlatform::instance().create_object<FpuUnit>(this);  
+  exe_units_.at((int)ExeType::GPU) = SimPlatform::instance().create_object<GpuUnit>(this);
 
   // connect l1 switch
   icache_->MemReqPort.bind(&l1_mem_switch_->ReqIn[0]);
@@ -216,6 +216,7 @@ void Core::fetch(uint64_t cycle) {
     mem_req.addr  = trace->PC;
     mem_req.write = false;
     mem_req.tag   = pending_icache_.allocate(trace);    
+    mem_req.core_id = id_;
     icache_->CoreReqPorts.at(0).send(mem_req, 1);
     DT(3, cycle, "icache-req: addr=" << std::hex << mem_req.addr << ", tag=" << mem_req.tag << ", " << *trace);
     fetch_latch_.pop();

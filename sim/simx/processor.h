@@ -4,24 +4,23 @@
 
 namespace vortex {
 
-class Processor {
+class Processor : public SimObject<Processor> {
 public:
-  typedef std::shared_ptr<Processor> Ptr;
+  SimPort<MemReq> MemReqPort;
+  SimPort<MemRsp> MemRspPort;
   
-  Processor(const ArchDef& arch);
+  Processor(const SimContext& ctx, const ArchDef& arch);
   ~Processor();
 
   void attach_ram(RAM* mem);
 
-  int run();
+  bool check_exit(int* exitcode);
+
+  void step(uint64_t cycle);
 
 private:
-  std::vector<Core::Ptr> cores_;  
-  std::vector<Cache::Ptr> l2caches_;  
-  std::vector<Switch<MemReq, MemRsp>::Ptr> l2_mem_switches_;
-  Cache::Ptr l3cache_;
-  Switch<MemReq, MemRsp>::Ptr l3_mem_switch_;
-  MemSim::Ptr memsim_;
+  class Impl;
+  Impl* impl_;
 };
 
 }

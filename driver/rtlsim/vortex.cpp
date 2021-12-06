@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <iostream>
 #include <future>
+#include <list>
 #include <chrono>
 
 #include <vortex.h>
@@ -11,7 +12,7 @@
 #include <VX_config.h>
 #include <mem.h>
 #include <util.h>
-#include <simulator.h>
+#include <processor.h>
 
 #define RAM_PAGE_SIZE 4096
 
@@ -60,7 +61,9 @@ public:
     vx_device() 
         : ram_(RAM_PAGE_SIZE)
         , mem_allocation_(ALLOC_BASE_ADDR) 
-    {}
+    {
+        processor_.attach_ram(&ram_);
+    }
 
     ~vx_device() {    
         if (future_.valid()) {
@@ -121,12 +124,9 @@ public:
             future_.wait();
         }
         // start new run
-        simulator_.attach_ram(&ram_);
         future_ = std::async(std::launch::async, [&]{             
-            simulator_.reset();        
-            while (simulator_.is_busy()) {
-                simulator_.step();
-            }
+            processor_.reset();            
+            processor_.run();
         });
         return 0;
     }
@@ -149,7 +149,7 @@ public:
 private:
 
     RAM ram_;
-    Simulator simulator_;
+    Processor processor_;
     uint64_t mem_allocation_;     
     std::future<void> future_;
 };

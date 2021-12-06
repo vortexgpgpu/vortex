@@ -60,7 +60,13 @@ public:
         : arch_("rv32i", NUM_CORES * NUM_CLUSTERS, NUM_WARPS, NUM_THREADS)
         , ram_(RAM_PAGE_SIZE)
         , mem_allocation_(ALLOC_BASE_ADDR)
-    {}
+    {
+        // setup memory simulator
+        memsim_ = MemSim::Create(MemSim::Config{
+            DRAM_CHANNELS,
+            arch_.num_cores()
+        });
+    }
 
     ~vx_device() {
         if (future_.valid()) {
@@ -113,13 +119,33 @@ public:
         if (future_.valid()) {
             future_.wait();
         }
+        
         // start new run
-        SimPlatform::instance().flush();
-        processor_ = std::make_shared<Processor>(arch_);
-        processor_->attach_ram(&ram_);
         future_ = std::async(std::launch::async, [&]{
-            processor_->run();
+            if (processor_) {                
+                // release current processor instance
+                processor_->MemReqPort.unbind();
+                memsim_->MemRspPort.unbind();
+                SimPlatform::instance().release_object(processor_);
+            }
+
+            // create new processor instance
+            processor_ = Processor::Create(arch_);
+            processor_->MemReqPort.bind(&memsim_->MemReqPort);
+            memsim_->MemRspPort.bind(&processor_->MemRspPort);
+
+            // attach memory object
+            processor_->attach_ram(&ram_);
+
+            // run simulation
+            int exitcode;   
+            for (;;) {
+                SimPlatform::instance().step();
+                if (processor_->check_exit(&exitcode))
+                    break;
+            };
         });
+        
         return 0;
     }
 
@@ -141,6 +167,7 @@ public:
 private:
     ArchDef arch_;
     RAM ram_;
+    MemSim::Ptr memsim_;
     Processor::Ptr processor_;
     uint64_t mem_allocation_;        
     std::future<void> future_;
