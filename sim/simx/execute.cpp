@@ -87,7 +87,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DPN(2, "-");
             continue;            
           }
-          rsdata[t][i] = iRegFile_.at(t)[reg];          
+          rsdata[t][i] = ireg_file_.at(t)[reg];          
           DPN(2, std::hex << rsdata[t][i]); 
         }
         DPN(2, "}" << std::endl);
@@ -100,7 +100,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DPN(2, "-");
             continue;            
           }
-          rsdata[t][i] = fRegFile_.at(t)[reg];
+          rsdata[t][i] = freg_file_.at(t)[reg];
           DPN(2, std::hex << rsdata[t][i]); 
         }
         DPN(2, "}" << std::endl);
@@ -460,7 +460,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       DP(4, "lmul: " << vtype_.vlmul << " VLEN:" << (core_->arch().vsize() * 8) << "sew: " << vtype_.vsew);
       DP(4, "dest: v" << rdest);
       DP(4, "width" << instr.getVlsWidth());
-      auto &vd = vRegFile_.at(rdest);
+      auto &vd = vreg_file_.at(rdest);
       switch (instr.getVlsWidth()) {
       case 6: { 
         // load word and unit strided (not checking for unit stride)
@@ -517,7 +517,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         switch (instr.getVlsWidth()) {
         case 6: {
           // store word and unit strided (not checking for unit stride)          
-          uint32_t value = *(uint32_t *)(vRegFile_.at(instr.getVs3()).data() + i);
+          uint32_t value = *(uint32_t *)(vreg_file_.at(instr.getVs3()).data() + i);
           core_->dcache_write(memAddr, value, 4);
           DP(4, "store: " << memAddr << " value:" << value);
         } break;
@@ -784,7 +784,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         // predicate mode
         ThreadMask pred;
         for (int i = 0; i < num_threads; ++i) {
-          pred[i] = tmask_.test(i) ? (iRegFile_.at(i).at(rsrc0) != 0) : 0;
+          pred[i] = tmask_.test(i) ? (ireg_file_.at(i).at(rsrc0) != 0) : 0;
         }
         if (pred.any()) {
           tmask_ &= pred;
@@ -819,15 +819,15 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       trace->gpu.type = GpuType::SPLIT;
       trace->used_iregs.set(rsrc0);
       trace->fetch_stall = true;
-      if (HasDivergentThreads(tmask_, iRegFile_, rsrc0)) {          
+      if (HasDivergentThreads(tmask_, ireg_file_, rsrc0)) {          
         ThreadMask tmask;
         for (int i = 0; i < num_threads; ++i) {
-          tmask[i] = tmask_.test(i) && !iRegFile_.at(i).at(rsrc0);
+          tmask[i] = tmask_.test(i) && !ireg_file_.at(i).at(rsrc0);
         }
 
         DomStackEntry e(tmask, nextPC);
-        domStack_.push(tmask_);
-        domStack_.push(e);
+        dom_stack_.push(tmask_);
+        dom_stack_.push(e);
         for (size_t i = 0; i < e.tmask.size(); ++i) {
           tmask_.set(i, !e.tmask.test(i) && tmask_.test(i));
         }
@@ -842,7 +842,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         DP(3, "*** Unanimous pred");
         DomStackEntry e(tmask_);
         e.unanimous = true;
-        domStack_.push(e);
+        dom_stack_.push(e);
       }        
     } break;
     case 3: {
@@ -850,25 +850,25 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       trace->exe_type = ExeType::GPU;
       trace->gpu.type = GpuType::JOIN;        
       trace->fetch_stall = true;        
-      if (!domStack_.empty() && domStack_.top().unanimous) {
+      if (!dom_stack_.empty() && dom_stack_.top().unanimous) {
         DP(3, "*** Uninimous branch at join");
-        tmask_ = domStack_.top().tmask;
+        tmask_ = dom_stack_.top().tmask;
         active_ = tmask_.any();
-        domStack_.pop();
+        dom_stack_.pop();
       } else {
-        if (!domStack_.top().fallThrough) {
-          nextPC = domStack_.top().PC;
+        if (!dom_stack_.top().fallThrough) {
+          nextPC = dom_stack_.top().PC;
           DP(3, "*** Join: next PC: " << std::hex << nextPC << std::dec);
         }
 
-        tmask_ = domStack_.top().tmask;
+        tmask_ = dom_stack_.top().tmask;
         active_ = tmask_.any();
 
         DPH(3, "*** Join: New TM=");
         for (int i = 0; i < num_threads; ++i) DPN(3, tmask_.test(num_threads-i-1));
         DPN(3, "\n");
 
-        domStack_.pop();
+        dom_stack_.pop();
       }        
     } break;
     case 4: {
@@ -946,10 +946,10 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     case 0: // vector-vector
       switch (func6) {
       case 0: {
-        auto& vr1 = vRegFile_.at(rsrc0);
-        auto& vr2 = vRegFile_.at(rsrc1);
-        auto& vd = vRegFile_.at(rdest);
-        auto& mask = vRegFile_.at(0);
+        auto& vr1 = vreg_file_.at(rsrc0);
+        auto& vr2 = vreg_file_.at(rsrc1);
+        auto& vd = vreg_file_.at(rdest);
+        auto& mask = vreg_file_.at(0);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             uint8_t emask = *(uint8_t *)(mask.data() + i);
@@ -990,9 +990,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 24: {
         // vmseq
-        auto &vr1 = vRegFile_.at(rsrc0);
-        auto &vr2 = vRegFile_.at(rsrc1);
-        auto &vd = vRegFile_.at(rdest);
+        auto &vr1 = vreg_file_.at(rsrc0);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
@@ -1021,9 +1021,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 25: { 
         // vmsne
-        auto &vr1 = vRegFile_.at(rsrc0);
-        auto &vr2 = vRegFile_.at(rsrc1);
-        auto &vd = vRegFile_.at(rdest);
+        auto &vr1 = vreg_file_.at(rsrc0);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
@@ -1052,9 +1052,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 26: {
         // vmsltu
-        auto &vr1 = vRegFile_.at(rsrc0);
-        auto &vr2 = vRegFile_.at(rsrc1);
-        auto &vd = vRegFile_.at(rdest);
+        auto &vr1 = vreg_file_.at(rsrc0);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
@@ -1083,9 +1083,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 27: {
         // vmslt
-        auto &vr1 = vRegFile_.at(rsrc0);
-        auto &vr2 = vRegFile_.at(rsrc1);
-        auto &vd = vRegFile_.at(rdest);
+        auto &vr1 = vreg_file_.at(rsrc0);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             int8_t first  = *(int8_t *)(vr1.data() + i);
@@ -1114,9 +1114,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 28: {
         // vmsleu
-        auto &vr1 = vRegFile_.at(rsrc0);
-        auto &vr2 = vRegFile_.at(rsrc1);
-        auto &vd = vRegFile_.at(rdest);
+        auto &vr1 = vreg_file_.at(rsrc0);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
@@ -1145,9 +1145,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 29: {
         // vmsle
-        auto &vr1 = vRegFile_.at(rsrc0);
-        auto &vr2 = vRegFile_.at(rsrc1);
-        auto &vd = vRegFile_.at(rdest);
+        auto &vr1 = vreg_file_.at(rsrc0);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             int8_t first  = *(int8_t *)(vr1.data() + i);
@@ -1176,9 +1176,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 30: {
         // vmsgtu
-        auto &vr1 = vRegFile_.at(rsrc0);
-        auto &vr2 = vRegFile_.at(rsrc1);
-        auto &vd = vRegFile_.at(rdest);
+        auto &vr1 = vreg_file_.at(rsrc0);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
@@ -1207,9 +1207,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 31: {
         // vmsgt
-        auto &vr1 = vRegFile_.at(rsrc0);
-        auto &vr2 = vRegFile_.at(rsrc1);
-        auto &vd = vRegFile_.at(rdest);
+        auto &vr1 = vreg_file_.at(rsrc0);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             int8_t first  = *(int8_t *)(vr1.data() + i);
@@ -1242,9 +1242,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       switch (func6) {
       case 24: { 
         // vmandnot
-        auto &vr1 = vRegFile_.at(rsrc0);
-        auto &vr2 = vRegFile_.at(rsrc1);
-        auto &vd = vRegFile_.at(rdest);
+        auto &vr1 = vreg_file_.at(rsrc0);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
@@ -1288,9 +1288,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 25: {
         // vmand
-        auto &vr1 = vRegFile_.at(rsrc0);
-        auto &vr2 = vRegFile_.at(rsrc1);
-        auto &vd = vRegFile_.at(rdest);
+        auto &vr1 = vreg_file_.at(rsrc0);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
@@ -1334,9 +1334,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 26: {
         // vmor
-        auto &vr1 = vRegFile_.at(rsrc0);
-        auto &vr2 = vRegFile_.at(rsrc1);
-        auto &vd = vRegFile_.at(rdest);
+        auto &vr1 = vreg_file_.at(rsrc0);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
@@ -1380,9 +1380,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 27: { 
         // vmxor
-        auto &vr1 = vRegFile_.at(rsrc0);
-        auto &vr2 = vRegFile_.at(rsrc1);
-        auto &vd = vRegFile_.at(rdest);
+        auto &vr1 = vreg_file_.at(rsrc0);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
@@ -1426,9 +1426,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 28: {
         // vmornot
-        auto &vr1 = vRegFile_.at(rsrc0);
-        auto &vr2 = vRegFile_.at(rsrc1);
-        auto &vd = vRegFile_.at(rdest);
+        auto &vr1 = vreg_file_.at(rsrc0);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
@@ -1472,9 +1472,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 29: {
         // vmnand
-        auto &vr1 = vRegFile_.at(rsrc0);
-        auto &vr2 = vRegFile_.at(rsrc1);
-        auto &vd = vRegFile_.at(rdest);
+        auto &vr1 = vreg_file_.at(rsrc0);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
@@ -1518,9 +1518,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 30: {
         // vmnor
-        auto &vr1 = vRegFile_.at(rsrc0);
-        auto &vr2 = vRegFile_.at(rsrc1);
-        auto &vd = vRegFile_.at(rdest);
+        auto &vr1 = vreg_file_.at(rsrc0);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
@@ -1564,9 +1564,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 31: {
         // vmxnor
-        auto &vr1 = vRegFile_.at(rsrc0);
-        auto &vr2 = vRegFile_.at(rsrc1);
-        auto &vd = vRegFile_.at(rdest);
+        auto &vr1 = vreg_file_.at(rsrc0);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
@@ -1610,9 +1610,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 37: {
         // vmul
-        auto &vr1 = vRegFile_.at(rsrc0);
-        auto &vr2 = vRegFile_.at(rsrc1);
-        auto &vd = vRegFile_.at(rdest);
+        auto &vr1 = vreg_file_.at(rsrc0);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
@@ -1650,9 +1650,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 45: {
         // vmacc
-        auto &vr1 = vRegFile_.at(rsrc0);
-        auto &vr2 = vRegFile_.at(rsrc1);
-        auto &vd = vRegFile_.at(rdest);
+        auto &vr1 = vreg_file_.at(rsrc0);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
@@ -1693,8 +1693,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     case 6: {
       switch (func6) {
       case 0: {
-        auto &vr2 = vRegFile_.at(rsrc1);
-        auto &vd = vRegFile_.at(rdest);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             uint8_t second = *(uint8_t *)(vr2.data() + i);
@@ -1729,8 +1729,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 37: {
         // vmul.vx
-        auto &vr2 = vRegFile_.at(rsrc1);
-        auto &vd = vRegFile_.at(rdest);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
           for (int i = 0; i < vl_; i++) {
             uint8_t second = *(uint8_t *)(vr2.data() + i);
@@ -1805,7 +1805,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DPN(2, "-");
             continue;            
           }
-          iRegFile_.at(t)[rdest] = rddata[t];
+          ireg_file_.at(t)[rdest] = rddata[t];
           DPN(2, "0x" << std::hex << rddata[t]);         
         }
         DPN(2, "}" << std::endl);
@@ -1820,7 +1820,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           DPN(2, "-");
           continue;            
         }
-        fRegFile_.at(t)[rdest] = rddata[t];        
+        freg_file_.at(t)[rdest] = rddata[t];        
         DPN(2, "0x" << std::hex << rddata[t]);         
       }
       DPN(2, "}" << std::endl);

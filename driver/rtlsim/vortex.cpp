@@ -124,8 +124,7 @@ public:
             future_.wait();
         }
         // start new run
-        future_ = std::async(std::launch::async, [&]{             
-            processor_.reset();            
+        future_ = std::async(std::launch::async, [&]{
             processor_.run();
         });
         return 0;

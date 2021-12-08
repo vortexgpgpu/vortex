@@ -26,10 +26,12 @@ public:
     SimPort<MemReq> MemReqPort;
     SimPort<MemRsp> MemRspPort;
 
-    MemSim(const SimContext& ctx, const Config& config);
+    MemSim(const SimContext& ctx, const char* name, const Config& config);
     ~MemSim();
 
-    void step(uint64_t cycle);
+    void reset();
+
+    void tick();
 
     const PerfStats& perf_stats() const;
     

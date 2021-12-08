@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include "processor.h"
+#include "archdef.h"
+#include "mem.h"
 #include "constants.h"
 #include <util.h>
 #include "args.h"
@@ -50,11 +52,14 @@ int main(int argc, char **argv) {
 
   std::cout << "Running " << imgFileName << "..." << std::endl;
   
-  if (!SimPlatform::instance().initialize())
-    return -1;
-
   {
+    // create processor configuation
+    ArchDef arch(archStr, num_cores, num_warps, num_threads);
+
+    // create memory module
     RAM ram(RAM_PAGE_SIZE);
+
+    // load program
     {
       std::string program_ext(fileExtension(imgFileName.c_str()));
       if (program_ext == "bin") {
@@ -67,27 +72,15 @@ int main(int argc, char **argv) {
       }
     }
 
-    ArchDef arch(archStr, num_cores, num_warps, num_threads);
-    auto processor = Processor::Create(arch);
-    processor->attach_ram(&ram);
-
-    // setup memory simulator
-    auto memsim = MemSim::Create(MemSim::Config{
-      DRAM_CHANNELS,
-      arch.num_cores()
-    });    
-    processor->MemReqPort.bind(&memsim->MemReqPort);
-    memsim->MemRspPort.bind(&processor->MemRspPort);
+    // create processor
+    Processor processor(arch);
+  
+    // attach memory module
+    processor.attach_ram(&ram);   
 
     // run simulation
-    for (;;) {
-      SimPlatform::instance().step();
-      if (processor->check_exit(&exitcode))
-          break;
-    };    
-  }
-
-  SimPlatform::instance().finalize();
+    processor.run();
+  } 
 
   if (riscv_test) {
     if (1 == exitcode) {

@@ -41,6 +41,8 @@ struct vtype {
 class Warp {
 public:
   Warp(Core *core, Word id);
+
+  void clear();
   
   bool active() const {
     return active_;
@@ -84,7 +86,7 @@ public:
   }
 
   Word getIRegValue(int reg) const {
-    return iRegFile_.at(0).at(reg);
+    return ireg_file_.at(0).at(reg);
   }
 
   void eval(pipeline_trace_t *);
@@ -100,10 +102,10 @@ private:
   Word PC_;
   ThreadMask tmask_;  
   
-  std::vector<std::vector<Word>> iRegFile_;
-  std::vector<std::vector<Word>> fRegFile_;
-  std::vector<std::vector<Byte>> vRegFile_;
-  std::stack<DomStackEntry> domStack_;
+  std::vector<std::vector<Word>> ireg_file_;
+  std::vector<std::vector<Word>> freg_file_;
+  std::vector<std::vector<Byte>> vreg_file_;
+  std::stack<DomStackEntry> dom_stack_;
 
   struct vtype vtype_;
   int vl_;

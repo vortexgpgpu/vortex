@@ -11,6 +11,8 @@ public:
     TexUnit(Core* core);
     ~TexUnit();
 
+    void clear();
+
     uint32_t get_state(uint32_t state);
   
     void set_state(uint32_t state, uint32_t value);

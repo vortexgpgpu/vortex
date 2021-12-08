@@ -213,67 +213,48 @@ struct MemReq {
     bool non_cacheable;
     uint32_t tag;
     uint32_t core_id;    
+    uint64_t uuid;
 
     MemReq(uint64_t _addr = 0, 
            bool _write = false,
            bool _non_cacheable = false,
            uint64_t _tag = 0, 
-           uint32_t _core_id = 0
+           uint32_t _core_id = 0,
+           uint64_t _uuid = 0
     )   : addr(_addr)
         , write(_write)
         , non_cacheable(_non_cacheable)
         , tag(_tag)
         , core_id(_core_id)
+        , uuid(_uuid)
     {}
 };
+
+inline std::ostream &operator<<(std::ostream &os, const MemReq& req) {
+  os << "mem-" << (req.write ? "wr" : "rd") << ": ";
+  os << "addr=" << req.addr << ", tag=" << req.tag << ", core_id=" << req.core_id;
+  os << " (#" << std::dec << req.uuid << ")";
+  return os;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 
 struct MemRsp {
     uint64_t tag;    
     uint32_t core_id;
-    MemRsp(uint64_t _tag = 0, uint32_t _core_id = 0)
+    uint64_t uuid;
+    MemRsp(uint64_t _tag = 0, uint32_t _core_id = 0, uint64_t _uuid = 0)
       : tag (_tag) 
       , core_id(_core_id)
+      , uuid(_uuid)
     {}
 };
 
-///////////////////////////////////////////////////////////////////////////////
-
-template <typename T>
-class Queue {
-protected:
-  std::queue<T> queue_;
-
-public:
-  Queue() {}
-
-  bool empty() const {
-    return queue_.empty();
-  }
-
-  const T& front() const {
-    return queue_.front();
-  }
-
-  T& front() {
-    return queue_.front();
-  }
-
-  const T& back() const {
-    return queue_.back();
-  }
-
-  T& back() {
-    return queue_.back();
-  }
-
-  void push(const T& value) {    
-    queue_.push(value);
-  }
-
-  void pop() {
-    queue_.pop();
-  }
-};
+inline std::ostream &operator<<(std::ostream &os, const MemRsp& rsp) {
+  os << "mem-rsp: tag=" << rsp.tag << ", core_id=" << rsp.core_id;
+  os << " (#" << std::dec << rsp.uuid << ")";
+  return os;
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -337,6 +318,14 @@ public:
     entry.first = false;
     --size_;
   }
+
+  void clear() {
+    for (uint32_t i = 0, n = entries_.size(); i < n; ++i) {
+      auto& entry = entries_.at(i);
+      entry.first = false;
+    }
+    size_ = 0;
+  }
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -376,7 +365,11 @@ public:
     }
   }
 
-  void step(uint64_t /*cycle*/) {  
+  void reset() {
+    cursor_ = 0;
+  }
+
+  void tick() {  
     if (ReqIn.size() == 1)
       return;
         

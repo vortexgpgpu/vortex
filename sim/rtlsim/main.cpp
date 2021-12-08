@@ -49,12 +49,12 @@ int main(int argc, char **argv) {
 	
 	parse_args(argc, argv);
 
-	for (auto program : programs) {
-		std::cout << "Running " << program << "..." << std::endl;
+	vortex::RAM ram(RAM_PAGE_SIZE);
+	vortex::Processor processor;
+	processor.attach_ram(&ram);
 
-		vortex::RAM ram(RAM_PAGE_SIZE);
-		vortex::Processor processor;
-		processor.attach_ram(&ram);
+	for (auto program : programs) {
+		std::cout << "Running " << program << "..." << std::endl;		
 
 		std::string program_ext(fileExtension(program));
 		if (program_ext == "bin") {

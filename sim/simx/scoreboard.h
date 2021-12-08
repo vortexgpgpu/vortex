@@ -24,11 +24,16 @@ public:
         , in_use_fregs_(arch.num_warps())
         , in_use_vregs_(arch.num_warps())
     {
-        for (int w = 0; w < arch.num_warps(); ++w) {    
-            in_use_iregs_.at(w).reset();
-            in_use_fregs_.at(w).reset();
-            in_use_vregs_.at(w).reset();    
+        this->clear();
+    }
+
+    void clear() {
+        for (int i = 0, n = in_use_iregs_.size(); i < n; ++i) {
+            in_use_iregs_.at(i).reset();
+            in_use_fregs_.at(i).reset();
+            in_use_vregs_.at(i).reset();
         }
+        owners_.clear();
     }
 
     bool in_use(pipeline_trace_t* state) const {

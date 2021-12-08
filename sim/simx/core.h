@@ -75,14 +75,12 @@ public:
 
   bool running() const;
 
-  void step(uint64_t cycle);
+  void reset();
+
+  void tick();
 
   Word id() const {
     return id_;
-  }
-
-  Warp& warp(int i) {
-    return *warps_.at(i);
   }
 
   const Decoder& decoder() {
@@ -125,13 +123,15 @@ public:
 
 private:
 
-  void schedule(uint64_t cycle);
-  void fetch(uint64_t cycle);
-  void decode(uint64_t cycle);
-  void execute(uint64_t cycle);
-  void commit(uint64_t cycle);
+  void schedule();
+  void fetch();
+  void decode();
+  void execute();
+  void commit();
   
   void writeToStdOut(Addr addr, Word data);
+
+  void cout_flush();
 
   Word id_;
   const ArchDef arch_;

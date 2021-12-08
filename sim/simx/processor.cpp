@@ -1,11 +1,11 @@
 #include "processor.h"
+#include "core.h"
 #include "constants.h"
 
 using namespace vortex;
 
 class Processor::Impl {
 private:
-  Processor* simobject_;
   std::vector<Core::Ptr> cores_;
   std::vector<Cache::Ptr> l2caches_;
   std::vector<Switch<MemReq, MemRsp>::Ptr> l2_mem_switches_;
@@ -13,12 +13,13 @@ private:
   Switch<MemReq, MemRsp>::Ptr l3_mem_switch_;
 
 public:
-  Impl(Processor* simobject, const ArchDef& arch) 
-    : simobject_(simobject)
-    , cores_(arch.num_cores())
+  Impl(const ArchDef& arch) 
+    : cores_(arch.num_cores())
     , l2caches_(NUM_CLUSTERS)
     , l2_mem_switches_(NUM_CLUSTERS)
   {
+    SimPlatform::instance().initialize();
+
     uint32_t num_cores = arch.num_cores();
     uint32_t cores_per_cluster = num_cores / NUM_CLUSTERS;
 
@@ -26,12 +27,15 @@ public:
     for (uint32_t i = 0; i < num_cores; ++i) {
         cores_.at(i) = Core::Create(arch, i);
     }
-    
-    std::vector<SimPort<MemReq>*> mem_req_ports(1);
-    std::vector<SimPort<MemRsp>*> mem_rsp_ports(1);
 
-    mem_req_ports.at(0) = &simobject_->MemReqPort;
-    mem_rsp_ports.at(0) = &simobject_->MemRspPort;
+     // setup memory simulator
+    auto memsim = MemSim::Create("dram", MemSim::Config{
+      MEMORY_BANKS,
+      arch.num_cores()
+    });
+    
+    std::vector<SimPort<MemReq>*> mem_req_ports(1, &memsim->MemReqPort);
+    std::vector<SimPort<MemRsp>*> mem_rsp_ports(1, &memsim->MemRspPort);
 
     if (L3_ENABLE) {
       l3cache_ = Cache::Create("l3cache", Cache::Config{
@@ -39,7 +43,7 @@ public:
         log2ceil(MEM_BLOCK_SIZE), // B
         2,                      // W
         0,                      // A
-        32,                    // address bits  
+        32,                     // address bits  
         L3_NUM_BANKS,           // number of banks
         L3_NUM_PORTS,           // number of ports
         NUM_CLUSTERS,           // request size 
@@ -122,10 +126,8 @@ public:
     }
   }
 
-  ~Impl() {}
-
-  void step(uint64_t cycle) {
-    __unused (cycle);
+  ~Impl() {
+    SimPlatform::instance().finalize();
   }
 
   void attach_ram(RAM* ram) {
@@ -134,28 +136,33 @@ public:
     }
   }
 
-  bool check_exit(int* exitcode) {
-    bool running = false;
-    for (auto& core : cores_) {
-      if (core->running()) {
-        running = true;
+  int run() {
+    SimPlatform::instance().reset();
+    bool running;
+    int exitcode = 0;
+    do {
+      SimPlatform::instance().tick();
+      running = false;
+      for (auto& core : cores_) {
+        if (core->running()) {
+          running = true;
+        }
+        if (core->check_exit()) {
+          exitcode = core->getIRegValue(3);
+          running = false;
+          break;
+        }
       }
-      if (core->check_exit()) {
-        *exitcode = core->getIRegValue(3);
-        return true;
-      }
-    }
-    return !running;
+    } while (running);
+
+    return exitcode;
   }
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
-Processor::Processor(const SimContext& ctx, const ArchDef& arch) 
-  : SimObject<Processor>(ctx, "Vortex")
-  , MemReqPort(this) 
-  , MemRspPort(this)
-  , impl_(new Impl(this, arch))
+Processor::Processor(const ArchDef& arch) 
+  : impl_(new Impl(arch))
 {}
 
 Processor::~Processor() {
@@ -166,10 +173,6 @@ void Processor::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
 }
 
-bool Processor::check_exit(int* exitcode) {
-  return impl_->check_exit(exitcode);
-}
-
-void Processor::step(uint64_t cycle) {
-  impl_->step(cycle);
+int Processor::run() {
+  return impl_->run();
 }

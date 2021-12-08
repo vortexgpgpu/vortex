@@ -16,6 +16,12 @@ TexUnit::TexUnit(Core* core) : core_(core) {}
 
 TexUnit::~TexUnit() {}
 
+void TexUnit::clear() {
+  for (auto& state : states_) {
+    state = 0;
+  }
+}
+
 uint32_t TexUnit::get_state(uint32_t state) {
   return states_.at(state);
 }
