@@ -30,7 +30,7 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
     , ibuffers_(arch.num_warps(), IBUF_SIZE)
     , scoreboard_(arch_) 
     , exe_units_((int)ExeType::MAX)
-    , icache_(Cache::Create("Icache", Cache::Config{
+    , icache_(Cache::Create("icache", Cache::Config{
         log2ceil(ICACHE_SIZE),  // C
         log2ceil(L1_BLOCK_SIZE),// B
         2,                      // W
@@ -45,7 +45,7 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
         NUM_WARPS,              // mshr
         2,                      // pipeline latency
       }))
-    , dcache_(Cache::Create("Dcache", Cache::Config{
+    , dcache_(Cache::Create("dcache", Cache::Config{
         log2ceil(DCACHE_SIZE),  // C
         log2ceil(L1_BLOCK_SIZE),// B
         2,                      // W
@@ -72,15 +72,6 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
     , fetch_latch_("fetch")
     , decode_latch_("decode")
     , pending_icache_(arch_.num_warps())
-    , active_warps_(1)
-    , stalled_warps_(0)
-    , last_schedule_wid_(0)
-    , issued_instrs_(0)
-    , committed_instrs_(0)
-    , csr_tex_unit_(0)
-    , ecall_(false)
-    , ebreak_(false)   
-    , perf_mem_pending_reads_(0) 
 {  
   for (int i = 0; i < arch_.num_warps(); ++i) {
     warps_.at(i) = std::make_shared<Warp>(this, i);
@@ -112,10 +103,7 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
 #endif        
     sw->ReqOut.bind(&dcache_->CoreReqPorts.at(i));
     dcache_->CoreRspPorts.at(i).bind(&sw->RspIn);
-  }
-
-  // activate warp0
-  warps_.at(0)->setTmask(0, true);
+  } 
 
   // memory perf callbacks
   MemReqPort.tx_callback([&](const MemReq& req, uint64_t cycle){
@@ -128,9 +116,62 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
     __unused (cycle);
     --perf_mem_pending_reads_;
   });
+
+  this->reset();
 }
 
 Core::~Core() {
+  this->cout_flush();
+}
+
+void Core::reset() {
+  for (auto& warp : warps_) {
+    warp->clear();
+  }
+  warps_.at(0)->setTmask(0, true);
+  active_warps_ = 1;
+
+  for (auto& tex_unit : tex_units_) {
+    tex_unit.clear();
+  }
+
+  for ( auto& barrier : barriers_) {
+    barrier.reset();
+  }
+  
+  for (auto& csr : csrs_) {
+    csr = 0;
+  }
+  
+  for (auto& fcsr : fcsrs_) {
+    fcsr = 0;
+  }
+  
+  for (auto& ibuf : ibuffers_) {
+    ibuf.clear();
+  }
+
+  scoreboard_.clear(); 
+  fetch_latch_.clear();
+  decode_latch_.clear();
+  pending_icache_.clear();  
+  stalled_warps_.reset();  
+  last_schedule_wid_ = 0;
+  issued_instrs_ = 0;
+  committed_instrs_ = 0;
+  csr_tex_unit_ = 0;
+  ecall_ = false;
+  ebreak_ = false;
+  perf_mem_pending_reads_ = 0;
+  perf_stats_ = PerfStats();
+}
+
+void Core::attach_ram(RAM* ram) {
+  // bind RAM to memory unit
+  mmu_.attach(*ram, 0, 0xFFFFFFFF);    
+}
+
+void Core::cout_flush() {
   for (auto& buf : print_bufs_) {
     auto str = buf.second.str();
     if (!str.empty()) {
@@ -139,17 +180,12 @@ Core::~Core() {
   }
 }
 
-void Core::attach_ram(RAM* ram) {
-  // bind RAM to memory unit
-  mmu_.attach(*ram, 0, 0xFFFFFFFF);    
-}
-
-void Core::step(uint64_t cycle) {
-  this->commit(cycle);
-  this->execute(cycle);
-  this->decode(cycle);
-  this->fetch(cycle);
-  this->schedule(cycle);
+void Core::tick() {
+  this->commit();
+  this->execute();
+  this->decode();
+  this->fetch();
+  this->schedule();
 
   // update perf counter  
   perf_stats_.mem_latency += perf_mem_pending_reads_;
@@ -157,9 +193,7 @@ void Core::step(uint64_t cycle) {
   DPN(2, std::flush);
 }
 
-void Core::schedule(uint64_t cycle) {
-  __unused (cycle);
-
+void Core::schedule() {
   bool foundSchedule = false;
   int scheduled_warp = last_schedule_wid_;
 
@@ -181,30 +215,27 @@ void Core::schedule(uint64_t cycle) {
   // suspend warp until decode
   stalled_warps_.set(scheduled_warp);
 
-  auto& warp = warps_.at(scheduled_warp);
-
   uint64_t uuid = (issued_instrs_++ * arch_.num_cores()) + id_;
 
   auto trace = new pipeline_trace_t(uuid, arch_);
 
+  auto& warp = warps_.at(scheduled_warp);
   warp->eval(trace);
 
-  DT(3, cycle, "pipeline-schedule: " << *trace);
+  DT(3, "pipeline-schedule: " << *trace);
 
   // advance to fetch stage  
   fetch_latch_.push(trace);
 }
 
-void Core::fetch(uint64_t cycle) {
-  __unused (cycle);
-
+void Core::fetch() {
   // handle icache reponse
   auto& icache_rsp_port = icache_->CoreRspPorts.at(0);      
   if (!icache_rsp_port.empty()){
     auto& mem_rsp = icache_rsp_port.front();
     auto trace = pending_icache_.at(mem_rsp.tag);
     decode_latch_.push(trace);
-    DT(3, cycle, "icache-rsp: addr=" << std::hex << trace->PC << ", tag=" << mem_rsp.tag << ", " << *trace);
+    DT(3, "icache-rsp: addr=" << std::hex << trace->PC << ", tag=" << mem_rsp.tag << ", " << *trace);
     pending_icache_.release(mem_rsp.tag);
     icache_rsp_port.pop();
   }
@@ -216,16 +247,15 @@ void Core::fetch(uint64_t cycle) {
     mem_req.addr  = trace->PC;
     mem_req.write = false;
     mem_req.tag   = pending_icache_.allocate(trace);    
-    mem_req.core_id = id_;
-    icache_->CoreReqPorts.at(0).send(mem_req, 1);
-    DT(3, cycle, "icache-req: addr=" << std::hex << mem_req.addr << ", tag=" << mem_req.tag << ", " << *trace);
+    mem_req.core_id = trace->cid;
+    mem_req.uuid = trace->uuid;
+    icache_->CoreReqPorts.at(0).send(mem_req, 1);    
+    DT(3, "icache-req: addr=" << std::hex << mem_req.addr << ", tag=" << mem_req.tag << ", " << *trace);
     fetch_latch_.pop();
   }    
 }
 
-void Core::decode(uint64_t cycle) {
-  __unused (cycle);
-
+void Core::decode() {
   if (decode_latch_.empty())
     return;
 
@@ -235,7 +265,7 @@ void Core::decode(uint64_t cycle) {
   auto& ibuffer = ibuffers_.at(trace->wid);
   if (ibuffer.full()) {
     if (!trace->suspend()) {
-      DT(3, cycle, "*** ibuffer-stall: " << *trace);
+      DT(3, "*** ibuffer-stall: " << *trace);
     }
     ++perf_stats_.ibuf_stalls;
     return;
@@ -257,7 +287,7 @@ void Core::decode(uint64_t cycle) {
   if (trace->exe_type == ExeType::ALU && trace->alu.type == AluType::BRANCH) 
     perf_stats_.branches += active_threads;
 
-  DT(3, cycle, "pipeline-decode: " << *trace);
+  DT(3, "pipeline-decode: " << *trace);
 
   // insert to ibuffer 
   ibuffer.push(trace);
@@ -265,9 +295,7 @@ void Core::decode(uint64_t cycle) {
   decode_latch_.pop();
 }
 
-void Core::execute(uint64_t cycle) {
-  __unused (cycle);  
-    
+void Core::execute() {    
   // issue ibuffer instructions
   for (auto& ibuffer : ibuffers_) {
     if (ibuffer.empty())
@@ -278,7 +306,7 @@ void Core::execute(uint64_t cycle) {
     // check scoreboard
     if (scoreboard_.in_use(trace)) {
       if (!trace->suspend()) {
-        DTH(3, cycle, "*** scoreboard-stall: dependents={");
+        DTH(3, "*** scoreboard-stall: dependents={");
         auto uses = scoreboard_.get_uses(trace);
         for (uint32_t i = 0, n = uses.size(); i < n; ++i) {
           auto& use = uses.at(i);
@@ -297,7 +325,7 @@ void Core::execute(uint64_t cycle) {
     // update scoreboard
     scoreboard_.reserve(trace);
 
-    DT(3, cycle, "pipeline-issue: " << *trace);
+    DT(3, "pipeline-issue: " << *trace);
 
     // push to execute units
     auto& exe_unit = exe_units_.at((int)trace->exe_type);
@@ -308,9 +336,7 @@ void Core::execute(uint64_t cycle) {
   }
 }
 
-void Core::commit(uint64_t cycle) {
-  __unused (cycle);
-  
+void Core::commit() {  
   // commit completed instructions
   bool wb = false;
   for (auto& exe_unit : exe_units_) {
@@ -323,7 +349,7 @@ void Core::commit(uint64_t cycle) {
       wb |= trace->wb;
 
       // advance to commit stage
-      DT(3, cycle, "pipeline-commit: " << *trace);
+      DT(3, "pipeline-commit: " << *trace);
 
       // update scoreboard
       scoreboard_.release(trace);

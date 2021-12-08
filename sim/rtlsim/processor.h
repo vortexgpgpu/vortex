@@ -8,11 +8,9 @@ class Processor {
 public:
   
   Processor();
-  virtual ~Processor();
+  ~Processor();
 
   void attach_ram(RAM* ram);
-
-  void reset();
 
   int run();
 

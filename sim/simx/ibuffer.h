@@ -34,6 +34,11 @@ public:
     void pop() {
         return entries_.pop();
     }
+
+    void clear() {
+        std::queue<pipeline_trace_t*> empty;
+        std::swap(entries_, empty );
+    }
 };
 
 }

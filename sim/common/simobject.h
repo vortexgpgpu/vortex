@@ -127,7 +127,7 @@ public:
 
   virtual ~SimEventBase() {}
   
-  virtual void fire() const  = 0;
+  virtual void fire() const = 0;
 
   uint64_t time() const {
     return time_;
@@ -219,15 +219,21 @@ public:
 
   const std::string& name() const {
     return name_;
-  }
-
-  virtual void step(uint64_t cycle) = 0;
+  } 
 
 protected:
 
   SimObjectBase(const SimContext& ctx, const char* name); 
 
+private:
+
+  virtual void do_reset() = 0;
+
+  virtual void do_tick() = 0;
+
   std::string name_;
+
+  friend class SimPlatform;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -246,18 +252,22 @@ protected:
     : SimObjectBase(ctx, name) 
   {}
 
-  void step(uint64_t cycle) override {
-    this->impl().step(cycle);
-  }
-
 private:
 
-  const Impl& impl() const {
-    return static_cast<const Impl&>(*this);
+  const Impl* impl() const {
+    return static_cast<const Impl*>(this);
   }
 
-  Impl& impl() {
-    return static_cast<Impl&>(*this);
+  Impl* impl() {
+    return static_cast<Impl*>(this);
+  }
+
+  void do_reset() override {
+    this->impl()->reset();
+  }
+
+  void do_tick() override {
+    this->impl()->tick();
   }
 };
 
@@ -280,10 +290,6 @@ public:
   bool initialize() {
     //--
     return true;
-  }
-
-  void flush() {
-    instance().clear();
   }
 
   void finalize() {
@@ -310,7 +316,15 @@ public:
     events_.emplace_back(evt);
   }
 
-  void step() {
+  void reset() {
+    events_.clear();
+    for (auto& object : objects_) {
+      object->do_reset();
+    }
+    cycles_ = 0;
+  }
+
+  void tick() {
     // evaluate events
     auto evt_it = events_.begin();
     auto evt_it_end = events_.end();
@@ -325,7 +339,7 @@ public:
     }
     // evaluate components
     for (auto& object : objects_) {
-      object->step(cycles_);
+      object->do_tick();
     }
     // advance clock    
     ++cycles_;

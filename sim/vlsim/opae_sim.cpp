@@ -23,6 +23,7 @@
 
 #include <future>
 #include <list>
+#include <queue>
 #include <unordered_map>
 
 #ifndef MEMORY_BANKS 
@@ -33,8 +34,12 @@
   #endif
 #endif
 
+#ifndef MEM_CYCLE_RATIO
+#define MEM_CYCLE_RATIO -1
+#endif
+
 #undef MEM_BLOCK_SIZE
-#define MEM_BLOCK_SIZE    (PLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH / 8)
+#define MEM_BLOCK_SIZE (PLATFORM_PARAM_LOCAL_MEMORY_DATA_WIDTH / 8)
 
 #define CACHE_BLOCK_SIZE  64
 
@@ -42,8 +47,6 @@
 #define CCI_RAND_MOD 8
 #define CCI_RQ_SIZE 16
 #define CCI_WQ_SIZE 16
-
-#define ENABLE_MEM_STALLS
 
 #ifndef TRACE_START_TIME
 #define TRACE_START_TIME 0ull
@@ -144,7 +147,7 @@ public:
     future_ = std::async(std::launch::async, [&]{                 
         while (!stop_) {
             std::lock_guard<std::mutex> guard(mutex_);
-            this->step();
+            this->tick();
         }
     }); 
   }
@@ -206,7 +209,7 @@ public:
     device_->vcp2af_sRxPort_c0_ReqMmioHdr_address = offset / 4;
     device_->vcp2af_sRxPort_c0_ReqMmioHdr_length = 1;
     device_->vcp2af_sRxPort_c0_ReqMmioHdr_tid = 0;
-    this->step();
+    this->tick();
     device_->vcp2af_sRxPort_c0_mmioRdValid = 0;
     assert(device_->af2cp_sTxPort_c2_mmioRdValid);  
     *value = device_->af2cp_sTxPort_c2_data;
@@ -220,7 +223,7 @@ public:
     device_->vcp2af_sRxPort_c0_ReqMmioHdr_length = 1;
     device_->vcp2af_sRxPort_c0_ReqMmioHdr_tid = 0;
     memcpy(device_->vcp2af_sRxPort_c0_data, &value, 8);
-    this->step();
+    this->tick();
     device_->vcp2af_sRxPort_c0_mmioWrValid = 0;
   }
 
@@ -257,17 +260,29 @@ private:
     Verilated::assertOn(true);
   }
 
-  void step() {
+  void tick() {
     this->sRxPort_bus();
     this->sTxPort_bus();
     this->avs_bus();
+
+    if (!dram_queue_.empty()) {
+      if (dram_->send(dram_queue_.front()))
+        dram_queue_.pop();
+    }
         
     device_->clk = 0;
     this->eval();
     device_->clk = 1;
     this->eval();
 
-    dram_->tick();
+    if (MEM_CYCLE_RATIO > 0) { 
+      auto cycle = timestamp / 2;
+      if ((cycle % MEM_CYCLE_RATIO) == 0)
+        dram_->tick();
+    } else {
+      for (int i = MEM_CYCLE_RATIO; i <= 0; ++i)
+        dram_->tick();            
+    }
 
   #ifndef NDEBUG
     fflush(stdout);
@@ -403,7 +418,7 @@ private:
           ramulator::Request::Type::WRITE,
           0
         );
-        dram_->send(dram_req);
+        dram_queue_.push(dram_req);
       }
 
       if (device_->avs_read[b]) {
@@ -431,7 +446,7 @@ private:
             }, placeholders::_1, mem_req),
           0
         );
-        dram_->send(dram_req);
+        dram_queue_.push(dram_req);
       }
 
       device_->avs_waitrequest[b] = false;
@@ -479,6 +494,8 @@ private:
   RAM *ram_;
 
   ramulator::Gem5Wrapper* dram_;
+
+  std::queue<ramulator::Request> dram_queue_;
 
   Vvortex_afu_shim *device_;
 #ifdef VCD_OUTPUT

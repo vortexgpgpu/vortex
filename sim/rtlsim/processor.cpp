@@ -22,6 +22,7 @@
 #include <VX_config.h>
 #include <ostream>
 #include <list>
+#include <queue>
 #include <vector>
 #include <sstream> 
 #include <unordered_map>
@@ -39,7 +40,9 @@
   #endif
 #endif
 
-#define ENABLE_MEM_STALLS
+#ifndef MEM_CYCLE_RATIO
+#define MEM_CYCLE_RATIO -1
+#endif
 
 #ifndef TRACE_START_TIME
 #define TRACE_START_TIME 0ull
@@ -126,12 +129,7 @@ public:
   }
 
   ~Impl() {
-    for (auto& buf : print_bufs_) {
-      auto str = buf.second.str();
-      if (!str.empty()) {
-        std::cout << "#" << buf.first << ": " << str << std::endl;
-      }
-    }
+    this->cout_flush();
 
   #ifdef VCD_OUTPUT
     trace_->close();
@@ -147,9 +145,45 @@ public:
     }
   }
 
+  void cout_flush() {
+    for (auto& buf : print_bufs_) {
+      auto str = buf.second.str();
+      if (!str.empty()) {
+        std::cout << "#" << buf.first << ": " << str << std::endl;
+      }
+    }
+  }
+
   void attach_ram(RAM* ram) {
     ram_ = ram;
   }
+
+  int run() {
+    int exitcode = 0;
+
+  #ifndef NDEBUG
+    std::cout << std::dec << timestamp << ": [sim] run()" << std::endl;
+  #endif
+
+    // reset device
+    this->reset();
+
+    // execute program
+    while (device_->busy) {
+      if (get_ebreak()) {
+        exitcode = get_last_wb_value(3);
+        break;  
+      }
+      this->tick();
+    }
+
+    // wait 5 cycles to flush the pipeline
+    this->wait(5);  
+
+    return exitcode;
+  }
+
+private:
 
   void reset() { 
     print_bufs_.clear();
@@ -178,33 +212,11 @@ public:
     
     // Turn on assertion after reset
     Verilated::assertOn(true);
+
+    this->cout_flush();
   }
 
-  int run() {
-    int exitcode = 0;
-
-  #ifndef NDEBUG
-    std::cout << std::dec << timestamp << ": [sim] run()" << std::endl;
-  #endif
-
-    // execute program
-    while (device_->busy) {
-      if (get_ebreak()) {
-        exitcode = get_last_wb_value(3);
-        break;  
-      }
-      this->step();
-    }
-
-    // wait 5 cycles to flush the pipeline
-    this->wait(5);  
-
-    return exitcode;
-  }
-
-private:
-
-  void step() {
+  void tick() {
 
     device_->clk = 0;
     this->eval();
@@ -224,7 +236,19 @@ private:
     this->eval_avs_bus(1);
   #endif
 
-    dram_->tick();
+    if (MEM_CYCLE_RATIO > 0) { 
+      auto cycle = timestamp / 2;
+      if ((cycle % MEM_CYCLE_RATIO) == 0)
+        dram_->tick();
+    } else {
+      for (int i = MEM_CYCLE_RATIO; i <= 0; ++i)
+        dram_->tick();            
+    }
+
+    if (!dram_queue_.empty()) {
+      if (dram_->send(dram_queue_.front()))
+        dram_queue_.pop();
+    }
 
   #ifndef NDEBUG
     fflush(stdout);
@@ -372,7 +396,7 @@ private:
             ramulator::Request::Type::WRITE,
             0
           );
-          dram_->send(dram_req);
+          dram_queue_.push(dram_req);
         }        
       } else {
         // process reads
@@ -393,7 +417,7 @@ private:
             }, placeholders::_1, mem_req),
           0
         );
-        dram_->send(dram_req);
+        dram_queue_.push(dram_req);
       } 
     } 
 
@@ -490,7 +514,7 @@ private:
             ramulator::Request::Type::WRITE,
             0
           );
-          dram_->send(dram_req);
+          dram_queue_.push(dram_req);
         }
       } else {
         // process reads
@@ -511,7 +535,7 @@ private:
             }, placeholders::_1, mem_req),
           0
         );
-        dram_->send(dram_req);
+        dram_queue_.push(dram_req);
       }
     }   
 
@@ -522,7 +546,7 @@ private:
 
   void wait(uint32_t cycles) {
     for (int i = 0; i < cycles; ++i) {
-      this->step();
+      this->tick();
     }
   }
 
@@ -574,6 +598,8 @@ private:
   RAM *ram_;
 
   ramulator::Gem5Wrapper* dram_;
+
+  std::queue<ramulator::Request> dram_queue_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -588,10 +614,6 @@ Processor::~Processor() {
 
 void Processor::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
-}
-
-void Processor::reset() {
-  impl_->reset();
 }
 
 int Processor::run() {

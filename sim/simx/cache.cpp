@@ -102,6 +102,12 @@ struct block_t {
 struct set_t {
     std::vector<block_t> blocks;    
     set_t(uint32_t size) : blocks(size) {}
+
+    void clear() {
+        for (auto& block : blocks) {
+            block.valid = false;
+        }
+    }
 };
 
 struct bank_req_info_t {
@@ -117,6 +123,7 @@ struct bank_req_t {
     uint64_t tag;
     uint32_t set_id;
     uint32_t core_id;
+    uint64_t uuid;
     std::vector<bank_req_info_t> infos;
 
     bank_req_t(uint32_t size) 
@@ -126,6 +133,7 @@ struct bank_req_t {
         , tag(0)
         , set_id(0)
         , core_id(0)
+        , uuid(0)
         , infos(size)
     {}
 };
@@ -142,20 +150,20 @@ struct mshr_entry_t : public bank_req_t {
 class MSHR {
 private:
     std::vector<mshr_entry_t> entries_;
-    uint32_t capacity_;
+    uint32_t size_;
 
 public:    
     MSHR(uint32_t size)
         : entries_(size)
-        , capacity_(0) 
+        , size_(0) 
     {}
 
     bool empty() const {
-        return (0 == capacity_);
+        return (0 == size_);
     }
     
     bool full() const {
-        return (capacity_ == entries_.size());
+        return (size_ == entries_.size());
     }
 
     int lookup(const bank_req_t& bank_req) {
@@ -178,7 +186,7 @@ public:
                 entry.valid = true;
                 entry.mshr_replay = false;
                 entry.block_id = block_id;  
-                ++capacity_;              
+                ++size_;              
                 return i;
             }
         }
@@ -204,11 +212,20 @@ public:
             if (entry.valid && entry.mshr_replay) {
                 *out = entry;
                 entry.valid = false;
-                --capacity_;
+                --size_;
                 return true;
             }
         }
         return false;
+    }
+
+    void clear() {
+        for (auto& entry : entries_) {
+            if (entry.valid && entry.mshr_replay) {
+                entry.valid = false;
+            }
+        }
+        size_ = 0;
     }
 };
 
@@ -221,6 +238,13 @@ struct bank_t {
         : sets(params.sets_per_bank, params.blocks_per_set)
         , mshr(config.mshr_size)
     {}
+
+    void clear() {
+        mshr.clear();
+        for (auto& set : sets) {
+            set.clear();
+        }
+    }
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -235,11 +259,11 @@ private:
     Switch<MemReq, MemRsp>::Ptr bypass_switch_;
     std::vector<SimPort<MemReq>> mem_req_ports_;
     std::vector<SimPort<MemRsp>>  mem_rsp_ports_;
+    uint32_t flush_cycles_;
     PerfStats perf_stats_;
     uint64_t pending_read_reqs_;
     uint64_t pending_write_reqs_;
-    uint64_t pending_fill_reqs_;
-    uint32_t flush_cycles_;
+    uint64_t pending_fill_reqs_;    
 
 public:
     Impl(Cache* simobject, const Config& config) 
@@ -249,9 +273,6 @@ public:
         , banks_(config.num_banks, {config, params_})
         , mem_req_ports_(config.num_banks, simobject)
         , mem_rsp_ports_(config.num_banks, simobject)
-        , pending_read_reqs_(0)
-        , pending_write_reqs_(0)
-        , pending_fill_reqs_(0)
     {
         bypass_switch_ = Switch<MemReq, MemRsp>::Create("bypass_arb", ArbiterType::Priority, 2);
         bypass_switch_->ReqOut.bind(&simobject->MemReqPort);
@@ -272,18 +293,27 @@ public:
 
         // calculate tag flush cycles
         flush_cycles_ = params_.sets_per_bank * params_.blocks_per_set;
-    }    
-
-    const PerfStats& perf_stats() const {
-        return perf_stats_;
     }
 
-    void step(uint64_t cycle) {
+    void reset() {
+        for (auto& bank : banks_) {
+            bank.clear();
+        }
+        perf_stats_ = PerfStats();
+        pending_read_reqs_ = 0;
+        pending_write_reqs_ = 0;
+        pending_fill_reqs_ = 0;
+    }
+
+    void tick() {
         // wait on flush cycles
         if (flush_cycles_ != 0) {
             --flush_cycles_;
             return;
         }
+
+        // per-bank pipeline request
+        std::vector<bank_req_t> pipeline_reqs(config_.num_banks, config_.ports_per_bank);
 
         // calculate memory latency
         perf_stats_.mem_latency += pending_fill_reqs_;
@@ -294,12 +324,11 @@ public:
             auto& mem_rsp = bypass_port.front();
             uint32_t req_id = mem_rsp.tag & ((1 << params_.log2_num_inputs)-1);                
             uint64_t tag = mem_rsp.tag >> params_.log2_num_inputs;
-            MemRsp core_rsp{tag, mem_rsp.core_id};
+            MemRsp core_rsp{tag, mem_rsp.core_id, mem_rsp.uuid};
             simobject_->CoreRspPorts.at(req_id).send(core_rsp, config_.latency);
+            DT(3, simobject_->name() << "-" << core_rsp);
             bypass_port.pop();
-        }
-
-        std::vector<bank_req_t> pipeline_reqs(config_.num_banks, config_.ports_per_bank);
+        }        
 
         // handle MSHR replay
         for (uint32_t bank_id = 0, n = config_.num_banks; bank_id < n; ++bank_id) {
@@ -351,6 +380,7 @@ public:
             bank_req.tag = tag;            
             bank_req.set_id = set_id;       
             bank_req.core_id = core_req.core_id;
+            bank_req.uuid = core_req.uuid;
             bank_req.infos.at(port_id) = {true, req_id, core_req.tag};
 
             auto& bank = banks_.at(bank_id);            
@@ -400,22 +430,31 @@ public:
 
             // remove request
             auto time = core_req_port.pop();
-            perf_stats_.pipeline_stalls += (cycle - time);
+            perf_stats_.pipeline_stalls += (SimPlatform::instance().cycles() - time);
         }
     
         // process active request        
         this->processBankRequest(pipeline_reqs);
+    } 
+
+    const PerfStats& perf_stats() const {
+        return perf_stats_;
     }
+
+private:
     
     void processIORequest(const MemReq& core_req, uint32_t req_id) {
         {
             MemReq mem_req(core_req);
             mem_req.tag = (core_req.tag << params_.log2_num_inputs) + req_id;
             bypass_switch_->ReqIn.at(1).send(mem_req, 1);
+            DT(3, simobject_->name() << "-" << mem_req);
         }
 
         if (core_req.write && config_.write_reponse) {
-            simobject_->CoreRspPorts.at(req_id).send(MemRsp{core_req.tag}, 1);            
+            MemRsp core_rsp{core_req.tag, core_req.core_id, core_req.uuid};
+            simobject_->CoreRspPorts.at(req_id).send(core_rsp, 1);            
+            DT(3, simobject_->name() << "-" << core_rsp);
         }
     }
 
@@ -442,8 +481,9 @@ public:
             if (pipeline_req.mshr_replay) {
                 // send core response
                 for (auto& info : pipeline_req.infos) {
-                    MemRsp core_rsp{info.req_tag, pipeline_req.core_id};
-                    simobject_->CoreRspPorts.at(info.req_id).send(core_rsp, config_.latency);           
+                    MemRsp core_rsp{info.req_tag, pipeline_req.core_id, pipeline_req.uuid};
+                    simobject_->CoreRspPorts.at(info.req_id).send(core_rsp, config_.latency);  
+                    DT(3, simobject_->name() << "-" << core_rsp);         
                 }
             } else {        
                 bool hit = false;
@@ -485,7 +525,9 @@ public:
                             mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, hit_block.tag);
                             mem_req.write = true;
                             mem_req.core_id = pipeline_req.core_id;
+                            mem_req.uuid = pipeline_req.uuid;
                             mem_req_ports_.at(bank_id).send(mem_req, 1);
+                            DT(3, simobject_->name() << "-" << mem_req);
                         } else {
                             // mark block as dirty
                             hit_block.dirty = true;
@@ -494,8 +536,9 @@ public:
                     // send core response
                     if (!pipeline_req.write || config_.write_reponse) {
                         for (auto& info : pipeline_req.infos) {     
-                            MemRsp core_rsp{info.req_tag, pipeline_req.core_id};
+                            MemRsp core_rsp{info.req_tag, pipeline_req.core_id, pipeline_req.uuid};
                             simobject_->CoreRspPorts.at(info.req_id).send(core_rsp, config_.latency);
+                            DT(3, simobject_->name() << "-" << core_rsp);
                         }
                     }
                 } else {     
@@ -516,6 +559,7 @@ public:
                             mem_req.write = true;
                             mem_req.core_id = pipeline_req.core_id;
                             mem_req_ports_.at(bank_id).send(mem_req, 1);
+                            DT(3, simobject_->name() << "-" << mem_req);
                             ++perf_stats_.evictions;
                         }
                     }
@@ -527,13 +571,16 @@ public:
                             mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, pipeline_req.tag);
                             mem_req.write = true;
                             mem_req.core_id = pipeline_req.core_id;
+                            mem_req.uuid = pipeline_req.uuid;
                             mem_req_ports_.at(bank_id).send(mem_req, 1);
+                            DT(3, simobject_->name() << "-" << mem_req);
                         }
                         // send core response
                         if (config_.write_reponse) {
                             for (auto& info : pipeline_req.infos) {         
-                                MemRsp core_rsp{info.req_tag, pipeline_req.core_id};
+                                MemRsp core_rsp{info.req_tag, pipeline_req.core_id, pipeline_req.uuid};
                                 simobject_->CoreRspPorts.at(info.req_id).send(core_rsp, config_.latency);
+                                DT(3, simobject_->name() << "-" << core_rsp);
                             }
                         }
                     } else {
@@ -550,7 +597,9 @@ public:
                             mem_req.write = false;
                             mem_req.tag   = mshr_id;
                             mem_req.core_id = pipeline_req.core_id;
+                            mem_req.uuid = pipeline_req.uuid;
                             mem_req_ports_.at(bank_id).send(mem_req, 1);
+                            DT(3, simobject_->name() << "-" << mem_req);
                             ++pending_fill_reqs_;
                         }
                     }
@@ -575,8 +624,12 @@ Cache::~Cache() {
     delete impl_;
 }
 
-void Cache::step(uint64_t cycle) {
-    impl_->step(cycle);
+void Cache::reset() {
+    impl_->reset();
+}
+
+void Cache::tick() {
+    impl_->tick();
 }
 
 const Cache::PerfStats& Cache::perf_stats() const {

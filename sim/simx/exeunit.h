@@ -18,9 +18,13 @@ public:
         , Input(this)
         , Output(this)
         , core_(core)
-    {}    
+    {}
     
     virtual ~ExeUnit() {}
+
+    virtual void reset() {}
+
+    virtual void tick() = 0;
 
 protected:
     Core* core_;
@@ -32,7 +36,7 @@ class NopUnit : public ExeUnit {
 public:
     NopUnit(const SimContext& ctx, Core*);
     
-    void step(uint64_t cycle);
+    void tick();
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -40,14 +44,16 @@ public:
 class LsuUnit : public ExeUnit {
 private:    
     uint32_t num_threads_;
-    HashTable<std::pair<pipeline_trace_t*, uint32_t>> pending_dcache_;
+    HashTable<std::pair<pipeline_trace_t*, uint32_t>> pending_rd_reqs_;
     pipeline_trace_t* fence_state_;
     bool fence_lock_;
 
 public:
     LsuUnit(const SimContext& ctx, Core*);
 
-    void step(uint64_t cycle);
+    void reset();
+
+    void tick();
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -56,7 +62,7 @@ class AluUnit : public ExeUnit {
 public:
     AluUnit(const SimContext& ctx, Core*);
     
-    void step(uint64_t cycle);
+    void tick();
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -65,7 +71,7 @@ class CsrUnit : public ExeUnit {
 public:
     CsrUnit(const SimContext& ctx, Core*);
     
-    void step(uint64_t cycle);
+    void tick();
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -74,7 +80,7 @@ class FpuUnit : public ExeUnit {
 public:
     FpuUnit(const SimContext& ctx, Core*);
     
-    void step(uint64_t cycle);
+    void tick();
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -84,12 +90,14 @@ private:
     uint32_t num_threads_;
     HashTable<std::pair<pipeline_trace_t*, uint32_t>> pending_tex_reqs_;
 
-    bool processTexRequest(uint64_t cycle, pipeline_trace_t* trace);
+    bool processTexRequest(pipeline_trace_t* trace);
     
 public:
     GpuUnit(const SimContext& ctx, Core*);
+
+    void reset();
     
-    void step(uint64_t cycle);
+    void tick();
 };
 
 }

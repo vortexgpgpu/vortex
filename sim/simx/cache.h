@@ -22,6 +22,7 @@ public:
         uint16_t mshr_size;     // MSHR buffer size
         uint8_t latency;        // pipeline latency
     };
+    
     struct PerfStats {
         uint64_t reads;
         uint64_t writes;
@@ -54,7 +55,9 @@ public:
     Cache(const SimContext& ctx, const char* name, const Config& config);
     ~Cache();
 
-    void step(uint64_t cycle);
+    void reset();
+    
+    void tick();
 
     const PerfStats& perf_stats() const;
     

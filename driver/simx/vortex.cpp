@@ -8,10 +8,16 @@
 
 #include <vortex.h>
 #include <vx_utils.h>
-#include <processor.h>
-#include <constants.h>
+
 #include <VX_config.h>
+
 #include <util.h>
+
+#include <processor.h>
+#include <archdef.h>
+#include <mem.h>
+#include <constants.h>
+
 
 using namespace vortex;
 
@@ -59,13 +65,11 @@ public:
     vx_device() 
         : arch_("rv32i", NUM_CORES * NUM_CLUSTERS, NUM_WARPS, NUM_THREADS)
         , ram_(RAM_PAGE_SIZE)
+        , processor_(arch_)
         , mem_allocation_(ALLOC_BASE_ADDR)
     {
-        // setup memory simulator
-        memsim_ = MemSim::Create(MemSim::Config{
-            DRAM_CHANNELS,
-            arch_.num_cores()
-        });
+        // attach memory module
+        processor_.attach_ram(&ram_);
     }
 
     ~vx_device() {
@@ -122,28 +126,7 @@ public:
         
         // start new run
         future_ = std::async(std::launch::async, [&]{
-            if (processor_) {                
-                // release current processor instance
-                processor_->MemReqPort.unbind();
-                memsim_->MemRspPort.unbind();
-                SimPlatform::instance().release_object(processor_);
-            }
-
-            // create new processor instance
-            processor_ = Processor::Create(arch_);
-            processor_->MemReqPort.bind(&memsim_->MemReqPort);
-            memsim_->MemRspPort.bind(&processor_->MemRspPort);
-
-            // attach memory object
-            processor_->attach_ram(&ram_);
-
-            // run simulation
-            int exitcode;   
-            for (;;) {
-                SimPlatform::instance().step();
-                if (processor_->check_exit(&exitcode))
-                    break;
-            };
+            processor_.run();
         });
         
         return 0;
@@ -167,8 +150,7 @@ public:
 private:
     ArchDef arch_;
     RAM ram_;
-    MemSim::Ptr memsim_;
-    Processor::Ptr processor_;
+    Processor processor_;
     uint64_t mem_allocation_;        
     std::future<void> future_;
 };
@@ -207,9 +189,6 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     if (nullptr == hdevice)
         return  -1;
 
-    if (!SimPlatform::instance().initialize())
-        return -1;
-
     *hdevice = new vx_device();    
 
 #ifdef DUMP_PERF_STATS
@@ -231,8 +210,6 @@ extern int vx_dev_close(vx_device_h hdevice) {
 #endif
 
     delete device;
-
-    SimPlatform::instance().finalize();
 
     return 0;
 }

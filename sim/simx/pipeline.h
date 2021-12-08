@@ -98,14 +98,40 @@ inline std::ostream &operator<<(std::ostream &os, const pipeline_trace_t& state)
   return os;
 }
 
-class PipelineLatch : public Queue<pipeline_trace_t*> {
+class PipelineLatch {
 protected:
   const char* name_;
+  std::queue<pipeline_trace_t*> queue_;
 
 public:
   PipelineLatch(const char* name = nullptr) 
     : name_(name) 
   {}
+  
+  bool empty() const {
+    return queue_.empty();
+  }
+
+  pipeline_trace_t* front() {
+    return queue_.front();
+  }
+
+  pipeline_trace_t* back() {
+    return queue_.back();
+  }
+
+  void push(pipeline_trace_t* value) {    
+    queue_.push(value);
+  }
+
+  void pop() {
+    queue_.pop();
+  }
+
+  void clear() {
+    std::queue<pipeline_trace_t*> empty;
+    std::swap(queue_, empty );
+  }
 };
 
 }

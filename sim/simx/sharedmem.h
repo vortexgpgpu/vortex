@@ -45,7 +45,11 @@ public:
     
     virtual ~SharedMem() {}
 
-    void step(uint64_t /*cycle*/) {
+    void reset() {
+        perf_stats_ = PerfStats();
+    }
+
+    void tick() {
         std::vector<bool> in_used_banks(config_.num_banks);
         for (uint32_t req_id = 0; req_id < config_.num_reqs; ++req_id) {
             auto& core_req_port = this->Inputs.at(req_id);            
