@@ -425,11 +425,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       for (int t = 0; t < num_threads; ++t) {
         if (!tmask_.test(t))
           continue;
-        Word memAddr   = ((rsdata[t][0] + immsrc) & 0xFFFFFFFC); // word aligned
+        Word mem_addr  = ((rsdata[t][0] + immsrc) & 0xFFFFFFFC); // word aligned
         Word shift_by  = ((rsdata[t][0] + immsrc) & 0x00000003) * 8;
-        Word data_read = core_->dcache_read(memAddr, 4);
-        trace->mem_addrs.at(t).push_back({memAddr, 4});
-        DP(4, "LOAD MEM: ADDRESS=0x" << std::hex << memAddr << ", DATA=0x" << data_read);
+        Word data_read = core_->dcache_read(mem_addr, 4);
+        trace->mem_addrs.at(t).push_back({mem_addr, 4});
+        DP(4, "LOAD MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << data_read);
         switch (func3) {
         case 0:
           // LBI
@@ -465,10 +465,10 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       case 6: { 
         // load word and unit strided (not checking for unit stride)
         for (int i = 0; i < vl_; i++) {
-          Word memAddr = ((rsdata[i][0]) & 0xFFFFFFFC) + (i * vtype_.vsew / 8);
-          DP(4, "LOAD MEM: ADDRESS=0x" << std::hex << memAddr);
-          Word data_read = core_->dcache_read(memAddr, 4);
-          DP(4, "Mem addr: " << std::hex << memAddr << " Data read " << data_read);
+          Word mem_addr = ((rsdata[i][0]) & 0xFFFFFFFC) + (i * vtype_.vsew / 8);
+          DP(4, "LOAD MEM: ADDRESS=0x" << std::hex << mem_addr);
+          Word data_read = core_->dcache_read(mem_addr, 4);
+          DP(4, "Mem addr: " << std::hex << mem_addr << " Data read " << data_read);
           int *result_ptr = (int *)(vd.data() + i);
           *result_ptr = data_read;            
         }
@@ -490,21 +490,21 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       for (int t = 0; t < num_threads; ++t) {
         if (!tmask_.test(t))
           continue;
-        Word memAddr = rsdata[t][0] + immsrc;
-        trace->mem_addrs.at(t).push_back({memAddr, (1u << func3)});
-        DP(4, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
+        Word mem_addr = rsdata[t][0] + immsrc;
+        trace->mem_addrs.at(t).push_back({mem_addr, (1u << func3)});
+        DP(4, "STORE MEM: ADDRESS=0x" << std::hex << mem_addr);
         switch (func3) {
         case 0:
           // SB
-          core_->dcache_write(memAddr, rsdata[t][1] & 0x000000FF, 1);
+          core_->dcache_write(mem_addr, rsdata[t][1] & 0x000000FF, 1);
           break;
         case 1:
           // SH
-          core_->dcache_write(memAddr, rsdata[t][1], 2);
+          core_->dcache_write(mem_addr, rsdata[t][1], 2);
           break;
         case 2:
           // SW
-          core_->dcache_write(memAddr, rsdata[t][1], 4);
+          core_->dcache_write(mem_addr, rsdata[t][1], 4);
           break;
         default:
           std::abort();
@@ -512,14 +512,14 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       }
     } else {
       for (int i = 0; i < vl_; i++) {
-        Word memAddr = rsdata[i][0] + (i * vtype_.vsew / 8);
-        DP(4, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
+        Word mem_addr = rsdata[i][0] + (i * vtype_.vsew / 8);
+        DP(4, "STORE MEM: ADDRESS=0x" << std::hex << mem_addr);
         switch (instr.getVlsWidth()) {
         case 6: {
           // store word and unit strided (not checking for unit stride)          
           uint32_t value = *(uint32_t *)(vreg_file_.at(instr.getVs3()).data() + i);
-          core_->dcache_write(memAddr, value, 4);
-          DP(4, "store: " << memAddr << " value:" << value);
+          core_->dcache_write(mem_addr, value, 4);
+          DP(4, "store: " << mem_addr << " value:" << value);
         } break;
         default:
           std::abort();
@@ -888,8 +888,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       for (int t = 0; t < num_threads; ++t) {
         if (!tmask_.test(t))
           continue;
-        int addr = rsdata[t][0];
-        printf("*** PREFETCHED %d ***\n", addr);
+        auto mem_addr = rsdata[t][0];
+        trace->mem_addrs.at(t).push_back({mem_addr, 4});
       }
     } break;
     default:
