@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdint>
+#include <stdint.h>
 
 #ifdef USE_VLSIM
 #include <fpga.h>

@@ -5,115 +5,85 @@
 
 #ifdef __cplusplus
 extern "C" {
-    
 #endif
+
 #ifdef __ASSEMBLY__
 #define __ASM_STR(x)	x
 #else
 #define __ASM_STR(x)	#x
 #endif
 
-#define vx_csr_swap(csr, val)	({              \
-	unsigned  __v = (unsigned )(val);	        \
-	__asm__ __volatile__ ("csrrw %0, " __ASM_STR(csr) ", %1" : "=r" (__v) : "rK" (__v) : "memory"); \
-	__v;						                \
-})
-
-#define vx_csr_read(csr)	({                  \
-	register unsigned  __v;				        \
-	__asm__ __volatile__ ("csrr %0, " __ASM_STR(csr) : "=r" (__v) :: "memory"); \
-	__v;							            \
-})
-
-#define vx_csr_write(csr, val)	({              \
-	unsigned  __v = (unsigned )(val);	        \
-	__asm__ __volatile__ ("csrw " __ASM_STR(csr) ", %0"	:: "rK" (__v) : "memory");  \
-})
-
-#define vx_csr_read_set(csr, val)	({          \
-	unsigned  __v = (unsigned )(val);           \
-	__asm__ __volatile__ ("csrrs %0, " __ASM_STR(csr) ", %1" : "=r" (__v) : "rK" (__v) : "memory"); \
-	__v;							            \
-})
-
-#define vx_csr_set(csr, val)	({              \
-	unsigned  __v = (unsigned )(val);	        \
-	__asm__ __volatile__ ("csrs " __ASM_STR(csr) ", %0"	:: "rK" (__v) : "memory");  \
-})
-
-#define vx_csr_read_clear(csr, val)	({          \
-	unsigned  __v = (unsigned )(val);	        \
-	__asm__ __volatile__ ("csrrc %0, " __ASM_STR(csr) ", %1" : "=r" (__v) : "rK" (__v) : "memory"); \
-	__v;							            \
-})
-
-#define vx_csr_clear(csr, val)	({              \
-	unsigned  __v = (unsigned )(val);           \
-	__asm__ __volatile__ ("csrc " __ASM_STR(csr) ", %0"	:: "rK" (__v) : "memory"); \
-})
-
-// Texture load
-#define vx_tex(unit, u, v, l)    ({             \
-	unsigned __r;		                        \
-    unsigned __u = u;	                        \
-    unsigned __v = v;	                        \
-    unsigned __l = l;                           \
-    __asm__ __volatile__ (".insn r4 0x6b, 5, " __ASM_STR(unit) ", %0, %1, %2, %3" : "=r"(__r) : "r"(__u), "r"(__v), "r"(__l)); \
+#define csr_read(csr) ({                        \
+	unsigned __r;	               		        \
+	__asm__ __volatile__ ("csrr %0, %1" : "=r" (__r) : "i" (csr)); \
 	__r;							            \
 })
 
-#ifdef __ASSEMBLY__
-#define __ASM_STR(x)	x
-#else
-#define __ASM_STR(x)	#x
-#endif
-
-#define vx_csr_swap(csr, val)	({              \
-	unsigned  __v = (unsigned )(val);	        \
-	__asm__ __volatile__ ("csrrw %0, " __ASM_STR(csr) ", %1" : "=r" (__v) : "rK" (__v) : "memory"); \
-	__v;						                \
+#define csr_write(csr, val)	({                  \
+	unsigned __v = (unsigned)(val);             \
+	if (__builtin_constant_p(val) && __v < 32)  \
+        __asm__ __volatile__ ("csrw %0, %1"	:: "i" (csr), "i" (__v));  \
+    else                                        \
+        __asm__ __volatile__ ("csrw %0, %1"	:: "i" (csr), "r" (__v));  \
 })
 
-#define vx_csr_read(csr)	({                  \
-	register unsigned  __v;				        \
-	__asm__ __volatile__ ("csrr %0, " __ASM_STR(csr) : "=r" (__v) :: "memory"); \
-	__v;							            \
+#define csr_swap(csr, val) ({                   \
+    unsigned __r;                               \
+	unsigned __v = (unsigned)(val);	            \
+	if (__builtin_constant_p(val) && __v < 32)  \
+        __asm__ __volatile__ ("csrrw %0, %1, %2" : "=r" (__r) : "i" (csr), "i" (__v)); \
+    else                                        \
+        __asm__ __volatile__ ("csrrw %0, %1, %2" : "=r" (__r) : "i" (csr), "r" (__v)); \
+	__r;						                \
 })
 
-#define vx_csr_write(csr, val)	({              \
-	unsigned  __v = (unsigned )(val);	        \
-	__asm__ __volatile__ ("csrw " __ASM_STR(csr) ", %0"	:: "rK" (__v) : "memory");  \
+#define csr_read_set(csr, val) ({               \
+	unsigned __r;                               \
+	unsigned __v = (unsigned)(val);	            \
+    if (__builtin_constant_p(val) && __v < 32)  \
+	    __asm__ __volatile__ ("csrrs %0, %1, %2" : "=r" (__r) : "i" (csr), "i" (__v)); \
+    else                                        \
+        __asm__ __volatile__ ("csrrs %0, %1, %2" : "=r" (__r) : "i" (csr), "r" (__v)); \
+	__r;							            \
 })
 
-#define vx_csr_read_set(csr, val)	({          \
-	unsigned  __v = (unsigned )(val);           \
-	__asm__ __volatile__ ("csrrs %0, " __ASM_STR(csr) ", %1" : "=r" (__v) : "rK" (__v) : "memory"); \
-	__v;							            \
+#define csr_set(csr, val) ({                    \
+	unsigned __v = (unsigned)(val);	            \
+    if (__builtin_constant_p(val) && __v < 32)  \
+	    __asm__ __volatile__ ("csrs %0, %1"	:: "i" (csr), "i" (__v));  \
+    else                                        \
+        __asm__ __volatile__ ("csrs %0, %1"	:: "i" (csr), "r" (__v));  \
 })
 
-#define vx_csr_set(csr, val)	({              \
-	unsigned  __v = (unsigned )(val);	        \
-	__asm__ __volatile__ ("csrs " __ASM_STR(csr) ", %0"	:: "rK" (__v) : "memory");  \
+#define csr_read_clear(csr, val) ({             \
+	unsigned __r;                               \
+	unsigned __v = (unsigned)(val);	            \
+    if (__builtin_constant_p(val) && __v < 32)  \
+	    __asm__ __volatile__ ("csrrc %0, %1, %2" : "=r" (__r) : "i" (csr), "i" (__v)); \
+    else                                        \
+        __asm__ __volatile__ ("csrrc %0, %1, %2" : "=r" (__r) : "i" (csr), "r" (__v)); \
+	__r;							            \
 })
 
-#define vx_csr_read_clear(csr, val)	({          \
-	unsigned  __v = (unsigned )(val);	        \
-	__asm__ __volatile__ ("csrrc %0, " __ASM_STR(csr) ", %1" : "=r" (__v) : "rK" (__v) : "memory"); \
-	__v;							            \
-})
-
-#define vx_csr_clear(csr, val)	({              \
-	unsigned  __v = (unsigned )(val);           \
-	__asm__ __volatile__ ("csrc " __ASM_STR(csr) ", %0"	:: "rK" (__v) : "memory"); \
+#define csr_clear(csr, val)	({                  \
+	unsigned __v = (unsigned)(val);             \
+	if (__builtin_constant_p(val) && __v < 32)  \
+        __asm__ __volatile__ ("csrc %0, %1"	:: "i" (csr), "i" (__v)); \
+    else                                        \
+        __asm__ __volatile__ ("csrc %0, %1"	:: "i" (csr), "r" (__v)); \
 })
 
 // Texture load
-#define vx_tex(unit, u, v, l)    ({             \
+#define vx_tex(unit, u, v, lod) ({              \
+	unsigned __r;                               \
+    __asm__ __volatile__ (".insn r4 0x5b, 0, %1, %0, %2, %3, %4" : "=r"(__r) : "i"(unit), "r"(u), "r"(v), "r"(lod)); \
+	__r;							            \
+})
+
+// Conditional move
+#define vx_cmov(c, t, f) ({                     \
 	unsigned __r;		                        \
-    unsigned __u = u;	                        \
-    unsigned __v = v;	                        \
-    unsigned __l = l;                           \
-    __asm__ __volatile__ (".insn r4 0x6b, 5, " __ASM_STR(unit) ", %0, %1, %2, %3" : "=r"(__r) : "r"(__u), "r"(__v), "r"(__l)); \
+    __asm__ __volatile__ (".insn r4 0x5b, 1, 0, %0, %1, %2, %3" : "=r"(__r : "r"(c), "r"(t), "r"(f)); \
 	__r;							            \
 })
 
@@ -151,7 +121,7 @@ inline void vx_barrier(unsigned barried_id, unsigned num_warps) {
 
 // Prefetch
 inline void vx_prefetch(unsigned addr) {
-    asm volatile (".insn s 0x6b, 6, x0, 0(%0)" :: "r"(addr) );
+    asm volatile (".insn s 0x6b, 5, x0, 0(%0)" :: "r"(addr) );
 }
 
 // Return active warp's thread id 

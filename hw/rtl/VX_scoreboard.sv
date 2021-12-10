@@ -60,22 +60,22 @@ module VX_scoreboard  #(
         end else begin
         `ifdef DBG_TRACE_PIPELINE
             if (ibuffer_if.valid && ~ibuffer_if.ready) begin
-                dpi_trace("%d: *** core%0d-stall: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b\n", 
+                dpi_trace("%d: *** core%0d-stall: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b (#%0d)\n", 
                     $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.rd, ibuffer_if.wb, 
-                    deq_inuse_rd, deq_inuse_rs1, deq_inuse_rs2, deq_inuse_rs3);
+                    deq_inuse_rd, deq_inuse_rs1, deq_inuse_rs2, deq_inuse_rs3, ibuffer_if.uuid);
             end
         `endif
             if (release_reg) begin
                 `ASSERT(inuse_regs[writeback_if.wid][writeback_if.rd] != 0,
-                    ("%t: *** core%0d: invalid writeback register: wid=%0d, PC=%0h, rd=%0d",
-                                $time, CORE_ID, writeback_if.wid, writeback_if.PC, writeback_if.rd));
+                    ("%t: *** core%0d: invalid writeback register: wid=%0d, PC=%0h, rd=%0d (#%0d)",
+                                $time, CORE_ID, writeback_if.wid, writeback_if.PC, writeback_if.rd,writeback_if.uuid));
             end
             if (ibuffer_if.valid && ~ibuffer_if.ready) begin            
                 deadlock_ctr <= deadlock_ctr + 1;
                 `ASSERT(deadlock_ctr < deadlock_timeout,
-                    ("%t: *** core%0d-deadlock: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b",
+                    ("%t: *** core%0d-deadlock: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b (#%0d)",
                         $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.rd, ibuffer_if.wb, 
-                        deq_inuse_rd, deq_inuse_rs1, deq_inuse_rs2, deq_inuse_rs3));
+                        deq_inuse_rd, deq_inuse_rs1, deq_inuse_rs2, deq_inuse_rs3, ibuffer_if.uuid));
             end else if (ibuffer_if.valid && ibuffer_if.ready) begin
                 deadlock_ctr <= 0;
             end

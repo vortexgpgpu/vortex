@@ -3,9 +3,8 @@
 
 `include "VX_platform.vh"
 
-`ifdef DBG_CACHE_REQ_INFO
-`include "VX_define.vh"
-`endif
+// cache request identifier
+`define DBG_CACHE_REQ_IDW       44
 
 `define REQS_BITS               `LOG2UP(NUM_REQS)
 
@@ -24,7 +23,7 @@
 
 `define WORD_ADDR_WIDTH         (32-`CLOG2(WORD_SIZE))
 `define MEM_ADDR_WIDTH          (32-`CLOG2(CACHE_LINE_SIZE))
-`define LINE_ADDR_WIDTH         (`MEM_ADDR_WIDTH-`BANK_SELECT_BITS)
+`define LINE_ADDR_WIDTH         (`MEM_ADDR_WIDTH-`CLOG2(NUM_BANKS))
 
 // Word select
 `define WORD_SELECT_BITS        `CLOG2(`WORDS_PER_LINE)
@@ -46,14 +45,13 @@
 `define TAG_SELECT_ADDR_START   (1+`LINE_SELECT_ADDR_END)
 `define TAG_SELECT_ADDR_END     (`WORD_ADDR_WIDTH-1)
 
-`define BANK_SELECT_ADDR(x)     x[`BANK_SELECT_ADDR_END : `BANK_SELECT_ADDR_START]
-
-`define LINE_SELECT_ADDR0(x)    x[`WORD_ADDR_WIDTH-1 : `LINE_SELECT_ADDR_START]
-`define LINE_SELECT_ADDRX(x)    {x[`WORD_ADDR_WIDTH-1 : `LINE_SELECT_ADDR_START], x[`BANK_SELECT_ADDR_START-1 : 1+`WORD_SELECT_ADDR_END]}
+`define SELECT_BANK_ID(x)       x[`BANK_SELECT_ADDR_END : `BANK_SELECT_ADDR_START]
+`define SELECT_LINE_ADDR0(x)    x[`WORD_ADDR_WIDTH-1 : `LINE_SELECT_ADDR_START]
+`define SELECT_LINE_ADDRX(x)    {x[`WORD_ADDR_WIDTH-1 : `LINE_SELECT_ADDR_START], x[`BANK_SELECT_ADDR_START-1 : 1+`WORD_SELECT_ADDR_END]}
 
 `define LINE_TAG_ADDR(x)        x[`LINE_ADDR_WIDTH-1 : `LINE_SELECT_BITS]
 
-`define CACHE_REQ_INFO_RNG      CORE_TAG_WIDTH-1 : (CORE_TAG_WIDTH-`DBG_CACHE_REQ_MDATAW)
+`define CACHE_REQ_ID_RNG        CORE_TAG_WIDTH-1 : (CORE_TAG_WIDTH-`DBG_CACHE_REQ_IDW)
 
 ///////////////////////////////////////////////////////////////////////////////
 

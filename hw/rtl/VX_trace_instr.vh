@@ -35,9 +35,9 @@ task trace_ex_op (
                 `INST_BR_JALR:  dpi_trace("JALR");
                 `INST_BR_ECALL: dpi_trace("ECALL");
                 `INST_BR_EBREAK:dpi_trace("EBREAK");    
-                `INST_BR_MRET:  dpi_trace("MRET");    
+                `INST_BR_URET:  dpi_trace("URET");    
                 `INST_BR_SRET:  dpi_trace("SRET");    
-                `INST_BR_DRET:  dpi_trace("DRET");    
+                `INST_BR_MRET:  dpi_trace("MRET");    
                 default:   dpi_trace("?");
             endcase                
         end else if (`INST_ALU_IS_MUL(op_mod)) begin

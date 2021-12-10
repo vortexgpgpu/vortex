@@ -4,10 +4,10 @@
 #include <stdint.h>
 
 #define DUMP_CSR_4(d, s) \
-    csr_mem[d + 0] = vx_csr_read(s + 0); \
-    csr_mem[d + 1] = vx_csr_read(s + 1); \
-    csr_mem[d + 2] = vx_csr_read(s + 2); \
-    csr_mem[d + 3] = vx_csr_read(s + 3);
+    csr_mem[d + 0] = csr_read(s + 0); \
+    csr_mem[d + 1] = csr_read(s + 1); \
+    csr_mem[d + 2] = csr_read(s + 2); \
+    csr_mem[d + 3] = csr_read(s + 3);
 
 #define DUMP_CSR_32(d, s) \
     DUMP_CSR_4(d + 0,  s + 0)  \

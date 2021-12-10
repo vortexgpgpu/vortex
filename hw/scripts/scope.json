@@ -123,9 +123,9 @@
             "!cci_pending_writes_full": 1,
             "?afu_mem_req_fire": 1,            
             "afu_mem_req_addr": 26,
-            "afu_mem_req_tag": 27,
+            "afu_mem_req_tag": "`VX_MEM_TAG_WIDTH+1",
             "?afu_mem_rsp_fire": 1,
-            "afu_mem_rsp_tag": 27
+            "afu_mem_rsp_tag": "`VX_MEM_TAG_WIDTH+1"
         },
         "afu/vortex": {
             "!reset": 1,
@@ -140,49 +140,29 @@
             "mem_rsp_tag":"`VX_MEM_TAG_WIDTH",
             "busy": 1       
         },
-        "afu/vortex/cluster/core/pipeline/fetch/icache_stage": {
-            "?icache_req_fire": 1,            
-            "icache_req_wid":"`NW_BITS",
-            "icache_req_addr": 32,
-            "icache_req_tag":"`ICACHE_CORE_TAG_ID_BITS",
-            "?icache_rsp_fire": 1,
-            "icache_rsp_data": 32,
-            "icache_rsp_tag":"`ICACHE_CORE_TAG_ID_BITS"
-        },
         "afu/vortex/cluster/core/pipeline/fetch/warp_sched": {
             "?wsched_scheduled": 1,
+            "wsched_schedule_uuid": "`UUID_BITS",
             "wsched_active_warps": "`NUM_WARPS",
             "wsched_stalled_warps": "`NUM_WARPS",
             "wsched_schedule_tmask": "`NUM_THREADS",
             "wsched_schedule_wid": "`NW_BITS",
-            "wsched_schedule_pc": "32"
+            "wsched_schedule_pc": 32         
         },
-        "afu/vortex/cluster/core/pipeline/execute/gpu_unit": {
-            "?gpu_rsp_valid": 1, 
-            "gpu_rsp_wid": "`NW_BITS", 
-            "gpu_rsp_tmc": 1, 
-            "gpu_rsp_wspawn": 1,             
-            "gpu_rsp_split": 1,
-            "gpu_rsp_barrier": 1    
-        },
-        "afu/vortex/cluster/core/pipeline/execute/lsu_unit": {
-            "?dcache_req_fire":"`NUM_THREADS",
-            "dcache_req_wid":"`NW_BITS",
-            "dcache_req_pc": 32,
-            "dcache_req_addr":"`NUM_THREADS * 32",
-            "dcache_req_rw": 1,
-            "dcache_req_byteen":"`NUM_THREADS * 4",
-            "dcache_req_data":  "`NUM_THREADS * 32",
-            "dcache_req_tag":"`LSUQ_ADDR_BITS",  
-            "?dcache_rsp_fire":"`NUM_THREADS",
-            "dcache_rsp_data":"`NUM_THREADS * 32",
-            "dcache_rsp_tag":"`LSUQ_ADDR_BITS"
+        "afu/vortex/cluster/core/pipeline/fetch/icache_stage": {
+            "?icache_req_fire": 1,            
+            "icache_req_uuid": "`UUID_BITS",
+            "icache_req_addr": 32,
+            "icache_req_tag":"`ICACHE_CORE_TAG_ID_BITS",
+            "?icache_rsp_fire": 1,
+            "icache_rsp_uuid": "`UUID_BITS",
+            "icache_rsp_data": 32,
+            "icache_rsp_tag":"`ICACHE_CORE_TAG_ID_BITS"
         },
         "afu/vortex/cluster/core/pipeline/issue": {
             "?issue_fire": 1,
-            "issue_wid":"`NW_BITS",
-            "issue_tmask":"`NUM_THREADS",
-            "issue_pc": 32,
+            "issue_uuid": "`UUID_BITS",
+            "issue_tmask":"`NUM_THREADS",            
             "issue_ex_type":"`EX_BITS",
             "issue_op_type":"`INST_OP_BITS",
             "issue_op_mod":"`INST_MOD_BITS",
@@ -198,15 +178,35 @@
             "gpr_rs2":"`NUM_THREADS * 32",
             "gpr_rs3":"`NUM_THREADS * 32",
             "?writeback_valid": 1,
-            "writeback_wid":"`NW_BITS",
-            "writeback_pc": 32,
+            "writeback_uuid": "`UUID_BITS",
             "writeback_tmask":"`NUM_THREADS",
             "writeback_rd":"`NR_BITS",
             "writeback_data":"`NUM_THREADS * 32",
             "writeback_eop": 1,
             "!scoreboard_delay": 1,        
             "!dispatch_delay": 1
-        },   
+        },
+        "afu/vortex/cluster/core/pipeline/execute/lsu_unit": {
+            "?dcache_req_fire":"`NUM_THREADS",
+            "dcache_req_uuid": "`UUID_BITS",
+            "dcache_req_addr":"`NUM_THREADS * 32",
+            "dcache_req_rw": 1,
+            "dcache_req_byteen":"`NUM_THREADS * 4",
+            "dcache_req_data":"`NUM_THREADS * 32",
+            "dcache_req_tag":"`LSUQ_ADDR_BITS",  
+            "?dcache_rsp_fire":"`NUM_THREADS",
+            "dcache_rsp_uuid": "`UUID_BITS",
+            "dcache_rsp_data":"`NUM_THREADS * 32",
+            "dcache_rsp_tag":"`LSUQ_ADDR_BITS"
+        },
+        "afu/vortex/cluster/core/pipeline/execute/gpu_unit": {
+            "?gpu_rsp_valid": 1,
+            "gpu_rsp_uuid": "`UUID_BITS", 
+            "gpu_rsp_tmc": 1, 
+            "gpu_rsp_wspawn": 1,             
+            "gpu_rsp_split": 1,
+            "gpu_rsp_barrier": 1    
+        },
         "afu/vortex/l3cache/bank, afu/vortex/cluster/l2cache/bank, afu/vortex/cluster/core/mem_unit/dcache/bank, afu/vortex/cluster/core/mem_unit/icache/bank": {
             "?valid_st0": 1,
             "?valid_st1": 1,

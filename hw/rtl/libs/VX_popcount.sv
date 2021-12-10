@@ -4,12 +4,17 @@
 module VX_popcount #(
     parameter MODEL = 1,
     parameter N     = 1,
-    parameter LOGN  = $clog2(N),
-    parameter M     = LOGN+1    
+    parameter M     = $clog2(N+1) 
 ) (
     input  wire [N-1:0] in_i,
     output wire [M-1:0] cnt_o
 );
+`ifndef SYNTHESIS
+    assign cnt_o = $countones(in_i);
+`else
+`ifdef QUARTUS
+    assign cnt_o = $countones(in_i);
+`else
     if (N == 1) begin
 
         assign cnt_o = in_i;
@@ -53,6 +58,8 @@ module VX_popcount #(
         assign cnt_o = cnt_r;
     
     end
+`endif
+`endif
 
 endmodule
 `TRACING_ON

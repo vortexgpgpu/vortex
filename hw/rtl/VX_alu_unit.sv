@@ -96,6 +96,7 @@ module VX_alu_unit #(
     wire                          alu_ready_in;
     wire                          alu_valid_out;
     wire                          alu_ready_out;
+    wire [`UUID_BITS-1:0]         alu_uuid;
     wire [`NW_BITS-1:0]           alu_wid;
     wire [`NUM_THREADS-1:0]       alu_tmask;
     wire [31:0]                   alu_PC;
@@ -112,14 +113,14 @@ module VX_alu_unit #(
     assign alu_ready_in = alu_ready_out || ~alu_valid_out;
 
     VX_pipe_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `INST_BR_BITS + 1 + 1 + 32),
+        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `INST_BR_BITS + 1 + 1 + 32),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (alu_ready_in),
-        .data_in  ({alu_valid_in,  alu_req_if.wid, alu_req_if.tmask, alu_req_if.PC, alu_req_if.rd, alu_req_if.wb, alu_jal_result, is_br_op,   br_op,   is_less,   is_equal,   br_dest}),
-        .data_out ({alu_valid_out, alu_wid,        alu_tmask,        alu_PC,        alu_rd,        alu_wb,        alu_data,       is_br_op_r, br_op_r, is_less_r, is_equal_r, br_dest_r})
+        .data_in  ({alu_valid_in,  alu_req_if.uuid, alu_req_if.wid, alu_req_if.tmask, alu_req_if.PC, alu_req_if.rd, alu_req_if.wb, alu_jal_result, is_br_op,   br_op,   is_less,   is_equal,   br_dest}),
+        .data_out ({alu_valid_out, alu_uuid,        alu_wid,        alu_tmask,        alu_PC,        alu_rd,        alu_wb,        alu_data,       is_br_op_r, br_op_r, is_less_r, is_equal_r, br_dest_r})
     );
 
     `UNUSED_VAR (br_op_r)
@@ -138,6 +139,7 @@ module VX_alu_unit #(
     wire                          mul_ready_in;
     wire                          mul_valid_out;    
     wire                          mul_ready_out;
+    wire [`UUID_BITS-1:0]         mul_uuid;
     wire [`NW_BITS-1:0]           mul_wid;
     wire [`NUM_THREADS-1:0]       mul_tmask;
     wire [31:0]                   mul_PC;
@@ -153,6 +155,7 @@ module VX_alu_unit #(
         
         // Inputs
         .alu_op     (mul_op),
+        .uuid_in    (alu_req_if.uuid),
         .wid_in     (alu_req_if.wid),
         .tmask_in   (alu_req_if.tmask),
         .PC_in      (alu_req_if.PC),
@@ -163,6 +166,7 @@ module VX_alu_unit #(
 
         // Outputs
         .wid_out    (mul_wid),
+        .uuid_out   (mul_uuid),
         .tmask_out  (mul_tmask),
         .PC_out     (mul_PC),
         .rd_out     (mul_rd),
@@ -184,6 +188,7 @@ module VX_alu_unit #(
     assign mul_valid_in = alu_req_if.valid && is_mul_op;
 
     assign alu_commit_if.valid = alu_valid_out || mul_valid_out;
+    assign alu_commit_if.uuid  = alu_valid_out ? alu_uuid  : mul_uuid;
     assign alu_commit_if.wid   = alu_valid_out ? alu_wid   : mul_wid;
     assign alu_commit_if.tmask = alu_valid_out ? alu_tmask : mul_tmask;
     assign alu_commit_if.PC    = alu_valid_out ? alu_PC    : mul_PC;
@@ -201,6 +206,7 @@ module VX_alu_unit #(
     assign alu_valid_in = alu_req_if.valid;
 
     assign alu_commit_if.valid = alu_valid_out;
+    assign alu_commit_if.uuid  = alu_uuid;
     assign alu_commit_if.wid   = alu_wid;
     assign alu_commit_if.tmask = alu_tmask;
     assign alu_commit_if.PC    = alu_PC; 
@@ -220,8 +226,8 @@ module VX_alu_unit #(
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (branch_ctl_if.valid) begin
-            dpi_trace("%d: core%0d-branch: wid=%0d, PC=%0h, taken=%b, dest=%0h\n", 
-                $time, CORE_ID, branch_ctl_if.wid, alu_commit_if.PC, branch_ctl_if.taken, branch_ctl_if.dest);
+            dpi_trace("%d: core%0d-branch: wid=%0d, PC=%0h, taken=%b, dest=%0h (#%0d)\n", 
+                $time, CORE_ID, branch_ctl_if.wid, alu_commit_if.PC, branch_ctl_if.taken, branch_ctl_if.dest, alu_uuid);
         end
     end
 `endif

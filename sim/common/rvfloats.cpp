@@ -3,8 +3,8 @@
 
 extern "C" {
 #include <softfloat.h>
-#include <softfloat/source/include/internals.h>
-#include <softfloat/source/RISCV/specialize.h>
+#include <internals.h>
+#include <../RISCV/specialize.h>
 }
 
 #define F32_SIGN 0x80000000
