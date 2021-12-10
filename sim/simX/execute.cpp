@@ -59,6 +59,7 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
   Word func3 = instr.getFunc3();
   Word func6 = instr.getFunc6();
   Word func7 = instr.getFunc7();
+  Word func2 = instr.getFunc2();
 
   auto opcode = instr.getOpcode();
   int rdest  = instr.getRDest();
@@ -346,8 +347,8 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       rd_write = true;
       break;
     case L_INST: {
-      DoubleWord memAddr   = ((rsdata[0] + immsrc) & 0xFFFFFFFC); // DoubleWord aligned
-      DoubleWord shift_by  = ((rsdata[0] + immsrc) & 0x00000003) * 8;
+      DoubleWord memAddr   = ((rsdata[0] + immsrc) & 0xFFFFFFF8); // DoubleWord aligned
+      DoubleWord shift_by  = ((rsdata[0] + immsrc) & 0x00000007) * 8;
       DoubleWord data_read = core_->dcache_read(memAddr, 8);
       D(3, "LOAD MEM: ADDRESS=0x" << std::hex << memAddr << ", DATA=0x" << data_read);
       switch (func3) {
@@ -583,8 +584,13 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         DoubleWord memAddr = rsdata[0] + immsrc;
         DoubleWord data_read = core_->dcache_read(memAddr, 4);        
         D(3, "LOAD MEM: ADDRESS=0x" << std::hex << memAddr << ", DATA=0x" << data_read);
-        // simx64
         rddata = data_read | 0xFFFFFFFF00000000;
+      } else if (func3 == 0x3) {
+        // RV32D: FLD
+        DoubleWord memAddr = ((rsdata[0] + immsrc) & 0xFFFFFFF8);
+        DoubleWord data_read = core_->dcache_read(memAddr, 8);        
+        D(3, "LOAD MEM: ADDRESS=0x" << std::hex << memAddr << ", DATA=0x" << data_read);
+        rddata = data_read;
       } else {  
         D(3, "Executing vector load");      
         D(3, "lmul: " << vtype_.vlmul << " VLEN:" << (core_->arch().vsize() * 8) << "sew: " << vtype_.vsew);
@@ -615,8 +621,14 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       break;
     case (FS | VS):
       if (func3 == 0x2) {
+        // RV32F: FSW
         DoubleWord memAddr = rsdata[0] + immsrc;
         core_->dcache_write(memAddr, rsdata[1], 4);
+        D(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
+      } else if (func3 == 0x3){
+        // RV32D: FSD
+        DoubleWord memAddr = rsdata[0] + immsrc;
+        core_->dcache_write(memAddr, rsdata[1], 8);
         D(3, "STORE MEM: ADDRESS=0x" << std::hex << memAddr);
       } else {
         for (int i = 0; i < vl_; i++) {
@@ -639,31 +651,59 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       uint32_t frm = get_fpu_rm(func3, core_, t, id_);
       uint32_t fflags = 0;
       switch (func7) {
-      case 0x00: // RV32F: FADD
+      case 0x00: // RV32F: FADD.S
         rddata = rv_fadd(rsdata[0], rsdata[1], frm, &fflags);
         break;
-      case 0x04: // RV32F: FSUB
+      case 0x01:  // RV32D: FADD.D
+        rddata = rv_fadd_d(rsdata[0], rsdata[1], frm, &fflags);
+        break;
+      case 0x04: // RV32F: FSUB.S
         rddata = rv_fsub(rsdata[0], rsdata[1], frm, &fflags);
         break;
-      case 0x08: // RV32F: FMUL
+      case 0x05: // RV32D: FSUB.D
+        rddata = rv_fsub_d(rsdata[0], rsdata[1], frm, &fflags);
+        break;
+      case 0x08: // RV32F: FMUL.S
         rddata = rv_fmul(rsdata[0], rsdata[1], frm, &fflags);
         break;
-      case 0x0c: // RV32F: FDIV
+      case 0x09: // RV32D: FMUL.D
+        rddata = rv_fmul_d(rsdata[0], rsdata[1], frm, &fflags);
+        break;
+      case 0x0c: // RV32F: FDIV.S
         rddata = rv_fdiv(rsdata[0], rsdata[1], frm, &fflags);
         break;
-      case 0x2c: // RV32F: FSQRT
+      case 0x0d: // RV32D: FDIV.D
+        rddata = rv_fdiv_d(rsdata[0], rsdata[1], frm, &fflags);
+        break;
+      case 0x2c: // RV32F: FSQRT.S
         rddata = rv_fsqrt(rsdata[0], frm, &fflags);
+        break; 
+      case 0x2d: // RV32D: FSQRT.D
+        rddata = rv_fsqrt_d(rsdata[0], frm, &fflags);
         break;        
       case 0x10:
         switch (func3) {            
         case 0: // RV32F: FSGNJ.S
-          rddata = rv_fsgnj(rsdata[0], rsdata[1]);
+          rddata = rv_fsgnj((Word)rsdata[0], (Word)rsdata[1]) | 0xFFFFFFFF00000000;
           break;          
         case 1: // RV32F: FSGNJN.S
-          rddata = rv_fsgnjn(rsdata[0], rsdata[1]);
+          rddata = rv_fsgnjn((Word)rsdata[0], (Word)rsdata[1]) | 0xFFFFFFFF00000000;
           break;          
         case 2: // RV32F: FSGNJX.S
-          rddata = rv_fsgnjx(rsdata[0], rsdata[1]);
+          rddata = rv_fsgnjx((Word)rsdata[0], (Word)rsdata[1]) | 0xFFFFFFFF00000000;
+          break;
+        }
+        break;
+      case 0x11:
+        switch (func3) {
+        case 0: // RV32D: FSGNJ.D
+          rddata = rv_fsgnj_d(rsdata[0], rsdata[1]);
+          break;          
+        case 1: // RV32D: FSGNJN.D
+          rddata = rv_fsgnjn_d(rsdata[0], rsdata[1]);
+          break;          
+        case 2: // RV32D: FSGNJX.D
+          rddata = rv_fsgnjx_d(rsdata[0], rsdata[1]);
           break;
         }
         break;
@@ -676,6 +716,19 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
           rddata = rv_fmin(rsdata[0], rsdata[1], &fflags);
         }
         break;
+      case 0x15:
+        if (func3) {
+          // RV32D: FMAX.D
+          rddata = rv_fmax_d(rsdata[0], rsdata[1], &fflags);
+        } else {
+          // RV32D: FMIN.D
+          rddata = rv_fmin_d(rsdata[0], rsdata[1], &fflags);
+        }
+        break;
+      case 0x20:  rddata = rv_dtof(rsdata[0]);
+                  break;
+      case 0x21:  rddata = rv_ftod(rsdata[0]); 
+                  break;
       case 0x60:
         switch(rsrc1) {
           case 0: 
@@ -696,6 +749,26 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
             break;
         }
         break;
+      case 0x61:
+        switch(rsrc1) {
+          case 0: 
+            // RV32D: FCVT.W.D
+            rddata = signExt(rv_ftoi_d(rsdata[0], frm, &fflags), 32, 0xFFFFFFFF);
+            break;
+          case 1:
+            // RV32D: FCVT.WU.D
+            rddata = signExt(rv_ftou_d(rsdata[0], frm, &fflags), 32, 0xFFFFFFFF);
+            break;
+          case 2:
+            // RV64D: FCVT.L.D
+            rddata = rv_ftol_d(rsdata[0], frm, &fflags);
+            break;
+          case 3:
+            // RV64D: FCVT.LU.D
+            rddata = rv_ftolu_d(rsdata[0], frm, &fflags);
+            break;
+        }
+        break;
       case 0x70:      
         if (func3) {
           // RV32F: FCLASS.S
@@ -703,6 +776,15 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
         } else {          
           // RV32F: FMV.X.W
           rddata = signExt((Word)rsdata[0], 32, 0xFFFFFFFF);
+        } 
+        break;
+      case 0x71:      
+        if (func3) {
+          // RV32D: FCLASS.D
+          rddata = rv_fclss_d(rsdata[0]);
+        } else {          
+          // RV64D: FMV.X.D
+          rddata = rsdata[0];
         } 
         break;
       case 0x50:          
@@ -719,7 +801,22 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
           // RV32F: FEQ.S
           rddata = rv_feq(rsdata[0], rsdata[1], &fflags);
           break;
-        } break;        
+        } break;   
+      case 0x51:          
+        switch(func3) {              
+        case 0:
+          // RV32D: FLE.D
+          rddata = rv_fle_d(rsdata[0], rsdata[1], &fflags);    
+          break;              
+        case 1:
+          // RV32D: FLT.D
+          rddata = rv_flt_d(rsdata[0], rsdata[1], &fflags);
+          break;              
+        case 2:
+          // RV32D: FEQ.D
+          rddata = rv_feq_d(rsdata[0], rsdata[1], &fflags);
+          break;
+        } break;       
       case 0x68:
         switch(rsrc1) {
           case 0: 
@@ -740,8 +837,32 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
             break;
         }
         break;
+      case 0x69:
+        switch(rsrc1) {
+          case 0: 
+            // RV32D: FCVT.D.W
+            rddata = rv_itof_d(rsdata[0], frm, &fflags);
+            break;
+          case 1:
+            // RV32F: FCVT.D.WU
+            rddata = rv_utof_d(rsdata[0], frm, &fflags);
+            break;
+          case 2:
+            // RV64D: FCVT.D.L
+            rddata = rv_ltof_d(rsdata[0], frm, &fflags);
+            break;
+          case 3:
+            // RV64D: FCVT.D.LU
+            rddata = rv_lutof_d(rsdata[0], frm, &fflags);
+            break;
+        }
+        break;
       case 0x78:
         // RV32F: FMV.W.X
+        rddata = rsdata[0];
+        break;
+      case 0x79:
+        // RV64D: FMV.D.X
         rddata = rsdata[0];
         break;
       }
@@ -757,20 +878,36 @@ void Warp::execute(const Instr &instr, Pipeline *pipeline) {
       Word fflags = 0;
       switch (opcode) {
       case FMADD:
-        // RV32F: FMADD
-        rddata = rv_fmadd(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
+        if (func2)
+          // RV32D: FMADD.D
+          rddata = rv_fmadd_d(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
+        else 
+          // RV32F: FMADD.S
+          rddata = rv_fmadd(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
         break;
       case FMSUB:
-        // RV32F: FMSUB
-        rddata = rv_fmsub(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
+        if (func2)
+          // RV32D: FMSUB.D
+          rddata = rv_fmsub_d(rsdata[0],rsdata[1], rsdata[2], frm, &fflags);
+        else
+          // RV32F: FMSUB.S
+          rddata = rv_fmsub(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
         break;
       case FMNMADD:
-        // RV32F: FNMADD
-        rddata = rv_fnmadd(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
+        if (func2)
+          // RV32D: FNMADD.D
+          rddata = rv_fnmadd_d(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
+        else
+          // RV32F: FNMADD.S
+          rddata = rv_fnmadd(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
         break;  
       case FMNMSUB:
-        // RV32F: FNMSUB
-        rddata = rv_fnmsub(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
+        if (func2)
+          // RV32D: FNMSUB.D
+          rddata = rv_fnmsub_d(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
+        else
+          // RV32F: FNMSUB.S
+          rddata = rv_fnmsub(rsdata[0], rsdata[1], rsdata[2], frm, &fflags);
         break;
       default:
         break;

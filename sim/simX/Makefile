@@ -1,6 +1,6 @@
 RTL_DIR = ../hw/rtl
 
-CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
+CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors -Werror -g
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I. -I../common -I../../hw
 CXXFLAGS += -I../common/softfloat/source/include
