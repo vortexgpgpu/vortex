@@ -68,9 +68,9 @@ module VX_tag_access #(
         end
         if (lookup && ~stall) begin                
             if (tag_match) begin
-                dpi_trace("%d: cache%0d:%0d tag-hit: addr=%0h, req_id=%0h, blk_addr=%0d, tag_id=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), req_id, line_addr, line_tag);                
+                dpi_trace("%d: cache%0d:%0d tag-hit: addr=%0h, blk_addr=%0d, tag_id=%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, line_tag, req_id);
             end else begin
-                dpi_trace("%d: cache%0d:%0d tag-miss: addr=%0h, req_id=%0h, blk_addr=%0d, tag_id=%0h, old_tag_id=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), req_id, line_addr, line_tag, read_tag);
+                dpi_trace("%d: cache%0d:%0d tag-miss: addr=%0h, blk_addr=%0d, tag_id=%0h, old_tag_id=%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, line_tag, read_tag, req_id);
             end
         end          
     end    

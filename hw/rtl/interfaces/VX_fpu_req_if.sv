@@ -6,7 +6,7 @@
 interface VX_fpu_req_if ();
 
     wire                    valid;
-    wire [63:0]             uuid;
+    wire [`UUID_BITS-1:0]   uuid;
     wire [`NW_BITS-1:0]     wid;
     wire [`NUM_THREADS-1:0] tmask;
     wire [31:0]             PC;

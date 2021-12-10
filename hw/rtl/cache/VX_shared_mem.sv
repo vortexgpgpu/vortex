@@ -306,10 +306,10 @@ module VX_shared_mem #(
             for (integer i = 0; i < NUM_BANKS; ++i) begin
                 if (per_bank_core_req_valid_unqual[i]) begin
                     if (per_bank_core_req_rw_unqual[i]) begin
-                        dpi_trace("%d: smem%0d:%0d core-wr-req: addr=%0h, tag=%0h, byteen=%b, data=%0h, req_id=%0h\n", 
+                        dpi_trace("%d: smem%0d:%0d core-wr-req: addr=%0h, tag=%0h, byteen=%b, data=%0h (#%0d)\n", 
                             $time, CACHE_ID, i, `LINE_TO_BYTE_ADDR(per_bank_core_req_addr_unqual[i], i), per_bank_core_req_tag_unqual[i], per_bank_core_req_byteen_unqual[i], per_bank_core_req_data_unqual[i], req_id_st0[i]);
                     end else begin
-                        dpi_trace("%d: smem%0d:%0d core-rd-req: addr=%0h, tag=%0h, req_id=%0h\n", 
+                        dpi_trace("%d: smem%0d:%0d core-rd-req: addr=%0h, tag=%0h (#%0d)\n", 
                             $time, CACHE_ID, i, `LINE_TO_BYTE_ADDR(per_bank_core_req_addr_unqual[i], i), per_bank_core_req_tag_unqual[i], req_id_st0[i]);
                     end
                 end
@@ -319,10 +319,10 @@ module VX_shared_mem #(
             for (integer i = 0; i < NUM_BANKS; ++i) begin
                 if (per_bank_core_req_valid[i]) begin
                     if (per_bank_core_req_rw[i]) begin
-                        dpi_trace("%d: smem%0d:%0d core-wr-rsp: addr=%0h, tag=%0h, data=%0h, req_id=%0h\n", 
+                        dpi_trace("%d: smem%0d:%0d core-wr-rsp: addr=%0h, tag=%0h, data=%0h (#%0d)\n", 
                             $time, CACHE_ID, i, `LINE_TO_BYTE_ADDR(per_bank_core_req_addr[i], i), per_bank_core_req_tag[i], per_bank_core_req_data[i], req_id_st1[i]);
                     end else begin
-                        dpi_trace("%d: smem%0d:%0d core-rd-rsp: addr=%0h, tag=%0h, data=%0h, req_id=%0h\n", 
+                        dpi_trace("%d: smem%0d:%0d core-rd-rsp: addr=%0h, tag=%0h, data=%0h (#%0d)\n", 
                             $time, CACHE_ID, i, `LINE_TO_BYTE_ADDR(per_bank_core_req_addr[i], i), per_bank_core_req_tag[i], per_bank_core_rsp_data[i], req_id_st1[i]);
                     end
                 end

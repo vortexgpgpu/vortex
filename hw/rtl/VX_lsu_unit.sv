@@ -28,7 +28,7 @@ module VX_lsu_unit #(
     `STATIC_ASSERT(`SMEM_SIZE == `MEM_BLOCK_SIZE * (`SMEM_SIZE / `MEM_BLOCK_SIZE), ("invalid parameter"))
     
     wire                          req_valid;
-    wire [63:0]                   req_uuid;
+    wire [`UUID_BITS-1:0]         req_uuid;
     wire [`NUM_THREADS-1:0]       req_tmask;
     wire [`NUM_THREADS-1:0][31:0] req_addr;       
     wire [`INST_LSU_BITS-1:0]     req_type;
@@ -82,7 +82,7 @@ module VX_lsu_unit #(
     wire lsu_wb = lsu_req_if.wb | lsu_req_if.is_prefetch;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 64 + `NW_BITS + `NUM_THREADS + 32 + (`NUM_THREADS * 32) + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + `INST_LSU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32)),
+        .DATAW  (1 + 1 + 1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + (`NUM_THREADS * 32) + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + `INST_LSU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32)),
         .RESETW (1)
     ) req_pipe_reg (
         .clk      (clk),
@@ -95,7 +95,7 @@ module VX_lsu_unit #(
     // Can accept new request?
     assign lsu_req_if.ready = ~stall_in && ~fence_wait;
 
-    wire [63:0] rsp_uuid;
+    wire [`UUID_BITS-1:0] rsp_uuid;
     wire [`NW_BITS-1:0] rsp_wid;
     wire [31:0] rsp_pc;
     wire [`NR_BITS-1:0] rsp_rd;
@@ -108,8 +108,6 @@ module VX_lsu_unit #(
     wire [`NUM_THREADS-1:0] rsp_rem_mask_n;
     wire [`NUM_THREADS-1:0] rsp_tmask;
 
-    reg [`DBG_CACHE_REQ_IDW-1:0] req_id;
-    wire [`DBG_CACHE_REQ_IDW-1:0] rsp_req_id;
     reg [`NUM_THREADS-1:0] req_sent_mask;
     reg is_req_start;
 
@@ -118,7 +116,6 @@ module VX_lsu_unit #(
 
     `UNUSED_VAR (rsp_type)
     `UNUSED_VAR (rsp_is_prefetch)
-    `UNUSED_VAR (rsp_req_id)
 
     wire [`NUM_THREADS-1:0][REQ_ASHIFT-1:0] req_offset, rsp_offset;
     for (genvar i = 0; i < `NUM_THREADS; i++) begin  
@@ -127,8 +124,6 @@ module VX_lsu_unit #(
 
     wire [`NUM_THREADS-1:0] dcache_req_fire = dcache_req_if.valid & dcache_req_if.ready;
 
-    wire dcache_req_fire_any = (| dcache_req_fire);
-    
     wire dcache_rsp_fire = dcache_rsp_if.valid && dcache_rsp_if.ready;
 
     wire [`NUM_THREADS-1:0] req_tmask_dup = req_tmask & {{(`NUM_THREADS-1){~req_is_dup}}, 1'b1};
@@ -141,14 +136,13 @@ module VX_lsu_unit #(
     wire mbuf_pop = dcache_rsp_fire && (0 == rsp_rem_mask_n);
     
     assign mbuf_raddr = dcache_rsp_if.tag[`CACHE_ADDR_TYPE_BITS +: `LSUQ_ADDR_BITS];
-    assign rsp_req_id = dcache_rsp_if.tag[(`CACHE_ADDR_TYPE_BITS + `LSU_TAG_ID_BITS) +: `DBG_CACHE_REQ_IDW];
     `UNUSED_VAR (dcache_rsp_if.tag)    
 
     // do not writeback from software prefetch
     wire req_wb2 = req_wb && ~req_is_prefetch;
 
     VX_index_buffer #(
-        .DATAW (64 + `NW_BITS + 32 + `NUM_THREADS + `NR_BITS + 1 + `INST_LSU_BITS + (`NUM_THREADS * REQ_ASHIFT) + 1 + 1),
+        .DATAW (`UUID_BITS + `NW_BITS + 32 + `NUM_THREADS + `NR_BITS + 1 + `INST_LSU_BITS + (`NUM_THREADS * REQ_ASHIFT) + 1 + 1),
         .SIZE  (`LSUQ_SIZE)
     ) req_metadata (
         .clk          (clk),
@@ -241,19 +235,9 @@ module VX_lsu_unit #(
         assign dcache_req_if.addr[i]   = req_addr[i][31:2];
         assign dcache_req_if.byteen[i] = mem_req_byteen;
         assign dcache_req_if.data[i]   = mem_req_data;
-        assign dcache_req_if.tag[i]    = {req_id, `LSU_TAG_ID_BITS'(req_tag), req_addr_type[i]};
+        assign dcache_req_if.tag[i]    = {req_uuid, `LSU_TAG_ID_BITS'(req_tag), req_addr_type[i]};
     end
 
-    always @(posedge clk) begin
-        if (reset) begin
-            req_id <= `DBG_CACHE_REQ_ID(1, 0);
-        end else begin
-            if (dcache_req_fire_any) begin
-                req_id <= req_id + 1;
-            end
-        end
-    end
-    
     assign ready_in = req_dep_ready && dcache_req_ready;
 
     // send store commit
@@ -298,7 +282,7 @@ module VX_lsu_unit #(
     wire load_rsp_stall = ~ld_commit_if.ready && ld_commit_if.valid;
     
     VX_pipe_register #(
-        .DATAW  (1 + 64 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1),
+        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1),
         .RESETW (1)
     ) rsp_pipe_reg (
         .clk      (clk),
@@ -325,7 +309,7 @@ module VX_lsu_unit #(
     `SCOPE_ASSIGN (dcache_rsp_tag,   mbuf_raddr);
 
 `ifndef SYNTHESIS
-    reg [`LSUQ_SIZE-1:0][(`NW_BITS + 32 + `NR_BITS + 64 + 64 + 1)-1:0] pending_reqs;
+    reg [`LSUQ_SIZE-1:0][(`NW_BITS + 32 + `NR_BITS + `UUID_BITS + 64 + 1)-1:0] pending_reqs;
     wire [63:0] delay_timeout = 10000 * (1 ** (`L2_ENABLE + `L3_ENABLE));
 
     always @(posedge clk) begin
@@ -344,23 +328,24 @@ module VX_lsu_unit #(
             if (pending_reqs[i][0]) begin 
                 `ASSERT(($time - pending_reqs[i][1 +: 64]) < delay_timeout, 
                     ("%t: *** D$%0d response timeout: remaining=%b, wid=%0d, PC=%0h, rd=%0d (#%0d)", 
-                        $time, CORE_ID, rsp_rem_mask[i], pending_reqs[i][1+64+64+32+`NR_BITS +: `NW_BITS], 
-                                                         pending_reqs[i][1+64+64+`NR_BITS +: 32], 
-                                                         pending_reqs[i][1+64+64 +: `NR_BITS],
-                                                         pending_reqs[i][1+64 +: 64]));
+                        $time, CORE_ID, rsp_rem_mask[i], pending_reqs[i][1+64+`UUID_BITS+`NR_BITS+32 +: `NW_BITS], 
+                                                         pending_reqs[i][1+64+`UUID_BITS+`NR_BITS +: 32], 
+                                                         pending_reqs[i][1+64+`UUID_BITS +: `NR_BITS],
+                                                         pending_reqs[i][1+64 +: `UUID_BITS]));
             end
         end
     end
 `endif
     
 `ifdef DBG_TRACE_CORE_DCACHE
+    wire dcache_req_fire_any = (| dcache_req_fire);
     always @(posedge clk) begin    
         if (lsu_req_if.valid && fence_wait) begin
             dpi_trace("%d: *** D$%0d fence wait\n", $time, CORE_ID);
         end
         if (dcache_req_fire_any) begin
             if (dcache_req_if.rw[0]) begin
-                dpi_trace("%d: D$%0d Wr Req: wid=%0d, PC=%0h, tmask=%b, req_id=%0h, addr=", $time, CORE_ID, req_wid, req_pc, dcache_req_fire, req_id);
+                dpi_trace("%d: D$%0d Wr Req: wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, dcache_req_fire);
                 `TRACE_ARRAY1D(req_addr, `NUM_THREADS);
                 dpi_trace(", tag=%0h, byteen=%0h, type=", req_tag, dcache_req_if.byteen);
                 `TRACE_ARRAY1D(req_addr_type, `NUM_THREADS);
@@ -368,7 +353,7 @@ module VX_lsu_unit #(
                 `TRACE_ARRAY1D(dcache_req_if.data, `NUM_THREADS);
                 dpi_trace(", (#%0d)\n", req_uuid);
             end else begin
-                dpi_trace("%d: D$%0d Rd Req: prefetch=%b, wid=%0d, PC=%0h, tmask=%b, req_id=%0h, addr=", $time, CORE_ID, req_is_prefetch, req_wid, req_pc, dcache_req_fire, req_id);
+                dpi_trace("%d: D$%0d Rd Req: prefetch=%b, wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_is_prefetch, req_wid, req_pc, dcache_req_fire);
                 `TRACE_ARRAY1D(req_addr, `NUM_THREADS);
                 dpi_trace(", tag=%0h, byteen=%0h, type=", req_tag, dcache_req_if.byteen);
                 `TRACE_ARRAY1D(req_addr_type, `NUM_THREADS);
@@ -376,8 +361,8 @@ module VX_lsu_unit #(
             end
         end
         if (dcache_rsp_fire) begin
-            dpi_trace("%d: D$%0d Rsp: prefetch=%b, wid=%0d, PC=%0h, tmask=%b, req_id=%0h, tag=%0h, rd=%0d, data=", 
-                $time, CORE_ID, rsp_is_prefetch, rsp_wid, rsp_pc, dcache_rsp_if.tmask, rsp_req_id, mbuf_raddr, rsp_rd);
+            dpi_trace("%d: D$%0d Rsp: prefetch=%b, wid=%0d, PC=%0h, tmask=%b, tag=%0h, rd=%0d, data=", 
+                $time, CORE_ID, rsp_is_prefetch, rsp_wid, rsp_pc, dcache_rsp_if.tmask, mbuf_raddr, rsp_rd);
             `TRACE_ARRAY1D(dcache_rsp_if.data, `NUM_THREADS);
             dpi_trace(", is_dup=%b (#%0d)\n", rsp_is_dup, rsp_uuid);
         end

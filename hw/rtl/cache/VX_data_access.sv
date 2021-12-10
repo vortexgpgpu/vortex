@@ -122,10 +122,10 @@ module VX_data_access #(
             dpi_trace("%d: cache%0d:%0d data-fill: addr=%0h, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, fill_data);
         end
         if (read && ~stall) begin
-            dpi_trace("%d: cache%0d:%0d data-read: addr=%0h, req_id=%0h, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), req_id, line_addr, read_data);
+            dpi_trace("%d: cache%0d:%0d data-read: addr=%0h, blk_addr=%0d, data=%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, read_data, req_id);
         end 
         if (write && ~stall) begin
-            dpi_trace("%d: cache%0d:%0d data-write: addr=%0h, req_id=%0h, byteen=%b, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), req_id, byteen, line_addr, write_data);
+            dpi_trace("%d: cache%0d:%0d data-write: addr=%0h, byteen=%b, blk_addr=%0d, data=%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), byteen, line_addr, write_data, req_id);
         end      
     end    
 `endif
