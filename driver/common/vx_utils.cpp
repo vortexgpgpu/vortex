@@ -1,17 +1,29 @@
+#include "vx_utils.h"
 #include <iostream>
 #include <fstream>
 #include <cstring>
 #include <vortex.h>
 #include <VX_config.h>
+#include <assert.h>
 
-extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, size_t size) {
+uint64_t aligned_size(uint64_t size, uint64_t alignment) {        
+    assert(0 == (alignment & (alignment - 1)));
+    return (size + alignment - 1) & ~(alignment - 1);
+}
+
+bool is_aligned(uint64_t addr, uint64_t alignment) {
+    assert(0 == (alignment & (alignment - 1)));
+    return 0 == (addr & (alignment - 1));
+}
+
+extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint64_t size) {
   int err = 0;
 
   if (NULL == content || 0 == size)
     return -1;
 
   uint32_t buffer_transfer_size = 65536;
-  unsigned kernel_base_addr;
+  uint64_t kernel_base_addr;
   err = vx_dev_caps(device, VX_CAPS_KERNEL_BASE_ADDR, &kernel_base_addr);
   if (err != 0)
     return -1;
@@ -29,9 +41,9 @@ extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, size_
   // upload content
   //
 
-  size_t offset = 0;
+  uint64_t offset = 0;
   while (offset < size) {
-    auto chunk_size = std::min<size_t>(buffer_transfer_size, size - offset);
+    auto chunk_size = std::min<uint64_t>(buffer_transfer_size, size - offset);
     std::memcpy(buf_ptr, (uint8_t*)content + offset, chunk_size);
 
     /*printf("***  Upload Kernel to 0x%0x: data=", kernel_base_addr + offset);
@@ -102,11 +114,13 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   uint64_t csr_stalls = 0;
   uint64_t alu_stalls = 0;
   uint64_t gpu_stalls = 0;
+  // PERF: decode
+  uint64_t loads = 0;
+  uint64_t stores = 0;
+  uint64_t branches = 0;
   // PERF: Icache 
   uint64_t icache_reads = 0;
   uint64_t icache_read_misses = 0;
-  uint64_t icache_pipe_stalls = 0;
-  uint64_t icache_rsp_stalls = 0;
   // PERF: Dcache 
   uint64_t dcache_reads = 0;
   uint64_t dcache_writes = 0;
@@ -114,20 +128,22 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   uint64_t dcache_write_misses = 0;
   uint64_t dcache_bank_stalls = 0;  
   uint64_t dcache_mshr_stalls = 0;
-  uint64_t dcache_pipe_stalls = 0;
-  uint64_t dcache_rsp_stalls = 0;  
-  // PERF: SMEM
+  // PERF: shared memory
   uint64_t smem_reads = 0;
   uint64_t smem_writes = 0;
   uint64_t smem_bank_stalls = 0;
   // PERF: memory
   uint64_t mem_reads = 0;
   uint64_t mem_writes = 0;
-  uint64_t mem_stalls = 0;
   uint64_t mem_lat = 0;
+#ifdef EXT_TEX_ENABLE
+  // PERF: texunit
+  uint64_t tex_mem_reads = 0;
+  uint64_t tex_mem_lat = 0;
+#endif
 #endif     
 
-  unsigned num_cores;
+  uint64_t num_cores;
   ret = vx_dev_caps(device, VX_CAPS_MAX_CORES, &num_cores);
   if (ret != 0)
     return ret;
@@ -184,6 +200,20 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     if (num_cores > 1) fprintf(stream, "PERF: core%d: gpu unit stalls=%ld\n", core_id, gpu_stalls_per_core);
     gpu_stalls += gpu_stalls_per_core;  
 
+    // PERF: decode
+    // loads
+    uint64_t loads_per_core = get_csr_64(staging_ptr, CSR_MPM_LOADS);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: loads=%ld\n", core_id, loads_per_core);
+    loads += loads_per_core;
+    // stores
+    uint64_t stores_per_core = get_csr_64(staging_ptr, CSR_MPM_STORES);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: stores=%ld\n", core_id, stores_per_core);
+    stores += stores_per_core;
+    // branches
+    uint64_t branches_per_core = get_csr_64(staging_ptr, CSR_MPM_BRANCHES);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: branches=%ld\n", core_id, branches_per_core);
+    branches += branches_per_core;
+
     // PERF: Icache
     // total reads
     uint64_t icache_reads_per_core = get_csr_64(staging_ptr, CSR_MPM_ICACHE_READS);
@@ -192,16 +222,8 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     // read misses
     uint64_t icache_miss_r_per_core = get_csr_64(staging_ptr, CSR_MPM_ICACHE_MISS_R);
     int icache_read_hit_ratio = (int)((1.0 - (double(icache_miss_r_per_core) / double(icache_reads_per_core))) * 100);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: icache read misses=%ld (hit ratio=%d%%)\n", core_id, icache_miss_r_per_core, icache_read_hit_ratio);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: icache misses=%ld (hit ratio=%d%%)\n", core_id, icache_miss_r_per_core, icache_read_hit_ratio);
     icache_read_misses += icache_miss_r_per_core;
-    // pipeline stalls
-    uint64_t icache_pipe_st_per_core = get_csr_64(staging_ptr, CSR_MPM_ICACHE_PIPE_ST);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: icache pipeline stalls=%ld\n", core_id, icache_pipe_st_per_core);
-    icache_pipe_stalls += icache_pipe_st_per_core;
-    // response stalls
-    uint64_t icache_crsp_st_per_core = get_csr_64(staging_ptr, CSR_MPM_ICACHE_CRSP_ST);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: icache reponse stalls=%ld\n", core_id, icache_crsp_st_per_core);
-    icache_rsp_stalls += icache_crsp_st_per_core;
 
     // PERF: Dcache
     // total reads
@@ -231,14 +253,6 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     uint64_t dcache_mshr_st_per_core = get_csr_64(staging_ptr, CSR_MPM_DCACHE_MSHR_ST);
     if (num_cores > 1) fprintf(stream, "PERF: core%d: dcache mshr stalls=%ld\n", core_id, dcache_mshr_st_per_core);
     dcache_mshr_stalls += dcache_mshr_st_per_core; 
-     // pipeline stalls
-    uint64_t dcache_pipe_st_per_core = get_csr_64(staging_ptr, CSR_MPM_DCACHE_PIPE_ST);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: dcache pipeline stalls=%ld\n", core_id, dcache_pipe_st_per_core);
-    dcache_pipe_stalls += dcache_pipe_st_per_core;
-   // response stalls
-    uint64_t dcache_crsp_st_per_core = get_csr_64(staging_ptr, CSR_MPM_DCACHE_CRSP_ST);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: dcache reponse stalls=%ld\n", core_id, dcache_crsp_st_per_core);
-    dcache_rsp_stalls += dcache_crsp_st_per_core;
 
     // PERF: SMEM
     // total reads
@@ -258,17 +272,26 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     // PERF: memory
     uint64_t mem_reads_per_core  = get_csr_64(staging_ptr, CSR_MPM_MEM_READS);
     uint64_t mem_writes_per_core = get_csr_64(staging_ptr, CSR_MPM_MEM_WRITES);
-    uint64_t mem_stalls_per_core = get_csr_64(staging_ptr, CSR_MPM_MEM_ST);
     uint64_t mem_lat_per_core    = get_csr_64(staging_ptr, CSR_MPM_MEM_LAT);      
-    int mem_utilization = (int)((double(mem_reads_per_core + mem_writes_per_core) / double(mem_reads_per_core + mem_writes_per_core + mem_stalls_per_core)) * 100);
     int mem_avg_lat = (int)(double(mem_lat_per_core) / double(mem_reads_per_core));       
     if (num_cores > 1) fprintf(stream, "PERF: core%d: memory requests=%ld (reads=%ld, writes=%ld)\n", core_id, (mem_reads_per_core + mem_writes_per_core), mem_reads_per_core, mem_writes_per_core);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: memory stalls=%ld (utilization=%d%%)\n", core_id, mem_stalls_per_core, mem_utilization);
-    if (num_cores > 1) fprintf(stream, "PERF: core%d: memory average latency=%d cycles\n", core_id, mem_avg_lat);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: memory latency=%d cycles\n", core_id, mem_avg_lat);
     mem_reads  += mem_reads_per_core;
     mem_writes += mem_writes_per_core;
-    mem_stalls += mem_stalls_per_core;
     mem_lat    += mem_lat_per_core;    
+  
+  #ifdef EXT_TEX_ENABLE
+    // total reads
+    uint64_t tex_reads_per_core = get_csr_64(staging_ptr, CSR_MPM_TEX_READS);
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: tex memory reads=%ld\n", core_id, tex_reads_per_core);
+    tex_mem_reads += tex_reads_per_core;
+    
+    // read latency
+    uint64_t tex_lat_per_core = get_csr_64(staging_ptr, CSR_MPM_TEX_LAT);
+    int tex_avg_lat = (int)(double(tex_lat_per_core) / double(tex_reads_per_core));
+    if (num_cores > 1) fprintf(stream, "PERF: core%d: tex memory latency=%d cycles\n", core_id, tex_avg_lat);
+    tex_mem_lat += tex_lat_per_core;
+  #endif
   #endif
   }  
   
@@ -281,7 +304,6 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   int dcache_write_hit_ratio = (int)((1.0 - (double(dcache_write_misses) / double(dcache_writes))) * 100);
   int dcache_bank_utilization = (int)((double(dcache_reads + dcache_writes) / double(dcache_reads + dcache_writes + dcache_bank_stalls)) * 100);
   int smem_bank_utilization = (int)((double(smem_reads + smem_writes) / double(smem_reads + smem_writes + smem_bank_stalls)) * 100);
-  int mem_utilization = (int)((double(mem_reads + mem_writes) / double(mem_reads + mem_writes + mem_stalls)) * 100);
   int mem_avg_lat = (int)(double(mem_lat) / double(mem_reads));
   fprintf(stream, "PERF: ibuffer stalls=%ld\n", ibuffer_stalls);
   fprintf(stream, "PERF: scoreboard stalls=%ld\n", scoreboard_stalls);
@@ -290,24 +312,27 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   fprintf(stream, "PERF: csr unit stalls=%ld\n", csr_stalls);
   fprintf(stream, "PERF: fpu unit stalls=%ld\n", fpu_stalls);
   fprintf(stream, "PERF: gpu unit stalls=%ld\n", gpu_stalls);
+  fprintf(stream, "PERF: loads=%ld\n", loads);
+  fprintf(stream, "PERF: stores=%ld\n", stores);
+  fprintf(stream, "PERF: branches=%ld\n", branches);
   fprintf(stream, "PERF: icache reads=%ld\n", icache_reads);
   fprintf(stream, "PERF: icache read misses=%ld (hit ratio=%d%%)\n", icache_read_misses, icache_read_hit_ratio);
-  fprintf(stream, "PERF: icache pipeline stalls=%ld\n", icache_pipe_stalls);  
-  fprintf(stream, "PERF: icache reponse stalls=%ld\n", icache_rsp_stalls);
   fprintf(stream, "PERF: dcache reads=%ld\n", dcache_reads);
   fprintf(stream, "PERF: dcache writes=%ld\n", dcache_writes);
   fprintf(stream, "PERF: dcache read misses=%ld (hit ratio=%d%%)\n", dcache_read_misses, dcache_read_hit_ratio);
   fprintf(stream, "PERF: dcache write misses=%ld (hit ratio=%d%%)\n", dcache_write_misses, dcache_write_hit_ratio);  
   fprintf(stream, "PERF: dcache bank stalls=%ld (utilization=%d%%)\n", dcache_bank_stalls, dcache_bank_utilization);
   fprintf(stream, "PERF: dcache mshr stalls=%ld\n", dcache_mshr_stalls);
-  fprintf(stream, "PERF: dcache pipeline stalls=%ld\n", dcache_pipe_stalls);
-  fprintf(stream, "PERF: dcache reponse stalls=%ld\n", dcache_rsp_stalls);
   fprintf(stream, "PERF: smem reads=%ld\n", smem_reads);
   fprintf(stream, "PERF: smem writes=%ld\n", smem_writes); 
   fprintf(stream, "PERF: smem bank stalls=%ld (utilization=%d%%)\n", smem_bank_stalls, smem_bank_utilization);
   fprintf(stream, "PERF: memory requests=%ld (reads=%ld, writes=%ld)\n", (mem_reads + mem_writes), mem_reads, mem_writes);
-  fprintf(stream, "PERF: memory stalls=%ld (utilization=%d%%)\n", mem_stalls, mem_utilization);
   fprintf(stream, "PERF: memory average latency=%d cycles\n", mem_avg_lat);
+#ifdef EXT_TEX_ENABLE
+  int tex_avg_lat = (int)(double(tex_mem_lat) / double(tex_mem_reads));
+  fprintf(stream, "PERF: tex memory reads=%ld\n", tex_mem_reads);
+  fprintf(stream, "PERF: tex memory latency=%d cycles\n", tex_avg_lat);
+#endif
 #endif
 
   // release allocated resources

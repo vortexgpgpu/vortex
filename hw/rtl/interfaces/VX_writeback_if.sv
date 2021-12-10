@@ -6,6 +6,7 @@
 interface VX_writeback_if ();
 
     wire                            valid;
+    wire [`UUID_BITS-1:0]           uuid;
     wire [`NUM_THREADS-1:0]         tmask;
     wire [`NW_BITS-1:0]             wid; 
     wire [31:0]                     PC;
@@ -16,6 +17,7 @@ interface VX_writeback_if ();
 
     modport master (
         output valid,
+        output uuid,
         output tmask,
         output wid,
         output PC,
@@ -27,6 +29,7 @@ interface VX_writeback_if ();
 
     modport slave (
         input  valid,
+        input  uuid,
         input  tmask,
         input  wid,
         input  PC,

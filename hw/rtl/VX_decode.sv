@@ -20,6 +20,10 @@ module VX_decode  #(
     input  wire         clk,
     input  wire         reset,
 
+`ifdef PERF_ENABLE
+    VX_perf_pipeline_if.decode perf_decode_if,
+`endif
+
     // inputs
     VX_ifetch_rsp_if.slave ifetch_rsp_if,
 
@@ -57,7 +61,6 @@ module VX_decode  #(
     wire [11:0] s_imm     = {func7, rd};
     wire [12:0] b_imm     = {instr[31], instr[7], instr[30:25], instr[11:8], 1'b0};
     wire [20:0] jal_imm   = {instr[31], instr[19:12], instr[20], instr[30:21], 1'b0};
-    wire [11:0] jalr_imm  = {func7, rs2};
 
     `UNUSED_VAR (rs3)
     
@@ -169,7 +172,7 @@ module VX_decode  #(
                 use_rd  = 1;
                 use_imm = 1;
                 is_wstall = 1;
-                imm     = {{20{jalr_imm[11]}}, jalr_imm};
+                imm     = {{20{u_12[11]}}, u_12};
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
             end
@@ -192,7 +195,7 @@ module VX_decode  #(
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
             end
-            `INST_F: begin
+            `INST_FENCE: begin
                 ex_type = `EX_LSU;
                 op_mod  = `INST_MOD_BITS'(1);
             end
@@ -214,9 +217,9 @@ module VX_decode  #(
                     case (u_12)
                         12'h000: op_type = `INST_OP_BITS'(`INST_BR_ECALL);
                         12'h001: op_type = `INST_OP_BITS'(`INST_BR_EBREAK);             
+                        12'h002: op_type = `INST_OP_BITS'(`INST_BR_URET);                        
+                        12'h102: op_type = `INST_OP_BITS'(`INST_BR_SRET);                        
                         12'h302: op_type = `INST_OP_BITS'(`INST_BR_MRET);
-                        12'h102: op_type = `INST_OP_BITS'(`INST_BR_SRET);
-                        12'h7B2: op_type = `INST_OP_BITS'(`INST_BR_DRET);
                         default:;
                     endcase
                     op_mod  = 1;
@@ -347,7 +350,7 @@ module VX_decode  #(
                 endcase
             end
         `endif
-            `INST_GPU: begin 
+            `INST_GPGPU: begin 
                 ex_type = `EX_GPU;
                 case (func3)
                     3'h0: begin
@@ -374,9 +377,21 @@ module VX_decode  #(
                         is_wstall = 1;
                         `USED_IREG (rs1);
                         `USED_IREG (rs2);
-                    end
-                `ifdef EXT_TEX_ENABLE
+                    end                
                     3'h5: begin
+                        ex_type = `EX_LSU;
+                        op_type = `INST_OP_BITS'(`INST_LSU_LW);
+                        op_mod  = `INST_MOD_BITS'(2);
+                        `USED_IREG (rs1);
+                    end
+                    default:;
+                endcase
+            end
+            `INST_GPU: begin                
+                case (func3)
+                `ifdef EXT_TEX_ENABLE
+                    3'h0: begin
+                        ex_type = `EX_GPU;
                         op_type = `INST_OP_BITS'(`INST_GPU_TEX);
                         op_mod  = `INST_MOD_BITS'(func2);
                         use_rd  = 1;       
@@ -386,12 +401,6 @@ module VX_decode  #(
                         `USED_IREG (rs3);
                     end
                 `endif
-                    3'h6: begin
-                        ex_type = `EX_LSU;
-                        op_type = `INST_OP_BITS'(`INST_LSU_LW);
-                        op_mod  = `INST_MOD_BITS'(2);
-                        `USED_IREG (rs1);
-                    end
                     default:;
                 endcase
             end
@@ -405,6 +414,7 @@ module VX_decode  #(
     wire wb = use_rd && (| rd_r);
 
     assign decode_if.valid     = ifetch_rsp_if.valid;
+    assign decode_if.uuid      = ifetch_rsp_if.uuid;
     assign decode_if.wid       = ifetch_rsp_if.wid;
     assign decode_if.tmask     = ifetch_rsp_if.tmask;
     assign decode_if.PC        = ifetch_rsp_if.PC;
@@ -433,6 +443,42 @@ module VX_decode  #(
 
     assign ifetch_rsp_if.ready = decode_if.ready;
 
+`ifdef PERF_ENABLE
+    wire [$clog2(`NUM_THREADS+1)-1:0] perf_loads_per_cycle;
+    wire [$clog2(`NUM_THREADS+1)-1:0] perf_stores_per_cycle;
+    wire [$clog2(`NUM_THREADS+1)-1:0] perf_branches_per_cycle;
+
+    wire [`NUM_THREADS-1:0] perf_loads_per_mask = decode_if.tmask & {`NUM_THREADS{decode_if.ex_type  == `EX_LSU && `INST_LSU_IS_MEM(decode_if.op_mod) && decode_if.wb}};
+    wire [`NUM_THREADS-1:0] perf_stores_per_mask = decode_if.tmask & {`NUM_THREADS{decode_if.ex_type == `EX_LSU && `INST_LSU_IS_MEM(decode_if.op_mod) && ~decode_if.wb}};
+    wire [`NUM_THREADS-1:0] perf_branches_per_mask = decode_if.tmask & {`NUM_THREADS{decode_if.ex_type == `EX_ALU && `INST_ALU_IS_BR(decode_if.op_mod)}};
+
+    `POP_COUNT(perf_loads_per_cycle, perf_loads_per_mask);
+    `POP_COUNT(perf_stores_per_cycle, perf_stores_per_mask);
+    `POP_COUNT(perf_branches_per_cycle, perf_branches_per_mask);
+
+    reg [`PERF_CTR_BITS-1:0] perf_loads;
+    reg [`PERF_CTR_BITS-1:0] perf_stores;
+    reg [`PERF_CTR_BITS-1:0] perf_branches;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_loads    <= 0;
+            perf_stores   <= 0;
+            perf_branches <= 0;
+        end else begin
+            if (decode_if.valid && decode_if.ready) begin
+                perf_loads    <= perf_loads + `PERF_CTR_BITS'(perf_loads_per_cycle);
+                perf_stores   <= perf_stores + `PERF_CTR_BITS'(perf_stores_per_cycle);
+                perf_branches <= perf_branches + `PERF_CTR_BITS'(perf_branches_per_cycle);
+            end
+        end
+    end
+    
+    assign perf_decode_if.loads    = perf_loads;
+    assign perf_decode_if.stores   = perf_stores;
+    assign perf_decode_if.branches = perf_branches;
+`endif
+
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (decode_if.valid && decode_if.ready) begin
@@ -440,7 +486,8 @@ module VX_decode  #(
             trace_ex_type(decode_if.ex_type);
             dpi_trace(", op=");
             trace_ex_op(decode_if.ex_type, decode_if.op_type, decode_if.op_mod);
-            dpi_trace(", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=%0h, use_pc=%b, use_imm=%b\n", decode_if.op_mod, decode_if.tmask, decode_if.wb, decode_if.rd, decode_if.rs1, decode_if.rs2, decode_if.rs3, decode_if.imm, decode_if.use_PC, decode_if.use_imm);                        
+            dpi_trace(", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=%0h, use_pc=%b, use_imm=%b (#%0d)\n",
+                decode_if.op_mod, decode_if.tmask, decode_if.wb, decode_if.rd, decode_if.rs1, decode_if.rs2, decode_if.rs3, decode_if.imm, decode_if.use_PC, decode_if.use_imm, decode_if.uuid);
         end
     end
 `endif

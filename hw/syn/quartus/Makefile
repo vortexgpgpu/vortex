@@ -1,6 +1,6 @@
 BUILD_DIR ?= build
 
-.PHONY: dogfood unittest pipeline smem cache fpu_core core vortex top1 top2 top4 top8 top16 top32 top64
+.PHONY: dogfood unittest pipeline smem cache fpu_core core vortex top1 top2 top4 top8 top16 top32 top64 texunit
 
 dogfood:
 	mkdir -p dogfood/$(BUILD_DIR)
@@ -76,3 +76,8 @@ top64:
 	mkdir -p top64/$(BUILD_DIR)
 	cp top64/Makefile top64/$(BUILD_DIR)
 	$(MAKE) -C top64/$(BUILD_DIR) clean && $(MAKE) -C top64/$(BUILD_DIR) > top64/$(BUILD_DIR)/build.log 2>&1 &
+
+texunit:
+	mkdir -p texunit/$(BUILD_DIR)
+	cp texunit/Makefile texunit/$(BUILD_DIR)
+	$(MAKE) -C texunit/$(BUILD_DIR) clean && $(MAKE) -C texunit/$(BUILD_DIR) > texunit/$(BUILD_DIR)/build.log 2>&1 &

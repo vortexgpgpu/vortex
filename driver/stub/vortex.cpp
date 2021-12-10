@@ -8,15 +8,15 @@ extern int vx_dev_close(vx_device_h /*hdevice*/) {
     return -1;
 }
 
-extern int vx_dev_caps(vx_device_h /*hdevice*/, unsigned /*caps_id*/, unsigned* /*value*/) {
+extern int vx_dev_caps(vx_device_h /*hdevice*/, uint32_t /*caps_id*/, uint64_t* /*value*/) {
     return -1;
 }
 
-extern int vx_alloc_dev_mem(vx_device_h /*hdevice*/, size_t /*size*/, size_t* /*dev_maddr*/) {
+extern int vx_alloc_dev_mem(vx_device_h /*hdevice*/, uint64_t /*size*/, uint64_t* /*dev_maddr*/) {
     return -1;
 }
 
-extern int vx_alloc_shared_mem(vx_device_h /*hdevice*/, size_t /*size*/, vx_buffer_h* /*hbuffer*/) {
+extern int vx_alloc_shared_mem(vx_device_h /*hdevice*/, uint64_t /*size*/, vx_buffer_h* /*hbuffer*/) {
     return -1;
 }
 
@@ -28,11 +28,11 @@ extern int vx_buf_release(vx_buffer_h /*hbuffer*/) {
     return -1;
 }
 
-extern int vx_copy_to_dev(vx_buffer_h /*hbuffer*/, size_t /*dev_maddr*/, size_t /*size*/, size_t /*src_offset*/) {
+extern int vx_copy_to_dev(vx_buffer_h /*hbuffer*/, uint64_t /*dev_maddr*/, uint64_t /*size*/, uint64_t /*src_offset*/) {
     return -1;
 }
 
-extern int vx_copy_from_dev(vx_buffer_h /*hbuffer*/, size_t /*dev_maddr*/, size_t /*size*/, size_t /*dest_offset*/) {
+extern int vx_copy_from_dev(vx_buffer_h /*hbuffer*/, uint64_t /*dev_maddr*/, uint64_t /*size*/, uint64_t /*dest_offset*/) {
      return -1;
 }
 
@@ -40,6 +40,6 @@ extern int vx_start(vx_device_h /*hdevice*/) {
     return -1;
 }
 
-extern int vx_ready_wait(vx_device_h /*hdevice*/, long long /*timeout*/) {
+extern int vx_ready_wait(vx_device_h /*hdevice*/, uint64_t /*timeout*/) {
     return -1;
 }

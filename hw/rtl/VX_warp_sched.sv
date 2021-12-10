@@ -46,6 +46,8 @@ module VX_warp_sched #(
     wire                    schedule_valid;
     wire                    warp_scheduled;
 
+    reg [`UUID_BITS-1:0] issued_instrs;
+
     wire ifetch_req_fire = ifetch_req_if.valid && ifetch_req_if.ready;
 
     wire tmc_active = (warp_ctl_if.tmc.tmask != 0);   
@@ -62,12 +64,13 @@ module VX_warp_sched #(
 
     always @(posedge clk) begin
         if (reset) begin
-            barrier_masks   <= 0;
-            use_wspawn      <= 0;
-            stalled_warps   <= 0;
+            barrier_masks   <= '0;
+            use_wspawn      <= '0;
+            stalled_warps   <= '0;
             warp_pcs        <= '0;
             active_warps    <= '0;
             thread_masks    <= '0;
+            issued_instrs   <= '0;
 
             // activate first warp
             warp_pcs[0]     <= `STARTUP_ADDR;
@@ -117,6 +120,8 @@ module VX_warp_sched #(
                 if (use_wspawn[schedule_wid]) begin
                     thread_masks[schedule_wid] <= 1;
                 end
+
+                issued_instrs <= issued_instrs + 1;
             end
 
             if (ifetch_req_fire) begin
@@ -223,20 +228,23 @@ module VX_warp_sched #(
 
     assign warp_scheduled = schedule_valid && ~stall_out;
 
+    wire [`UUID_BITS-1:0] instr_uuid = (issued_instrs * `NUM_CORES * `NUM_CLUSTERS) + `UUID_BITS'(CORE_ID);
+
     VX_pipe_register #( 
-        .DATAW  (1 + `NUM_THREADS + 32 + `NW_BITS),
+        .DATAW  (1 + `UUID_BITS + `NUM_THREADS + 32 + `NW_BITS),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_out),
-        .data_in  ({schedule_valid,      schedule_tmask,      schedule_pc,      schedule_wid}),
-        .data_out ({ifetch_req_if.valid, ifetch_req_if.tmask, ifetch_req_if.PC, ifetch_req_if.wid})
+        .data_in  ({schedule_valid,      instr_uuid,         schedule_tmask,      schedule_pc,      schedule_wid}),
+        .data_out ({ifetch_req_if.valid, ifetch_req_if.uuid, ifetch_req_if.tmask, ifetch_req_if.PC, ifetch_req_if.wid})
     );
 
     assign busy = (active_warps != 0); 
 
     `SCOPE_ASSIGN (wsched_scheduled,      warp_scheduled);
+    `SCOPE_ASSIGN (wsched_schedule_uuid,  instr_uuid);
     `SCOPE_ASSIGN (wsched_active_warps,   active_warps);
     `SCOPE_ASSIGN (wsched_stalled_warps,  stalled_warps);
     `SCOPE_ASSIGN (wsched_schedule_wid,   schedule_wid);

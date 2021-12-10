@@ -121,7 +121,7 @@ int run_test(const kernel_arg_t& kernel_arg,
 
   // wait for completion
   std::cout << "wait for completion" << std::endl;
-  RT_CHECK(vx_ready_wait(device, -1));
+  RT_CHECK(vx_ready_wait(device, MAX_TIMEOUT));
 
   // download destination buffer
   std::cout << "download destination buffer" << std::endl;

@@ -21,12 +21,9 @@ module VX_data_access #(
     input wire                          clk,
     input wire                          reset,
 
-`ifdef DBG_CACHE_REQ_INFO
 `IGNORE_UNUSED_BEGIN
-    input wire[31:0]                    debug_pc,
-    input wire[`NW_BITS-1:0]            debug_wid,
+    input wire[`DBG_CACHE_REQ_IDW-1:0]  req_id,
 `IGNORE_UNUSED_END
-`endif
 
     input wire                          stall,
 
@@ -125,10 +122,10 @@ module VX_data_access #(
             dpi_trace("%d: cache%0d:%0d data-fill: addr=%0h, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, fill_data);
         end
         if (read && ~stall) begin
-            dpi_trace("%d: cache%0d:%0d data-read: addr=%0h, wid=%0d, PC=%0h, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), debug_wid, debug_pc, line_addr, read_data);
+            dpi_trace("%d: cache%0d:%0d data-read: addr=%0h, blk_addr=%0d, data=%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, read_data, req_id);
         end 
         if (write && ~stall) begin
-            dpi_trace("%d: cache%0d:%0d data-write: addr=%0h, wid=%0d, PC=%0h, byteen=%b, blk_addr=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), debug_wid, debug_pc, byteen, line_addr, write_data);
+            dpi_trace("%d: cache%0d:%0d data-write: addr=%0h, byteen=%b, blk_addr=%0d, data=%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), byteen, line_addr, write_data, req_id);
         end      
     end    
 `endif

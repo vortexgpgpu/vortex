@@ -33,9 +33,6 @@ module VX_bank #(
     // core request tag size
     parameter CORE_TAG_WIDTH                = 1,
 
-    // size of tag id in core request tag
-    parameter CORE_TAG_ID_BITS              = 0,
-
     // bank offset from beginning of index range
     parameter BANK_ADDR_OFFSET              = 0,
 
@@ -51,7 +48,6 @@ module VX_bank #(
     output wire perf_read_misses,
     output wire perf_write_misses,
     output wire perf_mshr_stalls,
-    output wire perf_pipe_stalls,
 `endif
 
     // Core Request    
@@ -96,14 +92,9 @@ module VX_bank #(
     input wire [`LINE_SELECT_BITS-1:0]  flush_addr
 );
 
-    `UNUSED_PARAM (CORE_TAG_ID_BITS)
-    
-`ifdef DBG_CACHE_REQ_INFO
 `IGNORE_UNUSED_BEGIN
-    wire [31:0]         debug_pc_sel, debug_pc_st0,  debug_pc_st1;
-    wire [`NW_BITS-1:0] debug_wid_sel, debug_wid_st0, debug_wid_st1;
+    wire [`DBG_CACHE_REQ_IDW-1:0] req_id_sel, req_id_st0, req_id_st1;
 `IGNORE_UNUSED_END
-`endif    
 
     wire [NUM_PORTS-1:0] creq_pmask;
     wire [NUM_PORTS-1:0][WORD_SELECT_BITS-1:0] creq_wsel;
@@ -197,13 +188,7 @@ module VX_bank #(
     wire mem_rsp_fire = mem_rsp_valid && mem_rsp_ready;
     wire creq_fire    = creq_valid && creq_ready;
 
-`ifdef DBG_CACHE_REQ_INFO
-    if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
-        assign {debug_wid_sel, debug_pc_sel} = mshr_enable ? mshr_tag[0][`CACHE_REQ_INFO_RNG] : creq_tag[0][`CACHE_REQ_INFO_RNG];
-    end else begin        
-        assign {debug_wid_sel, debug_pc_sel} = 0;
-    end
-`endif
+    assign req_id_sel = mshr_enable ? mshr_tag[0][`CACHE_REQ_ID_RNG] : creq_tag[0][`CACHE_REQ_ID_RNG];
 
     wire [`CACHE_LINE_WIDTH-1:0] wdata_sel;    
     assign wdata_sel[(NUM_PORTS * `WORD_WIDTH)-1:0] = (mem_rsp_valid || !WRITE_ENABLE) ? mem_rsp_data[(NUM_PORTS * `WORD_WIDTH)-1:0] : creq_data;
@@ -237,13 +222,7 @@ module VX_bank #(
         .data_out ({valid_st0, is_flush_st0, is_mshr_st0, is_fill_st0, is_read_st0, is_write_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_tid_st0, pmask_st0, tag_st0, mshr_id_st0})
     );
 
-`ifdef DBG_CACHE_REQ_INFO
-    if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
-        assign {debug_wid_st0, debug_pc_st0} = tag_st0[0][`CACHE_REQ_INFO_RNG];
-    end else begin
-        assign {debug_wid_st0, debug_pc_st0} = 0;
-    end
-`endif
+    assign req_id_st0 = tag_st0[0][`CACHE_REQ_ID_RNG];
 
     wire do_fill_st0   = valid_st0 && is_fill_st0;
     wire do_flush_st0  = valid_st0 && is_flush_st0;
@@ -263,11 +242,9 @@ module VX_bank #(
         .clk       (clk),
         .reset     (reset),
 
-    `ifdef DBG_CACHE_REQ_INFO
-        .debug_pc  (debug_pc_st0),
-        .debug_wid (debug_wid_st0),
-    `endif
-        .stall      (crsq_stall),
+        .req_id    (req_id_st0),
+        
+        .stall     (crsq_stall),
 
         // read/Fill
         .lookup    (do_lookup_st0),
@@ -293,13 +270,7 @@ module VX_bank #(
         .data_out ({valid_st1, is_mshr_st1, is_fill_st1, is_read_st1, is_write_st1, miss_st1, addr_st1, wdata_st1, wsel_st1, byteen_st1, req_tid_st1, pmask_st1, tag_st1, mshr_id_st1,   mshr_pending_st1})
     ); 
 
-`ifdef DBG_CACHE_REQ_INFO
-    if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin
-        assign {debug_wid_st1, debug_pc_st1} = tag_st1[0][`CACHE_REQ_INFO_RNG];
-    end else begin        
-        assign {debug_wid_st1, debug_pc_st1} = 0;
-    end
-`endif
+    assign req_id_st1 = tag_st1[0][`CACHE_REQ_ID_RNG];
 
     wire do_read_st0  = valid_st0 && is_read_st0;
     wire do_read_st1  = valid_st1 && is_read_st1;
@@ -323,10 +294,8 @@ module VX_bank #(
         .clk        (clk),
         .reset      (reset),
 
-    `ifdef DBG_CACHE_REQ_INFO
-        .debug_pc   (debug_pc_st1),
-        .debug_wid  (debug_wid_st1),
-    `endif
+        .req_id     (req_id_st1),
+
         .stall      (crsq_stall),
 
         .read       (do_read_st1 || do_mshr_st1),      
@@ -372,14 +341,9 @@ module VX_bank #(
         .clk                (clk),
         .reset              (reset),
 
-    `ifdef DBG_CACHE_REQ_INFO
-        .deq_debug_pc       (debug_pc_sel),
-        .deq_debug_wid      (debug_wid_sel),
-        .lkp_debug_pc       (debug_pc_st0),
-        .lkp_debug_wid      (debug_wid_st0),
-        .rel_debug_pc       (debug_pc_st1),
-        .rel_debug_wid      (debug_wid_st1),
-    `endif
+        .deq_req_id         (req_id_sel),
+        .lkp_req_id         (req_id_st0),
+        .rel_req_id         (req_id_st1),
 
         // allocate
         .allocate_valid     (mshr_allocate),
@@ -505,7 +469,6 @@ module VX_bank #(
 `ifdef PERF_ENABLE
     assign perf_read_misses  = do_read_st1 && miss_st1;
     assign perf_write_misses = do_write_st1 && miss_st1;
-    assign perf_pipe_stalls  = crsq_stall || mreq_alm_full || mshr_alm_full;
     assign perf_mshr_stalls  = mshr_alm_full;
 `endif
 
@@ -525,22 +488,22 @@ module VX_bank #(
             dpi_trace("%d: cache%0d:%0d fill-rsp: addr=%0h, id=%0d, data=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mem_rsp_addr, BANK_ID), mem_rsp_id, mem_rsp_data);
         end
         if (mshr_fire) begin
-            dpi_trace("%d: cache%0d:%0d mshr-pop: addr=%0h, tag=%0h, pmask=%b, tid=%0d, wid=%0d, PC=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mshr_addr, BANK_ID), mshr_tag, mshr_pmask, mshr_tid, debug_wid_sel, debug_pc_sel);
+            dpi_trace("%d: cache%0d:%0d mshr-pop: addr=%0h, tag=%0h, pmask=%b, tid=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mshr_addr, BANK_ID), mshr_tag, mshr_pmask, mshr_tid, req_id_sel);
         end
         if (creq_fire) begin
             if (creq_rw)
-                dpi_trace("%d: cache%0d:%0d core-wr-req: addr=%0h, tag=%0h, pmask=%b, tid=%0d, byteen=%b, data=%0h, wid=%0d, PC=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(creq_addr, BANK_ID), creq_tag, creq_pmask, creq_tid, creq_byteen, creq_data, debug_wid_sel, debug_pc_sel);
+                dpi_trace("%d: cache%0d:%0d core-wr-req: addr=%0h, tag=%0h, pmask=%b, tid=%0d, byteen=%b, data=%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(creq_addr, BANK_ID), creq_tag, creq_pmask, creq_tid, creq_byteen, creq_data, req_id_sel);
             else
-                dpi_trace("%d: cache%0d:%0d core-rd-req: addr=%0h, tag=%0h, pmask=%b, tid=%0d, byteen=%b, wid=%0d, PC=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(creq_addr, BANK_ID), creq_tag, creq_pmask, creq_tid, creq_byteen, debug_wid_sel, debug_pc_sel);
+                dpi_trace("%d: cache%0d:%0d core-rd-req: addr=%0h, tag=%0h, pmask=%b, tid=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(creq_addr, BANK_ID), creq_tag, creq_pmask, creq_tid, req_id_sel);
         end
         if (crsq_fire) begin
-            dpi_trace("%d: cache%0d:%0d core-rsp: addr=%0h, tag=%0h, pmask=%b, tid=%0d, data=%0h, wid=%0d, PC=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), crsq_tag, crsq_pmask, crsq_tid, crsq_data, debug_wid_st1, debug_pc_st1);
+            dpi_trace("%d: cache%0d:%0d core-rsp: addr=%0h, tag=%0h, pmask=%b, tid=%0d, data=%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), crsq_tag, crsq_pmask, crsq_tid, crsq_data, req_id_st1);
         end
         if (mreq_push) begin
             if (is_write_st1)
-                dpi_trace("%d: cache%0d:%0d writeback: addr=%0h, data=%0h, byteen=%b, wid=%0d, PC=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mreq_addr, BANK_ID), mreq_data, mreq_byteen, debug_wid_st1, debug_pc_st1);
+                dpi_trace("%d: cache%0d:%0d writeback: addr=%0h, data=%0h, byteen=%b (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mreq_addr, BANK_ID), mreq_data, mreq_byteen, req_id_st1);
             else
-                dpi_trace("%d: cache%0d:%0d fill-req: addr=%0h, id=%0d, wid=%0d, PC=%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mreq_addr, BANK_ID), mreq_id, debug_wid_st1, debug_pc_st1);
+                dpi_trace("%d: cache%0d:%0d fill-req: addr=%0h, id=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mreq_addr, BANK_ID), mreq_id, req_id_st1);
         end
     end    
 `endif

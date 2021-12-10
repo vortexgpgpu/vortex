@@ -11,7 +11,7 @@ interface VX_perf_cache_if ();
     wire [`PERF_CTR_BITS-1:0] write_misses;
     wire [`PERF_CTR_BITS-1:0] bank_stalls;
     wire [`PERF_CTR_BITS-1:0] mshr_stalls;
-    wire [`PERF_CTR_BITS-1:0] pipe_stalls;
+    wire [`PERF_CTR_BITS-1:0] mem_stalls;
     wire [`PERF_CTR_BITS-1:0] crsp_stalls;
 
     modport master (
@@ -21,7 +21,7 @@ interface VX_perf_cache_if ();
         output write_misses,
         output bank_stalls,
         output mshr_stalls,
-        output pipe_stalls,
+        output mem_stalls,
         output crsp_stalls
     );
 
@@ -32,7 +32,7 @@ interface VX_perf_cache_if ();
         input write_misses,
         input bank_stalls,
         input mshr_stalls,
-        input pipe_stalls,
+        input mem_stalls,
         input crsp_stalls
     );
 

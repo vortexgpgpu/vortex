@@ -6,6 +6,7 @@ module VX_muldiv (
     
     // Inputs    
     input wire [`INST_MUL_BITS-1:0]     alu_op,
+    input wire [`UUID_BITS-1:0]         uuid_in,
     input wire [`NW_BITS-1:0]           wid_in,
     input wire [`NUM_THREADS-1:0]       tmask_in,
     input wire [31:0]                   PC_in,
@@ -15,6 +16,7 @@ module VX_muldiv (
     input wire [`NUM_THREADS-1:0][31:0] alu_in2,
 
     // Outputs
+    output wire [`UUID_BITS-1:0]         uuid_out,
     output wire [`NW_BITS-1:0]           wid_out,
     output wire [`NUM_THREADS-1:0]       tmask_out,
     output wire [31:0]                   PC_out,
@@ -32,6 +34,7 @@ module VX_muldiv (
     wire is_div_op = `INST_MUL_IS_DIV(alu_op);
 
     wire [`NUM_THREADS-1:0][31:0] mul_result;
+    wire [`UUID_BITS-1:0] mul_uuid_out;
     wire [`NW_BITS-1:0] mul_wid_out;
     wire [`NUM_THREADS-1:0] mul_tmask_out;
     wire [31:0] mul_PC_out;
@@ -63,15 +66,15 @@ module VX_muldiv (
     end
 
     VX_shift_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
+        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
         .DEPTH  (`LATENCY_IMUL),
         .RESETW (1)
     ) mul_shift_reg (
         .clk(clk),
         .reset    (reset),
         .enable   (mul_ready_in),
-        .data_in  ({mul_valid_in,  wid_in,      tmask_in,       PC_in,      rd_in,      wb_in,      mul_result_tmp}),
-        .data_out ({mul_valid_out, mul_wid_out, mul_tmask_out,  mul_PC_out, mul_rd_out, mul_wb_out, mul_result})
+        .data_in  ({mul_valid_in,  uuid_in,      wid_in,      tmask_in,       PC_in,      rd_in,      wb_in,      mul_result_tmp}),
+        .data_out ({mul_valid_out, mul_uuid_out, mul_wid_out, mul_tmask_out,  mul_PC_out, mul_rd_out, mul_wb_out, mul_result})
     );
 
 `else      
@@ -103,15 +106,15 @@ module VX_muldiv (
     end
 
     VX_shift_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1),
+        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1),
         .DEPTH  (`LATENCY_IMUL),
         .RESETW (1)
     ) mul_shift_reg (
         .clk(clk),
         .reset    (reset),
         .enable   (mul_ready_in),
-        .data_in  ({mul_valid_in,  wid_in,      tmask_in,       PC_in,      rd_in,      wb_in,      is_mulh_in}),
-        .data_out ({mul_valid_out, mul_wid_out, mul_tmask_out,  mul_PC_out, mul_rd_out, mul_wb_out, is_mulh_out})
+        .data_in  ({mul_valid_in,  uuid_in,      wid_in,      tmask_in,       PC_in,      rd_in,      wb_in,      is_mulh_in}),
+        .data_out ({mul_valid_out, mul_uuid_out, mul_wid_out, mul_tmask_out,  mul_PC_out, mul_rd_out, mul_wb_out, is_mulh_out})
     );
 
 `endif
@@ -119,6 +122,7 @@ module VX_muldiv (
     ///////////////////////////////////////////////////////////////////////////
 
     wire [`NUM_THREADS-1:0][31:0] div_result;
+    wire [`UUID_BITS-1:0] div_uuid_out;
     wire [`NW_BITS-1:0] div_wid_out;
     wire [`NUM_THREADS-1:0] div_tmask_out;
     wire [31:0] div_PC_out;
@@ -147,15 +151,15 @@ module VX_muldiv (
     end
 
     VX_shift_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
+        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
         .DEPTH  (`LATENCY_IMUL),
         .RESETW (1)
     ) div_shift_reg (
         .clk(clk),
         .reset    (reset),
         .enable   (div_ready_in),
-        .data_in  ({div_valid_in,  wid_in,      tmask_in,       PC_in,      rd_in,      wb_in,      div_result_tmp}),
-        .data_out ({div_valid_out, div_wid_out, div_tmask_out,  div_PC_out, div_rd_out, div_wb_out, div_result})
+        .data_in  ({div_valid_in,  uuid_in,      wid_in,      tmask_in,       PC_in,      rd_in,      wb_in,      div_result_tmp}),
+        .data_out ({div_valid_out, div_uuid_out, div_wid_out, div_tmask_out,  div_PC_out, div_rd_out, div_wb_out, div_result})
     );
 
     assign div_ready_in = div_ready_out || ~div_valid_out;
@@ -171,21 +175,21 @@ module VX_muldiv (
         .WIDTHQ (32),
         .WIDTHR (32),
         .LANES  (`NUM_THREADS),
-        .TAGW   (`NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1)
+        .TAGW   (64 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1)
     ) divide (
         .clk       (clk),
         .reset     (reset),        
         .valid_in  (div_valid_in),
         .ready_in  (div_ready_in),
         .signed_mode(is_signed_div),
-        .tag_in    ({wid_in, tmask_in, PC_in, rd_in, wb_in, is_rem_op_in}),
+        .tag_in    ({uuid_in, wid_in, tmask_in, PC_in, rd_in, wb_in, is_rem_op_in}),
         .numer     (alu_in1),
         .denom     (alu_in2),
         .quotient  (div_result_tmp),
         .remainder (rem_result_tmp),
         .ready_out (div_ready_out),
         .valid_out (div_valid_out),
-        .tag_out   ({div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, is_rem_op_out})
+        .tag_out   ({div_uuid_out, div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, is_rem_op_out})
     );
 
     assign div_result = is_rem_op_out ? rem_result_tmp : div_result_tmp; 
@@ -195,6 +199,7 @@ module VX_muldiv (
     ///////////////////////////////////////////////////////////////////////////
 
     wire                    rsp_valid = mul_valid_out || div_valid_out;  
+    wire [`UUID_BITS-1:0]   rsp_uuid  = mul_valid_out ? mul_uuid_out : div_uuid_out;
     wire [`NW_BITS-1:0]     rsp_wid   = mul_valid_out ? mul_wid_out : div_wid_out;
     wire [`NUM_THREADS-1:0] rsp_tmask = mul_valid_out ? mul_tmask_out : div_tmask_out;
     wire [31:0]             rsp_PC    = mul_valid_out ? mul_PC_out : div_PC_out;
@@ -205,14 +210,14 @@ module VX_muldiv (
     assign stall_out = ~ready_out && valid_out;
 
     VX_pipe_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
+        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({rsp_valid, rsp_wid, rsp_tmask, rsp_PC, rsp_rd, rsp_wb, rsp_data}),
-        .data_out ({valid_out, wid_out, tmask_out, PC_out, rd_out, wb_out, data_out})
+        .data_in  ({rsp_valid, rsp_uuid, rsp_wid, rsp_tmask, rsp_PC, rsp_rd, rsp_wb, rsp_data}),
+        .data_out ({valid_out, uuid_out, wid_out, tmask_out, PC_out, rd_out, wb_out, data_out})
     );
 
     // can accept new request?
