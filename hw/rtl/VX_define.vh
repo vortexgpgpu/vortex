@@ -34,6 +34,8 @@
 
 `define PERF_CTR_BITS   44
 
+`define UUID_BITS       44
+
 ///////////////////////////////////////////////////////////////////////////////
 
 `define EX_NOP          3'h0
@@ -55,7 +57,7 @@
 `define INST_S          7'b0100011 // store instructions
 `define INST_I          7'b0010011 // immediate instructions
 `define INST_R          7'b0110011 // register instructions
-`define INST_F          7'b0001111 // Fence instructions
+`define INST_FENCE      7'b0001111 // Fence instructions
 `define INST_SYS        7'b1110011 // system instructions
 
 `define INST_FL         7'b0000111 // float load instruction
@@ -66,7 +68,8 @@
 `define INST_FNMADD     7'b1001111 
 `define INST_FCI        7'b1010011 // float common instructions
 
-`define INST_GPU        7'b1101011
+`define INST_GPGPU      7'b1101011
+`define INST_GPU        7'b1011011
 
 `define INST_TEX       7'b0101011
 
@@ -117,9 +120,9 @@
 `define INST_BR_JALR         4'b1001
 `define INST_BR_ECALL        4'b1010
 `define INST_BR_EBREAK       4'b1011
-`define INST_BR_MRET         4'b1100
+`define INST_BR_URET         4'b1100
 `define INST_BR_SRET         4'b1101
-`define INST_BR_DRET         4'b1110
+`define INST_BR_MRET         4'b1110
 `define INST_BR_OTHER        4'b1111
 `define INST_BR_BITS         4
 `define INST_BR_NEG(x)       x[1]
@@ -154,6 +157,7 @@
 `define INST_LSU_BITS        4
 `define INST_LSU_FMT(x)      x[2:0]
 `define INST_LSU_WSIZE(x)    x[1:0]
+`define INST_LSU_IS_MEM(x)   (3'h0 == x)
 `define INST_LSU_IS_FENCE(x) (3'h1 == x)
 `define INST_LSU_IS_PREFETCH(x) (3'h2 == x)
 
@@ -185,14 +189,14 @@
 `define INST_FPU_NMADD       4'hF
 `define INST_FPU_BITS        4
 
-`define INST_GPU_TMC         3'h0
-`define INST_GPU_WSPAWN      3'h1 
-`define INST_GPU_SPLIT       3'h2
-`define INST_GPU_JOIN        3'h3
-`define INST_GPU_BAR         3'h4
-`define INST_GPU_PRED        3'h5
-`define INST_GPU_TEX         3'h6
-`define INST_GPU_BITS        3
+`define INST_GPU_TMC         4'h0
+`define INST_GPU_WSPAWN      4'h1 
+`define INST_GPU_SPLIT       4'h2
+`define INST_GPU_JOIN        4'h3
+`define INST_GPU_BAR         4'h4
+`define INST_GPU_PRED        4'h5
+`define INST_GPU_TEX         4'h6
+`define INST_GPU_BITS        4
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -237,17 +241,14 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`ifdef DBG_CACHE_REQ_INFO     //  wid       PC 
-`define DBG_CACHE_REQ_MDATAW    (`NW_BITS + 32)
-`else
-`define DBG_CACHE_REQ_MDATAW    0
-`endif
-
 // non-cacheable tag bits
 `define NC_TAG_BIT              1
 
 // texture tag bits
 `define TEX_TAG_BIT             1
+
+// cache address type bits
+`define CACHE_ADDR_TYPE_BITS    (`NC_TAG_BIT + `SM_ENABLE)
 
 ////////////////////////// Icache Configurable Knobs //////////////////////////
 
@@ -264,7 +265,7 @@
 `define ICACHE_CORE_TAG_ID_BITS `NW_BITS
 
 // Core request tag bits
-`define ICACHE_CORE_TAG_WIDTH   (`DBG_CACHE_REQ_MDATAW + `ICACHE_CORE_TAG_ID_BITS)
+`define ICACHE_CORE_TAG_WIDTH   (`UUID_BITS + `ICACHE_CORE_TAG_ID_BITS)
 
 // Memory request data bits
 `define ICACHE_MEM_DATA_WIDTH   (`ICACHE_LINE_SIZE * 8)
@@ -289,17 +290,14 @@
 // Core request tag bits
 `define LSUQ_ADDR_BITS          `LOG2UP(`LSUQ_SIZE)
 `ifdef EXT_TEX_ENABLE
-`define LSU_TAG_ID_BITS         (`LSUQ_ADDR_BITS + `NC_TAG_BIT + `SM_ENABLE)
-`define TEX_TAG_ID_BITS         (2)
-`define LSU_TEX_TAG_ID_BITS     `MAX(`LSU_TAG_ID_BITS, `TEX_TAG_ID_BITS) 
-`define DCACHE_CORE_TAG_ID_BITS (`LSU_TEX_TAG_ID_BITS + `TEX_TAG_BIT)
-`define LSU_DCACHE_TAG_BITS     (`DBG_CACHE_REQ_MDATAW + `LSU_TAG_ID_BITS)
-`define TEX_DCACHE_TAG_BITS     (`DBG_CACHE_REQ_MDATAW + `TEX_TAG_ID_BITS)
-`define LSU_TEX_DCACHE_TAG_BITS (`DBG_CACHE_REQ_MDATAW + `LSU_TEX_TAG_ID_BITS)
+`define LSU_TAG_ID_BITS         `MAX(`LSUQ_ADDR_BITS, 2)
+`define LSU_TEX_DCACHE_TAG_BITS (`UUID_BITS + `LSU_TAG_ID_BITS + `CACHE_ADDR_TYPE_BITS)
+`define DCACHE_CORE_TAG_ID_BITS (`LSU_TAG_ID_BITS + `CACHE_ADDR_TYPE_BITS + `TEX_TAG_BIT)
 `else 
-`define DCACHE_CORE_TAG_ID_BITS (`LSUQ_ADDR_BITS + `NC_TAG_BIT + `SM_ENABLE)
+`define LSU_TAG_ID_BITS         `LSUQ_ADDR_BITS
+`define DCACHE_CORE_TAG_ID_BITS (`LSU_TAG_ID_BITS + `CACHE_ADDR_TYPE_BITS)
 `endif
-`define DCACHE_CORE_TAG_WIDTH  (`DBG_CACHE_REQ_MDATAW + `DCACHE_CORE_TAG_ID_BITS)
+`define DCACHE_CORE_TAG_WIDTH   (`UUID_BITS + `DCACHE_CORE_TAG_ID_BITS)
  
 // Memory request data bits
 `define DCACHE_MEM_DATA_WIDTH   (`DCACHE_LINE_SIZE * 8)

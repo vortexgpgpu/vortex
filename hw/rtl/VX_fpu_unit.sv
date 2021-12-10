@@ -22,6 +22,7 @@ module VX_fpu_unit #(
     wire valid_out;
     wire ready_out;
 
+    wire [`UUID_BITS-1:0] rsp_uuid;
     wire [`NW_BITS-1:0] rsp_wid;
     wire [`NUM_THREADS-1:0] rsp_tmask;
     wire [31:0] rsp_PC;
@@ -39,7 +40,7 @@ module VX_fpu_unit #(
     wire fpuq_pop  = valid_out && ready_out;
 
     VX_index_buffer #(
-        .DATAW   (`NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1),
+        .DATAW   (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1),
         .SIZE    (`FPUQ_SIZE)
     ) req_metadata  (
         .clk          (clk),
@@ -48,8 +49,8 @@ module VX_fpu_unit #(
         .write_addr   (tag_in),                
         .read_addr    (tag_out),
         .release_addr (tag_out),        
-        .write_data   ({fpu_req_if.wid, fpu_req_if.tmask, fpu_req_if.PC, fpu_req_if.rd, fpu_req_if.wb}),                    
-        .read_data    ({rsp_wid,        rsp_tmask,        rsp_PC,        rsp_rd,        rsp_wb}), 
+        .write_data   ({fpu_req_if.uuid, fpu_req_if.wid, fpu_req_if.tmask, fpu_req_if.PC, fpu_req_if.rd, fpu_req_if.wb}),                    
+        .read_data    ({rsp_uuid,        rsp_wid,        rsp_tmask,        rsp_PC,        rsp_rd,        rsp_wb}), 
         .release_slot (fpuq_pop),     
         .full         (fpuq_full),
         `UNUSED_PIN (empty)
@@ -180,14 +181,14 @@ module VX_fpu_unit #(
     wire stall_out = ~fpu_commit_if.ready && fpu_commit_if.valid;
 
     VX_pipe_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `FFLAGS_BITS),
+        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `FFLAGS_BITS),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_out),
-        .data_in  ({valid_out,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           rsp_wb,           result,             has_fflags,   rsp_fflags}),
-        .data_out ({fpu_commit_if.valid, fpu_commit_if.wid, fpu_commit_if.tmask, fpu_commit_if.PC, fpu_commit_if.rd, fpu_commit_if.wb, fpu_commit_if.data, has_fflags_r, fflags_r})
+        .data_in  ({valid_out,           rsp_uuid,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           rsp_wb,           result,             has_fflags,   rsp_fflags}),
+        .data_out ({fpu_commit_if.valid, fpu_commit_if.uuid, fpu_commit_if.wid, fpu_commit_if.tmask, fpu_commit_if.PC, fpu_commit_if.rd, fpu_commit_if.wb, fpu_commit_if.data, has_fflags_r, fflags_r})
     );
 
     assign fpu_commit_if.eop = 1'b1;

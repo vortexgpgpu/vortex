@@ -165,6 +165,9 @@ module VX_pipeline #(
     ) decode (
         .clk            (clk),
         .reset          (decode_reset),        
+    `ifdef PERF_ENABLE
+        .perf_decode_if (perf_pipeline_if.decode),
+    `endif
         .ifetch_rsp_if  (ifetch_rsp_if),
         .decode_if      (decode_if),
         .wstall_if      (wstall_if),
@@ -180,7 +183,7 @@ module VX_pipeline #(
         .reset          (issue_reset),
 
     `ifdef PERF_ENABLE
-        .perf_pipeline_if (perf_pipeline_if),
+        .perf_issue_if  (perf_pipeline_if.issue),
     `endif
 
         .decode_if      (decode_if),

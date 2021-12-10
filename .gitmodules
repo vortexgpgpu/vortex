@@ -1,6 +1,12 @@
-[submodule "hw/rtl/fp_cores/fpnew"]
-	path = hw/rtl/fp_cores/fpnew
+[submodule "third_party/fpnew"]
+	path = third_party/fpnew
 	url = https://github.com/pulp-platform/fpnew.git
-[submodule "sim/common/softfloat"]
-	path = sim/common/softfloat
+[submodule "third_party/softfloat"]
+	path = third_party/softfloat
 	url = https://github.com/ucb-bar/berkeley-softfloat-3.git
+[submodule "third_party/cocogfx"]
+	path = third_party/cocogfx
+	url = https://github.com/gtcasl/cocogfx.git
+[submodule "third_party/ramulator"]
+	path = third_party/ramulator
+	url = https://github.com/CMU-SAFARI/ramulator.git

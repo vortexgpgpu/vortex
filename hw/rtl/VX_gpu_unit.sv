@@ -12,6 +12,10 @@ module VX_gpu_unit #(
     VX_gpu_req_if.slave gpu_req_if,
 
 `ifdef EXT_TEX_ENABLE
+    // PERF
+`ifdef PERF_ENABLE
+    VX_perf_tex_if.master perf_tex_if,
+`endif
     VX_dcache_req_if.master dcache_req_if,
     VX_dcache_rsp_if.slave  dcache_rsp_if,
     VX_tex_csr_if.slave tex_csr_if,
@@ -28,12 +32,13 @@ module VX_gpu_unit #(
     localparam WCTL_DATAW = `GPU_TMC_BITS + `GPU_WSPAWN_BITS + `GPU_SPLIT_BITS + `GPU_BARRIER_BITS;
     localparam RSP_DATAW  = `MAX(`NUM_THREADS * 32, WCTL_DATAW);
 
-    wire                          rsp_valid;
-    wire [`NW_BITS-1:0]           rsp_wid;
-    wire [`NUM_THREADS-1:0]       rsp_tmask;
-    wire [31:0]                   rsp_PC;
-    wire [`NR_BITS-1:0]           rsp_rd;   
-    wire                          rsp_wb;
+    wire                    rsp_valid;
+    wire [`UUID_BITS-1:0]   rsp_uuid;
+    wire [`NW_BITS-1:0]     rsp_wid;
+    wire [`NUM_THREADS-1:0] rsp_tmask;
+    wire [31:0]             rsp_PC;
+    wire [`NR_BITS-1:0]     rsp_rd;   
+    wire                    rsp_wb;
 
     wire [RSP_DATAW-1:0] rsp_data, rsp_data_r;
 
@@ -112,6 +117,7 @@ module VX_gpu_unit #(
     wire is_tex = (gpu_req_if.op_type == `INST_GPU_TEX);
 
     assign tex_req_if.valid = gpu_req_if.valid && is_tex;
+    assign tex_req_if.uuid  = gpu_req_if.uuid;
     assign tex_req_if.wid   = gpu_req_if.wid;
     assign tex_req_if.tmask = gpu_req_if.tmask;
     assign tex_req_if.PC    = gpu_req_if.PC;
@@ -128,6 +134,9 @@ module VX_gpu_unit #(
     ) tex_unit (
         .clk           (clk),
         .reset         (reset),
+    `ifdef PERF_ENABLE
+        .perf_tex_if   (perf_tex_if),
+    `endif
         .tex_req_if    (tex_req_if),
         .tex_csr_if    (tex_csr_if),
         .tex_rsp_if    (tex_rsp_if),
@@ -143,6 +152,7 @@ module VX_gpu_unit #(
     assign is_warp_ctl = !(is_tex || tex_rsp_if.valid);
 
     assign rsp_valid = tex_rsp_if.valid || (gpu_req_if.valid && ~is_tex);
+    assign rsp_uuid  = tex_rsp_if.valid ? tex_rsp_if.uuid : gpu_req_if.uuid;
     assign rsp_wid   = tex_rsp_if.valid ? tex_rsp_if.wid : gpu_req_if.wid;
     assign rsp_tmask = tex_rsp_if.valid ? tex_rsp_if.tmask : gpu_req_if.tmask;
     assign rsp_PC    = tex_rsp_if.valid ? tex_rsp_if.PC : gpu_req_if.PC;
@@ -161,6 +171,7 @@ module VX_gpu_unit #(
     assign is_warp_ctl = 1;
 
     assign rsp_valid = gpu_req_if.valid;
+    assign rsp_uuid  = gpu_req_if.uuid;
     assign rsp_wid   = gpu_req_if.wid;
     assign rsp_tmask = gpu_req_if.tmask;
     assign rsp_PC    = gpu_req_if.PC;
@@ -176,14 +187,14 @@ module VX_gpu_unit #(
     assign stall_out = ~gpu_commit_if.ready && gpu_commit_if.valid;
 
     VX_pipe_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + RSP_DATAW + 1),
+        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + RSP_DATAW + 1),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_out),
-        .data_in  ({rsp_valid,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           rsp_wb,           rsp_data,   is_warp_ctl}),
-        .data_out ({gpu_commit_if.valid, gpu_commit_if.wid, gpu_commit_if.tmask, gpu_commit_if.PC, gpu_commit_if.rd, gpu_commit_if.wb, rsp_data_r, is_warp_ctl_r})
+        .data_in  ({rsp_valid,           rsp_uuid,           rsp_wid,           rsp_tmask,           rsp_PC,           rsp_rd,           rsp_wb,           rsp_data,   is_warp_ctl}),
+        .data_out ({gpu_commit_if.valid, gpu_commit_if.uuid, gpu_commit_if.wid, gpu_commit_if.tmask, gpu_commit_if.PC, gpu_commit_if.rd, gpu_commit_if.wb, rsp_data_r, is_warp_ctl_r})
     );  
 
     assign gpu_commit_if.data = rsp_data_r[(`NUM_THREADS * 32)-1:0];
@@ -200,7 +211,7 @@ module VX_gpu_unit #(
     assign gpu_req_if.ready = ~stall_in;
 
     `SCOPE_ASSIGN (gpu_rsp_valid, warp_ctl_if.valid);
-    `SCOPE_ASSIGN (gpu_rsp_wid, warp_ctl_if.wid);
+    `SCOPE_ASSIGN (gpu_rsp_uuid, gpu_commit_if.uuid);
     `SCOPE_ASSIGN (gpu_rsp_tmc, warp_ctl_if.tmc.valid);
     `SCOPE_ASSIGN (gpu_rsp_wspawn, warp_ctl_if.wspawn.valid);          
     `SCOPE_ASSIGN (gpu_rsp_split, warp_ctl_if.split.valid);

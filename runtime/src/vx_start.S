@@ -42,15 +42,9 @@ _start:
 .type _exit, @function
 .global _exit
 _exit:
-  beqz a0, label_exit_next 
-  mv gp, a0
-  ecall;
-
-label_exit_next:
-  # dump performance CSRs
-  call  vx_perf_dump
-
-  # disable all threads in current warp
+  mv s0, a0
+  call vx_perf_dump 
+  mv gp, s0
   li a0, 0
   .insn s 0x6b, 0, x0, 0(a0)  # tmc a0
 

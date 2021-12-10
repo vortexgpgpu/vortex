@@ -7,6 +7,9 @@ module VX_csr_unit #(
     input wire                  reset,
 
 `ifdef PERF_ENABLE
+`ifdef EXT_TEX_ENABLE
+    VX_perf_tex_if.slave        perf_tex_if,
+`endif
     VX_perf_memsys_if.slave     perf_memsys_if,
     VX_perf_pipeline_if.slave   perf_pipeline_if,
 `endif
@@ -29,7 +32,8 @@ module VX_csr_unit #(
 );    
     wire csr_we_s1;
     wire [`CSR_ADDR_BITS-1:0] csr_addr_s1;    
-    wire [31:0] csr_read_data, csr_read_data_s1;
+    wire [31:0] csr_read_data;
+    wire [31:0] csr_read_data_s1;
     wire [31:0] csr_updated_data_s1;  
 
     wire write_enable = csr_commit_if.valid && csr_we_s1;
@@ -42,8 +46,11 @@ module VX_csr_unit #(
         .clk            (clk),
         .reset          (reset),
     `ifdef PERF_ENABLE
-        .perf_memsys_if  (perf_memsys_if),
-        .perf_pipeline_if (perf_pipeline_if),
+    `ifdef EXT_TEX_ENABLE
+        .perf_tex_if    (perf_tex_if),
+    `endif
+        .perf_memsys_if (perf_memsys_if),
+        .perf_pipeline_if(perf_pipeline_if),
     `endif
         .cmt_to_csr_if  (cmt_to_csr_if),
         .fetch_to_csr_if(fetch_to_csr_if),
@@ -54,10 +61,12 @@ module VX_csr_unit #(
         .tex_csr_if     (tex_csr_if),
     `endif
         .read_enable    (csr_req_if.valid),
+        .read_uuid      (csr_req_if.uuid),
         .read_addr      (csr_req_if.addr),
         .read_wid       (csr_req_if.wid),      
         .read_data      (csr_read_data),
         .write_enable   (write_enable),        
+        .write_uuid     (csr_commit_if.uuid),
         .write_addr     (csr_addr_s1), 
         .write_wid      (csr_commit_if.wid),
         .write_data     (csr_updated_data_s1),
@@ -101,14 +110,14 @@ module VX_csr_unit #(
     wire stall_out = ~csr_commit_if.ready && csr_commit_if.valid;
 
     VX_pipe_register #(
-        .DATAW  (1 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + 32 + 32),
+        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + 32 + 32),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_out),
-        .data_in  ({csr_req_valid,       csr_req_if.wid,    csr_req_if.tmask,    csr_req_if.PC,    csr_req_if.rd,    csr_req_if.wb,    csr_we_s0_unqual, csr_req_if.addr, csr_read_data_qual, csr_updated_data}),
-        .data_out ({csr_commit_if.valid, csr_commit_if.wid, csr_commit_if.tmask, csr_commit_if.PC, csr_commit_if.rd, csr_commit_if.wb, csr_we_s1,        csr_addr_s1,     csr_read_data_s1,   csr_updated_data_s1})
+        .data_in  ({csr_req_valid,       csr_req_if.uuid,    csr_req_if.wid,    csr_req_if.tmask,    csr_req_if.PC,    csr_req_if.rd,    csr_req_if.wb,    csr_we_s0_unqual, csr_req_if.addr, csr_read_data_qual, csr_updated_data}),
+        .data_out ({csr_commit_if.valid, csr_commit_if.uuid, csr_commit_if.wid, csr_commit_if.tmask, csr_commit_if.PC, csr_commit_if.rd, csr_commit_if.wb, csr_we_s1,        csr_addr_s1,     csr_read_data_s1,   csr_updated_data_s1})
     );
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin

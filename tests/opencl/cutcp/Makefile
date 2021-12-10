@@ -3,7 +3,7 @@ POCL_CC_PATH ?= $(wildcard ../../../../pocl/drops_riscv_cc)
 POCL_INC_PATH ?= $(wildcard ../include)
 POCL_LIB_PATH ?= $(wildcard ../lib)
 VORTEX_RT_PATH ?= $(wildcard ../../../runtime)
-VX_SIMX_PATH ?= $(wildcard ../../../simX/obj_dir)
+VX_SIMX_PATH ?= $(wildcard ../../../simx/obj_dir)
 
 CC  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
 CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++

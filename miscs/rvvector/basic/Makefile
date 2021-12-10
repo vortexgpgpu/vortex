@@ -36,6 +36,6 @@ ELF:
 	$(COMP) $(CC_FLAGS) $(VX_STR) $(VX_VEC) $(VX_FIO) $(NEWLIB) $(VX_INT) $(VX_IO) $(VX_API) $(VX_MAIN).c $(LIBS) -Iinclude  -o $(VX_MAIN).elf
 
 run:
-	../../simX/obj_dir/Vcache_simX -E -a rv32i --core vx_vector_main.hex  -s -b 1> emulator.debug
+	../../simx/obj_dir/Vcache_simX -E -a rv32i --core vx_vector_main.hex  -s -b 1> emulator.debug
 
 

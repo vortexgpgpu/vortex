@@ -15,7 +15,7 @@ module VX_ibuffer #(
 
     `UNUSED_PARAM (CORE_ID)
     
-    localparam DATAW   = `NUM_THREADS + 32 + `EX_BITS + `INST_OP_BITS + `INST_FRM_BITS + 1 + (`NR_BITS * 4) + 32 + 1 + 1;
+    localparam DATAW   = `UUID_BITS + `NUM_THREADS + 32 + `EX_BITS + `INST_OP_BITS + `INST_FRM_BITS + 1 + (`NR_BITS * 4) + 32 + 1 + 1;
     localparam ADDRW   = $clog2(`IBUF_SIZE+1);
     localparam NWARPSW = $clog2(`NUM_WARPS+1);
 
@@ -168,7 +168,8 @@ module VX_ibuffer #(
     
     assign decode_if.ready = ~q_full[decode_if.wid];
     
-    assign q_data_in = {decode_if.tmask, 
+    assign q_data_in = {decode_if.uuid,
+                        decode_if.tmask, 
                         decode_if.PC, 
                         decode_if.ex_type, 
                         decode_if.op_type, 
@@ -184,7 +185,8 @@ module VX_ibuffer #(
 
     assign ibuffer_if.valid = deq_valid;
     assign ibuffer_if.wid   = deq_wid;
-    assign {ibuffer_if.tmask, 
+    assign {ibuffer_if.uuid,
+            ibuffer_if.tmask, 
             ibuffer_if.PC, 
             ibuffer_if.ex_type, 
             ibuffer_if.op_type, 

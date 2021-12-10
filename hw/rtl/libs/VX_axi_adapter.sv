@@ -125,7 +125,7 @@ module VX_axi_adapter #(
 
     // AXI write response channel
     `UNUSED_VAR (m_axi_bid);
-    `RUNTIME_ASSERT(~m_axi_bvalid || m_axi_bresp == 0, ("AXI response error"));
+    `RUNTIME_ASSERT(~m_axi_bvalid || m_axi_bresp == 0, ("%t: *** AXI response error", $time));
     assign m_axi_bready     = 1'b1;
 
     // AXI read request channel
@@ -144,7 +144,7 @@ module VX_axi_adapter #(
     assign mem_rsp_valid    = m_axi_rvalid;
     assign mem_rsp_tag      = m_axi_rid;
     assign mem_rsp_data     = m_axi_rdata;
-    `RUNTIME_ASSERT(~m_axi_rvalid || m_axi_rresp == 0, ("AXI response error"));
+    `RUNTIME_ASSERT(~m_axi_rvalid || m_axi_rresp == 0, ("%t: *** AXI response error", $time));
     `UNUSED_VAR (m_axi_rlast);
     assign m_axi_rready     = mem_rsp_ready;
 
