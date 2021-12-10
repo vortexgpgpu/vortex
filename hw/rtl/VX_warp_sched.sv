@@ -46,7 +46,7 @@ module VX_warp_sched #(
     wire                    schedule_valid;
     wire                    warp_scheduled;
 
-    reg [63:0] issued_instrs;
+    reg [`UUID_BITS-1:0] issued_instrs;
 
     wire ifetch_req_fire = ifetch_req_if.valid && ifetch_req_if.ready;
 
@@ -228,10 +228,10 @@ module VX_warp_sched #(
 
     assign warp_scheduled = schedule_valid && ~stall_out;
 
-    wire [63:0] instr_uuid = (issued_instrs * `NUM_CORES * `NUM_CLUSTERS) + 64'(CORE_ID);
+    wire [`UUID_BITS-1:0] instr_uuid = (issued_instrs * `NUM_CORES * `NUM_CLUSTERS) + `UUID_BITS'(CORE_ID);
 
     VX_pipe_register #( 
-        .DATAW  (1 + 64 + `NUM_THREADS + 32 + `NW_BITS),
+        .DATAW  (1 + `UUID_BITS + `NUM_THREADS + 32 + `NW_BITS),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),

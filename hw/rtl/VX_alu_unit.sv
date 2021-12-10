@@ -96,7 +96,7 @@ module VX_alu_unit #(
     wire                          alu_ready_in;
     wire                          alu_valid_out;
     wire                          alu_ready_out;
-    wire [63:0]                   alu_uuid;
+    wire [`UUID_BITS-1:0]         alu_uuid;
     wire [`NW_BITS-1:0]           alu_wid;
     wire [`NUM_THREADS-1:0]       alu_tmask;
     wire [31:0]                   alu_PC;
@@ -113,7 +113,7 @@ module VX_alu_unit #(
     assign alu_ready_in = alu_ready_out || ~alu_valid_out;
 
     VX_pipe_register #(
-        .DATAW  (1 + 64 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `INST_BR_BITS + 1 + 1 + 32),
+        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `INST_BR_BITS + 1 + 1 + 32),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
@@ -139,7 +139,7 @@ module VX_alu_unit #(
     wire                          mul_ready_in;
     wire                          mul_valid_out;    
     wire                          mul_ready_out;
-    wire [63:0]                   mul_uuid;
+    wire [`UUID_BITS-1:0]         mul_uuid;
     wire [`NW_BITS-1:0]           mul_wid;
     wire [`NUM_THREADS-1:0]       mul_tmask;
     wire [31:0]                   mul_PC;

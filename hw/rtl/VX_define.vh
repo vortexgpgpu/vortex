@@ -34,6 +34,8 @@
 
 `define PERF_CTR_BITS   44
 
+`define UUID_BITS       44
+
 ///////////////////////////////////////////////////////////////////////////////
 
 `define EX_NOP          3'h0
@@ -239,10 +241,6 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// cache request identifier
-`define DBG_CACHE_REQ_IDW       48
-`define DBG_CACHE_REQ_ID(type, ctr)  {4'(type), {`DBG_CACHE_REQ_IDW-4{1'b0}}} + ctr
-
 // non-cacheable tag bits
 `define NC_TAG_BIT              1
 
@@ -267,7 +265,7 @@
 `define ICACHE_CORE_TAG_ID_BITS `NW_BITS
 
 // Core request tag bits
-`define ICACHE_CORE_TAG_WIDTH   (`DBG_CACHE_REQ_IDW + `ICACHE_CORE_TAG_ID_BITS)
+`define ICACHE_CORE_TAG_WIDTH   (`UUID_BITS + `ICACHE_CORE_TAG_ID_BITS)
 
 // Memory request data bits
 `define ICACHE_MEM_DATA_WIDTH   (`ICACHE_LINE_SIZE * 8)
@@ -293,13 +291,13 @@
 `define LSUQ_ADDR_BITS          `LOG2UP(`LSUQ_SIZE)
 `ifdef EXT_TEX_ENABLE
 `define LSU_TAG_ID_BITS         `MAX(`LSUQ_ADDR_BITS, 2)
-`define LSU_TEX_DCACHE_TAG_BITS (`DBG_CACHE_REQ_IDW + `LSU_TAG_ID_BITS + `CACHE_ADDR_TYPE_BITS)
+`define LSU_TEX_DCACHE_TAG_BITS (`UUID_BITS + `LSU_TAG_ID_BITS + `CACHE_ADDR_TYPE_BITS)
 `define DCACHE_CORE_TAG_ID_BITS (`LSU_TAG_ID_BITS + `CACHE_ADDR_TYPE_BITS + `TEX_TAG_BIT)
 `else 
 `define LSU_TAG_ID_BITS         `LSUQ_ADDR_BITS
 `define DCACHE_CORE_TAG_ID_BITS (`LSU_TAG_ID_BITS + `CACHE_ADDR_TYPE_BITS)
 `endif
-`define DCACHE_CORE_TAG_WIDTH   (`DBG_CACHE_REQ_IDW + `DCACHE_CORE_TAG_ID_BITS)
+`define DCACHE_CORE_TAG_WIDTH   (`UUID_BITS + `DCACHE_CORE_TAG_ID_BITS)
  
 // Memory request data bits
 `define DCACHE_MEM_DATA_WIDTH   (`DCACHE_LINE_SIZE * 8)

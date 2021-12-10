@@ -23,11 +23,11 @@ module VX_tex_unit #(
     VX_tex_rsp_if.master    tex_rsp_if
 );
 
-    localparam REQ_INFO_W = 64 + `NR_BITS + 1 + `NW_BITS + 32;
+    localparam REQ_INFO_W = `NR_BITS + 1 + `NW_BITS + 32 + `UUID_BITS;
     localparam BLEND_FRAC_W = (2 * `NUM_THREADS * `TEX_BLEND_FRAC);
     
     reg [$clog2(`NUM_TEX_UNITS)-1:0] csr_tex_unit;
-    reg [`TEX_MIPOFF_BITS-1:0]    tex_mipoff [`NUM_TEX_UNITS-1:0][`TEX_LOD_MAX+1-1:0];
+    reg [`TEX_MIPOFF_BITS-1:0]    tex_mipoff [`NUM_TEX_UNITS-1:0][(`TEX_LOD_MAX+1)-1:0];
     reg [1:0][`TEX_LOD_BITS-1:0]  tex_logdims [`NUM_TEX_UNITS-1:0];
     reg [1:0][`TEX_WRAP_BITS-1:0] tex_wraps  [`NUM_TEX_UNITS-1:0];
     reg [`TEX_ADDR_BITS-1:0]      tex_baddr  [`NUM_TEX_UNITS-1:0];     
@@ -35,9 +35,6 @@ module VX_tex_unit #(
     reg [`TEX_FILTER_BITS-1:0]    tex_filter [`NUM_TEX_UNITS-1:0];
 
     // CSRs programming
-
-    reg csrs_dirty [`NUM_TEX_UNITS-1:0];
-    `UNUSED_VAR (csrs_dirty)
 
     always @(posedge clk) begin
         if (tex_csr_if.write_enable) begin
@@ -47,50 +44,39 @@ module VX_tex_unit #(
                 end
                 `CSR_TEX_ADDR: begin 
                     tex_baddr[csr_tex_unit] <= tex_csr_if.write_data[`TEX_ADDR_BITS-1:0];
-                    csrs_dirty[csr_tex_unit] <= 1;
                 end
                 `CSR_TEX_FORMAT: begin 
                     tex_format[csr_tex_unit] <= tex_csr_if.write_data[`TEX_FORMAT_BITS-1:0];
-                    csrs_dirty[csr_tex_unit] <= 1;
                 end
                 `CSR_TEX_WRAPU: begin
                     tex_wraps[csr_tex_unit][0] <= tex_csr_if.write_data[`TEX_WRAP_BITS-1:0];
-                    csrs_dirty[csr_tex_unit] <= 1;
                 end
                 `CSR_TEX_WRAPV: begin
                     tex_wraps[csr_tex_unit][1] <= tex_csr_if.write_data[`TEX_WRAP_BITS-1:0];
-                    csrs_dirty[csr_tex_unit] <= 1;
                 end
                 `CSR_TEX_FILTER: begin 
-                    tex_filter[csr_tex_unit] <= tex_csr_if.write_data[`TEX_FILTER_BITS-1:0];                        
-                    csrs_dirty[csr_tex_unit] <= 1;
+                    tex_filter[csr_tex_unit] <= tex_csr_if.write_data[`TEX_FILTER_BITS-1:0];
                 end
                 `CSR_TEX_WIDTH: begin 
                     tex_logdims[csr_tex_unit][0] <= tex_csr_if.write_data[`TEX_LOD_BITS-1:0];
-                    csrs_dirty[csr_tex_unit] <= 1;
                 end
                 `CSR_TEX_HEIGHT: begin 
                     tex_logdims[csr_tex_unit][1] <= tex_csr_if.write_data[`TEX_LOD_BITS-1:0];
-                    csrs_dirty[csr_tex_unit] <= 1;
                 end
                 default: begin
                     for (integer j = 0; j <= `TEX_LOD_MAX; ++j) begin
                     `IGNORE_WARNINGS_BEGIN
                         if (tex_csr_if.write_addr == `CSR_TEX_MIPOFF(j)) begin
                     `IGNORE_WARNINGS_END
-                            tex_mipoff[csr_tex_unit][j] <= tex_csr_if.write_data[`TEX_MIPOFF_BITS-1:0];                            
-                            csrs_dirty[csr_tex_unit] <= 1;
+                            tex_mipoff[csr_tex_unit][j] <= tex_csr_if.write_data[`TEX_MIPOFF_BITS-1:0];
                         end
                     end
                 end
             endcase
         end
-        if (reset || (tex_req_if.valid && tex_req_if.ready)) begin
-            for (integer i = 0; i < `NUM_TEX_UNITS; ++i) begin
-                csrs_dirty[i] <= 0;
-            end
-        end
     end
+    wire [`UUID_BITS-1:0] write_uuid = tex_csr_if.write_uuid;
+    `UNUSED_VAR (write_uuid);
 
     // mipmap attributes
 
@@ -136,7 +122,7 @@ module VX_tex_unit #(
         .mip_level  (mip_level),
         .req_mipoff (sel_mipoff),
         .req_logdims(sel_logdims),
-        .req_info   ({tex_format[tex_req_if.unit], tex_req_if.uuid, tex_req_if.rd, tex_req_if.wb, tex_req_if.wid, tex_req_if.PC}),
+        .req_info   ({tex_format[tex_req_if.unit], tex_req_if.rd, tex_req_if.wb, tex_req_if.wid, tex_req_if.PC, tex_req_if.uuid}),
         .req_ready  (tex_req_if.ready),
 
         .rsp_valid  (mem_req_valid), 
@@ -211,9 +197,9 @@ module VX_tex_unit #(
         .rsp_valid  (tex_rsp_if.valid),
         .rsp_tmask  (tex_rsp_if.tmask),
         .rsp_data   (tex_rsp_if.data),
-        .rsp_info   ({tex_rsp_if.uuid, tex_rsp_if.rd, tex_rsp_if.wb, tex_rsp_if.wid, tex_rsp_if.PC}),
+        .rsp_info   ({tex_rsp_if.rd, tex_rsp_if.wb, tex_rsp_if.wid, tex_rsp_if.PC, tex_rsp_if.uuid}),
         .rsp_ready  (tex_rsp_if.ready)
-    );  
+    );
 
 `ifdef PERF_ENABLE
     wire [$clog2(`NUM_THREADS+1)-1:0] perf_mem_req_per_cycle;
@@ -255,31 +241,24 @@ module VX_tex_unit #(
 
 `ifdef DBG_TRACE_TEX
     always @(posedge clk) begin
+        if (tex_csr_if.write_enable) begin
+            dpi_trace("%d: core%0d-tex-csr: unit=%0d, state=", $time, CORE_ID, csr_tex_unit);
+            trace_tex_state(tex_csr_if.write_addr);
+            dpi_trace(", data=%0h (#%0d)\n", tex_csr_if.write_data, tex_csr_if.write_uuid);
+        end
         if (tex_req_if.valid && tex_req_if.ready) begin
-            for (integer i = 0; i < `NUM_TEX_UNITS; ++i) begin
-                if (csrs_dirty[i]) begin
-                    dpi_trace("%d: core%0d-tex-csr: tex%0d_addr=%0h\n", $time, CORE_ID, i, tex_baddr[i]);
-                    dpi_trace("%d: core%0d-tex-csr: tex%0d_logwidth=%0h\n", $time, CORE_ID, i, tex_logdims[i][0]);
-                    dpi_trace("%d: core%0d-tex-csr: tex%0d_logheight=%0h\n", $time, CORE_ID, i, tex_logdims[i][1]);
-                    dpi_trace("%d: core%0d-tex-csr: tex%0d_format=%0h\n", $time, CORE_ID, i, tex_format[i]);
-                    dpi_trace("%d: core%0d-tex-csr: tex%0d_wrap_u=%0h\n", $time, CORE_ID, i, tex_wraps[i][0]);
-                    dpi_trace("%d: core%0d-tex-csr: tex%0d_wrap_v=%0h\n", $time, CORE_ID, i, tex_wraps[i][1]);
-                    dpi_trace("%d: core%0d-tex-csr: tex%0d_filter=%0h\n", $time, CORE_ID, i, tex_filter[i]);
-                end
-            end
-            
             dpi_trace("%d: core%0d-tex-req: wid=%0d, PC=%0h, tmask=%b, unit=%0d, lod=%0h, u=", 
-                    $time, CORE_ID, tex_req_if.wid, tex_req_if.PC, tex_req_if.tmask, tex_req_if.unit, tex_req_if.lod);
+                $time, CORE_ID, tex_req_if.wid, tex_req_if.PC, tex_req_if.tmask, tex_req_if.unit, tex_req_if.lod);
             `TRACE_ARRAY1D(tex_req_if.coords[0], `NUM_THREADS);
             dpi_trace(", v=");
             `TRACE_ARRAY1D(tex_req_if.coords[1], `NUM_THREADS);
-            dpi_trace("\n");
+            dpi_trace(" (#%0d)\n", tex_req_if.uuid);
         end
         if (tex_rsp_if.valid && tex_rsp_if.ready) begin
              dpi_trace("%d: core%0d-tex-rsp: wid=%0d, PC=%0h, tmask=%b, data=", 
                     $time, CORE_ID, tex_rsp_if.wid, tex_rsp_if.PC, tex_rsp_if.tmask);
             `TRACE_ARRAY1D(tex_rsp_if.data, `NUM_THREADS);
-            dpi_trace("\n");
+            dpi_trace(" (#%0d)\n", tex_rsp_if.uuid);
         end
     end
 `endif

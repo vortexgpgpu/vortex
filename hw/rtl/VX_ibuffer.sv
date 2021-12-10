@@ -15,7 +15,7 @@ module VX_ibuffer #(
 
     `UNUSED_PARAM (CORE_ID)
     
-    localparam DATAW   = 64 + `NUM_THREADS + 32 + `EX_BITS + `INST_OP_BITS + `INST_FRM_BITS + 1 + (`NR_BITS * 4) + 32 + 1 + 1;
+    localparam DATAW   = `UUID_BITS + `NUM_THREADS + 32 + `EX_BITS + `INST_OP_BITS + `INST_FRM_BITS + 1 + (`NR_BITS * 4) + 32 + 1 + 1;
     localparam ADDRW   = $clog2(`IBUF_SIZE+1);
     localparam NWARPSW = $clog2(`NUM_WARPS+1);
 

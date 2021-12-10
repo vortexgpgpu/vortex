@@ -110,7 +110,7 @@ module VX_csr_unit #(
     wire stall_out = ~csr_commit_if.ready && csr_commit_if.valid;
 
     VX_pipe_register #(
-        .DATAW  (1 + 64 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + 32 + 32),
+        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + 32 + 32),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),

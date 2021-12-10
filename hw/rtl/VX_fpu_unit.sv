@@ -22,7 +22,7 @@ module VX_fpu_unit #(
     wire valid_out;
     wire ready_out;
 
-    wire [63:0] rsp_uuid;
+    wire [`UUID_BITS-1:0] rsp_uuid;
     wire [`NW_BITS-1:0] rsp_wid;
     wire [`NUM_THREADS-1:0] rsp_tmask;
     wire [31:0] rsp_PC;
@@ -40,7 +40,7 @@ module VX_fpu_unit #(
     wire fpuq_pop  = valid_out && ready_out;
 
     VX_index_buffer #(
-        .DATAW   (64 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1),
+        .DATAW   (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1),
         .SIZE    (`FPUQ_SIZE)
     ) req_metadata  (
         .clk          (clk),
@@ -181,7 +181,7 @@ module VX_fpu_unit #(
     wire stall_out = ~fpu_commit_if.ready && fpu_commit_if.valid;
 
     VX_pipe_register #(
-        .DATAW  (1 + 64 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `FFLAGS_BITS),
+        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `FFLAGS_BITS),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),

@@ -25,13 +25,13 @@ module VX_csr_data #(
 `endif 
 
     input wire                      read_enable,
-    input wire [63:0]               read_uuid,
+    input wire [`UUID_BITS-1:0]     read_uuid,
     input wire[`CSR_ADDR_BITS-1:0]  read_addr,
     input wire[`NW_BITS-1:0]        read_wid,
     output wire[31:0]               read_data,
 
     input wire                      write_enable, 
-    input wire [63:0]               write_uuid,
+    input wire [`UUID_BITS-1:0]     write_uuid,
     input wire[`CSR_ADDR_BITS-1:0]  write_addr,
     input wire[`NW_BITS-1:0]        write_wid,
     input wire[31:0]                write_data,
@@ -100,6 +100,7 @@ module VX_csr_data #(
     assign tex_csr_if.write_enable = write_enable;
     assign tex_csr_if.write_addr   = write_addr;
     assign tex_csr_if.write_data   = write_data;
+    assign tex_csr_if.write_uuid   = write_uuid;
 `endif
 
     always @(posedge clk) begin

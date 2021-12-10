@@ -33,7 +33,7 @@ module VX_gpu_unit #(
     localparam RSP_DATAW  = `MAX(`NUM_THREADS * 32, WCTL_DATAW);
 
     wire                    rsp_valid;
-    wire [63:0]             rsp_uuid;
+    wire [`UUID_BITS-1:0]   rsp_uuid;
     wire [`NW_BITS-1:0]     rsp_wid;
     wire [`NUM_THREADS-1:0] rsp_tmask;
     wire [31:0]             rsp_PC;
@@ -187,7 +187,7 @@ module VX_gpu_unit #(
     assign stall_out = ~gpu_commit_if.ready && gpu_commit_if.valid;
 
     VX_pipe_register #(
-        .DATAW  (1 + 64 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + RSP_DATAW + 1),
+        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + RSP_DATAW + 1),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
