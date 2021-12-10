@@ -1,6 +1,10 @@
 `ifndef VX_CONFIG
 `define VX_CONFIG
 
+`ifndef XLEN
+`define XLEN 32
+`endif
+
 `ifndef NUM_CLUSTERS
 `define NUM_CLUSTERS 1
 `endif
@@ -167,48 +171,50 @@
 `define CSR_MPM_FPU_ST_H            12'hB88
 `define CSR_MPM_GPU_ST              12'hB09
 `define CSR_MPM_GPU_ST_H            12'hB89
+// PERF: decode
+`define CSR_MPM_LOADS               12'hB0A
+`define CSR_MPM_LOADS_H             12'hB8A
+`define CSR_MPM_STORES              12'hB0B
+`define CSR_MPM_STORES_H            12'hB8B
+`define CSR_MPM_BRANCHES            12'hB0C
+`define CSR_MPM_BRANCHES_H          12'hB8C
 // PERF: icache
-`define CSR_MPM_ICACHE_READS        12'hB0A     // total reads
-`define CSR_MPM_ICACHE_READS_H      12'hB8A
-`define CSR_MPM_ICACHE_MISS_R       12'hB0B     // total misses
-`define CSR_MPM_ICACHE_MISS_R_H     12'hB8B
-`define CSR_MPM_ICACHE_PIPE_ST      12'hB0C     // pipeline stalls
-`define CSR_MPM_ICACHE_PIPE_ST_H    12'hB8C
-`define CSR_MPM_ICACHE_CRSP_ST      12'hB0D     // core response stalls
-`define CSR_MPM_ICACHE_CRSP_ST_H    12'hB8D
+`define CSR_MPM_ICACHE_READS        12'hB0D     // total reads
+`define CSR_MPM_ICACHE_READS_H      12'hB8D
+`define CSR_MPM_ICACHE_MISS_R       12'hB0E     // read misses
+`define CSR_MPM_ICACHE_MISS_R_H     12'hB8E
 // PERF: dcache
-`define CSR_MPM_DCACHE_READS        12'hB0E     // total reads
-`define CSR_MPM_DCACHE_READS_H      12'hB8E
-`define CSR_MPM_DCACHE_WRITES       12'hB0F     // total writes
-`define CSR_MPM_DCACHE_WRITES_H     12'hB8F 
-`define CSR_MPM_DCACHE_MISS_R       12'hB10     // read misses
-`define CSR_MPM_DCACHE_MISS_R_H     12'hB90
-`define CSR_MPM_DCACHE_MISS_W       12'hB11     // write misses
-`define CSR_MPM_DCACHE_MISS_W_H     12'hB91
-`define CSR_MPM_DCACHE_BANK_ST      12'hB12     // bank conflicts stalls
-`define CSR_MPM_DCACHE_BANK_ST_H    12'hB92
-`define CSR_MPM_DCACHE_MSHR_ST      12'hB13     // MSHR stalls
-`define CSR_MPM_DCACHE_MSHR_ST_H    12'hB93
-`define CSR_MPM_DCACHE_PIPE_ST      12'hB14     // pipeline stalls
-`define CSR_MPM_DCACHE_PIPE_ST_H    12'hB94
-`define CSR_MPM_DCACHE_CRSP_ST      12'hB15     // core response stalls
-`define CSR_MPM_DCACHE_CRSP_ST_H    12'hB95
+`define CSR_MPM_DCACHE_READS        12'hB0F     // total reads
+`define CSR_MPM_DCACHE_READS_H      12'hB8F
+`define CSR_MPM_DCACHE_WRITES       12'hB10     // total writes
+`define CSR_MPM_DCACHE_WRITES_H     12'hB90
+`define CSR_MPM_DCACHE_MISS_R       12'hB11     // read misses
+`define CSR_MPM_DCACHE_MISS_R_H     12'hB91
+`define CSR_MPM_DCACHE_MISS_W       12'hB12     // write misses
+`define CSR_MPM_DCACHE_MISS_W_H     12'hB92
+`define CSR_MPM_DCACHE_BANK_ST      12'hB13     // bank conflicts
+`define CSR_MPM_DCACHE_BANK_ST_H    12'hB93
+`define CSR_MPM_DCACHE_MSHR_ST      12'hB14     // MSHR stalls
+`define CSR_MPM_DCACHE_MSHR_ST_H    12'hB94
 // PERF: smem
-`define CSR_MPM_SMEM_READS          12'hB16     // total reads
-`define CSR_MPM_SMEM_READS_H        12'hB96
-`define CSR_MPM_SMEM_WRITES         12'hB17     // total writes
-`define CSR_MPM_SMEM_WRITES_H       12'hB97
-`define CSR_MPM_SMEM_BANK_ST        12'hB18     // bank conflicts stalls
-`define CSR_MPM_SMEM_BANK_ST_H      12'hB98
+`define CSR_MPM_SMEM_READS          12'hB15     // total reads
+`define CSR_MPM_SMEM_READS_H        12'hB95
+`define CSR_MPM_SMEM_WRITES         12'hB16     // total writes
+`define CSR_MPM_SMEM_WRITES_H       12'hB96
+`define CSR_MPM_SMEM_BANK_ST        12'hB17     // bank conflicts
+`define CSR_MPM_SMEM_BANK_ST_H      12'hB97
 // PERF: memory
-`define CSR_MPM_MEM_READS           12'hB19     // memory reads
-`define CSR_MPM_MEM_READS_H         12'hB99
-`define CSR_MPM_MEM_WRITES          12'hB1A     // memory writes
-`define CSR_MPM_MEM_WRITES_H        12'hB9A
-`define CSR_MPM_MEM_ST              12'hB1B     // memory request stalls
-`define CSR_MPM_MEM_ST_H            12'hB9B
-`define CSR_MPM_MEM_LAT             12'hB1C     // memory latency (total)
-`define CSR_MPM_MEM_LAT_H           12'hB9C
+`define CSR_MPM_MEM_READS           12'hB18     // memory reads
+`define CSR_MPM_MEM_READS_H         12'hB98
+`define CSR_MPM_MEM_WRITES          12'hB19     // memory writes
+`define CSR_MPM_MEM_WRITES_H        12'hB99
+`define CSR_MPM_MEM_LAT             12'hB1A     // memory latency
+`define CSR_MPM_MEM_LAT_H           12'hB9A
+// PERF: texunit
+`define CSR_MPM_TEX_READS           12'hB1B     // texture accesses
+`define CSR_MPM_TEX_READS_H         12'hB9B
+`define CSR_MPM_TEX_LAT             12'hB1C     // texture latency
+`define CSR_MPM_TEX_LAT_H           12'hB9C
 
 // Machine Information Registers
 `define CSR_MVENDORID   12'hF11
@@ -232,18 +238,40 @@
 
 ////////// Texture Units //////////////////////////////////////////////////////
 
-`define NUM_TEX_UNITS       2
+`define NUM_TEX_UNITS           2
+`define TEX_SUBPIXEL_BITS       8
 
-`define CSR_TEX_STATES      7
-`define CSR_TEX_BEGIN(x)    (12'hFD0 + (x) * `CSR_TEX_STATES)
+`define TEX_DIM_BITS            15
+`define TEX_LOD_MAX             `TEX_DIM_BITS
+`define TEX_LOD_BITS            4
 
-`define CSR_TEX_ADDR(x)     (`CSR_TEX_BEGIN(x) + 12'h00)
-`define CSR_TEX_FORMAT(x)   (`CSR_TEX_BEGIN(x) + 12'h01)
-`define CSR_TEX_WRAP(x)     (`CSR_TEX_BEGIN(x) + 12'h02)
-`define CSR_TEX_FILTER(x)   (`CSR_TEX_BEGIN(x) + 12'h03)
-`define CSR_TEX_MIPOFF(x)   (`CSR_TEX_BEGIN(x) + 12'h04)
-`define CSR_TEX_WIDTH(x)    (`CSR_TEX_BEGIN(x) + 12'h05)
-`define CSR_TEX_HEIGHT(x)   (`CSR_TEX_BEGIN(x) + 12'h06)
+`define TEX_FXD_BITS            32
+`define TEX_FXD_FRAC            (`TEX_DIM_BITS+`TEX_SUBPIXEL_BITS)
+
+`define TEX_STATE_ADDR          0
+`define TEX_STATE_WIDTH         1
+`define TEX_STATE_HEIGHT        2
+`define TEX_STATE_FORMAT        3
+`define TEX_STATE_FILTER        4
+`define TEX_STATE_WRAPU         5
+`define TEX_STATE_WRAPV         6
+`define TEX_STATE_MIPOFF(lod)   (7+(lod))
+`define NUM_TEX_STATES          (`TEX_STATE_MIPOFF(`TEX_LOD_MAX)+1)
+
+`define CSR_TEX_UNIT            12'hFD0
+
+`define CSR_TEX_STATE_BEGIN     12'hFD1
+`define CSR_TEX_ADDR            (`CSR_TEX_STATE_BEGIN+`TEX_STATE_ADDR)
+`define CSR_TEX_WIDTH           (`CSR_TEX_STATE_BEGIN+`TEX_STATE_WIDTH)
+`define CSR_TEX_HEIGHT          (`CSR_TEX_STATE_BEGIN+`TEX_STATE_HEIGHT)
+`define CSR_TEX_FORMAT          (`CSR_TEX_STATE_BEGIN+`TEX_STATE_FORMAT)
+`define CSR_TEX_FILTER          (`CSR_TEX_STATE_BEGIN+`TEX_STATE_FILTER)
+`define CSR_TEX_WRAPU           (`CSR_TEX_STATE_BEGIN+`TEX_STATE_WRAPU)
+`define CSR_TEX_WRAPV           (`CSR_TEX_STATE_BEGIN+`TEX_STATE_WRAPV)
+`define CSR_TEX_MIPOFF(lod)     (`CSR_TEX_STATE_BEGIN+`TEX_STATE_MIPOFF(lod))
+`define CSR_TEX_STATE_END       (`CSR_TEX_STATE_BEGIN+`NUM_TEX_STATES)
+
+`define CSR_TEX_STATE(addr)     ((addr) - `CSR_TEX_STATE_BEGIN)
 
 // Pipeline Queues ////////////////////////////////////////////////////////////
 
@@ -260,6 +288,11 @@
 // Size of FPU Request Queue
 `ifndef FPUQ_SIZE
 `define FPUQ_SIZE 8
+`endif
+
+// Texture Unit Request Queue
+`ifndef TEXQ_SIZE
+`define TEXQ_SIZE (`NUM_WARPS * 2)
 `endif
 
 // Icache Configurable Knobs //////////////////////////////////////////////////
@@ -373,7 +406,7 @@
 
 // Number of banks
 `ifndef L2_NUM_BANKS
-`define L2_NUM_BANKS `MIN(`NUM_CORES, 4)
+`define L2_NUM_BANKS ((`NUM_CORES < 4) ? `NUM_CORES : 4)
 `endif
 
 // Number of ports per bank
@@ -415,7 +448,7 @@
 
 // Number of banks
 `ifndef L3_NUM_BANKS
-`define L3_NUM_BANKS `MIN(`NUM_CLUSTERS, 4)
+`define L3_NUM_BANKS ((`NUM_CLUSTERS < 4) ? `NUM_CORES : 4)
 `endif
 
 // Number of ports per bank

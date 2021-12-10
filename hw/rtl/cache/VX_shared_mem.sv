@@ -254,22 +254,19 @@ module VX_shared_mem #(
         .ready_out (core_rsp_ready)
     );
 
-`ifdef DBG_CACHE_REQ_INFO
 `IGNORE_UNUSED_BEGIN
-    wire [NUM_BANKS-1:0][31:0]         debug_pc_st0, debug_pc_st1;
-    wire [NUM_BANKS-1:0][`NW_BITS-1:0] debug_wid_st0, debug_wid_st1;
+    wire [NUM_BANKS-1:0][`DBG_CACHE_REQ_IDW-1:0]  req_id_st0, req_id_st1;
 `IGNORE_UNUSED_END
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         if (CORE_TAG_WIDTH != CORE_TAG_ID_BITS && CORE_TAG_ID_BITS != 0) begin        
-            assign {debug_wid_st0[i], debug_pc_st0[i]} = per_bank_core_req_tag_unqual[i][`CACHE_REQ_INFO_RNG];
-            assign {debug_wid_st1[i], debug_pc_st1[i]} = per_bank_core_req_tag[i][`CACHE_REQ_INFO_RNG];        
+            assign req_id_st0[i] = per_bank_core_req_tag_unqual[i][`CACHE_REQ_ID_RNG];
+            assign req_id_st1[i] = per_bank_core_req_tag[i][`CACHE_REQ_ID_RNG];
         end else begin
-            assign {debug_wid_st0[i], debug_pc_st0[i]} = 0;
-            assign {debug_wid_st1[i], debug_pc_st1[i]} = 0;
+            assign req_id_st0[i] = 0;
+            assign req_id_st1[i] = 0;
         end
     end
-`endif
 
 `ifdef DBG_TRACE_CACHE_BANK
     
@@ -309,11 +306,11 @@ module VX_shared_mem #(
             for (integer i = 0; i < NUM_BANKS; ++i) begin
                 if (per_bank_core_req_valid_unqual[i]) begin
                     if (per_bank_core_req_rw_unqual[i]) begin
-                        dpi_trace("%d: cache%0d:%0d core-wr-req: addr=%0h, tag=%0h, byteen=%b, data=%0h, wid=%0d, PC=%0h\n", 
-                            $time, CACHE_ID, i, `LINE_TO_BYTE_ADDR(per_bank_core_req_addr_unqual[i], i), per_bank_core_req_tag_unqual[i], per_bank_core_req_byteen_unqual[i], per_bank_core_req_data_unqual[i], debug_wid_st0[i], debug_pc_st0[i]);
+                        dpi_trace("%d: smem%0d:%0d core-wr-req: addr=%0h, tag=%0h, byteen=%b, data=%0h (#%0d)\n", 
+                            $time, CACHE_ID, i, `LINE_TO_BYTE_ADDR(per_bank_core_req_addr_unqual[i], i), per_bank_core_req_tag_unqual[i], per_bank_core_req_byteen_unqual[i], per_bank_core_req_data_unqual[i], req_id_st0[i]);
                     end else begin
-                        dpi_trace("%d: cache%0d:%0d core-rd-req: addr=%0h, tag=%0h, byteen=%b, wid=%0d, PC=%0h\n", 
-                            $time, CACHE_ID, i, `LINE_TO_BYTE_ADDR(per_bank_core_req_addr_unqual[i], i), per_bank_core_req_tag_unqual[i], per_bank_core_req_byteen_unqual[i], debug_wid_st0[i], debug_pc_st0[i]);
+                        dpi_trace("%d: smem%0d:%0d core-rd-req: addr=%0h, tag=%0h (#%0d)\n", 
+                            $time, CACHE_ID, i, `LINE_TO_BYTE_ADDR(per_bank_core_req_addr_unqual[i], i), per_bank_core_req_tag_unqual[i], req_id_st0[i]);
                     end
                 end
             end
@@ -322,11 +319,11 @@ module VX_shared_mem #(
             for (integer i = 0; i < NUM_BANKS; ++i) begin
                 if (per_bank_core_req_valid[i]) begin
                     if (per_bank_core_req_rw[i]) begin
-                        dpi_trace("%d: cache%0d:%0d core-wr-rsp: addr=%0h, tag=%0h, byteen=%b, data=%0h, wid=%0d, PC=%0h\n", 
-                            $time, CACHE_ID, i, `LINE_TO_BYTE_ADDR(per_bank_core_req_addr[i], i), per_bank_core_req_tag[i], per_bank_core_req_byteen[i], per_bank_core_req_data[i], debug_wid_st1[i], debug_pc_st1[i]);
+                        dpi_trace("%d: smem%0d:%0d core-wr-rsp: addr=%0h, tag=%0h, data=%0h (#%0d)\n", 
+                            $time, CACHE_ID, i, `LINE_TO_BYTE_ADDR(per_bank_core_req_addr[i], i), per_bank_core_req_tag[i], per_bank_core_req_data[i], req_id_st1[i]);
                     end else begin
-                        dpi_trace("%d: cache%0d:%0d core-rd-rsp: addr=%0h, tag=%0h, byteen=%b, data=%0h, wid=%0d, PC=%0h\n", 
-                            $time, CACHE_ID, i, `LINE_TO_BYTE_ADDR(per_bank_core_req_addr[i], i), per_bank_core_req_tag[i], per_bank_core_req_byteen[i], per_bank_core_rsp_data[i], debug_wid_st1[i], debug_pc_st1[i]);
+                        dpi_trace("%d: smem%0d:%0d core-rd-rsp: addr=%0h, tag=%0h, data=%0h (#%0d)\n", 
+                            $time, CACHE_ID, i, `LINE_TO_BYTE_ADDR(per_bank_core_req_addr[i], i), per_bank_core_req_tag[i], per_bank_core_rsp_data[i], req_id_st1[i]);
                     end
                 end
             end
@@ -338,21 +335,13 @@ module VX_shared_mem #(
     // per cycle: core_reads, core_writes
     wire [$clog2(NUM_REQS+1)-1:0] perf_core_reads_per_cycle;
     wire [$clog2(NUM_REQS+1)-1:0] perf_core_writes_per_cycle;
-    wire [$clog2(NUM_REQS+1)-1:0] perf_crsp_stall_per_cycle;
 
     wire [NUM_REQS-1:0] perf_core_reads_per_mask = core_req_valid & core_req_ready & ~core_req_rw;
     wire [NUM_REQS-1:0] perf_core_writes_per_mask = core_req_valid & core_req_ready & core_req_rw;
 
     `POP_COUNT(perf_core_reads_per_cycle, perf_core_reads_per_mask);
     `POP_COUNT(perf_core_writes_per_cycle, perf_core_writes_per_mask);
-    
-    if (CORE_TAG_ID_BITS != 0) begin
-        wire [NUM_REQS-1:0] perf_crsp_stall_per_mask = core_rsp_tmask & {NUM_REQS{core_rsp_valid && ~core_rsp_ready}};
-        `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_mask);
-    end else begin
-        wire [NUM_REQS-1:0] perf_crsp_stall_per_mask = core_rsp_valid & ~core_rsp_ready;
-        `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_mask);
-    end
+    wire perf_crsp_stall_per_cycle = core_rsp_valid & ~core_rsp_ready;
 
     reg [`PERF_CTR_BITS-1:0] perf_core_reads;
     reg [`PERF_CTR_BITS-1:0] perf_core_writes;
@@ -360,13 +349,13 @@ module VX_shared_mem #(
 
     always @(posedge clk) begin
         if (reset) begin
-            perf_core_reads   <= 0;
-            perf_core_writes  <= 0;
-            perf_crsp_stalls  <= 0;
+            perf_core_reads  <= 0;
+            perf_core_writes <= 0;
+            perf_crsp_stalls <= 0;
         end else begin
-            perf_core_reads   <= perf_core_reads  + `PERF_CTR_BITS'(perf_core_reads_per_cycle);
-            perf_core_writes  <= perf_core_writes + `PERF_CTR_BITS'(perf_core_writes_per_cycle);
-            perf_crsp_stalls  <= perf_crsp_stalls + `PERF_CTR_BITS'(perf_crsp_stall_per_cycle);
+            perf_core_reads  <= perf_core_reads  + `PERF_CTR_BITS'(perf_core_reads_per_cycle);
+            perf_core_writes <= perf_core_writes + `PERF_CTR_BITS'(perf_core_writes_per_cycle);
+            perf_crsp_stalls <= perf_crsp_stalls + `PERF_CTR_BITS'(perf_crsp_stall_per_cycle);
         end
     end
 
@@ -374,7 +363,8 @@ module VX_shared_mem #(
     assign perf_cache_if.writes       = perf_core_writes;
     assign perf_cache_if.read_misses  = '0;
     assign perf_cache_if.write_misses = '0;
-    assign perf_cache_if.pipe_stalls  = '0;
+    assign perf_cache_if.mshr_stalls  = '0;
+    assign perf_cache_if.mem_stalls   = '0;
     assign perf_cache_if.crsp_stalls  = perf_crsp_stalls;
 `endif
 

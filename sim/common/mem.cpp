@@ -168,11 +168,12 @@ void MemoryUnit::tlbRm(uint64_t va) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-RAM::RAM(uint32_t num_pages, uint32_t page_size) 
-  : page_bits_(log2ceil(page_size)) {    
-    assert(ispow2(page_size));
-  mem_.resize(num_pages, NULL);
-  size_ = uint64_t(mem_.size()) << page_bits_;
+RAM::RAM(uint32_t page_size) 
+  : size_(0)
+  , page_bits_(log2ceil(page_size))
+  , last_page_(nullptr)
+  , last_page_index_(0) {    
+   assert(ispow2(page_size));
 }
 
 RAM::~RAM() {
@@ -180,31 +181,41 @@ RAM::~RAM() {
 }
 
 void RAM::clear() {
-  for (auto& page : mem_) {
-    delete[] page;
-    page = NULL;
+  for (auto& page : pages_) {
+    delete[] page.second;
   }
 }
 
 uint64_t RAM::size() const {
-  return size_;
+  return uint64_t(pages_.size()) << page_bits_;
 }
 
-uint8_t *RAM::get(uint32_t address) const {
-  uint32_t page_size   = 1 << page_bits_;
-  uint32_t page_index  = address >> page_bits_;
-  uint32_t byte_offset = address & ((1 << page_bits_) - 1);
+uint8_t *RAM::get(uint64_t address) const {
+  uint32_t page_size   = 1 << page_bits_;  
+  uint32_t page_offset = address & (page_size - 1);
+  uint64_t page_index  = address >> page_bits_;
 
-  auto &page = mem_.at(page_index);
-  if (page == NULL) {
-    uint8_t *ptr = new uint8_t[page_size];
-    // set uninitialized data to "baadf00d"
-    for (uint32_t i = 0; i < page_size; ++i) {
-      ptr[i] = (0xbaadf00d >> ((i & 0x3) * 8)) & 0xff;
+  uint8_t* page;
+  if (last_page_ && last_page_index_ == page_index) {
+    page = last_page_;
+  } else {
+    auto it = pages_.find(page_index);
+    if (it != pages_.end()) {
+      page = it->second;
+    } else {
+      uint8_t *ptr = new uint8_t[page_size];
+      // set uninitialized data to "baadf00d"
+      for (uint32_t i = 0; i < page_size; ++i) {
+        ptr[i] = (0xbaadf00d >> ((i & 0x3) * 8)) & 0xff;
+      }
+      pages_.emplace(page_index, ptr);
+      page = ptr;
     }
-    page = ptr;
+    last_page_ = page;
+    last_page_index_ = page_index;
   }
-  return page + byte_offset;
+
+  return page + page_offset;
 }
 
 void RAM::read(void *data, uint64_t addr, uint64_t size) {

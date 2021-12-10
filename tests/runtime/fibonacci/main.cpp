@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <vx_print.h>
 
 const int Num = 9;
 const int Ans = 34;
@@ -14,12 +15,12 @@ int main() {
 
 	int fib = fibonacci(Num);
 	
-	printf("fibonacci(%d) = %d\n", Num, fib);
+	vx_printf("fibonacci(%d) = %d\n", Num, fib);
 
 	if (fib == Ans) {
-		printf("Passed!\n");
+		vx_printf("Passed!\n");
 	} else {
-		printf("Failed! value=%d, expected=%d\n", fib, Ans);
+		vx_printf("Failed! value=%d, expected=%d\n", fib, Ans);
 		errors = 1;
 	}
 

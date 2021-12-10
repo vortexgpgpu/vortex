@@ -102,7 +102,6 @@ module VX_cache #(
     wire [NUM_BANKS-1:0] perf_read_miss_per_bank;
     wire [NUM_BANKS-1:0] perf_write_miss_per_bank;
     wire [NUM_BANKS-1:0] perf_mshr_stall_per_bank;
-    wire [NUM_BANKS-1:0] perf_pipe_stall_per_bank;
 `endif
 
     ///////////////////////////////////////////////////////////////////////////
@@ -219,37 +218,37 @@ module VX_cache #(
     ///////////////////////////////////////////////////////////////////////////
 
     // Core request    
-    wire [NUM_REQS-1:0]                     core_req_valid_nc;
-    wire [NUM_REQS-1:0]                     core_req_rw_nc;
-    wire [NUM_REQS-1:0][`WORD_ADDR_WIDTH-1:0] core_req_addr_nc;
-    wire [NUM_REQS-1:0][WORD_SIZE-1:0]      core_req_byteen_nc;
-    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]    core_req_data_nc;
-    wire [NUM_REQS-1:0][CORE_TAG_X_WIDTH-1:0] core_req_tag_nc;
-    wire [NUM_REQS-1:0]                     core_req_ready_nc;
+    wire [NUM_REQS-1:0]                     core_req_valid_c;
+    wire [NUM_REQS-1:0]                     core_req_rw_c;
+    wire [NUM_REQS-1:0][`WORD_ADDR_WIDTH-1:0] core_req_addr_c;
+    wire [NUM_REQS-1:0][WORD_SIZE-1:0]      core_req_byteen_c;
+    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]    core_req_data_c;
+    wire [NUM_REQS-1:0][CORE_TAG_X_WIDTH-1:0] core_req_tag_c;
+    wire [NUM_REQS-1:0]                     core_req_ready_c;
 
     // Core response
-    wire [`CORE_RSP_TAGS-1:0]               core_rsp_valid_nc;
-    wire [NUM_REQS-1:0]                     core_rsp_tmask_nc;
-    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]    core_rsp_data_nc;
-    wire [`CORE_RSP_TAGS-1:0][CORE_TAG_X_WIDTH-1:0] core_rsp_tag_nc;
-    wire [`CORE_RSP_TAGS-1:0]               core_rsp_ready_nc;
+    wire [`CORE_RSP_TAGS-1:0]               core_rsp_valid_c;
+    wire [NUM_REQS-1:0]                     core_rsp_tmask_c;
+    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]    core_rsp_data_c;
+    wire [`CORE_RSP_TAGS-1:0][CORE_TAG_X_WIDTH-1:0] core_rsp_tag_c;
+    wire [`CORE_RSP_TAGS-1:0]               core_rsp_ready_c;
 
     // Memory request
-    wire                            mem_req_valid_nc;
-    wire                            mem_req_rw_nc;
-    wire [`MEM_ADDR_WIDTH-1:0]      mem_req_addr_nc;
-    wire [NUM_PORTS-1:0]            mem_req_pmask_nc;
-    wire [NUM_PORTS-1:0][WORD_SIZE-1:0] mem_req_byteen_nc;
-    wire [NUM_PORTS-1:0][WORD_SELECT_BITS-1:0] mem_req_wsel_nc;
-    wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] mem_req_data_nc;
-    wire [MEM_TAG_IN_WIDTH-1:0]     mem_req_tag_nc;
-    wire                            mem_req_ready_nc;
+    wire                            mem_req_valid_c;
+    wire                            mem_req_rw_c;
+    wire [`MEM_ADDR_WIDTH-1:0]      mem_req_addr_c;
+    wire [NUM_PORTS-1:0]            mem_req_pmask_c;
+    wire [NUM_PORTS-1:0][WORD_SIZE-1:0] mem_req_byteen_c;
+    wire [NUM_PORTS-1:0][WORD_SELECT_BITS-1:0] mem_req_wsel_c;
+    wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] mem_req_data_c;
+    wire [MEM_TAG_IN_WIDTH-1:0]     mem_req_tag_c;
+    wire                            mem_req_ready_c;
     
     // Memory response
-    wire                            mem_rsp_valid_nc;
-    wire [`CACHE_LINE_WIDTH-1:0]    mem_rsp_data_nc;
-    wire [MEM_TAG_IN_WIDTH-1:0]     mem_rsp_tag_nc;
-    wire                            mem_rsp_ready_nc;
+    wire                            mem_rsp_valid_c;
+    wire [`CACHE_LINE_WIDTH-1:0]    mem_rsp_data_c;
+    wire [MEM_TAG_IN_WIDTH-1:0]     mem_rsp_tag_c;
+    wire                            mem_rsp_ready_c;
 
     if (NC_ENABLE) begin
         VX_nc_bypass #( 
@@ -280,20 +279,20 @@ module VX_cache #(
             .core_req_ready_in  (core_req_ready),
 
             // Core request out
-            .core_req_valid_out (core_req_valid_nc),
-            .core_req_rw_out    (core_req_rw_nc),
-            .core_req_byteen_out(core_req_byteen_nc),
-            .core_req_addr_out  (core_req_addr_nc),
-            .core_req_data_out  (core_req_data_nc),        
-            .core_req_tag_out   (core_req_tag_nc),
-            .core_req_ready_out (core_req_ready_nc),
+            .core_req_valid_out (core_req_valid_c),
+            .core_req_rw_out    (core_req_rw_c),
+            .core_req_byteen_out(core_req_byteen_c),
+            .core_req_addr_out  (core_req_addr_c),
+            .core_req_data_out  (core_req_data_c),        
+            .core_req_tag_out   (core_req_tag_c),
+            .core_req_ready_out (core_req_ready_c),
 
             // Core response in
-            .core_rsp_valid_in  (core_rsp_valid_nc),
-            .core_rsp_tmask_in  (core_rsp_tmask_nc),
-            .core_rsp_data_in   (core_rsp_data_nc),
-            .core_rsp_tag_in    (core_rsp_tag_nc),
-            .core_rsp_ready_in  (core_rsp_ready_nc),
+            .core_rsp_valid_in  (core_rsp_valid_c),
+            .core_rsp_tmask_in  (core_rsp_tmask_c),
+            .core_rsp_data_in   (core_rsp_data_c),
+            .core_rsp_tag_in    (core_rsp_tag_c),
+            .core_rsp_ready_in  (core_rsp_ready_c),
 
             // Core response out
             .core_rsp_valid_out (core_rsp_valid_sb),
@@ -303,15 +302,15 @@ module VX_cache #(
             .core_rsp_ready_out (core_rsp_ready_sb),
 
             // Memory request in
-            .mem_req_valid_in   (mem_req_valid_nc),
-            .mem_req_rw_in      (mem_req_rw_nc),  
-            .mem_req_addr_in    (mem_req_addr_nc),
-            .mem_req_pmask_in   (mem_req_pmask_nc),
-            .mem_req_byteen_in  (mem_req_byteen_nc),
-            .mem_req_wsel_in    (mem_req_wsel_nc),
-            .mem_req_data_in    (mem_req_data_nc),
-            .mem_req_tag_in     (mem_req_tag_nc),
-            .mem_req_ready_in   (mem_req_ready_nc),
+            .mem_req_valid_in   (mem_req_valid_c),
+            .mem_req_rw_in      (mem_req_rw_c),  
+            .mem_req_addr_in    (mem_req_addr_c),
+            .mem_req_pmask_in   (mem_req_pmask_c),
+            .mem_req_byteen_in  (mem_req_byteen_c),
+            .mem_req_wsel_in    (mem_req_wsel_c),
+            .mem_req_data_in    (mem_req_data_c),
+            .mem_req_tag_in     (mem_req_tag_c),
+            .mem_req_ready_in   (mem_req_ready_c),
 
             // Memory request out
             .mem_req_valid_out  (mem_req_valid_sb),
@@ -331,40 +330,40 @@ module VX_cache #(
             .mem_rsp_ready_in   (mem_rsp_ready),
 
             // Memory response out
-            .mem_rsp_valid_out  (mem_rsp_valid_nc),        
-            .mem_rsp_data_out   (mem_rsp_data_nc),
-            .mem_rsp_tag_out    (mem_rsp_tag_nc),
-            .mem_rsp_ready_out  (mem_rsp_ready_nc)
+            .mem_rsp_valid_out  (mem_rsp_valid_c),        
+            .mem_rsp_data_out   (mem_rsp_data_c),
+            .mem_rsp_tag_out    (mem_rsp_tag_c),
+            .mem_rsp_ready_out  (mem_rsp_ready_c)
         );
     end else begin        
-        assign core_req_valid_nc    = core_req_valid;
-        assign core_req_rw_nc       = core_req_rw;
-        assign core_req_addr_nc     = core_req_addr;
-        assign core_req_byteen_nc   = core_req_byteen;
-        assign core_req_data_nc     = core_req_data;
-        assign core_req_tag_nc      = core_req_tag;
-        assign core_req_ready       = core_req_ready_nc;
+        assign core_req_valid_c     = core_req_valid;
+        assign core_req_rw_c        = core_req_rw;
+        assign core_req_addr_c      = core_req_addr;
+        assign core_req_byteen_c    = core_req_byteen;
+        assign core_req_data_c      = core_req_data;
+        assign core_req_tag_c       = core_req_tag;
+        assign core_req_ready       = core_req_ready_c;
 
-        assign core_rsp_valid_sb    = core_rsp_valid_nc;
-        assign core_rsp_tmask_sb    = core_rsp_tmask_nc;
-        assign core_rsp_data_sb     = core_rsp_data_nc;
-        assign core_rsp_tag_sb      = core_rsp_tag_nc;
-        assign core_rsp_ready_nc    = core_rsp_ready_sb;
+        assign core_rsp_valid_sb    = core_rsp_valid_c;
+        assign core_rsp_tmask_sb    = core_rsp_tmask_c;
+        assign core_rsp_data_sb     = core_rsp_data_c;
+        assign core_rsp_tag_sb      = core_rsp_tag_c;
+        assign core_rsp_ready_c     = core_rsp_ready_sb;
 
-        assign mem_req_valid_sb     = mem_req_valid_nc;
-        assign mem_req_addr_sb      = mem_req_addr_nc;
-        assign mem_req_rw_p         = mem_req_rw_nc;
-        assign mem_req_pmask_p      = mem_req_pmask_nc;
-        assign mem_req_byteen_p     = mem_req_byteen_nc;
-        assign mem_req_wsel_p       = mem_req_wsel_nc;
-        assign mem_req_data_p       = mem_req_data_nc;
-        assign mem_req_tag_sb       = mem_req_tag_nc;
-        assign mem_req_ready_nc     = mem_req_ready_sb;
+        assign mem_req_valid_sb     = mem_req_valid_c;
+        assign mem_req_addr_sb      = mem_req_addr_c;
+        assign mem_req_rw_p         = mem_req_rw_c;
+        assign mem_req_pmask_p      = mem_req_pmask_c;
+        assign mem_req_byteen_p     = mem_req_byteen_c;
+        assign mem_req_wsel_p       = mem_req_wsel_c;
+        assign mem_req_data_p       = mem_req_data_c;
+        assign mem_req_tag_sb       = mem_req_tag_c;
+        assign mem_req_ready_c      = mem_req_ready_sb;
 
-        assign mem_rsp_valid_nc     = mem_rsp_valid;
-        assign mem_rsp_data_nc      = mem_rsp_data;
-        assign mem_rsp_tag_nc       = mem_rsp_tag;
-        assign mem_rsp_ready        = mem_rsp_ready_nc;
+        assign mem_rsp_valid_c      = mem_rsp_valid;
+        assign mem_rsp_data_c       = mem_rsp_data;
+        assign mem_rsp_tag_c        = mem_rsp_tag;
+        assign mem_rsp_ready        = mem_rsp_ready_c;
     end    
 
     ///////////////////////////////////////////////////////////////////////////
@@ -383,15 +382,15 @@ module VX_cache #(
     ) mem_rsp_queue (
         .clk        (clk),
         .reset      (mrsq_reset),
-        .ready_in   (mem_rsp_ready_nc),
-        .valid_in   (mem_rsp_valid_nc),
-        .data_in    ({mem_rsp_tag_nc,   mem_rsp_data_nc}),                
+        .ready_in   (mem_rsp_ready_c),
+        .valid_in   (mem_rsp_valid_c),
+        .data_in    ({mem_rsp_tag_c,   mem_rsp_data_c}),                
         .data_out   ({mem_rsp_tag_qual, mem_rsp_data_qual}),
         .ready_out  (mrsq_out_ready),
         .valid_out  (mrsq_out_valid)
     );
 
-    `UNUSED_VAR (mem_rsp_tag_nc)
+    `UNUSED_VAR (mem_rsp_tag_c)
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -464,13 +463,13 @@ module VX_cache #(
     `ifdef PERF_ENABLE        
         .bank_stalls(perf_cache_if.bank_stalls),
     `endif     
-        .core_req_valid          (core_req_valid_nc),
-        .core_req_rw             (core_req_rw_nc), 
-        .core_req_addr           (core_req_addr_nc),
-        .core_req_byteen         (core_req_byteen_nc),
-        .core_req_data           (core_req_data_nc),
-        .core_req_tag            (core_req_tag_nc),
-        .core_req_ready          (core_req_ready_nc),
+        .core_req_valid          (core_req_valid_c),
+        .core_req_rw             (core_req_rw_c), 
+        .core_req_addr           (core_req_addr_c),
+        .core_req_byteen         (core_req_byteen_c),
+        .core_req_data           (core_req_data_c),
+        .core_req_tag            (core_req_tag_c),
+        .core_req_ready          (core_req_ready_c),
         .per_bank_core_req_valid (per_bank_core_req_valid),
         .per_bank_core_req_pmask (per_bank_core_req_pmask),
         .per_bank_core_req_rw    (per_bank_core_req_rw),
@@ -580,8 +579,7 @@ module VX_cache #(
             .MSHR_SIZE          (MSHR_SIZE),
             .MREQ_SIZE          (MREQ_SIZE),
             .WRITE_ENABLE       (WRITE_ENABLE),
-            .CORE_TAG_WIDTH     (CORE_TAG_X_WIDTH),                
-            .CORE_TAG_ID_BITS   (CORE_TAG_ID_X_BITS),
+            .CORE_TAG_WIDTH     (CORE_TAG_X_WIDTH),
             .BANK_ADDR_OFFSET   (BANK_ADDR_OFFSET)
         ) bank (
             `SCOPE_BIND_VX_cache_bank(i)
@@ -593,7 +591,6 @@ module VX_cache #(
             .perf_read_misses   (perf_read_miss_per_bank[i]),
             .perf_write_misses  (perf_write_miss_per_bank[i]),
             .perf_mshr_stalls   (perf_mshr_stall_per_bank[i]),
-            .perf_pipe_stalls   (perf_pipe_stall_per_bank[i]),
         `endif
                        
             // Core request
@@ -656,11 +653,11 @@ module VX_cache #(
         .per_bank_core_rsp_tag   (per_bank_core_rsp_tag),
         .per_bank_core_rsp_tid   (per_bank_core_rsp_tid),   
         .per_bank_core_rsp_ready (per_bank_core_rsp_ready),
-        .core_rsp_valid          (core_rsp_valid_nc),
-        .core_rsp_tmask          (core_rsp_tmask_nc),
-        .core_rsp_tag            (core_rsp_tag_nc),
-        .core_rsp_data           (core_rsp_data_nc),  
-        .core_rsp_ready          (core_rsp_ready_nc)
+        .core_rsp_valid          (core_rsp_valid_c),
+        .core_rsp_tmask          (core_rsp_tmask_c),
+        .core_rsp_tag            (core_rsp_tag_c),
+        .core_rsp_data           (core_rsp_data_c),  
+        .core_rsp_ready          (core_rsp_ready_c)
     ); 
 
     wire [NUM_BANKS-1:0][(`MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + NUM_PORTS * (1 + WORD_SIZE + WORD_SELECT_BITS + `WORD_WIDTH))-1:0] data_in;
@@ -682,15 +679,15 @@ module VX_cache #(
         .valid_in  (per_bank_mem_req_valid),
         .data_in   (data_in),
         .ready_in  (per_bank_mem_req_ready),   
-        .valid_out (mem_req_valid_nc),   
-        .data_out  ({mem_req_addr_nc, mem_req_id, mem_req_rw_nc, mem_req_pmask_nc, mem_req_byteen_nc, mem_req_wsel_nc, mem_req_data_nc}),
-        .ready_out (mem_req_ready_nc)
+        .valid_out (mem_req_valid_c),   
+        .data_out  ({mem_req_addr_c, mem_req_id, mem_req_rw_c, mem_req_pmask_c, mem_req_byteen_c, mem_req_wsel_c, mem_req_data_c}),
+        .ready_out (mem_req_ready_c)
     );
 
     if (NUM_BANKS == 1) begin
-        assign mem_req_tag_nc = MEM_TAG_IN_WIDTH'(mem_req_id);
+        assign mem_req_tag_c = MEM_TAG_IN_WIDTH'(mem_req_id);
     end else begin
-        assign mem_req_tag_nc = MEM_TAG_IN_WIDTH'({`MEM_ADDR_TO_BANK_ID(mem_req_addr_nc), mem_req_id});
+        assign mem_req_tag_c = MEM_TAG_IN_WIDTH'({`MEM_ADDR_TO_BANK_ID(mem_req_addr_c), mem_req_id});
     end    
 
 `ifdef PERF_ENABLE
@@ -698,12 +695,21 @@ module VX_cache #(
     wire [$clog2(NUM_REQS+1)-1:0] perf_core_reads_per_cycle;
     wire [$clog2(NUM_REQS+1)-1:0] perf_core_writes_per_cycle;
     wire [$clog2(NUM_REQS+1)-1:0] perf_crsp_stall_per_cycle;
-
-    wire [NUM_REQS-1:0] perf_core_reads_per_mask = core_req_valid & core_req_ready & ~core_req_rw;
-    wire [NUM_REQS-1:0] perf_core_writes_per_mask = core_req_valid & core_req_ready & core_req_rw;
-
-    `POP_COUNT(perf_core_reads_per_cycle, perf_core_reads_per_mask);
+    
+    wire [NUM_REQS-1:0] perf_core_reads_per_mask  = core_req_valid_c & core_req_ready_c & ~core_req_rw;
+    wire [NUM_REQS-1:0] perf_core_writes_per_mask = core_req_valid_c & core_req_ready_c & core_req_rw;
+         
+    // per cycle: read misses, write misses, msrq stalls, pipeline stalls
+    wire [$clog2(NUM_BANKS+1)-1:0] perf_read_miss_per_cycle;
+    wire [$clog2(NUM_BANKS+1)-1:0] perf_write_miss_per_cycle;
+    wire [$clog2(NUM_BANKS+1)-1:0] perf_mshr_stall_per_cycle;
+    wire [$clog2(NUM_BANKS+1)-1:0] perf_crsp_stall_per_cycle;
+    
+    `POP_COUNT(perf_core_reads_per_cycle,  perf_core_reads_per_mask);
     `POP_COUNT(perf_core_writes_per_cycle, perf_core_writes_per_mask);
+    `POP_COUNT(perf_read_miss_per_cycle,   perf_read_miss_per_bank);
+    `POP_COUNT(perf_write_miss_per_cycle,  perf_write_miss_per_bank);
+    `POP_COUNT(perf_mshr_stall_per_cycle,  perf_mshr_stall_per_bank);
     
     if (CORE_TAG_ID_BITS != 0) begin
         wire [NUM_REQS-1:0] perf_crsp_stall_per_mask = core_rsp_tmask & {NUM_REQS{core_rsp_valid && ~core_rsp_ready}};
@@ -713,23 +719,14 @@ module VX_cache #(
         `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_mask);
     end
 
-    // per cycle: read misses, write misses, msrq stalls, pipeline stalls
-    wire [$clog2(NUM_BANKS+1)-1:0] perf_read_miss_per_cycle;
-    wire [$clog2(NUM_BANKS+1)-1:0] perf_write_miss_per_cycle;
-    wire [$clog2(NUM_BANKS+1)-1:0] perf_mshr_stall_per_cycle;
-    wire [$clog2(NUM_BANKS+1)-1:0] perf_pipe_stall_per_cycle; 
-    
-    `POP_COUNT(perf_read_miss_per_cycle, perf_read_miss_per_bank);
-    `POP_COUNT(perf_write_miss_per_cycle, perf_write_miss_per_bank);    
-    `POP_COUNT(perf_mshr_stall_per_cycle, perf_mshr_stall_per_bank);
-    `POP_COUNT(perf_pipe_stall_per_cycle, perf_pipe_stall_per_bank);
+    wire perf_mem_stall_per_cycle = mem_req_valid & ~mem_req_ready;
 
     reg [`PERF_CTR_BITS-1:0] perf_core_reads;
     reg [`PERF_CTR_BITS-1:0] perf_core_writes;
     reg [`PERF_CTR_BITS-1:0] perf_read_misses;
     reg [`PERF_CTR_BITS-1:0] perf_write_misses;
     reg [`PERF_CTR_BITS-1:0] perf_mshr_stalls;
-    reg [`PERF_CTR_BITS-1:0] perf_pipe_stalls;
+    reg [`PERF_CTR_BITS-1:0] perf_mem_stalls;
     reg [`PERF_CTR_BITS-1:0] perf_crsp_stalls;
 
     always @(posedge clk) begin
@@ -739,16 +736,16 @@ module VX_cache #(
             perf_read_misses  <= 0;
             perf_write_misses <= 0;
             perf_mshr_stalls  <= 0;
-            perf_pipe_stalls  <= 0;
+            perf_mem_stalls   <= 0;
             perf_crsp_stalls  <= 0;
         end else begin
-            perf_core_reads   <= perf_core_reads  + `PERF_CTR_BITS'(perf_core_reads_per_cycle);
-            perf_core_writes  <= perf_core_writes + `PERF_CTR_BITS'(perf_core_writes_per_cycle);
-            perf_read_misses  <= perf_read_misses + `PERF_CTR_BITS'(perf_read_miss_per_cycle);
-            perf_write_misses <= perf_write_misses+ `PERF_CTR_BITS'(perf_write_miss_per_cycle);
-            perf_mshr_stalls  <= perf_mshr_stalls + `PERF_CTR_BITS'(perf_mshr_stall_per_cycle);
-            perf_pipe_stalls  <= perf_pipe_stalls + `PERF_CTR_BITS'(perf_pipe_stall_per_cycle);
-            perf_crsp_stalls  <= perf_crsp_stalls + `PERF_CTR_BITS'(perf_crsp_stall_per_cycle);
+            perf_core_reads   <= perf_core_reads   + `PERF_CTR_BITS'(perf_core_reads_per_cycle);
+            perf_core_writes  <= perf_core_writes  + `PERF_CTR_BITS'(perf_core_writes_per_cycle);
+            perf_read_misses  <= perf_read_misses  + `PERF_CTR_BITS'(perf_read_miss_per_cycle);
+            perf_write_misses <= perf_write_misses + `PERF_CTR_BITS'(perf_write_miss_per_cycle);
+            perf_mshr_stalls  <= perf_mshr_stalls  + `PERF_CTR_BITS'(perf_mshr_stall_per_cycle);
+            perf_mem_stalls   <= perf_mem_stalls   + `PERF_CTR_BITS'(perf_mem_stall_per_cycle);
+            perf_crsp_stalls  <= perf_crsp_stalls  + `PERF_CTR_BITS'(perf_crsp_stall_per_cycle);
         end
     end
 
@@ -757,7 +754,7 @@ module VX_cache #(
     assign perf_cache_if.read_misses  = perf_read_misses;
     assign perf_cache_if.write_misses = perf_write_misses;
     assign perf_cache_if.mshr_stalls  = perf_mshr_stalls;
-    assign perf_cache_if.pipe_stalls  = perf_pipe_stalls;
+    assign perf_cache_if.mem_stalls   = perf_mem_stalls;
     assign perf_cache_if.crsp_stalls  = perf_crsp_stalls;
 `endif
 

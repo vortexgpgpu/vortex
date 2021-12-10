@@ -17,6 +17,7 @@
 #include <fpga.h>
 #endif
 
+#include "vx_utils.h"
 #include <vortex.h>
 #include <VX_config.h>
 #include "vortex_afu.h"
@@ -52,7 +53,7 @@
 
 typedef struct vx_device_ {
     fpga_handle fpga;
-    size_t mem_allocation;
+    uint64_t mem_allocation;
     unsigned version;
     unsigned num_cores;
     unsigned num_warps;
@@ -64,18 +65,8 @@ typedef struct vx_buffer_ {
     void* host_ptr;
     uint64_t io_addr;
     vx_device_h hdevice;
-    size_t size;
+    uint64_t size;
 } vx_buffer_t;
-
-inline size_t align_size(size_t size, size_t alignment) {        
-    assert(0 == (alignment & (alignment - 1)));
-    return (size + alignment - 1) & ~(alignment - 1);
-}
-
-inline bool is_aligned(size_t addr, size_t alignment) {
-    assert(0 == (alignment & (alignment - 1)));
-    return 0 == (addr & (alignment - 1));
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -107,7 +98,7 @@ AutoPerfDump gAutoPerfDump;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-extern int vx_dev_caps(vx_device_h hdevice, unsigned caps_id, unsigned *value) {
+extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
     if (nullptr == hdevice)
         return -1;
 
@@ -279,7 +270,7 @@ extern int vx_dev_close(vx_device_h hdevice) {
     return 0;
 }
 
-extern int vx_alloc_dev_mem(vx_device_h hdevice, size_t size, size_t* dev_maddr) {
+extern int vx_alloc_dev_mem(vx_device_h hdevice, uint64_t size, uint64_t* dev_maddr) {
     if (nullptr == hdevice 
      || nullptr == dev_maddr
      || 0 >= size)
@@ -288,7 +279,7 @@ extern int vx_alloc_dev_mem(vx_device_h hdevice, size_t size, size_t* dev_maddr)
     vx_device_t *device = ((vx_device_t*)hdevice);
 
     size_t dev_mem_size = LOCAL_MEM_SIZE;
-    size_t asize = align_size(size, CACHE_BLOCK_SIZE);
+    size_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
     
     if (device->mem_allocation + asize > dev_mem_size)
         return -1;   
@@ -299,7 +290,7 @@ extern int vx_alloc_dev_mem(vx_device_h hdevice, size_t size, size_t* dev_maddr)
     return 0;
 }
 
-extern int vx_alloc_shared_mem(vx_device_h hdevice, size_t size, vx_buffer_h* hbuffer) {
+extern int vx_alloc_shared_mem(vx_device_h hdevice, uint64_t size, vx_buffer_h* hbuffer) {
     fpga_result res;
     void* host_ptr;
     uint64_t wsid;
@@ -313,7 +304,7 @@ extern int vx_alloc_shared_mem(vx_device_h hdevice, size_t size, vx_buffer_h* hb
 
     vx_device_t *device = ((vx_device_t*)hdevice);
 
-    size_t asize = align_size(size, CACHE_BLOCK_SIZE);
+    size_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
 
     res = fpgaPrepareBuffer(device->fpga, asize, &host_ptr, &wsid, 0);
     if (FPGA_OK != res) {
@@ -367,7 +358,7 @@ extern int vx_buf_release(vx_buffer_h hbuffer) {
     return 0;
 }
 
-extern int vx_ready_wait(vx_device_h hdevice, long long timeout) {
+extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
     if (nullptr == hdevice)
         return -1;
 
@@ -386,7 +377,7 @@ extern int vx_ready_wait(vx_device_h hdevice, long long timeout) {
 #endif
 
     // to milliseconds
-    long long sleep_time_ms = (sleep_time.tv_sec * 1000) + (sleep_time.tv_nsec / 1000000);
+    uint64_t sleep_time_ms = (sleep_time.tv_sec * 1000) + (sleep_time.tv_nsec / 1000000);
     
     for (;;) {
         uint64_t status;
@@ -430,7 +421,7 @@ extern int vx_ready_wait(vx_device_h hdevice, long long timeout) {
     return 0;
 }
 
-extern int vx_copy_to_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, size_t src_offset) {
+extern int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size, uint64_t src_offset) {
     if (nullptr == hbuffer 
      || 0 >= size)
         return -1;
@@ -438,8 +429,8 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, si
     vx_buffer_t *buffer = ((vx_buffer_t*)hbuffer);
     vx_device_t *device = ((vx_device_t*)buffer->hdevice);
 
-    size_t dev_mem_size = LOCAL_MEM_SIZE; 
-    size_t asize = align_size(size, CACHE_BLOCK_SIZE);
+    uint64_t dev_mem_size = LOCAL_MEM_SIZE; 
+    uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
 
     // check alignment
     if (!is_aligned(dev_maddr, CACHE_BLOCK_SIZE))
@@ -454,7 +445,7 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, si
         return -1;
 
     // Ensure ready for new command
-    if (vx_ready_wait(buffer->hdevice, -1) != 0)
+    if (vx_ready_wait(buffer->hdevice, MAX_TIMEOUT) != 0)
         return -1;
 
     auto ls_shift = (int)std::log2(CACHE_BLOCK_SIZE);
@@ -465,13 +456,13 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, si
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_MEM_WRITE));
 
     // Wait for the write operation to finish
-    if (vx_ready_wait(buffer->hdevice, -1) != 0)
+    if (vx_ready_wait(buffer->hdevice, MAX_TIMEOUT) != 0)
         return -1;
 
     return 0;
 }
 
-extern int vx_copy_from_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, size_t dest_offset) {
+extern int vx_copy_from_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size, uint64_t dest_offset) {
     if (nullptr == hbuffer 
      || 0 >= size)
         return -1;
@@ -479,8 +470,8 @@ extern int vx_copy_from_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, 
     vx_buffer_t *buffer = ((vx_buffer_t*)hbuffer);
     vx_device_t *device = ((vx_device_t*)buffer->hdevice);
 
-    size_t dev_mem_size = LOCAL_MEM_SIZE;  
-    size_t asize = align_size(size, CACHE_BLOCK_SIZE);
+    uint64_t dev_mem_size = LOCAL_MEM_SIZE;  
+    uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
 
     // check alignment
     if (!is_aligned(dev_maddr, CACHE_BLOCK_SIZE))
@@ -495,7 +486,7 @@ extern int vx_copy_from_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, 
         return -1;
 
     // Ensure ready for new command
-    if (vx_ready_wait(buffer->hdevice, -1) != 0)
+    if (vx_ready_wait(buffer->hdevice, MAX_TIMEOUT) != 0)
         return -1;
 
     auto ls_shift = (int)std::log2(CACHE_BLOCK_SIZE);
@@ -506,7 +497,7 @@ extern int vx_copy_from_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, 
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_MEM_READ));
 
     // Wait for the write operation to finish
-    if (vx_ready_wait(buffer->hdevice, -1) != 0)
+    if (vx_ready_wait(buffer->hdevice, MAX_TIMEOUT) != 0)
         return -1;
 
     return 0;
@@ -519,7 +510,7 @@ extern int vx_start(vx_device_h hdevice) {
     vx_device_t *device = ((vx_device_t*)hdevice);
 
     // Ensure ready for new command
-    if (vx_ready_wait(hdevice, -1) != 0)
+    if (vx_ready_wait(hdevice, MAX_TIMEOUT) != 0)
         return -1;    
   
     // start execution    

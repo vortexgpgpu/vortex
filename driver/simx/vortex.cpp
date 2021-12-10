@@ -3,16 +3,21 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <iostream>
-#include <thread>
-#include <mutex>
+#include <future>
 #include <chrono>
 
 #include <vortex.h>
-#include <core.h>
+#include <vx_utils.h>
+
 #include <VX_config.h>
+
 #include <util.h>
 
-#define PAGE_SIZE   4096
+#include <processor.h>
+#include <archdef.h>
+#include <mem.h>
+#include <constants.h>
+
 
 using namespace vortex;
 
@@ -22,10 +27,10 @@ class vx_device;
 
 class vx_buffer {
 public:
-    vx_buffer(size_t size, vx_device* device) 
+    vx_buffer(uint64_t size, vx_device* device) 
         : size_(size)
         , device_(device) {
-        auto aligned_asize = align_size(size, CACHE_BLOCK_SIZE);
+        uint64_t aligned_asize = aligned_size(size, CACHE_BLOCK_SIZE);
         data_ = malloc(aligned_asize);
     }
 
@@ -39,7 +44,7 @@ public:
         return data_;
     }
 
-    size_t size() const {
+    uint64_t size() const {
         return size_;
     }
 
@@ -48,7 +53,7 @@ public:
     }
 
 private:
-    size_t size_;
+    uint64_t size_;
     vx_device* device_;
     void* data_;
 };
@@ -58,33 +63,24 @@ private:
 class vx_device {    
 public:
     vx_device() 
-        : arch_("rv32i", NUM_CORES, NUM_WARPS, NUM_THREADS)
-        , decoder_(arch_)
-        , mmu_(PAGE_SIZE, arch_.wsize(), true)
-        , cores_(arch_.num_cores())
-        , is_done_(false)
-        , is_running_(false)
-        , thread_(__thread_proc__, this)
-        , ram_((1<<12), (1<<20))  {
-
-        mem_allocation_ = ALLOC_BASE_ADDR;               
-        mmu_.attach(ram_, 0, 0xffffffff);  
-        for (int i = 0; i < arch_.num_cores(); ++i) {
-            cores_[i] = std::make_shared<Core>(arch_, decoder_, mmu_, i);
-        }
+        : arch_("rv32i", NUM_CORES * NUM_CLUSTERS, NUM_WARPS, NUM_THREADS)
+        , ram_(RAM_PAGE_SIZE)
+        , processor_(arch_)
+        , mem_allocation_(ALLOC_BASE_ADDR)
+    {
+        // attach memory module
+        processor_.attach_ram(&ram_);
     }
 
     ~vx_device() {
-        mutex_.lock();
-        is_done_ = true;
-        mutex_.unlock();
-        
-        thread_.join();
+        if (future_.valid()) {
+            future_.wait();
+        }
     }
 
-    int alloc_local_mem(size_t size, size_t* dev_maddr) {
-        auto dev_mem_size = LOCAL_MEM_SIZE;
-        auto asize = align_size(size, CACHE_BLOCK_SIZE);        
+    int alloc_local_mem(uint64_t size, uint64_t* dev_maddr) {
+        uint64_t dev_mem_size = LOCAL_MEM_SIZE;
+        uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);        
         if (mem_allocation_ + asize > dev_mem_size)
             return -1;
         *dev_maddr = mem_allocation_;
@@ -92,9 +88,9 @@ public:
         return 0;
     }
 
-    int upload(const void* src, size_t dest_addr, size_t size, size_t src_offset) {
-        auto asize = align_size(size, CACHE_BLOCK_SIZE);
-        if (dest_addr + asize > ram_.size())
+    int upload(const void* src, uint64_t dest_addr, uint64_t size, uint64_t src_offset) {
+        uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
+        if (dest_addr + asize > LOCAL_MEM_SIZE)
             return -1;
 
         ram_.write((const uint8_t*)src + src_offset, dest_addr, asize);
@@ -107,9 +103,9 @@ public:
         return 0;
     }
 
-    int download(void* dest, size_t src_addr, size_t size, size_t dest_offset) {
-        size_t asize = align_size(size, CACHE_BLOCK_SIZE);
-        if (src_addr + asize > ram_.size())
+    int download(void* dest, uint64_t src_addr, uint64_t size, uint64_t dest_offset) {
+        uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
+        if (src_addr + asize > LOCAL_MEM_SIZE)
             return -1;
 
         ram_.read((uint8_t*)dest + dest_offset, src_addr, asize);
@@ -123,98 +119,40 @@ public:
     }
 
     int start() {  
-
-        mutex_.lock();     
-        for (int i = 0; i < arch_.num_cores(); ++i) {
-            cores_[i]->clear();
+        // ensure prior run completed
+        if (future_.valid()) {
+            future_.wait();
         }
-        is_running_ = true;        
-        mutex_.unlock();
-
+        
+        // start new run
+        future_ = std::async(std::launch::async, [&]{
+            processor_.run();
+        });
+        
         return 0;
     }
 
-    int wait(long long timeout) {
-        auto timeout_sec = (timeout < 0) ? timeout : (timeout / 1000);
+    int wait(uint64_t timeout) {
+        if (!future_.valid())
+            return 0;
+        uint64_t timeout_sec = timeout / 1000;
+        std::chrono::seconds wait_time(1);
         for (;;) {
-            mutex_.lock();
-            bool is_running = is_running_;
-            mutex_.unlock();
-
-            if (!is_running || 0 == timeout_sec--)
+            // wait for 1 sec and check status
+            auto status = future_.wait_for(wait_time);
+            if (status == std::future_status::ready 
+             || 0 == timeout_sec--)
                 break;
-
-            std::this_thread::sleep_for(std::chrono::seconds(1));            
         }
         return 0;
-    }
-
-    int get_csr(int core_id, int addr, unsigned *value) {
-        *value = cores_.at(core_id)->get_csr(addr, 0, 0);
-        return 0;
-    }    
-
-    int set_csr(int core_id, int addr, unsigned value) {
-        cores_.at(core_id)->set_csr(addr, value, 0, 0);
-        return 0;
-    }
+    } 
 
 private:
-
-    void run() {
-        bool running;
-        do {
-            running = false;
-            for (auto& core : cores_) {
-                core->step();
-                if (core->running())
-                    running = true;
-            }
-        } while (running);
-    }
-
-    void thread_proc() {
-        std::cout << "Device ready..." << std::flush << std::endl;
-
-        for (;;) {
-            mutex_.lock();
-            bool is_done = is_done_;
-            bool is_running = is_running_;
-            mutex_.unlock();
-
-            if (is_done)
-                break;
-
-            if (is_running) {                                
-                std::cout << "Device running..." << std::flush << std::endl;
-                
-                this->run();
-
-                mutex_.lock();
-                is_running_ = false;
-                mutex_.unlock();
-
-                std::cout << "Device ready..." << std::flush << std::endl;
-            }
-        }
-
-        std::cout << "Device shutdown..." << std::flush << std::endl;
-    }
-
-    static void __thread_proc__(vx_device* device) {
-        device->thread_proc();
-    }
-
     ArchDef arch_;
-    Decoder decoder_;
-    MemoryUnit mmu_;
-    std::vector<std::shared_ptr<Core>> cores_;
-    bool is_done_;
-    bool is_running_;   
-    size_t mem_allocation_; 
-    std::thread thread_;   
     RAM ram_;
-    std::mutex mutex_;
+    Processor processor_;
+    uint64_t mem_allocation_;        
+    std::future<void> future_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -276,7 +214,7 @@ extern int vx_dev_close(vx_device_h hdevice) {
     return 0;
 }
 
-extern int vx_dev_caps(vx_device_h hdevice, unsigned caps_id, unsigned *value) {
+extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
     if (nullptr == hdevice)
         return  -1;
 
@@ -314,7 +252,7 @@ extern int vx_dev_caps(vx_device_h hdevice, unsigned caps_id, unsigned *value) {
     return 0;
 }
 
-extern int vx_alloc_dev_mem(vx_device_h hdevice, size_t size, size_t* dev_maddr) {
+extern int vx_alloc_dev_mem(vx_device_h hdevice, uint64_t size, uint64_t* dev_maddr) {
     if (nullptr == hdevice 
      || nullptr == dev_maddr
      || 0 >= size)
@@ -324,7 +262,7 @@ extern int vx_alloc_dev_mem(vx_device_h hdevice, size_t size, size_t* dev_maddr)
     return device->alloc_local_mem(size, dev_maddr);
 }
 
-extern int vx_alloc_shared_mem(vx_device_h hdevice, size_t size, vx_buffer_h* hbuffer) {
+extern int vx_alloc_shared_mem(vx_device_h hdevice, uint64_t size, vx_buffer_h* hbuffer) {
     if (nullptr == hdevice 
      || 0 >= size
      || nullptr == hbuffer)
@@ -363,7 +301,7 @@ extern int vx_buf_release(vx_buffer_h hbuffer) {
     return 0;
 }
 
-extern int vx_copy_to_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, size_t src_offset) {
+extern int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size, uint64_t src_offset) {
     if (nullptr == hbuffer 
      || 0 >= size)
         return -1;
@@ -376,7 +314,7 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, si
     return buffer->device()->upload(buffer->data(), dev_maddr, size, src_offset);
 }
 
-extern int vx_copy_from_dev(vx_buffer_h hbuffer, size_t dev_maddr, size_t size, size_t dest_offset) {
+extern int vx_copy_from_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size, uint64_t dest_offset) {
      if (nullptr == hbuffer 
       || 0 >= size)
         return -1;
@@ -398,7 +336,7 @@ extern int vx_start(vx_device_h hdevice) {
     return device->start();
 }
 
-extern int vx_ready_wait(vx_device_h hdevice, long long timeout) {
+extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
     if (nullptr == hdevice)
         return -1;
 

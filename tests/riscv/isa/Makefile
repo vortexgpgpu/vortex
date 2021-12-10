@@ -10,7 +10,7 @@ TESTS := $(filter-out $(EXCLUDED_TESTS), $(ALL_TESTS))
 all:
 
 run-simx:	
-	$(foreach test, $(TESTS), ../../../sim/simX/simX -r -a rv32i -c 1 -i $(test) || exit;)
+	$(foreach test, $(TESTS), ../../../sim/simx/simx -r -a rv32i -c 1 -i $(test) || exit;)
 
 run-rtlsim:
 	$(foreach test, $(TESTS), ../../../sim/rtlsim/rtlsim -r $(test) || exit;)

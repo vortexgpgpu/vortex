@@ -6,6 +6,7 @@
 interface VX_tex_rsp_if ();
 
     wire                    valid;   
+    wire [`UUID_BITS-1:0]   uuid;
     wire [`NW_BITS-1:0]     wid;
     wire [`NUM_THREADS-1:0] tmask;    
     wire [31:0]             PC;    
@@ -16,6 +17,7 @@ interface VX_tex_rsp_if ();
 
     modport master (
         output valid,
+        output uuid,
         output wid,
         output tmask,
         output PC,
@@ -27,6 +29,7 @@ interface VX_tex_rsp_if ();
 
     modport slave (
         input  valid,
+        input  uuid,
         input  wid,
         input  tmask,
         input  PC,
