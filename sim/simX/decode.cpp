@@ -46,6 +46,8 @@ static const std::unordered_map<int, struct InstTableEntry_t> sc_instTable = {
 };
 
 static const char* op_string(const Instr &instr) {  
+  // simx64
+  Word func2 = instr.getFunc2();
   Word func3 = instr.getFunc3();
   Word func7 = instr.getFunc7();
   Word rs2   = instr.getRSrc(1);
@@ -169,35 +171,80 @@ static const char* op_string(const Instr &instr) {
       std::abort();
     }
   case Opcode::FENCE: return "FENCE";
-  case Opcode::FL: return (func3 == 0x2) ? "FL" : "VL";
-  case Opcode::FS: return (func3 == 0x2) ? "FS" : "VS";
+  // simx64
+  case Opcode::FL: 
+    switch (func3) {
+      case 0x1: return "VL";
+      case 0x2: return "FLW";
+      case 0x3: return "FLD";
+      default: 
+        std::abort();
+    }
+  case Opcode::FS: 
+    switch (func3) {
+      case 0x1: return "VS";
+      case 0x2: return "FSW";
+      case 0x3: return "FSD";
+      default: 
+        std::abort();
+    }
   case Opcode::FCI: 
     switch (func7) {
-    case 0x00: return "FADD";
-    case 0x04: return "FSUB";
-    case 0x08: return "FMUL";
-    case 0x0c: return "FDIV";
-    case 0x2c: return "FSQRT";
+    case 0x00: return "FADD.S";
+    case 0x01: return "FADD.D";
+    case 0x04: return "FSUB.S";
+    case 0x05: return "FSUB.D";
+    case 0x08: return "FMUL.S";
+    case 0x09: return "FMUL.D";
+    case 0x0c: return "FDIV.S";
+    case 0x0d: return "FDIV.D";
+    case 0x2c: return "FSQRT.S";
+    case 0x2d: return "FSQRT.D";
     case 0x10:
       switch (func3) {            
-      case 0: return "FSGNJ";
-      case 1: return "FSGNJN";
-      case 2: return "FSGNJX";
+      case 0: return "FSGNJ.S";
+      case 1: return "FSGNJN.S";
+      case 2: return "FSGNJX.S";
+      default:
+        std::abort();
+      }
+    case 0x11:
+      switch (func3) {            
+      case 0: return "FSGNJ.D";
+      case 1: return "FSGNJN.D";
+      case 2: return "FSGNJX.D";
       default:
         std::abort();
       }
     case 0x14:
       switch (func3) {            
-      case 0: return "FMIM";
-      case 1: return "FMAX";
+      case 0: return "FMIN.S";
+      case 1: return "FMAX.S";
       default:
         std::abort();
       }
+    case 0x15:
+      switch (func3) {            
+      case 0: return "FMIN.D";
+      case 1: return "FMAX.D";
+      default:
+        std::abort();
+      }
+    case 0x20: return "FCVT.S.D";
+    case 0x21: return "FCVT.D.S";
     case 0x50: 
       switch (func3) {              
-      case 0: return "FLE"; 
-      case 1: return "FLT"; 
-      case 2: return "FEQ";
+      case 0: return "FLE.S"; 
+      case 1: return "FLT.S"; 
+      case 2: return "FEQ.S";
+      default:
+        std::abort();
+      }
+    case 0x51: 
+      switch (func3) {              
+      case 0: return "FLE.D"; 
+      case 1: return "FLT.D"; 
+      case 2: return "FEQ.D";
       default:
         std::abort();
       }
@@ -211,6 +258,15 @@ static const char* op_string(const Instr &instr) {
       default:
         std::abort();
       }
+    case 0x61:
+      switch (rs2) {
+      case 0: return "FCVT.W.D";
+      case 1: return "FCVT.WU.D";
+      case 2: return "FCVT.L.D";
+      case 3: return "FCVT.LU.D";
+      default:
+        std::abort();
+      }
     case 0x68: 
       switch (rs2) {
       case 0: return "FCVT.S.W";
@@ -220,15 +276,26 @@ static const char* op_string(const Instr &instr) {
       default:
         std::abort();
       }
-    case 0x70: return func3 ? "FLASS" : "FMV.X.W";
+    case 0x69:
+      switch (rs2) {
+      case 0: return "FCVT.D.W";
+      case 1: return "FCVT.D.WU";
+      case 2: return "FCVT.D.L";
+      case 3: return "FCVT.D.LU";
+      default:
+        std::abort();
+      }
+    case 0x70: return func3 ? "FCLASS.S" : "FMV.X.W";
+    case 0x71: return func3 ? "FCLASS.D" : "FMV.X.D";
     case 0x78: return "FMV.W.X";
+    case 0x79: return "FMV.D.X";
     default:
       std::abort();
     }
-  case Opcode::FMADD:   return "FMADD";
-  case Opcode::FMSUB:   return "FMSUB";
-  case Opcode::FMNMADD: return "FMNMADD";
-  case Opcode::FMNMSUB: return "FMNMSUB";
+  case Opcode::FMADD:   return func2 ? "FMADD.D" : "FMADD.S";
+  case Opcode::FMSUB:   return func2 ? "FMSUB.D" : "FMSUB.S";
+  case Opcode::FMNMADD: return func2 ? "FNMADD.D" : "FNMADD.S";
+  case Opcode::FMNMSUB: return func2 ? "FNMSUB.D" : "FNMSUB.S";
   case Opcode::VSET:    return "VSET";
   case Opcode::GPGPU:
     switch (func3) {            
@@ -324,7 +391,8 @@ Decoder::Decoder(const ArchDef &arch) {
   shift_vset_   = shift_func7_ + 6;
 
   reg_mask_    = 0x1f;
-  func2_mask_  = 0x2;
+  // simx64
+  func2_mask_  = 0x3;
   func3_mask_  = 0x7;
   func6_mask_  = 0x3f;
   func7_mask_  = 0x7f;
@@ -343,11 +411,12 @@ std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) {
   Opcode op = (Opcode)((code >> shift_opcode_) & opcode_mask_);
   instr->setOpcode(op);
 
+  // simx64
+  Word func2 = (code >> shift_func7_) & func2_mask_;
   Word func3 = (code >> shift_func3_) & func3_mask_;
   Word func6 = (code >> shift_func6_) & func6_mask_;
   Word func7 = (code >> shift_func7_) & func7_mask_;
 
-  // simx64
   int rd  = (code >> shift_rd_)  & reg_mask_;
   int rs1 = (code >> shift_rs1_) & reg_mask_;
   int rs2 = (code >> shift_rs2_) & reg_mask_;
@@ -361,7 +430,8 @@ std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) {
 
   auto iType = op_it->second.iType;
   if (op == Opcode::FL || op == Opcode::FS) { 
-    if (func3 != 0x2) {
+    // simx64
+    if (func3 != 0x2 && func3 != 0x3) {
       iType = InstType::V_TYPE;
     }
   }
@@ -373,8 +443,10 @@ std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) {
   case InstType::R_TYPE:
     if (op == Opcode::FCI) {      
       switch (func7) {
-      case 0x68: // FCVT.S.W, FCVT.S.WU
+      case 0x68: // FCVT.S.W, FCVT.S.WU, FCVT.S.L, FCVT.S.LU
+      case 0x69: // FCVT.D.W, FCVT.D.WU, FCVT.D.L, FCVT.D.LU
       case 0x78: // FMV.W.X
+      case 0x79: // FMV.D.X
         instr->setSrcReg(rs1);
         break;
       default:
@@ -382,9 +454,12 @@ std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) {
       }      
       instr->setSrcFReg(rs2);
       switch (func7) {
-      case 0x50: // FLE, FLT, FEQ
-      case 0x60: // FCVT.WU.S, FCVT.W.S
-      case 0x70: // FLASS, FMV.X.W
+      case 0x50: // FLE.S, FLT.S, FEQ.S
+      case 0x51: // FLE.D, FLT.D, FEQ.D
+      case 0x60: // FCVT.WU.S, FCVT.W.S, FCVT.L.S, FCVT.LU.S
+      case 0x61: // FCVT.W.D, FCVT.WU.D, FCVT.L.D, FCVT.LU.D
+      case 0x70: // FLASS.S, FMV.X.W
+      case 0x71: // FCLASS.D, FMV.X.D
         instr->setDestReg(rd);
         break;
       default:
@@ -512,6 +587,8 @@ std::shared_ptr<Instr> Decoder::decode(Word code, Word PC) {
     instr->setSrcFReg(rs2);
     instr->setSrcFReg(rs3);
     instr->setFunc3(func3);
+    // simx64
+    instr->setFunc2(func2);
     break;
   default:
     std::abort();
