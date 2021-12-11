@@ -304,7 +304,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         break;
       case 3: {
         // RV32I: SLTIU
-        rddata[t] = (DoubleWord(rsdata[t][0]) < DoubleWord(immsrc));
+        rddata[t] = rsdata[t][0] < immsrc;
       } break;
       case 4:
         // RV32I: XORI
@@ -313,11 +313,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       case 5:
         if (func7) {
           // RV32I: SRAI
-          DoubleWord result = WordI(rsdata[t][0]) >> immsrc;
+          DoubleWord result = DoubleWordI(rsdata[t][0]) >> immsrc;
           rddata[t] = result;
         } else {
           // RV32I: SRLI
-          DoubleWord result = Word(rsdata[t][0]) >> immsrc;
+          DoubleWord result = rsdata[t][0] >> immsrc;
           rddata[t] = result;
         }
         break;
