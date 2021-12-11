@@ -13,8 +13,8 @@ using namespace vortex;
 Warp::Warp(Core *core, Word id)
     : id_(id)
     , core_(core)
-    , ireg_file_(core->arch().num_threads(), std::vector<Word>(core->arch().num_regs()))
-    , freg_file_(core->arch().num_threads(), std::vector<Word>(core->arch().num_regs()))
+    , ireg_file_(core->arch().num_threads(), std::vector<DoubleWord>(core->arch().num_regs()))
+    , freg_file_(core->arch().num_threads(), std::vector<DoubleWord>(core->arch().num_regs()))
     , vreg_file_(core->arch().num_threads(), std::vector<Byte>(core->arch().vsize()))
 {
   this->clear();
@@ -71,7 +71,7 @@ void Warp::eval(pipeline_trace_t *trace) {
   for (int i = 0; i < core_->arch().num_regs(); ++i) {
     DPN(4, "  %r" << std::setfill('0') << std::setw(2) << std::dec << i << ':');
     for (int j = 0; j < core_->arch().num_threads(); ++j) {
-      DPN(4, ' ' << std::setfill('0') << std::setw(8) << std::hex << ireg_file_.at(j).at(i) << std::setfill(' ') << ' ');
+      DPN(4, ' ' << std::setfill('0') << std::setw(16) << std::hex << ireg_file_.at(j).at(i) << std::setfill(' ') << ' ');
     }
     DPN(4, std::endl);
   }  

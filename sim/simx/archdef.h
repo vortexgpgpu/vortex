@@ -28,7 +28,7 @@ public:
     : num_cores_(num_cores)
     , num_warps_(num_warps)
     , num_threads_(num_threads)
-    , wsize_(4)
+    , wsize_(8)
     , vsize_(16)
     , num_regs_(32)
     , num_csrs_(4096)
@@ -66,6 +66,4 @@ public:
   uint16_t num_cores() const {
     return num_cores_;
   }
-};
-
 }
