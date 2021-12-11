@@ -77,3 +77,17 @@ inline uint32_t sext32(uint32_t word, uint32_t width) {
   uint32_t mask = (1 << width) - 1;
   return ((word >> (width - 1)) & 0x1) ? (word | ~mask) : word;
 }
+
+inline uint32_t sext64(uint64_t word, uint32_t width) {
+  assert(width > 1);
+  assert(width <= 64);
+  uint64_t mask = (1 << width) - 1;
+  return ((word >> (width - 1)) & 0x1) ? (word | ~mask) : word;
+}
+
+inline uint32_t sext128(__uint128_t word, uint32_t width) {
+  assert(width > 1);
+  assert(width <= 128);
+  uint128_t mask = (1 << width) - 1;
+  return ((word >> (width - 1)) & 0x1) ? (word | ~mask) : word;
+}
