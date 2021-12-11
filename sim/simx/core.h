@@ -109,9 +109,9 @@ public:
 
   Word icache_read(Addr, Size);
 
-  Word dcache_read(Addr, Size);
+  DoubleWord dcache_read(Addr, Size);
 
-  void dcache_write(Addr, Word, Size);
+  void dcache_write(Addr, DoubleWord, Size);
 
   Word tex_read(uint32_t unit, Word lod, Word u, Word v, std::vector<mem_addr_size_t>* mem_addrs);
 
