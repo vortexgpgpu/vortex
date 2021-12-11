@@ -42,6 +42,8 @@ static const std::unordered_map<int, struct InstTableEntry_t> sc_instTable = {
   {Opcode::VSET,       {false, InstType::V_TYPE}}, 
   {Opcode::GPGPU,      {false, InstType::R_TYPE}},
   {Opcode::GPU,        {false, InstType::R4_TYPE}},
+  {Opcode::R_INST_64,  {false, InstType::R_TYPE}},
+  {Opcode::I_INST_64,  {false, InstType::I_TYPE}},
 };
 
 static const char* op_string(const Instr &instr) {
@@ -494,17 +496,25 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
       break;
     case Opcode::I_INST:
       if (func3 == 0x1 || func3 == 0x5) {
-        // simx64
-        // int6
-        instr->setImm(sext32(rs2, 6));
+        // int5
+        instr->setImm(sext64(rs2, 5));
       } else {
         // int12
-        instr->setImm(sext32(code >> shift_rs2_, 12));
+        instr->setImm(sext64(code >> shift_rs2_, 12));
+      }
+      break;
+    case Opcode::I_INST_64:
+      if (func3 == 0x1 || func3 == 0x5) {
+        // int4
+        instr->setImm(sext64(rs2, 4));
+      } else {
+        // int12
+        instr->setImm(sext64(code >> shift_rs2_, 12));
       }
       break;
     default:
       // int12
-      instr->setImm(sext32(code >> shift_rs2_, 12));
+      instr->setImm(sext64(code >> shift_rs2_, 12));
       break;
     }
   } break;
@@ -516,9 +526,8 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
       instr->setSrcReg(rs2);
     }
     instr->setFunc3(func3);
-    // simx64
     DoubleWord imm = (func7 << reg_s_) | rd;
-    instr->setImm(sext32(imm, 12));
+    instr->setImm(sext64(imm, 12));
   } break;
 
   case InstType::B_TYPE: {
@@ -529,14 +538,13 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
     Word bits_4_1 = rd >> 1;
     Word bit_10_5 = func7 & 0x3f;
     Word bit_12   = func7 >> 6;
-    // simx64
     DoubleWord imm = (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
-    instr->setImm(sext32(imm, 13));
+    instr->setImm(sext64(imm, 13));
   } break;
 
   case InstType::U_TYPE:
     instr->setDestReg(rd);
-    instr->setImm(sext32(code >> shift_func3_, 20));
+    instr->setImm(sext64(code >> shift_func3_, 20));
     break;
 
   case InstType::J_TYPE: {
@@ -546,7 +554,6 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
     Word bit_11 = (unordered >> 8) & 0x1;
     Word bits_10_1 = (unordered >> 9) & 0x3ff;
     Word bit_20 = (unordered >> 19) & 0x1;
-    // simx64
     DoubleWord imm = 0 | (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
     if (bit_20) {
       imm |= ~j_imm_mask_;
@@ -616,8 +623,6 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
     }
     instr->setFunc2(func2);
     instr->setFunc3(func3);
-    // simx64
-    instr->setFunc2(func2);
     break;
   default:
     std::abort();

@@ -11,6 +11,7 @@
 #include "constants.h"
 #include <util.h>
 #include "args.h"
+#include "core.h"
 
 using namespace vortex;
 
@@ -79,7 +80,8 @@ int main(int argc, char **argv) {
     processor.attach_ram(&ram);   
 
     // run simulation
-    processor.run();
+    exitcode = processor.run();
+
   } 
 
   if (riscv_test) {
