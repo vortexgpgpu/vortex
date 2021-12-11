@@ -45,6 +45,7 @@
 `define L1_BLOCK_SIZE ((`L2_ENABLE || `L3_ENABLE) ? 16 : `MEM_BLOCK_SIZE)
 `endif
 
+// simx64
 `ifndef STARTUP_ADDR
 `define STARTUP_ADDR 32'h80000000
 `endif
