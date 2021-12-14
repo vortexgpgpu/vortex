@@ -123,7 +123,6 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     for (int t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
-      // simx64
       rddata[t] = (immsrc << 12) & 0xfffffffffffff000;
     }    
     rd_write = true;
@@ -155,15 +154,13 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           break;
         case 1: {
           // RV32M: MULH
-          // simx64
           __int128_t first = sext128((__int128_t)rsdata[t][0], 64);
           __int128_t second = sext128((__int128_t)rsdata[t][1], 64);
           rddata[t] = ((first * second) >> 64) & 0xFFFFFFFFFFFFFFFF;
           trace->alu.type = AluType::IMUL;
         } break;
         case 2: {
-          // RV32M: MULHSU   
-          // simx64       
+          // RV32M: MULHSU       
           __int128_t first = sext128((__int128_t)rsdata[t][0], 64);
           __int128_t second = (__int128_t)rsdata[t][1];
           rddata[t] = ((first * second) >> 64) & 0xFFFFFFFFFFFFFFFF;
@@ -171,7 +168,6 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         } break;
         case 3: {
           // RV32M: MULHU
-          // simx64
           __uint128_t first = (__int128_t)rsdata[t][0];
           __uint128_t second = (__int128_t)rsdata[t][1];
           rddata[t] = ((first * second) >> 64) & 0xFFFFFFFFFFFFFFFF;
@@ -179,7 +175,6 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         } break;
         case 4: {
           // RV32M: DIV
-          // simx64
           DoubleWordI dividen = rsdata[t][0];
           DoubleWordI divisor = rsdata[t][1];
           if (divisor == 0) {
@@ -193,7 +188,6 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         } break;
         case 5: {
           // RV32M: DIVU
-          // simx64
           DoubleWord dividen = rsdata[t][0];
           DoubleWord divisor = rsdata[t][1];
           if (divisor == 0) {
@@ -205,7 +199,6 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         } break;
         case 6: {
           // RV32M: REM
-          // simx64
           DoubleWordI dividen = rsdata[t][0];
           DoubleWordI divisor = rsdata[t][1];
           if (rsdata[t][1] == 0) {
