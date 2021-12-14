@@ -1,7 +1,4 @@
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
-# simx64
-RISCV64_TOOLCHAIN_PATH ?= /nethome/ssrivatsan8/riscv
-
 
 CC = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
 AR = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc-ar
