@@ -111,11 +111,9 @@ static const char* op_string(const Instr &instr) {
     case 0: return "LBI";
     case 1: return "LHI";
     case 2: return "LW";
-    // simx64
     case 3: return "LD";
     case 4: return "LBU";
     case 5: return "LHU";
-    // simx64
     case 6: return "LWU";
     default:
       std::abort();
@@ -125,12 +123,10 @@ static const char* op_string(const Instr &instr) {
     case 0: return "SB";
     case 1: return "SH";
     case 2: return "SW";
-    // simx64
     case 3: return "SD";
     default:
       std::abort();
     }
-  // simx64
   case Opcode::R_INST_64:
     if (func7 & 0x1){
       switch (func3) {
@@ -151,7 +147,6 @@ static const char* op_string(const Instr &instr) {
           std::abort();
       }
     }
-  // simx64  
   case Opcode::I_INST_64:
     switch (func3) {
       case 0: return "ADDIW";
@@ -182,7 +177,6 @@ static const char* op_string(const Instr &instr) {
       std::abort();
     }
   case Opcode::FENCE: return "FENCE";
-  // simx64
   case Opcode::FL: 
     switch (func3) {
       case 0x1: return "VL";
@@ -259,7 +253,6 @@ static const char* op_string(const Instr &instr) {
       default:
         std::abort();
       }
-    // simx64
     case 0x60: 
       switch (rs2) {
       case 0: return "FCVT.W.S";
@@ -376,7 +369,6 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
 }
 
 Decoder::Decoder(const ArchDef &arch) {
-  // simx64
   inst_s_   = arch.wsize() * 4;
   opcode_s_ = 7;
   reg_s_    = 5;
@@ -435,7 +427,6 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
 
   auto iType = op_it->second.iType;
   if (op == Opcode::FL || op == Opcode::FS) { 
-    // simx64
     if (func3 != 0x2 && func3 != 0x3) {
       iType = InstType::V_TYPE;
     }
