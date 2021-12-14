@@ -7,43 +7,37 @@
 extern "C" {
 #endif
 
-uint64_t rv_fadd(uint32_t a, uint32_t b, uint32_t frm, uint32_t* fflags);
-uint64_t rv_fsub(uint32_t a, uint32_t b, uint32_t frm, uint32_t* fflags);
-uint64_t rv_fmul(uint32_t a, uint32_t b, uint32_t frm, uint32_t* fflags);
-uint64_t rv_fmadd(uint32_t a, uint32_t b, uint32_t c, uint32_t frm, uint32_t* fflags);
-uint64_t rv_fmsub(uint32_t a, uint32_t b, uint32_t c, uint32_t frm, uint32_t* fflags);
-uint64_t rv_fnmadd(uint32_t a, uint32_t b, uint32_t c, uint32_t frm, uint32_t* fflags);
-uint64_t rv_fnmsub(uint32_t a, uint32_t b, uint32_t c, uint32_t frm, uint32_t* fflags);
-uint64_t rv_fdiv(uint32_t a, uint32_t b, uint32_t frm, uint32_t* fflags);
-uint64_t rv_fsqrt(uint32_t a, uint32_t frm, uint32_t* fflags);
+uint32_t rv_fadd_s(uint32_t a, uint32_t b, uint32_t frm, uint32_t* fflags);
+uint32_t rv_fsub_s(uint32_t a, uint32_t b, uint32_t frm, uint32_t* fflags);
+uint32_t rv_fmul_s(uint32_t a, uint32_t b, uint32_t frm, uint32_t* fflags);
+uint32_t rv_fmadd_s(uint32_t a, uint32_t b, uint32_t c, uint32_t frm, uint32_t* fflags);
+uint32_t rv_fmsub_s(uint32_t a, uint32_t b, uint32_t c, uint32_t frm, uint32_t* fflags);
+uint32_t rv_fnmadd_s(uint32_t a, uint32_t b, uint32_t c, uint32_t frm, uint32_t* fflags);
+uint32_t rv_fnmsub_s(uint32_t a, uint32_t b, uint32_t c, uint32_t frm, uint32_t* fflags);
+uint32_t rv_fdiv_s(uint32_t a, uint32_t b, uint32_t frm, uint32_t* fflags);
+uint32_t rv_fsqrt_s(uint32_t a, uint32_t frm, uint32_t* fflags);
 
-uint64_t rv_ftoi(uint32_t a, uint32_t frm, uint32_t* fflags);
-uint64_t rv_ftou(uint32_t a, uint32_t frm, uint32_t* fflags);
-// simx64
-uint64_t rv_ftol(uint32_t a, uint32_t frm, uint32_t* fflags);
-// simx64
-uint64_t rv_ftolu(uint32_t a, uint32_t frm, uint32_t* fflags);
-uint64_t rv_itof(uint32_t a, uint32_t frm, uint32_t* fflags);
-uint64_t rv_utof(uint32_t a, uint32_t frm, uint32_t* fflags);
-// simx64
-uint64_t rv_ltof(uint64_t a, uint32_t frm, uint32_t* fflags);
-// simx64
-uint64_t rv_lutof(uint64_t a, uint32_t frm, uint32_t* fflags);
+uint32_t rv_ftoi_s(uint32_t a, uint32_t frm, uint32_t* fflags);
+uint32_t rv_ftou_s(uint32_t a, uint32_t frm, uint32_t* fflags);
+uint64_t rv_ftol_s(uint32_t a, uint32_t frm, uint32_t* fflags);
+uint64_t rv_ftolu_s(uint32_t a, uint32_t frm, uint32_t* fflags);
+uint32_t rv_itof_s(uint32_t a, uint32_t frm, uint32_t* fflags);
+uint32_t rv_utof_s(uint32_t a, uint32_t frm, uint32_t* fflags);
+uint32_t rv_ltof_s(uint64_t a, uint32_t frm, uint32_t* fflags);
+uint32_t rv_lutof_s(uint64_t a, uint32_t frm, uint32_t* fflags);
 
-uint64_t rv_fclss(uint32_t a);
-uint64_t rv_fsgnj(uint32_t a, uint32_t b);
-uint64_t rv_fsgnjn(uint32_t a, uint32_t b);
-uint64_t rv_fsgnjx(uint32_t a, uint32_t b);
+uint32_t rv_fclss_s(uint32_t a);
+uint32_t rv_fsgnj_s(uint32_t a, uint32_t b);
+uint32_t rv_fsgnjn_s(uint32_t a, uint32_t b);
+uint32_t rv_fsgnjx_s(uint32_t a, uint32_t b);
 
-uint64_t rv_flt(uint32_t a, uint32_t b, uint32_t* fflags);
-uint64_t rv_fle(uint32_t a, uint32_t b, uint32_t* fflags);
-uint64_t rv_feq(uint32_t a, uint32_t b, uint32_t* fflags);
-uint64_t rv_fmin(uint32_t a, uint32_t b, uint32_t* fflags);
-uint64_t rv_fmax(uint32_t a, uint32_t b, uint32_t* fflags);
+uint32_t rv_flt_s(uint32_t a, uint32_t b, uint32_t* fflags);
+uint32_t rv_fle_s(uint32_t a, uint32_t b, uint32_t* fflags);
+uint32_t rv_feq_s(uint32_t a, uint32_t b, uint32_t* fflags);
+uint32_t rv_fmin_s(uint32_t a, uint32_t b, uint32_t* fflags);
+uint32_t rv_fmax_s(uint32_t a, uint32_t b, uint32_t* fflags);
 
 
-
-// simx64
 uint64_t rv_fadd_d(uint64_t a, uint64_t b, uint32_t frm, uint32_t* fflags);
 uint64_t rv_fsub_d(uint64_t a, uint64_t b, uint32_t frm, uint32_t* fflags);
 uint64_t rv_fmul_d(uint64_t a, uint64_t b, uint32_t frm, uint32_t* fflags);
