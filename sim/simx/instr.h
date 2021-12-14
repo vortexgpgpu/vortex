@@ -75,7 +75,7 @@ public:
   void setFunc2(Word func2) { func2_ = func2; }
   void setFunc3(Word func3) { func3_ = func3; }
   void setFunc7(Word func7) { func7_ = func7; }
-  void setImm(DoubleWord imm) { has_imm_ = true; imm_ = imm; }
+  void setImm(DWord imm) { has_imm_ = true; imm_ = imm; }
   void setVlsWidth(Word width) { vlsWidth_ = width; }
   void setVmop(Word mop) { vMop_ = mop; }
   void setVnf(Word nf) { vNf_ = nf; }
@@ -98,7 +98,7 @@ public:
   int getRDest() const { return rdest_; }  
   RegType getRDType() const { return rdest_type_; }  
   bool hasImm() const { return has_imm_; }
-  DoubleWord getImm() const { return imm_; }
+  DWord getImm() const { return imm_; }
   Word getVlsWidth() const { return vlsWidth_; }
   Word getVmop() const { return vMop_; }
   Word getvNf() const { return vNf_; }
@@ -118,7 +118,7 @@ private:
   int num_rsrcs_;
   bool has_imm_;
   RegType rdest_type_;
-  DoubleWord imm_;
+  DWord imm_;
   RegType rsrc_type_[MAX_REG_SOURCES];
   int rsrc_[MAX_REG_SOURCES];  
   int rdest_;
