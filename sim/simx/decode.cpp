@@ -369,7 +369,7 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
 }
 
 Decoder::Decoder(const ArchDef &arch) {
-  inst_s_   = arch.wsize() * 4;
+  inst_s_   = arch.wsize() * 8;
   opcode_s_ = 7;
   reg_s_    = 5;
   func2_s_  = 2;
