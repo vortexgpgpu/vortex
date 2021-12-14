@@ -13,8 +13,8 @@ namespace vortex {
 typedef uint8_t  Byte;
 typedef uint32_t Word;
 typedef int32_t  WordI;
-typedef uint64_t DoubleWord;
-typedef int64_t DoubleWordI;
+typedef uint64_t DWord;
+typedef int64_t DWordI;
 
 typedef uint64_t Addr;
 typedef uint32_t Size;

@@ -52,7 +52,7 @@ static const char* op_string(const Instr &instr) {
   Word func3  = instr.getFunc3();
   Word func7  = instr.getFunc7();
   Word rs2    = instr.getRSrc(1);
-  DoubleWord imm    = instr.getImm();
+  DWord imm    = instr.getImm();
 
   switch (opcode) {
   case Opcode::NOP:        return "NOP";
@@ -517,7 +517,7 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
       instr->setSrcReg(rs2);
     }
     instr->setFunc3(func3);
-    DoubleWord imm = (func7 << reg_s_) | rd;
+    DWord imm = (func7 << reg_s_) | rd;
     instr->setImm(sext64(imm, 12));
   } break;
 
@@ -529,7 +529,7 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
     Word bits_4_1 = rd >> 1;
     Word bit_10_5 = func7 & 0x3f;
     Word bit_12   = func7 >> 6;
-    DoubleWord imm = (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
+    DWord imm = (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
     instr->setImm(sext64(imm, 13));
   } break;
 
@@ -545,7 +545,7 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
     Word bit_11 = (unordered >> 8) & 0x1;
     Word bits_10_1 = (unordered >> 9) & 0x3ff;
     Word bit_20 = (unordered >> 19) & 0x1;
-    DoubleWord imm = 0 | (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
+    DWord imm = 0 | (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
     if (bit_20) {
       imm |= ~j_imm_mask_;
     }

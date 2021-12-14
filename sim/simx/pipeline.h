@@ -18,7 +18,7 @@ struct pipeline_trace_t {
   int         cid;
   int         wid;  
   ThreadMask  tmask;
-  DoubleWord        PC;
+  DWord        PC;
 
   //--
   bool        fetch_stall;
