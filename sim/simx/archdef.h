@@ -66,6 +66,5 @@ public:
   uint16_t num_cores() const {
     return num_cores_;
   }
-
 };
 }
