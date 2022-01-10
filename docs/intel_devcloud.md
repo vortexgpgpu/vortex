@@ -54,10 +54,10 @@ $ cd vortex/ci
 $ nano toolchain_install.sh
 ```
 
-We’ll have to change line 8:
+You’ll have to change line 8:
 
 ```bash
-# this is the script 'toolchain_install.sh' we're editing
+# this is the script 'toolchain_install.sh' you're editing
 #!/bin/bash
 
 # exit when any command fails
@@ -109,7 +109,7 @@ $ tools_setup #select option 5 here - Arria 10 PAC Compilation and Programming -
 ```
 ### OPAE set-up
 
-Compressed OPAE folders are available at `/opt/a10/inteldevstack/a10_gx_pac_ias_1_2_1_pv/sw`. We need to untar OPAE but we don't have permissions to `/opt`, so we will copy this folder to `/home/uxxxxxx`.
+Compressed OPAE folders are available at `/opt/a10/inteldevstack/a10_gx_pac_ias_1_2_1_pv/sw`. You need to untar OPAE but you don't have permissions to `/opt`, so copy this folder to `/home/uxxxxxx`.
 
 ```bash
 $ cd /opt/a10/inteldevstack/a10_gx_pac_ias_1_2_1_pv/
@@ -120,7 +120,7 @@ $ cp –r /opt/a10/inteldevstack/a10_gx_pac_ias_1_2_1_pv /home/uxxxxxx/a10_gx_pa
 $ cd /home/uxxxxxx/a10_gx_pac_ias_1_2_1_pv/a10_gx_pac_ias_1_2_1_pv/sw
 $ tar xvzf opae-1.1.2-2.tar.gz
 ```
-This will create a folder in the current directory called `opae-1.1.2-2`. We will use this path to set some env variables next. You need to do this only once. 
+This will create a folder in the current directory called `opae-1.1.2-2`. You will use this path to set some env variables next. You need to do this only once. 
 
 ### Set environment variables
 Set the following variables correctly. 
@@ -136,7 +136,9 @@ export LD_LIBRARY_PATH=/home/uxxxxxx/a10_gx_pac_ias_1_2_1_pv/a10_gx_pac_ias_1_2_
 **(Note:You might need to set these variables everytime you access devcloud (`ssh devcloud`) unless you include them in your .bashrc script.)**
 
 ### Generate bitstream
-We’re now going to generate a .gbs file. 
+
+To generate a .gbs file: 
+
 ```bash
 # From /home/uxxxxxx
 
