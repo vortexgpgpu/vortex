@@ -10,36 +10,39 @@ This is a step-by-step guide to program Vortex on Arria 10 via Intel's devcloud.
 
 ## Vortex set-up
 
-### Get vortex locally
+### Get vortex
 
-- Clone the vortex repo
+Clone the vortex repo
+
+> Devcloud users cannot use `sudo apt-get` from the main [README](https://github.com/vortexgpgpu/vortex#install-development-tools), but devcloud comes with `build-essential` and `git` preinstalled so this step is ignored. 
 
 ```bash
-git clone --recursive https://github.com/vortexgpgpu/vortex.git` 
-cd vortex
+$ git clone --recursive https://github.com/vortexgpgpu/vortex.git` 
 ```
 
-### Installing dependencies
+### Installing toolchain & dependencies
 
-- On devcloud we dont have /opt access (requires admin privileges) but the vortex script `toolchain_install.sh` uses /opt. 
-- First, type `pwd` in your devcloud home directory. Your path will look like `/home/uxxxxxx` where `uxxxxxx` is your devcloud user id. 
+> Devcloud users dont have /opt access (requires admin privileges) but the vortex script `toolchain_install.sh` uses /opt. We will have to edit this script. 
+
+Type these commands from your devcloud home directory.
 
 ```bash
-mkdir BIN
-cd BIN
-pwd
+$ mkdir BIN
+$ cd BIN
+$ pwd
 ```
 
-- Your path will look like `/home/uxxxxxx/BIN.` Copy this path for later. 
+Your path will look like `/home/uxxxxxx/BIN`, where `uxxxxxx` is your devcloud user-id. Copy this path for later. 
 
 ```bash
-cd vortex/ci
-nano toolchain_install.sh
+$ cd vortex/ci
+$ nano toolchain_install.sh
 ```
 
-- We’ll have to change line 8 to:
+We’ll have to change line 8:
 
 ```bash
+# this is the script 'toolchain_install.sh' we're editing
 #!/bin/bash
 
 # exit when any command fails
@@ -47,10 +50,10 @@ set -e
 
 REPOSITORY=https://github.com/vortexgpgpu/vortex-toolchain-prebuilt/raw/master
 
-DESTDIR="${DESTDIR:=/home/uxxxxxx/BIN}"
+DESTDIR="${DESTDIR:=/home/uxxxxxx/BIN}" # EDIT HERE
 ```
 
-- After this you can run the following command while inside the vortex directory 
+After this you can run the following commands while inside the vortex directory 
 
 ```bash
 ./ci/toolchain_install.sh -all
@@ -59,7 +62,7 @@ make -s
 
 ### Environment variables
 
-- You’ll have to set the following variables correctly:
+Set the following variables correctly:
 
 ```bash
 export VERILATOR_ROOT=/home/uxxxxxx/BIN/verilator
@@ -70,9 +73,11 @@ export LLVM_PREFIX=/home/uxxxxxx/BIN/llvm-riscv
 export RISCV_TOOLCHAIN_PATH=/home/uxxxxxx/BIN/riscv-gnu-toolchain
 ```
 
+**Note: You might need to set these variables everytime you access devcloud (`ssh devcloud`) unless you include them in your .bashrc script.**
+
 ### Test installation
 
-- To quickly test your installation run
+To quickly test your installation run: 
 
 ```bash
 ./ci/blackbox.sh --driver=simx --cores=2 --app=vecadd
