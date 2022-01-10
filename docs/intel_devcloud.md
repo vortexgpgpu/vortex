@@ -1,15 +1,28 @@
 # Vortex on Intel’s devcloud Arria 10
 
-- Sign up for Intel devcloud and get the ssh and setup so that ssh devcloud works
+This is a step-by-step guide to program Vortex on Arria 10 via Intel's devcloud.
 
-- Install vortex repo
+## Getting started with Intel's devcloud
+
+- Sign up for [Intel devcloud](https://www.intel.com/content/www/us/en/developer/tools/devcloud/overview.html) 
+- If you're on a Linux/macOs type system follow the steps [here](https://devcloud.intel.com/oneapi/documentation/connect-with-ssh-linux-macos/) for the initial setup.
+- If your setup is successful, typing `ssh devcloud` on your terminal will connect you to devcloud
+
+## Vortex set-up
+
+### Get vortex locally
+
+- Clone the vortex repo
 
 ```bash
 git clone --recursive https://github.com/vortexgpgpu/vortex.git` 
 cd vortex
 ```
 
-- Installing toolchain → On devcloud we dont have /opt access but the vortex script `toolchain_install.sh` uses /opt. First do a pwd in your devcloud home directory. Your path will look like `/home/uxxxxxx.`
+### Installing dependencies
+
+- On devcloud we dont have /opt access (requires admin privileges) but the vortex script `toolchain_install.sh` uses /opt. 
+- First, type `pwd` in your devcloud home directory. Your path will look like `/home/uxxxxxx` where `uxxxxxx` is your devcloud user id. 
 
 ```bash
 mkdir BIN
@@ -17,14 +30,14 @@ cd BIN
 pwd
 ```
 
-Your path will look like `/home/uxxxxxx/BIN.` 
+- Your path will look like `/home/uxxxxxx/BIN.` Copy this path for later. 
 
 ```bash
 cd vortex/ci
 nano toolchain_install.sh
 ```
 
-So first we’ll have to change that on line 8 to:
+- We’ll have to change line 8 to:
 
 ```bash
 #!/bin/bash
@@ -37,14 +50,16 @@ REPOSITORY=https://github.com/vortexgpgpu/vortex-toolchain-prebuilt/raw/master
 DESTDIR="${DESTDIR:=/home/uxxxxxx/BIN}"
 ```
 
-After this you can run the following command while inside the vortex directory 
+- After this you can run the following command while inside the vortex directory 
 
 ```bash
 ./ci/toolchain_install.sh -all
 make -s
 ```
 
-- You’ll have to set the following variables correctly
+### Environment variables
+
+- You’ll have to set the following variables correctly:
 
 ```bash
 export VERILATOR_ROOT=/home/uxxxxxx/BIN/verilator
@@ -55,13 +70,15 @@ export LLVM_PREFIX=/home/uxxxxxx/BIN/llvm-riscv
 export RISCV_TOOLCHAIN_PATH=/home/uxxxxxx/BIN/riscv-gnu-toolchain
 ```
 
+### Test installation
+
 - To quickly test your installation run
 
 ```bash
 ./ci/blackbox.sh --driver=simx --cores=2 --app=vecadd
 ```
 
-- Programming Arria 10 with vortex
+## Programming Arria 10 with vortex
 
 ```bash
 $ ssh devcloud
