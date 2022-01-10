@@ -1,19 +1,26 @@
 # Vortex on Intel’s devcloud Arria 10
 
-This is a step-by-step guide to program Vortex on Arria 10 via Intel's devcloud. It assumes a Linux like environment. 
+This is a step-by-step guide to program Vortex on Arria 10 via Intel's devcloud. (Assumes a Linux like environment)
   
-1. [Getting started with Intel's devcloud](#devcloud-set-up)
-2. [Vortex set-up](#vortex-set-up)
-    * [Get vortex](#get-vortex)
-    * [Installing toolchain & dependencies](#toolchain)
-    * [Environment variables](#environment-variables)
-    * [Test installation](#test-installation)
-3. [Programming Arria 10 with Vortex](#programming-arria-10-with-vortex)
+- [Devcloud set-up](#devcloud-set-up)
+- [Vortex set-up](#vortex-set-up)
+  * [Get vortex](#get-vortex)
+  * [Toolchain](#toolchain)
+  * [Environment variables](#environment-variables)
+  * [Test installation](#test-installation)
+- [Programming Arria 10 with Vortex](#programming-arria-10-with-vortex)
+  * [OPAE set-up](#opae-set-up)
+  * [Set environment variables](#set-environment-variables)
+  * [Generate bitstream](#generate-bitstream)
+  * [Sign the bitstream](#sign-the-bitstream)
+  * [Program the FPGA](#program-the-fpga)
+  * [Test example](#test-example)
+- [References](#references)
 
 ## Devcloud set-up
 
 - Sign up for [Intel devcloud](https://www.intel.com/content/www/us/en/developer/tools/devcloud/overview.html) 
-- If you're on a Linux/macOs type system follow the steps [here](https://devcloud.intel.com/oneapi/documentation/connect-with-ssh-linux-macos/) for the initial setup.
+- If you're on a Linux/macOS type system follow the steps [here](https://devcloud.intel.com/oneapi/documentation/connect-with-ssh-linux-macos/) for the initial setup.
 - If your setup is successful, typing `ssh devcloud` on your terminal will connect you to devcloud
 
 ## Vortex set-up
@@ -85,7 +92,7 @@ export RISCV_TOOLCHAIN_PATH=/home/uxxxxxx/BIN/riscv-gnu-toolchain
 
 ### Test installation
 
-To quickly test your installation run: 
+To quickly test your installation run the following from your vortex folder: 
 
 ```bash
 ./ci/blackbox.sh --driver=simx --cores=2 --app=vecadd
@@ -100,6 +107,8 @@ $ devcloud_login #select option 1 here - Arria 10 PAC Compilation and Programmin
 
 $ tools_setup #select option 5 here - Arria 10 PAC Compilation and Programming - RTL AFU, OpenCL - this sets the right env variables
 ```
+### OPAE set-up
+
 Compressed OPAE folders are available at `/opt/a10/inteldevstack/a10_gx_pac_ias_1_2_1_pv/sw`. We need to untar OPAE but we don't have permissions to `/opt`, so we will copy this folder to `/home/uxxxxxx`.
 
 ```bash
@@ -111,16 +120,22 @@ $ cp –r /opt/a10/inteldevstack/a10_gx_pac_ias_1_2_1_pv /home/uxxxxxx/a10_gx_pa
 $ cd /home/uxxxxxx/a10_gx_pac_ias_1_2_1_pv/a10_gx_pac_ias_1_2_1_pv/sw
 $ tar xvzf opae-1.1.2-2.tar.gz
 ```
-This will create a folder in the current directory called `opae-1.1.2-2`. We will use this path to set some env variables next.
+This will create a folder in the current directory called `opae-1.1.2-2`. We will use this path to set some env variables next. You need to do this only once. 
+
+### Set environment variables
 Set the following variables correctly. 
+
+>  $OPAE_PLATFORM_ROOT is already set by the `tools_setup` command, try `echo $OPAE_PLATFORM_ROOT` to verify this. 
 
 ```bash
 export PATH=$OPAE_PLATFORM_ROOT/bin:$PATH
 export C_INCLUDE_PATH=/home/uxxxxxx/a10_gx_pac_ias_1_2_1_pv/a10_gx_pac_ias_1_2_1_pv/sw/opae-1.1.2-2/common/include:$C_INCLUDE_PATH
 export LD_LIBRARY_PATH=/home/uxxxxxx/a10_gx_pac_ias_1_2_1_pv/a10_gx_pac_ias_1_2_1_pv/hw/lib:$LD_LIBRARY_PATH
 ```
-*(Note: $OPAE_PLATFORM_ROOT is already set by the `tools_setup` command, try `echo $OPAE_PLATFORM_ROOT`)*
 
+**(Note:You might need to set these variables everytime you access devcloud (`ssh devcloud`) unless you include them in your .bashrc script.)**
+
+### Generate bitstream
 We’re now going to generate a .gbs file. 
 ```bash
 # From /home/uxxxxxx
@@ -138,21 +153,25 @@ This is supposed to create a folder called `build_fpga_4c` and run synthesis for
 > $OPAE_PLATFORM_ROOT/bin/run.sh
 > ```
 
-Signing the bitstream and Programming the FPGA:
+### Sign the bitstream 
 
 ```bash
 $ PACSign PR -t UPDATE -H openssl_manager -i vortex_afu.gbs -o vortex_afu_unsigned_ssl.gbs
+```
+### Program the FPGA
+
+```bash
 $ fpgasupdate vortex_afu_unsigned_ssl.gbs
 ```
 
-Test example:
+### Test example
 
 ```bash
 # from vortex root folder
 $ ./ci/blackbox.sh --driver=fpga --app=sgemm --args="-n64"
 ```
 
-References:
+## References
 1. [FPGA demo video](https://github.com/vortexgpgpu/vortex_tutorials/blob/main/Slides/vortex_fpga_demo.mp4)
 2. [FPGA Startup and Configuration Guide](https://github.com/vortexgpgpu/vortex/blob/master/docs/fpga_setup.md)
 
