@@ -1,8 +1,16 @@
 # Vortex on Intel’s devcloud Arria 10
 
-This is a step-by-step guide to program Vortex on Arria 10 via Intel's devcloud.
+This is a step-by-step guide to program Vortex on Arria 10 via Intel's devcloud. It assumes a Linux like environment. 
+  
+1. [Getting started with Intel's devcloud](#devcloud-set-up)
+2. [Vortex set-up](#vortex-set-up)
+    * [Get vortex](#get-vortex)
+    * [Installing toolchain & dependencies](#toolchain)
+    * [Environment variables](#environment-variables)
+    * [Test installation](#test-installation)
+3. [Programming Arria 10 with Vortex](#programming-arria-10-with-vortex)
 
-## Getting started with Intel's devcloud
+## Devcloud set-up
 
 - Sign up for [Intel devcloud](https://www.intel.com/content/www/us/en/developer/tools/devcloud/overview.html) 
 - If you're on a Linux/macOs type system follow the steps [here](https://devcloud.intel.com/oneapi/documentation/connect-with-ssh-linux-macos/) for the initial setup.
@@ -20,7 +28,7 @@ Clone the vortex repo
 $ git clone --recursive https://github.com/vortexgpgpu/vortex.git` 
 ```
 
-### Installing toolchain & dependencies
+### Toolchain
 
 > Devcloud users dont have /opt access (requires admin privileges) but the vortex script `toolchain_install.sh` uses /opt. We will have to edit this script. 
 
@@ -83,51 +91,68 @@ To quickly test your installation run:
 ./ci/blackbox.sh --driver=simx --cores=2 --app=vecadd
 ```
 
-## Programming Arria 10 with vortex
+## Programming Arria 10 with Vortex
 
 ```bash
 $ ssh devcloud
 
-$ devcloud_login #select option 1 here
+$ devcloud_login #select option 1 here - Arria 10 PAC Compilation and Programming - RTL AFU, OpenCL & select either release 1.2 or 1.2.1 
 
-$ tools_setup #select option 5 here
-
-$ cd /opt/a10/... find the opae tar file
-
-$ copy it over to home and untar it
+$ tools_setup #select option 5 here - Arria 10 PAC Compilation and Programming - RTL AFU, OpenCL - this sets the right env variables
 ```
+Compressed OPAE folders are available at `/opt/a10/inteldevstack/a10_gx_pac_ias_1_2_1_pv/sw`. We need to untar OPAE but we don't have permissions to `/opt`, so we will copy this folder to `/home/uxxxxxx`.
 
-- Set the following variables correctly
+```bash
+$ cd /opt/a10/inteldevstack/a10_gx_pac_ias_1_2_1_pv/
+$ pwd #copy this path
+$ cd ~
+$ mkdir a10_gx_pac_ias_1_2_1_pv
+$ cp –r /opt/a10/inteldevstack/a10_gx_pac_ias_1_2_1_pv /home/uxxxxxx/a10_gx_pac_ias_1_2_1_pv/
+$ cd /home/uxxxxxx/a10_gx_pac_ias_1_2_1_pv/a10_gx_pac_ias_1_2_1_pv/sw
+$ tar xvzf opae-1.1.2-2.tar.gz
+```
+This will create a folder in the current directory called `opae-1.1.2-2`. We will use this path to set some env variables next.
+Set the following variables correctly. 
 
 ```bash
 export PATH=$OPAE_PLATFORM_ROOT/bin:$PATH
-
-export C_INCLUDE_PATH=/home/u109558/a10_gx_pac_ias_1_2_1_pv/a10_gx_pac_ias_1_2_1_pv/sw/opae-1.1.2-2/common/include:$C_INCLUDE_PATH
-
-export LD_LIBRARY_PATH=/home/u109558/a10_gx_pac_ias_1_2_1_pv/a10_gx_pac_ias_1_2_1_pv/hw/lib:$LD_LIBRARY_PATH
+export C_INCLUDE_PATH=/home/uxxxxxx/a10_gx_pac_ias_1_2_1_pv/a10_gx_pac_ias_1_2_1_pv/sw/opae-1.1.2-2/common/include:$C_INCLUDE_PATH
+export LD_LIBRARY_PATH=/home/uxxxxxx/a10_gx_pac_ias_1_2_1_pv/a10_gx_pac_ias_1_2_1_pv/hw/lib:$LD_LIBRARY_PATH
 ```
+*(Note: $OPAE_PLATFORM_ROOT is already set by the `tools_setup` command, try `echo $OPAE_PLATFORM_ROOT`)*
 
-- We’re now going to generate a .gbs file  (link vortex vid)
-
+We’re now going to generate a .gbs file. 
 ```bash
+# From /home/uxxxxxx
+
 cd vortex/hw/syn/opae
-make fpga-4c # make fpga-<num-of-cores>c, you can check the Makefile for other configs
+make fpga-4c # make fpga-<num-of-cores>c, you can check the Makefile for other settings and options
 ```
 
-This is supposed to create a folder called `build_fpga_4c` and run synthesis for a while. After that `cd build_fpga_4c` should have a `vortex_afu.gbs` file. If this doesnt work then
+This is supposed to create a folder called `build_fpga_4c` and run synthesis for a while. After that `cd build_fpga_4c` **should have a `vortex_afu.gbs` file.**
+
+
+> Note: If `build_fpga_4c` doesn't have `vortex_afu.gbs`
+> ```bash
+> cd build_fpga_4c
+> $OPAE_PLATFORM_ROOT/bin/run.sh
+> ```
+
+Signing the bitstream and Programming the FPGA:
 
 ```bash
-cd build_fpga_4c
-$OPAE_PLATFORM_ROOT/bin/run.sh
+$ PACSign PR -t UPDATE -H openssl_manager -i vortex_afu.gbs -o vortex_afu_unsigned_ssl.gbs
+$ fpgasupdate vortex_afu_unsigned_ssl.gbs
 ```
+
+Test example:
 
 ```bash
-PACSign PR -t UPDATE -H openssl_manager -i vortex_afu.gbs -o vortex_afu_unsigned_ssl.gbs
-fpgasupdate vortex_afu_unsigned_ssl.gbs
+# from vortex root folder
+$ ./ci/blackbox.sh --driver=fpga --app=sgemm --args="-n64"
 ```
 
-- example
+References:
+1. [FPGA demo video](https://github.com/vortexgpgpu/vortex_tutorials/blob/main/Slides/vortex_fpga_demo.mp4)
+2. [FPGA Startup and Configuration Guide](https://github.com/vortexgpgpu/vortex/blob/master/docs/fpga_setup.md)
 
-```bash
-./ci/blackbox.sh --driver=fpga --app=sgemm --args="-n64"
-```
