@@ -66,11 +66,11 @@ public:
     return id_;
   }
 
-  DWord getPC() const {
+  Word getPC() const {
     return PC_;
   }
 
-  void setPC(DWord PC) {
+  void setPC(Word PC) {
     PC_ = PC;
   }
 
