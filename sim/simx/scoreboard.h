@@ -80,7 +80,7 @@ public:
                 ++r;
             }
         }
-        return std::move(out);
+        return out;
     }
     
     void reserve(pipeline_trace_t* state) {

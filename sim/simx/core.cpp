@@ -377,7 +377,7 @@ WarpMask Core::wspawn(int num_warps, int nextPC) {
     warp->setTmask(0, true);
     ret.set(i); 
   }
-  return std::move(ret);
+  return ret;
 }
 
 WarpMask Core::barrier(int bar_id, int count, int warp_id) {
@@ -387,7 +387,7 @@ WarpMask Core::barrier(int bar_id, int count, int warp_id) {
   if (barrier.count() < (size_t)count) {
     warps_.at(warp_id)->suspend();
     DP(3, "*** Suspend warp #" << warp_id << " at barrier #" << bar_id);
-    return std::move(ret);
+    return ret;
   }
   for (int i = 0; i < arch_.num_warps(); ++i) {
     if (barrier.test(i)) {
@@ -397,7 +397,7 @@ WarpMask Core::barrier(int bar_id, int count, int warp_id) {
     }
   }
   barrier.reset();
-  return std::move(ret);
+  return ret;
 }
 
 Word Core::icache_read(Addr addr, Size size) {
