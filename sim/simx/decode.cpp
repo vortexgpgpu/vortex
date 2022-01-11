@@ -67,6 +67,8 @@ static const char* op_string(const Instr &instr) {
       case 5: return "DIVU";
       case 6: return "REM";
       case 7: return "REMU";
+      default:
+        std::abort();
       }
     } else {
       switch (func3) {
@@ -78,6 +80,8 @@ static const char* op_string(const Instr &instr) {
       case 5: return func7 ? "SRA" : "SRL";
       case 6: return "OR";
       case 7: return "AND";
+      default:
+        std::abort();
       }
     }
   case Opcode::I_INST:
@@ -90,6 +94,8 @@ static const char* op_string(const Instr &instr) {
     case 5: return func7 ? "SRAI" : "SRLI";
     case 6: return "ORI";
     case 7: return "ANDI";
+    default:
+      std::abort();
     }  
   case Opcode::B_INST:
     switch (func3) {
