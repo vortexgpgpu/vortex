@@ -133,7 +133,7 @@ struct mem_addr_size_t {
   uint32_t size;
 };
 
-inline AddrType get_addr_type(Word addr, uint32_t size) {
+inline AddrType get_addr_type(DWord addr, uint32_t size) {
   __unused (size);
   if (SM_ENABLE) {
     if (addr >= (SMEM_BASE_ADDR - SMEM_SIZE)

@@ -6,7 +6,7 @@ AR = $(RISCV64_TOOLCHAIN_PATH)/bin/riscv64-unknown-elf-gcc-ar
 DP = $(RISCV64_TOOLCHAIN_PATH)/bin/riscv64-unknown-elf-objdump
 CP = $(RISCV64_TOOLCHAIN_PATH)/bin/riscv64-unknown-elf-objcopy
 
-CFLAGS += -O3 -march=rv64imfd -mabi=lp64d -Wstack-usage=1024 -fno-exceptions -fdata-sections -ffunction-sections
+CFLAGS += -O3 -march=rv64imfd -mabi=lp64d -mcmodel=medany -Wstack-usage=1024 -fno-exceptions -fdata-sections -ffunction-sections
 CFLAGS += -I./include -I../hw
 
 PROJECT = libvortexrt
