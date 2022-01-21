@@ -20,7 +20,7 @@ Vortex is a full-system RISCV-based GPGPU processor.
 
 ## Directory structure
 
-- `doc`: [Documentation](doc/Vortex.md).
+- `doc`: [Documentation](docs/index.md).
 - `hw`: Hardware sources.
 - `driver`: Host drivers repository.
 - `runtime`: Kernel Runtime software.
