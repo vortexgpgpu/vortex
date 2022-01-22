@@ -93,3 +93,7 @@ inline __uint128_t sext128(__uint128_t word, uint32_t width) {
   __uint128_t mask = (unity << width) - 1;
   return ((word >> (width - 1)) & 0x1) ? (word | ~mask) : word;
 }
+
+inline uint64_t nan_box(uint32_t word) {
+  return word | 0xFFFFFFFF00000000;
+}
