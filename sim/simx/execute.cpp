@@ -512,7 +512,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       if (!tmask_.test(t))
         continue;
       rddata[t] = nextPC;
-      nextPC = PC_ + immsrc;  
+      nextPC = Word(PC_ + immsrc);  
       trace->fetch_stall = true;
       break; // runonce
     }
@@ -538,12 +538,13 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->lsu.type = LsuType::LOAD;
     trace->used_iregs.set(rsrc0);
     if (opcode == L_INST 
-    || (opcode == FL && func3 == 2)) {
+    || (opcode == FL && func3 == 2)
+    || (opcode == FL && func3 == 3)) {
       for (int t = 0; t < num_threads; ++t) {
         if (!tmask_.test(t))
           continue;
-        DWord mem_addr  = ((rsdata[t][0] + immsrc) & 0xFFFFFFFFFFFFFFF8); // double word aligned
-        DWord shift_by  = ((rsdata[t][0] + immsrc) & 0x00000007) * 8;
+        DWord mem_addr  = ((rsdata[t][0] + immsrc) & 0xFFFFFFFFFFFFFFFC); // double word aligned
+        DWord shift_by  = ((rsdata[t][0] + immsrc) & 0x00000003) * 8;
         DWord data_read = core_->dcache_read(mem_addr, 8);
         trace->mem_addrs.at(t).push_back({mem_addr, 8});
         DP(4, "LOAD MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << data_read);
@@ -557,11 +558,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           rddata[t] = sext64((data_read >> shift_by) & 0xFFFF, 16);
           break;
         case 2:
-          // RV32I: LW
-          rddata[t] = sext64((data_read >> shift_by) & 0xFFFFFFFF, 32);
+          // RV32I: LW / RV32F: FLW
+          rddata[t] = (opcode == FL) ? nan_box((data_read >> shift_by) & 0xFFFFFFFF) : sext64((data_read >> shift_by) & 0xFFFFFFFF, 32); 
           break;
         case 3:
-          // RV64I: LD
+          // RV64I: LD / RV32D: FLD
           rddata[t] = data_read;
           break;
         case 4:
@@ -628,11 +629,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           core_->dcache_write(mem_addr, rsdata[t][1] & 0x0000FFFF, 2);
           break;
         case 2:
-          // RV32I: SW
+          // RV32I: SW / RV32F: FSW
           core_->dcache_write(mem_addr, rsdata[t][1] & 0xFFFFFFFF, 4);
           break;
         case 3:
-          // RV64I: SD
+          // RV64I: SD / RV32D: FSD
           core_->dcache_write(mem_addr, rsdata[t][1], 8);
           break;
         default:
@@ -742,7 +743,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       uint32_t fflags = 0;
       switch (func7) {
       case 0x00: // RV32F: FADD.S
-        rddata[t] = rv_fadd_s(rsdata[t][0], rsdata[t][1], frm, &fflags);
+        rddata[t] = nan_box(rv_fadd_s(rsdata[t][0], rsdata[t][1], frm, &fflags));
         trace->fpu.type = FpuType::FMA;
         trace->used_fregs.set(rsrc0);
         trace->used_fregs.set(rsrc1);
@@ -754,7 +755,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         trace->used_fregs.set(rsrc1);
         break;
       case 0x04: // RV32F: FSUB.S
-        rddata[t] = rv_fsub_s(rsdata[t][0], rsdata[t][1], frm, &fflags);
+        rddata[t] = nan_box(rv_fsub_s(rsdata[t][0], rsdata[t][1], frm, &fflags));
         trace->fpu.type = FpuType::FMA;
         trace->used_fregs.set(rsrc0);
         trace->used_fregs.set(rsrc1);
@@ -766,31 +767,31 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         trace->used_fregs.set(rsrc1);
         break;
       case 0x08: // RV32F: FMUL.S
-        rddata[t] = rv_fmul_s(rsdata[t][0], rsdata[t][1], frm, &fflags);
+        rddata[t] = nan_box(rv_fmul_s(rsdata[t][0], rsdata[t][1], frm, &fflags));
         trace->fpu.type = FpuType::FMA;
         trace->used_fregs.set(rsrc0);
         trace->used_fregs.set(rsrc1);
         break;
-      case 0x09: // RV32F: FMUL.D
+      case 0x09: // RV32D: FMUL.D
         rddata[t] = rv_fmul_d(rsdata[t][0], rsdata[t][1], frm, &fflags);
         trace->fpu.type = FpuType::FMA;
         trace->used_fregs.set(rsrc0);
         trace->used_fregs.set(rsrc1);
         break;
       case 0x0c: // RV32F: FDIV.S
-        rddata[t] = rv_fdiv_s(rsdata[t][0], rsdata[t][1], frm, &fflags);
+        rddata[t] = nan_box(rv_fdiv_s(rsdata[t][0], rsdata[t][1], frm, &fflags));
         trace->fpu.type = FpuType::FDIV;
         trace->used_fregs.set(rsrc0);
         trace->used_fregs.set(rsrc1);
         break;
-      case 0x0d: // RV32F: FDIV.D
+      case 0x0d: // RV32D: FDIV.D
         rddata[t] = rv_fdiv_d(rsdata[t][0], rsdata[t][1], frm, &fflags);
         trace->fpu.type = FpuType::FDIV;
         trace->used_fregs.set(rsrc0);
         trace->used_fregs.set(rsrc1);
         break;
       case 0x2c: // RV32F: FSQRT.S
-        rddata[t] = rv_fsqrt_s(rsdata[t][0], frm, &fflags);
+        rddata[t] = nan_box(rv_fsqrt_s(rsdata[t][0], frm, &fflags));
         trace->fpu.type = FpuType::FSQRT;
         trace->used_fregs.set(rsrc0);
         break;
@@ -802,24 +803,28 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       case 0x10:
         switch (func3) {            
         case 0: // RV32F: FSGNJ.S
-          rddata[t] = rv_fsgnj_s(rsdata[t][0], rsdata[t][1]);
+          rddata[t] = nan_box(rv_fsgnj_s(rsdata[t][0], rsdata[t][1]));
           break;          
         case 1: // RV32F: FSGNJN.S
-          rddata[t] = rv_fsgnjn_s(rsdata[t][0], rsdata[t][1]);
+          rddata[t] = nan_box(rv_fsgnjn_s(rsdata[t][0], rsdata[t][1]));
           break;          
         case 2: // RV32F: FSGNJX.S
-          rddata[t] = rv_fsgnjx_s(rsdata[t][0], rsdata[t][1]);
+          rddata[t] = nan_box(rv_fsgnjx_s(rsdata[t][0], rsdata[t][1]));
           break;
         }
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);
+        break;
       case 0x11:
         switch (func3) {            
-        case 0: // RV32F: FSGNJ.D
+        case 0: // RV32D: FSGNJ.D
           rddata[t] = rv_fsgnj_d(rsdata[t][0], rsdata[t][1]);
           break;          
-        case 1: // RV32F: FSGNJN.D
+        case 1: // RV32D: FSGNJN.D
           rddata[t] = rv_fsgnjn_d(rsdata[t][0], rsdata[t][1]);
           break;          
-        case 2: // RV32F: FSGNJX.D
+        case 2: // RV32D: FSGNJX.D
           rddata[t] = rv_fsgnjx_d(rsdata[t][0], rsdata[t][1]);
           break;
         }
@@ -830,10 +835,10 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       case 0x14:              
         if (func3) {
           // RV32F: FMAX.S
-          rddata[t] = rv_fmax_s(rsdata[t][0], rsdata[t][1], &fflags);
+          rddata[t] = nan_box(rv_fmax_s(rsdata[t][0], rsdata[t][1], &fflags));
         } else {
           // RV32F: FMIN.S
-          rddata[t] = rv_fmin_s(rsdata[t][0], rsdata[t][1], &fflags);
+          rddata[t] = nan_box(rv_fmin_s(rsdata[t][0], rsdata[t][1], &fflags));
         }
         trace->fpu.type = FpuType::FNCP;
         trace->used_fregs.set(rsrc0);
@@ -847,6 +852,20 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           // RV32D: FMIN.D
           rddata[t] = rv_fmin_d(rsdata[t][0], rsdata[t][1], &fflags);
         }
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);        
+        break;
+      case 0x20:
+        // RV32D: FCVT.S.D
+        rddata[t] = nan_box(rv_dtof(rsdata[t][0]));
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);        
+        break;
+      case 0x21:
+        // RV32D: FCVT.D.S
+        rddata[t] = rv_ftod(rsdata[t][0]);
         trace->fpu.type = FpuType::FNCP;
         trace->used_fregs.set(rsrc0);
         trace->used_fregs.set(rsrc1);        
@@ -884,11 +903,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             rddata[t] = sext64(rv_ftou_d(rsdata[t][0], frm, &fflags), 32);
             break;
           case 2:
-            // RV64F: FCVT.L.D
+            // RV64D: FCVT.L.D
             rddata[t] = rv_ftol_d(rsdata[t][0], frm, &fflags);
             break;
           case 3:
-            // RV64F: FCVT.LU.D
+            // RV64D: FCVT.LU.D
             rddata[t] = rv_ftolu_d(rsdata[t][0], frm, &fflags);
             break;
         }
@@ -901,7 +920,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           rddata[t] = rv_fclss_s(rsdata[t][0]);
         } else {          
           // RV32F: FMV.X.W
-          rddata[t] = rsdata[t][0];
+          rddata[t] = sext64((Word)rsdata[t][0],32);
         }        
         trace->fpu.type = FpuType::FNCP;
         trace->used_fregs.set(rsrc0);
@@ -959,19 +978,19 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         switch(rsrc1) {
           case 0: 
             // RV32F: FCVT.S.W
-            rddata[t] = rv_itof_s(rsdata[t][0], frm, &fflags);
+            rddata[t] = nan_box(rv_itof_s(rsdata[t][0], frm, &fflags));
             break;
           case 1:
             // RV32F: FCVT.S.WU
-            rddata[t] = rv_utof_s(rsdata[t][0], frm, &fflags);
+            rddata[t] = nan_box(rv_utof_s(rsdata[t][0], frm, &fflags));
             break;
           case 2:
             // RV64F: FCVT.S.L
-            rddata[t] = rv_ltof_s(rsdata[t][0], frm, &fflags);
+            rddata[t] = nan_box(rv_ltof_s(rsdata[t][0], frm, &fflags));
             break;
           case 3:
             // RV64F: FCVT.S.LU
-            rddata[t] = rv_lutof_s(rsdata[t][0], frm, &fflags);
+            rddata[t] = nan_box(rv_lutof_s(rsdata[t][0], frm, &fflags));
             break;
         }
         trace->fpu.type = FpuType::FCVT;
@@ -999,8 +1018,12 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         trace->fpu.type = FpuType::FCVT;
         trace->used_iregs.set(rsrc0);
         break;
-      case 0x78:  // FMV.W.X
-      case 0x79:  // FMV.D.X
+      case 0x78:  // RV32F: FMV.W.X
+        rddata[t] = nan_box(rsdata[t][0]);
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_iregs.set(rsrc0);
+        break;
+      case 0x79:  // RV64D: FMV.D.X
         rddata[t] = rsdata[t][0];
         trace->fpu.type = FpuType::FNCP;
         trace->used_iregs.set(rsrc0);
@@ -1030,7 +1053,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           rddata[t] = rv_fmadd_d(rsdata[t][0], rsdata[t][1], rsdata[t][2], frm, &fflags);
         else
           // RV32F: FMADD.S
-          rddata[t] = rv_fmadd_s(rsdata[t][0], rsdata[t][1], rsdata[t][2], frm, &fflags);
+          rddata[t] = nan_box(rv_fmadd_s(rsdata[t][0], rsdata[t][1], rsdata[t][2], frm, &fflags));
         break;
       case FMSUB:
         if (func2)
@@ -1038,7 +1061,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           rddata[t] = rv_fmsub_d(rsdata[t][0], rsdata[t][1], rsdata[t][2], frm, &fflags);
         else 
           // RV32F: FMSUB.S
-          rddata[t] = rv_fmsub_s(rsdata[t][0], rsdata[t][1], rsdata[t][2], frm, &fflags);
+          rddata[t] = nan_box(rv_fmsub_s(rsdata[t][0], rsdata[t][1], rsdata[t][2], frm, &fflags));
         break;
       case FMNMADD:
         if (func2)
@@ -1046,7 +1069,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           rddata[t] = rv_fnmadd_d(rsdata[t][0], rsdata[t][1], rsdata[t][2], frm, &fflags);
         else
           // RV32F: FNMADD.S
-          rddata[t] = rv_fnmadd_s(rsdata[t][0], rsdata[t][1], rsdata[t][2], frm, &fflags);
+          rddata[t] = nan_box(rv_fnmadd_s(rsdata[t][0], rsdata[t][1], rsdata[t][2], frm, &fflags));
         break; 
       case FMNMSUB:
         if (func2)
@@ -1054,7 +1077,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           rddata[t] = rv_fnmsub_d(rsdata[t][0], rsdata[t][1], rsdata[t][2], frm, &fflags);
         else
           // RV32F: FNMSUB.S
-          rddata[t] = rv_fnmsub_s(rsdata[t][0], rsdata[t][1], rsdata[t][2], frm, &fflags);
+          rddata[t] = nan_box(rv_fnmsub_s(rsdata[t][0], rsdata[t][1], rsdata[t][2], frm, &fflags));
         break;
       default:
         break;

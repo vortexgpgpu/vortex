@@ -207,7 +207,7 @@ SECTIONS
 		KEEP(*(.stack*))
 	}
   __stack_usage = SIZEOF(.stack_dummy);
-  PROVIDE(__stack_top  = 0xFFFFFFFFFF000000);
+  PROVIDE(__stack_top  = 0xFF000000);
   PROVIDE(__stack_size = 0x400);
 	PROVIDE(__stack = __stack_top);
 	ASSERT(__stack_usage <= __stack_size, "stack overflow")

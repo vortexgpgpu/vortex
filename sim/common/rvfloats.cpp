@@ -169,7 +169,7 @@ uint32_t rv_ftoi_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
   return r;
 }
 
-uint64_t rv_ftoi_d(uint64_t a, uint64_t frm, uint32_t* fflags) {
+uint64_t rv_ftoi_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
   softfloat_roundingMode = frm;
   auto r = f64_to_i32(to_float64_t(a), frm, true);
   if (fflags) { *fflags = get_fflags(); }
@@ -183,7 +183,7 @@ uint32_t rv_ftou_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
   return r;
 }
 
-uint64_t rv_ftou_d(uint64_t a, uint64_t frm, uint32_t* fflags) {
+uint64_t rv_ftou_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
   softfloat_roundingMode = frm;
   auto r = f64_to_ui32(to_float64_t(a), frm, true);
   if (fflags) { *fflags = get_fflags(); }
@@ -197,7 +197,7 @@ uint64_t rv_ftol_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
   return r;
 }
 
-uint64_t rv_ftol_d(uint64_t a, uint64_t frm, uint32_t* fflags) {
+uint64_t rv_ftol_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
   softfloat_roundingMode = frm;
   auto r = f64_to_i64(to_float64_t(a), frm, true);
   if (fflags) { *fflags = get_fflags(); }
@@ -211,7 +211,7 @@ uint64_t rv_ftolu_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
   return r;
 }
 
-uint64_t rv_ftolu_d(uint64_t a, uint64_t frm, uint32_t* fflags) {
+uint64_t rv_ftolu_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
   softfloat_roundingMode = frm;
   auto r = f64_to_ui64(to_float64_t(a), frm, true);
   if (fflags) { *fflags = get_fflags(); }
@@ -225,7 +225,7 @@ uint32_t rv_itof_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
   return from_float32_t(r);
 }
 
-uint64_t rv_itof_d(uint32_t a, uint32_t frm, uint32_t* fflags) {
+uint64_t rv_itof_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
   softfloat_roundingMode = frm;
   auto r = i32_to_f64(a);
   if (fflags) { *fflags = get_fflags(); }
@@ -239,7 +239,7 @@ uint32_t rv_utof_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
   return from_float32_t(r);
 }
 
-uint64_t rv_utof_d(uint32_t a, uint32_t frm, uint32_t* fflags) {
+uint64_t rv_utof_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
   softfloat_roundingMode = frm;
   auto r = ui32_to_f64(a);
   if (fflags) { *fflags = get_fflags(); }
@@ -298,7 +298,13 @@ uint64_t rv_fle_d(uint64_t a, uint64_t b, uint32_t* fflags) {
   return r;
 }
 
-uint32_t rv_feq_s(uint32_t a, uint32_t b, uint32_t* fflags) {
+uint32_t rv_feq_s(uint64_t a, uint64_t b, uint32_t* fflags) {
+
+  // Either a or b isn't NaN boxed
+  if ((a >> 32 != 0xffffffff) || (b >> 32 != 0xffffffff)) {
+    return 0;
+  }
+
   auto r = f32_eq(to_float32_t(a), to_float32_t(b));
   if (fflags) { *fflags = get_fflags(); }  
   return r;
@@ -428,8 +434,20 @@ uint64_t rv_fclss_d(uint64_t a) {
   return r;
 }
 
-uint32_t rv_fsgnj_s(uint32_t a, uint32_t b) {
-  
+uint32_t rv_fsgnj_s(uint64_t a, uint64_t b) {
+
+  // Both a and b aren't NaN boxed
+  if ((a >> 32 != 0xffffffff) && (b >> 32 != 0xffffffff)) {
+    return 0x7fc00000;
+  }
+  // a is NaN boxed but b isn't
+  if (b >> 32 != 0xffffffff)
+    return a;
+
+  // b is NaN boxed but a isn't
+  if(a >> 32 != 0xffffffff)
+    return 0xffc00000;
+
   int sign = b & F32_SIGN;
   int r = sign | (a & ~F32_SIGN);
 
@@ -444,8 +462,20 @@ uint64_t rv_fsgnj_d(uint64_t a, uint64_t b) {
   return r;
 }
 
-uint32_t rv_fsgnjn_s(uint32_t a, uint32_t b) {
+uint32_t rv_fsgnjn_s(uint64_t a, uint64_t b) {
+
+  // Both a and b aren't NaN boxed
+  if ((a >> 32 != 0xffffffff) && (b >> 32 != 0xffffffff)) {
+    return 0x7fc00000;
+  }
+  // a is NaN boxed but b isn't
+  if (b >> 32 != 0xffffffff)
+    return a;
   
+  // b is NaN boxed but a isn't
+  if(a >> 32 != 0xffffffff)
+    return 0xffc00000;
+
   int sign = ~b & F32_SIGN;
   int r = sign | (a & ~F32_SIGN);
 
@@ -460,8 +490,20 @@ uint64_t rv_fsgnjn_d(uint64_t a, uint64_t b) {
   return r;
 }
 
-uint32_t rv_fsgnjx_s(uint32_t a, uint32_t b) {
+uint32_t rv_fsgnjx_s(uint64_t a, uint64_t b) {
+
+  // Both a and b aren't NaN boxed
+  if ((a >> 32 != 0xffffffff) && (b >> 32 != 0xffffffff)) {
+    return 0x7fc00000;
+  }
+  // a is NaN boxed but b isn't
+  if (b >> 32 != 0xffffffff)
+    return a;
   
+  // b is NaN boxed but a isn't
+  if(a >> 32 != 0xffffffff)
+    return 0xffc00000;
+    
   int sign1 = a & F32_SIGN;
   int sign2 = b & F32_SIGN;
   int r = (sign1 ^ sign2) | (a & ~F32_SIGN);
@@ -478,7 +520,7 @@ uint64_t rv_fsgnjx_d(uint64_t a, uint64_t b) {
   return r;
 }
 
-uint64_t rv_dtof(uint64_t a) {
+uint32_t rv_dtof(uint64_t a) {
 
   auto r = f64_to_f32(to_float64_t(a));
   return from_float32_t(r);

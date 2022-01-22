@@ -73,6 +73,10 @@ void Warp::eval(pipeline_trace_t *trace) {
     for (int j = 0; j < core_->arch().num_threads(); ++j) {
       DPN(4, ' ' << std::setfill('0') << std::setw(16) << std::hex << ireg_file_.at(j).at(i) << std::setfill(' ') << ' ');
     }
+    // delete later: printing floating point reg file
+    for (int j = 0; j < core_->arch().num_threads(); ++j) {
+      DPN(4, ' ' << std::setfill('0') << std::setw(16) << std::hex << freg_file_.at(j).at(i) << std::setfill(' ') << ' ');
+    }
     DPN(4, std::endl);
   }  
 }
