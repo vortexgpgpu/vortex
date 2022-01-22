@@ -11,7 +11,7 @@ class Core;
 class Instr;
 class pipeline_trace_t;
 struct DomStackEntry {
-  DomStackEntry(const ThreadMask &tmask, DWord PC) 
+  DomStackEntry(const ThreadMask &tmask, XWord PC) 
     : tmask(tmask)
     , PC(PC)
     , fallThrough(false)
@@ -26,7 +26,7 @@ struct DomStackEntry {
   {}
 
   ThreadMask tmask;
-  DWord PC;
+  XWord PC;
   bool fallThrough;
   bool unanimous;
 };
@@ -99,11 +99,11 @@ private:
   Core *core_;
   bool active_;
   
-  DWord PC_;
+  XWord PC_;
   ThreadMask tmask_;  
   
-  std::vector<std::vector<DWord>> ireg_file_;
-  std::vector<std::vector<DWord>> freg_file_;
+  std::vector<std::vector<XWord>> ireg_file_;
+  std::vector<std::vector<XWord>> freg_file_;
   std::vector<std::vector<Byte>> vreg_file_;
   std::stack<DomStackEntry> dom_stack_;
 

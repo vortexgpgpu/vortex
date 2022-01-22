@@ -8,15 +8,25 @@
 #include <VX_config.h>
 #include <simobject.h>
 
+#if XLEN == 32
+#define uintx_t uint32_t
+#define intx_t int32_t
+#elif XLEN == 64
+#define uintx_t uint64_t
+#define intx_t int64_t
+#else
+#error unsupported XLEN
+#endif
+
 namespace vortex {
 
 typedef uint8_t  Byte;
 typedef uint32_t Word;
 typedef int32_t  WordI;
-typedef uint64_t DWord;
-typedef int64_t DWordI;
+typedef uintx_t XWord;
+typedef intx_t XWordI;
 
-typedef uint64_t Addr;
+typedef uintx_t Addr;
 typedef uint32_t Size;
 
 typedef std::bitset<32> RegMask;
@@ -133,7 +143,7 @@ struct mem_addr_size_t {
   uint32_t size;
 };
 
-inline AddrType get_addr_type(DWord addr, uint32_t size) {
+inline AddrType get_addr_type(XWord addr, uint32_t size) {
   __unused (size);
   if (SM_ENABLE) {
     if (addr >= (SMEM_BASE_ADDR - SMEM_SIZE)

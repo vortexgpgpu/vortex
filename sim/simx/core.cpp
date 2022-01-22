@@ -406,8 +406,8 @@ Word Core::icache_read(Addr addr, Size size) {
   return data;
 }
 
-DWord Core::dcache_read(Addr addr, Size size) {  
-  DWord data;
+XWord Core::dcache_read(Addr addr, Size size) {  
+  XWord data;
   auto type = get_addr_type(addr, size);
   if (type == AddrType::Shared) {
     smem_.read(&data, addr & (SMEM_SIZE-1), size);
@@ -417,7 +417,7 @@ DWord Core::dcache_read(Addr addr, Size size) {
   return data;
 }
 
-void Core::dcache_write(Addr addr, DWord data, Size size) {  
+void Core::dcache_write(Addr addr, XWord data, Size size) {  
   if (addr >= IO_COUT_ADDR 
    && addr <= (IO_COUT_ADDR + IO_COUT_SIZE - 1)) {
      this->writeToStdOut(addr, data);
