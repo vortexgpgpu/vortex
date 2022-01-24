@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <algorithm>
 #include <assert.h>
+#include "xlen.h"
 
 constexpr uint32_t count_leading_zeros(uint32_t value) {
   return value ? __builtin_clz(value) : 32;
@@ -71,10 +72,11 @@ inline uint64_t bit_getw(uint64_t bits, uint32_t start, uint32_t end) {
 }
 
 // Apply integer sign extension
-inline uint32_t sext32(uint32_t word, uint32_t width) {
+inline uintx_t sext(uintx_t word, uint32_t width) {
   assert(width > 1);
   assert(width <= 32);
-  uint32_t mask = (1 << width) - 1;
+  uintx_t unity = 1;
+  uintx_t mask = (unity << width) - 1;
   return ((word >> (width - 1)) & 0x1) ? (word | ~mask) : word;
 }
 
@@ -86,14 +88,15 @@ inline uint64_t sext64(uint64_t word, uint64_t width) {
   return ((word >> (width - 1)) & 0x1) ? (word | ~mask) : word;
 }
 
-inline __uint128_t sext128(__uint128_t word, uint32_t width) {
+inline uintm_t sext_mul(uintm_t word, uint32_t width) {
   assert(width > 1);
-  assert(width <= 128);
-  __uint128_t unity = 1;
-  __uint128_t mask = (unity << width) - 1;
+  assert(width <= 32);
+  uintm_t unity = 1;
+  uintm_t mask = (unity << width) - 1;
   return ((word >> (width - 1)) & 0x1) ? (word | ~mask) : word;
 }
 
-inline uint64_t nan_box(uint32_t word) {
-  return word | 0xFFFFFFFF00000000;
+inline uintf_t nan_box(uint32_t word) {
+  uintf_t mask = uintf_t(0xffffffff00000000);
+  return word | mask;
 }

@@ -103,7 +103,7 @@ private:
   ThreadMask tmask_;  
   
   std::vector<std::vector<XWord>> ireg_file_;
-  std::vector<std::vector<XWord>> freg_file_;
+  std::vector<std::vector<FWord>> freg_file_;
   std::vector<std::vector<Byte>> vreg_file_;
   std::stack<DomStackEntry> dom_stack_;
 

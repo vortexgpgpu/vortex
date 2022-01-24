@@ -487,11 +487,13 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
       break;
     case Opcode::I_INST:
       if (func3 == 0x1 || func3 == 0x5) {
-        // int6
-        instr->setImm(sext64(((func7 & 0x1) << 5) | rs2, 6));
+        // int5 (XLEN = 32) / int6 (XLEN = 64)
+        int shamt_width = log2up(XLEN);
+        int shamt = ((func7 & 0x1) << 5) | rs2;
+        instr->setImm(sext(shamt, shamt_width));
       } else {
         // int12
-        instr->setImm(sext64(code >> shift_rs2_, 12));
+        instr->setImm(sext(code >> shift_rs2_, 12));
       }
       break;
     case Opcode::I_INST_64:
@@ -505,7 +507,7 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
       break;
     default:
       // int12
-      instr->setImm(sext64(code >> shift_rs2_, 12));
+      instr->setImm(sext(code >> shift_rs2_, 12));
       break;
     }
   } break;
@@ -518,7 +520,7 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
     }
     instr->setFunc3(func3);
     XWord imm = (func7 << reg_s_) | rd;
-    instr->setImm(sext64(imm, 12));
+    instr->setImm(sext(imm, 12));
   } break;
 
   case InstType::B_TYPE: {
@@ -530,12 +532,12 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
     Word bit_10_5 = func7 & 0x3f;
     Word bit_12   = func7 >> 6;
     XWord imm = (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
-    instr->setImm(sext64(imm, 13));
+    instr->setImm(sext(imm, 13));
   } break;
 
   case InstType::U_TYPE:
     instr->setDestReg(rd);
-    instr->setImm(sext64(code >> shift_func3_, 20));
+    instr->setImm(sext(code >> shift_func3_, 20));
     break;
 
   case InstType::J_TYPE: {
@@ -545,7 +547,7 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
     Word bit_11 = (unordered >> 8) & 0x1;
     Word bits_10_1 = (unordered >> 9) & 0x3ff;
     Word bit_20 = (unordered >> 19) & 0x1;
-    XWord imm = 0 | (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
+    XWord imm = (XWord) 0 | (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
     if (bit_20) {
       imm |= ~j_imm_mask_;
     }

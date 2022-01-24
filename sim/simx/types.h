@@ -7,24 +7,16 @@
 #include <util.h>
 #include <VX_config.h>
 #include <simobject.h>
-
-#if XLEN == 32
-#define uintx_t uint32_t
-#define intx_t int32_t
-#elif XLEN == 64
-#define uintx_t uint64_t
-#define intx_t int64_t
-#else
-#error unsupported XLEN
-#endif
+#include <xlen.h>
 
 namespace vortex {
 
 typedef uint8_t  Byte;
 typedef uint32_t Word;
 typedef int32_t  WordI;
-typedef uintx_t XWord;
+typedef uintx_t  XWord;
 typedef intx_t XWordI;
+typedef uintf_t FWord;
 
 typedef uintx_t Addr;
 typedef uint32_t Size;
