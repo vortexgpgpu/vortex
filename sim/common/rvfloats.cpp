@@ -300,10 +300,12 @@ uint64_t rv_fle_d(uint64_t a, uint64_t b, uint32_t* fflags) {
 
 uint32_t rv_feq_s(uint64_t a, uint64_t b, uint32_t* fflags) {
 
+  #if FLEN == 64
   // Either a or b isn't NaN boxed
   if ((a >> 32 != 0xffffffff) || (b >> 32 != 0xffffffff)) {
     return 0;
   }
+  #endif
 
   auto r = f32_eq(to_float32_t(a), to_float32_t(b));
   if (fflags) { *fflags = get_fflags(); }  
@@ -436,6 +438,7 @@ uint64_t rv_fclss_d(uint64_t a) {
 
 uint32_t rv_fsgnj_s(uint64_t a, uint64_t b) {
 
+  #if FLEN == 64
   // Both a and b aren't NaN boxed
   if ((a >> 32 != 0xffffffff) && (b >> 32 != 0xffffffff)) {
     return 0x7fc00000;
@@ -447,6 +450,7 @@ uint32_t rv_fsgnj_s(uint64_t a, uint64_t b) {
   // b is NaN boxed but a isn't
   if(a >> 32 != 0xffffffff)
     return 0xffc00000;
+  #endif
 
   int sign = b & F32_SIGN;
   int r = sign | (a & ~F32_SIGN);
@@ -464,6 +468,7 @@ uint64_t rv_fsgnj_d(uint64_t a, uint64_t b) {
 
 uint32_t rv_fsgnjn_s(uint64_t a, uint64_t b) {
 
+  #if FLEN == 64
   // Both a and b aren't NaN boxed
   if ((a >> 32 != 0xffffffff) && (b >> 32 != 0xffffffff)) {
     return 0x7fc00000;
@@ -475,6 +480,7 @@ uint32_t rv_fsgnjn_s(uint64_t a, uint64_t b) {
   // b is NaN boxed but a isn't
   if(a >> 32 != 0xffffffff)
     return 0xffc00000;
+  #endif
 
   int sign = ~b & F32_SIGN;
   int r = sign | (a & ~F32_SIGN);
@@ -492,6 +498,7 @@ uint64_t rv_fsgnjn_d(uint64_t a, uint64_t b) {
 
 uint32_t rv_fsgnjx_s(uint64_t a, uint64_t b) {
 
+  #if FLEN == 64
   // Both a and b aren't NaN boxed
   if ((a >> 32 != 0xffffffff) && (b >> 32 != 0xffffffff)) {
     return 0x7fc00000;
@@ -503,7 +510,8 @@ uint32_t rv_fsgnjx_s(uint64_t a, uint64_t b) {
   // b is NaN boxed but a isn't
   if(a >> 32 != 0xffffffff)
     return 0xffc00000;
-    
+  #endif
+
   int sign1 = a & F32_SIGN;
   int sign2 = b & F32_SIGN;
   int r = (sign1 ^ sign2) | (a & ~F32_SIGN);

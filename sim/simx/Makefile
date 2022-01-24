@@ -34,8 +34,11 @@ endif
 # XLEN parameterization
 ifdef XLEN
 	CXXFLAGS += -DXLEN=$(XLEN)
-else
-	CXXFLAGS += -DXLEN=32
+endif
+
+# FLEN parameterization
+ifdef FLEN
+	CXXFLAGS += -DFLEN=$(FLEN)
 endif
 
 PROJECT = simx
