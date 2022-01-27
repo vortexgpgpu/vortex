@@ -256,15 +256,18 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           // RV32I: XOR
           rddata[t] = rsdata[t][0] ^ rsdata[t][1];
           break;
-        case 5:
+        case 5: {
+          XWord shamt_mask = (1 << log2up(XLEN)) - 1;
+          XWord shamt = rsdata[t][1] & shamt_mask;
           if (func7) {
             // RV32I: SRA
-            rddata[t] = XWordI(rsdata[t][0]) >> XWordI(rsdata[t][1]);
+            rddata[t] = XWordI(rsdata[t][0]) >> shamt;
           } else {
             // RV32I: SRL
-            rddata[t] = XWord(rsdata[t][0]) >> XWord(rsdata[t][1]);
+            rddata[t] = XWord(rsdata[t][0]) >> shamt;
           }
           break;
+        }
         case 6:
           // RV32I: OR
           rddata[t] = rsdata[t][0] | rsdata[t][1];
@@ -315,7 +318,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           rddata[t] = result;
         } else {
           // RV64I: SRLI
-          XWord result = rsdata[t][0] >> immsrc;
+          XWord result = XWord(rsdata[t][0]) >> immsrc;
           rddata[t] = result;
         }
         break;
@@ -413,15 +416,18 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           // RV64I: SLLW
           rddata[t] = sext64((Word)rsdata[t][0] << (Word)rsdata[t][1], 32);
           break;
-        case 5:
+        case 5: {
+          Word shamt_mask = 0x1F;
+          Word shamt = rsdata[t][1] & shamt_mask;
           if (func7) {
             // RV64I: SRAW
-            rddata[t] = sext64((WordI)rsdata[t][0] >> (WordI)rsdata[t][1], 32);
+            rddata[t] = sext64((WordI)rsdata[t][0] >> shamt, 32);
           } else {
             // RV64I: SRLW
-            rddata[t] = sext64((Word)rsdata[t][0] >> (Word)rsdata[t][1], 32);
+            rddata[t] = sext64((Word)rsdata[t][0] >> shamt, 32);
           }
           break;
+        }
         default:
           std::abort();
         }
@@ -449,11 +455,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         case 5:
           if (func7) {
             // RV64I: SRAIW
-            XWord result = sext64((WordI)rsdata[t][0] >> (WordI)immsrc, 32);
+            XWord result = sext64((WordI)rsdata[t][0] >> immsrc, 32);
             rddata[t] = result;
           } else {
             // RV64I: SRLIW
-            XWord result = sext64((Word)rsdata[t][0] >> (Word)immsrc, 32);
+            XWord result = sext64((Word)rsdata[t][0] >> immsrc, 32);
             rddata[t] = result;
           }
           break;

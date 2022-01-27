@@ -488,9 +488,9 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
     case Opcode::I_INST:
       if (func3 == 0x1 || func3 == 0x5) {
         // int5 (XLEN = 32) / int6 (XLEN = 64)
-        int shamt_width = log2up(XLEN);
-        int shamt = ((func7 & 0x1) << 5) | rs2;
-        instr->setImm(sext(shamt, shamt_width));
+        XWord shamt_mask = (1 << log2up(XLEN)) - 1;
+        XWord shamt = (((func7 & 0x1) << 5) | rs2) & shamt_mask;
+        instr->setImm(shamt);
       } else {
         // int12
         instr->setImm(sext(code >> shift_rs2_, 12));
@@ -499,7 +499,8 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
     case Opcode::I_INST_64:
       if (func3 == 0x1 || func3 == 0x5) {
         // int5
-        instr->setImm(sext64(rs2, 5));
+        XWord shamt = rs2;
+        instr->setImm(shamt);
       } else {
         // int12
         instr->setImm(sext64(code >> shift_rs2_, 12));
