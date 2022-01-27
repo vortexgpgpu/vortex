@@ -32,6 +32,9 @@ jobs:
       name: coverage
       script: cp -r $PWD ../build_coverage && cd ../build_coverage && ./ci/travis_run.py ./ci/regression.sh -coverage
     - stage: test
+      name: coverage64
+      script: cp -r $PWD ../build_coverage && cd ../build_coverage && ./ci/travis_run.py ./ci/regression64.sh -coverage
+    - stage: test
       name: tex
       script: cp -r $PWD ../build_tex && cd ../build_tex && ./ci/travis_run.py ./ci/regression.sh -tex
     - stage: test
