@@ -5,8 +5,8 @@
 void main() {
 	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
 	uint32_t count   = arg->count;
-	int32_t* src_ptr = (int32_t*)arg->src_ptr;
-	int32_t* dst_ptr = (int32_t*)arg->dst_ptr;
+	int32_t* src_ptr = (int32_t*)arg->src_addr;
+	int32_t* dst_ptr = (int32_t*)arg->dst_addr;
 	
 	uint32_t offset  = vx_core_id() * count;
 	

@@ -5,7 +5,7 @@
 #include "common.h"
 
 void kernel_body(int task_id, kernel_arg_t* arg) {
-	int* src_ptr = (int*)arg->src_ptr;
+	int* src_ptr = (int*)arg->src_addr;
 	vx_printf("task=%d, value=%d\n", task_id, src_ptr[task_id]);
 }
 

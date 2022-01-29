@@ -13,8 +13,6 @@ LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 LDFLAGS += -L$(THIRD_PARTY_DIR)/cocogfx -lcocogfx 
 LDFLAGS += -L$(THIRD_PARTY_DIR)/ramulator -lramulator
 
-TOP = vx_cache_sim
-
 SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp
 SRCS += args.cpp cache.cpp memsim.cpp warp.cpp core.cpp decode.cpp execute.cpp exeunit.cpp tex_unit.cpp processor.cpp
 

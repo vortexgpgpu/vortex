@@ -22,7 +22,7 @@ extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint6
   if (NULL == content || 0 == size)
     return -1;
 
-  uint32_t buffer_transfer_size = 65536;
+  uint32_t buffer_transfer_size = 65536; // 64 KB
   uint64_t kernel_base_addr;
   err = vx_dev_caps(device, VX_CAPS_KERNEL_BASE_ADDR, &kernel_base_addr);
   if (err != 0)
@@ -30,7 +30,7 @@ extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint6
 
   // allocate device buffer
   vx_buffer_h buffer;
-  err = vx_alloc_shared_mem(device, buffer_transfer_size, &buffer);
+  err = vx_buf_alloc(device, buffer_transfer_size, &buffer);
   if (err != 0)
     return -1; 
 
@@ -54,13 +54,13 @@ extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint6
 
     err = vx_copy_to_dev(buffer, kernel_base_addr + offset, chunk_size, 0);
     if (err != 0) {
-      vx_buf_release(buffer);
+      vx_buf_free(buffer);
       return err;
     }
     offset += chunk_size;
   }
 
-  vx_buf_release(buffer);
+  vx_buf_free(buffer);
 
   return 0;
 }
@@ -149,7 +149,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     return ret;
 
   vx_buffer_h staging_buf;
-  ret = vx_alloc_shared_mem(device, 64 * sizeof(uint32_t), &staging_buf);
+  ret = vx_buf_alloc(device, 64 * sizeof(uint32_t), &staging_buf);
   if (ret != 0)
     return ret;
 
@@ -158,7 +158,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   for (unsigned core_id = 0; core_id < num_cores; ++core_id) {
     ret = vx_copy_from_dev(staging_buf, IO_CSR_ADDR + 64 * sizeof(uint32_t) * core_id, 64 * sizeof(uint32_t), 0);
     if (ret != 0) {
-      vx_buf_release(staging_buf);
+      vx_buf_free(staging_buf);
       return ret;
     }
 
@@ -336,7 +336,21 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
 #endif
 
   // release allocated resources
-  vx_buf_release(staging_buf);
+  vx_buf_free(staging_buf);
 
   return ret;
+}
+
+// Deprecated API functions
+
+extern int vx_alloc_shared_mem(vx_device_h hdevice, uint64_t size, vx_buffer_h* hbuffer) {
+  return vx_buf_alloc(hdevice, size, hbuffer);
+}
+
+extern int vx_buf_release(vx_buffer_h hbuffer) {
+  return vx_buf_free(hbuffer);
+}
+
+extern int vx_alloc_dev_mem(vx_device_h hdevice, uint64_t size, uint64_t* dev_maddr) {
+  return vx_mem_alloc(hdevice, size, dev_maddr);
 }

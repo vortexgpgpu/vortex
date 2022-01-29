@@ -5,8 +5,8 @@
 
 void kernel_body(int __DIVERGENT__ task_id, kernel_arg_t* arg) {
 	uint32_t num_points = arg->num_points;
-	int32_t* src_ptr = (int32_t*)arg->src_ptr;
-	int32_t* dst_ptr = (int32_t*)arg->dst_ptr;
+	int32_t* src_ptr = (int32_t*)arg->src_addr;
+	int32_t* dst_ptr = (int32_t*)arg->dst_addr;
 
 	int32_t ref_value = src_ptr[task_id];
 

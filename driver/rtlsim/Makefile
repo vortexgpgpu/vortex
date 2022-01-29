@@ -1,7 +1,6 @@
 RTLSIM_DIR = ../../sim/rtlsim
 
-CXXFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -pedantic -Wfatal-errors
-#CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
+CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
 
 CXXFLAGS += -I../include -I../common -I../../hw -I$(RTLSIM_DIR) -I$(RTLSIM_DIR)/../common
 
@@ -18,6 +17,13 @@ LDFLAGS += -shared -pthread
 LDFLAGS += -L. -lrtlsim
 
 SRCS = vortex.cpp ../common/vx_utils.cpp
+
+# Debugigng
+ifdef DEBUG
+	CXXFLAGS += -g -O0
+else    
+	CXXFLAGS += -O2 -DNDEBUG
+endif
 
 # Enable perf counters
 ifdef PERF

@@ -35,6 +35,7 @@ ePixelFormat eformat = FORMAT_A8R8G8B8;
 
 vx_device_h device = nullptr;
 vx_buffer_h buffer = nullptr;
+kernel_arg_t kernel_arg;
 
 static void show_usage() {
    std::cout << "Vortex Texture Test." << std::endl;
@@ -95,9 +96,11 @@ static void parse_args(int argc, char **argv) {
 
 void cleanup() {
   if (buffer) {
-    vx_buf_release(buffer);
+    vx_buf_free(buffer);
   }
   if (device) {
+    vx_mem_free(device, kernel_arg.src_addr);
+    vx_mem_free(device, kernel_arg.dst_addr);
     vx_dev_close(device);
   }
 }
@@ -141,7 +144,6 @@ int run_test(const kernel_arg_t& kernel_arg,
 }
 
 int main(int argc, char *argv[]) {
-  kernel_arg_t kernel_arg;  
   std::vector<uint8_t> src_pixels;
   std::vector<uint32_t> mip_offsets;
   uint32_t src_width;
@@ -196,8 +198,8 @@ int main(int argc, char *argv[]) {
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;  
   uint64_t src_addr, dst_addr;
-  RT_CHECK(vx_alloc_dev_mem(device, src_bufsize, &src_addr));
-  RT_CHECK(vx_alloc_dev_mem(device, dst_bufsize, &dst_addr));
+  RT_CHECK(vx_mem_alloc(device, src_bufsize, &src_addr));
+  RT_CHECK(vx_mem_alloc(device, dst_bufsize, &dst_addr));
 
   std::cout << "src_addr=0x" << std::hex << src_addr << std::endl;
   std::cout << "dst_addr=0x" << std::hex << dst_addr << std::endl;
@@ -206,7 +208,7 @@ int main(int argc, char *argv[]) {
   std::cout << "allocate shared memory" << std::endl;    
   uint32_t alloc_size = std::max<uint32_t>(sizeof(kernel_arg_t), 
                             std::max<uint32_t>(src_bufsize, dst_bufsize));
-  RT_CHECK(vx_alloc_shared_mem(device, alloc_size, &buffer));
+  RT_CHECK(vx_buf_alloc(device, alloc_size, &buffer));
   
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
