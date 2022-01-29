@@ -35,16 +35,19 @@ int vx_dev_close(vx_device_h hdevice);
 int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value);
 
 // Allocate shared buffer with device
-int vx_alloc_shared_mem(vx_device_h hdevice, uint64_t size, vx_buffer_h* hbuffer);
+int vx_buf_alloc(vx_device_h hdevice, uint64_t size, vx_buffer_h* hbuffer);
+
+// release buffer
+int vx_buf_free(vx_buffer_h hbuffer);
 
 // Get host pointer address  
 void* vx_host_ptr(vx_buffer_h hbuffer);
 
-// release buffer
-int vx_buf_release(vx_buffer_h hbuffer);
-
 // allocate device memory and return address
-int vx_alloc_dev_mem(vx_device_h hdevice, uint64_t size, uint64_t* dev_maddr);
+int vx_mem_alloc(vx_device_h hdevice, uint64_t size, uint64_t* dev_maddr);
+
+// release device memory
+int vx_mem_free(vx_device_h hdevice, uint64_t dev_maddr);
 
 // Copy bytes from buffer to device local memory
 int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size, uint64_t src_offset);
@@ -68,6 +71,11 @@ int vx_upload_kernel_file(vx_device_h device, const char* filename);
 
 // dump performance counters
 int vx_dump_perf(vx_device_h device, FILE* stream);
+
+//////////////////////////// DEPRECATED FUNCTIONS /////////////////////////////
+int vx_alloc_dev_mem(vx_device_h hdevice, uint64_t size, uint64_t* dev_maddr);
+int vx_alloc_shared_mem(vx_device_h hdevice, uint64_t size, vx_buffer_h* hbuffer);
+int vx_buf_release(vx_buffer_h hbuffer);
 
 #ifdef __cplusplus
 }

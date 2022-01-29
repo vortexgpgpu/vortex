@@ -6,8 +6,7 @@ SCRIPT_DIR=../../hw/scripts
 
 OPAE_SYN_DIR=../../hw/syn/opae
 
-CXXFLAGS += -std=c++11 -O2 -DNDEBUG -Wall -Wextra -pedantic -Wfatal-errors
-#CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
+CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
 
 CXXFLAGS += -I. -I../include -I../../hw -I$(OPAE_HOME)/include -I$(OPAE_SYN_DIR)
 
@@ -38,6 +37,13 @@ LDFLAGS += -shared
 PROJECT = libvortex.so
 
 SRCS = ../common/opae.cpp ../common/vx_utils.cpp
+
+# Debugigng
+ifdef DEBUG
+	CXXFLAGS += -g -O0
+else    
+	CXXFLAGS += -O2 -DNDEBUG
+endif
 
 # Enable scope analyzer
 ifdef SCOPE

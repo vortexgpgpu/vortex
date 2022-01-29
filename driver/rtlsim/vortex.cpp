@@ -8,6 +8,7 @@
 #include <chrono>
 
 #include <vortex.h>
+#include <vx_malloc.h>
 #include <vx_utils.h>
 #include <VX_config.h>
 #include <mem.h>
@@ -60,7 +61,11 @@ class vx_device {
 public:
     vx_device() 
         : ram_(RAM_PAGE_SIZE)
-        , mem_allocation_(ALLOC_BASE_ADDR) 
+        , mem_allocator_(
+            ALLOC_BASE_ADDR,
+            ALLOC_BASE_ADDR + LOCAL_MEM_SIZE,
+            RAM_PAGE_SIZE,
+            CACHE_BLOCK_SIZE) 
     {
         processor_.attach_ram(&ram_);
     }
@@ -72,13 +77,11 @@ public:
     }
 
     int alloc_local_mem(uint64_t size, uint64_t* dev_maddr) {
-        uint64_t dev_mem_size = LOCAL_MEM_SIZE;
-        uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);        
-        if (mem_allocation_ + asize > dev_mem_size)
-            return -1;
-        *dev_maddr = mem_allocation_;
-        mem_allocation_ += asize;
-        return 0;
+        return mem_allocator_.allocate(size, dev_maddr);
+    }
+
+    int free_local_mem(uint64_t dev_maddr) {
+        return mem_allocator_.release(dev_maddr);
     }
 
     int upload(const void* src, uint64_t dest_addr, uint64_t size, uint64_t src_offset) {
@@ -149,7 +152,7 @@ private:
 
     RAM ram_;
     Processor processor_;
-    uint64_t mem_allocation_;     
+    MemoryAllocator mem_allocator_;     
     std::future<void> future_;
 };
 
@@ -250,7 +253,7 @@ extern int vx_dev_close(vx_device_h hdevice) {
     return 0;
 }
 
-extern int vx_alloc_dev_mem(vx_device_h hdevice, uint64_t size, uint64_t* dev_maddr) {
+extern int vx_mem_alloc(vx_device_h hdevice, uint64_t size, uint64_t* dev_maddr) {
     if (nullptr == hdevice 
      || nullptr == dev_maddr
      || 0 >= size)
@@ -260,8 +263,15 @@ extern int vx_alloc_dev_mem(vx_device_h hdevice, uint64_t size, uint64_t* dev_ma
     return device->alloc_local_mem(size, dev_maddr);
 }
 
+extern int vx_mem_free(vx_device_h hdevice, uint64_t dev_maddr) {
+    if (nullptr == hdevice)
+        return -1;
 
-extern int vx_alloc_shared_mem(vx_device_h hdevice, uint64_t size, vx_buffer_h* hbuffer) {
+    vx_device *device = ((vx_device*)hdevice);
+    return device->free_local_mem(dev_maddr);
+}
+
+extern int vx_buf_alloc(vx_device_h hdevice, uint64_t size, vx_buffer_h* hbuffer) {
     if (nullptr == hdevice 
      || 0 >= size
      || nullptr == hbuffer)
@@ -289,7 +299,7 @@ extern void* vx_host_ptr(vx_buffer_h hbuffer) {
     return buffer->data();
 }
 
-extern int vx_buf_release(vx_buffer_h hbuffer) {
+extern int vx_buf_free(vx_buffer_h hbuffer) {
     if (nullptr == hbuffer)
         return -1;
 

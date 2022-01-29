@@ -5,9 +5,9 @@
 
 void kernel_body(int task_id, kernel_arg_t* arg) {
 	uint32_t count    = arg->task_size;
-	int32_t* src0_ptr = (int32_t*)arg->src0_ptr;
-	int32_t* src1_ptr = (int32_t*)arg->src1_ptr;
-	int32_t* dst_ptr  = (int32_t*)arg->dst_ptr;
+	int32_t* src0_ptr = (int32_t*)arg->src0_addr;
+	int32_t* src1_ptr = (int32_t*)arg->src1_addr;
+	int32_t* dst_ptr  = (int32_t*)arg->dst_addr;
 	
 	uint32_t offset = task_id * count;
 

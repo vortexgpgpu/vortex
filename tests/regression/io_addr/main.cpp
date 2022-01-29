@@ -30,6 +30,7 @@ std::vector<int32_t> ref_data;
 
 vx_device_h device = nullptr;
 vx_buffer_h staging_buf = nullptr;
+kernel_arg_t kernel_arg;
 
 static void show_usage() {
    std::cout << "Vortex Test." << std::endl;
@@ -60,9 +61,11 @@ static void parse_args(int argc, char **argv) {
 
 void cleanup() {
   if (staging_buf) {
-    vx_buf_release(staging_buf);
+    vx_buf_free(staging_buf);
   }
   if (device) {
+    vx_mem_free(device, kernel_arg.src_addr);
+    vx_mem_free(device, kernel_arg.dst_addr);
     vx_dev_close(device);
   }
 }
@@ -105,7 +108,7 @@ int run_test(const kernel_arg_t& kernel_arg,
 
   // download destination buffer
   std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(staging_buf, kernel_arg.dst_ptr, buf_size, 0));
+  RT_CHECK(vx_copy_from_dev(staging_buf, kernel_arg.dst_addr, buf_size, 0));
 
   // verify result
   std::cout << "verify result" << std::endl;  
@@ -132,8 +135,7 @@ int run_test(const kernel_arg_t& kernel_arg,
 }
 
 int main(int argc, char *argv[]) {
-  size_t value; 
-  kernel_arg_t kernel_arg;
+  size_t value;
   
   // parse command arguments
   parse_args(argc, argv);
@@ -150,7 +152,7 @@ int main(int argc, char *argv[]) {
 
   uint32_t num_points = count;
 
-  RT_CHECK(vx_alloc_dev_mem(device, NUM_ADDRS * sizeof(uint32_t), &usr_test_mem));
+  RT_CHECK(vx_mem_alloc(device, NUM_ADDRS * sizeof(uint32_t), &usr_test_mem));
 
   // generate input data
   gen_input_data(num_points);
@@ -171,15 +173,15 @@ int main(int argc, char *argv[]) {
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;  
 
-  RT_CHECK(vx_alloc_dev_mem(device, src_buf_size, &value));
-  kernel_arg.src_ptr = value;
-  RT_CHECK(vx_alloc_dev_mem(device, dst_buf_size, &value));
-  kernel_arg.dst_ptr = value;
+  RT_CHECK(vx_mem_alloc(device, src_buf_size, &value));
+  kernel_arg.src_addr = value;
+  RT_CHECK(vx_mem_alloc(device, dst_buf_size, &value));
+  kernel_arg.dst_addr = value;
 
   kernel_arg.num_points = num_points;
 
-  std::cout << "dev_src=" << std::hex << kernel_arg.src_ptr << std::endl;
-  std::cout << "dev_dst=" << std::hex << kernel_arg.dst_ptr << std::endl;
+  std::cout << "dev_src=" << std::hex << kernel_arg.src_addr << std::endl;
+  std::cout << "dev_dst=" << std::hex << kernel_arg.dst_addr << std::endl;
   
   // allocate shared memory  
   std::cout << "allocate shared memory" << std::endl;    
@@ -187,7 +189,7 @@ int main(int argc, char *argv[]) {
                                 std::max<uint32_t>(src_buf_size,
                                   std::max<uint32_t>(dst_buf_size, 
                                     sizeof(kernel_arg_t))));
-  RT_CHECK(vx_alloc_shared_mem(device, staging_buf_size, &staging_buf));
+  RT_CHECK(vx_buf_alloc(device, staging_buf_size, &staging_buf));
   
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
@@ -215,7 +217,7 @@ int main(int argc, char *argv[]) {
     }
   }
   std::cout << "upload source buffer" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src_ptr, src_buf_size, 0));
+  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src_addr, src_buf_size, 0));
 
   // clear destination buffer
   {
@@ -225,7 +227,7 @@ int main(int argc, char *argv[]) {
     }
   }
   std::cout << "clear destination buffer" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_ptr, dst_buf_size, 0));  
+  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_addr, dst_buf_size, 0));  
 
   // run tests
   std::cout << "run tests" << std::endl;

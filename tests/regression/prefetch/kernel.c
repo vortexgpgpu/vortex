@@ -11,9 +11,9 @@ void kernel_body(int task_id, kernel_arg_t* arg) {
 	uint32_t offset = task_id * count;
 	uint32_t num_blocks = (count * 4 + BLOCK_SIZE-1) / BLOCK_SIZE;
 
-	int32_t* src0_ptr = (int32_t*)arg->src0_ptr + offset;
-	int32_t* src1_ptr = (int32_t*)arg->src1_ptr + offset;
-	int32_t* dst_ptr  = (int32_t*)arg->dst_ptr + offset;
+	int32_t* src0_ptr = (int32_t*)arg->src0_addr + offset;
+	int32_t* src1_ptr = (int32_t*)arg->src1_addr + offset;
+	int32_t* dst_ptr  = (int32_t*)arg->dst_addr + offset;
 
 	uint32_t src0_end = (uint32_t)(src0_ptr + count);
 	uint32_t src1_end = (uint32_t)(src1_ptr + count);
