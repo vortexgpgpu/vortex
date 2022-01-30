@@ -144,16 +144,20 @@ if [ $DEBUG -eq 1 ]
 then    
     if [ $SCOPE -eq 1 ]
     then
+        echo "running: DEBUG=$DEBUG_LEVEL SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH"
         DEBUG=$DEBUG_LEVEL SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH
     else
+        echo "running: DEBUG=$DEBUG_LEVEL CONFIGS="$CONFIGS" make -C $DRIVER_PATH"
         DEBUG=$DEBUG_LEVEL CONFIGS="$CONFIGS" make -C $DRIVER_PATH
     fi    
     
     if [ $HAS_ARGS -eq 1 ]
     then
+        echo "running: OPTS=$ARGS make -C $APP_PATH run-$DRIVER > run.log 2>&1"
         OPTS=$ARGS make -C $APP_PATH run-$DRIVER > run.log 2>&1
         status=$?
     else
+        echo "running: make -C $APP_PATH run-$DRIVER > run.log 2>&1"
         make -C $APP_PATH run-$DRIVER > run.log 2>&1
         status=$?
     fi
@@ -163,18 +167,24 @@ then
         mv -f $APP_PATH/trace.vcd .
     fi
 else
+    echo "driver initialization..."
     if [ $SCOPE -eq 1 ]
     then
+        echo "running: SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH"
         SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH
     else
+        echo "running: CONFIGS="$CONFIGS" make -C $DRIVER_PATH"
         CONFIGS="$CONFIGS" make -C $DRIVER_PATH
     fi
     
+    echo "running application..."
     if [ $HAS_ARGS -eq 1 ]
     then
+        echo "running: OPTS=$ARGS make -C $APP_PATH run-$DRIVER"
         OPTS=$ARGS make -C $APP_PATH run-$DRIVER
         status=$?
     else
+        echo "running: make -C $APP_PATH run-$DRIVER"
         make -C $APP_PATH run-$DRIVER
         status=$?
     fi
