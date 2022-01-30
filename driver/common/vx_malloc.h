@@ -21,11 +21,11 @@ public:
 
     ~MemoryAllocator() {
         // Free allocated pages
-        page_t* pCurPage = pages_;
-        while (pCurPage) {
-            auto nextPage = pCurPage->next;
-            this->DeletePage(pCurPage);
-            pCurPage = nextPage;
+        page_t* currPage = pages_;
+        while (currPage) {
+            auto nextPage = currPage->next;
+            this->DeletePage(currPage);
+            currPage = nextPage;
         }
     }
 
@@ -37,143 +37,146 @@ public:
         size = AlignSize(size, blockAlign_);
 
         // Walk thru all pages to find a free block
-        block_t* pFreeBlock = nullptr;
-        auto pCurPage = pages_;
-        while (pCurPage) {
-            auto pCurBlock = pCurPage->pFreeSList;
-            if (pCurBlock) {
-                // The free list is already sorted with biggest block on top,
-                // just check if the last block has enough space.
-                if (pCurBlock->size >= size) {
-                    // Find the smallest matching block
-                    while (pCurBlock->nextFreeS 
-                        && (pCurBlock->nextFreeS->size >= size)) {
-                        pCurBlock = pCurBlock->nextFreeS;
+        block_t* freeBlock = nullptr;
+        auto currPage = pages_;
+        while (currPage) {
+            auto currBlock = currPage->freeSList;
+            if (currBlock) {
+                // The free S-list is already sorted with the largest block first
+                // Quick check if the head block has enough space.
+                if (currBlock->size >= size) {
+                    // Find the smallest matching block in the S-list
+                    while (currBlock->nextFreeS 
+                        && (currBlock->nextFreeS->size >= size)) {
+                        currBlock = currBlock->nextFreeS;
                     }
                     // Return the free block
-                    pFreeBlock = pCurBlock;
+                    freeBlock = currBlock;
                     break;
                 }
             }
-            pCurPage = pCurPage->next;
+            currPage = currPage->next;
         }
 
-        if (nullptr == pFreeBlock) {
+        if (nullptr == freeBlock) {
             // Allocate a new page for this request
-            pCurPage = this->NewPage(size);
-            if (nullptr == pCurPage)
+            currPage = this->NewPage(size);
+            if (nullptr == currPage)
                 return -1;
-            pFreeBlock = pCurPage->pFreeSList;
+            freeBlock = currPage->freeSList;
         }   
 
         // Remove the block from the free lists
-        assert(pFreeBlock->size >= size);
-        pCurPage->RemoveFreeMBlock(pFreeBlock);
-        pCurPage->RemoveFreeSBlock(pFreeBlock);
+        assert(freeBlock->size >= size);
+        currPage->RemoveFreeMBlock(freeBlock);
+        currPage->RemoveFreeSBlock(freeBlock);
 
         // If the free block we have found is larger than what we are looking for,
         // we may be able to split our free block in two.
-        uint64_t extraBytes = pFreeBlock->size - size;
+        uint64_t extraBytes = freeBlock->size - size;
         if (extraBytes >= blockAlign_) {
             // Reduce the free block size to the requested value
-            pFreeBlock->size = size;
+            freeBlock->size = size;
 
             // Allocate a new block to contain the extra buffer
-            auto nextAddr = pFreeBlock->addr + size;
-            auto pNewBlock = new block_t(nextAddr, extraBytes);
+            auto nextAddr = freeBlock->addr + size;
+            auto newBlock = new block_t(nextAddr, extraBytes);
 
             // Add the new block to the free lists
-            pCurPage->InsertFreeMBlock(pNewBlock);
-            pCurPage->InsertFreeSBlock(pNewBlock);
+            currPage->InsertFreeMBlock(newBlock);
+            currPage->InsertFreeSBlock(newBlock);
         }
 
         // Insert the free block into the used list
-        pCurPage->InsertUsedBlock(pFreeBlock);
+        currPage->InsertUsedBlock(freeBlock);
 
         // Return the free block address
-        *addr = pFreeBlock->addr;
+        *addr = freeBlock->addr;
 
         return 0;
     }
 
     int release(uint64_t addr) {
         // Walk all pages to find the pointer
-        block_t* pUsedBlock = nullptr;
-        auto pCurPage = pages_;
-        while (pCurPage) {
-            if ((pCurPage->addr < addr)
-            && ((pCurPage->addr + pCurPage->size) > addr)) {
-                auto pCurBlock = pCurPage->pUsedList;
-                while (pCurBlock) {
-                    if (pCurBlock->addr == addr) {
-                        pUsedBlock = pCurBlock;
+        block_t* usedBlock = nullptr;
+        auto currPage = pages_;
+        while (currPage) {
+            if (addr >= currPage->addr
+            &&  addr < (currPage->addr + currPage->size)) {
+                auto currBlock = currPage->usedList;
+                while (currBlock) {
+                    if (currBlock->addr == addr) {
+                        usedBlock = currBlock;
                         break;
                     }
-                    pCurBlock = pCurBlock->nextUsed;
+                    currBlock = currBlock->nextUsed;
                 }
-                if (pUsedBlock)
-                    break;
+                break;
             }
-            pCurPage = pCurPage->next;
+            currPage = currPage->next;
         }
 
         // found the corresponding block?
-        if (nullptr == pUsedBlock)
+        if (nullptr == usedBlock)
             return -1;
 
         // Remove the block from the used list
-        pCurPage->RemoveUsedBlock(pUsedBlock);
+        currPage->RemoveUsedBlock(usedBlock);
 
         // Insert the block into the free M-list.
-        pCurPage->InsertFreeMBlock(pUsedBlock);
+        currPage->InsertFreeMBlock(usedBlock);
 
         // Check if we can merge adjacent free blocks from the left.        
-        if (pUsedBlock->prevFreeM) {
+        if (usedBlock->prevFreeM) {
             // Calculate the previous address
-            auto prevAddr = pUsedBlock->prevFreeM->addr + pUsedBlock->prevFreeM->size;
-            if (pUsedBlock->addr == prevAddr) {
-                auto pMergedBlock = pUsedBlock->prevFreeM;
-
-                // Detach left block from the free S-list
-                pCurPage->RemoveFreeSBlock(pMergedBlock);
+            auto prevAddr = usedBlock->prevFreeM->addr + usedBlock->prevFreeM->size;
+            if (usedBlock->addr == prevAddr) {
+                auto prevBlock = usedBlock->prevFreeM;
 
                 // Merge the blocks to the left
-                pMergedBlock->size += pUsedBlock->size;
-                pMergedBlock->nextFreeM = pUsedBlock->nextFreeM;
-                if (pMergedBlock->nextFreeM) {
-                    pMergedBlock->nextFreeM->prevFreeM = pMergedBlock;
+                prevBlock->size += usedBlock->size;
+                prevBlock->nextFreeM = usedBlock->nextFreeM;
+                if (prevBlock->nextFreeM) {
+                    prevBlock->nextFreeM->prevFreeM = prevBlock;
                 }
-                pUsedBlock = pMergedBlock;
+
+                // Detach previous block from the free S-list since size increased
+                currPage->RemoveFreeSBlock(prevBlock);
+
+                // reset usedBlock
+                delete usedBlock;
+                usedBlock = prevBlock;
             }
         }
 
         // Check if we can merge adjacent free blocks from the right.
-        if (pUsedBlock->nextFreeM) {
+        if (usedBlock->nextFreeM) {
             // Calculate the next allocation start address
-            auto nextMem = pUsedBlock->addr + pUsedBlock->size;
-            if (pUsedBlock->nextFreeM->addr == nextMem) {
-                auto nextBlock = pUsedBlock->nextFreeM;
-
-                // Detach right block from the free S-list
-                pCurPage->RemoveFreeSBlock(nextBlock);
+            auto nextAddr = usedBlock->addr + usedBlock->size;
+            if (usedBlock->nextFreeM->addr == nextAddr) {
+                auto nextBlock = usedBlock->nextFreeM;
 
                 // Merge the blocks to the right
-                pUsedBlock->size += nextBlock->size;
-                pUsedBlock->nextFreeM = nextBlock->nextFreeM;
-                if (pUsedBlock->nextFreeM) {
-                    pUsedBlock->nextFreeM->prevFreeM = pUsedBlock;
+                usedBlock->size += nextBlock->size;
+                usedBlock->nextFreeM = nextBlock->nextFreeM;
+                if (usedBlock->nextFreeM) {
+                    usedBlock->nextFreeM->prevFreeM = usedBlock;
                 }
+
+                // Delete next block
+                currPage->RemoveFreeSBlock(nextBlock);
+                delete nextBlock;
             }
         }
 
         // Insert the block into the free S-list.
-        pCurPage->InsertFreeSBlock(pUsedBlock);
+        currPage->InsertFreeSBlock(usedBlock);
 
         // Check if we can free empty pages
-        if (nullptr == pCurPage->pUsedList) {
+        if (nullptr == currPage->usedList) {
             // Try to delete the page
-            while (pCurPage && this->DeletePage(pCurPage)) {
-                pCurPage = this->NextEmptyPage();
+            while (currPage && this->DeletePage(currPage)) {
+                currPage = this->NextEmptyPage();
             }
 
         }
@@ -212,110 +215,110 @@ private:
         page_t*  next;        
         
         // List of used blocks
-        block_t* pUsedList;
+        block_t* usedList;
         
         // List with blocks sorted by descreasing sizes
         // Used for block lookup during memory allocation.
-        block_t* pFreeSList;
+        block_t* freeSList;
         
         // List with blocks sorted by increasing memory addresses
         // Used for block merging during memory release.
-        block_t* pFreeMList;
+        block_t* freeMList;
         
         uint64_t addr;
         uint64_t size;
 
         page_t(uint64_t addr, uint64_t size) : 
             next(nullptr),            
-            pUsedList(nullptr),
+            usedList(nullptr),
             addr(addr),
             size(size) {
-            pFreeSList = pFreeMList = new block_t(addr, size);
+            freeSList = freeMList = new block_t(addr, size);
         }
 
-        void InsertUsedBlock(block_t* pBlock) {
-            pBlock->nextUsed = pUsedList;
-            if (pUsedList) {
-                pUsedList->prevUsed = pBlock;
+        void InsertUsedBlock(block_t* block) {
+            block->nextUsed = usedList;
+            if (usedList) {
+                usedList->prevUsed = block;
             }
-            pUsedList = pBlock;
+            usedList = block;
         }
 
-        void RemoveUsedBlock(block_t* pBlock) {
-            if (pBlock->prevUsed) {
-                pBlock->prevUsed->nextUsed = pBlock->nextUsed;
+        void RemoveUsedBlock(block_t* block) {
+            if (block->prevUsed) {
+                block->prevUsed->nextUsed = block->nextUsed;
             } else {
-                pUsedList = pBlock->nextUsed;
+                usedList = block->nextUsed;
             }
-            if (pBlock->nextUsed) {
-                pBlock->nextUsed->prevUsed = pBlock->prevUsed;
+            if (block->nextUsed) {
+                block->nextUsed->prevUsed = block->prevUsed;
             }
-            pBlock->nextUsed = nullptr;
-            pBlock->prevUsed = nullptr;
+            block->nextUsed = nullptr;
+            block->prevUsed = nullptr;
         }
 
-        void InsertFreeMBlock(block_t* pBlock) {
-            block_t* pCurBlock = pFreeMList;
+        void InsertFreeMBlock(block_t* block) {
+            block_t* currBlock = freeMList;
             block_t* prevBlock = nullptr;
-            while (pCurBlock && (pCurBlock->addr < pBlock->addr)) {
-                prevBlock = pCurBlock;
-                pCurBlock = pCurBlock->nextFreeM;
+            while (currBlock && (currBlock->addr < block->addr)) {
+                prevBlock = currBlock;
+                currBlock = currBlock->nextFreeM;
             }
-            pBlock->nextFreeM = pCurBlock;
-            pBlock->prevFreeM = prevBlock;
+            block->nextFreeM = currBlock;
+            block->prevFreeM = prevBlock;
             if (prevBlock) {
-                prevBlock->nextFreeM = pBlock;
+                prevBlock->nextFreeM = block;
             } else {
-                pFreeMList = pBlock;
+                freeMList = block;
             }
-            if (pCurBlock) {
-                pCurBlock->prevFreeM = pBlock;
+            if (currBlock) {
+                currBlock->prevFreeM = block;
             }    
         }
 
-        void RemoveFreeMBlock(block_t* pBlock) {
-            if (pBlock->prevFreeM) {
-                pBlock->prevFreeM->nextFreeM = pBlock->nextFreeM;
+        void RemoveFreeMBlock(block_t* block) {
+            if (block->prevFreeM) {
+                block->prevFreeM->nextFreeM = block->nextFreeM;
             } else {
-                pFreeMList = pBlock->nextFreeM;
+                freeMList = block->nextFreeM;
             }
-            if (pBlock->nextFreeM) {
-                pBlock->nextFreeM->prevFreeM = pBlock->prevFreeM;
+            if (block->nextFreeM) {
+                block->nextFreeM->prevFreeM = block->prevFreeM;
             }
-            pBlock->nextFreeM = nullptr;
-            pBlock->prevFreeM = nullptr;
+            block->nextFreeM = nullptr;
+            block->prevFreeM = nullptr;
         }
 
-        void InsertFreeSBlock(block_t* pBlock) {
-            block_t* pCurBlock = this->pFreeSList;
+        void InsertFreeSBlock(block_t* block) {
+            block_t* currBlock = this->freeSList;
             block_t* prevBlock = nullptr;
-            while (pCurBlock && (pCurBlock->size > pBlock->size)) {
-                prevBlock = pCurBlock;
-                pCurBlock = pCurBlock->nextFreeS;
+            while (currBlock && (currBlock->size > block->size)) {
+                prevBlock = currBlock;
+                currBlock = currBlock->nextFreeS;
             }
-            pBlock->nextFreeS = pCurBlock;
-            pBlock->prevFreeS = prevBlock;
+            block->nextFreeS = currBlock;
+            block->prevFreeS = prevBlock;
             if (prevBlock) {
-                prevBlock->nextFreeS = pBlock;
+                prevBlock->nextFreeS = block;
             } else {
-                this->pFreeSList = pBlock;
+                this->freeSList = block;
             }
-            if (pCurBlock) {
-                pCurBlock->prevFreeS = pBlock;
+            if (currBlock) {
+                currBlock->prevFreeS = block;
             }
         }
 
-        void RemoveFreeSBlock(block_t* pBlock) {
-            if (pBlock->prevFreeS) {
-                pBlock->prevFreeS->nextFreeS = pBlock->nextFreeS;
+        void RemoveFreeSBlock(block_t* block) {
+            if (block->prevFreeS) {
+                block->prevFreeS->nextFreeS = block->nextFreeS;
             } else {
-                pFreeSList = pBlock->nextFreeS;
+                freeSList = block->nextFreeS;
             }
-            if (pBlock->nextFreeS) {
-                pBlock->nextFreeS->prevFreeS = pBlock->prevFreeS;
+            if (block->nextFreeS) {
+                block->nextFreeS->prevFreeS = block->prevFreeS;
             }
-            pBlock->nextFreeS = nullptr;
-            pBlock->prevFreeS = nullptr;    
+            block->nextFreeS = nullptr;
+            block->prevFreeS = nullptr;    
         }
     };
 
@@ -332,54 +335,58 @@ private:
         if (nextAddress_ > maxAddress_)
             return nullptr;
 
-        // Allocate the page
-        auto pNewPage = new page_t(addr, size);
+        // Allocate object
+        auto newPage = new page_t(addr, size);
 
         // Insert the new page into the list
-        pNewPage->next = pages_;
-        pages_ = pNewPage;
+        newPage->next = pages_;
+        pages_ = newPage;
 
-        return pNewPage;
+        return newPage;
     }
 
-    bool DeletePage(page_t* pPage) {
+    bool DeletePage(page_t* page) {
         // The page should be empty
-        assert(nullptr == pPage->pUsedList);
-        assert(pPage->pFreeMList && (nullptr == pPage->pFreeMList->nextFreeM));
+        assert(nullptr == page->usedList);
+        assert(page->freeMList && (nullptr == page->freeMList->nextFreeM));
 
         // Only delete top-level pages
-        auto nextAddr = pPage->addr + pPage->size;
+        auto nextAddr = page->addr + page->size;
         if (nextAddr != nextAddress_)
             return false;
 
         // Remove the page from the list
         page_t* prevPage = nullptr;
-        auto pCurPage = pages_;
-        while (pCurPage) {
-            if (pCurPage == pPage) {
+        auto currPage = pages_;
+        while (currPage) {
+            if (currPage == page) {
                 if (prevPage) {
-                    prevPage->next = pCurPage->next;
+                    prevPage->next = currPage->next;
                 } else {
-                    pages_ = pCurPage->next;
+                    pages_ = currPage->next;
                 }
                 break;
             }
-            prevPage = pCurPage;
-            pCurPage = pCurPage->next;
+            prevPage = currPage;
+            currPage = currPage->next;
         }
 
         // Update next allocation address
-        nextAddress_ = pPage->addr;
+        nextAddress_ = page->addr;
+        
+        // free object
+        delete page->freeMList;
+        delete page;
 
         return true;
     }
 
     page_t* NextEmptyPage() {
-       auto pCurPage = pages_;
-        while (pCurPage) {
-            if (nullptr == pCurPage->pUsedList)
-                return pCurPage;
-            pCurPage = pCurPage->next;
+       auto currPage = pages_;
+        while (currPage) {
+            if (nullptr == currPage->usedList)
+                return currPage;
+            currPage = currPage->next;
         } 
         return nullptr;
     }

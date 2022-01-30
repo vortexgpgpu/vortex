@@ -6,6 +6,11 @@ set -e
 # ensure build
 make -s
 
+unittest() 
+{
+make -C tests/unittest run
+}
+
 coverage() 
 {
 echo "begin coverage tests..."
@@ -156,11 +161,13 @@ echo "stress1 tests done!"
 
 usage()
 {
-    echo "usage: regression [-coverage] [-tex] [-cluster] [-debug] [-config] [-stress[#n]] [-all] [-h|--help]"
+    echo "usage: regression [-unittest] [-coverage] [-tex] [-cluster] [-debug] [-config] [-stress[#n]] [-all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
     case $1 in
+        -unittest ) unittest
+                ;;
         -coverage ) coverage
                 ;;
         -tex ) tex
