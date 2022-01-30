@@ -18,12 +18,18 @@ VX_RUNTIME = $(VORTEX_RT_PATH)/src/vx_start.S $(VORTEX_RT_PATH)/src/vx_perf.c
 
 VX_SRCS = kernel.c $(VX_RUNTIME)
 
-#CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -pedantic -Wfatal-errors
-CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
+CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
 
 CXXFLAGS += -I$(VORTEX_DRV_PATH)/include
 
 LDFLAGS += -L$(VORTEX_DRV_PATH)/stub -lvortex
+
+# Debugigng
+ifdef DEBUG
+	CXXFLAGS += -g -O0
+else    
+	CXXFLAGS += -O2 -DNDEBUG
+endif
 
 PROJECT = no_smem
 

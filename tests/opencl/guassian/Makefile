@@ -11,8 +11,7 @@ K_LLCFLAGS += "-O3 -march=riscv32 -target-abi=ilp32f -mcpu=generic-rv32 -mattr=+
 K_CFLAGS   += "-v -O3 --sysroot=$(SYSROOT) --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH) -march=rv32imf -mabi=ilp32f -Xclang -target-feature -Xclang +vortex -I$(VORTEX_RT_PATH)/include -fno-rtti -fno-exceptions -ffreestanding -nostartfiles -fdata-sections -ffunction-sections"
 K_LDFLAGS  += "-Wl,-Bstatic,-T$(VORTEX_RT_PATH)/linker/vx_link.ld -Wl,--gc-sections $(VORTEX_RT_PATH)/libvortexrt.a -lm"
 
-CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors
-#CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -Wfatal-errors
+CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
 
 CXXFLAGS += -Wno-deprecated-declarations -Wno-unused-parameter
 CXXFLAGS += -Wno-unused-variable -Wno-narrowing -Wno-unused-result -Wno-unused-but-set-variable
@@ -20,6 +19,13 @@ CXXFLAGS += -Wno-unused-variable -Wno-narrowing -Wno-unused-result -Wno-unused-b
 CXXFLAGS += -I$(POCL_RT_PATH)/include
 
 LDFLAGS += -L$(POCL_RT_PATH)/lib -L$(VORTEX_DRV_PATH)/stub -lOpenCL -lvortex
+
+# Debugigng
+ifdef DEBUG
+	CXXFLAGS += -g -O0
+else    
+	CXXFLAGS += -O2 -DNDEBUG
+endif
 
 PROJECT = guassian
 

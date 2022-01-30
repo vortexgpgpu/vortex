@@ -16,12 +16,18 @@ VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link.ld -Wl,--gc-secti
 
 VX_SRCS = kernel.c
 
-#CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -pedantic -Wfatal-errors
-CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
+CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
 
 CXXFLAGS += -I$(VORTEX_DRV_PATH)/include
 
 LDFLAGS += -L$(VORTEX_DRV_PATH)/stub -lvortex
+
+# Debugigng
+ifdef DEBUG
+	CXXFLAGS += -g -O0
+else    
+	CXXFLAGS += -O2 -DNDEBUG
+endif
 
 PROJECT = prefetch
 
