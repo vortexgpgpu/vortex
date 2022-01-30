@@ -24,12 +24,18 @@ VX_DPFLAGS = -arch=riscv32 -mcpu=generic-rv32 -mattr=+m,+f -mattr=+vortex
 
 VX_SRCS = kernel.c
 
-#CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -pedantic -Wfatal-errors
-CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
+CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
 
 CXXFLAGS += -I$(VORTEX_DRV_PATH)/include
 
 LDFLAGS += -L$(VORTEX_DRV_PATH)/stub -lvortex
+
+# Debugigng
+ifdef DEBUG
+	CXXFLAGS += -g -O0
+else    
+	CXXFLAGS += -O2 -DNDEBUG
+endif
 
 PROJECT = sort
 
