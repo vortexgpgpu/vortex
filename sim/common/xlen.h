@@ -5,7 +5,7 @@
 #endif
 
 #ifndef FLEN
-#define FLEN 32
+#define FLEN XLEN
 #endif
 
 #if XLEN == 32
