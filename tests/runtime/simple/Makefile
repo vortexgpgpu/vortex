@@ -27,7 +27,7 @@ LDFLAGS += -lm -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link$(XLEN).ld -Wl,--
 
 PROJECT = simple
 
-SRCS = main.cpp
+SRCS = main.cpp tests.cpp
 
 all: $(PROJECT).elf $(PROJECT).bin $(PROJECT).dump
 
