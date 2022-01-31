@@ -1,4 +1,5 @@
 #include "rvfloats.h"
+#include "xlen.h"
 #include <stdio.h>
 
 extern "C" {
@@ -481,6 +482,8 @@ uint32_t rv_fsgnjn_s(uint64_t a, uint64_t b) {
   if(a >> 32 != 0xffffffff)
     return 0xffc00000;
   #endif
+
+  printf("XLEN=%d, FLEN=%d\n", XLEN, FLEN);
 
   int sign = ~b & F32_SIGN;
   int r = sign | (a & ~F32_SIGN);
