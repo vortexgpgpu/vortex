@@ -72,31 +72,25 @@ inline uint64_t bit_getw(uint64_t bits, uint32_t start, uint32_t end) {
 }
 
 // Apply integer sign extension
-inline uintx_t sext(uintx_t word, uint32_t width) {
+inline uint32_t sext(uint32_t word, uint32_t width) {
   assert(width > 1);
   assert(width <= 32);
-  uintx_t unity = 1;
-  uintx_t mask = (unity << width) - 1;
+  uint64_t unity = 1;
+  uint32_t mask = (unity << width) - 1;
   return ((word >> (width - 1)) & 0x1) ? (word | ~mask) : word;
 }
 
-inline uint64_t sext64(uint64_t word, uint64_t width) {
+inline uint64_t sext(uint64_t word, uint32_t width) {
   assert(width > 1);
   assert(width <= 64);
-  uint64_t unity = 1;
+  __uint128_t unity = 1;
   uint64_t mask = (unity << width) - 1;
   return ((word >> (width - 1)) & 0x1) ? (word | ~mask) : word;
 }
 
-inline uintm_t sext_mul(uintm_t word, uint32_t width) {
-  assert(width > 1);
-  assert(width <= 32);
-  uintm_t unity = 1;
-  uintm_t mask = (unity << width) - 1;
-  return ((word >> (width - 1)) & 0x1) ? (word | ~mask) : word;
-}
-
-inline uintf_t nan_box(uint32_t word) {
+// change:
+// Move this to another file later
+inline uint64_t nan_box(uint32_t word) {
   uintf_t mask = uintf_t(0xffffffff00000000);
   return word | mask;
 }
