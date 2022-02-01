@@ -100,7 +100,6 @@ module VX_nc_bypass #(
     localparam CORE_LDATAW = $clog2(CORE_DATA_WIDTH);
     localparam MEM_LDATAW  = $clog2(MEM_DATA_WIDTH);
     localparam D = MEM_LDATAW - CORE_LDATAW;
-    localparam P = 2**D;
 
     // core request handling
 

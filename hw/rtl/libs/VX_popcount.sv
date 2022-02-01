@@ -9,6 +9,8 @@ module VX_popcount #(
     input  wire [N-1:0] in_i,
     output wire [M-1:0] cnt_o
 );
+    `UNUSED_PARAM (MODEL)
+
 `ifndef SYNTHESIS
     assign cnt_o = $countones(in_i);
 `else

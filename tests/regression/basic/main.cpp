@@ -4,7 +4,6 @@
 #include <vortex.h>
 #include <chrono>
 #include "common.h"
-#include "kernel_scheduler.h"
 
 #define RT_CHECK(_expr)                                         \
    do {                                                         \
