@@ -15,7 +15,7 @@ make -C tests/riscv/isa run-rtlsim
 make -C tests/regression run-vlsim
 make -C tests/opencl run-vlsim
 make -C tests/runtime run-simx
-make -C tests/riscv/isa run-simx-32imf
+make -C tests/riscv/isa run-simx
 make -C tests/regression run-simx
 make -C tests/opencl run-simx
 
