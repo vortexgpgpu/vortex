@@ -4,7 +4,6 @@
    Copying and distribution of this script, with or without modification,
    are permitted in any medium without royalty provided the copyright
    notice and this notice are preserved.  */
-/* simx64 */   
 OUTPUT_FORMAT("elf64-littleriscv", "elf64-littleriscv", "elf64-littleriscv")
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
@@ -185,13 +184,10 @@ SECTIONS
       .bss section disappears because there are no input sections.
       FIXME: Why do we need it? When there is no .bss section, we do not
       pad the .data section.  */
-   /* simx64 */   
    . = ALIGN(. != 0 ? 64 / 8 : 1);
   }
-  /* simx64 */
   . = ALIGN(64 / 8);
   . = SEGMENT_START("ldata-segment", .);
-  /* simx64 */
   . = ALIGN(64 / 8);
   __BSS_END__ = .;
     __global_pointer = MIN(__SDATA_BEGIN__ + 0x800,
