@@ -9,14 +9,27 @@
 #include <simobject.h>
 #include <xlen.h>
 
+#if XLEN == 32
+#define uintx_t uint32_t
+#define intx_t int32_t
+#define uintd_t uint64_t
+#define intd_t int64_t
+#elif XLEN == 64
+#define uintx_t uint64_t
+#define intx_t int64_t
+#define uintd_t __uint128_t
+#define intd_t __int128_t
+#else
+#error unsupported XLEN
+#endif
+
 namespace vortex {
 
-typedef uint8_t  Byte;
-typedef uint32_t Word;
-typedef int32_t  WordI;
-typedef uintx_t  XWord;
-typedef intx_t XWordI;
-typedef uintf_t FWord;
+typedef uint8_t Byte;
+typedef uintx_t Word;
+typedef intx_t  WordI;
+typedef uintd_t DWord;
+typedef intd_t  DWordI;
 
 typedef uintx_t Addr;
 typedef uint32_t Size;
