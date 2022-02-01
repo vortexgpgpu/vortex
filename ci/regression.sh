@@ -185,7 +185,8 @@ while [ "$1" != "" ]; do
         -stress ) stress0
                   stress1
                 ;;
-        -all ) coverage
+        -all ) unittest
+               coverage
                tex
                cluster
                debug
