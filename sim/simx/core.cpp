@@ -419,7 +419,7 @@ Word Core::dcache_read(Addr addr, Size size) {
 
 void Core::dcache_write(Addr addr, Word data, Size size) {  
   if (addr >= IO_COUT_ADDR 
-   && addr <= (IO_COUT_ADDR + IO_COUT_SIZE - 1)) {
+   && addr < (IO_COUT_ADDR + IO_COUT_SIZE)) {
      this->writeToStdOut(addr, data);
   } else {
     auto type = get_addr_type(addr, size);

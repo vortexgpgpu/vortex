@@ -204,7 +204,7 @@ module VX_issue #(
 `endif
 `endif
 
-`ifdef DBG_TRACE_PIPELINE
+`ifdef DBG_TRACE_CORE_PIPELINE
     always @(posedge clk) begin
         if (alu_req_if.valid && alu_req_if.ready) begin
             dpi_trace("%d: core%0d-issue: wid=%0d, PC=%0h, ex=ALU, tmask=%b, rd=%0d, rs1_data=", 

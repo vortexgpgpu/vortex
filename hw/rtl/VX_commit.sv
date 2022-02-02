@@ -93,7 +93,7 @@ module VX_commit #(
     // store and gpu commits don't writeback  
     assign st_commit_if.ready  = 1'b1;
 
-`ifdef DBG_TRACE_PIPELINE
+`ifdef DBG_TRACE_CORE_PIPELINE
     always @(posedge clk) begin
         if (alu_commit_if.valid && alu_commit_if.ready) begin
              dpi_trace("%d: core%0d-commit: wid=%0d, PC=%0h, ex=ALU, tmask=%b, wb=%0d, rd=%0d, data=", $time, CORE_ID, alu_commit_if.wid, alu_commit_if.PC, alu_commit_if.tmask, alu_commit_if.wb, alu_commit_if.rd);

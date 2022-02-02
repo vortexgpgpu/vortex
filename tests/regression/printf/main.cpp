@@ -126,9 +126,9 @@ int main(int argc, char *argv[]) {
 
   // upload source buffer0
   {
-    auto buf_ptr = (float*)vx_host_ptr(staging_buf);
+    auto buf_ptr = (int*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
-      buf_ptr[i] = i-1;
+      buf_ptr[i] = i;
     }
   }
   std::cout << "upload source buffer" << std::endl;      

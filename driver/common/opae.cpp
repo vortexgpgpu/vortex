@@ -50,6 +50,8 @@
 #define MMIO_DEV_CAPS       (AFU_IMAGE_MMIO_DEV_CAPS * 4)
 #define MMIO_STATUS         (AFU_IMAGE_MMIO_STATUS * 4)
 
+#define STATUS_STATE_BITS   8
+
 ///////////////////////////////////////////////////////////////////////////////
 
 class vx_device {
@@ -373,7 +375,7 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
     if (nullptr == hdevice)
         return -1;
 
-    std::unordered_map<int, std::stringstream> print_bufs;
+    std::unordered_map<uint32_t, std::stringstream> print_bufs;
     
     vx_device *device = ((vx_device*)hdevice);
 
@@ -394,11 +396,13 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
         uint64_t status;
         CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_STATUS, &status));
 
-        uint16_t cout_data = (status >> 8) & 0xffff;
-        if (cout_data & 0x0001) {
+        // check for console data
+        uint32_t cout_data = status >> STATUS_STATE_BITS;
+        if (cout_data & 0x1) {
+            // retrieve console data
             do {
                 char cout_char = (cout_data >> 1) & 0xff;
-                int cout_tid = (cout_data >> 9) & 0xff;
+                uint32_t cout_tid = (cout_data >> 9) & 0xff;
                 auto& ss_buf = print_bufs[cout_tid];
                 ss_buf << cout_char;
                 if (cout_char == '\n') {
@@ -406,11 +410,11 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
                     ss_buf.str("");
                 }
                 CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_STATUS, &status));
-                cout_data = (status >> 8) & 0xffff;
-            } while (cout_data & 0x0001);
+                cout_data = status >> STATUS_STATE_BITS;
+            } while (cout_data & 0x1);
         }
 
-        uint8_t state = status & 0xff;
+        uint32_t state = status & ((1 << STATUS_STATE_BITS)-1);
 
         if (0 == state || 0 == timeout) {
             for (auto& buf : print_bufs) {
