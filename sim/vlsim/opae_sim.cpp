@@ -122,7 +122,7 @@ public:
   #ifdef VCD_OUTPUT
     Verilated::traceEverOn(true);
     trace_ = new VerilatedVcdC();
-    device_->trace(this->trace, 99);
+    device_->trace(trace_, 99);
     trace_->open("trace.vcd");
   #endif
 

@@ -54,7 +54,7 @@ jobs:
       script: cp -r $PWD ../build_tex && cd ../build_tex && ./ci/travis_run.py ./ci/regression.sh -tex
     - stage: test
       name: unittest
-      script: cp -r $PWD ../build_coverage && cd ../build_unittest && ./ci/travis_run.py ./ci/regression.sh -unittest
+      script: cp -r $PWD ../build_unittest && cd ../build_unittest && ./ci/travis_run.py ./ci/regression.sh -unittest
   
 after_success:
   # Gather code coverage

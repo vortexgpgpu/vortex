@@ -1,5 +1,5 @@
 `include "VX_define.vh"
-`ifdef DBG_TRACE_PIPELINE
+`ifdef DBG_TRACE_CORE_PIPELINE
 `include "VX_trace_instr.vh"
 `endif
 
@@ -479,7 +479,7 @@ module VX_decode  #(
     assign perf_decode_if.branches = perf_branches;
 `endif
 
-`ifdef DBG_TRACE_PIPELINE
+`ifdef DBG_TRACE_CORE_PIPELINE
     always @(posedge clk) begin
         if (decode_if.valid && decode_if.ready) begin
             dpi_trace("%d: core%0d-decode: wid=%0d, PC=%0h, ex=", $time, CORE_ID, decode_if.wid, decode_if.PC);

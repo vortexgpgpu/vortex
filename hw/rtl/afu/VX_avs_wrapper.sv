@@ -158,7 +158,7 @@ module VX_avs_wrapper #(
         .ready_out (mem_rsp_ready)
     );
 
-`ifdef DBG_TRACE_AVS
+`ifdef DBG_TRACE_AFU
     always @(posedge clk) begin
         if (mem_req_valid && mem_req_ready) begin
             if (mem_req_rw) begin

@@ -310,7 +310,7 @@ module VX_lsu_unit #(
 
 `ifndef SYNTHESIS
     reg [`LSUQ_SIZE-1:0][(`NW_BITS + 32 + `NR_BITS + `UUID_BITS + 64 + 1)-1:0] pending_reqs;
-    wire [63:0] delay_timeout = 40000 * (1 ** (`L2_ENABLE + `L3_ENABLE));
+    wire [63:0] delay_timeout = 10000 * (1 ** (`L2_ENABLE + `L3_ENABLE));
 
     always @(posedge clk) begin
         if (reset) begin
