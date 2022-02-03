@@ -13,49 +13,49 @@ class Decoder {
 public:
   Decoder(const ArchDef &);    
   
-  std::shared_ptr<Instr> decode(Word code) const;
+  std::shared_ptr<Instr> decode(uint32_t code) const;
 
 private:
 
-  Word inst_s_;
-  Word opcode_s_;
-  Word reg_s_;
-  Word func2_s_;
-  Word func3_s_;
-  Word shift_opcode_;
-  Word shift_rd_;
-  Word shift_rs1_;
-  Word shift_rs2_;
-  Word shift_rs3_;
-  Word shift_func2_;
-  Word shift_func3_;
-  Word shift_func7_;
-  Word shift_j_u_immed_;
-  Word shift_s_b_immed_;
-  Word shift_i_immed_;
+  uint32_t inst_s_;
+  uint32_t opcode_s_;
+  uint32_t reg_s_;
+  uint32_t func2_s_;
+  uint32_t func3_s_;
+  uint32_t shift_opcode_;
+  uint32_t shift_rd_;
+  uint32_t shift_rs1_;
+  uint32_t shift_rs2_;
+  uint32_t shift_rs3_;
+  uint32_t shift_func2_;
+  uint32_t shift_func3_;
+  uint32_t shift_func7_;
+  uint32_t shift_j_u_immed_;
+  uint32_t shift_s_b_immed_;
+  uint32_t shift_i_immed_;
 
-  Word reg_mask_;
-  Word func2_mask_;
-  Word func3_mask_;
-  Word func6_mask_;
-  Word func7_mask_;
-  Word opcode_mask_;
-  Word i_imm_mask_;
-  Word s_imm_mask_;
-  Word b_imm_mask_;
-  Word u_imm_mask_;
-  Word j_imm_mask_;
-  Word v_imm_mask_;
+  uint32_t reg_mask_;
+  uint32_t func2_mask_;
+  uint32_t func3_mask_;
+  uint32_t func6_mask_;
+  uint32_t func7_mask_;
+  uint32_t opcode_mask_;
+  uint32_t i_imm_mask_;
+  uint32_t s_imm_mask_;
+  uint32_t b_imm_mask_;
+  uint32_t u_imm_mask_;
+  uint32_t j_imm_mask_;
+  uint32_t v_imm_mask_;
 
   //Vector
-  Word shift_vset_;
-  Word shift_vset_immed_;
-  Word shift_vmask_;
-  Word shift_vmop_;
-  Word shift_vnf_;
-  Word shift_func6_;
-  Word vmask_s_;
-  Word mop_s_;
+  uint32_t shift_vset_;
+  uint32_t shift_vset_immed_;
+  uint32_t shift_vmask_;
+  uint32_t shift_vmop_;
+  uint32_t shift_vnf_;
+  uint32_t shift_func6_;
+  uint32_t vmask_s_;
+  uint32_t mop_s_;
 };
 
 }

@@ -42,7 +42,7 @@ struct params_t {
 
         assert(config.ports_per_bank <= this->words_per_block);
                 
-        // Word select
+        // uint32_t select
         this->word_select_addr_start = config.W;
         this->word_select_addr_end = (this->word_select_addr_start+offset_bits-1);
 

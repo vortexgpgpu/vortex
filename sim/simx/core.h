@@ -68,7 +68,7 @@ public:
   SimPort<MemRsp> MemRspPort;
   SimPort<MemReq> MemReqPort;
 
-  Core(const SimContext& ctx, const ArchDef &arch, Word id);
+  Core(const SimContext& ctx, const ArchDef &arch, uint32_t id);
   ~Core();
 
   void attach_ram(RAM* ram);
@@ -79,7 +79,7 @@ public:
 
   void tick();
 
-  Word id() const {
+  uint32_t id() const {
     return id_;
   }
 
@@ -95,25 +95,25 @@ public:
     return perf_stats_;
   } 
 
-  Word getIRegValue(int reg) const {
+  uint32_t getIRegValue(int reg) const {
     return warps_.at(0)->getIRegValue(reg);
   }
 
-  Word get_csr(Addr addr, int tid, int wid);
+  uint32_t get_csr(Addr addr, int tid, int wid);
   
-  void set_csr(Addr addr, Word value, int tid, int wid);
+  void set_csr(Addr addr, uint32_t value, int tid, int wid);
 
   WarpMask wspawn(int num_warps, int nextPC);
   
   WarpMask barrier(int bar_id, int count, int warp_id);
 
-  Word icache_read(Addr, Size);
+  uint32_t icache_read(Addr, Size);
 
-  XWord dcache_read(Addr, Size);
+  Word dcache_read(Addr, Size);
 
-  void dcache_write(Addr, XWord, Size);
+  void dcache_write(Addr, Word, Size);
 
-  Word tex_read(uint32_t unit, Word lod, Word u, Word v, std::vector<mem_addr_size_t>* mem_addrs);
+  uint32_t tex_read(uint32_t unit, uint32_t lod, uint32_t u, uint32_t v, std::vector<mem_addr_size_t>* mem_addrs);
 
   void trigger_ecall();
 
@@ -129,11 +129,11 @@ private:
   void execute();
   void commit();
   
-  void writeToStdOut(Addr addr, Word data);
+  void writeToStdOut(Addr addr, uint32_t data);
 
   void cout_flush();
 
-  Word id_;
+  uint32_t id_;
   const ArchDef arch_;
   const Decoder decoder_;
   MemoryUnit mmu_;
@@ -142,7 +142,7 @@ private:
 
   std::vector<std::shared_ptr<Warp>> warps_;  
   std::vector<WarpMask> barriers_;  
-  std::vector<Word> csrs_;
+  std::vector<uint32_t> csrs_;
   std::vector<Byte> fcsrs_;
   std::vector<IBuffer> ibuffers_;
   Scoreboard scoreboard_;

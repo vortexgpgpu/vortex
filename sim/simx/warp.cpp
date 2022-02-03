@@ -10,10 +10,10 @@
 
 using namespace vortex;
 
-Warp::Warp(Core *core, Word id)
+Warp::Warp(Core *core, uint32_t id)
     : id_(id)
     , core_(core)
-    , ireg_file_(core->arch().num_threads(), std::vector<XWord>(core->arch().num_regs()))
+    , ireg_file_(core->arch().num_threads(), std::vector<Word>(core->arch().num_regs()))
     , freg_file_(core->arch().num_threads(), std::vector<FWord>(core->arch().num_regs()))
     , vreg_file_(core->arch().num_threads(), std::vector<Byte>(core->arch().vsize()))
 {
@@ -47,7 +47,7 @@ void Warp::eval(pipeline_trace_t *trace) {
 
   /* Fetch and decode. */    
 
-  Word instr_code = core_->icache_read(PC_, sizeof(Word));
+  uint32_t instr_code = core_->icache_read(PC_, sizeof(uint32_t));
   auto instr = core_->decoder().decode(instr_code);
   if (!instr) {
     std::cout << std::hex << "Error: invalid instruction 0x" << instr_code << ", at PC=" << PC_ << std::endl;
@@ -77,7 +77,7 @@ void Warp::eval(pipeline_trace_t *trace) {
     DPN(4, '|');
     // Floating point register file
     for (int j = 0; j < core_->arch().num_threads(); ++j) {
-      DPN(4, ' ' << std::setfill('0') << std::setw(FLEN/4) << std::hex << freg_file_.at(j).at(i) << std::setfill(' ') << ' ');
+      DPN(4, ' ' << std::setfill('0') << std::setw(16) << std::hex << freg_file_.at(j).at(i) << std::setfill(' ') << ' ');
     }
     DPN(4, std::endl);
   }  

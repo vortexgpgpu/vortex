@@ -48,11 +48,11 @@ static const std::unordered_map<int, struct InstTableEntry_t> sc_instTable = {
 
 static const char* op_string(const Instr &instr) {
   auto opcode = instr.getOpcode();
-  Word func2  = instr.getFunc2();
-  Word func3  = instr.getFunc3();
-  Word func7  = instr.getFunc7();
-  Word rs2    = instr.getRSrc(1);
-  XWord imm    = instr.getImm();
+  uint32_t func2  = instr.getFunc2();
+  uint32_t func3  = instr.getFunc3();
+  uint32_t func7  = instr.getFunc7();
+  uint32_t rs2    = instr.getRSrc(1);
+  Word imm    = instr.getImm();
 
   switch (opcode) {
   case Opcode::NOP:        return "NOP";
@@ -130,21 +130,21 @@ static const char* op_string(const Instr &instr) {
   case Opcode::R_INST_64:
     if (func7 & 0x1){
       switch (func3) {
-      case 0: return func7 ? "SUBW" : "ADDW";
-      case 1: return "SLLW";
-      case 5: return func7 ? "SRAW" : "SRLW";  
+      case 0: return "MULW";
+      case 4: return "DIVW";
+      case 5: return "DIVUW";
+      case 6: return "REMW";
+      case 7: return "REMUW";
       default:
         std::abort();
       }
     } else {
       switch (func3) {
-        case 0: return "MULW";
-        case 4: return "DIVW";
-        case 5: return "DIVUW";
-        case 6: return "REMW";
-        case 7: return "REMUW";
-        default:
-          std::abort();
+      case 0: return func7 ? "SUBW" : "ADDW";
+      case 1: return "SLLW";
+      case 5: return func7 ? "SRAW" : "SRLW";  
+      default:
+        std::abort();
       }
     }
   case Opcode::I_INST_64:
@@ -333,8 +333,8 @@ static const char* op_string(const Instr &instr) {
 namespace vortex {
 std::ostream &operator<<(std::ostream &os, const Instr &instr) {  
   auto opcode = instr.getOpcode();    
-  Word func2  = instr.getFunc2();
-  Word func3  = instr.getFunc3();
+  uint32_t func2  = instr.getFunc2();
+  uint32_t func3  = instr.getFunc3();
 
   os << op_string(instr) << ": ";
 
@@ -404,15 +404,15 @@ Decoder::Decoder(const ArchDef &arch) {
   v_imm_mask_  = 0x7ff;  
 }
 
-std::shared_ptr<Instr> Decoder::decode(Word code) const {  
+std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {  
   auto instr = std::make_shared<Instr>();
   Opcode op = (Opcode)((code >> shift_opcode_) & opcode_mask_);
   instr->setOpcode(op);
 
-  Word func2 = (code >> shift_func2_) & func2_mask_;
-  Word func3 = (code >> shift_func3_) & func3_mask_;
-  Word func6 = (code >> shift_func6_) & func6_mask_;
-  Word func7 = (code >> shift_func7_) & func7_mask_;
+  uint32_t func2 = (code >> shift_func2_) & func2_mask_;
+  uint32_t func3 = (code >> shift_func3_) & func3_mask_;
+  uint32_t func6 = (code >> shift_func6_) & func6_mask_;
+  uint32_t func7 = (code >> shift_func7_) & func7_mask_;
 
   int rd  = (code >> shift_rd_)  & reg_mask_;
   int rs1 = (code >> shift_rs1_) & reg_mask_;
@@ -488,27 +488,30 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
     case Opcode::I_INST:
       if (func3 == 0x1 || func3 == 0x5) {
         // int5 (XLEN = 32) / int6 (XLEN = 64)
-        XWord shamt_mask = (1 << log2up(XLEN)) - 1;
-        XWord shamt = (((func7 & 0x1) << 5) | rs2) & shamt_mask;
+        Word shamt_mask = ((Word)1 << log2up(XLEN)) - 1;
+        Word shamt = (((func7 & 0x1) << 5) | rs2) & shamt_mask;
         instr->setImm(shamt);
       } else {
         // int12
-        instr->setImm(sext(code >> shift_rs2_, 12));
+        Word imm = code >> shift_rs2_;
+        instr->setImm(sext(imm, 12));
       }
       break;
     case Opcode::I_INST_64:
       if (func3 == 0x1 || func3 == 0x5) {
         // int5
-        XWord shamt = rs2;
+        Word shamt = rs2;
         instr->setImm(shamt);
       } else {
         // int12
-        instr->setImm(sext64(code >> shift_rs2_, 12));
+        Word imm = code >> shift_rs2_;
+        instr->setImm(sext(imm, 12));
       }
       break;
     default:
       // int12
-      instr->setImm(sext(code >> shift_rs2_, 12));
+      Word imm = code >> shift_rs2_;
+      instr->setImm(sext(imm, 12));
       break;
     }
   } break;
@@ -520,7 +523,7 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
       instr->setSrcReg(rs2);
     }
     instr->setFunc3(func3);
-    XWord imm = (func7 << reg_s_) | rd;
+    Word imm = (func7 << reg_s_) | rd;
     instr->setImm(sext(imm, 12));
   } break;
 
@@ -528,27 +531,28 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
     instr->setSrcReg(rs1);
     instr->setSrcReg(rs2);
     instr->setFunc3(func3);
-    Word bit_11   = rd & 0x1;
-    Word bits_4_1 = rd >> 1;
-    Word bit_10_5 = func7 & 0x3f;
-    Word bit_12   = func7 >> 6;
-    XWord imm = (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
+    uint32_t bit_11   = rd & 0x1;
+    uint32_t bits_4_1 = rd >> 1;
+    uint32_t bit_10_5 = func7 & 0x3f;
+    uint32_t bit_12   = func7 >> 6;
+    Word imm = (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
     instr->setImm(sext(imm, 13));
   } break;
 
-  case InstType::U_TYPE:
+  case InstType::U_TYPE: {
     instr->setDestReg(rd);
-    instr->setImm(sext(code >> shift_func3_, 20));
-    break;
+    Word imm = code >> shift_func3_;
+    instr->setImm(sext(imm, 20));
+  }  break;
 
   case InstType::J_TYPE: {
     instr->setDestReg(rd);
-    Word unordered = code >> shift_func3_;
-    Word bits_19_12 = unordered & 0xff;
-    Word bit_11 = (unordered >> 8) & 0x1;
-    Word bits_10_1 = (unordered >> 9) & 0x3ff;
-    Word bit_20 = (unordered >> 19) & 0x1;
-    XWord imm = (XWord) 0 | (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
+    uint32_t unordered = code >> shift_func3_;
+    uint32_t bits_19_12 = unordered & 0xff;
+    uint32_t bit_11 = (unordered >> 8) & 0x1;
+    uint32_t bits_10_1 = (unordered >> 9) & 0x3ff;
+    uint32_t bit_20 = (unordered >> 19) & 0x1;
+    Word imm = (Word) 0 | (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
     if (bit_20) {
       imm |= ~j_imm_mask_;
     }
@@ -564,7 +568,7 @@ std::shared_ptr<Instr> Decoder::decode(Word code) const {
       if (func3 == 7) {
         instr->setImm(!(code >> shift_vset_));
         if (instr->getImm()) {
-          Word immed = (code >> shift_rs2_) & v_imm_mask_;
+          uint32_t immed = (code >> shift_rs2_) & v_imm_mask_;
           instr->setImm(immed);
           instr->setVlmul(immed & 0x3);
           instr->setVediv((immed >> 4) & 0x3);

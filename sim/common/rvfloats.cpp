@@ -1,5 +1,4 @@
 #include "rvfloats.h"
-#include "xlen.h"
 #include <stdio.h>
 
 extern "C" {
@@ -299,14 +298,7 @@ uint64_t rv_fle_d(uint64_t a, uint64_t b, uint32_t* fflags) {
   return r;
 }
 
-uint32_t rv_feq_s(uint64_t a, uint64_t b, uint32_t* fflags) {
-
-  #if FLEN == 64
-  // Either a or b isn't NaN boxed
-  if ((a >> 32 != 0xffffffff) || (b >> 32 != 0xffffffff)) {
-    return 0;
-  }
-  #endif
+uint32_t rv_feq_s(uint32_t a, uint32_t b, uint32_t* fflags) {
 
   auto r = f32_eq(to_float32_t(a), to_float32_t(b));
   if (fflags) { *fflags = get_fflags(); }  
@@ -437,21 +429,7 @@ uint64_t rv_fclss_d(uint64_t a) {
   return r;
 }
 
-uint32_t rv_fsgnj_s(uint64_t a, uint64_t b) {
-
-  #if FLEN == 64
-  // Both a and b aren't NaN boxed
-  if ((a >> 32 != 0xffffffff) && (b >> 32 != 0xffffffff)) {
-    return 0x7fc00000;
-  }
-  // a is NaN boxed but b isn't
-  if (b >> 32 != 0xffffffff)
-    return a;
-
-  // b is NaN boxed but a isn't
-  if(a >> 32 != 0xffffffff)
-    return 0xffc00000;
-  #endif
+uint32_t rv_fsgnj_s(uint32_t a, uint32_t b) {
 
   int sign = b & F32_SIGN;
   int r = sign | (a & ~F32_SIGN);
@@ -467,23 +445,7 @@ uint64_t rv_fsgnj_d(uint64_t a, uint64_t b) {
   return r;
 }
 
-uint32_t rv_fsgnjn_s(uint64_t a, uint64_t b) {
-
-  #if FLEN == 64
-  // Both a and b aren't NaN boxed
-  if ((a >> 32 != 0xffffffff) && (b >> 32 != 0xffffffff)) {
-    return 0x7fc00000;
-  }
-  // a is NaN boxed but b isn't
-  if (b >> 32 != 0xffffffff)
-    return a;
-  
-  // b is NaN boxed but a isn't
-  if(a >> 32 != 0xffffffff)
-    return 0xffc00000;
-  #endif
-
-  printf("XLEN=%d, FLEN=%d\n", XLEN, FLEN);
+uint32_t rv_fsgnjn_s(uint32_t a, uint32_t b) {
 
   int sign = ~b & F32_SIGN;
   int r = sign | (a & ~F32_SIGN);
@@ -499,21 +461,7 @@ uint64_t rv_fsgnjn_d(uint64_t a, uint64_t b) {
   return r;
 }
 
-uint32_t rv_fsgnjx_s(uint64_t a, uint64_t b) {
-
-  #if FLEN == 64
-  // Both a and b aren't NaN boxed
-  if ((a >> 32 != 0xffffffff) && (b >> 32 != 0xffffffff)) {
-    return 0x7fc00000;
-  }
-  // a is NaN boxed but b isn't
-  if (b >> 32 != 0xffffffff)
-    return a;
-  
-  // b is NaN boxed but a isn't
-  if(a >> 32 != 0xffffffff)
-    return 0xffc00000;
-  #endif
+uint32_t rv_fsgnjx_s(uint32_t a, uint32_t b) {
 
   int sign1 = a & F32_SIGN;
   int sign2 = b & F32_SIGN;

@@ -7,7 +7,6 @@
 #include <util.h>
 #include <VX_config.h>
 #include <simobject.h>
-#include <xlen.h>
 
 #if XLEN == 32
 #define uintx_t uint32_t
@@ -30,6 +29,7 @@ typedef uintx_t Word;
 typedef intx_t  WordI;
 typedef uintd_t DWord;
 typedef intd_t  DWordI;
+typedef uint64_t FWord;
 
 typedef uintx_t Addr;
 typedef uint32_t Size;
@@ -148,7 +148,7 @@ struct mem_addr_size_t {
   uint32_t size;
 };
 
-inline AddrType get_addr_type(XWord addr, uint32_t size) {
+inline AddrType get_addr_type(Word addr, uint32_t size) {
   __unused (size);
   if (SM_ENABLE) {
     if (addr >= (SMEM_BASE_ADDR - SMEM_SIZE)
