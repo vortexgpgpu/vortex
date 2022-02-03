@@ -13,7 +13,7 @@
 
 using namespace vortex;
 
-Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
+Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
     : SimObject(ctx, "Core")
     , MemRspPort(this)
     , MemReqPort(this)
@@ -400,14 +400,14 @@ WarpMask Core::barrier(int bar_id, int count, int warp_id) {
   return std::move(ret);
 }
 
-Word Core::icache_read(Addr addr, Size size) {
-  Word data;
+uint32_t Core::icache_read(Addr addr, Size size) {
+  uint32_t data;
   mmu_.read(&data, addr, size, 0);
   return data;
 }
 
-XWord Core::dcache_read(Addr addr, Size size) {  
-  XWord data;
+Word Core::dcache_read(Addr addr, Size size) {  
+  Word data;
   auto type = get_addr_type(addr, size);
   if (type == AddrType::Shared) {
     smem_.read(&data, addr & (SMEM_SIZE-1), size);
@@ -417,7 +417,7 @@ XWord Core::dcache_read(Addr addr, Size size) {
   return data;
 }
 
-void Core::dcache_write(Addr addr, XWord data, Size size) {  
+void Core::dcache_write(Addr addr, Word data, Size size) {  
   if (addr >= IO_COUT_ADDR 
    && addr <= (IO_COUT_ADDR + IO_COUT_SIZE - 1)) {
      this->writeToStdOut(addr, data);
@@ -431,11 +431,11 @@ void Core::dcache_write(Addr addr, XWord data, Size size) {
   }
 }
 
-Word Core::tex_read(uint32_t unit, Word u, Word v, Word lod, std::vector<mem_addr_size_t>* mem_addrs) {
+uint32_t Core::tex_read(uint32_t unit, uint32_t u, uint32_t v, uint32_t lod, std::vector<mem_addr_size_t>* mem_addrs) {
   return tex_units_.at(unit).read(u, v, lod, mem_addrs);
 }
 
-void Core::writeToStdOut(Addr addr, Word data) {
+void Core::writeToStdOut(Addr addr, uint32_t data) {
   uint32_t tid = (addr - IO_COUT_ADDR) & (IO_COUT_SIZE-1);
   auto& ss_buf = print_bufs_[tid];
   char c = (char)data;
@@ -446,7 +446,7 @@ void Core::writeToStdOut(Addr addr, Word data) {
   }
 }
 
-Word Core::get_csr(Addr addr, int tid, int wid) {
+uint32_t Core::get_csr(Addr addr, int tid, int wid) {
   switch (addr) {
   case CSR_SATP:
   case CSR_PMPCFG0:
@@ -502,13 +502,13 @@ Word Core::get_csr(Addr addr, int tid, int wid) {
     return perf_stats_.instrs & 0xffffffff;
   case CSR_MINSTRET_H:
     // NumInsts
-    return (Word)(perf_stats_.instrs >> 32);
+    return (uint32_t)(perf_stats_.instrs >> 32);
   case CSR_MCYCLE:
     // NumCycles
-    return (Word)SimPlatform::instance().cycles();
+    return (uint32_t)SimPlatform::instance().cycles();
   case CSR_MCYCLE_H:
     // NumCycles
-    return (Word)(SimPlatform::instance().cycles() >> 32);
+    return (uint32_t)(SimPlatform::instance().cycles() >> 32);
   case CSR_MPM_IBUF_ST:
     return perf_stats_.ibuf_stalls & 0xffffffff; 
   case CSR_MPM_IBUF_ST_H:
@@ -644,7 +644,7 @@ Word Core::get_csr(Addr addr, int tid, int wid) {
   return 0;
 }
 
-void Core::set_csr(Addr addr, Word value, int /*tid*/, int wid) {
+void Core::set_csr(Addr addr, uint32_t value, int /*tid*/, int wid) {
   if (addr == CSR_FFLAGS) {
     fcsrs_.at(wid) = (fcsrs_.at(wid) & ~0x1F) | (value & 0x1F);
   } else if (addr == CSR_FRM) {

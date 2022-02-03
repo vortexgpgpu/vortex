@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <algorithm>
 #include <assert.h>
-#include "xlen.h"
 
 constexpr uint32_t count_leading_zeros(uint32_t value) {
   return value ? __builtin_clz(value) : 32;
@@ -88,9 +87,11 @@ inline uint64_t sext(uint64_t word, uint32_t width) {
   return ((word >> (width - 1)) & 0x1) ? (word | ~mask) : word;
 }
 
-// change:
-// Move this to another file later
-inline uint64_t nan_box(uint32_t word) {
-  uintf_t mask = uintf_t(0xffffffff00000000);
-  return word | mask;
+inline __uint128_t sext(__uint128_t word, uint32_t width) {
+  assert(width > 1);
+  assert(width <= 64);
+  __uint128_t unity = 1;
+  __uint128_t mask = (unity << width) - 1;
+  return ((word >> (width - 1)) & 0x1) ? (word | ~mask) : word;
 }
+

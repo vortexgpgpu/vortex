@@ -72,41 +72,42 @@ public:
   void setSrcFReg(int srcReg) { rsrc_type_[num_rsrcs_] = RegType::Float; rsrc_[num_rsrcs_++] = srcReg;  }
   void setDestVReg(int destReg) { rdest_type_ = RegType::Vector; rdest_ = destReg; }
   void setSrcVReg(int srcReg) { rsrc_type_[num_rsrcs_] = RegType::Vector; rsrc_[num_rsrcs_++] = srcReg;  }
-  void setFunc2(Word func2) { func2_ = func2; }
-  void setFunc3(Word func3) { func3_ = func3; }
-  void setFunc7(Word func7) { func7_ = func7; }
-  void setImm(XWord imm) { has_imm_ = true; imm_ = imm; }
-  void setVlsWidth(Word width) { vlsWidth_ = width; }
-  void setVmop(Word mop) { vMop_ = mop; }
-  void setVnf(Word nf) { vNf_ = nf; }
-  void setVmask(Word mask) { vmask_ = mask; }
-  void setVs3(Word vs) { vs3_ = vs; }
-  void setVlmul(Word lmul) { vlmul_ = 1 << lmul; }
-  void setVsew(Word sew) { vsew_ = 1 << (3+sew); }
-  void setVediv(Word ediv) { vediv_ = 1 << ediv; }
-  void setFunc6(Word func6) { func6_ = func6; }
+  void setFunc2(uint32_t func2) { func2_ = func2; }
+  void setFunc3(uint32_t func3) { func3_ = func3; }
+  void setFunc7(uint32_t func7) { func7_ = func7; }
+  void setImm(Word imm) { has_imm_ = true; imm_ = imm; }
+  void setVlsWidth(uint32_t width) { vlsWidth_ = width; }
+  void setVmop(uint32_t mop) { vMop_ = mop; }
+  void setVnf(uint32_t nf) { vNf_ = nf; }
+  void setVmask(uint32_t mask) { vmask_ = mask; }
+  void setVs3(uint32_t vs) { vs3_ = vs; }
+  void setVlmul(uint32_t lmul) { vlmul_ = 1 << lmul; }
+  void setVsew(uint32_t sew) { vsew_ = 1 << (3+sew); }
+  void setVediv(uint32_t ediv) { vediv_ = 1 << ediv; }
+  void setFunc6(uint32_t func6) { func6_ = func6; }
 
   /* Getters used by encoders. */
+  // uint32_t -> uint32
   Opcode getOpcode() const { return opcode_; }
-  Word getFunc2() const { return func2_; }
-  Word getFunc3() const { return func3_; }
-  Word getFunc6() const { return func6_; }
-  Word getFunc7() const { return func7_; }
+  uint32_t getFunc2() const { return func2_; }
+  uint32_t getFunc3() const { return func3_; }
+  uint32_t getFunc6() const { return func6_; }
+  uint32_t getFunc7() const { return func7_; }
   int getNRSrc() const { return num_rsrcs_; }
   int getRSrc(int i) const { return rsrc_[i]; }
   RegType getRSType(int i) const { return rsrc_type_[i]; }
   int getRDest() const { return rdest_; }  
   RegType getRDType() const { return rdest_type_; }  
   bool hasImm() const { return has_imm_; }
-  XWord getImm() const { return imm_; }
-  Word getVlsWidth() const { return vlsWidth_; }
-  Word getVmop() const { return vMop_; }
-  Word getvNf() const { return vNf_; }
-  Word getVmask() const { return vmask_; }
-  Word getVs3() const { return vs3_; }
-  Word getVlmul() const { return vlmul_; }
-  Word getVsew() const { return vsew_; }
-  Word getVediv() const { return vediv_; }
+  Word getImm() const { return imm_; }
+  uint32_t getVlsWidth() const { return vlsWidth_; }
+  uint32_t getVmop() const { return vMop_; }
+  uint32_t getvNf() const { return vNf_; }
+  uint32_t getVmask() const { return vmask_; }
+  uint32_t getVs3() const { return vs3_; }
+  uint32_t getVlmul() const { return vlmul_; }
+  uint32_t getVsew() const { return vsew_; }
+  uint32_t getVediv() const { return vediv_; }
 
 private:
 
@@ -118,24 +119,24 @@ private:
   int num_rsrcs_;
   bool has_imm_;
   RegType rdest_type_;
-  XWord imm_;
+  Word imm_;
   RegType rsrc_type_[MAX_REG_SOURCES];
   int rsrc_[MAX_REG_SOURCES];  
   int rdest_;
-  Word func2_;
-  Word func3_;
-  Word func6_;
+  uint32_t func2_;
+  uint32_t func3_;
+  uint32_t func6_;
 
   // Vector
-  Word vmask_;
-  Word vlsWidth_;
-  Word vMop_;
-  Word vNf_;
-  Word vs3_;
-  Word vlmul_;
-  Word vsew_;
-  Word vediv_;
-  Word func7_;  
+  uint32_t vmask_;
+  uint32_t vlsWidth_;
+  uint32_t vMop_;
+  uint32_t vNf_;
+  uint32_t vs3_;
+  uint32_t vlmul_;
+  uint32_t vsew_;
+  uint32_t vediv_;
+  uint32_t func7_;  
 
   friend std::ostream &operator<<(std::ostream &, const Instr&);
 };

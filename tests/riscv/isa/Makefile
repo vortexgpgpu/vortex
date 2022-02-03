@@ -4,15 +4,54 @@ ALL_TESTS_64 := $(wildcard rv64*.hex)
 
 
 D_TESTS_32 := $(wildcard rv32ud-p-*.hex)
-V_TESTS := $(wildcard *-v-*.hex)
 
-EXCLUDED_TESTS_32 := $(V_TESTS) $(D_TESTS_32) rv32si-p-scall.hex rv32si-p-sbreak.hex rv32mi-p-breakpoint.hex rv32ua-p-amomax_w.hex rv32ua-p-amoxor_w.hex rv32ua-p-amoor_w.hex rv32mi-p-ma_addr.hex rv32mi-p-mcsr.hex rv32ua-p-amoswap_w.hex rv32mi-p-ma_fetch.hex rv32mi-p-csr.hex rv32ua-p-amoadd_w.hex rv32si-p-dirty.hex rv32ui-p-fence_i.hex rv32si-p-csr.hex rv32mi-p-shamt.hex rv32ua-p-amomin_w.hex rv32ua-p-lrsc.hex rv32si-p-wfi.hex rv32ua-p-amomaxu_w.hex rv32si-p-ma_fetch.hex rv32mi-p-illegal.hex rv32uc-p-rvc.hex rv32mi-p-sbreak.hex rv32ua-p-amominu_w.hex rv32ua-p-amoand_w.hex
-EXCLUDED_TESTS_64 := rv64ud-p-ldst.hex rv64ud-p-recoding.hex
+EXCLUDED_TESTS_32 := $(V_TESTS) $(D_TESTS_32) rv32uf-p-recoding.hex rv32uf-p-fcvt.hex
+EXCLUDED_TESTS_64 := rv64ud-p-recoding.hex
 
 TESTS_32 := $(filter-out $(EXCLUDED_TESTS_32), $(ALL_TESTS_32))
 TESTS_64 := $(filter-out $(EXCLUDED_TESTS_64), $(ALL_TESTS_64))
 
+### To be deleted later
+32I := $(wildcard rv32ui-p-*.hex)
+32M := $(wildcard rv32um-p-*.hex)
+32F := $(wildcard rv32uf-p-*.hex)
+32D := $(wildcard rv32ud-p-*.hex)
+
+64I := $(wildcard rv64ui-p-*.hex)
+64M := $(wildcard rv64um-p-*.hex)
+64F := $(wildcard rv64uf-p-*.hex)
+64D := $(filter-out rv64ud-p-recoding.hex rv64ud-p-ldst.hex, $(wildcard rv64ud-p-*.hex))
+###
+
 all:
+
+### To be deleted later
+32i:
+	$(foreach test, $(32I), ../../../sim/simx/simx -r -a rv32i -c 1 -i $(test) || exit;)
+
+32m:
+	$(foreach test, $(32M), ../../../sim/simx/simx -r -a rv32im -c 1 -i $(test) || exit;)
+
+32f:
+	$(foreach test, $(32F), ../../../sim/simx/simx -r -a rv32imf -c 1 -i $(test) || exit;)
+
+32d:
+	$(foreach test, $(32D), ../../../sim/simx/simx -r -a rv32imfd -c 1 -i $(test) || exit;)
+
+64i:
+	$(foreach test, $(64I), ../../../sim/simx/simx -r -a rv64i -c 1 -i $(test) || exit;)
+
+64m:
+	$(foreach test, $(64M), ../../../sim/simx/simx -r -a rv64im -c 1 -i $(test) || exit;)
+
+64f:
+	$(foreach test, $(64F), ../../../sim/simx/simx -r -a rv64imf -c 1 -i $(test) || exit;)
+
+64d:
+	$(foreach test, $(64D), ../../../sim/simx/simx -r -a rv64imfd -c 1 -i $(test) || exit;)
+###
+
+run-simx: run-simx-32imf
 
 run-simx-32imf:	
 	$(foreach test, $(TESTS_32), ../../../sim/simx/simx -r -a rv32imf -c 1 -i $(test) || exit;)
