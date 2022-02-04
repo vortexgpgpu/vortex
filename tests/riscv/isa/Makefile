@@ -5,7 +5,7 @@ ALL_TESTS_64 := $(wildcard rv64*.hex)
 
 D_TESTS_32 := $(wildcard rv32ud-p-*.hex)
 
-EXCLUDED_TESTS_32 := $(V_TESTS) $(D_TESTS_32) rv32uf-p-recoding.hex rv32uf-p-fcvt.hex
+EXCLUDED_TESTS_32 := $(V_TESTS) $(D_TESTS_32)
 EXCLUDED_TESTS_64 := rv64ud-p-recoding.hex
 
 TESTS_32 := $(filter-out $(EXCLUDED_TESTS_32), $(ALL_TESTS_32))
