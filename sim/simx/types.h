@@ -16,20 +16,16 @@ typedef uint32_t Word;
 typedef int32_t  WordI;
 typedef uint64_t DWord;
 typedef int64_t  DWordI;
-typedef uint32_t Addr;
-typedef uint32_t Size;
-typedef uint32_t FWord;
 #elif XLEN == 64
 typedef uint64_t Word;
 typedef int64_t  WordI;
 typedef __uint128_t DWord;
 typedef __int128_t DWordI;
-typedef uint64_t Addr;
-typedef uint64_t Size;
-typedef uint64_t FWord;
 #else
 #error unsupported XLEN
 #endif
+
+typedef uint64_t FWord;
 
 typedef std::bitset<32> RegMask;
 typedef std::bitset<32> ThreadMask;
@@ -44,12 +40,12 @@ enum class RegType {
   Vector
 };
 
-inline std::ostream &operator<<(std::ostream &os, const RegType& type) {
-  switch (type) {
+inline std::ostream &operator<<(std::ostream &os, const RegType& clss) {
+  switch (clss) {
   case RegType::None: break;
-  case RegType::Integer: os << "r"; break;
-  case RegType::Float:   os << "fr"; break;
-  case RegType::Vector:  os << "vr"; break;
+  case RegType::Integer: os << "x"; break;  
+  case RegType::Float:   os << "f"; break;
+  case RegType::Vector:  os << "v"; break;
   }
   return os;
 }

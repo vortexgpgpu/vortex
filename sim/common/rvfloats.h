@@ -19,10 +19,11 @@ uint32_t rv_fsqrt_s(uint32_t a, uint32_t frm, uint32_t* fflags);
 
 uint32_t rv_ftoi_s(uint32_t a, uint32_t frm, uint32_t* fflags);
 uint32_t rv_ftou_s(uint32_t a, uint32_t frm, uint32_t* fflags);
-uint64_t rv_ftol_s(uint32_t a, uint32_t frm, uint32_t* fflags);
-uint64_t rv_ftolu_s(uint32_t a, uint32_t frm, uint32_t* fflags);
 uint32_t rv_itof_s(uint32_t a, uint32_t frm, uint32_t* fflags);
 uint32_t rv_utof_s(uint32_t a, uint32_t frm, uint32_t* fflags);
+
+uint64_t rv_ftol_s(uint32_t a, uint32_t frm, uint32_t* fflags);
+uint64_t rv_ftolu_s(uint32_t a, uint32_t frm, uint32_t* fflags);
 uint32_t rv_ltof_s(uint64_t a, uint32_t frm, uint32_t* fflags);
 uint32_t rv_lutof_s(uint64_t a, uint32_t frm, uint32_t* fflags);
 

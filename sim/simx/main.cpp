@@ -26,14 +26,14 @@ int main(int argc, char **argv) {
   bool showStats(false);
   bool riscv_test(false);
 
-  /* Read the command line arguments. */
-  CommandLineArgFlag fh("-h", "--help", "", showHelp);
-  CommandLineArgSetter<std::string> fi("-i", "--image", "", imgFileName);
-  CommandLineArgSetter<int> fc("-c", "--cores", "", num_cores);
-  CommandLineArgSetter<int> fw("-w", "--warps", "", num_warps);
-  CommandLineArgSetter<int> ft("-t", "--threads", "", num_threads);
-  CommandLineArgFlag fr("-r", "--riscv", "", riscv_test);
-  CommandLineArgFlag fs("-s", "--stats", "", showStats);
+  // parse the command line arguments
+  CommandLineArgFlag fh("-h", "--help", "show command line options", showHelp);
+  CommandLineArgSetter<std::string> fi("-i", "--image", "program binary", imgFileName);
+  CommandLineArgSetter<int> fc("-c", "--cores", "number of cores", num_cores);
+  CommandLineArgSetter<int> fw("-w", "--warps", "number  of warps", num_warps);
+  CommandLineArgSetter<int> ft("-t", "--threads", "number of threads", num_threads);
+  CommandLineArgFlag fr("-r", "--riscv", "enable riscv tests", riscv_test);
+  CommandLineArgFlag fs("-s", "--stats", "show stats", showStats);
 
   CommandLineArg::readArgs(argc - 1, argv + 1);
 
