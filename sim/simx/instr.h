@@ -33,8 +33,8 @@ enum Opcode {
   GPGPU     = 0x6b,
   GPU       = 0x5b,
   // RV64 Standard Extensions
-  R_INST_64 = 0x3b,
-  I_INST_64 = 0x1b,
+  R_INST_W  = 0x3b,
+  I_INST_W  = 0x1b,
 };
 
 enum InstType { 
@@ -64,18 +64,15 @@ public:
     }
   }
 
-  /* Setters used to "craft" the instruction. */
   void setOpcode(Opcode opcode)  { opcode_ = opcode; }
-  void setDestReg(uint32_t destReg) { rdest_type_ = RegType::Integer; rdest_ = destReg; }
-  void setSrcReg(uint32_t srcReg) { rsrc_type_[num_rsrcs_] = RegType::Integer; rsrc_[num_rsrcs_++] = srcReg; }
-  void setDestFReg(uint32_t destReg) { rdest_type_ = RegType::Float; rdest_ = destReg; }
-  void setSrcFReg(uint32_t srcReg) { rsrc_type_[num_rsrcs_] = RegType::Float; rsrc_[num_rsrcs_++] = srcReg;  }
+  void setDestReg(uint32_t destReg, RegType type) { rdest_type_ = type; rdest_ = destReg; }
+  void setSrcReg(uint32_t srcReg, RegType type) { rsrc_type_[num_rsrcs_] = type; rsrc_[num_rsrcs_++] = srcReg; }
   void setDestVReg(uint32_t destReg) { rdest_type_ = RegType::Vector; rdest_ = destReg; }
   void setSrcVReg(uint32_t srcReg) { rsrc_type_[num_rsrcs_] = RegType::Vector; rsrc_[num_rsrcs_++] = srcReg;  }
   void setFunc2(uint32_t func2) { func2_ = func2; }
   void setFunc3(uint32_t func3) { func3_ = func3; }
   void setFunc7(uint32_t func7) { func7_ = func7; }
-  void setImm(Word imm) { has_imm_ = true; imm_ = imm; }
+  void setImm(uint32_t imm) { has_imm_ = true; imm_ = imm; }
   void setVlsWidth(uint32_t width) { vlsWidth_ = width; }
   void setVmop(uint32_t mop) { vMop_ = mop; }
   void setVnf(uint32_t nf) { vNf_ = nf; }
@@ -86,8 +83,6 @@ public:
   void setVediv(uint32_t ediv) { vediv_ = 1 << ediv; }
   void setFunc6(uint32_t func6) { func6_ = func6; }
 
-  /* Getters used by encoders. */
-  // uint32_t -> uint32
   Opcode getOpcode() const { return opcode_; }
   uint32_t getFunc2() const { return func2_; }
   uint32_t getFunc3() const { return func3_; }
@@ -99,7 +94,7 @@ public:
   uint32_t getRDest() const { return rdest_; }  
   RegType getRDType() const { return rdest_type_; }  
   bool hasImm() const { return has_imm_; }
-  Word getImm() const { return imm_; }
+  uint32_t getImm() const { return imm_; }
   uint32_t getVlsWidth() const { return vlsWidth_; }
   uint32_t getVmop() const { return vMop_; }
   uint32_t getvNf() const { return vNf_; }
@@ -119,7 +114,7 @@ private:
   uint32_t num_rsrcs_;
   bool has_imm_;
   RegType rdest_type_;
-  Word imm_;
+  uint32_t imm_;
   RegType rsrc_type_[MAX_REG_SOURCES];
   uint32_t rsrc_[MAX_REG_SOURCES];  
   uint32_t rdest_;

@@ -99,19 +99,19 @@ public:
     return warps_.at(0)->getIRegValue(reg);
   }
 
-  uint32_t get_csr(Addr addr, uint32_t tid, uint32_t wid);
+  uint32_t get_csr(uint32_t addr, uint32_t tid, uint32_t wid);
   
-  void set_csr(Addr addr, uint32_t value, uint32_t tid, uint32_t wid);
+  void set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid);
 
   WarpMask wspawn(uint32_t num_warps, uint32_t nextPC);
   
   WarpMask barrier(uint32_t bar_id, uint32_t count, uint32_t warp_id);
 
-  uint32_t icache_read(Addr, Size);
+  void icache_read(void* data, uint64_t addr, uint32_t size);
 
-  Word dcache_read(Addr, Size);
+  void dcache_read(void* data, uint64_t addr, uint32_t size);
 
-  void dcache_write(Addr, Word, Size);
+  void dcache_write(const void* data, uint64_t addr, uint32_t size);
 
   uint32_t tex_read(uint32_t unit, uint32_t lod, uint32_t u, uint32_t v, std::vector<mem_addr_size_t>* mem_addrs);
 
@@ -129,7 +129,7 @@ private:
   void execute();
   void commit();
   
-  void writeToStdOut(Addr addr, uint32_t data);
+  void writeToStdOut(const void* data, uint64_t addr, uint32_t size);
 
   void cout_flush();
 

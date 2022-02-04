@@ -400,33 +400,31 @@ WarpMask Core::barrier(uint32_t bar_id, uint32_t count, uint32_t warp_id) {
   return std::move(ret);
 }
 
-uint32_t Core::icache_read(Addr addr, Size size) {
-  uint32_t data;
-  mmu_.read(&data, addr, size, 0);
-  return data;
+void Core::icache_read(void *data, uint64_t addr, uint32_t size) {
+  mmu_.read(data, addr, size, 0);
 }
 
-Word Core::dcache_read(Addr addr, Size size) {  
-  Word data;
+void Core::dcache_read(void *data, uint64_t addr, uint32_t size) {  
   auto type = get_addr_type(addr, size);
   if (type == AddrType::Shared) {
-    smem_.read(&data, addr & (SMEM_SIZE-1), size);
+    addr &= (SMEM_SIZE-1);
+    smem_.read(data, addr, size);
   } else {  
-    mmu_.read(&data, addr, size, 0);
+    mmu_.read(data, addr, size, 0);
   }
-  return data;
 }
 
-void Core::dcache_write(Addr addr, Word data, Size size) {  
+void Core::dcache_write(const void* data, uint64_t addr, uint32_t size) {  
   if (addr >= IO_COUT_ADDR 
    && addr <= (IO_COUT_ADDR + IO_COUT_SIZE - 1)) {
-     this->writeToStdOut(addr, data);
+     this->writeToStdOut(data, addr, size);
   } else {
     auto type = get_addr_type(addr, size);
     if (type == AddrType::Shared) {
-      smem_.write(&data, addr & (SMEM_SIZE-1), size);
+      addr &= (SMEM_SIZE-1);
+      smem_.write(data, addr, size);
     } else {
-      mmu_.write(&data, addr, size, 0);
+      mmu_.write(data, addr, size, 0);
     }
   }
 }
@@ -435,10 +433,12 @@ uint32_t Core::tex_read(uint32_t unit, uint32_t u, uint32_t v, uint32_t lod, std
   return tex_units_.at(unit).read(u, v, lod, mem_addrs);
 }
 
-void Core::writeToStdOut(Addr addr, uint32_t data) {
+void Core::writeToStdOut(const void* data, uint64_t addr, uint32_t size) {
+  if (size != 1)
+    std::abort();
   uint32_t tid = (addr - IO_COUT_ADDR) & (IO_COUT_SIZE-1);
   auto& ss_buf = print_bufs_[tid];
-  char c = (char)data;
+  char c = *(char*)data;
   ss_buf << c;
   if (c == '\n') {
     std::cout << std::dec << "#" << tid << ": " << ss_buf.str() << std::flush;
@@ -446,7 +446,7 @@ void Core::writeToStdOut(Addr addr, uint32_t data) {
   }
 }
 
-uint32_t Core::get_csr(Addr addr, uint32_t tid, uint32_t wid) {
+uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   switch (addr) {
   case CSR_SATP:
   case CSR_PMPCFG0:
@@ -644,7 +644,7 @@ uint32_t Core::get_csr(Addr addr, uint32_t tid, uint32_t wid) {
   return 0;
 }
 
-void Core::set_csr(Addr addr, uint32_t value, uint32_t /*tid*/, uint32_t wid) {
+void Core::set_csr(uint32_t addr, uint32_t value, uint32_t /*tid*/, uint32_t wid) {
   if (addr == CSR_FFLAGS) {
     fcsrs_.at(wid) = (fcsrs_.at(wid) & ~0x1F) | (value & 0x1F);
   } else if (addr == CSR_FRM) {
