@@ -38,6 +38,7 @@ uint32_t rv_feq_s(uint32_t a, uint32_t b, uint32_t* fflags);
 uint32_t rv_fmin_s(uint32_t a, uint32_t b, uint32_t* fflags);
 uint32_t rv_fmax_s(uint32_t a, uint32_t b, uint32_t* fflags);
 
+///////////////////////////////////////////////////////////////////////////////
 
 uint64_t rv_fadd_d(uint64_t a, uint64_t b, uint32_t frm, uint32_t* fflags);
 uint64_t rv_fsub_d(uint64_t a, uint64_t b, uint32_t frm, uint32_t* fflags);
@@ -59,7 +60,7 @@ uint64_t rv_utof_d(uint64_t a, uint32_t frm, uint32_t* fflags);
 uint64_t rv_ltof_d(uint64_t a, uint32_t frm, uint32_t* fflags);
 uint64_t rv_lutof_d(uint64_t a, uint32_t frm, uint32_t* fflags);
 
-uint64_t rv_fclss_d(uint64_t a);
+uint32_t rv_fclss_d(uint64_t a);
 uint64_t rv_fsgnj_d(uint64_t a, uint64_t b);
 uint64_t rv_fsgnjn_d(uint64_t a, uint64_t b);
 uint64_t rv_fsgnjx_d(uint64_t a, uint64_t b);

@@ -32,10 +32,10 @@ struct DomStackEntry {
 };
 
 struct vtype {
-  int vill;
-  int vediv;
-  int vsew;
-  int vlmul;
+  uint32_t vill;
+  uint32_t vediv;
+  uint32_t vsew;
+  uint32_t vlmul;
 };
 
 class Warp {
@@ -85,7 +85,7 @@ public:
     return 0;
   }
 
-  uint32_t getIRegValue(int reg) const {
+  uint32_t getIRegValue(uint32_t reg) const {
     return ireg_file_.at(0).at(reg);
   }
 
@@ -108,7 +108,7 @@ private:
   std::stack<DomStackEntry> dom_stack_;
 
   struct vtype vtype_;
-  int vl_;
+  uint32_t vl_;
 };
 
 }

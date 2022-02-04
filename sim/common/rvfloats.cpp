@@ -86,7 +86,7 @@ uint64_t rv_fmadd_d(uint64_t a, uint64_t b, uint64_t c, uint32_t frm, uint32_t* 
 
 uint32_t rv_fmsub_s(uint32_t a, uint32_t b, uint32_t c, uint32_t frm, uint32_t* fflags) {
   softfloat_roundingMode = frm;
-  int c_neg = c ^ F32_SIGN;
+  auto c_neg = c ^ F32_SIGN;
   auto r = f32_mulAdd(to_float32_t(a), to_float32_t(b), to_float32_t(c_neg));
   if (fflags) { *fflags = get_fflags(); }
   return from_float32_t(r);
@@ -94,7 +94,7 @@ uint32_t rv_fmsub_s(uint32_t a, uint32_t b, uint32_t c, uint32_t frm, uint32_t* 
 
 uint64_t rv_fmsub_d(uint64_t a, uint64_t b, uint64_t c, uint32_t frm, uint32_t* fflags) {
   softfloat_roundingMode = frm;
-  long c_neg = c ^ F64_SIGN;
+  auto c_neg = c ^ F64_SIGN;
   auto r = f64_mulAdd(to_float64_t(a), to_float64_t(b), to_float64_t(c_neg));
   if (fflags) { *fflags = get_fflags(); }
   return from_float64_t(r);
@@ -102,8 +102,8 @@ uint64_t rv_fmsub_d(uint64_t a, uint64_t b, uint64_t c, uint32_t frm, uint32_t* 
 
 uint32_t rv_fnmadd_s(uint32_t a, uint32_t b, uint32_t c, uint32_t frm, uint32_t* fflags) {
   softfloat_roundingMode = frm;
-  int a_neg = a ^ F32_SIGN;
-  int c_neg = c ^ F32_SIGN;
+  auto a_neg = a ^ F32_SIGN;
+  auto c_neg = c ^ F32_SIGN;
   auto r = f32_mulAdd(to_float32_t(a_neg), to_float32_t(b), to_float32_t(c_neg));
   if (fflags) { *fflags = get_fflags(); }
   return from_float32_t(r);
@@ -111,8 +111,8 @@ uint32_t rv_fnmadd_s(uint32_t a, uint32_t b, uint32_t c, uint32_t frm, uint32_t*
 
 uint64_t rv_fnmadd_d(uint64_t a, uint64_t b, uint64_t c, uint32_t frm, uint32_t* fflags) {
   softfloat_roundingMode = frm;
-  long a_neg = a ^ F64_SIGN;
-  long c_neg = c ^ F64_SIGN;
+  auto a_neg = a ^ F64_SIGN;
+  auto c_neg = c ^ F64_SIGN;
   auto r = f64_mulAdd(to_float64_t(a_neg), to_float64_t(b), to_float64_t(c_neg));
   if (fflags) { *fflags = get_fflags(); }
   return from_float64_t(r);
@@ -120,7 +120,7 @@ uint64_t rv_fnmadd_d(uint64_t a, uint64_t b, uint64_t c, uint32_t frm, uint32_t*
 
 uint32_t rv_fnmsub_s(uint32_t a, uint32_t b, uint32_t c, uint32_t frm, uint32_t* fflags) {
   softfloat_roundingMode = frm;
-  int a_neg = a ^ F32_SIGN;
+  auto a_neg = a ^ F32_SIGN;
   auto r = f32_mulAdd(to_float32_t(a_neg), to_float32_t(b), to_float32_t(c));
   if (fflags) { *fflags = get_fflags(); }
   return from_float32_t(r);
@@ -128,7 +128,7 @@ uint32_t rv_fnmsub_s(uint32_t a, uint32_t b, uint32_t c, uint32_t frm, uint32_t*
 
 uint64_t rv_fnmsub_d(uint64_t a, uint64_t b, uint64_t c, uint32_t frm, uint32_t* fflags) {
   softfloat_roundingMode = frm;
-  long a_neg = a ^ F64_SIGN;
+  auto a_neg = a ^ F64_SIGN;
   auto r = f64_mulAdd(to_float64_t(a_neg), to_float64_t(b), to_float64_t(c));
   if (fflags) { *fflags = get_fflags(); }
   return from_float64_t(r);
@@ -312,7 +312,7 @@ uint64_t rv_feq_d(uint64_t a, uint64_t b, uint32_t* fflags) {
 }
 
 uint32_t rv_fmin_s(uint32_t a, uint32_t b, uint32_t* fflags) {  
-  long r;
+  uint32_t r;
   if (isNaNF32UI(a) && isNaNF32UI(b)) {
     r = defaultNaNF32UI;   
   } else {
@@ -330,7 +330,7 @@ uint32_t rv_fmin_s(uint32_t a, uint32_t b, uint32_t* fflags) {
 }
 
 uint64_t rv_fmin_d(uint64_t a, uint64_t b, uint32_t* fflags) {  
-  long r;
+  uint64_t r;
   if (isNaNF64UI(a) && isNaNF64UI(b)) {
     r = defaultNaNF64UI;   
   } else {
@@ -348,7 +348,7 @@ uint64_t rv_fmin_d(uint64_t a, uint64_t b, uint32_t* fflags) {
 }
 
 uint32_t rv_fmax_s(uint32_t a, uint32_t b, uint32_t* fflags) {
-  long r;
+  uint32_t r;
   if (isNaNF32UI(a) && isNaNF32UI(b)) {
     r = defaultNaNF32UI;   
   } else {
@@ -366,7 +366,7 @@ uint32_t rv_fmax_s(uint32_t a, uint32_t b, uint32_t* fflags) {
 }
 
 uint64_t rv_fmax_d(uint64_t a, uint64_t b, uint32_t* fflags) {
-  long r;
+  uint64_t r;
   if (isNaNF64UI(a) && isNaNF64UI(b)) {
     r = defaultNaNF64UI;   
   } else {
@@ -391,7 +391,7 @@ uint32_t rv_fclss_s(uint32_t a) {
   bool isNaN         = isNaNF32UI(a);
   bool isSNaN        = softfloat_isSigNaNF32UI(a);
 
-  int r =
+  uint32_t r =
       (  sign && infOrNaN && fracZero )        << 0 |
       (  sign && !infOrNaN && !subnormOrZero ) << 1 |
       (  sign && subnormOrZero && !fracZero )  << 2 |
@@ -406,7 +406,7 @@ uint32_t rv_fclss_s(uint32_t a) {
   return r;
 }
 
-uint64_t rv_fclss_d(uint64_t a) {
+uint32_t rv_fclss_d(uint64_t a) {
   auto infOrNaN      = (0x7ff == expF64UI(a));
   auto subnormOrZero = (0 == expF64UI(a));
   bool sign          = signF64UI(a);
@@ -414,7 +414,7 @@ uint64_t rv_fclss_d(uint64_t a) {
   bool isNaN         = isNaNF64UI(a);
   bool isSNaN        = softfloat_isSigNaNF64UI(a);
 
-  int r =
+  uint32_t r =
       (  sign && infOrNaN && fracZero )        << 0 |
       (  sign && !infOrNaN && !subnormOrZero ) << 1 |
       (  sign && subnormOrZero && !fracZero )  << 2 |
@@ -430,63 +430,49 @@ uint64_t rv_fclss_d(uint64_t a) {
 }
 
 uint32_t rv_fsgnj_s(uint32_t a, uint32_t b) {
-
-  int sign = b & F32_SIGN;
-  int r = sign | (a & ~F32_SIGN);
-
+  auto sign = b & F32_SIGN;
+  auto r = sign | (a & ~F32_SIGN);
   return r;
 }
 
-uint64_t rv_fsgnj_d(uint64_t a, uint64_t b) {
-  
-  long sign = b & F64_SIGN;
-  long r = sign | (a & ~F64_SIGN);
-
+uint64_t rv_fsgnj_d(uint64_t a, uint64_t b) {  
+  auto sign = b & F64_SIGN;
+  auto r = sign | (a & ~F64_SIGN);
   return r;
 }
 
 uint32_t rv_fsgnjn_s(uint32_t a, uint32_t b) {
-
-  int sign = ~b & F32_SIGN;
-  int r = sign | (a & ~F32_SIGN);
-
+  auto sign = ~b & F32_SIGN;
+  auto r = sign | (a & ~F32_SIGN);
   return r;
 }
 
-uint64_t rv_fsgnjn_d(uint64_t a, uint64_t b) {
-  
-  long sign = ~b & F64_SIGN;
-  long r = sign | (a & ~F64_SIGN);
-
+uint64_t rv_fsgnjn_d(uint64_t a, uint64_t b) {  
+  auto sign = ~b & F64_SIGN;
+  auto r = sign | (a & ~F64_SIGN);
   return r;
 }
 
 uint32_t rv_fsgnjx_s(uint32_t a, uint32_t b) {
-
-  int sign1 = a & F32_SIGN;
-  int sign2 = b & F32_SIGN;
-  int r = (sign1 ^ sign2) | (a & ~F32_SIGN);
-
+  auto sign1 = a & F32_SIGN;
+  auto sign2 = b & F32_SIGN;
+  auto r = (sign1 ^ sign2) | (a & ~F32_SIGN);
   return r;
 }
 
-uint64_t rv_fsgnjx_d(uint64_t a, uint64_t b) {
-  
-  long sign1 = a & F64_SIGN;
-  long sign2 = b & F64_SIGN;
-  long r = (sign1 ^ sign2) | (a & ~F64_SIGN);
-
+uint64_t rv_fsgnjx_d(uint64_t a, uint64_t b) {  
+  auto sign1 = a & F64_SIGN;
+  auto sign2 = b & F64_SIGN;
+  auto r = (sign1 ^ sign2) | (a & ~F64_SIGN);
   return r;
 }
 
 uint32_t rv_dtof(uint64_t a) {
-
   auto r = f64_to_f32(to_float64_t(a));
   return from_float32_t(r);
 }
 
 uint64_t rv_ftod(uint32_t a) {
-
   auto r = f32_to_f64(to_float32_t(a));
   return from_float64_t(r);
 }

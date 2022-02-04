@@ -351,7 +351,7 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
     if (instr.getRDType() != RegType::None) {
       os << instr.getRDType() << std::dec << instr.getRDest() << " <- ";
     }
-    int i = 0;
+    uint32_t i = 0;
     for (; i < instr.getNRSrc(); ++i) {    
       if (i) os << ", ";
       os << instr.getRSType(i) << std::dec << instr.getRSrc(i);
@@ -552,7 +552,7 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
     uint32_t bit_11 = (unordered >> 8) & 0x1;
     uint32_t bits_10_1 = (unordered >> 9) & 0x3ff;
     uint32_t bit_20 = (unordered >> 19) & 0x1;
-    Word imm = (Word) 0 | (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
+    Word imm = (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
     if (bit_20) {
       imm |= ~j_imm_mask_;
     }

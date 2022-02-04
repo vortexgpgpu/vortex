@@ -42,7 +42,7 @@ struct params_t {
 
         assert(config.ports_per_bank <= this->words_per_block);
                 
-        // uint32_t select
+        // Word select
         this->word_select_addr_start = config.W;
         this->word_select_addr_end = (this->word_select_addr_start+offset_bits-1);
 
@@ -488,11 +488,11 @@ private:
             } else {        
                 bool hit = false;
                 bool found_free_block = false;            
-                int hit_block_id = 0;
-                int repl_block_id = 0;            
+                uint32_t hit_block_id = 0;
+                uint32_t repl_block_id = 0;            
                 uint32_t max_cnt = 0;
                 
-                for (int i = 0, n = set.blocks.size(); i < n; ++i) {
+                for (uint32_t i = 0, n = set.blocks.size(); i < n; ++i) {
                     auto& block = set.blocks.at(i);
                     if (block.valid) {
                         if (block.tag == pipeline_req.tag) {

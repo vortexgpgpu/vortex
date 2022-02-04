@@ -59,19 +59,19 @@ public:
     , rdest_(0)
     , func3_(0)
     , func7_(0) {
-    for (int i = 0; i < MAX_REG_SOURCES; ++i) {
+    for (uint32_t i = 0; i < MAX_REG_SOURCES; ++i) {
        rsrc_type_[i] = RegType::None;
     }
   }
 
   /* Setters used to "craft" the instruction. */
   void setOpcode(Opcode opcode)  { opcode_ = opcode; }
-  void setDestReg(int destReg) { rdest_type_ = RegType::Integer; rdest_ = destReg; }
-  void setSrcReg(int srcReg) { rsrc_type_[num_rsrcs_] = RegType::Integer; rsrc_[num_rsrcs_++] = srcReg; }
-  void setDestFReg(int destReg) { rdest_type_ = RegType::Float; rdest_ = destReg; }
-  void setSrcFReg(int srcReg) { rsrc_type_[num_rsrcs_] = RegType::Float; rsrc_[num_rsrcs_++] = srcReg;  }
-  void setDestVReg(int destReg) { rdest_type_ = RegType::Vector; rdest_ = destReg; }
-  void setSrcVReg(int srcReg) { rsrc_type_[num_rsrcs_] = RegType::Vector; rsrc_[num_rsrcs_++] = srcReg;  }
+  void setDestReg(uint32_t destReg) { rdest_type_ = RegType::Integer; rdest_ = destReg; }
+  void setSrcReg(uint32_t srcReg) { rsrc_type_[num_rsrcs_] = RegType::Integer; rsrc_[num_rsrcs_++] = srcReg; }
+  void setDestFReg(uint32_t destReg) { rdest_type_ = RegType::Float; rdest_ = destReg; }
+  void setSrcFReg(uint32_t srcReg) { rsrc_type_[num_rsrcs_] = RegType::Float; rsrc_[num_rsrcs_++] = srcReg;  }
+  void setDestVReg(uint32_t destReg) { rdest_type_ = RegType::Vector; rdest_ = destReg; }
+  void setSrcVReg(uint32_t srcReg) { rsrc_type_[num_rsrcs_] = RegType::Vector; rsrc_[num_rsrcs_++] = srcReg;  }
   void setFunc2(uint32_t func2) { func2_ = func2; }
   void setFunc3(uint32_t func3) { func3_ = func3; }
   void setFunc7(uint32_t func7) { func7_ = func7; }
@@ -93,10 +93,10 @@ public:
   uint32_t getFunc3() const { return func3_; }
   uint32_t getFunc6() const { return func6_; }
   uint32_t getFunc7() const { return func7_; }
-  int getNRSrc() const { return num_rsrcs_; }
-  int getRSrc(int i) const { return rsrc_[i]; }
-  RegType getRSType(int i) const { return rsrc_type_[i]; }
-  int getRDest() const { return rdest_; }  
+  uint32_t getNRSrc() const { return num_rsrcs_; }
+  uint32_t getRSrc(uint32_t i) const { return rsrc_[i]; }
+  RegType getRSType(uint32_t i) const { return rsrc_type_[i]; }
+  uint32_t getRDest() const { return rdest_; }  
   RegType getRDType() const { return rdest_type_; }  
   bool hasImm() const { return has_imm_; }
   Word getImm() const { return imm_; }
@@ -116,13 +116,13 @@ private:
   };
 
   Opcode opcode_;
-  int num_rsrcs_;
+  uint32_t num_rsrcs_;
   bool has_imm_;
   RegType rdest_type_;
   Word imm_;
   RegType rsrc_type_[MAX_REG_SOURCES];
-  int rsrc_[MAX_REG_SOURCES];  
-  int rdest_;
+  uint32_t rsrc_[MAX_REG_SOURCES];  
+  uint32_t rdest_;
   uint32_t func2_;
   uint32_t func3_;
   uint32_t func6_;

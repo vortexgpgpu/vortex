@@ -276,7 +276,7 @@ void RAM::loadHexImage(const char* filename) {
   ifs.seekg(0, ifs.beg);
   ifs.read(content.data(), size);
 
-  int offset = 0;
+  uint32_t offset = 0;
   char *line = content.data();
 
   this->clear();
