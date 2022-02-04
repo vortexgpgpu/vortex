@@ -36,11 +36,6 @@ ifdef XLEN
 	CXXFLAGS += -DXLEN=$(XLEN)
 endif
 
-# FLEN parameterization
-ifdef FLEN
-	CXXFLAGS += -DFLEN=$(FLEN)
-endif
-
 PROJECT = simx
 
 all: $(DESTDIR)/$(PROJECT)

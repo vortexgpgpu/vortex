@@ -99,13 +99,13 @@ public:
     return warps_.at(0)->getIRegValue(reg);
   }
 
-  uint32_t get_csr(Addr addr, int tid, int wid);
+  uint32_t get_csr(Addr addr, uint32_t tid, uint32_t wid);
   
-  void set_csr(Addr addr, uint32_t value, int tid, int wid);
+  void set_csr(Addr addr, uint32_t value, uint32_t tid, uint32_t wid);
 
-  WarpMask wspawn(int num_warps, int nextPC);
+  WarpMask wspawn(uint32_t num_warps, uint32_t nextPC);
   
-  WarpMask barrier(int bar_id, int count, int warp_id);
+  WarpMask barrier(uint32_t bar_id, uint32_t count, uint32_t warp_id);
 
   uint32_t icache_read(Addr, Size);
 

@@ -8,31 +8,28 @@
 #include <VX_config.h>
 #include <simobject.h>
 
-#if XLEN == 32
-#define uintx_t uint32_t
-#define intx_t int32_t
-#define uintd_t uint64_t
-#define intd_t int64_t
-#elif XLEN == 64
-#define uintx_t uint64_t
-#define intx_t int64_t
-#define uintd_t __uint128_t
-#define intd_t __int128_t
-#else
-#error unsupported XLEN
-#endif
-
 namespace vortex {
 
 typedef uint8_t Byte;
-typedef uintx_t Word;
-typedef intx_t  WordI;
-typedef uintd_t DWord;
-typedef intd_t  DWordI;
-typedef uint64_t FWord;
-
-typedef uintx_t Addr;
+#if XLEN == 32
+typedef uint32_t Word;
+typedef int32_t  WordI;
+typedef uint64_t DWord;
+typedef int64_t  DWordI;
+typedef uint32_t Addr;
 typedef uint32_t Size;
+typedef uint32_t FWord;
+#elif XLEN == 64
+typedef uint64_t Word;
+typedef int64_t  WordI;
+typedef __uint128_t DWord;
+typedef __int128_t DWordI;
+typedef uint64_t Addr;
+typedef uint64_t Size;
+typedef uint64_t FWord;
+#else
+#error unsupported XLEN
+#endif
 
 typedef std::bitset<32> RegMask;
 typedef std::bitset<32> ThreadMask;
@@ -249,7 +246,7 @@ struct MemReq {
 
 inline std::ostream &operator<<(std::ostream &os, const MemReq& req) {
   os << "mem-" << (req.write ? "wr" : "rd") << ": ";
-  os << "addr=" << req.addr << ", tag=" << req.tag << ", core_id=" << req.core_id;
+  os << "addr=" << std::hex << req.addr << std::dec << ", tag=" << req.tag << ", core_id=" << req.core_id;
   os << " (#" << std::dec << req.uuid << ")";
   return os;
 }

@@ -14,6 +14,8 @@ AR = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)gcc-ar
 DP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)objdump
 CP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)objcopy
 
+SIM_DIR=../../../sim
+
 ifeq ($(XLEN),32)
 CFLAGS += -march=rv32imf -mabi=ilp32f
 else
@@ -41,10 +43,10 @@ $(PROJECT).elf: $(SRCS)
 	$(CC) $(CFLAGS) $(SRCS) $(LDFLAGS) -o $(PROJECT).elf
 
 run-rtlsim: $(PROJECT).bin
-	../../../sim/rtlsim/rtlsim $(PROJECT).bin
+	$(SIM_DIR)/rtlsim/rtlsim $(PROJECT).bin
 
 run-simx: $(PROJECT).bin
-	../../../sim/simx/simx -a rv32i -c 1 -i $(PROJECT).bin
+	$(SIM_DIR)/simx/simx -c 1 -i $(PROJECT).bin
 
 .depend: $(SRCS)
 	$(CC) $(CFLAGS) -MM $^ > .depend;

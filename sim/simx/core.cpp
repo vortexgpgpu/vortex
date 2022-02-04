@@ -73,7 +73,7 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
     , decode_latch_("decode")
     , pending_icache_(arch_.num_warps())
 {  
-  for (int i = 0; i < arch_.num_warps(); ++i) {
+  for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
     warps_.at(i) = std::make_shared<Warp>(this, i);
   }
 
@@ -195,7 +195,7 @@ void Core::tick() {
 
 void Core::schedule() {
   bool foundSchedule = false;
-  int scheduled_warp = last_schedule_wid_;
+  uint32_t scheduled_warp = last_schedule_wid_;
 
   // round robin scheduling
   for (size_t wid = 0, nw = arch_.num_warps(); wid < nw; ++wid) {    
@@ -367,11 +367,11 @@ void Core::commit() {
   }
 }
 
-WarpMask Core::wspawn(int num_warps, int nextPC) {
+WarpMask Core::wspawn(uint32_t num_warps, uint32_t nextPC) {
   WarpMask ret(1);
-  int active_warps = std::min<int>(num_warps, arch_.num_warps());
+  uint32_t active_warps = std::min<uint32_t>(num_warps, arch_.num_warps());
   DP(3, "*** Activate " << (active_warps-1) << " warps at PC: " << std::hex << nextPC);
-  for (int i = 1; i < active_warps; ++i) {
+  for (uint32_t i = 1; i < active_warps; ++i) {
     auto warp = warps_.at(i);
     warp->setPC(nextPC);
     warp->setTmask(0, true);
@@ -380,7 +380,7 @@ WarpMask Core::wspawn(int num_warps, int nextPC) {
   return std::move(ret);
 }
 
-WarpMask Core::barrier(int bar_id, int count, int warp_id) {
+WarpMask Core::barrier(uint32_t bar_id, uint32_t count, uint32_t warp_id) {
   WarpMask ret(0);
   auto& barrier = barriers_.at(bar_id);
   barrier.set(warp_id);
@@ -389,7 +389,7 @@ WarpMask Core::barrier(int bar_id, int count, int warp_id) {
     DP(3, "*** Suspend warp #" << warp_id << " at barrier #" << bar_id);
     return std::move(ret);
   }
-  for (int i = 0; i < arch_.num_warps(); ++i) {
+  for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
     if (barrier.test(i)) {
       DP(3, "*** Resume warp #" << i << " at barrier #" << bar_id);
       warps_.at(i)->activate();
@@ -446,7 +446,7 @@ void Core::writeToStdOut(Addr addr, uint32_t data) {
   }
 }
 
-uint32_t Core::get_csr(Addr addr, int tid, int wid) {
+uint32_t Core::get_csr(Addr addr, uint32_t tid, uint32_t wid) {
   switch (addr) {
   case CSR_SATP:
   case CSR_PMPCFG0:
@@ -644,7 +644,7 @@ uint32_t Core::get_csr(Addr addr, int tid, int wid) {
   return 0;
 }
 
-void Core::set_csr(Addr addr, uint32_t value, int /*tid*/, int wid) {
+void Core::set_csr(Addr addr, uint32_t value, uint32_t /*tid*/, uint32_t wid) {
   if (addr == CSR_FFLAGS) {
     fcsrs_.at(wid) = (fcsrs_.at(wid) & ~0x1F) | (value & 0x1F);
   } else if (addr == CSR_FRM) {

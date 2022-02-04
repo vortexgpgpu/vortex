@@ -57,22 +57,22 @@ inline uint64_t nan_box(uint32_t word) {
 void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   assert(tmask_.any());
 
-  Word nextPC = PC_ + core_->arch().wsize();
+  auto nextPC = PC_ + core_->arch().wsize();
 
-  uint32_t func2  = instr.getFunc2();
-  uint32_t func3  = instr.getFunc3();
-  uint32_t func6  = instr.getFunc6();
-  uint32_t func7  = instr.getFunc7();
+  auto func2  = instr.getFunc2();
+  auto func3  = instr.getFunc3();
+  auto func6  = instr.getFunc6();
+  auto func7  = instr.getFunc7();
 
   auto opcode = instr.getOpcode();
-  int rdest   = instr.getRDest();
-  int rsrc0   = instr.getRSrc(0);
-  int rsrc1   = instr.getRSrc(1);
-  int rsrc2   = instr.getRSrc(2);
-  Word immsrc = instr.getImm();
-  uint32_t vmask  = instr.getVmask();
+  auto rdest  = instr.getRDest();
+  auto rsrc0  = instr.getRSrc(0);
+  auto rsrc1  = instr.getRSrc(1);
+  auto rsrc2  = instr.getRSrc(2);
+  auto immsrc = instr.getImm();
+  auto vmask  = instr.getVmask();
 
-  int num_threads = core_->arch().num_threads();
+  auto num_threads = core_->arch().num_threads();
 
   std::vector<Word[3]> rsdata(num_threads);
   std::vector<Word> rddata(num_threads);
@@ -80,16 +80,16 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   std::vector<FWord[3]> frsdata(num_threads);
   std::vector<FWord> frddata(num_threads);
 
-  int num_rsrcs = instr.getNRSrc();
+  auto num_rsrcs = instr.getNRSrc();
   if (num_rsrcs) {              
-    for (int i = 0; i < num_rsrcs; ++i) {    
+    for (uint32_t i = 0; i < num_rsrcs; ++i) {    
       DPH(2, "Src Reg [" << std::dec << i << "]: ");
       auto type = instr.getRSType(i);
-      int reg = instr.getRSrc(i);        
+      auto reg = instr.getRSrc(i);        
       switch (type) {
       case RegType::Integer: 
         DPN(2, "r" << std::dec << reg << "={");
-        for (int t = 0; t < num_threads; ++t) {
+        for (uint32_t t = 0; t < num_threads; ++t) {
           if (t) DPN(2, ", ");
           if (!tmask_.test(t)) {
             DPN(2, "-");
@@ -102,7 +102,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         break;
       case RegType::Float: 
         DPN(2, "fr" << std::dec << reg << "={");
-        for (int t = 0; t < num_threads; ++t) {
+        for (uint32_t t = 0; t < num_threads; ++t) {
           if (t) DPN(2, ", ");
           if (!tmask_.test(t)) {
             DPN(2, "-");
@@ -129,7 +129,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   case LUI_INST: {
     trace->exe_type = ExeType::ALU;
     trace->alu.type = AluType::ARITH;
-    for (int t = 0; t < num_threads; ++t) {
+    for (uint32_t t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       rddata[t] = immsrc << 12;
@@ -141,7 +141,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   case AUIPC_INST: {
     trace->exe_type = ExeType::ALU;
     trace->alu.type = AluType::ARITH;
-    for (int t = 0; t < num_threads; ++t) {
+    for (uint32_t t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       rddata[t] = (immsrc << 12) + PC_;
@@ -154,7 +154,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->alu.type = AluType::ARITH;
     trace->used_iregs.set(rsrc0);
     trace->used_iregs.set(rsrc1);
-    for (int t = 0; t < num_threads; ++t) {
+    for (uint32_t t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       if (func7 & 0x1) {
@@ -314,7 +314,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->exe_type = ExeType::ALU;    
     trace->alu.type = AluType::ARITH;    
     trace->used_iregs.set(rsrc0);
-    for (int t = 0; t < num_threads; ++t) {
+    for (uint32_t t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       switch (func3) {
@@ -375,7 +375,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->alu.type = AluType::ARITH;
     trace->used_iregs.set(rsrc0);
     trace->used_iregs.set(rsrc1);
-    for (int t = 0; t < num_threads; ++t) {
+    for (uint32_t t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       if (func7 & 0x1){
@@ -501,7 +501,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->exe_type = ExeType::ALU;    
     trace->alu.type = AluType::ARITH;    
     trace->used_iregs.set(rsrc0);
-    for (int t = 0; t < num_threads; ++t) {
+    for (uint32_t t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       switch (func3) {
@@ -545,7 +545,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->alu.type = AluType::BRANCH;    
     trace->used_iregs.set(rsrc0);
     trace->used_iregs.set(rsrc1);
-    for (int t = 0; t < num_threads; ++t) {
+    for (uint32_t t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       switch (func3) {
@@ -603,7 +603,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   case JAL_INST: {
     trace->exe_type = ExeType::ALU;    
     trace->alu.type = AluType::BRANCH;
-    for (int t = 0; t < num_threads; ++t) {
+    for (uint32_t t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       rddata[t] = nextPC;
@@ -619,7 +619,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->exe_type = ExeType::ALU;    
     trace->alu.type = AluType::BRANCH;
     trace->used_iregs.set(rsrc0);
-    for (int t = 0; t < num_threads; ++t) {
+    for (uint32_t t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       rddata[t] = nextPC;
@@ -638,7 +638,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     if (opcode == L_INST 
     || (opcode == FL && func3 == 2)
     || (opcode == FL && func3 == 3)) {
-      for (int t = 0; t < num_threads; ++t) {
+      for (uint32_t t = 0; t < num_threads; ++t) {
         if (!tmask_.test(t))
           continue;
         uint32_t mem_addr  = (rsdata[t][0] + immsrc) & 0xFFFFFFFC; 
@@ -707,12 +707,12 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       switch (instr.getVlsWidth()) {
       case 6: { 
         // load word and unit strided (not checking for unit stride)
-        for (int i = 0; i < vl_; i++) {
-          uint32_t mem_addr = ((rsdata[i][0]) & 0xFFFFFFFC) + (i * vtype_.vsew / 8);
+        for (uint32_t i = 0; i < vl_; i++) {
+          Addr mem_addr = ((rsdata[i][0]) & 0xFFFFFFFC) + (i * vtype_.vsew / 8);
           DP(4, "LOAD MEM: ADDRESS=0x" << std::hex << mem_addr);
-          uint32_t data_read = core_->dcache_read(mem_addr, 4);
+          Word data_read = core_->dcache_read(mem_addr, 4);
           DP(4, "Mem addr: " << std::hex << mem_addr << " Data read " << data_read);
-          int *result_ptr = (int *)(vd.data() + i);
+          Word *result_ptr = (Word *)(vd.data() + i);
           *result_ptr = data_read;            
         }
         break;
@@ -732,7 +732,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->used_iregs.set(rsrc1);
     if (opcode == S_INST 
     || (opcode == FS && func3 == 2)) {
-      for (int t = 0; t < num_threads; ++t) {
+      for (uint32_t t = 0; t < num_threads; ++t) {
         if (!tmask_.test(t))
           continue;
         uint32_t mem_addr = rsdata[t][0] + immsrc;
@@ -776,7 +776,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         }
       }
     } else {
-      for (int i = 0; i < vl_; i++) {
+      for (uint32_t i = 0; i < vl_; i++) {
         uint32_t mem_addr = rsdata[i][0] + (i * vtype_.vsew / 8);
         DP(4, "STORE MEM: ADDRESS=0x" << std::hex << mem_addr);
         switch (instr.getVlsWidth()) {
@@ -795,7 +795,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     break;
   }
   case SYS_INST: {
-    for (int t = 0; t < num_threads; ++t) {
+    for (uint32_t t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
       uint32_t csr_addr = immsrc;
@@ -884,7 +884,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   }   
   case FCI: {       
     trace->exe_type = ExeType::FPU;     
-    for (int t = 0; t < num_threads; ++t) {
+    for (uint32_t t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue; 
       uint32_t frm = get_fpu_rm(func3, core_, t, id_);
@@ -1250,10 +1250,10 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->used_fregs.set(rsrc0);
     trace->used_fregs.set(rsrc1);
     trace->used_fregs.set(rsrc2);
-    for (int t = 0; t < num_threads; ++t) {
+    for (uint32_t t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
-      int frm = get_fpu_rm(func3, core_, t, id_);
+      uint32_t frm = get_fpu_rm(func3, core_, t, id_);
       uint32_t fflags = 0;
       switch (opcode) {
       case FMADD:
@@ -1297,8 +1297,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     break;
   }
   case GPGPU: {    
-    int ts = 0;
-    for (int t = 0; t < num_threads; ++t) {
+    uint32_t ts = 0;
+    for (uint32_t t = 0; t < num_threads; ++t) {
       if (tmask_.test(t)) {
         ts = t;
         break;
@@ -1314,20 +1314,20 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       if (rsrc1) {
         // predicate mode
         ThreadMask pred;
-        for (int i = 0; i < num_threads; ++i) {
-          pred[i] = tmask_.test(i) ? (ireg_file_.at(i).at(rsrc0) != 0) : 0;
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          pred[t] = tmask_.test(t) ? (ireg_file_.at(t).at(rsrc0) != 0) : 0;
         }
         if (pred.any()) {
           tmask_ &= pred;
         }
       } else {
         tmask_.reset();
-        for (int i = 0; i < num_threads; ++i) {
-          tmask_.set(i, rsdata.at(ts)[0] & (1 << i));
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          tmask_.set(t, rsdata.at(ts)[0] & (1 << t));
         }
       }
       DPH(3, "*** New TMC: ");
-      for (int i = 0; i < num_threads; ++i)
+      for (uint32_t i = 0; i < num_threads; ++i)
         DPN(3, tmask_.test(num_threads-i-1));
       DPN(3, std::endl);
 
@@ -1352,22 +1352,22 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       trace->fetch_stall = true;
       if (HasDivergentThreads(tmask_, ireg_file_, rsrc0)) {          
         ThreadMask tmask;
-        for (int i = 0; i < num_threads; ++i) {
-          tmask[i] = tmask_.test(i) && !ireg_file_.at(i).at(rsrc0);
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          tmask[t] = tmask_.test(t) && !ireg_file_.at(t).at(rsrc0);
         }
 
         DomStackEntry e(tmask, nextPC);
         dom_stack_.push(tmask_);
         dom_stack_.push(e);
-        for (size_t i = 0; i < e.tmask.size(); ++i) {
-          tmask_.set(i, !e.tmask.test(i) && tmask_.test(i));
+        for (uint32_t t = 0, n = e.tmask.size(); t < n; ++t) {
+          tmask_.set(t, !e.tmask.test(t) && tmask_.test(t));
         }
         active_ = tmask_.any();
 
         DPH(3, "*** Split: New TM=");
-        for (int i = 0; i < num_threads; ++i) DPN(3, tmask_.test(num_threads-i-1));
+        for (uint32_t t = 0; t < num_threads; ++t) DPN(3, tmask_.test(num_threads-t-1));
         DPN(3, ", Pushed TM=");
-        for (int i = 0; i < num_threads; ++i) DPN(3, e.tmask.test(num_threads-i-1));
+        for (uint32_t t = 0; t < num_threads; ++t) DPN(3, e.tmask.test(num_threads-t-1));
         DPN(3, ", PC=0x" << std::hex << e.PC << "\n");
       } else {
         DP(3, "*** Unanimous pred");
@@ -1396,7 +1396,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         active_ = tmask_.any();
 
         DPH(3, "*** Join: New TM=");
-        for (int i = 0; i < num_threads; ++i) DPN(3, tmask_.test(num_threads-i-1));
+        for (uint32_t t = 0; t < num_threads; ++t) DPN(3, tmask_.test(num_threads-t-1));
         DPN(3, "\n");
 
         dom_stack_.pop();
@@ -1416,7 +1416,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       trace->exe_type = ExeType::LSU; 
       trace->lsu.type = LsuType::PREFETCH; 
       trace->used_iregs.set(rsrc0);
-      for (int t = 0; t < num_threads; ++t) {
+      for (uint32_t t = 0; t < num_threads; ++t) {
         if (!tmask_.test(t))
           continue;
         auto mem_addr = rsdata[t][0];
@@ -1435,7 +1435,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       trace->used_iregs.set(rsrc0);
       trace->used_iregs.set(rsrc1);
       trace->used_iregs.set(rsrc2);
-      for (int t = 0; t < num_threads; ++t) {
+      for (uint32_t t = 0; t < num_threads; ++t) {
         if (!tmask_.test(t))
           continue;        
         auto unit  = func2;
@@ -1455,7 +1455,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
         trace->used_iregs.set(rsrc2);
-        for (int t = 0; t < num_threads; ++t) {
+        for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t))
             continue;     
           rddata[t] = rsdata[t][0] ? rsdata[t][1] : rsdata[t][2];
@@ -1471,8 +1471,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     }
   } break;
   case VSET: {
-    int VLEN = core_->arch().vsize() * 8;
-    int VLMAX = (instr.getVlmul() * VLEN) / instr.getVsew();
+    uint32_t VLEN = core_->arch().vsize() * 8;
+    uint32_t VLMAX = (instr.getVlmul() * VLEN) / instr.getVsew();
     switch (func3) {
     case 0: // vector-vector
       switch (func6) {
@@ -1482,7 +1482,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto& vd = vreg_file_.at(rdest);
         auto& mask = vreg_file_.at(0);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint8_t emask = *(uint8_t *)(mask.data() + i);
             uint8_t value = emask & 0x1;
             if (vmask || (!vmask && value)) {
@@ -1494,7 +1494,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             }
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint16_t emask = *(uint16_t *)(mask.data() + i);
             uint16_t value = emask & 0x1;
             if (vmask || (!vmask && value)) {
@@ -1506,7 +1506,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             }
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint32_t emask = *(uint32_t *)(mask.data() + i);
             uint32_t value = emask & 0x1;
             if (vmask || (!vmask && value)) {
@@ -1525,7 +1525,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t result = (first == second) ? 1 : 0;
@@ -1533,7 +1533,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             *(uint8_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t result = (first == second) ? 1 : 0;
@@ -1541,7 +1541,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             *(uint16_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t result = (first == second) ? 1 : 0;
@@ -1556,7 +1556,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t result = (first != second) ? 1 : 0;
@@ -1564,7 +1564,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             *(uint8_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t result = (first != second) ? 1 : 0;
@@ -1572,7 +1572,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             *(uint16_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t result = (first != second) ? 1 : 0;
@@ -1587,7 +1587,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t result = (first < second) ? 1 : 0;
@@ -1595,7 +1595,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             *(uint8_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t result = (first < second) ? 1 : 0;
@@ -1603,7 +1603,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             *(uint16_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t result = (first < second) ? 1 : 0;
@@ -1618,7 +1618,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             int8_t first  = *(int8_t *)(vr1.data() + i);
             int8_t second = *(int8_t *)(vr2.data() + i);
             int8_t result = (first < second) ? 1 : 0;
@@ -1626,7 +1626,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             *(uint8_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             int16_t first  = *(int16_t *)(vr1.data() + i);
             int16_t second = *(int16_t *)(vr2.data() + i);
             int16_t result = (first < second) ? 1 : 0;
@@ -1634,7 +1634,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             *(int16_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             int32_t first  = *(int32_t *)(vr1.data() + i);
             int32_t second = *(int32_t *)(vr2.data() + i);
             int32_t result = (first < second) ? 1 : 0;
@@ -1649,7 +1649,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t result = (first <= second) ? 1 : 0;
@@ -1657,7 +1657,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             *(uint8_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t result = (first <= second) ? 1 : 0;
@@ -1665,7 +1665,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             *(uint16_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t result = (first <= second) ? 1 : 0;
@@ -1680,7 +1680,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             int8_t first  = *(int8_t *)(vr1.data() + i);
             int8_t second = *(int8_t *)(vr2.data() + i);
             int8_t result = (first <= second) ? 1 : 0;
@@ -1688,7 +1688,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             *(uint8_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             int16_t first  = *(int16_t *)(vr1.data() + i);
             int16_t second = *(int16_t *)(vr2.data() + i);
             int16_t result = (first <= second) ? 1 : 0;
@@ -1696,7 +1696,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             *(int16_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             int32_t first  = *(int32_t *)(vr1.data() + i);
             int32_t second = *(int32_t *)(vr2.data() + i);
             int32_t result = (first <= second) ? 1 : 0;
@@ -1711,7 +1711,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t result = (first > second) ? 1 : 0;
@@ -1719,7 +1719,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             *(uint8_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t result = (first > second) ? 1 : 0;
@@ -1727,7 +1727,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             *(uint16_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t result = (first > second) ? 1 : 0;
@@ -1742,7 +1742,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             int8_t first  = *(int8_t *)(vr1.data() + i);
             int8_t second = *(int8_t *)(vr2.data() + i);
             int8_t result = (first > second) ? 1 : 0;
@@ -1750,7 +1750,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             *(uint8_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             int16_t first  = *(int16_t *)(vr1.data() + i);
             int16_t second = *(int16_t *)(vr2.data() + i);
             int16_t result = (first > second) ? 1 : 0;
@@ -1758,7 +1758,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             *(int16_t *)(vd.data() + i) = result;
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             int32_t first  = *(int32_t *)(vr1.data() + i);
             int32_t second = *(int32_t *)(vr2.data() + i);
             int32_t result = (first > second) ? 1 : 0;
@@ -1777,7 +1777,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t first_value  = (first & 0x1);
@@ -1786,11 +1786,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }            
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint8_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t first_value  = (first & 0x1);
@@ -1799,11 +1799,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint16_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t first_value  = (first & 0x1);
@@ -1812,7 +1812,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint32_t *)(vd.data() + i) = 0;
           }
         }
@@ -1823,7 +1823,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t first_value  = (first & 0x1);
@@ -1832,11 +1832,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint8_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t first_value  = (first & 0x1);
@@ -1845,11 +1845,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint16_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t first_value  = (first & 0x1);
@@ -1858,7 +1858,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint32_t *)(vd.data() + i) = 0;
           }
         }
@@ -1869,7 +1869,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t first_value  = (first & 0x1);
@@ -1878,11 +1878,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint8_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t first_value  = (first & 0x1);
@@ -1891,11 +1891,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint16_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t first_value  = (first & 0x1);
@@ -1904,7 +1904,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint32_t *)(vd.data() + i) = 0;
           }
         }
@@ -1915,7 +1915,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t first_value  = (first & 0x1);
@@ -1924,11 +1924,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint8_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t first_value  = (first & 0x1);
@@ -1937,11 +1937,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint16_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t first_value  = (first & 0x1);
@@ -1950,7 +1950,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint32_t *)(vd.data() + i) = 0;
           }
         }
@@ -1961,7 +1961,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t first_value  = (first & 0x1);
@@ -1970,11 +1970,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint8_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t first_value  = (first & 0x1);
@@ -1983,11 +1983,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint16_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t first_value  = (first & 0x1);
@@ -1996,7 +1996,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint32_t *)(vd.data() + i) = 0;
           }
         }
@@ -2007,7 +2007,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t first_value  = (first & 0x1);
@@ -2016,11 +2016,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint8_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t first_value  = (first & 0x1);
@@ -2029,11 +2029,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint16_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t first_value  = (first & 0x1);
@@ -2042,7 +2042,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint32_t *)(vd.data() + i) = 0;
           }
         }
@@ -2053,7 +2053,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t first_value  = (first & 0x1);
@@ -2062,11 +2062,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint8_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t first_value  = (first & 0x1);
@@ -2075,11 +2075,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint16_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t first_value  = (first & 0x1);
@@ -2088,7 +2088,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint32_t *)(vd.data() + i) = 0;
           }
         }
@@ -2099,7 +2099,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t first_value  = (first & 0x1);
@@ -2108,11 +2108,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint8_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t first_value  = (first & 0x1);
@@ -2121,11 +2121,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint16_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t first_value  = (first & 0x1);
@@ -2134,7 +2134,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint32_t *)(vd.data() + i) = 0;
           }
         }
@@ -2145,36 +2145,36 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t result = (first * second);
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint8_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t result = (first * second);
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint16_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t result = (first * second);
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint32_t *)(vd.data() + i) = 0;
           }
         }
@@ -2185,36 +2185,36 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint8_t first  = *(uint8_t *)(vr1.data() + i);
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t result = (first * second);
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) += result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint8_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint16_t first  = *(uint16_t *)(vr1.data() + i);
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t result = (first * second);
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) += result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint16_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint32_t first  = *(uint32_t *)(vr1.data() + i);
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t result = (first * second);
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) += result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint32_t *)(vd.data() + i) = 0;
           }
         }
@@ -2227,33 +2227,33 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t result = (rsdata[i][0] + second);
             DP(3, "Comparing " << rsdata[i][0] << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint8_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t result = (rsdata[i][0] + second);
             DP(3, "Comparing " << rsdata[i][0] << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint16_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t result = (rsdata[i][0] + second);
             DP(3, "Comparing " << rsdata[i][0] << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint32_t *)(vd.data() + i) = 0;
           }
         }
@@ -2263,33 +2263,33 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
         if (vtype_.vsew == 8) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint8_t second = *(uint8_t *)(vr2.data() + i);
             uint8_t result = (rsdata[i][0] * second);
             DP(3, "Comparing " << rsdata[i][0] << " + " << second << " = " << result);
             *(uint8_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint8_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 16) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t result = (rsdata[i][0] * second);
             DP(3, "Comparing " << rsdata[i][0] << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint16_t *)(vd.data() + i) = 0;
           }
         } else if (vtype_.vsew == 32) {
-          for (int i = 0; i < vl_; i++) {
+          for (uint32_t i = 0; i < vl_; i++) {
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t result = (rsdata[i][0] * second);
             DP(3, "Comparing " << rsdata[i][0] << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i) = result;
           }
-          for (int i = vl_; i < VLMAX; i++) {
+          for (uint32_t i = vl_; i < VLMAX; i++) {
             *(uint32_t *)(vd.data() + i) = 0;
           }
         }
@@ -2297,18 +2297,18 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       }
     } break;
     case 7: {
-      vtype_.vill = 0;
+      vtype_.vill  = 0;
       vtype_.vediv = instr.getVediv();
       vtype_.vsew  = instr.getVsew();
       vtype_.vlmul = instr.getVlmul();
 
       DP(3, "lmul:" << vtype_.vlmul << " sew:" << vtype_.vsew  << " ediv: " << vtype_.vediv << "rsrc_" << rsdata[0][0] << "VLMAX" << VLMAX);
 
-      int s0 = rsdata[0][0];
+      auto s0 = rsdata[0][0];
       if (s0 <= VLMAX) {
         vl_ = s0;
       } else if (s0 < (2 * VLMAX)) {
-        vl_ = (int)ceil((s0 * 1.0) / 2.0);
+        vl_ = (uint32_t)ceil((s0 * 1.0) / 2.0);
       } else if (s0 >= (2 * VLMAX)) {
         vl_ = VLMAX;
       }        
@@ -2330,7 +2330,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     case RegType::Integer:      
       if (rdest) {    
         DPN(2, "r" << std::dec << rdest << "={");    
-        for (int t = 0; t < num_threads; ++t) {
+        for (uint32_t t = 0; t < num_threads; ++t) {
           if (t) DPN(2, ", ");
           if (!tmask_.test(t)) {
             DPN(2, "-");
@@ -2345,7 +2345,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       break;
     case RegType::Float:
       DPN(2, "fr" << std::dec << rdest << "={");
-      for (int t = 0; t < num_threads; ++t) {
+      for (uint32_t t = 0; t < num_threads; ++t) {
         if (t) DPN(2, ", ");
         if (!tmask_.test(t)) {
           DPN(2, "-");

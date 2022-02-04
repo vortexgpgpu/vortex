@@ -24,7 +24,7 @@ void Warp::clear() {
   active_ = false;
   PC_ = STARTUP_ADDR;
   tmask_.reset();  
-  for (int i = 0, n = core_->arch().num_threads(); i < n; ++i) {
+  for (uint32_t i = 0, n = core_->arch().num_threads(); i < n; ++i) {
     for (auto& reg : ireg_file_.at(i)) {
       reg = 0;
     }
@@ -41,7 +41,7 @@ void Warp::eval(pipeline_trace_t *trace) {
   assert(tmask_.any());
 
   DPH(2, "Fetch: coreid=" << core_->id() << ", wid=" << id_ << ", tmask=");
-  for (int i = 0, n = core_->arch().num_threads(); i < n; ++i)
+  for (uint32_t i = 0, n = core_->arch().num_threads(); i < n; ++i)
     DPN(2, tmask_.test(n-i-1));
   DPN(2, ", PC=0x" << std::hex << PC_ << " (#" << std::dec << trace->uuid << ")" << std::endl);
 
@@ -68,15 +68,15 @@ void Warp::eval(pipeline_trace_t *trace) {
   this->execute(*instr, trace);
 
   DP(4, "Register state:");
-  for (int i = 0; i < core_->arch().num_regs(); ++i) {
+  for (uint32_t i = 0; i < core_->arch().num_regs(); ++i) {
     DPN(4, "  %r" << std::setfill('0') << std::setw(2) << std::dec << i << ':');
     // Integer register file
-    for (int j = 0; j < core_->arch().num_threads(); ++j) {
+    for (uint32_t j = 0; j < core_->arch().num_threads(); ++j) {
       DPN(4, ' ' << std::setfill('0') << std::setw(XLEN/4) << std::hex << ireg_file_.at(j).at(i) << std::setfill(' ') << ' ');
     }
     DPN(4, '|');
     // Floating point register file
-    for (int j = 0; j < core_->arch().num_threads(); ++j) {
+    for (uint32_t j = 0; j < core_->arch().num_threads(); ++j) {
       DPN(4, ' ' << std::setfill('0') << std::setw(16) << std::hex << freg_file_.at(j).at(i) << std::setfill(' ') << ' ');
     }
     DPN(4, std::endl);
