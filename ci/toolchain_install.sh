@@ -24,7 +24,7 @@ riscv64()
 {
     for x in {a..j} 
     do
-        wget $REPOSITORY/riscv-gnu-toolchain/ubuntu/bionic/riscv64-gnu-toolchain.tar.bz2.parta$x
+        wget $REPOSITORY/riscv64-gnu-toolchain/ubuntu/bionic/riscv64-gnu-toolchain.tar.bz2.parta$x
     done
     cat riscv64-gnu-toolchain.tar.bz2.parta* > riscv64-gnu-toolchain.tar.bz2
     tar -xvf riscv64-gnu-toolchain.tar.bz2
