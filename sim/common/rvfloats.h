@@ -33,9 +33,9 @@ uint32_t rv_fsgnj_s(uint32_t a, uint32_t b);
 uint32_t rv_fsgnjn_s(uint32_t a, uint32_t b);
 uint32_t rv_fsgnjx_s(uint32_t a, uint32_t b);
 
-uint32_t rv_flt_s(uint32_t a, uint32_t b, uint32_t* fflags);
-uint32_t rv_fle_s(uint32_t a, uint32_t b, uint32_t* fflags);
-uint32_t rv_feq_s(uint32_t a, uint32_t b, uint32_t* fflags);
+bool rv_flt_s(uint32_t a, uint32_t b, uint32_t* fflags);
+bool rv_fle_s(uint32_t a, uint32_t b, uint32_t* fflags);
+bool rv_feq_s(uint32_t a, uint32_t b, uint32_t* fflags);
 uint32_t rv_fmin_s(uint32_t a, uint32_t b, uint32_t* fflags);
 uint32_t rv_fmax_s(uint32_t a, uint32_t b, uint32_t* fflags);
 
@@ -52,12 +52,12 @@ uint64_t rv_fmsub_d(uint64_t a, uint64_t b, uint64_t c, uint32_t frm, uint32_t* 
 uint64_t rv_fnmadd_d(uint64_t a, uint64_t b, uint64_t c, uint32_t frm, uint32_t* fflags);
 uint64_t rv_fnmsub_d(uint64_t a, uint64_t b, uint64_t c, uint32_t frm, uint32_t* fflags);
 
-uint64_t rv_ftoi_d(uint64_t a, uint32_t frm, uint32_t* fflags);
-uint64_t rv_ftou_d(uint64_t a, uint32_t frm, uint32_t* fflags);
+uint32_t rv_ftoi_d(uint64_t a, uint32_t frm, uint32_t* fflags);
+uint32_t rv_ftou_d(uint64_t a, uint32_t frm, uint32_t* fflags);
 uint64_t rv_ftol_d(uint64_t a, uint32_t frm, uint32_t* fflags);
 uint64_t rv_ftolu_d(uint64_t a, uint32_t frm, uint32_t* fflags);
-uint64_t rv_itof_d(uint64_t a, uint32_t frm, uint32_t* fflags);
-uint64_t rv_utof_d(uint64_t a, uint32_t frm, uint32_t* fflags);
+uint64_t rv_itof_d(uint32_t a, uint32_t frm, uint32_t* fflags);
+uint64_t rv_utof_d(uint32_t a, uint32_t frm, uint32_t* fflags);
 uint64_t rv_ltof_d(uint64_t a, uint32_t frm, uint32_t* fflags);
 uint64_t rv_lutof_d(uint64_t a, uint32_t frm, uint32_t* fflags);
 
@@ -66,9 +66,9 @@ uint64_t rv_fsgnj_d(uint64_t a, uint64_t b);
 uint64_t rv_fsgnjn_d(uint64_t a, uint64_t b);
 uint64_t rv_fsgnjx_d(uint64_t a, uint64_t b);
 
-uint64_t rv_flt_d(uint64_t a, uint64_t b, uint32_t* fflags);
-uint64_t rv_fle_d(uint64_t a, uint64_t b, uint32_t* fflags);
-uint64_t rv_feq_d(uint64_t a, uint64_t b, uint32_t* fflags);
+bool rv_flt_d(uint64_t a, uint64_t b, uint32_t* fflags);
+bool rv_fle_d(uint64_t a, uint64_t b, uint32_t* fflags);
+bool rv_feq_d(uint64_t a, uint64_t b, uint32_t* fflags);
 uint64_t rv_fmin_d(uint64_t a, uint64_t b, uint32_t* fflags);
 uint64_t rv_fmax_d(uint64_t a, uint64_t b, uint32_t* fflags);
 

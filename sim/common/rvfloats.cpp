@@ -169,7 +169,7 @@ uint32_t rv_ftoi_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
   return r;
 }
 
-uint64_t rv_ftoi_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
+uint32_t rv_ftoi_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
   softfloat_roundingMode = frm;
   auto r = f64_to_i32(to_float64_t(a), frm, true);
   if (fflags) { *fflags = get_fflags(); }
@@ -183,7 +183,7 @@ uint32_t rv_ftou_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
   return r;
 }
 
-uint64_t rv_ftou_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
+uint32_t rv_ftou_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
   softfloat_roundingMode = frm;
   auto r = f64_to_ui32(to_float64_t(a), frm, true);
   if (fflags) { *fflags = get_fflags(); }
@@ -225,7 +225,7 @@ uint32_t rv_itof_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
   return from_float32_t(r);
 }
 
-uint64_t rv_itof_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
+uint64_t rv_itof_d(uint32_t a, uint32_t frm, uint32_t* fflags) {
   softfloat_roundingMode = frm;
   auto r = i32_to_f64(a);
   if (fflags) { *fflags = get_fflags(); }
@@ -239,7 +239,7 @@ uint32_t rv_utof_s(uint32_t a, uint32_t frm, uint32_t* fflags) {
   return from_float32_t(r);
 }
 
-uint64_t rv_utof_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
+uint64_t rv_utof_d(uint32_t a, uint32_t frm, uint32_t* fflags) {
   softfloat_roundingMode = frm;
   auto r = ui32_to_f64(a);
   if (fflags) { *fflags = get_fflags(); }
@@ -274,38 +274,37 @@ uint64_t rv_lutof_d(uint64_t a, uint32_t frm, uint32_t* fflags) {
   return from_float64_t(r);
 }
 
-uint32_t rv_flt_s(uint32_t a, uint32_t b, uint32_t* fflags) {
+bool rv_flt_s(uint32_t a, uint32_t b, uint32_t* fflags) {
   auto r = f32_lt(to_float32_t(a), to_float32_t(b));
   if (fflags) { *fflags = get_fflags(); }
   return r;
 }
 
-uint64_t rv_flt_d(uint64_t a, uint64_t b, uint32_t* fflags) {
+bool rv_flt_d(uint64_t a, uint64_t b, uint32_t* fflags) {
   auto r = f64_lt(to_float64_t(a), to_float64_t(b));
   if (fflags) { *fflags = get_fflags(); }
   return r;
 }
 
-uint32_t rv_fle_s(uint32_t a, uint32_t b, uint32_t* fflags) {
+bool rv_fle_s(uint32_t a, uint32_t b, uint32_t* fflags) {
   auto r = f32_le(to_float32_t(a), to_float32_t(b));
   if (fflags) { *fflags = get_fflags(); }
   return r;
 }
 
-uint64_t rv_fle_d(uint64_t a, uint64_t b, uint32_t* fflags) {
+bool rv_fle_d(uint64_t a, uint64_t b, uint32_t* fflags) {
   auto r = f64_le(to_float64_t(a), to_float64_t(b));
   if (fflags) { *fflags = get_fflags(); }
   return r;
 }
 
-uint32_t rv_feq_s(uint32_t a, uint32_t b, uint32_t* fflags) {
-
+bool rv_feq_s(uint32_t a, uint32_t b, uint32_t* fflags) {
   auto r = f32_eq(to_float32_t(a), to_float32_t(b));
   if (fflags) { *fflags = get_fflags(); }  
   return r;
 }
 
-uint64_t rv_feq_d(uint64_t a, uint64_t b, uint32_t* fflags) {
+bool rv_feq_d(uint64_t a, uint64_t b, uint32_t* fflags) {
   auto r = f64_eq(to_float64_t(a), to_float64_t(b));
   if (fflags) { *fflags = get_fflags(); }
   return r;
