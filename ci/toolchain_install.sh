@@ -82,6 +82,7 @@ while [ "$1" != "" ]; do
         -llvm ) llvm
                 ;;
         -all ) riscv
+               riscv64
                llvm
                pocl
                verilator
