@@ -444,21 +444,31 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
       switch (func7) {      
       case 0x50: // FLE.S, FLT.S, FEQ.S
       case 0x51: // FLE.D, FLT.D, FEQ.D
+        instr->setDestReg(rd, RegType::Integer);
+        instr->setSrcReg(rs1, RegType::Float);
+        instr->setSrcReg(rs2, RegType::Float);
+        break;
       case 0x60: // FCVT.W.D, FCVT.WU.D, FCVT.L.D, FCVT.LU.D
       case 0x61: // FCVT.WU.S, FCVT.W.S, FCVT.L.S, FCVT.LU.S
-      case 0x70: // FCLASS.S, FMV.X.W
-      case 0x71: // FCLASS.D, FMV.X.D        
         instr->setDestReg(rd, RegType::Integer);
         instr->setSrcReg(rs1, RegType::Float);
         instr->setSrcReg(rs2, RegType::Integer);
         break;
       case 0x68: // FCVT.S.W, FCVT.S.WU, FCVT.S.L, FCVT.S.LU
       case 0x69: // FCVT.D.W, FCVT.D.WU, FCVT.D.L, FCVT.D.LU
+        instr->setDestReg(rd, RegType::Float);
+        instr->setSrcReg(rs1, RegType::Integer);
+        instr->setSrcReg(rs2, RegType::Integer);
+        break;
+      case 0x70: // FCLASS.S, FMV.X.W
+      case 0x71: // FCLASS.D, FMV.X.D        
+        instr->setDestReg(rd, RegType::Integer);
+        instr->setSrcReg(rs1, RegType::Float);
+        break;
       case 0x78: // FMV.W.X
       case 0x79: // FMV.D.X        
         instr->setDestReg(rd, RegType::Float);
         instr->setSrcReg(rs1, RegType::Integer);
-        instr->setSrcReg(rs2, RegType::Integer);
         break;
       default:
         instr->setDestReg(rd, RegType::Float);
