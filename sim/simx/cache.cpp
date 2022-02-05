@@ -488,11 +488,11 @@ private:
             } else {        
                 bool hit = false;
                 bool found_free_block = false;            
-                int hit_block_id = 0;
-                int repl_block_id = 0;            
+                uint32_t hit_block_id = 0;
+                uint32_t repl_block_id = 0;            
                 uint32_t max_cnt = 0;
                 
-                for (int i = 0, n = set.blocks.size(); i < n; ++i) {
+                for (uint32_t i = 0, n = set.blocks.size(); i < n; ++i) {
                     auto& block = set.blocks.at(i);
                     if (block.valid) {
                         if (block.tag == pipeline_req.tag) {

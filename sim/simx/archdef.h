@@ -21,8 +21,7 @@ private:
   uint16_t num_barriers_;
   
 public:
-  ArchDef(const std::string& /*arch*/,
-          uint16_t num_cores, 
+  ArchDef(uint16_t num_cores, 
           uint16_t num_warps, 
           uint16_t num_threads)   
     : num_cores_(num_cores)

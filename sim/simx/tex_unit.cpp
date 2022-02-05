@@ -61,10 +61,11 @@ uint32_t TexUnit::read(int32_t u,
     uint32_t addr11 = base_addr + offset11 * stride;
 
     // memory lookup
-    uint32_t texel00 = core_->dcache_read(addr00, stride);
-    uint32_t texel01 = core_->dcache_read(addr01, stride);
-    uint32_t texel10 = core_->dcache_read(addr10, stride);
-    uint32_t texel11 = core_->dcache_read(addr11, stride);
+    uint32_t texel00(0), texel01(0), texel10(0), texel11(0);
+    core_->dcache_read(&texel00, addr00, stride);
+    core_->dcache_read(&texel01, addr01, stride);
+    core_->dcache_read(&texel10, addr10, stride);
+    core_->dcache_read(&texel11, addr11, stride);
 
     mem_addrs->push_back({addr00, stride});
     mem_addrs->push_back({addr01, stride});
@@ -84,7 +85,8 @@ uint32_t TexUnit::read(int32_t u,
     uint32_t addr = base_addr + offset * stride;
 
     // memory lookup
-    uint32_t texel = core_->dcache_read(addr, stride);
+    uint32_t texel(0);
+    core_->dcache_read(&texel, addr, stride);
     mem_addrs->push_back({addr, stride});
 
     // filtering
