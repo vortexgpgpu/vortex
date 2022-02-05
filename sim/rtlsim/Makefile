@@ -85,7 +85,7 @@ PROJECT = rtlsim
 all: $(PROJECT)
 
 $(DESTDIR)/$(PROJECT): $(SRCS) main.cpp
-	verilator --build $(VL_FLAGS) $^ $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$@
+	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$@
 	
 $(DESTDIR)/lib$(PROJECT).so: $(SRCS)
 	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS)' -LDFLAGS '-shared $(LDFLAGS)' -o ../$@
