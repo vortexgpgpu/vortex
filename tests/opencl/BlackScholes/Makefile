@@ -1,3 +1,5 @@
+XLEN ?= 32
+
 RISCV_TOOLCHAIN_PATH ?= $(wildcard ../../../../riscv-gnu-toolchain/drops)
 POCL_CC_PATH ?= $(wildcard ../../../../pocl/drops_riscv_cc)
 POCL_INC_PATH ?= $(wildcard ../include)
@@ -19,7 +21,7 @@ VX_SRCS += $(VORTEX_RT_PATH)/fileio/fileio.S
 VX_SRCS += $(VORTEX_RT_PATH)/tests/tests.c
 VX_SRCS += $(VORTEX_RT_PATH)/vx_api/vx_api.c
 
-VX_CFLAGS = -nostartfiles -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/startup/vx_link.ld
+VX_CFLAGS = -nostartfiles -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/startup/vx_link$(XLEN).ld
 
 CXXFLAGS =  -g -O0 -march=rv32im -mabi=ilp32
 CXXFLAGS += -ffreestanding # program may not begin at main()
@@ -50,7 +52,7 @@ $(PROJECT).dump: $(PROJECT).elf
 	$(DMP) -D $(PROJECT).elf > $(PROJECT).dump
 
 run: $(PROJECT).hex
-	POCL_DEBUG=all $(VX_SIMX_PATH)/Vcache_simX -E -a rv32i --core $(PROJECT).hex -s -b 1> emulator.debug
+	POCL_DEBUG=all $(VX_SIMX_PATH)/Vcache_simX -E --core $(PROJECT).hex -s -b 1> emulator.debug
 
 qemu: $(PROJECT).qemu
 	POCL_DEBUG=all $(RISCV_TOOLCHAIN_PATH)/bin/qemu-riscv32 -d in_asm -D debug.log $(PROJECT).qemu
