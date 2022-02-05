@@ -30,7 +30,17 @@ jobs:
   include:
     - stage: test
       name: coverage
+<<<<<<< HEAD
       script: cp -r $PWD ../build_coverage && cd ../build_coverage && ./ci/travis_run.py ./ci/regression.sh -coverage    
+=======
+      script: cp -r $PWD ../build_coverage && cd ../build_coverage && ./ci/travis_run.py ./ci/regression.sh -coverage
+    - stage: test
+      name: coverage64
+      script: cp -r $PWD ../build_coverage64 && cd ../build_coverage64 && ./ci/travis_run.py ./ci/regression64.sh -coverage
+    - stage: test
+      name: tex
+      script: cp -r $PWD ../build_tex && cd ../build_tex && ./ci/travis_run.py ./ci/regression.sh -tex
+>>>>>>> xlen-parameterization
     - stage: test
       name: cluster
       script: cp -r $PWD ../build_cluster && cd ../build_cluster && ./ci/travis_run.py ./ci/regression.sh -cluster    

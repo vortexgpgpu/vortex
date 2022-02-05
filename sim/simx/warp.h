@@ -32,15 +32,15 @@ struct DomStackEntry {
 };
 
 struct vtype {
-  int vill;
-  int vediv;
-  int vsew;
-  int vlmul;
+  uint32_t vill;
+  uint32_t vediv;
+  uint32_t vsew;
+  uint32_t vlmul;
 };
 
 class Warp {
 public:
-  Warp(Core *core, Word id);
+  Warp(Core *core, uint32_t id);
 
   void clear();
   
@@ -62,15 +62,15 @@ public:
     return 0;
   }
 
-  Word id() const {
+  uint32_t id() const {
     return id_;
   }
 
-  Word getPC() const {
+  uint32_t getPC() const {
     return PC_;
   }
 
-  void setPC(Word PC) {
+  void setPC(uint32_t PC) {
     PC_ = PC;
   }
 
@@ -79,13 +79,13 @@ public:
     active_ = tmask_.any();
   }
 
-  Word getTmask() const {
+  uint32_t getTmask() const {
     if (active_)
       return tmask_.to_ulong();
     return 0;
   }
 
-  Word getIRegValue(int reg) const {
+  uint32_t getIRegValue(uint32_t reg) const {
     return ireg_file_.at(0).at(reg);
   }
 
@@ -95,7 +95,7 @@ private:
 
   void execute(const Instr &instr, pipeline_trace_t *trace);
   
-  Word id_;
+  uint32_t id_;
   Core *core_;
   bool active_;
   
@@ -103,12 +103,12 @@ private:
   ThreadMask tmask_;  
   
   std::vector<std::vector<Word>> ireg_file_;
-  std::vector<std::vector<Word>> freg_file_;
+  std::vector<std::vector<FWord>> freg_file_;
   std::vector<std::vector<Byte>> vreg_file_;
   std::stack<DomStackEntry> dom_stack_;
 
   struct vtype vtype_;
-  int vl_;
+  uint32_t vl_;
 };
 
 }

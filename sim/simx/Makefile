@@ -29,6 +29,11 @@ else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
+# XLEN parameterization
+ifdef XLEN
+	CXXFLAGS += -DXLEN=$(XLEN)
+endif
+
 PROJECT = simx
 
 all: $(DESTDIR)/$(PROJECT)
