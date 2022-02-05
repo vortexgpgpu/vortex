@@ -83,6 +83,15 @@ static bool checkBoxedArgs(FWord* out, FWord a, FWord b, uint32_t* fflags) {
   return false;
 }
 
+static bool checkBoxedArgs(FWord* out, FWord a, uint32_t* fflags) {  
+  bool xa = is_nan_boxed(a);
+  if (xa)
+    return true;
+  *out = nan_box(0x7fc00000);
+  *fflags = 0;
+  return false;
+}
+
 static bool checkBoxedCmpArgs(Word* out, FWord a, FWord b, uint32_t* fflags) {  
   bool xa = is_nan_boxed(a);
   bool xb = is_nan_boxed(b);  
@@ -944,7 +953,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         break;
       }
       case 0x2c: { // RV32F: FSQRT.S
-        if (checkBoxedArgs(&rddata[t].f, rsdata[t][0].f, rsdata[t][1].f, &fflags)) {
+        if (checkBoxedArgs(&rddata[t].f, rsdata[t][0].f, &fflags)) {
           rddata[t].f = nan_box(rv_fsqrt_s(rsdata[t][0].f, frm, &fflags));
         }
         trace->fpu.type = FpuType::FSQRT;
