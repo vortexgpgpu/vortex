@@ -10,7 +10,7 @@ coverage()
 {
 echo "begin coverage tests..."
 
-make -C tests/riscv/isa run-simx-64imfd
+make -C tests/riscv/isa run-simx-64
 
 echo "coverage tests done!"
 }
