@@ -11,13 +11,13 @@
 #include "constants.h"
 #include <util.h>
 #include "args.h"
+#include "core.h"
 
 using namespace vortex;
 
 int main(int argc, char **argv) {
   int exitcode = 0;
 
-  std::string archStr("rv32imf");
   std::string imgFileName;
   int num_cores(NUM_CORES * NUM_CLUSTERS);
   int num_warps(NUM_WARPS);
@@ -26,15 +26,14 @@ int main(int argc, char **argv) {
   bool showStats(false);
   bool riscv_test(false);
 
-  /* Read the command line arguments. */
-  CommandLineArgFlag fh("-h", "--help", "", showHelp);
-  CommandLineArgSetter<std::string> fa("-a", "--arch", "", archStr);  
-  CommandLineArgSetter<std::string> fi("-i", "--image", "", imgFileName);
-  CommandLineArgSetter<int> fc("-c", "--cores", "", num_cores);
-  CommandLineArgSetter<int> fw("-w", "--warps", "", num_warps);
-  CommandLineArgSetter<int> ft("-t", "--threads", "", num_threads);
-  CommandLineArgFlag fr("-r", "--riscv", "", riscv_test);
-  CommandLineArgFlag fs("-s", "--stats", "", showStats);
+  // parse the command line arguments
+  CommandLineArgFlag fh("-h", "--help", "show command line options", showHelp);
+  CommandLineArgSetter<std::string> fi("-i", "--image", "program binary", imgFileName);
+  CommandLineArgSetter<int> fc("-c", "--cores", "number of cores", num_cores);
+  CommandLineArgSetter<int> fw("-w", "--warps", "number  of warps", num_warps);
+  CommandLineArgSetter<int> ft("-t", "--threads", "number of threads", num_threads);
+  CommandLineArgFlag fr("-r", "--riscv", "enable riscv tests", riscv_test);
+  CommandLineArgFlag fs("-s", "--stats", "show stats", showStats);
 
   CommandLineArg::readArgs(argc - 1, argv + 1);
 
@@ -44,7 +43,6 @@ int main(int argc, char **argv) {
                  "  -c, --cores <num> Number of cores\n"
                  "  -w, --warps <num> Number of warps\n"
                  "  -t, --threads <num> Number of threads\n"
-                 "  -a, --arch <arch string> Architecture string\n"
                  "  -r, --riscv riscv test\n"
                  "  -s, --stats Print stats on exit.\n";
     return 0;
@@ -54,7 +52,7 @@ int main(int argc, char **argv) {
   
   {
     // create processor configuation
-    ArchDef arch(archStr, num_cores, num_warps, num_threads);
+    ArchDef arch(num_cores, num_warps, num_threads);
 
     // create memory module
     RAM ram(RAM_PAGE_SIZE);
@@ -79,7 +77,8 @@ int main(int argc, char **argv) {
     processor.attach_ram(&ram);   
 
     // run simulation
-    processor.run();
+    exitcode = processor.run();
+
   } 
 
   if (riscv_test) {

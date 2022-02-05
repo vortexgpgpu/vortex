@@ -226,9 +226,9 @@ void RAM::read(void *data, uint64_t addr, uint64_t size) {
 }
 
 void RAM::write(const void *data, uint64_t addr, uint64_t size) {
-  const uint8_t* s = (const uint8_t*)data;
+  const uint8_t* d = (const uint8_t*)data;
   for (uint64_t i = 0; i < size; i++) {
-    *this->get(addr + i) = s[i];
+    *this->get(addr + i) = d[i];
   }
 }
 
@@ -276,7 +276,7 @@ void RAM::loadHexImage(const char* filename) {
   ifs.seekg(0, ifs.beg);
   ifs.read(content.data(), size);
 
-  int offset = 0;
+  uint32_t offset = 0;
   char *line = content.data();
 
   this->clear();

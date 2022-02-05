@@ -15,8 +15,8 @@ struct pipeline_trace_t {
   uint64_t    uuid;
   
   //--
-  int         cid;
-  int         wid;  
+  uint32_t    cid;
+  uint32_t    wid;  
   ThreadMask  tmask;
   Word        PC;
 
@@ -26,7 +26,7 @@ struct pipeline_trace_t {
   //--
   bool        wb;  
   RegType     rdest_type;
-  int         rdest;
+  uint32_t    rdest;
 
   //--
   RegMask     used_iregs;
