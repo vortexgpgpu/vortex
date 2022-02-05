@@ -16,7 +16,7 @@ namespace vortex {
 
 enum Constants {
 
-    SMEM_BANK_OFFSET = log2ceil(sizeof(Word)) + log2ceil(STACK_SIZE / sizeof(Word)),
+    SMEM_BANK_OFFSET = log2ceil(sizeof(uint32_t)) + log2ceil(STACK_SIZE / sizeof(uint32_t)),
 
 };
 

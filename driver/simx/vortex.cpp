@@ -64,7 +64,7 @@ private:
 class vx_device {    
 public:
     vx_device() 
-        : arch_("rv32i", NUM_CORES * NUM_CLUSTERS, NUM_WARPS, NUM_THREADS)
+        : arch_(NUM_CORES * NUM_CLUSTERS, NUM_WARPS, NUM_THREADS)
         , ram_(RAM_PAGE_SIZE)
         , processor_(arch_)
         , mem_allocator_(
