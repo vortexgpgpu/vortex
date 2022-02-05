@@ -19,8 +19,6 @@ install:
   - export PATH=$VERILATOR_ROOT/bin:$PATH
   # Install toolchain
   - ci/toolchain_install.sh -all
-  # build project
-  - make -s
 
 # stages ordering
 stages:
