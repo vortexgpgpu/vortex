@@ -502,6 +502,13 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
     instr->setFunc7(func7);
     switch (op) {
     case Opcode::SYS_INST:
+      if (func3 != 0) {
+        // RV32I: CSR*
+        instr->setDestReg(rd, RegType::Integer);
+      }
+      // uint12
+      instr->setImm(code >> shift_rs2);
+      break;
     case Opcode::FENCE:
       // uint12
       instr->setImm(code >> shift_rs2);
