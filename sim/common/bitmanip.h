@@ -70,31 +70,12 @@ inline uint64_t bit_getw(uint64_t bits, uint32_t start, uint32_t end) {
     return (bits << shift) >> (shift + start);
 }
 
-// Apply integer sign extension
-inline uint32_t sext(uint32_t word, uint32_t width) {
+template <typename T = uint32_t>
+T sext(const T& word, uint32_t width) {
   assert(width > 1);
-  assert(width <= 32);
-  if (width == 32) 
+  assert(width <= (sizeof(T) * 8));
+  if (width == (sizeof(T) * 8)) 
     return word;
-  uint32_t mask = (uint32_t(1) << width) - 1;
+  T mask((static_cast<T>(1) << width) - 1);
   return ((word >> (width - 1)) & 0x1) ? (word | ~mask) : word;
 }
-
-inline uint64_t sext(uint64_t word, uint32_t width) {
-  assert(width > 1);
-  assert(width <= 64);
-  if (width == 64) 
-    return word;
-  uint64_t mask = (uint64_t(1) << width) - 1;
-  return ((word >> (width - 1)) & 0x1) ? (word | ~mask) : word;
-}
-
-inline __uint128_t sext(__uint128_t word, uint32_t width) {
-  assert(width > 1);
-  assert(width <= 128);
-  if (width == 128) 
-    return word;
-  __uint128_t mask = (__uint128_t(1) << width) - 1;
-  return ((word >> (width - 1)) & 0x1) ? (word | ~mask) : word;
-}
-
