@@ -40,7 +40,7 @@ run-simx-64imfd:
 
 run-simx-32: run-simx-32imfd
 
-run-simx-64: run-simx-64imfd
+run-simx-64: run-simx-32imfd run-simx-64imfd
 
 run-simx: run-simx-$(XLEN)
 
