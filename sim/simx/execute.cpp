@@ -48,16 +48,49 @@ inline uint32_t get_fpu_rm(uint32_t func3, Core* core, uint32_t tid, uint32_t wi
   return (func3 == 0x7) ? core->get_csr(CSR_FRM, tid, wid) : func3;
 }
 
-inline void update_fcrs(uint32_t fflags, Core* core, uint32_t tid, uint32_t wid) {
+static void update_fcrs(uint32_t fflags, Core* core, uint32_t tid, uint32_t wid) {
   if (fflags) {
     core->set_csr(CSR_FCSR, core->get_csr(CSR_FCSR, tid, wid) | fflags, tid, wid);
     core->set_csr(CSR_FFLAGS, core->get_csr(CSR_FFLAGS, tid, wid) | fflags, tid, wid);
   }
 }
 
-inline uint64_t nan_box(uint32_t word) {
+inline uint64_t nan_box(uint32_t value) {
   uint64_t mask = 0xffffffff00000000;
-  return word | mask;
+  return value | mask;
+}
+
+inline bool is_nan_boxed(uint64_t value) {
+  return (uint32_t(value >> 32) == 0xffffffff);
+}
+
+static bool checkBoxedArgs(FWord* out, FWord a, FWord b, uint32_t* fflags) {  
+  bool xa = is_nan_boxed(a);
+  bool xb = is_nan_boxed(b);  
+  if (xa && xb)
+    return true;
+  if (xa) {
+    // a is NaN boxed but b isn't
+    *out = nan_box((uint32_t)a);
+  } else if (xb) {
+    // b is NaN boxed but a isn't
+    *out = nan_box(0xffc00000);
+  } else {
+    // Both a and b aren't NaN boxed
+    *out = nan_box(0x7fc00000);
+  }
+  *fflags = 0;
+  return false;
+}
+
+static bool checkBoxedCmpArgs(Word* out, FWord a, FWord b, uint32_t* fflags) {  
+  bool xa = is_nan_boxed(a);
+  bool xb = is_nan_boxed(b);  
+  if (xa && xb)
+    return true;
+  *out = 0;
+  *fflags = 0;
+  return false;
 }
 
 void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
@@ -845,108 +878,87 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         continue; 
       uint32_t frm = get_fpu_rm(func3, core_, t, id_);
       uint32_t fflags = 0;
-      bool fvalid = true;
       switch (func7) {
-        case 0x00: // RV32F: FADD.S
-        case 0x04: // RV32F: FSUB.S
-        case 0x08: // RV32F: FMUL.S
-        case 0x0c: // RV32F: FDIV.S
-        case 0x2c: // RV32F: FSQRT.S
-        case 0x10: // RV32F: FSGNJ.S / FSGNJN.S / FSGNJX.S
-        case 0x14: // RV32F: FMAX.S / FMIN.S 
-        case 0x50: { 
-          // RV32F: FLE.S / FLT.S / FEQ.S
-          uint64_t a = rsdata[t][0].f;
-          uint64_t b = rsdata[t][1].f;
-          // Both a and b aren't NaN boxed
-          if ((a >> 32 != 0xffffffff) && (b >> 32 != 0xffffffff)) {
-            rddata[t].f = nan_box(0x7fc00000);
-            fvalid = false;
-          }
-          // a is NaN boxed but b isn't
-          else if (b >> 32 != 0xffffffff) {
-            rddata[t].f = nan_box((uint32_t)a);
-            fvalid = false;
-          }
-          // b is NaN boxed but a isn't
-          else if (a >> 32 != 0xffffffff) {
-            rddata[t].f = nan_box(0xffc00000);
-            fvalid = false;
-          }
-          break;
-        }
-      }
-      if (fvalid){
-        switch (func7) {
-        case 0x00: { // RV32F: FADD.S
+      case 0x00: { // RV32F: FADD.S
+        if (checkBoxedArgs(&rddata[t].f, rsdata[t][0].f, rsdata[t][1].f, &fflags)) {
           rddata[t].f = nan_box(rv_fadd_s(rsdata[t][0].f, rsdata[t][1].f, frm, &fflags));
-          trace->fpu.type = FpuType::FMA;
-          trace->used_fregs.set(rsrc0);
-          trace->used_fregs.set(rsrc1);
-          break;
         }
-        case 0x01: { // RV32D: FADD.D
-          rddata[t].f = rv_fadd_d(rsdata[t][0].f, rsdata[t][1].f, frm, &fflags);
-          trace->fpu.type = FpuType::FMA;
-          trace->used_fregs.set(rsrc0);
-          trace->used_fregs.set(rsrc1);
-          break;
-        }
-        case 0x04: { // RV32F: FSUB.S
+        trace->fpu.type = FpuType::FMA;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);
+        break;
+      }
+      case 0x01: { // RV32D: FADD.D
+        rddata[t].f = rv_fadd_d(rsdata[t][0].f, rsdata[t][1].f, frm, &fflags);
+        trace->fpu.type = FpuType::FMA;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);
+        break;
+      }
+      case 0x04: { // RV32F: FSUB.S
+        if (checkBoxedArgs(&rddata[t].f, rsdata[t][0].f, rsdata[t][1].f, &fflags)) {
           rddata[t].f = nan_box(rv_fsub_s(rsdata[t][0].f, rsdata[t][1].f, frm, &fflags));
-          trace->fpu.type = FpuType::FMA;
-          trace->used_fregs.set(rsrc0);
-          trace->used_fregs.set(rsrc1);
-          break;
         }
-        case 0x05: { // RV32D: FSUB.D
-          rddata[t].f = rv_fsub_d(rsdata[t][0].f, rsdata[t][1].f, frm, &fflags);
-          trace->fpu.type = FpuType::FMA;
-          trace->used_fregs.set(rsrc0);
-          trace->used_fregs.set(rsrc1);
-          break;
-        }
-        case 0x08: { // RV32F: FMUL.S
+        trace->fpu.type = FpuType::FMA;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);
+        break;
+      }
+      case 0x05: { // RV32D: FSUB.D
+        rddata[t].f = rv_fsub_d(rsdata[t][0].f, rsdata[t][1].f, frm, &fflags);
+        trace->fpu.type = FpuType::FMA;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);
+        break;
+      }
+      case 0x08: { // RV32F: FMUL.S
+        if (checkBoxedArgs(&rddata[t].f, rsdata[t][0].f, rsdata[t][1].f, &fflags)) {
           rddata[t].f = nan_box(rv_fmul_s(rsdata[t][0].f, rsdata[t][1].f, frm, &fflags));
-          trace->fpu.type = FpuType::FMA;
-          trace->used_fregs.set(rsrc0);
-          trace->used_fregs.set(rsrc1);
-          break;
         }
-        case 0x09: { // RV32D: FMUL.D
-          rddata[t].f = rv_fmul_d(rsdata[t][0].f, rsdata[t][1].f, frm, &fflags);
-          trace->fpu.type = FpuType::FMA;
-          trace->used_fregs.set(rsrc0);
-          trace->used_fregs.set(rsrc1);
-          break;
-        }
-        case 0x0c: { // RV32F: FDIV.S
+        trace->fpu.type = FpuType::FMA;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);
+        break;
+      }
+      case 0x09: { // RV32D: FMUL.D
+        rddata[t].f = rv_fmul_d(rsdata[t][0].f, rsdata[t][1].f, frm, &fflags);
+        trace->fpu.type = FpuType::FMA;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);
+        break;
+      }
+      case 0x0c: { // RV32F: FDIV.S
+        if (checkBoxedArgs(&rddata[t].f, rsdata[t][0].f, rsdata[t][1].f, &fflags)) {
           rddata[t].f = nan_box(rv_fdiv_s(rsdata[t][0].f, rsdata[t][1].f, frm, &fflags));
-          trace->fpu.type = FpuType::FDIV;
-          trace->used_fregs.set(rsrc0);
-          trace->used_fregs.set(rsrc1);
-          break;
         }
-        case 0x0d: { // RV32D: FDIV.D
-          rddata[t].f = rv_fdiv_d(rsdata[t][0].f, rsdata[t][1].f, frm, &fflags);
-          trace->fpu.type = FpuType::FDIV;
-          trace->used_fregs.set(rsrc0);
-          trace->used_fregs.set(rsrc1);
-          break;
-        }
-        case 0x2c: { // RV32F: FSQRT.S
+        trace->fpu.type = FpuType::FDIV;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);
+        break;
+      }
+      case 0x0d: { // RV32D: FDIV.D
+        rddata[t].f = rv_fdiv_d(rsdata[t][0].f, rsdata[t][1].f, frm, &fflags);
+        trace->fpu.type = FpuType::FDIV;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);
+        break;
+      }
+      case 0x2c: { // RV32F: FSQRT.S
+        if (checkBoxedArgs(&rddata[t].f, rsdata[t][0].f, rsdata[t][1].f, &fflags)) {
           rddata[t].f = nan_box(rv_fsqrt_s(rsdata[t][0].f, frm, &fflags));
-          trace->fpu.type = FpuType::FSQRT;
-          trace->used_fregs.set(rsrc0);
-          break;
         }
-        case 0x2d: { // RV32D: FSQRT.D
-          rddata[t].f = rv_fsqrt_d(rsdata[t][0].f, frm, &fflags);
-          trace->fpu.type = FpuType::FSQRT;
-          trace->used_fregs.set(rsrc0);
-          break;  
-        }       
-        case 0x10: {
+        trace->fpu.type = FpuType::FSQRT;
+        trace->used_fregs.set(rsrc0);
+        break;
+      }
+      case 0x2d: { // RV32D: FSQRT.D
+        rddata[t].f = rv_fsqrt_d(rsdata[t][0].f, frm, &fflags);
+        trace->fpu.type = FpuType::FSQRT;
+        trace->used_fregs.set(rsrc0);
+        break;  
+      }       
+      case 0x10: {
+        if (checkBoxedArgs(&rddata[t].f, rsdata[t][0].f, rsdata[t][1].f, &fflags)) {
           switch (func3) {            
           case 0: // RV32F: FSGNJ.S
             rddata[t].f = nan_box(rv_fsgnj_s(rsdata[t][0].f, rsdata[t][1].f));
@@ -958,29 +970,31 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             rddata[t].f = nan_box(rv_fsgnjx_s(rsdata[t][0].f, rsdata[t][1].f));
             break;
           }
-          trace->fpu.type = FpuType::FNCP;
-          trace->used_fregs.set(rsrc0);
-          trace->used_fregs.set(rsrc1);
+        }
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);
+        break;
+      }
+      case 0x11: {
+        switch (func3) {            
+        case 0: // RV32D: FSGNJ.D
+          rddata[t].f = rv_fsgnj_d(rsdata[t][0].f, rsdata[t][1].f);
+          break;          
+        case 1: // RV32D: FSGNJN.D
+          rddata[t].f = rv_fsgnjn_d(rsdata[t][0].f, rsdata[t][1].f);
+          break;          
+        case 2: // RV32D: FSGNJX.D
+          rddata[t].f = rv_fsgnjx_d(rsdata[t][0].f, rsdata[t][1].f);
           break;
         }
-        case 0x11: {
-          switch (func3) {            
-          case 0: // RV32D: FSGNJ.D
-            rddata[t].f = rv_fsgnj_d(rsdata[t][0].f, rsdata[t][1].f);
-            break;          
-          case 1: // RV32D: FSGNJN.D
-            rddata[t].f = rv_fsgnjn_d(rsdata[t][0].f, rsdata[t][1].f);
-            break;          
-          case 2: // RV32D: FSGNJX.D
-            rddata[t].f = rv_fsgnjx_d(rsdata[t][0].f, rsdata[t][1].f);
-            break;
-          }
-          trace->fpu.type = FpuType::FNCP;
-          trace->used_fregs.set(rsrc0);
-          trace->used_fregs.set(rsrc1);
-          break;
-        }
-        case 0x14: {            
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);
+        break;
+      }
+      case 0x14: {   
+        if (checkBoxedArgs(&rddata[t].f, rsdata[t][0].f, rsdata[t][1].f, &fflags)) {         
           if (func3) {
             // RV32F: FMAX.S
             rddata[t].f = nan_box(rv_fmax_s(rsdata[t][0].f, rsdata[t][1].f, &fflags));
@@ -988,112 +1002,114 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             // RV32F: FMIN.S
             rddata[t].f = nan_box(rv_fmin_s(rsdata[t][0].f, rsdata[t][1].f, &fflags));
           }
-          trace->fpu.type = FpuType::FNCP;
-          trace->used_fregs.set(rsrc0);
-          trace->used_fregs.set(rsrc1);        
-          break;
         }
-        case 0x15: {            
-          if (func3) {
-            // RV32D: FMAX.D
-            rddata[t].f = rv_fmax_d(rsdata[t][0].f, rsdata[t][1].f, &fflags);
-          } else {
-            // RV32D: FMIN.D
-            rddata[t].f = rv_fmin_d(rsdata[t][0].f, rsdata[t][1].f, &fflags);
-          }
-          trace->fpu.type = FpuType::FNCP;
-          trace->used_fregs.set(rsrc0);
-          trace->used_fregs.set(rsrc1);        
-          break;
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);        
+        break;
+      }
+      case 0x15: {            
+        if (func3) {
+          // RV32D: FMAX.D
+          rddata[t].f = rv_fmax_d(rsdata[t][0].f, rsdata[t][1].f, &fflags);
+        } else {
+          // RV32D: FMIN.D
+          rddata[t].f = rv_fmin_d(rsdata[t][0].f, rsdata[t][1].f, &fflags);
         }
-        case 0x20: {
-          // RV32D: FCVT.S.D
-          rddata[t].f = nan_box(rv_dtof(rsdata[t][0].f));
-          trace->fpu.type = FpuType::FNCP;
-          trace->used_fregs.set(rsrc0);
-          trace->used_fregs.set(rsrc1);        
-          break;
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);        
+        break;
+      }
+      case 0x20: {
+        // RV32D: FCVT.S.D
+        rddata[t].f = nan_box(rv_dtof(rsdata[t][0].f));
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);        
+        break;
+      }
+      case 0x21: {
+        // RV32D: FCVT.D.S
+        rddata[t].f = rv_ftod(rsdata[t][0].f);
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);        
+        break;
+      }
+      case 0x60: {
+        switch (rsrc1) {
+          case 0: 
+            // RV32F: FCVT.W.S
+            rddata[t].i = sext((uint64_t)rv_ftoi_s(rsdata[t][0].f, frm, &fflags), 32);
+            break;
+          case 1:
+            // RV32F: FCVT.WU.S
+            rddata[t].i = sext((uint64_t)rv_ftou_s(rsdata[t][0].f, frm, &fflags), 32);
+            break;
+          case 2:
+            // RV64F: FCVT.L.S
+            rddata[t].i = rv_ftol_s(rsdata[t][0].f, frm, &fflags);
+            break;
+          case 3:
+            // RV64F: FCVT.LU.S
+            rddata[t].i = rv_ftolu_s(rsdata[t][0].f, frm, &fflags);
+            break;
         }
-        case 0x21: {
-          // RV32D: FCVT.D.S
-          rddata[t].f = rv_ftod(rsdata[t][0].f);
-          trace->fpu.type = FpuType::FNCP;
-          trace->used_fregs.set(rsrc0);
-          trace->used_fregs.set(rsrc1);        
-          break;
+      trace->fpu.type = FpuType::FCVT;
+      trace->used_fregs.set(rsrc0);
+      break;
+    }
+      case 0x61: {
+        switch (rsrc1) {
+          case 0: 
+            // RV32D: FCVT.W.D
+            rddata[t].i = sext((uint64_t)rv_ftoi_d(rsdata[t][0].f, frm, &fflags), 32);
+            break;
+          case 1:
+            // RV32D: FCVT.WU.D
+            rddata[t].i = sext((uint64_t)rv_ftou_d(rsdata[t][0].f, frm, &fflags), 32);
+            break;
+          case 2:
+            // RV64D: FCVT.L.D
+            rddata[t].i = rv_ftol_d(rsdata[t][0].f, frm, &fflags);
+            break;
+          case 3:
+            // RV64D: FCVT.LU.D
+            rddata[t].i = rv_ftolu_d(rsdata[t][0].f, frm, &fflags);
+            break;
         }
-        case 0x60: {
-          switch (rsrc1) {
-            case 0: 
-              // RV32F: FCVT.W.S
-              rddata[t].i = sext((uint64_t)rv_ftoi_s(rsdata[t][0].f, frm, &fflags), 32);
-              break;
-            case 1:
-              // RV32F: FCVT.WU.S
-              rddata[t].i = sext((uint64_t)rv_ftou_s(rsdata[t][0].f, frm, &fflags), 32);
-              break;
-            case 2:
-              // RV64F: FCVT.L.S
-              rddata[t].i = rv_ftol_s(rsdata[t][0].f, frm, &fflags);
-              break;
-            case 3:
-              // RV64F: FCVT.LU.S
-              rddata[t].i = rv_ftolu_s(rsdata[t][0].f, frm, &fflags);
-              break;
-          }
         trace->fpu.type = FpuType::FCVT;
         trace->used_fregs.set(rsrc0);
         break;
       }
-        case 0x61: {
-          switch (rsrc1) {
-            case 0: 
-              // RV32D: FCVT.W.D
-              rddata[t].i = sext(rv_ftoi_d(rsdata[t][0].f, frm, &fflags), 32);
-              break;
-            case 1:
-              // RV32D: FCVT.WU.D
-              rddata[t].i = sext(rv_ftou_d(rsdata[t][0].f, frm, &fflags), 32);
-              break;
-            case 2:
-              // RV64D: FCVT.L.D
-              rddata[t].i = rv_ftol_d(rsdata[t][0].f, frm, &fflags);
-              break;
-            case 3:
-              // RV64D: FCVT.LU.D
-              rddata[t].i = rv_ftolu_d(rsdata[t][0].f, frm, &fflags);
-              break;
-          }
-          trace->fpu.type = FpuType::FCVT;
-          trace->used_fregs.set(rsrc0);
-          break;
-        }
-        case 0x70: {     
-          if (func3) {
-            // RV32F: FCLASS.S
-            rddata[t].i = rv_fclss_s(rsdata[t][0].f);
-          } else {          
-            // RV32F: FMV.X.W
-            uint32_t result = (uint32_t)rsdata[t][0].f;
-            rddata[t].i = sext((uint64_t)result, 32);
-          }        
-          trace->fpu.type = FpuType::FNCP;
-          trace->used_fregs.set(rsrc0);
-          break;
-        }
-        case 0x71: {    
-          if (func3) {
-            // RV32D: FCLASS.D
-            rddata[t].i = rv_fclss_d(rsdata[t][0].f);
-          } else {          
-            // RV64D: FMV.X.D
-            rddata[t].i = rsdata[t][0].f;
-          }        
-          trace->fpu.type = FpuType::FNCP;
-          trace->used_fregs.set(rsrc0);
-          break;
-        }
-        case 0x50: {           
+      case 0x70: {     
+        if (func3) {
+          // RV32F: FCLASS.S
+          rddata[t].i = rv_fclss_s(rsdata[t][0].f);
+        } else {          
+          // RV32F: FMV.X.W
+          uint32_t result = (uint32_t)rsdata[t][0].f;
+          rddata[t].i = sext((uint64_t)result, 32);
+        }        
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_fregs.set(rsrc0);
+        break;
+      }
+      case 0x71: {    
+        if (func3) {
+          // RV32D: FCLASS.D
+          rddata[t].i = rv_fclss_d(rsdata[t][0].f);
+        } else {          
+          // RV64D: FMV.X.D
+          rddata[t].i = rsdata[t][0].f;
+        }        
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_fregs.set(rsrc0);
+        break;
+      }
+      case 0x50: {      
+        if (checkBoxedCmpArgs(&rddata[t].i, rsdata[t][0].f, rsdata[t][1].f, &fflags)) {     
           switch (func3) {              
           case 0:
             // RV32F: FLE.S
@@ -1107,91 +1123,91 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             // RV32F: FEQ.S
             rddata[t].i = rv_feq_s(rsdata[t][0].f, rsdata[t][1].f, &fflags);
             break;
-          } 
-          trace->fpu.type = FpuType::FNCP;
-          trace->used_fregs.set(rsrc0);
-          trace->used_fregs.set(rsrc1);
-          break; 
-        }
-        case 0x51: {           
-          switch (func3) {              
-          case 0:
-            // RV32D: FLE.D
-            rddata[t].i = rv_fle_d(rsdata[t][0].f, rsdata[t][1].f, &fflags);    
-            break;              
-          case 1:
-            // RV32D: FLT.D
-            rddata[t].i = rv_flt_d(rsdata[t][0].f, rsdata[t][1].f, &fflags);
-            break;              
-          case 2:
-            // RV32D: FEQ.D
-            rddata[t].i = rv_feq_d(rsdata[t][0].f, rsdata[t][1].f, &fflags);
+          }
+        } 
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);
+        break; 
+      }
+      case 0x51: {           
+        switch (func3) {              
+        case 0:
+          // RV32D: FLE.D
+          rddata[t].i = rv_fle_d(rsdata[t][0].f, rsdata[t][1].f, &fflags);    
+          break;              
+        case 1:
+          // RV32D: FLT.D
+          rddata[t].i = rv_flt_d(rsdata[t][0].f, rsdata[t][1].f, &fflags);
+          break;              
+        case 2:
+          // RV32D: FEQ.D
+          rddata[t].i = rv_feq_d(rsdata[t][0].f, rsdata[t][1].f, &fflags);
+          break;
+        } 
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_fregs.set(rsrc0);
+        trace->used_fregs.set(rsrc1);
+        break;  
+      }      
+      case 0x68: {
+        switch (rsrc1) {
+          case 0: 
+            // RV32F: FCVT.S.W
+            rddata[t].f = nan_box(rv_itof_s(rsdata[t][0].i, frm, &fflags));
             break;
-          } 
-          trace->fpu.type = FpuType::FNCP;
-          trace->used_fregs.set(rsrc0);
-          trace->used_fregs.set(rsrc1);
-          break;  
-        }      
-        case 0x68: {
-          switch (rsrc1) {
-            case 0: 
-              // RV32F: FCVT.S.W
-              rddata[t].f = nan_box(rv_itof_s(rsdata[t][0].i, frm, &fflags));
-              break;
-            case 1:
-              // RV32F: FCVT.S.WU
-              rddata[t].f = nan_box(rv_utof_s(rsdata[t][0].i, frm, &fflags));
-              break;
-            case 2:
-              // RV64F: FCVT.S.L
-              rddata[t].f = nan_box(rv_ltof_s(rsdata[t][0].i, frm, &fflags));
-              break;
-            case 3:
-              // RV64F: FCVT.S.LU
-              rddata[t].f = nan_box(rv_lutof_s(rsdata[t][0].i, frm, &fflags));
-              break;
-          }
-          trace->fpu.type = FpuType::FCVT;
-          trace->used_iregs.set(rsrc0);
-          break;
+          case 1:
+            // RV32F: FCVT.S.WU
+            rddata[t].f = nan_box(rv_utof_s(rsdata[t][0].i, frm, &fflags));
+            break;
+          case 2:
+            // RV64F: FCVT.S.L
+            rddata[t].f = nan_box(rv_ltof_s(rsdata[t][0].i, frm, &fflags));
+            break;
+          case 3:
+            // RV64F: FCVT.S.LU
+            rddata[t].f = nan_box(rv_lutof_s(rsdata[t][0].i, frm, &fflags));
+            break;
         }
-        case 0x69: {
-          switch (rsrc1) {
-            case 0: 
-              // RV32D: FCVT.D.W
-              rddata[t].f = rv_itof_d(rsdata[t][0].i, frm, &fflags);
-              break;
-            case 1:
-              // RV32D: FCVT.D.WU
-              rddata[t].f = rv_utof_d(rsdata[t][0].i, frm, &fflags);
-              break;
-            case 2:
-              // RV64D: FCVT.D.L
-              rddata[t].f = rv_ltof_d(rsdata[t][0].i, frm, &fflags);
-              break;
-            case 3:
-              // RV64D: FCVT.D.LU
-              rddata[t].f = rv_lutof_d(rsdata[t][0].i, frm, &fflags);
-              break;
-          }
-          trace->fpu.type = FpuType::FCVT;
-          trace->used_iregs.set(rsrc0);
-          break;
+        trace->fpu.type = FpuType::FCVT;
+        trace->used_iregs.set(rsrc0);
+        break;
+      }
+      case 0x69: {
+        switch (rsrc1) {
+          case 0: 
+            // RV32D: FCVT.D.W
+            rddata[t].f = rv_itof_d(rsdata[t][0].i, frm, &fflags);
+            break;
+          case 1:
+            // RV32D: FCVT.D.WU
+            rddata[t].f = rv_utof_d(rsdata[t][0].i, frm, &fflags);
+            break;
+          case 2:
+            // RV64D: FCVT.D.L
+            rddata[t].f = rv_ltof_d(rsdata[t][0].i, frm, &fflags);
+            break;
+          case 3:
+            // RV64D: FCVT.D.LU
+            rddata[t].f = rv_lutof_d(rsdata[t][0].i, frm, &fflags);
+            break;
         }
-        case 0x78: { // RV32F: FMV.W.X
-          rddata[t].f = nan_box((uint32_t)rsdata[t][0].i);
-          trace->fpu.type = FpuType::FNCP;
-          trace->used_iregs.set(rsrc0);
-          break;
-        }
-        case 0x79: { // RV64D: FMV.D.X
-          rddata[t].f = rsdata[t][0].i;
-          trace->fpu.type = FpuType::FNCP;
-          trace->used_iregs.set(rsrc0);
-          break;
-        }
-        }
+        trace->fpu.type = FpuType::FCVT;
+        trace->used_iregs.set(rsrc0);
+        break;
+      }
+      case 0x78: { // RV32F: FMV.W.X
+        rddata[t].f = nan_box((uint32_t)rsdata[t][0].i);
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_iregs.set(rsrc0);
+        break;
+      }
+      case 0x79: { // RV64D: FMV.D.X
+        rddata[t].f = rsdata[t][0].i;
+        trace->fpu.type = FpuType::FNCP;
+        trace->used_iregs.set(rsrc0);
+        break;
+      }
       }
       update_fcrs(fflags, core_, t, id_);
     }
