@@ -450,6 +450,7 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
       case 0x71: // FCLASS.D, FMV.X.D        
         instr->setDestReg(rd, RegType::Integer);
         instr->setSrcReg(rs1, RegType::Float);
+        instr->setSrcReg(rs2, RegType::Integer);
         break;
       case 0x68: // FCVT.S.W, FCVT.S.WU, FCVT.S.L, FCVT.S.LU
       case 0x69: // FCVT.D.W, FCVT.D.WU, FCVT.D.L, FCVT.D.LU
@@ -457,6 +458,7 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
       case 0x79: // FMV.D.X        
         instr->setDestReg(rd, RegType::Float);
         instr->setSrcReg(rs1, RegType::Integer);
+        instr->setSrcReg(rs2, RegType::Integer);
         break;
       default:
         instr->setDestReg(rd, RegType::Float);
