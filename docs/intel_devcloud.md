@@ -32,7 +32,7 @@ Clone the vortex repo
 > Devcloud users cannot use `sudo apt-get` from the main [README](https://github.com/vortexgpgpu/vortex#install-development-tools), but devcloud comes with `build-essential` and `git` preinstalled so this step is ignored. 
 
 ```bash
-$ git clone --recursive https://github.com/vortexgpgpu/vortex.git` 
+$ git clone --recursive https://github.com/vortexgpgpu/vortex.git 
 ```
 
 ### Toolchain
