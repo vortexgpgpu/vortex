@@ -1,18 +1,50 @@
-ALL_TESTS := $(wildcard *.hex)
+XLEN ?= 32
 
-D_TESTS := $(wildcard *ud-p-*.hex)
-V_TESTS := $(wildcard *-v-*.hex)
+SIM_DIR=../../../sim
 
-EXCLUDED_TESTS := $(V_TESTS) $(D_TESTS) rv32si-p-scall.hex rv32si-p-sbreak.hex rv32mi-p-breakpoint.hex rv32ua-p-amomax_w.hex rv32ua-p-amoxor_w.hex rv32ua-p-amoor_w.hex rv32mi-p-ma_addr.hex rv32mi-p-mcsr.hex rv32ua-p-amoswap_w.hex rv32mi-p-ma_fetch.hex rv32mi-p-csr.hex rv32ua-p-amoadd_w.hex rv32si-p-dirty.hex rv32ui-p-fence_i.hex rv32si-p-csr.hex rv32mi-p-shamt.hex rv32ua-p-amomin_w.hex rv32ua-p-lrsc.hex rv32si-p-wfi.hex rv32ua-p-amomaxu_w.hex rv32si-p-ma_fetch.hex rv32mi-p-illegal.hex rv32uc-p-rvc.hex rv32mi-p-sbreak.hex rv32ua-p-amominu_w.hex rv32ua-p-amoand_w.hex
+TESTS_32I := $(filter-out rv32ui-p-fence_i.hex, $(wildcard rv32ui-p-*.hex))
+TESTS_32M := $(wildcard rv32um-p-*.hex)
+TESTS_32F := $(wildcard rv32uf-p-*.hex)
+TESTS_32D := $(wildcard rv32ud-p-*.hex)
 
-TESTS := $(filter-out $(EXCLUDED_TESTS), $(ALL_TESTS))
+TESTS_64I := $(wildcard rv64ui-p-*.hex)
+TESTS_64M := $(wildcard rv64um-p-*.hex)
+TESTS_64F := $(wildcard rv64uf-p-*.hex)
+TESTS_64D := $(wildcard rv64ud-p-*.hex)
 
 all:
 
-run-simx:	
-	$(foreach test, $(TESTS), ../../../sim/simx/simx -r -a rv32i -c 1 -i $(test) || exit;)
+run-simx-32i:
+	$(foreach test, $(TESTS_32I), $(SIM_DIR)/simx/simx -r -c 1 -i $(test) || exit;)
+
+run-simx-32im:
+	$(foreach test,  $(TESTS_32I) $(TESTS_32M), $(SIM_DIR)/simx/simx -r -c 1 -i $(test) || exit;)
+
+run-simx-32imf:
+	$(foreach test, $(TESTS_32I) $(TESTS_32M) $(TESTS_32F), $(SIM_DIR)/simx/simx -r -c 1 -i $(test) || exit;)
+
+run-simx-32imfd:
+	$(foreach test, $(TESTS_32I) $(TESTS_32M) $(TESTS_32F) $(TESTS_32D), $(SIM_DIR)/simx/simx -r -c 1 -i $(test) || exit;)
+
+run-simx-64i:
+	$(foreach test, $(TESTS_64I), $(SIM_DIR)/simx/simx -r -c 1 -i $(test) || exit;)
+
+run-simx-64im:
+	$(foreach test, $(TESTS_64I) $(TESTS_64M), $(SIM_DIR)/simx/simx -r -c 1 -i $(test) || exit;)
+
+run-simx-64imf:
+	$(foreach test, $(TESTS_64I) $(TESTS_64M) $(TESTS_64F), $(SIM_DIR)/simx/simx -r -c 1 -i $(test) || exit;)
+
+run-simx-64imfd:
+	$(foreach test, $(TESTS_64I) $(TESTS_64M) $(TESTS_64F) $(TESTS_64D), $(SIM_DIR)/simx/simx -r -c 1 -i $(test) || exit;)
+
+run-simx-32: run-simx-32imfd
+
+run-simx-64: run-simx-32imfd run-simx-64imfd
+
+run-simx: run-simx-$(XLEN)
 
 run-rtlsim:
-	$(foreach test, $(TESTS), ../../../sim/rtlsim/rtlsim -r $(test) || exit;)
+	$(foreach test, $(TESTS_32I) $(TESTS_32M) $(TESTS_32F), $(SIM_DIR)/rtlsim/rtlsim -r $(test) || exit;)
 
 clean:

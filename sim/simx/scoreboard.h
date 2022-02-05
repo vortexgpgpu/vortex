@@ -28,7 +28,7 @@ public:
     }
 
     void clear() {
-        for (int i = 0, n = in_use_iregs_.size(); i < n; ++i) {
+        for (uint32_t i = 0, n = in_use_iregs_.size(); i < n; ++i) {
             in_use_iregs_.at(i).reset();
             in_use_fregs_.at(i).reset();
             in_use_vregs_.at(i).reset();

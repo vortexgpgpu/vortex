@@ -114,8 +114,8 @@ void LsuUnit::tick() {
     // duplicates detection
     bool is_dup = false;
     if (trace->tmask.test(0)) {
-        uint64_t addr_mask = sizeof(Word)-1;
-        Word addr0 = trace->mem_addrs.at(0).at(0).addr & ~addr_mask;
+        uint64_t addr_mask = sizeof(uint32_t)-1;
+        uint32_t addr0 = trace->mem_addrs.at(0).at(0).addr & ~addr_mask;
         uint32_t matches = 1;
         for (uint32_t t = 1; t < num_threads_; ++t) {
             if (!trace->tmask.test(t))

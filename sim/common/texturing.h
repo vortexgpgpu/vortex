@@ -56,7 +56,7 @@ inline void Unpack8888(TexFormat format,
                        uint32_t texel, 
                        uint32_t* lo, 
                        uint32_t* hi) {
-  int r, g, b, a;
+  uint32_t r, g, b, a;
   switch (format) {
   case TexFormat::A8R8G8B8:    
     r = (texel >> 16) & 0xff;
