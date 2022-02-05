@@ -57,7 +57,9 @@ public:
     , has_imm_(false)
     , rdest_type_(RegType::None)
     , rdest_(0)
+    , func2_(0)
     , func3_(0)
+    , func6_(0)
     , func7_(0) {
     for (uint32_t i = 0; i < MAX_REG_SOURCES; ++i) {
        rsrc_type_[i] = RegType::None;
@@ -121,6 +123,7 @@ private:
   uint32_t func2_;
   uint32_t func3_;
   uint32_t func6_;
+  uint32_t func7_;
 
   // Vector
   uint32_t vmask_;
@@ -130,8 +133,7 @@ private:
   uint32_t vs3_;
   uint32_t vlmul_;
   uint32_t vsew_;
-  uint32_t vediv_;
-  uint32_t func7_;  
+  uint32_t vediv_;   
 
   friend std::ostream &operator<<(std::ostream &, const Instr&);
 };
