@@ -4,7 +4,7 @@
 set -e
 
 # ensure build
-make -C hw -s
+make -s
 
 coverage() 
 {

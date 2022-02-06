@@ -3,6 +3,9 @@
 # exit when any command fails
 set -e
 
+# ensure build
+make -s
+
 # clear POCL cache
 rm -rf ~/.cache/pocl
 
