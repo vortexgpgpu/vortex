@@ -41,131 +41,131 @@ extern "C" {
 void dpi_fadd(bool enable, int a, int b, const svBitVecVal* frm, int* result, svBitVecVal* fflags) {
   if (!enable) 
     return;
-  *result = rv_fadd(a, b, (*frm & 0x7), fflags);
+  *result = rv_fadd_s(a, b, (*frm & 0x7), fflags);
 }
 
 void dpi_fsub(bool enable, int a, int b, const svBitVecVal* frm, int* result, svBitVecVal* fflags) {
   if (!enable) 
     return;
-  *result = rv_fsub(a, b, (*frm & 0x7), fflags);
+  *result = rv_fsub_s(a, b, (*frm & 0x7), fflags);
 }
 
 void dpi_fmul(bool enable, int a, int b, const svBitVecVal* frm, int* result, svBitVecVal* fflags) {
   if (!enable) 
     return;
-  *result = rv_fmul(a, b, (*frm & 0x7), fflags);
+  *result = rv_fmul_s(a, b, (*frm & 0x7), fflags);
 }
 
 void dpi_fmadd(bool enable, int a, int b, int c, const svBitVecVal* frm, int* result, svBitVecVal* fflags) {
   if (!enable) 
     return;
-  *result = rv_fmadd(a, b, c, (*frm & 0x7), fflags);
+  *result = rv_fmadd_s(a, b, c, (*frm & 0x7), fflags);
 }
 
 void dpi_fmsub(bool enable, int a, int b, int c, const svBitVecVal* frm, int* result, svBitVecVal* fflags) {
   if (!enable) 
     return;
-  *result = rv_fmsub(a, b, c, (*frm & 0x7), fflags);
+  *result = rv_fmsub_s(a, b, c, (*frm & 0x7), fflags);
 }
 
 void dpi_fnmadd(bool enable, int a, int b, int c, const svBitVecVal* frm, int* result, svBitVecVal* fflags) {
   if (!enable) 
     return;
-  *result = rv_fnmadd(a, b, c, (*frm & 0x7), fflags);
+  *result = rv_fnmadd_s(a, b, c, (*frm & 0x7), fflags);
 }
 
 void dpi_fnmsub(bool enable, int a, int b, int c, const svBitVecVal* frm, int* result, svBitVecVal* fflags) {
   if (!enable) 
     return;
-  *result = rv_fnmsub(a, b, c, (*frm & 0x7), fflags);
+  *result = rv_fnmsub_s(a, b, c, (*frm & 0x7), fflags);
 }
 
 void dpi_fdiv(bool enable, int a, int b, const svBitVecVal* frm, int* result, svBitVecVal* fflags) {
   if (!enable) 
     return;
-  *result = rv_fdiv(a, b, (*frm & 0x7), fflags);
+  *result = rv_fdiv_s(a, b, (*frm & 0x7), fflags);
 }
 
 void dpi_fsqrt(bool enable, int a, const svBitVecVal* frm, int* result, svBitVecVal* fflags) {
   if (!enable) 
     return;
-  *result = rv_fsqrt(a, (*frm & 0x7), fflags);
+  *result = rv_fsqrt_s(a, (*frm & 0x7), fflags);
 }
 
 void dpi_ftoi(bool enable, int a, const svBitVecVal* frm, int* result, svBitVecVal* fflags) {
   if (!enable) 
     return;
-  *result = rv_ftoi(a, (*frm & 0x7), fflags);
+  *result = rv_ftoi_s(a, (*frm & 0x7), fflags);
 }
 
 void dpi_ftou(bool enable, int a, const svBitVecVal* frm, int* result, svBitVecVal* fflags) {
   if (!enable) 
     return;
-  *result = rv_ftou(a, (*frm & 0x7), fflags);
+  *result = rv_ftou_s(a, (*frm & 0x7), fflags);
 }
 
 void dpi_itof(bool enable, int a, const svBitVecVal* frm, int* result, svBitVecVal* fflags) {
   if (!enable) 
     return;
-  *result = rv_itof(a, (*frm & 0x7), fflags);
+  *result = rv_itof_s(a, (*frm & 0x7), fflags);
 }
 
 void dpi_utof(bool enable, int a, const svBitVecVal* frm, int* result, svBitVecVal* fflags) {
   if (!enable) 
     return;
-  *result = rv_utof(a, (*frm & 0x7), fflags);
+  *result = rv_utof_s(a, (*frm & 0x7), fflags);
 }
 
 void dpi_flt(bool enable, int a, int b, int* result, svBitVecVal* fflags) {
   if (!enable) 
     return;
-  *result = rv_flt(a, b, fflags);
+  *result = rv_flt_s(a, b, fflags);
 }
 
 void dpi_fle(bool enable, int a, int b, int* result, svBitVecVal* fflags) {
   if (!enable) 
     return;
-  *result = rv_fle(a, b, fflags);
+  *result = rv_fle_s(a, b, fflags);
 }
 
 void dpi_feq(bool enable, int a, int b, int* result, svBitVecVal* fflags) {
   if (!enable) 
     return;
-  *result = rv_feq(a, b, fflags);
+  *result = rv_feq_s(a, b, fflags);
 }
 
 void dpi_fmin(bool enable, int a, int b, int* result, svBitVecVal* fflags) {
   if (!enable) 
     return;
-  *result = rv_fmin(a, b, fflags);
+  *result = rv_fmin_s(a, b, fflags);
 }
 
 void dpi_fmax(bool enable, int a, int b, int* result, svBitVecVal* fflags) {
   if (!enable) 
     return;
-  *result = rv_fmax(a, b, fflags);
+  *result = rv_fmax_s(a, b, fflags);
 }
 
 void dpi_fclss(bool enable, int a, int* result) {
   if (!enable) 
     return;
-  *result = rv_fclss(a);
+  *result = rv_fclss_s(a);
 }
 
 void dpi_fsgnj(bool enable, int a, int b, int* result) {
   if (!enable) 
     return;
-  *result = rv_fsgnj(a, b);
+  *result = rv_fsgnj_s(a, b);
 }
 
 void dpi_fsgnjn(bool enable, int a, int b, int* result) {
   if (!enable) 
     return;
-  *result = rv_fsgnjn(a, b);
+  *result = rv_fsgnjn_s(a, b);
 }
 
 void dpi_fsgnjx(bool enable, int a, int b, int* result) {
   if (!enable) 
     return;
-  *result = rv_fsgnjx(a, b);
+  *result = rv_fsgnjx_s(a, b);
 }

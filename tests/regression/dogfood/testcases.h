@@ -76,7 +76,7 @@ public:
     for (int i = 0; i < n; ++i) {
       auto ref = a[i] + b[i]; 
       if (c[i] != ref) {
-        std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -104,7 +104,7 @@ public:
     for (int i = 0; i < n; ++i) {
       auto ref = a[i] * b[i]; 
       if (c[i] != ref) {
-        std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -132,7 +132,7 @@ public:
     for (int i = 0; i < n; ++i) {
       auto ref = a[i] / b[i]; 
       if (c[i] != ref) {
-        std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -162,7 +162,7 @@ public:
       auto y = a[i] * b[i]; 
       auto ref = x + y; 
       if (c[i] != ref) {
-        std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -190,7 +190,7 @@ public:
     for (int i = 0; i < n; ++i) {
       auto ref = a[i] + b[i]; 
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -218,7 +218,7 @@ public:
     for (int i = 0; i < n; ++i) {
       auto ref = a[i] - b[i]; 
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -246,7 +246,7 @@ public:
     for (int i = 0; i < n; ++i) {
       auto ref = a[i] * b[i]; 
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -274,7 +274,7 @@ public:
     for (int i = 0; i < n; ++i) {
       auto ref = a[i] * b[i] + b[i];
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -302,7 +302,7 @@ public:
     for (int i = 0; i < n; ++i) {
       auto ref = a[i] * b[i] - b[i];
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -330,7 +330,7 @@ public:
     for (int i = 0; i < n; ++i) {
       auto ref = -a[i] * b[i] - b[i];
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -358,7 +358,7 @@ public:
     for (int i = 0; i < n; ++i) {
       auto ref = -a[i] * b[i] + b[i];
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -388,7 +388,7 @@ public:
       auto y =  a[i] * b[i] + b[i];
       auto ref = x + y;
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -416,7 +416,7 @@ public:
     for (int i = 0; i < n; ++i) {
       auto ref = a[i] / b[i];
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -446,7 +446,7 @@ public:
       auto y = b[i] / a[i];
       auto ref = x + y;
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -475,7 +475,7 @@ public:
     for (int i = 0; i < n; ++i) {
       auto ref = sqrt(a[i] * b[i]);
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -504,7 +504,7 @@ public:
       auto x = a[i] + b[i];
       auto ref = (int32_t)x;
       if (c[i] != ref) {
-        std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -533,7 +533,7 @@ public:
       auto x = a[i] + b[i];
       auto ref = (uint32_t)x;
       if (c[i] != ref) {
-        std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -562,7 +562,7 @@ public:
       auto x = a[i] + b[i];
       auto ref = (float)x;
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
@@ -591,7 +591,7 @@ public:
       auto x = a[i] + b[i];
       auto ref = (float)x;
       if (!almost_equal(c[i], ref)) {
-        std::cout << "error at result #" << i << ": expected " << ref << ", actual " << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
+        std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << std::endl;
         ++errors;
       }
     }
