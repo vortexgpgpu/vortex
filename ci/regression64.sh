@@ -4,13 +4,15 @@
 set -e
 
 # ensure build
-XLEN=64 make -s
+make -C hw -s
 
 coverage() 
 {
 echo "begin coverage tests..."
 
-make -C tests/riscv/isa run-simx-64
+make -C sim/simx clean
+XLEN=64 make -C sim/simx
+XLEN=64 make -C tests/riscv/isa run-simx
 
 echo "coverage tests done!"
 }
