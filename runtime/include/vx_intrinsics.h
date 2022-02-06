@@ -87,6 +87,21 @@ extern "C" {
 	__r;							            \
 })
 
+// Raster load
+#define vx_rast() ({                            \
+    unsigned __r;                               \
+    __asm__ __volatile__ (".insn s 0x0b, 0, 0, %0, x0, x0" : "=r"(__r)); \
+    __r;                                        \
+})
+
+// Rop write
+#define vx_rop(pos, depth, color, mask) ({      \
+	unsigned __r;                               \
+    unsigned depth_mask = (mask << 16) | depth; \
+    __asm__ __volatile__ (".insn r4 0x5b, 1, 1, x0, %0, %1, %2" :: "r"(pos), "r"(depth_mask), "r"(color); \
+	__r;							            \
+})
+
 // Set thread mask
 inline void vx_tmc(unsigned thread_mask) {
     asm volatile (".insn s 0x6b, 0, x0, 0(%0)" :: "r"(thread_mask));
