@@ -11,14 +11,14 @@ module VX_tex_unit #(
     VX_perf_tex_if.master perf_tex_if,
 `endif
 
-    // Texture unit <-> Memory Unit
-    VX_dcache_req_if.master dcache_req_if,
-    VX_dcache_rsp_if.slave  dcache_rsp_if,
+    // Memory interface
+    VX_dcache_req_if.master cache_req_if,
+    VX_dcache_rsp_if.slave  cache_rsp_if,
 
     // Inputs
-    VX_tex_req_if.slave     tex_req_if,
     VX_tex_csr_if.slave     tex_csr_if,
-
+    VX_tex_req_if.slave     tex_req_if,
+    
     // Outputs
     VX_tex_rsp_if.master    tex_rsp_if
 );
@@ -153,8 +153,8 @@ module VX_tex_unit #(
         .reset     (reset),
 
         // memory interface
-        .dcache_req_if (dcache_req_if),
-        .dcache_rsp_if (dcache_rsp_if),
+        .cache_req_if (cache_req_if),
+        .cache_rsp_if (cache_rsp_if),
 
         // inputs
         .req_valid (mem_req_valid),
@@ -205,8 +205,8 @@ module VX_tex_unit #(
     wire [$clog2(`NUM_THREADS+1)-1:0] perf_mem_req_per_cycle;
     wire [$clog2(`NUM_THREADS+1)-1:0] perf_mem_rsp_per_cycle;
 
-    wire [`NUM_THREADS-1:0] perf_mem_req_per_mask = dcache_req_if.valid & dcache_req_if.ready;
-    wire [`NUM_THREADS-1:0] perf_mem_rsp_per_mask = dcache_rsp_if.tmask & {`NUM_THREADS{dcache_rsp_if.valid & dcache_rsp_if.ready}};
+    wire [`NUM_THREADS-1:0] perf_mem_req_per_mask = cache_req_if.valid & cache_req_if.ready;
+    wire [`NUM_THREADS-1:0] perf_mem_rsp_per_mask = cache_rsp_if.tmask & {`NUM_THREADS{cache_rsp_if.valid & cache_rsp_if.ready}};
 
     `POP_COUNT(perf_mem_req_per_cycle, perf_mem_req_per_mask);    
     `POP_COUNT(perf_mem_rsp_per_cycle, perf_mem_rsp_per_mask);

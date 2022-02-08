@@ -220,8 +220,8 @@ module VX_execute #(
         .perf_tex_if    (perf_tex_if),
     `endif
         .tex_csr_if     (tex_csr_if),
-        .dcache_req_if  (tex_dcache_req_if),
-        .dcache_rsp_if  (tex_dcache_rsp_if),
+        .tcache_req_if  (tex_dcache_req_if),
+        .tcache_rsp_if  (tex_dcache_rsp_if),
     `endif
         .warp_ctl_if    (warp_ctl_if),
         .gpu_commit_if  (gpu_commit_if)
