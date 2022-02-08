@@ -24,72 +24,38 @@ module VX_tex_unit #(
 );
 
     localparam REQ_INFO_W = `NR_BITS + 1 + `NW_BITS + 32 + `UUID_BITS;
-    localparam BLEND_FRAC_W = (2 * `NUM_THREADS * `TEX_BLEND_FRAC);
+    localparam BLEND_FRAC_W = (2 * `NUM_THREADS * `TEX_BLEND_FRAC);    
     
-    reg [$clog2(`NUM_TEX_UNITS)-1:0] csr_tex_unit;
-    reg [`TEX_MIPOFF_BITS-1:0]    tex_mipoff [`NUM_TEX_UNITS-1:0][(`TEX_LOD_MAX+1)-1:0];
-    reg [1:0][`TEX_LOD_BITS-1:0]  tex_logdims [`NUM_TEX_UNITS-1:0];
-    reg [1:0][`TEX_WRAP_BITS-1:0] tex_wraps  [`NUM_TEX_UNITS-1:0];
-    reg [`TEX_ADDR_BITS-1:0]      tex_baddr  [`NUM_TEX_UNITS-1:0];     
-    reg [`TEX_FORMAT_BITS-1:0]    tex_format [`NUM_TEX_UNITS-1:0];
-    reg [`TEX_FILTER_BITS-1:0]    tex_filter [`NUM_TEX_UNITS-1:0];
-
-    // CSRs programming
-
-    always @(posedge clk) begin
-        if (tex_csr_if.write_enable) begin
-            case (tex_csr_if.write_addr)
-                `CSR_TEX_UNIT: begin 
-                    csr_tex_unit <= tex_csr_if.write_data[$clog2(`NUM_TEX_UNITS)-1:0];
-                end
-                `CSR_TEX_ADDR: begin 
-                    tex_baddr[csr_tex_unit] <= tex_csr_if.write_data[`TEX_ADDR_BITS-1:0];
-                end
-                `CSR_TEX_FORMAT: begin 
-                    tex_format[csr_tex_unit] <= tex_csr_if.write_data[`TEX_FORMAT_BITS-1:0];
-                end
-                `CSR_TEX_WRAPU: begin
-                    tex_wraps[csr_tex_unit][0] <= tex_csr_if.write_data[`TEX_WRAP_BITS-1:0];
-                end
-                `CSR_TEX_WRAPV: begin
-                    tex_wraps[csr_tex_unit][1] <= tex_csr_if.write_data[`TEX_WRAP_BITS-1:0];
-                end
-                `CSR_TEX_FILTER: begin 
-                    tex_filter[csr_tex_unit] <= tex_csr_if.write_data[`TEX_FILTER_BITS-1:0];
-                end
-                `CSR_TEX_WIDTH: begin 
-                    tex_logdims[csr_tex_unit][0] <= tex_csr_if.write_data[`TEX_LOD_BITS-1:0];
-                end
-                `CSR_TEX_HEIGHT: begin 
-                    tex_logdims[csr_tex_unit][1] <= tex_csr_if.write_data[`TEX_LOD_BITS-1:0];
-                end
-                default: begin
-                    for (integer j = 0; j <= `TEX_LOD_MAX; ++j) begin
-                    `IGNORE_WARNINGS_BEGIN
-                        if (tex_csr_if.write_addr == `CSR_TEX_MIPOFF(j)) begin
-                    `IGNORE_WARNINGS_END
-                            tex_mipoff[csr_tex_unit][j] <= tex_csr_if.write_data[`TEX_MIPOFF_BITS-1:0];
-                        end
-                    end
-                end
-            endcase
-        end
-    end
     wire [`UUID_BITS-1:0] write_uuid = tex_csr_if.write_uuid;
     `UNUSED_VAR (write_uuid);
 
-    // mipmap attributes
+    // CSRs access
+
+    tex_csrs_t tex_csrs;
+
+    VX_tex_csr #(
+        .CORE_ID   (CORE_ID)
+    ) tex_csr (
+        .clk        (clk),
+        .reset      (reset),
+
+        // inputs
+        .tex_csr_if (tex_csr_if),
+        .tex_req_if (tex_req_if),
+
+        // outputs
+        .tex_csrs   (tex_csrs)
+    );
 
     wire [`NUM_THREADS-1:0][`TEX_LOD_BITS-1:0]      mip_level;
     wire [`NUM_THREADS-1:0][`TEX_MIPOFF_BITS-1:0]   sel_mipoff;
     wire [`NUM_THREADS-1:0][1:0][`TEX_LOD_BITS-1:0] sel_logdims;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        wire [`NTEX_BITS-1:0] unit = tex_req_if.unit[`NTEX_BITS-1:0];
-        assign mip_level[i]      = tex_req_if.lod[i][`TEX_LOD_BITS-1:0];        
-        assign sel_mipoff[i]     = tex_mipoff[unit][mip_level[i]];
-        assign sel_logdims[i][0] = tex_logdims[unit][0];
-        assign sel_logdims[i][1] = tex_logdims[unit][1];
+        assign mip_level[i]      = tex_req_if.lod[i][`TEX_LOD_BITS-1:0];
+        assign sel_mipoff[i]     = tex_csrs.mipoff[mip_level[i]];
+        assign sel_logdims[i][0] = tex_csrs.logdims[0];
+        assign sel_logdims[i][1] = tex_csrs.logdims[1];
     end
 
     // address generation
@@ -112,19 +78,21 @@ module VX_tex_unit #(
         .clk        (clk),
         .reset      (reset),
 
+        // inputs
         .req_valid  (tex_req_if.valid),
         .req_tmask  (tex_req_if.tmask),
         .req_coords (tex_req_if.coords),
-        .req_format (tex_format[tex_req_if.unit]),
-        .req_filter (tex_filter[tex_req_if.unit]),
-        .req_wraps  (tex_wraps[tex_req_if.unit]),
-        .req_baseaddr(tex_baddr[tex_req_if.unit]),    
+        .req_format (tex_csrs.format),
+        .req_filter (tex_csrs.filter),
+        .req_wraps  (tex_csrs.wraps),
+        .req_baseaddr(tex_csrs.baddr),    
         .mip_level  (mip_level),
         .req_mipoff (sel_mipoff),
         .req_logdims(sel_logdims),
-        .req_info   ({tex_format[tex_req_if.unit], tex_req_if.rd, tex_req_if.wb, tex_req_if.wid, tex_req_if.PC, tex_req_if.uuid}),
+        .req_info   ({tex_csrs.format, tex_req_if.rd, tex_req_if.wb, tex_req_if.wid, tex_req_if.PC, tex_req_if.uuid}),
         .req_ready  (tex_req_if.ready),
 
+        // outputs
         .rsp_valid  (mem_req_valid), 
         .rsp_tmask  (mem_req_tmask),
         .rsp_filter (mem_req_filter), 

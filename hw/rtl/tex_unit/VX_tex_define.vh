@@ -48,4 +48,10 @@ task trace_tex_state (
     endcase  
 endtask
 
+`include "VX_tex_types.vh"
+
+`IGNORE_WARNINGS_BEGIN
+import tex_types::*;
+`IGNORE_WARNINGS_END
+
 `endif
