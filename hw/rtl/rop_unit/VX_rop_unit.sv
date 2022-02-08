@@ -3,9 +3,8 @@
 module VX_rop_unit #(  
     parameter CORE_ID = 0
 ) (
-    input wire  clk,
-    input wire  reset
-
+    input wire clk,
+    input wire reset
     // TODO
 );
 

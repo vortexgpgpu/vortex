@@ -73,6 +73,8 @@
 `define SMEM_BASE_ADDR `IO_BASE_ADDR
 `endif
 
+// ISA Extensions /////////////////////////////////////////////////////////////
+
 `ifndef EXT_M_DISABLE
 `define EXT_M_ENABLE
 `endif
@@ -81,12 +83,112 @@
 `define EXT_F_ENABLE
 `endif
 
-// Device identification
+`define ISA_STD_A           0
+`define ISA_STD_C           2
+`define ISA_STD_D           3
+`define ISA_STD_E           4
+`define ISA_STD_F           5
+`define ISA_STD_H           7
+`define ISA_STD_I           8
+`define ISA_STD_N           13
+`define ISA_STD_Q           16
+`define ISA_STD_S           18
+`define ISA_STD_U           20
+
+`define ISA_EXT_TEX         0
+`define ISA_EXT_RASTER      1
+`define ISA_EXT_ROP         2
+
+`ifdef EXT_A_ENABLE
+    `define EXT_A_ENABLED   1
+`else
+    `define EXT_A_ENABLED   0
+`endif
+
+`ifdef EXT_C_ENABLE
+    `define EXT_C_ENABLED   1
+`else
+    `define EXT_C_ENABLED   0
+`endif
+
+`ifdef EXT_D_ENABLE
+    `define EXT_D_ENABLED   1
+`else
+    `define EXT_D_ENABLED   0
+`endif
+
+`ifdef EXT_F_ENABLE
+    `define EXT_F_ENABLED   1
+`else
+    `define EXT_F_ENABLED   0
+`endif
+
+`ifdef EXT_M_ENABLE
+    `define EXT_M_ENABLED   1
+`else
+    `define EXT_M_ENABLED   0
+`endif
+
+`ifdef EXT_TEX_ENABLE
+    `define EXT_TEX_ENABLED 1
+`else
+    `define EXT_TEX_ENABLED 0
+`endif
+
+`ifdef EXT_RASTER_ENABLE
+    `define EXT_RASTER_ENABLED 1
+`else
+    `define EXT_RASTER_ENABLED 0
+`endif
+
+`ifdef EXT_ROP_ENABLE
+    `define EXT_ROP_ENABLED 1
+`else
+    `define EXT_ROP_ENABLED 0
+`endif
+
+`define ISA_X_ENABLED   (`EXT_TEX_ENABLED       \
+                       | `EXT_RASTER_ENABLED    \
+                       | `EXT_ROP_ENABLED)
+
+`define MISA_EXT    (`EXT_TEX_ENABLED << `ISA_EXT_TEX)        \
+                  | (`EXT_RASTER_ENABLED << `ISA_EXT_RASTER)  \
+                  | (`EXT_ROP_ENABLED << `ISA_EXT_ROP)
+
+`define MISA_STD  (`EXT_A_ENABLED <<  0) /* A - Atomic Instructions extension */ \
+                | (0 <<  1) /* B - Tentatively reserved for Bit operations extension */ \
+                | (`EXT_C_ENABLED <<  2) /* C - Compressed extension */ \
+                | (`EXT_D_ENABLED <<  3) /* D - Double precsision floating-point extension */ \
+                | (0 <<  4) /* E - RV32E base ISA */ \
+                | (`EXT_F_ENABLED << 5) /* F - Single precsision floating-point extension */ \
+                | (0 <<  6) /* G - Additional standard extensions present */ \
+                | (0 <<  7) /* H - Hypervisor mode implemented */ \
+                | (1 <<  8) /* I - RV32I/64I/128I base ISA */ \
+                | (0 <<  9) /* J - Reserved */ \
+                | (0 << 10) /* K - Reserved */ \
+                | (0 << 11) /* L - Tentatively reserved for Bit operations extension */ \
+                | (`EXT_M_ENABLED << 12) /* M - Integer Multiply/Divide extension */ \
+                | (0 << 13) /* N - User level interrupts supported */ \
+                | (0 << 14) /* O - Reserved */ \
+                | (0 << 15) /* P - Tentatively reserved for Packed-SIMD extension */ \
+                | (0 << 16) /* Q - Quad-precision floating-point extension */ \
+                | (0 << 17) /* R - Reserved */ \
+                | (0 << 18) /* S - Supervisor mode implemented */ \
+                | (0 << 19) /* T - Tentatively reserved for Transactional Memory extension */ \
+                | (1 << 20) /* U - User mode implemented */ \
+                | (0 << 21) /* V - Tentatively reserved for Vector extension */ \
+                | (0 << 22) /* W - Reserved */ \
+                | (`ISA_X_ENABLED << 23) /* X - Non-standard extensions present */ \
+                | (0 << 24) /* Y - Reserved */ \
+                | (0 << 25) /* Z - Reserved */
+
+// Device identification //////////////////////////////////////////////////////
+
 `define VENDOR_ID           0
 `define ARCHITECTURE_ID     0
 `define IMPLEMENTATION_ID   0
 
-///////////////////////////////////////////////////////////////////////////////
+// Pipeline latencies /////////////////////////////////////////////////////////
 
 `ifndef LATENCY_IMUL
 `define LATENCY_IMUL 3
@@ -126,26 +228,48 @@
 
 `define RESET_DELAY 6
 
+// Pipeline Queues ////////////////////////////////////////////////////////////
+
+// Size of Instruction Buffer
+`ifndef IBUF_SIZE
+`define IBUF_SIZE 2
+`endif
+
+// Size of LSU Request Queue
+`ifndef LSUQ_SIZE
+`define LSUQ_SIZE (`NUM_WARPS * 2)
+`endif
+
+// Size of FPU Request Queue
+`ifndef FPUQ_SIZE
+`define FPUQ_SIZE 8
+`endif
+
+// Texture Unit Request Queue
+`ifndef TEXQ_SIZE
+`define TEXQ_SIZE (`NUM_WARPS * 2)
+`endif
+
 // CSR Addresses //////////////////////////////////////////////////////////////
 
 // User Floating-Point CSRs
-`define CSR_FFLAGS      12'h001
-`define CSR_FRM         12'h002
-`define CSR_FCSR        12'h003
+`define CSR_FFLAGS                  12'h001
+`define CSR_FRM                     12'h002
+`define CSR_FCSR                    12'h003
 
-`define CSR_SATP        12'h180
+`define CSR_SATP                    12'h180
 
-`define CSR_PMPCFG0     12'h3A0
-`define CSR_PMPADDR0    12'h3B0
+`define CSR_PMPCFG0                 12'h3A0
+`define CSR_PMPADDR0                12'h3B0
 
-`define CSR_MSTATUS     12'h300
-`define CSR_MISA        12'h301
-`define CSR_MEDELEG     12'h302
-`define CSR_MIDELEG     12'h303
-`define CSR_MIE         12'h304
-`define CSR_MTVEC       12'h305
+`define CSR_MSTATUS                 12'h300
+`define CSR_MISA                    12'h301
+`define CSR_MEDELEG                 12'h302
+`define CSR_MIDELEG                 12'h303
+`define CSR_MIE                     12'h304
+`define CSR_MTVEC                   12'h305
 
-`define CSR_MEPC        12'h341
+`define CSR_MEPC                    12'h341
 
 // Machine Performance-monitoring counters
 `define CSR_MPM_BASE                12'hB00
@@ -217,83 +341,97 @@
 `define CSR_MPM_TEX_LAT_H           12'hB9C
 
 // Machine Information Registers
-`define CSR_MVENDORID   12'hF11
-`define CSR_MARCHID     12'hF12
-`define CSR_MIMPID      12'hF13
-`define CSR_MHARTID     12'hF14
+`define CSR_MVENDORID               12'hF11
+`define CSR_MARCHID                 12'hF12
+`define CSR_MIMPID                  12'hF13
+`define CSR_MHARTID                 12'hF14
 
-// User SIMT CSRs
-`define CSR_WTID        12'hCC0
-`define CSR_LTID        12'hCC1
-`define CSR_GTID        12'hCC2
-`define CSR_LWID        12'hCC3
-`define CSR_GWID        `CSR_MHARTID
-`define CSR_GCID        12'hCC5
-`define CSR_TMASK       12'hCC4
+// Vortex GPGU CSRs
+`define CSR_WTID                    12'hCC0
+`define CSR_LTID                    12'hCC1
+`define CSR_GTID                    12'hCC2
+`define CSR_LWID                    12'hCC3
+`define CSR_GWID                    `CSR_MHARTID
+`define CSR_GCID                    12'hCC5
+`define CSR_TMASK                   12'hCC4
+`define CSR_NT                      12'hFC0
+`define CSR_NW                      12'hFC1
+`define CSR_NC                      12'hFC2
 
-// Machine SIMT CSRs
-`define CSR_NT          12'hFC0
-`define CSR_NW          12'hFC1
-`define CSR_NC          12'hFC2
+// Texture Units //////////////////////////////////////////////////////////////
 
-////////// Texture Units //////////////////////////////////////////////////////
+`define NUM_TEX_UNITS               2
+`define TEX_SUBPIXEL_BITS           8
 
-`define NUM_TEX_UNITS           2
-`define TEX_SUBPIXEL_BITS       8
+`define TEX_DIM_BITS                15
+`define TEX_LOD_MAX                 `TEX_DIM_BITS
+`define TEX_LOD_BITS                4
 
-`define TEX_DIM_BITS            15
-`define TEX_LOD_MAX             `TEX_DIM_BITS
-`define TEX_LOD_BITS            4
+`define TEX_FXD_BITS                32
+`define TEX_FXD_FRAC                (`TEX_DIM_BITS+`TEX_SUBPIXEL_BITS)
 
-`define TEX_FXD_BITS            32
-`define TEX_FXD_FRAC            (`TEX_DIM_BITS+`TEX_SUBPIXEL_BITS)
+`define TEX_STATE_ADDR              0
+`define TEX_STATE_WIDTH             1
+`define TEX_STATE_HEIGHT            2
+`define TEX_STATE_FORMAT            3
+`define TEX_STATE_FILTER            4
+`define TEX_STATE_WRAPU             5
+`define TEX_STATE_WRAPV             6
+`define TEX_STATE_MIPOFF(lod)       (7+(lod))
+`define NUM_TEX_STATES              (`TEX_STATE_MIPOFF(`TEX_LOD_MAX)+1)
 
-`define TEX_STATE_ADDR          0
-`define TEX_STATE_WIDTH         1
-`define TEX_STATE_HEIGHT        2
-`define TEX_STATE_FORMAT        3
-`define TEX_STATE_FILTER        4
-`define TEX_STATE_WRAPU         5
-`define TEX_STATE_WRAPV         6
-`define TEX_STATE_MIPOFF(lod)   (7+(lod))
-`define NUM_TEX_STATES          (`TEX_STATE_MIPOFF(`TEX_LOD_MAX)+1)
+`define CSR_TEX_UNIT                12'h7C0
 
-`define CSR_TEX_UNIT            12'hFD0
+`define CSR_TEX_STATE_BEGIN         12'h7C1
+`define CSR_TEX_ADDR                (`CSR_TEX_STATE_BEGIN+`TEX_STATE_ADDR)
+`define CSR_TEX_WIDTH               (`CSR_TEX_STATE_BEGIN+`TEX_STATE_WIDTH)
+`define CSR_TEX_HEIGHT              (`CSR_TEX_STATE_BEGIN+`TEX_STATE_HEIGHT)
+`define CSR_TEX_FORMAT              (`CSR_TEX_STATE_BEGIN+`TEX_STATE_FORMAT)
+`define CSR_TEX_FILTER              (`CSR_TEX_STATE_BEGIN+`TEX_STATE_FILTER)
+`define CSR_TEX_WRAPU               (`CSR_TEX_STATE_BEGIN+`TEX_STATE_WRAPU)
+`define CSR_TEX_WRAPV               (`CSR_TEX_STATE_BEGIN+`TEX_STATE_WRAPV)
+`define CSR_TEX_MIPOFF(lod)         (`CSR_TEX_STATE_BEGIN+`TEX_STATE_MIPOFF(lod))
+`define CSR_TEX_STATE_END           (`CSR_TEX_STATE_BEGIN+`NUM_TEX_STATES)
 
-`define CSR_TEX_STATE_BEGIN     12'hFD1
-`define CSR_TEX_ADDR            (`CSR_TEX_STATE_BEGIN+`TEX_STATE_ADDR)
-`define CSR_TEX_WIDTH           (`CSR_TEX_STATE_BEGIN+`TEX_STATE_WIDTH)
-`define CSR_TEX_HEIGHT          (`CSR_TEX_STATE_BEGIN+`TEX_STATE_HEIGHT)
-`define CSR_TEX_FORMAT          (`CSR_TEX_STATE_BEGIN+`TEX_STATE_FORMAT)
-`define CSR_TEX_FILTER          (`CSR_TEX_STATE_BEGIN+`TEX_STATE_FILTER)
-`define CSR_TEX_WRAPU           (`CSR_TEX_STATE_BEGIN+`TEX_STATE_WRAPU)
-`define CSR_TEX_WRAPV           (`CSR_TEX_STATE_BEGIN+`TEX_STATE_WRAPV)
-`define CSR_TEX_MIPOFF(lod)     (`CSR_TEX_STATE_BEGIN+`TEX_STATE_MIPOFF(lod))
-`define CSR_TEX_STATE_END       (`CSR_TEX_STATE_BEGIN+`NUM_TEX_STATES)
+`define CSR_TEX_STATE(addr)         ((addr) - `CSR_TEX_STATE_BEGIN)
 
-`define CSR_TEX_STATE(addr)     ((addr) - `CSR_TEX_STATE_BEGIN)
+// Raster Units ///////////////////////////////////////////////////////////////
 
-// Pipeline Queues ////////////////////////////////////////////////////////////
+`define RASTER_STATE_PIDX_ADDR      0
+`define RASTER_STATE_PIDX_SIZE      1
+`define RASTER_STATE_PBUF_ADDR      2
+`define RASTER_STATE_PBUF_STRIDE    3
+`define RASTER_STATE_TILE_XY        4
+`define RASTER_STATE_TILE_WH        5
+`define NUM_RASTER_STATES           6
 
-// Size of Instruction Buffer
-`ifndef IBUF_SIZE
-`define IBUF_SIZE 2
-`endif
+`define CSR_RASTER_STATE_BEGIN      `CSR_TEX_STATE_END
+`define CSR_RASTER_PIDX_ADDR        (`CSR_RASTER_BEGIN+`RASTER_STATE_PIDX_ADDR)
+`define CSR_RASTER_PIDX_SIZE        (`CSR_RASTER_BEGIN+`RASTER_STATE_PIDX_SIZE)
+`define CSR_RASTER_PBUF_ADDR        (`CSR_RASTER_BEGIN+`RASTER_STATE_PBUF_ADDR)
+`define CSR_RASTER_PBUF_STRIDE      (`CSR_RASTER_BEGIN+`RASTER_STATE_PBUF_STRIDE)
+`define CSR_RASTER_TILE_XY          (`CSR_RASTER_BEGIN+`RASTER_STATE_TILE_XY)
+`define CSR_RASTER_TILE_WH          (`CSR_RASTER_BEGIN+`RASTER_STATE_TILE_WH)
+`define CSR_RASTER_STATE_END        (`CSR_RASTER_STATE_BEGIN+`NUM_RASTER_STATES)
 
-// Size of LSU Request Queue
-`ifndef LSUQ_SIZE
-`define LSUQ_SIZE (`NUM_WARPS * 2)
-`endif
+`define CSR_RASTER_STATE(addr)      ((addr) - `CSR_RASTER_STATE_BEGIN)
 
-// Size of FPU Request Queue
-`ifndef FPUQ_SIZE
-`define FPUQ_SIZE 8
-`endif
+// Render Output Units ////////////////////////////////////////////////////////
 
-// Texture Unit Request Queue
-`ifndef TEXQ_SIZE
-`define TEXQ_SIZE (`NUM_WARPS * 2)
-`endif
+`define ROP_STATE_BLEND_RGB         0
+`define ROP_STATE_BLEND_ALPHA       1
+`define ROP_STATE_BLEBD_CONST       2
+`define ROP_STATE_LOGIC_OP          3
+`define NUM_ROP_STATES              4
+
+`define CSR_ROP_STATE_BEGIN        `CSR_RASTER_STATE_END
+`define CSR_ROP_BLEND_RGB          (`CSR_ROP_STATE_BEGIN+`ROP_STATE_BLEND_RGB)
+`define CSR_ROP_BLEND_APLHA        (`CSR_ROP_STATE_BEGIN+`ROP_STATE_BLEND_ALPHA)
+`define CSR_ROP_BLEND_CONST        (`CSR_ROP_STATE_BEGIN+`ROP_STATE_BLEND_CONST)
+`define CSR_ROP_LOGIC_OP           (`CSR_ROP_STATE_BEGIN+`ROP_STATE_LOGIC_OP)
+`define CSR_ROP_STATE_END          (`CSR_ROP_STATE_BEGIN+`NUM_ROP_STATES)
+
+`define CSR_ROP_STATE(addr)        ((addr) - `CSR_ROP_STATE_BEGIN)
 
 // Icache Configurable Knobs //////////////////////////////////////////////////
 

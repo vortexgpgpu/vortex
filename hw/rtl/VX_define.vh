@@ -200,47 +200,6 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`ifdef EXT_M_ENABLE
-    `define ISA_EXT_M   (1 << 12)
-`else
-    `define ISA_EXT_M   0
-`endif
-
-`ifdef EXT_F_ENABLE
-    `define ISA_EXT_F   (1 << 5)
-`else
-    `define ISA_EXT_F   0
-`endif
-
-`define ISA_CODE  (0 <<  0) // A - Atomic Instructions extension \
-                | (0 <<  1) // B - Tentatively reserved for Bit operations extension  \
-                | (0 <<  2) // C - Compressed extension \
-                | (0 <<  3) // D - Double precsision floating-point extension \
-                | (0 <<  4) // E - RV32E base ISA \
-                |`ISA_EXT_F // F - Single precsision floating-point extension \
-                | (0 <<  6) // G - Additional standard extensions present \
-                | (0 <<  7) // H - Hypervisor mode implemented \
-                | (1 <<  8) // I - RV32I/64I/128I base ISA \
-                | (0 <<  9) // J - Reserved \
-                | (0 << 10) // K - Reserved \
-                | (0 << 11) // L - Tentatively reserved for Bit operations extension \
-                |`ISA_EXT_M // M - Integer Multiply/Divide extension \
-                | (0 << 13) // N - User level interrupts supported \
-                | (0 << 14) // O - Reserved \
-                | (0 << 15) // P - Tentatively reserved for Packed-SIMD extension \
-                | (0 << 16) // Q - Quad-precision floating-point extension \
-                | (0 << 17) // R - Reserved \
-                | (0 << 18) // S - Supervisor mode implemented \
-                | (0 << 19) // T - Tentatively reserved for Transactional Memory extension \
-                | (1 << 20) // U - User mode implemented \
-                | (0 << 21) // V - Tentatively reserved for Vector extension \
-                | (0 << 22) // W - Reserved \
-                | (1 << 23) // X - Non-standard extensions present \
-                | (0 << 24) // Y - Reserved \
-                | (0 << 25) // Z - Reserved
-
-///////////////////////////////////////////////////////////////////////////////
-
 // non-cacheable tag bits
 `define NC_TAG_BIT              1
 

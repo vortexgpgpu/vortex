@@ -23,6 +23,8 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
     , mmu_(0, arch.wsize(), true)
     , smem_(RAM_PAGE_SIZE)
     , tex_units_(NUM_TEX_UNITS, this)
+    , raster_unit_(this)
+    , rop_unit_(this)
     , warps_(arch.num_warps())
     , barriers_(arch.num_barriers(), 0)
     , csrs_(arch.num_csrs(), 0)
@@ -634,6 +636,20 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
      && addr < CSR_TEX_STATE_END) {
       uint32_t state = CSR_TEX_STATE(addr);
       return tex_units_.at(csr_tex_unit_).get_state(state);
+    } else
+  #endif
+  #ifdef EXT_RASTER_ENABLE
+    if (addr >= CSR_RASTER_STATE_BEGIN
+     && addr < CSR_RASTER_STATE_END) {
+      uint32_t state = CSR_RASTER_STATE(addr);
+      return raster_unit.get_state(state);
+    } else
+  #endif
+  #ifdef EXT_ROP_ENABLE
+    if (addr >= CSR_ROP_STATE_BEGIN
+     && addr < CSR_ROP_STATE_END) {
+      uint32_t state = CSR_ROP_STATE(addr);
+      return rop_unit.get_state(state);
     } else
   #endif
     {

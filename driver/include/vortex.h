@@ -22,6 +22,24 @@ typedef void* vx_buffer_h;
 #define VX_CAPS_LOCAL_MEM_SIZE    0x5
 #define VX_CAPS_ALLOC_BASE_ADDR   0x6
 #define VX_CAPS_KERNEL_BASE_ADDR  0x7
+#define VX_CAPS_ISA_FLAGS         0x8
+
+// device isa flags
+#define VX_ISA_STD_A              (1ull << 0)
+#define VX_ISA_STD_C              (1ull << 2)
+#define VX_ISA_STD_D              (1ull << 3)
+#define VX_ISA_STD_E              (1ull << 4)
+#define VX_ISA_STD_F              (1ull << 5)
+#define VX_ISA_STD_H              (1ull << 7)
+#define VX_ISA_STD_I              (1ull << 8)
+#define VX_ISA_STD_N              (1ull << 13)
+#define VX_ISA_STD_Q              (1ull << 16)
+#define VX_ISA_STD_S              (1ull << 18)
+#define VX_ISA_STD_U              (1ull << 20)
+#define VX_ISA_BASE(flags)        (1 << (((flags >> 30) & 0x3) + 4))
+#define VX_ISA_EXT_TEX            (1ull << 32)
+#define VX_ISA_EXT_RASTER         (1ull << 33)
+#define VX_ISA_EXT_ROP            (1ull << 34)
 
 #define MAX_TIMEOUT               (60*60*1000)   // 1hr 
 

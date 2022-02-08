@@ -22,6 +22,8 @@
 #include "scoreboard.h"
 #include "exeunit.h"
 #include "tex_unit.h"
+#include "raster_unit.h"
+#include "rop_unit.h"
 
 namespace vortex {
 
@@ -139,6 +141,8 @@ private:
   MemoryUnit mmu_;
   RAM smem_;
   std::vector<TexUnit> tex_units_;
+  RasterUnit raster_unit_;
+  RopUnit rop_unit_;
 
   std::vector<std::shared_ptr<Warp>> warps_;  
   std::vector<WarpMask> barriers_;  

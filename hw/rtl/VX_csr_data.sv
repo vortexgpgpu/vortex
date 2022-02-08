@@ -222,7 +222,7 @@ module VX_csr_data #(
             `CSR_SATP      : read_data_r = 32'(csr_satp);
             
             `CSR_MSTATUS   : read_data_r = 32'(csr_mstatus);
-            `CSR_MISA      : read_data_r = `ISA_CODE;
+            `CSR_MISA      : read_data_r = (($clog2(`XLEN)-4) << (`XLEN-2)) | `MISA_STD;
             `CSR_MEDELEG   : read_data_r = 32'(csr_medeleg);
             `CSR_MIDELEG   : read_data_r = 32'(csr_mideleg);
             `CSR_MIE       : read_data_r = 32'(csr_mie);

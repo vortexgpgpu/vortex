@@ -1,6 +1,6 @@
-`include "VX_raster_define.vh"
+`include "VX_rop_define.vh"
 
-module VX_raster_unit #(  
+module VX_rop_slice #(  
     parameter CORE_ID = 0
     // TODO
 ) (

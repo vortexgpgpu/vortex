@@ -48,6 +48,7 @@
 #define MMIO_MEM_ADDR       (AFU_IMAGE_MMIO_MEM_ADDR * 4)
 #define MMIO_DATA_SIZE      (AFU_IMAGE_MMIO_DATA_SIZE * 4)
 #define MMIO_DEV_CAPS       (AFU_IMAGE_MMIO_DEV_CAPS * 4)
+#define MMIO_ISA_CAPS       (AFU_IMAGE_MMIO_ISA_CAPS * 4)
 #define MMIO_STATUS         (AFU_IMAGE_MMIO_STATUS * 4)
 
 #define STATUS_STATE_BITS   8
@@ -72,6 +73,7 @@ public:
     unsigned num_cores;
     unsigned num_warps;
     unsigned num_threads;
+    uint64_t isa_caps;
 };
 
 typedef struct vx_buffer_ {
@@ -142,6 +144,9 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
         break;
     case VX_CAPS_KERNEL_BASE_ADDR:
         *value = STARTUP_ADDR;
+        break;
+    case VX_CAPS_ISA_FLAGS:
+        *value = device->isa_caps;
         break;
     default:
         fprintf(stderr, "[VXDRV] Error: invalid caps id: %d\n", caps_id);
@@ -227,9 +232,16 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     device->fpga = accel_handle;
     
     {   
+        // Load ISA CAPS
+        int ret = fpgaReadMMIO64(device->fpga, 0, MMIO_ISA_CAPS, &device->isa_caps);        
+        if (ret != FPGA_OK) {
+            fpgaClose(accel_handle);
+            return ret;
+        }
+
         // Load device CAPS
         uint64_t dev_caps;
-        int ret = fpgaReadMMIO64(device->fpga, 0, MMIO_DEV_CAPS, &dev_caps);        
+        ret = fpgaReadMMIO64(device->fpga, 0, MMIO_DEV_CAPS, &dev_caps);        
         if (ret != FPGA_OK) {
             fpgaClose(accel_handle);
             return ret;
@@ -239,8 +251,8 @@ extern int vx_dev_open(vx_device_h* hdevice) {
         device->num_warps   = (dev_caps >> 32) & 0xffff;
         device->num_threads = (dev_caps >> 48) & 0xffff;
     #ifndef NDEBUG    
-        fprintf(stdout, "[VXDRV] DEVCAPS: version=%d, num_cores=%d, num_warps=%d, num_threads=%d\n", 
-                device->version, device->num_cores, device->num_warps, device->num_threads);
+        fprintf(stdout, "[VXDRV] DEVCAPS: version=%d, num_cores=%d, num_warps=%d, num_threads=%d isa=%ld\n", 
+                device->version, device->num_cores, device->num_warps, device->num_threads, device->isa_caps);
     #endif
     }
     

@@ -78,6 +78,7 @@ localparam MMIO_SCOPE_READ    = `AFU_IMAGE_MMIO_SCOPE_READ;
 localparam MMIO_SCOPE_WRITE   = `AFU_IMAGE_MMIO_SCOPE_WRITE;
 
 localparam MMIO_DEV_CAPS      = `AFU_IMAGE_MMIO_DEV_CAPS;
+localparam MMIO_ISA_CAPS      = `AFU_IMAGE_MMIO_ISA_CAPS;
 
 localparam CCI_RD_QUEUE_SIZE  = 2 * CCI_RD_WINDOW_SIZE;
 localparam CCI_RD_QUEUE_TAGW  = $clog2(CCI_RD_WINDOW_SIZE);
@@ -97,6 +98,8 @@ localparam STATE_WIDTH        = $clog2(STATE_MAX_VALUE);
 wire [127:0] afu_id = `AFU_ACCEL_UUID;
 
 wire [63:0] dev_caps = {16'(`NUM_THREADS), 16'(`NUM_WARPS), 16'(`NUM_CORES * `NUM_CLUSTERS), 16'(`IMPLEMENTATION_ID)};
+
+wire [63:0] isa_caps = {32'(`MISA_EXT), 2'($clog2(`XLEN)-4), 30'(`MISA_STD)};
 
 reg [STATE_WIDTH-1:0] state;
 
@@ -261,6 +264,14 @@ always @(posedge clk) begin
         mmio_tx.data <= dev_caps;
       `ifdef DBG_TRACE_AFU
         dpi_trace("%d: MMIO_DEV_CAPS: addr=%0h, data=%0h\n", $time, mmio_hdr.address, dev_caps);
+      `endif
+      end      
+      MMIO_ISA_CAPS: begin
+        mmio_tx.data <= isa_caps;
+      `ifdef DBG_TRACE_AFU
+        if (state != STATE_WIDTH'(mmio_tx.data)) begin
+          dpi_trace("%d: MMIO_ISA_CAPS: addr=%0h, state=%0d\n", $time, mmio_hdr.address, isa_caps);
+        end
       `endif
       end
       default: begin

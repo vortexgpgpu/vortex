@@ -34,7 +34,7 @@ bool use_sw = false;
 ePixelFormat eformat = FORMAT_A8R8G8B8;
 
 vx_device_h device = nullptr;
-vx_buffer_h buffer = nullptr;
+vx_buffer_h staging_buf = nullptr;
 kernel_arg_t kernel_arg;
 
 static void show_usage() {
@@ -95,8 +95,8 @@ static void parse_args(int argc, char **argv) {
 }
 
 void cleanup() {
-  if (buffer) {
-    vx_buf_free(buffer);
+  if (staging_buf) {
+    vx_buf_free(staging_buf);
   }
   if (device) {
     vx_mem_free(device, kernel_arg.src_addr);
@@ -127,10 +127,10 @@ int run_test(const kernel_arg_t& kernel_arg,
 
   // download destination buffer
   std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(buffer, kernel_arg.dst_addr, buf_size, 0));
+  RT_CHECK(vx_copy_from_dev(staging_buf, kernel_arg.dst_addr, buf_size, 0));
 
   std::vector<uint8_t> dst_pixels(buf_size);
-  auto buf_ptr = (uint8_t*)vx_host_ptr(buffer);
+  auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
   for (uint32_t i = 0; i < buf_size; ++i) {
     dst_pixels[i] = buf_ptr[i];
   } 
@@ -177,19 +177,26 @@ int main(int argc, char *argv[]) {
   uint32_t dst_bufsize = dst_bpp * dst_width * dst_height;
 
   // open device connection
-  std::cout << "open device connection" << std::endl;  
+  std::cout << "open device connection" << std::endl;
   RT_CHECK(vx_dev_open(&device));
+
+  uint64_t isa_flags;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
+  if (0 == (isa_flags & VX_ISA_EXT_TEX)) {
+    std::cout << "texture extension not supported!" << std::endl;
+    return -1;
+  }
 
   uint64_t max_cores, max_warps, max_threads;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_CORES, &max_cores));
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_WARPS, &max_warps));
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_THREADS, &max_threads));
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_THREADS, &max_threads));  
 
   uint32_t num_tasks = max_cores * max_warps * max_threads;
 
   std::cout << "number of tasks: " << std::dec << num_tasks << std::endl;
-  std::cout << "source buffer: width=" << src_width << ", heigth=" << src_height << ", size=" << src_bufsize << " bytes" << std::endl;
-  std::cout << "destination buffer: width=" << dst_width << ", heigth=" << dst_height << ", size=" << dst_bufsize << " bytes" << std::endl;
+  std::cout << "source staging_buf: width=" << src_width << ", heigth=" << src_height << ", size=" << src_bufsize << " bytes" << std::endl;
+  std::cout << "destination staging_buf: width=" << dst_width << ", heigth=" << dst_height << ", size=" << dst_bufsize << " bytes" << std::endl;
 
   // upload program
   std::cout << "upload program" << std::endl;  
@@ -208,7 +215,7 @@ int main(int argc, char *argv[]) {
   std::cout << "allocate shared memory" << std::endl;    
   uint32_t alloc_size = std::max<uint32_t>(sizeof(kernel_arg_t), 
                             std::max<uint32_t>(src_bufsize, dst_bufsize));
-  RT_CHECK(vx_buf_alloc(device, alloc_size, &buffer));
+  RT_CHECK(vx_buf_alloc(device, alloc_size, &staging_buf));
   
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
@@ -235,29 +242,29 @@ int main(int argc, char *argv[]) {
     kernel_arg.dst_pitch  = dst_bpp * dst_width;    
     kernel_arg.dst_addr   = dst_addr;
 
-    auto buf_ptr = (uint8_t*)vx_host_ptr(buffer);
+    auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
-    RT_CHECK(vx_copy_to_dev(buffer, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
+    RT_CHECK(vx_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
   }
 
   // upload source buffer
   std::cout << "upload source buffer" << std::endl;      
   {    
-    auto buf_ptr = (uint8_t*)vx_host_ptr(buffer);
+    auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < src_bufsize; ++i) {
       buf_ptr[i] = src_pixels[i];
     }      
-    RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.src_addr, src_bufsize, 0));
+    RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src_addr, src_bufsize, 0));
   }
 
   // clear destination buffer
   std::cout << "clear destination buffer" << std::endl;      
   {    
-    auto buf_ptr = (uint32_t*)vx_host_ptr(buffer);
+    auto buf_ptr = (uint32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < (dst_bufsize/4); ++i) {
       buf_ptr[i] = 0xdeadbeef;
     }    
-    RT_CHECK(vx_copy_to_dev(buffer, kernel_arg.dst_addr, dst_bufsize, 0));  
+    RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_addr, dst_bufsize, 0));  
   }
 
   // run tests
