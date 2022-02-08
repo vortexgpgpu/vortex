@@ -16,11 +16,8 @@ module VX_rop_unit #(
     VX_dcache_rsp_if.slave  cache_rsp_if,
 
     // Inputs
-    VX_rop_csr_if.slave     rop_csr_if,
-    VX_rop_req_if.slave     rop_req_if,
-    
-    // Outputs
-    VX_rop_rsp_if.master    rop_rsp_if
+    VX_rop_csr_if.slave rop_csr_if,
+    VX_rop_req_if.slave rop_req_if
 );
 
     // TODO
