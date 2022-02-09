@@ -25,8 +25,24 @@ module VX_raster_unit #(
     VX_raster_rsp_if.master raster_rsp_if
 );
 
-    `UNUSED_VAR (clk)
-    `UNUSED_VAR (reset)
+    raster_csrs_t raster_csrs;
+
+    VX_raster_csr #(
+        .CORE_ID (CORE_ID)
+    ) raster_csr (
+        .clk        (clk),
+        .reset      (reset),
+
+        // inputs
+        .raster_csr_if (raster_csr_if),
+        .raster_req_if (raster_req_if),
+
+        // outputs
+        .raster_csrs (raster_csrs)
+    );
+
+    // TODO: remove
+    `UNUSED_VAR (raster_csrs)
 
     // TODO: remove
     `UNUSED_VAR (raster_req_if.valid)

@@ -87,4 +87,14 @@ module VX_tex_csr #(
     assign tex_csrs.format  = tex_format[tex_req_if.unit];
     assign tex_csrs.filter  = tex_filter[tex_req_if.unit];
 
+`ifdef DBG_TRACE_TEX
+    always @(posedge clk) begin
+        if (tex_csr_if.write_enable) begin
+            dpi_trace("%d: core%0d-tex-csr: unit=%0d, state=", $time, CORE_ID, csr_tex_unit);
+            trace_tex_state(tex_csr_if.write_addr);
+            dpi_trace(", data=%0h (#%0d)\n", tex_csr_if.write_data, tex_csr_if.write_uuid);
+        end
+    end
+`endif
+
 endmodule

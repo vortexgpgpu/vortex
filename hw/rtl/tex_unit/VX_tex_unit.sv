@@ -211,11 +211,6 @@ module VX_tex_unit #(
 
 `ifdef DBG_TRACE_TEX
     always @(posedge clk) begin
-        if (tex_csr_if.write_enable) begin
-            dpi_trace("%d: core%0d-tex-csr: unit=%0d, state=", $time, CORE_ID, csr_tex_unit);
-            trace_tex_state(tex_csr_if.write_addr);
-            dpi_trace(", data=%0h (#%0d)\n", tex_csr_if.write_data, tex_csr_if.write_uuid);
-        end
         if (tex_req_if.valid && tex_req_if.ready) begin
             dpi_trace("%d: core%0d-tex-req: wid=%0d, PC=%0h, tmask=%b, unit=%0d, lod=%0h, u=", 
                 $time, CORE_ID, tex_req_if.wid, tex_req_if.PC, tex_req_if.tmask, tex_req_if.unit, tex_req_if.lod);

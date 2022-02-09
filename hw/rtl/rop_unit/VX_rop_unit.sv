@@ -21,8 +21,24 @@ module VX_rop_unit #(
     VX_rop_req_if.slave rop_req_if
 );
 
-    `UNUSED_VAR (clk)
-    `UNUSED_VAR (reset)
+    rop_csrs_t rop_csrs;
+
+    VX_rop_csr #(
+        .CORE_ID (CORE_ID)
+    ) rop_csr (
+        .clk        (clk),
+        .reset      (reset),
+
+        // inputs
+        .rop_csr_if (rop_csr_if),
+        .rop_req_if (rop_req_if),
+
+        // outputs
+        .rop_csrs   (rop_csrs)
+    );
+
+    // TODO: remove
+    `UNUSED_VAR (rop_csrs)
 
     // TODO: remove
     `UNUSED_VAR (rop_req_if.valid)
