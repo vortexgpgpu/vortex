@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_cache_arb #(    
+module VX_cache_mux #(    
     parameter NUM_REQS      = 1, 
     parameter LANES         = 1,
     parameter DATA_SIZE     = 1,

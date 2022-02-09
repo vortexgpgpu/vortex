@@ -14,11 +14,11 @@ module VX_gpu_unit #(
 `ifdef EXT_TEX_ENABLE
     // PERF
 `ifdef PERF_ENABLE
-    VX_perf_tex_if.master perf_tex_if,
+    VX_perf_tex_if.master   perf_tex_if,
 `endif
     VX_dcache_req_if.master tcache_req_if,
     VX_dcache_rsp_if.slave  tcache_rsp_if,
-    VX_tex_csr_if.slave tex_csr_if,
+    VX_tex_csr_if.slave     tex_csr_if,
 `endif
 
     // Outputs

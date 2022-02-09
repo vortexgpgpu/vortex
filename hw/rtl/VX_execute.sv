@@ -12,6 +12,12 @@ module VX_execute #(
     VX_dcache_req_if.master dcache_req_if,
     VX_dcache_rsp_if.slave dcache_rsp_if,
 
+`ifdef EXT_TEX_ENABLE
+    // Tcache interface
+    VX_dcache_req_if.master tcache_req_if,
+    VX_dcache_rsp_if.slave tcache_rsp_if,
+`endif
+
     // commit interface
     VX_cmt_to_csr_if.slave  cmt_to_csr_if,
 
@@ -45,83 +51,13 @@ module VX_execute #(
     VX_commit_if.master     gpu_commit_if,
     
     input wire              busy
-);     
+);
 
 `ifdef EXT_TEX_ENABLE
-
-    VX_dcache_req_if #(
-        .NUM_REQS  (`NUM_THREADS), 
-        .WORD_SIZE (4), 
-        .TAG_WIDTH (`LSU_TEX_DCACHE_TAG_BITS)
-    ) lsu_dcache_req_if();
-
-    VX_dcache_rsp_if #(
-        .NUM_REQS  (`NUM_THREADS), 
-        .WORD_SIZE (4), 
-        .TAG_WIDTH (`LSU_TEX_DCACHE_TAG_BITS)
-    ) lsu_dcache_rsp_if();
-
-    VX_dcache_req_if #(
-        .NUM_REQS  (`NUM_THREADS), 
-        .WORD_SIZE (4), 
-        .TAG_WIDTH (`LSU_TEX_DCACHE_TAG_BITS)
-    ) tex_dcache_req_if();
-
-    VX_dcache_rsp_if #(
-        .NUM_REQS  (`NUM_THREADS), 
-        .WORD_SIZE (4), 
-        .TAG_WIDTH (`LSU_TEX_DCACHE_TAG_BITS)
-    ) tex_dcache_rsp_if();
-
     VX_tex_csr_if tex_csr_if();
-
 `ifdef PERF_ENABLE
     VX_perf_tex_if perf_tex_if();
 `endif
-
-    VX_cache_arb #(
-        .NUM_REQS      (2),
-        .LANES         (`NUM_THREADS),
-        .DATA_SIZE     (4),            
-        .TAG_IN_WIDTH  (`LSU_TEX_DCACHE_TAG_BITS),
-        .TAG_SEL_IDX   (`NC_TAG_BIT + `SM_ENABLE)
-    ) tex_lsu_arb (
-        .clk            (clk),
-        .reset          (reset),
-
-        // Tex/LSU request
-        .req_valid_in   ({tex_dcache_req_if.valid,  lsu_dcache_req_if.valid}),
-        .req_rw_in      ({tex_dcache_req_if.rw,     lsu_dcache_req_if.rw}),
-        .req_byteen_in  ({tex_dcache_req_if.byteen, lsu_dcache_req_if.byteen}),
-        .req_addr_in    ({tex_dcache_req_if.addr,   lsu_dcache_req_if.addr}),
-        .req_data_in    ({tex_dcache_req_if.data,   lsu_dcache_req_if.data}),  
-        .req_tag_in     ({tex_dcache_req_if.tag,    lsu_dcache_req_if.tag}),  
-        .req_ready_in   ({tex_dcache_req_if.ready,  lsu_dcache_req_if.ready}),
-
-        // Dcache request
-        .req_valid_out  (dcache_req_if.valid),
-        .req_rw_out     (dcache_req_if.rw),        
-        .req_byteen_out (dcache_req_if.byteen),        
-        .req_addr_out   (dcache_req_if.addr),
-        .req_data_out   (dcache_req_if.data),
-        .req_tag_out    (dcache_req_if.tag),
-        .req_ready_out  (dcache_req_if.ready),
-        
-        // Dcache response
-        .rsp_valid_in   (dcache_rsp_if.valid),
-        .rsp_tmask_in   (dcache_rsp_if.tmask),
-        .rsp_tag_in     (dcache_rsp_if.tag),
-        .rsp_data_in    (dcache_rsp_if.data),
-        .rsp_ready_in   (dcache_rsp_if.ready),
-
-        // Tex/LSU response
-        .rsp_valid_out  ({tex_dcache_rsp_if.valid, lsu_dcache_rsp_if.valid}),
-        .rsp_tmask_out  ({tex_dcache_rsp_if.tmask, lsu_dcache_rsp_if.tmask}),
-        .rsp_data_out   ({tex_dcache_rsp_if.data,  lsu_dcache_rsp_if.data}),
-        .rsp_tag_out    ({tex_dcache_rsp_if.tag,   lsu_dcache_rsp_if.tag}),
-        .rsp_ready_out  ({tex_dcache_rsp_if.ready, lsu_dcache_rsp_if.ready})
-    );
-
 `endif
 
 `ifdef EXT_F_ENABLE
@@ -151,13 +87,8 @@ module VX_execute #(
         `SCOPE_BIND_VX_execute_lsu_unit
         .clk            (clk),
         .reset          (lsu_reset),
-    `ifdef EXT_TEX_ENABLE
-        .dcache_req_if  (lsu_dcache_req_if),
-        .dcache_rsp_if  (lsu_dcache_rsp_if),
-    `else 
         .dcache_req_if  (dcache_req_if),
         .dcache_rsp_if  (dcache_rsp_if),
-    `endif
         .lsu_req_if     (lsu_req_if),
         .ld_commit_if   (ld_commit_if),
         .st_commit_if   (st_commit_if)
@@ -220,8 +151,8 @@ module VX_execute #(
         .perf_tex_if    (perf_tex_if),
     `endif
         .tex_csr_if     (tex_csr_if),
-        .tcache_req_if  (tex_dcache_req_if),
-        .tcache_rsp_if  (tex_dcache_rsp_if),
+        .tcache_req_if  (tcache_req_if),
+        .tcache_rsp_if  (tcache_rsp_if),
     `endif
         .warp_ctl_if    (warp_ctl_if),
         .gpu_commit_if  (gpu_commit_if)

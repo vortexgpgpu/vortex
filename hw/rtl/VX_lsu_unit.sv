@@ -136,13 +136,14 @@ module VX_lsu_unit #(
     wire mbuf_pop = dcache_rsp_fire && (0 == rsp_rem_mask_n);
     
     assign mbuf_raddr = dcache_rsp_if.tag[`CACHE_ADDR_TYPE_BITS +: `LSUQ_ADDR_BITS];
-    `UNUSED_VAR (dcache_rsp_if.tag)    
+    assign rsp_uuid   = dcache_rsp_if.tag[`DCACHE_CORE_TAG_ID_BITS +: `UUID_BITS];
+    `UNUSED_VAR (dcache_rsp_if.tag)
 
     // do not writeback from software prefetch
     wire req_wb2 = req_wb && ~req_is_prefetch;
 
     VX_index_buffer #(
-        .DATAW (`UUID_BITS + `NW_BITS + 32 + `NUM_THREADS + `NR_BITS + 1 + `INST_LSU_BITS + (`NUM_THREADS * REQ_ASHIFT) + 1 + 1),
+        .DATAW (`NW_BITS + 32 + `NUM_THREADS + `NR_BITS + 1 + `INST_LSU_BITS + (`NUM_THREADS * REQ_ASHIFT) + 1 + 1),
         .SIZE  (`LSUQ_SIZE)
     ) req_metadata (
         .clk          (clk),
@@ -150,8 +151,8 @@ module VX_lsu_unit #(
         .write_addr   (mbuf_waddr),  
         .acquire_slot (mbuf_push),       
         .read_addr    (mbuf_raddr),
-        .write_data   ({req_uuid, req_wid, req_pc, req_tmask, req_rd, req_wb2, req_type, req_offset, req_is_dup, req_is_prefetch}),                    
-        .read_data    ({rsp_uuid, rsp_wid, rsp_pc, rsp_tmask, rsp_rd, rsp_wb,  rsp_type, rsp_offset, rsp_is_dup, rsp_is_prefetch}),
+        .write_data   ({req_wid, req_pc, req_tmask, req_rd, req_wb2, req_type, req_offset, req_is_dup, req_is_prefetch}),                    
+        .read_data    ({rsp_wid, rsp_pc, rsp_tmask, rsp_rd, rsp_wb,  rsp_type, rsp_offset, rsp_is_dup, rsp_is_prefetch}),
         .release_addr (mbuf_raddr),
         .release_slot (mbuf_pop),     
         .full         (mbuf_full),

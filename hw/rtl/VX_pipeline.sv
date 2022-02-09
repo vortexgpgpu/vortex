@@ -6,108 +6,30 @@ module VX_pipeline #(
     `SCOPE_IO_VX_pipeline
     
     // Clock
-    input wire                              clk,
-    input wire                              reset,
+    input wire                  clk,
+    input wire                  reset,
 
-    // Dcache core request
-    output wire [`NUM_THREADS-1:0]          dcache_req_valid,
-    output wire [`NUM_THREADS-1:0]          dcache_req_rw,
-    output wire [`NUM_THREADS-1:0][3:0]     dcache_req_byteen,
-    output wire [`NUM_THREADS-1:0][29:0]    dcache_req_addr,
-    output wire [`NUM_THREADS-1:0][31:0]    dcache_req_data,
-    output wire [`NUM_THREADS-1:0][`DCACHE_CORE_TAG_WIDTH-1:0] dcache_req_tag,    
-    input wire [`NUM_THREADS-1:0]           dcache_req_ready,
+    // Dcache interface
+    VX_dcache_req_if.master     dcache_req_if,
+    VX_dcache_rsp_if.slave      dcache_rsp_if,
 
-    // Dcache core reponse    
-    input wire                              dcache_rsp_valid,
-    input wire [`NUM_THREADS-1:0]           dcache_rsp_tmask,
-    input wire [`NUM_THREADS-1:0][31:0]     dcache_rsp_data,
-    input wire [`DCACHE_CORE_TAG_WIDTH-1:0] dcache_rsp_tag,    
-    output wire                             dcache_rsp_ready,      
+    // Icache interface
+    VX_icache_req_if.master     icache_req_if,
+    VX_icache_rsp_if.slave      icache_rsp_if,
 
-    // Icache core request
-    output wire                             icache_req_valid,
-    output wire [29:0]                      icache_req_addr,
-    output wire [`ICACHE_CORE_TAG_WIDTH-1:0] icache_req_tag,
-    input wire                              icache_req_ready,
-
-    // Icache core response    
-    input wire                              icache_rsp_valid,
-    input wire [31:0]                       icache_rsp_data,
-    input wire [`ICACHE_CORE_TAG_WIDTH-1:0] icache_rsp_tag,    
-    output wire                             icache_rsp_ready,   
+`ifdef EXT_TEX_ENABLE
+    // Tcache interface
+    VX_dcache_req_if.master     tcache_req_if,
+    VX_dcache_rsp_if.slave      tcache_rsp_if,
+`endif
 
 `ifdef PERF_ENABLE
-    VX_perf_memsys_if.slave                 perf_memsys_if,
+    VX_perf_memsys_if.slave     perf_memsys_if,
 `endif
 
     // Status
-    output wire                             busy
+    output wire                 busy
 );
-    //
-    // Dcache request
-    //
-
-    VX_dcache_req_if #(
-        .NUM_REQS  (`NUM_THREADS), 
-        .WORD_SIZE (4), 
-        .TAG_WIDTH (`DCACHE_CORE_TAG_WIDTH)
-    ) dcache_req_if();
-
-    assign dcache_req_valid  = dcache_req_if.valid;
-    assign dcache_req_rw     = dcache_req_if.rw;
-    assign dcache_req_byteen = dcache_req_if.byteen;
-    assign dcache_req_addr   = dcache_req_if.addr;
-    assign dcache_req_data   = dcache_req_if.data;
-    assign dcache_req_tag    = dcache_req_if.tag;
-    assign dcache_req_if.ready = dcache_req_ready;
- 
-    //
-    // Dcache response
-    //
-
-    VX_dcache_rsp_if #(
-        .NUM_REQS  (`NUM_THREADS), 
-        .WORD_SIZE (4), 
-        .TAG_WIDTH (`DCACHE_CORE_TAG_WIDTH)
-    ) dcache_rsp_if();
-
-    assign dcache_rsp_if.valid = dcache_rsp_valid;
-    assign dcache_rsp_if.tmask = dcache_rsp_tmask;
-    assign dcache_rsp_if.data  = dcache_rsp_data;
-    assign dcache_rsp_if.tag   = dcache_rsp_tag;
-    assign dcache_rsp_ready = dcache_rsp_if.ready;
-
-    //
-    // Icache request
-    //
-
-    VX_icache_req_if #(
-        .WORD_SIZE (4), 
-        .TAG_WIDTH (`ICACHE_CORE_TAG_WIDTH)
-    ) icache_req_if();       
-
-    assign icache_req_valid  = icache_req_if.valid;
-    assign icache_req_addr   = icache_req_if.addr;
-    assign icache_req_tag    = icache_req_if.tag;
-    assign icache_req_if.ready = icache_req_ready;
-
-    //
-    // Icache response
-    //
-
-    VX_icache_rsp_if #(
-        .WORD_SIZE (4), 
-        .TAG_WIDTH (`ICACHE_CORE_TAG_WIDTH)
-    ) icache_rsp_if();    
-
-    assign icache_rsp_if.valid = icache_rsp_valid;
-    assign icache_rsp_if.data  = icache_rsp_data;
-    assign icache_rsp_if.tag   = icache_rsp_tag;
-    assign icache_rsp_ready = icache_rsp_if.ready;
-
-    ///////////////////////////////////////////////////////////////////////////
-
     VX_fetch_to_csr_if  fetch_to_csr_if();
     VX_cmt_to_csr_if    cmt_to_csr_if();
     VX_decode_if        decode_if();
@@ -213,6 +135,11 @@ module VX_pipeline #(
 
         .dcache_req_if  (dcache_req_if),
         .dcache_rsp_if  (dcache_rsp_if),
+
+    `ifdef EXT_TEX_ENABLE
+        .tcache_req_if  (tcache_req_if),
+        .tcache_rsp_if  (tcache_rsp_if),
+    `endif
 
         .cmt_to_csr_if  (cmt_to_csr_if),   
         .fetch_to_csr_if(fetch_to_csr_if),              

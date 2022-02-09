@@ -24,28 +24,29 @@ module VX_icache_stage #(
 
     localparam OUT_REG = 0;
 
-    wire [`NW_BITS-1:0] req_tag, rsp_tag;
+    wire [`UUID_BITS-1:0] rsp_uuid;
+    wire [`NW_BITS-1:0] req_tag, rsp_tag;    
 
     wire icache_req_fire = icache_req_if.valid && icache_req_if.ready;
     
     assign req_tag = ifetch_req_if.wid;
-    assign rsp_tag = icache_rsp_if.tag[`NW_BITS-1:0];
+    
+    assign {rsp_uuid, rsp_tag} = icache_rsp_if.tag;
 
-    wire [`UUID_BITS-1:0] rsp_uuid;
     wire [31:0] rsp_PC;
     wire [`NUM_THREADS-1:0] rsp_tmask;
 
     VX_dp_ram #(
-        .DATAW  (32 + `NUM_THREADS + `UUID_BITS),
+        .DATAW  (32 + `NUM_THREADS),
         .SIZE   (`NUM_WARPS),
         .LUTRAM (1)
     ) req_metadata (
         .clk   (clk),        
         .wren  (icache_req_fire),
         .waddr (req_tag),
-        .wdata ({ifetch_req_if.PC, ifetch_req_if.tmask, ifetch_req_if.uuid}),
+        .wdata ({ifetch_req_if.PC, ifetch_req_if.tmask}),
         .raddr (rsp_tag),
-        .rdata ({rsp_PC, rsp_tmask, rsp_uuid})
+        .rdata ({rsp_PC, rsp_tmask})
     );
 
     `RUNTIME_ASSERT((!ifetch_req_if.valid || ifetch_req_if.PC >= `STARTUP_ADDR), 

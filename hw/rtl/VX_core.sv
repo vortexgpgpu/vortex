@@ -78,6 +78,20 @@ module VX_core #(
         .WORD_SIZE (`ICACHE_WORD_SIZE), 
         .TAG_WIDTH (`ICACHE_CORE_TAG_WIDTH)
     ) icache_rsp_if();
+
+`ifdef EXT_TEX_ENABLE
+    VX_dcache_req_if #(
+        .NUM_REQS  (`NUM_THREADS), 
+        .WORD_SIZE (4), 
+        .TAG_WIDTH (`DCACHE_TAG_WIDTH)
+    ) tcache_req_if();
+
+    VX_dcache_rsp_if #(
+        .NUM_REQS  (`NUM_THREADS), 
+        .WORD_SIZE (4), 
+        .TAG_WIDTH (`DCACHE_TAG_WIDTH)
+    ) tcache_rsp_if();
+`endif
     
     VX_pipeline #(
         .CORE_ID(CORE_ID)
@@ -87,39 +101,24 @@ module VX_core #(
         .perf_memsys_if (perf_memsys_if),
     `endif
 
-        .clk(clk),
-        .reset(reset),
+        .clk            (clk),
+        .reset          (reset),
 
-        // Dcache core request
-        .dcache_req_valid   (dcache_req_if.valid),
-        .dcache_req_rw      (dcache_req_if.rw),
-        .dcache_req_byteen  (dcache_req_if.byteen),
-        .dcache_req_addr    (dcache_req_if.addr),
-        .dcache_req_data    (dcache_req_if.data),
-        .dcache_req_tag     (dcache_req_if.tag),
-        .dcache_req_ready   (dcache_req_if.ready),
+        // dcache interface
+        .dcache_req_if  (dcache_req_if),
+        .dcache_rsp_if  (dcache_rsp_if),
 
-        // Dcache core reponse    
-        .dcache_rsp_valid   (dcache_rsp_if.valid),
-        .dcache_rsp_tmask   (dcache_rsp_if.tmask),
-        .dcache_rsp_data    (dcache_rsp_if.data),
-        .dcache_rsp_tag     (dcache_rsp_if.tag),
-        .dcache_rsp_ready   (dcache_rsp_if.ready),
+        // icache interface
+        .icache_req_if  (icache_req_if),
+        .icache_rsp_if  (icache_rsp_if),
 
-        // Icache core request
-        .icache_req_valid   (icache_req_if.valid),
-        .icache_req_addr    (icache_req_if.addr),
-        .icache_req_tag     (icache_req_if.tag),
-        .icache_req_ready   (icache_req_if.ready),
-
-        // Icache core reponse    
-        .icache_rsp_valid   (icache_rsp_if.valid),
-        .icache_rsp_data    (icache_rsp_if.data),
-        .icache_rsp_tag     (icache_rsp_if.tag),
-        .icache_rsp_ready   (icache_rsp_if.ready),
+    `ifdef EXT_TEX_ENABLE
+        .tcache_req_if  (tcache_req_if),
+        .tcache_rsp_if  (tcache_rsp_if),
+    `endif
 
         // Status
-        .busy(busy)
+        .busy           (busy)
     );  
 
     //--
@@ -135,13 +134,19 @@ module VX_core #(
         .clk            (clk),
         .reset          (reset),
 
-        // Core <-> Dcache
+        // dcache interface
         .dcache_req_if  (dcache_req_if),
         .dcache_rsp_if  (dcache_rsp_if),
         
-        // Core <-> Icache
+        // icache interface
         .icache_req_if  (icache_req_if),
         .icache_rsp_if  (icache_rsp_if),
+
+    `ifdef EXT_TEX_ENABLE
+        // tcache interface
+        .tcache_req_if (tcache_req_if),
+        .tcache_rsp_if (tcache_rsp_if),
+    `endif
 
         // Memory
         .mem_req_if     (mem_req_if),
