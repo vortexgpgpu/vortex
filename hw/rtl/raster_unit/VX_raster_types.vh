@@ -6,12 +6,14 @@
 package raster_types;
 
 typedef struct packed {
-    logic [(`TEX_LOD_MAX+1)-1:0][`TEX_MIPOFF_BITS-1:0] mipoff;
-    logic [1:0][`TEX_LOD_BITS-1:0]  logdims;
-    logic [1:0][`TEX_WRAP_BITS-1:0] wraps;
-    logic [`TEX_ADDR_BITS-1:0]      baddr;
-    logic [`TEX_FORMAT_BITS-1:0]    format;
-    logic [`TEX_FILTER_BITS-1:0]    filter;
+    logic [31:0]    pidx_addr;
+    logic [31:0]    pidx_size;
+    logic [31:0]    pbuf_addr;
+    logic [31:0]    pbuf_size;
+    logic [15:0]    tile_x;
+    logic [15:0]    tile_y;
+    logic [15:0]    tile_width;
+    logic [15:0]    tile_height;
 } raster_csrs_t;
 
 endpackage

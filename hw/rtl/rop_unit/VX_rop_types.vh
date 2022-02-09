@@ -11,7 +11,7 @@ typedef struct packed {
     logic [`ROP_BLEND_FACTOR_BITS-1:0] blend_src_a;
     logic [`ROP_BLEND_FACTOR_BITS-1:0] blend_dst_a;
     logic [31:0] blend_const;
-    logic [`TEX_LOGIC_OP_BITS-1:0] logic_op;
+    logic [`ROP_LOGIC_OP_BITS-1:0] logic_op;
 } rop_csrs_t;
 
 endpackage

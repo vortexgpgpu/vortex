@@ -29,7 +29,10 @@ DBG_FLAGS += $(DBG_TRACE_FLAGS)
 
 FPU_INCLUDE = -I$(RTL_DIR)/fp_cores -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src -I$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/fpnew/src
 TEX_INCLUDE = -I$(RTL_DIR)/tex_unit
-RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache -I$(RTL_DIR)/simulate $(FPU_INCLUDE) $(TEX_INCLUDE)
+RASTER_INCLUDE = -I$(RTL_DIR)/raster_unit
+ROP_INCLUDE = -I$(RTL_DIR)/rop_unit
+RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache -I$(RTL_DIR)/simulate $(FPU_INCLUDE)
+RTL_INCLUDE += $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
 
 SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp
 SRCS += $(DPI_DIR)/util_dpi.cpp $(DPI_DIR)/float_dpi.cpp
