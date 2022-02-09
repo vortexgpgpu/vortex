@@ -1,6 +1,6 @@
 PROJECT = Unittest
 TOP_LEVEL_ENTITY = VX_core_req_bank_sel
-SRC_FILE = VX_core_req_bank_sel.v
+SRC_FILE = VX_core_req_bank_sel.sv
 RTL_DIR = ../../../../rtl
 THIRD_PARTY_DIR = ../../../../../third_party
 

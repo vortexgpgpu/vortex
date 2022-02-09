@@ -1,6 +1,6 @@
 PROJECT = VX_shared_mem
 TOP_LEVEL_ENTITY = VX_shared_mem
-SRC_FILE = VX_shared_mem.v
+SRC_FILE = VX_shared_mem.sv
 RTL_DIR = ../../../../rtl
 
 FAMILY = "Arria 10"

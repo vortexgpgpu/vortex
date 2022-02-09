@@ -1,6 +1,6 @@
 PROJECT = VX_pipeline
 TOP_LEVEL_ENTITY = VX_pipeline
-SRC_FILE = VX_pipeline.v
+SRC_FILE = VX_pipeline.sv
 RTL_DIR = ../../../../rtl
 THIRD_PARTY_DIR = ../../../../../third_party
 

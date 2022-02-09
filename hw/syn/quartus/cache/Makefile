@@ -1,6 +1,6 @@
 PROJECT = VX_cache
 TOP_LEVEL_ENTITY = VX_cache
-SRC_FILE = VX_cache.v
+SRC_FILE = VX_cache.sv
 RTL_DIR = ../../../../rtl
 
 FAMILY = "Arria 10"

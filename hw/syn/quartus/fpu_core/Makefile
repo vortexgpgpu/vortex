@@ -1,6 +1,6 @@
 PROJECT = VX_fpu_fpga
 TOP_LEVEL_ENTITY = VX_fpu_fpga
-SRC_FILE = VX_fpu_fpga.v
+SRC_FILE = VX_fpu_fpga.sv
 RTL_DIR = ../../../../rtl
 THIRD_PARTY_DIR = ../../../../../third_party
 

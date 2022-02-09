@@ -1,6 +1,6 @@
 PROJECT = Core
 TOP_LEVEL_ENTITY = VX_core
-SRC_FILE = VX_core.v
+SRC_FILE = VX_core.sv
 RTL_DIR = ../../../../rtl
 THIRD_PARTY_DIR = ../../../../../third_party
 
