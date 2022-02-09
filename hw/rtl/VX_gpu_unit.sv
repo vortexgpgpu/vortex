@@ -130,7 +130,8 @@ module VX_gpu_unit #(
     assign tex_req_if.lod       = gpu_req_if.rs3_data;        
 
     VX_tex_unit #(
-        .CORE_ID(CORE_ID)
+        .CORE_ID    (CORE_ID),
+        .NUM_STAGES (`NUM_TEX_STAGES)
     ) tex_unit (
         .clk           (clk),
         .reset         (reset),

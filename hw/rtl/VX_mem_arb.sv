@@ -70,12 +70,12 @@ module VX_mem_arb #(
             assign req_data_in_merged[i] = {req_tag_in_w, req_addr_in[i], req_rw_in[i], req_byteen_in[i], req_data_in[i]};
         end
 
-        VX_stream_arbiter #(            
+        VX_stream_mux #(            
             .NUM_REQS (NUM_REQS),
             .DATAW    (REQ_DATAW),
             .BUFFERED (BUFFERED_REQ),
             .TYPE     (TYPE)
-        ) req_arb (
+        ) req_mux (
             .clk       (clk),
             .reset     (reset),
             .valid_in  (req_valid_in),

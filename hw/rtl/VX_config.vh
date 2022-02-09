@@ -83,6 +83,12 @@
 `define EXT_F_ENABLE
 `endif
 
+`ifdef EXT_GFX_ENABLE
+`define EXT_TEX_ENABLE
+`define EXT_RASTER_ENABLE
+`define EXT_ROP_ENABLE
+`endif
+
 `define ISA_STD_A           0
 `define ISA_STD_C           2
 `define ISA_STD_D           3
@@ -360,7 +366,7 @@
 
 // Texture Units //////////////////////////////////////////////////////////////
 
-`define NUM_TEX_UNITS               2
+`define NUM_TEX_STAGES              2
 `define TEX_SUBPIXEL_BITS           8
 
 `define TEX_DIM_BITS                15

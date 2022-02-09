@@ -5,8 +5,14 @@ module VX_raster_csr #(
     // TODO
 ) (
     input wire clk,
-    input wire reset
-    // TODO
+    input wire reset,
+
+    // Inputs
+    VX_raster_csr_if.slave raster_csr_if,
+    VX_raster_req_if.slave raster_req_if,
+
+    // Output
+    output raster_csrs_t raster_csrs
 );
 
     // TODO

@@ -669,11 +669,11 @@ module VX_cache #(
 
     `RESET_RELAY (mreq_reset);
 
-    VX_stream_arbiter #(
+    VX_stream_mux #(
         .NUM_REQS (NUM_BANKS),
         .DATAW    (`MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + NUM_PORTS * (1 + WORD_SIZE + WORD_SELECT_BITS + `WORD_WIDTH)),
         .TYPE     ("R")
-    ) mem_req_arb (
+    ) mem_req_mux (
         .clk       (clk),
         .reset     (mreq_reset),
         .valid_in  (per_bank_mem_req_valid),

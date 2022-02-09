@@ -1,7 +1,8 @@
 `include "VX_tex_define.vh"
 
 module VX_tex_unit #(  
-    parameter CORE_ID = 0
+    parameter CORE_ID = 0,
+    parameter NUM_STAGES = 1
 ) (
     input wire  clk,
     input wire  reset,    
@@ -34,7 +35,8 @@ module VX_tex_unit #(
     tex_csrs_t tex_csrs;
 
     VX_tex_csr #(
-        .CORE_ID   (CORE_ID)
+        .CORE_ID    (CORE_ID),
+        .NUM_STAGES (NUM_STAGES)
     ) tex_csr (
         .clk        (clk),
         .reset      (reset),

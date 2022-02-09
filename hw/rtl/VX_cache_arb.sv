@@ -76,13 +76,13 @@ module VX_cache_arb #(
             end
         end
 
-        VX_stream_arbiter #(            
+        VX_stream_mux #(            
             .NUM_REQS (NUM_REQS),
             .LANES    (LANES),
             .DATAW    (REQ_DATAW),
             .BUFFERED (BUFFERED_REQ),
             .TYPE     (TYPE)
-        ) req_arb (
+        ) req_mux (
             .clk       (clk),
             .reset     (reset),
             .valid_in  (req_valid_in),

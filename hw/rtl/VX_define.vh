@@ -18,7 +18,7 @@
 
 `define NRI_BITS        `LOG2UP(`NUM_IREGS)
 
-`define NTEX_BITS       `LOG2UP(`NUM_TEX_UNITS)
+`define NTEX_BITS       `LOG2UP(`NUM_TEX_STAGES)
 
 `ifdef EXT_F_ENABLE
 `define NUM_REGS        (2 * `NUM_IREGS)

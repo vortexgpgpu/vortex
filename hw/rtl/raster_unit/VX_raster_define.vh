@@ -5,4 +5,10 @@
 
 // TODO
 
+`include "VX_raster_types.vh"
+
+`IGNORE_WARNINGS_BEGIN
+import raster_types::*;
+`IGNORE_WARNINGS_END
+
 `endif

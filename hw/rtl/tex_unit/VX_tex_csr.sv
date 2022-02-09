@@ -1,7 +1,8 @@
 `include "VX_tex_define.vh"
 
 module VX_tex_csr #(  
-    parameter CORE_ID = 0
+    parameter CORE_ID = 0,
+    parameter NUM_STAGES = 1
 ) (
     input wire clk,
     input wire reset,
@@ -18,21 +19,31 @@ module VX_tex_csr #(
 
     // CSR registers
 
-    reg [$clog2(`NUM_TEX_UNITS)-1:0] csr_tex_unit;
-    reg [(`TEX_LOD_MAX+1)-1:0][`TEX_MIPOFF_BITS-1:0] tex_mipoff [`NUM_TEX_UNITS-1:0];
-    reg [1:0][`TEX_LOD_BITS-1:0]  tex_logdims [`NUM_TEX_UNITS-1:0];
-    reg [1:0][`TEX_WRAP_BITS-1:0] tex_wraps  [`NUM_TEX_UNITS-1:0];
-    reg [`TEX_ADDR_BITS-1:0]      tex_baddr  [`NUM_TEX_UNITS-1:0];     
-    reg [`TEX_FORMAT_BITS-1:0]    tex_format [`NUM_TEX_UNITS-1:0];
-    reg [`TEX_FILTER_BITS-1:0]    tex_filter [`NUM_TEX_UNITS-1:0];
+    reg [$clog2(NUM_STAGES)-1:0] csr_tex_unit;
+    reg [(`TEX_LOD_MAX+1)-1:0][`TEX_MIPOFF_BITS-1:0] tex_mipoff [NUM_STAGES-1:0];
+    reg [1:0][`TEX_LOD_BITS-1:0]  tex_logdims [NUM_STAGES-1:0];
+    reg [1:0][`TEX_WRAP_BITS-1:0] tex_wraps  [NUM_STAGES-1:0];
+    reg [`TEX_ADDR_BITS-1:0]      tex_baddr  [NUM_STAGES-1:0];     
+    reg [`TEX_FORMAT_BITS-1:0]    tex_format [NUM_STAGES-1:0];
+    reg [`TEX_FILTER_BITS-1:0]    tex_filter [NUM_STAGES-1:0];
 
     // CSRs write
 
     always @(posedge clk) begin
-        if (tex_csr_if.write_enable) begin
+        if (reset) begin
+            csr_tex_unit <= 0;
+            for (integer  i = 0; i < NUM_STAGES; ++i) begin
+                tex_mipoff[i]  <= 0;
+                tex_logdims[i] <= 0;
+                tex_wraps[i]   <= 0;
+                tex_baddr[i]   <= 0;
+                tex_format[i]  <= 0;
+                tex_filter[i]  <= 0;
+            end
+        end else if (tex_csr_if.write_enable) begin
             case (tex_csr_if.write_addr)
                 `CSR_TEX_UNIT: begin 
-                    csr_tex_unit <= tex_csr_if.write_data[$clog2(`NUM_TEX_UNITS)-1:0];
+                    csr_tex_unit <= tex_csr_if.write_data[$clog2(NUM_STAGES)-1:0];
                 end
                 `CSR_TEX_ADDR: begin 
                     tex_baddr[csr_tex_unit] <= tex_csr_if.write_data[`TEX_ADDR_BITS-1:0];

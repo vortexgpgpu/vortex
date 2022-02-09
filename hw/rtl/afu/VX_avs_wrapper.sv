@@ -143,11 +143,11 @@ module VX_avs_wrapper #(
         assign avs_reqq_pop[i]     = rsp_arb_valid_in[i] && rsp_arb_ready_in[i];
     end
 
-    VX_stream_arbiter #(
+    VX_stream_mux #(
         .NUM_REQS (AVS_BANKS),
         .DATAW    (AVS_DATA_WIDTH + REQ_TAG_WIDTH),
         .TYPE     ("R")
-    ) rsp_arb (
+    ) rsp_mux (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (rsp_arb_valid_in),

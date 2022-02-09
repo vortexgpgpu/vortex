@@ -61,12 +61,12 @@ module VX_writeback #(
         { ld_commit_if.wid, ld_commit_if.PC,  ld_commit_if.tmask,  ld_commit_if.rd,  ld_commit_if.data,  ld_commit_if.eop}
     };
     
-    VX_stream_arbiter #(            
+    VX_stream_mux #(            
         .NUM_REQS (NUM_RSPS),
         .DATAW    (DATAW),
         .BUFFERED (1),
         .TYPE     ("R")
-    ) rsp_arb (
+    ) rsp_mux (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (rsp_valid),

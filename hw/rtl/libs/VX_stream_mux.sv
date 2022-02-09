@@ -1,6 +1,6 @@
 `include "VX_platform.vh"
 
-module VX_stream_arbiter #(
+module VX_stream_mux #(
     parameter NUM_REQS    = 1,
     parameter LANES       = 1,
     parameter DATAW       = 1,

@@ -13,8 +13,8 @@ module VX_raster_unit #(
 `endif
 
     // Memory interface
-    VX_dcache_req_if.master cache_req_if,
-    VX_dcache_rsp_if.slave  cache_rsp_if,
+    VX_dcache_req_if.master mem_req_if,
+    VX_dcache_rsp_if.slave  mem_rsp_if,
 
     // Inputs
     VX_raster_csr_if.slave  raster_csr_if,

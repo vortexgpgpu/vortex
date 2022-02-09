@@ -119,13 +119,13 @@ module VX_smem_arb #(
             assign rsp_data_in_merged[i] = {rsp_tag_in_w, rsp_tmask_in[i], rsp_data_in[i]};
         end
 
-        VX_stream_arbiter #(            
+        VX_stream_mux #(            
             .NUM_REQS (NUM_REQS),
             .LANES    (1),
             .DATAW    (RSP_DATAW),
             .BUFFERED (BUFFERED_RSP),
             .TYPE     (TYPE)
-        ) rsp_arb (
+        ) rsp_mux (
             .clk       (clk),
             .reset     (reset),
             .valid_in  (rsp_valid_in),
