@@ -205,6 +205,7 @@ module VX_gpu_unit #(
     assign rop_req_if.wb     = gpu_req_if.wb;
     assign rop_req_if.x      = 0; // TODO: remove
     assign rop_req_if.y      = 0; // TODO: remove
+    assign rop_req_if.z      = 0; // TODO: remove
     assign rop_req_if.color  = 0; // TODO: remove
     `UNUSED_VAR (rop_req_if.ready) // TODO: remove
 

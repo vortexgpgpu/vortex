@@ -16,6 +16,7 @@ interface VX_rop_req_if ();
 
     wire [15:0]                     x;
     wire [15:0]                     y;
+    wire [31:0]                     z;
     wire [31:0]                     color;
     
     wire                            ready;

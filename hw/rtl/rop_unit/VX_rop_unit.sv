@@ -51,6 +51,7 @@ module VX_rop_unit #(
     `UNUSED_VAR (rop_req_if.tmask)    
     `UNUSED_VAR (rop_req_if.x)
     `UNUSED_VAR (rop_req_if.y)
+    `UNUSED_VAR (rop_req_if.z)
     `UNUSED_VAR (rop_req_if.color)
     assign rop_req_if.ready = 0;
 
