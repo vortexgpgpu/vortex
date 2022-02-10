@@ -1,6 +1,6 @@
 `include "VX_raster_define.vh"
 
-module VX_raster_qa #(  
+module VX_raster_qe #(  
     parameter CORE_ID = 0
     // TODO
 ) (
