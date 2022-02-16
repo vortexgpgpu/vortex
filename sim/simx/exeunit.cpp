@@ -193,6 +193,9 @@ void AluUnit::tick() {
     case AluType::CMOV:
         Output.send(trace, 1);
         break;
+    case AluType::IMADD:
+        Output.send(trace, 1);
+        break;
     case AluType::IMUL:
         Output.send(trace, LATENCY_IMUL+1);
         break;

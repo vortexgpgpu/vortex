@@ -84,6 +84,7 @@ enum class AluType {
   IMUL,
   IDIV,    
   CMOV,
+  IMADD,
 };
 
 inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
@@ -94,6 +95,7 @@ inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
   case AluType::IMUL:    os << "IMUL"; break;
   case AluType::IDIV:    os << "IDIV"; break;
   case AluType::CMOV:    os << "CMOV"; break;
+  case AluType::IMADD:   os << "IMADD"; break;
   }
   return os;
 }

@@ -99,6 +99,11 @@ extern "C" {
     __asm__ __volatile__ (".insn r4 0x5b, 1, 1, x0, %0, %1, %2" :: "r"(x), "r"(y), "r"(color); \
 })
 
+// Interpolation
+#define vx_interp(x, y, acc) ({                  \
+    __asm__ __volatile__ (".insn r4 0x5b, 1, 2, x0, %0, %1, %2" :: "r"(x), "r"(y), "r"(acc); \
+})
+
 // Set thread mask
 inline void vx_tmc(unsigned thread_mask) {
     asm volatile (".insn s 0x6b, 0, x0, 0(%0)" :: "r"(thread_mask));

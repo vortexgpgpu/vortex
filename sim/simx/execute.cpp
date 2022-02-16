@@ -1447,6 +1447,20 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         std::abort();
       }
       break;
+      case 2: { // interp
+        trace->exe_type = ExeType::ALU;
+        trace->alu.type = AluType::IMADD;
+        trace->used_iregs.set(rsrc0);
+        trace->used_iregs.set(rsrc1);
+        trace->used_iregs.set(rsrc2);
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t))
+            continue;
+          rddata[t].i = (WordI)rsdata[t][0].i * (WordI)rsdata[t][1].i + (WordI)rsdata[t][2].i;
+        }
+        rd_write = true;
+      }
+      break;
     default:
       std::abort();
     }
