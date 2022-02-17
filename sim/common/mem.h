@@ -7,6 +7,7 @@
 
 namespace vortex {
 struct BadAddress {};
+struct OutOfRange {};
 
 class MemDevice {
 public:
@@ -132,7 +133,7 @@ private:
 class RAM : public MemDevice {
 public:
   
-  RAM(uint32_t page_size);
+   RAM(uint32_t page_size, uint64_t capacity = 0);
   ~RAM();
 
   void clear();
@@ -157,6 +158,7 @@ private:
 
   uint8_t *get(uint64_t address) const;
 
+  uint64_t capacity_;
   uint64_t size_;
   uint32_t page_bits_;  
   mutable std::unordered_map<uint64_t, uint8_t*> pages_;
