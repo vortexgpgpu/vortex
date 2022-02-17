@@ -7,6 +7,7 @@
 #include "debug.h"
 #include "core.h"
 #include "constants.h"
+#include "cachesim.h"
 
 using namespace vortex;
 
@@ -56,7 +57,7 @@ void LsuUnit::tick() {
 
     // handle shared memory response
     for (uint32_t t = 0; t < num_threads_; ++t) {
-        auto& smem_rsp_port = core_->shared_mem_->Outputs.at(t);
+        auto& smem_rsp_port = core_->sharedmem_->Outputs.at(t);
         if (smem_rsp_port.empty())
             continue;
         auto& mem_rsp = smem_rsp_port.front();
@@ -143,7 +144,7 @@ void LsuUnit::tick() {
         
         auto& dcache_req_port = core_->dcache_switch_.at(t)->ReqIn.at(0);        
         auto mem_addr = trace->mem_addrs.at(t).at(0);
-        auto type = get_addr_type(mem_addr.addr, mem_addr.size);
+        auto type = core_->get_addr_type(mem_addr.addr);
 
         MemReq mem_req;
         mem_req.addr  = mem_addr.addr;
@@ -154,12 +155,12 @@ void LsuUnit::tick() {
         mem_req.uuid = trace->uuid;
         
         if (type == AddrType::Shared) {
-            core_->shared_mem_->Inputs.at(t).send(mem_req, 2);
-            DT(3, "smem-req: addr=" << std::hex << mem_addr.addr << ", tag=" << tag 
+            core_->sharedmem_->Inputs.at(t).send(mem_req, 2);
+            DT(3, "smem-req: addr=" << std::hex << mem_req.addr << ", tag=" << tag 
                 << ", type=" << trace->lsu.type << ", tid=" << t << ", " << *trace);
         } else {            
             dcache_req_port.send(mem_req, 2);
-            DT(3, "dcache-req: addr=" << std::hex << mem_addr.addr << ", tag=" << tag 
+            DT(3, "dcache-req: addr=" << std::hex << mem_req.addr << ", tag=" << tag 
                 << ", type=" << trace->lsu.type << ", tid=" << t << ", nc=" << mem_req.non_cacheable << ", " << *trace);
         }        
         

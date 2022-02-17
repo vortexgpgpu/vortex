@@ -38,12 +38,12 @@ int main(int argc, char **argv) {
   CommandLineArg::readArgs(argc - 1, argv + 1);
 
   if (showHelp || imgFileName.empty()) {
-    std::cout << "Vortex emulator command line arguments:\n"
-                 "  -i, --image <filename> Program RAM image\n"
-                 "  -c, --cores <num> Number of cores\n"
-                 "  -w, --warps <num> Number of warps\n"
-                 "  -t, --threads <num> Number of threads\n"
-                 "  -r, --riscv riscv test\n"
+    std::cout << "Vortex Cycle-Level Simulator:\n"
+                 "  -i, --image <filename> program binary\n"
+                 "  -c, --cores <num> number of cores\n"
+                 "  -w, --warps <num> number of warps\n"
+                 "  -t, --threads <num> number of threads\n"
+                 "  -r, --riscv check riscv test exitcode\n"
                  "  -s, --stats Print stats on exit.\n";
     return 0;
   }

@@ -11,13 +11,3 @@
 #ifndef MEMORY_BANKS
 #define MEMORY_BANKS 2
 #endif
-
-namespace vortex {
-
-enum Constants {
-
-    SMEM_BANK_OFFSET = log2ceil(sizeof(uint32_t)) + log2ceil(STACK_SIZE / sizeof(uint32_t)),
-
-};
-
-}

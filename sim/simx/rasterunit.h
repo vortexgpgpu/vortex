@@ -20,9 +20,9 @@ public:
 
     void clear();
 
-    uint32_t get_state(uint32_t state);
+    uint32_t csr_read(uint32_t addr);
   
-    void set_state(uint32_t state, uint32_t value);
+    void csr_write(uint32_t addr, uint32_t value);
 
     bool pop(raster_quad_t* quad);
 

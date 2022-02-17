@@ -2,7 +2,6 @@
 
 #include <simobject.h>
 #include "pipeline.h"
-#include "cache.h"
 
 namespace vortex {
 

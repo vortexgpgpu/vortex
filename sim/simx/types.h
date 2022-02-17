@@ -5,6 +5,7 @@
 #include <queue>
 #include <unordered_map>
 #include <util.h>
+#include <stringutil.h>
 #include <VX_config.h>
 #include <simobject.h>
 
@@ -140,21 +141,6 @@ struct mem_addr_size_t {
   uint64_t addr;
   uint32_t size;
 };
-
-inline AddrType get_addr_type(Word addr, uint32_t size) {
-  __unused (size);
-  if (SM_ENABLE) {
-    if (addr >= (SMEM_BASE_ADDR - SMEM_SIZE)
-    &&  addr < SMEM_BASE_ADDR) {      
-      assert((addr + size) <= SMEM_BASE_ADDR);
-      return AddrType::Shared;
-    }
-  }
-  if (addr >= IO_BASE_ADDR) {
-     return AddrType::IO;
-  }
-  return AddrType::Global;
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 

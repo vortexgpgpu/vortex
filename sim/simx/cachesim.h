@@ -5,7 +5,7 @@
 
 namespace vortex {
 
-class Cache : public SimObject<Cache> {
+class CacheSim : public SimObject<CacheSim> {
 public:
     struct Config {
         uint8_t C;              // log2 cache size
@@ -52,8 +52,8 @@ public:
     SimPort<MemReq>              MemReqPort;
     SimPort<MemRsp>              MemRspPort;
 
-    Cache(const SimContext& ctx, const char* name, const Config& config);
-    ~Cache();
+    CacheSim(const SimContext& ctx, const char* name, const Config& config);
+    ~CacheSim();
 
     void reset();
     

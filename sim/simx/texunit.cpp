@@ -1,4 +1,4 @@
-#include "tex_unit.h"
+#include "texunit.h"
 #include "core.h"
 #include <texturing.h>
 #include <VX_config.h>
@@ -12,38 +12,53 @@ enum class FilterMode {
   Trilinear,
 };
 
-TexUnit::TexUnit(Core* core) : core_(core) {}
+TexUnit::TexUnit(Core* core) 
+  : csr_tex_unit_(0)
+  , core_(core) 
+{}
 
 TexUnit::~TexUnit() {}
 
 void TexUnit::clear() {
-  for (auto& state : states_) {
-    state = 0;
+  for (auto& states : states_) {
+    for (auto& state : states) {
+      state = 0;
+    }
   }
 }
 
-uint32_t TexUnit::get_state(uint32_t state) {
-  return states_.at(state);
+uint32_t TexUnit::csr_read(uint32_t addr) {
+  if (addr == CSR_TEX_STAGE) {
+    return csr_tex_unit_;
+  }
+  uint32_t state = CSR_TEX_STATE(addr);
+  return states_.at(csr_tex_unit_).at(state);
 }
   
-void TexUnit::set_state(uint32_t state, uint32_t value) {
-  states_.at(state) = value;
+void TexUnit::csr_write(uint32_t addr, uint32_t value) {
+  if (addr == CSR_TEX_STAGE) {
+    csr_tex_unit_ = value;
+    return;
+  }
+  uint32_t state = CSR_TEX_STATE(addr);  
+  states_.at(csr_tex_unit_).at(state) = value;
 }
 
-uint32_t TexUnit::read(int32_t u, 
+uint32_t TexUnit::read(uint32_t stage,
+                       int32_t u, 
                        int32_t v, 
                        int32_t lod, 
                        std::vector<mem_addr_size_t>* mem_addrs) {
-  //--
+  auto& states = states_.at(stage);
   auto xu = Fixed<TEX_FXD_FRAC>::make(u);
   auto xv = Fixed<TEX_FXD_FRAC>::make(v);
-  uint32_t base_addr  = states_.at(TEX_STATE_ADDR) + states_.at(TEX_STATE_MIPOFF(lod));
-  uint32_t log_width  = std::max<int32_t>(states_.at(TEX_STATE_WIDTH) - lod, 0);
-  uint32_t log_height = std::max<int32_t>(states_.at(TEX_STATE_HEIGHT) - lod, 0);
-  auto format         = (TexFormat)states_.at(TEX_STATE_FORMAT);    
-  auto filter         = (FilterMode)states_.at(TEX_STATE_FILTER);    
-  auto wrapu          = (WrapMode)states_.at(TEX_STATE_WRAPU);
-  auto wrapv          = (WrapMode)states_.at(TEX_STATE_WRAPV);
+  uint32_t base_addr  = states.at(TEX_STATE_ADDR) + states.at(TEX_STATE_MIPOFF(lod));
+  uint32_t log_width  = std::max<int32_t>(states.at(TEX_STATE_WIDTH) - lod, 0);
+  uint32_t log_height = std::max<int32_t>(states.at(TEX_STATE_HEIGHT) - lod, 0);
+  auto format         = (TexFormat)states.at(TEX_STATE_FORMAT);    
+  auto filter         = (FilterMode)states.at(TEX_STATE_FILTER);    
+  auto wrapu          = (WrapMode)states.at(TEX_STATE_WRAPU);
+  auto wrapv          = (WrapMode)states.at(TEX_STATE_WRAPV);
 
   auto stride = Stride(format);
   

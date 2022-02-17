@@ -21,8 +21,7 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
     , arch_(arch)
     , decoder_(arch)
     , mmu_(0, arch.wsize(), true)
-    , smem_(RAM_PAGE_SIZE)
-    , tex_units_(NUM_TEX_UNITS, this)
+    , tex_unit_(this)
     , raster_unit_(this)
     , rop_unit_(this)
     , warps_(arch.num_warps())
@@ -32,7 +31,7 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
     , ibuffers_(arch.num_warps(), IBUF_SIZE)
     , scoreboard_(arch_) 
     , exe_units_((int)ExeType::MAX)
-    , icache_(Cache::Create("icache", Cache::Config{
+    , icache_(CacheSim::Create("icache", CacheSim::Config{
         log2ceil(ICACHE_SIZE),  // C
         log2ceil(L1_BLOCK_SIZE),// B
         2,                      // W
@@ -47,7 +46,7 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
         NUM_WARPS,              // mshr
         2,                      // pipeline latency
       }))
-    , dcache_(Cache::Create("dcache", Cache::Config{
+    , dcache_(CacheSim::Create("dcache", CacheSim::Config{
         log2ceil(DCACHE_SIZE),  // C
         log2ceil(L1_BLOCK_SIZE),// B
         2,                      // W
@@ -62,10 +61,11 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
         DCACHE_MSHR_SIZE,       // mshr
         4,                      // pipeline latency
       }))
-    , shared_mem_(SharedMem::Create("sharedmem", SharedMem::Config{
+    , sharedmem_(SharedMem::Create("smem", SharedMem::Config{
+        uint32_t(SMEM_LOCAL_SIZE) * arch.num_warps() * arch.num_threads(),
         arch.num_threads(), 
         arch.num_threads(), 
-        Constants::SMEM_BANK_OFFSET,
+        log2ceil(STACK_SIZE),
         1,
         false
       }))
@@ -133,9 +133,7 @@ void Core::reset() {
   warps_.at(0)->setTmask(0, true);
   active_warps_ = 1;
 
-  for (auto& tex_unit : tex_units_) {
-    tex_unit.clear();
-  }
+  tex_unit_.clear();
 
   for ( auto& barrier : barriers_) {
     barrier.reset();
@@ -157,11 +155,9 @@ void Core::reset() {
   fetch_latch_.clear();
   decode_latch_.clear();
   pending_icache_.clear();  
-  stalled_warps_.reset();  
-  last_schedule_wid_ = 0;
+  stalled_warps_.reset();
   issued_instrs_ = 0;
   committed_instrs_ = 0;
-  csr_tex_unit_ = 0;
   ecall_ = false;
   ebreak_ = false;
   perf_mem_pending_reads_ = 0;
@@ -196,23 +192,20 @@ void Core::tick() {
 }
 
 void Core::schedule() {
-  bool foundSchedule = false;
-  uint32_t scheduled_warp = last_schedule_wid_;
+  int scheduled_warp = -1;
 
-  // round robin scheduling
-  for (size_t wid = 0, nw = arch_.num_warps(); wid < nw; ++wid) {    
-    scheduled_warp = (scheduled_warp + 1) % nw;
-    bool warp_active = active_warps_.test(scheduled_warp);
-    bool warp_stalled = stalled_warps_.test(scheduled_warp); 
+  // find next ready warp
+  for (size_t wid = 0, nw = arch_.num_warps(); wid < nw; ++wid) {  
+    bool warp_active = active_warps_.test(wid);
+    bool warp_stalled = stalled_warps_.test(wid); 
     if (warp_active && !warp_stalled) {      
-      last_schedule_wid_ = scheduled_warp;
-      foundSchedule = true;
+      scheduled_warp = wid;
       break;
     }
   }
 
-  if (!foundSchedule)
-    return;  
+  if (scheduled_warp == -1)
+    return;
 
   // suspend warp until decode
   stalled_warps_.set(scheduled_warp);
@@ -406,33 +399,51 @@ void Core::icache_read(void *data, uint64_t addr, uint32_t size) {
   mmu_.read(data, addr, size, 0);
 }
 
+AddrType Core::get_addr_type(uint64_t addr) {  
+  if (addr >= IO_BASE_ADDR) {
+     return AddrType::IO;
+  }
+  if (SM_ENABLE) {
+    // check if address is a stack address
+    uint32_t total_threads    = arch_.num_cores() * arch_.num_warps() * arch_.num_threads();
+    uint64_t total_stack_size = STACK_SIZE * total_threads;
+    uint64_t stack_end        = STACK_BASE_ADDR - total_stack_size;
+    if (addr >= stack_end && addr <  STACK_BASE_ADDR) {     
+      // check if address is within shared memory region
+      uint32_t offset = addr % STACK_SIZE;
+      if (offset >= (STACK_SIZE - SMEM_LOCAL_SIZE)) {
+        return AddrType::Shared;
+      }
+    }
+  }
+  return AddrType::Global;
+}
+
 void Core::dcache_read(void *data, uint64_t addr, uint32_t size) {  
-  auto type = get_addr_type(addr, size);
+  auto type = this->get_addr_type(addr);
   if (type == AddrType::Shared) {
-    addr &= (SMEM_SIZE-1);
-    smem_.read(data, addr, size);
+    sharedmem_->read(data, addr, size);
   } else {  
     mmu_.read(data, addr, size, 0);
   }
+
+  DPH(2, "Mem Read: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << " (" << type << ")" << std::endl);
 }
 
 void Core::dcache_write(const void* data, uint64_t addr, uint32_t size) {  
+  auto type = this->get_addr_type(addr);
   if (addr >= IO_COUT_ADDR 
    && addr <= (IO_COUT_ADDR + IO_COUT_SIZE - 1)) {
      this->writeToStdOut(data, addr, size);
   } else {
-    auto type = get_addr_type(addr, size);
     if (type == AddrType::Shared) {
-      addr &= (SMEM_SIZE-1);
-      smem_.write(data, addr, size);
+      sharedmem_->write(data, addr, size);
     } else {
       mmu_.write(data, addr, size, 0);
     }
   }
-}
 
-uint32_t Core::tex_read(uint32_t unit, uint32_t u, uint32_t v, uint32_t lod, std::vector<mem_addr_size_t>* mem_addrs) {
-  return tex_units_.at(unit).read(u, v, lod, mem_addrs);
+  DPH(2, "Mem Write: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << " (" << type << ")" << std::endl);
 }
 
 void Core::writeToStdOut(const void* data, uint64_t addr, uint32_t size) {
@@ -588,17 +599,17 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
     return dcache_->perf_stats().mshr_stalls >> 32;
   
   case CSR_MPM_SMEM_READS:
-    return shared_mem_->perf_stats().reads & 0xffffffff;
+    return sharedmem_->perf_stats().reads & 0xffffffff;
   case CSR_MPM_SMEM_READS_H:
-    return shared_mem_->perf_stats().reads >> 32;
+    return sharedmem_->perf_stats().reads >> 32;
   case CSR_MPM_SMEM_WRITES:
-    return shared_mem_->perf_stats().writes & 0xffffffff;
+    return sharedmem_->perf_stats().writes & 0xffffffff;
   case CSR_MPM_SMEM_WRITES_H:
-    return shared_mem_->perf_stats().writes >> 32;
+    return sharedmem_->perf_stats().writes >> 32;
   case CSR_MPM_SMEM_BANK_ST:
-    return shared_mem_->perf_stats().bank_stalls & 0xffffffff; 
+    return sharedmem_->perf_stats().bank_stalls & 0xffffffff; 
   case CSR_MPM_SMEM_BANK_ST_H:
-    return shared_mem_->perf_stats().bank_stalls >> 32; 
+    return sharedmem_->perf_stats().bank_stalls >> 32; 
 
   case CSR_MPM_MEM_READS:
     return perf_stats_.mem_reads & 0xffffffff; 
@@ -629,27 +640,21 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
       // user-defined MPM CSRs
     } else
   #ifdef EXT_TEX_ENABLE
-    if (addr == CSR_TEX_UNIT) {
-      return csr_tex_unit_;
-    } else
     if (addr >= CSR_TEX_STATE_BEGIN
      && addr < CSR_TEX_STATE_END) {
-      uint32_t state = CSR_TEX_STATE(addr);
-      return tex_units_.at(csr_tex_unit_).get_state(state);
+      return tex_unit_.csr_read(addr);
     } else
   #endif
   #ifdef EXT_RASTER_ENABLE
     if (addr >= CSR_RASTER_STATE_BEGIN
      && addr < CSR_RASTER_STATE_END) {
-      uint32_t state = CSR_RASTER_STATE(addr);
-      return raster_unit.get_state(state);
+      return raster_unit.csr_read(addr);
     } else
   #endif
   #ifdef EXT_ROP_ENABLE
     if (addr >= CSR_ROP_STATE_BEGIN
      && addr < CSR_ROP_STATE_END) {
-      uint32_t state = CSR_ROP_STATE(addr);
-      return rop_unit.get_state(state);
+      return rop_unit.csr_read(addr);
     } else
   #endif
     {
@@ -669,14 +674,21 @@ void Core::set_csr(uint32_t addr, uint32_t value, uint32_t /*tid*/, uint32_t wid
     fcsrs_.at(wid) = value & 0xff;
   } else 
 #ifdef EXT_TEX_ENABLE
-  if (addr == CSR_TEX_UNIT) {
-    csr_tex_unit_ = value;
-  } else
   if (addr >= CSR_TEX_STATE_BEGIN
    && addr < CSR_TEX_STATE_END) {
-      uint32_t state = CSR_TEX_STATE(addr);
-      tex_units_.at(csr_tex_unit_).set_state(state, value);
-      return;
+      tex_unit_.csr_write(addr, value);
+  } else
+#endif
+#ifdef EXT_RASTER_ENABLE
+  if (addr >= CSR_RASTER_STATE_BEGIN
+   && addr < CSR_RASTER_STATE_END) { 
+    raster_unit.csr_write(addr, value);
+  } else
+#endif
+#ifdef EXT_ROP_ENABLE
+  if (addr >= CSR_ROP_STATE_BEGIN
+   && addr < CSR_ROP_STATE_END) {
+    rop_unit.csr_write(addr, value);
   } else
 #endif
   {

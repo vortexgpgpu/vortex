@@ -1,4 +1,4 @@
-#include "raster_unit.h"
+#include "rasterunit.h"
 #include "core.h"
 #include <VX_config.h>
 
@@ -19,11 +19,13 @@ void RasterUnit::clear() {
     }
 }
 
-uint32_t RasterUnit::get_state(uint32_t state) {
+uint32_t RasterUnit::csr_read(uint32_t addr) {
+    uint32_t state = CSR_RASTER_STATE(addr);
     return states_.at(state);
 }
 
-void RasterUnit::set_state(uint32_t state, uint32_t value) {
+void RasterUnit::csr_write(uint32_t addr, uint32_t value) {
+    uint32_t state = CSR_RASTER_STATE(addr);
     states_.at(state) = value;
 }
 

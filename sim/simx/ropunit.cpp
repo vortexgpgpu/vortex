@@ -1,4 +1,4 @@
-#include "rop_unit.h"
+#include "ropunit.h"
 #include "core.h"
 #include <VX_config.h>
 
@@ -19,11 +19,13 @@ void RopUnit::clear() {
     }
 }
 
-uint32_t RopUnit::get_state(uint32_t state) {
+uint32_t RopUnit::csr_read(uint32_t addr) {
+    uint32_t state = CSR_ROP_STATE(addr);
     return states_.at(state);
 }
 
-void RopUnit::set_state(uint32_t state, uint32_t value) {
+void RopUnit::csr_write(uint32_t addr, uint32_t value) {
+    uint32_t state = CSR_ROP_STATE(addr);
     states_.at(state) = value;
 }
 

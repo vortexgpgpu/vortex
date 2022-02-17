@@ -7,9 +7,9 @@ using namespace vortex;
 class Processor::Impl {
 private:
   std::vector<Core::Ptr> cores_;
-  std::vector<Cache::Ptr> l2caches_;
+  std::vector<CacheSim::Ptr> l2caches_;
   std::vector<Switch<MemReq, MemRsp>::Ptr> l2_mem_switches_;
-  Cache::Ptr l3cache_;
+  CacheSim::Ptr l3cache_;
   Switch<MemReq, MemRsp>::Ptr l3_mem_switch_;
 
 public:
@@ -38,7 +38,7 @@ public:
     std::vector<SimPort<MemRsp>*> mem_rsp_ports(1, &memsim->MemRspPort);
 
     if (L3_ENABLE) {
-      l3cache_ = Cache::Create("l3cache", Cache::Config{
+      l3cache_ = CacheSim::Create("l3cache", CacheSim::Config{
         log2ceil(L3_CACHE_SIZE),  // C
         log2ceil(MEM_BLOCK_SIZE), // B
         2,                      // W
@@ -84,7 +84,7 @@ public:
 
       if (L2_ENABLE) {
         auto& l2cache = l2caches_.at(i);
-        l2cache = Cache::Create("l2cache", Cache::Config{
+        l2cache = CacheSim::Create("l2cache", CacheSim::Config{
           log2ceil(L2_CACHE_SIZE),  // C
           log2ceil(MEM_BLOCK_SIZE), // B
           2,                      // W

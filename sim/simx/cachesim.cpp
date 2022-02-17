@@ -1,4 +1,4 @@
-#include "cache.h"
+#include "cachesim.h"
 #include "debug.h"
 #include "types.h"
 #include <util.h>
@@ -27,7 +27,7 @@ struct params_t {
     uint32_t tag_select_addr_start;
     uint32_t tag_select_addr_end;
 
-    params_t(const Cache::Config& config) {
+    params_t(const CacheSim::Config& config) {
         uint32_t bank_bits   = log2ceil(config.num_banks);
         uint32_t offset_bits = config.B - config.W;
         uint32_t log2_bank_size  = config.C - bank_bits;
@@ -233,7 +233,7 @@ struct bank_t {
     std::vector<set_t>  sets;    
     MSHR                mshr;
 
-    bank_t(const Cache::Config& config, 
+    bank_t(const CacheSim::Config& config, 
            const params_t& params) 
         : sets(params.sets_per_bank, params.blocks_per_set)
         , mshr(config.mshr_size)
@@ -249,9 +249,9 @@ struct bank_t {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class Cache::Impl {
+class CacheSim::Impl {
 private:
-    Cache* const simobject_;
+    CacheSim* const simobject_;
     Config config_;
     params_t params_;
     std::vector<bank_t> banks_;
@@ -266,7 +266,7 @@ private:
     uint64_t pending_fill_reqs_;    
 
 public:
-    Impl(Cache* simobject, const Config& config) 
+    Impl(CacheSim* simobject, const Config& config) 
         : simobject_(simobject)
         , config_(config)
         , params_(config)
@@ -611,8 +611,8 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-Cache::Cache(const SimContext& ctx, const char* name, const Config& config) 
-    : SimObject<Cache>(ctx, name)    
+CacheSim::CacheSim(const SimContext& ctx, const char* name, const Config& config) 
+    : SimObject<CacheSim>(ctx, name)    
     , CoreReqPorts(config.num_inputs, this)
     , CoreRspPorts(config.num_inputs, this)
     , MemReqPort(this)
@@ -620,18 +620,18 @@ Cache::Cache(const SimContext& ctx, const char* name, const Config& config)
     , impl_(new Impl(this, config))
 {}
 
-Cache::~Cache() {
+CacheSim::~CacheSim() {
     delete impl_;
 }
 
-void Cache::reset() {
+void CacheSim::reset() {
     impl_->reset();
 }
 
-void Cache::tick() {
+void CacheSim::tick() {
     impl_->tick();
 }
 
-const Cache::PerfStats& Cache::perf_stats() const {
+const CacheSim::PerfStats& CacheSim::perf_stats() const {
     return impl_->perf_stats();
 }
