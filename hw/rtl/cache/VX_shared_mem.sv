@@ -165,14 +165,15 @@ module VX_shared_mem #(
 
     wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0] per_bank_core_rsp_data; 
 
+    wire [NUM_BANKS-1:0][`LINE_SELECT_BITS-1:0] per_bank_blk_addr;
+
     for (genvar i = 0; i < NUM_BANKS; i++) begin
+
+        assign per_bank_blk_addr[i] = `SMEM_LINE_TO_BLOCK_ADDR(per_bank_core_req_addr[i]);
 
         wire [WORD_SIZE-1:0] wren = per_bank_core_req_byteen[i]
                                   & {WORD_SIZE{per_bank_core_req_valid[i] 
                                             && per_bank_core_req_rw[i]}};
-
-        wire [`LINE_SELECT_BITS-1:0] addr = per_bank_core_req_addr[i][`LINE_SELECT_BITS-1:0];
-
         VX_sp_ram #(
             .DATAW      (`WORD_WIDTH),
             .SIZE       (`LINES_PER_BANK),
@@ -180,7 +181,7 @@ module VX_shared_mem #(
             .NO_RWCHECK (1)
         ) data_store (
             .clk   (clk),
-            .addr  (addr),
+            .addr  (per_bank_blk_addr[i]),
             .wren  (wren),
             .wdata (per_bank_core_req_data[i]),
             .rdata (per_bank_core_rsp_data[i])
@@ -306,11 +307,11 @@ module VX_shared_mem #(
             for (integer i = 0; i < NUM_BANKS; ++i) begin
                 if (per_bank_core_req_valid_unqual[i]) begin
                     if (per_bank_core_req_rw_unqual[i]) begin
-                        dpi_trace("%d: smem%0d:%0d core-wr-req: addr=%0h, tag=%0h, byteen=%b, data=%0h (#%0d)\n", 
-                            $time, CACHE_ID, i, `LINE_TO_BYTE_ADDR(per_bank_core_req_addr_unqual[i], i), per_bank_core_req_tag_unqual[i], per_bank_core_req_byteen_unqual[i], per_bank_core_req_data_unqual[i], req_id_st0[i]);
+                        dpi_trace("%d: smem%0d:%0d core-wr-req: addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", 
+                            $time, CACHE_ID, i, `LINE_TO_BYTE_ADDRX(per_bank_core_req_addr_unqual[i], i), per_bank_core_req_tag_unqual[i], per_bank_core_req_byteen_unqual[i], per_bank_core_req_data_unqual[i], req_id_st0[i]);
                     end else begin
-                        dpi_trace("%d: smem%0d:%0d core-rd-req: addr=%0h, tag=%0h (#%0d)\n", 
-                            $time, CACHE_ID, i, `LINE_TO_BYTE_ADDR(per_bank_core_req_addr_unqual[i], i), per_bank_core_req_tag_unqual[i], req_id_st0[i]);
+                        dpi_trace("%d: smem%0d:%0d core-rd-req: addr=0x%0h, tag=0x%0h (#%0d)\n", 
+                            $time, CACHE_ID, i, `LINE_TO_BYTE_ADDRX(per_bank_core_req_addr_unqual[i], i), per_bank_core_req_tag_unqual[i], req_id_st0[i]);
                     end
                 end
             end
@@ -319,11 +320,11 @@ module VX_shared_mem #(
             for (integer i = 0; i < NUM_BANKS; ++i) begin
                 if (per_bank_core_req_valid[i]) begin
                     if (per_bank_core_req_rw[i]) begin
-                        dpi_trace("%d: smem%0d:%0d core-wr-rsp: addr=%0h, tag=%0h, data=%0h (#%0d)\n", 
-                            $time, CACHE_ID, i, `LINE_TO_BYTE_ADDR(per_bank_core_req_addr[i], i), per_bank_core_req_tag[i], per_bank_core_req_data[i], req_id_st1[i]);
+                        dpi_trace("%d: smem%0d:%0d core-wr-rsp: addr=0x%0h, blk_addr=%0d, tag=0x%0h, data=0x%0h (#%0d)\n", 
+                            $time, CACHE_ID, i, `LINE_TO_BYTE_ADDRX(per_bank_core_req_addr[i], i), per_bank_blk_addr[i], per_bank_core_req_tag[i], per_bank_core_req_data[i], req_id_st1[i]);
                     end else begin
-                        dpi_trace("%d: smem%0d:%0d core-rd-rsp: addr=%0h, tag=%0h, data=%0h (#%0d)\n", 
-                            $time, CACHE_ID, i, `LINE_TO_BYTE_ADDR(per_bank_core_req_addr[i], i), per_bank_core_req_tag[i], per_bank_core_rsp_data[i], req_id_st1[i]);
+                        dpi_trace("%d: smem%0d:%0d core-rd-rsp: addr=0x%0h, blk_addr=%0d, tag=0x%0h, data=0x%0h (#%0d)\n", 
+                            $time, CACHE_ID, i, `LINE_TO_BYTE_ADDRX(per_bank_core_req_addr[i], i), per_bank_blk_addr[i], per_bank_core_req_tag[i], per_bank_core_rsp_data[i], req_id_st1[i]);
                     end
                 end
             end

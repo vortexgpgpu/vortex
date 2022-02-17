@@ -56,25 +56,15 @@ vx_set_sp:
   li a0, -1
   .insn s 0x6b, 0, x0, 0(a0)  # tmc a0
   
-  # set global pointer register
-  .option push
-  .option norelax
-  la gp, __global_pointer
-  .option pop
-
-  # allocate stack region for a threads on the processor 
-  # set stack pointer
-  li sp, SMEM_BASE_ADDR # load stack base address
-  #if SM_ENABLE
-  csrr a2, CSR_LTID    # get local thread id
-  #else
-  csrr a2, CSR_GTID    # get global thread id
-  #endif
-  slli a1, a2, STACK_LOG2_SIZE
-  sub  sp, sp, a1      # sub thread block
+  # set per-thread stack register
+  li sp, STACK_BASE_ADDR # load stack base address
+  li a1, STACK_SIZE      # load stack size
+  csrr a2, CSR_GTID      # get global thread id
+  mul  a1, a1, a2
+  sub  sp, sp, a1
 
   # disable active warps except warp0
-  csrr a3, CSR_LWID    # get local wid
+  csrr a3, CSR_LWID     # get local wid
   beqz a3, RETURN
   li a0, 0
   .insn s 0x6b, 0, x0, 0(a0)  # tmc a0

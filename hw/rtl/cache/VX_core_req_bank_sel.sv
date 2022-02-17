@@ -57,7 +57,7 @@ module VX_core_req_bank_sel #(
 
     for (genvar i = 0; i < NUM_REQS; i++) begin    
         if (BANK_ADDR_OFFSET == 0) begin
-            assign core_req_line_addr[i] = `SELECT_LINE_ADDR0(core_req_addr[i]);
+            assign core_req_line_addr[i] = `SELECT_LINE_ADDR(core_req_addr[i]);
         end else begin
             assign core_req_line_addr[i] = `SELECT_LINE_ADDRX(core_req_addr[i]);
         end

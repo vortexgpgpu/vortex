@@ -69,8 +69,12 @@
 `define IO_CSR_ADDR `IO_BASE_ADDR
 `endif
 
-`ifndef SMEM_BASE_ADDR
-`define SMEM_BASE_ADDR `IO_BASE_ADDR
+`ifndef STACK_BASE_ADDR
+`define STACK_BASE_ADDR `IO_BASE_ADDR
+`endif
+
+`ifndef STACK_SIZE
+`define STACK_SIZE 8192
 `endif
 
 // ISA Extensions /////////////////////////////////////////////////////////////
@@ -386,20 +390,19 @@
 `define TEX_STATE_MIPOFF(lod)       (7+(lod))
 `define NUM_TEX_STATES              (`TEX_STATE_MIPOFF(`TEX_LOD_MAX)+1)
 
-`define CSR_TEX_UNIT                12'h7C0
+`define CSR_TEX_STATE_BEGIN         12'h7C0
+`define CSR_TEX_STAGE               `CSR_TEX_STATE_BEGIN
+`define CSR_TEX_ADDR                (`CSR_TEX_STATE_BEGIN+1+`TEX_STATE_ADDR)
+`define CSR_TEX_WIDTH               (`CSR_TEX_STATE_BEGIN+1+`TEX_STATE_WIDTH)
+`define CSR_TEX_HEIGHT              (`CSR_TEX_STATE_BEGIN+1+`TEX_STATE_HEIGHT)
+`define CSR_TEX_FORMAT              (`CSR_TEX_STATE_BEGIN+1+`TEX_STATE_FORMAT)
+`define CSR_TEX_FILTER              (`CSR_TEX_STATE_BEGIN+1+`TEX_STATE_FILTER)
+`define CSR_TEX_WRAPU               (`CSR_TEX_STATE_BEGIN+1+`TEX_STATE_WRAPU)
+`define CSR_TEX_WRAPV               (`CSR_TEX_STATE_BEGIN+1+`TEX_STATE_WRAPV)
+`define CSR_TEX_MIPOFF(lod)         (`CSR_TEX_STATE_BEGIN+1+`TEX_STATE_MIPOFF(lod))
+`define CSR_TEX_STATE_END           (`CSR_TEX_STATE_BEGIN+1+`NUM_TEX_STATES)
 
-`define CSR_TEX_STATE_BEGIN         12'h7C1
-`define CSR_TEX_ADDR                (`CSR_TEX_STATE_BEGIN+`TEX_STATE_ADDR)
-`define CSR_TEX_WIDTH               (`CSR_TEX_STATE_BEGIN+`TEX_STATE_WIDTH)
-`define CSR_TEX_HEIGHT              (`CSR_TEX_STATE_BEGIN+`TEX_STATE_HEIGHT)
-`define CSR_TEX_FORMAT              (`CSR_TEX_STATE_BEGIN+`TEX_STATE_FORMAT)
-`define CSR_TEX_FILTER              (`CSR_TEX_STATE_BEGIN+`TEX_STATE_FILTER)
-`define CSR_TEX_WRAPU               (`CSR_TEX_STATE_BEGIN+`TEX_STATE_WRAPU)
-`define CSR_TEX_WRAPV               (`CSR_TEX_STATE_BEGIN+`TEX_STATE_WRAPV)
-`define CSR_TEX_MIPOFF(lod)         (`CSR_TEX_STATE_BEGIN+`TEX_STATE_MIPOFF(lod))
-`define CSR_TEX_STATE_END           (`CSR_TEX_STATE_BEGIN+`NUM_TEX_STATES)
-
-`define CSR_TEX_STATE(addr)         ((addr) - `CSR_TEX_STATE_BEGIN)
+`define CSR_TEX_STATE(addr)         ((addr) - `CSR_TEX_ADDR)
 
 // Raster Units ///////////////////////////////////////////////////////////////
 
@@ -536,14 +539,13 @@
 // SM Configurable Knobs //////////////////////////////////////////////////////
 
 // per thread stack size
-`ifndef STACK_LOG2_SIZE
-`define STACK_LOG2_SIZE 10
+`ifndef SMEM_LOCAL_SIZE
+`define SMEM_LOCAL_SIZE 1024
 `endif
-`define STACK_SIZE (1 << `STACK_LOG2_SIZE)
 
-// Size of cache in bytes
+// Size of storage in bytes
 `ifndef SMEM_SIZE
-`define SMEM_SIZE (`STACK_SIZE * `NUM_WARPS * `NUM_THREADS)
+`define SMEM_SIZE (`SMEM_LOCAL_SIZE * `NUM_WARPS * `NUM_THREADS)
 `endif
 
 // Number of banks

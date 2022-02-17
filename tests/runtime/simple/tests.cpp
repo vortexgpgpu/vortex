@@ -62,7 +62,7 @@ int test_stack_memory() {
 
 int test_shared_memory() {
 	static const int SHARED_MEM_SZ = 8;
-	int* shared_buffer = (int*)(SMEM_BASE_ADDR-(SMEM_SIZE-SHARED_MEM_SZ-4));
+	int* shared_buffer = (int*)(STACK_BASE_ADDR-(128*4)-SHARED_MEM_SZ*4);
 
 	vx_printf("Shared Memory Test\n");	
 	
