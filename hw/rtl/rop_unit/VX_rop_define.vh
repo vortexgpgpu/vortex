@@ -42,18 +42,18 @@
 
 `define ROP_LOGIC_OP_CLEAR                      0
 `define ROP_LOGIC_OP_AND                        1
-`define ROP_LOGIC_OP_AND REVERSE                2
+`define ROP_LOGIC_OP_AND_REVERSE                2
 `define ROP_LOGIC_OP_COPY                       3
-`define ROP_LOGIC_OP_AND INVERTED               4
+`define ROP_LOGIC_OP_AND_INVERTED               4
 `define ROP_LOGIC_OP_NOOP                       5
 `define ROP_LOGIC_OP_XOR                        6
 `define ROP_LOGIC_OP_OR                         7
 `define ROP_LOGIC_OP_NOR                        8
 `define ROP_LOGIC_OP_EQUIV                      9
 `define ROP_LOGIC_OP_INVERT                     10
-`define ROP_LOGIC_OP_OR REVERSE                 11
-`define ROP_LOGIC_OP_COPY INVERTED              12
-`define ROP_LOGIC_OP_OR INVERTED                13
+`define ROP_LOGIC_OP_OR_REVERSE                 11
+`define ROP_LOGIC_OP_COPY_INVERTED              12
+`define ROP_LOGIC_OP_OR_INVERTED                13
 `define ROP_LOGIC_OP_NAND                       14
 `define ROP_LOGIC_OP_SET                        15
 `define ROP_LOGIC_OP_BITS                       4
