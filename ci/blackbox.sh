@@ -3,7 +3,7 @@
 show_usage()
 {
     echo "Vortex BlackBox Test Driver v1.0"
-    echo "Usage: [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=rtlsim|vlsim|simx] [--debug] [--scope] [--perf] [--app=vecadd|sgemm|basic|demo|dogfood] [--args=<args>] [--help]]"
+    echo "Usage: [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--perf] [--help]]"
 }
 
 SCRIPT_DIR=$(dirname "$0")
@@ -20,7 +20,6 @@ L3=0
 DEBUG=0
 SCOPE=0
 HAS_ARGS=0
-DEBUG_LEVEL=1
 
 for i in "$@"
 do
@@ -57,8 +56,8 @@ case $i in
         L3=1
         shift
         ;;
-    --debug)
-        DEBUG=1
+    --debug=*)
+        DEBUG=${i#*=}
         shift
         ;;
     --scope)
@@ -101,7 +100,6 @@ case $DRIVER in
         ;; 
     simx)
         DRIVER_PATH=$VORTEX_HOME/driver/simx
-        DEBUG_LEVEL=3
         ;;
     *)
         echo "invalid driver: $DRIVER"
@@ -140,15 +138,15 @@ echo "$CONFIGS+$DEBUG+$SCOPE" > $BLACKBOX_CACHE
 
 status=0
 
-if [ $DEBUG -eq 1 ]
+if [ $DEBUG -ne 0 ]
 then    
     if [ $SCOPE -eq 1 ]
     then
-        echo "running: DEBUG=$DEBUG_LEVEL SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH"
-        DEBUG=$DEBUG_LEVEL SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH
+        echo "running: DEBUG=$DEBUG SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH"
+        DEBUG=$DEBUG SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH
     else
-        echo "running: DEBUG=$DEBUG_LEVEL CONFIGS="$CONFIGS" make -C $DRIVER_PATH"
-        DEBUG=$DEBUG_LEVEL CONFIGS="$CONFIGS" make -C $DRIVER_PATH
+        echo "running: DEBUG=$DEBUG CONFIGS="$CONFIGS" make -C $DRIVER_PATH"
+        DEBUG=$DEBUG CONFIGS="$CONFIGS" make -C $DRIVER_PATH
     fi    
     
     if [ $HAS_ARGS -eq 1 ]
