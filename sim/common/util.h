@@ -50,3 +50,6 @@ const char* fileExtension(const char* filepath);
 #define DISABLE_WARNING_UNREFERENCED_FUNCTION
 #define DISABLE_WARNING_ANONYMOUS_STRUCT
 #endif
+
+void *aligned_malloc(size_t size, size_t alignment);
+void aligned_free(void *ptr);

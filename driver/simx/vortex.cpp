@@ -32,12 +32,16 @@ public:
         : size_(size)
         , device_(device) {
         uint64_t aligned_asize = aligned_size(size, CACHE_BLOCK_SIZE);
-        data_ = malloc(aligned_asize);
+        data_ = aligned_malloc(aligned_asize, CACHE_BLOCK_SIZE);
+        // set uninitialized data to "baadf00d"
+        for (uint32_t i = 0; i < aligned_asize; ++i) {
+            ((uint8_t*)data_)[i] = (0xbaadf00d >> ((i & 0x3) * 8)) & 0xff;
+        }
     }
 
     ~vx_buffer() {
         if (data_) {
-            free(data_);
+            aligned_free(data_);
         }
     }
 
