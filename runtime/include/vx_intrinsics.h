@@ -74,9 +74,9 @@ extern "C" {
 })
 
 // Texture load
-#define vx_tex(unit, u, v, lod) ({              \
+#define vx_tex(stage, u, v, lod) ({              \
 	unsigned __r;                               \
-    __asm__ __volatile__ (".insn r4 0x5b, 0, %1, %0, %2, %3, %4" : "=r"(__r) : "i"(unit), "r"(u), "r"(v), "r"(lod)); \
+    __asm__ __volatile__ (".insn r4 0x5b, 0, %1, %0, %2, %3, %4" : "=r"(__r) : "i"(stage), "r"(u), "r"(v), "r"(lod)); \
 	__r;							            \
 })
 

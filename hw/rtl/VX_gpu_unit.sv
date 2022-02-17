@@ -272,7 +272,7 @@ module VX_gpu_unit #(
     assign tex_req_if.rd    = gpu_req_if.rd;
     assign tex_req_if.wb    = gpu_req_if.wb;
     
-    assign tex_req_if.unit      = gpu_req_if.op_mod[`NTEX_BITS-1:0];
+    assign tex_req_if.stage     = gpu_req_if.op_mod[`NTEX_BITS-1:0];
     assign tex_req_if.coords[0] = gpu_req_if.rs1_data;
     assign tex_req_if.coords[1] = gpu_req_if.rs2_data;
     assign tex_req_if.lod       = gpu_req_if.rs3_data;        
