@@ -55,6 +55,7 @@ module VX_csr_data #(
     reg [`NUM_WARPS-1:0][`INST_FRM_BITS+`FFLAGS_BITS-1:0] fcsr;
 
     always @(posedge clk) begin
+        reg write_addr_valid;
         if (reset) begin
             fcsr <= '0;
         end else begin
@@ -79,15 +80,27 @@ module VX_csr_data #(
                     `CSR_PMPCFG0:  csr_pmpcfg[0]  <= write_data[`CSR_WIDTH-1:0];
                     `CSR_PMPADDR0: csr_pmpaddr[0] <= write_data[`CSR_WIDTH-1:0];
                     default: begin
+                        write_addr_valid = 0;             
                     `ifdef EXT_TEX_ENABLE
-                        `ASSERT((write_addr == `CSR_TEX_UNIT)
-                             || (write_addr >= `CSR_TEX_STATE_BEGIN 
-                              && write_addr < `CSR_TEX_STATE_END),
-                                ("%t: *** invalid CSR write address: %0h (#%0d)", $time, write_addr, write_uuid));
-                    `else
-                        `ASSERT(~write_enable, ("%t: *** invalid CSR write address: %0h (#%0d)", $time, write_addr, write_uuid));
+                        if (write_addr >= `CSR_TEX_STATE_BEGIN
+                         && write_addr < `CSR_TEX_STATE_END) begin
+                            write_addr_valid = 1;
+                        end
                     `endif
-                    end
+                    `ifdef EXT_RASTER_ENABLE    
+                        if (write_addr >= `CSR_RASTER_STATE_BEGIN
+                         && write_addr < `CSR_RASTER_STATE_END) begin
+                            write_addr_valid = 1;
+                        end
+                    `endif
+                    `ifdef EXT_TEX_ENABLE    
+                        if (write_addr >= `CSR_RASTER_STATE_BEGIN
+                         && write_addr < `CSR_RASTER_STATE_END) begin
+                            write_addr_valid = 1;
+                        end
+                    `endif
+                        `ASSERT(write_addr_valid, ("%t: *** invalid CSR write address: %0h (#%0d)", $time, write_addr, write_uuid));
+                    end                    
                 endcase
             end
         end
@@ -102,6 +115,8 @@ module VX_csr_data #(
     assign tex_csr_if.write_data   = write_data;
     assign tex_csr_if.write_uuid   = write_uuid;
 `endif
+
+///////////////////////////////////////////////////////////////////////////////
 
     always @(posedge clk) begin
        if (reset) begin
@@ -243,9 +258,20 @@ module VX_csr_data #(
                      read_addr_valid_r = 1;
                 end else     
             `ifdef EXT_TEX_ENABLE    
-                if ((read_addr == `CSR_TEX_UNIT)
-                 || (read_addr >= `CSR_TEX_STATE_BEGIN
-                  && read_addr < `CSR_TEX_STATE_END)) begin
+                if (read_addr >= `CSR_TEX_STATE_BEGIN
+                 && read_addr < `CSR_TEX_STATE_END) begin
+                    read_addr_valid_r = 1;
+                end else
+            `endif
+            `ifdef EXT_RASTER_ENABLE
+                if (read_addr >= `CSR_RASTER_STATE_BEGIN
+                 && read_addr < `CSR_RASTER_STATE_END) begin
+                    read_addr_valid_r = 1;
+                end else
+            `endif
+            `ifdef EXT_ROP_ENABLE
+                if (read_addr >= `CSR_ROP_STATE_BEGIN
+                 && read_addr < `CSR_ROP_STATE_END) begin
                     read_addr_valid_r = 1;
                 end else
             `endif
