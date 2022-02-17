@@ -383,13 +383,13 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
 
   if (opcode == S_INST 
    || opcode == FS) {     
-     os << "M[r" << std::dec << instr.getRSrc(0) << " + 0x" << std::hex << instr.getImm() << "] <- ";
+     os << "M[x" << std::dec << instr.getRSrc(0) << " + 0x" << std::hex << instr.getImm() << "] <- ";
      os << instr.getRSType(1) << std::dec << instr.getRSrc(1);
   } else 
   if (opcode == L_INST 
    || opcode == FL) {     
      os << instr.getRDType() << std::dec << instr.getRDest() << " <- ";
-     os << "M[r" << std::dec << instr.getRSrc(0) << " + 0x" << std::hex << instr.getImm() << "]";
+     os << "M[x" << std::dec << instr.getRSrc(0) << " + 0x" << std::hex << instr.getImm() << "]";
   } else {
     if (instr.getRDType() != RegType::None) {
       os << instr.getRDType() << std::dec << instr.getRDest() << " <- ";
@@ -404,7 +404,7 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
       os << "imm=0x" << std::hex << instr.getImm();
     }
     if (opcode == GPU && func3 == 0) {
-      os << ", unit=" << std::dec << func2;
+      os << ", stage=" << std::dec << func2;
     }
   }
   return os;

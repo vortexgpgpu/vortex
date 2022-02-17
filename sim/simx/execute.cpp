@@ -128,7 +128,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   auto num_rsrcs = instr.getNRSrc();
   if (num_rsrcs) {              
     for (uint32_t i = 0; i < num_rsrcs; ++i) {    
-      DPH(2, "Src Reg [" << std::dec << i << "]: ");
+      DPH(2, "Src" << std::dec << i << " Reg: ");
       auto type = instr.getRSType(i);
       auto reg = instr.getRSrc(i);        
       switch (type) {
@@ -141,7 +141,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             continue;            
           }
           rsdata[t][i].i = ireg_file_.at(t)[reg];          
-          DPN(2, std::hex << rsdata[t][i].i); 
+          DPN(2, "0x" << std::hex << rsdata[t][i].i);
         }
         DPN(2, "}" << std::endl);
         break;
@@ -154,7 +154,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             continue;            
           }
           rsdata[t][i].f = freg_file_.at(t)[reg];
-          DPN(2, std::hex << rsdata[t][i].f); 
+          DPN(2, "0x" << std::hex << rsdata[t][i].f);
         }
         DPN(2, "}" << std::endl);
         break;
@@ -690,8 +690,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         uint64_t mem_addr = rsdata[t][0].i + immsrc;         
         uint64_t mem_data = 0;
         core_->dcache_read(&mem_data, mem_addr, mem_bytes);
-        trace->mem_addrs.at(t).push_back({mem_addr, mem_bytes});        
-        DP(4, "LOAD MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data);
+        trace->mem_addrs.at(t).push_back({mem_addr, mem_bytes});
         switch (func3) {
         case 0:
           // RV32I: LB
@@ -731,7 +730,6 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           core_->dcache_read(&mem_data, mem_addr, 4);
           Word *result_ptr = (Word *)(vd.data() + i);
           *result_ptr = mem_data;
-          DP(4, "LOAD MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data);        
         }
         break;
       } 
@@ -761,8 +759,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         if (mem_bytes < 8) {
           mem_data &= mask;
         }
-        trace->mem_addrs.at(t).push_back({mem_addr, mem_bytes});        
-        DP(4, "STORE MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data);
+        trace->mem_addrs.at(t).push_back({mem_addr, mem_bytes});
         switch (func3) {
         case 0:
         case 1:
@@ -782,7 +779,6 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           // store word and unit strided (not checking for unit stride)          
           uint32_t mem_data = *(uint32_t *)(vreg_file_.at(instr.getVs3()).data() + i);
           core_->dcache_write(&mem_data, mem_addr, 4);
-          DP(4, "STORE MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data);
           break;
         } 
         default:
@@ -1419,11 +1415,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       for (uint32_t t = 0; t < num_threads; ++t) {
         if (!tmask_.test(t))
           continue;        
-        auto unit  = func2;
+        auto stage = func2;
         auto u     = rsdata[t][0].i;
         auto v     = rsdata[t][1].i;
         auto lod   = rsdata[t][2].i;
-        auto color = core_->tex_read(unit, u, v, lod, &trace->mem_addrs.at(t));
+        auto color = core_->tex_unit_.read(stage, u, v, lod, &trace->mem_addrs.at(t));
         rddata[t].i = color;
       }
       rd_write = true;
@@ -2305,12 +2301,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
 
   if (rd_write) {
     trace->wb = true;
-    DPH(2, "Dest Reg: ");
     auto type = instr.getRDType();    
     switch (type) {
     case RegType::Integer:      
-      if (rdest) {    
-        DPN(2, type << std::dec << rdest << "={");    
+      if (rdest) {   
+        DPH(2, "Dest Reg: " << type << std::dec << rdest << "={");    
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (t) DPN(2, ", ");
           if (!tmask_.test(t)) {
@@ -2325,7 +2320,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       }
       break;
     case RegType::Float:
-      DPN(2, type << std::dec << rdest << "={");
+      DPH(2, "Dest Reg: " << type << std::dec << rdest << "={");
       for (uint32_t t = 0; t < num_threads; ++t) {
         if (t) DPN(2, ", ");
         if (!tmask_.test(t)) {
