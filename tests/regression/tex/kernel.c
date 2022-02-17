@@ -62,7 +62,7 @@ int main() {
 	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
 
 	// configure texture unit
-	csr_write(CSR_TEX_UNIT,   0);
+	csr_write(CSR_TEX_STAGE,  0);
 	csr_write(CSR_TEX_WIDTH,  arg->src_logwidth);	
 	csr_write(CSR_TEX_HEIGHT, arg->src_logheight);
 	csr_write(CSR_TEX_FORMAT, arg->format);

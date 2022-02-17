@@ -55,9 +55,11 @@ static void __attribute__ ((noinline)) spawn_tasks_all_stub() {
   int wK = (p_wspawn_args->N * wid) + MIN(p_wspawn_args->R, wid);
   int tK = p_wspawn_args->N + (wid < p_wspawn_args->R);
   int offset = p_wspawn_args->offset + (wK * NT) + (tid * tK);
+  vx_spawn_tasks_cb callback = p_wspawn_args->callback;
+  void* arg = p_wspawn_args->arg;
 
   for (int task_id = offset, N = task_id + tK; task_id < N; ++task_id) {
-    (p_wspawn_args->callback)(task_id, p_wspawn_args->arg);
+    callback(task_id, arg);
   }
 
   // wait for all warps to complete
