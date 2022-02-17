@@ -1,10 +1,10 @@
-/* ---- Original Script: /opt/riscv32i/riscv32-unknown-elf/lib/ldscripts/elf64lriscv.x ---- */
 /* Default linker script, for normal executables */
-/* Copyright (C) 2014-2017 Free Software Foundation, Inc.
+/* Copyright (C) 2014-2020 Free Software Foundation, Inc.
    Copying and distribution of this script, with or without modification,
    are permitted in any medium without royalty provided the copyright
    notice and this notice are preserved.  */
-OUTPUT_FORMAT("elf64-littleriscv", "elf64-littleriscv", "elf64-littleriscv")
+OUTPUT_FORMAT("elf64-littleriscv", "elf64-littleriscv",
+	      "elf64-littleriscv")
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
 SECTIONS
@@ -19,23 +19,24 @@ SECTIONS
   .gnu.version    : { *(.gnu.version) }
   .gnu.version_d  : { *(.gnu.version_d) }
   .gnu.version_r  : { *(.gnu.version_r) }
-  .rela.dyn       :
+  .rela.init      : { *(.rela.init) }
+  .rela.text      : { *(.rela.text .rela.text.* .rela.gnu.linkonce.t.*) }
+  .rela.fini      : { *(.rela.fini) }
+  .rela.rodata    : { *(.rela.rodata .rela.rodata.* .rela.gnu.linkonce.r.*) }
+  .rela.data.rel.ro   : { *(.rela.data.rel.ro .rela.data.rel.ro.* .rela.gnu.linkonce.d.rel.ro.*) }
+  .rela.data      : { *(.rela.data .rela.data.* .rela.gnu.linkonce.d.*) }
+  .rela.tdata	  : { *(.rela.tdata .rela.tdata.* .rela.gnu.linkonce.td.*) }
+  .rela.tbss	  : { *(.rela.tbss .rela.tbss.* .rela.gnu.linkonce.tb.*) }
+  .rela.ctors     : { *(.rela.ctors) }
+  .rela.dtors     : { *(.rela.dtors) }
+  .rela.got       : { *(.rela.got) }
+  .rela.sdata     : { *(.rela.sdata .rela.sdata.* .rela.gnu.linkonce.s.*) }
+  .rela.sbss      : { *(.rela.sbss .rela.sbss.* .rela.gnu.linkonce.sb.*) }
+  .rela.sdata2    : { *(.rela.sdata2 .rela.sdata2.* .rela.gnu.linkonce.s2.*) }
+  .rela.sbss2     : { *(.rela.sbss2 .rela.sbss2.* .rela.gnu.linkonce.sb2.*) }
+  .rela.bss       : { *(.rela.bss .rela.bss.* .rela.gnu.linkonce.b.*) }
+  .rela.iplt      :
     {
-      *(.rela.init)
-      *(.rela.text .rela.text.* .rela.gnu.linkonce.t.*)
-      *(.rela.fini)
-      *(.rela.rodata .rela.rodata.* .rela.gnu.linkonce.r.*)
-      *(.rela.data .rela.data.* .rela.gnu.linkonce.d.*)
-      *(.rela.tdata .rela.tdata.* .rela.gnu.linkonce.td.*)
-      *(.rela.tbss .rela.tbss.* .rela.gnu.linkonce.tb.*)
-      *(.rela.ctors)
-      *(.rela.dtors)
-      *(.rela.got)
-      *(.rela.sdata .rela.sdata.* .rela.gnu.linkonce.s.*)
-      *(.rela.sbss .rela.sbss.* .rela.gnu.linkonce.sb.*)
-      *(.rela.sdata2 .rela.sdata2.* .rela.gnu.linkonce.s2.*)
-      *(.rela.sbss2 .rela.sbss2.* .rela.gnu.linkonce.sb2.*)
-      *(.rela.bss .rela.bss.* .rela.gnu.linkonce.b.*)
       PROVIDE_HIDDEN (__rela_iplt_start = .);
       *(.rela.iplt)
       PROVIDE_HIDDEN (__rela_iplt_end = .);
@@ -56,8 +57,9 @@ SECTIONS
     *(.text.exit .text.exit.*)
     *(.text.startup .text.startup.*)
     *(.text.hot .text.hot.*)
+    *(SORT(.text.sorted.*))
     *(.text .stub .text.* .gnu.linkonce.t.*)
-    /* .gnu.warning sections are handled specially by elf32.em.  */
+    /* .gnu.warning sections are handled specially by elf.em.  */
     *(.gnu.warning)
   }
   .fini           :
@@ -89,12 +91,12 @@ SECTIONS
   .gcc_except_table   : ONLY_IF_RW { *(.gcc_except_table .gcc_except_table.*) }
   .exception_ranges   : ONLY_IF_RW { *(.exception_ranges*) }
   /* Thread Local Storage sections  */
-  .tdata    :
+  .tdata	  :
    {
      PROVIDE_HIDDEN (__tdata_start = .);
      *(.tdata .tdata.* .gnu.linkonce.td.*)
    }
-  .tbss     : { *(.tbss .tbss.* .gnu.linkonce.tb.*) *(.tcommon) }
+  .tbss		  : { *(.tbss .tbss.* .gnu.linkonce.tb.*) *(.tcommon) }
   .preinit_array    :
   {
     PROVIDE_HIDDEN (__preinit_array_start = .);
@@ -191,23 +193,9 @@ SECTIONS
   . = ALIGN(64 / 8);
   __BSS_END__ = .;
     __global_pointer = MIN(__SDATA_BEGIN__ + 0x800,
-                MAX(__DATA_BEGIN__ + 0x800, __BSS_END__ - 0x800));
+		            MAX(__DATA_BEGIN__ + 0x800, __BSS_END__ - 0x800));
   _end = .; PROVIDE (end = .);
-  . = DATA_SEGMENT_END (.);  
-  
-  /* .stack_dummy section doesn't contains any symbols. It is only
-	 * used for linker to calculate size of stack sections, and assign
-	 * values to stack symbols later */
-	.stack_dummy (COPY):
-	{
-		KEEP(*(.stack*))
-	}
-  __stack_usage = SIZEOF(.stack_dummy);
-  PROVIDE(__stack_top  = 0xFF000000);
-  PROVIDE(__stack_size = 0x400);
-	PROVIDE(__stack = __stack_top);
-	ASSERT(__stack_usage <= __stack_size, "stack overflow")
-
+  . = DATA_SEGMENT_END (.);
   /* Stabs debugging sections.  */
   .stab          0 : { *(.stab) }
   .stabstr       0 : { *(.stabstr) }
