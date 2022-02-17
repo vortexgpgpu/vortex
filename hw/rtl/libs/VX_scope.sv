@@ -232,7 +232,7 @@ module VX_scope #(
 `ifdef DBG_TRACE_SCOPE
     always @(posedge clk) begin
         if (bus_read) begin
-            dpi_trace("%d: scope-read: cmd=%0d, addr=%0d, value=%0h\n", $time, get_cmd, raddr, bus_out);
+            dpi_trace("%d: scope-read: cmd=%0d, addr=%0d, value=0x%0h\n", $time, get_cmd, raddr, bus_out);
         end
         if (bus_write) begin
             dpi_trace("%d: scope-write: cmd=%0d, value=%0d\n", $time, cmd_type, cmd_data);

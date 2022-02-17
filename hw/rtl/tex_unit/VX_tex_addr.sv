@@ -196,7 +196,7 @@ module VX_tex_addr #(
         end
 
         if (rsp_valid && rsp_ready) begin
-            dpi_trace("%d: core%0d-tex-addr: wid=%0d, PC=%0h, tmask=%b, req_filter=%0d, lgstride=%0d, addr=", 
+            dpi_trace("%d: core%0d-tex-addr: wid=%0d, PC=0x%0h, tmask=%b, req_filter=%0d, lgstride=%0d, addr=", 
                     $time, CORE_ID, rsp_wid, rsp_PC, rsp_tmask, rsp_filter, rsp_lgstride);
             `TRACE_ARRAY2D(rsp_addr, 4, NUM_REQS);
             dpi_trace("\n");

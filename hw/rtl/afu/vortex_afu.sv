@@ -191,36 +191,36 @@ always @(posedge clk) begin
       MMIO_IO_ADDR: begin
         cmd_io_addr <= t_ccip_clAddr'(cp2af_sRxPort.c0.data);
       `ifdef DBG_TRACE_AFU 
-        dpi_trace("%d: MMIO_IO_ADDR: addr=%0h, data=0x%0h\n", $time, mmio_hdr.address, t_ccip_clAddr'(cp2af_sRxPort.c0.data));
+        dpi_trace("%d: MMIO_IO_ADDR: addr=0x%0h, data=0x%0h\n", $time, mmio_hdr.address, t_ccip_clAddr'(cp2af_sRxPort.c0.data));
       `endif
       end
       MMIO_MEM_ADDR: begin
         cmd_mem_addr <= $bits(cmd_mem_addr)'(cp2af_sRxPort.c0.data);
       `ifdef DBG_TRACE_AFU
-        dpi_trace("%d: MMIO_MEM_ADDR: addr=%0h, data=0x%0h\n", $time, mmio_hdr.address, $bits(cmd_mem_addr)'(cp2af_sRxPort.c0.data));
+        dpi_trace("%d: MMIO_MEM_ADDR: addr=0x%0h, data=0x%0h\n", $time, mmio_hdr.address, $bits(cmd_mem_addr)'(cp2af_sRxPort.c0.data));
       `endif
       end
       MMIO_DATA_SIZE: begin
         cmd_data_size <= $bits(cmd_data_size)'(cp2af_sRxPort.c0.data);
       `ifdef DBG_TRACE_AFU
-        dpi_trace("%d: MMIO_DATA_SIZE: addr=%0h, data=%0d\n", $time, mmio_hdr.address, $bits(cmd_data_size)'(cp2af_sRxPort.c0.data));
+        dpi_trace("%d: MMIO_DATA_SIZE: addr=0x%0h, data=%0d\n", $time, mmio_hdr.address, $bits(cmd_data_size)'(cp2af_sRxPort.c0.data));
       `endif
       end
       MMIO_CMD_TYPE: begin
       `ifdef DBG_TRACE_AFU
-        dpi_trace("%d: MMIO_CMD_TYPE: addr=%0h, data=%0d\n", $time, mmio_hdr.address, $bits(cmd_type)'(cp2af_sRxPort.c0.data));
+        dpi_trace("%d: MMIO_CMD_TYPE: addr=0x%0h, data=%0d\n", $time, mmio_hdr.address, $bits(cmd_type)'(cp2af_sRxPort.c0.data));
       `endif
       end
     `ifdef SCOPE
       MMIO_SCOPE_WRITE: begin
       `ifdef DBG_TRACE_AFU
-        dpi_trace("%d: MMIO_SCOPE_WRITE: addr=%0h, data=%0h\n", $time, mmio_hdr.address, 64'(cp2af_sRxPort.c0.data));
+        dpi_trace("%d: MMIO_SCOPE_WRITE: addr=0x%0h, data=0x%0h\n", $time, mmio_hdr.address, 64'(cp2af_sRxPort.c0.data));
       `endif
       end
     `endif
       default: begin
         `ifdef DBG_TRACE_AFU
-          dpi_trace("%d: Unknown MMIO Wr: addr=%0h, data=%0h\n", $time, mmio_hdr.address, $bits(cmd_data_size)'(cp2af_sRxPort.c0.data));
+          dpi_trace("%d: Unknown MMIO Wr: addr=0x%0h, data=0x%0h\n", $time, mmio_hdr.address, $bits(cmd_data_size)'(cp2af_sRxPort.c0.data));
         `endif
       end
     endcase
@@ -248,7 +248,7 @@ always @(posedge clk) begin
         mmio_tx.data <= 64'({cout_q_dout, !cout_q_empty, 8'(state)});
       `ifdef DBG_TRACE_AFU
         if (state != STATE_WIDTH'(mmio_tx.data)) begin
-          dpi_trace("%d: MMIO_STATUS: addr=%0h, state=%0d\n", $time, mmio_hdr.address, state);
+          dpi_trace("%d: MMIO_STATUS: addr=0x%0h, state=%0d\n", $time, mmio_hdr.address, state);
         end
       `endif
       end
@@ -256,28 +256,28 @@ always @(posedge clk) begin
       MMIO_SCOPE_READ: begin
         mmio_tx.data <= cmd_scope_rdata;
       `ifdef DBG_TRACE_AFU
-        dpi_trace("%d: MMIO_SCOPE_READ: addr=%0h, data=%0h\n", $time, mmio_hdr.address, cmd_scope_rdata);
+        dpi_trace("%d: MMIO_SCOPE_READ: addr=0x%0h, data=0x%0h\n", $time, mmio_hdr.address, cmd_scope_rdata);
       `endif
       end
     `endif
       MMIO_DEV_CAPS: begin
         mmio_tx.data <= dev_caps;
       `ifdef DBG_TRACE_AFU
-        dpi_trace("%d: MMIO_DEV_CAPS: addr=%0h, data=%0h\n", $time, mmio_hdr.address, dev_caps);
+        dpi_trace("%d: MMIO_DEV_CAPS: addr=0x%0h, data=0x%0h\n", $time, mmio_hdr.address, dev_caps);
       `endif
       end      
       MMIO_ISA_CAPS: begin
         mmio_tx.data <= isa_caps;
       `ifdef DBG_TRACE_AFU
         if (state != STATE_WIDTH'(mmio_tx.data)) begin
-          dpi_trace("%d: MMIO_ISA_CAPS: addr=%0h, state=%0d\n", $time, mmio_hdr.address, isa_caps);
+          dpi_trace("%d: MMIO_ISA_CAPS: addr=0x%0h, state=%0d\n", $time, mmio_hdr.address, isa_caps);
         end
       `endif
       end
       default: begin
         mmio_tx.data <= 64'h0;
       `ifdef DBG_TRACE_AFU
-        dpi_trace("%d: Unknown MMIO Rd: addr=%0h\n", $time, mmio_hdr.address);
+        dpi_trace("%d: Unknown MMIO Rd: addr=0x%0h\n", $time, mmio_hdr.address);
       `endif
       end
     endcase
@@ -311,13 +311,13 @@ always @(posedge clk) begin
         case (cmd_type)
           CMD_MEM_READ: begin     
           `ifdef DBG_TRACE_AFU
-            dpi_trace("%d: STATE READ: ia=%0h addr=%0h size=%0d\n", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size);
+            dpi_trace("%d: STATE READ: ia=0x%0h addr=0x%0h size=%0d\n", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size);
           `endif
             state <= STATE_READ;   
           end 
           CMD_MEM_WRITE: begin      
           `ifdef DBG_TRACE_AFU
-            dpi_trace("%d: STATE WRITE: ia=%0h addr=%0h size=%0d\n", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size);
+            dpi_trace("%d: STATE WRITE: ia=0x%0h addr=0x%0h size=%0d\n", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size);
           `endif
             state <= STATE_WRITE;
           end
@@ -713,7 +713,7 @@ always @(posedge clk) begin
     cci_rd_req_addr <= cci_rd_req_addr + 1;
     cci_rd_req_ctr  <= cci_rd_req_ctr + 1;
   `ifdef DBG_TRACE_AFU
-    dpi_trace("%d: CCI Rd Req: addr=%0h, tag=%0h, rem=%0d, pending=%0d\n", $time, cci_rd_req_addr, cci_rd_req_tag, (cmd_data_size - cci_rd_req_ctr - 1), cci_pending_reads);
+    dpi_trace("%d: CCI Rd Req: addr=0x%0h, tag=0x%0h, rem=%0d, pending=%0d\n", $time, cci_rd_req_addr, cci_rd_req_tag, (cmd_data_size - cci_rd_req_ctr - 1), cci_pending_reads);
   `endif
   end
 
@@ -723,7 +723,7 @@ always @(posedge clk) begin
       cci_mem_wr_req_addr_base <= cci_mem_wr_req_addr_base + CCI_ADDR_WIDTH'(CCI_RD_WINDOW_SIZE);
     end
   `ifdef DBG_TRACE_AFU
-    dpi_trace("%d: CCI Rd Rsp: idx=%0d, ctr=%0d, data=%0h\n", $time, cci_rd_rsp_tag, cci_rd_rsp_ctr, cp2af_sRxPort.c0.data);
+    dpi_trace("%d: CCI Rd Rsp: idx=%0d, ctr=%0d, data=0x%0h\n", $time, cci_rd_rsp_tag, cci_rd_rsp_ctr, cp2af_sRxPort.c0.data);
   `endif
   end 
 
@@ -870,7 +870,7 @@ begin
       cci_wr_req_done <= 1;
     end
   `ifdef DBG_TRACE_AFU
-    dpi_trace("%d: CCI Wr Req: addr=%0h, rem=%0d, pending=%0d, data=%0h\n", $time, cci_wr_req_addr, (cci_wr_req_ctr - 1), cci_pending_writes, af2cp_sTxPort.c1.data);
+    dpi_trace("%d: CCI Wr Req: addr=0x%0h, rem=%0d, pending=%0d, data=0x%0h\n", $time, cci_wr_req_addr, (cci_wr_req_ctr - 1), cci_pending_writes, af2cp_sTxPort.c1.data);
   `endif
   end
 

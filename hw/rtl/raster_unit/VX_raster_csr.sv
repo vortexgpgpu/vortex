@@ -56,7 +56,7 @@ module VX_raster_csr #(
         if (raster_csr_if.write_enable) begin
             dpi_trace("%d: core%0d-raster-csr: state=", $time, CORE_ID);
             trace_raster_state(raster_csr_if.write_addr);
-            dpi_trace(", data=%0h (#%0d)\n", raster_csr_if.write_data, raster_csr_if.write_uuid);
+            dpi_trace(", data=0x%0h (#%0d)\n", raster_csr_if.write_data, raster_csr_if.write_uuid);
         end
     end
 `endif

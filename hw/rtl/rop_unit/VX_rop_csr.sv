@@ -77,7 +77,7 @@ module VX_rop_csr #(
         if (rop_csr_if.write_enable) begin
             dpi_trace("%d: core%0d-rop-csr: state=", $time, CORE_ID);
             trace_rop_state(rop_csr_if.write_addr);
-            dpi_trace(", data=%0h (#%0d)\n", rop_csr_if.write_data, rop_csr_if.write_uuid);
+            dpi_trace(", data=0x%0h (#%0d)\n", rop_csr_if.write_data, rop_csr_if.write_uuid);
         end
     end
 `endif

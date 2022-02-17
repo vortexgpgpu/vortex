@@ -128,7 +128,7 @@ module VX_tex_sampler #(
 
     always @(posedge clk) begin        
         if (req_valid && req_ready) begin
-            dpi_trace("%d: core%0d-tex-sampler-req: wid=%0d, PC=%0h, tmask=%b, format=%0d, data=", 
+            dpi_trace("%d: core%0d-tex-sampler-req: wid=%0d, PC=0x%0h, tmask=%b, format=%0d, data=", 
                     $time, CORE_ID, req_wid, req_PC, req_tmask, req_format);
             `TRACE_ARRAY2D(req_data, 4, NUM_REQS);
             dpi_trace(", u0=");
@@ -138,7 +138,7 @@ module VX_tex_sampler #(
             dpi_trace("\n");
         end
         if (rsp_valid && rsp_ready) begin
-            dpi_trace("%d: core%0d-tex-sampler-rsp: wid=%0d, PC=%0h, tmask=%b, data=", 
+            dpi_trace("%d: core%0d-tex-sampler-rsp: wid=%0d, PC=0x%0h, tmask=%b, data=", 
                     $time, CORE_ID, rsp_wid, rsp_PC, rsp_tmask);
             `TRACE_ARRAY1D(rsp_data, NUM_REQS);
             dpi_trace("\n");
