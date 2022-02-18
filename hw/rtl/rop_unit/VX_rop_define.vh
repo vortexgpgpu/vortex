@@ -40,6 +40,14 @@
 `define ROP_BLEND_FACTOR_ALPHA_SAT              14
 `define ROP_BLEND_FACTOR_BITS                   4
 
+`define ROP_BLEND_MODE_FUNC_ADD                 0
+`define ROP_BLEND_MODE_FUNC_SUBTRACT            1
+`define ROP_BLEND_MODE_FUNC_REVERSE_SUBTRACT    2
+`define ROP_BLEND_MODE_MIN                      3
+`define ROP_BLEND_MODE_MAX                      4
+`define ROP_BLEND_MODE_LOGIC_OP                 5
+`define ROP_BLEND_MODE_BITS                     3
+
 `define ROP_LOGIC_OP_CLEAR                      0
 `define ROP_LOGIC_OP_AND                        1
 `define ROP_LOGIC_OP_AND_REVERSE                2
