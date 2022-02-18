@@ -11,34 +11,30 @@ module VX_rop_blend #(
     input wire [:0]             mode_rgb,
     input wire [:0]             mode_a,
 
-    // Blend Function (TODO: replace with CSRs)
-    input wire [`ROP_BLEND_FACTOR_BITS-1:0] func_src_rgb,
-    input wire [`ROP_BLEND_FACTOR_BITS-1:0] func_dst_rgb,
-    input wire [`ROP_BLEND_FACTOR_BITS-1:0] func_src_a,
-    input wire [`ROP_BLEND_FACTOR_BITS-1:0] func_dst_a,
-
-    // Blend Color
-    input wire [:0]             const_red,
-    input wire [:0]             const_green,
-    input wire [:0]             const_blue,
-    input wire [:0]             const_a,
+    // CSR Parameters
+    rop_csrs_t reg_csrs,
 
     // Color Values (TODO: replace with REQs)
     input wire [31:0]           dst_color,
     input wire [31:0]           src_color,
     output wire [31:0]          out_color,
-
-    VX_rop_csr_if.slave         rop_csr_if,
-    VX_rop_req_if.slave         rop_req_src_if,
-    VX_rop_req_if.slave         rop_req_dst_if,
-    VX_rop_req_if.master        rop_req_out_if
 );
 
+    // Blend Color
+    wire [7:0]             const_red;
+    wire [7:0]             const_green;
+    wire [7:0]             const_blue;
+    wire [7:0]             const_alpha;
     rop_csrs_t reg_csrs;
     wire [`ROP_BLEND_FACTOR_BITS-1:0]  pipe_factor_src_rgb, pipe_factor_rgb_a,
                                        pipe_factor_dst_rgb, pipe_factor_dst_a;
     logic [`ROP_BLEND_FACTOR_BITS-1:0] factor_src_rgb, factor_src_a,
                                        factor_dst_rgb, factor_dst_a;
+
+    assign const_red   = reg_csrs.blend_const[31:24];
+    assign const_green = reg_csrs.blend_const[23:16];
+    assign const_blue  = reg_csrs.blend_const[15:8];
+    assign const_alpha = reg_csrs.blend_const[7:0];
 
     always @(posedge clock) begin
         if (reset) begin
