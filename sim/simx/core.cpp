@@ -210,17 +210,15 @@ void Core::schedule() {
   // suspend warp until decode
   stalled_warps_.set(scheduled_warp);
 
-  uint64_t uuid = (issued_instrs_++ * arch_.num_cores()) + id_;
-
-  auto trace = new pipeline_trace_t(uuid, arch_);
-
+  // evaluate scheduled warp
   auto& warp = warps_.at(scheduled_warp);
-  warp->eval(trace);
+  auto trace = warp->eval();
 
   DT(3, "pipeline-schedule: " << *trace);
 
-  // advance to fetch stage  
+  // advance to fetch stage
   fetch_latch_.push(trace);
+  ++issued_instrs_;
 }
 
 void Core::fetch() {

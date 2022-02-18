@@ -134,7 +134,7 @@ private:
   void cout_flush();
 
   uint32_t id_;
-  const ArchDef arch_;
+  const ArchDef& arch_;
   const Decoder decoder_;
   MemoryUnit mmu_;  
   TexUnit tex_unit_;

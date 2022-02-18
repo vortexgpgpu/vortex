@@ -105,7 +105,7 @@ static bool checkBoxedCmpArgs(Word* out, FWord a, FWord b, uint32_t* fflags) {
 void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   assert(tmask_.any());
 
-  auto nextPC = PC_ + core_->arch().wsize();
+  auto nextPC = PC_ + arch_.wsize();
 
   auto func2  = instr.getFunc2();
   auto func3  = instr.getFunc3();
@@ -120,7 +120,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   auto immsrc = sext((Word)instr.getImm(), 32);
   auto vmask  = instr.getVmask();
 
-  auto num_threads = core_->arch().num_threads();
+  auto num_threads = arch_.num_threads();
 
   std::vector<reg_data_t[3]> rsdata(num_threads);
   std::vector<reg_data_t> rddata(num_threads);
@@ -1462,7 +1462,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     }
   } break;
   case VSET: {
-    uint32_t VLEN = core_->arch().vsize() * 8;
+    uint32_t VLEN = arch_.vsize() * 8;
     uint32_t VLMAX = (instr.getVlmul() * VLEN) / instr.getVsew();
     switch (func3) {
     case 0: // vector-vector
@@ -2353,7 +2353,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     }
   }
 
-  PC_ += core_->arch().wsize();
+  PC_ += arch_.wsize();
   if (PC_ != nextPC) {
     DP(3, "*** Next PC: " << std::hex << nextPC << std::dec);
     PC_ = nextPC;

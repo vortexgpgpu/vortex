@@ -7,9 +7,11 @@
 
 namespace vortex {
 
+class ArchDef;
 class Core;
 class Instr;
 class pipeline_trace_t;
+
 struct DomStackEntry {
   DomStackEntry(const ThreadMask &tmask, Word PC) 
     : tmask(tmask)
@@ -89,15 +91,21 @@ public:
     return ireg_file_.at(0).at(reg);
   }
 
-  void eval(pipeline_trace_t *);
+  uint64_t incr_instrs() {
+    return issued_instrs_++;
+  }
+
+  pipeline_trace_t* eval();
 
 private:
 
   void execute(const Instr &instr, pipeline_trace_t *trace);
   
   uint32_t id_;
+  const ArchDef& arch_;
   Core *core_;
   bool active_;
+  uint64_t issued_instrs_;
   
   Word PC_;
   ThreadMask tmask_;  

@@ -12,6 +12,7 @@ using namespace vortex;
 
 Warp::Warp(Core *core, uint32_t id)
     : id_(id)
+    , arch_(core->arch())
     , core_(core)
     , ireg_file_(core->arch().num_threads(), std::vector<Word>(core->arch().num_regs()))
     , freg_file_(core->arch().num_threads(), std::vector<FWord>(core->arch().num_regs()))
@@ -24,7 +25,8 @@ void Warp::clear() {
   active_ = false;
   PC_ = STARTUP_ADDR;
   tmask_.reset();  
-  for (uint32_t i = 0, n = core_->arch().num_threads(); i < n; ++i) {
+  issued_instrs_ = 0;
+  for (uint32_t i = 0, n = arch_.num_threads(); i < n; ++i) {
     for (auto& reg : ireg_file_.at(i)) {
       reg = 0;
     }
@@ -37,11 +39,14 @@ void Warp::clear() {
   }
 }
 
-void Warp::eval(pipeline_trace_t *trace) {
+pipeline_trace_t* Warp::eval() {
   assert(tmask_.any());
 
+  uint64_t uuid = ((issued_instrs_++ * arch_.num_warps() + id_) * arch_.num_cores()) + core_->id();
+  auto trace = new pipeline_trace_t(uuid, arch_);
+
   DPH(1, "Fetch: coreid=" << core_->id() << ", wid=" << id_ << ", tmask=");
-  for (uint32_t i = 0, n = core_->arch().num_threads(); i < n; ++i)
+  for (uint32_t i = 0, n = arch_.num_threads(); i < n; ++i)
     DPN(1, tmask_.test(n-i-1));
   DPN(1, ", PC=0x" << std::hex << PC_ << " (#" << std::dec << trace->uuid << ")" << std::endl);
 
@@ -69,17 +74,19 @@ void Warp::eval(pipeline_trace_t *trace) {
   this->execute(*instr, trace);
 
   DP(5, "Register state:");
-  for (uint32_t i = 0; i < core_->arch().num_regs(); ++i) {
+  for (uint32_t i = 0; i < arch_.num_regs(); ++i) {
     DPN(5, "  %r" << std::setfill('0') << std::setw(2) << std::dec << i << ':');
     // Integer register file
-    for (uint32_t j = 0; j < core_->arch().num_threads(); ++j) {
+    for (uint32_t j = 0; j < arch_.num_threads(); ++j) {
       DPN(5, ' ' << std::setfill('0') << std::setw(XLEN/4) << std::hex << ireg_file_.at(j).at(i) << std::setfill(' ') << ' ');
     }
     DPN(5, '|');
     // Floating point register file
-    for (uint32_t j = 0; j < core_->arch().num_threads(); ++j) {
+    for (uint32_t j = 0; j < arch_.num_threads(); ++j) {
       DPN(5, ' ' << std::setfill('0') << std::setw(16) << std::hex << freg_file_.at(j).at(i) << std::setfill(' ') << ' ');
     }
     DPN(5, std::endl);
   }  
+
+  return trace;
 }
