@@ -25,8 +25,9 @@ void NopUnit::tick() {
 
 LsuUnit::LsuUnit(const SimContext& ctx, Core* core) 
     : ExeUnit(ctx, core, "LSU")
-    , num_threads_(core->arch().num_threads()) 
+    , dcache_(core->dcache_)
     , pending_rd_reqs_(LSUQ_SIZE)
+    , num_threads_(core->arch().num_threads())     
     , fence_lock_(false)
 {}
 
@@ -38,17 +39,17 @@ void LsuUnit::reset() {
 void LsuUnit::tick() {
     // handle dcache response
     for (uint32_t t = 0; t < num_threads_; ++t) {
-        auto& dcache_rsp_port = core_->dcache_switch_.at(t)->RspOut.at(0);
+        auto& dcache_rsp_port = dcache_->CoreRspPorts.at(t);
         if (dcache_rsp_port.empty())
             continue;
         auto& mem_rsp = dcache_rsp_port.front();
         auto& entry = pending_rd_reqs_.at(mem_rsp.tag);          
-        auto trace = entry.first;
-        DT(3, "dcache-rsp: tag=" << mem_rsp.tag << ", type=" << trace->lsu.type 
+        auto trace = entry.trace;
+        DT(3, "dcache-rsp: tag=" << mem_rsp.tag << ", type=" << trace->lsu_type 
             << ", tid=" << t << ", " << *trace);  
-        assert(entry.second);
-        --entry.second; // track remaining blocks 
-        if (0 == entry.second) {
+        assert(entry.count);
+        --entry.count; // track remaining blocks 
+        if (0 == entry.count) {
             Output.send(trace, 1);
             pending_rd_reqs_.release(mem_rsp.tag);
         } 
@@ -62,12 +63,12 @@ void LsuUnit::tick() {
             continue;
         auto& mem_rsp = smem_rsp_port.front();
         auto& entry = pending_rd_reqs_.at(mem_rsp.tag);          
-        auto trace = entry.first;
-        DT(3, "smem-rsp: tag=" << mem_rsp.tag << ", type=" << trace->lsu.type 
+        auto trace = entry.trace;
+        DT(3, "smem-rsp: tag=" << mem_rsp.tag << ", type=" << trace->lsu_type 
             << ", tid=" << t << ", " << *trace);  
-        assert(entry.second);
-        --entry.second; // track remaining blocks 
-        if (0 == entry.second) {
+        assert(entry.count);
+        --entry.count; // track remaining blocks 
+        if (0 == entry.count) {
             Output.send(trace, 1);
             pending_rd_reqs_.release(mem_rsp.tag);
         } 
@@ -88,8 +89,9 @@ void LsuUnit::tick() {
         return;
 
     auto trace = Input.front();
+    auto trace_data = dynamic_cast<LsuTraceData*>(trace->data);
 
-    if (trace->lsu.type == LsuType::FENCE) {
+    if (trace->lsu_type == LsuType::FENCE) {
         // schedule fence lock
         fence_state_ = trace;
         fence_lock_ = true;        
@@ -110,18 +112,18 @@ void LsuUnit::tick() {
         trace->resume();
     }
     
-    bool is_write = (trace->lsu.type == LsuType::STORE);
+    bool is_write = (trace->lsu_type == LsuType::STORE);
 
     // duplicates detection
     bool is_dup = false;
     if (trace->tmask.test(0)) {
         uint64_t addr_mask = sizeof(uint32_t)-1;
-        uint32_t addr0 = trace->mem_addrs.at(0).at(0).addr & ~addr_mask;
+        uint32_t addr0 = trace_data->mem_addrs.at(0).addr & ~addr_mask;
         uint32_t matches = 1;
         for (uint32_t t = 1; t < num_threads_; ++t) {
             if (!trace->tmask.test(t))
                 continue;
-            auto mem_addr = trace->mem_addrs.at(t).at(0).addr & ~addr_mask;
+            auto mem_addr = trace_data->mem_addrs.at(t).addr & ~addr_mask;
             matches += (addr0 == mem_addr);
         }
         is_dup = (matches == trace->tmask.count());
@@ -131,9 +133,7 @@ void LsuUnit::tick() {
     if (is_dup) {
         valid_addrs = 1;
     } else {
-        for (auto& mem_addr : trace->mem_addrs) {
-            valid_addrs += mem_addr.size();
-        }
+        valid_addrs = trace->tmask.count();
     }
 
     auto tag = pending_rd_reqs_.allocate({trace, valid_addrs});
@@ -142,8 +142,8 @@ void LsuUnit::tick() {
         if (!trace->tmask.test(t))
             continue;
         
-        auto& dcache_req_port = core_->dcache_switch_.at(t)->ReqIn.at(0);        
-        auto mem_addr = trace->mem_addrs.at(t).at(0);
+        auto& dcache_req_port = dcache_->CoreReqPorts.at(t);
+        auto mem_addr = trace_data->mem_addrs.at(t);
         auto type = core_->get_addr_type(mem_addr.addr);
 
         MemReq mem_req;
@@ -157,11 +157,11 @@ void LsuUnit::tick() {
         if (type == AddrType::Shared) {
             core_->sharedmem_->Inputs.at(t).send(mem_req, 2);
             DT(3, "smem-req: addr=" << std::hex << mem_req.addr << ", tag=" << tag 
-                << ", type=" << trace->lsu.type << ", tid=" << t << ", " << *trace);
+                << ", type=" << trace->lsu_type << ", tid=" << t << ", " << *trace);
         } else {            
             dcache_req_port.send(mem_req, 2);
             DT(3, "dcache-req: addr=" << std::hex << mem_req.addr << ", tag=" << tag 
-                << ", type=" << trace->lsu.type << ", tid=" << t << ", nc=" << mem_req.non_cacheable << ", " << *trace);
+                << ", type=" << trace->lsu_type << ", tid=" << t << ", nc=" << mem_req.non_cacheable << ", " << *trace);
         }        
         
         if (is_dup)
@@ -169,7 +169,7 @@ void LsuUnit::tick() {
     }
 
     // do not wait on writes
-    if (is_write) {        
+    if (is_write) {
         pending_rd_reqs_.release(tag);
         Output.send(trace, 1);
     }
@@ -187,7 +187,7 @@ void AluUnit::tick() {
     if (Input.empty())
         return;
     auto trace = Input.front();    
-    switch (trace->alu.type) {
+    switch (trace->alu_type) {
     case AluType::ARITH:        
     case AluType::BRANCH:
     case AluType::SYSCALL:
@@ -206,7 +206,7 @@ void AluUnit::tick() {
     default:
         std::abort();
     }
-    DT(3, "pipeline-execute: op=" << trace->alu.type << ", " << *trace);
+    DT(3, "pipeline-execute: op=" << trace->alu_type << ", " << *trace);
     if (trace->fetch_stall) {
         core_->stalled_warps_.reset(trace->wid);
     }
@@ -236,7 +236,7 @@ void FpuUnit::tick() {
     if (Input.empty()) 
         return;
     auto trace = Input.front();
-    switch (trace->fpu.type) {
+    switch (trace->fpu_type) {
     case FpuType::FNCP:
         Output.send(trace, 2);
         break;
@@ -255,7 +255,7 @@ void FpuUnit::tick() {
     default:
         std::abort();
     }    
-    DT(3, "pipeline-execute: op=" << trace->fpu.type << ", " << *trace);
+    DT(3, "pipeline-execute: op=" << trace->fpu_type << ", " << *trace);
     auto time = Input.pop();
     core_->perf_stats_.fpu_stalls += (SimPlatform::instance().cycles() - time);
 }
@@ -263,35 +263,22 @@ void FpuUnit::tick() {
 ///////////////////////////////////////////////////////////////////////////////
 
 GpuUnit::GpuUnit(const SimContext& ctx, Core* core) 
-    : ExeUnit(ctx, core, "GPU")
-    , num_threads_(core->arch().num_threads()) 
-    , pending_tex_reqs_(TEXQ_SIZE)
+    : ExeUnit(ctx, core, "GPU")   
+    , tex_unit_(core->tex_unit_)
+    , raster_unit_(core->raster_unit_)
+    , rop_unit_(core->rop_unit_)
 {}
-
-void GpuUnit::reset() {
-    pending_tex_reqs_.clear();
-}
     
 void GpuUnit::tick() {
-#ifdef EXT_TEX_ENABLE
-    // handle memory response
-    for (uint32_t t = 0; t < num_threads_; ++t) {
-        auto& dcache_rsp_port = core_->dcache_switch_.at(t)->RspOut.at(1);
-        if (dcache_rsp_port.empty())
-            continue;
-        auto& mem_rsp = dcache_rsp_port.front();
-        auto& entry = pending_tex_reqs_.at(mem_rsp.tag);  
-        auto trace = entry.first;
-        DT(3, "tex-rsp: tag=" << mem_rsp.tag << ", tid=" << t << ", " << *trace);  
-        assert(entry.second);
-        --entry.second; // track remaining blocks 
-        if (0 == entry.second) {
-            Output.send(trace, 1);
-            pending_tex_reqs_.release(mem_rsp.tag);
-        }   
-        dcache_rsp_port.pop();
+    // handle nested units reponses
+    if (!tex_unit_->Output.empty()) {
+      auto trace = tex_unit_->Output.front();
+      Output.send(trace, 1);      
     }
-#endif
+    if (!raster_unit_->Output.empty()) {
+      auto trace = raster_unit_->Output.front();
+      Output.send(trace, 1);      
+    }
 
     // check input queue
     if (Input.empty())
@@ -299,89 +286,47 @@ void GpuUnit::tick() {
 
     auto trace = Input.front();
 
-    bool issued = false;
-
-    switch  (trace->gpu.type) {
-    case GpuType::TMC:
+    switch  (trace->gpu_type) {
+    case GpuType::TMC: {
         Output.send(trace, 1);
-        core_->active_warps_.set(trace->wid, trace->gpu.active_warps.test(trace->wid));
-        issued = true;
-        break;
-    case GpuType::WSPAWN:
+        auto trace_data = dynamic_cast<GPUTraceData*>(trace->data);
+        core_->active_warps_.set(trace->wid, trace_data->active_warps.test(trace->wid));
+    }   break;
+    case GpuType::WSPAWN: {
         Output.send(trace, 1);
-        core_->active_warps_ = trace->gpu.active_warps;        
-        issued = true;
-        break;
+        auto trace_data = dynamic_cast<GPUTraceData*>(trace->data);
+        core_->active_warps_ = trace_data->active_warps;
+    }    break;
     case GpuType::SPLIT:
     case GpuType::JOIN:
         Output.send(trace, 1);
-        issued = true;
         break;
-    case GpuType::BAR:
+    case GpuType::BAR: {
         Output.send(trace, 1);
-        if (trace->gpu.active_warps != 0) 
-            core_->active_warps_ |= trace->gpu.active_warps;
+        auto trace_data = dynamic_cast<GPUTraceData*>(trace->data);
+        if (trace_data->active_warps != 0) 
+            core_->active_warps_ |= trace_data->active_warps;
         else
             core_->active_warps_.reset(trace->wid);
-        issued = true;
-        break;
+    }   break;
     case GpuType::TEX:
-        if (this->processTexRequest(trace))
-           issued = true;
+        tex_unit_->Input.send(trace, 1);
+        break;
+    case GpuType::RASTER:
+        raster_unit_->Input.send(trace, 1);
+        break;
+    case GpuType::ROP:
+        rop_unit_->Input.send(trace, 1);
+        Output.send(trace, 1);
         break;
     default:
         std::abort();
     }
 
-    if (issued) {    
-        DT(3, "pipeline-execute: op=" << trace->gpu.type << ", " << *trace);
-        if (trace->fetch_stall)  {
-            core_->stalled_warps_.reset(trace->wid);
-        }
-        auto time = Input.pop();
-        core_->perf_stats_.fpu_stalls += (SimPlatform::instance().cycles() - time);
+    DT(3, "pipeline-execute: op=" << trace->gpu_type << ", " << *trace);
+    if (trace->fetch_stall)  {
+        core_->stalled_warps_.reset(trace->wid);
     }
-}
-
-bool GpuUnit::processTexRequest(pipeline_trace_t* trace) {    
-    // check pending queue capacity    
-    if (pending_tex_reqs_.full()) {
-        if (!trace->suspend()) {
-            DT(3, "*** tex-queue-stall: " << *trace);
-        }
-        return false;
-    } else {
-        trace->resume();
-    }
-
-    // send memory request
-
-    uint32_t valid_addrs = 0;
-    for (auto& mem_addr : trace->mem_addrs) {
-        valid_addrs += mem_addr.size();
-    }
-
-    auto tag = pending_tex_reqs_.allocate({trace, valid_addrs});
-
-    for (uint32_t t = 0; t < num_threads_; ++t) {
-        if (!trace->tmask.test(t))
-            continue;
-
-        auto& dcache_req_port = core_->dcache_switch_.at(t)->ReqIn.at(1);
-        for (auto& mem_addr : trace->mem_addrs.at(t)) {
-            MemReq mem_req;
-            mem_req.addr  = mem_addr.addr;
-            mem_req.write = (trace->lsu.type == LsuType::STORE);
-            mem_req.tag   = tag;
-            mem_req.core_id = core_->id();
-            mem_req.uuid = trace->uuid;
-            dcache_req_port.send(mem_req, 3);
-            DT(3, "tex-req: addr=" << std::hex << mem_addr.addr << ", tag=" << tag 
-                << ", tid=" << t << ", "<< trace);
-            ++ core_->perf_stats_.tex_reads;
-            ++ core_->perf_stats_.tex_latency += pending_tex_reqs_.size();
-        }
-    }
-
-    return true;
+    auto time = Input.pop();
+    core_->perf_stats_.gpu_stalls += (SimPlatform::instance().cycles() - time);
 }

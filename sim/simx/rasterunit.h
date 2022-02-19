@@ -1,24 +1,36 @@
 #pragma once
 
-#include "types.h"
+#include <simobject.h>
+#include "pipeline.h"
 
 namespace vortex {
 
 class Core;
 
-struct raster_quad_t {
-    uint32_t x;
-    uint32_t y;
-    uint32_t mask;
-    uint32_t pidx;
-};
-
-class RasterUnit {
+class RasterUnit : public SimObject<RasterUnit> {
 public:
-    RasterUnit(Core* core);
+    struct raster_quad_t {
+        uint32_t x;
+        uint32_t y;
+        uint32_t mask;
+        uint32_t pidx;
+    };
+    
+    struct PerfStats {
+        uint64_t reads;
+
+        PerfStats() 
+            : reads(0)
+        {}
+    };
+
+    SimPort<pipeline_trace_t*> Input;
+    SimPort<pipeline_trace_t*> Output;
+
+    RasterUnit(const SimContext& ctx, const char* name, Core* core);    
     ~RasterUnit();
 
-    void clear();
+    void reset();
 
     uint32_t csr_read(uint32_t addr);
   
@@ -26,10 +38,14 @@ public:
 
     bool pop(raster_quad_t* quad);
 
+    void tick();
+
+    const PerfStats& perf_stats() const;
+
 private:
 
-    std::array<uint32_t, NUM_RASTER_STATES> states_;
-    Core* core_;
+    class Impl;
+    Impl* impl_;
 };
 
 }

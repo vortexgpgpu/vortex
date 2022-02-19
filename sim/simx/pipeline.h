@@ -10,9 +10,25 @@
 
 namespace vortex {
 
+class TraceData {
+public:
+    TraceData() {}
+    virtual ~TraceData() {}
+};
+
+struct LsuTraceData : public TraceData {
+  std::vector<mem_addr_size_t> mem_addrs;
+  LsuTraceData(uint32_t num_threads) : mem_addrs(num_threads) {}
+};
+
+struct GPUTraceData : public TraceData {
+  const WarpMask active_warps;
+  GPUTraceData(const WarpMask& active_warps) : active_warps(active_warps) {}
+};
+
 struct pipeline_trace_t {
   //--
-  uint64_t    uuid;
+  const uint64_t  uuid;
   
   //--
   uint32_t    cid;
@@ -37,29 +53,20 @@ struct pipeline_trace_t {
   ExeType     exe_type; 
 
   //--
-  std::vector<std::vector<mem_addr_size_t>> mem_addrs;
-  
-  //--
   union {
-    struct {        
-      LsuType type;
-    } lsu;
-    struct {
-      AluType type;
-    } alu;
-    struct {
-      FpuType type;
-    } fpu;
-    struct {
-      GpuType type;
-      WarpMask active_warps;
-    } gpu;
+    LsuType lsu_type;
+    AluType alu_type;
+    FpuType fpu_type;
+    GpuType gpu_type;
   };
+
+  TraceData* data;
 
   bool stalled;
 
-  pipeline_trace_t(uint64_t uuid_, const ArchDef& arch) {
-    uuid = uuid_;
+  pipeline_trace_t(uint64_t uuid) 
+    : uuid(uuid)
+    , data(nullptr) {
     cid = 0;
     wid = 0;
     tmask.reset();
@@ -72,8 +79,12 @@ struct pipeline_trace_t {
     used_fregs.reset();
     used_vregs.reset();
     exe_type = ExeType::NOP;
-    mem_addrs.resize(arch.num_threads());
     stalled = false;
+  }
+  
+  ~pipeline_trace_t() {
+    if (data)
+      delete data;
   }
 
   bool suspend() {

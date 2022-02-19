@@ -43,12 +43,11 @@ pipeline_trace_t* Warp::eval() {
   assert(tmask_.any());
 
   uint64_t uuid = ((issued_instrs_++ * arch_.num_warps() + id_) * arch_.num_cores()) + core_->id();
-  auto trace = new pipeline_trace_t(uuid, arch_);
-
+  
   DPH(1, "Fetch: coreid=" << core_->id() << ", wid=" << id_ << ", tmask=");
   for (uint32_t i = 0, n = arch_.num_threads(); i < n; ++i)
     DPN(1, tmask_.test(n-i-1));
-  DPN(1, ", PC=0x" << std::hex << PC_ << " (#" << std::dec << trace->uuid << ")" << std::endl);
+  DPN(1, ", PC=0x" << std::hex << PC_ << " (#" << std::dec << uuid << ")" << std::endl);
 
   /* Fetch and decode. */    
 
@@ -62,7 +61,8 @@ pipeline_trace_t* Warp::eval() {
 
   DP(1, "Instr 0x" << std::hex << instr_code << ": " << *instr);
 
-  // Update trace
+  // Create trace
+  auto trace = new pipeline_trace_t(uuid);
   trace->cid   = core_->id();
   trace->wid   = id_;
   trace->PC    = PC_;

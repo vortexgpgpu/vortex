@@ -113,8 +113,6 @@ public:
 
   void dcache_write(const void* data, uint64_t addr, uint32_t size);
 
-  uint32_t tex_read(uint32_t stage, uint32_t lod, uint32_t u, uint32_t v, std::vector<mem_addr_size_t>* mem_addrs);
-
   void trigger_ecall();
 
   void trigger_ebreak();
@@ -136,10 +134,7 @@ private:
   uint32_t id_;
   const ArchDef& arch_;
   const Decoder decoder_;
-  MemoryUnit mmu_;  
-  TexUnit tex_unit_;
-  RasterUnit raster_unit_;
-  RopUnit rop_unit_;
+  MemoryUnit mmu_;
 
   std::vector<std::shared_ptr<Warp>> warps_;  
   std::vector<WarpMask> barriers_;  
@@ -150,9 +145,12 @@ private:
   std::vector<ExeUnit::Ptr> exe_units_;
   CacheSim::Ptr icache_;
   CacheSim::Ptr dcache_;
+  CacheSim::Ptr tcache_;
   SharedMem::Ptr sharedmem_;
+  TexUnit::Ptr tex_unit_;
+  RasterUnit::Ptr raster_unit_;
+  RopUnit::Ptr rop_unit_;
   Switch<MemReq, MemRsp>::Ptr l1_mem_switch_;
-  std::vector<Switch<MemReq, MemRsp>::Ptr> dcache_switch_;
 
   PipelineLatch fetch_latch_;
   PipelineLatch decode_latch_;
@@ -176,6 +174,9 @@ private:
   friend class CsrUnit;
   friend class FpuUnit;
   friend class GpuUnit;
+  friend class TexUnit;
+  friend class RasterUnit;
+  friend class RopUnit;
 };
 
 } // namespace vortex

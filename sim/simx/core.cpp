@@ -21,9 +21,6 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
     , arch_(arch)
     , decoder_(arch)
     , mmu_(0, arch.wsize(), true)
-    , tex_unit_(this)
-    , raster_unit_(this)
-    , rop_unit_(this)
     , warps_(arch.num_warps())
     , barriers_(arch.num_barriers(), 0)
     , csrs_(arch.num_csrs(), 0)
@@ -34,7 +31,7 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
     , icache_(CacheSim::Create("icache", CacheSim::Config{
         log2ceil(ICACHE_SIZE),  // C
         log2ceil(L1_BLOCK_SIZE),// B
-        2,                      // W
+        log2ceil(sizeof(uint32_t)), // W
         0,                      // A
         32,                     // address bits    
         1,                      // number of banks
@@ -49,13 +46,28 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
     , dcache_(CacheSim::Create("dcache", CacheSim::Config{
         log2ceil(DCACHE_SIZE),  // C
         log2ceil(L1_BLOCK_SIZE),// B
-        2,                      // W
+        log2ceil(sizeof(Word)), // W
         0,                      // A
         32,                     // address bits    
         DCACHE_NUM_BANKS,       // number of banks
         DCACHE_NUM_PORTS,       // number of ports
         (uint8_t)arch.num_threads(), // request size   
         true,                   // write-through
+        false,                  // write response
+        0,                      // victim size
+        DCACHE_MSHR_SIZE,       // mshr
+        4,                      // pipeline latency
+      }))
+    , tcache_(CacheSim::Create("tcache", CacheSim::Config{
+        log2ceil(DCACHE_SIZE),  // C
+        log2ceil(L1_BLOCK_SIZE),// B
+        log2ceil(sizeof(uint32_t)), // W
+        4,                      // A
+        32,                     // address bits    
+        (uint8_t)arch.num_threads(), // number of banks
+        1,                      // number of ports
+        (uint8_t)arch.num_threads(), // request size   
+        false,                  // write-through
         false,                  // write response
         0,                      // victim size
         DCACHE_MSHR_SIZE,       // mshr
@@ -69,8 +81,7 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
         1,
         false
       }))
-    , l1_mem_switch_(Switch<MemReq, MemRsp>::Create("l1_arb", ArbiterType::Priority, 2)) 
-    , dcache_switch_(arch.num_threads())
+    , l1_mem_switch_(Switch<MemReq, MemRsp>::Create("l1_arb", ArbiterType::Priority, 3))
     , fetch_latch_("fetch")
     , decode_latch_("decode")
     , pending_icache_(arch_.num_warps())
@@ -78,6 +89,13 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
   for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
     warps_.at(i) = std::make_shared<Warp>(this, i);
   }
+
+  tex_unit_ = TexUnit::Create("tex", TexUnit::Config{
+    1, // address latency
+    2, // sampler latency
+  }, this);
+  raster_unit_ = RasterUnit::Create("raster", this);
+  rop_unit_ = RopUnit::Create("rop", this);
 
   // register execute units
   exe_units_.at((int)ExeType::NOP) = SimPlatform::instance().create_object<NopUnit>(this);
@@ -90,22 +108,12 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
   // connect l1 switch
   icache_->MemReqPort.bind(&l1_mem_switch_->ReqIn[0]);
   dcache_->MemReqPort.bind(&l1_mem_switch_->ReqIn[1]);
+  tcache_->MemReqPort.bind(&l1_mem_switch_->ReqIn[2]);
   l1_mem_switch_->RspOut[0].bind(&icache_->MemRspPort);  
   l1_mem_switch_->RspOut[1].bind(&dcache_->MemRspPort);
+  l1_mem_switch_->RspOut[2].bind(&tcache_->MemRspPort);
   this->MemRspPort.bind(&l1_mem_switch_->RspIn);
   l1_mem_switch_->ReqOut.bind(&this->MemReqPort);
-
-  // lsu/tex switch
-  for (uint32_t i = 0, n = arch.num_threads(); i < n; ++i) {
-    auto& sw = dcache_switch_.at(i);
-#ifdef EXT_TEX_ENABLE
-    sw = Switch<MemReq, MemRsp>::Create("lsu_arb", ArbiterType::Priority, 2);
-#else
-    sw = Switch<MemReq, MemRsp>::Create("lsu_arb", ArbiterType::Priority, 1);
-#endif        
-    sw->ReqOut.bind(&dcache_->CoreReqPorts.at(i));
-    dcache_->CoreRspPorts.at(i).bind(&sw->RspIn);
-  } 
 
   // memory perf callbacks
   MemReqPort.tx_callback([&](const MemReq& req, uint64_t cycle){
@@ -133,8 +141,14 @@ void Core::reset() {
   warps_.at(0)->setTmask(0, true);
   active_warps_ = 1;
 
-  tex_unit_.clear();
+  for (auto& exe_unit : exe_units_) {
+    exe_unit->reset();
+  }
 
+  tex_unit_->reset();
+  raster_unit_->reset();
+  rop_unit_->reset();
+  
   for ( auto& barrier : barriers_) {
     barrier.reset();
   }
@@ -151,10 +165,10 @@ void Core::reset() {
     ibuf.clear();
   }
 
-  scoreboard_.clear(); 
+  scoreboard_.clear();
   fetch_latch_.clear();
   decode_latch_.clear();
-  pending_icache_.clear();  
+  pending_icache_.clear();
   stalled_warps_.reset();
   issued_instrs_ = 0;
   committed_instrs_ = 0;
@@ -273,11 +287,11 @@ void Core::decode() {
 
   // update perf counters
   uint32_t active_threads = trace->tmask.count();
-  if (trace->exe_type == ExeType::LSU && trace->lsu.type == LsuType::LOAD)
+  if (trace->exe_type == ExeType::LSU && trace->lsu_type == LsuType::LOAD)
     perf_stats_.loads += active_threads;
-  if (trace->exe_type == ExeType::LSU && trace->lsu.type == LsuType::STORE) 
+  if (trace->exe_type == ExeType::LSU && trace->lsu_type == LsuType::STORE) 
     perf_stats_.stores += active_threads;
-  if (trace->exe_type == ExeType::ALU && trace->alu.type == AluType::BRANCH) 
+  if (trace->exe_type == ExeType::ALU && trace->alu_type == AluType::BRANCH) 
     perf_stats_.branches += active_threads;
 
   DT(3, "pipeline-decode: " << *trace);
