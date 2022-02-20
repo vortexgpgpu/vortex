@@ -27,14 +27,13 @@ module VX_csr_unit #(
     VX_tex_csr_if.master        tex_csr_if,
 `endif
 
-    output wire[`NUM_WARPS-1:0] pending,
-    input wire                  busy
+    output wire[`NUM_WARPS-1:0] req_pending
 );    
     wire csr_we_s1;
     wire [`CSR_ADDR_BITS-1:0] csr_addr_s1;    
     wire [31:0] csr_read_data;
     wire [31:0] csr_read_data_s1;
-    wire [31:0] csr_updated_data_s1;  
+    wire [31:0] csr_updated_data_s1;
 
     wire write_enable = csr_commit_if.valid && csr_we_s1;
 
@@ -62,39 +61,40 @@ module VX_csr_unit #(
     `endif
         .read_enable    (csr_req_if.valid),
         .read_uuid      (csr_req_if.uuid),
+        .read_wid       (csr_req_if.wid),    
+        .read_tmask     (csr_req_if.tmask),    
         .read_addr      (csr_req_if.addr),
-        .read_wid       (csr_req_if.wid),      
         .read_data      (csr_read_data),
-        .write_enable   (write_enable),        
+        .write_enable   (write_enable),       
         .write_uuid     (csr_commit_if.uuid),
-        .write_addr     (csr_addr_s1), 
         .write_wid      (csr_commit_if.wid),
-        .write_data     (csr_updated_data_s1),
-        .busy           (busy)
+        .write_tmask    (csr_commit_if.tmask),
+        .write_addr     (csr_addr_s1),        
+        .write_data     (csr_updated_data_s1)
     );    
 
     wire write_hazard = (csr_addr_s1 == csr_req_if.addr)
                      && (csr_commit_if.wid == csr_req_if.wid) 
                      && csr_commit_if.valid;
 
-    wire [31:0] csr_read_data_qual = write_hazard ? csr_updated_data_s1 : csr_read_data; 
+    wire [31:0] csr_read_data_s0 = write_hazard ? csr_updated_data_s1 : csr_read_data; 
 
-    reg [31:0] csr_updated_data;
-    reg csr_we_s0_unqual; 
+    reg [31:0] csr_updated_data_s0;
+    reg csr_we_s0; 
     
     always @(*) begin        
-        csr_we_s0_unqual = (csr_req_data != 0);
+        csr_we_s0 = (csr_req_data != 0);
         case (csr_req_if.op_type)
             `INST_CSR_RW: begin
-                csr_updated_data = csr_req_data;
-                csr_we_s0_unqual = 1;
+                csr_updated_data_s0 = csr_req_data;
+                csr_we_s0 = 1;
             end
             `INST_CSR_RS: begin
-                csr_updated_data = csr_read_data_qual | csr_req_data;
+                csr_updated_data_s0 = csr_read_data_s0 | csr_req_data;
             end
             //`INST_CSR_RC
             default: begin
-                csr_updated_data = csr_read_data_qual & ~csr_req_data;
+                csr_updated_data_s0 = csr_read_data_s0 & ~csr_req_data;
             end
         endcase
     end
@@ -116,8 +116,8 @@ module VX_csr_unit #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_out),
-        .data_in  ({csr_req_valid,       csr_req_if.uuid,    csr_req_if.wid,    csr_req_if.tmask,    csr_req_if.PC,    csr_req_if.rd,    csr_req_if.wb,    csr_we_s0_unqual, csr_req_if.addr, csr_read_data_qual, csr_updated_data}),
-        .data_out ({csr_commit_if.valid, csr_commit_if.uuid, csr_commit_if.wid, csr_commit_if.tmask, csr_commit_if.PC, csr_commit_if.rd, csr_commit_if.wb, csr_we_s1,        csr_addr_s1,     csr_read_data_s1,   csr_updated_data_s1})
+        .data_in  ({csr_req_valid,       csr_req_if.uuid,    csr_req_if.wid,    csr_req_if.tmask,    csr_req_if.PC,    csr_req_if.rd,    csr_req_if.wb,    csr_we_s0, csr_req_if.addr, csr_read_data_s0, csr_updated_data_s0}),
+        .data_out ({csr_commit_if.valid, csr_commit_if.uuid, csr_commit_if.wid, csr_commit_if.tmask, csr_commit_if.PC, csr_commit_if.rd, csr_commit_if.wb, csr_we_s1, csr_addr_s1,     csr_read_data_s1, csr_updated_data_s1})
     );
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
@@ -133,19 +133,19 @@ module VX_csr_unit #(
     assign csr_req_if.ready = ~(stall_out || stall_in);
 
     // pending request
-    reg [`NUM_WARPS-1:0] pending_r;
+    reg [`NUM_WARPS-1:0] req_pending_r;
     always @(posedge clk) begin
         if (reset) begin
-            pending_r <= 0;
+            req_pending_r <= 0;
         end else begin
-            if (csr_commit_if.valid && csr_commit_if.ready) begin
-                 pending_r[csr_commit_if.wid] <= 0;
-            end          
             if (csr_req_if.valid && csr_req_if.ready) begin
-                 pending_r[csr_req_if.wid] <= 1;
+                 req_pending_r[csr_req_if.wid] <= 1;
+            end
+            if (csr_commit_if.valid && csr_commit_if.ready) begin
+                 req_pending_r[csr_commit_if.wid] <= 0;
             end
         end
     end
-    assign pending = pending_r;
+    assign req_pending = req_pending_r;
 
 endmodule

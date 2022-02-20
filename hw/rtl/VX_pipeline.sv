@@ -161,9 +161,7 @@ module VX_pipeline #(
     `ifdef EXT_F_ENABLE
         .fpu_commit_if  (fpu_commit_if),
     `endif
-        .gpu_commit_if  (gpu_commit_if),        
-        
-        .busy           (busy)
+        .gpu_commit_if  (gpu_commit_if)
     );    
 
     VX_commit #(

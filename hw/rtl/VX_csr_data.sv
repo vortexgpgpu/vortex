@@ -26,17 +26,17 @@ module VX_csr_data #(
 
     input wire                      read_enable,
     input wire [`UUID_BITS-1:0]     read_uuid,
-    input wire[`CSR_ADDR_BITS-1:0]  read_addr,
     input wire[`NW_BITS-1:0]        read_wid,
+    input wire[`NUM_THREADS-1:0]    read_tmask,
+    input wire[`CSR_ADDR_BITS-1:0]  read_addr,
     output wire[31:0]               read_data,
 
     input wire                      write_enable, 
     input wire [`UUID_BITS-1:0]     write_uuid,
-    input wire[`CSR_ADDR_BITS-1:0]  write_addr,
     input wire[`NW_BITS-1:0]        write_wid,
-    input wire[31:0]                write_data,
-    
-    input wire                      busy
+    input wire[`NUM_THREADS-1:0]    write_tmask,
+    input wire[`CSR_ADDR_BITS-1:0]  write_addr,
+    input wire[31:0]                write_data
 );
     import fpu_types::*;
     
@@ -49,9 +49,6 @@ module VX_csr_data #(
     reg [`CSR_WIDTH-1:0] csr_mepc;    
     reg [`CSR_WIDTH-1:0] csr_pmpcfg [0:0];
     reg [`CSR_WIDTH-1:0] csr_pmpaddr [0:0];
-    reg [63:0] csr_cycle;
-    reg [63:0] csr_instret;
-    
     reg [`NUM_WARPS-1:0][`INST_FRM_BITS+`FFLAGS_BITS-1:0] fcsr;
 
     always @(posedge clk) begin
@@ -106,6 +103,7 @@ module VX_csr_data #(
         end
     end
 
+    `UNUSED_VAR (write_tmask)
     `UNUSED_VAR (write_data)
 
     // TEX CSRs
@@ -117,20 +115,6 @@ module VX_csr_data #(
 `endif
 
 ///////////////////////////////////////////////////////////////////////////////
-
-    always @(posedge clk) begin
-       if (reset) begin
-            csr_cycle   <= 0;
-            csr_instret <= 0;
-        end else begin
-            if (busy) begin
-                csr_cycle <= csr_cycle + 1;
-            end
-            if (cmt_to_csr_if.valid) begin
-                csr_instret <= csr_instret + 64'(cmt_to_csr_if.commit_size);
-            end
-        end
-    end
 
     reg [31:0] read_data_r;
     reg read_addr_valid_r;
@@ -151,16 +135,16 @@ module VX_csr_data #(
             `CSR_GWID       : read_data_r = CORE_ID * `NUM_WARPS + 32'(read_wid);
             `CSR_GCID       : read_data_r = CORE_ID;
 
-            `CSR_TMASK      : read_data_r = 32'(fetch_to_csr_if.thread_masks[read_wid]);
+            `CSR_TMASK      : read_data_r = 32'(read_tmask);
 
             `CSR_NT         : read_data_r = `NUM_THREADS;
             `CSR_NW         : read_data_r = `NUM_WARPS;
             `CSR_NC         : read_data_r = `NUM_CORES * `NUM_CLUSTERS;
             
-            `CSR_MCYCLE     : read_data_r = csr_cycle[31:0];
-            `CSR_MCYCLE_H   : read_data_r = 32'(csr_cycle[`PERF_CTR_BITS-1:32]);
-            `CSR_MINSTRET   : read_data_r = csr_instret[31:0];
-            `CSR_MINSTRET_H : read_data_r = 32'(csr_instret[`PERF_CTR_BITS-1:32]);
+            `CSR_MCYCLE     : read_data_r = fetch_to_csr_if.cycles[31:0];
+            `CSR_MCYCLE_H   : read_data_r = 32'(fetch_to_csr_if.cycles[`PERF_CTR_BITS-1:32]);
+            `CSR_MINSTRET   : read_data_r = cmt_to_csr_if.instret[31:0];
+            `CSR_MINSTRET_H : read_data_r = 32'(cmt_to_csr_if.instret[`PERF_CTR_BITS-1:32]);
             
         `ifdef PERF_ENABLE
             // PERF: pipeline

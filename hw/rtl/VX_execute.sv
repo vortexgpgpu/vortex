@@ -48,9 +48,7 @@ module VX_execute #(
 `ifdef EXT_F_ENABLE
     VX_commit_if.master     fpu_commit_if,
 `endif
-    VX_commit_if.master     gpu_commit_if,
-    
-    input wire              busy
+    VX_commit_if.master     gpu_commit_if
 );
 
 `ifdef EXT_TEX_ENABLE
@@ -105,22 +103,21 @@ module VX_execute #(
     `endif
         .perf_memsys_if (perf_memsys_if),
         .perf_pipeline_if(perf_pipeline_if),
-    `endif    
-        .cmt_to_csr_if  (cmt_to_csr_if),    
-        .fetch_to_csr_if(fetch_to_csr_if),
-        .csr_req_if     (csr_req_if),   
-        .csr_commit_if  (csr_commit_if),
+    `endif
     `ifdef EXT_F_ENABLE  
         .fpu_to_csr_if  (fpu_to_csr_if),
         .fpu_pending    (fpu_pending),        
-        .pending        (csr_pending),
+        .req_pending    (csr_pending),
     `else
-        `UNUSED_PIN (pending),
+        `UNUSED_PIN (req_pending),
     `endif        
     `ifdef EXT_TEX_ENABLE
         .tex_csr_if     (tex_csr_if),
     `endif
-        .busy           (busy)
+        .cmt_to_csr_if  (cmt_to_csr_if),
+        .fetch_to_csr_if(fetch_to_csr_if),
+        .csr_req_if     (csr_req_if),   
+        .csr_commit_if  (csr_commit_if)
     );
 
 `ifdef EXT_F_ENABLE
@@ -135,7 +132,7 @@ module VX_execute #(
         .fpu_to_csr_if  (fpu_to_csr_if), 
         .fpu_commit_if  (fpu_commit_if),
         .csr_pending    (csr_pending),
-        .pending        (fpu_pending) 
+        .req_pending    (fpu_pending) 
     );
 `endif
 

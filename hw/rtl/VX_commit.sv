@@ -61,16 +61,19 @@ module VX_commit #(
     
     `POP_COUNT(commit_size, commit_tmask);
 
-    VX_pipe_register #(
-        .DATAW  (1 + $bits(commit_size)),
-        .RESETW (1)
-    ) pipe_reg (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (1'b1),
-        .data_in  ({commit_fire,         commit_size}),
-        .data_out ({cmt_to_csr_if.valid, cmt_to_csr_if.commit_size})
-    );
+    reg [`PERF_CTR_BITS-1:0] instret;
+
+    always @(posedge clk) begin
+       if (reset) begin
+            instret <= 0;
+        end else begin
+            if (commit_fire) begin
+                instret <= instret + `PERF_CTR_BITS'(commit_size);
+            end
+        end
+    end
+
+    assign cmt_to_csr_if.instret = instret;
 
     // Writeback
 

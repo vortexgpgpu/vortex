@@ -46,6 +46,8 @@ module VX_warp_sched #(
     wire                    schedule_valid;
     wire                    warp_scheduled;
 
+    reg [`PERF_CTR_BITS-1:0]    cycles;
+
     reg [`NUM_WARPS-1:0][`UUID_BITS-1:0] issued_instrs;
 
     wire ifetch_req_fire = ifetch_req_if.valid && ifetch_req_if.ready;
@@ -71,6 +73,7 @@ module VX_warp_sched #(
             active_warps    <= '0;
             thread_masks    <= '0;
             issued_instrs   <= '0;
+            cycles          <= '0;
 
             // activate first warp
             warp_pcs[0]     <= `STARTUP_ADDR;
@@ -140,12 +143,16 @@ module VX_warp_sched #(
                 thread_masks[join_if.wid] <= join_tmask;
             end
 
+            if (busy) begin
+                cycles <= cycles + 1;
+            end
+
             active_warps <= active_warps_n;
         end
     end
 
-    // export thread mask register
-    assign fetch_to_csr_if.thread_masks = thread_masks;
+    // export cycles counter
+    assign fetch_to_csr_if.cycles = cycles;
 
     // calculate active barrier status
 
