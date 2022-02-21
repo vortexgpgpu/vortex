@@ -6,6 +6,18 @@ set -e
 # ensure build
 make -s
 
+smoke() 
+{
+echo "begin smoke tests..."
+
+make -C tests/riscv/isa run-simx
+make -C tests/riscv/isa run-rtlsim
+CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -osoccer_result.png -g0"
+CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -osoccer_result.png -g0"
+
+echo "smoke tests done!"
+}
+
 unittest() 
 {
 make -C tests/unittest run
@@ -161,11 +173,13 @@ echo "stress1 tests done!"
 
 usage()
 {
-    echo "usage: regression [-unittest] [-coverage] [-tex] [-cluster] [-debug] [-config] [-stress[#n]] [-all] [-h|--help]"
+    echo "usage: regression [-smoke] [-unittest] [-coverage] [-tex] [-cluster] [-debug] [-config] [-stress[#n]] [-all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
     case $1 in
+        -smoke ) smoke
+                ;;
         -unittest ) unittest
                 ;;
         -coverage ) coverage
