@@ -138,10 +138,10 @@ public:
   void tick() {
     // handle memory response
     for (uint32_t t = 0; t < num_threads_; ++t) {
-        auto& dcache_rsp_port = tcache_->CoreRspPorts.at(t);
-        if (dcache_rsp_port.empty())
+        auto& tcache_rsp_port = tcache_->CoreRspPorts.at(t);
+        if (tcache_rsp_port.empty())
             continue;
-        auto& mem_rsp = dcache_rsp_port.front();
+        auto& mem_rsp = tcache_rsp_port.front();
         auto& entry = pending_reqs_.at(mem_rsp.tag);  
         auto trace = entry.trace;
         DT(3, "tex-rsp: tag=" << mem_rsp.tag << ", tid=" << t << ", " << *trace);  
@@ -151,7 +151,7 @@ public:
             simobject_->Output.send(trace, config_.sampler_latency);
             pending_reqs_.release(mem_rsp.tag);
         }   
-        dcache_rsp_port.pop();
+        tcache_rsp_port.pop();
     }
 
     // check input queue
@@ -171,14 +171,14 @@ public:
     }
 
     // send memory request
-    auto trace_data = dynamic_cast<TraceData*>(trace->data);
+    auto trace_data = dynamic_cast<TexUnit::TraceData*>(trace->data);
 
-    uint32_t valid_addrs = 0;
+    uint32_t addr_count = 0;
     for (auto& mem_addr : trace_data->mem_addrs) {
-        valid_addrs += mem_addr.size();
+        addr_count += mem_addr.size();
     }
 
-    auto tag = pending_reqs_.allocate({trace, valid_addrs});
+    auto tag = pending_reqs_.allocate({trace, addr_count});
 
     for (uint32_t t = 0; t < num_threads_; ++t) {
         if (!trace->tmask.test(t))
@@ -195,10 +195,13 @@ public:
             tcache_req_port.send(mem_req, config_.address_latency);
             DT(3, "tex-req: addr=" << std::hex << mem_addr.addr << ", tag=" << tag 
                 << ", tid=" << t << ", "<< trace);
-            ++ core_->perf_stats_.tex_reads;
-            ++ core_->perf_stats_.tex_latency += pending_reqs_.size();
+            ++perf_stats_.reads;
+            ++perf_stats_.latency += pending_reqs_.size();
         }
     }
+
+    auto time = simobject_->Input.pop();
+    perf_stats_.stalls += (SimPlatform::instance().cycles() - time);
   }
 
   const PerfStats& perf_stats() const { 

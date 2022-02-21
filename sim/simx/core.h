@@ -44,8 +44,7 @@ public:
     uint64_t mem_reads;
     uint64_t mem_writes;
     uint64_t mem_latency;
-    uint64_t tex_reads;
-    uint64_t tex_latency;
+    
 
     PerfStats() 
       : instrs(0)
@@ -62,8 +61,6 @@ public:
       , mem_reads(0)
       , mem_writes(0)
       , mem_latency(0)
-      , tex_reads(0)
-      , tex_latency(0)
     {}
   };
 

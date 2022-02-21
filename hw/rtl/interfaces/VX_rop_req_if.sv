@@ -31,6 +31,7 @@ interface VX_rop_req_if ();
         output wb,
         output x,
         output y,
+        output z,
         output color,
         input  ready
     );
@@ -45,12 +46,11 @@ interface VX_rop_req_if ();
         input  wb,
         input  x,
         input  y,
+        input  z,
         input  color,
         output ready
     );
 
 endinterface
 `endif
-
-
  

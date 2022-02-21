@@ -28,11 +28,13 @@ struct params_t {
     uint32_t tag_select_addr_end;
 
     params_t(const CacheSim::Config& config) {
-        uint32_t bank_bits   = log2ceil(config.num_banks);
-        uint32_t offset_bits = config.B - config.W;
-        uint32_t log2_bank_size  = config.C - bank_bits;
-        uint32_t index_bits  = log2_bank_size - (config.B << config.A);        
-        assert(log2_bank_size >= config.B);   
+        int32_t bank_bits = log2ceil(config.num_banks);
+        int32_t offset_bits = config.B - config.W;
+        int32_t log2_bank_size = config.C - bank_bits;
+        int32_t index_bits = log2_bank_size - (config.B + config.A);        
+        assert(log2_bank_size > 0);
+        assert(offset_bits >= 0);
+        assert(index_bits >= 0);
 
         this->log2_num_inputs = log2ceil(config.num_inputs);
 

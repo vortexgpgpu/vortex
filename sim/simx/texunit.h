@@ -20,10 +20,14 @@ public:
     };
 
     struct PerfStats {
+        uint64_t stalls;
         uint64_t reads;
+        uint64_t latency;
 
         PerfStats() 
-            : reads(0)
+            : stalls(0)
+            , reads(0)
+            , latency(0)
         {}
     };
 

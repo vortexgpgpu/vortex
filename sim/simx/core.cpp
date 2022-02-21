@@ -59,10 +59,10 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
         4,                      // pipeline latency
       }))
     , tcache_(CacheSim::Create("tcache", CacheSim::Config{
-        log2ceil(DCACHE_SIZE),  // C
+        log2ceil(TCACHE_SIZE),  // C
         log2ceil(L1_BLOCK_SIZE),// B
         log2ceil(sizeof(uint32_t)), // W
-        4,                      // A
+        2,                      // A
         32,                     // address bits    
         (uint8_t)arch.num_threads(), // number of banks
         1,                      // number of ports
@@ -638,13 +638,13 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
 
 #ifdef EXT_TEX_ENABLE
   case CSR_MPM_TEX_READS:
-    return perf_stats_.tex_reads & 0xffffffff;
+    return tex_unit_->perf_stats().reads & 0xffffffff;
   case CSR_MPM_TEX_READS_H:
-     return perf_stats_.tex_reads >> 32;
+     return tex_unit_->perf_stats().reads >> 32;
   case CSR_MPM_TEX_LAT:
-    return perf_stats_.tex_latency & 0xffffffff;
+    return tex_unit_->perf_stats().latency & 0xffffffff;
   case CSR_MPM_TEX_LAT_H:
-    return perf_stats_.tex_latency >> 32;
+    return tex_unit_->perf_stats().latency >> 32;
 #endif  
   default:
     if ((addr >= CSR_MPM_BASE && addr < (CSR_MPM_BASE + 32))
@@ -654,19 +654,19 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   #ifdef EXT_TEX_ENABLE
     if (addr >= CSR_TEX_STATE_BEGIN
      && addr < CSR_TEX_STATE_END) {
-      return tex_unit_.csr_read(addr);
+      return tex_unit_->csr_read(addr);
     } else
   #endif
   #ifdef EXT_RASTER_ENABLE
     if (addr >= CSR_RASTER_STATE_BEGIN
      && addr < CSR_RASTER_STATE_END) {
-      return raster_unit.csr_read(addr);
+      return raster_unit_->csr_read(addr);
     } else
   #endif
   #ifdef EXT_ROP_ENABLE
     if (addr >= CSR_ROP_STATE_BEGIN
      && addr < CSR_ROP_STATE_END) {
-      return rop_unit.csr_read(addr);
+      return rop_unit_->csr_read(addr);
     } else
   #endif
     {
@@ -688,19 +688,19 @@ void Core::set_csr(uint32_t addr, uint32_t value, uint32_t /*tid*/, uint32_t wid
 #ifdef EXT_TEX_ENABLE
   if (addr >= CSR_TEX_STATE_BEGIN
    && addr < CSR_TEX_STATE_END) {
-      tex_unit_.csr_write(addr, value);
+      tex_unit_->csr_write(addr, value);
   } else
 #endif
 #ifdef EXT_RASTER_ENABLE
   if (addr >= CSR_RASTER_STATE_BEGIN
    && addr < CSR_RASTER_STATE_END) { 
-    raster_unit.csr_write(addr, value);
+    raster_unit_->csr_write(addr, value);
   } else
 #endif
 #ifdef EXT_ROP_ENABLE
   if (addr >= CSR_ROP_STATE_BEGIN
    && addr < CSR_ROP_STATE_END) {
-    rop_unit.csr_write(addr, value);
+    rop_unit_->csr_write(addr, value);
   } else
 #endif
   {

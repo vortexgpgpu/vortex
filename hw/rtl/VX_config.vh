@@ -536,6 +536,48 @@
 `define DCACHE_MRSQ_SIZE 0
 `endif
 
+// Tcache Configurable Knobs //////////////////////////////////////////////////
+
+// Size of cache in bytes
+`ifndef TCACHE_SIZE
+`define TCACHE_SIZE 16384
+`endif
+
+// Number of banks
+`ifndef TCACHE_NUM_BANKS
+`define TCACHE_NUM_BANKS `NUM_THREADS
+`endif
+
+// Number of ports per bank
+`ifndef TCACHE_NUM_PORTS
+`define TCACHE_NUM_PORTS 1
+`endif
+
+// Core Request Queue Size
+`ifndef TCACHE_CREQ_SIZE
+`define TCACHE_CREQ_SIZE 0
+`endif
+
+// Core Response Queue Size
+`ifndef TCACHE_CRSQ_SIZE
+`define TCACHE_CRSQ_SIZE 2
+`endif
+
+// Miss Handling Register Size
+`ifndef TCACHE_MSHR_SIZE
+`define TCACHE_MSHR_SIZE (`NUM_THREADS * 4)
+`endif
+
+// Memory Request Queue Size
+`ifndef TCACHE_MREQ_SIZE
+`define TCACHE_MREQ_SIZE 4
+`endif
+
+// Memory Response Queue Size
+`ifndef TCACHE_MRSQ_SIZE
+`define TCACHE_MRSQ_SIZE 0
+`endif
+
 // SM Configurable Knobs //////////////////////////////////////////////////////
 
 // per thread stack size

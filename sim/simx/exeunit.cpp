@@ -129,14 +129,14 @@ void LsuUnit::tick() {
         is_dup = (matches == trace->tmask.count());
     }
 
-    uint32_t valid_addrs = 0;
+    uint32_t addr_count;
     if (is_dup) {
-        valid_addrs = 1;
+        addr_count = 1;
     } else {
-        valid_addrs = trace->tmask.count();
+        addr_count = trace->tmask.count();
     }
 
-    auto tag = pending_rd_reqs_.allocate({trace, valid_addrs});
+    auto tag = pending_rd_reqs_.allocate({trace, addr_count});
 
     for (uint32_t t = 0; t < num_threads_; ++t) {
         if (!trace->tmask.test(t))
