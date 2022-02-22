@@ -111,6 +111,7 @@ module VX_rop_blend #(
             endcase
 
             // Blend Equations
+            // Need enumerated modes for which equation to use, add to vx_rop_define (these are the values for func_add)
             case (mode_rgb)
                 `ROP_BLEND_EQ_x: begin
                     out_red <=
