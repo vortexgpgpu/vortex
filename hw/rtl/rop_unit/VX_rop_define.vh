@@ -29,8 +29,8 @@
 `define ROP_BLEND_FACTOR_ONE_MINUS_SRC_RGB      3
 `define ROP_BLEND_FACTOR_DST_RGB                4
 `define ROP_BLEND_FACTOR_ONE_MINUS_DST_RGB      5
-`define ROP_BLEND_FACTOR_DST_A                  6
-`define ROP_BLEND_FACTOR_ONE_MINUS_DST_A        7
+`define ROP_BLEND_FACTOR_SRC_A                  6
+`define ROP_BLEND_FACTOR_ONE_MINUS_SRC_A        7
 `define ROP_BLEND_FACTOR_DST_A                  8
 `define ROP_BLEND_FACTOR_ONE_MINUS_DST_A        9
 `define ROP_BLEND_FACTOR_CONST_RGB              10
