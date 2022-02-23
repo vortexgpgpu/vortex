@@ -195,9 +195,11 @@
 `define INST_GPU_JOIN        4'h3
 `define INST_GPU_BAR         4'h4
 `define INST_GPU_PRED        4'h5
+
 `define INST_GPU_TEX         4'h6
 `define INST_GPU_RASTER      4'h7
 `define INST_GPU_ROP         4'h8
+`define INST_GPU_IMADD       4'h1
 `define INST_GPU_BITS        4
 
 ///////////////////////////////////////////////////////////////////////////////

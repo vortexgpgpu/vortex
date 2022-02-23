@@ -99,8 +99,8 @@ extern "C" {
     __asm__ __volatile__ (".insn r4 0x5b, 1, 1, x0, %0, %1, %2" :: "r"(x), "r"(y), "r"(color); \
 })
 
-// Interpolation
-#define vx_interp(x, y, acc) ({                  \
+// IMADD
+#define vx_imadd(x, y, acc) ({                  \
     __asm__ __volatile__ (".insn r4 0x5b, 1, 2, x0, %0, %1, %2" :: "r"(x), "r"(y), "r"(acc); \
 })
 

@@ -1450,7 +1450,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         std::abort();
       }
       break;
-      case 2: { // interp
+      case 2: { // IMADD
         trace->exe_type = ExeType::ALU;
         trace->alu_type = AluType::IMADD;
         trace->used_iregs.set(rsrc0);

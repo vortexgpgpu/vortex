@@ -401,6 +401,15 @@ module VX_decode  #(
                         `USED_IREG (rs3);
                     end
                 `endif
+                    3'h1: begin
+                        ex_type = `EX_GPU;
+                        op_type = `INST_OP_BITS'(`INST_GPU_IMADD);
+                        use_rd = 1;
+                        `USED_IREG (rd);
+                        `USED_IREG (rs1);
+                        `USED_IREG (rs2);
+                        `USED_IREG (rs3);
+                    end
                     default:;
                 endcase
             end
