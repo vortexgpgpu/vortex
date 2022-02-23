@@ -11,6 +11,7 @@ private:
   std::vector<Switch<MemReq, MemRsp>::Ptr> l2_mem_switches_;
   CacheSim::Ptr l3cache_;
   Switch<MemReq, MemRsp>::Ptr l3_mem_switch_;
+  GlobalCSRS global_csrs_;
 
 public:
   Impl(const ArchDef& arch) 
@@ -25,7 +26,7 @@ public:
 
     // create cores
     for (uint32_t i = 0; i < num_cores; ++i) {
-        cores_.at(i) = Core::Create(arch, i);
+        cores_.at(i) = Core::Create(i, arch, global_csrs_);
     }
 
      // setup memory simulator
@@ -157,6 +158,10 @@ public:
 
     return exitcode;
   }
+
+  void write_csr(uint32_t addr, uint64_t value) {
+    global_csrs_.write(addr, value);
+  }
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -175,4 +180,8 @@ void Processor::attach_ram(RAM* mem) {
 
 int Processor::run() {
   return impl_->run();
+}
+
+void Processor::write_csr(uint32_t addr, uint64_t value) {
+  return impl_->write_csr(addr, value);
 }

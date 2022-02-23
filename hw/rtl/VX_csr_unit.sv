@@ -23,9 +23,6 @@ module VX_csr_unit #(
     VX_fpu_to_csr_if.slave      fpu_to_csr_if,
     input wire[`NUM_WARPS-1:0]  fpu_pending,
 `endif
-`ifdef EXT_TEX_ENABLE
-    VX_tex_csr_if.master        tex_csr_if,
-`endif
 
     output wire[`NUM_WARPS-1:0] req_pending
 );    
@@ -39,9 +36,9 @@ module VX_csr_unit #(
 
     wire [31:0] csr_req_data = csr_req_if.use_imm ? 32'(csr_req_if.imm) : csr_req_if.rs1_data;
 
-    VX_csr_data #(
+    VX_csr_local #(
         .CORE_ID(CORE_ID)
-    ) csr_data (
+    ) csr_local (
         .clk            (clk),
         .reset          (reset),
     `ifdef PERF_ENABLE
@@ -55,9 +52,6 @@ module VX_csr_unit #(
         .fetch_to_csr_if(fetch_to_csr_if),
     `ifdef EXT_F_ENABLE
         .fpu_to_csr_if  (fpu_to_csr_if), 
-    `endif
-    `ifdef EXT_TEX_ENABLE
-        .tex_csr_if     (tex_csr_if),
     `endif
         .read_enable    (csr_req_if.valid),
         .read_uuid      (csr_req_if.uuid),

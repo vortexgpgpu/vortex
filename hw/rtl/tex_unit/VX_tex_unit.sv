@@ -26,32 +26,13 @@ module VX_tex_unit #(
 
     localparam REQ_INFO_W = `NR_BITS + 1 + `NW_BITS + 32 + `UUID_BITS;
     localparam BLEND_FRAC_W = (2 * `NUM_THREADS * `TEX_BLEND_FRAC);    
-    
-    wire [`UUID_BITS-1:0] write_uuid = tex_csr_if.write_uuid;
-    `UNUSED_VAR (write_uuid);
-
-    // CSRs access
-
-    tex_csrs_t tex_csrs;
-
-    VX_tex_csr #(
-        .CORE_ID    (CORE_ID),
-        .NUM_STAGES (NUM_STAGES)
-    ) tex_csr (
-        .clk        (clk),
-        .reset      (reset),
-
-        // inputs
-        .tex_csr_if (tex_csr_if),
-        .tex_req_if (tex_req_if),
-
-        // outputs
-        .tex_csrs   (tex_csrs)
-    );
 
     wire [`NUM_THREADS-1:0][`TEX_LOD_BITS-1:0]      mip_level;
     wire [`NUM_THREADS-1:0][`TEX_MIPOFF_BITS-1:0]   sel_mipoff;
     wire [`NUM_THREADS-1:0][1:0][`TEX_LOD_BITS-1:0] sel_logdims;
+
+    assign tex_csr_if.stage = tex_req_if.stage;
+    tex_csrs_t tex_csrs = tex_csr_if.data;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign mip_level[i]      = tex_req_if.lod[i][`TEX_LOD_BITS-1:0];

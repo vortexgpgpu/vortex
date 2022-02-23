@@ -6,7 +6,6 @@ using namespace vortex;
 
 class RasterUnit::Impl {
 private:
-    std::array<uint32_t, NUM_RASTER_STATES> states_;
     RasterUnit* simobject_;    
     Core* core_;
     PerfStats perf_stats_;
@@ -19,20 +18,8 @@ public:
 
     ~Impl() {}
 
-    void reset() {
-        for (auto& state : states_) {
-            state = 0;
-        }
-    }
-
-    uint32_t csr_read(uint32_t addr) {
-        uint32_t state = CSR_RASTER_STATE(addr);
-        return states_.at(state);
-    }
-  
-    void csr_write(uint32_t addr, uint32_t value) {
-        uint32_t state = CSR_RASTER_STATE(addr);
-        states_.at(state) = value;
+    void clear() {
+        //--
     }
 
     bool pop(raster_quad_t* quad) {
@@ -63,15 +50,7 @@ RasterUnit::~RasterUnit() {
 }
 
 void RasterUnit::reset() {
-  impl_->reset();
-}
-
-uint32_t RasterUnit::csr_read(uint32_t addr) {
-  return impl_->csr_read(addr);
-}
-
-void RasterUnit::csr_write(uint32_t addr, uint32_t value) {
-  impl_->csr_write(addr, value);
+  impl_->clear();
 }
 
 bool RasterUnit::pop(raster_quad_t* quad) {

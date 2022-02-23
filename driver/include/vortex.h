@@ -79,6 +79,9 @@ int vx_start(vx_device_h hdevice);
 // Wait for device ready with milliseconds timeout
 int vx_ready_wait(vx_device_h hdevice, uint64_t timeout);
 
+// write device constant registers
+int vx_csr_write(vx_device_h hdevice, uint32_t addr, uint64_t value);
+
 ////////////////////////////// UTILITY FUNCIONS ///////////////////////////////
 
 // upload kernel bytes to device

@@ -1,7 +1,6 @@
 `include "VX_rop_define.vh"
 
-module VX_rop_unit #(  
-    parameter CORE_ID = 0,
+module VX_rop_unit #(
     parameter NUM_SLICES = 1
 ) (
     input wire clk,
@@ -20,24 +19,11 @@ module VX_rop_unit #(
     VX_rop_csr_if.slave rop_csr_if,
     VX_rop_req_if.slave rop_req_if
 );
-
-    rop_csrs_t rop_csrs;
-
-    VX_rop_csr #(
-        .CORE_ID (CORE_ID)
-    ) rop_csr (
-        .clk        (clk),
-        .reset      (reset),
-
-        // inputs
-        .rop_csr_if (rop_csr_if),
-        .rop_req_if (rop_req_if),
-
-        // outputs
-        .rop_csrs   (rop_csrs)
-    );
+    `UNUSED_VAR (clk)
+    `UNUSED_VAR (reset)
 
     // TODO: remove
+    rop_csrs_t rop_csrs = rop_csr_if.data;
     `UNUSED_VAR (rop_csrs)
 
     // TODO: remove
@@ -54,12 +40,6 @@ module VX_rop_unit #(
     `UNUSED_VAR (rop_req_if.z)
     `UNUSED_VAR (rop_req_if.color)
     assign rop_req_if.ready = 0;
-
-    // TODO: remove
-    `UNUSED_VAR (rop_csr_if.write_enable);
-    `UNUSED_VAR (rop_csr_if.write_addr);
-    `UNUSED_VAR (rop_csr_if.write_data);
-    `UNUSED_VAR (rop_csr_if.write_uuid);
 
     // TODO: remove
     assign perf_rop_if.mem_reads = 0;

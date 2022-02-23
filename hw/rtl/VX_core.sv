@@ -9,6 +9,10 @@ module VX_core #(
     input  wire                             clk,
     input  wire                             reset,
 
+`ifdef EXT_TEX_ENABLE
+    VX_tex_csr_if.slave                     tex_csr_if,
+`endif
+
     // Memory request
     output wire                             mem_req_valid,
     output wire                             mem_req_rw,    
@@ -113,6 +117,7 @@ module VX_core #(
         .icache_rsp_if  (icache_rsp_if),
 
     `ifdef EXT_TEX_ENABLE
+        .tex_csr_if     (tex_csr_if),
         .tcache_req_if  (tcache_req_if),
         .tcache_rsp_if  (tcache_rsp_if),
     `endif

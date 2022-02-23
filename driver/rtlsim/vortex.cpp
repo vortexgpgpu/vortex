@@ -152,6 +152,14 @@ public:
         return 0;
     }
 
+    int write_csr(uint32_t addr, uint64_t value) {
+        if (future_.valid()) {
+            future_.wait(); // ensure prior run completed
+        }        
+        processor_.write_csr(addr, value);
+        return 0;
+    }
+
 private:
 
     RAM ram_;
@@ -359,4 +367,17 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
     vx_device *device = ((vx_device*)hdevice);
 
     return device->wait(timeout);
+}
+
+extern int vx_csr_write(vx_device_h hdevice, uint32_t addr, uint64_t value) {
+    if (nullptr == hdevice)
+        return -1;
+
+    vx_device *device = ((vx_device*)hdevice);
+
+    // Ensure ready for new command
+    if (vx_ready_wait(hdevice, -1) != 0)
+        return -1;    
+  
+    return device->write_csr(addr, value);
 }

@@ -13,9 +13,9 @@ module VX_execute #(
     VX_dcache_rsp_if.slave dcache_rsp_if,
 
 `ifdef EXT_TEX_ENABLE
-    // Tcache interface
+    VX_tex_csr_if.slave     tex_csr_if,
     VX_dcache_req_if.master tcache_req_if,
-    VX_dcache_rsp_if.slave tcache_rsp_if,
+    VX_dcache_rsp_if.slave  tcache_rsp_if,
 `endif
 
     // commit interface
@@ -52,7 +52,6 @@ module VX_execute #(
 );
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_csr_if tex_csr_if();
 `ifdef PERF_ENABLE
     VX_perf_tex_if perf_tex_if();
 `endif
@@ -110,9 +109,6 @@ module VX_execute #(
         .req_pending    (csr_pending),
     `else
         `UNUSED_PIN (req_pending),
-    `endif        
-    `ifdef EXT_TEX_ENABLE
-        .tex_csr_if     (tex_csr_if),
     `endif
         .cmt_to_csr_if  (cmt_to_csr_if),
         .fetch_to_csr_if(fetch_to_csr_if),
