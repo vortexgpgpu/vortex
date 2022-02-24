@@ -267,6 +267,20 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_addr, dst_bufsize, 0));  
   }
 
+	// configure texture units
+	vx_csr_write(device, CSR_TEX_STAGE,  0);
+	vx_csr_write(device, CSR_TEX_WIDTH,  src_logwidth);	
+	vx_csr_write(device, CSR_TEX_HEIGHT, src_logheight);
+	vx_csr_write(device, CSR_TEX_FORMAT, format);
+	vx_csr_write(device, CSR_TEX_WRAPU,  wrap);
+	vx_csr_write(device, CSR_TEX_WRAPV,  wrap);
+	vx_csr_write(device, CSR_TEX_FILTER, (filter ? 1 : 0));
+	vx_csr_write(device, CSR_TEX_ADDR,   src_addr);
+	for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
+    assert(i < TEX_LOD_MAX);
+		vx_csr_write(device, CSR_TEX_MIPOFF(i), mip_offsets.at(i));
+	};
+
   // run tests
   std::cout << "run tests" << std::endl;
   RT_CHECK(run_test(kernel_arg, dst_bufsize, dst_width, dst_height, dst_bpp));

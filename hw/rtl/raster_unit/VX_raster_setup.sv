@@ -1,7 +1,6 @@
 `include "VX_raster_define.vh"
 
-module VX_raster_setup #(  
-    parameter CORE_ID = 0
+module VX_raster_setup #(
     // TODO
 ) (
     input wire clk,

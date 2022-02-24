@@ -61,19 +61,6 @@ void kernel_body(int task_id, tile_arg_t* arg) {
 int main() {
 	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
 
-	// configure texture unit
-	csr_write(CSR_TEX_STAGE,  0);
-	csr_write(CSR_TEX_WIDTH,  arg->src_logwidth);	
-	csr_write(CSR_TEX_HEIGHT, arg->src_logheight);
-	csr_write(CSR_TEX_FORMAT, arg->format);
-	csr_write(CSR_TEX_WRAPU,  arg->wrapu);
-	csr_write(CSR_TEX_WRAPV,  arg->wrapv);
-	csr_write(CSR_TEX_FILTER, (arg->filter ? 1 : 0));
-	csr_write(CSR_TEX_ADDR,   arg->src_addr);
-	static_for_t<int, 0, TEX_LOD_MAX+1>()([&](int i) {
-		csr_write(CSR_TEX_MIPOFF(i), arg->mip_offs[i]);
-	});
-
 	tile_arg_t targ;
 	targ.state       = arg;
 	targ.tile_width  = arg->dst_width;

@@ -62,17 +62,19 @@ localparam AFU_ID_H           = 16'h0004;      // AFU ID Higher
 
 localparam CMD_MEM_READ       = `AFU_IMAGE_CMD_MEM_READ;
 localparam CMD_MEM_WRITE      = `AFU_IMAGE_CMD_MEM_WRITE;
+localparam CMD_CSR_WRITE      = `AFU_IMAGE_CMD_CSR_WRITE;
 localparam CMD_RUN            = `AFU_IMAGE_CMD_RUN;
+localparam CMD_TYPE_WIDTH     = $clog2(`AFU_IMAGE_CMD_MAX_VALUE+1);
 
 localparam MMIO_CMD_TYPE      = `AFU_IMAGE_MMIO_CMD_TYPE; 
-localparam MMIO_IO_ADDR       = `AFU_IMAGE_MMIO_IO_ADDR;
-localparam MMIO_MEM_ADDR      = `AFU_IMAGE_MMIO_MEM_ADDR;
-localparam MMIO_DATA_SIZE     = `AFU_IMAGE_MMIO_DATA_SIZE;
+localparam MMIO_CMD_ARG0      = `AFU_IMAGE_MMIO_CMD_ARG0;
+localparam MMIO_CMD_ARG1      = `AFU_IMAGE_MMIO_CMD_ARG1;
+localparam MMIO_CMD_ARG2      = `AFU_IMAGE_MMIO_CMD_ARG2;
 localparam MMIO_STATUS        = `AFU_IMAGE_MMIO_STATUS;
 
-localparam COUT_TID_WIDTH    = $clog2(`IO_COUT_SIZE); 
-localparam COUT_QUEUE_DATAW  = COUT_TID_WIDTH + 8;
-localparam COUT_QUEUE_SIZE   = 64; 
+localparam COUT_TID_WIDTH     = $clog2(`IO_COUT_SIZE); 
+localparam COUT_QUEUE_DATAW   = COUT_TID_WIDTH + 8;
+localparam COUT_QUEUE_SIZE    = 64; 
 
 localparam MMIO_SCOPE_READ    = `AFU_IMAGE_MMIO_SCOPE_READ;
 localparam MMIO_SCOPE_WRITE   = `AFU_IMAGE_MMIO_SCOPE_WRITE;
@@ -85,11 +87,11 @@ localparam CCI_RD_QUEUE_TAGW  = $clog2(CCI_RD_WINDOW_SIZE);
 localparam CCI_RD_QUEUE_DATAW = CCI_DATA_WIDTH + CCI_ADDR_WIDTH;
 
 localparam STATE_IDLE         = 0;
-localparam STATE_WRITE        = 1;
-localparam STATE_READ         = 2;
-localparam STATE_START        = 3;
-localparam STATE_MAX_VALUE    = 4;
-localparam STATE_WIDTH        = $clog2(STATE_MAX_VALUE);
+localparam STATE_MEM_WRITE    = 1;
+localparam STATE_MEM_READ     = 2;
+localparam STATE_RUN          = 3;
+localparam STATE_CSR_WRITE    = 4;
+localparam STATE_WIDTH        = $clog2(STATE_CSR_WRITE+1);
 
 `ifdef SCOPE
 `SCOPE_DECL_SIGNALS
@@ -118,20 +120,25 @@ wire [`VX_MEM_DATA_WIDTH-1:0]   vx_mem_rsp_data;
 wire [`VX_MEM_TAG_WIDTH-1:0]    vx_mem_rsp_tag;
 wire vx_mem_rsp_ready;
 
-reg  vx_reset;
+reg  vx_start;
 wire vx_busy;
 
 // CMD variables //////////////////////////////////////////////////////////////
 
-t_ccip_clAddr             cmd_io_addr;
-reg [CCI_ADDR_WIDTH-1:0]  cmd_mem_addr;
-reg [CCI_ADDR_WIDTH-1:0]  cmd_data_size;
+reg [2:0][63:0] cmd_args;
+
+t_ccip_clAddr               cmd_io_addr = t_ccip_clAddr'(cmd_args[0]);
+wire [CCI_ADDR_WIDTH-1:0] cmd_mem_addr  = CCI_ADDR_WIDTH'(cmd_args[1]);
+wire [CCI_ADDR_WIDTH-1:0] cmd_data_size = CCI_ADDR_WIDTH'(cmd_args[2]);
+
+wire [`VX_CSR_ADDR_WIDTH-1:0] cmd_csr_addr = `VX_CSR_ADDR_WIDTH'(cmd_args[0]);
+wire [`VX_CSR_DATA_WIDTH-1:0] cmd_csr_data = `VX_CSR_DATA_WIDTH'(cmd_args[1]);
 
 `ifdef SCOPE
-wire [63:0]               cmd_scope_rdata;
-wire [63:0]               cmd_scope_wdata;  
-wire                      cmd_scope_read;
-wire                      cmd_scope_write;
+wire [63:0]   cmd_scope_rdata;
+wire [63:0]   cmd_scope_wdata;  
+wire          cmd_scope_read;
+wire          cmd_scope_write;
 `endif
 
 // MMIO controller ////////////////////////////////////////////////////////////
@@ -154,9 +161,6 @@ assign cmd_scope_write = cp2af_sRxPort.c0.mmioWrValid && (MMIO_SCOPE_WRITE == mm
 
 wire [COUT_QUEUE_DATAW-1:0] cout_q_dout;
 wire cout_q_full, cout_q_empty;
-
-wire [2:0] cmd_type = (cp2af_sRxPort.c0.mmioWrValid 
-                    && (MMIO_CMD_TYPE == mmio_hdr.address)) ? 3'(cp2af_sRxPort.c0.data) : 3'h0;
 
 // disable assertions until full reset
 `ifndef VERILATOR
@@ -188,39 +192,39 @@ always @(posedge clk) begin
   // serve MMIO write request
   if (cp2af_sRxPort.c0.mmioWrValid) begin
     case (mmio_hdr.address)
-      MMIO_IO_ADDR: begin
-        cmd_io_addr <= t_ccip_clAddr'(cp2af_sRxPort.c0.data);
+      MMIO_CMD_ARG0: begin
+        cmd_args[0] <= 64'(cp2af_sRxPort.c0.data);
       `ifdef DBG_TRACE_AFU 
-        dpi_trace("%d: MMIO_IO_ADDR: addr=0x%0h, data=0x%0h\n", $time, mmio_hdr.address, t_ccip_clAddr'(cp2af_sRxPort.c0.data));
+        dpi_trace("%d: MMIO_CMD_ARG0: data=0x%0h\n", $time, 64'(cp2af_sRxPort.c0.data));
       `endif
       end
-      MMIO_MEM_ADDR: begin
-        cmd_mem_addr <= $bits(cmd_mem_addr)'(cp2af_sRxPort.c0.data);
+      MMIO_CMD_ARG1: begin
+        cmd_args[1] <= 64'(cp2af_sRxPort.c0.data);
       `ifdef DBG_TRACE_AFU
-        dpi_trace("%d: MMIO_MEM_ADDR: addr=0x%0h, data=0x%0h\n", $time, mmio_hdr.address, $bits(cmd_mem_addr)'(cp2af_sRxPort.c0.data));
+        dpi_trace("%d: MMIO_CMD_ARG1: data=0x%0h\n", $time, 64'(cp2af_sRxPort.c0.data));
       `endif
       end
-      MMIO_DATA_SIZE: begin
-        cmd_data_size <= $bits(cmd_data_size)'(cp2af_sRxPort.c0.data);
+      MMIO_CMD_ARG2: begin
+        cmd_args[2] <= 64'(cp2af_sRxPort.c0.data);
       `ifdef DBG_TRACE_AFU
-        dpi_trace("%d: MMIO_DATA_SIZE: addr=0x%0h, data=%0d\n", $time, mmio_hdr.address, $bits(cmd_data_size)'(cp2af_sRxPort.c0.data));
+        dpi_trace("%d: MMIO_CMD_ARG2: data=%0d\n", $time, 64'(cp2af_sRxPort.c0.data));
       `endif
       end
       MMIO_CMD_TYPE: begin
       `ifdef DBG_TRACE_AFU
-        dpi_trace("%d: MMIO_CMD_TYPE: addr=0x%0h, data=%0d\n", $time, mmio_hdr.address, $bits(cmd_type)'(cp2af_sRxPort.c0.data));
+        dpi_trace("%d: MMIO_CMD_TYPE: data=%0d\n", $time, 64'(cp2af_sRxPort.c0.data));
       `endif
       end
     `ifdef SCOPE
       MMIO_SCOPE_WRITE: begin
       `ifdef DBG_TRACE_AFU
-        dpi_trace("%d: MMIO_SCOPE_WRITE: addr=0x%0h, data=0x%0h\n", $time, mmio_hdr.address, 64'(cp2af_sRxPort.c0.data));
+        dpi_trace("%d: MMIO_SCOPE_WRITE: data=0x%0h\n", $time, 64'(cp2af_sRxPort.c0.data));
       `endif
       end
     `endif
       default: begin
         `ifdef DBG_TRACE_AFU
-          dpi_trace("%d: Unknown MMIO Wr: addr=0x%0h, data=0x%0h\n", $time, mmio_hdr.address, $bits(cmd_data_size)'(cp2af_sRxPort.c0.data));
+          dpi_trace("%d: Unknown MMIO Wr: addr=0x%0h, data=0x%0h\n", $time, mmio_hdr.address, 64'(cp2af_sRxPort.c0.data));
         `endif
       end
     endcase
@@ -256,21 +260,21 @@ always @(posedge clk) begin
       MMIO_SCOPE_READ: begin
         mmio_tx.data <= cmd_scope_rdata;
       `ifdef DBG_TRACE_AFU
-        dpi_trace("%d: MMIO_SCOPE_READ: addr=0x%0h, data=0x%0h\n", $time, mmio_hdr.address, cmd_scope_rdata);
+        dpi_trace("%d: MMIO_SCOPE_READ: data=0x%0h\n", $time, cmd_scope_rdata);
       `endif
       end
     `endif
       MMIO_DEV_CAPS: begin
         mmio_tx.data <= dev_caps;
       `ifdef DBG_TRACE_AFU
-        dpi_trace("%d: MMIO_DEV_CAPS: addr=0x%0h, data=0x%0h\n", $time, mmio_hdr.address, dev_caps);
+        dpi_trace("%d: MMIO_DEV_CAPS: data=0x%0h\n", $time, dev_caps);
       `endif
       end      
       MMIO_ISA_CAPS: begin
         mmio_tx.data <= isa_caps;
       `ifdef DBG_TRACE_AFU
         if (state != STATE_WIDTH'(mmio_tx.data)) begin
-          dpi_trace("%d: MMIO_ISA_CAPS: addr=0x%0h, state=%0d\n", $time, mmio_hdr.address, isa_caps);
+          dpi_trace("%d: MMIO_ISA_CAPS: data=%0d\n", $time, isa_caps);
         end
       `endif
       end
@@ -286,8 +290,9 @@ end
 
 // COMMAND FSM ////////////////////////////////////////////////////////////////
 
-wire cmd_read_done;
-reg  cmd_write_done;
+wire cmd_mem_rd_done;
+reg  cmd_mem_wr_done;
+wire cmd_csr_wr_done;
 wire cmd_run_done;
 reg  vx_started;
 
@@ -295,38 +300,47 @@ reg [$clog2(`RESET_DELAY+1)-1:0] vx_reset_ctr;
 always @(posedge clk) begin
   if (state == STATE_IDLE) begin
     vx_reset_ctr <= 0;
-  end else if (state == STATE_START) begin
+  end else if (state == STATE_RUN) begin
     vx_reset_ctr <= vx_reset_ctr + 1;
   end
 end
+
+wire is_mmio_wr_cmd = cp2af_sRxPort.c0.mmioWrValid && (MMIO_CMD_TYPE == mmio_hdr.address);
+wire [CMD_TYPE_WIDTH-1:0] cmd_type = is_mmio_wr_cmd ? CMD_TYPE_WIDTH'(cp2af_sRxPort.c0.data) : CMD_TYPE_WIDTH'(0);
 
 always @(posedge clk) begin
   if (reset) begin
     state      <= STATE_IDLE;
     vx_started <= 0;
-    vx_reset   <= 0;    
+    vx_start   <= 0;    
   end else begin
     case (state)
       STATE_IDLE: begin             
         case (cmd_type)
           CMD_MEM_READ: begin     
           `ifdef DBG_TRACE_AFU
-            dpi_trace("%d: STATE READ: ia=0x%0h addr=0x%0h size=%0d\n", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size);
+            dpi_trace("%d: STATE MEM_READ: ia=0x%0h addr=0x%0h size=%0d\n", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size);
           `endif
-            state <= STATE_READ;   
+            state <= STATE_MEM_READ;   
           end 
           CMD_MEM_WRITE: begin      
           `ifdef DBG_TRACE_AFU
-            dpi_trace("%d: STATE WRITE: ia=0x%0h addr=0x%0h size=%0d\n", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size);
+            dpi_trace("%d: STATE MEM_WRITE: ia=0x%0h addr=0x%0h size=%0d\n", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size);
           `endif
-            state <= STATE_WRITE;
+            state <= STATE_MEM_WRITE;
+          end
+          CMD_CSR_WRITE: begin      
+          `ifdef DBG_TRACE_AFU
+            dpi_trace("%d: STATE CSR_WRITE: addr=0x%0h data=%0d\n", $time, cmd_csr_addr, cmd_csr_data);
+          `endif
+            state <= STATE_CSR_WRITE;
           end
           CMD_RUN: begin        
           `ifdef DBG_TRACE_AFU
-            dpi_trace("%d: STATE START\n", $time);
+            dpi_trace("%d: STATE RUN\n", $time);
           `endif
-            vx_reset <= 1;            
-            state <= STATE_START;                    
+            vx_start <= 1;            
+            state <= STATE_RUN;                    
           end
           default: begin
             state <= state;
@@ -334,8 +348,8 @@ always @(posedge clk) begin
         endcase
       end      
 
-      STATE_READ: begin
-        if (cmd_read_done) begin
+      STATE_MEM_READ: begin
+        if (cmd_mem_rd_done) begin
           state <= STATE_IDLE;
         `ifdef DBG_TRACE_AFU
           dpi_trace("%d: STATE IDLE\n", $time);
@@ -343,8 +357,8 @@ always @(posedge clk) begin
         end
       end
 
-      STATE_WRITE: begin
-        if (cmd_write_done) begin
+      STATE_MEM_WRITE: begin
+        if (cmd_mem_wr_done) begin
           state <= STATE_IDLE;
         `ifdef DBG_TRACE_AFU
           dpi_trace("%d: STATE IDLE\n", $time);
@@ -352,7 +366,16 @@ always @(posedge clk) begin
         end
       end
 
-      STATE_START: begin 
+      STATE_CSR_WRITE: begin
+        if (cmd_csr_wr_done) begin
+          state <= STATE_IDLE;
+        `ifdef DBG_TRACE_AFU
+          dpi_trace("%d: STATE IDLE\n", $time);
+        `endif
+        end
+      end
+
+      STATE_RUN: begin 
         // vortex reset cycles
         if (vx_started) begin
           if (cmd_run_done) begin
@@ -365,7 +388,7 @@ always @(posedge clk) begin
         end else begin
           if (vx_reset_ctr == (`RESET_DELAY-1)) begin
             vx_started <= 1;
-            vx_reset   <= 0;
+            vx_start   <= 0;
           end  
         end        
       end
@@ -686,7 +709,7 @@ always @(posedge clk) begin
       cci_rd_req_wait  <= 0;
     end
 
-    cci_rd_req_valid <= (STATE_WRITE == state)                       
+    cci_rd_req_valid <= (STATE_MEM_WRITE == state)                       
                      && (cci_rd_req_ctr_next != cmd_data_size)
                      && !cp2af_sRxPort.c0TxAlmFull;    
 
@@ -706,7 +729,7 @@ always @(posedge clk) begin
     cci_rd_rsp_ctr     <= 0;
     cci_mem_wr_req_ctr <= 0;
     cci_mem_wr_req_addr_base <= cmd_mem_addr;
-    cmd_write_done     <= 0;
+    cmd_mem_wr_done     <= 0;
   end
 
   if (cci_rd_req_fire) begin  
@@ -736,7 +759,7 @@ always @(posedge clk) begin
   if (cci_mem_wr_req_fire) begin    
     cci_mem_wr_req_ctr <= cci_mem_wr_req_ctr + CCI_ADDR_WIDTH'(1);
     if (cci_mem_wr_req_ctr == (cmd_data_size-1)) begin
-      cmd_write_done <= 1;
+      cmd_mem_wr_done <= 1;
     end
   end
 end
@@ -804,7 +827,7 @@ end
 wire cci_mem_rd_req_fire = cci_mem_rd_req_valid && cci_mem_req_ready;
 wire cci_mem_rd_rsp_fire = cci_mem_rsp_valid && cci_mem_rsp_ready;
 
-wire cci_wr_rsp_fire = (STATE_READ == state) 
+wire cci_wr_rsp_fire = (STATE_MEM_READ == state) 
                     && cp2af_sRxPort.c1.rspValid 
                     && (cp2af_sRxPort.c1.hdr.resp_type == eRSP_WRLINE);
 
@@ -825,13 +848,13 @@ VX_pending_size #(
 );
 `UNUSED_VAR (cci_pending_writes)
 
-assign cci_mem_rd_req_valid = (STATE_READ == state) 
+assign cci_mem_rd_req_valid = (STATE_MEM_READ == state) 
                            && !cci_mem_rd_req_done;
 
 assign cci_mem_rsp_ready = !cp2af_sRxPort.c1TxAlmFull 
                         && !cci_pending_writes_full;
 
-assign cmd_read_done = cci_wr_req_done
+assign cmd_mem_rd_done = cci_wr_req_done
                     && cci_pending_writes_empty;
 
 // Send write requests to CCI
@@ -883,7 +906,10 @@ end
 
 //--
 
-assign cci_mem_req_rw    = state[0]; // STATE_WRITE=00, STATE_WRITE=01
+assign cci_mem_req_rw = state[0];
+`STATIC_ASSERT(STATE_MEM_WRITE == 1, ("invalid value")); // 01
+`STATIC_ASSERT(STATE_MEM_READ  == 2, ("invalid value")); // 10
+
 assign cci_mem_req_valid = cci_mem_req_rw ? cci_mem_wr_req_valid : cci_mem_rd_req_valid;
 assign cci_mem_req_addr  = cci_mem_req_rw ? cci_mem_wr_req_addr : cci_mem_rd_req_addr;
 assign cci_mem_req_data  = cci_rdq_dout[CCI_RD_QUEUE_DATAW-1:CCI_ADDR_WIDTH];
@@ -891,13 +917,16 @@ assign cci_mem_req_tag   = cci_mem_req_rw ? cci_mem_wr_req_ctr : cci_mem_rd_req_
 
 // Vortex /////////////////////////////////////////////////////////////////////
 
-assign cmd_run_done = !vx_busy;
+wire                          vx_csr_wr_valid = (STATE_CSR_WRITE == state);
+wire [`VX_CSR_ADDR_WIDTH-1:0] vx_csr_wr_addr  = cmd_csr_addr;
+wire [`VX_CSR_DATA_WIDTH-1:0] vx_csr_wr_data  = cmd_csr_data;
+wire                          vx_csr_wr_ready;
 
 Vortex vortex (
   `SCOPE_BIND_afu_vortex
 
   .clk            (clk),
-  .reset          (reset || vx_reset),
+  .reset          (reset),
 
   // Memory request 
   .mem_req_valid  (vx_mem_req_valid),
@@ -913,10 +942,20 @@ Vortex vortex (
   .mem_rsp_data   (vx_mem_rsp_data),
   .mem_rsp_tag    (vx_mem_rsp_tag),
   .mem_rsp_ready  (vx_mem_rsp_ready),
+
+  // CSR write request
+  .csr_wr_valid   (vx_csr_wr_valid),
+  .csr_wr_addr    (vx_csr_wr_addr),
+  .csr_wr_data    (vx_csr_wr_data),
+  .csr_wr_ready   (vx_csr_wr_ready),
  
-  // status
+  // Control / status
+  .start          (vx_start),
   .busy           (vx_busy)
 );
+
+assign cmd_csr_wr_done = vx_csr_wr_ready;
+assign cmd_run_done = !vx_busy;
 
 // COUT HANDLING //////////////////////////////////////////////////////////////
 

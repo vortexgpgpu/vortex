@@ -370,7 +370,7 @@
 
 // Texture Units //////////////////////////////////////////////////////////////
 
-`define NUM_TEX_STAGES              2
+`define TEX_STAGE_COUNT             2
 `define TEX_SUBPIXEL_BITS           8
 
 `define TEX_DIM_BITS                15
@@ -388,7 +388,7 @@
 `define TEX_STATE_WRAPU             5
 `define TEX_STATE_WRAPV             6
 `define TEX_STATE_MIPOFF(lod)       (7+(lod))
-`define NUM_TEX_STATES              (`TEX_STATE_MIPOFF(`TEX_LOD_MAX)+1)
+`define TEX_STATE_COUNT             (`TEX_STATE_MIPOFF(`TEX_LOD_MAX)+1)
 
 `define CSR_TEX_STATE_BEGIN         12'h7C0
 `define CSR_TEX_STAGE               `CSR_TEX_STATE_BEGIN
@@ -400,7 +400,7 @@
 `define CSR_TEX_WRAPU               (`CSR_TEX_STATE_BEGIN+1+`TEX_STATE_WRAPU)
 `define CSR_TEX_WRAPV               (`CSR_TEX_STATE_BEGIN+1+`TEX_STATE_WRAPV)
 `define CSR_TEX_MIPOFF(lod)         (`CSR_TEX_STATE_BEGIN+1+`TEX_STATE_MIPOFF(lod))
-`define CSR_TEX_STATE_END           (`CSR_TEX_STATE_BEGIN+1+`NUM_TEX_STATES)
+`define CSR_TEX_STATE_END           (`CSR_TEX_STATE_BEGIN+1+`TEX_STATE_COUNT)
 
 `define CSR_TEX_STATE(addr)         ((addr) - `CSR_TEX_ADDR)
 
@@ -412,7 +412,7 @@
 `define RASTER_STATE_PBUF_STRIDE    3
 `define RASTER_STATE_TILE_XY        4
 `define RASTER_STATE_TILE_WH        5
-`define NUM_RASTER_STATES           6
+`define RASTER_STATE_COUNT          6
 
 `define CSR_RASTER_STATE_BEGIN      `CSR_TEX_STATE_END
 `define CSR_RASTER_PIDX_ADDR        (`CSR_RASTER_STATE_BEGIN+`RASTER_STATE_PIDX_ADDR)
@@ -421,7 +421,7 @@
 `define CSR_RASTER_PBUF_STRIDE      (`CSR_RASTER_STATE_BEGIN+`RASTER_STATE_PBUF_STRIDE)
 `define CSR_RASTER_TILE_XY          (`CSR_RASTER_STATE_BEGIN+`RASTER_STATE_TILE_XY)
 `define CSR_RASTER_TILE_WH          (`CSR_RASTER_STATE_BEGIN+`RASTER_STATE_TILE_WH)
-`define CSR_RASTER_STATE_END        (`CSR_RASTER_STATE_BEGIN+`NUM_RASTER_STATES)
+`define CSR_RASTER_STATE_END        (`CSR_RASTER_STATE_BEGIN+`RASTER_STATE_COUNT)
 
 `define CSR_RASTER_STATE(addr)      ((addr) - `CSR_RASTER_STATE_BEGIN)
 
@@ -441,7 +441,7 @@
 `define ROP_STATE_BLEND_ALPHA       11
 `define ROP_STATE_BLEND_CONST       12
 `define ROP_STATE_LOGIC_OP          13
-`define NUM_ROP_STATES              14
+`define ROP_STATE_COUNT             14
 
 `define CSR_ROP_STATE_BEGIN         `CSR_RASTER_STATE_END
 `define CSR_ROP_ZBUF_ADDR           (`CSR_ROP_STATE_BEGIN+`ROP_STATE_ZBUF_ADDR)
@@ -458,7 +458,7 @@
 `define CSR_ROP_BLEND_APLHA         (`CSR_ROP_STATE_BEGIN+`ROP_STATE_BLEND_ALPHA)
 `define CSR_ROP_BLEND_CONST         (`CSR_ROP_STATE_BEGIN+`ROP_STATE_BLEND_CONST)
 `define CSR_ROP_LOGIC_OP            (`CSR_ROP_STATE_BEGIN+`ROP_STATE_LOGIC_OP)
-`define CSR_ROP_STATE_END           (`CSR_ROP_STATE_BEGIN+`NUM_ROP_STATES)
+`define CSR_ROP_STATE_END           (`CSR_ROP_STATE_BEGIN+`ROP_STATE_COUNT)
 
 `define CSR_ROP_STATE(addr)         ((addr) - `CSR_ROP_STATE_BEGIN)
 

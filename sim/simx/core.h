@@ -24,6 +24,7 @@
 #include "texunit.h"
 #include "rasterunit.h"
 #include "ropunit.h"
+#include "glcsrs.h"
 
 namespace vortex {
 
@@ -67,7 +68,7 @@ public:
   SimPort<MemRsp> MemRspPort;
   SimPort<MemReq> MemReqPort;
 
-  Core(const SimContext& ctx, const ArchDef &arch, uint32_t id);
+  Core(const SimContext& ctx, uint32_t id, const ArchDef &arch, const GlobalCSRS &global_csrs);
   ~Core();
 
   void attach_ram(RAM* ram);
@@ -130,12 +131,12 @@ private:
 
   uint32_t id_;
   const ArchDef& arch_;
+  const GlobalCSRS &global_csrs_;
   const Decoder decoder_;
   MemoryUnit mmu_;
 
   std::vector<std::shared_ptr<Warp>> warps_;  
-  std::vector<WarpMask> barriers_;  
-  std::vector<uint32_t> csrs_;
+  std::vector<WarpMask> barriers_;
   std::vector<Byte> fcsrs_;
   std::vector<IBuffer> ibuffers_;
   Scoreboard scoreboard_;

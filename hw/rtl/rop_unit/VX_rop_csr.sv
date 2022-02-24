@@ -1,83 +1,81 @@
 `include "VX_rop_define.vh"
 
-module VX_rop_csr #(  
-    parameter CORE_ID = 0
-    // TODO
-) (
+module VX_rop_csr (
     input wire clk,
     input wire reset,
 
     // Inputs
-    VX_rop_csr_if.slave rop_csr_if,
-    VX_rop_req_if.slave rop_req_if,
+    input  wire                          csr_wr_valid,
+    input  wire [`VX_CSR_ADDR_WIDTH-1:0] csr_wr_addr,
+    input  wire [`VX_CSR_DATA_WIDTH-1:0] csr_wr_data,
 
     // Output
-    output rop_csrs_t rop_csrs
+    VX_rop_csr_if.master rop_csr_if
 );
 
-    rop_csrs_t reg_csrs;
+    rop_csrs_t csrs;
 
     // CSRs write
 
     always @(posedge clk) begin
         if (reset) begin
-            reg_csrs <= 0;
-        end else if (rop_csr_if.write_enable) begin
-            case (rop_csr_if.write_addr)
+            csrs <= 0;
+        end else if (csr_wr_valid) begin
+            case (csr_wr_addr)
                 `CSR_ROP_ZBUF_ADDR: begin 
-                    reg_csrs.zbuf_addr <= rop_csr_if.write_data[31:0];
+                    csrs.zbuf_addr <= csr_wr_data[31:0];
                 end
                 `CSR_ROP_ZBUF_PITCH: begin 
-                    reg_csrs.zbuf_pitch <= rop_csr_if.write_data[31:0];
+                    csrs.zbuf_pitch <= csr_wr_data[31:0];
                 end
                 `CSR_ROP_CBUF_ADDR: begin 
-                    reg_csrs.cbuf_addr <= rop_csr_if.write_data[31:0];
+                    csrs.cbuf_addr <= csr_wr_data[31:0];
                 end
                 `CSR_ROP_CBUF_PITCH: begin 
-                    reg_csrs.cbuf_pitch <= rop_csr_if.write_data[31:0];
+                    csrs.cbuf_pitch <= csr_wr_data[31:0];
                 end
                 `CSR_ROP_ZFUNC: begin 
-                    reg_csrs.zfunc <= rop_csr_if.write_data[`ROP_DEPTH_FUNC_BITS-1:0];
+                    csrs.zfunc <= csr_wr_data[`ROP_DEPTH_FUNC_BITS-1:0];
                 end
                 `CSR_ROP_SFUNC: begin 
-                    reg_csrs.sfunc <= rop_csr_if.write_data[`ROP_DEPTH_FUNC_BITS-1:0];
+                    csrs.sfunc <= csr_wr_data[`ROP_DEPTH_FUNC_BITS-1:0];
                 end
                 `CSR_ROP_ZPASS: begin 
-                    reg_csrs.zpass <= rop_csr_if.write_data[`ROP_STENCIL_OP_BITS-1:0];
+                    csrs.zpass <= csr_wr_data[`ROP_STENCIL_OP_BITS-1:0];
                 end
                 `CSR_ROP_ZFAIL: begin 
-                    reg_csrs.zfail <= rop_csr_if.write_data[`ROP_STENCIL_OP_BITS-1:0];
+                    csrs.zfail <= csr_wr_data[`ROP_STENCIL_OP_BITS-1:0];
                 end
                 `CSR_ROP_SFAIL: begin 
-                    reg_csrs.sfail <= rop_csr_if.write_data[`ROP_STENCIL_OP_BITS-1:0];
+                    csrs.sfail <= csr_wr_data[`ROP_STENCIL_OP_BITS-1:0];
                 end
                 `CSR_ROP_BLEND_RGB: begin 
-                    reg_csrs.blend_src_rgb <= rop_csr_if.write_data[15:0][`ROP_BLEND_FACTOR_BITS-1:0];
-                    reg_csrs.blend_dst_rgb <= rop_csr_if.write_data[31:16][`ROP_BLEND_FACTOR_BITS-1:0];
+                    csrs.blend_src_rgb <= csr_wr_data[15:0][`ROP_BLEND_FACTOR_BITS-1:0];
+                    csrs.blend_dst_rgb <= csr_wr_data[31:16][`ROP_BLEND_FACTOR_BITS-1:0];
                 end
                 `CSR_ROP_BLEND_APLHA: begin 
-                    reg_csrs.blend_src_a <= rop_csr_if.write_data[15:0][`ROP_BLEND_FACTOR_BITS-1:0];
-                    reg_csrs.blend_dst_a <= rop_csr_if.write_data[31:16][`ROP_BLEND_FACTOR_BITS-1:0];
+                    csrs.blend_src_a <= csr_wr_data[15:0][`ROP_BLEND_FACTOR_BITS-1:0];
+                    csrs.blend_dst_a <= csr_wr_data[31:16][`ROP_BLEND_FACTOR_BITS-1:0];
                 end
                 `CSR_ROP_BLEND_CONST: begin 
-                    reg_csrs.blend_const <= rop_csr_if.write_data[31:0];
+                    csrs.blend_const <= csr_wr_data[31:0];
                 end
                 `CSR_ROP_LOGIC_OP: begin
-                    reg_csrs.logic_op <= rop_csr_if.write_data[`ROP_LOGIC_OP_BITS-1:0];
+                    csrs.logic_op <= csr_wr_data[`ROP_LOGIC_OP_BITS-1:0];
                 end
             endcase
         end
     end
 
     // CSRs read
-    assign rop_csrs = reg_csrs;
+    assign rop_csr_if.data = csrs;
 
 `ifdef DBG_TRACE_ROP
     always @(posedge clk) begin
-        if (rop_csr_if.write_enable) begin
-            dpi_trace("%d: core%0d-rop-csr: state=", $time, CORE_ID);
-            trace_rop_state(rop_csr_if.write_addr);
-            dpi_trace(", data=0x%0h (#%0d)\n", rop_csr_if.write_data, rop_csr_if.write_uuid);
+        if (csr_wr_valid) begin
+            dpi_trace("%d: rop-csr: state=", $time);
+            trace_rop_state(csr_wr_addr);
+            dpi_trace(", data=0x%0h\n", csr_wr_data);
         end
     end
 `endif

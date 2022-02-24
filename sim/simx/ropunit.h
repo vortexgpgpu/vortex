@@ -17,6 +17,36 @@ public:
         {}
     };
 
+    class CSRS {
+    private:
+        std::array<uint32_t, ROP_STATE_COUNT> states_;
+
+    public:
+        CSRS() {
+            this->clear();
+        }
+    
+        void clear() {
+            for (auto& state : states_) {
+                state = 0;
+            }
+        }
+
+        uint32_t at(uint32_t state) const {
+            return states_.at(state);
+        }
+
+        uint32_t read(uint32_t addr) {
+            uint32_t state = CSR_ROP_STATE(addr);
+            return states_.at(state);
+        }
+    
+        void write(uint32_t addr, uint32_t value) {
+            uint32_t state = CSR_ROP_STATE(addr);
+            states_.at(state) = value;
+        }
+    };
+
     SimPort<pipeline_trace_t*> Input;
 
     RopUnit(const SimContext& ctx, const char* name, Core* core);    

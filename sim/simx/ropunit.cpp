@@ -6,7 +6,6 @@ using namespace vortex;
 
 class RopUnit::Impl {
 private:
-    std::array<uint32_t, NUM_ROP_STATES> states_;
     RopUnit* simobject_;    
     Core* core_;
     PerfStats perf_stats_;
@@ -22,19 +21,7 @@ public:
     ~Impl() {}
 
     void clear() {
-        for (auto& state : states_) {
-            state = 0;
-        }
-    }
-
-    uint32_t csr_read(uint32_t addr) {
-        uint32_t state = CSR_ROP_STATE(addr);
-        return states_.at(state);
-    }
-  
-    void csr_write(uint32_t addr, uint32_t value) {
-        uint32_t state = CSR_ROP_STATE(addr);
-        states_.at(state) = value;
+      //--
     }
 
     void write(uint32_t x, uint32_t y, uint32_t z, uint32_t color) {
@@ -67,14 +54,6 @@ RopUnit::~RopUnit() {
 
 void RopUnit::reset() {
   impl_->clear();
-}
-
-uint32_t RopUnit::csr_read(uint32_t addr) {
-  return impl_->csr_read(addr);
-}
-
-void RopUnit::csr_write(uint32_t addr, uint32_t value) {
-  impl_->csr_write(addr, value);
 }
 
 void RopUnit::write(uint32_t x, uint32_t y, uint32_t z, uint32_t color) {

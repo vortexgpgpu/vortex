@@ -16,9 +16,9 @@ module VX_gpu_unit #(
 `ifdef PERF_ENABLE
     VX_perf_tex_if.master   perf_tex_if,
 `endif
+    VX_tex_csr_if.slave     tex_csr_if,
     VX_dcache_req_if.master tcache_req_if,
     VX_dcache_rsp_if.slave  tcache_rsp_if,
-    VX_tex_csr_if.slave     tex_csr_if,
 `endif
 
     // Outputs
@@ -105,156 +105,6 @@ module VX_gpu_unit #(
     // pack warp ctl result
     assign warp_ctl_data = {tmc, wspawn, split, barrier};
 
-`ifdef EXT_RASTER_ENABLE
-
-`IGNORE_WARNINGS_BEGIN
-
-    VX_raster_req_if    raster_req_if();
-    VX_raster_rsp_if    raster_rsp_if();    
-    VX_raster_csr_if    raster_csr_if();
-    VX_perf_raster_if   perf_raster_if();
-    VX_dcache_req_if    rcache_req_if();
-    VX_dcache_rsp_if    rcache_rsp_if();
-
-    wire is_raster = (gpu_req_if.op_type == `INST_GPU_RASTER);
-
-    assign raster_req_if.valid  = gpu_req_if.valid && is_tex;
-    assign raster_req_if.uuid   = gpu_req_if.uuid;
-    assign raster_req_if.wid    = gpu_req_if.wid;
-    assign raster_req_if.tmask  = gpu_req_if.tmask;
-    assign raster_req_if.PC     = gpu_req_if.PC;
-    assign raster_req_if.rd     = gpu_req_if.rd;
-    assign raster_req_if.wb     = gpu_req_if.wb;
-    `UNUSED_VAR (raster_req_if.ready) // TODO: remove
-
-    // TODO: remove
-    `UNUSED_VAR (raster_rsp_if.valid)
-    `UNUSED_VAR (raster_rsp_if.uuid)
-    `UNUSED_VAR (raster_rsp_if.wid)
-    `UNUSED_VAR (raster_rsp_if.tmask)
-    `UNUSED_VAR (raster_rsp_if.PC)
-    `UNUSED_VAR (raster_rsp_if.rd)
-    `UNUSED_VAR (raster_rsp_if.wb)
-    `UNUSED_VAR (raster_rsp_if.rem)
-    assign raster_rsp_if.ready = 0;
-
-    // TODO: remove
-    assign raster_csr_if.write_enable = 0;
-    assign raster_csr_if.write_addr = 0;
-    assign raster_csr_if.write_data = 0;
-    assign raster_csr_if.write_uuid = 0;
-
-    // TODO: remove
-    `UNUSED_VAR (perf_raster_if.mem_reads);
-    `UNUSED_VAR (perf_raster_if.mem_latency);
-
-    // TODO: remove
-    `UNUSED_VAR (rcache_req_if.valid);
-    `UNUSED_VAR (rcache_req_if.rw);
-    `UNUSED_VAR (rcache_req_if.byteen);
-    `UNUSED_VAR (rcache_req_if.addr);
-    `UNUSED_VAR (rcache_req_if.data);     
-    `UNUSED_VAR (rcache_req_if.tag);
-    assign rcache_req_if.ready = 0;
-
-    // TODO: remove
-    assign rcache_rsp_if.valid = 0;
-    assign rcache_rsp_if.tmask = 0;
-    assign rcache_rsp_if.data = 0;     
-    assign rcache_rsp_if.tag = 0;
-    `UNUSED_VAR (rcache_rsp_if.ready);
-
-    VX_raster_unit #(
-        .CORE_ID    (CORE_ID),
-        .NUM_SLICES (1)
-    ) raster_unit (
-        .clk           (clk),
-        .reset         (reset),
-    `ifdef PERF_ENABLE
-        .perf_raster_if(perf_raster_if),
-    `endif
-        .raster_req_if (raster_req_if),
-        .raster_csr_if (raster_csr_if),
-        .raster_rsp_if (raster_rsp_if),
-        .cache_req_if  (rcache_req_if),
-        .cache_rsp_if  (rcache_rsp_if)
-    );
-
-`IGNORE_WARNINGS_END
-
-`endif
-
-`ifdef EXT_ROP_ENABLE
-
-`IGNORE_WARNINGS_BEGIN
-
-    VX_rop_req_if       rop_req_if(); 
-    VX_rop_csr_if       rop_csr_if();
-    VX_perf_rop_if      perf_rop_if(); 
-    VX_dcache_req_if    ccache_req_if();
-    VX_dcache_rsp_if    ccache_rsp_if();
-
-    wire is_rop = (gpu_req_if.op_type == `INST_GPU_ROP);
-
-    assign rop_req_if.valid  = gpu_req_if.valid && is_rop;
-    assign rop_req_if.uuid   = gpu_req_if.uuid;
-    assign rop_req_if.wid    = gpu_req_if.wid;
-    assign rop_req_if.tmask  = gpu_req_if.tmask;
-    assign rop_req_if.PC     = gpu_req_if.PC;
-    assign rop_req_if.rd     = gpu_req_if.rd;
-    assign rop_req_if.wb     = gpu_req_if.wb;
-    assign rop_req_if.x      = 0; // TODO: remove
-    assign rop_req_if.y      = 0; // TODO: remove
-    assign rop_req_if.z      = 0; // TODO: remove
-    assign rop_req_if.color  = 0; // TODO: remove
-    `UNUSED_VAR (rop_req_if.ready) // TODO: remove
-
-    // TODO: remove
-    assign rop_csr_if.write_enable = 0;
-    assign rop_csr_if.write_addr = 0;
-    assign rop_csr_if.write_data = 0;
-    assign rop_csr_if.write_uuid = 0;
-
-    // TODO: remove
-    `UNUSED_VAR (perf_rop_if.mem_reads);
-    `UNUSED_VAR (perf_rop_if.mem_writes);
-    `UNUSED_VAR (perf_rop_if.mem_latency);
-
-    // TODO: remove
-    `UNUSED_VAR (ccache_req_if.valid);
-    `UNUSED_VAR (ccache_req_if.rw);
-    `UNUSED_VAR (ccache_req_if.byteen);
-    `UNUSED_VAR (ccache_req_if.addr);
-    `UNUSED_VAR (ccache_req_if.data);     
-    `UNUSED_VAR (ccache_req_if.tag);
-    assign ccache_req_if.ready = 0;
-
-    // TODO: remove
-    assign ccache_rsp_if.valid = 0;
-    assign ccache_rsp_if.tmask = 0;
-    assign ccache_rsp_if.data = 0;     
-    assign ccache_rsp_if.tag = 0;
-    `UNUSED_VAR (ccache_rsp_if.ready);
-
-    VX_rop_unit #(
-        .CORE_ID    (CORE_ID),
-        .NUM_SLICES (`NUM_THREADS)
-    ) rop_unit (
-        .clk           (clk),
-        .reset         (reset),
-    `ifdef PERF_ENABLE
-        .perf_rop_if   (perf_rop_if),
-    `endif
-        .rop_req_if    (rop_req_if),
-        .rop_csr_if    (rop_csr_if),
-        .cache_req_if  (ccache_req_if),
-        .cache_rsp_if  (ccache_rsp_if)
-    );
-
-`IGNORE_WARNINGS_END
-
-`endif
-
 `ifdef EXT_TEX_ENABLE
 
     `UNUSED_VAR (gpu_req_if.op_mod)
@@ -279,7 +129,7 @@ module VX_gpu_unit #(
 
     VX_tex_unit #(
         .CORE_ID    (CORE_ID),
-        .NUM_STAGES (`NUM_TEX_STAGES)
+        .NUM_STAGES (`TEX_STAGE_COUNT)
     ) tex_unit (
         .clk           (clk),
         .reset         (reset),
@@ -287,8 +137,8 @@ module VX_gpu_unit #(
         .perf_tex_if   (perf_tex_if),
     `endif
         .tex_req_if    (tex_req_if),
-        .tex_csr_if    (tex_csr_if),
         .tex_rsp_if    (tex_rsp_if),
+        .tex_csr_if    (tex_csr_if),
         .cache_req_if  (tcache_req_if),
         .cache_rsp_if  (tcache_rsp_if)
     );

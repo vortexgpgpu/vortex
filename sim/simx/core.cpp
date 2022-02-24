@@ -13,17 +13,17 @@
 
 using namespace vortex;
 
-Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
+Core::Core(const SimContext& ctx, uint32_t id, const ArchDef &arch, const GlobalCSRS &global_csrs)
     : SimObject(ctx, "Core")
     , MemRspPort(this)
     , MemReqPort(this)
     , id_(id)
     , arch_(arch)
+    , global_csrs_(global_csrs)
     , decoder_(arch)
     , mmu_(0, arch.wsize(), true)
     , warps_(arch.num_warps())
     , barriers_(arch.num_barriers(), 0)
-    , csrs_(arch.num_csrs(), 0)
     , fcsrs_(arch.num_warps(), 0)
     , ibuffers_(arch.num_warps(), IBUF_SIZE)
     , scoreboard_(arch_) 
@@ -151,10 +151,6 @@ void Core::reset() {
   
   for ( auto& barrier : barriers_) {
     barrier.reset();
-  }
-  
-  for (auto& csr : csrs_) {
-    csr = 0;
   }
   
   for (auto& fcsr : fcsrs_) {
@@ -650,26 +646,7 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
     if ((addr >= CSR_MPM_BASE && addr < (CSR_MPM_BASE + 32))
      || (addr >= CSR_MPM_BASE_H && addr < (CSR_MPM_BASE_H + 32))) {
       // user-defined MPM CSRs
-    } else
-  #ifdef EXT_TEX_ENABLE
-    if (addr >= CSR_TEX_STATE_BEGIN
-     && addr < CSR_TEX_STATE_END) {
-      return tex_unit_->csr_read(addr);
-    } else
-  #endif
-  #ifdef EXT_RASTER_ENABLE
-    if (addr >= CSR_RASTER_STATE_BEGIN
-     && addr < CSR_RASTER_STATE_END) {
-      return raster_unit_->csr_read(addr);
-    } else
-  #endif
-  #ifdef EXT_ROP_ENABLE
-    if (addr >= CSR_ROP_STATE_BEGIN
-     && addr < CSR_ROP_STATE_END) {
-      return rop_unit_->csr_read(addr);
-    } else
-  #endif
-    {
+    } else {
       std::cout << std::hex << "Error: invalid CSR read addr=0x" << addr << std::endl;
       std::abort();
     }
@@ -678,33 +655,29 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
 }
 
 void Core::set_csr(uint32_t addr, uint32_t value, uint32_t /*tid*/, uint32_t wid) {
-  if (addr == CSR_FFLAGS) {
+  switch (addr) {
+  case CSR_FFLAGS:
     fcsrs_.at(wid) = (fcsrs_.at(wid) & ~0x1F) | (value & 0x1F);
-  } else if (addr == CSR_FRM) {
+    break;
+  case CSR_FRM:
     fcsrs_.at(wid) = (fcsrs_.at(wid) & ~0xE0) | (value << 5);
-  } else if (addr == CSR_FCSR) {
+    break;
+  case CSR_FCSR:
     fcsrs_.at(wid) = value & 0xff;
-  } else 
-#ifdef EXT_TEX_ENABLE
-  if (addr >= CSR_TEX_STATE_BEGIN
-   && addr < CSR_TEX_STATE_END) {
-      tex_unit_->csr_write(addr, value);
-  } else
-#endif
-#ifdef EXT_RASTER_ENABLE
-  if (addr >= CSR_RASTER_STATE_BEGIN
-   && addr < CSR_RASTER_STATE_END) { 
-    raster_unit_->csr_write(addr, value);
-  } else
-#endif
-#ifdef EXT_ROP_ENABLE
-  if (addr >= CSR_ROP_STATE_BEGIN
-   && addr < CSR_ROP_STATE_END) {
-    rop_unit_->csr_write(addr, value);
-  } else
-#endif
-  {
-    csrs_.at(addr) = value;
+    break;
+  case CSR_SATP:
+  case CSR_MSTATUS:
+  case CSR_MEDELEG:
+  case CSR_MIDELEG:
+  case CSR_MIE:
+  case CSR_MTVEC:
+  case CSR_MEPC:
+  case CSR_PMPCFG0:
+  case CSR_PMPADDR0:
+    break;
+  default:
+    std::cout << std::hex << "Error: invalid CSR write addr=0x" << addr << ", value=0x" << value << std::endl;
+    std::abort();
   }
 }
 

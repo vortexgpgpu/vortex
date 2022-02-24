@@ -18,13 +18,11 @@ private:
       pipeline_trace_t* trace;
       uint32_t count;
     };
-    std::array<std::array<uint32_t, NUM_TEX_STATES>, NUM_TEX_STAGES> states_;
     TexUnit* simobject_;
     Config config_;
     Core* core_;
     CacheSim::Ptr tcache_;
     uint32_t num_threads_;
-    uint32_t csr_tex_unit_;
     HashTable<pending_req_t> pending_reqs_;
     PerfStats perf_stats_;
 
@@ -43,34 +41,11 @@ public:
     ~Impl() {}
 
     void clear() {
-      csr_tex_unit_ = 0;
-      for (auto& states : states_) {
-        for (auto& state : states) {
-          state = 0;
-        }
-      }
       pending_reqs_.clear();
     }
 
-    uint32_t csr_read(uint32_t addr) {
-      if (addr == CSR_TEX_STAGE) {
-        return csr_tex_unit_;
-      }
-      uint32_t state = CSR_TEX_STATE(addr);
-      return states_.at(csr_tex_unit_).at(state);
-    }
-  
-    void csr_write(uint32_t addr, uint32_t value) {
-      if (addr == CSR_TEX_STAGE) {
-        csr_tex_unit_ = value;
-        return;
-      }
-      uint32_t state = CSR_TEX_STATE(addr);  
-      states_.at(csr_tex_unit_).at(state) = value;
-    }
-
     uint32_t read(uint32_t stage, int32_t u, int32_t v, int32_t lod, TraceData* trace_data) {
-      auto& states = states_.at(stage);
+      auto& states = core_->global_csrs_.tex_csrs.at(stage);
       auto xu = Fixed<TEX_FXD_FRAC>::make(u);
       auto xv = Fixed<TEX_FXD_FRAC>::make(v);
       auto base_addr  = states.at(TEX_STATE_ADDR) + states.at(TEX_STATE_MIPOFF(lod));
@@ -224,14 +199,6 @@ TexUnit::~TexUnit() {
 
 void TexUnit::reset() {
   impl_->clear();
-}
-
-uint32_t TexUnit::csr_read(uint32_t addr) {
-  return impl_->csr_read(addr);
-}
-
-void TexUnit::csr_write(uint32_t addr, uint32_t value) {
-  impl_->csr_write(addr, value);
 }
 
 uint32_t TexUnit::read(uint32_t stage, int32_t u, int32_t v, int32_t lod, TraceData* trace_data) {

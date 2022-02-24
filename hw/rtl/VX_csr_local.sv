@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_csr_data #(
+module VX_csr_local #(
     parameter CORE_ID = 0
 ) (
     input wire clk,
@@ -20,9 +20,6 @@ module VX_csr_data #(
 `ifdef EXT_F_ENABLE
     VX_fpu_to_csr_if.slave          fpu_to_csr_if,
 `endif
-`ifdef EXT_TEX_ENABLE
-    VX_tex_csr_if.master            tex_csr_if,
-`endif 
 
     input wire                      read_enable,
     input wire [`UUID_BITS-1:0]     read_uuid,
@@ -40,15 +37,15 @@ module VX_csr_data #(
 );
     import fpu_types::*;
     
-    reg [`CSR_WIDTH-1:0] csr_satp;
-    reg [`CSR_WIDTH-1:0] csr_mstatus;
-    reg [`CSR_WIDTH-1:0] csr_medeleg;
-    reg [`CSR_WIDTH-1:0] csr_mideleg;
-    reg [`CSR_WIDTH-1:0] csr_mie;
-    reg [`CSR_WIDTH-1:0] csr_mtvec;
-    reg [`CSR_WIDTH-1:0] csr_mepc;    
-    reg [`CSR_WIDTH-1:0] csr_pmpcfg [0:0];
-    reg [`CSR_WIDTH-1:0] csr_pmpaddr [0:0];
+    reg [31:0] csr_satp;
+    reg [31:0] csr_mstatus;
+    reg [31:0] csr_medeleg;
+    reg [31:0] csr_mideleg;
+    reg [31:0] csr_mie;
+    reg [31:0] csr_mtvec;
+    reg [31:0] csr_mepc;    
+    reg [31:0] csr_pmpcfg [0:0];
+    reg [31:0] csr_pmpaddr [0:0];
     reg [`NUM_WARPS-1:0][`INST_FRM_BITS+`FFLAGS_BITS-1:0] fcsr;
 
     always @(posedge clk) begin
@@ -67,36 +64,18 @@ module VX_csr_data #(
                     `CSR_FFLAGS:   fcsr[write_wid][`FFLAGS_BITS-1:0] <= write_data[`FFLAGS_BITS-1:0];
                     `CSR_FRM:      fcsr[write_wid][`INST_FRM_BITS+`FFLAGS_BITS-1:`FFLAGS_BITS] <= write_data[`INST_FRM_BITS-1:0];
                     `CSR_FCSR:     fcsr[write_wid] <= write_data[`FFLAGS_BITS+`INST_FRM_BITS-1:0];
-                    `CSR_SATP:     csr_satp       <= write_data[`CSR_WIDTH-1:0];
-                    `CSR_MSTATUS:  csr_mstatus    <= write_data[`CSR_WIDTH-1:0];
-                    `CSR_MEDELEG:  csr_medeleg    <= write_data[`CSR_WIDTH-1:0];
-                    `CSR_MIDELEG:  csr_mideleg    <= write_data[`CSR_WIDTH-1:0];
-                    `CSR_MIE:      csr_mie        <= write_data[`CSR_WIDTH-1:0];
-                    `CSR_MTVEC:    csr_mtvec      <= write_data[`CSR_WIDTH-1:0];
-                    `CSR_MEPC:     csr_mepc       <= write_data[`CSR_WIDTH-1:0];
-                    `CSR_PMPCFG0:  csr_pmpcfg[0]  <= write_data[`CSR_WIDTH-1:0];
-                    `CSR_PMPADDR0: csr_pmpaddr[0] <= write_data[`CSR_WIDTH-1:0];
+                    `CSR_SATP:     csr_satp       <= write_data;
+                    `CSR_MSTATUS:  csr_mstatus    <= write_data;
+                    `CSR_MEDELEG:  csr_medeleg    <= write_data;
+                    `CSR_MIDELEG:  csr_mideleg    <= write_data;
+                    `CSR_MIE:      csr_mie        <= write_data;
+                    `CSR_MTVEC:    csr_mtvec      <= write_data;
+                    `CSR_MEPC:     csr_mepc       <= write_data;
+                    `CSR_PMPCFG0:  csr_pmpcfg[0]  <= write_data;
+                    `CSR_PMPADDR0: csr_pmpaddr[0] <= write_data;
                     default: begin
-                        write_addr_valid = 0;             
-                    `ifdef EXT_TEX_ENABLE
-                        if (write_addr >= `CSR_TEX_STATE_BEGIN
-                         && write_addr < `CSR_TEX_STATE_END) begin
-                            write_addr_valid = 1;
-                        end
-                    `endif
-                    `ifdef EXT_RASTER_ENABLE    
-                        if (write_addr >= `CSR_RASTER_STATE_BEGIN
-                         && write_addr < `CSR_RASTER_STATE_END) begin
-                            write_addr_valid = 1;
-                        end
-                    `endif
-                    `ifdef EXT_TEX_ENABLE    
-                        if (write_addr >= `CSR_RASTER_STATE_BEGIN
-                         && write_addr < `CSR_RASTER_STATE_END) begin
-                            write_addr_valid = 1;
-                        end
-                    `endif
-                        `ASSERT(write_addr_valid, ("%t: *** invalid CSR write address: %0h (#%0d)", $time, write_addr, write_uuid));
+                        write_addr_valid = 0;
+                        `ASSERT(write_addr_valid, ("%t: *** invalid CSR write address: 0x%0h (#%0d)", $time, write_addr, write_uuid));
                     end                    
                 endcase
             end
@@ -105,14 +84,6 @@ module VX_csr_data #(
 
     `UNUSED_VAR (write_tmask)
     `UNUSED_VAR (write_data)
-
-    // TEX CSRs
-`ifdef EXT_TEX_ENABLE    
-    assign tex_csr_if.write_enable = write_enable;
-    assign tex_csr_if.write_addr   = write_addr;
-    assign tex_csr_if.write_data   = write_data;
-    assign tex_csr_if.write_uuid   = write_uuid;
-`endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -235,36 +206,17 @@ module VX_csr_data #(
             `CSR_MVENDORID : read_data_r = `VENDOR_ID;
             `CSR_MARCHID   : read_data_r = `ARCHITECTURE_ID;
             `CSR_MIMPID    : read_data_r = `IMPLEMENTATION_ID;
-
             default: begin
+                read_addr_valid_r = 0;
                 if ((read_addr >= `CSR_MPM_BASE && read_addr < (`CSR_MPM_BASE + 32))
                  || (read_addr >= `CSR_MPM_BASE_H && read_addr < (`CSR_MPM_BASE_H + 32))) begin
                      read_addr_valid_r = 1;
-                end else     
-            `ifdef EXT_TEX_ENABLE    
-                if (read_addr >= `CSR_TEX_STATE_BEGIN
-                 && read_addr < `CSR_TEX_STATE_END) begin
-                    read_addr_valid_r = 1;
-                end else
-            `endif
-            `ifdef EXT_RASTER_ENABLE
-                if (read_addr >= `CSR_RASTER_STATE_BEGIN
-                 && read_addr < `CSR_RASTER_STATE_END) begin
-                    read_addr_valid_r = 1;
-                end else
-            `endif
-            `ifdef EXT_ROP_ENABLE
-                if (read_addr >= `CSR_ROP_STATE_BEGIN
-                 && read_addr < `CSR_ROP_STATE_END) begin
-                    read_addr_valid_r = 1;
-                end else
-            `endif
-                    read_addr_valid_r = 0;
+                end                    
             end
         endcase
     end 
 
-    `RUNTIME_ASSERT(~read_enable || read_addr_valid_r, ("%t: *** invalid CSR read address: %0h (#%0d)", $time, read_addr, read_uuid))
+    `RUNTIME_ASSERT(~read_enable || read_addr_valid_r, ("%t: *** invalid CSR read address: 0x%0h (#%0d)", $time, read_addr, read_uuid))
 
     assign read_data = read_data_r;
 

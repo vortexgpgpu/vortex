@@ -18,7 +18,7 @@
 
 `define NRI_BITS        `LOG2UP(`NUM_IREGS)
 
-`define NTEX_BITS       `LOG2UP(`NUM_TEX_STAGES)
+`define NTEX_BITS       `LOG2UP(`TEX_STAGE_COUNT)
 
 `ifdef EXT_F_ENABLE
 `define NUM_REGS        (2 * `NUM_IREGS)
@@ -29,8 +29,6 @@
 `define NR_BITS         `LOG2UP(`NUM_REGS)
 
 `define CSR_ADDR_BITS   12
-
-`define CSR_WIDTH       12
 
 `define PERF_CTR_BITS   44
 
@@ -367,7 +365,8 @@
 `define VX_MEM_DATA_WIDTH       `L3_MEM_DATA_WIDTH
 `define VX_MEM_TAG_WIDTH        `L3_MEM_TAG_WIDTH
 `define VX_CORE_TAG_WIDTH       `L3_CORE_TAG_WIDTH 
-`define VX_CSR_ID_WIDTH         `LOG2UP(`NUM_CLUSTERS * `NUM_CORES)
+`define VX_CSR_ADDR_WIDTH       `CSR_ADDR_BITS
+`define VX_CSR_DATA_WIDTH       32
 
 `define TO_FULL_ADDR(x)         {x, (32-$bits(x))'(0)}
 

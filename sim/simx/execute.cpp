@@ -833,7 +833,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         case 2: {
           // RV32I: CSRRS
           rddata[t].i = csr_value;
-          core_->set_csr(csr_addr, csr_value | rsdata[t][0].i, t, id_);
+          if (rsdata[t][0].i) {
+            core_->set_csr(csr_addr, csr_value | rsdata[t][0].i, t, id_);
+          }
           trace->used_iregs.set(rsrc0);
           rd_write = true;
           break;
@@ -841,7 +843,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         case 3: {
           // RV32I: CSRRC
           rddata[t].i = csr_value;
-          core_->set_csr(csr_addr, csr_value & ~rsdata[t][0].i, t, id_);
+          if (rsdata[t][0].i) {
+            core_->set_csr(csr_addr, csr_value & ~rsdata[t][0].i, t, id_);
+          }
           trace->used_iregs.set(rsrc0);
           rd_write = true;
           break;
@@ -856,14 +860,18 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         case 6: {
           // RV32I: CSRRSI;
           rddata[t].i = csr_value;
-          core_->set_csr(csr_addr, csr_value | rsrc0, t, id_);
+          if (rsrc0) {
+            core_->set_csr(csr_addr, csr_value | rsrc0, t, id_);
+          }
           rd_write = true;
           break;
         }
         case 7: {
           // RV32I: CSRRCI
           rddata[t].i = csr_value;
-          core_->set_csr(csr_addr, csr_value & ~rsrc0, t, id_);
+          if (rsrc0) {
+            core_->set_csr(csr_addr, csr_value & ~rsrc0, t, id_);
+          }
           rd_write = true;
           break;
         }
