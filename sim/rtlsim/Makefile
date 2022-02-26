@@ -3,7 +3,7 @@ RTL_DIR = ../../hw/rtl
 DPI_DIR = ../../hw/dpi
 THIRD_PARTY_DIR = ../../third_party
 
-CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
+CXXFLAGS += -std=C++11 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I../../../hw -I../../common
 CXXFLAGS += -I../$(THIRD_PARTY_DIR)/softfloat/source/include
@@ -48,7 +48,7 @@ else
 endif
 
 VL_FLAGS = --exe --cc $(TOP) --top-module $(TOP)
-VL_FLAGS += -O2 --language 1800-2009 --assert -Wall -Wpedantic
+VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic
 VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
 VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
