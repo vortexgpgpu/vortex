@@ -49,6 +49,7 @@ public:
     };
 
     SimPort<pipeline_trace_t*> Input;
+    SimPort<pipeline_trace_t*> Output;
 
     RopUnit(const SimContext& ctx, const char* name, Core* core);    
     ~RopUnit();

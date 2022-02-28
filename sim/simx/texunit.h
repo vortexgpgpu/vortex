@@ -16,7 +16,7 @@ public:
         uint32_t sampler_latency;
     };
 
-    struct TraceData : public vortex::TraceData {
+    struct TraceData : public ITraceData {
         std::vector<std::vector<mem_addr_size_t>> mem_addrs;
     };
 

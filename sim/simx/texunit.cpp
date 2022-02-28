@@ -142,7 +142,7 @@ public:
     }
 
     // send memory request
-    auto trace_data = dynamic_cast<TexUnit::TraceData*>(trace->data);
+    auto trace_data = dynamic_cast<TraceData*>(trace->data);
 
     uint32_t addr_count = 0;
     for (auto& mem_addr : trace_data->mem_addrs) {
