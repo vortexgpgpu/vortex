@@ -36,15 +36,15 @@ task trace_tex_state (
     input [`CSR_ADDR_BITS-1:0] state
 );
     case (state)
-        `CSR_TEX_ADDR:   dpi_trace("ADDR");     
-        `CSR_TEX_WIDTH:  dpi_trace("WIDTH");
-        `CSR_TEX_HEIGHT: dpi_trace("HEIGHT");
-        `CSR_TEX_FORMAT: dpi_trace("FORMAT");
-        `CSR_TEX_FILTER: dpi_trace("FILTER");
-        `CSR_TEX_WRAPU:  dpi_trace("WRAPU");
-        `CSR_TEX_WRAPV:  dpi_trace("WRAPV");
+        `CSR_TEX_ADDR:      dpi_trace("ADDR");     
+        `CSR_TEX_LOGWIDTH:  dpi_trace("LOGWIDTH");
+        `CSR_TEX_LOGHEIGHT: dpi_trace("LOGHEIGHT");
+        `CSR_TEX_FORMAT:    dpi_trace("FORMAT");
+        `CSR_TEX_FILTER:    dpi_trace("FILTER");
+        `CSR_TEX_WRAPU:     dpi_trace("WRAPU");
+        `CSR_TEX_WRAPV:     dpi_trace("WRAPV");
         //`CSR_TEX_MIPOFF:   
-        default:         dpi_trace("MIPOFF");
+        default:            dpi_trace("MIPOFF");
     endcase  
 endtask
 

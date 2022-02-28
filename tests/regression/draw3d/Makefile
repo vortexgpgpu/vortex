@@ -11,14 +11,14 @@ VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++
 VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
 VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
-VX_CFLAGS += -std=c++11 -march=rv32imf -mabi=ilp32f -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
+VX_CFLAGS += -std=c++14 -march=rv32imf -mabi=ilp32f -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
 VX_CFLAGS += -DENABLE_SW -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw -I$(VORTEX_RT_PATH)/../sim/common -I$(VORTEX_RT_PATH)/../third_party
 
 VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections $(VORTEX_RT_PATH)/libvortexrt.a
 
-VX_SRCS = kernel.c
+VX_SRCS = kernel.cpp
 
-CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
+CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
 
 CXXFLAGS += -I$(VORTEX_DRV_PATH)/include -I$(VORTEX_RT_PATH)/../hw -I$(VORTEX_RT_PATH)/../sim/common -I$(VORTEX_RT_PATH)/../third_party
 

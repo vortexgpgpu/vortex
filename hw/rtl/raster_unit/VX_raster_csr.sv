@@ -22,11 +22,11 @@ module VX_raster_csr (
             csrs <= 0;
         end else if (csr_wr_valid) begin
             case (csr_wr_addr)
-                `CSR_RASTER_PIDX_ADDR: begin 
-                    csrs.pidx_addr <= csr_wr_data[31:0];
+                `CSR_RASTER_TBUF_ADDR: begin 
+                    csrs.tbuf_addr <= csr_wr_data[31:0];
                 end
-                `CSR_RASTER_PIDX_SIZE: begin 
-                    csrs.pidx_size <= csr_wr_data[31:0];
+                `CSR_RASTER_TILE_COUNT: begin 
+                    csrs.tile_count <= csr_wr_data[31:0];
                 end
                 `CSR_RASTER_PBUF_ADDR: begin 
                     csrs.pbuf_addr <= csr_wr_data[31:0];
@@ -34,13 +34,8 @@ module VX_raster_csr (
                 `CSR_RASTER_PBUF_STRIDE: begin 
                     csrs.pbuf_stride <= csr_wr_data[31:0];
                 end
-                `CSR_RASTER_TILE_XY: begin 
-                    csrs.tile_left <= csr_wr_data[15:0];
-                    csrs.tile_top  <= csr_wr_data[31:16];
-                end
-                `CSR_RASTER_TILE_WH: begin 
-                    csrs.tile_width  <= csr_wr_data[15:0];
-                    csrs.tile_height <= csr_wr_data[31:16];
+                `CSR_RASTER_TILE_LOGSIZE: begin 
+                    csrs.tile_logsize <= csr_wr_data[15:0];
                 end
             endcase
         end

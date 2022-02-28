@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-#include <cocogfx/include/fixed.h>
+#include <cocogfx/include/fixed.hpp>
 #include <bitmanip.h>
 
 using namespace cocogfx;
@@ -23,11 +23,11 @@ enum class TexFormat {
 };
 
 template <uint32_t F, typename T = int32_t>
-T Clamp(Fixed<F,T> fx, WrapMode mode) {
+T Clamp(TFixed<F,T> fx, WrapMode mode) {
   switch (mode) {
-  case WrapMode::Clamp:  return (fx.data() < 0) ? 0 : ((fx.data() > Fixed<F,T>::MASK) ? Fixed<F,T>::MASK : fx.data());
-  case WrapMode::Repeat: return (fx.data() & Fixed<F,T>::MASK);
-  case WrapMode::Mirror: return (bit_get(fx.data(), Fixed<F,T>::FRAC) ? ~fx.data() : fx.data());
+  case WrapMode::Clamp:  return (fx.data() < 0) ? 0 : ((fx.data() > TFixed<F,T>::MASK) ? TFixed<F,T>::MASK : fx.data());
+  case WrapMode::Repeat: return (fx.data() & TFixed<F,T>::MASK);
+  case WrapMode::Mirror: return (bit_get(fx.data(), TFixed<F,T>::FRAC) ? ~fx.data() : fx.data());
   default: 
     std::abort();
     return 0;    
@@ -121,8 +121,8 @@ inline uint32_t Lerp8888(uint32_t a, uint32_t b, uint32_t f) {
 }
 
 template <uint32_t F, typename T = int32_t>
-void TexAddressLinear(Fixed<F,T> fu, 
-                      Fixed<F,T> fv, 
+void TexAddressLinear(TFixed<F,T> fu, 
+                      TFixed<F,T> fv, 
                       uint32_t log_width,
                       uint32_t log_height,
                       WrapMode wrapu,
@@ -134,16 +134,16 @@ void TexAddressLinear(Fixed<F,T> fu,
                       uint32_t* alpha,
                       uint32_t* beta
 ) {
-  auto delta_x = Fixed<F,T>::make(Fixed<F,T>::HALF >> log_width);
-  auto delta_y = Fixed<F,T>::make(Fixed<F,T>::HALF >> log_height);
+  auto delta_x = TFixed<F,T>::make(TFixed<F,T>::HALF >> log_width);
+  auto delta_y = TFixed<F,T>::make(TFixed<F,T>::HALF >> log_height);
 
   uint32_t u0 = Clamp(fu - delta_x, wrapu);    
   uint32_t u1 = Clamp(fu + delta_x, wrapu);
   uint32_t v0 = Clamp(fv - delta_y, wrapv);     
   uint32_t v1 = Clamp(fv + delta_y, wrapv);
 
-  uint32_t shift_u = (Fixed<F,T>::FRAC - log_width);
-  uint32_t shift_v = (Fixed<F,T>::FRAC - log_height);
+  uint32_t shift_u = (TFixed<F,T>::FRAC - log_width);
+  uint32_t shift_v = (TFixed<F,T>::FRAC - log_height);
 
   uint32_t x0s = (u0 << 8) >> shift_u;
   uint32_t y0s = (v0 << 8) >> shift_v;
@@ -165,8 +165,8 @@ void TexAddressLinear(Fixed<F,T> fu,
 }
 
 template <uint32_t F, typename T = int32_t>
-void TexAddressPoint(Fixed<F,T> fu, 
-                     Fixed<F,T> fv, 
+void TexAddressPoint(TFixed<F,T> fu, 
+                     TFixed<F,T> fv, 
                      uint32_t log_width,
                      uint32_t log_height,
                      WrapMode wrapu,
@@ -176,8 +176,8 @@ void TexAddressPoint(Fixed<F,T> fu,
   uint32_t u = Clamp(fu, wrapu);
   uint32_t v = Clamp(fv, wrapv);
   
-  uint32_t x = u >> (Fixed<F,T>::FRAC - log_width);
-  uint32_t y = v >> (Fixed<F,T>::FRAC - log_height);
+  uint32_t x = u >> (TFixed<F,T>::FRAC - log_width);
+  uint32_t y = v >> (TFixed<F,T>::FRAC - log_height);
   
   *addr = x + (y << log_width);
 

@@ -3,8 +3,8 @@
 #include <string>
 #include <iostream>
 #include <iomanip>
-#include <cocogfx/include/tga.h>
-#include <cocogfx/include/png.h>
+#include <cocogfx/include/tga.hpp>
+#include <cocogfx/include/png.hpp>
 
 using namespace cocogfx;
 

@@ -3,7 +3,7 @@ RTL_DIR = ../../hw/rtl
 DPI_DIR = ../../hw/dpi
 THIRD_PARTY_DIR = ../../third_party
 
-CXXFLAGS += -std=C++11 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
+CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I../../../hw -I../../common
 CXXFLAGS += -I../$(THIRD_PARTY_DIR)/softfloat/source/include

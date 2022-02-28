@@ -46,11 +46,11 @@ public:
 
     uint32_t read(uint32_t stage, int32_t u, int32_t v, int32_t lod, TraceData* trace_data) {
       auto& states = core_->global_csrs_.tex_csrs.at(stage);
-      auto xu = Fixed<TEX_FXD_FRAC>::make(u);
-      auto xv = Fixed<TEX_FXD_FRAC>::make(v);
+      auto xu = TFixed<TEX_FXD_FRAC>::make(u);
+      auto xv = TFixed<TEX_FXD_FRAC>::make(v);
       auto base_addr  = states.at(TEX_STATE_ADDR) + states.at(TEX_STATE_MIPOFF(lod));
-      auto log_width  = std::max<int32_t>(states.at(TEX_STATE_WIDTH) - lod, 0);
-      auto log_height = std::max<int32_t>(states.at(TEX_STATE_HEIGHT) - lod, 0);
+      auto log_width  = std::max<int32_t>(states.at(TEX_STATE_LOGWIDTH) - lod, 0);
+      auto log_height = std::max<int32_t>(states.at(TEX_STATE_LOGHEIGHT) - lod, 0);
       auto format     = (TexFormat)states.at(TEX_STATE_FORMAT);    
       auto filter     = (FilterMode)states.at(TEX_STATE_FILTER);    
       auto wrapu      = (WrapMode)states.at(TEX_STATE_WRAPU);

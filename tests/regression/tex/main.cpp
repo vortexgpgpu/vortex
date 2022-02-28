@@ -105,12 +105,10 @@ void cleanup() {
   }
 }
 
-int run_test(const kernel_arg_t& kernel_arg, 
-             uint32_t buf_size, 
-             uint32_t width, 
-             uint32_t height,
-             uint32_t bpp) {
-  (void)bpp;
+int render(const kernel_arg_t& kernel_arg, 
+           uint32_t buf_size,
+           uint32_t width,
+           uint32_t height) {
   auto time_start = std::chrono::high_resolution_clock::now();
 
   // start device
@@ -137,7 +135,7 @@ int run_test(const kernel_arg_t& kernel_arg,
 
   // save output image
   std::cout << "save output image" << std::endl;  
-  //dump_image(dst_pixels, width, height, bpp);  
+  //dump_image(dst_pixels, width, height, 4);  
   RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, dst_pixels, width, height));
 
   return 0;
@@ -227,10 +225,9 @@ int main(int argc, char *argv[]) {
     kernel_arg.wrapu      = wrap;
     kernel_arg.wrapv      = wrap;    
     
+    kernel_arg.src_addr      = src_addr;
     kernel_arg.src_logwidth  = src_logwidth;
     kernel_arg.src_logheight = src_logheight;
-    kernel_arg.src_addr      = src_addr;
-
     for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
       assert(i < TEX_LOD_MAX);
       kernel_arg.mip_offs[i] = mip_offsets.at(i); 
@@ -269,8 +266,8 @@ int main(int argc, char *argv[]) {
 
 	// configure texture units
 	vx_csr_write(device, CSR_TEX_STAGE,  0);
-	vx_csr_write(device, CSR_TEX_WIDTH,  src_logwidth);	
-	vx_csr_write(device, CSR_TEX_HEIGHT, src_logheight);
+	vx_csr_write(device, CSR_TEX_LOGWIDTH,  src_logwidth);	
+	vx_csr_write(device, CSR_TEX_LOGHEIGHT, src_logheight);
 	vx_csr_write(device, CSR_TEX_FORMAT, format);
 	vx_csr_write(device, CSR_TEX_WRAPU,  wrap);
 	vx_csr_write(device, CSR_TEX_WRAPV,  wrap);
@@ -281,9 +278,9 @@ int main(int argc, char *argv[]) {
 		vx_csr_write(device, CSR_TEX_MIPOFF(i), mip_offsets.at(i));
 	};
 
-  // run tests
-  std::cout << "run tests" << std::endl;
-  RT_CHECK(run_test(kernel_arg, dst_bufsize, dst_width, dst_height, dst_bpp));
+  // render
+  std::cout << "render" << std::endl;
+  RT_CHECK(render(kernel_arg, dst_bufsize, dst_width, dst_height));
 
   // cleanup
   std::cout << "cleanup" << std::endl;  

@@ -60,10 +60,10 @@ module VX_tex_csr #(
                 `CSR_TEX_FILTER: begin 
                     tex_filter[csr_tex_stage] <= csr_wr_data[`TEX_FILTER_BITS-1:0];
                 end
-                `CSR_TEX_WIDTH: begin 
+                `CSR_TEX_LOGWIDTH: begin 
                     tex_logdims[csr_tex_stage][0] <= csr_wr_data[`TEX_LOD_BITS-1:0];
                 end
-                `CSR_TEX_HEIGHT: begin 
+                `CSR_TEX_LOGHEIGHT: begin 
                     tex_logdims[csr_tex_stage][1] <= csr_wr_data[`TEX_LOD_BITS-1:0];
                 end
                 default: begin
