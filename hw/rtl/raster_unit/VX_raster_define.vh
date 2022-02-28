@@ -13,7 +13,7 @@ task trace_raster_state (
         `CSR_RASTER_TILE_COUNT:  dpi_trace("TILE_COUNT");
         `CSR_RASTER_PBUF_ADDR:   dpi_trace("PBUF_ADDR");
         `CSR_RASTER_PBUF_STRIDE: dpi_trace("PBUF_STRIDE");
-        `CSR_RASTER_TILE_LOGSIZE:dpi_trace("TILE_LOGSIZE);
+        `CSR_RASTER_TILE_LOGSIZE:dpi_trace("TILE_LOGSIZE");
         default:                 dpi_trace("??");
     endcase  
 endtask
