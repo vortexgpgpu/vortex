@@ -26,8 +26,8 @@ using namespace cocogfx;
 const char* kernel_file = "kernel.bin";
 const char* input_file  = "palette64.png";
 const char* output_file = "output.png";
-int wrap    = 0;
-int filter  = 0;    // 0-> point, 1->bilinear, 2->trilinear
+int wrap    = TEX_WRAP_CLAMP;
+int filter  = TEX_FILTER_POINT;
 float scale = 1.0f;
 int format  = 0;
 bool use_sw = false;
@@ -265,14 +265,12 @@ int main(int argc, char *argv[]) {
   }
 
 	// configure texture units
-	vx_csr_write(device, CSR_TEX_STAGE,  0);
-	vx_csr_write(device, CSR_TEX_LOGWIDTH,  src_logwidth);	
-	vx_csr_write(device, CSR_TEX_LOGHEIGHT, src_logheight);
-	vx_csr_write(device, CSR_TEX_FORMAT, format);
-	vx_csr_write(device, CSR_TEX_WRAPU,  wrap);
-	vx_csr_write(device, CSR_TEX_WRAPV,  wrap);
-	vx_csr_write(device, CSR_TEX_FILTER, (filter ? 1 : 0));
-	vx_csr_write(device, CSR_TEX_ADDR,   src_addr);
+	vx_csr_write(device, CSR_TEX_STAGE,   0);
+	vx_csr_write(device, CSR_TEX_LOGDIM,  (src_logheight << 16) | src_logwidth);	
+	vx_csr_write(device, CSR_TEX_FORMAT,  format);
+	vx_csr_write(device, CSR_TEX_WRAP,    (wrap << 16) | wrap);
+	vx_csr_write(device, CSR_TEX_FILTER,  (filter ? TEX_FILTER_BILINEAR : TEX_FILTER_POINT));
+	vx_csr_write(device, CSR_TEX_ADDR,    src_addr);
 	for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
     assert(i < TEX_LOD_MAX);
 		vx_csr_write(device, CSR_TEX_MIPOFF(i), mip_offsets.at(i));

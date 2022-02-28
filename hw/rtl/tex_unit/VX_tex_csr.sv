@@ -51,20 +51,16 @@ module VX_tex_csr #(
                 `CSR_TEX_FORMAT: begin 
                     tex_format[csr_tex_stage] <= csr_wr_data[`TEX_FORMAT_BITS-1:0];
                 end
-                `CSR_TEX_WRAPU: begin
-                    tex_wraps[csr_tex_stage][0] <= csr_wr_data[`TEX_WRAP_BITS-1:0];
-                end
-                `CSR_TEX_WRAPV: begin
-                    tex_wraps[csr_tex_stage][1] <= csr_wr_data[`TEX_WRAP_BITS-1:0];
-                end
                 `CSR_TEX_FILTER: begin 
                     tex_filter[csr_tex_stage] <= csr_wr_data[`TEX_FILTER_BITS-1:0];
                 end
-                `CSR_TEX_LOGWIDTH: begin 
-                    tex_logdims[csr_tex_stage][0] <= csr_wr_data[`TEX_LOD_BITS-1:0];
+                `CSR_TEX_WRAP: begin
+                    tex_wraps[csr_tex_stage][0] <= csr_wr_data[15:0][`TEX_WRAP_BITS-1:0];
+                    tex_wraps[csr_tex_stage][1] <= csr_wr_data[31:16][`TEX_WRAP_BITS-1:0];
                 end
-                `CSR_TEX_LOGHEIGHT: begin 
-                    tex_logdims[csr_tex_stage][1] <= csr_wr_data[`TEX_LOD_BITS-1:0];
+                `CSR_TEX_LOGDIM: begin 
+                    tex_logdims[csr_tex_stage][0] <= csr_wr_data[15:0][`TEX_LOD_BITS-1:0];
+                    tex_logdims[csr_tex_stage][1] <= csr_wr_data[31:16][`TEX_LOD_BITS-1:0];
                 end
                 default: begin
                     for (integer j = 0; j <= `TEX_LOD_MAX; ++j) begin

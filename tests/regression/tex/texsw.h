@@ -38,9 +38,9 @@ inline uint32_t vx_tex_sw(kernel_arg_t* state,
     uint8_t* base_addr  = ((uint8_t*)state->src_addr) + state->mip_offs[lod];
 	uint32_t log_width  = std::max<int32_t>(state->src_logwidth - lod, 0);
 	uint32_t log_height = std::max<int32_t>(state->src_logheight - lod, 0);
-	auto format = (TexFormat)state->format;
-	auto wrapu  = (WrapMode)state->wrapu;
-    auto wrapv  = (WrapMode)state->wrapv;
+	auto format = state->format;
+	auto wrapu  = state->wrapu;
+    auto wrapv  = state->wrapv;
 	auto filter = state->filter;
     auto stride = Stride(format);    
 

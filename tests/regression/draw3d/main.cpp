@@ -264,11 +264,9 @@ int main(int argc, char *argv[]) {
 
   // configure texture units
 	vx_csr_write(device, CSR_TEX_STAGE,  0);
-	vx_csr_write(device, CSR_TEX_LOGWIDTH,  src_logwidth);	
-	vx_csr_write(device, CSR_TEX_LOGHEIGHT, src_logheight);
+	vx_csr_write(device, CSR_TEX_LOGDIM, (src_logheight << 16) | src_logwidth);	
 	vx_csr_write(device, CSR_TEX_FORMAT, src_format);
-	vx_csr_write(device, CSR_TEX_WRAPU,  src_wrap);
-	vx_csr_write(device, CSR_TEX_WRAPV,  src_wrap);
+	vx_csr_write(device, CSR_TEX_WRAP,   (src_wrap << 16) | src_wrap);
 	vx_csr_write(device, CSR_TEX_FILTER, src_filter);
 	vx_csr_write(device, CSR_TEX_ADDR,   srcbuf_addr);
 	for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
@@ -284,6 +282,9 @@ int main(int argc, char *argv[]) {
   vx_csr_write(device, CSR_RASTER_TILE_LOGSIZE, logTileSize);
 
   // configure rop units
+  vx_csr_write(device, CSR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16) | ROP_BLEND_MODE_ADD);
+  vx_csr_write(device, CSR_ROP_BLEND_SRC,  (ROP_BLEND_FUNC_ONE << 16) | ROP_BLEND_FUNC_SRC_A);
+  vx_csr_write(device, CSR_ROP_BLEND_DST,  (ROP_BLEND_FUNC_ZERO << 16) | ROP_BLEND_FUNC_ONE_MINUS_SRC_A);
 
   // run tests
   std::cout << "render" << std::endl;

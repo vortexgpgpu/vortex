@@ -3,8 +3,6 @@
 
 `include "VX_define.vh"
 
-// TODO
-
 task trace_raster_state (
     input [`CSR_ADDR_BITS-1:0] state
 );

@@ -2,6 +2,7 @@
 
 #include <simobject.h>
 #include <vector>
+#include <VX_types.h>
 #include "pipeline.h"
 
 namespace vortex {

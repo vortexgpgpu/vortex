@@ -2,6 +2,7 @@
 #define _COMMON_H_
 
 #include <VX_config.h>
+#include <VX_types.h>
 #include <stdint.h>
 
 #define KERNEL_ARG_DEV_MEM_ADDR 0x7ffff000

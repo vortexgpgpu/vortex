@@ -3,48 +3,33 @@
 #include <cstdint>
 #include <cocogfx/include/fixed.hpp>
 #include <bitmanip.h>
+#include <VX_types.h>
 
 using namespace cocogfx;
 
-enum class WrapMode {
-  Clamp,
-  Repeat,
-  Mirror,
-};
-
-enum class TexFormat {
-  A8R8G8B8,
-  R5G6B5,
-  A1R5G5B5,
-  A4R4G4B4,
-  A8L8,
-  L8,  
-  A8,  
-};
-
 template <uint32_t F, typename T = int32_t>
-T Clamp(TFixed<F,T> fx, WrapMode mode) {
+T Clamp(TFixed<F,T> fx, int mode) {
   switch (mode) {
-  case WrapMode::Clamp:  return (fx.data() < 0) ? 0 : ((fx.data() > TFixed<F,T>::MASK) ? TFixed<F,T>::MASK : fx.data());
-  case WrapMode::Repeat: return (fx.data() & TFixed<F,T>::MASK);
-  case WrapMode::Mirror: return (bit_get(fx.data(), TFixed<F,T>::FRAC) ? ~fx.data() : fx.data());
+  case TEX_WRAP_CLAMP:  return (fx.data() < 0) ? 0 : ((fx.data() > TFixed<F,T>::MASK) ? TFixed<F,T>::MASK : fx.data());
+  case TEX_WRAP_REPEAT: return (fx.data() & TFixed<F,T>::MASK);
+  case TEX_WRAP_MIRROR: return (bit_get(fx.data(), TFixed<F,T>::FRAC) ? ~fx.data() : fx.data());
   default: 
     std::abort();
     return 0;    
   }
 }
 
-inline uint32_t Stride(TexFormat format) {
+inline uint32_t Stride(int format) {
   switch (format) {
-  case TexFormat::A8R8G8B8: 
+  case TEX_FORMAT_A8R8G8B8: 
     return 4;
-  case TexFormat::R5G6B5:
-  case TexFormat::A1R5G5B5:
-  case TexFormat::A4R4G4B4:
-  case TexFormat::A8L8:
+  case TEX_FORMAT_R5G6B5:
+  case TEX_FORMAT_A1R5G5B5:
+  case TEX_FORMAT_A4R4G4B4:
+  case TEX_FORMAT_A8L8:
     return 2;
-  case TexFormat::L8:
-  case TexFormat::A8:
+  case TEX_FORMAT_L8:
+  case TEX_FORMAT_A8:
     return 1;
   default: 
     std::abort();
@@ -52,49 +37,49 @@ inline uint32_t Stride(TexFormat format) {
   }
 }
 
-inline void Unpack8888(TexFormat format, 
+inline void Unpack8888(int format, 
                        uint32_t texel, 
                        uint32_t* lo, 
                        uint32_t* hi) {
   uint32_t r, g, b, a;
   switch (format) {
-  case TexFormat::A8R8G8B8:    
+  case TEX_FORMAT_A8R8G8B8:    
     r = (texel >> 16) & 0xff;
     g = (texel >> 8) & 0xff;
     b = texel & 0xff;
     a = texel >> 24;
     break;
-  case TexFormat::R5G6B5: 
+  case TEX_FORMAT_R5G6B5: 
     r = ((texel >> 11) << 3) | (texel >> 13);    
     g = ((texel >> 3) & 0xfc) | ((texel >> 9) & 0x3);
     b = ((texel & 0x1f) << 3) | ((texel & 0x1c) >> 2);    
     a = 0xff;
     break;
-  case TexFormat::A1R5G5B5:         
+  case TEX_FORMAT_A1R5G5B5:         
     r = ((texel >> 7) & 0xf8) | ((texel << 1) >> 13);
     g = ((texel >> 2) & 0xf8) | ((texel >> 7) & 7);
     b = ((texel & 0x1f) << 3) | ((texel & 0x1c) >> 2);
     a = 0xff * (texel >> 15);
     break;
-  case TexFormat::A4R4G4B4:   
+  case TEX_FORMAT_A4R4G4B4:   
     r = ((texel >> 4) & 0xf0) | ((texel >> 8) & 0x0f);
     g = ((texel & 0xf0) >> 0) | ((texel & 0xf0) >> 4);
     b = ((texel & 0x0f) << 4) | ((texel & 0x0f) >> 0);
     a = ((texel >> 8) & 0xf0) | (texel >> 12);
     break;
-  case TexFormat::A8L8:
+  case TEX_FORMAT_A8L8:
     r = texel & 0xff;
     g = r;
     b = r;
     a = texel >> 8;
     break;
-  case TexFormat::L8:
+  case TEX_FORMAT_L8:
     r = texel & 0xff;
     g = r;
     b = r;
     a = 0xff;
     break;
-  case TexFormat::A8:
+  case TEX_FORMAT_A8:
     r = 0xff;
     g = 0xff;
     b = 0xff;
@@ -125,8 +110,8 @@ void TexAddressLinear(TFixed<F,T> fu,
                       TFixed<F,T> fv, 
                       uint32_t log_width,
                       uint32_t log_height,
-                      WrapMode wrapu,
-                      WrapMode wrapv,
+                      int wrapu,
+                      int wrapv,
                       uint32_t* addr00,
                       uint32_t* addr01,
                       uint32_t* addr10,
@@ -169,8 +154,8 @@ void TexAddressPoint(TFixed<F,T> fu,
                      TFixed<F,T> fv, 
                      uint32_t log_width,
                      uint32_t log_height,
-                     WrapMode wrapu,
-                     WrapMode wrapv,
+                     int wrapu,
+                     int wrapv,
                      uint32_t* addr
 ) {
   uint32_t u = Clamp(fu, wrapu);
@@ -185,7 +170,7 @@ void TexAddressPoint(TFixed<F,T> fu,
 }
 
 inline uint32_t TexFilterLinear(
-  TexFormat format,
+  int format,
   uint32_t texel00,  
   uint32_t texel01,
   uint32_t texel10,
@@ -223,7 +208,7 @@ inline uint32_t TexFilterLinear(
   return color;
 }
 
-inline uint32_t TexFilterPoint(TexFormat format, uint32_t texel) {
+inline uint32_t TexFilterPoint(int format, uint32_t texel) {
   uint32_t color;
   {
     uint32_t cl, ch;
