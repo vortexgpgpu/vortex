@@ -1,4 +1,4 @@
-#include <VX_config.h>
+#include <VX_types.h>
 
 .type vx_serial, @function
 .global vx_serial
