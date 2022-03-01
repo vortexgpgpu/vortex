@@ -28,6 +28,7 @@ using namespace cocogfx;
 const char* kernel_file = "kernel.bin";
 const char* input_file  = "soccer.png";
 const char* output_file = "output.png";
+const char* reference_file  = nullptr;
 ePixelFormat src_format = FORMAT_A8R8G8B8;
 int src_wrap = 0;
 int src_filter = 0; // 0-> point, 1->bilinear
@@ -46,18 +47,21 @@ kernel_arg_t kernel_arg;
 
 static void show_usage() {
    std::cout << "Vortex 3D Rendering Test." << std::endl;
-   std::cout << "Usage: [-i texture] [-o output] [-w width] [-h height] [-t tilesize]" << std::endl;
+   std::cout << "Usage: [-i texture] [-o output] [-r reference] [-w width] [-h height] [-t tilesize]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "k:o:w:h:?")) != -1) {
+  while ((c = getopt(argc, argv, "i:o:r:w:h:t:?")) != -1) {
     switch (c) {
     case 'i':
       input_file = optarg;
       break;
     case 'o':
       output_file = optarg;
+      break;
+    case 'r':
+      reference_file = optarg;
       break;
     case 'w':
       dst_width = std::atoi(optarg);
@@ -292,9 +296,17 @@ int main(int argc, char *argv[]) {
 
   // cleanup
   std::cout << "cleanup" << std::endl;  
-  cleanup();
+  cleanup();  
 
-  std::cout << "PASSED!" << std::endl;
+  if (reference_file) {
+    auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8);
+    if (0 == errors) {
+      std::cout << "PASSED!" << std::endl;
+    } else {
+      std::cout << "FAILED!" << std::endl;
+      return errors;
+    }
+  } 
 
   return 0;
 }

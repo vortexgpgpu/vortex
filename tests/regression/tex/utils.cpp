@@ -89,7 +89,7 @@ int SaveImage(const char *filename,
               const std::vector<uint8_t> &pixels, 
               uint32_t width,
               uint32_t height) {
-  uint32_t bpp = GetInfo(format).BytePerPixel;
+  auto bpp = GetInfo(format).BytePerPixel;
   auto ext = getFileExt(filename);
   if (iequals(ext, "tga")) {
     return SaveTGA(filename, pixels, width, height, bpp);
@@ -119,4 +119,56 @@ void dump_image(const std::vector<uint8_t>& pixels, uint32_t width, uint32_t hei
     }
     std::cout << std::endl;
   }
+}
+
+int CompareImages(const char* filename1, 
+                  const char* filename2, 
+                  cocogfx::ePixelFormat format) {
+  int ret;
+  std::vector<uint8_t> image1_bits;  
+  uint32_t image1_width; 
+  uint32_t image1_height;
+
+  std::vector<uint8_t> image2_bits;  
+  uint32_t image2_width; 
+  uint32_t image2_height;
+    
+  ret = LoadImage(filename1, format, image1_bits, &image1_width, &image1_height);  
+  if (ret)
+    return ret;
+
+  ret = LoadImage(filename2, format, image2_bits, &image2_width, &image2_height);  
+  if (ret)
+    return ret;
+
+  if (image1_bits.size() != image2_bits.size())
+    return -1;
+
+  if (image1_width != image2_width)
+    return -1;
+
+  if (image1_height != image2_height)
+    return -1;
+
+  int errors = 0;
+  {
+    auto convert_from = GetConvertFrom(format, true);
+    auto bpp = GetInfo(format).BytePerPixel;
+    auto pixels1 = image1_bits.data();
+    auto pixels2 = image2_bits.data();
+    for (uint32_t y = 0; y < image1_height; ++y) {
+      for (uint32_t x = 0; x < image1_width; ++x) {
+        auto color1 = convert_from(pixels1);
+        auto color2 = convert_from(pixels2);
+        if (color1 != color2) {
+          printf("Error: pixel mismatch at (%d, %d), actual=0x%x, expected=0x%x\n", x, y, color1.value, color2.value);
+          ++errors;
+        }
+        pixels1 += bpp;
+        pixels2 += bpp;    
+      }
+    }
+  }
+
+  return errors;
 }

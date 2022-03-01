@@ -224,10 +224,10 @@
 `define ICACHE_LINE_SIZE        `L1_BLOCK_SIZE
 
 // TAG sharing enable       
-`define ICACHE_CORE_TAG_ID_BITS `NW_BITS
+`define ICACHE_TAG_ID_BITS      `NW_BITS
 
 // Core request tag bits
-`define ICACHE_CORE_TAG_WIDTH   (`UUID_BITS + `ICACHE_CORE_TAG_ID_BITS)
+`define ICACHE_TAG_WIDTH        (`UUID_BITS + `ICACHE_TAG_ID_BITS)
 
 // Memory request data bits
 `define ICACHE_MEM_DATA_WIDTH   (`ICACHE_LINE_SIZE * 8)
@@ -251,14 +251,7 @@
 
 // Core request tag bits
 `define LSUQ_ADDR_BITS          `LOG2UP(`LSUQ_SIZE)
-`ifdef EXT_TEX_ENABLE
-`define LSU_TAG_ID_BITS         `MAX(`LSUQ_ADDR_BITS, 2)
-`else 
-`define LSU_TAG_ID_BITS         `LSUQ_ADDR_BITS
-`endif
-`define DCACHE_CORE_TAG_ID_BITS (`LSU_TAG_ID_BITS + `CACHE_ADDR_TYPE_BITS)
-`define DCACHE_TAG_ID_BITS      (`DCACHE_CORE_TAG_ID_BITS - `SM_ENABLE) 
-`define DCACHE_CORE_TAG_WIDTH   (`UUID_BITS + `DCACHE_CORE_TAG_ID_BITS)
+`define DCACHE_TAG_ID_BITS      (`LSUQ_ADDR_BITS + `CACHE_ADDR_TYPE_BITS)
 `define DCACHE_TAG_WIDTH        (`UUID_BITS + `DCACHE_TAG_ID_BITS)
  
 // Memory request data bits
@@ -275,7 +268,7 @@
 
 // Memory request tag bits
 `define _DMEM_ADDR_RATIO_W      $clog2(`DCACHE_LINE_SIZE / `DCACHE_WORD_SIZE)
-`define _DNC_MEM_TAG_WIDTH      ($clog2(`DCACHE_NUM_REQS) + `_DMEM_ADDR_RATIO_W + `DCACHE_CORE_TAG_WIDTH)
+`define _DNC_MEM_TAG_WIDTH      ($clog2(`DCACHE_NUM_REQS) + `_DMEM_ADDR_RATIO_W + `DCACHE_TAG_WIDTH)
 `define DCACHE_MEM_TAG_WIDTH    `MAX((`CLOG2(`DCACHE_NUM_BANKS) + `CLOG2(`DCACHE_MSHR_SIZE) + `NC_TAG_BIT), `_DNC_MEM_TAG_WIDTH)
 
 // Merged D-cache/I-cache memory tag
@@ -307,7 +300,7 @@
 `define L2_CACHE_LINE_SIZE       ((`L2_ENABLE) ? `MEM_BLOCK_SIZE : `L2_WORD_SIZE)
 
 // Input request tag bits
-`define L2_CORE_TAG_WIDTH        (`DCACHE_CORE_TAG_WIDTH + `CLOG2(`NUM_CORES))
+`define L2_CORE_TAG_WIDTH        (`DCACHE_TAG_WIDTH + `CLOG2(`NUM_CORES))
 
 // Memory request data bits
 `define L2_MEM_DATA_WIDTH        (`L2_CACHE_LINE_SIZE * 8)

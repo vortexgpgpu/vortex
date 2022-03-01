@@ -1,4 +1,5 @@
 `include "VX_define.vh"
+`include "VX_tex_define.vh"
 
 module VX_core #( 
     parameter CORE_ID = 0
@@ -64,36 +65,36 @@ module VX_core #(
     VX_dcache_req_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
         .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`DCACHE_CORE_TAG_WIDTH)
+        .TAG_WIDTH (`DCACHE_TAG_WIDTH)
     ) dcache_req_if();
 
     VX_dcache_rsp_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
         .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`DCACHE_CORE_TAG_WIDTH)
+        .TAG_WIDTH (`DCACHE_TAG_WIDTH)
     ) dcache_rsp_if();
     
     VX_icache_req_if #(
         .WORD_SIZE (`ICACHE_WORD_SIZE), 
-        .TAG_WIDTH (`ICACHE_CORE_TAG_WIDTH)
+        .TAG_WIDTH (`ICACHE_TAG_WIDTH)
     ) icache_req_if();
 
     VX_icache_rsp_if #(
         .WORD_SIZE (`ICACHE_WORD_SIZE), 
-        .TAG_WIDTH (`ICACHE_CORE_TAG_WIDTH)
+        .TAG_WIDTH (`ICACHE_TAG_WIDTH)
     ) icache_rsp_if();
 
 `ifdef EXT_TEX_ENABLE
     VX_dcache_req_if #(
-        .NUM_REQS  (`NUM_THREADS), 
-        .WORD_SIZE (4), 
-        .TAG_WIDTH (`DCACHE_TAG_WIDTH)
+        .NUM_REQS  (`TCACHE_NUM_REQS), 
+        .WORD_SIZE (`TCACHE_WORD_SIZE), 
+        .TAG_WIDTH (`TCACHE_TAG_WIDTH)
     ) tcache_req_if();
 
     VX_dcache_rsp_if #(
-        .NUM_REQS  (`NUM_THREADS), 
-        .WORD_SIZE (4), 
-        .TAG_WIDTH (`DCACHE_TAG_WIDTH)
+        .NUM_REQS  (`TCACHE_NUM_REQS), 
+        .WORD_SIZE (`TCACHE_WORD_SIZE), 
+        .TAG_WIDTH (`TCACHE_TAG_WIDTH)
     ) tcache_rsp_if();
 `endif
     

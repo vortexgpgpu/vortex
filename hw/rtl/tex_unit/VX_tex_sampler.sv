@@ -122,9 +122,10 @@ module VX_tex_sampler #(
 `ifdef DBG_TRACE_TEX
     wire [`NW_BITS-1:0] req_wid, rsp_wid;
     wire [31:0]         req_PC, rsp_PC;
+    wire [`UUID_BITS-1:0] req_uuid, rsp_uuid;
 
-    assign {req_wid, req_PC} = req_info[`NW_BITS+32-1:0];
-    assign {rsp_wid, rsp_PC} = rsp_info[`NW_BITS+32-1:0];
+    assign {req_wid, req_PC, req_uuid} = req_info[`NW_BITS+32+`UUID_BITS-1:0];
+    assign {rsp_wid, rsp_PC, rsp_uuid} = rsp_info[`NW_BITS+32+`UUID_BITS-1:0];
 
     always @(posedge clk) begin        
         if (req_valid && req_ready) begin
@@ -135,13 +136,13 @@ module VX_tex_sampler #(
             `TRACE_ARRAY1D(req_blends[0], NUM_REQS);
             dpi_trace(", v0=");
             `TRACE_ARRAY1D(req_blends[1], NUM_REQS);
-            dpi_trace("\n");
+            dpi_trace(" (#%0d\n", req_uuid);
         end
         if (rsp_valid && rsp_ready) begin
             dpi_trace("%d: core%0d-tex-sampler-rsp: wid=%0d, PC=0x%0h, tmask=%b, data=", 
                     $time, CORE_ID, rsp_wid, rsp_PC, rsp_tmask);
             `TRACE_ARRAY1D(rsp_data, NUM_REQS);
-            dpi_trace("\n");
+            dpi_trace(" (#%0d\n", rsp_uuid);
         end        
     end
 `endif  

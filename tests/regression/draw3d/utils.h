@@ -28,3 +28,7 @@ void dump_image(const std::vector<uint8_t>& pixels,
                 uint32_t width, 
                 uint32_t height, 
                 uint32_t bpp);
+
+int CompareImages(const char* filename1, 
+                  const char* filename2, 
+                  cocogfx::ePixelFormat format);

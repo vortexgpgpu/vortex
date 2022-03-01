@@ -26,6 +26,7 @@ using namespace cocogfx;
 const char* kernel_file = "kernel.bin";
 const char* input_file  = "palette64.png";
 const char* output_file = "output.png";
+const char* reference_file  = nullptr;
 int wrap    = TEX_WRAP_CLAMP;
 int filter  = TEX_FILTER_POINT;
 float scale = 1.0f;
@@ -39,18 +40,21 @@ kernel_arg_t kernel_arg;
 
 static void show_usage() {
    std::cout << "Vortex Texture Test." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-s scale] [-w wrap] [-f format] [-g filter] [-z no_hw] [-h: help]" << std::endl;
+   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-r reference] [-s scale] [-w wrap] [-f format] [-g filter] [-z no_hw] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "zi:o:k:w:f:g:s:h?")) != -1) {
+  while ((c = getopt(argc, argv, "zi:o:k:w:f:g:s:r:h?")) != -1) {
     switch (c) {
     case 'i':
       input_file = optarg;
       break;
     case 'o':
       output_file = optarg;
+      break;
+    case 'r':
+      reference_file = optarg;
       break;
     case 's':
       scale = std::stof(optarg, NULL);
@@ -284,7 +288,15 @@ int main(int argc, char *argv[]) {
   std::cout << "cleanup" << std::endl;  
   cleanup();
 
-  std::cout << "PASSED!" << std::endl;
+  if (reference_file) {
+    auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8);
+    if (0 == errors) {
+      std::cout << "PASSED!" << std::endl;
+    } else {
+      std::cout << "FAILED!" << std::endl;
+      return errors;
+    }
+  } 
 
   return 0;
 }

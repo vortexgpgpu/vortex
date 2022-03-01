@@ -3,6 +3,11 @@
 
 `include "VX_define.vh"
 
+`define TCACHE_TAG_ID_BITS  2
+`define TCACHE_TAG_WIDTH    (`UUID_BITS + `TCACHE_TAG_ID_BITS)
+`define TCACHE_NUM_REQS     `NUM_THREADS
+`define TCACHE_WORD_SIZE    4
+
 `define TEX_FXD_INT         (`TEX_FXD_BITS - `TEX_FXD_FRAC)
 `define TEX_FXD_ONE         (2 ** `TEX_FXD_FRAC)
 `define TEX_FXD_HALF        (`TEX_FXD_ONE >> 1)

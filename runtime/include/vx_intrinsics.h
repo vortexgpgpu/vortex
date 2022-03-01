@@ -1,6 +1,7 @@
 #ifndef VX_INTRINSICS_H
 #define VX_INTRINSICS_H
 
+#include <VX_config.h>
 #include <VX_types.h>
 
 #ifdef __cplusplus
