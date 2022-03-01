@@ -228,7 +228,7 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
         *value = STARTUP_ADDR;
         break;    
     case VX_CAPS_ISA_FLAGS:
-        *value = (((uint64_t)MISA_EXT)<<32) | ((log2floor(XLEN)-4) << 30) | MISA_STD;
+        *value = ((uint64_t(MISA_EXT))<<32) | ((log2floor(XLEN)-4) << 30) | MISA_STD;
         break;
     default:
         std::cout << "invalid caps id: " << caps_id << std::endl;

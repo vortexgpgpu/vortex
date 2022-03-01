@@ -45,6 +45,7 @@ public:
 RopUnit::RopUnit(const SimContext& ctx, const char* name, Core* core) 
   : SimObject<RopUnit>(ctx, name)
   , Input(this)
+  , Output(this)
   , impl_(new Impl(this, core)) 
 {}
 

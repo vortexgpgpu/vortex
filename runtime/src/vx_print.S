@@ -1,4 +1,5 @@
 #include <VX_config.h>
+#include <VX_types.h>
 
 .type vx_putchar, @function
 .global vx_putchar

@@ -1,4 +1,5 @@
 #include <VX_config.h>
+#include <VX_types.h>
 
 .section .init, "ax"
 .global _start

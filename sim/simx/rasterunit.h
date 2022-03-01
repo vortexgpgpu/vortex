@@ -1,6 +1,7 @@
 #pragma once
 
 #include <simobject.h>
+#include <VX_types.h>
 #include "pipeline.h"
 
 namespace vortex {

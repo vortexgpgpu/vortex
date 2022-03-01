@@ -1,5 +1,16 @@
 `include "VX_define.vh"
 
+`define DCACHE_SMEM_TAG_WIDTH   `DCACHE_TAG_WIDTH-`SM_ENABLE
+`define DCACHE_SMEM_TAG_ID_BITS `DCACHE_TAG_ID_BITS-`SM_ENABLE
+
+`ifdef EXT_TEX_ENABLE
+`define DCACHE_TEX_TAG_ID_BITS  `MAX(`DCACHE_SMEM_TAG_ID_BITS, `TCACHE_TAG_ID_BITS)
+`define DCACHE_TEX_TAG_WIDTH    (`UUID_BITS + `DCACHE_TEX_TAG_ID_BITS)  
+`else 
+`define DCACHE_TEX_TAG_WIDTH    `DCACHE_SMEM_TAG_WIDTH
+`define DCACHE_TEX_TAG_ID_BITS  `DCACHE_SMEM_TAG_ID_BITS
+`endif
+
 module VX_mem_unit # (
     parameter CORE_ID = 0
 ) (
@@ -60,26 +71,26 @@ module VX_mem_unit # (
     VX_dcache_req_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
         .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`DCACHE_TAG_WIDTH)
-    ) dcache_req_tmp_if();
+        .TAG_WIDTH (`DCACHE_SMEM_TAG_WIDTH)
+    ) dcache_smem_req_if();
 
     VX_dcache_rsp_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
         .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`DCACHE_TAG_WIDTH)
-    ) dcache_rsp_tmp_if();
+        .TAG_WIDTH (`DCACHE_SMEM_TAG_WIDTH)
+    ) dcache_smem_rsp_if();
 
     VX_dcache_req_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
         .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`DCACHE_TAG_WIDTH+`EXT_TEX_ENABLED)
-    ) dcache_req_tmp2_if();
+        .TAG_WIDTH (`DCACHE_TEX_TAG_WIDTH+`EXT_TEX_ENABLED)
+    ) dcache_tex_req_if();
 
     VX_dcache_rsp_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
         .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`DCACHE_TAG_WIDTH+`EXT_TEX_ENABLED)
-    ) dcache_rsp_tmp2_if();
+        .TAG_WIDTH (`DCACHE_TEX_TAG_WIDTH+`EXT_TEX_ENABLED)
+    ) dcache_tex_rsp_if();
 
     `RESET_RELAY (icache_reset);
     `RESET_RELAY (dcache_reset);
@@ -98,8 +109,8 @@ module VX_mem_unit # (
         .MRSQ_SIZE          (`ICACHE_MRSQ_SIZE),
         .MREQ_SIZE          (`ICACHE_MREQ_SIZE),
         .WRITE_ENABLE       (0),
-        .CORE_TAG_WIDTH     (`ICACHE_CORE_TAG_WIDTH),
-        .CORE_TAG_ID_BITS   (`ICACHE_CORE_TAG_ID_BITS),
+        .CORE_TAG_WIDTH     (`ICACHE_TAG_WIDTH),
+        .CORE_TAG_ID_BITS   (`ICACHE_TAG_ID_BITS),
         .MEM_TAG_WIDTH      (`ICACHE_MEM_TAG_WIDTH)
     ) icache (
         `SCOPE_BIND_VX_mem_unit_icache
@@ -157,8 +168,8 @@ module VX_mem_unit # (
         .MRSQ_SIZE          (`DCACHE_MRSQ_SIZE),
         .MREQ_SIZE          (`DCACHE_MREQ_SIZE),
         .WRITE_ENABLE       (1),
-        .CORE_TAG_WIDTH     (`DCACHE_TAG_WIDTH+`EXT_TEX_ENABLED),
-        .CORE_TAG_ID_BITS   (`DCACHE_TAG_ID_BITS+`EXT_TEX_ENABLED),
+        .CORE_TAG_WIDTH     (`DCACHE_TEX_TAG_WIDTH+`EXT_TEX_ENABLED),
+        .CORE_TAG_ID_BITS   (`DCACHE_TEX_TAG_ID_BITS+`EXT_TEX_ENABLED),
         .MEM_TAG_WIDTH      (`DCACHE_MEM_TAG_WIDTH),
         .NC_ENABLE          (1)
     ) dcache (
@@ -168,20 +179,20 @@ module VX_mem_unit # (
         .reset              (dcache_reset),
 
         // Core req
-        .core_req_valid     (dcache_req_tmp2_if.valid),
-        .core_req_rw        (dcache_req_tmp2_if.rw),
-        .core_req_byteen    (dcache_req_tmp2_if.byteen),
-        .core_req_addr      (dcache_req_tmp2_if.addr),
-        .core_req_data      (dcache_req_tmp2_if.data),        
-        .core_req_tag       (dcache_req_tmp2_if.tag),
-        .core_req_ready     (dcache_req_tmp2_if.ready),
+        .core_req_valid     (dcache_tex_req_if.valid),
+        .core_req_rw        (dcache_tex_req_if.rw),
+        .core_req_byteen    (dcache_tex_req_if.byteen),
+        .core_req_addr      (dcache_tex_req_if.addr),
+        .core_req_data      (dcache_tex_req_if.data),        
+        .core_req_tag       (dcache_tex_req_if.tag),
+        .core_req_ready     (dcache_tex_req_if.ready),
 
         // Core response
-        .core_rsp_valid     (dcache_rsp_tmp2_if.valid),
-        .core_rsp_tmask     (dcache_rsp_tmp2_if.tmask),
-        .core_rsp_data      (dcache_rsp_tmp2_if.data),
-        .core_rsp_tag       (dcache_rsp_tmp2_if.tag),
-        .core_rsp_ready     (dcache_rsp_tmp2_if.ready),
+        .core_rsp_valid     (dcache_tex_rsp_if.valid),
+        .core_rsp_tmask     (dcache_tex_rsp_if.tmask),
+        .core_rsp_data      (dcache_tex_rsp_if.data),
+        .core_rsp_tag       (dcache_tex_rsp_if.tag),
+        .core_rsp_ready     (dcache_tex_rsp_if.ready),
 
     `ifdef PERF_ENABLE
         .perf_cache_if      (perf_dcache_if),
@@ -207,13 +218,13 @@ module VX_mem_unit # (
         VX_dcache_req_if #(
             .NUM_REQS  (`DCACHE_NUM_REQS), 
             .WORD_SIZE (`DCACHE_WORD_SIZE), 
-            .TAG_WIDTH (`DCACHE_TAG_WIDTH)
+            .TAG_WIDTH (`DCACHE_SMEM_TAG_WIDTH)
         ) smem_req_if();
 
         VX_dcache_rsp_if #(
             .NUM_REQS  (`DCACHE_NUM_REQS), 
             .WORD_SIZE (`DCACHE_WORD_SIZE), 
-            .TAG_WIDTH (`DCACHE_TAG_WIDTH)
+            .TAG_WIDTH (`DCACHE_SMEM_TAG_WIDTH)
         ) smem_rsp_if();
 
         `RESET_RELAY (smem_arb_reset);
@@ -223,12 +234,12 @@ module VX_mem_unit # (
             .NUM_REQS      (2),
             .LANES         (`NUM_THREADS),
             .DATA_SIZE     (4),            
-            .TAG_IN_WIDTH  (`DCACHE_CORE_TAG_WIDTH),
+            .TAG_IN_WIDTH  (`DCACHE_TAG_WIDTH),
             .TAG_SEL_IDX   (0),
             .TYPE          ("P"),
             .BUFFERED_REQ  (2),
             .BUFFERED_RSP  (1)
-        ) smem_arb (
+        ) dcache_smem_arb (
             .clk          (clk),
             .reset        (smem_arb_reset),
 
@@ -242,20 +253,20 @@ module VX_mem_unit # (
             .req_ready_in   (dcache_req_if.ready),
             
             // output requests
-            .req_valid_out  ({smem_req_if.valid,  dcache_req_tmp_if.valid}),
-            .req_rw_out     ({smem_req_if.rw,     dcache_req_tmp_if.rw}),
-            .req_byteen_out ({smem_req_if.byteen, dcache_req_tmp_if.byteen}),
-            .req_addr_out   ({smem_req_if.addr,   dcache_req_tmp_if.addr}),
-            .req_data_out   ({smem_req_if.data,   dcache_req_tmp_if.data}),  
-            .req_tag_out    ({smem_req_if.tag,    dcache_req_tmp_if.tag}),  
-            .req_ready_out  ({smem_req_if.ready,  dcache_req_tmp_if.ready}),            
+            .req_valid_out  ({smem_req_if.valid, dcache_smem_req_if.valid}),
+            .req_rw_out     ({smem_req_if.rw,    dcache_smem_req_if.rw}),
+            .req_byteen_out ({smem_req_if.byteen,dcache_smem_req_if.byteen}),
+            .req_addr_out   ({smem_req_if.addr,  dcache_smem_req_if.addr}),
+            .req_data_out   ({smem_req_if.data,  dcache_smem_req_if.data}),  
+            .req_tag_out    ({smem_req_if.tag,   dcache_smem_req_if.tag}),  
+            .req_ready_out  ({smem_req_if.ready, dcache_smem_req_if.ready}),            
             
             // input responses
-            .rsp_valid_in   ({smem_rsp_if.valid, dcache_rsp_tmp_if.valid}),
-            .rsp_tmask_in   ({smem_rsp_if.tmask, dcache_rsp_tmp_if.tmask}),
-            .rsp_data_in    ({smem_rsp_if.data,  dcache_rsp_tmp_if.data}),
-            .rsp_tag_in     ({smem_rsp_if.tag,   dcache_rsp_tmp_if.tag}),
-            .rsp_ready_in   ({smem_rsp_if.ready, dcache_rsp_tmp_if.ready}),
+            .rsp_valid_in   ({smem_rsp_if.valid, dcache_smem_rsp_if.valid}),
+            .rsp_tmask_in   ({smem_rsp_if.tmask, dcache_smem_rsp_if.tmask}),
+            .rsp_data_in    ({smem_rsp_if.data,  dcache_smem_rsp_if.data}),
+            .rsp_tag_in     ({smem_rsp_if.tag,   dcache_smem_rsp_if.tag}),
+            .rsp_ready_in   ({smem_rsp_if.ready, dcache_smem_rsp_if.ready}),
 
             // output response
             .rsp_valid_out  (dcache_rsp_if.valid),
@@ -273,8 +284,8 @@ module VX_mem_unit # (
             .NUM_REQS           (`SMEM_NUM_REQS),
             .CREQ_SIZE          (`SMEM_CREQ_SIZE),
             .CRSQ_SIZE          (`SMEM_CRSQ_SIZE),
-            .CORE_TAG_WIDTH     (`DCACHE_TAG_WIDTH),
-            .CORE_TAG_ID_BITS   (`DCACHE_TAG_ID_BITS),
+            .CORE_TAG_WIDTH     (`DCACHE_SMEM_TAG_WIDTH),
+            .CORE_TAG_ID_BITS   (`DCACHE_SMEM_TAG_ID_BITS),
             .BANK_ADDR_OFFSET   (`SMEM_BANK_ADDR_OFFSET)
         ) smem (            
             .clk                (clk),
@@ -304,87 +315,110 @@ module VX_mem_unit # (
         // core to D-cache request
         for (genvar i = 0; i < `DCACHE_NUM_REQS; ++i) begin
             VX_skid_buffer #(
-                .DATAW ((32-`CLOG2(`DCACHE_WORD_SIZE)) + 1 + `DCACHE_WORD_SIZE + (8*`DCACHE_WORD_SIZE) + `DCACHE_CORE_TAG_WIDTH)
+                .DATAW ((32-`CLOG2(`DCACHE_WORD_SIZE)) + 1 + `DCACHE_WORD_SIZE + (8*`DCACHE_WORD_SIZE) + `DCACHE_TAG_WIDTH)
             ) req_buf (
                 .clk       (clk),
                 .reset     (reset),
                 .valid_in  (dcache_req_if.valid[i]),        
                 .data_in   ({dcache_req_if.addr[i], dcache_req_if.rw[i], dcache_req_if.byteen[i], dcache_req_if.data[i], dcache_req_if.tag[i]}),
                 .ready_in  (dcache_req_if.ready[i]),
-                .valid_out (dcache_req_tmp_if.valid[i]),
-                .data_out  ({dcache_req_tmp_if.addr[i], dcache_req_tmp_if.rw[i], dcache_req_tmp_if.byteen[i], dcache_req_tmp_if.data[i], dcache_req_tmp_if.tag[i]}),
-                .ready_out (dcache_req_tmp_if.ready[i])
+                .valid_out (dcache_smem_req_if.valid[i]),
+                .data_out  ({dcache_smem_req_if.addr[i], dcache_smem_req_if.rw[i], dcache_smem_req_if.byteen[i], dcache_smem_req_if.data[i], dcache_smem_req_if.tag[i]}),
+                .ready_out (dcache_smem_req_if.ready[i])
             );
         end
         
         // D-cache to core reponse
-        assign dcache_rsp_if.valid  = dcache_rsp_tmp_if.valid;
-        assign dcache_rsp_if.tmask  = dcache_rsp_tmp_if.tmask;
-        assign dcache_rsp_if.tag    = dcache_rsp_tmp_if.tag;
-        assign dcache_rsp_if.data   = dcache_rsp_tmp_if.data;
-        assign dcache_rsp_tmp_if.ready = dcache_rsp_if.ready;
+        assign dcache_rsp_if.valid = dcache_smem_rsp_if.valid;
+        assign dcache_rsp_if.tmask = dcache_smem_rsp_if.tmask;
+        assign dcache_rsp_if.tag   = dcache_smem_rsp_if.tag;
+        assign dcache_rsp_if.data  = dcache_smem_rsp_if.data;
+        assign dcache_smem_rsp_if.ready = dcache_rsp_if.ready;
     end    
 
 `ifdef EXT_TEX_ENABLE
+
+    reg [`DCACHE_NUM_REQS-1:0][`DCACHE_TEX_TAG_WIDTH-1:0] dcache_smem_req_tag, tcache_req_tag;
+    wire [`DCACHE_TEX_TAG_WIDTH-1:0] dcache_smem_rsp_tag, tcache_rsp_tag;
+
+    always @(*) begin
+        for (integer i = 0; i < `DCACHE_NUM_REQS; ++i) begin
+            dcache_smem_req_tag[i] = 0;        
+            dcache_smem_req_tag[i][0 +: `DCACHE_SMEM_TAG_ID_BITS] = dcache_smem_req_if.tag[i][0 +: `DCACHE_SMEM_TAG_ID_BITS];
+            dcache_smem_req_tag[i][`DCACHE_TEX_TAG_ID_BITS +: `UUID_BITS] = dcache_smem_req_if.tag[i][`DCACHE_SMEM_TAG_ID_BITS +: `UUID_BITS];        
+
+            tcache_req_tag[i] = 0;
+            tcache_req_tag[i][0 +: `TCACHE_TAG_ID_BITS] = tcache_req_if.tag[i][0 +: `TCACHE_TAG_ID_BITS];
+            tcache_req_tag[i][`DCACHE_TEX_TAG_ID_BITS +: `UUID_BITS] = tcache_req_if.tag[i][`TCACHE_TAG_ID_BITS +: `UUID_BITS];        
+        end
+    end
+
+    assign dcache_smem_rsp_if.tag[0 +: `DCACHE_SMEM_TAG_ID_BITS] = dcache_smem_rsp_tag[0 +: `DCACHE_SMEM_TAG_ID_BITS];
+    assign dcache_smem_rsp_if.tag[`DCACHE_SMEM_TAG_ID_BITS +: `UUID_BITS] = dcache_smem_rsp_tag[`DCACHE_TEX_TAG_ID_BITS +: `UUID_BITS];
+    `UNUSED_VAR (dcache_smem_rsp_tag)
+
+    assign tcache_rsp_if.tag[0 +: `TCACHE_TAG_ID_BITS] = tcache_rsp_tag[0 +: `TCACHE_TAG_ID_BITS];
+    assign tcache_rsp_if.tag[`TCACHE_TAG_ID_BITS +: `UUID_BITS] = tcache_rsp_tag[`DCACHE_TEX_TAG_ID_BITS +: `UUID_BITS];    
+    `UNUSED_VAR (tcache_rsp_tag)
 
     VX_cache_mux #(
         .NUM_REQS      (2),
         .LANES         (`NUM_THREADS),
         .DATA_SIZE     (4),            
-        .TAG_IN_WIDTH  (`DCACHE_TAG_WIDTH),
+        .TAG_IN_WIDTH  (`DCACHE_TEX_TAG_WIDTH),
         .TAG_SEL_IDX   (0)
-    ) dcache_arb (
+    ) dcache_tex_arb (
         .clk            (clk),
         .reset          (reset),
 
         // Tex/LSU request
-        .req_valid_in   ({tcache_req_if.valid,  dcache_req_tmp_if.valid}),
-        .req_rw_in      ({tcache_req_if.rw,     dcache_req_tmp_if.rw}),
-        .req_byteen_in  ({tcache_req_if.byteen, dcache_req_tmp_if.byteen}),
-        .req_addr_in    ({tcache_req_if.addr,   dcache_req_tmp_if.addr}),
-        .req_data_in    ({tcache_req_if.data,   dcache_req_tmp_if.data}),  
-        .req_tag_in     ({tcache_req_if.tag,    dcache_req_tmp_if.tag}),  
-        .req_ready_in   ({tcache_req_if.ready,  dcache_req_tmp_if.ready}),
+        .req_valid_in   ({tcache_req_if.valid,  dcache_smem_req_if.valid}),
+        .req_rw_in      ({tcache_req_if.rw,     dcache_smem_req_if.rw}),
+        .req_byteen_in  ({tcache_req_if.byteen, dcache_smem_req_if.byteen}),
+        .req_addr_in    ({tcache_req_if.addr,   dcache_smem_req_if.addr}),
+        .req_data_in    ({tcache_req_if.data,   dcache_smem_req_if.data}),  
+        .req_tag_in     ({tcache_req_tag,       dcache_smem_req_tag}),  
+        .req_ready_in   ({tcache_req_if.ready,  dcache_smem_req_if.ready}),
 
         // Dcache request
-        .req_valid_out  (dcache_req_tmp2_if.valid),
-        .req_rw_out     (dcache_req_tmp2_if.rw),        
-        .req_byteen_out (dcache_req_tmp2_if.byteen),        
-        .req_addr_out   (dcache_req_tmp2_if.addr),
-        .req_data_out   (dcache_req_tmp2_if.data),
-        .req_tag_out    (dcache_req_tmp2_if.tag),
-        .req_ready_out  (dcache_req_tmp2_if.ready),
+        .req_valid_out  (dcache_tex_req_if.valid),
+        .req_rw_out     (dcache_tex_req_if.rw),        
+        .req_byteen_out (dcache_tex_req_if.byteen),        
+        .req_addr_out   (dcache_tex_req_if.addr),
+        .req_data_out   (dcache_tex_req_if.data),
+        .req_tag_out    (dcache_tex_req_if.tag),
+        .req_ready_out  (dcache_tex_req_if.ready),
         
         // Dcache response
-        .rsp_valid_in   (dcache_rsp_tmp2_if.valid),
-        .rsp_tmask_in   (dcache_rsp_tmp2_if.tmask),
-        .rsp_tag_in     (dcache_rsp_tmp2_if.tag),
-        .rsp_data_in    (dcache_rsp_tmp2_if.data),
-        .rsp_ready_in   (dcache_rsp_tmp2_if.ready),
+        .rsp_valid_in   (dcache_tex_rsp_if.valid),
+        .rsp_tmask_in   (dcache_tex_rsp_if.tmask),
+        .rsp_tag_in     (dcache_tex_rsp_if.tag),
+        .rsp_data_in    (dcache_tex_rsp_if.data),
+        .rsp_ready_in   (dcache_tex_rsp_if.ready),
 
         // Tex/LSU response
-        .rsp_valid_out  ({tcache_rsp_if.valid, dcache_rsp_tmp_if.valid}),
-        .rsp_tmask_out  ({tcache_rsp_if.tmask, dcache_rsp_tmp_if.tmask}),
-        .rsp_data_out   ({tcache_rsp_if.data,  dcache_rsp_tmp_if.data}),
-        .rsp_tag_out    ({tcache_rsp_if.tag,   dcache_rsp_tmp_if.tag}),
-        .rsp_ready_out  ({tcache_rsp_if.ready, dcache_rsp_tmp_if.ready})
+        .rsp_valid_out  ({tcache_rsp_if.valid, dcache_smem_rsp_if.valid}),
+        .rsp_tmask_out  ({tcache_rsp_if.tmask, dcache_smem_rsp_if.tmask}),
+        .rsp_data_out   ({tcache_rsp_if.data,  dcache_smem_rsp_if.data}),
+        .rsp_tag_out    ({tcache_rsp_tag,      dcache_smem_rsp_tag}),
+        .rsp_ready_out  ({tcache_rsp_if.ready, dcache_smem_rsp_if.ready})
     );
 
 `else    
 
-    assign dcache_req_tmp2_if.valid  = dcache_req_tmp_if.valid;
-    assign dcache_req_tmp2_if.rw     = dcache_req_tmp_if.rw;
-    assign dcache_req_tmp2_if.byteen = dcache_req_tmp_if.byteen;
-    assign dcache_req_tmp2_if.addr   = dcache_req_tmp_if.addr;
-    assign dcache_req_tmp2_if.data   = dcache_req_tmp_if.data;
-    assign dcache_req_tmp2_if.tag    = dcache_req_tmp_if.tag;
-    assign dcache_req_tmp_if.ready   = dcache_req_tmp2_if.ready;
+    assign dcache_tex_req_if.valid  = dcache_smem_req_if.valid;
+    assign dcache_tex_req_if.rw     = dcache_smem_req_if.rw;
+    assign dcache_tex_req_if.byteen = dcache_smem_req_if.byteen;
+    assign dcache_tex_req_if.addr   = dcache_smem_req_if.addr;
+    assign dcache_tex_req_if.data   = dcache_smem_req_if.data;
+    assign dcache_tex_req_if.tag    = dcache_smem_req_if.tag;
+    assign dcache_smem_req_if.ready = dcache_tex_req_if.ready;
 
-    assign dcache_rsp_tmp_if.valid  = dcache_rsp_tmp2_if.valid;
-    assign dcache_rsp_tmp_if.tmask  = dcache_rsp_tmp2_if.tmask;
-    assign dcache_rsp_tmp_if.tag    = dcache_rsp_tmp2_if.tag;
-    assign dcache_rsp_tmp_if.data   = dcache_rsp_tmp2_if.data;
-    assign dcache_rsp_tmp2_if.ready = dcache_rsp_tmp_if.ready;
+    assign dcache_smem_rsp_if.valid = dcache_tex_rsp_if.valid;
+    assign dcache_smem_rsp_if.tmask = dcache_tex_rsp_if.tmask;
+    assign dcache_smem_rsp_if.tag   = dcache_tex_rsp_if.tag;
+    assign dcache_smem_rsp_if.data  = dcache_tex_rsp_if.data;
+    assign dcache_tex_rsp_if.ready  = dcache_smem_rsp_if.ready;
 
 `endif
 

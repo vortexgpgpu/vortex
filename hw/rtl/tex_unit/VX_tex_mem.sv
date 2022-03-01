@@ -45,7 +45,7 @@ module VX_tex_mem #(
     wire [3:0][NUM_REQS-1:0][29:0] req_addr_w;
     wire [3:0][NUM_REQS-1:0][1:0] align_offs;
 
-    // reorder address into quads
+    // reorder addresses into requests per quad
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         for (genvar j = 0; j < 4; ++j) begin
@@ -164,7 +164,7 @@ module VX_tex_mem #(
     assign cache_req_if.addr   = req_texel_addr;
     assign cache_req_if.byteen = {NUM_REQS{4'b0}};
     assign cache_req_if.data   = 'x;
-    assign cache_req_if.tag    = {NUM_REQS{q_req_uuid, `LSU_TAG_ID_BITS'(req_texel_idx), 1'b0}};
+    assign cache_req_if.tag    = {NUM_REQS{q_req_uuid, req_texel_idx}};
 
     // Dcache Response
 
@@ -180,7 +180,7 @@ module VX_tex_mem #(
     wire [1:0] rsp_texel_idx;
     wire rsp_texel_dup;
     
-    assign rsp_texel_idx = cache_rsp_if.tag[`CACHE_ADDR_TYPE_BITS +: 2];
+    assign rsp_texel_idx = cache_rsp_if.tag[1:0];
     `UNUSED_VAR (cache_rsp_if.tag)
 
     assign rsp_texel_dup = q_dup_reqs[rsp_texel_idx];
@@ -248,6 +248,8 @@ module VX_tex_mem #(
             end
         end
     end
+
+    // reorder addresses back into quads per request
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         for (genvar j = 0; j < 4; ++j) begin

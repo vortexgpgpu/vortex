@@ -151,7 +151,7 @@ module VX_lsu_unit #(
     wire mbuf_pop = dcache_rsp_fire && (0 == rsp_rem_mask_n);
     
     assign mbuf_raddr = dcache_rsp_if.tag[`CACHE_ADDR_TYPE_BITS +: `LSUQ_ADDR_BITS];
-    assign rsp_uuid   = dcache_rsp_if.tag[`DCACHE_CORE_TAG_ID_BITS +: `UUID_BITS];
+    assign rsp_uuid   = dcache_rsp_if.tag[`DCACHE_TAG_ID_BITS +: `UUID_BITS];
     `UNUSED_VAR (dcache_rsp_if.tag)
 
     // do not writeback from software prefetch
@@ -251,7 +251,7 @@ module VX_lsu_unit #(
         assign dcache_req_if.addr[i]   = req_addr[i][31:2];
         assign dcache_req_if.byteen[i] = mem_req_byteen;
         assign dcache_req_if.data[i]   = mem_req_data;
-        assign dcache_req_if.tag[i]    = {req_uuid, `LSU_TAG_ID_BITS'(req_tag), req_addr_type[i]};
+        assign dcache_req_if.tag[i]    = {req_uuid, req_tag, req_addr_type[i]};
     end
 
     assign ready_in = req_dep_ready && dcache_req_ready;

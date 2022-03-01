@@ -26,8 +26,9 @@ using namespace cocogfx;
 const char* kernel_file = "kernel.bin";
 const char* input_file  = "palette64.png";
 const char* output_file = "output.png";
-int wrap    = 0;
-int filter  = 0;    // 0-> point, 1->bilinear, 2->trilinear
+const char* reference_file  = nullptr;
+int wrap    = TEX_WRAP_CLAMP;
+int filter  = TEX_FILTER_POINT;
 float scale = 1.0f;
 int format  = 0;
 bool use_sw = false;
@@ -39,18 +40,21 @@ kernel_arg_t kernel_arg;
 
 static void show_usage() {
    std::cout << "Vortex Texture Test." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-s scale] [-w wrap] [-f format] [-g filter] [-z no_hw] [-h: help]" << std::endl;
+   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-r reference] [-s scale] [-w wrap] [-f format] [-g filter] [-z no_hw] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "zi:o:k:w:f:g:s:h?")) != -1) {
+  while ((c = getopt(argc, argv, "zi:o:k:w:f:g:s:r:h?")) != -1) {
     switch (c) {
     case 'i':
       input_file = optarg;
       break;
     case 'o':
       output_file = optarg;
+      break;
+    case 'r':
+      reference_file = optarg;
       break;
     case 's':
       scale = std::stof(optarg, NULL);
@@ -105,12 +109,10 @@ void cleanup() {
   }
 }
 
-int run_test(const kernel_arg_t& kernel_arg, 
-             uint32_t buf_size, 
-             uint32_t width, 
-             uint32_t height,
-             uint32_t bpp) {
-  (void)bpp;
+int render(const kernel_arg_t& kernel_arg, 
+           uint32_t buf_size,
+           uint32_t width,
+           uint32_t height) {
   auto time_start = std::chrono::high_resolution_clock::now();
 
   // start device
@@ -137,7 +139,7 @@ int run_test(const kernel_arg_t& kernel_arg,
 
   // save output image
   std::cout << "save output image" << std::endl;  
-  //dump_image(dst_pixels, width, height, bpp);  
+  //dump_image(dst_pixels, width, height, 4);  
   RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, dst_pixels, width, height));
 
   return 0;
@@ -227,10 +229,9 @@ int main(int argc, char *argv[]) {
     kernel_arg.wrapu      = wrap;
     kernel_arg.wrapv      = wrap;    
     
+    kernel_arg.src_addr      = src_addr;
     kernel_arg.src_logwidth  = src_logwidth;
     kernel_arg.src_logheight = src_logheight;
-    kernel_arg.src_addr      = src_addr;
-
     for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
       assert(i < TEX_LOD_MAX);
       kernel_arg.mip_offs[i] = mip_offsets.at(i); 
@@ -268,28 +269,34 @@ int main(int argc, char *argv[]) {
   }
 
 	// configure texture units
-	vx_csr_write(device, CSR_TEX_STAGE,  0);
-	vx_csr_write(device, CSR_TEX_WIDTH,  src_logwidth);	
-	vx_csr_write(device, CSR_TEX_HEIGHT, src_logheight);
-	vx_csr_write(device, CSR_TEX_FORMAT, format);
-	vx_csr_write(device, CSR_TEX_WRAPU,  wrap);
-	vx_csr_write(device, CSR_TEX_WRAPV,  wrap);
-	vx_csr_write(device, CSR_TEX_FILTER, (filter ? 1 : 0));
-	vx_csr_write(device, CSR_TEX_ADDR,   src_addr);
+	vx_csr_write(device, CSR_TEX_STAGE,   0);
+	vx_csr_write(device, CSR_TEX_LOGDIM,  (src_logheight << 16) | src_logwidth);	
+	vx_csr_write(device, CSR_TEX_FORMAT,  format);
+	vx_csr_write(device, CSR_TEX_WRAP,    (wrap << 16) | wrap);
+	vx_csr_write(device, CSR_TEX_FILTER,  (filter ? TEX_FILTER_BILINEAR : TEX_FILTER_POINT));
+	vx_csr_write(device, CSR_TEX_ADDR,    src_addr);
 	for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
     assert(i < TEX_LOD_MAX);
 		vx_csr_write(device, CSR_TEX_MIPOFF(i), mip_offsets.at(i));
 	};
 
-  // run tests
-  std::cout << "run tests" << std::endl;
-  RT_CHECK(run_test(kernel_arg, dst_bufsize, dst_width, dst_height, dst_bpp));
+  // render
+  std::cout << "render" << std::endl;
+  RT_CHECK(render(kernel_arg, dst_bufsize, dst_width, dst_height));
 
   // cleanup
   std::cout << "cleanup" << std::endl;  
   cleanup();
 
-  std::cout << "PASSED!" << std::endl;
+  if (reference_file) {
+    auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8);
+    if (0 == errors) {
+      std::cout << "PASSED!" << std::endl;
+    } else {
+      std::cout << "FAILED!" << std::endl;
+      return errors;
+    }
+  } 
 
   return 0;
 }

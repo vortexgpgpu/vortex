@@ -7,7 +7,7 @@ module VX_tex_lerp (
     output wire [3:0][7:0] out
 );
     for (genvar i = 0; i < 4; ++i) begin
-        wire [16:0] sum = in1[i] * 8'(8'hff - frac) + in2[i] * frac;
+        wire [16:0] sum = in1[i] * 9'(9'd256 - frac) + in2[i] * frac;
         `UNUSED_VAR (sum)
         assign out[i] = sum[15:8];
     end

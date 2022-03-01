@@ -98,6 +98,7 @@ private:
   TexUnit::Ptr    tex_unit_;
   RasterUnit::Ptr raster_unit_;
   RopUnit::Ptr    rop_unit_;
+  const std::vector<SimPort<pipeline_trace_t*>*> pending_rsps_;
 
 public:
     GpuUnit(const SimContext& ctx, Core*);

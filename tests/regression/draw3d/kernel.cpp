@@ -14,17 +14,6 @@ void kernel_body(int task_id, tile_arg_t* arg) {
 int main() {
 	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
 
-	// configure raster unit
-
-	// configure rop unit
-
-	tile_arg_t targ;
-	targ.state = arg;
-	
-	vx_spawn_tasks(arg->num_tiles, (vx_spawn_tasks_cb)kernel_body, &targ);
-	/*for (uint32_t t=0; t < arg->num_tiles; ++t) {		
-		kernel_body(t, &targ);
-	}*/
-
+	// TODO
 	return 0;
 }

@@ -49,13 +49,17 @@ module VX_rop_csr (
                 `CSR_ROP_SFAIL: begin 
                     csrs.sfail <= csr_wr_data[`ROP_STENCIL_OP_BITS-1:0];
                 end
-                `CSR_ROP_BLEND_RGB: begin 
-                    csrs.blend_src_rgb <= csr_wr_data[15:0][`ROP_BLEND_FACTOR_BITS-1:0];
-                    csrs.blend_dst_rgb <= csr_wr_data[31:16][`ROP_BLEND_FACTOR_BITS-1:0];
+                `CSR_ROP_BLEND_MODE: begin 
+                    csrs.blend_mode_rgb <= csr_wr_data[15:0][`ROP_BLEND_MODE_BITS-1:0];
+                    csrs.blend_mode_a   <= csr_wr_data[31:16][`ROP_BLEND_MODE_BITS-1:0];
                 end
-                `CSR_ROP_BLEND_APLHA: begin 
-                    csrs.blend_src_a <= csr_wr_data[15:0][`ROP_BLEND_FACTOR_BITS-1:0];
-                    csrs.blend_dst_a <= csr_wr_data[31:16][`ROP_BLEND_FACTOR_BITS-1:0];
+                `CSR_ROP_BLEND_SRC: begin 
+                    csrs.blend_src_rgb <= csr_wr_data[15:0][`ROP_BLEND_FUNC_BITS-1:0];
+                    csrs.blend_src_a   <= csr_wr_data[31:16][`ROP_BLEND_FUNC_BITS-1:0];
+                end
+                `CSR_ROP_BLEND_DST: begin 
+                    csrs.blend_dst_rgb <= csr_wr_data[15:0][`ROP_BLEND_FUNC_BITS-1:0];
+                    csrs.blend_dst_a   <= csr_wr_data[31:16][`ROP_BLEND_FUNC_BITS-1:0];
                 end
                 `CSR_ROP_BLEND_CONST: begin 
                     csrs.blend_const <= csr_wr_data[31:0];

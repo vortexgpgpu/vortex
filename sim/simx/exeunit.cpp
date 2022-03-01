@@ -267,17 +267,21 @@ GpuUnit::GpuUnit(const SimContext& ctx, Core* core)
     , tex_unit_(core->tex_unit_)
     , raster_unit_(core->raster_unit_)
     , rop_unit_(core->rop_unit_)
+    , pending_rsps_{
+        &core->tex_unit_->Output,
+        &core->raster_unit_->Output,
+        &core->rop_unit_->Output
+    }
 {}
     
 void GpuUnit::tick() {
-    // handle nested units reponses
-    if (!tex_unit_->Output.empty()) {
-      auto trace = tex_unit_->Output.front();
-      Output.send(trace, 1);      
-    }
-    if (!raster_unit_->Output.empty()) {
-      auto trace = raster_unit_->Output.front();
-      Output.send(trace, 1);      
+    // handle pending reponses
+    for (auto pending_rsp : pending_rsps_) {
+        if (pending_rsp->empty())
+            continue;
+        auto trace = pending_rsp->front();
+        Output.send(trace, 1);
+        pending_rsp->pop();
     }
 
     // check input queue
@@ -296,7 +300,7 @@ void GpuUnit::tick() {
         Output.send(trace, 1);
         auto trace_data = dynamic_cast<GPUTraceData*>(trace->data);
         core_->active_warps_ = trace_data->active_warps;
-    }    break;
+    }   break;
     case GpuType::SPLIT:
     case GpuType::JOIN:
         Output.send(trace, 1);
@@ -317,7 +321,6 @@ void GpuUnit::tick() {
         break;
     case GpuType::ROP:
         rop_unit_->Input.send(trace, 1);
-        Output.send(trace, 1);
         break;
     default:
         std::abort();

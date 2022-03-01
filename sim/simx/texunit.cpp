@@ -6,12 +6,6 @@
 using namespace vortex;
 using namespace cocogfx;
 
-enum class FilterMode {
-  Point,
-  Bilinear,
-  Trilinear,
-};
-
 class TexUnit::Impl {
 private:
     struct pending_req_t {
@@ -46,20 +40,22 @@ public:
 
     uint32_t read(uint32_t stage, int32_t u, int32_t v, int32_t lod, TraceData* trace_data) {
       auto& states = core_->global_csrs_.tex_csrs.at(stage);
-      auto xu = Fixed<TEX_FXD_FRAC>::make(u);
-      auto xv = Fixed<TEX_FXD_FRAC>::make(v);
+      auto xu = TFixed<TEX_FXD_FRAC>::make(u);
+      auto xv = TFixed<TEX_FXD_FRAC>::make(v);
       auto base_addr  = states.at(TEX_STATE_ADDR) + states.at(TEX_STATE_MIPOFF(lod));
-      auto log_width  = std::max<int32_t>(states.at(TEX_STATE_WIDTH) - lod, 0);
-      auto log_height = std::max<int32_t>(states.at(TEX_STATE_HEIGHT) - lod, 0);
-      auto format     = (TexFormat)states.at(TEX_STATE_FORMAT);    
-      auto filter     = (FilterMode)states.at(TEX_STATE_FILTER);    
-      auto wrapu      = (WrapMode)states.at(TEX_STATE_WRAPU);
-      auto wrapv      = (WrapMode)states.at(TEX_STATE_WRAPV);
+      auto logdim     = states.at(TEX_STATE_LOGDIM);
+      auto log_width  = std::max<int32_t>((logdim & 0xffff) - lod, 0);
+      auto log_height = std::max<int32_t>((logdim >> 16) - lod, 0);
+      auto format     = states.at(TEX_STATE_FORMAT);    
+      auto filter     = states.at(TEX_STATE_FILTER);    
+      auto wrap       = states.at(TEX_STATE_WRAP);
+      auto wrapu      = wrap & 0xffff;
+      auto wrapv      = wrap >> 16;
 
       auto stride = Stride(format);
       
       switch (filter) {
-      case FilterMode::Bilinear: {
+      case TEX_FILTER_BILINEAR: {
         // addressing
         uint32_t offset00, offset01, offset10, offset11;
         uint32_t alpha, beta;
@@ -88,7 +84,7 @@ public:
           format, texel00, texel01, texel10, texel11, alpha, beta);
         return color;
       }
-      case FilterMode::Point: {
+      case TEX_FILTER_POINT: {
         // addressing
         uint32_t offset;
         TexAddressPoint(xu, xv, log_width, log_height, wrapu, wrapv, &offset);
@@ -146,7 +142,7 @@ public:
     }
 
     // send memory request
-    auto trace_data = dynamic_cast<TexUnit::TraceData*>(trace->data);
+    auto trace_data = dynamic_cast<TraceData*>(trace->data);
 
     uint32_t addr_count = 0;
     for (auto& mem_addr : trace_data->mem_addrs) {

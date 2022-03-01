@@ -10,23 +10,24 @@
 
 namespace vortex {
 
-class TraceData {
+class ITraceData {
 public:
-    TraceData() {}
-    virtual ~TraceData() {}
+    ITraceData() {}
+    virtual ~ITraceData() {}
 };
 
-struct LsuTraceData : public TraceData {
+struct LsuTraceData : public ITraceData {
   std::vector<mem_addr_size_t> mem_addrs;
   LsuTraceData(uint32_t num_threads) : mem_addrs(num_threads) {}
 };
 
-struct GPUTraceData : public TraceData {
+struct GPUTraceData : public ITraceData {
   const WarpMask active_warps;
   GPUTraceData(const WarpMask& active_warps) : active_warps(active_warps) {}
 };
 
 struct pipeline_trace_t {
+public:
   //--
   const uint64_t  uuid;
   
@@ -37,12 +38,9 @@ struct pipeline_trace_t {
   Word        PC;
 
   //--
-  bool        fetch_stall;
-
-  //--
-  bool        wb;  
-  RegType     rdest_type;
   uint32_t    rdest;
+  RegType     rdest_type;
+  bool        wb;
 
   //--
   RegMask     used_iregs;
@@ -60,27 +58,27 @@ struct pipeline_trace_t {
     GpuType gpu_type;
   };
 
-  TraceData* data;
+  ITraceData* data;
 
-  bool stalled;
+  bool fetch_stall;
 
+private:
+  bool stalled_;
+
+public:
   pipeline_trace_t(uint64_t uuid) 
     : uuid(uuid)
-    , data(nullptr) {
-    cid = 0;
-    wid = 0;
-    tmask.reset();
-    PC = 0;
-    fetch_stall = false;
-    wb  = false;
-    rdest = 0;
-    rdest_type = RegType::None;
-    used_iregs.reset();
-    used_fregs.reset();
-    used_vregs.reset();
-    exe_type = ExeType::NOP;
-    stalled = false;
-  }
+    , cid(0)
+    , wid(0)
+    , PC(0)    
+    , rdest(0)
+    , rdest_type(RegType::None)
+    , wb(false)
+    , exe_type(ExeType::NOP)
+    , data(nullptr)
+    , fetch_stall(false)
+    , stalled_(false) 
+  {}
   
   ~pipeline_trace_t() {
     if (data)
@@ -88,13 +86,13 @@ struct pipeline_trace_t {
   }
 
   bool suspend() {
-    bool old = stalled;
-    stalled = true;
+    bool old = stalled_;
+    stalled_ = true;
     return old;
   }
 
   void resume() {
-    stalled = false;
+    stalled_ = false;
   }
 };
 
