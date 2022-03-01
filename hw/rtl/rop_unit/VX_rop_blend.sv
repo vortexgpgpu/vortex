@@ -14,13 +14,10 @@ module VX_rop_blend #(
     // CSR Parameters
     rop_csrs_t                  reg_csrs,
 
-    // Logic Op enable (if enabled, blending is disabled even if blend enable is set)
-    input wire                  logic_op_enable,
-
     // Color Values 
     input wire [31:0]           dst_color,
     input wire [31:0]           src_color,
-    output wire [31:0]          out_color,
+    output wire [31:0]          out_color
 );
 
     // Blend Color
@@ -29,8 +26,6 @@ module VX_rop_blend #(
     wire [7:0]             const_blue;
     wire [7:0]             const_alpha;
 
-    wire [23:0] pipe_factor_src_rgb, pipe_factor_dst_rgb;
-    wire [7:0] pipe_factor_rgb_a, pipe_factor_dst_a;
     wire [23:0] factor_src_rgb, factor_dst_rgb;
     wire [7:0] factor_src_a, factor_dst_a;
 
@@ -72,7 +67,7 @@ module VX_rop_blend #(
             `ROP_BLEND_FACTOR_CONST_A:              factor_src_rgb = {const_alpha, const_alpha, const_alpha};
             `ROP_BLEND_FACTOR_ONE_MINUS_CONST_A:    factor_src_rgb = {8'hFF - const_alpha, 8'hFF - const_alpha, 8'hFF - const_alpha};
             `ROP_BLEND_FACTOR_ALPHA_SAT:            factor_src_rgb = 
-            default:                                factor_src_rgb = {24{1'b0}};
+            default:                                factor_src_rgb = {24{1'b1}};
         endcase
         case (reg_csrs.blend_src_a)
             `ROP_BLEND_FACTOR_ZERO:                 factor_src_a = 8'h00;
@@ -90,7 +85,7 @@ module VX_rop_blend #(
             `ROP_BLEND_FACTOR_CONST_A:              factor_src_a = const_alpha;
             `ROP_BLEND_FACTOR_ONE_MINUS_CONST_A:    factor_src_a = 8'hFF - const_alpha;
             `ROP_BLEND_FACTOR_ALPHA_SAT:            factor_src_a = 8'hFF;
-            default:                                factor_src_a = 8'h00;
+            default:                                factor_src_a = {8{1'b1}};
         endcase
         case (reg_csrs.blend_dst_rgb)
             `ROP_BLEND_FACTOR_ZERO:                 factor_dst_rgb = {24{1'b0}};
@@ -131,21 +126,38 @@ module VX_rop_blend #(
     end
 
     // Store the original source color in pipe_color in case blending is turned off
-    wire enable_out, reset_out, logic_op_enable_out, stage1_pipe_en;
+    wire pipe_enable, pipe_reset, pipe_logic_op;
     wire [31:0] pipe_src_color, pipe_dst_color;
-
-    // If either blending enable or logic op enable are set, store values in pipe_reg
-    assign stage1_pipe_en = enable || logic_op_enable;
+    wire [23:0] pipe_factor_src_rgb, pipe_factor_dst_rgb;
+    wire [7:0] pipe_factor_rgb_a, pipe_factor_dst_a;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 24 + 8 + 24 + 8 + 32 + 32),
+        .DATAW  (1 + `ROP_LOGIC_OP_BITS + 24 + 8 + 24 + 8 + 32 + 32),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
-        .enable   (stage1_pipe_en),
-        .data_in  ({enable,     reset,     logic_op_enable,     factor_src_rgb,      factor_rgb_a,      factor_dst_rgb,      factor_dst_a,      src_color,      dst_color}),
-        .data_out ({enable_out, reset_out, logic_op_enable_out, pipe_factor_src_rgb, pipe_factor_rgb_a, pipe_factor_dst_rgb, pipe_factor_dst_a, pipe_src_color, pipe_dst_color})
+        .enable   (enable),
+        .data_in  ({enable,      reset,      reg_csrs.logic_op,  factor_src_rgb,      factor_rgb_a,      factor_dst_rgb,      factor_dst_a,      src_color,      dst_color}),
+        .data_out ({pipe_enable, pipe_reset, pipe_logic_op,      pipe_factor_src_rgb, pipe_factor_rgb_a, pipe_factor_dst_rgb, pipe_factor_dst_a, pipe_src_color, pipe_dst_color})
+    );
+
+    VX_rop_mult_add #(
+    ) mult_add (
+        .mode(),
+        .src_rgba(),
+        .dst_rgba(),
+        .src_blend_factor(),
+        .dst_blend_factor(),
+        .result_rgba()
+    );
+
+    VX_rop_logic #(
+    ) rop_logic (
+        .logic_op(),
+        .src_color(),
+        .dst_color(),
+        .color_out()
     );
 
     wire [7:0] out_red, out_green, out_blue;
@@ -209,19 +221,17 @@ module VX_rop_blend #(
     end
 
     // If enable is off, pass the original source color (now stored in pipe_color) on to the next stage and ignore blending
-    wire stage2_pipe_en;
     wire [31:0] pipe_out_color;
 
-    assign stage2_pipe_en = enable_out || logic_op_enable_out;
-    assign pipe_out_color = (enable_out || logic_op_enable_out) ? {out_red, out_green, out_blue, out_a} : pipe_src_color;
+    assign pipe_out_color = (enable_out) ? {out_red, out_green, out_blue, out_a} : pipe_src_color;
 
     VX_pipe_register #(
         .DATAW  (32),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
-        .reset    (reset_out),
-        .enable   (stage2_pipe_en),
+        .reset    (pipe_reset),
+        .enable   (pipe_enable),
         .data_in  ({pipe_out_color}),
         .data_out ({out_color})
     );
