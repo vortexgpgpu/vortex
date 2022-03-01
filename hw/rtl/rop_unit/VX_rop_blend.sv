@@ -7,10 +7,6 @@ module VX_rop_blend #(
     input wire                  reset,
     input wire                  enable,
 
-    // Blend Equation (TODO: replace with CSRs)
-    input wire [`ROP_BLEND_MODE_BITS-1:0]   mode_rgb,
-    input wire [`ROP_BLEND_MODE_BITS-1:0]   mode_a,
-
     // CSR Parameters
     rop_csrs_t                  reg_csrs,
 
@@ -51,7 +47,7 @@ module VX_rop_blend #(
     // Combinational logic, not sequential. We want the pipe reg to store the output from this block. Reset will be tied to the pipe reg.
     always @(*) begin
         // Blending Functions
-        case (reg_csrs.blend_src_rgb)
+        case (reg_csrs.blend_func_src_rgb)
             `ROP_BLEND_FACTOR_ZERO:                 factor_src_rgb = {24{1'b0}};
             `ROP_BLEND_FACTOR_ONE:                  factor_src_rgb = {24{1'b1}};
             `ROP_BLEND_FACTOR_SRC_RGB:              factor_src_rgb = src_color[31:8];
@@ -69,7 +65,7 @@ module VX_rop_blend #(
             `ROP_BLEND_FACTOR_ALPHA_SAT:            factor_src_rgb = 
             default:                                factor_src_rgb = {24{1'b1}};
         endcase
-        case (reg_csrs.blend_src_a)
+        case (reg_csrs.blend_func_src_a)
             `ROP_BLEND_FACTOR_ZERO:                 factor_src_a = 8'h00;
             `ROP_BLEND_FACTOR_ONE:                  factor_src_a = 8'hFF;
             `ROP_BLEND_FACTOR_SRC_RGB:              factor_src_a = src_color[7:0];
@@ -87,7 +83,7 @@ module VX_rop_blend #(
             `ROP_BLEND_FACTOR_ALPHA_SAT:            factor_src_a = 8'hFF;
             default:                                factor_src_a = {8{1'b1}};
         endcase
-        case (reg_csrs.blend_dst_rgb)
+        case (reg_csrs.blend_func_dst_rgb)
             `ROP_BLEND_FACTOR_ZERO:                 factor_dst_rgb = {24{1'b0}};
             `ROP_BLEND_FACTOR_ONE:                  factor_dst_rgb = {24{1'b1}};
             `ROP_BLEND_FACTOR_SRC_RGB:              factor_dst_rgb = src_color[31:8];
@@ -105,7 +101,7 @@ module VX_rop_blend #(
             `ROP_BLEND_FACTOR_ALPHA_SAT:            factor_dst_rgb = 
             default:                                factor_src_rgb = {24{1'b0}};
         endcase
-        case (reg_csrs.blend_dst_a)
+        case (reg_csrs.blend_func_dst_a)
             `ROP_BLEND_FACTOR_ZERO:                 factor_dst_a = 8'h00;
             `ROP_BLEND_FACTOR_ONE:                  factor_dst_a = 8'hFF;
             `ROP_BLEND_FACTOR_SRC_RGB:              factor_dst_a = src_color[7:0];
@@ -134,7 +130,7 @@ module VX_rop_blend #(
     VX_pipe_register #(
         .DATAW  (1 + `ROP_LOGIC_OP_BITS + 24 + 8 + 24 + 8 + 32 + 32),
         .RESETW (1)
-    ) pipe_reg (
+    ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
@@ -164,7 +160,7 @@ module VX_rop_blend #(
 
     always @(*) begin
         // Blend Equations (TODO: ask about logic op and whether blending is disabled or not when logic op is used as per GL spec)
-        case (mode_rgb)
+        case (reg_csrs.blend_mode_rgb)
             `ROP_BLEND_MODE_FUNC_ADD: begin
                 out_red   =
                 out_blue  =
@@ -197,7 +193,7 @@ module VX_rop_blend #(
                 out_green =
                 end
         endcase
-        case (mode_a)
+        case (reg_csrs.blend_mode_a)
             `ROP_BLEND_MODE_FUNC_ADD: begin
                 out_a =
                 end
@@ -228,7 +224,7 @@ module VX_rop_blend #(
     VX_pipe_register #(
         .DATAW  (32),
         .RESETW (1)
-    ) pipe_reg (
+    ) pipe_reg2 (
         .clk      (clk),
         .reset    (pipe_reset),
         .enable   (pipe_enable),
