@@ -4,15 +4,16 @@ module VX_rop_mult_add #(
     parameter CORE_ID = 0
 ) (
     // Mode used to determine which values to multiply and whether to use addition or subtraction.
-    input wire [1:0] mode,
+    input wire [`ROP_BLEND_MODE_BITS-1:0] mode_rgb,
+    input wire [`ROP_BLEND_MODE_BITS-1:0] mode_a,
 
-    input wire [31:0] src_rgba,
-    input wire [31:0] dst_rgba,
+    input wire [31:0] src_color,
+    input wire [31:0] dst_color,
 
     input wire [31:0] src_blend_factor,
     input wire [31:0] dst_blend_factor,
 
-    output wire [31:0] result_rgba
+    output wire [31:0] color_out
 );
 
     // How to do math because the color constant is float between [0, 1] and 

@@ -99,7 +99,7 @@ module VX_rop_blend #(
             `ROP_BLEND_FACTOR_CONST_A:              factor_dst_rgb = {const_alpha, const_alpha, const_alpha};
             `ROP_BLEND_FACTOR_ONE_MINUS_CONST_A:    factor_dst_rgb = {8'hFF - const_alpha, 8'hFF - const_alpha, 8'hFF - const_alpha};
             `ROP_BLEND_FACTOR_ALPHA_SAT:            factor_dst_rgb = 
-            default:                                factor_src_rgb = {24{1'b0}};
+            default:                                factor_dst_rgb = {24{1'b0}};
         endcase
         case (reg_csrs.blend_func_dst_a)
             `ROP_BLEND_FACTOR_ZERO:                 factor_dst_a = 8'h00;
@@ -117,109 +117,115 @@ module VX_rop_blend #(
             `ROP_BLEND_FACTOR_CONST_A:              factor_dst_a = const_alpha;
             `ROP_BLEND_FACTOR_ONE_MINUS_CONST_A:    factor_dst_a = 8'hFF - const_alpha;
             `ROP_BLEND_FACTOR_ALPHA_SAT:            factor_dst_a = 8'hFF;
-            default:                                factor_src_a = 8'h00;
+            default:                                factor_dst_a = 8'h00;
         endcase
     end
 
     // Store the original source color in pipe_color in case blending is turned off
-    wire pipe_enable, pipe_reset, pipe_logic_op;
+    wire pipe_enable, pipe_reset;
     wire [31:0] pipe_src_color, pipe_dst_color;
     wire [23:0] pipe_factor_src_rgb, pipe_factor_dst_rgb;
-    wire [7:0] pipe_factor_rgb_a, pipe_factor_dst_a;
+    wire [7:0] pipe_factor_src_a, pipe_factor_dst_a;
+    wire [`ROP_LOGIC_OP_BITS-1:0] pipe_logic_op;
+    wire [`ROP_BLEND_MODE_BITS-1:0] pipe_blend_mode_rgb, pipe_blend_mode_a;
 
     VX_pipe_register #(
-        .DATAW  (1 + `ROP_LOGIC_OP_BITS + 24 + 8 + 24 + 8 + 32 + 32),
+        .DATAW  (1 + 1 + `ROP_LOGIC_OP_BITS + 2*`ROP_BLEND_MODE_BITS + 24 + 8 + 24 + 8 + 32 + 32),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
-        .data_in  ({enable,      reset,      reg_csrs.logic_op,  factor_src_rgb,      factor_rgb_a,      factor_dst_rgb,      factor_dst_a,      src_color,      dst_color}),
-        .data_out ({pipe_enable, pipe_reset, pipe_logic_op,      pipe_factor_src_rgb, pipe_factor_rgb_a, pipe_factor_dst_rgb, pipe_factor_dst_a, pipe_src_color, pipe_dst_color})
+        .data_in  ({enable,      reset,      reg_csrs.logic_op, reg_csrs.blend_mode_rgb, reg_csrs.blend_mode_a, factor_src_rgb,      factor_src_a,      factor_dst_rgb,      factor_dst_a,      src_color,      dst_color}),
+        .data_out ({pipe_enable, pipe_reset, pipe_logic_op,     pipe_blend_mode_rgb,     pipe_blend_mode_a,     pipe_factor_src_rgb, pipe_factor_src_a, pipe_factor_dst_rgb, pipe_factor_dst_a, pipe_src_color, pipe_dst_color})
     );
+
+    wire [31:0] mult_add_color_out, min_color_out, max_color_out, rop_logic_color_out;
+    wire [31:0] color_out;
 
     VX_rop_mult_add #(
     ) mult_add (
-        .mode(),
-        .src_rgba(),
-        .dst_rgba(),
-        .src_blend_factor(),
-        .dst_blend_factor(),
-        .result_rgba()
+        .mode_rgb(pipe_blend_mode_rgb),
+        .mode_a(pipe_blend_mode_a),
+        .src_color(pipe_src_color),
+        .dst_color(pipe_dst_color),
+        .src_blend_factor({pipe_factor_src_rgb, pipe_factor_src_a}),
+        .dst_blend_factor({pipe_factor_dst_rgb, pipe_factor_dst_a}),
+        .color_out(mult_add_color_out)
+    );
+
+    VX_rop_min_max #(
+    ) min_max (
+        .src_color(pipe_src_color),
+        .dst_color(pipe_dst_color),
+        .min_color_out(min_color_out),
+        .max_color_out(max_color_out)
     );
 
     VX_rop_logic #(
     ) rop_logic (
-        .logic_op(),
-        .src_color(),
-        .dst_color(),
-        .color_out()
+        .logic_op(pipe_logic_op),
+        .src_color(pipe_src_color),
+        .dst_color(pipe_dst_color),
+        .color_out(rop_logic_color_out)
     );
 
-    wire [7:0] out_red, out_green, out_blue;
-
     always @(*) begin
-        // Blend Equations (TODO: ask about logic op and whether blending is disabled or not when logic op is used as per GL spec)
-        case (reg_csrs.blend_mode_rgb)
+        // Blend Equations
+        // RGB Component
+        case (pipe_blend_mode_rgb)
             `ROP_BLEND_MODE_FUNC_ADD: begin
-                out_red   =
-                out_blue  =
-                out_green =
+                color_out[31:8] = mult_add_color_out[31:8];
                 end
             `ROP_BLEND_MODE_FUNC_SUBTRACT: begin
-                out_red   =
-                out_blue  =
-                out_green =
+                color_out[31:8] = mult_add_color_out[31:8];
                 end
             `ROP_BLEND_MODE_FUNC_REVERSE_SUBTRACT: begin
-                out_red   =
-                out_blue  =
-                out_green =
+                color_out[31:8] = mult_add_color_out[31:8];
                 end
             `ROP_BLEND_MODE_MIN: begin
-                out_red   =
-                out_blue  =
-                out_green =
+                color_out[31:8] = min_color_out[31:8];
                 end
             `ROP_BLEND_MODE_MAX: begin
-                out_red   =
-                out_blue  =
-                out_green =
+                color_out[31:8] = max_color_out[31:8];
                 end
-            `ROP_BLEND_MODE_LOGIC_OP:
+            `ROP_BLEND_MODE_LOGIC_OP: begin
+                color_out[31:8] = rop_logic_color_out[31:8];
+                end
             default: begin
-                out_red   =
-                out_blue  =
-                out_green =
+                // Figure out default
                 end
         endcase
-        case (reg_csrs.blend_mode_a)
+        // Alpha Component
+        case (pipe_blend_mode_a)
             `ROP_BLEND_MODE_FUNC_ADD: begin
-                out_a =
+                color_out[7:0] = mult_add_color_out[7:0];
                 end
             `ROP_BLEND_MODE_FUNC_SUBTRACT: begin
-                out_a =
+                color_out[7:0] = mult_add_color_out[7:0];
                 end
             `ROP_BLEND_MODE_FUNC_REVERSE_SUBTRACT: begin
-                out_a =
+                color_out[7:0] = mult_add_color_out[7:0];
                 end
             `ROP_BLEND_MODE_MIN: begin
-                out_a =
+                color_out[7:0] = min_color_out[7:0];
                 end
             `ROP_BLEND_MODE_MAX: begin
-                out_a =
+                color_out[7:0] = max_color_out[7:0];
                 end
-            `ROP_BLEND_MODE_LOGIC_OP:
+            `ROP_BLEND_MODE_LOGIC_OP: begin
+                color_out[7:0] = rop_logic_color_out[7:0];
+                end
             default: begin
-                out_a =
+                // Figure out defualt
                 end
         endcase
     end
 
     // If enable is off, pass the original source color (now stored in pipe_color) on to the next stage and ignore blending
-    wire [31:0] pipe_out_color;
+    wire [31:0] pipe_color_out;
 
-    assign pipe_out_color = (enable_out) ? {out_red, out_green, out_blue, out_a} : pipe_src_color;
+    assign pipe_color_out = (enable_out) ? color_out : pipe_src_color;
 
     VX_pipe_register #(
         .DATAW  (32),
@@ -228,7 +234,7 @@ module VX_rop_blend #(
         .clk      (clk),
         .reset    (pipe_reset),
         .enable   (pipe_enable),
-        .data_in  ({pipe_out_color}),
+        .data_in  ({pipe_color_out}),
         .data_out ({out_color})
     );
 
