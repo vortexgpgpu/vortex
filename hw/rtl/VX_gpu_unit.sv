@@ -16,7 +16,7 @@ module VX_gpu_unit #(
 `ifdef PERF_ENABLE
     VX_perf_tex_if.master   perf_tex_if,
 `endif
-    VX_tex_csr_if.slave     tex_csr_if,
+    VX_tex_dcr_if.slave     tex_dcr_if,
     VX_dcache_req_if.master tcache_req_if,
     VX_dcache_rsp_if.slave  tcache_rsp_if,
 `endif
@@ -138,7 +138,7 @@ module VX_gpu_unit #(
     `endif
         .tex_req_if    (tex_req_if),
         .tex_rsp_if    (tex_rsp_if),
-        .tex_csr_if    (tex_csr_if),
+        .tex_dcr_if    (tex_dcr_if),
         .cache_req_if  (tcache_req_if),
         .cache_rsp_if  (tcache_rsp_if)
     );

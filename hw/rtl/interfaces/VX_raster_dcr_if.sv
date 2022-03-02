@@ -1,11 +1,11 @@
-`ifndef VX_RASTER_CSR_IF
-`define VX_RASTER_CSR_IF
+`ifndef VX_RASTER_DCR_IF
+`define VX_RASTER_DCR_IF
 
 `include "VX_raster_define.vh"
 
-interface VX_raster_csr_if ();
+interface VX_raster_dcr_if ();
 
-    raster_csrs_t data;
+    raster_dcrs_t data;
 
     modport master (
         output data

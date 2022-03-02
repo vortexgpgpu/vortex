@@ -22,11 +22,11 @@ module Vortex (
     input wire [`VX_MEM_TAG_WIDTH-1:0]      mem_rsp_tag,
     output wire                             mem_rsp_ready,
 
-    // CSR request
-    input  wire                             csr_wr_valid,
-    input  wire [`VX_CSR_ADDR_WIDTH-1:0]    csr_wr_addr,
-    input  wire [`VX_CSR_DATA_WIDTH-1:0]    csr_wr_data,
-    output wire                             csr_wr_ready,
+    // DCR request
+    input  wire                             dcr_wr_valid,
+    input  wire [`VX_DCR_ADDR_WIDTH-1:0]    dcr_wr_addr,
+    input  wire [`VX_DCR_DATA_WIDTH-1:0]    dcr_wr_data,
+    output wire                             dcr_wr_ready,
 
     // Control / status
     input wire                              start,
@@ -35,31 +35,31 @@ module Vortex (
     `STATIC_ASSERT((`L3_ENABLE == 0 || `NUM_CLUSTERS > 1), ("invalid parameter"))
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_csr_if    tex_csr_if();
+    VX_tex_dcr_if    tex_dcr_if();
 `endif
 `ifdef EXT_RASTER_ENABLE
-    VX_raster_csr_if raster_csr_if();
+    VX_raster_dcr_if raster_dcr_if();
 `endif
 `ifdef EXT_ROP_ENABLE
-    VX_rop_csr_if    rop_csr_if();
+    VX_rop_dcr_if    rop_dcr_if();
 `endif
     
-    VX_csr_global csr_global(
+    VX_dcr_data dcr_data(
         .clk          (clk),
         .reset        (reset),
     `ifdef EXT_TEX_ENABLE
-        .tex_csr_if    (tex_csr_if),
+        .tex_dcr_if    (tex_dcr_if),
     `endif
     `ifdef EXT_RASTER_ENABLE
-        .raster_csr_if (raster_csr_if),  
+        .raster_dcr_if (raster_dcr_if),  
     `endif
     `ifdef EXT_ROP_ENABLE
-        .rop_csr_if    (rop_csr_if),
+        .rop_dcr_if    (rop_dcr_if),
     `endif
-        .csr_wr_valid (csr_wr_valid),
-        .csr_wr_addr  (csr_wr_addr),
-        .csr_wr_data  (csr_wr_data),
-        .csr_wr_ready (csr_wr_ready)
+        .dcr_wr_valid (dcr_wr_valid),
+        .dcr_wr_addr  (dcr_wr_addr),
+        .dcr_wr_data  (dcr_wr_data),
+        .dcr_wr_ready (dcr_wr_ready)
     );
 
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_req_valid;
@@ -90,13 +90,13 @@ module Vortex (
             .reset          (cluster_reset),
             
         `ifdef EXT_TEX_ENABLE
-            .tex_csr_if     (tex_csr_if),
+            .tex_dcr_if     (tex_dcr_if),
         `endif
         `ifdef EXT_RASTER_ENABLE
-            .raster_csr_if  (raster_csr_if),  
+            .raster_dcr_if  (raster_dcr_if),  
         `endif
         `ifdef EXT_ROP_ENABLE
-            .rop_csr_if     (rop_csr_if),
+            .rop_dcr_if     (rop_dcr_if),
         `endif
 
             .mem_req_valid  (per_cluster_mem_req_valid [i]),

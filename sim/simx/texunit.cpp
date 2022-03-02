@@ -39,7 +39,7 @@ public:
     }
 
     uint32_t read(uint32_t stage, int32_t u, int32_t v, int32_t lod, TraceData* trace_data) {
-      auto& states = core_->global_csrs_.tex_csrs.at(stage);
+      auto& states = core_->dcrs_.tex_dcrs.at(stage);
       auto xu = TFixed<TEX_FXD_FRAC>::make(u);
       auto xv = TFixed<TEX_FXD_FRAC>::make(v);
       auto base_addr  = states.at(TEX_STATE_ADDR) + states.at(TEX_STATE_MIPOFF(lod));

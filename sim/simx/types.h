@@ -174,6 +174,7 @@ enum class GpuType {
   JOIN,
   BAR,
   TEX,
+  INTERP,
   RASTER,
   ROP
 };
@@ -188,6 +189,7 @@ inline std::ostream &operator<<(std::ostream &os, const GpuType& type) {
   case GpuType::TEX:    os << "TEX"; break;
   case GpuType::RASTER: os << "RASTER"; break;
   case GpuType::ROP:    os << "ROP"; break;
+  case GpuType::INTERP: os << "INTERP"; break;
   }
   return os;
 }

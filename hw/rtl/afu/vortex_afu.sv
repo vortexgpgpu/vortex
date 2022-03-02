@@ -62,7 +62,7 @@ localparam AFU_ID_H           = 16'h0004;      // AFU ID Higher
 
 localparam CMD_MEM_READ       = `AFU_IMAGE_CMD_MEM_READ;
 localparam CMD_MEM_WRITE      = `AFU_IMAGE_CMD_MEM_WRITE;
-localparam CMD_CSR_WRITE      = `AFU_IMAGE_CMD_CSR_WRITE;
+localparam CMD_DCR_WRITE      = `AFU_IMAGE_CMD_DCR_WRITE;
 localparam CMD_RUN            = `AFU_IMAGE_CMD_RUN;
 localparam CMD_TYPE_WIDTH     = $clog2(`AFU_IMAGE_CMD_MAX_VALUE+1);
 
@@ -90,8 +90,8 @@ localparam STATE_IDLE         = 0;
 localparam STATE_MEM_WRITE    = 1;
 localparam STATE_MEM_READ     = 2;
 localparam STATE_RUN          = 3;
-localparam STATE_CSR_WRITE    = 4;
-localparam STATE_WIDTH        = $clog2(STATE_CSR_WRITE+1);
+localparam STATE_DCR_WRITE    = 4;
+localparam STATE_WIDTH        = $clog2(STATE_DCR_WRITE+1);
 
 `ifdef SCOPE
 `SCOPE_DECL_SIGNALS
@@ -131,8 +131,8 @@ t_ccip_clAddr               cmd_io_addr = t_ccip_clAddr'(cmd_args[0]);
 wire [CCI_ADDR_WIDTH-1:0] cmd_mem_addr  = CCI_ADDR_WIDTH'(cmd_args[1]);
 wire [CCI_ADDR_WIDTH-1:0] cmd_data_size = CCI_ADDR_WIDTH'(cmd_args[2]);
 
-wire [`VX_CSR_ADDR_WIDTH-1:0] cmd_csr_addr = `VX_CSR_ADDR_WIDTH'(cmd_args[0]);
-wire [`VX_CSR_DATA_WIDTH-1:0] cmd_csr_data = `VX_CSR_DATA_WIDTH'(cmd_args[1]);
+wire [`VX_DCR_ADDR_WIDTH-1:0] cmd_dcr_addr = `VX_DCR_ADDR_WIDTH'(cmd_args[0]);
+wire [`VX_DCR_DATA_WIDTH-1:0] cmd_dcr_data = `VX_DCR_DATA_WIDTH'(cmd_args[1]);
 
 `ifdef SCOPE
 wire [63:0]   cmd_scope_rdata;
@@ -292,7 +292,7 @@ end
 
 wire cmd_mem_rd_done;
 reg  cmd_mem_wr_done;
-wire cmd_csr_wr_done;
+wire cmd_dcr_wr_done;
 wire cmd_run_done;
 reg  vx_started;
 
@@ -329,11 +329,11 @@ always @(posedge clk) begin
           `endif
             state <= STATE_MEM_WRITE;
           end
-          CMD_CSR_WRITE: begin      
+          CMD_DCR_WRITE: begin      
           `ifdef DBG_TRACE_AFU
-            dpi_trace("%d: STATE CSR_WRITE: addr=0x%0h data=%0d\n", $time, cmd_csr_addr, cmd_csr_data);
+            dpi_trace("%d: STATE DCR_WRITE: addr=0x%0h data=%0d\n", $time, cmd_dcr_addr, cmd_dcr_data);
           `endif
-            state <= STATE_CSR_WRITE;
+            state <= STATE_DCR_WRITE;
           end
           CMD_RUN: begin        
           `ifdef DBG_TRACE_AFU
@@ -366,8 +366,8 @@ always @(posedge clk) begin
         end
       end
 
-      STATE_CSR_WRITE: begin
-        if (cmd_csr_wr_done) begin
+      STATE_DCR_WRITE: begin
+        if (cmd_dcr_wr_done) begin
           state <= STATE_IDLE;
         `ifdef DBG_TRACE_AFU
           dpi_trace("%d: STATE IDLE\n", $time);
@@ -917,10 +917,10 @@ assign cci_mem_req_tag   = cci_mem_req_rw ? cci_mem_wr_req_ctr : cci_mem_rd_req_
 
 // Vortex /////////////////////////////////////////////////////////////////////
 
-wire                          vx_csr_wr_valid = (STATE_CSR_WRITE == state);
-wire [`VX_CSR_ADDR_WIDTH-1:0] vx_csr_wr_addr  = cmd_csr_addr;
-wire [`VX_CSR_DATA_WIDTH-1:0] vx_csr_wr_data  = cmd_csr_data;
-wire                          vx_csr_wr_ready;
+wire                          vx_dcr_wr_valid = (STATE_DCR_WRITE == state);
+wire [`VX_DCR_ADDR_WIDTH-1:0] vx_dcr_wr_addr  = cmd_dcr_addr;
+wire [`VX_DCR_DATA_WIDTH-1:0] vx_dcr_wr_data  = cmd_dcr_data;
+wire                          vx_dcr_wr_ready;
 
 Vortex vortex (
   `SCOPE_BIND_afu_vortex
@@ -943,18 +943,18 @@ Vortex vortex (
   .mem_rsp_tag    (vx_mem_rsp_tag),
   .mem_rsp_ready  (vx_mem_rsp_ready),
 
-  // CSR write request
-  .csr_wr_valid   (vx_csr_wr_valid),
-  .csr_wr_addr    (vx_csr_wr_addr),
-  .csr_wr_data    (vx_csr_wr_data),
-  .csr_wr_ready   (vx_csr_wr_ready),
+  // DCR write request
+  .dcr_wr_valid   (vx_dcr_wr_valid),
+  .dcr_wr_addr    (vx_dcr_wr_addr),
+  .dcr_wr_data    (vx_dcr_wr_data),
+  .dcr_wr_ready   (vx_dcr_wr_ready),
  
   // Control / status
   .start          (vx_start),
   .busy           (vx_busy)
 );
 
-assign cmd_csr_wr_done = vx_csr_wr_ready;
+assign cmd_dcr_wr_done = vx_dcr_wr_ready;
 assign cmd_run_done = !vx_busy;
 
 // COUT HANDLING //////////////////////////////////////////////////////////////

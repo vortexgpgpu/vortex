@@ -42,7 +42,7 @@
 #define CMD_MEM_READ        AFU_IMAGE_CMD_MEM_READ
 #define CMD_MEM_WRITE       AFU_IMAGE_CMD_MEM_WRITE
 #define CMD_RUN             AFU_IMAGE_CMD_RUN
-#define CMD_CSR_WRITE       AFU_IMAGE_CMD_CSR_WRITE
+#define CMD_DCR_WRITE       AFU_IMAGE_CMD_DCR_WRITE
 
 #define MMIO_CMD_TYPE       (AFU_IMAGE_MMIO_CMD_TYPE * 4)
 #define MMIO_CMD_ARG0       (AFU_IMAGE_MMIO_CMD_ARG0 * 4)
@@ -547,7 +547,7 @@ extern int vx_start(vx_device_h hdevice) {
     return 0;
 }
 
-extern int vx_csr_write(vx_device_h hdevice, uint32_t addr, uint64_t value) {
+extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint64_t value) {
     if (nullptr == hdevice)
         return -1;
 
@@ -557,10 +557,10 @@ extern int vx_csr_write(vx_device_h hdevice, uint32_t addr, uint64_t value) {
     if (vx_ready_wait(hdevice, -1) != 0)
         return -1;    
   
-    // write CSR value
+    // write DCR value
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG0, addr));
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG1, value));
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_CSR_WRITE));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_DCR_WRITE));
 
     return 0;
 }

@@ -13,13 +13,13 @@
 
 using namespace vortex;
 
-Core::Core(const SimContext& ctx, uint32_t id, const ArchDef &arch, const GlobalCSRS &global_csrs)
+Core::Core(const SimContext& ctx, uint32_t id, const ArchDef &arch, const DCRS &dcrs)
     : SimObject(ctx, "Core")
     , MemRspPort(this)
     , MemReqPort(this)
     , id_(id)
     , arch_(arch)
-    , global_csrs_(global_csrs)
+    , dcrs_(dcrs)
     , decoder_(arch)
     , mmu_(0, arch.wsize(), true)
     , warps_(arch.num_warps())

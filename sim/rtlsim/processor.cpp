@@ -183,11 +183,11 @@ public:
     return exitcode;
   }
 
-  void write_csr(uint32_t addr, uint64_t value) {
-    device_->csr_wr_valid = 1;
-    device_->csr_wr_addr  = addr;
-    device_->csr_wr_data  = value;
-    while (device_->csr_wr_valid) {
+  void write_dcr(uint32_t addr, uint64_t value) {
+    device_->dcr_wr_valid = 1;
+    device_->dcr_wr_addr  = addr;
+    device_->dcr_wr_data  = value;
+    while (device_->dcr_wr_valid) {
       this->tick();
     }
   }
@@ -208,7 +208,7 @@ private:
     this->reset_avs_bus();
   #endif
 
-    this->reset_csr_bus();
+    this->reset_dcr_bus();
 
     device_->reset = 1;
 
@@ -253,7 +253,7 @@ private:
   #else
     this->eval_avs_bus(0);
   #endif
-    this->eval_csr_bus(0);
+    this->eval_dcr_bus(0);
 
     device_->clk = 1;
     this->eval();
@@ -263,7 +263,7 @@ private:
   #else
     this->eval_avs_bus(1);
   #endif
-    this->eval_csr_bus(1);
+    this->eval_dcr_bus(1);
 
     if (MEM_CYCLE_RATIO > 0) { 
       auto cycle = timestamp / 2;
@@ -573,17 +573,17 @@ private:
 
 #endif
 
-  void  reset_csr_bus() {
-    device_->csr_wr_valid = 0;
+  void  reset_dcr_bus() {
+    device_->dcr_wr_valid = 0;
   }
 
-  void  eval_csr_bus(bool clk) {
+  void  eval_dcr_bus(bool clk) {
     if (!clk) {
-      csr_wr_ready_ = device_->csr_wr_ready;
+      dcr_wr_ready_ = device_->dcr_wr_ready;
       return;
     }
-    if (device_->csr_wr_valid && csr_wr_ready_) {
-      device_->csr_wr_valid = 0;
+    if (device_->dcr_wr_valid && dcr_wr_ready_) {
+      device_->dcr_wr_valid = 0;
     }
   }
 
@@ -638,7 +638,7 @@ private:
   bool mem_wr_rsp_active_;
   bool mem_wr_rsp_ready_;
 
-  bool csr_wr_ready_;
+  bool dcr_wr_ready_;
 
   RAM *ram_;
 
@@ -665,6 +665,6 @@ int Processor::run() {
   return impl_->run();
 }
 
-void Processor::write_csr(uint32_t addr, uint64_t value) {
-  return impl_->write_csr(addr, value);
+void Processor::write_dcr(uint32_t addr, uint64_t value) {
+  return impl_->write_dcr(addr, value);
 }

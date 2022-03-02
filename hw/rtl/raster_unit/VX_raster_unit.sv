@@ -17,7 +17,7 @@ module VX_raster_unit #(
     VX_dcache_rsp_if.slave  cache_rsp_if,
 
     // Inputs
-    VX_raster_csr_if.slave  raster_csr_if,
+    VX_raster_dcr_if.slave  raster_dcr_if,
     VX_raster_req_if.slave  raster_req_if,
 
     // Outputs
@@ -27,8 +27,8 @@ module VX_raster_unit #(
     `UNUSED_VAR (reset)
 
      // TODO: remove
-     raster_csrs_t raster_csrs = raster_csr_if.data;
-    `UNUSED_VAR (raster_csrs)
+     raster_dcrs_t raster_dcrs = raster_dcr_if.data;
+    `UNUSED_VAR (raster_dcrs)
 
     // TODO: remove
     `UNUSED_VAR (raster_req_if.valid)

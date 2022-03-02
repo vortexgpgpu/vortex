@@ -30,9 +30,9 @@ const char* reference_file  = nullptr;
 int wrap    = TEX_WRAP_CLAMP;
 int filter  = TEX_FILTER_POINT;
 float scale = 1.0f;
-int format  = 0;
-bool use_sw = false;
+int format  = TEX_FORMAT_A8R8G8B8;
 ePixelFormat eformat = FORMAT_A8R8G8B8;
+bool use_sw = false;
 
 vx_device_h device = nullptr;
 vx_buffer_h staging_buf = nullptr;
@@ -68,13 +68,13 @@ static void parse_args(int argc, char **argv) {
     case 'f': {
       format  = std::atoi(optarg);
       switch (format) {
-      case 0: eformat = FORMAT_A8R8G8B8; break;
-      case 1: eformat = FORMAT_R5G6B5; break;
-      case 2: eformat = FORMAT_A1R5G5B5; break;
-      case 3: eformat = FORMAT_A4R4G4B4; break;
-      case 4: eformat = FORMAT_A8L8; break;
-      case 5: eformat = FORMAT_L8; break;
-      case 6: eformat = FORMAT_A8; break;
+      case TEX_FORMAT_A8R8G8B8: eformat = FORMAT_A8R8G8B8; break;
+      case TEX_FORMAT_R5G6B5: eformat = FORMAT_R5G6B5; break;
+      case TEX_FORMAT_A1R5G5B5: eformat = FORMAT_A1R5G5B5; break;
+      case TEX_FORMAT_A4R4G4B4: eformat = FORMAT_A4R4G4B4; break;
+      case TEX_FORMAT_A8L8: eformat = FORMAT_A8L8; break;
+      case TEX_FORMAT_L8: eformat = FORMAT_L8; break;
+      case TEX_FORMAT_A8: eformat = FORMAT_A8; break;
       default:
         std::cout << "Error: invalid format: " << format << std::endl;
         exit(1);
@@ -269,15 +269,15 @@ int main(int argc, char *argv[]) {
   }
 
 	// configure texture units
-	vx_csr_write(device, CSR_TEX_STAGE,   0);
-	vx_csr_write(device, CSR_TEX_LOGDIM,  (src_logheight << 16) | src_logwidth);	
-	vx_csr_write(device, CSR_TEX_FORMAT,  format);
-	vx_csr_write(device, CSR_TEX_WRAP,    (wrap << 16) | wrap);
-	vx_csr_write(device, CSR_TEX_FILTER,  (filter ? TEX_FILTER_BILINEAR : TEX_FILTER_POINT));
-	vx_csr_write(device, CSR_TEX_ADDR,    src_addr);
+	vx_dcr_write(device, DCR_TEX_STAGE,   0);
+	vx_dcr_write(device, DCR_TEX_LOGDIM,  (src_logheight << 16) | src_logwidth);	
+	vx_dcr_write(device, DCR_TEX_FORMAT,  format);
+	vx_dcr_write(device, DCR_TEX_WRAP,    (wrap << 16) | wrap);
+	vx_dcr_write(device, DCR_TEX_FILTER,  (filter ? TEX_FILTER_BILINEAR : TEX_FILTER_POINT));
+	vx_dcr_write(device, DCR_TEX_ADDR,    src_addr);
 	for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
     assert(i < TEX_LOD_MAX);
-		vx_csr_write(device, CSR_TEX_MIPOFF(i), mip_offsets.at(i));
+		vx_dcr_write(device, DCR_TEX_MIPOFF(i), mip_offsets.at(i));
 	};
 
   // render

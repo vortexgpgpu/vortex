@@ -16,15 +16,15 @@ module VX_rop_unit #(
     VX_dcache_rsp_if.slave  cache_rsp_if,
 
     // Inputs
-    VX_rop_csr_if.slave rop_csr_if,
+    VX_rop_dcr_if.slave rop_dcr_if,
     VX_rop_req_if.slave rop_req_if
 );
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
 
     // TODO: remove
-    rop_csrs_t rop_csrs = rop_csr_if.data;
-    `UNUSED_VAR (rop_csrs)
+    rop_dcrs_t rop_dcrs = rop_dcr_if.data;
+    `UNUSED_VAR (rop_dcrs)
 
     // TODO: remove
     `UNUSED_VAR (rop_req_if.valid)

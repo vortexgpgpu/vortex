@@ -25,12 +25,12 @@ public:
         {}
     };
 
-    class CSRS {
+    class DCRS {
     private:
         std::array<uint32_t, RASTER_STATE_COUNT> states_;
 
     public:
-        CSRS() {
+        DCRS() {
             this->clear();
         }
     
@@ -45,12 +45,12 @@ public:
         }
 
         uint32_t read(uint32_t addr) {
-            uint32_t state = CSR_RASTER_STATE(addr);
+            uint32_t state = DCR_RASTER_STATE(addr);
             return states_.at(state);
         }
     
         void write(uint32_t addr, uint32_t value) {
-            uint32_t state = CSR_RASTER_STATE(addr);
+            uint32_t state = DCR_RASTER_STATE(addr);
             states_.at(state) = value;
         }
     };
@@ -63,11 +63,13 @@ public:
 
     void reset();
 
-    uint32_t csr_read(uint32_t addr);
+    uint32_t dcr_read(uint32_t addr);
   
-    void csr_write(uint32_t addr, uint32_t value);
+    void dcr_write(uint32_t addr, uint32_t value);
 
     bool pop(raster_quad_t* quad);
+
+    int32_t interpolate(uint32_t quad, int32_t a, int32_t b, int32_t c);
 
     void tick();
 

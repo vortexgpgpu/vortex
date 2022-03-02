@@ -31,11 +31,11 @@ module VX_cache #(
     // Enable cache writeable
     parameter WRITE_ENABLE                  = 1,
 
-    // core request tag size
-    parameter CORE_TAG_WIDTH                = $clog2(MSHR_SIZE),
-    
     // size of tag id in core request tag
-    parameter CORE_TAG_ID_BITS              = CORE_TAG_WIDTH,
+    parameter CORE_TAG_ID_BITS              = $clog2(MSHR_SIZE),
+
+    // core request tag size
+    parameter CORE_TAG_WIDTH                = (CORE_TAG_ID_BITS + `DBG_CACHE_REQ_IDW),
 
     // Memory request tag size
     parameter MEM_TAG_WIDTH                 = (32 - $clog2(CACHE_LINE_SIZE)),

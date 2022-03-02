@@ -26,15 +26,15 @@
 `define TEX_BLEND_ONE       (2 ** `TEX_BLEND_FRAC)
 
 task trace_tex_state (
-    input [`CSR_ADDR_BITS-1:0] state
+    input [`DCR_ADDR_BITS-1:0] state
 );
     case (state)
-        `CSR_TEX_ADDR:      dpi_trace("ADDR");     
-        `CSR_TEX_LOGDIM:    dpi_trace("LOGDIM");
-        `CSR_TEX_FORMAT:    dpi_trace("FORMAT");
-        `CSR_TEX_FILTER:    dpi_trace("FILTER");
-        `CSR_TEX_WRAP:      dpi_trace("WRAP");
-        //`CSR_TEX_MIPOFF:   
+        `DCR_TEX_ADDR:      dpi_trace("ADDR");     
+        `DCR_TEX_LOGDIM:    dpi_trace("LOGDIM");
+        `DCR_TEX_FORMAT:    dpi_trace("FORMAT");
+        `DCR_TEX_FILTER:    dpi_trace("FILTER");
+        `DCR_TEX_WRAP:      dpi_trace("WRAP");
+        //`DCR_TEX_MIPOFF:   
         default:            dpi_trace("MIPOFF");
     endcase  
 endtask

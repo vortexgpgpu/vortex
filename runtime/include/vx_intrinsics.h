@@ -88,21 +88,16 @@ extern "C" {
 	__r;							            \
 })
 
-// Raster load
-#define vx_rast() ({                            \
-    unsigned __r;                               \
-    __asm__ __volatile__ (".insn r 0x0b, 0, 0, %0, x0, x0" : "=r"(__r)); \
-    __r;                                        \
-})
-
-// Rop write
-#define vx_rop(x, y, color) ({                  \
-    __asm__ __volatile__ (".insn r4 0x5b, 1, 1, x0, %0, %1, %2" :: "r"(x), "r"(y), "r"(color); \
-})
-
 // IMADD
 #define vx_imadd(x, y, acc) ({                  \
     __asm__ __volatile__ (".insn r4 0x5b, 1, 2, x0, %0, %1, %2" :: "r"(x), "r"(y), "r"(acc); \
+})
+
+// Interpolate
+#define vx_interp(quad, a, b, c) ({             \
+	unsigned __r;                               \
+    __asm__ __volatile__ (".insn r4 0x5b, 2, %1, %0, %2, %3, %4" : "=r"(__r) : "i"(quad), "r"(a), "r"(b), "r"(c)); \
+	__r;							            \
 })
 
 // Set thread mask

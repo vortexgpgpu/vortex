@@ -1,6 +1,10 @@
 `ifndef VX_TYPES
 `define VX_TYPES
 
+// Device configuration registers 
+`define NUM_DCRS                    4096
+`define DCR_BITS                    12
+
 // User Floating-Point CSRs
 `define CSR_FFLAGS                  12'h001
 `define CSR_FRM                     12'h002
@@ -95,7 +99,7 @@
 `define CSR_MIMPID                  12'hF13
 `define CSR_MHARTID                 12'hF14
 
-// Vortex GPGU CSRs
+// GPGU CSRs
 `define CSR_WTID                    12'hCC0
 `define CSR_LTID                    12'hCC1
 `define CSR_GTID                    12'hCC2
@@ -106,6 +110,18 @@
 `define CSR_NT                      12'hFC0
 `define CSR_NW                      12'hFC1
 `define CSR_NC                      12'hFC2
+
+// Raster unit CSRs
+`define CSR_RASTER_BEGIN            12'h7C0
+`define CSR_RASTER_FETCH            (`CSR_RASTER_BEGIN+0)
+`define CSR_RASTER_PID              (`CSR_RASTER_BEGIN+1)
+`define CSR_RASTER_END              (`CSR_RASTER_BEGIN+2)
+
+// ROP unit CSRs
+`define CSR_ROP_BEGIN               `CSR_RASTER_END
+`define CSR_ROP_COLOR               (`CSR_ROP_BEGIN+0)
+`define CSR_ROP_Z                   (`CSR_ROP_BEGIN+4)
+`define CSR_ROP_END                 (`CSR_ROP_BEGIN+4)
 
 // Texture Units //////////////////////////////////////////////////////////////
 
@@ -143,17 +159,17 @@
 `define TEX_STATE_MIPOFF(lod)       (5+(lod))
 `define TEX_STATE_COUNT             (`TEX_STATE_MIPOFF(`TEX_LOD_MAX)+1)
 
-`define CSR_TEX_STATE_BEGIN         12'h7C0
-`define CSR_TEX_STAGE               `CSR_TEX_STATE_BEGIN
-`define CSR_TEX_ADDR                (`CSR_TEX_STATE_BEGIN+1+`TEX_STATE_ADDR)
-`define CSR_TEX_LOGDIM              (`CSR_TEX_STATE_BEGIN+1+`TEX_STATE_LOGDIM)
-`define CSR_TEX_FORMAT              (`CSR_TEX_STATE_BEGIN+1+`TEX_STATE_FORMAT)
-`define CSR_TEX_FILTER              (`CSR_TEX_STATE_BEGIN+1+`TEX_STATE_FILTER)
-`define CSR_TEX_WRAP                (`CSR_TEX_STATE_BEGIN+1+`TEX_STATE_WRAP)
-`define CSR_TEX_MIPOFF(lod)         (`CSR_TEX_STATE_BEGIN+1+`TEX_STATE_MIPOFF(lod))
-`define CSR_TEX_STATE_END           (`CSR_TEX_STATE_BEGIN+1+`TEX_STATE_COUNT)
+`define DCR_TEX_STATE_BEGIN         12'h100
+`define DCR_TEX_STAGE               `DCR_TEX_STATE_BEGIN
+`define DCR_TEX_ADDR                (`DCR_TEX_STATE_BEGIN+1+`TEX_STATE_ADDR)
+`define DCR_TEX_LOGDIM              (`DCR_TEX_STATE_BEGIN+1+`TEX_STATE_LOGDIM)
+`define DCR_TEX_FORMAT              (`DCR_TEX_STATE_BEGIN+1+`TEX_STATE_FORMAT)
+`define DCR_TEX_FILTER              (`DCR_TEX_STATE_BEGIN+1+`TEX_STATE_FILTER)
+`define DCR_TEX_WRAP                (`DCR_TEX_STATE_BEGIN+1+`TEX_STATE_WRAP)
+`define DCR_TEX_MIPOFF(lod)         (`DCR_TEX_STATE_BEGIN+1+`TEX_STATE_MIPOFF(lod))
+`define DCR_TEX_STATE_END           (`DCR_TEX_STATE_BEGIN+1+`TEX_STATE_COUNT)
 
-`define CSR_TEX_STATE(addr)         ((addr) - `CSR_TEX_ADDR)
+`define DCR_TEX_STATE(addr)         ((addr) - `DCR_TEX_ADDR)
 
 // Raster Units ///////////////////////////////////////////////////////////////
 
@@ -166,15 +182,15 @@
 `define RASTER_STATE_TILE_LOGSIZE   4
 `define RASTER_STATE_COUNT          5
 
-`define CSR_RASTER_STATE_BEGIN      `CSR_TEX_STATE_END
-`define CSR_RASTER_TBUF_ADDR        (`CSR_RASTER_STATE_BEGIN+`RASTER_STATE_TBUF_ADDR)
-`define CSR_RASTER_TILE_COUNT       (`CSR_RASTER_STATE_BEGIN+`RASTER_STATE_TILE_COUNT)
-`define CSR_RASTER_PBUF_ADDR        (`CSR_RASTER_STATE_BEGIN+`RASTER_STATE_PBUF_ADDR)
-`define CSR_RASTER_PBUF_STRIDE      (`CSR_RASTER_STATE_BEGIN+`RASTER_STATE_PBUF_STRIDE)
-`define CSR_RASTER_TILE_LOGSIZE     (`CSR_RASTER_STATE_BEGIN+`RASTER_STATE_TILE_LOGSIZE)
-`define CSR_RASTER_STATE_END        (`CSR_RASTER_STATE_BEGIN+`RASTER_STATE_COUNT)
+`define DCR_RASTER_STATE_BEGIN      `DCR_TEX_STATE_END
+`define DCR_RASTER_TBUF_ADDR        (`DCR_RASTER_STATE_BEGIN+`RASTER_STATE_TBUF_ADDR)
+`define DCR_RASTER_TILE_COUNT       (`DCR_RASTER_STATE_BEGIN+`RASTER_STATE_TILE_COUNT)
+`define DCR_RASTER_PBUF_ADDR        (`DCR_RASTER_STATE_BEGIN+`RASTER_STATE_PBUF_ADDR)
+`define DCR_RASTER_PBUF_STRIDE      (`DCR_RASTER_STATE_BEGIN+`RASTER_STATE_PBUF_STRIDE)
+`define DCR_RASTER_TILE_LOGSIZE     (`DCR_RASTER_STATE_BEGIN+`RASTER_STATE_TILE_LOGSIZE)
+`define DCR_RASTER_STATE_END        (`DCR_RASTER_STATE_BEGIN+`RASTER_STATE_COUNT)
 
-`define CSR_RASTER_STATE(addr)      ((addr) - `CSR_RASTER_STATE_BEGIN)
+`define DCR_RASTER_STATE(addr)      ((addr) - `DCR_RASTER_STATE_BEGIN)
 
 // Render Output Units ////////////////////////////////////////////////////////
 
@@ -257,23 +273,23 @@
 `define ROP_STATE_LOGIC_OP          13
 `define ROP_STATE_COUNT             14
 
-`define CSR_ROP_STATE_BEGIN         `CSR_RASTER_STATE_END
-`define CSR_ROP_ZBUF_ADDR           (`CSR_ROP_STATE_BEGIN+`ROP_STATE_ZBUF_ADDR)
-`define CSR_ROP_ZBUF_PITCH          (`CSR_ROP_STATE_BEGIN+`ROP_STATE_ZBUF_PITCH)
-`define CSR_ROP_CBUF_ADDR           (`CSR_ROP_STATE_BEGIN+`ROP_STATE_CBUF_ADDR)
-`define CSR_ROP_CBUF_PITCH          (`CSR_ROP_STATE_BEGIN+`ROP_STATE_CBUF_PITCH)
-`define CSR_ROP_ZFUNC               (`CSR_ROP_STATE_BEGIN+`ROP_STATE_ZFUNC)
-`define CSR_ROP_SFUNC               (`CSR_ROP_STATE_BEGIN+`ROP_STATE_SFUNC)
-`define CSR_ROP_ZPASS               (`CSR_ROP_STATE_BEGIN+`ROP_STATE_ZPASS)
-`define CSR_ROP_ZFAIL               (`CSR_ROP_STATE_BEGIN+`ROP_STATE_ZFAIL)
-`define CSR_ROP_SFAIL               (`CSR_ROP_STATE_BEGIN+`ROP_STATE_SFAIL)
-`define CSR_ROP_BLEND_MODE          (`CSR_ROP_STATE_BEGIN+`ROP_STATE_BLEND_MODE)
-`define CSR_ROP_BLEND_SRC           (`CSR_ROP_STATE_BEGIN+`ROP_STATE_BLEND_SRC)
-`define CSR_ROP_BLEND_DST           (`CSR_ROP_STATE_BEGIN+`ROP_STATE_BLEND_DST)
-`define CSR_ROP_BLEND_CONST         (`CSR_ROP_STATE_BEGIN+`ROP_STATE_BLEND_CONST)
-`define CSR_ROP_LOGIC_OP            (`CSR_ROP_STATE_BEGIN+`ROP_STATE_LOGIC_OP)
-`define CSR_ROP_STATE_END           (`CSR_ROP_STATE_BEGIN+`ROP_STATE_COUNT)
+`define DCR_ROP_STATE_BEGIN         `DCR_RASTER_STATE_END
+`define DCR_ROP_ZBUF_ADDR           (`DCR_ROP_STATE_BEGIN+`ROP_STATE_ZBUF_ADDR)
+`define DCR_ROP_ZBUF_PITCH          (`DCR_ROP_STATE_BEGIN+`ROP_STATE_ZBUF_PITCH)
+`define DCR_ROP_CBUF_ADDR           (`DCR_ROP_STATE_BEGIN+`ROP_STATE_CBUF_ADDR)
+`define DCR_ROP_CBUF_PITCH          (`DCR_ROP_STATE_BEGIN+`ROP_STATE_CBUF_PITCH)
+`define DCR_ROP_ZFUNC               (`DCR_ROP_STATE_BEGIN+`ROP_STATE_ZFUNC)
+`define DCR_ROP_SFUNC               (`DCR_ROP_STATE_BEGIN+`ROP_STATE_SFUNC)
+`define DCR_ROP_ZPASS               (`DCR_ROP_STATE_BEGIN+`ROP_STATE_ZPASS)
+`define DCR_ROP_ZFAIL               (`DCR_ROP_STATE_BEGIN+`ROP_STATE_ZFAIL)
+`define DCR_ROP_SFAIL               (`DCR_ROP_STATE_BEGIN+`ROP_STATE_SFAIL)
+`define DCR_ROP_BLEND_MODE          (`DCR_ROP_STATE_BEGIN+`ROP_STATE_BLEND_MODE)
+`define DCR_ROP_BLEND_SRC           (`DCR_ROP_STATE_BEGIN+`ROP_STATE_BLEND_SRC)
+`define DCR_ROP_BLEND_DST           (`DCR_ROP_STATE_BEGIN+`ROP_STATE_BLEND_DST)
+`define DCR_ROP_BLEND_CONST         (`DCR_ROP_STATE_BEGIN+`ROP_STATE_BLEND_CONST)
+`define DCR_ROP_LOGIC_OP            (`DCR_ROP_STATE_BEGIN+`ROP_STATE_LOGIC_OP)
+`define DCR_ROP_STATE_END           (`DCR_ROP_STATE_BEGIN+`ROP_STATE_COUNT)
 
-`define CSR_ROP_STATE(addr)         ((addr) - `CSR_ROP_STATE_BEGIN)
+`define DCR_ROP_STATE(addr)         ((addr) - `DCR_ROP_STATE_BEGIN)
 
 `endif

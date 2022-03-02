@@ -20,13 +20,13 @@ public:
         std::vector<std::vector<mem_addr_size_t>> mem_addrs;
     };
 
-    class CSRS {
+    class DCRS {
     private:
         std::array<std::array<uint32_t, TEX_STATE_COUNT>, TEX_STAGE_COUNT> states_;
         uint32_t stage_;
 
     public:
-        CSRS() {
+        DCRS() {
             this->clear();
         }
     
@@ -44,19 +44,19 @@ public:
         }
 
         uint32_t read(uint32_t addr) {
-            if (addr == CSR_TEX_STAGE) {
+            if (addr == DCR_TEX_STAGE) {
                 return stage_;
             }
-            uint32_t state = CSR_TEX_STATE(addr);
+            uint32_t state = DCR_TEX_STATE(addr);
             return states_.at(stage_).at(state);
         }
     
         void write(uint32_t addr, uint32_t value) {
-            if (addr == CSR_TEX_STAGE) {
+            if (addr == DCR_TEX_STAGE) {
                 stage_ = value;
                 return;
             }
-            uint32_t state = CSR_TEX_STATE(addr);
+            uint32_t state = DCR_TEX_STATE(addr);
             assert(stage_ < states_.size());
             assert(state < states_.at(0).size());
             states_.at(stage_).at(state) = value;

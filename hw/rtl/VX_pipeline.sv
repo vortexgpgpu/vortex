@@ -18,7 +18,7 @@ module VX_pipeline #(
     VX_icache_rsp_if.slave      icache_rsp_if,
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_csr_if.slave         tex_csr_if,
+    VX_tex_dcr_if.slave         tex_dcr_if,
     VX_dcache_req_if.master     tcache_req_if,
     VX_dcache_rsp_if.slave      tcache_rsp_if,
 `endif
@@ -137,7 +137,7 @@ module VX_pipeline #(
         .dcache_rsp_if  (dcache_rsp_if),
 
     `ifdef EXT_TEX_ENABLE
-        .tex_csr_if     (tex_csr_if),
+        .tex_dcr_if     (tex_dcr_if),
         .tcache_req_if  (tcache_req_if),
         .tcache_rsp_if  (tcache_rsp_if),
     `endif
