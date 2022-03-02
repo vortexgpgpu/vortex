@@ -2,50 +2,47 @@
 # Makefile to compile and test the memory stream unit
 #---------------------------------------------------------
 
-TOP = VX_mem_streamer
+TOP = VX_mem_streamer_test
 
-HW_DIR = ../..
-RTL_DIR = $(HW_DIR)/rtl
-DPI_DIR = $(HW_DIR)/dpi
-INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs
-SRCS = memsim.cpp $(DPI_DIR)/util_dpi.cpp
+RTL_DIR = ../../rtl
+DPI_DIR = ../../dpi
+
+RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(DPI_DIR)
 
 VERILATOR ?= $(VERILATOR_ROOT)/bin/verilator
 
-VL_FLAGS = 
-# Generate C++ in executable form
-VL_FLAGS += -exe -cc $(TOP).sv --top-module $(TOP)
-# Optimize. Convert all x's to 0's
-VL_FLAGS += -O2 -x-assign 0
-# Warn about lint issues. May not want this on less solid designs
-VL_FLAGS += -Wall -Wpedantic -Wno-DECLFILENAME -Wno-REDEFMACRO
-# Generate trace
+VL_FLAGS += --exe --cc $(TOP).sv --top-module $(TOP)
+VL_FLAGS += --language 1800-2009 --assert -Wall
+VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
+VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += --trace
-# Include paths
-VL_FLAGS += $(INCLUDE)
+VL_FLAGS += $(RTL_INCLUDE)
 
-# CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
-# CXXFLAGS += -fPIC -Wno-maybe-uninitialized
-# CXXFLAGS += -I$(HW_DIR)
+SRCS += memsim.cpp $(DPI_DIR)/util_dpi.cpp
 
-CF += -std=c++11 -fms-extensions -I../..
+CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors -Wno-array-bounds -Wno-maybe-uninitialized
+CXXFLAGS += ../../../dpi
 
-default: build
+default: run
 
 gen: $(SRCS)
-	@echo "--VERILATE--"
-	$(VERILATOR) $(VL_FLAGS) $^ -CFLAGS '$(CF)'
+	@echo 
+	@echo "### VERILATE ###"
+	$(VERILATOR) $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS)'
 
 build: gen
-	@echo "--COMPILE--"
+	@echo 
+	@echo "### BUILD ###"
 	$(MAKE) -C obj_dir -j 4 -f V$(TOP).mk
 
 run: build
-	@echo "--RUN--"
+	@echo
+	@echo "### RUN ###"
 	obj_dir/V$(TOP)
 
 clean:
-	@echo "--CLEAN--"
+	@echo
+	@echo "### CLEAN ###"
 	-rm -rf obj_dir *.vcd
 
 #---------------------------------------------------------

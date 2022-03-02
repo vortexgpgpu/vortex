@@ -1,6 +1,6 @@
 `include "VX_platform.vh"
 
-`TRACING_OFF
+// `TRACING_OFF
 module VX_index_buffer #(
     parameter DATAW  = 1,
     parameter SIZE   = 1,
@@ -85,4 +85,4 @@ module VX_index_buffer #(
     assign full       = full_r;
     
 endmodule
-`TRACING_ON
+// `TRACING_ON

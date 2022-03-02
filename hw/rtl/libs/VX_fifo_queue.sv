@@ -1,6 +1,6 @@
 `include "VX_platform.vh"
 
-`TRACING_OFF
+// `TRACING_OFF
 module VX_fifo_queue #(
     parameter DATAW     = 1,
     parameter SIZE      = 2,
@@ -229,4 +229,4 @@ module VX_fifo_queue #(
     end
 
 endmodule
-`TRACING_ON
+// `TRACING_ON

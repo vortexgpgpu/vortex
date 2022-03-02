@@ -6,7 +6,7 @@
 #include <iostream>
 #include "svdpi.h"
 #include "verilated_vpi.h"
-#include "VX_config.h"
+#include "../VX_config.h"
 
 extern "C" {
   void dpi_imul(bool enable, int a, int b, bool is_signed_a, bool is_signed_b, int* resultl, int* resulth);
