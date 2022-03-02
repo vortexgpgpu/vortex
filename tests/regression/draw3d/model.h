@@ -4,6 +4,16 @@
 #include <vector>
 
 typedef struct {
+  float     x;
+  float     y;
+  float     z;
+  float     w;
+  uint32_t  c;
+  float     u;
+  float     v;
+} vertex_t;
+
+typedef struct {
   uint32_t i0;
   uint32_t i1;
   uint32_t i2;

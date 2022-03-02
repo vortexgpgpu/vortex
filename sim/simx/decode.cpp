@@ -366,6 +366,7 @@ static const char* op_string(const Instr &instr) {
         std::abort();
       }
     }
+    case 2: return "INTERP";
     default:
       std::abort();
     }

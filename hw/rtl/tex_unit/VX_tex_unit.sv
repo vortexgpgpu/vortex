@@ -17,7 +17,7 @@ module VX_tex_unit #(
     VX_dcache_rsp_if.slave  cache_rsp_if,
 
     // Inputs
-    VX_tex_csr_if.slave     tex_csr_if,
+    VX_tex_dcr_if.slave     tex_dcr_if,
     VX_tex_req_if.slave     tex_req_if,
     
     // Outputs
@@ -31,14 +31,14 @@ module VX_tex_unit #(
     wire [`NUM_THREADS-1:0][`TEX_MIPOFF_BITS-1:0]   sel_mipoff;
     wire [`NUM_THREADS-1:0][1:0][`TEX_LOD_BITS-1:0] sel_logdims;
 
-    assign tex_csr_if.stage = tex_req_if.stage;
-    tex_csrs_t tex_csrs = tex_csr_if.data;
+    assign tex_dcr_if.stage = tex_req_if.stage;
+    tex_dcrs_t tex_dcrs = tex_dcr_if.data;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign mip_level[i]      = tex_req_if.lod[i][`TEX_LOD_BITS-1:0];
-        assign sel_mipoff[i]     = tex_csrs.mipoff[mip_level[i]];
-        assign sel_logdims[i][0] = tex_csrs.logdims[0];
-        assign sel_logdims[i][1] = tex_csrs.logdims[1];
+        assign sel_mipoff[i]     = tex_dcrs.mipoff[mip_level[i]];
+        assign sel_logdims[i][0] = tex_dcrs.logdims[0];
+        assign sel_logdims[i][1] = tex_dcrs.logdims[1];
     end
 
     // address generation
@@ -65,14 +65,14 @@ module VX_tex_unit #(
         .req_valid  (tex_req_if.valid),
         .req_tmask  (tex_req_if.tmask),
         .req_coords (tex_req_if.coords),
-        .req_format (tex_csrs.format),
-        .req_filter (tex_csrs.filter),
-        .req_wraps  (tex_csrs.wraps),
-        .req_baseaddr(tex_csrs.baddr),    
+        .req_format (tex_dcrs.format),
+        .req_filter (tex_dcrs.filter),
+        .req_wraps  (tex_dcrs.wraps),
+        .req_baseaddr(tex_dcrs.baddr),    
         .mip_level  (mip_level),
         .req_mipoff (sel_mipoff),
         .req_logdims(sel_logdims),
-        .req_info   ({tex_csrs.format, tex_req_if.rd, tex_req_if.wb, tex_req_if.wid, tex_req_if.PC, tex_req_if.uuid}),
+        .req_info   ({tex_dcrs.format, tex_req_if.rd, tex_req_if.wb, tex_req_if.wid, tex_req_if.PC, tex_req_if.uuid}),
         .req_ready  (tex_req_if.ready),
 
         // outputs

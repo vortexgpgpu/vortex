@@ -29,9 +29,10 @@ const char* kernel_file = "kernel.bin";
 const char* input_file  = "soccer.png";
 const char* output_file = "output.png";
 const char* reference_file  = nullptr;
-ePixelFormat src_format = FORMAT_A8R8G8B8;
-int src_wrap = 0;
-int src_filter = 0; // 0-> point, 1->bilinear
+int src_format = TEX_FORMAT_A8R8G8B8;
+ePixelFormat src_eformat = FORMAT_A8R8G8B8;
+int src_wrap = TEX_WRAP_CLAMP;
+int src_filter  = TEX_FILTER_POINT;
 uint32_t dst_width  = 64;
 uint32_t dst_height = 64;
 uint32_t tile_size = 64;
@@ -52,7 +53,7 @@ static void show_usage() {
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "i:o:r:w:h:t:?")) != -1) {
+  while ((c = getopt(argc, argv, "i:o:r:w:h:t:f:g:?")) != -1) {
     switch (c) {
     case 'i':
       input_file = optarg;
@@ -71,6 +72,24 @@ static void parse_args(int argc, char **argv) {
       break;
     case 't':
       tile_size = std::atoi(optarg);
+      break;
+    case 'f':
+      src_format  = std::atoi(optarg);
+      switch (src_format) {
+      case TEX_FORMAT_A8R8G8B8: src_eformat = FORMAT_A8R8G8B8; break;
+      case TEX_FORMAT_R5G6B5: src_eformat = FORMAT_R5G6B5; break;
+      case TEX_FORMAT_A1R5G5B5: src_eformat = FORMAT_A1R5G5B5; break;
+      case TEX_FORMAT_A4R4G4B4: src_eformat = FORMAT_A4R4G4B4; break;
+      case TEX_FORMAT_A8L8: src_eformat = FORMAT_A8L8; break;
+      case TEX_FORMAT_L8: src_eformat = FORMAT_L8; break;
+      case TEX_FORMAT_A8: src_eformat = FORMAT_A8; break;
+      default:
+        std::cout << "Error: invalid format: " << src_format << std::endl;
+        exit(1);
+      }
+      break;
+    case 'g':
+      src_filter = std::atoi(optarg);
       break;
     case '?': {
       show_usage();
@@ -182,7 +201,7 @@ int main(int argc, char *argv[]) {
 
   {
     std::vector<uint8_t> staging;  
-    RT_CHECK(LoadImage(input_file, src_format, staging, &src_width, &src_height));
+    RT_CHECK(LoadImage(input_file, src_eformat, staging, &src_width, &src_height));
     
     // check power of two support
     if (!ispow2(src_width) || !ispow2(src_height)) {
@@ -190,7 +209,7 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    RT_CHECK(GenerateMipmaps(srcbuf, mip_offsets, staging, src_format, src_width, src_height, src_width * 4));    
+    RT_CHECK(GenerateMipmaps(srcbuf, mip_offsets, staging, src_eformat, src_width, src_height, src_width * 4));    
   }
 
   uint32_t src_logwidth  = log2ceil(src_width);
@@ -267,28 +286,28 @@ int main(int argc, char *argv[]) {
   }
 
   // configure texture units
-	vx_csr_write(device, CSR_TEX_STAGE,  0);
-	vx_csr_write(device, CSR_TEX_LOGDIM, (src_logheight << 16) | src_logwidth);	
-	vx_csr_write(device, CSR_TEX_FORMAT, src_format);
-	vx_csr_write(device, CSR_TEX_WRAP,   (src_wrap << 16) | src_wrap);
-	vx_csr_write(device, CSR_TEX_FILTER, src_filter);
-	vx_csr_write(device, CSR_TEX_ADDR,   srcbuf_addr);
+	vx_dcr_write(device, DCR_TEX_STAGE,  0);
+	vx_dcr_write(device, DCR_TEX_LOGDIM, (src_logheight << 16) | src_logwidth);	
+	vx_dcr_write(device, DCR_TEX_FORMAT, src_format);
+	vx_dcr_write(device, DCR_TEX_WRAP,   (src_wrap << 16) | src_wrap);
+	vx_dcr_write(device, DCR_TEX_FILTER, src_filter);
+	vx_dcr_write(device, DCR_TEX_ADDR,   srcbuf_addr);
 	for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
     assert(i < TEX_LOD_MAX);
-		vx_csr_write(device, CSR_TEX_MIPOFF(i), mip_offsets.at(i));
+		vx_dcr_write(device, DCR_TEX_MIPOFF(i), mip_offsets.at(i));
 	};
 
   // configure raster units
-  vx_csr_write(device, CSR_RASTER_TBUF_ADDR, tilebuf_addr);
-  vx_csr_write(device, CSR_RASTER_TILE_COUNT, num_tiles);
-  vx_csr_write(device, CSR_RASTER_PBUF_ADDR, primbuf_addr);
-  vx_csr_write(device, CSR_RASTER_PBUF_STRIDE, sizeof(rast_prim_t));
-  vx_csr_write(device, CSR_RASTER_TILE_LOGSIZE, logTileSize);
+  vx_dcr_write(device, DCR_RASTER_TBUF_ADDR, tilebuf_addr);
+  vx_dcr_write(device, DCR_RASTER_TILE_COUNT, num_tiles);
+  vx_dcr_write(device, DCR_RASTER_PBUF_ADDR, primbuf_addr);
+  vx_dcr_write(device, DCR_RASTER_PBUF_STRIDE, sizeof(rast_prim_t));
+  vx_dcr_write(device, DCR_RASTER_TILE_LOGSIZE, logTileSize);
 
   // configure rop units
-  vx_csr_write(device, CSR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16) | ROP_BLEND_MODE_ADD);
-  vx_csr_write(device, CSR_ROP_BLEND_SRC,  (ROP_BLEND_FUNC_ONE << 16) | ROP_BLEND_FUNC_SRC_A);
-  vx_csr_write(device, CSR_ROP_BLEND_DST,  (ROP_BLEND_FUNC_ZERO << 16) | ROP_BLEND_FUNC_ONE_MINUS_SRC_A);
+  vx_dcr_write(device, DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16) | ROP_BLEND_MODE_ADD);
+  vx_dcr_write(device, DCR_ROP_BLEND_SRC,  (ROP_BLEND_FUNC_ONE << 16) | ROP_BLEND_FUNC_SRC_A);
+  vx_dcr_write(device, DCR_ROP_BLEND_DST,  (ROP_BLEND_FUNC_ZERO << 16) | ROP_BLEND_FUNC_ONE_MINUS_SRC_A);
 
   // run tests
   std::cout << "render" << std::endl;

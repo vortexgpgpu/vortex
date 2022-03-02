@@ -10,13 +10,13 @@ module VX_cluster #(
     input  wire                             reset,
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_csr_if.slave                     tex_csr_if,
+    VX_tex_dcr_if.slave                     tex_dcr_if,
 `endif
 `ifdef EXT_RASTER_ENABLE
-    VX_raster_csr_if.slave                  raster_csr_if,
+    VX_raster_dcr_if.slave                  raster_dcr_if,
 `endif
 `ifdef EXT_ROP_ENABLE
-    VX_rop_csr_if.slave                     rop_csr_if,
+    VX_rop_dcr_if.slave                     rop_dcr_if,
 `endif
 
 
@@ -99,7 +99,7 @@ module VX_cluster #(
         .perf_raster_if(perf_raster_if),
     `endif
         .raster_req_if (raster_req_if),
-        .raster_csr_if (raster_csr_if),
+        .raster_dcr_if (raster_dcr_if),
         .raster_rsp_if (raster_rsp_if),
         .cache_req_if  (rcache_req_if),
         .cache_rsp_if  (rcache_rsp_if)
@@ -159,7 +159,7 @@ module VX_cluster #(
         .perf_rop_if   (perf_rop_if),
     `endif
         .rop_req_if    (rop_req_if),
-        .rop_csr_if    (rop_csr_if),
+        .rop_dcr_if    (rop_dcr_if),
         .cache_req_if  (ccache_req_if),
         .cache_rsp_if  (ccache_rsp_if)
     );
@@ -194,7 +194,7 @@ module VX_cluster #(
             .reset          (core_reset),
 
         `ifdef EXT_TEX_ENABLE
-            .tex_csr_if     (tex_csr_if),
+            .tex_dcr_if     (tex_dcr_if),
         `endif
 
             .mem_req_valid  (per_core_mem_req_valid[i]),

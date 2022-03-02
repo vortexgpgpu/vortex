@@ -58,10 +58,10 @@ module Vortex_axi #(
     output wire                         m_axi_rready,
     
     // CSR write request
-    input  wire                         csr_wr_valid,
-    input  wire [`VX_CSR_ADDR_WIDTH-1:0] csr_wr_addr,
-    input  wire [`VX_CSR_DATA_WIDTH-1:0] csr_wr_data,
-    output wire                         csr_wr_ready,
+    input  wire                         dcr_wr_valid,
+    input  wire [`VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr,
+    input  wire [`VX_DCR_DATA_WIDTH-1:0] dcr_wr_data,
+    output wire                         dcr_wr_ready,
 
     // Control / status
     input wire                          start,
@@ -166,10 +166,10 @@ module Vortex_axi #(
         .mem_rsp_tag    (mem_rsp_tag),
         .mem_rsp_ready  (mem_rsp_ready),
 
-        .csr_wr_valid   (csr_wr_valid),
-        .csr_wr_addr    (csr_wr_addr),
-        .csr_wr_data    (csr_wr_data),
-        .csr_wr_ready   (csr_wr_ready),
+        .dcr_wr_valid   (dcr_wr_valid),
+        .dcr_wr_addr    (dcr_wr_addr),
+        .dcr_wr_data    (dcr_wr_data),
+        .dcr_wr_ready   (dcr_wr_ready),
 
         .start          (start),
         .busy           (busy)

@@ -7,18 +7,18 @@
 
 namespace vortex {
 
-class GlobalCSRS {
+class DCRS {
 public:
-    GlobalCSRS();
-    ~GlobalCSRS();
+    DCRS();
+    ~DCRS();
 
     void clear();
 
     void write(uint32_t addr, uint64_t value);
 
-    TexUnit::CSRS tex_csrs;
-    RasterUnit::CSRS raster_csrs;
-    RopUnit::CSRS rop_csrs;
+    TexUnit::DCRS tex_dcrs;
+    RasterUnit::DCRS raster_dcrs;
+    RopUnit::DCRS rop_dcrs;
 };
 
 }

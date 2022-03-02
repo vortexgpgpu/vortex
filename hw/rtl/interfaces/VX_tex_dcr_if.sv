@@ -1,12 +1,12 @@
-`ifndef VX_TEX_CSR_IF
-`define VX_TEX_CSR_IF
+`ifndef VX_TEX_DCR_IF
+`define VX_TEX_DCR_IF
 
 `include "VX_tex_define.vh"
 
-interface VX_tex_csr_if ();
+interface VX_tex_dcr_if ();
 
     wire [`NTEX_BITS-1:0] stage;
-    tex_csrs_t data;
+    tex_dcrs_t data;
 
     modport master (
         input  stage,

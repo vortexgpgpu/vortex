@@ -31,6 +31,8 @@
 
 `define CSR_ADDR_BITS   12
 
+`define DCR_ADDR_BITS   12
+
 `define PERF_CTR_BITS   44
 
 `define UUID_BITS       44
@@ -359,8 +361,8 @@
 `define VX_MEM_DATA_WIDTH       `L3_MEM_DATA_WIDTH
 `define VX_MEM_TAG_WIDTH        `L3_MEM_TAG_WIDTH
 `define VX_CORE_TAG_WIDTH       `L3_CORE_TAG_WIDTH 
-`define VX_CSR_ADDR_WIDTH       `CSR_ADDR_BITS
-`define VX_CSR_DATA_WIDTH       32
+`define VX_DCR_ADDR_WIDTH       `DCR_ADDR_BITS
+`define VX_DCR_DATA_WIDTH       32
 
 `define TO_FULL_ADDR(x)         {x, (32-$bits(x))'(0)}
 

@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_csr_local #(
+module VX_csr_data #(
     parameter CORE_ID = 0
 ) (
     input wire clk,

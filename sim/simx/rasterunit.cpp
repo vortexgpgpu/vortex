@@ -27,6 +27,11 @@ public:
         return false;
     }
 
+    int32_t interpolate(uint32_t quad, int32_t a, int32_t b, int32_t c) {
+      //--
+      return 0;
+    }
+
     void tick() {
         //--
     }
@@ -59,6 +64,10 @@ bool RasterUnit::pop(raster_quad_t* quad) {
 
 void RasterUnit::tick() {
   impl_->tick();
+}
+
+int32_t RasterUnit::interpolate(uint32_t quad, int32_t a, int32_t b, int32_t c) {
+  return impl_->interpolate(quad, a, b, c);
 }
 
 const RasterUnit::PerfStats& RasterUnit::perf_stats() const {

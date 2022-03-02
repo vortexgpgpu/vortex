@@ -1454,10 +1454,6 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         }
         rd_write = true;
       } break;
-      default:
-        std::abort();
-      }
-      break;
       case 2: { // IMADD
         trace->exe_type = ExeType::ALU;
         trace->alu_type = AluType::IMADD;
@@ -1470,8 +1466,29 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           rddata[t].i = (WordI)rsdata[t][0].i * (WordI)rsdata[t][1].i + (WordI)rsdata[t][2].i;
         }
         rd_write = true;
+      } break;
+      default:
+        std::abort();
       }
-      break;
+      break;      
+    case 2: { // INTERP
+        trace->exe_type = ExeType::GPU; 
+        trace->gpu_type = GpuType::INTERP;
+        trace->used_iregs.set(rsrc0);
+        trace->used_iregs.set(rsrc1);
+        trace->used_iregs.set(rsrc2);
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t))
+            continue;        
+          auto quad = func2;
+          auto a    = rsdata[t][0].i;
+          auto b    = rsdata[t][1].i;
+          auto c    = rsdata[t][2].i;
+          auto result = core_->raster_unit_->interpolate(quad, a, b, c);
+          rddata[t].i = result;
+        }
+        rd_write = true;
+      } break;
     default:
       std::abort();
     }

@@ -13,7 +13,7 @@ module VX_execute #(
     VX_dcache_rsp_if.slave dcache_rsp_if,
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_csr_if.slave     tex_csr_if,
+    VX_tex_dcr_if.slave     tex_dcr_if,
     VX_dcache_req_if.master tcache_req_if,
     VX_dcache_rsp_if.slave  tcache_rsp_if,
 `endif
@@ -143,7 +143,7 @@ module VX_execute #(
     `ifdef PERF_ENABLE
         .perf_tex_if    (perf_tex_if),
     `endif
-        .tex_csr_if     (tex_csr_if),
+        .tex_dcr_if     (tex_dcr_if),
         .tcache_req_if  (tcache_req_if),
         .tcache_rsp_if  (tcache_rsp_if),
     `endif

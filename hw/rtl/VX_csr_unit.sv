@@ -36,9 +36,9 @@ module VX_csr_unit #(
 
     wire [31:0] csr_req_data = csr_req_if.use_imm ? 32'(csr_req_if.imm) : csr_req_if.rs1_data;
 
-    VX_csr_local #(
+    VX_csr_data #(
         .CORE_ID(CORE_ID)
-    ) csr_local (
+    ) csr_data (
         .clk            (clk),
         .reset          (reset),
     `ifdef PERF_ENABLE

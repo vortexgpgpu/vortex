@@ -11,7 +11,7 @@ module VX_core #(
     input  wire                             reset,
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_csr_if.slave                     tex_csr_if,
+    VX_tex_dcr_if.slave                     tex_dcr_if,
 `endif
 
     // Memory request
@@ -59,8 +59,6 @@ module VX_core #(
     assign mem_rsp_if.data  = mem_rsp_data;
     assign mem_rsp_if.tag   = mem_rsp_tag;
     assign mem_rsp_ready = mem_rsp_if.ready;
-
-    //--
 
     VX_dcache_req_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
@@ -118,16 +116,14 @@ module VX_core #(
         .icache_rsp_if  (icache_rsp_if),
 
     `ifdef EXT_TEX_ENABLE
-        .tex_csr_if     (tex_csr_if),
+        .tex_dcr_if     (tex_dcr_if),
         .tcache_req_if  (tcache_req_if),
         .tcache_rsp_if  (tcache_rsp_if),
     `endif
 
         // Status
         .busy           (busy)
-    );  
-
-    //--
+    );
 
     VX_mem_unit #(
         .CORE_ID(CORE_ID)

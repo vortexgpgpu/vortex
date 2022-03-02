@@ -17,23 +17,20 @@ using fixed16_t  = TFixed<16>;
 using vec2d_f_t  = TVector2<float>;
 using vec2d_fx_t = TVector2<fixed16_t>;
 
-using vec3d_fx_t = TVector3<fixed16_t>;
-
 using vec4d_f_t  = TVector4<float>;
 
 using rect_f_t   = TRect<float>;
-using rect_u_t   = TRect<uint32_t>;
 
 static fixed16_t fxZero(0);
 static fixed16_t fxHalf(0.5f);
 
 // Evaluate edge function
-static fixed16_t evalEdgeFunction(const vec3d_fx_t& e, uint32_t x, uint32_t y) {
+static fixed16_t evalEdgeFunction(const rast_edge_t& e, uint32_t x, uint32_t y) {
   return (e.x * x) + (e.y * y) + e.z;
 }
 
 // Calculate the edge extents for tile corners
-static fixed16_t calcEdgeExtents(const vec3d_fx_t& e, uint32_t logTileSize) {
+static fixed16_t calcEdgeExtents(const rast_edge_t& e, uint32_t logTileSize) {
   vec2d_fx_t corners[4] = {{fxZero, fxZero},  // 00
                             {e.x,    fxZero},  // 10
                             {fxZero, e.y},     // 01
@@ -42,7 +39,7 @@ static fixed16_t calcEdgeExtents(const vec3d_fx_t& e, uint32_t logTileSize) {
   return (corners[i].x + corners[i].y) << logTileSize;
 }
 
-static float EdgeEquation(vec3d_fx_t edges[3], 
+static float EdgeEquation(rast_edge_t edges[3], 
                           const vec4d_f_t& v0, 
                           const vec4d_f_t& v1, 
                           const vec4d_f_t& v2) {
@@ -80,6 +77,13 @@ static float EdgeEquation(vec3d_fx_t edges[3],
   return det;
 }
 
+static void ColorToFloat(float out[4], uint32_t color) {
+  out[0] = ((color >>  0) & 0xFF) / 255.0f;
+  out[1] = ((color >>  8) & 0xFF) / 255.0f;
+  out[2] = ((color >> 16) & 0xFF) / 255.0f;
+  out[3] = ((color >> 24) & 0xFF) / 255.0f;
+}
+
 // traverse model primitives and do tile assignment
 uint32_t Binning(std::vector<uint8_t>& tilebuf, 
                  std::vector<uint8_t>& primbuf,
@@ -92,27 +96,33 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
 
   std::unordered_map<uint32_t, std::vector<uint32_t>> tiles;
 
+  std::vector<rast_prim_t> rast_prims;
+  rast_prims.reserve(model.primitives.size());
+
   uint32_t num_prims = 0;
   
-  for (uint32_t p = 0; p < model.primitives.size(); ++p) {    
+  for (auto& primitive : model.primitives) {
     // get primitive vertices
-    auto& primitive = model.primitives.at(p);
-    auto& p0 = *(vec4d_f_t*)&model.vertives.at(primitive.i0);
-    auto& p1 = *(vec4d_f_t*)&model.vertives.at(primitive.i1);
-    auto& p2 = *(vec4d_f_t*)&model.vertives.at(primitive.i2);
+    auto& v0 = model.vertives.at(primitive.i0);
+    auto& v1 = model.vertives.at(primitive.i1);
+    auto& v2 = model.vertives.at(primitive.i2);
 
-    vec3d_fx_t edges[3];
-    rect_u_t bbox;
+    auto& p0 = *(vec4d_f_t*)&v0;
+    auto& p1 = *(vec4d_f_t*)&v1;
+    auto& p2 = *(vec4d_f_t*)&v2;
+
+    rast_edge_t edges[3];
+    rast_bbox_t bbox;
 
     {
       // Convert position from clip to 2D homogenous device space
-      vec4d_f_t v0, v1, v2;
-      ClipTo2DH(&v0, p0, width, height);
-      ClipTo2DH(&v1, p1, width, height);
-      ClipTo2DH(&v2, p2, width, height);
+      vec4d_f_t q0, q1, q2;
+      ClipTo2DH(&q0, p0, width, height);
+      ClipTo2DH(&q1, p1, width, height);
+      ClipTo2DH(&q2, p2, width, height);
 
       // Calculate edge equation
-      auto det = EdgeEquation(edges, v0, v1, v2);
+      auto det = EdgeEquation(edges, q0, q1, q2);
       if (det <= 0) {
         // reject back-facing or degenerate triangles
         continue;
@@ -121,18 +131,52 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
 
     {
       // Convert position from clip to screen space
-      vec4d_f_t v0, v1, v2;
-      ClipToScreen(&v0, p0, width, height);
-      ClipToScreen(&v1, p1, width, height);
-      ClipToScreen(&v2, p2, width, height);
+      vec4d_f_t q0, q1, q2;
+      ClipToScreen(&q0, p0, width, height);
+      ClipToScreen(&q1, p1, width, height);
+      ClipToScreen(&q2, p2, width, height);
 
       // Calculate bounding box 
       rect_f_t tmp;
-      CalcBoundingBox(&tmp, *(vec2d_f_t*)&v0, *(vec2d_f_t*)&v1, *(vec2d_f_t*)&v2);
+      auto _q0 = (vec2d_f_t*)&q0;
+      auto _q1 = (vec2d_f_t*)&q1;
+      auto _q2 = (vec2d_f_t*)&q2;
+      CalcBoundingBox(&tmp, *_q0, *_q1, *_q2);
       bbox.left   = std::max<int32_t>(0, tmp.left);
       bbox.right  = std::min<int32_t>(width, tmp.right);
       bbox.top    = std::max<int32_t>(0, tmp.top);
       bbox.bottom = std::min<int32_t>(height, tmp.bottom);
+    }
+
+    uint32_t p;
+
+    {
+      #define INTERPOLATE_DELTA(dx, x0, x1, x2) \
+        dx.x = fixed23_t(x0 - x2); \
+        dx.y = fixed23_t(x1 - x2); \
+        dx.z = fixed23_t(x2)
+
+      rast_prim_t rast_prim;
+      rast_prim.edges[0] = edges[0];
+      rast_prim.edges[1] = edges[1];
+      rast_prim.edges[2] = edges[2];
+      rast_prim.bbox = bbox;
+
+      float colors[3][4];
+      ColorToFloat(colors[0], v0.c);
+      ColorToFloat(colors[1], v1.c);
+      ColorToFloat(colors[2], v2.c);
+      
+      INTERPOLATE_DELTA(rast_prim.attribs.z, v0.z, v1.z, v2.z);
+      INTERPOLATE_DELTA(rast_prim.attribs.r, colors[0][0], colors[1][0], colors[2][0]);
+      INTERPOLATE_DELTA(rast_prim.attribs.g, colors[0][1], colors[1][1], colors[2][1]);
+      INTERPOLATE_DELTA(rast_prim.attribs.b, colors[0][2], colors[1][2], colors[2][2]);
+      INTERPOLATE_DELTA(rast_prim.attribs.a, colors[0][3], colors[1][3], colors[2][3]);      
+      INTERPOLATE_DELTA(rast_prim.attribs.u, v0.u, v1.u, v2.u);
+      INTERPOLATE_DELTA(rast_prim.attribs.v, v0.v, v1.v, v2.v);
+
+      p = rast_prims.size();
+      rast_prims.push_back(rast_prim);      
     }
 
     // Calculate min/max tile positions
@@ -164,9 +208,9 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
       auto e2 = E2;
       for (uint32_t tx = minTileX; tx < maxTileX; ++tx) {
         // check if tile overlap triangle    
-        if ((e0 + extents[0]) >= fxZero 
-         && (e1 + extents[1]) >= fxZero
-         && (e2 + extents[2]) >= fxZero) {
+        if (((e0 + extents[0]).data() 
+           | (e1 + extents[1]).data()
+           | (e2 + extents[2]).data()) >= 0) {
           // assign primitive to tile
           uint32_t tile_id = (ty << 16) | tx;
           tiles[tile_id].push_back(p);
@@ -186,23 +230,8 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
   }
 
   {
-    primbuf.reserve(model.primitives.size() * sizeof(rast_prim_t));
-    auto prim_data = primbuf.data();
-    for (auto& primitive : model.primitives) {
-      // get primitive vertices
-      auto& p0 = *(vec4d_f_t*)&model.vertives.at(primitive.i0);
-      auto& p1 = *(vec4d_f_t*)&model.vertives.at(primitive.i1);
-      auto& p2 = *(vec4d_f_t*)&model.vertives.at(primitive.i2);
-
-      rast_prim_t prim{
-        rast_vtx_t{p0.x, p0.y, p0.z, p0.w},
-        rast_vtx_t{p1.x, p1.y, p1.z, p1.w},
-        rast_vtx_t{p2.x, p2.y, p2.z, p2.w},
-      };
-
-      *(rast_prim_t*)(prim_data) = prim;
-      prim_data += sizeof(rast_prim_t);
-    }
+    primbuf.reserve(rast_prims.size()  * sizeof(rast_prim_t));
+    memcpy(primbuf.data(), rast_prims.data(), primbuf.size());
   }
   
   {

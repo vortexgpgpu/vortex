@@ -1,11 +1,11 @@
-`ifndef VX_ROP_CSR_IF
-`define VX_ROP_CSR_IF
+`ifndef VX_ROP_DCR_IF
+`define VX_ROP_DCR_IF
 
 `include "VX_rop_define.vh"
 
-interface VX_rop_csr_if ();
+interface VX_rop_dcr_if ();
 
-    rop_csrs_t data;
+    rop_dcrs_t data;
 
     modport master (
         output data
