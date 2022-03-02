@@ -62,7 +62,7 @@ module VX_rop_blend #(
             `ROP_BLEND_FACTOR_ONE_MINUS_CONST_RGB:  factor_src_rgb = {8'hFF - const_red, 8'hFF - const_green, 8'hFF - const_blue};
             `ROP_BLEND_FACTOR_CONST_A:              factor_src_rgb = {const_alpha, const_alpha, const_alpha};
             `ROP_BLEND_FACTOR_ONE_MINUS_CONST_A:    factor_src_rgb = {8'hFF - const_alpha, 8'hFF - const_alpha, 8'hFF - const_alpha};
-            `ROP_BLEND_FACTOR_ALPHA_SAT:            factor_src_rgb = 
+            `ROP_BLEND_FACTOR_ALPHA_SAT:            factor_src_rgb = (src_color[7:0] < 8'hFF - dst_color[7:0]) ? src_color[7:0] : 8'hFF - dst_color[7:0];
             default:                                factor_src_rgb = {24{1'b1}};
         endcase
         case (reg_csrs.blend_func_src_a)
@@ -98,7 +98,7 @@ module VX_rop_blend #(
             `ROP_BLEND_FACTOR_ONE_MINUS_CONST_RGB:  factor_dst_rgb = {8'hFF - const_red, 8'hFF - const_green, 8'hFF - const_blue};
             `ROP_BLEND_FACTOR_CONST_A:              factor_dst_rgb = {const_alpha, const_alpha, const_alpha};
             `ROP_BLEND_FACTOR_ONE_MINUS_CONST_A:    factor_dst_rgb = {8'hFF - const_alpha, 8'hFF - const_alpha, 8'hFF - const_alpha};
-            `ROP_BLEND_FACTOR_ALPHA_SAT:            factor_dst_rgb = 
+            `ROP_BLEND_FACTOR_ALPHA_SAT:            factor_dst_rgb = (src_color[7:0] < 8'hFF - dst_color[7:0]) ? src_color[7:0] : 8'hFF - dst_color[7:0]; // forbidden
             default:                                factor_dst_rgb = {24{1'b0}};
         endcase
         case (reg_csrs.blend_func_dst_a)

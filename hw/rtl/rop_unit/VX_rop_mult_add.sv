@@ -27,4 +27,11 @@ module VX_rop_mult_add #(
     // are all possible cases. src_blend_factor/dst_blend_factor could be 
     // set to the orginal src/dst values or to a color constant.
 
+    // Answer:
+    // Simply treat the constant color value the same as a regular color,
+    // despite what the OpenGL documentation says. AFAIK, it will be handled in
+    // the software stack or higher-level modules.
+    // As for the multiplication, I think you'd want to take the upeer half,
+    // which is consistent with VX_tex_lerp.
+
 endmodule
