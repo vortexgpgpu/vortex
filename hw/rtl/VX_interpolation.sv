@@ -35,19 +35,15 @@ module VX_interpolation (
 ); 
 
     wire [`NUM_THREADS-1:0][31:0] mul_result;
+    wire [`NUM_THREADS-1:0][31:0] mul_result_out;
     wire [`NUM_THREADS-1:0][31:0] add_result;
-    wire [`UUID_BITS-1:0] mul_uuid_out;
-    wire [`NW_BITS-1:0] mul_wid_out;
-    wire [`NUM_THREADS-1:0] mul_tmask_out;
-    wire [31:0] mul_PC_out;
     wire [`NR_BITS-1:0] mul_rd_out;
     wire mul_wb_out;
 
     wire stall_out;
 
-    wire mul_valid_out;
-    wire mul_valid_in = valid_in;    
-    wire mul_ready_in = ~stall_out || ~mul_valid_out;
+    wire imadd_valid_out; 
+    wire mul_ready_in = ~stall_out || ~imadd_valid_out;
 
     wire is_mulh_in      = (alu_op != `INST_MUL_MUL);
 
@@ -79,32 +75,14 @@ module VX_interpolation (
         assign mul_result[i] = is_mulh_out ? mul_result_tmp[63:32] : mul_result_tmp[31:0];
     end
 
-    VX_shift_register #(
-        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + (`NUM_THREADS * 32)),
-        .DEPTH  (`LATENCY_IMUL),
-        .RESETW (1)
-    ) mul_shift_reg (
-        .clk(clk),
-        .reset    (reset),
-        .enable   (mul_ready_in),
-        .data_in  ({mul_valid_in,  uuid_in,      wid_in,      tmask_in,       PC_in,      rd_in,      wb_in,      is_mulh_in,  mul_result}),
-        .data_out ({mul_valid_out, mul_uuid_out, mul_wid_out, mul_tmask_out,  mul_PC_out, mul_rd_out, mul_wb_out, is_mulh_out, mul_result_out})
-    );
-
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        assign add_result[i] = mul_result_out[i] + alu_in3[i];
+        assign add_result[i] = mul_result[i] + alu_in3[i];
     end
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire                    rsp_valid = mul_valid_out;  
-    wire [`UUID_BITS-1:0]   rsp_uuid  = mul_uuid_out;
-    wire [`NW_BITS-1:0]     rsp_wid   = mul_wid_out;
-    wire [`NUM_THREADS-1:0] rsp_tmask = mul_tmask_out;
-    wire [31:0]             rsp_PC    = mul_PC_out;
-    wire [`NR_BITS-1:0]     rsp_rd    = mul_rd_out;
-    wire                    rsp_wb    = mul_wb_out;
-    wire [`NUM_THREADS-1:0][31:0] rsp_data = mul_result;
+    wire rsp_valid = imadd_valid_out;
+    wire [`NUM_THREADS-1:0][31:0] rsp_data = add_result;
 
     assign stall_out = ~ready_out && valid_out;
 
@@ -115,7 +93,7 @@ module VX_interpolation (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({rsp_valid, rsp_uuid, rsp_wid, rsp_tmask, rsp_PC, rsp_rd, rsp_wb, rsp_data}),
+        .data_in  ({rsp_valid, uuid_in, wid_in, tmask_in, PC_in, rd_in, wb_in, rsp_data}),
         .data_out ({valid_out, uuid_out, wid_out, tmask_out, PC_out, rd_out, wb_out, data_out})
     );
 
