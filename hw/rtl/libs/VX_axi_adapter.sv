@@ -1,4 +1,4 @@
-`include "VX_define.vh"
+`include "VX_platform.vh"
 
 module VX_axi_adapter #(
     parameter VX_DATA_WIDTH    = 512, 

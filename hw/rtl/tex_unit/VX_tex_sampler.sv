@@ -63,22 +63,25 @@ module VX_tex_sampler #(
     );
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        VX_tex_lerp #(
-        ) tex_lerp_ul (
-            .in1   (fmt_texels_s0[i][0]),
-            .in2   (fmt_texels_s0[i][1]),
-            .frac  (req_blends_s0[i][0]),
-            .out   (texel_ul[i])
-        );  
+        for (genvar j = 0; j < 4; ++j) begin
+            VX_lerp_fx #(
+                .N (8)
+            ) tex_lerp_ul (
+                .in1  (fmt_texels_s0[i][0][j*8 +: 8]),
+                .in2  (fmt_texels_s0[i][1][j*8 +: 8]),
+                .frac (req_blends_s0[i][0]),
+                .out  (texel_ul[i][j*8 +: 8])
+            );
 
-        VX_tex_lerp #(
-        ) tex_lerp_uh (
-            .in1   (fmt_texels_s0[i][2]),
-            .in2   (fmt_texels_s0[i][3]),
-            .frac  (req_blends_s0[i][0]),
-            .out   (texel_uh[i])
-        );
-
+            VX_lerp_fx #(
+                .N (8)
+            ) tex_lerp_uh (
+                .in1  (fmt_texels_s0[i][2][j*8 +: 8]),
+                .in2  (fmt_texels_s0[i][3][j*8 +: 8]),
+                .frac (req_blends_s0[i][0]),
+                .out  (texel_uh[i][j*8 +: 8])
+            );
+        end
         assign blend_v[i] = req_blends_s0[i][1];
     end
 
@@ -94,13 +97,16 @@ module VX_tex_sampler #(
     );
 
     for (genvar i = 0; i < NUM_REQS; i++) begin
-        VX_tex_lerp #(
-        ) tex_lerp_v (
-            .in1   (texel_ul_s1[i]),
-            .in2   (texel_uh_s1[i]),
-            .frac  (blend_v_s1[i]),
-            .out   (texel_v[i])
-        );
+        for (genvar j = 0; j < 4; ++j) begin
+            VX_lerp_fx #(
+                .N (8)
+            ) tex_lerp_v (
+                .in1  (texel_ul_s1[i][j*8 +: 8]),
+                .in2  (texel_uh_s1[i][j*8 +: 8]),
+                .frac (blend_v_s1[i]),
+                .out  (texel_v[i][j*8 +: 8])
+            );
+        end
     end
 
     assign stall_out = rsp_valid && ~rsp_ready;
