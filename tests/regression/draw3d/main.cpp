@@ -330,9 +330,12 @@ int main(int argc, char *argv[]) {
   vx_dcr_write(device, DCR_ROP_STENCIL_REF, 0);
 
   // configure rop blend stats
-  vx_dcr_write(device, DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16) | ROP_BLEND_MODE_ADD);
-  vx_dcr_write(device, DCR_ROP_BLEND_SRC,  (ROP_BLEND_FUNC_ONE << 16) | ROP_BLEND_FUNC_SRC_A);
-  vx_dcr_write(device, DCR_ROP_BLEND_DST,  (ROP_BLEND_FUNC_ZERO << 16) | ROP_BLEND_FUNC_ONE_MINUS_SRC_A);
+  vx_dcr_write(device, DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)   // DST
+                                         | (ROP_BLEND_MODE_ADD << 0));  // SRC
+  vx_dcr_write(device, DCR_ROP_BLEND_FUNC, (ROP_BLEND_FUNC_ZERO            << 24)   // DST_A
+                                         | (ROP_BLEND_FUNC_ONE_MINUS_SRC_A << 16)   // DST_RGB 
+                                         | (ROP_BLEND_FUNC_ONE             << 8)    // SRC_A
+                                         | (ROP_BLEND_FUNC_SRC_A           << 0));  // SRC_RGB
   vx_dcr_write(device, DCR_ROP_LOGIC_OP,  ROP_LOGIC_OP_COPY);
 
   // run tests

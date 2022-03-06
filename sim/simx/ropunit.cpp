@@ -398,10 +398,10 @@ private:
     write_mask_     = dcrs_.at(DCR_ROP_CBUF_MASK);
     blend_mode_rgb_ = dcrs_.at(DCR_ROP_BLEND_MODE) & 0xffff;
     blend_mode_a_   = dcrs_.at(DCR_ROP_BLEND_MODE) >> 16;
-    blend_src_rgb_  = dcrs_.at(DCR_ROP_BLEND_SRC) & 0xffff;
-    blend_src_a_    = dcrs_.at(DCR_ROP_BLEND_SRC) >> 16;
-    blend_dst_rgb_  = dcrs_.at(DCR_ROP_BLEND_DST) & 0xffff;
-    blend_dst_a_    = dcrs_.at(DCR_ROP_BLEND_DST) >> 16;
+    blend_src_rgb_  = (dcrs_.at(DCR_ROP_BLEND_FUNC) >>  0) & 0xff;
+    blend_src_a_    = (dcrs_.at(DCR_ROP_BLEND_FUNC) >>  8) & 0xff;
+    blend_dst_rgb_  = (dcrs_.at(DCR_ROP_BLEND_FUNC) >> 16) & 0xff;
+    blend_dst_a_    = (dcrs_.at(DCR_ROP_BLEND_FUNC) >> 24) & 0xff;
     blend_const_    = dcrs_.at(DCR_ROP_BLEND_CONST);
     logic_op_       = dcrs_.at(DCR_ROP_LOGIC_OP);    
     initialized_    = true;

@@ -71,13 +71,11 @@ module VX_rop_dcr (
                     dcrs.blend_mode_rgb <= dcr_wr_data[15:0][`ROP_BLEND_MODE_BITS-1:0];
                     dcrs.blend_mode_a   <= dcr_wr_data[31:16][`ROP_BLEND_MODE_BITS-1:0];
                 end
-                `DCR_ROP_BLEND_SRC: begin 
-                    dcrs.blend_src_rgb <= dcr_wr_data[15:0][`ROP_BLEND_FUNC_BITS-1:0];
-                    dcrs.blend_src_a   <= dcr_wr_data[31:16][`ROP_BLEND_FUNC_BITS-1:0];
-                end
-                `DCR_ROP_BLEND_DST: begin 
-                    dcrs.blend_dst_rgb <= dcr_wr_data[15:0][`ROP_BLEND_FUNC_BITS-1:0];
-                    dcrs.blend_dst_a   <= dcr_wr_data[31:16][`ROP_BLEND_FUNC_BITS-1:0];
+                `DCR_ROP_BLEND_FUNC: begin 
+                    dcrs.blend_src_rgb <= dcr_wr_data[0  +: 8][`ROP_BLEND_FUNC_BITS-1:0];
+                    dcrs.blend_src_a   <= dcr_wr_data[8  +: 8][`ROP_BLEND_FUNC_BITS-1:0];
+                    dcrs.blend_dst_rgb <= dcr_wr_data[16 +: 8][`ROP_BLEND_FUNC_BITS-1:0];
+                    dcrs.blend_dst_a   <= dcr_wr_data[24 +: 8][`ROP_BLEND_FUNC_BITS-1:0];
                 end
                 `DCR_ROP_BLEND_CONST: begin 
                     dcrs.blend_const <= dcr_wr_data[31:0];
