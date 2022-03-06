@@ -15,6 +15,8 @@ module VX_core_req_bank_sel #(
     parameter NUM_REQS          = 4,
     // core request tag size
     parameter CORE_TAG_WIDTH    = 3,
+    //Swetha: added ways 
+    parameter WAYS                          = 1, //dummy value - change this to 1 later
     // bank offset from beginning of index range
     parameter BANK_ADDR_OFFSET  = 0
 ) (
