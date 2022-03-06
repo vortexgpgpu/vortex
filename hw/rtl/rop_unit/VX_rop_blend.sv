@@ -25,19 +25,19 @@ module VX_rop_blend #(
     wire [23:0] factor_src_rgb, factor_dst_rgb;
     wire [7:0] factor_src_a, factor_dst_a;
 
-    // // considering mapping out input color channels for readability
-    // wire [7:0] src_red, src_green, src_blue, src_alpha;
-    // wire [7:0] dst_red, dst_green, dst_blue, dst_alpha;
+    // considering mapping out input color channels for readability
+    wire [7:0] src_red, src_green, src_blue, src_alpha;
+    wire [7:0] dst_red, dst_green, dst_blue, dst_alpha;
 
-    // assign src_red     = src_color[31:24];
-    // assign src_green   = src_color[23:16];
-    // assign src_blue    = src_color[15:8];
-    // assign src_alpha   = src_color[7:0];
+    assign src_red     = src_color[31:24];
+    assign src_green   = src_color[23:16];
+    assign src_blue    = src_color[15:8];
+    assign src_alpha   = src_color[7:0];
 
-    // assign dst_red     = dst_color[31:24];
-    // assign dst_green   = dst_color[23:16];
-    // assign dst_blue    = dst_color[15:8];
-    // assign dst_alpha   = dst_color[7:0];
+    assign dst_red     = dst_color[31:24];
+    assign dst_green   = dst_color[23:16];
+    assign dst_blue    = dst_color[15:8];
+    assign dst_alpha   = dst_color[7:0];
 
     assign const_red   = reg_csrs.blend_const[31:24];
     assign const_green = reg_csrs.blend_const[23:16];
