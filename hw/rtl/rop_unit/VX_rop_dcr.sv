@@ -21,33 +21,51 @@ module VX_rop_dcr (
         if (reset) begin
             dcrs <= 0;
         end else if (dcr_wr_valid) begin
-            case (dcr_wr_addr)
-                `DCR_ROP_ZBUF_ADDR: begin 
-                    dcrs.zbuf_addr <= dcr_wr_data[31:0];
-                end
-                `DCR_ROP_ZBUF_PITCH: begin 
-                    dcrs.zbuf_pitch <= dcr_wr_data[31:0];
-                end
+            case (dcr_wr_addr)                
                 `DCR_ROP_CBUF_ADDR: begin 
                     dcrs.cbuf_addr <= dcr_wr_data[31:0];
                 end
                 `DCR_ROP_CBUF_PITCH: begin 
                     dcrs.cbuf_pitch <= dcr_wr_data[31:0];
                 end
-                `DCR_ROP_ZFUNC: begin 
-                    dcrs.zfunc <= dcr_wr_data[`ROP_DEPTH_FUNC_BITS-1:0];
+                `DCR_ROP_CBUF_MASK: begin 
+                    dcrs.cbuf_mask <= dcr_wr_data[31:0];
                 end
-                `DCR_ROP_SFUNC: begin 
-                    dcrs.sfunc <= dcr_wr_data[`ROP_DEPTH_FUNC_BITS-1:0];
+                `DCR_ROP_ZBUF_ADDR: begin 
+                    dcrs.zbuf_addr <= dcr_wr_data[31:0];
                 end
-                `DCR_ROP_ZPASS: begin 
-                    dcrs.zpass <= dcr_wr_data[`ROP_STENCIL_OP_BITS-1:0];
+                `DCR_ROP_ZBUF_PITCH: begin 
+                    dcrs.zbuf_pitch <= dcr_wr_data[31:0];
                 end
-                `DCR_ROP_ZFAIL: begin 
-                    dcrs.zfail <= dcr_wr_data[`ROP_STENCIL_OP_BITS-1:0];
+                `DCR_ROP_DEPTH_FUNC: begin 
+                    dcrs.depth_func <= dcr_wr_data[`ROP_DEPTH_FUNC_BITS-1:0];
                 end
-                `DCR_ROP_SFAIL: begin 
-                    dcrs.sfail <= dcr_wr_data[`ROP_STENCIL_OP_BITS-1:0];
+                `DCR_ROP_DEPTH_MASK: begin 
+                    dcrs.depth_mask <= dcr_wr_data[0];
+                end
+                `DCR_ROP_STENCIL_FUNC: begin 
+                    dcrs.stencil_front_func <= dcr_wr_data[0 +: `ROP_DEPTH_FUNC_BITS];
+                    dcrs.stencil_back_func <= dcr_wr_data[16 +: `ROP_DEPTH_FUNC_BITS];
+                end
+                `DCR_ROP_STENCIL_ZPASS: begin 
+                    dcrs.stencil_front_zpass <= dcr_wr_data[0 +: `ROP_STENCIL_OP_BITS];
+                    dcrs.stencil_back_zpass <= dcr_wr_data[16 +: `ROP_STENCIL_OP_BITS];
+                end
+                `DCR_ROP_STENCIL_ZFAIL: begin 
+                    dcrs.stencil_front_zfail <= dcr_wr_data[0 +: `ROP_STENCIL_OP_BITS];
+                    dcrs.stencil_back_zfail <= dcr_wr_data[16 +: `ROP_STENCIL_OP_BITS];
+                end
+                `DCR_ROP_STENCIL_FAIL: begin 
+                    dcrs.stencil_front_fail <= dcr_wr_data[0 +: `ROP_STENCIL_OP_BITS];
+                    dcrs.stencil_back_fail <= dcr_wr_data[16 +: `ROP_STENCIL_OP_BITS];
+                end
+                `DCR_ROP_STENCIL_MASK: begin 
+                    dcrs.stencil_front_mask <= dcr_wr_data[0 +: 8];
+                    dcrs.stencil_back_mask <= dcr_wr_data[16 +: 8];
+                end
+                `DCR_ROP_STENCIL_REF: begin 
+                    dcrs.stencil_front_ref <= dcr_wr_data[0 +: 8];
+                    dcrs.stencil_back_ref <= dcr_wr_data[16 +: 8];
                 end
                 `DCR_ROP_BLEND_MODE: begin 
                     dcrs.blend_mode_rgb <= dcr_wr_data[15:0][`ROP_BLEND_MODE_BITS-1:0];

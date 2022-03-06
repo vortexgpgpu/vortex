@@ -265,12 +265,12 @@ void FpuUnit::tick() {
 GpuUnit::GpuUnit(const SimContext& ctx, Core* core) 
     : ExeUnit(ctx, core, "GPU")   
     , tex_unit_(core->tex_unit_)
-    , raster_unit_(core->raster_unit_)
-    , rop_unit_(core->rop_unit_)
+    , raster_srv_(core->raster_srv_)
+    , rop_srv_(core->rop_srv_)
     , pending_rsps_{
         &core->tex_unit_->Output,
-        &core->raster_unit_->Output,
-        &core->rop_unit_->Output
+        &core->raster_srv_->Output,
+        &core->rop_srv_->Output
     }
 {}
     
@@ -317,10 +317,10 @@ void GpuUnit::tick() {
         tex_unit_->Input.send(trace, 1);
         break;
     case GpuType::RASTER:
-        raster_unit_->Input.send(trace, 1);
+        raster_srv_->Input.send(trace, 1);
         break;
     case GpuType::ROP:
-        rop_unit_->Input.send(trace, 1);
+        rop_srv_->Input.send(trace, 1);
         break;
     default:
         std::abort();

@@ -34,9 +34,6 @@ module VX_raster_dcr (
                 `DCR_RASTER_PBUF_STRIDE: begin 
                     dcrs.pbuf_stride <= dcr_wr_data[31:0];
                 end
-                `DCR_RASTER_TILE_LOGSIZE: begin 
-                    dcrs.tile_logsize <= dcr_wr_data[15:0];
-                end
             endcase
         end
     end

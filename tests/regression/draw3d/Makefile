@@ -11,7 +11,7 @@ VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++
 VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
 VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
-VX_CFLAGS += -std=c++14 -march=rv32imf -mabi=ilp32f -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
+VX_CFLAGS += -std=c++17 -march=rv32imf -mabi=ilp32f -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
 VX_CFLAGS += -DENABLE_SW -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw -I$(VORTEX_RT_PATH)/../sim/common -I$(VORTEX_RT_PATH)/../third_party
 
 VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections $(VORTEX_RT_PATH)/libvortexrt.a

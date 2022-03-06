@@ -41,7 +41,8 @@ static const std::unordered_map<Opcode, struct InstTableEntry_t> sc_instTable = 
   {Opcode::FMNMSUB,    {false, InstType::R4_TYPE}},  
   {Opcode::VSET,       {false, InstType::V_TYPE}}, 
   {Opcode::GPGPU,      {false, InstType::R_TYPE}},
-  {Opcode::GPU,        {false, InstType::R4_TYPE}},
+  {Opcode::EXT1,       {false, InstType::R_TYPE}},
+  {Opcode::EXT2,       {false, InstType::R4_TYPE}},
   {Opcode::R_INST_W,   {false, InstType::R_TYPE}},
   {Opcode::I_INST_W,   {false, InstType::I_TYPE}},
 };
@@ -355,7 +356,20 @@ static const char* op_string(const Instr &instr) {
     default:
       std::abort();
     }
-  case Opcode::GPU:
+  case Opcode::EXT1:
+    switch (func7) {
+    case 0: {
+      switch (func3) {
+      case 0: return "RASTER";
+      case 1: return "ROP";
+      default:
+        std::abort();
+      }
+    }
+    default:
+      std::abort();
+    }
+  case Opcode::EXT2:
     switch (func3) {
     case 0: return "TEX";
     case 1: {
@@ -405,7 +419,7 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
       if (i) os << ", ";
       os << "imm=0x" << std::hex << instr.getImm();
     }
-    if (opcode == GPU && func3 == 0) {
+    if (opcode == EXT2 && func3 == 0) {
       os << ", stage=" << std::dec << func2;
     }
   }
@@ -629,7 +643,7 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
     }
     break;
   case R4_TYPE:
-    if (op == Opcode::GPU) {
+    if (op == Opcode::EXT2) {
       instr->setDestReg(rd, RegType::Integer);
       instr->setSrcReg(rs1, RegType::Integer);
       instr->setSrcReg(rs2, RegType::Integer);

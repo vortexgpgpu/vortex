@@ -13,7 +13,12 @@
 
 using namespace vortex;
 
-Core::Core(const SimContext& ctx, uint32_t id, const ArchDef &arch, const DCRS &dcrs)
+Core::Core(const SimContext& ctx, 
+           uint32_t id, 
+           const ArchDef &arch, 
+           const DCRS &dcrs,
+           RasterUnit::Ptr raster_unit,
+           RopUnit::Ptr rop_unit)
     : SimObject(ctx, "Core")
     , MemRspPort(this)
     , MemReqPort(this)
@@ -94,8 +99,8 @@ Core::Core(const SimContext& ctx, uint32_t id, const ArchDef &arch, const DCRS &
     1, // address latency
     2, // sampler latency
   }, this);
-  raster_unit_ = RasterUnit::Create("raster", this);
-  rop_unit_ = RopUnit::Create("rop", this);
+  raster_srv_ = RasterSrv::Create("rastersrv", this, raster_unit);
+  rop_srv_ = RopSrv::Create("ropsrv", this, rop_unit);
 
   // register execute units
   exe_units_.at((int)ExeType::NOP) = SimPlatform::instance().create_object<NopUnit>(this);
@@ -146,8 +151,6 @@ void Core::reset() {
   }
 
   tex_unit_->reset();
-  raster_unit_->reset();
-  rop_unit_->reset();
   
   for ( auto& barrier : barriers_) {
     barrier.reset();
@@ -646,7 +649,20 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
     if ((addr >= CSR_MPM_BASE && addr < (CSR_MPM_BASE + 32))
      || (addr >= CSR_MPM_BASE_H && addr < (CSR_MPM_BASE_H + 32))) {
       // user-defined MPM CSRs
-    } else {
+    } else
+  #ifdef EXT_RASTER_ENABLE
+    if (addr >= CSR_RASTER_BEGIN
+     && addr < CSR_RASTER_END) {
+      return raster_srv_->csr_read(wid, tid, addr);
+    } else
+  #endif
+  #ifdef EXT_ROP_ENABLE
+    if (addr >= CSR_ROP_BEGIN
+     && addr < CSR_ROP_END) {
+      return rop_srv_->csr_read(wid, tid, addr);
+    } else
+  #endif  
+    {
       std::cout << std::hex << "Error: invalid CSR read addr=0x" << addr << std::endl;
       std::abort();
     }
@@ -654,7 +670,8 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   return 0;
 }
 
-void Core::set_csr(uint32_t addr, uint32_t value, uint32_t /*tid*/, uint32_t wid) {
+void Core::set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid) {
+  __unused (tid);
   switch (addr) {
   case CSR_FFLAGS:
     fcsrs_.at(wid) = (fcsrs_.at(wid) & ~0x1F) | (value & 0x1F);
@@ -676,8 +693,22 @@ void Core::set_csr(uint32_t addr, uint32_t value, uint32_t /*tid*/, uint32_t wid
   case CSR_PMPADDR0:
     break;
   default:
-    std::cout << std::hex << "Error: invalid CSR write addr=0x" << addr << ", value=0x" << value << std::endl;
-    std::abort();
+  #ifdef EXT_RASTER_ENABLE
+    if (addr >= CSR_RASTER_BEGIN
+     && addr < CSR_RASTER_END) {
+      raster_srv_->csr_write(wid, tid, addr, value);
+    } else
+  #endif
+  #ifdef EXT_ROP_ENABLE
+    if (addr >= CSR_ROP_BEGIN
+     && addr < CSR_ROP_END) {
+      rop_srv_->csr_write(wid, tid, addr, value);
+    } else
+  #endif
+    {
+      std::cout << std::hex << "Error: invalid CSR write addr=0x" << addr << ", value=0x" << value << std::endl;
+      std::abort();
+    }
   }
 }
 

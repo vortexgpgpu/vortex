@@ -6,6 +6,7 @@
 
 namespace vortex {
 
+class RAM;
 class Core;
 
 class RopUnit : public SimObject<RopUnit> {
@@ -37,7 +38,7 @@ public:
             return states_.at(state);
         }
 
-        uint32_t read(uint32_t addr) {
+        uint32_t read(uint32_t addr) const {
             uint32_t state = DCR_ROP_STATE(addr);
             return states_.at(state);
         }
@@ -48,19 +49,21 @@ public:
         }
     };
 
-    SimPort<pipeline_trace_t*> Input;
-    SimPort<pipeline_trace_t*> Output;
+    SimPort<pipeline_trace_t*> MemReq;
+    SimPort<pipeline_trace_t*> MemRsp;
 
-    RopUnit(const SimContext& ctx, const char* name, Core* core);    
+    RopUnit(const SimContext& ctx, 
+            const char* name,  
+            const ArchDef &arch, 
+            const DCRS& dcrs);    
+
     ~RopUnit();
+
+    void attach_ram(RAM* mem);
 
     void reset();
 
-    uint32_t dcr_read(uint32_t addr);
-  
-    void dcr_write(uint32_t addr, uint32_t value);
-
-    void write(uint32_t x, uint32_t y, uint32_t z, uint32_t color);
+    void write(uint32_t x, uint32_t y, uint32_t mask, uint32_t face, uint32_t color, uint32_t depth);
 
     void tick();
 

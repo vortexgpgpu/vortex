@@ -2,19 +2,24 @@
 
 #include <simobject.h>
 #include <VX_types.h>
+#include <cocogfx/include/fixed.hpp>
+#include <cocogfx/include/math.hpp>
 #include "pipeline.h"
-
 namespace vortex {
 
+class RAM;
 class Core;
-
 class RasterUnit : public SimObject<RasterUnit> {
 public:
-    struct raster_quad_t {
-        uint32_t x;
-        uint32_t y;
-        uint32_t mask;
-        uint32_t pidx;
+    using fixed16_t = cocogfx::TFixed<16>;
+    using vec3_fx_t = cocogfx::TVector3<fixed16_t>;
+
+    struct Stamp {
+        uint32_t  x;
+        uint32_t  y;  
+        vec3_fx_t bcoords[4]; // barycentric coordinates
+        uint32_t  mask;
+        uint32_t  pid;
     };
     
     struct PerfStats {
@@ -44,7 +49,7 @@ public:
             return states_.at(state);
         }
 
-        uint32_t read(uint32_t addr) {
+        uint32_t read(uint32_t addr) const {
             uint32_t state = DCR_RASTER_STATE(addr);
             return states_.at(state);
         }
@@ -58,18 +63,20 @@ public:
     SimPort<pipeline_trace_t*> Input;
     SimPort<pipeline_trace_t*> Output;
 
-    RasterUnit(const SimContext& ctx, const char* name, Core* core);    
+    RasterUnit(const SimContext& ctx, 
+               const char* name,
+               const ArchDef &arch, 
+               const DCRS& dcrs,
+               uint32_t tile_logsize, 
+               uint32_t block_logsize);    
+
     ~RasterUnit();
 
     void reset();
 
-    uint32_t dcr_read(uint32_t addr);
-  
-    void dcr_write(uint32_t addr, uint32_t value);
+    void attach_ram(RAM* mem);
 
-    bool pop(raster_quad_t* quad);
-
-    int32_t interpolate(uint32_t quad, int32_t a, int32_t b, int32_t c);
+    Stamp* fetch();    
 
     void tick();
 

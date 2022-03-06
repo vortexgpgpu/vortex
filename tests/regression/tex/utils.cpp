@@ -89,7 +89,7 @@ int SaveImage(const char *filename,
               const std::vector<uint8_t> &pixels, 
               uint32_t width,
               uint32_t height) {
-  auto bpp = GetInfo(format).BytePerPixel;
+  auto bpp = Format::GetInfo(format).BytePerPixel;
   auto ext = getFileExt(filename);
   if (iequals(ext, "tga")) {
     return SaveTGA(filename, pixels, width, height, bpp);
@@ -152,8 +152,8 @@ int CompareImages(const char* filename1,
 
   int errors = 0;
   {
-    auto convert_from = GetConvertFrom(format, true);
-    auto bpp = GetInfo(format).BytePerPixel;
+    auto convert_from = Format::GetConvertFrom(format, true);
+    auto bpp = Format::GetInfo(format).BytePerPixel;
     auto pixels1 = image1_bits.data();
     auto pixels2 = image2_bits.data();
     for (uint32_t y = 0; y < image1_height; ++y) {

@@ -15,6 +15,7 @@ private:
     TexUnit* simobject_;
     Config config_;
     Core* core_;
+    const DCRS& dcrs_;
     CacheSim::Ptr tcache_;
     uint32_t num_threads_;
     HashTable<pending_req_t> pending_reqs_;
@@ -25,6 +26,7 @@ public:
       : simobject_(simobject)
       , config_(config)
       , core_(core) 
+      , dcrs_(core->dcrs_.tex_dcrs)
       , tcache_(core->tcache_)
       , num_threads_(core->arch().num_threads())
       , pending_reqs_(TEXQ_SIZE)
@@ -39,7 +41,7 @@ public:
     }
 
     uint32_t read(uint32_t stage, int32_t u, int32_t v, int32_t lod, TraceData* trace_data) {
-      auto& states = core_->dcrs_.tex_dcrs.at(stage);
+      auto& states = dcrs_.at(stage);
       auto xu = TFixed<TEX_FXD_FRAC>::make(u);
       auto xv = TFixed<TEX_FXD_FRAC>::make(v);
       auto base_addr  = states.at(TEX_STATE_ADDR) + states.at(TEX_STATE_MIPOFF(lod));

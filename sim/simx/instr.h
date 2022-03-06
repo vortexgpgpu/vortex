@@ -29,9 +29,10 @@ enum Opcode {
   FMNMADD   = 0x4f,
   // Vector Extension  
   VSET      = 0x57,
-  // GPGPU Extension
+  // Vortex Extensions
+  EXT1      = 0x0b,
+  EXT2      = 0x5b,
   GPGPU     = 0x6b,
-  GPU       = 0x5b,
   // RV64 Standard Extensions
   R_INST_W  = 0x3b,
   I_INST_W  = 0x1b,

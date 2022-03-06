@@ -160,6 +160,7 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
       rast_prim.edges[0] = edges[0];
       rast_prim.edges[1] = edges[1];
       rast_prim.edges[2] = edges[2];
+      
       rast_prim.bbox = bbox;
 
       float colors[3][4];
@@ -197,20 +198,20 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
     extents[2] = calcEdgeExtents(edges[2], logTileSize);
 
     // Evaluate edge equation for the starting tile
-    auto E0 = evalEdgeFunction(edges[0], X, Y);
-    auto E1 = evalEdgeFunction(edges[1], X, Y);
-    auto E2 = evalEdgeFunction(edges[2], X, Y);
+    auto e0 = evalEdgeFunction(edges[0], X, Y);
+    auto e1 = evalEdgeFunction(edges[1], X, Y);
+    auto e2 = evalEdgeFunction(edges[2], X, Y);
 
     // traverse covered tiles
     for (uint32_t ty = minTileY; ty < maxTileY; ++ty) {
-      auto e0 = E0;
-      auto e1 = E1;
-      auto e2 = E2;
+      auto ee0 = e0;
+      auto ee1 = e1;
+      auto ee2 = e2;
       for (uint32_t tx = minTileX; tx < maxTileX; ++tx) {
         // check if tile overlap triangle    
-        if (((e0 + extents[0]).data() 
-           | (e1 + extents[1]).data()
-           | (e2 + extents[2]).data()) >= 0) {
+        if (((ee0 + extents[0]).data() 
+           | (ee1 + extents[1]).data()
+           | (ee2 + extents[2]).data()) >= 0) {
           // assign primitive to tile
           uint32_t tile_id = (ty << 16) | tx;
           tiles[tile_id].push_back(p);
@@ -218,14 +219,14 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
         }
 
         // update edge equation x components
-        e0 += edges[0].x << logTileSize;
-        e1 += edges[1].x << logTileSize;
-        e2 += edges[2].x << logTileSize;
+        ee0 += edges[0].x << logTileSize;
+        ee1 += edges[1].x << logTileSize;
+        ee2 += edges[2].x << logTileSize;
       }
       // update edge equation y components
-      E0 += edges[0].y << logTileSize;
-      E1 += edges[1].y << logTileSize;
-      E2 += edges[2].y << logTileSize;
+      e0 += edges[0].y << logTileSize;
+      e1 += edges[1].y << logTileSize;
+      e2 += edges[2].y << logTileSize;
     }
   }
 
@@ -330,7 +331,7 @@ int SaveImage(const char *filename,
               const std::vector<uint8_t> &pixels, 
               uint32_t width,
               uint32_t height) {
-  uint32_t bpp = GetInfo(format).BytePerPixel;
+  uint32_t bpp = Format::GetInfo(format).BytePerPixel;
   auto ext = getFileExt(filename);
   if (iequals(ext, "tga")) {
     return SaveTGA(filename, pixels, width, height, bpp);
@@ -393,8 +394,8 @@ int CompareImages(const char* filename1,
 
   int errors = 0;
   {
-    auto convert_from = GetConvertFrom(format, true);
-    auto bpp = GetInfo(format).BytePerPixel;
+    auto convert_from = Format::GetConvertFrom(format, true);
+    auto bpp = Format::GetInfo(format).BytePerPixel;
     auto pixels1 = image1_bits.data();
     auto pixels2 = image2_bits.data();
     for (uint32_t y = 0; y < image1_height; ++y) {

@@ -12,7 +12,6 @@ typedef struct packed {
     logic [31:0]    tile_count;
     logic [31:0]    pbuf_addr;
     logic [31:0]    pbuf_stride;
-    logic [15:0]    tile_logsize;
 } raster_dcrs_t;
 
 endpackage

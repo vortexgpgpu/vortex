@@ -1417,7 +1417,48 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       std::abort();
     }
   }  break;
-  case GPU: {    
+  case EXT1: {   
+    switch (func7) {
+    case 0:
+      switch (func3) {
+      case 0: { // RASTER
+        trace->exe_type = ExeType::GPU; 
+        trace->gpu_type = GpuType::RASTER;
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t))
+            continue;        
+          auto result = core_->raster_srv_->fetch(id_, t);
+          rddata[t].i = result;
+        }
+        rd_write = true;
+      } break;
+      case 1: { // ROP
+        trace->exe_type = ExeType::GPU; 
+        trace->gpu_type = GpuType::ROP;
+        trace->used_iregs.set(rsrc0);
+        trace->used_iregs.set(rsrc1);
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t))
+            continue;
+          auto color = rsdata[t][0].i;
+          auto depth = rsdata[t][1].i;
+          auto x_y = core_->raster_srv_->csr_read(id_, t, CSR_RASTER_X_Y);
+          auto mask_pid = core_->raster_srv_->csr_read(id_, t, CSR_RASTER_MASK_PID);
+          auto x = x_y & 0xffff;
+          auto y = x_y > 16;
+          auto mask = mask_pid & 0xf;          
+          core_->rop_srv_->write(x, y, mask, color, depth);
+        }
+      } break;
+      default:
+        std::abort();
+      }
+      break;
+    default:
+      std::abort();
+    }
+  } break;
+  case EXT2: {    
     switch (func3) {
     case 0: { // TEX
       trace->exe_type = ExeType::GPU; 
@@ -1480,11 +1521,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t))
             continue;        
-          auto quad = func2;
-          auto a    = rsdata[t][0].i;
-          auto b    = rsdata[t][1].i;
-          auto c    = rsdata[t][2].i;
-          auto result = core_->raster_unit_->interpolate(quad, a, b, c);
+          auto q = func2;
+          auto a = rsdata[t][0].i;
+          auto b = rsdata[t][1].i;
+          auto c = rsdata[t][2].i;
+          auto result = core_->raster_srv_->interpolate(id_, t, q, a, b, c);
           rddata[t].i = result;
         }
         rd_write = true;

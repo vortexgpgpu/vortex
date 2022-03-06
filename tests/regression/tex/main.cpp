@@ -157,16 +157,16 @@ int main(int argc, char *argv[]) {
   {
     std::vector<uint8_t> staging;  
     RT_CHECK(LoadImage(input_file, eformat, staging, &src_width, &src_height));  
-    uint32_t src_bpp = GetInfo(eformat).BytePerPixel;
+    // check power of two support
+    if (!ispow2(src_width) || !ispow2(src_height)) {
+      std::cout << "Error: only power of two textures supported: width=" << src_width << ", heigth=" << src_height << std::endl;
+      return -1;
+    }
+    uint32_t src_bpp = Format::GetInfo(eformat).BytePerPixel;
+    uint32_t src_pitch = src_width * src_bpp;
     //dump_image(staging, src_width, src_height, src_bpp);
-    RT_CHECK(GenerateMipmaps(src_pixels, mip_offsets, staging, eformat, src_width, src_height, src_width * src_bpp));    
-  }
-
-  // check power of two support
-  if (!ispow2(src_width) || !ispow2(src_height)) {
-    std::cout << "Error: only power of two textures supported: width=" << src_width << ", heigth=" << src_height << std::endl;
-    return -1;
-  }
+    RT_CHECK(GenerateMipmaps(src_pixels, mip_offsets, staging, eformat, src_width, src_height, src_pitch));    
+  }  
 
   uint32_t src_logwidth  = log2ceil(src_width);
   uint32_t src_logheight = log2ceil(src_height);

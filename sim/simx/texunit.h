@@ -43,7 +43,7 @@ public:
             return states_.at(stage);
         }
 
-        uint32_t read(uint32_t addr) {
+        uint32_t read(uint32_t addr) const {
             if (addr == DCR_TEX_STAGE) {
                 return stage_;
             }

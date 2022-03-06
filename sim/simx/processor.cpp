@@ -11,6 +11,8 @@ private:
   std::vector<Switch<MemReq, MemRsp>::Ptr> l2_mem_switches_;
   CacheSim::Ptr l3cache_;
   Switch<MemReq, MemRsp>::Ptr l3_mem_switch_;
+  std::vector<RasterUnit::Ptr> raster_units_;
+  std::vector<RopUnit::Ptr> rop_units_;
   DCRS dcrs_;
 
 public:
@@ -18,6 +20,8 @@ public:
     : cores_(arch.num_cores())
     , l2caches_(NUM_CLUSTERS)
     , l2_mem_switches_(NUM_CLUSTERS)
+    , raster_units_(NUM_CLUSTERS)
+    , rop_units_(NUM_CLUSTERS)
   {
     SimPlatform::instance().initialize();
 
@@ -26,7 +30,8 @@ public:
 
     // create cores
     for (uint32_t i = 0; i < num_cores; ++i) {
-        cores_.at(i) = Core::Create(i, arch, dcrs_);
+      auto j = i / cores_per_cluster;
+      cores_.at(i) = Core::Create(i, arch, dcrs_, raster_units_.at(j), rop_units_.at(j));
     }
 
      // setup memory simulator
@@ -124,7 +129,10 @@ public:
         core->MemReqPort.bind(cluster_mem_req_ports.at(j));
         cluster_mem_rsp_ports.at(j)->bind(&core->MemRspPort);
       }
-    }
+
+      raster_units_.at(i) = RasterUnit::Create("raster", arch, dcrs_.raster_dcrs, RASTER_TILE_LOGSIZE, RASTER_BLOCK_LOGSIZE);
+      rop_units_.at(i) = RopUnit::Create("rop", arch, dcrs_.rop_dcrs);
+    }    
   }
 
   ~Impl() {
@@ -134,6 +142,12 @@ public:
   void attach_ram(RAM* ram) {
     for (auto core : cores_) {
       core->attach_ram(ram);
+    }
+    for (auto raster_unit : raster_units_) {
+      raster_unit->attach_ram(ram);
+    }
+    for (auto rop_unit : rop_units_) {
+      rop_unit->attach_ram(ram);
     }
   }
 

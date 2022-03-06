@@ -22,8 +22,8 @@
 #include "scoreboard.h"
 #include "exeunit.h"
 #include "texunit.h"
-#include "rasterunit.h"
-#include "ropunit.h"
+#include "rastersrv.h"
+#include "ropsrv.h"
 #include "dcrs.h"
 
 namespace vortex {
@@ -45,7 +45,6 @@ public:
     uint64_t mem_reads;
     uint64_t mem_writes;
     uint64_t mem_latency;
-    
 
     PerfStats() 
       : instrs(0)
@@ -68,7 +67,13 @@ public:
   SimPort<MemRsp> MemRspPort;
   SimPort<MemReq> MemReqPort;
 
-  Core(const SimContext& ctx, uint32_t id, const ArchDef &arch, const DCRS &dcrs);
+  Core(const SimContext& ctx, 
+       uint32_t id, 
+       const ArchDef &arch, 
+       const DCRS &dcrs,
+       RasterUnit::Ptr raster_unit,
+       RopUnit::Ptr rop_unit);
+
   ~Core();
 
   void attach_ram(RAM* ram);
@@ -85,6 +90,10 @@ public:
 
   const ArchDef& arch() const {
     return arch_;
+  }
+
+  const DCRS& dcrs() const {
+    return dcrs_;
   }
 
   const PerfStats& perf_stats() const {
@@ -132,6 +141,7 @@ private:
   uint32_t id_;
   const ArchDef& arch_;
   const DCRS &dcrs_;
+  
   const Decoder decoder_;
   MemoryUnit mmu_;
 
@@ -146,8 +156,8 @@ private:
   CacheSim::Ptr tcache_;
   SharedMem::Ptr sharedmem_;
   TexUnit::Ptr tex_unit_;
-  RasterUnit::Ptr raster_unit_;
-  RopUnit::Ptr rop_unit_;
+  RasterSrv::Ptr raster_srv_;
+  RopSrv::Ptr rop_srv_;
   Switch<MemReq, MemRsp>::Ptr l1_mem_switch_;
 
   PipelineLatch fetch_latch_;
@@ -173,8 +183,8 @@ private:
   friend class FpuUnit;
   friend class GpuUnit;
   friend class TexUnit;
-  friend class RasterUnit;
-  friend class RopUnit;
+  friend class RasterSrv;
+  friend class RopSrv;
 };
 
 } // namespace vortex
