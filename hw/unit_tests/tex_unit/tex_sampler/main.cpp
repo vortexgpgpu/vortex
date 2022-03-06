@@ -20,22 +20,20 @@ static bool trace_enabled = false;
 static uint64_t trace_start_time = 0;
 static uint64_t trace_stop_time = -1ull;
 
-double sc_time_stamp() { 
+double sc_time_stamp () { 
   return timestamp;
 }
 
-bool sim_trace_enabled() {
+bool sim_trace_enabled () {
   if (timestamp >= trace_start_time 
    && timestamp < trace_stop_time)
     return true;
   return trace_enabled;
 }
 
-void sim_trace_enable(bool enable) {
+void sim_trace_enable (bool enable) {
   trace_enabled = enable;
 }
-
-// using Device = VVX_tex_sampler;
 
 template <typename T> 
 class TestBench {
