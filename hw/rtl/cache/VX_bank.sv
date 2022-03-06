@@ -36,6 +36,9 @@ module VX_bank #(
     // bank offset from beginning of index range
     parameter BANK_ADDR_OFFSET              = 0,
 
+    //Swetha: added ways 
+    parameter WAYS                          = 8, //dummy value - change this to 1 later
+
     parameter MSHR_ADDR_WIDTH  = $clog2(MSHR_SIZE),
     parameter WORD_SELECT_BITS = `UP(`WORD_SELECT_BITS)
 ) (
@@ -229,6 +232,11 @@ module VX_bank #(
     wire do_lookup_st0 = valid_st0 && ~(is_fill_st0 || is_flush_st0);
 
     wire tag_match_st0;
+
+    //Swetha: added for associativity 
+    wire [WAYS-1:0] tag_match_way_st0;
+    // localparam way_width = $clog2(WAYS);
+    // wire[way_width-1:0] tag_match_way_num_st0;
         
     VX_tag_access #(
         .BANK_ID          (BANK_ID),
@@ -237,7 +245,8 @@ module VX_bank #(
         .CACHE_LINE_SIZE  (CACHE_LINE_SIZE),
         .NUM_BANKS        (NUM_BANKS),
         .WORD_SIZE        (WORD_SIZE),   
-        .BANK_ADDR_OFFSET (BANK_ADDR_OFFSET)
+        .BANK_ADDR_OFFSET (BANK_ADDR_OFFSET),
+        .WAYS(WAYS)
     ) tag_access (
         .clk       (clk),
         .reset     (reset),
@@ -250,7 +259,11 @@ module VX_bank #(
         .lookup    (do_lookup_st0),
         .addr      (addr_st0),        
         .fill      (do_fill_st0),
-        .flush     (do_flush_st0),    
+        .flush     (do_flush_st0),
+         //Swetha: added for associativity
+        .tag_match_way (tag_match_way_st0),
+        //.tag_match_way_num(tag_match_way_num_st0),
+
         .tag_match (tag_match_st0)
     );
 
@@ -289,7 +302,8 @@ module VX_bank #(
         .NUM_BANKS      (NUM_BANKS),
         .NUM_PORTS      (NUM_PORTS),
         .WORD_SIZE      (WORD_SIZE),
-        .WRITE_ENABLE   (WRITE_ENABLE)
+        .WRITE_ENABLE   (WRITE_ENABLE),
+        .WAYS(WAYS)
      ) data_access (
         .clk        (clk),
         .reset      (reset),
@@ -297,6 +311,9 @@ module VX_bank #(
         .req_id     (req_id_st1),
 
         .stall      (crsq_stall),
+        //Swetha: added for associativity
+        .tag_match_way (tag_match_way_st0),
+        //.tag_match_way_num(tag_match_way_num_st0),
 
         .read       (do_read_st1 || do_mshr_st1),      
         .fill       (do_fill_st1),        

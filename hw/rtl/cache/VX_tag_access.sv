@@ -11,6 +11,8 @@ module VX_tag_access #(
     parameter NUM_BANKS         = 1, 
     // Size of a word in bytes
     parameter WORD_SIZE         = 1,
+    //Swetha: added ways 
+    parameter WAYS                          = 8, //dummy value - change this to 1 later
     // bank offset from beginning of index range
     parameter BANK_ADDR_OFFSET  = 0
 ) (
@@ -28,6 +30,9 @@ module VX_tag_access #(
     input wire[`LINE_ADDR_WIDTH-1:0]    addr,
     input wire                          fill,    
     input wire                          flush,
+    //Swetha: added for associativity
+    output wire[WAYS-1:0]              tag_match_way,
+    //output wire[$clog2(WAYS)-1:0]       tag_match_way_num,
     output wire                         tag_match
 );
 
@@ -42,19 +47,47 @@ module VX_tag_access #(
     wire [`LINE_SELECT_BITS-1:0] line_addr = addr[`LINE_SELECT_BITS-1:0];
     wire [`TAG_SELECT_BITS-1:0] line_tag = `LINE_TAG_ADDR(addr);
 
-    VX_sp_ram #(
-        .DATAW      (`TAG_SELECT_BITS + 1),
-        .SIZE       (`LINES_PER_BANK),
-        .NO_RWCHECK (1)
-    ) tag_store (
-        .clk(  clk),                 
-        .addr  (line_addr),   
-        .wren  (fill || flush),
-        .wdata ({!flush, line_tag}),
-        .rdata ({read_valid, read_tag})
-    );
+    //Swetha: instantiate tag access module WAYS times
+    /* CHANGES START HERE */
+    //We use a tag match array to check if each of the arrays has a match 
+    //assign the output wire to the ANDed result of tag_match_array
+    generate 
+        genvar i;
+        for (i = 0; i < WAYS; i = i+1) begin
+            VX_sp_ram #(
+            .DATAW      (`TAG_SELECT_BITS + 1),
+            .SIZE       (`LINES_PER_BANK),
+            .NO_RWCHECK (1)
+            ) tag_store (
+                .clk(  clk),                 
+                .addr  (line_addr),   
+                .wren  (fill || flush),
+                .wdata ({!flush, line_tag}),
+                .rdata ({read_valid, read_tag})
+            );
+            assign tag_match_way[i] = read_valid && (line_tag == read_tag);
+            //assign tag_match_way_num = (tag_match_way[i] == 1'b1) ? i : {$clog2(WAYS){1'b0}};
+        end
+    endgenerate
+    //Check if any of the ways have tag match
+    assign tag_match = |tag_match_way;
+    //we need to propagate the entire tag_match_array out to the bank 
+    /* CHANGES END HERE */
 
-    assign tag_match = read_valid && (line_tag == read_tag);
+    
+    // VX_sp_ram #(
+    //     .DATAW      (`TAG_SELECT_BITS + 1),
+    //     .SIZE       (`LINES_PER_BANK),
+    //     .NO_RWCHECK (1)
+    // ) tag_store (
+    //     .clk(  clk),                 
+    //     .addr  (line_addr),   
+    //     .wren  (fill || flush),
+    //     .wdata ({!flush, line_tag}),
+    //     .rdata ({read_valid, read_tag})
+    // );
+
+    // assign tag_match = read_valid && (line_tag == read_tag);
 
     `UNUSED_VAR (stall)
     

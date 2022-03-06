@@ -23,6 +23,9 @@ module VX_shared_mem #(
     // core request tag size
     parameter CORE_TAG_WIDTH                = (2 + CORE_TAG_ID_BITS),
 
+    //Swetha: added ways 
+    parameter WAYS                          = 1, //dummy value - change this to 1 later
+
     // bank offset from beginning of index range
     parameter BANK_ADDR_OFFSET              = `CLOG2(256)
  ) (    
