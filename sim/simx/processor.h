@@ -4,12 +4,12 @@
 
 namespace vortex {
 
-class ArchDef;
+class Arch;
 class RAM;
 
 class Processor {
 public:
-  Processor(const ArchDef& arch);
+  Processor(const Arch& arch);
   ~Processor();
 
   void attach_ram(RAM* mem);

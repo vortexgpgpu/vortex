@@ -54,7 +54,7 @@ public:
 
     RopUnit(const SimContext& ctx, 
             const char* name,  
-            const ArchDef &arch, 
+            const Arch &arch, 
             const DCRS& dcrs);    
 
     ~RopUnit();

@@ -16,7 +16,7 @@ private:
   DCRS dcrs_;
 
 public:
-  Impl(const ArchDef& arch) 
+  Impl(const Arch& arch) 
     : cores_(arch.num_cores())
     , l2caches_(NUM_CLUSTERS)
     , l2_mem_switches_(NUM_CLUSTERS)
@@ -180,7 +180,7 @@ public:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-Processor::Processor(const ArchDef& arch) 
+Processor::Processor(const Arch& arch) 
   : impl_(new Impl(arch))
 {}
 

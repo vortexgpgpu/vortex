@@ -1,5 +1,5 @@
-#include "rastersrv.h"
-#include "rasterunit.h"
+#include "raster_srv.h"
+#include "raster_unit.h"
 #include "core.h"
 #include <VX_config.h>
 #include <cocogfx/include/fixed.hpp>
@@ -29,7 +29,7 @@ class RasterSrv::Impl {
 private:
     RasterSrv* simobject_;  
     Core* core_;      
-    const ArchDef& arch_;
+    const Arch& arch_;
     RasterUnit::Ptr raster_unit_;    
     std::vector<csr_t> csrs_;
     PerfStats perf_stats_;

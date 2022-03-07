@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include "processor.h"
-#include "archdef.h"
+#include "arch.h"
 #include "mem.h"
 #include "constants.h"
 #include <util.h>
@@ -52,7 +52,7 @@ int main(int argc, char **argv) {
   
   {
     // create processor configuation
-    ArchDef arch(num_cores, num_warps, num_threads);
+    Arch arch(num_cores, num_warps, num_threads);
 
     // create memory module
     RAM ram(RAM_PAGE_SIZE);

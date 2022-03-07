@@ -11,19 +11,19 @@
 #include <simobject.h>
 #include "debug.h"
 #include "types.h"
-#include "archdef.h"
+#include "arch.h"
 #include "decode.h"
 #include "mem.h"
 #include "warp.h"
 #include "pipeline.h"
-#include "cachesim.h"
-#include "sharedmem.h"
+#include "cache_sim.h"
+#include "shared_mem.h"
 #include "ibuffer.h"
 #include "scoreboard.h"
-#include "exeunit.h"
-#include "texunit.h"
-#include "rastersrv.h"
-#include "ropsrv.h"
+#include "exe_unit.h"
+#include "tex_unit.h"
+#include "raster_srv.h"
+#include "rop_srv.h"
 #include "dcrs.h"
 
 namespace vortex {
@@ -69,7 +69,7 @@ public:
 
   Core(const SimContext& ctx, 
        uint32_t id, 
-       const ArchDef &arch, 
+       const Arch &arch, 
        const DCRS &dcrs,
        RasterUnit::Ptr raster_unit,
        RopUnit::Ptr rop_unit);
@@ -88,7 +88,7 @@ public:
     return id_;
   }
 
-  const ArchDef& arch() const {
+  const Arch& arch() const {
     return arch_;
   }
 
@@ -139,7 +139,7 @@ private:
   void cout_flush();
 
   uint32_t id_;
-  const ArchDef& arch_;
+  const Arch& arch_;
   const DCRS &dcrs_;
   
   const Decoder decoder_;

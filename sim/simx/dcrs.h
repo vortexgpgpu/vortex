@@ -1,9 +1,9 @@
 #pragma once
 
 #include <util.h>
-#include "texunit.h"
-#include "rasterunit.h"
-#include "ropunit.h"
+#include "tex_unit.h"
+#include "raster_unit.h"
+#include "rop_unit.h"
 
 namespace vortex {
 

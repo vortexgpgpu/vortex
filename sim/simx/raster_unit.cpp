@@ -1,4 +1,4 @@
-#include "rasterunit.h"
+#include "raster_unit.h"
 #include "core.h"
 #include <VX_config.h>
 #include <cocogfx/include/fixed.hpp>
@@ -41,7 +41,7 @@ static fixed16_t calcEdgeExtents(const vec3_fx_t& e) {
 
 class Rasterizer {
 private:    
-  const ArchDef& arch_;
+  const Arch& arch_;
   const RasterUnit::DCRS& dcrs_;
   RAM* mem_;
   uint32_t tile_logsize_;
@@ -297,7 +297,7 @@ private:
   }
 
 public:
-  Rasterizer(const ArchDef& arch,
+  Rasterizer(const Arch& arch,
               const RasterUnit::DCRS& dcrs, 
               uint32_t tile_logsize, 
               uint32_t block_logsize) 
@@ -340,13 +340,13 @@ public:
 class RasterUnit::Impl {
 private:
   RasterUnit* simobject_;        
-  const ArchDef& arch_;
+  const Arch& arch_;
   Rasterizer rasterizer_;
   PerfStats perf_stats_;
 
 public:
   Impl(RasterUnit* simobject,     
-       const ArchDef &arch,
+       const Arch &arch,
        const DCRS& dcrs, 
        uint32_t tile_logsize, 
        uint32_t block_logsize) 
@@ -382,7 +382,7 @@ public:
 
 RasterUnit::RasterUnit(const SimContext& ctx, 
                        const char* name,                        
-                       const ArchDef &arch, 
+                       const Arch &arch, 
                        const DCRS& dcrs,
                        uint32_t tile_logsize, 
                        uint32_t block_logsize) 

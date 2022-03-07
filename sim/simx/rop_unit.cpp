@@ -1,4 +1,4 @@
-#include "ropunit.h"
+#include "rop_unit.h"
 #include "core.h"
 #include <VX_config.h>
 #include <cocogfx/include/fixed.hpp>
@@ -198,18 +198,18 @@ static cocogfx::ColorARGB DoBlendMode(uint32_t mode,
       cocogfx::Sub8(cocogfx::Mul8(dst.b, d.b), cocogfx::Mul8(src.b, s.b))
     );
   case ROP_BLEND_MODE_MIN:
-    return cocogfx::ColorARGB(0, 0, 0, 0/*
+    return cocogfx::ColorARGB(
       std::min(src.a, dst.a),
       std::min(src.r, dst.r),
       std::min(src.g, dst.g),
-      std::min(src.b, dst.b),*/
+      std::min(src.b, dst.b)
     );
   case ROP_BLEND_MODE_MAX:
-    return cocogfx::ColorARGB(0, 0, 0, 0/*
+    return cocogfx::ColorARGB(
       std::max(src.a, dst.a),
       std::max(src.r, dst.r),
       std::max(src.g, dst.g),
-      std::max(src.b, dst.b),*/
+      std::max(src.b, dst.b)
     );
   case ROP_BLEND_MODE_LOGICOP:
     return cocogfx::ColorARGB(DoLogicOp(logic_op, src.value, dst.value));
@@ -218,7 +218,7 @@ static cocogfx::ColorARGB DoBlendMode(uint32_t mode,
 
 class DepthTencil {
 private:
-  const ArchDef& arch_;
+  const Arch& arch_;
   const RopUnit::DCRS& dcrs_;
   RAM* mem_;
   uint32_t buf_baseaddr_;
@@ -344,7 +344,7 @@ private:
   }
 
 public:
-  DepthTencil(const ArchDef& arch, const RopUnit::DCRS& dcrs) 
+  DepthTencil(const Arch& arch, const RopUnit::DCRS& dcrs) 
     : arch_(arch)
     , dcrs_(dcrs)  
     , initialized_(false)
@@ -376,7 +376,7 @@ public:
 
 class Blender {
 private:
-  const ArchDef& arch_;
+  const Arch& arch_;
   const RopUnit::DCRS& dcrs_;
   RAM* mem_;
   uint32_t buf_baseaddr_;
@@ -408,7 +408,7 @@ private:
   }
 
 public:
-  Blender(const ArchDef& arch, const RopUnit::DCRS& dcrs) 
+  Blender(const Arch& arch, const RopUnit::DCRS& dcrs) 
     : arch_(arch)
     , dcrs_(dcrs) 
     , initialized_(false)
@@ -461,14 +461,14 @@ public:
 class RopUnit::Impl {
 private:
     RopUnit* simobject_;    
-    const ArchDef& arch_;    
+    const Arch& arch_;    
     PerfStats perf_stats_;
     DepthTencil depthtencil_;
     Blender blender_;
 
 public:
     Impl(RopUnit* simobject,      
-         const ArchDef &arch,
+         const Arch &arch,
          const DCRS& dcrs) 
       : simobject_(simobject)
       , arch_(arch)
@@ -508,7 +508,7 @@ public:
 
 RopUnit::RopUnit(const SimContext& ctx, 
                  const char* name,                         
-                 const ArchDef &arch, 
+                 const Arch &arch, 
                  const DCRS& dcrs) 
   : SimObject<RopUnit>(ctx, name)
   , MemReq(this)

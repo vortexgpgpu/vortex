@@ -9,7 +9,7 @@
 
 namespace vortex {
 
-class ArchDef {  
+class Arch {  
 private:
   uint16_t num_cores_;
   uint16_t num_warps_;
@@ -21,9 +21,9 @@ private:
   uint16_t num_barriers_;
   
 public:
-  ArchDef(uint16_t num_cores, 
-          uint16_t num_warps, 
-          uint16_t num_threads)   
+  Arch(uint16_t num_cores, 
+       uint16_t num_warps, 
+       uint16_t num_threads)   
     : num_cores_(num_cores)
     , num_warps_(num_warps)
     , num_threads_(num_threads)

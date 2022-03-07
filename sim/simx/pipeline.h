@@ -5,7 +5,7 @@
 #include <iostream>
 #include <util.h>
 #include "types.h"
-#include "archdef.h"
+#include "arch.h"
 #include "debug.h"
 
 namespace vortex {

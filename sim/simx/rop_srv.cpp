@@ -1,5 +1,5 @@
-#include "ropsrv.h"
-#include "ropunit.h"
+#include "rop_srv.h"
+#include "rop_unit.h"
 #include "core.h"
 #include <VX_config.h>
 
@@ -9,7 +9,7 @@ class RopSrv::Impl {
 private:
     RopSrv* simobject_;
     Core* core_;    
-    const ArchDef& arch_;    
+    const Arch& arch_;    
     RopUnit::Ptr rop_unit_;
     PerfStats perf_stats_;
 

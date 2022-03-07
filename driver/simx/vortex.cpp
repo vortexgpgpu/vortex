@@ -15,7 +15,7 @@
 #include <util.h>
 
 #include <processor.h>
-#include <archdef.h>
+#include <arch.h>
 #include <mem.h>
 #include <constants.h>
 
@@ -163,7 +163,7 @@ public:
     }
 
 private:
-    ArchDef arch_;
+    Arch arch_;
     RAM ram_;
     Processor processor_;
     MemoryAllocator mem_allocator_;       

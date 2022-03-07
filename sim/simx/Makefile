@@ -14,8 +14,8 @@ LDFLAGS += -L$(THIRD_PARTY_DIR)/cocogfx -lcocogfx
 LDFLAGS += -L$(THIRD_PARTY_DIR)/ramulator -lramulator
 
 SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp
-SRCS += args.cpp processor.cpp warp.cpp core.cpp decode.cpp execute.cpp exeunit.cpp cachesim.cpp memsim.cpp sharedmem.cpp dcrs.cpp
-SRCS += texunit.cpp rastersrv.cpp ropsrv.cpp rasterunit.cpp ropunit.cpp
+SRCS += args.cpp processor.cpp warp.cpp core.cpp decode.cpp execute.cpp exe_unit.cpp cache_sim.cpp mem_sim.cpp shared_mem.cpp dcrs.cpp
+SRCS += tex_unit.cpp raster_srv.cpp rop_srv.cpp raster_unit.cpp rop_unit.cpp
 
 OBJS := $(patsubst %.cpp, obj_dir/%.o, $(notdir $(SRCS)))
 VPATH := $(sort $(dir $(SRCS)))

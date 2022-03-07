@@ -2,10 +2,10 @@
 
 #include <simobject.h>
 #include "pipeline.h"
-#include "cachesim.h"
-#include "texunit.h"
-#include "rastersrv.h"
-#include "ropsrv.h"
+#include "cache_sim.h"
+#include "tex_unit.h"
+#include "raster_srv.h"
+#include "rop_srv.h"
 
 namespace vortex {
 

@@ -1,4 +1,4 @@
-#include "texunit.h"
+#include "tex_unit.h"
 #include "core.h"
 #include <texturing.h>
 #include <VX_config.h>

@@ -9,7 +9,7 @@
 #include "debug.h"
 #include "types.h"
 #include "decode.h"
-#include "archdef.h"
+#include "arch.h"
 #include "instr.h"
 
 using namespace vortex;
@@ -425,7 +425,7 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
 }
 }
 
-Decoder::Decoder(const ArchDef&) {}
+Decoder::Decoder(const Arch&) {}
 
 std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {  
   auto instr = std::make_shared<Instr>();

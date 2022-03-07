@@ -65,7 +65,7 @@ public:
 
     RasterUnit(const SimContext& ctx, 
                const char* name,
-               const ArchDef &arch, 
+               const Arch &arch, 
                const DCRS& dcrs,
                uint32_t tile_logsize, 
                uint32_t block_logsize);    

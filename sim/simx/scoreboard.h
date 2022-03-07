@@ -19,7 +19,7 @@ private:
     std::unordered_map<uint32_t, uint64_t> owners_; 
 
 public:    
-    Scoreboard(const ArchDef &arch) 
+    Scoreboard(const Arch &arch) 
         : in_use_iregs_(arch.num_warps())
         , in_use_fregs_(arch.num_warps())
         , in_use_vregs_(arch.num_warps())

@@ -1,4 +1,4 @@
-#include "exeunit.h"
+#include "exe_unit.h"
 #include <iostream>
 #include <iomanip>
 #include <string.h>
@@ -7,7 +7,7 @@
 #include "debug.h"
 #include "core.h"
 #include "constants.h"
-#include "cachesim.h"
+#include "cache_sim.h"
 
 using namespace vortex;
 

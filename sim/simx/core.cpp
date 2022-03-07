@@ -4,7 +4,7 @@
 #include <assert.h>
 #include <util.h>
 #include "types.h"
-#include "archdef.h"
+#include "arch.h"
 #include "mem.h"
 #include "decode.h"
 #include "core.h"
@@ -15,7 +15,7 @@ using namespace vortex;
 
 Core::Core(const SimContext& ctx, 
            uint32_t id, 
-           const ArchDef &arch, 
+           const Arch &arch, 
            const DCRS &dcrs,
            RasterUnit::Ptr raster_unit,
            RopUnit::Ptr rop_unit)

@@ -7,7 +7,7 @@
 
 namespace vortex {
 
-class ArchDef;
+class Arch;
 class Core;
 class Instr;
 class pipeline_trace_t;
@@ -102,7 +102,7 @@ private:
   void execute(const Instr &instr, pipeline_trace_t *trace);
   
   uint32_t id_;
-  const ArchDef& arch_;
+  const Arch& arch_;
   Core *core_;
   bool active_;
   uint64_t issued_instrs_;
