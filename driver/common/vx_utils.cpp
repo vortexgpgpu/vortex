@@ -4,6 +4,7 @@
 #include <cstring>
 #include <vortex.h>
 #include <VX_config.h>
+#include <VX_types.h>
 #include <assert.h>
 
 uint64_t aligned_size(uint64_t size, uint64_t alignment) {        

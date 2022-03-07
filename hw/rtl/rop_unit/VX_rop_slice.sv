@@ -1,7 +1,6 @@
 `include "VX_rop_define.vh"
 
-module VX_rop_slice #(  
-    parameter CORE_ID = 0
+module VX_rop_slice #(
     // TODO
 ) (
     input wire clk,

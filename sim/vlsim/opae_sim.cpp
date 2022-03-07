@@ -25,6 +25,7 @@
 #include <list>
 #include <queue>
 #include <unordered_map>
+#include <util.h>
 
 #ifndef MEMORY_BANKS 
   #ifdef PLATFORM_PARAM_LOCAL_MEMORY_BANKS
@@ -69,23 +70,6 @@ static uint64_t timestamp = 0;
 double sc_time_stamp() { 
   return timestamp;
 }
-
-static void *__aligned_malloc(size_t alignment, size_t size) {
-  // reserve margin for alignment and storing of unaligned address
-  size_t margin = (alignment-1) + sizeof(void*);
-  void *unaligned_addr = malloc(size + margin);
-  void **aligned_addr = (void**)((uintptr_t)(((uint8_t*)unaligned_addr) + margin) & ~(alignment-1));
-  aligned_addr[-1] = unaligned_addr;
-  return aligned_addr;
-}
-
-static void __aligned_free(void *ptr) {
-  // retreive the stored unaligned address and use it to free the allocation
-  void* unaligned_addr = ((void**)ptr)[-1];
-  free(unaligned_addr);
-}
-
-///////////////////////////////////////////////////////////////////////////////
 
 static bool trace_enabled = false;
 static uint64_t trace_start_time = TRACE_START_TIME;
@@ -158,7 +142,7 @@ public:
       future_.wait();
     } 
     for (auto& buffer : host_buffers_) {
-      __aligned_free(buffer.second.data);
+      aligned_free(buffer.second.data);
     }   
   #ifdef VCD_OUTPUT
     trace_->close();
@@ -176,9 +160,13 @@ public:
   }
 
   int prepare_buffer(uint64_t len, void **buf_addr, uint64_t *wsid, int flags) {
-    auto alloc = __aligned_malloc(CACHE_BLOCK_SIZE, len);
+    auto alloc = aligned_malloc(len, CACHE_BLOCK_SIZE);
     if (alloc == NULL)
       return -1;
+    // set uninitialized data to "baadf00d"
+    for (uint32_t i = 0; i < len; ++i) {
+        ((uint8_t*)alloc)[i] = (0xbaadf00d >> ((i & 0x3) * 8)) & 0xff;
+    }
     host_buffer_t buffer;
     buffer.data   = (uint64_t*)alloc;
     buffer.size   = len;
@@ -193,7 +181,7 @@ public:
   void release_buffer(uint64_t wsid) {
     auto it = host_buffers_.find(wsid);
     if (it != host_buffers_.end()) {
-      __aligned_free(it->second.data);
+      aligned_free(it->second.data);
       host_buffers_.erase(it);
     }
   }

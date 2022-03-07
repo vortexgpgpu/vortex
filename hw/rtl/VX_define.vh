@@ -3,6 +3,7 @@
 
 `include "VX_platform.vh"
 `include "VX_config.vh"
+`include "VX_types.vh"
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -18,7 +19,7 @@
 
 `define NRI_BITS        `LOG2UP(`NUM_IREGS)
 
-`define NTEX_BITS       `LOG2UP(`NUM_TEX_STAGES)
+`define NTEX_BITS       `LOG2UP(`TEX_STAGE_COUNT)
 
 `ifdef EXT_F_ENABLE
 `define NUM_REGS        (2 * `NUM_IREGS)
@@ -30,7 +31,7 @@
 
 `define CSR_ADDR_BITS   12
 
-`define CSR_WIDTH       12
+`define DCR_ADDR_BITS   12
 
 `define PERF_CTR_BITS   44
 
@@ -68,10 +69,11 @@
 `define INST_FNMADD     7'b1001111 
 `define INST_FCI        7'b1010011 // float common instructions
 
-`define INST_GPGPU      7'b1101011
-`define INST_GPU        7'b1011011
-
-`define INST_TEX       7'b0101011
+// Custom extension opcodes
+`define INST_EXT1       7'b0001011 // 0x0B
+`define INST_EXT2       7'b0101011 // 0x2B
+`define INST_EXT3       7'b1011011 // 0x5B
+`define INST_EXT4       7'b1111011 // 0x7B
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -195,9 +197,11 @@
 `define INST_GPU_JOIN        4'h3
 `define INST_GPU_BAR         4'h4
 `define INST_GPU_PRED        4'h5
+
 `define INST_GPU_TEX         4'h6
 `define INST_GPU_RASTER      4'h7
 `define INST_GPU_ROP         4'h8
+`define INST_GPU_IMADD       4'h1
 `define INST_GPU_BITS        4
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -223,10 +227,10 @@
 `define ICACHE_LINE_SIZE        `L1_BLOCK_SIZE
 
 // TAG sharing enable       
-`define ICACHE_CORE_TAG_ID_BITS `NW_BITS
+`define ICACHE_TAG_ID_BITS      `NW_BITS
 
 // Core request tag bits
-`define ICACHE_CORE_TAG_WIDTH   (`UUID_BITS + `ICACHE_CORE_TAG_ID_BITS)
+`define ICACHE_TAG_WIDTH        (`UUID_BITS + `ICACHE_TAG_ID_BITS)
 
 // Memory request data bits
 `define ICACHE_MEM_DATA_WIDTH   (`ICACHE_LINE_SIZE * 8)
@@ -250,14 +254,7 @@
 
 // Core request tag bits
 `define LSUQ_ADDR_BITS          `LOG2UP(`LSUQ_SIZE)
-`ifdef EXT_TEX_ENABLE
-`define LSU_TAG_ID_BITS         `MAX(`LSUQ_ADDR_BITS, 2)
-`else 
-`define LSU_TAG_ID_BITS         `LSUQ_ADDR_BITS
-`endif
-`define DCACHE_CORE_TAG_ID_BITS (`LSU_TAG_ID_BITS + `CACHE_ADDR_TYPE_BITS)
-`define DCACHE_TAG_ID_BITS      (`DCACHE_CORE_TAG_ID_BITS - `SM_ENABLE) 
-`define DCACHE_CORE_TAG_WIDTH   (`UUID_BITS + `DCACHE_CORE_TAG_ID_BITS)
+`define DCACHE_TAG_ID_BITS      (`LSUQ_ADDR_BITS + `CACHE_ADDR_TYPE_BITS)
 `define DCACHE_TAG_WIDTH        (`UUID_BITS + `DCACHE_TAG_ID_BITS)
  
 // Memory request data bits
@@ -274,7 +271,7 @@
 
 // Memory request tag bits
 `define _DMEM_ADDR_RATIO_W      $clog2(`DCACHE_LINE_SIZE / `DCACHE_WORD_SIZE)
-`define _DNC_MEM_TAG_WIDTH      ($clog2(`DCACHE_NUM_REQS) + `_DMEM_ADDR_RATIO_W + `DCACHE_CORE_TAG_WIDTH)
+`define _DNC_MEM_TAG_WIDTH      ($clog2(`DCACHE_NUM_REQS) + `_DMEM_ADDR_RATIO_W + `DCACHE_TAG_WIDTH)
 `define DCACHE_MEM_TAG_WIDTH    `MAX((`CLOG2(`DCACHE_NUM_BANKS) + `CLOG2(`DCACHE_MSHR_SIZE) + `NC_TAG_BIT), `_DNC_MEM_TAG_WIDTH)
 
 // Merged D-cache/I-cache memory tag
@@ -306,7 +303,7 @@
 `define L2_CACHE_LINE_SIZE       ((`L2_ENABLE) ? `MEM_BLOCK_SIZE : `L2_WORD_SIZE)
 
 // Input request tag bits
-`define L2_CORE_TAG_WIDTH        (`DCACHE_CORE_TAG_WIDTH + `CLOG2(`NUM_CORES))
+`define L2_CORE_TAG_WIDTH        (`DCACHE_TAG_WIDTH + `CLOG2(`NUM_CORES))
 
 // Memory request data bits
 `define L2_MEM_DATA_WIDTH        (`L2_CACHE_LINE_SIZE * 8)
@@ -365,7 +362,8 @@
 `define VX_MEM_DATA_WIDTH       `L3_MEM_DATA_WIDTH
 `define VX_MEM_TAG_WIDTH        `L3_MEM_TAG_WIDTH
 `define VX_CORE_TAG_WIDTH       `L3_CORE_TAG_WIDTH 
-`define VX_CSR_ID_WIDTH         `LOG2UP(`NUM_CLUSTERS * `NUM_CORES)
+`define VX_DCR_ADDR_WIDTH       `DCR_ADDR_BITS
+`define VX_DCR_DATA_WIDTH       32
 
 `define TO_FULL_ADDR(x)         {x, (32-$bits(x))'(0)}
 

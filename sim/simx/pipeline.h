@@ -10,9 +10,26 @@
 
 namespace vortex {
 
+class ITraceData {
+public:
+    ITraceData() {}
+    virtual ~ITraceData() {}
+};
+
+struct LsuTraceData : public ITraceData {
+  std::vector<mem_addr_size_t> mem_addrs;
+  LsuTraceData(uint32_t num_threads) : mem_addrs(num_threads) {}
+};
+
+struct GPUTraceData : public ITraceData {
+  const WarpMask active_warps;
+  GPUTraceData(const WarpMask& active_warps) : active_warps(active_warps) {}
+};
+
 struct pipeline_trace_t {
+public:
   //--
-  uint64_t    uuid;
+  const uint64_t  uuid;
   
   //--
   uint32_t    cid;
@@ -21,12 +38,9 @@ struct pipeline_trace_t {
   Word        PC;
 
   //--
-  bool        fetch_stall;
-
-  //--
-  bool        wb;  
-  RegType     rdest_type;
   uint32_t    rdest;
+  RegType     rdest_type;
+  bool        wb;
 
   //--
   RegMask     used_iregs;
@@ -37,53 +51,48 @@ struct pipeline_trace_t {
   ExeType     exe_type; 
 
   //--
-  std::vector<std::vector<mem_addr_size_t>> mem_addrs;
-  
-  //--
   union {
-    struct {        
-      LsuType type;
-    } lsu;
-    struct {
-      AluType type;
-    } alu;
-    struct {
-      FpuType type;
-    } fpu;
-    struct {
-      GpuType type;
-      WarpMask active_warps;
-    } gpu;
+    LsuType lsu_type;
+    AluType alu_type;
+    FpuType fpu_type;
+    GpuType gpu_type;
   };
 
-  bool stalled;
+  ITraceData* data;
 
-  pipeline_trace_t(uint64_t uuid_, const ArchDef& arch) {
-    uuid = uuid_;
-    cid = 0;
-    wid = 0;
-    tmask.reset();
-    PC = 0;
-    fetch_stall = false;
-    wb  = false;
-    rdest = 0;
-    rdest_type = RegType::None;
-    used_iregs.reset();
-    used_fregs.reset();
-    used_vregs.reset();
-    exe_type = ExeType::NOP;
-    mem_addrs.resize(arch.num_threads());
-    stalled = false;
+  bool fetch_stall;
+
+private:
+  bool stalled_;
+
+public:
+  pipeline_trace_t(uint64_t uuid) 
+    : uuid(uuid)
+    , cid(0)
+    , wid(0)
+    , PC(0)    
+    , rdest(0)
+    , rdest_type(RegType::None)
+    , wb(false)
+    , exe_type(ExeType::NOP)
+    , data(nullptr)
+    , fetch_stall(false)
+    , stalled_(false) 
+  {}
+  
+  ~pipeline_trace_t() {
+    if (data)
+      delete data;
   }
 
   bool suspend() {
-    bool old = stalled;
-    stalled = true;
+    bool old = stalled_;
+    stalled_ = true;
     return old;
   }
 
   void resume() {
-    stalled = false;
+    stalled_ = false;
   }
 };
 

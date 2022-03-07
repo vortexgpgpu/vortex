@@ -16,14 +16,15 @@
 #include "mem.h"
 #include "warp.h"
 #include "pipeline.h"
-#include "cache.h"
+#include "cachesim.h"
 #include "sharedmem.h"
 #include "ibuffer.h"
 #include "scoreboard.h"
 #include "exeunit.h"
-#include "tex_unit.h"
-#include "raster_unit.h"
-#include "rop_unit.h"
+#include "texunit.h"
+#include "rastersrv.h"
+#include "ropsrv.h"
+#include "dcrs.h"
 
 namespace vortex {
 
@@ -44,8 +45,6 @@ public:
     uint64_t mem_reads;
     uint64_t mem_writes;
     uint64_t mem_latency;
-    uint64_t tex_reads;
-    uint64_t tex_latency;
 
     PerfStats() 
       : instrs(0)
@@ -62,15 +61,19 @@ public:
       , mem_reads(0)
       , mem_writes(0)
       , mem_latency(0)
-      , tex_reads(0)
-      , tex_latency(0)
     {}
   };
 
   SimPort<MemRsp> MemRspPort;
   SimPort<MemReq> MemReqPort;
 
-  Core(const SimContext& ctx, const ArchDef &arch, uint32_t id);
+  Core(const SimContext& ctx, 
+       uint32_t id, 
+       const ArchDef &arch, 
+       const DCRS &dcrs,
+       RasterUnit::Ptr raster_unit,
+       RopUnit::Ptr rop_unit);
+
   ~Core();
 
   void attach_ram(RAM* ram);
@@ -85,17 +88,17 @@ public:
     return id_;
   }
 
-  const Decoder& decoder() {
-    return decoder_;
-  }
-
   const ArchDef& arch() const {
     return arch_;
   }
 
+  const DCRS& dcrs() const {
+    return dcrs_;
+  }
+
   const PerfStats& perf_stats() const {
     return perf_stats_;
-  } 
+  }
 
   uint32_t getIRegValue(int reg) const {
     return warps_.at(0)->getIRegValue(reg);
@@ -109,13 +112,13 @@ public:
   
   WarpMask barrier(uint32_t bar_id, uint32_t count, uint32_t warp_id);
 
+  AddrType get_addr_type(uint64_t addr);
+
   void icache_read(void* data, uint64_t addr, uint32_t size);
 
   void dcache_read(void* data, uint64_t addr, uint32_t size);
 
   void dcache_write(const void* data, uint64_t addr, uint32_t size);
-
-  uint32_t tex_read(uint32_t unit, uint32_t lod, uint32_t u, uint32_t v, std::vector<mem_addr_size_t>* mem_addrs);
 
   void trigger_ecall();
 
@@ -136,26 +139,26 @@ private:
   void cout_flush();
 
   uint32_t id_;
-  const ArchDef arch_;
+  const ArchDef& arch_;
+  const DCRS &dcrs_;
+  
   const Decoder decoder_;
   MemoryUnit mmu_;
-  RAM smem_;
-  std::vector<TexUnit> tex_units_;
-  RasterUnit raster_unit_;
-  RopUnit rop_unit_;
 
   std::vector<std::shared_ptr<Warp>> warps_;  
-  std::vector<WarpMask> barriers_;  
-  std::vector<uint32_t> csrs_;
+  std::vector<WarpMask> barriers_;
   std::vector<Byte> fcsrs_;
   std::vector<IBuffer> ibuffers_;
   Scoreboard scoreboard_;
   std::vector<ExeUnit::Ptr> exe_units_;
-  Cache::Ptr icache_;
-  Cache::Ptr dcache_;
-  SharedMem::Ptr shared_mem_;
+  CacheSim::Ptr icache_;
+  CacheSim::Ptr dcache_;
+  CacheSim::Ptr tcache_;
+  SharedMem::Ptr sharedmem_;
+  TexUnit::Ptr tex_unit_;
+  RasterSrv::Ptr raster_srv_;
+  RopSrv::Ptr rop_srv_;
   Switch<MemReq, MemRsp>::Ptr l1_mem_switch_;
-  std::vector<Switch<MemReq, MemRsp>::Ptr> dcache_switch_;
 
   PipelineLatch fetch_latch_;
   PipelineLatch decode_latch_;
@@ -163,10 +166,8 @@ private:
   HashTable<pipeline_trace_t*> pending_icache_;
   WarpMask active_warps_;
   WarpMask stalled_warps_;
-  uint32_t last_schedule_wid_;
   uint64_t issued_instrs_;
-  uint64_t committed_instrs_;
-  uint32_t csr_tex_unit_;
+  uint64_t committed_instrs_;  
   bool ecall_;
   bool ebreak_;
 
@@ -175,11 +176,15 @@ private:
   PerfStats perf_stats_;
   uint64_t perf_mem_pending_reads_;
 
+  friend class Warp;
   friend class LsuUnit;
   friend class AluUnit;
   friend class CsrUnit;
   friend class FpuUnit;
   friend class GpuUnit;
+  friend class TexUnit;
+  friend class RasterSrv;
+  friend class RopSrv;
 };
 
 } // namespace vortex

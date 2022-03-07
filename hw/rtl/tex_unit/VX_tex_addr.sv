@@ -156,11 +156,13 @@ module VX_tex_addr #(
 
     assign req_ready = ~stall_out;
 
-`ifdef DBG_TRACE_TEX
-    wire [`NW_BITS-1:0] rsp_wid;
-    wire [31:0]         rsp_PC;
+`ifdef DBG_TRACE_TEX    
+    wire [`NW_BITS-1:0]   rsp_wid;
+    wire [31:0]           rsp_PC;
+    wire [`UUID_BITS-1:0] rsp_uuid;
+    
 
-    assign {rsp_wid, rsp_PC} = rsp_info[`NW_BITS+32-1:0];
+    assign {rsp_wid, rsp_PC, rsp_uuid} = rsp_info[`NW_BITS+32+`UUID_BITS-1:0];
     
     always @(posedge clk) begin
         if (req_valid && ~stall_out) begin
@@ -196,10 +198,10 @@ module VX_tex_addr #(
         end
 
         if (rsp_valid && rsp_ready) begin
-            dpi_trace("%d: core%0d-tex-addr: wid=%0d, PC=%0h, tmask=%b, req_filter=%0d, lgstride=%0d, addr=", 
+            dpi_trace("%d: core%0d-tex-addr: wid=%0d, PC=0x%0h, tmask=%b, req_filter=%0d, lgstride=%0d, addr=", 
                     $time, CORE_ID, rsp_wid, rsp_PC, rsp_tmask, rsp_filter, rsp_lgstride);
             `TRACE_ARRAY2D(rsp_addr, 4, NUM_REQS);
-            dpi_trace("\n");
+            dpi_trace(" (#%0d)\n", rsp_uuid);
         end
     end
 `endif

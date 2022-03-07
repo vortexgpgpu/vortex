@@ -165,8 +165,8 @@ public:
     std::cout << std::dec << timestamp << ": [sim] run()" << std::endl;
   #endif
 
-    // reset device
-    this->reset();
+    // start device
+    this->start();
 
     // execute program
     while (device_->busy) {
@@ -181,6 +181,15 @@ public:
     this->wait(5);  
 
     return exitcode;
+  }
+
+  void write_dcr(uint32_t addr, uint64_t value) {
+    device_->dcr_wr_valid = 1;
+    device_->dcr_wr_addr  = addr;
+    device_->dcr_wr_data  = value;
+    while (device_->dcr_wr_valid) {
+      this->tick();
+    }
   }
 
 private:
@@ -199,6 +208,8 @@ private:
     this->reset_avs_bus();
   #endif
 
+    this->reset_dcr_bus();
+
     device_->reset = 1;
 
     for (int i = 0; i < RESET_DELAY; ++i) {
@@ -216,6 +227,22 @@ private:
     this->cout_flush();
   }
 
+  void start() {
+
+    device_->start = 1;
+
+    for (int i = 0; i < RESET_DELAY; ++i) {
+      device_->clk = 0;
+      this->eval();
+      device_->clk = 1;
+      this->eval();
+    }  
+
+    device_->start = 0;
+
+    this->cout_flush();
+  }
+
   void tick() {
 
     device_->clk = 0;
@@ -226,6 +253,7 @@ private:
   #else
     this->eval_avs_bus(0);
   #endif
+    this->eval_dcr_bus(0);
 
     device_->clk = 1;
     this->eval();
@@ -235,6 +263,7 @@ private:
   #else
     this->eval_avs_bus(1);
   #endif
+    this->eval_dcr_bus(1);
 
     if (MEM_CYCLE_RATIO > 0) { 
       auto cycle = timestamp / 2;
@@ -544,6 +573,20 @@ private:
 
 #endif
 
+  void  reset_dcr_bus() {
+    device_->dcr_wr_valid = 0;
+  }
+
+  void  eval_dcr_bus(bool clk) {
+    if (!clk) {
+      dcr_wr_ready_ = device_->dcr_wr_ready;
+      return;
+    }
+    if (device_->dcr_wr_valid && dcr_wr_ready_) {
+      device_->dcr_wr_valid = 0;
+    }
+  }
+
   void wait(uint32_t cycles) {
     for (int i = 0; i < cycles; ++i) {
       this->tick();
@@ -595,6 +638,8 @@ private:
   bool mem_wr_rsp_active_;
   bool mem_wr_rsp_ready_;
 
+  bool dcr_wr_ready_;
+
   RAM *ram_;
 
   ramulator::Gem5Wrapper* dram_;
@@ -618,4 +663,8 @@ void Processor::attach_ram(RAM* mem) {
 
 int Processor::run() {
   return impl_->run();
+}
+
+void Processor::write_dcr(uint32_t addr, uint64_t value) {
+  return impl_->write_dcr(addr, value);
 }

@@ -1,4 +1,5 @@
 `include "VX_define.vh"
+`include "VX_tex_define.vh"
 
 module VX_core #( 
     parameter CORE_ID = 0
@@ -8,6 +9,10 @@ module VX_core #(
     // Clock
     input  wire                             clk,
     input  wire                             reset,
+
+`ifdef EXT_TEX_ENABLE
+    VX_tex_dcr_if.slave                     tex_dcr_if,
+`endif
 
     // Memory request
     output wire                             mem_req_valid,
@@ -55,41 +60,39 @@ module VX_core #(
     assign mem_rsp_if.tag   = mem_rsp_tag;
     assign mem_rsp_ready = mem_rsp_if.ready;
 
-    //--
-
     VX_dcache_req_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
         .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`DCACHE_CORE_TAG_WIDTH)
+        .TAG_WIDTH (`DCACHE_TAG_WIDTH)
     ) dcache_req_if();
 
     VX_dcache_rsp_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
         .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`DCACHE_CORE_TAG_WIDTH)
+        .TAG_WIDTH (`DCACHE_TAG_WIDTH)
     ) dcache_rsp_if();
     
     VX_icache_req_if #(
         .WORD_SIZE (`ICACHE_WORD_SIZE), 
-        .TAG_WIDTH (`ICACHE_CORE_TAG_WIDTH)
+        .TAG_WIDTH (`ICACHE_TAG_WIDTH)
     ) icache_req_if();
 
     VX_icache_rsp_if #(
         .WORD_SIZE (`ICACHE_WORD_SIZE), 
-        .TAG_WIDTH (`ICACHE_CORE_TAG_WIDTH)
+        .TAG_WIDTH (`ICACHE_TAG_WIDTH)
     ) icache_rsp_if();
 
 `ifdef EXT_TEX_ENABLE
     VX_dcache_req_if #(
-        .NUM_REQS  (`NUM_THREADS), 
-        .WORD_SIZE (4), 
-        .TAG_WIDTH (`DCACHE_TAG_WIDTH)
+        .NUM_REQS  (`TCACHE_NUM_REQS), 
+        .WORD_SIZE (`TCACHE_WORD_SIZE), 
+        .TAG_WIDTH (`TCACHE_TAG_WIDTH)
     ) tcache_req_if();
 
     VX_dcache_rsp_if #(
-        .NUM_REQS  (`NUM_THREADS), 
-        .WORD_SIZE (4), 
-        .TAG_WIDTH (`DCACHE_TAG_WIDTH)
+        .NUM_REQS  (`TCACHE_NUM_REQS), 
+        .WORD_SIZE (`TCACHE_WORD_SIZE), 
+        .TAG_WIDTH (`TCACHE_TAG_WIDTH)
     ) tcache_rsp_if();
 `endif
     
@@ -113,15 +116,14 @@ module VX_core #(
         .icache_rsp_if  (icache_rsp_if),
 
     `ifdef EXT_TEX_ENABLE
+        .tex_dcr_if     (tex_dcr_if),
         .tcache_req_if  (tcache_req_if),
         .tcache_rsp_if  (tcache_rsp_if),
     `endif
 
         // Status
         .busy           (busy)
-    );  
-
-    //--
+    );
 
     VX_mem_unit #(
         .CORE_ID(CORE_ID)

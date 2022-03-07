@@ -350,47 +350,52 @@ module VX_decode  #(
                 endcase
             end
         `endif
-            `INST_GPGPU: begin 
-                ex_type = `EX_GPU;
-                case (func3)
-                    3'h0: begin
-                        op_type = rs2[0] ? `INST_OP_BITS'(`INST_GPU_PRED) : `INST_OP_BITS'(`INST_GPU_TMC);
-                        is_wstall = 1;
-                        `USED_IREG (rs1);
-                    end
-                    3'h1: begin
-                        op_type = `INST_OP_BITS'(`INST_GPU_WSPAWN);
-                        `USED_IREG (rs1);
-                        `USED_IREG (rs2);
-                    end
-                    3'h2: begin
-                        op_type = `INST_OP_BITS'(`INST_GPU_SPLIT);
-                        is_wstall = 1;
-                        `USED_IREG (rs1);
-                    end
-                    3'h3: begin 
-                        op_type = `INST_OP_BITS'(`INST_GPU_JOIN);
-                        is_join = 1;
-                    end
-                    3'h4: begin 
-                        op_type = `INST_OP_BITS'(`INST_GPU_BAR);
-                        is_wstall = 1;
-                        `USED_IREG (rs1);
-                        `USED_IREG (rs2);
-                    end                
-                    3'h5: begin
-                        ex_type = `EX_LSU;
-                        op_type = `INST_OP_BITS'(`INST_LSU_LW);
-                        op_mod  = `INST_MOD_BITS'(2);
-                        `USED_IREG (rs1);
+            `INST_EXT1: begin 
+                case (func7)
+                    7'h00: begin
+                        ex_type = `EX_GPU;
+                        case (func3)
+                            3'h0: begin // TMC, PRED
+                                op_type = rs2[0] ? `INST_OP_BITS'(`INST_GPU_PRED) : `INST_OP_BITS'(`INST_GPU_TMC);
+                                is_wstall = 1;
+                                `USED_IREG (rs1);
+                            end
+                            3'h1: begin // WSPAWN
+                                op_type = `INST_OP_BITS'(`INST_GPU_WSPAWN);
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                            end
+                            3'h2: begin // SPLIT
+                                op_type = `INST_OP_BITS'(`INST_GPU_SPLIT);
+                                is_wstall = 1;
+                                `USED_IREG (rs1);
+                            end
+                            3'h3: begin // JOIN
+                                op_type = `INST_OP_BITS'(`INST_GPU_JOIN);
+                                is_join = 1;
+                            end
+                            3'h4: begin // BAR
+                                op_type = `INST_OP_BITS'(`INST_GPU_BAR);
+                                is_wstall = 1;
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                            end                
+                            3'h5: begin // PREFETCH
+                                ex_type = `EX_LSU;
+                                op_type = `INST_OP_BITS'(`INST_LSU_LW);
+                                op_mod  = `INST_MOD_BITS'(2);
+                                `USED_IREG (rs1);
+                            end
+                            default:;
+                        endcase
                     end
                     default:;
                 endcase
             end
-            `INST_GPU: begin                
+            `INST_EXT2: begin                
                 case (func3)
                 `ifdef EXT_TEX_ENABLE
-                    3'h0: begin
+                    3'h0: begin // TEX
                         ex_type = `EX_GPU;
                         op_type = `INST_OP_BITS'(`INST_GPU_TEX);
                         op_mod  = `INST_MOD_BITS'(func2);
@@ -401,6 +406,15 @@ module VX_decode  #(
                         `USED_IREG (rs3);
                     end
                 `endif
+                    3'h1: begin // IMADD
+                        ex_type = `EX_GPU;
+                        op_type = `INST_OP_BITS'(`INST_GPU_IMADD);
+                        use_rd = 1;
+                        `USED_IREG (rd);
+                        `USED_IREG (rs1);
+                        `USED_IREG (rs2);
+                        `USED_IREG (rs3);
+                    end
                     default:;
                 endcase
             end
@@ -482,11 +496,11 @@ module VX_decode  #(
 `ifdef DBG_TRACE_CORE_PIPELINE
     always @(posedge clk) begin
         if (decode_if.valid && decode_if.ready) begin
-            dpi_trace("%d: core%0d-decode: wid=%0d, PC=%0h, ex=", $time, CORE_ID, decode_if.wid, decode_if.PC);
+            dpi_trace("%d: core%0d-decode: wid=%0d, PC=0x%0h, ex=", $time, CORE_ID, decode_if.wid, decode_if.PC);
             trace_ex_type(decode_if.ex_type);
             dpi_trace(", op=");
             trace_ex_op(decode_if.ex_type, decode_if.op_type, decode_if.op_mod);
-            dpi_trace(", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=%0h, use_pc=%b, use_imm=%b (#%0d)\n",
+            dpi_trace(", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=0x%0h, use_pc=%b, use_imm=%b (#%0d)\n",
                 decode_if.op_mod, decode_if.tmask, decode_if.wb, decode_if.rd, decode_if.rs1, decode_if.rs2, decode_if.rs3, decode_if.imm, decode_if.use_PC, decode_if.use_imm, decode_if.uuid);
         end
     end

@@ -6,6 +6,22 @@ set -e
 # ensure build
 make -s
 
+# clear blackbox cache
+rm -f blackbox.*.cache
+
+smoke() 
+{
+echo "begin smoke tests..."
+
+make -C tests/riscv/isa run-simx
+make -C tests/riscv/isa run-rtlsim
+CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g1.png -g1"
+CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g1.png -g1"
+CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=vlsim --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g1.png -g1"
+
+echo "smoke tests done!"
+}
+
 unittest() 
 {
 make -C tests/unittest run
@@ -31,12 +47,12 @@ tex()
 {
 echo "begin texture tests..."
 
-CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=vlsim --app=tex --args="-isoccer.png -osoccer_result.png -g0"
-CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -osoccer_result.png -g0"
-CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-itoad.png -otoad_result.png -g1"
-CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=simx --app=tex --args="-irainbow.png -orainbow_result.png -g2"
-CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-itoad.png -otoad_result.png -g1" --perf
-CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=simx --app=tex --args="-itoad.png -otoad_result.png -g1" --perf
+CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=vlsim --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g0.png -g0"
+CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g0.png -g0"
+CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-itoad.png -osoccer_result.png -rsoccer_ref_g0.png -g0"
+CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-itoad.png -osoccer_result.png -rsoccerref_g1.png -g1" --perf
+CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=simx --app=tex --args="-itoad.png -osoccer_result.png -rsoccer_ref_g1.png -g1" --perf
+CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=simx --app=tex --args="-irainbow.png -orsoccer_result.png -rsoccer_ref_g2.png -g2"
 
 echo "coverage texture done!"
 }
@@ -73,8 +89,8 @@ echo "begin debugging tests..."
 
 ./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --perf --app=demo --args="-n1"
 ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --perf --app=demo --args="-n1"
-./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --debug --app=demo --args="-n1"
-./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --debug --app=demo --args="-n1"
+./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --debug=1 --app=demo --args="-n1"
+./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --debug=1 --app=demo --args="-n1"
 ./ci/blackbox.sh --driver=vlsim --cores=1 --scope --app=basic --args="-t0 -n1"
 
 echo "debugging tests done!"
@@ -110,16 +126,16 @@ AXI_BUS=1 ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo
 CONFIGS="-DL1_BLOCK_SIZE=64" ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=io_addr --args="-n1"
 
 # test cache banking
-CONFIGS="-DDNUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=io_addr
-CONFIGS="-DDNUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=io_addr
-CONFIGS="-DDNUM_BANKS=2" ./ci/blackbox.sh --driver=simx --cores=1 --app=io_addr
+CONFIGS="-DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=io_addr
+CONFIGS="-DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=io_addr
+CONFIGS="-DDCACHE_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --cores=1 --app=io_addr
 
 # test cache multi-porting
-CONFIGS="-DDNUM_PORTS=2" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=io_addr
-CONFIGS="-DDNUM_PORTS=2" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo --debug --args="-n1"
-CONFIGS="-DL2_NUM_PORTS=2 -DDNUM_PORTS=2" ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=io_addr
-CONFIGS="-DL2_NUM_PORTS=4 -DDNUM_PORTS=4" ./ci/blackbox.sh --driver=rtlsim --cores=4 --l2cache --app=io_addr
-CONFIGS="-DL2_NUM_PORTS=4 -DDNUM_PORTS=4" ./ci/blackbox.sh --driver=simx --cores=4 --l2cache --app=io_addr
+CONFIGS="-DDCACHE_NUM_PORTS=2" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=io_addr
+CONFIGS="-DDCACHE_NUM_PORTS=2" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo --debug=1 --args="-n1"
+CONFIGS="-DL2_NUM_PORTS=2 -DDCACHE_NUM_PORTS=2" ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=io_addr
+CONFIGS="-DL2_NUM_PORTS=4 -DDCACHE_NUM_PORTS=4" ./ci/blackbox.sh --driver=rtlsim --cores=4 --l2cache --app=io_addr
+CONFIGS="-DL2_NUM_PORTS=4 -DDCACHE_NUM_PORTS=4" ./ci/blackbox.sh --driver=simx --cores=4 --l2cache --app=io_addr
 
 # test 128-bit MEM block
 CONFIGS=-DMEM_BLOCK_SIZE=16 ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
@@ -161,11 +177,13 @@ echo "stress1 tests done!"
 
 usage()
 {
-    echo "usage: regression [-unittest] [-coverage] [-tex] [-cluster] [-debug] [-config] [-stress[#n]] [-all] [-h|--help]"
+    echo "usage: regression [-smoke] [-unittest] [-coverage] [-tex] [-cluster] [-debug] [-config] [-stress[#n]] [-all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
     case $1 in
+        -smoke ) smoke
+                ;;
         -unittest ) unittest
                 ;;
         -coverage ) coverage

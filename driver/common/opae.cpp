@@ -42,14 +42,15 @@
 #define CMD_MEM_READ        AFU_IMAGE_CMD_MEM_READ
 #define CMD_MEM_WRITE       AFU_IMAGE_CMD_MEM_WRITE
 #define CMD_RUN             AFU_IMAGE_CMD_RUN
+#define CMD_DCR_WRITE       AFU_IMAGE_CMD_DCR_WRITE
 
 #define MMIO_CMD_TYPE       (AFU_IMAGE_MMIO_CMD_TYPE * 4)
-#define MMIO_IO_ADDR        (AFU_IMAGE_MMIO_IO_ADDR * 4)
-#define MMIO_MEM_ADDR       (AFU_IMAGE_MMIO_MEM_ADDR * 4)
-#define MMIO_DATA_SIZE      (AFU_IMAGE_MMIO_DATA_SIZE * 4)
+#define MMIO_CMD_ARG0       (AFU_IMAGE_MMIO_CMD_ARG0 * 4)
+#define MMIO_CMD_ARG1       (AFU_IMAGE_MMIO_CMD_ARG1 * 4)
+#define MMIO_CMD_ARG2       (AFU_IMAGE_MMIO_CMD_ARG2 * 4)
+#define MMIO_STATUS         (AFU_IMAGE_MMIO_STATUS   * 4)
 #define MMIO_DEV_CAPS       (AFU_IMAGE_MMIO_DEV_CAPS * 4)
 #define MMIO_ISA_CAPS       (AFU_IMAGE_MMIO_ISA_CAPS * 4)
-#define MMIO_STATUS         (AFU_IMAGE_MMIO_STATUS * 4)
 
 #define STATUS_STATE_BITS   8
 
@@ -477,9 +478,9 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size
 
     auto ls_shift = (int)std::log2(CACHE_BLOCK_SIZE);
 
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_IO_ADDR, (buffer->io_addr + src_offset) >> ls_shift));
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_MEM_ADDR, dev_maddr >> ls_shift));
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_DATA_SIZE, asize >> ls_shift));   
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG0, (buffer->io_addr + src_offset) >> ls_shift));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG1, dev_maddr >> ls_shift));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG2, asize >> ls_shift));   
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_MEM_WRITE));
 
     // Wait for the write operation to finish
@@ -518,9 +519,9 @@ extern int vx_copy_from_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t si
 
     auto ls_shift = (int)std::log2(CACHE_BLOCK_SIZE);
 
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_IO_ADDR, (buffer->io_addr + dest_offset) >> ls_shift));
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_MEM_ADDR, dev_maddr >> ls_shift));    
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_DATA_SIZE, asize >> ls_shift));   
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG0, (buffer->io_addr + dest_offset) >> ls_shift));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG1, dev_maddr >> ls_shift));    
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG2, asize >> ls_shift));   
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_MEM_READ));
 
     // Wait for the write operation to finish
@@ -542,6 +543,24 @@ extern int vx_start(vx_device_h hdevice) {
   
     // start execution    
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_RUN));
+
+    return 0;
+}
+
+extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint64_t value) {
+    if (nullptr == hdevice)
+        return -1;
+
+    vx_device *device = ((vx_device*)hdevice);
+
+    // Ensure ready for new command
+    if (vx_ready_wait(hdevice, -1) != 0)
+        return -1;    
+  
+    // write DCR value
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG0, addr));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG1, value));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_DCR_WRITE));
 
     return 0;
 }

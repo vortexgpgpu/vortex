@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 namespace vortex {
 
 class RAM;
@@ -13,6 +15,8 @@ public:
   void attach_ram(RAM* ram);
 
   int run();
+
+  void write_dcr(uint32_t addr, uint64_t value);
 
 private:
 

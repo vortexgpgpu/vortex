@@ -23,9 +23,19 @@ module VX_lsu_unit #(
     localparam MEM_ADDRW  = 32 - MEM_ASHIFT;
     localparam REQ_ASHIFT = `CLOG2(`DCACHE_WORD_SIZE);
 
+    localparam STACK_SIZE_W = `STACK_SIZE >> MEM_ASHIFT;
+    localparam STACK_ADDR_W = `CLOG2(STACK_SIZE_W);
+    localparam SMEM_LOCAL_SIZE_W = `SMEM_LOCAL_SIZE >> MEM_ASHIFT;
+
+    localparam TOTAL_STACK_SIZE = `STACK_SIZE * `NUM_THREADS * `NUM_WARPS * `NUM_CORES;
+    localparam STACK_START_W = MEM_ADDRW'(`STACK_BASE_ADDR >> MEM_ASHIFT);
+    localparam STACK_END_W = MEM_ADDRW'((`STACK_BASE_ADDR - TOTAL_STACK_SIZE) >> MEM_ASHIFT);
+
     `STATIC_ASSERT(0 == (`IO_BASE_ADDR % MEM_ASHIFT), ("invalid parameter"))
-    `STATIC_ASSERT(0 == (`SMEM_BASE_ADDR % MEM_ASHIFT), ("invalid parameter"))
-    `STATIC_ASSERT(`SMEM_SIZE == `MEM_BLOCK_SIZE * (`SMEM_SIZE / `MEM_BLOCK_SIZE), ("invalid parameter"))
+    `STATIC_ASSERT(0 == (`STACK_BASE_ADDR % MEM_ASHIFT), ("invalid parameter"))    
+    `STATIC_ASSERT(`SMEM_LOCAL_SIZE == `MEM_BLOCK_SIZE * (`SMEM_LOCAL_SIZE / `MEM_BLOCK_SIZE), ("invalid parameter"))
+    `STATIC_ASSERT(`STACK_SIZE == `MEM_BLOCK_SIZE * (`STACK_SIZE / `MEM_BLOCK_SIZE), ("invalid parameter"))
+    `STATIC_ASSERT(`SMEM_LOCAL_SIZE >= `MEM_BLOCK_SIZE, ("invalid parameter"))
     
     wire                          req_valid;
     wire [`UUID_BITS-1:0]         req_uuid;
@@ -59,12 +69,17 @@ module VX_lsu_unit #(
     wire lsu_is_dup = lsu_req_if.tmask[0] && (& addr_matches);
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
+        wire [MEM_ADDRW-1:0] full_addr_w = full_addr[i][MEM_ASHIFT +: MEM_ADDRW];
         // is non-cacheable address
-        wire is_addr_nc = (full_addr[i][MEM_ASHIFT +: MEM_ADDRW] >= MEM_ADDRW'(`IO_BASE_ADDR >> MEM_ASHIFT));
+        wire is_addr_nc = (full_addr_w >= MEM_ADDRW'(`IO_BASE_ADDR >> MEM_ASHIFT));
         if (`SM_ENABLE) begin
-            // is shared memory address
-            wire is_addr_sm = (full_addr[i][MEM_ASHIFT +: MEM_ADDRW] >= MEM_ADDRW'((`SMEM_BASE_ADDR - `SMEM_SIZE) >> MEM_ASHIFT))
-                            & (full_addr[i][MEM_ASHIFT +: MEM_ADDRW] < MEM_ADDRW'(`SMEM_BASE_ADDR >> MEM_ASHIFT));            
+            // is stack address
+            wire is_stack_addr = (full_addr_w >= STACK_END_W) && (full_addr_w < STACK_START_W);
+
+            // check if address falls into shared memory region
+            wire [STACK_ADDR_W-1:0] offset = full_addr_w[STACK_ADDR_W-1:0];
+            wire is_addr_sm = is_stack_addr && (offset >= STACK_ADDR_W'(STACK_SIZE_W - SMEM_LOCAL_SIZE_W));
+
             assign lsu_addr_type[i] = {is_addr_nc, is_addr_sm};
         end else begin
             assign lsu_addr_type[i] = is_addr_nc;
@@ -136,7 +151,7 @@ module VX_lsu_unit #(
     wire mbuf_pop = dcache_rsp_fire && (0 == rsp_rem_mask_n);
     
     assign mbuf_raddr = dcache_rsp_if.tag[`CACHE_ADDR_TYPE_BITS +: `LSUQ_ADDR_BITS];
-    assign rsp_uuid   = dcache_rsp_if.tag[`DCACHE_CORE_TAG_ID_BITS +: `UUID_BITS];
+    assign rsp_uuid   = dcache_rsp_if.tag[`DCACHE_TAG_ID_BITS +: `UUID_BITS];
     `UNUSED_VAR (dcache_rsp_if.tag)
 
     // do not writeback from software prefetch
@@ -236,7 +251,7 @@ module VX_lsu_unit #(
         assign dcache_req_if.addr[i]   = req_addr[i][31:2];
         assign dcache_req_if.byteen[i] = mem_req_byteen;
         assign dcache_req_if.data[i]   = mem_req_data;
-        assign dcache_req_if.tag[i]    = {req_uuid, `LSU_TAG_ID_BITS'(req_tag), req_addr_type[i]};
+        assign dcache_req_if.tag[i]    = {req_uuid, req_tag, req_addr_type[i]};
     end
 
     assign ready_in = req_dep_ready && dcache_req_ready;
@@ -328,7 +343,7 @@ module VX_lsu_unit #(
         for (integer i = 0; i < `LSUQ_SIZE; ++i) begin
             if (pending_reqs[i][0]) begin 
                 `ASSERT(($time - pending_reqs[i][1 +: 64]) < delay_timeout, 
-                    ("%t: *** D$%0d response timeout: remaining=%b, wid=%0d, PC=%0h, rd=%0d (#%0d)", 
+                    ("%t: *** D$%0d response timeout: remaining=%b, wid=%0d, PC=0x%0h, rd=%0d (#%0d)", 
                         $time, CORE_ID, rsp_rem_mask[i], pending_reqs[i][1+64+`UUID_BITS+`NR_BITS+32 +: `NW_BITS], 
                                                          pending_reqs[i][1+64+`UUID_BITS+`NR_BITS +: 32], 
                                                          pending_reqs[i][1+64+`UUID_BITS +: `NR_BITS],
@@ -346,23 +361,23 @@ module VX_lsu_unit #(
         end
         if (dcache_req_fire_any) begin
             if (dcache_req_if.rw[0]) begin
-                dpi_trace("%d: D$%0d Wr Req: wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, dcache_req_fire);
+                dpi_trace("%d: D$%0d Wr Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, dcache_req_fire);
                 `TRACE_ARRAY1D(req_addr, `NUM_THREADS);
-                dpi_trace(", tag=%0h, byteen=%0h, type=", req_tag, dcache_req_if.byteen);
+                dpi_trace(", tag=0x%0h, byteen=0x%0h, type=", req_tag, dcache_req_if.byteen);
                 `TRACE_ARRAY1D(req_addr_type, `NUM_THREADS);
                 dpi_trace(", data=");
                 `TRACE_ARRAY1D(dcache_req_if.data, `NUM_THREADS);
                 dpi_trace(", (#%0d)\n", req_uuid);
             end else begin
-                dpi_trace("%d: D$%0d Rd Req: prefetch=%b, wid=%0d, PC=%0h, tmask=%b, addr=", $time, CORE_ID, req_is_prefetch, req_wid, req_pc, dcache_req_fire);
+                dpi_trace("%d: D$%0d Rd Req: prefetch=%b, wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, req_is_prefetch, req_wid, req_pc, dcache_req_fire);
                 `TRACE_ARRAY1D(req_addr, `NUM_THREADS);
-                dpi_trace(", tag=%0h, byteen=%0h, type=", req_tag, dcache_req_if.byteen);
+                dpi_trace(", tag=0x%0h, byteen=0x%0h, type=", req_tag, dcache_req_if.byteen);
                 `TRACE_ARRAY1D(req_addr_type, `NUM_THREADS);
                 dpi_trace(", rd=%0d, is_dup=%b (#%0d)\n", req_rd, req_is_dup, req_uuid);
             end
         end
         if (dcache_rsp_fire) begin
-            dpi_trace("%d: D$%0d Rsp: prefetch=%b, wid=%0d, PC=%0h, tmask=%b, tag=%0h, rd=%0d, data=", 
+            dpi_trace("%d: D$%0d Rsp: prefetch=%b, wid=%0d, PC=0x%0h, tmask=%b, tag=0x%0h, rd=%0d, data=", 
                 $time, CORE_ID, rsp_is_prefetch, rsp_wid, rsp_pc, dcache_rsp_if.tmask, mbuf_raddr, rsp_rd);
             `TRACE_ARRAY1D(dcache_rsp_if.data, `NUM_THREADS);
             dpi_trace(", is_dup=%b (#%0d)\n", rsp_is_dup, rsp_uuid);

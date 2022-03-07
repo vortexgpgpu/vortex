@@ -2,7 +2,10 @@
 
 #include <simobject.h>
 #include "pipeline.h"
-#include "cache.h"
+#include "cachesim.h"
+#include "texunit.h"
+#include "rastersrv.h"
+#include "ropsrv.h"
 
 namespace vortex {
 
@@ -43,8 +46,13 @@ public:
 
 class LsuUnit : public ExeUnit {
 private:    
+    struct pending_req_t {
+      pipeline_trace_t* trace;
+      uint32_t count;
+    };
+    CacheSim::Ptr dcache_;
+    HashTable<pending_req_t> pending_rd_reqs_;    
     uint32_t num_threads_;
-    HashTable<std::pair<pipeline_trace_t*, uint32_t>> pending_rd_reqs_;
     pipeline_trace_t* fence_state_;
     bool fence_lock_;
 
@@ -86,16 +94,14 @@ public:
 ///////////////////////////////////////////////////////////////////////////////
 
 class GpuUnit : public ExeUnit {
-private:
-    uint32_t num_threads_;
-    HashTable<std::pair<pipeline_trace_t*, uint32_t>> pending_tex_reqs_;
+private:    
+  TexUnit::Ptr   tex_unit_;
+  RasterSrv::Ptr raster_srv_;
+  RopSrv::Ptr    rop_srv_;
+  const std::vector<SimPort<pipeline_trace_t*>*> pending_rsps_;
 
-    bool processTexRequest(pipeline_trace_t* trace);
-    
 public:
     GpuUnit(const SimContext& ctx, Core*);
-
-    void reset();
     
     void tick();
 };

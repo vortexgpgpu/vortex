@@ -1,7 +1,6 @@
 `include "VX_rop_define.vh"
 
-module VX_rop_req_switch #(  
-    parameter CORE_ID = 0
+module VX_rop_req_switch #(
     // TODO
 ) (
     input wire clk,

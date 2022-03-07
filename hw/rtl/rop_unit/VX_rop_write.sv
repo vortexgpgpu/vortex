@@ -1,7 +1,6 @@
 `include "VX_rop_define.vh"
 
-module VX_rop_write #(  
-    parameter CORE_ID = 0
+module VX_rop_write #(
     // TODO
 ) (
     input wire clk,

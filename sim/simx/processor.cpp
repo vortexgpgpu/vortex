@@ -7,16 +7,21 @@ using namespace vortex;
 class Processor::Impl {
 private:
   std::vector<Core::Ptr> cores_;
-  std::vector<Cache::Ptr> l2caches_;
+  std::vector<CacheSim::Ptr> l2caches_;
   std::vector<Switch<MemReq, MemRsp>::Ptr> l2_mem_switches_;
-  Cache::Ptr l3cache_;
+  CacheSim::Ptr l3cache_;
   Switch<MemReq, MemRsp>::Ptr l3_mem_switch_;
+  std::vector<RasterUnit::Ptr> raster_units_;
+  std::vector<RopUnit::Ptr> rop_units_;
+  DCRS dcrs_;
 
 public:
   Impl(const ArchDef& arch) 
     : cores_(arch.num_cores())
     , l2caches_(NUM_CLUSTERS)
     , l2_mem_switches_(NUM_CLUSTERS)
+    , raster_units_(NUM_CLUSTERS)
+    , rop_units_(NUM_CLUSTERS)
   {
     SimPlatform::instance().initialize();
 
@@ -25,7 +30,8 @@ public:
 
     // create cores
     for (uint32_t i = 0; i < num_cores; ++i) {
-        cores_.at(i) = Core::Create(arch, i);
+      auto j = i / cores_per_cluster;
+      cores_.at(i) = Core::Create(i, arch, dcrs_, raster_units_.at(j), rop_units_.at(j));
     }
 
      // setup memory simulator
@@ -38,7 +44,7 @@ public:
     std::vector<SimPort<MemRsp>*> mem_rsp_ports(1, &memsim->MemRspPort);
 
     if (L3_ENABLE) {
-      l3cache_ = Cache::Create("l3cache", Cache::Config{
+      l3cache_ = CacheSim::Create("l3cache", CacheSim::Config{
         log2ceil(L3_CACHE_SIZE),  // C
         log2ceil(MEM_BLOCK_SIZE), // B
         2,                      // W
@@ -84,7 +90,7 @@ public:
 
       if (L2_ENABLE) {
         auto& l2cache = l2caches_.at(i);
-        l2cache = Cache::Create("l2cache", Cache::Config{
+        l2cache = CacheSim::Create("l2cache", CacheSim::Config{
           log2ceil(L2_CACHE_SIZE),  // C
           log2ceil(MEM_BLOCK_SIZE), // B
           2,                      // W
@@ -123,7 +129,10 @@ public:
         core->MemReqPort.bind(cluster_mem_req_ports.at(j));
         cluster_mem_rsp_ports.at(j)->bind(&core->MemRspPort);
       }
-    }
+
+      raster_units_.at(i) = RasterUnit::Create("raster", arch, dcrs_.raster_dcrs, RASTER_TILE_LOGSIZE, RASTER_BLOCK_LOGSIZE);
+      rop_units_.at(i) = RopUnit::Create("rop", arch, dcrs_.rop_dcrs);
+    }    
   }
 
   ~Impl() {
@@ -133,6 +142,12 @@ public:
   void attach_ram(RAM* ram) {
     for (auto core : cores_) {
       core->attach_ram(ram);
+    }
+    for (auto raster_unit : raster_units_) {
+      raster_unit->attach_ram(ram);
+    }
+    for (auto rop_unit : rop_units_) {
+      rop_unit->attach_ram(ram);
     }
   }
 
@@ -157,6 +172,10 @@ public:
 
     return exitcode;
   }
+
+  void write_dcr(uint32_t addr, uint64_t value) {
+    dcrs_.write(addr, value);
+  }
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -175,4 +194,8 @@ void Processor::attach_ram(RAM* mem) {
 
 int Processor::run() {
   return impl_->run();
+}
+
+void Processor::write_dcr(uint32_t addr, uint64_t value) {
+  return impl_->write_dcr(addr, value);
 }

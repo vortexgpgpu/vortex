@@ -32,15 +32,15 @@ inline void  texel_read(uint32_t* texels,
 }
 
 inline uint32_t vx_tex_sw(kernel_arg_t* state, 
-                          Fixed<TEX_FXD_FRAC> xu, 
-                          Fixed<TEX_FXD_FRAC> xv, 
+                          TFixed<TEX_FXD_FRAC> xu, 
+                          TFixed<TEX_FXD_FRAC> xv, 
                           uint32_t lod) {
     uint8_t* base_addr  = ((uint8_t*)state->src_addr) + state->mip_offs[lod];
 	uint32_t log_width  = std::max<int32_t>(state->src_logwidth - lod, 0);
 	uint32_t log_height = std::max<int32_t>(state->src_logheight - lod, 0);
-	auto format = (TexFormat)state->format;
-	auto wrapu  = (WrapMode)state->wrapu;
-    auto wrapv  = (WrapMode)state->wrapv;
+	auto format = state->format;
+	auto wrapu  = state->wrapu;
+    auto wrapv  = state->wrapv;
 	auto filter = state->filter;
     auto stride = Stride(format);    
 
@@ -87,11 +87,11 @@ inline uint32_t vx_tex_sw(kernel_arg_t* state,
 }
 
 inline uint32_t tex_load(kernel_arg_t* state, 
-                         Fixed<TEX_FXD_FRAC> xu,
-                         Fixed<TEX_FXD_FRAC> xv,
-                         Fixed<16> xj) {
+                         TFixed<TEX_FXD_FRAC> xu,
+                         TFixed<TEX_FXD_FRAC> xv,
+                         TFixed<16> xj) {
     uint32_t color;
-    uint32_t j = std::max<int32_t>(xj.data(), Fixed<16>::ONE);
+    uint32_t j = std::max<int32_t>(xj.data(), TFixed<16>::ONE);
     uint32_t l = std::min<uint32_t>(log2floor(j) - 16, TEX_LOD_MAX);
     if (state->filter == 2) {        
         uint32_t ln = std::min<uint32_t>(l + 1, TEX_LOD_MAX);

@@ -1,7 +1,7 @@
 `ifndef VX_TEX_RSP_IF
 `define VX_TEX_RSP_IF
 
-`include "VX_define.vh"
+`include "VX_tex_define.vh"
 
 interface VX_tex_rsp_if ();
 

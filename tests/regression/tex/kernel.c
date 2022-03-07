@@ -36,7 +36,7 @@ void kernel_body(int task_id, tile_arg_t* arg) {
 
 	uint8_t* dst_ptr = (uint8_t*)(state->dst_addr + xoffset * state->dst_stride + yoffset * state->dst_pitch);
 
-	Fixed<16> xj(arg->minification);
+	TFixed<16> xj(arg->minification);
 
 	/*vx_printf("task_id=%d, tile_width=%d, tile_height=%d, deltaX=%f, deltaY=%f, minification=%f\n", 
 	 	task_id, arg->tile_width, arg->tile_height, arg->deltaX, arg->deltaY, arg->minification);*/
@@ -46,8 +46,8 @@ void kernel_body(int task_id, tile_arg_t* arg) {
 		uint32_t* dst_row = (uint32_t*)dst_ptr;
 		float fu = (xoffset + 0.5f) * arg->deltaX;
 		for (uint32_t x = 0; x < arg->tile_width; ++x) {
-			Fixed<TEX_FXD_FRAC> xu(fu);
-			Fixed<TEX_FXD_FRAC> xv(fv);
+			TFixed<TEX_FXD_FRAC> xu(fu);
+			TFixed<TEX_FXD_FRAC> xv(fv);
 			uint32_t color = tex_load(state, xu, xv, xj);
 			//vx_printf("task_id=%d, x=%d, y=%d, fu=%f, fv=%f, xu=0x%x, xv=0x%x, color=0x%x\n", task_id, x, y, fu, fv, xu.data(), xv.data(), color);			
 			dst_row[x] = color;
@@ -60,19 +60,6 @@ void kernel_body(int task_id, tile_arg_t* arg) {
 
 int main() {
 	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
-
-	// configure texture unit
-	csr_write(CSR_TEX_UNIT,   0);
-	csr_write(CSR_TEX_WIDTH,  arg->src_logwidth);	
-	csr_write(CSR_TEX_HEIGHT, arg->src_logheight);
-	csr_write(CSR_TEX_FORMAT, arg->format);
-	csr_write(CSR_TEX_WRAPU,  arg->wrapu);
-	csr_write(CSR_TEX_WRAPV,  arg->wrapv);
-	csr_write(CSR_TEX_FILTER, (arg->filter ? 1 : 0));
-	csr_write(CSR_TEX_ADDR,   arg->src_addr);
-	static_for_t<int, 0, TEX_LOD_MAX+1>()([&](int i) {
-		csr_write(CSR_TEX_MIPOFF(i), arg->mip_offs[i]);
-	});
 
 	tile_arg_t targ;
 	targ.state       = arg;
@@ -90,7 +77,7 @@ int main() {
 	}
 	
 	vx_spawn_tasks(arg->num_tasks, (vx_spawn_tasks_cb)kernel_body, &targ);
-	/*for (uint32_t t=0; t < arg->num_tasks; ++t) {		
+	/*for (uint32_t t = 0; t < arg->num_tasks; ++t) {		
 		kernel_body(t, &targ);
 	}*/
 

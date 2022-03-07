@@ -22,10 +22,45 @@ module Vortex (
     input wire [`VX_MEM_TAG_WIDTH-1:0]      mem_rsp_tag,
     output wire                             mem_rsp_ready,
 
-    // Status
+    // DCR request
+    input  wire                             dcr_wr_valid,
+    input  wire [`VX_DCR_ADDR_WIDTH-1:0]    dcr_wr_addr,
+    input  wire [`VX_DCR_DATA_WIDTH-1:0]    dcr_wr_data,
+    output wire                             dcr_wr_ready,
+
+    // Control / status
+    input wire                              start,
     output wire                             busy
 );
     `STATIC_ASSERT((`L3_ENABLE == 0 || `NUM_CLUSTERS > 1), ("invalid parameter"))
+
+`ifdef EXT_TEX_ENABLE
+    VX_tex_dcr_if    tex_dcr_if();
+`endif
+`ifdef EXT_RASTER_ENABLE
+    VX_raster_dcr_if raster_dcr_if();
+`endif
+`ifdef EXT_ROP_ENABLE
+    VX_rop_dcr_if    rop_dcr_if();
+`endif
+    
+    VX_dcr_data dcr_data(
+        .clk          (clk),
+        .reset        (reset),
+    `ifdef EXT_TEX_ENABLE
+        .tex_dcr_if    (tex_dcr_if),
+    `endif
+    `ifdef EXT_RASTER_ENABLE
+        .raster_dcr_if (raster_dcr_if),  
+    `endif
+    `ifdef EXT_ROP_ENABLE
+        .rop_dcr_if    (rop_dcr_if),
+    `endif
+        .dcr_wr_valid (dcr_wr_valid),
+        .dcr_wr_addr  (dcr_wr_addr),
+        .dcr_wr_data  (dcr_wr_data),
+        .dcr_wr_ready (dcr_wr_ready)
+    );
 
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_req_valid;
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_req_rw;
@@ -44,7 +79,7 @@ module Vortex (
 
     for (genvar i = 0; i < `NUM_CLUSTERS; i++) begin
 
-        `RESET_RELAY (cluster_reset);
+        `START_RELAY (cluster_reset);
 
         VX_cluster #(
             .CLUSTER_ID(i)
@@ -53,6 +88,16 @@ module Vortex (
 
             .clk            (clk),
             .reset          (cluster_reset),
+            
+        `ifdef EXT_TEX_ENABLE
+            .tex_dcr_if     (tex_dcr_if),
+        `endif
+        `ifdef EXT_RASTER_ENABLE
+            .raster_dcr_if  (raster_dcr_if),  
+        `endif
+        `ifdef EXT_ROP_ENABLE
+            .rop_dcr_if     (rop_dcr_if),
+        `endif
 
             .mem_req_valid  (per_cluster_mem_req_valid [i]),
             .mem_req_rw     (per_cluster_mem_req_rw    [i]),
@@ -78,7 +123,7 @@ module Vortex (
         VX_perf_cache_if perf_l3cache_if();
     `endif
 
-        `RESET_RELAY (l3_reset);
+        `START_RELAY (l3_reset);
 
         VX_cache #(
             .CACHE_ID           (`L3_CACHE_ID),
@@ -142,7 +187,7 @@ module Vortex (
 
     end else begin
 
-        `RESET_RELAY (mem_arb_reset);
+        `START_RELAY (mem_arb_reset);
 
         VX_mem_arb #(
             .NUM_REQS     (`NUM_CLUSTERS),
@@ -205,12 +250,12 @@ module Vortex (
     always @(posedge clk) begin
         if (mem_req_valid && mem_req_ready) begin
             if (mem_req_rw)
-                dpi_trace("%d: MEM Wr Req: addr=%0h, tag=%0h, byteen=%0h data=%0h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_data);
+                dpi_trace("%d: MEM Wr Req: addr=0x%0h, tag=0x%0h, byteen=0x%0h data=0x%0h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_data);
             else
-                dpi_trace("%d: MEM Rd Req: addr=%0h, tag=%0h, byteen=%0h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen);
+                dpi_trace("%d: MEM Rd Req: addr=0x%0h, tag=0x%0h, byteen=0x%0h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen);
         end
         if (mem_rsp_valid && mem_rsp_ready) begin
-            dpi_trace("%d: MEM Rsp: tag=%0h, data=%0h\n", $time, mem_rsp_tag, mem_rsp_data);
+            dpi_trace("%d: MEM Rsp: tag=0x%0h, data=0x%0h\n", $time, mem_rsp_tag, mem_rsp_data);
         end
     end
 `endif

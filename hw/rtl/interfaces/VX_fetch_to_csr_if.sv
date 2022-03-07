@@ -5,14 +5,14 @@
 
 interface VX_fetch_to_csr_if ();
 
-    wire [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks;
+    wire [`PERF_CTR_BITS-1:0] cycles;
 
     modport master (
-        output thread_masks
+        output cycles
     );
 
     modport slave (
-        input  thread_masks
+        input  cycles
     );
 
 endinterface

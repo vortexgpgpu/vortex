@@ -5,6 +5,7 @@
 #include <queue>
 #include <unordered_map>
 #include <util.h>
+#include <stringutil.h>
 #include <VX_config.h>
 #include <simobject.h>
 
@@ -84,6 +85,7 @@ enum class AluType {
   IMUL,
   IDIV,    
   CMOV,
+  IMADD,
 };
 
 inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
@@ -94,6 +96,7 @@ inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
   case AluType::IMUL:    os << "IMUL"; break;
   case AluType::IDIV:    os << "IDIV"; break;
   case AluType::CMOV:    os << "CMOV"; break;
+  case AluType::IMADD:   os << "IMADD"; break;
   }
   return os;
 }
@@ -141,21 +144,6 @@ struct mem_addr_size_t {
   uint32_t size;
 };
 
-inline AddrType get_addr_type(Word addr, uint32_t size) {
-  __unused (size);
-  if (SM_ENABLE) {
-    if (addr >= (SMEM_BASE_ADDR - SMEM_SIZE)
-    &&  addr < SMEM_BASE_ADDR) {      
-      assert((addr + size) <= SMEM_BASE_ADDR);
-      return AddrType::Shared;
-    }
-  }
-  if (addr >= IO_BASE_ADDR) {
-     return AddrType::IO;
-  }
-  return AddrType::Global;
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 
 enum class FpuType {
@@ -186,6 +174,9 @@ enum class GpuType {
   JOIN,
   BAR,
   TEX,
+  INTERP,
+  RASTER,
+  ROP
 };
 
 inline std::ostream &operator<<(std::ostream &os, const GpuType& type) {
@@ -196,6 +187,9 @@ inline std::ostream &operator<<(std::ostream &os, const GpuType& type) {
   case GpuType::JOIN:   os << "JOIN"; break;
   case GpuType::BAR:    os << "BAR"; break;
   case GpuType::TEX:    os << "TEX"; break;
+  case GpuType::RASTER: os << "RASTER"; break;
+  case GpuType::ROP:    os << "ROP"; break;
+  case GpuType::INTERP: os << "INTERP"; break;
   }
   return os;
 }

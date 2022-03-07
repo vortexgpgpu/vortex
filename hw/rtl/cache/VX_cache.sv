@@ -31,17 +31,20 @@ module VX_cache #(
     // Enable cache writeable
     parameter WRITE_ENABLE                  = 1,
 
-    // core request tag size
-    parameter CORE_TAG_WIDTH                = $clog2(MSHR_SIZE),
-    
     // size of tag id in core request tag
-    parameter CORE_TAG_ID_BITS              = CORE_TAG_WIDTH,
+    parameter CORE_TAG_ID_BITS              = $clog2(MSHR_SIZE),
+
+    // core request tag size
+    parameter CORE_TAG_WIDTH                = (CORE_TAG_ID_BITS + `DBG_CACHE_REQ_IDW),
 
     // Memory request tag size
     parameter MEM_TAG_WIDTH                 = (32 - $clog2(CACHE_LINE_SIZE)),
 
     // bank offset from beginning of index range
     parameter BANK_ADDR_OFFSET              = 0,
+
+    //Swetha: added ways 
+    parameter WAYS                          = 8, //dummy value - change this to 1 later
 
     // enable bypass for non-cacheable addresses
     parameter NC_ENABLE                     = 0,
@@ -402,6 +405,8 @@ module VX_cache #(
     VX_flush_ctrl #( 
         .CACHE_SIZE (CACHE_SIZE),
         .CACHE_LINE_SIZE (CACHE_LINE_SIZE),
+        //Swetha: added ways here 
+        .WAYS(WAYS),
         .NUM_BANKS  (NUM_BANKS)
     ) flush_ctrl (
         .clk       (clk),
@@ -456,6 +461,8 @@ module VX_cache #(
         .WORD_SIZE       (WORD_SIZE),
         .NUM_REQS        (NUM_REQS),
         .CORE_TAG_WIDTH  (CORE_TAG_X_WIDTH),
+        //Swetha: added ways here 
+        .WAYS(WAYS),
         .BANK_ADDR_OFFSET(BANK_ADDR_OFFSET)
     ) core_req_bank_sel (        
         .clk        (clk),
@@ -580,6 +587,8 @@ module VX_cache #(
             .MREQ_SIZE          (MREQ_SIZE),
             .WRITE_ENABLE       (WRITE_ENABLE),
             .CORE_TAG_WIDTH     (CORE_TAG_X_WIDTH),
+            //Swetha: added ways here 
+            .WAYS(WAYS),
             .BANK_ADDR_OFFSET   (BANK_ADDR_OFFSET)
         ) bank (
             `SCOPE_BIND_VX_cache_bank(i)

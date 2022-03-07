@@ -14,7 +14,7 @@ VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 VX_CFLAGS += -march=rv32imf -mabi=ilp32f -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
 VX_CFLAGS += -DSM_ENABLE=0 -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw
 
-VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections,--defsym=__stack_top=0xfefff000
+VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections
 
 VX_RUNTIME = $(VORTEX_RT_PATH)/src/vx_start.S $(VORTEX_RT_PATH)/src/vx_perf.c
 

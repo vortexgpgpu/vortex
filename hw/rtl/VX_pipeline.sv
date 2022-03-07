@@ -18,7 +18,7 @@ module VX_pipeline #(
     VX_icache_rsp_if.slave      icache_rsp_if,
 
 `ifdef EXT_TEX_ENABLE
-    // Tcache interface
+    VX_tex_dcr_if.slave         tex_dcr_if,
     VX_dcache_req_if.master     tcache_req_if,
     VX_dcache_rsp_if.slave      tcache_rsp_if,
 `endif
@@ -137,6 +137,7 @@ module VX_pipeline #(
         .dcache_rsp_if  (dcache_rsp_if),
 
     `ifdef EXT_TEX_ENABLE
+        .tex_dcr_if     (tex_dcr_if),
         .tcache_req_if  (tcache_req_if),
         .tcache_rsp_if  (tcache_rsp_if),
     `endif
@@ -161,9 +162,7 @@ module VX_pipeline #(
     `ifdef EXT_F_ENABLE
         .fpu_commit_if  (fpu_commit_if),
     `endif
-        .gpu_commit_if  (gpu_commit_if),        
-        
-        .busy           (busy)
+        .gpu_commit_if  (gpu_commit_if)
     );    
 
     VX_commit #(

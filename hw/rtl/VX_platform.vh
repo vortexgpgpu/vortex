@@ -144,12 +144,20 @@
     end                                         \
     dpi_trace("}")
 
-`define RESET_RELAY(signal)     \
-    wire signal;                \
-    VX_reset_relay __``signal ( \
-        .clk     (clk),         \
-        .reset   (reset),       \
-        .reset_o (signal)       \
+`define RESET_RELAY(signal)         \
+    wire signal;                    \
+    VX_reset_relay __``signal (     \
+        .clk     (clk),             \
+        .reset   (reset),           \
+        .reset_o (signal)           \
+    )
+
+`define START_RELAY(signal)         \
+    wire signal;                    \
+    VX_reset_relay __``signal (     \
+        .clk     (clk),             \
+        .reset   (reset || start),  \
+        .reset_o (signal)           \
     )
 
 `define POP_COUNT(out, in)  \

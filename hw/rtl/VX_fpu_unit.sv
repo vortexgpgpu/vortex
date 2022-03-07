@@ -11,7 +11,7 @@ module VX_fpu_unit #(
     VX_commit_if.master     fpu_commit_if,
 
     input wire[`NUM_WARPS-1:0] csr_pending,
-    output wire[`NUM_WARPS-1:0] pending
+    output wire[`NUM_WARPS-1:0] req_pending
 ); 
     import fpu_types::*;
     
@@ -201,19 +201,19 @@ module VX_fpu_unit #(
     assign fpu_to_csr_if.write_fflags = fflags_r;
 
     // pending request
-    reg [`NUM_WARPS-1:0] pending_r;
+    reg [`NUM_WARPS-1:0] req_pending_r;
     always @(posedge clk) begin
         if (reset) begin
-            pending_r <= 0;
-        end else begin
-            if (fpu_commit_if.valid && fpu_commit_if.ready) begin
-                 pending_r[fpu_commit_if.wid] <= 0;
-            end          
+            req_pending_r <= 0;
+        end else begin                      
             if (fpu_req_if.valid && fpu_req_if.ready) begin
-                 pending_r[fpu_req_if.wid] <= 1;
+                 req_pending_r[fpu_req_if.wid] <= 1;
+            end
+            if (fpu_commit_if.valid && fpu_commit_if.ready) begin
+                 req_pending_r[fpu_commit_if.wid] <= 0;
             end
         end
     end
-    assign pending = pending_r;
+    assign req_pending = req_pending_r;
 
 endmodule

@@ -47,3 +47,7 @@ extern int vx_start(vx_device_h /*hdevice*/) {
 extern int vx_ready_wait(vx_device_h /*hdevice*/, uint64_t /*timeout*/) {
     return -1;
 }
+
+extern int vx_dcr_write(vx_device_h /*hdevice*/, uint32_t /*addr*/, uint64_t /*value*/) {
+    return -1;
+}

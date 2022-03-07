@@ -28,12 +28,16 @@ public:
         : size_(size)
         , device_(device) {
         auto aligned_asize = aligned_size(size, CACHE_BLOCK_SIZE);
-        data_ = malloc(aligned_asize);
+        data_ = aligned_malloc(aligned_asize, CACHE_BLOCK_SIZE);
+        // set uninitialized data to "baadf00d"
+        for (uint32_t i = 0; i < aligned_asize; ++i) {
+            ((uint8_t*)data_)[i] = (0xbaadf00d >> ((i & 0x3) * 8)) & 0xff;
+        }
     }
 
     ~vx_buffer() {
         if (data_) {
-            free(data_);
+            aligned_free(data_);
         }
     }
 
@@ -148,6 +152,14 @@ public:
         return 0;
     }
 
+    int write_dcr(uint32_t addr, uint64_t value) {
+        if (future_.valid()) {
+            future_.wait(); // ensure prior run completed
+        }        
+        processor_.write_dcr(addr, value);
+        return 0;
+    }
+
 private:
 
     RAM ram_;
@@ -216,7 +228,7 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
         *value = STARTUP_ADDR;
         break;    
     case VX_CAPS_ISA_FLAGS:
-        *value = (((uint64_t)MISA_EXT)<<32) | ((log2floor(XLEN)-4) << 30) | MISA_STD;
+        *value = ((uint64_t(MISA_EXT))<<32) | ((log2floor(XLEN)-4) << 30) | MISA_STD;
         break;
     default:
         std::cout << "invalid caps id: " << caps_id << std::endl;
@@ -355,4 +367,17 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
     vx_device *device = ((vx_device*)hdevice);
 
     return device->wait(timeout);
+}
+
+extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint64_t value) {
+    if (nullptr == hdevice)
+        return -1;
+
+    vx_device *device = ((vx_device*)hdevice);
+
+    // Ensure ready for new command
+    if (vx_ready_wait(hdevice, -1) != 0)
+        return -1;    
+  
+    return device->write_dcr(addr, value);
 }

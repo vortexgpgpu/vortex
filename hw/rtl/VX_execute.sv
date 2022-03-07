@@ -13,9 +13,9 @@ module VX_execute #(
     VX_dcache_rsp_if.slave dcache_rsp_if,
 
 `ifdef EXT_TEX_ENABLE
-    // Tcache interface
+    VX_tex_dcr_if.slave     tex_dcr_if,
     VX_dcache_req_if.master tcache_req_if,
-    VX_dcache_rsp_if.slave tcache_rsp_if,
+    VX_dcache_rsp_if.slave  tcache_rsp_if,
 `endif
 
     // commit interface
@@ -48,13 +48,10 @@ module VX_execute #(
 `ifdef EXT_F_ENABLE
     VX_commit_if.master     fpu_commit_if,
 `endif
-    VX_commit_if.master     gpu_commit_if,
-    
-    input wire              busy
+    VX_commit_if.master     gpu_commit_if
 );
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_csr_if tex_csr_if();
 `ifdef PERF_ENABLE
     VX_perf_tex_if perf_tex_if();
 `endif
@@ -105,22 +102,18 @@ module VX_execute #(
     `endif
         .perf_memsys_if (perf_memsys_if),
         .perf_pipeline_if(perf_pipeline_if),
-    `endif    
-        .cmt_to_csr_if  (cmt_to_csr_if),    
-        .fetch_to_csr_if(fetch_to_csr_if),
-        .csr_req_if     (csr_req_if),   
-        .csr_commit_if  (csr_commit_if),
+    `endif
     `ifdef EXT_F_ENABLE  
         .fpu_to_csr_if  (fpu_to_csr_if),
         .fpu_pending    (fpu_pending),        
-        .pending        (csr_pending),
+        .req_pending    (csr_pending),
     `else
-        `UNUSED_PIN (pending),
-    `endif        
-    `ifdef EXT_TEX_ENABLE
-        .tex_csr_if     (tex_csr_if),
+        `UNUSED_PIN (req_pending),
     `endif
-        .busy           (busy)
+        .cmt_to_csr_if  (cmt_to_csr_if),
+        .fetch_to_csr_if(fetch_to_csr_if),
+        .csr_req_if     (csr_req_if),   
+        .csr_commit_if  (csr_commit_if)
     );
 
 `ifdef EXT_F_ENABLE
@@ -135,7 +128,7 @@ module VX_execute #(
         .fpu_to_csr_if  (fpu_to_csr_if), 
         .fpu_commit_if  (fpu_commit_if),
         .csr_pending    (csr_pending),
-        .pending        (fpu_pending) 
+        .req_pending    (fpu_pending) 
     );
 `endif
 
@@ -150,7 +143,7 @@ module VX_execute #(
     `ifdef PERF_ENABLE
         .perf_tex_if    (perf_tex_if),
     `endif
-        .tex_csr_if     (tex_csr_if),
+        .tex_dcr_if     (tex_dcr_if),
         .tcache_req_if  (tcache_req_if),
         .tcache_rsp_if  (tcache_rsp_if),
     `endif

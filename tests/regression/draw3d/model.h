@@ -1,0 +1,25 @@
+#pragma once
+
+#include "common.h"
+#include <vector>
+
+typedef struct {
+  float     x;
+  float     y;
+  float     z;
+  float     w;
+  uint32_t  c;
+  float     u;
+  float     v;
+} vertex_t;
+
+typedef struct {
+  uint32_t i0;
+  uint32_t i1;
+  uint32_t i2;
+} primitive_t;
+
+struct model_t {
+  std::vector<vertex_t>    vertives;
+  std::vector<primitive_t> primitives;
+};

@@ -50,7 +50,7 @@ module VX_icache_stage #(
     );
 
     `RUNTIME_ASSERT((!ifetch_req_if.valid || ifetch_req_if.PC >= `STARTUP_ADDR), 
-        ("%t: *** invalid PC=%0h, wid=%0d, tmask=%b (#%0d)", $time, ifetch_req_if.PC, ifetch_req_if.wid, ifetch_req_if.tmask, ifetch_req_if.uuid))
+        ("%t: *** invalid PC=0x%0h, wid=%0d, tmask=%b (#%0d)", $time, ifetch_req_if.PC, ifetch_req_if.wid, ifetch_req_if.tmask, ifetch_req_if.uuid))
 
     // Icache Request
     assign icache_req_if.valid = ifetch_req_if.valid;
@@ -92,10 +92,10 @@ module VX_icache_stage #(
 `ifdef DBG_TRACE_CORE_ICACHE
     always @(posedge clk) begin
         if (icache_req_fire) begin
-            dpi_trace("%d: I$%0d req: wid=%0d, PC=%0h (#%0d)\n", $time, CORE_ID, ifetch_req_if.wid, ifetch_req_if.PC, ifetch_req_if.uuid);
+            dpi_trace("%d: I$%0d req: wid=%0d, PC=0x%0h (#%0d)\n", $time, CORE_ID, ifetch_req_if.wid, ifetch_req_if.PC, ifetch_req_if.uuid);
         end
         if (ifetch_rsp_if.valid && ifetch_rsp_if.ready) begin
-            dpi_trace("%d: I$%0d rsp: wid=%0d, PC=%0h, data=%0h (#%0d)\n", $time, CORE_ID, ifetch_rsp_if.wid, ifetch_rsp_if.PC, ifetch_rsp_if.data, ifetch_rsp_if.uuid);
+            dpi_trace("%d: I$%0d rsp: wid=%0d, PC=0x%0h, data=0x%0h (#%0d)\n", $time, CORE_ID, ifetch_rsp_if.wid, ifetch_rsp_if.PC, ifetch_rsp_if.data, ifetch_rsp_if.uuid);
         end
     end
 `endif

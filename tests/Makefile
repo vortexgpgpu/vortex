@@ -16,10 +16,17 @@ unittest:
 	$(MAKE) -C unittest
 
 clean:
-	$(MAKE) clean -C runtime
-	$(MAKE) clean -C regression
-	$(MAKE) clean -C opencl
-	$(MAKE) clean -C riscv
-	$(MAKE) clean -C unittest
+	$(MAKE) -C runtime clean
+	$(MAKE) -C regression clean
+	$(MAKE) -C opencl clean
+	$(MAKE) -C riscv clean
+	$(MAKE) -C unittest clean
+
+clean-all:
+	$(MAKE) -C runtime clean
+	$(MAKE) -C regression clean-all
+	$(MAKE) -C opencl clean
+	$(MAKE) -C riscv clean
+	$(MAKE) -C unittest clean
 
 .PHONY: all runtime regression opencl riscv unittest

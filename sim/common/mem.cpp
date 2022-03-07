@@ -168,12 +168,15 @@ void MemoryUnit::tlbRm(uint64_t va) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-RAM::RAM(uint32_t page_size) 
-  : size_(0)
+RAM::RAM(uint32_t page_size, uint64_t capacity) 
+  : capacity_(capacity)
+  , size_(0)
   , page_bits_(log2ceil(page_size))
   , last_page_(nullptr)
   , last_page_index_(0) {    
    assert(ispow2(page_size));
+   assert(0 == capacity || ispow2(capacity));
+   assert(0 == (capacity % page_size));
 }
 
 RAM::~RAM() {
@@ -191,6 +194,9 @@ uint64_t RAM::size() const {
 }
 
 uint8_t *RAM::get(uint64_t address) const {
+  if (capacity_ != 0 && address >= capacity_) {
+    throw OutOfRange();
+  }
   uint32_t page_size   = 1 << page_bits_;  
   uint32_t page_offset = address & (page_size - 1);
   uint64_t page_index  = address >> page_bits_;

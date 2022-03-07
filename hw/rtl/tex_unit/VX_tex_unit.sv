@@ -17,7 +17,7 @@ module VX_tex_unit #(
     VX_dcache_rsp_if.slave  cache_rsp_if,
 
     // Inputs
-    VX_tex_csr_if.slave     tex_csr_if,
+    VX_tex_dcr_if.slave     tex_dcr_if,
     VX_tex_req_if.slave     tex_req_if,
     
     // Outputs
@@ -26,38 +26,19 @@ module VX_tex_unit #(
 
     localparam REQ_INFO_W = `NR_BITS + 1 + `NW_BITS + 32 + `UUID_BITS;
     localparam BLEND_FRAC_W = (2 * `NUM_THREADS * `TEX_BLEND_FRAC);    
-    
-    wire [`UUID_BITS-1:0] write_uuid = tex_csr_if.write_uuid;
-    `UNUSED_VAR (write_uuid);
-
-    // CSRs access
-
-    tex_csrs_t tex_csrs;
-
-    VX_tex_csr #(
-        .CORE_ID    (CORE_ID),
-        .NUM_STAGES (NUM_STAGES)
-    ) tex_csr (
-        .clk        (clk),
-        .reset      (reset),
-
-        // inputs
-        .tex_csr_if (tex_csr_if),
-        .tex_req_if (tex_req_if),
-
-        // outputs
-        .tex_csrs   (tex_csrs)
-    );
 
     wire [`NUM_THREADS-1:0][`TEX_LOD_BITS-1:0]      mip_level;
     wire [`NUM_THREADS-1:0][`TEX_MIPOFF_BITS-1:0]   sel_mipoff;
     wire [`NUM_THREADS-1:0][1:0][`TEX_LOD_BITS-1:0] sel_logdims;
 
+    assign tex_dcr_if.stage = tex_req_if.stage;
+    tex_dcrs_t tex_dcrs = tex_dcr_if.data;
+
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign mip_level[i]      = tex_req_if.lod[i][`TEX_LOD_BITS-1:0];
-        assign sel_mipoff[i]     = tex_csrs.mipoff[mip_level[i]];
-        assign sel_logdims[i][0] = tex_csrs.logdims[0];
-        assign sel_logdims[i][1] = tex_csrs.logdims[1];
+        assign sel_mipoff[i]     = tex_dcrs.mipoff[mip_level[i]];
+        assign sel_logdims[i][0] = tex_dcrs.logdims[0];
+        assign sel_logdims[i][1] = tex_dcrs.logdims[1];
     end
 
     // address generation
@@ -84,14 +65,14 @@ module VX_tex_unit #(
         .req_valid  (tex_req_if.valid),
         .req_tmask  (tex_req_if.tmask),
         .req_coords (tex_req_if.coords),
-        .req_format (tex_csrs.format),
-        .req_filter (tex_csrs.filter),
-        .req_wraps  (tex_csrs.wraps),
-        .req_baseaddr(tex_csrs.baddr),    
+        .req_format (tex_dcrs.format),
+        .req_filter (tex_dcrs.filter),
+        .req_wraps  (tex_dcrs.wraps),
+        .req_baseaddr(tex_dcrs.baddr),    
         .mip_level  (mip_level),
         .req_mipoff (sel_mipoff),
         .req_logdims(sel_logdims),
-        .req_info   ({tex_csrs.format, tex_req_if.rd, tex_req_if.wb, tex_req_if.wid, tex_req_if.PC, tex_req_if.uuid}),
+        .req_info   ({tex_dcrs.format, tex_req_if.rd, tex_req_if.wb, tex_req_if.wid, tex_req_if.PC, tex_req_if.uuid}),
         .req_ready  (tex_req_if.ready),
 
         // outputs
@@ -212,15 +193,15 @@ module VX_tex_unit #(
 `ifdef DBG_TRACE_TEX
     always @(posedge clk) begin
         if (tex_req_if.valid && tex_req_if.ready) begin
-            dpi_trace("%d: core%0d-tex-req: wid=%0d, PC=%0h, tmask=%b, unit=%0d, lod=%0h, u=", 
-                $time, CORE_ID, tex_req_if.wid, tex_req_if.PC, tex_req_if.tmask, tex_req_if.unit, tex_req_if.lod);
+            dpi_trace("%d: core%0d-tex-req: wid=%0d, PC=0x%0h, tmask=%b, stage=%0d, lod=0x%0h, u=", 
+                $time, CORE_ID, tex_req_if.wid, tex_req_if.PC, tex_req_if.tmask, tex_req_if.stage, tex_req_if.lod);
             `TRACE_ARRAY1D(tex_req_if.coords[0], `NUM_THREADS);
             dpi_trace(", v=");
             `TRACE_ARRAY1D(tex_req_if.coords[1], `NUM_THREADS);
             dpi_trace(" (#%0d)\n", tex_req_if.uuid);
         end
         if (tex_rsp_if.valid && tex_rsp_if.ready) begin
-             dpi_trace("%d: core%0d-tex-rsp: wid=%0d, PC=%0h, tmask=%b, data=", 
+             dpi_trace("%d: core%0d-tex-rsp: wid=%0d, PC=0x%0h, tmask=%b, data=", 
                     $time, CORE_ID, tex_rsp_if.wid, tex_rsp_if.PC, tex_rsp_if.tmask);
             `TRACE_ARRAY1D(tex_rsp_if.data, `NUM_THREADS);
             dpi_trace(" (#%0d)\n", tex_rsp_if.uuid);

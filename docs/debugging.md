@@ -3,15 +3,15 @@
 ## SimX Debugging
 
 SimX cycle-approximate simulator allows faster debugging of Vortex kernels' execution. 
-The recommended method to enable debugging is to pass the `--debug` flag to `blackbox` tool when running a program.
+The recommended method to enable debugging is to pass the `--debug=<level>` flag to `blackbox` tool when running a program.
 
     // Running demo program on SimX in debug mode
-    $ ./ci/blackbox.sh --driver=simx --app=demo --debug 
+    $ ./ci/blackbox.sh --driver=simx --app=demo --debug=1
 
-A debug trace `run.log` is generated in the current directory during the program execution. The trace includes important states of the simulated processor (decoded instruction, register states, pipeline states, etc..). You can increase the verbosity level of the trace by changing the `DEBUG_LEVEL` variable to a value [1-5] (default is 3).
+A debug trace `run.log` is generated in the current directory during the program execution. The trace includes important states of the simulated processor (decoded instruction, register states, pipeline states, etc..). You can increase the verbosity of the trace by changing the debug level.
 
-    // Using SimX in debug mode with verbose level 4
-    $ CONFIGS=-DDEBUG_LEVEL=4 ./ci/blackbox.sh --driver=simx --app=demo --debug
+    // Using SimX in debug mode with verbose level 3
+    $ ./ci/blackbox.sh --driver=simx --app=demo --debug=3
 
 ## RTL Debugging
 
@@ -20,10 +20,10 @@ To debug the processor RTL, you need to use VLSIM or RTLSIM driver. VLSIM simula
 The recommended method to enable debugging is to pass the `--debug` flag to `blackbox` tool when running a program.
 
     // Running demo program on vlsim in debug mode
-    $ ./ci/blackbox.sh --driver=vlsim --app=demo --debug
+    $ ./ci/blackbox.sh --driver=vlsim --app=demo --debug=1
 
     // Running demo program on rtlsim in debug mode
-    $ ./ci/blackbox.sh --driver=rtlsim --app=demo --debug
+    $ ./ci/blackbox.sh --driver=rtlsim --app=demo --debug=1
 
 A debug trace `run.log` is generated in the current directory during the program execution. The trace includes important states of the simulated processor (memory, caches, pipeline, stalls, etc..). A waveform trace `trace.vcd` is also generated in the current directory during the program execution. You can visualize the waveform trace using any tool that can open VCD files (Modelsim, Quartus, Vivado, etc..). [GTKwave] (http://gtkwave.sourceforge.net) is a great open-source scope analyzer that also works with VCD files.
 

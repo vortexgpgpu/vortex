@@ -1,5 +1,6 @@
 
 #include <VX_config.h>
+#include <VX_types.h>
 #include <vx_intrinsics.h>
 #include <stdint.h>
 

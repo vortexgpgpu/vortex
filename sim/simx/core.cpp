@@ -13,29 +13,30 @@
 
 using namespace vortex;
 
-Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
+Core::Core(const SimContext& ctx, 
+           uint32_t id, 
+           const ArchDef &arch, 
+           const DCRS &dcrs,
+           RasterUnit::Ptr raster_unit,
+           RopUnit::Ptr rop_unit)
     : SimObject(ctx, "Core")
     , MemRspPort(this)
     , MemReqPort(this)
     , id_(id)
     , arch_(arch)
+    , dcrs_(dcrs)
     , decoder_(arch)
     , mmu_(0, arch.wsize(), true)
-    , smem_(RAM_PAGE_SIZE)
-    , tex_units_(NUM_TEX_UNITS, this)
-    , raster_unit_(this)
-    , rop_unit_(this)
     , warps_(arch.num_warps())
     , barriers_(arch.num_barriers(), 0)
-    , csrs_(arch.num_csrs(), 0)
     , fcsrs_(arch.num_warps(), 0)
     , ibuffers_(arch.num_warps(), IBUF_SIZE)
     , scoreboard_(arch_) 
     , exe_units_((int)ExeType::MAX)
-    , icache_(Cache::Create("icache", Cache::Config{
+    , icache_(CacheSim::Create("icache", CacheSim::Config{
         log2ceil(ICACHE_SIZE),  // C
         log2ceil(L1_BLOCK_SIZE),// B
-        2,                      // W
+        log2ceil(sizeof(uint32_t)), // W
         0,                      // A
         32,                     // address bits    
         1,                      // number of banks
@@ -47,10 +48,10 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
         NUM_WARPS,              // mshr
         2,                      // pipeline latency
       }))
-    , dcache_(Cache::Create("dcache", Cache::Config{
+    , dcache_(CacheSim::Create("dcache", CacheSim::Config{
         log2ceil(DCACHE_SIZE),  // C
         log2ceil(L1_BLOCK_SIZE),// B
-        2,                      // W
+        log2ceil(sizeof(Word)), // W
         0,                      // A
         32,                     // address bits    
         DCACHE_NUM_BANKS,       // number of banks
@@ -62,15 +63,30 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
         DCACHE_MSHR_SIZE,       // mshr
         4,                      // pipeline latency
       }))
-    , shared_mem_(SharedMem::Create("sharedmem", SharedMem::Config{
+    , tcache_(CacheSim::Create("tcache", CacheSim::Config{
+        log2ceil(TCACHE_SIZE),  // C
+        log2ceil(L1_BLOCK_SIZE),// B
+        log2ceil(sizeof(uint32_t)), // W
+        2,                      // A
+        32,                     // address bits    
+        (uint8_t)arch.num_threads(), // number of banks
+        1,                      // number of ports
+        (uint8_t)arch.num_threads(), // request size   
+        false,                  // write-through
+        false,                  // write response
+        0,                      // victim size
+        DCACHE_MSHR_SIZE,       // mshr
+        4,                      // pipeline latency
+      }))
+    , sharedmem_(SharedMem::Create("smem", SharedMem::Config{
+        uint32_t(SMEM_LOCAL_SIZE) * arch.num_warps() * arch.num_threads(),
         arch.num_threads(), 
         arch.num_threads(), 
-        Constants::SMEM_BANK_OFFSET,
+        log2ceil(STACK_SIZE),
         1,
         false
       }))
-    , l1_mem_switch_(Switch<MemReq, MemRsp>::Create("l1_arb", ArbiterType::Priority, 2)) 
-    , dcache_switch_(arch.num_threads())
+    , l1_mem_switch_(Switch<MemReq, MemRsp>::Create("l1_arb", ArbiterType::Priority, 3))
     , fetch_latch_("fetch")
     , decode_latch_("decode")
     , pending_icache_(arch_.num_warps())
@@ -78,6 +94,13 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
   for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
     warps_.at(i) = std::make_shared<Warp>(this, i);
   }
+
+  tex_unit_ = TexUnit::Create("tex", TexUnit::Config{
+    1, // address latency
+    2, // sampler latency
+  }, this);
+  raster_srv_ = RasterSrv::Create("rastersrv", this, raster_unit);
+  rop_srv_ = RopSrv::Create("ropsrv", this, rop_unit);
 
   // register execute units
   exe_units_.at((int)ExeType::NOP) = SimPlatform::instance().create_object<NopUnit>(this);
@@ -90,22 +113,12 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
   // connect l1 switch
   icache_->MemReqPort.bind(&l1_mem_switch_->ReqIn[0]);
   dcache_->MemReqPort.bind(&l1_mem_switch_->ReqIn[1]);
+  tcache_->MemReqPort.bind(&l1_mem_switch_->ReqIn[2]);
   l1_mem_switch_->RspOut[0].bind(&icache_->MemRspPort);  
   l1_mem_switch_->RspOut[1].bind(&dcache_->MemRspPort);
+  l1_mem_switch_->RspOut[2].bind(&tcache_->MemRspPort);
   this->MemRspPort.bind(&l1_mem_switch_->RspIn);
   l1_mem_switch_->ReqOut.bind(&this->MemReqPort);
-
-  // lsu/tex switch
-  for (uint32_t i = 0, n = arch.num_threads(); i < n; ++i) {
-    auto& sw = dcache_switch_.at(i);
-#ifdef EXT_TEX_ENABLE
-    sw = Switch<MemReq, MemRsp>::Create("lsu_arb", ArbiterType::Priority, 2);
-#else
-    sw = Switch<MemReq, MemRsp>::Create("lsu_arb", ArbiterType::Priority, 1);
-#endif        
-    sw->ReqOut.bind(&dcache_->CoreReqPorts.at(i));
-    dcache_->CoreRspPorts.at(i).bind(&sw->RspIn);
-  } 
 
   // memory perf callbacks
   MemReqPort.tx_callback([&](const MemReq& req, uint64_t cycle){
@@ -133,16 +146,14 @@ void Core::reset() {
   warps_.at(0)->setTmask(0, true);
   active_warps_ = 1;
 
-  for (auto& tex_unit : tex_units_) {
-    tex_unit.clear();
+  for (auto& exe_unit : exe_units_) {
+    exe_unit->reset();
   }
 
+  tex_unit_->reset();
+  
   for ( auto& barrier : barriers_) {
     barrier.reset();
-  }
-  
-  for (auto& csr : csrs_) {
-    csr = 0;
   }
   
   for (auto& fcsr : fcsrs_) {
@@ -153,15 +164,13 @@ void Core::reset() {
     ibuf.clear();
   }
 
-  scoreboard_.clear(); 
+  scoreboard_.clear();
   fetch_latch_.clear();
   decode_latch_.clear();
-  pending_icache_.clear();  
-  stalled_warps_.reset();  
-  last_schedule_wid_ = 0;
+  pending_icache_.clear();
+  stalled_warps_.reset();
   issued_instrs_ = 0;
   committed_instrs_ = 0;
-  csr_tex_unit_ = 0;
   ecall_ = false;
   ebreak_ = false;
   perf_mem_pending_reads_ = 0;
@@ -196,38 +205,33 @@ void Core::tick() {
 }
 
 void Core::schedule() {
-  bool foundSchedule = false;
-  uint32_t scheduled_warp = last_schedule_wid_;
+  int scheduled_warp = -1;
 
-  // round robin scheduling
-  for (size_t wid = 0, nw = arch_.num_warps(); wid < nw; ++wid) {    
-    scheduled_warp = (scheduled_warp + 1) % nw;
-    bool warp_active = active_warps_.test(scheduled_warp);
-    bool warp_stalled = stalled_warps_.test(scheduled_warp); 
+  // find next ready warp
+  for (size_t wid = 0, nw = arch_.num_warps(); wid < nw; ++wid) {  
+    bool warp_active = active_warps_.test(wid);
+    bool warp_stalled = stalled_warps_.test(wid); 
     if (warp_active && !warp_stalled) {      
-      last_schedule_wid_ = scheduled_warp;
-      foundSchedule = true;
+      scheduled_warp = wid;
       break;
     }
   }
 
-  if (!foundSchedule)
-    return;  
+  if (scheduled_warp == -1)
+    return;
 
   // suspend warp until decode
   stalled_warps_.set(scheduled_warp);
 
-  uint64_t uuid = (issued_instrs_++ * arch_.num_cores()) + id_;
-
-  auto trace = new pipeline_trace_t(uuid, arch_);
-
+  // evaluate scheduled warp
   auto& warp = warps_.at(scheduled_warp);
-  warp->eval(trace);
+  auto trace = warp->eval();
 
   DT(3, "pipeline-schedule: " << *trace);
 
-  // advance to fetch stage  
+  // advance to fetch stage
   fetch_latch_.push(trace);
+  ++issued_instrs_;
 }
 
 void Core::fetch() {
@@ -282,11 +286,11 @@ void Core::decode() {
 
   // update perf counters
   uint32_t active_threads = trace->tmask.count();
-  if (trace->exe_type == ExeType::LSU && trace->lsu.type == LsuType::LOAD)
+  if (trace->exe_type == ExeType::LSU && trace->lsu_type == LsuType::LOAD)
     perf_stats_.loads += active_threads;
-  if (trace->exe_type == ExeType::LSU && trace->lsu.type == LsuType::STORE) 
+  if (trace->exe_type == ExeType::LSU && trace->lsu_type == LsuType::STORE) 
     perf_stats_.stores += active_threads;
-  if (trace->exe_type == ExeType::ALU && trace->alu.type == AluType::BRANCH) 
+  if (trace->exe_type == ExeType::ALU && trace->alu_type == AluType::BRANCH) 
     perf_stats_.branches += active_threads;
 
   DT(3, "pipeline-decode: " << *trace);
@@ -406,33 +410,51 @@ void Core::icache_read(void *data, uint64_t addr, uint32_t size) {
   mmu_.read(data, addr, size, 0);
 }
 
+AddrType Core::get_addr_type(uint64_t addr) {  
+  if (addr >= IO_BASE_ADDR) {
+     return AddrType::IO;
+  }
+  if (SM_ENABLE) {
+    // check if address is a stack address
+    uint32_t total_threads    = arch_.num_cores() * arch_.num_warps() * arch_.num_threads();
+    uint64_t total_stack_size = STACK_SIZE * total_threads;
+    uint64_t stack_end        = STACK_BASE_ADDR - total_stack_size;
+    if (addr >= stack_end && addr <  STACK_BASE_ADDR) {     
+      // check if address is within shared memory region
+      uint32_t offset = addr % STACK_SIZE;
+      if (offset >= (STACK_SIZE - SMEM_LOCAL_SIZE)) {
+        return AddrType::Shared;
+      }
+    }
+  }
+  return AddrType::Global;
+}
+
 void Core::dcache_read(void *data, uint64_t addr, uint32_t size) {  
-  auto type = get_addr_type(addr, size);
+  auto type = this->get_addr_type(addr);
   if (type == AddrType::Shared) {
-    addr &= (SMEM_SIZE-1);
-    smem_.read(data, addr, size);
+    sharedmem_->read(data, addr, size);
   } else {  
     mmu_.read(data, addr, size, 0);
   }
+
+  DPH(2, "Mem Read: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << " (" << type << ")" << std::endl);
 }
 
 void Core::dcache_write(const void* data, uint64_t addr, uint32_t size) {  
+  auto type = this->get_addr_type(addr);
   if (addr >= IO_COUT_ADDR 
    && addr <= (IO_COUT_ADDR + IO_COUT_SIZE - 1)) {
      this->writeToStdOut(data, addr, size);
   } else {
-    auto type = get_addr_type(addr, size);
     if (type == AddrType::Shared) {
-      addr &= (SMEM_SIZE-1);
-      smem_.write(data, addr, size);
+      sharedmem_->write(data, addr, size);
     } else {
       mmu_.write(data, addr, size, 0);
     }
   }
-}
 
-uint32_t Core::tex_read(uint32_t unit, uint32_t u, uint32_t v, uint32_t lod, std::vector<mem_addr_size_t>* mem_addrs) {
-  return tex_units_.at(unit).read(u, v, lod, mem_addrs);
+  DPH(2, "Mem Write: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << " (" << type << ")" << std::endl);
 }
 
 void Core::writeToStdOut(const void* data, uint64_t addr, uint32_t size) {
@@ -588,17 +610,17 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
     return dcache_->perf_stats().mshr_stalls >> 32;
   
   case CSR_MPM_SMEM_READS:
-    return shared_mem_->perf_stats().reads & 0xffffffff;
+    return sharedmem_->perf_stats().reads & 0xffffffff;
   case CSR_MPM_SMEM_READS_H:
-    return shared_mem_->perf_stats().reads >> 32;
+    return sharedmem_->perf_stats().reads >> 32;
   case CSR_MPM_SMEM_WRITES:
-    return shared_mem_->perf_stats().writes & 0xffffffff;
+    return sharedmem_->perf_stats().writes & 0xffffffff;
   case CSR_MPM_SMEM_WRITES_H:
-    return shared_mem_->perf_stats().writes >> 32;
+    return sharedmem_->perf_stats().writes >> 32;
   case CSR_MPM_SMEM_BANK_ST:
-    return shared_mem_->perf_stats().bank_stalls & 0xffffffff; 
+    return sharedmem_->perf_stats().bank_stalls & 0xffffffff; 
   case CSR_MPM_SMEM_BANK_ST_H:
-    return shared_mem_->perf_stats().bank_stalls >> 32; 
+    return sharedmem_->perf_stats().bank_stalls >> 32; 
 
   case CSR_MPM_MEM_READS:
     return perf_stats_.mem_reads & 0xffffffff; 
@@ -615,43 +637,31 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
 
 #ifdef EXT_TEX_ENABLE
   case CSR_MPM_TEX_READS:
-    return perf_stats_.tex_reads & 0xffffffff;
+    return tex_unit_->perf_stats().reads & 0xffffffff;
   case CSR_MPM_TEX_READS_H:
-     return perf_stats_.tex_reads >> 32;
+     return tex_unit_->perf_stats().reads >> 32;
   case CSR_MPM_TEX_LAT:
-    return perf_stats_.tex_latency & 0xffffffff;
+    return tex_unit_->perf_stats().latency & 0xffffffff;
   case CSR_MPM_TEX_LAT_H:
-    return perf_stats_.tex_latency >> 32;
+    return tex_unit_->perf_stats().latency >> 32;
 #endif  
   default:
     if ((addr >= CSR_MPM_BASE && addr < (CSR_MPM_BASE + 32))
      || (addr >= CSR_MPM_BASE_H && addr < (CSR_MPM_BASE_H + 32))) {
       // user-defined MPM CSRs
     } else
-  #ifdef EXT_TEX_ENABLE
-    if (addr == CSR_TEX_UNIT) {
-      return csr_tex_unit_;
-    } else
-    if (addr >= CSR_TEX_STATE_BEGIN
-     && addr < CSR_TEX_STATE_END) {
-      uint32_t state = CSR_TEX_STATE(addr);
-      return tex_units_.at(csr_tex_unit_).get_state(state);
-    } else
-  #endif
   #ifdef EXT_RASTER_ENABLE
-    if (addr >= CSR_RASTER_STATE_BEGIN
-     && addr < CSR_RASTER_STATE_END) {
-      uint32_t state = CSR_RASTER_STATE(addr);
-      return raster_unit.get_state(state);
+    if (addr >= CSR_RASTER_BEGIN
+     && addr < CSR_RASTER_END) {
+      return raster_srv_->csr_read(wid, tid, addr);
     } else
   #endif
   #ifdef EXT_ROP_ENABLE
-    if (addr >= CSR_ROP_STATE_BEGIN
-     && addr < CSR_ROP_STATE_END) {
-      uint32_t state = CSR_ROP_STATE(addr);
-      return rop_unit.get_state(state);
+    if (addr >= CSR_ROP_BEGIN
+     && addr < CSR_ROP_END) {
+      return rop_srv_->csr_read(wid, tid, addr);
     } else
-  #endif
+  #endif  
     {
       std::cout << std::hex << "Error: invalid CSR read addr=0x" << addr << std::endl;
       std::abort();
@@ -660,27 +670,45 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   return 0;
 }
 
-void Core::set_csr(uint32_t addr, uint32_t value, uint32_t /*tid*/, uint32_t wid) {
-  if (addr == CSR_FFLAGS) {
+void Core::set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid) {
+  __unused (tid);
+  switch (addr) {
+  case CSR_FFLAGS:
     fcsrs_.at(wid) = (fcsrs_.at(wid) & ~0x1F) | (value & 0x1F);
-  } else if (addr == CSR_FRM) {
+    break;
+  case CSR_FRM:
     fcsrs_.at(wid) = (fcsrs_.at(wid) & ~0xE0) | (value << 5);
-  } else if (addr == CSR_FCSR) {
+    break;
+  case CSR_FCSR:
     fcsrs_.at(wid) = value & 0xff;
-  } else 
-#ifdef EXT_TEX_ENABLE
-  if (addr == CSR_TEX_UNIT) {
-    csr_tex_unit_ = value;
-  } else
-  if (addr >= CSR_TEX_STATE_BEGIN
-   && addr < CSR_TEX_STATE_END) {
-      uint32_t state = CSR_TEX_STATE(addr);
-      tex_units_.at(csr_tex_unit_).set_state(state, value);
-      return;
-  } else
-#endif
-  {
-    csrs_.at(addr) = value;
+    break;
+  case CSR_SATP:
+  case CSR_MSTATUS:
+  case CSR_MEDELEG:
+  case CSR_MIDELEG:
+  case CSR_MIE:
+  case CSR_MTVEC:
+  case CSR_MEPC:
+  case CSR_PMPCFG0:
+  case CSR_PMPADDR0:
+    break;
+  default:
+  #ifdef EXT_RASTER_ENABLE
+    if (addr >= CSR_RASTER_BEGIN
+     && addr < CSR_RASTER_END) {
+      raster_srv_->csr_write(wid, tid, addr, value);
+    } else
+  #endif
+  #ifdef EXT_ROP_ENABLE
+    if (addr >= CSR_ROP_BEGIN
+     && addr < CSR_ROP_END) {
+      rop_srv_->csr_write(wid, tid, addr, value);
+    } else
+  #endif
+    {
+      std::cout << std::hex << "Error: invalid CSR write addr=0x" << addr << ", value=0x" << value << std::endl;
+      std::abort();
+    }
   }
 }
 

@@ -12,7 +12,7 @@ typedef struct packed {
     logic [`TEX_ADDR_BITS-1:0]      baddr;
     logic [`TEX_FORMAT_BITS-1:0]    format;
     logic [`TEX_FILTER_BITS-1:0]    filter;
-} tex_csrs_t;
+} tex_dcrs_t;
 
 endpackage
 

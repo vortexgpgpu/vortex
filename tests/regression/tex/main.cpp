@@ -26,12 +26,13 @@ using namespace cocogfx;
 const char* kernel_file = "kernel.bin";
 const char* input_file  = "palette64.png";
 const char* output_file = "output.png";
-int wrap    = 0;
-int filter  = 0;    // 0-> point, 1->bilinear, 2->trilinear
+const char* reference_file  = nullptr;
+int wrap    = TEX_WRAP_CLAMP;
+int filter  = TEX_FILTER_POINT;
 float scale = 1.0f;
-int format  = 0;
-bool use_sw = false;
+int format  = TEX_FORMAT_A8R8G8B8;
 ePixelFormat eformat = FORMAT_A8R8G8B8;
+bool use_sw = false;
 
 vx_device_h device = nullptr;
 vx_buffer_h staging_buf = nullptr;
@@ -39,18 +40,21 @@ kernel_arg_t kernel_arg;
 
 static void show_usage() {
    std::cout << "Vortex Texture Test." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-s scale] [-w wrap] [-f format] [-g filter] [-z no_hw] [-h: help]" << std::endl;
+   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-r reference] [-s scale] [-w wrap] [-f format] [-g filter] [-z no_hw] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "zi:o:k:w:f:g:s:h?")) != -1) {
+  while ((c = getopt(argc, argv, "zi:o:k:w:f:g:s:r:h?")) != -1) {
     switch (c) {
     case 'i':
       input_file = optarg;
       break;
     case 'o':
       output_file = optarg;
+      break;
+    case 'r':
+      reference_file = optarg;
       break;
     case 's':
       scale = std::stof(optarg, NULL);
@@ -64,13 +68,13 @@ static void parse_args(int argc, char **argv) {
     case 'f': {
       format  = std::atoi(optarg);
       switch (format) {
-      case 0: eformat = FORMAT_A8R8G8B8; break;
-      case 1: eformat = FORMAT_R5G6B5; break;
-      case 2: eformat = FORMAT_A1R5G5B5; break;
-      case 3: eformat = FORMAT_A4R4G4B4; break;
-      case 4: eformat = FORMAT_A8L8; break;
-      case 5: eformat = FORMAT_L8; break;
-      case 6: eformat = FORMAT_A8; break;
+      case TEX_FORMAT_A8R8G8B8: eformat = FORMAT_A8R8G8B8; break;
+      case TEX_FORMAT_R5G6B5: eformat = FORMAT_R5G6B5; break;
+      case TEX_FORMAT_A1R5G5B5: eformat = FORMAT_A1R5G5B5; break;
+      case TEX_FORMAT_A4R4G4B4: eformat = FORMAT_A4R4G4B4; break;
+      case TEX_FORMAT_A8L8: eformat = FORMAT_A8L8; break;
+      case TEX_FORMAT_L8: eformat = FORMAT_L8; break;
+      case TEX_FORMAT_A8: eformat = FORMAT_A8; break;
       default:
         std::cout << "Error: invalid format: " << format << std::endl;
         exit(1);
@@ -105,12 +109,10 @@ void cleanup() {
   }
 }
 
-int run_test(const kernel_arg_t& kernel_arg, 
-             uint32_t buf_size, 
-             uint32_t width, 
-             uint32_t height,
-             uint32_t bpp) {
-  (void)bpp;
+int render(const kernel_arg_t& kernel_arg, 
+           uint32_t buf_size,
+           uint32_t width,
+           uint32_t height) {
   auto time_start = std::chrono::high_resolution_clock::now();
 
   // start device
@@ -137,7 +139,7 @@ int run_test(const kernel_arg_t& kernel_arg,
 
   // save output image
   std::cout << "save output image" << std::endl;  
-  //dump_image(dst_pixels, width, height, bpp);  
+  //dump_image(dst_pixels, width, height, 4);  
   RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, dst_pixels, width, height));
 
   return 0;
@@ -155,16 +157,16 @@ int main(int argc, char *argv[]) {
   {
     std::vector<uint8_t> staging;  
     RT_CHECK(LoadImage(input_file, eformat, staging, &src_width, &src_height));  
-    uint32_t src_bpp = GetInfo(eformat).BytePerPixel;
+    // check power of two support
+    if (!ispow2(src_width) || !ispow2(src_height)) {
+      std::cout << "Error: only power of two textures supported: width=" << src_width << ", heigth=" << src_height << std::endl;
+      return -1;
+    }
+    uint32_t src_bpp = Format::GetInfo(eformat).BytePerPixel;
+    uint32_t src_pitch = src_width * src_bpp;
     //dump_image(staging, src_width, src_height, src_bpp);
-    RT_CHECK(GenerateMipmaps(src_pixels, mip_offsets, staging, eformat, src_width, src_height, src_width * src_bpp));    
-  }
-
-  // check power of two support
-  if (!ispow2(src_width) || !ispow2(src_height)) {
-    std::cout << "Error: only power of two textures supported: width=" << src_width << ", heigth=" << src_height << std::endl;
-    return -1;
-  }
+    RT_CHECK(GenerateMipmaps(src_pixels, mip_offsets, staging, eformat, src_width, src_height, src_pitch));    
+  }  
 
   uint32_t src_logwidth  = log2ceil(src_width);
   uint32_t src_logheight = log2ceil(src_height);
@@ -211,8 +213,8 @@ int main(int argc, char *argv[]) {
   std::cout << "src_addr=0x" << std::hex << src_addr << std::endl;
   std::cout << "dst_addr=0x" << std::hex << dst_addr << std::endl;
 
-  // allocate staging shared memory  
-  std::cout << "allocate shared memory" << std::endl;    
+  // allocate staging buffer  
+  std::cout << "allocate staging buffer" << std::endl;    
   uint32_t alloc_size = std::max<uint32_t>(sizeof(kernel_arg_t), 
                             std::max<uint32_t>(src_bufsize, dst_bufsize));
   RT_CHECK(vx_buf_alloc(device, alloc_size, &staging_buf));
@@ -227,10 +229,9 @@ int main(int argc, char *argv[]) {
     kernel_arg.wrapu      = wrap;
     kernel_arg.wrapv      = wrap;    
     
+    kernel_arg.src_addr      = src_addr;
     kernel_arg.src_logwidth  = src_logwidth;
     kernel_arg.src_logheight = src_logheight;
-    kernel_arg.src_addr      = src_addr;
-
     for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
       assert(i < TEX_LOD_MAX);
       kernel_arg.mip_offs[i] = mip_offsets.at(i); 
@@ -267,15 +268,35 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_addr, dst_bufsize, 0));  
   }
 
-  // run tests
-  std::cout << "run tests" << std::endl;
-  RT_CHECK(run_test(kernel_arg, dst_bufsize, dst_width, dst_height, dst_bpp));
+	// configure texture units
+	vx_dcr_write(device, DCR_TEX_STAGE,   0);
+	vx_dcr_write(device, DCR_TEX_LOGDIM,  (src_logheight << 16) | src_logwidth);	
+	vx_dcr_write(device, DCR_TEX_FORMAT,  format);
+	vx_dcr_write(device, DCR_TEX_WRAP,    (wrap << 16) | wrap);
+	vx_dcr_write(device, DCR_TEX_FILTER,  (filter ? TEX_FILTER_BILINEAR : TEX_FILTER_POINT));
+	vx_dcr_write(device, DCR_TEX_ADDR,    src_addr);
+	for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
+    assert(i < TEX_LOD_MAX);
+		vx_dcr_write(device, DCR_TEX_MIPOFF(i), mip_offsets.at(i));
+	};
+
+  // render
+  std::cout << "render" << std::endl;
+  RT_CHECK(render(kernel_arg, dst_bufsize, dst_width, dst_height));
 
   // cleanup
   std::cout << "cleanup" << std::endl;  
   cleanup();
 
-  std::cout << "PASSED!" << std::endl;
+  if (reference_file) {
+    auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8);
+    if (0 == errors) {
+      std::cout << "PASSED!" << std::endl;
+    } else {
+      std::cout << "FAILED!" << std::endl;
+      return errors;
+    }
+  } 
 
   return 0;
 }
