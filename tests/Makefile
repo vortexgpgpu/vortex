@@ -25,7 +25,7 @@ clean:
 clean-all:
 	$(MAKE) -C runtime clean
 	$(MAKE) -C regression clean-all
-	$(MAKE) -C opencl clean-all
+	$(MAKE) -C opencl clean
 	$(MAKE) -C riscv clean
 	$(MAKE) -C unittest clean
 
