@@ -46,7 +46,7 @@ module VX_rop_blend #(
     // Combinational logic, not sequential. We want the pipe reg to store the output from this block. Reset will be tied to the pipe reg.
     always @(*) begin
         // Blending Functions
-        case (reg_csrs.blend_func_src_rgb)
+        case (reg_csrs.blend_src_rgb)
             `ROP_BLEND_FUNC_ZERO:                 factor_src_rgb = {24{1'b0}};
             `ROP_BLEND_FUNC_ONE:                  factor_src_rgb = {24{1'b1}};
             `ROP_BLEND_FUNC_SRC_RGB:              factor_src_rgb = src_color[31:8];
@@ -64,7 +64,7 @@ module VX_rop_blend #(
             `ROP_BLEND_FUNC_ALPHA_SAT:            factor_src_rgb = (src_alpha < 8'hFF - dst_alpha) ? src_alpha : 8'hFF - dst_alpha;
             default:                              factor_src_rgb = {24{1'b1}};
         endcase
-        case (reg_csrs.blend_func_src_a)
+        case (reg_csrs.blend_src_a)
             `ROP_BLEND_FUNC_ZERO:                 factor_src_a = 8'h00;
             `ROP_BLEND_FUNC_ONE:                  factor_src_a = 8'hFF;
             `ROP_BLEND_FUNC_SRC_RGB:              factor_src_a = src_alpha;
@@ -82,7 +82,7 @@ module VX_rop_blend #(
             `ROP_BLEND_FUNC_ALPHA_SAT:            factor_src_a = 8'hFF;
             default:                              factor_src_a = 8'hFF;
         endcase
-        case (reg_csrs.blend_func_dst_rgb)
+        case (reg_csrs.blend_dst_rgb)
             `ROP_BLEND_FUNC_ZERO:                 factor_src_rgb = {24{1'b0}};
             `ROP_BLEND_FUNC_ONE:                  factor_src_rgb = {24{1'b1}};
             `ROP_BLEND_FUNC_SRC_RGB:              factor_src_rgb = src_color[31:8];
@@ -100,7 +100,7 @@ module VX_rop_blend #(
             `ROP_BLEND_FUNC_ALPHA_SAT:            factor_src_rgb = (src_alpha < 8'hFF - dst_alpha) ? src_alpha : 8'hFF - dst_alpha; // forbidden
             default:                              factor_src_rgb = {24{1'b1}};
         endcase
-        case (reg_csrs.blend_func_dst_a)
+        case (reg_csrs.blend_dst_a)
             `ROP_BLEND_FUNC_ZERO:                 factor_dst_a = 8'h00;
             `ROP_BLEND_FUNC_ONE:                  factor_dst_a = 8'hFF;
             `ROP_BLEND_FUNC_SRC_RGB:              factor_dst_a = src_alpha;
@@ -173,10 +173,13 @@ module VX_rop_blend #(
         // Blend Equations
         // RGB Component
         case (pipe_blend_mode_rgb)
-            `ROP_BLEND_MODE_ADD, `ROP_BLEND_MODE_SUB, `ROP_BLEND_MODE_REV_SUB: begin
+            `ROP_BLEND_MODE_ADD, 
+            `ROP_BLEND_MODE_SUB, 
+            `ROP_BLEND_MODE_REV_SUB: begin
                 color_out[31:8] = mult_add_color_out[31:8];
                 end
-            `ROP_BLEND_MODE_MIN, `ROP_BLEND_MODE_MAX: begin
+            `ROP_BLEND_MODE_MIN, 
+            `ROP_BLEND_MODE_MAX: begin
                 color_out[31:8] = max_color_out[31:8];
                 end
             `ROP_BLEND_MODE_LOGICOP: begin
@@ -188,10 +191,13 @@ module VX_rop_blend #(
         endcase
         // Alpha Component
         case (pipe_blend_mode_a)
-            `ROP_BLEND_MODE_ADD, `ROP_BLEND_MODE_SUB, `ROP_BLEND_MODE_REV_SUB: begin
+            `ROP_BLEND_MODE_ADD, 
+            `ROP_BLEND_MODE_SUB, 
+            `ROP_BLEND_MODE_REV_SUB: begin
                 color_out[7:0] = mult_add_color_out[7:0];
                 end
-            `ROP_BLEND_MODE_MIN, `ROP_BLEND_MODE_MAX: begin
+            `ROP_BLEND_MODE_MIN, 
+            `ROP_BLEND_MODE_MAX: begin
                 color_out[31:8] = max_color_out[31:8];
                 end
             `ROP_BLEND_MODE_LOGICOP: begin

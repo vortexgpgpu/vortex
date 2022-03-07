@@ -48,12 +48,12 @@ module VX_rop_blend_multadd #(
                 green_combined = (src_green * src_blend_green) + (dst_green * dst_blend_green);
                 blue_combined  = (src_blue * src_blend_blue) + (dst_blue * dst_blend_blue);
             end
-            `ROP_BLEND_MODE_SUBTRACT: begin
+            `ROP_BLEND_MODE_SUB: begin
                 red_combined   = (src_red * src_blend_red) - (dst_red * dst_blend_red);
                 green_combined = (src_green * src_blend_green) - (dst_green * dst_blend_green);
                 blue_combined  = (src_blue * src_blend_blue) - (dst_blue * dst_blend_blue); 
             end
-            `ROP_BLEND_MODE_REVERSE_SUBTRACT: begin
+            `ROP_BLEND_MODE_REV_SUB: begin
                 red_combined   = (dst_red * src_blend_red) - (src_red * dst_blend_red);
                 green_combined = (dst_green * src_blend_green) - (src_green * dst_blend_green);
                 blue_combined  = (dst_blue * src_blend_blue) - (src_blue * dst_blend_blue);
@@ -66,13 +66,13 @@ module VX_rop_blend_multadd #(
         endcase
         // Alpha blending
         case(mode_a)
-            `ROP_BLEND_MODE_FUNC_ADD: begin
+            `ROP_BLEND_MODE_ADD: begin
                 alpha_combined = (src_alpha * src_blend_alpha) + (dst_alpha * dst_blend_alpha);
             end
-            `ROP_BLEND_MODE_FUNC_SUBTRACT: begin
+            `ROP_BLEND_MODE_SUB: begin
                 alpha_combined = (src_alpha * src_blend_alpha) - (dst_alpha * dst_blend_alpha);
             end
-            `ROP_BLEND_MODE_FUNC_REVERSE_SUBTRACT: begin
+            `ROP_BLEND_MODE_REV_SUB: begin
                 alpha_combined = (dst_alpha * src_blend_alpha) - (src_alpha * dst_blend_alpha);
             end
             default: begin
