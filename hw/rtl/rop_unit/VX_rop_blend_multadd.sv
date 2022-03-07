@@ -43,17 +43,17 @@ module VX_rop_blend_multadd #(
     always @(*) begin
         // RGB blending
         case(mode_rgb)
-            `ROP_BLEND_MODE_FUNC_ADD: begin
+            `ROP_BLEND_MODE_ADD: begin
                 red_combined   = (src_red * src_blend_red) + (dst_red * dst_blend_red);
                 green_combined = (src_green * src_blend_green) + (dst_green * dst_blend_green);
                 blue_combined  = (src_blue * src_blend_blue) + (dst_blue * dst_blend_blue);
             end
-            `ROP_BLEND_MODE_FUNC_SUBTRACT: begin
+            `ROP_BLEND_MODE_SUBTRACT: begin
                 red_combined   = (src_red * src_blend_red) - (dst_red * dst_blend_red);
                 green_combined = (src_green * src_blend_green) - (dst_green * dst_blend_green);
                 blue_combined  = (src_blue * src_blend_blue) - (dst_blue * dst_blend_blue); 
             end
-            `ROP_BLEND_MODE_FUNC_REVERSE_SUBTRACT: begin
+            `ROP_BLEND_MODE_REVERSE_SUBTRACT: begin
                 red_combined   = (dst_red * src_blend_red) - (src_red * dst_blend_red);
                 green_combined = (dst_green * src_blend_green) - (src_green * dst_blend_green);
                 blue_combined  = (dst_blue * src_blend_blue) - (src_blue * dst_blend_blue);
