@@ -39,8 +39,7 @@ static const std::unordered_map<Opcode, struct InstTableEntry_t> sc_instTable = 
   {Opcode::FMSUB,      {false, InstType::R4_TYPE}},
   {Opcode::FMNMADD,    {false, InstType::R4_TYPE}},
   {Opcode::FMNMSUB,    {false, InstType::R4_TYPE}},  
-  {Opcode::VSET,       {false, InstType::V_TYPE}}, 
-  {Opcode::GPGPU,      {false, InstType::R_TYPE}},
+  {Opcode::VSET,       {false, InstType::V_TYPE}},
   {Opcode::EXT1,       {false, InstType::R_TYPE}},
   {Opcode::EXT2,       {false, InstType::R4_TYPE}},
   {Opcode::R_INST_W,   {false, InstType::R_TYPE}},
@@ -345,27 +344,26 @@ static const char* op_string(const Instr &instr) {
   case Opcode::FMNMADD: return func2 ? "FNMADD.D" : "FNMADD.S";
   case Opcode::FMNMSUB: return func2 ? "FNMSUB.D" : "FNMSUB.S";
   case Opcode::VSET:    return "VSET";
-  case Opcode::GPGPU:
-    switch (func3) {            
-    case 0: return "TMC";
-    case 1: return "WSPAWN";
-    case 2: return "SPLIT";
-    case 3: return "JOIN";
-    case 4: return "BAR";
-    case 5: return "PREFETCH";
-    default:
-      std::abort();
-    }
   case Opcode::EXT1:
     switch (func7) {
-    case 0: {
+    case 0:
+      switch (func3) {            
+      case 0: return rs2 ? "PRED" : "TMC";
+      case 1: return "WSPAWN";
+      case 2: return "SPLIT";
+      case 3: return "JOIN";
+      case 4: return "BAR";
+      case 5: return "PREFETCH";
+      default:
+        std::abort();
+      }
+    case 1:
       switch (func3) {
       case 0: return "RASTER";
       case 1: return "ROP";
       default:
         std::abort();
       }
-    }
     default:
       std::abort();
     }

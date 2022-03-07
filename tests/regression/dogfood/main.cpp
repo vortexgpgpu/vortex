@@ -204,8 +204,8 @@ int main(int argc, char *argv[]) {
   std::cout << "dev_src1=" << std::hex << kernel_arg.src1_addr << std::dec << std::endl;
   std::cout << "dev_dst=" << std::hex << kernel_arg.dst_addr << std::dec << std::endl;
   
-  // allocate shared memory  
-  std::cout << "allocate shared memory" << std::endl;
+  // allocate staging buffer  
+  std::cout << "allocate staging buffer" << std::endl;
   RT_CHECK(vx_buf_alloc(device, sizeof(kernel_arg_t), &arg_buf));
   RT_CHECK(vx_buf_alloc(device, buf_size, &src1_buf));
   RT_CHECK(vx_buf_alloc(device, buf_size, &src2_buf));

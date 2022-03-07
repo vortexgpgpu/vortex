@@ -69,10 +69,11 @@
 `define INST_FNMADD     7'b1001111 
 `define INST_FCI        7'b1010011 // float common instructions
 
-`define INST_GPGPU      7'b1101011
-`define INST_GPU        7'b1011011
-
-`define INST_TEX       7'b0101011
+// Custom extension opcodes
+`define INST_EXT1       7'b0001011 // 0x0B
+`define INST_EXT2       7'b0101011 // 0x2B
+`define INST_EXT3       7'b1011011 // 0x5B
+`define INST_EXT4       7'b1111011 // 0x7B
 
 ///////////////////////////////////////////////////////////////////////////////
 

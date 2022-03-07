@@ -213,8 +213,8 @@ int main(int argc, char *argv[]) {
   std::cout << "src_addr=0x" << std::hex << src_addr << std::endl;
   std::cout << "dst_addr=0x" << std::hex << dst_addr << std::endl;
 
-  // allocate staging shared memory  
-  std::cout << "allocate shared memory" << std::endl;    
+  // allocate staging buffer  
+  std::cout << "allocate staging buffer" << std::endl;    
   uint32_t alloc_size = std::max<uint32_t>(sizeof(kernel_arg_t), 
                             std::max<uint32_t>(src_bufsize, dst_bufsize));
   RT_CHECK(vx_buf_alloc(device, alloc_size, &staging_buf));

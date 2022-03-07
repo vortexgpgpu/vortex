@@ -9,12 +9,12 @@ _start:
   # execute stack initialization on all warps
   la a1, vx_set_sp
   csrr a0, CSR_NW  # get num warps
-  .insn s 0x6b, 1, a1, 0(a0)  # wspawn a0, a1
+  .insn r 0x0b, 1, 0, x0, a0, a1  # wspawn a0, a1
   jal vx_set_sp
 
   # return back to single thread execution
   li a0, 1
-  .insn s 0x6b, 0, x0, 0(a0)  # tmc a0
+  .insn r 0x0b, 0, 0, x0, a0, x0  # tmc a0
   
   # Clear the bss segment
   la      a0, _edata
@@ -47,7 +47,7 @@ _exit:
   call vx_perf_dump 
   mv gp, s0
   li a0, 0
-  .insn s 0x6b, 0, x0, 0(a0)  # tmc a0
+  .insn r 0x0b, 0, 0, x0, a0, x0  # tmc a0
 
 .section .text
 .type vx_set_sp, @function
@@ -55,7 +55,7 @@ _exit:
 vx_set_sp:
   # activate all threads
   li a0, -1
-  .insn s 0x6b, 0, x0, 0(a0)  # tmc a0
+  .insn r 0x0b, 0, 0, x0, a0, x0  # tmc a0
   
   # set per-thread stack register
   li sp, STACK_BASE_ADDR # load stack base address
@@ -68,7 +68,7 @@ vx_set_sp:
   csrr a3, CSR_LWID     # get local wid
   beqz a3, RETURN
   li a0, 0
-  .insn s 0x6b, 0, x0, 0(a0)  # tmc a0
+  .insn r 0x0b, 0, 0, x0, a0, x0  # tmc a0
 RETURN:
   ret
 

@@ -178,8 +178,8 @@ int main(int argc, char *argv[]) {
   std::cout << "dev_src=" << std::hex << kernel_arg.src_addr << std::endl;
   std::cout << "dev_dst=" << std::hex << kernel_arg.dst_addr << std::endl;
   
-  // allocate shared memory  
-  std::cout << "allocate shared memory" << std::endl;    
+  // allocate staging buffer  
+  std::cout << "allocate staging buffer" << std::endl;    
   uint32_t staging_buf_size = std::max<uint32_t>(src_buf_size,
                                   std::max<uint32_t>(dst_buf_size, 
                                     sizeof(kernel_arg_t)));

@@ -18,12 +18,12 @@ vx_serial:
 label_loop:
     sub	 t0, s0, s1
     seqz t1, t0                 # (index != tid)
-    .insn s 0x6b, 2, x0, 0(t1)  # split t0
+    .insn r 0x0b, 2, 0, x0, t1, x0  # split t0
     bnez t0, label_join
     mv   a0, s3                 # a0 <- arg
     jalr s4                     # callback(arg)
 label_join:
-    .insn s 0x6b, 3, x0, 0(x0)  # join
+    .insn r 0x0b, 3, 0, x0, x0, x0  # join
     addi s0, s0, 1              # index++
     blt	 s0, s2, label_loop     # loop back
     lw   ra, 20(sp)

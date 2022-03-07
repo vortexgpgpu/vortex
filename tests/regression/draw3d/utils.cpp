@@ -16,9 +16,7 @@ using fixed16_t  = TFixed<16>;
 
 using vec2d_f_t  = TVector2<float>;
 using vec2d_fx_t = TVector2<fixed16_t>;
-
 using vec4d_f_t  = TVector4<float>;
-
 using rect_f_t   = TRect<float>;
 
 static fixed16_t fxZero(0);
@@ -30,13 +28,13 @@ static fixed16_t evalEdgeFunction(const rast_edge_t& e, uint32_t x, uint32_t y) 
 }
 
 // Calculate the edge extents for tile corners
-static fixed16_t calcEdgeExtents(const rast_edge_t& e, uint32_t logTileSize) {
+static fixed16_t calcEdgeExtents(const rast_edge_t& e) {
   vec2d_fx_t corners[4] = {{fxZero, fxZero},  // 00
-                            {e.x,    fxZero},  // 10
-                            {fxZero, e.y},     // 01
-                            {e.x,    e.y}};    // 11
+                           {e.x,    fxZero},  // 10
+                           {fxZero, e.y},     // 01
+                           {e.x,    e.y}};    // 11
   auto i = (e.y >= fxZero) ? ((e.x >= fxZero) ? 3 : 2) : (e.x >= fxZero) ? 1 : 0;
-  return (corners[i].x + corners[i].y) << logTileSize;
+  return corners[i].x + corners[i].y;
 }
 
 static float EdgeEquation(rast_edge_t edges[3], 
@@ -92,7 +90,7 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
                  uint32_t height,
                  uint32_t tileSize) {
 
-  uint32_t logTileSize = log2ceil(tileSize);
+  uint32_t tileLogSize = log2ceil(tileSize);
 
   std::unordered_map<uint32_t, std::vector<uint32_t>> tiles;
 
@@ -151,7 +149,7 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
     uint32_t p;
 
     {
-      #define INTERPOLATE_DELTA(dx, x0, x1, x2) \
+      #define ATTRIBUTE_DELTA(dx, x0, x1, x2) \
         dx.x = fixed23_t(x0 - x2); \
         dx.y = fixed23_t(x1 - x2); \
         dx.z = fixed23_t(x2)
@@ -168,34 +166,34 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
       ColorToFloat(colors[1], v1.c);
       ColorToFloat(colors[2], v2.c);
       
-      INTERPOLATE_DELTA(rast_prim.attribs.z, v0.z, v1.z, v2.z);
-      INTERPOLATE_DELTA(rast_prim.attribs.r, colors[0][0], colors[1][0], colors[2][0]);
-      INTERPOLATE_DELTA(rast_prim.attribs.g, colors[0][1], colors[1][1], colors[2][1]);
-      INTERPOLATE_DELTA(rast_prim.attribs.b, colors[0][2], colors[1][2], colors[2][2]);
-      INTERPOLATE_DELTA(rast_prim.attribs.a, colors[0][3], colors[1][3], colors[2][3]);      
-      INTERPOLATE_DELTA(rast_prim.attribs.u, v0.u, v1.u, v2.u);
-      INTERPOLATE_DELTA(rast_prim.attribs.v, v0.v, v1.v, v2.v);
+      ATTRIBUTE_DELTA(rast_prim.attribs.z, v0.z, v1.z, v2.z);
+      ATTRIBUTE_DELTA(rast_prim.attribs.r, colors[0][0], colors[1][0], colors[2][0]);
+      ATTRIBUTE_DELTA(rast_prim.attribs.g, colors[0][1], colors[1][1], colors[2][1]);
+      ATTRIBUTE_DELTA(rast_prim.attribs.b, colors[0][2], colors[1][2], colors[2][2]);
+      ATTRIBUTE_DELTA(rast_prim.attribs.a, colors[0][3], colors[1][3], colors[2][3]);      
+      ATTRIBUTE_DELTA(rast_prim.attribs.u, v0.u, v1.u, v2.u);
+      ATTRIBUTE_DELTA(rast_prim.attribs.v, v0.v, v1.v, v2.v);
 
       p = rast_prims.size();
       rast_prims.push_back(rast_prim);      
     }
 
     // Calculate min/max tile positions
-    auto tileSize = 1 << logTileSize;
-    auto minTileX = bbox.left >> logTileSize;
-    auto minTileY = bbox.top >> logTileSize;
-    auto maxTileX = (bbox.right + tileSize - 1) >> logTileSize;
-    auto maxTileY = (bbox.bottom + tileSize - 1) >> logTileSize;
+    auto tileSize = 1 << tileLogSize;
+    auto minTileX = bbox.left >> tileLogSize;
+    auto minTileY = bbox.top >> tileLogSize;
+    auto maxTileX = (bbox.right + tileSize - 1) >> tileLogSize;
+    auto maxTileY = (bbox.bottom + tileSize - 1) >> tileLogSize;
 
     // Starting tile coordinates
-    auto X = minTileX << logTileSize;
-    auto Y = minTileY << logTileSize;
+    auto X = minTileX << tileLogSize;
+    auto Y = minTileY << tileLogSize;
 
     // Add tile corner edge offsets
     fixed16_t extents[3];
-    extents[0] = calcEdgeExtents(edges[0], logTileSize);
-    extents[1] = calcEdgeExtents(edges[1], logTileSize);
-    extents[2] = calcEdgeExtents(edges[2], logTileSize);
+    extents[0] = calcEdgeExtents(edges[0]);
+    extents[1] = calcEdgeExtents(edges[1]);
+    extents[2] = calcEdgeExtents(edges[2]);
 
     // Evaluate edge equation for the starting tile
     auto e0 = evalEdgeFunction(edges[0], X, Y);
@@ -209,34 +207,33 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
       auto ee2 = e2;
       for (uint32_t tx = minTileX; tx < maxTileX; ++tx) {
         // check if tile overlap triangle    
-        if (((ee0 + extents[0]).data() 
-           | (ee1 + extents[1]).data()
-           | (ee2 + extents[2]).data()) >= 0) {
+        if (((ee0 + (extents[0] << tileLogSize)).data() 
+           | (ee1 + (extents[1] << tileLogSize)).data()
+           | (ee2 + (extents[2] << tileLogSize)).data()) >= 0) {
           // assign primitive to tile
           uint32_t tile_id = (ty << 16) | tx;
           tiles[tile_id].push_back(p);
           ++num_prims;
         }
-
         // update edge equation x components
-        ee0 += edges[0].x << logTileSize;
-        ee1 += edges[1].x << logTileSize;
-        ee2 += edges[2].x << logTileSize;
+        ee0 += edges[0].x << tileLogSize;
+        ee1 += edges[1].x << tileLogSize;
+        ee2 += edges[2].x << tileLogSize;
       }
       // update edge equation y components
-      e0 += edges[0].y << logTileSize;
-      e1 += edges[1].y << logTileSize;
-      e2 += edges[2].y << logTileSize;
+      e0 += edges[0].y << tileLogSize;
+      e1 += edges[1].y << tileLogSize;
+      e2 += edges[2].y << tileLogSize;
     }
   }
 
   {
-    primbuf.reserve(rast_prims.size()  * sizeof(rast_prim_t));
+    primbuf.resize(rast_prims.size() * sizeof(rast_prim_t));
     memcpy(primbuf.data(), rast_prims.data(), primbuf.size());
   }
   
   {
-    tilebuf.reserve(tiles.size() * sizeof(rast_tile_header_t) + num_prims * sizeof(uint32_t));
+    tilebuf.resize(tiles.size() * sizeof(rast_tile_header_t) + num_prims * sizeof(uint32_t));
     auto tile_data = tilebuf.data();
     for (auto it : tiles) {
       rast_tile_header_t header{it.first, (uint32_t)it.second.size()};

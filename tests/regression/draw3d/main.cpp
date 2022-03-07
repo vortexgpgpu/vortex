@@ -26,7 +26,7 @@ using namespace cocogfx;
 ///////////////////////////////////////////////////////////////////////////////
 
 const char* kernel_file = "kernel.bin";
-const char* input_file  = "soccer.png";
+const char* input_file  = "fire.png";
 const char* output_file = "output.png";
 const char* reference_file  = nullptr;
 uint32_t clear_color = 0x00000000;
@@ -34,8 +34,8 @@ int tex_format = TEX_FORMAT_A8R8G8B8;
 ePixelFormat tex_eformat = FORMAT_A8R8G8B8;
 int tex_wrap = TEX_WRAP_CLAMP;
 int tex_filter  = TEX_FILTER_POINT;
-uint32_t dst_width  = 64;
-uint32_t dst_height = 64;
+uint32_t dst_width  = 256;
+uint32_t dst_height = 256;
 const model_t& model = model_quad;
 
 vx_device_h device = nullptr;
@@ -218,6 +218,7 @@ int main(int argc, char *argv[]) {
 
   // Perform tile binning
   auto num_tiles = Binning(tilebuf, primbuf, model, dst_width, dst_height, tile_size);
+  std::cout << "Binning allocated " << num_tiles << " tiles." << std::endl;
   
   // upload program
   std::cout << "upload program" << std::endl;  
@@ -237,8 +238,8 @@ int main(int argc, char *argv[]) {
   std::cout << "zbuf_addr=0x" << std::hex << zbuf_addr << std::endl;
   std::cout << "cbuf_addr=0x" << std::hex << cbuf_addr << std::endl;
 
-  // allocate staging shared memory  
-  std::cout << "allocate shared memory" << std::endl;    
+  // allocate staging buffer  
+  std::cout << "allocate staging buffer" << std::endl;    
   uint32_t alloc_size = std::max<uint32_t>({
       sizeof(kernel_arg_t), (uint32_t)tilebuf.size(), (uint32_t)primbuf.size(), zbuf_size, cbuf_size
     });

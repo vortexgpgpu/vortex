@@ -77,76 +77,76 @@ extern "C" {
 // Texture load
 #define vx_tex(stage, u, v, lod) ({              \
 	unsigned __r;                               \
-    __asm__ __volatile__ (".insn r4 0x5b, 0, %1, %0, %2, %3, %4" : "=r"(__r) : "i"(stage), "r"(u), "r"(v), "r"(lod)); \
+    __asm__ __volatile__ (".insn r4 0x2b, 0, %1, %0, %2, %3, %4" : "=r"(__r) : "i"(stage), "r"(u), "r"(v), "r"(lod)); \
 	__r;							            \
 })
 
 // Conditional move
 #define vx_cmov(c, t, f) ({                     \
 	unsigned __r;		                        \
-    __asm__ __volatile__ (".insn r4 0x5b, 1, 0, %0, %1, %2, %3" : "=r"(__r : "r"(c), "r"(t), "r"(f)); \
+    __asm__ __volatile__ (".insn r4 0x2b, 1, 0, %0, %1, %2, %3" : "=r"(__r : "r"(c), "r"(t), "r"(f)); \
 	__r;							            \
 })
 
 // IMADD
 #define vx_imadd(x, y, acc) ({                  \
-    __asm__ __volatile__ (".insn r4 0x5b, 1, 2, x0, %0, %1, %2" :: "r"(x), "r"(y), "r"(acc); \
+    __asm__ __volatile__ (".insn r4 0x2b, 1, 2, x0, %0, %1, %2" :: "r"(x), "r"(y), "r"(acc); \
 })
 
 // Raster load
 #define vx_rast() ({                            \
     unsigned __r;                               \
-    __asm__ __volatile__ (".insn r 0x0b, 0, 0, %0, x0, x0" : "=r"(__r)); \
+    __asm__ __volatile__ (".insn r 0x0b, 0, 1, %0, x0, x0" : "=r"(__r)); \
     __r;                                        \
 })
 
 // Rop write
 #define vx_rop(color, depth) ({                 \
-    __asm__ __volatile__ (".insn r 0x0b, 0, 1, x0, %0, %1" :: "r"(color), "r"(depth)); \
+    __asm__ __volatile__ (".insn r 0x0b, 1, 1, x0, %0, %1" :: "r"(color), "r"(depth)); \
 })
 
 // Interpolate
 #define vx_interp(f, a, b, c) ({                \
 	unsigned __r;                               \
-    __asm__ __volatile__ (".insn r4 0x5b, 2, %1, %0, %2, %3, %4" : "=r"(__r) : "i"(f), "r"(a), "r"(b), "r"(c)); \
+    __asm__ __volatile__ (".insn r4 0x2b, 2, %1, %0, %2, %3, %4" : "=r"(__r) : "i"(f), "r"(a), "r"(b), "r"(c)); \
 	__r;							            \
 })
 
 // Set thread mask
 inline void vx_tmc(unsigned thread_mask) {
-    asm volatile (".insn s 0x6b, 0, x0, 0(%0)" :: "r"(thread_mask));
+    asm volatile (".insn r 0x0b, 0, 0, x0, %0, x0" :: "r"(thread_mask));
 }
 
 // Set thread predicate
 inline void vx_pred(unsigned condition) {
-    asm volatile (".insn s 0x6b, 0, x1, 0(%0)" :: "r"(condition));
+    asm volatile (".insn r 0x0b, 0, 0, x0, %0, x1" :: "r"(condition));
 }
 
 typedef void (*vx_wspawn_pfn)();
 
 // Spawn warps
 inline void vx_wspawn(unsigned num_warps, vx_wspawn_pfn func_ptr) {
-    asm volatile (".insn s 0x6b, 1, %1, 0(%0)" :: "r"(num_warps), "r"(func_ptr));
+    asm volatile (".insn r 0x0b, 1, 0, x0, %0, %1" :: "r"(num_warps), "r"(func_ptr));
 }
 
 // Split on a predicate
 inline void vx_split(int predicate) {
-    asm volatile (".insn s 0x6b, 2, x0, 0(%0)" :: "r"(predicate));
+    asm volatile (".insn r 0x0b, 2, 0, x0, %0, x0" :: "r"(predicate));
 }
 
 // Join
 inline void vx_join() {
-  asm volatile (".insn s 0x6b, 3, x0, 0(x0)");
+  asm volatile (".insn r 0x0b, 3, 0, x0, x0, x0");
 }
 
 // Warp Barrier
 inline void vx_barrier(unsigned barried_id, unsigned num_warps) {
-    asm volatile (".insn s 0x6b, 4, %1, 0(%0)" :: "r"(barried_id), "r"(num_warps));
+    asm volatile (".insn r 0x0b, 4, 0, x0, %0, %1" :: "r"(barried_id), "r"(num_warps));
 }
 
 // Prefetch
 inline void vx_prefetch(unsigned addr) {
-    asm volatile (".insn s 0x6b, 5, x0, 0(%0)" :: "r"(addr) );
+    asm volatile (".insn r 0x0b, 5, 0, x0, %0, x0" :: "r"(addr) );
 }
 
 // Return active warp's thread id 

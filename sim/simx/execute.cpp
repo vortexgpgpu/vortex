@@ -1285,141 +1285,141 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     rd_write = true;
     break;
   }
-  case GPGPU: {    
-    uint32_t ts = 0;
-    for (uint32_t t = 0; t < num_threads; ++t) {
-      if (tmask_.test(t)) {
-        ts = t;
-        break;
-      }
-    }
-    switch (func3) {
-    case 0: {
-      // TMC   
-      trace->exe_type = ExeType::GPU;     
-      trace->gpu_type = GpuType::TMC;
-      trace->used_iregs.set(rsrc0);
-      trace->fetch_stall = true;
-      if (rsrc1) {
-        // predicate mode
-        ThreadMask pred;
-        for (uint32_t t = 0; t < num_threads; ++t) {
-          pred[t] = tmask_.test(t) ? (ireg_file_.at(t).at(rsrc0) != 0) : 0;
-        }
-        if (pred.any()) {
-          tmask_ &= pred;
-        }
-      } else {
-        tmask_.reset();
-        for (uint32_t t = 0; t < num_threads; ++t) {
-          tmask_.set(t, rsdata.at(ts)[0].i & (1 << t));
-        }
-      }
-      DPH(3, "*** New TMC: ");
-      for (uint32_t i = 0; i < num_threads; ++i)
-        DPN(3, tmask_.test(num_threads-i-1));
-      DPN(3, std::endl);
-
-      active_ = tmask_.any();
-      trace->data = new GPUTraceData(active_ << id_);
-    } break;
-    case 1: {
-      // WSPAWN
-      trace->exe_type = ExeType::GPU;
-      trace->gpu_type = GpuType::WSPAWN;
-      trace->used_iregs.set(rsrc0);
-      trace->used_iregs.set(rsrc1);
-      trace->fetch_stall = true;
-      trace->data = new GPUTraceData(core_->wspawn(rsdata.at(ts)[0].i, rsdata.at(ts)[1].i));
-    } break;
-    case 2: {
-      // SPLIT    
-      trace->exe_type = ExeType::GPU;
-      trace->gpu_type = GpuType::SPLIT;
-      trace->used_iregs.set(rsrc0);
-      trace->fetch_stall = true;
-      if (HasDivergentThreads(tmask_, ireg_file_, rsrc0)) {          
-        ThreadMask tmask;
-        for (uint32_t t = 0; t < num_threads; ++t) {
-          tmask[t] = tmask_.test(t) && !ireg_file_.at(t).at(rsrc0);
-        }
-
-        DomStackEntry e(tmask, nextPC);
-        dom_stack_.push(tmask_);
-        dom_stack_.push(e);
-        for (uint32_t t = 0, n = e.tmask.size(); t < n; ++t) {
-          tmask_.set(t, !e.tmask.test(t) && tmask_.test(t));
-        }
-        active_ = tmask_.any();
-
-        DPH(3, "*** Split: New TM=");
-        for (uint32_t t = 0; t < num_threads; ++t) DPN(3, tmask_.test(num_threads-t-1));
-        DPN(3, ", Pushed TM=");
-        for (uint32_t t = 0; t < num_threads; ++t) DPN(3, e.tmask.test(num_threads-t-1));
-        DPN(3, ", PC=0x" << std::hex << e.PC << "\n");
-      } else {
-        DP(3, "*** Unanimous pred");
-        DomStackEntry e(tmask_);
-        e.unanimous = true;
-        dom_stack_.push(e);
-      }        
-    } break;
-    case 3: {
-      // JOIN
-      trace->exe_type = ExeType::GPU;
-      trace->gpu_type = GpuType::JOIN;        
-      trace->fetch_stall = true;        
-      if (!dom_stack_.empty() && dom_stack_.top().unanimous) {
-        DP(3, "*** Uninimous branch at join");
-        tmask_ = dom_stack_.top().tmask;
-        active_ = tmask_.any();
-        dom_stack_.pop();
-      } else {
-        if (!dom_stack_.top().fallThrough) {
-          nextPC = dom_stack_.top().PC;
-          DP(3, "*** Join: next PC: " << std::hex << nextPC << std::dec);
-        }
-
-        tmask_ = dom_stack_.top().tmask;
-        active_ = tmask_.any();
-
-        DPH(3, "*** Join: New TM=");
-        for (uint32_t t = 0; t < num_threads; ++t) DPN(3, tmask_.test(num_threads-t-1));
-        DPN(3, "\n");
-
-        dom_stack_.pop();
-      }        
-    } break;
-    case 4: {
-      // BAR
-      trace->exe_type = ExeType::GPU; 
-      trace->gpu_type = GpuType::BAR;
-      trace->used_iregs.set(rsrc0);
-      trace->used_iregs.set(rsrc1);
-      trace->fetch_stall = true;
-      trace->data = new GPUTraceData(core_->barrier(rsdata[ts][0].i, rsdata[ts][1].i, id_));
-    } break;
-    case 5: {
-      // PREFETCH
-      trace->exe_type = ExeType::LSU; 
-      trace->lsu_type = LsuType::PREFETCH; 
-      trace->used_iregs.set(rsrc0);
-      auto trace_data = new LsuTraceData(num_threads);
-      trace->data = trace_data;
-      for (uint32_t t = 0; t < num_threads; ++t) {
-        if (!tmask_.test(t))
-          continue;
-        auto mem_addr = rsdata[t][0].i;
-        trace_data->mem_addrs.at(t) = {mem_addr, 4};
-      }
-    } break;
-    default:
-      std::abort();
-    }
-  }  break;
   case EXT1: {   
     switch (func7) {
-    case 0:
+    case 0: {    
+      uint32_t ts = 0;
+      for (uint32_t t = 0; t < num_threads; ++t) {
+        if (tmask_.test(t)) {
+          ts = t;
+          break;
+        }
+      }
+      switch (func3) {
+      case 0: {
+        // TMC   
+        trace->exe_type = ExeType::GPU;     
+        trace->gpu_type = GpuType::TMC;
+        trace->used_iregs.set(rsrc0);
+        trace->fetch_stall = true;
+        if (rsrc1) {
+          // predicate mode
+          ThreadMask pred;
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            pred[t] = tmask_.test(t) ? (ireg_file_.at(t).at(rsrc0) != 0) : 0;
+          }
+          if (pred.any()) {
+            tmask_ &= pred;
+          }
+        } else {
+          tmask_.reset();
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            tmask_.set(t, rsdata.at(ts)[0].i & (1 << t));
+          }
+        }
+        DPH(3, "*** New TMC: ");
+        for (uint32_t i = 0; i < num_threads; ++i)
+          DPN(3, tmask_.test(num_threads-i-1));
+        DPN(3, std::endl);
+
+        active_ = tmask_.any();
+        trace->data = new GPUTraceData(active_ << id_);
+      } break;
+      case 1: {
+        // WSPAWN
+        trace->exe_type = ExeType::GPU;
+        trace->gpu_type = GpuType::WSPAWN;
+        trace->used_iregs.set(rsrc0);
+        trace->used_iregs.set(rsrc1);
+        trace->fetch_stall = true;
+        trace->data = new GPUTraceData(core_->wspawn(rsdata.at(ts)[0].i, rsdata.at(ts)[1].i));
+      } break;
+      case 2: {
+        // SPLIT    
+        trace->exe_type = ExeType::GPU;
+        trace->gpu_type = GpuType::SPLIT;
+        trace->used_iregs.set(rsrc0);
+        trace->fetch_stall = true;
+        if (HasDivergentThreads(tmask_, ireg_file_, rsrc0)) {          
+          ThreadMask tmask;
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            tmask[t] = tmask_.test(t) && !ireg_file_.at(t).at(rsrc0);
+          }
+
+          DomStackEntry e(tmask, nextPC);
+          dom_stack_.push(tmask_);
+          dom_stack_.push(e);
+          for (uint32_t t = 0, n = e.tmask.size(); t < n; ++t) {
+            tmask_.set(t, !e.tmask.test(t) && tmask_.test(t));
+          }
+          active_ = tmask_.any();
+
+          DPH(3, "*** Split: New TM=");
+          for (uint32_t t = 0; t < num_threads; ++t) DPN(3, tmask_.test(num_threads-t-1));
+          DPN(3, ", Pushed TM=");
+          for (uint32_t t = 0; t < num_threads; ++t) DPN(3, e.tmask.test(num_threads-t-1));
+          DPN(3, ", PC=0x" << std::hex << e.PC << "\n");
+        } else {
+          DP(3, "*** Unanimous pred");
+          DomStackEntry e(tmask_);
+          e.unanimous = true;
+          dom_stack_.push(e);
+        }        
+      } break;
+      case 3: {
+        // JOIN
+        trace->exe_type = ExeType::GPU;
+        trace->gpu_type = GpuType::JOIN;        
+        trace->fetch_stall = true;        
+        if (!dom_stack_.empty() && dom_stack_.top().unanimous) {
+          DP(3, "*** Uninimous branch at join");
+          tmask_ = dom_stack_.top().tmask;
+          active_ = tmask_.any();
+          dom_stack_.pop();
+        } else {
+          if (!dom_stack_.top().fallThrough) {
+            nextPC = dom_stack_.top().PC;
+            DP(3, "*** Join: next PC: " << std::hex << nextPC << std::dec);
+          }
+
+          tmask_ = dom_stack_.top().tmask;
+          active_ = tmask_.any();
+
+          DPH(3, "*** Join: New TM=");
+          for (uint32_t t = 0; t < num_threads; ++t) DPN(3, tmask_.test(num_threads-t-1));
+          DPN(3, "\n");
+
+          dom_stack_.pop();
+        }        
+      } break;
+      case 4: {
+        // BAR
+        trace->exe_type = ExeType::GPU; 
+        trace->gpu_type = GpuType::BAR;
+        trace->used_iregs.set(rsrc0);
+        trace->used_iregs.set(rsrc1);
+        trace->fetch_stall = true;
+        trace->data = new GPUTraceData(core_->barrier(rsdata[ts][0].i, rsdata[ts][1].i, id_));
+      } break;
+      case 5: {
+        // PREFETCH
+        trace->exe_type = ExeType::LSU; 
+        trace->lsu_type = LsuType::PREFETCH; 
+        trace->used_iregs.set(rsrc0);
+        auto trace_data = new LsuTraceData(num_threads);
+        trace->data = trace_data;
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t))
+            continue;
+          auto mem_addr = rsdata[t][0].i;
+          trace_data->mem_addrs.at(t) = {mem_addr, 4};
+        }
+      } break;
+      default:
+        std::abort();
+      }
+    } break;
+    case 1:
       switch (func3) {
       case 0: { // RASTER
         trace->exe_type = ExeType::GPU; 
