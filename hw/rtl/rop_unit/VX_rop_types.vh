@@ -6,6 +6,13 @@
 package rop_types;
 
 typedef struct packed {
+    logic [7:0] a;
+    logic [7:0] r;
+    logic [7:0] g;
+    logic [7:0] b;
+} rgba_t;
+
+typedef struct packed {
     logic [31:0]                        cbuf_addr;
     logic [31:0]                        cbuf_pitch;
     logic [31:0]                        cbuf_mask;
@@ -35,7 +42,7 @@ typedef struct packed {
     logic [`ROP_BLEND_FUNC_BITS-1:0]    blend_src_a;
     logic [`ROP_BLEND_FUNC_BITS-1:0]    blend_dst_rgb;
     logic [`ROP_BLEND_FUNC_BITS-1:0]    blend_dst_a;
-    logic [31:0]                        blend_const;
+    rgba_t                              blend_const;
     
     logic [`ROP_LOGIC_OP_BITS-1:0]      logic_op;
 } rop_dcrs_t;

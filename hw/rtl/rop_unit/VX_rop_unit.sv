@@ -23,8 +23,8 @@ module VX_rop_unit #(
     `UNUSED_VAR (reset)
 
     // TODO: remove
-    rop_dcrs_t rop_dcrs = rop_dcr_if.data;
-    `UNUSED_VAR (rop_dcrs)
+    rop_dcrs_t dcrs = rop_dcr_if.data;
+    `UNUSED_VAR (dcrs)
 
     // TODO: remove
     `UNUSED_VAR (rop_req_if.valid)
@@ -61,5 +61,31 @@ module VX_rop_unit #(
     `UNUSED_VAR (cache_rsp_if.data)        
     `UNUSED_VAR (cache_rsp_if.tag)
     assign cache_rsp_if.ready = 0;
+
+    reg blend_valid_in = 1;
+    reg blend_ready_out = 1;
+    reg [31:0] src_color = 0;
+    reg [31:0] dst_color = 0;    
+    wire blend_ready_in;
+    wire blend_valid_out;    
+    wire [31:0] out_color;
+
+    VX_rop_blend #(
+    ) blend (
+        .clk       (clk),
+        .reset     (reset),
+        .ready_in  (blend_ready_in),
+        .valid_in  (blend_valid_in),        
+        .ready_out (blend_ready_out),
+        .valid_out (blend_valid_out),
+        .dcrs      (dcrs),
+        .src_color (src_color),
+        .dst_color (dst_color),
+        .color_out (out_color)
+    );
+
+    `UNUSED_VAR (out_color)
+    `UNUSED_VAR (blend_ready_in)
+    `UNUSED_VAR (blend_valid_out)
 
 endmodule
