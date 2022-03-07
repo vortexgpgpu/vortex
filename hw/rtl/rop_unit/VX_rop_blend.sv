@@ -176,10 +176,7 @@ module VX_rop_blend #(
             `ROP_BLEND_MODE_ADD, `ROP_BLEND_MODE_SUB, `ROP_BLEND_MODE_REV_SUB: begin
                 color_out[31:8] = mult_add_color_out[31:8];
                 end
-            `ROP_BLEND_MODE_MIN: begin
-                color_out[31:8] = min_color_out[31:8];
-                end
-            `ROP_BLEND_MODE_MAX: begin
+            `ROP_BLEND_MODE_MIN, `ROP_BLEND_MODE_MAX: begin
                 color_out[31:8] = max_color_out[31:8];
                 end
             `ROP_BLEND_MODE_LOGICOP: begin
@@ -194,10 +191,7 @@ module VX_rop_blend #(
             `ROP_BLEND_MODE_ADD, `ROP_BLEND_MODE_SUB, `ROP_BLEND_MODE_REV_SUB: begin
                 color_out[7:0] = mult_add_color_out[7:0];
                 end
-            `ROP_BLEND_MODE_MIN: begin
-                color_out[31:8] = min_color_out[31:8];
-                end
-            `ROP_BLEND_MODE_MAX: begin
+            `ROP_BLEND_MODE_MIN, `ROP_BLEND_MODE_MAX: begin
                 color_out[31:8] = max_color_out[31:8];
                 end
             `ROP_BLEND_MODE_LOGICOP: begin
