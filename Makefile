@@ -12,3 +12,10 @@ clean:
 	$(MAKE) -C driver clean
 	$(MAKE) -C runtime clean
 	$(MAKE) -C tests clean
+
+clean-all:
+	$(MAKE) -C hw clean
+	$(MAKE) -C sim clean
+	$(MAKE) -C driver clean
+	$(MAKE) -C runtime clean
+	$(MAKE) -C tests clean-all
