@@ -48,75 +48,75 @@ module VX_rop_blend #(
     always @(*) begin
         // Blending Functions
         case (reg_csrs.blend_func_src_rgb)
-            `ROP_BLEND_FACTOR_ZERO:                 factor_src_rgb = {24{1'b0}};
-            `ROP_BLEND_FACTOR_ONE:                  factor_src_rgb = {24{1'b1}};
-            `ROP_BLEND_FACTOR_SRC_RGB:              factor_src_rgb = src_color[31:8];
-            `ROP_BLEND_FACTOR_ONE_MINUS_SRC_RGB:    factor_src_rgb = {8'hFF - src_color[31:24], 8'hFF - src_color[23:16], 8'hFF - src_color[15:8]};
-            `ROP_BLEND_FACTOR_DST_RGB:              factor_src_rgb = dst_color[31:8];
-            `ROP_BLEND_FACTOR_ONE_MINUS_DST_RGB:    factor_src_rgb = {8'hFF - dst_color[31:24], 8'hFF - dst_color[23:16], 8'hFF - dst_color[15:8]};
-            `ROP_BLEND_FACTOR_SRC_A:                factor_src_rgb = {src_color[7:0], src_color[7:0], src_color[7:0]};
-            `ROP_BLEND_FACTOR_ONE_MINUS_SRC_A:      factor_src_rgb = {8'hFF - src_color[7:0], 8'hFF - src_color[7:0], 8'hFF - src_color[7:0]};
-            `ROP_BLEND_FACTOR_DST_A:                factor_src_rgb = {dst_color[7:0], dst_color[7:0], dst_color[7:0]};
-            `ROP_BLEND_FACTOR_ONE_MINUS_DST_A:      factor_src_rgb = {8'hFF - dst_color[7:0], 8'hFF - dst_color[7:0], 8'hFF - dst_color[7:0]};
-            `ROP_BLEND_FACTOR_CONST_RGB:            factor_src_rgb = {const_red, const_green, const_blue};
-            `ROP_BLEND_FACTOR_ONE_MINUS_CONST_RGB:  factor_src_rgb = {8'hFF - const_red, 8'hFF - const_green, 8'hFF - const_blue};
-            `ROP_BLEND_FACTOR_CONST_A:              factor_src_rgb = {const_alpha, const_alpha, const_alpha};
-            `ROP_BLEND_FACTOR_ONE_MINUS_CONST_A:    factor_src_rgb = {8'hFF - const_alpha, 8'hFF - const_alpha, 8'hFF - const_alpha};
-            `ROP_BLEND_FACTOR_ALPHA_SAT:            factor_src_rgb = (src_color[7:0] < 8'hFF - dst_color[7:0]) ? src_color[7:0] : 8'hFF - dst_color[7:0];
+            `ROP_BLEND_FUNC_ZERO:                 factor_src_rgb = {24{1'b0}};
+            `ROP_BLEND_FUNC_ONE:                  factor_src_rgb = {24{1'b1}};
+            `ROP_BLEND_FUNC_SRC_RGB:              factor_src_rgb = src_color[31:8];
+            `ROP_BLEND_FUNC_ONE_MINUS_SRC_RGB:    factor_src_rgb = {8'hFF - src_color[31:24], 8'hFF - src_color[23:16], 8'hFF - src_color[15:8]};
+            `ROP_BLEND_FUNC_DST_RGB:              factor_src_rgb = dst_color[31:8];
+            `ROP_BLEND_FUNC_ONE_MINUS_DST_RGB:    factor_src_rgb = {8'hFF - dst_color[31:24], 8'hFF - dst_color[23:16], 8'hFF - dst_color[15:8]};
+            `ROP_BLEND_FUNC_SRC_A:                factor_src_rgb = {src_color[7:0], src_color[7:0], src_color[7:0]};
+            `ROP_BLEND_FUNC_ONE_MINUS_SRC_A:      factor_src_rgb = {8'hFF - src_color[7:0], 8'hFF - src_color[7:0], 8'hFF - src_color[7:0]};
+            `ROP_BLEND_FUNC_DST_A:                factor_src_rgb = {dst_color[7:0], dst_color[7:0], dst_color[7:0]};
+            `ROP_BLEND_FUNC_ONE_MINUS_DST_A:      factor_src_rgb = {8'hFF - dst_color[7:0], 8'hFF - dst_color[7:0], 8'hFF - dst_color[7:0]};
+            `ROP_BLEND_FUNC_CONST_RGB:            factor_src_rgb = {const_red, const_green, const_blue};
+            `ROP_BLEND_FUNC_ONE_MINUS_CONST_RGB:  factor_src_rgb = {8'hFF - const_red, 8'hFF - const_green, 8'hFF - const_blue};
+            `ROP_BLEND_FUNC_CONST_A:              factor_src_rgb = {const_alpha, const_alpha, const_alpha};
+            `ROP_BLEND_FUNC_ONE_MINUS_CONST_A:    factor_src_rgb = {8'hFF - const_alpha, 8'hFF - const_alpha, 8'hFF - const_alpha};
+            `ROP_BLEND_FUNC_ALPHA_SAT:            factor_src_rgb = (src_color[7:0] < 8'hFF - dst_color[7:0]) ? src_color[7:0] : 8'hFF - dst_color[7:0];
             default:                                factor_src_rgb = {24{1'b1}};
         endcase
         case (reg_csrs.blend_func_src_a)
-            `ROP_BLEND_FACTOR_ZERO:                 factor_src_a = 8'h00;
-            `ROP_BLEND_FACTOR_ONE:                  factor_src_a = 8'hFF;
-            `ROP_BLEND_FACTOR_SRC_RGB:              factor_src_a = src_color[7:0];
-            `ROP_BLEND_FACTOR_ONE_MINUS_SRC_RGB:    factor_src_a = 8'hFF - src_color[7:0];
-            `ROP_BLEND_FACTOR_DST_RGB:              factor_src_a = dst_color[7:0];
-            `ROP_BLEND_FACTOR_ONE_MINUS_DST_RGB:    factor_src_a = 8'hFF - dst_color[7:0];
-            `ROP_BLEND_FACTOR_SRC_A:                factor_src_a = src_color[7:0];
-            `ROP_BLEND_FACTOR_ONE_MINUS_SRC_A:      factor_src_a = 8'hFF - src_color[7:0];
-            `ROP_BLEND_FACTOR_DST_A:                factor_src_a = dst_color[7:0];
-            `ROP_BLEND_FACTOR_ONE_MINUS_DST_A:      factor_src_a = 8'hFF - dst_color[7:0];
-            `ROP_BLEND_FACTOR_CONST_RGB:            factor_src_a = const_alpha;
-            `ROP_BLEND_FACTOR_ONE_MINUS_CONST_RGB:  factor_src_a = 8'hFF - const_alpha;
-            `ROP_BLEND_FACTOR_CONST_A:              factor_src_a = const_alpha;
-            `ROP_BLEND_FACTOR_ONE_MINUS_CONST_A:    factor_src_a = 8'hFF - const_alpha;
-            `ROP_BLEND_FACTOR_ALPHA_SAT:            factor_src_a = 8'hFF;
+            `ROP_BLEND_FUNC_ZERO:                 factor_src_a = 8'h00;
+            `ROP_BLEND_FUNC_ONE:                  factor_src_a = 8'hFF;
+            `ROP_BLEND_FUNC_SRC_RGB:              factor_src_a = src_color[7:0];
+            `ROP_BLEND_FUNC_ONE_MINUS_SRC_RGB:    factor_src_a = 8'hFF - src_color[7:0];
+            `ROP_BLEND_FUNC_DST_RGB:              factor_src_a = dst_color[7:0];
+            `ROP_BLEND_FUNC_ONE_MINUS_DST_RGB:    factor_src_a = 8'hFF - dst_color[7:0];
+            `ROP_BLEND_FUNC_SRC_A:                factor_src_a = src_color[7:0];
+            `ROP_BLEND_FUNC_ONE_MINUS_SRC_A:      factor_src_a = 8'hFF - src_color[7:0];
+            `ROP_BLEND_FUNC_DST_A:                factor_src_a = dst_color[7:0];
+            `ROP_BLEND_FUNC_ONE_MINUS_DST_A:      factor_src_a = 8'hFF - dst_color[7:0];
+            `ROP_BLEND_FUNC_CONST_RGB:            factor_src_a = const_alpha;
+            `ROP_BLEND_FUNC_ONE_MINUS_CONST_RGB:  factor_src_a = 8'hFF - const_alpha;
+            `ROP_BLEND_FUNC_CONST_A:              factor_src_a = const_alpha;
+            `ROP_BLEND_FUNC_ONE_MINUS_CONST_A:    factor_src_a = 8'hFF - const_alpha;
+            `ROP_BLEND_FUNC_ALPHA_SAT:            factor_src_a = 8'hFF;
             default:                                factor_src_a = {8{1'b1}};
         endcase
         case (reg_csrs.blend_func_dst_rgb)
-            `ROP_BLEND_FACTOR_ZERO:                 factor_dst_rgb = {24{1'b0}};
-            `ROP_BLEND_FACTOR_ONE:                  factor_dst_rgb = {24{1'b1}};
-            `ROP_BLEND_FACTOR_SRC_RGB:              factor_dst_rgb = src_color[31:8];
-            `ROP_BLEND_FACTOR_ONE_MINUS_SRC_RGB:    factor_dst_rgb = {8'hFF - src_color[31:24], 8'hFF - src_color[23:16], 8'hFF - src_color[15:8]};
-            `ROP_BLEND_FACTOR_DST_RGB:              factor_dst_rgb = dst_color[31:8];
-            `ROP_BLEND_FACTOR_ONE_MINUS_DST_RGB:    factor_dst_rgb = {8'hFF - dst_color[31:24], 8'hFF - dst_color[23:16], 8'hFF - dst_color[15:8]};
-            `ROP_BLEND_FACTOR_SRC_A:                factor_dst_rgb = {src_color[7:0], src_color[7:0], src_color[7:0]};
-            `ROP_BLEND_FACTOR_ONE_MINUS_SRC_A:      factor_dst_rgb = {8'hFF - src_color[7:0], 8'hFF - src_color[7:0], 8'hFF - src_color[7:0]};
-            `ROP_BLEND_FACTOR_DST_A:                factor_dst_rgb = {dst_color[7:0], dst_color[7:0], dst_color[7:0]};
-            `ROP_BLEND_FACTOR_ONE_MINUS_DST_A:      factor_dst_rgb = {8'hFF - dst_color[7:0], 8'hFF - dst_color[7:0], 8'hFF - dst_color[7:0]};
-            `ROP_BLEND_FACTOR_CONST_RGB:            factor_dst_rgb = {const_red, const_green, const_blue};
-            `ROP_BLEND_FACTOR_ONE_MINUS_CONST_RGB:  factor_dst_rgb = {8'hFF - const_red, 8'hFF - const_green, 8'hFF - const_blue};
-            `ROP_BLEND_FACTOR_CONST_A:              factor_dst_rgb = {const_alpha, const_alpha, const_alpha};
-            `ROP_BLEND_FACTOR_ONE_MINUS_CONST_A:    factor_dst_rgb = {8'hFF - const_alpha, 8'hFF - const_alpha, 8'hFF - const_alpha};
-            `ROP_BLEND_FACTOR_ALPHA_SAT:            factor_dst_rgb = (src_color[7:0] < 8'hFF - dst_color[7:0]) ? src_color[7:0] : 8'hFF - dst_color[7:0]; // forbidden
+            `ROP_BLEND_FUNC_ZERO:                 factor_dst_rgb = {24{1'b0}};
+            `ROP_BLEND_FUNC_ONE:                  factor_dst_rgb = {24{1'b1}};
+            `ROP_BLEND_FUNC_SRC_RGB:              factor_dst_rgb = src_color[31:8];
+            `ROP_BLEND_FUNC_ONE_MINUS_SRC_RGB:    factor_dst_rgb = {8'hFF - src_color[31:24], 8'hFF - src_color[23:16], 8'hFF - src_color[15:8]};
+            `ROP_BLEND_FUNC_DST_RGB:              factor_dst_rgb = dst_color[31:8];
+            `ROP_BLEND_FUNC_ONE_MINUS_DST_RGB:    factor_dst_rgb = {8'hFF - dst_color[31:24], 8'hFF - dst_color[23:16], 8'hFF - dst_color[15:8]};
+            `ROP_BLEND_FUNC_SRC_A:                factor_dst_rgb = {src_color[7:0], src_color[7:0], src_color[7:0]};
+            `ROP_BLEND_FUNC_ONE_MINUS_SRC_A:      factor_dst_rgb = {8'hFF - src_color[7:0], 8'hFF - src_color[7:0], 8'hFF - src_color[7:0]};
+            `ROP_BLEND_FUNC_DST_A:                factor_dst_rgb = {dst_color[7:0], dst_color[7:0], dst_color[7:0]};
+            `ROP_BLEND_FUNC_ONE_MINUS_DST_A:      factor_dst_rgb = {8'hFF - dst_color[7:0], 8'hFF - dst_color[7:0], 8'hFF - dst_color[7:0]};
+            `ROP_BLEND_FUNC_CONST_RGB:            factor_dst_rgb = {const_red, const_green, const_blue};
+            `ROP_BLEND_FUNC_ONE_MINUS_CONST_RGB:  factor_dst_rgb = {8'hFF - const_red, 8'hFF - const_green, 8'hFF - const_blue};
+            `ROP_BLEND_FUNC_CONST_A:              factor_dst_rgb = {const_alpha, const_alpha, const_alpha};
+            `ROP_BLEND_FUNC_ONE_MINUS_CONST_A:    factor_dst_rgb = {8'hFF - const_alpha, 8'hFF - const_alpha, 8'hFF - const_alpha};
+            `ROP_BLEND_FUNC_ALPHA_SAT:            factor_dst_rgb = (src_color[7:0] < 8'hFF - dst_color[7:0]) ? src_color[7:0] : 8'hFF - dst_color[7:0]; // forbidden
             default:                                factor_dst_rgb = {24{1'b0}};
         endcase
         case (reg_csrs.blend_func_dst_a)
-            `ROP_BLEND_FACTOR_ZERO:                 factor_dst_a = 8'h00;
-            `ROP_BLEND_FACTOR_ONE:                  factor_dst_a = 8'hFF;
-            `ROP_BLEND_FACTOR_SRC_RGB:              factor_dst_a = src_color[7:0];
-            `ROP_BLEND_FACTOR_ONE_MINUS_SRC_RGB:    factor_dst_a = 8'hFF - src_color[7:0];
-            `ROP_BLEND_FACTOR_DST_RGB:              factor_dst_a = dst_color[7:0];
-            `ROP_BLEND_FACTOR_ONE_MINUS_DST_RGB:    factor_dst_a = 8'hFF - dst_color[7:0];
-            `ROP_BLEND_FACTOR_SRC_A:                factor_dst_a = src_color[7:0];
-            `ROP_BLEND_FACTOR_ONE_MINUS_SRC_A:      factor_dst_a = 8'hFF - src_color[7:0];
-            `ROP_BLEND_FACTOR_DST_A:                factor_dst_a = dst_color[7:0];
-            `ROP_BLEND_FACTOR_ONE_MINUS_DST_A:      factor_dst_a = 8'hFF - dst_color[7:0];
-            `ROP_BLEND_FACTOR_CONST_RGB:            factor_dst_a = const_alpha;
-            `ROP_BLEND_FACTOR_ONE_MINUS_CONST_RGB:  factor_dst_a = 8'hFF - const_alpha;
-            `ROP_BLEND_FACTOR_CONST_A:              factor_dst_a = const_alpha;
-            `ROP_BLEND_FACTOR_ONE_MINUS_CONST_A:    factor_dst_a = 8'hFF - const_alpha;
-            `ROP_BLEND_FACTOR_ALPHA_SAT:            factor_dst_a = 8'hFF;
+            `ROP_BLEND_FUNC_ZERO:                 factor_dst_a = 8'h00;
+            `ROP_BLEND_FUNC_ONE:                  factor_dst_a = 8'hFF;
+            `ROP_BLEND_FUNC_SRC_RGB:              factor_dst_a = src_color[7:0];
+            `ROP_BLEND_FUNC_ONE_MINUS_SRC_RGB:    factor_dst_a = 8'hFF - src_color[7:0];
+            `ROP_BLEND_FUNC_DST_RGB:              factor_dst_a = dst_color[7:0];
+            `ROP_BLEND_FUNC_ONE_MINUS_DST_RGB:    factor_dst_a = 8'hFF - dst_color[7:0];
+            `ROP_BLEND_FUNC_SRC_A:                factor_dst_a = src_color[7:0];
+            `ROP_BLEND_FUNC_ONE_MINUS_SRC_A:      factor_dst_a = 8'hFF - src_color[7:0];
+            `ROP_BLEND_FUNC_DST_A:                factor_dst_a = dst_color[7:0];
+            `ROP_BLEND_FUNC_ONE_MINUS_DST_A:      factor_dst_a = 8'hFF - dst_color[7:0];
+            `ROP_BLEND_FUNC_CONST_RGB:            factor_dst_a = const_alpha;
+            `ROP_BLEND_FUNC_ONE_MINUS_CONST_RGB:  factor_dst_a = 8'hFF - const_alpha;
+            `ROP_BLEND_FUNC_CONST_A:              factor_dst_a = const_alpha;
+            `ROP_BLEND_FUNC_ONE_MINUS_CONST_A:    factor_dst_a = 8'hFF - const_alpha;
+            `ROP_BLEND_FUNC_ALPHA_SAT:            factor_dst_a = 8'hFF;
             default:                                factor_dst_a = 8'h00;
         endcase
     end
@@ -154,7 +154,7 @@ module VX_rop_blend #(
         .color_out(mult_add_color_out)
     );
 
-    VX_rop_min_max #(
+    VX_rop_blend_minmax #(
     ) min_max (
         .src_color(pipe_src_color),
         .dst_color(pipe_dst_color),
@@ -174,13 +174,7 @@ module VX_rop_blend #(
         // Blend Equations
         // RGB Component
         case (pipe_blend_mode_rgb)
-            `ROP_BLEND_MODE_FUNC_ADD: begin
-                color_out[31:8] = mult_add_color_out[31:8];
-                end
-            `ROP_BLEND_MODE_FUNC_SUBTRACT: begin
-                color_out[31:8] = mult_add_color_out[31:8];
-                end
-            `ROP_BLEND_MODE_FUNC_REVERSE_SUBTRACT: begin
+            `ROP_BLEND_MODE_ADD, `ROP_BLEND_MODE_SUB, `ROP_BLEND_MODE_REV_SUB: begin
                 color_out[31:8] = mult_add_color_out[31:8];
                 end
             `ROP_BLEND_MODE_MIN: begin
@@ -189,7 +183,7 @@ module VX_rop_blend #(
             `ROP_BLEND_MODE_MAX: begin
                 color_out[31:8] = max_color_out[31:8];
                 end
-            `ROP_BLEND_MODE_LOGIC_OP: begin
+            `ROP_BLEND_MODE_LOGICOP: begin
                 color_out[31:8] = rop_logic_color_out[31:8];
                 end
             default: begin
@@ -198,22 +192,16 @@ module VX_rop_blend #(
         endcase
         // Alpha Component
         case (pipe_blend_mode_a)
-            `ROP_BLEND_MODE_FUNC_ADD: begin
-                color_out[7:0] = mult_add_color_out[7:0];
-                end
-            `ROP_BLEND_MODE_FUNC_SUBTRACT: begin
-                color_out[7:0] = mult_add_color_out[7:0];
-                end
-            `ROP_BLEND_MODE_FUNC_REVERSE_SUBTRACT: begin
+            `ROP_BLEND_MODE_ADD, `ROP_BLEND_MODE_SUB, `ROP_BLEND_MODE_REV_SUB: begin
                 color_out[7:0] = mult_add_color_out[7:0];
                 end
             `ROP_BLEND_MODE_MIN: begin
-                color_out[7:0] = min_color_out[7:0];
+                color_out[31:8] = min_color_out[31:8];
                 end
             `ROP_BLEND_MODE_MAX: begin
-                color_out[7:0] = max_color_out[7:0];
+                color_out[31:8] = max_color_out[31:8];
                 end
-            `ROP_BLEND_MODE_LOGIC_OP: begin
+            `ROP_BLEND_MODE_LOGICOP: begin
                 color_out[7:0] = rop_logic_color_out[7:0];
                 end
             default: begin

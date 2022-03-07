@@ -1,6 +1,6 @@
 `include "VX_rop_define.vh"
 
-module VX_rop_mult_add #(  
+module VX_rop_blend_multadd #(  
     parameter CORE_ID = 0
 ) (
     // Mode used to determine which values to multiply and whether to use addition or subtraction.

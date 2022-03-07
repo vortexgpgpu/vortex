@@ -1,6 +1,6 @@
 `include "VX_rop_define.vh"
 
-module VX_rop_min_max #(  
+module VX_rop_blend_minmax #(  
     parameter CORE_ID = 0
 ) (
     input wire [31:0] src_color,
