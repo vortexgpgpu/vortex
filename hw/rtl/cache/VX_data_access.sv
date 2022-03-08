@@ -53,10 +53,12 @@ module VX_data_access #(
     `UNUSED_VAR (read)
 
     localparam BYTEENW = WRITE_ENABLE ? CACHE_LINE_SIZE : 1;
+    //localparam n_BYTEENW = 1;
 
     wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] rdata;
     wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] wdata;
     wire [BYTEENW-1:0] wren;
+    //wire [n_BYTEENW-1:0] n_wren;
 
     wire [`LINE_SELECT_BITS-1:0] line_addr = addr[`LINE_SELECT_BITS-1:0];
 
@@ -98,6 +100,7 @@ module VX_data_access #(
         `UNUSED_VAR (write_data)
         assign wdata = fill_data;
         assign wren  = fill;
+        //assign n_wren = fill;
     end
 
     //Swetha: adding associativity to data access
@@ -108,11 +111,35 @@ module VX_data_access #(
     localparam [`WAY_SEL_WIDTH-1:0] which_way = 0; //dummy assignment  
 
     generate
+        genvar m;
+        for (m = 0; m < WAYS; m = m+1) begin
+            assign which_way = tag_match_way[m] ? m : 'z; 
+        end
+    endgenerate
+
+    generate
         genvar j;
-        for (j = 0; j < WAYS; j = j+1) begin
-            assign which_way = tag_match_way[j] ? j : 'z; 
+        for (j = 0; j < which_way; j = j+1) begin
+            //assign which_way = tag_match_way[j] ? j : 'z; 
             //assign wren = (tag_match_way[j] == 1'b0) ? {BYTEENW{1'b0}} : wren;
             VX_sp_ram #(
+                .DATAW      (`CACHE_LINE_WIDTH),
+                .SIZE       (`LINES_PER_BANK),
+                .BYTEENW    (1),
+                .NO_RWCHECK (1)
+            ) data_store (
+                .clk   (clk),
+                .addr  (line_addr),
+                //Swetha: wren is disabled so that data is not written into spram
+                .wren  (0),  //& {BYTEENW{tag_match_way[j]}}
+                .wdata (wdata),
+                //Swetha: modified this for associativity 
+                .rdata (read_data_local[j]) 
+            );
+        end
+    endgenerate
+
+     VX_sp_ram #(
                 .DATAW      (`CACHE_LINE_WIDTH),
                 .SIZE       (`LINES_PER_BANK),
                 .BYTEENW    (BYTEENW),
@@ -124,10 +151,32 @@ module VX_data_access #(
                 .wren  (wren),  //& {BYTEENW{tag_match_way[j]}}
                 .wdata (wdata),
                 //Swetha: modified this for associativity 
-                .rdata (read_data_local[j]) 
+                .rdata (read_data_local[which_way]) 
+            );
+
+localparam temp = which_way + 1; 
+    generate
+        genvar k;
+        for (k = temp; k < WAYS; k = k+1) begin
+            //assign which_way = tag_match_way[j] ? j : 'z; 
+            //assign wren = (tag_match_way[j] == 1'b0) ? {BYTEENW{1'b0}} : wren;
+            VX_sp_ram #(
+                .DATAW      (`CACHE_LINE_WIDTH),
+                .SIZE       (`LINES_PER_BANK),
+                .BYTEENW    (1),
+                .NO_RWCHECK (1)
+            ) data_store (
+                .clk   (clk),
+                .addr  (line_addr),
+                //Swetha: wren is disabled so that data is not written into spram
+                .wren  (0),  //& {BYTEENW{tag_match_way[j]}}
+                .wdata (wdata),
+                //Swetha: modified this for associativity 
+                .rdata (read_data_local[k]) 
             );
         end
     endgenerate
+   
 
     //Approach 1: 
     //assign rdata = read_data_local[which_way];
