@@ -42,21 +42,17 @@ class MemSim {
 
         mem_req_t *mem_req_;
         mem_rsp_t *mem_rsp_;
-        
         std::vector<mem_req_t*> ram_;
 
         void eval();
+        void step();
+        void reset();
+        void attach_core();
+        void attach_ram();
 
     public:
         MemSim();
         virtual ~MemSim();
 
-        void step();
-        void reset();
-
-        void attach_core();
-        void attach_ram();
-
-        void run();
-        
+        void run();  
 };
