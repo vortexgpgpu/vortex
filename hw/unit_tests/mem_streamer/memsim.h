@@ -13,13 +13,13 @@
 
 
 typedef struct {
-    bool        valid;
+    uint8_t     valid;
     bool        rw;
     uint8_t     byteen;
     uint32_t    addr;
     uint32_t    data;
     char        tag;
-    double      tick;
+    double      cycles_left;
     bool     ready;
 } mem_req_t;
 
@@ -41,6 +41,7 @@ class MemSim {
         mem_req_t *mem_req_;
         mem_rsp_t *mem_rsp_;
         std::vector<mem_req_t> ram_;
+        bool mem_rsp_active_;
 
         void eval();
         void step();
