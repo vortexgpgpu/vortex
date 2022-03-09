@@ -1,6 +1,7 @@
 `include "VX_platform.vh"
 
-`TRACING_OFF
+// Test memory stream reader step by step
+
 module VX_mem_streamer #(
     parameter NUM_REQS = 4,
 	parameter ADDRW = 32,	
@@ -9,7 +10,7 @@ module VX_mem_streamer #(
 	parameter WORD_SIZE = 4,
 	parameter QUEUE_SIZE = 16,
 	parameter QUEUE_ADDRW = `CLOG2(QUEUE_SIZE),
-	parameter PARTIAL_RESPONSE = 0
+	parameter PARTIAL_RESPONSE = 1
 ) (
     input  wire clk,
     input  wire reset,
@@ -48,7 +49,7 @@ module VX_mem_streamer #(
 	input wire 								rsp_ready
   );
 
-	localparam RSPW = 1 + NUM_REQS + (NUM_REQS * DATAW) + TAGW;
+	localparam RSPW = 1 + NUM_REQS + (NUM_REQS * DATAW);
 
 	// Detect duplicate addresses
 	wire [NUM_REQS-2:0] addr_matches;
@@ -58,42 +59,49 @@ module VX_mem_streamer #(
 	// Pending queue
 	wire [QUEUE_ADDRW-1:0] 	pq_waddr;
 	wire 					pq_push;
-	wire [QUEUE_ADDRW-1:0] 	pq_raddr;
 	wire 					pq_pop;
+	wire [QUEUE_ADDRW-1:0] 	pq_raddr;
 	wire 					pq_full;
+	wire 					pq_empty;
 
-	wire 							pq_req_valid;
-	wire 							pq_req_rw, 		reqq_rw;
-	wire [NUM_REQS-1:0] 			pq_req_mask, 	reqq_mask;
-	wire [WORD_SIZE-1:0] 			pq_req_byteen, 	reqq_byteen;
-	wire [NUM_REQS-1:0][ADDRW-1:0] 	pq_req_addr, 	reqq_addr;
-	wire [NUM_REQS-1:0][DATAW-1:0] 	pq_req_data, 	reqq_data;
+	wire 							pq_req_rw;	
+	wire [NUM_REQS-1:0] 			pq_req_mask; 	
+	wire [WORD_SIZE-1:0] 			pq_req_byteen; 	
+	wire [NUM_REQS-1:0][ADDRW-1:0] 	pq_req_addr; 	
+	wire [NUM_REQS-1:0][DATAW-1:0] 	pq_req_data; 	
 	wire [TAGW-1:0] 				pq_req_tag;
-	wire [QUEUE_ADDRW-1:0]			reqq_tag;
 
 	// Index queue
 	wire [QUEUE_ADDRW-1:0] 	iq_raddr;
+	wire 					iq_push;
 	wire 					iq_pop;
 	wire 					iq_full;
+	wire 					iq_empty;
 
 	// Memory request
-	wire [NUM_REQS-1:0] mem_req_fire;
-	wire 				mem_req_new;
-	reg  [NUM_REQS-1:0] req_sent_mask;
-	wire [NUM_REQS-1:0] req_sent_mask_n;
-	wire req_sent_all;
+	wire 									mreq_en;	
+	wire [NUM_REQS-1:0] 					mreq_valid;
+	wire [NUM_REQS-1:0] 					mreq_rw;
+	wire [NUM_REQS-1:0][WORD_SIZE-1:0] 		mreq_byteen;
+	wire [NUM_REQS-1:0][ADDRW-1:0] 			mreq_addr;
+	wire [NUM_REQS-1:0][DATAW-1:0] 			mreq_data;
+	wire [NUM_REQS-1:0][QUEUE_ADDRW-1:0] 	mreq_tag;
+
+	wire [NUM_REQS-1:0] 					mem_req_fire;
+	wire [NUM_REQS-1:0] 					mem_req_mask;
+	reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0] 	req_sent_mask;
+	wire [NUM_REQS-1:0] 					req_sent_mask_n;
+	wire 									req_sent_all;
 
 	// Memory response
-	wire 								mem_rsp_fire;
-	reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0]	rsp_rem_mask;
-	wire [NUM_REQS-1:0] 				rsp_rem_mask_n;
+	wire 									rsp_en;
+	reg  [QUEUE_SIZE-1:0][RSPW-1:0]			rsp;
+	wire [RSPW-1:0] 						rsp_n;
+	wire 									mem_rsp_fire;
+	reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0]		rsp_rem_mask;
+	wire [NUM_REQS-1:0] 					rsp_rem_mask_n;
 
-	// Response gather
-	reg  [QUEUE_SIZE-1:0][RSPW-1:0] rg_rsp;
-	wire [RSPW-1:0] rg_rsp_n;
-
-	wire req_en;
-	wire rsp_en;
+	//////////////////////////////////////////////////////////////////
 
 	// Detect duplicate addresses
 	for(genvar i = 0; i < NUM_REQS-1; i++) begin
@@ -103,19 +111,17 @@ module VX_mem_streamer #(
 	assign req_dup = req_mask[0] && (& addr_matches);
 	assign req_dup_mask = req_mask & {{(NUM_REQS-1){~req_dup}}, 1'b1};
 
-	// Clear entry in PQ when all responses come back
-	assign pq_pop = (mem_rsp_fire && (0 == rsp_rem_mask_n)) || req_rw;
+	//////////////////////////////////////////////////////////////////
+
+	// Save incoming requests into a pending queue
 
 	// Select entry in PQ
 	assign pq_raddr = mem_rsp_fire ? mem_rsp_tag : iq_raddr;
+	assign pq_push = req_valid && ~pq_full && ~iq_full;
+	assign req_ready = ~pq_full;
 
-	assign pq_push = ~pq_full || ~iq_full;
-
-	assign req_ready = pq_push;
-				
-	// Save incoming requests into a PQ
 	VX_index_buffer #(
-		.DATAW	(1 + 1 + NUM_REQS + WORD_SIZE + (NUM_REQS * ADDRW) + (NUM_REQS * DATAW) + TAGW),
+		.DATAW	(1 + NUM_REQS + WORD_SIZE + (NUM_REQS * ADDRW) + (NUM_REQS * DATAW) + TAGW),
 		.SIZE	(QUEUE_SIZE)
 	) pending_queue (
 		.clk			(clk),
@@ -123,109 +129,121 @@ module VX_mem_streamer #(
 		.write_addr		(pq_waddr),
 		.acquire_slot	(pq_push),
 		.read_addr		(pq_raddr),
-		.write_data		({req_valid,    req_rw,    req_dup_mask, req_byteen,    req_addr,    req_data,    req_tag}),
-		.read_data		({pq_req_valid, pq_req_rw, pq_req_mask,  pq_req_byteen, pq_req_addr, pq_req_data, pq_req_tag}),
+		.write_data		({req_rw,     req_dup_mask,  req_byteen,    req_addr,    req_data,    req_tag}),
+		.read_data		({pq_req_rw,  pq_req_mask,   pq_req_byteen, pq_req_addr, pq_req_data, pq_req_tag}),
 		.release_addr	(pq_raddr),
 		.release_slot	(pq_pop),
 		.full			(pq_full),
-		`UNUSED_PIN 	(empty)
+		.empty			(pq_empty)
 	);
 
-	// Clear entry from IQ when all requests have been sent
-	assign iq_pop = req_sent_all;
+	//////////////////////////////////////////////////////////////////
 
-	// Save PQ addresses into an IQ
+	// Save write address of pending queue into an index queue
+
+	assign iq_push = req_valid && ~iq_full;
+
 	VX_fifo_queue #(
 		.DATAW	(QUEUE_ADDRW),
 		.SIZE	(QUEUE_SIZE)
 	) idx_queue (
 		.clk		(clk),
 		.reset		(reset),
-		.push		(pq_push),
+		.push		(iq_push),
 		.pop		(iq_pop),
 		.data_in	(pq_waddr),
 		.data_out	(iq_raddr),
 		.full		(iq_full),
-		`UNUSED_PIN (empty),
+		.empty 		(iq_empty),
 		`UNUSED_PIN (alm_full),
 		`UNUSED_PIN (alm_empty),
 		`UNUSED_PIN (size)
 	);
 
-	// Memory response
-	// TODO: Fix mem_rsp_ready
-	assign mem_rsp_ready = ~rsp_ready;
-	assign mem_rsp_fire = mem_rsp_valid && mem_rsp_ready;
-	assign rsp_rem_mask_n = rsp_rem_mask[pq_raddr] & ~mem_rsp_mask;
-	assign rg_rsp_n = rg_rsp[pq_raddr];
+	//////////////////////////////////////////////////////////////////
 
+	// Memory response
+	assign mem_rsp_ready = 1'b1;
+	assign mem_rsp_fire = mem_rsp_valid && mem_rsp_ready;
+	assign rsp_rem_mask_n = rsp_rem_mask[pq_waddr] & ~mem_rsp_mask;
+
+	// Evaluate remaining responses
 	always @(posedge clk) begin
+		if (reset) begin
+			rsp_rem_mask <= 0;
+		end
 		if (pq_push) begin
 			rsp_rem_mask[pq_waddr] <= req_dup_mask;
-			rg_rsp[pq_waddr] <= 0;
 		end
 		if (mem_rsp_fire) begin
-			rsp_rem_mask[pq_raddr]	<= rsp_rem_mask_n;
-			rg_rsp[pq_raddr] <=  rg_rsp_n | {mem_rsp_valid, mem_rsp_mask, mem_rsp_data, pq_req_tag};
+			rsp_rem_mask[pq_raddr] <= rsp_rem_mask_n;
 		end
 	end
 
-	// Stall request pipeline in case of an invalid request
-	assign req_en = pq_req_valid;
+	// Store response till ready to send
+	assign rsp_n = rsp[pq_waddr] | {mem_rsp_valid, mem_rsp_mask, mem_rsp_data};
 
-	// TODO:
-	// Stall logic if the host is not ready to receive a response
+	always @(posedge clk) begin
+		if (reset) begin
+			rsp <= 0;
+		end
+		if(mem_rsp_fire) begin
+			rsp[pq_raddr] <= rsp_n;
+		end
+	end
 
-	// Partial response
-	assign rsp_en = PARTIAL_RESPONSE ? mem_rsp_fire : (0 == rsp_rem_mask_n);
-
-	VX_pipe_register #(
-		.DATAW	(1 + NUM_REQS + WORD_SIZE + (NUM_REQS * ADDRW) + (NUM_REQS * DATAW) + QUEUE_ADDRW),
-		.RESETW (1)
-	) req_pipe_reg (
-		.clk		(clk),
-		.reset		(reset),
-		.enable		(req_en),
-		.data_in	({pq_req_rw, pq_req_mask, pq_req_byteen, pq_req_addr, pq_req_data, pq_raddr}),
-		.data_out	({reqq_rw,    reqq_mask,    reqq_byteen,    reqq_addr,    reqq_data,    reqq_tag})
-	);
+	assign rsp_en = ((PARTIAL_RESPONSE) ? rsp_n[RSPW-1] : (0 == rsp_rem_mask_n)) && rsp_ready;
 
 	VX_pipe_register #(
-		.DATAW	(1 + NUM_REQS + (NUM_REQS * DATAW) + TAGW),
+		.DATAW	(1 + NUM_REQS + (NUM_REQS * DATAW) + TAGW + 1),
 		.RESETW (1)
 	) rsp_pipe_reg (
 		.clk		(clk),
 		.reset		(reset),
 		.enable		(rsp_en),
-		.data_in	(rg_rsp_n),
-		.data_out	({rsp_valid, rsp_mask, rsp_data, rsp_tag})
+		.data_in	({rsp_n, pq_req_tag, rsp_en & ~pq_empty}),
+		.data_out	({rsp_valid, rsp_mask, rsp_data, rsp_tag, pq_pop})
 	);
 
-	// Memory request
-	assign mem_req_valid 	= reqq_mask & ~req_sent_mask & {NUM_REQS{req_sent_all}};
-	assign mem_req_rw 		= {NUM_REQS{reqq_rw}};
-	assign mem_req_addr 	= reqq_addr;
-	assign mem_req_byteen 	= {NUM_REQS{reqq_byteen}};
-	assign mem_req_data 	= reqq_data;
-	assign mem_req_tag 		= {NUM_REQS{reqq_tag}};
+	//////////////////////////////////////////////////////////////////
 
-	assign mem_req_fire = mem_req_valid & mem_req_ready;
-    assign mem_req_new = &(mem_req_ready | req_sent_mask | ~req_mask);
-	assign req_sent_mask_n = req_sent_mask | mem_req_fire;
-	assign req_sent_all = (req_mask == req_sent_mask);
+	// Memory request
+	assign mreq_valid 	= pq_req_mask & ~req_sent_mask[pq_raddr];
+	assign mreq_rw 	    = {NUM_REQS{pq_req_rw}};
+	assign mreq_byteen  = {NUM_REQS{pq_req_byteen}};
+	assign mreq_addr 	= pq_req_addr;
+	assign mreq_data 	= pq_req_data;
+	assign mreq_tag 	= {NUM_REQS{pq_raddr}};
+
+	assign mreq_en = (| mreq_valid);
+
+	VX_pipe_register #(
+		.DATAW	(NUM_REQS + NUM_REQS + (NUM_REQS * WORD_SIZE) + (NUM_REQS * ADDRW) + (NUM_REQS * DATAW) + (NUM_REQS * QUEUE_ADDRW) + NUM_REQS + 1),
+		.RESETW (1)
+	) req_pipe_reg (
+		.clk		(clk),
+		.reset		(reset),
+		.enable		(mreq_en),
+		.data_in	({mreq_valid,    mreq_rw,    mreq_byteen,    mreq_addr,    mreq_data,    mreq_tag,    pq_req_mask,  req_sent_all & ~iq_empty}),
+		.data_out	({mem_req_valid, mem_req_rw, mem_req_byteen, mem_req_addr, mem_req_data, mem_req_tag, mem_req_mask, iq_pop})
+	);
+
+	assign mem_req_fire 	= mem_req_valid & mem_req_ready;
+	assign req_sent_mask_n 	= req_sent_mask[mem_req_tag[0 +: QUEUE_ADDRW]] | mem_req_fire;
+	assign req_sent_all 	= (| mem_req_fire) && (req_sent_mask_n == mem_req_mask);
 
 	always @(posedge clk) begin
 		if (reset) begin
 			req_sent_mask <= 0;
 		end else begin
-			if(mem_req_new) begin
-				req_sent_mask <= 0;
-			end
-			else begin
-				req_sent_mask <= req_sent_mask_n;
+			if (req_sent_all) begin
+				req_sent_mask[mem_req_tag[0 +: QUEUE_ADDRW]] <= 0;
+			end else begin
+				req_sent_mask[mem_req_tag[0 +: QUEUE_ADDRW]] <= req_sent_mask_n;
 			end
 		end
 	end
 
+	//////////////////////////////////////////////////////////////////
+
 endmodule
-`TRACING_ON

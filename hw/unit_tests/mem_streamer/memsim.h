@@ -1,37 +1,49 @@
 #pragma once
 
 #include <iostream>
-#include <map>
+#include <unordered_map>
+#include <vector>
 #include <verilated.h>
 #include <verilated_vcd_c.h>
-#include "VVX_mem_streamer_test.h"
-#include "VVX_mem_streamer_test__Syms.h"
+#include "VVX_mem_streamer.h"
+#include "VVX_mem_streamer__Syms.h"
 
-// Input request
-typedef struct {
-    uint8_t valid;
-    uint8_t rw;
-    uint8_t mask;
-    uint8_t byteen;
-    uint32_t addr;
-    uint32_t data;
-    uint32_t tag;
-    uint8_t ready;
-} req_t;
+#define SIM_TIME 50
+#define CYCLE_DELAY 4
 
-// Output response
+
 typedef struct {
-    uint8_t valid;
-    uint8_t mask;
-    uint32_t* data;
-    uint32_t tag;
-    uint8_t ready;
-} rsp_t;
+    bool        valid;
+    bool        rw;
+    uint8_t     byteen;
+    uint32_t    addr;
+    uint32_t    data;
+    char        tag;
+    double      tick;
+
+    uint8_t     ready;
+} mem_req_t;
+
+typedef struct {
+    bool        valid;
+    uint8_t     mask;
+    uint32_t    data;
+    char        tag;
+
+    bool        ready;
+} mem_rsp_t;
+
+int generate_rand (int min, int max);
 
 class MemSim {
     private:
-        VVX_mem_streamer_test *msu_;
+        VVX_mem_streamer *msu_;
         VerilatedVcdC *trace_;
+
+        mem_req_t *mem_req_;
+        mem_rsp_t *mem_rsp_;
+        
+        std::vector<mem_req_t*> ram_;
 
         void eval();
 
@@ -41,5 +53,10 @@ class MemSim {
 
         void step();
         void reset();
-        void set_core_req(req_t *req);
+
+        void attach_core();
+        void attach_ram();
+
+        void run();
+        
 };

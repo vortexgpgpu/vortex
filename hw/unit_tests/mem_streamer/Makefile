@@ -2,8 +2,8 @@
 # Makefile to compile and test the memory stream unit
 #---------------------------------------------------------
 
-TOP = VX_mem_streamer_test
-PARAMS += -GNUM_REQS=4 -GADDRW=8 -GDATAW=8 -GTAGW=8 -GWORD_SIZE=1 -GQUEUE_SIZE=4 
+TOP = VX_mem_streamer
+PARAMS += -GNUM_REQS=4 -GADDRW=8 -GDATAW=8 -GTAGW=8 -GWORD_SIZE=1 -GQUEUE_SIZE=4
 
 RTL_DIR = ../../rtl
 DPI_DIR = ../../dpi
@@ -24,7 +24,7 @@ VL_FLAGS += $(PARAMS)
 SRCS += memsim.cpp $(DPI_DIR)/util_dpi.cpp
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors -Wno-array-bounds -Wno-maybe-uninitialized
-CXXFLAGS += -I../../../dpi
+CXXFLAGS += -I../../../dpi -I../../../
 
 default: run
 
@@ -46,7 +46,7 @@ run: build
 waves: trace.vcd
 	@echo 
 	@echo "### TRACE ###"
-	gtkwave trace.vcd
+	gtkwave -o trace.vcd
 
 clean:
 	@echo
