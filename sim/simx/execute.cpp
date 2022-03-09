@@ -1444,8 +1444,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           auto depth = rsdata[t][1].i;
           auto x_y = core_->raster_srv_->csr_read(id_, t, CSR_RASTER_X_Y);
           auto mask_pid = core_->raster_srv_->csr_read(id_, t, CSR_RASTER_MASK_PID);
-          auto x = x_y & 0xffff;
-          auto y = x_y > 16;
+          auto x    = x_y & 0xffff;
+          auto y    = x_y >> 16;
           auto mask = mask_pid & 0xf;          
           core_->rop_srv_->write(x, y, mask, color, depth);
         }
@@ -1495,6 +1495,23 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         }
         rd_write = true;
       } break;
+      case 1: { // INTERP
+        trace->exe_type = ExeType::GPU; 
+        trace->gpu_type = GpuType::INTERP;
+        trace->used_iregs.set(rsrc0);
+        trace->used_iregs.set(rsrc1);
+        trace->used_iregs.set(rsrc2);
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t))
+            continue;
+          auto a = rsdata[t][0].i;
+          auto b = rsdata[t][1].i;
+          auto c = rsdata[t][2].i;
+          auto result = core_->raster_srv_->interpolate(id_, t, a, b, c);
+          rddata[t].i = result;
+        }
+        rd_write = true;
+      } break;
       case 2: { // IMADD
         trace->exe_type = ExeType::ALU;
         trace->alu_type = AluType::IMADD;
@@ -1511,25 +1528,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       default:
         std::abort();
       }
-      break;      
-    case 2: { // INTERP
-        trace->exe_type = ExeType::GPU; 
-        trace->gpu_type = GpuType::INTERP;
-        trace->used_iregs.set(rsrc0);
-        trace->used_iregs.set(rsrc1);
-        trace->used_iregs.set(rsrc2);
-        for (uint32_t t = 0; t < num_threads; ++t) {
-          if (!tmask_.test(t))
-            continue;        
-          auto q = func2;
-          auto a = rsdata[t][0].i;
-          auto b = rsdata[t][1].i;
-          auto c = rsdata[t][2].i;
-          auto result = core_->raster_srv_->interpolate(id_, t, q, a, b, c);
-          rddata[t].i = result;
-        }
-        rd_write = true;
-      } break;
+      break;    
     default:
       std::abort();
     }

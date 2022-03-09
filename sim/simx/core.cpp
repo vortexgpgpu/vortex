@@ -19,7 +19,7 @@ Core::Core(const SimContext& ctx,
            const DCRS &dcrs,
            RasterUnit::Ptr raster_unit,
            RopUnit::Ptr rop_unit)
-    : SimObject(ctx, "Core")
+    : SimObject(ctx, "core")
     , MemRspPort(this)
     , MemReqPort(this)
     , id_(id)
@@ -78,7 +78,7 @@ Core::Core(const SimContext& ctx,
         DCACHE_MSHR_SIZE,       // mshr
         4,                      // pipeline latency
       }))
-    , sharedmem_(SharedMem::Create("smem", SharedMem::Config{
+    , sharedmem_(SharedMem::Create("shared_mem", SharedMem::Config{
         uint32_t(SMEM_LOCAL_SIZE) * arch.num_warps() * arch.num_threads(),
         arch.num_threads(), 
         arch.num_threads(), 
@@ -95,12 +95,12 @@ Core::Core(const SimContext& ctx,
     warps_.at(i) = std::make_shared<Warp>(this, i);
   }
 
-  tex_unit_ = TexUnit::Create("tex", TexUnit::Config{
+  tex_unit_ = TexUnit::Create("tex_unit", TexUnit::Config{
     1, // address latency
     2, // sampler latency
   }, this);
-  raster_srv_ = RasterSrv::Create("rastersrv", this, raster_unit);
-  rop_srv_ = RopSrv::Create("ropsrv", this, rop_unit);
+  raster_srv_ = RasterSrv::Create("raster_srv", this, raster_unit);
+  rop_srv_ = RopSrv::Create("rop_srv", this, rop_unit);
 
   // register execute units
   exe_units_.at((int)ExeType::NOP) = SimPlatform::instance().create_object<NopUnit>(this);

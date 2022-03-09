@@ -7,22 +7,36 @@
 
 using namespace vortex;
 
-using fixed23_t = cocogfx::TFixed<23>;
+using fixed24_t = cocogfx::TFixed<24>;
 
-using vec2_fx2_t = cocogfx::TVector2<fixed23_t>;
+using vec2_fx2_t = cocogfx::TVector2<fixed24_t>;
 
-struct csr_t {
-  uint32_t frag;
-  RasterUnit::Stamp *stamp;
+class CSR {
+private:
+  RasterUnit::Stamp *stamp_;
+
+public:
+  uint32_t   frag;  
   vec2_fx2_t gradients[4];
 
-  csr_t(RasterUnit::Stamp *stamp = nullptr) 
-    : stamp(stamp) 
+  CSR() 
+    : stamp_(nullptr) 
   {}
   
-  ~csr_t() { 
-    delete stamp; 
+  ~CSR() { 
+    if (stamp_ )
+      delete stamp_; 
   }
+
+  void set_stamp(RasterUnit::Stamp *stamp) {
+    if (stamp_ )
+      delete stamp_; 
+    stamp_ = stamp;
+  }
+
+  RasterUnit::Stamp* get_stamp() const {
+    return stamp_;
+  } 
 };
 
 class RasterSrv::Impl {
@@ -31,7 +45,7 @@ private:
     Core* core_;      
     const Arch& arch_;
     RasterUnit::Ptr raster_unit_;    
-    std::vector<csr_t> csrs_;
+    std::vector<CSR> csrs_;
     PerfStats perf_stats_;
 
 public:
@@ -42,7 +56,7 @@ public:
       , core_(core)
       , arch_(core->arch())
       , raster_unit_(raster_unit)
-      , csrs_(core->arch().num_cores() * core->arch().num_warps() * core->arch().num_threads())
+      , csrs_(core->arch().num_warps() * core->arch().num_threads())
     {}
 
     ~Impl() {}
@@ -56,17 +70,20 @@ public:
       auto& csr = csrs_.at(ltid);
       switch (addr) {
       case CSR_RASTER_X_Y:
-        return (csr.stamp->y << 16) | csr.stamp->x;
+        return (csr.get_stamp()->y << 16) | csr.get_stamp()->x;
       case CSR_RASTER_MASK_PID:
-        return (csr.stamp->mask << 4) | csr.stamp->pid;
+        return (csr.get_stamp()->pid << 4) | csr.get_stamp()->mask;
       case CSR_RASTER_FRAG:
         return csr.frag;
       case CSR_RASTER_BCOORD_X:
-        return csr.stamp->bcoords[csr.frag].x.data();
+        printf("bcoord.x=%d\n", csr.get_stamp()->bcoords[csr.frag].x.data());
+        return csr.get_stamp()->bcoords[csr.frag].x.data();
       case CSR_RASTER_BCOORD_Y:
-        return csr.stamp->bcoords[csr.frag].y.data();
+        printf("bcoord.y=%d\n", csr.get_stamp()->bcoords[csr.frag].y.data());
+        return csr.get_stamp()->bcoords[csr.frag].y.data();
       case CSR_RASTER_BCOORD_Z:
-        return csr.stamp->bcoords[csr.frag].z.data();
+        printf("bcoord.z=%d\n", csr.get_stamp()->bcoords[csr.frag].z.data());
+        return csr.get_stamp()->bcoords[csr.frag].z.data();
       case CSR_RASTER_GRAD_X:
         return csr.gradients[csr.frag].x.data();
       case CSR_RASTER_GRAD_Y:
@@ -85,10 +102,12 @@ public:
         csr.frag = value;
         break;
       case CSR_RASTER_GRAD_X:
-        csr.gradients[csr.frag].x = fixed23_t::make(value);
+        csr.gradients[csr.frag].x = fixed24_t::make(value);
+        printf("grad.x=%d\n", csr.gradients[csr.frag].x.data());
         break;
       case CSR_RASTER_GRAD_Y:
-        csr.gradients[csr.frag].y = fixed23_t::make(value);
+        csr.gradients[csr.frag].y = fixed24_t::make(value);
+        printf("grad.y=%d\n", csr.gradients[csr.frag].y.data());
         break;
       default:
         std::abort();
@@ -101,26 +120,31 @@ public:
         return 0;      
       uint32_t ltid = wid * arch_.num_threads() + tid;
       auto& csr = csrs_.at(ltid);
-      if (csr.stamp) {
-        delete csr.stamp;
-      }
-      csr.stamp = stamp;
+      csr.set_stamp(stamp);
       return (stamp->pid << 1) | 1;
     }
 
-    int32_t interpolate(uint32_t wid, uint32_t tid, 
-                        uint32_t quad, int32_t a, int32_t b, int32_t c) {
+    int32_t interpolate(uint32_t wid, uint32_t tid, int32_t a, int32_t b, int32_t c) {
       uint32_t ltid = wid * arch_.num_threads() + tid;
       auto& csr = csrs_.at(ltid);
-      auto afx = fixed23_t::make(a);
-      auto bfx = fixed23_t::make(b);
-      auto cfx = fixed23_t::make(c);
-      auto out = cocogfx::Dot<fixed23_t>(afx, csr.gradients[quad].x, bfx, csr.gradients[quad].y) + cfx;
+      auto ax = fixed24_t::make(a);
+      auto bx = fixed24_t::make(b);
+      auto cx = fixed24_t::make(c);
+      auto out = cocogfx::Dot<fixed24_t>(ax, csr.gradients[csr.frag].x, bx, csr.gradients[csr.frag].y) + cx;
       return out.data();
     }
 
     void tick() {
-      //--
+      // check input queue
+      if (simobject_->Input.empty())
+          return;
+
+      auto trace = simobject_->Input.front();
+
+      simobject_->Output.send(trace, 1);
+
+      auto time = simobject_->Input.pop();
+      perf_stats_.stalls += (SimPlatform::instance().cycles() - time);
     }
 
     const PerfStats& perf_stats() const { 
@@ -160,9 +184,8 @@ uint32_t RasterSrv::fetch(uint32_t wid, uint32_t tid) {
   return impl_->fetch(wid, tid);
 }
 
-int32_t RasterSrv::interpolate(uint32_t wid, uint32_t tid, 
-                               uint32_t q, int32_t a, int32_t b, int32_t c) {
-  return impl_->interpolate(wid, tid, q, a, b, c);
+int32_t RasterSrv::interpolate(uint32_t wid, uint32_t tid, int32_t a, int32_t b, int32_t c) {
+  return impl_->interpolate(wid, tid, a, b, c);
 }
 
 void RasterSrv::tick() {

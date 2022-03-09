@@ -11,11 +11,15 @@ class Core;
 
 class RopUnit : public SimObject<RopUnit> {
 public:
-    struct PerfStats {
+    struct PerfStats {        
         uint64_t reads;
+        uint64_t writes;
+        uint64_t stalls;
 
         PerfStats() 
             : reads(0)
+            , writes(0)
+            , stalls(0)
         {}
     };
 

@@ -1,22 +1,24 @@
 #include "raster_unit.h"
 #include "core.h"
 #include <VX_config.h>
+#include "mempool.h"
 #include <cocogfx/include/fixed.hpp>
 #include <cocogfx/include/math.hpp>
 
 using namespace vortex;
 
+#define STAMP_POOL_MAX_SIZE   1024
+
 using fixed16_t = cocogfx::TFixed<16>;
-using fixed23_t = cocogfx::TFixed<23>;
+using fixed24_t = cocogfx::TFixed<23>;
 
 using vec2_fx_t = cocogfx::TVector2<fixed16_t>;
 using vec3_fx_t = cocogfx::TVector3<fixed16_t>;
 
-using vec2_fx2_t = cocogfx::TVector2<fixed23_t>;
-using vec3_fx2_t = cocogfx::TVector3<fixed23_t>;
+using vec2_fx2_t = cocogfx::TVector2<fixed24_t>;
+using vec3_fx2_t = cocogfx::TVector3<fixed24_t>;
 
 using rect_u_t = cocogfx::TRect<uint32_t>;
-
 struct primitive_t {
   vec3_fx_t edges[3];
   fixed16_t extents[3];
@@ -55,7 +57,8 @@ private:
   uint32_t num_prims_;    
   uint32_t cur_tile_;
   uint32_t cur_prim_;
-  std::list<RasterUnit::Stamp*> stamp_queue_;
+  std::queue<RasterUnit::Stamp*> stamp_queue_;
+  MemoryPool<RasterUnit::Stamp> stamp_allocator_;
   bool initialized_;
 
   void renderQuad(const primitive_t& primitive, 
@@ -64,6 +67,7 @@ private:
                   fixed16_t e0, 
                   fixed16_t e1, 
                   fixed16_t e2) {
+    printf("Quad (%d,%d) :\n", x, y);
     RasterUnit::Stamp stamp;
     stamp.x    = x;
     stamp.y    = y;
@@ -81,7 +85,7 @@ private:
           stamp.mask |= (1 << f);                
           stamp.bcoords[f].x = ee0;
           stamp.bcoords[f].y = ee1;
-          stamp.bcoords[f].x = ee2;          
+          stamp.bcoords[f].z = ee2;          
         }
         // update edge equation x components
         ee0 += primitive.edges[0].x;
@@ -96,17 +100,17 @@ private:
 
     // submit stamp
     if (stamp.mask) {
-      stamp_queue_.push_back(new RasterUnit::Stamp(stamp));
+      stamp_queue_.push(new RasterUnit::Stamp(stamp));
     }
   }
 
   void renderBlock(uint32_t subBlockLogSize, 
-                    const primitive_t& primitive, 
-                    uint32_t  x, 
-                    uint32_t  y, 
-                    fixed16_t e0, 
-                    fixed16_t e1, 
-                    fixed16_t e2) {
+                   const primitive_t& primitive, 
+                   uint32_t  x, 
+                   uint32_t  y, 
+                   fixed16_t e0, 
+                   fixed16_t e1, 
+                   fixed16_t e2) {
     // check if block overlap triangle    
     if ((e0 + (primitive.extents[0] << subBlockLogSize)) < fxZero 
      || (e1 + (primitive.extents[1] << subBlockLogSize)) < fxZero
@@ -114,6 +118,8 @@ private:
       return; 
   
     if (subBlockLogSize > 1) {
+      //printf("Block (%d,%d) :\n", x, y);
+
       --subBlockLogSize;
       auto subBlockSize = 1 << subBlockLogSize;
       // draw top-left subtile
@@ -175,6 +181,8 @@ private:
       return; 
     
     if (subTileLogSize > block_logsize_) {
+      //if (subTileLogSize == tile_logsize_) printf("Tile (%d,%d) :\n", x, y);
+
       --subTileLogSize;
       auto subTileSize = 1 << subTileLogSize;
       // draw top-left subtile
@@ -228,10 +236,11 @@ private:
   }
 
   void initialize() {
-    num_tiles_     = dcrs_.at(DCR_RASTER_TILE_COUNT);
-    tbuf_baseaddr_ = dcrs_.at(DCR_RASTER_TBUF_ADDR);
-    pbuf_baseaddr_ = dcrs_.at(DCR_RASTER_PBUF_ADDR);
-    pbuf_stride_   = dcrs_.at(DCR_RASTER_PBUF_STRIDE);
+    // get device configuration
+    num_tiles_     = dcrs_.at(RASTER_STATE_TILE_COUNT);
+    tbuf_baseaddr_ = dcrs_.at(RASTER_STATE_TBUF_ADDR);
+    pbuf_baseaddr_ = dcrs_.at(RASTER_STATE_PBUF_ADDR);
+    pbuf_stride_   = dcrs_.at(RASTER_STATE_PBUF_STRIDE);
 
     tbuf_addr_ = tbuf_baseaddr_;
     cur_tile_  = 0;
@@ -241,8 +250,7 @@ private:
     initialized_ = true;
   }
 
-  void renderNextPrimitive() {
-    assert(cur_prim_ < num_prims_);      
+  void renderNextPrimitive() {    
     // get current tile header
     if (0 == num_prims_) {
       mem_->read(&tile_xy_, tbuf_addr_, 4);
@@ -256,7 +264,7 @@ private:
     mem_->read(&cur_prim_, tbuf_addr_, 4);
     tbuf_addr_ += 4;
 
-    // get primitive edges and bbox
+    // get primitive edges
     primitive_t primitive;
     auto pbuf_addr = pbuf_baseaddr_ + cur_prim_ * pbuf_stride_;
     for (int i = 0; i < 3; ++i) {
@@ -268,8 +276,8 @@ private:
       pbuf_addr += 4;
     }
 
-    uint32_t tx = tile_xy_ & 0xffff;
-    uint32_t ty = tile_xy_ >> 16;
+    uint32_t tx = (tile_xy_ & 0xffff) << tile_logsize_;
+    uint32_t ty = (tile_xy_ >> 16) << tile_logsize_;
     
     // Add tile corner edge offsets
     primitive.extents[0] = calcEdgeExtents(primitive.edges[0]);
@@ -291,6 +299,7 @@ private:
     // Advance next primitive
     ++cur_prim_;
     if (cur_prim_ == num_prims_) {        
+      cur_prim_ = 0;
       num_prims_ = 0;
       ++cur_tile_;
     }
@@ -305,6 +314,7 @@ public:
     , dcrs_(dcrs)
     , tile_logsize_(tile_logsize)
     , block_logsize_(block_logsize)
+    , stamp_allocator_(STAMP_POOL_MAX_SIZE)
     , initialized_(false) {
     assert(block_logsize >= 1);
     assert(tile_logsize >= block_logsize);
@@ -332,7 +342,7 @@ public:
       this->renderNextPrimitive();
     }      
     auto stamp = stamp_queue_.front();
-    stamp_queue_.pop_front();
+    stamp_queue_.pop();
     return stamp;
   }
 };

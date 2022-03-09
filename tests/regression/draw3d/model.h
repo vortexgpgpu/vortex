@@ -2,6 +2,7 @@
 
 #include "common.h"
 #include <vector>
+#include <string>
 
 typedef struct {
   float     x;
@@ -22,4 +23,5 @@ typedef struct {
 struct model_t {
   std::vector<vertex_t>    vertives;
   std::vector<primitive_t> primitives;
+  std::string              texture;
 };

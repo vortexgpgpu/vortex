@@ -322,6 +322,9 @@ void GpuUnit::tick() {
     case GpuType::ROP:
         rop_srv_->Input.send(trace, 1);
         break;
+    case GpuType::INTERP:
+        Output.send(trace, 6);
+        break;
     default:
         std::abort();
     }

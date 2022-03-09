@@ -8,7 +8,7 @@
 
 using namespace vortex;
 
-using fixed23_t = cocogfx::TFixed<23>;
+using fixed24_t = cocogfx::TFixed<23>;
 
 static bool DoCompare(uint32_t func, uint32_t a, uint32_t b) {
   switch (func) {
@@ -243,44 +243,52 @@ private:
   bool initialized_;
 
   void initialize() {
-    buf_baseaddr_       = dcrs_.at(DCR_ROP_ZBUF_ADDR);
-    buf_pitch_          = dcrs_.at(DCR_ROP_ZBUF_PITCH);
-    depth_func_         = dcrs_.at(DCR_ROP_DEPTH_FUNC);
-    depth_mask_         = dcrs_.at(DCR_ROP_DEPTH_MASK);
-    stencil_front_func_ = dcrs_.at(DCR_ROP_STENCIL_FUNC) & 0xffff;
-    stencil_front_zpass_= dcrs_.at(DCR_ROP_STENCIL_ZPASS) & 0xffff;
-    stencil_front_zfail_= dcrs_.at(DCR_ROP_STENCIL_ZFAIL) & 0xffff;
-    stencil_front_fail_ = dcrs_.at(DCR_ROP_STENCIL_FAIL) & 0xffff;
-    stencil_front_mask_ = dcrs_.at(DCR_ROP_STENCIL_MASK) & 0xffff;
-    stencil_front_ref_  = dcrs_.at(DCR_ROP_STENCIL_REF) & 0xffff;
-    stencil_back_func_  = dcrs_.at(DCR_ROP_STENCIL_FUNC) >> 16;
-    stencil_back_zpass_ = dcrs_.at(DCR_ROP_STENCIL_ZPASS) >> 16;
-    stencil_back_zfail_ = dcrs_.at(DCR_ROP_STENCIL_ZFAIL) >> 16;
-    stencil_back_fail_  = dcrs_.at(DCR_ROP_STENCIL_FAIL) >> 16;
-    stencil_back_mask_  = dcrs_.at(DCR_ROP_STENCIL_MASK) >> 16;
-    stencil_back_ref_   = dcrs_.at(DCR_ROP_STENCIL_REF) >> 16;
-    depth_enabled_      = (depth_func_ != ROP_DEPTH_FUNC_ALWAYS) || (depth_mask_ != 0);
-    stencil_front_enabled_ = (stencil_front_func_ != ROP_DEPTH_FUNC_ALWAYS) || depth_enabled_;
-    stencil_back_enabled_ = (stencil_back_func_ != ROP_DEPTH_FUNC_ALWAYS) || depth_enabled_;
+    // get device configuration
+    buf_baseaddr_       = dcrs_.at(ROP_STATE_ZBUF_ADDR);
+    buf_pitch_          = dcrs_.at(ROP_STATE_ZBUF_PITCH);
+    depth_func_         = dcrs_.at(ROP_STATE_DEPTH_FUNC);
+    depth_mask_         = dcrs_.at(ROP_STATE_DEPTH_MASK);
+    stencil_front_func_ = dcrs_.at(ROP_STATE_STENCIL_FUNC) & 0xffff;
+    stencil_front_zpass_= dcrs_.at(ROP_STATE_STENCIL_ZPASS) & 0xffff;
+    stencil_front_zfail_= dcrs_.at(ROP_STATE_STENCIL_ZFAIL) & 0xffff;
+    stencil_front_fail_ = dcrs_.at(ROP_STATE_STENCIL_FAIL) & 0xffff;
+    stencil_front_mask_ = dcrs_.at(ROP_STATE_STENCIL_MASK) & 0xffff;
+    stencil_front_ref_  = dcrs_.at(ROP_STATE_STENCIL_REF) & 0xffff;
+    stencil_back_func_  = dcrs_.at(ROP_STATE_STENCIL_FUNC) >> 16;
+    stencil_back_zpass_ = dcrs_.at(ROP_STATE_STENCIL_ZPASS) >> 16;
+    stencil_back_zfail_ = dcrs_.at(ROP_STATE_STENCIL_ZFAIL) >> 16;
+    stencil_back_fail_  = dcrs_.at(ROP_STATE_STENCIL_FAIL) >> 16;
+    stencil_back_mask_  = dcrs_.at(ROP_STATE_STENCIL_MASK) >> 16;
+    stencil_back_ref_   = dcrs_.at(ROP_STATE_STENCIL_REF) >> 16;
+
+    depth_enabled_      = !((depth_func_ == ROP_DEPTH_FUNC_ALWAYS) && !depth_mask_);
+    
+    stencil_front_enabled_ = !((stencil_front_func_  == ROP_DEPTH_FUNC_ALWAYS) 
+                            && (stencil_front_zpass_ == ROP_STENCIL_OP_KEEP)
+                            && (stencil_front_zfail_ == ROP_STENCIL_OP_KEEP));
+    
+    stencil_back_enabled_ = !((stencil_back_func_  == ROP_DEPTH_FUNC_ALWAYS) 
+                           && (stencil_back_zpass_ == ROP_STENCIL_OP_KEEP)
+                           && (stencil_back_zfail_ == ROP_STENCIL_OP_KEEP));
     initialized_        = true;
   }
 
   uint32_t doDepthTest(uint32_t x, uint32_t y, uint32_t mask, uint32_t depth) { 
     uint32_t result_mask = 0;
-    uint32_t depth_ref = depth & fixed23_t::MASK;
+    uint32_t depth_ref = depth & fixed24_t::MASK;
 
     for (uint32_t j = 0; j < 2; ++j) {
       for (uint32_t i = 0; i < 2; ++i) {
         uint32_t f = j * 2 + i;
         if (mask & (1 << f)) {
           uint32_t stored_value;
-          uint32_t buf_addr = buf_baseaddr_ + y * buf_pitch_ + x * 4;
+          uint32_t buf_addr = buf_baseaddr_ + (y + j) * buf_pitch_ + (x + i) * 4;
           mem_->read(&stored_value, buf_addr, 4);
-          uint32_t depth_val = stored_value & 0xffffff;
+          uint32_t depth_val = stored_value & fixed24_t::MASK;
           auto passed = DoCompare(depth_func_, depth_ref, depth_val);
           if (passed) {
             if (depth_mask_) {
-              auto write_value = (stored_value & ~0xffffff) | (depth_ref & 0xffffff);
+              auto write_value = (stored_value & ~fixed24_t::MASK) | (depth_ref & fixed24_t::MASK);
               mem_->write(&write_value, buf_addr, 4);
             }
             result_mask |= (1 << f);
@@ -293,7 +301,7 @@ private:
 
   uint32_t doStencilTest(uint32_t x, uint32_t y, uint32_t mask, uint32_t face, uint32_t depth)  { 
     uint32_t result_mask = 0;
-    auto depth_ref     = depth & fixed23_t::MASK;    
+    auto depth_ref     = depth & fixed24_t::MASK;    
     auto stencil_func  = face ? stencil_back_func_ : stencil_front_func_;    
     auto stencil_mask  = face ? stencil_back_mask_ : stencil_front_mask_;
     auto stencil_ref   = face ? stencil_back_ref_ : stencil_front_ref_;    
@@ -304,7 +312,7 @@ private:
         uint32_t f = j * 2 + i;
         if (mask & (1 << f)) {
           uint32_t stored_value;
-          uint32_t buf_addr = buf_baseaddr_ + y * buf_pitch_ + x * 4;
+          uint32_t buf_addr = buf_baseaddr_ + (y + j) * buf_pitch_ + (x + i) * 4;
           mem_->read(&stored_value, buf_addr, 4);          
           uint32_t stencil_val = stored_value >> 24;
           uint32_t depth_val   = stored_value & 0xffffff;   
@@ -393,17 +401,18 @@ private:
   bool initialized_;
 
   void initialize() {
-    buf_baseaddr_   = dcrs_.at(DCR_ROP_CBUF_ADDR);
-    buf_pitch_      = dcrs_.at(DCR_ROP_CBUF_PITCH);
-    write_mask_     = dcrs_.at(DCR_ROP_CBUF_MASK);
-    blend_mode_rgb_ = dcrs_.at(DCR_ROP_BLEND_MODE) & 0xffff;
-    blend_mode_a_   = dcrs_.at(DCR_ROP_BLEND_MODE) >> 16;
-    blend_src_rgb_  = (dcrs_.at(DCR_ROP_BLEND_FUNC) >>  0) & 0xff;
-    blend_src_a_    = (dcrs_.at(DCR_ROP_BLEND_FUNC) >>  8) & 0xff;
-    blend_dst_rgb_  = (dcrs_.at(DCR_ROP_BLEND_FUNC) >> 16) & 0xff;
-    blend_dst_a_    = (dcrs_.at(DCR_ROP_BLEND_FUNC) >> 24) & 0xff;
-    blend_const_    = dcrs_.at(DCR_ROP_BLEND_CONST);
-    logic_op_       = dcrs_.at(DCR_ROP_LOGIC_OP);    
+    // get device configuration
+    buf_baseaddr_   = dcrs_.at(ROP_STATE_CBUF_ADDR);
+    buf_pitch_      = dcrs_.at(ROP_STATE_CBUF_PITCH);
+    write_mask_     = dcrs_.at(ROP_STATE_CBUF_MASK);
+    blend_mode_rgb_ = dcrs_.at(ROP_STATE_BLEND_MODE) & 0xffff;
+    blend_mode_a_   = dcrs_.at(ROP_STATE_BLEND_MODE) >> 16;
+    blend_src_rgb_  = (dcrs_.at(ROP_STATE_BLEND_FUNC) >>  0) & 0xff;
+    blend_src_a_    = (dcrs_.at(ROP_STATE_BLEND_FUNC) >>  8) & 0xff;
+    blend_dst_rgb_  = (dcrs_.at(ROP_STATE_BLEND_FUNC) >> 16) & 0xff;
+    blend_dst_a_    = (dcrs_.at(ROP_STATE_BLEND_FUNC) >> 24) & 0xff;
+    blend_const_    = dcrs_.at(ROP_STATE_BLEND_CONST);
+    logic_op_       = dcrs_.at(ROP_STATE_LOGIC_OP);    
     initialized_    = true;
   }
 
@@ -444,7 +453,7 @@ public:
         uint32_t f = j * 2 + i;
         if (mask & (1 << f)) {
           uint32_t stored_value;
-          uint32_t buf_addr = buf_baseaddr_ + y * buf_pitch_ + x * 4;
+          uint32_t buf_addr = buf_baseaddr_ + (y + j) * buf_pitch_ + (x + i) * 4;
           mem_->read(&stored_value, buf_addr, 4);   
           cocogfx::ColorARGB src(color);
           cocogfx::ColorARGB dst(stored_value);

@@ -13,10 +13,10 @@ class RasterUnit;
 class RasterSrv : public SimObject<RasterSrv> {
 public:
     struct PerfStats {
-        uint64_t reads;
+        uint64_t stalls;
 
         PerfStats() 
-            : reads(0)
+            : stalls(0)
         {}
     };
     
@@ -38,7 +38,7 @@ public:
 
     uint32_t fetch(uint32_t wid, uint32_t tid);
 
-    int32_t interpolate(uint32_t wid, uint32_t tid, uint32_t q, int32_t a, int32_t b, int32_t c);
+    int32_t interpolate(uint32_t wid, uint32_t tid, int32_t a, int32_t b, int32_t c);
 
     void tick();
 

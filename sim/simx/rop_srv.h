@@ -13,10 +13,10 @@ class RopUnit;
 class RopSrv : public SimObject<RopSrv> {
 public:
     struct PerfStats {
-        uint64_t reads;
+        uint64_t stalls;
 
         PerfStats() 
-            : reads(0)
+            : stalls(0)
         {}
     };
     

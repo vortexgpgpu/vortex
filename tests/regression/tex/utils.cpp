@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <cocogfx/include/tga.hpp>
 #include <cocogfx/include/png.hpp>
+#include <cocogfx/include/bmp.hpp>
 
 using namespace cocogfx;
 
@@ -46,6 +47,11 @@ int LoadImage(const char *filename,
     int ret = LoadPNG(filename, pixels, &img_width, &img_height, &img_bpp);
     if (ret)
       return ret;
+  } else 
+  if (iequals(ext, "bmp")) {
+    int ret = LoadBMP(filename, pixels, &img_width, &img_height, &img_bpp);
+    if (ret)
+      return ret;
   } else {
     std::cerr << "invalid file extension: " << ext << "!" << std::endl;
     return -1;
@@ -72,7 +78,7 @@ int LoadImage(const char *filename,
   if (img_format != format) {
     // format conversion to RGBA
     std::vector<uint8_t> staging;    
-    int ret = ConvertImage(staging, format, pixels, img_format, img_width, img_height, img_width * img_bpp);
+    int ret = ConvertImage(staging, format, pixels.data(), img_format, img_width, img_height, img_width * img_bpp);
     if (ret)
       return ret;
     pixels.swap(staging);
@@ -86,16 +92,20 @@ int LoadImage(const char *filename,
 
 int SaveImage(const char *filename,
               ePixelFormat format,
-              const std::vector<uint8_t> &pixels, 
+              const uint8_t* pixels,
               uint32_t width,
-              uint32_t height) {
+              uint32_t height,
+              int32_t pitch) {
   auto bpp = Format::GetInfo(format).BytePerPixel;
   auto ext = getFileExt(filename);
   if (iequals(ext, "tga")) {
-    return SaveTGA(filename, pixels, width, height, bpp);
+    return SaveTGA(filename, pixels, width, height, bpp, pitch);
   } else 
   if (iequals(ext, "png")) {
-    return SavePNG(filename, pixels, width, height, bpp);
+    return SavePNG(filename, pixels, width, height, bpp, pitch);
+  } else 
+  if (iequals(ext, "bmp")) {
+    return SaveBMP(filename, pixels, width, height, bpp, pitch);
   } else {
     std::cerr << "invalid file extension: " << ext << "!" << std::endl;
     return -1;

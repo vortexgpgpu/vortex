@@ -106,9 +106,9 @@ extern "C" {
 })
 
 // Interpolate
-#define vx_interp(f, a, b, c) ({                \
+#define vx_interp(a, b, c) ({                   \
 	unsigned __r;                               \
-    __asm__ __volatile__ (".insn r4 0x2b, 2, %1, %0, %2, %3, %4" : "=r"(__r) : "i"(f), "r"(a), "r"(b), "r"(c)); \
+    __asm__ __volatile__ (".insn r4 0x2b, 1, 1, %0, %1, %2, %3" : "=r"(__r) : "r"(a), "r"(b), "r"(c)); \
 	__r;							            \
 })
 

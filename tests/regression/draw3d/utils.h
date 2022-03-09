@@ -20,9 +20,10 @@ int LoadImage(const char *filename,
 
 int SaveImage(const char *filename,
               cocogfx::ePixelFormat format,
-              const std::vector<uint8_t> &pixels,
+              const uint8_t* pixels, 
               uint32_t width,
-              uint32_t height);
+              uint32_t height,
+              int32_t pitch);
 
 void dump_image(const std::vector<uint8_t>& pixels, 
                 uint32_t width, 

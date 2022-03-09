@@ -22,14 +22,16 @@ public:
         uint32_t  pid;
     };
     
-    struct PerfStats {
+    struct PerfStats {        
         uint64_t reads;
+        uint64_t stalls;
 
         PerfStats() 
             : reads(0)
+            , stalls(0)
         {}
     };
-
+    
     class DCRS {
     private:
         std::array<uint32_t, RASTER_STATE_COUNT> states_;

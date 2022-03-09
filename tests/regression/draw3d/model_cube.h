@@ -2,7 +2,7 @@
 
 #include "model.h"
 
-const model_t model_quad = {
+const model_t model_cube = {
     {
         {-6.337301, 0.000000, 24.177938, 24.949747, 0xffffffff, 0.000000, 0.000000},
         {6.337301, 0.000000, 24.177938, 24.949747, 0xffffffff, 1.000000, 0.000000},
@@ -51,5 +51,6 @@ const model_t model_quad = {
         {7, 0, 4},
         {5, 4, 1},
         {1, 4, 0}
-    }
+    },
+    "fire.png"
 };

@@ -3,6 +3,7 @@ XLEN ?= 32
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 VORTEX_DRV_PATH ?= $(realpath ../../../driver)
 VORTEX_RT_PATH ?= $(wildcard ../../../runtime)
+LLVM_PREFIX ?= /opt/llvm-riscv
 
 OPTS ?= -g1
 
@@ -11,7 +12,12 @@ VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++
 VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
 VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
-VX_CFLAGS += -std=c++17 -march=rv32imf -mabi=ilp32f -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
+#VX_CC  = ${LLVM_PREFIX}/bin/clang
+#VX_CXX = ${LLVM_PREFIX}/bin/clang++
+#VX_DP  = ${LLVM_PREFIX}/bin/llvm-objdump
+#VX_CP  = ${LLVM_PREFIX}/bin/llvm-objcopy
+
+VX_CFLAGS += -std=c++17 -march=rv32imf -mabi=ilp32f -O3 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
 VX_CFLAGS += -DENABLE_SW -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw -I$(VORTEX_RT_PATH)/../sim/common -I$(VORTEX_RT_PATH)/../third_party
 
 VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections $(VORTEX_RT_PATH)/libvortexrt.a
@@ -22,7 +28,7 @@ CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
 
 CXXFLAGS += -I$(VORTEX_DRV_PATH)/include -I$(VORTEX_RT_PATH)/../hw -I$(VORTEX_RT_PATH)/../sim/common -I$(VORTEX_RT_PATH)/../third_party
 
-LDFLAGS += -L$(VORTEX_DRV_PATH)/stub -lvortex $(VORTEX_RT_PATH)/../third_party/cocogfx/libcocogfx.a -lz
+LDFLAGS += -L$(VORTEX_DRV_PATH)/stub -lvortex $(VORTEX_RT_PATH)/../third_party/cocogfx/libcocogfx.a -lpng -lz
 
 # Debugigng
 ifdef DEBUG

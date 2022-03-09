@@ -4,9 +4,11 @@
 #include <iostream>
 #include <iomanip>
 #include <string.h>
+#include <map>
 #include <unordered_map>
 #include <cocogfx/include/tga.hpp>
 #include <cocogfx/include/png.hpp>
+#include <cocogfx/include/bmp.hpp>
 #include <cocogfx/include/fixed.hpp>
 #include <cocogfx/include/math.hpp>
 
@@ -92,7 +94,7 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
 
   uint32_t tileLogSize = log2ceil(tileSize);
 
-  std::unordered_map<uint32_t, std::vector<uint32_t>> tiles;
+  std::map<uint32_t, std::vector<uint32_t>> tiles;
 
   std::vector<rast_prim_t> rast_prims;
   rast_prims.reserve(model.primitives.size());
@@ -150,9 +152,9 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
 
     {
       #define ATTRIBUTE_DELTA(dx, x0, x1, x2) \
-        dx.x = fixed23_t(x0 - x2); \
-        dx.y = fixed23_t(x1 - x2); \
-        dx.z = fixed23_t(x2)
+        dx.x = fixed24_t(x0 - x2); \
+        dx.y = fixed24_t(x1 - x2); \
+        dx.z = fixed24_t(x2)
 
       rast_prim_t rast_prim;
       rast_prim.edges[0] = edges[0];
@@ -211,6 +213,9 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
            | (ee1 + (extents[1] << tileLogSize)).data()
            | (ee2 + (extents[2] << tileLogSize)).data()) >= 0) {
           // assign primitive to tile
+          //auto x = tx << tileLogSize;
+          //auto y = ty << tileLogSize;
+          //printf("*** Tile (%d,%d) :\n", x, y);
           uint32_t tile_id = (ty << 16) | tx;
           tiles[tile_id].push_back(p);
           ++num_prims;
@@ -285,6 +290,11 @@ int LoadImage(const char *filename,
     int ret = LoadPNG(filename, pixels, &img_width, &img_height, &img_bpp);
     if (ret)
       return ret;
+  } else 
+  if (iequals(ext, "bmp")) {
+    int ret = LoadBMP(filename, pixels, &img_width, &img_height, &img_bpp);
+    if (ret)
+      return ret;
   } else {
     std::cerr << "invalid file extension: " << ext << "!" << std::endl;
     return -1;
@@ -311,7 +321,7 @@ int LoadImage(const char *filename,
   if (img_format != format) {
     // format conversion to RGBA
     std::vector<uint8_t> staging;    
-    int ret = ConvertImage(staging, format, pixels, img_format, img_width, img_height, img_width * img_bpp);
+    int ret = ConvertImage(staging, format, pixels.data(), img_format, img_width, img_height, img_width * img_bpp);
     if (ret)
       return ret;
     pixels.swap(staging);
@@ -325,16 +335,20 @@ int LoadImage(const char *filename,
 
 int SaveImage(const char *filename,
               ePixelFormat format,
-              const std::vector<uint8_t> &pixels, 
+              const uint8_t* pixels, 
               uint32_t width,
-              uint32_t height) {
+              uint32_t height,
+              int32_t pitch) {
   uint32_t bpp = Format::GetInfo(format).BytePerPixel;
   auto ext = getFileExt(filename);
   if (iequals(ext, "tga")) {
-    return SaveTGA(filename, pixels, width, height, bpp);
+    return SaveTGA(filename, pixels, width, height, bpp, pitch);
   } else 
   if (iequals(ext, "png")) {
-    return SavePNG(filename, pixels, width, height, bpp);
+    return SavePNG(filename, pixels, width, height, bpp, pitch);
+  } else 
+  if (iequals(ext, "bmp")) {
+    return SaveBMP(filename, pixels, width, height, bpp, pitch);
   } else {
     std::cerr << "invalid file extension: " << ext << "!" << std::endl;
     return -1;

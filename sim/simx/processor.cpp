@@ -28,6 +28,12 @@ public:
     uint32_t num_cores = arch.num_cores();
     uint32_t cores_per_cluster = num_cores / NUM_CLUSTERS;
 
+    // create gpu blocks
+    for (uint32_t i = 0; i < NUM_CLUSTERS; ++i) {
+      raster_units_.at(i) = RasterUnit::Create("raster_unit", arch, dcrs_.raster_dcrs, RASTER_TILE_LOGSIZE, RASTER_BLOCK_LOGSIZE);
+      rop_units_.at(i) = RopUnit::Create("rop_unit", arch, dcrs_.rop_dcrs);
+    }
+
     // create cores
     for (uint32_t i = 0; i < num_cores; ++i) {
       auto j = i / cores_per_cluster;
@@ -128,10 +134,7 @@ public:
         auto& core = cores_.at((i * cores_per_cluster) + j);
         core->MemReqPort.bind(cluster_mem_req_ports.at(j));
         cluster_mem_rsp_ports.at(j)->bind(&core->MemRspPort);
-      }
-
-      raster_units_.at(i) = RasterUnit::Create("raster", arch, dcrs_.raster_dcrs, RASTER_TILE_LOGSIZE, RASTER_BLOCK_LOGSIZE);
-      rop_units_.at(i) = RopUnit::Create("rop", arch, dcrs_.rop_dcrs);
+      }      
     }    
   }
 

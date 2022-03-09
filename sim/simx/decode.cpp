@@ -373,12 +373,12 @@ static const char* op_string(const Instr &instr) {
     case 1: {
       switch (func2) {
       case 0: return "CMOV";
+      case 1: return "INTERP";
       case 2: return "IMADD";
       default:
         std::abort();
       }
-    }
-    case 2: return "INTERP";
+    }    
     default:
       std::abort();
     }

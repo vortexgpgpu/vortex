@@ -9,12 +9,12 @@
 #define KERNEL_ARG_DEV_MEM_ADDR 0x7ffff000
 
 using fixed16_t = cocogfx::TFixed<16>;
-using fixed23_t = cocogfx::TFixed<23>;
+using fixed24_t = cocogfx::TFixed<24>;
 
 typedef struct {
-  fixed23_t x;
-  fixed23_t y;
-  fixed23_t z;
+  fixed24_t x;
+  fixed24_t y;
+  fixed24_t z;
 } rast_attrib_t;
 
 typedef struct {
@@ -46,8 +46,8 @@ typedef struct {
 } rast_prim_t;
 
 typedef struct {  
-  fixed23_t dx;
-  fixed23_t dy;
+  fixed24_t dx;
+  fixed24_t dy;
 } rast_grad_t;
 
 struct fragment_t {
@@ -63,12 +63,13 @@ typedef struct {
 } rast_tile_header_t;
 
 typedef struct {
+  bool     tex_enabled;
   uint32_t prim_addr;
   uint32_t dst_addr;
   uint32_t dst_width;
   uint32_t dst_height;
   uint8_t  dst_stride;  
-  uint32_t dst_pitch;  
+  uint32_t dst_pitch;    
 } kernel_arg_t;
 
 #endif

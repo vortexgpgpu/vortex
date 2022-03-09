@@ -19,7 +19,7 @@ else
 CFLAGS += -march=rv64imfd -mabi=lp64d
 endif
 
-CFLAGS += -O3 -mcmodel=medany -Wstack-usage=1024 -fno-exceptions -fdata-sections -ffunction-sections
+CFLAGS += -O3 -mcmodel=medany -fno-exceptions -fdata-sections -ffunction-sections
 CFLAGS += -I./include -I../hw
 
 PROJECT = libvortexrt

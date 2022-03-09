@@ -9,7 +9,8 @@
 #include <vortex.h>
 #include "common.h"
 #include "utils.h"
-#include "model_quad.h"
+#include "model_cube.h"
+#include "model_triangle.h"
 
 using namespace cocogfx;
 
@@ -30,13 +31,15 @@ const char* input_file  = "fire.png";
 const char* output_file = "output.png";
 const char* reference_file  = nullptr;
 uint32_t clear_color = 0x00000000;
+uint32_t clear_depth = 0x00000000;
+bool tex_enabled = false;
 int tex_format = TEX_FORMAT_A8R8G8B8;
 ePixelFormat tex_eformat = FORMAT_A8R8G8B8;
 int tex_wrap = TEX_WRAP_CLAMP;
 int tex_filter  = TEX_FILTER_POINT;
-uint32_t dst_width  = 256;
-uint32_t dst_height = 256;
-const model_t& model = model_quad;
+uint32_t dst_width  = 128;
+uint32_t dst_height = 128;
+const model_t& model = model_triangle;
 
 vx_device_h device = nullptr;
 vx_buffer_h staging_buf = nullptr;
@@ -107,7 +110,8 @@ void cleanup() {
   if (device) {
     vx_mem_free(device, tilebuf_addr);
     vx_mem_free(device, primbuf_addr);
-    vx_mem_free(device, tbuf_addr);    
+    if (tex_enabled)
+      vx_mem_free(device, tbuf_addr);    
     vx_mem_free(device, zbuf_addr);
     vx_mem_free(device, cbuf_addr);
     vx_dev_close(device);
@@ -140,7 +144,12 @@ int render(uint32_t buf_addr, uint32_t buf_size, uint32_t width, uint32_t height
   // save output image
   std::cout << "save output image" << std::endl;
   //dump_image(dst_pixels, width, height, 4);
-  RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, dst_pixels, width, height));
+  {
+    // the image is flipped
+    auto pitch = width * 4;
+    auto bits = dst_pixels.data() + (height-1) * pitch;
+    RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, bits, width, height, -pitch));
+  }
 
   return 0;
 }
@@ -190,7 +199,9 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  {
+  if (!model.texture.empty()) {
+    tex_enabled = true;
+
     std::vector<uint8_t> staging;  
     RT_CHECK(LoadImage(input_file, tex_eformat, staging, &tex_width, &tex_height));    
     // check power of two support
@@ -200,7 +211,7 @@ int main(int argc, char *argv[]) {
     }
     uint32_t tex_bpp = Format::GetInfo(tex_eformat).BytePerPixel;
     uint32_t tex_pitch = tex_width * tex_bpp;
-    RT_CHECK(GenerateMipmaps(texbuf, mip_offsets, staging, tex_eformat, tex_width, tex_height, tex_pitch));    
+    RT_CHECK(GenerateMipmaps(texbuf, mip_offsets, staging.data(), tex_eformat, tex_width, tex_height, tex_pitch));    
   }
 
   uint32_t primbuf_stride = sizeof(rast_prim_t);
@@ -228,7 +239,8 @@ int main(int argc, char *argv[]) {
   std::cout << "allocate device memory" << std::endl;
   RT_CHECK(vx_mem_alloc(device, tilebuf.size(), &tilebuf_addr));
   RT_CHECK(vx_mem_alloc(device, primbuf.size(), &primbuf_addr));
-  RT_CHECK(vx_mem_alloc(device, texbuf.size(), &tbuf_addr));  
+  if (tex_enabled)
+    RT_CHECK(vx_mem_alloc(device, texbuf.size(), &tbuf_addr));  
   RT_CHECK(vx_mem_alloc(device, zbuf_size, &zbuf_addr));
   RT_CHECK(vx_mem_alloc(device, cbuf_size, &cbuf_addr));
 
@@ -241,19 +253,26 @@ int main(int argc, char *argv[]) {
   // allocate staging buffer  
   std::cout << "allocate staging buffer" << std::endl;    
   uint32_t alloc_size = std::max<uint32_t>({
-      sizeof(kernel_arg_t), (uint32_t)tilebuf.size(), (uint32_t)primbuf.size(), zbuf_size, cbuf_size
+      sizeof(kernel_arg_t), 
+      (uint32_t)tilebuf.size(), 
+      (uint32_t)primbuf.size(), 
+      (uint32_t)texbuf.size(),
+      zbuf_size, 
+      cbuf_size
     });
   RT_CHECK(vx_buf_alloc(device, alloc_size, &staging_buf));
   
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
   {
+    kernel_arg.tex_enabled= tex_enabled;
+    kernel_arg.prim_addr  = primbuf_addr;
     kernel_arg.dst_width  = dst_width;
     kernel_arg.dst_height = dst_height;
     kernel_arg.dst_stride = cbuf_stride;
     kernel_arg.dst_pitch  = cbuf_pitch;    
     kernel_arg.dst_addr   = cbuf_addr;
-
+    
     auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
     RT_CHECK(vx_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
@@ -280,7 +299,7 @@ int main(int argc, char *argv[]) {
   {    
     auto buf_ptr = (uint32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < (cbuf_size/4); ++i) {
-      buf_ptr[i] = clear_color;
+      buf_ptr[i] = clear_depth;
     }    
     RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_addr, cbuf_size, 0));  
   }
@@ -296,16 +315,18 @@ int main(int argc, char *argv[]) {
   }
 
   // configure texture units
-	vx_dcr_write(device, DCR_TEX_STAGE,  0);
-	vx_dcr_write(device, DCR_TEX_LOGDIM, (tex_logheight << 16) | tex_logwidth);	
-	vx_dcr_write(device, DCR_TEX_FORMAT, tex_format);
-	vx_dcr_write(device, DCR_TEX_WRAP,   (tex_wrap << 16) | tex_wrap);
-	vx_dcr_write(device, DCR_TEX_FILTER, tex_filter);
-	vx_dcr_write(device, DCR_TEX_ADDR,   tbuf_addr);
-	for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
-    assert(i < TEX_LOD_MAX);
-		vx_dcr_write(device, DCR_TEX_MIPOFF(i), mip_offsets.at(i));
-	};
+  if (tex_enabled) {
+    vx_dcr_write(device, DCR_TEX_STAGE,  0);
+    vx_dcr_write(device, DCR_TEX_LOGDIM, (tex_logheight << 16) | tex_logwidth);	
+    vx_dcr_write(device, DCR_TEX_FORMAT, tex_format);
+    vx_dcr_write(device, DCR_TEX_WRAP,   (tex_wrap << 16) | tex_wrap);
+    vx_dcr_write(device, DCR_TEX_FILTER, tex_filter);
+    vx_dcr_write(device, DCR_TEX_ADDR,   tbuf_addr);
+    for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
+      assert(i < TEX_LOD_MAX);
+      vx_dcr_write(device, DCR_TEX_MIPOFF(i), mip_offsets.at(i));
+    };
+  }
 
   // configure raster units
   vx_dcr_write(device, DCR_RASTER_TBUF_ADDR,   tilebuf_addr);
@@ -319,16 +340,22 @@ int main(int argc, char *argv[]) {
   vx_dcr_write(device, DCR_ROP_CBUF_ADDR,  cbuf_addr);
   vx_dcr_write(device, DCR_ROP_CBUF_PITCH, cbuf_pitch);
   vx_dcr_write(device, DCR_ROP_CBUF_MASK, 0xffffffff);
-
+ 
   // configure rop depth states
   vx_dcr_write(device, DCR_ROP_DEPTH_FUNC, ROP_DEPTH_FUNC_LESS);
   vx_dcr_write(device, DCR_ROP_DEPTH_MASK, 1);
-  vx_dcr_write(device, DCR_ROP_STENCIL_FUNC, ROP_DEPTH_FUNC_ALWAYS);
-  vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, ROP_STENCIL_OP_KEEP);
-  vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, ROP_STENCIL_OP_KEEP);
-  vx_dcr_write(device, DCR_ROP_STENCIL_FAIL, ROP_STENCIL_OP_KEEP);
-  vx_dcr_write(device, DCR_ROP_STENCIL_MASK, 0xff);
-  vx_dcr_write(device, DCR_ROP_STENCIL_REF, 0);
+  vx_dcr_write(device, DCR_ROP_STENCIL_FUNC, (ROP_DEPTH_FUNC_ALWAYS << 16)  // back
+                                           | (ROP_DEPTH_FUNC_ALWAYS << 0)); // front 
+  vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, (ROP_STENCIL_OP_KEEP << 16)  // back
+                                            | (ROP_STENCIL_OP_KEEP << 0)); // front 
+  vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, (ROP_STENCIL_OP_KEEP << 16)  // back
+                                            | (ROP_STENCIL_OP_KEEP << 0)); // front 
+  vx_dcr_write(device, DCR_ROP_STENCIL_FAIL, (ROP_STENCIL_OP_KEEP << 16)  // back
+                                           | (ROP_STENCIL_OP_KEEP << 0)); // front
+  vx_dcr_write(device, DCR_ROP_STENCIL_MASK, (0xff << 16)  // back
+                                           | (0xff << 0)); // front 
+  vx_dcr_write(device, DCR_ROP_STENCIL_REF, (0 << 16)  // back 
+                                          | (0 << 0)); // front 
 
   // configure rop blend stats
   vx_dcr_write(device, DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)   // DST

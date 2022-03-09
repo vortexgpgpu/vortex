@@ -52,7 +52,16 @@ public:
     }
 
     void tick() {
-      //--
+      // check input queue
+      if (simobject_->Input.empty())
+          return;
+
+      auto trace = simobject_->Input.front();
+
+      simobject_->Output.send(trace, 1);
+
+      auto time = simobject_->Input.pop();
+      perf_stats_.stalls += (SimPlatform::instance().cycles() - time);
     }    
 
     const PerfStats& perf_stats() const { 

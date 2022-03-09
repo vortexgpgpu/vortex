@@ -22,7 +22,7 @@ else
 CFLAGS += -march=rv64imfd -mabi=lp64d
 endif
 
-CFLAGS += -O3 -Wstack-usage=1024 -mcmodel=medany -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
+CFLAGS += -O3 -mcmodel=medany -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
 CFLAGS += -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw
 
 LDFLAGS += -lm -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections $(VORTEX_RT_PATH)/libvortexrt.a
