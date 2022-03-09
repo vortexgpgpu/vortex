@@ -9,7 +9,7 @@
 #include "VVX_mem_streamer__Syms.h"
 
 #define SIM_TIME 50
-#define CYCLE_DELAY 4
+#define MEM_LATENCY 4
 
 
 typedef struct {
@@ -20,8 +20,7 @@ typedef struct {
     uint32_t    data;
     char        tag;
     double      tick;
-
-    uint8_t     ready;
+    bool     ready;
 } mem_req_t;
 
 typedef struct {
@@ -29,7 +28,6 @@ typedef struct {
     uint8_t     mask;
     uint32_t    data;
     char        tag;
-
     bool        ready;
 } mem_rsp_t;
 
@@ -42,7 +40,7 @@ class MemSim {
 
         mem_req_t *mem_req_;
         mem_rsp_t *mem_rsp_;
-        std::vector<mem_req_t*> ram_;
+        std::vector<mem_req_t> ram_;
 
         void eval();
         void step();

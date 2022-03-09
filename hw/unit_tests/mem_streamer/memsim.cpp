@@ -88,49 +88,39 @@ void MemSim::attach_ram () {
 	// Check if ram is full/busy
 	msu_->mem_req_ready = 0b1111;
 
-	mem_req_->valid 	= msu_->mem_req_valid;
-	mem_req_->rw 		= msu_->mem_req_rw;
-	mem_req_->byteen	= msu_->mem_req_byteen;
-	mem_req_->addr 		= msu_->mem_req_addr;
-	mem_req_->data 		= msu_->mem_req_data;
-	mem_req_->tag 		= msu_->mem_req_tag;
-	mem_req_->tick 		= CYCLE_DELAY;
-
 	// Simulate 4 cycle delay in response
 	int dequeue_index = -1;
 	for (int i = 0; i < ram_.size(); i++) {
-		if (ram_[i]->tick > 0) {
-			ram_[i]->tick -= 1;	
+		if (ram_[i].tick > 0) {
+			ram_[i].tick -= 1;	
 		}
-		if (dequeue_index == -1 && ram_[i]->tick == 0) {
+		if (dequeue_index == -1 && ram_[i].tick == 0) {
 			dequeue_index = i;
 		}
-		std::cout<<ram_[i]->tick<<"\n";
+		std::cout<<ram_[i].tick<<"\n";
 	}
 
 	// Time to respond to the request
 	if (dequeue_index != -1) {
-		mem_rsp_->valid = 1;
-		mem_rsp_->mask 	= generate_rand (0, ram_[dequeue_index]->valid);
-		mem_rsp_->data 	= generate_rand (0x20000000, 0x30000000);
-		mem_rsp_->tag 	= ram_[dequeue_index]->tag;
-	}
-
-	for (auto &req : ram_) {
-		is_duplicate = (req->addr == mem_req_->addr);
-		break;
+		msu_->mem_rsp_valid = 1;
+		msu_->mem_rsp_mask 	= generate_rand (0, ram_[dequeue_index].valid);
+		msu_->mem_rsp_data 	= generate_rand (0x20000000, 0x30000000);
+		msu_->mem_rsp_tag 	= ram_[dequeue_index].tag;
+		ram_.erase(ram_.begin() + dequeue_index);
 	}
 
 	// Store incoming request
-	if (mem_req_->valid && !is_duplicate) {
-		std::cout<<"Store request.\n";
-		ram_.insert(ram_.begin(), mem_req_);
+	if (msu_->mem_req_valid && !is_duplicate) {
+		mem_req_t mem_req;
+		mem_req.valid 	= msu_->mem_req_valid;
+		mem_req.rw 		= msu_->mem_req_rw;
+		mem_req.byteen	= msu_->mem_req_byteen;
+		mem_req.addr 	= msu_->mem_req_addr;
+		mem_req.data 	= msu_->mem_req_data;
+		mem_req.tag 	= msu_->mem_req_tag;
+		mem_req.tick 	= MEM_LATENCY;
+		ram_.push_back(mem_req);
 	}
-
-	msu_->mem_rsp_valid = mem_rsp_->valid;
-	msu_->mem_rsp_mask 	= mem_rsp_->mask;
-	msu_->mem_rsp_data 	= mem_rsp_->data;
-	msu_->mem_rsp_tag 	= mem_rsp_->tag;
 }
 
 void MemSim::run() {

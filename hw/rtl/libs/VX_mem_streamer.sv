@@ -118,6 +118,7 @@ module VX_mem_streamer #(
 	// Select entry in PQ
 	assign pq_raddr = mem_rsp_fire ? mem_rsp_tag : iq_raddr;
 	assign pq_push = req_valid && ~pq_full && ~iq_full;
+	assign pq_pop = rsp_en && ~pq_empty;
 	assign req_ready = ~pq_full;
 
 	VX_index_buffer #(
@@ -195,14 +196,14 @@ module VX_mem_streamer #(
 	assign rsp_en = ((PARTIAL_RESPONSE) ? rsp_n[RSPW-1] : (0 == rsp_rem_mask_n)) && rsp_ready;
 
 	VX_pipe_register #(
-		.DATAW	(1 + NUM_REQS + (NUM_REQS * DATAW) + TAGW + 1),
+		.DATAW	(1 + NUM_REQS + (NUM_REQS * DATAW) + TAGW ),
 		.RESETW (1)
 	) rsp_pipe_reg (
 		.clk		(clk),
 		.reset		(reset),
 		.enable		(rsp_en),
-		.data_in	({rsp_n, pq_req_tag, rsp_en & ~pq_empty}),
-		.data_out	({rsp_valid, rsp_mask, rsp_data, rsp_tag, pq_pop})
+		.data_in	({rsp_n, pq_req_tag}),
+		.data_out	({rsp_valid, rsp_mask, rsp_data, rsp_tag})
 	);
 
 	//////////////////////////////////////////////////////////////////
