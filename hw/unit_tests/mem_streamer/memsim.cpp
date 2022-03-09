@@ -111,7 +111,7 @@ void MemSim::attach_ram () {
 	// Time to respond to the request
 	if (dequeue_index != -1) {
 		mem_rsp_->valid = 1;
-		mem_rsp_->mask 	= generate_rand (0, ram_.back()->valid);
+		mem_rsp_->mask 	= generate_rand (0, ram_[dequeue_index]->valid);
 		mem_rsp_->data 	= generate_rand (0x20000000, 0x30000000);
 		mem_rsp_->tag 	= ram_[dequeue_index]->tag;
 	}
