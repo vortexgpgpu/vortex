@@ -128,6 +128,9 @@ module VX_mem_streamer #(
 		if (pq_pop) begin
 			$display ("Releasing entry from PQ at location %d", pq_raddr);
 		end
+		if (pq_push) begin
+			$display ("Inserting entry into PQ at location %d", pq_waddr);
+		end
 	end
 
 	VX_index_buffer #(

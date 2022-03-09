@@ -37,6 +37,7 @@ MemSim::MemSim() {
 	mem_rsp_ 	= new mem_rsp_t;
 
 	mem_rsp_active_ = false;
+	mem_rsp_stall_ = false;
 
 	// Enable tracing
 	Verilated::traceEverOn(true);
@@ -89,16 +90,19 @@ void MemSim::attach_core() {
 void MemSim::attach_ram () {
 	bool is_duplicate = false;
 
-	msu_->mem_req_ready = 0b1111;
+	msu_->mem_req_ready = generate_rand(10, 15);
 	int dequeue_index = -1;
 
 	std::cout<<"Num entries in RAM: "<<ram_.size()<<"\n";
 
 	// Simulate 4 cycle delay in response
 	for (int i = 0; i < ram_.size(); i++) {
-		if (ram_[i].cycles_left > 0) {
-			ram_[i].cycles_left -= 1;	
+		if (!mem_rsp_stall_) {
+			if (ram_[i].cycles_left > 0) {
+				ram_[i].cycles_left -= 1;	
+			}
 		}
+		
 		if (dequeue_index == -1 && ram_[i].cycles_left == 0) {
 			dequeue_index = i;
 		}
@@ -121,16 +125,24 @@ void MemSim::attach_ram () {
 		if (dequeue_index != -1) {
 			std::cout<<"Scheduling response\n";
 			msu_->mem_rsp_valid = 1;
-			msu_->mem_rsp_mask 	= ram_[dequeue_index].valid;
-			msu_->mem_rsp_data 	= generate_rand (0x20000000, 0x30000000);
+			msu_->mem_rsp_mask 	= generate_rand(ram_[dequeue_index].rsp_sent_mask, ram_[dequeue_index].valid);
+			msu_->mem_rsp_data 	= generate_rand(0x20000000, 0x30000000);
 			msu_->mem_rsp_tag 	= ram_[dequeue_index].tag;
-			std::cout<<"Erasing entry\n";
-			ram_.erase(ram_.begin() + dequeue_index);
-			mem_rsp_active_ = true;
 
 			std::cout<<std::hex;
 			std::cout<<"Valid: "<<+msu_->mem_rsp_valid<<"\n";
-			std::cout<<"Mask: "<<+msu_->mem_rsp_mask<<"\n";
+			std::cout<<"Response mask: "<<+msu_->mem_rsp_mask<<" Required mask: "<<+ram_[dequeue_index].valid<<"\n";
+
+			if (msu_->mem_rsp_mask == ram_[dequeue_index].valid) {
+				std::cout<<"Erasing entry after all requests have been processed\n";
+				ram_.erase(ram_.begin() + dequeue_index);
+				mem_rsp_stall_ = false;
+			} else {
+				mem_rsp_stall_ = true;
+				ram_[dequeue_index].rsp_sent_mask = msu_->mem_rsp_mask;
+				std::cout<<"Stall\n";
+			}
+			mem_rsp_active_ = true;
 
 		} else {
 			msu_->mem_rsp_valid = 0;
@@ -148,13 +160,14 @@ void MemSim::attach_ram () {
 		mem_req.data 	= msu_->mem_req_data;
 		mem_req.tag 	= msu_->mem_req_tag;
 		mem_req.cycles_left = MEM_LATENCY;
+		mem_req.rsp_sent_mask = 0;
 		ram_.push_back(mem_req);
 	}
 }
 
 void MemSim::run() {
 	this->reset();
-	
+
 	while (sc_time_stamp() < SIM_TIME) {
 		std::cout<<"========================="<<"\n";
 		std::cout<<"Timestamp: "<<sc_time_stamp()<<"\n";

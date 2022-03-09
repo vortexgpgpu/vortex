@@ -14,6 +14,7 @@
 
 typedef struct {
     uint8_t     valid;
+    uint8_t     rsp_sent_mask;
     bool        rw;
     uint8_t     byteen;
     uint32_t    addr;
@@ -42,6 +43,7 @@ class MemSim {
         mem_rsp_t *mem_rsp_;
         std::vector<mem_req_t> ram_;
         bool mem_rsp_active_;
+        bool mem_rsp_stall_;
 
         void eval();
         void step();
