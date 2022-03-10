@@ -21,7 +21,7 @@ VL_FLAGS += --trace
 VL_FLAGS += $(RTL_INCLUDE)
 VL_FLAGS += $(PARAMS)
 
-SRCS += memsim.cpp $(DPI_DIR)/util_dpi.cpp
+SRCS += memsim.cpp ram.cpp $(DPI_DIR)/util_dpi.cpp
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors -Wno-array-bounds -Wno-maybe-uninitialized
 CXXFLAGS += -I../../../dpi -I../../../

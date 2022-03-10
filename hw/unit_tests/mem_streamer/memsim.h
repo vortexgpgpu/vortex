@@ -7,10 +7,9 @@
 #include <verilated_vcd_c.h>
 #include "VVX_mem_streamer.h"
 #include "VVX_mem_streamer__Syms.h"
+#include "ram.h"
 
-#define SIM_TIME 50
-#define MEM_LATENCY 4
-
+#define SIM_TIME 300
 
 typedef struct {
     uint8_t     valid;
@@ -50,10 +49,11 @@ class MemSim {
         void reset();
         void attach_core();
         void attach_ram();
+        void attach_ram2(RAM *ram);
 
     public:
         MemSim();
         virtual ~MemSim();
 
-        void run();  
+        void run(RAM *ram);  
 };

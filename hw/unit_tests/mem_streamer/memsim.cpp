@@ -1,5 +1,6 @@
 #include <random>
 #include "memsim.h"
+#include "ram.h"
 
 static bool trace_enabled = false;
 static uint64_t trace_start_time = 0;
@@ -46,15 +47,21 @@ MemSim::MemSim() {
     trace_->open("trace.vcd");
 }
 
+//////////////////////////////////////////////////////
+
 MemSim::~MemSim() {
 	trace_->close();
 	delete msu_;
 }
 
+//////////////////////////////////////////////////////
+
 void MemSim::eval() {
 	msu_->eval();
 	trace_->dump(timestamp++);
 }
+
+//////////////////////////////////////////////////////
 
 void MemSim::step() {
 	msu_->clk = 0;
@@ -64,6 +71,8 @@ void MemSim::step() {
 	this->eval();
 }
 
+//////////////////////////////////////////////////////
+
 void MemSim::reset() {
 	msu_->reset = 1;
 	this->step();
@@ -71,8 +80,9 @@ void MemSim::reset() {
 	msu_->reset = 0;
 	this->step();
 
-	ram_.clear();
 }
+
+//////////////////////////////////////////////////////
 
 void MemSim::attach_core() {
 	if (msu_->req_ready) {
@@ -86,6 +96,66 @@ void MemSim::attach_core() {
 	}
 	msu_->rsp_ready = true;
 }
+
+//////////////////////////////////////////////////////
+
+void MemSim::attach_ram2 (RAM *ram) {
+
+	req_t req;
+	req.valid 			= msu_->mem_req_valid;
+	req.rw 				= msu_->mem_req_rw;
+	req.byteen			= msu_->mem_req_byteen;
+	req.addr 			= msu_->mem_req_addr;
+	req.data 			= msu_->mem_req_data;
+	req.tag 			= msu_->mem_req_tag;
+
+	msu_->mem_req_ready = ram->insert_req(req);
+	std::cout<<"SIM: Request ready: "<<+msu_->mem_req_ready<<std::endl;
+
+	rsp_t rsp;
+	rsp = ram->schedule_rsp();
+
+	msu_->mem_rsp_valid = rsp.valid;
+	msu_->mem_rsp_mask 	= rsp.mask;
+	msu_->mem_rsp_data 	= rsp.data;
+	msu_->mem_rsp_tag 	= rsp.tag;
+	rsp.ready 			= msu_->mem_rsp_ready;
+
+	ram->halt_rsp(rsp);
+}
+
+//////////////////////////////////////////////////////
+
+void MemSim::run(RAM *ram) {
+	this->reset();
+
+	while (sc_time_stamp() < SIM_TIME) {
+		std::cout<<"========================="<<"\n";
+		std::cout<<"Cycle: "<<sc_time_stamp()<<"\n";
+		this->step();
+		this->attach_core();
+		this->attach_ram2(ram);
+	}
+}
+
+//////////////////////////////////////////////////////
+
+int main (int argc, char** argv, char** env) {
+    Verilated::commandArgs(argc, argv);
+
+	MemSim memsim;
+	RAM ram;	
+
+	memsim.run(&ram);
+
+	return 0;
+}
+
+//////////////////////////////////////////////////////
+
+
+
+/* Code dump
 
 void MemSim::attach_ram () {
 	bool is_duplicate = false;
@@ -165,27 +235,4 @@ void MemSim::attach_ram () {
 	}
 }
 
-void MemSim::run() {
-	this->reset();
-
-	while (sc_time_stamp() < SIM_TIME) {
-		std::cout<<"========================="<<"\n";
-		std::cout<<"Timestamp: "<<sc_time_stamp()<<"\n";
-		this->step();
-		this->attach_core();
-		this->attach_ram();
-	}
-}
-
-//////////////////////////////////////////////////////
-
-int main (int argc, char** argv, char** env) {
-    Verilated::commandArgs(argc, argv);
-
-	MemSim memsim;
-	memsim.run();
-
-	return 0;
-}
-
-//////////////////////////////////////////////////////
+*/

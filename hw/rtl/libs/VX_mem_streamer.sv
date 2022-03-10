@@ -126,10 +126,10 @@ module VX_mem_streamer #(
 	// Debugging
 	always @(posedge clk) begin
 		if (pq_pop) begin
-			$display ("Releasing entry from PQ at location %d", pq_raddr);
+			$display ("MSU: Releasing entry from PQ at index: %d", pq_raddr);
 		end
 		if (pq_push) begin
-			$display ("Inserting entry into PQ at location %d", pq_waddr);
+			$display ("MSU: Inserting entry into PQ at index %d", pq_waddr);
 		end
 	end
 
@@ -208,7 +208,7 @@ module VX_mem_streamer #(
 	assign rsp_en = ((PARTIAL_RESPONSE) ? rsp_n[0] : (0 == rsp_rem_mask_n)) && rsp_ready;
 
 	// Assert pq_pop for only one clk cycle
-	assign pq_pop_n = pq_pop;
+	assign pq_pop_n = pq_pop & rsp_en;
 	always @(posedge clk) begin
 		if (reset)
 			pq_pop <= 1'b0;
