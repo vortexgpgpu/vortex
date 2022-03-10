@@ -2,7 +2,7 @@
 
 // Top unit for the raster unit
 // Instantiates the following modules:
-//      1. CSR connections
+//      1. DCR connections
 //      2. Requests switch
 //      3. Raster slices
 //      4. Response switch
@@ -25,29 +25,29 @@ module VX_raster_unit #(
     VX_dcache_rsp_if.slave  cache_rsp_if,
 
     // Inputs
-    VX_raster_csr_if.slave  raster_csr_if,
+    VX_raster_dcr_if.slave  raster_dcr_if,
     VX_raster_req_if.slave  raster_req_if,
 
     // Outputs
     VX_raster_rsp_if.master raster_rsp_if
 );
 
-    raster_csrs_t raster_csrs;
+    raster_dcrs_t raster_dcrs;
 
-    // Raster unit csr block
-    VX_raster_csr #(
+    // Raster unit dcr block
+    VX_raster_dcr #(
         .CORE_ID (CORE_ID)
-    ) raster_csr (
+    ) raster_dcr (
         .clk        (clk),
         .reset      (reset),
 
         // inputs
-        .raster_csr_if (raster_csr_if),
+        .raster_dcr_if (raster_dcr_if),
         // TODO: Remove if not used
         //.raster_req_if (raster_req_if),
 
         // outputs
-        .raster_csrs (raster_csrs)
+        .raster_dcrs (raster_dcrs)
     );
 
     // TODO: Add requests switch here
@@ -78,7 +78,7 @@ module VX_raster_unit #(
     )
 
     // TODO: remove
-    `UNUSED_VAR (raster_csrs)
+    `UNUSED_VAR (raster_dcrs)
 
     // TODO: remove
     `UNUSED_VAR (raster_req_if.valid)
@@ -103,10 +103,10 @@ module VX_raster_unit #(
     `UNUSED_VAR (raster_rsp_if.ready)
 
     // TODO: remove
-    `UNUSED_VAR (raster_csr_if.write_enable);
-    `UNUSED_VAR (raster_csr_if.write_addr);
-    `UNUSED_VAR (raster_csr_if.write_data);
-    `UNUSED_VAR (raster_csr_if.write_uuid);
+    `UNUSED_VAR (raster_dcr_if.write_enable);
+    `UNUSED_VAR (raster_dcr_if.write_addr);
+    `UNUSED_VAR (raster_dcr_if.write_data);
+    `UNUSED_VAR (raster_dcr_if.write_uuid);
 
     // TODO: remove
     assign perf_raster_if.mem_reads = 0;
