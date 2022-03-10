@@ -67,7 +67,7 @@ private:
                   fixed16_t e0, 
                   fixed16_t e1, 
                   fixed16_t e2) {
-    printf("Quad (%d,%d) :\n", x, y);
+    //printf("Quad (%d,%d) :\n", x, y);
     RasterUnit::Stamp stamp;
     stamp.x    = x;
     stamp.y    = y;

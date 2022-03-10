@@ -47,8 +47,14 @@ public:
       __unused (value);
     }    
 
-    void write(uint32_t x, uint32_t y , uint32_t mask, uint32_t color, uint32_t depth) {    
-      rop_unit_->write(x, y, mask, 0, color, depth);
+    void write(uint32_t frag, uint32_t x, uint32_t y , uint32_t mask, uint32_t color, uint32_t depth) {    
+      if (mask & (1 << frag)) {
+        auto i  = frag & 0x1;
+        auto j  = frag >> 1;
+        auto px = x + i;
+        auto py = y + j;
+        rop_unit_->write(px, py, 0, color, depth);
+      }
     }
 
     void tick() {
@@ -97,8 +103,8 @@ void RopSrv::csr_write(uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value
   impl_->csr_write(wid, tid, addr, value);
 }
 
-void RopSrv::write(uint32_t x, uint32_t y, uint32_t mask, uint32_t color, uint32_t depth) {
-  impl_->write(x, y, mask, color, depth);
+void RopSrv::write(uint32_t frag, uint32_t x, uint32_t y, uint32_t mask, uint32_t color, uint32_t depth) {
+  impl_->write(frag, x, y, mask, color, depth);
 }
 
 void RopSrv::tick() {

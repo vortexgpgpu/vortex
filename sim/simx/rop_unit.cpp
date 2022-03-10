@@ -273,82 +273,68 @@ private:
     initialized_        = true;
   }
 
-  uint32_t doDepthTest(uint32_t x, uint32_t y, uint32_t mask, uint32_t depth) { 
-    uint32_t result_mask = 0;
+  bool doDepthTest(uint32_t x, uint32_t y, uint32_t depth) {     
     uint32_t depth_ref = depth & fixed24_t::MASK;
+    
+    uint32_t buf_addr = buf_baseaddr_ + y * buf_pitch_ + x * 4;
+    
+    uint32_t stored_value;
+    mem_->read(&stored_value, buf_addr, 4);
 
-    for (uint32_t j = 0; j < 2; ++j) {
-      for (uint32_t i = 0; i < 2; ++i) {
-        uint32_t f = j * 2 + i;
-        if (mask & (1 << f)) {
-          uint32_t stored_value;
-          uint32_t buf_addr = buf_baseaddr_ + (y + j) * buf_pitch_ + (x + i) * 4;
-          mem_->read(&stored_value, buf_addr, 4);
-          uint32_t depth_val = stored_value & fixed24_t::MASK;
-          auto passed = DoCompare(depth_func_, depth_ref, depth_val);
-          if (passed) {
-            if (depth_mask_) {
-              auto write_value = (stored_value & ~fixed24_t::MASK) | (depth_ref & fixed24_t::MASK);
-              mem_->write(&write_value, buf_addr, 4);
-            }
-            result_mask |= (1 << f);
-          }          
-        }
-      }
+    uint32_t depth_val = stored_value & fixed24_t::MASK;
+    auto passed = DoCompare(depth_func_, depth_ref, depth_val);
+    if (passed && depth_mask_) {
+      auto write_value = (stored_value & ~fixed24_t::MASK) | (depth_ref & fixed24_t::MASK);
+      mem_->write(&write_value, buf_addr, 4);
     }
-    return result_mask;
+
+    return passed;
   }
 
-  uint32_t doStencilTest(uint32_t x, uint32_t y, uint32_t mask, uint32_t face, uint32_t depth)  { 
-    uint32_t result_mask = 0;
+  bool doStencilTest(uint32_t x, uint32_t y, uint32_t face, uint32_t depth)  { 
     auto depth_ref     = depth & fixed24_t::MASK;    
     auto stencil_func  = face ? stencil_back_func_ : stencil_front_func_;    
     auto stencil_mask  = face ? stencil_back_mask_ : stencil_front_mask_;
     auto stencil_ref   = face ? stencil_back_ref_ : stencil_front_ref_;    
     auto stencil_ref_m = stencil_ref & stencil_mask;
 
-    for (uint32_t j = 0; j < 2; ++j) {
-      for (uint32_t i = 0; i < 2; ++i) {
-        uint32_t f = j * 2 + i;
-        if (mask & (1 << f)) {
-          uint32_t stored_value;
-          uint32_t buf_addr = buf_baseaddr_ + (y + j) * buf_pitch_ + (x + i) * 4;
-          mem_->read(&stored_value, buf_addr, 4);          
-          uint32_t stencil_val = stored_value >> 24;
-          uint32_t depth_val   = stored_value & 0xffffff;   
+    uint32_t buf_addr = buf_baseaddr_ + y * buf_pitch_ + x * 4;
 
-          uint32_t stencil_val_m = stencil_val & stencil_mask;
+    uint32_t stored_value;          
+    mem_->read(&stored_value, buf_addr, 4);          
 
-          uint32_t writeMask = stencil_mask << 24;
+    uint32_t stencil_val = stored_value >> 24;
+    uint32_t depth_val   = stored_value & 0xffffff;   
 
-          uint32_t stencil_op;
+    uint32_t stencil_val_m = stencil_val & stencil_mask;
 
-          auto stencil_passed = DoCompare(stencil_func, stencil_ref_m, stencil_val_m);
-          if (stencil_passed) {
-            auto depth_passed = DoCompare(depth_func_, depth_ref, depth_val);
-            if (depth_passed) {
-              if (depth_mask_) {
-                writeMask |= 0xffffff;
-              }
-              result_mask |= (1 << f);
-              stencil_op = face ? stencil_back_zpass_ : stencil_front_zpass_;              
-            } else {
-              stencil_op = face ? stencil_back_zfail_ : stencil_front_zfail_;
-            } 
-          } else {
-            stencil_op = face ? stencil_back_fail_ : stencil_front_fail_;
-          }
+    uint32_t writeMask = stencil_mask << 24;
 
-          auto stencil_result = DoStencilOp(stencil_op, stencil_ref, stencil_val);
+    uint32_t stencil_op;
 
-          // Write the depth stencil value
-          auto merged_value = (stencil_result << 24) | depth_ref;
-          auto write_value = (stored_value & ~writeMask) | (merged_value & writeMask);
-          mem_->write(&write_value, buf_addr, 4);
+    auto passed = DoCompare(stencil_func, stencil_ref_m, stencil_val_m);
+    if (passed) {
+      passed = DoCompare(depth_func_, depth_ref, depth_val);
+      if (passed) {
+        if (depth_mask_) {
+          writeMask |= 0xffffff;
         }
-      }
+        stencil_op = face ? stencil_back_zpass_ : stencil_front_zpass_;              
+      } else {
+        stencil_op = face ? stencil_back_zfail_ : stencil_front_zfail_;
+      } 
+    } else {
+      stencil_op = face ? stencil_back_fail_ : stencil_front_fail_;
     }
-    return result_mask;
+
+    auto stencil_result = DoStencilOp(stencil_op, stencil_ref, stencil_val);
+
+    // Write the depth stencil value
+    auto merged_value = (stencil_result << 24) | depth_ref;
+    auto write_value = (stored_value & ~writeMask) | (merged_value & writeMask);
+    mem_->write(&write_value, buf_addr, 4);
+
+    return passed;
   }
 
 public:
@@ -368,17 +354,17 @@ public:
     mem_ = mem;
   }
 
-  uint32_t write(uint32_t x, uint32_t y, uint32_t mask, uint32_t face, uint32_t depth) {
+  bool write(uint32_t x, uint32_t y, uint32_t face, uint32_t depth) {
     if (!initialized_) {
       this->initialize();
     }
     auto stencil_enabled = face ? stencil_back_enabled_ : stencil_front_enabled_;
     if (stencil_enabled) {
-      mask = this->doStencilTest(x, y, mask, face, depth);
+      return this->doStencilTest(x, y, face, depth);
     } else if (depth_enabled_) {
-      mask = this->doDepthTest(x, y, mask, depth);
+      return this->doDepthTest(x, y, depth);
     }
-    return mask;
+    return true;
   }
 };
 
@@ -398,6 +384,7 @@ private:
   uint32_t blend_const_;
   uint32_t logic_op_;
   uint32_t write_mask_;
+  bool blend_enabled_;
   bool initialized_;
 
   void initialize() {
@@ -413,6 +400,8 @@ private:
     blend_dst_a_    = (dcrs_.at(ROP_STATE_BLEND_FUNC) >> 24) & 0xff;
     blend_const_    = dcrs_.at(ROP_STATE_BLEND_CONST);
     logic_op_       = dcrs_.at(ROP_STATE_LOGIC_OP);    
+    blend_enabled_  = !((blend_mode_rgb_ == ROP_BLEND_MODE_LOGICOP) 
+                    && (logic_op_ == ROP_LOGIC_OP_COPY));
     initialized_    = true;
   }
 
@@ -443,27 +432,25 @@ public:
     return cocogfx::ColorARGB(a.a, rgb.r, rgb.g, rgb.b);
   }
 
-  void write(uint32_t x, uint32_t y, uint32_t mask, uint32_t color) {
+  void write(uint32_t x, uint32_t y, uint32_t color) {
     if (!initialized_) {
       this->initialize();
     }
 
-    for (uint32_t j = 0; j < 2; ++j) {
-      for (uint32_t i = 0; i < 2; ++i) {
-        uint32_t f = j * 2 + i;
-        if (mask & (1 << f)) {
-          uint32_t stored_value;
-          uint32_t buf_addr = buf_baseaddr_ + (y + j) * buf_pitch_ + (x + i) * 4;
-          mem_->read(&stored_value, buf_addr, 4);   
-          cocogfx::ColorARGB src(color);
-          cocogfx::ColorARGB dst(stored_value);
-          cocogfx::ColorARGB cst(blend_const_);
-          auto new_color = this->doBlend(src, dst, cst);
-          auto write_value = (stored_value & ~write_mask_) | (new_color & write_mask_);
-          mem_->write(&write_value, buf_addr, 4);
-        }
-      }
-    }
+    uint32_t buf_addr = buf_baseaddr_ + y * buf_pitch_ + x * 4;
+
+    uint32_t stored_value;
+    mem_->read(&stored_value, buf_addr, 4);   
+
+    cocogfx::ColorARGB src(color);
+    cocogfx::ColorARGB dst(stored_value);
+    cocogfx::ColorARGB cst(blend_const_);
+    auto new_color = this->doBlend(src, dst, cst);
+
+    // printf("color[%d,%d]=(%d,%d,%d,%d)\n", x, y, new_color.r, new_color.g, new_color.b, new_color.a);
+
+    auto write_value = (stored_value & ~write_mask_) | (new_color & write_mask_);
+    mem_->write(&write_value, buf_addr, 4);
   }
 };
 
@@ -499,9 +486,9 @@ public:
       blender_.attach_ram(mem);
     }   
 
-    void write(uint32_t x, uint32_t y, uint32_t mask, uint32_t face, uint32_t color, uint32_t depth) {
-      mask = depthtencil_.write(x, y, mask, face, depth);
-      blender_.write(x, y, mask, color);
+    void write(uint32_t x, uint32_t y, uint32_t face, uint32_t color, uint32_t depth) {
+      if (depthtencil_.write(x, y, face, depth))
+        blender_.write(x, y, color);
     }
 
     void tick() {
@@ -537,8 +524,8 @@ void RopUnit::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
 }
 
-void RopUnit::write(uint32_t x, uint32_t y, uint32_t mask, uint32_t face, uint32_t color, uint32_t depth) {
-  impl_->write(x, y, mask, face, color, depth);
+void RopUnit::write(uint32_t x, uint32_t y, uint32_t face, uint32_t color, uint32_t depth) {
+  impl_->write(x, y, face, color, depth);
 }
 
 void RopUnit::tick() {

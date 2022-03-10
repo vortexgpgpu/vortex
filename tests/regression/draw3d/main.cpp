@@ -32,7 +32,6 @@ const char* output_file = "output.png";
 const char* reference_file  = nullptr;
 uint32_t clear_color = 0x00000000;
 uint32_t clear_depth = 0x00000000;
-bool tex_enabled = false;
 int tex_format = TEX_FORMAT_A8R8G8B8;
 ePixelFormat tex_eformat = FORMAT_A8R8G8B8;
 int tex_wrap = TEX_WRAP_CLAMP;
@@ -40,6 +39,7 @@ int tex_filter  = TEX_FILTER_POINT;
 uint32_t dst_width  = 128;
 uint32_t dst_height = 128;
 const model_t& model = model_triangle;
+bool blend_enabled = false;
 
 vx_device_h device = nullptr;
 vx_buffer_h staging_buf = nullptr;
@@ -110,7 +110,7 @@ void cleanup() {
   if (device) {
     vx_mem_free(device, tilebuf_addr);
     vx_mem_free(device, primbuf_addr);
-    if (tex_enabled)
+    if (model.tex_enabled)
       vx_mem_free(device, tbuf_addr);    
     vx_mem_free(device, zbuf_addr);
     vx_mem_free(device, cbuf_addr);
@@ -199,9 +199,7 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  if (!model.texture.empty()) {
-    tex_enabled = true;
-
+  if (model.tex_enabled) {
     std::vector<uint8_t> staging;  
     RT_CHECK(LoadImage(input_file, tex_eformat, staging, &tex_width, &tex_height));    
     // check power of two support
@@ -220,12 +218,12 @@ int main(int argc, char *argv[]) {
   uint32_t tex_logheight = log2ceil(tex_height);
 
   uint32_t zbuf_stride = 4;
-  uint32_t zbuf_pitch = dst_width * zbuf_stride;
-  uint32_t zbuf_size = dst_height * zbuf_pitch;
+  uint32_t zbuf_pitch  = dst_width * zbuf_stride;
+  uint32_t zbuf_size   = dst_height * zbuf_pitch;
 
   uint32_t cbuf_stride = 4;
-  uint32_t cbuf_pitch = dst_width * cbuf_stride;
-  uint32_t cbuf_size = dst_width * cbuf_pitch;
+  uint32_t cbuf_pitch  = dst_width * cbuf_stride;
+  uint32_t cbuf_size   = dst_width * cbuf_pitch;
 
   // Perform tile binning
   auto num_tiles = Binning(tilebuf, primbuf, model, dst_width, dst_height, tile_size);
@@ -239,7 +237,7 @@ int main(int argc, char *argv[]) {
   std::cout << "allocate device memory" << std::endl;
   RT_CHECK(vx_mem_alloc(device, tilebuf.size(), &tilebuf_addr));
   RT_CHECK(vx_mem_alloc(device, primbuf.size(), &primbuf_addr));
-  if (tex_enabled)
+  if (model.tex_enabled)
     RT_CHECK(vx_mem_alloc(device, texbuf.size(), &tbuf_addr));  
   RT_CHECK(vx_mem_alloc(device, zbuf_size, &zbuf_addr));
   RT_CHECK(vx_mem_alloc(device, cbuf_size, &cbuf_addr));
@@ -265,13 +263,15 @@ int main(int argc, char *argv[]) {
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
   {
-    kernel_arg.tex_enabled= tex_enabled;
-    kernel_arg.prim_addr  = primbuf_addr;
-    kernel_arg.dst_width  = dst_width;
-    kernel_arg.dst_height = dst_height;
-    kernel_arg.dst_stride = cbuf_stride;
-    kernel_arg.dst_pitch  = cbuf_pitch;    
-    kernel_arg.dst_addr   = cbuf_addr;
+    kernel_arg.depth_enabled= model.depth_enabled;
+    kernel_arg.color_enabled= model.color_enabled;
+    kernel_arg.tex_enabled  = model.tex_enabled;
+    kernel_arg.prim_addr    = primbuf_addr;
+    kernel_arg.dst_width    = dst_width;
+    kernel_arg.dst_height   = dst_height;
+    kernel_arg.dst_stride   = cbuf_stride;
+    kernel_arg.dst_pitch    = cbuf_pitch;    
+    kernel_arg.dst_addr     = cbuf_addr;
     
     auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
@@ -314,8 +314,8 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_addr, cbuf_size, 0));  
   }
 
-  // configure texture units
-  if (tex_enabled) {
+  if (model.tex_enabled) {
+    // configure texture units
     vx_dcr_write(device, DCR_TEX_STAGE,  0);
     vx_dcr_write(device, DCR_TEX_LOGDIM, (tex_logheight << 16) | tex_logwidth);	
     vx_dcr_write(device, DCR_TEX_FORMAT, tex_format);
@@ -334,37 +334,43 @@ int main(int argc, char *argv[]) {
   vx_dcr_write(device, DCR_RASTER_PBUF_ADDR,   primbuf_addr);
   vx_dcr_write(device, DCR_RASTER_PBUF_STRIDE, primbuf_stride);
 
-  // configure rop buffers
-  vx_dcr_write(device, DCR_ROP_ZBUF_ADDR,  zbuf_addr);
-  vx_dcr_write(device, DCR_ROP_ZBUF_PITCH, zbuf_pitch);
+  // configure rop color buffer
   vx_dcr_write(device, DCR_ROP_CBUF_ADDR,  cbuf_addr);
   vx_dcr_write(device, DCR_ROP_CBUF_PITCH, cbuf_pitch);
   vx_dcr_write(device, DCR_ROP_CBUF_MASK, 0xffffffff);
- 
-  // configure rop depth states
-  vx_dcr_write(device, DCR_ROP_DEPTH_FUNC, ROP_DEPTH_FUNC_LESS);
-  vx_dcr_write(device, DCR_ROP_DEPTH_MASK, 1);
-  vx_dcr_write(device, DCR_ROP_STENCIL_FUNC, (ROP_DEPTH_FUNC_ALWAYS << 16)  // back
-                                           | (ROP_DEPTH_FUNC_ALWAYS << 0)); // front 
-  vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, (ROP_STENCIL_OP_KEEP << 16)  // back
-                                            | (ROP_STENCIL_OP_KEEP << 0)); // front 
-  vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, (ROP_STENCIL_OP_KEEP << 16)  // back
-                                            | (ROP_STENCIL_OP_KEEP << 0)); // front 
-  vx_dcr_write(device, DCR_ROP_STENCIL_FAIL, (ROP_STENCIL_OP_KEEP << 16)  // back
-                                           | (ROP_STENCIL_OP_KEEP << 0)); // front
-  vx_dcr_write(device, DCR_ROP_STENCIL_MASK, (0xff << 16)  // back
-                                           | (0xff << 0)); // front 
-  vx_dcr_write(device, DCR_ROP_STENCIL_REF, (0 << 16)  // back 
-                                          | (0 << 0)); // front 
 
-  // configure rop blend stats
-  vx_dcr_write(device, DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)   // DST
-                                         | (ROP_BLEND_MODE_ADD << 0));  // SRC
-  vx_dcr_write(device, DCR_ROP_BLEND_FUNC, (ROP_BLEND_FUNC_ZERO            << 24)   // DST_A
-                                         | (ROP_BLEND_FUNC_ONE_MINUS_SRC_A << 16)   // DST_RGB 
-                                         | (ROP_BLEND_FUNC_ONE             << 8)    // SRC_A
-                                         | (ROP_BLEND_FUNC_SRC_A           << 0));  // SRC_RGB
-  vx_dcr_write(device, DCR_ROP_LOGIC_OP,  ROP_LOGIC_OP_COPY);
+  if (model.depth_enabled) {
+    // configure rop depth buffer
+    vx_dcr_write(device, DCR_ROP_ZBUF_ADDR,  zbuf_addr);
+    vx_dcr_write(device, DCR_ROP_ZBUF_PITCH, zbuf_pitch);    
+  
+    // configure rop depth states
+    vx_dcr_write(device, DCR_ROP_DEPTH_FUNC, ROP_DEPTH_FUNC_LESS);
+    vx_dcr_write(device, DCR_ROP_DEPTH_MASK, 1);
+    vx_dcr_write(device, DCR_ROP_STENCIL_FUNC, (ROP_DEPTH_FUNC_ALWAYS << 16)  // back
+                                             | (ROP_DEPTH_FUNC_ALWAYS << 0)); // front 
+    vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, (ROP_STENCIL_OP_KEEP << 16)  // back
+                                              | (ROP_STENCIL_OP_KEEP << 0)); // front 
+    vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, (ROP_STENCIL_OP_KEEP << 16)  // back
+                                              | (ROP_STENCIL_OP_KEEP << 0)); // front 
+    vx_dcr_write(device, DCR_ROP_STENCIL_FAIL, (ROP_STENCIL_OP_KEEP << 16)  // back
+                                             | (ROP_STENCIL_OP_KEEP << 0)); // front
+    vx_dcr_write(device, DCR_ROP_STENCIL_MASK, (0xff << 16)  // back
+                                            | (0xff << 0)); // front 
+    vx_dcr_write(device, DCR_ROP_STENCIL_REF, (0 << 16)  // back 
+                                            | (0 << 0)); // front 
+  }
+
+  if (blend_enabled) {
+    // configure rop blending
+    vx_dcr_write(device, DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)   // DST
+                                           | (ROP_BLEND_MODE_ADD << 0));  // SRC
+    vx_dcr_write(device, DCR_ROP_BLEND_FUNC, (ROP_BLEND_FUNC_ZERO            << 24)   // DST_A
+                                           | (ROP_BLEND_FUNC_ONE_MINUS_SRC_A << 16)   // DST_RGB 
+                                           | (ROP_BLEND_FUNC_ONE             << 8)    // SRC_A
+                                           | (ROP_BLEND_FUNC_SRC_A           << 0));  // SRC_RGB
+    vx_dcr_write(device, DCR_ROP_LOGIC_OP,  ROP_LOGIC_OP_COPY);
+  }
 
   // run tests
   std::cout << "render" << std::endl;

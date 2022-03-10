@@ -201,8 +201,8 @@
 
 // Render Output Units ////////////////////////////////////////////////////////
 
-`define ROP_DEPTH_FUNC_NEVER        0
-`define ROP_DEPTH_FUNC_ALWAYS       1
+`define ROP_DEPTH_FUNC_ALWAYS       0
+`define ROP_DEPTH_FUNC_NEVER        1
 `define ROP_DEPTH_FUNC_LESS         2
 `define ROP_DEPTH_FUNC_LEQUAL       3
 `define ROP_DEPTH_FUNC_EQUAL        4
@@ -221,12 +221,12 @@
 `define ROP_STENCIL_OP_DECR_WRAP    7
 `define ROP_STENCIL_OP_BITS         3
 
-`define ROP_BLEND_MODE_ADD          0
-`define ROP_BLEND_MODE_SUB          1
-`define ROP_BLEND_MODE_REV_SUB      2
-`define ROP_BLEND_MODE_MIN          3
-`define ROP_BLEND_MODE_MAX          4
-`define ROP_BLEND_MODE_LOGICOP      5  // deprecated!
+`define ROP_BLEND_MODE_LOGICOP      0  // deprecated!
+`define ROP_BLEND_MODE_ADD          1
+`define ROP_BLEND_MODE_SUB          2
+`define ROP_BLEND_MODE_REV_SUB      3
+`define ROP_BLEND_MODE_MIN          4
+`define ROP_BLEND_MODE_MAX          5
 `define ROP_BLEND_MODE_BITS         3
 
 `define ROP_BLEND_FUNC_ZERO                   0 
@@ -246,10 +246,10 @@
 `define ROP_BLEND_FUNC_ALPHA_SAT              14
 `define ROP_BLEND_FUNC_BITS                   4
 
-`define ROP_LOGIC_OP_CLEAR          0
-`define ROP_LOGIC_OP_AND            1
-`define ROP_LOGIC_OP_AND_REVERSE    2
-`define ROP_LOGIC_OP_COPY           3
+`define ROP_LOGIC_OP_COPY           0
+`define ROP_LOGIC_OP_CLEAR          1
+`define ROP_LOGIC_OP_AND            2
+`define ROP_LOGIC_OP_AND_REVERSE    3
 `define ROP_LOGIC_OP_AND_INVERTED   4
 `define ROP_LOGIC_OP_NOOP           5
 `define ROP_LOGIC_OP_XOR            6

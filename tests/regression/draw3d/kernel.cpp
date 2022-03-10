@@ -4,8 +4,22 @@
 #include <cocogfx/include/color.hpp>
 #include <cocogfx/include/math.hpp>
 
-#define GRADIENTS_i(i) \
-{ \
+#define DEFAULTS_i(i) \
+	z[i] = fixed24_t(0.0f); \
+	r[i] = fixed24_t(1.0f); \
+	g[i] = fixed24_t(1.0f); \
+	b[i] = fixed24_t(1.0f); \
+	a[i] = fixed24_t(1.0f); \
+	u[i] = fixed24_t(0.0f); \
+	v[i] = fixed24_t(0.0f)
+
+#define DEFAULTS \
+	DEFAULTS_i(0); \
+	DEFAULTS_i(1); \
+	DEFAULTS_i(2); \
+	DEFAULTS_i(3)  \
+
+#define GRADIENTS_i(i) { \
 	csr_write(CSR_RASTER_FRAG, i); \
 	auto cx = fixed16_t::make(csr_read(CSR_RASTER_BCOORD_X)); \
 	auto cy = fixed16_t::make(csr_read(CSR_RASTER_BCOORD_Y)); \
@@ -17,7 +31,7 @@
 	csr_write(CSR_RASTER_GRAD_Y, gy.data()); \
 }
 
-#define GRADIENTS  \
+#define GRADIENTS \
 	GRADIENTS_i(0) \
 	GRADIENTS_i(1) \
 	GRADIENTS_i(2) \
@@ -33,23 +47,23 @@
 	INTERPOLATE_i(2, dst, src); \
 	INTERPOLATE_i(3, dst, src);
 
-#define TEXTURING(dst, u, v)	\
+#define TEXTURING(dst, u, v) \
 	dst[0] = vx_tex(0, u[0].data(), v[0].data(), 0); \
 	dst[1] = vx_tex(0, u[1].data(), v[1].data(), 0); \
 	dst[2] = vx_tex(0, u[2].data(), v[2].data(), 0); \
 	dst[3] = vx_tex(0, u[3].data(), v[3].data(), 0)
 
-#define MODULATE_i(i, dst, in1, in2_r, in2_g, in2_b, in2_a) \
-	dst[i].r = cocogfx::Mul8(in1[i].r, static_cast<uint8_t>(in2_r[i])); \
-	dst[i].g = cocogfx::Mul8(in1[i].g, static_cast<uint8_t>(in2_g[i])); \
-	dst[i].b = cocogfx::Mul8(in1[i].b, static_cast<uint8_t>(in2_b[i])); \
-	dst[i].a = cocogfx::Mul8(in1[i].a, static_cast<uint8_t>(in2_a[i]))
+#define MODULATE_i(i, dst_r, dst_g, dst_b, dst_a, src) \
+	dst_r[i] = fixed24_t::make(cocogfx::Mul8(dst_r[i].data(), src[i].r)); \
+	dst_g[i] = fixed24_t::make(cocogfx::Mul8(dst_g[i].data(), src[i].g)); \
+	dst_b[i] = fixed24_t::make(cocogfx::Mul8(dst_b[i].data(), src[i].b)); \
+	dst_a[i] = fixed24_t::make(cocogfx::Mul8(dst_a[i].data(), src[i].a)); \
 
-#define MODULATE(dst, in1, in2_r, in2_g, in2_b, in2_a) \
-	MODULATE_i(0, dst, in1, in2_r, in2_g, in2_b, in2_a); \
-	MODULATE_i(1, dst, in1, in2_r, in2_g, in2_b, in2_a); \
-	MODULATE_i(2, dst, in1, in2_r, in2_g, in2_b, in2_a); \
-	MODULATE_i(3, dst, in1, in2_r, in2_g, in2_b, in2_a)
+#define MODULATE(dst_r, dst_g, dst_b, dst_a, src) \
+	MODULATE_i(0, dst_r, dst_g, dst_b, dst_a, src); \
+	MODULATE_i(1, dst_r, dst_g, dst_b, dst_a, src); \
+	MODULATE_i(2, dst_r, dst_g, dst_b, dst_a, src); \
+	MODULATE_i(3, dst_r, dst_g, dst_b, dst_a, src)
 
 #define TO_RGBA_i(i, dst, src_r, src_g, src_b, src_a) \
 	dst[i].r = static_cast<uint8_t>((src_r[i].data() * 255) >> fixed24_t::FRAC); \
@@ -63,16 +77,22 @@
 	TO_RGBA_i(2, dst, src_r, src_g, src_b, src_a); \
 	TO_RGBA_i(3, dst, src_r, src_g, src_b, src_a)
 
+#define OUTPUT_i(i, color, z) \
+	csr_write(CSR_RASTER_FRAG, i); \
+	vx_rop(color[i].value, z[i].data()) \
+
 #define OUTPUT(color, z) \
-	vx_rop(color[0].value, z[0].data()); \
-	vx_rop(color[1].value, z[1].data()); \
-	vx_rop(color[2].value, z[2].data()); \
-	vx_rop(color[3].value, z[3].data())
+	OUTPUT_i(0, color, z); \
+	OUTPUT_i(1, color, z); \
+	OUTPUT_i(2, color, z); \
+	OUTPUT_i(3, color, z)
 
 void shader_function(int task_id, kernel_arg_t* kernel_arg) {
 	auto prim_ptr = (rast_prim_t*)kernel_arg->prim_addr;
 	fixed24_t z[4], r[4], g[4], b[4], a[4], u[4], v[4];
 	cocogfx::ColorARGB tex_color[4], out_color[4];
+
+	DEFAULTS;
 
 	for (;;) {
 		__DIVERGENT__ int status = vx_rast();
@@ -85,20 +105,25 @@ void shader_function(int task_id, kernel_arg_t* kernel_arg) {
 
 		GRADIENTS;
 
-		INTERPOLATE(z, attribs.z);
-		INTERPOLATE(r, attribs.r);
-		INTERPOLATE(g, attribs.g);
-		INTERPOLATE(b, attribs.b);
-		INTERPOLATE(a, attribs.a);
-		INTERPOLATE(u, attribs.u);
-		INTERPOLATE(v, attribs.v);
+		if (kernel_arg->depth_enabled) {
+			INTERPOLATE(z, attribs.z);
+		}
 
+		if (kernel_arg->color_enabled) {
+			INTERPOLATE(r, attribs.r);
+			INTERPOLATE(g, attribs.g);
+			INTERPOLATE(b, attribs.b);
+			INTERPOLATE(a, attribs.a);
+		}
+		
 		if (kernel_arg->tex_enabled) {
+			INTERPOLATE(u, attribs.u);
+			INTERPOLATE(v, attribs.v);
 			TEXTURING(tex_color, u, v);
-			MODULATE(out_color, tex_color, r, g, b, a);
-		} else {
-			TO_RGBA(out_color, r, g, b, a);
+			MODULATE(r, g, b, a, tex_color);
 		}	
+
+		TO_RGBA(out_color, r, g, b, a);
 
 		OUTPUT(out_color, z);
 	}
@@ -106,9 +131,9 @@ void shader_function(int task_id, kernel_arg_t* kernel_arg) {
 
 int main() {
 	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
-	int num_warps = vx_num_warps();
-	int num_threads = vx_num_threads();
-	int total_threads = num_warps * total_threads;
+	//int num_warps = vx_num_warps();
+	//int num_threads = vx_num_threads();
+	//int total_threads = num_warps * total_threads;
 	//vx_spawn_tasks(total_threads, (vx_spawn_tasks_cb)shader_function, arg);
 	shader_function(0, arg);
 	return 0;

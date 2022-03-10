@@ -1442,12 +1442,13 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             continue;
           auto color = rsdata[t][0].i;
           auto depth = rsdata[t][1].i;
-          auto x_y = core_->raster_srv_->csr_read(id_, t, CSR_RASTER_X_Y);
+          auto frag  = core_->raster_srv_->csr_read(id_, t, CSR_RASTER_FRAG);
+          auto x_y   = core_->raster_srv_->csr_read(id_, t, CSR_RASTER_X_Y);
           auto mask_pid = core_->raster_srv_->csr_read(id_, t, CSR_RASTER_MASK_PID);
           auto x    = x_y & 0xffff;
           auto y    = x_y >> 16;
           auto mask = mask_pid & 0xf;          
-          core_->rop_srv_->write(x, y, mask, color, depth);
+          core_->rop_srv_->write(frag, x, y, mask, color, depth);
         }
       } break;
       default:

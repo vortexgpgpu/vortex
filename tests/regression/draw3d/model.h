@@ -21,6 +21,9 @@ typedef struct {
 } primitive_t;
 
 struct model_t {
+  bool depth_enabled;
+  bool color_enabled;
+  bool tex_enabled;
   std::vector<vertex_t>    vertives;
   std::vector<primitive_t> primitives;
   std::string              texture;

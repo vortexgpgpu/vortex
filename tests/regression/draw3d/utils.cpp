@@ -151,10 +151,10 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
     uint32_t p;
 
     {
-      #define ATTRIBUTE_DELTA(dx, x0, x1, x2) \
-        dx.x = fixed24_t(x0 - x2); \
-        dx.y = fixed24_t(x1 - x2); \
-        dx.z = fixed24_t(x2)
+      #define ATTRIBUTE_DELTA(d, x0, x1, x2) \
+        d.x = fixed24_t(x0 - x2); \
+        d.y = fixed24_t(x1 - x2); \
+        d.z = fixed24_t(x2)
 
       rast_prim_t rast_prim;
       rast_prim.edges[0] = edges[0];

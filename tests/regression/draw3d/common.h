@@ -63,6 +63,8 @@ typedef struct {
 } rast_tile_header_t;
 
 typedef struct {
+  bool     depth_enabled;
+  bool     color_enabled;
   bool     tex_enabled;
   uint32_t prim_addr;
   uint32_t dst_addr;
