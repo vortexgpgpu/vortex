@@ -56,7 +56,7 @@ uint8_t RAM::insert_req(req_t req) {
 
         // Store metadata
         r.cycles_left = MEM_LATENCY;
-        r.rsp_sent_mask = 0;
+        r.rsp_sent_mask = 0b0001;
 
         std::cout<<"RAM: Insert entry... "<<std::endl;
 
@@ -78,8 +78,8 @@ rsp_t RAM::schedule_rsp() {
             std::cout<<"RAM: Scheduling response... "<<std::endl;
 
             is_rsp_active_ = true;
-            rsp.valid   = true;
-            rsp.mask    = generate_rand(ram_[dequeue_index].rsp_sent_mask, ram_[dequeue_index].valid);
+            rsp.valid   = 1;
+            rsp.mask    = ram_[dequeue_index].valid; //generate_rand(ram_[dequeue_index].rsp_sent_mask, ram_[dequeue_index].valid);
             rsp.data    = generate_rand(0x20000000, 0x30000000);
             rsp.tag     = ram_[dequeue_index].tag;
 
