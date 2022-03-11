@@ -1,6 +1,10 @@
 `include "VX_raster_define.vh"
 
-module VX_raster_setup #(
+// Module for triangle setup
+//  Description: Perform edge equation computation
+
+module VX_raster_setup #(  
+    parameter CORE_ID = 0
     // TODO
 ) (
     input wire clk,
