@@ -7,10 +7,12 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_te #(
-    CORE_ID = 0
+    parameter RASTER_TILE_SIZE       = 16,
+    parameter RASTER_BLOCK_SIZE      = 4,
+    parameter RASTER_LEVEL_DATA_BITS = ($clog2(RASTER_TILE_SIZE/RASTER_BLOCK_SIZE) + 1)
 ) (
     // Level value in recursive descent
-    input logic [`RASTER_LEVEL_DATA_BITS-1:0]                 level,
+    input logic [RASTER_LEVEL_DATA_BITS-1:0]                 level,
     // Tile data
     input logic [`RASTER_TILE_DATA_BITS-1:0]                  x_loc, y_loc,
     // Primitive data
@@ -20,13 +22,16 @@ module VX_raster_te #(
     input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]      edge_func_val[2:0],
     input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]      extents[2:0],
 
-    // Hand-shaking signals
+    // Status signals
     output logic                                              valid_tile, valid_block,
     // Sub-tile related data
     output logic [`RASTER_TILE_DATA_BITS-1:0]                 tile_x_loc[3:0],
         tile_y_loc[3:0],
     output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]     tile_edge_func_val[3:0][2:0]
 );
+    localparam RASTER_TILE_FIFO_DEPTH    = RASTER_TILE_SIZE/RASTER_BLOCK_SIZE;
+    localparam RASTER_TILE_SIZE_BITS     = $clog2(RASTER_TILE_SIZE);
+    localparam RASTER_BLOCK_SIZE_BITS    = $clog2(RASTER_BLOCK_SIZE);
 
     // Check if primitive within tile
     logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] eval0, eval1, eval2;
@@ -43,9 +48,9 @@ module VX_raster_te #(
         valid_tile = !((eval0 < 0) || (eval1 < 0) || (eval2 < 9));
         // If tile valid => sub-divide into sub-tiles
         if (valid_tile) begin
-            sub_tile_bits = `RASTER_TILE_DATA_BITS'(`RASTER_TILE_SIZE_BITS) - `RASTER_TILE_DATA_BITS'(level) - 1;
+            sub_tile_bits = `RASTER_TILE_DATA_BITS'(RASTER_TILE_SIZE_BITS) - `RASTER_TILE_DATA_BITS'(level) - 1;
             sub_tile_size = 1 << sub_tile_bits;
-            if (sub_tile_bits >= `RASTER_TILE_DATA_BITS'(`RASTER_BLOCK_SIZE_BITS)) begin
+            if (sub_tile_bits >= `RASTER_TILE_DATA_BITS'(RASTER_BLOCK_SIZE_BITS)) begin
                 // divide into sub tiles as still bigger than block
                 valid_block = 0;
                 // generate sub-tile data

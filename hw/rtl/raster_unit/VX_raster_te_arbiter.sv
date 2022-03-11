@@ -4,21 +4,26 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_te_arbiter #(
-    CORE_ID = 0,
-    DATA_WIDTH = `RASTER_FIFO_DATA_WIDTH
+    parameter RASTER_TILE_SIZE       = 16,
+    parameter RASTER_BLOCK_SIZE      = 4,
+    parameter RASTER_LEVEL_DATA_BITS = $clog2(RASTER_TILE_SIZE/RASTER_BLOCK_SIZE) + 1,
+    parameter RASTER_FIFO_DATA_WIDTH = (RASTER_LEVEL_DATA_BITS + 2*`RASTER_TILE_DATA_BITS + 3*`RASTER_PRIMITIVE_DATA_BITS)
 ) (
     input logic                                 clk, reset,
     input logic [3:0]                           fifo_push, fifo_pop,
-    input logic [DATA_WIDTH-1:0]                data_push[3:0],
+    input logic [RASTER_FIFO_DATA_WIDTH-1:0]                data_push[3:0],
 
-    output logic [DATA_WIDTH-1:0]               data_pop,
+    output logic [RASTER_FIFO_DATA_WIDTH-1:0]               data_pop,
     output logic [3:0]                          fifo_index_onehot,
     output logic                                fifo_full, fifo_empty, fifo_data_valid
 );
 
+    localparam RASTER_TILE_FIFO_DEPTH = RASTER_TILE_SIZE/RASTER_BLOCK_SIZE;
+    
+
     // Per FIFO flags
     logic [3:0] empty_flag, full_flag;
-    logic [DATA_WIDTH-1:0] data_pop_array[3:0];
+    logic [RASTER_FIFO_DATA_WIDTH-1:0] data_pop_array[3:0];
 
     // Index selected from arbitration
     logic [1:0] fifo_index;
@@ -27,8 +32,8 @@ module VX_raster_te_arbiter #(
     for(genvar i = 0; i < 4; ++i) begin
         // Sub-tile queue
         VX_fifo_queue #(
-            .DATAW	    (DATA_WIDTH),
-            .SIZE       (`RASTER_TILE_FIFO_DEPTH),
+            .DATAW	    (RASTER_FIFO_DATA_WIDTH),
+            .SIZE       (RASTER_TILE_FIFO_DEPTH),
             .OUT_REG    (1)
         ) tile_fifo_queue (
             .clk        (clk),
