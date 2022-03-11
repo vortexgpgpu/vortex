@@ -70,7 +70,8 @@ $(TOP): $(SRCS)
 	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS)' -o ../$(TOP)
 	
 run: $(TOP)
-	./$(TOP)
+	./$(TOP) > out_v.log
+	python compare.py
 
 clean:
 	rm -rf obj_dir $(TOP)
