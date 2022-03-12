@@ -9,10 +9,11 @@ module VX_tag_access #(
     parameter CACHE_LINE_SIZE   = 1, 
     // Number of banks
     parameter NUM_BANKS         = 1, 
+    // Number of associative ways
+    parameter NUM_WAYS          = 8, 
     // Size of a word in bytes
     parameter WORD_SIZE         = 1,
-    //Swetha: added ways 
-    parameter WAYS                          = 8, //dummy value - change this to 1 later
+    
     // bank offset from beginning of index range
     parameter BANK_ADDR_OFFSET  = 0
 ) (
@@ -30,8 +31,10 @@ module VX_tag_access #(
     input wire[`LINE_ADDR_WIDTH-1:0]    addr,
     input wire                          fill,    
     input wire                          flush,
+    //Swetha: added for eviction
+    input wire[NUM_WAYS-1:0]                repl_way,
     //Swetha: added for associativity
-    output wire[WAYS-1:0]              tag_match_way,
+    output wire[NUM_WAYS-1:0]              tag_match_way,
     //output wire[$clog2(WAYS)-1:0]       tag_match_way_num,
     output wire                         tag_match
 );
@@ -51,9 +54,16 @@ module VX_tag_access #(
     /* CHANGES START HERE */
     //We use a tag match array to check if each of the arrays has a match 
     //assign the output wire to the ANDed result of tag_match_array
+
+    //Swetha: added for eviction 
+    wire fill_local[NUM_WAYS-1:0];
+    for (i = 0; i < NUM_WAYS; i = i+1) begin
+        assign fill_local[i] = (fill && repl_way[i]) ? 1 : 0;
+    end
+
     generate 
         genvar i;
-        for (i = 0; i < WAYS; i = i+1) begin
+        for (i = 0; i < NUM_WAYS; i = i+1) begin
             VX_sp_ram #(
             .DATAW      (`TAG_SELECT_BITS + 1),
             .SIZE       (`LINES_PER_BANK),
@@ -61,8 +71,8 @@ module VX_tag_access #(
             ) tag_store (
                 .clk(  clk),                 
                 .addr  (line_addr),   
-                .wren  (fill || flush),
-                .wdata ({!flush, line_tag}),
+                .wren  (fill_local[i] || flush),
+                .wdata ({!flush, line_tag}), //Swetha: modified this line for eviction 
                 .rdata ({read_valid, read_tag})
             );
             assign tag_match_way[i] = read_valid && (line_tag == read_tag);

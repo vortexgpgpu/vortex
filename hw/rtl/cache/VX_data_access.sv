@@ -11,14 +11,13 @@ module VX_data_access #(
     parameter NUM_BANKS         = 1, 
     // Number of ports per banks
     parameter NUM_PORTS         = 1,
+    // Number of associative ways
+    parameter NUM_WAYS          = 8,
     // Size of a word in bytes
     parameter WORD_SIZE         = 1,
     // Enable cache writeable
     parameter WRITE_ENABLE      = 1,
-
-    //Swetha: added ways 
-    parameter WAYS                          = 8, //dummy value - change this to 1 later
-
+    
     parameter WORD_SELECT_BITS  = `UP(`WORD_SELECT_BITS)
 ) (
     input wire                          clk,
@@ -40,8 +39,10 @@ module VX_data_access #(
     input wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] fill_data,
     input wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] write_data,
     //Swetha: added for associativity
-    input wire[WAYS-1:0]              tag_match_way,
+    input wire[NUM_WAYS-1:0]              tag_match_way,
     //input wire[$clog2(WAYS)-1:0]       tag_match_way_num,
+    //Swetha: added for eviction
+    input wire[NUM_WAYS-1:0]                repl_way,
 
     output wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] read_data
 );
@@ -107,13 +108,13 @@ module VX_data_access #(
     /* CHANGES START HERE */
 
     //Swetha: Local variable to capture data from all ways before assigning to output wire
-    wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] read_data_local [WAYS-1:0];
+    wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] read_data_local [NUM_WAYS-1:0];
     localparam [`WAY_SEL_WIDTH-1:0] which_way = 0; //dummy assignment  
 
     generate
         genvar m;
-        for (m = 0; m < WAYS; m = m+1) begin
-            assign which_way = tag_match_way[m] ? m : 'z; 
+        for (m = 0; m < NUM_WAYS; m = m+1) begin
+            assign which_way = ((fill & repl_way[m]) || (!fill & tag_match_way[m])) ? m : 'z; 
         end
     endgenerate
 
@@ -157,7 +158,7 @@ module VX_data_access #(
 localparam temp = which_way + 1; 
     generate
         genvar k;
-        for (k = temp; k < WAYS; k = k+1) begin
+        for (k = temp; k < NUM_WAYS; k = k+1) begin
             //assign which_way = tag_match_way[j] ? j : 'z; 
             //assign wren = (tag_match_way[j] == 1'b0) ? {BYTEENW{1'b0}} : wren;
             VX_sp_ram #(
@@ -187,7 +188,7 @@ localparam temp = which_way + 1;
     //localparam [`WAY_SEL_WIDTH-1:0] which_way = 0;
     //output wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] read_data
 
-    if (WAYS > 1) begin
+    if (NUM_WAYS > 1) begin
         assign rdata = read_data_local[which_way];
     end else begin
         //`UNUSED_VAR (sel_in)
