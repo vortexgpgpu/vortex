@@ -160,6 +160,7 @@ int main(int argc, char *argv[]) {
     // check power of two support
     if (!ispow2(src_width) || !ispow2(src_height)) {
       std::cout << "Error: only power of two textures supported: width=" << src_width << ", heigth=" << src_height << std::endl;
+      cleanup();
       return -1;
     }
     uint32_t src_bpp = Format::GetInfo(eformat).BytePerPixel;
@@ -186,6 +187,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
   if (0 == (isa_flags & VX_ISA_EXT_TEX)) {
     std::cout << "texture extension not supported!" << std::endl;
+    cleanup();
     return -1;
   }
 

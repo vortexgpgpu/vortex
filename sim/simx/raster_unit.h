@@ -17,9 +17,37 @@ public:
     struct Stamp {
         uint32_t  x;
         uint32_t  y;  
-        vec3_fx_t bcoords[4]; // barycentric coordinates
         uint32_t  mask;
+        std::array<vec3_fx_t, 4> bcoords; // barycentric coordinates        
         uint32_t  pid;
+
+        Stamp* next_;
+        Stamp* prev_;
+
+        Stamp(uint32_t x, uint32_t y, uint32_t mask, const std::array<vec3_fx_t, 4>& bcoords, uint32_t  pid) 
+            : x(x)
+            , y(y)
+            , mask(mask)
+            , bcoords(bcoords)
+            , pid(pid)
+            , next_(nullptr)
+            , prev_(nullptr) 
+        {}
+
+        void* operator new(size_t /*size*/) {
+            return allocator().allocate();
+        }
+
+        void operator delete(void* ptr) {
+            allocator().deallocate(ptr);
+        }
+
+    private:
+
+        static MemoryPool<Stamp>& allocator() {
+            static MemoryPool<Stamp> instance(1024);
+            return instance;
+        }
     };
     
     struct PerfStats {        

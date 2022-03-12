@@ -21,11 +21,18 @@ public:
 
   CSR() 
     : stamp_(nullptr) 
+    , frag(0)
   {}
   
   ~CSR() { 
-    if (stamp_ )
+    this->clear();
+  }
+
+  void clear() {
+    if (stamp_ ) {
       delete stamp_; 
+      stamp_ = nullptr;
+    }
   }
 
   void set_stamp(RasterUnit::Stamp *stamp) {
@@ -62,13 +69,16 @@ public:
     ~Impl() {}
 
     void clear() {
-      //--
+      for (auto& csr : csrs_) {
+        csr.clear();
+      }
     } 
 
     uint32_t csr_read(int32_t wid, uint32_t tid, uint32_t addr) {
       uint32_t ltid = wid * arch_.num_threads() + tid;
       auto& csr = csrs_.at(ltid);
-      if (0 == (csr.get_stamp()->mask & (1 << csr.frag)))
+      if (0 == (csr.get_stamp()->mask & (1 << csr.frag)) 
+       && addr != CSR_RASTER_FRAG)
         return 0;
       auto i  = csr.frag & 0x1;
       auto j  = csr.frag >> 1;
@@ -105,7 +115,9 @@ public:
     void csr_write(uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value) {
       uint32_t ltid = wid * arch_.num_threads() + tid;
       auto& csr = csrs_.at(ltid);
-      bool valid_frag = (csr.get_stamp()->mask & (1 << csr.frag));
+      if (0 == (csr.get_stamp()->mask & (1 << csr.frag)) 
+       && addr != CSR_RASTER_FRAG)
+        return;
       auto i  = csr.frag & 0x1;
       auto j  = csr.frag >> 1;
       auto px = csr.get_stamp()->x + i;
@@ -117,16 +129,12 @@ public:
         csr.frag = value;
         break;
       case CSR_RASTER_GRAD_X:
-        if (valid_frag) {
-          csr.gradients[csr.frag].x = fixed24_t::make(value);
-          //printf("grad.x[%d,%d]=%d\n", px, py, csr.gradients[csr.frag].x.data());
-        }
+        csr.gradients[csr.frag].x = fixed24_t::make(value);
+        //printf("grad.x[%d,%d]=%d\n", px, py, csr.gradients[csr.frag].x.data());
         break;
       case CSR_RASTER_GRAD_Y:
-        if (valid_frag) {
-          csr.gradients[csr.frag].y = fixed24_t::make(value);
-          //printf("grad.y[%d,%d]=%d\n", px, py, csr.gradients[csr.frag].y.data());
-        }
+        csr.gradients[csr.frag].y = fixed24_t::make(value);
+        //printf("grad.y[%d,%d]=%d\n", px, py, csr.gradients[csr.frag].y.data());
         break;
       default:
         std::abort();

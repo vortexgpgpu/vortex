@@ -11,6 +11,7 @@
 #include <cocogfx/include/bmp.hpp>
 #include <cocogfx/include/fixed.hpp>
 #include <cocogfx/include/math.hpp>
+#include "common.h"
 
 using namespace cocogfx;
 
@@ -77,19 +78,15 @@ static float EdgeEquation(rast_edge_t edges[3],
   return det;
 }
 
-static void ColorToFloat(float out[4], uint32_t color) {
-  out[0] = ((color >>  0) & 0xFF) / 255.0f;
-  out[1] = ((color >>  8) & 0xFF) / 255.0f;
-  out[2] = ((color >> 16) & 0xFF) / 255.0f;
-  out[3] = ((color >> 24) & 0xFF) / 255.0f;
-}
-
 // traverse model primitives and do tile assignment
 uint32_t Binning(std::vector<uint8_t>& tilebuf, 
                  std::vector<uint8_t>& primbuf,
-                 const model_t& model, 
+                 const std::unordered_map<uint32_t, CGLTrace::vertex_t>& vertices,
+                 const std::vector<CGLTrace::primitive_t>& primitives,                 
                  uint32_t width,
                  uint32_t height,
+                 float near,
+                 float far,
                  uint32_t tileSize) {
 
   uint32_t tileLogSize = log2ceil(tileSize);
@@ -97,50 +94,51 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
   std::map<uint32_t, std::vector<uint32_t>> tiles;
 
   std::vector<rast_prim_t> rast_prims;
-  rast_prims.reserve(model.primitives.size());
+  rast_prims.reserve(primitives.size());
 
   uint32_t num_prims = 0;
   
-  for (auto& primitive : model.primitives) {
+  for (auto& primitive : primitives) {
     // get primitive vertices
-    auto& v0 = model.vertives.at(primitive.i0);
-    auto& v1 = model.vertives.at(primitive.i1);
-    auto& v2 = model.vertives.at(primitive.i2);
+    auto& v0 = vertices.at(primitive.i0);
+    auto& v1 = vertices.at(primitive.i1);
+    auto& v2 = vertices.at(primitive.i2);
 
-    auto& p0 = *(vec4d_f_t*)&v0;
-    auto& p1 = *(vec4d_f_t*)&v1;
-    auto& p2 = *(vec4d_f_t*)&v2;
+    auto& p0 = *(vec4d_f_t*)&v0.pos;
+    auto& p1 = *(vec4d_f_t*)&v1.pos;
+    auto& p2 = *(vec4d_f_t*)&v2.pos;
 
     rast_edge_t edges[3];
     rast_bbox_t bbox;
 
+    vec4d_f_t pn0, pn1, pn2;
+    vec4d_f_t ps0, ps1, ps2;
+
     {
-      // Convert position from clip to 2D homogenous device space
-      vec4d_f_t q0, q1, q2;
-      ClipTo2DH(&q0, p0, width, height);
-      ClipTo2DH(&q1, p1, width, height);
-      ClipTo2DH(&q2, p2, width, height);
+      // Convert position from clip to 2D homogenous device space      
+      ClipToHDC(&pn0, p0, 0, width, 0, height, near, far);
+      ClipToHDC(&pn1, p1, 0, width, 0, height, near, far);
+      ClipToHDC(&pn2, p2, 0, width, 0, height, near, far);
 
       // Calculate edge equation
-      auto det = EdgeEquation(edges, q0, q1, q2);
+      auto det = EdgeEquation(edges, pn0, pn1, pn2);
       if (det <= 0) {
         // reject back-facing or degenerate triangles
         continue;
       }
-    }   
+    }       
 
     {
-      // Convert position from clip to screen space
-      vec4d_f_t q0, q1, q2;
-      ClipToScreen(&q0, p0, width, height);
-      ClipToScreen(&q1, p1, width, height);
-      ClipToScreen(&q2, p2, width, height);
+      // Convert position from clip to screen space      
+      ClipToScreen(&ps0, p0, 0, width, 0, height, near, far);
+      ClipToScreen(&ps1, p1, 0, width, 0, height, near, far);
+      ClipToScreen(&ps2, p2, 0, width, 0, height, near, far);
 
       // Calculate bounding box 
       rect_f_t tmp;
-      auto _q0 = (vec2d_f_t*)&q0;
-      auto _q1 = (vec2d_f_t*)&q1;
-      auto _q2 = (vec2d_f_t*)&q2;
+      auto _q0 = (vec2d_f_t*)&ps0;
+      auto _q1 = (vec2d_f_t*)&ps1;
+      auto _q2 = (vec2d_f_t*)&ps2;
       CalcBoundingBox(&tmp, *_q0, *_q1, *_q2);
       bbox.left   = std::max<int32_t>(0, tmp.left);
       bbox.right  = std::min<int32_t>(width, tmp.right);
@@ -160,21 +158,20 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
       rast_prim.edges[0] = edges[0];
       rast_prim.edges[1] = edges[1];
       rast_prim.edges[2] = edges[2];
+
+      //printf("*** edge0=(%d, %d, %d)\n", edges[0].x.data(), edges[0].y.data(), edges[0].z.data());
+      //printf("*** edge1=(%d, %d, %d)\n", edges[1].x.data(), edges[1].y.data(), edges[1].z.data());
+      //printf("*** edge2=(%d, %d, %d)\n", edges[2].x.data(), edges[2].y.data(), edges[2].z.data());
       
       rast_prim.bbox = bbox;
-
-      float colors[3][4];
-      ColorToFloat(colors[0], v0.c);
-      ColorToFloat(colors[1], v1.c);
-      ColorToFloat(colors[2], v2.c);
       
-      ATTRIBUTE_DELTA(rast_prim.attribs.z, v0.z, v1.z, v2.z);
-      ATTRIBUTE_DELTA(rast_prim.attribs.r, colors[0][0], colors[1][0], colors[2][0]);
-      ATTRIBUTE_DELTA(rast_prim.attribs.g, colors[0][1], colors[1][1], colors[2][1]);
-      ATTRIBUTE_DELTA(rast_prim.attribs.b, colors[0][2], colors[1][2], colors[2][2]);
-      ATTRIBUTE_DELTA(rast_prim.attribs.a, colors[0][3], colors[1][3], colors[2][3]);      
-      ATTRIBUTE_DELTA(rast_prim.attribs.u, v0.u, v1.u, v2.u);
-      ATTRIBUTE_DELTA(rast_prim.attribs.v, v0.v, v1.v, v2.v);
+      ATTRIBUTE_DELTA(rast_prim.attribs.z, ps0.z, ps1.z, ps2.z);
+      ATTRIBUTE_DELTA(rast_prim.attribs.r, v0.color.r, v1.color.r, v2.color.r);
+      ATTRIBUTE_DELTA(rast_prim.attribs.g, v0.color.g, v1.color.g, v2.color.g);
+      ATTRIBUTE_DELTA(rast_prim.attribs.b, v0.color.b, v1.color.b, v2.color.b);
+      ATTRIBUTE_DELTA(rast_prim.attribs.a, v0.color.a, v1.color.a, v2.color.a);
+      ATTRIBUTE_DELTA(rast_prim.attribs.u, v0.texcoord.u, v1.texcoord.u, v2.texcoord.u);
+      ATTRIBUTE_DELTA(rast_prim.attribs.v, v0.texcoord.v, v1.texcoord.v, v2.texcoord.v);
 
       p = rast_prims.size();
       rast_prims.push_back(rast_prim);      
@@ -306,7 +303,7 @@ int LoadImage(const char *filename,
     img_format = FORMAT_A8;
     break;
   case 2: 
-    img_format = FORMAT_A1R5G5B5;
+    img_format = FORMAT_R5G6B5;
     break;
   case 3: 
     img_format = FORMAT_R8G8B8; 
@@ -424,4 +421,72 @@ int CompareImages(const char* filename1,
   }
 
   return errors;
+}
+
+uint32_t toVXFormat(ePixelFormat format) {
+  switch (format) {
+  case FORMAT_A8R8G8B8: return TEX_FORMAT_A8R8G8B8; break;
+  case FORMAT_R5G6B5: return TEX_FORMAT_R5G6B5; break;
+  case FORMAT_A1R5G5B5: return TEX_FORMAT_A1R5G5B5; break;
+  case FORMAT_A4R4G4B4: return TEX_FORMAT_A4R4G4B4; break;
+  case FORMAT_A8L8: return TEX_FORMAT_A8L8; break;
+  case FORMAT_L8: return TEX_FORMAT_L8; break;
+  case FORMAT_A8: return TEX_FORMAT_A8; break;
+  default:
+    std::cout << "Error: invalid format: " << format << std::endl;
+    exit(1);
+  }
+  return 0;
+}
+
+uint32_t toVXCompare(CGLTrace::ecompare compare) {
+  switch (compare) {
+  case CGLTrace::COMPARE_NEVER: return ROP_DEPTH_FUNC_NEVER; break;
+  case CGLTrace::COMPARE_LESS: return ROP_DEPTH_FUNC_LESS; break;
+  case CGLTrace::COMPARE_EQUAL: return ROP_DEPTH_FUNC_EQUAL; break;
+  case CGLTrace::COMPARE_LEQUAL: return ROP_DEPTH_FUNC_LEQUAL; break;
+  case CGLTrace::COMPARE_GREATER: return ROP_DEPTH_FUNC_GREATER; break;
+  case CGLTrace::COMPARE_NOTEQUAL: return ROP_DEPTH_FUNC_NOTEQUAL; break;
+  case CGLTrace::COMPARE_GEQUAL: return ROP_DEPTH_FUNC_GEQUAL; break;
+  case CGLTrace::COMPARE_ALWAYS: return ROP_DEPTH_FUNC_ALWAYS; break;
+  default:
+    std::cout << "Error: invalid compare function: " << compare << std::endl;
+    exit(1);
+  }
+  return 0;
+}
+
+uint32_t toVXStencilOp(CGLTrace::eStencilOp op) {
+  switch (op) {
+  case CGLTrace::STENCIL_KEEP: return ROP_STENCIL_OP_KEEP; break;
+  case CGLTrace::STENCIL_REPLACE: return ROP_STENCIL_OP_REPLACE; break;
+  case CGLTrace::STENCIL_INCR: return ROP_STENCIL_OP_INCR; break;
+  case CGLTrace::STENCIL_DECR: return ROP_STENCIL_OP_DECR; break;
+  case CGLTrace::STENCIL_ZERO: return ROP_STENCIL_OP_ZERO; break;
+  case CGLTrace::STENCIL_INVERT: return ROP_STENCIL_OP_INVERT; break;
+  default:
+    std::cout << "Error: invalid stencil operation: " << op << std::endl;
+    exit(1);
+  }
+  return 0;
+}
+
+uint32_t toVXBlendFunc(CGLTrace::eBlendOp op) {
+  switch (op) {
+  case CGLTrace::BLEND_ZERO: return ROP_BLEND_FUNC_ZERO;
+  case CGLTrace::BLEND_ONE: return ROP_BLEND_FUNC_ONE;
+  case CGLTrace::BLEND_SRC_COLOR: return ROP_BLEND_FUNC_SRC_RGB;
+  case CGLTrace::BLEND_ONE_MINUS_SRC_COLOR: return ROP_BLEND_FUNC_ONE_MINUS_SRC_RGB;
+  case CGLTrace::BLEND_SRC_ALPHA: return ROP_BLEND_FUNC_SRC_A;
+  case CGLTrace::BLEND_ONE_MINUS_SRC_ALPHA: return ROP_BLEND_FUNC_ONE_MINUS_SRC_A;
+  case CGLTrace::BLEND_DST_ALPHA: return ROP_BLEND_FUNC_DST_A;
+  case CGLTrace::BLEND_ONE_MINUS_DST_ALPHA: return ROP_BLEND_FUNC_ONE_MINUS_DST_A;
+  case CGLTrace::BLEND_DST_COLOR: return ROP_BLEND_FUNC_DST_RGB;
+  case CGLTrace::BLEND_ONE_MINUS_DST_COLOR: return ROP_BLEND_FUNC_ONE_MINUS_DST_RGB;
+  case CGLTrace::BLEND_SRC_ALPHA_SATURATE: return ROP_BLEND_FUNC_ALPHA_SAT;
+  default:
+    std::cout << "Error: invalid blend function: " << op << std::endl;
+    exit(1);
+  }
+  return 0;
 }
