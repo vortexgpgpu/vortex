@@ -23,12 +23,12 @@ DBG_FLAGS += $(DBG_TRACE_FLAGS)
 
 FPU_INCLUDE = -I$(RTL_DIR)/fp_cores -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src -I$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/fpnew/src
 TEX_INCLUDE = -I$(RTL_DIR)/tex_unit
-RASTER_INCLUDE = -I$(RTL_DIR)/raster_unit
+RASTER_INCLUDE = -I$(RTL_DIR)/raster_unit -I$(RTL_DIR)/raster_unit/tile_evaluator
 ROP_INCLUDE = -I$(RTL_DIR)/rop_unit
 RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache -I$(RTL_DIR)/simulate $(FPU_INCLUDE) -I$(DPI_DIR)/..
 RTL_INCLUDE += $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
 
-TOP = VX_raster_qe
+TOP = VX_raster_slice
 TESTBENCH = testbench.cpp
 SRCS = $(TESTBENCH) $(DPI_DIR)/util_dpi.cpp
 
@@ -38,7 +38,7 @@ CXXFLAGS += -I$(DPI_DIR)/.. -I$(DPI_DIR) -I$(DPI_DIR)/../common -I/nethome/vsaxe
 VL_FLAGS += --exe --cc $(TOP).sv  --top-module $(TOP)
 VL_FLAGS += --language 1800-2009 --assert -Wall
 VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
-VL_FLAGS += --x-initial unique --x-assign unique -Wno-UNUSED -Wno-UNDRIVEN
+VL_FLAGS += --x-initial unique --x-assign unique --Wno-UNUSED
 VL_FLAGS += $(RTL_INCLUDE)
 VL_FLAGS += $(PARAMS)
 
@@ -70,7 +70,8 @@ $(TOP): $(SRCS)
 	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS)' -o ../$(TOP)
 	
 run: $(TOP)
-	./$(TOP)
+	./$(TOP) > out_v.log
+	python compare.py
 
 clean:
 	rm -rf obj_dir $(TOP)
