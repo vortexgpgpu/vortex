@@ -5,10 +5,10 @@ module VX_flush_ctrl #(
     parameter CACHE_SIZE        = 16384, 
     // Size of line inside a bank in bytes
     parameter CACHE_LINE_SIZE   = 1, 
-    //Swetha: added ways 
-    parameter WAYS                          = 1, //dummy value - change this to 1 later
     // Number of banks
-    parameter NUM_BANKS         = 1
+    parameter NUM_BANKS         = 1,
+    // Number of associative ways
+    parameter NUM_WAYS          = 8
 ) (
     input wire  clk,
     input wire  reset,    
