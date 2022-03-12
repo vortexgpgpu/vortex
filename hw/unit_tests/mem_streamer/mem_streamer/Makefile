@@ -51,7 +51,7 @@ waves: trace.vcd
 clean:
 	@echo
 	@echo "### CLEAN ###"
-	-rm -rf obj_dir *.vcd
+	-rm -rf obj_dir *.vcd *.log
 
 #---------------------------------------------------------
 

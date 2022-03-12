@@ -9,7 +9,7 @@
 #include "VVX_mem_streamer__Syms.h"
 #include "ram.h"
 
-#define SIM_TIME 1000
+#define SIM_TIME 50
 
 int generate_rand (int min, int max);
 
@@ -21,7 +21,7 @@ class MemSim {
         void eval();
         void step();
         void reset();
-        
+
         void attach_core();
         void attach_ram(RAM *ram);
 

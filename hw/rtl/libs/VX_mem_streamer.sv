@@ -1,7 +1,7 @@
 `include "VX_platform.vh"
 
 module VX_mem_streamer #(
-    parameter NUM_REQS = 4,
+  parameter NUM_REQS = 4,
 	parameter ADDRW = 32,	
 	parameter DATAW = 32,
 	parameter TAGW = 32,
@@ -10,8 +10,8 @@ module VX_mem_streamer #(
 	parameter QUEUE_ADDRW = `CLOG2(QUEUE_SIZE),
 	parameter PARTIAL_RESPONSE = 0
 ) (
-    input  wire clk,
-    input  wire reset,
+  input  wire clk,
+  input  wire reset,
 
 	// Input request
 	input wire 								req_valid,
@@ -47,7 +47,7 @@ module VX_mem_streamer #(
 	input wire 								rsp_ready
   );
 
-	localparam RSPW = QUEUE_ADDRW + NUM_REQS + (NUM_REQS * DATAW) + 1;
+	localparam RSPW = NUM_REQS + (NUM_REQS * DATAW) + 1;
 
 	// Detect duplicate addresses
 	wire [NUM_REQS-2:0] addr_matches;
@@ -61,20 +61,19 @@ module VX_mem_streamer #(
 	wire [NUM_REQS-1:0][ADDRW-1:0] 		pq_addr;
 	wire [NUM_REQS-1:0][DATAW-1:0] 		pq_data;
 	wire [TAGW-1:0] 					pq_tag;
-	wire [QUEUE_ADDRW-1:0] 				mem_tag;
 
 	wire 					sreq_push;
 	wire [QUEUE_ADDRW-1:0] 	sreq_waddr;
 	wire [QUEUE_ADDRW-1:0]	sreq_raddr;
 	wire [QUEUE_ADDRW-1:0]	sreq_pop_addr;
 	wire 					sreq_pop;
-	reg  					sreq_pop_r;
+	// reg  					sreq_pop_r;
 	wire 					sreq_full;
 	wire 					sreq_empty;
 
 	wire 					sidx_push;
 	wire 					sidx_pop;
-	reg  					sidx_pop_r;
+	// reg  					sidx_pop_r;
 	wire [QUEUE_ADDRW-1:0] 	sidx_din;
 	wire [QUEUE_ADDRW-1:0] 	sidx_dout;
 	wire 					sidx_full;
@@ -121,7 +120,7 @@ module VX_mem_streamer #(
 	assign req_ready = !sreq_full && !sidx_full;
 
 	VX_index_buffer #(
-		.DATAW	(1 + NUM_REQS + WORD_SIZE + (NUM_REQS * ADDRW) + (NUM_REQS * DATAW) + TAGW + QUEUE_ADDRW),
+		.DATAW	(1 + NUM_REQS + WORD_SIZE + (NUM_REQS * ADDRW) + (NUM_REQS * DATAW) + TAGW),
 		.SIZE	(QUEUE_SIZE)
 	) store_req (
 		.clk			(clk),
@@ -129,16 +128,17 @@ module VX_mem_streamer #(
 		.write_addr		(sreq_waddr),
 		.acquire_slot	(sreq_push),
 		.read_addr		(sreq_raddr),
-		.write_data		({req_rw, req_dup_mask, req_byteen, req_addr, req_data, req_tag, sreq_waddr}),
-		.read_data		({pq_rw,  pq_mask,      pq_byteen,  pq_addr,  pq_data,  pq_tag,  mem_tag}),
+		.write_data		({req_rw, req_dup_mask, req_byteen, req_addr, req_data, req_tag}),
+		.read_data		({pq_rw,  pq_mask,      pq_byteen,  pq_addr,  pq_data,  pq_tag}),
 		.release_addr	(sreq_pop_addr),
 		.release_slot	(sreq_pop),
 		.full			(sreq_full),
 		.empty			(sreq_empty)
 	);
 
-	wire sidx_push = sreq_push;
-	wire sidx_din = sreq_waddr;
+	assign sidx_push = sreq_push;
+	assign sidx_din = sreq_waddr;
+	assign sidx_pop = req_sent_all && ~sidx_empty;
 
 	VX_fifo_queue #(
 		.DATAW	(QUEUE_ADDRW),
@@ -178,7 +178,7 @@ module VX_mem_streamer #(
 	end
 
 	// Store response till ready to send
-	assign rsp_n = rsp[sreq_raddr] | {mem_rsp_tag, mem_rsp_mask, mem_rsp_data, mem_rsp_valid};
+	assign rsp_n = rsp[sreq_raddr] | {mem_rsp_mask, mem_rsp_data, mem_rsp_valid};
 
 	always @(posedge clk) begin
 		if (reset) begin
@@ -189,47 +189,47 @@ module VX_mem_streamer #(
 		end
 	end
 
-	assign rsp_en = ((PARTIAL_RESPONSE) ? rsp_n[0] : (0 == rsp_rem_mask_n)) && rsp_ready;
-
-	// Assert sreq_pop for only one clk cycle
-	assign sreq_pop = sreq_pop_r;
-	always @(posedge clk) begin
-		if (reset)
-			sreq_pop_r <= 1'b0;
-		else begin
-			if (sreq_pop)
-				sreq_pop_r <= 1'b0;
-			else
-				sreq_pop_r <= (0 == rsp_rem_mask_n) && mem_rsp_fire && ~sreq_empty;
-		end
-	end
-
-	wire is_send;
+    wire already_sent;
+    wire pop = mem_rsp_fire && (0 == rsp_rem_mask_n) && ~sreq_empty;
+    wire [QUEUE_ADDRW-1:0] pop_addr = mem_rsp_tag;
 
 	VX_pipe_register #(
-		.DATAW	(QUEUE_ADDRW + NUM_REQS + (NUM_REQS * DATAW) + 1 + TAGW + 1),
+		.DATAW	(1 + QUEUE_ADDRW + 1),
+		.RESETW (1)
+    ) wait_pipe_reg (
+		.clk		(clk),
+		.reset		(reset),
+		.enable		(1'b1),
+		.data_in	({pop,      pop_addr,      mem_rsp_valid}),
+		.data_out	({sreq_pop, sreq_pop_addr, already_sent})
+	);
+
+	assign rsp_en = ((PARTIAL_RESPONSE) ? rsp_n[0] : (0 == rsp_rem_mask_n)) && rsp_ready;
+
+	VX_pipe_register #(
+		.DATAW	(NUM_REQS + (NUM_REQS * DATAW) + 1 + TAGW),
 		.RESETW (1)
 	) rsp_pipe_reg (
 		.clk		(clk),
 		.reset		(reset),
 		.enable		(rsp_en),
-		.data_in	({rsp_n,                                        pq_tag, mem_rsp_fire}),
-		.data_out	({sreq_pop_addr, rsp_mask, rsp_data, rsp_valid, rsp_tag, is_send})
+		.data_in	({rsp_n,                         pq_tag}),
+		.data_out	({rsp_mask, rsp_data, rsp_valid, rsp_tag})
 	);
 
 	//////////////////////////////////////////////////////////////////
 
 	// Memory request
-	assign mreq_valid 	= pq_mask & ~req_sent_mask[mem_tag] & {NUM_REQS{!is_send}};
+	assign mreq_valid 	= pq_mask & ~req_sent_mask[sreq_raddr] & {NUM_REQS{!already_sent}};
 	assign mreq_rw 	    = {NUM_REQS{pq_rw}};
 	assign mreq_byteen  = {NUM_REQS{pq_byteen}};
 	assign mreq_addr 	= pq_addr;
 	assign mreq_data 	= pq_data;
-	assign mreq_tag 	= {NUM_REQS{mem_tag}};
-	assign mreq_en 		= (| mreq_valid);
+	assign mreq_tag 	= {NUM_REQS{sreq_raddr}};
+	assign mreq_en 		= 1'b1;
 
 	assign mem_req_fire 	= mreq_valid & mem_req_ready;
-	assign req_sent_mask_n 	= req_sent_mask[mem_tag] | mem_req_fire;
+	assign req_sent_mask_n 	= req_sent_mask[sreq_raddr] | mem_req_fire;
 	assign req_sent_all 	= (req_sent_mask_n == pq_mask);
 
 	always @(posedge clk) begin
@@ -237,22 +237,9 @@ module VX_mem_streamer #(
 			req_sent_mask <= 0;
 		else begin
 			if (req_sent_all)
-				req_sent_mask[mem_tag] <= 0;
+				req_sent_mask[sreq_raddr] <= 0;
 			else
-				req_sent_mask[mem_tag] <= req_sent_mask_n;
-		end
-	end
-
-	// Assert sidx_pop for only one clk cycle
-	assign sidx_pop = sidx_pop_r;
-	always @(posedge clk) begin
-		if (reset)
-			sidx_pop_r <= 1'b0;
-		else begin
-			if (sidx_pop)
-				sidx_pop_r <= 1'b0;
-			else
-				sidx_pop_r <= (| mem_req_fire) && (req_sent_all) &&  ~sidx_empty;
+				req_sent_mask[sreq_raddr] <= req_sent_mask_n;
 		end
 	end
 
@@ -268,5 +255,11 @@ module VX_mem_streamer #(
 	);
 
 	//////////////////////////////////////////////////////////////////
+
+    // Debugging
+
+    always @(posedge clk) begin
+        $display ("MSU: already_sent: %b", already_sent);
+    end
 
 endmodule

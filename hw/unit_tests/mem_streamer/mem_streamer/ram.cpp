@@ -61,13 +61,15 @@ void RAM::insert_req(req_t req) {
         r.rsp_sent_mask = 0b0001;
 
         std::cout<<"RAM: Insert entry... "<<std::endl;
+        std::cout<<"RAM: valid mask: "<<+r.valid<<std::endl;
 
         ram_.push_back(r);
     }
 }
 
 uint8_t RAM::is_ready() {    
-    return generate_rand(0b1000, 0b1111);
+    // return generate_rand(0b1000, 0b1111);
+    return 0b1111;
 }
 
 //////////////////////////////////////////////////////
@@ -83,9 +85,11 @@ rsp_t RAM::schedule_rsp() {
 
             is_rsp_active_ = true;
             rsp.valid   = 1;
-            rsp.mask    = generate_rand(ram_[dequeue_index].rsp_sent_mask, ram_[dequeue_index].valid);
+            rsp.mask    = ram_[dequeue_index].valid; //generate_rand(ram_[dequeue_index].rsp_sent_mask, ram_[dequeue_index].valid);
             rsp.data    = generate_rand(0x20000000, 0x30000000);
             rsp.tag     = ram_[dequeue_index].tag;
+
+            std::cout<<"RAM: Response tag: "<<std::hex<<+rsp.tag<<std::endl;
 
             std::cout<<"RAM: Response mask: "<<+rsp.mask<<" | Required mask: "<<+ram_[dequeue_index].valid<<std::endl;
 
