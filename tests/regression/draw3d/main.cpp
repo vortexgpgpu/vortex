@@ -141,7 +141,7 @@ int render(const CGLTrace& trace) {
 
       // upload texture data
       std::cout << "upload texture buffer" << std::endl;      
-      {    
+      { 
         RT_CHECK(vx_buf_alloc(device, texbuf.size(), &staging_buf));
         auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
         memcpy(buf_ptr, texbuf.data(), texbuf.size());
@@ -182,7 +182,7 @@ int render(const CGLTrace& trace) {
     RT_CHECK(vx_buf_alloc(device, alloc_size, &staging_buf));
     
     // upload tiles buffer
-    std::cout << "upload tiles buffer" << std::endl;      
+    std::cout << "upload tile buffer" << std::endl;      
     {    
       auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
       memcpy(buf_ptr, tilebuf.data(), tilebuf.size());
@@ -190,7 +190,7 @@ int render(const CGLTrace& trace) {
     }
 
     // upload primitives buffer
-    std::cout << "upload primitives buffer" << std::endl;      
+    std::cout << "upload primitive buffer" << std::endl;      
     {    
       auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
       memcpy(buf_ptr, primbuf.data(), primbuf.size());

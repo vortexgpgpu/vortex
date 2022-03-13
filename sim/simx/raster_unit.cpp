@@ -53,7 +53,8 @@ private:
   uint32_t pbuf_baseaddr_;
   uint32_t pbuf_stride_;
   uint32_t tbuf_addr_;
-  uint32_t tile_xy_;
+  uint32_t tile_x_;
+  uint32_t tile_y_;
   uint32_t num_prims_;    
   uint32_t cur_tile_;
   uint32_t cur_prim_;
@@ -266,24 +267,32 @@ private:
   }
 
   void renderNextPrimitive() {    
-    // get current tile header
     if (0 == num_prims_) {
-      mem_->read(&tile_xy_, tbuf_addr_, 4);
+      // read header for next tile
+      uint32_t tile_xy;
+      mem_->read(&tile_xy, tbuf_addr_, 4);
       tbuf_addr_ += 4;
       mem_->read(&num_prims_, tbuf_addr_, 4);
       tbuf_addr_ += 4;
       assert(num_prims_ > 0);
+      tile_x_ = (tile_xy & 0xffff) << tile_logsize_;
+      tile_y_ = (tile_xy >> 16) << tile_logsize_;
+      cur_prim_ = 0;
     }
 
-    //printf("renderNextPrimitive(tile=%d/%d, prim=%d/%d)\n", cur_tile_, num_tiles_, cur_prim_, num_prims_);
-
     // get next primitive index from current tile
-    mem_->read(&cur_prim_, tbuf_addr_, 4);
+    uint32_t pid;
+    mem_->read(&pid, tbuf_addr_, 4);
     tbuf_addr_ += 4;
+
+    uint32_t x = tile_x_;
+    uint32_t y = tile_y_;
+
+    printf("renderNextPrimitive(tile=%d/%d, prim=%d/%d, pid=%d, tx=%d, ty=%d)\n", cur_tile_, num_tiles_, cur_prim_, num_prims_, pid, x, y);
 
     // get primitive edges
     primitive_t primitive;
-    auto pbuf_addr = pbuf_baseaddr_ + cur_prim_ * pbuf_stride_;
+    auto pbuf_addr = pbuf_baseaddr_ + pid * pbuf_stride_;
     for (int i = 0; i < 3; ++i) {
       mem_->read(&primitive.edges[i].x, pbuf_addr, 4);
       pbuf_addr += 4;
@@ -297,30 +306,26 @@ private:
     //printf("edge1=(%d, %d, %d)\n", primitive.edges[1].x.data(), primitive.edges[1].y.data(), primitive.edges[1].z.data());
     //printf("edge2=(%d, %d, %d)\n", primitive.edges[2].x.data(), primitive.edges[2].y.data(), primitive.edges[2].z.data());
 
-    uint32_t tx = (tile_xy_ & 0xffff) << tile_logsize_;
-    uint32_t ty = (tile_xy_ >> 16) << tile_logsize_;
-    
     // Add tile corner edge offsets
     primitive.extents[0] = calcEdgeExtents(primitive.edges[0]);
     primitive.extents[1] = calcEdgeExtents(primitive.edges[1]);
     primitive.extents[2] = calcEdgeExtents(primitive.edges[2]);
 
     // Evaluate edge equation for the starting tile
-    auto e0 = evalEdgeFunction(primitive.edges[0], tx, ty);
-    auto e1 = evalEdgeFunction(primitive.edges[1], tx, ty);
-    auto e2 = evalEdgeFunction(primitive.edges[2], tx, ty);
+    auto e0 = evalEdgeFunction(primitive.edges[0], x, y);
+    auto e1 = evalEdgeFunction(primitive.edges[1], x, y);
+    auto e2 = evalEdgeFunction(primitive.edges[2], x, y);
 
     // Render the tile
     if (tile_logsize_ > block_logsize_) {
-      this->renderTile(tile_logsize_, primitive, tx, ty, e0, e1, e2);
+      this->renderTile(tile_logsize_, primitive, x, y, e0, e1, e2);
     } else {
-      this->renderBlock(block_logsize_, primitive, tx, ty, e0, e1, e2);
+      this->renderBlock(block_logsize_, primitive, x, y, e0, e1, e2);
     }
 
     // Advance next primitive
     ++cur_prim_;
-    if (cur_prim_ == num_prims_) {        
-      cur_prim_ = 0;
+    if (cur_prim_ == num_prims_) {
       num_prims_ = 0;
       ++cur_tile_;
     }
