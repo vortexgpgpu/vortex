@@ -14,6 +14,7 @@ clean:
 	$(MAKE) -C tests clean
 
 clean-all:
+	$(MAKE) -C third_party clean
 	$(MAKE) -C hw clean
 	$(MAKE) -C sim clean
 	$(MAKE) -C driver clean
