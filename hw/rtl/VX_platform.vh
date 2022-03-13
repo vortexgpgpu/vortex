@@ -30,6 +30,7 @@
                               /* verilator lint_off UNDRIVEN */ \
                               /* verilator lint_off DECLFILENAME */ \
                               /* verilator lint_off IMPLICIT */ \
+                              /* verilator lint_off PINMISSING */ \
                               /* verilator lint_off IMPORTSTAR */
 
 `define IGNORE_WARNINGS_END   /* verilator lint_on UNUSED */ \
@@ -39,6 +40,7 @@
                               /* verilator lint_on UNDRIVEN */ \
                               /* verilator lint_on DECLFILENAME */ \
                               /* verilator lint_on IMPLICIT */ \
+                              /* verilator lint_off PINMISSING */ \
                               /* verilator lint_on IMPORTSTAR */
 
 `define UNUSED_PARAM(x)  /* verilator lint_off UNUSED */ \
