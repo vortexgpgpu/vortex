@@ -121,14 +121,14 @@ module VX_mem_streamer #(
         .DATAW	(1 + NUM_REQS + WORD_SIZE + (NUM_REQS * ADDRW) + (NUM_REQS * DATAW) + QUEUE_ADDRW),
         .SIZE	(QUEUE_SIZE)
     ) store_req (
-        .clk		(clk),
-        .reset		(reset),
-        .push		(sreq_push),
-        .pop		(sreq_pop),
-        .data_in	({req_rw,  req_dup_mask, req_byteen,  req_addr,  req_data,  stag_waddr}),
-        .data_out	({sreq_rw, sreq_mask,    sreq_byteen, sreq_addr, sreq_data, sreq_tag}),
-        .full		(sreq_full),
-        .empty 		(sreq_empty),
+        .clk        (clk),
+        .reset      (reset),
+        .push       (sreq_push),
+        .pop        (sreq_pop),
+        .data_in    ({req_rw,  req_dup_mask, req_byteen,  req_addr,  req_data,  stag_waddr}),
+        .data_out   ({sreq_rw, sreq_mask,    sreq_byteen, sreq_addr, sreq_data, sreq_tag}),
+        .full       (sreq_full),
+        .empty      (sreq_empty),
         `UNUSED_PIN (alm_full),
         `UNUSED_PIN (alm_empty),
         `UNUSED_PIN (size)
@@ -142,17 +142,17 @@ module VX_mem_streamer #(
         .DATAW	(TAGW),
         .SIZE	(QUEUE_SIZE)
     ) store_tag (
-        .clk			(clk),
-        .reset			(reset),
-        .write_addr		(stag_waddr),
-        .acquire_slot	(stag_push),
-        .read_addr		(stag_raddr),
-        .write_data		(req_tag),
-        .read_data		(stag_dout),
-        .release_addr	(stag_raddr),
-        .release_slot	(stag_pop),
-        .full			(stag_full),
-        .empty			(stag_empty)
+        .clk          (clk),
+        .reset        (reset),
+        .write_addr   (stag_waddr),
+        .acquire_slot (stag_push),
+        .read_addr    (stag_raddr),
+        .write_data   (req_tag),
+        .read_data    (stag_dout),
+        .release_addr (stag_raddr),
+        .release_slot (stag_pop),
+        .full         (stag_full),
+        .empty        (stag_empty)
     );
 
     //////////////////////////////////////////////////////////////////
