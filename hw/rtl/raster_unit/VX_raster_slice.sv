@@ -212,7 +212,7 @@ module VX_raster_slice #(
     assign be_fifo_pop = (be_ready == 1 && block_fifo_empty == 0);
 
     // Stop pushing the last tile back in
-    logic last_block;
+    //logic last_block;
     always @(posedge clk) begin
         // check if the current block is going to be the last block
         if (fifo_empty == 1 && valid_tile == 0 && valid_block == 1)

@@ -10,5 +10,7 @@ module VX_raster_req_switch #(
 );
 
     // TODO
+    `UNUSED_VAR (clk)
+    `UNUSED_VAR (reset)
 
 endmodule

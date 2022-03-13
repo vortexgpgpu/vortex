@@ -14,5 +14,7 @@ module VX_raster_fetch #(
 );
 
     // TODO
+    `UNUSED_VAR (clk)
+    `UNUSED_VAR (reset)
 
 endmodule
