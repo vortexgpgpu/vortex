@@ -192,11 +192,11 @@ module VX_mem_streamer #(
         .DATAW	(RSPW),
         .RESETW (1)
     ) rsp_pipe_reg (
-        .clk		(clk),
-        .reset		(reset),
-        .enable		(1'b1),
-        .data_in	({rsp_out}),
-        .data_out	({rsp_tag, rsp_mask, rsp_data, rsp_valid})
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  ({rsp_out}),
+        .data_out ({rsp_tag, rsp_mask, rsp_data, rsp_valid})
     );
 
     //////////////////////////////////////////////////////////////////
@@ -229,11 +229,11 @@ module VX_mem_streamer #(
         .DATAW	(NUM_REQS + NUM_REQS + (NUM_REQS * WORD_SIZE) + (NUM_REQS * ADDRW) + (NUM_REQS * DATAW) + (NUM_REQS * QUEUE_ADDRW)),
         .RESETW (1)
     ) req_pipe_reg (
-        .clk		(clk),
-        .reset		(reset),
-        .enable		(mreq_en),
-        .data_in	({mreq_valid,    mreq_rw,    mreq_byteen,    mreq_addr,    mreq_data,    mreq_tag}),
-        .data_out	({mem_req_valid, mem_req_rw, mem_req_byteen, mem_req_addr, mem_req_data, mem_req_tag})
+        .clk      (clk),
+        .reset    (reset),
+        .enable	  (mreq_en),
+        .data_in  ({mreq_valid,    mreq_rw,    mreq_byteen,    mreq_addr,    mreq_data,    mreq_tag}),
+        .data_out ({mem_req_valid, mem_req_rw, mem_req_byteen, mem_req_addr, mem_req_data, mem_req_tag})
     );
 
     //////////////////////////////////////////////////////////////////
