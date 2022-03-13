@@ -232,26 +232,9 @@ module VX_bank #(
 
     wire tag_match_st0;
 
-    //Swetha: added for associativity 
-    wire [NUM_WAYS-1:0] tag_match_way_st0;
-    wire [NUM_WAYS-1:0] tag_match_way_st1;
-    //Swetha: added for eviction 
-    wire[NUM_WAYS-1:0] repl_way_st0;
-    wire[NUM_WAYS-1:0] repl_way_st1;
-    //Swetha: using left shift register to determine replacement way  
-    genvar i;
-    for (i = 0; i < NUM_WAYS; i = i+1) begin
-        assign repl_way_st0[i] = 1;
-    end
-    // if (is_flush_st0) begin
-    //     //assign 1 as the initial value
-    //     assign repl_way_st0[0] = 1'b1;
-    //     for (i = 1; i < NUM_WAYS; i = i+1) begin
-    //         assign repl_way_st0[i] = 0;
-    //     end
-    // end else begin
-    //     assign repl_way_st0 = {repl_way_st0[NUM_WAYS-2:0],repl_way_st0[NUM_WAYS-1]};
-    // end 
+    //added for associativity 
+    wire [NUM_WAYS-1:0] select_way_st0;
+    wire [NUM_WAYS-1:0] select_way_st1;
 
     VX_tag_access #(
         .BANK_ID          (BANK_ID),
@@ -275,10 +258,8 @@ module VX_bank #(
         .addr      (addr_st0),        
         .fill      (do_fill_st0),
         .flush     (do_flush_st0),
-         //Swetha: added for associativity
-        .tag_match_way (tag_match_way_st0),
-        //Swetha: added for eviction
-        .repl_way (repl_way_st0),
+         //added for associativity
+        .select_way (select_way_st0),
         .tag_match (tag_match_st0)
     );
 
@@ -288,14 +269,14 @@ module VX_bank #(
     wire [MSHR_ADDR_WIDTH-1:0] mshr_id_a_st0 = (is_read_st0 || is_write_st0) ? mshr_alloc_id : mshr_id_st0;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH + NUM_PORTS * (WORD_SELECT_BITS + WORD_SIZE + `REQS_BITS + 1 + CORE_TAG_WIDTH) + MSHR_ADDR_WIDTH + 1 + NUM_WAYS + NUM_WAYS),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH + NUM_PORTS * (WORD_SELECT_BITS + WORD_SIZE + `REQS_BITS + 1 + CORE_TAG_WIDTH) + MSHR_ADDR_WIDTH + 1 + NUM_WAYS),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (!crsq_stall),
-        .data_in  ({valid_st0, is_mshr_st0, is_fill_st0, is_read_st0, is_write_st0, miss_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_tid_st0, pmask_st0, tag_st0, mshr_id_a_st0, mshr_pending_st0, tag_match_way_st0, repl_way_st0}),
-        .data_out ({valid_st1, is_mshr_st1, is_fill_st1, is_read_st1, is_write_st1, miss_st1, addr_st1, wdata_st1, wsel_st1, byteen_st1, req_tid_st1, pmask_st1, tag_st1, mshr_id_st1,   mshr_pending_st1, tag_match_way_st1, repl_way_st1})
+        .data_in  ({valid_st0, is_mshr_st0, is_fill_st0, is_read_st0, is_write_st0, miss_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_tid_st0, pmask_st0, tag_st0, mshr_id_a_st0, mshr_pending_st0, select_way_st0}),
+        .data_out ({valid_st1, is_mshr_st1, is_fill_st1, is_read_st1, is_write_st1, miss_st1, addr_st1, wdata_st1, wsel_st1, byteen_st1, req_tid_st1, pmask_st1, tag_st1, mshr_id_st1,   mshr_pending_st1, select_way_st1})
     ); 
 
     assign req_id_st1 = tag_st1[0][`CACHE_REQ_ID_RNG];
@@ -326,10 +307,8 @@ module VX_bank #(
         .req_id     (req_id_st1),
 
         .stall      (crsq_stall),
-        //Swetha: added for associativity
-        .tag_match_way (tag_match_way_st1),
-        //Swetha: added for eviction
-        .repl_way (repl_way_st1),
+        //added for associativity
+        .select_way (select_way_st1),
 
         .read       (do_read_st1 || do_mshr_st1),      
         .fill       (do_fill_st1),        
