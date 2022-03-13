@@ -38,11 +38,7 @@ module VX_data_access #(
     input wire [NUM_PORTS-1:0][WORD_SIZE-1:0] byteen,
     input wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] fill_data,
     input wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] write_data,
-    //Swetha: added for associativity
-    input wire[NUM_WAYS-1:0]              tag_match_way,
-    //input wire[$clog2(WAYS)-1:0]       tag_match_way_num,
-    //Swetha: added for eviction
-    input wire[NUM_WAYS-1:0]                repl_way,
+    input wire[NUM_WAYS-1:0]              select_way,
 
     output wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] read_data
 );
@@ -54,13 +50,10 @@ module VX_data_access #(
     `UNUSED_VAR (read)
 
     localparam BYTEENW = WRITE_ENABLE ? CACHE_LINE_SIZE : 1;
-    //localparam n_BYTEENW = 1;
 
     wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] rdata;
     wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] wdata;
     wire [BYTEENW-1:0] wren;
-    //wire [n_BYTEENW-1:0] n_wren;
-
     wire [`LINE_SELECT_BITS-1:0] line_addr = addr[`LINE_SELECT_BITS-1:0];
 
     if (WRITE_ENABLE) begin
@@ -101,28 +94,22 @@ module VX_data_access #(
         `UNUSED_VAR (write_data)
         assign wdata = fill_data;
         assign wren  = fill;
-        //assign n_wren = fill;
     end
 
-    //Swetha: adding associativity to data access
-    /* CHANGES START HERE */
-
-    //Swetha: Local variable to capture data from all ways before assigning to output wire
+    //Local variable to capture data from all ways before assigning to output wire
     wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] read_data_local [NUM_WAYS-1:0];
-    localparam [`WAY_SEL_WIDTH-1:0] which_way = 0; //dummy assignment  
+    localparam [`WAY_SEL_WIDTH-1:0] which_way = 0; 
 
     generate
         genvar m;
         for (m = 0; m < NUM_WAYS; m = m+1) begin
-            assign which_way = ((fill & repl_way[m]) || (!fill & tag_match_way[m])) ? m : 'z; 
+            assign which_way = select_way[m] ? m : 'z; 
         end
     endgenerate
 
     generate
         genvar j;
         for (j = 0; j < which_way; j = j+1) begin
-            //assign which_way = tag_match_way[j] ? j : 'z; 
-            //assign wren = (tag_match_way[j] == 1'b0) ? {BYTEENW{1'b0}} : wren;
             VX_sp_ram #(
                 .DATAW      (`CACHE_LINE_WIDTH),
                 .SIZE       (`LINES_PER_BANK),
@@ -131,10 +118,9 @@ module VX_data_access #(
             ) data_store (
                 .clk   (clk),
                 .addr  (line_addr),
-                //Swetha: wren is disabled so that data is not written into spram
-                .wren  (0),  //& {BYTEENW{tag_match_way[j]}}
+                //wren is disabled so that data is not written into spram
+                .wren  (0),  
                 .wdata (wdata),
-                //Swetha: modified this for associativity 
                 .rdata (read_data_local[j]) 
             );
         end
@@ -148,10 +134,8 @@ module VX_data_access #(
             ) data_store (
                 .clk   (clk),
                 .addr  (line_addr),
-                //Swetha: wren is disabled so that data is not written into spram
-                .wren  (wren),  //& {BYTEENW{tag_match_way[j]}}
+                .wren  (wren),  
                 .wdata (wdata),
-                //Swetha: modified this for associativity 
                 .rdata (read_data_local[which_way]) 
             );
 
@@ -159,8 +143,6 @@ localparam temp = which_way + 1;
     generate
         genvar k;
         for (k = temp; k < NUM_WAYS; k = k+1) begin
-            //assign which_way = tag_match_way[j] ? j : 'z; 
-            //assign wren = (tag_match_way[j] == 1'b0) ? {BYTEENW{1'b0}} : wren;
             VX_sp_ram #(
                 .DATAW      (`CACHE_LINE_WIDTH),
                 .SIZE       (`LINES_PER_BANK),
@@ -169,42 +151,18 @@ localparam temp = which_way + 1;
             ) data_store (
                 .clk   (clk),
                 .addr  (line_addr),
-                //Swetha: wren is disabled so that data is not written into spram
-                .wren  (0),  //& {BYTEENW{tag_match_way[j]}}
+                .wren  (0),  
                 .wdata (wdata),
-                //Swetha: modified this for associativity 
                 .rdata (read_data_local[k]) 
             );
         end
     endgenerate
    
-
-    //Approach 1: 
-    //assign rdata = read_data_local[which_way];
-
-    //Approach 2:  
-
-    //reg [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] read_data_local[WAYS-1:0];
-    //localparam [`WAY_SEL_WIDTH-1:0] which_way = 0;
-    //output wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] read_data
-
     if (NUM_WAYS > 1) begin
         assign rdata = read_data_local[which_way];
     end else begin
-        //`UNUSED_VAR (sel_in)
         assign rdata = read_data_local;
     end
-
-    // wire 
-
-    // VX_mux #(
-    //     .DATAW    (`WORDS_PER_LINE + `WORD_WIDTH),
-    //     .N        (WAYS),  
-    // ) find_read_data (
-    //     read_data_local,
-    //     which_way,
-    //     rdata
-    // );
 
     if (`WORDS_PER_LINE > 1) begin
         for (genvar i = 0; i < NUM_PORTS; ++i) begin
@@ -213,38 +171,6 @@ localparam temp = which_way + 1;
     end else begin
         assign read_data = rdata;
     end
-
-    //Approach 3: 
-    // if (`WORDS_PER_LINE > 1) begin
-    //     for (genvar i = 0; i < NUM_PORTS; ++i) begin
-    //             assign read_data[i] = rdata[which_way][wsel[i]]; 
-    //     end
-    // end else begin
-    //     assign read_data = rdata[which_way]; 
-    // end
-    /* CHANGES END HERE */
-    
-    
-    // VX_sp_ram #(
-    //     .DATAW      (`CACHE_LINE_WIDTH),
-    //     .SIZE       (`LINES_PER_BANK),
-    //     .BYTEENW    (BYTEENW),
-    //     .NO_RWCHECK (1)
-    // ) data_store (
-    //     .clk   (clk),
-    //     .addr  (line_addr),
-    //     .wren  (wren),
-    //     .wdata (wdata),
-    //     .rdata (rdata)
-    // );
-
-    // if (`WORDS_PER_LINE > 1) begin
-    //     for (genvar i = 0; i < NUM_PORTS; ++i) begin
-    //         assign read_data[i] = rdata[wsel[i]];
-    //     end
-    // end else begin
-    //     assign read_data = rdata;
-    // end
 
      `UNUSED_VAR (stall)
 
