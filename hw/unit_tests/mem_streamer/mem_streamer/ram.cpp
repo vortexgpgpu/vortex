@@ -58,18 +58,14 @@ void RAM::insert_req(req_t req) {
 
         // Store metadata
         r.cycles_left = MEM_LATENCY;
-        r.rsp_sent_mask = 0b0001;
 
         std::cout<<"RAM: Insert entry... "<<std::endl;
-        std::cout<<"RAM: valid mask: "<<+r.valid<<std::endl;
-
         ram_.push_back(r);
     }
 }
 
 uint8_t RAM::is_ready() {    
-    // return generate_rand(0b1000, 0b1111);
-    return 0b1111;
+    return generate_rand(0b1000, 0b1111);
 }
 
 //////////////////////////////////////////////////////
@@ -85,20 +81,21 @@ rsp_t RAM::schedule_rsp() {
 
             is_rsp_active_ = true;
             rsp.valid   = 1;
-            rsp.mask    = ram_[dequeue_index].valid; //generate_rand(ram_[dequeue_index].rsp_sent_mask, ram_[dequeue_index].valid);
+            rsp.mask    = generate_rand_mask(ram_[dequeue_index].valid);
             rsp.data    = generate_rand(0x20000000, 0x30000000);
             rsp.tag     = ram_[dequeue_index].tag;
 
-            std::cout<<"RAM: Response tag: "<<std::hex<<+rsp.tag<<std::endl;
-
+            std::cout<<std::hex;
             std::cout<<"RAM: Response mask: "<<+rsp.mask<<" | Required mask: "<<+ram_[dequeue_index].valid<<std::endl;
 
-            if (rsp.mask == ram_[dequeue_index].valid) {
+            ram_[dequeue_index].rsp_sent_mask = rsp.mask;
+            ram_[dequeue_index].valid = ram_[dequeue_index].valid & ~ram_[dequeue_index].rsp_sent_mask;
+
+            if (0 == ram_[dequeue_index].valid) {
                 ram_.erase(ram_.begin() + dequeue_index);
                 is_rsp_stall_ = false;
                 std::cout<<"RAM: Clear entry... "<<std::endl;
             } else {
-                ram_[dequeue_index].rsp_sent_mask = rsp.mask;
                 is_rsp_stall_ = true;
                 std::cout<<"RAM: Stall... "<<std::endl;
             }

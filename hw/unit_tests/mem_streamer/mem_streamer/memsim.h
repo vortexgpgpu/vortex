@@ -12,6 +12,7 @@
 #define SIM_TIME 1000
 
 int generate_rand (int min, int max);
+int generate_rand_mask (int mask);
 
 class MemSim {
     private:

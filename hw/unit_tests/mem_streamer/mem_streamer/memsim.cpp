@@ -31,6 +31,19 @@ int generate_rand (int min, int max) {
 
 //////////////////////////////////////////////////////
 
+int generate_rand_mask (int mask) {
+	int result = 0;
+	for (int i = 0; i < 4; i++) {
+		int bit = mask & 0b1;
+		int rand_bit = generate_rand (0, bit);
+		result |= (rand_bit << i);
+		mask = mask >> 1;
+	}
+	return result;
+}
+
+//////////////////////////////////////////////////////
+
 MemSim::MemSim() {
 	msu_ = new VVX_mem_streamer();
 
