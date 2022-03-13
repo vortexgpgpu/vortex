@@ -32,7 +32,7 @@ int generate_rand (int min, int max) {
 //////////////////////////////////////////////////////
 
 MemSim::MemSim() {
-	msu_ = new VVX_mem_streamer_test();
+	msu_ = new VVX_mem_streamer();
 
 	// Enable tracing
 	Verilated::traceEverOn(true);
