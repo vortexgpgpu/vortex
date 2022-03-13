@@ -2,7 +2,7 @@
 # Makefile to compile and test the memory stream unit
 #---------------------------------------------------------
 
-TOP = VX_mem_streamer
+TOP = VX_mem_streamer_test
 PARAMS += -GNUM_REQS=4 -GADDRW=8 -GDATAW=8 -GTAGW=8 -GWORD_SIZE=1 -GQUEUE_SIZE=4
 
 RTL_DIR = ../../../rtl

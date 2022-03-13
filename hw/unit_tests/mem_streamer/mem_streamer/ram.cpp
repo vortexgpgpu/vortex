@@ -54,7 +54,7 @@ void RAM::insert_req(req_t req) {
         r.byteen    = req.byteen;
         r.addr      = req.addr;
         r.data      = req.data;
-        r.tag       = req.tag;
+        r.tag       = req.tag & 0b11;
 
         // Store metadata
         r.cycles_left = MEM_LATENCY;

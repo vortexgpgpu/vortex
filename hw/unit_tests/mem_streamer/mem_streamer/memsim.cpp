@@ -32,7 +32,7 @@ int generate_rand (int min, int max) {
 //////////////////////////////////////////////////////
 
 MemSim::MemSim() {
-	msu_ = new VVX_mem_streamer();
+	msu_ = new VVX_mem_streamer_test();
 
 	// Enable tracing
 	Verilated::traceEverOn(true);
@@ -80,7 +80,7 @@ void MemSim::reset() {
 
 void MemSim::attach_core() {
 	if (msu_->req_ready) {
-		msu_->req_valid 	= 1;//generate_rand(0, 1);
+		msu_->req_valid 	= generate_rand(0, 1);
 		msu_->req_rw 		= false;
 		msu_->req_mask 		= generate_rand(0b0001, 0b1111);
 		msu_->req_byteen 	= 0b1;
