@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
 <!DOCTYPE boost_serialization>
 <boost_serialization signature="serialization::archive" version="15">
-<cgltrace class_id="0" tracking_level="0" version="0">
-	<version>0</version>
+<cgltrace class_id="0" tracking_level="0" version="1">
 	<drawcalls class_id="1" tracking_level="0" version="0">
 		<count>2</count>
 		<item_version>0</item_version>
@@ -13,7 +12,7 @@
 				<color_writemask>4294967295</color_writemask>
 				<depth_test>1</depth_test>
 				<depth_writemask>1</depth_writemask>
-				<depth_format>13</depth_format>
+				<depth_format>14</depth_format>
 				<depth_func>1</depth_func>
 				<stencil_test>0</stencil_test>
 				<stencil_func>0</stencil_func>
@@ -159,7 +158,7 @@
 				<color_writemask>4294967295</color_writemask>
 				<depth_test>1</depth_test>
 				<depth_writemask>1</depth_writemask>
-				<depth_format>13</depth_format>
+				<depth_format>14</depth_format>
 				<depth_func>1</depth_func>
 				<stencil_test>0</stencil_test>
 				<stencil_func>0</stencil_func>
@@ -309,6 +308,7 @@
 				<format>4</format>
 				<width>128</width>
 				<height>128</height>
+				<size>32768</size>
 				<pixels>
 AAAAAAAAAAAgACAAIAAgACAAIAAgAEEIQQhBCEEIQQhhCGIIYghiCGEIYQhBCGEIYQhiCGIQgRCB
 EGEIgQiBCGIIQghCCEIIYQhhCEEAQQBCCEIIQQgBACEAQQhhCCAAIQBiCCEIIQAhAAAAAAAAAAAA
