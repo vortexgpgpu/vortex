@@ -74,34 +74,45 @@ public:
       }
     } 
 
+    uint32_t fetch(uint32_t wid, uint32_t tid) {      
+      auto stamp = raster_unit_->fetch();
+      if (nullptr == stamp)
+        return 0;      
+      uint32_t ltid = wid * arch_.num_threads() + tid;
+      auto& csr = csrs_.at(ltid);
+      csr.set_stamp(stamp);
+      return (stamp->pid << 1) | 1;
+    }
+
     uint32_t csr_read(int32_t wid, uint32_t tid, uint32_t addr) {
       uint32_t ltid = wid * arch_.num_threads() + tid;
       auto& csr = csrs_.at(ltid);
-      if (0 == (csr.get_stamp()->mask & (1 << csr.frag)) 
+      auto stamp = csr.get_stamp();
+      if (0 == (stamp->mask & (1 << csr.frag)) 
        && addr != CSR_RASTER_FRAG)
         return 0;
       auto i  = csr.frag & 0x1;
       auto j  = csr.frag >> 1;
-      auto px = csr.get_stamp()->x + i;
-      auto py = csr.get_stamp()->y + j;
+      auto px = stamp->x + i;
+      auto py = stamp->y + j;
       __unused (px);
       __unused (py);
       switch (addr) {
-      case CSR_RASTER_X_Y:
-        return (csr.get_stamp()->y << 16) | csr.get_stamp()->x;
-      case CSR_RASTER_MASK_PID:
-        return (csr.get_stamp()->pid << 4) | csr.get_stamp()->mask;
       case CSR_RASTER_FRAG:
         return csr.frag;
+      case CSR_RASTER_X_Y:
+        return (stamp->y << 16) | stamp->x;
+      case CSR_RASTER_MASK_PID:
+        return (stamp->pid << 4) | stamp->mask;      
       case CSR_RASTER_BCOORD_X:
-        //printf("bcoord.x[%d,%d]=%d\n", px, py, csr.get_stamp()->bcoords[csr.frag].x.data());
-        return csr.get_stamp()->bcoords[csr.frag].x.data();
+        //printf("bcoord.x[%d,%d]=%d\n", px, py, stamp->bcoords[csr.frag].x.data());
+        return stamp->bcoords[csr.frag].x.data();
       case CSR_RASTER_BCOORD_Y:
-        //printf("bcoord.y[%d,%d]=%d\n", px, py, csr.get_stamp()->bcoords[csr.frag].y.data());
-        return csr.get_stamp()->bcoords[csr.frag].y.data();
+        //printf("bcoord.y[%d,%d]=%d\n", px, py, stamp->bcoords[csr.frag].y.data());
+        return stamp->bcoords[csr.frag].y.data();
       case CSR_RASTER_BCOORD_Z:
-        //printf("bcoord.z[%d,%d]=%d\n", px, py, csr.get_stamp()->bcoords[csr.frag].z.data());
-        return csr.get_stamp()->bcoords[csr.frag].z.data();
+        //printf("bcoord.z[%d,%d]=%d\n", px, py, stamp->bcoords[csr.frag].z.data());
+        return stamp->bcoords[csr.frag].z.data();
       case CSR_RASTER_GRAD_X:
         return csr.gradients[csr.frag].x.data();
       case CSR_RASTER_GRAD_Y:
@@ -115,13 +126,14 @@ public:
     void csr_write(uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value) {
       uint32_t ltid = wid * arch_.num_threads() + tid;
       auto& csr = csrs_.at(ltid);
-      if (0 == (csr.get_stamp()->mask & (1 << csr.frag)) 
+      auto stamp = csr.get_stamp();
+      if (0 == (stamp->mask & (1 << csr.frag)) 
        && addr != CSR_RASTER_FRAG)
         return;
       auto i  = csr.frag & 0x1;
       auto j  = csr.frag >> 1;
-      auto px = csr.get_stamp()->x + i;
-      auto py = csr.get_stamp()->y + j;
+      auto px = stamp->x + i;
+      auto py = stamp->y + j;
       __unused (px);
       __unused (py);
       switch (addr) {
@@ -141,25 +153,16 @@ public:
       }
     }
 
-    uint32_t fetch(uint32_t wid, uint32_t tid) {      
-      auto stamp = raster_unit_->fetch();
-      if (nullptr == stamp)
-        return 0;      
-      uint32_t ltid = wid * arch_.num_threads() + tid;
-      auto& csr = csrs_.at(ltid);
-      csr.set_stamp(stamp);
-      return (stamp->pid << 1) | 1;
-    }
-
     int32_t interpolate(uint32_t wid, uint32_t tid, int32_t a, int32_t b, int32_t c) {
       uint32_t ltid = wid * arch_.num_threads() + tid;
       auto& csr = csrs_.at(ltid);
-      if (0 == (csr.get_stamp()->mask & (1 << csr.frag)))
+      auto stamp = csr.get_stamp();
+      if (0 == (stamp->mask & (1 << csr.frag)))
         return 0;
       auto i   = csr.frag & 0x1;
       auto j   = csr.frag >> 1;
-      auto px  = csr.get_stamp()->x + i;
-      auto py  = csr.get_stamp()->y + j;
+      auto px  = stamp->x + i;
+      auto py  = stamp->y + j;
       __unused (px);
       __unused (py);
       auto ax  = fixed24_t::make(a);

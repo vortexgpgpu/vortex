@@ -6,6 +6,7 @@
 #include <string.h>
 #include <map>
 #include <unordered_map>
+#include <algorithm>
 #include <cocogfx/include/tga.hpp>
 #include <cocogfx/include/png.hpp>
 #include <cocogfx/include/bmp.hpp>
@@ -58,7 +59,9 @@ static float EdgeEquation(rast_edge_t edges[3],
   auto c2 = (v0.x * v1.y) - (v1.x * v0.y);
 
   // Normalize the matrix
-  #define NORMALIZE(x, y, z) { auto t = 1.0 / (std::abs(x) + std::abs(y)); x *= t; y *= t; z *= t; }
+  auto max_ab = std::max({std::abs(a0), std::abs(a1), std::abs(a2),
+                          std::abs(b0), std::abs(b1), std::abs(b2)});
+  #define NORMALIZE(x, y, z) { auto t = 1.0 / max_ab; x *= t; y *= t; z *= t; }
   NORMALIZE(a0, b0, c0)
   NORMALIZE(a1, b1, c1)
   NORMALIZE(a2, b2, c2)

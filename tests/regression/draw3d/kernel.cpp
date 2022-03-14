@@ -23,14 +23,14 @@ using fixeduv_t = cocogfx::TFixed<TEX_FXD_FRAC>;
 
 #define GRADIENTS_i(i) { \
 	csr_write(CSR_RASTER_FRAG, i); \
-	auto cx = fixed16_t::make(csr_read(CSR_RASTER_BCOORD_X)); \
-	auto cy = fixed16_t::make(csr_read(CSR_RASTER_BCOORD_Y)); \
-	auto cz = fixed16_t::make(csr_read(CSR_RASTER_BCOORD_Z)); \
-	auto r  = cocogfx::Inverse<fixed24_t>(cx + cy + cz); \
-    auto gx = cocogfx::Mul<fixed24_t>(cx, r); \
-    auto gy = cocogfx::Mul<fixed24_t>(cy, r); \
-	csr_write(CSR_RASTER_GRAD_X, gx.data()); \
-	csr_write(CSR_RASTER_GRAD_Y, gy.data()); \
+	auto F0 = fixed16_t::make(csr_read(CSR_RASTER_BCOORD_X)); \
+	auto F1 = fixed16_t::make(csr_read(CSR_RASTER_BCOORD_Y)); \
+	auto F2 = fixed16_t::make(csr_read(CSR_RASTER_BCOORD_Z)); \
+	auto r  = cocogfx::Inverse<fixed24_t>(F0 + F1 + F2); \
+    auto f0 = cocogfx::Mul<fixed24_t>(r, F0); \
+    auto f1 = cocogfx::Mul<fixed24_t>(r, F1); \
+	csr_write(CSR_RASTER_GRAD_X, f0.data()); \
+	csr_write(CSR_RASTER_GRAD_Y, f1.data()); \
 }
 
 #define GRADIENTS \

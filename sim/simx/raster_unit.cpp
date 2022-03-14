@@ -58,6 +58,7 @@ private:
   uint32_t num_prims_;    
   uint32_t cur_tile_;
   uint32_t cur_prim_;
+  uint32_t pid_;
   RasterUnit::Stamp* stamps_head_;
   RasterUnit::Stamp *stamps_tail_;
   bool initialized_;  
@@ -86,7 +87,6 @@ private:
                   fixed16_t e0, 
                   fixed16_t e1, 
                   fixed16_t e2) {
-    //printf("Quad (%d,%d) :\n", x, y);
     uint32_t mask = 0;
     std::array<vec3_fx_t, 4> bcoords;
 
@@ -116,7 +116,8 @@ private:
     
     if (mask) {
       // add stamp to queue
-      this->stamps_push(new RasterUnit::Stamp(x, y, mask, bcoords, cur_prim_));
+      //printf("Quad: x=%d, y=%d, mask=%d, pid=%d\n", x, y, mask, pid_);
+      this->stamps_push(new RasterUnit::Stamp(x, y, mask, bcoords, pid_));
     }
   }
 
@@ -197,7 +198,7 @@ private:
       return; 
     
     if (subTileLogSize > block_logsize_) {
-      //if (subTileLogSize == tile_logsize_) printf("Tile (%d,%d) :\n", x, y);
+      //printf("Tile (%d,%d) :\n", x, y);
 
       --subTileLogSize;
       auto subTileSize = 1 << subTileLogSize;
@@ -268,7 +269,7 @@ private:
 
   void renderNextPrimitive() {    
     if (0 == num_prims_) {
-      // read header for next tile
+      // read next tile header from tile buffer
       uint32_t tile_xy;
       mem_->read(&tile_xy, tbuf_addr_, 4);
       tbuf_addr_ += 4;
@@ -280,19 +281,18 @@ private:
       cur_prim_ = 0;
     }
 
-    // get next primitive index from current tile
-    uint32_t pid;
-    mem_->read(&pid, tbuf_addr_, 4);
+    // read next primitive index from tile buffer
+    mem_->read(&pid_, tbuf_addr_, 4);
     tbuf_addr_ += 4;
 
     uint32_t x = tile_x_;
     uint32_t y = tile_y_;
 
-    printf("renderNextPrimitive(tile=%d/%d, prim=%d/%d, pid=%d, tx=%d, ty=%d)\n", cur_tile_, num_tiles_, cur_prim_, num_prims_, pid, x, y);
+    //printf("renderNextPrimitive(tile=%d/%d, prim=%d/%d, pid=%d, tx=%d, ty=%d)\n", cur_tile_, num_tiles_, cur_prim_, num_prims_, pid_, x, y);
 
     // get primitive edges
     primitive_t primitive;
-    auto pbuf_addr = pbuf_baseaddr_ + pid * pbuf_stride_;
+    auto pbuf_addr = pbuf_baseaddr_ + pid_ * pbuf_stride_;
     for (int i = 0; i < 3; ++i) {
       mem_->read(&primitive.edges[i].x, pbuf_addr, 4);
       pbuf_addr += 4;
@@ -323,11 +323,12 @@ private:
       this->renderBlock(block_logsize_, primitive, x, y, e0, e1, e2);
     }
 
-    // Advance next primitive
+    // Move to next primitive
     ++cur_prim_;
     if (cur_prim_ == num_prims_) {
-      num_prims_ = 0;
+      // Move to next tile      
       ++cur_tile_;
+      num_prims_ = 0;
     }
   }
 
