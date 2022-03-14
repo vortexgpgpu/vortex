@@ -25,7 +25,7 @@ module VX_raster_unit #(
     VX_dcache_rsp_if.slave  cache_rsp_if,
 
     // Inputs
-    VX_raster_dcr_if.slave  raster_dcr_if,
+    VX_raster_dcr_if.master raster_dcr_if,
     VX_raster_req_if.slave  raster_req_if,
 
     // Outputs
@@ -44,6 +44,7 @@ module VX_raster_unit #(
         .reset      (reset),
 
         // inputs
+        .dcr_wr_valid (0),
         .raster_dcr_if(raster_dcr_if)
 
         // output

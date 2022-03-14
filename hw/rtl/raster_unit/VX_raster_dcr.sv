@@ -13,7 +13,7 @@ module VX_raster_dcr #(
     input  wire [`VX_DCR_DATA_WIDTH-1:0]    dcr_wr_data,
 
     // Output
-    VX_raster_dcr_if.master raster_dcr_if
+    VX_raster_dcr_if.slave raster_dcr_if
 );
 
     // DCR registers

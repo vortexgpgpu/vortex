@@ -16,7 +16,7 @@ module VX_tex_unit #(
     VX_dcache_rsp_if.slave  cache_rsp_if,
 
     // Inputs
-    VX_tex_dcr_if.slave     tex_dcr_if,
+    VX_tex_dcr_if.master    tex_dcr_if,
     VX_tex_req_if.slave     tex_req_if,
     
     // Outputs
@@ -30,8 +30,8 @@ module VX_tex_unit #(
     wire [`NUM_THREADS-1:0][`TEX_MIPOFF_BITS-1:0]   sel_mipoff;
     wire [`NUM_THREADS-1:0][1:0][`TEX_LOD_BITS-1:0] sel_logdims;
 
-    assign tex_dcr_if.stage = tex_req_if.stage;
-    tex_dcrs_t tex_dcrs = tex_dcr_if.data;
+    tex_dcrs_t tex_dcrs;
+    assign tex_dcrs = tex_dcr_if.data[tex_req_if.stage];
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign mip_level[i]      = tex_req_if.lod[i][`TEX_LOD_BITS-1:0];

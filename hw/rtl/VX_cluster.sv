@@ -10,13 +10,13 @@ module VX_cluster #(
     input  wire                             reset,
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_dcr_if.slave                     tex_dcr_if,
+    VX_tex_dcr_if.master                    tex_dcr_if,
 `endif
 `ifdef EXT_RASTER_ENABLE
-    VX_raster_dcr_if.slave                  raster_dcr_if,
+    VX_raster_dcr_if.master                 raster_dcr_if,
 `endif
 `ifdef EXT_ROP_ENABLE
-    VX_rop_dcr_if.slave                     rop_dcr_if,
+    VX_rop_dcr_if.master                    rop_dcr_if,
 `endif
 
 

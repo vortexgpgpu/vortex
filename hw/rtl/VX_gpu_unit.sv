@@ -16,7 +16,7 @@ module VX_gpu_unit #(
 `ifdef PERF_ENABLE
     VX_perf_tex_if.master   perf_tex_if,
 `endif
-    VX_tex_dcr_if.slave     tex_dcr_if,
+    VX_tex_dcr_if.master    tex_dcr_if,
     VX_dcache_req_if.master tcache_req_if,
     VX_dcache_rsp_if.slave  tcache_rsp_if,
 `endif
@@ -58,8 +58,6 @@ module VX_gpu_unit #(
     wire is_split  = (gpu_req_if.op_type == `INST_GPU_SPLIT);
     wire is_bar    = (gpu_req_if.op_type == `INST_GPU_BAR);
     wire is_pred   = (gpu_req_if.op_type == `INST_GPU_PRED);
-
-    wire is_wctl   = is_wspawn | is_tmc | is_split | is_bar | is_pred;
 
     wire [31:0] rs1_data = gpu_req_if.rs1_data[gpu_req_if.tid];
     wire [31:0] rs2_data = gpu_req_if.rs2_data[gpu_req_if.tid];
@@ -106,9 +104,11 @@ module VX_gpu_unit #(
     assign barrier.size_m1 = (`NW_BITS)'(rs2_data - 1);       
 
     // Warp control response
-    wire wctl_rsp_valid = gpu_req_if.valid & is_wctl;
+    wire wctl_req_valid = gpu_req_if.valid & (is_wspawn | is_tmc | is_split | is_bar | is_pred);
+    wire wctl_rsp_valid = wctl_req_valid;
     wire [WCTL_DATAW-1:0] wctl_rsp_data = {tmc, wspawn, split, barrier};
     wire wctl_rsp_ready;
+    wire wctl_req_ready = wctl_rsp_ready;
 
     `UNUSED_VAR (gpu_req_if.op_mod)
     `UNUSED_VAR (gpu_req_if.rs3_data)
@@ -120,14 +120,13 @@ module VX_gpu_unit #(
     VX_tex_req_if tex_req_if();
     VX_commit_if  tex_rsp_if();
 
-    assign tex_req_if.valid = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_TEX);
-    assign tex_req_if.uuid  = gpu_req_if.uuid;
-    assign tex_req_if.wid   = gpu_req_if.wid;
-    assign tex_req_if.tmask = gpu_req_if.tmask;
-    assign tex_req_if.PC    = gpu_req_if.PC;
-    assign tex_req_if.rd    = gpu_req_if.rd;
-    assign tex_req_if.wb    = gpu_req_if.wb;
-    
+    assign tex_req_if.valid     = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_TEX);
+    assign tex_req_if.uuid      = gpu_req_if.uuid;
+    assign tex_req_if.wid       = gpu_req_if.wid;
+    assign tex_req_if.tmask     = gpu_req_if.tmask;
+    assign tex_req_if.PC        = gpu_req_if.PC;
+    assign tex_req_if.rd        = gpu_req_if.rd;
+    assign tex_req_if.wb        = gpu_req_if.wb;    
     assign tex_req_if.stage     = gpu_req_if.op_mod[`NTEX_BITS-1:0];
     assign tex_req_if.coords[0] = gpu_req_if.rs1_data;
     assign tex_req_if.coords[1] = gpu_req_if.rs2_data;
@@ -156,19 +155,20 @@ module VX_gpu_unit #(
     `ifdef EXT_TEX_ENABLE
         `INST_GPU_TEX: gpu_req_ready = tex_req_if.ready;
     `endif
-        default: gpu_req_ready = wctl_rsp_ready;
+        default: gpu_req_ready = wctl_req_ready;
         endcase
     end   
     assign gpu_req_if.ready = gpu_req_ready;
 
     VX_stream_mux #(            
-        .NUM_REQS (1
-    `ifdef EXT_TEX_ENABLE
-        +1
-    `endif    
+        .NUM_REQS (
+            1
+        `ifdef EXT_TEX_ENABLE
+           +1
+        `endif    
         ),
         .DATAW    (MUX_DATAW),
-        .BUFFERED (1),
+        .BUFFERED (0),
         .TYPE     ("R")
     ) rsp_mux (
         .clk       (clk),
@@ -214,9 +214,9 @@ module VX_gpu_unit #(
 
     // warp control reponse
      
-    assign {warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.split, warp_ctl_if.barrier} = rsp_data_r[WCTL_DATAW-1:0];    
     assign warp_ctl_if.valid = gpu_commit_if.valid && gpu_commit_if.ready && rsp_is_wctl_r;
     assign warp_ctl_if.wid   = gpu_commit_if.wid;    
+    assign {warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.split, warp_ctl_if.barrier} = rsp_data_r[WCTL_DATAW-1:0];
 
     `SCOPE_ASSIGN (gpu_rsp_valid, warp_ctl_if.valid);
     `SCOPE_ASSIGN (gpu_rsp_uuid, gpu_commit_if.uuid);

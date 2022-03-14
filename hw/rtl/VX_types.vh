@@ -113,9 +113,9 @@
 
 // Raster unit CSRs
 `define CSR_RASTER_BEGIN            12'h7C0
-`define CSR_RASTER_X_Y              (`CSR_RASTER_BEGIN+0)
-`define CSR_RASTER_MASK_PID         (`CSR_RASTER_BEGIN+1)
-`define CSR_RASTER_FRAG             (`CSR_RASTER_BEGIN+2)
+`define CSR_RASTER_FRAG             (`CSR_RASTER_BEGIN+0)
+`define CSR_RASTER_X_Y              (`CSR_RASTER_BEGIN+1)
+`define CSR_RASTER_MASK_PID         (`CSR_RASTER_BEGIN+2)
 `define CSR_RASTER_BCOORD_X         (`CSR_RASTER_BEGIN+3)
 `define CSR_RASTER_BCOORD_Y         (`CSR_RASTER_BEGIN+4)
 `define CSR_RASTER_BCOORD_Z         (`CSR_RASTER_BEGIN+5)

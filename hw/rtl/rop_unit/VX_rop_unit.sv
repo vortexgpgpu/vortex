@@ -16,8 +16,8 @@ module VX_rop_unit #(
     VX_dcache_rsp_if.slave  cache_rsp_if,
 
     // Inputs
-    VX_rop_dcr_if.slave rop_dcr_if,
-    VX_rop_req_if.slave rop_req_if
+    VX_rop_dcr_if.master rop_dcr_if,
+    VX_rop_req_if.slave  rop_req_if
 );
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
