@@ -5,12 +5,11 @@
 //  of primitive data from the buffer
 
 module VX_raster_fetch #(  
-    parameter CORE_ID = 0
-    // TODO
+    parameter RASTER_SLICE_NUM = 1,
+    parameter RASTER_PRIM_REQUEST_SIZE = 5,
 ) (
-    input wire clk,
-    input wire reset
-    // TODO
+    input logic clk,
+    input logic reset,
 );
 
     // TODO
