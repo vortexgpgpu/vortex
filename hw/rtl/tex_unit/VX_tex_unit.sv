@@ -1,15 +1,14 @@
 `include "VX_tex_define.vh"
 
 module VX_tex_unit #(  
-    parameter CORE_ID = 0,
-    parameter NUM_STAGES = 1
+    parameter CORE_ID = 0
 ) (
     input wire  clk,
     input wire  reset,    
 
     // PERF
 `ifdef PERF_ENABLE
-    VX_perf_tex_if.master perf_tex_if,
+    VX_perf_tex_if.master   perf_tex_if,
 `endif
 
     // Memory interface
@@ -21,7 +20,7 @@ module VX_tex_unit #(
     VX_tex_req_if.slave     tex_req_if,
     
     // Outputs
-    VX_tex_rsp_if.master    tex_rsp_if
+    VX_commit_if.master     tex_rsp_if
 );
 
     localparam REQ_INFO_W = `NR_BITS + 1 + `NW_BITS + 32 + `UUID_BITS;
@@ -151,6 +150,8 @@ module VX_tex_unit #(
         .rsp_info   ({tex_rsp_if.rd, tex_rsp_if.wb, tex_rsp_if.wid, tex_rsp_if.PC, tex_rsp_if.uuid}),
         .rsp_ready  (tex_rsp_if.ready)
     );
+
+    assign tex_rsp_if.eop = 1;
 
 `ifdef PERF_ENABLE
     wire [$clog2(`NUM_THREADS+1)-1:0] perf_mem_req_per_cycle;

@@ -36,32 +36,10 @@ module VX_writeback #(
     wire [`NUM_THREADS-1:0][31:0] wb_data;
     wire wb_eop;
 
-    wire [NUM_RSPS-1:0] rsp_valid;
-    wire [NUM_RSPS-1:0][DATAW-1:0] rsp_data;
     wire [NUM_RSPS-1:0] rsp_ready;
     wire stall;
-
-    assign rsp_valid = {            
-        gpu_commit_if.valid && gpu_commit_if.wb,
-        csr_commit_if.valid && csr_commit_if.wb,
-        alu_commit_if.valid && alu_commit_if.wb,        
-    `ifdef EXT_F_ENABLE
-        fpu_commit_if.valid && fpu_commit_if.wb,
-    `endif
-        ld_commit_if.valid  && ld_commit_if.wb
-    };
-
-    assign rsp_data = {                                       
-        {gpu_commit_if.wid, gpu_commit_if.PC, gpu_commit_if.tmask, gpu_commit_if.rd, gpu_commit_if.data, gpu_commit_if.eop},
-        {csr_commit_if.wid, csr_commit_if.PC, csr_commit_if.tmask, csr_commit_if.rd, csr_commit_if.data, csr_commit_if.eop},
-        {alu_commit_if.wid, alu_commit_if.PC, alu_commit_if.tmask, alu_commit_if.rd, alu_commit_if.data, alu_commit_if.eop},
-    `ifdef EXT_F_ENABLE
-        {fpu_commit_if.wid, fpu_commit_if.PC, fpu_commit_if.tmask, fpu_commit_if.rd, fpu_commit_if.data, fpu_commit_if.eop},
-    `endif
-        { ld_commit_if.wid, ld_commit_if.PC,  ld_commit_if.tmask,  ld_commit_if.rd,  ld_commit_if.data,  ld_commit_if.eop}
-    };
     
-    VX_stream_mux #(            
+    VX_stream_mux #(
         .NUM_REQS (NUM_RSPS),
         .DATAW    (DATAW),
         .BUFFERED (1),
@@ -69,8 +47,24 @@ module VX_writeback #(
     ) rsp_mux (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (rsp_valid),
-        .data_in   (rsp_data),
+        .valid_in  ({            
+            gpu_commit_if.valid && gpu_commit_if.wb,
+            csr_commit_if.valid && csr_commit_if.wb,
+            alu_commit_if.valid && alu_commit_if.wb,    
+        `ifdef EXT_F_ENABLE
+            fpu_commit_if.valid && fpu_commit_if.wb,
+        `endif
+            ld_commit_if.valid  && ld_commit_if.wb
+        }),
+        .data_in   ({                                       
+            {gpu_commit_if.wid, gpu_commit_if.PC, gpu_commit_if.tmask, gpu_commit_if.rd, gpu_commit_if.data, gpu_commit_if.eop},
+            {csr_commit_if.wid, csr_commit_if.PC, csr_commit_if.tmask, csr_commit_if.rd, csr_commit_if.data, csr_commit_if.eop},
+            {alu_commit_if.wid, alu_commit_if.PC, alu_commit_if.tmask, alu_commit_if.rd, alu_commit_if.data, alu_commit_if.eop},
+        `ifdef EXT_F_ENABLE
+            {fpu_commit_if.wid, fpu_commit_if.PC, fpu_commit_if.tmask, fpu_commit_if.rd, fpu_commit_if.data, fpu_commit_if.eop},
+        `endif
+            { ld_commit_if.wid, ld_commit_if.PC,  ld_commit_if.tmask,  ld_commit_if.rd,  ld_commit_if.data,  ld_commit_if.eop}
+        }),
         .ready_in  (rsp_ready),
         .valid_out (wb_valid),
         .data_out  ({wb_wid, wb_PC, wb_tmask, wb_rd, wb_data, wb_eop}),
