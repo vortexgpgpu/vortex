@@ -6,7 +6,9 @@ module VX_shared_mem #(
     // Size of cache in bytes
     parameter CACHE_SIZE                    = (1024*16), 
     // Number of banks
-    parameter NUM_BANKS                     = 2, 
+    parameter NUM_BANKS                     = 2,
+    // Number of associative ways
+    parameter NUM_WAYS                      = 1, 
     // Size of a word in bytes
     parameter WORD_SIZE                     = 4, 
     // Number of Word requests per cycle
@@ -21,10 +23,7 @@ module VX_shared_mem #(
     parameter CORE_TAG_ID_BITS              = 8,
 
     // core request tag size
-    parameter CORE_TAG_WIDTH                = (2 + CORE_TAG_ID_BITS),
-
-    //Swetha: added ways 
-    parameter WAYS                          = 1, //dummy value - change this to 1 later
+    parameter CORE_TAG_WIDTH                = (2 + CORE_TAG_ID_BITS), 
 
     // bank offset from beginning of index range
     parameter BANK_ADDR_OFFSET              = `CLOG2(256)

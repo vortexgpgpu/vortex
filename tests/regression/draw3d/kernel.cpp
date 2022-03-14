@@ -4,6 +4,8 @@
 #include <cocogfx/include/color.hpp>
 #include <cocogfx/include/math.hpp>
 
+using fixeduv_t = cocogfx::TFixed<TEX_FXD_FRAC>;
+
 #define DEFAULTS_i(i) \
 	z[i] = fixed24_t(0.0f); \
 	r[i] = fixed24_t(1.0f); \
@@ -48,10 +50,10 @@
 	INTERPOLATE_i(3, dst, src);
 
 #define TEXTURING(dst, u, v) \
-	dst[0] = vx_tex(0, u[0].data(), v[0].data(), 0); \
-	dst[1] = vx_tex(0, u[1].data(), v[1].data(), 0); \
-	dst[2] = vx_tex(0, u[2].data(), v[2].data(), 0); \
-	dst[3] = vx_tex(0, u[3].data(), v[3].data(), 0)
+	dst[0] = vx_tex(0, fixeduv_t(u[0]).data(), fixeduv_t(v[0]).data(), 0); \
+	dst[1] = vx_tex(0, fixeduv_t(u[1]).data(), fixeduv_t(v[1]).data(), 0); \
+	dst[2] = vx_tex(0, fixeduv_t(u[2]).data(), fixeduv_t(v[2]).data(), 0); \
+	dst[3] = vx_tex(0, fixeduv_t(u[3]).data(), fixeduv_t(v[3]).data(), 0)
 
 #define MODULATE_i(i, dst_r, dst_g, dst_b, dst_a, src) \
 	dst_r[i] = fixed24_t::make(cocogfx::Mul8(dst_r[i].data(), src[i].r)); \
@@ -64,6 +66,12 @@
 	MODULATE_i(1, dst_r, dst_g, dst_b, dst_a, src); \
 	MODULATE_i(2, dst_r, dst_g, dst_b, dst_a, src); \
 	MODULATE_i(3, dst_r, dst_g, dst_b, dst_a, src)
+
+#define REPLACE(dst, src) \
+	dst[0] = src[0]; \
+	dst[1] = src[1]; \
+	dst[2] = src[2]; \
+	dst[3] = src[3]
 
 #define TO_RGBA_i(i, dst, src_r, src_g, src_b, src_a) \
 	dst[i].r = static_cast<uint8_t>((src_r[i].data() * 255) >> fixed24_t::FRAC); \
@@ -119,11 +127,15 @@ void shader_function(int task_id, kernel_arg_t* kernel_arg) {
 		if (kernel_arg->tex_enabled) {
 			INTERPOLATE(u, attribs.u);
 			INTERPOLATE(v, attribs.v);
-			TEXTURING(tex_color, u, v);
-			MODULATE(r, g, b, a, tex_color);
+			TEXTURING(tex_color, u, v);			
+			if (kernel_arg->tex_modulate) {
+				MODULATE(r, g, b, a, tex_color);
+			} else {
+				REPLACE(out_color, tex_color);
+			}
+		} else {
+			TO_RGBA(out_color, r, g, b, a);
 		}	
-
-		TO_RGBA(out_color, r, g, b, a);
 
 		OUTPUT(out_color, z);
 	}

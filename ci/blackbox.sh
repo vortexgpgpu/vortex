@@ -18,6 +18,7 @@ THREADS=4
 L2=0
 L3=0
 DEBUG=0
+DEBUG_LEVEL=0
 SCOPE=0
 HAS_ARGS=0
 
@@ -57,7 +58,8 @@ case $i in
         shift
         ;;
     --debug=*)
-        DEBUG=${i#*=}
+        DEBUG_LEVEL=${i#*=}
+        DEBUG=1
         shift
         ;;
     --scope)
@@ -142,11 +144,11 @@ if [ $DEBUG -ne 0 ]
 then    
     if [ $SCOPE -eq 1 ]
     then
-        echo "running: DEBUG=$DEBUG SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH"
-        DEBUG=$DEBUG SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH
+        echo "running: DEBUG=$DEBUG_LEVEL SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH"
+        DEBUG=$DEBUG_LEVEL SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH
     else
-        echo "running: DEBUG=$DEBUG CONFIGS="$CONFIGS" make -C $DRIVER_PATH"
-        DEBUG=$DEBUG CONFIGS="$CONFIGS" make -C $DRIVER_PATH
+        echo "running: DEBUG=$DEBUG_LEVEL CONFIGS="$CONFIGS" make -C $DRIVER_PATH"
+        DEBUG=$DEBUG_LEVEL CONFIGS="$CONFIGS" make -C $DRIVER_PATH
     fi    
     
     if [ $HAS_ARGS -eq 1 ]

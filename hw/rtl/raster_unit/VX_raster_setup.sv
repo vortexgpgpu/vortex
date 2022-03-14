@@ -13,5 +13,7 @@ module VX_raster_setup #(
 );
 
     // TODO
+    `UNUSED_VAR (clk)
+    `UNUSED_VAR (reset)
 
 endmodule

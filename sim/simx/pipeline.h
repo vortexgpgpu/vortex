@@ -52,10 +52,11 @@ public:
 
   //--
   union {
-    LsuType lsu_type;
-    AluType alu_type;
-    FpuType fpu_type;
-    GpuType gpu_type;
+    uint32_t unit_type;
+    LsuType  lsu_type;
+    AluType  alu_type;
+    FpuType  fpu_type;
+    GpuType  gpu_type;
   };
 
   ITraceData* data;
@@ -75,6 +76,7 @@ public:
     , rdest_type(RegType::None)
     , wb(false)
     , exe_type(ExeType::NOP)
+    , unit_type(0)
     , data(nullptr)
     , fetch_stall(false)
     , stalled_(false) 

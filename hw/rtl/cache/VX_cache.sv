@@ -14,6 +14,8 @@ module VX_cache #(
     parameter NUM_BANKS                     = NUM_REQS,
     // Number of ports per banks
     parameter NUM_PORTS                     = 1,
+    // Number of associative ways
+    parameter NUM_WAYS                      = 8,
     // Size of a word in bytes
     parameter WORD_SIZE                     = 4, 
 
@@ -42,9 +44,6 @@ module VX_cache #(
 
     // bank offset from beginning of index range
     parameter BANK_ADDR_OFFSET              = 0,
-
-    //Swetha: added ways 
-    parameter WAYS                          = 8, //dummy value - change this to 1 later
 
     // enable bypass for non-cacheable addresses
     parameter NC_ENABLE                     = 0,
@@ -406,7 +405,7 @@ module VX_cache #(
         .CACHE_SIZE (CACHE_SIZE),
         .CACHE_LINE_SIZE (CACHE_LINE_SIZE),
         //Swetha: added ways here 
-        .WAYS(WAYS),
+        .NUM_WAYS(NUM_WAYS),
         .NUM_BANKS  (NUM_BANKS)
     ) flush_ctrl (
         .clk       (clk),
@@ -462,7 +461,7 @@ module VX_cache #(
         .NUM_REQS        (NUM_REQS),
         .CORE_TAG_WIDTH  (CORE_TAG_X_WIDTH),
         //Swetha: added ways here 
-        .WAYS(WAYS),
+        .NUM_WAYS(NUM_WAYS),
         .BANK_ADDR_OFFSET(BANK_ADDR_OFFSET)
     ) core_req_bank_sel (        
         .clk        (clk),
@@ -588,7 +587,7 @@ module VX_cache #(
             .WRITE_ENABLE       (WRITE_ENABLE),
             .CORE_TAG_WIDTH     (CORE_TAG_X_WIDTH),
             //Swetha: added ways here 
-            .WAYS(WAYS),
+            .NUM_WAYS(NUM_WAYS),
             .BANK_ADDR_OFFSET   (BANK_ADDR_OFFSET)
         ) bank (
             `SCOPE_BIND_VX_cache_bank(i)

@@ -5,7 +5,7 @@ VORTEX_DRV_PATH ?= $(realpath ../../../driver)
 VORTEX_RT_PATH ?= $(wildcard ../../../runtime)
 LLVM_PREFIX ?= /opt/llvm-riscv
 
-OPTS ?= -g1
+OPTS ?= 
 
 VX_CC  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
 VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++
@@ -28,7 +28,7 @@ CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
 
 CXXFLAGS += -I$(VORTEX_DRV_PATH)/include -I$(VORTEX_RT_PATH)/../hw -I$(VORTEX_RT_PATH)/../sim/common -I$(VORTEX_RT_PATH)/../third_party
 
-LDFLAGS += -L$(VORTEX_DRV_PATH)/stub -lvortex $(VORTEX_RT_PATH)/../third_party/cocogfx/libcocogfx.a -lpng -lz
+LDFLAGS += -L$(VORTEX_DRV_PATH)/stub -lvortex $(VORTEX_RT_PATH)/../third_party/cocogfx/libcocogfx.a -lpng -lz -lboost_serialization
 
 # Debugigng
 ifdef DEBUG

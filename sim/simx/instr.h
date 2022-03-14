@@ -62,9 +62,18 @@ public:
     , func2_(0)
     , func3_(0)
     , func6_(0)
-    , func7_(0) {
+    , func7_(0)
+    , vmask_(0)
+    , vlsWidth_(0)
+    , vMop_(0)
+    , vNf_(0)
+    , vs3_(0)
+    , vlmul_(0)
+    , vsew_(0)
+    , vediv_(0)   {
     for (uint32_t i = 0; i < MAX_REG_SOURCES; ++i) {
        rsrc_type_[i] = RegType::None;
+       rsrc_[i] = 0;
     }
   }
 

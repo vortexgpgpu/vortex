@@ -53,13 +53,32 @@ private:
   uint32_t pbuf_baseaddr_;
   uint32_t pbuf_stride_;
   uint32_t tbuf_addr_;
-  uint32_t tile_xy_;
+  uint32_t tile_x_;
+  uint32_t tile_y_;
   uint32_t num_prims_;    
   uint32_t cur_tile_;
   uint32_t cur_prim_;
-  std::queue<RasterUnit::Stamp*> stamp_queue_;
-  MemoryPool<RasterUnit::Stamp> stamp_allocator_;
-  bool initialized_;
+  RasterUnit::Stamp* stamps_head_;
+  RasterUnit::Stamp *stamps_tail_;
+  bool initialized_;  
+
+  void stamps_push(RasterUnit::Stamp* stamp) {
+    stamp->next_ = stamps_tail_;
+    stamp->prev_ = nullptr;
+    if (stamps_tail_)
+      stamps_tail_->prev_ = stamp;
+    else
+      stamps_head_ = stamp;
+    stamps_tail_ = stamp;
+  }
+
+  void stamps_pop() {
+    stamps_head_ = stamps_head_->prev_;
+    if (stamps_head_)
+      stamps_head_->next_ = nullptr;
+    else
+      stamps_tail_ = nullptr;
+  }
 
   void renderQuad(const primitive_t& primitive, 
                   uint32_t  x, 
@@ -68,11 +87,8 @@ private:
                   fixed16_t e1, 
                   fixed16_t e2) {
     //printf("Quad (%d,%d) :\n", x, y);
-    RasterUnit::Stamp stamp;
-    stamp.x    = x;
-    stamp.y    = y;
-    stamp.mask = 0;
-    stamp.pid  = cur_prim_;
+    uint32_t mask = 0;
+    std::array<vec3_fx_t, 4> bcoords;
 
     for (uint32_t j = 0; j < 2; ++j) {
       auto ee0 = e0;
@@ -82,10 +98,10 @@ private:
         // test if pixel overlaps triangle
         if (ee0 >= fxZero && ee1 >= fxZero && ee2 >= fxZero) {
           uint32_t f = j * 2 + i;          
-          stamp.mask |= (1 << f);                
-          stamp.bcoords[f].x = ee0;
-          stamp.bcoords[f].y = ee1;
-          stamp.bcoords[f].z = ee2;          
+          mask |= (1 << f);                
+          bcoords[f].x = ee0;
+          bcoords[f].y = ee1;
+          bcoords[f].z = ee2;          
         }
         // update edge equation x components
         ee0 += primitive.edges[0].x;
@@ -97,10 +113,10 @@ private:
       e1 += primitive.edges[1].y;
       e2 += primitive.edges[2].y;
     }
-
-    // submit stamp
-    if (stamp.mask) {
-      stamp_queue_.push(new RasterUnit::Stamp(stamp));
+    
+    if (mask) {
+      // add stamp to queue
+      this->stamps_push(new RasterUnit::Stamp(x, y, mask, bcoords, cur_prim_));
     }
   }
 
@@ -251,22 +267,32 @@ private:
   }
 
   void renderNextPrimitive() {    
-    // get current tile header
     if (0 == num_prims_) {
-      mem_->read(&tile_xy_, tbuf_addr_, 4);
+      // read header for next tile
+      uint32_t tile_xy;
+      mem_->read(&tile_xy, tbuf_addr_, 4);
       tbuf_addr_ += 4;
       mem_->read(&num_prims_, tbuf_addr_, 4);
       tbuf_addr_ += 4;
       assert(num_prims_ > 0);
+      tile_x_ = (tile_xy & 0xffff) << tile_logsize_;
+      tile_y_ = (tile_xy >> 16) << tile_logsize_;
+      cur_prim_ = 0;
     }
 
     // get next primitive index from current tile
-    mem_->read(&cur_prim_, tbuf_addr_, 4);
+    uint32_t pid;
+    mem_->read(&pid, tbuf_addr_, 4);
     tbuf_addr_ += 4;
+
+    uint32_t x = tile_x_;
+    uint32_t y = tile_y_;
+
+    printf("renderNextPrimitive(tile=%d/%d, prim=%d/%d, pid=%d, tx=%d, ty=%d)\n", cur_tile_, num_tiles_, cur_prim_, num_prims_, pid, x, y);
 
     // get primitive edges
     primitive_t primitive;
-    auto pbuf_addr = pbuf_baseaddr_ + cur_prim_ * pbuf_stride_;
+    auto pbuf_addr = pbuf_baseaddr_ + pid * pbuf_stride_;
     for (int i = 0; i < 3; ++i) {
       mem_->read(&primitive.edges[i].x, pbuf_addr, 4);
       pbuf_addr += 4;
@@ -276,30 +302,30 @@ private:
       pbuf_addr += 4;
     }
 
-    uint32_t tx = (tile_xy_ & 0xffff) << tile_logsize_;
-    uint32_t ty = (tile_xy_ >> 16) << tile_logsize_;
-    
+    //printf("edge0=(%d, %d, %d)\n", primitive.edges[0].x.data(), primitive.edges[0].y.data(), primitive.edges[0].z.data());
+    //printf("edge1=(%d, %d, %d)\n", primitive.edges[1].x.data(), primitive.edges[1].y.data(), primitive.edges[1].z.data());
+    //printf("edge2=(%d, %d, %d)\n", primitive.edges[2].x.data(), primitive.edges[2].y.data(), primitive.edges[2].z.data());
+
     // Add tile corner edge offsets
     primitive.extents[0] = calcEdgeExtents(primitive.edges[0]);
     primitive.extents[1] = calcEdgeExtents(primitive.edges[1]);
     primitive.extents[2] = calcEdgeExtents(primitive.edges[2]);
 
     // Evaluate edge equation for the starting tile
-    auto e0 = evalEdgeFunction(primitive.edges[0], tx, ty);
-    auto e1 = evalEdgeFunction(primitive.edges[1], tx, ty);
-    auto e2 = evalEdgeFunction(primitive.edges[2], tx, ty);
+    auto e0 = evalEdgeFunction(primitive.edges[0], x, y);
+    auto e1 = evalEdgeFunction(primitive.edges[1], x, y);
+    auto e2 = evalEdgeFunction(primitive.edges[2], x, y);
 
     // Render the tile
     if (tile_logsize_ > block_logsize_) {
-      this->renderTile(tile_logsize_, primitive, tx, ty, e0, e1, e2);
+      this->renderTile(tile_logsize_, primitive, x, y, e0, e1, e2);
     } else {
-      this->renderBlock(block_logsize_, primitive, tx, ty, e0, e1, e2);
+      this->renderBlock(block_logsize_, primitive, x, y, e0, e1, e2);
     }
 
     // Advance next primitive
     ++cur_prim_;
-    if (cur_prim_ == num_prims_) {        
-      cur_prim_ = 0;
+    if (cur_prim_ == num_prims_) {
       num_prims_ = 0;
       ++cur_tile_;
     }
@@ -314,7 +340,8 @@ public:
     , dcrs_(dcrs)
     , tile_logsize_(tile_logsize)
     , block_logsize_(block_logsize)
-    , stamp_allocator_(STAMP_POOL_MAX_SIZE)
+    , stamps_head_(nullptr)
+    , stamps_tail_(nullptr)
     , initialized_(false) {
     assert(block_logsize >= 1);
     assert(tile_logsize >= block_logsize);
@@ -336,13 +363,17 @@ public:
     if (!initialized_) {
       this->initialize();
     }
-    if (stamp_queue_.empty() && cur_tile_ == num_tiles_)
-      return nullptr;
-    if (stamp_queue_.empty()) {
-      this->renderNextPrimitive();
-    }      
-    auto stamp = stamp_queue_.front();
-    stamp_queue_.pop();
+    
+    do {
+      if (stamps_head_ == nullptr && cur_tile_ == num_tiles_)
+        return nullptr;
+      if (stamps_head_ == nullptr) {
+        this->renderNextPrimitive();
+      }      
+    } while (stamps_head_ == nullptr);
+    
+    auto stamp = stamps_head_;
+    this->stamps_pop();
     return stamp;
   }
 };
