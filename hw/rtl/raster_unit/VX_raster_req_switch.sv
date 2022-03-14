@@ -29,16 +29,7 @@ module VX_raster_req_switch #(
     output logic [RASTER_SLICE_BITS-1:0]                        out_slice_index,
 
     // Status signals
-    output logic                                    ready,
-
-    // Test interactions
-    logic mem_req_valid,
-    logic mem_req_ready, mem_rsp_valid,
-    logic [8:0][`RASTER_DCR_DATA_BITS-1:0]   mem_req_addr,
-    logic [8:0][`RASTER_PRIMITIVE_DATA_BITS-1:0] mem_rsp_data,
-    logic [RASTER_RS_INDEX_BITS-1:0]    raster_mem_rsp_tag
-
-
+    output logic                                    ready
 );
 
     // Holds x_loc, y_loc, edge_func_val, edges -> extents are calculated on the fly
@@ -56,6 +47,10 @@ module VX_raster_req_switch #(
     logic valid_raster_index, valid_rs_index, valid_rs_empty_index;
 
     // Memory interactions
+    logic mem_req_valid, mem_req_ready, mem_rsp_valid;
+    logic [8:0][`RASTER_DCR_DATA_BITS-1:0]       mem_req_addr;
+    logic [8:0][`RASTER_PRIMITIVE_DATA_BITS-1:0] mem_rsp_data;
+    logic [RASTER_RS_INDEX_BITS-1:0]             raster_mem_rsp_tag;
 
     // Stall signal
     //  -> assert when any entry in the RS is empty
@@ -165,43 +160,43 @@ module VX_raster_req_switch #(
     );
 
     // Memory streamer
-    // VX_mem_streamer #(
-    //     .NUM_REQS(9), // 3 edges and 3 coeffs in each edge
-    //     .ADDRW(`RASTER_DCR_DATA_BITS),
-    //     .DATAW(`RASTER_PRIMITIVE_DATA_BITS),
-    //     .TAGW(RASTER_RS_INDEX_BITS)
-    // ) raster_mem_streamer (
-    //     .clk(clk),
-    //     .reset(reset),
+    VX_mem_streamer #(
+        .NUM_REQS(9), // 3 edges and 3 coeffs in each edge
+        .ADDRW(`RASTER_DCR_DATA_BITS),
+        .DATAW(`RASTER_PRIMITIVE_DATA_BITS),
+        .TAGW(RASTER_RS_INDEX_BITS)
+    ) raster_mem_streamer (
+        .clk(clk),
+        .reset(reset),
 
-    //     .req_valid(mem_req_valid),
-    //     .req_rw(0),
-    //     .req_mask(9'b1),
-    //     `UNUSED_PIN (req_byteen),   /// TODO: USE THIS PIN
-    //     .req_addr(mem_req_addr),
-    //     `UNUSED_PIN (req_data),
-    //     .req_tag(raster_rs_empty_index),
-    //     .req_ready(mem_req_ready),
+        .req_valid(mem_req_valid),
+        .req_rw(0),
+        .req_mask(9'b1),
+        `UNUSED_PIN (req_byteen),   /// TODO: USE THIS PIN
+        .req_addr(mem_req_addr),
+        `UNUSED_PIN (req_data),
+        .req_tag(raster_rs_empty_index),
+        .req_ready(mem_req_ready),
         
-    //     // Output response
-    //     .rsp_valid(mem_rsp_valid),
-    //     `UNUSED_PIN (rsp_mask),
-    //     .rsp_data(mem_rsp_data),
-    //     .rsp_tag(raster_mem_rsp_tag),
-    //     .rsp_ready(1),
+        // Output response
+        .rsp_valid(mem_rsp_valid),
+        `UNUSED_PIN (rsp_mask),
+        .rsp_data(mem_rsp_data),
+        .rsp_tag(raster_mem_rsp_tag),
+        .rsp_ready(1),
 
-    //     `UNUSED_PIN (mem_req_valid),
-    //     `UNUSED_PIN (mem_req_rw),
-    //     `UNUSED_PIN (mem_req_byteen),
-    //     `UNUSED_PIN (mem_req_addr),
-    //     `UNUSED_PIN (mem_req_data),
-    //     `UNUSED_PIN (mem_req_tag),
-    //     `UNUSED_PIN (mem_req_ready),
-    //     `UNUSED_PIN (mem_rsp_valid),
-    //     `UNUSED_PIN (mem_rsp_mask),
-    //     `UNUSED_PIN (mem_rsp_data),
-    //     `UNUSED_PIN (mem_rsp_tag),
-    //     `UNUSED_PIN (mem_rsp_ready)
-    // );
+        `UNUSED_PIN (mem_req_valid),
+        `UNUSED_PIN (mem_req_rw),
+        `UNUSED_PIN (mem_req_byteen),
+        `UNUSED_PIN (mem_req_addr),
+        `UNUSED_PIN (mem_req_data),
+        `UNUSED_PIN (mem_req_tag),
+        `UNUSED_PIN (mem_req_ready),
+        `UNUSED_PIN (mem_rsp_valid),
+        `UNUSED_PIN (mem_rsp_mask),
+        `UNUSED_PIN (mem_rsp_data),
+        `UNUSED_PIN (mem_rsp_tag),
+        `UNUSED_PIN (mem_rsp_ready)
+    );
 
 endmodule
