@@ -15,7 +15,7 @@ interface VX_raster_rsp_if ();
     wire [`NR_BITS-1:0]     rd;
     wire                    wb;
     
-    stamp_t [`NUM_THREADS-1:0] stamp;
+    raster_stamp_t [`NUM_THREADS-1:0] stamp;
     wire [31:0]             last;
 
     wire                    ready;
