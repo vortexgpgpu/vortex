@@ -10,14 +10,12 @@ interface VX_rop_req_if ();
     wire [`UUID_BITS-1:0]           uuid;
     wire [`NW_BITS-1:0]             wid;
     wire [`NUM_THREADS-1:0]         tmask;    
-    wire [31:0]                     PC;    
-    wire [`NR_BITS-1:0]             rd;    
-    wire                            wb;
+    wire [31:0]                     PC;
 
-    wire [15:0]                     x;
-    wire [15:0]                     y;
-    wire [31:0]                     z;
-    wire [31:0]                     color;
+    wire [`NUM_THREADS-1:0][15:0]   x;
+    wire [`NUM_THREADS-1:0][15:0]   y;
+    wire [`NUM_THREADS-1:0][31:0]   color;
+    wire [`NUM_THREADS-1:0][31:0]   depth;
     
     wire                            ready;
 
@@ -27,12 +25,10 @@ interface VX_rop_req_if ();
         output wid,
         output tmask,
         output PC,
-        output rd,
-        output wb,
         output x,
-        output y,
-        output z,
+        output y,        
         output color,
+        output depth,
         input  ready
     );
 
@@ -42,12 +38,10 @@ interface VX_rop_req_if ();
         input  wid,
         input  tmask,
         input  PC,
-        input  rd,
-        input  wb,
         input  x,
-        input  y,
-        input  z,
+        input  y,        
         input  color,
+        input  depth,
         output ready
     );
 

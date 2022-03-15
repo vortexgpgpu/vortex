@@ -8,7 +8,7 @@ module VX_tex_unit #(
 
     // PERF
 `ifdef PERF_ENABLE
-    VX_perf_tex_if.master   perf_tex_if,
+    VX_tex_perf_if.master   tex_perf_if,
 `endif
 
     // Memory interface
@@ -17,6 +17,7 @@ module VX_tex_unit #(
 
     // Inputs
     VX_tex_dcr_if.master    tex_dcr_if,
+    VX_gpu_csr_if.slave     tex_csr_if,
     VX_tex_req_if.slave     tex_req_if,
     
     // Outputs
@@ -30,8 +31,28 @@ module VX_tex_unit #(
     wire [`NUM_THREADS-1:0][`TEX_MIPOFF_BITS-1:0]   sel_mipoff;
     wire [`NUM_THREADS-1:0][1:0][`TEX_LOD_BITS-1:0] sel_logdims;
 
+    // CSRs access
+
+    tex_csrs_t tex_csrs;
+
+    VX_tex_csr #(
+        .CORE_ID    (CORE_ID),
+        .NUM_STAGES (`TEX_STAGE_COUNT)
+    ) tex_csr (
+        .clk        (clk),
+        .reset      (reset),
+
+        // inputs
+        .tex_csr_if (tex_csr_if),
+
+        // outputs
+        .tex_csrs   (tex_csrs)
+    );
+
+    // DCRs access
+
     tex_dcrs_t tex_dcrs;
-    assign tex_dcrs = tex_dcr_if.data[tex_req_if.stage];
+    assign tex_dcrs = tex_dcr_if.data[tex_csrs.stage];
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign mip_level[i]      = tex_req_if.lod[i][`TEX_LOD_BITS-1:0];
@@ -187,8 +208,8 @@ module VX_tex_unit #(
         end
     end
 
-    assign perf_tex_if.mem_reads   = perf_mem_reads;
-    assign perf_tex_if.mem_latency = perf_mem_latency;
+    assign tex_perf_if.mem_reads   = perf_mem_reads;
+    assign tex_perf_if.mem_latency = perf_mem_latency;
 `endif  
 
 `ifdef DBG_TRACE_TEX

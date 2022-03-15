@@ -1,9 +1,9 @@
-`ifndef VX_PERF_RASTER_IF
-`define VX_PERF_RASTER_IF
+`ifndef VX_RASTER_PERF_IF
+`define VX_RASTER_PERF_IF
 
 `include "VX_define.vh"
 
-interface VX_perf_raster_if ();
+interface VX_raster_perf_if ();
 
     wire [`PERF_CTR_BITS-1:0] mem_reads;
     wire [`PERF_CTR_BITS-1:0] mem_latency;

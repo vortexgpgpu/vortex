@@ -6,6 +6,18 @@
 using namespace vortex;
 using namespace cocogfx;
 
+class CSR {
+public:
+  uint32_t   stage;  
+  
+  CSR() { this->clear(); }  
+  ~CSR() {}
+
+  void clear() {
+    stage = 0;
+  }
+};
+
 class TexUnit::Impl {
 private:
     struct pending_req_t {
@@ -16,6 +28,7 @@ private:
     Config config_;
     Core* core_;
     const DCRS& dcrs_;
+    CSR csrs_;
     CacheSim::Ptr tcache_;
     uint32_t num_threads_;
     HashTable<pending_req_t> pending_reqs_;
@@ -26,7 +39,7 @@ public:
       : simobject_(simobject)
       , config_(config)
       , core_(core) 
-      , dcrs_(core->dcrs_.tex_dcrs)
+      , dcrs_(core->dcrs_.tex_dcrs)      
       , tcache_(core->tcache_)
       , num_threads_(core->arch().num_threads())
       , pending_reqs_(TEXQ_SIZE)
@@ -38,10 +51,31 @@ public:
 
     void clear() {
       pending_reqs_.clear();
+      csrs_.clear();
     }
 
-    uint32_t read(uint32_t stage, int32_t u, int32_t v, int32_t lod, TraceData* trace_data) {
-      auto& states = dcrs_.at(stage);
+    uint32_t csr_read(uint32_t addr) {
+      switch (addr) {
+      case CSR_TEX_STAGE:
+        return csrs_.stage;
+      default:
+        std::abort();
+      }
+      return 0;
+    }
+
+    void csr_write(uint32_t addr, uint32_t value) {
+      switch (addr) {
+      case CSR_TEX_STAGE:
+        csrs_.stage = value;
+        break;
+      default:
+        std::abort();
+      }
+    }
+
+    uint32_t read(int32_t u, int32_t v, int32_t lod, TraceData* trace_data) {
+      auto& states = dcrs_.at(csrs_.stage);
       auto xu = TFixed<TEX_FXD_FRAC>::make(u);
       auto xv = TFixed<TEX_FXD_FRAC>::make(v);
       auto base_addr  = states.at(TEX_STATE_ADDR) + states.at(TEX_STATE_MIPOFF(lod));
@@ -199,8 +233,16 @@ void TexUnit::reset() {
   impl_->clear();
 }
 
-uint32_t TexUnit::read(uint32_t stage, int32_t u, int32_t v, int32_t lod, TraceData* trace_data) {
-  return impl_->read(stage, u, v, lod, trace_data);
+uint32_t TexUnit::csr_read(uint32_t addr) {
+  return impl_->csr_read(addr);
+}
+
+void TexUnit::csr_write(uint32_t addr, uint32_t value) {
+  impl_->csr_write(addr, value);
+}
+
+uint32_t TexUnit::read(int32_t u, int32_t v, int32_t lod, TraceData* trace_data) {
+  return impl_->read(u, v, lod, trace_data);
 }
 
 void TexUnit::tick() {

@@ -50,10 +50,10 @@ using fixeduv_t = cocogfx::TFixed<TEX_FXD_FRAC>;
 	INTERPOLATE_i(3, dst, src);
 
 #define TEXTURING(dst, u, v) \
-	dst[0] = vx_tex(0, fixeduv_t(u[0]).data(), fixeduv_t(v[0]).data(), 0); \
-	dst[1] = vx_tex(0, fixeduv_t(u[1]).data(), fixeduv_t(v[1]).data(), 0); \
-	dst[2] = vx_tex(0, fixeduv_t(u[2]).data(), fixeduv_t(v[2]).data(), 0); \
-	dst[3] = vx_tex(0, fixeduv_t(u[3]).data(), fixeduv_t(v[3]).data(), 0)
+	dst[0] = vx_tex(fixeduv_t(u[0]).data(), fixeduv_t(v[0]).data(), 0); \
+	dst[1] = vx_tex(fixeduv_t(u[1]).data(), fixeduv_t(v[1]).data(), 0); \
+	dst[2] = vx_tex(fixeduv_t(u[2]).data(), fixeduv_t(v[2]).data(), 0); \
+	dst[3] = vx_tex(fixeduv_t(u[3]).data(), fixeduv_t(v[3]).data(), 0)
 
 #define MODULATE_i(i, dst_r, dst_g, dst_b, dst_a, src) \
 	dst_r[i] = fixed24_t::make(cocogfx::Mul8(dst_r[i].data(), src[i].r)); \

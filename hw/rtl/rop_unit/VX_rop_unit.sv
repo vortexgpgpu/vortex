@@ -1,14 +1,16 @@
 `include "VX_rop_define.vh"
 
-module VX_rop_unit #(
-    parameter NUM_SLICES = 1
+module VX_rop_unit #(    
+    parameter CLUSTER_ID = 0,    
+    parameter NUM_SLICES = 1,
+    parameter NUM_LANES  = 4
 ) (
     input wire clk,
     input wire reset,
 
     // PERF
 `ifdef PERF_ENABLE
-    VX_perf_rop_if.master perf_rop_if,
+    VX_rop_perf_if.master rop_perf_if,
 `endif
 
     // Memory interface
@@ -32,19 +34,17 @@ module VX_rop_unit #(
     `UNUSED_VAR (rop_req_if.wid)
     `UNUSED_VAR (rop_req_if.tmask)
     `UNUSED_VAR (rop_req_if.PC)
-    `UNUSED_VAR (rop_req_if.rd)
-    `UNUSED_VAR (rop_req_if.wb)
     `UNUSED_VAR (rop_req_if.tmask)    
     `UNUSED_VAR (rop_req_if.x)
-    `UNUSED_VAR (rop_req_if.y)
-    `UNUSED_VAR (rop_req_if.z)
+    `UNUSED_VAR (rop_req_if.y)    
     `UNUSED_VAR (rop_req_if.color)
+    `UNUSED_VAR (rop_req_if.depth)
     assign rop_req_if.ready = 0;
 
     // TODO: remove
-    assign perf_rop_if.mem_reads = 0;
-    assign perf_rop_if.mem_writes = 0;
-    assign perf_rop_if.mem_latency = 0;
+    assign rop_perf_if.mem_reads = 0;
+    assign rop_perf_if.mem_writes = 0;
+    assign rop_perf_if.mem_latency = 0;
 
     // TODO: remove
     assign cache_req_if.valid = 0;

@@ -16,7 +16,7 @@ task trace_raster_state (
         `DCR_RASTER_TILE_COUNT:  dpi_trace("TILE_COUNT");
         `DCR_RASTER_PBUF_ADDR:   dpi_trace("PBUF_ADDR");
         `DCR_RASTER_PBUF_STRIDE: dpi_trace("PBUF_STRIDE");
-        default:                 dpi_trace("??");
+        default:                 dpi_trace("?");
     endcase  
 endtask
 

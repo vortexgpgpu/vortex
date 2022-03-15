@@ -1472,11 +1472,10 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       for (uint32_t t = 0; t < num_threads; ++t) {
         if (!tmask_.test(t))
           continue;        
-        auto stage = func2;
         auto u     = rsdata[t][0].i;
         auto v     = rsdata[t][1].i;
         auto lod   = rsdata[t][2].i;
-        auto color = core_->tex_unit_->read(stage, u, v, lod, trace_data);
+        auto color = core_->tex_unit_->read(u, v, lod, trace_data);
         rddata[t].i = color;
       }
       rd_write = true;
