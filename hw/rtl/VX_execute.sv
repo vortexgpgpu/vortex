@@ -13,7 +13,7 @@ module VX_execute #(
     VX_dcache_rsp_if.slave dcache_rsp_if,
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_dcr_if.slave     tex_dcr_if,
+    VX_tex_dcr_if.master    tex_dcr_if,
     VX_dcache_req_if.master tcache_req_if,
     VX_dcache_rsp_if.slave  tcache_rsp_if,
 `endif
@@ -52,9 +52,16 @@ module VX_execute #(
 );
 
 `ifdef EXT_TEX_ENABLE
+    VX_gpu_csr_if tex_csr_if();
 `ifdef PERF_ENABLE
-    VX_perf_tex_if perf_tex_if();
+    VX_tex_perf_if tex_perf_if();
 `endif
+`endif
+`ifdef EXT_RASTER_ENABLE
+    VX_gpu_csr_if raster_csr_if();
+`endif
+`ifdef EXT_ROP_ENABLE
+    VX_gpu_csr_if rop_csr_if();
 `endif
 
 `ifdef EXT_F_ENABLE
@@ -97,9 +104,6 @@ module VX_execute #(
         .clk            (clk),
         .reset          (csr_reset),   
     `ifdef PERF_ENABLE
-    `ifdef EXT_TEX_ENABLE
-        .perf_tex_if    (perf_tex_if),
-    `endif
         .perf_memsys_if (perf_memsys_if),
         .perf_pipeline_if(perf_pipeline_if),
     `endif
@@ -109,6 +113,18 @@ module VX_execute #(
         .req_pending    (csr_pending),
     `else
         `UNUSED_PIN (req_pending),
+    `endif
+    `ifdef EXT_TEX_ENABLE        
+        .tex_csr_if     (tex_csr_if),
+    `ifdef PERF_ENABLE
+        .tex_perf_if    (tex_perf_if),
+    `endif
+    `endif
+    `ifdef EXT_RASTER_ENABLE        
+        .raster_csr_if  (raster_csr_if),
+    `endif
+    `ifdef EXT_RASTER_ENABLE        
+        .rop_csr_if     (rop_csr_if),
     `endif
         .cmt_to_csr_if  (cmt_to_csr_if),
         .fetch_to_csr_if(fetch_to_csr_if),
@@ -140,12 +156,19 @@ module VX_execute #(
         .reset          (gpu_reset),    
         .gpu_req_if     (gpu_req_if),
     `ifdef EXT_TEX_ENABLE
-    `ifdef PERF_ENABLE
-        .perf_tex_if    (perf_tex_if),
-    `endif
+        .tex_csr_if     (tex_csr_if),
         .tex_dcr_if     (tex_dcr_if),
         .tcache_req_if  (tcache_req_if),
         .tcache_rsp_if  (tcache_rsp_if),
+    `ifdef PERF_ENABLE
+        .tex_perf_if    (tex_perf_if),
+    `endif
+    `endif
+    `ifdef EXT_RASTER_ENABLE        
+        .raster_csr_if  (raster_csr_if),
+    `endif
+    `ifdef EXT_RASTER_ENABLE        
+        .rop_csr_if     (rop_csr_if),
     `endif
         .warp_ctl_if    (warp_ctl_if),
         .gpu_commit_if  (gpu_commit_if)

@@ -7,11 +7,21 @@ module VX_csr_unit #(
     input wire                  reset,
 
 `ifdef PERF_ENABLE
-`ifdef EXT_TEX_ENABLE
-    VX_perf_tex_if.slave        perf_tex_if,
-`endif
     VX_perf_memsys_if.slave     perf_memsys_if,
     VX_perf_pipeline_if.slave   perf_pipeline_if,
+`endif
+
+`ifdef EXT_TEX_ENABLE
+    VX_gpu_csr_if.master        tex_csr_if,
+`ifdef PERF_ENABLE
+    VX_tex_perf_if.slave        tex_perf_if,
+`endif
+`endif
+`ifdef EXT_RASTER_ENABLE
+    VX_gpu_csr_if.master        raster_csr_if,
+`endif
+`ifdef EXT_ROP_ENABLE
+    VX_gpu_csr_if.master        rop_csr_if,
 `endif
 
     VX_cmt_to_csr_if.slave      cmt_to_csr_if,
@@ -28,13 +38,12 @@ module VX_csr_unit #(
 );    
     wire csr_we_s1;
     wire [`CSR_ADDR_BITS-1:0] csr_addr_s1;    
-    wire [31:0] csr_read_data;
-    wire [31:0] csr_read_data_s1;
-    wire [31:0] csr_updated_data_s1;
+    wire [`NUM_THREADS-1:0][31:0] csr_read_data;
+    reg [`NUM_THREADS-1:0][31:0] csr_write_data_s0, csr_write_data_s1;
 
     wire write_enable = csr_commit_if.valid && csr_we_s1;
 
-    wire [31:0] csr_req_data = csr_req_if.use_imm ? 32'(csr_req_if.imm) : csr_req_if.rs1_data;
+    wire [`NUM_THREADS-1:0][31:0] csr_req_data = csr_req_if.use_imm ? {`NUM_THREADS{32'(csr_req_if.imm)}} : csr_req_if.rs1_data;
 
     VX_csr_data #(
         .CORE_ID(CORE_ID)
@@ -42,9 +51,6 @@ module VX_csr_unit #(
         .clk            (clk),
         .reset          (reset),
     `ifdef PERF_ENABLE
-    `ifdef EXT_TEX_ENABLE
-        .perf_tex_if    (perf_tex_if),
-    `endif
         .perf_memsys_if (perf_memsys_if),
         .perf_pipeline_if(perf_pipeline_if),
     `endif
@@ -53,6 +59,20 @@ module VX_csr_unit #(
     `ifdef EXT_F_ENABLE
         .fpu_to_csr_if  (fpu_to_csr_if), 
     `endif
+
+    `ifdef EXT_TEX_ENABLE        
+        .tex_csr_if     (tex_csr_if),
+    `ifdef PERF_ENABLE
+        .tex_perf_if    (tex_perf_if),
+    `endif
+    `endif
+    `ifdef EXT_RASTER_ENABLE        
+        .raster_csr_if  (raster_csr_if),
+    `endif
+    `ifdef EXT_RASTER_ENABLE        
+        .rop_csr_if     (rop_csr_if),
+    `endif
+
         .read_enable    (csr_req_if.valid),
         .read_uuid      (csr_req_if.uuid),
         .read_wid       (csr_req_if.wid),    
@@ -64,34 +84,42 @@ module VX_csr_unit #(
         .write_wid      (csr_commit_if.wid),
         .write_tmask    (csr_commit_if.tmask),
         .write_addr     (csr_addr_s1),        
-        .write_data     (csr_updated_data_s1)
+        .write_data     (csr_write_data_s1)
     );    
 
     wire write_hazard = (csr_addr_s1 == csr_req_if.addr)
                      && (csr_commit_if.wid == csr_req_if.wid) 
                      && csr_commit_if.valid;
 
-    wire [31:0] csr_read_data_s0 = write_hazard ? csr_updated_data_s1 : csr_read_data; 
+    wire [`NUM_THREADS-1:0][31:0] csr_read_data_s0 = write_hazard ? csr_write_data_s1 : csr_read_data; 
 
-    reg [31:0] csr_updated_data_s0;
     reg csr_we_s0; 
     
-    always @(*) begin        
-        csr_we_s0 = (csr_req_data != 0);
+    always @(*) begin      
+        csr_we_s0 = 0;  
+        for (integer i = 0; i < `NUM_THREADS; ++i) begin
+            csr_we_s0 |= (csr_req_data[i] != 0);
+        end
         case (csr_req_if.op_type)
             `INST_CSR_RW: begin
-                csr_updated_data_s0 = csr_req_data;
+                for (integer i = 0; i < `NUM_THREADS; ++i) begin
+                    csr_write_data_s0[i] = csr_req_data[i];
+                end
                 csr_we_s0 = 1;
             end
             `INST_CSR_RS: begin
-                csr_updated_data_s0 = csr_read_data_s0 | csr_req_data;
+                for (integer i = 0; i < `NUM_THREADS; ++i) begin
+                    csr_write_data_s0[i] = csr_read_data_s0[i] | csr_req_data[i];
+                end
             end
             //`INST_CSR_RC
             default: begin
-                csr_updated_data_s0 = csr_read_data_s0 & ~csr_req_data;
+                for (integer i = 0; i < `NUM_THREADS; ++i) begin
+                    csr_write_data_s0[i] = csr_read_data_s0[i] & ~csr_req_data[i];
+                end
             end
         endcase
-    end
+    end         
 
 `ifdef EXT_F_ENABLE
     wire stall_in = fpu_pending[csr_req_if.wid];
@@ -104,22 +132,15 @@ module VX_csr_unit #(
     wire stall_out = ~csr_commit_if.ready && csr_commit_if.valid;
 
     VX_pipe_register #(
-        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + 32 + 32),
+        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + 2 * (`NUM_THREADS * 32)),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall_out),
-        .data_in  ({csr_req_valid,       csr_req_if.uuid,    csr_req_if.wid,    csr_req_if.tmask,    csr_req_if.PC,    csr_req_if.rd,    csr_req_if.wb,    csr_we_s0, csr_req_if.addr, csr_read_data_s0, csr_updated_data_s0}),
-        .data_out ({csr_commit_if.valid, csr_commit_if.uuid, csr_commit_if.wid, csr_commit_if.tmask, csr_commit_if.PC, csr_commit_if.rd, csr_commit_if.wb, csr_we_s1, csr_addr_s1,     csr_read_data_s1, csr_updated_data_s1})
+        .data_in  ({csr_req_valid,       csr_req_if.uuid,    csr_req_if.wid,    csr_req_if.tmask,    csr_req_if.PC,    csr_req_if.rd,    csr_req_if.wb,    csr_we_s0, csr_req_if.addr, csr_read_data_s0,   csr_write_data_s0}),
+        .data_out ({csr_commit_if.valid, csr_commit_if.uuid, csr_commit_if.wid, csr_commit_if.tmask, csr_commit_if.PC, csr_commit_if.rd, csr_commit_if.wb, csr_we_s1, csr_addr_s1,     csr_commit_if.data, csr_write_data_s1})
     );
-
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        assign csr_commit_if.data[i] = (csr_addr_s1 == `CSR_WTID) ? i : 
-                                         (csr_addr_s1 == `CSR_LTID 
-                                       || csr_addr_s1 == `CSR_GTID) ? (csr_read_data_s1 * `NUM_THREADS + i) : 
-                                                                      csr_read_data_s1;
-    end         
 
     assign csr_commit_if.eop = 1'b1;
 

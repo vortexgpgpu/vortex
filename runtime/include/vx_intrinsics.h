@@ -75,9 +75,9 @@ extern "C" {
 })
 
 // Texture load
-#define vx_tex(stage, u, v, lod) ({              \
+#define vx_tex(u, v, lod) ({                    \
 	unsigned __r;                               \
-    __asm__ __volatile__ (".insn r4 0x2b, 0, %1, %0, %2, %3, %4" : "=r"(__r) : "i"(stage), "r"(u), "r"(v), "r"(lod)); \
+    __asm__ __volatile__ (".insn r4 0x2b, 0, 0, %0, %1, %2, %3" : "=r"(__r) : "r"(u), "r"(v), "r"(lod)); \
 	__r;							            \
 })
 
@@ -85,6 +85,13 @@ extern "C" {
 #define vx_cmov(c, t, f) ({                     \
 	unsigned __r;		                        \
     __asm__ __volatile__ (".insn r4 0x2b, 1, 0, %0, %1, %2, %3" : "=r"(__r : "r"(c), "r"(t), "r"(f)); \
+	__r;							            \
+})
+
+// Interpolate
+#define vx_interp(a, b, c) ({                   \
+	unsigned __r;                               \
+    __asm__ __volatile__ (".insn r4 0x2b, 1, 1, %0, %1, %2, %3" : "=r"(__r) : "r"(a), "r"(b), "r"(c)); \
 	__r;							            \
 })
 
@@ -103,13 +110,6 @@ extern "C" {
 // Rop write
 #define vx_rop(color, depth) ({                 \
     __asm__ __volatile__ (".insn r 0x0b, 1, 1, x0, %0, %1" :: "r"(color), "r"(depth)); \
-})
-
-// Interpolate
-#define vx_interp(a, b, c) ({                   \
-	unsigned __r;                               \
-    __asm__ __volatile__ (".insn r4 0x2b, 1, 1, %0, %1, %2, %3" : "=r"(__r) : "r"(a), "r"(b), "r"(c)); \
-	__r;							            \
 })
 
 // Set thread mask

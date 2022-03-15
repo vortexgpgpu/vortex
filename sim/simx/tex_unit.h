@@ -83,7 +83,11 @@ public:
 
     void reset();
 
-    uint32_t read(uint32_t stage, int32_t u, int32_t v, int32_t lod, TraceData* trace_data);
+    uint32_t csr_read(uint32_t addr);
+
+    void csr_write(uint32_t addr, uint32_t value);
+
+    uint32_t read(int32_t u, int32_t v, int32_t lod, TraceData* trace_data);
     
     void tick();
 

@@ -10,13 +10,13 @@ module VX_cluster #(
     input  wire                             reset,
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_dcr_if.slave                     tex_dcr_if,
+    VX_tex_dcr_if.master                    tex_dcr_if,
 `endif
 `ifdef EXT_RASTER_ENABLE
-    VX_raster_dcr_if.slave                  raster_dcr_if,
+    VX_raster_dcr_if.master                 raster_dcr_if,
 `endif
 `ifdef EXT_ROP_ENABLE
-    VX_rop_dcr_if.slave                     rop_dcr_if,
+    VX_rop_dcr_if.master                    rop_dcr_if,
 `endif
 
 
@@ -44,7 +44,7 @@ module VX_cluster #(
 
     VX_raster_req_if    raster_req_if();
     VX_raster_rsp_if    raster_rsp_if();
-    VX_perf_raster_if   perf_raster_if();
+    VX_raster_perf_if   raster_perf_if();
     VX_dcache_req_if    rcache_req_if();
     VX_dcache_rsp_if    rcache_rsp_if();
 
@@ -69,8 +69,8 @@ module VX_cluster #(
     assign raster_rsp_if.ready = 0;
 
     // TODO: remove
-    `UNUSED_VAR (perf_raster_if.mem_reads);
-    `UNUSED_VAR (perf_raster_if.mem_latency);
+    `UNUSED_VAR (raster_perf_if.mem_reads);
+    `UNUSED_VAR (raster_perf_if.mem_latency);
 
     // TODO: remove
     `UNUSED_VAR (rcache_req_if.valid);
@@ -96,7 +96,7 @@ module VX_cluster #(
         .clk           (clk),
         .reset         (raster_reset),
     `ifdef PERF_ENABLE
-        .perf_raster_if(perf_raster_if),
+        .raster_perf_if(raster_perf_if),
     `endif
         .raster_req_if (raster_req_if),
         .raster_dcr_if (raster_dcr_if),
@@ -110,7 +110,7 @@ module VX_cluster #(
 `ifdef EXT_ROP_ENABLE
 
     VX_rop_req_if       rop_req_if();
-    VX_perf_rop_if      perf_rop_if(); 
+    VX_rop_perf_if      rop_perf_if(); 
     VX_dcache_req_if    ccache_req_if();
     VX_dcache_rsp_if    ccache_rsp_if();
 
@@ -119,18 +119,16 @@ module VX_cluster #(
     assign rop_req_if.wid    = 0; // TODO: remove
     assign rop_req_if.tmask  = 0; // TODO: remove
     assign rop_req_if.PC     = 0; // TODO: remove
-    assign rop_req_if.rd     = 0; // TODO: remove
-    assign rop_req_if.wb     = 0; // TODO: remove
     assign rop_req_if.x      = 0; // TODO: remove
-    assign rop_req_if.y      = 0; // TODO: remove
-    assign rop_req_if.z      = 0; // TODO: remove
+    assign rop_req_if.y      = 0; // TODO: remove    
     assign rop_req_if.color  = 0; // TODO: remove
+    assign rop_req_if.depth  = 0; // TODO: remove
     `UNUSED_VAR (rop_req_if.ready) // TODO: remove
 
     // TODO: remove
-    `UNUSED_VAR (perf_rop_if.mem_reads);
-    `UNUSED_VAR (perf_rop_if.mem_writes);
-    `UNUSED_VAR (perf_rop_if.mem_latency);
+    `UNUSED_VAR (rop_perf_if.mem_reads);
+    `UNUSED_VAR (rop_perf_if.mem_writes);
+    `UNUSED_VAR (rop_perf_if.mem_latency);
 
     // TODO: remove
     `UNUSED_VAR (ccache_req_if.valid);
@@ -156,7 +154,7 @@ module VX_cluster #(
         .clk           (clk),
         .reset         (rop_reset),
     `ifdef PERF_ENABLE
-        .perf_rop_if   (perf_rop_if),
+        .rop_perf_if   (rop_perf_if),
     `endif
         .rop_req_if    (rop_req_if),
         .rop_dcr_if    (rop_dcr_if),

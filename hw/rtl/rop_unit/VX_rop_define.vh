@@ -24,7 +24,7 @@ task trace_rop_state (
         `DCR_ROP_BLEND_FUNC:    dpi_trace("BLEND_FUNC");
         `DCR_ROP_BLEND_CONST:   dpi_trace("BLEND_CONST");
         `DCR_ROP_LOGIC_OP:      dpi_trace("LOGIC_OP");        
-        default:                dpi_trace("??");
+        default:                dpi_trace("?");
     endcase  
 endtask
 

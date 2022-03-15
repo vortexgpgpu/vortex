@@ -166,7 +166,7 @@ module VX_tex_addr #(
     
     always @(posedge clk) begin
         if (req_valid && ~stall_out) begin
-            dpi_trace("%d: *** log_pitch=", $time); 
+            dpi_trace("%d: *** tex-addr: log_pitch=", $time); 
             `TRACE_ARRAY1D(log_pitch, NUM_REQS);
             dpi_trace(", mip_addr=");
             `TRACE_ARRAY1D(mip_addr, NUM_REQS);
@@ -182,7 +182,7 @@ module VX_tex_addr #(
         end
 
         if (valid_s0 && ~stall_out) begin
-            dpi_trace("%d: *** scaled_lo=", $time); 
+            dpi_trace("%d: *** tex-addr: scaled_lo=", $time); 
             `TRACE_ARRAY2D(scaled_lo, 2, NUM_REQS);
             dpi_trace(", scaled_hi=");
             `TRACE_ARRAY2D(scaled_hi, 2, NUM_REQS);  

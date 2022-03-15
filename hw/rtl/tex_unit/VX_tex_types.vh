@@ -14,6 +14,10 @@ typedef struct packed {
     logic [`TEX_FILTER_BITS-1:0]    filter;
 } tex_dcrs_t;
 
+typedef struct packed {
+    logic [`TEX_STAGE_BITS-1:0] stage;
+} tex_csrs_t;
+
 endpackage
 
 `endif

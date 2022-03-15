@@ -13,7 +13,6 @@ interface VX_tex_req_if ();
     wire [`NR_BITS-1:0]             rd;    
     wire                            wb;
 
-    wire [`NTEX_BITS-1:0]           stage;
     wire [1:0][`NUM_THREADS-1:0][31:0] coords;
     wire [`NUM_THREADS-1:0][31:0]   lod;
     
@@ -27,7 +26,6 @@ interface VX_tex_req_if ();
         output PC,
         output rd,
         output wb,
-        output stage,
         output coords,
         output lod,
         input  ready
@@ -41,7 +39,6 @@ interface VX_tex_req_if ();
         input  PC,
         input  rd,
         input  wb,
-        input  stage,
         input  coords,
         input  lod,
         output ready

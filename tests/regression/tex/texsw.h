@@ -101,8 +101,8 @@ inline uint32_t tex_load(kernel_arg_t* state,
             texel0 = vx_tex_sw(state, xu, xv, l);  
             texel1 = vx_tex_sw(state, xu, xv, ln);
         } else {
-            texel0 = vx_tex(0, xu.data(), xv.data(), l);
-            texel1 = vx_tex(0, xu.data(), xv.data(), ln);
+            texel0 = vx_tex(xu.data(), xv.data(), l);
+            texel1 = vx_tex(xu.data(), xv.data(), ln);
         }
         uint32_t cl, ch;
         {
@@ -118,7 +118,7 @@ inline uint32_t tex_load(kernel_arg_t* state,
         if (state->use_sw) {
             color = vx_tex_sw(state, xu, xv, l);
         } else {
-            color = vx_tex(0, xu.data(), xv.data(), l);
+            color = vx_tex(xu.data(), xv.data(), l);
         }
     }
     return color;

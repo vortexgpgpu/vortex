@@ -35,7 +35,9 @@ module Vortex (
     `STATIC_ASSERT((`L3_ENABLE == 0 || `NUM_CLUSTERS > 1), ("invalid parameter"))
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_dcr_if    tex_dcr_if();
+    VX_tex_dcr_if #(
+        .NUM_STAGES (`TEX_STAGE_COUNT)
+    ) tex_dcr_if();
 `endif
 `ifdef EXT_RASTER_ENABLE
     VX_raster_dcr_if raster_dcr_if();

@@ -1,6 +1,7 @@
 `include "VX_rop_define.vh"
 
-module VX_rop_write #(
+// Module for handling memory requests
+module VX_rop_mem #(
     // TODO
 ) (
     input wire clk,

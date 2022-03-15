@@ -17,7 +17,7 @@ module VX_raster_unit #(
 
     // PERF
 `ifdef PERF_ENABLE
-    VX_perf_raster_if.master perf_raster_if,
+    VX_raster_perf_if.master raster_perf_if,
 `endif
 
     // Memory interface
@@ -25,7 +25,7 @@ module VX_raster_unit #(
     VX_dcache_rsp_if.slave  cache_rsp_if,
 
     // Inputs
-    VX_raster_dcr_if.slave  raster_dcr_if,
+    VX_raster_dcr_if.master raster_dcr_if,
     VX_raster_req_if.slave  raster_req_if,
 
     // Outputs
@@ -44,6 +44,7 @@ module VX_raster_unit #(
         .reset      (reset),
 
         // inputs
+        .dcr_wr_valid (0),
         .raster_dcr_if(raster_dcr_if)
 
         // output
@@ -100,8 +101,8 @@ module VX_raster_unit #(
     `UNUSED_VAR (raster_rsp_if.ready)
 
     // TODO: remove
-    assign perf_raster_if.mem_reads = 0;
-    assign perf_raster_if.mem_latency = 0;
+    assign raster_perf_if.mem_reads = 0;
+    assign raster_perf_if.mem_latency = 0;
 
     // TODO: remove
     assign cache_req_if.valid = 0;

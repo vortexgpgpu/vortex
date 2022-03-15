@@ -19,8 +19,6 @@
 
 `define NRI_BITS        `LOG2UP(`NUM_IREGS)
 
-`define NTEX_BITS       `LOG2UP(`TEX_STAGE_COUNT)
-
 `ifdef EXT_F_ENABLE
 `define NUM_REGS        (2 * `NUM_IREGS)
 `else
@@ -201,7 +199,7 @@
 `define INST_GPU_TEX         4'h6
 `define INST_GPU_RASTER      4'h7
 `define INST_GPU_ROP         4'h8
-`define INST_GPU_IMADD       4'h1
+`define INST_GPU_IMADD       4'h9
 `define INST_GPU_BITS        4
 
 ///////////////////////////////////////////////////////////////////////////////

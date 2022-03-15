@@ -2,6 +2,8 @@
 
 module VX_rop_ds #(
     parameter DEPTH_TEST = 1
+    parameter CLUSTER_ID = 0,
+    parameter NUM_LANES  = 4
 ) (
     input wire clk,
     input wire reset

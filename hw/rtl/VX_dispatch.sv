@@ -82,17 +82,16 @@ module VX_dispatch (
     wire [`INST_CSR_BITS-1:0] csr_op_type = `INST_CSR_BITS'(ibuffer_if.op_type);
     wire [`CSR_ADDR_BITS-1:0] csr_addr = ibuffer_if.imm[`CSR_ADDR_BITS-1:0];
     wire [`NRI_BITS-1:0] csr_imm = ibuffer_if.imm[`CSR_ADDR_BITS +: `NRI_BITS];
-    wire [31:0] csr_rs1_data = gpr_rsp_if.rs1_data[tid];
 
     VX_skid_buffer #(
-        .DATAW   (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `INST_CSR_BITS + `CSR_ADDR_BITS + `NR_BITS + 1 + 1 + `NRI_BITS + 32),
+        .DATAW   (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `INST_CSR_BITS + `CSR_ADDR_BITS + `NR_BITS + 1 + 1 + `NRI_BITS + (`NUM_THREADS * 32)),
         .OUT_REG (1)
     ) csr_buffer (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (csr_req_valid),
         .ready_in  (csr_req_ready),
-        .data_in   ({ibuffer_if.uuid, ibuffer_if.wid, ibuffer_if.tmask, ibuffer_if.PC, csr_op_type,        csr_addr,        ibuffer_if.rd, ibuffer_if.wb, ibuffer_if.use_imm, csr_imm,        csr_rs1_data}),
+        .data_in   ({ibuffer_if.uuid, ibuffer_if.wid, ibuffer_if.tmask, ibuffer_if.PC, csr_op_type,        csr_addr,        ibuffer_if.rd, ibuffer_if.wb, ibuffer_if.use_imm, csr_imm,        gpr_rsp_if.rs1_data}),
         .data_out  ({csr_req_if.uuid, csr_req_if.wid, csr_req_if.tmask, csr_req_if.PC, csr_req_if.op_type, csr_req_if.addr, csr_req_if.rd, csr_req_if.wb, csr_req_if.use_imm, csr_req_if.imm, csr_req_if.rs1_data}),
         .valid_out (csr_req_if.valid),
         .ready_out (csr_req_if.ready)

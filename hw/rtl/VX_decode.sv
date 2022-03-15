@@ -389,6 +389,23 @@ module VX_decode  #(
                             default:;
                         endcase
                     end
+                    7'h01: begin
+                        ex_type = `EX_GPU;
+                        case (func3)
+                            3'h0: begin // RASTER
+                            op_type = `INST_OP_BITS'(`INST_GPU_RASTER);
+                            is_wstall = 1;
+                            use_rd  = 1;
+                            `USED_IREG (rd);
+                            end
+                            3'h1: begin // ROP
+                            op_type = `INST_OP_BITS'(`INST_GPU_ROP);
+                            `USED_IREG (rs1);
+                            `USED_IREG (rs2);
+                            end
+                            default:;
+                        endcase
+                    end
                     default:;
                 endcase
             end
@@ -398,9 +415,8 @@ module VX_decode  #(
                     3'h0: begin // TEX
                         ex_type = `EX_GPU;
                         op_type = `INST_OP_BITS'(`INST_GPU_TEX);
-                        op_mod  = `INST_MOD_BITS'(func2);
-                        use_rd  = 1;       
-                        `USED_IREG (rd);              
+                        use_rd  = 1;
+                        `USED_IREG (rd);       
                         `USED_IREG (rs1);
                         `USED_IREG (rs2);
                         `USED_IREG (rs3);

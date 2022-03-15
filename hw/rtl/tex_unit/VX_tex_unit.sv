@@ -1,15 +1,14 @@
 `include "VX_tex_define.vh"
 
 module VX_tex_unit #(  
-    parameter CORE_ID = 0,
-    parameter NUM_STAGES = 1
+    parameter CORE_ID = 0
 ) (
     input wire  clk,
     input wire  reset,    
 
     // PERF
 `ifdef PERF_ENABLE
-    VX_perf_tex_if.master perf_tex_if,
+    VX_tex_perf_if.master   tex_perf_if,
 `endif
 
     // Memory interface
@@ -17,11 +16,12 @@ module VX_tex_unit #(
     VX_dcache_rsp_if.slave  cache_rsp_if,
 
     // Inputs
-    VX_tex_dcr_if.slave     tex_dcr_if,
+    VX_tex_dcr_if.master    tex_dcr_if,
+    VX_gpu_csr_if.slave     tex_csr_if,
     VX_tex_req_if.slave     tex_req_if,
     
     // Outputs
-    VX_tex_rsp_if.master    tex_rsp_if
+    VX_commit_if.master     tex_rsp_if
 );
 
     localparam REQ_INFO_W = `NR_BITS + 1 + `NW_BITS + 32 + `UUID_BITS;
@@ -31,8 +31,28 @@ module VX_tex_unit #(
     wire [`NUM_THREADS-1:0][`TEX_MIPOFF_BITS-1:0]   sel_mipoff;
     wire [`NUM_THREADS-1:0][1:0][`TEX_LOD_BITS-1:0] sel_logdims;
 
-    assign tex_dcr_if.stage = tex_req_if.stage;
-    tex_dcrs_t tex_dcrs = tex_dcr_if.data;
+    // CSRs access
+
+    tex_csrs_t tex_csrs;
+
+    VX_tex_csr #(
+        .CORE_ID    (CORE_ID),
+        .NUM_STAGES (`TEX_STAGE_COUNT)
+    ) tex_csr (
+        .clk        (clk),
+        .reset      (reset),
+
+        // inputs
+        .tex_csr_if (tex_csr_if),
+
+        // outputs
+        .tex_csrs   (tex_csrs)
+    );
+
+    // DCRs access
+
+    tex_dcrs_t tex_dcrs;
+    assign tex_dcrs = tex_dcr_if.data[tex_csrs.stage];
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign mip_level[i]      = tex_req_if.lod[i][`TEX_LOD_BITS-1:0];
@@ -152,6 +172,8 @@ module VX_tex_unit #(
         .rsp_ready  (tex_rsp_if.ready)
     );
 
+    assign tex_rsp_if.eop = 1;
+
 `ifdef PERF_ENABLE
     wire [$clog2(`NUM_THREADS+1)-1:0] perf_mem_req_per_cycle;
     wire [$clog2(`NUM_THREADS+1)-1:0] perf_mem_rsp_per_cycle;
@@ -186,8 +208,8 @@ module VX_tex_unit #(
         end
     end
 
-    assign perf_tex_if.mem_reads   = perf_mem_reads;
-    assign perf_tex_if.mem_latency = perf_mem_latency;
+    assign tex_perf_if.mem_reads   = perf_mem_reads;
+    assign tex_perf_if.mem_latency = perf_mem_latency;
 `endif  
 
 `ifdef DBG_TRACE_TEX
