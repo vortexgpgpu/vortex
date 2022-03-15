@@ -4,7 +4,8 @@
 //  Descrption: Performs strided fetch
 //  of primitive data from the buffer
 
-module VX_raster_mem #(  
+module VX_raster_mem #( 
+    parameter CLUSTER_ID = 0,
     parameter RASTER_SLICE_NUM = 1,
     parameter RASTER_PRIM_REQUEST_SIZE = 5,
 ) (

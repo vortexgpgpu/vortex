@@ -8,8 +8,9 @@
 //      4. Response switch
 
 module VX_raster_unit #(  
-    parameter CORE_ID = 0,
-    parameter NUM_SLICES = 1    // number of raster slices
+    parameter CLUSTER_ID  = 0,
+    parameter NUM_SLICES  = 1,  // number of raster slices
+    parameter NUM_OUTPUTS = 4   // number of output queues    
     // TODO
 ) (
     input wire clk,
@@ -81,6 +82,7 @@ module VX_raster_unit #(
     // TODO: remove
     `UNUSED_VAR (raster_req_if.valid)
     `UNUSED_VAR (raster_req_if.uuid)
+    `UNUSED_VAR (raster_req_if.cid)
     `UNUSED_VAR (raster_req_if.wid)
     `UNUSED_VAR (raster_req_if.tmask)
     `UNUSED_VAR (raster_req_if.PC)
@@ -92,12 +94,14 @@ module VX_raster_unit #(
     // TODO: remove
     assign raster_rsp_if.valid = 0;
     assign raster_rsp_if.uuid  = 0;
+    assign raster_rsp_if.cid   = 0;
     assign raster_rsp_if.wid   = 0;
     assign raster_rsp_if.tmask = 0;
     assign raster_rsp_if.PC    = 0;
     assign raster_rsp_if.rd    = 0;
     assign raster_rsp_if.wb    = 0;
-    assign raster_rsp_if.rem   = 0;
+    assign raster_rsp_if.stamp = '0;
+    assign raster_rsp_if.last  = 0;
     `UNUSED_VAR (raster_rsp_if.ready)
 
     // TODO: remove

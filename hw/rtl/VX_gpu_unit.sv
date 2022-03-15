@@ -156,26 +156,26 @@ module VX_gpu_unit #(
 
 `ifdef EXT_RASTER_ENABLE
     
-    VX_raster_req_if raster_req_if();
+    VX_raster_srv_if raster_srv_if();
     VX_commit_if     raster_rsp_if();
 
     wire [`NUM_THREADS-1:0][15:0] fragment_x;
     wire [`NUM_THREADS-1:0][15:0] fragment_y;
 
-    assign raster_req_if.valid     = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_RASTER);
-    assign raster_req_if.uuid      = gpu_req_if.uuid;
-    assign raster_req_if.wid       = gpu_req_if.wid;
-    assign raster_req_if.tmask     = gpu_req_if.tmask;
-    assign raster_req_if.PC        = gpu_req_if.PC;
-    assign raster_req_if.rd        = gpu_req_if.rd;
-    assign raster_req_if.wb        = gpu_req_if.wb;
+    assign raster_srv_if.valid     = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_RASTER);
+    assign raster_srv_if.uuid      = gpu_req_if.uuid;
+    assign raster_srv_if.wid       = gpu_req_if.wid;
+    assign raster_srv_if.tmask     = gpu_req_if.tmask;
+    assign raster_srv_if.PC        = gpu_req_if.PC;
+    assign raster_srv_if.rd        = gpu_req_if.rd;
+    assign raster_srv_if.wb        = gpu_req_if.wb;
 
     VX_raster_srv #(
         .CORE_ID (CORE_ID)
     ) raster_srv (
         .clk           (clk),
         .reset         (reset),
-        .raster_req_if (raster_req_if),        
+        .raster_srv_if (raster_srv_if),        
         .raster_rsp_if (raster_rsp_if),
         .raster_csr_if (raster_csr_if),
         .fragment_x    (fragment_x),
@@ -185,25 +185,25 @@ module VX_gpu_unit #(
 
 `ifdef EXT_ROP_ENABLE
     
-    VX_rop_req_if rop_req_if();
+    VX_rop_srv_if rop_srv_if();
     VX_commit_if  rop_rsp_if();
 
-    assign rop_req_if.valid     = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_ROP);
-    assign rop_req_if.uuid      = gpu_req_if.uuid;
-    assign rop_req_if.wid       = gpu_req_if.wid;
-    assign rop_req_if.tmask     = gpu_req_if.tmask;
-    assign rop_req_if.PC        = gpu_req_if.PC;
-    assign rop_req_if.x         = fragment_x;
-    assign rop_req_if.y         = fragment_y;    
-    assign rop_req_if.color     = gpu_req_if.rs1_data;
-    assign rop_req_if.depth     = gpu_req_if.rs2_data;
+    assign rop_srv_if.valid     = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_ROP);
+    assign rop_srv_if.uuid      = gpu_req_if.uuid;
+    assign rop_srv_if.wid       = gpu_req_if.wid;
+    assign rop_srv_if.tmask     = gpu_req_if.tmask;
+    assign rop_srv_if.PC        = gpu_req_if.PC;
+    assign rop_srv_if.pos_x     = fragment_x;
+    assign rop_srv_if.pos_y     = fragment_y;    
+    assign rop_srv_if.color     = gpu_req_if.rs1_data;
+    assign rop_srv_if.depth     = gpu_req_if.rs2_data;
     
     VX_rop_srv #(
         .CORE_ID (CORE_ID)
     ) rop_srv (
         .clk        (clk),
         .reset      (reset),
-        .rop_req_if (rop_req_if),
+        .rop_srv_if (rop_srv_if),
         .rop_rsp_if (rop_rsp_if),
         .rop_csr_if (rop_csr_if)
     );        
@@ -217,10 +217,10 @@ module VX_gpu_unit #(
         `INST_GPU_TEX: gpu_req_ready = tex_req_if.ready;
     `endif
     `ifdef EXT_RASTER_ENABLE
-        `INST_GPU_RASTER: gpu_req_ready = raster_req_if.ready;
+        `INST_GPU_RASTER: gpu_req_ready = raster_srv_if.ready;
     `endif
     `ifdef EXT_ROP_ENABLE
-        `INST_GPU_ROP: gpu_req_ready = rop_req_if.ready;
+        `INST_GPU_ROP: gpu_req_ready = rop_srv_if.ready;
     `endif
         default: gpu_req_ready = wctl_req_ready;
         endcase

@@ -5,28 +5,30 @@
 
 interface VX_rop_req_if ();
 
-    wire                            valid;
+    wire                    valid;
 
-    wire [`UUID_BITS-1:0]           uuid;
-    wire [`NW_BITS-1:0]             wid;
-    wire [`NUM_THREADS-1:0]         tmask;    
-    wire [31:0]                     PC;
+    wire [`UUID_BITS-1:0]   uuid;
+    wire [`NC_BITS-1:0]     cid;
+    wire [`NW_BITS-1:0]     wid;
+    wire [`NUM_THREADS-1:0] tmask;    
+    wire [31:0]             PC;
 
-    wire [`NUM_THREADS-1:0][15:0]   x;
-    wire [`NUM_THREADS-1:0][15:0]   y;
-    wire [`NUM_THREADS-1:0][31:0]   color;
-    wire [`NUM_THREADS-1:0][31:0]   depth;
-    
-    wire                            ready;
+    wire [`NUM_THREADS-1:0][15:0] pos_x;
+    wire [`NUM_THREADS-1:0][15:0] pos_y;
+    wire [`NUM_THREADS-1:0][31:0] color;
+    wire [`NUM_THREADS-1:0][31:0] depth;
+
+    wire                    ready;
 
     modport master (
         output valid,
         output uuid,
+        output cid,
         output wid,
         output tmask,
         output PC,
-        output x,
-        output y,        
+        output pos_x,
+        output pos_y,
         output color,
         output depth,
         input  ready
@@ -35,16 +37,17 @@ interface VX_rop_req_if ();
     modport slave (
         input  valid,
         input  uuid,
+        input  cid,
         input  wid,
         input  tmask,
         input  PC,
-        input  x,
-        input  y,        
+        input  pos_x,
+        input  pos_y,
         input  color,
         input  depth,
         output ready
     );
 
 endinterface
+
 `endif
- 

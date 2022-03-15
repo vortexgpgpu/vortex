@@ -5,20 +5,22 @@
 
 interface VX_raster_req_if ();
 
-    wire                        valid;
+    wire                    valid;
 
-    wire [`UUID_BITS-1:0]       uuid;
-    wire [`NW_BITS-1:0]         wid;
-    wire [`NUM_THREADS-1:0]     tmask;
-    wire [31:0]                 PC;
-    wire [`NR_BITS-1:0]         rd;
-    wire                        wb;
+    wire [`UUID_BITS-1:0]   uuid;
+    wire [`NC_BITS-1:0]     cid;
+    wire [`NW_BITS-1:0]     wid;
+    wire [`NUM_THREADS-1:0] tmask;    
+    wire [31:0]             PC;    
+    wire [`NR_BITS-1:0]     rd;
+    wire                    wb;
 
-    wire                        ready;
+    wire                    ready;
 
     modport master (
         output valid,
         output uuid,
+        output cid,
         output wid,
         output tmask,
         output PC,
@@ -30,6 +32,7 @@ interface VX_raster_req_if ();
     modport slave (
         input  valid,
         input  uuid,
+        input  cid,
         input  wid,
         input  tmask,
         input  PC,
@@ -39,7 +42,5 @@ interface VX_raster_req_if ();
     );
 
 endinterface
+
 `endif
-
-
- 

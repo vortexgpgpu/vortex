@@ -50,6 +50,7 @@ module VX_cluster #(
 
     assign raster_req_if.valid  = 0; // TODO: remove
     assign raster_req_if.uuid   = 0; // TODO: remove;
+    assign raster_req_if.cid    = 0; // TODO: remove;
     assign raster_req_if.wid    = 0; // TODO: remove;
     assign raster_req_if.tmask  = 0; // TODO: remove;
     assign raster_req_if.PC     = 0; // TODO: remove;
@@ -60,12 +61,14 @@ module VX_cluster #(
     // TODO: remove
     `UNUSED_VAR (raster_rsp_if.valid)
     `UNUSED_VAR (raster_rsp_if.uuid)
+    `UNUSED_VAR (raster_rsp_if.cid)
     `UNUSED_VAR (raster_rsp_if.wid)
     `UNUSED_VAR (raster_rsp_if.tmask)
     `UNUSED_VAR (raster_rsp_if.PC)
     `UNUSED_VAR (raster_rsp_if.rd)
     `UNUSED_VAR (raster_rsp_if.wb)
-    `UNUSED_VAR (raster_rsp_if.rem)
+    `UNUSED_VAR (raster_rsp_if.stamp)
+    `UNUSED_VAR (raster_rsp_if.last)
     assign raster_rsp_if.ready = 0;
 
     // TODO: remove
@@ -91,7 +94,9 @@ module VX_cluster #(
     `RESET_RELAY (raster_reset);
 
     VX_raster_unit #(
-        .NUM_SLICES (1)
+        .CLUSTER_ID  (CLUSTER_ID),
+        .NUM_SLICES  (1),
+        .NUM_OUTPUTS (`NUM_THREADS)
     ) raster_unit (
         .clk           (clk),
         .reset         (raster_reset),
@@ -116,13 +121,14 @@ module VX_cluster #(
 
     assign rop_req_if.valid  = 0; // TODO: remove
     assign rop_req_if.uuid   = 0; // TODO: remove
+    assign rop_req_if.cid    = 0; // TODO: remove;
     assign rop_req_if.wid    = 0; // TODO: remove
     assign rop_req_if.tmask  = 0; // TODO: remove
     assign rop_req_if.PC     = 0; // TODO: remove
-    assign rop_req_if.x      = 0; // TODO: remove
-    assign rop_req_if.y      = 0; // TODO: remove    
-    assign rop_req_if.color  = 0; // TODO: remove
-    assign rop_req_if.depth  = 0; // TODO: remove
+    assign rop_req_if.pos_x  = '0; // TODO: remove
+    assign rop_req_if.pos_y  = '0; // TODO: remove    
+    assign rop_req_if.color  = '0; // TODO: remove
+    assign rop_req_if.depth  = '0; // TODO: remove
     `UNUSED_VAR (rop_req_if.ready) // TODO: remove
 
     // TODO: remove
@@ -149,6 +155,7 @@ module VX_cluster #(
     `RESET_RELAY (rop_reset);
 
     VX_rop_unit #(
+        .CLUSTER_ID (CLUSTER_ID),
         .NUM_SLICES (`NUM_THREADS)
     ) rop_unit (
         .clk           (clk),
