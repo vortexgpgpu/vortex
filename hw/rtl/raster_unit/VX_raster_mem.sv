@@ -1,10 +1,10 @@
 `include "VX_raster_define.vh"
 
-// Module for primitive fetch
+// Module for handling memory requests
 //  Descrption: Performs strided fetch
 //  of primitive data from the buffer
 
-module VX_raster_fetch #(  
+module VX_raster_mem #(  
     parameter RASTER_SLICE_NUM = 1,
     parameter RASTER_PRIM_REQUEST_SIZE = 5,
 ) (
