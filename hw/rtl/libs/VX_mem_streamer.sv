@@ -2,7 +2,7 @@
 
 // `TRACING_OFF
 module VX_mem_streamer #(
-  parameter NUM_REQS = 4,
+    parameter NUM_REQS = 4,
     parameter ADDRW = 32,
     parameter DATAW = 32,
     parameter TAGW = 32,
@@ -134,8 +134,8 @@ module VX_mem_streamer #(
         `UNUSED_PIN (size)
     );
 
-    assign stag_push = sreq_push;
-    assign stag_pop  = mem_rsp_fire && (0 == rsp_rem_mask_n) && !stag_empty;
+    assign stag_push  = sreq_push;
+    assign stag_pop   = mem_rsp_fire && (0 == rsp_rem_mask_n) && !stag_empty;
     assign stag_raddr = mem_rsp_tag;
 
     VX_index_buffer #(
