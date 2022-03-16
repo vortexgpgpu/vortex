@@ -8,7 +8,6 @@ module VX_mem_streamer #(
     parameter TAGW = 32,
     parameter WORD_SIZE = 4,
     parameter QUEUE_SIZE = 16,
-    parameter QUEUE_ADDRW = `CLOG2(QUEUE_SIZE),
     parameter PARTIAL_RESPONSE = 0
 ) (
     input  wire clk,
@@ -47,7 +46,7 @@ module VX_mem_streamer #(
     output wire [TAGW-1:0]                rsp_tag,
     input wire                            rsp_ready
   );
-
+    localparam QUEUE_ADDRW = `CLOG2(QUEUE_SIZE);
     localparam RSPW = TAGW + NUM_REQS + (NUM_REQS * DATAW) + 1;
 
     // Detect duplicate addresses
@@ -114,7 +113,7 @@ module VX_mem_streamer #(
     // Save incoming requests into a pending queue
 
     assign sreq_push = req_valid && !sreq_full && !stag_full;
-    assign sreq_pop  = req_sent_all && !sreq_empty;
+    assign sreq_pop  = (| mem_req_fire) && req_sent_all && !sreq_empty;
     assign req_ready = !sreq_full && !stag_full;
 
     VX_fifo_queue #(
@@ -134,7 +133,8 @@ module VX_mem_streamer #(
         `UNUSED_PIN (size)
     );
 
-    assign stag_push  = sreq_push;
+    // Reads only
+    assign stag_push  = sreq_push && !req_rw;
     assign stag_pop   = mem_rsp_fire && (0 == rsp_rem_mask_n) && !stag_empty;
     assign stag_raddr = mem_rsp_tag;
 

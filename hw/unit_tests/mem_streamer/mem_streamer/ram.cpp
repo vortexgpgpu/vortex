@@ -47,7 +47,7 @@ int RAM::simulate_cycle_delay() {
 //////////////////////////////////////////////////////
 
 void RAM::insert_req(req_t req) {
-    if ( !(this->check_duplicate_req(req)) && req.valid) {
+    if ( !(this->check_duplicate_req(req)) && req.valid && !req.rw) {
         req_t r;
         r.valid     = req.valid;
         r.rw        = req.rw;
@@ -60,6 +60,7 @@ void RAM::insert_req(req_t req) {
         r.cycles_left = MEM_LATENCY;
 
         std::cout<<"RAM: Insert entry... "<<std::endl;
+        std::cout<<"Write? : "<<req.rw<<std::endl;
         ram_.push_back(r);
     }
 }
