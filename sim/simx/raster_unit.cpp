@@ -19,6 +19,7 @@ using vec2_fx2_t = cocogfx::TVector2<fixed24_t>;
 using vec3_fx2_t = cocogfx::TVector3<fixed24_t>;
 
 using rect_u_t = cocogfx::TRect<uint32_t>;
+
 struct primitive_t {
   vec3_fx_t edges[3];
   fixed16_t extents[3];

@@ -1,7 +1,8 @@
 `include "VX_rop_define.vh"
 
 module VX_rop_blend #(
-    parameter n = 1
+    parameter CLUSTER_ID = 0,
+    parameter NUM_LANES  = 4
 ) (
     input wire          clk,
     input wire          reset,   
@@ -16,11 +17,11 @@ module VX_rop_blend #(
     input rop_dcrs_t    dcrs,
 
     // Inputs    
-    input rgba_t        src_color [0:n-1],
-    input rgba_t        dst_color [0:n-1],
+    input rgba_t [NUM_LANES-1:0] src_color,
+    input rgba_t [NUM_LANES-1:0] dst_color,
     
     // Outputs
-    output rgba_t       color_out [0:n-1]
+    output rgba_t [NUM_LANES-1:0] color_out
 );
     `UNUSED_VAR (dcrs)
 
@@ -28,11 +29,11 @@ module VX_rop_blend #(
     
     assign ready_in = ~stall;
     
-    rgba_t src_factor [0:n-1];
-    rgba_t dst_factor [0:n-1];
+    rgba_t [NUM_LANES-1:0]  src_factor;
+    rgba_t [NUM_LANES-1:0]  dst_factor;
 
     generate
-        for(genvar i = 0; i < n; i++) begin : blend_func_inst
+        for(genvar i = 0; i < NUM_LANES; i++) begin : blend_func_inst
 
             VX_rop_blend_func #(
             ) src_blend_func (
@@ -58,13 +59,13 @@ module VX_rop_blend #(
 
     wire valid_s1;
 
-    rgba_t src_color_s1  [0:n-1];
-    rgba_t dst_color_s1  [0:n-1];
-    rgba_t src_factor_s1 [0:n-1];
-    rgba_t dst_factor_s1 [0:n-1];
+    rgba_t [NUM_LANES-1:0] src_color_s1;
+    rgba_t [NUM_LANES-1:0] dst_color_s1;
+    rgba_t [NUM_LANES-1:0] src_factor_s1;
+    rgba_t [NUM_LANES-1:0] dst_factor_s1;
 
     VX_pipe_register #(
-        .DATAW  (1 + 32 * 4 * n),
+        .DATAW  (1 + 32 * 4 * NUM_LANES),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
@@ -74,13 +75,13 @@ module VX_rop_blend #(
         .data_out ({valid_s1, src_color_s1, dst_color_s1, src_factor_s1, dst_factor_s1})
     );
 
-    rgba_t mult_add_color_out [0:n-1];
-    rgba_t min_color_out      [0:n-1];
-    rgba_t max_color_out      [0:n-1];
-    rgba_t logic_op_color_out [0:n-1];
+    rgba_t [NUM_LANES-1:0] mult_add_color_out;
+    rgba_t [NUM_LANES-1:0] min_color_out;
+    rgba_t [NUM_LANES-1:0] max_color_out;
+    rgba_t [NUM_LANES-1:0] logic_op_color_out;
     
     generate
-        for(genvar i = 0; i < n; i++) begin : blend_op_inst
+        for(genvar i = 0; i < NUM_LANES; i++) begin : blend_op_inst
 
             VX_rop_blend_multadd #(
             ) mult_add (
@@ -111,10 +112,10 @@ module VX_rop_blend #(
         end
     endgenerate
 
-    rgba_t color_out_s1 [0:n-1];
+    rgba_t [NUM_LANES-1:0] color_out_s1;
 
     generate
-        for(genvar i = 0; i < n; i++) begin : blend_color_out_inst
+        for(genvar i = 0; i < NUM_LANES; i++) begin : blend_color_out_inst
             always @(*) begin
                 // RGB Component
                 case (dcrs.blend_mode_rgb)
@@ -171,7 +172,7 @@ module VX_rop_blend #(
     endgenerate
 
     VX_pipe_register #(
-        .DATAW  (1 + 32 * n),
+        .DATAW  (1 + 32 * NUM_LANES),
         .RESETW (1)
     ) pipe_reg2 (
         .clk      (clk),

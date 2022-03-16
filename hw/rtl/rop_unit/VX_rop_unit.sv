@@ -19,7 +19,7 @@ module VX_rop_unit #(
 
     // Inputs
     VX_rop_dcr_if.master rop_dcr_if,
-    VX_rop_req_if.slave  rop_req_if
+    VX_rop_req_if.slave rop_req_if
 );
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
@@ -30,13 +30,8 @@ module VX_rop_unit #(
 
     // TODO: remove
     `UNUSED_VAR (rop_req_if.valid)
-    `UNUSED_VAR (rop_req_if.uuid)
-    `UNUSED_VAR (rop_req_if.wid)
-    `UNUSED_VAR (rop_req_if.tmask)
-    `UNUSED_VAR (rop_req_if.PC)
-    `UNUSED_VAR (rop_req_if.tmask)    
-    `UNUSED_VAR (rop_req_if.x)
-    `UNUSED_VAR (rop_req_if.y)    
+    `UNUSED_VAR (rop_req_if.pos_x)
+    `UNUSED_VAR (rop_req_if.pos_y)    
     `UNUSED_VAR (rop_req_if.color)
     `UNUSED_VAR (rop_req_if.depth)
     assign rop_req_if.ready = 0;
@@ -64,13 +59,15 @@ module VX_rop_unit #(
 
     reg blend_valid_in = 1;
     reg blend_ready_out = 1;
-    reg [31:0] src_color = 0;
-    reg [31:0] dst_color = 0;    
+    rgba_t [NUM_LANES-1:0] src_color = 0;
+    rgba_t [NUM_LANES-1:0] dst_color = 0;    
     wire blend_ready_in;
     wire blend_valid_out;    
-    wire [31:0] out_color;
+    rgba_t [NUM_LANES-1:0] out_color;
 
     VX_rop_blend #(
+        .CLUSTER_ID (CLUSTER_ID),
+        .NUM_LANES  (NUM_LANES)
     ) blend (
         .clk       (clk),
         .reset     (reset),

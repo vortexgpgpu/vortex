@@ -165,9 +165,7 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
       //printf("*** edge0=(%d, %d, %d)\n", edges[0].x.data(), edges[0].y.data(), edges[0].z.data());
       //printf("*** edge1=(%d, %d, %d)\n", edges[1].x.data(), edges[1].y.data(), edges[1].z.data());
       //printf("*** edge2=(%d, %d, %d)\n", edges[2].x.data(), edges[2].y.data(), edges[2].z.data());
-      
-      rast_prim.bbox = bbox;
-      
+         
       ATTRIBUTE_DELTA(rast_prim.attribs.z, ps0.z, ps1.z, ps2.z);
       ATTRIBUTE_DELTA(rast_prim.attribs.r, v0.color.r, v1.color.r, v2.color.r);
       ATTRIBUTE_DELTA(rast_prim.attribs.g, v0.color.g, v1.color.g, v2.color.g);

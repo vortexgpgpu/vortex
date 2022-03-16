@@ -17,12 +17,6 @@ SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp
 SRCS += args.cpp processor.cpp warp.cpp core.cpp decode.cpp execute.cpp exe_unit.cpp cache_sim.cpp mem_sim.cpp shared_mem.cpp dcrs.cpp
 SRCS += tex_unit.cpp raster_srv.cpp rop_srv.cpp raster_unit.cpp rop_unit.cpp
 
-OBJS := $(patsubst %.cpp, obj_dir/%.o, $(notdir $(SRCS)))
-VPATH := $(sort $(dir $(SRCS)))
-
-#$(info OBJS is $(OBJS))
-#$(info VPATH is $(VPATH))
-
 # Debugigng
 ifdef DEBUG
 	CXXFLAGS += -g -O0 -DDEBUG_LEVEL=$(DEBUG)
@@ -49,4 +43,4 @@ $(DESTDIR)/lib$(PROJECT).so: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
 
 clean:
-	rm -rf obj_dir $(DESTDIR)/$(PROJECT) $(DESTDIR)/lib$(PROJECT).so
+	rm -rf $(DESTDIR)/$(PROJECT) $(DESTDIR)/lib$(PROJECT).so

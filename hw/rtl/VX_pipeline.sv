@@ -23,6 +23,13 @@ module VX_pipeline #(
     VX_dcache_rsp_if.slave      tcache_rsp_if,
 `endif
 
+`ifdef EXT_RASTER_ENABLE        
+    VX_raster_req_if            raster_req_if,
+`endif
+`ifdef EXT_RASTER_ENABLE        
+    VX_rop_req_if               rop_req_if,
+`endif
+
 `ifdef PERF_ENABLE
     VX_perf_memsys_if.slave     perf_memsys_if,
 `endif
@@ -140,6 +147,12 @@ module VX_pipeline #(
         .tex_dcr_if     (tex_dcr_if),
         .tcache_req_if  (tcache_req_if),
         .tcache_rsp_if  (tcache_rsp_if),
+    `endif
+    `ifdef EXT_RASTER_ENABLE        
+        .raster_req_if  (raster_req_if),
+    `endif
+    `ifdef EXT_RASTER_ENABLE        
+        .rop_req_if     (rop_req_if),
     `endif
 
         .cmt_to_csr_if  (cmt_to_csr_if),   

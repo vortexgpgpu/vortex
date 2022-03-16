@@ -13,6 +13,12 @@ module VX_core #(
 `ifdef EXT_TEX_ENABLE
     VX_tex_dcr_if.master                    tex_dcr_if,
 `endif
+`ifdef EXT_RASTER_ENABLE        
+    VX_raster_req_if                        raster_req_if,
+`endif
+`ifdef EXT_RASTER_ENABLE        
+    VX_rop_req_if                           rop_req_if,
+`endif
 
     // Memory request
     output wire                             mem_req_valid,
@@ -119,6 +125,12 @@ module VX_core #(
         .tex_dcr_if     (tex_dcr_if),
         .tcache_req_if  (tcache_req_if),
         .tcache_rsp_if  (tcache_rsp_if),
+    `endif
+    `ifdef EXT_RASTER_ENABLE        
+        .raster_req_if  (raster_req_if),
+    `endif
+    `ifdef EXT_RASTER_ENABLE        
+        .rop_req_if     (rop_req_if),
     `endif
 
         // Status

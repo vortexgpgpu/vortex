@@ -47,6 +47,15 @@ typedef struct packed {
     logic [`ROP_LOGIC_OP_BITS-1:0]      logic_op;
 } rop_dcrs_t;
 
+typedef struct packed {
+    logic [1:0]     rt_idx;
+    logic [15:0]    pos_x;
+    logic [15:0]    pos_y;    
+    logic [23:0]    depth;
+    logic [2:0]     sample_idx;
+    logic [7:0]     sample_mask;
+} rop_csrs_t;
+
 endpackage
 
 `endif

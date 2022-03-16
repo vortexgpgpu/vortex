@@ -4,7 +4,7 @@
 //  Description: Perform edge equation computation
 
 module VX_raster_setup #(  
-    parameter CORE_ID = 0
+    parameter CLUSTER_ID = 0
     // TODO
 ) (
     input wire clk,
