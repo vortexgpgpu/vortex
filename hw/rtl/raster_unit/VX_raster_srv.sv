@@ -7,30 +7,39 @@ module VX_raster_srv #(
     input wire reset,
 
     // Inputs    
-    VX_raster_srv_if.slave  raster_srv_if,
+    VX_raster_srv_if.slave  raster_srv_req_if,    
     VX_gpu_csr_if.slave     raster_csr_if,
+    VX_raster_to_rop_if.slave raster_to_rop_if,
     
     // Outputs
-    output wire [`NUM_THREADS-1:0][15:0] fragment_x,
-    output wire [`NUM_THREADS-1:0][15:0] fragment_y,
-    VX_commit_if.master     raster_rsp_if
+    VX_commit_if.master     raster_srv_rsp_if,
+    VX_raster_req_if.master raster_req_if
 );
-    `UNUSED_VAR (raster_srv_if.valid)
-    `UNUSED_VAR (raster_srv_if.uuid)
-    `UNUSED_VAR (raster_srv_if.wid)
-    `UNUSED_VAR (raster_srv_if.tmask)
-    `UNUSED_VAR (raster_srv_if.PC)
-    `UNUSED_VAR (raster_srv_if.rd)
-    `UNUSED_VAR (raster_srv_if.wb)
-    assign raster_srv_if.ready = 0;
+    // CSRs access
 
-    assign raster_rsp_if.valid = 0;
-    
-    assign fragment_x = '0;
-    assign fragment_y = '0;
-    
-    // TODO
-    `UNUSED_VAR (clk)
-    `UNUSED_VAR (reset)
+    VX_raster_csr #(
+        .CORE_ID    (CORE_ID)
+    ) raster_csr (
+        .clk        (clk),
+        .reset      (reset),
+
+        // inputs
+        .raster_csr_if (raster_csr_if),
+        .raster_req_if (raster_req_if),
+
+        // outputs
+        .raster_to_rop_if (raster_to_rop_if)
+    );
+
+    `UNUSED_VAR (raster_srv_req_if.valid)
+    `UNUSED_VAR (raster_srv_req_if.uuid)
+    `UNUSED_VAR (raster_srv_req_if.wid)
+    `UNUSED_VAR (raster_srv_req_if.tmask)
+    `UNUSED_VAR (raster_srv_req_if.PC)
+    `UNUSED_VAR (raster_srv_req_if.rd)
+    `UNUSED_VAR (raster_srv_req_if.wb)
+    assign raster_srv_req_if.ready = 0;
+
+    assign raster_srv_rsp_if.valid = 0;
 
 endmodule

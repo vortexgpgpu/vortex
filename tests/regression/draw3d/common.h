@@ -41,7 +41,6 @@ typedef struct {
 } rast_bbox_t;
 typedef struct {
   rast_edge_t    edges[3];
-  rast_bbox_t    bbox;
   rast_attribs_t attribs;
 } rast_prim_t;
 

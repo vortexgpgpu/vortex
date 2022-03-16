@@ -23,10 +23,13 @@ typedef struct packed {
 } raster_stamp_t;
 
 typedef struct packed {
-    raster_stamp_t  stamp;
-    logic [1:0]     frag;
-    logic [31:0]    grad_x;
-    logic [31:0]    grad_y;    
+    logic [31:0]        pos_y_x;
+    logic [31:0]        pid_mask;
+    logic [3:0][31:0]   bcoord_x;
+    logic [3:0][31:0]   bcoord_y;
+    logic [3:0][31:0]   bcoord_z;
+    logic [31:0]        grad_x;
+    logic [31:0]        grad_y;    
 } raster_csrs_t;
 
 endpackage

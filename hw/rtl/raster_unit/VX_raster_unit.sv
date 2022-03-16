@@ -27,29 +27,16 @@ module VX_raster_unit #(
 
     // Inputs
     VX_raster_dcr_if.master raster_dcr_if,
-    VX_raster_req_if.slave  raster_req_if,
-
-    // Outputs
-    VX_raster_rsp_if.master raster_rsp_if
+    VX_raster_req_if.slave  raster_req_if
 );
 
 // TODO: remove
 `IGNORE_WARNINGS_BEGIN
 
+    // TODO: remove
     raster_dcrs_t raster_dcrs;
-
-    // Raster unit dcr block
-    VX_raster_dcr #(
-    ) raster_dcr (
-        .clk        (clk),
-        .reset      (reset),
-
-        // inputs
-        .dcr_wr_valid (0),
-        .raster_dcr_if(raster_dcr_if)
-
-        // output
-    );
+    assign raster_dcrs = raster_dcr_if.data;
+    `UNUSED_VAR (raster_dcrs)
 
     // TODO: Add requests switch here
 
@@ -76,33 +63,10 @@ module VX_raster_unit #(
     );
 
     // TODO: remove
-    assign raster_dcrs = raster_dcr_if.data;
-    `UNUSED_VAR (raster_dcrs)
-
-    // TODO: remove
     `UNUSED_VAR (raster_req_if.valid)
-    `UNUSED_VAR (raster_req_if.uuid)
-    `UNUSED_VAR (raster_req_if.cid)
-    `UNUSED_VAR (raster_req_if.wid)
-    `UNUSED_VAR (raster_req_if.tmask)
-    `UNUSED_VAR (raster_req_if.PC)
-    `UNUSED_VAR (raster_req_if.rd)
-    `UNUSED_VAR (raster_req_if.wb)
-    `UNUSED_VAR (raster_req_if.tmask)
+    assign raster_req_if.stamp = 0;
+    assign raster_req_if.empty = 0;
     assign raster_req_if.ready = 0;
-
-    // TODO: remove
-    assign raster_rsp_if.valid = 0;
-    assign raster_rsp_if.uuid  = 0;
-    assign raster_rsp_if.cid   = 0;
-    assign raster_rsp_if.wid   = 0;
-    assign raster_rsp_if.tmask = 0;
-    assign raster_rsp_if.PC    = 0;
-    assign raster_rsp_if.rd    = 0;
-    assign raster_rsp_if.wb    = 0;
-    assign raster_rsp_if.stamp = '0;
-    assign raster_rsp_if.last  = 0;
-    `UNUSED_VAR (raster_rsp_if.ready)
 
     // TODO: remove
     assign raster_perf_if.mem_reads = 0;

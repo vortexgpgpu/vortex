@@ -42,54 +42,33 @@ module VX_cluster #(
 
 `ifdef EXT_RASTER_ENABLE
 
+    VX_raster_req_if    per_core_raster_req_if[`NUM_CORES-1:0]();
     VX_raster_req_if    raster_req_if();
-    VX_raster_rsp_if    raster_rsp_if();
+
     VX_raster_perf_if   raster_perf_if();
-    VX_dcache_req_if    rcache_req_if();
-    VX_dcache_rsp_if    rcache_rsp_if();
 
-    assign raster_req_if.valid  = 0; // TODO: remove
-    assign raster_req_if.uuid   = 0; // TODO: remove;
-    assign raster_req_if.cid    = 0; // TODO: remove;
-    assign raster_req_if.wid    = 0; // TODO: remove;
-    assign raster_req_if.tmask  = 0; // TODO: remove;
-    assign raster_req_if.PC     = 0; // TODO: remove;
-    assign raster_req_if.rd     = 0; // TODO: remove;
-    assign raster_req_if.wb     = 0; // TODO: remove;
-    `UNUSED_VAR (raster_req_if.ready) // TODO: remove
+    VX_dcache_req_if    raster_cache_req_if();
+    VX_dcache_rsp_if    raster_cache_rsp_if();
 
     // TODO: remove
-    `UNUSED_VAR (raster_rsp_if.valid)
-    `UNUSED_VAR (raster_rsp_if.uuid)
-    `UNUSED_VAR (raster_rsp_if.cid)
-    `UNUSED_VAR (raster_rsp_if.wid)
-    `UNUSED_VAR (raster_rsp_if.tmask)
-    `UNUSED_VAR (raster_rsp_if.PC)
-    `UNUSED_VAR (raster_rsp_if.rd)
-    `UNUSED_VAR (raster_rsp_if.wb)
-    `UNUSED_VAR (raster_rsp_if.stamp)
-    `UNUSED_VAR (raster_rsp_if.last)
-    assign raster_rsp_if.ready = 0;
+    `UNUSED_VAR (raster_perf_if.mem_reads)
+    `UNUSED_VAR (raster_perf_if.mem_latency)
 
     // TODO: remove
-    `UNUSED_VAR (raster_perf_if.mem_reads);
-    `UNUSED_VAR (raster_perf_if.mem_latency);
+    `UNUSED_VAR (raster_cache_req_if.valid)
+    `UNUSED_VAR (raster_cache_req_if.rw)
+    `UNUSED_VAR (raster_cache_req_if.byteen)
+    `UNUSED_VAR (raster_cache_req_if.addr)
+    `UNUSED_VAR (raster_cache_req_if.data)  
+    `UNUSED_VAR (raster_cache_req_if.tag)
+    assign raster_cache_req_if.ready = 0;
 
     // TODO: remove
-    `UNUSED_VAR (rcache_req_if.valid);
-    `UNUSED_VAR (rcache_req_if.rw);
-    `UNUSED_VAR (rcache_req_if.byteen);
-    `UNUSED_VAR (rcache_req_if.addr);
-    `UNUSED_VAR (rcache_req_if.data);     
-    `UNUSED_VAR (rcache_req_if.tag);
-    assign rcache_req_if.ready = 0;
-
-    // TODO: remove
-    assign rcache_rsp_if.valid = 0;
-    assign rcache_rsp_if.tmask = 0;
-    assign rcache_rsp_if.data = 0;     
-    assign rcache_rsp_if.tag = 0;
-    `UNUSED_VAR (rcache_rsp_if.ready);
+    assign raster_cache_rsp_if.valid = 0;
+    assign raster_cache_rsp_if.tmask = 0;
+    assign raster_cache_rsp_if.data = 0;     
+    assign raster_cache_rsp_if.tag = 0;
+    `UNUSED_VAR (raster_cache_rsp_if.ready)
 
     `RESET_RELAY (raster_reset);
 
@@ -104,53 +83,52 @@ module VX_cluster #(
         .raster_perf_if(raster_perf_if),
     `endif
         .raster_req_if (raster_req_if),
-        .raster_dcr_if (raster_dcr_if),
-        .raster_rsp_if (raster_rsp_if),
-        .cache_req_if  (rcache_req_if),
-        .cache_rsp_if  (rcache_rsp_if)
+        .raster_dcr_if (raster_dcr_if),        
+        .cache_req_if  (raster_cache_req_if),
+        .cache_rsp_if  (raster_cache_rsp_if)
+    );
+
+    VX_raster_req_arb #(
+        .NUM_REQS (`NUM_CORES)
+    ) raster_req_arb (
+        .clk     (clk),
+        .reset   (raster_reset),
+        .req_in  (per_core_raster_req_if),
+        .req_out (raster_req_if)
     );
 
 `endif
 
 `ifdef EXT_ROP_ENABLE
 
+    VX_rop_req_if       per_core_rop_req_if[`NUM_CORES-1:0]();
     VX_rop_req_if       rop_req_if();
+    
     VX_rop_perf_if      rop_perf_if(); 
-    VX_dcache_req_if    ccache_req_if();
-    VX_dcache_rsp_if    ccache_rsp_if();
-
-    assign rop_req_if.valid  = 0; // TODO: remove
-    assign rop_req_if.uuid   = 0; // TODO: remove
-    assign rop_req_if.cid    = 0; // TODO: remove;
-    assign rop_req_if.wid    = 0; // TODO: remove
-    assign rop_req_if.tmask  = 0; // TODO: remove
-    assign rop_req_if.PC     = 0; // TODO: remove
-    assign rop_req_if.pos_x  = '0; // TODO: remove
-    assign rop_req_if.pos_y  = '0; // TODO: remove    
-    assign rop_req_if.color  = '0; // TODO: remove
-    assign rop_req_if.depth  = '0; // TODO: remove
-    `UNUSED_VAR (rop_req_if.ready) // TODO: remove
+    
+    VX_dcache_req_if    rop_cache_req_if();
+    VX_dcache_rsp_if    rop_cache_rsp_if();
 
     // TODO: remove
-    `UNUSED_VAR (rop_perf_if.mem_reads);
-    `UNUSED_VAR (rop_perf_if.mem_writes);
-    `UNUSED_VAR (rop_perf_if.mem_latency);
+    `UNUSED_VAR (rop_perf_if.mem_reads)
+    `UNUSED_VAR (rop_perf_if.mem_writes)
+    `UNUSED_VAR (rop_perf_if.mem_latency)
 
     // TODO: remove
-    `UNUSED_VAR (ccache_req_if.valid);
-    `UNUSED_VAR (ccache_req_if.rw);
-    `UNUSED_VAR (ccache_req_if.byteen);
-    `UNUSED_VAR (ccache_req_if.addr);
-    `UNUSED_VAR (ccache_req_if.data);     
-    `UNUSED_VAR (ccache_req_if.tag);
-    assign ccache_req_if.ready = 0;
+    `UNUSED_VAR (rop_cache_req_if.valid)
+    `UNUSED_VAR (rop_cache_req_if.rw)
+    `UNUSED_VAR (rop_cache_req_if.byteen)
+    `UNUSED_VAR (rop_cache_req_if.addr)
+    `UNUSED_VAR (rop_cache_req_if.data) 
+    `UNUSED_VAR (rop_cache_req_if.tag)
+    assign rop_cache_req_if.ready = 0;
 
     // TODO: remove
-    assign ccache_rsp_if.valid = 0;
-    assign ccache_rsp_if.tmask = 0;
-    assign ccache_rsp_if.data = 0;     
-    assign ccache_rsp_if.tag = 0;
-    `UNUSED_VAR (ccache_rsp_if.ready);
+    assign rop_cache_rsp_if.valid = 0;
+    assign rop_cache_rsp_if.tmask = 0;
+    assign rop_cache_rsp_if.data = 0;     
+    assign rop_cache_rsp_if.tag = 0;
+    `UNUSED_VAR (rop_cache_rsp_if.ready)
 
     `RESET_RELAY (rop_reset);
 
@@ -165,8 +143,17 @@ module VX_cluster #(
     `endif
         .rop_req_if    (rop_req_if),
         .rop_dcr_if    (rop_dcr_if),
-        .cache_req_if  (ccache_req_if),
-        .cache_rsp_if  (ccache_rsp_if)
+        .cache_req_if  (rop_cache_req_if),
+        .cache_rsp_if  (rop_cache_rsp_if)
+    );
+
+    VX_rop_req_arb #(
+        .NUM_REQS (`NUM_CORES)
+    ) rop_req_arb (
+        .clk     (clk),
+        .reset   (rop_reset),
+        .req_in  (per_core_rop_req_if),
+        .req_out (rop_req_if)
     );
 
 `endif
@@ -200,6 +187,12 @@ module VX_cluster #(
 
         `ifdef EXT_TEX_ENABLE
             .tex_dcr_if     (tex_dcr_if),
+        `endif
+        `ifdef EXT_RASTER_ENABLE        
+            .raster_req_if  (per_core_raster_req_if[i]),
+        `endif
+        `ifdef EXT_RASTER_ENABLE        
+            .rop_req_if     (per_core_rop_req_if[i]),
         `endif
 
             .mem_req_valid  (per_core_mem_req_valid[i]),

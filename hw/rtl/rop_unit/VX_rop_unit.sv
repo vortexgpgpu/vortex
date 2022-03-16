@@ -30,12 +30,6 @@ module VX_rop_unit #(
 
     // TODO: remove
     `UNUSED_VAR (rop_req_if.valid)
-    `UNUSED_VAR (rop_req_if.uuid)
-    `UNUSED_VAR (rop_req_if.cid)
-    `UNUSED_VAR (rop_req_if.wid)
-    `UNUSED_VAR (rop_req_if.tmask)
-    `UNUSED_VAR (rop_req_if.PC)
-    `UNUSED_VAR (rop_req_if.tmask)    
     `UNUSED_VAR (rop_req_if.pos_x)
     `UNUSED_VAR (rop_req_if.pos_y)    
     `UNUSED_VAR (rop_req_if.color)

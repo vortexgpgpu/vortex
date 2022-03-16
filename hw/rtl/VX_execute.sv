@@ -28,6 +28,13 @@ module VX_execute #(
     VX_perf_memsys_if.slave perf_memsys_if,
     VX_perf_pipeline_if.slave perf_pipeline_if,
  `endif
+
+`ifdef EXT_RASTER_ENABLE        
+    VX_raster_req_if        raster_req_if,
+`endif
+`ifdef EXT_RASTER_ENABLE        
+    VX_rop_req_if           rop_req_if,
+`endif
     
     // inputs    
     VX_alu_req_if.slave     alu_req_if,
@@ -166,9 +173,11 @@ module VX_execute #(
     `endif
     `ifdef EXT_RASTER_ENABLE        
         .raster_csr_if  (raster_csr_if),
+        .raster_req_if  (raster_req_if),
     `endif
     `ifdef EXT_RASTER_ENABLE        
         .rop_csr_if     (rop_csr_if),
+        .rop_req_if     (rop_req_if),
     `endif
         .warp_ctl_if    (warp_ctl_if),
         .gpu_commit_if  (gpu_commit_if)
