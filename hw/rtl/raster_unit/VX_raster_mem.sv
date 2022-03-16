@@ -11,7 +11,6 @@
 module VX_raster_mem #(  
     parameter RASTER_SLICE_NUM  = 4,
     parameter RASTER_TILE_SIZE  = 16,
-    parameter RASTER_TILE_BITS  = $clog2(RASTER_TILE_SIZE),
     parameter RASTER_RS_SIZE    = 8, // Reservation station size
     parameter RASTER_SLICE_BITS = `LOG2UP(RASTER_SLICE_NUM)
 ) (
@@ -37,7 +36,7 @@ module VX_raster_mem #(
     output logic                                    ready, out_valid
 );
 
-    logic [2:0] location_identifier;
+    localparam RASTER_TILE_BITS  = $clog2(RASTER_TILE_SIZE);
 
     // Bit tag identifier for type of memory request
     // Request #1: Tile and primitive id fetch => bit = 01
@@ -130,7 +129,6 @@ module VX_raster_mem #(
                 else begin
                     // Check the reponse tag type
                     if (mem_rsp_tag[1:0] == TILE_FETCH) begin
-                        location_identifier <= 1;
                         // returned value is tile data
                         temp_x_loc <= `RASTER_TILE_DATA_BITS'((mem_rsp_data[0] & {{`RASTER_TILE_DATA_BITS{1'b0}}, {`RASTER_TILE_DATA_BITS{1'b1}}}) << RASTER_TILE_BITS);
                         temp_y_loc <= `RASTER_TILE_DATA_BITS'((mem_rsp_data[0] >> (`RASTER_TILE_DATA_BITS)) << RASTER_TILE_BITS);
@@ -144,8 +142,6 @@ module VX_raster_mem #(
                         temp_tbuf_addr <= temp_tbuf_addr + 4;
                     end
                     else if (mem_rsp_tag[1:0] == PRIM_ID_FETCH) begin
-                        location_identifier <= 2;
-                        //integer pbuf_addr = temp_pbuf_addr + mem_rsp_data[0]*temp_pbuf_stride;
                         // Launch next request based on pid
                         mem_tag_type <= PRIM_DATA_FETCH;
                         mem_req_valid <= 1;
@@ -155,7 +151,6 @@ module VX_raster_mem #(
                         end
                     end
                     else if (mem_rsp_tag[1:0] == PRIM_DATA_FETCH) begin
-                        location_identifier <= 3;
                         // Insert data into RS
                         raster_rs[raster_rs_empty_index] <= {temp_x_loc, temp_y_loc,
                             mem_rsp_data[0], mem_rsp_data[1], mem_rsp_data[2],
@@ -167,7 +162,6 @@ module VX_raster_mem #(
 
                         // Incrememnt the prim and tile count register
                         if (temp_prim_count + 1 == temp_num_prims) begin
-                            location_identifier <= 4;
                             // => Last primitive fetched
                             temp_prim_count <= 0;
                             temp_tile_count <= temp_tile_count + 1;
@@ -177,7 +171,6 @@ module VX_raster_mem #(
                                 temp_tile_count <= temp_tile_count + 1;
                             end
                             else begin
-                                location_identifier <= 5;
                                 // Fetch the next tile
                                 // Launch memory request to get the tbuf and pbuf
                                 mem_tag_type <= TILE_FETCH;
@@ -191,7 +184,6 @@ module VX_raster_mem #(
                             end
                         end
                         else begin
-                            location_identifier <= 6;
                             temp_prim_count <= temp_prim_count + 1;
                             // Launch the request to get next primitive id // Launch the pid fetch
                             mem_tag_type <= PRIM_ID_FETCH;
