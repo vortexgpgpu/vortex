@@ -130,10 +130,12 @@
 
 // ROP unit CSRs
 `define CSR_ROP_BEGIN               `CSR_RASTER_END
-`define CSR_ROP_DST_IDX             (`CSR_ROP_BEGIN+0)
-`define CSR_ROP_DST_POS             (`CSR_ROP_BEGIN+1)
-`define CSR_ROP_SAMPLE_MASK         (`CSR_ROP_BEGIN+2)
-`define CSR_ROP_END                 (`CSR_ROP_BEGIN+3)
+`define CSR_ROP_RT_IDX              (`CSR_ROP_BEGIN+0)
+`define CSR_ROP_POS                 (`CSR_ROP_BEGIN+1)
+`define CSR_ROP_SAMPLE_IDX          (`CSR_ROP_BEGIN+2)
+`define CSR_ROP_SAMPLE_MASK         (`CSR_ROP_BEGIN+3)
+`define CSR_ROP_DEPTH_MSAA          (`CSR_ROP_BEGIN+4)
+`define CSR_ROP_END                 (`CSR_ROP_BEGIN+5)
 
 // Texture Units //////////////////////////////////////////////////////////////
 

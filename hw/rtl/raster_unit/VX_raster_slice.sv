@@ -8,6 +8,7 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_slice #(
+    parameter CLUSTER_ID              = 0,
     parameter RASTER_BLOCK_SIZE       = 8,
     parameter RASTER_TILE_SIZE        = 16,
     parameter RASTER_QUAD_OUTPUT_RATE = 4,

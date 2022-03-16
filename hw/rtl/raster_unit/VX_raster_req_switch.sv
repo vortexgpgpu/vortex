@@ -1,8 +1,9 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_req_switch #(  
+    parameter CLUSTER_ID = 0,
     parameter RASTER_SLICE_NUM = 4,
-    parameter RASTER_TILE_SIZE        = 16,
+    parameter RASTER_TILE_SIZE = 16,
     parameter RASTER_RS_SIZE = 8, // Reservation station size
     parameter RASTER_SLICE_BITS = `LOG2UP(RASTER_SLICE_NUM)
 ) (

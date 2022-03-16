@@ -2,13 +2,8 @@
 
 // Module for handling memory requests
 module VX_rop_mem #(
-    parameter NUM_REQS = 4,
-    parameter ADDRW = 32,
-    parameter DATAW = 32,
-    parameter TAGW = 32,
-    parameter WORD_SIZE = 4,
-    parameter QUEUE_SIZE = 16,
-    parameter PARTIAL_RESPONSE = 1
+    parameter CLUSTER_ID = 0,
+    parameter NUM_LANES  = 4
 ) (
     input wire clk,
     input wire reset,
@@ -36,13 +31,13 @@ module VX_rop_mem #(
     VX_dcache_rsp_if.slave  cache_rsp_if;
 
     VX_mem_streamer #(
-        .NUM_REQS (NUM_REQS),
-        .ADDRW (ADDRW),
-        .DATAW (DATAW),
-        .TAGW (TAGW),
-        .WORD_SIZE (WORD_SIZE),
-        .QUEUE_SIZE (QUEUE_SIZE),
-        .PARTIAL_RESPONSE (PARTIAL_RESPONSE)
+        .NUM_REQS (NUM_LANES),
+        .ADDRW (32),
+        .DATAW (32),
+        .TAGW (32),
+        .WORD_SIZE (4),
+        .QUEUE_SIZE (16),
+        .PARTIAL_RESPONSE (1)
     ) mem_streamer (
         .clk            (clk),
         .reset          (reset),
