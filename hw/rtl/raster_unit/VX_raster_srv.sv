@@ -31,6 +31,9 @@ module VX_raster_srv #(
         .raster_to_rop_if (raster_to_rop_if)
     );
 
+    assign raster_req_if.valid = 0;
+    assign raster_req_if.tmask = 0;
+
     `UNUSED_VAR (raster_srv_req_if.valid)
     `UNUSED_VAR (raster_srv_req_if.uuid)
     `UNUSED_VAR (raster_srv_req_if.wid)

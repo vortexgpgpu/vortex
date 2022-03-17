@@ -6,21 +6,24 @@
 interface VX_raster_req_if ();
 
     wire                                valid;
-    wire [31:0]                         empty;
-    raster_stamp_t [`NUM_THREADS-1:0]   stamp;    
+    wire [`NUM_THREADS-1:0]             tmask;    
+    raster_stamp_t [`NUM_THREADS-1:0]   stamp;
+    wire [31:0]                         empty;    
     wire                                ready;
 
     modport master (
         output valid,
-        input  empty,
+        output tmask,
         input  stamp,
+        input  empty,        
         input  ready
     );
 
     modport slave (
         input  valid,
-        output empty,
+        input  tmask,        
         output stamp,
+        output empty,
         output ready
     );
 

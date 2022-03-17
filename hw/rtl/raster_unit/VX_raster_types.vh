@@ -6,10 +6,12 @@
 package raster_types;
 
 typedef struct packed {
-    logic [`RASTER_DCR_DATA_BITS-1:0]    tbuf_addr;      // Tile buffer address
-    logic [`RASTER_DCR_DATA_BITS-1:0]    tile_count;     // Number of tiles in the tile buffer
-    logic [`RASTER_DCR_DATA_BITS-1:0]    pbuf_addr;      // Primitive (triangle) data buffer start address
-    logic [`RASTER_DCR_DATA_BITS-1:0]    pbuf_stride;    // Primitive data stride to fetch vertices
+    logic [`RASTER_DCR_DATA_BITS-1:0]    tbuf_addr;     // Tile buffer address
+    logic [`RASTER_DCR_DATA_BITS-1:0]    tile_count;    // Number of tiles in the tile buffer
+    logic [`RASTER_DCR_DATA_BITS-1:0]    pbuf_addr;     // Primitive (triangle) data buffer start address
+    logic [`RASTER_DCR_DATA_BITS-1:0]    pbuf_stride;   // Primitive data stride to fetch vertices
+    logic [15:0]                         dst_width;     // window width
+    logic [15:0]                         dst_height;    // window height
 } raster_dcrs_t;
 
 typedef struct packed {

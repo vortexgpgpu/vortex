@@ -244,22 +244,22 @@ private:
 
   void initialize() {
     // get device configuration
-    buf_baseaddr_       = dcrs_.at(ROP_STATE_ZBUF_ADDR);
-    buf_pitch_          = dcrs_.at(ROP_STATE_ZBUF_PITCH);
-    depth_func_         = dcrs_.at(ROP_STATE_DEPTH_FUNC);
-    depth_mask_         = dcrs_.at(ROP_STATE_DEPTH_MASK);
-    stencil_front_func_ = dcrs_.at(ROP_STATE_STENCIL_FUNC) & 0xffff;
-    stencil_front_zpass_= dcrs_.at(ROP_STATE_STENCIL_ZPASS) & 0xffff;
-    stencil_front_zfail_= dcrs_.at(ROP_STATE_STENCIL_ZFAIL) & 0xffff;
-    stencil_front_fail_ = dcrs_.at(ROP_STATE_STENCIL_FAIL) & 0xffff;
-    stencil_front_mask_ = dcrs_.at(ROP_STATE_STENCIL_MASK) & 0xffff;
-    stencil_front_ref_  = dcrs_.at(ROP_STATE_STENCIL_REF) & 0xffff;
-    stencil_back_func_  = dcrs_.at(ROP_STATE_STENCIL_FUNC) >> 16;
-    stencil_back_zpass_ = dcrs_.at(ROP_STATE_STENCIL_ZPASS) >> 16;
-    stencil_back_zfail_ = dcrs_.at(ROP_STATE_STENCIL_ZFAIL) >> 16;
-    stencil_back_fail_  = dcrs_.at(ROP_STATE_STENCIL_FAIL) >> 16;
-    stencil_back_mask_  = dcrs_.at(ROP_STATE_STENCIL_MASK) >> 16;
-    stencil_back_ref_   = dcrs_.at(ROP_STATE_STENCIL_REF) >> 16;
+    buf_baseaddr_       = dcrs_.read(DCR_ROP_ZBUF_ADDR);
+    buf_pitch_          = dcrs_.read(DCR_ROP_ZBUF_PITCH);
+    depth_func_         = dcrs_.read(DCR_ROP_DEPTH_FUNC);
+    depth_mask_         = dcrs_.read(DCR_ROP_DEPTH_MASK);
+    stencil_front_func_ = dcrs_.read(DCR_ROP_STENCIL_FUNC) & 0xffff;
+    stencil_front_zpass_= dcrs_.read(DCR_ROP_STENCIL_ZPASS) & 0xffff;
+    stencil_front_zfail_= dcrs_.read(DCR_ROP_STENCIL_ZFAIL) & 0xffff;
+    stencil_front_fail_ = dcrs_.read(DCR_ROP_STENCIL_FAIL) & 0xffff;
+    stencil_front_mask_ = dcrs_.read(DCR_ROP_STENCIL_MASK) & 0xffff;
+    stencil_front_ref_  = dcrs_.read(DCR_ROP_STENCIL_REF) & 0xffff;
+    stencil_back_func_  = dcrs_.read(DCR_ROP_STENCIL_FUNC) >> 16;
+    stencil_back_zpass_ = dcrs_.read(DCR_ROP_STENCIL_ZPASS) >> 16;
+    stencil_back_zfail_ = dcrs_.read(DCR_ROP_STENCIL_ZFAIL) >> 16;
+    stencil_back_fail_  = dcrs_.read(DCR_ROP_STENCIL_FAIL) >> 16;
+    stencil_back_mask_  = dcrs_.read(DCR_ROP_STENCIL_MASK) >> 16;
+    stencil_back_ref_   = dcrs_.read(DCR_ROP_STENCIL_REF) >> 16;
 
     depth_enabled_      = !((depth_func_ == ROP_DEPTH_FUNC_ALWAYS) && !depth_mask_);
     
@@ -389,17 +389,17 @@ private:
 
   void initialize() {
     // get device configuration
-    buf_baseaddr_   = dcrs_.at(ROP_STATE_CBUF_ADDR);
-    buf_pitch_      = dcrs_.at(ROP_STATE_CBUF_PITCH);
-    write_mask_     = dcrs_.at(ROP_STATE_CBUF_MASK);
-    blend_mode_rgb_ = dcrs_.at(ROP_STATE_BLEND_MODE) & 0xffff;
-    blend_mode_a_   = dcrs_.at(ROP_STATE_BLEND_MODE) >> 16;
-    blend_src_rgb_  = (dcrs_.at(ROP_STATE_BLEND_FUNC) >>  0) & 0xff;
-    blend_src_a_    = (dcrs_.at(ROP_STATE_BLEND_FUNC) >>  8) & 0xff;
-    blend_dst_rgb_  = (dcrs_.at(ROP_STATE_BLEND_FUNC) >> 16) & 0xff;
-    blend_dst_a_    = (dcrs_.at(ROP_STATE_BLEND_FUNC) >> 24) & 0xff;
-    blend_const_    = dcrs_.at(ROP_STATE_BLEND_CONST);
-    logic_op_       = dcrs_.at(ROP_STATE_LOGIC_OP);    
+    buf_baseaddr_   = dcrs_.read(DCR_ROP_CBUF_ADDR);
+    buf_pitch_      = dcrs_.read(DCR_ROP_CBUF_PITCH);
+    write_mask_     = dcrs_.read(DCR_ROP_CBUF_MASK);
+    blend_mode_rgb_ = dcrs_.read(DCR_ROP_BLEND_MODE) & 0xffff;
+    blend_mode_a_   = dcrs_.read(DCR_ROP_BLEND_MODE) >> 16;
+    blend_src_rgb_  = (dcrs_.read(DCR_ROP_BLEND_FUNC) >>  0) & 0xff;
+    blend_src_a_    = (dcrs_.read(DCR_ROP_BLEND_FUNC) >>  8) & 0xff;
+    blend_dst_rgb_  = (dcrs_.read(DCR_ROP_BLEND_FUNC) >> 16) & 0xff;
+    blend_dst_a_    = (dcrs_.read(DCR_ROP_BLEND_FUNC) >> 24) & 0xff;
+    blend_const_    = dcrs_.read(DCR_ROP_BLEND_CONST);
+    logic_op_       = dcrs_.read(DCR_ROP_LOGIC_OP);    
     blend_enabled_  = !((blend_mode_rgb_ == ROP_BLEND_MODE_LOGICOP) 
                     && (logic_op_ == ROP_LOGIC_OP_COPY));
     initialized_    = true;

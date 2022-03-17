@@ -54,6 +54,8 @@ private:
   uint32_t pbuf_baseaddr_;
   uint32_t pbuf_stride_;
   uint32_t tbuf_addr_;
+  uint32_t dst_width_;
+  uint32_t dst_height_;
   uint32_t tile_x_;
   uint32_t tile_y_;
   uint32_t num_prims_;    
@@ -98,11 +100,14 @@ private:
       for (uint32_t i = 0; i < 2; ++i) {
         // test if pixel overlaps triangle
         if (ee0 >= fxZero && ee1 >= fxZero && ee2 >= fxZero) {
-          uint32_t f = j * 2 + i;          
-          mask |= (1 << f);                
-          bcoords[f].x = ee0;
-          bcoords[f].y = ee1;
-          bcoords[f].z = ee2;          
+          // test if the pixel overlaps rendering region
+          if ((x+i) < dst_width_ && (y+j) < dst_height_) {
+            uint32_t f = j * 2 + i;          
+            mask |= (1 << f);                
+            bcoords[f].x = ee0;
+            bcoords[f].y = ee1;
+            bcoords[f].z = ee2;          
+          }
         }
         // update edge equation x components
         ee0 += primitive.edges[0].x;
@@ -255,10 +260,12 @@ private:
 
   void initialize() {
     // get device configuration
-    num_tiles_     = dcrs_.at(RASTER_STATE_TILE_COUNT);
-    tbuf_baseaddr_ = dcrs_.at(RASTER_STATE_TBUF_ADDR);
-    pbuf_baseaddr_ = dcrs_.at(RASTER_STATE_PBUF_ADDR);
-    pbuf_stride_   = dcrs_.at(RASTER_STATE_PBUF_STRIDE);
+    num_tiles_     = dcrs_.read(DCR_RASTER_TILE_COUNT);
+    tbuf_baseaddr_ = dcrs_.read(DCR_RASTER_TBUF_ADDR);
+    pbuf_baseaddr_ = dcrs_.read(DCR_RASTER_PBUF_ADDR);
+    pbuf_stride_   = dcrs_.read(DCR_RASTER_PBUF_STRIDE);
+    dst_width_     = dcrs_.read(DCR_RASTER_DST_SIZE) & 0xffff;
+    dst_height_    = dcrs_.read(DCR_RASTER_DST_SIZE) >> 16;
 
     tbuf_addr_ = tbuf_baseaddr_;
     cur_tile_  = 0;

@@ -41,6 +41,7 @@ module VX_raster_csr #(
     `UNUSED_VAR (rdata)
 
     `UNUSED_VAR (raster_req_if.valid)
+    `UNUSED_VAR (raster_req_if.tmask)
     `UNUSED_VAR (raster_req_if.stamp)
     `UNUSED_VAR (raster_req_if.empty)
     `UNUSED_VAR (raster_req_if.ready)

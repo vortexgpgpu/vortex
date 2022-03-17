@@ -25,7 +25,7 @@ public:
 
     class DCRS {
     private:
-        std::array<uint32_t, ROP_STATE_COUNT> states_;
+        std::array<uint32_t, DCR_ROP_STATE_COUNT> states_;
 
     public:
         DCRS() {
@@ -36,10 +36,6 @@ public:
             for (auto& state : states_) {
                 state = 0;
             }
-        }
-
-        uint32_t at(uint32_t state) const {
-            return states_.at(state);
         }
 
         uint32_t read(uint32_t addr) const {
