@@ -108,14 +108,14 @@ module VX_raster_csr #(
         if (raster_csr_if.read_enable) begin
             dpi_trace("%d: core%0d-raster-csr-read: wid=%0d, tmask=%b, state=", $time, CORE_ID, raster_csr_if.read_wid, raster_csr_if.read_tmask);
             trace_raster_csr(raster_csr_if.read_addr);
-            dpi_trace(", data=", raster_csr_if.read_data);
+            dpi_trace(", data=");
             `TRACE_ARRAY1D(raster_csr_if.read_data, `NUM_THREADS);
             dpi_trace(" (#%0d)\n", raster_csr_if.read_uuid);
         end
         if (raster_csr_if.write_enable) begin
             dpi_trace("%d: core%0d-raster-csr-write: wid=%0d, tmask=%b, state=", $time, CORE_ID, raster_csr_if.write_wid, raster_csr_if.write_tmask);
             trace_raster_csr(raster_csr_if.write_addr);
-            dpi_trace(", data=", raster_csr_if.write_data);
+            dpi_trace(", data=");
             `TRACE_ARRAY1D(raster_csr_if.write_data, `NUM_THREADS);
             dpi_trace(" (#%0d)\n", raster_csr_if.write_uuid);
         end

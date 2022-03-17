@@ -66,14 +66,14 @@ module VX_rop_csr #(
         if (rop_csr_if.read_enable) begin
             dpi_trace("%d: core%0d-rop-csr-read: wid=%0d, tmask=%b, state=", $time, CORE_ID, rop_csr_if.read_wid, rop_csr_if.read_tmask);
             trace_rop_csr(rop_csr_if.read_addr);
-            dpi_trace(", data=", rop_csr_if.read_data);
+            dpi_trace(", data=");
             `TRACE_ARRAY1D(rop_csr_if.read_data, `NUM_THREADS);
             dpi_trace(" (#%0d)\n", rop_csr_if.read_uuid);
         end
         if (rop_csr_if.write_enable) begin
             dpi_trace("%d: core%0d-rop-csr-write: wid=%0d, tmask=%b, state=", $time, CORE_ID, rop_csr_if.write_wid, rop_csr_if.write_tmask);
             trace_rop_csr(rop_csr_if.write_addr);
-            dpi_trace(", data=", rop_csr_if.write_data);
+            dpi_trace(", data=");
             `TRACE_ARRAY1D(rop_csr_if.write_data, `NUM_THREADS);
             dpi_trace(" (#%0d)\n", rop_csr_if.write_uuid);
         end

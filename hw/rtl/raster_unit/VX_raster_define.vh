@@ -20,6 +20,22 @@ task trace_raster_state (
     endcase  
 endtask
 
+task trace_raster_csr (
+    input [`CSR_ADDR_BITS-1:0] addr
+);
+    case (addr)
+        `CSR_RASTER_FRAG:       dpi_trace("FRAG");
+        `CSR_RASTER_X_Y:        dpi_trace("X_Y");
+        `CSR_RASTER_MASK_PID:   dpi_trace("MASK_PID");
+        `CSR_RASTER_BCOORD_X:   dpi_trace("BCOORD_X");
+        `CSR_RASTER_BCOORD_Y:   dpi_trace("BCOORD_Y");
+        `CSR_RASTER_BCOORD_Z:   dpi_trace("BCOORD_Z");
+        `CSR_RASTER_GRAD_X:     dpi_trace("GRAD_X");
+        `CSR_RASTER_GRAD_Y:     dpi_trace("GRAD_Y");
+        default:                dpi_trace("?");
+    endcase  
+endtask
+
 `include "VX_raster_types.vh"
 
 `IGNORE_WARNINGS_BEGIN

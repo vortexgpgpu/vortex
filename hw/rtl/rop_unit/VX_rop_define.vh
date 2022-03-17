@@ -28,6 +28,19 @@ task trace_rop_state (
     endcase  
 endtask
 
+task trace_rop_csr (
+    input [`CSR_ADDR_BITS-1:0] addr
+);
+    case (addr)
+        `CSR_ROP_RT_IDX:        dpi_trace("RT_IDX");
+        `CSR_ROP_POS:           dpi_trace("POS");
+        `CSR_ROP_SAMPLE_IDX:    dpi_trace("SAMPLE_IDX");
+        `CSR_ROP_SAMPLE_MASK:   dpi_trace("SAMPLE_MASK");
+        `CSR_ROP_DEPTH_MSAA:    dpi_trace("DEPTH_MSAA");
+        default:                dpi_trace("?");
+    endcase  
+endtask
+
 `include "VX_rop_types.vh"
 
 `IGNORE_WARNINGS_BEGIN

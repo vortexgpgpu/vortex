@@ -69,14 +69,14 @@ module VX_tex_csr #(
         if (tex_csr_if.read_enable) begin
             dpi_trace("%d: core%0d-tex-csr-read: wid=%0d, tmask=%b, state=", $time, CORE_ID, tex_csr_if.read_wid, tex_csr_if.read_tmask);
             trace_tex_csr(tex_csr_if.read_addr);
-            dpi_trace(", data=", tex_csr_if.read_data);
+            dpi_trace(", data=");
             `TRACE_ARRAY1D(tex_csr_if.read_data, `NUM_THREADS);
             dpi_trace(" (#%0d)\n", tex_csr_if.read_uuid);
         end
         if (tex_csr_if.write_enable) begin
             dpi_trace("%d: core%0d-tex-csr-write: wid=%0d, tmask=%b, state=", $time, CORE_ID, tex_csr_if.write_wid, tex_csr_if.write_tmask);
             trace_tex_csr(tex_csr_if.write_addr);
-            dpi_trace(", data=", tex_csr_if.write_data);
+            dpi_trace(", data=");
             `TRACE_ARRAY1D(tex_csr_if.write_data, `NUM_THREADS);
             dpi_trace(" (#%0d)\n", tex_csr_if.write_uuid);
         end
