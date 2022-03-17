@@ -10,7 +10,7 @@ DPI_DIR = ../../../dpi
 
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(DPI_DIR)
 
-VERILATOR_ROOT = /opt/verilator/share/verilator
+VERILATOR_ROOT = /opt/verilator/
 VERILATOR ?= $(VERILATOR_ROOT)/bin/verilator
 
 VL_FLAGS += --exe --cc $(TOP).sv --top-module $(TOP)

@@ -2,111 +2,139 @@
 
 module VX_rop_ds #(
     parameter DEPTH_TEST = 1,
+    parameter STENCIL_TEST = 1,
     parameter CLUSTER_ID = 0,
     parameter NUM_LANES  = 4
 ) (
     input wire clk,
     input wire reset,
 
-    // Inputs
-    VX_rop_req_if.slave rop_req_if,
-    VX_rop_dcr_if.slave rop_dcr_if
+    // Depth Test
+    input wire [`ROP_DEPTH_FUNC_BITS] depth_func,
+    input wire [23:0] depth_ref,
+    input wire [23:0] depth_val,
+    input wire [3:0]  depth_mask,
+
+    output wire [23:0] depth_out,
+
+    // Stencil Test
+    input wire [7:0]                        stencil_val;
+    input wire [`ROP_STENCIL_FACE_BITS-1:0] stencil_face;
+
+    input wire [`ROP_DEPTH_FUNC_BITS-1:0] stencil_front_func;    
+    input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_front_zpass;
+    input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_front_zfail;
+    input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_front_fail;
+    input wire [7:0]                      stencil_front_mask;
+    input wire [7:0]                      stencil_front_ref;
+    input wire [`ROP_DEPTH_FUNC_BITS-1:0] stencil_back_func;    
+    input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_back_zpass;
+    input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_back_zfail;
+    input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_back_fail;
+    input wire [7:0]                      stencil_back_mask;
+    input wire [7:0]                      stencil_back_ref;
+
+    output wire [7:0]  stencil_out
+    output wire [31:0] mask_out
+
 );
 
-    localparam MASK = 24'h7FFFFF;
+    wire [`ROP_DEPTH_FUNC_BITS-1:0] stencil_func;
+    reg  [`ROP_STENCIL_OP_BITS-1:0] stencil_op;
+    wire [7:0] stencil_mask;
+    wire [7:0] stencil_ref;
 
-    // Depth Buffer
-    wire                    zbuf_req_valid;
-    wire                    zbuf_req_rw;
-    wire [`NUM_THREADS-1:0] zbuf_req_mask;
-    wire [3:0]              zbuf_req_byteen;
-    wire [31:0]             zbuf_req_addr;
-    wire [31:0]             zbuf_req_data;
-    wire [`UUID_BITS-1:0]   zbuf_req_tag;
-    wire                    zbuf_req_ready;
+    wire [7:0] stencil_ref_m;
+    wire [7:0] stencil_val_m;
 
-    wire                    zbuf_rsp_valid;
-    wire [`NUM_THREADS-1:0] zbuf_rsp_mask;
-    wire [31:0]             zbuf_rsp_data;
-    wire [`UUID_BITS-1:0]   zbuf_rsp_tag;
-    wire                    zbuf_rsp_ready;
+    wire [23:0] depth_result;
+    wire [7:0]  stencil_result;
+    reg  [31:0] write_mask = stencil_mask << 24;
 
-    wire zbuf_req_fire;
+    wire dpass;
+    wire spass;
+
+    ///////////////////////////////////////////////////////////////
 
     // Depth Test
-    wire [31:0] depth_ref;
-    wire [31:0] depth_val;
-    wire        passed;
-
-    ///////////////////////////////////////////////////////////////
-
-    // Read depth value from the depth buffer
-
-    assign zbuf_req_valid  = rop_req_if.valid;
-    assign zbuf_req_mask   = rop_req_if.tmask;
-    assign zbuf_req_byteen = 4'b1111;
-    assign zbuf_req_addr   = rop_dcr_if.zbuf_addr + (rop_req_if.y * rop_dcr_if.zbuf_pitch) + (rop_req_if.x * 4);
-    assign zbuf_req_tag    = rop_req_if.uuid;
-
-    assign zbuf_req_fire = zbuf_req_valid & zbuf_req_ready;
-     
-    VX_rop_mem #(
-        .NUM_REQS (NUM_LANES),
-        .TAGW (`UUID_BITS)
-    ) zbuf_streamer (
-        .clk            (clk),
-        .reset          (reset),
-
-        .req_valid      (zbuf_req_valid),
-        .req_rw         (zbuf_req_rw),
-        .req_mask       (zbuf_req_mask),
-        .req_byteen     (zbuf_req_byteen),
-        .req_addr       (zbuf_req_addr),
-        .req_data       (zbuf_req_data),
-        .req_tag        (zbuf_req_tag),
-        .req_ready      (zbuf_req_ready),
-
-        .rsp_valid      (zbuf_rsp_valid),
-        .rsp_mask       (zbuf_rsp_mask),
-        .rsp_data       (zbuf_rsp_data),
-        .rsp_tag        (zbuf_rsp_tag),
-        .rsp_ready      (zbuf_rsp_ready)
-    );
-
-    ///////////////////////////////////////////////////////////////
-
-    // Compare depth value with a reference value
-
-    assign depth_ref = rop_req_if.depth & MASK;
-    assign depth_val = zbuf_rsp_data & MASK;
 
     VX_rop_compare #(
-        .DATAW (32)
-    ) do_compare (
-        .func   (rop_dcr_if.depth_func),
+        .DATAW (24)
+    ) depth_compare (
+        .func   (depth_func),
         .a      (depth_ref),
         .b      (depth_val),
-        .result (passed)
+        .result (dpass)
     );
 
-    wire rw = zbuf_rsp_valid && passed && (| rop_dcr_if.depth_mask);
+    always @(*) begin
+        if (!DEPTH_TEST) 
+            depth_result = depth_val;
+        else begin
+            if (dpass & (| depth_mask))
+                depth_result = depth_ref;
+            else    
+                depth_result = depth_val;
+        end
+    end
 
     ///////////////////////////////////////////////////////////////
 
-    // Write value into depth buffer
+    // Stencil Test
+
+    assign stencil_func = (stencil_face == `ROP_STENCIL_FACE_FRONT)? stencil_front_func : stencil_back_front;
+    assign stencil_mask = (stencil_face == `ROP_STENCIL_FACE_FRONT)? stencil_front_mask : stencil_back_mask;
+    assign stencil_ref  = (stencil_face == `ROP_STENCIL_FACE_FRONT)? stencil_front_ref : stencil_back_ref;
+
+    assign stencil_ref_m = stencil_ref & stencil_mask;
+    assign stencil_val_m = stencil_val & stencil_mask;
+
+    VX_rop_compare #(
+        .DATAW (8)
+    ) stencil_compare (
+        .func   (stencil_func),
+        .a      (stencil_ref_m),
+        .b      (stencil_val_m),
+        .result (spass)
+    );
+
+    always @(*) begin
+        if (!STENCIL_TEST)
+            stencil_out = stencil_val;
+        else begin 
+            if (spass) begin
+                if (dpass) begin
+                    if (| depth_mask)
+                        write_mask = write_mask | 24'hFFFFFF;
+                    stencil_op = (stencil_face == `ROP_STENCIL_FACE_FRONT)? stencil_front_zpass : stencil_back_zpass;
+                end else
+                    stencil_op = (stencil_face == `ROP_STENCIL_FACE_FRONT)? stencil_front_zfail : stencil_back_zfail;
+            end else
+                stencil_op = (stencil_face == `ROP_STENCIL_FACE_FRONT)? stencil_front_fail : stencil_back_fail;
+        end
+    end
+
+    VX_rop_stencil_op #(
+        .DATAW (8)
+    ) stencil_op_ (
+        .stencil_op     (stencil_op),
+        .stencil_ref    (stencil_ref),
+        .stencil_val    (stencil_val),
+        .stencil_result (stencil_result)
+    );
+
+    ///////////////////////////////////////////////////////////////
 
     VX_pipe_register #(
-        .DATAW	(1 + 32),
+        .DATAW	(8 + 24 + 32),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (1'b1),
-        .data_in  ({rw,        depth_val}),
-        .data_out ({zbuf_req_rw, zbuf_req_data})
+        .data_in  ({depth_result, stencil_result, write_mask}),
+        .data_out ({depth_out,    stencil_out,    mask_out})
     );
-
-    assign rop_req_if.ready = zbuf_req_fire & zbuf_req_rw;
 
     ///////////////////////////////////////////////////////////////
 
