@@ -10,7 +10,7 @@ module VX_tag_access #(
     // Number of banks
     parameter NUM_BANKS         = 1, 
     // Number of associative ways
-    parameter NUM_WAYS          = 8, 
+    parameter NUM_WAYS          = 1, 
     // Size of a word in bytes
     parameter WORD_SIZE         = 1, 
     // bank offset from beginning of index range
@@ -30,7 +30,7 @@ module VX_tag_access #(
     input wire[`LINE_ADDR_WIDTH-1:0]    addr,
     input wire                          fill,    
     input wire                          flush,
-    output wire[NUM_WAYS-1:0]              select_way,
+    output wire[NUM_WAYS-1:0]           select_way,
     output wire                         tag_match
 );
 
@@ -39,71 +39,60 @@ module VX_tag_access #(
     `UNUSED_VAR (reset)
     `UNUSED_VAR (lookup)
 
-    wire [`TAG_SELECT_BITS-1:0] read_tag;
-    wire read_valid;
-    wire[NUM_WAYS-1:0]              tag_match_way;
+    wire [NUM_WAYS-1:0] tag_match_way;
     wire [`LINE_SELECT_BITS-1:0] line_addr = addr[`LINE_SELECT_BITS-1:0];
-    wire [`TAG_SELECT_BITS-1:0] line_tag = `LINE_TAG_ADDR(addr);
-    logic [NUM_WAYS-1:0] repl_way;
-    wire fill_local[NUM_WAYS-1:0];
+    wire [`TAG_SELECT_BITS-1:0] line_tag = `LINE_TAG_ADDR(addr);    
+    wire [NUM_WAYS-1:0] fill_way;
 
-    //cyclic assignment of replacement way
-    initial begin
-        if (reset)
-            repl_way =1;
-        else 
-            repl_way = {repl_way[NUM_WAYS-2:0],repl_way[NUM_WAYS-1]};//rotate left     
-    end
-    generate
-    genvar g;
-    for (g = 0; g < NUM_WAYS; g = g+1) begin
-        assign fill_local[g] = (fill && repl_way[g]) ? 1 : 0;
-    end 
-    endgenerate
-
-    //We use a tag match array to check if each of the arrays has a match 
-    //assign the output wire to the ANDed result of tag_match_array
-
-    wire fill_local[NUM_WAYS-1:0];
-    for (i = 0; i < NUM_WAYS; i = i+1) begin
-        assign fill_local[i] = (fill && repl_way[i]) ? 1 : 0;
+    if (NUM_WAYS > 1)  begin
+        reg [NUM_WAYS-1:0] repl_way;
+        // cyclic assignment of replacement way
+        always @(posedge clk) begin
+            if (reset)
+                repl_way <= 1;
+            else 
+                if (!stall) begin // hold the value on stalls prevent filling different slots twice
+                    repl_way <= {repl_way[NUM_WAYS-2:0], repl_way[NUM_WAYS-1]};
+                end
+        end        
+        for (genvar i = 0; i < NUM_WAYS; ++i) begin
+            assign fill_way[i] = fill & repl_way[i];
+        end
+    end else begin
+        assign fill_way = fill;
     end
 
-    generate 
-        genvar i;
-        for (i = 0; i < NUM_WAYS; i = i+1) begin
-            VX_sp_ram #(
+    for (genvar i = 0; i < NUM_WAYS; ++i) begin
+        wire [`TAG_SELECT_BITS-1:0] read_tag;
+        wire read_valid;
+
+        VX_sp_ram #(
             .DATAW      (`TAG_SELECT_BITS + 1),
             .SIZE       (`LINES_PER_BANK),
             .NO_RWCHECK (1)
-            ) tag_store (
-                .clk(  clk),                 
-                .addr  (line_addr),   
-                .wren  (fill_local[i] || flush),
-                .wdata ({!flush, line_tag}), 
-                .rdata ({read_valid, read_tag})
-            );
-            assign tag_match_way[i] = read_valid && (line_tag == read_tag);
-        end
-    endgenerate
-    //Check if any of the ways have tag match
+        ) tag_store (
+            .clk(  clk),                 
+            .addr  (line_addr),   
+            .wren  (fill_way[i] || flush),
+            .wdata ({!flush, line_tag}), 
+            .rdata ({read_valid, read_tag})
+        );
+        
+        assign tag_match_way[i] = read_valid && (line_tag == read_tag);
+    end
+
+    // Check if any of the ways have tag match
     assign tag_match = |tag_match_way;
 
-    //select_ways is passed to VX_bank and VX_data_access
-    //select_ways = tag_match_way if the access is with fill = 0, else select_ways = replacement way
-    generate
-        genvar m;
-        for (m = 0; m < NUM_WAYS; m = m+1) begin
-            assign select_way[m] = ((fill & repl_way[m]) || (!fill & tag_match_way[m])) ? 1: 0; 
-        end
-    endgenerate
-    
-    `UNUSED_VAR (stall)
+    // return the selected way
+    for (genvar i = 0; i < NUM_WAYS; ++i) begin
+        assign select_way[i] = fill_way[i] | tag_match_way[i];
+    end
     
 `ifdef DBG_TRACE_CACHE_TAG
     always @(posedge clk) begin
         if (fill && ~stall) begin
-            dpi_trace("%d: cache%0d:%0d tag-fill: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, line_tag);
+            dpi_trace("%d: cache%0d:%0d tag-fill: addr=0x%0h, blk_addr=%0d, repl_way=%b, tag_id=0x%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, fill_way, line_tag);
         end
         if (flush) begin
             dpi_trace("%d: cache%0d:%0d tag-flush: addr=0x%0h, blk_addr=%0d\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr);
@@ -112,7 +101,7 @@ module VX_tag_access #(
             if (tag_match) begin
                 dpi_trace("%d: cache%0d:%0d tag-hit: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, line_tag, req_id);
             end else begin
-                dpi_trace("%d: cache%0d:%0d tag-miss: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h, old_tag_id=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, line_tag, read_tag, req_id);
+                dpi_trace("%d: cache%0d:%0d tag-miss: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, line_tag, req_id);
             end
         end          
     end    
