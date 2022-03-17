@@ -30,10 +30,12 @@ module VX_rop_unit #(
 
     // TODO: remove
     `UNUSED_VAR (rop_req_if.valid)
+    `UNUSED_VAR (rop_req_if.tmask)
     `UNUSED_VAR (rop_req_if.pos_x)
     `UNUSED_VAR (rop_req_if.pos_y)    
     `UNUSED_VAR (rop_req_if.color)
     `UNUSED_VAR (rop_req_if.depth)
+    `UNUSED_VAR (rop_req_if.backface)
     assign rop_req_if.ready = 0;
 
     // TODO: remove
