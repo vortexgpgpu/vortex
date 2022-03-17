@@ -270,32 +270,15 @@ private:
     stencil_back_enabled_ = !((stencil_back_func_  == ROP_DEPTH_FUNC_ALWAYS) 
                            && (stencil_back_zpass_ == ROP_STENCIL_OP_KEEP)
                            && (stencil_back_zfail_ == ROP_STENCIL_OP_KEEP));
+
     initialized_        = true;
   }
 
-  bool doDepthTest(uint32_t x, uint32_t y, uint32_t depth) {     
-    uint32_t depth_ref = depth & fixed24_t::MASK;
-    
-    uint32_t buf_addr = buf_baseaddr_ + y * buf_pitch_ + x * 4;
-    
-    uint32_t stored_value;
-    mem_->read(&stored_value, buf_addr, 4);
-
-    uint32_t depth_val = stored_value & fixed24_t::MASK;
-    auto passed = DoCompare(depth_func_, depth_ref, depth_val);
-    if (passed && depth_mask_) {
-      auto write_value = (stored_value & ~fixed24_t::MASK) | (depth_ref & fixed24_t::MASK);
-      mem_->write(&write_value, buf_addr, 4);
-    }
-
-    return passed;
-  }
-
-  bool doStencilTest(uint32_t x, uint32_t y, uint32_t face, uint32_t depth)  { 
+  bool doDepthStencilTest(uint32_t x, uint32_t y, uint32_t isBackface, uint32_t depth)  { 
     auto depth_ref     = depth & fixed24_t::MASK;    
-    auto stencil_func  = face ? stencil_back_func_ : stencil_front_func_;    
-    auto stencil_mask  = face ? stencil_back_mask_ : stencil_front_mask_;
-    auto stencil_ref   = face ? stencil_back_ref_ : stencil_front_ref_;    
+    auto stencil_func  = isBackface ? stencil_back_func_ : stencil_front_func_;    
+    auto stencil_mask  = isBackface ? stencil_back_mask_ : stencil_front_mask_;
+    auto stencil_ref   = isBackface ? stencil_back_ref_ : stencil_front_ref_;    
     auto stencil_ref_m = stencil_ref & stencil_mask;
 
     uint32_t buf_addr = buf_baseaddr_ + y * buf_pitch_ + x * 4;
@@ -319,12 +302,12 @@ private:
         if (depth_mask_) {
           writeMask |= 0xffffff;
         }
-        stencil_op = face ? stencil_back_zpass_ : stencil_front_zpass_;              
+        stencil_op = isBackface ? stencil_back_zpass_ : stencil_front_zpass_;              
       } else {
-        stencil_op = face ? stencil_back_zfail_ : stencil_front_zfail_;
+        stencil_op = isBackface ? stencil_back_zfail_ : stencil_front_zfail_;
       } 
     } else {
-      stencil_op = face ? stencil_back_fail_ : stencil_front_fail_;
+      stencil_op = isBackface ? stencil_back_fail_ : stencil_front_fail_;
     }
 
     auto stencil_result = DoStencilOp(stencil_op, stencil_ref, stencil_val);
@@ -354,15 +337,13 @@ public:
     mem_ = mem;
   }
 
-  bool write(uint32_t x, uint32_t y, uint32_t face, uint32_t depth) {
+  bool write(uint32_t x, uint32_t y, bool isBackface, uint32_t depth) {
     if (!initialized_) {
       this->initialize();
     }
-    auto stencil_enabled = face ? stencil_back_enabled_ : stencil_front_enabled_;
-    if (stencil_enabled) {
-      return this->doStencilTest(x, y, face, depth);
-    } else if (depth_enabled_) {
-      return this->doDepthTest(x, y, depth);
+    auto stencil_enabled = isBackface ? stencil_back_enabled_ : stencil_front_enabled_;
+    if (stencil_enabled || depth_enabled_) {
+      return this->doDepthStencilTest(x, y, isBackface, depth);
     }
     return true;
   }
@@ -486,8 +467,8 @@ public:
       blender_.attach_ram(mem);
     }   
 
-    void write(uint32_t x, uint32_t y, uint32_t face, uint32_t color, uint32_t depth) {
-      if (depthtencil_.write(x, y, face, depth))
+    void write(uint32_t x, uint32_t y, bool isBackface, uint32_t color, uint32_t depth) {
+      if (depthtencil_.write(x, y, isBackface, depth))
         blender_.write(x, y, color);
     }
 
@@ -524,8 +505,8 @@ void RopUnit::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
 }
 
-void RopUnit::write(uint32_t x, uint32_t y, uint32_t face, uint32_t color, uint32_t depth) {
-  impl_->write(x, y, face, color, depth);
+void RopUnit::write(uint32_t x, uint32_t y, bool isBackface, uint32_t color, uint32_t depth) {
+  impl_->write(x, y, isBackface, color, depth);
 }
 
 void RopUnit::tick() {

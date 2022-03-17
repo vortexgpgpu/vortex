@@ -63,7 +63,7 @@ public:
 
     void reset();
 
-    void write(uint32_t x, uint32_t y, uint32_t face, uint32_t color, uint32_t depth);
+    void write(uint32_t x, uint32_t y, bool isBackface, uint32_t color, uint32_t depth);
 
     void tick();
 

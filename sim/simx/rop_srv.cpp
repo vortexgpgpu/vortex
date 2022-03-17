@@ -53,7 +53,7 @@ public:
         auto j  = frag >> 1;
         auto px = x + i;
         auto py = y + j;
-        rop_unit_->write(px, py, 0, color, depth);
+        rop_unit_->write(px, py, false, color, depth);
       }
     }
 
