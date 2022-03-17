@@ -1,9 +1,9 @@
 XLEN ?= 32
 
 ifeq ($(XLEN),32)
-RISCV_TOOLCHAIN_PATH = /opt/riscv-gnu-toolchain
+RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 else
-RISCV_TOOLCHAIN_PATH = /opt/riscv64-gnu-toolchain
+RISCV_TOOLCHAIN_PATH ?= /opt/riscv64-gnu-toolchain
 endif
 
 RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf-
