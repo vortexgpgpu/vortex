@@ -40,6 +40,10 @@ module VX_raster_dcr #(
                 `DCR_RASTER_PBUF_STRIDE: begin 
                     dcrs.pbuf_stride <= dcr_wr_data[`RASTER_DCR_DATA_BITS-1:0];
                 end
+                `DCR_RASTER_DST_SIZE: begin 
+                    dcrs.dst_width  <= dcr_wr_data[15:0];
+                    dcrs.dst_height <= dcr_wr_data[31:16];
+                end
             endcase
         end
     end

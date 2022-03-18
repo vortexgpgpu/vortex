@@ -19,10 +19,8 @@
 
 `define BANK_SIZE               (CACHE_SIZE / NUM_BANKS)
 
-//Swetha: added ways 
-`define NUM_WAYS                    8 //dummy value
 `define WAY_SEL_WIDTH           `CLOG2(NUM_WAYS)
-//Swetha: modified LINES_PER_BANK definition
+
 `define LINES_PER_BANK          (`BANK_SIZE / (CACHE_LINE_SIZE*NUM_WAYS))
 `define WORDS_PER_LINE          (CACHE_LINE_SIZE / WORD_SIZE)
 

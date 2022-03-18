@@ -100,6 +100,16 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
   rast_prims.reserve(primitives.size());
 
   uint32_t num_prims = 0;
+
+  #define POS_TO_V2D(d, s) \
+      d.x = s.x; \
+      d.y = s.y
+
+  #define POS_TO_V4D(d, s) \
+    d.x = s.x; \
+    d.y = s.y; \
+    d.z = s.z; \
+    d.w = s.w
   
   for (auto& primitive : primitives) {
     // get primitive vertices
@@ -107,9 +117,10 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
     auto& v1 = vertices.at(primitive.i1);
     auto& v2 = vertices.at(primitive.i2);
 
-    auto& p0 = *(vec4d_f_t*)&v0.pos;
-    auto& p1 = *(vec4d_f_t*)&v1.pos;
-    auto& p2 = *(vec4d_f_t*)&v2.pos;
+    vec4d_f_t p0, p1, p2;
+    POS_TO_V4D (p0, v0.pos);
+    POS_TO_V4D (p1, v1.pos);
+    POS_TO_V4D (p2, v2.pos);
 
     rast_edge_t edges[3];
     rast_bbox_t bbox;
@@ -137,12 +148,14 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
       ClipToScreen(&ps1, p1, 0, width, 0, height, near, far);
       ClipToScreen(&ps2, p2, 0, width, 0, height, near, far);
 
-      // Calculate bounding box 
+      // Calculate bounding box
+      vec2d_f_t q0, q1, q2;
+      POS_TO_V2D (q0, ps0);
+      POS_TO_V2D (q1, ps1);
+      POS_TO_V2D (q2, ps2);
+
       rect_f_t tmp;
-      auto _q0 = (vec2d_f_t*)&ps0;
-      auto _q1 = (vec2d_f_t*)&ps1;
-      auto _q2 = (vec2d_f_t*)&ps2;
-      CalcBoundingBox(&tmp, *_q0, *_q1, *_q2);
+      CalcBoundingBox(&tmp, q0, q1, q2);
       bbox.left   = std::max<int32_t>(0, tmp.left);
       bbox.right  = std::min<int32_t>(width, tmp.right);
       bbox.top    = std::max<int32_t>(0, tmp.top);
@@ -166,13 +179,13 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
       //printf("*** edge1=(%d, %d, %d)\n", edges[1].x.data(), edges[1].y.data(), edges[1].z.data());
       //printf("*** edge2=(%d, %d, %d)\n", edges[2].x.data(), edges[2].y.data(), edges[2].z.data());
          
-      ATTRIBUTE_DELTA(rast_prim.attribs.z, ps0.z, ps1.z, ps2.z);
-      ATTRIBUTE_DELTA(rast_prim.attribs.r, v0.color.r, v1.color.r, v2.color.r);
-      ATTRIBUTE_DELTA(rast_prim.attribs.g, v0.color.g, v1.color.g, v2.color.g);
-      ATTRIBUTE_DELTA(rast_prim.attribs.b, v0.color.b, v1.color.b, v2.color.b);
-      ATTRIBUTE_DELTA(rast_prim.attribs.a, v0.color.a, v1.color.a, v2.color.a);
-      ATTRIBUTE_DELTA(rast_prim.attribs.u, v0.texcoord.u, v1.texcoord.u, v2.texcoord.u);
-      ATTRIBUTE_DELTA(rast_prim.attribs.v, v0.texcoord.v, v1.texcoord.v, v2.texcoord.v);
+      ATTRIBUTE_DELTA (rast_prim.attribs.z, ps0.z, ps1.z, ps2.z);
+      ATTRIBUTE_DELTA (rast_prim.attribs.r, v0.color.r, v1.color.r, v2.color.r);
+      ATTRIBUTE_DELTA (rast_prim.attribs.g, v0.color.g, v1.color.g, v2.color.g);
+      ATTRIBUTE_DELTA (rast_prim.attribs.b, v0.color.b, v1.color.b, v2.color.b);
+      ATTRIBUTE_DELTA (rast_prim.attribs.a, v0.color.a, v1.color.a, v2.color.a);
+      ATTRIBUTE_DELTA (rast_prim.attribs.u, v0.texcoord.u, v1.texcoord.u, v2.texcoord.u);
+      ATTRIBUTE_DELTA (rast_prim.attribs.v, v0.texcoord.v, v1.texcoord.v, v2.texcoord.v);
 
       p = rast_prims.size();
       rast_prims.push_back(rast_prim);      

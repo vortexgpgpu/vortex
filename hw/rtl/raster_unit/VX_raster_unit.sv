@@ -63,7 +63,8 @@ module VX_raster_unit #(
     );
 
     // TODO: remove
-    `UNUSED_VAR (raster_req_if.valid)
+    `UNUSED_VAR (raster_req_if.valid)    
+    `UNUSED_VAR (raster_req_if.tmask)
     assign raster_req_if.stamp = 0;
     assign raster_req_if.empty = 0;
     assign raster_req_if.ready = 0;

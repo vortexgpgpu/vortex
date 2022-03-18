@@ -22,7 +22,7 @@ public:
 
     class DCRS {
     private:
-        std::array<std::array<uint32_t, TEX_STATE_COUNT>, TEX_STAGE_COUNT> states_;
+        std::array<std::array<uint32_t, (DCR_TEX_STATE_COUNT-1)>, TEX_STAGE_COUNT> states_;
         uint32_t stage_;
 
     public:
@@ -39,15 +39,11 @@ public:
             }
         }
 
-        const std::array<uint32_t, TEX_STATE_COUNT>& at(uint32_t stage) const {
-            return states_.at(stage);
-        }
-
         uint32_t read(uint32_t addr) const {
             if (addr == DCR_TEX_STAGE) {
                 return stage_;
             }
-            uint32_t state = DCR_TEX_STATE(addr);
+            uint32_t state = DCR_TEX_STATE(addr-1);
             return states_.at(stage_).at(state);
         }
     
@@ -56,9 +52,7 @@ public:
                 stage_ = value;
                 return;
             }
-            uint32_t state = DCR_TEX_STATE(addr);
-            assert(stage_ < states_.size());
-            assert(state < states_.at(0).size());
+            uint32_t state = DCR_TEX_STATE(addr-1);
             states_.at(stage_).at(state) = value;
         }
     };

@@ -16,7 +16,7 @@ module VX_bank #(
     // Number of ports per banks
     parameter NUM_PORTS                     = 1,
     // Number of associative ways 
-    parameter NUM_WAYS                      = 8, 
+    parameter NUM_WAYS                      = 1, 
     // Size of a word in bytes
     parameter WORD_SIZE                     = 1, 
 
@@ -232,7 +232,7 @@ module VX_bank #(
 
     wire tag_match_st0;
 
-    //added for associativity 
+    // added for associativity
     wire [NUM_WAYS-1:0] select_way_st0;
     wire [NUM_WAYS-1:0] select_way_st1;
 
@@ -242,9 +242,9 @@ module VX_bank #(
         .CACHE_SIZE       (CACHE_SIZE),
         .CACHE_LINE_SIZE  (CACHE_LINE_SIZE),
         .NUM_BANKS        (NUM_BANKS),
+        .NUM_WAYS         (NUM_WAYS),
         .WORD_SIZE        (WORD_SIZE),   
-        .BANK_ADDR_OFFSET (BANK_ADDR_OFFSET),
-        .NUM_WAYS(NUM_WAYS)
+        .BANK_ADDR_OFFSET (BANK_ADDR_OFFSET) 
     ) tag_access (
         .clk       (clk),
         .reset     (reset),
@@ -258,13 +258,15 @@ module VX_bank #(
         .addr      (addr_st0),        
         .fill      (do_fill_st0),
         .flush     (do_flush_st0),
-         //added for associativity
         .select_way (select_way_st0),
         .tag_match (tag_match_st0)
     );
 
     // we have a core request hit
     assign miss_st0 = (is_read_st0 || is_write_st0) && ~tag_match_st0;
+
+    // ensure mshr reply never get a miss
+    `RUNTIME_ASSERT(tag_match_st0 || ~(valid_st0 && is_mshr_st0), ("runtime error"));
 
     wire [MSHR_ADDR_WIDTH-1:0] mshr_id_a_st0 = (is_read_st0 || is_write_st0) ? mshr_alloc_id : mshr_id_st0;
 
@@ -296,10 +298,10 @@ module VX_bank #(
         .CACHE_SIZE     (CACHE_SIZE),
         .CACHE_LINE_SIZE(CACHE_LINE_SIZE),
         .NUM_BANKS      (NUM_BANKS),
+        .NUM_WAYS       (NUM_WAYS),
         .NUM_PORTS      (NUM_PORTS),
         .WORD_SIZE      (WORD_SIZE),
-        .WRITE_ENABLE   (WRITE_ENABLE),
-        .NUM_WAYS(NUM_WAYS)
+        .WRITE_ENABLE   (WRITE_ENABLE)        
      ) data_access (
         .clk        (clk),
         .reset      (reset),
@@ -307,7 +309,7 @@ module VX_bank #(
         .req_id     (req_id_st1),
 
         .stall      (crsq_stall),
-        //added for associativity
+
         .select_way (select_way_st1),
 
         .read       (do_read_st1 || do_mshr_st1),      

@@ -111,64 +111,14 @@ int render(const CGLTrace& trace) {
   for (auto& drawcall : trace.drawcalls) {
     auto& states = drawcall.states;
 
-    if (states.texture_enabled) {
-      std::vector<uint8_t> texbuf;    
-      std::vector<uint32_t> mip_offsets;
-
-      auto& texture = trace.textures.at(drawcall.texture_id);      
-      
-      auto tex_bpp = Format::GetInfo(texture.format).BytePerPixel;
-      auto tex_pitch = texture.width * tex_bpp;
-
-      // generate mipmaps
-      RT_CHECK(GenerateMipmaps(texbuf, mip_offsets, texture.pixels.data(), texture.format, texture.width, texture.height, tex_pitch));
-
-      uint32_t tex_logwidth = log2ceil(texture.width);
-      uint32_t tex_logheight = log2ceil(texture.height);
-
-      int tex_format = toVXFormat(texture.format);
-
-      int tex_filter = (states.texture_magfilter != CGLTrace::FILTER_NEAREST) 
-                    || (states.texture_magfilter != CGLTrace::FILTER_NEAREST);
-
-      int tex_wrapU = (states.texture_addressU == CGLTrace::ADDRESS_WRAP);
-      int tex_wrapV = (states.texture_addressU == CGLTrace::ADDRESS_WRAP);
-
-      // allocate texture memory
-      if (texbuf_addr != -1ull) vx_mem_free(device, texbuf_addr); 
-      RT_CHECK(vx_mem_alloc(device, texbuf.size(), &texbuf_addr));
-      std::cout << "texbuf_addr=0x" << std::hex << texbuf_addr << std::endl;
-
-      // upload texture data
-      std::cout << "upload texture buffer" << std::endl;      
-      { 
-        RT_CHECK(vx_buf_alloc(device, texbuf.size(), &staging_buf));
-        auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
-        memcpy(buf_ptr, texbuf.data(), texbuf.size());
-        RT_CHECK(vx_copy_to_dev(staging_buf, texbuf_addr, texbuf.size(), 0));
-        vx_buf_free(staging_buf);
-        staging_buf = nullptr;
-      }
-
-      // configure texture units
-      vx_dcr_write(device, DCR_TEX_STAGE,  0);
-      vx_dcr_write(device, DCR_TEX_LOGDIM, (tex_logheight << 16) | tex_logwidth);	
-      vx_dcr_write(device, DCR_TEX_FORMAT, tex_format);
-      vx_dcr_write(device, DCR_TEX_WRAP,   (tex_wrapV << 16) | tex_wrapU);
-      vx_dcr_write(device, DCR_TEX_FILTER, tex_filter);
-      vx_dcr_write(device, DCR_TEX_ADDR,   texbuf_addr);
-      for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
-        assert(i < TEX_LOD_MAX);
-        vx_dcr_write(device, DCR_TEX_MIPOFF(i), mip_offsets.at(i));
-      };
-    }
-
     std::vector<uint8_t> tilebuf;
     std::vector<uint8_t> primbuf;
     
     // Perform tile binning
     auto num_tiles = Binning(tilebuf, primbuf, drawcall.vertices, drawcall.primitives, dst_width, dst_height, drawcall.viewport.near, drawcall.viewport.far, tile_size);
     std::cout << "Binning allocated " << num_tiles << " tiles and " << primbuf.size() << " primitives." << std::endl;
+    if (0 == num_tiles)
+      continue;
 
     // allocate tile memory
     if (tilebuf_addr != -1ull) vx_mem_free(device, tilebuf_addr); 
@@ -224,6 +174,7 @@ int render(const CGLTrace& trace) {
     vx_dcr_write(device, DCR_RASTER_TILE_COUNT,  num_tiles);
     vx_dcr_write(device, DCR_RASTER_PBUF_ADDR,   primbuf_addr);
     vx_dcr_write(device, DCR_RASTER_PBUF_STRIDE, primbuf_stride);
+    vx_dcr_write(device, DCR_RASTER_DST_SIZE, (dst_height << 16) | dst_width);
 
     // configure rop color buffer
     vx_dcr_write(device, DCR_ROP_CBUF_ADDR,  cbuf_addr);
@@ -267,6 +218,59 @@ int render(const CGLTrace& trace) {
                                              | (blend_dst << 16)  // DST_RGB 
                                              | (blend_src << 8)   // SRC_A
                                              | (blend_src << 0)); // SRC_RGB
+    }
+    
+    if (states.texture_enabled) {
+      // configure texture states
+      std::vector<uint8_t> texbuf;    
+      std::vector<uint32_t> mip_offsets;
+
+      auto& texture = trace.textures.at(drawcall.texture_id);      
+      
+      auto tex_bpp = Format::GetInfo(texture.format).BytePerPixel;
+      auto tex_pitch = texture.width * tex_bpp;
+
+      // generate mipmaps
+      RT_CHECK(GenerateMipmaps(texbuf, mip_offsets, texture.pixels.data(), texture.format, texture.width, texture.height, tex_pitch));
+
+      uint32_t tex_logwidth = log2ceil(texture.width);
+      uint32_t tex_logheight = log2ceil(texture.height);
+
+      int tex_format = toVXFormat(texture.format);
+
+      int tex_filter = (states.texture_magfilter != CGLTrace::FILTER_NEAREST) 
+                    || (states.texture_magfilter != CGLTrace::FILTER_NEAREST);
+
+      int tex_wrapU = (states.texture_addressU == CGLTrace::ADDRESS_WRAP);
+      int tex_wrapV = (states.texture_addressU == CGLTrace::ADDRESS_WRAP);
+
+      // allocate texture memory
+      if (texbuf_addr != -1ull) vx_mem_free(device, texbuf_addr); 
+      RT_CHECK(vx_mem_alloc(device, texbuf.size(), &texbuf_addr));
+      std::cout << "texbuf_addr=0x" << std::hex << texbuf_addr << std::endl;
+
+      // upload texture data
+      std::cout << "upload texture buffer" << std::endl;      
+      { 
+        RT_CHECK(vx_buf_alloc(device, texbuf.size(), &staging_buf));
+        auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
+        memcpy(buf_ptr, texbuf.data(), texbuf.size());
+        RT_CHECK(vx_copy_to_dev(staging_buf, texbuf_addr, texbuf.size(), 0));
+        vx_buf_free(staging_buf);
+        staging_buf = nullptr;
+      }
+
+      // configure texture units
+      vx_dcr_write(device, DCR_TEX_STAGE,  0);
+      vx_dcr_write(device, DCR_TEX_LOGDIM, (tex_logheight << 16) | tex_logwidth);	
+      vx_dcr_write(device, DCR_TEX_FORMAT, tex_format);
+      vx_dcr_write(device, DCR_TEX_WRAP,   (tex_wrapV << 16) | tex_wrapU);
+      vx_dcr_write(device, DCR_TEX_FILTER, tex_filter);
+      vx_dcr_write(device, DCR_TEX_ADDR,   texbuf_addr);
+      for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
+        assert(i < TEX_LOD_MAX);
+        vx_dcr_write(device, DCR_TEX_MIPOFF(i), mip_offsets.at(i));
+      };
     }
 
     auto time_start = std::chrono::high_resolution_clock::now();

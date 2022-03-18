@@ -34,6 +34,15 @@ module VX_rop_srv #(
 
     `UNUSED_VAR (rop_csrs)
 
+    assign rop_req_if.valid = 0;
+    assign rop_req_if.tmask = 0;
+    assign rop_req_if.pos_x = 0;
+    assign rop_req_if.pos_y = 0;
+    assign rop_req_if.color = 0;
+    assign rop_req_if.depth = 0;
+    assign rop_req_if.backface = 0;
+    `UNUSED_VAR (rop_req_if.ready);
+
     assign raster_to_rop_if.valid = 0;
     assign raster_to_rop_if.wid = 0;
     `UNUSED_VAR(raster_to_rop_if.pos_x)
