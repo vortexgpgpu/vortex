@@ -40,8 +40,8 @@ module VX_rop_dcr (
                 `DCR_ROP_DEPTH_FUNC: begin 
                     dcrs.depth_func <= dcr_wr_data[`ROP_DEPTH_FUNC_BITS-1:0];
                 end
-                `DCR_ROP_DEPTH_MASK: begin 
-                    dcrs.depth_mask <= dcr_wr_data[0];
+                `DCR_ROP_DEPTH_WRITEMASK: begin 
+                    dcrs.depth_writemask <= dcr_wr_data[0];
                 end
                 `DCR_ROP_STENCIL_FUNC: begin 
                     dcrs.stencil_front_func <= dcr_wr_data[0 +: `ROP_DEPTH_FUNC_BITS];
@@ -58,14 +58,17 @@ module VX_rop_dcr (
                 `DCR_ROP_STENCIL_FAIL: begin 
                     dcrs.stencil_front_fail <= dcr_wr_data[0 +: `ROP_STENCIL_OP_BITS];
                     dcrs.stencil_back_fail <= dcr_wr_data[16 +: `ROP_STENCIL_OP_BITS];
+                end                
+                `DCR_ROP_STENCIL_REF: begin 
+                    dcrs.stencil_front_ref <= dcr_wr_data[0 +: `ROP_STENCIL_BITS];
+                    dcrs.stencil_back_ref <= dcr_wr_data[16 +: `ROP_STENCIL_BITS];
                 end
                 `DCR_ROP_STENCIL_MASK: begin 
-                    dcrs.stencil_front_mask <= dcr_wr_data[0 +: 8];
-                    dcrs.stencil_back_mask <= dcr_wr_data[16 +: 8];
+                    dcrs.stencil_front_mask <= dcr_wr_data[0 +: `ROP_STENCIL_BITS];
+                    dcrs.stencil_back_mask <= dcr_wr_data[16 +: `ROP_STENCIL_BITS];
                 end
-                `DCR_ROP_STENCIL_REF: begin 
-                    dcrs.stencil_front_ref <= dcr_wr_data[0 +: 8];
-                    dcrs.stencil_back_ref <= dcr_wr_data[16 +: 8];
+                `DCR_ROP_STENCIL_WRITEMASK: begin 
+                    dcrs.stencil_writemask <= dcr_wr_data[0 +: `ROP_STENCIL_BITS];
                 end
                 `DCR_ROP_BLEND_MODE: begin 
                     dcrs.blend_mode_rgb <= dcr_wr_data[15:0][`ROP_BLEND_MODE_BITS-1:0];

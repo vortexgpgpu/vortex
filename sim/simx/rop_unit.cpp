@@ -224,7 +224,7 @@ private:
   uint32_t buf_baseaddr_;
   uint32_t buf_pitch_;
   uint32_t depth_func_;
-  bool     depth_mask_;
+  bool     depth_writemask_;
   uint32_t stencil_front_func_;
   uint32_t stencil_front_zpass_;
   uint32_t stencil_front_zfail_;
@@ -237,6 +237,7 @@ private:
   uint32_t stencil_back_fail_;
   uint32_t stencil_back_mask_;
   uint32_t stencil_back_ref_;
+  uint32_t stencil_writemask_;
   bool depth_enabled_;
   bool stencil_front_enabled_;
   bool stencil_back_enabled_;
@@ -247,35 +248,39 @@ private:
     buf_baseaddr_       = dcrs_.read(DCR_ROP_ZBUF_ADDR);
     buf_pitch_          = dcrs_.read(DCR_ROP_ZBUF_PITCH);
     depth_func_         = dcrs_.read(DCR_ROP_DEPTH_FUNC);
-    depth_mask_         = dcrs_.read(DCR_ROP_DEPTH_MASK);
+    depth_writemask_    = dcrs_.read(DCR_ROP_DEPTH_WRITEMASK);
     stencil_front_func_ = dcrs_.read(DCR_ROP_STENCIL_FUNC) & 0xffff;
     stencil_front_zpass_= dcrs_.read(DCR_ROP_STENCIL_ZPASS) & 0xffff;
     stencil_front_zfail_= dcrs_.read(DCR_ROP_STENCIL_ZFAIL) & 0xffff;
     stencil_front_fail_ = dcrs_.read(DCR_ROP_STENCIL_FAIL) & 0xffff;
-    stencil_front_mask_ = dcrs_.read(DCR_ROP_STENCIL_MASK) & 0xffff;
     stencil_front_ref_  = dcrs_.read(DCR_ROP_STENCIL_REF) & 0xffff;
+    stencil_front_mask_ = dcrs_.read(DCR_ROP_STENCIL_MASK) & 0xffff;    
     stencil_back_func_  = dcrs_.read(DCR_ROP_STENCIL_FUNC) >> 16;
     stencil_back_zpass_ = dcrs_.read(DCR_ROP_STENCIL_ZPASS) >> 16;
     stencil_back_zfail_ = dcrs_.read(DCR_ROP_STENCIL_ZFAIL) >> 16;
-    stencil_back_fail_  = dcrs_.read(DCR_ROP_STENCIL_FAIL) >> 16;
-    stencil_back_mask_  = dcrs_.read(DCR_ROP_STENCIL_MASK) >> 16;
+    stencil_back_fail_  = dcrs_.read(DCR_ROP_STENCIL_FAIL) >> 16;    
     stencil_back_ref_   = dcrs_.read(DCR_ROP_STENCIL_REF) >> 16;
+    stencil_back_mask_  = dcrs_.read(DCR_ROP_STENCIL_MASK) >> 16;
+    stencil_writemask_  = dcrs_.read(DCR_ROP_STENCIL_WRITEMASK);
 
-    depth_enabled_      = !((depth_func_ == ROP_DEPTH_FUNC_ALWAYS) && !depth_mask_);
+    depth_enabled_      = !((depth_func_ == ROP_DEPTH_FUNC_ALWAYS) 
+                         && !depth_writemask_);
     
     stencil_front_enabled_ = !((stencil_front_func_  == ROP_DEPTH_FUNC_ALWAYS) 
                             && (stencil_front_zpass_ == ROP_STENCIL_OP_KEEP)
-                            && (stencil_front_zfail_ == ROP_STENCIL_OP_KEEP));
+                            && (stencil_front_zfail_ == ROP_STENCIL_OP_KEEP)
+                            && (stencil_front_mask_  == ROP_STENCIL_MASK));
     
     stencil_back_enabled_ = !((stencil_back_func_  == ROP_DEPTH_FUNC_ALWAYS) 
                            && (stencil_back_zpass_ == ROP_STENCIL_OP_KEEP)
-                           && (stencil_back_zfail_ == ROP_STENCIL_OP_KEEP));
+                           && (stencil_back_zfail_ == ROP_STENCIL_OP_KEEP)
+                           && (stencil_back_mask_  == ROP_STENCIL_MASK));
 
-    initialized_        = true;
+    initialized_ = true;
   }
 
   bool doDepthStencilTest(uint32_t x, uint32_t y, uint32_t isBackface, uint32_t depth)  { 
-    auto depth_ref     = depth & fixed24_t::MASK;    
+    auto depth_ref     = depth & ROP_DEPTH_MASK;    
     auto stencil_func  = isBackface ? stencil_back_func_ : stencil_front_func_;    
     auto stencil_mask  = isBackface ? stencil_back_mask_ : stencil_front_mask_;
     auto stencil_ref   = isBackface ? stencil_back_ref_ : stencil_front_ref_;    
@@ -286,12 +291,12 @@ private:
     uint32_t stored_value;          
     mem_->read(&stored_value, buf_addr, 4);          
 
-    uint32_t stencil_val = stored_value >> 24;
-    uint32_t depth_val   = stored_value & 0xffffff;   
+    uint32_t stencil_val = stored_value >> ROP_DEPTH_BITS;
+    uint32_t depth_val   = stored_value & ROP_DEPTH_MASK;   
 
     uint32_t stencil_val_m = stencil_val & stencil_mask;
 
-    uint32_t writeMask = stencil_mask << 24;
+    uint32_t writeMask = stencil_writemask_ << ROP_DEPTH_BITS;
 
     uint32_t stencil_op;
 
@@ -299,9 +304,7 @@ private:
     if (passed) {
       passed = DoCompare(depth_func_, depth_ref, depth_val);
       if (passed) {
-        if (depth_mask_) {
-          writeMask |= 0xffffff;
-        }
+        writeMask |= (depth_writemask_ ? ROP_DEPTH_MASK : 0);
         stencil_op = isBackface ? stencil_back_zpass_ : stencil_front_zpass_;              
       } else {
         stencil_op = isBackface ? stencil_back_zfail_ : stencil_front_zfail_;
@@ -313,7 +316,7 @@ private:
     auto stencil_result = DoStencilOp(stencil_op, stencil_ref, stencil_val);
 
     // Write the depth stencil value
-    auto merged_value = (stencil_result << 24) | depth_ref;
+    auto merged_value = (stencil_result << ROP_DEPTH_BITS) | depth_ref;
     auto write_value = (stored_value & ~writeMask) | (merged_value & writeMask);
     mem_->write(&write_value, buf_addr, 4);
 
@@ -380,10 +383,16 @@ private:
     blend_dst_rgb_  = (dcrs_.read(DCR_ROP_BLEND_FUNC) >> 16) & 0xff;
     blend_dst_a_    = (dcrs_.read(DCR_ROP_BLEND_FUNC) >> 24) & 0xff;
     blend_const_    = dcrs_.read(DCR_ROP_BLEND_CONST);
-    logic_op_       = dcrs_.read(DCR_ROP_LOGIC_OP);    
-    blend_enabled_  = !((blend_mode_rgb_ == ROP_BLEND_MODE_LOGICOP) 
-                    && (logic_op_ == ROP_LOGIC_OP_COPY));
-    initialized_    = true;
+    logic_op_       = dcrs_.read(DCR_ROP_LOGIC_OP);  
+
+    blend_enabled_  = !((blend_mode_rgb_ == ROP_BLEND_MODE_ADD)
+                     && (blend_mode_a_   == ROP_BLEND_MODE_ADD) 
+                     && (blend_src_rgb_  == ROP_BLEND_FUNC_ONE) 
+                     && (blend_src_a_    == ROP_BLEND_FUNC_ONE) 
+                     && (blend_dst_rgb_  == ROP_BLEND_FUNC_ZERO) 
+                     && (blend_dst_a_    == ROP_BLEND_FUNC_ZERO));
+
+    initialized_ = true;
   }
 
 public:
@@ -403,7 +412,7 @@ public:
     mem_ = mem;
   }
 
-  cocogfx::ColorARGB doBlend(cocogfx::ColorARGB src, cocogfx::ColorARGB dst, cocogfx::ColorARGB cst) {    
+  cocogfx::ColorARGB doBlend(cocogfx::ColorARGB src, cocogfx::ColorARGB dst, cocogfx::ColorARGB cst) {        
     auto s_rgb = DoBlendFunc(blend_src_rgb_, src, dst, cst);
     auto s_a   = DoBlendFunc(blend_src_a_, src, dst, cst);
     auto d_rgb = DoBlendFunc(blend_dst_rgb_, src, dst, cst);
@@ -426,11 +435,16 @@ public:
     cocogfx::ColorARGB src(color);
     cocogfx::ColorARGB dst(stored_value);
     cocogfx::ColorARGB cst(blend_const_);
-    auto new_color = this->doBlend(src, dst, cst);
 
-    // printf("color[%d,%d]=(%d,%d,%d,%d)\n", x, y, new_color.r, new_color.g, new_color.b, new_color.a);
+    cocogfx::ColorARGB result_color;
+    if (blend_enabled_) {
+      result_color = this->doBlend(src, dst, cst);
+    } else {
+      result_color = src;
+    }
 
-    auto write_value = (stored_value & ~write_mask_) | (new_color & write_mask_);
+    // printf("color[%d,%d]=(%d,%d,%d,%d)\n", x, y, result_color.r, result_color.g, result_color.b, result_color.a);
+    auto write_value = (stored_value & ~write_mask_) | (result_color & write_mask_);
     mem_->write(&write_value, buf_addr, 4);
   }
 };

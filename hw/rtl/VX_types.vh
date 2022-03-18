@@ -197,6 +197,12 @@
 
 // Render Output Units ////////////////////////////////////////////////////////
 
+`define ROP_DEPTH_BITS              24 
+`define ROP_DEPTH_MASK              ((1 << `ROP_DEPTH_BITS) - 1)
+
+`define ROP_STENCIL_BITS            8
+`define ROP_STENCIL_MASK            ((1 << `ROP_STENCIL_BITS) - 1)
+
 `define ROP_DEPTH_FUNC_ALWAYS       0
 `define ROP_DEPTH_FUNC_NEVER        1
 `define ROP_DEPTH_FUNC_LESS         2
@@ -217,12 +223,12 @@
 `define ROP_STENCIL_OP_DECR_WRAP    7
 `define ROP_STENCIL_OP_BITS         3
 
-`define ROP_BLEND_MODE_LOGICOP      0  // deprecated!
-`define ROP_BLEND_MODE_ADD          1
-`define ROP_BLEND_MODE_SUB          2
-`define ROP_BLEND_MODE_REV_SUB      3
-`define ROP_BLEND_MODE_MIN          4
-`define ROP_BLEND_MODE_MAX          5
+`define ROP_BLEND_MODE_ADD          0
+`define ROP_BLEND_MODE_SUB          1
+`define ROP_BLEND_MODE_REV_SUB      2
+`define ROP_BLEND_MODE_MIN          3
+`define ROP_BLEND_MODE_MAX          4
+`define ROP_BLEND_MODE_LOGICOP      5
 `define ROP_BLEND_MODE_BITS         3
 
 `define ROP_BLEND_FUNC_ZERO                   0 
@@ -242,10 +248,10 @@
 `define ROP_BLEND_FUNC_ALPHA_SAT              14
 `define ROP_BLEND_FUNC_BITS                   4
 
-`define ROP_LOGIC_OP_COPY           0
-`define ROP_LOGIC_OP_CLEAR          1
-`define ROP_LOGIC_OP_AND            2
-`define ROP_LOGIC_OP_AND_REVERSE    3
+`define ROP_LOGIC_OP_CLEAR          0
+`define ROP_LOGIC_OP_AND            1
+`define ROP_LOGIC_OP_AND_REVERSE    2
+`define ROP_LOGIC_OP_COPY           3
 `define ROP_LOGIC_OP_AND_INVERTED   4
 `define ROP_LOGIC_OP_NOOP           5
 `define ROP_LOGIC_OP_XOR            6
@@ -267,18 +273,19 @@
 `define DCR_ROP_ZBUF_ADDR           (`DCR_ROP_STATE_BEGIN+3)
 `define DCR_ROP_ZBUF_PITCH          (`DCR_ROP_STATE_BEGIN+4)
 `define DCR_ROP_DEPTH_FUNC          (`DCR_ROP_STATE_BEGIN+5)
-`define DCR_ROP_DEPTH_MASK          (`DCR_ROP_STATE_BEGIN+6)
+`define DCR_ROP_DEPTH_WRITEMASK     (`DCR_ROP_STATE_BEGIN+6)
 `define DCR_ROP_STENCIL_FUNC        (`DCR_ROP_STATE_BEGIN+7)
 `define DCR_ROP_STENCIL_ZPASS       (`DCR_ROP_STATE_BEGIN+8)
 `define DCR_ROP_STENCIL_ZFAIL       (`DCR_ROP_STATE_BEGIN+9)
 `define DCR_ROP_STENCIL_FAIL        (`DCR_ROP_STATE_BEGIN+10)
-`define DCR_ROP_STENCIL_MASK        (`DCR_ROP_STATE_BEGIN+11)
-`define DCR_ROP_STENCIL_REF         (`DCR_ROP_STATE_BEGIN+12)
-`define DCR_ROP_BLEND_MODE          (`DCR_ROP_STATE_BEGIN+13)
-`define DCR_ROP_BLEND_FUNC          (`DCR_ROP_STATE_BEGIN+14)
-`define DCR_ROP_BLEND_CONST         (`DCR_ROP_STATE_BEGIN+15)
-`define DCR_ROP_LOGIC_OP            (`DCR_ROP_STATE_BEGIN+16)
-`define DCR_ROP_STATE_END           (`DCR_ROP_STATE_BEGIN+17)
+`define DCR_ROP_STENCIL_REF         (`DCR_ROP_STATE_BEGIN+11)
+`define DCR_ROP_STENCIL_MASK        (`DCR_ROP_STATE_BEGIN+12)
+`define DCR_ROP_STENCIL_WRITEMASK   (`DCR_ROP_STATE_BEGIN+13)
+`define DCR_ROP_BLEND_MODE          (`DCR_ROP_STATE_BEGIN+14)
+`define DCR_ROP_BLEND_FUNC          (`DCR_ROP_STATE_BEGIN+15)
+`define DCR_ROP_BLEND_CONST         (`DCR_ROP_STATE_BEGIN+16)
+`define DCR_ROP_LOGIC_OP            (`DCR_ROP_STATE_BEGIN+17)
+`define DCR_ROP_STATE_END           (`DCR_ROP_STATE_BEGIN+18)
 
 `define DCR_ROP_STATE(addr)         ((addr) - `DCR_ROP_STATE_BEGIN)
 `define DCR_ROP_STATE_COUNT         (`DCR_ROP_STATE_END-`DCR_ROP_STATE_BEGIN)

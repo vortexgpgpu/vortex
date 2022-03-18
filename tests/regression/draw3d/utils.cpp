@@ -136,8 +136,8 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
 
       // Calculate edge equation
       auto det = EdgeEquation(edges, pn0, pn1, pn2);
-      if (det <= 0) {
-        // reject back-facing or degenerate triangles
+      if (det == 0) {
+        // reject degenerate triangles
         continue;
       }
     }       

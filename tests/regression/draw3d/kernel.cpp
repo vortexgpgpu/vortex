@@ -47,7 +47,7 @@ using fixeduv_t = cocogfx::TFixed<TEX_FXD_FRAC>;
 	INTERPOLATE_i(0, dst, src); \
 	INTERPOLATE_i(1, dst, src); \
 	INTERPOLATE_i(2, dst, src); \
-	INTERPOLATE_i(3, dst, src);
+	INTERPOLATE_i(3, dst, src)
 
 #define TEXTURING(dst, u, v) \
 	dst[0] = vx_tex(fixeduv_t(u[0]).data(), fixeduv_t(v[0]).data(), 0); \
@@ -55,17 +55,17 @@ using fixeduv_t = cocogfx::TFixed<TEX_FXD_FRAC>;
 	dst[2] = vx_tex(fixeduv_t(u[2]).data(), fixeduv_t(v[2]).data(), 0); \
 	dst[3] = vx_tex(fixeduv_t(u[3]).data(), fixeduv_t(v[3]).data(), 0)
 
-#define MODULATE_i(i, dst_r, dst_g, dst_b, dst_a, src) \
-	dst_r[i] = fixed24_t::make(cocogfx::Mul8(dst_r[i].data(), src[i].r)); \
-	dst_g[i] = fixed24_t::make(cocogfx::Mul8(dst_g[i].data(), src[i].g)); \
-	dst_b[i] = fixed24_t::make(cocogfx::Mul8(dst_b[i].data(), src[i].b)); \
-	dst_a[i] = fixed24_t::make(cocogfx::Mul8(dst_a[i].data(), src[i].a)); \
+#define MODULATE_i(i, dst, src1_r, src1_g, src1_b, src1_a, src2) \
+	dst[i].r = (src1_r[i].data() * src2[i].r) >> fixed24_t::FRAC; \
+	dst[i].g = (src1_g[i].data() * src2[i].g) >> fixed24_t::FRAC; \
+	dst[i].b = (src1_b[i].data() * src2[i].b) >> fixed24_t::FRAC; \
+	dst[i].a = (src1_a[i].data() * src2[i].a) >> fixed24_t::FRAC
 
-#define MODULATE(dst_r, dst_g, dst_b, dst_a, src) \
-	MODULATE_i(0, dst_r, dst_g, dst_b, dst_a, src); \
-	MODULATE_i(1, dst_r, dst_g, dst_b, dst_a, src); \
-	MODULATE_i(2, dst_r, dst_g, dst_b, dst_a, src); \
-	MODULATE_i(3, dst_r, dst_g, dst_b, dst_a, src)
+#define MODULATE(dst, src1_r, src1_g, src1_b, src1_a, src2) \
+	MODULATE_i(0, dst, src1_r, src1_g, src1_b, src1_a, src2); \
+	MODULATE_i(1, dst, src1_r, src1_g, src1_b, src1_a, src2); \
+	MODULATE_i(2, dst, src1_r, src1_g, src1_b, src1_a, src2); \
+	MODULATE_i(3, dst, src1_r, src1_g, src1_b, src1_a, src2)
 
 #define REPLACE(dst, src) \
 	dst[0] = src[0]; \
@@ -77,7 +77,7 @@ using fixeduv_t = cocogfx::TFixed<TEX_FXD_FRAC>;
 	dst[i].r = static_cast<uint8_t>((src_r[i].data() * 255) >> fixed24_t::FRAC); \
 	dst[i].g = static_cast<uint8_t>((src_g[i].data() * 255) >> fixed24_t::FRAC); \
 	dst[i].b = static_cast<uint8_t>((src_b[i].data() * 255) >> fixed24_t::FRAC); \
-	dst[i].a = static_cast<uint8_t>((src_a[i].data() * 255) >> fixed24_t::FRAC); \
+	dst[i].a = static_cast<uint8_t>((src_a[i].data() * 255) >> fixed24_t::FRAC)
 
 #define TO_RGBA(dst, src_r, src_g, src_b, src_a) \
 	TO_RGBA_i(0, dst, src_r, src_g, src_b, src_a); \
@@ -129,7 +129,7 @@ void shader_function(int task_id, kernel_arg_t* kernel_arg) {
 			INTERPOLATE(v, attribs.v);
 			TEXTURING(tex_color, u, v);			
 			if (kernel_arg->tex_modulate) {
-				MODULATE(r, g, b, a, tex_color);
+				MODULATE(out_color, r, g, b, a, tex_color);
 			} else {
 				REPLACE(out_color, tex_color);
 			}

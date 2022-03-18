@@ -116,7 +116,7 @@ int render(const CGLTrace& trace) {
     
     // Perform tile binning
     auto num_tiles = Binning(tilebuf, primbuf, drawcall.vertices, drawcall.primitives, dst_width, dst_height, drawcall.viewport.near, drawcall.viewport.far, tile_size);
-    std::cout << "Binning allocated " << num_tiles << " tiles and " << primbuf.size() << " primitives." << std::endl;
+    std::cout << "Binning allocated " << std::dec << num_tiles << " tiles with " << primbuf.size() << " total primitives." << std::endl;
     if (0 == num_tiles)
       continue;
 
@@ -156,8 +156,8 @@ int render(const CGLTrace& trace) {
       kernel_arg.tex_modulate  = (states.texture_enabled && states.texture_envmode == CGLTrace::ENVMODE_MODULATE);
       kernel_arg.prim_addr     = primbuf_addr;
 
-      if (kernel_arg.tex_modulate)
-        kernel_arg.color_enabled = false;
+      if (kernel_arg.tex_modulate && !kernel_arg.color_enabled)
+        kernel_arg.tex_modulate = false;
       
       auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
       memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
@@ -191,7 +191,10 @@ int render(const CGLTrace& trace) {
       // configure rop depth states
       auto depth_func = toVXCompare(states.depth_func);
       vx_dcr_write(device, DCR_ROP_DEPTH_FUNC, depth_func);
-      vx_dcr_write(device, DCR_ROP_DEPTH_MASK, states.depth_writemask);
+      vx_dcr_write(device, DCR_ROP_DEPTH_WRITEMASK, states.depth_writemask);
+    } else {
+      vx_dcr_write(device, DCR_ROP_DEPTH_FUNC, ROP_DEPTH_FUNC_ALWAYS);
+      vx_dcr_write(device, DCR_ROP_DEPTH_WRITEMASK, 0);
     }
 
     if (states.stencil_test) {
@@ -204,20 +207,36 @@ int render(const CGLTrace& trace) {
       vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, stencil_zpass);
       vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, stencil_zfail);
       vx_dcr_write(device, DCR_ROP_STENCIL_FAIL, stencil_fail);
-      vx_dcr_write(device, DCR_ROP_STENCIL_MASK, states.stencil_mask);
       vx_dcr_write(device, DCR_ROP_STENCIL_REF, states.stencil_ref);
+      vx_dcr_write(device, DCR_ROP_STENCIL_MASK, states.stencil_mask);
+      vx_dcr_write(device, DCR_ROP_STENCIL_WRITEMASK, states.stencil_writemask);      
+    } else {
+      vx_dcr_write(device, DCR_ROP_STENCIL_FUNC, ROP_DEPTH_FUNC_ALWAYS);
+      vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, ROP_STENCIL_OP_KEEP);
+      vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, ROP_STENCIL_OP_KEEP);
+      vx_dcr_write(device, DCR_ROP_STENCIL_FAIL, ROP_STENCIL_OP_KEEP);
+      vx_dcr_write(device, DCR_ROP_STENCIL_REF, 0);
+      vx_dcr_write(device, DCR_ROP_STENCIL_MASK, ROP_STENCIL_MASK);
+      vx_dcr_write(device, DCR_ROP_STENCIL_WRITEMASK, 0);
     }
 
     if (states.blend_enabled) {
       // configure rop blend states
       auto blend_src = toVXBlendFunc(states.blend_src);
       auto blend_dst = toVXBlendFunc(states.blend_dst);
-      vx_dcr_write(device, DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)  // DST
-                                             | (ROP_BLEND_MODE_ADD << 0)); // SRC
-      vx_dcr_write(device, DCR_ROP_BLEND_FUNC, (blend_dst << 24)  // DST_A
-                                             | (blend_dst << 16)  // DST_RGB 
-                                             | (blend_src << 8)   // SRC_A
-                                             | (blend_src << 0)); // SRC_RGB
+      vx_dcr_write(device, DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)   // DST
+                                             | (ROP_BLEND_MODE_ADD << 0));  // SRC
+      vx_dcr_write(device, DCR_ROP_BLEND_FUNC, (blend_dst << 24)            // DST_A
+                                             | (blend_dst << 16)            // DST_RGB 
+                                             | (blend_src << 8)             // SRC_A
+                                             | (blend_src << 0));           // SRC_RGB
+    } else {
+      vx_dcr_write(device, DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)   // DST
+                                             | (ROP_BLEND_MODE_ADD << 0));  // SRC
+      vx_dcr_write(device, DCR_ROP_BLEND_FUNC, (ROP_BLEND_FUNC_ZERO << 24)  // DST_A
+                                             | (ROP_BLEND_FUNC_ZERO << 16)  // DST_RGB 
+                                             | (ROP_BLEND_FUNC_ONE << 8)    // SRC_A
+                                             | (ROP_BLEND_FUNC_ONE << 0));  // SRC_RGB
     }
     
     if (states.texture_enabled) {
