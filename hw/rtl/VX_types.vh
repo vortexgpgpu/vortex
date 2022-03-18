@@ -212,6 +212,7 @@
 `define ROP_DEPTH_FUNC_GREATER      6
 `define ROP_DEPTH_FUNC_NOTEQUAL     7
 `define ROP_DEPTH_FUNC_BITS         3
+`define ROP_DEPTH_BITS              24
 
 `define ROP_STENCIL_OP_KEEP         0 
 `define ROP_STENCIL_OP_ZERO         1
@@ -222,6 +223,7 @@
 `define ROP_STENCIL_OP_INCR_WRAP    6
 `define ROP_STENCIL_OP_DECR_WRAP    7
 `define ROP_STENCIL_OP_BITS         3
+`define ROP_STENCIL_BITS            8
 
 `define ROP_BLEND_MODE_ADD          0
 `define ROP_BLEND_MODE_SUB          1

@@ -33,11 +33,12 @@ int generate_rand (int min, int max) {
 
 int generate_rand_mask (int mask) {
 	int result = 0;
+	int m = mask;
 	for (int i = 0; i < 4; i++) {
-		int bit = mask & 0b1;
+		int bit = m & 0b1;
 		int rand_bit = generate_rand (0, bit);
 		result |= (rand_bit << i);
-		mask = mask >> 1;
+		m = m >> 1;
 	}
 	return result;
 }
@@ -94,11 +95,11 @@ void MemSim::reset() {
 void MemSim::attach_core() {
 	if (msu_->req_ready) {
 		msu_->req_valid 	= generate_rand(0, 1);
-		msu_->req_rw 		= false;
+		msu_->req_rw 		= generate_rand(0, 1);
 		msu_->req_mask 		= generate_rand(0b0001, 0b1111);
 		msu_->req_byteen 	= 0b1;
 		msu_->req_addr 		= generate_rand(0, 0x10000000);
-		msu_->req_data 		= 0x00000000;
+		msu_->req_data 		= generate_rand(0x60000000, 0x80000000);
 		msu_->req_tag 		= generate_rand(0x00, 0xFF);
 	}
 	msu_->rsp_ready = true;

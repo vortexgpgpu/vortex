@@ -83,6 +83,31 @@ module VX_rop_unit #(
         .color_out (out_color)
     );
 
+    wire [31:0] buf_addr = rop_dcr_if.zbuf_addr + (rop_req_if.pos_y * rop_dcr_if.zbuf_pitch) + (rop_req_if.pos_x * 4);
+
+
+    VX_rop_mem #(
+        .CLUSTER_ID (CLUSTER_ID),
+        .NUM_LANES  (NUM_LANES)
+    ) mem (
+        .clk       (clk),
+        .reset     (reset),
+        .req_valid (rop_req_if.valid),
+        .req_rw    (1'b0),
+        .req_mask  (rop_req_if.tmask),
+        .req_byteen(4'b1111),
+        .req_addr  (buf_addr),
+        .req_data  (0),
+        .req_tag   (),
+        .req_ready (),
+
+        .rsp_valid (),
+        .rsp_mask  (),
+        .rsp_data  (),
+        .rsp_tag   (),
+        .rsp_ready ()
+    )
+
     `UNUSED_VAR (out_color)
     `UNUSED_VAR (blend_ready_in)
     `UNUSED_VAR (blend_valid_out)
