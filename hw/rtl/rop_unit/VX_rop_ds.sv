@@ -1,8 +1,6 @@
 `include "VX_rop_define.vh"
 
 module VX_rop_ds #(
-    parameter DEPTH_TEST = 1,
-    parameter STENCIL_TEST = 1,
     parameter CLUSTER_ID = 0,
     parameter NUM_LANES  = 4
 ) (
@@ -10,46 +8,47 @@ module VX_rop_ds #(
     input wire reset,
 
     // Depth Test
-    input wire [`ROP_DEPTH_FUNC_BITS-1:0] depth_func,
-    input wire [23:0] depth_ref,
-    input wire [23:0] depth_val,
-    input wire [3:0]  depth_mask,
+    input wire [`NUM_LANES-1:0][`ROP_DEPTH_FUNC_BITS-1:0] depth_func,
+    input wire [`NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] depth_ref,
+    input wire [`NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] depth_val,
+    input wire [`NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] depth_mask,
 
-    output wire [23:0] depth_out,
+    output wire [`ROP_DEPTH_BITS-1:0] depth_out,
 
     // Stencil Test
-    input wire [7:0]                      stencil_val,
+    input wire [`ROP_STENCIL_BITS-1:0]    stencil_val,
     input wire                            backface,
 
     input wire [`ROP_DEPTH_FUNC_BITS-1:0] stencil_front_func,    
     input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_front_zpass,
     input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_front_zfail,
     input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_front_fail,
-    input wire [7:0]                      stencil_front_mask,
-    input wire [7:0]                      stencil_front_ref,
+    input wire [`ROP_STENCIL_BITS-1:0]    stencil_front_mask,
+    input wire [`ROP_STENCIL_BITS-1:0]    stencil_front_ref,
     input wire [`ROP_DEPTH_FUNC_BITS-1:0] stencil_back_func,    
     input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_back_zpass,
     input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_back_zfail,
     input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_back_fail,
-    input wire [7:0]                      stencil_back_mask,
-    input wire [7:0]                      stencil_back_ref,
+    input wire [`ROP_STENCIL_BITS-1:0]    stencil_back_mask,
+    input wire [`ROP_STENCIL_BITS-1:0]    stencil_back_ref,
 
-    output wire [7:0]  stencil_out,
-    output wire [31:0] mask_out
+    output wire [`ROP_STENCIL_BITS-1:0]  stencil_out,
+    output wire [`ROP_DEPTH_BITS+`ROP_STENCIL_BITS-1:0] mask_out
 
 );
 
-    reg  [23:0] depth_result;
+    reg  [`ROP_DEPTH_BITS-1:0]      depth_result;
 
     wire [`ROP_DEPTH_FUNC_BITS-1:0] stencil_func;
     reg  [`ROP_STENCIL_OP_BITS-1:0] stencil_op;
-    wire [7:0]  stencil_mask;
-    reg  [31:0] stencil_write_mask;
-    wire [7:0]  stencil_ref;
-    wire [7:0]  stencil_result;
+    wire [`ROP_STENCIL_BITS-1:0]    stencil_mask;
+    wire [`ROP_STENCIL_BITS-1:0]    stencil_ref;
+    wire [`ROP_STENCIL_BITS-1:0]    stencil_result;
 
-    wire [7:0] stencil_ref_m;
-    wire [7:0] stencil_val_m;
+    wire [`ROP_STENCIL_BITS-1:0]    stencil_ref_m;
+    wire [`ROP_STENCIL_BITS-1:0]    stencil_val_m;
+
+    reg  [`ROP_DEPTH_BITS+`ROP_STENCIL_BITS-1:0] stencil_write_mask;
 
     wire dpass;
     wire spass;
@@ -68,14 +67,10 @@ module VX_rop_ds #(
     );
 
     always @(*) begin
-        if (!DEPTH_TEST) 
+        if (dpass & (| depth_mask))
+            depth_result = depth_ref;
+        else    
             depth_result = depth_val;
-        else begin
-            if (dpass & (| depth_mask))
-                depth_result = depth_ref;
-            else    
-                depth_result = depth_val;
-        end
     end
 
     ///////////////////////////////////////////////////////////////
@@ -99,7 +94,7 @@ module VX_rop_ds #(
     );
 
     always @(*) begin
-        stencil_write_mask = {stencil_mask, {24{1'b0}}};
+        stencil_write_mask = {stencil_mask, {`ROP_DEPTH_BITS{1'b0}}};
         if (spass) begin
             if (dpass) begin
                 if (| depth_mask)
@@ -112,7 +107,6 @@ module VX_rop_ds #(
     end
 
     VX_rop_stencil_op #(
-        .STENCIL_TEST (STENCIL_TEST),
         .DATAW (8)
     ) stencil_op_ (
         .stencil_op     (stencil_op),
@@ -124,7 +118,7 @@ module VX_rop_ds #(
     ///////////////////////////////////////////////////////////////
 
     VX_pipe_register #(
-        .DATAW	(8 + 24 + 32),
+        .DATAW	(`ROP_DEPTH_BITS + `ROP_STENCIL_BITS + (`ROP_DEPTH_BITS + `ROP_STENCIL_BITS)),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
