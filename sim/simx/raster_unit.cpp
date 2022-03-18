@@ -64,9 +64,11 @@ private:
   uint32_t pid_;
   RasterUnit::Stamp* stamps_head_;
   RasterUnit::Stamp *stamps_tail_;
+  uint32_t           stamps_size_;
   bool initialized_;  
 
   void stamps_push(RasterUnit::Stamp* stamp) {
+    assert(stamp);
     stamp->next_ = stamps_tail_;
     stamp->prev_ = nullptr;
     if (stamps_tail_)
@@ -74,14 +76,17 @@ private:
     else
       stamps_head_ = stamp;
     stamps_tail_ = stamp;
+    ++stamps_size_;
   }
 
   void stamps_pop() {
+    assert (stamps_size_);
     stamps_head_ = stamps_head_->prev_;
     if (stamps_head_)
       stamps_head_->next_ = nullptr;
     else
       stamps_tail_ = nullptr;
+    --stamps_size_;
   }
 
   void renderQuad(const primitive_t& primitive, 
@@ -338,6 +343,8 @@ private:
       ++cur_tile_;
       num_prims_ = 0;
     }
+
+    //printf("*** generated %d stamps\n", stamps_size_);
   }
 
 public:
@@ -351,6 +358,7 @@ public:
     , block_logsize_(block_logsize)
     , stamps_head_(nullptr)
     , stamps_tail_(nullptr)
+    , stamps_size_(0)
     , initialized_(false) {
     assert(block_logsize >= 1);
     assert(tile_logsize >= block_logsize);

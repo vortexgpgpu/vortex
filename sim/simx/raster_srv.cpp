@@ -11,43 +11,44 @@ using fixed24_t = cocogfx::TFixed<24>;
 
 using vec2_fx2_t = cocogfx::TVector2<fixed24_t>;
 
-class CSR {
-private:
-  RasterUnit::Stamp *stamp_;
-
-public:
-  uint32_t   frag;  
-  vec2_fx2_t gradients[4];
-
-  CSR() 
-    : stamp_(nullptr) 
-    , frag(0)
-  {}
-  
-  ~CSR() { 
-    this->clear();
-  }
-
-  void clear() {
-    if (stamp_ ) {
-      delete stamp_; 
-      stamp_ = nullptr;
-    }
-  }
-
-  void set_stamp(RasterUnit::Stamp *stamp) {
-    if (stamp_ )
-      delete stamp_; 
-    stamp_ = stamp;
-  }
-
-  RasterUnit::Stamp* get_stamp() const {
-    return stamp_;
-  } 
-};
-
 class RasterSrv::Impl {
 private:
+
+  class CSR {
+    private:
+      RasterUnit::Stamp *stamp_;
+
+    public:
+      uint32_t                  frag;  
+      std::array<vec2_fx2_t, 4> gradients;
+
+      CSR() : stamp_(nullptr) { this->clear(); }    
+      ~CSR() { this->clear(); }
+
+      void clear() {
+        if (stamp_) {
+          delete stamp_;
+          stamp_ = nullptr;
+        }
+        frag = 0;
+        for (auto& grad : gradients) {
+          grad.x = fixed24_t(0);
+          grad.y = fixed24_t(0);
+        }
+      }
+
+      void set_stamp(RasterUnit::Stamp *stamp) {
+        if (stamp_)
+          delete stamp_;
+        stamp_ = stamp;
+      }
+
+      RasterUnit::Stamp* get_stamp() const {
+        assert(stamp_);
+        return stamp_;
+      }
+    };
+
     RasterSrv* simobject_;  
     Core* core_;      
     const Arch& arch_;
@@ -105,18 +106,18 @@ public:
       case CSR_RASTER_MASK_PID:
         return (stamp->pid << 4) | stamp->mask;      
       case CSR_RASTER_BCOORD_X:
-        //printf("bcoord.x[%d,%d]=%d\n", px, py, stamp->bcoords[csr.frag].x.data());
-        return stamp->bcoords[csr.frag].x.data();
+        //printf("bcoord.x[%d,%d]=%d\n", px, py, stamp->bcoords.at(csr.frag).x.data());
+        return stamp->bcoords.at(csr.frag).x.data();
       case CSR_RASTER_BCOORD_Y:
-        //printf("bcoord.y[%d,%d]=%d\n", px, py, stamp->bcoords[csr.frag].y.data());
-        return stamp->bcoords[csr.frag].y.data();
+        //printf("bcoord.y[%d,%d]=%d\n", px, py, stamp->bcoords.at(csr.frag).y.data());
+        return stamp->bcoords.at(csr.frag).y.data();
       case CSR_RASTER_BCOORD_Z:
-        //printf("bcoord.z[%d,%d]=%d\n", px, py, stamp->bcoords[csr.frag].z.data());
-        return stamp->bcoords[csr.frag].z.data();
+        //printf("bcoord.z[%d,%d]=%d\n", px, py, stamp->bcoords.at(csr.frag).z.data());
+        return stamp->bcoords.at(csr.frag).z.data();
       case CSR_RASTER_GRAD_X:
-        return csr.gradients[csr.frag].x.data();
+        return csr.gradients.at(csr.frag).x.data();
       case CSR_RASTER_GRAD_Y:
-        return csr.gradients[csr.frag].y.data();
+        return csr.gradients.at(csr.frag).y.data();
       default:
         std::abort();
       }
@@ -141,12 +142,12 @@ public:
         csr.frag = value;
         break;
       case CSR_RASTER_GRAD_X:
-        csr.gradients[csr.frag].x = fixed24_t::make(value);
-        //printf("grad.x[%d,%d]=%d\n", px, py, csr.gradients[csr.frag].x.data());
+        csr.gradients.at(csr.frag).x = fixed24_t::make(value);
+        //printf("grad.x[%d,%d]=%d\n", px, py, csr.gradients.at(csr.frag).x.data());
         break;
       case CSR_RASTER_GRAD_Y:
-        csr.gradients[csr.frag].y = fixed24_t::make(value);
-        //printf("grad.y[%d,%d]=%d\n", px, py, csr.gradients[csr.frag].y.data());
+        csr.gradients.at(csr.frag).y = fixed24_t::make(value);
+        //printf("grad.y[%d,%d]=%d\n", px, py, csr.gradients.at(csr.frag).y.data());
         break;
       default:
         std::abort();
@@ -168,7 +169,7 @@ public:
       auto ax  = fixed24_t::make(a);
       auto bx  = fixed24_t::make(b);
       auto cx  = fixed24_t::make(c);
-      auto out = cocogfx::Dot<fixed24_t>(ax, csr.gradients[csr.frag].x, bx, csr.gradients[csr.frag].y) + cx;
+      auto out = cocogfx::Dot<fixed24_t>(ax, csr.gradients.at(csr.frag).x, bx, csr.gradients.at(csr.frag).y) + cx;
       //printf("interpolate[%d,%d](a=%d, b=%d, c=%d)=%d\n", px, py, a, b, c, out.data());
       return out.data();
     }

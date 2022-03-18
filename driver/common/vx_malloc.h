@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <assert.h>
+#include <stdio.h>
 
 namespace vortex {
 
@@ -30,8 +31,10 @@ public:
     }
 
     int allocate(uint64_t size, uint64_t* addr) {
-        if (size == 0 || addr == nullptr)
+        if (size == 0 || addr == nullptr) {
+            printf("error: invalid argurments\n");
             return -1;
+        }
 
         // Align allocation size
         size = AlignSize(size, blockAlign_);
@@ -61,8 +64,10 @@ public:
         if (nullptr == freeBlock) {
             // Allocate a new page for this request
             currPage = this->NewPage(size);
-            if (nullptr == currPage)
+            if (nullptr == currPage) {
+                printf("error: out of memory\n");
                 return -1;
+            }
             freeBlock = currPage->freeSList;
         }   
 
@@ -117,8 +122,10 @@ public:
         }
 
         // found the corresponding block?
-        if (nullptr == usedBlock)
+        if (nullptr == usedBlock) {
+            printf("error: invalid address to release\n");
             return -1;
+        }
 
         // Remove the block from the used list
         currPage->RemoveUsedBlock(usedBlock);
@@ -176,7 +183,7 @@ public:
         if (nullptr == currPage->usedList) {
             // Try to delete the page
             while (currPage && this->DeletePage(currPage)) {
-                currPage = this->NextEmptyPage();
+                currPage = this->FindNextEmptyPage();
             }
 
         }
@@ -381,7 +388,7 @@ private:
         return true;
     }
 
-    page_t* NextEmptyPage() {
+    page_t* FindNextEmptyPage() {
        auto currPage = pages_;
         while (currPage) {
             if (nullptr == currPage->usedList)

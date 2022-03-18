@@ -6,24 +6,25 @@
 using namespace vortex;
 using namespace cocogfx;
 
-class CSR {
-public:
-  uint32_t   stage;  
-  
-  CSR() { this->clear(); }  
-  ~CSR() {}
-
-  void clear() {
-    stage = 0;
-  }
-};
-
 class TexUnit::Impl {
 private:
     struct pending_req_t {
       pipeline_trace_t* trace;
       uint32_t count;
     };
+
+    class CSR {
+    public:
+      uint32_t stage;  
+      
+      CSR() { this->clear(); }
+      ~CSR() { this->clear(); }
+
+      void clear() {
+        stage = 0;
+      }
+    };
+
     TexUnit* simobject_;
     Config config_;
     Core* core_;
