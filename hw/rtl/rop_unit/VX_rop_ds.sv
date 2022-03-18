@@ -82,7 +82,7 @@ module VX_rop_ds #(
 
     // Stencil Test
 
-    assign stencil_func = (stencil_face == `ROP_STENCIL_FACE_FRONT)? stencil_front_func : stencil_back_front;
+    assign stencil_func = (stencil_face == `ROP_STENCIL_FACE_FRONT)? stencil_front_func : stencil_back_func;
     assign stencil_mask = (stencil_face == `ROP_STENCIL_FACE_FRONT)? stencil_front_mask : stencil_back_mask;
     assign stencil_ref  = (stencil_face == `ROP_STENCIL_FACE_FRONT)? stencil_front_ref : stencil_back_ref;
 
