@@ -10,7 +10,7 @@ module VX_rop_ds #(
     input wire reset,
 
     // Depth Test
-    input wire [`ROP_DEPTH_FUNC_BITS] depth_func,
+    input wire [`ROP_DEPTH_FUNC_BITS-1:0] depth_func,
     input wire [23:0] depth_ref,
     input wire [23:0] depth_val,
     input wire [3:0]  depth_mask,
@@ -18,38 +18,38 @@ module VX_rop_ds #(
     output wire [23:0] depth_out,
 
     // Stencil Test
-    input wire [7:0]                        stencil_val;
-    input wire [`ROP_STENCIL_FACE_BITS-1:0] stencil_face;
+    input wire [7:0]                      stencil_val,
+    input wire                            backface,
 
-    input wire [`ROP_DEPTH_FUNC_BITS-1:0] stencil_front_func;    
-    input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_front_zpass;
-    input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_front_zfail;
-    input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_front_fail;
-    input wire [7:0]                      stencil_front_mask;
-    input wire [7:0]                      stencil_front_ref;
-    input wire [`ROP_DEPTH_FUNC_BITS-1:0] stencil_back_func;    
-    input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_back_zpass;
-    input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_back_zfail;
-    input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_back_fail;
-    input wire [7:0]                      stencil_back_mask;
-    input wire [7:0]                      stencil_back_ref;
+    input wire [`ROP_DEPTH_FUNC_BITS-1:0] stencil_front_func,    
+    input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_front_zpass,
+    input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_front_zfail,
+    input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_front_fail,
+    input wire [7:0]                      stencil_front_mask,
+    input wire [7:0]                      stencil_front_ref,
+    input wire [`ROP_DEPTH_FUNC_BITS-1:0] stencil_back_func,    
+    input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_back_zpass,
+    input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_back_zfail,
+    input wire [`ROP_STENCIL_OP_BITS-1:0] stencil_back_fail,
+    input wire [7:0]                      stencil_back_mask,
+    input wire [7:0]                      stencil_back_ref,
 
-    output wire [7:0]  stencil_out
+    output wire [7:0]  stencil_out,
     output wire [31:0] mask_out
 
 );
 
+    reg  [23:0] depth_result;
+
     wire [`ROP_DEPTH_FUNC_BITS-1:0] stencil_func;
     reg  [`ROP_STENCIL_OP_BITS-1:0] stencil_op;
-    wire [7:0] stencil_mask;
-    wire [7:0] stencil_ref;
+    wire [7:0]  stencil_mask;
+    reg  [31:0] stencil_write_mask;
+    wire [7:0]  stencil_ref;
+    wire [7:0]  stencil_result;
 
     wire [7:0] stencil_ref_m;
     wire [7:0] stencil_val_m;
-
-    wire [23:0] depth_result;
-    wire [7:0]  stencil_result;
-    reg  [31:0] write_mask = stencil_mask << 24;
 
     wire dpass;
     wire spass;
@@ -82,9 +82,9 @@ module VX_rop_ds #(
 
     // Stencil Test
 
-    assign stencil_func = (stencil_face == `ROP_STENCIL_FACE_FRONT)? stencil_front_func : stencil_back_func;
-    assign stencil_mask = (stencil_face == `ROP_STENCIL_FACE_FRONT)? stencil_front_mask : stencil_back_mask;
-    assign stencil_ref  = (stencil_face == `ROP_STENCIL_FACE_FRONT)? stencil_front_ref : stencil_back_ref;
+    assign stencil_func = backface ? stencil_back_func : stencil_front_func;
+    assign stencil_mask = backface ? stencil_back_mask : stencil_front_mask;
+    assign stencil_ref  = backface ? stencil_back_ref : stencil_front_ref;
 
     assign stencil_ref_m = stencil_ref & stencil_mask;
     assign stencil_val_m = stencil_val & stencil_mask;
@@ -99,22 +99,20 @@ module VX_rop_ds #(
     );
 
     always @(*) begin
-        if (!STENCIL_TEST)
-            stencil_out = stencil_val;
-        else begin 
-            if (spass) begin
-                if (dpass) begin
-                    if (| depth_mask)
-                        write_mask = write_mask | 24'hFFFFFF;
-                    stencil_op = (stencil_face == `ROP_STENCIL_FACE_FRONT)? stencil_front_zpass : stencil_back_zpass;
-                end else
-                    stencil_op = (stencil_face == `ROP_STENCIL_FACE_FRONT)? stencil_front_zfail : stencil_back_zfail;
+        stencil_write_mask = {stencil_mask, {24{1'b0}}};
+        if (spass) begin
+            if (dpass) begin
+                if (| depth_mask)
+                    stencil_write_mask = stencil_write_mask | 32'hFFFFFF;
+                stencil_op = backface ? stencil_back_zpass : stencil_front_zpass;
             end else
-                stencil_op = (stencil_face == `ROP_STENCIL_FACE_FRONT)? stencil_front_fail : stencil_back_fail;
-        end
+                stencil_op = backface ? stencil_back_zfail : stencil_front_zfail;
+        end else
+            stencil_op = backface ? stencil_back_fail : stencil_front_fail;
     end
 
     VX_rop_stencil_op #(
+        .STENCIL_TEST (STENCIL_TEST),
         .DATAW (8)
     ) stencil_op_ (
         .stencil_op     (stencil_op),
@@ -132,7 +130,7 @@ module VX_rop_ds #(
         .clk      (clk),
         .reset    (reset),
         .enable   (1'b1),
-        .data_in  ({depth_result, stencil_result, write_mask}),
+        .data_in  ({depth_result, stencil_result, stencil_write_mask}),
         .data_out ({depth_out,    stencil_out,    mask_out})
     );
 
