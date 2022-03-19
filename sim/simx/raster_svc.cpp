@@ -1,4 +1,4 @@
-#include "raster_srv.h"
+#include "raster_svc.h"
 #include "raster_unit.h"
 #include "core.h"
 #include <VX_config.h>
@@ -11,7 +11,7 @@ using fixed24_t = cocogfx::TFixed<24>;
 
 using vec2_fx2_t = cocogfx::TVector2<fixed24_t>;
 
-class RasterSrv::Impl {
+class RasterSvc::Impl {
 private:
 
   class CSR {
@@ -49,7 +49,7 @@ private:
       }
     };
 
-    RasterSrv* simobject_;  
+    RasterSvc* simobject_;  
     Core* core_;      
     const Arch& arch_;
     RasterUnit::Ptr raster_unit_;    
@@ -57,7 +57,7 @@ private:
     PerfStats perf_stats_;
 
 public:
-    Impl(RasterSrv* simobject,     
+    Impl(RasterSvc* simobject,     
          Core* core,
          RasterUnit::Ptr raster_unit) 
       : simobject_(simobject)
@@ -194,44 +194,44 @@ public:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-RasterSrv::RasterSrv(const SimContext& ctx, 
+RasterSvc::RasterSvc(const SimContext& ctx, 
                      const char* name,  
                      Core* core,
                      RasterUnit::Ptr raster_unit)  
-: SimObject<RasterSrv>(ctx, name)
+: SimObject<RasterSvc>(ctx, name)
   , Input(this)
   , Output(this)
   , impl_(new Impl(this, core, raster_unit)) 
 {}
 
-RasterSrv::~RasterSrv() {
+RasterSvc::~RasterSvc() {
   delete impl_;
 }
 
-void RasterSrv::reset() {
+void RasterSvc::reset() {
   impl_->clear();
 }
 
-uint32_t RasterSrv::csr_read(uint32_t wid, uint32_t tid, uint32_t addr) {
+uint32_t RasterSvc::csr_read(uint32_t wid, uint32_t tid, uint32_t addr) {
   return impl_->csr_read(wid, tid, addr);
 }
 
-void RasterSrv::csr_write(uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value) {
+void RasterSvc::csr_write(uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value) {
   impl_->csr_write(wid, tid, addr, value);
 }
 
-uint32_t RasterSrv::fetch(uint32_t wid, uint32_t tid) {
+uint32_t RasterSvc::fetch(uint32_t wid, uint32_t tid) {
   return impl_->fetch(wid, tid);
 }
 
-int32_t RasterSrv::interpolate(uint32_t wid, uint32_t tid, int32_t a, int32_t b, int32_t c) {
+int32_t RasterSvc::interpolate(uint32_t wid, uint32_t tid, int32_t a, int32_t b, int32_t c) {
   return impl_->interpolate(wid, tid, a, b, c);
 }
 
-void RasterSrv::tick() {
+void RasterSvc::tick() {
   impl_->tick();
 }
 
-const RasterSrv::PerfStats& RasterSrv::perf_stats() const {
+const RasterSvc::PerfStats& RasterSvc::perf_stats() const {
   return impl_->perf_stats();
 }

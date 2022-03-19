@@ -1,9 +1,9 @@
-`ifndef VX_ROP_SRV_IF
-`define VX_ROP_SRV_IF
+`ifndef VX_ROP_SVC_IF
+`define VX_ROP_SVC_IF
 
 `include "VX_rop_define.vh"
 
-interface VX_rop_srv_if ();
+interface VX_rop_svc_if ();
 
     wire                            valid;
 

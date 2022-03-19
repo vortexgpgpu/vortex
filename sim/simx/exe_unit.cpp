@@ -265,12 +265,12 @@ void FpuUnit::tick() {
 GpuUnit::GpuUnit(const SimContext& ctx, Core* core) 
     : ExeUnit(ctx, core, "GPU")   
     , tex_unit_(core->tex_unit_)
-    , raster_srv_(core->raster_srv_)
-    , rop_srv_(core->rop_srv_)
+    , raster_svc_(core->raster_svc_)
+    , rop_svc_(core->rop_svc_)
     , pending_rsps_{
         &core->tex_unit_->Output,
-        &core->raster_srv_->Output,
-        &core->rop_srv_->Output
+        &core->raster_svc_->Output,
+        &core->rop_svc_->Output
     }
 {}
     
@@ -317,10 +317,10 @@ void GpuUnit::tick() {
         tex_unit_->Input.send(trace, 1);
         break;
     case GpuType::RASTER:
-        raster_srv_->Input.send(trace, 1);
+        raster_svc_->Input.send(trace, 1);
         break;
     case GpuType::ROP:
-        rop_srv_->Input.send(trace, 1);
+        rop_svc_->Input.send(trace, 1);
         break;
     case GpuType::INTERP:
         Output.send(trace, 6);

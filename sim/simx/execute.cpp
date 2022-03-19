@@ -1427,7 +1427,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t))
             continue;        
-          auto result = core_->raster_srv_->fetch(id_, t);
+          auto result = core_->raster_svc_->fetch(id_, t);
           rddata[t].i = result;
         }
         rd_write = true;
@@ -1442,13 +1442,13 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             continue;
           auto color = rsdata[t][0].i;
           auto depth = rsdata[t][1].i;
-          auto frag  = core_->raster_srv_->csr_read(id_, t, CSR_RASTER_FRAG);
-          auto x_y   = core_->raster_srv_->csr_read(id_, t, CSR_RASTER_X_Y);
-          auto mask_pid = core_->raster_srv_->csr_read(id_, t, CSR_RASTER_MASK_PID);
+          auto frag  = core_->raster_svc_->csr_read(id_, t, CSR_RASTER_FRAG);
+          auto x_y   = core_->raster_svc_->csr_read(id_, t, CSR_RASTER_X_Y);
+          auto mask_pid = core_->raster_svc_->csr_read(id_, t, CSR_RASTER_MASK_PID);
           auto x    = x_y & 0xffff;
           auto y    = x_y >> 16;
           auto mask = mask_pid & 0xf;          
-          core_->rop_srv_->write(frag, x, y, mask, color, depth);
+          core_->rop_svc_->write(frag, x, y, mask, color, depth);
         }
       } break;
       default:
@@ -1507,7 +1507,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           auto a = rsdata[t][0].i;
           auto b = rsdata[t][1].i;
           auto c = rsdata[t][2].i;
-          auto result = core_->raster_srv_->interpolate(id_, t, a, b, c);
+          auto result = core_->raster_svc_->interpolate(id_, t, a, b, c);
           rddata[t].i = result;
         }
         rd_write = true;

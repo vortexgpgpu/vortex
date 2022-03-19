@@ -99,8 +99,8 @@ Core::Core(const SimContext& ctx,
     1, // address latency
     2, // sampler latency
   }, this);
-  raster_srv_ = RasterSrv::Create("raster_srv", this, raster_unit);
-  rop_srv_ = RopSrv::Create("rop_srv", this, rop_unit);
+  raster_svc_ = RasterSvc::Create("raster_svc", this, raster_unit);
+  rop_svc_ = RopSvc::Create("rop_svc", this, rop_unit);
 
   // register execute units
   exe_units_.at((int)ExeType::NOP) = SimPlatform::instance().create_object<NopUnit>(this);
@@ -653,13 +653,13 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   #ifdef EXT_RASTER_ENABLE
     if (addr >= CSR_RASTER_BEGIN
      && addr < CSR_RASTER_END) {
-      return raster_srv_->csr_read(wid, tid, addr);
+      return raster_svc_->csr_read(wid, tid, addr);
     } else
   #endif
   #ifdef EXT_ROP_ENABLE
     if (addr >= CSR_ROP_BEGIN
      && addr < CSR_ROP_END) {
-      return rop_srv_->csr_read(wid, tid, addr);
+      return rop_svc_->csr_read(wid, tid, addr);
     } else
   #endif  
     {
@@ -696,13 +696,13 @@ void Core::set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid) {
   #ifdef EXT_RASTER_ENABLE
     if (addr >= CSR_RASTER_BEGIN
      && addr < CSR_RASTER_END) {
-      raster_srv_->csr_write(wid, tid, addr, value);
+      raster_svc_->csr_write(wid, tid, addr, value);
     } else
   #endif
   #ifdef EXT_ROP_ENABLE
     if (addr >= CSR_ROP_BEGIN
      && addr < CSR_ROP_END) {
-      rop_srv_->csr_write(wid, tid, addr, value);
+      rop_svc_->csr_write(wid, tid, addr, value);
     } else
   #endif
     {
