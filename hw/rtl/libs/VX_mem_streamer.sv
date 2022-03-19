@@ -23,7 +23,7 @@ module VX_mem_streamer #(
     input wire [TAGW-1:0]                req_tag,
     output wire                          req_ready,
 
-    // Output request line 12 13 VX_execute (the one that leaves the execute unit)
+    // Output request
     output wire [NUM_REQS-1:0]                  mem_req_valid,
     output wire [NUM_REQS-1:0]                  mem_req_rw,
     output wire [NUM_REQS-1:0][WORD_SIZE-1:0]   mem_req_byteen,
