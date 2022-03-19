@@ -10,7 +10,7 @@ module VX_rop_req_arb #(
     VX_rop_req_if.slave     req_in[NUM_REQS],
 
     // output request
-    VX_rop_req_if.master      req_out
+    VX_rop_req_if.master    req_out
 );
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
@@ -21,7 +21,7 @@ module VX_rop_req_arb #(
         wire [`NUM_THREADS-1:0][15:0] pos_x = req_in[i].pos_x;
         wire [`NUM_THREADS-1:0][15:0] pos_y = req_in[i].pos_y;
         wire [`NUM_THREADS-1:0][31:0] color = req_in[i].color;
-        wire [`NUM_THREADS-1:0][31:0] depth = req_in[i].depth;
+        wire [`NUM_THREADS-1:0][`ROP_DEPTH_BITS-1:0] depth = req_in[i].depth;
         `UNUSED_VAR (valid)
         `UNUSED_VAR (pos_x)
         `UNUSED_VAR (pos_y)

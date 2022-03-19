@@ -8,7 +8,7 @@ module VX_mem_streamer #(
     parameter TAGW = 32,
     parameter WORD_SIZE = 4,
     parameter QUEUE_SIZE = 16,
-    parameter PARTIAL_RESPONSE = 1π
+    parameter PARTIAL_RESPONSE = 1
 ) (
     input  wire clk,
     input  wire reset,

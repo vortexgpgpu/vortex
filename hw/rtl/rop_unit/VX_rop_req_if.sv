@@ -5,15 +5,15 @@
 
 interface VX_rop_req_if ();
 
-    wire                            valid;
-    wire [`NUM_THREADS-1:0]         tmask; 
-    wire [`NUM_THREADS-1:0][15:0]   pos_x;
-    wire [`NUM_THREADS-1:0][15:0]   pos_y;
-    wire [`NUM_THREADS-1:0][31:0]   color;
-    wire [`NUM_THREADS-1:0][31:0]   depth;
-    wire                            backface;
+    wire                                    valid;
+    wire [`NUM_THREADS-1:0]                 tmask; 
+    wire [`NUM_THREADS-1:0][15:0]           pos_x;
+    wire [`NUM_THREADS-1:0][15:0]           pos_y;
+    wire [`NUM_THREADS-1:0][31:0]           color;
+    wire [`NUM_THREADS-1:0][`ROP_DEPTH_BITS-1:0] depth;
+    wire                                    backface;
 
-    wire                            ready;
+    wire                                    ready;
 
     modport master (
         output valid,

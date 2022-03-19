@@ -69,9 +69,11 @@ module VX_raster_unit #(
     assign raster_req_if.empty = 0;
     assign raster_req_if.ready = 0;
 
+`ifdef PERF_ENABLE
     // TODO: remove
     assign raster_perf_if.mem_reads = 0;
     assign raster_perf_if.mem_latency = 0;
+`endif
 
     // TODO: remove
     assign cache_req_if.valid = 0;

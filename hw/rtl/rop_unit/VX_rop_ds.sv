@@ -2,142 +2,122 @@
 
 module VX_rop_ds #(
     parameter CLUSTER_ID = 0,
-    parameter NUM_LANES  = 4
+    parameter NUM_LANES  = 4,
+    parameter TAG_WIDTH  = 1
 ) (
     input wire clk,
-    input wire reset,
+    input wire reset,   
 
-    // Depth Test
-    input wire [NUM_LANES-1:0][`ROP_DEPTH_FUNC_BITS-1:0] depth_func,
-    input wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0]      depth_ref,
-    input wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0]      depth_val,
-    input wire [NUM_LANES-1:0]                           depth_mask,
+    // Handshake
+    input wire                  valid_in,
+    input wire [TAG_WIDTH-1:0]  tag_in,
+    output wire                 ready_in,   
+     
+    output wire                 valid_out,
+    output wire [TAG_WIDTH-1:0] tag_out,
+    input wire                  ready_out,    
 
-    output wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0]     depth_result,
+    // Configuration states
+    input wire [`ROP_DEPTH_FUNC_BITS-1:0]               depth_func,
+    input wire                                          depth_writemask,
+    input wire [`ROP_DEPTH_FUNC_BITS-1:0]               stencil_func,    
+    input wire [`ROP_STENCIL_OP_BITS-1:0]               stencil_zpass,
+    input wire [`ROP_STENCIL_OP_BITS-1:0]               stencil_zfail,
+    input wire [`ROP_STENCIL_OP_BITS-1:0]               stencil_fail,
+    input wire [`ROP_STENCIL_BITS-1:0]                  stencil_ref,
+    input wire [`ROP_STENCIL_BITS-1:0]                  stencil_mask,
+    input wire [`ROP_STENCIL_BITS-1:0]                  stencil_writemask,
 
-    // Stencil Test
-    input wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]    stencil_val,
-    input wire [NUM_LANES-1:0]                           is_backface,
+    // Input values
+    input wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0]     depth_ref,
+    input wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0]     depth_val,
+    input wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]   stencil_val,    
 
-    input wire [NUM_LANES-1:0][`ROP_DEPTH_FUNC_BITS-1:0] stencil_front_func,    
-    input wire [NUM_LANES-1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_front_zpass,
-    input wire [NUM_LANES-1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_front_zfail,
-    input wire [NUM_LANES-1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_front_fail,
-    input wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]    stencil_front_mask,
-    input wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]    stencil_front_ref,
-    input wire [NUM_LANES-1:0][`ROP_DEPTH_FUNC_BITS-1:0] stencil_back_func,    
-    input wire [NUM_LANES-1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_back_zpass,
-    input wire [NUM_LANES-1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_back_zfail,
-    input wire [NUM_LANES-1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_back_fail,
-    input wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]    stencil_back_mask,
-    input wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]    stencil_back_ref,
-
-    output wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]   stencil_result,
-    output wire [NUM_LANES-1:0][`ROP_DEPTH_BITS+`ROP_STENCIL_BITS-1:0] mask_out
-
-);
-
-    reg [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0]      dresult;
-
-    reg [NUM_LANES-1:0][`ROP_DEPTH_FUNC_BITS-1:0] stencil_func;
-    reg [NUM_LANES-1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_op;
-    reg [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]    stencil_mask;
-    reg [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]    stencil_ref;
-    wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]   sresult;
-
-    wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]   stencil_ref_m;
-    wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]   stencil_val_m;
-
-    reg  [NUM_LANES-1:0][`ROP_DEPTH_BITS+`ROP_STENCIL_BITS-1:0] stencil_write_mask;
+    // Output values
+    output wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0]    depth_out,        
+    output wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]  stencil_out,
+    output wire [NUM_LANES-1:0]                         test_out
+); 
+     wire stall = ~ready_out && valid_out;
+    
+    assign ready_in = ~stall;
+    
+    // Depth Test /////////////////////////////////////////////////////////////
 
     wire [NUM_LANES-1:0] dpass;
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
+        VX_rop_compare #(
+            .DATAW     (`ROP_DEPTH_BITS)
+        ) rop_compare_depth (
+            .func   (depth_func),
+            .a      (depth_ref[i]),
+            .b      (depth_val[i]),
+            .result (dpass[i])
+        );
+    end
+
+    wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] depth_write;
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
+        assign depth_write[i] = (dpass[i] & depth_writemask) ? depth_ref[i] : depth_val[i];
+    end
+
+    // Stencil Test ///////////////////////////////////////////////////////////
+
     wire [NUM_LANES-1:0] spass;
 
-    ///////////////////////////////////////////////////////////////
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
+        VX_rop_compare #(
+            .DATAW (`ROP_STENCIL_BITS)
+        ) rop_compare_stencil (
+            .func   (stencil_func),
+            .a      (stencil_ref & stencil_mask),
+            .b      (stencil_val[i] & stencil_mask),
+            .result (spass[i])
+        );
+    end    
+    
+    wire [NUM_LANES-1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_op;
+                    
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
+        assign stencil_op[i] = spass[i] ? (dpass[i] ? stencil_zpass : stencil_zfail) : stencil_fail;
+    end    
 
-    // Depth Test
+    wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] stenil_result;
 
-    VX_rop_compare #(
-        .NUM_LANES (NUM_LANES),
-        .DATAW     (`ROP_DEPTH_BITS)
-    ) depth_compare (
-        .func   (depth_func),
-        .a      (depth_ref),
-        .b      (depth_val),
-        .result (dpass)
-    );
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
+        VX_rop_stencil_op #(
+            .DATAW (`ROP_STENCIL_BITS)
+        ) rop_stencil_op (
+            .stencil_op     (stencil_op[i]),
+            .stencil_ref    (stencil_ref),
+            .stencil_val    (stencil_val[i]),
+            .stencil_result (stenil_result[i])
+        );
+    end
 
-    always @(*) begin
-        for (integer i = 0; i < NUM_LANES; i = i + 1) begin
-             if (dpass[i] & depth_mask[i])
-                dresult[i] = depth_ref[i];
-            else    
-                dresult[i] = depth_val[i];
+    wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] stencil_write;
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
+        for (genvar j = 0; j < `ROP_STENCIL_BITS; ++j) begin
+            assign stencil_write[i][j] = stencil_writemask[j] ? stenil_result[i][j] : stencil_val[i][j];
         end
     end
 
-    ///////////////////////////////////////////////////////////////
+    wire [NUM_LANES-1:0] test_result = spass & dpass;
 
-    // Stencil Test
-
-     always @(*) begin
-        for (integer i = 0; i < NUM_LANES; i = i + 1) begin
-            stencil_func[i] = is_backface[i] ? stencil_back_func[i] : stencil_front_func[i];
-            stencil_mask[i] = is_backface[i] ? stencil_back_mask[i] : stencil_front_mask[i];
-            stencil_ref[i]  = is_backface[i] ? stencil_back_ref[i]  : stencil_front_ref[i];
-        end
-    end
-
-    assign stencil_ref_m = stencil_ref & stencil_mask;
-    assign stencil_val_m = stencil_val & stencil_mask;
-
-    VX_rop_compare #(
-        .NUM_LANES (NUM_LANES),
-        .DATAW (`ROP_STENCIL_BITS)
-    ) stencil_compare (
-        .func   (stencil_func),
-        .a      (stencil_ref_m),
-        .b      (stencil_val_m),
-        .result (spass)
-    );
-
-    always @(*) begin
-        for (integer i = 0; i < NUM_LANES; i = i + 1) begin
-            stencil_write_mask[i] = {stencil_mask[i], {`ROP_DEPTH_BITS{1'b0}}};
-            if (spass[i]) begin
-                if (dpass[i]) begin
-                    stencil_write_mask[i] = stencil_write_mask[i] | {{`ROP_STENCIL_BITS{1'b0}}, {`ROP_DEPTH_BITS{depth_mask[i]}}};
-                    stencil_op[i] = is_backface[i] ? stencil_back_zpass[i] : stencil_front_zpass[i];
-                end else
-                    stencil_op[i] = is_backface[i] ? stencil_back_zfail[i] : stencil_front_zfail[i];
-            end else
-                stencil_op[i] = is_backface[i] ? stencil_back_fail[i] : stencil_front_fail[i];
-        end
-    end
-
-    VX_rop_stencil_op #(
-        .NUM_LANES (NUM_LANES),
-        .DATAW (8)
-    ) stencil_op_ (
-        .stencil_op     (stencil_op),
-        .stencil_ref    (stencil_ref),
-        .stencil_val    (stencil_val),
-        .stencil_result (sresult)
-    );
-
-    ///////////////////////////////////////////////////////////////
+    // Output /////////////////////////////////////////////////////////////////
 
     VX_pipe_register #(
-        .DATAW	((`ROP_DEPTH_BITS + `ROP_STENCIL_BITS  + `ROP_DEPTH_BITS + `ROP_STENCIL_BITS) * NUM_LANES),
+        .DATAW	(1 + TAG_WIDTH + NUM_LANES * (`ROP_DEPTH_BITS + `ROP_STENCIL_BITS + 1)),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
-        .enable   (1'b1),
-        .data_in  ({dresult,      sresult,        stencil_write_mask}),
-        .data_out ({depth_result, stencil_result, mask_out})
+        .enable   (!stall),
+        .data_in  ({valid_in,  tag_in,  depth_write,  stencil_write, test_result}),
+        .data_out ({valid_out, tag_out, depth_out,    stencil_out,    test_out})
     );
-
-    ///////////////////////////////////////////////////////////////
 
 endmodule

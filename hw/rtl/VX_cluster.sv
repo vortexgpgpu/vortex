@@ -45,14 +45,18 @@ module VX_cluster #(
     VX_raster_req_if    per_core_raster_req_if[`NUM_CORES-1:0]();
     VX_raster_req_if    raster_req_if();
 
+`ifdef PERF_ENABLE
     VX_raster_perf_if   raster_perf_if();
+`endif
 
     VX_dcache_req_if    raster_cache_req_if();
     VX_dcache_rsp_if    raster_cache_rsp_if();
 
+`ifdef PERF_ENABLE
     // TODO: remove
     `UNUSED_VAR (raster_perf_if.mem_reads)
     `UNUSED_VAR (raster_perf_if.mem_latency)
+`endif
 
     // TODO: remove
     `UNUSED_VAR (raster_cache_req_if.valid)
@@ -103,16 +107,20 @@ module VX_cluster #(
 
     VX_rop_req_if       per_core_rop_req_if[`NUM_CORES-1:0]();
     VX_rop_req_if       rop_req_if();
-    
+
+`ifdef PERF_ENABLE
     VX_rop_perf_if      rop_perf_if(); 
+`endif
     
     VX_dcache_req_if    rop_cache_req_if();
     VX_dcache_rsp_if    rop_cache_rsp_if();
 
+`ifdef PERF_ENABLE
     // TODO: remove
     `UNUSED_VAR (rop_perf_if.mem_reads)
     `UNUSED_VAR (rop_perf_if.mem_writes)
     `UNUSED_VAR (rop_perf_if.mem_latency)
+`endif 
 
     // TODO: remove
     `UNUSED_VAR (rop_cache_req_if.valid)
