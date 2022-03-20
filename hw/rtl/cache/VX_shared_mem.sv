@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_shared_mem #(
-    parameter CACHE_ID                      = 0,
+    parameter CACHE_ID                      = "cache",
 
     // Size of cache in bytes
     parameter CACHE_SIZE                    = (1024*16), 

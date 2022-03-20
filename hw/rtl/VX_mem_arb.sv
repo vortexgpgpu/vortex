@@ -119,7 +119,7 @@ module VX_mem_arb #(
         `UNUSED_VAR (reset)
 
         assign req_out_if.valid  = req_in_if[0].valid;
-        assign req_out_if.tag    = req_in_if[0].tag;
+        //assign req_out_if.tag    = req_in_if[0].tag;
         assign req_out_if.addr   = req_in_if[0].addr;
         assign req_out_if.rw     = req_in_if[0].rw;
         assign req_out_if.byteen = req_in_if[0].byteen;
@@ -127,7 +127,7 @@ module VX_mem_arb #(
         assign req_in_if[0].ready= req_out_if.ready;
 
         assign rsp_out_if[0].valid  = rsp_in_if.valid;
-        assign rsp_out_if[0].tag    = rsp_in_if.tag;
+        //assign rsp_out_if[0].tag    = rsp_in_if.tag;
         assign rsp_out_if[0].data   = rsp_in_if.data;
         assign rsp_in_if.ready   = rsp_out_if[0].ready;
 

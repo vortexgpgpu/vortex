@@ -65,13 +65,19 @@
 
 `define SCOPE_BIND_VX_cluster_l2cache
 
-`define SCOPE_IO_VX_mem_unit
+`define SCOPE_BIND_VX_cluster_rcache
 
-`define SCOPE_BIND_VX_mem_unit_dcache
+`define SCOPE_BIND_VX_cluster_ocache
+
+`define SCOPE_IO_VX_mem_unit
 
 `define SCOPE_BIND_VX_core_mem_unit
 
+`define SCOPE_BIND_VX_mem_unit_dcache
+
 `define SCOPE_BIND_VX_mem_unit_icache
+
+`define SCOPE_BIND_VX_mem_unit_tcache
 
 `define SCOPE_BIND_VX_mem_unit_smem
 

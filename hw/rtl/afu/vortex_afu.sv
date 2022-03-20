@@ -421,18 +421,16 @@ wire cci_mem_rsp_ready;
 
 //--
 
-wire                    cci_mem_req_arb_valid;
-wire                    cci_mem_req_arb_rw; 
-t_local_mem_byte_mask   cci_mem_req_arb_byteen;
-t_local_mem_addr        cci_mem_req_arb_addr;
-t_local_mem_data        cci_mem_req_arb_data;
-wire [AVS_REQ_TAGW-1:0] cci_mem_req_arb_tag;
-wire                    cci_mem_req_arb_ready;
+VX_mem_req_if #(
+  .DATA_WIDTH ($bits(t_local_mem_data)),
+  .ADDR_WIDTH ($bits(t_local_mem_addr)),
+  .TAG_WIDTH  (AVS_REQ_TAGW)
+) cci_vx_mem_req_if[1:0]();
 
-wire                    cci_mem_rsp_arb_valid;        
-t_local_mem_data        cci_mem_rsp_arb_data;
-wire [AVS_REQ_TAGW-1:0] cci_mem_rsp_arb_tag;
-wire                    cci_mem_rsp_arb_ready;
+VX_mem_rsp_if #(
+  .DATA_WIDTH ($bits(t_local_mem_data)),
+  .TAG_WIDTH  (AVS_REQ_TAGW)
+) cci_vx_mem_rsp_if[1:0]();
 
 VX_to_mem #(
   .SRC_DATA_WIDTH (CCI_DATA_WIDTH), 
@@ -453,18 +451,18 @@ VX_to_mem #(
   .mem_req_tag_in     (cci_mem_req_tag), 
   .mem_req_ready_in   (cci_mem_req_ready), 
 
-  .mem_req_valid_out  (cci_mem_req_arb_valid),
-  .mem_req_addr_out   (cci_mem_req_arb_addr),
-  .mem_req_rw_out     (cci_mem_req_arb_rw),
-  .mem_req_byteen_out (cci_mem_req_arb_byteen),
-  .mem_req_data_out   (cci_mem_req_arb_data),
-  .mem_req_tag_out    (cci_mem_req_arb_tag),
-  .mem_req_ready_out  (cci_mem_req_arb_ready), 
+  .mem_req_valid_out  (cci_vx_mem_req_if[1].valid),
+  .mem_req_addr_out   (cci_vx_mem_req_if[1].addr),
+  .mem_req_rw_out     (cci_vx_mem_req_if[1].rw),
+  .mem_req_byteen_out (cci_vx_mem_req_if[1].byteen),
+  .mem_req_data_out   (cci_vx_mem_req_if[1].data),
+  .mem_req_tag_out    (cci_vx_mem_req_if[1].tag),
+  .mem_req_ready_out  (cci_vx_mem_req_if[1].ready), 
 
-  .mem_rsp_valid_in   (cci_mem_rsp_arb_valid), 
-  .mem_rsp_data_in    (cci_mem_rsp_arb_data), 
-  .mem_rsp_tag_in     (cci_mem_rsp_arb_tag), 
-  .mem_rsp_ready_in   (cci_mem_rsp_arb_ready),
+  .mem_rsp_valid_in   (cci_vx_mem_rsp_if[1].valid), 
+  .mem_rsp_data_in    (cci_vx_mem_rsp_if[1].data), 
+  .mem_rsp_tag_in     (cci_vx_mem_rsp_if[1].tag), 
+  .mem_rsp_ready_in   (cci_vx_mem_rsp_if[1].ready),
 
   .mem_rsp_valid_out  (cci_mem_rsp_valid), 
   .mem_rsp_data_out   (cci_mem_rsp_data), 
@@ -473,19 +471,6 @@ VX_to_mem #(
 );
 
 //--
-
-wire                    vx_mem_req_arb_valid;
-wire                    vx_mem_req_arb_rw; 
-t_local_mem_byte_mask   vx_mem_req_arb_byteen;
-t_local_mem_addr        vx_mem_req_arb_addr;
-t_local_mem_data        vx_mem_req_arb_data;
-wire [AVS_REQ_TAGW-1:0] vx_mem_req_arb_tag;
-wire                    vx_mem_req_arb_ready;
-
-wire                    vx_mem_rsp_arb_valid;        
-t_local_mem_data        vx_mem_rsp_arb_data;
-wire [AVS_REQ_TAGW-1:0] vx_mem_rsp_arb_tag;
-wire                    vx_mem_rsp_arb_ready;
 
 wire vx_mem_is_cout;
 wire vx_mem_req_valid_qual;
@@ -514,18 +499,18 @@ VX_to_mem #(
   .mem_req_tag_in     (vx_mem_req_tag), 
   .mem_req_ready_in   (vx_mem_req_ready_qual), 
 
-  .mem_req_valid_out  (vx_mem_req_arb_valid),
-  .mem_req_addr_out   (vx_mem_req_arb_addr),
-  .mem_req_rw_out     (vx_mem_req_arb_rw),
-  .mem_req_byteen_out (vx_mem_req_arb_byteen),
-  .mem_req_data_out   (vx_mem_req_arb_data),
-  .mem_req_tag_out    (vx_mem_req_arb_tag),
-  .mem_req_ready_out  (vx_mem_req_arb_ready), 
+  .mem_req_valid_out  (cci_vx_mem_req_if[0].valid),
+  .mem_req_addr_out   (cci_vx_mem_req_if[0].addr),
+  .mem_req_rw_out     (cci_vx_mem_req_if[0].rw),
+  .mem_req_byteen_out (cci_vx_mem_req_if[0].byteen),
+  .mem_req_data_out   (cci_vx_mem_req_if[0].data),
+  .mem_req_tag_out    (cci_vx_mem_req_if[0].tag),
+  .mem_req_ready_out  (cci_vx_mem_req_if[0].ready), 
 
-  .mem_rsp_valid_in   (vx_mem_rsp_arb_valid), 
-  .mem_rsp_data_in    (vx_mem_rsp_arb_data), 
-  .mem_rsp_tag_in     (vx_mem_rsp_arb_tag), 
-  .mem_rsp_ready_in   (vx_mem_rsp_arb_ready),
+  .mem_rsp_valid_in   (cci_vx_mem_rsp_if[0].valid), 
+  .mem_rsp_data_in    (cci_vx_mem_rsp_if[0].data), 
+  .mem_rsp_tag_in     (cci_vx_mem_rsp_if[0].tag), 
+  .mem_rsp_ready_in   (cci_vx_mem_rsp_if[0].ready),
 
   .mem_rsp_valid_out  (vx_mem_rsp_valid), 
   .mem_rsp_data_out   (vx_mem_rsp_data), 
@@ -534,19 +519,16 @@ VX_to_mem #(
 );
 
 //--
+VX_mem_req_if #(
+  .DATA_WIDTH ($bits(t_local_mem_data)),
+  .ADDR_WIDTH ($bits(t_local_mem_addr)),
+  .TAG_WIDTH  (AVS_REQ_TAGW+1)
+) mem_req_if();
 
-wire                    mem_req_valid;
-wire                    mem_req_rw; 
-t_local_mem_byte_mask   mem_req_byteen;
-t_local_mem_addr        mem_req_addr;
-t_local_mem_data        mem_req_data;
-wire [AVS_REQ_TAGW:0]   mem_req_tag;
-wire                    mem_req_ready;
-
-wire                    mem_rsp_valid;        
-t_local_mem_data        mem_rsp_data;
-wire [AVS_REQ_TAGW:0]   mem_rsp_tag;
-wire                    mem_rsp_ready;
+VX_mem_rsp_if #(
+  .DATA_WIDTH ($bits(t_local_mem_data)),
+  .TAG_WIDTH  (AVS_REQ_TAGW+1)
+) mem_rsp_if();
 
 `RESET_RELAY (mem_arb_reset);
 
@@ -559,38 +541,12 @@ VX_mem_arb #(
   .BUFFERED_REQ   (2),
   .BUFFERED_RSP   (2)
 ) mem_arb (
-  .clk            (clk),
-  .reset          (mem_arb_reset),
-
-  // Source request
-  .req_valid_in   ({vx_mem_req_arb_valid,  cci_mem_req_arb_valid}),
-  .req_rw_in      ({vx_mem_req_arb_rw,     cci_mem_req_arb_rw}),
-  .req_byteen_in  ({vx_mem_req_arb_byteen, cci_mem_req_arb_byteen}),
-  .req_addr_in    ({vx_mem_req_arb_addr,   cci_mem_req_arb_addr}),
-  .req_data_in    ({vx_mem_req_arb_data,   cci_mem_req_arb_data}),  
-  .req_tag_in     ({vx_mem_req_arb_tag,    cci_mem_req_arb_tag}),  
-  .req_ready_in   ({vx_mem_req_arb_ready,  cci_mem_req_arb_ready}),
-
-  // Memory request
-  .req_valid_out  (mem_req_valid),
-  .req_rw_out     (mem_req_rw),        
-  .req_byteen_out (mem_req_byteen),        
-  .req_addr_out   (mem_req_addr),
-  .req_data_out   (mem_req_data),
-  .req_tag_out    (mem_req_tag),
-  .req_ready_out  (mem_req_ready),
-
-  // Source response
-  .rsp_valid_out  ({vx_mem_rsp_arb_valid, cci_mem_rsp_arb_valid}),
-  .rsp_data_out   ({vx_mem_rsp_arb_data,  cci_mem_rsp_arb_data}),
-  .rsp_tag_out    ({vx_mem_rsp_arb_tag,   cci_mem_rsp_arb_tag}),
-  .rsp_ready_out  ({vx_mem_rsp_arb_ready, cci_mem_rsp_arb_ready}),
-  
-  // Memory response
-  .rsp_valid_in   (mem_rsp_valid),
-  .rsp_tag_in     (mem_rsp_tag),
-  .rsp_data_in    (mem_rsp_data),
-  .rsp_ready_in   (mem_rsp_ready)
+  .clk        (clk),
+  .reset      (mem_arb_reset),
+  .req_in_if  (cci_vx_mem_req_if),
+  .req_out_if (mem_req_if),
+  .rsp_out_if (cci_vx_mem_rsp_if),
+  .rsp_in_if  (mem_rsp_if)
 );
 
 //--
@@ -609,19 +565,19 @@ VX_avs_wrapper #(
   .reset            (avs_wrapper_reset),
 
   // Memory request 
-  .mem_req_valid    (mem_req_valid),
-  .mem_req_rw       (mem_req_rw),
-  .mem_req_byteen   (mem_req_byteen),
-  .mem_req_addr     (mem_req_addr),
-  .mem_req_data     (mem_req_data),
-  .mem_req_tag      (mem_req_tag),
-  .mem_req_ready    (mem_req_ready),
+  .mem_req_valid    (mem_req_if.valid),
+  .mem_req_rw       (mem_req_if.rw),
+  .mem_req_byteen   (mem_req_if.byteen),
+  .mem_req_addr     (mem_req_if.addr),
+  .mem_req_data     (mem_req_if.data),
+  .mem_req_tag      (mem_req_if.tag),
+  .mem_req_ready    (mem_req_if.ready),
 
   // Memory response  
-  .mem_rsp_valid    (mem_rsp_valid),
-  .mem_rsp_data     (mem_rsp_data),
-  .mem_rsp_tag      (mem_rsp_tag),
-  .mem_rsp_ready    (mem_rsp_ready),
+  .mem_rsp_valid    (mem_rsp_if.valid),
+  .mem_rsp_data     (mem_rsp_if.data),
+  .mem_rsp_tag      (mem_rsp_if.tag),
+  .mem_rsp_ready    (mem_rsp_if.ready),
 
   // AVS bus
   .avs_writedata    (avs_writedata),
@@ -1047,11 +1003,11 @@ VX_fifo_queue #(
 `SCOPE_ASSIGN (cci_pending_reads_full, cci_pending_reads_full);
 `SCOPE_ASSIGN (cci_pending_writes_empty, cci_pending_writes_empty);
 `SCOPE_ASSIGN (cci_pending_writes_full, cci_pending_writes_full);
-`SCOPE_ASSIGN (afu_mem_req_fire, (mem_req_valid && mem_req_ready));
-`SCOPE_ASSIGN (afu_mem_req_addr, mem_req_addr);
-`SCOPE_ASSIGN (afu_mem_req_tag, mem_req_tag);
-`SCOPE_ASSIGN (afu_mem_rsp_fire, (mem_rsp_valid && mem_rsp_ready));
-`SCOPE_ASSIGN (afu_mem_rsp_tag, mem_rsp_tag);
+`SCOPE_ASSIGN (afu_mem_req_fire, (mem_req_if.valid && mem_req_if.ready));
+`SCOPE_ASSIGN (afu_mem_req_addr, mem_req_if.addr);
+`SCOPE_ASSIGN (afu_mem_req_tag, mem_req_if.tag);
+`SCOPE_ASSIGN (afu_mem_rsp_fire, (mem_rsp_if.valid && mem_rsp_if.ready));
+`SCOPE_ASSIGN (afu_mem_rsp_tag, mem_rsp_if.tag);
 
 wire scope_changed = `SCOPE_TRIGGER;
 
