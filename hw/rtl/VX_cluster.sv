@@ -83,10 +83,10 @@ module VX_cluster #(
     VX_raster_req_arb #(
         .NUM_REQS (`NUM_CORES)
     ) raster_req_arb (
-        .clk     (clk),
-        .reset   (raster_reset),
-        .req_in  (per_core_raster_req_if),
-        .req_out (raster_req_if)
+        .clk        (clk),
+        .reset      (raster_reset),
+        .req_in_if  (per_core_raster_req_if),
+        .req_out_if (raster_req_if)
     );
 
 `endif
@@ -146,10 +146,10 @@ module VX_cluster #(
     VX_rop_req_arb #(
         .NUM_REQS (`NUM_CORES)
     ) rop_req_arb (
-        .clk     (clk),
-        .reset   (rop_reset),
-        .req_in  (per_core_rop_req_if),
-        .req_out (rop_req_if)
+        .clk        (clk),
+        .reset      (rop_reset),
+        .req_in_if  (per_core_rop_req_if),
+        .req_out_if (rop_req_if)
     );
 
 `endif
