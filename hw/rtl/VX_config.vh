@@ -25,16 +25,26 @@
 `define NUM_BARRIERS 4
 `endif
 
-`ifndef L2_ENABLE
-`define L2_ENABLE 0
+`ifndef SM_DISABLE
+`define SM_ENABLE
 `endif
 
-`ifndef L3_ENABLE
-`define L3_ENABLE 0
+`ifdef SM_ENABLE
+    `define SM_ENABLED   1
+`else
+    `define SM_ENABLED   0
 `endif
 
-`ifndef SM_ENABLE
-`define SM_ENABLE 1
+`ifdef L2_ENABLE
+    `define L2_ENABLED   1
+`else
+    `define L2_ENABLED   0
+`endif
+
+`ifdef L3_ENABLE
+    `define L3_ENABLED   1
+`else
+    `define L3_ENABLED   0
 `endif
 
 `ifndef MEM_BLOCK_SIZE
@@ -42,7 +52,7 @@
 `endif
 
 `ifndef L1_BLOCK_SIZE
-`define L1_BLOCK_SIZE ((`L2_ENABLE || `L3_ENABLE) ? 16 : `MEM_BLOCK_SIZE)
+`define L1_BLOCK_SIZE ((`L2_ENABLED || `L3_ENABLED) ? 16 : `MEM_BLOCK_SIZE)
 `endif
 
 `ifndef STARTUP_ADDR

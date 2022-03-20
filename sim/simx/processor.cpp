@@ -49,7 +49,7 @@ public:
     std::vector<SimPort<MemReq>*> mem_req_ports(1, &memsim->MemReqPort);
     std::vector<SimPort<MemRsp>*> mem_rsp_ports(1, &memsim->MemRspPort);
 
-    if (L3_ENABLE) {
+    if (L3_ENABLED) {
       l3cache_ = CacheSim::Create("l3cache", CacheSim::Config{
         log2ceil(L3_CACHE_SIZE),  // C
         log2ceil(MEM_BLOCK_SIZE), // B
@@ -94,7 +94,7 @@ public:
       std::vector<SimPort<MemReq>*> cluster_mem_req_ports(cores_per_cluster); 
       std::vector<SimPort<MemRsp>*> cluster_mem_rsp_ports(cores_per_cluster);
 
-      if (L2_ENABLE) {
+      if (L2_ENABLED) {
         auto& l2cache = l2caches_.at(i);
         l2cache = CacheSim::Create("l2cache", CacheSim::Config{
           log2ceil(L2_CACHE_SIZE),  // C

@@ -26,7 +26,7 @@ module VX_cluster #(
     // Status
     output wire             busy
 ); 
-    `STATIC_ASSERT((`L2_ENABLE == 0 || `NUM_CORES > 1), ("invalid parameter"))
+    `STATIC_ASSERT((`L2_ENABLED == 0 || `NUM_CORES > 1), ("invalid parameter"))
 
     localparam MEM_ARB_SIZE = 1 + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED;
     localparam RASTER_MEM_ARB = `EXT_RASTER_ENABLED;
@@ -35,12 +35,12 @@ module VX_cluster #(
     VX_mem_req_if #(
         .DATA_WIDTH (`L2_MEM_DATA_WIDTH),
         .ADDR_WIDTH (`L2_MEM_ADDR_WIDTH),
-        .TAG_WIDTH  (`L2_MEM_TAG_WIDTH)
+        .TAG_WIDTH  (`L2X_MEM_TAG_WIDTH)
     ) mem_req_arb_if[MEM_ARB_SIZE-1:0]();
     
     VX_mem_rsp_if #(
         .DATA_WIDTH (`L2_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (`L2_MEM_TAG_WIDTH)
+        .TAG_WIDTH  (`L2X_MEM_TAG_WIDTH)
     ) mem_rsp_arb_if[MEM_ARB_SIZE-1:0]();
 
 `ifdef EXT_RASTER_ENABLE
@@ -273,12 +273,12 @@ module VX_cluster #(
     VX_mem_req_if #(
         .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
         .ADDR_WIDTH (`DCACHE_MEM_ADDR_WIDTH),
-        .TAG_WIDTH  (`DCACHE_MEM_TAG_WIDTH)
+        .TAG_WIDTH  (`L1_MEM_TAG_WIDTH)
     ) per_core_mem_req_if[`NUM_CORES-1:0]();
     
     VX_mem_rsp_if #(
         .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (`DCACHE_MEM_TAG_WIDTH)
+        .TAG_WIDTH  (`L1_MEM_TAG_WIDTH)
     ) per_core_mem_rsp_if[`NUM_CORES-1:0]();
 
     wire [`NUM_CORES-1:0] per_core_busy;
@@ -314,102 +314,103 @@ module VX_cluster #(
     
     assign busy = (| per_core_busy);
 
-    if (`L2_ENABLE) begin
+`ifdef L2_ENABLE
+
+`ifdef PERF_ENABLE
+    VX_perf_cache_if perf_l2cache_if();
+`endif
+
+    `RESET_RELAY (l2_reset);
+
+    VX_cache #(
+        .CACHE_ID           (`L2_CACHE_ID),
+        .CACHE_SIZE         (`L2_CACHE_SIZE),
+        .CACHE_LINE_SIZE    (`L2_CACHE_LINE_SIZE),
+        .NUM_BANKS          (`L2_NUM_BANKS),
+        .NUM_PORTS          (`L2_NUM_PORTS),
+        .WORD_SIZE          (`L2_WORD_SIZE),
+        .NUM_REQS           (`L2_NUM_REQS),
+        .CREQ_SIZE          (`L2_CREQ_SIZE),
+        .CRSQ_SIZE          (`L2_CRSQ_SIZE),
+        .MSHR_SIZE          (`L2_MSHR_SIZE),
+        .MRSQ_SIZE          (`L2_MRSQ_SIZE),
+        .MREQ_SIZE          (`L2_MREQ_SIZE),
+        .WRITE_ENABLE       (1),          
+        .CORE_TAG_WIDTH     (`L1_MEM_TAG_WIDTH),
+        .CORE_TAG_ID_BITS   (0),
+        .MEM_TAG_WIDTH      (`L2_MEM_TAG_WIDTH),
+        .NC_ENABLE          (1)
+    ) l2cache (
+        `SCOPE_BIND_VX_cluster_l2cache
+            
+        .clk                (clk),
+        .reset              (l2_reset),
+
     `ifdef PERF_ENABLE
-        VX_perf_cache_if perf_l2cache_if();
+        .perf_cache_if      (perf_l2cache_if),
     `endif
 
-        `RESET_RELAY (l2_reset);
+        // Core request
+        .core_req_valid     (per_core_mem_req_if.valid),
+        .core_req_rw        (per_core_mem_req_if.rw),
+        .core_req_byteen    (per_core_mem_req_if.byteen),
+        .core_req_addr      (per_core_mem_req_if.addr),
+        .core_req_data      (per_core_mem_req_if.data),  
+        .core_req_tag       (per_core_mem_req_if.tag),  
+        .core_req_ready     (per_core_mem_req_if.ready),
 
-        VX_cache #(
-            .CACHE_ID           (`L2_CACHE_ID),
-            .CACHE_SIZE         (`L2_CACHE_SIZE),
-            .CACHE_LINE_SIZE    (`L2_CACHE_LINE_SIZE),
-            .NUM_BANKS          (`L2_NUM_BANKS),
-            .NUM_PORTS          (`L2_NUM_PORTS),
-            .WORD_SIZE          (`L2_WORD_SIZE),
-            .NUM_REQS           (`L2_NUM_REQS),
-            .CREQ_SIZE          (`L2_CREQ_SIZE),
-            .CRSQ_SIZE          (`L2_CRSQ_SIZE),
-            .MSHR_SIZE          (`L2_MSHR_SIZE),
-            .MRSQ_SIZE          (`L2_MRSQ_SIZE),
-            .MREQ_SIZE          (`L2_MREQ_SIZE),
-            .WRITE_ENABLE       (1),          
-            .CORE_TAG_WIDTH     (`L1_MEM_TAG_WIDTH),
-            .CORE_TAG_ID_BITS   (0),
-            .MEM_TAG_WIDTH      (`L2_MEM_TAG_WIDTH),
-            .NC_ENABLE          (1)
-        ) l2cache (
-            `SCOPE_BIND_VX_cluster_l2cache
-              
-            .clk                (clk),
-            .reset              (l2_reset),
+        // Core response
+        .core_rsp_valid     (per_core_mem_rsp_if.valid),
+        .core_rsp_data      (per_core_mem_rsp_if.data),
+        .core_rsp_tag       (per_core_mem_rsp_if.tag),
+        .core_rsp_ready     (per_core_mem_rsp_if.ready),
+        `UNUSED_PIN (core_rsp_tmask),
 
-        `ifdef PERF_ENABLE
-            .perf_cache_if      (perf_l2cache_if),
-        `endif
+        // Memory request
+        .mem_req_valid      (mem_req_if.valid),
+        .mem_req_rw         (mem_req_if.rw),        
+        .mem_req_byteen     (mem_req_if.byteen),
+        .mem_req_addr       (mem_req_if.addr),
+        .mem_req_data       (mem_req_if.data),
+        .mem_req_tag        (mem_req_if.tag),
+        .mem_req_ready      (mem_req_if.ready),
+        
+        // Memory response
+        .mem_rsp_valid      (mem_rsp_if.valid),
+        .mem_rsp_tag        (mem_rsp_if.tag),
+        .mem_rsp_data       (mem_rsp_if.data),
+        .mem_rsp_ready      (mem_rsp_if.ready)
+    );
 
-            // Core request
-            .core_req_valid     (per_core_mem_req_if.valid),
-            .core_req_rw        (per_core_mem_req_if.rw),
-            .core_req_byteen    (per_core_mem_req_if.byteen),
-            .core_req_addr      (per_core_mem_req_if.addr),
-            .core_req_data      (per_core_mem_req_if.data),  
-            .core_req_tag       (per_core_mem_req_if.tag),  
-            .core_req_ready     (per_core_mem_req_if.ready),
+`else
 
-            // Core response
-            .core_rsp_valid     (per_core_mem_rsp_if.valid),
-            .core_rsp_data      (per_core_mem_rsp_if.data),
-            .core_rsp_tag       (per_core_mem_rsp_if.tag),
-            .core_rsp_ready     (per_core_mem_rsp_if.ready),
-            `UNUSED_PIN (core_rsp_tmask),
+    `RESET_RELAY (mem_arb_reset);
 
-            // Memory request
-            .mem_req_valid      (mem_req_if.valid),
-            .mem_req_rw         (mem_req_if.rw),        
-            .mem_req_byteen     (mem_req_if.byteen),
-            .mem_req_addr       (mem_req_if.addr),
-            .mem_req_data       (mem_req_if.data),
-            .mem_req_tag        (mem_req_if.tag),
-            .mem_req_ready      (mem_req_if.ready),
-            
-            // Memory response
-            .mem_rsp_valid      (mem_rsp_if.valid),
-            .mem_rsp_tag        (mem_rsp_if.tag),
-            .mem_rsp_data       (mem_rsp_if.data),
-            .mem_rsp_ready      (mem_rsp_if.ready)
-        );
+    VX_mem_arb #(
+        .NUM_REQS     (`NUM_CORES),
+        .DATA_WIDTH   (`DCACHE_MEM_DATA_WIDTH),
+        .ADDR_WIDTH   (`DCACHE_MEM_ADDR_WIDTH),           
+        .TAG_IN_WIDTH (`L1_MEM_TAG_WIDTH),            
+        .TYPE         ("R"),
+        .TAG_SEL_IDX  (1), // Skip 0 for NC flag
+        .BUFFERED_REQ (1),
+        .BUFFERED_RSP (1)
+    ) mem_arb_core (
+        .clk        (clk),
+        .reset      (mem_arb_reset),
+        .req_in_if  (per_core_mem_req_if),
+        .req_out_if (mem_req_arb_if[0]),
+        .rsp_out_if (per_core_mem_rsp_if),
+        .rsp_in_if  (mem_rsp_arb_if[0])
+    );
 
-    end else begin
-
-        `RESET_RELAY (mem_arb_reset);
-
-        VX_mem_arb #(
-            .NUM_REQS     (`NUM_CORES),
-            .DATA_WIDTH   (`DCACHE_MEM_DATA_WIDTH),
-            .ADDR_WIDTH   (`DCACHE_MEM_ADDR_WIDTH),           
-            .TAG_IN_WIDTH (`DCACHE_MEM_TAG_WIDTH),            
-            .TYPE         ("R"),
-            .TAG_SEL_IDX  (1), // Skip 0 for NC flag
-            .BUFFERED_REQ (1),
-            .BUFFERED_RSP (1)
-        ) mem_arb_core (
-            .clk        (clk),
-            .reset      (mem_arb_reset),
-            .req_in_if  (per_core_mem_req_if),
-            .req_out_if (mem_req_arb_if[0]),
-            .rsp_out_if (per_core_mem_rsp_if),
-            .rsp_in_if  (mem_rsp_arb_if[0])
-        );
-
-    end
+`endif
 
     VX_mem_arb #(
         .NUM_REQS     (MEM_ARB_SIZE),
         .DATA_WIDTH   (`L2_MEM_DATA_WIDTH),
         .ADDR_WIDTH   (`L2_MEM_ADDR_WIDTH),
-        .TAG_IN_WIDTH (`L2_MEM_TAG_WIDTH),
+        .TAG_IN_WIDTH (`L2X_MEM_TAG_WIDTH),
     ) mem_arb_out (
         .clk        (clk),
         .reset      (reset),

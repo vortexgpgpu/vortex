@@ -1,7 +1,7 @@
 `include "VX_define.vh"
 
-`define DCACHE_SMEM_TAG_WIDTH   `DCACHE_TAG_WIDTH-`SM_ENABLE
-`define DCACHE_SMEM_TAG_ID_BITS `DCACHE_TAG_ID_BITS-`SM_ENABLE
+`define DCACHE_SMEM_TAG_WIDTH   `DCACHE_TAG_WIDTH-`SM_ENABLED
+`define DCACHE_SMEM_TAG_ID_BITS `DCACHE_TAG_ID_BITS-`SM_ENABLED
 
 `ifdef EXT_TEX_ENABLE
 `define DCACHE_TEX_TAG_ID_BITS  `MAX(`DCACHE_SMEM_TAG_ID_BITS, `TCACHE_TAG_ID_BITS)
@@ -208,127 +208,127 @@ module VX_mem_unit # (
         .mem_rsp_ready      (caches_mem_rsp_if[1].ready)
     ); 
 
-    if (`SM_ENABLE) begin
-        VX_dcache_req_if #(
-            .NUM_REQS  (`DCACHE_NUM_REQS), 
-            .WORD_SIZE (`DCACHE_WORD_SIZE), 
-            .TAG_WIDTH (`DCACHE_SMEM_TAG_WIDTH)
-        ) smem_req_if();
+`ifdef SM_ENABLE
+    VX_dcache_req_if #(
+        .NUM_REQS  (`DCACHE_NUM_REQS), 
+        .WORD_SIZE (`DCACHE_WORD_SIZE), 
+        .TAG_WIDTH (`DCACHE_SMEM_TAG_WIDTH)
+    ) smem_req_if();
 
-        VX_dcache_rsp_if #(
-            .NUM_REQS  (`DCACHE_NUM_REQS), 
-            .WORD_SIZE (`DCACHE_WORD_SIZE), 
-            .TAG_WIDTH (`DCACHE_SMEM_TAG_WIDTH)
-        ) smem_rsp_if();
+    VX_dcache_rsp_if #(
+        .NUM_REQS  (`DCACHE_NUM_REQS), 
+        .WORD_SIZE (`DCACHE_WORD_SIZE), 
+        .TAG_WIDTH (`DCACHE_SMEM_TAG_WIDTH)
+    ) smem_rsp_if();
 
-        `RESET_RELAY (smem_arb_reset);
-        `RESET_RELAY (smem_reset);
+    `RESET_RELAY (smem_arb_reset);
+    `RESET_RELAY (smem_reset);
 
-        VX_cache_demux #(
-            .NUM_REQS      (2),
-            .LANES         (`NUM_THREADS),
-            .DATA_SIZE     (4),            
-            .TAG_IN_WIDTH  (`DCACHE_TAG_WIDTH),
-            .TAG_SEL_IDX   (0),
-            .TYPE          ("P"),
-            .BUFFERED_REQ  (2),
-            .BUFFERED_RSP  (1)
-        ) dcache_smem_arb (
-            .clk          (clk),
-            .reset        (smem_arb_reset),
+    VX_cache_demux #(
+        .NUM_REQS      (2),
+        .LANES         (`NUM_THREADS),
+        .DATA_SIZE     (4),            
+        .TAG_IN_WIDTH  (`DCACHE_TAG_WIDTH),
+        .TAG_SEL_IDX   (0),
+        .TYPE          ("P"),
+        .BUFFERED_REQ  (2),
+        .BUFFERED_RSP  (1)
+    ) dcache_smem_arb (
+        .clk          (clk),
+        .reset        (smem_arb_reset),
 
-            // input request
-            .req_valid_in   (dcache_req_if.valid),
-            .req_rw_in      (dcache_req_if.rw),        
-            .req_byteen_in  (dcache_req_if.byteen),        
-            .req_addr_in    (dcache_req_if.addr),
-            .req_data_in    (dcache_req_if.data),
-            .req_tag_in     (dcache_req_if.tag),
-            .req_ready_in   (dcache_req_if.ready),
-            
-            // output requests
-            .req_valid_out  ({smem_req_if.valid, dcache_smem_req_if.valid}),
-            .req_rw_out     ({smem_req_if.rw,    dcache_smem_req_if.rw}),
-            .req_byteen_out ({smem_req_if.byteen,dcache_smem_req_if.byteen}),
-            .req_addr_out   ({smem_req_if.addr,  dcache_smem_req_if.addr}),
-            .req_data_out   ({smem_req_if.data,  dcache_smem_req_if.data}),  
-            .req_tag_out    ({smem_req_if.tag,   dcache_smem_req_if.tag}),  
-            .req_ready_out  ({smem_req_if.ready, dcache_smem_req_if.ready}),            
-            
-            // input responses
-            .rsp_valid_in   ({smem_rsp_if.valid, dcache_smem_rsp_if.valid}),
-            .rsp_tmask_in   ({smem_rsp_if.tmask, dcache_smem_rsp_if.tmask}),
-            .rsp_data_in    ({smem_rsp_if.data,  dcache_smem_rsp_if.data}),
-            .rsp_tag_in     ({smem_rsp_if.tag,   dcache_smem_rsp_if.tag}),
-            .rsp_ready_in   ({smem_rsp_if.ready, dcache_smem_rsp_if.ready}),
-
-            // output response
-            .rsp_valid_out  (dcache_rsp_if.valid),
-            .rsp_tmask_out  (dcache_rsp_if.tmask),
-            .rsp_tag_out    (dcache_rsp_if.tag),
-            .rsp_data_out   (dcache_rsp_if.data),
-            .rsp_ready_out  (dcache_rsp_if.ready)
-        );
-
-        VX_shared_mem #(
-            .CACHE_ID           (`SMEM_ID),
-            .CACHE_SIZE         (`SMEM_SIZE),
-            .NUM_BANKS          (`SMEM_NUM_BANKS),
-            .WORD_SIZE          (`SMEM_WORD_SIZE),
-            .NUM_REQS           (`SMEM_NUM_REQS),
-            .CREQ_SIZE          (`SMEM_CREQ_SIZE),
-            .CRSQ_SIZE          (`SMEM_CRSQ_SIZE),
-            .CORE_TAG_WIDTH     (`DCACHE_SMEM_TAG_WIDTH),
-            .CORE_TAG_ID_BITS   (`DCACHE_SMEM_TAG_ID_BITS),
-            .BANK_ADDR_OFFSET   (`SMEM_BANK_ADDR_OFFSET)
-        ) smem (            
-            .clk                (clk),
-            .reset              (smem_reset),
-
-        `ifdef PERF_ENABLE
-            .perf_cache_if      (perf_smem_if),
-        `endif
-
-            // Core request
-            .core_req_valid     (smem_req_if.valid),
-            .core_req_rw        (smem_req_if.rw),
-            .core_req_byteen    (smem_req_if.byteen),
-            .core_req_addr      (smem_req_if.addr),
-            .core_req_data      (smem_req_if.data),        
-            .core_req_tag       (smem_req_if.tag),
-            .core_req_ready     (smem_req_if.ready),
-
-            // Core response
-            .core_rsp_valid     (smem_rsp_if.valid),
-            .core_rsp_tmask     (smem_rsp_if.tmask),
-            .core_rsp_data      (smem_rsp_if.data),
-            .core_rsp_tag       (smem_rsp_if.tag),
-            .core_rsp_ready     (smem_rsp_if.ready)
-        );    
-    end else begin
-        // core to D-cache request
-        for (genvar i = 0; i < `DCACHE_NUM_REQS; ++i) begin
-            VX_skid_buffer #(
-                .DATAW ((32-`CLOG2(`DCACHE_WORD_SIZE)) + 1 + `DCACHE_WORD_SIZE + (8*`DCACHE_WORD_SIZE) + `DCACHE_TAG_WIDTH)
-            ) req_buf (
-                .clk       (clk),
-                .reset     (reset),
-                .valid_in  (dcache_req_if.valid[i]),        
-                .data_in   ({dcache_req_if.addr[i], dcache_req_if.rw[i], dcache_req_if.byteen[i], dcache_req_if.data[i], dcache_req_if.tag[i]}),
-                .ready_in  (dcache_req_if.ready[i]),
-                .valid_out (dcache_smem_req_if.valid[i]),
-                .data_out  ({dcache_smem_req_if.addr[i], dcache_smem_req_if.rw[i], dcache_smem_req_if.byteen[i], dcache_smem_req_if.data[i], dcache_smem_req_if.tag[i]}),
-                .ready_out (dcache_smem_req_if.ready[i])
-            );
-        end
+        // input request
+        .req_valid_in   (dcache_req_if.valid),
+        .req_rw_in      (dcache_req_if.rw),        
+        .req_byteen_in  (dcache_req_if.byteen),        
+        .req_addr_in    (dcache_req_if.addr),
+        .req_data_in    (dcache_req_if.data),
+        .req_tag_in     (dcache_req_if.tag),
+        .req_ready_in   (dcache_req_if.ready),
         
-        // D-cache to core reponse
-        assign dcache_rsp_if.valid = dcache_smem_rsp_if.valid;
-        assign dcache_rsp_if.tmask = dcache_smem_rsp_if.tmask;
-        assign dcache_rsp_if.tag   = dcache_smem_rsp_if.tag;
-        assign dcache_rsp_if.data  = dcache_smem_rsp_if.data;
-        assign dcache_smem_rsp_if.ready = dcache_rsp_if.ready;
-    end    
+        // output requests
+        .req_valid_out  ({smem_req_if.valid, dcache_smem_req_if.valid}),
+        .req_rw_out     ({smem_req_if.rw,    dcache_smem_req_if.rw}),
+        .req_byteen_out ({smem_req_if.byteen,dcache_smem_req_if.byteen}),
+        .req_addr_out   ({smem_req_if.addr,  dcache_smem_req_if.addr}),
+        .req_data_out   ({smem_req_if.data,  dcache_smem_req_if.data}),  
+        .req_tag_out    ({smem_req_if.tag,   dcache_smem_req_if.tag}),  
+        .req_ready_out  ({smem_req_if.ready, dcache_smem_req_if.ready}),            
+        
+        // input responses
+        .rsp_valid_in   ({smem_rsp_if.valid, dcache_smem_rsp_if.valid}),
+        .rsp_tmask_in   ({smem_rsp_if.tmask, dcache_smem_rsp_if.tmask}),
+        .rsp_data_in    ({smem_rsp_if.data,  dcache_smem_rsp_if.data}),
+        .rsp_tag_in     ({smem_rsp_if.tag,   dcache_smem_rsp_if.tag}),
+        .rsp_ready_in   ({smem_rsp_if.ready, dcache_smem_rsp_if.ready}),
+
+        // output response
+        .rsp_valid_out  (dcache_rsp_if.valid),
+        .rsp_tmask_out  (dcache_rsp_if.tmask),
+        .rsp_tag_out    (dcache_rsp_if.tag),
+        .rsp_data_out   (dcache_rsp_if.data),
+        .rsp_ready_out  (dcache_rsp_if.ready)
+    );
+
+    VX_shared_mem #(
+        .CACHE_ID           (`SMEM_ID),
+        .CACHE_SIZE         (`SMEM_SIZE),
+        .NUM_BANKS          (`SMEM_NUM_BANKS),
+        .WORD_SIZE          (`SMEM_WORD_SIZE),
+        .NUM_REQS           (`SMEM_NUM_REQS),
+        .CREQ_SIZE          (`SMEM_CREQ_SIZE),
+        .CRSQ_SIZE          (`SMEM_CRSQ_SIZE),
+        .CORE_TAG_WIDTH     (`DCACHE_SMEM_TAG_WIDTH),
+        .CORE_TAG_ID_BITS   (`DCACHE_SMEM_TAG_ID_BITS),
+        .BANK_ADDR_OFFSET   (`SMEM_BANK_ADDR_OFFSET)
+    ) smem (            
+        .clk                (clk),
+        .reset              (smem_reset),
+
+    `ifdef PERF_ENABLE
+        .perf_cache_if      (perf_smem_if),
+    `endif
+
+        // Core request
+        .core_req_valid     (smem_req_if.valid),
+        .core_req_rw        (smem_req_if.rw),
+        .core_req_byteen    (smem_req_if.byteen),
+        .core_req_addr      (smem_req_if.addr),
+        .core_req_data      (smem_req_if.data),        
+        .core_req_tag       (smem_req_if.tag),
+        .core_req_ready     (smem_req_if.ready),
+
+        // Core response
+        .core_rsp_valid     (smem_rsp_if.valid),
+        .core_rsp_tmask     (smem_rsp_if.tmask),
+        .core_rsp_data      (smem_rsp_if.data),
+        .core_rsp_tag       (smem_rsp_if.tag),
+        .core_rsp_ready     (smem_rsp_if.ready)
+    );    
+`else
+    // core to D-cache request
+    for (genvar i = 0; i < `DCACHE_NUM_REQS; ++i) begin
+        VX_skid_buffer #(
+            .DATAW ((32-`CLOG2(`DCACHE_WORD_SIZE)) + 1 + `DCACHE_WORD_SIZE + (8*`DCACHE_WORD_SIZE) + `DCACHE_TAG_WIDTH)
+        ) req_buf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (dcache_req_if.valid[i]),        
+            .data_in   ({dcache_req_if.addr[i], dcache_req_if.rw[i], dcache_req_if.byteen[i], dcache_req_if.data[i], dcache_req_if.tag[i]}),
+            .ready_in  (dcache_req_if.ready[i]),
+            .valid_out (dcache_smem_req_if.valid[i]),
+            .data_out  ({dcache_smem_req_if.addr[i], dcache_smem_req_if.rw[i], dcache_smem_req_if.byteen[i], dcache_smem_req_if.data[i], dcache_smem_req_if.tag[i]}),
+            .ready_out (dcache_smem_req_if.ready[i])
+        );
+    end
+    
+    // D-cache to core reponse
+    assign dcache_rsp_if.valid = dcache_smem_rsp_if.valid;
+    assign dcache_rsp_if.tmask = dcache_smem_rsp_if.tmask;
+    assign dcache_rsp_if.tag   = dcache_smem_rsp_if.tag;
+    assign dcache_rsp_if.data  = dcache_smem_rsp_if.data;
+    assign dcache_smem_rsp_if.ready = dcache_rsp_if.ready;
+`endif    
 
 `ifdef EXT_TEX_ENABLE
 
@@ -448,16 +448,16 @@ module VX_mem_unit # (
     assign perf_memsys_if.dcache_bank_stalls = perf_dcache_if.bank_stalls;
     assign perf_memsys_if.dcache_mshr_stalls = perf_dcache_if.mshr_stalls;    
 
-if (`SM_ENABLE) begin
+`ifdef SM_ENABLE
     assign perf_memsys_if.smem_reads         = perf_smem_if.reads;
     assign perf_memsys_if.smem_writes        = perf_smem_if.writes;
     assign perf_memsys_if.smem_bank_stalls   = perf_smem_if.bank_stalls;    
-end else begin
+`else
     assign perf_memsys_if.smem_reads         = 0;
     assign perf_memsys_if.smem_writes        = 0;
     assign perf_memsys_if.smem_bank_stalls   = 0;
-end
-    
+`endif
+
     reg [`PERF_CTR_BITS-1:0] perf_mem_pending_reads;
 
     always @(posedge clk) begin

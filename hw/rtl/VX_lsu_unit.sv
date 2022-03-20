@@ -72,18 +72,18 @@ module VX_lsu_unit #(
         wire [MEM_ADDRW-1:0] full_addr_w = full_addr[i][MEM_ASHIFT +: MEM_ADDRW];
         // is non-cacheable address
         wire is_addr_nc = (full_addr_w >= MEM_ADDRW'(`IO_BASE_ADDR >> MEM_ASHIFT));
-        if (`SM_ENABLE) begin
-            // is stack address
-            wire is_stack_addr = (full_addr_w >= STACK_END_W) && (full_addr_w < STACK_START_W);
+    `ifdef SM_ENABLE
+        // is stack address
+        wire is_stack_addr = (full_addr_w >= STACK_END_W) && (full_addr_w < STACK_START_W);
 
-            // check if address falls into shared memory region
-            wire [STACK_ADDR_W-1:0] offset = full_addr_w[STACK_ADDR_W-1:0];
-            wire is_addr_sm = is_stack_addr && (offset >= STACK_ADDR_W'(STACK_SIZE_W - SMEM_LOCAL_SIZE_W));
+        // check if address falls into shared memory region
+        wire [STACK_ADDR_W-1:0] offset = full_addr_w[STACK_ADDR_W-1:0];
+        wire is_addr_sm = is_stack_addr && (offset >= STACK_ADDR_W'(STACK_SIZE_W - SMEM_LOCAL_SIZE_W));
 
-            assign lsu_addr_type[i] = {is_addr_nc, is_addr_sm};
-        end else begin
-            assign lsu_addr_type[i] = is_addr_nc;
-        end
+        assign lsu_addr_type[i] = {is_addr_nc, is_addr_sm};
+    `else
+        assign lsu_addr_type[i] = is_addr_nc;
+    `endif
     end
 
     // fence stalls the pipeline until all pending requests are sent
@@ -326,7 +326,7 @@ module VX_lsu_unit #(
 
 `ifndef SYNTHESIS
     reg [`LSUQ_SIZE-1:0][(`NW_BITS + 32 + `NR_BITS + `UUID_BITS + 64 + 1)-1:0] pending_reqs;
-    wire [63:0] delay_timeout = 10000 * (1 ** (`L2_ENABLE + `L3_ENABLE));
+    wire [63:0] delay_timeout = 10000 * (1 ** (`L2_ENABLED + `L3_ENABLED));
 
     always @(posedge clk) begin
         if (reset) begin
