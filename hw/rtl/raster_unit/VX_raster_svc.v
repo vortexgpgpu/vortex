@@ -23,24 +23,23 @@ module VX_raster_svc #(
         .reset      (reset),
 
         // inputs        
+        .raster_svc_req_if (raster_svc_req_if),
         .raster_req_if (raster_req_if),
 
         // outputs
         .raster_csr_if (raster_csr_if)
     );
 
-    assign raster_req_if.valid = 0;
-    assign raster_req_if.tmask = 0;
+    assign raster_req_if.valid = raster_svc_req_if.valid & raster_svc_rsp_if.ready;
+    assign raster_req_if.tmask = raster_svc_req_if.tmask;
+    assign raster_svc_req_if.ready = raster_req_if.ready & raster_svc_rsp_if.ready;
 
-    `UNUSED_VAR (raster_svc_req_if.valid)
-    `UNUSED_VAR (raster_svc_req_if.uuid)
-    `UNUSED_VAR (raster_svc_req_if.wid)
-    `UNUSED_VAR (raster_svc_req_if.tmask)
-    `UNUSED_VAR (raster_svc_req_if.PC)
-    `UNUSED_VAR (raster_svc_req_if.rd)
-    `UNUSED_VAR (raster_svc_req_if.wb)
-    assign raster_svc_req_if.ready = 0;
-
-    assign raster_svc_rsp_if.valid = 0;
+    assign raster_svc_rsp_if.valid = raster_svc_req_if.valid & raster_req_if.ready;
+    assign raster_svc_rsp_if.uuid  = raster_svc_req_if.uuid;
+    assign raster_svc_rsp_if.wid   = raster_svc_req_if.wid;
+    assign raster_svc_rsp_if.tmask = raster_svc_req_if.tmask;
+    assign raster_svc_rsp_if.PC    = raster_svc_req_if.PC;
+    assign raster_svc_rsp_if.rd    =  raster_svc_req_if.rd;
+    assign raster_svc_rsp_if.wb    =  raster_svc_req_if.wb;
 
 endmodule

@@ -25,7 +25,7 @@ using fixeduv_t = cocogfx::TFixed<TEX_FXD_FRAC>;
 	auto F0 = fixed16_t::make(csr_read(CSR_RASTER_BCOORD_X##i)); \
 	auto F1 = fixed16_t::make(csr_read(CSR_RASTER_BCOORD_Y##i)); \
 	auto F2 = fixed16_t::make(csr_read(CSR_RASTER_BCOORD_Z##i)); \
-	auto r  = cocogfx::Inverse<fixed24_t>(F0 + F1 + F2); \
+	auto r  = fixed24_t::make((1ll << (16+24)) / (int64_t(F0.data()) + int64_t(F1.data()) + int64_t(F2.data()))); \
     dx[i]   = cocogfx::Mul<fixed24_t>(r, F0); \
     dy[i]   = cocogfx::Mul<fixed24_t>(r, F1); \
 }

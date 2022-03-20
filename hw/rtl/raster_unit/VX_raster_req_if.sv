@@ -21,7 +21,7 @@ interface VX_raster_req_if ();
 
     modport slave (
         input  valid,
-        input  tmask,        
+        input  tmask,
         output stamp,
         output empty,
         output ready

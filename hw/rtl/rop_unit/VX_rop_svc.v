@@ -35,25 +35,24 @@ module VX_rop_svc #(
 
     assign rop_req_if.valid = 0;
     assign rop_req_if.tmask = 0;
-    assign rop_req_if.pos_x = 0;
-    assign rop_req_if.pos_y = 0;
-    assign rop_req_if.color = 0;
-    assign rop_req_if.depth = 0;
-    assign rop_req_if.backface = 0;
+    
     `UNUSED_VAR (rop_req_if.ready);
 
-    `UNUSED_VAR (rop_svc_req_if.valid)
-    `UNUSED_VAR (rop_svc_req_if.uuid)
-    `UNUSED_VAR (rop_svc_req_if.wid)
-    `UNUSED_VAR (rop_svc_req_if.tmask)
-    `UNUSED_VAR (rop_svc_req_if.PC)
-    `UNUSED_VAR (rop_svc_req_if.pos_x)
-    `UNUSED_VAR (rop_svc_req_if.pos_y)
-    `UNUSED_VAR (rop_svc_req_if.backface)
-    `UNUSED_VAR (rop_svc_req_if.color)
-    `UNUSED_VAR (rop_svc_req_if.depth)
-    assign rop_svc_req_if.ready = 0;
+    assign rop_req_if.valid = rop_svc_req_if.valid & rop_svc_rsp_if.ready;
+    assign rop_req_if.tmask = rop_svc_req_if.tmask;
+    assign rop_req_if.pos_x = rop_svc_req_if.pos_x;
+    assign rop_req_if.pos_y = rop_svc_req_if.pos_y;
+    assign rop_req_if.color = rop_svc_req_if.color;
+    assign rop_req_if.depth = rop_svc_req_if.depth;
+    assign rop_req_if.backface = rop_svc_req_if.backface;
+    assign rop_svc_req_if.ready = rop_req_if.ready & rop_svc_rsp_if.ready;
 
-    assign rop_svc_rsp_if.valid = 0;
+    assign rop_svc_rsp_if.valid = rop_svc_req_if.valid & rop_req_if.ready;
+    assign rop_svc_rsp_if.uuid  = rop_svc_req_if.uuid;
+    assign rop_svc_rsp_if.wid   = rop_svc_req_if.wid;
+    assign rop_svc_rsp_if.tmask = rop_svc_req_if.tmask;
+    assign rop_svc_rsp_if.PC    = rop_svc_req_if.PC;
+    assign rop_svc_rsp_if.rd    = '0;
+    assign rop_svc_rsp_if.wb    = 0;
 
 endmodule
