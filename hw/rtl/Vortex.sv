@@ -34,6 +34,30 @@ module Vortex (
 );
     `STATIC_ASSERT((`L3_ENABLE == 0 || `NUM_CLUSTERS > 1), ("invalid parameter"))
 
+    VX_mem_req_if #(
+        .DATA_WIDTH (`VX_MEM_DATA_WIDTH),
+        .ADDR_WIDTH (`VX_MEM_ADDR_WIDTH),
+        .TAG_WIDTH  (`VX_MEM_TAG_WIDTH)
+    ) mem_req_if();
+
+    VX_mem_rsp_if #(
+        .DATA_WIDTH (`VX_MEM_DATA_WIDTH),
+        .TAG_WIDTH  (`VX_MEM_TAG_WIDTH)
+    ) mem_rsp_if();
+
+    assign mem_req_valid = mem_req_if.valid;
+    assign mem_req_rw    = mem_req_if.rw;
+    assign mem_req_byteen= mem_req_if.byteen;
+    assign mem_req_addr  = mem_req_if.addr;
+    assign mem_req_data  = mem_req_if.data;
+    assign mem_req_tag   = mem_req_if.tag;
+    assign mem_req_if.ready = mem_req_ready;
+
+    assign mem_rsp_if.valid = mem_rsp_valid;
+    assign mem_rsp_if.data  = mem_rsp_data;
+    assign mem_rsp_if.tag   = mem_rsp_tag;
+    assign mem_rsp_ready = mem_rsp_if.ready;
+
 `ifdef EXT_TEX_ENABLE
     VX_tex_dcr_if #(
         .NUM_STAGES (`TEX_STAGE_COUNT)
@@ -43,7 +67,7 @@ module Vortex (
     VX_raster_dcr_if raster_dcr_if();
 `endif
 `ifdef EXT_ROP_ENABLE
-    VX_rop_dcr_if    rop_dcr_if();
+    VX_rop_dcr_if rop_dcr_if();
 `endif
     
     VX_dcr_data dcr_data(
@@ -64,20 +88,18 @@ module Vortex (
         .dcr_wr_ready (dcr_wr_ready)
     );
 
-    wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_req_valid;
-    wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_req_rw;
-    wire [`NUM_CLUSTERS-1:0][`L2_MEM_BYTEEN_WIDTH-1:0] per_cluster_mem_req_byteen;
-    wire [`NUM_CLUSTERS-1:0][`L2_MEM_ADDR_WIDTH-1:0] per_cluster_mem_req_addr;
-    wire [`NUM_CLUSTERS-1:0][`L2_MEM_DATA_WIDTH-1:0] per_cluster_mem_req_data;
-    wire [`NUM_CLUSTERS-1:0][`L2_MEM_TAG_WIDTH-1:0]  per_cluster_mem_req_tag;
-    wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_req_ready;
+    VX_mem_req_if #(
+        .DATA_WIDTH (`L2_MEM_DATA_WIDTH),
+        .ADDR_WIDTH (`L2_MEM_ADDR_WIDTH),
+        .TAG_WIDTH  (`L2_MEM_TAG_WIDTH)
+    ) per_cluster_mem_req_if[`NUM_CLUSTERS-1:0]();        
 
-    wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_rsp_valid;
-    wire [`NUM_CLUSTERS-1:0][`L2_MEM_DATA_WIDTH-1:0] per_cluster_mem_rsp_data;
-    wire [`NUM_CLUSTERS-1:0][`L2_MEM_TAG_WIDTH-1:0]  per_cluster_mem_rsp_tag;
-    wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_rsp_ready;
+    VX_mem_rsp_if #(
+        .DATA_WIDTH (`L2_MEM_DATA_WIDTH),
+        .TAG_WIDTH  (`L2_MEM_TAG_WIDTH)
+    ) per_cluster_mem_rsp_if[`NUM_CLUSTERS-1:0]();
 
-    wire [`NUM_CLUSTERS-1:0]                         per_cluster_busy;
+    wire [`NUM_CLUSTERS-1:0] per_cluster_busy;
 
     for (genvar i = 0; i < `NUM_CLUSTERS; i++) begin
 
@@ -101,24 +123,14 @@ module Vortex (
             .rop_dcr_if     (rop_dcr_if),
         `endif
 
-            .mem_req_valid  (per_cluster_mem_req_valid [i]),
-            .mem_req_rw     (per_cluster_mem_req_rw    [i]),
-            .mem_req_byteen (per_cluster_mem_req_byteen[i]),
-            .mem_req_addr   (per_cluster_mem_req_addr  [i]),
-            .mem_req_data   (per_cluster_mem_req_data  [i]),
-            .mem_req_tag    (per_cluster_mem_req_tag   [i]),
-            .mem_req_ready  (per_cluster_mem_req_ready [i]),
+            .mem_req_if     (per_cluster_mem_req_if[i]),
+            .mem_rsp_if     (per_cluster_mem_rsp_if[i]),
 
-            .mem_rsp_valid  (per_cluster_mem_rsp_valid [i]),
-            .mem_rsp_data   (per_cluster_mem_rsp_data  [i]),
-            .mem_rsp_tag    (per_cluster_mem_rsp_tag   [i]),
-            .mem_rsp_ready  (per_cluster_mem_rsp_ready [i]),
-
-            .busy           (per_cluster_busy           [i])
+            .busy           (per_cluster_busy[i])
         );
     end
 
-    assign busy   = (| per_cluster_busy);
+    assign busy = (| per_cluster_busy);
 
     if (`L3_ENABLE) begin
     `ifdef PERF_ENABLE
@@ -156,35 +168,35 @@ module Vortex (
         `endif
 
             // Core request    
-            .core_req_valid     (per_cluster_mem_req_valid),
-            .core_req_rw        (per_cluster_mem_req_rw),
-            .core_req_byteen    (per_cluster_mem_req_byteen),
-            .core_req_addr      (per_cluster_mem_req_addr),
-            .core_req_data      (per_cluster_mem_req_data),
-            .core_req_tag       (per_cluster_mem_req_tag),
-            .core_req_ready     (per_cluster_mem_req_ready),
+            .core_req_valid     (per_cluster_mem_req_if.valid),
+            .core_req_rw        (per_cluster_mem_req_if.rw),
+            .core_req_byteen    (per_cluster_mem_req_if.byteen),
+            .core_req_addr      (per_cluster_mem_req_if.addr),
+            .core_req_data      (per_cluster_mem_req_if.data),
+            .core_req_tag       (per_cluster_mem_req_if.tag),
+            .core_req_ready     (per_cluster_mem_req_if.ready),
 
             // Core response
-            .core_rsp_valid     (per_cluster_mem_rsp_valid),
-            .core_rsp_data      (per_cluster_mem_rsp_data),
-            .core_rsp_tag       (per_cluster_mem_rsp_tag),              
-            .core_rsp_ready     (per_cluster_mem_rsp_ready),
+            .core_rsp_valid     (per_cluster_mem_rsp_if.valid),
+            .core_rsp_data      (per_cluster_mem_rsp_if.data),
+            .core_rsp_tag       (per_cluster_mem_rsp_if.tag),              
+            .core_rsp_ready     (per_cluster_mem_rsp_if.ready),
             `UNUSED_PIN (core_rsp_tmask),
 
             // Memory request
-            .mem_req_valid      (mem_req_valid),
-            .mem_req_rw         (mem_req_rw),
-            .mem_req_byteen     (mem_req_byteen),
-            .mem_req_addr       (mem_req_addr),
-            .mem_req_data       (mem_req_data),
-            .mem_req_tag        (mem_req_tag),
-            .mem_req_ready      (mem_req_ready),
+            .mem_req_valid      (mem_req_if.valid),
+            .mem_req_rw         (mem_req_if.rw),
+            .mem_req_byteen     (mem_req_if.byteen),
+            .mem_req_addr       (mem_req_if.addr),
+            .mem_req_data       (mem_req_if.data),
+            .mem_req_tag        (mem_req_if.tag),
+            .mem_req_ready      (mem_req_if.ready),
 
             // Memory response
-            .mem_rsp_valid      (mem_rsp_valid),            
-            .mem_rsp_data       (mem_rsp_data),
-            .mem_rsp_tag        (mem_rsp_tag),
-            .mem_rsp_ready      (mem_rsp_ready)
+            .mem_rsp_valid      (mem_rsp_if.valid),            
+            .mem_rsp_data       (mem_rsp_if.data),
+            .mem_rsp_tag        (mem_rsp_if.tag),
+            .mem_rsp_ready      (mem_rsp_if.ready)
         );
 
     end else begin
@@ -200,38 +212,12 @@ module Vortex (
             .BUFFERED_REQ (1),
             .BUFFERED_RSP (1)
         ) mem_arb (
-            .clk            (clk),
-            .reset          (mem_arb_reset),
-
-            // Core request
-            .req_valid_in   (per_cluster_mem_req_valid),
-            .req_rw_in      (per_cluster_mem_req_rw),
-            .req_byteen_in  (per_cluster_mem_req_byteen),
-            .req_addr_in    (per_cluster_mem_req_addr),
-            .req_data_in    (per_cluster_mem_req_data),  
-            .req_tag_in     (per_cluster_mem_req_tag),  
-            .req_ready_in   (per_cluster_mem_req_ready),
-
-            // Memory request
-            .req_valid_out  (mem_req_valid),
-            .req_rw_out     (mem_req_rw),        
-            .req_byteen_out (mem_req_byteen),        
-            .req_addr_out   (mem_req_addr),
-            .req_data_out   (mem_req_data),
-            .req_tag_out    (mem_req_tag),
-            .req_ready_out  (mem_req_ready),
-
-            // Core response
-            .rsp_valid_out  (per_cluster_mem_rsp_valid),
-            .rsp_data_out   (per_cluster_mem_rsp_data),
-            .rsp_tag_out    (per_cluster_mem_rsp_tag),
-            .rsp_ready_out  (per_cluster_mem_rsp_ready),
-            
-            // Memory response
-            .rsp_valid_in   (mem_rsp_valid),
-            .rsp_tag_in     (mem_rsp_tag),
-            .rsp_data_in    (mem_rsp_data),
-            .rsp_ready_in   (mem_rsp_ready)
+            .clk        (clk),
+            .reset      (mem_arb_reset),
+            .req_in_if  (per_cluster_mem_req_if),
+            .req_out_if (mem_req_if),
+            .rsp_out_if (per_cluster_mem_rsp_if),
+            .rsp_in_if  (mem_rsp_if)
         );
 
     end

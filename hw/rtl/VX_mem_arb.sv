@@ -8,51 +8,35 @@ module VX_mem_arb #(
     parameter TAG_SEL_IDX   = 0,
     parameter BUFFERED_REQ  = 0,
     parameter BUFFERED_RSP  = 0,
-    parameter TYPE          = "P",
-    
-    parameter DATA_SIZE     = (DATA_WIDTH / 8),
-    parameter LOG_NUM_REQS  = `CLOG2(NUM_REQS),
-    parameter TAG_OUT_WIDTH = TAG_IN_WIDTH + LOG_NUM_REQS
+    parameter TYPE          = "P"
 ) (
-    input wire clk,
-    input wire reset,
+    input wire              clk,
+    input wire              reset,
 
-    // input requests    
-    input wire [NUM_REQS-1:0]                   req_valid_in,    
-    input wire [NUM_REQS-1:0][TAG_IN_WIDTH-1:0] req_tag_in,  
-    input wire [NUM_REQS-1:0][ADDR_WIDTH-1:0]   req_addr_in,
-    input wire [NUM_REQS-1:0]                   req_rw_in,  
-    input wire [NUM_REQS-1:0][DATA_SIZE-1:0]    req_byteen_in,  
-    input wire [NUM_REQS-1:0][DATA_WIDTH-1:0]   req_data_in,  
-    output wire [NUM_REQS-1:0]                  req_ready_in,
-
+    // input requests        
+    VX_mem_req_if.slave     req_in_if[NUM_REQS],
+    
     // output request
-    output wire                                 req_valid_out,
-    output wire [TAG_OUT_WIDTH-1:0]             req_tag_out,   
-    output wire [ADDR_WIDTH-1:0]                req_addr_out, 
-    output wire                                 req_rw_out,  
-    output wire [DATA_SIZE-1:0]                 req_byteen_out,  
-    output wire [DATA_WIDTH-1:0]                req_data_out,    
-    input wire                                  req_ready_out,
+    VX_mem_req_if.master    req_out_if,
 
     // input response
-    input wire                                  rsp_valid_in,
-    input wire [TAG_OUT_WIDTH-1:0]              rsp_tag_in,
-    input wire [DATA_WIDTH-1:0]                 rsp_data_in,
-    output wire                                 rsp_ready_in,
+    VX_mem_rsp_if.slave     rsp_in_if,
 
     // output responses
-    output wire [NUM_REQS-1:0]                  rsp_valid_out,
-    output wire [NUM_REQS-1:0][TAG_IN_WIDTH-1:0] rsp_tag_out,
-    output wire [NUM_REQS-1:0][DATA_WIDTH-1:0]  rsp_data_out,
-    input wire  [NUM_REQS-1:0]                  rsp_ready_out    
-);
+    VX_mem_rsp_if.master    rsp_out_if[NUM_REQS]
+);   
+    
+    localparam DATA_SIZE     = (DATA_WIDTH / 8);
+    localparam LOG_NUM_REQS  = `CLOG2(NUM_REQS);
+    localparam TAG_OUT_WIDTH = TAG_IN_WIDTH + LOG_NUM_REQS;
     localparam REQ_DATAW = TAG_OUT_WIDTH + ADDR_WIDTH + 1 + DATA_SIZE + DATA_WIDTH;
     localparam RSP_DATAW = TAG_IN_WIDTH + DATA_WIDTH;
 
     if (NUM_REQS > 1) begin
 
-        wire [NUM_REQS-1:0][REQ_DATAW-1:0] req_data_in_merged;
+        wire [NUM_REQS-1:0] req_valid_in;
+        wire [NUM_REQS-1:0][REQ_DATAW-1:0] req_data_in;
+        wire [NUM_REQS-1:0] req_ready_in;
 
         for (genvar i = 0; i < NUM_REQS; i++) begin
             wire [TAG_OUT_WIDTH-1:0] req_tag_in_w;
@@ -62,12 +46,14 @@ module VX_mem_arb #(
                 .S   (LOG_NUM_REQS),
                 .POS (TAG_SEL_IDX)
             ) bits_insert (
-                .data_in  (req_tag_in[i]),
+                .data_in  (req_in_if[i].tag),
                 .sel_in   (LOG_NUM_REQS'(i)),
                 .data_out (req_tag_in_w)
             );
 
-            assign req_data_in_merged[i] = {req_tag_in_w, req_addr_in[i], req_rw_in[i], req_byteen_in[i], req_data_in[i]};
+            assign req_valid_in[i] = req_in_if[i].valid;
+            assign req_data_in[i] = {req_tag_in_w, req_in_if[i].addr, req_in_if[i].rw, req_in_if[i].byteen, req_in_if[i].data};
+            assign req_in_if[i].ready = req_ready_in[i];
         end
 
         VX_stream_mux #(            
@@ -79,18 +65,20 @@ module VX_mem_arb #(
             .clk       (clk),
             .reset     (reset),
             .valid_in  (req_valid_in),
-            .data_in   (req_data_in_merged),
+            .data_in   (req_data_in),
             .ready_in  (req_ready_in),
-            .valid_out (req_valid_out),
-            .data_out  ({req_tag_out, req_addr_out, req_rw_out, req_byteen_out, req_data_out}),
-            .ready_out (req_ready_out)
+            .valid_out (req_out_if.valid),
+            .data_out  ({req_out_if.tag, req_out_if.addr, req_out_if.rw, req_out_if.byteen, req_out_if.data}),
+            .ready_out (req_out_if.ready)
         );
 
         ///////////////////////////////////////////////////////////////////////
 
-        wire [NUM_REQS-1:0][RSP_DATAW-1:0] rsp_data_out_merged;
+        wire [NUM_REQS-1:0] rsp_valid_out;
+        wire [NUM_REQS-1:0][RSP_DATAW-1:0] rsp_data_out;
+        wire [NUM_REQS-1:0] rsp_ready_out;
 
-        wire [LOG_NUM_REQS-1:0] rsp_sel = rsp_tag_in[TAG_SEL_IDX +: LOG_NUM_REQS];
+        wire [LOG_NUM_REQS-1:0] rsp_sel = rsp_in_if.tag[TAG_SEL_IDX +: LOG_NUM_REQS];
 
         wire [TAG_IN_WIDTH-1:0] rsp_tag_in_w;
 
@@ -99,7 +87,7 @@ module VX_mem_arb #(
             .S   (LOG_NUM_REQS),
             .POS (TAG_SEL_IDX)
         ) bits_remove (
-            .data_in  (rsp_tag_in),
+            .data_in  (rsp_in_if.tag),
             .data_out (rsp_tag_in_w)
         );
 
@@ -111,35 +99,37 @@ module VX_mem_arb #(
             .clk       (clk),
             .reset     (reset),
             .sel_in    (rsp_sel),
-            .valid_in  (rsp_valid_in),
-            .data_in   ({rsp_tag_in_w, rsp_data_in}),
-            .ready_in  (rsp_ready_in),
+            .valid_in  (rsp_in_if.valid),
+            .data_in   ({rsp_tag_in_w, rsp_in_if.data}),
+            .ready_in  (rsp_in_if.ready),
             .valid_out (rsp_valid_out),
-            .data_out  (rsp_data_out_merged),
+            .data_out  (rsp_data_out),
             .ready_out (rsp_ready_out)
         );
         
         for (genvar i = 0; i < NUM_REQS; i++) begin
-            assign {rsp_tag_out[i], rsp_data_out[i]} = rsp_data_out_merged[i];
-        end        
+            assign rsp_out_if[i].valid = rsp_valid_out[i];
+            assign {rsp_out_if[i].tag, rsp_out_if[i].data} = rsp_data_out[i];            
+            assign rsp_ready_out[i] = rsp_out_if[i].ready;
+        end                
 
     end else begin
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
 
-        assign req_valid_out  = req_valid_in;
-        assign req_tag_out    = req_tag_in;
-        assign req_addr_out   = req_addr_in;
-        assign req_rw_out     = req_rw_in;
-        assign req_byteen_out = req_byteen_in;
-        assign req_data_out   = req_data_in;
-        assign req_ready_in   = req_ready_out;
+        assign req_out_if.valid  = req_in_if[0].valid;
+        assign req_out_if.tag    = req_in_if[0].tag;
+        assign req_out_if.addr   = req_in_if[0].addr;
+        assign req_out_if.rw     = req_in_if[0].rw;
+        assign req_out_if.byteen = req_in_if[0].byteen;
+        assign req_out_if.data   = req_in_if[0].data;
+        assign req_in_if[0].ready= req_out_if.ready;
 
-        assign rsp_valid_out  = rsp_valid_in;
-        assign rsp_tag_out    = rsp_tag_in;
-        assign rsp_data_out   = rsp_data_in;
-        assign rsp_ready_in   = rsp_ready_out;
+        assign rsp_out_if[0].valid  = rsp_in_if.valid;
+        assign rsp_out_if[0].tag    = rsp_in_if.tag;
+        assign rsp_out_if[0].data   = rsp_in_if.data;
+        assign rsp_in_if.ready   = rsp_out_if[0].ready;
 
     end
 

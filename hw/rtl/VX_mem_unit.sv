@@ -47,26 +47,15 @@ module VX_mem_unit # (
 `endif
 
     VX_mem_req_if #(
-        .DATA_WIDTH (`ICACHE_MEM_DATA_WIDTH),
-        .ADDR_WIDTH (`ICACHE_MEM_ADDR_WIDTH),
-        .TAG_WIDTH  (`ICACHE_MEM_TAG_WIDTH)
-    ) icache_mem_req_if();
-
-    VX_mem_rsp_if #(
-        .DATA_WIDTH (`ICACHE_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (`ICACHE_MEM_TAG_WIDTH)
-    ) icache_mem_rsp_if();
-
-    VX_mem_req_if #(
         .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
         .ADDR_WIDTH (`DCACHE_MEM_ADDR_WIDTH),
         .TAG_WIDTH  (`DCACHE_MEM_TAG_WIDTH)
-    ) dcache_mem_req_if();
+    ) caches_mem_req_if[2]();
 
     VX_mem_rsp_if #(
         .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
         .TAG_WIDTH  (`DCACHE_MEM_TAG_WIDTH)
-    ) dcache_mem_rsp_if();
+    ) caches_mem_rsp_if[2]();
 
     VX_dcache_req_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
@@ -95,6 +84,11 @@ module VX_mem_unit # (
     `RESET_RELAY (icache_reset);
     `RESET_RELAY (dcache_reset);
     `RESET_RELAY (mem_arb_reset);
+
+    wire [`ICACHE_MEM_TAG_WIDTH-1:0] icache_mem_req_tag;
+    wire [`ICACHE_MEM_TAG_WIDTH-1:0] icache_mem_rsp_tag;
+    assign caches_mem_req_if[0].tag = `DCACHE_MEM_TAG_WIDTH'(icache_mem_req_tag);
+    assign icache_mem_rsp_tag = `ICACHE_MEM_TAG_WIDTH'(caches_mem_rsp_if[0].tag);
 
     VX_cache #(
         .CACHE_ID           (`ICACHE_ID),
@@ -139,19 +133,19 @@ module VX_mem_unit # (
     `endif
 
         // Memory Request
-        .mem_req_valid     (icache_mem_req_if.valid),
-        .mem_req_rw        (icache_mem_req_if.rw),        
-        .mem_req_byteen    (icache_mem_req_if.byteen),        
-        .mem_req_addr      (icache_mem_req_if.addr),
-        .mem_req_data      (icache_mem_req_if.data),
-        .mem_req_tag       (icache_mem_req_if.tag),
-        .mem_req_ready     (icache_mem_req_if.ready),        
+        .mem_req_valid     (caches_mem_req_if[0].valid),
+        .mem_req_rw        (caches_mem_req_if[0].rw),        
+        .mem_req_byteen    (caches_mem_req_if[0].byteen),        
+        .mem_req_addr      (caches_mem_req_if[0].addr),
+        .mem_req_data      (caches_mem_req_if[0].data),
+        .mem_req_tag       (icache_mem_req_tag),
+        .mem_req_ready     (caches_mem_req_if[0].ready),        
 
         // Memory response
-        .mem_rsp_valid     (icache_mem_rsp_if.valid),        
-        .mem_rsp_data      (icache_mem_rsp_if.data),
-        .mem_rsp_tag       (icache_mem_rsp_if.tag),
-        .mem_rsp_ready     (icache_mem_rsp_if.ready)
+        .mem_rsp_valid     (caches_mem_rsp_if[0].valid),        
+        .mem_rsp_data      (caches_mem_rsp_if[0].data),
+        .mem_rsp_tag       (icache_mem_rsp_tag),
+        .mem_rsp_ready     (caches_mem_rsp_if[0].ready)
     );
 
     VX_cache #(
@@ -199,19 +193,19 @@ module VX_mem_unit # (
     `endif
 
         // Memory request
-        .mem_req_valid      (dcache_mem_req_if.valid),
-        .mem_req_rw         (dcache_mem_req_if.rw),        
-        .mem_req_byteen     (dcache_mem_req_if.byteen),        
-        .mem_req_addr       (dcache_mem_req_if.addr),
-        .mem_req_data       (dcache_mem_req_if.data),
-        .mem_req_tag        (dcache_mem_req_if.tag),
-        .mem_req_ready      (dcache_mem_req_if.ready),
+        .mem_req_valid      (caches_mem_req_if[1].valid),
+        .mem_req_rw         (caches_mem_req_if[1].rw),        
+        .mem_req_byteen     (caches_mem_req_if[1].byteen),        
+        .mem_req_addr       (caches_mem_req_if[1].addr),
+        .mem_req_data       (caches_mem_req_if[1].data),
+        .mem_req_tag        (caches_mem_req_if[1].tag),
+        .mem_req_ready      (caches_mem_req_if[1].ready),
 
         // Memory response
-        .mem_rsp_valid      (dcache_mem_rsp_if.valid),        
-        .mem_rsp_data       (dcache_mem_rsp_if.data),
-        .mem_rsp_tag        (dcache_mem_rsp_if.tag),
-        .mem_rsp_ready      (dcache_mem_rsp_if.ready)
+        .mem_rsp_valid      (caches_mem_rsp_if[1].valid),        
+        .mem_rsp_data       (caches_mem_rsp_if[1].data),
+        .mem_rsp_tag        (caches_mem_rsp_if[1].tag),
+        .mem_rsp_ready      (caches_mem_rsp_if[1].ready)
     ); 
 
     if (`SM_ENABLE) begin
@@ -420,13 +414,8 @@ module VX_mem_unit # (
     assign dcache_smem_rsp_if.data  = dcache_tex_rsp_if.data;
     assign dcache_tex_rsp_if.ready  = dcache_smem_rsp_if.ready;
 
-`endif
-
-    wire [`DCACHE_MEM_TAG_WIDTH-1:0] icache_mem_req_tag = `DCACHE_MEM_TAG_WIDTH'(icache_mem_req_if.tag);
-    wire [`DCACHE_MEM_TAG_WIDTH-1:0] icache_mem_rsp_tag;
-    assign icache_mem_rsp_if.tag = icache_mem_rsp_tag[`ICACHE_MEM_TAG_WIDTH-1:0];
-    `UNUSED_VAR (icache_mem_rsp_tag)
-
+`endif    
+   
     VX_mem_arb #(
         .NUM_REQS      (2),
         .DATA_WIDTH    (`DCACHE_MEM_DATA_WIDTH),
@@ -439,36 +428,10 @@ module VX_mem_unit # (
     ) mem_arb (
         .clk            (clk),
         .reset          (mem_arb_reset),
-
-        // Source request
-        .req_valid_in   ({dcache_mem_req_if.valid,  icache_mem_req_if.valid}),
-        .req_rw_in      ({dcache_mem_req_if.rw,     icache_mem_req_if.rw}),
-        .req_byteen_in  ({dcache_mem_req_if.byteen, icache_mem_req_if.byteen}),
-        .req_addr_in    ({dcache_mem_req_if.addr,   icache_mem_req_if.addr}),
-        .req_data_in    ({dcache_mem_req_if.data,   icache_mem_req_if.data}),  
-        .req_tag_in     ({dcache_mem_req_if.tag,    icache_mem_req_tag}),  
-        .req_ready_in   ({dcache_mem_req_if.ready,  icache_mem_req_if.ready}),
-
-        // Memory request
-        .req_valid_out  (mem_req_if.valid),
-        .req_rw_out     (mem_req_if.rw),        
-        .req_byteen_out (mem_req_if.byteen),        
-        .req_addr_out   (mem_req_if.addr),
-        .req_data_out   (mem_req_if.data),
-        .req_tag_out    (mem_req_if.tag),
-        .req_ready_out  (mem_req_if.ready),
-
-        // Source response
-        .rsp_valid_out  ({dcache_mem_rsp_if.valid, icache_mem_rsp_if.valid}),
-        .rsp_data_out   ({dcache_mem_rsp_if.data,  icache_mem_rsp_if.data}),
-        .rsp_tag_out    ({dcache_mem_rsp_if.tag,   icache_mem_rsp_tag}),
-        .rsp_ready_out  ({dcache_mem_rsp_if.ready, icache_mem_rsp_if.ready}),
-        
-        // Memory response
-        .rsp_valid_in   (mem_rsp_if.valid),
-        .rsp_tag_in     (mem_rsp_if.tag),
-        .rsp_data_in    (mem_rsp_if.data),
-        .rsp_ready_in   (mem_rsp_if.ready)
+        .req_in_if      (caches_mem_req_if),
+        .req_out_if     (mem_req_if),
+        .rsp_out_if     (caches_mem_rsp_if),
+        .rsp_in_if      (mem_rsp_if)
     );
 
 `ifdef PERF_ENABLE
