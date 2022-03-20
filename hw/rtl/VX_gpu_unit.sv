@@ -211,7 +211,7 @@ module VX_gpu_unit #(
     );        
 `endif
 
-    /*// interpolation unit
+    // interpolation unit
     wire [`UUID_BITS-1:0]         interp_uuid_out;
     wire [`NW_BITS-1:0]           interp_wid_out;
     wire [`NUM_THREADS-1:0]       interp_tmask_out;
@@ -222,7 +222,6 @@ module VX_gpu_unit #(
 
     wire                          interp_ready_in;
     wire                          interp_valid_out;
-    `UNUSED_VAR(interp_ready_in) //TODO
     wire interp_valid_in  = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_IMADD);
     wire interp_ready_out = gpu_req_if.ready & ~gpu_commit_if.valid;
 
@@ -256,7 +255,7 @@ module VX_gpu_unit #(
         .ready_in    (interp_ready_in),
         .valid_out   (interp_valid_out),
         .ready_out   (interp_ready_out)
-    );*/
+    );
 
     // can accept new request?
     reg gpu_req_ready;
@@ -271,7 +270,7 @@ module VX_gpu_unit #(
     `ifdef EXT_ROP_ENABLE
         `INST_GPU_ROP: gpu_req_ready = rop_svc_req_if.ready;
     `endif
-        //`INST_GPU_IMADD: gpu_req_ready = interp_ready_in;
+        `INST_GPU_IMADD: gpu_req_ready = interp_ready_in;
         default: gpu_req_ready = wctl_req_ready;
         endcase
     end   
@@ -307,7 +306,7 @@ module VX_gpu_unit #(
         `ifdef EXT_ROP_ENABLE
           , rop_svc_rsp_if.valid
         `endif
-          //, interp_valid_out
+          , interp_valid_out
         }),
         .data_in   ({
             {gpu_req_if.uuid, gpu_req_if.wid, gpu_req_if.tmask, gpu_req_if.PC, `NR_BITS'(0),  1'b0,          RSP_DATAW'(wctl_rsp_data),   1'b1,           1'b1}
@@ -320,7 +319,7 @@ module VX_gpu_unit #(
         `ifdef EXT_ROP_ENABLE
           , {rop_svc_rsp_if.uuid, rop_svc_rsp_if.wid, rop_svc_rsp_if.tmask, rop_svc_rsp_if.PC, rop_svc_rsp_if.rd, rop_svc_rsp_if.wb, RSP_DATAW'(rop_svc_rsp_if.data), rop_svc_rsp_if.eop, 1'b0}
         `endif
-          //, {interp_uuid_out, interp_wid_out, interp_tmask_out, interp_PC_out, interp_rd_out, interp_wb_out, RSP_DATAW'(interp_data_out), 1'b1, 1'b0}
+          , {interp_uuid_out, interp_wid_out, interp_tmask_out, interp_PC_out, interp_rd_out, interp_wb_out, RSP_DATAW'(interp_data_out), 1'b1, 1'b0}
         }),
         .ready_in  ({
             wctl_rsp_ready
@@ -333,7 +332,7 @@ module VX_gpu_unit #(
         `ifdef EXT_ROP_ENABLE
           , rop_svc_rsp_if.ready
         `endif
-          //, gpu_req_if.ready
+          , gpu_req_if.ready
         }),
         .valid_out (rsp_valid),
         .data_out  ({rsp_uuid, rsp_wid, rsp_tmask, rsp_PC, rsp_rd, rsp_wb, rsp_data, rsp_eop, rsp_is_wctl}),
