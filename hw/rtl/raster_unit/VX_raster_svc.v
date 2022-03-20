@@ -8,12 +8,11 @@ module VX_raster_svc #(
 
     // Inputs    
     VX_raster_svc_if.slave  raster_svc_req_if,    
-    VX_gpu_csr_if.slave     raster_csr_if,
-    VX_raster_to_rop_if.slave raster_to_rop_if,
-    
+    VX_raster_req_if.master raster_req_if,
+        
     // Outputs
     VX_commit_if.master     raster_svc_rsp_if,
-    VX_raster_req_if.master raster_req_if
+    VX_gpu_csr_if.slave     raster_csr_if    
 );
     // CSRs access
 
@@ -23,12 +22,11 @@ module VX_raster_svc #(
         .clk        (clk),
         .reset      (reset),
 
-        // inputs
-        .raster_csr_if (raster_csr_if),
+        // inputs        
         .raster_req_if (raster_req_if),
 
         // outputs
-        .raster_to_rop_if (raster_to_rop_if)
+        .raster_csr_if (raster_csr_if)
     );
 
     assign raster_req_if.valid = 0;

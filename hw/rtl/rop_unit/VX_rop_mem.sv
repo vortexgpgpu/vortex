@@ -22,16 +22,16 @@ module VX_rop_mem #(
     VX_dcache_rsp_if.slave  cache_rsp_if,
 
     // Request interface
-    input wire                          req_valid,
-    input wire [NUM_LANES-1:0]          req_tmask,
-    input wire                          req_rw,
-    input wire [NUM_LANES-1:0][15:0]    req_pos_x,
-    input wire [NUM_LANES-1:0][15:0]    req_pos_y,
-    input rgba_t [NUM_LANES-1:0]        req_color, 
+    input wire                                      req_valid,
+    input wire [NUM_LANES-1:0]                      req_tmask,
+    input wire                                      req_rw,
+    input wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0]   req_pos_x,
+    input wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0]   req_pos_y,
+    input rgba_t [NUM_LANES-1:0]                    req_color, 
     input wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] req_depth,
     input wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] req_stencil,
-    input wire [TAG_WIDTH-1:0]          req_tag,
-    output wire                         req_ready,
+    input wire [TAG_WIDTH-1:0]                      req_tag,
+    output wire                                     req_ready,
 
     // Response interface
     output wire                         rsp_valid,

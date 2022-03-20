@@ -84,20 +84,21 @@ extern "C" {
 // Conditional move
 #define vx_cmov(c, t, f) ({                     \
 	unsigned __r;		                        \
-    __asm__ __volatile__ (".insn r4 0x2b, 1, 0, %0, %1, %2, %3" : "=r"(__r : "r"(c), "r"(t), "r"(f)); \
+    __asm__ __volatile__ (".insn r4 0x2b, 0, 1, %0, %1, %2, %3" : "=r"(__r) : "r"(c), "r"(t), "r"(f)); \
 	__r;							            \
 })
 
-// Interpolate
-#define vx_interp(a, b, c) ({                   \
-	unsigned __r;                               \
-    __asm__ __volatile__ (".insn r4 0x2b, 1, 1, %0, %1, %2, %3" : "=r"(__r) : "r"(a), "r"(b), "r"(c)); \
-	__r;							            \
+// Rop write
+#define vx_rop(x, y, face, color, depth) ({             \
+    unsigned pos_face = (y << 16) | (x << 1) | face;    \
+    __asm__ __volatile__ (".insn r4 0x2b, 0, 2, x0, %0, %1, %2" :: "r"(pos_face), "r"(color), "r"(depth)); \
 })
 
-// IMADD
-#define vx_imadd(x, y, acc) ({                  \
-    __asm__ __volatile__ (".insn r4 0x2b, 1, 2, x0, %0, %1, %2" :: "r"(x), "r"(y), "r"(acc); \
+// Integer multiply add
+#define vx_imadd(a, b, c, shift) ({             \
+	unsigned __r;		                        \
+    __asm__ __volatile__ (".insn r4 0x2b, 1, %1, %0, %2, %3, %4" : "=r"(__r) : "i"(shift), "r"(a), "r"(b), "r"(c)); \
+	__r;							            \
 })
 
 // Raster load
@@ -105,11 +106,6 @@ extern "C" {
     unsigned __r;                               \
     __asm__ __volatile__ (".insn r 0x0b, 0, 1, %0, x0, x0" : "=r"(__r)); \
     __r;                                        \
-})
-
-// Rop write
-#define vx_rop(color, depth) ({                 \
-    __asm__ __volatile__ (".insn r 0x0b, 1, 1, x0, %0, %1" :: "r"(color), "r"(depth)); \
 })
 
 // Set thread mask

@@ -22,15 +22,12 @@ using fixeduv_t = cocogfx::TFixed<TEX_FXD_FRAC>;
 	DEFAULTS_i(3)  \
 
 #define GRADIENTS_i(i) { \
-	csr_write(CSR_RASTER_FRAG, i); \
-	auto F0 = fixed16_t::make(csr_read(CSR_RASTER_BCOORD_X)); \
-	auto F1 = fixed16_t::make(csr_read(CSR_RASTER_BCOORD_Y)); \
-	auto F2 = fixed16_t::make(csr_read(CSR_RASTER_BCOORD_Z)); \
+	auto F0 = fixed16_t::make(csr_read(CSR_RASTER_BCOORD_X##i)); \
+	auto F1 = fixed16_t::make(csr_read(CSR_RASTER_BCOORD_Y##i)); \
+	auto F2 = fixed16_t::make(csr_read(CSR_RASTER_BCOORD_Z##i)); \
 	auto r  = cocogfx::Inverse<fixed24_t>(F0 + F1 + F2); \
-    auto f0 = cocogfx::Mul<fixed24_t>(r, F0); \
-    auto f1 = cocogfx::Mul<fixed24_t>(r, F1); \
-	csr_write(CSR_RASTER_GRAD_X, f0.data()); \
-	csr_write(CSR_RASTER_GRAD_Y, f1.data()); \
+    dx[i]   = cocogfx::Mul<fixed24_t>(r, F0); \
+    dy[i]   = cocogfx::Mul<fixed24_t>(r, F1); \
 }
 
 #define GRADIENTS \
@@ -39,9 +36,11 @@ using fixeduv_t = cocogfx::TFixed<TEX_FXD_FRAC>;
 	GRADIENTS_i(2) \
 	GRADIENTS_i(3) \
 
-#define INTERPOLATE_i(i, dst, src) \
-	csr_write(CSR_RASTER_FRAG, i); \
-	dst[i] = fixed24_t::make(vx_interp(src.x.data(), src.y.data(), src.z.data()))
+#define INTERPOLATE_i(i, dst, src) { \
+	auto tmp = vx_imadd(src.x.data(), dx[i].data(), src.z.data(), 3); \
+	     tmp = vx_imadd(src.y.data(), dy[i].data(), tmp, 3); \
+	dst[i] = fixed24_t::make(tmp); \
+}
 
 #define INTERPOLATE(dst, src) \
 	INTERPOLATE_i(0, dst, src); \
@@ -85,19 +84,27 @@ using fixeduv_t = cocogfx::TFixed<TEX_FXD_FRAC>;
 	TO_RGBA_i(2, dst, src_r, src_g, src_b, src_a); \
 	TO_RGBA_i(3, dst, src_r, src_g, src_b, src_a)
 
-#define OUTPUT_i(i, color, z) \
-	csr_write(CSR_RASTER_FRAG, i); \
-	vx_rop(color[i].value, z[i].data()) \
+#define OUTPUT_i(i, mask, x, y, face, color, depth) \
+	if (mask & (1 << i)) {							\
+		auto pos_x = (x << 1) + (i & 1);			\
+		auto pos_y = (y << 1) + (i >> 1);			\
+		vx_rop(pos_x, pos_y, face, color[i].value, depth[i].data()); \
+	}
 
-#define OUTPUT(color, z) \
-	OUTPUT_i(0, color, z); \
-	OUTPUT_i(1, color, z); \
-	OUTPUT_i(2, color, z); \
-	OUTPUT_i(3, color, z)
+#define OUTPUT(face, color, depth) \
+	auto pos_mask = csr_read(CSR_RASTER_POS_MASK); \
+	auto mask = (pos_mask >> 0) & 0xf;			 \
+	auto x    = (pos_mask >> 4) & ((1 << (RASTER_DIM_BITS-1))-1); \
+	auto y    = (pos_mask >> (4 + (RASTER_DIM_BITS-1))) & ((1 << (RASTER_DIM_BITS-1))-1); \
+	OUTPUT_i(0, mask, x, y, face, color, depth)  \
+	OUTPUT_i(1, mask, x, y, face, color, depth)  \
+	OUTPUT_i(2, mask, x, y, face, color, depth)  \
+	OUTPUT_i(3, mask, x, y, face, color, depth)
 
 void shader_function(int task_id, kernel_arg_t* kernel_arg) {
 	auto prim_ptr = (rast_prim_t*)kernel_arg->prim_addr;
 	fixed24_t z[4], r[4], g[4], b[4], a[4], u[4], v[4];
+	fixed24_t dx[4], dy[4];
 	cocogfx::ColorARGB tex_color[4], out_color[4];
 
 	DEFAULTS;
@@ -111,7 +118,7 @@ void shader_function(int task_id, kernel_arg_t* kernel_arg) {
 		auto& prim    = prim_ptr[pid];
 		auto& attribs = prim.attribs;
 
-		GRADIENTS;
+		GRADIENTS
 
 		if (kernel_arg->depth_enabled) {
 			INTERPOLATE(z, attribs.z);
@@ -137,7 +144,7 @@ void shader_function(int task_id, kernel_arg_t* kernel_arg) {
 			TO_RGBA(out_color, r, g, b, a);
 		}	
 
-		OUTPUT(out_color, z);
+		OUTPUT(0, out_color, z)
 	}
 }
 

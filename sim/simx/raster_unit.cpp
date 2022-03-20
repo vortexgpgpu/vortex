@@ -127,8 +127,10 @@ private:
     
     if (mask) {
       // add stamp to queue
-      //printf("Quad: x=%d, y=%d, mask=%d, pid=%d\n", x, y, mask, pid_);
-      this->stamps_push(new RasterUnit::Stamp(x, y, mask, bcoords, pid_));
+      auto pos_x = x >> 1;
+      auto pos_y = y >> 1;
+      //printf("Quad: x=%d, y=%d, mask=%d, pid=%d\n", pos_x, pos_y, mask, pid_);
+      this->stamps_push(new RasterUnit::Stamp(pos_x, pos_y, mask, bcoords, pid_));
     }
   }
 

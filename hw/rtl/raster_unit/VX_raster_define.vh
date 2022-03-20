@@ -24,14 +24,19 @@ task trace_raster_csr (
     input [`CSR_ADDR_BITS-1:0] addr
 );
     case (addr)
-        `CSR_RASTER_FRAG:       dpi_trace("FRAG");
-        `CSR_RASTER_X_Y:        dpi_trace("X_Y");
-        `CSR_RASTER_MASK_PID:   dpi_trace("MASK_PID");
-        `CSR_RASTER_BCOORD_X:   dpi_trace("BCOORD_X");
-        `CSR_RASTER_BCOORD_Y:   dpi_trace("BCOORD_Y");
-        `CSR_RASTER_BCOORD_Z:   dpi_trace("BCOORD_Z");
-        `CSR_RASTER_GRAD_X:     dpi_trace("GRAD_X");
-        `CSR_RASTER_GRAD_Y:     dpi_trace("GRAD_Y");
+        `CSR_RASTER_POS_MASK:   dpi_trace("POS_MASK");
+        `CSR_RASTER_BCOORD_X0:  dpi_trace("BCOORD_X0");
+        `CSR_RASTER_BCOORD_X1:  dpi_trace("BCOORD_X1");
+        `CSR_RASTER_BCOORD_X2:  dpi_trace("BCOORD_X2");
+        `CSR_RASTER_BCOORD_X3:  dpi_trace("BCOORD_X3");
+        `CSR_RASTER_BCOORD_Y0:  dpi_trace("BCOORD_Y0");
+        `CSR_RASTER_BCOORD_Y1:  dpi_trace("BCOORD_Y1");
+        `CSR_RASTER_BCOORD_Y2:  dpi_trace("BCOORD_Y2");
+        `CSR_RASTER_BCOORD_Y3:  dpi_trace("BCOORD_Y3");
+        `CSR_RASTER_BCOORD_Z0:  dpi_trace("BCOORD_Z0");
+        `CSR_RASTER_BCOORD_Z1:  dpi_trace("BCOORD_Z1");
+        `CSR_RASTER_BCOORD_Z2:  dpi_trace("BCOORD_Z2");
+        `CSR_RASTER_BCOORD_Z3:  dpi_trace("BCOORD_Z3");
         default:                dpi_trace("?");
     endcase  
 endtask

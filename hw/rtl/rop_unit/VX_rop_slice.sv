@@ -22,27 +22,27 @@ module VX_rop_slice #(
     // Inputs
     VX_rop_req_if.slave rop_req_if
 );
-    localparam MEM_TAG_WIDTH = NUM_LANES * (16 + 16 + 32 + `ROP_DEPTH_BITS) + 1;
-    localparam DS_TAG_WIDTH  = NUM_LANES * (16 + 16 + 1);
+    localparam MEM_TAG_WIDTH = NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 32 + `ROP_DEPTH_BITS + 1);
+    localparam DS_TAG_WIDTH  = NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 1);
 
-    wire                        mem_req_valid;
-    wire [NUM_LANES-1:0]        mem_req_tmask;
-    wire                        mem_req_rw;
-    wire [NUM_LANES-1:0][15:0]  mem_req_pos_x;
-    wire [NUM_LANES-1:0][15:0]  mem_req_pos_y;
-    rgba_t [NUM_LANES-1:0]      mem_req_color;
+    wire                                    mem_req_valid;
+    wire [NUM_LANES-1:0]                    mem_req_tmask;
+    wire                                    mem_req_rw;
+    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] mem_req_pos_x;
+    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] mem_req_pos_y;
+    rgba_t [NUM_LANES-1:0]                  mem_req_color;
     wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] mem_req_depth;
     wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] mem_req_stencil;
-    wire [MEM_TAG_WIDTH-1:0]    mem_req_tag;
-    wire                        mem_req_ready;
+    wire [MEM_TAG_WIDTH-1:0]                mem_req_tag;
+    wire                                    mem_req_ready;
 
-    wire                        mem_rsp_valid;
-    wire [NUM_LANES-1:0]        mem_rsp_tmask;
-    rgba_t [NUM_LANES-1:0]      mem_rsp_color;
+    wire                                    mem_rsp_valid;
+    wire [NUM_LANES-1:0]                    mem_rsp_tmask;
+    rgba_t [NUM_LANES-1:0]                  mem_rsp_color;
     wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] mem_rsp_depth;
     wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] mem_rsp_stencil;
-    wire [MEM_TAG_WIDTH-1:0]    mem_rsp_tag;
-    wire                        mem_rsp_ready;
+    wire [MEM_TAG_WIDTH-1:0]                mem_rsp_tag;
+    wire                                    mem_rsp_ready;
 
     VX_rop_mem #(
         .CLUSTER_ID (CLUSTER_ID),
@@ -83,7 +83,7 @@ module VX_rop_slice #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire                    ds_backface;
+    wire [NUM_LANES-1:0]    ds_backface;
 
     wire                    ds_valid_in;
     wire [DS_TAG_WIDTH-1:0] ds_tag_in;
@@ -99,6 +99,22 @@ module VX_rop_slice #(
     wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0]   ds_depth_out;      
     wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] ds_stencil_out;
     wire [NUM_LANES-1:0]                        ds_test_out;
+
+    wire [NUM_LANES-1:0][`ROP_DEPTH_FUNC_BITS-1:0] stencil_func;    
+    wire [NUM_LANES-1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_zpass;
+    wire [NUM_LANES-1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_zfail;
+    wire [NUM_LANES-1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_fail;
+    wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]    stencil_ref;
+    wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]    stencil_mask;
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
+        assign stencil_func[i]  = ds_backface[i] ? dcrs.stencil_back_func  : dcrs.stencil_front_func;    
+        assign stencil_zpass[i] = ds_backface[i] ? dcrs.stencil_back_zpass : dcrs.stencil_front_zpass;
+        assign stencil_zfail[i] = ds_backface[i] ? dcrs.stencil_back_zfail : dcrs.stencil_front_zfail;
+        assign stencil_fail[i]  = ds_backface[i] ? dcrs.stencil_back_fail  : dcrs.stencil_front_fail;
+        assign stencil_ref[i]   = ds_backface[i] ? dcrs.stencil_back_ref   : dcrs.stencil_front_ref;
+        assign stencil_mask[i]  = ds_backface[i] ? dcrs.stencil_back_mask  : dcrs.stencil_front_mask;
+    end
 
     VX_rop_ds #(
         .CLUSTER_ID (CLUSTER_ID),
@@ -118,12 +134,12 @@ module VX_rop_slice #(
         
         .depth_func     (dcrs.depth_func),
         .depth_writemask(dcrs.depth_writemask),
-        .stencil_func   (ds_backface ? dcrs.stencil_back_func  : dcrs.stencil_front_func),    
-        .stencil_zpass  (ds_backface ? dcrs.stencil_back_zpass : dcrs.stencil_front_zpass),
-        .stencil_zfail  (ds_backface ? dcrs.stencil_back_zfail : dcrs.stencil_front_zfail),
-        .stencil_fail   (ds_backface ? dcrs.stencil_back_fail  : dcrs.stencil_front_fail),
-        .stencil_ref    (ds_backface ? dcrs.stencil_back_ref   : dcrs.stencil_front_ref),
-        .stencil_mask   (ds_backface ? dcrs.stencil_back_mask  : dcrs.stencil_front_mask),
+        .stencil_func   (stencil_func),    
+        .stencil_zpass  (stencil_zpass),
+        .stencil_zfail  (stencil_zfail),
+        .stencil_fail   (stencil_fail),
+        .stencil_ref    (stencil_ref),
+        .stencil_mask   (stencil_mask),
         .stencil_writemask(dcrs.stencil_writemask),
 
         .depth_ref      (ds_depth_ref),
@@ -177,8 +193,8 @@ module VX_rop_slice #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire [NUM_LANES-1:0][15:0] mem_rsp_pos_x, mem_write_pos_x;
-    wire [NUM_LANES-1:0][15:0] mem_rsp_pos_y, mem_write_pos_y;
+    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] mem_rsp_pos_x, mem_write_pos_x;
+    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] mem_rsp_pos_y, mem_write_pos_y;
     wire [NUM_LANES-1:0] mem_write_tmask;
 
     wire write_enable = ds_valid_out & blend_valid_out;

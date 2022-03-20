@@ -118,24 +118,26 @@
 
 // Raster unit CSRs
 `define CSR_RASTER_BEGIN            `CSR_TEX_END
-`define CSR_RASTER_FRAG             (`CSR_RASTER_BEGIN+0)
-`define CSR_RASTER_X_Y              (`CSR_RASTER_BEGIN+1)
-`define CSR_RASTER_MASK_PID         (`CSR_RASTER_BEGIN+2)
-`define CSR_RASTER_BCOORD_X         (`CSR_RASTER_BEGIN+3)
-`define CSR_RASTER_BCOORD_Y         (`CSR_RASTER_BEGIN+4)
-`define CSR_RASTER_BCOORD_Z         (`CSR_RASTER_BEGIN+5)
-`define CSR_RASTER_GRAD_X           (`CSR_RASTER_BEGIN+6)
-`define CSR_RASTER_GRAD_Y           (`CSR_RASTER_BEGIN+7)
-`define CSR_RASTER_END              (`CSR_RASTER_BEGIN+8)
+`define CSR_RASTER_POS_MASK         (`CSR_RASTER_BEGIN+0)
+`define CSR_RASTER_BCOORD_X0        (`CSR_RASTER_BEGIN+1)
+`define CSR_RASTER_BCOORD_X1        (`CSR_RASTER_BEGIN+2)
+`define CSR_RASTER_BCOORD_X2        (`CSR_RASTER_BEGIN+3)
+`define CSR_RASTER_BCOORD_X3        (`CSR_RASTER_BEGIN+4)
+`define CSR_RASTER_BCOORD_Y0        (`CSR_RASTER_BEGIN+5)
+`define CSR_RASTER_BCOORD_Y1        (`CSR_RASTER_BEGIN+6)
+`define CSR_RASTER_BCOORD_Y2        (`CSR_RASTER_BEGIN+7)
+`define CSR_RASTER_BCOORD_Y3        (`CSR_RASTER_BEGIN+8)
+`define CSR_RASTER_BCOORD_Z0        (`CSR_RASTER_BEGIN+9)
+`define CSR_RASTER_BCOORD_Z1        (`CSR_RASTER_BEGIN+10)
+`define CSR_RASTER_BCOORD_Z2        (`CSR_RASTER_BEGIN+11)
+`define CSR_RASTER_BCOORD_Z3        (`CSR_RASTER_BEGIN+12)
+`define CSR_RASTER_END              (`CSR_RASTER_BEGIN+13)
 
 // ROP unit CSRs
 `define CSR_ROP_BEGIN               `CSR_RASTER_END
 `define CSR_ROP_RT_IDX              (`CSR_ROP_BEGIN+0)
-`define CSR_ROP_POS                 (`CSR_ROP_BEGIN+1)
-`define CSR_ROP_SAMPLE_IDX          (`CSR_ROP_BEGIN+2)
-`define CSR_ROP_SAMPLE_MASK         (`CSR_ROP_BEGIN+3)
-`define CSR_ROP_DEPTH_MSAA          (`CSR_ROP_BEGIN+4)
-`define CSR_ROP_END                 (`CSR_ROP_BEGIN+5)
+`define CSR_ROP_SAMPLE_IDX          (`CSR_ROP_BEGIN+1)
+`define CSR_ROP_END                 (`CSR_ROP_BEGIN+2)
 
 // Texture Units //////////////////////////////////////////////////////////////
 
@@ -181,6 +183,7 @@
 // Raster Units ///////////////////////////////////////////////////////////////
 
 `define RASTER_DIM_BITS             15
+`define RASTER_PID_BITS             16
 `define RASTER_TILE_LOGSIZE         6
 `define RASTER_BLOCK_LOGSIZE        2
 
@@ -196,6 +199,8 @@
 `define DCR_RASTER_STATE_COUNT      (`DCR_RASTER_STATE_END-`DCR_RASTER_STATE_BEGIN)
 
 // Render Output Units ////////////////////////////////////////////////////////
+
+`define ROP_DIM_BITS                15
 
 `define ROP_DEPTH_BITS              24 
 `define ROP_DEPTH_MASK              ((1 << `ROP_DEPTH_BITS) - 1)

@@ -18,8 +18,8 @@ module VX_rop_req_arb #(
     // TODO
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         wire valid = req_in[i].valid;
-        wire [`NUM_THREADS-1:0][15:0] pos_x = req_in[i].pos_x;
-        wire [`NUM_THREADS-1:0][15:0] pos_y = req_in[i].pos_y;
+        wire [`NUM_THREADS-1:0][`ROP_DIM_BITS-1:0] pos_x = req_in[i].pos_x;
+        wire [`NUM_THREADS-1:0][`ROP_DIM_BITS-1:0] pos_y = req_in[i].pos_y;
         wire [`NUM_THREADS-1:0][31:0] color = req_in[i].color;
         wire [`NUM_THREADS-1:0][`ROP_DEPTH_BITS-1:0] depth = req_in[i].depth;
         `UNUSED_VAR (valid)

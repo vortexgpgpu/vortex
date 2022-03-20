@@ -20,12 +20,12 @@ module VX_rop_ds #(
     // Configuration states
     input wire [`ROP_DEPTH_FUNC_BITS-1:0]               depth_func,
     input wire                                          depth_writemask,
-    input wire [`ROP_DEPTH_FUNC_BITS-1:0]               stencil_func,    
-    input wire [`ROP_STENCIL_OP_BITS-1:0]               stencil_zpass,
-    input wire [`ROP_STENCIL_OP_BITS-1:0]               stencil_zfail,
-    input wire [`ROP_STENCIL_OP_BITS-1:0]               stencil_fail,
-    input wire [`ROP_STENCIL_BITS-1:0]                  stencil_ref,
-    input wire [`ROP_STENCIL_BITS-1:0]                  stencil_mask,
+    input wire [NUM_LANES-1:0][`ROP_DEPTH_FUNC_BITS-1:0] stencil_func,    
+    input wire [NUM_LANES-1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_zpass,
+    input wire [NUM_LANES-1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_zfail,
+    input wire [NUM_LANES-1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_fail,
+    input wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]    stencil_ref,
+    input wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]    stencil_mask,
     input wire [`ROP_STENCIL_BITS-1:0]                  stencil_writemask,
 
     // Input values
@@ -71,9 +71,9 @@ module VX_rop_ds #(
         VX_rop_compare #(
             .DATAW (`ROP_STENCIL_BITS)
         ) rop_compare_stencil (
-            .func   (stencil_func),
-            .a      (stencil_ref & stencil_mask),
-            .b      (stencil_val[i] & stencil_mask),
+            .func   (stencil_func[i]),
+            .a      (stencil_ref[i] & stencil_mask[i]),
+            .b      (stencil_val[i] & stencil_mask[i]),
             .result (spass[i])
         );
     end    
@@ -81,7 +81,7 @@ module VX_rop_ds #(
     wire [NUM_LANES-1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_op;
                     
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        assign stencil_op[i] = spass[i] ? (dpass[i] ? stencil_zpass : stencil_zfail) : stencil_fail;
+        assign stencil_op[i] = spass[i] ? (dpass[i] ? stencil_zpass[i] : stencil_zfail[i]) : stencil_fail[i];
     end    
 
     wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] stenil_result;
@@ -91,7 +91,7 @@ module VX_rop_ds #(
             .DATAW (`ROP_STENCIL_BITS)
         ) rop_stencil_op (
             .stencil_op     (stencil_op[i]),
-            .stencil_ref    (stencil_ref),
+            .stencil_ref    (stencil_ref[i]),
             .stencil_val    (stencil_val[i]),
             .stencil_result (stenil_result[i])
         );

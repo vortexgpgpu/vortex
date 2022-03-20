@@ -25,10 +25,7 @@ module VX_rop_csr #(
         end else if (rop_csr_if.write_enable) begin
             case (rop_csr_if.write_addr)
                 `CSR_ROP_RT_IDX:;
-                `CSR_ROP_POS:;
                 `CSR_ROP_SAMPLE_IDX:;
-                `CSR_ROP_SAMPLE_MASK:;
-                `CSR_ROP_DEPTH_MSAA:;
                 default:;
             endcase
         end
@@ -41,10 +38,7 @@ module VX_rop_csr #(
         read_data_r = 'x;
         case (rop_csr_if.read_addr)
             `CSR_ROP_RT_IDX:;
-            `CSR_ROP_POS:;
-            `CSR_ROP_SAMPLE_IDX:;
-            `CSR_ROP_SAMPLE_MASK:;
-            `CSR_ROP_DEPTH_MSAA:;
+            `CSR_ROP_SAMPLE_IDX:;            
             default:;
         endcase
     end

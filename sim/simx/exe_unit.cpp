@@ -191,12 +191,6 @@ void AluUnit::tick() {
     case AluType::ARITH:        
     case AluType::BRANCH:
     case AluType::SYSCALL:
-    case AluType::CMOV:
-        Output.send(trace, 1);
-        break;
-    case AluType::IMADD:
-        Output.send(trace, 1);
-        break;
     case AluType::IMUL:
         Output.send(trace, LATENCY_IMUL+1);
         break;
@@ -321,9 +315,12 @@ void GpuUnit::tick() {
         break;
     case GpuType::ROP:
         rop_svc_->Input.send(trace, 1);
+        break;    
+    case GpuType::CMOV:
+        Output.send(trace, 3);
         break;
-    case GpuType::INTERP:
-        Output.send(trace, 6);
+    case GpuType::IMADD:
+        Output.send(trace, 3);
         break;
     default:
         std::abort();

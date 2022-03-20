@@ -10,10 +10,9 @@ module VX_rop_svc #(
     VX_rop_svc_if.slave     rop_svc_req_if,    
     VX_gpu_csr_if.slave     rop_csr_if,  
 
-    // Outputs
-    VX_rop_req_if.master    rop_req_if,
+    // Outputs    
     VX_commit_if.master     rop_svc_rsp_if,
-    VX_raster_to_rop_if.master raster_to_rop_if
+    VX_rop_req_if.master    rop_req_if
 );
     // CSRs access
 
@@ -43,18 +42,14 @@ module VX_rop_svc #(
     assign rop_req_if.backface = 0;
     `UNUSED_VAR (rop_req_if.ready);
 
-    assign raster_to_rop_if.valid = 0;
-    assign raster_to_rop_if.wid = 0;
-    `UNUSED_VAR(raster_to_rop_if.pos_x)
-    `UNUSED_VAR(raster_to_rop_if.pos_y)
-    `UNUSED_VAR(raster_to_rop_if.mask)
-    `UNUSED_VAR(raster_to_rop_if.ready)
-
     `UNUSED_VAR (rop_svc_req_if.valid)
     `UNUSED_VAR (rop_svc_req_if.uuid)
     `UNUSED_VAR (rop_svc_req_if.wid)
     `UNUSED_VAR (rop_svc_req_if.tmask)
     `UNUSED_VAR (rop_svc_req_if.PC)
+    `UNUSED_VAR (rop_svc_req_if.pos_x)
+    `UNUSED_VAR (rop_svc_req_if.pos_y)
+    `UNUSED_VAR (rop_svc_req_if.backface)
     `UNUSED_VAR (rop_svc_req_if.color)
     `UNUSED_VAR (rop_svc_req_if.depth)
     assign rop_svc_req_if.ready = 0;

@@ -19,8 +19,6 @@ private:
       RasterUnit::Stamp *stamp_;
 
     public:
-      uint32_t                  frag;  
-      std::array<vec2_fx2_t, 4> gradients;
 
       CSR() : stamp_(nullptr) { this->clear(); }    
       ~CSR() { this->clear(); }
@@ -29,11 +27,6 @@ private:
         if (stamp_) {
           delete stamp_;
           stamp_ = nullptr;
-        }
-        frag = 0;
-        for (auto& grad : gradients) {
-          grad.x = fixed24_t(0);
-          grad.y = fixed24_t(0);
         }
       }
 
@@ -86,38 +79,27 @@ public:
     }
 
     uint32_t csr_read(int32_t wid, uint32_t tid, uint32_t addr) {
-      uint32_t ltid = wid * arch_.num_threads() + tid;
-      auto& csr = csrs_.at(ltid);
+      uint32_t index = wid * arch_.num_threads() + tid;
+      auto& csr = csrs_.at(index);
       auto stamp = csr.get_stamp();
-      if (0 == (stamp->mask & (1 << csr.frag)) 
-       && addr != CSR_RASTER_FRAG)
-        return 0;
-      auto i  = csr.frag & 0x1;
-      auto j  = csr.frag >> 1;
-      auto px = stamp->x + i;
-      auto py = stamp->y + j;
-      __unused (px);
-      __unused (py);
       switch (addr) {
-      case CSR_RASTER_FRAG:
-        return csr.frag;
-      case CSR_RASTER_X_Y:
-        return (stamp->y << 16) | stamp->x;
-      case CSR_RASTER_MASK_PID:
-        return (stamp->pid << 4) | stamp->mask;      
-      case CSR_RASTER_BCOORD_X:
-        //printf("bcoord.x[%d,%d]=%d\n", px, py, stamp->bcoords.at(csr.frag).x.data());
-        return stamp->bcoords.at(csr.frag).x.data();
-      case CSR_RASTER_BCOORD_Y:
-        //printf("bcoord.y[%d,%d]=%d\n", px, py, stamp->bcoords.at(csr.frag).y.data());
-        return stamp->bcoords.at(csr.frag).y.data();
-      case CSR_RASTER_BCOORD_Z:
-        //printf("bcoord.z[%d,%d]=%d\n", px, py, stamp->bcoords.at(csr.frag).z.data());
-        return stamp->bcoords.at(csr.frag).z.data();
-      case CSR_RASTER_GRAD_X:
-        return csr.gradients.at(csr.frag).x.data();
-      case CSR_RASTER_GRAD_Y:
-        return csr.gradients.at(csr.frag).y.data();
+      case CSR_RASTER_POS_MASK:
+        return (stamp->y << (4 + RASTER_DIM_BITS-1)) | (stamp->x << 4) | stamp->mask;      
+      case CSR_RASTER_BCOORD_X0:
+      case CSR_RASTER_BCOORD_X1:
+      case CSR_RASTER_BCOORD_X2:
+      case CSR_RASTER_BCOORD_X3:
+        return stamp->bcoords.at(addr - CSR_RASTER_BCOORD_X0).x.data();
+      case CSR_RASTER_BCOORD_Y0:
+      case CSR_RASTER_BCOORD_Y1:
+      case CSR_RASTER_BCOORD_Y2:
+      case CSR_RASTER_BCOORD_Y3:
+        return stamp->bcoords.at(addr - CSR_RASTER_BCOORD_Y0).y.data();
+      case CSR_RASTER_BCOORD_Z0:
+      case CSR_RASTER_BCOORD_Z1:
+      case CSR_RASTER_BCOORD_Z2:
+      case CSR_RASTER_BCOORD_Z3:
+        return stamp->bcoords.at(addr - CSR_RASTER_BCOORD_Z0).z.data();
       default:
         std::abort();
       }
@@ -125,53 +107,10 @@ public:
     }
 
     void csr_write(uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value) {
-      uint32_t ltid = wid * arch_.num_threads() + tid;
-      auto& csr = csrs_.at(ltid);
-      auto stamp = csr.get_stamp();
-      if (0 == (stamp->mask & (1 << csr.frag)) 
-       && addr != CSR_RASTER_FRAG)
-        return;
-      auto i  = csr.frag & 0x1;
-      auto j  = csr.frag >> 1;
-      auto px = stamp->x + i;
-      auto py = stamp->y + j;
-      __unused (px);
-      __unused (py);
-      switch (addr) {
-      case CSR_RASTER_FRAG:
-        csr.frag = value;
-        break;
-      case CSR_RASTER_GRAD_X:
-        csr.gradients.at(csr.frag).x = fixed24_t::make(value);
-        //printf("grad.x[%d,%d]=%d\n", px, py, csr.gradients.at(csr.frag).x.data());
-        break;
-      case CSR_RASTER_GRAD_Y:
-        csr.gradients.at(csr.frag).y = fixed24_t::make(value);
-        //printf("grad.y[%d,%d]=%d\n", px, py, csr.gradients.at(csr.frag).y.data());
-        break;
-      default:
-        std::abort();
-      }
-    }
-
-    int32_t interpolate(uint32_t wid, uint32_t tid, int32_t a, int32_t b, int32_t c) {
-      uint32_t ltid = wid * arch_.num_threads() + tid;
-      auto& csr = csrs_.at(ltid);
-      auto stamp = csr.get_stamp();
-      if (0 == (stamp->mask & (1 << csr.frag)))
-        return 0;
-      auto i   = csr.frag & 0x1;
-      auto j   = csr.frag >> 1;
-      auto px  = stamp->x + i;
-      auto py  = stamp->y + j;
-      __unused (px);
-      __unused (py);
-      auto ax  = fixed24_t::make(a);
-      auto bx  = fixed24_t::make(b);
-      auto cx  = fixed24_t::make(c);
-      auto out = cocogfx::Dot<fixed24_t>(ax, csr.gradients.at(csr.frag).x, bx, csr.gradients.at(csr.frag).y) + cx;
-      //printf("interpolate[%d,%d](a=%d, b=%d, c=%d)=%d\n", px, py, a, b, c, out.data());
-      return out.data();
+      __unused (wid);
+      __unused (tid);
+      __unused (addr);
+      __unused (value);
     }
 
     void tick() {
@@ -222,10 +161,6 @@ void RasterSvc::csr_write(uint32_t wid, uint32_t tid, uint32_t addr, uint32_t va
 
 uint32_t RasterSvc::fetch(uint32_t wid, uint32_t tid) {
   return impl_->fetch(wid, tid);
-}
-
-int32_t RasterSvc::interpolate(uint32_t wid, uint32_t tid, int32_t a, int32_t b, int32_t c) {
-  return impl_->interpolate(wid, tid, a, b, c);
 }
 
 void RasterSvc::tick() {

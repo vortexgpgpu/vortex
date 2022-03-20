@@ -390,18 +390,13 @@ module VX_decode  #(
                         endcase
                     end
                     7'h01: begin
-                        ex_type = `EX_GPU;
                         case (func3)
                             3'h0: begin // RASTER
-                            op_type = `INST_OP_BITS'(`INST_GPU_RASTER);
+                            ex_type   = `EX_GPU;
+                            op_type   = `INST_OP_BITS'(`INST_GPU_RASTER);
                             is_wstall = 1;
-                            use_rd  = 1;
+                            use_rd    = 1;
                             `USED_IREG (rd);
-                            end
-                            3'h1: begin // ROP
-                            op_type = `INST_OP_BITS'(`INST_GPU_ROP);
-                            `USED_IREG (rs1);
-                            `USED_IREG (rs2);
                             end
                             default:;
                         endcase
@@ -411,21 +406,43 @@ module VX_decode  #(
             end
             `INST_EXT2: begin                
                 case (func3)
-                `ifdef EXT_TEX_ENABLE
-                    3'h0: begin // TEX
-                        ex_type = `EX_GPU;
-                        op_type = `INST_OP_BITS'(`INST_GPU_TEX);
-                        use_rd  = 1;
-                        `USED_IREG (rd);       
-                        `USED_IREG (rs1);
-                        `USED_IREG (rs2);
-                        `USED_IREG (rs3);
+                    3'h0: begin
+                        case (func2)
+                        `ifdef EXT_TEX_ENABLE
+                            2'h0: begin // TEX
+                                ex_type = `EX_GPU;
+                                op_type = `INST_OP_BITS'(`INST_GPU_TEX);
+                                use_rd  = 1;
+                                `USED_IREG (rd);       
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                                `USED_IREG (rs3);
+                            end
+                        `endif
+                            2'h1: begin // CMOV
+                                ex_type = `EX_GPU;
+                                op_type = `INST_OP_BITS'(`INST_GPU_CMOV);
+                                use_rd = 1;
+                                `USED_IREG (rd);
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                                `USED_IREG (rs3);
+                            end
+                            2'h2: begin // ROP
+                                ex_type = `EX_GPU;
+                                op_type = `INST_OP_BITS'(`INST_GPU_ROP);
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                                `USED_IREG (rs3);
+                            end
+                            default:;
+                        endcase
                     end
-                `endif
                     3'h1: begin // IMADD
                         ex_type = `EX_GPU;
                         op_type = `INST_OP_BITS'(`INST_GPU_IMADD);
-                        use_rd = 1;
+                        op_mod  = `INST_MOD_BITS'(func2);
+                        use_rd  = 1;
                         `USED_IREG (rd);
                         `USED_IREG (rs1);
                         `USED_IREG (rs2);

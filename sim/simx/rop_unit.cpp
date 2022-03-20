@@ -482,6 +482,7 @@ public:
     }   
 
     void write(uint32_t x, uint32_t y, bool isBackface, uint32_t color, uint32_t depth) {
+      //printf("rop_write(x=%d, y=%d, backface=%s, color=%x, depth=%x)\n", x, y, (isBackface ? "Y":"N"), color, depth);
       if (depthtencil_.write(x, y, isBackface, depth))
         blender_.write(x, y, color);
     }

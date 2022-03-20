@@ -36,7 +36,7 @@ public:
     
     void csr_write(uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value);
 
-    void write(uint32_t frag, uint32_t x, uint32_t y , uint32_t mask, uint32_t color, uint32_t depth);
+    void write(uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth);
 
     void tick();
 

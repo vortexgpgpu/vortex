@@ -6,12 +6,11 @@ module VX_raster_csr #(
     input wire clk,
     input wire reset,
 
-    // Inputs
-    VX_gpu_csr_if.slave raster_csr_if,
+    // Inputs    
     VX_raster_req_if.slave raster_req_if,
 
     // Output
-    VX_raster_to_rop_if.slave raster_to_rop_if
+    VX_gpu_csr_if.slave raster_csr_if
 );
     `UNUSED_VAR (reset)
 
@@ -45,13 +44,6 @@ module VX_raster_csr #(
     `UNUSED_VAR (raster_req_if.stamp)
     `UNUSED_VAR (raster_req_if.empty)
     `UNUSED_VAR (raster_req_if.ready)
-
-    `UNUSED_VAR (raster_to_rop_if.valid)
-    `UNUSED_VAR (raster_to_rop_if.wid)
-    assign raster_to_rop_if.pos_x = 0;
-    assign raster_to_rop_if.pos_y = 0;
-    assign raster_to_rop_if.mask  = 0;
-    assign raster_to_rop_if.ready = 0;
     
     /*
     // CSRs write

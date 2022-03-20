@@ -34,10 +34,7 @@ task trace_rop_csr (
 );
     case (addr)
         `CSR_ROP_RT_IDX:        dpi_trace("RT_IDX");
-        `CSR_ROP_POS:           dpi_trace("POS");
         `CSR_ROP_SAMPLE_IDX:    dpi_trace("SAMPLE_IDX");
-        `CSR_ROP_SAMPLE_MASK:   dpi_trace("SAMPLE_MASK");
-        `CSR_ROP_DEPTH_MSAA:    dpi_trace("DEPTH_MSAA");
         default:                dpi_trace("?");
     endcase  
 endtask

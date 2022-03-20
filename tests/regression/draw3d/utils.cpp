@@ -94,8 +94,7 @@ static void EdgeToFixed(rast_edge_t out[3], vec3d_f_t in[3]) {
   // Convert the edge equation to fixedpoint
   out[0] = {fixed16_t(in[0].x), fixed16_t(in[0].y), fixed16_t(in[0].z)};
   out[1] = {fixed16_t(in[1].x), fixed16_t(in[1].y), fixed16_t(in[1].z)};
-  out[2] = {fixed16_t(in[2].x), fixed16_t(in[2].y), fixed16_t(in[2].z)};  
-
+  out[2] = {fixed16_t(in[2].x), fixed16_t(in[2].y), fixed16_t(in[2].z)};
 
   //printf("*** out0=(%d, %d, %d)\n", outs[0].x.data(), outs[0].y.data(), outs[0].z.data());
   //printf("*** out1=(%d, %d, %d)\n", outs[1].x.data(), outs[1].y.data(), outs[1].z.data());

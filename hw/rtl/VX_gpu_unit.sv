@@ -161,8 +161,6 @@ module VX_gpu_unit #(
     VX_raster_svc_if raster_svc_req_if();
     VX_commit_if     raster_svc_rsp_if();
 
-    VX_raster_to_rop_if raster_to_rop_if();
-
     assign raster_svc_req_if.valid     = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_RASTER);
     assign raster_svc_req_if.uuid      = gpu_req_if.uuid;
     assign raster_svc_req_if.wid       = gpu_req_if.wid;
@@ -179,8 +177,7 @@ module VX_gpu_unit #(
         .raster_svc_req_if  (raster_svc_req_if),        
         .raster_svc_rsp_if  (raster_svc_rsp_if),  
         .raster_req_if      (raster_req_if),
-        .raster_csr_if      (raster_csr_if),
-        .raster_to_rop_if   (raster_to_rop_if)
+        .raster_csr_if      (raster_csr_if)
     );        
 `endif
 
@@ -194,19 +191,23 @@ module VX_gpu_unit #(
     assign rop_svc_req_if.wid   = gpu_req_if.wid;
     assign rop_svc_req_if.tmask = gpu_req_if.tmask;
     assign rop_svc_req_if.PC    = gpu_req_if.PC;
-    assign rop_svc_req_if.color = gpu_req_if.rs1_data;
-    assign rop_svc_req_if.depth = gpu_req_if.rs2_data;
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+        assign rop_svc_req_if.backface[i] = gpu_req_if.rs1_data[i][0];
+        assign rop_svc_req_if.pos_x[i]    = gpu_req_if.rs1_data[i][1 +: `ROP_DIM_BITS];
+        assign rop_svc_req_if.pos_y[i]    = gpu_req_if.rs1_data[i][16 +: `ROP_DIM_BITS];    
+    end    
+    assign rop_svc_req_if.color = gpu_req_if.rs2_data;
+    assign rop_svc_req_if.depth = gpu_req_if.rs3_data;
     
     VX_rop_svc #(
         .CORE_ID (CORE_ID)
     ) rop_svc (
-        .clk                (clk),
-        .reset              (reset),
-        .rop_svc_req_if     (rop_svc_req_if),
-        .rop_svc_rsp_if     (rop_svc_rsp_if),
-        .rop_req_if         (rop_req_if),
-        .rop_csr_if         (rop_csr_if),
-        .raster_to_rop_if   (raster_to_rop_if)
+        .clk            (clk),
+        .reset          (reset),
+        .rop_svc_req_if (rop_svc_req_if),
+        .rop_svc_rsp_if (rop_svc_rsp_if),
+        .rop_req_if     (rop_req_if),
+        .rop_csr_if     (rop_csr_if)
     );        
 `endif
 

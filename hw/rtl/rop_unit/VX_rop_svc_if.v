@@ -12,6 +12,9 @@ interface VX_rop_svc_if ();
     wire [`NUM_THREADS-1:0]         tmask;    
     wire [31:0]                     PC;
 
+    wire [`NUM_THREADS-1:0][14:0]   pos_x;
+    wire [`NUM_THREADS-1:0][14:0]   pos_y;
+    wire [`NUM_THREADS-1:0]         backface;
     wire [`NUM_THREADS-1:0][31:0]   color;
     wire [`NUM_THREADS-1:0][31:0]   depth;
     
@@ -22,7 +25,10 @@ interface VX_rop_svc_if ();
         output uuid,
         output wid,
         output tmask,
-        output PC,    
+        output PC,   
+        output pos_x,
+        output pos_y,
+        output backface,
         output color,
         output depth,
         input  ready
@@ -34,6 +40,9 @@ interface VX_rop_svc_if ();
         input  wid,
         input  tmask,
         input  PC,      
+        input  pos_x,
+        input  pos_y,
+        input  backface,
         input  color,
         input  depth,
         output ready

@@ -50,12 +50,12 @@ module VX_tex_dcr #(
                     tex_dcrs[tex_stage].filter <= dcr_wr_data[`TEX_FILTER_BITS-1:0];
                 end
                 `DCR_TEX_WRAP: begin
-                    tex_dcrs[tex_stage].wraps[0] <= dcr_wr_data[15:0][`TEX_WRAP_BITS-1:0];
-                    tex_dcrs[tex_stage].wraps[1] <= dcr_wr_data[31:16][`TEX_WRAP_BITS-1:0];
+                    tex_dcrs[tex_stage].wraps[0] <= dcr_wr_data[0  +: `TEX_WRAP_BITS];
+                    tex_dcrs[tex_stage].wraps[1] <= dcr_wr_data[16 +: `TEX_WRAP_BITS];
                 end
                 `DCR_TEX_LOGDIM: begin 
-                    tex_dcrs[tex_stage].logdims[0] <= dcr_wr_data[15:0][`TEX_LOD_BITS-1:0];
-                    tex_dcrs[tex_stage].logdims[1] <= dcr_wr_data[31:16][`TEX_LOD_BITS-1:0];
+                    tex_dcrs[tex_stage].logdims[0] <= dcr_wr_data[0  +: `TEX_LOD_BITS];
+                    tex_dcrs[tex_stage].logdims[1] <= dcr_wr_data[16 +: `TEX_LOD_BITS];
                 end
                 default: begin
                     for (integer j = 0; j <= `TEX_LOD_MAX; ++j) begin

@@ -69,57 +69,57 @@ module VX_csr_data #(
     );    
 
 `ifdef EXT_TEX_ENABLE    
-    wire tex_read_enable = (read_addr >= `CSR_TEX_BEGIN && read_addr < `CSR_TEX_END);
+    wire tex_read_enable  = (read_addr >= `CSR_TEX_BEGIN && read_addr < `CSR_TEX_END);
     wire tex_write_enable = (write_addr >= `CSR_TEX_BEGIN && write_addr < `CSR_TEX_END);
 
     assign tex_csr_if.read_enable = read_enable && tex_read_enable;
-    assign tex_csr_if.read_uuid = read_uuid;
-    assign tex_csr_if.read_wid = read_wid;
-    assign tex_csr_if.read_tmask = read_tmask;
-    assign tex_csr_if.read_addr = read_addr;
+    assign tex_csr_if.read_uuid   = read_uuid;
+    assign tex_csr_if.read_wid    = read_wid;
+    assign tex_csr_if.read_tmask  = read_tmask;
+    assign tex_csr_if.read_addr   = read_addr;
     
     assign tex_csr_if.write_enable = write_enable && tex_write_enable; 
-    assign tex_csr_if.write_uuid = write_uuid;
-    assign tex_csr_if.write_wid = write_wid;
-    assign tex_csr_if.write_tmask = write_tmask;
-    assign tex_csr_if.write_addr = write_addr;
-    assign tex_csr_if.write_data = write_data;
+    assign tex_csr_if.write_uuid   = write_uuid;
+    assign tex_csr_if.write_wid    = write_wid;
+    assign tex_csr_if.write_tmask  = write_tmask;
+    assign tex_csr_if.write_addr   = write_addr;
+    assign tex_csr_if.write_data   = write_data;
 `endif
 
 `ifdef EXT_RASTER_ENABLE
-    wire raster_read_enable = (read_addr >= `CSR_RASTER_BEGIN && read_addr < `CSR_RASTER_END);
+    wire raster_read_enable  = (read_addr >= `CSR_RASTER_BEGIN && read_addr < `CSR_RASTER_END);
     wire raster_write_enable = (write_addr >= `CSR_RASTER_BEGIN && write_addr < `CSR_RASTER_END);
 
     assign raster_csr_if.read_enable = read_enable && raster_read_enable;
-    assign raster_csr_if.read_uuid = read_uuid;
-    assign raster_csr_if.read_wid = read_wid;
-    assign raster_csr_if.read_tmask = read_tmask;
-    assign raster_csr_if.read_addr = read_addr;
+    assign raster_csr_if.read_uuid   = read_uuid;
+    assign raster_csr_if.read_wid    = read_wid;
+    assign raster_csr_if.read_tmask  = read_tmask;
+    assign raster_csr_if.read_addr   = read_addr;
     
     assign raster_csr_if.write_enable = write_enable && raster_write_enable; 
-    assign raster_csr_if.write_uuid = write_uuid;
-    assign raster_csr_if.write_wid = write_wid;
-    assign raster_csr_if.write_tmask = write_tmask;
-    assign raster_csr_if.write_addr = write_addr;
-    assign raster_csr_if.write_data = write_data;
+    assign raster_csr_if.write_uuid   = write_uuid;
+    assign raster_csr_if.write_wid    = write_wid;
+    assign raster_csr_if.write_tmask  = write_tmask;
+    assign raster_csr_if.write_addr   = write_addr;
+    assign raster_csr_if.write_data   = write_data;
 `endif
 
 `ifdef EXT_ROP_ENABLE
-    wire rop_read_enable = (read_addr >= `CSR_ROP_BEGIN && read_addr < `CSR_ROP_END);
+    wire rop_read_enable  = (read_addr >= `CSR_ROP_BEGIN && read_addr < `CSR_ROP_END);
     wire rop_write_enable = (write_addr >= `CSR_ROP_BEGIN && write_addr < `CSR_ROP_END);;
 
     assign rop_csr_if.read_enable = read_enable && rop_read_enable;
-    assign rop_csr_if.read_uuid = read_uuid;
-    assign rop_csr_if.read_wid = read_wid;
-    assign rop_csr_if.read_tmask = read_tmask;
-    assign rop_csr_if.read_addr = read_addr;
+    assign rop_csr_if.read_uuid   = read_uuid;
+    assign rop_csr_if.read_wid    = read_wid;
+    assign rop_csr_if.read_tmask  = read_tmask;
+    assign rop_csr_if.read_addr   = read_addr;
     
     assign rop_csr_if.write_enable = write_enable && rop_write_enable; 
-    assign rop_csr_if.write_uuid = write_uuid;
-    assign rop_csr_if.write_wid = write_wid;
-    assign rop_csr_if.write_tmask = write_tmask;
-    assign rop_csr_if.write_addr = write_addr;
-    assign rop_csr_if.write_data = write_data;
+    assign rop_csr_if.write_uuid   = write_uuid;
+    assign rop_csr_if.write_wid    = write_wid;
+    assign rop_csr_if.write_tmask  = write_tmask;
+    assign rop_csr_if.write_addr   = write_addr;
+    assign rop_csr_if.write_data   = write_data;
 `endif
 
     always @(posedge clk) begin

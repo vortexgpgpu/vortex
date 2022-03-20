@@ -38,8 +38,6 @@ public:
 
     uint32_t fetch(uint32_t wid, uint32_t tid);
 
-    int32_t interpolate(uint32_t wid, uint32_t tid, int32_t a, int32_t b, int32_t c);
-
     void tick();
 
     const PerfStats& perf_stats() const;

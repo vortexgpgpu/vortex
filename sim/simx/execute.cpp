@@ -12,11 +12,13 @@
 #include "warp.h"
 #include "instr.h"
 #include "core.h"
+#include <cocogfx/include/fixed.hpp>
 
 using namespace vortex;
 
 union reg_data_t {
-  Word     i;  
+  Word     u;
+  WordI    i;
   FWord    f;
   uint64_t _;
 };
@@ -140,7 +142,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             DPN(2, "-");
             continue;            
           }
-          rsdata[t][i].i = ireg_file_.at(t)[reg];          
+          rsdata[t][i].u = ireg_file_.at(t)[reg];          
           DPN(2, "0x" << std::hex << rsdata[t][i].i);
         }
         DPN(2, "}" << std::endl);
@@ -206,39 +208,39 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         switch (func3) {
         case 0: {
           // RV32M: MUL
-          rddata[t].i = (WordI)rsdata[t][0].i * (WordI)rsdata[t][1].i;
+          rddata[t].i = rsdata[t][0].i * rsdata[t][1].i;
           trace->alu_type = AluType::IMUL;
           break;
         }
         case 1: {
           // RV32M: MULH
-          DWordI first = sext((DWord)rsdata[t][0].i, XLEN);
-          DWordI second = sext((DWord)rsdata[t][1].i, XLEN);
+          auto first = static_cast<DWordI>(rsdata[t][0].i);
+          auto second = static_cast<DWordI>(rsdata[t][1].i);
           rddata[t].i = (first * second) >> XLEN;
           trace->alu_type = AluType::IMUL;
           break;
         }
         case 2: {
           // RV32M: MULHSU       
-          DWordI first = sext((DWord)rsdata[t][0].i, XLEN);
-          DWord second = rsdata[t][1].i;
+          auto first = static_cast<DWordI>(rsdata[t][0].i);
+          auto second = static_cast<DWord>(rsdata[t][1].u);
           rddata[t].i = (first * second) >> XLEN;
           trace->alu_type = AluType::IMUL;
           break;
         } 
         case 3: {
           // RV32M: MULHU
-          DWord first = rsdata[t][0].i;
-          DWord second = rsdata[t][1].i;
+          auto first = static_cast<DWord>(rsdata[t][0].u);
+          auto second = static_cast<DWord>(rsdata[t][1].u);
           rddata[t].i = (first * second) >> XLEN;
           trace->alu_type = AluType::IMUL;
           break;
         } 
         case 4: {
           // RV32M: DIV
-          WordI dividen = rsdata[t][0].i;
-          WordI divisor = rsdata[t][1].i; 
-          WordI largest_negative = WordI(1) << (XLEN-1);  
+          auto dividen = rsdata[t][0].i;
+          auto divisor = rsdata[t][1].i; 
+          auto largest_negative = WordI(1) << (XLEN-1);  
           if (divisor == 0) {
             rddata[t].i = -1;
           } else if (dividen == largest_negative && divisor == -1) {
@@ -251,8 +253,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         } 
         case 5: {
           // RV32M: DIVU
-          Word dividen = rsdata[t][0].i;
-          Word divisor = rsdata[t][1].i;
+          auto dividen = rsdata[t][0].u;
+          auto divisor = rsdata[t][1].u;
           if (divisor == 0) {
             rddata[t].i = -1;
           } else {
@@ -263,9 +265,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         } 
         case 6: {
           // RV32M: REM
-          WordI dividen = rsdata[t][0].i;
-          WordI divisor = rsdata[t][1].i;
-          WordI largest_negative = WordI(1) << (XLEN-1);
+          auto dividen = rsdata[t][0].i;
+          auto divisor = rsdata[t][1].i;
+          auto largest_negative = WordI(1) << (XLEN-1);
           if (rsdata[t][1].i == 0) {
             rddata[t].i = dividen;
           } else if (dividen == largest_negative && divisor == -1) {
@@ -278,8 +280,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         } 
         case 7: {
           // RV32M: REMU
-          Word dividen = rsdata[t][0].i;
-          Word divisor = rsdata[t][1].i;
+          auto dividen = rsdata[t][0].u;
+          auto divisor = rsdata[t][1].u;
           if (rsdata[t][1].i == 0) {
             rddata[t].i = dividen;
           } else {
@@ -312,12 +314,12 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         }
         case 2: {
           // RV32I: SLT
-          rddata[t].i = WordI(rsdata[t][0].i) < WordI(rsdata[t][1].i);
+          rddata[t].i = rsdata[t][0].i < rsdata[t][1].i;
           break;
         }
         case 3: {
           // RV32I: SLTU
-          rddata[t].i = Word(rsdata[t][0].i) < Word(rsdata[t][1].i);
+          rddata[t].i = rsdata[t][0].u < rsdata[t][1].u;
           break;
         }
         case 4: {
@@ -330,10 +332,10 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           Word shamt = rsdata[t][1].i & shamt_mask;
           if (func7) {
             // RV32I: SRA
-            rddata[t].i = WordI(rsdata[t][0].i) >> shamt;
+            rddata[t].i = rsdata[t][0].i >> shamt;
           } else {
             // RV32I: SRL
-            rddata[t].i = Word(rsdata[t][0].i) >> shamt;
+            rddata[t].i = rsdata[t][0].u >> shamt;
           }
           break;
         }
@@ -375,12 +377,12 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       }
       case 2: {
         // RV32I: SLTI
-        rddata[t].i = WordI(rsdata[t][0].i) < WordI(immsrc);
+        rddata[t].i = rsdata[t][0].i < WordI(immsrc);
         break;
       }
       case 3: {
         // RV32I: SLTIU
-        rddata[t].i = rsdata[t][0].i < immsrc;
+        rddata[t].i = rsdata[t][0].u < immsrc;
         break;
       } 
       case 4: {
@@ -391,11 +393,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       case 5: {
         if (func7) {
           // RV64I: SRAI
-          Word result = WordI(rsdata[t][0].i) >> immsrc;
+          Word result = rsdata[t][0].i >> immsrc;
           rddata[t].i = result;
         } else {
           // RV64I: SRLI
-          Word result = Word(rsdata[t][0].i) >> immsrc;
+          Word result = rsdata[t][0].u >> immsrc;
           rddata[t].i = result;
         }
         break;
@@ -610,28 +612,28 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       }
       case 4: {
         // RV32I: BLT
-        if (WordI(rsdata[t][0].i) < WordI(rsdata[t][1].i)) {
+        if (rsdata[t][0].i < rsdata[t][1].i) {
           nextPC = uint32_t(PC_ + immsrc);
         }
         break;
       }
       case 5: {
         // RV32I: BGE
-        if (WordI(rsdata[t][0].i) >= WordI(rsdata[t][1].i)) {
+        if (rsdata[t][0].i >= rsdata[t][1].i) {
           nextPC = uint32_t(PC_ + immsrc);
         }
         break;
       }
       case 6: {
         // RV32I: BLTU
-        if (Word(rsdata[t][0].i) < Word(rsdata[t][1].i)) {
+        if (rsdata[t][0].u < rsdata[t][1].u) {
           nextPC = uint32_t(PC_ + immsrc);
         }
         break;
       }
       case 7: {
         // RV32I: BGEU
-        if (Word(rsdata[t][0].i) >= Word(rsdata[t][1].i)) {
+        if (rsdata[t][0].u >= rsdata[t][1].u) {
           nextPC = uint32_t(PC_ + immsrc);
         }
         break;
@@ -1126,7 +1128,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         break;
       }
       case 0x50: {      
-        if (checkBoxedCmpArgs(&rddata[t].i, rsdata[t][0].f, rsdata[t][1].f, &fflags)) {     
+        if (checkBoxedCmpArgs(&rddata[t].u, rsdata[t][0].f, rsdata[t][1].f, &fflags)) {     
           switch (func3) {              
           case 0:
             // RV32F: FLE.S
@@ -1411,7 +1413,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t))
             continue;
-          auto mem_addr = rsdata[t][0].i;
+          auto mem_addr = rsdata[t][0].u;
           trace_data->mem_addrs.at(t) = {mem_addr, 4};
         }
       } break;
@@ -1432,25 +1434,6 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         }
         rd_write = true;
       } break;
-      case 1: { // ROP
-        trace->exe_type = ExeType::GPU; 
-        trace->gpu_type = GpuType::ROP;
-        trace->used_iregs.set(rsrc0);
-        trace->used_iregs.set(rsrc1);
-        for (uint32_t t = 0; t < num_threads; ++t) {
-          if (!tmask_.test(t))
-            continue;
-          auto color = rsdata[t][0].i;
-          auto depth = rsdata[t][1].i;
-          auto frag  = core_->raster_svc_->csr_read(id_, t, CSR_RASTER_FRAG);
-          auto x_y   = core_->raster_svc_->csr_read(id_, t, CSR_RASTER_X_Y);
-          auto mask_pid = core_->raster_svc_->csr_read(id_, t, CSR_RASTER_MASK_PID);
-          auto x    = x_y & 0xffff;
-          auto y    = x_y >> 16;
-          auto mask = mask_pid & 0xf;          
-          core_->rop_svc_->write(frag, x, y, mask, color, depth);
-        }
-      } break;
       default:
         std::abort();
       }
@@ -1460,31 +1443,31 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     }
   } break;
   case EXT2: {    
-    switch (func3) {
-    case 0: { // TEX
-      trace->exe_type = ExeType::GPU; 
-      trace->gpu_type = GpuType::TEX;
-      trace->used_iregs.set(rsrc0);
-      trace->used_iregs.set(rsrc1);
-      trace->used_iregs.set(rsrc2);
-      auto trace_data = new TexUnit::TraceData();
-      trace->data = trace_data;
-      for (uint32_t t = 0; t < num_threads; ++t) {
-        if (!tmask_.test(t))
-          continue;        
-        auto u     = rsdata[t][0].i;
-        auto v     = rsdata[t][1].i;
-        auto lod   = rsdata[t][2].i;
-        auto color = core_->tex_unit_->read(u, v, lod, trace_data);
-        rddata[t].i = color;
-      }
-      rd_write = true;
-    } break;
-    case 1: 
+    switch (func3) {    
+    case 0: 
       switch (func2) {
-      case 0: { // CMOV
-        trace->exe_type = ExeType::ALU;
-        trace->alu_type = AluType::CMOV;
+      case 0: { // TEX
+        trace->exe_type = ExeType::GPU; 
+        trace->gpu_type = GpuType::TEX;
+        trace->used_iregs.set(rsrc0);
+        trace->used_iregs.set(rsrc1);
+        trace->used_iregs.set(rsrc2);
+        auto trace_data = new TexUnit::TraceData();
+        trace->data = trace_data;
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t))
+            continue;        
+          auto u     = rsdata[t][0].i;
+          auto v     = rsdata[t][1].i;
+          auto lod   = rsdata[t][2].i;
+          auto color = core_->tex_unit_->read(u, v, lod, trace_data);
+          rddata[t].i = color;
+        }
+        rd_write = true;
+      } break;
+      case 1: { // CMOV
+        trace->exe_type = ExeType::GPU;
+        trace->gpu_type = GpuType::CMOV;
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
         trace->used_iregs.set(rsrc2);
@@ -1495,40 +1478,42 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         }
         rd_write = true;
       } break;
-      case 1: { // INTERP
+      case 2: { // ROP
         trace->exe_type = ExeType::GPU; 
-        trace->gpu_type = GpuType::INTERP;
+        trace->gpu_type = GpuType::ROP;
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
         trace->used_iregs.set(rsrc2);
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t))
             continue;
-          auto a = rsdata[t][0].i;
-          auto b = rsdata[t][1].i;
-          auto c = rsdata[t][2].i;
-          auto result = core_->raster_svc_->interpolate(id_, t, a, b, c);
-          rddata[t].i = result;
+          auto pos_face = rsdata[t][0].i;
+          auto color    = rsdata[t][1].i;
+          auto depth    = rsdata[t][2].i;
+          auto f = (pos_face >> 0)  & 0x1;
+          auto x = (pos_face >> 1)  & 0x7fff;
+          auto y = (pos_face >> 16) & 0x7fff;
+          core_->rop_svc_->write(x, y, f, color, depth);
         }
-        rd_write = true;
-      } break;
-      case 2: { // IMADD
-        trace->exe_type = ExeType::ALU;
-        trace->alu_type = AluType::IMADD;
-        trace->used_iregs.set(rsrc0);
-        trace->used_iregs.set(rsrc1);
-        trace->used_iregs.set(rsrc2);
-        for (uint32_t t = 0; t < num_threads; ++t) {
-          if (!tmask_.test(t))
-            continue;
-          rddata[t].i = (WordI)rsdata[t][0].i * (WordI)rsdata[t][1].i + (WordI)rsdata[t][2].i;
-        }
-        rd_write = true;
       } break;
       default:
         std::abort();
       }
-      break;    
+      break;      
+    case 1: { // IMADD
+      trace->exe_type = ExeType::GPU;
+      trace->gpu_type = GpuType::IMADD;
+      trace->used_iregs.set(rsrc0);
+      trace->used_iregs.set(rsrc1);
+      trace->used_iregs.set(rsrc2);
+      uint32_t shift = func2 * 8;
+      for (uint32_t t = 0; t < num_threads; ++t) {
+        if (!tmask_.test(t))
+          continue;
+        rddata[t].i = (WordI)(((int64_t)rsdata[t][0].i * (int64_t)rsdata[t][1].i) >> shift) + rsdata[t][2].i;
+      }
+      rd_write = true;
+    } break;        
     default:
       std::abort();
     }
@@ -2367,7 +2352,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
 
       DP(3, "lmul:" << vtype_.vlmul << " sew:" << vtype_.vsew  << " ediv: " << vtype_.vediv << "rsrc_" << rsdata[0][0].i << "VLMAX" << VLMAX);
 
-      auto s0 = rsdata[0][0].i;
+      auto s0 = rsdata[0][0].u;
       if (s0 <= VLMAX) {
         vl_ = s0;
       } else if (s0 < (2 * VLMAX)) {
