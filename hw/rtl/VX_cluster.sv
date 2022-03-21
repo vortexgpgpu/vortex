@@ -32,6 +32,9 @@ module VX_cluster #(
     localparam RASTER_MEM_ARB = `EXT_RASTER_ENABLED;
     localparam ROP_MEM_ARB = 1 + `EXT_RASTER_ENABLED;
 
+    `UNUSED_PARAM (RASTER_MEM_ARB)
+    `UNUSED_PARAM (ROP_MEM_ARB)
+
     VX_mem_req_if #(
         .DATA_WIDTH (`L2_MEM_DATA_WIDTH),
         .ADDR_WIDTH (`L2_MEM_ADDR_WIDTH),

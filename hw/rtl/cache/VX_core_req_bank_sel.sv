@@ -47,7 +47,8 @@ module VX_core_req_bank_sel #(
     output wire [NUM_BANKS-1:0][NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] per_bank_core_req_tag,
     input  wire [NUM_BANKS-1:0]                     per_bank_core_req_ready
 );
-    `UNUSED_PARAM (CACHE_ID)
+    `UNUSED_PARAM (CACHE_ID)    
+    `UNUSED_PARAM (NUM_WAYS)
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))
     `STATIC_ASSERT(NUM_PORTS <= NUM_BANKS, ("invalid value"))
 

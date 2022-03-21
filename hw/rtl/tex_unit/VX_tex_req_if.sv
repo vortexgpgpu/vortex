@@ -46,6 +46,4 @@ interface VX_tex_req_if ();
 
 endinterface
 `endif
-
-
  

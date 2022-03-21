@@ -126,10 +126,10 @@ module VX_mem_arb #(
         assign req_out_if.data   = req_in_if[0].data;
         assign req_in_if[0].ready= req_out_if.ready;
 
-        assign rsp_out_if[0].valid  = rsp_in_if.valid;
-        assign rsp_out_if[0].tag    = rsp_in_if.tag;
-        assign rsp_out_if[0].data   = rsp_in_if.data;
-        assign rsp_in_if.ready   = rsp_out_if[0].ready;
+        assign rsp_out_if[0].valid = rsp_in_if.valid;
+        assign rsp_out_if[0].tag   = rsp_in_if.tag;
+        assign rsp_out_if[0].data  = rsp_in_if.data;
+        assign rsp_in_if.ready  = rsp_out_if[0].ready;
 
     end
 

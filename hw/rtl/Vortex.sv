@@ -234,7 +234,7 @@ module Vortex (
         .NUM_REQS     (`NUM_CLUSTERS),
         .DATA_WIDTH   (`L3_MEM_DATA_WIDTH),            
         .ADDR_WIDTH   (`L3_MEM_ADDR_WIDTH),
-        .TAG_IN_WIDTH (`L2_MEM_TAG_WIDTH-2),
+        .TAG_IN_WIDTH (`L2_MEM_TAG_WIDTH),
         .TYPE         ("R"),
         .BUFFERED_REQ (1),
         .BUFFERED_RSP (1)
