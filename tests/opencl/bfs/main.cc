@@ -190,7 +190,8 @@ int main(int argc, char *argv[]) {
   char *h_graph_mask, *h_updating_graph_mask, *h_graph_visited;
   
   try {
-    char *input_f = "graph4096.txt";
+    /* char *input_f = "graph4096.txt"; */
+    char *input_f = "cora.txt";
     printf("Reading File\n");
     // Read in Graph from a file
     fp = fopen(input_f, "r");

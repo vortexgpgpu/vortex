@@ -3,7 +3,7 @@
 show_usage()
 {
     echo "Vortex BlackBox Test Driver v1.0"
-    echo "Usage: [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=rtlsim|vlsim|simx] [--debug] [--scope] [--perf] [--app=vecadd|sgemm|basic|demo|dogfood] [--args=<args>] [--help]]"
+    echo "Usage: [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=rtlsim|vlsim|simx] [--debug] [--scope] [--perf] [--app=vecadd|sgemm|basic|demo|dogfood|bfs] [--args=<args>] [--help]]"
 }
 
 SCRIPT_DIR=$(dirname "$0")
