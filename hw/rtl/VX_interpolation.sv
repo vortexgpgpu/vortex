@@ -1,11 +1,13 @@
+// TODO: add immediate shift
+
 `include "VX_define.vh"
 
 module VX_interpolation (
     input wire clk,
     input wire reset,
     
-    // Inputs    
-    input wire [`INST_MUL_BITS-1:0]     interp_op,
+    // Inputs
+    input wire [`INST_MOD_BITS-1:0]     op_mod,
     input wire [`UUID_BITS-1:0]         uuid_in,
     input wire [`NW_BITS-1:0]           wid_in,
     input wire [`NUM_THREADS-1:0]       tmask_in,
@@ -33,33 +35,24 @@ module VX_interpolation (
 ); 
 
     wire [`NUM_THREADS-1:0][31:0] mul_result;
-    wire [`NUM_THREADS-1:0][31:0] mul_result_out;
     wire [`NUM_THREADS-1:0][31:0] add_result;
-    wire [`NR_BITS-1:0] mul_rd_out;
-    wire mul_wb_out;
 
     wire stall_out;
 
     wire imadd_valid_out;
     wire mul_ready_in = ~stall_out || ~imadd_valid_out;
 
-    wire is_mulh_in      = (interp_op != `INST_MUL_MUL);
-
     ///////////////////////////////////////////////////////////////////////////
-    
-    wire is_mulh_out;
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         wire [31:0] mul_in1 = interp_in1[i];
         wire [31:0] mul_in2 = interp_in2[i];
-    `IGNORE_UNUSED_BEGIN
-        wire [63:0] mul_result_tmp;
-    `IGNORE_UNUSED_END
+        wire [31:0] mul_result_tmp;
 
-        VX_multiplier #(
+        VX_multiplier #( // TODO: use alu mul
             .WIDTHA  (32),
             .WIDTHB  (32),
-            .WIDTHP  (64),
+            .WIDTHP  (32),
             .SIGNED  (0),
             .LATENCY (`LATENCY_IMUL)
         ) multiplier (
@@ -70,18 +63,16 @@ module VX_interpolation (
             .result (mul_result_tmp)
         );
 
-        assign mul_result[i] = is_mulh_out ? mul_result_tmp[63:32] : mul_result_tmp[31:0];
+        assign mul_result[i] = mul_result_tmp >> (op_mod * 8);
     end
 
     reg [`LATENCY_IMUL-1:0] mul_shift_reg;
 
-    always @(posedge clk) // wait for multiplier
-        begin
+    always @(posedge clk) begin // wait for multiplier
             mul_shift_reg <= { mul_shift_reg[`LATENCY_IMUL-2:0], valid_in & mul_ready_in };
-        end
+    end
     
     assign imadd_valid_out = mul_shift_reg[`LATENCY_IMUL-1];
-
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         assign add_result[i] = mul_result[i] + interp_in3[i];
