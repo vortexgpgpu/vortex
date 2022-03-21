@@ -46,6 +46,7 @@ module VX_rop_mem #(
     localparam NUM_REQS = 2 * NUM_LANES;
 
     wire [NUM_REQS-1:0]       req_mask;
+    wire [NUM_REQS-1:0]       rsp_mask;
     wire [NUM_REQS-1:0]       write_mask;
     wire [NUM_REQS-1:0][31:0] req_addr;
     wire [NUM_REQS-1:0][31:0] req_data;
@@ -62,6 +63,7 @@ module VX_rop_mem #(
 
     assign write_mask = { {NUM_LANES{~dcrs.depth_writemask}}, {NUM_LANES{dcrs.depth_writemask}} };
     assign req_mask = {2{req_tmask}} & write_mask;
+    assign rsp_tmask = dcrs.depth_writemask ? rsp_mask[0 +: NUM_LANES] : rsp_mask[NUM_LANES +: NUM_LANES];
     assign cache_rsp_if.ready = rsp_ready;
 
     for (genvar i = 0;  i < NUM_LANES; ++i) begin
@@ -99,7 +101,7 @@ module VX_rop_mem #(
         .req_ready      (req_ready),
 
         .rsp_valid      (rsp_valid),
-        .rsp_mask       (rsp_tmask),
+        .rsp_mask       (rsp_mask),
         .rsp_data       (rsp_data),
         .rsp_tag        (rsp_tag),
         .rsp_ready      (rsp_ready),
