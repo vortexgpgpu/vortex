@@ -375,7 +375,7 @@
 `define TCACHE_NUM_REQS         `NUM_THREADS
 
 // Memory request tag bits
-`define RCACHE_MEM_TAG_WIDTH    `L2_MEM_TAG_WIDTH
+`define RCACHE_MEM_TAG_WIDTH    (`CLOG2(`TCACHE_NUM_BANKS) + `CLOG2(`TCACHE_MSHR_SIZE))
 
 ////////////////////////// Rcache Configurable Knobs //////////////////////////
 
@@ -397,7 +397,7 @@
 `define RCACHE_NUM_REQS         1
 
 // Memory request tag bits
-`define RCACHE_MEM_TAG_WIDTH    `L2_MEM_TAG_WIDTH
+`define RCACHE_MEM_TAG_WIDTH    (`CLOG2(`RCACHE_NUM_BANKS) + `CLOG2(`RCACHE_MSHR_SIZE))
 
 ////////////////////////// Ocache Configurable Knobs //////////////////////////
 
@@ -419,7 +419,7 @@
 `define OCACHE_NUM_REQS         `NUM_THREADS
 
 // Memory request tag bits
-`define OCACHE_MEM_TAG_WIDTH    `L2_MEM_TAG_WIDTH
+`define OCACHE_MEM_TAG_WIDTH    (`CLOG2(`OCACHE_NUM_BANKS) + `CLOG2(`OCACHE_MSHR_SIZE))
 
 ///////////////////////////////////////////////////////////////////////////////
 

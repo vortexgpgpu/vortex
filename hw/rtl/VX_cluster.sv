@@ -65,8 +65,17 @@ module VX_cluster #(
     `unused_var (perf_rcache_if.crsp_stalls)
 `endif
 
-    VX_dcache_req_if    raster_cache_req_if();
-    VX_dcache_rsp_if    raster_cache_rsp_if();
+    VX_dcache_req_if #(
+        .NUM_REQS  (`RCACHE_NUM_REQS), 
+        .WORD_SIZE (`RCACHE_WORD_SIZE), 
+        .TAG_WIDTH (`RCACHE_TAG_WIDTH)
+    ) raster_cache_req_if();
+
+    VX_dcache_rsp_if #(
+        .NUM_REQS  (`RCACHE_NUM_REQS), 
+        .WORD_SIZE (`RCACHE_WORD_SIZE), 
+        .TAG_WIDTH (`RCACHE_TAG_WIDTH)
+    ) raster_cache_rsp_if();
 
     `RESET_RELAY (raster_reset);
 
@@ -85,6 +94,11 @@ module VX_cluster #(
         .cache_req_if  (raster_cache_req_if),
         .cache_rsp_if  (raster_cache_rsp_if)
     );
+
+    wire [`RCACHE_MEM_TAG_WIDTH-1:0] rcache_mem_req_tag;
+    wire [`RCACHE_MEM_TAG_WIDTH-1:0] rcache_mem_rsp_tag;
+    assign mem_req_arb_if[RASTER_MEM_ARB].tag = `L2X_MEM_TAG_WIDTH'(rcache_mem_req_tag);
+    assign rcache_mem_rsp_tag = `RCACHE_MEM_TAG_WIDTH'(mem_rsp_arb_if[RASTER_MEM_ARB].tag);
 
     VX_cache #(
         .CACHE_ID           (`RCACHE_ID),
@@ -136,13 +150,13 @@ module VX_cluster #(
         .mem_req_byteen     (mem_req_arb_if[RASTER_MEM_ARB].byteen),        
         .mem_req_addr       (mem_req_arb_if[RASTER_MEM_ARB].addr),
         .mem_req_data       (mem_req_arb_if[RASTER_MEM_ARB].data),
-        .mem_req_tag        (mem_req_arb_if[RASTER_MEM_ARB].tag),
+        .mem_req_tag        (rcache_mem_req_tag),
         .mem_req_ready      (mem_req_arb_if[RASTER_MEM_ARB].ready),
 
         // Memory response
         .mem_rsp_valid      (mem_rsp_arb_if[RASTER_MEM_ARB].valid),        
         .mem_rsp_data       (mem_rsp_arb_if[RASTER_MEM_ARB].data),
-        .mem_rsp_tag        (mem_rsp_arb_if[RASTER_MEM_ARB].tag),
+        .mem_rsp_tag        (rcache_mem_rsp_tag),
         .mem_rsp_ready      (mem_rsp_arb_if[RASTER_MEM_ARB].ready)
     );
 
@@ -179,8 +193,17 @@ module VX_cluster #(
     `unused_var (perf_ocache_if.crsp_stalls)
 `endif
     
-    VX_dcache_req_if    rop_cache_req_if();
-    VX_dcache_rsp_if    rop_cache_rsp_if();
+    VX_dcache_req_if #(
+        .NUM_REQS  (`OCACHE_NUM_REQS), 
+        .WORD_SIZE (`OCACHE_WORD_SIZE), 
+        .TAG_WIDTH (`OCACHE_TAG_WIDTH)
+    ) rop_cache_req_if();
+
+    VX_dcache_rsp_if #(
+        .NUM_REQS  (`OCACHE_NUM_REQS), 
+        .WORD_SIZE (`OCACHE_WORD_SIZE), 
+        .TAG_WIDTH (`OCACHE_TAG_WIDTH)
+    ) rop_cache_rsp_if();
 
     `RESET_RELAY (rop_reset);
 
@@ -198,6 +221,11 @@ module VX_cluster #(
         .cache_req_if  (rop_cache_req_if),
         .cache_rsp_if  (rop_cache_rsp_if)
     );
+
+    wire [`OCACHE_MEM_TAG_WIDTH-1:0] ocache_mem_req_tag;
+    wire [`OCACHE_MEM_TAG_WIDTH-1:0] ocache_mem_rsp_tag;
+    assign mem_req_arb_if[ROP_MEM_ARB].tag = `L2X_MEM_TAG_WIDTH'(ocache_mem_req_tag);
+    assign ocache_mem_rsp_tag = `OCACHE_MEM_TAG_WIDTH'(mem_rsp_arb_if[ROP_MEM_ARB].tag);
 
     VX_cache #(
         .CACHE_ID           (`OCACHE_ID),
@@ -249,13 +277,13 @@ module VX_cluster #(
         .mem_req_byteen     (mem_req_arb_if[ROP_MEM_ARB].byteen),        
         .mem_req_addr       (mem_req_arb_if[ROP_MEM_ARB].addr),
         .mem_req_data       (mem_req_arb_if[ROP_MEM_ARB].data),
-        .mem_req_tag        (mem_req_arb_if[ROP_MEM_ARB].tag),
+        .mem_req_tag        (ocache_mem_req_tag),
         .mem_req_ready      (mem_req_arb_if[ROP_MEM_ARB].ready),
 
         // Memory response
         .mem_rsp_valid      (mem_rsp_arb_if[ROP_MEM_ARB].valid),        
         .mem_rsp_data       (mem_rsp_arb_if[ROP_MEM_ARB].data),
-        .mem_rsp_tag        (mem_rsp_arb_if[ROP_MEM_ARB].tag),
+        .mem_rsp_tag        (ocache_mem_rsp_tag),
         .mem_rsp_ready      (mem_rsp_arb_if[ROP_MEM_ARB].ready)
     );
 
@@ -320,6 +348,32 @@ module VX_cluster #(
     VX_perf_cache_if perf_l2cache_if();
 `endif
 
+    wire [`NUM_CORES-1:0]                       per_core_mem_req_valid;
+    wire [`NUM_CORES-1:0]                       per_core_mem_req_rw;    
+    wire [`NUM_CORES-1:0][`DCACHE_MEM_BYTEEN_WIDTH-1:0] per_core_mem_req_byteen;    
+    wire [`NUM_CORES-1:0][`DCACHE_MEM_ADDR_WIDTH-1:0] per_core_mem_req_addr;
+    wire [`NUM_CORES-1:0][`DCACHE_MEM_DATA_WIDTH-1:0] per_core_mem_req_data;
+    wire [`NUM_CORES-1:0][`L1_MEM_TAG_WIDTH-1:0] per_core_mem_req_tag;
+    wire [`NUM_CORES-1:0]                       per_core_mem_req_ready;
+
+    wire [`NUM_CORES-1:0]                       per_core_mem_rsp_valid;            
+    wire [`NUM_CORES-1:0][`DCACHE_MEM_DATA_WIDTH-1:0] per_core_mem_rsp_data;
+    wire [`NUM_CORES-1:0][`L1_MEM_TAG_WIDTH-1:0] per_core_mem_rsp_tag;
+    wire [`NUM_CORES-1:0]                       per_core_mem_rsp_ready;
+
+    assign per_core_mem_req_valid   = per_core_mem_req_if.valid;
+    assign per_core_mem_req_rw      = per_core_mem_req_if.rw;    
+    assign per_core_mem_req_byteen  = per_core_mem_req_if.byteen;    
+    assign per_core_mem_req_addr    = per_core_mem_req_if.addr;
+    assign per_core_mem_req_data    = per_core_mem_req_if.data;
+    assign per_core_mem_req_tag     = per_core_mem_req_if.tag;
+    assign per_core_mem_req_if.ready = per_core_mem_req_ready;
+
+    assign per_core_mem_rsp_if.valid= per_core_mem_rsp_valid;
+    assign per_core_mem_rsp_if.data = per_core_mem_rsp_data;
+    assign per_core_mem_rsp_if.tag  = per_core_mem_rsp_tag;
+    assign per_core_mem_rsp_ready = per_core_mem_rsp_if.ready;
+
     `RESET_RELAY (l2_reset);
 
     VX_cache #(
@@ -351,19 +405,19 @@ module VX_cluster #(
     `endif
 
         // Core request
-        .core_req_valid     (per_core_mem_req_if.valid),
-        .core_req_rw        (per_core_mem_req_if.rw),
-        .core_req_byteen    (per_core_mem_req_if.byteen),
-        .core_req_addr      (per_core_mem_req_if.addr),
-        .core_req_data      (per_core_mem_req_if.data),  
-        .core_req_tag       (per_core_mem_req_if.tag),  
-        .core_req_ready     (per_core_mem_req_if.ready),
+        .core_req_valid     (per_core_mem_req_valid),
+        .core_req_rw        (per_core_mem_req_rw),
+        .core_req_byteen    (per_core_mem_req_byteen),
+        .core_req_addr      (per_core_mem_req_addr),
+        .core_req_data      (per_core_mem_req_data),  
+        .core_req_tag       (per_core_mem_req_tag),  
+        .core_req_ready     (per_core_mem_req_ready),
 
         // Core response
-        .core_rsp_valid     (per_core_mem_rsp_if.valid),
-        .core_rsp_data      (per_core_mem_rsp_if.data),
-        .core_rsp_tag       (per_core_mem_rsp_if.tag),
-        .core_rsp_ready     (per_core_mem_rsp_if.ready),
+        .core_rsp_valid     (per_core_mem_rsp_valid),
+        .core_rsp_data      (per_core_mem_rsp_data),
+        .core_rsp_tag       (per_core_mem_rsp_tag),
+        .core_rsp_ready     (per_core_mem_rsp_ready),
         `UNUSED_PIN (core_rsp_tmask),
 
         // Memory request

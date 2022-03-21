@@ -39,7 +39,7 @@ module VX_mem_arb #(
         wire [NUM_REQS-1:0] req_ready_in;
 
         for (genvar i = 0; i < NUM_REQS; i++) begin
-            wire [TAG_OUT_WIDTH-1:0] req_tag_in_w;
+            wire [TAG_OUT_WIDTH-1:0] req_tag_in;
 
             VX_bits_insert #( 
                 .N   (TAG_IN_WIDTH),
@@ -48,11 +48,11 @@ module VX_mem_arb #(
             ) bits_insert (
                 .data_in  (req_in_if[i].tag),
                 .sel_in   (LOG_NUM_REQS'(i)),
-                .data_out (req_tag_in_w)
+                .data_out (req_tag_in)
             );
 
             assign req_valid_in[i] = req_in_if[i].valid;
-            assign req_data_in[i] = {req_tag_in_w, req_in_if[i].addr, req_in_if[i].rw, req_in_if[i].byteen, req_in_if[i].data};
+            assign req_data_in[i] = {req_tag_in, req_in_if[i].addr, req_in_if[i].rw, req_in_if[i].byteen, req_in_if[i].data};
             assign req_in_if[i].ready = req_ready_in[i];
         end
 
@@ -80,7 +80,7 @@ module VX_mem_arb #(
 
         wire [LOG_NUM_REQS-1:0] rsp_sel = rsp_in_if.tag[TAG_SEL_IDX +: LOG_NUM_REQS];
 
-        wire [TAG_IN_WIDTH-1:0] rsp_tag_in_w;
+        wire [TAG_IN_WIDTH-1:0] rsp_tag_in;
 
         VX_bits_remove #( 
             .N   (TAG_OUT_WIDTH),
@@ -88,7 +88,7 @@ module VX_mem_arb #(
             .POS (TAG_SEL_IDX)
         ) bits_remove (
             .data_in  (rsp_in_if.tag),
-            .data_out (rsp_tag_in_w)
+            .data_out (rsp_tag_in)
         );
 
         VX_stream_demux #(
@@ -100,7 +100,7 @@ module VX_mem_arb #(
             .reset     (reset),
             .sel_in    (rsp_sel),
             .valid_in  (rsp_in_if.valid),
-            .data_in   ({rsp_tag_in_w, rsp_in_if.data}),
+            .data_in   ({rsp_tag_in, rsp_in_if.data}),
             .ready_in  (rsp_in_if.ready),
             .valid_out (rsp_valid_out),
             .data_out  (rsp_data_out),
