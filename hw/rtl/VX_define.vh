@@ -274,7 +274,8 @@
 `define DCACHE_MEM_TAG_WIDTH    `MAX((`CLOG2(`DCACHE_NUM_BANKS) + `CLOG2(`DCACHE_MSHR_SIZE) + `NC_TAG_BIT), `_DNC_MEM_TAG_WIDTH)
 
 // Merged D-cache/I-cache memory tag
-`define L1_MEM_TAG_WIDTH        (`MAX(`ICACHE_MEM_TAG_WIDTH, `DCACHE_MEM_TAG_WIDTH) + `CLOG2(2))
+`define ICACHE_DCACHE_MEM_TAG   `MAX(`ICACHE_MEM_TAG_WIDTH, `DCACHE_MEM_TAG_WIDTH)
+`define L1_MEM_TAG_WIDTH        (`ICACHE_DCACHE_MEM_TAG + `CLOG2(2))
 
 ////////////////////////// SM Configurable Knobs //////////////////////////////
 

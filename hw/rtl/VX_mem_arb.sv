@@ -54,7 +54,7 @@ module VX_mem_arb #(
             assign req_valid_in[i] = req_in_if[i].valid;
             assign req_data_in[i] = {req_tag_in, req_in_if[i].addr, req_in_if[i].rw, req_in_if[i].byteen, req_in_if[i].data};
             assign req_in_if[i].ready = req_ready_in[i];
-        end
+        end        
 
         VX_stream_mux #(            
             .NUM_REQS (NUM_REQS),

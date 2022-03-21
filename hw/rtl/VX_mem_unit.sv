@@ -49,12 +49,12 @@ module VX_mem_unit # (
     VX_mem_req_if #(
         .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
         .ADDR_WIDTH (`DCACHE_MEM_ADDR_WIDTH),
-        .TAG_WIDTH  (`L1_MEM_TAG_WIDTH)
+        .TAG_WIDTH  (`ICACHE_DCACHE_MEM_TAG)
     ) caches_mem_req_if[2]();
 
     VX_mem_rsp_if #(
         .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (`L1_MEM_TAG_WIDTH)
+        .TAG_WIDTH  (`ICACHE_DCACHE_MEM_TAG)
     ) caches_mem_rsp_if[2]();
 
     VX_dcache_req_if #(
@@ -87,7 +87,7 @@ module VX_mem_unit # (
 
     wire [`ICACHE_MEM_TAG_WIDTH-1:0] icache_mem_req_tag;
     wire [`ICACHE_MEM_TAG_WIDTH-1:0] icache_mem_rsp_tag;
-    assign caches_mem_req_if[0].tag = `L1_MEM_TAG_WIDTH'(icache_mem_req_tag);
+    assign caches_mem_req_if[0].tag = `ICACHE_DCACHE_MEM_TAG'(icache_mem_req_tag);
     assign icache_mem_rsp_tag = `ICACHE_MEM_TAG_WIDTH'(caches_mem_rsp_if[0].tag);
 
     VX_cache #(
@@ -150,7 +150,7 @@ module VX_mem_unit # (
 
     wire [`DCACHE_MEM_TAG_WIDTH-1:0] dcache_mem_req_tag;
     wire [`DCACHE_MEM_TAG_WIDTH-1:0] dcache_mem_rsp_tag;
-    assign caches_mem_req_if[1].tag = `L1_MEM_TAG_WIDTH'(dcache_mem_req_tag);
+    assign caches_mem_req_if[1].tag = `ICACHE_DCACHE_MEM_TAG'(dcache_mem_req_tag);
     assign dcache_mem_rsp_tag = `DCACHE_MEM_TAG_WIDTH'(caches_mem_rsp_if[1].tag);
 
     VX_cache #(
@@ -425,7 +425,7 @@ module VX_mem_unit # (
         .NUM_REQS      (2),
         .DATA_WIDTH    (`DCACHE_MEM_DATA_WIDTH),
         .ADDR_WIDTH    (`DCACHE_MEM_ADDR_WIDTH),
-        .TAG_IN_WIDTH  (`L1_MEM_TAG_WIDTH),
+        .TAG_IN_WIDTH  (`ICACHE_DCACHE_MEM_TAG),
         .TYPE          ("R"),
         .TAG_SEL_IDX   (1), // Skip 0 for NC flag
         .BUFFERED_REQ  (1),

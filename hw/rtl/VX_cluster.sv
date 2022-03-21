@@ -182,6 +182,7 @@ module VX_cluster #(
 `ifdef PERF_ENABLE
     VX_perf_cache_if    perf_ocache_if();
     VX_rop_perf_if      rop_perf_if(); 
+    
     // TODO: remove
     `UNUSED_VAR (rop_perf_if.mem_reads)
     `UNUSED_VAR (rop_perf_if.mem_writes)
@@ -349,7 +350,7 @@ module VX_cluster #(
 
 `ifdef PERF_ENABLE
     VX_perf_cache_if perf_l2cache_if();
-`endif
+`endif    
 
     wire [`NUM_CORES-1:0]                       per_core_mem_req_valid;
     wire [`NUM_CORES-1:0]                       per_core_mem_req_rw;    
@@ -364,18 +365,20 @@ module VX_cluster #(
     wire [`NUM_CORES-1:0][`L1_MEM_TAG_WIDTH-1:0] per_core_mem_rsp_tag;
     wire [`NUM_CORES-1:0]                       per_core_mem_rsp_ready;
 
-    assign per_core_mem_req_valid   = per_core_mem_req_if.valid;
-    assign per_core_mem_req_rw      = per_core_mem_req_if.rw;    
-    assign per_core_mem_req_byteen  = per_core_mem_req_if.byteen;    
-    assign per_core_mem_req_addr    = per_core_mem_req_if.addr;
-    assign per_core_mem_req_data    = per_core_mem_req_if.data;
-    assign per_core_mem_req_tag     = per_core_mem_req_if.tag;
-    assign per_core_mem_req_if.ready = per_core_mem_req_ready;
+    for (genvar i = 0; i < `NUM_CORES; i++) begin
+        assign per_core_mem_req_valid[i]   = per_core_mem_req_if[i].valid;
+        assign per_core_mem_req_rw[i]      = per_core_mem_req_if[i].rw;    
+        assign per_core_mem_req_byteen[i]  = per_core_mem_req_if[i].byteen;    
+        assign per_core_mem_req_addr[i]    = per_core_mem_req_if[i].addr;
+        assign per_core_mem_req_data[i]    = per_core_mem_req_if[i].data;
+        assign per_core_mem_req_tag[i]     = per_core_mem_req_if[i].tag;
+        assign per_core_mem_req_if[i].ready = per_core_mem_req_ready[i];
 
-    assign per_core_mem_rsp_if.valid= per_core_mem_rsp_valid;
-    assign per_core_mem_rsp_if.data = per_core_mem_rsp_data;
-    assign per_core_mem_rsp_if.tag  = per_core_mem_rsp_tag;
-    assign per_core_mem_rsp_ready = per_core_mem_rsp_if.ready;
+        assign per_core_mem_rsp_if[i].valid= per_core_mem_rsp_valid[i];
+        assign per_core_mem_rsp_if[i].data = per_core_mem_rsp_data[i];
+        assign per_core_mem_rsp_if[i].tag  = per_core_mem_rsp_tag[i];
+        assign per_core_mem_rsp_ready[i] = per_core_mem_rsp_if[i].ready;
+    end
 
     `RESET_RELAY (l2_reset);
 

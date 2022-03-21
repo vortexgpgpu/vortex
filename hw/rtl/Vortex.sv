@@ -136,7 +136,7 @@ module Vortex (
 
 `ifdef PERF_ENABLE
     VX_perf_cache_if perf_l3cache_if();
-`endif
+`endif    
 
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_req_valid;
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_req_rw;
@@ -151,18 +151,20 @@ module Vortex (
     wire [`NUM_CLUSTERS-1:0][`L2_MEM_TAG_WIDTH-1:0]  per_cluster_mem_rsp_tag;
     wire [`NUM_CLUSTERS-1:0]                         per_cluster_mem_rsp_ready;
 
-    assign per_cluster_mem_req_valid   = per_cluster_mem_req_if.valid;
-    assign per_cluster_mem_req_rw      = per_cluster_mem_req_if.rw;    
-    assign per_cluster_mem_req_byteen  = per_cluster_mem_req_if.byteen;    
-    assign per_cluster_mem_req_addr    = per_cluster_mem_req_if.addr;
-    assign per_cluster_mem_req_data    = per_cluster_mem_req_if.data;
-    assign per_cluster_mem_req_tag     = per_cluster_mem_req_if.tag;
-    assign per_cluster_mem_req_if.ready = per_cluster_mem_req_ready;
+    for (genvar i = 0; i < `NUM_CLUSTERS; i++) begin
+        assign per_cluster_mem_req_valid[i]   = per_cluster_mem_req_if[i].valid;
+        assign per_cluster_mem_req_rw[i]      = per_cluster_mem_req_if[i].rw;    
+        assign per_cluster_mem_req_byteen[i]  = per_cluster_mem_req_if[i].byteen;    
+        assign per_cluster_mem_req_addr[i]    = per_cluster_mem_req_if[i].addr;
+        assign per_cluster_mem_req_data[i]    = per_cluster_mem_req_if[i].data;
+        assign per_cluster_mem_req_tag[i]     = per_cluster_mem_req_if[i].tag;
+        assign per_cluster_mem_req_if[i].ready = per_cluster_mem_req_ready[i];
 
-    assign per_cluster_mem_rsp_if.valid= per_cluster_mem_rsp_valid;
-    assign per_cluster_mem_rsp_if.data = per_cluster_mem_rsp_data;
-    assign per_cluster_mem_rsp_if.tag  = per_cluster_mem_rsp_tag;
-    assign per_cluster_mem_rsp_ready = per_cluster_mem_rsp_if.ready;
+        assign per_cluster_mem_rsp_if[i].valid= per_cluster_mem_rsp_valid[i];
+        assign per_cluster_mem_rsp_if[i].data = per_cluster_mem_rsp_data[i];
+        assign per_cluster_mem_rsp_if[i].tag  = per_cluster_mem_rsp_tag[i];
+        assign per_cluster_mem_rsp_ready[i] = per_cluster_mem_rsp_if[i].ready;
+    end
 
     `START_RELAY (l3_reset);
 
@@ -232,8 +234,8 @@ module Vortex (
 
     VX_mem_arb #(
         .NUM_REQS     (`NUM_CLUSTERS),
-        .DATA_WIDTH   (`L3_MEM_DATA_WIDTH),            
-        .ADDR_WIDTH   (`L3_MEM_ADDR_WIDTH),
+        .DATA_WIDTH   (`L2_MEM_DATA_WIDTH),            
+        .ADDR_WIDTH   (`L2_MEM_ADDR_WIDTH),
         .TAG_IN_WIDTH (`L2_MEM_TAG_WIDTH),
         .TYPE         ("R"),
         .BUFFERED_REQ (1),
