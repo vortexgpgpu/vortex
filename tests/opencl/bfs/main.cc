@@ -133,6 +133,7 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
       _clSetArgs(kernel_id, kernel_idx++, d_over);
       _clSetArgs(kernel_id, kernel_idx++, &no_of_nodes, sizeof(int));
 
+
       // work_items = no_of_nodes;
       _clInvokeKernel(kernel_id, no_of_nodes, work_group_size);
 
@@ -237,6 +238,7 @@ int main(int argc, char *argv[]) {
     h_graph_mask[source] = true;
     h_graph_visited[source] = true;
     fscanf(fp, "%d", &edge_list_size);
+    printf("no_of_nodes: %d, edge_list_size: %d\n", no_of_nodes, edge_list_size);
     int id, cost;
     int *h_graph_edges = (int *)malloc(sizeof(int) * edge_list_size);
     for (int i = 0; i < edge_list_size; i++) {

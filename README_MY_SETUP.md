@@ -12,9 +12,7 @@ Add the conda include dir to CPATH, /volume1/users/nshah/anaconda3/anaconda3/env
 This is automated by wih activate.d and deactivate.d. See script ~/conda_env_var.sh
 
 IMPORTANT:
-Prebuilt POCL of centos is not compiling, probably due to compiler mismatch, as we are using gxx=11.2.0 instead of the deafult 4.8.5 in centos. 
-Hence, use the ubuntu prebuilt for POCL.
-Also, using the ubunut prebuilt for verilator, as there were no errors. 
+Prebuilt POCL of centos is not compiling for some workloads, probably due to compiler mismatch, as we are using gxx=11.2.0 instead of the deafult 4.8.5 in centos. 
 Centos prebuilt of verilator also works, but with the following change:
 Copy ./verilator/share/verilator/ to ./verilator/
 
@@ -24,9 +22,9 @@ export VORTEX_OPT_UBUNTU="/esat/puck1/users/nshah/Software_tools/no_backup/vorte
 export VORTEX_OPT_CENTOS="/esat/puck1/users/nshah/Software_tools/no_backup/vortex_opt_centos"
 export RISCV_TOOLCHAIN_PATH="${VORTEX_OPT_CENTOS}/riscv-gnu-toolchain"
 export SYSROOT="${RISCV_TOOLCHAIN_PATH}/riscv32-unknown-elf"
-export VERILATOR_ROOT="${VORTEX_OPT_UBUNTU}/verilator"
+export VERILATOR_ROOT="${VORTEX_OPT_CENTOS}/verilator"
 export PATH="${VERILATOR_ROOT}/bin:${PATH}"
 export LLVM_PREFIX="${VORTEX_OPT_CENTOS}/llvm-riscv"
-export POCL_CC_PATH="${VORTEX_OPT_UBUNTU}/pocl/compiler"
-export POCL_RT_PATH="${VORTEX_OPT_UBUNTU}/pocl/runtime"
+export POCL_CC_PATH="${VORTEX_OPT_CENTOS}/pocl/compiler"
+export POCL_RT_PATH="${VORTEX_OPT_CENTOS}/pocl/runtime"
 
