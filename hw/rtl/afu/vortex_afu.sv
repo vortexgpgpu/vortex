@@ -544,8 +544,8 @@ VX_mem_arb #(
   .clk        (clk),
   .reset      (mem_arb_reset),
   .req_in_if  (cci_vx_mem_req_if),
-  .req_out_if (mem_req_if),
   .rsp_out_if (cci_vx_mem_rsp_if),
+  .req_out_if (mem_req_if),
   .rsp_in_if  (mem_rsp_if)
 );
 

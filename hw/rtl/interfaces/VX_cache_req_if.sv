@@ -3,7 +3,7 @@
 
 `include "../cache/VX_cache_define.vh"
 
-interface VX_dcache_req_if #(
+interface VX_cache_req_if #(
     parameter NUM_REQS  = 1,
     parameter WORD_SIZE = 1,
     parameter TAG_WIDTH = 1
@@ -38,5 +38,14 @@ interface VX_dcache_req_if #(
     );
 
 endinterface
+
+`define CACHE_REQ_TO_MEM(dst, src, i) \
+    assign dst[i].valid = src.valid[i]; \
+    assign dst[i].rw = src.rw[i]; \
+    assign dst[i].byteen = src.byteen[i]; \
+    assign dst[i].addr = src.addr[i]; \
+    assign dst[i].data = src.data[i]; \
+    assign dst[i].tag = src.tag[i]; \
+    assign src.ready[i] = dst[i].ready
 
 `endif

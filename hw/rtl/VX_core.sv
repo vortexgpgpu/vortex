@@ -31,36 +31,36 @@ module VX_core #(
     VX_perf_memsys_if perf_memsys_if();
 `endif
 
-    VX_dcache_req_if #(
+    VX_cache_req_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
         .WORD_SIZE (`DCACHE_WORD_SIZE), 
         .TAG_WIDTH (`DCACHE_TAG_WIDTH)
     ) dcache_req_if();
 
-    VX_dcache_rsp_if #(
+    VX_cache_rsp_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
         .WORD_SIZE (`DCACHE_WORD_SIZE), 
         .TAG_WIDTH (`DCACHE_TAG_WIDTH)
     ) dcache_rsp_if();
     
-    VX_icache_req_if #(
+    VX_cache_req_if #(
         .WORD_SIZE (`ICACHE_WORD_SIZE), 
         .TAG_WIDTH (`ICACHE_TAG_WIDTH)
     ) icache_req_if();
 
-    VX_icache_rsp_if #(
+    VX_cache_rsp_if #(
         .WORD_SIZE (`ICACHE_WORD_SIZE), 
         .TAG_WIDTH (`ICACHE_TAG_WIDTH)
     ) icache_rsp_if();
 
 `ifdef EXT_TEX_ENABLE
-    VX_dcache_req_if #(
+    VX_cache_req_if #(
         .NUM_REQS  (`TCACHE_NUM_REQS), 
         .WORD_SIZE (`TCACHE_WORD_SIZE), 
         .TAG_WIDTH (`TCACHE_TAG_WIDTH)
     ) tcache_req_if();
 
-    VX_dcache_rsp_if #(
+    VX_cache_rsp_if #(
         .NUM_REQS  (`TCACHE_NUM_REQS), 
         .WORD_SIZE (`TCACHE_WORD_SIZE), 
         .TAG_WIDTH (`TCACHE_TAG_WIDTH)

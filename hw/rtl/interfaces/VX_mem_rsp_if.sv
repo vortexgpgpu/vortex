@@ -35,4 +35,9 @@ endinterface
     assign dst.tag    = src.tag;    \
     assign src.ready  = dst.ready
 
+`define ASSIGN_VX_MEM_RSP_IF_XTAG(dst, src) \
+    assign dst.valid  = src.valid;  \
+    assign dst.data   = src.data;   \
+    assign src.ready  = dst.ready
+
 `endif

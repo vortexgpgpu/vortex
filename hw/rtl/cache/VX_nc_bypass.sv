@@ -3,7 +3,6 @@
 module VX_nc_bypass #(
     parameter NUM_PORTS         = 1,
     parameter NUM_REQS          = 1,
-    parameter NUM_RSP_TAGS      = 0,
     parameter NC_TAG_BIT        = 0,
 
     parameter CORE_ADDR_WIDTH   = 1,
@@ -42,18 +41,16 @@ module VX_nc_bypass #(
     input wire [NUM_REQS-1:0]                       core_req_ready_out,
 
     // Core response in
-    input wire [NUM_RSP_TAGS-1:0]                   core_rsp_valid_in,
-    input wire [NUM_REQS-1:0]                       core_rsp_tmask_in,
+    input wire [NUM_REQS-1:0]                       core_rsp_valid_in,
     input wire [NUM_REQS-1:0][CORE_DATA_WIDTH-1:0]  core_rsp_data_in,
-    input wire [NUM_RSP_TAGS-1:0][CORE_TAG_OUT_WIDTH-1:0] core_rsp_tag_in,
-    output  wire [NUM_RSP_TAGS-1:0]                 core_rsp_ready_in,   
+    input wire [NUM_REQS-1:0][CORE_TAG_OUT_WIDTH-1:0] core_rsp_tag_in,
+    output  wire [NUM_REQS-1:0]                     core_rsp_ready_in,   
 
     // Core response out
-    output wire [NUM_RSP_TAGS-1:0]                  core_rsp_valid_out,
-    output wire [NUM_REQS-1:0]                      core_rsp_tmask_out,
+    output wire [NUM_REQS-1:0]                      core_rsp_valid_out,
     output wire [NUM_REQS-1:0][CORE_DATA_WIDTH-1:0] core_rsp_data_out,
-    output wire [NUM_RSP_TAGS-1:0][CORE_TAG_IN_WIDTH-1:0] core_rsp_tag_out,
-    input  wire [NUM_RSP_TAGS-1:0]                  core_rsp_ready_out,   
+    output wire [NUM_REQS-1:0][CORE_TAG_IN_WIDTH-1:0] core_rsp_tag_out,
+    input  wire [NUM_REQS-1:0]                      core_rsp_ready_out,   
 
     // Memory request in
     input wire                          mem_req_valid_in,
@@ -89,8 +86,6 @@ module VX_nc_bypass #(
     output  wire [MEM_TAG_IN_WIDTH-1:0] mem_rsp_tag_out,
     input wire                          mem_rsp_ready_out
 );
-    `STATIC_ASSERT((NUM_RSP_TAGS == 1 || NUM_RSP_TAGS == NUM_REQS), ("invalid paramter"))
-
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
 
@@ -226,11 +221,11 @@ module VX_nc_bypass #(
 
     // core response handling
 
-    wire [NUM_RSP_TAGS-1:0][CORE_TAG_IN_WIDTH-1:0] core_rsp_tag_out_c;
+    wire [NUM_REQS-1:0][CORE_TAG_IN_WIDTH-1:0] core_rsp_tag_out_c;
 
     wire is_mem_rsp_nc = mem_rsp_valid_in && mem_rsp_tag_in[NC_TAG_BIT];
 
-    for (genvar i = 0; i < NUM_RSP_TAGS; ++i) begin
+    for (genvar i = 0; i < NUM_REQS; ++i) begin
         VX_bits_insert #( 
             .N   (CORE_TAG_OUT_WIDTH),
             .S   (1),
@@ -242,61 +237,30 @@ module VX_nc_bypass #(
         );
     end
 
-    if (NUM_RSP_TAGS > 1) begin
-        wire [CORE_REQ_TIDW-1:0] rsp_tid = mem_rsp_tag_in[(CORE_TAG_IN_WIDTH + D) +: CORE_REQ_TIDW];
-        reg [NUM_REQS-1:0] rsp_nc_valid_r;
-        always @(*) begin
-            rsp_nc_valid_r = 0;
-            rsp_nc_valid_r[rsp_tid] = is_mem_rsp_nc;
-        end
+    wire [CORE_REQ_TIDW-1:0] rsp_tid = mem_rsp_tag_in[(CORE_TAG_IN_WIDTH + D) +: CORE_REQ_TIDW];
+    reg [NUM_REQS-1:0] rsp_nc_valid_r;
+    always @(*) begin
+        rsp_nc_valid_r = 0;
+        rsp_nc_valid_r[rsp_tid] = is_mem_rsp_nc;
+    end
 
-        assign core_rsp_valid_out = core_rsp_valid_in | rsp_nc_valid_r;
-        assign core_rsp_tmask_out = core_rsp_tmask_in;
-        assign core_rsp_ready_in  = core_rsp_ready_out;
+    assign core_rsp_valid_out = core_rsp_valid_in | rsp_nc_valid_r;
+    assign core_rsp_ready_in  = core_rsp_ready_out;
 
-        if (D != 0) begin
-            wire [D-1:0] rsp_addr_idx = mem_rsp_tag_in[CORE_TAG_IN_WIDTH +: D];        
-            for (genvar i = 0; i < NUM_REQS; ++i) begin
-                assign core_rsp_data_out[i] = core_rsp_valid_in[i] ? 
-                    core_rsp_data_in[i] : mem_rsp_data_in[rsp_addr_idx * CORE_DATA_WIDTH +: CORE_DATA_WIDTH];
-            end
-        end else begin
-            for (genvar i = 0; i < NUM_REQS; ++i) begin
-                assign core_rsp_data_out[i] = core_rsp_valid_in[i] ? core_rsp_data_in[i] : mem_rsp_data_in;
-            end
-        end
-
+    if (D != 0) begin
+        wire [D-1:0] rsp_addr_idx = mem_rsp_tag_in[CORE_TAG_IN_WIDTH +: D];        
         for (genvar i = 0; i < NUM_REQS; ++i) begin
-            assign core_rsp_tag_out[i] = core_rsp_valid_in[i] ? core_rsp_tag_out_c[i] : mem_rsp_tag_in[CORE_TAG_IN_WIDTH-1:0];
+            assign core_rsp_data_out[i] = core_rsp_valid_in[i] ? 
+                core_rsp_data_in[i] : mem_rsp_data_in[rsp_addr_idx * CORE_DATA_WIDTH +: CORE_DATA_WIDTH];
         end
     end else begin
-        assign core_rsp_valid_out = core_rsp_valid_in || is_mem_rsp_nc;
-        assign core_rsp_tag_out   = core_rsp_valid_in ? core_rsp_tag_out_c : mem_rsp_tag_in[CORE_TAG_IN_WIDTH-1:0];
-        assign core_rsp_ready_in  = core_rsp_ready_out;
-
-        if (NUM_REQS > 1) begin    
-            wire [CORE_REQ_TIDW-1:0] rsp_tid = mem_rsp_tag_in[(CORE_TAG_IN_WIDTH + D) +: CORE_REQ_TIDW];
-            reg [NUM_REQS-1:0] core_rsp_tmask_in_r;
-            always @(*) begin
-                core_rsp_tmask_in_r = 0;
-                core_rsp_tmask_in_r[rsp_tid] = 1;
-            end
-            assign core_rsp_tmask_out = core_rsp_valid_in ? core_rsp_tmask_in : core_rsp_tmask_in_r;
-        end else begin
-            assign core_rsp_tmask_out = core_rsp_tmask_in || is_mem_rsp_nc;
+        for (genvar i = 0; i < NUM_REQS; ++i) begin
+            assign core_rsp_data_out[i] = core_rsp_valid_in[i] ? core_rsp_data_in[i] : mem_rsp_data_in;
         end
+    end
 
-        if (D != 0) begin
-            wire [D-1:0] rsp_addr_idx = mem_rsp_tag_in[CORE_TAG_IN_WIDTH +: D];    
-            for (genvar i = 0; i < NUM_REQS; ++i) begin
-                assign core_rsp_data_out[i] = core_rsp_valid_in ?
-                    core_rsp_data_in[i] : mem_rsp_data_in[rsp_addr_idx * CORE_DATA_WIDTH +: CORE_DATA_WIDTH];
-            end
-        end else begin
-            for (genvar i = 0; i < NUM_REQS; ++i) begin
-                assign core_rsp_data_out[i] = core_rsp_valid_in ? core_rsp_data_in[i] : mem_rsp_data_in;
-            end
-        end
+    for (genvar i = 0; i < NUM_REQS; ++i) begin
+        assign core_rsp_tag_out[i] = core_rsp_valid_in[i] ? core_rsp_tag_out_c[i] : mem_rsp_tag_in[CORE_TAG_IN_WIDTH-1:0];
     end
 
     // memory response handling
@@ -313,11 +277,7 @@ module VX_nc_bypass #(
         .data_out (mem_rsp_tag_out)
     );
 
-    if (NUM_RSP_TAGS > 1) begin
-        wire [CORE_REQ_TIDW-1:0] rsp_tid = mem_rsp_tag_in[(CORE_TAG_IN_WIDTH + D) +: CORE_REQ_TIDW];
-        assign mem_rsp_ready_in = is_mem_rsp_nc ? (~core_rsp_valid_in[rsp_tid] && core_rsp_ready_out[rsp_tid]) : mem_rsp_ready_out;
-    end else begin
-        assign mem_rsp_ready_in = is_mem_rsp_nc ? (~core_rsp_valid_in && core_rsp_ready_out) : mem_rsp_ready_out;
-    end
+    wire [CORE_REQ_TIDW-1:0] rsp_tid = mem_rsp_tag_in[(CORE_TAG_IN_WIDTH + D) +: CORE_REQ_TIDW];
+    assign mem_rsp_ready_in = is_mem_rsp_nc ? (~core_rsp_valid_in[rsp_tid] && core_rsp_ready_out[rsp_tid]) : mem_rsp_ready_out;
 
 endmodule

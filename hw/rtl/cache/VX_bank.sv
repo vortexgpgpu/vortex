@@ -98,16 +98,16 @@ module VX_bank #(
     wire [`DBG_CACHE_REQ_IDW-1:0] req_id_sel, req_id_st0, req_id_st1;
 `IGNORE_UNUSED_END
 
-    wire [NUM_PORTS-1:0] creq_pmask;
+    wire                                       creq_valid;
+    wire [NUM_PORTS-1:0]                       creq_pmask;
     wire [NUM_PORTS-1:0][WORD_SELECT_BITS-1:0] creq_wsel;
-    wire [NUM_PORTS-1:0][WORD_SIZE-1:0] creq_byteen;
-    wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] creq_data;
-    wire [NUM_PORTS-1:0][`REQS_BITS-1:0] creq_tid;  
-    wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] creq_tag;
-    wire                        creq_rw;  
-    wire [`LINE_ADDR_WIDTH-1:0] creq_addr;
-    
-    wire creq_valid, creq_ready;
+    wire [NUM_PORTS-1:0][WORD_SIZE-1:0]        creq_byteen;
+    wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0]      creq_data;
+    wire [NUM_PORTS-1:0][`REQS_BITS-1:0]       creq_tid;  
+    wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0]   creq_tag;
+    wire                                       creq_rw;  
+    wire [`LINE_ADDR_WIDTH-1:0]                creq_addr;    
+    wire                                       creq_ready;
 
     VX_elastic_buffer #(
         .DATAW (1 + `LINE_ADDR_WIDTH + NUM_PORTS * (1 + WORD_SELECT_BITS + WORD_SIZE + `WORD_WIDTH + `REQS_BITS + CORE_TAG_WIDTH)),
@@ -350,7 +350,7 @@ module VX_bank #(
         .WORD_SIZE          (WORD_SIZE),
         .NUM_REQS           (NUM_REQS),
         .MSHR_SIZE          (MSHR_SIZE),
-        .CORE_TAG_WIDTH     (CORE_TAG_WIDTH)
+        .CORE_TAG_WIDTH          (CORE_TAG_WIDTH)
     ) miss_resrv (
         .clk                (clk),
         .reset              (reset),

@@ -221,6 +221,7 @@
 
 // Word size in bytes
 `define ICACHE_WORD_SIZE        4
+`define ICACHE_ADDR_WIDTH       (32-`CLOG2(`ICACHE_WORD_SIZE))
 
 // Block size in bytes
 `define ICACHE_LINE_SIZE        `L1_BLOCK_SIZE
@@ -230,6 +231,9 @@
 
 // Core request tag bits
 `define ICACHE_TAG_WIDTH        (`UUID_BITS + `ICACHE_TAG_ID_BITS)
+
+// Input request size
+`define ICACHE_NUM_REQS         1
 
 // Memory request data bits
 `define ICACHE_MEM_DATA_WIDTH   (`ICACHE_LINE_SIZE * 8)
@@ -247,6 +251,7 @@
 
 // Word size in bytes
 `define DCACHE_WORD_SIZE        4
+`define DCACHE_ADDR_WIDTH       (32-`CLOG2(`DCACHE_WORD_SIZE))
 
 // Block size in bytes
 `define DCACHE_LINE_SIZE        `L1_BLOCK_SIZE
@@ -284,6 +289,7 @@
 
 // Word size in bytes
 `define SMEM_WORD_SIZE          4
+`define SMEM_ADDR_WIDTH         (32-`CLOG2(`SMEM_WORD_SIZE))
 
 // bank address offset
 `define SMEM_BANK_ADDR_OFFSET   `CLOG2(`STACK_SIZE / `SMEM_WORD_SIZE)
@@ -298,12 +304,10 @@
 
 // Word size in bytes
 `define L2_WORD_SIZE            `DCACHE_LINE_SIZE
+`define L2_ADDR_WIDTH           (32-`CLOG2(`L2_WORD_SIZE))
 
 // Block size in bytes
 `define L2_CACHE_LINE_SIZE      (`L2_ENABLED ? `MEM_BLOCK_SIZE : `L2_WORD_SIZE)
-
-// Input request tag bits
-`define L2_CORE_TAG_WIDTH       (`DCACHE_TAG_WIDTH + `CLOG2(`NUM_CORES))
 
 // Memory request data bits
 `define L2_MEM_DATA_WIDTH       (`L2_CACHE_LINE_SIZE * 8)
@@ -331,12 +335,10 @@
 
 // Word size in bytes
 `define L3_WORD_SIZE            `L2_CACHE_LINE_SIZE
+`define L3_ADDR_WIDTH           (32-`CLOG2(`L3_WORD_SIZE))
 
 // Block size in bytes
 `define L3_CACHE_LINE_SIZE      (`L3_ENABLED ? `MEM_BLOCK_SIZE : `L3_WORD_SIZE)
-
-// Input request tag bits
-`define L3_CORE_TAG_WIDTH       (`L2_CORE_TAG_WIDTH + `CLOG2(`NUM_CLUSTERS))
 
 // Memory request data bits
 `define L3_MEM_DATA_WIDTH       (`L3_CACHE_LINE_SIZE * 8)
@@ -428,7 +430,6 @@
 `define VX_MEM_ADDR_WIDTH       `L3_MEM_ADDR_WIDTH
 `define VX_MEM_DATA_WIDTH       `L3_MEM_DATA_WIDTH
 `define VX_MEM_TAG_WIDTH        `L3_MEM_TAG_WIDTH
-`define VX_CORE_TAG_WIDTH       `L3_CORE_TAG_WIDTH 
 `define VX_DCR_ADDR_WIDTH       `DCR_ADDR_BITS
 `define VX_DCR_DATA_WIDTH       32
 

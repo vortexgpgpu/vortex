@@ -10,8 +10,8 @@
 
 `define PORTS_BITS              `LOG2UP(NUM_PORTS)
 
-//                                tag              valid  tid          word_sel              
-`define MSHR_DATA_WIDTH         ((CORE_TAG_WIDTH + 1 +    `REQS_BITS + `UP(`WORD_SELECT_BITS)) * NUM_PORTS)
+//                                tag             valid  tid          word_sel              
+`define MSHR_DATA_WIDTH         ((CORE_TAG_WIDTH + 1 + `REQS_BITS + `UP(`WORD_SELECT_BITS)) * NUM_PORTS)
 
 `define WORD_WIDTH              (8 * WORD_SIZE)
 
@@ -57,8 +57,6 @@
 `define CACHE_REQ_ID_RNG        CORE_TAG_WIDTH-1 : (CORE_TAG_WIDTH-`DBG_CACHE_REQ_IDW)
 
 ///////////////////////////////////////////////////////////////////////////////
-
-`define CORE_RSP_TAGS           ((CORE_TAG_ID_BITS != 0) ? 1 : NUM_REQS)
 
 `define LINE_TO_MEM_ADDR(x, i)  {x, `BANK_SELECT_BITS'(i)}
 
