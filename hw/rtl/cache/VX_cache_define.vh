@@ -72,9 +72,4 @@
 
 `define TO_FULL_ADDR(x)         {x, (32-$bits(x))'(0)}
 
-///////////////////////////////////////////////////////////////////////////////
-
-`define __WID_ADDR_OFFSET       `CLOG2(`SMEM_LOCAL_SIZE / `SMEM_WORD_SIZE)
-`define SMEM_LINE_TO_BLOCK_ADDR(x) {x[BANK_ADDR_OFFSET +: `NW_BITS], x[0 +: `__WID_ADDR_OFFSET]}
-
 `endif

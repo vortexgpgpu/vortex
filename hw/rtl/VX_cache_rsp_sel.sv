@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_mem_rsp_sel #(
+module VX_cache_rsp_sel #(
     parameter NUM_REQS      = 1, 
     parameter DATA_WIDTH    = 1, 
     parameter TAG_WIDTH     = 1,    
@@ -14,11 +14,7 @@ module VX_mem_rsp_sel #(
     VX_mem_rsp_if.slave     rsp_in_if[NUM_REQS],
 
     // output responses
-    wire                                    rsp_out_valid;
-    wire [NUM_REQS-1:0]                     rsp_out_tmask;
-    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]    rsp_out_data;
-    wire [TAG_WIDTH-1:0]                    rsp_out_tag;
-    wire                                    rsp_out_ready;
+    VX_cache_rsp_if.master  rsp_out_if
 );
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
@@ -33,12 +29,11 @@ module VX_mem_rsp_sel #(
         assign rsp_in_if[i].ready = 0;
     end
 
-    assign rsp_out_valid = 0;
-    assign rsp_out_tmask = '0;
-    assign rsp_out_data  = '0;
-    assign rsp_out_tag   = '0;
-    `UNUSED_VAR (rsp_out_ready)
-
+    assign rsp_out_if.valid = 0;
+    assign rsp_out_if.tmask = '0;
+    assign rsp_out_if.data  = '0;
+    assign rsp_out_if.tag   = '0;
+    `UNUSED_VAR (rsp_out_if.ready)
     /*
     if (NUM_BANKS > 1) begin
 

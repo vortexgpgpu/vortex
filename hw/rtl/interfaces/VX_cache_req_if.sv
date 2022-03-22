@@ -39,13 +39,4 @@ interface VX_cache_req_if #(
 
 endinterface
 
-`define CACHE_REQ_TO_MEM(dst, src, i) \
-    assign dst[i].valid = src.valid[i]; \
-    assign dst[i].rw = src.rw[i]; \
-    assign dst[i].byteen = src.byteen[i]; \
-    assign dst[i].addr = src.addr[i]; \
-    assign dst[i].data = src.data[i]; \
-    assign dst[i].tag = src.tag[i]; \
-    assign src.ready[i] = dst[i].ready
-
 `endif

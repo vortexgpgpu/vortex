@@ -27,17 +27,6 @@ interface VX_mem_rsp_if #(
         output ready
     );    
 
-endinterface    
-
-`define ASSIGN_VX_MEM_RSP_IF(dst, src) \
-    assign dst.valid  = src.valid;  \
-    assign dst.data   = src.data;   \
-    assign dst.tag    = src.tag;    \
-    assign src.ready  = dst.ready
-
-`define ASSIGN_VX_MEM_RSP_IF_XTAG(dst, src) \
-    assign dst.valid  = src.valid;  \
-    assign dst.data   = src.data;   \
-    assign src.ready  = dst.ready
+endinterface
 
 `endif

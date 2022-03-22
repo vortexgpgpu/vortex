@@ -1,4 +1,5 @@
 `include "VX_cache_define.vh"
+`include "VX_define.vh"
 
 module VX_shared_mem #(
     parameter CACHE_ID                      = "cache",
@@ -50,13 +51,14 @@ module VX_shared_mem #(
     output wire [CORE_TAG_WIDTH-1:0]            core_rsp_tag,
     input  wire                                 core_rsp_ready
 );
+    `define __WID_ADDR_OFFSET           `CLOG2(`SMEM_LOCAL_SIZE / `SMEM_WORD_SIZE)
+    `define SMEM_LINE_TO_BLOCK_ADDR(x)  {x[BANK_ADDR_OFFSET +: `NW_BITS], x[0 +: `__WID_ADDR_OFFSET]}
 
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))
     `UNUSED_PARAM (CACHE_ID)
     `UNUSED_PARAM (CORE_TAG_ID_BITS)
 
     localparam CACHE_LINE_SIZE = WORD_SIZE;
-
     localparam NUM_WAYS = 1;
 
     wire [NUM_BANKS-1:0]                    per_bank_core_req_valid_unqual; 

@@ -49,7 +49,18 @@ module VX_mem_unit # (
 
     `RESET_RELAY (icache_reset);
     `RESET_RELAY (dcache_reset);
-    `RESET_RELAY (mem_arb_reset);
+    `RESET_RELAY (mem_arb_reset);    
+    
+    VX_mem_req_if #(
+        .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
+        .ADDR_WIDTH (`DCACHE_MEM_ADDR_WIDTH),
+        .TAG_WIDTH  (`ICACHE_MEM_TAG_WIDTH)
+    ) icache_mem_req_if();
+
+    VX_mem_rsp_if #(
+        .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
+        .TAG_WIDTH  (`ICACHE_MEM_TAG_WIDTH)
+    ) icache_mem_rsp_if();
 
     VX_mem_req_if #(
         .DATA_WIDTH (`ICACHE_WORD_SIZE*8), 
@@ -109,17 +120,6 @@ module VX_mem_unit # (
     );
 
     ///////////////////////////////////////////////////////////////////////////
-
-    VX_mem_req_if #(
-        .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
-        .ADDR_WIDTH (`DCACHE_MEM_ADDR_WIDTH),
-        .TAG_WIDTH  (`ICACHE_MEM_TAG_WIDTH)
-    ) icache_mem_req_if();
-
-    VX_mem_rsp_if #(
-        .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (`ICACHE_MEM_TAG_WIDTH)
-    ) icache_mem_rsp_if();
 
     VX_mem_req_if #(
         .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),

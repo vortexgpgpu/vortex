@@ -413,7 +413,7 @@ module VX_cluster #(
         .NUM_REQS     (MEM_ARB_SIZE),
         .DATA_WIDTH   (`L2_MEM_DATA_WIDTH),
         .ADDR_WIDTH   (`L2_MEM_ADDR_WIDTH),
-        .TAG_IN_WIDTH (`L2X_MEM_TAG_WIDTH),
+        .TAG_IN_WIDTH (`L2X_MEM_TAG_WIDTH)
     ) mem_arb_out (
         .clk        (clk),
         .reset      (reset),

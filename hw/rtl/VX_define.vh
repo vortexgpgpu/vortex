@@ -378,7 +378,7 @@
 `define TCACHE_NUM_REQS         `NUM_THREADS
 
 // Memory request tag bits
-`define RCACHE_MEM_TAG_WIDTH    (`CLOG2(`TCACHE_NUM_BANKS) + `CLOG2(`TCACHE_MSHR_SIZE))
+`define TCACHE_MEM_TAG_WIDTH    (`CLOG2(`TCACHE_NUM_BANKS) + `CLOG2(`TCACHE_MSHR_SIZE))
 
 ////////////////////////// Rcache Configurable Knobs //////////////////////////
 
@@ -434,6 +434,45 @@
 `define VX_DCR_DATA_WIDTH       32
 
 `define TO_FULL_ADDR(x)         {x, (32-$bits(x))'(0)}
+
+///////////////////////////////////////////////////////////////////////////////
+
+`define ASSIGN_VX_MEM_REQ_IF(dst, src) \
+    assign dst.valid  = src.valid;  \
+    assign dst.rw     = src.rw;     \
+    assign dst.byteen = src.byteen; \
+    assign dst.addr   = src.addr;   \
+    assign dst.data   = src.data;   \
+    assign dst.tag    = src.tag;    \
+    assign src.ready  = dst.ready
+
+`define ASSIGN_VX_MEM_REQ_IF_XTAG(dst, src) \
+    assign dst.valid  = src.valid;  \
+    assign dst.rw     = src.rw;     \
+    assign dst.byteen = src.byteen; \
+    assign dst.addr   = src.addr;   \
+    assign dst.data   = src.data;   \
+    assign src.ready  = dst.ready
+
+`define ASSIGN_VX_MEM_RSP_IF(dst, src) \
+    assign dst.valid  = src.valid;  \
+    assign dst.data   = src.data;   \
+    assign dst.tag    = src.tag;    \
+    assign src.ready  = dst.ready
+
+`define ASSIGN_VX_MEM_RSP_IF_XTAG(dst, src) \
+    assign dst.valid  = src.valid;  \
+    assign dst.data   = src.data;   \
+    assign src.ready  = dst.ready
+
+`define CACHE_REQ_TO_MEM(dst, src, i) \
+    assign dst[i].valid = src.valid[i]; \
+    assign dst[i].rw = src.rw[i]; \
+    assign dst[i].byteen = src.byteen[i]; \
+    assign dst[i].addr = src.addr[i]; \
+    assign dst[i].data = src.data[i]; \
+    assign dst[i].tag = src.tag[i]; \
+    assign src.ready[i] = dst[i].ready
 
 ///////////////////////////////////////////////////////////////////////////////
 
