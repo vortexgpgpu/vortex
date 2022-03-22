@@ -42,50 +42,16 @@ module VX_rop_mem #(
     output wire [TAG_WIDTH-1:0]         rsp_tag,
     input wire                          rsp_ready
 );
-    // TODO
-    `UNUSED_VAR (clk)
-    `UNUSED_VAR (reset)
 
-    // TODO
-    `UNUSED_VAR (dcrs)
+    localparam NUM_REQS = 2 * NUM_LANES;
 
-    // TODO
-    `UNUSED_VAR (req_valid)
-    `UNUSED_VAR (req_tmask)
-    `UNUSED_VAR (req_rw)
-    `UNUSED_VAR (req_pos_x)
-    `UNUSED_VAR (req_pos_y)    
-    `UNUSED_VAR (req_color)
-    `UNUSED_VAR (req_depth)
-    `UNUSED_VAR (req_stencil)
-    `UNUSED_VAR (req_tag)
-    assign req_ready = 0;
+    wire [NUM_REQS-1:0]       req_mask;
+    wire [NUM_REQS-1:0]       rsp_mask;
+    wire [NUM_REQS-1:0]       write_mask;
+    wire [NUM_REQS-1:0][31:0] req_addr;
+    wire [NUM_REQS-1:0][31:0] req_data;
+    wire [NUM_REQS-1:0][31:0] rsp_data;
 
-   // TODO
-    assign rsp_valid = 0;
-    assign rsp_tmask = 0;
-    assign rsp_color = 0;
-    assign rsp_depth = 0;
-    assign rsp_stencil = 0;     
-    assign rsp_tag = 0;
-    `UNUSED_VAR (rsp_ready)
-
-    // TODO
-    assign cache_req_if.valid = 0;
-    assign cache_req_if.rw = 0;
-    assign cache_req_if.byteen = 0;
-    assign cache_req_if.addr = 0;
-    assign cache_req_if.data = 0;     
-    assign cache_req_if.tag = 0;
-    `UNUSED_VAR (cache_req_if.ready)
-
-    // TODO
-    `UNUSED_VAR (cache_rsp_if.valid)
-    `UNUSED_VAR (cache_rsp_if.tmask)
-    `UNUSED_VAR (cache_rsp_if.data)        
-    `UNUSED_VAR (cache_rsp_if.tag)
-    assign cache_rsp_if.ready = 0;
-    
 `ifdef PERF_ENABLE
     // TODO
     assign rop_perf_if.mem_reads = 0;
@@ -93,15 +59,34 @@ module VX_rop_mem #(
     assign rop_perf_if.mem_latency = 0;
 `endif
 
-    /*
+    //////////////////////////////////////////////////////////////////
+
+    assign write_mask = { {NUM_LANES{~dcrs.depth_writemask}}, {NUM_LANES{dcrs.depth_writemask}} };
+    assign req_mask = {2{req_tmask}} & write_mask;
+    assign rsp_tmask = dcrs.depth_writemask ? rsp_mask[0 +: NUM_LANES] : rsp_mask[NUM_LANES +: NUM_LANES];
+    assign cache_rsp_if.ready = rsp_ready;
+
+    for (genvar i = 0;  i < NUM_LANES; ++i) begin
+        assign req_addr[i]    = dcrs.zbuf_addr + (req_pos_y[i] * dcrs.zbuf_pitch) + (req_pos_x[i] * 4);
+        assign req_data[i]    = {req_stencil[i], req_depth[i]};
+        assign rsp_depth[i]   = rsp_data[i] & `ROP_DEPTH_MASK;
+        assign rsp_stencil[i] = (rsp_data[i] >> `ROP_DEPTH_BITS) & `ROP_STENCIL_MASK;
+    end
+
+    for (genvar i = NUM_LANES; i < NUM_REQS; ++i) begin
+        assign req_addr[i] = dcrs.cbuf_addr + (req_pos_y[i - NUM_LANES] * dcrs.cbuf_pitch) + (req_pos_x[i - NUM_LANES] * 4);
+        assign req_data[i] = req_color[i - NUM_LANES];
+        assign rsp_color[i - NUM_LANES] = rsp_data[i];
+    end
+
     VX_mem_streamer #(
-        .NUM_REQS (NUM_LANES),
-        .ADDRW (32),
-        .DATAW (32),
-        .TAGW (32),
-        .WORD_SIZE (4),
-        .QUEUE_SIZE (16),
-        .PARTIAL_RESPONSE (1)
+        .NUM_REQS         (NUM_REQS),
+        .ADDRW            (32),
+        .DATAW            (32),
+        .TAGW             (TAG_WIDTH),
+        .WORD_SIZE        (4),
+        .QUEUE_SIZE       (16),
+        .PARTIAL_RESPONSE (0)
     ) mem_streamer (
         .clk            (clk),
         .reset          (reset),
@@ -109,7 +94,7 @@ module VX_rop_mem #(
         .req_valid      (req_valid),
         .req_rw         (req_rw),
         .req_mask       (req_mask),
-        .req_byteen     (req_byteen),
+        .req_byteen     (8'hff),
         .req_addr       (req_addr),
         .req_data       (req_data),
         .req_tag        (req_tag),
@@ -130,10 +115,10 @@ module VX_rop_mem #(
         .mem_req_ready  (cache_req_if.ready),
 
         .mem_rsp_valid  (cache_rsp_if.valid),
-        .mem_rsp_mask   (cache_rsp_if.mask),
+        .mem_rsp_mask   (cache_rsp_if.tmask),
         .mem_rsp_data   (cache_rsp_if.data),
         .mem_rsp_tag    (cache_rsp_if.tag),
         .mem_rsp_ready  (cache_rsp_if.ready)
-    );*/
+    );
     
 endmodule
