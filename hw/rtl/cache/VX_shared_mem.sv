@@ -1,14 +1,12 @@
 `include "VX_cache_define.vh"
 
 module VX_shared_mem #(
-    parameter CACHE_ID                      = 0,
+    parameter CACHE_ID                      = "cache",
 
     // Size of cache in bytes
     parameter CACHE_SIZE                    = (1024*16), 
     // Number of banks
     parameter NUM_BANKS                     = 2,
-    // Number of associative ways
-    parameter NUM_WAYS                      = 1, 
     // Size of a word in bytes
     parameter WORD_SIZE                     = 4, 
     // Number of Word requests per cycle
@@ -58,6 +56,8 @@ module VX_shared_mem #(
     `UNUSED_PARAM (CORE_TAG_ID_BITS)
 
     localparam CACHE_LINE_SIZE = WORD_SIZE;
+
+    localparam NUM_WAYS = 1;
 
     wire [NUM_BANKS-1:0]                    per_bank_core_req_valid_unqual; 
     wire [NUM_BANKS-1:0]                    per_bank_core_req_rw_unqual;  

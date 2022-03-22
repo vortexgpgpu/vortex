@@ -83,9 +83,7 @@ enum class AluType {
   BRANCH,
   SYSCALL,
   IMUL,
-  IDIV,    
-  CMOV,
-  IMADD,
+  IDIV
 };
 
 inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
@@ -95,8 +93,6 @@ inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
   case AluType::SYSCALL: os << "SYSCALL"; break;
   case AluType::IMUL:    os << "IMUL"; break;
   case AluType::IDIV:    os << "IDIV"; break;
-  case AluType::CMOV:    os << "CMOV"; break;
-  case AluType::IMADD:   os << "IMADD"; break;
   }
   return os;
 }
@@ -174,9 +170,10 @@ enum class GpuType {
   JOIN,
   BAR,
   TEX,
-  INTERP,
   RASTER,
-  ROP
+  ROP,    
+  CMOV,
+  IMADD
 };
 
 inline std::ostream &operator<<(std::ostream &os, const GpuType& type) {
@@ -189,7 +186,8 @@ inline std::ostream &operator<<(std::ostream &os, const GpuType& type) {
   case GpuType::TEX:    os << "TEX"; break;
   case GpuType::RASTER: os << "RASTER"; break;
   case GpuType::ROP:    os << "ROP"; break;
-  case GpuType::INTERP: os << "INTERP"; break;
+  case GpuType::CMOV:   os << "CMOV"; break;
+  case GpuType::IMADD:  os << "IMADD"; break;
   }
   return os;
 }

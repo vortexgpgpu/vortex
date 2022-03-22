@@ -18,8 +18,9 @@ public:
   void* allocate() {
     void* mem;
     if (!free_list_.empty()) {
-      mem = static_cast<void*>(free_list_.top());
+      auto entry = free_list_.top();
       free_list_.pop();
+      mem = static_cast<void*>(entry);      
     } else {
       mem = ::operator new(sizeof(T));
     }
@@ -36,12 +37,13 @@ public:
 
   void flush() {
     while (!free_list_.empty()) {
-      ::operator delete(free_list_.top());
+      auto entry = free_list_.top();
       free_list_.pop();
+      ::operator delete(entry);      
     }
   }
 
 private:
-  std::stack<void*> free_list_;
+  std::stack<T*> free_list_;
   uint32_t max_size_;
 };

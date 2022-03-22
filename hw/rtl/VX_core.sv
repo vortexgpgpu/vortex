@@ -7,58 +7,29 @@ module VX_core #(
     `SCOPE_IO_VX_core
     
     // Clock
-    input  wire                             clk,
-    input  wire                             reset,
+    input  wire             clk,
+    input  wire             reset,
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_dcr_if.master                    tex_dcr_if,
+    VX_tex_dcr_if.master    tex_dcr_if,
+`endif
+`ifdef EXT_RASTER_ENABLE        
+    VX_raster_req_if        raster_req_if,
+`endif
+`ifdef EXT_RASTER_ENABLE        
+    VX_rop_req_if           rop_req_if,
 `endif
 
-    // Memory request
-    output wire                             mem_req_valid,
-    output wire                             mem_req_rw,    
-    output wire [`DCACHE_MEM_BYTEEN_WIDTH-1:0] mem_req_byteen,
-    output wire [`DCACHE_MEM_ADDR_WIDTH-1:0] mem_req_addr,
-    output wire [`DCACHE_MEM_DATA_WIDTH-1:0] mem_req_data,
-    output wire [`L1_MEM_TAG_WIDTH-1:0]     mem_req_tag,
-    input  wire                             mem_req_ready,
-
-    // Memory reponse    
-    input  wire                             mem_rsp_valid,
-    input  wire [`DCACHE_MEM_DATA_WIDTH-1:0] mem_rsp_data,
-    input  wire [`L1_MEM_TAG_WIDTH-1:0]     mem_rsp_tag,
-    output wire                             mem_rsp_ready,
+    // Memory
+    VX_mem_req_if.master    mem_req_if,
+    VX_mem_rsp_if.slave     mem_rsp_if,
 
     // Status
-    output wire                             busy
+    output wire             busy
 );
 `ifdef PERF_ENABLE
     VX_perf_memsys_if perf_memsys_if();
 `endif
-
-    VX_mem_req_if #(
-        .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
-        .ADDR_WIDTH (`DCACHE_MEM_ADDR_WIDTH),
-        .TAG_WIDTH  (`L1_MEM_TAG_WIDTH)
-    ) mem_req_if();
-
-    VX_mem_rsp_if #(
-        .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (`L1_MEM_TAG_WIDTH)
-    ) mem_rsp_if();
-
-    assign mem_req_valid = mem_req_if.valid;
-    assign mem_req_rw    = mem_req_if.rw;
-    assign mem_req_byteen= mem_req_if.byteen;
-    assign mem_req_addr  = mem_req_if.addr;
-    assign mem_req_data  = mem_req_if.data;
-    assign mem_req_tag   = mem_req_if.tag;
-    assign mem_req_if.ready = mem_req_ready;
-
-    assign mem_rsp_if.valid = mem_rsp_valid;
-    assign mem_rsp_if.data  = mem_rsp_data;
-    assign mem_rsp_if.tag   = mem_rsp_tag;
-    assign mem_rsp_ready = mem_rsp_if.ready;
 
     VX_dcache_req_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
@@ -120,6 +91,12 @@ module VX_core #(
         .tcache_req_if  (tcache_req_if),
         .tcache_rsp_if  (tcache_rsp_if),
     `endif
+    `ifdef EXT_RASTER_ENABLE        
+        .raster_req_if  (raster_req_if),
+    `endif
+    `ifdef EXT_RASTER_ENABLE        
+        .rop_req_if     (rop_req_if),
+    `endif
 
         // Status
         .busy           (busy)
@@ -146,8 +123,8 @@ module VX_core #(
 
     `ifdef EXT_TEX_ENABLE
         // tcache interface
-        .tcache_req_if (tcache_req_if),
-        .tcache_rsp_if (tcache_rsp_if),
+        .tcache_req_if  (tcache_req_if),
+        .tcache_rsp_if  (tcache_rsp_if),
     `endif
 
         // Memory

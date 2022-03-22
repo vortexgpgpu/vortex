@@ -3,7 +3,6 @@
 module VX_raster_rsp_switch #(  
     parameter CLUSTER_ID = 0,
     parameter RASTER_QUAD_OUTPUT_RATE = 4
-    // TODO
 ) (
     input valid,
     input empty,

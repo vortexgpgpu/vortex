@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_cache #(
-    parameter CACHE_ID                      = 0,
+    parameter CACHE_ID                      = "cache",
 
     // Number of Word requests per cycle
     parameter NUM_REQS                      = 4,
@@ -15,7 +15,7 @@ module VX_cache #(
     // Number of ports per banks
     parameter NUM_PORTS                     = 1,
     // Number of associative ways
-    parameter NUM_WAYS                      = 8,
+    parameter NUM_WAYS                      = 4,
     // Size of a word in bytes
     parameter WORD_SIZE                     = 4, 
 
@@ -403,10 +403,9 @@ module VX_cache #(
 
     VX_flush_ctrl #( 
         .CACHE_SIZE (CACHE_SIZE),
-        .CACHE_LINE_SIZE (CACHE_LINE_SIZE),
-        //Swetha: added ways here 
-        .NUM_WAYS(NUM_WAYS),
-        .NUM_BANKS  (NUM_BANKS)
+        .CACHE_LINE_SIZE (CACHE_LINE_SIZE),        
+        .NUM_BANKS  (NUM_BANKS),
+        .NUM_WAYS   (NUM_WAYS)
     ) flush_ctrl (
         .clk       (clk),
         .reset     (flush_reset),
@@ -456,12 +455,11 @@ module VX_cache #(
         .CACHE_ID        (CACHE_ID),
         .CACHE_LINE_SIZE (CACHE_LINE_SIZE),
         .NUM_BANKS       (NUM_BANKS),
+        .NUM_WAYS        (NUM_WAYS),
         .NUM_PORTS       (NUM_PORTS),
         .WORD_SIZE       (WORD_SIZE),
         .NUM_REQS        (NUM_REQS),
         .CORE_TAG_WIDTH  (CORE_TAG_X_WIDTH),
-        //Swetha: added ways here 
-        .NUM_WAYS(NUM_WAYS),
         .BANK_ADDR_OFFSET(BANK_ADDR_OFFSET)
     ) core_req_bank_sel (        
         .clk        (clk),
@@ -577,6 +575,7 @@ module VX_cache #(
             .CACHE_SIZE         (CACHE_SIZE),
             .CACHE_LINE_SIZE    (CACHE_LINE_SIZE),
             .NUM_BANKS          (NUM_BANKS),
+            .NUM_WAYS           (NUM_WAYS),
             .NUM_PORTS          (NUM_PORTS),
             .WORD_SIZE          (WORD_SIZE),
             .NUM_REQS           (NUM_REQS),
@@ -585,9 +584,7 @@ module VX_cache #(
             .MSHR_SIZE          (MSHR_SIZE),
             .MREQ_SIZE          (MREQ_SIZE),
             .WRITE_ENABLE       (WRITE_ENABLE),
-            .CORE_TAG_WIDTH     (CORE_TAG_X_WIDTH),
-            //Swetha: added ways here 
-            .NUM_WAYS(NUM_WAYS),
+            .CORE_TAG_WIDTH     (CORE_TAG_X_WIDTH),            
             .BANK_ADDR_OFFSET   (BANK_ADDR_OFFSET)
         ) bank (
             `SCOPE_BIND_VX_cache_bank(i)

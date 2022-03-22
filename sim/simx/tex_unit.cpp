@@ -6,24 +6,25 @@
 using namespace vortex;
 using namespace cocogfx;
 
-class CSR {
-public:
-  uint32_t   stage;  
-  
-  CSR() { this->clear(); }  
-  ~CSR() {}
-
-  void clear() {
-    stage = 0;
-  }
-};
-
 class TexUnit::Impl {
 private:
     struct pending_req_t {
       pipeline_trace_t* trace;
       uint32_t count;
     };
+
+    class CSR {
+    public:
+      uint32_t stage;  
+      
+      CSR() { this->clear(); }
+      ~CSR() { this->clear(); }
+
+      void clear() {
+        stage = 0;
+      }
+    };
+
     TexUnit* simobject_;
     Config config_;
     Core* core_;
@@ -75,16 +76,15 @@ public:
     }
 
     uint32_t read(int32_t u, int32_t v, int32_t lod, TraceData* trace_data) {
-      auto& states = dcrs_.at(csrs_.stage);
       auto xu = TFixed<TEX_FXD_FRAC>::make(u);
       auto xv = TFixed<TEX_FXD_FRAC>::make(v);
-      auto base_addr  = states.at(TEX_STATE_ADDR) + states.at(TEX_STATE_MIPOFF(lod));
-      auto logdim     = states.at(TEX_STATE_LOGDIM);
+      auto base_addr  = dcrs_.read(DCR_TEX_ADDR) + dcrs_.read(DCR_TEX_MIPOFF(lod));
+      auto logdim     = dcrs_.read(DCR_TEX_LOGDIM);
       auto log_width  = std::max<int32_t>((logdim & 0xffff) - lod, 0);
       auto log_height = std::max<int32_t>((logdim >> 16) - lod, 0);
-      auto format     = states.at(TEX_STATE_FORMAT);    
-      auto filter     = states.at(TEX_STATE_FILTER);    
-      auto wrap       = states.at(TEX_STATE_WRAP);
+      auto format     = dcrs_.read(DCR_TEX_FORMAT);    
+      auto filter     = dcrs_.read(DCR_TEX_FILTER);    
+      auto wrap       = dcrs_.read(DCR_TEX_WRAP);
       auto wrapu      = wrap & 0xffff;
       auto wrapv      = wrap >> 16;
 

@@ -30,7 +30,7 @@ const char* trace_file  = "triangle.cgltrace";
 const char* output_file = "output.png";
 const char* reference_file  = nullptr;
 
-uint32_t clear_color = 0xFFFFFFFF;
+uint32_t clear_color = 0x00000000;
 uint32_t clear_depth = 0xFFFFFFFF;
 
 uint32_t dst_width  = 128;
@@ -111,7 +111,136 @@ int render(const CGLTrace& trace) {
   for (auto& drawcall : trace.drawcalls) {
     auto& states = drawcall.states;
 
+    std::vector<uint8_t> tilebuf;
+    std::vector<uint8_t> primbuf;
+    
+    // Perform tile binning
+    auto num_tiles = Binning(tilebuf, primbuf, drawcall.vertices, drawcall.primitives, dst_width, dst_height, drawcall.viewport.near, drawcall.viewport.far, tile_size);
+    std::cout << "Binning allocated " << std::dec << num_tiles << " tiles with " << primbuf.size() << " total primitives." << std::endl;
+    if (0 == num_tiles)
+      continue;
+
+    // allocate tile memory
+    if (tilebuf_addr != -1ull) vx_mem_free(device, tilebuf_addr); 
+    if (primbuf_addr != -1ull) vx_mem_free(device, primbuf_addr); 
+    RT_CHECK(vx_mem_alloc(device, tilebuf.size(), &tilebuf_addr));
+    RT_CHECK(vx_mem_alloc(device, primbuf.size(), &primbuf_addr));
+    std::cout << "tilebuf_addr=0x" << std::hex << tilebuf_addr << std::endl;
+    std::cout << "primbuf_addr=0x" << std::hex << primbuf_addr << std::endl;
+
+    uint32_t alloc_size = std::max({tilebuf.size(), primbuf.size(), sizeof(kernel_arg_t)});
+    RT_CHECK(vx_buf_alloc(device, alloc_size, &staging_buf));
+    
+    // upload tiles buffer
+    std::cout << "upload tile buffer" << std::endl;      
+    {    
+      auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
+      memcpy(buf_ptr, tilebuf.data(), tilebuf.size());
+      RT_CHECK(vx_copy_to_dev(staging_buf, tilebuf_addr, tilebuf.size(), 0));
+    }
+
+    // upload primitives buffer
+    std::cout << "upload primitive buffer" << std::endl;      
+    {    
+      auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
+      memcpy(buf_ptr, primbuf.data(), primbuf.size());
+      RT_CHECK(vx_copy_to_dev(staging_buf, primbuf_addr, primbuf.size(), 0));
+    }
+
+    // upload kernel argument
+    std::cout << "upload kernel argument" << std::endl;
+    {
+      kernel_arg.depth_enabled = states.depth_test;
+      kernel_arg.color_enabled = states.color_enabled;
+      kernel_arg.tex_enabled   = states.texture_enabled;
+      kernel_arg.tex_modulate  = (states.texture_enabled && states.texture_envmode == CGLTrace::ENVMODE_MODULATE);
+      kernel_arg.prim_addr     = primbuf_addr;
+
+      if (kernel_arg.tex_modulate && !kernel_arg.color_enabled)
+        kernel_arg.tex_modulate = false;
+      
+      auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
+      memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
+      RT_CHECK(vx_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
+    }
+
+    vx_buf_free(staging_buf);
+    staging_buf = nullptr;
+
+    uint32_t primbuf_stride = sizeof(rast_prim_t);
+
+    // configure raster units
+    vx_dcr_write(device, DCR_RASTER_TBUF_ADDR,   tilebuf_addr);
+    vx_dcr_write(device, DCR_RASTER_TILE_COUNT,  num_tiles);
+    vx_dcr_write(device, DCR_RASTER_PBUF_ADDR,   primbuf_addr);
+    vx_dcr_write(device, DCR_RASTER_PBUF_STRIDE, primbuf_stride);
+    vx_dcr_write(device, DCR_RASTER_DST_SIZE, (dst_height << 16) | dst_width);
+
+    // configure rop color buffer
+    vx_dcr_write(device, DCR_ROP_CBUF_ADDR,  cbuf_addr);
+    vx_dcr_write(device, DCR_ROP_CBUF_PITCH, cbuf_pitch);
+    vx_dcr_write(device, DCR_ROP_CBUF_MASK, states.color_writemask);
+
+    if (states.depth_test || states.stencil_test) {
+      // configure rop depth buffer
+      vx_dcr_write(device, DCR_ROP_ZBUF_ADDR,  zbuf_addr);
+      vx_dcr_write(device, DCR_ROP_ZBUF_PITCH, zbuf_pitch);    
+    }
+
+    if (states.depth_test) {    
+      // configure rop depth states
+      auto depth_func = toVXCompare(states.depth_func);
+      vx_dcr_write(device, DCR_ROP_DEPTH_FUNC, depth_func);
+      vx_dcr_write(device, DCR_ROP_DEPTH_WRITEMASK, states.depth_writemask);
+    } else {
+      vx_dcr_write(device, DCR_ROP_DEPTH_FUNC, ROP_DEPTH_FUNC_ALWAYS);
+      vx_dcr_write(device, DCR_ROP_DEPTH_WRITEMASK, 0);
+    }
+
+    if (states.stencil_test) {
+      // configure rop stencil states
+      auto stencil_func  = toVXCompare(states.stencil_func);
+      auto stencil_zpass = toVXStencilOp(states.stencil_zpass);
+      auto stencil_zfail = toVXStencilOp(states.stencil_zfail);
+      auto stencil_fail  = toVXStencilOp(states.stencil_fail);
+      vx_dcr_write(device, DCR_ROP_STENCIL_FUNC, stencil_func);
+      vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, stencil_zpass);
+      vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, stencil_zfail);
+      vx_dcr_write(device, DCR_ROP_STENCIL_FAIL, stencil_fail);
+      vx_dcr_write(device, DCR_ROP_STENCIL_REF, states.stencil_ref);
+      vx_dcr_write(device, DCR_ROP_STENCIL_MASK, states.stencil_mask);
+      vx_dcr_write(device, DCR_ROP_STENCIL_WRITEMASK, states.stencil_writemask);      
+    } else {
+      vx_dcr_write(device, DCR_ROP_STENCIL_FUNC, ROP_DEPTH_FUNC_ALWAYS);
+      vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, ROP_STENCIL_OP_KEEP);
+      vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, ROP_STENCIL_OP_KEEP);
+      vx_dcr_write(device, DCR_ROP_STENCIL_FAIL, ROP_STENCIL_OP_KEEP);
+      vx_dcr_write(device, DCR_ROP_STENCIL_REF, 0);
+      vx_dcr_write(device, DCR_ROP_STENCIL_MASK, ROP_STENCIL_MASK);
+      vx_dcr_write(device, DCR_ROP_STENCIL_WRITEMASK, 0);
+    }
+
+    if (states.blend_enabled) {
+      // configure rop blend states
+      auto blend_src = toVXBlendFunc(states.blend_src);
+      auto blend_dst = toVXBlendFunc(states.blend_dst);
+      vx_dcr_write(device, DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)   // DST
+                                             | (ROP_BLEND_MODE_ADD << 0));  // SRC
+      vx_dcr_write(device, DCR_ROP_BLEND_FUNC, (blend_dst << 24)            // DST_A
+                                             | (blend_dst << 16)            // DST_RGB 
+                                             | (blend_src << 8)             // SRC_A
+                                             | (blend_src << 0));           // SRC_RGB
+    } else {
+      vx_dcr_write(device, DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)   // DST
+                                             | (ROP_BLEND_MODE_ADD << 0));  // SRC
+      vx_dcr_write(device, DCR_ROP_BLEND_FUNC, (ROP_BLEND_FUNC_ZERO << 24)  // DST_A
+                                             | (ROP_BLEND_FUNC_ZERO << 16)  // DST_RGB 
+                                             | (ROP_BLEND_FUNC_ONE << 8)    // SRC_A
+                                             | (ROP_BLEND_FUNC_ONE << 0));  // SRC_RGB
+    }
+    
     if (states.texture_enabled) {
+      // configure texture states
       std::vector<uint8_t> texbuf;    
       std::vector<uint32_t> mip_offsets;
 
@@ -161,112 +290,6 @@ int render(const CGLTrace& trace) {
         assert(i < TEX_LOD_MAX);
         vx_dcr_write(device, DCR_TEX_MIPOFF(i), mip_offsets.at(i));
       };
-    }
-
-    std::vector<uint8_t> tilebuf;
-    std::vector<uint8_t> primbuf;
-    
-    // Perform tile binning
-    auto num_tiles = Binning(tilebuf, primbuf, drawcall.vertices, drawcall.primitives, dst_width, dst_height, drawcall.viewport.near, drawcall.viewport.far, tile_size);
-    std::cout << "Binning allocated " << num_tiles << " tiles and " << primbuf.size() << " primitives." << std::endl;
-
-    // allocate tile memory
-    if (tilebuf_addr != -1ull) vx_mem_free(device, tilebuf_addr); 
-    if (primbuf_addr != -1ull) vx_mem_free(device, primbuf_addr); 
-    RT_CHECK(vx_mem_alloc(device, tilebuf.size(), &tilebuf_addr));
-    RT_CHECK(vx_mem_alloc(device, primbuf.size(), &primbuf_addr));
-    std::cout << "tilebuf_addr=0x" << std::hex << tilebuf_addr << std::endl;
-    std::cout << "primbuf_addr=0x" << std::hex << primbuf_addr << std::endl;
-
-    uint32_t alloc_size = std::max({tilebuf.size(), primbuf.size(), sizeof(kernel_arg_t)});
-    RT_CHECK(vx_buf_alloc(device, alloc_size, &staging_buf));
-    
-    // upload tiles buffer
-    std::cout << "upload tile buffer" << std::endl;      
-    {    
-      auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
-      memcpy(buf_ptr, tilebuf.data(), tilebuf.size());
-      RT_CHECK(vx_copy_to_dev(staging_buf, tilebuf_addr, tilebuf.size(), 0));
-    }
-
-    // upload primitives buffer
-    std::cout << "upload primitive buffer" << std::endl;      
-    {    
-      auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
-      memcpy(buf_ptr, primbuf.data(), primbuf.size());
-      RT_CHECK(vx_copy_to_dev(staging_buf, primbuf_addr, primbuf.size(), 0));
-    }
-
-    // upload kernel argument
-    std::cout << "upload kernel argument" << std::endl;
-    {
-      kernel_arg.depth_enabled = states.depth_test;
-      kernel_arg.color_enabled = states.color_enabled;
-      kernel_arg.tex_enabled   = states.texture_enabled;
-      kernel_arg.tex_modulate  = (states.texture_enabled && states.texture_envmode == CGLTrace::ENVMODE_MODULATE);
-      kernel_arg.prim_addr     = primbuf_addr;
-
-      if (kernel_arg.tex_modulate)
-        kernel_arg.color_enabled = false;
-      
-      auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
-      memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
-      RT_CHECK(vx_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
-    }
-
-    vx_buf_free(staging_buf);
-    staging_buf = nullptr;
-
-    uint32_t primbuf_stride = sizeof(rast_prim_t);
-
-    // configure raster units
-    vx_dcr_write(device, DCR_RASTER_TBUF_ADDR,   tilebuf_addr);
-    vx_dcr_write(device, DCR_RASTER_TILE_COUNT,  num_tiles);
-    vx_dcr_write(device, DCR_RASTER_PBUF_ADDR,   primbuf_addr);
-    vx_dcr_write(device, DCR_RASTER_PBUF_STRIDE, primbuf_stride);
-
-    // configure rop color buffer
-    vx_dcr_write(device, DCR_ROP_CBUF_ADDR,  cbuf_addr);
-    vx_dcr_write(device, DCR_ROP_CBUF_PITCH, cbuf_pitch);
-    vx_dcr_write(device, DCR_ROP_CBUF_MASK, states.color_writemask);
-
-    if (states.depth_test || states.stencil_test) {
-      // configure rop depth buffer
-      vx_dcr_write(device, DCR_ROP_ZBUF_ADDR,  zbuf_addr);
-      vx_dcr_write(device, DCR_ROP_ZBUF_PITCH, zbuf_pitch);    
-    }
-
-    if (states.depth_test) {    
-      // configure rop depth states
-      auto depth_func = toVXCompare(states.depth_func);
-      vx_dcr_write(device, DCR_ROP_DEPTH_FUNC, depth_func);
-      vx_dcr_write(device, DCR_ROP_DEPTH_MASK, states.depth_writemask);
-    }
-
-    if (states.stencil_test) {
-      // configure rop stencil states
-      auto stencil_func  = toVXCompare(states.stencil_func);
-      auto stencil_zpass = toVXStencilOp(states.stencil_zpass);
-      auto stencil_zfail = toVXStencilOp(states.stencil_zfail);
-      auto stencil_fail  = toVXStencilOp(states.stencil_fail);
-      vx_dcr_write(device, DCR_ROP_STENCIL_FUNC, stencil_func);
-      vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, stencil_zpass);
-      vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, stencil_zfail);
-      vx_dcr_write(device, DCR_ROP_STENCIL_FAIL, stencil_fail);
-      vx_dcr_write(device, DCR_ROP_STENCIL_MASK, states.stencil_mask);
-      vx_dcr_write(device, DCR_ROP_STENCIL_REF, states.stencil_ref);
-    }
-
-    if (states.blend_enabled) {
-      // configure rop blend states
-      auto blend_src = toVXBlendFunc(states.blend_src);
-      auto blend_dst = toVXBlendFunc(states.blend_dst);
-      vx_dcr_write(device, DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)  // DST
-                                             | (ROP_BLEND_MODE_ADD << 0)); // SRC
-      vx_dcr_write(device, DCR_ROP_BLEND_FUNC, (blend_dst << 24)  // DST_A
-                                             | (blend_dst << 16)  // DST_RGB 
-                                             | (blend_src << 8)   // SRC_A
-                                             | (blend_src << 0)); // SRC_RGB
     }
 
     auto time_start = std::chrono::high_resolution_clock::now();

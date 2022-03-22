@@ -359,8 +359,7 @@ static const char* op_string(const Instr &instr) {
       }
     case 1:
       switch (func3) {
-      case 0: return "RASTER";
-      case 1: return "ROP";
+      case 0: return "RASTER";      
       default:
         std::abort();
       }
@@ -369,16 +368,17 @@ static const char* op_string(const Instr &instr) {
     }
   case Opcode::EXT2:
     switch (func3) {
-    case 0: return "TEX";
-    case 1: {
+    case 0: {
       switch (func2) {
-      case 0: return "CMOV";
-      case 1: return "INTERP";
-      case 2: return "IMADD";
+      case 0: return "TEX";
+      case 1: return "CMOV";
+      case 2: return "ROP";      
       default:
         std::abort();
       }
     }    
+    case 1: 
+      return "IMADD";
     default:
       std::abort();
     }

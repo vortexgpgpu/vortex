@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_data_access #(
-    parameter CACHE_ID          = 0,
+    parameter CACHE_ID          = "cache",
     parameter BANK_ID           = 0,
     // Size of cache in bytes
     parameter CACHE_SIZE        = 1, 
@@ -12,7 +12,7 @@ module VX_data_access #(
     // Number of ports per banks
     parameter NUM_PORTS         = 1,
     // Number of associative ways
-    parameter NUM_WAYS          = 8,
+    parameter NUM_WAYS          = 1,
     // Size of a word in bytes
     parameter WORD_SIZE         = 1,
     // Enable cache writeable
@@ -96,71 +96,31 @@ module VX_data_access #(
         assign wren  = fill;
     end
 
-    //Local variable to capture data from all ways before assigning to output wire
-    wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] read_data_local [NUM_WAYS-1:0];
-    localparam [`WAY_SEL_WIDTH-1:0] which_way = 0; 
+    wire [NUM_WAYS-1:0][`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] read_data_local;
 
-    generate
-        genvar m;
-        for (m = 0; m < NUM_WAYS; m = m+1) begin
-            assign which_way = select_way[m] ? m : 'z; 
-        end
-    endgenerate
-
-    generate
-        genvar j;
-        for (j = 0; j < which_way; j = j+1) begin
-            VX_sp_ram #(
-                .DATAW      (`CACHE_LINE_WIDTH),
-                .SIZE       (`LINES_PER_BANK),
-                .BYTEENW    (1),
-                .NO_RWCHECK (1)
-            ) data_store (
-                .clk   (clk),
-                .addr  (line_addr),
-                //wren is disabled so that data is not written into spram
-                .wren  (0),  
-                .wdata (wdata),
-                .rdata (read_data_local[j]) 
-            );
-        end
-    endgenerate
-
-     VX_sp_ram #(
-                .DATAW      (`CACHE_LINE_WIDTH),
-                .SIZE       (`LINES_PER_BANK),
-                .BYTEENW    (BYTEENW),
-                .NO_RWCHECK (1)
-            ) data_store (
-                .clk   (clk),
-                .addr  (line_addr),
-                .wren  (wren),  
-                .wdata (wdata),
-                .rdata (read_data_local[which_way]) 
-            );
-
-localparam temp = which_way + 1; 
-    generate
-        genvar k;
-        for (k = temp; k < NUM_WAYS; k = k+1) begin
-            VX_sp_ram #(
-                .DATAW      (`CACHE_LINE_WIDTH),
-                .SIZE       (`LINES_PER_BANK),
-                .BYTEENW    (1),
-                .NO_RWCHECK (1)
-            ) data_store (
-                .clk   (clk),
-                .addr  (line_addr),
-                .wren  (0),  
-                .wdata (wdata),
-                .rdata (read_data_local[k]) 
-            );
-        end
-    endgenerate
+    for (genvar i = 0; i < NUM_WAYS; ++i) begin
+        VX_sp_ram #(
+            .DATAW      (`CACHE_LINE_WIDTH),
+            .SIZE       (`LINES_PER_BANK),
+            .BYTEENW    (BYTEENW),
+            .NO_RWCHECK (1)
+        ) data_store (
+            .clk   (clk),
+            .addr  (line_addr),
+            .wren  (wren & {BYTEENW{select_way[i]}}),
+            .wdata (wdata),
+            .rdata (read_data_local[i]) 
+        );
+    end
    
     if (NUM_WAYS > 1) begin
+        wire [`WAY_SEL_WIDTH-1:0] which_way;
+        for (genvar i = 0; i < NUM_WAYS; ++i) begin
+            assign which_way = select_way[i] ? i : 'z; 
+        end
         assign rdata = read_data_local[which_way];
     end else begin
+        `UNUSED_VAR (select_way)
         assign rdata = read_data_local;
     end
 
@@ -177,13 +137,13 @@ localparam temp = which_way + 1;
 `ifdef DBG_TRACE_CACHE_DATA
     always @(posedge clk) begin 
         if (fill && ~stall) begin
-            dpi_trace("%d: cache%0d:%0d data-fill: addr=0x%0h, blk_addr=%0d, data=0x%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, fill_data);
+            dpi_trace("%d: %s:%0d data-fill: addr=0x%0h, blk_addr=%0d, data=0x%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, fill_data);
         end
         if (read && ~stall) begin
-            dpi_trace("%d: cache%0d:%0d data-read: addr=0x%0h, blk_addr=%0d, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, read_data, req_id);
+            dpi_trace("%d: %s:%0d data-read: addr=0x%0h, blk_addr=%0d, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, read_data, req_id);
         end 
         if (write && ~stall) begin
-            dpi_trace("%d: cache%0d:%0d data-write: addr=0x%0h, byteen=%b, blk_addr=%0d, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), byteen, line_addr, write_data, req_id);
+            dpi_trace("%d: %s:%0d data-write: addr=0x%0h, byteen=%b, blk_addr=%0d, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), byteen, line_addr, write_data, req_id);
         end      
     end    
 `endif

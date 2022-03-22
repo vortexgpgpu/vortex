@@ -25,16 +25,26 @@
 `define NUM_BARRIERS 4
 `endif
 
-`ifndef L2_ENABLE
-`define L2_ENABLE 0
+`ifndef SM_DISABLE
+`define SM_ENABLE
 `endif
 
-`ifndef L3_ENABLE
-`define L3_ENABLE 0
+`ifdef SM_ENABLE
+    `define SM_ENABLED   1
+`else
+    `define SM_ENABLED   0
 `endif
 
-`ifndef SM_ENABLE
-`define SM_ENABLE 1
+`ifdef L2_ENABLE
+    `define L2_ENABLED   1
+`else
+    `define L2_ENABLED   0
+`endif
+
+`ifdef L3_ENABLE
+    `define L3_ENABLED   1
+`else
+    `define L3_ENABLED   0
 `endif
 
 `ifndef MEM_BLOCK_SIZE
@@ -42,7 +52,7 @@
 `endif
 
 `ifndef L1_BLOCK_SIZE
-`define L1_BLOCK_SIZE ((`L2_ENABLE || `L3_ENABLE) ? 16 : `MEM_BLOCK_SIZE)
+`define L1_BLOCK_SIZE ((`L2_ENABLED || `L3_ENABLED) ? 16 : `MEM_BLOCK_SIZE)
 `endif
 
 `ifndef STARTUP_ADDR
@@ -374,6 +384,90 @@
 // Memory Response Queue Size
 `ifndef TCACHE_MRSQ_SIZE
 `define TCACHE_MRSQ_SIZE 0
+`endif
+
+// Rcache Configurable Knobs //////////////////////////////////////////////////
+
+// Size of cache in bytes
+`ifndef RCACHE_SIZE
+`define RCACHE_SIZE 8192
+`endif
+
+// Number of banks
+`ifndef RCACHE_NUM_BANKS
+`define RCACHE_NUM_BANKS 1
+`endif
+
+// Number of ports per bank
+`ifndef RCACHE_NUM_PORTS
+`define RCACHE_NUM_PORTS 1
+`endif
+
+// Core Request Queue Size
+`ifndef RCACHE_CREQ_SIZE
+`define RCACHE_CREQ_SIZE 0
+`endif
+
+// Core Response Queue Size
+`ifndef RCACHE_CRSQ_SIZE
+`define RCACHE_CRSQ_SIZE 2
+`endif
+
+// Miss Handling Register Size
+`ifndef RCACHE_MSHR_SIZE
+`define RCACHE_MSHR_SIZE 8
+`endif
+
+// Memory Request Queue Size
+`ifndef RCACHE_MREQ_SIZE
+`define RCACHE_MREQ_SIZE 4
+`endif
+
+// Memory Response Queue Size
+`ifndef RCACHE_MRSQ_SIZE
+`define RCACHE_MRSQ_SIZE 0
+`endif
+
+// Ocache Configurable Knobs //////////////////////////////////////////////////
+
+// Size of cache in bytes
+`ifndef OCACHE_SIZE
+`define OCACHE_SIZE 8192
+`endif
+
+// Number of banks
+`ifndef OCACHE_NUM_BANKS
+`define OCACHE_NUM_BANKS `NUM_THREADS
+`endif
+
+// Number of ports per bank
+`ifndef OCACHE_NUM_PORTS
+`define OCACHE_NUM_PORTS 1
+`endif
+
+// Core Request Queue Size
+`ifndef OCACHE_CREQ_SIZE
+`define OCACHE_CREQ_SIZE 0
+`endif
+
+// Core Response Queue Size
+`ifndef OCACHE_CRSQ_SIZE
+`define OCACHE_CRSQ_SIZE 2
+`endif
+
+// Miss Handling Register Size
+`ifndef OCACHE_MSHR_SIZE
+`define OCACHE_MSHR_SIZE 8
+`endif
+
+// Memory Request Queue Size
+`ifndef OCACHE_MREQ_SIZE
+`define OCACHE_MREQ_SIZE 4
+`endif
+
+// Memory Response Queue Size
+`ifndef OCACHE_MRSQ_SIZE
+`define OCACHE_MRSQ_SIZE 0
 `endif
 
 // SM Configurable Knobs //////////////////////////////////////////////////////

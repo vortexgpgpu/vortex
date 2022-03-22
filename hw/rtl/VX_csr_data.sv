@@ -66,7 +66,61 @@ module VX_csr_data #(
         .in_i       (write_tmask),
         .cnt_o      (tid),
         `UNUSED_PIN (valid_o)
-    );
+    );    
+
+`ifdef EXT_TEX_ENABLE    
+    wire tex_read_enable  = (read_addr >= `CSR_TEX_BEGIN && read_addr < `CSR_TEX_END);
+    wire tex_write_enable = (write_addr >= `CSR_TEX_BEGIN && write_addr < `CSR_TEX_END);
+
+    assign tex_csr_if.read_enable = read_enable && tex_read_enable;
+    assign tex_csr_if.read_uuid   = read_uuid;
+    assign tex_csr_if.read_wid    = read_wid;
+    assign tex_csr_if.read_tmask  = read_tmask;
+    assign tex_csr_if.read_addr   = read_addr;
+    
+    assign tex_csr_if.write_enable = write_enable && tex_write_enable; 
+    assign tex_csr_if.write_uuid   = write_uuid;
+    assign tex_csr_if.write_wid    = write_wid;
+    assign tex_csr_if.write_tmask  = write_tmask;
+    assign tex_csr_if.write_addr   = write_addr;
+    assign tex_csr_if.write_data   = write_data;
+`endif
+
+`ifdef EXT_RASTER_ENABLE
+    wire raster_read_enable  = (read_addr >= `CSR_RASTER_BEGIN && read_addr < `CSR_RASTER_END);
+    wire raster_write_enable = (write_addr >= `CSR_RASTER_BEGIN && write_addr < `CSR_RASTER_END);
+
+    assign raster_csr_if.read_enable = read_enable && raster_read_enable;
+    assign raster_csr_if.read_uuid   = read_uuid;
+    assign raster_csr_if.read_wid    = read_wid;
+    assign raster_csr_if.read_tmask  = read_tmask;
+    assign raster_csr_if.read_addr   = read_addr;
+    
+    assign raster_csr_if.write_enable = write_enable && raster_write_enable; 
+    assign raster_csr_if.write_uuid   = write_uuid;
+    assign raster_csr_if.write_wid    = write_wid;
+    assign raster_csr_if.write_tmask  = write_tmask;
+    assign raster_csr_if.write_addr   = write_addr;
+    assign raster_csr_if.write_data   = write_data;
+`endif
+
+`ifdef EXT_ROP_ENABLE
+    wire rop_read_enable  = (read_addr >= `CSR_ROP_BEGIN && read_addr < `CSR_ROP_END);
+    wire rop_write_enable = (write_addr >= `CSR_ROP_BEGIN && write_addr < `CSR_ROP_END);;
+
+    assign rop_csr_if.read_enable = read_enable && rop_read_enable;
+    assign rop_csr_if.read_uuid   = read_uuid;
+    assign rop_csr_if.read_wid    = read_wid;
+    assign rop_csr_if.read_tmask  = read_tmask;
+    assign rop_csr_if.read_addr   = read_addr;
+    
+    assign rop_csr_if.write_enable = write_enable && rop_write_enable; 
+    assign rop_csr_if.write_uuid   = write_uuid;
+    assign rop_csr_if.write_wid    = write_wid;
+    assign rop_csr_if.write_tmask  = write_tmask;
+    assign rop_csr_if.write_addr   = write_addr;
+    assign rop_csr_if.write_data   = write_data;
+`endif
 
     always @(posedge clk) begin
         reg write_addr_valid_r;
@@ -96,20 +150,17 @@ module VX_csr_data #(
                     default: begin
                         write_addr_valid_r = 0;
                         `ifdef EXT_TEX_ENABLE
-                            if (write_addr >= `CSR_TEX_BEGIN
-                             && write_addr < `CSR_TEX_END) begin
+                            if (tex_write_enable) begin
                                 write_addr_valid_r = 1;
                             end
                         `endif
                         `ifdef EXT_RASTER_ENABLE
-                            if (write_addr >= `CSR_RASTER_BEGIN
-                             && write_addr < `CSR_RASTER_END) begin
+                            if (raster_write_enable) begin
                                 write_addr_valid_r = 1;
                             end
                         `endif
                         `ifdef EXT_ROP_ENABLE
-                            if (write_addr >= `CSR_ROP_BEGIN
-                             && write_addr < `CSR_ROP_END) begin
+                            if (rop_write_enable) begin
                                 write_addr_valid_r = 1;
                             end
                         `endif
@@ -258,24 +309,21 @@ module VX_csr_data #(
                     read_addr_valid_r = 1;
                 end else     
             `ifdef EXT_TEX_ENABLE    
-                if (read_addr >= `CSR_TEX_BEGIN
-                 && read_addr < `CSR_TEX_END) begin
+                if (tex_read_enable) begin
                     read_data_r = tex_csr_if.read_data;
-                    read_addr_valid_r = 1;
+                    read_addr_valid_r = 1;                    
                 end else
             `endif
             `ifdef EXT_RASTER_ENABLE
-                if (read_addr >= `CSR_RASTER_BEGIN
-                 && read_addr < `CSR_RASTER_END) begin
+                if (raster_read_enable) begin
                     read_data_r = raster_csr_if.read_data;
-                    read_addr_valid_r = 1;
+                    read_addr_valid_r = 1;                    
                 end else
             `endif
             `ifdef EXT_ROP_ENABLE
-                if (read_addr >= `CSR_ROP_BEGIN
-                 && read_addr < `CSR_ROP_END) begin
+                if (rop_read_enable) begin
                     read_data_r = rop_csr_if.read_data;
-                    read_addr_valid_r = 1;
+                    read_addr_valid_r = 1;                    
                 end else
             `endif
                     read_addr_valid_r = 0;
@@ -289,51 +337,6 @@ module VX_csr_data #(
 
 `ifdef EXT_F_ENABLE    
     assign fpu_to_csr_if.read_frm = fcsr[fpu_to_csr_if.read_wid][`INST_FRM_BITS+`FFLAGS_BITS-1:`FFLAGS_BITS];
-`endif
-
-`ifdef EXT_TEX_ENABLE    
-    assign tex_csr_if.read_enable = read_enable;
-    assign tex_csr_if.read_uuid = read_uuid;
-    assign tex_csr_if.read_wid = read_wid;
-    assign tex_csr_if.read_tmask = read_tmask;
-    assign tex_csr_if.read_addr = read_addr;
-    
-    assign tex_csr_if.write_enable = write_enable; 
-    assign tex_csr_if.write_uuid = write_uuid;
-    assign tex_csr_if.write_wid = write_wid;
-    assign tex_csr_if.write_tmask = write_tmask;
-    assign tex_csr_if.write_addr = write_addr;
-    assign tex_csr_if.write_data = write_data;
-`endif
-
-`ifdef EXT_RASTER_ENABLE    
-    assign raster_csr_if.read_enable = read_enable;
-    assign raster_csr_if.read_uuid = read_uuid;
-    assign raster_csr_if.read_wid = read_wid;
-    assign raster_csr_if.read_tmask = read_tmask;
-    assign raster_csr_if.read_addr = read_addr;
-    
-    assign raster_csr_if.write_enable = write_enable; 
-    assign raster_csr_if.write_uuid = write_uuid;
-    assign raster_csr_if.write_wid = write_wid;
-    assign raster_csr_if.write_tmask = write_tmask;
-    assign raster_csr_if.write_addr = write_addr;
-    assign raster_csr_if.write_data = write_data;
-`endif
-
-`ifdef EXT_ROP_ENABLE    
-    assign rop_csr_if.read_enable = read_enable;
-    assign rop_csr_if.read_uuid = read_uuid;
-    assign rop_csr_if.read_wid = read_wid;
-    assign rop_csr_if.read_tmask = read_tmask;
-    assign rop_csr_if.read_addr = read_addr;
-    
-    assign rop_csr_if.write_enable = write_enable; 
-    assign rop_csr_if.write_uuid = write_uuid;
-    assign rop_csr_if.write_wid = write_wid;
-    assign rop_csr_if.write_tmask = write_tmask;
-    assign rop_csr_if.write_addr = write_addr;
-    assign rop_csr_if.write_data = write_data;
 `endif
 
 endmodule

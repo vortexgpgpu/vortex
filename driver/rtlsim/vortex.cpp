@@ -271,7 +271,7 @@ extern int vx_dev_close(vx_device_h hdevice) {
 extern int vx_mem_alloc(vx_device_h hdevice, uint64_t size, uint64_t* dev_maddr) {
     if (nullptr == hdevice 
      || nullptr == dev_maddr
-     || 0 >= size)
+     || 0 == size)
         return -1;
 
     vx_device *device = ((vx_device*)hdevice);

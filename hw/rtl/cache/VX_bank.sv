@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_bank #(
-    parameter CACHE_ID                      = 0,
+    parameter CACHE_ID                      = "cache",
     parameter BANK_ID                       = 0,
 
     // Number of Word requests per cycle
@@ -16,7 +16,7 @@ module VX_bank #(
     // Number of ports per banks
     parameter NUM_PORTS                     = 1,
     // Number of associative ways 
-    parameter NUM_WAYS                      = 8, 
+    parameter NUM_WAYS                      = 1, 
     // Size of a word in bytes
     parameter WORD_SIZE                     = 1, 
 
@@ -232,7 +232,7 @@ module VX_bank #(
 
     wire tag_match_st0;
 
-    //added for associativity 
+    // added for associativity
     wire [NUM_WAYS-1:0] select_way_st0;
     wire [NUM_WAYS-1:0] select_way_st1;
 
@@ -242,9 +242,9 @@ module VX_bank #(
         .CACHE_SIZE       (CACHE_SIZE),
         .CACHE_LINE_SIZE  (CACHE_LINE_SIZE),
         .NUM_BANKS        (NUM_BANKS),
+        .NUM_WAYS         (NUM_WAYS),
         .WORD_SIZE        (WORD_SIZE),   
-        .BANK_ADDR_OFFSET (BANK_ADDR_OFFSET),
-        .NUM_WAYS(NUM_WAYS)
+        .BANK_ADDR_OFFSET (BANK_ADDR_OFFSET) 
     ) tag_access (
         .clk       (clk),
         .reset     (reset),
@@ -258,13 +258,15 @@ module VX_bank #(
         .addr      (addr_st0),        
         .fill      (do_fill_st0),
         .flush     (do_flush_st0),
-         //added for associativity
         .select_way (select_way_st0),
         .tag_match (tag_match_st0)
     );
 
     // we have a core request hit
     assign miss_st0 = (is_read_st0 || is_write_st0) && ~tag_match_st0;
+
+    // ensure mshr reply never get a miss
+    `RUNTIME_ASSERT(tag_match_st0 || ~(valid_st0 && is_mshr_st0), ("runtime error"));
 
     wire [MSHR_ADDR_WIDTH-1:0] mshr_id_a_st0 = (is_read_st0 || is_write_st0) ? mshr_alloc_id : mshr_id_st0;
 
@@ -296,10 +298,10 @@ module VX_bank #(
         .CACHE_SIZE     (CACHE_SIZE),
         .CACHE_LINE_SIZE(CACHE_LINE_SIZE),
         .NUM_BANKS      (NUM_BANKS),
+        .NUM_WAYS       (NUM_WAYS),
         .NUM_PORTS      (NUM_PORTS),
         .WORD_SIZE      (WORD_SIZE),
-        .WRITE_ENABLE   (WRITE_ENABLE),
-        .NUM_WAYS(NUM_WAYS)
+        .WRITE_ENABLE   (WRITE_ENABLE)        
      ) data_access (
         .clk        (clk),
         .reset      (reset),
@@ -307,7 +309,7 @@ module VX_bank #(
         .req_id     (req_id_st1),
 
         .stall      (crsq_stall),
-        //added for associativity
+
         .select_way (select_way_st1),
 
         .read       (do_read_st1 || do_mshr_st1),      
@@ -491,31 +493,31 @@ module VX_bank #(
 
     always @(posedge clk) begin
         if (pipeline_stall) begin
-            dpi_trace("%d: *** cache%0d:%0d stall: crsq=%b, mreq=%b, mshr=%b\n", $time, CACHE_ID, BANK_ID, crsq_stall, mreq_alm_full, mshr_alm_full);
+            dpi_trace("%d: *** %s:%0d stall: crsq=%b, mreq=%b, mshr=%b\n", $time, CACHE_ID, BANK_ID, crsq_stall, mreq_alm_full, mshr_alm_full);
         end
         if (flush_enable) begin
-            dpi_trace("%d: cache%0d:%0d flush: addr=0x%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(flush_addr, BANK_ID));
+            dpi_trace("%d: %s:%0d flush: addr=0x%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(flush_addr, BANK_ID));
         end
         if (mem_rsp_fire) begin
-            dpi_trace("%d: cache%0d:%0d fill-rsp: addr=0x%0h, id=%0d, data=0x%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mem_rsp_addr, BANK_ID), mem_rsp_id, mem_rsp_data);
+            dpi_trace("%d: %s:%0d fill-rsp: addr=0x%0h, id=%0d, data=0x%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mem_rsp_addr, BANK_ID), mem_rsp_id, mem_rsp_data);
         end
         if (mshr_fire) begin
-            dpi_trace("%d: cache%0d:%0d mshr-pop: addr=0x%0h, tag=0x%0h, pmask=%b, tid=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mshr_addr, BANK_ID), mshr_tag, mshr_pmask, mshr_tid, req_id_sel);
+            dpi_trace("%d: %s:%0d mshr-pop: addr=0x%0h, tag=0x%0h, pmask=%b, tid=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mshr_addr, BANK_ID), mshr_tag, mshr_pmask, mshr_tid, req_id_sel);
         end
         if (creq_fire) begin
             if (creq_rw)
-                dpi_trace("%d: cache%0d:%0d core-wr-req: addr=0x%0h, tag=0x%0h, pmask=%b, tid=%0d, byteen=%b, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(creq_addr, BANK_ID), creq_tag, creq_pmask, creq_tid, creq_byteen, creq_data, req_id_sel);
+                dpi_trace("%d: %s:%0d core-wr-req: addr=0x%0h, tag=0x%0h, pmask=%b, tid=%0d, byteen=%b, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(creq_addr, BANK_ID), creq_tag, creq_pmask, creq_tid, creq_byteen, creq_data, req_id_sel);
             else
-                dpi_trace("%d: cache%0d:%0d core-rd-req: addr=0x%0h, tag=0x%0h, pmask=%b, tid=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(creq_addr, BANK_ID), creq_tag, creq_pmask, creq_tid, req_id_sel);
+                dpi_trace("%d: %s:%0d core-rd-req: addr=0x%0h, tag=0x%0h, pmask=%b, tid=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(creq_addr, BANK_ID), creq_tag, creq_pmask, creq_tid, req_id_sel);
         end
         if (crsq_fire) begin
-            dpi_trace("%d: cache%0d:%0d core-rsp: addr=0x%0h, tag=0x%0h, pmask=%b, tid=%0d, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), crsq_tag, crsq_pmask, crsq_tid, crsq_data, req_id_st1);
+            dpi_trace("%d: %s:%0d core-rsp: addr=0x%0h, tag=0x%0h, pmask=%b, tid=%0d, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), crsq_tag, crsq_pmask, crsq_tid, crsq_data, req_id_st1);
         end
         if (mreq_push) begin
             if (is_write_st1)
-                dpi_trace("%d: cache%0d:%0d writeback: addr=0x%0h, data=0x%0h, byteen=%b (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mreq_addr, BANK_ID), mreq_data, mreq_byteen, req_id_st1);
+                dpi_trace("%d: %s:%0d writeback: addr=0x%0h, data=0x%0h, byteen=%b (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mreq_addr, BANK_ID), mreq_data, mreq_byteen, req_id_st1);
             else
-                dpi_trace("%d: cache%0d:%0d fill-req: addr=0x%0h, id=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mreq_addr, BANK_ID), mreq_id, req_id_st1);
+                dpi_trace("%d: %s:%0d fill-req: addr=0x%0h, id=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mreq_addr, BANK_ID), mreq_id, req_id_st1);
         end
     end    
 `endif

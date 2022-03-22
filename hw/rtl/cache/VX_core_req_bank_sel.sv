@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_core_req_bank_sel #(  
-    parameter CACHE_ID          = 0,
+    parameter CACHE_ID          = "cache",
 
     // Size of line inside a bank in bytes
     parameter CACHE_LINE_SIZE   = 64, 
@@ -11,10 +11,10 @@ module VX_core_req_bank_sel #(
     parameter NUM_BANKS         = 4,
     // Number of ports per banks
     parameter NUM_PORTS         = 1,
+    // Number of associative ways
+    parameter NUM_WAYS          = 1,
     // Number of Word requests per cycle
     parameter NUM_REQS          = 4,
-    // Number of associative ways
-    parameter NUM_WAYS          = 8,
     // core request tag size
     parameter CORE_TAG_WIDTH    = 3,
     
@@ -47,7 +47,8 @@ module VX_core_req_bank_sel #(
     output wire [NUM_BANKS-1:0][NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] per_bank_core_req_tag,
     input  wire [NUM_BANKS-1:0]                     per_bank_core_req_ready
 );
-    `UNUSED_PARAM (CACHE_ID)
+    `UNUSED_PARAM (CACHE_ID)    
+    `UNUSED_PARAM (NUM_WAYS)
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))
     `STATIC_ASSERT(NUM_PORTS <= NUM_BANKS, ("invalid value"))
 

@@ -20,6 +20,27 @@ task trace_raster_state (
     endcase  
 endtask
 
+task trace_raster_csr (
+    input [`CSR_ADDR_BITS-1:0] addr
+);
+    case (addr)
+        `CSR_RASTER_POS_MASK:   dpi_trace("POS_MASK");
+        `CSR_RASTER_BCOORD_X0:  dpi_trace("BCOORD_X0");
+        `CSR_RASTER_BCOORD_X1:  dpi_trace("BCOORD_X1");
+        `CSR_RASTER_BCOORD_X2:  dpi_trace("BCOORD_X2");
+        `CSR_RASTER_BCOORD_X3:  dpi_trace("BCOORD_X3");
+        `CSR_RASTER_BCOORD_Y0:  dpi_trace("BCOORD_Y0");
+        `CSR_RASTER_BCOORD_Y1:  dpi_trace("BCOORD_Y1");
+        `CSR_RASTER_BCOORD_Y2:  dpi_trace("BCOORD_Y2");
+        `CSR_RASTER_BCOORD_Y3:  dpi_trace("BCOORD_Y3");
+        `CSR_RASTER_BCOORD_Z0:  dpi_trace("BCOORD_Z0");
+        `CSR_RASTER_BCOORD_Z1:  dpi_trace("BCOORD_Z1");
+        `CSR_RASTER_BCOORD_Z2:  dpi_trace("BCOORD_Z2");
+        `CSR_RASTER_BCOORD_Z3:  dpi_trace("BCOORD_Z3");
+        default:                dpi_trace("?");
+    endcase  
+endtask
+
 `include "VX_raster_types.vh"
 
 `IGNORE_WARNINGS_BEGIN

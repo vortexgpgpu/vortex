@@ -118,22 +118,26 @@
 
 // Raster unit CSRs
 `define CSR_RASTER_BEGIN            `CSR_TEX_END
-`define CSR_RASTER_FRAG             (`CSR_RASTER_BEGIN+0)
-`define CSR_RASTER_X_Y              (`CSR_RASTER_BEGIN+1)
-`define CSR_RASTER_MASK_PID         (`CSR_RASTER_BEGIN+2)
-`define CSR_RASTER_BCOORD_X         (`CSR_RASTER_BEGIN+3)
-`define CSR_RASTER_BCOORD_Y         (`CSR_RASTER_BEGIN+4)
-`define CSR_RASTER_BCOORD_Z         (`CSR_RASTER_BEGIN+5)
-`define CSR_RASTER_GRAD_X           (`CSR_RASTER_BEGIN+6)
-`define CSR_RASTER_GRAD_Y           (`CSR_RASTER_BEGIN+7)
-`define CSR_RASTER_END              (`CSR_RASTER_BEGIN+8)
+`define CSR_RASTER_POS_MASK         (`CSR_RASTER_BEGIN+0)
+`define CSR_RASTER_BCOORD_X0        (`CSR_RASTER_BEGIN+1)
+`define CSR_RASTER_BCOORD_X1        (`CSR_RASTER_BEGIN+2)
+`define CSR_RASTER_BCOORD_X2        (`CSR_RASTER_BEGIN+3)
+`define CSR_RASTER_BCOORD_X3        (`CSR_RASTER_BEGIN+4)
+`define CSR_RASTER_BCOORD_Y0        (`CSR_RASTER_BEGIN+5)
+`define CSR_RASTER_BCOORD_Y1        (`CSR_RASTER_BEGIN+6)
+`define CSR_RASTER_BCOORD_Y2        (`CSR_RASTER_BEGIN+7)
+`define CSR_RASTER_BCOORD_Y3        (`CSR_RASTER_BEGIN+8)
+`define CSR_RASTER_BCOORD_Z0        (`CSR_RASTER_BEGIN+9)
+`define CSR_RASTER_BCOORD_Z1        (`CSR_RASTER_BEGIN+10)
+`define CSR_RASTER_BCOORD_Z2        (`CSR_RASTER_BEGIN+11)
+`define CSR_RASTER_BCOORD_Z3        (`CSR_RASTER_BEGIN+12)
+`define CSR_RASTER_END              (`CSR_RASTER_BEGIN+13)
 
 // ROP unit CSRs
 `define CSR_ROP_BEGIN               `CSR_RASTER_END
-`define CSR_ROP_DST_IDX             (`CSR_ROP_BEGIN+0)
-`define CSR_ROP_DST_POS             (`CSR_ROP_BEGIN+1)
-`define CSR_ROP_SAMPLE_MASK         (`CSR_ROP_BEGIN+2)
-`define CSR_ROP_END                 (`CSR_ROP_BEGIN+3)
+`define CSR_ROP_RT_IDX              (`CSR_ROP_BEGIN+0)
+`define CSR_ROP_SAMPLE_IDX          (`CSR_ROP_BEGIN+1)
+`define CSR_ROP_END                 (`CSR_ROP_BEGIN+2)
 
 // Texture Units //////////////////////////////////////////////////////////////
 
@@ -163,48 +167,46 @@
 `define TEX_FORMAT_L8               5
 `define TEX_FORMAT_A8               6
 
-`define TEX_STATE_ADDR              0
-`define TEX_STATE_LOGDIM            1
-`define TEX_STATE_FORMAT            2
-`define TEX_STATE_FILTER            3
-`define TEX_STATE_WRAP              4
-`define TEX_STATE_MIPOFF(lod)       (5+(lod))
-`define TEX_STATE_COUNT             (`TEX_STATE_MIPOFF(`TEX_LOD_MAX)+1)
-
 `define DCR_TEX_STATE_BEGIN         12'h100
-`define DCR_TEX_STAGE               `DCR_TEX_STATE_BEGIN
-`define DCR_TEX_ADDR                (`DCR_TEX_STATE_BEGIN+1+`TEX_STATE_ADDR)
-`define DCR_TEX_LOGDIM              (`DCR_TEX_STATE_BEGIN+1+`TEX_STATE_LOGDIM)
-`define DCR_TEX_FORMAT              (`DCR_TEX_STATE_BEGIN+1+`TEX_STATE_FORMAT)
-`define DCR_TEX_FILTER              (`DCR_TEX_STATE_BEGIN+1+`TEX_STATE_FILTER)
-`define DCR_TEX_WRAP                (`DCR_TEX_STATE_BEGIN+1+`TEX_STATE_WRAP)
-`define DCR_TEX_MIPOFF(lod)         (`DCR_TEX_STATE_BEGIN+1+`TEX_STATE_MIPOFF(lod))
-`define DCR_TEX_STATE_END           (`DCR_TEX_STATE_BEGIN+1+`TEX_STATE_COUNT)
+`define DCR_TEX_STAGE               (`DCR_TEX_STATE_BEGIN+0)
+`define DCR_TEX_ADDR                (`DCR_TEX_STATE_BEGIN+1)
+`define DCR_TEX_LOGDIM              (`DCR_TEX_STATE_BEGIN+2)
+`define DCR_TEX_FORMAT              (`DCR_TEX_STATE_BEGIN+3)
+`define DCR_TEX_FILTER              (`DCR_TEX_STATE_BEGIN+4)
+`define DCR_TEX_WRAP                (`DCR_TEX_STATE_BEGIN+5)
+`define DCR_TEX_MIPOFF(lod)         (`DCR_TEX_STATE_BEGIN+6+lod)
+`define DCR_TEX_STATE_END           (`DCR_TEX_MIPOFF(`TEX_LOD_MAX)+1)
 
-`define DCR_TEX_STATE(addr)         ((addr) - `DCR_TEX_ADDR)
+`define DCR_TEX_STATE(addr)         ((addr) - `DCR_TEX_STATE_BEGIN)
+`define DCR_TEX_STATE_COUNT         (`DCR_TEX_STATE_END-`DCR_TEX_STATE_BEGIN)
 
 // Raster Units ///////////////////////////////////////////////////////////////
 
 `define RASTER_DIM_BITS             15
+`define RASTER_PID_BITS             16
 `define RASTER_TILE_LOGSIZE         6
 `define RASTER_BLOCK_LOGSIZE        2
 
-`define RASTER_STATE_TBUF_ADDR      0
-`define RASTER_STATE_TILE_COUNT     1
-`define RASTER_STATE_PBUF_ADDR      2
-`define RASTER_STATE_PBUF_STRIDE    3
-`define RASTER_STATE_COUNT          4
-
 `define DCR_RASTER_STATE_BEGIN      `DCR_TEX_STATE_END
-`define DCR_RASTER_TBUF_ADDR        (`DCR_RASTER_STATE_BEGIN+`RASTER_STATE_TBUF_ADDR)
-`define DCR_RASTER_TILE_COUNT       (`DCR_RASTER_STATE_BEGIN+`RASTER_STATE_TILE_COUNT)
-`define DCR_RASTER_PBUF_ADDR        (`DCR_RASTER_STATE_BEGIN+`RASTER_STATE_PBUF_ADDR)
-`define DCR_RASTER_PBUF_STRIDE      (`DCR_RASTER_STATE_BEGIN+`RASTER_STATE_PBUF_STRIDE)
-`define DCR_RASTER_STATE_END        (`DCR_RASTER_STATE_BEGIN+`RASTER_STATE_COUNT)
+`define DCR_RASTER_TBUF_ADDR        (`DCR_RASTER_STATE_BEGIN+0)
+`define DCR_RASTER_TILE_COUNT       (`DCR_RASTER_STATE_BEGIN+1)
+`define DCR_RASTER_PBUF_ADDR        (`DCR_RASTER_STATE_BEGIN+2)
+`define DCR_RASTER_PBUF_STRIDE      (`DCR_RASTER_STATE_BEGIN+3)
+`define DCR_RASTER_DST_SIZE         (`DCR_RASTER_STATE_BEGIN+4)
+`define DCR_RASTER_STATE_END        (`DCR_RASTER_STATE_BEGIN+5)
 
 `define DCR_RASTER_STATE(addr)      ((addr) - `DCR_RASTER_STATE_BEGIN)
+`define DCR_RASTER_STATE_COUNT      (`DCR_RASTER_STATE_END-`DCR_RASTER_STATE_BEGIN)
 
 // Render Output Units ////////////////////////////////////////////////////////
+
+`define ROP_DIM_BITS                15
+
+`define ROP_DEPTH_BITS              24 
+`define ROP_DEPTH_MASK              ((1 << `ROP_DEPTH_BITS) - 1)
+
+`define ROP_STENCIL_BITS            8
+`define ROP_STENCIL_MASK            ((1 << `ROP_STENCIL_BITS) - 1)
 
 `define ROP_DEPTH_FUNC_ALWAYS       0
 `define ROP_DEPTH_FUNC_NEVER        1
@@ -226,12 +228,12 @@
 `define ROP_STENCIL_OP_DECR_WRAP    7
 `define ROP_STENCIL_OP_BITS         3
 
-`define ROP_BLEND_MODE_LOGICOP      0  // deprecated!
-`define ROP_BLEND_MODE_ADD          1
-`define ROP_BLEND_MODE_SUB          2
-`define ROP_BLEND_MODE_REV_SUB      3
-`define ROP_BLEND_MODE_MIN          4
-`define ROP_BLEND_MODE_MAX          5
+`define ROP_BLEND_MODE_ADD          0
+`define ROP_BLEND_MODE_SUB          1
+`define ROP_BLEND_MODE_REV_SUB      2
+`define ROP_BLEND_MODE_MIN          3
+`define ROP_BLEND_MODE_MAX          4
+`define ROP_BLEND_MODE_LOGICOP      5
 `define ROP_BLEND_MODE_BITS         3
 
 `define ROP_BLEND_FUNC_ZERO                   0 
@@ -251,10 +253,10 @@
 `define ROP_BLEND_FUNC_ALPHA_SAT              14
 `define ROP_BLEND_FUNC_BITS                   4
 
-`define ROP_LOGIC_OP_COPY           0
-`define ROP_LOGIC_OP_CLEAR          1
-`define ROP_LOGIC_OP_AND            2
-`define ROP_LOGIC_OP_AND_REVERSE    3
+`define ROP_LOGIC_OP_CLEAR          0
+`define ROP_LOGIC_OP_AND            1
+`define ROP_LOGIC_OP_AND_REVERSE    2
+`define ROP_LOGIC_OP_COPY           3
 `define ROP_LOGIC_OP_AND_INVERTED   4
 `define ROP_LOGIC_OP_NOOP           5
 `define ROP_LOGIC_OP_XOR            6
@@ -269,45 +271,28 @@
 `define ROP_LOGIC_OP_SET            15
 `define ROP_LOGIC_OP_BITS           4
 
-`define ROP_STATE_CBUF_ADDR         0
-`define ROP_STATE_CBUF_PITCH        1
-`define ROP_STATE_CBUF_MASK         2
-`define ROP_STATE_ZBUF_ADDR         3
-`define ROP_STATE_ZBUF_PITCH        4
-`define ROP_STATE_DEPTH_FUNC        5
-`define ROP_STATE_DEPTH_MASK        6
-`define ROP_STATE_STENCIL_FUNC      7
-`define ROP_STATE_STENCIL_ZPASS     8
-`define ROP_STATE_STENCIL_ZFAIL     9
-`define ROP_STATE_STENCIL_FAIL      10
-`define ROP_STATE_STENCIL_MASK      11
-`define ROP_STATE_STENCIL_REF       12
-`define ROP_STATE_BLEND_MODE        13
-`define ROP_STATE_BLEND_FUNC        14
-`define ROP_STATE_BLEND_CONST       15
-`define ROP_STATE_LOGIC_OP          16
-`define ROP_STATE_COUNT             17
-
 `define DCR_ROP_STATE_BEGIN         `DCR_RASTER_STATE_END
-`define DCR_ROP_CBUF_ADDR           (`DCR_ROP_STATE_BEGIN+`ROP_STATE_CBUF_ADDR)
-`define DCR_ROP_CBUF_PITCH          (`DCR_ROP_STATE_BEGIN+`ROP_STATE_CBUF_PITCH)
-`define DCR_ROP_CBUF_MASK           (`DCR_ROP_STATE_BEGIN+`ROP_STATE_CBUF_MASK)
-`define DCR_ROP_ZBUF_ADDR           (`DCR_ROP_STATE_BEGIN+`ROP_STATE_ZBUF_ADDR)
-`define DCR_ROP_ZBUF_PITCH          (`DCR_ROP_STATE_BEGIN+`ROP_STATE_ZBUF_PITCH)
-`define DCR_ROP_DEPTH_FUNC          (`DCR_ROP_STATE_BEGIN+`ROP_STATE_DEPTH_FUNC)
-`define DCR_ROP_DEPTH_MASK          (`DCR_ROP_STATE_BEGIN+`ROP_STATE_DEPTH_MASK)
-`define DCR_ROP_STENCIL_FUNC        (`DCR_ROP_STATE_BEGIN+`ROP_STATE_STENCIL_FUNC)
-`define DCR_ROP_STENCIL_ZPASS       (`DCR_ROP_STATE_BEGIN+`ROP_STATE_STENCIL_ZPASS)
-`define DCR_ROP_STENCIL_ZFAIL       (`DCR_ROP_STATE_BEGIN+`ROP_STATE_STENCIL_ZFAIL)
-`define DCR_ROP_STENCIL_FAIL        (`DCR_ROP_STATE_BEGIN+`ROP_STATE_STENCIL_FAIL)
-`define DCR_ROP_STENCIL_MASK        (`DCR_ROP_STATE_BEGIN+`ROP_STATE_STENCIL_MASK)
-`define DCR_ROP_STENCIL_REF         (`DCR_ROP_STATE_BEGIN+`ROP_STATE_STENCIL_REF)
-`define DCR_ROP_BLEND_MODE          (`DCR_ROP_STATE_BEGIN+`ROP_STATE_BLEND_MODE)
-`define DCR_ROP_BLEND_FUNC          (`DCR_ROP_STATE_BEGIN+`ROP_STATE_BLEND_FUNC)
-`define DCR_ROP_BLEND_CONST         (`DCR_ROP_STATE_BEGIN+`ROP_STATE_BLEND_CONST)
-`define DCR_ROP_LOGIC_OP            (`DCR_ROP_STATE_BEGIN+`ROP_STATE_LOGIC_OP)
-`define DCR_ROP_STATE_END           (`DCR_ROP_STATE_BEGIN+`ROP_STATE_COUNT)
+`define DCR_ROP_CBUF_ADDR           (`DCR_ROP_STATE_BEGIN+0)
+`define DCR_ROP_CBUF_PITCH          (`DCR_ROP_STATE_BEGIN+1)
+`define DCR_ROP_CBUF_MASK           (`DCR_ROP_STATE_BEGIN+2)
+`define DCR_ROP_ZBUF_ADDR           (`DCR_ROP_STATE_BEGIN+3)
+`define DCR_ROP_ZBUF_PITCH          (`DCR_ROP_STATE_BEGIN+4)
+`define DCR_ROP_DEPTH_FUNC          (`DCR_ROP_STATE_BEGIN+5)
+`define DCR_ROP_DEPTH_WRITEMASK     (`DCR_ROP_STATE_BEGIN+6)
+`define DCR_ROP_STENCIL_FUNC        (`DCR_ROP_STATE_BEGIN+7)
+`define DCR_ROP_STENCIL_ZPASS       (`DCR_ROP_STATE_BEGIN+8)
+`define DCR_ROP_STENCIL_ZFAIL       (`DCR_ROP_STATE_BEGIN+9)
+`define DCR_ROP_STENCIL_FAIL        (`DCR_ROP_STATE_BEGIN+10)
+`define DCR_ROP_STENCIL_REF         (`DCR_ROP_STATE_BEGIN+11)
+`define DCR_ROP_STENCIL_MASK        (`DCR_ROP_STATE_BEGIN+12)
+`define DCR_ROP_STENCIL_WRITEMASK   (`DCR_ROP_STATE_BEGIN+13)
+`define DCR_ROP_BLEND_MODE          (`DCR_ROP_STATE_BEGIN+14)
+`define DCR_ROP_BLEND_FUNC          (`DCR_ROP_STATE_BEGIN+15)
+`define DCR_ROP_BLEND_CONST         (`DCR_ROP_STATE_BEGIN+16)
+`define DCR_ROP_LOGIC_OP            (`DCR_ROP_STATE_BEGIN+17)
+`define DCR_ROP_STATE_END           (`DCR_ROP_STATE_BEGIN+18)
 
 `define DCR_ROP_STATE(addr)         ((addr) - `DCR_ROP_STATE_BEGIN)
+`define DCR_ROP_STATE_COUNT         (`DCR_ROP_STATE_END-`DCR_ROP_STATE_BEGIN)
 
 `endif

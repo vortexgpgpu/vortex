@@ -1,7 +1,7 @@
 `ifndef VX_RASTER_PERF_IF
 `define VX_RASTER_PERF_IF
 
-`include "VX_define.vh"
+`include "VX_raster_define.vh"
 
 interface VX_raster_perf_if ();
 

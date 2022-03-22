@@ -36,7 +36,6 @@ module VX_raster_unit #(
 );
     localparam NUM_SLICE_BITS = `LOG2UP(NUM_SLICES);
 
-    // TODO: remove
     raster_dcrs_t raster_dcrs;
 
     // TODO
@@ -85,7 +84,6 @@ module VX_raster_unit #(
         .ready(raster_req_if.ready),
         .out_valid(mem_valid)
     );
-
 
     // Complete the edge function values and extents
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] edge_func_val[2:0];

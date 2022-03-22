@@ -19,6 +19,7 @@ using vec2_fx2_t = cocogfx::TVector2<fixed24_t>;
 using vec3_fx2_t = cocogfx::TVector3<fixed24_t>;
 
 using rect_u_t = cocogfx::TRect<uint32_t>;
+
 struct primitive_t {
   vec3_fx_t edges[3];
   fixed16_t extents[3];
@@ -53,6 +54,8 @@ private:
   uint32_t pbuf_baseaddr_;
   uint32_t pbuf_stride_;
   uint32_t tbuf_addr_;
+  uint32_t dst_width_;
+  uint32_t dst_height_;
   uint32_t tile_x_;
   uint32_t tile_y_;
   uint32_t num_prims_;    
@@ -61,9 +64,11 @@ private:
   uint32_t pid_;
   RasterUnit::Stamp* stamps_head_;
   RasterUnit::Stamp *stamps_tail_;
+  uint32_t           stamps_size_;
   bool initialized_;  
 
   void stamps_push(RasterUnit::Stamp* stamp) {
+    assert(stamp);
     stamp->next_ = stamps_tail_;
     stamp->prev_ = nullptr;
     if (stamps_tail_)
@@ -71,14 +76,17 @@ private:
     else
       stamps_head_ = stamp;
     stamps_tail_ = stamp;
+    ++stamps_size_;
   }
 
   void stamps_pop() {
+    assert (stamps_size_);
     stamps_head_ = stamps_head_->prev_;
     if (stamps_head_)
       stamps_head_->next_ = nullptr;
     else
       stamps_tail_ = nullptr;
+    --stamps_size_;
   }
 
   void renderQuad(const primitive_t& primitive, 
@@ -97,11 +105,14 @@ private:
       for (uint32_t i = 0; i < 2; ++i) {
         // test if pixel overlaps triangle
         if (ee0 >= fxZero && ee1 >= fxZero && ee2 >= fxZero) {
-          uint32_t f = j * 2 + i;          
-          mask |= (1 << f);                
-          bcoords[f].x = ee0;
-          bcoords[f].y = ee1;
-          bcoords[f].z = ee2;          
+          // test if the pixel overlaps rendering region
+          if ((x+i) < dst_width_ && (y+j) < dst_height_) {
+            uint32_t f = j * 2 + i;          
+            mask |= (1 << f);                
+            bcoords[f].x = ee0;
+            bcoords[f].y = ee1;
+            bcoords[f].z = ee2;          
+          }
         }
         // update edge equation x components
         ee0 += primitive.edges[0].x;
@@ -116,8 +127,10 @@ private:
     
     if (mask) {
       // add stamp to queue
-      //printf("Quad: x=%d, y=%d, mask=%d, pid=%d\n", x, y, mask, pid_);
-      this->stamps_push(new RasterUnit::Stamp(x, y, mask, bcoords, pid_));
+      auto pos_x = x >> 1;
+      auto pos_y = y >> 1;
+      //printf("Quad: x=%d, y=%d, mask=%d, pid=%d\n", pos_x, pos_y, mask, pid_);
+      this->stamps_push(new RasterUnit::Stamp(pos_x, pos_y, mask, bcoords, pid_));
     }
   }
 
@@ -254,10 +267,12 @@ private:
 
   void initialize() {
     // get device configuration
-    num_tiles_     = dcrs_.at(RASTER_STATE_TILE_COUNT);
-    tbuf_baseaddr_ = dcrs_.at(RASTER_STATE_TBUF_ADDR);
-    pbuf_baseaddr_ = dcrs_.at(RASTER_STATE_PBUF_ADDR);
-    pbuf_stride_   = dcrs_.at(RASTER_STATE_PBUF_STRIDE);
+    num_tiles_     = dcrs_.read(DCR_RASTER_TILE_COUNT);
+    tbuf_baseaddr_ = dcrs_.read(DCR_RASTER_TBUF_ADDR);
+    pbuf_baseaddr_ = dcrs_.read(DCR_RASTER_PBUF_ADDR);
+    pbuf_stride_   = dcrs_.read(DCR_RASTER_PBUF_STRIDE);
+    dst_width_     = dcrs_.read(DCR_RASTER_DST_SIZE) & 0xffff;
+    dst_height_    = dcrs_.read(DCR_RASTER_DST_SIZE) >> 16;
 
     tbuf_addr_ = tbuf_baseaddr_;
     cur_tile_  = 0;
@@ -330,6 +345,8 @@ private:
       ++cur_tile_;
       num_prims_ = 0;
     }
+
+    //printf("*** generated %d stamps\n", stamps_size_);
   }
 
 public:
@@ -343,6 +360,7 @@ public:
     , block_logsize_(block_logsize)
     , stamps_head_(nullptr)
     , stamps_tail_(nullptr)
+    , stamps_size_(0)
     , initialized_(false) {
     assert(block_logsize >= 1);
     assert(tile_logsize >= block_logsize);

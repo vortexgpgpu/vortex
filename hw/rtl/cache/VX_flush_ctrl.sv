@@ -8,7 +8,7 @@ module VX_flush_ctrl #(
     // Number of banks
     parameter NUM_BANKS         = 1,
     // Number of associative ways
-    parameter NUM_WAYS          = 8
+    parameter NUM_WAYS          = 1
 ) (
     input wire  clk,
     input wire  reset,    

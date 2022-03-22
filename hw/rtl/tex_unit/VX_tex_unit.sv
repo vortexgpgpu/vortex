@@ -216,7 +216,7 @@ module VX_tex_unit #(
     always @(posedge clk) begin
         if (tex_req_if.valid && tex_req_if.ready) begin
             dpi_trace("%d: core%0d-tex-req: wid=%0d, PC=0x%0h, tmask=%b, stage=%0d, lod=0x%0h, u=", 
-                $time, CORE_ID, tex_req_if.wid, tex_req_if.PC, tex_req_if.tmask, tex_req_if.stage, tex_req_if.lod);
+                $time, CORE_ID, tex_req_if.wid, tex_req_if.PC, tex_req_if.tmask, tex_csrs.stage, tex_req_if.lod);
             `TRACE_ARRAY1D(tex_req_if.coords[0], `NUM_THREADS);
             dpi_trace(", v=");
             `TRACE_ARRAY1D(tex_req_if.coords[1], `NUM_THREADS);

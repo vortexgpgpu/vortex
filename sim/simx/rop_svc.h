@@ -10,7 +10,7 @@ namespace vortex {
 class Core;
 class RopUnit;
 
-class RopSrv : public SimObject<RopSrv> {
+class RopSvc : public SimObject<RopSvc> {
 public:
     struct PerfStats {
         uint64_t stalls;
@@ -23,12 +23,12 @@ public:
     SimPort<pipeline_trace_t*> Input;
     SimPort<pipeline_trace_t*> Output;
 
-    RopSrv(const SimContext& ctx, 
+    RopSvc(const SimContext& ctx, 
            const char* name,  
            Core* core,
            RopUnit::Ptr rop_unit);    
 
-    ~RopSrv();
+    ~RopSvc();
 
     void reset();
 
@@ -36,7 +36,7 @@ public:
     
     void csr_write(uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value);
 
-    void write(uint32_t frag, uint32_t x, uint32_t y , uint32_t mask, uint32_t color, uint32_t depth);
+    void write(uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth);
 
     void tick();
 
