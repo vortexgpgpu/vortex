@@ -8,6 +8,7 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_slice #(
+    parameter CLUSTER_ID              = 0,
     parameter RASTER_BLOCK_SIZE       = 8,
     parameter RASTER_TILE_SIZE        = 16,
     parameter RASTER_QUAD_OUTPUT_RATE = 4,
@@ -22,6 +23,7 @@ module VX_raster_slice #(
     input logic [`RASTER_TILE_DATA_BITS-1:0]              x_loc, y_loc,
     // Primitive information
     input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  edges[2:0][2:0],
+    input logic        [`RASTER_PRIMITIVE_DATA_BITS-1:0]  pid,
     input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  edge_func_val[2:0],
     input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  extents[2:0],
 
@@ -33,6 +35,8 @@ module VX_raster_slice #(
     output logic [`RASTER_TILE_DATA_BITS-1:0]             out_quad_x_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
         out_quad_y_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
     output logic [3:0]                                    out_quad_masks[RASTER_QUAD_OUTPUT_RATE-1:0],
+    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]        out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0],
+    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]        out_pid,
     output logic                                          valid[RASTER_QUAD_OUTPUT_RATE-1:0]
 );
 
@@ -42,6 +46,7 @@ module VX_raster_slice #(
     // Store data which will stay same for tile throughout operation
     logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  global_extents[2:0];
     logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  global_edges[2:0][2:0];
+    logic        [`RASTER_PRIMITIVE_DATA_BITS-1:0]  global_pid;
 
     // Store the tile relevant data as global regs as TE is combinatorial
     logic [`RASTER_TILE_DATA_BITS-1:0]              tile_x_loc, tile_y_loc;
@@ -56,7 +61,7 @@ module VX_raster_slice #(
     logic        fifo_full, fifo_empty, fifo_tile_valid;
     logic        stall;
     logic        be_ready; // to track the status of the block evaluator
-    logic       done;
+    logic        done;
 
     // Stall used to wait for block queue to complete run if another needs to be inserted
     assign stall = (valid_block == 1 && block_fifo_full == 1);
@@ -95,6 +100,7 @@ module VX_raster_slice #(
                 // Update globals
                 global_extents     <= extents;
                 global_edges       <= edges;
+                global_pid         <= pid;
             end
             // sub-tile rerouter used only 1 onces for the parent tile
             else if (level == 0 && fifo_empty == 1 && fifo_tile_valid == 0) begin
@@ -205,6 +211,7 @@ module VX_raster_slice #(
     // Block evaluator data
     logic [`RASTER_TILE_DATA_BITS-1:0]   be_in_x_loc, be_in_y_loc;
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] be_in_edge_func_val[2:0];
+    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] be_pid;
 
     localparam BLOCK_FIFO_DATA_WIDTH = 2*`RASTER_TILE_DATA_BITS + 3*`RASTER_PRIMITIVE_DATA_BITS;
 
@@ -255,10 +262,13 @@ module VX_raster_slice #(
         .x_loc(be_in_x_loc),
         .y_loc(be_in_y_loc),
         .edges(global_edges),
+        .pid(global_pid),
         .edge_func_val(be_in_edge_func_val),
         .out_quad_x_loc(out_quad_x_loc),
         .out_quad_y_loc(out_quad_y_loc),
         .out_quad_masks(out_quad_masks),
+        .out_quad_bcoords(out_quad_bcoords),
+        .out_pid(out_pid),
         .valid(valid), 
         .ready(be_ready),
         .pop(pop_quad),

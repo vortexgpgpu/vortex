@@ -23,13 +23,16 @@ module VX_raster_be #(
     input logic [`RASTER_TILE_DATA_BITS-1:0]                   x_loc, y_loc,
     // edge equation data for the 3 edges and ax+by+c
     input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]       edges[2:0][2:0],
+    input logic        [`RASTER_PRIMITIVE_DATA_BITS-1:0]       pid,
     // edge function computation value propagated
     input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]       edge_func_val[2:0],
 
     // Quad related output data
     output logic [`RASTER_TILE_DATA_BITS-1:0]     out_quad_x_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
     output logic [`RASTER_TILE_DATA_BITS-1:0]     out_quad_y_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
+    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] out_pid,
     output logic [3:0]                            out_quad_masks[RASTER_QUAD_OUTPUT_RATE-1:0],
+    output logic [3:0]                            out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0],
     output logic                                  valid[RASTER_QUAD_OUTPUT_RATE-1:0]
 );
 
@@ -46,6 +49,8 @@ module VX_raster_be #(
         quad_y_loc[RASTER_QUAD_SPACE-1:0];
     logic [3:0] temp_quad_masks[RASTER_QUAD_SPACE-1:0], 
         quad_masks[RASTER_QUAD_SPACE-1:0];
+    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_quad_bcoords[RASTER_QUAD_SPACE-1:0][2:0][3:0],
+        quad_bcoords[RASTER_QUAD_SPACE-1:0][2:0][3:0];
 
     // Wire to hold the edge function values for quad evaluation
     logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] local_edge_func_val[RASTER_QUAD_SPACE-1:0][2:0];
@@ -70,7 +75,8 @@ module VX_raster_be #(
             VX_raster_qe qe (
                 .edges(edges),
                 .edge_func_val(local_edge_func_val[i*RASTER_QUAD_NUM+j]),
-                .masks(temp_quad_masks[i*RASTER_QUAD_NUM+j])
+                .masks(temp_quad_masks[i*RASTER_QUAD_NUM+j]),
+                .bcoords(temp_quad_bcoords[i])
             );
         end
     end
@@ -80,9 +86,10 @@ module VX_raster_be #(
         // Save the temp data into quad registers to prevent overwrite by redundant data
         always @(posedge clk) begin
             if (input_valid == 1) begin // overwrite only the first time
-                quad_x_loc[i] <= temp_quad_x_loc[i];
-                quad_y_loc[i] <= temp_quad_y_loc[i];
-                quad_masks[i] <= temp_quad_masks[i];
+                quad_x_loc[i]   <= temp_quad_x_loc[i];
+                quad_y_loc[i]   <= temp_quad_y_loc[i];
+                quad_masks[i]   <= temp_quad_masks[i];
+                quad_bcoords[i] <= temp_quad_bcoords[i];
             end
         end
     end
@@ -109,7 +116,8 @@ module VX_raster_be #(
     assign push = (arbiter_index < (RASTER_QUAD_ARBITER_RANGE[ARBITER_BITS-1:0])) && !full;
     assign ready = (arbiter_index >= (RASTER_QUAD_ARBITER_RANGE[ARBITER_BITS-1:0]-1)) && !full;
 
-    localparam FIFO_DATA_WIDTH = 2*`RASTER_TILE_DATA_BITS + 4 + 1;
+    localparam FIFO_DATA_WIDTH = 2*`RASTER_TILE_DATA_BITS + 4 + `RASTER_PRIMITIVE_DATA_BITS*3*4 + 
+        `RASTER_PRIMITIVE_DATA_BITS + 1;
     // Generate the required number of FIFOs
     for (genvar i = 0; i < RASTER_QUAD_OUTPUT_RATE; ++i) begin
         // Quad queue
@@ -119,11 +127,14 @@ module VX_raster_be #(
                 quad_x_loc[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i],
                 quad_y_loc[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i],
                 quad_masks[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i],
+                quad_bcoords[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i],
+                pid,
                 (1'b1 && valid_data)
             } : {FIFO_DATA_WIDTH{1'bz}};
 
         logic fifo_valid;
-        assign {out_quad_x_loc[i], out_quad_y_loc[i], out_quad_masks[i], fifo_valid} = fifo_pop_data;
+        assign {out_quad_x_loc[i], out_quad_y_loc[i], out_quad_masks[i], out_quad_bcoords[i],
+            out_pid, fifo_valid} = fifo_pop_data;
         assign valid[i] = fifo_valid && !empty_flag[i];
         VX_fifo_queue #(
             .DATAW	    (FIFO_DATA_WIDTH),
