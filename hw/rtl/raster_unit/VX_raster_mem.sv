@@ -30,6 +30,7 @@ module VX_raster_mem #(
     input logic [RASTER_SLICE_NUM-1:0]                          raster_slice_ready,
     output logic [`RASTER_TILE_DATA_BITS-1:0]                   out_x_loc, out_y_loc,
     output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              out_edges[2:0][2:0],
+    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              out_pid,
     output logic [RASTER_SLICE_BITS-1:0]                        out_slice_index,
 
     // Status signals
@@ -54,8 +55,8 @@ module VX_raster_mem #(
     logic [`RASTER_TILE_DATA_BITS-1:0] temp_x_loc, temp_y_loc;
     logic [`RASTER_DCR_DATA_BITS-1:0] temp_prim_count, temp_tile_count;
 
-    // Holds x_loc, y_loc, edge_func_val, edges -> extents are calculated on the fly
-    localparam RASTER_RS_DATA_WIDTH = 2*`RASTER_TILE_DATA_BITS + 3*3*`RASTER_PRIMITIVE_DATA_BITS;
+    // Holds x_loc, y_loc, edge_func_val, edges, pid -> extents are calculated on the fly
+    localparam RASTER_RS_DATA_WIDTH = 2*`RASTER_TILE_DATA_BITS + 3*3*`RASTER_PRIMITIVE_DATA_BITS + RASTER_PRIMITIVE_DATA_BITS;
     localparam RASTER_RS_INDEX_BITS = `LOG2UP(RASTER_RS_SIZE);
 
     // Reservation station
@@ -77,6 +78,7 @@ module VX_raster_mem #(
     logic [TAG_MAX_BIT_INDEX:0]                  mem_rsp_tag; // size increased by 1 bit to account for the mem_tag_type
     logic [1:0]                                  mem_tag_type;
     logic [8:0]                                  mem_req_mask;
+    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]      pid;
 
     // Stall signal
     //  -> assert when any entry in the RS is empty
@@ -93,6 +95,7 @@ module VX_raster_mem #(
             temp_num_tiles <= 0;
             temp_prim_count <= 0;
             fetch_fsm_complete <= 1;
+            pid <= 0;
             for (int i = 0; i < RASTER_RS_SIZE; ++i) begin
                 raster_rs_valid[i] <= 0;
                 raster_rs_empty[i] <= 1;
@@ -146,6 +149,7 @@ module VX_raster_mem #(
                         mem_tag_type <= PRIM_DATA_FETCH;
                         mem_req_valid <= 1;
                         mem_req_mask <= PRIM_DATA_FETCH_MASK;
+                        pid <= mem_rsp_data[0];
                         for (int i = 0; i < 9; ++i) begin
                             mem_req_addr[i] <= temp_pbuf_addr + mem_rsp_data[0] * temp_pbuf_stride + 4*i;
                         end
@@ -155,7 +159,8 @@ module VX_raster_mem #(
                         raster_rs[raster_rs_empty_index] <= {temp_x_loc, temp_y_loc,
                             mem_rsp_data[0], mem_rsp_data[1], mem_rsp_data[2],
                             mem_rsp_data[3], mem_rsp_data[4], mem_rsp_data[5],
-                            mem_rsp_data[6], mem_rsp_data[7], mem_rsp_data[8]
+                            mem_rsp_data[6], mem_rsp_data[7], mem_rsp_data[8],
+                            pid
                         };
                         raster_rs_empty[raster_rs_empty_index] <= 0;
                         raster_rs_valid[raster_rs_empty_index] <= 1;
@@ -207,7 +212,8 @@ module VX_raster_mem #(
                 {out_x_loc, out_y_loc,
                 out_edges[0][0], out_edges[0][1], out_edges[0][2],
                 out_edges[1][0], out_edges[1][1], out_edges[1][2],
-                out_edges[2][0], out_edges[2][1], out_edges[2][2]} <= raster_rs[raster_rs_index];
+                out_edges[2][0], out_edges[2][1], out_edges[2][2],
+                out_pid} <= raster_rs[raster_rs_index];
                 raster_rs_valid[raster_rs_index] <= 0;
                 raster_rs_empty[raster_rs_index] <= 1;
                 out_valid <= 1;
