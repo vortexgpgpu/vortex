@@ -19,12 +19,12 @@ module VX_cache_mux #(
     input wire reset,
 
     // input requests    
-    input wire [NUM_REQS-1:0][LANES-1:0]                    req_valid_in, 
-    input wire [NUM_REQS-1:0][LANES-1:0]                    req_rw_in,   
-    input wire [NUM_REQS-1:0][LANES-1:0][DATA_SIZE-1:0]     req_byteen_in, 
-    input wire [NUM_REQS-1:0][LANES-1:0][ADDR_WIDTH-1:0]    req_addr_in, 
-    input wire [NUM_REQS-1:0][LANES-1:0][DATA_WIDTH-1:0]    req_data_in,    
-    input wire [NUM_REQS-1:0][LANES-1:0][TAG_IN_WIDTH-1:0]  req_tag_in,  
+    input wire  [NUM_REQS-1:0][LANES-1:0]                   req_valid_in, 
+    input wire  [NUM_REQS-1:0][LANES-1:0]                   req_rw_in,   
+    input wire  [NUM_REQS-1:0][LANES-1:0][DATA_SIZE-1:0]    req_byteen_in, 
+    input wire  [NUM_REQS-1:0][LANES-1:0][ADDR_WIDTH-1:0]   req_addr_in, 
+    input wire  [NUM_REQS-1:0][LANES-1:0][DATA_WIDTH-1:0]   req_data_in,    
+    input wire  [NUM_REQS-1:0][LANES-1:0][TAG_IN_WIDTH-1:0] req_tag_in,  
     output wire [NUM_REQS-1:0][LANES-1:0]                   req_ready_in,
 
     // output request
@@ -37,21 +37,19 @@ module VX_cache_mux #(
     input wire  [LANES-1:0]                                 req_ready_out,
 
     // input response
-    input wire                                              rsp_valid_in,    
-    input wire [LANES-1:0]                                  rsp_tmask_in,    
-    input wire [LANES-1:0][DATA_WIDTH-1:0]                  rsp_data_in,
-    input wire [TAG_OUT_WIDTH-1:0]                          rsp_tag_in,
-    output wire                                             rsp_ready_in,
+    input wire  [LANES-1:0]                                 rsp_valid_in,   
+    input wire  [LANES-1:0][DATA_WIDTH-1:0]                 rsp_data_in,
+    input wire  [LANES-1:0][TAG_OUT_WIDTH-1:0]              rsp_tag_in,
+    output wire [LANES-1:0]                                 rsp_ready_in,
 
     // output responses
-    output wire [NUM_REQS-1:0]                              rsp_valid_out,
-    output wire [NUM_REQS-1:0][LANES-1:0]                   rsp_tmask_out,
+    output wire [NUM_REQS-1:0][LANES-1:0]                   rsp_valid_out,
     output wire [NUM_REQS-1:0][LANES-1:0][DATA_WIDTH-1:0]   rsp_data_out,
     output wire [NUM_REQS-1:0][TAG_IN_WIDTH-1:0]            rsp_tag_out,
-    input wire  [NUM_REQS-1:0]                              rsp_ready_out    
+    input wire  [NUM_REQS-1:0][LANES-1:0]                   rsp_ready_out    
 );  
     localparam REQ_DATAW = TAG_OUT_WIDTH + ADDR_WIDTH + 1 + DATA_SIZE + DATA_WIDTH;
-    localparam RSP_DATAW = LANES * (1 + DATA_WIDTH) + TAG_IN_WIDTH;
+    localparam RSP_DATAW = LANES * (TAG_IN_WIDTH + DATA_WIDTH);
 
     if (NUM_REQS > 1) begin
 
@@ -99,24 +97,31 @@ module VX_cache_mux #(
 
         ///////////////////////////////////////////////////////////////////////
 
-        wire [NUM_REQS-1:0][RSP_DATAW-1:0] rsp_data_out_merged;
+        wire [LANES-1:0][RSP_DATAW-1:0] rsp_data_in_merged;
+        wire [LANES-1:0][NUM_REQS-1:0][RSP_DATAW-1:0] rsp_data_out_merged;
 
-        wire [LOG_NUM_REQS-1:0] rsp_sel = rsp_tag_in[TAG_SEL_IDX +: LOG_NUM_REQS];
+        wire [LANES-1:0][LOG_NUM_REQS-1:0] rsp_sel;
 
-        wire [TAG_IN_WIDTH-1:0] rsp_tag_in_w;
+        for (genvar i = 0; i < LANES; ++i) begin
 
-        VX_bits_remove #( 
-            .N   (TAG_OUT_WIDTH),
-            .S   (LOG_NUM_REQS),
-            .POS (TAG_SEL_IDX)
-        ) bits_remove (
-            .data_in  (rsp_tag_in),
-            .data_out (rsp_tag_in_w)
-        );
+            wire [TAG_IN_WIDTH-1:0] rsp_tag_in_w;
+
+            VX_bits_remove #( 
+                .N   (TAG_OUT_WIDTH),
+                .S   (LOG_NUM_REQS),
+                .POS (TAG_SEL_IDX)
+            ) bits_remove (
+                .data_in  (rsp_tag_in[i]),
+                .data_out (rsp_tag_in_w)
+            );            
+
+            assign rsp_sel[i]= rsp_tag_in[i][TAG_SEL_IDX +: LOG_NUM_REQS];
+            assign rsp_data_in_merged[i] = {rsp_tag_in_w, rsp_data_in[i]};
+        end
 
         VX_stream_demux #(
             .NUM_REQS (NUM_REQS),
-            .LANES    (1),
+            .LANES    (LANES),
             .DATAW    (RSP_DATAW),
             .BUFFERED (BUFFERED_RSP)
         ) rsp_demux (
@@ -124,7 +129,7 @@ module VX_cache_mux #(
             .reset     (reset),
             .sel_in    (rsp_sel),
             .valid_in  (rsp_valid_in),
-            .data_in   ({rsp_tmask_in, rsp_tag_in_w, rsp_data_in}),
+            .data_in   (rsp_data_in_merged),
             .ready_in  (rsp_ready_in),
             .valid_out (rsp_valid_out),
             .data_out  (rsp_data_out_merged),
@@ -132,7 +137,9 @@ module VX_cache_mux #(
         );
         
         for (genvar i = 0; i < NUM_REQS; i++) begin
-            assign {rsp_tmask_out[i], rsp_tag_out[i], rsp_data_out[i]} = rsp_data_out_merged[i];
+            for (genvar j = 0; j < LANES; ++j) begin
+                assign {rsp_tag_out[i][j], rsp_data_out[i][j]} = rsp_data_out_merged[i][j];
+            end
         end
 
     end else begin
@@ -149,7 +156,6 @@ module VX_cache_mux #(
         assign req_ready_in   = req_ready_out;
 
         assign rsp_valid_out  = rsp_valid_in;
-        assign rsp_tmask_out  = rsp_tmask_in;
         assign rsp_tag_out    = rsp_tag_in;
         assign rsp_data_out   = rsp_data_in;
         assign rsp_ready_in   = rsp_ready_out;

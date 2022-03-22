@@ -238,6 +238,7 @@ module VX_nc_bypass #(
     end
 
     wire [CORE_REQ_TIDW-1:0] rsp_tid = mem_rsp_tag_in[(CORE_TAG_IN_WIDTH + D) +: CORE_REQ_TIDW];
+    
     reg [NUM_REQS-1:0] rsp_nc_valid_r;
     always @(*) begin
         rsp_nc_valid_r = 0;
@@ -277,7 +278,6 @@ module VX_nc_bypass #(
         .data_out (mem_rsp_tag_out)
     );
 
-    wire [CORE_REQ_TIDW-1:0] rsp_tid = mem_rsp_tag_in[(CORE_TAG_IN_WIDTH + D) +: CORE_REQ_TIDW];
     assign mem_rsp_ready_in = is_mem_rsp_nc ? (~core_rsp_valid_in[rsp_tid] && core_rsp_ready_out[rsp_tid]) : mem_rsp_ready_out;
 
 endmodule

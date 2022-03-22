@@ -106,7 +106,7 @@ module Vortex (
         `START_RELAY (cluster_reset);
 
         VX_cluster #(
-            .CLUSTER_ID(i)
+            .CLUSTER_ID (i)
         ) cluster (
             `SCOPE_BIND_Vortex_cluster(i)
 

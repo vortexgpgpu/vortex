@@ -364,6 +364,7 @@
 
 // Word size in bytes
 `define TCACHE_WORD_SIZE        4
+`define TCACHE_ADDR_WIDTH       (32-`CLOG2(`TCACHE_WORD_SIZE))
 
 // Block size in bytes
 `define TCACHE_LINE_SIZE        `L1_CACHE_LINE_SIZE
@@ -382,10 +383,11 @@
 
 ////////////////////////// Rcache Configurable Knobs //////////////////////////
 
-`define RCACHE_ID               $sformatf("cluster%0d-rcache", CLUSTER_ID)
+`define RCACHE_ID               $sformatf("cluster%0d-rcache", CACHE_ID)
 
 // Word size in bytes
 `define RCACHE_WORD_SIZE        4
+`define RCACHE_ADDR_WIDTH       (32-`CLOG2(`RCACHE_WORD_SIZE))
 
 // Block size in bytes
 `define RCACHE_LINE_SIZE        `L2_CACHE_LINE_SIZE
@@ -399,15 +401,22 @@
 // Input request size
 `define RCACHE_NUM_REQS         1
 
+// Memory request data bits
+`define RCACHE_MEM_DATA_WIDTH   (`RCACHE_LINE_SIZE * 8)
+
+// Memory request address bits
+`define RCACHE_MEM_ADDR_WIDTH   (32 - `CLOG2(`RCACHE_LINE_SIZE))
+
 // Memory request tag bits
 `define RCACHE_MEM_TAG_WIDTH    (`CLOG2(`RCACHE_NUM_BANKS) + `CLOG2(`RCACHE_MSHR_SIZE))
 
 ////////////////////////// Ocache Configurable Knobs //////////////////////////
 
-`define OCACHE_ID               $sformatf("cluster%0d-ocache", CLUSTER_ID)
+`define OCACHE_ID               $sformatf("cluster%0d-ocache", CACHE_ID)
 
 // Word size in bytes
 `define OCACHE_WORD_SIZE        4
+`define OCACHE_ADDR_WIDTH       (32-`CLOG2(`OCACHE_WORD_SIZE))
 
 // Block size in bytes
 `define OCACHE_LINE_SIZE        `L2_CACHE_LINE_SIZE
@@ -420,6 +429,12 @@
 
 // Input request size
 `define OCACHE_NUM_REQS         `NUM_THREADS
+
+// Memory request data bits
+`define OCACHE_MEM_DATA_WIDTH   (`OCACHE_LINE_SIZE * 8)
+
+// Memory request address bits
+`define OCACHE_MEM_ADDR_WIDTH   (32 - `CLOG2(`OCACHE_LINE_SIZE))
 
 // Memory request tag bits
 `define OCACHE_MEM_TAG_WIDTH    (`CLOG2(`OCACHE_NUM_BANKS) + `CLOG2(`OCACHE_MSHR_SIZE))
@@ -446,6 +461,12 @@
     assign dst.tag    = src.tag;    \
     assign src.ready  = dst.ready
 
+`define ASSIGN_VX_MEM_RSP_IF(dst, src) \
+    assign dst.valid  = src.valid;  \
+    assign dst.data   = src.data;   \
+    assign dst.tag    = src.tag;    \
+    assign src.ready  = dst.ready
+
 `define ASSIGN_VX_MEM_REQ_IF_XTAG(dst, src) \
     assign dst.valid  = src.valid;  \
     assign dst.rw     = src.rw;     \
@@ -454,15 +475,24 @@
     assign dst.data   = src.data;   \
     assign src.ready  = dst.ready
 
-`define ASSIGN_VX_MEM_RSP_IF(dst, src) \
+`define ASSIGN_VX_MEM_RSP_IF_XTAG(dst, src) \
     assign dst.valid  = src.valid;  \
+    assign dst.data   = src.data;   \
+    assign src.ready  = dst.ready
+
+`define ASSIGN_VX_CACHE_REQ_IF(dst, src) \
+    assign dst.valid  = src.valid;  \
+    assign dst.rw     = src.rw;     \
+    assign dst.byteen = src.byteen; \
+    assign dst.addr   = src.addr;   \
     assign dst.data   = src.data;   \
     assign dst.tag    = src.tag;    \
     assign src.ready  = dst.ready
 
-`define ASSIGN_VX_MEM_RSP_IF_XTAG(dst, src) \
+`define ASSIGN_VX_CACHE_RSP_IF(dst, src) \
     assign dst.valid  = src.valid;  \
     assign dst.data   = src.data;   \
+    assign dst.tag    = src.tag;    \
     assign src.ready  = dst.ready
 
 `define CACHE_REQ_TO_MEM(dst, src, i) \
@@ -473,6 +503,12 @@
     assign dst[i].data = src.data[i]; \
     assign dst[i].tag = src.tag[i]; \
     assign src.ready[i] = dst[i].ready
+
+`define CACHE_RSP_FROM_MEM(dst, src, i) \
+    assign dst.valid[i] = src[i].valid; \
+    assign dst.data[i] = src[i].data; \
+    assign dst.tag[i] = src[i].tag; \
+    assign src[i].ready = dst.ready[i]
 
 ///////////////////////////////////////////////////////////////////////////////
 

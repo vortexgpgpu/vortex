@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_bank #(
-    parameter CACHE_ID                      = "cache",
+    parameter CACHE_ID                      = "",
     parameter BANK_ID                       = 0,
 
     // Number of Word requests per cycle
@@ -237,8 +237,8 @@ module VX_bank #(
     wire [NUM_WAYS-1:0] select_way_st1;
 
     VX_tag_access #(
-        .BANK_ID          (BANK_ID),
         .CACHE_ID         (CACHE_ID),
+        .BANK_ID          (BANK_ID),        
         .CACHE_SIZE       (CACHE_SIZE),
         .CACHE_LINE_SIZE  (CACHE_LINE_SIZE),
         .NUM_BANKS        (NUM_BANKS),
@@ -293,8 +293,8 @@ module VX_bank #(
     `UNUSED_VAR (wdata_st1)
     
     VX_data_access #(
-        .BANK_ID        (BANK_ID),
         .CACHE_ID       (CACHE_ID),
+        .BANK_ID        (BANK_ID),        
         .CACHE_SIZE     (CACHE_SIZE),
         .CACHE_LINE_SIZE(CACHE_LINE_SIZE),
         .NUM_BANKS      (NUM_BANKS),
@@ -342,8 +342,8 @@ module VX_bank #(
     );
 
     VX_miss_resrv #(
-        .BANK_ID            (BANK_ID),
         .CACHE_ID           (CACHE_ID),
+        .BANK_ID            (BANK_ID),        
         .CACHE_LINE_SIZE    (CACHE_LINE_SIZE),
         .NUM_BANKS          (NUM_BANKS),
         .NUM_PORTS          (NUM_PORTS),

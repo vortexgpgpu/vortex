@@ -14,8 +14,8 @@ module VX_gpu_unit #(
 `ifdef EXT_TEX_ENABLE    
     VX_tex_dcr_if.master    tex_dcr_if,
     VX_gpu_csr_if.slave     tex_csr_if,
-    VX_cache_req_if.master tcache_req_if,
-    VX_cache_rsp_if.slave  tcache_rsp_if,
+    VX_cache_req_if.master  tcache_req_if,
+    VX_cache_rsp_if.slave   tcache_rsp_if,
 `ifdef PERF_ENABLE
     VX_tex_perf_if.slave    tex_perf_if,
 `endif

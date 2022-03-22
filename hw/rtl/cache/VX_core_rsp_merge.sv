@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_core_rsp_merge #(
-    parameter CACHE_ID          = "cache",
+    parameter CACHE_ID          = "",
 
     // Number of Word requests per cycle
     parameter NUM_REQS          = 1, 

@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_core_req_bank_sel #(  
-    parameter CACHE_ID          = "cache",
+    parameter CACHE_ID          = "",
 
     // Size of line inside a bank in bytes
     parameter CACHE_LINE_SIZE   = 64, 
@@ -33,7 +33,7 @@ module VX_core_req_bank_sel #(
     input wire [NUM_REQS-1:0][`WORD_ADDR_WIDTH-1:0] core_req_addr,
     input wire [NUM_REQS-1:0][WORD_SIZE-1:0]        core_req_byteen,
     input wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]      core_req_data,
-    input wire [NUM_REQS-1:0][CORE_TAG_WIDTH-1:0]        core_req_tag,
+    input wire [NUM_REQS-1:0][CORE_TAG_WIDTH-1:0]   core_req_tag,
     output wire [NUM_REQS-1:0]                      core_req_ready,
 
     output wire [NUM_BANKS-1:0]                     per_bank_core_req_valid,

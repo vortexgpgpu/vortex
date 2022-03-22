@@ -44,11 +44,13 @@ module VX_core #(
     ) dcache_rsp_if();
     
     VX_cache_req_if #(
+        .NUM_REQS  (`ICACHE_NUM_REQS), 
         .WORD_SIZE (`ICACHE_WORD_SIZE), 
         .TAG_WIDTH (`ICACHE_TAG_WIDTH)
     ) icache_req_if();
 
     VX_cache_rsp_if #(
+        .NUM_REQS  (`ICACHE_NUM_REQS), 
         .WORD_SIZE (`ICACHE_WORD_SIZE), 
         .TAG_WIDTH (`ICACHE_TAG_WIDTH)
     ) icache_rsp_if();

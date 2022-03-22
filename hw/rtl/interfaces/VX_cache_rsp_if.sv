@@ -9,15 +9,13 @@ interface VX_cache_rsp_if #(
     parameter TAG_WIDTH = 1
 ) ();
 
-    wire                                    valid;
-    wire [NUM_REQS-1:0]                     tmask;
-    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]    data;
-    wire [TAG_WIDTH-1:0]                    tag;
-    wire                                    ready;
+    wire [NUM_REQS-1:0]                 valid;
+    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0] data;
+    wire [NUM_REQS-1:0][TAG_WIDTH-1:0]  tag;
+    wire [NUM_REQS-1:0]                 ready;
 
     modport master (
         output valid,
-        output tmask,
         output data,        
         output tag,
         input  ready
@@ -25,7 +23,6 @@ interface VX_cache_rsp_if #(
 
     modport slave (
         input  valid,
-        input  tmask,
         input  data,
         input  tag,
         output ready

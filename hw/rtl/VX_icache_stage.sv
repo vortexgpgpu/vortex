@@ -77,9 +77,7 @@ module VX_icache_stage #(
         .enable   (!stall_out),
         .data_in  ({icache_rsp_if.valid, rsp_wid,           rsp_tmask,           rsp_PC,           icache_rsp_if.data, rsp_uuid}),
         .data_out ({ifetch_rsp_if.valid, ifetch_rsp_if.wid, ifetch_rsp_if.tmask, ifetch_rsp_if.PC, ifetch_rsp_if.data, ifetch_rsp_if.uuid})
-    );     
-
-    `UNUSED_VAR (icache_rsp_if.tmask)
+    );
     
     // Can accept new response?
     assign icache_rsp_if.ready = ~stall_out;

@@ -98,8 +98,8 @@ module VX_execute #(
         `SCOPE_BIND_VX_execute_lsu_unit
         .clk            (clk),
         .reset          (lsu_reset),
-        .dcache_req_if  (dcache_req_if),
-        .dcache_rsp_if  (dcache_rsp_if),
+        .cache_req_if   (dcache_req_if),
+        .cache_rsp_if   (dcache_rsp_if),
         .lsu_req_if     (lsu_req_if),
         .ld_commit_if   (ld_commit_if),
         .st_commit_if   (st_commit_if)
