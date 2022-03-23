@@ -312,16 +312,24 @@ module VX_mem_unit # (
     ) dcache_tex_mux_rsp_if[2]();
 
     `ASSIGN_VX_CACHE_REQ_IF_XTAG (dcache_tex_mux_req_if[0], dcache_smem_req_if);
-    assign dcache_tex_mux_req_if[0].tag = `DCACHE_TEX_TAG_WIDTH'(dcache_smem_req_if.tag);
+    for (genvar i = 0; i < `DCACHE_NUM_REQS; ++i) begin
+        assign dcache_tex_mux_req_if[0].tag[i] = `DCACHE_TEX_TAG_WIDTH'(dcache_smem_req_if.tag[i]);
+    end
 
     `ASSIGN_VX_CACHE_RSP_IF_XTAG (dcache_smem_rsp_if, dcache_tex_mux_rsp_if[0]);
-    assign dcache_smem_rsp_if.tag = `DCACHE_SMEM_TAG_WIDTH'(dcache_tex_mux_rsp_if[0].tag);
+    for (genvar i = 0; i < `DCACHE_NUM_REQS; ++i) begin
+        assign dcache_smem_rsp_if.tag[i] = `DCACHE_SMEM_TAG_WIDTH'(dcache_tex_mux_rsp_if[0].tag[i]);
+    end
 
     `ASSIGN_VX_CACHE_REQ_IF_XTAG (dcache_tex_mux_req_if[1], tcache_req_if);
-    assign dcache_tex_mux_req_if[1].tag = `DCACHE_TEX_TAG_WIDTH'(tcache_req_if.tag);
+    for (genvar i = 0; i < `DCACHE_NUM_REQS; ++i) begin
+        assign dcache_tex_mux_req_if[1].tag[i] = `DCACHE_TEX_TAG_WIDTH'(tcache_req_if.tag[i]);
+    end
 
     `ASSIGN_VX_CACHE_RSP_IF_XTAG (tcache_rsp_if, dcache_tex_mux_rsp_if[1]);
-    assign tcache_rsp_if.tag = `TCACHE_TAG_WIDTH'(dcache_tex_mux_rsp_if[1].tag);
+    for (genvar i = 0; i < `DCACHE_NUM_REQS; ++i) begin
+        assign tcache_rsp_if.tag[i] = `TCACHE_TAG_WIDTH'(dcache_tex_mux_rsp_if[1].tag[i]);
+    end
 
     VX_cache_mux #(
         .NUM_REQS      (2),
