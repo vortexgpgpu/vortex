@@ -129,7 +129,7 @@ module VX_cache_demux #(
         );
 
         for (genvar i = 0; i < LANES; ++i) begin
-            assign {rsp_in_if[i].tag, rsp_in_if[i].data} = rsp_data_out[i];
+            assign {rsp_in_if.tag[i], rsp_in_if.data[i]} = rsp_data_in[i];
         end
 
     end else begin
@@ -148,7 +148,7 @@ module VX_cache_demux #(
         assign rsp_in_if.valid  = rsp_out_if.valid;
         assign rsp_in_if.tag    = rsp_out_if.tag;
         assign rsp_in_if.data   = rsp_out_if.data;
-        assign rsp_out_if.ready   = rsp_in_if.ready;
+        assign rsp_out_if.ready = rsp_in_if.ready;
 
     end
 
