@@ -10,7 +10,7 @@ module VX_rop_dcr (
     input  wire [`VX_DCR_DATA_WIDTH-1:0] dcr_wr_data,
 
     // Output
-    VX_rop_dcr_if.slave rop_dcr_if
+    VX_rop_dcr_if.master    rop_dcr_if
 );
 
     rop_dcrs_t dcrs;

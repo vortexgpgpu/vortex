@@ -10,7 +10,7 @@ module VX_core #(
     input  wire             reset,
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_dcr_if.master    tex_dcr_if,
+    VX_tex_dcr_if.slave     tex_dcr_if,
 `endif
 `ifdef EXT_RASTER_ENABLE        
     VX_raster_req_if        raster_req_if,

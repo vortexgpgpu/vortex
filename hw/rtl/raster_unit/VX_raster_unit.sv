@@ -34,9 +34,12 @@ module VX_raster_unit #(
     VX_cache_rsp_if.slave  cache_rsp_if,
 
     // Inputs
-    VX_raster_dcr_if.master raster_dcr_if,
+    VX_raster_dcr_if.slave  raster_dcr_if,
     VX_raster_req_if.master raster_req_if
 );
+    // TODO: remove
+    `UNUSED_VAR (clk)
+    `UNUSED_VAR (reset)
 
     // TODO: remove
     raster_dcrs_t raster_dcrs;
@@ -73,22 +76,6 @@ module VX_raster_unit #(
     assign cache_rsp_if.ready = 0;
 
     /*localparam NUM_SLICE_BITS = `LOG2UP(RASTER_SLICE_BITS);
-
-    raster_dcrs_t raster_dcrs;
-
-    // TODO
-    VX_raster_dcr raster_dcr (
-        .clk(clk),
-        .reset(reset),
-
-        .dcr_wr_valid(raster_dcr_if.valid),
-        .dcr_wr_addr(raster_dcr_if.addr),
-        .dcr_wr_data(raster_dcr_if.data),
-
-        .raster_dcr_if(raster_dcr_if)
-    );
-
-    assign raster_dcrs = raster_dcr_if.data;
 
     // Output from the request
     logic [`RASTER_TILE_DATA_BITS-1:0]                   x_loc, y_loc;
