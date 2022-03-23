@@ -72,7 +72,6 @@ module VX_rop_mem #(
     assign write_mask = { {NUM_LANES{~dcrs.depth_writemask}}, {NUM_LANES{dcrs.depth_writemask}} };
     assign req_mask = {2{req_tmask}} & write_mask;
     assign rsp_tmask = dcrs.depth_writemask ? rsp_mask[0 +: NUM_LANES] : rsp_mask[NUM_LANES +: NUM_LANES];
-    assign cache_rsp_ready = rsp_ready;
 
     for (genvar i = 0;  i < NUM_LANES; ++i) begin
         assign req_addr[i]    = dcrs.zbuf_addr + (req_pos_y[i] * dcrs.zbuf_pitch) + (req_pos_x[i] * 4);
