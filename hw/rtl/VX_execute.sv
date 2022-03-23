@@ -32,7 +32,7 @@ module VX_execute #(
 `ifdef EXT_RASTER_ENABLE        
     VX_raster_req_if        raster_req_if,
 `endif
-`ifdef EXT_RASTER_ENABLE        
+`ifdef EXT_ROP_ENABLE        
     VX_rop_req_if           rop_req_if,
 `endif
     
@@ -133,7 +133,7 @@ module VX_execute #(
     `ifdef EXT_RASTER_ENABLE        
         .raster_csr_if  (raster_csr_if),
     `endif
-    `ifdef EXT_RASTER_ENABLE        
+    `ifdef EXT_ROP_ENABLE        
         .rop_csr_if     (rop_csr_if),
     `endif
         .cmt_to_csr_if  (cmt_to_csr_if),
@@ -178,7 +178,7 @@ module VX_execute #(
         .raster_csr_if  (raster_csr_if),
         .raster_req_if  (raster_req_if),
     `endif
-    `ifdef EXT_RASTER_ENABLE        
+    `ifdef EXT_ROP_ENABLE        
         .rop_csr_if     (rop_csr_if),
         .rop_req_if     (rop_req_if),
     `endif

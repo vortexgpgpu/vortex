@@ -24,7 +24,7 @@ module VX_gpu_unit #(
     VX_gpu_csr_if.slave     raster_csr_if,
     VX_raster_req_if        raster_req_if,
 `endif
-`ifdef EXT_RASTER_ENABLE        
+`ifdef EXT_ROP_ENABLE        
     VX_gpu_csr_if.slave     rop_csr_if,
     VX_rop_req_if           rop_req_if,
 `endif
