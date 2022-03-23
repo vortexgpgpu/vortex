@@ -36,7 +36,7 @@ module VX_tex_mem #(
     wire                          cache_rsp_valid;
     wire [`NUM_THREADS-1:0]       cache_rsp_tmask;
     wire [`NUM_THREADS-1:0][31:0] cache_rsp_data;
-    wire [`DCACHE_TAG_WIDTH-1:0]  cache_rsp_tag;
+    wire [`TCACHE_TAG_WIDTH-1:0]  cache_rsp_tag;
     wire                          cache_rsp_ready;
 
     // full address calculation
@@ -140,7 +140,7 @@ module VX_tex_mem #(
     wire is_last_texel = (req_texel_idx == (q_req_filter ? 3 : 0));
     assign last_texel_sent = req_texel_valid && sent_all_ready && is_last_texel;
 
-    // DCache Request
+    // Cache Request
 
     reg [NUM_REQS-1:0] texel_sent_mask;
 
@@ -172,13 +172,13 @@ module VX_tex_mem #(
     assign cache_req_if.data   = 'x;
     assign cache_req_if.tag    = {NUM_REQS{q_req_uuid, req_texel_idx}};
 
-    // Dcache Response
+    // Cache Response
 
     VX_cache_rsp_sel #(
-        .NUM_REQS    (`TCACHE_NUM_REQS),
-        .DATA_WIDTH  (`TCACHE_WORD_SIZE*8),
-        .TAG_WIDTH   (`TCACHE_TAG_WIDTH),
-        .TAG_ID_BITS (`TCACHE_TAG_ID_BITS)
+        .NUM_REQS     (`TCACHE_NUM_REQS),
+        .DATA_WIDTH   (`TCACHE_WORD_SIZE*8),
+        .TAG_WIDTH    (`TCACHE_TAG_WIDTH),
+        .TAG_SEL_BITS (`TCACHE_TAG_SEL_BITS)
     ) cache_rsp_sel (
         .clk            (clk),
         .reset          (reset),

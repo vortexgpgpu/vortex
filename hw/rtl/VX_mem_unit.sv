@@ -1,14 +1,14 @@
 `include "VX_define.vh"
 
-`define DCACHE_SMEM_TAG_WIDTH   `DCACHE_TAG_WIDTH-`SM_ENABLED
-`define DCACHE_SMEM_TAG_ID_BITS `DCACHE_TAG_ID_BITS-`SM_ENABLED
+`define DCACHE_SMEM_TAG_SEL_BITS    (`DCACHE_TAG_SEL_BITS-`SM_ENABLED)
+`define DCACHE_SMEM_TAG_WIDTH       (`UUID_BITS + `DCACHE_SMEM_TAG_SEL_BITS)
 
 `ifdef EXT_TEX_ENABLE
-`define DCACHE_TEX_TAG_ID_BITS  `MAX(`DCACHE_SMEM_TAG_ID_BITS, `TCACHE_TAG_ID_BITS)
-`define DCACHE_TEX_TAG_WIDTH    (`UUID_BITS + `DCACHE_TEX_TAG_ID_BITS)  
+`define DCACHE_TEX_TAG_SEL_BITS     `MAX(`DCACHE_SMEM_TAG_SEL_BITS, `TCACHE_TAG_SEL_BITS)
+`define DCACHE_TEX_TAG_WIDTH        (`UUID_BITS + `DCACHE_TEX_TAG_SEL_BITS)  
 `else 
-`define DCACHE_TEX_TAG_WIDTH    `DCACHE_SMEM_TAG_WIDTH
-`define DCACHE_TEX_TAG_ID_BITS  `DCACHE_SMEM_TAG_ID_BITS
+`define DCACHE_TEX_TAG_SEL_BITS     `DCACHE_SMEM_TAG_SEL_BITS
+`define DCACHE_TEX_TAG_WIDTH        `DCACHE_SMEM_TAG_WIDTH
 `endif
 
 module VX_mem_unit # (
@@ -90,6 +90,7 @@ module VX_mem_unit # (
         .MRSQ_SIZE          (`ICACHE_MRSQ_SIZE),
         .MREQ_SIZE          (`ICACHE_MREQ_SIZE),
         .WRITE_ENABLE       (0),
+        .REQ_DBG_IDW        (`UUID_BITS),
         .CORE_TAG_WIDTH     (`ICACHE_TAG_WIDTH),
         .MEM_TAG_WIDTH      (`ICACHE_MEM_TAG_WIDTH)
     ) icache (
@@ -177,6 +178,7 @@ module VX_mem_unit # (
         .MRSQ_SIZE          (`DCACHE_MRSQ_SIZE),
         .MREQ_SIZE          (`DCACHE_MREQ_SIZE),
         .WRITE_ENABLE       (1),
+        .REQ_DBG_IDW        (`UUID_BITS),
         .CORE_TAG_WIDTH     (`DCACHE_TEX_TAG_WIDTH+`EXT_TEX_ENABLED),
         .MEM_TAG_WIDTH      (`DCACHE_MEM_TAG_WIDTH),
         .NC_ENABLE          (1)
@@ -267,6 +269,7 @@ module VX_mem_unit # (
         .NUM_REQS           (`SMEM_NUM_REQS),
         .CREQ_SIZE          (`SMEM_CREQ_SIZE),
         .CRSQ_SIZE          (`SMEM_CRSQ_SIZE),
+        .REQ_DBG_IDW        (`UUID_BITS), 
         .TAG_WIDTH          (`DCACHE_SMEM_TAG_WIDTH),
         .BANK_ADDR_OFFSET   (`SMEM_BANK_ADDR_OFFSET)
     ) smem (            
@@ -322,21 +325,22 @@ module VX_mem_unit # (
     always @(*) begin
         for (integer i = 0; i < `DCACHE_NUM_REQS; ++i) begin
             dcache_smem_req_tag[i] = 0;        
-            dcache_smem_req_tag[i][0 +: `DCACHE_SMEM_TAG_ID_BITS] = dcache_smem_req_if.tag[i][0 +: `DCACHE_SMEM_TAG_ID_BITS];
-            dcache_smem_req_tag[i][`DCACHE_TEX_TAG_ID_BITS +: `UUID_BITS] = dcache_smem_req_if.tag[i][`DCACHE_SMEM_TAG_ID_BITS +: `UUID_BITS];        
+            dcache_smem_req_tag[i][0 +: `DCACHE_SMEM_TAG_SEL_BITS] = dcache_smem_req_if.tag[i][0 +: `DCACHE_SMEM_TAG_SEL_BITS];
+            dcache_smem_req_tag[i][`DCACHE_TEX_TAG_SEL_BITS +: `UUID_BITS] = dcache_smem_req_if.tag[i][`DCACHE_SMEM_TAG_SEL_BITS +: `UUID_BITS];        
 
             tcache_req_tag[i] = 0;
-            tcache_req_tag[i][0 +: `TCACHE_TAG_ID_BITS] = tcache_req_if.tag[i][0 +: `TCACHE_TAG_ID_BITS];
-            tcache_req_tag[i][`DCACHE_TEX_TAG_ID_BITS +: `UUID_BITS] = tcache_req_if.tag[i][`TCACHE_TAG_ID_BITS +: `UUID_BITS];        
+            tcache_req_tag[i][0 +: `TCACHE_TAG_SEL_BITS] = tcache_req_if.tag[i][0 +: `TCACHE_TAG_SEL_BITS];
+            tcache_req_tag[i][`DCACHE_TEX_TAG_SEL_BITS +: `UUID_BITS] = tcache_req_if.tag[i][`TCACHE_TAG_SEL_BITS +: `UUID_BITS];        
         end
     end
 
-    assign dcache_smem_rsp_if.tag[0 +: `DCACHE_SMEM_TAG_ID_BITS] = dcache_smem_rsp_tag[0 +: `DCACHE_SMEM_TAG_ID_BITS];
-    assign dcache_smem_rsp_if.tag[`DCACHE_SMEM_TAG_ID_BITS +: `UUID_BITS] = dcache_smem_rsp_tag[`DCACHE_TEX_TAG_ID_BITS +: `UUID_BITS];
+    assign dcache_smem_rsp_if.tag[0 +: `DCACHE_SMEM_TAG_SEL_BITS] = dcache_smem_rsp_tag[0 +: `DCACHE_SMEM_TAG_SEL_BITS];
+
+    assign dcache_smem_rsp_if.tag[`DCACHE_SMEM_TAG_SEL_BITS +: `UUID_BITS] = dcache_smem_rsp_tag[`DCACHE_TEX_TAG_SEL_BITS +: `UUID_BITS];
     `UNUSED_VAR (dcache_smem_rsp_tag)
 
-    assign tcache_rsp_if.tag[0 +: `TCACHE_TAG_ID_BITS] = tcache_rsp_tag[0 +: `TCACHE_TAG_ID_BITS];
-    assign tcache_rsp_if.tag[`TCACHE_TAG_ID_BITS +: `UUID_BITS] = tcache_rsp_tag[`DCACHE_TEX_TAG_ID_BITS +: `UUID_BITS];    
+    assign tcache_rsp_if.tag[0 +: `TCACHE_TAG_SEL_BITS] = tcache_rsp_tag[0 +: `TCACHE_TAG_SEL_BITS];
+    assign tcache_rsp_if.tag[`TCACHE_TAG_SEL_BITS +: `UUID_BITS] = tcache_rsp_tag[`DCACHE_TEX_TAG_SEL_BITS +: `UUID_BITS];    
     `UNUSED_VAR (tcache_rsp_tag)
 
     VX_cache_mux #(

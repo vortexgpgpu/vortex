@@ -4,7 +4,7 @@ module VX_cache_rsp_sel #(
     parameter NUM_REQS      = 1, 
     parameter DATA_WIDTH    = 1, 
     parameter TAG_WIDTH     = 1,    
-    parameter TAG_ID_BITS   = 0,
+    parameter TAG_SEL_BITS  = 0,
     parameter OUT_REG       = 0
 ) (
     input wire              clk,
@@ -46,7 +46,7 @@ module VX_cache_rsp_sel #(
             rsp_in_ready_r   = 0;
             
             for (integer i = 0; i < NUM_REQS; i++) begin
-                if (rsp_in_if.tag[i][TAG_ID_BITS-1:0] == rsp_tag_unqual[TAG_ID_BITS-1:0]) begin
+                if (rsp_in_if.tag[i][TAG_SEL_BITS-1:0] == rsp_tag_unqual[TAG_SEL_BITS-1:0]) begin
                     rsp_valid_unqual[i] = rsp_in_if.valid[i];                    
                     rsp_in_ready_r[i] = rsp_ready_unqual;
                 end

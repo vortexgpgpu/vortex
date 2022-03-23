@@ -17,8 +17,11 @@ module VX_shared_mem #(
     // Core Response Queue Size
     parameter CRSQ_SIZE                     = 2,
 
+    // Request debug identifier
+    parameter REQ_DBG_IDW                   = 0,
+
     // core request tag size
-    parameter TAG_WIDTH                     = 8, 
+    parameter TAG_WIDTH                     = REQ_DBG_IDW, 
 
     // bank offset from beginning of index range
     parameter BANK_ADDR_OFFSET              = `CLOG2(256)
@@ -244,8 +247,8 @@ module VX_shared_mem #(
     wire [NUM_BANKS-1:0][`DBG_CACHE_REQ_IDW-1:0]  req_id_st0, req_id_st1;
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
-        assign req_id_st0[i] = per_bank_core_req_tag_unqual[i][`CACHE_REQ_ID_RNG];
-        assign req_id_st1[i] = per_bank_core_req_tag[i][`CACHE_REQ_ID_RNG];
+        `ASSIGN_REQ_DBG_ID (req_id_st0[i], per_bank_core_req_tag_unqual[i])
+        `ASSIGN_REQ_DBG_ID (req_id_st1[i], per_bank_core_req_tag[i])
     end
   
     reg is_multi_tag_req;
@@ -267,7 +270,7 @@ module VX_shared_mem #(
         is_multi_tag_req = 0;
         for (integer i = 0; i < NUM_BANKS; ++i) begin
             if (per_bank_core_req_valid[i] 
-             && (core_req_tag_sel[CORE_TAG_ID_BITS-1:0] != per_bank_core_req_tag[i][CORE_TAG_ID_BITS-1:0])) begin
+             && (core_req_tag_sel[CORE_TAG_SEL_BITS-1:0] != per_bank_core_req_tag[i][CORE_TAG_SEL_BITS-1:0])) begin
                 is_multi_tag_req = creq_out_valid;
             end
         end

@@ -270,6 +270,11 @@
 `define TEXQ_SIZE (`NUM_WARPS * 2)
 `endif
 
+// ROP memeory queue size
+`ifndef ROP_MEM_QUEUE_SIZE    
+`define ROP_MEM_QUEUE_SIZE  8
+`endif
+
 // Icache Configurable Knobs //////////////////////////////////////////////////
 
 // Size of cache in bytes

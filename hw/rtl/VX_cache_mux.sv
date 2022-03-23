@@ -45,11 +45,11 @@ module VX_cache_mux #(
     // output responses
     output wire [NUM_REQS-1:0][LANES-1:0]                   rsp_valid_out,
     output wire [NUM_REQS-1:0][LANES-1:0][DATA_WIDTH-1:0]   rsp_data_out,
-    output wire [NUM_REQS-1:0][TAG_IN_WIDTH-1:0]            rsp_tag_out,
+    output wire [NUM_REQS-1:0][LANES-1:0][TAG_IN_WIDTH-1:0] rsp_tag_out,
     input wire  [NUM_REQS-1:0][LANES-1:0]                   rsp_ready_out    
 );  
     localparam REQ_DATAW = TAG_OUT_WIDTH + ADDR_WIDTH + 1 + DATA_SIZE + DATA_WIDTH;
-    localparam RSP_DATAW = LANES * (TAG_IN_WIDTH + DATA_WIDTH);
+    localparam RSP_DATAW = TAG_IN_WIDTH + DATA_WIDTH;
 
     if (NUM_REQS > 1) begin
 

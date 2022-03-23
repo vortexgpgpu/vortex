@@ -138,6 +138,7 @@ module VX_cluster #(
         .MRSQ_SIZE          (`RCACHE_MRSQ_SIZE),
         .MREQ_SIZE          (`RCACHE_MREQ_SIZE),
         .WRITE_ENABLE       (0),
+        .REQ_DBG_IDW        (0),
         .CORE_TAG_WIDTH     (`RCACHE_TAG_WIDTH),
         .MEM_TAG_WIDTH      (`RCACHE_MEM_TAG_WIDTH),
         .NC_ENABLE          (0)
@@ -219,8 +220,8 @@ module VX_cluster #(
     `endif
         .rop_req_if    (rop_req_if),
         .rop_dcr_if    (rop_dcr_if),
-        .cache_req_if  (rop_cache_req_if),
-        .cache_rsp_if  (rop_cache_rsp_if)
+        .cache_req_if  (ocache_req_if),
+        .cache_rsp_if  (ocache_rsp_if)
     );
 
     VX_mem_req_if #(
@@ -263,6 +264,7 @@ module VX_cluster #(
         .MRSQ_SIZE          (`OCACHE_MRSQ_SIZE),
         .MREQ_SIZE          (`OCACHE_MREQ_SIZE),
         .WRITE_ENABLE       (1),
+        .REQ_DBG_IDW        (0),
         .CORE_TAG_WIDTH     (`OCACHE_TAG_WIDTH),
         .MEM_TAG_WIDTH      (`OCACHE_MEM_TAG_WIDTH),
         .NC_ENABLE          (0)
@@ -362,7 +364,8 @@ module VX_cluster #(
         .MSHR_SIZE          (`L2_MSHR_SIZE),
         .MRSQ_SIZE          (`L2_MRSQ_SIZE),
         .MREQ_SIZE          (`L2_MREQ_SIZE),
-        .WRITE_ENABLE       (1),          
+        .WRITE_ENABLE       (1),       
+        .REQ_DBG_IDW        (`UUID_BITS),   
         .CORE_TAG_WIDTH     (`L1_MEM_TAG_WIDTH),
         .MEM_TAG_WIDTH      (`L2_MEM_TAG_WIDTH),
         .NC_ENABLE          (1)

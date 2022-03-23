@@ -226,11 +226,11 @@
 // Block size in bytes
 `define ICACHE_LINE_SIZE        `L1_BLOCK_SIZE
 
-// TAG sharing enable       
-`define ICACHE_TAG_ID_BITS      `NW_BITS
+// Response tag select bits       
+`define ICACHE_TAG_SEL_BITS     `NW_BITS
 
 // Core request tag bits
-`define ICACHE_TAG_WIDTH        (`UUID_BITS + `ICACHE_TAG_ID_BITS)
+`define ICACHE_TAG_WIDTH        (`UUID_BITS + `ICACHE_TAG_SEL_BITS)
 
 // Input request size
 `define ICACHE_NUM_REQS         1
@@ -256,10 +256,12 @@
 // Block size in bytes
 `define DCACHE_LINE_SIZE        `L1_BLOCK_SIZE
 
-// Core request tag bits
+// Response tag select bits
 `define LSUQ_ADDR_BITS          `LOG2UP(`LSUQ_SIZE)
-`define DCACHE_TAG_ID_BITS      (`LSUQ_ADDR_BITS + `CACHE_ADDR_TYPE_BITS)
-`define DCACHE_TAG_WIDTH        (`UUID_BITS + `DCACHE_TAG_ID_BITS)
+`define DCACHE_TAG_SEL_BITS     (`LSUQ_ADDR_BITS + `CACHE_ADDR_TYPE_BITS)
+
+// Core request tag bits
+`define DCACHE_TAG_WIDTH        (`UUID_BITS + `DCACHE_TAG_SEL_BITS)
  
 // Memory request data bits
 `define DCACHE_MEM_DATA_WIDTH   (`DCACHE_LINE_SIZE * 8)
@@ -369,11 +371,11 @@
 // Block size in bytes
 `define TCACHE_LINE_SIZE        `L1_CACHE_LINE_SIZE
 
-// TAG sharing enable       
-`define TCACHE_TAG_ID_BITS      8
+// Response tag select bits       
+`define TCACHE_TAG_SEL_BITS      2
 
 // Core request tag bits
-`define TCACHE_TAG_WIDTH        (`UUID_BITS + `TCACHE_TAG_ID_BITS)
+`define TCACHE_TAG_WIDTH        (`UUID_BITS + `TCACHE_TAG_SEL_BITS)
 
 // Input request size
 `define TCACHE_NUM_REQS         `NUM_THREADS
@@ -383,7 +385,7 @@
 
 ////////////////////////// Rcache Configurable Knobs //////////////////////////
 
-`define RCACHE_ID               $sformatf("cluster%0d-rcache", CACHE_ID)
+`define RCACHE_ID               $sformatf("cluster%0d-rcache", CLUSTER_ID)
 
 // Word size in bytes
 `define RCACHE_WORD_SIZE        4
@@ -392,11 +394,11 @@
 // Block size in bytes
 `define RCACHE_LINE_SIZE        `L2_CACHE_LINE_SIZE
 
-// TAG sharing enable       
-`define RCACHE_TAG_ID_BITS      8
+// Response tag select bits       
+`define RCACHE_TAG_SEL_BITS     2
 
 // Core request tag bits
-`define RCACHE_TAG_WIDTH        (`UUID_BITS + `RCACHE_TAG_ID_BITS)
+`define RCACHE_TAG_WIDTH        `RCACHE_TAG_SEL_BITS
 
 // Input request size
 `define RCACHE_NUM_REQS         1
@@ -412,7 +414,7 @@
 
 ////////////////////////// Ocache Configurable Knobs //////////////////////////
 
-`define OCACHE_ID               $sformatf("cluster%0d-ocache", CACHE_ID)
+`define OCACHE_ID               $sformatf("cluster%0d-ocache", CLUSTER_ID)
 
 // Word size in bytes
 `define OCACHE_WORD_SIZE        4
@@ -421,14 +423,14 @@
 // Block size in bytes
 `define OCACHE_LINE_SIZE        `L2_CACHE_LINE_SIZE
 
-// TAG sharing enable       
-`define OCACHE_TAG_ID_BITS      8
+// Input request size
+`define OCACHE_NUM_REQS         (2*`NUM_THREADS)
+
+// Response tag select bits       
+`define OCACHE_TAG_SEL_BITS     `CLOG2(`ROP_MEM_QUEUE_SIZE)
 
 // Core request tag bits
-`define OCACHE_TAG_WIDTH        (`UUID_BITS + `OCACHE_TAG_ID_BITS)
-
-// Input request size
-`define OCACHE_NUM_REQS         `NUM_THREADS
+`define OCACHE_TAG_WIDTH        `OCACHE_TAG_SEL_BITS
 
 // Memory request data bits
 `define OCACHE_MEM_DATA_WIDTH   (`OCACHE_LINE_SIZE * 8)

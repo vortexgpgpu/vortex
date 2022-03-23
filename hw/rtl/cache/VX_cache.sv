@@ -33,8 +33,11 @@ module VX_cache #(
     // Enable cache writeable
     parameter WRITE_ENABLE          = 1,
 
+    // Request debug identifier
+    parameter REQ_DBG_IDW           = 0,
+
     // core request tag size
-    parameter CORE_TAG_WIDTH        = (`DBG_CACHE_REQ_IDW),
+    parameter CORE_TAG_WIDTH        = REQ_DBG_IDW,
 
     // Memory request tag size
     parameter MEM_TAG_WIDTH         = (32 - $clog2(CACHE_LINE_SIZE)),
@@ -559,7 +562,8 @@ module VX_cache #(
             .MSHR_SIZE          (MSHR_SIZE),
             .MREQ_SIZE          (MREQ_SIZE),
             .WRITE_ENABLE       (WRITE_ENABLE),
-            .CORE_TAG_WIDTH          (CORE_TAG_X_WIDTH),            
+            .REQ_DBG_IDW        (REQ_DBG_IDW),
+            .CORE_TAG_WIDTH     (CORE_TAG_X_WIDTH),            
             .BANK_ADDR_OFFSET   (BANK_ADDR_OFFSET)
         ) bank (
             `SCOPE_BIND_VX_cache_bank(i)
@@ -617,12 +621,12 @@ module VX_cache #(
     end   
 
     VX_core_rsp_merge #(
-        .CACHE_ID   (CACHE_ID),
-        .NUM_BANKS  (NUM_BANKS),
-        .NUM_PORTS  (NUM_PORTS),
-        .WORD_SIZE  (WORD_SIZE),
-        .NUM_REQS   (NUM_REQS),
-        .CORE_TAG_WIDTH  (CORE_TAG_X_WIDTH)
+        .CACHE_ID       (CACHE_ID),
+        .NUM_BANKS      (NUM_BANKS),
+        .NUM_PORTS      (NUM_PORTS),
+        .WORD_SIZE      (WORD_SIZE),
+        .NUM_REQS       (NUM_REQS),
+        .CORE_TAG_WIDTH (CORE_TAG_X_WIDTH)
     ) core_rsp_merge (
         .clk                     (clk),
         .reset                   (reset),                    

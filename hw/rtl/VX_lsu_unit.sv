@@ -157,7 +157,7 @@ module VX_lsu_unit #(
     wire mbuf_pop = cache_rsp_fire && (0 == rsp_rem_mask_n);
     
     assign mbuf_raddr = cache_rsp_tag[`CACHE_ADDR_TYPE_BITS +: `LSUQ_ADDR_BITS];
-    assign rsp_uuid   = cache_rsp_tag[`DCACHE_TAG_ID_BITS +: `UUID_BITS];
+    assign rsp_uuid   = cache_rsp_tag[`DCACHE_TAG_SEL_BITS +: `UUID_BITS];
     `UNUSED_VAR (cache_rsp_tag)
 
     // do not writeback from software prefetch
@@ -223,7 +223,7 @@ module VX_lsu_unit #(
     wire req_dep_ready = (req_wb && ~(mbuf_full && is_req_start)) 
                       || (~req_wb && st_commit_if.ready);
 
-    // DCache Request
+    // Cache Request
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
 
@@ -262,13 +262,13 @@ module VX_lsu_unit #(
 
     assign ready_in = req_dep_ready && cache_req_ready;
 
-    // Dcache response
+    // Cache response
 
     VX_cache_rsp_sel #(
-        .NUM_REQS    (`DCACHE_NUM_REQS),
-        .DATA_WIDTH  (`DCACHE_WORD_SIZE*8),
-        .TAG_WIDTH   (`DCACHE_TAG_WIDTH),
-        .TAG_ID_BITS (`DCACHE_TAG_ID_BITS)
+        .NUM_REQS     (`DCACHE_NUM_REQS),
+        .DATA_WIDTH   (`DCACHE_WORD_SIZE*8),
+        .TAG_WIDTH    (`DCACHE_TAG_WIDTH),
+        .TAG_SEL_BITS (`DCACHE_TAG_SEL_BITS)
     ) cache_rsp_sel (
         .clk            (clk),
         .reset          (reset),

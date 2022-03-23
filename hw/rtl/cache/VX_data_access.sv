@@ -17,6 +17,8 @@ module VX_data_access #(
     parameter WORD_SIZE         = 1,
     // Enable cache writeable
     parameter WRITE_ENABLE      = 1,
+    // Request debug identifier
+    parameter REQ_DBG_IDW       = 0,
     
     parameter WORD_SELECT_BITS  = `UP(`WORD_SELECT_BITS)
 ) (

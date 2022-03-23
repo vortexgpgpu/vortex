@@ -154,6 +154,7 @@ module Vortex (
         .MRSQ_SIZE          (`L3_MRSQ_SIZE),
         .MREQ_SIZE          (`L3_MREQ_SIZE),
         .WRITE_ENABLE       (1),
+        .REQ_DBG_IDW        (`UUID_BITS),
         .CORE_TAG_WIDTH     (`L2_MEM_TAG_WIDTH),
         .MEM_TAG_WIDTH      (`L3_MEM_TAG_WIDTH),
         .NC_ENABLE          (1)
