@@ -98,7 +98,7 @@ module VX_cache_mux #(
         ///////////////////////////////////////////////////////////////////////
 
         wire [LANES-1:0][RSP_DATAW-1:0] rsp_data_in_merged;
-        wire [LANES-1:0][NUM_REQS-1:0][RSP_DATAW-1:0] rsp_data_out_merged;
+        wire [NUM_REQS-1:0][LANES-1:0][RSP_DATAW-1:0] rsp_data_out_merged;
 
         wire [LANES-1:0][LOG_NUM_REQS-1:0] rsp_sel;
 

@@ -1,4 +1,5 @@
 `include "VX_cache_define.vh"
+`include "VX_define.vh"
 
 module VX_shared_mem #(
     parameter IDNAME                        = "",
@@ -162,8 +163,6 @@ module VX_shared_mem #(
     assign creq_out_ready = ~(| core_req_read_mask)
                          || ((| per_bank_core_rsp_ready) && crsq_last_read);
 
-    wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0] per_bank_core_rsp_data; 
-
     wire [NUM_BANKS-1:0][`LINE_SELECT_BITS-1:0] per_bank_blk_addr;
 
     for (genvar i = 0; i < NUM_BANKS; i++) begin
@@ -215,7 +214,6 @@ module VX_shared_mem #(
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         assign per_bank_core_rsp_valid[i] = creq_out_valid & per_bank_core_req_valid[i];
         assign per_bank_core_rsp_pmask[i] = 'x;
-        assign per_bank_core_rsp_data[i]  = per_bank_core_req_data[i];
         assign per_bank_core_rsp_tag[i]   = per_bank_core_req_tag[i];
         assign per_bank_core_rsp_tid[i]   = per_bank_core_req_tid[i];
     end

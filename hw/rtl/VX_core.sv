@@ -1,5 +1,4 @@
 `include "VX_define.vh"
-`include "VX_tex_define.vh"
 
 module VX_core #( 
     parameter CORE_ID = 0

@@ -8,7 +8,7 @@ module VX_raster_csr #(
 
     // Inputs    
     VX_raster_svc_if.slave raster_svc_req_if,    
-    VX_raster_req_if.slave raster_req_if,
+    VX_raster_req_if.slave csr_write_if,
 
     // Output
     VX_gpu_csr_if.slave raster_csr_if
@@ -40,17 +40,19 @@ module VX_raster_csr #(
 
     // CSRs write  
 
-    wire req_fire = raster_req_if.valid & raster_req_if.ready;
+    wire req_fire = csr_write_if.valid & csr_write_if.ready;
 
-    assign wren  = {`NUM_THREADS{req_fire}} & raster_req_if.tmask;
+    assign wren  = {`NUM_THREADS{req_fire}} & csr_write_if.tmask;
     assign waddr = raster_svc_req_if.wid;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign wdata[i].pos_mask = {raster_req_if.stamps[i].pos_y, raster_req_if.stamps[i].pos_x, raster_req_if.stamps[i].mask}; 
-        assign wdata[i].bcoord_x = raster_req_if.stamps[i].bcoord_x;
-        assign wdata[i].bcoord_y = raster_req_if.stamps[i].bcoord_y;
-        assign wdata[i].bcoord_z = raster_req_if.stamps[i].bcoord_z;    
+        assign wdata[i].pos_mask = {csr_write_if.stamps[i].pos_y, csr_write_if.stamps[i].pos_x, csr_write_if.stamps[i].mask}; 
+        assign wdata[i].bcoord_x = csr_write_if.stamps[i].bcoord_x;
+        assign wdata[i].bcoord_y = csr_write_if.stamps[i].bcoord_y;
+        assign wdata[i].bcoord_z = csr_write_if.stamps[i].bcoord_z;    
     end    
+
+    assign csr_write_if.ready = 1; // can always write
     
     // CSRs read
 
@@ -91,9 +93,9 @@ module VX_raster_csr #(
     logic [`NUM_THREADS-1:0][3:0]                  mask;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign pos_x[i] = raster_req_if.stamps[i].pos_x;
-        assign pos_y[i] = raster_req_if.stamps[i].pos_y;
-        assign mask[i]  = raster_req_if.stamps[i].mask;
+        assign pos_x[i] = csr_write_if.stamps[i].pos_x;
+        assign pos_y[i] = csr_write_if.stamps[i].pos_y;
+        assign mask[i]  = csr_write_if.stamps[i].mask;
     end
 
     always @(posedge clk) begin

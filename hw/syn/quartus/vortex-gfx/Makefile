@@ -1,6 +1,6 @@
-PROJECT = Core
-TOP_LEVEL_ENTITY = VX_core
-SRC_FILE = VX_core.sv
+PROJECT = Vortex
+TOP_LEVEL_ENTITY = Vortex
+SRC_FILE = Vortex.sv
 RTL_DIR = ../../../../rtl
 THIRD_PARTY_DIR = ../../../../../third_party
 
@@ -13,8 +13,8 @@ FPU_CORE_PATH = $(RTL_DIR)/fp_cores/altera/arria10
 #FPU_CORE_PATH = $(RTL_DIR)/fp_cores/altera/stratix10
 
 FPU_INCLUDE = $(RTL_DIR)/fp_cores;$(FPU_CORE_PATH);$(THIRD_PARTY_DIR)/fpnew/src;$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl;$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include;$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src
-TEX_INCLUDE = $(RTL_DIR)/tex_unit
-RTL_INCLUDE = $(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces;$(RTL_DIR)/cache;$(FPU_INCLUDE);$(TEX_INCLUDE)
+GFX_INCLUDE = $(RTL_DIR)/tex_unit;$(RTL_DIR)/raster_unit;$(RTL_DIR)/rop_unit
+RTL_INCLUDE = $(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces;$(RTL_DIR)/cache;$(FPU_INCLUDE);$(GFX_INCLUDE)
 
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
@@ -60,7 +60,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES):
-	quartus_sh -t ../../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../../project.sdc -inc "$(RTL_INCLUDE)" -set "EXT_TEX_ENABLE"
+	quartus_sh -t ../../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../../project.sdc -inc "$(RTL_INCLUDE)" -set "EXT_GFX_ENABLE"
 	
 syn.chg:
 	$(STAMP) syn.chg

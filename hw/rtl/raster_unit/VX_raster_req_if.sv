@@ -14,16 +14,16 @@ interface VX_raster_req_if ();
     modport master (
         output valid,
         output tmask,
-        input  stamps,
-        input  empty,        
+        output stamps,
+        output empty,        
         input  ready
     );
 
     modport slave (
         input  valid,
         input  tmask,
-        output stamps,
-        output empty,
+        input  stamps,
+        input  empty,
         output ready
     );
 

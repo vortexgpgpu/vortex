@@ -6,28 +6,30 @@ module VX_raster_req_arb #(
     input wire clk,
     input wire reset,
 
-    // input requests    
-    VX_raster_req_if.slave     req_in_if[NUM_REQS],
+    // input request   
+    VX_raster_req_if.slave    req_in_if,
 
-    // output request
-    VX_raster_req_if.master    req_out_if
+    // output requests
+    VX_raster_req_if.master   req_out_if[NUM_REQS]
 );
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
 
     // TODO
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
-        wire valid = req_in_if[i].valid;
-        `UNUSED_VAR (valid)
-        assign req_in_if[i].stamps = '0;
-        assign req_in_if[i].empty = '0;
-        assign req_in_if[i].ready = 0;
-    end
+    `UNUSED_VAR (req_in_if.valid)
+    `UNUSED_VAR (req_in_if.tmask)
+    `UNUSED_VAR (req_in_if.stamps)
+    `UNUSED_VAR (req_in_if.empty)
+    assign req_in_if.ready = 0;
 
     // TODO
-    assign req_out_if.valid = 0;
-    `UNUSED_VAR (req_out_if.stamps)
-    `UNUSED_VAR (req_out_if.empty)
-    `UNUSED_VAR (req_out_if.ready)
+    for (genvar i = 0; i < NUM_REQS; ++i) begin        
+        assign req_out_if[i].valid  = 0;
+        assign req_out_if[i].tmask  = '0;
+        assign req_out_if[i].stamps = '0;
+        assign req_out_if[i].empty  = 0;
+        wire valid = req_out_if[i].ready;
+        `UNUSED_VAR (ready)
+    end
 
 endmodule

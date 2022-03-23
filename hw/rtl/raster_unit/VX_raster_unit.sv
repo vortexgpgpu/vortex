@@ -35,7 +35,7 @@ module VX_raster_unit #(
 
     // Inputs
     VX_raster_dcr_if.master raster_dcr_if,
-    VX_raster_req_if.slave  raster_req_if
+    VX_raster_req_if.master raster_req_if
 );
 
     // TODO: remove
@@ -44,11 +44,12 @@ module VX_raster_unit #(
     `UNUSED_VAR (raster_dcrs)
 
     // TODO: remove
-    `UNUSED_VAR (raster_req_if.valid)    
-    `UNUSED_VAR (raster_req_if.tmask)
+    assign raster_req_if.valid  = 0;
+    assign raster_req_if.tmask  = 0;
+    assign raster_req_if.valid  = 0;
     assign raster_req_if.stamps = 0;
-    assign raster_req_if.empty = 0;
-    assign raster_req_if.ready = 0;
+    assign raster_req_if.empty  = 0;
+    `UNUSED_VAR (raster_req_if.ready)
 
 `ifdef PERF_ENABLE
     // TODO: remove
