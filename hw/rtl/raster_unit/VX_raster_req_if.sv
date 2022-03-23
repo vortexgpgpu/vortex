@@ -8,7 +8,7 @@ interface VX_raster_req_if ();
     wire                                valid;
     wire [`NUM_THREADS-1:0]             tmask;    
     raster_stamp_t [`NUM_THREADS-1:0]   stamps;
-    wire [31:0]                         empty;    
+    wire                                empty;    
     wire                                ready;
 
     modport master (

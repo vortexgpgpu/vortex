@@ -47,7 +47,7 @@ module VX_raster_svc #(
     assign raster_svc_rsp_if.PC    = raster_svc_req_if.PC;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign raster_svc_rsp_if.data[i] = (csr_write_if.stamps[i].pid << 1) & csr_write_if.empty;
+        assign raster_svc_rsp_if.data[i] = {31'(csr_write_if.stamps[i].pid), csr_write_if.empty};
     end
 
     assign raster_svc_rsp_if.rd    = raster_svc_req_if.rd;

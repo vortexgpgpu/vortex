@@ -28,7 +28,7 @@ module VX_raster_req_arb #(
         assign req_out_if[i].tmask  = '0;
         assign req_out_if[i].stamps = '0;
         assign req_out_if[i].empty  = 0;
-        wire valid = req_out_if[i].ready;
+        wire ready = req_out_if[i].ready;
         `UNUSED_VAR (ready)
     end
 
