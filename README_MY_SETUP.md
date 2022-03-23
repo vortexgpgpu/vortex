@@ -13,6 +13,7 @@ This is automated by wih activate.d and deactivate.d. See script ~/conda_env_var
 
 IMPORTANT:
 Prebuilt POCL of centos is not compiling for some workloads, probably due to compiler mismatch, as we are using gxx=11.2.0 instead of the deafult 4.8.5 in centos. 
+Probably, POCL_CC_PATH works with centos, but POCL_RT_PATH needs to be pointed to ubuntu
 Centos prebuilt of verilator also works, but with the following change:
 Copy ./verilator/share/verilator/ to ./verilator/
 

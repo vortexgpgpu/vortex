@@ -183,6 +183,20 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
 int main(int argc, char *argv[]) {
 	printf("enter demo main\n");
 
+  /** usage */
+  int nrequired_args = 2;
+  if (argc != nrequired_args){
+      fprintf(stderr, "NAME:\n\tbfs : script to benchmark gaph bfs performance\n");
+      fprintf(stderr, "\nSYNOPSIS:\n");
+      fprintf(stderr, "\tmkl_spmv input_file\n");
+      fprintf(stderr, "\nSAMPLE EXECUTION:\n");
+      fprintf(stderr, "\t./bfs cora.txt\n");
+      exit(1);
+  }
+  /** parse arguments */
+  int iarg = 1;
+  char *input_f = argv[iarg];    iarg++;
+
   int no_of_nodes;
   int edge_list_size;
   FILE *fp;
@@ -191,7 +205,8 @@ int main(int argc, char *argv[]) {
   
   try {
     /* char *input_f = "graph4096.txt"; */
-    char *input_f = "cora.txt";
+    /* char *input_f = "cora.txt"; */
+    /* char *input_f = "pubmed_diabetes.txt"; */
     printf("Reading File\n");
     // Read in Graph from a file
     fp = fopen(input_f, "r");

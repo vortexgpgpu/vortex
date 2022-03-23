@@ -8,12 +8,23 @@ logger.setLevel(logging.INFO)
 
 
 def main():
-  name= 'cora'
-  path_prefix= f'/esat/puck1/users/nshah/datasets/graphs/{name}/'
-  graph_nx= process_input_graphs(name, path_prefix)
+  # name= 'cora'
+  name_ls = [\
+    # 'cora', 
+    # 'pubmed_diabetes',
+    # 'p2p-Gnutella30',
+    # 'CA-HepPh',
+    # 'Cit-HepPh',
+    # 'Slashdot0811',
+    'web-Google',
+  ]
 
-  output_path= f'../tests/opencl/bfs/{name}.txt'
-  write_files_for_kernel(graph_nx, output_path)
+  for name in name_ls:
+    path_prefix= f'/esat/puck1/users/nshah/datasets/graphs/'
+    graph_nx= process_input_graphs(name, path_prefix)
+
+    output_path= f'../tests/opencl/bfs/{name}.txt'
+    write_files_for_kernel(graph_nx, output_path)
 
 
 def relabel_nodes_with_contiguous_numbers(graph_nx, start= 0):
@@ -24,20 +35,82 @@ def relabel_nodes_with_contiguous_numbers(graph_nx, start= 0):
 
   return nx.relabel.relabel_nodes(graph_nx, mapping, copy= True), mapping
 
+def simple_edge_ls(edge_ls_str, str_format= 'dst_src'):
+  assert str_format in ['dst_src', 'src_dst']
+  edge_ls = []
+  for e in edge_ls_str:
+    if str_format == 'dst_src':
+      dst, src = e.split()
+    elif str_format == 'src_dst':
+      src, dst = e.split()
+    else:
+      assert 0
+
+    dst = int(dst)
+    src = int(src)
+    edge_ls.append((src, dst))
+  
+  return edge_ls
+
 def process_input_graphs(name, path_prefix):
-  assert name in ['cora', 'arxiv', 'citeseer']
 
   if name == 'cora':
-    f= path_prefix + 'cora.cites'
+    f= path_prefix + 'core/cora.cites'
     f= open(f, 'r')
     edge_ls_str= list(f.readlines())
+    edge_ls= simple_edge_ls(edge_ls_str, str_format= 'dst_src')
+    
+  elif name == 'pubmed_diabetes':
+    f= path_prefix + 'Pubmed-Diabetes/data/Pubmed-Diabetes.DIRECTED.cites.tab'
+    f= open(f, 'r')
+    edge_ls_str= list(f.readlines())
+
+    #remove initial comments
+    edge_ls_str = edge_ls_str[2:]
     
     edge_ls = []
     for e in edge_ls_str:
-      dst, src = e.split()
+      _, dst, _ , src = e.split()
+      dst = dst.replace('paper:', '')
+      src = src.replace('paper:', '')
       dst = int(dst)
       src = int(src)
       edge_ls.append((src, dst))
+
+  elif name == 'p2p-Gnutella30':
+    f= path_prefix + 'snap/p2p-Gnutella30.txt'
+    f= open(f, 'r')
+    edge_ls_str= list(f.readlines())
+    edge_ls_str = edge_ls_str[4:]
+    edge_ls= simple_edge_ls(edge_ls_str, str_format= 'src_dst') 
+
+  elif name == 'CA-HepPh':
+    f= path_prefix + 'snap/CA-HepPh.txt'
+    f= open(f, 'r')
+    edge_ls_str= list(f.readlines())
+    edge_ls_str = edge_ls_str[4:]
+    edge_ls= simple_edge_ls(edge_ls_str, str_format= 'src_dst') 
+
+  elif name == 'Cit-HepPh':
+    f= path_prefix + 'snap/Cit-HepPh.txt'
+    f= open(f, 'r')
+    edge_ls_str= list(f.readlines())
+    edge_ls_str = edge_ls_str[4:]
+    edge_ls= simple_edge_ls(edge_ls_str, str_format= 'src_dst') 
+
+  elif name == 'Slashdot0811':
+    f= path_prefix + 'snap/Slashdot0811.txt'
+    f= open(f, 'r')
+    edge_ls_str= list(f.readlines())
+    edge_ls_str = edge_ls_str[4:]
+    edge_ls= simple_edge_ls(edge_ls_str, str_format= 'src_dst') 
+
+  elif name == 'web-Google':
+    f= path_prefix + 'snap/web-Google.txt'
+    f= open(f, 'r')
+    edge_ls_str= list(f.readlines())
+    edge_ls_str = edge_ls_str[4:]
+    edge_ls= simple_edge_ls(edge_ls_str, str_format= 'src_dst') 
 
   else:
     assert 0

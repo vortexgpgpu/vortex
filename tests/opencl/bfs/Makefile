@@ -1,5 +1,8 @@
 XLEN ?= 32
 
+OPTS ?= cora.txt
+INPUT_FILE ?= $(OPTS)
+
 LLVM_PREFIX ?= /opt/llvm-riscv
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf
@@ -39,19 +42,19 @@ $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 run-fpga: $(PROJECT) kernel.pocl   
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/fpga:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/fpga:$(LD_LIBRARY_PATH) ./$(PROJECT) $(INPUT_FILE)
 
 run-asesim: $(PROJECT) kernel.pocl   
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/asesim:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/asesim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(INPUT_FILE)
 
 run-vlsim: $(PROJECT) kernel.pocl   
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/vlsim:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/vlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(INPUT_FILE)
 
 run-simx: $(PROJECT) kernel.pocl   
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT) $(INPUT_FILE)
 
 run-rtlsim: $(PROJECT) kernel.pocl   
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(INPUT_FILE)
 
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
