@@ -50,7 +50,7 @@ module VX_shared_mem #(
     output wire [NUM_REQS-1:0][TAG_WIDTH-1:0]   core_rsp_tag,
     input  wire [NUM_REQS-1:0]                  core_rsp_ready
 );
-    `define __WID_ADDR_OFFSET           `CLOG2(`SMEM_LOCAL_SIZE / `SMEM_WORD_SIZE)
+    `define __WID_ADDR_OFFSET           `CLOG2(`SMEM_LOCAL_SIZE / WORD_SIZE)
     `define SMEM_LINE_TO_BLOCK_ADDR(x)  {x[BANK_ADDR_OFFSET +: `NW_BITS], x[0 +: `__WID_ADDR_OFFSET]}
 
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))

@@ -1,6 +1,6 @@
 `include "VX_rop_define.vh"
 
-module VX_rop_req_arb #(
+module VX_rop_req_mux #(
     parameter NUM_REQS = 1
 ) (
     input wire clk,

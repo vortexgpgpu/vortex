@@ -1,6 +1,6 @@
 `include "VX_raster_define.vh"
 
-module VX_raster_req_arb #(
+module VX_raster_req_demux #(
     parameter NUM_REQS = 1
 ) (
     input wire clk,

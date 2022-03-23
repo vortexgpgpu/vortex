@@ -147,9 +147,9 @@ module VX_cluster #(
         `CACHE_RSP_FROM_MEM(rcache_rsp_if, rcache_rsp_qual_if, i);
     end  
 
-    VX_raster_req_arb #(
+    VX_raster_req_demux #(
         .NUM_REQS (`NUM_CORES)
-    ) raster_req_arb (
+    ) raster_req_demux (
         .clk        (clk),
         .reset      (raster_reset),
         .req_in_if  (raster_req_if),
@@ -274,9 +274,9 @@ module VX_cluster #(
         `CACHE_RSP_FROM_MEM(ocache_rsp_if, ocache_rsp_qual_if, i);
     end
 
-    VX_rop_req_arb #(
+    VX_rop_req_mux #(
         .NUM_REQS (`NUM_CORES)
-    ) rop_req_arb (
+    ) rop_req_mux (
         .clk        (clk),
         .reset      (rop_reset),
         .req_in_if  (per_core_rop_req_if),
@@ -396,7 +396,7 @@ module VX_cluster #(
 
     `RESET_RELAY (mem_arb_reset);
 
-    VX_mem_arb #(
+    VX_mem_mux #(
         .NUM_REQS     (`NUM_CORES),
         .DATA_WIDTH   (`DCACHE_MEM_DATA_WIDTH),
         .ADDR_WIDTH   (`DCACHE_MEM_ADDR_WIDTH),           
@@ -405,13 +405,13 @@ module VX_cluster #(
         .TAG_SEL_IDX  (1), // Skip 0 for NC flag
         .BUFFERED_REQ (1),
         .BUFFERED_RSP (1)
-    ) mem_arb_core (
+    ) mem_mux_core (
         .clk        (clk),
         .reset      (mem_arb_reset),
         .req_in_if  (per_core_mem_req_if),        
-        .rsp_out_if (per_core_mem_rsp_if),
+        .rsp_in_if  (per_core_mem_rsp_if),
         .req_out_if (l2_mem_req_if),
-        .rsp_in_if  (l2_mem_rsp_if)
+        .rsp_out_if (l2_mem_rsp_if)
     );
 
 `endif
@@ -459,18 +459,18 @@ module VX_cluster #(
     assign ocache_mem_rsp_if.tag = `OCACHE_MEM_TAG_WIDTH'(mem_rsp_arb_if[ROP_MEM_ARB_IDX].tag);
 `endif
 
-    VX_mem_arb #(
+    VX_mem_mux #(
         .NUM_REQS     (MEM_ARB_SIZE),
         .DATA_WIDTH   (`L2_MEM_DATA_WIDTH),
         .ADDR_WIDTH   (`L2_MEM_ADDR_WIDTH),
         .TAG_IN_WIDTH (MEM_ARB_TAG_WIDTH)
-    ) mem_arb_out (
+    ) mem_mux_out (
         .clk        (clk),
         .reset      (reset),
         .req_in_if  (mem_req_arb_if),        
-        .rsp_out_if (mem_rsp_arb_if),
+        .rsp_in_if  (mem_rsp_arb_if),
         .req_out_if (mem_req_if),
-        .rsp_in_if  (mem_rsp_if)
+        .rsp_out_if (mem_rsp_if)
     );
 
 endmodule

@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_mem_arb #(    
+module VX_mem_mux #(    
     parameter NUM_REQS      = 1, 
     parameter DATA_WIDTH    = 1,
     parameter ADDR_WIDTH    = 1,
@@ -15,15 +15,15 @@ module VX_mem_arb #(
 
     // input requests        
     VX_mem_req_if.slave     req_in_if[NUM_REQS],
+
+    // input responses
+    VX_mem_rsp_if.master    rsp_in_if[NUM_REQS],
     
     // output request
     VX_mem_req_if.master    req_out_if,
 
-    // input response
-    VX_mem_rsp_if.slave     rsp_in_if,
-
-    // output responses
-    VX_mem_rsp_if.master    rsp_out_if[NUM_REQS]
+    // output response
+    VX_mem_rsp_if.slave     rsp_out_if
 );   
     
     localparam DATA_SIZE     = (DATA_WIDTH / 8);
@@ -74,21 +74,21 @@ module VX_mem_arb #(
 
         ///////////////////////////////////////////////////////////////////////
 
-        wire [NUM_REQS-1:0] rsp_valid_out;
-        wire [NUM_REQS-1:0][RSP_DATAW-1:0] rsp_data_out;
-        wire [NUM_REQS-1:0] rsp_ready_out;
+        wire [NUM_REQS-1:0] rsp_valid_in;
+        wire [NUM_REQS-1:0][RSP_DATAW-1:0] rsp_data_in;
+        wire [NUM_REQS-1:0] rsp_ready_in;
 
-        wire [LOG_NUM_REQS-1:0] rsp_sel = rsp_in_if.tag[TAG_SEL_IDX +: LOG_NUM_REQS];
+        wire [LOG_NUM_REQS-1:0] rsp_sel = rsp_out_if.tag[TAG_SEL_IDX +: LOG_NUM_REQS];
 
-        wire [TAG_IN_WIDTH-1:0] rsp_tag_in;
+        wire [TAG_IN_WIDTH-1:0] rsp_tag_out;
 
         VX_bits_remove #( 
             .N   (TAG_OUT_WIDTH),
             .S   (LOG_NUM_REQS),
             .POS (TAG_SEL_IDX)
         ) bits_remove (
-            .data_in  (rsp_in_if.tag),
-            .data_out (rsp_tag_in)
+            .data_in  (rsp_out_if.tag),
+            .data_out (rsp_tag_out)
         );
 
         VX_stream_demux #(
@@ -99,18 +99,18 @@ module VX_mem_arb #(
             .clk       (clk),
             .reset     (reset),
             .sel_in    (rsp_sel),
-            .valid_in  (rsp_in_if.valid),
-            .data_in   ({rsp_tag_in, rsp_in_if.data}),
-            .ready_in  (rsp_in_if.ready),
-            .valid_out (rsp_valid_out),
-            .data_out  (rsp_data_out),
-            .ready_out (rsp_ready_out)
+            .valid_in  (rsp_out_if.valid),
+            .data_in   ({rsp_tag_out, rsp_out_if.data}),
+            .ready_in  (rsp_out_if.ready),
+            .valid_out (rsp_valid_in),
+            .data_out  (rsp_data_in),
+            .ready_out (rsp_ready_in)
         );
         
         for (genvar i = 0; i < NUM_REQS; i++) begin
-            assign rsp_out_if[i].valid = rsp_valid_out[i];
-            assign {rsp_out_if[i].tag, rsp_out_if[i].data} = rsp_data_out[i];            
-            assign rsp_ready_out[i] = rsp_out_if[i].ready;
+            assign rsp_in_if[i].valid = rsp_valid_in[i];
+            assign {rsp_in_if[i].tag, rsp_in_if[i].data} = rsp_data_in[i];        
+            assign rsp_ready_in[i] = rsp_in_if[i].ready;
         end                
 
     end else begin
@@ -126,10 +126,10 @@ module VX_mem_arb #(
         assign req_out_if.data   = req_in_if[0].data;
         assign req_in_if[0].ready= req_out_if.ready;
 
-        assign rsp_out_if[0].valid = rsp_in_if.valid;
-        assign rsp_out_if[0].tag   = rsp_in_if.tag;
-        assign rsp_out_if[0].data  = rsp_in_if.data;
-        assign rsp_in_if.ready  = rsp_out_if[0].ready;
+        assign rsp_in_if[0].valid = rsp_out_if.valid;
+        assign rsp_in_if[0].tag   = rsp_out_if.tag;
+        assign rsp_in_if[0].data  = rsp_out_if.data;
+        assign rsp_out_if.ready  = rsp_in_if[0].ready;
 
     end
 

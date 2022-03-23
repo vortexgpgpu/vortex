@@ -190,7 +190,7 @@ module Vortex (
 
     `START_RELAY (mem_arb_reset);
 
-    VX_mem_arb #(
+    VX_mem_mux #(
         .NUM_REQS     (`NUM_CLUSTERS),
         .DATA_WIDTH   (`L2_MEM_DATA_WIDTH),            
         .ADDR_WIDTH   (`L2_MEM_ADDR_WIDTH),
@@ -198,13 +198,13 @@ module Vortex (
         .TYPE         ("R"),
         .BUFFERED_REQ (1),
         .BUFFERED_RSP (1)
-    ) mem_arb (
+    ) mem_mux (
         .clk        (clk),
         .reset      (mem_arb_reset),
         .req_in_if  (per_cluster_mem_req_if),        
-        .rsp_out_if (per_cluster_mem_rsp_if),
+        .rsp_in_if  (per_cluster_mem_rsp_if),
         .req_out_if (mem_req_if),
-        .rsp_in_if  (mem_rsp_if)
+        .rsp_out_if (mem_rsp_if)
     );    
 
 `endif

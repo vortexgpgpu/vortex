@@ -281,23 +281,16 @@
 `define DCACHE_MEM_TAG_WIDTH    `MAX((`CLOG2(`DCACHE_NUM_BANKS) + `CLOG2(`DCACHE_MSHR_SIZE) + `NC_TAG_BIT), `_DNC_MEM_TAG_WIDTH)
 
 // Merged D-cache/I-cache memory tag
-`define ICACHE_DCACHE_MEM_TAG   `MAX(`ICACHE_MEM_TAG_WIDTH, `DCACHE_MEM_TAG_WIDTH)
-`define L1_MEM_TAG_WIDTH        (`ICACHE_DCACHE_MEM_TAG + `CLOG2(2))
+`define L1_MEM_RGB_TAG_WIDTH    `MAX(`ICACHE_MEM_TAG_WIDTH, `DCACHE_MEM_TAG_WIDTH)
+`define L1_MEM_TAG_WIDTH        (`L1_MEM_RGB_TAG_WIDTH + `CLOG2(2))
 
 ////////////////////////// SM Configurable Knobs //////////////////////////////
 
 // Cache ID
 `define SMEM_ID                 $sformatf("core%0d-smem", CORE_ID)
 
-// Word size in bytes
-`define SMEM_WORD_SIZE          4
-`define SMEM_ADDR_WIDTH         (32-`CLOG2(`SMEM_WORD_SIZE))
-
 // bank address offset
-`define SMEM_BANK_ADDR_OFFSET   `CLOG2(`STACK_SIZE / `SMEM_WORD_SIZE)
-
-// Input request size
-`define SMEM_NUM_REQS           `NUM_THREADS
+`define SMEM_BANK_ADDR_OFFSET   `CLOG2(`STACK_SIZE / `DCACHE_WORD_SIZE)
 
 ////////////////////////// L2cache Configurable Knobs /////////////////////////
 
@@ -495,6 +488,19 @@
     assign dst.valid  = src.valid;  \
     assign dst.data   = src.data;   \
     assign dst.tag    = src.tag;    \
+    assign src.ready  = dst.ready
+
+`define ASSIGN_VX_CACHE_REQ_IF_XTAG(dst, src) \
+    assign dst.valid  = src.valid;  \
+    assign dst.rw     = src.rw;     \
+    assign dst.byteen = src.byteen; \
+    assign dst.addr   = src.addr;   \
+    assign dst.data   = src.data;   \
+    assign src.ready  = dst.ready
+
+`define ASSIGN_VX_CACHE_RSP_IF_XTAG(dst, src) \
+    assign dst.valid  = src.valid;  \
+    assign dst.data   = src.data;   \
     assign src.ready  = dst.ready
 
 `define CACHE_REQ_TO_MEM(dst, src, i) \
