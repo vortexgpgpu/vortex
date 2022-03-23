@@ -55,7 +55,10 @@ module VX_execute #(
 `ifdef EXT_F_ENABLE
     VX_commit_if.master     fpu_commit_if,
 `endif
-    VX_commit_if.master     gpu_commit_if
+    VX_commit_if.master     gpu_commit_if,
+
+    // simulation helper signals
+    output wire             sim_ebreak
 );
 
 `ifdef EXT_TEX_ENABLE
@@ -183,9 +186,8 @@ module VX_execute #(
         .gpu_commit_if  (gpu_commit_if)
     );
 
-    // special workaround to get RISC-V tests Pass/Fail status
-    wire ebreak /* verilator public */;
-    assign ebreak = alu_req_if.valid && alu_req_if.ready
+    // simulation helper signal to get RISC-V tests Pass/Fail status
+    assign sim_ebreak = alu_req_if.valid && alu_req_if.ready
                  && `INST_ALU_IS_BR(alu_req_if.op_mod)
                  && (`INST_BR_BITS'(alu_req_if.op_type) == `INST_BR_EBREAK 
                   || `INST_BR_BITS'(alu_req_if.op_type) == `INST_BR_ECALL);

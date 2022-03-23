@@ -23,6 +23,10 @@ module VX_core #(
     VX_mem_req_if.master    mem_req_if,
     VX_mem_rsp_if.slave     mem_rsp_if,
 
+    // simulation helper signals
+    output wire             sim_ebreak,
+    output wire [`NUM_REGS-1:0][31:0] sim_last_wb_value,
+
     // Status
     output wire             busy
 );
@@ -98,6 +102,9 @@ module VX_core #(
     `ifdef EXT_RASTER_ENABLE        
         .rop_req_if     (rop_req_if),
     `endif
+
+        .sim_ebreak     (sim_ebreak),
+        .sim_last_wb_value (sim_last_wb_value),
 
         // Status
         .busy           (busy)

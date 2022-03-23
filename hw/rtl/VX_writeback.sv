@@ -16,7 +16,10 @@ module VX_writeback #(
     VX_commit_if.slave  gpu_commit_if,
 
     // outputs
-    VX_writeback_if.master writeback_if
+    VX_writeback_if.master writeback_if,
+
+    // simulation helper signals
+    output reg [`NUM_REGS-1:0][31:0] sim_last_wb_value
 );
 
     `UNUSED_PARAM (CORE_ID)
@@ -96,11 +99,10 @@ module VX_writeback #(
         .data_out ({writeback_if.valid, writeback_if.wid, writeback_if.PC, writeback_if.tmask, writeback_if.rd, writeback_if.data, writeback_if.eop})
     );
     
-    // special workaround to get RISC-V tests Pass/Fail status
-    reg [31:0] last_wb_value [`NUM_REGS-1:0] /* verilator public */;
+    // simulation helper signal to get RISC-V tests Pass/Fail status
     always @(posedge clk) begin
         if (writeback_if.valid && writeback_if.ready) begin
-            last_wb_value[writeback_if.rd] <= writeback_if.data[0];
+            sim_last_wb_value[writeback_if.rd] <= writeback_if.data[0];
         end
     end
 

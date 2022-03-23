@@ -34,6 +34,10 @@ module VX_pipeline #(
     VX_perf_memsys_if.slave     perf_memsys_if,
 `endif
 
+    // simulation helper signals
+    output wire                 sim_ebreak,
+    output wire [`NUM_REGS-1:0][31:0] sim_last_wb_value,
+
     // Status
     output wire                 busy
 );
@@ -175,7 +179,9 @@ module VX_pipeline #(
     `ifdef EXT_F_ENABLE
         .fpu_commit_if  (fpu_commit_if),
     `endif
-        .gpu_commit_if  (gpu_commit_if)
+        .gpu_commit_if  (gpu_commit_if),
+
+        .sim_ebreak     (sim_ebreak)
     );    
 
     VX_commit #(
@@ -194,7 +200,9 @@ module VX_pipeline #(
         .gpu_commit_if  (gpu_commit_if),
         
         .writeback_if   (writeback_if),
-        .cmt_to_csr_if  (cmt_to_csr_if)
+        .cmt_to_csr_if  (cmt_to_csr_if),
+
+        .sim_last_wb_value (sim_last_wb_value)
     );
     
 endmodule

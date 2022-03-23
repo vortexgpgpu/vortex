@@ -195,6 +195,7 @@ module VX_bank #(
 
     wire [CORE_TAG_WIDTH-1:0] mshr_creq_tag = mshr_enable ? mshr_tag[0] : creq_tag[0];
     `ASSIGN_REQ_DBG_ID (req_id_sel, mshr_creq_tag)
+    `UNUSED_VAR (mshr_creq_tag)
 
     wire [`CACHE_LINE_WIDTH-1:0] wdata_sel;    
     assign wdata_sel[(NUM_PORTS * `WORD_WIDTH)-1:0] = (mem_rsp_valid || !WRITE_ENABLE) ? mem_rsp_data[(NUM_PORTS * `WORD_WIDTH)-1:0] : creq_data;

@@ -88,6 +88,15 @@ module Vortex (
         .dcr_wr_ready (dcr_wr_ready)
     );
 
+    wire sim_ebreak /* verilator public */;
+    wire [`NUM_REGS-1:0][31:0] sim_last_wb_value /* verilator public */;    
+    wire [`NUM_CLUSTERS-1:0] per_cluster_sim_ebreak;
+    wire [`NUM_CLUSTERS-1:0][`NUM_REGS-1:0][31:0] per_cluster_sim_last_wb_value;
+    assign sim_ebreak = per_cluster_sim_ebreak[0];
+    assign sim_last_wb_value = per_cluster_sim_last_wb_value[0];
+    `UNUSED_VAR (per_cluster_sim_ebreak)
+    `UNUSED_VAR (per_cluster_sim_last_wb_value)
+
     VX_mem_req_if #(
         .DATA_WIDTH (`L2_MEM_DATA_WIDTH),
         .ADDR_WIDTH (`L2_MEM_ADDR_WIDTH),
@@ -125,6 +134,9 @@ module Vortex (
 
             .mem_req_if     (per_cluster_mem_req_if[i]),
             .mem_rsp_if     (per_cluster_mem_rsp_if[i]),
+
+            .sim_ebreak     (per_cluster_sim_ebreak[i]),
+            .sim_last_wb_value (per_cluster_sim_last_wb_value[i]),
 
             .busy           (per_cluster_busy[i])
         );
@@ -222,7 +234,6 @@ module Vortex (
         end
     end
 `endif
-
 
 `ifndef NDEBUG
     always @(posedge clk) begin

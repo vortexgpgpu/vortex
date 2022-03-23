@@ -58,6 +58,8 @@ module VX_rop_mem #(
     wire [NUM_REQS-1:0][31:0] req_data;
     wire [NUM_REQS-1:0][31:0] rsp_data;
 
+    `UNUSED_VAR (dcrs)
+
 `ifdef PERF_ENABLE
     // TODO
     assign rop_perf_if.mem_reads = 0;

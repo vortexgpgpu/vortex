@@ -23,6 +23,10 @@ module VX_cluster #(
     VX_mem_req_if.master    mem_req_if,
     VX_mem_rsp_if.slave     mem_rsp_if,
 
+    // simulation helper signals
+    output wire             sim_ebreak,
+    output wire [`NUM_REGS-1:0][31:0] sim_last_wb_value,
+
     // Status
     output wire             busy
 ); 
@@ -281,6 +285,13 @@ module VX_cluster #(
 
 `endif
 
+    wire [`NUM_CORES-1:0] per_core_sim_ebreak;
+    wire [`NUM_CORES-1:0][`NUM_REGS-1:0][31:0] per_core_sim_last_wb_value;
+    assign sim_ebreak = per_core_sim_ebreak[0];
+    assign sim_last_wb_value = per_core_sim_last_wb_value[0];
+    `UNUSED_VAR (per_core_sim_ebreak)
+    `UNUSED_VAR (per_core_sim_last_wb_value)
+
     VX_mem_req_if #(
         .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
         .ADDR_WIDTH (`DCACHE_MEM_ADDR_WIDTH),
@@ -318,6 +329,9 @@ module VX_cluster #(
 
             .mem_req_if     (per_core_mem_req_if[i]),
             .mem_rsp_if     (per_core_mem_rsp_if[i]),
+
+            .sim_ebreak     (per_core_sim_ebreak[i]),
+            .sim_last_wb_value (per_core_sim_last_wb_value[i]),
 
             .busy           (per_core_busy[i])
         );
