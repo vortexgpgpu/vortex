@@ -46,10 +46,10 @@ module VX_raster_csr #(
     assign waddr = raster_svc_req_if.wid;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign wdata[i].pos_mask = {raster_req_if.stamp[i].pos_y, raster_req_if.stamp[i].pos_x, raster_req_if.stamp[i].mask}; 
-        assign wdata[i].bcoord_x = raster_req_if.stamp[i].bcoord_x;
-        assign wdata[i].bcoord_y = raster_req_if.stamp[i].bcoord_y;
-        assign wdata[i].bcoord_z = raster_req_if.stamp[i].bcoord_z;    
+        assign wdata[i].pos_mask = {raster_req_if.stamps[i].pos_y, raster_req_if.stamps[i].pos_x, raster_req_if.stamps[i].mask}; 
+        assign wdata[i].bcoord_x = raster_req_if.stamps[i].bcoord_x;
+        assign wdata[i].bcoord_y = raster_req_if.stamps[i].bcoord_y;
+        assign wdata[i].bcoord_z = raster_req_if.stamps[i].bcoord_z;    
     end    
     
     // CSRs read
@@ -91,9 +91,9 @@ module VX_raster_csr #(
     logic [`NUM_THREADS-1:0][3:0]                  mask;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign pos_x[i] = raster_req_if.stamp[i].pos_x;
-        assign pos_y[i] = raster_req_if.stamp[i].pos_y;
-        assign mask[i]  = raster_req_if.stamp[i].mask;
+        assign pos_x[i] = raster_req_if.stamps[i].pos_x;
+        assign pos_y[i] = raster_req_if.stamps[i].pos_y;
+        assign mask[i]  = raster_req_if.stamps[i].mask;
     end
 
     always @(posedge clk) begin

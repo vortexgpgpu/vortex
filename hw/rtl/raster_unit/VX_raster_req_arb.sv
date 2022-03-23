@@ -19,14 +19,14 @@ module VX_raster_req_arb #(
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         wire valid = req_in_if[i].valid;
         `UNUSED_VAR (valid)
-        assign req_in_if[i].stamp = '0;
+        assign req_in_if[i].stamps = '0;
         assign req_in_if[i].empty = '0;
         assign req_in_if[i].ready = 0;
     end
 
     // TODO
     assign req_out_if.valid = 0;
-    `UNUSED_VAR (req_out_if.stamp)
+    `UNUSED_VAR (req_out_if.stamps)
     `UNUSED_VAR (req_out_if.empty)
     `UNUSED_VAR (req_out_if.ready)
 
