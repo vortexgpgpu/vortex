@@ -253,27 +253,27 @@ module VX_mem_unit # (
         .TAG_WIDTH          (`DCACHE_SMEM_TAG_WIDTH),
         .BANK_ADDR_OFFSET   (`SMEM_BANK_ADDR_OFFSET)
     ) smem (            
-        .clk                (clk),
-        .reset              (smem_reset),
+        .clk            (clk),
+        .reset          (smem_reset),
 
     `ifdef PERF_ENABLE
-        .perf_cache_if      (perf_smem_if),
+        .perf_cache_if  (perf_smem_if),
     `endif
 
         // Core request
-        .core_req_valid     (smem_req_if.valid),
-        .core_req_rw        (smem_req_if.rw),
-        .core_req_byteen    (smem_req_if.byteen),
-        .core_req_addr      (smem_req_if.addr),
-        .core_req_data      (smem_req_if.data),        
-        .core_req_tag       (smem_req_if.tag),
-        .core_req_ready     (smem_req_if.ready),
+        .req_valid     (smem_req_if.valid),
+        .req_rw        (smem_req_if.rw),
+        .req_byteen    (smem_req_if.byteen),
+        .req_addr      (smem_req_if.addr),
+        .req_data      (smem_req_if.data),        
+        .req_tag       (smem_req_if.tag),
+        .req_ready     (smem_req_if.ready),
 
         // Core response
-        .core_rsp_valid     (smem_rsp_if.valid),
-        .core_rsp_data      (smem_rsp_if.data),
-        .core_rsp_tag       (smem_rsp_if.tag),
-        .core_rsp_ready     (smem_rsp_if.ready)
+        .rsp_valid     (smem_rsp_if.valid),
+        .rsp_data      (smem_rsp_if.data),
+        .rsp_tag       (smem_rsp_if.tag),
+        .rsp_ready     (smem_rsp_if.ready)
     );    
 `else
     // core to D-cache request
