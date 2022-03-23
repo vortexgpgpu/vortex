@@ -333,7 +333,7 @@ module VX_cluster #(
         `ifdef EXT_RASTER_ENABLE        
             .raster_req_if  (per_core_raster_req_if[i]),
         `endif
-        `ifdef EXT_RASTER_ENABLE        
+        `ifdef EXT_ROP_ENABLE        
             .rop_req_if     (per_core_rop_req_if[i]),
         `endif
 
