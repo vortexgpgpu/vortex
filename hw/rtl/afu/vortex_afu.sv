@@ -537,7 +537,7 @@ VX_mem_mux #(
   .DATA_WIDTH     (LMEM_DATA_WIDTH),
   .ADDR_WIDTH     (LMEM_ADDR_WIDTH),
   .TAG_IN_WIDTH   (AVS_REQ_TAGW),
-  .TYPE           ("P"),
+  .ARBITER           ("P"),
   .BUFFERED_REQ   (2),
   .BUFFERED_RSP   (2)
 ) mem_mux (
