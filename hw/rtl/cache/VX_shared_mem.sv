@@ -2,7 +2,7 @@
 `include "VX_define.vh"
 
 module VX_shared_mem #(
-    parameter IDNAME                        = "",
+    parameter string  IDNAME                = "",
 
     // Size of cache in bytes
     parameter CACHE_SIZE                    = (1024*16), 
@@ -57,6 +57,7 @@ module VX_shared_mem #(
     `UNUSED_PARAM (IDNAME)
 
     localparam CACHE_LINE_SIZE = WORD_SIZE;
+    localparam CORE_TAG_WIDTH = TAG_WIDTH;
     localparam NUM_WAYS = 1;
 
     wire [NUM_BANKS-1:0]                    per_bank_req_valid_unqual; 
@@ -215,7 +216,7 @@ module VX_shared_mem #(
     end
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
-        assign per_bank_rsp_valid[i] = creq_out_valid & per_bank_req_valid[i];
+        assign per_bank_rsp_valid[i] = creq_out_valid & req_read_mask[i];
         assign per_bank_rsp_pmask[i] = 'x;
         assign per_bank_rsp_tag[i]   = per_bank_req_tag[i];
         assign per_bank_rsp_tid[i]   = per_bank_req_tid[i];
@@ -251,39 +252,8 @@ module VX_shared_mem #(
         `ASSIGN_REQ_DBG_ID (req_id_st0[i], per_bank_req_tag_unqual[i])
         `ASSIGN_REQ_DBG_ID (req_id_st1[i], per_bank_req_tag[i])
     end
-  
-    reg is_multi_tag_req;
-`IGNORE_UNUSED_BEGIN
-    reg [TAG_WIDTH-1:0] req_tag_sel;
-`IGNORE_UNUSED_END
-
-    VX_find_first #(
-        .N     (NUM_BANKS),
-        .DATAW (TAG_WIDTH)
-    ) find_first_d (
-        .valid_i (per_bank_req_valid),
-        .data_i  (per_bank_req_tag),
-        .data_o  (req_tag_sel),
-        `UNUSED_PIN (valid_o)
-    );
-
-    always @(*) begin
-        is_multi_tag_req = 0;
-        for (integer i = 0; i < NUM_BANKS; ++i) begin
-            if (per_bank_req_valid[i] 
-             && (req_tag_sel[CORE_TAG_SEL_BITS-1:0] != per_bank_req_tag[i][CORE_TAG_SEL_BITS-1:0])) begin
-                is_multi_tag_req = creq_out_valid;
-            end
-        end
-    end
 
     always @(posedge clk) begin        
-        if (|(per_bank_rsp_valid & ~per_bank_rsp_ready)) begin
-            dpi_trace("%d: *** cache%0d pipeline-stall\n", $time, IDNAME);        
-        end
-        if (is_multi_tag_req) begin
-            dpi_trace("%d: *** cache%0d multi-tag request!\n", $time, IDNAME);
-        end
         if (creq_in_fire) begin
             for (integer i = 0; i < NUM_BANKS; ++i) begin
                 if (per_bank_req_valid_unqual[i]) begin

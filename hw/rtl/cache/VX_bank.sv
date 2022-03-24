@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_bank #(
-    parameter CACHE_ID          = "",
+    parameter string CACHE_ID   = "",
     parameter BANK_ID           = 0,
 
     // Number of Word requests per cycle

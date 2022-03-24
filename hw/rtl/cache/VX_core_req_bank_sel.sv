@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_core_req_bank_sel #(  
-    parameter CACHE_ID          = "",
+    parameter string CACHE_ID   = "",
 
     // Size of line inside a bank in bytes
     parameter CACHE_LINE_SIZE   = 64, 
