@@ -101,6 +101,7 @@
 `define EXT_TEX_ENABLE
 `define EXT_RASTER_ENABLE
 `define EXT_ROP_ENABLE
+`define EXT_IMADD_ENABLE
 `endif
 
 `define ISA_STD_A           0
@@ -118,6 +119,7 @@
 `define ISA_EXT_TEX         0
 `define ISA_EXT_RASTER      1
 `define ISA_EXT_ROP         2
+`define ISA_EXT_IMADD       3
 
 `ifdef EXT_A_ENABLE
     `define EXT_A_ENABLED   1
@@ -167,13 +169,22 @@
     `define EXT_ROP_ENABLED 0
 `endif
 
-`define ISA_X_ENABLED   (`EXT_TEX_ENABLED       \
+`ifdef EXT_IMADD_ENABLE
+    `define EXT_IMADD_ENABLED 1
+`else
+    `define EXT_IMADD_ENABLED 0
+`endif
+
+`define ISA_X_ENABLED  ( `EXT_TEX_ENABLED       \
                        | `EXT_RASTER_ENABLED    \
-                       | `EXT_ROP_ENABLED)
+                       | `EXT_ROP_ENABLED       \
+                       | `EXT_IMADD_ENABLED     \
+                       )
 
 `define MISA_EXT    (`EXT_TEX_ENABLED << `ISA_EXT_TEX)        \
                   | (`EXT_RASTER_ENABLED << `ISA_EXT_RASTER)  \
-                  | (`EXT_ROP_ENABLED << `ISA_EXT_ROP)
+                  | (`EXT_ROP_ENABLED << `ISA_EXT_ROP)        \
+                  | (`EXT_IMADD_ENABLED << `ISA_EXT_IMADD)
 
 `define MISA_STD  (`EXT_A_ENABLED <<  0) /* A - Atomic Instructions extension */ \
                 | (0 <<  1) /* B - Tentatively reserved for Bit operations extension */ \

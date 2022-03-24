@@ -5,11 +5,11 @@ module VX_gpu_unit #(
 ) (
     `SCOPE_IO_VX_gpu_unit
     
-    input wire          clk,
-    input wire          reset,
+    input wire              clk,
+    input wire              reset,
 
     // Inputs
-    VX_gpu_req_if.slave gpu_req_if,
+    VX_gpu_req_if.slave     gpu_req_if,
 
 `ifdef EXT_TEX_ENABLE    
     VX_tex_dcr_if.slave     tex_dcr_if,
@@ -161,13 +161,13 @@ module VX_gpu_unit #(
     VX_raster_svc_if raster_svc_req_if();
     VX_commit_if     raster_svc_rsp_if();
 
-    assign raster_svc_req_if.valid     = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_RASTER);
-    assign raster_svc_req_if.uuid      = gpu_req_if.uuid;
-    assign raster_svc_req_if.wid       = gpu_req_if.wid;
-    assign raster_svc_req_if.tmask     = gpu_req_if.tmask;
-    assign raster_svc_req_if.PC        = gpu_req_if.PC;
-    assign raster_svc_req_if.rd        = gpu_req_if.rd;
-    assign raster_svc_req_if.wb        = gpu_req_if.wb;
+    assign raster_svc_req_if.valid = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_RASTER);
+    assign raster_svc_req_if.uuid  = gpu_req_if.uuid;
+    assign raster_svc_req_if.wid   = gpu_req_if.wid;
+    assign raster_svc_req_if.tmask = gpu_req_if.tmask;
+    assign raster_svc_req_if.PC    = gpu_req_if.PC;
+    assign raster_svc_req_if.rd    = gpu_req_if.rd;
+    assign raster_svc_req_if.wb    = gpu_req_if.wb;
 
     VX_raster_svc #(
         .CORE_ID (CORE_ID)
@@ -191,6 +191,7 @@ module VX_gpu_unit #(
     assign rop_svc_req_if.wid   = gpu_req_if.wid;
     assign rop_svc_req_if.tmask = gpu_req_if.tmask;
     assign rop_svc_req_if.PC    = gpu_req_if.PC;
+
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign rop_svc_req_if.backface[i] = gpu_req_if.rs1_data[i][0];
         assign rop_svc_req_if.pos_x[i] = gpu_req_if.rs1_data[i][1 +: `ROP_DIM_BITS];
@@ -211,24 +212,25 @@ module VX_gpu_unit #(
     );        
 `endif
 
-    /*// interpolation unit
-    wire [`UUID_BITS-1:0]         interp_uuid_out;
-    wire [`NW_BITS-1:0]           interp_wid_out;
-    wire [`NUM_THREADS-1:0]       interp_tmask_out;
-    wire [31:0]                   interp_PC_out;
-    wire [`NR_BITS-1:0]           interp_rd_out;
-    wire                          interp_wb_out;
-    wire [`NUM_THREADS-1:0][31:0] interp_data_out;
+`ifdef EXT_IMADD_ENABLE    
 
-    wire                          interp_ready_in;
-    wire                          interp_valid_out;
-    `UNUSED_VAR(interp_ready_in) //TODO
-    wire interp_valid_in  = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_IMADD);
-    wire interp_ready_out = gpu_req_if.ready & ~gpu_commit_if.valid;
+    wire [`UUID_BITS-1:0]         imadd_uuid_out;
+    wire [`NW_BITS-1:0]           imadd_wid_out;
+    wire [`NUM_THREADS-1:0]       imadd_tmask_out;
+    wire [31:0]                   imadd_PC_out;
+    wire [`NR_BITS-1:0]           imadd_rd_out;
+    wire                          imadd_wb_out;
+    wire [`NUM_THREADS-1:0][31:0] imadd_data_out;
+    wire                          imadd_valid_in;
+    wire                          imadd_ready_in;
+    wire                          imadd_valid_out;
+    wire                          imadd_ready_out;
 
-    VX_interpolation imadd (
-        .clk         (clk),
-        .reset       (reset),
+    assign imadd_valid_in  = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_IMADD);
+
+    VX_imadd imadd (
+        .clk        (clk),
+        .reset      (reset),
         
         // Inputs
         .op_mod     (gpu_req_if.op_mod),
@@ -238,25 +240,27 @@ module VX_gpu_unit #(
         .PC_in      (gpu_req_if.PC),
         .rd_in      (gpu_req_if.rd),
         .wb_in      (gpu_req_if.wb),
-        .interp_in1 (gpu_req_if.rs1_data),
-        .interp_in2 (gpu_req_if.rs2_data),
-        .interp_in3 (gpu_req_if.rs3_data),
+        .data_in1   (gpu_req_if.rs1_data),
+        .data_in2   (gpu_req_if.rs2_data),
+        .data_in3   (gpu_req_if.rs3_data),
 
         // Outputs
-        .uuid_out    (interp_uuid_out),
-        .wid_out     (interp_wid_out),
-        .tmask_out   (interp_tmask_out),
-        .PC_out      (interp_PC_out),
-        .rd_out      (interp_rd_out),
-        .wb_out      (interp_wb_out),
-        .data_out    (interp_data_out),
+        .uuid_out   (imadd_uuid_out),
+        .wid_out    (imadd_wid_out),
+        .tmask_out  (imadd_tmask_out),
+        .PC_out     (imadd_PC_out),
+        .rd_out     (imadd_rd_out),
+        .wb_out     (imadd_wb_out),
+        .data_out   (imadd_data_out),
 
         // handshake
-        .valid_in    (interp_valid_in),
-        .ready_in    (interp_ready_in),
-        .valid_out   (interp_valid_out),
-        .ready_out   (interp_ready_out)
-    );*/
+        .valid_in   (imadd_valid_in),
+        .ready_in   (imadd_ready_in),
+        .valid_out  (imadd_valid_out),
+        .ready_out  (imadd_ready_out)
+    );
+
+`endif
 
     // can accept new request?
     reg gpu_req_ready;
@@ -271,25 +275,16 @@ module VX_gpu_unit #(
     `ifdef EXT_ROP_ENABLE
         `INST_GPU_ROP: gpu_req_ready = rop_svc_req_if.ready;
     `endif
-        //`INST_GPU_IMADD: gpu_req_ready = interp_ready_in;
+    `ifdef EXT_IMADD_ENABLE
+        `INST_GPU_IMADD: gpu_req_ready = imadd_ready_in;
+    `endif
         default: gpu_req_ready = wctl_req_ready;
         endcase
     end   
     assign gpu_req_if.ready = gpu_req_ready;
 
-    VX_stream_mux #(            
-        .NUM_REQS (
-            1
-        `ifdef EXT_TEX_ENABLE
-           +1
-        `endif
-        `ifdef EXT_RASTER_ENABLE
-           +1
-        `endif    
-        `ifdef EXT_ROP_ENABLE
-           +1
-        `endif
-        ),
+    VX_stream_mux #(
+        .NUM_REQS (1 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED + `EXT_IMADD_ENABLED),
         .DATAW    (MUX_DATAW),
         .BUFFERED (0),
         .TYPE     ("R")
@@ -307,9 +302,11 @@ module VX_gpu_unit #(
         `ifdef EXT_ROP_ENABLE
           , rop_svc_rsp_if.valid
         `endif
-          //, interp_valid_out
+        `ifdef EXT_IMADD_ENABLE
+          , imadd_valid_out
+        `endif
         }),
-        .data_in   ({
+        .data_in ({
             {gpu_req_if.uuid, gpu_req_if.wid, gpu_req_if.tmask, gpu_req_if.PC, `NR_BITS'(0),  1'b0,          RSP_DATAW'(wctl_rsp_data),   1'b1,           1'b1}
         `ifdef EXT_TEX_ENABLE
           , {tex_rsp_if.uuid, tex_rsp_if.wid, tex_rsp_if.tmask, tex_rsp_if.PC, tex_rsp_if.rd, tex_rsp_if.wb, RSP_DATAW'(tex_rsp_if.data), tex_rsp_if.eop, 1'b0}
@@ -320,9 +317,11 @@ module VX_gpu_unit #(
         `ifdef EXT_ROP_ENABLE
           , {rop_svc_rsp_if.uuid, rop_svc_rsp_if.wid, rop_svc_rsp_if.tmask, rop_svc_rsp_if.PC, rop_svc_rsp_if.rd, rop_svc_rsp_if.wb, RSP_DATAW'(rop_svc_rsp_if.data), rop_svc_rsp_if.eop, 1'b0}
         `endif
-          //, {interp_uuid_out, interp_wid_out, interp_tmask_out, interp_PC_out, interp_rd_out, interp_wb_out, RSP_DATAW'(interp_data_out), 1'b1, 1'b0}
+        `ifdef EXT_IMADD_ENABLE
+          , {imadd_uuid_out, imadd_wid_out, imadd_tmask_out, imadd_PC_out, imadd_rd_out, imadd_wb_out, RSP_DATAW'(imadd_data_out), 1'b1, 1'b0}
+        `endif
         }),
-        .ready_in  ({
+        .ready_in ({
             wctl_rsp_ready
         `ifdef EXT_TEX_ENABLE
           , tex_rsp_if.ready
@@ -333,7 +332,9 @@ module VX_gpu_unit #(
         `ifdef EXT_ROP_ENABLE
           , rop_svc_rsp_if.ready
         `endif
-          //, gpu_req_if.ready
+        `ifdef EXT_IMADD_ENABLE
+          , imadd_ready_out
+        `endif
         }),
         .valid_out (rsp_valid),
         .data_out  ({rsp_uuid, rsp_wid, rsp_tmask, rsp_PC, rsp_rd, rsp_wb, rsp_data, rsp_eop, rsp_is_wctl}),
