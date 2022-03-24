@@ -46,9 +46,7 @@ module VX_cache #(
     parameter BANK_ADDR_OFFSET      = 0,
 
     // enable bypass for non-cacheable addresses
-    parameter NC_ENABLE             = 0,
-
-    parameter WORD_SELECT_BITS      = `UP(`WORD_SELECT_BITS)
+    parameter NC_ENABLE             = 0
  ) (
     `SCOPE_IO_VX_cache    
     
@@ -76,6 +74,7 @@ module VX_cache #(
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))
     `STATIC_ASSERT(NUM_PORTS <= NUM_BANKS, ("invalid value"))
 
+    localparam WORD_SELECT_BITS = `UP(`WORD_SELECT_BITS);
     localparam MSHR_ADDR_WIDTH  = $clog2(MSHR_SIZE);
     localparam MEM_TAG_IN_WIDTH = `BANK_SELECT_BITS + MSHR_ADDR_WIDTH;
     localparam CORE_TAG_X_WIDTH = CORE_TAG_WIDTH - NC_ENABLE;

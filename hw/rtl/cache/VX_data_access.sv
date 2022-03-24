@@ -18,9 +18,7 @@ module VX_data_access #(
     // Enable cache writeable
     parameter WRITE_ENABLE      = 1,
     // Request debug identifier
-    parameter REQ_DBG_IDW       = 0,
-    
-    parameter WORD_SELECT_BITS  = `UP(`WORD_SELECT_BITS)
+    parameter REQ_DBG_IDW       = 0
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -51,6 +49,7 @@ module VX_data_access #(
     `UNUSED_VAR (addr)
     `UNUSED_VAR (read)
 
+    localparam WORD_SELECT_BITS = `UP(`WORD_SELECT_BITS);
     localparam BYTEENW = WRITE_ENABLE ? CACHE_LINE_SIZE : 1;
 
     wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] rdata;
