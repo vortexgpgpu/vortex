@@ -195,7 +195,7 @@ module Vortex (
         .DATA_WIDTH   (`L2_MEM_DATA_WIDTH),            
         .ADDR_WIDTH   (`L2_MEM_ADDR_WIDTH),
         .TAG_IN_WIDTH (`L2_MEM_TAG_WIDTH),
-        .TYPE         ("R"),
+        .ARBITER      ("R"),
         .BUFFERED_REQ (1),
         .BUFFERED_RSP (1)
     ) mem_mux (

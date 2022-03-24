@@ -224,7 +224,7 @@ module VX_mem_unit # (
         .DATA_SIZE     (4),            
         .TAG_IN_WIDTH  (`DCACHE_TAG_WIDTH),
         .TAG_SEL_IDX   (0),
-        .TYPE          ("P"),
+        .ARBITER       ("P"),
         .BUFFERED_REQ  (2),
         .BUFFERED_RSP  (1)
     ) dcache_smem_demux (
@@ -336,7 +336,8 @@ module VX_mem_unit # (
         .LANES         (`NUM_THREADS),
         .DATA_SIZE     (4),            
         .TAG_IN_WIDTH  (`DCACHE_TEX_TAG_WIDTH),
-        .TAG_SEL_IDX   (0)
+        .ARBITER       ("P"),
+        .TAG_SEL_IDX   (0)        
     ) dcache_tex_mux (
         .clk        (clk),
         .reset      (reset),
@@ -381,7 +382,7 @@ module VX_mem_unit # (
         .DATA_WIDTH    (`DCACHE_MEM_DATA_WIDTH),
         .ADDR_WIDTH    (`DCACHE_MEM_ADDR_WIDTH),
         .TAG_IN_WIDTH  (`L1_MEM_RGB_TAG_WIDTH),
-        .TYPE          ("R"),
+        .ARBITER       ("R"),
         .TAG_SEL_IDX   (1), // Skip 0 for NC flag
         .BUFFERED_REQ  (1),
         .BUFFERED_RSP  (2)

@@ -146,10 +146,11 @@ module VX_avs_wrapper #(
     VX_stream_mux #(
         .NUM_REQS (AVS_BANKS),
         .DATAW    (AVS_DATA_WIDTH + REQ_TAG_WIDTH),
-        .TYPE     ("R")
+        .ARBITER  ("R")
     ) rsp_mux (
         .clk       (clk),
         .reset     (reset),
+        `UNUSED_PIN (sel_in),
         .valid_in  (rsp_arb_valid_in),
         .data_in   (rsp_arb_data_in),
         .ready_in  (rsp_arb_ready_in),

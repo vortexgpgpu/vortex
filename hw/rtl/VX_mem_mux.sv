@@ -8,7 +8,7 @@ module VX_mem_mux #(
     parameter TAG_SEL_IDX   = 0,
     parameter BUFFERED_REQ  = 0,
     parameter BUFFERED_RSP  = 0,
-    parameter TYPE          = "P"
+    parameter ARBITER       = "P"
 ) (
     input wire              clk,
     input wire              reset,
@@ -60,10 +60,11 @@ module VX_mem_mux #(
             .NUM_REQS (NUM_REQS),
             .DATAW    (REQ_DATAW),
             .BUFFERED (BUFFERED_REQ),
-            .TYPE     (TYPE)
+            .ARBITER  (ARBITER)
         ) req_mux (
             .clk       (clk),
             .reset     (reset),
+            `UNUSED_PIN (sel_in),
             .valid_in  (req_valid_in),
             .data_in   (req_data_in),
             .ready_in  (req_ready_in),

@@ -287,10 +287,11 @@ module VX_gpu_unit #(
         .NUM_REQS (1 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED + `EXT_IMADD_ENABLED),
         .DATAW    (MUX_DATAW),
         .BUFFERED (0),
-        .TYPE     ("R")
+        .ARBITER  ("R")
     ) rsp_mux (
         .clk       (clk),
         .reset     (reset),
+        `UNUSED_PIN (sel_in),
         .valid_in  ({
             wctl_rsp_valid
         `ifdef EXT_TEX_ENABLE

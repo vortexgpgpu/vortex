@@ -654,10 +654,11 @@ module VX_cache #(
     VX_stream_mux #(
         .NUM_REQS (NUM_BANKS),
         .DATAW    (`MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + NUM_PORTS * (1 + WORD_SIZE + WORD_SELECT_BITS + `WORD_WIDTH)),
-        .TYPE     ("R")
+        .ARBITER  ("R")
     ) mem_req_mux (
         .clk       (clk),
         .reset     (mreq_reset),
+        `UNUSED_PIN (sel_in),
         .valid_in  (per_bank_mem_req_valid),
         .data_in   (data_in),
         .ready_in  (per_bank_mem_req_ready),   

@@ -8,7 +8,7 @@ module VX_cache_demux #(
     parameter TAG_SEL_IDX   = 0,   
     parameter BUFFERED_REQ  = 0,
     parameter BUFFERED_RSP  = 0,
-    parameter TYPE          = "P",
+    parameter ARBITER       = "P",
 
     parameter ADDR_WIDTH    = (32-`CLOG2(DATA_SIZE)),
     parameter DATA_WIDTH    = (8 * DATA_SIZE),
@@ -116,10 +116,11 @@ module VX_cache_demux #(
             .LANES    (LANES),
             .DATAW    (RSP_DATAW),
             .BUFFERED (BUFFERED_RSP),
-            .TYPE     (TYPE)
+            .ARBITER  (ARBITER)
         ) rsp_mux (
             .clk       (clk),
             .reset     (reset),
+            `UNUSED_PIN (sel_in),
             .valid_in  (rsp_valid_out),
             .data_in   (rsp_data_out),
             .ready_in  (rsp_ready_out),

@@ -401,7 +401,7 @@ module VX_cluster #(
         .DATA_WIDTH   (`DCACHE_MEM_DATA_WIDTH),
         .ADDR_WIDTH   (`DCACHE_MEM_ADDR_WIDTH),           
         .TAG_IN_WIDTH (`L1_MEM_TAG_WIDTH),            
-        .TYPE         ("R"),
+        .ARBITER      ("R"),
         .TAG_SEL_IDX  (1), // Skip 0 for NC flag
         .BUFFERED_REQ (1),
         .BUFFERED_RSP (1)

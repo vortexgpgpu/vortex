@@ -46,10 +46,11 @@ module VX_writeback #(
         .NUM_REQS (NUM_RSPS),
         .DATAW    (DATAW),
         .BUFFERED (1),
-        .TYPE     ("R")
+        .ARBITER  ("R")
     ) rsp_mux (
         .clk       (clk),
         .reset     (reset),
+        `UNUSED_PIN (sel_in),
         .valid_in  ({            
             gpu_commit_if.valid && gpu_commit_if.wb,
             csr_commit_if.valid && csr_commit_if.wb,

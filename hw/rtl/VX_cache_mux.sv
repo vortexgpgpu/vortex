@@ -8,7 +8,7 @@ module VX_cache_mux #(
     parameter TAG_SEL_IDX   = 0,   
     parameter BUFFERED_REQ  = 0,
     parameter BUFFERED_RSP  = 0,
-    parameter TYPE          = "R",
+    parameter ARBITER       = "R",
 
     localparam ADDR_WIDTH   = (32-`CLOG2(DATA_SIZE)),
     localparam DATA_WIDTH   = (8 * DATA_SIZE),
@@ -66,10 +66,11 @@ module VX_cache_mux #(
             .LANES    (LANES),
             .DATAW    (REQ_DATAW),
             .BUFFERED (BUFFERED_REQ),
-            .TYPE     (TYPE)
+            .ARBITER  (ARBITER)
         ) req_mux (
             .clk       (clk),
             .reset     (reset),
+            `UNUSED_PIN (sel_in),
             .valid_in  (req_valid_in),
             .data_in   (req_data_in),
             .ready_in  (req_ready_in),
