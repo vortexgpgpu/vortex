@@ -7,13 +7,14 @@
 module VX_onehot_encoder #(
     parameter N       = 1,    
     parameter REVERSE = 0,
-    parameter MODEL   = 1,
-    parameter LN      = `LOG2UP(N)
+    parameter MODEL   = 1    
 ) (
     input wire [N-1:0]   data_in,    
     output wire [LN-1:0] data_out,
     output wire          valid_out
 ); 
+    localparam LN = `LOG2UP(N);
+
     if (N == 1) begin
 
         assign data_out  = data_in;

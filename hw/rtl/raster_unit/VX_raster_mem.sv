@@ -320,7 +320,8 @@ module VX_raster_mem #(
         .NUM_REQS     (`RCACHE_NUM_REQS),
         .DATA_WIDTH   (`RCACHE_WORD_SIZE*8),
         .TAG_WIDTH    (`RCACHE_TAG_WIDTH),
-        .TAG_SEL_BITS (`RCACHE_TAG_SEL_BITS)
+        .TAG_SEL_BITS (`RCACHE_TAG_SEL_BITS),
+        .OUT_REG      (1)
     ) cache_rsp_sel (
         .clk            (clk),
         .reset          (reset),

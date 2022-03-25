@@ -4,17 +4,17 @@
 module VX_generic_arbiter #(
     parameter NUM_REQS     = 1,
     parameter LOCK_ENABLE  = 0,
-    parameter LOG_NUM_REQS = $clog2(NUM_REQS),    
     parameter string TYPE  = "P"
 ) (
     input  wire                     clk,
     input  wire                     reset,
-    input  wire                     enable,
+    input  wire                     unlock,
     input  wire [NUM_REQS-1:0]      requests,
     output wire [LOG_NUM_REQS-1:0]  grant_index,
     output wire [NUM_REQS-1:0]      grant_onehot,   
     output wire                     grant_valid
-  );
+);
+    localparam LOG_NUM_REQS = $clog2(NUM_REQS);
 
     if (TYPE == "P") begin
         VX_fixed_arbiter #(
@@ -23,7 +23,7 @@ module VX_generic_arbiter #(
         ) grant_arb (
             .clk          (clk),
             .reset        (reset),
-            .enable       (enable),
+            .unlock       (unlock),
             .requests     (requests),              
             .grant_valid  (grant_valid),
             .grant_index  (grant_index),
@@ -36,7 +36,7 @@ module VX_generic_arbiter #(
         ) grant_arb (
             .clk          (clk),
             .reset        (reset),
-            .enable       (enable),
+            .unlock       (unlock),
             .requests     (requests),  
             .grant_valid  (grant_valid),
             .grant_index  (grant_index),
@@ -49,7 +49,7 @@ module VX_generic_arbiter #(
         ) grant_arb (
             .clk          (clk),
             .reset        (reset),
-            .enable       (enable),
+            .unlock       (unlock),
             .requests     (requests),   
             .grant_valid  (grant_valid),
             .grant_index  (grant_index),
@@ -62,7 +62,7 @@ module VX_generic_arbiter #(
         ) grant_arb (
             .clk          (clk),
             .reset        (reset),
-            .enable       (enable),
+            .unlock       (unlock),
             .requests     (requests), 
             .grant_valid  (grant_valid),
             .grant_index  (grant_index),

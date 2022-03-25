@@ -39,9 +39,7 @@ module VX_bank #(
     parameter CORE_TAG_WIDTH    = REQ_DBG_IDW,
 
     // bank offset from beginning of index range
-    parameter BANK_ADDR_OFFSET  = 0,
-
-    parameter MSHR_ADDR_WIDTH   = $clog2(MSHR_SIZE)
+    parameter BANK_ADDR_OFFSET  = 0    
 ) (
     `SCOPE_IO_VX_bank
 
@@ -95,7 +93,7 @@ module VX_bank #(
     input wire                          flush_enable,
     input wire [`LINE_SELECT_BITS-1:0]  flush_addr
 );
-
+    localparam MSHR_ADDR_WIDTH  = $clog2(MSHR_SIZE);
     localparam WORD_SELECT_BITS = `UP(`WORD_SELECT_BITS);
 
 `IGNORE_UNUSED_BEGIN

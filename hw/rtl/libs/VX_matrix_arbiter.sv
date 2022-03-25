@@ -2,18 +2,18 @@
 
 `TRACING_OFF
 module VX_matrix_arbiter #(
-    parameter NUM_REQS     = 1,
-    parameter LOCK_ENABLE  = 0,
-    parameter LOG_NUM_REQS = $clog2(NUM_REQS)
+    parameter NUM_REQS    = 1,
+    parameter LOCK_ENABLE = 0
 ) (
     input  wire                     clk,
     input  wire                     reset,
-    input  wire                     enable,
+    input  wire                     unlock,
     input  wire [NUM_REQS-1:0]      requests,
     output wire [LOG_NUM_REQS-1:0]  grant_index,
     output wire [NUM_REQS-1:0]      grant_onehot,   
     output wire                     grant_valid
-  );
+);
+    localparam LOG_NUM_REQS = $clog2(NUM_REQS);
 
     if (NUM_REQS == 1)  begin
 
@@ -58,18 +58,18 @@ module VX_matrix_arbiter #(
         end
 
         if (LOCK_ENABLE == 0) begin
-            `UNUSED_VAR (enable)
+            `UNUSED_VAR (unlock)
             assign grant_onehot = grant_unqual;
         end else begin
             reg [NUM_REQS-1:0] grant_unqual_prev;
             always @(posedge clk) begin
                 if (reset) begin
                     grant_unqual_prev <= 0;
-                end else if (enable) begin
+                end else if (unlock) begin
                     grant_unqual_prev <= grant_unqual;
                 end
             end
-            assign grant_onehot = enable ? grant_unqual : grant_unqual_prev;
+            assign grant_onehot = unlock ? grant_unqual : grant_unqual_prev;
         end
 
         VX_onehot_encoder #(

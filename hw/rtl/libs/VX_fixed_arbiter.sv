@@ -2,14 +2,13 @@
 
 `TRACING_OFF
 module VX_fixed_arbiter #(
-    parameter NUM_REQS     = 1,
-    parameter LOCK_ENABLE  = 0,
-    parameter LOG_NUM_REQS = $clog2(NUM_REQS)
+    parameter NUM_REQS    = 1,
+    parameter LOCK_ENABLE = 0
 ) (
     input  wire                     clk,
     input  wire                     reset,
     input  wire [NUM_REQS-1:0]      requests,           
-    input  wire                     enable,
+    input  wire                     unlock,
     output wire [LOG_NUM_REQS-1:0]  grant_index,
     output wire [NUM_REQS-1:0]      grant_onehot,   
     output wire                     grant_valid
@@ -18,7 +17,9 @@ module VX_fixed_arbiter #(
     `UNUSED_PARAM (LOCK_ENABLE)
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
-    `UNUSED_VAR (enable)
+    `UNUSED_VAR (unlock)
+
+    localparam LOG_NUM_REQS = $clog2(NUM_REQS);
 
     if (NUM_REQS == 1)  begin        
         

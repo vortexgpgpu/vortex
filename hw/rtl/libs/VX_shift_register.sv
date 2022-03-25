@@ -4,8 +4,7 @@
 module VX_shift_register_nr #( 
     parameter DATAW  = 1,
     parameter DEPTH  = 1,
-    parameter NTAPS  = 1,
-    parameter DEPTHW = $clog2(DEPTH),
+    parameter NTAPS  = 1,    
     parameter [(DEPTHW*NTAPS)-1:0] TAPS = {NTAPS{DEPTHW'(DEPTH-1)}}
 ) (
     input wire clk,
@@ -13,6 +12,8 @@ module VX_shift_register_nr #(
     input wire [DATAW-1:0]          data_in,
     output wire [(NTAPS*DATAW)-1:0] data_out
 );
+    localparam DEPTHW = $clog2(DEPTH);
+
     reg [DEPTH-1:0][DATAW-1:0] entries;
 
     always @(posedge clk) begin
@@ -32,8 +33,7 @@ endmodule
 module VX_shift_register_wr #( 
     parameter DATAW  = 1, 
     parameter DEPTH  = 1,
-    parameter NTAPS  = 1,
-    parameter DEPTHW = $clog2(DEPTH),
+    parameter NTAPS  = 1,    
     parameter [(DEPTHW*NTAPS)-1:0] TAPS = {NTAPS{DEPTHW'(DEPTH-1)}}
 ) (
     input wire clk,
@@ -42,6 +42,8 @@ module VX_shift_register_wr #(
     input wire [DATAW-1:0]          data_in,
     output wire [(NTAPS*DATAW)-1:0] data_out
 );
+    localparam DEPTHW = $clog2(DEPTH);
+
     reg [DEPTH-1:0][DATAW-1:0] entries;
 
     always @(posedge clk) begin
@@ -64,8 +66,7 @@ module VX_shift_register #(
     parameter DATAW  = 1, 
     parameter RESETW = 0,
     parameter DEPTH  = 1,
-    parameter NTAPS  = 1,
-    parameter DEPTHW = $clog2(DEPTH),
+    parameter NTAPS  = 1,    
     parameter [(DEPTHW*NTAPS)-1:0] TAPS = {NTAPS{DEPTHW'(DEPTH-1)}}
 ) (
     input wire clk,
@@ -74,6 +75,8 @@ module VX_shift_register #(
     input wire [DATAW-1:0]          data_in,
     output wire [(NTAPS*DATAW)-1:0] data_out
 );
+    localparam DEPTHW = $clog2(DEPTH);
+
     if (RESETW != 0) begin
         if (RESETW == DATAW) begin
     

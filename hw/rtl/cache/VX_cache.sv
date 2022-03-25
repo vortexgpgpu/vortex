@@ -436,7 +436,7 @@ module VX_cache #(
         .NUM_PORTS       (NUM_PORTS),
         .WORD_SIZE       (WORD_SIZE),
         .NUM_REQS        (NUM_REQS),
-        .CORE_TAG_WIDTH       (CORE_TAG_X_WIDTH),
+        .CORE_TAG_WIDTH  (CORE_TAG_X_WIDTH),
         .BANK_ADDR_OFFSET(BANK_ADDR_OFFSET)
     ) core_req_bank_sel (        
         .clk        (clk),

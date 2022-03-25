@@ -4,14 +4,15 @@
 module VX_priority_encoder #( 
     parameter N       = 1,  
     parameter REVERSE = 0,
-    parameter MODEL   = 1,
-    parameter LN      = `LOG2UP(N)
+    parameter MODEL   = 1    
 ) (
     input  wire [N-1:0]  data_in,  
     output wire [N-1:0]  onehot,
     output wire [LN-1:0] index,
     output wire          valid_out
 );
+    localparam LN = `LOG2UP(N);
+
     wire [N-1:0] reversed; 
 
     if (REVERSE) begin

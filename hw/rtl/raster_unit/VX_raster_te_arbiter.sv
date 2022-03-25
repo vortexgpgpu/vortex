@@ -59,7 +59,7 @@ module VX_raster_te_arbiter #(
     ) tile_fifo_arbiter (
         .clk            (clk),
         .reset          (reset),
-        .enable         (!fifo_empty),
+        .unlock         (!fifo_empty),
         .requests       (~empty_flag),
         .grant_index    (fifo_index),
         .grant_onehot   (fifo_index_onehot),

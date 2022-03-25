@@ -121,7 +121,7 @@ module VX_ibuffer #(
         .grant_index (deq_wid_rr_n),
         `UNUSED_PIN (grant_valid),
         `UNUSED_PIN (grant_onehot),
-        `UNUSED_PIN (enable)
+        `UNUSED_PIN (unlock)
     );
 
     // schedule the next instruction to issue

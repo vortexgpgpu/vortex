@@ -7,8 +7,7 @@ module VX_dp_ram #(
     parameter BYTEENW     = 1,
     parameter OUT_REG     = 0,
     parameter NO_RWCHECK  = 0,
-    parameter LUTRAM      = 0,
-    parameter ADDRW       = $clog2(SIZE),
+    parameter LUTRAM      = 0,    
     parameter INIT_ENABLE = 0,
     parameter INIT_FILE   = "",
     parameter [DATAW-1:0] INIT_VALUE = 0
@@ -20,6 +19,7 @@ module VX_dp_ram #(
     input wire [ADDRW-1:0]   raddr,
     output wire [DATAW-1:0]  rdata
 );
+    localparam ADDRW = $clog2(SIZE);
 
     `STATIC_ASSERT((1 == BYTEENW) || ((BYTEENW > 1) && 0 == (BYTEENW % 4)), ("invalid parameter"))
 
