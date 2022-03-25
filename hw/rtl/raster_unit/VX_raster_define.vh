@@ -2,10 +2,10 @@
 `define VX_RASTER_DEFINE
 
 `include "VX_define.vh"
+`include "VX_types.vh"
 
 `define RASTER_ADDR_BITS            32  
 `define RASTER_DCR_DATA_BITS        32
-`define RASTER_TILE_DATA_BITS       16
 `define RASTER_PRIMITIVE_DATA_BITS  32
 
 task trace_raster_state (
