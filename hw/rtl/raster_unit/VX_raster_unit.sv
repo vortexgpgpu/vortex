@@ -9,17 +9,14 @@
 
 module VX_raster_unit #(
     parameter CLUSTER_ID  = 0,
-    parameter NUM_SLICES  = 1,  // number of raster slices
-    parameter NUM_OUTPUTS = 4   // number of output queues   
-    parameter CLUSTER_ID  = 0,
+    parameter NUM_OUTPUTS = 4,               // number of output queues
     parameter NUM_SLICES = 1,                // number of raster slices
-    parameter RASTER_TILE_SIZE = 16,        // tile size
-    parameter RASTER_BLOCK_SIZE = 4,        // block size
-    parameter RASTER_RS_SIZE = 8,           // Reservation station size
-    parameter RASTER_QUAD_OUTPUT_RATE = 4,  // Rate output quad generation
-    parameter RASTER_QUAD_FIFO_DEPTH  = 64, // Quad fifo depth
-    parameter RASTER_TILE_FIFO_DEPTH  = (RASTER_TILE_SIZE*RASTER_TILE_SIZE)/(
-        RASTER_BLOCK_SIZE*RASTER_BLOCK_SIZE) + 1 // tile fifo depth
+    parameter RASTER_TILE_SIZE = 16,         // tile size
+    parameter RASTER_BLOCK_SIZE = 4,         // block size
+    parameter RASTER_RS_SIZE = 8,            // Reservation station size
+    parameter RASTER_QUAD_OUTPUT_RATE = 4,   // Rate output quad generation
+    parameter RASTER_QUAD_FIFO_DEPTH  = 64,  // Quad fifo depth
+    parameter RASTER_TILE_FIFO_DEPTH  = 16   // tile fifo depth
 ) (
     input wire clk,
     input wire reset,
@@ -37,65 +34,44 @@ module VX_raster_unit #(
     VX_raster_dcr_if.slave  raster_dcr_if,
     VX_raster_req_if.master raster_req_if
 );
-    // TODO: remove
-    `UNUSED_VAR (clk)
-    `UNUSED_VAR (reset)
 
-    // TODO: remove
+    `STATIC_ASSERT(RASTER_TILE_FIFO_DEPTH >= (RASTER_TILE_SIZE*RASTER_TILE_SIZE)/(
+        RASTER_BLOCK_SIZE*RASTER_BLOCK_SIZE) + 1, ("must be 0 or power of 2!"))
+
+    localparam RASTER_SLICE_BITS = `LOG2UP(NUM_SLICES);
+
     raster_dcrs_t raster_dcrs;
     assign raster_dcrs = raster_dcr_if.data;
-    `UNUSED_VAR (raster_dcrs)
-
-    // TODO: remove
-    assign raster_req_if.valid  = 0;
-    assign raster_req_if.tmask  = 0;
-    assign raster_req_if.valid  = 0;
-    assign raster_req_if.stamps = 0;
-    assign raster_req_if.empty  = 0;
-    `UNUSED_VAR (raster_req_if.ready)
-
-`ifdef PERF_ENABLE
-    // TODO: remove
-    assign raster_perf_if.mem_reads = 0;
-    assign raster_perf_if.mem_latency = 0;
-`endif
-    
-    // TODO: remove
-    assign cache_req_if.valid = 0;
-    assign cache_req_if.rw = 0;
-    assign cache_req_if.byteen = 0;
-    assign cache_req_if.addr = 0;
-    assign cache_req_if.data = 0;     
-    assign cache_req_if.tag = 0;
-    `UNUSED_VAR (cache_req_if.ready)
-
-    // TODO: remove
-    `UNUSED_VAR (cache_rsp_if.valid)
-    `UNUSED_VAR (cache_rsp_if.data)        
-    `UNUSED_VAR (cache_rsp_if.tag)
-    assign cache_rsp_if.ready = 0;
-
-    localparam NUM_SLICE_BITS = `LOG2UP(RASTER_SLICE_BITS);
 
     // Output from the request
-    logic [`RASTER_TILE_DATA_BITS-1:0]                   x_loc, y_loc;
+    logic [`RASTER_DIM_BITS-1:0]                   x_loc, y_loc;
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              edges[2:0][2:0];
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              pid;
     // Slice selected for tile
     logic [RASTER_SLICE_BITS-1:0]                       slice_index;
     logic mem_data_valid;
 
+    // FSM to control the valid signals for the rest of the system
+    reg raster_input_valid;
+    always @(posedge clk) begin
+        raster_input_valid <= 0;
+        if (reset) begin
+            raster_input_valid <= 1;
+        end
+    end
+
     // Mem to raster slice control signals
     logic mem_valid;
-    logic [RASTER_SLICE_NUM-1:0] raster_slice_ready;
-    VX_raster_mem #(  
-        .RASTER_SLICE_NUM(RASTER_SLICE_BITS),
+    logic [NUM_SLICES-1:0] raster_slice_ready;
+    VX_raster_mem #(
+        .RASTER_SLICE_NUM(NUM_SLICES),
+        .RASTER_SLICE_BITS(RASTER_SLICE_BITS),
         .RASTER_TILE_SIZE(RASTER_TILE_SIZE),
         .RASTER_RS_SIZE(RASTER_RS_SIZE)
     ) raster_mem (
         .clk(clk),
         .reset(reset),
-        .input_valid(raster_req_if.valid),
+        .input_valid(raster_input_valid),
         .num_tiles(raster_dcrs.tile_count),
         .tbuf_baseaddr(raster_dcrs.tbuf_addr),
         .pbuf_baseaddr(raster_dcrs.pbuf_addr),
@@ -106,7 +82,7 @@ module VX_raster_unit #(
         .out_edges(edges),
         .out_pid(pid),
         .out_slice_index(slice_index),
-        .ready(raster_req_if.ready),
+        `UNUSED_PIN(ready),
         .out_valid(mem_valid),
         .cache_req_if(cache_req_if),
         .cache_rsp_if(cache_rsp_if)
@@ -130,15 +106,15 @@ module VX_raster_unit #(
         .edge_func_val(edge_func_val)
     );
 
-    logic quad_valid[RASTER_SLICE_NUM-1:0][RASTER_QUAD_OUTPUT_RATE-1:0];
+    logic quad_valid[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0];
     
-    logic [`RASTER_TILE_DATA_BITS-1:0] temp_quad_x_loc[RASTER_SLICE_NUM-1:0][RASTER_QUAD_OUTPUT_RATE-1:0],
-        temp_quad_y_loc[RASTER_QUAD_OUTPUT_RATE-1:0];
-    logic [3:0] temp_quad_masks[RASTER_SLICE_NUM-1:0];
-    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_quad_bcoords[RASTER_SLICE_NUM-1:0][RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0];
-    logic quad_queue_empty[RASTER_SLICE_NUM-1:0];
-    logic quad_pop[RASTER_SLICE_NUM-1:0];
-    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_out_pid[RASTER_SLICE_NUM-1:0];
+    logic [`RASTER_DIM_BITS-1:0] temp_quad_x_loc[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0],
+        temp_quad_y_loc[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0];
+    logic [3:0] temp_quad_masks[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0];
+    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_quad_bcoords[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0];
+    logic quad_queue_empty[NUM_SLICES-1:0];
+    logic quad_pop[NUM_SLICES-1:0];
+    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_out_pid[NUM_SLICES-1:0];
     
     // TODO: Add raster slices in generate block here
     for (genvar i = 0; i < RASTER_SLICE_BITS; ++i) begin
@@ -161,10 +137,11 @@ module VX_raster_unit #(
             .pid(pid),
             .edge_func_val(edge_func_val),
             .extents(extents),
-            .pop_quad(quad_pop[i] && arbiter_valid),
+            // Pop quad only if the quad receiver outside the raster is ready
+            .pop_quad(quad_pop[i] && arbiter_valid && raster_req_if.ready),
             .ready(raster_slice_ready[i]),
             .quad_queue_empty(quad_queue_empty[i]),
-            .out_pid(out_pid[i]),
+            .out_pid(temp_out_pid[i]),
             .out_quad_x_loc(temp_quad_x_loc[i]),
             .out_quad_y_loc(temp_quad_y_loc[i]),
             .out_quad_masks(temp_quad_masks[i]),
@@ -173,20 +150,18 @@ module VX_raster_unit #(
         );
     end
 
-    logic pop_quad;
-
-    logic [`RASTER_TILE_DATA_BITS-1:0] out_quad_x_loc[RASTER_QUAD_OUTPUT_RATE-1:0];
-    logic [`RASTER_TILE_DATA_BITS-1:0] out_quad_y_loc[RASTER_QUAD_OUTPUT_RATE-1:0];
+    logic [`RASTER_DIM_BITS-1:0] out_quad_x_loc[RASTER_QUAD_OUTPUT_RATE-1:0];
+    logic [`RASTER_DIM_BITS-1:0] out_quad_y_loc[RASTER_QUAD_OUTPUT_RATE-1:0];
     logic [3:0] out_quad_masks[RASTER_QUAD_OUTPUT_RATE-1:0];
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0];
     logic arbiter_valid;
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] out_pid;
     generate
         // add arbiter if # raster slice > 1
-        if (RASTER_SLICE_NUM > 1) begin
-            logic quad_index[NUM_SLICE_BITS-1:0];
+        if (NUM_SLICES > 1) begin
+            logic quad_index[RASTER_SLICE_BITS-1:0];
             VX_fair_arbiter #(
-                .NUM_REQS   (RASTER_SLICE_NUM),
+                .NUM_REQS   (NUM_SLICES),
             ) tile_fifo_arbiter (
                 .clk            (clk),
                 .reset          (reset),
@@ -210,7 +185,7 @@ module VX_raster_unit #(
             always_comb begin
                 arbiter_valid = 1;
                 if (!quad_queue_empty) begin
-                    pop_quad = 1;
+                    quad_pop[0] = 1;
                     if (|quad_valid) begin
                         out_quad_x_loc = temp_quad_x_loc[0];
                         out_quad_y_loc = temp_quad_y_loc[0];
