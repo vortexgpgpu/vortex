@@ -115,8 +115,8 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_WARPS, &max_warps));
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_THREADS, &max_threads));
 
-  int num_tasks  = max_cores * max_warps * max_threads;
-  int num_points = count * num_tasks;
+  uint32_t num_tasks  = max_cores * max_warps * max_threads;
+  uint32_t num_points = count * num_tasks;
   size_t buf_size = num_points * sizeof(uint32_t);
   
   std::cout << "number of points: " << num_points << std::endl;
@@ -169,13 +169,13 @@ int main(int argc, char *argv[]) {
   auto b = (int32_t*)vx_host_ptr(src2_buf);
   auto c = (int32_t*)vx_host_ptr(src3_buf);
   auto s = (int32_t*)vx_host_ptr(src4_buf);
-  for (int i = 0; i < num_points; ++i) {
+  for (uint32_t i = 0; i < num_points; ++i) {
     a[i] = num_points/2 + i;
     b[i] = num_points/2 + i;
     c[i] = (num_points + i) / 2;
-    s[i] = 1;
+    s[i] = (i % 4);
   }
-  
+
   // upload source buffer0
   std::cout << "upload source buffer0" << std::endl;      
   RT_CHECK(vx_copy_to_dev(src1_buf, kernel_arg.src0_addr, buf_size, 0));
@@ -184,20 +184,23 @@ int main(int argc, char *argv[]) {
   std::cout << "upload source buffer1" << std::endl;      
   RT_CHECK(vx_copy_to_dev(src2_buf, kernel_arg.src1_addr, buf_size, 0));
 
-   // upload source buffer2
+  // upload source buffer2
   std::cout << "upload source buffer2" << std::endl;      
   RT_CHECK(vx_copy_to_dev(src3_buf, kernel_arg.src2_addr, buf_size, 0));
 
-   // upload source buffer3
+  // upload source buffer3
   std::cout << "upload source buffer2" << std::endl;      
   RT_CHECK(vx_copy_to_dev(src4_buf, kernel_arg.src3_addr, buf_size, 0));
 
   // clear destination buffer    
-  std::cout << "clear destination buffer" << std::endl;     
-  for (int i = 0; i < num_points; ++i) {
-    ((uint32_t*)vx_host_ptr(dst_buf))[i] = 0xdeadbeef;
-  }         
-  RT_CHECK(vx_copy_to_dev(dst_buf, kernel_arg.dst_addr, buf_size, 0));
+  {
+    std::cout << "clear destination buffer" << std::endl;   
+    auto buf_ptr = (int32_t*)vx_host_ptr(dst_buf);
+    for (uint32_t i = 0; i < num_points; ++i) {
+      buf_ptr[i] = 0xdeadbeef;
+    }
+    RT_CHECK(vx_copy_to_dev(dst_buf, kernel_arg.dst_addr, buf_size, 0));
+  }
 
   // start device
   std::cout << "start device" << std::endl;
@@ -213,10 +216,10 @@ int main(int argc, char *argv[]) {
 
   // verify destination
   std::cout << "verify test result" << std::endl;
-  int errors = 0;
+  uint32_t errors = 0;
   auto d = (int32_t*)vx_host_ptr(dst_buf);
-  for (int i = 0; i < num_points; ++i) {
-    auto ref = ((a[i] * b[i]) >> s[i]) + c[i];
+  for (uint32_t i = 0; i < num_points; ++i) {
+    auto ref = ((a[i] * b[i]) >> (s[i] * 8)) + c[i];
     if (d[i] != ref) {
       std::cout << "error at result #" << i << ": expected=" << ref << ", actual=" << c[i] << ", a=" << a[i] << ", b=" << b[i] << ", c=" << c[i] << ", s=" << s[i] << std::endl;
       ++errors;

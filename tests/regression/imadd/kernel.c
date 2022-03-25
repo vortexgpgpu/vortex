@@ -18,7 +18,14 @@ void kernel_body(int task_id, kernel_arg_t* arg) {
 		int32_t b = src1_ptr[offset+i];
 		int32_t c = src2_ptr[offset+i];
 		int32_t s = src3_ptr[offset+i];
-		int32_t d = vx_imadd(a, b, c, s);
+		int32_t d;
+		switch (s) {
+			case 0:  d = vx_imadd(a, b, c, 0); break;
+			case 1:  d = vx_imadd(a, b, c, 1); break;
+			case 2:  d = vx_imadd(a, b, c, 2); break;
+			case 3:  d = vx_imadd(a, b, c, 3); break;
+			default: d = 0; break;
+		}
 		dst_ptr[offset+i] = d;
 	}
 }
