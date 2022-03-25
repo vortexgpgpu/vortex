@@ -60,15 +60,6 @@ module VX_raster_unit #(
         end
     end
 
-    // FSM to control the valid signals for the rest of the system
-    reg raster_input_valid;
-    always @(posedge clk) begin
-        raster_input_valid <= 0;
-        if (reset) begin
-            raster_input_valid <= 1;
-        end
-    end
-
     // Mem to raster slice control signals
     logic mem_valid;
     logic [NUM_SLICES-1:0] raster_slice_ready;
