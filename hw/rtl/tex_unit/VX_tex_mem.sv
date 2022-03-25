@@ -317,8 +317,8 @@ module VX_tex_mem #(
         end
         if (dcache_rsp_fire) begin
             dpi_trace("%d: core%0d-tex-cache-rsp: wid=%0d, PC=0x%0h, tmask=%b, tag=0x%0h, data=", 
-                    $time, CORE_ID, q_req_wid, q_req_PC, cache_rsp_if.tmask, rsp_texel_idx);
-            `TRACE_ARRAY1D(cache_rsp_if.data, NUM_REQS);
+                    $time, CORE_ID, q_req_wid, q_req_PC, cache_rsp_tmask, rsp_texel_idx);
+            `TRACE_ARRAY1D(cache_rsp_data, NUM_REQS);
             dpi_trace(" (#%0d)\n", q_req_uuid);
         end
         if (req_valid && req_ready) begin
