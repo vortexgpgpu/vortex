@@ -35,7 +35,10 @@ module VX_raster_unit #(
     VX_raster_req_if.master raster_req_if
 );
 
+<<<<<<< HEAD
     // NECESSARY TO AVOID DEADLOCKS
+=======
+>>>>>>> 26a0dd6fcfbb8fbde2268295a60ad6049adac5d2
     `STATIC_ASSERT(RASTER_TILE_FIFO_DEPTH >= (RASTER_TILE_SIZE*RASTER_TILE_SIZE)/(
         RASTER_BLOCK_SIZE*RASTER_BLOCK_SIZE) + 1, ("must be 0 or power of 2!"))
 
@@ -50,6 +53,15 @@ module VX_raster_unit #(
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              pid;
     // Slice selected for tile
     logic [RASTER_SLICE_BITS-1:0]                       slice_index;
+
+    // FSM to control the valid signals for the rest of the system
+    reg raster_input_valid;
+    always @(posedge clk) begin
+        raster_input_valid <= 0;
+        if (reset) begin
+            raster_input_valid <= 1;
+        end
+    end
 
     // FSM to control the valid signals for the rest of the system
     reg raster_input_valid;
