@@ -15,10 +15,11 @@ void kernel_body(int task_id, tile_arg_t* arg) {
 	auto y_start = task_id * arg->tile_height;
 	auto y_end   = std::min<uint32_t>(y_start + arg->tile_height, state->dst_height);
 
-	auto tile_width = state->dst_width;
+	auto x_start = 0;
+	auto x_end = state->dst_width;
 
 	for (uint32_t y = y_start; y < y_end; ++y) {
-		for (uint32_t x = 0; x < tile_width; ++x) {
+		for (uint32_t x = x_start; x < x_end; ++x) {
 			vx_rop(x, y, state->backface, state->color, state->depth);	
 		}
 	}

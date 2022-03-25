@@ -16,7 +16,7 @@ VX_CFLAGS += -DENABLE_SW -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw -
 
 VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections $(VORTEX_RT_PATH)/libvortexrt.a
 
-VX_SRCS = kernel.c
+VX_SRCS = kernel.cpp
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
 
