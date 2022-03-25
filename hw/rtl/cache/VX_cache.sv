@@ -15,7 +15,7 @@ module VX_cache #(
     // Number of ports per banks
     parameter NUM_PORTS             = 1,
     // Number of associative ways
-    parameter NUM_WAYS              = 4,
+    parameter NUM_WAYS              = 1,
     // Size of a word in bytes
     parameter WORD_SIZE             = 4, 
 
