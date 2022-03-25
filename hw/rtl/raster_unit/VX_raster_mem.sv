@@ -34,7 +34,11 @@ module VX_raster_mem #(
     output logic [RASTER_SLICE_BITS-1:0]                        out_slice_index,
 
     // Status signals
-    output logic                                    ready, out_valid
+    output logic                                    ready, out_valid,
+
+    // Memory interface
+    VX_dcache_req_if.master cache_req_if,
+    VX_dcache_rsp_if.slave  cache_rsp_if
 );
 
     localparam RASTER_TILE_BITS  = $clog2(RASTER_TILE_SIZE);
@@ -263,7 +267,7 @@ module VX_raster_mem #(
         .clk(clk),
         .reset(reset),
 
-        .req_valid(mem_req_valid && mem_req_ready && |raster_rs_empty), // NOTE: This should ensure stalls
+        .req_valid(mem_req_valid && |raster_rs_empty), // NOTE: This should ensure stalls
         .req_rw(0),
         .req_mask(mem_req_mask),
         `UNUSED_PIN (req_byteen),   /// TODO: USE THIS PIN
@@ -279,18 +283,18 @@ module VX_raster_mem #(
         .rsp_tag(mem_rsp_tag),
         .rsp_ready(1),
 
-        `UNUSED_PIN (mem_req_valid),
-        `UNUSED_PIN (mem_req_rw),
-        `UNUSED_PIN (mem_req_byteen),
-        `UNUSED_PIN (mem_req_addr),
-        `UNUSED_PIN (mem_req_data),
-        `UNUSED_PIN (mem_req_tag),
-        `UNUSED_PIN (mem_req_ready),
-        `UNUSED_PIN (mem_rsp_valid),
-        `UNUSED_PIN (mem_rsp_mask),
-        `UNUSED_PIN (mem_rsp_data),
-        `UNUSED_PIN (mem_rsp_tag),
-        `UNUSED_PIN (mem_rsp_ready)
+        .mem_rsp_valid(cache_req_if.valid),
+        .mem_req_rw(cache_req_if.rw),
+        .mem_req_byteen(cache_req_if.byteen),
+        .mem_req_addr(cache_req_if.addr),
+        .mem_req_data(cache_req_if.data),
+        .mem_req_tag(cache_req_if.tag),
+        .mem_req_ready(cache_req_if.ready),
+        .mem_rsp_valid(cache_rsp_if.valid),
+        .mem_rsp_mask(cache_rsp_if.tmask),
+        .mem_rsp_data(cache_rsp_if.data),
+        .mem_rsp_tag(cache_rsp_if.tag),
+        .mem_rsp_ready(cache_rsp_if.ready)
     );
 
 endmodule

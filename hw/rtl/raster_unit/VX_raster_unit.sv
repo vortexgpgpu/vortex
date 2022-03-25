@@ -11,7 +11,7 @@ module VX_raster_unit #(
     parameter CLUSTER_ID  = 0,
     parameter NUM_SLICES  = 1,  // number of raster slices
     parameter NUM_OUTPUTS = 4   // number of output queues   
-    /*parameter CLUSTER_ID  = 0,
+    parameter CLUSTER_ID  = 0,
     parameter NUM_SLICES = 1,                // number of raster slices
     parameter RASTER_TILE_SIZE = 16,        // tile size
     parameter RASTER_BLOCK_SIZE = 4,        // block size
@@ -19,7 +19,7 @@ module VX_raster_unit #(
     parameter RASTER_QUAD_OUTPUT_RATE = 4,  // Rate output quad generation
     parameter RASTER_QUAD_FIFO_DEPTH  = 64, // Quad fifo depth
     parameter RASTER_TILE_FIFO_DEPTH  = (RASTER_TILE_SIZE*RASTER_TILE_SIZE)/(
-        RASTER_BLOCK_SIZE*RASTER_BLOCK_SIZE) + 1 // tile fifo depth*/
+        RASTER_BLOCK_SIZE*RASTER_BLOCK_SIZE) + 1 // tile fifo depth
 ) (
     input wire clk,
     input wire reset,
@@ -75,7 +75,7 @@ module VX_raster_unit #(
     `UNUSED_VAR (cache_rsp_if.tag)
     assign cache_rsp_if.ready = 0;
 
-    /*localparam NUM_SLICE_BITS = `LOG2UP(RASTER_SLICE_BITS);
+    localparam NUM_SLICE_BITS = `LOG2UP(RASTER_SLICE_BITS);
 
     // Output from the request
     logic [`RASTER_TILE_DATA_BITS-1:0]                   x_loc, y_loc;
@@ -107,7 +107,9 @@ module VX_raster_unit #(
         .out_pid(pid),
         .out_slice_index(slice_index),
         .ready(raster_req_if.ready),
-        .out_valid(mem_valid)
+        .out_valid(mem_valid),
+        .cache_req_if(cache_req_if),
+        .cache_rsp_if(cache_rsp_if)
     );
 
     // Complete the edge function values and extents
@@ -232,6 +234,6 @@ module VX_raster_unit #(
         .bcoords(out_quad_bcoords),
         .pid(out_pid),
         .raster_req_if(raster_req_if)
-    );*/
+    );
 
 endmodule
