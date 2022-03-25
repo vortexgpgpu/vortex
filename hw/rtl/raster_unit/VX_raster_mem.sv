@@ -101,6 +101,7 @@ module VX_raster_mem #(
             temp_num_tiles <= 0;
             temp_prim_count <= 0;
             fetch_fsm_complete <= 1;
+            temp_tile_count <= 0;
             pid <= 0;
             for (int i = 0; i < RASTER_RS_SIZE; ++i) begin
                 raster_rs_valid[i] <= 0;
@@ -109,7 +110,7 @@ module VX_raster_mem #(
         end
         else if (mem_req_ready) begin
             // On new input -> set the temp state values
-            if (ready && input_valid && valid_rs_empty_index) begin
+            if (ready && input_valid && valid_rs_empty_index && (temp_tile_count != num_tiles)) begin
                 temp_pbuf_addr <= pbuf_baseaddr;
                 temp_num_tiles <= num_tiles;
                 temp_pbuf_stride <= pbuf_stride;
