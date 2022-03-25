@@ -35,10 +35,7 @@ module VX_raster_unit #(
     VX_raster_req_if.master raster_req_if
 );
 
-<<<<<<< HEAD
     // NECESSARY TO AVOID DEADLOCKS
-=======
->>>>>>> 26a0dd6fcfbb8fbde2268295a60ad6049adac5d2
     `STATIC_ASSERT(RASTER_TILE_FIFO_DEPTH >= (RASTER_TILE_SIZE*RASTER_TILE_SIZE)/(
         RASTER_BLOCK_SIZE*RASTER_BLOCK_SIZE) + 1, ("must be 0 or power of 2!"))
 
