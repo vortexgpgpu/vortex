@@ -1,45 +1,47 @@
 `include "VX_cache_define.vh"
 
 module VX_bank #(
-    parameter CACHE_ID                      = "cache",
-    parameter BANK_ID                       = 0,
+    parameter string CACHE_ID   = "",
+    parameter BANK_ID           = 0,
 
     // Number of Word requests per cycle
-    parameter NUM_REQS                      = 1,  
+    parameter NUM_REQS          = 1,  
 
     // Size of cache in bytes
-    parameter CACHE_SIZE                    = 1, 
+    parameter CACHE_SIZE        = 1, 
     // Size of line inside a bank in bytes
-    parameter CACHE_LINE_SIZE               = 1, 
+    parameter CACHE_LINE_SIZE   = 1, 
     // Number of banks
-    parameter NUM_BANKS                     = 1,
+    parameter NUM_BANKS         = 1,
     // Number of ports per banks
-    parameter NUM_PORTS                     = 1,
+    parameter NUM_PORTS         = 1,
     // Number of associative ways 
-    parameter NUM_WAYS                      = 1, 
+    parameter NUM_WAYS          = 1, 
     // Size of a word in bytes
-    parameter WORD_SIZE                     = 1, 
+    parameter WORD_SIZE         = 1, 
 
     // Core Request Queue Size
-    parameter CREQ_SIZE                     = 1, 
+    parameter CREQ_SIZE         = 1, 
     // Core Response Queue Size
-    parameter CRSQ_SIZE                     = 1,
+    parameter CRSQ_SIZE         = 1,
     // Miss Reserv Queue Knob
-    parameter MSHR_SIZE                     = 1, 
+    parameter MSHR_SIZE         = 1, 
     // Memory Request Queue Size
-    parameter MREQ_SIZE                     = 1,
+    parameter MREQ_SIZE         = 1,
 
     // Enable cache writeable
-    parameter WRITE_ENABLE                  = 1,
+    parameter WRITE_ENABLE      = 1,
+
+    // Request debug identifier
+    parameter REQ_DBG_IDW       = 0,
 
     // core request tag size
-    parameter CORE_TAG_WIDTH                = 1,
+    parameter CORE_TAG_WIDTH    = REQ_DBG_IDW,
 
     // bank offset from beginning of index range
-    parameter BANK_ADDR_OFFSET              = 0,
+    parameter BANK_ADDR_OFFSET  = 0,
 
-    parameter MSHR_ADDR_WIDTH  = $clog2(MSHR_SIZE),
-    parameter WORD_SELECT_BITS = `UP(`WORD_SELECT_BITS)
+    parameter MSHR_ADDR_WIDTH   = $clog2(MSHR_SIZE)
 ) (
     `SCOPE_IO_VX_bank
 
@@ -94,20 +96,22 @@ module VX_bank #(
     input wire [`LINE_SELECT_BITS-1:0]  flush_addr
 );
 
+    localparam WORD_SELECT_BITS = `UP(`WORD_SELECT_BITS);
+
 `IGNORE_UNUSED_BEGIN
     wire [`DBG_CACHE_REQ_IDW-1:0] req_id_sel, req_id_st0, req_id_st1;
 `IGNORE_UNUSED_END
 
-    wire [NUM_PORTS-1:0] creq_pmask;
+    wire                                       creq_valid;
+    wire [NUM_PORTS-1:0]                       creq_pmask;
     wire [NUM_PORTS-1:0][WORD_SELECT_BITS-1:0] creq_wsel;
-    wire [NUM_PORTS-1:0][WORD_SIZE-1:0] creq_byteen;
-    wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] creq_data;
-    wire [NUM_PORTS-1:0][`REQS_BITS-1:0] creq_tid;  
-    wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] creq_tag;
-    wire                        creq_rw;  
-    wire [`LINE_ADDR_WIDTH-1:0] creq_addr;
-    
-    wire creq_valid, creq_ready;
+    wire [NUM_PORTS-1:0][WORD_SIZE-1:0]        creq_byteen;
+    wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0]      creq_data;
+    wire [NUM_PORTS-1:0][`REQS_BITS-1:0]       creq_tid;  
+    wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0]   creq_tag;
+    wire                                       creq_rw;  
+    wire [`LINE_ADDR_WIDTH-1:0]                creq_addr;    
+    wire                                       creq_ready;
 
     VX_elastic_buffer #(
         .DATAW (1 + `LINE_ADDR_WIDTH + NUM_PORTS * (1 + WORD_SELECT_BITS + WORD_SIZE + `WORD_WIDTH + `REQS_BITS + CORE_TAG_WIDTH)),
@@ -190,7 +194,9 @@ module VX_bank #(
     wire mem_rsp_fire = mem_rsp_valid && mem_rsp_ready;
     wire creq_fire    = creq_valid && creq_ready;
 
-    assign req_id_sel = mshr_enable ? mshr_tag[0][`CACHE_REQ_ID_RNG] : creq_tag[0][`CACHE_REQ_ID_RNG];
+    wire [CORE_TAG_WIDTH-1:0] mshr_creq_tag = mshr_enable ? mshr_tag[0] : creq_tag[0];
+    `ASSIGN_REQ_DBG_ID (req_id_sel, mshr_creq_tag)
+    `UNUSED_VAR (mshr_creq_tag)
 
     wire [`CACHE_LINE_WIDTH-1:0] wdata_sel;    
     assign wdata_sel[(NUM_PORTS * `WORD_WIDTH)-1:0] = (mem_rsp_valid || !WRITE_ENABLE) ? mem_rsp_data[(NUM_PORTS * `WORD_WIDTH)-1:0] : creq_data;
@@ -224,7 +230,7 @@ module VX_bank #(
         .data_out ({valid_st0, is_flush_st0, is_mshr_st0, is_fill_st0, is_read_st0, is_write_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_tid_st0, pmask_st0, tag_st0, mshr_id_st0})
     );
 
-    assign req_id_st0 = tag_st0[0][`CACHE_REQ_ID_RNG];
+    `ASSIGN_REQ_DBG_ID (req_id_st0, tag_st0[0])
 
     wire do_fill_st0   = valid_st0 && is_fill_st0;
     wire do_flush_st0  = valid_st0 && is_flush_st0;
@@ -237,13 +243,14 @@ module VX_bank #(
     wire [NUM_WAYS-1:0] select_way_st1;
 
     VX_tag_access #(
-        .BANK_ID          (BANK_ID),
         .CACHE_ID         (CACHE_ID),
+        .BANK_ID          (BANK_ID),        
         .CACHE_SIZE       (CACHE_SIZE),
         .CACHE_LINE_SIZE  (CACHE_LINE_SIZE),
         .NUM_BANKS        (NUM_BANKS),
         .NUM_WAYS         (NUM_WAYS),
         .WORD_SIZE        (WORD_SIZE),   
+        .REQ_DBG_IDW      (REQ_DBG_IDW),
         .BANK_ADDR_OFFSET (BANK_ADDR_OFFSET) 
     ) tag_access (
         .clk       (clk),
@@ -281,7 +288,7 @@ module VX_bank #(
         .data_out ({valid_st1, is_mshr_st1, is_fill_st1, is_read_st1, is_write_st1, miss_st1, addr_st1, wdata_st1, wsel_st1, byteen_st1, req_tid_st1, pmask_st1, tag_st1, mshr_id_st1,   mshr_pending_st1, select_way_st1})
     ); 
 
-    assign req_id_st1 = tag_st1[0][`CACHE_REQ_ID_RNG];
+    `ASSIGN_REQ_DBG_ID (req_id_st1, tag_st1[0])
 
     wire do_read_st0  = valid_st0 && is_read_st0;
     wire do_read_st1  = valid_st1 && is_read_st1;
@@ -293,15 +300,16 @@ module VX_bank #(
     `UNUSED_VAR (wdata_st1)
     
     VX_data_access #(
-        .BANK_ID        (BANK_ID),
         .CACHE_ID       (CACHE_ID),
+        .BANK_ID        (BANK_ID),        
         .CACHE_SIZE     (CACHE_SIZE),
         .CACHE_LINE_SIZE(CACHE_LINE_SIZE),
         .NUM_BANKS      (NUM_BANKS),
         .NUM_WAYS       (NUM_WAYS),
         .NUM_PORTS      (NUM_PORTS),
         .WORD_SIZE      (WORD_SIZE),
-        .WRITE_ENABLE   (WRITE_ENABLE)        
+        .WRITE_ENABLE   (WRITE_ENABLE),
+        .REQ_DBG_IDW    (REQ_DBG_IDW)
      ) data_access (
         .clk        (clk),
         .reset      (reset),
@@ -342,14 +350,15 @@ module VX_bank #(
     );
 
     VX_miss_resrv #(
-        .BANK_ID            (BANK_ID),
         .CACHE_ID           (CACHE_ID),
+        .BANK_ID            (BANK_ID),        
         .CACHE_LINE_SIZE    (CACHE_LINE_SIZE),
         .NUM_BANKS          (NUM_BANKS),
         .NUM_PORTS          (NUM_PORTS),
         .WORD_SIZE          (WORD_SIZE),
         .NUM_REQS           (NUM_REQS),
         .MSHR_SIZE          (MSHR_SIZE),
+        .REQ_DBG_IDW        (REQ_DBG_IDW),
         .CORE_TAG_WIDTH     (CORE_TAG_WIDTH)
     ) miss_resrv (
         .clk                (clk),

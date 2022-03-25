@@ -595,17 +595,17 @@ private:
 
   bool get_ebreak() const {
   #ifdef AXI_BUS
-    return (bool)device_->Vortex_axi->vortex->genblk2__BRA__0__KET____DOT__cluster->genblk2__BRA__0__KET____DOT__core->pipeline->execute->ebreak;
+    return (bool)device_->Vortex_axi->vortex->sim_ebreak;
   #else
-    return (bool)device_->Vortex->genblk2__BRA__0__KET____DOT__cluster->genblk2__BRA__0__KET____DOT__core->pipeline->execute->ebreak;
+    return (bool)device_->Vortex->sim_ebreak;
   #endif
   }
 
   int get_last_wb_value(int reg) const {
   #ifdef AXI_BUS
-    return (int)device_->Vortex_axi->vortex->genblk2__BRA__0__KET____DOT__cluster->genblk2__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_wb_value[reg];
+    return (int)device_->Vortex_axi->vortex->sim_last_wb_value[reg];
   #else
-    return (int)device_->Vortex->genblk2__BRA__0__KET____DOT__cluster->genblk2__BRA__0__KET____DOT__core->pipeline->commit->writeback->last_wb_value[reg];
+    return (int)device_->Vortex->sim_last_wb_value[reg];
   #endif
   }
 

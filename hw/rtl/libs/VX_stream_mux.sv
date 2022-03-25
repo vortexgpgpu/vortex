@@ -1,15 +1,17 @@
 `include "VX_platform.vh"
 
 module VX_stream_mux #(
-    parameter NUM_REQS    = 1,
-    parameter LANES       = 1,
-    parameter DATAW       = 1,
-    parameter TYPE        = "P",
-    parameter LOCK_ENABLE = 1,
-    parameter BUFFERED    = 0
+    parameter NUM_REQS     = 1,
+    parameter LANES        = 1,
+    parameter DATAW        = 1,
+    parameter string ARBITER = "",
+    parameter LOCK_ENABLE  = 1,
+    parameter BUFFERED     = 0
 ) (
     input  wire clk,
     input  wire reset,
+
+    input wire [LANES-1:0][`UP(LOG_NUM_REQS)-1:0] sel_in,
 
     input  wire [NUM_REQS-1:0][LANES-1:0]            valid_in,
     input  wire [NUM_REQS-1:0][LANES-1:0][DATAW-1:0] data_in,
@@ -22,99 +24,73 @@ module VX_stream_mux #(
     localparam LOG_NUM_REQS = `CLOG2(NUM_REQS);
 
     if (NUM_REQS > 1)  begin
-        wire                    sel_valid;
-        wire                    sel_ready;
-        wire [LOG_NUM_REQS-1:0] sel_index;
-        wire [NUM_REQS-1:0]     sel_onehot;
+        
+        wire [LANES-1:0]                   sel_fire;
+        wire [LANES-1:0][LOG_NUM_REQS-1:0] sel_index;
+        wire [LANES-1:0][NUM_REQS-1:0]     sel_onehot;
 
-        wire [NUM_REQS-1:0] valid_in_any;
-        wire [LANES-1:0] ready_in_sel;
+        if (ARBITER != "") begin   
+            `UNUSED_VAR (sel_in)        
+            wire [NUM_REQS-1:0]     arb_requests;
+            wire [LOG_NUM_REQS-1:0] arb_index;
+            wire [NUM_REQS-1:0]     arb_onehot;
+            wire                    arb_enable;
 
-        if (LANES > 1) begin
-            for (genvar i = 0; i < NUM_REQS; i++) begin
-                assign valid_in_any[i] = (| valid_in[i]);
+            if (LANES > 1) begin
+                for (genvar i = 0; i < NUM_REQS; i++) begin
+                    assign arb_requests[i] = (| valid_in[i]);
+                end
+                assign arb_enable = (| sel_fire);
+            end else begin
+                for (genvar i = 0; i < NUM_REQS; i++) begin
+                    assign arb_requests[i] = valid_in[i];
+                end
+                assign arb_enable = sel_fire;
             end
-            assign sel_ready = (| ready_in_sel);
+
+            VX_generic_arbiter #(
+                .NUM_REQS    (NUM_REQS),
+                .LOCK_ENABLE (1),
+                .TYPE        (ARBITER)
+            ) arb (
+                .clk          (clk),
+                .reset        (reset),
+                .requests     (arb_requests),  
+                .enable       (arb_enable),
+                `UNUSED_PIN (grant_valid),
+                .grant_index  (arb_index),
+                .grant_onehot (arb_onehot)
+            );
+            
+            for (genvar i = 0; i < LANES; i++) begin
+                assign sel_index[i] = arb_index;
+                assign sel_onehot[i] = arb_onehot;
+            end
         end else begin
-            for (genvar i = 0; i < NUM_REQS; i++) begin
-                assign valid_in_any[i] = valid_in[i];
+            `UNUSED_VAR (sel_fire)
+            assign sel_index = sel_in;
+            reg [LANES-1:0][NUM_REQS-1:0] sel_onehot_r;
+            always @(*) begin
+                for (integer i = 0; i < LANES; ++i) begin
+                    sel_onehot_r[i]            = '0;
+                    sel_onehot_r[i][sel_in[i]] = 1;
+                end
             end
-            assign sel_ready = ready_in_sel;
+            assign sel_onehot = sel_onehot_r;
         end
 
-        if (TYPE == "P") begin
-            VX_fixed_arbiter #(
-                .NUM_REQS    (NUM_REQS),
-                .LOCK_ENABLE (LOCK_ENABLE)
-            ) sel_arb (
-                .clk          (clk),
-                .reset        (reset),
-                .requests     (valid_in_any),  
-                .enable       (sel_ready),
-                .grant_valid  (sel_valid),
-				.grant_index  (sel_index),
-                .grant_onehot (sel_onehot)
-            );
-        end else if (TYPE == "R") begin
-            VX_rr_arbiter #(
-                .NUM_REQS    (NUM_REQS),
-                .LOCK_ENABLE (LOCK_ENABLE)
-            ) sel_arb (
-                .clk          (clk),
-                .reset        (reset),
-                .requests     (valid_in_any),  
-                .enable       (sel_ready),
-                .grant_valid  (sel_valid),
-				.grant_index  (sel_index),
-                .grant_onehot (sel_onehot)
-            );
-        end else if (TYPE == "F") begin
-            VX_fair_arbiter #(
-                .NUM_REQS    (NUM_REQS),
-                .LOCK_ENABLE (LOCK_ENABLE)
-            ) sel_arb (
-                .clk          (clk),
-                .reset        (reset),
-                .requests     (valid_in_any),  
-                .enable       (sel_ready),     
-                .grant_valid  (sel_valid),
-				.grant_index  (sel_index),
-                .grant_onehot (sel_onehot)
-            );
-        end else if (TYPE == "M") begin
-            VX_matrix_arbiter #(
-                .NUM_REQS    (NUM_REQS),
-                .LOCK_ENABLE (LOCK_ENABLE)
-            ) sel_arb (
-                .clk          (clk),
-                .reset        (reset),
-                .requests     (valid_in_any),  
-                .enable       (sel_ready),     
-                .grant_valid  (sel_valid),
-				.grant_index  (sel_index),
-                .grant_onehot (sel_onehot)
-            );
-        end else begin
-            `ERROR(("invalid parameter"));
-        end
+        wire [LANES-1:0]            sel_valid;
+        wire [LANES-1:0][DATAW-1:0] sel_data;
+        wire [LANES-1:0]            sel_ready;
 
-        wire [LANES-1:0] valid_in_sel;
-        wire [LANES-1:0][DATAW-1:0] data_in_sel;
+        assign sel_fire = sel_valid & sel_ready;
 
-        if (LANES > 1) begin
-            wire [NUM_REQS-1:0][(LANES * (1 + DATAW))-1:0] valid_data_in;
-            for (genvar i = 0; i < NUM_REQS; i++) begin
-                assign valid_data_in[i] = {valid_in[i], data_in[i]};
+        for (genvar j = 0; j < LANES; ++j) begin
+            assign sel_valid[j] = valid_in[sel_index[j]][j];
+            assign sel_data[j] = data_in[sel_index[j]][j];            
+            for (genvar i = 0; i < NUM_REQS; ++i) begin            
+                assign ready_in[i][j] = sel_ready[j] & sel_onehot[j][i];
             end
-            assign {valid_in_sel, data_in_sel} = valid_data_in[sel_index];
-            `UNUSED_VAR (sel_valid)
-        end else begin
-            assign data_in_sel  = data_in[sel_index];            
-            assign valid_in_sel = sel_valid;
-        end
-
-        for (genvar i = 0; i < NUM_REQS; i++) begin
-            assign ready_in[i] = ready_in_sel & {LANES{sel_onehot[i]}};
         end
 
         for (genvar i = 0; i < LANES; ++i) begin
@@ -125,9 +101,9 @@ module VX_stream_mux #(
             ) out_buffer (
                 .clk       (clk),
                 .reset     (reset),
-                .valid_in  (valid_in_sel[i]),        
-                .data_in   (data_in_sel[i]),
-                .ready_in  (ready_in_sel[i]),      
+                .valid_in  (sel_valid[i]),        
+                .data_in   (sel_data[i]),
+                .ready_in  (sel_ready[i]),      
                 .valid_out (valid_out[i]),
                 .data_out  (data_out[i]),
                 .ready_out (ready_out[i])
@@ -138,6 +114,7 @@ module VX_stream_mux #(
     
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
+        `UNUSED_VAR (sel_in)
         
         assign valid_out = valid_in;        
         assign data_out  = data_in;

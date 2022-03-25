@@ -12,7 +12,7 @@ module VX_tex_dcr #(
     input  wire [`VX_DCR_DATA_WIDTH-1:0]    dcr_wr_data,
 
     // Output
-    VX_tex_dcr_if.slave tex_dcr_if
+    VX_tex_dcr_if.master    tex_dcr_if
 );
 
     `UNUSED_VAR (reset)

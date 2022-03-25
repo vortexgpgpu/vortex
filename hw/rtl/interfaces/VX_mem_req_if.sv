@@ -40,13 +40,4 @@ interface VX_mem_req_if #(
 
 endinterface
 
-`define ASSIGN_VX_MEM_REQ_IF(dst, src) \
-    assign dst.valid  = src.valid;  \
-    assign dst.rw     = src.rw;     \
-    assign dst.byteen = src.byteen; \
-    assign dst.addr   = src.addr;   \
-    assign dst.data   = src.data;   \
-    assign dst.tag    = src.tag;    \
-    assign src.ready  = dst.ready
-
 `endif

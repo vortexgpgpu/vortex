@@ -335,26 +335,6 @@ int main(int argc, char *argv[]) {
   // parse command arguments
   parse_args(argc, argv);
 
-  if (!ispow2(dst_width)) {
-    std::cout << "Error: only power of two dst_width supported: dst_width=" << dst_width << std::endl;    
-    return -1;
-  }
-
-  if (!ispow2(dst_height)) {
-    std::cout << "Error: only power of two dst_height supported: dst_height=" << dst_height << std::endl;
-    return -1;
-  }
-
-  if (0 != (dst_width % tile_size)) {
-    std::cout << "Error: dst_with must be divisible by tile_size" << std::endl;
-    return -1;
-  }
-
-  if (0 != (dst_height % tile_size)) {
-    std::cout << "Error: dst_height must be divisible by tile_size" << std::endl;
-    return -1;
-  }
-
   // open device connection
   std::cout << "open device connection" << std::endl;  
   RT_CHECK(vx_dev_open(&device));

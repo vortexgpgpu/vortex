@@ -12,11 +12,11 @@ module VX_tex_unit #(
 `endif
 
     // Memory interface
-    VX_dcache_req_if.master cache_req_if,
-    VX_dcache_rsp_if.slave  cache_rsp_if,
+    VX_cache_req_if.master  cache_req_if,
+    VX_cache_rsp_if.slave   cache_rsp_if,
 
     // Inputs
-    VX_tex_dcr_if.master    tex_dcr_if,
+    VX_tex_dcr_if.slave     tex_dcr_if,
     VX_gpu_csr_if.slave     tex_csr_if,
     VX_tex_req_if.slave     tex_req_if,
     

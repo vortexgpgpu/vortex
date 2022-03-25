@@ -4,14 +4,14 @@
 `include "VX_platform.vh"
 
 // cache request identifier
-`define DBG_CACHE_REQ_IDW       44
+`define DBG_CACHE_REQ_IDW       `UP(REQ_DBG_IDW)
 
 `define REQS_BITS               `LOG2UP(NUM_REQS)
 
 `define PORTS_BITS              `LOG2UP(NUM_PORTS)
 
-//                                tag              valid  tid          word_sel              
-`define MSHR_DATA_WIDTH         ((CORE_TAG_WIDTH + 1 +    `REQS_BITS + `UP(`WORD_SELECT_BITS)) * NUM_PORTS)
+//                                tag             valid  tid          word_sel              
+`define MSHR_DATA_WIDTH         ((CORE_TAG_WIDTH + 1 + `REQS_BITS + `UP(`WORD_SELECT_BITS)) * NUM_PORTS)
 
 `define WORD_WIDTH              (8 * WORD_SIZE)
 
@@ -54,11 +54,14 @@
 
 `define LINE_TAG_ADDR(x)        x[`LINE_ADDR_WIDTH-1 : `LINE_SELECT_BITS]
 
-`define CACHE_REQ_ID_RNG        CORE_TAG_WIDTH-1 : (CORE_TAG_WIDTH-`DBG_CACHE_REQ_IDW)
+`define ASSIGN_REQ_DBG_ID(dst, tag) \
+    if (REQ_DBG_IDW > 0) begin      \
+        assign dst = tag[CORE_TAG_WIDTH-1 : (CORE_TAG_WIDTH-REQ_DBG_IDW)]; \
+    end else begin \
+        assign dst = 0; \
+    end
 
 ///////////////////////////////////////////////////////////////////////////////
-
-`define CORE_RSP_TAGS           ((CORE_TAG_ID_BITS != 0) ? 1 : NUM_REQS)
 
 `define LINE_TO_MEM_ADDR(x, i)  {x, `BANK_SELECT_BITS'(i)}
 
@@ -73,10 +76,5 @@
 `define LINE_TO_BYTE_ADDRX(x, i) {x[$bits(x)-1:BANK_ADDR_OFFSET], `BANK_SELECT_BITS'(i), x[BANK_ADDR_OFFSET-1:0], (32-$bits(x)-`BANK_SELECT_BITS)'(0)}
 
 `define TO_FULL_ADDR(x)         {x, (32-$bits(x))'(0)}
-
-///////////////////////////////////////////////////////////////////////////////
-
-`define __WID_ADDR_OFFSET       `CLOG2(`SMEM_LOCAL_SIZE / `SMEM_WORD_SIZE)
-`define SMEM_LINE_TO_BLOCK_ADDR(x) {x[BANK_ADDR_OFFSET +: `NW_BITS], x[0 +: `__WID_ADDR_OFFSET]}
 
 `endif

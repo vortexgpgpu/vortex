@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_data_access #(
-    parameter CACHE_ID          = "cache",
+    parameter string CACHE_ID   = "",
     parameter BANK_ID           = 0,
     // Size of cache in bytes
     parameter CACHE_SIZE        = 1, 
@@ -17,8 +17,8 @@ module VX_data_access #(
     parameter WORD_SIZE         = 1,
     // Enable cache writeable
     parameter WRITE_ENABLE      = 1,
-    
-    parameter WORD_SELECT_BITS  = `UP(`WORD_SELECT_BITS)
+    // Request debug identifier
+    parameter REQ_DBG_IDW       = 0
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -49,6 +49,7 @@ module VX_data_access #(
     `UNUSED_VAR (addr)
     `UNUSED_VAR (read)
 
+    localparam WORD_SELECT_BITS = `UP(`WORD_SELECT_BITS);
     localparam BYTEENW = WRITE_ENABLE ? CACHE_LINE_SIZE : 1;
 
     wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] rdata;

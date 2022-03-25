@@ -13,11 +13,11 @@ module VX_rop_blend_func #(
     output rgba_t factor_out
 );
     
-    function logic[7:0] blend_func(logic [`ROP_BLEND_FUNC_BITS-1:0] func, 
-                                   int i,
-                                   logic [3:0][7:0] src, 
-                                   logic [3:0][7:0] dst, 
-                                   logic [3:0][7:0] cst);
+    function automatic logic[7:0] blend_func(logic [`ROP_BLEND_FUNC_BITS-1:0] func, 
+                                             int i,
+                                             logic [3:0][7:0] src, 
+                                             logic [3:0][7:0] dst, 
+                                             logic [3:0][7:0] cst);
 
         logic [7:0] one_minus_dst_a = 8'hFF - dst[3];
 
@@ -36,13 +36,14 @@ module VX_rop_blend_func #(
             `ROP_BLEND_FUNC_ONE_MINUS_CONST_RGB:  return 8'hFF - cst[i];
             `ROP_BLEND_FUNC_CONST_A:              return cst[3];
             `ROP_BLEND_FUNC_ONE_MINUS_CONST_A:    return 8'hFF - cst[3];
-            `ROP_BLEND_FUNC_ALPHA_SAT:
+            `ROP_BLEND_FUNC_ALPHA_SAT: begin
                 if (i < 3) begin
                     return (src[3] < one_minus_dst_a) ? src[3] : one_minus_dst_a;
                 end else begin
                     return 8'hFF;
                 end
-            default:                              return 8'x;
+            end
+            default:                              return 8'hx;
         endcase
     endfunction
 

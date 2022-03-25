@@ -1,5 +1,4 @@
 `include "VX_define.vh"
-`include "VX_tex_define.vh"
 
 module VX_core #( 
     parameter CORE_ID = 0
@@ -11,18 +10,22 @@ module VX_core #(
     input  wire             reset,
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_dcr_if.master    tex_dcr_if,
+    VX_tex_dcr_if.slave     tex_dcr_if,
 `endif
 `ifdef EXT_RASTER_ENABLE        
     VX_raster_req_if        raster_req_if,
 `endif
-`ifdef EXT_RASTER_ENABLE        
+`ifdef EXT_ROP_ENABLE        
     VX_rop_req_if           rop_req_if,
 `endif
 
     // Memory
     VX_mem_req_if.master    mem_req_if,
     VX_mem_rsp_if.slave     mem_rsp_if,
+
+    // simulation helper signals
+    output wire             sim_ebreak,
+    output wire [`NUM_REGS-1:0][31:0] sim_last_wb_value,
 
     // Status
     output wire             busy
@@ -31,36 +34,38 @@ module VX_core #(
     VX_perf_memsys_if perf_memsys_if();
 `endif
 
-    VX_dcache_req_if #(
+    VX_cache_req_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
         .WORD_SIZE (`DCACHE_WORD_SIZE), 
         .TAG_WIDTH (`DCACHE_TAG_WIDTH)
     ) dcache_req_if();
 
-    VX_dcache_rsp_if #(
+    VX_cache_rsp_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
         .WORD_SIZE (`DCACHE_WORD_SIZE), 
         .TAG_WIDTH (`DCACHE_TAG_WIDTH)
     ) dcache_rsp_if();
     
-    VX_icache_req_if #(
+    VX_cache_req_if #(
+        .NUM_REQS  (`ICACHE_NUM_REQS), 
         .WORD_SIZE (`ICACHE_WORD_SIZE), 
         .TAG_WIDTH (`ICACHE_TAG_WIDTH)
     ) icache_req_if();
 
-    VX_icache_rsp_if #(
+    VX_cache_rsp_if #(
+        .NUM_REQS  (`ICACHE_NUM_REQS), 
         .WORD_SIZE (`ICACHE_WORD_SIZE), 
         .TAG_WIDTH (`ICACHE_TAG_WIDTH)
     ) icache_rsp_if();
 
 `ifdef EXT_TEX_ENABLE
-    VX_dcache_req_if #(
+    VX_cache_req_if #(
         .NUM_REQS  (`TCACHE_NUM_REQS), 
         .WORD_SIZE (`TCACHE_WORD_SIZE), 
         .TAG_WIDTH (`TCACHE_TAG_WIDTH)
     ) tcache_req_if();
 
-    VX_dcache_rsp_if #(
+    VX_cache_rsp_if #(
         .NUM_REQS  (`TCACHE_NUM_REQS), 
         .WORD_SIZE (`TCACHE_WORD_SIZE), 
         .TAG_WIDTH (`TCACHE_TAG_WIDTH)
@@ -94,9 +99,12 @@ module VX_core #(
     `ifdef EXT_RASTER_ENABLE        
         .raster_req_if  (raster_req_if),
     `endif
-    `ifdef EXT_RASTER_ENABLE        
+    `ifdef EXT_ROP_ENABLE        
         .rop_req_if     (rop_req_if),
     `endif
+
+        .sim_ebreak     (sim_ebreak),
+        .sim_last_wb_value (sim_last_wb_value),
 
         // Status
         .busy           (busy)
