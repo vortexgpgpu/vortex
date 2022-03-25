@@ -27,8 +27,8 @@ module VX_raster_unit #(
 `endif
 
     // Memory interface -> TODO: Remove as memory interface through streamer
-    // VX_dcache_req_if.master cache_req_if,
-    // VX_dcache_rsp_if.slave  cache_rsp_if,
+    VX_dcache_req_if.master cache_req_if,
+    VX_dcache_rsp_if.slave  cache_rsp_if,
 
     // Inputs
     VX_raster_dcr_if.master raster_dcr_if,
