@@ -532,21 +532,21 @@ VX_mem_rsp_if #(
 
 `RESET_RELAY (mem_arb_reset);
 
-VX_mem_arb #(
+VX_mem_mux #(
   .NUM_REQS       (2),
   .DATA_WIDTH     (LMEM_DATA_WIDTH),
   .ADDR_WIDTH     (LMEM_ADDR_WIDTH),
   .TAG_IN_WIDTH   (AVS_REQ_TAGW),
-  .TYPE           ("P"),
+  .ARBITER           ("P"),
   .BUFFERED_REQ   (2),
   .BUFFERED_RSP   (2)
-) mem_arb (
+) mem_mux (
   .clk        (clk),
   .reset      (mem_arb_reset),
   .req_in_if  (cci_vx_mem_req_if),
+  .rsp_in_if  (cci_vx_mem_rsp_if),
   .req_out_if (mem_req_if),
-  .rsp_out_if (cci_vx_mem_rsp_if),
-  .rsp_in_if  (mem_rsp_if)
+  .rsp_out_if (mem_rsp_if)
 );
 
 //--

@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_miss_resrv #(
-    parameter CACHE_ID          = "cache",
+    parameter string CACHE_ID   = "",
     parameter BANK_ID           = 0, 
     
     // Number of Word requests per cycle
@@ -17,8 +17,11 @@ module VX_miss_resrv #(
     parameter WORD_SIZE         = 1, 
     // Miss Reserv Queue Knob
     parameter MSHR_SIZE         = 1,
+    
+    // Request debug identifier
+    parameter REQ_DBG_IDW       = 0,
     // core request tag size
-    parameter CORE_TAG_WIDTH    = 1,
+    parameter CORE_TAG_WIDTH    = REQ_DBG_IDW,
 
     parameter MSHR_ADDR_WIDTH   = $clog2(MSHR_SIZE)
 ) (

@@ -221,15 +221,19 @@
 
 // Word size in bytes
 `define ICACHE_WORD_SIZE        4
+`define ICACHE_ADDR_WIDTH       (32-`CLOG2(`ICACHE_WORD_SIZE))
 
 // Block size in bytes
 `define ICACHE_LINE_SIZE        `L1_BLOCK_SIZE
 
-// TAG sharing enable       
-`define ICACHE_TAG_ID_BITS      `NW_BITS
+// Response tag select bits       
+`define ICACHE_TAG_SEL_BITS     `NW_BITS
 
 // Core request tag bits
-`define ICACHE_TAG_WIDTH        (`UUID_BITS + `ICACHE_TAG_ID_BITS)
+`define ICACHE_TAG_WIDTH        (`UUID_BITS + `ICACHE_TAG_SEL_BITS)
+
+// Input request size
+`define ICACHE_NUM_REQS         1
 
 // Memory request data bits
 `define ICACHE_MEM_DATA_WIDTH   (`ICACHE_LINE_SIZE * 8)
@@ -247,14 +251,17 @@
 
 // Word size in bytes
 `define DCACHE_WORD_SIZE        4
+`define DCACHE_ADDR_WIDTH       (32-`CLOG2(`DCACHE_WORD_SIZE))
 
 // Block size in bytes
 `define DCACHE_LINE_SIZE        `L1_BLOCK_SIZE
 
-// Core request tag bits
+// Response tag select bits
 `define LSUQ_ADDR_BITS          `LOG2UP(`LSUQ_SIZE)
-`define DCACHE_TAG_ID_BITS      (`LSUQ_ADDR_BITS + `CACHE_ADDR_TYPE_BITS)
-`define DCACHE_TAG_WIDTH        (`UUID_BITS + `DCACHE_TAG_ID_BITS)
+`define DCACHE_TAG_SEL_BITS     (`LSUQ_ADDR_BITS + `CACHE_ADDR_TYPE_BITS)
+
+// Core request tag bits
+`define DCACHE_TAG_WIDTH        (`UUID_BITS + `DCACHE_TAG_SEL_BITS)
  
 // Memory request data bits
 `define DCACHE_MEM_DATA_WIDTH   (`DCACHE_LINE_SIZE * 8)
@@ -269,27 +276,30 @@
 `define DCACHE_NUM_REQS         `NUM_THREADS
 
 // Memory request tag bits
+`define DCACHE_SMEM_TAG_SEL_BITS (`DCACHE_TAG_SEL_BITS - `SM_ENABLED)
+`define DCACHE_SMEM_TAG_WIDTH    (`UUID_BITS + `DCACHE_SMEM_TAG_SEL_BITS)
+`ifdef EXT_TEX_ENABLE
+`define DCACHE_TEX_TAG_SEL_BITS  `MAX(`DCACHE_SMEM_TAG_SEL_BITS, `TCACHE_TAG_SEL_BITS)
+`define DCACHE_TEX_TAG_WIDTH     (`UUID_BITS + `DCACHE_TEX_TAG_SEL_BITS)
+`else 
+`define DCACHE_TEX_TAG_SEL_BITS  `DCACHE_SMEM_TAG_SEL_BITS
+`define DCACHE_TEX_TAG_WIDTH     `DCACHE_SMEM_TAG_WIDTH
+`endif
 `define _DMEM_ADDR_RATIO_W      `CLOG2(`DCACHE_LINE_SIZE / `DCACHE_WORD_SIZE)
-`define _DNC_MEM_TAG_WIDTH      (`CLOG2(`DCACHE_NUM_REQS) + `_DMEM_ADDR_RATIO_W + `DCACHE_TAG_WIDTH)
+`define _DNC_MEM_TAG_WIDTH      (`CLOG2(`DCACHE_NUM_REQS) + `_DMEM_ADDR_RATIO_W + (`DCACHE_TEX_TAG_WIDTH + `EXT_TEX_ENABLED))
 `define DCACHE_MEM_TAG_WIDTH    `MAX((`CLOG2(`DCACHE_NUM_BANKS) + `CLOG2(`DCACHE_MSHR_SIZE) + `NC_TAG_BIT), `_DNC_MEM_TAG_WIDTH)
 
 // Merged D-cache/I-cache memory tag
-`define ICACHE_DCACHE_MEM_TAG   `MAX(`ICACHE_MEM_TAG_WIDTH, `DCACHE_MEM_TAG_WIDTH)
-`define L1_MEM_TAG_WIDTH        (`ICACHE_DCACHE_MEM_TAG + `CLOG2(2))
+`define L1_MEM_RGB_TAG_WIDTH    `MAX(`ICACHE_MEM_TAG_WIDTH, `DCACHE_MEM_TAG_WIDTH)
+`define L1_MEM_TAG_WIDTH        (`L1_MEM_RGB_TAG_WIDTH + `CLOG2(2))
 
 ////////////////////////// SM Configurable Knobs //////////////////////////////
 
 // Cache ID
 `define SMEM_ID                 $sformatf("core%0d-smem", CORE_ID)
 
-// Word size in bytes
-`define SMEM_WORD_SIZE          4
-
 // bank address offset
-`define SMEM_BANK_ADDR_OFFSET   `CLOG2(`STACK_SIZE / `SMEM_WORD_SIZE)
-
-// Input request size
-`define SMEM_NUM_REQS           `NUM_THREADS
+`define SMEM_BANK_ADDR_OFFSET   `CLOG2(`STACK_SIZE / `DCACHE_WORD_SIZE)
 
 ////////////////////////// L2cache Configurable Knobs /////////////////////////
 
@@ -298,12 +308,10 @@
 
 // Word size in bytes
 `define L2_WORD_SIZE            `DCACHE_LINE_SIZE
+`define L2_ADDR_WIDTH           (32-`CLOG2(`L2_WORD_SIZE))
 
 // Block size in bytes
 `define L2_CACHE_LINE_SIZE      (`L2_ENABLED ? `MEM_BLOCK_SIZE : `L2_WORD_SIZE)
-
-// Input request tag bits
-`define L2_CORE_TAG_WIDTH       (`DCACHE_TAG_WIDTH + `CLOG2(`NUM_CORES))
 
 // Memory request data bits
 `define L2_MEM_DATA_WIDTH       (`L2_CACHE_LINE_SIZE * 8)
@@ -331,12 +339,10 @@
 
 // Word size in bytes
 `define L3_WORD_SIZE            `L2_CACHE_LINE_SIZE
+`define L3_ADDR_WIDTH           (32-`CLOG2(`L3_WORD_SIZE))
 
 // Block size in bytes
 `define L3_CACHE_LINE_SIZE      (`L3_ENABLED ? `MEM_BLOCK_SIZE : `L3_WORD_SIZE)
-
-// Input request tag bits
-`define L3_CORE_TAG_WIDTH       (`L2_CORE_TAG_WIDTH + `CLOG2(`NUM_CLUSTERS))
 
 // Memory request data bits
 `define L3_MEM_DATA_WIDTH       (`L3_CACHE_LINE_SIZE * 8)
@@ -362,21 +368,22 @@
 
 // Word size in bytes
 `define TCACHE_WORD_SIZE        4
+`define TCACHE_ADDR_WIDTH       (32-`CLOG2(`TCACHE_WORD_SIZE))
 
 // Block size in bytes
 `define TCACHE_LINE_SIZE        `L1_CACHE_LINE_SIZE
 
-// TAG sharing enable       
-`define TCACHE_TAG_ID_BITS      8
+// Response tag select bits       
+`define TCACHE_TAG_SEL_BITS      2
 
 // Core request tag bits
-`define TCACHE_TAG_WIDTH        (`UUID_BITS + `TCACHE_TAG_ID_BITS)
+`define TCACHE_TAG_WIDTH        (`UUID_BITS + `TCACHE_TAG_SEL_BITS)
 
 // Input request size
 `define TCACHE_NUM_REQS         `NUM_THREADS
 
 // Memory request tag bits
-`define RCACHE_MEM_TAG_WIDTH    (`CLOG2(`TCACHE_NUM_BANKS) + `CLOG2(`TCACHE_MSHR_SIZE))
+`define TCACHE_MEM_TAG_WIDTH    (`CLOG2(`TCACHE_NUM_BANKS) + `CLOG2(`TCACHE_MSHR_SIZE))
 
 ////////////////////////// Rcache Configurable Knobs //////////////////////////
 
@@ -384,18 +391,25 @@
 
 // Word size in bytes
 `define RCACHE_WORD_SIZE        4
+`define RCACHE_ADDR_WIDTH       (32-`CLOG2(`RCACHE_WORD_SIZE))
 
 // Block size in bytes
 `define RCACHE_LINE_SIZE        `L2_CACHE_LINE_SIZE
 
-// TAG sharing enable       
-`define RCACHE_TAG_ID_BITS      8
+// Response tag select bits       
+`define RCACHE_TAG_SEL_BITS     2
 
 // Core request tag bits
-`define RCACHE_TAG_WIDTH        (`UUID_BITS + `RCACHE_TAG_ID_BITS)
+`define RCACHE_TAG_WIDTH        `RCACHE_TAG_SEL_BITS
 
 // Input request size
 `define RCACHE_NUM_REQS         1
+
+// Memory request data bits
+`define RCACHE_MEM_DATA_WIDTH   (`RCACHE_LINE_SIZE * 8)
+
+// Memory request address bits
+`define RCACHE_MEM_ADDR_WIDTH   (32 - `CLOG2(`RCACHE_LINE_SIZE))
 
 // Memory request tag bits
 `define RCACHE_MEM_TAG_WIDTH    (`CLOG2(`RCACHE_NUM_BANKS) + `CLOG2(`RCACHE_MSHR_SIZE))
@@ -406,18 +420,25 @@
 
 // Word size in bytes
 `define OCACHE_WORD_SIZE        4
+`define OCACHE_ADDR_WIDTH       (32-`CLOG2(`OCACHE_WORD_SIZE))
 
 // Block size in bytes
 `define OCACHE_LINE_SIZE        `L2_CACHE_LINE_SIZE
 
-// TAG sharing enable       
-`define OCACHE_TAG_ID_BITS      8
+// Input request size
+`define OCACHE_NUM_REQS         (2*`NUM_THREADS)
+
+// Response tag select bits       
+`define OCACHE_TAG_SEL_BITS     `CLOG2(`ROP_MEM_QUEUE_SIZE)
 
 // Core request tag bits
-`define OCACHE_TAG_WIDTH        (`UUID_BITS + `OCACHE_TAG_ID_BITS)
+`define OCACHE_TAG_WIDTH        `OCACHE_TAG_SEL_BITS
 
-// Input request size
-`define OCACHE_NUM_REQS         `NUM_THREADS
+// Memory request data bits
+`define OCACHE_MEM_DATA_WIDTH   (`OCACHE_LINE_SIZE * 8)
+
+// Memory request address bits
+`define OCACHE_MEM_ADDR_WIDTH   (32 - `CLOG2(`OCACHE_LINE_SIZE))
 
 // Memory request tag bits
 `define OCACHE_MEM_TAG_WIDTH    (`CLOG2(`OCACHE_NUM_BANKS) + `CLOG2(`OCACHE_MSHR_SIZE))
@@ -428,11 +449,83 @@
 `define VX_MEM_ADDR_WIDTH       `L3_MEM_ADDR_WIDTH
 `define VX_MEM_DATA_WIDTH       `L3_MEM_DATA_WIDTH
 `define VX_MEM_TAG_WIDTH        `L3_MEM_TAG_WIDTH
-`define VX_CORE_TAG_WIDTH       `L3_CORE_TAG_WIDTH 
 `define VX_DCR_ADDR_WIDTH       `DCR_ADDR_BITS
 `define VX_DCR_DATA_WIDTH       32
 
 `define TO_FULL_ADDR(x)         {x, (32-$bits(x))'(0)}
+
+///////////////////////////////////////////////////////////////////////////////
+
+`define ASSIGN_VX_MEM_REQ_IF(dst, src) \
+    assign dst.valid  = src.valid;  \
+    assign dst.rw     = src.rw;     \
+    assign dst.byteen = src.byteen; \
+    assign dst.addr   = src.addr;   \
+    assign dst.data   = src.data;   \
+    assign dst.tag    = src.tag;    \
+    assign src.ready  = dst.ready
+
+`define ASSIGN_VX_MEM_RSP_IF(dst, src) \
+    assign dst.valid  = src.valid;  \
+    assign dst.data   = src.data;   \
+    assign dst.tag    = src.tag;    \
+    assign src.ready  = dst.ready
+
+`define ASSIGN_VX_MEM_REQ_IF_XTAG(dst, src) \
+    assign dst.valid  = src.valid;  \
+    assign dst.rw     = src.rw;     \
+    assign dst.byteen = src.byteen; \
+    assign dst.addr   = src.addr;   \
+    assign dst.data   = src.data;   \
+    assign src.ready  = dst.ready
+
+`define ASSIGN_VX_MEM_RSP_IF_XTAG(dst, src) \
+    assign dst.valid  = src.valid;  \
+    assign dst.data   = src.data;   \
+    assign src.ready  = dst.ready
+
+`define ASSIGN_VX_CACHE_REQ_IF(dst, src) \
+    assign dst.valid  = src.valid;  \
+    assign dst.rw     = src.rw;     \
+    assign dst.byteen = src.byteen; \
+    assign dst.addr   = src.addr;   \
+    assign dst.data   = src.data;   \
+    assign dst.tag    = src.tag;    \
+    assign src.ready  = dst.ready
+
+`define ASSIGN_VX_CACHE_RSP_IF(dst, src) \
+    assign dst.valid  = src.valid;  \
+    assign dst.data   = src.data;   \
+    assign dst.tag    = src.tag;    \
+    assign src.ready  = dst.ready
+
+`define ASSIGN_VX_CACHE_REQ_IF_XTAG(dst, src) \
+    assign dst.valid  = src.valid;  \
+    assign dst.rw     = src.rw;     \
+    assign dst.byteen = src.byteen; \
+    assign dst.addr   = src.addr;   \
+    assign dst.data   = src.data;   \
+    assign src.ready  = dst.ready
+
+`define ASSIGN_VX_CACHE_RSP_IF_XTAG(dst, src) \
+    assign dst.valid  = src.valid;  \
+    assign dst.data   = src.data;   \
+    assign src.ready  = dst.ready
+
+`define CACHE_REQ_TO_MEM(dst, src, i) \
+    assign dst[i].valid = src.valid[i]; \
+    assign dst[i].rw = src.rw[i]; \
+    assign dst[i].byteen = src.byteen[i]; \
+    assign dst[i].addr = src.addr[i]; \
+    assign dst[i].data = src.data[i]; \
+    assign dst[i].tag = src.tag[i]; \
+    assign src.ready[i] = dst[i].ready
+
+`define CACHE_RSP_FROM_MEM(dst, src, i) \
+    assign dst.valid[i] = src[i].valid; \
+    assign dst.data[i] = src[i].data; \
+    assign dst.tag[i] = src[i].tag; \
+    assign src[i].ready = dst.ready[i]
 
 ///////////////////////////////////////////////////////////////////////////////
 

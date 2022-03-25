@@ -16,8 +16,8 @@ module VX_rop_slice #(
     input rop_dcrs_t dcrs,
 
     // Memory interface
-    VX_dcache_req_if.master cache_req_if,
-    VX_dcache_rsp_if.slave  cache_rsp_if,
+    VX_cache_req_if.master cache_req_if,
+    VX_cache_rsp_if.slave  cache_rsp_if,
 
     // Inputs
     VX_rop_req_if.slave rop_req_if

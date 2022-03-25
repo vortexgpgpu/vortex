@@ -8,8 +8,8 @@ module VX_tex_mem #(
     input wire reset,
 
    // memory interface
-    VX_dcache_req_if.master cache_req_if,
-    VX_dcache_rsp_if.slave  cache_rsp_if,
+    VX_cache_req_if.master cache_req_if,
+    VX_cache_rsp_if.slave  cache_rsp_if,
 
     // inputs
     input wire                          req_valid,
@@ -32,6 +32,12 @@ module VX_tex_mem #(
     `UNUSED_PARAM (CORE_ID)
 
     localparam RSP_CTR_W = $clog2(NUM_REQS * 4 + 1);
+
+    wire                          cache_rsp_valid;
+    wire [`NUM_THREADS-1:0]       cache_rsp_tmask;
+    wire [`NUM_THREADS-1:0][31:0] cache_rsp_data;
+    wire [`TCACHE_TAG_WIDTH-1:0]  cache_rsp_tag;
+    wire                          cache_rsp_ready;
 
     // full address calculation
     wire [NUM_REQS-1:0][3:0][31:0] full_addr;    
@@ -134,7 +140,7 @@ module VX_tex_mem #(
     wire is_last_texel = (req_texel_idx == (q_req_filter ? 3 : 0));
     assign last_texel_sent = req_texel_valid && sent_all_ready && is_last_texel;
 
-    // DCache Request
+    // Cache Request
 
     reg [NUM_REQS-1:0] texel_sent_mask;
 
@@ -166,7 +172,23 @@ module VX_tex_mem #(
     assign cache_req_if.data   = 'x;
     assign cache_req_if.tag    = {NUM_REQS{q_req_uuid, req_texel_idx}};
 
-    // Dcache Response
+    // Cache Response
+
+    VX_cache_rsp_sel #(
+        .NUM_REQS     (`TCACHE_NUM_REQS),
+        .DATA_WIDTH   (`TCACHE_WORD_SIZE*8),
+        .TAG_WIDTH    (`TCACHE_TAG_WIDTH),
+        .TAG_SEL_BITS (`TCACHE_TAG_SEL_BITS)
+    ) cache_rsp_sel (
+        .clk            (clk),
+        .reset          (reset),
+        .rsp_in_if      (cache_rsp_if),
+        .rsp_out_valid  (cache_rsp_valid),
+        .rsp_out_tmask  (cache_rsp_tmask),
+        .rsp_out_data   (cache_rsp_data),
+        .rsp_out_tag    (cache_rsp_tag),
+        .rsp_out_ready  (cache_rsp_ready)
+    );
 
     reg [3:0][NUM_REQS-1:0][31:0] rsp_texels, rsp_texels_n;
     wire [NUM_REQS-1:0][3:0][31:0] rsp_texels_qual;
@@ -180,17 +202,17 @@ module VX_tex_mem #(
     wire [1:0] rsp_texel_idx;
     wire rsp_texel_dup;
     
-    assign rsp_texel_idx = cache_rsp_if.tag[1:0];
-    `UNUSED_VAR (cache_rsp_if.tag)
+    assign rsp_texel_idx = cache_rsp_tag[1:0];
+    `UNUSED_VAR (cache_rsp_tag)
 
     assign rsp_texel_dup = q_dup_reqs[rsp_texel_idx];
     assign rsp_align_offs = q_align_offs[rsp_texel_idx];
 
-    assign dcache_rsp_fire = cache_rsp_if.valid && cache_rsp_if.ready;
+    assign dcache_rsp_fire = cache_rsp_valid && cache_rsp_ready;
 
     for (genvar i = 0; i < NUM_REQS; i++) begin             
-        wire [31:0] src_mask = {32{cache_rsp_if.tmask[i]}};
-        wire [31:0] src_data = ((i == 0 || rsp_texel_dup) ? cache_rsp_if.data[0] : cache_rsp_if.data[i]) & src_mask;
+        wire [31:0] src_mask = {32{cache_rsp_tmask[i]}};
+        wire [31:0] src_data = ((i == 0 || rsp_texel_dup) ? cache_rsp_data[0] : cache_rsp_data[i]) & src_mask;
 
         reg [31:0] rsp_data_shifted;
         always @(*) begin
@@ -232,7 +254,7 @@ module VX_tex_mem #(
         end
     end
 
-    wire [NUM_REQS-1:0] dcache_rsp_tmask = cache_rsp_if.tmask;
+    wire [NUM_REQS-1:0] dcache_rsp_tmask = cache_rsp_tmask;
     `POP_COUNT(dcache_rsp_size, dcache_rsp_tmask);
 
     assign rsp_rem_ctr_n = rsp_rem_ctr - RSP_CTR_W'(dcache_rsp_size);
@@ -277,7 +299,7 @@ module VX_tex_mem #(
     );
 
     // Can accept new cache response?
-    assign cache_rsp_if.ready = ~(is_last_rsp && stall_out);
+    assign cache_rsp_ready = ~(is_last_rsp && stall_out);
 
 `ifdef DBG_TRACE_TEX    
     wire [`NW_BITS-1:0] req_wid, rsp_wid;

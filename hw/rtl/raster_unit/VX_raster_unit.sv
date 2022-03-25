@@ -9,6 +9,9 @@
 
 module VX_raster_unit #(
     parameter CLUSTER_ID  = 0,
+    parameter NUM_SLICES  = 1,  // number of raster slices
+    parameter NUM_OUTPUTS = 4   // number of output queues   
+    parameter CLUSTER_ID  = 0,
     parameter NUM_SLICES = 1,                // number of raster slices
     parameter RASTER_TILE_SIZE = 16,        // tile size
     parameter RASTER_BLOCK_SIZE = 4,        // block size
@@ -26,45 +29,67 @@ module VX_raster_unit #(
     VX_raster_perf_if.master raster_perf_if,
 `endif
 
-    // Memory interface -> TODO: Remove as memory interface through streamer
-    VX_dcache_req_if.master cache_req_if,
-    VX_dcache_rsp_if.slave  cache_rsp_if,
+    // Memory interface
+    VX_cache_req_if.master cache_req_if,
+    VX_cache_rsp_if.slave  cache_rsp_if,
 
     // Inputs
-    VX_raster_dcr_if.master raster_dcr_if,
-    VX_raster_req_if.slave  raster_req_if
+    VX_raster_dcr_if.slave  raster_dcr_if,
+    VX_raster_req_if.master raster_req_if
 );
-    localparam NUM_SLICE_BITS = `LOG2UP(NUM_SLICES);
+    // TODO: remove
+    `UNUSED_VAR (clk)
+    `UNUSED_VAR (reset)
 
+    // TODO: remove
     raster_dcrs_t raster_dcrs;
-
-    // TODO
-    VX_raster_dcr raster_dcr (
-        .clk(clk),
-        .reset(reset),
-
-        .dcr_wr_valid(raster_dcr_if.valid),
-        .dcr_wr_addr(raster_dcr_if.addr),
-        .dcr_wr_data(raster_dcr_if.data),
-
-        .raster_dcr_if(raster_dcr_if)
-    );
-
     assign raster_dcrs = raster_dcr_if.data;
+    `UNUSED_VAR (raster_dcrs)
+
+    // TODO: remove
+    assign raster_req_if.valid  = 0;
+    assign raster_req_if.tmask  = 0;
+    assign raster_req_if.valid  = 0;
+    assign raster_req_if.stamps = 0;
+    assign raster_req_if.empty  = 0;
+    `UNUSED_VAR (raster_req_if.ready)
+
+`ifdef PERF_ENABLE
+    // TODO: remove
+    assign raster_perf_if.mem_reads = 0;
+    assign raster_perf_if.mem_latency = 0;
+`endif
+    
+    // TODO: remove
+    assign cache_req_if.valid = 0;
+    assign cache_req_if.rw = 0;
+    assign cache_req_if.byteen = 0;
+    assign cache_req_if.addr = 0;
+    assign cache_req_if.data = 0;     
+    assign cache_req_if.tag = 0;
+    `UNUSED_VAR (cache_req_if.ready)
+
+    // TODO: remove
+    `UNUSED_VAR (cache_rsp_if.valid)
+    `UNUSED_VAR (cache_rsp_if.data)        
+    `UNUSED_VAR (cache_rsp_if.tag)
+    assign cache_rsp_if.ready = 0;
+
+    localparam NUM_SLICE_BITS = `LOG2UP(RASTER_SLICE_BITS);
 
     // Output from the request
     logic [`RASTER_TILE_DATA_BITS-1:0]                   x_loc, y_loc;
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              edges[2:0][2:0];
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              pid;
     // Slice selected for tile
-    logic [RASTER_SLICE_BITS-1:0]                        slice_index;
+    logic [RASTER_SLICE_BITS-1:0]                       slice_index;
     logic mem_data_valid;
 
     // Mem to raster slice control signals
     logic mem_valid;
     logic [RASTER_SLICE_NUM-1:0] raster_slice_ready;
     VX_raster_mem #(  
-        .RASTER_SLICE_NUM(NUM_SLICES),
+        .RASTER_SLICE_NUM(RASTER_SLICE_BITS),
         .RASTER_TILE_SIZE(RASTER_TILE_SIZE),
         .RASTER_RS_SIZE(RASTER_RS_SIZE)
     ) raster_mem (
@@ -82,7 +107,9 @@ module VX_raster_unit #(
         .out_pid(pid),
         .out_slice_index(slice_index),
         .ready(raster_req_if.ready),
-        .out_valid(mem_valid)
+        .out_valid(mem_valid),
+        .cache_req_if(cache_req_if),
+        .cache_rsp_if(cache_rsp_if)
     );
 
     // Complete the edge function values and extents
@@ -99,22 +126,22 @@ module VX_raster_unit #(
     VX_raster_edge_functions raster_edge_function (
         .x_loc(x_loc),
         .y_loc(y_loc),
-        .edges(edges[i]),
+        .edges(edges),
         .edge_func_val(edge_func_val)
     );
 
-    logic quad_valid[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0];
+    logic quad_valid[RASTER_SLICE_NUM-1:0][RASTER_QUAD_OUTPUT_RATE-1:0];
     
-    logic [`RASTER_TILE_DATA_BITS-1:0] temp_quad_x_loc[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0],
+    logic [`RASTER_TILE_DATA_BITS-1:0] temp_quad_x_loc[RASTER_SLICE_NUM-1:0][RASTER_QUAD_OUTPUT_RATE-1:0],
         temp_quad_y_loc[RASTER_QUAD_OUTPUT_RATE-1:0];
-    logic [3:0] temp_quad_masks[NUM_SLICES-1:0];
-    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_quad_bcoords[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0];
-    logic quad_queue_empty[NUM_SLICES-1:0];
-    logic quad_pop[NUM_SLICES-1:0];
-    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_out_pid[NUM_SLICES-1:0];
+    logic [3:0] temp_quad_masks[RASTER_SLICE_NUM-1:0];
+    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_quad_bcoords[RASTER_SLICE_NUM-1:0][RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0];
+    logic quad_queue_empty[RASTER_SLICE_NUM-1:0];
+    logic quad_pop[RASTER_SLICE_NUM-1:0];
+    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_out_pid[RASTER_SLICE_NUM-1:0];
     
     // TODO: Add raster slices in generate block here
-    for (genvar i = 0; i < NUM_SLICES; ++i) begin
+    for (genvar i = 0; i < RASTER_SLICE_BITS; ++i) begin
         VX_raster_slice #(
             .RASTER_BLOCK_SIZE(RASTER_BLOCK_SIZE),
             .RASTER_TILE_SIZE(RASTER_TILE_SIZE),
@@ -146,9 +173,10 @@ module VX_raster_unit #(
         );
     end
 
+    logic pop_quad;
 
-    logic [`RASTER_TILE_DATA_BITS-1:0] out_quad_x_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
-        out_quad_y_loc[RASTER_QUAD_OUTPUT_RATE-1:0];
+    logic [`RASTER_TILE_DATA_BITS-1:0] out_quad_x_loc[RASTER_QUAD_OUTPUT_RATE-1:0];
+    logic [`RASTER_TILE_DATA_BITS-1:0] out_quad_y_loc[RASTER_QUAD_OUTPUT_RATE-1:0];
     logic [3:0] out_quad_masks[RASTER_QUAD_OUTPUT_RATE-1:0];
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0];
     logic arbiter_valid;
@@ -158,7 +186,7 @@ module VX_raster_unit #(
         if (RASTER_SLICE_NUM > 1) begin
             logic quad_index[NUM_SLICE_BITS-1:0];
             VX_fair_arbiter #(
-                .NUM_REQS   (NUM_SLICES),
+                .NUM_REQS   (RASTER_SLICE_NUM),
             ) tile_fifo_arbiter (
                 .clk            (clk),
                 .reset          (reset),

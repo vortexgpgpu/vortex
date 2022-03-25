@@ -8,11 +8,11 @@ interface VX_rop_dcr_if ();
     rop_dcrs_t data;
 
     modport master (
-        input data
+        output data
     );
 
     modport slave (
-        output data
+        input data
     );
 
 endinterface

@@ -1,8 +1,6 @@
-// TODO: add immediate shift
-
 `include "VX_define.vh"
 
-module VX_interpolation (
+module VX_imadd (
     input wire clk,
     input wire reset,
     
@@ -14,9 +12,9 @@ module VX_interpolation (
     input wire [31:0]                   PC_in,
     input wire [`NR_BITS-1:0]           rd_in,
     input wire                          wb_in,
-    input wire [`NUM_THREADS-1:0][31:0] interp_in1, 
-    input wire [`NUM_THREADS-1:0][31:0] interp_in2,
-    input wire [`NUM_THREADS-1:0][31:0] interp_in3,
+    input wire [`NUM_THREADS-1:0][31:0] data_in1, 
+    input wire [`NUM_THREADS-1:0][31:0] data_in2,
+    input wire [`NUM_THREADS-1:0][31:0] data_in3,
 
     // Outputs
     output wire [`UUID_BITS-1:0]         uuid_out,
@@ -34,22 +32,29 @@ module VX_interpolation (
     input wire  ready_out
 ); 
 
+    wire                    valid_s;
+    wire [`UUID_BITS-1:0]   uuid_s;
+    wire [`NW_BITS-1:0]     wid_s;
+    wire [`NUM_THREADS-1:0] tmask_s;
+    wire [31:0]             PC_s;
+    wire [`NR_BITS-1:0]     rd_s;
+    wire                    wb_s;
+
     wire [`NUM_THREADS-1:0][31:0] mul_result;
     wire [`NUM_THREADS-1:0][31:0] add_result;
 
-    wire stall_out;
+    wire stall_out;    
 
-    wire imadd_valid_out;
-    wire mul_ready_in = ~stall_out || ~imadd_valid_out;
+    wire mul_ready_in = ~stall_out || ~valid_s;
 
     ///////////////////////////////////////////////////////////////////////////
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        wire [31:0] mul_in1 = interp_in1[i];
-        wire [31:0] mul_in2 = interp_in2[i];
+        wire [31:0] mul_in1 = data_in1[i];
+        wire [31:0] mul_in2 = data_in2[i];
         wire [31:0] mul_result_tmp;
 
-        VX_multiplier #( // TODO: use alu mul
+        VX_multiplier #(
             .WIDTHA  (32),
             .WIDTHB  (32),
             .WIDTHP  (32),
@@ -63,24 +68,26 @@ module VX_interpolation (
             .result (mul_result_tmp)
         );
 
-        assign mul_result[i] = mul_result_tmp >> (op_mod * 8);
+        assign mul_result[i] = $signed(mul_result_tmp) >> (op_mod * 8);
     end
 
-    reg [`LATENCY_IMUL-1:0] mul_shift_reg;
-
-    always @(posedge clk) begin // wait for multiplier
-            mul_shift_reg <= { mul_shift_reg[`LATENCY_IMUL-2:0], valid_in & mul_ready_in };
-    end
-    
-    assign imadd_valid_out = mul_shift_reg[`LATENCY_IMUL-1];
+    VX_shift_register #(
+        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1),
+        .DEPTH  (`LATENCY_IMUL),
+        .RESETW (1)
+    ) mul_shift_reg (
+        .clk(clk),
+        .reset    (reset),
+        .enable   (mul_ready_in),
+        .data_in  ({valid_in, uuid_in, wid_in, tmask_in, PC_in, rd_in, wb_in}),
+        .data_out ({valid_s,  uuid_s,  wid_s,  tmask_s,  PC_s,  rd_s,  wb_s})
+    );
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        assign add_result[i] = mul_result[i] + interp_in3[i];
+        assign add_result[i] = mul_result[i] + data_in3[i];
     end
 
     ///////////////////////////////////////////////////////////////////////////
-
-    wire [`NUM_THREADS-1:0][31:0] rsp_data = add_result;
 
     assign stall_out = ~ready_out && valid_out;
 
@@ -90,8 +97,8 @@ module VX_interpolation (
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
-        .enable   (mul_ready_in),
-        .data_in  ({imadd_valid_out, uuid_in, wid_in, tmask_in, PC_in, rd_in, wb_in, rsp_data}),
+        .enable   (stall_out),
+        .data_in  ({valid_s,   uuid_s,   wid_s,   tmask_s,   PC_s,   rd_s,   wb_s,   add_result}),
         .data_out ({valid_out, uuid_out, wid_out, tmask_out, PC_out, rd_out, wb_out, data_out})
     );
 

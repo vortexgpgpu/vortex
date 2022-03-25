@@ -9,8 +9,8 @@ module VX_icache_stage #(
     input  wire             reset,
     
     // Icache interface
-    VX_icache_req_if.master icache_req_if,
-    VX_icache_rsp_if.slave  icache_rsp_if,
+    VX_cache_req_if.master icache_req_if,
+    VX_cache_rsp_if.slave  icache_rsp_if,
     
     // request
     VX_ifetch_req_if.slave  ifetch_req_if,
@@ -54,8 +54,11 @@ module VX_icache_stage #(
 
     // Icache Request
     assign icache_req_if.valid = ifetch_req_if.valid;
-    assign icache_req_if.addr  = ifetch_req_if.PC[31:2];
-    assign icache_req_if.tag   = {ifetch_req_if.uuid, req_tag};
+    assign icache_req_if.rw     = 0;
+    assign icache_req_if.byteen = '0;
+    assign icache_req_if.addr   = ifetch_req_if.PC[31:2];
+    assign icache_req_if.data   = '0;
+    assign icache_req_if.tag    = {ifetch_req_if.uuid, req_tag};
 
     // Can accept new request?
     assign ifetch_req_if.ready = icache_req_if.ready;
@@ -74,7 +77,7 @@ module VX_icache_stage #(
         .enable   (!stall_out),
         .data_in  ({icache_rsp_if.valid, rsp_wid,           rsp_tmask,           rsp_PC,           icache_rsp_if.data, rsp_uuid}),
         .data_out ({ifetch_rsp_if.valid, ifetch_rsp_if.wid, ifetch_rsp_if.tmask, ifetch_rsp_if.PC, ifetch_rsp_if.data, ifetch_rsp_if.uuid})
-    );     
+    );
     
     // Can accept new response?
     assign icache_rsp_if.ready = ~stall_out;
