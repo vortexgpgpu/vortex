@@ -184,7 +184,7 @@ module VX_raster_unit #(
         else begin
             always_comb begin
                 arbiter_valid = 1;
-                if (!quad_queue_empty) begin
+                if (!quad_queue_empty[0]) begin
                     quad_pop[0] = 1;
                     if (|quad_valid) begin
                         out_quad_x_loc = temp_quad_x_loc[0];
