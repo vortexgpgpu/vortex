@@ -15,8 +15,8 @@ CLUSTERS=1
 CORES=1
 WARPS=4
 THREADS=4
-L2=0
-L3=0
+L2=
+L3=
 DEBUG=0
 DEBUG_LEVEL=0
 SCOPE=0
@@ -50,11 +50,11 @@ case $i in
         shift
         ;;
     --l2cache)
-        L2=1
+        L2=-DL2_ENABLE
         shift
         ;;
     --l3cache)
-        L3=1
+        L3=-DL3_ENABLE
         shift
         ;;
     --debug=*)
@@ -120,7 +120,7 @@ else
     exit -1
 fi
 
-CONFIGS="-DNUM_CLUSTERS=$CLUSTERS -DNUM_CORES=$CORES -DNUM_WARPS=$WARPS -DNUM_THREADS=$THREADS -DL2_ENABLE=$L2 -DL3_ENABLE=$L3 $PERF_FLAG $CONFIGS"
+CONFIGS="-DNUM_CLUSTERS=$CLUSTERS -DNUM_CORES=$CORES -DNUM_WARPS=$WARPS -DNUM_THREADS=$THREADS $L2 $L3 $PERF_FLAG $CONFIGS"
 
 echo "CONFIGS=$CONFIGS"
 

@@ -13,7 +13,7 @@ module VX_raster_dcr #(
     input  wire [`VX_DCR_DATA_WIDTH-1:0]    dcr_wr_data,
 
     // Output
-    VX_raster_dcr_if.slave raster_dcr_if
+    VX_raster_dcr_if.master     raster_dcr_if
 );
 
     // DCR registers
@@ -40,10 +40,11 @@ module VX_raster_dcr #(
                 `DCR_RASTER_PBUF_STRIDE: begin 
                     dcrs.pbuf_stride <= dcr_wr_data[`RASTER_DCR_DATA_BITS-1:0];
                 end
-                `DCR_RASTER_DST_SIZE: begin 
-                    dcrs.dst_width  <= dcr_wr_data[0 +: `RASTER_DIM_BITS];
-                    dcrs.dst_height <= dcr_wr_data[16 +: `RASTER_DIM_BITS];
-                end
+                // TODO: Uncomment for the next enhancements
+                // `DCR_RASTER_DST_SIZE: begin 
+                //     dcrs.dst_width  <= dcr_wr_data[0 +: `RASTER_DIM_BITS];
+                //     dcrs.dst_height <= dcr_wr_data[16 +: `RASTER_DIM_BITS];
+                // end
             endcase
         end
     end

@@ -14,11 +14,11 @@ module VX_rop_unit #(
 `endif
 
     // Memory interface
-    VX_dcache_req_if.master cache_req_if,
-    VX_dcache_rsp_if.slave  cache_rsp_if,
+    VX_cache_req_if.master cache_req_if,
+    VX_cache_rsp_if.slave  cache_rsp_if,
 
     // Inputs
-    VX_rop_dcr_if.master rop_dcr_if,
+    VX_rop_dcr_if.slave rop_dcr_if,
     VX_rop_req_if.slave rop_req_if
 );
     rop_dcrs_t dcrs = rop_dcr_if.data;

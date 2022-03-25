@@ -10,29 +10,33 @@ module VX_pipeline #(
     input wire                  reset,
 
     // Dcache interface
-    VX_dcache_req_if.master     dcache_req_if,
-    VX_dcache_rsp_if.slave      dcache_rsp_if,
+    VX_cache_req_if.master     dcache_req_if,
+    VX_cache_rsp_if.slave      dcache_rsp_if,
 
     // Icache interface
-    VX_icache_req_if.master     icache_req_if,
-    VX_icache_rsp_if.slave      icache_rsp_if,
+    VX_cache_req_if.master     icache_req_if,
+    VX_cache_rsp_if.slave      icache_rsp_if,
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_dcr_if.master        tex_dcr_if,
-    VX_dcache_req_if.master     tcache_req_if,
-    VX_dcache_rsp_if.slave      tcache_rsp_if,
+    VX_tex_dcr_if.slave        tex_dcr_if,
+    VX_cache_req_if.master     tcache_req_if,
+    VX_cache_rsp_if.slave      tcache_rsp_if,
 `endif
 
 `ifdef EXT_RASTER_ENABLE        
     VX_raster_req_if            raster_req_if,
 `endif
-`ifdef EXT_RASTER_ENABLE        
+`ifdef EXT_ROP_ENABLE        
     VX_rop_req_if               rop_req_if,
 `endif
 
 `ifdef PERF_ENABLE
     VX_perf_memsys_if.slave     perf_memsys_if,
 `endif
+
+    // simulation helper signals
+    output wire                 sim_ebreak,
+    output wire [`NUM_REGS-1:0][31:0] sim_last_wb_value,
 
     // Status
     output wire                 busy
@@ -151,7 +155,7 @@ module VX_pipeline #(
     `ifdef EXT_RASTER_ENABLE        
         .raster_req_if  (raster_req_if),
     `endif
-    `ifdef EXT_RASTER_ENABLE        
+    `ifdef EXT_ROP_ENABLE        
         .rop_req_if     (rop_req_if),
     `endif
 
@@ -175,7 +179,9 @@ module VX_pipeline #(
     `ifdef EXT_F_ENABLE
         .fpu_commit_if  (fpu_commit_if),
     `endif
-        .gpu_commit_if  (gpu_commit_if)
+        .gpu_commit_if  (gpu_commit_if),
+
+        .sim_ebreak     (sim_ebreak)
     );    
 
     VX_commit #(
@@ -194,7 +200,9 @@ module VX_pipeline #(
         .gpu_commit_if  (gpu_commit_if),
         
         .writeback_if   (writeback_if),
-        .cmt_to_csr_if  (cmt_to_csr_if)
+        .cmt_to_csr_if  (cmt_to_csr_if),
+
+        .sim_last_wb_value (sim_last_wb_value)
     );
     
 endmodule

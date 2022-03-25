@@ -414,7 +414,7 @@ AddrType Core::get_addr_type(uint64_t addr) {
   if (addr >= IO_BASE_ADDR) {
      return AddrType::IO;
   }
-  if (SM_ENABLE) {
+  if (SM_ENABLED) {
     // check if address is a stack address
     uint32_t total_threads    = arch_.num_cores() * arch_.num_warps() * arch_.num_threads();
     uint64_t total_stack_size = STACK_SIZE * total_threads;

@@ -33,11 +33,6 @@ module VX_rop_svc #(
 
     `UNUSED_VAR (rop_csrs)
 
-    assign rop_req_if.valid = 0;
-    assign rop_req_if.tmask = 0;
-    
-    `UNUSED_VAR (rop_req_if.ready);
-
     assign rop_req_if.valid = rop_svc_req_if.valid & rop_svc_rsp_if.ready;
     assign rop_req_if.tmask = rop_svc_req_if.tmask;
     assign rop_req_if.pos_x = rop_svc_req_if.pos_x;
@@ -52,7 +47,8 @@ module VX_rop_svc #(
     assign rop_svc_rsp_if.wid   = rop_svc_req_if.wid;
     assign rop_svc_rsp_if.tmask = rop_svc_req_if.tmask;
     assign rop_svc_rsp_if.PC    = rop_svc_req_if.PC;
-    assign rop_svc_rsp_if.rd    = '0;
+    assign rop_svc_rsp_if.data  = 'x;
+    assign rop_svc_rsp_if.rd    = 'x;
     assign rop_svc_rsp_if.wb    = 0;
 
 endmodule

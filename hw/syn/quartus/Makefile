@@ -1,6 +1,6 @@
 BUILD_DIR ?= build
 
-.PHONY: dogfood unittest pipeline smem cache fpu_core core vortex top1 top2 top4 top8 top16 top32 top64 texunit
+.PHONY: dogfood unittest pipeline smem cache fpu_core core vortex vortex-gfx top1 top2 top4 top8 top16 top32 top64 texunit test
 
 dogfood:
 	mkdir -p dogfood/$(BUILD_DIR)
@@ -42,6 +42,11 @@ vortex:
 	cp vortex/Makefile vortex/$(BUILD_DIR)
 	$(MAKE) -C vortex/$(BUILD_DIR) clean && $(MAKE) -C vortex/$(BUILD_DIR) > vortex/$(BUILD_DIR)/build.log 2>&1 &
 
+vortex-gfx:
+	mkdir -p vortex-gfx/$(BUILD_DIR)
+	cp vortex-gfx/Makefile vortex-gfx/$(BUILD_DIR)
+	$(MAKE) -C vortex-gfx/$(BUILD_DIR) clean && $(MAKE) -C vortex-gfx/$(BUILD_DIR) > vortex-gfx/$(BUILD_DIR)/build.log 2>&1 &
+
 top1:
 	mkdir -p top1/$(BUILD_DIR)
 	cp top1/Makefile top1/$(BUILD_DIR)
@@ -81,3 +86,8 @@ texunit:
 	mkdir -p texunit/$(BUILD_DIR)
 	cp texunit/Makefile texunit/$(BUILD_DIR)
 	$(MAKE) -C texunit/$(BUILD_DIR) clean && $(MAKE) -C texunit/$(BUILD_DIR) > texunit/$(BUILD_DIR)/build.log 2>&1 &
+
+test:
+	mkdir -p test/$(BUILD_DIR)
+	cp test/Makefile test/$(BUILD_DIR)
+	$(MAKE) -C test/$(BUILD_DIR) clean && $(MAKE) -C test/$(BUILD_DIR) > test/$(BUILD_DIR)/build.log 2>&1 &

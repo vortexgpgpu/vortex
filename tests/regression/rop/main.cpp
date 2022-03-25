@@ -1,0 +1,280 @@
+#include <iostream>
+#include <vector>
+#include <unistd.h>
+#include <string.h>
+#include <chrono>
+#include <cmath>
+#include <assert.h>
+#include <vortex.h>
+#include "common.h"
+#include "utils.h"
+
+using namespace cocogfx;
+
+#define RT_CHECK(_expr)                                         \
+   do {                                                         \
+     int _ret = _expr;                                          \
+     if (0 == _ret)                                             \
+       break;                                                   \
+     printf("Error: '%s' returned %d!\n", #_expr, (int)_ret);   \
+	 cleanup();			                                              \
+     exit(-1);                                                  \
+   } while (false)
+
+///////////////////////////////////////////////////////////////////////////////
+
+const char* kernel_file = "kernel.bin";
+const char* output_file = "output.png";
+const char* reference_file  = nullptr;
+
+uint32_t color = 0xffffffff;
+uint32_t depth = 0x0;
+bool backface = false;
+
+uint32_t clear_color = 0x00000000;
+uint32_t clear_depth = 0xFFFFFFFF;
+
+uint32_t dst_width  = 128;
+uint32_t dst_height = 128;
+
+uint32_t zbuf_stride = 4;
+uint32_t zbuf_pitch  = dst_width * zbuf_stride;
+uint32_t zbuf_size   = dst_height * zbuf_pitch;
+
+uint32_t cbuf_stride = 4;
+uint32_t cbuf_pitch  = dst_width * cbuf_stride;
+uint32_t cbuf_size   = dst_width * cbuf_pitch;
+
+vx_device_h device = nullptr;
+vx_buffer_h staging_buf = nullptr;
+uint64_t zbuf_addr = -1;
+uint64_t cbuf_addr = -1;
+
+kernel_arg_t kernel_arg;
+
+static void show_usage() {
+   std::cout << "Vortex Render Output Test." << std::endl;
+   std::cout << "Usage: [-c color] [-d depth] [-f face] [-k: kernel] [-o image] [-r reference] [-w width] [-h height]" << std::endl;
+}
+
+static void parse_args(int argc, char **argv) {
+  int c;
+  while ((c = getopt(argc, argv, "o:r:k:w:h:c:d:fh?")) != -1) {
+    switch (c) {
+    case 'o':
+      output_file = optarg;
+      break;
+    case 'r':
+      reference_file = optarg;
+      break;
+    case 'k':
+      kernel_file = optarg;
+      break;
+    case 'w':
+      dst_width = std::atoi(optarg);
+      break;
+    case 'h':
+      dst_height = std::atoi(optarg);
+      break;
+    case 'f':
+      backface = true;
+      break;
+    case 'c':
+      color = std::atoi(optarg);
+      break;
+    case 'd':
+      color = std::atoi(optarg);
+      break;
+    case '?': {
+      show_usage();
+      exit(0);
+    } break;
+    default:
+      show_usage();
+      exit(-1);
+    }
+  }
+}
+
+void cleanup() {
+  if (staging_buf) {
+    vx_buf_free(staging_buf);
+  }
+  if (device) {     
+    if (zbuf_addr != -1ull) vx_mem_free(device, zbuf_addr);
+    if (cbuf_addr != -1ull) vx_mem_free(device, cbuf_addr);
+    vx_dev_close(device);
+  }
+}
+
+int render(uint32_t num_tasks) {
+  uint32_t alloc_size = sizeof(kernel_arg_t);
+  RT_CHECK(vx_buf_alloc(device, alloc_size, &staging_buf));
+  
+  // upload kernel argument
+  std::cout << "upload kernel argument" << std::endl;
+  {
+    kernel_arg.num_tasks  = num_tasks;
+    kernel_arg.dst_width  = dst_width;
+    kernel_arg.dst_height = dst_height;
+    kernel_arg.backface   = backface;
+    kernel_arg.color      = color;
+    kernel_arg.depth      = depth;
+
+    auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
+    memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
+    RT_CHECK(vx_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
+  }
+
+  vx_buf_free(staging_buf);
+  staging_buf = nullptr;
+
+  // configure rop color buffer
+  vx_dcr_write(device, DCR_ROP_CBUF_ADDR,  cbuf_addr);
+  vx_dcr_write(device, DCR_ROP_CBUF_PITCH, cbuf_pitch);
+  vx_dcr_write(device, DCR_ROP_CBUF_MASK, 0xffffffff);
+
+  // configure rop depth buffer to default
+  vx_dcr_write(device, DCR_ROP_ZBUF_ADDR,  zbuf_addr);
+  vx_dcr_write(device, DCR_ROP_ZBUF_PITCH, zbuf_pitch);    
+  vx_dcr_write(device, DCR_ROP_DEPTH_FUNC, ROP_DEPTH_FUNC_ALWAYS);
+  vx_dcr_write(device, DCR_ROP_DEPTH_WRITEMASK, 0);
+  
+  // configure rop stencil states to default
+  vx_dcr_write(device, DCR_ROP_STENCIL_FUNC, ROP_DEPTH_FUNC_ALWAYS);
+  vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, ROP_STENCIL_OP_KEEP);
+  vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, ROP_STENCIL_OP_KEEP);
+  vx_dcr_write(device, DCR_ROP_STENCIL_FAIL, ROP_STENCIL_OP_KEEP);
+  vx_dcr_write(device, DCR_ROP_STENCIL_REF, 0);
+  vx_dcr_write(device, DCR_ROP_STENCIL_MASK, ROP_STENCIL_MASK);
+  vx_dcr_write(device, DCR_ROP_STENCIL_WRITEMASK, 0);
+
+  // configure rop blend states to default
+  vx_dcr_write(device, DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)   // DST
+                                          | (ROP_BLEND_MODE_ADD << 0));  // SRC
+  vx_dcr_write(device, DCR_ROP_BLEND_FUNC, (ROP_BLEND_FUNC_ZERO << 24)  // DST_A
+                                          | (ROP_BLEND_FUNC_ZERO << 16)  // DST_RGB 
+                                          | (ROP_BLEND_FUNC_ONE << 8)    // SRC_A
+                                          | (ROP_BLEND_FUNC_ONE << 0));  // SRC_RGB
+  
+  auto time_start = std::chrono::high_resolution_clock::now();
+
+  // start device
+  std::cout << "start device" << std::endl;
+  RT_CHECK(vx_start(device));
+
+  // wait for completion
+  std::cout << "wait for completion" << std::endl;
+  RT_CHECK(vx_ready_wait(device, MAX_TIMEOUT));
+  
+  auto time_end = std::chrono::high_resolution_clock::now();
+  double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
+  printf("Elapsed time: %lg ms\n", elapsed);
+
+  // download destination buffer
+  std::vector<uint8_t> dst_pixels(cbuf_size);
+  {
+    std::cout << "download destination buffer" << std::endl;
+    RT_CHECK(vx_buf_alloc(device, cbuf_size, &staging_buf));
+    RT_CHECK(vx_copy_from_dev(staging_buf, cbuf_addr, cbuf_size, 0));    
+    auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
+    memcpy(dst_pixels.data(), buf_ptr, cbuf_size);
+    vx_buf_free(staging_buf);
+    staging_buf = nullptr;
+  }
+
+  // save output image
+  std::cout << "save output image" << std::endl;
+  {
+    // save image upside down
+    auto bits = dst_pixels.data() + (dst_height-1) * cbuf_pitch;
+    RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, bits, dst_width, dst_height, -cbuf_pitch));
+  }
+
+  return 0;
+}
+
+int main(int argc, char *argv[]) {  
+  // parse command arguments
+  parse_args(argc, argv);
+
+  // open device connection
+  std::cout << "open device connection" << std::endl;
+  RT_CHECK(vx_dev_open(&device));
+
+  uint64_t isa_flags;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
+  if (0 == (isa_flags & VX_ISA_EXT_TEX)) {
+    std::cout << "texture extension not supported!" << std::endl;
+    cleanup();
+    return -1;
+  }
+
+  uint64_t max_cores, max_warps, max_threads;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_CORES, &max_cores));
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_WARPS, &max_warps));
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_THREADS, &max_threads));  
+
+  uint32_t num_tasks = max_cores * max_warps * max_threads;
+
+  std::cout << "number of tasks: " << std::dec << num_tasks << std::endl;
+
+  // upload program
+  std::cout << "upload program" << std::endl;  
+  RT_CHECK(vx_upload_kernel_file(device, kernel_file));
+
+  // allocate device memory  
+  RT_CHECK(vx_mem_alloc(device, zbuf_size, &zbuf_addr));
+  RT_CHECK(vx_mem_alloc(device, cbuf_size, &cbuf_addr));
+
+  std::cout << "zbuf_addr=0x" << std::hex << zbuf_addr << std::endl;
+  std::cout << "cbuf_addr=0x" << std::hex << cbuf_addr << std::endl;
+
+  // allocate staging buffer  
+  std::cout << "allocate staging buffer" << std::endl;    
+  uint32_t alloc_size = std::max(zbuf_size, cbuf_size);
+  RT_CHECK(vx_buf_alloc(device, alloc_size, &staging_buf));
+  
+  // clear depth buffer
+  std::cout << "clear depth buffer" << std::endl;      
+  {    
+    auto buf_ptr = (uint32_t*)vx_host_ptr(staging_buf);
+    for (uint32_t i = 0; i < (zbuf_size/4); ++i) {
+      buf_ptr[i] = clear_depth;
+    }    
+    RT_CHECK(vx_copy_to_dev(staging_buf, zbuf_addr, zbuf_size, 0));  
+  }
+
+  // clear destination buffer
+  std::cout << "clear destination buffer" << std::endl;      
+  {    
+    auto buf_ptr = (uint32_t*)vx_host_ptr(staging_buf);
+    for (uint32_t i = 0; i < (cbuf_size/4); ++i) {
+      buf_ptr[i] = clear_color;
+    }    
+    RT_CHECK(vx_copy_to_dev(staging_buf, cbuf_addr, cbuf_size, 0));  
+  }  
+
+  vx_buf_free(staging_buf);
+  staging_buf = nullptr;
+  
+  // run tests
+  std::cout << "render" << std::endl;
+  RT_CHECK(render(num_tasks));
+
+  // cleanup
+  std::cout << "cleanup" << std::endl;  
+  cleanup();  
+
+  if (reference_file) {
+    auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8);
+    if (0 == errors) {
+      std::cout << "PASSED!" << std::endl;
+    } else {
+      std::cout << "FAILED!" << std::endl;
+      return errors;
+    }
+  }
+
+  return 0;
+}

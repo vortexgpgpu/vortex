@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_tag_access #(
-    parameter CACHE_ID          = 0,
+    parameter string CACHE_ID   = "",
     parameter BANK_ID           = 0,
     // Size of cache in bytes
     parameter CACHE_SIZE        = 1, 
@@ -13,6 +13,8 @@ module VX_tag_access #(
     parameter NUM_WAYS          = 1, 
     // Size of a word in bytes
     parameter WORD_SIZE         = 1, 
+    // Request debug identifier
+    parameter REQ_DBG_IDW       = 0,
     // bank offset from beginning of index range
     parameter BANK_ADDR_OFFSET  = 0
 ) (
@@ -92,16 +94,16 @@ module VX_tag_access #(
 `ifdef DBG_TRACE_CACHE_TAG
     always @(posedge clk) begin
         if (fill && ~stall) begin
-            dpi_trace("%d: cache%0d:%0d tag-fill: addr=0x%0h, blk_addr=%0d, repl_way=%b, tag_id=0x%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, fill_way, line_tag);
+            dpi_trace("%d: %s:%0d tag-fill: addr=0x%0h, blk_addr=%0d, repl_way=%b, tag_id=0x%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, fill_way, line_tag);
         end
         if (flush) begin
-            dpi_trace("%d: cache%0d:%0d tag-flush: addr=0x%0h, blk_addr=%0d\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr);
+            dpi_trace("%d: %s:%0d tag-flush: addr=0x%0h, blk_addr=%0d\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr);
         end
         if (lookup && ~stall) begin                
             if (tag_match) begin
-                dpi_trace("%d: cache%0d:%0d tag-hit: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, line_tag, req_id);
+                dpi_trace("%d: %s:%0d tag-hit: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, line_tag, req_id);
             end else begin
-                dpi_trace("%d: cache%0d:%0d tag-miss: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, line_tag, req_id);
+                dpi_trace("%d: %s:%0d tag-miss: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, line_tag, req_id);
             end
         end          
     end    

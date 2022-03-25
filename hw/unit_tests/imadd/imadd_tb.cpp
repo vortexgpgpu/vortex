@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <iostream>
-#include "VVX_interpolation.h"
-#include "VVX_interpolation__Syms.h"
+#include "VVX_imadd.h"
+#include "VVX_imadd__Syms.h"
 #include <verilated.h>
 #include <verilated_vcd_c.h>
 
@@ -9,7 +9,7 @@ vluint64_t sim_time = 0;
 vluint64_t posedges = 0;
 
 int main(int argc, char** argv) {
-    VVX_interpolation *dut = new VVX_interpolation;
+    VVX_imadd *dut = new VVX_imadd;
 
     Verilated::traceEverOn(true);
     VerilatedVcdC *m_trace = new VerilatedVcdC;

@@ -18,7 +18,10 @@ module VX_commit #(
 
     // outputs
     VX_writeback_if.master  writeback_if,
-    VX_cmt_to_csr_if.master cmt_to_csr_if
+    VX_cmt_to_csr_if.master cmt_to_csr_if,
+
+    // simulation helper signals
+    output reg [`NUM_REGS-1:0][31:0] sim_last_wb_value
 );
     // CSRs update
 
@@ -90,7 +93,9 @@ module VX_commit #(
         .fpu_commit_if  (fpu_commit_if),
     `endif
         .gpu_commit_if  (gpu_commit_if),
-        .writeback_if   (writeback_if)
+        .writeback_if   (writeback_if),
+        
+        .sim_last_wb_value (sim_last_wb_value)
     );
 
     // store and gpu commits don't writeback  
@@ -132,10 +137,3 @@ module VX_commit #(
 `endif
 
 endmodule
-
-
-
-
-
-
-

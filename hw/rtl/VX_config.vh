@@ -25,16 +25,26 @@
 `define NUM_BARRIERS 4
 `endif
 
-`ifndef L2_ENABLE
-`define L2_ENABLE 0
+`ifndef SM_DISABLE
+`define SM_ENABLE
 `endif
 
-`ifndef L3_ENABLE
-`define L3_ENABLE 0
+`ifdef SM_ENABLE
+    `define SM_ENABLED   1
+`else
+    `define SM_ENABLED   0
 `endif
 
-`ifndef SM_ENABLE
-`define SM_ENABLE 1
+`ifdef L2_ENABLE
+    `define L2_ENABLED   1
+`else
+    `define L2_ENABLED   0
+`endif
+
+`ifdef L3_ENABLE
+    `define L3_ENABLED   1
+`else
+    `define L3_ENABLED   0
 `endif
 
 `ifndef MEM_BLOCK_SIZE
@@ -42,7 +52,7 @@
 `endif
 
 `ifndef L1_BLOCK_SIZE
-`define L1_BLOCK_SIZE ((`L2_ENABLE || `L3_ENABLE) ? 16 : `MEM_BLOCK_SIZE)
+`define L1_BLOCK_SIZE ((`L2_ENABLED || `L3_ENABLED) ? 16 : `MEM_BLOCK_SIZE)
 `endif
 
 `ifndef STARTUP_ADDR
@@ -91,6 +101,7 @@
 `define EXT_TEX_ENABLE
 `define EXT_RASTER_ENABLE
 `define EXT_ROP_ENABLE
+`define EXT_IMADD_ENABLE
 `endif
 
 `define ISA_STD_A           0
@@ -108,6 +119,7 @@
 `define ISA_EXT_TEX         0
 `define ISA_EXT_RASTER      1
 `define ISA_EXT_ROP         2
+`define ISA_EXT_IMADD       3
 
 `ifdef EXT_A_ENABLE
     `define EXT_A_ENABLED   1
@@ -157,13 +169,22 @@
     `define EXT_ROP_ENABLED 0
 `endif
 
-`define ISA_X_ENABLED   (`EXT_TEX_ENABLED       \
+`ifdef EXT_IMADD_ENABLE
+    `define EXT_IMADD_ENABLED 1
+`else
+    `define EXT_IMADD_ENABLED 0
+`endif
+
+`define ISA_X_ENABLED  ( `EXT_TEX_ENABLED       \
                        | `EXT_RASTER_ENABLED    \
-                       | `EXT_ROP_ENABLED)
+                       | `EXT_ROP_ENABLED       \
+                       | `EXT_IMADD_ENABLED     \
+                       )
 
 `define MISA_EXT    (`EXT_TEX_ENABLED << `ISA_EXT_TEX)        \
                   | (`EXT_RASTER_ENABLED << `ISA_EXT_RASTER)  \
-                  | (`EXT_ROP_ENABLED << `ISA_EXT_ROP)
+                  | (`EXT_ROP_ENABLED << `ISA_EXT_ROP)        \
+                  | (`EXT_IMADD_ENABLED << `ISA_EXT_IMADD)
 
 `define MISA_STD  (`EXT_A_ENABLED <<  0) /* A - Atomic Instructions extension */ \
                 | (0 <<  1) /* B - Tentatively reserved for Bit operations extension */ \
@@ -258,6 +279,11 @@
 // Texture Unit Request Queue
 `ifndef TEXQ_SIZE
 `define TEXQ_SIZE (`NUM_WARPS * 2)
+`endif
+
+// ROP memeory queue size
+`ifndef ROP_MEM_QUEUE_SIZE    
+`define ROP_MEM_QUEUE_SIZE  8
 `endif
 
 // Icache Configurable Knobs //////////////////////////////////////////////////
@@ -374,6 +400,90 @@
 // Memory Response Queue Size
 `ifndef TCACHE_MRSQ_SIZE
 `define TCACHE_MRSQ_SIZE 0
+`endif
+
+// Rcache Configurable Knobs //////////////////////////////////////////////////
+
+// Size of cache in bytes
+`ifndef RCACHE_SIZE
+`define RCACHE_SIZE 8192
+`endif
+
+// Number of banks
+`ifndef RCACHE_NUM_BANKS
+`define RCACHE_NUM_BANKS 1
+`endif
+
+// Number of ports per bank
+`ifndef RCACHE_NUM_PORTS
+`define RCACHE_NUM_PORTS 1
+`endif
+
+// Core Request Queue Size
+`ifndef RCACHE_CREQ_SIZE
+`define RCACHE_CREQ_SIZE 0
+`endif
+
+// Core Response Queue Size
+`ifndef RCACHE_CRSQ_SIZE
+`define RCACHE_CRSQ_SIZE 2
+`endif
+
+// Miss Handling Register Size
+`ifndef RCACHE_MSHR_SIZE
+`define RCACHE_MSHR_SIZE 8
+`endif
+
+// Memory Request Queue Size
+`ifndef RCACHE_MREQ_SIZE
+`define RCACHE_MREQ_SIZE 4
+`endif
+
+// Memory Response Queue Size
+`ifndef RCACHE_MRSQ_SIZE
+`define RCACHE_MRSQ_SIZE 0
+`endif
+
+// Ocache Configurable Knobs //////////////////////////////////////////////////
+
+// Size of cache in bytes
+`ifndef OCACHE_SIZE
+`define OCACHE_SIZE 8192
+`endif
+
+// Number of banks
+`ifndef OCACHE_NUM_BANKS
+`define OCACHE_NUM_BANKS `NUM_THREADS
+`endif
+
+// Number of ports per bank
+`ifndef OCACHE_NUM_PORTS
+`define OCACHE_NUM_PORTS 1
+`endif
+
+// Core Request Queue Size
+`ifndef OCACHE_CREQ_SIZE
+`define OCACHE_CREQ_SIZE 0
+`endif
+
+// Core Response Queue Size
+`ifndef OCACHE_CRSQ_SIZE
+`define OCACHE_CRSQ_SIZE 2
+`endif
+
+// Miss Handling Register Size
+`ifndef OCACHE_MSHR_SIZE
+`define OCACHE_MSHR_SIZE 8
+`endif
+
+// Memory Request Queue Size
+`ifndef OCACHE_MREQ_SIZE
+`define OCACHE_MREQ_SIZE 4
+`endif
+
+// Memory Response Queue Size
+`ifndef OCACHE_MRSQ_SIZE
+`define OCACHE_MRSQ_SIZE 0
 `endif
 
 // SM Configurable Knobs //////////////////////////////////////////////////////

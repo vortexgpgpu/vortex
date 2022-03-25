@@ -8,11 +8,11 @@ interface VX_raster_dcr_if ();
     raster_dcrs_t data;
 
     modport master (
-        input data
+        output data
     );
 
     modport slave (
-        output data
+        input data
     );
 
 endinterface

@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_data_access #(
-    parameter CACHE_ID          = 0,
+    parameter string CACHE_ID   = "",
     parameter BANK_ID           = 0,
     // Size of cache in bytes
     parameter CACHE_SIZE        = 1, 
@@ -17,8 +17,8 @@ module VX_data_access #(
     parameter WORD_SIZE         = 1,
     // Enable cache writeable
     parameter WRITE_ENABLE      = 1,
-    
-    parameter WORD_SELECT_BITS  = `UP(`WORD_SELECT_BITS)
+    // Request debug identifier
+    parameter REQ_DBG_IDW       = 0
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -49,6 +49,7 @@ module VX_data_access #(
     `UNUSED_VAR (addr)
     `UNUSED_VAR (read)
 
+    localparam WORD_SELECT_BITS = `UP(`WORD_SELECT_BITS);
     localparam BYTEENW = WRITE_ENABLE ? CACHE_LINE_SIZE : 1;
 
     wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] rdata;
@@ -137,13 +138,13 @@ module VX_data_access #(
 `ifdef DBG_TRACE_CACHE_DATA
     always @(posedge clk) begin 
         if (fill && ~stall) begin
-            dpi_trace("%d: cache%0d:%0d data-fill: addr=0x%0h, blk_addr=%0d, data=0x%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, fill_data);
+            dpi_trace("%d: %s:%0d data-fill: addr=0x%0h, blk_addr=%0d, data=0x%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, fill_data);
         end
         if (read && ~stall) begin
-            dpi_trace("%d: cache%0d:%0d data-read: addr=0x%0h, blk_addr=%0d, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, read_data, req_id);
+            dpi_trace("%d: %s:%0d data-read: addr=0x%0h, blk_addr=%0d, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, read_data, req_id);
         end 
         if (write && ~stall) begin
-            dpi_trace("%d: cache%0d:%0d data-write: addr=0x%0h, byteen=%b, blk_addr=%0d, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), byteen, line_addr, write_data, req_id);
+            dpi_trace("%d: %s:%0d data-write: addr=0x%0h, byteen=%b, blk_addr=%0d, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), byteen, line_addr, write_data, req_id);
         end      
     end    
 `endif

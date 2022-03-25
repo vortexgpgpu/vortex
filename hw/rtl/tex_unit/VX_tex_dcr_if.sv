@@ -9,11 +9,11 @@ interface VX_tex_dcr_if #(
     tex_dcrs_t data [NUM_STAGES-1:0];
     
     modport master (
-        input data
+        output  data
     );
 
     modport slave (
-        output data
+        input   data
     );
 
 endinterface

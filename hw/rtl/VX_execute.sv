@@ -9,13 +9,13 @@ module VX_execute #(
     input wire reset,    
 
     // Dcache interface
-    VX_dcache_req_if.master dcache_req_if,
-    VX_dcache_rsp_if.slave dcache_rsp_if,
+    VX_cache_req_if.master dcache_req_if,
+    VX_cache_rsp_if.slave dcache_rsp_if,
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_dcr_if.master    tex_dcr_if,
-    VX_dcache_req_if.master tcache_req_if,
-    VX_dcache_rsp_if.slave  tcache_rsp_if,
+    VX_tex_dcr_if.slave    tex_dcr_if,
+    VX_cache_req_if.master tcache_req_if,
+    VX_cache_rsp_if.slave  tcache_rsp_if,
 `endif
 
     // commit interface
@@ -32,7 +32,7 @@ module VX_execute #(
 `ifdef EXT_RASTER_ENABLE        
     VX_raster_req_if        raster_req_if,
 `endif
-`ifdef EXT_RASTER_ENABLE        
+`ifdef EXT_ROP_ENABLE        
     VX_rop_req_if           rop_req_if,
 `endif
     
@@ -55,7 +55,10 @@ module VX_execute #(
 `ifdef EXT_F_ENABLE
     VX_commit_if.master     fpu_commit_if,
 `endif
-    VX_commit_if.master     gpu_commit_if
+    VX_commit_if.master     gpu_commit_if,
+
+    // simulation helper signals
+    output wire             sim_ebreak
 );
 
 `ifdef EXT_TEX_ENABLE
@@ -98,8 +101,8 @@ module VX_execute #(
         `SCOPE_BIND_VX_execute_lsu_unit
         .clk            (clk),
         .reset          (lsu_reset),
-        .dcache_req_if  (dcache_req_if),
-        .dcache_rsp_if  (dcache_rsp_if),
+        .cache_req_if   (dcache_req_if),
+        .cache_rsp_if   (dcache_rsp_if),
         .lsu_req_if     (lsu_req_if),
         .ld_commit_if   (ld_commit_if),
         .st_commit_if   (st_commit_if)
@@ -130,7 +133,7 @@ module VX_execute #(
     `ifdef EXT_RASTER_ENABLE        
         .raster_csr_if  (raster_csr_if),
     `endif
-    `ifdef EXT_RASTER_ENABLE        
+    `ifdef EXT_ROP_ENABLE        
         .rop_csr_if     (rop_csr_if),
     `endif
         .cmt_to_csr_if  (cmt_to_csr_if),
@@ -175,7 +178,7 @@ module VX_execute #(
         .raster_csr_if  (raster_csr_if),
         .raster_req_if  (raster_req_if),
     `endif
-    `ifdef EXT_RASTER_ENABLE        
+    `ifdef EXT_ROP_ENABLE        
         .rop_csr_if     (rop_csr_if),
         .rop_req_if     (rop_req_if),
     `endif
@@ -183,9 +186,8 @@ module VX_execute #(
         .gpu_commit_if  (gpu_commit_if)
     );
 
-    // special workaround to get RISC-V tests Pass/Fail status
-    wire ebreak /* verilator public */;
-    assign ebreak = alu_req_if.valid && alu_req_if.ready
+    // simulation helper signal to get RISC-V tests Pass/Fail status
+    assign sim_ebreak = alu_req_if.valid && alu_req_if.ready
                  && `INST_ALU_IS_BR(alu_req_if.op_mod)
                  && (`INST_BR_BITS'(alu_req_if.op_type) == `INST_BR_EBREAK 
                   || `INST_BR_BITS'(alu_req_if.op_type) == `INST_BR_ECALL);
