@@ -165,7 +165,7 @@ module VX_raster_unit #(
             ) tile_fifo_arbiter (
                 .clk            (clk),
                 .reset          (reset),
-                .unlock         (!(&quad_queue_empty)),
+                `UNUSED_PIN     (unlock),
                 .requests       (~quad_queue_empty),
                 .grant_index    (quad_index),
                 .grant_onehot   (quad_pop),
