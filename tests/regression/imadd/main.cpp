@@ -109,6 +109,14 @@ int main(int argc, char *argv[]) {
   // open device connection
   std::cout << "open device connection" << std::endl;  
   RT_CHECK(vx_dev_open(&device));
+  
+  uint64_t isa_flags;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
+  if (0 == (isa_flags & (VX_ISA_EXT_IMADD))) {
+    std::cout << "raster or rop extensions not supported!" << std::endl;
+    cleanup();
+    return -1;
+  }
 
   uint64_t max_cores, max_warps, max_threads;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_CORES, &max_cores));

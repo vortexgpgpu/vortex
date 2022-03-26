@@ -204,7 +204,7 @@ int main(int argc, char *argv[]) {
 
   uint64_t isa_flags;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
-  if (0 == (isa_flags & VX_ISA_EXT_TEX)) {
+  if (0 == (isa_flags & VX_ISA_EXT_ROP)) {
     std::cout << "texture extension not supported!" << std::endl;
     cleanup();
     return -1;
