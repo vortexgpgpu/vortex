@@ -2,27 +2,29 @@ XLEN ?= 32
 
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 VORTEX_DRV_PATH ?= $(realpath ../../../driver)
-VORTEX_RT_PATH ?= $(wildcard ../../../runtime)
+VORTEX_RT_PATH ?= $(realpath ../../../runtime)
 
-OPTS ?= -g1
+OPTS ?= -n64
 
 VX_CC  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
 VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++
 VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
 VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
-VX_CFLAGS += -std=c++11 -march=rv32imf -mabi=ilp32f -O3 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
-VX_CFLAGS += -DENABLE_SW -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw -I$(VORTEX_RT_PATH)/../sim/common -I$(VORTEX_RT_PATH)/../third_party
+VX_CFLAGS += -march=rv32imf -mabi=ilp32f -O3 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
+VX_CFLAGS += -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw
 
 VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections $(VORTEX_RT_PATH)/libvortexrt.a
 
-VX_SRCS = kernel.cpp
+VX_LDFLAGS += -lm
 
-CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
+VX_SRCS = kernel.c
 
-CXXFLAGS += -I$(VORTEX_DRV_PATH)/include -I$(VORTEX_RT_PATH)/../hw -I$(VORTEX_RT_PATH)/../sim/common -I$(VORTEX_RT_PATH)/../third_party
+CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
 
-LDFLAGS += -L$(VORTEX_DRV_PATH)/stub -lvortex $(VORTEX_RT_PATH)/../third_party/cocogfx/libcocogfx.a -lpng -lz
+CXXFLAGS += -I$(VORTEX_DRV_PATH)/include -I$(VORTEX_RT_PATH)/../hw
+
+LDFLAGS += -L$(VORTEX_DRV_PATH)/stub -lvortex
 
 # Debugigng
 ifdef DEBUG
@@ -31,20 +33,20 @@ else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
-PROJECT = tex
+PROJECT = imadd
 
-SRCS = main.cpp utils.cpp
+SRCS = main.cpp
 
 all: $(PROJECT) kernel.bin kernel.dump
  
 kernel.dump: kernel.elf
-	$(VX_DP) -D kernel.elf > kernel.dump
+	$(VX_DP) -d -r -t kernel.elf > kernel.dump
 
 kernel.bin: kernel.elf
 	$(VX_CP) -O binary kernel.elf kernel.bin
 
 kernel.elf: $(VX_SRCS)
-	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -o kernel.elf
+	$(VX_CC) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -o kernel.elf
 
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@

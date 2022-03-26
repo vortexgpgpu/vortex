@@ -3,13 +3,14 @@
 `TRACING_OFF
 module VX_popcount #(
     parameter MODEL = 1,
-    parameter N     = 1,
-    parameter M     = $clog2(N+1) 
+    parameter N     = 1    
 ) (
     input  wire [N-1:0] in_i,
     output wire [M-1:0] cnt_o
 );
     `UNUSED_PARAM (MODEL)
+
+    localparam M = $clog2(N+1);
 
 `ifndef SYNTHESIS
     assign cnt_o = $countones(in_i);

@@ -28,15 +28,20 @@ module VX_raster_mem #(
 
     // Raster slice interactions
     input logic [RASTER_SLICE_NUM-1:0]                          raster_slice_ready,
-    output logic [`RASTER_TILE_DATA_BITS-1:0]                   out_x_loc, out_y_loc,
+    output logic [`RASTER_DIM_BITS-1:0]                   out_x_loc, out_y_loc,
     output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              out_edges[2:0][2:0],
     output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              out_pid,
     output logic [RASTER_SLICE_BITS-1:0]                        out_slice_index,
 
     // Status signals
-    output logic                                    ready, out_valid
+    output logic                                    ready, out_valid,
+
+    // Memory interface
+    VX_cache_req_if.master cache_req_if,
+    VX_cache_rsp_if.slave  cache_rsp_if
 );
 
+    localparam NUM_REQS          = 9;
     localparam RASTER_TILE_BITS  = $clog2(RASTER_TILE_SIZE);
 
     // Bit tag identifier for type of memory request
@@ -52,11 +57,11 @@ module VX_raster_mem #(
 
     // Temp storage to cycle through all primitives and tiles
     logic [`RASTER_DCR_DATA_BITS-1:0] temp_tbuf_addr, temp_pbuf_addr, temp_num_prims, temp_num_tiles, temp_pbuf_stride;
-    logic [`RASTER_TILE_DATA_BITS-1:0] temp_x_loc, temp_y_loc;
+    logic [`RASTER_DIM_BITS-1:0] temp_x_loc, temp_y_loc;
     logic [`RASTER_DCR_DATA_BITS-1:0] temp_prim_count, temp_tile_count;
 
     // Holds x_loc, y_loc, edge_func_val, edges, pid -> extents are calculated on the fly
-    localparam RASTER_RS_DATA_WIDTH = 2*`RASTER_TILE_DATA_BITS + 3*3*`RASTER_PRIMITIVE_DATA_BITS + RASTER_PRIMITIVE_DATA_BITS;
+    localparam RASTER_RS_DATA_WIDTH = 2*`RASTER_DIM_BITS + 3*3*`RASTER_PRIMITIVE_DATA_BITS + `RASTER_PRIMITIVE_DATA_BITS;
     localparam RASTER_RS_INDEX_BITS = `LOG2UP(RASTER_RS_SIZE);
 
     // Reservation station
@@ -74,8 +79,9 @@ module VX_raster_mem #(
     logic mem_req_valid, mem_req_ready, mem_rsp_valid;
     logic [8:0][`RASTER_DCR_DATA_BITS-1:0]       mem_req_addr;
     logic [8:0][`RASTER_PRIMITIVE_DATA_BITS-1:0] mem_rsp_data;
-    localparam TAG_MAX_BIT_INDEX = RASTER_RS_INDEX_BITS-1 + 2;
-    logic [TAG_MAX_BIT_INDEX:0]                  mem_rsp_tag; // size increased by 1 bit to account for the mem_tag_type
+    //localparam TAG_MAX_BIT_INDEX = RASTER_RS_INDEX_BITS-1 + 2;
+    localparam TAG_MAX_BIT_INDEX = 2;
+    logic [TAG_MAX_BIT_INDEX-1:0]                  mem_rsp_tag; // size increased by 1 bit to account for the mem_tag_type
     logic [1:0]                                  mem_tag_type;
     logic [8:0]                                  mem_req_mask;
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]      pid;
@@ -95,6 +101,7 @@ module VX_raster_mem #(
             temp_num_tiles <= 0;
             temp_prim_count <= 0;
             fetch_fsm_complete <= 1;
+            temp_tile_count <= 0;
             pid <= 0;
             for (int i = 0; i < RASTER_RS_SIZE; ++i) begin
                 raster_rs_valid[i] <= 0;
@@ -103,7 +110,7 @@ module VX_raster_mem #(
         end
         else if (mem_req_ready) begin
             // On new input -> set the temp state values
-            if (ready && input_valid && valid_rs_empty_index) begin
+            if (ready && input_valid && valid_rs_empty_index && (temp_tile_count != num_tiles)) begin
                 temp_pbuf_addr <= pbuf_baseaddr;
                 temp_num_tiles <= num_tiles;
                 temp_pbuf_stride <= pbuf_stride;
@@ -133,8 +140,8 @@ module VX_raster_mem #(
                     // Check the reponse tag type
                     if (mem_rsp_tag[1:0] == TILE_FETCH) begin
                         // returned value is tile data
-                        temp_x_loc <= `RASTER_TILE_DATA_BITS'((mem_rsp_data[0] & {{`RASTER_TILE_DATA_BITS{1'b0}}, {`RASTER_TILE_DATA_BITS{1'b1}}}) << RASTER_TILE_BITS);
-                        temp_y_loc <= `RASTER_TILE_DATA_BITS'((mem_rsp_data[0] >> (`RASTER_TILE_DATA_BITS)) << RASTER_TILE_BITS);
+                        temp_x_loc <= `RASTER_DIM_BITS'((mem_rsp_data[0] & {{16{1'b0}}, {16{1'b1}}}) << RASTER_TILE_BITS);
+                        temp_y_loc <= `RASTER_DIM_BITS'((mem_rsp_data[0] >> (16)) << RASTER_TILE_BITS);
                         temp_num_prims <= mem_rsp_data[1];
                         // Launch the pid fetch
                         mem_tag_type <= PRIM_ID_FETCH;
@@ -254,22 +261,35 @@ module VX_raster_mem #(
     );
 
     // Memory streamer
+
+    wire                                cache_rsp_valid;
+    wire [`RCACHE_NUM_REQS-1:0]         cache_rsp_tmask;
+    wire [`RCACHE_NUM_REQS-1:0][`RCACHE_WORD_SIZE*8-1:0] cache_rsp_data;
+    wire [`RCACHE_TAG_WIDTH-1:0]        cache_rsp_tag;
+    wire                                cache_rsp_ready;
+
+    wire [NUM_REQS-1:0][31:0] cache_mem_req_addr; 
+    for (genvar i = 0; i < NUM_REQS; ++i) begin
+        assign cache_req_if.addr[i] = cache_mem_req_addr[i][`RCACHE_ADDR_WIDTH-1:0]; 
+    end
+
     VX_mem_streamer #(
-        .NUM_REQS(9), // 3 edges and 3 coeffs in each edge
+        .NUM_REQS(NUM_REQS), // 3 edges and 3 coeffs in each edge
         .ADDRW(`RASTER_DCR_DATA_BITS),
         .DATAW(`RASTER_PRIMITIVE_DATA_BITS),
-        .TAGW(RASTER_RS_INDEX_BITS + 2) // the top bit will denote type of request
+        .QUEUE_SIZE(2**`RCACHE_TAG_WIDTH),
+        .TAGW(TAG_MAX_BIT_INDEX) // the top bit will denote type of request
     ) raster_mem_streamer (
         .clk(clk),
         .reset(reset),
 
-        .req_valid(mem_req_valid && mem_req_ready && |raster_rs_empty), // NOTE: This should ensure stalls
+        .req_valid(mem_req_valid && |raster_rs_empty), // NOTE: This should ensure stalls
         .req_rw(0),
         .req_mask(mem_req_mask),
         `UNUSED_PIN (req_byteen),   /// TODO: USE THIS PIN
         .req_addr(mem_req_addr),
         `UNUSED_PIN (req_data),
-        .req_tag({raster_rs_empty_index, mem_tag_type}), //tag type appended to tag
+        .req_tag(mem_tag_type), //tag type appended to tag
         .req_ready(mem_req_ready),
         
         // Output response
@@ -279,18 +299,38 @@ module VX_raster_mem #(
         .rsp_tag(mem_rsp_tag),
         .rsp_ready(1),
 
-        `UNUSED_PIN (mem_req_valid),
-        `UNUSED_PIN (mem_req_rw),
-        `UNUSED_PIN (mem_req_byteen),
-        `UNUSED_PIN (mem_req_addr),
-        `UNUSED_PIN (mem_req_data),
-        `UNUSED_PIN (mem_req_tag),
-        `UNUSED_PIN (mem_req_ready),
-        `UNUSED_PIN (mem_rsp_valid),
-        `UNUSED_PIN (mem_rsp_mask),
-        `UNUSED_PIN (mem_rsp_data),
-        `UNUSED_PIN (mem_rsp_tag),
-        `UNUSED_PIN (mem_rsp_ready)
+        .mem_req_valid(cache_req_if.valid),
+        .mem_req_rw(cache_req_if.rw),
+        .mem_req_byteen(cache_req_if.byteen),
+        .mem_req_addr(cache_mem_req_addr),
+        .mem_req_data(cache_req_if.data),
+        .mem_req_tag(cache_req_if.tag),
+        .mem_req_ready(cache_req_if.ready),
+
+        .mem_rsp_valid(cache_rsp_valid),
+        .mem_rsp_mask(cache_rsp_tmask),
+        .mem_rsp_data(cache_rsp_data),
+        .mem_rsp_tag(cache_rsp_tag),
+        .mem_rsp_ready(cache_rsp_ready)
+    );
+
+    // Cache Response
+
+    VX_cache_rsp_sel #(
+        .NUM_REQS     (`RCACHE_NUM_REQS),
+        .DATA_WIDTH   (`RCACHE_WORD_SIZE*8),
+        .TAG_WIDTH    (`RCACHE_TAG_WIDTH),
+        .TAG_SEL_BITS (`RCACHE_TAG_SEL_BITS),
+        .OUT_REG      (1)
+    ) cache_rsp_sel (
+        .clk            (clk),
+        .reset          (reset),
+        .rsp_in_if      (cache_rsp_if),
+        .rsp_out_valid  (cache_rsp_valid),
+        .rsp_out_tmask  (cache_rsp_tmask),
+        .rsp_out_data   (cache_rsp_data),
+        .rsp_out_tag    (cache_rsp_tag),
+        .rsp_out_ready  (cache_rsp_ready)
     );
 
 endmodule

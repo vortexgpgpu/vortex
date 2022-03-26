@@ -403,7 +403,7 @@
 `define RCACHE_TAG_WIDTH        `RCACHE_TAG_SEL_BITS
 
 // Input request size
-`define RCACHE_NUM_REQS         1
+`define RCACHE_NUM_REQS          9
 
 // Memory request data bits
 `define RCACHE_MEM_DATA_WIDTH   (`RCACHE_LINE_SIZE * 8)

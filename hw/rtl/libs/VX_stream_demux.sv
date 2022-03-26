@@ -22,7 +22,7 @@ module VX_stream_demux #(
     input  wire [NUM_REQS-1:0][LANES-1:0]            ready_out
   );
 
-    parameter LOG_NUM_REQS = `LOG2UP(NUM_REQS);
+    localparam LOG_NUM_REQS = `LOG2UP(NUM_REQS);
   
     if (NUM_REQS > 1)  begin
 
@@ -38,29 +38,29 @@ module VX_stream_demux #(
             wire [NUM_REQS-1:0]     arb_requests;
             wire [LOG_NUM_REQS-1:0] arb_index;
             wire [NUM_REQS-1:0]     arb_onehot;
-            wire                    arb_enable;
+            wire                    arb_unlock;
 
             if (LANES > 1) begin
                 for (genvar i = 0; i < NUM_REQS; i++) begin
                     assign arb_requests[i] = (| sel_ready[i]);
                 end
-                assign arb_enable = (| sel_fire);
+                assign arb_unlock = (| sel_fire);
             end else begin
                 for (genvar i = 0; i < NUM_REQS; i++) begin
                     assign arb_requests[i] = sel_ready[i];
                 end
-                assign arb_enable = sel_fire;
+                assign arb_unlock = sel_fire;
             end
 
             VX_generic_arbiter #(
                 .NUM_REQS    (NUM_REQS),
                 .LOCK_ENABLE (1),
                 .TYPE        (ARBITER)
-            ) arb (
+            ) arbiter (
                 .clk          (clk),
                 .reset        (reset),
                 .requests     (arb_requests),  
-                .enable       (arb_enable),
+                .unlock       (arb_unlock),
                 `UNUSED_PIN (grant_valid),
                 .grant_index  (arb_index),
                 .grant_onehot (arb_onehot)

@@ -39,6 +39,8 @@ module VX_imadd (
     wire [31:0]             PC_s;
     wire [`NR_BITS-1:0]     rd_s;
     wire                    wb_s;
+    wire [`INST_MOD_BITS-1:0] op_mod_s;
+    wire [`NUM_THREADS-1:0][31:0] data_in3_s;
 
     wire [`NUM_THREADS-1:0][31:0] mul_result;
     wire [`NUM_THREADS-1:0][31:0] add_result;
@@ -68,23 +70,23 @@ module VX_imadd (
             .result (mul_result_tmp)
         );
 
-        assign mul_result[i] = $signed(mul_result_tmp) >> (op_mod * 8);
+        assign mul_result[i] = $signed(mul_result_tmp) >> (op_mod_s * 8);
     end
 
     VX_shift_register #(
-        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1),
+        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + `INST_MOD_BITS + (`NUM_THREADS * 32)),
         .DEPTH  (`LATENCY_IMUL),
         .RESETW (1)
     ) mul_shift_reg (
         .clk(clk),
         .reset    (reset),
         .enable   (mul_ready_in),
-        .data_in  ({valid_in, uuid_in, wid_in, tmask_in, PC_in, rd_in, wb_in}),
-        .data_out ({valid_s,  uuid_s,  wid_s,  tmask_s,  PC_s,  rd_s,  wb_s})
+        .data_in  ({valid_in, uuid_in, wid_in, tmask_in, PC_in, rd_in, wb_in, op_mod,   data_in3}),
+        .data_out ({valid_s,  uuid_s,  wid_s,  tmask_s,  PC_s,  rd_s,  wb_s,  op_mod_s, data_in3_s})
     );
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        assign add_result[i] = mul_result[i] + data_in3[i];
+        assign add_result[i] = mul_result[i] + data_in3_s[i];
     end
 
     ///////////////////////////////////////////////////////////////////////////
@@ -97,7 +99,7 @@ module VX_imadd (
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
-        .enable   (stall_out),
+        .enable   (~stall_out),
         .data_in  ({valid_s,   uuid_s,   wid_s,   tmask_s,   PC_s,   rd_s,   wb_s,   add_result}),
         .data_out ({valid_out, uuid_out, wid_out, tmask_out, PC_out, rd_out, wb_out, data_out})
     );

@@ -4,8 +4,7 @@
 module VX_index_buffer #(
     parameter DATAW  = 1,
     parameter SIZE   = 1,
-    parameter LUTRAM = 1,
-    parameter ADDRW  = `LOG2UP(SIZE)
+    parameter LUTRAM = 1    
 ) (
     input  wire clk,
     input  wire reset,
@@ -22,6 +21,8 @@ module VX_index_buffer #(
     output wire empty,
     output wire full    
 );
+    localparam ADDRW = `LOG2UP(SIZE);
+
     reg [SIZE-1:0] free_slots, free_slots_n;
     reg [ADDRW-1:0] write_addr_r;
     reg empty_r, full_r;

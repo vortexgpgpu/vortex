@@ -3,13 +3,14 @@
 `TRACING_OFF
 module VX_lzc #(
     parameter N    = 2,
-    parameter MODE = 0, // 0 -> trailing zero, 1 -> leading zero
-    parameter LOGN = $clog2(N)
+    parameter MODE = 0  // 0 -> trailing zero, 1 -> leading zero    
 ) (
     input  wire [N-1:0]    in_i,
     output wire [LOGN-1:0] cnt_o,
     output wire            valid_o
 );
+    localparam LOGN = $clog2(N);
+
     wire [N-1:0][LOGN-1:0] indices;
 
     for (genvar i = 0; i < N; ++i) begin

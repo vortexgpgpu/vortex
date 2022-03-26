@@ -318,6 +318,11 @@
 `define ICACHE_MRSQ_SIZE 0
 `endif
 
+// Number of associative ways
+`ifndef ICACHE_NUM_WAYS
+`define ICACHE_NUM_WAYS 2
+`endif
+
 // Dcache Configurable Knobs //////////////////////////////////////////////////
 
 // Size of cache in bytes
@@ -360,11 +365,16 @@
 `define DCACHE_MRSQ_SIZE 0
 `endif
 
+// Number of associative ways
+`ifndef DCACHE_NUM_WAYS
+`define DCACHE_NUM_WAYS 4
+`endif
+
 // Tcache Configurable Knobs //////////////////////////////////////////////////
 
 // Size of cache in bytes
 `ifndef TCACHE_SIZE
-`define TCACHE_SIZE 16384
+`define TCACHE_SIZE 4096
 `endif
 
 // Number of banks
@@ -402,11 +412,16 @@
 `define TCACHE_MRSQ_SIZE 0
 `endif
 
+// Number of associative ways
+`ifndef TCACHE_NUM_WAYS
+`define TCACHE_NUM_WAYS 4
+`endif
+
 // Rcache Configurable Knobs //////////////////////////////////////////////////
 
 // Size of cache in bytes
 `ifndef RCACHE_SIZE
-`define RCACHE_SIZE 8192
+`define RCACHE_SIZE 4096
 `endif
 
 // Number of banks
@@ -444,11 +459,16 @@
 `define RCACHE_MRSQ_SIZE 0
 `endif
 
+// Number of associative ways
+`ifndef RCACHE_NUM_WAYS
+`define RCACHE_NUM_WAYS 2
+`endif
+
 // Ocache Configurable Knobs //////////////////////////////////////////////////
 
 // Size of cache in bytes
 `ifndef OCACHE_SIZE
-`define OCACHE_SIZE 8192
+`define OCACHE_SIZE 4096
 `endif
 
 // Number of banks
@@ -484,6 +504,11 @@
 // Memory Response Queue Size
 `ifndef OCACHE_MRSQ_SIZE
 `define OCACHE_MRSQ_SIZE 0
+`endif
+
+// Number of associative ways
+`ifndef OCACHE_NUM_WAYS
+`define OCACHE_NUM_WAYS 2
 `endif
 
 // SM Configurable Knobs //////////////////////////////////////////////////////
@@ -555,6 +580,11 @@
 `define L2_MRSQ_SIZE 0
 `endif
 
+// Number of associative ways
+`ifndef L2_NUM_WAYS
+`define L2_NUM_WAYS 8
+`endif
+
 // L3cache Configurable Knobs /////////////////////////////////////////////////
 
 // Size of cache in bytes
@@ -595,6 +625,11 @@
 // Memory Response Queue Size
 `ifndef L3_MRSQ_SIZE
 `define L3_MRSQ_SIZE 0
+`endif
+
+// Number of associative ways
+`ifndef L3_NUM_WAYS
+`define L3_NUM_WAYS 8
 `endif
 
 `endif

@@ -6,10 +6,7 @@ module VX_axi_adapter #(
     parameter VX_TAG_WIDTH     = 8,
     parameter AXI_DATA_WIDTH   = VX_DATA_WIDTH, 
     parameter AXI_ADDR_WIDTH   = 32,
-    parameter AXI_TID_WIDTH    = VX_TAG_WIDTH,
-    
-    parameter VX_BYTEEN_WIDTH  = (VX_DATA_WIDTH / 8),
-    parameter AXI_STROBE_WIDTH = (AXI_DATA_WIDTH / 8)
+    parameter AXI_TID_WIDTH    = VX_TAG_WIDTH
 ) (
     input  wire                         clk,
     input  wire                         reset,
@@ -76,7 +73,9 @@ module VX_axi_adapter #(
     input wire                          m_axi_rvalid,
     output wire                         m_axi_rready
 );
-    localparam AXSIZE = $clog2(VX_DATA_WIDTH/8);
+    localparam VX_BYTEEN_WIDTH  = (VX_DATA_WIDTH / 8);
+    localparam AXI_STROBE_WIDTH = (AXI_DATA_WIDTH / 8);
+    localparam AXSIZE           = $clog2(VX_DATA_WIDTH/8);
 
     `STATIC_ASSERT((AXI_DATA_WIDTH == VX_DATA_WIDTH), ("invalid parameter"))
     `STATIC_ASSERT((AXI_TID_WIDTH == VX_TAG_WIDTH), ("invalid parameter"))

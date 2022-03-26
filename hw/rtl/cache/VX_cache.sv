@@ -15,7 +15,7 @@ module VX_cache #(
     // Number of ports per banks
     parameter NUM_PORTS             = 1,
     // Number of associative ways
-    parameter NUM_WAYS              = 4,
+    parameter NUM_WAYS              = 1,
     // Size of a word in bytes
     parameter WORD_SIZE             = 4, 
 
@@ -436,7 +436,7 @@ module VX_cache #(
         .NUM_PORTS       (NUM_PORTS),
         .WORD_SIZE       (WORD_SIZE),
         .NUM_REQS        (NUM_REQS),
-        .CORE_TAG_WIDTH       (CORE_TAG_X_WIDTH),
+        .CORE_TAG_WIDTH  (CORE_TAG_X_WIDTH),
         .BANK_ADDR_OFFSET(BANK_ADDR_OFFSET)
     ) core_req_bank_sel (        
         .clk        (clk),

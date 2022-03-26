@@ -268,7 +268,8 @@ module VX_lsu_unit #(
         .NUM_REQS     (`DCACHE_NUM_REQS),
         .DATA_WIDTH   (`DCACHE_WORD_SIZE*8),
         .TAG_WIDTH    (`DCACHE_TAG_WIDTH),
-        .TAG_SEL_BITS (`DCACHE_TAG_SEL_BITS)
+        .TAG_SEL_BITS (`DCACHE_TAG_SEL_BITS),
+        .OUT_REG      (1)
     ) cache_rsp_sel (
         .clk            (clk),
         .reset          (reset),

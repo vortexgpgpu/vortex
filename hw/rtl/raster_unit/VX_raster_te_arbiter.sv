@@ -7,7 +7,7 @@ module VX_raster_te_arbiter #(
     parameter RASTER_TILE_SIZE       = 16,
     parameter RASTER_BLOCK_SIZE      = 4,
     parameter RASTER_LEVEL_DATA_BITS = $clog2(RASTER_TILE_SIZE/RASTER_BLOCK_SIZE) + 1,
-    parameter RASTER_FIFO_DATA_WIDTH = (RASTER_LEVEL_DATA_BITS + 2*`RASTER_TILE_DATA_BITS + 3*`RASTER_PRIMITIVE_DATA_BITS)
+    parameter RASTER_FIFO_DATA_WIDTH = (RASTER_LEVEL_DATA_BITS + 2*`RASTER_DIM_BITS + 3*`RASTER_PRIMITIVE_DATA_BITS)
 ) (
     input logic                                 clk, reset,
     input logic [3:0]                           fifo_push, fifo_pop,
@@ -59,7 +59,7 @@ module VX_raster_te_arbiter #(
     ) tile_fifo_arbiter (
         .clk            (clk),
         .reset          (reset),
-        .enable         (!fifo_empty),
+        .unlock         (!fifo_empty),
         .requests       (~empty_flag),
         .grant_index    (fifo_index),
         .grant_onehot   (fifo_index_onehot),

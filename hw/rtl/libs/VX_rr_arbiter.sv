@@ -4,17 +4,17 @@
 module VX_rr_arbiter #(
     parameter NUM_REQS     = 1,
     parameter LOCK_ENABLE  = 0,
-    parameter MODEL        = 1,
-    parameter LOG_NUM_REQS = $clog2(NUM_REQS)
+    parameter MODEL        = 1    
 ) (
     input  wire                     clk,
     input  wire                     reset,          
-    input  wire                     enable,
+    input  wire                     unlock,
     input  wire [NUM_REQS-1:0]      requests, 
     output wire [LOG_NUM_REQS-1:0]  grant_index,
     output wire [NUM_REQS-1:0]      grant_onehot,   
     output wire                     grant_valid
-  );
+);
+    localparam LOG_NUM_REQS = $clog2(NUM_REQS);
 
     if (NUM_REQS == 1)  begin
 
@@ -42,7 +42,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin                       
             if (reset) begin         
                 state <= 0;
-            end else if (!LOCK_ENABLE || enable) begin
+            end else if (!LOCK_ENABLE || unlock) begin
                 state <= grant_index_r;
             end
         end
@@ -78,7 +78,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin                       
             if (reset) begin         
                 state <= 0;
-            end else if (!LOCK_ENABLE || enable) begin
+            end else if (!LOCK_ENABLE || unlock) begin
                 state <= grant_index_r;
             end
         end
@@ -158,7 +158,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin                       
             if (reset) begin         
                 state <= 0;
-            end else if (!LOCK_ENABLE || enable) begin
+            end else if (!LOCK_ENABLE || unlock) begin
                 state <= grant_index_r;
             end
         end
@@ -192,7 +192,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin
 		    if (reset) begin
 				pointer_reg <= {NUM_REQS{1'b1}};
-			end else if (!LOCK_ENABLE || enable) begin
+			end else if (!LOCK_ENABLE || unlock) begin
 				if (|req_masked) begin
                     pointer_reg <= mask_higher_pri_regs;
                 end else if (|requests) begin
@@ -236,7 +236,7 @@ module VX_rr_arbiter #(
         always @(posedge clk) begin                       
             if (reset) begin         
                 state <= 0;
-            end else if (!LOCK_ENABLE || enable) begin
+            end else if (!LOCK_ENABLE || unlock) begin
                 state <= grant_index_r;
             end
         end

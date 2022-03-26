@@ -4,16 +4,17 @@
 module VX_find_first #(
     parameter N       = 1,
     parameter DATAW   = 1,
-    parameter REVERSE = 0,
-    parameter LOGN    = $clog2(N)
+    parameter REVERSE = 0
+    
 ) (
     input  wire [N-1:0][DATAW-1:0] data_i,
     input  wire [N-1:0]            valid_i,    
     output wire [DATAW-1:0]        data_o,
     output wire                    valid_o
 );
-    localparam TL = (1 << LOGN) - 1;
-    localparam TN = (1 << (LOGN+1)) - 1;
+    localparam LOGN = $clog2(N);
+    localparam TL   = (1 << LOGN) - 1;
+    localparam TN   = (1 << (LOGN+1)) - 1;
 
 `IGNORE_WARNINGS_BEGIN
     wire [TN-1:0] s_n;

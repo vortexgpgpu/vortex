@@ -140,7 +140,8 @@ module VX_rop_mem #(
         .NUM_REQS     (`OCACHE_NUM_REQS),
         .DATA_WIDTH   (`OCACHE_WORD_SIZE*8),
         .TAG_WIDTH    (`OCACHE_TAG_WIDTH),
-        .TAG_SEL_BITS (`OCACHE_TAG_SEL_BITS)
+        .TAG_SEL_BITS (`OCACHE_TAG_SEL_BITS),
+        .OUT_REG      (1)
     ) cache_rsp_sel (
         .clk            (clk),
         .reset          (reset),

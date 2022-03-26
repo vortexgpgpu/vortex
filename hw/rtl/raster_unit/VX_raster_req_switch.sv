@@ -14,7 +14,7 @@ module VX_raster_req_switch #(
     // To indicate valid inputs provided
     input logic         input_valid,
     // Tile information
-    input logic [`RASTER_TILE_DATA_BITS-1:0]        x_loc, y_loc,
+    input logic [`RASTER_DIM_BITS-1:0]        x_loc, y_loc,
     // Edge function values
     input logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]   edge_func_val[2:0],
     // Memory information
@@ -23,7 +23,7 @@ module VX_raster_req_switch #(
 
     // Raster slice interactions
     input logic [RASTER_SLICE_NUM-1:0]                          raster_slice_ready,
-    output logic [`RASTER_TILE_DATA_BITS-1:0]                   out_x_loc, out_y_loc,
+    output logic [`RASTER_DIM_BITS-1:0]                   out_x_loc, out_y_loc,
     output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              out_edges[2:0][2:0],
     output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              out_edge_func_val[2:0],
     output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              out_extents[2:0],
@@ -34,7 +34,7 @@ module VX_raster_req_switch #(
 );
 
     // Holds x_loc, y_loc, edge_func_val, edges -> extents are calculated on the fly
-    localparam RASTER_RS_DATA_WIDTH = 2*`RASTER_TILE_DATA_BITS + 3*`RASTER_PRIMITIVE_DATA_BITS + 3*3*`RASTER_PRIMITIVE_DATA_BITS;
+    localparam RASTER_RS_DATA_WIDTH = 2*`RASTER_DIM_BITS + 3*`RASTER_PRIMITIVE_DATA_BITS + 3*3*`RASTER_PRIMITIVE_DATA_BITS;
     localparam RASTER_RS_INDEX_BITS = `LOG2UP(RASTER_RS_SIZE);
 
     // Reservation station

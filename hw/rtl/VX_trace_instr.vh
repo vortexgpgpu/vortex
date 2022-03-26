@@ -117,16 +117,16 @@ task trace_ex_op (
             `INST_FPU_CMP:   dpi_trace("CMP");
             `INST_FPU_MISC: begin
                 case (op_mod)
-                0: dpi_trace("SGNJ");   
-                1: dpi_trace("SGNJN");
-                2: dpi_trace("SGNJX");
-                3: dpi_trace("MIN");
-                4: dpi_trace("MAX");
-                5: dpi_trace("MVXW");
-                6: dpi_trace("MVWX");
+                    0: dpi_trace("SGNJ");
+                    1: dpi_trace("SGNJN");
+                    2: dpi_trace("SGNJX");
+                    3: dpi_trace("MIN");
+                    4: dpi_trace("MAX");
+                    5: dpi_trace("MVXW");
+                    6: dpi_trace("MVWX");
                 endcase
             end 
-            default:    dpi_trace("?");
+            default:   dpi_trace("?");
         endcase
     end
     `EX_GPU: begin
@@ -138,7 +138,10 @@ task trace_ex_op (
             `INST_GPU_BAR:   dpi_trace("BAR");
             `INST_GPU_PRED:  dpi_trace("PRED");
             `INST_GPU_TEX:   dpi_trace("TEX");
-            default:    dpi_trace("?");
+            `INST_GPU_RASTER:dpi_trace("RASTER");
+            `INST_GPU_ROP:   dpi_trace("ROP");
+            `INST_GPU_IMADD: dpi_trace("IMADD");
+            default:         dpi_trace("?");
         endcase
     end    
     default: dpi_trace("?");
