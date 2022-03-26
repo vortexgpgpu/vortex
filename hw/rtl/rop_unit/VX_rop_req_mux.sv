@@ -1,9 +1,9 @@
 `include "VX_rop_define.vh"
 
 module VX_rop_req_mux #(
-    parameter NUM_REQS      = 1,
-    parameter BUFFERED_REQ  = 0,
-    parameter ARBITER       = "P"
+    parameter NUM_REQS       = 1,
+    parameter BUFFERED_REQ   = 0,
+    parameter string ARBITER = "R"
 ) (
     input wire clk,
     input wire reset,

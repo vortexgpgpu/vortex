@@ -7,8 +7,9 @@ module VX_raster_csr #(
     input wire reset,
 
     // Inputs    
+    input wire write_enable,
     VX_raster_svc_if.slave raster_svc_req_if,    
-    VX_raster_req_if.slave csr_write_if,
+    VX_raster_req_if.slave raster_req_if,
 
     // Output
     VX_gpu_csr_if.slave raster_csr_if
@@ -38,21 +39,17 @@ module VX_raster_csr #(
         );
     end
 
-    // CSRs write  
+    // CSRs write
 
-    wire req_fire = csr_write_if.valid & csr_write_if.ready;
-
-    assign wren  = {`NUM_THREADS{req_fire}} & csr_write_if.tmask;
+    assign wren  = {`NUM_THREADS{write_enable}} & raster_req_if.tmask;
     assign waddr = raster_svc_req_if.wid;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign wdata[i].pos_mask = {csr_write_if.stamps[i].pos_y, csr_write_if.stamps[i].pos_x, csr_write_if.stamps[i].mask}; 
-        assign wdata[i].bcoord_x = csr_write_if.stamps[i].bcoord_x;
-        assign wdata[i].bcoord_y = csr_write_if.stamps[i].bcoord_y;
-        assign wdata[i].bcoord_z = csr_write_if.stamps[i].bcoord_z;    
-    end    
-
-    assign csr_write_if.ready = 1; // can always write
+        assign wdata[i].pos_mask = {raster_req_if.stamps[i].pos_y, raster_req_if.stamps[i].pos_x, raster_req_if.stamps[i].mask}; 
+        assign wdata[i].bcoord_x = raster_req_if.stamps[i].bcoord_x;
+        assign wdata[i].bcoord_y = raster_req_if.stamps[i].bcoord_y;
+        assign wdata[i].bcoord_z = raster_req_if.stamps[i].bcoord_z;    
+    end
     
     // CSRs read
 
@@ -93,9 +90,9 @@ module VX_raster_csr #(
     logic [`NUM_THREADS-1:0][3:0]                  mask;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign pos_x[i] = csr_write_if.stamps[i].pos_x;
-        assign pos_y[i] = csr_write_if.stamps[i].pos_y;
-        assign mask[i]  = csr_write_if.stamps[i].mask;
+        assign pos_x[i] = raster_req_if.stamps[i].pos_x;
+        assign pos_y[i] = raster_req_if.stamps[i].pos_y;
+        assign mask[i]  = raster_req_if.stamps[i].mask;
     end
 
     always @(posedge clk) begin
@@ -106,7 +103,7 @@ module VX_raster_csr #(
             `TRACE_ARRAY1D(raster_csr_if.read_data, `NUM_THREADS);
             dpi_trace(" (#%0d)\n", raster_csr_if.read_uuid);
         end
-        if (req_fire) begin
+        if (write_enable) begin
             dpi_trace("%d: core%0d-raster-fetch: wid=%0d, tmask=%b, pos_x=", $time, CORE_ID, raster_svc_req_if.wid, raster_svc_req_if.tmask);
             `TRACE_ARRAY1D(pos_x, `NUM_THREADS);
             dpi_trace(", pos_y=");

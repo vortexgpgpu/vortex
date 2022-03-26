@@ -1,14 +1,14 @@
 `include "VX_define.vh"
 
 module VX_mem_mux #(    
-    parameter NUM_REQS      = 1, 
-    parameter DATA_WIDTH    = 1,
-    parameter ADDR_WIDTH    = 1,
-    parameter TAG_IN_WIDTH  = 1,    
-    parameter TAG_SEL_IDX   = 0,
-    parameter BUFFERED_REQ  = 0,
-    parameter BUFFERED_RSP  = 0,
-    parameter ARBITER       = "P"
+    parameter NUM_REQS       = 1, 
+    parameter DATA_WIDTH     = 1,
+    parameter ADDR_WIDTH     = 1,
+    parameter TAG_IN_WIDTH   = 1,    
+    parameter TAG_SEL_IDX    = 0,
+    parameter BUFFERED_REQ   = 0,
+    parameter BUFFERED_RSP   = 0,
+    parameter string ARBITER = "P"
 ) (
     input wire              clk,
     input wire              reset,
