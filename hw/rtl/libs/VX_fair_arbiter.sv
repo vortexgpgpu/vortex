@@ -33,7 +33,9 @@ module VX_fair_arbiter #(
         wire [NUM_REQS-1:0] buffer_n = requests_qual & ~grant_onehot;
 
         always @(posedge clk) begin
-            if (!LOCK_ENABLE || unlock) begin
+            if (reset) begin
+                buffer <= '0;
+            end else if (!LOCK_ENABLE || unlock) begin
                 buffer <= buffer_n;
             end
         end
