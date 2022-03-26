@@ -28,12 +28,12 @@ module VX_raster_be #(
     input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]       edge_func_val[2:0],
 
     // Quad related output data
-    output logic [`RASTER_DIM_BITS-1:0]     out_quad_x_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
-    output logic [`RASTER_DIM_BITS-1:0]     out_quad_y_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
-    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] out_pid,
-    output logic [3:0]                            out_quad_masks[RASTER_QUAD_OUTPUT_RATE-1:0],
-    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]                            out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0],
-    output logic                                  valid[RASTER_QUAD_OUTPUT_RATE-1:0]
+    output logic [`RASTER_DIM_BITS-1:0]              out_quad_x_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
+    output logic [`RASTER_DIM_BITS-1:0]              out_quad_y_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
+    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_pid,
+    output logic [3:0]                               out_quad_masks[RASTER_QUAD_OUTPUT_RATE-1:0],
+    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0],
+    output logic [RASTER_QUAD_OUTPUT_RATE-1:0]       valid
 );
 
     // Local parameter setup
