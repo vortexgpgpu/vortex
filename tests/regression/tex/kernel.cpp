@@ -21,16 +21,16 @@ void kernel_body(int task_id, tile_arg_t* arg) {
 	auto x_start = 0;
 	auto x_end = state->dst_width;
 
-	auto dst_ptr = (uint32_t*)(state->dst_addr + x_start * state->dst_stride + y_start * state->dst_pitch);
-
 	TFixed<16> xj(arg->minification);
+	
+	auto dst_ptr = reinterpret_cast<uint8_t*>(state->dst_addr + x_start * state->dst_stride + y_start * state->dst_pitch);
 
 	/*vx_printf("task_id=%d, tile_width=%d, tile_height=%d, deltaX=%f, deltaY=%f, minification=%f\n", 
 	 	task_id, arg->tile_width, arg->tile_height, arg->deltaX, arg->deltaY, arg->minification);*/
 
 	auto fv = (y_start + 0.5f) * arg->deltaY;
 	for (uint32_t y = y_start; y < y_end; ++y) {
-		auto dst_row = dst_ptr;
+		auto dst_row = reinterpret_cast<uint32_t*>(dst_ptr);
 		auto fu = (x_start + 0.5f) * arg->deltaX;
 		for (uint32_t x = x_start; x < x_end; ++x) {
 			TFixed<TEX_FXD_FRAC> xu(fu);
