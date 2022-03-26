@@ -65,7 +65,7 @@ module VX_miss_resrv #(
     `UNUSED_PARAM (CACHE_ID)
     `UNUSED_PARAM (BANK_ID)
 
-    localparam MSHR_ADDR_WIDTH = $clog2(MSHR_SIZE);
+    localparam MSHR_ADDR_WIDTH = `LOG2UP(MSHR_SIZE);
     
     reg [MSHR_SIZE-1:0][`LINE_ADDR_WIDTH-1:0] addr_table, addr_table_n;
     reg [MSHR_SIZE-1:0] valid_table, valid_table_n;

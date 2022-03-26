@@ -14,7 +14,7 @@ module VX_generic_arbiter #(
     output wire [NUM_REQS-1:0]      grant_onehot,   
     output wire                     grant_valid
 );
-    localparam LOG_NUM_REQS = $clog2(NUM_REQS);
+    localparam LOG_NUM_REQS = `LOG2UP(NUM_REQS);
 
     if (TYPE == "P") begin
         VX_fixed_arbiter #(

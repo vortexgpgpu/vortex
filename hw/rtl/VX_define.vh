@@ -242,7 +242,7 @@
 `define ICACHE_MEM_ADDR_WIDTH   (32 - `CLOG2(`ICACHE_LINE_SIZE))
 
 // Memory request tag bits
-`define ICACHE_MEM_TAG_WIDTH    `CLOG2(`ICACHE_MSHR_SIZE)
+`define ICACHE_MEM_TAG_WIDTH    `LOG2UP(`ICACHE_MSHR_SIZE)
 
 ////////////////////////// Dcache Configurable Knobs //////////////////////////
 
@@ -286,7 +286,7 @@
 `define DCACHE_TEX_TAG_WIDTH     `DCACHE_SMEM_TAG_WIDTH
 `endif
 `define _DMEM_ADDR_RATIO_W      `CLOG2(`DCACHE_LINE_SIZE / `DCACHE_WORD_SIZE)
-`define _DNC_MEM_TAG_WIDTH      (`CLOG2(`DCACHE_NUM_REQS) + `_DMEM_ADDR_RATIO_W + (`DCACHE_TEX_TAG_WIDTH + `EXT_TEX_ENABLED))
+`define _DNC_MEM_TAG_WIDTH      (`LOG2UP(`DCACHE_NUM_REQS) + `_DMEM_ADDR_RATIO_W + (`DCACHE_TEX_TAG_WIDTH + `EXT_TEX_ENABLED))
 `define DCACHE_MEM_TAG_WIDTH    `MAX((`CLOG2(`DCACHE_NUM_BANKS) + `CLOG2(`DCACHE_MSHR_SIZE) + `NC_TAG_BIT), `_DNC_MEM_TAG_WIDTH)
 
 // Merged D-cache/I-cache memory tag

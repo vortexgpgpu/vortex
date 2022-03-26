@@ -58,7 +58,7 @@ module VX_core_req_bank_sel #(
     localparam WORD_SELECT_BITS = `UP(`WORD_SELECT_BITS);
         
     wire [NUM_REQS-1:0][`LINE_ADDR_WIDTH-1:0]       core_req_line_addr;
-    wire [NUM_REQS-1:0][WORD_SELECT_BITS-1:0] core_req_wsel;
+    wire [NUM_REQS-1:0][WORD_SELECT_BITS-1:0]       core_req_wsel;
     wire [NUM_REQS-1:0][`UP(`BANK_SELECT_BITS)-1:0] core_req_bid;
 
     for (genvar i = 0; i < NUM_REQS; i++) begin    

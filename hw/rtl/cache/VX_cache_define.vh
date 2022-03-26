@@ -10,8 +10,8 @@
 
 `define PORTS_BITS              `LOG2UP(NUM_PORTS)
 
-//                                tag             valid  tid          word_sel              
-`define MSHR_DATA_WIDTH         ((CORE_TAG_WIDTH + 1 + `REQS_BITS + `UP(`WORD_SELECT_BITS)) * NUM_PORTS)
+//                                tag              valid  tid          word_sel              
+`define MSHR_DATA_WIDTH         ((CORE_TAG_WIDTH + 1 +    `REQS_BITS + `UP(`WORD_SELECT_BITS)) * NUM_PORTS)
 
 `define WORD_WIDTH              (8 * WORD_SIZE)
 
@@ -21,7 +21,7 @@
 
 `define WAY_SEL_WIDTH           `CLOG2(NUM_WAYS)
 
-`define LINES_PER_BANK          (`BANK_SIZE / (CACHE_LINE_SIZE*NUM_WAYS))
+`define LINES_PER_BANK          (`BANK_SIZE / (CACHE_LINE_SIZE * NUM_WAYS))
 `define WORDS_PER_LINE          (CACHE_LINE_SIZE / WORD_SIZE)
 
 `define WORD_ADDR_WIDTH         (32-`CLOG2(WORD_SIZE))

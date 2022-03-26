@@ -13,7 +13,7 @@ module VX_pending_size #(
     output wire [SIZEW-1:0] size
 );
     localparam SIZEW = $clog2(SIZE+1);
-    localparam ADDRW = $clog2(SIZE);
+    localparam ADDRW = `LOG2UP(SIZE);
 
     reg [ADDRW-1:0] used_r;  
     reg empty_r;    
@@ -43,7 +43,12 @@ module VX_pending_size #(
 
     assign empty = empty_r;
     assign full  = full_r;
-    assign size  = {full_r, used_r};
+    
+    if (SIZE > 1) begin
+        assign size = {full_r, used_r};
+    end else begin
+        assign size = full_r;
+    end
   
 endmodule
 `TRACING_ON

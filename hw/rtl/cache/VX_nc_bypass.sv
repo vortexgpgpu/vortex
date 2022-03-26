@@ -89,7 +89,7 @@ module VX_nc_bypass #(
     localparam CORE_TAG_OUT_WIDTH = CORE_TAG_IN_WIDTH - 1;
     localparam MEM_SELECT_BITS    = `UP(`CLOG2(MEM_DATA_SIZE / CORE_DATA_SIZE));
 
-    localparam CORE_REQ_TIDW = $clog2(NUM_REQS);
+    localparam CORE_REQ_TIDW = `LOG2UP(NUM_REQS);
     localparam MUX_DATAW = CORE_TAG_IN_WIDTH + CORE_DATA_WIDTH + CORE_DATA_SIZE + CORE_ADDR_WIDTH + 1;
 
     localparam CORE_LDATAW = $clog2(CORE_DATA_WIDTH);
@@ -100,7 +100,7 @@ module VX_nc_bypass #(
 
     wire [NUM_REQS-1:0] core_req_valid_in_nc;
     wire [NUM_REQS-1:0] core_req_nc_tids;    
-    wire [`UP(CORE_REQ_TIDW)-1:0] core_req_nc_tid;
+    wire [CORE_REQ_TIDW-1:0] core_req_nc_tid;
     wire [NUM_REQS-1:0] core_req_nc_sel;
     wire core_req_nc_valid;    
     
@@ -142,6 +142,7 @@ module VX_nc_bypass #(
                 (~mem_req_valid_in && mem_req_ready_out && core_req_nc_sel[i]) : core_req_ready_out[i];
         end 
     end else begin
+        `UNUSED_VAR (core_req_nc_sel)
         assign core_req_ready_in = core_req_valid_in_nc ? (~mem_req_valid_in && mem_req_ready_out) : core_req_ready_out;
     end
 

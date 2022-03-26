@@ -14,12 +14,14 @@ module VX_fair_arbiter #(
     output wire                     grant_valid
   );
 
-    localparam LOG_NUM_REQS = $clog2(NUM_REQS);
+    localparam LOG_NUM_REQS = `LOG2UP(NUM_REQS);
 
     if (NUM_REQS == 1)  begin                
         
         `UNUSED_VAR (clk)
-        `UNUSED_VAR (reset)
+        `UNUSED_VAR (reset)        
+        `UNUSED_VAR (unlock)
+
         assign grant_index  = 0;
         assign grant_onehot = requests;
         assign grant_valid  = requests[0];

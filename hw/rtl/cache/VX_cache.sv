@@ -75,7 +75,7 @@ module VX_cache #(
     `STATIC_ASSERT(NUM_PORTS <= NUM_BANKS, ("invalid value"))
 
     localparam WORD_SELECT_BITS = `UP(`WORD_SELECT_BITS);
-    localparam MSHR_ADDR_WIDTH  = $clog2(MSHR_SIZE);
+    localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE);
     localparam MEM_TAG_IN_WIDTH = `BANK_SELECT_BITS + MSHR_ADDR_WIDTH;
     localparam CORE_TAG_X_WIDTH = CORE_TAG_WIDTH - NC_ENABLE;
 

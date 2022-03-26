@@ -93,7 +93,7 @@ module VX_bank #(
     input wire                          flush_enable,
     input wire [`LINE_SELECT_BITS-1:0]  flush_addr
 );
-    localparam MSHR_ADDR_WIDTH  = $clog2(MSHR_SIZE);
+    localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE);
     localparam WORD_SELECT_BITS = `UP(`WORD_SELECT_BITS);
 
 `IGNORE_UNUSED_BEGIN

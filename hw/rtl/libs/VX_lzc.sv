@@ -9,24 +9,35 @@ module VX_lzc #(
     output wire [LOGN-1:0] cnt_o,
     output wire            valid_o
 );
-    localparam LOGN = $clog2(N);
+    localparam LOGN = `LOG2UP(N);
 
-    wire [N-1:0][LOGN-1:0] indices;
+    if (N > 1) begin
 
-    for (genvar i = 0; i < N; ++i) begin
-        assign indices[i] = MODE ? LOGN'(N-1-i) : LOGN'(i);
+        wire [N-1:0][LOGN-1:0] indices;
+
+        for (genvar i = 0; i < N; ++i) begin
+            assign indices[i] = MODE ? LOGN'(N-1-i) : LOGN'(i);
+        end
+
+        VX_find_first #(
+            .N       (N),
+            .DATAW   (LOGN),
+            .REVERSE (MODE)
+        ) find_first (        
+            .data_i  (indices),
+            .valid_i (in_i),
+            .data_o  (cnt_o),
+            .valid_o (valid_o)
+        );
+
+    end else begin
+
+        `UNUSED_PARAM (MODE)
+
+        assign cnt_o   = 0;
+        assign valid_o = in_i;
+        
     end
-
-    VX_find_first #(
-        .N       (N),
-        .DATAW   (LOGN),
-        .REVERSE (MODE)
-    ) find_first (        
-        .data_i  (indices),
-        .valid_i (in_i),
-        .data_o  (cnt_o),
-        .valid_o (valid_o)
-    );
   
 endmodule
 `TRACING_ON

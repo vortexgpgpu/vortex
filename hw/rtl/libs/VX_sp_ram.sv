@@ -18,7 +18,7 @@ module VX_sp_ram #(
     input wire [DATAW-1:0]   wdata,
     output wire [DATAW-1:0]  rdata
 );
-    localparam ADDRW = $clog2(SIZE);
+    localparam ADDRW = `LOG2UP(SIZE);
 
     `STATIC_ASSERT((1 == BYTEENW) || ((BYTEENW > 1) && 0 == (BYTEENW % 4)), ("invalid parameter"))
 
