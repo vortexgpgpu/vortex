@@ -106,15 +106,15 @@ module VX_raster_unit #(
         .edge_func_val(edge_func_val)
     );
 
-    logic quad_valid[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0];
+    logic [RASTER_QUAD_OUTPUT_RATE-1:0] quad_valid [NUM_SLICES-1:0];
     
     logic [`RASTER_DIM_BITS-1:0] temp_quad_x_loc[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0],
         temp_quad_y_loc[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0];
     logic [3:0] temp_quad_masks[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0];
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_quad_bcoords[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0];
-    logic quad_queue_empty[NUM_SLICES-1:0];
-    logic quad_pop[NUM_SLICES-1:0];
-    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_out_pid[NUM_SLICES-1:0];
+    logic [NUM_SLICES-1:0] quad_queue_empty;
+    logic [NUM_SLICES-1:0] quad_pop;
+    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_out_pid [NUM_SLICES-1:0];
     
     // TODO: Add raster slices in generate block here
     for (genvar i = 0; i < RASTER_SLICE_BITS; ++i) begin
@@ -159,9 +159,9 @@ module VX_raster_unit #(
     generate
         // add arbiter if # raster slice > 1
         if (NUM_SLICES > 1) begin
-            logic quad_index[RASTER_SLICE_BITS-1:0];
+            logic [RASTER_SLICE_BITS-1:0] quad_index;
             VX_fair_arbiter #(
-                .NUM_REQS   (NUM_SLICES),
+                .NUM_REQS   (NUM_SLICES)
             ) tile_fifo_arbiter (
                 .clk            (clk),
                 .reset          (reset),

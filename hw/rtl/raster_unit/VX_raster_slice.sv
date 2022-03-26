@@ -37,7 +37,7 @@ module VX_raster_slice #(
     output logic [3:0]                                    out_quad_masks[RASTER_QUAD_OUTPUT_RATE-1:0],
     output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]        out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0],
     output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]        out_pid,
-    output logic                                          valid[RASTER_QUAD_OUTPUT_RATE-1:0]
+    output logic [RASTER_QUAD_OUTPUT_RATE-1:0]            valid
 );
 
     localparam RASTER_LEVEL_DATA_BITS = $clog2(RASTER_TILE_SIZE/RASTER_BLOCK_SIZE) + 1;
