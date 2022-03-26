@@ -8,7 +8,8 @@ module VX_mem_streamer #(
     parameter TAGW = 32,
     parameter WORD_SIZE = 4,
     parameter QUEUE_SIZE = 16,
-    parameter PARTIAL_RESPONSE = 1
+    parameter PARTIAL_RESPONSE = 1,
+    parameter DUPLICATE_ADDR = 1
 ) (
     input  wire clk,
     input  wire reset,
@@ -92,6 +93,7 @@ module VX_mem_streamer #(
     // Memory response
     wire                                mem_rsp_fire;
     reg  [QUEUE_SIZE-1:0][RSPW-1:0]     rsp;
+    wire [QUEUE_SIZE-1:0]               rsp_full;
     wire [RSPW-1:0]                     rsp_in;
     reg  [RSPW-1:0]                     rsp_out;
     reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0] rsp_rem_mask;
@@ -106,7 +108,7 @@ module VX_mem_streamer #(
     end
 
     assign req_dup = req_mask[0] && (& addr_matches);
-    assign req_dup_mask = req_mask & {{(NUM_REQS-1){~req_dup}}, 1'b1};
+    assign req_dup_mask = DUPLICATE_ADDR ? req_mask & {{(NUM_REQS-1){~req_dup}}, 1'b1} : req_mask;
 
     //////////////////////////////////////////////////////////////////
 
@@ -158,7 +160,10 @@ module VX_mem_streamer #(
     //////////////////////////////////////////////////////////////////
 
     // Memory response
-    assign mem_rsp_ready = 1'b1;
+    for (genvar i = 0; i < QUEUE_SIZE; ++i) begin
+        assign rsp_full[i] = rsp[i][0];
+    end
+    assign mem_rsp_ready = !(& rsp_full);
     assign mem_rsp_fire = mem_rsp_valid && mem_rsp_ready;
 
     // Evaluate remaning responses
