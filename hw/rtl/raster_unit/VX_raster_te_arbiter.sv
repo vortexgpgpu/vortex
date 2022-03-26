@@ -54,12 +54,12 @@ module VX_raster_te_arbiter #(
     assign fifo_full =  &full_flag;
 
     // Arbitrate over the available entries to pop and generate index to pop for sub=tile
-    VX_fair_arbiter #(
+    VX_rr_arbiter #(
         .NUM_REQS   (4),
     ) tile_fifo_arbiter (
         .clk            (clk),
         .reset          (reset),
-        .unlock         (!fifo_empty),
+        `UNUSED_PIN     (unlock),
         .requests       (~empty_flag),
         .grant_index    (fifo_index),
         .grant_onehot   (fifo_index_onehot),
