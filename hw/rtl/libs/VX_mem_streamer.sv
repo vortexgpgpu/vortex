@@ -96,7 +96,6 @@ module VX_mem_streamer #(
     wire [RSPW-1:0]                     rsp_store_n;
     wire [QUEUE_SIZE-1:0]               rsp_store_full;
     reg  [RSPW-1:0]                     rsp_out;
-    reg                                 rsp_fire;
     reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0] rsp_rem_mask;
     wire [NUM_REQS-1:0]                 rsp_rem_mask_n;
 
@@ -181,23 +180,23 @@ module VX_mem_streamer #(
 
     // Store response till ready to send
     always @(posedge clk) begin
-        if (!PARTIAL_RESPONSE) begin
-            rsp_fire <= (0 == rsp_rem_mask) && mem_rsp_fire && rsp_ready;
+
+        rsp_out <= 0;
+
+        if (PARTIAL_RESPONSE) begin
+            if (mem_rsp_fire && rsp_ready) begin
+                rsp_out <= rsp_store_n;
+            end
+        end else begin
             if (reset) begin
                 rsp_store <= 0;
             end else if (sreq_push) begin
                 rsp_store[stag_waddr] <= 0;
             end else if (mem_rsp_fire) begin
                 rsp_store[stag_raddr] <= rsp_store[stag_raddr] | rsp_store_n;
+                if (0 == rsp_rem_mask_n && rsp_ready)
+                    rsp_out <= rsp_store_n;
             end
-        end else begin
-            rsp_fire <= mem_rsp_fire && rsp_ready;
-        end
-        
-        if (rsp_fire) begin
-            rsp_out <= rsp_store_n;
-        end else begin
-            rsp_out <= 0;
         end
     end
 
