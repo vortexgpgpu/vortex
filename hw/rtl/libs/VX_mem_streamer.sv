@@ -9,7 +9,7 @@ module VX_mem_streamer #(
     parameter WORD_SIZE = 4,
     parameter QUEUE_SIZE = 16,
     parameter PARTIAL_RESPONSE = 0,
-    parameter DUPLICATE_ADDR = 0
+    parameter DUPLICATE_ADDR = 1
 ) (
     input  wire clk,
     input  wire reset,
@@ -49,6 +49,9 @@ module VX_mem_streamer #(
   );
     localparam QUEUE_ADDRW = `CLOG2(QUEUE_SIZE);
     localparam RSPW = TAGW + NUM_REQS + (NUM_REQS * DATAW) + 1;
+
+    `STATIC_ASSERT ((0 == PARTIAL_RESPONSE) || (1 == PARTIAL_RESPONSE), ("invalid parameter"))
+    `STATIC_ASSERT ((0 == DUPLICATE_ADDR) || (1 == DUPLICATE_ADDR), ("invalid parameter"))
 
     // Detect duplicate addresses
     wire [NUM_REQS-2:0] addr_matches;
@@ -182,8 +185,9 @@ module VX_mem_streamer #(
     always @(posedge clk) begin
 
         rsp_out <= 0;
-
+        /* verilator lint_off WIDTH */
         if (PARTIAL_RESPONSE) begin
+        /* verilator lint_on WIDTH */
             if (mem_rsp_fire && rsp_ready) begin
                 rsp_out <= rsp_store_n;
             end
