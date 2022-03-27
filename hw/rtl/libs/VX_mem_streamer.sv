@@ -111,7 +111,7 @@ module VX_mem_streamer #(
     end
 
     assign req_dup = req_mask[0] && (& addr_matches);
-    assign req_dup_mask = DUPLICATE_ADDR ? req_mask & {{(NUM_REQS-1){~req_dup}}, 1'b1} : req_mask;
+    assign req_dup_mask = (DUPLICATE_ADDR == 1) ? req_mask & {{(NUM_REQS-1){~req_dup}}, 1'b1} : req_mask;
 
     //////////////////////////////////////////////////////////////////
 
@@ -181,13 +181,12 @@ module VX_mem_streamer #(
 
     assign rsp_store_n = {stag_dout, mem_rsp_mask, mem_rsp_data, mem_rsp_valid};
 
-    // Store response till ready to send
+    // Store response until ready to send
     always @(posedge clk) begin
 
         rsp_out <= 0;
-        /* verilator lint_off WIDTH */
-        if (PARTIAL_RESPONSE) begin
-        /* verilator lint_on WIDTH */
+
+        if (PARTIAL_RESPONSE == 1) begin
             if (mem_rsp_fire && rsp_ready) begin
                 rsp_out <= rsp_store_n;
             end
