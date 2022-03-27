@@ -1,9 +1,9 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_req_demux #(
-    parameter NUM_REQS = 1,
-    parameter BUFFERED = 0,
-    parameter ARBITER  = "P"
+    parameter NUM_REQS       = 1,
+    parameter BUFFERED       = 0,
+    parameter string ARBITER = "R"
 ) (
     input wire clk,
     input wire reset,

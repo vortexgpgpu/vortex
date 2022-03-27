@@ -1,14 +1,14 @@
 `include "VX_define.vh"
 
 module VX_cache_mux #(    
-    parameter NUM_REQS      = 1, 
-    parameter LANES         = 1,
-    parameter DATA_SIZE     = 1,
-    parameter TAG_IN_WIDTH  = 1,
-    parameter TAG_SEL_IDX   = 0,   
-    parameter BUFFERED_REQ  = 0,
-    parameter BUFFERED_RSP  = 0,
-    parameter ARBITER       = "R",
+    parameter NUM_REQS       = 1, 
+    parameter LANES          = 1,
+    parameter DATA_SIZE      = 1,
+    parameter TAG_IN_WIDTH   = 1,
+    parameter TAG_SEL_IDX    = 0,   
+    parameter BUFFERED_REQ   = 0,
+    parameter BUFFERED_RSP   = 0,
+    parameter string ARBITER = "R",
 
     localparam ADDR_WIDTH   = (32-`CLOG2(DATA_SIZE)),
     localparam DATA_WIDTH   = (8 * DATA_SIZE),

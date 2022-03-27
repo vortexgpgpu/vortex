@@ -273,6 +273,8 @@ module VX_raster_mem #(
         assign cache_req_if.addr[i] = cache_mem_req_addr[i][`RCACHE_ADDR_WIDTH-1:0]; 
     end
 
+    wire mem_fire;
+    assign mem_fire = mem_req_ready && mem_req_valid && |raster_rs_empty;
     VX_mem_streamer #(
         .NUM_REQS(NUM_REQS), // 3 edges and 3 coeffs in each edge
         .ADDRW(`RASTER_DCR_DATA_BITS),
@@ -283,7 +285,7 @@ module VX_raster_mem #(
         .clk(clk),
         .reset(reset),
 
-        .req_valid(mem_req_valid && |raster_rs_empty), // NOTE: This should ensure stalls
+        .req_valid(mem_fire), // NOTE: This should ensure stalls
         .req_rw(0),
         .req_mask(mem_req_mask),
         `UNUSED_PIN (req_byteen),   /// TODO: USE THIS PIN

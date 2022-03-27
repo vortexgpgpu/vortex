@@ -1,12 +1,12 @@
 `include "VX_platform.vh"
 
 module VX_stream_demux #(
-    parameter NUM_REQS      = 1,
-    parameter LANES         = 1,
-    parameter DATAW         = 1,
-    parameter ARBITER       = "",
-    parameter LOCK_ENABLE   = 1,
-    parameter BUFFERED      = 0    
+    parameter NUM_REQS       = 1,
+    parameter LANES          = 1,
+    parameter DATAW          = 1,
+    parameter string ARBITER = "",
+    parameter LOCK_ENABLE    = 1,
+    parameter BUFFERED       = 0    
 ) (
     input  wire clk,
     input  wire reset,

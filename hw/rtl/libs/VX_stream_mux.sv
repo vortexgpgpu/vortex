@@ -85,11 +85,11 @@ module VX_stream_mux #(
 
         assign sel_fire = sel_valid & sel_ready;
 
-        for (genvar j = 0; j < LANES; ++j) begin
-            assign sel_valid[j] = valid_in[sel_index[j]][j];
-            assign sel_data[j] = data_in[sel_index[j]][j];            
-            for (genvar i = 0; i < NUM_REQS; ++i) begin            
-                assign ready_in[i][j] = sel_ready[j] & sel_onehot[j][i];
+        for (genvar i = 0; i < LANES; ++i) begin
+            assign sel_valid[i] = valid_in[sel_index[i]][i];
+            assign sel_data[i] = data_in[sel_index[i]][i];            
+            for (genvar j = 0; j < NUM_REQS; ++j) begin            
+                assign ready_in[j][i] = sel_ready[i] & sel_onehot[i][j];
             end
         end
 
