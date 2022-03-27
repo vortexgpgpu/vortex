@@ -38,7 +38,7 @@ module VX_mem_streamer #(
     input wire [NUM_REQS-1:0]            mem_rsp_mask,
     input wire [NUM_REQS-1:0][DATAW-1:0] mem_rsp_data,
     input wire [QUEUE_ADDRW-1:0]         mem_rsp_tag,
-    output wire                          mem_rsp_ready,
+    output reg                           mem_rsp_ready,
 
     // Output response
     output wire                           rsp_valid,
@@ -97,10 +97,12 @@ module VX_mem_streamer #(
     wire                                mem_rsp_fire;
     reg  [QUEUE_SIZE-1:0][RSPW-1:0]     rsp_store;
     wire [RSPW-1:0]                     rsp_store_n;
-    wire [QUEUE_SIZE-1:0]               rsp_store_full;
+    reg  [QUEUE_SIZE-1:0]               rsp_store_full;
     reg  [RSPW-1:0]                     rsp_out;
     reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0] rsp_rem_mask;
     wire [NUM_REQS-1:0]                 rsp_rem_mask_n;
+
+    wire stall;
 
     //////////////////////////////////////////////////////////////////
 
@@ -163,10 +165,17 @@ module VX_mem_streamer #(
     //////////////////////////////////////////////////////////////////
 
     // Memory response
-    for (genvar i = 0; i < QUEUE_SIZE; ++i) begin
-        assign rsp_store_full[i] = rsp_store[i][0];
+    always @(*) begin
+        if (PARTIAL_RESPONSE == 1) begin
+            mem_rsp_ready = ~stall;
+        end else begin
+            for (integer i = 0; i < QUEUE_SIZE; ++i) begin
+                rsp_store_full[i] = rsp_store[i][0];
+            end
+            mem_rsp_ready = ~stall & ~(& rsp_store_full);
+        end
     end
-    assign mem_rsp_ready = !(& rsp_store_full);
+
     assign mem_rsp_fire = mem_rsp_valid && mem_rsp_ready;
 
     // Evaluate remaning responses
@@ -183,11 +192,10 @@ module VX_mem_streamer #(
 
     // Store response until ready to send
     always @(posedge clk) begin
-
         rsp_out <= 0;
 
         if (PARTIAL_RESPONSE == 1) begin
-            if (mem_rsp_fire && rsp_ready) begin
+            if (mem_rsp_fire) begin
                 rsp_out <= rsp_store_n;
             end
         end else begin
@@ -199,16 +207,18 @@ module VX_mem_streamer #(
                 end 
                 if (mem_rsp_fire) begin
                     rsp_store[stag_raddr] <= rsp_store[stag_raddr] | rsp_store_n;
-                    if ((0 == rsp_rem_mask_n) && rsp_ready) begin
+                    if (0 == rsp_rem_mask_n) begin
                         rsp_out <= rsp_store[stag_raddr] | rsp_store_n;;
                     end
                 end
             end
         end
+
     end      
     
     // Send response
-    assign {rsp_tag, rsp_mask, rsp_data, rsp_valid} = rsp_out;
+    assign {rsp_tag, rsp_mask, rsp_data, rsp_valid} = rsp_out & {{(RSPW-1){1'b1}}, rsp_ready};
+    assign stall = rsp_valid & ~rsp_ready;
 
     //////////////////////////////////////////////////////////////////
 
