@@ -9,6 +9,7 @@ class SharedMem : public SimObject<SharedMem> {
 public:
     struct Config {
         uint32_t capacity;
+        uint32_t line_size;
         uint32_t num_reqs;
         uint32_t num_banks; 
         uint32_t bank_offset;
