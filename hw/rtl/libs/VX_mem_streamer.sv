@@ -95,7 +95,6 @@ module VX_mem_streamer #(
     reg  [QUEUE_SIZE-1:0][RSPW-1:0]     rsp_store;
     wire [RSPW-1:0]                     rsp_store_n;
     wire [QUEUE_SIZE-1:0]               rsp_store_full;
-    wire [RSPW-1:0]                     rsp_in;
     reg  [RSPW-1:0]                     rsp_out;
     reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0] rsp_rem_mask;
     wire [NUM_REQS-1:0]                 rsp_rem_mask_n;
@@ -177,49 +176,36 @@ module VX_mem_streamer #(
             rsp_rem_mask[stag_raddr] <= rsp_rem_mask_n;
     end
 
-    // assign rsp_store_n = {stag_dout, mem_rsp_mask, mem_rsp_data, mem_rsp_valid};
-    // assign rsp_in = PARTIAL_RESPONSE? rsp_store_n : rsp_store[stag_raddr] | rsp_store_n;
+    assign rsp_store_n = {stag_dout, mem_rsp_mask, mem_rsp_data, mem_rsp_valid};
 
     // Store response till ready to send
-    // always @(posedge clk) begin
+    always @(posedge clk) begin
 
-    //     rsp_out <= 0;
+        rsp_out <= 0;
 
-    //     if (PARTIAL_RESPONSE) begin
-    //         if (mem_rsp_fire && rsp_in[0] && rsp_ready) begin
-    //             rsp_out <= rsp_in;
-    //         end
-    //     end else begin
-    //         if (reset) begin
-    //             rsp_store <= 0;
-    //         end else if (sreq_push) begin
-    //             rsp_store[stag_waddr] <= 0;
-    //         end else if (mem_rsp_fire) begin
-    //             rsp_store[stag_raddr] <= rsp_in;
-    //             if ((0 == rsp_rem_mask_n) && rsp_in[0] && rsp_ready)
-    //                 rsp_out <= rsp_in;
-    //         end
-    //     end
-    // end
-
-    `UNUSED_VAR (rsp_store_n)
-
-     assign rsp_in = rsp_store[stag_raddr] | {stag_dout, mem_rsp_mask, mem_rsp_data, mem_rsp_valid};
-
-     always @(posedge clk) begin
-         rsp_out <= 0;
-         if (reset)
-             rsp_store <= 0;
-         if (sreq_push)
-             rsp_store[stag_waddr] <= 0;
-         if(mem_rsp_fire) begin
-             rsp_store[stag_raddr] <= rsp_in;
-             if ((PARTIAL_RESPONSE || (0 == rsp_rem_mask_n)) && rsp_in[0] && rsp_ready)
-                 rsp_out <= rsp_in;
-         end
-     end
-
-     assign {rsp_valid, rsp_mask, rsp_data, rsp_valid} = {rsp_out};
+        if (PARTIAL_RESPONSE) begin
+            if (mem_rsp_fire && rsp_ready) begin
+                rsp_out <= rsp_store_n;
+            end
+        end else begin
+            if (reset) begin
+                rsp_store <= 0;
+            end else begin
+                if (sreq_push) begin
+                    rsp_store[stag_waddr] <= 0;
+                end 
+                if (mem_rsp_fire) begin
+                    rsp_store[stag_raddr] <= rsp_store[stag_raddr] | rsp_store_n;
+                    if ((0 == rsp_rem_mask_n) && rsp_ready) begin
+                        rsp_out <= rsp_store[stag_raddr] | rsp_store_n;;
+                    end
+                end
+            end
+        end
+    end      
+    
+    // Send response
+    assign {rsp_tag, rsp_mask, rsp_data, rsp_valid} = rsp_out;
 
     //////////////////////////////////////////////////////////////////
 
