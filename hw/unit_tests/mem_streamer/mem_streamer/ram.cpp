@@ -68,8 +68,8 @@ void RAM::insert_req(req_t req) {
 //////////////////////////////////////////////////////
 
 uint8_t RAM::is_ready() {    
-    return generate_rand(0b1000, 0b1111);
-    // return 0b1111;
+    // return generate_rand(0b1000, 0b1111);
+    return 0b1111;
 }
 
 //////////////////////////////////////////////////////

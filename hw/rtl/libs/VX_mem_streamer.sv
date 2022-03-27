@@ -8,7 +8,7 @@ module VX_mem_streamer #(
     parameter TAGW = 32,
     parameter WORD_SIZE = 4,
     parameter QUEUE_SIZE = 16,
-    parameter PARTIAL_RESPONSE = 1,
+    parameter PARTIAL_RESPONSE = 0,
     parameter DUPLICATE_ADDR = 1
 ) (
     input  wire clk,
@@ -92,10 +92,12 @@ module VX_mem_streamer #(
 
     // Memory response
     wire                                mem_rsp_fire;
-    reg  [QUEUE_SIZE-1:0][RSPW-1:0]     rsp;
+    reg  [QUEUE_SIZE-1:0][RSPW-1:0]     rsp_store;
+    wire [RSPW-1:0]                     rsp_store_n;
     wire [QUEUE_SIZE-1:0]               rsp_full;
     wire [RSPW-1:0]                     rsp_in;
     reg  [RSPW-1:0]                     rsp_out;
+    wire                                rsp_fire;
     reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0] rsp_rem_mask;
     wire [NUM_REQS-1:0]                 rsp_rem_mask_n;
 
@@ -121,7 +123,7 @@ module VX_mem_streamer #(
     VX_fifo_queue #(
         .DATAW	(1 + NUM_REQS + WORD_SIZE + (NUM_REQS * ADDRW) + (NUM_REQS * DATAW) + QUEUE_ADDRW),
         .SIZE	(QUEUE_SIZE)
-    ) store_req (
+    ) req_store (
         .clk        (clk),
         .reset      (reset),
         .push       (sreq_push),
@@ -143,7 +145,7 @@ module VX_mem_streamer #(
     VX_index_buffer #(
         .DATAW	(TAGW),
         .SIZE	(QUEUE_SIZE)
-    ) store_tag (
+    ) tag_store (
         .clk          (clk),
         .reset        (reset),
         .write_addr   (stag_waddr),
@@ -161,7 +163,7 @@ module VX_mem_streamer #(
 
     // Memory response
     for (genvar i = 0; i < QUEUE_SIZE; ++i) begin
-        assign rsp_full[i] = rsp[i][0];
+        assign rsp_full[i] = rsp_store[i][0];
     end
     assign mem_rsp_ready = !(& rsp_full);
     assign mem_rsp_fire = mem_rsp_valid && mem_rsp_ready;
@@ -177,18 +179,22 @@ module VX_mem_streamer #(
     end
 
     // Store response till ready to send
-    assign rsp_in = rsp[stag_raddr] | {stag_dout, mem_rsp_mask, mem_rsp_data, mem_rsp_valid};
+    assign rsp_store_n = {stag_dout, mem_rsp_mask, mem_rsp_data, mem_rsp_valid};
+    assign rsp_in      = PARTIAL_RESPONSE? rsp_store_n : rsp_store[stag_raddr] | rsp_store_n; 
+    assign rsp_fire    = PARTIAL_RESPONSE? mem_rsp_fire && rsp_ready : (0 == rsp_rem_mask_n) && mem_rsp_fire && rsp_ready;
 
     always @(posedge clk) begin
         rsp_out <= 0;
-        if (reset)
-            rsp <= 0;
+        if (reset) begin
+            rsp_store <= 0;
+        end
         if (sreq_push)
-            rsp[stag_waddr] <= 0;
-        if(mem_rsp_fire) begin
-            rsp[stag_raddr] <= rsp_in;
-            if ((PARTIAL_RESPONSE || (0 == rsp_rem_mask_n)) && rsp_in[0] && rsp_ready)
-                rsp_out <= rsp_in;
+            rsp_store[stag_waddr] <= 0;
+        if (!PARTIAL_RESPONSE && mem_rsp_fire) begin
+            rsp_store[stag_raddr] <= rsp_in;
+        end
+        if (rsp_fire) begin
+            rsp_out <= rsp_in;
         end
     end
 
