@@ -184,17 +184,21 @@ module VX_mem_streamer #(
     assign rsp_fire    = PARTIAL_RESPONSE? mem_rsp_fire && rsp_ready : (0 == rsp_rem_mask_n) && mem_rsp_fire && rsp_ready;
 
     always @(posedge clk) begin
-        rsp_out <= 0;
-        if (reset) begin
-            rsp_store <= 0;
+
+        if (!PARTIAL_RESPONSE) begin
+            if (reset) begin
+                rsp_store <= 0;
+            end else if (sreq_push) begin
+                rsp_store[stag_waddr] <= 0;
+            end else if (!mem_rsp_fire) begin
+                rsp_store[stag_raddr] <= rsp_in;
+            end
         end
-        if (sreq_push)
-            rsp_store[stag_waddr] <= 0;
-        if (!PARTIAL_RESPONSE && mem_rsp_fire) begin
-            rsp_store[stag_raddr] <= rsp_in;
-        end
+        
         if (rsp_fire) begin
             rsp_out <= rsp_in;
+        end else begin
+            rsp_out <= 0;
         end
     end
 
