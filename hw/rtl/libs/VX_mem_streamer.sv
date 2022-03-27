@@ -8,8 +8,8 @@ module VX_mem_streamer #(
     parameter TAGW = 32,
     parameter WORD_SIZE = 4,
     parameter QUEUE_SIZE = 16,
-    parameter PARTIAL_RESPONSE = 0,
-    parameter DUPLICATE_ADDR = 1
+    parameter PARTIAL_RESPONSE = 1,
+    parameter DUPLICATE_ADDR = 0
 ) (
     input  wire clk,
     input  wire reset,
@@ -95,9 +95,8 @@ module VX_mem_streamer #(
     reg  [QUEUE_SIZE-1:0][RSPW-1:0]     rsp_store;
     wire [RSPW-1:0]                     rsp_store_n;
     wire [QUEUE_SIZE-1:0]               rsp_store_full;
-    wire [RSPW-1:0]                     rsp_in;
     reg  [RSPW-1:0]                     rsp_out;
-    wire                                rsp_fire;
+    reg                                 rsp_fire;
     reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0] rsp_rem_mask;
     wire [NUM_REQS-1:0]                 rsp_rem_mask_n;
 
@@ -178,25 +177,25 @@ module VX_mem_streamer #(
             rsp_rem_mask[stag_raddr] <= rsp_rem_mask_n;
     end
 
-    // Store response till ready to send
     assign rsp_store_n = {stag_dout, mem_rsp_mask, mem_rsp_data, mem_rsp_valid};
-    assign rsp_in      = PARTIAL_RESPONSE? rsp_store_n : rsp_store[stag_raddr] | rsp_store_n; 
-    assign rsp_fire    = PARTIAL_RESPONSE? mem_rsp_fire && rsp_ready : (0 == rsp_rem_mask_n) && mem_rsp_fire && rsp_ready;
 
+    // Store response till ready to send
     always @(posedge clk) begin
-
         if (!PARTIAL_RESPONSE) begin
+            rsp_fire <= (0 == rsp_rem_mask) && mem_rsp_fire && rsp_ready;
             if (reset) begin
                 rsp_store <= 0;
             end else if (sreq_push) begin
                 rsp_store[stag_waddr] <= 0;
-            end else if (!mem_rsp_fire) begin
-                rsp_store[stag_raddr] <= rsp_in;
+            end else if (mem_rsp_fire) begin
+                rsp_store[stag_raddr] <= rsp_store[stag_raddr] | rsp_store_n;
             end
+        end else begin
+            rsp_fire <= mem_rsp_fire && rsp_ready;
         end
         
         if (rsp_fire) begin
-            rsp_out <= rsp_in;
+            rsp_out <= rsp_store_n;
         end else begin
             rsp_out <= 0;
         end
