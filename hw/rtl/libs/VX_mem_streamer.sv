@@ -94,7 +94,7 @@ module VX_mem_streamer #(
     wire                                mem_rsp_fire;
     reg  [QUEUE_SIZE-1:0][RSPW-1:0]     rsp_store;
     wire [RSPW-1:0]                     rsp_store_n;
-    wire [QUEUE_SIZE-1:0]               rsp_full;
+    wire [QUEUE_SIZE-1:0]               rsp_store_full;
     wire [RSPW-1:0]                     rsp_in;
     reg  [RSPW-1:0]                     rsp_out;
     wire                                rsp_fire;
@@ -163,9 +163,9 @@ module VX_mem_streamer #(
 
     // Memory response
     for (genvar i = 0; i < QUEUE_SIZE; ++i) begin
-        assign rsp_full[i] = rsp_store[i][0];
+        assign rsp_store_full[i] = rsp_store[i][0];
     end
-    assign mem_rsp_ready = !(& rsp_full);
+    assign mem_rsp_ready = !(& rsp_store_full);
     assign mem_rsp_fire = mem_rsp_valid && mem_rsp_ready;
 
     // Evaluate remaning responses
