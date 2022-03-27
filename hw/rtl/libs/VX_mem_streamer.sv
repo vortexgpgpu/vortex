@@ -9,7 +9,7 @@ module VX_mem_streamer #(
     parameter WORD_SIZE = 4,
     parameter QUEUE_SIZE = 16,
     parameter PARTIAL_RESPONSE = 0,
-    parameter DUPLICATE_ADDR = 1
+    parameter DUPLICATE_ADDR = 0
 ) (
     input  wire clk,
     input  wire reset,
