@@ -42,9 +42,6 @@ module VX_cache #(
     // Memory request tag size
     parameter MEM_TAG_WIDTH         = (32 - $clog2(CACHE_LINE_SIZE)),
 
-    // bank offset from beginning of index range
-    parameter BANK_ADDR_OFFSET      = 0,
-
     // enable bypass for non-cacheable addresses
     parameter NC_ENABLE             = 0
  ) (
@@ -397,7 +394,7 @@ module VX_cache #(
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SELECT_BITS-1:0] per_bank_core_req_wsel;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_core_req_byteen;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`WORD_WIDTH-1:0] per_bank_core_req_data;
-    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`REQS_BITS-1:0] per_bank_core_req_tid;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`REQS_BITS-1:0] per_bank_core_req_idx;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][CORE_TAG_X_WIDTH-1:0] per_bank_core_req_tag;
     wire [NUM_BANKS-1:0]                        per_bank_core_req_rw;  
     wire [NUM_BANKS-1:0][`LINE_ADDR_WIDTH-1:0]  per_bank_core_req_addr;    
@@ -406,7 +403,7 @@ module VX_cache #(
     wire [NUM_BANKS-1:0]                        per_bank_core_rsp_valid;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0]         per_bank_core_rsp_pmask;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`WORD_WIDTH-1:0] per_bank_core_rsp_data;
-    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`REQS_BITS-1:0] per_bank_core_rsp_tid;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`REQS_BITS-1:0] per_bank_core_rsp_idx;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][CORE_TAG_X_WIDTH-1:0] per_bank_core_rsp_tag;    
     wire [NUM_BANKS-1:0]                        per_bank_core_rsp_ready;
 
@@ -429,15 +426,13 @@ module VX_cache #(
     end
 
     VX_core_req_bank_sel #(
-        .CACHE_ID        (CACHE_ID),
-        .CACHE_LINE_SIZE (CACHE_LINE_SIZE),
-        .NUM_BANKS       (NUM_BANKS),
-        .NUM_WAYS        (NUM_WAYS),
-        .NUM_PORTS       (NUM_PORTS),
-        .WORD_SIZE       (WORD_SIZE),
-        .NUM_REQS        (NUM_REQS),
-        .CORE_TAG_WIDTH  (CORE_TAG_X_WIDTH),
-        .BANK_ADDR_OFFSET(BANK_ADDR_OFFSET)
+        .LINE_SIZE  (CACHE_LINE_SIZE),
+        .WORD_SIZE  (WORD_SIZE),
+        .ADDR_WIDTH (`WORD_ADDR_WIDTH),
+        .NUM_REQS   (NUM_REQS),
+        .NUM_BANKS  (NUM_BANKS),
+        .NUM_PORTS  (NUM_PORTS),        
+        .TAG_WIDTH  (CORE_TAG_X_WIDTH)
     ) core_req_bank_sel (        
         .clk        (clk),
         .reset      (reset),
@@ -459,7 +454,7 @@ module VX_cache #(
         .per_bank_core_req_byteen(per_bank_core_req_byteen),
         .per_bank_core_req_data  (per_bank_core_req_data),
         .per_bank_core_req_tag   (per_bank_core_req_tag),
-        .per_bank_core_req_tid   (per_bank_core_req_tid),
+        .per_bank_core_req_idx   (per_bank_core_req_idx),
         .per_bank_core_req_ready (per_bank_core_req_ready)
     );
 
@@ -471,7 +466,7 @@ module VX_cache #(
         wire [NUM_PORTS-1:0][WORD_SELECT_BITS-1:0] curr_bank_core_req_wsel;
         wire [NUM_PORTS-1:0][WORD_SIZE-1:0] curr_bank_core_req_byteen;
         wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] curr_bank_core_req_data;
-        wire [NUM_PORTS-1:0][`REQS_BITS-1:0] curr_bank_core_req_tid;
+        wire [NUM_PORTS-1:0][`REQS_BITS-1:0] curr_bank_core_req_idx;
         wire [NUM_PORTS-1:0][CORE_TAG_X_WIDTH-1:0] curr_bank_core_req_tag;
         wire                        curr_bank_core_req_rw;  
         wire [`LINE_ADDR_WIDTH-1:0] curr_bank_core_req_addr;        
@@ -480,7 +475,7 @@ module VX_cache #(
         wire                        curr_bank_core_rsp_valid;
         wire [NUM_PORTS-1:0]        curr_bank_core_rsp_pmask;        
         wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] curr_bank_core_rsp_data;
-        wire [NUM_PORTS-1:0][`REQS_BITS-1:0] curr_bank_core_rsp_tid;
+        wire [NUM_PORTS-1:0][`REQS_BITS-1:0] curr_bank_core_rsp_idx;
         wire [NUM_PORTS-1:0][CORE_TAG_X_WIDTH-1:0] curr_bank_core_rsp_tag;
         wire                        curr_bank_core_rsp_ready;
 
@@ -508,14 +503,14 @@ module VX_cache #(
         assign curr_bank_core_req_byteen  = per_bank_core_req_byteen[i];
         assign curr_bank_core_req_data    = per_bank_core_req_data[i];
         assign curr_bank_core_req_tag     = per_bank_core_req_tag[i];
-        assign curr_bank_core_req_tid     = per_bank_core_req_tid[i];
+        assign curr_bank_core_req_idx     = per_bank_core_req_idx[i];
         assign per_bank_core_req_ready[i] = curr_bank_core_req_ready;
 
         // Core WB
         assign curr_bank_core_rsp_ready   = per_bank_core_rsp_ready[i];
         assign per_bank_core_rsp_valid[i] = curr_bank_core_rsp_valid;
         assign per_bank_core_rsp_pmask[i] = curr_bank_core_rsp_pmask;
-        assign per_bank_core_rsp_tid  [i] = curr_bank_core_rsp_tid;
+        assign per_bank_core_rsp_idx  [i] = curr_bank_core_rsp_idx;
         assign per_bank_core_rsp_tag  [i] = curr_bank_core_rsp_tag;
         assign per_bank_core_rsp_data [i] = curr_bank_core_rsp_data;
 
@@ -562,8 +557,7 @@ module VX_cache #(
             .MREQ_SIZE          (MREQ_SIZE),
             .WRITE_ENABLE       (WRITE_ENABLE),
             .REQ_DBG_IDW        (REQ_DBG_IDW),
-            .CORE_TAG_WIDTH     (CORE_TAG_X_WIDTH),            
-            .BANK_ADDR_OFFSET   (BANK_ADDR_OFFSET)
+            .CORE_TAG_WIDTH     (CORE_TAG_X_WIDTH)
         ) bank (
             `SCOPE_BIND_VX_cache_bank(i)
             
@@ -585,13 +579,13 @@ module VX_cache #(
             .core_req_wsel      (curr_bank_core_req_wsel),
             .core_req_data      (curr_bank_core_req_data),
             .core_req_tag       (curr_bank_core_req_tag),
-            .core_req_tid       (curr_bank_core_req_tid),
+            .core_req_idx       (curr_bank_core_req_idx),
             .core_req_ready     (curr_bank_core_req_ready),
 
             // Core response                
             .core_rsp_valid     (curr_bank_core_rsp_valid),
             .core_rsp_pmask     (curr_bank_core_rsp_pmask),
-            .core_rsp_tid       (curr_bank_core_rsp_tid),
+            .core_rsp_idx       (curr_bank_core_rsp_idx),
             .core_rsp_data      (curr_bank_core_rsp_data),
             .core_rsp_tag       (curr_bank_core_rsp_tag),
             .core_rsp_ready     (curr_bank_core_rsp_ready),
@@ -620,12 +614,11 @@ module VX_cache #(
     end   
 
     VX_core_rsp_merge #(
-        .CACHE_ID       (CACHE_ID),
-        .NUM_BANKS      (NUM_BANKS),
-        .NUM_PORTS      (NUM_PORTS),
-        .WORD_SIZE      (WORD_SIZE),
-        .NUM_REQS       (NUM_REQS),
-        .CORE_TAG_WIDTH (CORE_TAG_X_WIDTH)
+        .NUM_BANKS (NUM_BANKS),
+        .NUM_PORTS (NUM_PORTS),
+        .WORD_SIZE (WORD_SIZE),
+        .NUM_REQS  (NUM_REQS),
+        .TAG_WIDTH (CORE_TAG_X_WIDTH)
     ) core_rsp_merge (
         .clk                     (clk),
         .reset                   (reset),                    
@@ -633,7 +626,7 @@ module VX_cache #(
         .per_bank_core_rsp_pmask (per_bank_core_rsp_pmask),   
         .per_bank_core_rsp_data  (per_bank_core_rsp_data),
         .per_bank_core_rsp_tag   (per_bank_core_rsp_tag),
-        .per_bank_core_rsp_tid   (per_bank_core_rsp_tid),   
+        .per_bank_core_rsp_idx   (per_bank_core_rsp_idx),   
         .per_bank_core_rsp_ready (per_bank_core_rsp_ready),
         .core_rsp_valid          (core_rsp_valid_c),
         .core_rsp_tag            (core_rsp_tag_c),

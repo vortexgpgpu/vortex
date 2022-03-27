@@ -243,17 +243,36 @@ module VX_mem_unit # (
     `ASSIGN_VX_CACHE_REQ_IF (smem_req_if, dcache_smem_demux_req_if[1]);
     `ASSIGN_VX_CACHE_RSP_IF (dcache_smem_demux_rsp_if[1], smem_rsp_if);
 
+    // shared memory address mapping:  
+    // addr = [warp_idx][per_thread_word_idx][bank_idx]
+    `define __BANK_ADDR_OFFSET  `CLOG2(`STACK_SIZE / `DCACHE_WORD_SIZE)
+    `define __WORD_SEL_BITS     `CLOG2(`SMEM_LOCAL_SIZE / `DCACHE_WORD_SIZE)
+    `define __WARP_SEL_BITS     `CLOG2(`NUM_WARPS)
+    `define __BANK_SEL_BITS     `CLOG2(`SMEM_NUM_BANKS)
+    `define SMEM_ADDR_WIDTH     (`__WARP_SEL_BITS + `__WORD_SEL_BITS + `__BANK_SEL_BITS)
+
+    wire [`DCACHE_NUM_REQS-1:0][`SMEM_ADDR_WIDTH-1:0] smem_req_addr;    
+    for (genvar i = 0; i < `DCACHE_NUM_REQS; ++i) begin
+        if (`__BANK_SEL_BITS != 0) begin
+            assign smem_req_addr[i][0 +: `__BANK_SEL_BITS] = smem_req_if.addr[i][`__BANK_ADDR_OFFSET +: `__BANK_SEL_BITS];
+        end
+        assign smem_req_addr[i][`__BANK_SEL_BITS +: `__WORD_SEL_BITS] = smem_req_if.addr[i][0 +: `__WORD_SEL_BITS];        
+        if (`__WARP_SEL_BITS != 0) begin
+            assign smem_req_addr[i][`__BANK_SEL_BITS + `__WORD_SEL_BITS +: `__WARP_SEL_BITS] = smem_req_if.addr[i][(`__BANK_ADDR_OFFSET + `__BANK_SEL_BITS) +: `__WARP_SEL_BITS];
+        end
+    end
+
     VX_shared_mem #(
         .IDNAME             (`SMEM_ID),
-        .CACHE_SIZE         (`SMEM_SIZE),
+        .SIZE               (`SMEM_SIZE),
+        .NUM_REQS           (`DCACHE_NUM_REQS),
         .NUM_BANKS          (`SMEM_NUM_BANKS),
         .WORD_SIZE          (`DCACHE_WORD_SIZE),
-        .NUM_REQS           (`DCACHE_NUM_REQS),
+        .ADDR_WIDTH         (`SMEM_ADDR_WIDTH),
         .CREQ_SIZE          (`SMEM_CREQ_SIZE),
         .CRSQ_SIZE          (`SMEM_CRSQ_SIZE),
         .REQ_DBG_IDW        (`UUID_BITS), 
-        .TAG_WIDTH          (`DCACHE_SMEM_TAG_WIDTH),
-        .BANK_ADDR_OFFSET   (`SMEM_BANK_ADDR_OFFSET)
+        .TAG_WIDTH          (`DCACHE_SMEM_TAG_WIDTH)
     ) smem (            
         .clk            (clk),
         .reset          (smem_reset),
@@ -266,7 +285,7 @@ module VX_mem_unit # (
         .req_valid     (smem_req_if.valid),
         .req_rw        (smem_req_if.rw),
         .req_byteen    (smem_req_if.byteen),
-        .req_addr      (smem_req_if.addr),
+        .req_addr      (smem_req_addr),
         .req_data      (smem_req_if.data),        
         .req_tag       (smem_req_if.tag),
         .req_ready     (smem_req_if.ready),

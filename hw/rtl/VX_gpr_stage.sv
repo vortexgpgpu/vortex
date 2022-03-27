@@ -34,6 +34,8 @@ module VX_gpr_stage #(
         assign raddr1 = {gpr_req_if.wid, gpr_req_if.rs1};
         assign raddr2 = {gpr_req_if.wid, gpr_req_if.rs2};
     end else begin
+        `UNUSED_VAR (writeback_if.wid)
+        `UNUSED_VAR (gpr_req_if.wid)
         assign waddr  = writeback_if.rd;
         assign raddr1 = gpr_req_if.rs1;
         assign raddr2 = gpr_req_if.rs2;
