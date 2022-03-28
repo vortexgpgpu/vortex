@@ -9,7 +9,7 @@
 #include "VVX_mem_streamer__Syms.h"
 #include "ram.h"
 
-#define SIM_TIME 5000
+#define SIM_TIME 500
 
 int generate_rand (int min, int max);
 int generate_rand_mask (int mask);

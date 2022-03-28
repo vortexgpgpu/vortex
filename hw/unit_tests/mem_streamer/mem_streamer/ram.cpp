@@ -106,9 +106,8 @@ rsp_t RAM::schedule_rsp() {
         } else {
             rsp.valid = false;
         }
-    } else {
-        rsp.valid = false;
-    }
+    } 
+    
     return rsp;
 }
 

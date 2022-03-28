@@ -213,11 +213,11 @@ module VX_mem_streamer #(
                 if (sreq_push) begin
                     rsp_store[stag_waddr] <= 0;
                 end
-                if (sreq_pop) begin
+                if (stag_pop) begin
                     rsp_full[stag_pop_addr]  <= 1'b0;
                 end
                 if (mem_rsp_fire) begin
-                    rsp_store[stag_raddr] <= rsp_store[stag_raddr] | mem_rsp_data;
+                    rsp_store[stag_raddr] <= mrsp_data;
                     rsp_full[stag_raddr]  <= 1'b1;
                 end
             end
