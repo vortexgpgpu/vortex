@@ -76,6 +76,7 @@ module VX_mem_streamer #(
     wire                   stag_full;
     wire                   stag_empty;
     wire [TAGW-1:0]        stag_dout;
+    wire [NUM_REQS-1:0]    stag_mask;
 
     // Memory request
     wire [NUM_REQS-1:0]                  mreq_valid;
@@ -152,7 +153,7 @@ module VX_mem_streamer #(
     assign stag_raddr = mem_rsp_tag;
 
     VX_index_buffer #(
-        .DATAW	(TAGW),
+        .DATAW	(NUM_REQS + TAGW),
         .SIZE	(QUEUE_SIZE)
     ) tag_store (
         .clk          (clk),
@@ -160,8 +161,8 @@ module VX_mem_streamer #(
         .write_addr   (stag_waddr),
         .acquire_slot (stag_push),
         .read_addr    (stag_raddr),
-        .write_data   (req_tag),
-        .read_data    (stag_dout),
+        .write_data   ({req_dup_mask, req_tag}),
+        .read_data    ({stag_mask,    stag_dout}),
         .release_addr (stag_pop_addr),
         .release_slot (stag_pop),
         .full         (stag_full),
@@ -200,7 +201,7 @@ module VX_mem_streamer #(
         assign mem_rsp_fire  = mem_rsp_valid & mem_rsp_ready;
 
         assign mrsp_valid = mem_rsp_valid & (0 == rsp_rem_mask_n);
-        assign mrsp_mask  = mem_rsp_mask;
+        assign mrsp_mask  = stag_mask;
         assign mrsp_data  = rsp_store[stag_raddr] | mem_rsp_data; 
         assign mrsp_tag   = stag_dout;
 
