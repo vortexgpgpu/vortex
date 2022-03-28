@@ -38,7 +38,7 @@ module VX_mem_streamer #(
     input wire [NUM_REQS-1:0]            mem_rsp_mask,
     input wire [NUM_REQS-1:0][DATAW-1:0] mem_rsp_data,
     input wire [QUEUE_ADDRW-1:0]         mem_rsp_tag,
-    output reg                           mem_rsp_ready,
+    output wire                          mem_rsp_ready,
 
     // Output response
     output wire                           rsp_valid,
@@ -48,14 +48,11 @@ module VX_mem_streamer #(
     input wire                            rsp_ready
   );
     localparam QUEUE_ADDRW = `CLOG2(QUEUE_SIZE);
-    localparam RSPW = TAGW + NUM_REQS + (NUM_REQS * DATAW) + 1;
-
+   
     `STATIC_ASSERT ((0 == PARTIAL_RESPONSE) || (1 == PARTIAL_RESPONSE), ("invalid parameter"))
     `STATIC_ASSERT ((0 == DUPLICATE_ADDR) || (1 == DUPLICATE_ADDR), ("invalid parameter"))
 
     // Detect duplicate addresses
-    wire [NUM_REQS-2:0] addr_matches;
-    wire req_dup;
     wire [NUM_REQS-1:0] req_dup_mask;
 
     // Pending queue
@@ -80,7 +77,6 @@ module VX_mem_streamer #(
     wire [TAGW-1:0]        stag_dout;
 
     // Memory request
-    wire                                 mreq_en;
     wire [NUM_REQS-1:0]                  mreq_valid;
     wire [NUM_REQS-1:0]                  mreq_rw;
     wire [NUM_REQS-1:0][WORD_SIZE-1:0]   mreq_byteen;
@@ -95,25 +91,33 @@ module VX_mem_streamer #(
 
     // Memory response
     wire                                mem_rsp_fire;
-    reg  [QUEUE_SIZE-1:0][RSPW-1:0]     rsp_store;
-    wire [RSPW-1:0]                     rsp_store_n;
-    reg  [QUEUE_SIZE-1:0]               rsp_store_full;
-    reg  [RSPW-1:0]                     rsp_out;
+    wire                                rsp_fire;
     reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0] rsp_rem_mask;
     wire [NUM_REQS-1:0]                 rsp_rem_mask_n;
+    wire                                mrsp_valid;
+    wire [NUM_REQS-1:0]                 mrsp_mask;
+    wire [NUM_REQS-1:0][DATAW-1:0]      mrsp_data;
+    wire [TAGW-1:0]                     mrsp_tag;
 
     wire stall;
 
     //////////////////////////////////////////////////////////////////
 
     // Detect duplicate addresses
+   
+    if (DUPLICATE_ADDR == 1) begin
+        assign req_dup_mask = req_mask;
+    end else begin
+        wire [NUM_REQS-2:0] addr_matches;
+        wire req_dup;
 
-    for(genvar i = 0; i < NUM_REQS-1; i++) begin
-        assign addr_matches[i] = (req_addr[i+1] == req_addr[0]) || ~req_mask[i+1];
+        for(genvar i = 0; i < NUM_REQS-1; i++) begin
+            assign addr_matches[i] = (req_addr[i+1] == req_addr[0]) || ~req_mask[i+1];
+        end
+
+        assign req_dup = req_mask[0] && (& addr_matches);
+        assign req_dup_mask = req_mask & {{(NUM_REQS-1){~req_dup}}, 1'b1};
     end
-
-    assign req_dup = req_mask[0] && (& addr_matches);
-    assign req_dup_mask = (DUPLICATE_ADDR == 1) ? req_mask & {{(NUM_REQS-1){~req_dup}}, 1'b1} : req_mask;
 
     //////////////////////////////////////////////////////////////////
 
@@ -165,18 +169,6 @@ module VX_mem_streamer #(
     //////////////////////////////////////////////////////////////////
 
     // Memory response
-    always @(*) begin
-        if (PARTIAL_RESPONSE == 1) begin
-            mem_rsp_ready = ~stall;
-        end else begin
-            for (integer i = 0; i < QUEUE_SIZE; ++i) begin
-                rsp_store_full[i] = rsp_store[i][0];
-            end
-            mem_rsp_ready = ~stall & ~(& rsp_store_full);
-        end
-    end
-
-    assign mem_rsp_fire = mem_rsp_valid && mem_rsp_ready;
 
     // Evaluate remaning responses
     assign rsp_rem_mask_n = rsp_rem_mask[stag_raddr] & ~mem_rsp_mask;
@@ -188,37 +180,46 @@ module VX_mem_streamer #(
             rsp_rem_mask[stag_raddr] <= rsp_rem_mask_n;
     end
 
-    assign rsp_store_n = {stag_dout, mem_rsp_mask, mem_rsp_data, mem_rsp_valid};
+    if (PARTIAL_RESPONSE == 1) begin
+        assign mem_rsp_ready = ~stall;
+        assign mem_rsp_fire  = mem_rsp_valid & mem_rsp_ready;
 
-    // Store response until ready to send
-    always @(posedge clk) begin
-        rsp_out <= 0;
+        assign mrsp_valid = mem_rsp_valid;
+        assign mrsp_mask  = mem_rsp_mask;
+        assign mrsp_data  = mem_rsp_data;
+        assign mrsp_tag   = stag_dout;
+        
+    end else begin
 
-        if (PARTIAL_RESPONSE == 1) begin
-            if (mem_rsp_fire) begin
-                rsp_out <= rsp_store_n;
-            end
-        end else begin
+        reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0][DATAW-1:0] rsp_store;
+        reg  [QUEUE_SIZE-1:0] rsp_full;
+
+        assign mem_rsp_ready = ~stall && ~(& rsp_full);
+        assign mem_rsp_fire  = mem_rsp_valid & mem_rsp_ready;
+
+        assign mrsp_valid = mem_rsp_valid & (0 == rsp_rem_mask_n);
+        assign mrsp_mask  = mem_rsp_mask;
+        assign mrsp_data  = rsp_store[stag_raddr] | mem_rsp_data; 
+        assign mrsp_tag   = stag_dout;
+
+        // Store response until ready to send
+        always @(posedge clk) begin
             if (reset) begin
                 rsp_store <= 0;
+                rsp_full  <= 0;
             end else begin
                 if (sreq_push) begin
                     rsp_store[stag_waddr] <= 0;
-                end 
+                    rsp_full[stag_raddr]  <= 0;
+                end
                 if (mem_rsp_fire) begin
-                    rsp_store[stag_raddr] <= rsp_store[stag_raddr] | rsp_store_n;
-                    if (0 == rsp_rem_mask_n) begin
-                        rsp_out <= rsp_store[stag_raddr] | rsp_store_n;;
-                    end
+                    rsp_store[stag_raddr] <= rsp_store[stag_raddr] | mem_rsp_data;
+                    rsp_full[stag_raddr]  <= 1'b1;
                 end
             end
-        end
+        end 
 
-    end      
-    
-    // Send response
-    assign {rsp_tag, rsp_mask, rsp_data, rsp_valid} = rsp_out & {{(RSPW-1){1'b1}}, rsp_ready};
-    assign stall = rsp_valid & ~rsp_ready;
+    end
 
     //////////////////////////////////////////////////////////////////
 
@@ -229,11 +230,10 @@ module VX_mem_streamer #(
     assign mreq_addr   = sreq_addr;
     assign mreq_data   = sreq_data;
     assign mreq_tag    = {NUM_REQS{sreq_tag}};
-    assign mreq_en     = 1'b1;
 
-    assign mem_req_fire    = mreq_valid & mem_req_ready;
+    assign mem_req_fire    = mem_req_valid & mem_req_ready;
     assign req_sent_mask_n = req_sent_mask | mem_req_fire;
-    assign req_sent_all    = (req_sent_mask_n == sreq_mask);
+    assign req_sent_all    = (req_sent_mask_n == mem_req_valid);
 
     always @(posedge clk) begin
         if (reset)
@@ -246,16 +246,35 @@ module VX_mem_streamer #(
         end
     end
 
+    //////////////////////////////////////////////////////////////////
+
     VX_pipe_register #(
         .DATAW	(NUM_REQS + NUM_REQS + (NUM_REQS * WORD_SIZE) + (NUM_REQS * ADDRW) + (NUM_REQS * DATAW) + (NUM_REQS * QUEUE_ADDRW)),
         .RESETW (1)
     ) req_pipe_reg (
         .clk      (clk),
         .reset    (reset),
-        .enable	  (mreq_en),
+        .enable	  (1'b1),
         .data_in  ({mreq_valid,    mreq_rw,    mreq_byteen,    mreq_addr,    mreq_data,    mreq_tag}),
         .data_out ({mem_req_valid, mem_req_rw, mem_req_byteen, mem_req_addr, mem_req_data, mem_req_tag})
     );
+
+    // Send response to caller
+    VX_pipe_register #(
+        .DATAW	(1 + NUM_REQS + (NUM_REQS * DATAW) + TAGW),
+        .RESETW (1)
+    ) rsp_pipe_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable	  (1'b1),
+        .data_in  ({mrsp_valid, mrsp_mask, mrsp_data, mrsp_tag}),
+        .data_out ({rsp_valid,  rsp_mask,  rsp_data,  rsp_tag})
+    );
+
+    assign rsp_fire = rsp_valid & rsp_ready;
+    assign stall = rsp_valid & ~rsp_ready;
+
+    `UNUSED_VAR(rsp_fire)
 
     //////////////////////////////////////////////////////////////////
 
