@@ -76,7 +76,6 @@ module VX_mem_streamer #(
     wire                   stag_full;
     wire                   stag_empty;
     wire [TAGW-1:0]        stag_dout;
-    wire [NUM_REQS-1:0]    stag_mask;
 
     // Memory request
     wire [NUM_REQS-1:0]                  mreq_valid;
@@ -153,7 +152,7 @@ module VX_mem_streamer #(
     assign stag_raddr = mem_rsp_tag;
 
     VX_index_buffer #(
-        .DATAW	(NUM_REQS + TAGW),
+        .DATAW	(TAGW),
         .SIZE	(QUEUE_SIZE)
     ) tag_store (
         .clk          (clk),
@@ -161,8 +160,8 @@ module VX_mem_streamer #(
         .write_addr   (stag_waddr),
         .acquire_slot (stag_push),
         .read_addr    (stag_raddr),
-        .write_data   ({req_dup_mask, req_tag}),
-        .read_data    ({stag_mask,    stag_dout}),
+        .write_data   (req_tag),
+        .read_data    (stag_dout),
         .release_addr (stag_pop_addr),
         .release_slot (stag_pop),
         .full         (stag_full),
@@ -195,27 +194,31 @@ module VX_mem_streamer #(
     end else begin
 
         reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0][DATAW-1:0] rsp_store;
+        reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0] mask_store;
         reg  [QUEUE_SIZE-1:0] rsp_full;
 
         assign mem_rsp_ready = ~stall && ~(& rsp_full);
         assign mem_rsp_fire  = mem_rsp_valid & mem_rsp_ready;
 
         assign mrsp_valid = mem_rsp_valid & (0 == rsp_rem_mask_n);
-        assign mrsp_mask  = stag_mask;
+        assign mrsp_mask  = mask_store[stag_raddr];
         assign mrsp_data  = rsp_store[stag_raddr] | mem_rsp_data; 
         assign mrsp_tag   = stag_dout;
 
         // Store response until ready to send
         always @(posedge clk) begin
             if (reset) begin
-                rsp_store <= 0;
-                rsp_full  <= 0;
+                rsp_store  <= 0;
+                mask_store <= 0;
+                rsp_full   <= 0;
             end else begin
                 if (sreq_push) begin
-                    rsp_store[stag_waddr] <= 0;
+                    rsp_store[stag_waddr]  <= 0;
+                    mask_store[stag_waddr] <= req_dup_mask;
                 end
                 if (stag_pop) begin
-                    rsp_full[stag_pop_addr]  <= 1'b0;
+                    rsp_full[stag_pop_addr]   <= 1'b0;
+                    mask_store[stag_pop_addr] <= 0;
                 end
                 if (mem_rsp_fire) begin
                     rsp_store[stag_raddr] <= mrsp_data;
