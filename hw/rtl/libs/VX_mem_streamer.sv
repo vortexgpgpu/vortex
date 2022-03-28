@@ -72,6 +72,7 @@ module VX_mem_streamer #(
     wire                   stag_pop;
     wire [QUEUE_ADDRW-1:0] stag_waddr;
     wire [QUEUE_ADDRW-1:0] stag_raddr;
+    wire [QUEUE_ADDRW-1:0] stag_pop_addr;
     wire                   stag_full;
     wire                   stag_empty;
     wire [TAGW-1:0]        stag_dout;
@@ -92,6 +93,7 @@ module VX_mem_streamer #(
     // Memory response
     wire                                mem_rsp_fire;
     wire                                rsp_fire;
+    wire                                rsp_done;
     reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0] rsp_rem_mask;
     wire [NUM_REQS-1:0]                 rsp_rem_mask_n;
     wire                                mrsp_valid;
@@ -146,7 +148,7 @@ module VX_mem_streamer #(
 
     // Reads only
     assign stag_push  = sreq_push && !req_rw;
-    assign stag_pop   = mem_rsp_fire && (0 == rsp_rem_mask_n) && !stag_empty;
+    assign stag_pop   = rsp_fire && rsp_done && !stag_empty;
     assign stag_raddr = mem_rsp_tag;
 
     VX_index_buffer #(
@@ -160,7 +162,7 @@ module VX_mem_streamer #(
         .read_addr    (stag_raddr),
         .write_data   (req_tag),
         .read_data    (stag_dout),
-        .release_addr (stag_raddr),
+        .release_addr (stag_pop_addr),
         .release_slot (stag_pop),
         .full         (stag_full),
         .empty        (stag_empty)
@@ -210,7 +212,9 @@ module VX_mem_streamer #(
             end else begin
                 if (sreq_push) begin
                     rsp_store[stag_waddr] <= 0;
-                    rsp_full[stag_raddr]  <= 0;
+                end
+                if (sreq_pop) begin
+                    rsp_full[stag_pop_addr]  <= 1'b0;
                 end
                 if (mem_rsp_fire) begin
                     rsp_store[stag_raddr] <= rsp_store[stag_raddr] | mem_rsp_data;
@@ -248,6 +252,7 @@ module VX_mem_streamer #(
 
     //////////////////////////////////////////////////////////////////
 
+    // Send request to memory
     VX_pipe_register #(
         .DATAW	(NUM_REQS + NUM_REQS + (NUM_REQS * WORD_SIZE) + (NUM_REQS * ADDRW) + (NUM_REQS * DATAW) + (NUM_REQS * QUEUE_ADDRW)),
         .RESETW (1)
@@ -261,20 +266,18 @@ module VX_mem_streamer #(
 
     // Send response to caller
     VX_pipe_register #(
-        .DATAW	(1 + NUM_REQS + (NUM_REQS * DATAW) + TAGW),
+        .DATAW	(1 + NUM_REQS + (NUM_REQS * DATAW) + TAGW + QUEUE_ADDRW + 1),
         .RESETW (1)
     ) rsp_pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable	  (1'b1),
-        .data_in  ({mrsp_valid, mrsp_mask, mrsp_data, mrsp_tag}),
-        .data_out ({rsp_valid,  rsp_mask,  rsp_data,  rsp_tag})
+        .data_in  ({mrsp_valid, mrsp_mask, mrsp_data, mrsp_tag, stag_raddr,    (0 == rsp_rem_mask_n)}),
+        .data_out ({rsp_valid,  rsp_mask,  rsp_data,  rsp_tag,  stag_pop_addr, rsp_done})
     );
 
     assign rsp_fire = rsp_valid & rsp_ready;
     assign stall = rsp_valid & ~rsp_ready;
-
-    `UNUSED_VAR(rsp_fire)
 
     //////////////////////////////////////////////////////////////////
 
