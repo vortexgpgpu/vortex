@@ -91,6 +91,8 @@ module VX_raster_mem #(
     assign ready = |raster_rs_empty & mem_req_ready & fetch_fsm_complete;
 
     always @(posedge clk) begin
+        // Setting default values:
+        mem_req_valid <= 0;
         // Reset condition
         if (reset) begin
             mem_req_valid <= 0;
@@ -108,7 +110,7 @@ module VX_raster_mem #(
                 raster_rs_empty[i] <= 1;
             end
         end
-        else if (mem_req_ready) begin
+        else if (mem_req_ready && fetch_fsm_complete == 1) begin
             // On new input -> set the temp state values
             if (ready && input_valid && valid_rs_empty_index && (temp_tile_count != num_tiles)) begin
                 temp_pbuf_addr <= pbuf_baseaddr;
