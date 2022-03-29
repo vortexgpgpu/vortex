@@ -19,7 +19,7 @@ module VX_fixed_arbiter #(
     `UNUSED_VAR (reset)
     `UNUSED_VAR (unlock)
 
-    localparam LOG_NUM_REQS = $clog2(NUM_REQS);
+    localparam LOG_NUM_REQS = `LOG2UP(NUM_REQS);
 
     if (NUM_REQS == 1)  begin        
         

@@ -1,20 +1,18 @@
-`include "VX_cache_define.vh"
+`include "VX_platform.vh"
 
 module VX_core_rsp_merge #(
-    parameter string CACHE_ID   = "",
-
     // Number of Word requests per cycle
-    parameter NUM_REQS          = 1, 
+    parameter NUM_REQS      = 1, 
     // Number of banks
-    parameter NUM_BANKS         = 1, 
+    parameter NUM_BANKS     = 1, 
     // Number of ports per banks
-    parameter NUM_PORTS         = 1,
+    parameter NUM_PORTS     = 1,
     // Size of a word in bytes
-    parameter WORD_SIZE         = 1, 
+    parameter WORD_SIZE     = 1, 
     // core request tag size
-    parameter CORE_TAG_WIDTH    = 1,
+    parameter TAG_WIDTH     = 1,
     // output register
-    parameter OUT_REG           = 0
+    parameter OUT_REG       = 0
 ) (
     input wire clk,
     input wire reset,
@@ -22,31 +20,34 @@ module VX_core_rsp_merge #(
     // Per Bank WB
     input  wire [NUM_BANKS-1:0]                     per_bank_core_rsp_valid,
     input  wire [NUM_BANKS-1:0][NUM_PORTS-1:0]      per_bank_core_rsp_pmask,
-    input  wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`WORD_WIDTH-1:0] per_bank_core_rsp_data,
-    input  wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`REQS_BITS-1:0] per_bank_core_rsp_tid,   
-    input  wire [NUM_BANKS-1:0][NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] per_bank_core_rsp_tag,   
+    input  wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_WIDTH-1:0] per_bank_core_rsp_data,
+    input  wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(REQS_BITS)-1:0] per_bank_core_rsp_idx,   
+    input  wire [NUM_BANKS-1:0][NUM_PORTS-1:0][TAG_WIDTH-1:0] per_bank_core_rsp_tag,   
     output wire [NUM_BANKS-1:0]                     per_bank_core_rsp_ready,
 
     // Core Response
-    output wire [NUM_REQS-1:0]                      core_rsp_valid,
-    output wire [NUM_REQS-1:0][CORE_TAG_WIDTH-1:0]  core_rsp_tag,
-    output wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]     core_rsp_data,      
-    input  wire [NUM_REQS-1:0]                      core_rsp_ready
+    output wire [NUM_REQS-1:0]                  core_rsp_valid,
+    output wire [NUM_REQS-1:0][TAG_WIDTH-1:0]   core_rsp_tag,
+    output wire [NUM_REQS-1:0][WORD_WIDTH-1:0]  core_rsp_data,      
+    input  wire [NUM_REQS-1:0]                  core_rsp_ready
 );
-    `UNUSED_PARAM (CACHE_ID)
+    localparam WORD_WIDTH    = WORD_SIZE * 8;
+    localparam REQS_BITS     = `CLOG2(NUM_REQS);
+    localparam BANK_SEL_BITS = `CLOG2(NUM_BANKS);
+    localparam PORTS_BITS    = `CLOG2(NUM_PORTS);
 
     if (NUM_BANKS > 1) begin
 
         reg [NUM_REQS-1:0] core_rsp_valid_unqual;
-        reg [NUM_REQS-1:0][`WORD_WIDTH-1:0] core_rsp_data_unqual;
+        reg [NUM_REQS-1:0][WORD_WIDTH-1:0] core_rsp_data_unqual;
         reg [NUM_BANKS-1:0] per_bank_core_rsp_ready_r;
                 
-        reg [NUM_REQS-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag_unqual;
+        reg [NUM_REQS-1:0][TAG_WIDTH-1:0] core_rsp_tag_unqual;
         wire [NUM_REQS-1:0] core_rsp_ready_unqual;
 
         if (NUM_PORTS > 1) begin
 
-            reg [NUM_REQS-1:0][(`PORTS_BITS + `BANK_SELECT_BITS)-1:0] bank_select_table;
+            reg [NUM_REQS-1:0][(PORTS_BITS + BANK_SEL_BITS)-1:0] bank_select_table;
 
             reg [NUM_BANKS-1:0][NUM_PORTS-1:0] per_bank_core_rsp_sent_r, per_bank_core_rsp_sent;
             wire [NUM_BANKS-1:0][NUM_PORTS-1:0] per_bank_core_rsp_sent_n;
@@ -80,10 +81,10 @@ module VX_core_rsp_merge #(
                         if (per_bank_core_rsp_valid[i] 
                             && per_bank_core_rsp_pmask[i][p]
                             && !per_bank_core_rsp_sent_r[i][p]) begin
-                            core_rsp_valid_unqual[per_bank_core_rsp_tid[i][p]] = 1;
-                            core_rsp_tag_unqual[per_bank_core_rsp_tid[i][p]]   = per_bank_core_rsp_tag[i][p];
-                            core_rsp_data_unqual[per_bank_core_rsp_tid[i][p]]  = per_bank_core_rsp_data[i][p];
-                            bank_select_table[per_bank_core_rsp_tid[i][p]] = {`PORTS_BITS'(p), `BANK_SELECT_BITS'(i)};                      
+                            core_rsp_valid_unqual[per_bank_core_rsp_idx[i][p]] = 1;
+                            core_rsp_tag_unqual[per_bank_core_rsp_idx[i][p]]   = per_bank_core_rsp_tag[i][p];
+                            core_rsp_data_unqual[per_bank_core_rsp_idx[i][p]]  = per_bank_core_rsp_data[i][p];
+                            bank_select_table[per_bank_core_rsp_idx[i][p]] = {PORTS_BITS'(p), BANK_SEL_BITS'(i)};                      
                         end
                     end
                 end 
@@ -93,7 +94,7 @@ module VX_core_rsp_merge #(
                 per_bank_core_rsp_sent = '0;
                 for (integer i = 0; i < NUM_REQS; i++) begin
                     if (core_rsp_valid_unqual[i]) begin
-                        per_bank_core_rsp_sent[bank_select_table[i][0 +: `BANK_SELECT_BITS]][bank_select_table[i][`BANK_SELECT_BITS +: `PORTS_BITS]] = core_rsp_ready_unqual[i];
+                        per_bank_core_rsp_sent[bank_select_table[i][0 +: BANK_SEL_BITS]][bank_select_table[i][BANK_SEL_BITS +: PORTS_BITS]] = core_rsp_ready_unqual[i];
                     end
                 end
             end
@@ -117,25 +118,25 @@ module VX_core_rsp_merge #(
                 
                 for (integer i = NUM_BANKS-1; i >= 0; --i) begin
                     if (per_bank_core_rsp_valid[i]) begin
-                        core_rsp_valid_unqual[per_bank_core_rsp_tid[i]] = 1;
-                        core_rsp_tag_unqual[per_bank_core_rsp_tid[i]]   = per_bank_core_rsp_tag[i];
-                        core_rsp_data_unqual[per_bank_core_rsp_tid[i]]  = per_bank_core_rsp_data[i];
-                        bank_select_table[per_bank_core_rsp_tid[i]]  = (1 << i);
+                        core_rsp_valid_unqual[per_bank_core_rsp_idx[i]] = 1;
+                        core_rsp_tag_unqual[per_bank_core_rsp_idx[i]]   = per_bank_core_rsp_tag[i];
+                        core_rsp_data_unqual[per_bank_core_rsp_idx[i]]  = per_bank_core_rsp_data[i];
+                        bank_select_table[per_bank_core_rsp_idx[i]]  = (1 << i);
                     end
                 end    
             end
 
             always @(*) begin
                 for (integer i = 0; i < NUM_BANKS; ++i) begin 
-                    per_bank_core_rsp_ready_r[i] = core_rsp_ready_unqual[per_bank_core_rsp_tid[i]] 
-                                                && bank_select_table[per_bank_core_rsp_tid[i]][i];
+                    per_bank_core_rsp_ready_r[i] = core_rsp_ready_unqual[per_bank_core_rsp_idx[i]] 
+                                                && bank_select_table[per_bank_core_rsp_idx[i]][i];
                 end 
             end 
         end
 
         for (genvar i = 0; i < NUM_REQS; i++) begin
             VX_skid_buffer #(
-                .DATAW    (CORE_TAG_WIDTH + `WORD_WIDTH),
+                .DATAW    (TAG_WIDTH + WORD_WIDTH),
                 .PASSTHRU (0 == OUT_REG)
             ) out_sbuf (
                 .clk       (clk),
@@ -159,31 +160,31 @@ module VX_core_rsp_merge #(
 
         if (NUM_REQS > 1) begin
 
-            reg [NUM_REQS-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag_unqual;
-            reg [NUM_REQS-1:0][`WORD_WIDTH-1:0] core_rsp_data_unqual;
+            reg [NUM_REQS-1:0][TAG_WIDTH-1:0] core_rsp_tag_unqual;
+            reg [NUM_REQS-1:0][WORD_WIDTH-1:0] core_rsp_data_unqual;
 
             reg [NUM_REQS-1:0] core_rsp_valid_unqual;
 
             always @(*) begin
                 core_rsp_valid_unqual = 0;
-                core_rsp_valid_unqual[per_bank_core_rsp_tid] = per_bank_core_rsp_valid;
+                core_rsp_valid_unqual[per_bank_core_rsp_idx] = per_bank_core_rsp_valid;
 
                 core_rsp_tag_unqual = 'x;
-                core_rsp_tag_unqual[per_bank_core_rsp_tid] = per_bank_core_rsp_tag;
+                core_rsp_tag_unqual[per_bank_core_rsp_idx] = per_bank_core_rsp_tag;
 
                 core_rsp_data_unqual = 'x;
-                core_rsp_data_unqual[per_bank_core_rsp_tid] = per_bank_core_rsp_data;
+                core_rsp_data_unqual[per_bank_core_rsp_idx] = per_bank_core_rsp_data;
             end 
 
             assign core_rsp_valid = core_rsp_valid_unqual;
-            assign per_bank_core_rsp_ready = core_rsp_ready[per_bank_core_rsp_tid];
+            assign per_bank_core_rsp_ready = core_rsp_ready[per_bank_core_rsp_idx];
 
             assign core_rsp_tag   = core_rsp_tag_unqual;
             assign core_rsp_data  = core_rsp_data_unqual;            
             
         end else begin
 
-            `UNUSED_VAR(per_bank_core_rsp_tid)
+            `UNUSED_VAR (per_bank_core_rsp_idx)
             assign core_rsp_valid = per_bank_core_rsp_valid;
             assign core_rsp_tag   = per_bank_core_rsp_tag;
             assign core_rsp_data  = per_bank_core_rsp_data;

@@ -67,12 +67,16 @@ module VX_lsu_unit #(
     end
 
     // detect duplicate addresses
-    wire [`NUM_THREADS-2:0] addr_matches;
-    for (genvar i = 0; i < (`NUM_THREADS-1); i++) begin
-        assign addr_matches[i] = (lsu_req_if.base_addr[i+1] == lsu_req_if.base_addr[0]) || ~lsu_req_if.tmask[i+1];
-    end    
-
-    wire lsu_is_dup = lsu_req_if.tmask[0] && (& addr_matches);
+    wire lsu_is_dup;
+    if (`NUM_THREADS > 1) begin    
+        wire [`NUM_THREADS-2:0] addr_matches;
+        for (genvar i = 0; i < (`NUM_THREADS-1); i++) begin
+            assign addr_matches[i] = (lsu_req_if.base_addr[i+1] == lsu_req_if.base_addr[0]) || ~lsu_req_if.tmask[i+1];
+        end
+        assign lsu_is_dup = lsu_req_if.tmask[0] && (& addr_matches);
+    end else begin
+        assign lsu_is_dup = 0;
+    end
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         wire [MEM_ADDRW-1:0] full_addr_w = full_addr[i][MEM_ASHIFT +: MEM_ADDRW];

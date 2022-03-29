@@ -16,13 +16,16 @@ protected:
     PerfStats perf_stats_;
 
     uint64_t to_local_addr(uint64_t addr) {
-        uint32_t smem_local_size_w = log2ceil(SMEM_LOCAL_SIZE);
-        uint32_t stack_size_w = log2ceil(STACK_SIZE);
-        uint32_t wid_tid_w = log2ceil(NUM_WARPS * NUM_THREADS);    
-        uint32_t wid_tid = bit_getw(addr, stack_size_w, stack_size_w + wid_tid_w-1);
-        uint32_t offset = bit_getw(addr, 0, smem_local_size_w-1);
-        uint32_t s_addr = bit_setw(offset, smem_local_size_w, smem_local_size_w + wid_tid_w-1, wid_tid);
-        return s_addr;
+        uint32_t offset_bits = log2ceil(config_.line_size);        
+        uint32_t offset = bit_getw(addr, 0, offset_bits-1);
+        uint32_t total_lines = config_.capacity / config_.line_size;
+        uint32_t line_bits = log2ceil(total_lines);    
+        if (line_bits) {
+            uint32_t line = bit_getw(addr, config_.bank_offset, config_.bank_offset + line_bits-1);
+            uint32_t s_addr = bit_setw(offset, offset_bits, offset_bits + line_bits-1, line);
+            return s_addr;
+        }
+        return offset;
     }
 
 public:
@@ -31,7 +34,7 @@ public:
         , config_(config)
         , ram_(config.capacity, config.capacity)
         , bank_sel_addr_start_(config.bank_offset)
-        , bank_sel_addr_end_(config.bank_offset + log2up(config.num_banks)-1)
+        , bank_sel_addr_end_(config.bank_offset + log2ceil(config.num_banks)-1)
     {}    
     
     virtual ~Impl() {}
@@ -61,8 +64,10 @@ public:
 
             auto& core_req = core_req_port.front();
 
-            uint32_t bank_id = (uint32_t)bit_getw(
-                core_req.addr, bank_sel_addr_start_, bank_sel_addr_end_);
+            uint32_t bank_id = 0;
+            if (bank_sel_addr_start_ <= bank_sel_addr_end_) {
+                bank_id = (uint32_t)bit_getw(core_req.addr, bank_sel_addr_start_, bank_sel_addr_end_);
+            }
 
             // bank conflict check
             if (in_used_banks.at(bank_id)) {

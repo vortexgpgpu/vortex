@@ -157,7 +157,7 @@ module VX_warp_sched #(
     // calculate active barrier status
 
 `IGNORE_UNUSED_BEGIN
-    wire [`NW_BITS:0] active_barrier_count;
+    wire [$clog2(`NUM_WARPS+1)-1:0] active_barrier_count;
 `IGNORE_UNUSED_END
     wire [`NUM_WARPS-1:0] barrier_mask = barrier_masks[warp_ctl_if.barrier.id];
     `POP_COUNT(active_barrier_count, barrier_mask);

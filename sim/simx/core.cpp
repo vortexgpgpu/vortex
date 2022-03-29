@@ -45,7 +45,7 @@ Core::Core(const SimContext& ctx,
         true,                   // write-through
         false,                  // write response
         0,                      // victim size
-        NUM_WARPS,              // mshr
+        (uint8_t)arch.num_warps(), // mshr
         2,                      // pipeline latency
       }))
     , dcache_(CacheSim::Create("dcache", CacheSim::Config{
@@ -80,8 +80,9 @@ Core::Core(const SimContext& ctx,
       }))
     , sharedmem_(SharedMem::Create("shared_mem", SharedMem::Config{
         uint32_t(SMEM_LOCAL_SIZE) * arch.num_warps() * arch.num_threads(),
+        SMEM_LOCAL_SIZE,
         arch.num_threads(), 
-        arch.num_threads(), 
+        arch.num_threads(),
         log2ceil(STACK_SIZE),
         1,
         false
@@ -419,7 +420,7 @@ AddrType Core::get_addr_type(uint64_t addr) {
     uint32_t total_threads    = arch_.num_cores() * arch_.num_warps() * arch_.num_threads();
     uint64_t total_stack_size = STACK_SIZE * total_threads;
     uint64_t stack_end        = STACK_BASE_ADDR - total_stack_size;
-    if (addr >= stack_end && addr <  STACK_BASE_ADDR) {     
+    if (addr >= stack_end && addr < STACK_BASE_ADDR) {     
       // check if address is within shared memory region
       uint32_t offset = addr % STACK_SIZE;
       if (offset >= (STACK_SIZE - SMEM_LOCAL_SIZE)) {

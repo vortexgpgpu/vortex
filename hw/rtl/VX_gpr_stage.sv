@@ -17,7 +17,8 @@ module VX_gpr_stage #(
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (reset)    
 
-    localparam RAM_SIZE = `NUM_WARPS * `NUM_REGS;
+    localparam RAM_SIZE  = `NUM_WARPS * `NUM_REGS;
+    localparam RAM_ADDRW = $clog2(RAM_SIZE);
 
     // ensure r0 never gets written, which can happen before the reset
     wire write_enable = writeback_if.valid && (writeback_if.rd != 0);
@@ -27,10 +28,18 @@ module VX_gpr_stage #(
         assign wren[i] = write_enable && writeback_if.tmask[i];
     end
 
-    wire [$clog2(RAM_SIZE)-1:0] waddr, raddr1, raddr2;
-    assign waddr  = {writeback_if.wid, writeback_if.rd};
-    assign raddr1 = {gpr_req_if.wid, gpr_req_if.rs1};
-    assign raddr2 = {gpr_req_if.wid, gpr_req_if.rs2};
+    wire [RAM_ADDRW-1:0] waddr, raddr1, raddr2;
+    if (`NUM_WARPS > 1) begin
+        assign waddr  = {writeback_if.wid, writeback_if.rd};
+        assign raddr1 = {gpr_req_if.wid, gpr_req_if.rs1};
+        assign raddr2 = {gpr_req_if.wid, gpr_req_if.rs2};
+    end else begin
+        `UNUSED_VAR (writeback_if.wid)
+        `UNUSED_VAR (gpr_req_if.wid)
+        assign waddr  = writeback_if.rd;
+        assign raddr1 = gpr_req_if.rs1;
+        assign raddr2 = gpr_req_if.rs2;
+    end
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         VX_dp_ram #(
@@ -63,8 +72,12 @@ module VX_gpr_stage #(
     end
     
 `ifdef EXT_F_ENABLE
-    wire [$clog2(RAM_SIZE)-1:0] raddr3;
-    assign raddr3 = {gpr_req_if.wid, gpr_req_if.rs3};    
+    wire [RAM_ADDRW-1:0] raddr3;
+    if (`NUM_WARPS > 1) begin
+        assign raddr3 = {gpr_req_if.wid, gpr_req_if.rs3};
+    end else begin
+        assign raddr3 = gpr_req_if.rs3;
+    end
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         VX_dp_ram #(

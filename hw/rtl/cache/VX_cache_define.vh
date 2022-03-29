@@ -8,10 +8,8 @@
 
 `define REQS_BITS               `LOG2UP(NUM_REQS)
 
-`define PORTS_BITS              `LOG2UP(NUM_PORTS)
-
-//                                tag             valid  tid          word_sel              
-`define MSHR_DATA_WIDTH         ((CORE_TAG_WIDTH + 1 + `REQS_BITS + `UP(`WORD_SELECT_BITS)) * NUM_PORTS)
+//                                tag              valid  tid          word_sel              
+`define MSHR_DATA_WIDTH         ((CORE_TAG_WIDTH + 1 +    `REQS_BITS + `UP(`WORD_SELECT_BITS)) * NUM_PORTS)
 
 `define WORD_WIDTH              (8 * WORD_SIZE)
 
@@ -21,7 +19,7 @@
 
 `define WAY_SEL_WIDTH           `CLOG2(NUM_WAYS)
 
-`define LINES_PER_BANK          (`BANK_SIZE / (CACHE_LINE_SIZE*NUM_WAYS))
+`define LINES_PER_BANK          (`BANK_SIZE / (CACHE_LINE_SIZE * NUM_WAYS))
 `define WORDS_PER_LINE          (CACHE_LINE_SIZE / WORD_SIZE)
 
 `define WORD_ADDR_WIDTH         (32-`CLOG2(WORD_SIZE))
@@ -35,13 +33,13 @@
 
 // Bank select
 `define BANK_SELECT_BITS        `CLOG2(NUM_BANKS)
-`define BANK_SELECT_ADDR_START  (1+`WORD_SELECT_ADDR_END+BANK_ADDR_OFFSET)
+`define BANK_SELECT_ADDR_START  (1+`WORD_SELECT_ADDR_END)
 `define BANK_SELECT_ADDR_END    (`BANK_SELECT_ADDR_START+`BANK_SELECT_BITS-1)
 
 // Line select
 `define LINE_SELECT_BITS        `CLOG2(`LINES_PER_BANK)
 `define LINE_SELECT_ADDR_START  (1+`BANK_SELECT_ADDR_END)
-`define LINE_SELECT_ADDR_END    (`LINE_SELECT_ADDR_START-BANK_ADDR_OFFSET+`LINE_SELECT_BITS-1)
+`define LINE_SELECT_ADDR_END    (`LINE_SELECT_ADDR_START+`LINE_SELECT_BITS-1)
 
 // Tag select
 `define TAG_SELECT_BITS         (`WORD_ADDR_WIDTH-1-`LINE_SELECT_ADDR_END)
@@ -50,7 +48,6 @@
 
 `define SELECT_BANK_ID(x)       x[`BANK_SELECT_ADDR_END : `BANK_SELECT_ADDR_START]
 `define SELECT_LINE_ADDR(x)     x[`WORD_ADDR_WIDTH-1 : `LINE_SELECT_ADDR_START]
-`define SELECT_LINE_ADDRX(x)    {x[`WORD_ADDR_WIDTH-1 : `LINE_SELECT_ADDR_START], x[`BANK_SELECT_ADDR_START-1 : 1+`WORD_SELECT_ADDR_END]}
 
 `define LINE_TAG_ADDR(x)        x[`LINE_ADDR_WIDTH-1 : `LINE_SELECT_BITS]
 
@@ -72,8 +69,6 @@
 `define MEM_TAG_TO_BANK_ID(x)   x[MSHR_ADDR_WIDTH +: `BANK_SELECT_BITS]
 
 `define LINE_TO_BYTE_ADDR(x, i) {x, (32-$bits(x))'(i << (32-$bits(x)-`BANK_SELECT_BITS))}
-
-`define LINE_TO_BYTE_ADDRX(x, i) {x[$bits(x)-1:BANK_ADDR_OFFSET], `BANK_SELECT_BITS'(i), x[BANK_ADDR_OFFSET-1:0], (32-$bits(x)-`BANK_SELECT_BITS)'(0)}
 
 `define TO_FULL_ADDR(x)         {x, (32-$bits(x))'(0)}
 

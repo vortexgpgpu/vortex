@@ -63,11 +63,15 @@ module VX_tex_mem #(
     // detect duplicate addresses
 
     for (genvar i = 0; i < 4; ++i) begin
-        wire [NUM_REQS-2:0] addr_matches;
-        for (genvar j = 0; j < (NUM_REQS-1); ++j) begin
-            assign addr_matches[j] = (req_addr_w[i][j+1] == req_addr_w[i][0]) || ~req_tmask[j+1];
-        end    
-        assign dup_reqs[i] = req_tmask[0] && (& addr_matches);
+        if (NUM_REQS > 1) begin
+            wire [NUM_REQS-2:0] addr_matches;
+            for (genvar j = 0; j < (NUM_REQS-1); ++j) begin
+                assign addr_matches[j] = (req_addr_w[i][j+1] == req_addr_w[i][0]) || ~req_tmask[j+1];
+            end
+            assign dup_reqs[i] = req_tmask[0] && (& addr_matches);
+        end else begin
+            assign dup_reqs[i] = 0;
+        end
     end
 
     // save request addresses into fifo 
