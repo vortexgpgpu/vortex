@@ -72,7 +72,6 @@ module VX_mem_streamer #(
     wire                   stag_pop;
     wire [QUEUE_ADDRW-1:0] stag_waddr;
     wire [QUEUE_ADDRW-1:0] stag_raddr;
-    wire [QUEUE_ADDRW-1:0] stag_pop_addr;
     wire                   stag_full;
     wire                   stag_empty;
     wire [TAGW-1:0]        stag_dout;
@@ -148,7 +147,7 @@ module VX_mem_streamer #(
 
     // Reads only
     assign stag_push  = sreq_push && !req_rw;
-    assign stag_pop   = rsp_fire && rsp_complete && !stag_empty;
+    assign stag_pop   = mem_rsp_fire && rsp_complete && ~rsp_stall && ~stag_empty;
     assign stag_raddr = mem_rsp_tag;
 
     VX_index_buffer #(
@@ -162,7 +161,7 @@ module VX_mem_streamer #(
         .read_addr    (stag_raddr),
         .write_data   (req_tag),
         .read_data    (stag_dout),
-        .release_addr (stag_pop_addr),
+        .release_addr (stag_raddr),
         .release_slot (stag_pop),
         .full         (stag_full),
         .empty        (stag_empty)
@@ -174,6 +173,7 @@ module VX_mem_streamer #(
 
     // Evaluate remaning responses
     assign rsp_rem_mask_n = rsp_rem_mask[stag_raddr] & ~mem_rsp_mask;
+    assign rsp_complete = (0 == rsp_rem_mask_n);
 
     always @(posedge clk) begin
         if (sreq_push)
@@ -200,7 +200,7 @@ module VX_mem_streamer #(
         assign mem_rsp_ready = ~rsp_stall && ~(& rsp_full);
         assign mem_rsp_fire  = mem_rsp_valid & mem_rsp_ready;
 
-        assign crsp_valid = mem_rsp_valid & (0 == rsp_rem_mask_n);
+        assign crsp_valid = mem_rsp_valid & rsp_complete;
         assign crsp_mask  = mask_store[stag_raddr];
         assign crsp_data  = rsp_store[stag_raddr] | mem_rsp_data; 
         assign crsp_tag   = stag_dout;
@@ -216,13 +216,13 @@ module VX_mem_streamer #(
                     rsp_store[stag_waddr]  <= 0;
                     mask_store[stag_waddr] <= req_dup_mask;
                 end
-                if (stag_pop) begin
-                    rsp_full[stag_pop_addr]   <= 1'b0;
-                    mask_store[stag_pop_addr] <= 0;
-                end
                 if (mem_rsp_fire) begin
                     rsp_store[stag_raddr] <= crsp_data;
                     rsp_full[stag_raddr]  <= 1'b1;
+                end
+                if (stag_pop) begin
+                    rsp_full[stag_raddr]   <= 1'b0;
+                    mask_store[stag_raddr] <= 0;
                 end
             end
         end 
@@ -270,18 +270,20 @@ module VX_mem_streamer #(
 
     // Send response to caller
     VX_pipe_register #(
-        .DATAW	(1 + NUM_REQS + (NUM_REQS * DATAW) + TAGW + QUEUE_ADDRW + 1),
+        .DATAW	(1 + NUM_REQS + (NUM_REQS * DATAW) + TAGW),
         .RESETW (1)
     ) rsp_pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable	  (1'b1),
-        .data_in  ({crsp_valid, crsp_mask, crsp_data, crsp_tag, stag_raddr,    (0 == rsp_rem_mask_n)}),
-        .data_out ({rsp_valid,  rsp_mask,  rsp_data,  rsp_tag,  stag_pop_addr, rsp_complete})
+        .data_in  ({crsp_valid, crsp_mask, crsp_data, crsp_tag}),
+        .data_out ({rsp_valid,  rsp_mask,  rsp_data,  rsp_tag})
     );
 
     assign rsp_fire = rsp_valid & rsp_ready;
     assign rsp_stall = rsp_valid & ~rsp_ready;
+
+    `UNUSED_VAR (rsp_fire)
 
     //////////////////////////////////////////////////////////////////
 
