@@ -101,7 +101,7 @@ module VX_mem_streamer #(
     wire [NUM_REQS-1:0][DATAW-1:0]      mrsp_data;
     wire [TAGW-1:0]                     mrsp_tag;
 
-    wire stall;
+    wire rsp_stall;
 
     //////////////////////////////////////////////////////////////////
 
@@ -183,7 +183,7 @@ module VX_mem_streamer #(
     end
 
     if (PARTIAL_RESPONSE == 1) begin
-        assign mem_rsp_ready = ~stall;
+        assign mem_rsp_ready = ~rsp_stall;
         assign mem_rsp_fire  = mem_rsp_valid & mem_rsp_ready;
 
         assign mrsp_valid = mem_rsp_valid;
@@ -197,7 +197,7 @@ module VX_mem_streamer #(
         reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0] mask_store;
         reg  [QUEUE_SIZE-1:0] rsp_full;
 
-        assign mem_rsp_ready = ~stall && ~(& rsp_full);
+        assign mem_rsp_ready = ~rsp_stall && ~(& rsp_full);
         assign mem_rsp_fire  = mem_rsp_valid & mem_rsp_ready;
 
         assign mrsp_valid = mem_rsp_valid & (0 == rsp_rem_mask_n);
@@ -281,7 +281,7 @@ module VX_mem_streamer #(
     );
 
     assign rsp_fire = rsp_valid & rsp_ready;
-    assign stall = rsp_valid & ~rsp_ready;
+    assign rsp_stall = rsp_valid & ~rsp_ready;
 
     //////////////////////////////////////////////////////////////////
 
