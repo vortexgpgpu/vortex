@@ -199,7 +199,7 @@ module VX_mem_streamer #(
         reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0][DATAW-1:0] rsp_store;
         reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0] mask_store;
 
-        assign mem_rsp_ready = ~rsp_stall;
+        assign mem_rsp_ready = ~(rsp_stall && rsp_complete);
         assign mem_rsp_fire  = mem_rsp_valid & mem_rsp_ready;
 
         assign crsp_valid = mem_rsp_valid & rsp_complete & ~stag_empty;
