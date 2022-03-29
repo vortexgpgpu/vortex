@@ -93,7 +93,7 @@ module VX_mem_streamer #(
     // Memory response
     wire                                mem_rsp_fire;
     wire                                rsp_fire;
-    wire                                rsp_done;
+    wire                                rsp_complete;
     reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0] rsp_rem_mask;
     wire [NUM_REQS-1:0]                 rsp_rem_mask_n;
     wire                                crsp_valid;
@@ -148,7 +148,7 @@ module VX_mem_streamer #(
 
     // Reads only
     assign stag_push  = sreq_push && !req_rw;
-    assign stag_pop   = rsp_fire && rsp_done && !stag_empty;
+    assign stag_pop   = rsp_fire && rsp_complete && !stag_empty;
     assign stag_raddr = mem_rsp_tag;
 
     VX_index_buffer #(
@@ -277,7 +277,7 @@ module VX_mem_streamer #(
         .reset    (reset),
         .enable	  (1'b1),
         .data_in  ({crsp_valid, crsp_mask, crsp_data, crsp_tag, stag_raddr,    (0 == rsp_rem_mask_n)}),
-        .data_out ({rsp_valid,  rsp_mask,  rsp_data,  rsp_tag,  stag_pop_addr, rsp_done})
+        .data_out ({rsp_valid,  rsp_mask,  rsp_data,  rsp_tag,  stag_pop_addr, rsp_complete})
     );
 
     assign rsp_fire = rsp_valid & rsp_ready;
