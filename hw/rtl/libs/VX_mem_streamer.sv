@@ -96,10 +96,10 @@ module VX_mem_streamer #(
     wire                                rsp_done;
     reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0] rsp_rem_mask;
     wire [NUM_REQS-1:0]                 rsp_rem_mask_n;
-    wire                                mrsp_valid;
-    wire [NUM_REQS-1:0]                 mrsp_mask;
-    wire [NUM_REQS-1:0][DATAW-1:0]      mrsp_data;
-    wire [TAGW-1:0]                     mrsp_tag;
+    wire                                crsp_valid;
+    wire [NUM_REQS-1:0]                 crsp_mask;
+    wire [NUM_REQS-1:0][DATAW-1:0]      crsp_data;
+    wire [TAGW-1:0]                     crsp_tag;
 
     wire rsp_stall;
 
@@ -186,10 +186,10 @@ module VX_mem_streamer #(
         assign mem_rsp_ready = ~rsp_stall;
         assign mem_rsp_fire  = mem_rsp_valid & mem_rsp_ready;
 
-        assign mrsp_valid = mem_rsp_valid;
-        assign mrsp_mask  = mem_rsp_mask;
-        assign mrsp_data  = mem_rsp_data;
-        assign mrsp_tag   = stag_dout;
+        assign crsp_valid = mem_rsp_valid;
+        assign crsp_mask  = mem_rsp_mask;
+        assign crsp_data  = mem_rsp_data;
+        assign crsp_tag   = stag_dout;
         
     end else begin
 
@@ -200,10 +200,10 @@ module VX_mem_streamer #(
         assign mem_rsp_ready = ~rsp_stall && ~(& rsp_full);
         assign mem_rsp_fire  = mem_rsp_valid & mem_rsp_ready;
 
-        assign mrsp_valid = mem_rsp_valid & (0 == rsp_rem_mask_n);
-        assign mrsp_mask  = mask_store[stag_raddr];
-        assign mrsp_data  = rsp_store[stag_raddr] | mem_rsp_data; 
-        assign mrsp_tag   = stag_dout;
+        assign crsp_valid = mem_rsp_valid & (0 == rsp_rem_mask_n);
+        assign crsp_mask  = mask_store[stag_raddr];
+        assign crsp_data  = rsp_store[stag_raddr] | mem_rsp_data; 
+        assign crsp_tag   = stag_dout;
 
         // Store response until ready to send
         always @(posedge clk) begin
@@ -221,7 +221,7 @@ module VX_mem_streamer #(
                     mask_store[stag_pop_addr] <= 0;
                 end
                 if (mem_rsp_fire) begin
-                    rsp_store[stag_raddr] <= mrsp_data;
+                    rsp_store[stag_raddr] <= crsp_data;
                     rsp_full[stag_raddr]  <= 1'b1;
                 end
             end
@@ -276,7 +276,7 @@ module VX_mem_streamer #(
         .clk      (clk),
         .reset    (reset),
         .enable	  (1'b1),
-        .data_in  ({mrsp_valid, mrsp_mask, mrsp_data, mrsp_tag, stag_raddr,    (0 == rsp_rem_mask_n)}),
+        .data_in  ({crsp_valid, crsp_mask, crsp_data, crsp_tag, stag_raddr,    (0 == rsp_rem_mask_n)}),
         .data_out ({rsp_valid,  rsp_mask,  rsp_data,  rsp_tag,  stag_pop_addr, rsp_done})
     );
 
