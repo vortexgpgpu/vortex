@@ -14,6 +14,132 @@ extern "C" {
 #define __ASM_STR(x)	#x
 #endif
 
+__asm__ (".set reg_x0  ,  0");
+__asm__ (".set reg_x1  ,  1");
+__asm__ (".set reg_x2  ,  2");
+__asm__ (".set reg_x3  ,  3");
+__asm__ (".set reg_x4  ,  4");
+__asm__ (".set reg_x5  ,  5");
+__asm__ (".set reg_x6  ,  6");
+__asm__ (".set reg_x7  ,  7");
+__asm__ (".set reg_x8  ,  8");
+__asm__ (".set reg_x9  ,  9");
+__asm__ (".set reg_x10 , 10");
+__asm__ (".set reg_x11 , 11");
+__asm__ (".set reg_x12 , 12");
+__asm__ (".set reg_x13 , 13");
+__asm__ (".set reg_x14 , 14");
+__asm__ (".set reg_x15 , 15");
+__asm__ (".set reg_x16 , 16");
+__asm__ (".set reg_x17 , 17");
+__asm__ (".set reg_x18 , 18");
+__asm__ (".set reg_x19 , 19");
+__asm__ (".set reg_x20 , 20");
+__asm__ (".set reg_x21 , 21");
+__asm__ (".set reg_x22 , 22");
+__asm__ (".set reg_x23 , 23");
+__asm__ (".set reg_x24 , 24");
+__asm__ (".set reg_x25 , 25");
+__asm__ (".set reg_x26 , 26");
+__asm__ (".set reg_x27 , 27");
+__asm__ (".set reg_x28 , 28");
+__asm__ (".set reg_x29 , 29");
+__asm__ (".set reg_x30 , 30");
+__asm__ (".set reg_x31 , 31");
+
+__asm__ (".set reg_zero,  0");
+__asm__ (".set reg_ra  ,  1");
+__asm__ (".set reg_sp  ,  2");
+__asm__ (".set reg_gp  ,  3");
+__asm__ (".set reg_tp  ,  4");
+__asm__ (".set reg_t0  ,  5");
+__asm__ (".set reg_t1  ,  6");
+__asm__ (".set reg_t2  ,  7");
+__asm__ (".set reg_s0  ,  8");
+__asm__ (".set reg_s1  ,  9");
+__asm__ (".set reg_a0  , 10");
+__asm__ (".set reg_a1  , 11");
+__asm__ (".set reg_a2  , 12");
+__asm__ (".set reg_a3  , 13");
+__asm__ (".set reg_a4  , 14");
+__asm__ (".set reg_a5  , 15");
+__asm__ (".set reg_a6  , 16");
+__asm__ (".set reg_a7  , 17");
+__asm__ (".set reg_s2  , 18");
+__asm__ (".set reg_s3  , 19");
+__asm__ (".set reg_s4  , 20");
+__asm__ (".set reg_s5  , 21");
+__asm__ (".set reg_s6  , 22");
+__asm__ (".set reg_s7  , 23");
+__asm__ (".set reg_s8  , 24");
+__asm__ (".set reg_s9  , 25");
+__asm__ (".set reg_s10 , 26");
+__asm__ (".set reg_s11 , 27");
+__asm__ (".set reg_t3  , 28");
+__asm__ (".set reg_t4  , 29");
+__asm__ (".set reg_t5  , 30");
+__asm__ (".set reg_t6  , 31");
+
+#define RISCV_CUSTOM0   0x0B
+#define RISCV_CUSTOM1   0x2B
+#define RISCV_CUSTOM2   0x5B
+#define RISCV_CUSTOM3   0x7B
+
+#define RISCV_INSN_R(opcode, func3, func7, rs1, rs2) ({         \
+    unsigned __r;                                               \
+    __asm__ __volatile__ (                                      \
+        ".word ((" __ASM_STR(opcode) ") | (reg_%0 << 7) | (reg_%1 << 15) | (reg_%2 << 20) | ((" __ASM_STR(func3) ") << 12) | ((" __ASM_STR(func7) ") << 25));" \
+        : "=r" (__r): "r" (rs1), "r" (rs2                       \
+    );                                                          \
+    __r;                                                        \
+})
+
+#define RISCV_INSN_R_000(opcode, func3, func7, imm1, imm2) ({   \
+    __asm__ __volatile__ (                                      \
+        ".word ((" __ASM_STR(opcode) ") | (" __ASM_STR(imm1) " << 15) | (" __ASM_STR(imm2) " << 20) | ((" __ASM_STR(func3) ") << 12) | ((" __ASM_STR(func7) ") << 25));" \
+        ::                                                      \
+    );                                                          \
+})
+
+#define RISCV_INSN_R_010(opcode, func3, func7, rs1, imm2)  ({   \
+    __asm__ __volatile__ (                                      \
+        ".word ((" __ASM_STR(opcode) ") | (reg_%0 << 15) | (" __ASM_STR(imm2) " << 20) | ((" __ASM_STR(func3) ") << 12) | ((" __ASM_STR(func7) ") << 25));" \
+        :: "r" (rs1)                                            \
+    );                                                          \
+})
+
+#define RISCV_INSN_R_011(opcode, func3, func7, rs1, rs2) ({     \
+    __asm__ __volatile__ (                                      \
+        ".word ((" __ASM_STR(opcode) ") | (reg_%0 << 15) | (reg_%1 << 20) | ((" __ASM_STR(func3) ") << 12) | ((" __ASM_STR(func7) ") << 25));" \
+        :: "r" (rs1), "r" (rs2)                                 \
+    );                                                          \
+})
+
+#define RISCV_INSN_R_100(opcode, func3, func7, imm1, imm2) ({   \
+    unsigned __r;                                               \
+    __asm__ __volatile__ (                                      \
+        ".word ((" __ASM_STR(opcode) ") | (reg_%0 << 7) | (" __ASM_STR(imm1) " << 15) | (" __ASM_STR(imm2) " << 20) | ((" __ASM_STR(func3) ") << 12) | ((" __ASM_STR(func7) ") << 25));" \
+        : "=r" (__r) :                                          \
+    );                                                          \
+    __r;                                                        \
+})
+
+#define RISCV_INSN_R4(opcode, func3, func2, rs1, rs2, rs3) ({   \
+    unsigned __r;                                               \
+    __asm__ __volatile__ (                                      \
+        ".word ((" __ASM_STR(opcode) ") | (reg_%0 << 7) | (reg_%1 << 15) | (reg_%2 << 20) | (reg_%3 << 27) | ((" __ASM_STR(func3) ") << 12) | ((" __ASM_STR(func2) ") << 25));" \
+        : "=r" (__r): "r" (rs1), "r" (rs2), "r" (rs3)           \
+    );                                                          \
+    __r;                                                        \
+})
+
+#define RISCV_INSN_R4_0111(opcode, func3, func2, rs1, rs2, rs3) ({  \
+    __asm__ __volatile__ (                                          \
+        ".word ((" __ASM_STR(opcode) ") | (reg_%0 << 15) | (reg_%1 << 20) | (reg_%2 << 27) | ((" __ASM_STR(func3) ") << 12) | ((" __ASM_STR(func2) ") << 25));" \
+        :: "r" (rs1), "r" (rs2), "r" (rs3)                          \
+    );                                                              \
+})
+
 #define csr_read(csr) ({                        \
 	unsigned __r;	               		        \
 	__asm__ __volatile__ ("csrr %0, %1" : "=r" (__r) : "i" (csr)); \
@@ -75,74 +201,65 @@ extern "C" {
 })
 
 // Texture load
-#define vx_tex(u, v, lod) ({                    \
-	unsigned __r;                               \
-    __asm__ __volatile__ (".insn r4 0x2b, 0, 0, %0, %1, %2, %3" : "=r"(__r) : "r"(u), "r"(v), "r"(lod)); \
-	__r;							            \
-})
+inline unsigned vx_tex(unsigned u, unsigned v, unsigned lod) {
+    return RISCV_INSN_R4(RISCV_CUSTOM1, 0, 0, u, v, lod);
+}
 
 // Conditional move
-#define vx_cmov(c, t, f) ({                     \
-	unsigned __r;		                        \
-    __asm__ __volatile__ (".insn r4 0x2b, 0, 1, %0, %1, %2, %3" : "=r"(__r) : "r"(c), "r"(t), "r"(f)); \
-	__r;							            \
-})
+inline unsigned vx_cmov(unsigned c, unsigned t, unsigned f) {
+	return RISCV_INSN_R4(RISCV_CUSTOM1, 0, 1, c, t, f);
+}
 
 // Rop write
-#define vx_rop(x, y, face, color, depth) ({             \
-    unsigned pos_face = (y << 16) | (x << 1) | face;    \
-    __asm__ __volatile__ (".insn r4 0x2b, 0, 2, x0, %0, %1, %2" :: "r"(pos_face), "r"(color), "r"(depth)); \
-})
+inline void vx_rop(unsigned x, unsigned y, unsigned face, unsigned color, unsigned depth) {
+    unsigned pos_face = (y << 16) | (x << 1) | face;
+    RISCV_INSN_R4_0111(RISCV_CUSTOM1, 0, 2, pos_face, color, depth);
+}
 
 // Integer multiply add
-#define vx_imadd(a, b, c, shift) ({             \
-	unsigned __r;		                        \
-    __asm__ __volatile__ (".insn r4 0x2b, 1, %1, %0, %2, %3, %4" : "=r"(__r) : "i"(shift), "r"(a), "r"(b), "r"(c)); \
-	__r;							            \
-})
+#define vx_imadd(a, b, c, shift) \
+    RISCV_INSN_R4(RISCV_CUSTOM1, 1, (shift), a, b, c)
 
 // Raster load
-#define vx_rast() ({                            \
-    unsigned __r;                               \
-    __asm__ __volatile__ (".insn r 0x0b, 0, 1, %0, x0, x0" : "=r"(__r)); \
-    __r;                                        \
-})
+inline unsigned vx_rast() {
+    return RISCV_INSN_R_100(RISCV_CUSTOM0, 0, 1, 0, 0);
+}
 
 // Set thread mask
 inline void vx_tmc(unsigned thread_mask) {
-    asm volatile (".insn r 0x0b, 0, 0, x0, %0, x0" :: "r"(thread_mask));
+    RISCV_INSN_R_010(RISCV_CUSTOM0, 0, 0, thread_mask, 0);
 }
 
 // Set thread predicate
 inline void vx_pred(unsigned condition) {
-    asm volatile (".insn r 0x0b, 0, 0, x0, %0, x1" :: "r"(condition));
+    RISCV_INSN_R_010(RISCV_CUSTOM0, 0, 0, condition, 1);
 }
 
 typedef void (*vx_wspawn_pfn)();
 
 // Spawn warps
 inline void vx_wspawn(unsigned num_warps, vx_wspawn_pfn func_ptr) {
-    asm volatile (".insn r 0x0b, 1, 0, x0, %0, %1" :: "r"(num_warps), "r"(func_ptr));
+    RISCV_INSN_R_011(RISCV_CUSTOM0, 1, 0, num_warps, func_ptr);
 }
 
 // Split on a predicate
-inline void vx_split(int predicate) {
-    asm volatile (".insn r 0x0b, 2, 0, x0, %0, x0" :: "r"(predicate));
+inline void vx_split(unsigned predicate) {
+    RISCV_INSN_R_010(RISCV_CUSTOM0, 2, 0, predicate, 0);
 }
 
 // Join
 inline void vx_join() {
-  asm volatile (".insn r 0x0b, 3, 0, x0, x0, x0");
+  RISCV_INSN_R_000(RISCV_CUSTOM0, 3, 0, 0, 0);
 }
 
 // Warp Barrier
 inline void vx_barrier(unsigned barried_id, unsigned num_warps) {
-    asm volatile (".insn r 0x0b, 4, 0, x0, %0, %1" :: "r"(barried_id), "r"(num_warps));
+    RISCV_INSN_R_011(RISCV_CUSTOM0, 4, 0, barried_id, num_warps);
 }
 
 // Prefetch
 inline void vx_prefetch(unsigned addr) {
-    asm volatile (".insn r 0x0b, 5, 0, x0, %0, x0" :: "r"(addr) );
+    RISCV_INSN_R_010(RISCV_CUSTOM0, 5, 0, addr, 0);
 }
 
 // Return active warp's thread id 
