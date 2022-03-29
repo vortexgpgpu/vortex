@@ -78,6 +78,7 @@ module VX_mem_streamer #(
 
     // Memory request
     wire [NUM_REQS-1:0]                  mreq_valid;
+    wire [NUM_REQS-1:0]                  mem_req_stall;
     wire [NUM_REQS-1:0]                  mreq_rw;
     wire [NUM_REQS-1:0][WORD_SIZE-1:0]   mreq_byteen;
     wire [NUM_REQS-1:0][ADDRW-1:0]       mreq_addr;
@@ -85,13 +86,17 @@ module VX_mem_streamer #(
     wire [NUM_REQS-1:0][QUEUE_ADDRW-1:0] mreq_tag;
 
     wire [NUM_REQS-1:0] mem_req_fire;
+    wire                mem_req_stall;
     reg  [NUM_REQS-1:0] req_sent_mask;
     wire [NUM_REQS-1:0] req_sent_mask_n;
-    wire                req_sent_all;
+    wire                req_complete;
 
     // Memory response
     wire                                mem_rsp_fire;
+
+    // Caller response
     wire                                rsp_fire;
+    wire                                rsp_stall;
     wire                                rsp_complete;
     reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0] rsp_rem_mask;
     wire [NUM_REQS-1:0]                 rsp_rem_mask_n;
@@ -99,8 +104,6 @@ module VX_mem_streamer #(
     wire [NUM_REQS-1:0]                 crsp_mask;
     wire [NUM_REQS-1:0][DATAW-1:0]      crsp_data;
     wire [TAGW-1:0]                     crsp_tag;
-
-    wire rsp_stall;
 
     //////////////////////////////////////////////////////////////////
 
@@ -125,7 +128,7 @@ module VX_mem_streamer #(
     // Save incoming requests into a pending queue
 
     assign sreq_push = req_valid && !sreq_full && !stag_full;
-    assign sreq_pop  = (| mem_req_fire) && req_sent_all && !sreq_empty;
+    assign sreq_pop  = (| mreq_valid) && req_complete && ~(| mem_req_stall);
     assign req_ready = !sreq_full && !stag_full;
 
     VX_fifo_queue #(
@@ -147,7 +150,7 @@ module VX_mem_streamer #(
 
     // Reads only
     assign stag_push  = sreq_push && !req_rw;
-    assign stag_pop   = crsp_valid && rsp_complete && ~rsp_stall && ~stag_empty;
+    assign stag_pop   = crsp_valid && rsp_complete && ~rsp_stall;
     assign stag_raddr = mem_rsp_tag;
 
     VX_index_buffer #(
@@ -186,7 +189,7 @@ module VX_mem_streamer #(
         assign mem_rsp_ready = ~rsp_stall;
         assign mem_rsp_fire  = mem_rsp_valid & mem_rsp_ready;
 
-        assign crsp_valid = mem_rsp_valid;
+        assign crsp_valid = mem_rsp_valid & ~stag_empty;
         assign crsp_mask  = mem_rsp_mask;
         assign crsp_data  = mem_rsp_data;
         assign crsp_tag   = stag_dout;
@@ -196,10 +199,10 @@ module VX_mem_streamer #(
         reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0][DATAW-1:0] rsp_store;
         reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0] mask_store;
 
-        assign mem_rsp_ready = ~rsp_stall & ~rsp_complete;
+        assign mem_rsp_ready = ~rsp_stall;
         assign mem_rsp_fire  = mem_rsp_valid & mem_rsp_ready;
 
-        assign crsp_valid = mem_rsp_valid & rsp_complete;
+        assign crsp_valid = mem_rsp_valid & rsp_complete & ~stag_empty;
         assign crsp_mask  = mask_store[stag_raddr];
         assign crsp_data  = rsp_store[stag_raddr] | mem_rsp_data; 
         assign crsp_tag   = stag_dout;
@@ -227,22 +230,21 @@ module VX_mem_streamer #(
     //////////////////////////////////////////////////////////////////
 
     // Memory request
-    assign mreq_valid  = sreq_mask & ~req_sent_mask & {NUM_REQS{!sreq_empty}};
+    assign mreq_valid  = sreq_mask & ~req_sent_mask & {NUM_REQS{~sreq_empty}};
     assign mreq_rw     = {NUM_REQS{sreq_rw}};
     assign mreq_byteen = {NUM_REQS{sreq_byteen}};
     assign mreq_addr   = sreq_addr;
     assign mreq_data   = sreq_data;
     assign mreq_tag    = {NUM_REQS{sreq_tag}};
 
-    assign mem_req_fire    = mem_req_valid & mem_req_ready;
-    assign req_sent_mask_n = req_sent_mask | mem_req_fire;
-    assign req_sent_all    = (req_sent_mask_n == mem_req_valid);
+    assign req_sent_mask_n = req_sent_mask | mreq_valid;
+    assign req_complete    = (req_sent_mask_n == sreq_mask);
 
     always @(posedge clk) begin
         if (reset)
             req_sent_mask <= 0;
         else begin
-            if (req_sent_all)
+            if (req_complete)
                 req_sent_mask <= 0;
             else
                 req_sent_mask <= req_sent_mask_n;
@@ -263,6 +265,9 @@ module VX_mem_streamer #(
         .data_out ({mem_req_valid, mem_req_rw, mem_req_byteen, mem_req_addr, mem_req_data, mem_req_tag})
     );
 
+    assign mem_req_fire    = mem_req_valid & mem_req_ready;
+    assign mem_req_stall   = mem_req_valid & ~mem_req_ready;
+
     // Send response to caller
     VX_pipe_register #(
         .DATAW	(1 + NUM_REQS + (NUM_REQS * DATAW) + TAGW),
@@ -275,9 +280,10 @@ module VX_mem_streamer #(
         .data_out ({rsp_valid,  rsp_mask,  rsp_data,  rsp_tag})
     );
 
-    assign rsp_fire = rsp_valid & rsp_ready;
+    assign rsp_fire  = rsp_valid & rsp_ready;
     assign rsp_stall = rsp_valid & ~rsp_ready;
 
+    `UNUSED_VAR (mem_req_fire)
     `UNUSED_VAR (rsp_fire)
 
     //////////////////////////////////////////////////////////////////
