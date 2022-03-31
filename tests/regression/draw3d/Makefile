@@ -7,17 +7,22 @@ LLVM_PREFIX ?= /opt/llvm-riscv
 
 OPTS ?= 
 
-VX_CC  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
-VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++
-VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
-VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
+#VX_CC  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
+#VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++
+#VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
+#VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
-#VX_CC  = ${LLVM_PREFIX}/bin/clang
-#VX_CXX = ${LLVM_PREFIX}/bin/clang++
-#VX_DP  = ${LLVM_PREFIX}/bin/llvm-objdump
-#VX_CP  = ${LLVM_PREFIX}/bin/llvm-objcopy
+VX_CLANG_FLAGS = --sysroot=${RISCV_TOOLCHAIN_PATH}/riscv32-unknown-elf
+VX_CLANG_FLAGS += -Xclang -target-feature -Xclang +vortex
+VX_CLANG_FLAGS += -Wl,-L$(RISCV_TOOLCHAIN_PATH)/lib/gcc/riscv32-unknown-elf/9.2.0 -I$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/include/c++/9.2.0/riscv32-unknown-elf -I$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/include/c++/9.2.0
+VX_CLANG_FLAGS += --rtlib=libgcc
 
-VX_CFLAGS += -std=c++17 -march=rv32imf -mabi=ilp32f -O3 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
+VX_CC  = $(LLVM_PREFIX)/bin/clang
+VX_CXX = $(LLVM_PREFIX)/bin/clang++ $(VX_CLANG_FLAGS)
+VX_DP  = $(LLVM_PREFIX)/bin/llvm-objdump
+VX_CP  = $(LLVM_PREFIX)/bin/llvm-objcopy
+
+VX_CFLAGS += -std=c++17 -v -march=rv32imf -mabi=ilp32f -O3 -nostartfiles -fdata-sections -ffunction-sections
 VX_CFLAGS += -DENABLE_SW -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw -I$(VORTEX_RT_PATH)/../sim/common -I$(VORTEX_RT_PATH)/../third_party
 
 VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections $(VORTEX_RT_PATH)/libvortexrt.a

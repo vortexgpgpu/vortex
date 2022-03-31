@@ -92,7 +92,7 @@ using fixeduv_t = cocogfx::TFixed<TEX_FXD_FRAC>;
 	}
 
 #define OUTPUT(face, color, depth) \
-	auto pos_mask = csr_read(CSR_RASTER_POS_MASK); \
+	auto __DIVERGENT__ pos_mask = csr_read(CSR_RASTER_POS_MASK); \
 	auto mask = (pos_mask >> 0) & 0xf;			 \
 	auto x    = (pos_mask >> 4) & ((1 << (RASTER_DIM_BITS-1))-1); \
 	auto y    = (pos_mask >> (4 + (RASTER_DIM_BITS-1))) & ((1 << (RASTER_DIM_BITS-1))-1); \
@@ -110,7 +110,7 @@ void shader_function(int task_id, kernel_arg_t* kernel_arg) {
 	DEFAULTS;
 
 	for (;;) {
-		__DIVERGENT__ int status = vx_rast();
+		auto __DIVERGENT__ status = vx_rast();
 		if (0 == status)
 			return;
 
@@ -142,18 +142,18 @@ void shader_function(int task_id, kernel_arg_t* kernel_arg) {
 			}
 		} else {
 			TO_RGBA(out_color, r, g, b, a);
-		}	
+		}
 
 		OUTPUT(0, out_color, z)
 	}
 }
 
 int main() {
-	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
-	//int num_warps = vx_num_warps();
-	//int num_threads = vx_num_threads();
-	//int total_threads = num_warps * total_threads;
-	//vx_spawn_tasks(total_threads, (vx_spawn_tasks_cb)shader_function, arg);
-	shader_function(0, arg);
+	auto arg = reinterpret_cast<kernel_arg_t*>(KERNEL_ARG_DEV_MEM_ADDR);
+	auto num_warps = vx_num_warps();
+	auto num_threads = vx_num_threads();
+	auto total_threads = num_warps * num_threads;
+	vx_spawn_tasks(total_threads, (vx_spawn_tasks_cb)shader_function, arg);
+	//shader_function(0, arg);
 	return 0;
 }

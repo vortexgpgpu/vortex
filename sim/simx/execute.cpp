@@ -1493,7 +1493,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           auto f = (pos_face >> 0)  & 0x1;
           auto x = (pos_face >> 1)  & 0x7fff;
           auto y = (pos_face >> 16) & 0x7fff;
-          core_->rop_svc_->write(x, y, f, color, depth);
+          core_->rop_svc_->write(id_, t, x, y, f, color, depth);
         }
       } break;
       default:

@@ -32,10 +32,10 @@ int main() {
 	targ.state       = arg;
 	targ.tile_height = (arg->dst_height + arg->num_tasks - 1) / arg->num_tasks;
 	
-	//vx_spawn_tasks(arg->num_tasks, (vx_spawn_tasks_cb)kernel_body, &targ);
-	for (uint32_t t = 0; t < arg->num_tasks; ++t) {		
+	vx_spawn_tasks(arg->num_tasks, (vx_spawn_tasks_cb)kernel_body, &targ);
+	/*for (uint32_t t = 0; t < arg->num_tasks; ++t) {		
 		kernel_body(t, &targ);
-	}
+	}*/
 
 	return 0;
 }
