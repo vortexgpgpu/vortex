@@ -282,7 +282,7 @@ module VX_mem_streamer #(
     ) rsp_pipe_reg (
         .clk      (clk),
         .reset    (reset),
-        .enable	  (rsp_stall),
+        .enable	  (~rsp_stall),
         .data_in  ({crsp_valid, crsp_mask, crsp_data, crsp_tag}),
         .data_out ({rsp_valid,  rsp_mask,  rsp_data,  rsp_tag})
     );
