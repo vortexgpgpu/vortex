@@ -198,7 +198,8 @@ module VX_cluster #(
 
     VX_rop_unit #(
         .CLUSTER_ID (CLUSTER_ID),
-        .NUM_SLICES (`NUM_THREADS)
+        .NUM_SLICES (1),
+        .NUM_LANES  (`NUM_THREADS)
     ) rop_unit (
         .clk           (clk),
         .reset         (rop_reset),

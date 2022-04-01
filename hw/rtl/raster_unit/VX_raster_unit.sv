@@ -14,7 +14,7 @@ module VX_raster_unit #(
     parameter RASTER_TILE_SIZE = 16,         // tile size
     parameter RASTER_BLOCK_SIZE = 4,         // block size
     parameter RASTER_RS_SIZE = 8,            // Reservation station size
-    parameter RASTER_QUAD_OUTPUT_RATE = 4,   // Rate output quad generation
+    parameter RASTER_QUAD_OUTPUT_RATE = NUM_OUTPUTS,   // Rate output quad generation
     parameter RASTER_QUAD_FIFO_DEPTH  = 64,  // Quad fifo depth
     parameter RASTER_TILE_FIFO_DEPTH  = 32   // tile fifo depth
 ) (
@@ -199,6 +199,8 @@ module VX_raster_unit #(
     endgenerate
 
     VX_raster_rsp_switch #(
+        .CLUSTER_ID (CLUSTER_ID),
+        .RASTER_QUAD_OUTPUT_RATE (RASTER_QUAD_OUTPUT_RATE)
     ) raster_rsp_switch (
         .valid(arbiter_valid),
         .empty((&raster_slice_ready) & raster_req_if.ready),
