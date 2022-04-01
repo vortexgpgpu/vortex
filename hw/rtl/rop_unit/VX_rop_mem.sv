@@ -45,12 +45,6 @@ module VX_rop_mem #(
 
     localparam NUM_REQS = 2 * NUM_LANES;
 
-    wire                                cache_rsp_valid;
-    wire [`OCACHE_NUM_REQS-1:0]         cache_rsp_tmask;
-    wire [`OCACHE_NUM_REQS-1:0][`OCACHE_WORD_SIZE*8-1:0] cache_rsp_data;
-    wire [`OCACHE_TAG_WIDTH-1:0]        cache_rsp_tag;
-    wire                                cache_rsp_ready;
-
     wire [NUM_REQS-1:0]       req_mask;
     wire [NUM_REQS-1:0]       rsp_mask;
     wire [NUM_REQS-1:0]       write_mask;
@@ -127,30 +121,10 @@ module VX_rop_mem #(
         .mem_req_tag    (cache_req_if.tag),
         .mem_req_ready  (cache_req_if.ready),
 
-        .mem_rsp_valid  (cache_rsp_valid),
-        .mem_rsp_mask   (cache_rsp_tmask),
-        .mem_rsp_data   (cache_rsp_data),
-        .mem_rsp_tag    (cache_rsp_tag),
-        .mem_rsp_ready  (cache_rsp_ready)
-    );
-
-    // Cache Response
-
-    VX_cache_rsp_sel #(
-        .NUM_REQS     (`OCACHE_NUM_REQS),
-        .DATA_WIDTH   (`OCACHE_WORD_SIZE*8),
-        .TAG_WIDTH    (`OCACHE_TAG_WIDTH),
-        .TAG_SEL_BITS (`OCACHE_TAG_SEL_BITS),
-        .OUT_REG      (1)
-    ) cache_rsp_sel (
-        .clk            (clk),
-        .reset          (reset),
-        .rsp_in_if      (cache_rsp_if),
-        .rsp_out_valid  (cache_rsp_valid),
-        .rsp_out_tmask  (cache_rsp_tmask),
-        .rsp_out_data   (cache_rsp_data),
-        .rsp_out_tag    (cache_rsp_tag),
-        .rsp_out_ready  (cache_rsp_ready)
+        .mem_rsp_valid  (cache_rsp_if.valid),
+        .mem_rsp_data   (cache_rsp_if.data),
+        .mem_rsp_tag    (cache_rsp_if.tag),
+        .mem_rsp_ready  (cache_rsp_if.ready)
     );
     
 endmodule

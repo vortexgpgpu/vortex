@@ -268,7 +268,7 @@ module VX_lsu_unit #(
 
     // Cache response
 
-    VX_cache_rsp_sel #(
+    VX_mem_rsp_sel #(
         .NUM_REQS     (`DCACHE_NUM_REQS),
         .DATA_WIDTH   (`DCACHE_WORD_SIZE*8),
         .TAG_WIDTH    (`DCACHE_TAG_WIDTH),
@@ -277,12 +277,15 @@ module VX_lsu_unit #(
     ) cache_rsp_sel (
         .clk            (clk),
         .reset          (reset),
-        .rsp_in_if      (cache_rsp_if),
-        .rsp_out_valid  (cache_rsp_valid),
-        .rsp_out_tmask  (cache_rsp_tmask),
-        .rsp_out_data   (cache_rsp_data),
-        .rsp_out_tag    (cache_rsp_tag),
-        .rsp_out_ready  (cache_rsp_ready)
+        .rsp_valid_in   (cache_rsp_if.valid),
+        .rsp_data_in    (cache_rsp_if.data),
+        .rsp_tag_in     (cache_rsp_if.tag),
+        .rsp_ready_in   (cache_rsp_if.ready),
+        .rsp_valid_out  (cache_rsp_valid),
+        .rsp_tmask_out  (cache_rsp_tmask),
+        .rsp_data_out   (cache_rsp_data),
+        .rsp_tag_out    (cache_rsp_tag),
+        .rsp_ready_out  (cache_rsp_ready)
     );
 
     // send store commit

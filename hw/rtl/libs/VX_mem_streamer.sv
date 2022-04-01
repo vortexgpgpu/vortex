@@ -16,38 +16,38 @@ module VX_mem_streamer #(
     input wire reset,
 
     // Input request
-    input wire                           req_valid,
-    input wire                           req_rw,
-    input wire [NUM_REQS-1:0]            req_mask,
-    input wire [WORD_SIZE-1:0]           req_byteen,
-    input wire [NUM_REQS-1:0][ADDRW-1:0] req_addr,
-    input wire [NUM_REQS-1:0][DATAW-1:0] req_data,
-    input wire [TAGW-1:0]                req_tag,
-    output wire                          req_ready,
-
-    // Output request
-    output wire [NUM_REQS-1:0]                  mem_req_valid,
-    output wire [NUM_REQS-1:0]                  mem_req_rw,
-    output wire [NUM_REQS-1:0][WORD_SIZE-1:0]   mem_req_byteen,
-    output wire [NUM_REQS-1:0][ADDRW-1:0]       mem_req_addr,
-    output wire [NUM_REQS-1:0][DATAW-1:0]       mem_req_data,
-    output wire [NUM_REQS-1:0][QUEUE_ADDRW-1:0] mem_req_tag,
-    input wire 	[NUM_REQS-1:0]                  mem_req_ready,
-
-    // Input response
-    input wire                           mem_rsp_valid,
-    input wire [NUM_REQS-1:0]            mem_rsp_mask,
-    input wire [NUM_REQS-1:0][DATAW-1:0] mem_rsp_data,
-    input wire [QUEUE_ADDRW-1:0]         mem_rsp_tag,
-    output wire                          mem_rsp_ready,
+    input wire                              req_valid,
+    input wire                              req_rw,
+    input wire [NUM_REQS-1:0]               req_mask,
+    input wire [WORD_SIZE-1:0]              req_byteen,
+    input wire [NUM_REQS-1:0][ADDRW-1:0]    req_addr,
+    input wire [NUM_REQS-1:0][DATAW-1:0]    req_data,
+    input wire [TAGW-1:0]                   req_tag,
+    output wire                             req_ready,
 
     // Output response
-    output wire                           rsp_valid,
-    output wire [NUM_REQS-1:0]            rsp_mask,
-    output wire [NUM_REQS-1:0][DATAW-1:0] rsp_data,
-    output wire [TAGW-1:0]                rsp_tag,
-    input wire                            rsp_ready
+    output wire                             rsp_valid,
+    output wire [NUM_REQS-1:0]              rsp_mask,
+    output wire [NUM_REQS-1:0][DATAW-1:0]   rsp_data,
+    output wire [TAGW-1:0]                  rsp_tag,
+    input wire                              rsp_ready,
+
+    // Memory request
+    output wire [NUM_REQS-1:0]              mem_req_valid,
+    output wire [NUM_REQS-1:0]              mem_req_rw,
+    output wire [NUM_REQS-1:0][WORD_SIZE-1:0] mem_req_byteen,
+    output wire [NUM_REQS-1:0][ADDRW-1:0]   mem_req_addr,
+    output wire [NUM_REQS-1:0][DATAW-1:0]   mem_req_data,
+    output wire [NUM_REQS-1:0][QUEUE_ADDRW-1:0] mem_req_tag,
+    input wire 	[NUM_REQS-1:0]              mem_req_ready,
+
+    // Memory response
+    input wire [NUM_REQS-1:0]               mem_rsp_valid,
+    input wire [NUM_REQS-1:0][DATAW-1:0]    mem_rsp_data,
+    input wire [NUM_REQS-1:0][QUEUE_ADDRW-1:0] mem_rsp_tag,
+    output wire [NUM_REQS-1:0]              mem_rsp_ready
   );
+
     localparam QUEUE_ADDRW = `CLOG2(QUEUE_SIZE);
    
     `STATIC_ASSERT ((0 == PARTIAL_RESPONSE) || (1 == PARTIAL_RESPONSE), ("invalid parameter"))
@@ -84,7 +84,12 @@ module VX_mem_streamer #(
     wire                req_complete;
 
     // Memory response
-    wire                mem_rsp_fire;
+    wire                            mem_rsp_valid_s;
+    wire [NUM_REQS-1:0]             mem_rsp_mask_s;
+    wire [NUM_REQS-1:0][DATAW-1:0]  mem_rsp_data_s;
+    wire [QUEUE_ADDRW-1:0]          mem_rsp_tag_s;
+    wire                            mem_rsp_ready_s;
+    wire                            mem_rsp_fire;
 
     // Caller response
     wire                                rsp_stall;
@@ -143,7 +148,7 @@ module VX_mem_streamer #(
     // Reads only
     assign stag_push  = sreq_push && !req_rw;
     assign stag_pop   = crsp_valid && rsp_complete && ~rsp_stall;
-    assign stag_raddr = mem_rsp_tag;
+    assign stag_raddr = mem_rsp_tag_s;
 
     VX_index_buffer #(
         .DATAW	(TAGW),
@@ -168,8 +173,28 @@ module VX_mem_streamer #(
 
     // Memory response
 
+    VX_mem_rsp_sel #(
+        .NUM_REQS     (NUM_REQS),
+        .DATA_WIDTH   (DATAW),
+        .TAG_WIDTH    (QUEUE_ADDRW),
+        .TAG_SEL_BITS (QUEUE_ADDRW),
+        .OUT_REG      (1)
+    ) mem_rsp_sel (
+        .clk            (clk),
+        .reset          (reset),
+        .rsp_valid_in   (mem_rsp_valid),
+        .rsp_data_in    (mem_rsp_data),
+        .rsp_tag_in     (mem_rsp_tag),
+        .rsp_ready_in   (mem_rsp_ready),
+        .rsp_valid_out  (mem_rsp_valid_s),
+        .rsp_tmask_out  (mem_rsp_mask_s),
+        .rsp_data_out   (mem_rsp_data_s),
+        .rsp_tag_out    (mem_rsp_tag_s),
+        .rsp_ready_out  (mem_rsp_ready_s)
+    );
+
     // Evaluate remaning responses
-    assign rsp_rem_mask_n = rsp_rem_mask[stag_raddr] & ~mem_rsp_mask;
+    assign rsp_rem_mask_n = rsp_rem_mask[stag_raddr] & ~mem_rsp_mask_s;
     assign rsp_complete = (0 == rsp_rem_mask_n);
 
     always @(posedge clk) begin
@@ -180,12 +205,12 @@ module VX_mem_streamer #(
     end
 
     if (PARTIAL_RESPONSE == 1) begin
-        assign mem_rsp_ready = ~rsp_stall;
-        assign mem_rsp_fire  = mem_rsp_valid & mem_rsp_ready;
+        assign mem_rsp_ready_s = ~rsp_stall;
+        assign mem_rsp_fire  = mem_rsp_valid_s & mem_rsp_ready_s;
 
-        assign crsp_valid = mem_rsp_valid;
-        assign crsp_mask  = mem_rsp_mask;
-        assign crsp_data  = mem_rsp_data;
+        assign crsp_valid = mem_rsp_valid_s;
+        assign crsp_mask  = mem_rsp_mask_s;
+        assign crsp_data  = mem_rsp_data_s;
         assign crsp_tag   = stag_dout;
         
     end else begin
@@ -193,12 +218,12 @@ module VX_mem_streamer #(
         reg [QUEUE_SIZE-1:0][NUM_REQS-1:0][DATAW-1:0] rsp_store;
         reg [QUEUE_SIZE-1:0][NUM_REQS-1:0] mask_store;
 
-        assign mem_rsp_ready = ~(rsp_stall && rsp_complete);
-        assign mem_rsp_fire  = mem_rsp_valid & mem_rsp_ready;
+        assign mem_rsp_ready_s = ~(rsp_stall && rsp_complete);
+        assign mem_rsp_fire  = mem_rsp_valid_s & mem_rsp_ready_s;
 
-        assign crsp_valid = mem_rsp_valid & rsp_complete;
+        assign crsp_valid = mem_rsp_valid_s & rsp_complete;
         assign crsp_mask  = mask_store[stag_raddr];
-        assign crsp_data  = rsp_store[stag_raddr] | mem_rsp_data; 
+        assign crsp_data  = rsp_store[stag_raddr] | mem_rsp_data_s; 
         assign crsp_tag   = stag_dout;
 
         // Store response until ready to send
