@@ -86,4 +86,4 @@ clean-all:
 	$(MAKE) -C no_smem clean-all
 	$(MAKE) -C prefetch clean-all
 	$(MAKE) -C tex clean-all
-	$(MAKE) -C draw3d clean-all
+	$(MAKE) -C draw3d clean
