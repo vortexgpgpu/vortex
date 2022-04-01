@@ -259,7 +259,7 @@ module VX_mem_streamer #(
     ) req_pipe_reg (
         .clk      (clk),
         .reset    (reset),
-        .enable	  (mem_req_stall != mreq_valid),
+        .enable	  (mem_req_stall != mem_req_valid),
         .data_in  ({mreq_valid,    mreq_rw,    mreq_byteen,    mreq_addr,    mreq_data,    mreq_tag}),
         .data_out ({mem_req_valid, mem_req_rw, mem_req_byteen, mem_req_addr, mem_req_data, mem_req_tag})
     );
