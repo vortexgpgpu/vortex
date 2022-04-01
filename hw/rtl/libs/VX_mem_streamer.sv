@@ -78,7 +78,6 @@ module VX_mem_streamer #(
 
     // Memory request
     wire [NUM_REQS-1:0]                  mreq_valid;
-    wire [NUM_REQS-1:0]                  mem_req_stall;
     wire [NUM_REQS-1:0]                  mreq_rw;
     wire [NUM_REQS-1:0][WORD_SIZE-1:0]   mreq_byteen;
     wire [NUM_REQS-1:0][ADDRW-1:0]       mreq_addr;
@@ -86,7 +85,7 @@ module VX_mem_streamer #(
     wire [NUM_REQS-1:0][QUEUE_ADDRW-1:0] mreq_tag;
 
     wire [NUM_REQS-1:0] mem_req_fire;
-    wire                mem_req_stall;
+    wire [NUM_REQS-1:0] mem_req_stall;
     reg  [NUM_REQS-1:0] req_sent_mask;
     wire [NUM_REQS-1:0] req_sent_mask_n;
     wire                req_complete;
@@ -260,7 +259,7 @@ module VX_mem_streamer #(
     ) req_pipe_reg (
         .clk      (clk),
         .reset    (reset),
-        .enable	  (1'b1),
+        .enable	  (~(| mem_req_stall)),
         .data_in  ({mreq_valid,    mreq_rw,    mreq_byteen,    mreq_addr,    mreq_data,    mreq_tag}),
         .data_out ({mem_req_valid, mem_req_rw, mem_req_byteen, mem_req_addr, mem_req_data, mem_req_tag})
     );
@@ -275,7 +274,7 @@ module VX_mem_streamer #(
     ) rsp_pipe_reg (
         .clk      (clk),
         .reset    (reset),
-        .enable	  (1'b1),
+        .enable	  (~rsp_stall),
         .data_in  ({crsp_valid, crsp_mask, crsp_data, crsp_tag}),
         .data_out ({rsp_valid,  rsp_mask,  rsp_data,  rsp_tag})
     );
