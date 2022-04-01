@@ -75,7 +75,7 @@ public:
       uint32_t ltid = wid * arch_.num_threads() + tid;
       auto& csr = csrs_.at(ltid);
       csr.set_stamp(stamp);
-      printf("Stamp: wid=%d, tid=%d, x=%d, y=%d, mask=%d, pid=%d\n", wid, tid, stamp->x, stamp->y, stamp->mask, stamp->pid);
+      //printf("Stamp: wid=%d, tid=%d, x=%d, y=%d, mask=%d, pid=%d\n", wid, tid, stamp->x, stamp->y, stamp->mask, stamp->pid);
       return (stamp->pid << 1) | 1;
     }
 
