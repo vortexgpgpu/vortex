@@ -188,7 +188,7 @@ module VX_mem_streamer #(
         assign mem_rsp_ready = ~rsp_stall;
         assign mem_rsp_fire  = mem_rsp_valid & mem_rsp_ready;
 
-        assign crsp_valid = mem_rsp_valid & ~stag_empty;
+        assign crsp_valid = mem_rsp_valid;
         assign crsp_mask  = mem_rsp_mask;
         assign crsp_data  = mem_rsp_data;
         assign crsp_tag   = stag_dout;
@@ -201,7 +201,7 @@ module VX_mem_streamer #(
         assign mem_rsp_ready = ~(rsp_stall && rsp_complete);
         assign mem_rsp_fire  = mem_rsp_valid & mem_rsp_ready;
 
-        assign crsp_valid = mem_rsp_valid & rsp_complete & ~stag_empty;
+        assign crsp_valid = mem_rsp_valid & rsp_complete;
         assign crsp_mask  = mask_store[stag_raddr];
         assign crsp_data  = rsp_store[stag_raddr] | mem_rsp_data; 
         assign crsp_tag   = stag_dout;
@@ -245,7 +245,7 @@ module VX_mem_streamer #(
         else begin
             if (req_complete)
                 req_sent_mask <= 0;
-            else
+            else if (mem_req_stall != mem_req_valid)
                 req_sent_mask <= req_sent_mask_n;
         end
     end
@@ -259,7 +259,7 @@ module VX_mem_streamer #(
     ) req_pipe_reg (
         .clk      (clk),
         .reset    (reset),
-        .enable	  (~(| mem_req_stall)),
+        .enable	  (mem_req_stall != mreq_valid),
         .data_in  ({mreq_valid,    mreq_rw,    mreq_byteen,    mreq_addr,    mreq_data,    mreq_tag}),
         .data_out ({mem_req_valid, mem_req_rw, mem_req_byteen, mem_req_addr, mem_req_data, mem_req_tag})
     );
@@ -284,6 +284,7 @@ module VX_mem_streamer #(
 
     `UNUSED_VAR (mem_req_fire)
     `UNUSED_VAR (rsp_fire)
+    `UNUSED_VAR (stag_empty)
 
     //////////////////////////////////////////////////////////////////
 
