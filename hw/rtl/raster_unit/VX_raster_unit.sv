@@ -199,8 +199,8 @@ module VX_raster_unit #(
     endgenerate
 
     VX_raster_rsp_switch #(
-        .CLUSTER_ID(CLUSTER_ID),
-        .RASTER_QUAD_OUTPUT_RATE(RASTER_QUAD_OUTPUT_RATE)
+        .CLUSTER_ID (CLUSTER_ID),
+        .RASTER_QUAD_OUTPUT_RATE (RASTER_QUAD_OUTPUT_RATE)
     ) raster_rsp_switch (
         .valid(arbiter_valid),
         .empty((&raster_slice_ready) & raster_req_if.ready),

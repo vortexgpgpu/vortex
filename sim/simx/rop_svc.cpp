@@ -47,7 +47,10 @@ public:
       __unused (value);
     }    
 
-    void write(uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth) {    
+    void write(uint32_t wid, uint32_t tid, uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth) {
+      __unused (wid);
+      __unused (tid);
+      //printf("rop_write(wid=%d, tid=%d, x=%d, y=%d, backface=%s, color=%x, depth=%x)\n", wid, tid, x, y, (is_backface ? "Y":"N"), color, depth);
       rop_unit_->write(x, y, is_backface, color, depth);
     }
 
@@ -97,8 +100,8 @@ void RopSvc::csr_write(uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value
   impl_->csr_write(wid, tid, addr, value);
 }
 
-void RopSvc::write(uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth) {
-  impl_->write(x, y, is_backface, color, depth);
+void RopSvc::write(uint32_t wid, uint32_t tid, uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth) {
+  impl_->write(wid, tid, x, y, is_backface, color, depth);
 }
 
 void RopSvc::tick() {

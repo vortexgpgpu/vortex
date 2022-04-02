@@ -439,7 +439,7 @@ void Core::dcache_read(void *data, uint64_t addr, uint32_t size) {
     mmu_.read(data, addr, size, 0);
   }
 
-  DPH(2, "Mem Read: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << " (" << type << ")" << std::endl);
+  DPH(2, "Mem Read: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << " (size=" << size << ", type=" << type << ")" << std::endl);
 }
 
 void Core::dcache_write(const void* data, uint64_t addr, uint32_t size) {  
@@ -455,7 +455,7 @@ void Core::dcache_write(const void* data, uint64_t addr, uint32_t size) {
     }
   }
 
-  DPH(2, "Mem Write: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << " (" << type << ")" << std::endl);
+  DPH(2, "Mem Write: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << " (size=" << size << ", type=" << type << ")" << std::endl);
 }
 
 void Core::writeToStdOut(const void* data, uint64_t addr, uint32_t size) {

@@ -42,7 +42,7 @@ else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
-PROJECT = draw3d
+PROJECT = raster
 
 SRCS = main.cpp utils.cpp
 

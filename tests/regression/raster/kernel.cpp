@@ -4,8 +4,6 @@
 #include <cocogfx/include/color.hpp>
 #include <cocogfx/include/math.hpp>
 
-using fixeduv_t = cocogfx::TFixed<TEX_FXD_FRAC>;
-
 struct InverseArg {
 	int64_t s;
 	fixed24_t r;
@@ -17,13 +15,10 @@ static void Inverse(void* arg) {
 }
 
 #define DEFAULTS_i(i) \
-	z[i] = fixed24_t(0.0f); \
 	r[i] = fixed24_t(1.0f); \
 	g[i] = fixed24_t(1.0f); \
 	b[i] = fixed24_t(1.0f); \
-	a[i] = fixed24_t(1.0f); \
-	u[i] = fixed24_t(0.0f); \
-	v[i] = fixed24_t(0.0f)
+	a[i] = fixed24_t(1.0f)
 
 #define DEFAULTS \
 	DEFAULTS_i(0); \
@@ -60,30 +55,6 @@ static void Inverse(void* arg) {
 	INTERPOLATE_i(2, dst, src); \
 	INTERPOLATE_i(3, dst, src)
 
-#define TEXTURING(dst, u, v) \
-	dst[0] = vx_tex(fixeduv_t(u[0]).data(), fixeduv_t(v[0]).data(), 0); \
-	dst[1] = vx_tex(fixeduv_t(u[1]).data(), fixeduv_t(v[1]).data(), 0); \
-	dst[2] = vx_tex(fixeduv_t(u[2]).data(), fixeduv_t(v[2]).data(), 0); \
-	dst[3] = vx_tex(fixeduv_t(u[3]).data(), fixeduv_t(v[3]).data(), 0)
-
-#define MODULATE_i(i, dst, src1_r, src1_g, src1_b, src1_a, src2) \
-	dst[i].r = (src1_r[i].data() * src2[i].r) >> fixed24_t::FRAC; \
-	dst[i].g = (src1_g[i].data() * src2[i].g) >> fixed24_t::FRAC; \
-	dst[i].b = (src1_b[i].data() * src2[i].b) >> fixed24_t::FRAC; \
-	dst[i].a = (src1_a[i].data() * src2[i].a) >> fixed24_t::FRAC
-
-#define MODULATE(dst, src1_r, src1_g, src1_b, src1_a, src2) \
-	MODULATE_i(0, dst, src1_r, src1_g, src1_b, src1_a, src2); \
-	MODULATE_i(1, dst, src1_r, src1_g, src1_b, src1_a, src2); \
-	MODULATE_i(2, dst, src1_r, src1_g, src1_b, src1_a, src2); \
-	MODULATE_i(3, dst, src1_r, src1_g, src1_b, src1_a, src2)
-
-#define REPLACE(dst, src) \
-	dst[0] = src[0]; \
-	dst[1] = src[1]; \
-	dst[2] = src[2]; \
-	dst[3] = src[3]
-
 #define TO_RGBA_i(i, dst, src_r, src_g, src_b, src_a) \
 	dst[i].r = static_cast<uint8_t>((src_r[i].data() * 255) >> fixed24_t::FRAC); \
 	dst[i].g = static_cast<uint8_t>((src_g[i].data() * 255) >> fixed24_t::FRAC); \
@@ -96,34 +67,35 @@ static void Inverse(void* arg) {
 	TO_RGBA_i(2, dst, src_r, src_g, src_b, src_a); \
 	TO_RGBA_i(3, dst, src_r, src_g, src_b, src_a)
 
-#define OUTPUT_i(i, mask, x, y, face, color, depth) \
+#define OUTPUT_i(i, mask, x, y, color) \
 	if (mask & (1 << i)) {							\
 		auto pos_x = (x << 1) + (i & 1);			\
 		auto pos_y = (y << 1) + (i >> 1);			\
-		vx_rop(pos_x, pos_y, face, color[i].value, depth[i].data()); \
+		auto dst_ptr = reinterpret_cast<uint32_t*>(kernel_arg->cbuf_addr + pos_x * kernel_arg->cbuf_stride + pos_y * kernel_arg->cbuf_pitch); \
+		*dst_ptr = color[i].value; \
 	}
 
-#define OUTPUT(face, color, depth) \
+#define OUTPUT(color) \
 	auto __DIVERGENT__ pos_mask = csr_read(CSR_RASTER_POS_MASK); \
 	auto mask = (pos_mask >> 0) & 0xf;			 \
 	auto x    = (pos_mask >> 4) & ((1 << (RASTER_DIM_BITS-1))-1); \
 	auto y    = (pos_mask >> (4 + (RASTER_DIM_BITS-1))) & ((1 << (RASTER_DIM_BITS-1))-1); \
-	OUTPUT_i(0, mask, x, y, face, color, depth)  \
-	OUTPUT_i(1, mask, x, y, face, color, depth)  \
-	OUTPUT_i(2, mask, x, y, face, color, depth)  \
-	OUTPUT_i(3, mask, x, y, face, color, depth)
+	OUTPUT_i(0, mask, x, y, color)  \
+	OUTPUT_i(1, mask, x, y, color)  \
+	OUTPUT_i(2, mask, x, y, color)  \
+	OUTPUT_i(3, mask, x, y, color)
 
 void shader_function(int task_id, kernel_arg_t* kernel_arg) {
 	auto prim_ptr = (rast_prim_t*)kernel_arg->prim_addr;
-	fixed24_t z[4], r[4], g[4], b[4], a[4], u[4], v[4];
+	fixed24_t r[4], g[4], b[4], a[4];
 	fixed24_t dx[4], dy[4];
-	cocogfx::ColorARGB tex_color[4], out_color[4];
+	cocogfx::ColorARGB out_color[4];
 
 	DEFAULTS;
 
 	for (;;) {
 		auto __DIVERGENT__ status = vx_rast();
-		if (0 == (status & 0x1))
+		if (0 == status)
 			return;
 
 		auto pid      = status >> 1;
@@ -131,32 +103,15 @@ void shader_function(int task_id, kernel_arg_t* kernel_arg) {
 		auto& attribs = prim.attribs;
 
 		GRADIENTS
-
-		if (kernel_arg->depth_enabled) {
-			INTERPOLATE(z, attribs.z);
-		}
-
-		if (kernel_arg->color_enabled) {
-			INTERPOLATE(r, attribs.r);
-			INTERPOLATE(g, attribs.g);
-			INTERPOLATE(b, attribs.b);
-			INTERPOLATE(a, attribs.a);
-		}
 		
-		if (kernel_arg->tex_enabled) {
-			INTERPOLATE(u, attribs.u);
-			INTERPOLATE(v, attribs.v);
-			TEXTURING(tex_color, u, v);			
-			if (kernel_arg->tex_modulate) {
-				MODULATE(out_color, r, g, b, a, tex_color);
-			} else {
-				REPLACE(out_color, tex_color);
-			}
-		} else {
-			TO_RGBA(out_color, r, g, b, a);
-		}
-
-		OUTPUT(0, out_color, z)
+		INTERPOLATE(r, attribs.r);
+		INTERPOLATE(g, attribs.g);
+		INTERPOLATE(b, attribs.b);
+		INTERPOLATE(a, attribs.a);
+		
+		TO_RGBA(out_color, r, g, b, a);
+		
+		OUTPUT(out_color)
 	}
 }
 

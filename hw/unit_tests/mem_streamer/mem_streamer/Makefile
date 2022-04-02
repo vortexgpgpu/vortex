@@ -5,12 +5,20 @@
 TOP = VX_mem_streamer
 PARAMS += -GNUM_REQS=4 -GADDRW=8 -GDATAW=8 -GTAGW=8 -GWORD_SIZE=1 -GQUEUE_SIZE=4
 
+ifdef PARTIAL_RESPONSE
+	PARAMS += -GPARTIAL_RESPONSE=$(PARTIAL_RESPONSE)
+endif
+
+ifdef DUPLICATE_ADDR
+	PARAMS += -GDUPLICATE_ADDR=$(DUPLICATE_ADDR)
+endif
+
 RTL_DIR = ../../../rtl
 DPI_DIR = ../../../dpi
 
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(DPI_DIR)
 
-VERILATOR_ROOT = /opt/verilator/
+VERILATOR_ROOT = /opt/verilator
 VERILATOR ?= $(VERILATOR_ROOT)/bin/verilator
 
 VL_FLAGS += --exe --cc $(TOP).sv --top-module $(TOP)

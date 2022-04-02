@@ -54,12 +54,12 @@ module VX_imadd (
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         wire [31:0] mul_in1 = data_in1[i];
         wire [31:0] mul_in2 = data_in2[i];
-        wire [31:0] mul_result_tmp;
+        wire [47:0] mul_result_tmp;
 
         VX_multiplier #(
             .WIDTHA  (32),
             .WIDTHB  (32),
-            .WIDTHP  (32),
+            .WIDTHP  (48),
             .SIGNED  (0),
             .LATENCY (`LATENCY_IMUL)
         ) multiplier (
@@ -70,7 +70,7 @@ module VX_imadd (
             .result (mul_result_tmp)
         );
 
-        assign mul_result[i] = $signed(mul_result_tmp) >> (op_mod_s * 8);
+        assign mul_result[i] = 32'($signed(mul_result_tmp) >> (op_mod_s * 8));
     end
 
     VX_shift_register #(

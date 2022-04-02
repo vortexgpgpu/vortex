@@ -128,6 +128,7 @@ void MemSim::attach_ram (RAM *ram) {
 	msu_->mem_rsp_data 	= rsp.data;
 	msu_->mem_rsp_tag 	= rsp.tag;
 	rsp.ready 			= msu_->mem_rsp_ready;
+	std::cout<<"MEMSIM: mem_rsp_ready: "<<rsp.ready<<"\n";
 
 	ram->halt_rsp(rsp);
 }

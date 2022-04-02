@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_cache_rsp_sel #(
+module VX_mem_rsp_sel #(
     parameter NUM_REQS      = 1, 
     parameter DATA_WIDTH    = 1, 
     parameter TAG_WIDTH     = 1,    
@@ -11,14 +11,17 @@ module VX_cache_rsp_sel #(
     input wire              reset,
 
     // input response
-    VX_cache_rsp_if.slave   rsp_in_if,
+    input wire [NUM_REQS-1:0]                   rsp_valid_in,
+    input wire [NUM_REQS-1:0][DATA_WIDTH-1:0]   rsp_data_in,
+    input wire [NUM_REQS-1:0][TAG_WIDTH-1:0]    rsp_tag_in,
+    output wire [NUM_REQS-1:0]                  rsp_ready_in,
 
     // output responses
-    output wire                             rsp_out_valid,
-    output wire [NUM_REQS-1:0]              rsp_out_tmask,
-    output wire [NUM_REQS-1:0][DATA_WIDTH-1:0] rsp_out_data,
-    output wire [TAG_WIDTH-1:0]             rsp_out_tag,
-    input wire                              rsp_out_ready
+    output wire                             rsp_valid_out,
+    output wire [NUM_REQS-1:0]              rsp_tmask_out,
+    output wire [NUM_REQS-1:0][DATA_WIDTH-1:0] rsp_data_out,
+    output wire [TAG_WIDTH-1:0]             rsp_tag_out,
+    input wire                              rsp_ready_out
 );
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
@@ -38,7 +41,7 @@ module VX_cache_rsp_sel #(
             .clk          (clk),
             .reset        (reset),
             .unlock       (rsp_fire),
-            .requests     (rsp_in_if.valid), 
+            .requests     (rsp_valid_in), 
             .grant_valid  (grant_valid),
             .grant_index  (grant_index),
             `UNUSED_PIN (grant_onehot)            
@@ -48,15 +51,15 @@ module VX_cache_rsp_sel #(
         reg [NUM_REQS-1:0] rsp_ready_sel;
         wire rsp_ready_unqual;
 
-        wire [TAG_WIDTH-1:0] rsp_tag_sel = rsp_in_if.tag[grant_index];
+        wire [TAG_WIDTH-1:0] rsp_tag_sel = rsp_tag_in[grant_index];
         
         always @(*) begin                
             rsp_valid_sel = 0;              
             rsp_ready_sel = 0;
             
             for (integer i = 0; i < NUM_REQS; i++) begin
-                if (rsp_in_if.tag[i][TAG_SEL_BITS-1:0] == rsp_tag_sel[TAG_SEL_BITS-1:0]) begin
-                    rsp_valid_sel[i] = rsp_in_if.valid[i];                    
+                if (rsp_tag_in[i][TAG_SEL_BITS-1:0] == rsp_tag_sel[TAG_SEL_BITS-1:0]) begin
+                    rsp_valid_sel[i] = rsp_valid_in[i];                    
                     rsp_ready_sel[i] = rsp_ready_unqual;
                 end
             end
@@ -71,22 +74,22 @@ module VX_cache_rsp_sel #(
             .clk       (clk),
             .reset     (reset),
             .valid_in  (grant_valid),        
-            .data_in   ({rsp_valid_sel, rsp_tag_sel, rsp_in_if.data}),
+            .data_in   ({rsp_valid_sel, rsp_tag_sel, rsp_data_in}),
             .ready_in  (rsp_ready_unqual),      
-            .valid_out (rsp_out_valid),
-            .data_out  ({rsp_out_tmask, rsp_out_tag, rsp_out_data}),
-            .ready_out (rsp_out_ready)
+            .valid_out (rsp_valid_out),
+            .data_out  ({rsp_tmask_out, rsp_tag_out, rsp_data_out}),
+            .ready_out (rsp_ready_out)
         );  
 
-        assign rsp_in_if.ready = rsp_ready_sel;     
+        assign rsp_ready_in = rsp_ready_sel;     
         
     end else begin
 
-        assign rsp_out_valid = rsp_in_if.valid;
-        assign rsp_out_tmask = 1'b1;
-        assign rsp_out_tag   = rsp_in_if.tag;
-        assign rsp_out_data  = rsp_in_if.data;
-        assign rsp_in_if.ready = rsp_out_ready;
+        assign rsp_valid_out = rsp_valid_in;
+        assign rsp_tmask_out = 1'b1;
+        assign rsp_tag_out   = rsp_tag_in;
+        assign rsp_data_out  = rsp_data_in;
+        assign rsp_ready_in = rsp_ready_out;
 
     end
 

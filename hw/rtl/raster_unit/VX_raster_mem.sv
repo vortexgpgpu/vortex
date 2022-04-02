@@ -264,12 +264,6 @@ module VX_raster_mem #(
 
     // Memory streamer
 
-    wire                                cache_rsp_valid;
-    wire [`RCACHE_NUM_REQS-1:0]         cache_rsp_tmask;
-    wire [`RCACHE_NUM_REQS-1:0][`RCACHE_WORD_SIZE*8-1:0] cache_rsp_data;
-    wire [`RCACHE_TAG_WIDTH-1:0]        cache_rsp_tag;
-    wire                                cache_rsp_ready;
-
     wire [NUM_REQS-1:0][31:0] cache_mem_req_addr; 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         assign cache_req_if.addr[i] = cache_mem_req_addr[i][`RCACHE_ADDR_WIDTH-1:0]; 
@@ -311,30 +305,10 @@ module VX_raster_mem #(
         .mem_req_tag(cache_req_if.tag),
         .mem_req_ready(cache_req_if.ready),
 
-        .mem_rsp_valid(cache_rsp_valid),
-        .mem_rsp_mask(cache_rsp_tmask),
-        .mem_rsp_data(cache_rsp_data),
-        .mem_rsp_tag(cache_rsp_tag),
-        .mem_rsp_ready(cache_rsp_ready)
-    );
-
-    // Cache Response
-
-    VX_cache_rsp_sel #(
-        .NUM_REQS     (`RCACHE_NUM_REQS),
-        .DATA_WIDTH   (`RCACHE_WORD_SIZE*8),
-        .TAG_WIDTH    (`RCACHE_TAG_WIDTH),
-        .TAG_SEL_BITS (`RCACHE_TAG_SEL_BITS),
-        .OUT_REG      (1)
-    ) cache_rsp_sel (
-        .clk            (clk),
-        .reset          (reset),
-        .rsp_in_if      (cache_rsp_if),
-        .rsp_out_valid  (cache_rsp_valid),
-        .rsp_out_tmask  (cache_rsp_tmask),
-        .rsp_out_data   (cache_rsp_data),
-        .rsp_out_tag    (cache_rsp_tag),
-        .rsp_out_ready  (cache_rsp_ready)
+        .mem_rsp_valid(cache_rsp_if.valid),
+        .mem_rsp_data(cache_rsp_if.data),
+        .mem_rsp_tag(cache_rsp_if.tag),
+        .mem_rsp_ready(cache_rsp_if.ready)
     );
 
 endmodule
