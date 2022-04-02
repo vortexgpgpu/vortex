@@ -56,18 +56,9 @@ typedef struct {
 
   uint32_t cbuf_addr;  
   uint8_t  cbuf_stride;  
-  uint32_t cbuf_pitch;    
+  uint32_t cbuf_pitch;  
 
-  uint32_t zbuf_addr;  
-  uint8_t  zbuf_stride;  
-  uint32_t zbuf_pitch; 
-
-  uint32_t prim_addr;   
-
-  bool depth_enabled;
-  bool color_enabled;
-  bool tex_enabled; 
-  bool tex_modulate;
+  uint32_t prim_addr;
 } kernel_arg_t;
 
 #endif
