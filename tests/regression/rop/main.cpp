@@ -132,7 +132,7 @@ int render(uint32_t num_tasks) {
   // configure rop color buffer
   vx_dcr_write(device, DCR_ROP_CBUF_ADDR,  cbuf_addr);
   vx_dcr_write(device, DCR_ROP_CBUF_PITCH, cbuf_pitch);
-  vx_dcr_write(device, DCR_ROP_CBUF_MASK, 0xffffffff);
+  vx_dcr_write(device, DCR_ROP_CBUF_WRITEMASK, 0xffffffff);
 
   // configure rop depth buffer to default
   vx_dcr_write(device, DCR_ROP_ZBUF_ADDR,  zbuf_addr);

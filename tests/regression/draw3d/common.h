@@ -39,22 +39,11 @@ typedef struct {
   uint32_t top;
   uint32_t bottom;
 } rast_bbox_t;
+
 typedef struct {
   rast_edge_t    edges[3];
   rast_attribs_t attribs;
 } rast_prim_t;
-
-typedef struct {  
-  fixed24_t dx;
-  fixed24_t dy;
-} rast_grad_t;
-
-struct fragment_t {
-  uint32_t    x;
-  uint32_t    y;
-  uint32_t    mask;
-  rast_grad_t grads[4];
-};
 
 typedef struct {
   uint32_t tile_xy;

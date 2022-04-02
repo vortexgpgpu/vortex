@@ -9,7 +9,7 @@ task trace_rop_state (
     case (state)
         `DCR_ROP_CBUF_ADDR:         dpi_trace("CBUF_ADDR");
         `DCR_ROP_CBUF_PITCH:        dpi_trace("CBUF_PITCH");
-        `DCR_ROP_CBUF_MASK:         dpi_trace("CBUF_MASK");
+        `DCR_ROP_CBUF_WRITEMASK:    dpi_trace("CBUF_WRITEMASK");
         `DCR_ROP_ZBUF_ADDR:         dpi_trace("ZBUF_ADDR");
         `DCR_ROP_ZBUF_PITCH:        dpi_trace("ZBUF_PITCH");
         `DCR_ROP_DEPTH_FUNC:        dpi_trace("DEPTH_FUNC");

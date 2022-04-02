@@ -375,7 +375,7 @@ private:
     // get device configuration
     buf_baseaddr_   = dcrs_.read(DCR_ROP_CBUF_ADDR);
     buf_pitch_      = dcrs_.read(DCR_ROP_CBUF_PITCH);
-    write_mask_     = dcrs_.read(DCR_ROP_CBUF_MASK);
+    write_mask_     = dcrs_.read(DCR_ROP_CBUF_WRITEMASK);
     blend_mode_rgb_ = dcrs_.read(DCR_ROP_BLEND_MODE) & 0xffff;
     blend_mode_a_   = dcrs_.read(DCR_ROP_BLEND_MODE) >> 16;
     blend_src_rgb_  = (dcrs_.read(DCR_ROP_BLEND_FUNC) >>  0) & 0xff;

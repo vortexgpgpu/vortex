@@ -179,7 +179,7 @@ int render(const CGLTrace& trace) {
     // configure rop color buffer
     vx_dcr_write(device, DCR_ROP_CBUF_ADDR,  cbuf_addr);
     vx_dcr_write(device, DCR_ROP_CBUF_PITCH, cbuf_pitch);
-    vx_dcr_write(device, DCR_ROP_CBUF_MASK, states.color_writemask);
+    vx_dcr_write(device, DCR_ROP_CBUF_WRITEMASK, states.color_writemask);
 
     if (states.depth_test || states.stencil_test) {
       // configure rop depth buffer

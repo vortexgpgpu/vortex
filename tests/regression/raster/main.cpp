@@ -168,7 +168,7 @@ int render(const CGLTrace& trace) {
     // configure rop color buffer
     vx_dcr_write(device, DCR_ROP_CBUF_ADDR,  cbuf_addr);
     vx_dcr_write(device, DCR_ROP_CBUF_PITCH, cbuf_pitch);
-    vx_dcr_write(device, DCR_ROP_CBUF_MASK,  states.color_writemask);
+    vx_dcr_write(device, DCR_ROP_CBUF_WRITEMASK, states.color_writemask);
 
     auto time_start = std::chrono::high_resolution_clock::now();
 

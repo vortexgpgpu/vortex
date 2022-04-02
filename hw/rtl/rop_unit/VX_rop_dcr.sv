@@ -28,8 +28,8 @@ module VX_rop_dcr (
                 `DCR_ROP_CBUF_PITCH: begin 
                     dcrs.cbuf_pitch <= dcr_wr_data[31:0];
                 end
-                `DCR_ROP_CBUF_MASK: begin 
-                    dcrs.cbuf_mask <= dcr_wr_data[31:0];
+                `DCR_ROP_CBUF_WRITEMASK: begin 
+                    dcrs.cbuf_writemask <= dcr_wr_data[3:0];
                 end
                 `DCR_ROP_ZBUF_ADDR: begin 
                     dcrs.zbuf_addr <= dcr_wr_data[31:0];
