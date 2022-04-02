@@ -123,7 +123,7 @@ void shader_function(int task_id, kernel_arg_t* kernel_arg) {
 
 	for (;;) {
 		auto __DIVERGENT__ status = vx_rast();
-		if (0 == status)
+		if (0 == (status & 0x1))
 			return;
 
 		auto pid      = status >> 1;
