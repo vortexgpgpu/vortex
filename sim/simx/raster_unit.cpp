@@ -129,7 +129,7 @@ private:
       // add stamp to queue
       auto pos_x = x >> 1;
       auto pos_y = y >> 1;
-      //printf("Quad: x=%d, y=%d, mask=%d, pid=%d\n", pos_x, pos_y, mask, pid_);
+      // printf("*** raster-quad: x=%d, y=%d, mask=%d, pid=%d\n", pos_x, pos_y, mask, pid_);
       this->stamps_push(new RasterUnit::Stamp(pos_x, pos_y, mask, bcoords, pid_));
     }
   }
@@ -148,7 +148,7 @@ private:
       return; 
   
     if (subBlockLogSize > 1) {
-      //printf("Block (%d,%d) :\n", x, y);
+      // printf("*** raster-block: x=%d, y=%d\n", x, y);
 
       --subBlockLogSize;
       auto subBlockSize = 1 << subBlockLogSize;
@@ -211,7 +211,7 @@ private:
       return; 
     
     if (subTileLogSize > block_logsize_) {
-      //printf("Tile (%d,%d) :\n", x, y);
+      // printf("*** raster-tile: x=%d, y=%d\n", x, y);
 
       --subTileLogSize;
       auto subTileSize = 1 << subTileLogSize;
@@ -287,8 +287,10 @@ private:
       // read next tile header from tile buffer
       uint32_t tile_xy;
       mem_->read(&tile_xy, tbuf_addr_, 4);
+      // printf("*** raster-mem: add=%d, tile_xy=%d\n", tbuf_addr_, tile_xy);
       tbuf_addr_ += 4;
       mem_->read(&num_prims_, tbuf_addr_, 4);
+      // printf("*** raster-mem: add=%d, num_prims=%d\n", tbuf_addr_, num_prims_);
       tbuf_addr_ += 4;
       assert(num_prims_ > 0);
       tile_x_ = (tile_xy & 0xffff) << tile_logsize_;
@@ -298,28 +300,32 @@ private:
 
     // read next primitive index from tile buffer
     mem_->read(&pid_, tbuf_addr_, 4);
+    // printf("*** raster-mem: add=%d, pid=%d\n", tbuf_addr_, pid_);
     tbuf_addr_ += 4;
 
     uint32_t x = tile_x_;
     uint32_t y = tile_y_;
 
-    //printf("renderNextPrimitive(tile=%d/%d, prim=%d/%d, pid=%d, tx=%d, ty=%d)\n", cur_tile_, num_tiles_, cur_prim_, num_prims_, pid_, x, y);
+    // printf("*** raster-primitive: tile=%d/%d, prim=%d/%d, pid=%d, tx=%d, ty=%d\n", cur_tile_, num_tiles_, cur_prim_, num_prims_, pid_, x, y);
 
     // get primitive edges
     primitive_t primitive;
     auto pbuf_addr = pbuf_baseaddr_ + pid_ * pbuf_stride_;
     for (int i = 0; i < 3; ++i) {
       mem_->read(&primitive.edges[i].x, pbuf_addr, 4);
+      // printf("*** raster-mem: add=%d, edge.x=%d\n", pbuf_addr, primitive.edges[i].x.data());
       pbuf_addr += 4;
       mem_->read(&primitive.edges[i].y, pbuf_addr, 4);
+      // printf("*** raster-mem: add=%d, edge.y=%d\n", pbuf_addr, primitive.edges[i].y.data());
       pbuf_addr += 4;
       mem_->read(&primitive.edges[i].z, pbuf_addr, 4);
+      // printf("*** raster-mem: add=%d, edge.z=%d\n", pbuf_addr, primitive.edges[i].z.data());
       pbuf_addr += 4;
     }
 
-    //printf("edge0=(%d, %d, %d)\n", primitive.edges[0].x.data(), primitive.edges[0].y.data(), primitive.edges[0].z.data());
-    //printf("edge1=(%d, %d, %d)\n", primitive.edges[1].x.data(), primitive.edges[1].y.data(), primitive.edges[1].z.data());
-    //printf("edge2=(%d, %d, %d)\n", primitive.edges[2].x.data(), primitive.edges[2].y.data(), primitive.edges[2].z.data());
+    // printf("*** raster-edge0: a=%d, b=%d, c=%d\n", primitive.edges[0].x.data(), primitive.edges[0].y.data(), primitive.edges[0].z.data());
+    // printf("*** raster-edge1: a=%d, b=%d, c=%d\n", primitive.edges[1].x.data(), primitive.edges[1].y.data(), primitive.edges[1].z.data());
+    // printf("*** raster-edge2: a=%d, b=%d, c=%d\n", primitive.edges[2].x.data(), primitive.edges[2].y.data(), primitive.edges[2].z.data());
 
     // Add tile corner edge offsets
     primitive.extents[0] = calcEdgeExtents(primitive.edges[0]);
@@ -346,7 +352,7 @@ private:
       num_prims_ = 0;
     }
 
-    //printf("*** generated %d stamps\n", stamps_size_);
+    // printf("*** raster: generated %d stamps\n", stamps_size_);
   }
 
 public:
