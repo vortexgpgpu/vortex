@@ -46,7 +46,7 @@ module VX_raster_svc #(
         assign response_data[i] = {31'(raster_req_if.stamps[i].pid), !raster_req_if.empty};
     end
 
-    assign stall_out = ~rop_svc_rsp_if.ready && rop_svc_rsp_if.valid;
+    assign stall_out = ~raster_svc_rsp_if.ready && raster_svc_rsp_if.valid;
 
     VX_pipe_register #(
         .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),

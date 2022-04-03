@@ -80,6 +80,10 @@ module VX_raster_csr #(
     `UNUSED_VAR (raster_csr_if.read_enable)
     `UNUSED_VAR (raster_csr_if.read_uuid)
     `UNUSED_VAR (raster_csr_if.read_tmask)
+
+    `UNUSED_VAR (raster_csr_if.write_enable)
+    `UNUSED_VAR (raster_csr_if.write_addr)
+    `UNUSED_VAR (raster_csr_if.write_data)
     `UNUSED_VAR (raster_csr_if.write_uuid)
     `UNUSED_VAR (raster_csr_if.write_wid)
     `UNUSED_VAR (raster_csr_if.write_tmask)
