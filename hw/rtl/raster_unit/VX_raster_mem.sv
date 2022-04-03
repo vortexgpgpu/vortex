@@ -264,7 +264,7 @@ module VX_raster_mem #(
 
     logic [8:0] [`RCACHE_ADDR_WIDTH-1:0] fire_mem_req_addr;
     for (genvar i = 0; i < 9; ++i) begin
-        assign fire_mem_req_addr[i] = mem_req_addr[i][`RCACHE_ADDR_WIDTH-1:0];
+        assign fire_mem_req_addr[i] = mem_req_addr[i][(32-`RCACHE_ADDR_WIDTH) +: `RCACHE_ADDR_WIDTH];
     end
 
     // Memory streamer
