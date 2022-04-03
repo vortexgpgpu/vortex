@@ -247,8 +247,10 @@ private:
     // get device configuration
     buf_baseaddr_       = dcrs_.read(DCR_ROP_ZBUF_ADDR);
     buf_pitch_          = dcrs_.read(DCR_ROP_ZBUF_PITCH);
+    
     depth_func_         = dcrs_.read(DCR_ROP_DEPTH_FUNC);
-    depth_writemask_    = dcrs_.read(DCR_ROP_DEPTH_WRITEMASK);
+    depth_writemask_    = dcrs_.read(DCR_ROP_DEPTH_WRITEMASK) & 0x1;
+
     stencil_front_func_ = dcrs_.read(DCR_ROP_STENCIL_FUNC) & 0xffff;
     stencil_front_zpass_= dcrs_.read(DCR_ROP_STENCIL_ZPASS) & 0xffff;
     stencil_front_zfail_= dcrs_.read(DCR_ROP_STENCIL_ZFAIL) & 0xffff;
@@ -279,11 +281,11 @@ private:
     initialized_ = true;
   }
 
-  bool doDepthStencilTest(uint32_t x, uint32_t y, uint32_t isBackface, uint32_t depth)  { 
+  bool doDepthStencilTest(uint32_t x, uint32_t y, uint32_t is_backface, uint32_t depth)  { 
     auto depth_ref     = depth & ROP_DEPTH_MASK;    
-    auto stencil_func  = isBackface ? stencil_back_func_ : stencil_front_func_;    
-    auto stencil_mask  = isBackface ? stencil_back_mask_ : stencil_front_mask_;
-    auto stencil_ref   = isBackface ? stencil_back_ref_ : stencil_front_ref_;    
+    auto stencil_func  = is_backface ? stencil_back_func_ : stencil_front_func_;    
+    auto stencil_mask  = is_backface ? stencil_back_mask_ : stencil_front_mask_;
+    auto stencil_ref   = is_backface ? stencil_back_ref_ : stencil_front_ref_;    
     auto stencil_ref_m = stencil_ref & stencil_mask;
 
     uint32_t buf_addr = buf_baseaddr_ + y * buf_pitch_ + x * 4;
@@ -305,17 +307,18 @@ private:
       passed = DoCompare(depth_func_, depth_ref, depth_val);
       if (passed) {
         writeMask |= (depth_writemask_ ? ROP_DEPTH_MASK : 0);
-        stencil_op = isBackface ? stencil_back_zpass_ : stencil_front_zpass_;              
+        stencil_op = is_backface ? stencil_back_zpass_ : stencil_front_zpass_;              
       } else {
-        stencil_op = isBackface ? stencil_back_zfail_ : stencil_front_zfail_;
+        stencil_op = is_backface ? stencil_back_zfail_ : stencil_front_zfail_;
       } 
     } else {
-      stencil_op = isBackface ? stencil_back_fail_ : stencil_front_fail_;
+      stencil_op = is_backface ? stencil_back_fail_ : stencil_front_fail_;
     }
 
     auto stencil_result = DoStencilOp(stencil_op, stencil_ref, stencil_val);
 
     // Write the depth stencil value
+    //printf("depth_stencil[%d,%d]=(%d, %d)\n", x, y, depth_ref, stencil_result);
     auto merged_value = (stencil_result << ROP_DEPTH_BITS) | depth_ref;
     auto write_value = (stored_value & ~writeMask) | (merged_value & writeMask);
     mem_->write(&write_value, buf_addr, 4);
@@ -340,13 +343,13 @@ public:
     mem_ = mem;
   }
 
-  bool write(uint32_t x, uint32_t y, bool isBackface, uint32_t depth) {
+  bool write(uint32_t x, uint32_t y, bool is_backface, uint32_t depth) {
     if (!initialized_) {
       this->initialize();
     }
-    auto stencil_enabled = isBackface ? stencil_back_enabled_ : stencil_front_enabled_;
+    auto stencil_enabled = is_backface ? stencil_back_enabled_ : stencil_front_enabled_;
     if (stencil_enabled || depth_enabled_) {
-      return this->doDepthStencilTest(x, y, isBackface, depth);
+      return this->doDepthStencilTest(x, y, is_backface, depth);
     }
     return true;
   }
@@ -357,8 +360,11 @@ private:
   const Arch& arch_;
   const RopUnit::DCRS& dcrs_;
   RAM* mem_;
+  
   uint32_t buf_baseaddr_;
   uint32_t buf_pitch_;
+  uint32_t buf_writemask_;
+
   uint32_t blend_mode_rgb_;
   uint32_t blend_mode_a_;
   uint32_t blend_src_rgb_;
@@ -367,7 +373,7 @@ private:
   uint32_t blend_dst_a_;
   uint32_t blend_const_;
   uint32_t logic_op_;
-  uint32_t write_mask_;
+  
   bool blend_enabled_;
   bool initialized_;
 
@@ -375,7 +381,8 @@ private:
     // get device configuration
     buf_baseaddr_   = dcrs_.read(DCR_ROP_CBUF_ADDR);
     buf_pitch_      = dcrs_.read(DCR_ROP_CBUF_PITCH);
-    write_mask_     = dcrs_.read(DCR_ROP_CBUF_WRITEMASK);
+    buf_writemask_  = dcrs_.read(DCR_ROP_CBUF_WRITEMASK) & 0xf;
+
     blend_mode_rgb_ = dcrs_.read(DCR_ROP_BLEND_MODE) & 0xffff;
     blend_mode_a_   = dcrs_.read(DCR_ROP_BLEND_MODE) >> 16;
     blend_src_rgb_  = (dcrs_.read(DCR_ROP_BLEND_FUNC) >>  0) & 0xff;
@@ -427,10 +434,15 @@ public:
       this->initialize();
     }
 
+    if (0 == buf_writemask_)
+      return;
+
     uint32_t buf_addr = buf_baseaddr_ + y * buf_pitch_ + x * 4;
 
     uint32_t stored_value;
-    mem_->read(&stored_value, buf_addr, 4);   
+    if (buf_writemask_ != 0) {
+      mem_->read(&stored_value, buf_addr, 4);   
+    }
 
     cocogfx::ColorARGB src(color);
     cocogfx::ColorARGB dst(stored_value);
@@ -444,7 +456,11 @@ public:
     }
 
     // printf("color[%d,%d]=(%d,%d,%d,%d)\n", x, y, result_color.r, result_color.g, result_color.b, result_color.a);
-    auto write_value = (stored_value & ~write_mask_) | (result_color & write_mask_);
+    uint32_t writemask = (((buf_writemask_ >> 0) & 0x1) * 0x000000ff) 
+                       | (((buf_writemask_ >> 1) & 0x1) * 0x0000ff00) 
+                       | (((buf_writemask_ >> 2) & 0x1) * 0x00ff0000) 
+                       | (((buf_writemask_ >> 3) & 0x1) * 0xff000000);
+    auto write_value = (stored_value & ~writemask) | (result_color & writemask);
     mem_->write(&write_value, buf_addr, 4);
   }
 };
@@ -481,8 +497,8 @@ public:
       blender_.attach_ram(mem);
     }   
 
-    void write(uint32_t x, uint32_t y, bool isBackface, uint32_t color, uint32_t depth) {      
-      if (depthtencil_.write(x, y, isBackface, depth))
+    void write(uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth) {      
+      if (depthtencil_.write(x, y, is_backface, depth))
         blender_.write(x, y, color);
     }
 
@@ -519,8 +535,8 @@ void RopUnit::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
 }
 
-void RopUnit::write(uint32_t x, uint32_t y, bool isBackface, uint32_t color, uint32_t depth) {
-  impl_->write(x, y, isBackface, color, depth);
+void RopUnit::write(uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth) {
+  impl_->write(x, y, is_backface, color, depth);
 }
 
 void RopUnit::tick() {
