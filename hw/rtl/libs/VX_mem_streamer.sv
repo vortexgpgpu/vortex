@@ -217,26 +217,32 @@ module VX_mem_streamer #(
 
         reg [QUEUE_SIZE-1:0][NUM_REQS-1:0][DATAW-1:0] rsp_store;
         reg [QUEUE_SIZE-1:0][NUM_REQS-1:0] mask_store;
+        wire [NUM_REQS-1:0][DATAW-1:0] mem_rsp_data_m;
+
+        for (genvar i = 0; i < NUM_REQS; ++i) begin
+            assign mem_rsp_data_m[i] = mem_rsp_mask_s[i] ? mem_rsp_data_s[i] : DATAW'(0);
+        end
 
         assign mem_rsp_ready_s = ~(rsp_stall && rsp_complete);
-        assign mem_rsp_fire  = mem_rsp_valid_s & mem_rsp_ready_s;
+        assign mem_rsp_fire = mem_rsp_valid_s & mem_rsp_ready_s;
 
         assign crsp_valid = mem_rsp_valid_s & rsp_complete;
         assign crsp_mask  = mask_store[stag_raddr];
-        assign crsp_data  = rsp_store[stag_raddr] | mem_rsp_data_s; 
+        assign crsp_data  = rsp_store[stag_raddr] | mem_rsp_data_m; 
         assign crsp_tag   = stag_dout;
 
         // Store response until ready to send
         always @(posedge clk) begin
             if (reset) begin
-                rsp_store  <= 0;
-                mask_store <= 0;
+                rsp_store  <= '0;
+                mask_store <= '0;
             end else begin
                 if (sreq_push) begin
                     mask_store[stag_waddr] <= req_dup_mask;
+                    rsp_store[stag_waddr]  <= '0;
                 end
                 if (mem_rsp_fire) begin
-                    rsp_store[stag_raddr]  <= crsp_data;
+                    rsp_store[stag_raddr] <= crsp_data;
                 end
                 if (stag_pop) begin
                     mask_store[stag_raddr] <= 0;
