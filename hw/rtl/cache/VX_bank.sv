@@ -514,7 +514,7 @@ module VX_bank #(
                 dpi_trace("%d: %s:%0d core-rd-req: addr=0x%0h, tag=0x%0h, pmask=%b, tid=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(creq_addr, BANK_ID), creq_tag, creq_pmask, creq_idx, req_id_sel);
         end
         if (crsq_fire) begin
-            dpi_trace("%d: %s:%0d core-rsp: addr=0x%0h, tag=0x%0h, pmask=%b, tid=%0d, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), crsq_tag, crsq_pmask, crsq_tid, crsq_data, req_id_st1);
+            dpi_trace("%d: %s:%0d core-rd-rsp: addr=0x%0h, tag=0x%0h, pmask=%b, tid=%0d, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), crsq_tag, crsq_pmask, crsq_tid, crsq_data, req_id_st1);
         end
         if (mreq_push) begin
             if (is_write_st1)

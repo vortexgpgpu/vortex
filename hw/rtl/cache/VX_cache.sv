@@ -728,4 +728,45 @@ module VX_cache #(
     assign perf_cache_if.crsp_stalls  = perf_crsp_stalls;
 `endif
 
+`ifdef DBG_TRACE_CACHE_BANK
+
+    for (genvar i = 0; i < NUM_REQS; ++i) begin
+        wire [`DBG_CACHE_REQ_IDW-1:0] core_req_id;
+        wire [`DBG_CACHE_REQ_IDW-1:0] core_rsp_id;
+
+        wire core_req_fire = core_req_if[i].valid & core_req_if[i].ready;
+        wire core_rsp_fire = core_rsp_if[i].valid & core_rsp_if[i].ready;
+
+        `ASSIGN_REQ_DBG_ID (core_req_id, core_req_if[i].tag)
+        `ASSIGN_REQ_DBG_ID (core_rsp_id, core_rsp_if[i].tag)
+        
+        always @(posedge clk) begin
+            if (core_req_fire) begin
+                if (core_req_if[i].rw)
+                    dpi_trace("%d: %s core-wr-req: tid=%0d, addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", $time, CACHE_ID, i, `TO_FULL_ADDR(core_req_if[i].addr), core_req_if[i].tag, core_req_if[i].byteen, core_req_if[i].data, core_req_id);
+                else
+                    dpi_trace("%d: %s core-rd-req: tid=%0d, addr=0x%0h, tag=0x%0h (#%0d)\n", $time, CACHE_ID, i, `TO_FULL_ADDR(core_req_if[i].addr), core_req_if[i].tag, core_req_id);
+            end
+            if (core_rsp_fire) begin
+                dpi_trace("%d: %s core-rd-rsp: tid=%0d, tag=0x%0h, data=0x%0h (#%0d)\n", $time, CACHE_ID, i, core_rsp_if[i].tag, core_rsp_if[i].data, core_rsp_id);
+            end        
+        end
+    end   
+
+    wire mem_req_fire = mem_req_if.valid & mem_req_if.ready;
+    wire mem_rsp_fire = mem_rsp_if.valid & mem_rsp_if.ready;
+
+    always @(posedge clk) begin
+        if (mem_req_fire) begin
+            if (mem_req_if.rw)
+                dpi_trace("%d: %s mem-wr-req: addr=0x%0h, tag=%0h, byteen=%b, data=0x%0h\n", $time, CACHE_ID, `TO_FULL_ADDR(mem_req_if.addr), mem_req_if.tag, mem_req_if.byteen, mem_req_if.data);
+            else
+                dpi_trace("%d: %s mem-rd-req: addr=0x%0h, tag=%0d\n", $time, CACHE_ID, `TO_FULL_ADDR(mem_req_if.addr), mem_req_if.tag);
+        end
+        if (mem_rsp_fire) begin
+            dpi_trace("%d: %s mem-rd-rsp: tag=%0d, data=0x%0h\n", $time, CACHE_ID, mem_rsp_if.tag, mem_rsp_if.data);
+        end
+    end    
+`endif
+
 endmodule
