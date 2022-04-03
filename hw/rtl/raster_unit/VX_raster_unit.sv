@@ -45,11 +45,17 @@ module VX_raster_unit #(
     assign raster_dcrs = raster_dcr_if.data;
 
     // Output from the request
-    logic [`RASTER_DIM_BITS-1:0]                   x_loc, y_loc;
+    logic [`RASTER_DIM_BITS-1:0]                         x_loc, y_loc;
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              edges[2:0][2:0];
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              pid;
     // Slice selected for tile
     logic [RASTER_SLICE_BITS-1:0]                       slice_index;
+
+    // Logic to dispatch the slices
+    logic dispatch_quads;
+
+    // Top raster unit ready signal
+    logic raster_unit_ready, raster_mem_ready;
 
     // FSM to control the valid signals for the rest of the system
     reg raster_input_valid;
@@ -57,8 +63,13 @@ module VX_raster_unit #(
         raster_input_valid <= 0;
         if (reset) begin
             raster_input_valid <= 1;
+            dispatch_quads <= 0;
+        end
+        else if (raster_req_if.ready) begin
+            dispatch_quads <= 1;
         end
     end
+
 
     // Mem to raster slice control signals
     logic mem_valid;
@@ -82,7 +93,7 @@ module VX_raster_unit #(
         .out_edges(edges),
         .out_pid(pid),
         .out_slice_index(slice_index),
-        `UNUSED_PIN(ready),
+        .ready(raster_mem_ready),
         .out_valid(mem_valid),
         .cache_req_if(cache_req_if),
         .cache_rsp_if(cache_rsp_if)
@@ -138,7 +149,7 @@ module VX_raster_unit #(
             .edge_func_val(edge_func_val),
             .extents(extents),
             // Pop quad only if the quad receiver outside the raster is ready
-            .pop_quad(quad_pop[i] && arbiter_valid && raster_req_if.ready),
+            .pop_quad(quad_pop[i] && arbiter_valid && dispatch_quads),
             .ready(raster_slice_ready[i]),
             .quad_queue_empty(quad_queue_empty[i]),
             .out_pid(temp_out_pid[i]),
@@ -183,7 +194,7 @@ module VX_raster_unit #(
         end
         else begin
             always_comb begin
-                arbiter_valid = 1;
+                arbiter_valid = !quad_queue_empty[0];
                 if (!quad_queue_empty[0]) begin
                     quad_pop[0] = 1;
                     if (|quad_valid) begin
@@ -198,12 +209,14 @@ module VX_raster_unit #(
         end
     endgenerate
 
+    assign raster_unit_ready = (&raster_slice_ready) & raster_mem_ready & (&quad_queue_empty);
+
     VX_raster_rsp_switch #(
         .CLUSTER_ID (CLUSTER_ID),
         .RASTER_QUAD_OUTPUT_RATE (RASTER_QUAD_OUTPUT_RATE)
     ) raster_rsp_switch (
         .valid(arbiter_valid),
-        .empty((&raster_slice_ready) & raster_req_if.ready),
+        .empty(raster_unit_ready),
         // Quad data
         .x_loc(out_quad_x_loc),
         .y_loc(out_quad_y_loc),

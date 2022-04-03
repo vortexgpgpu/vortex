@@ -113,7 +113,7 @@ module VX_raster_be #(
             valid_data <= 0;
     end
 
-    assign push = (arbiter_index < (RASTER_QUAD_ARBITER_RANGE[ARBITER_BITS-1:0])) && !full;
+    assign push = (arbiter_index < (RASTER_QUAD_ARBITER_RANGE[ARBITER_BITS-1:0])) && !full && !reset && valid_data;
     assign ready = (
         arbiter_index > (RASTER_QUAD_ARBITER_RANGE[ARBITER_BITS-1:0]-1) ||
         arbiter_index == (RASTER_QUAD_ARBITER_RANGE[ARBITER_BITS-1:0]-1)
@@ -157,7 +157,7 @@ module VX_raster_be #(
             .DATAW	    (FIFO_DATA_WIDTH),
             .SIZE       (RASTER_QUAD_FIFO_DEPTH),
             .OUT_REG    (1)
-        ) tile_fifo_queue (
+        ) quad_fifo_queue (
             .clk        (clk),
             .reset      (reset),
             .push       (push),
