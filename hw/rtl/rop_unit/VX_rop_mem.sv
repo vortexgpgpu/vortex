@@ -80,15 +80,9 @@ module VX_rop_mem #(
         assign rsp_color[i - NUM_LANES] = rsp_data[i];
     end
 
-    wire [NUM_REQS-1:0][31:0] mem_req_addr; 
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign cache_req_if.addr[i] = mem_req_addr[i][`OCACHE_ADDR_WIDTH-1:0]; 
-    end
-    `UNUSED_VAR (mem_req_addr)
-
     VX_mem_streamer #(
         .NUM_REQS         (NUM_REQS),
-        .ADDRW            (32),
+        .ADDRW            (`OCACHE_ADDR_WIDTH),
         .DATAW            (32),
         .TAGW             (TAG_WIDTH),
         .WORD_SIZE        (4),
@@ -102,7 +96,7 @@ module VX_rop_mem #(
         .req_rw         (req_rw),
         .req_mask       (req_mask),
         .req_byteen     (4'hf),
-        .req_addr       (req_addr),
+        .req_addr       (req_addr[(32-`OCACHE_ADDR_WIDTH) +: `OCACHE_ADDR_WIDTH]),
         .req_data       (req_data),
         .req_tag        (req_tag),
         .req_ready      (req_ready),
@@ -116,7 +110,7 @@ module VX_rop_mem #(
         .mem_req_valid  (cache_req_if.valid),
         .mem_req_rw     (cache_req_if.rw),
         .mem_req_byteen (cache_req_if.byteen),
-        .mem_req_addr   (mem_req_addr),
+        .mem_req_addr   (cache_req_if.addr),
         .mem_req_data   (cache_req_if.data),
         .mem_req_tag    (cache_req_if.tag),
         .mem_req_ready  (cache_req_if.ready),
