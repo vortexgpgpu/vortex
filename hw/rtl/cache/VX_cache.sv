@@ -759,12 +759,12 @@ module VX_cache #(
     always @(posedge clk) begin
         if (mem_req_fire) begin
             if (mem_req_if.rw)
-                dpi_trace("%d: %s mem-wr-req: addr=0x%0h, tag=%0h, byteen=%b, data=0x%0h\n", $time, CACHE_ID, `TO_FULL_ADDR(mem_req_if.addr), mem_req_if.tag, mem_req_if.byteen, mem_req_if.data);
+                dpi_trace("%d: %s mem-wr-req: addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h\n", $time, CACHE_ID, `TO_FULL_ADDR(mem_req_if.addr), mem_req_if.tag, mem_req_if.byteen, mem_req_if.data);
             else
-                dpi_trace("%d: %s mem-rd-req: addr=0x%0h, tag=%0d\n", $time, CACHE_ID, `TO_FULL_ADDR(mem_req_if.addr), mem_req_if.tag);
+                dpi_trace("%d: %s mem-rd-req: addr=0x%0h, tag=0x%0h\n", $time, CACHE_ID, `TO_FULL_ADDR(mem_req_if.addr), mem_req_if.tag);
         end
         if (mem_rsp_fire) begin
-            dpi_trace("%d: %s mem-rd-rsp: tag=%0d, data=0x%0h\n", $time, CACHE_ID, mem_rsp_if.tag, mem_rsp_if.data);
+            dpi_trace("%d: %s mem-rd-rsp: tag=0x%0h, data=0x%0h\n", $time, CACHE_ID, mem_rsp_if.tag, mem_rsp_if.data);
         end
     end    
 `endif
