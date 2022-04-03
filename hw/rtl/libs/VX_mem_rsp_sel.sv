@@ -1,5 +1,6 @@
 `include "VX_define.vh"
 
+`TRACING_OFF
 module VX_mem_rsp_sel #(
     parameter NUM_REQS      = 1, 
     parameter DATA_WIDTH    = 1, 
@@ -94,3 +95,4 @@ module VX_mem_rsp_sel #(
     end
 
 endmodule
+`TRACING_ON
