@@ -48,7 +48,7 @@ module VX_rop_mem #(
     wire [NUM_REQS-1:0]       req_mask;
     wire [NUM_REQS-1:0]       rsp_mask;
     wire [NUM_REQS-1:0]       write_mask;
-    wire [NUM_REQS-1:0][31:0] req_addr;
+    wire [NUM_REQS-1:0][`OCACHE_ADDR_WIDTH-1:0] req_addr;
     wire [NUM_REQS-1:0][31:0] req_data;
     wire [NUM_REQS-1:0][31:0] rsp_data;
 
@@ -68,14 +68,18 @@ module VX_rop_mem #(
     assign rsp_tmask = dcrs.depth_writemask ? rsp_mask[0 +: NUM_LANES] : rsp_mask[NUM_LANES +: NUM_LANES];
 
     for (genvar i = 0;  i < NUM_LANES; ++i) begin
-        assign req_addr[i]    = dcrs.zbuf_addr + (req_pos_y[i] * dcrs.zbuf_pitch) + (req_pos_x[i] * 4);
+        wire [31:0] full_addr = dcrs.zbuf_addr + (req_pos_y[i] * dcrs.zbuf_pitch) + (req_pos_x[i] * 4);
+        `UNUSED_VAR (full_addr)
+        assign req_addr[i]    = full_addr[(32-`OCACHE_ADDR_WIDTH) +: `OCACHE_ADDR_WIDTH];
         assign req_data[i]    = {req_stencil[i], req_depth[i]};
         assign rsp_depth[i]   = `ROP_DEPTH_BITS'(rsp_data) & `ROP_DEPTH_BITS'(`ROP_DEPTH_MASK);
         assign rsp_stencil[i] = `ROP_STENCIL_BITS'(rsp_data[i] >> `ROP_DEPTH_BITS) & `ROP_STENCIL_BITS'(`ROP_STENCIL_MASK);
     end
 
     for (genvar i = NUM_LANES; i < NUM_REQS; ++i) begin
-        assign req_addr[i] = dcrs.cbuf_addr + (req_pos_y[i - NUM_LANES] * dcrs.cbuf_pitch) + (req_pos_x[i - NUM_LANES] * 4);
+        wire [31:0] full_addr = dcrs.cbuf_addr + (req_pos_y[i - NUM_LANES] * dcrs.cbuf_pitch) + (req_pos_x[i - NUM_LANES] * 4);
+        `UNUSED_VAR (full_addr)
+        assign req_addr[i] = full_addr[(32-`OCACHE_ADDR_WIDTH) +: `OCACHE_ADDR_WIDTH];
         assign req_data[i] = req_color[i - NUM_LANES];
         assign rsp_color[i - NUM_LANES] = rsp_data[i];
     end
@@ -96,7 +100,7 @@ module VX_rop_mem #(
         .req_rw         (req_rw),
         .req_mask       (req_mask),
         .req_byteen     (4'hf),
-        .req_addr       (req_addr[(32-`OCACHE_ADDR_WIDTH) +: `OCACHE_ADDR_WIDTH]),
+        .req_addr       (req_addr),
         .req_data       (req_data),
         .req_tag        (req_tag),
         .req_ready      (req_ready),

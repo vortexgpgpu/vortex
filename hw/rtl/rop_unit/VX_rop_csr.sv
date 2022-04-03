@@ -51,6 +51,8 @@ module VX_rop_csr #(
     `UNUSED_VAR (rop_csr_if.read_uuid)
     `UNUSED_VAR (rop_csr_if.read_wid)
     `UNUSED_VAR (rop_csr_if.read_tmask)
+    
+    `UNUSED_VAR (rop_csr_if.write_data)    
     `UNUSED_VAR (rop_csr_if.write_uuid)
     `UNUSED_VAR (rop_csr_if.write_wid)
     `UNUSED_VAR (rop_csr_if.write_tmask)
