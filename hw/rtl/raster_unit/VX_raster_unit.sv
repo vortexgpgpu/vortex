@@ -43,6 +43,7 @@ module VX_raster_unit #(
 
     raster_dcrs_t raster_dcrs;
     assign raster_dcrs = raster_dcr_if.data;
+    `UNUSED_VAR (raster_dcrs)
 
     // Output from the request
     logic [`RASTER_DIM_BITS-1:0]                         x_loc, y_loc;

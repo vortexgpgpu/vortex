@@ -29,30 +29,27 @@ module VX_dcr_data (
     wire is_rop_dcr = (dcr_wr_addr >= `DCR_ROP_STATE_BEGIN && dcr_wr_addr < `DCR_ROP_STATE_END);
 `endif
 
-    always @(posedge clk) begin
-        reg write_addr_valid;
-        if (reset) begin
-            //--
-        end else if (dcr_wr_valid) begin
-            write_addr_valid = 0;
-            `ifdef EXT_TEX_ENABLE
-                if (is_tex_dcr) begin
-                    write_addr_valid = 1;
-                end
-            `endif
-            `ifdef EXT_RASTER_ENABLE
-                if (is_raster_dcr) begin
-                    write_addr_valid = 1;
-                end
-            `endif
-            `ifdef EXT_ROP_ENABLE
-                if (is_rop_dcr) begin
-                    write_addr_valid = 1;
-                end
-            `endif
-            `ASSERT(write_addr_valid, ("%t: *** invalid device configuration register write address: 0x%0h, data=0x%0h", $time, dcr_wr_addr, dcr_wr_data));
+    reg dcr_addr_valid;
+    always @(*) begin
+        dcr_addr_valid = 0;
+    `ifdef EXT_TEX_ENABLE
+        if (is_tex_dcr) begin
+            dcr_addr_valid = 1;
         end
+    `endif
+    `ifdef EXT_RASTER_ENABLE
+        if (is_raster_dcr) begin
+            dcr_addr_valid = 1;
+        end
+    `endif
+    `ifdef EXT_ROP_ENABLE
+        if (is_rop_dcr) begin
+            dcr_addr_valid = 1;
+        end
+    `endif
     end
+
+    `RUNTIME_ASSERT(~dcr_wr_valid || dcr_addr_valid, ("%t: *** invalid device configuration register write address: 0x%0h, data=0x%0h", $time, dcr_wr_addr, dcr_wr_data));
 
     assign dcr_wr_ready = 1; // no handshaking needed
 

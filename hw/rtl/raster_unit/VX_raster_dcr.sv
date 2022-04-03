@@ -22,10 +22,7 @@ module VX_raster_dcr #(
     // DCRs write
     always @(posedge clk) begin
         if (reset) begin
-            dcrs.tbuf_addr      <= 0;
-            dcrs.tile_count     <= 0;
-            dcrs.pbuf_addr      <= 0;
-            dcrs.pbuf_stride    <= 0;
+            dcrs <= '0;
         end else if (dcr_wr_valid) begin
             case (dcr_wr_addr)
                 `DCR_RASTER_TBUF_ADDR: begin 
@@ -40,11 +37,10 @@ module VX_raster_dcr #(
                 `DCR_RASTER_PBUF_STRIDE: begin 
                     dcrs.pbuf_stride <= dcr_wr_data[`RASTER_DCR_DATA_BITS-1:0];
                 end
-                // TODO: Uncomment for the next enhancements
-                // `DCR_RASTER_DST_SIZE: begin 
-                //     dcrs.dst_width  <= dcr_wr_data[0 +: `RASTER_DIM_BITS];
-                //     dcrs.dst_height <= dcr_wr_data[16 +: `RASTER_DIM_BITS];
-                // end
+               `DCR_RASTER_DST_SIZE: begin 
+                    dcrs.dst_width  <= dcr_wr_data[0 +: `RASTER_DIM_BITS];
+                    dcrs.dst_height <= dcr_wr_data[16 +: `RASTER_DIM_BITS];
+                end
             endcase
         end
     end
