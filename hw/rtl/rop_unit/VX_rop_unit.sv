@@ -3,7 +3,7 @@
 module VX_rop_unit #(    
     parameter CLUSTER_ID = 0,    
     parameter NUM_SLICES = 1,
-    parameter NUM_LANES  = 4
+    parameter NUM_LANES  = NUM_SLICES
 ) (
     input wire clk,
     input wire reset,

@@ -28,7 +28,7 @@ module VX_raster_mem #(
 
     // Raster slice interactions
     input logic [RASTER_SLICE_NUM-1:0]                          raster_slice_ready,
-    output logic [`RASTER_DIM_BITS-1:0]                   out_x_loc, out_y_loc,
+    output logic [`RASTER_DIM_BITS-1:0]                         out_x_loc, out_y_loc,
     output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              out_edges[2:0][2:0],
     output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              out_pid,
     output logic [RASTER_SLICE_BITS-1:0]                        out_slice_index,
@@ -91,6 +91,8 @@ module VX_raster_mem #(
     assign ready = |raster_rs_empty & mem_req_ready & fetch_fsm_complete;
 
     always @(posedge clk) begin
+        // Setting default values:
+        mem_req_valid <= 0;
         // Reset condition
         if (reset) begin
             mem_req_valid <= 0;
@@ -110,7 +112,7 @@ module VX_raster_mem #(
         end
         else if (mem_req_ready) begin
             // On new input -> set the temp state values
-            if (ready && input_valid && valid_rs_empty_index && (temp_tile_count != num_tiles)) begin
+            if (ready && input_valid && valid_rs_empty_index && (temp_tile_count != num_tiles) && fetch_fsm_complete == 1) begin
                 temp_pbuf_addr <= pbuf_baseaddr;
                 temp_num_tiles <= num_tiles;
                 temp_pbuf_stride <= pbuf_stride;
@@ -260,18 +262,17 @@ module VX_raster_mem #(
         .valid_out(valid_raster_index)
     );
 
-    // Memory streamer
-
-    wire [NUM_REQS-1:0][31:0] cache_mem_req_addr; 
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign cache_req_if.addr[i] = cache_mem_req_addr[i][`RCACHE_ADDR_WIDTH-1:0]; 
+    logic [8:0] [`RCACHE_ADDR_WIDTH-1:0] fire_mem_req_addr;
+    for (genvar i = 0; i < 9; ++i) begin
+        assign fire_mem_req_addr[i] = mem_req_addr[i][`RCACHE_ADDR_WIDTH-1:0];
     end
 
+    // Memory streamer
     wire mem_fire;
     assign mem_fire = mem_req_ready && mem_req_valid && |raster_rs_empty;
     VX_mem_streamer #(
         .NUM_REQS(NUM_REQS), // 3 edges and 3 coeffs in each edge
-        .ADDRW(`RASTER_DCR_DATA_BITS),
+        .ADDRW(`RCACHE_ADDR_WIDTH),
         .DATAW(`RASTER_PRIMITIVE_DATA_BITS),
         .QUEUE_SIZE(2**`RCACHE_TAG_WIDTH),
         .TAGW(TAG_MAX_BIT_INDEX) // the top bit will denote type of request
@@ -282,8 +283,8 @@ module VX_raster_mem #(
         .req_valid(mem_fire), // NOTE: This should ensure stalls
         .req_rw(0),
         .req_mask(mem_req_mask),
-        `UNUSED_PIN (req_byteen),   /// TODO: USE THIS PIN
-        .req_addr(mem_req_addr),
+        .req_byteen(4'hf),   /// TODO: USE THIS PIN
+        .req_addr(fire_mem_req_addr),
         `UNUSED_PIN (req_data),
         .req_tag(mem_tag_type), //tag type appended to tag
         .req_ready(mem_req_ready),
@@ -298,7 +299,7 @@ module VX_raster_mem #(
         .mem_req_valid(cache_req_if.valid),
         .mem_req_rw(cache_req_if.rw),
         .mem_req_byteen(cache_req_if.byteen),
-        .mem_req_addr(cache_mem_req_addr),
+        .mem_req_addr(cache_req_if.addr),
         .mem_req_data(cache_req_if.data),
         .mem_req_tag(cache_req_if.tag),
         .mem_req_ready(cache_req_if.ready),
@@ -308,5 +309,30 @@ module VX_raster_mem #(
         .mem_rsp_tag(cache_rsp_if.tag),
         .mem_rsp_ready(cache_rsp_if.ready)
     );
+
+`ifdef DBG_TRACE_RASTER
+    always @(posedge clk) begin
+        if (|cache_req_if.valid) begin
+            dpi_trace("%d: raster-cache-req:\n\tvalid=",
+                $time);
+            `TRACE_ARRAY1D(cache_req_if.valid, 9);
+            dpi_trace("\n\taddr=");
+            `TRACE_ARRAY1D(cache_req_if.addr, 9);
+            dpi_trace("\n\ttag=");
+            `TRACE_ARRAY1D(cache_req_if.tag, 9);
+            dpi_trace("\n");
+        end
+        if (|cache_rsp_if.valid) begin
+            dpi_trace("%d: raster-cache-rsp:\n\tvalid=",
+                $time);
+            `TRACE_ARRAY1D(cache_rsp_if.valid, 9);
+            dpi_trace("\n\tdata=");
+            `TRACE_ARRAY1D(cache_rsp_if.data, 9);
+            dpi_trace("\n\ttag=");
+            `TRACE_ARRAY1D(cache_rsp_if.tag, 9);
+            dpi_trace("\n");
+        end  
+    end
+`endif
 
 endmodule

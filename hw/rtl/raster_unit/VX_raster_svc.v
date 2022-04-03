@@ -43,7 +43,7 @@ module VX_raster_svc #(
     wire [`NUM_THREADS-1:0][31:0] response_data;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign response_data[i] = {31'(raster_req_if.stamps[i].pid), raster_req_if.empty};
+        assign response_data[i] = {31'(raster_req_if.stamps[i].pid), !raster_req_if.empty};
     end
 
     assign stall_out = ~rop_svc_rsp_if.ready && rop_svc_rsp_if.valid;
