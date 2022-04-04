@@ -8,6 +8,7 @@
 #include <vortex.h>
 #include "common.h"
 #include "utils.h"
+#include <cocogfx/include/fixed.hpp>
 
 using namespace cocogfx;
 
@@ -28,11 +29,14 @@ const char* output_file = "output.png";
 const char* reference_file  = nullptr;
 
 uint32_t color = 0xffffffff;
-uint32_t depth = 0x0;
-bool backface = false;
+uint32_t depth = TFixed<24>(0.5f).data();
+
+bool blend_enable = false;
+bool depth_enable = false;
+bool backface     = false;
 
 uint32_t clear_color = 0x00000000;
-uint32_t clear_depth = 0xFFFFFFFF;
+uint32_t clear_depth = TFixed<24>(0.5f).data();
 
 uint32_t dst_width  = 128;
 uint32_t dst_height = 128;
@@ -59,7 +63,7 @@ static void show_usage() {
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "o:r:k:w:h:c:d:fh?")) != -1) {
+  while ((c = getopt(argc, argv, "o:r:k:w:h:c:bdfh?")) != -1) {
     switch (c) {
     case 'o':
       output_file = optarg;
@@ -83,7 +87,10 @@ static void parse_args(int argc, char **argv) {
       color = std::atoi(optarg);
       break;
     case 'd':
-      color = std::atoi(optarg);
+      depth_enable = true;
+      break;
+    case 'b':
+      blend_enable = true;
       break;
     case '?': {
       show_usage();
@@ -136,26 +143,40 @@ int render(uint32_t num_tasks) {
 
   // configure rop depth buffer to default
   vx_dcr_write(device, DCR_ROP_ZBUF_ADDR,  zbuf_addr);
-  vx_dcr_write(device, DCR_ROP_ZBUF_PITCH, zbuf_pitch);    
-  vx_dcr_write(device, DCR_ROP_DEPTH_FUNC, ROP_DEPTH_FUNC_ALWAYS);
-  vx_dcr_write(device, DCR_ROP_DEPTH_WRITEMASK, 0);
+  vx_dcr_write(device, DCR_ROP_ZBUF_PITCH, zbuf_pitch);   
+  if (depth_enable) {
+    vx_dcr_write(device, DCR_ROP_DEPTH_FUNC, ROP_DEPTH_FUNC_LESS);
+    vx_dcr_write(device, DCR_ROP_DEPTH_WRITEMASK, 1);
+  } else {
+    vx_dcr_write(device, DCR_ROP_DEPTH_FUNC, ROP_DEPTH_FUNC_ALWAYS);
+    vx_dcr_write(device, DCR_ROP_DEPTH_WRITEMASK, 0);
+  }
   
   // configure rop stencil states to default
-  vx_dcr_write(device, DCR_ROP_STENCIL_FUNC, ROP_DEPTH_FUNC_ALWAYS);
+  vx_dcr_write(device, DCR_ROP_STENCIL_FUNC,  ROP_DEPTH_FUNC_ALWAYS);
   vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, ROP_STENCIL_OP_KEEP);
   vx_dcr_write(device, DCR_ROP_STENCIL_ZPASS, ROP_STENCIL_OP_KEEP);
-  vx_dcr_write(device, DCR_ROP_STENCIL_FAIL, ROP_STENCIL_OP_KEEP);
-  vx_dcr_write(device, DCR_ROP_STENCIL_REF, 0);
-  vx_dcr_write(device, DCR_ROP_STENCIL_MASK, ROP_STENCIL_MASK);
+  vx_dcr_write(device, DCR_ROP_STENCIL_FAIL,  ROP_STENCIL_OP_KEEP);
+  vx_dcr_write(device, DCR_ROP_STENCIL_REF,   0);
+  vx_dcr_write(device, DCR_ROP_STENCIL_MASK,  ROP_STENCIL_MASK);
   vx_dcr_write(device, DCR_ROP_STENCIL_WRITEMASK, 0);
 
   // configure rop blend states to default
-  vx_dcr_write(device, DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)   // DST
-                                          | (ROP_BLEND_MODE_ADD << 0));  // SRC
-  vx_dcr_write(device, DCR_ROP_BLEND_FUNC, (ROP_BLEND_FUNC_ZERO << 24)  // DST_A
-                                          | (ROP_BLEND_FUNC_ZERO << 16)  // DST_RGB 
-                                          | (ROP_BLEND_FUNC_ONE << 8)    // SRC_A
-                                          | (ROP_BLEND_FUNC_ONE << 0));  // SRC_RGB
+  if (blend_enable) {
+    vx_dcr_write(device, DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)   // DST
+                                           | (ROP_BLEND_MODE_ADD << 0));  // SRC
+    vx_dcr_write(device, DCR_ROP_BLEND_FUNC, (ROP_BLEND_FUNC_ONE_MINUS_SRC_A << 24)  // DST_A
+                                           | (ROP_BLEND_FUNC_ONE_MINUS_SRC_A << 16)  // DST_RGB 
+                                           | (ROP_BLEND_FUNC_ONE << 8)    // SRC_A
+                                           | (ROP_BLEND_FUNC_ONE << 0));  // SRC_RGB
+  } else {
+    vx_dcr_write(device, DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)   // DST
+                                           | (ROP_BLEND_MODE_ADD << 0));  // SRC
+    vx_dcr_write(device, DCR_ROP_BLEND_FUNC, (ROP_BLEND_FUNC_ZERO << 24)  // DST_A
+                                           | (ROP_BLEND_FUNC_ZERO << 16)  // DST_RGB 
+                                           | (ROP_BLEND_FUNC_ONE << 8)    // SRC_A
+                                           | (ROP_BLEND_FUNC_ONE << 0));  // SRC_RGB
+  }
   
   auto time_start = std::chrono::high_resolution_clock::now();
 
@@ -210,6 +231,8 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
+  std::cout << "using color=" << std::hex << color << ", depth=" << depth << std::endl;
+
   uint64_t max_cores, max_warps, max_threads;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_CORES, &max_cores));
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_WARPS, &max_warps));
@@ -240,7 +263,7 @@ int main(int argc, char *argv[]) {
   {    
     auto buf_ptr = (uint32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < (zbuf_size/4); ++i) {
-      buf_ptr[i] = clear_depth;
+      buf_ptr[i] = i ? TFixed<24>(0.0f).data() : TFixed<24>(1.0f).data();
     }    
     RT_CHECK(vx_copy_to_dev(staging_buf, zbuf_addr, zbuf_size, 0));  
   }
