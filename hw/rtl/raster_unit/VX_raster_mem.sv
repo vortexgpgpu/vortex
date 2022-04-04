@@ -90,6 +90,9 @@ module VX_raster_mem #(
     //  -> assert when any entry in the RS is empty
     assign ready = |raster_rs_empty & mem_req_ready & fetch_fsm_complete;
 
+    // Check for fsm completion
+    assign fetch_fsm_complete = temp_tile_count == temp_num_tiles;
+
     always @(posedge clk) begin
         // Setting default values:
         mem_req_valid <= 0;
@@ -102,7 +105,6 @@ module VX_raster_mem #(
             temp_num_prims <= 0;
             temp_num_tiles <= 0;
             temp_prim_count <= 0;
-            fetch_fsm_complete <= 1;
             temp_tile_count <= 0;
             pid <= 0;
             for (int i = 0; i < RASTER_RS_SIZE; ++i) begin
@@ -129,23 +131,71 @@ module VX_raster_mem #(
                 // Reset the counter
                 temp_prim_count <= 0;
                 temp_tile_count <= 0;
-                fetch_fsm_complete <= 0;
             end
             // If it gets a valid memory response
-            if (mem_rsp_valid && mem_req_ready) begin
-                // Check if all tiles have been generated
-                if (temp_tile_count == temp_num_tiles) begin
-                    fetch_fsm_complete <= 1;
-                end
+            if (mem_rsp_valid && fetch_fsm_complete == 0) begin
                 // If not generate the tiles and primitives
-                else begin
-                    // Check the reponse tag type
-                    if (mem_rsp_tag[1:0] == TILE_FETCH) begin
-                        // returned value is tile data
-                        temp_x_loc <= `RASTER_DIM_BITS'((mem_rsp_data[0] & {{16{1'b0}}, {16{1'b1}}}) << RASTER_TILE_BITS);
-                        temp_y_loc <= `RASTER_DIM_BITS'((mem_rsp_data[0] >> (16)) << RASTER_TILE_BITS);
-                        temp_num_prims <= mem_rsp_data[1];
-                        // Launch the pid fetch
+                // Check the reponse tag type
+                if (mem_rsp_tag[1:0] == TILE_FETCH) begin
+                    // returned value is tile data
+                    temp_x_loc <= `RASTER_DIM_BITS'((mem_rsp_data[0] & {{16{1'b0}}, {16{1'b1}}}) << RASTER_TILE_BITS);
+                    temp_y_loc <= `RASTER_DIM_BITS'((mem_rsp_data[0] >> (16)) << RASTER_TILE_BITS);
+                    temp_num_prims <= mem_rsp_data[1];
+                    // Launch the pid fetch
+                    mem_tag_type <= PRIM_ID_FETCH;
+                    mem_req_valid <= 1;
+                    mem_req_mask <= PRIM_ID_FETCH_MASK;
+                    // Fetch the primitive index
+                    mem_req_addr[0] <= temp_tbuf_addr;
+                    temp_tbuf_addr <= temp_tbuf_addr + 4;
+                end
+                else if (mem_rsp_tag[1:0] == PRIM_ID_FETCH) begin
+                    // Launch next request based on pid
+                    mem_tag_type <= PRIM_DATA_FETCH;
+                    mem_req_valid <= 1;
+                    mem_req_mask <= PRIM_DATA_FETCH_MASK;
+                    pid <= mem_rsp_data[0];
+                    for (int i = 0; i < 9; ++i) begin
+                        mem_req_addr[i] <= temp_pbuf_addr + mem_rsp_data[0] * temp_pbuf_stride + 4*i;
+                    end
+                end
+                else if (mem_rsp_tag[1:0] == PRIM_DATA_FETCH) begin
+                    // Insert data into RS
+                    raster_rs[raster_rs_empty_index] <= {temp_x_loc, temp_y_loc,
+                        mem_rsp_data[0], mem_rsp_data[1], mem_rsp_data[2],
+                        mem_rsp_data[3], mem_rsp_data[4], mem_rsp_data[5],
+                        mem_rsp_data[6], mem_rsp_data[7], mem_rsp_data[8],
+                        pid
+                    };
+                    raster_rs_empty[raster_rs_empty_index] <= 0;
+                    raster_rs_valid[raster_rs_empty_index] <= 1;
+
+                    // Incrememnt the prim and tile count register
+                    if (temp_prim_count + 1 == temp_num_prims) begin
+                        // => Last primitive fetched
+                        temp_prim_count <= 0;
+                        temp_tile_count <= temp_tile_count + 1;
+                        // Check if this was last tile
+                        if (temp_tile_count + 1 == temp_num_tiles) begin
+                            // => this was last tile
+                            temp_tile_count <= temp_tile_count + 1;
+                        end
+                        else begin
+                            // Fetch the next tile
+                            // Launch memory request to get the tbuf and pbuf
+                            mem_tag_type <= TILE_FETCH;
+                            mem_req_valid <= 1;
+                            mem_req_mask <= TILE_FETCH_MASK;
+                            // Fetch the first primitive as well
+                            mem_req_addr[0] <= temp_tbuf_addr;
+                            mem_req_addr[1] <= temp_tbuf_addr + 4;
+                            // To indicate the address for next fetch
+                            temp_tbuf_addr <= temp_tbuf_addr + 4 + 4;
+                        end
+                    end
+                    else begin
+                        temp_prim_count <= temp_prim_count + 1;
+                        // Launch the request to get next primitive id // Launch the pid fetch
                         mem_tag_type <= PRIM_ID_FETCH;
                         mem_req_valid <= 1;
                         mem_req_mask <= PRIM_ID_FETCH_MASK;
@@ -153,65 +203,10 @@ module VX_raster_mem #(
                         mem_req_addr[0] <= temp_tbuf_addr;
                         temp_tbuf_addr <= temp_tbuf_addr + 4;
                     end
-                    else if (mem_rsp_tag[1:0] == PRIM_ID_FETCH) begin
-                        // Launch next request based on pid
-                        mem_tag_type <= PRIM_DATA_FETCH;
-                        mem_req_valid <= 1;
-                        mem_req_mask <= PRIM_DATA_FETCH_MASK;
-                        pid <= mem_rsp_data[0];
-                        for (int i = 0; i < 9; ++i) begin
-                            mem_req_addr[i] <= temp_pbuf_addr + mem_rsp_data[0] * temp_pbuf_stride + 4*i;
-                        end
-                    end
-                    else if (mem_rsp_tag[1:0] == PRIM_DATA_FETCH) begin
-                        // Insert data into RS
-                        raster_rs[raster_rs_empty_index] <= {temp_x_loc, temp_y_loc,
-                            mem_rsp_data[0], mem_rsp_data[1], mem_rsp_data[2],
-                            mem_rsp_data[3], mem_rsp_data[4], mem_rsp_data[5],
-                            mem_rsp_data[6], mem_rsp_data[7], mem_rsp_data[8],
-                            pid
-                        };
-                        raster_rs_empty[raster_rs_empty_index] <= 0;
-                        raster_rs_valid[raster_rs_empty_index] <= 1;
-
-                        // Incrememnt the prim and tile count register
-                        if (temp_prim_count + 1 == temp_num_prims) begin
-                            // => Last primitive fetched
-                            temp_prim_count <= 0;
-                            temp_tile_count <= temp_tile_count + 1;
-                            // Check if this was last tile
-                            if (temp_tile_count + 1 == temp_num_tiles) begin
-                                // => this was last tile
-                                temp_tile_count <= temp_tile_count + 1;
-                            end
-                            else begin
-                                // Fetch the next tile
-                                // Launch memory request to get the tbuf and pbuf
-                                mem_tag_type <= TILE_FETCH;
-                                mem_req_valid <= 1;
-                                mem_req_mask <= TILE_FETCH_MASK;
-                                // Fetch the first primitive as well
-                                mem_req_addr[0] <= temp_tbuf_addr;
-                                mem_req_addr[1] <= temp_tbuf_addr + 4;
-                                // To indicate the address for next fetch
-                                temp_tbuf_addr <= temp_tbuf_addr + 4 + 4;
-                            end
-                        end
-                        else begin
-                            temp_prim_count <= temp_prim_count + 1;
-                            // Launch the request to get next primitive id // Launch the pid fetch
-                            mem_tag_type <= PRIM_ID_FETCH;
-                            mem_req_valid <= 1;
-                            mem_req_mask <= PRIM_ID_FETCH_MASK;
-                            // Fetch the primitive index
-                            mem_req_addr[0] <= temp_tbuf_addr;
-                            temp_tbuf_addr <= temp_tbuf_addr + 4;
-                        end
-                    end
-                    else begin
-                        `ASSERT(0, ("Incorrect tag returned"));
-                        mem_req_valid <= 0;
-                    end
+                end
+                else begin
+                    `ASSERT(0, ("Incorrect tag returned"));
+                    mem_req_valid <= 0;
                 end
             end
 
