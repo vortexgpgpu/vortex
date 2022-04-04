@@ -173,7 +173,7 @@ module VX_raster_req_switch #(
         .req_valid(mem_req_valid),
         .req_rw(0),
         .req_mask(9'b1),
-        `UNUSED_PIN (req_byteen),   /// TODO: USE THIS PIN
+        `UNUSED_PIN (req_byteen),
         .req_addr(mem_req_addr),
         `UNUSED_PIN (req_data),
         .req_tag(raster_rs_empty_index),

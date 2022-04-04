@@ -278,7 +278,7 @@ module VX_raster_mem #(
         .req_valid(mem_fire), // NOTE: This should ensure stalls
         .req_rw(0),
         .req_mask(mem_req_mask),
-        .req_byteen(4'hf),   /// TODO: USE THIS PIN
+        `UNUSED_PIN (req_byteen),
         .req_addr(fire_mem_req_addr),
         `UNUSED_PIN (req_data),
         .req_tag(mem_tag_type), //tag type appended to tag
