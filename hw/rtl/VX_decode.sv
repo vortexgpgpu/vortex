@@ -394,7 +394,6 @@ module VX_decode  #(
                             3'h0: begin // RASTER
                             ex_type   = `EX_GPU;
                             op_type   = `INST_OP_BITS'(`INST_GPU_RASTER);
-                            is_wstall = 1;
                             use_rd    = 1;
                             `USED_IREG (rd);
                             end
