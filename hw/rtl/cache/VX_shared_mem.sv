@@ -1,4 +1,4 @@
-`include "VX_cache_define.vh"
+`include "VX_platform.vh"
 
 module VX_shared_mem #(
     parameter string  IDNAME                = "",
@@ -64,7 +64,7 @@ module VX_shared_mem #(
     wire [NUM_BANKS-1:0][WORD_SIZE-1:0]     per_bank_req_byteen_unqual;
     wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0]   per_bank_req_data_unqual;
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0]     per_bank_req_tag_unqual;
-    wire [NUM_BANKS-1:0][`REQS_BITS-1:0]    per_bank_req_idx_unqual;
+    wire [NUM_BANKS-1:0][`REQ_SEL_BITS-1:0] per_bank_req_idx_unqual;
     wire [NUM_BANKS-1:0]                    per_bank_req_ready_unqual;
     
     VX_core_req_bank_sel #(
@@ -106,7 +106,7 @@ module VX_shared_mem #(
     wire [NUM_BANKS-1:0][WORD_SIZE-1:0]     per_bank_req_byteen;
     wire [NUM_BANKS-1:0][`WORD_WIDTH-1:0]   per_bank_req_data;
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0]     per_bank_req_tag;
-    wire [NUM_BANKS-1:0][`REQS_BITS-1:0]    per_bank_req_idx;
+    wire [NUM_BANKS-1:0][`REQ_SEL_BITS-1:0] per_bank_req_idx;
 
     wire creq_out_valid, creq_out_ready;
     wire creq_in_valid, creq_in_ready;
@@ -121,7 +121,7 @@ module VX_shared_mem #(
     assign per_bank_req_ready_unqual = {NUM_BANKS{creq_in_ready}};
 
     VX_elastic_buffer #(
-        .DATAW   (NUM_BANKS * (1 + 1 + BANK_ADDR_WIDTH + WORD_SIZE + `WORD_WIDTH + TAG_WIDTH + `REQS_BITS)), 
+        .DATAW   (NUM_BANKS * (1 + 1 + BANK_ADDR_WIDTH + WORD_SIZE + `WORD_WIDTH + TAG_WIDTH + `REQ_SEL_BITS)), 
         .SIZE    (CREQ_SIZE),
         .OUT_REG (1)   // output should be registered for the data_store addr port
     ) req_queue (
@@ -150,7 +150,7 @@ module VX_shared_mem #(
     wire [NUM_BANKS-1:0]                     per_bank_rsp_valid;
     wire [NUM_BANKS-1:0][0:0]                per_bank_rsp_pmask;
     wire [NUM_BANKS-1:0][0:0][`WORD_WIDTH-1:0] per_bank_rsp_data;
-    wire [NUM_BANKS-1:0][0:0][`REQS_BITS-1:0] per_bank_rsp_idx; 
+    wire [NUM_BANKS-1:0][0:0][`REQ_SEL_BITS-1:0] per_bank_rsp_idx; 
     wire [NUM_BANKS-1:0][0:0][TAG_WIDTH-1:0] per_bank_rsp_tag;   
     wire [NUM_BANKS-1:0]                     per_bank_rsp_ready;
 

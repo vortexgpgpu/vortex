@@ -40,8 +40,8 @@ module VX_tag_access #(
     `UNUSED_VAR (lookup)
 
     wire [NUM_WAYS-1:0] tag_match_way;
-    wire [`LINE_SELECT_BITS-1:0] line_addr = addr[`LINE_SELECT_BITS-1:0];
-    wire [`TAG_SELECT_BITS-1:0] line_tag = `LINE_TAG_ADDR(addr);    
+    wire [`LINE_SEL_BITS-1:0] line_addr = addr[`LINE_SEL_BITS-1:0];
+    wire [`TAG_SEL_BITS-1:0] line_tag = `LINE_TAG_ADDR(addr);    
     wire [NUM_WAYS-1:0] fill_way;
 
     if (NUM_WAYS > 1)  begin
@@ -63,11 +63,11 @@ module VX_tag_access #(
     end
 
     for (genvar i = 0; i < NUM_WAYS; ++i) begin
-        wire [`TAG_SELECT_BITS-1:0] read_tag;
+        wire [`TAG_SEL_BITS-1:0] read_tag;
         wire read_valid;
 
         VX_sp_ram #(
-            .DATAW      (`TAG_SELECT_BITS + 1),
+            .DATAW      (`TAG_SEL_BITS + 1),
             .SIZE       (`LINES_PER_BANK),
             .NO_RWCHECK (1)
         ) tag_store (

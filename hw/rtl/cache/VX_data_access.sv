@@ -33,7 +33,7 @@ module VX_data_access #(
     input wire                          fill, 
     input wire                          write,
     input wire[`LINE_ADDR_WIDTH-1:0]    addr,
-    input wire [NUM_PORTS-1:0][WORD_SELECT_BITS-1:0] wsel,
+    input wire [NUM_PORTS-1:0][WORD_SEL_BITS-1:0] wsel,
     input wire [NUM_PORTS-1:0]          pmask,
     input wire [NUM_PORTS-1:0][WORD_SIZE-1:0] byteen,
     input wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] fill_data,
@@ -49,13 +49,13 @@ module VX_data_access #(
     `UNUSED_VAR (addr)
     `UNUSED_VAR (read)
 
-    localparam WORD_SELECT_BITS = `UP(`WORD_SELECT_BITS);
+    localparam WORD_SEL_BITS = `UP(`WORD_SEL_BITS);
     localparam BYTEENW = WRITE_ENABLE ? CACHE_LINE_SIZE : 1;
 
     wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] rdata;
     wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] wdata;
     wire [BYTEENW-1:0] wren;
-    wire [`LINE_SELECT_BITS-1:0] line_addr = addr[`LINE_SELECT_BITS-1:0];
+    wire [`LINE_SEL_BITS-1:0] line_addr = addr[`LINE_SEL_BITS-1:0];
 
     if (WRITE_ENABLE) begin
         if (`WORDS_PER_LINE > 1) begin
@@ -115,7 +115,7 @@ module VX_data_access #(
     end
    
     if (NUM_WAYS > 1) begin
-        wire [`WAY_SEL_WIDTH-1:0] which_way;
+        wire [`WAY_SEL_BITS-1:0] which_way;
         for (genvar i = 0; i < NUM_WAYS; ++i) begin
             assign which_way = select_way[i] ? i : 'z; 
         end
