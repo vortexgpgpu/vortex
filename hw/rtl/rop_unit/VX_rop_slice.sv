@@ -23,21 +23,24 @@ module VX_rop_slice #(
     VX_rop_req_if.slave rop_req_if
 );
     localparam MEM_TAG_WIDTH = NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 32 + `ROP_DEPTH_BITS + 1);
-    localparam DS_TAG_WIDTH  = NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 1);
+    localparam DS_TAG_WIDTH = NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 1 + 1 + 32);
+    localparam BLEND_TAG_WIDTH  = NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 1);
 
     wire                                    mem_req_valid;
-    wire [NUM_LANES-1:0]                    mem_req_tmask;
+    wire [NUM_LANES-1:0]                    mem_req_mask;
+    wire [NUM_LANES-1:0]                    mem_req_ds_pass;
     wire                                    mem_req_rw;
     wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] mem_req_pos_x;
     wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] mem_req_pos_y;
     rgba_t [NUM_LANES-1:0]                  mem_req_color;
     wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] mem_req_depth;
     wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] mem_req_stencil;
+    wire [NUM_LANES-1:0]                    mem_req_backface;
     wire [MEM_TAG_WIDTH-1:0]                mem_req_tag;
     wire                                    mem_req_ready;
 
     wire                                    mem_rsp_valid;
-    wire [NUM_LANES-1:0]                    mem_rsp_tmask;
+    wire [NUM_LANES-1:0]                    mem_rsp_mask;
     rgba_t [NUM_LANES-1:0]                  mem_rsp_color;
     wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] mem_rsp_depth;
     wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] mem_rsp_stencil;
@@ -62,18 +65,20 @@ module VX_rop_slice #(
         .cache_rsp_if   (cache_rsp_if),
 
         .req_valid      (mem_req_valid),
-        .req_tmask      (mem_req_tmask),
+        .req_mask       (mem_req_mask),
+        .req_ds_pass    (mem_req_ds_pass),
         .req_rw         (mem_req_rw),
         .req_pos_x      (mem_req_pos_x),
         .req_pos_y      (mem_req_pos_y),
         .req_color      (mem_req_color), 
         .req_depth      (mem_req_depth),
         .req_stencil    (mem_req_stencil),
+        .req_backface   (mem_req_backface),
         .req_tag        (mem_req_tag),
         .req_ready      (mem_req_ready),
 
         .rsp_valid      (mem_rsp_valid),
-        .rsp_tmask      (mem_rsp_tmask),
+        .rsp_mask       (mem_rsp_mask),
         .rsp_color      (mem_rsp_color), 
         .rsp_depth      (mem_rsp_depth),
         .rsp_stencil    (mem_rsp_stencil),
@@ -83,14 +88,14 @@ module VX_rop_slice #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire [NUM_LANES-1:0]    ds_backface;
-
     wire                    ds_valid_in;
     wire [DS_TAG_WIDTH-1:0] ds_tag_in;
     wire                    ds_ready_in;   
     wire                    ds_valid_out;
     wire [DS_TAG_WIDTH-1:0] ds_tag_out;
     wire                    ds_ready_out;
+
+    wire [NUM_LANES-1:0]    ds_backface;
 
     wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0]   ds_depth_ref;
     wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0]   ds_depth_val;
@@ -106,6 +111,7 @@ module VX_rop_slice #(
     wire [NUM_LANES-1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_fail;
     wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]    stencil_ref;
     wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]    stencil_mask;
+    wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]    stencil_writemask;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign stencil_func[i]  = ds_backface[i] ? dcrs.stencil_back_func  : dcrs.stencil_front_func;    
@@ -114,6 +120,7 @@ module VX_rop_slice #(
         assign stencil_fail[i]  = ds_backface[i] ? dcrs.stencil_back_fail  : dcrs.stencil_front_fail;
         assign stencil_ref[i]   = ds_backface[i] ? dcrs.stencil_back_ref   : dcrs.stencil_front_ref;
         assign stencil_mask[i]  = ds_backface[i] ? dcrs.stencil_back_mask  : dcrs.stencil_front_mask;
+        assign stencil_writemask[i] = ds_backface[i] ? dcrs.stencil_back_writemask  : dcrs.stencil_front_writemask;
     end
 
     VX_rop_ds #(
@@ -140,7 +147,7 @@ module VX_rop_slice #(
         .stencil_fail   (stencil_fail),
         .stencil_ref    (stencil_ref),
         .stencil_mask   (stencil_mask),
-        .stencil_writemask(dcrs.stencil_writemask),
+        .stencil_writemask(stencil_writemask),
 
         .depth_ref      (ds_depth_ref),
         .depth_val      (ds_depth_val),
@@ -154,8 +161,10 @@ module VX_rop_slice #(
     ///////////////////////////////////////////////////////////////////////////
 
     wire                    blend_valid_in;
+    wire [BLEND_TAG_WIDTH-1:0] blend_tag_in;
     wire                    blend_ready_in;   
     wire                    blend_valid_out;
+    wire [BLEND_TAG_WIDTH-1:0] blend_tag_out;
     wire                    blend_ready_out;
 
     rgba_t [NUM_LANES-1:0]  blend_src_color;
@@ -164,17 +173,18 @@ module VX_rop_slice #(
 
     VX_rop_blend #(
         .CLUSTER_ID (CLUSTER_ID),
-        .NUM_LANES  (NUM_LANES)
+        .NUM_LANES  (NUM_LANES),
+        .TAG_WIDTH  (BLEND_TAG_WIDTH)
     ) rop_blend (
         .clk            (clk),
         .reset          (reset),
 
         .valid_in       (blend_valid_in),      
-        `UNUSED_PIN     (tag_in),
+        .tag_in         (blend_tag_in),
         .ready_in       (blend_ready_in), 
 
         .valid_out      (blend_valid_out),
-        `UNUSED_PIN     (tag_out),
+        .tag_out        (blend_tag_out),
         .ready_out      (blend_ready_out),
 
         .blend_mode_rgb (dcrs.blend_mode_rgb),
@@ -193,35 +203,76 @@ module VX_rop_slice #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] mem_rsp_pos_x, mem_write_pos_x;
-    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] mem_rsp_pos_y, mem_write_pos_y;
-    wire [NUM_LANES-1:0] mem_write_tmask;
+    wire color_writeen = (dcrs.cbuf_writemask != 0);
 
-    wire write_enable = ds_valid_out & blend_valid_out;
+    wire depth_enable  = dcrs.depth_enable;
+    wire depth_writeen = dcrs.depth_enable && (dcrs.depth_writemask != 0);
 
+    wire stencil_enable  = dcrs.stencil_back_enable | dcrs.stencil_front_enable;
+    wire stencil_writeen = (dcrs.stencil_back_enable && (dcrs.stencil_back_writemask != 0))
+                         | (dcrs.stencil_front_enable && (dcrs.stencil_front_writemask != 0));
+
+    wire ds_enable  = depth_enable | stencil_enable;
+    wire ds_writeen = depth_writeen | stencil_writeen;
+
+    wire blend_enable  = dcrs.blend_enable;
+    wire blend_writeen = dcrs.blend_enable & color_writeen;
+
+    wire mem_readen = blend_enable | ds_enable;
+
+    ///////////////////////////////////////////////////////////////////////////
+
+    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] mem_rsp_pos_x, mem_rsp_pos_y;
+
+    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] ds_write_pos_x, ds_write_pos_y;
+    wire [NUM_LANES-1:0] ds_write_mask, ds_write_backface;
+    rgba_t [NUM_LANES-1:0] ds_write_color;
+
+    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] blend_write_pos_x, blend_write_pos_y;
+    wire [NUM_LANES-1:0] blend_write_mask;
+    
     assign mem_req_tag = {rop_req_if.pos_x, rop_req_if.pos_y, rop_req_if.color, rop_req_if.depth, rop_req_if.backface};
-    assign {mem_rsp_pos_x, mem_rsp_pos_y, blend_src_color, ds_depth_ref, ds_backface} = mem_rsp_tag;
+    assign {mem_rsp_pos_x, mem_rsp_pos_y, blend_src_color, ds_depth_ref, ds_backface} = mem_readen ? mem_rsp_tag : mem_req_tag;
 
-    assign {mem_write_pos_x, mem_write_pos_y, mem_write_tmask} = ds_tag_out;
-    assign ds_tag_in = {mem_rsp_pos_x, mem_rsp_pos_y, mem_rsp_tmask};
+    assign ds_tag_in = {mem_rsp_pos_x, mem_rsp_pos_y, mem_rsp_mask, ds_backface, blend_src_color};
+    assign {ds_write_pos_x, ds_write_pos_y, ds_write_mask, ds_write_backface, ds_write_color} = ds_tag_out;
 
-    assign mem_req_valid    = write_enable | rop_req_if.valid;
-    assign mem_req_tmask    = write_enable ? (ds_test_out & mem_write_tmask) : rop_req_if.tmask;
-    assign mem_req_rw       = write_enable;
-    assign mem_req_pos_x    = write_enable ? mem_write_pos_x : rop_req_if.pos_x;
-    assign mem_req_pos_y    = write_enable ? mem_write_pos_y : rop_req_if.pos_y;
-    assign mem_req_color    = blend_color_out;
+    assign blend_tag_in = {mem_rsp_pos_x, mem_rsp_pos_y, mem_rsp_mask};
+    assign {blend_write_pos_x, blend_write_pos_y, blend_write_mask} = blend_tag_out;
+
+    wire blend_ds_read = mem_readen && rop_req_if.valid;
+
+    wire blend_ds_write = (ds_writeen && blend_writeen) ? (ds_valid_out && blend_valid_out) :
+                            (ds_writeen ? ds_valid_out :
+                                (blend_writeen ? blend_valid_out :
+                                    1'b0));
+
+    wire write_bypass = !ds_enable && !blend_enable && color_writeen && rop_req_if.valid;
+
+    assign mem_req_valid    = blend_ds_write || blend_ds_read || write_bypass;
+    assign mem_req_mask     = blend_ds_write ? (ds_enable ? ds_write_mask : blend_write_mask) : rop_req_if.tmask;
+    assign mem_req_ds_pass  = ds_enable ? ds_test_out : {NUM_LANES{1'b1}};
+    assign mem_req_rw       = blend_ds_write || write_bypass;
+    assign mem_req_backface = blend_ds_write ? ds_write_backface : rop_req_if.backface;
+    assign mem_req_pos_x    = blend_ds_write ? (ds_enable ? ds_write_pos_x : blend_write_pos_x) : rop_req_if.pos_x;
+    assign mem_req_pos_y    = blend_ds_write ? (ds_enable ? ds_write_pos_y : blend_write_pos_y) : rop_req_if.pos_y;
+    assign mem_req_color    = blend_enable ? blend_color_out : (ds_enable ? ds_write_color : rop_req_if.color);
     assign mem_req_depth    = ds_depth_out;
-    assign mem_req_stencil  = ds_stencil_out;    
-    assign ds_ready_out     = mem_req_ready & blend_valid_out;
-    assign blend_ready_out  = mem_req_ready & ds_valid_out;
-    assign rop_req_if.ready = mem_req_ready & ~write_enable;
+    assign mem_req_stencil  = ds_stencil_out;
+    
+    assign ds_ready_out     = mem_req_ready && (~blend_enable || blend_valid_out);
+    assign blend_ready_out  = mem_req_ready && (~ds_enable || ds_valid_out);
+    assign rop_req_if.ready = mem_req_ready && ((!ds_enable && !blend_enable) || ~blend_ds_write);
 
-    assign ds_valid_in      = mem_rsp_valid & blend_ready_in;
-    assign blend_valid_in   = mem_rsp_valid & ds_ready_in;    
+    assign ds_valid_in      = ds_enable && mem_rsp_valid && (~blend_enable || blend_ready_in);
+    assign blend_valid_in   = blend_enable && mem_rsp_valid & (~ds_enable || ds_ready_in);
     assign blend_dst_color  = mem_rsp_color;    
+
     assign ds_depth_val     = mem_rsp_depth;
     assign ds_stencil_val   = mem_rsp_stencil;    
-    assign mem_rsp_ready    = ds_ready_in & blend_ready_in;
+    assign mem_rsp_ready    = (ds_enable && blend_enable) ? (ds_ready_in && blend_ready_in) :
+                                (ds_enable ? ds_ready_in :
+                                    (blend_enable ? blend_ready_in :
+                                        1'b0));
 
 endmodule

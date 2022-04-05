@@ -320,7 +320,7 @@ private:
     auto stencil_result = DoStencilOp(stencil_op, stencil_ref, stencil_val);
 
     // Write the depth stencil value
-    //printf("*** rop-depthstencil: x=%d, y=%d, depth=%d, stencil=%d\n", x, y, depth_ref, stencil_result);
+    //printf("*** rop-depthstencil: x=%d, y=%d, depth_val=0x%x, depth_ref=0x%x, stencil_val=0x%x, stencil_result=0x%x, passed=%s\n", x, y, depth_val, depth_ref, stencil_val, stencil_result, (passed ? "Y":"N"));
     auto merged_value = (stencil_result << ROP_DEPTH_BITS) | depth_ref;
     auto write_value = (stored_value & ~writeMask) | (merged_value & writeMask);
     mem_->write(&write_value, buf_addr, 4);

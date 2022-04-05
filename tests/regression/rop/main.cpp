@@ -41,13 +41,13 @@ uint32_t clear_depth = TFixed<24>(0.5f).data();
 uint32_t dst_width  = 128;
 uint32_t dst_height = 128;
 
-uint32_t zbuf_stride = 4;
-uint32_t zbuf_pitch  = dst_width * zbuf_stride;
-uint32_t zbuf_size   = dst_height * zbuf_pitch;
+uint32_t zbuf_stride;
+uint32_t zbuf_pitch;
+uint32_t zbuf_size;
 
-uint32_t cbuf_stride = 4;
-uint32_t cbuf_pitch  = dst_width * cbuf_stride;
-uint32_t cbuf_size   = dst_width * cbuf_pitch;
+uint32_t cbuf_stride;
+uint32_t cbuf_pitch;
+uint32_t cbuf_size;
 
 vx_device_h device = nullptr;
 vx_buffer_h staging_buf = nullptr;
@@ -123,10 +123,11 @@ int render(uint32_t num_tasks) {
   {
     kernel_arg.num_tasks  = num_tasks;
     kernel_arg.dst_width  = dst_width;
-    kernel_arg.dst_height = dst_height;
-    kernel_arg.backface   = backface;
+    kernel_arg.dst_height = dst_height;    
     kernel_arg.color      = color;
     kernel_arg.depth      = depth;
+    kernel_arg.backface   = backface;
+    kernel_arg.blend_enable = blend_enable;
 
     auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
@@ -139,7 +140,7 @@ int render(uint32_t num_tasks) {
   // configure rop color buffer
   vx_dcr_write(device, DCR_ROP_CBUF_ADDR,  cbuf_addr);
   vx_dcr_write(device, DCR_ROP_CBUF_PITCH, cbuf_pitch);
-  vx_dcr_write(device, DCR_ROP_CBUF_WRITEMASK, 0xffffffff);
+  vx_dcr_write(device, DCR_ROP_CBUF_WRITEMASK, 0xf);
 
   // configure rop depth buffer to default
   vx_dcr_write(device, DCR_ROP_ZBUF_ADDR,  zbuf_addr);
@@ -246,6 +247,14 @@ int main(int argc, char *argv[]) {
   std::cout << "upload program" << std::endl;  
   RT_CHECK(vx_upload_kernel_file(device, kernel_file));
 
+  zbuf_stride = 4;
+  zbuf_pitch  = dst_width * zbuf_stride;
+  zbuf_size   = dst_height * zbuf_pitch;
+
+  cbuf_stride = 4;
+  cbuf_pitch  = dst_width * cbuf_stride;
+  cbuf_size   = dst_width * cbuf_pitch;
+
   // allocate device memory  
   RT_CHECK(vx_mem_alloc(device, zbuf_size, &zbuf_addr));
   RT_CHECK(vx_mem_alloc(device, cbuf_size, &cbuf_addr));
@@ -262,8 +271,10 @@ int main(int argc, char *argv[]) {
   std::cout << "clear depth buffer" << std::endl;      
   {    
     auto buf_ptr = (uint32_t*)vx_host_ptr(staging_buf);
-    for (uint32_t i = 0; i < (zbuf_size/4); ++i) {
-      buf_ptr[i] = i ? TFixed<24>(0.0f).data() : TFixed<24>(1.0f).data();
+    for (uint32_t y = 0; y < dst_height; ++y) {
+      for (uint32_t x = 0; x < dst_width; ++x) {
+        buf_ptr[x + y * dst_width] = ((x & 0x1) == (y & 0x1)) ? TFixed<24>(0.0f).data() : TFixed<24>(0.99f).data();
+      }
     }    
     RT_CHECK(vx_copy_to_dev(staging_buf, zbuf_addr, zbuf_size, 0));  
   }
