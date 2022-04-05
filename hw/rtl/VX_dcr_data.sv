@@ -19,6 +19,9 @@ module VX_dcr_data (
     input  wire [`VX_DCR_DATA_WIDTH-1:0]    dcr_wr_data,
     output wire                             dcr_wr_ready
 );
+    `UNUSED_VAR (clk)
+    `UNUSED_VAR (reset)
+    
 `ifdef EXT_TEX_ENABLE
     wire is_tex_dcr = (dcr_wr_addr >= `DCR_TEX_STATE_BEGIN && dcr_wr_addr < `DCR_TEX_STATE_END);
 `endif

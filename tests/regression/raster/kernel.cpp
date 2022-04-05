@@ -44,8 +44,8 @@ static void Inverse(void* arg) {
 	GRADIENTS_i(3) \
 
 #define INTERPOLATE_i(i, dst, src) { \
-	auto tmp = vx_imadd(src.x.data(), dx[i].data(), src.z.data(), 3); \
-	     tmp = vx_imadd(src.y.data(), dy[i].data(), tmp, 3); \
+	auto tmp = int32_t(int64_t(src.x.data()) * int64_t(dx[i].data()) >> 24) + src.z.data(); \
+        tmp  = int32_t(int64_t(src.y.data()) * int64_t(dy[i].data()) >> 24) + tmp; \
 	dst[i] = fixed24_t::make(tmp); \
 }
 

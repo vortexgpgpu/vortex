@@ -341,8 +341,8 @@ int main(int argc, char *argv[]) {
 
   uint64_t isa_flags;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
-  if (0 == (isa_flags & (VX_ISA_EXT_RASTER | VX_ISA_EXT_ROP))) {
-    std::cout << "raster or rop extensions not supported!" << std::endl;
+  if (0 == (isa_flags & (VX_ISA_EXT_RASTER | VX_ISA_EXT_ROP | VX_ISA_EXT_IMADD))) {
+    std::cout << "RASTER or ROP or IMADD extensions not supported!" << std::endl;
     cleanup();
     return -1;
   }

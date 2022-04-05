@@ -100,8 +100,6 @@ void cleanup() {
 int render(const CGLTrace& trace) {
   // render each draw call
   for (auto& drawcall : trace.drawcalls) {
-    auto& states = drawcall.states;
-
     std::vector<uint8_t> tilebuf;
     std::vector<uint8_t> primbuf;
     
@@ -215,7 +213,7 @@ int main(int argc, char *argv[]) {
   uint64_t isa_flags;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
   if (0 == (isa_flags & (VX_ISA_EXT_RASTER))) {
-    std::cout << "raster or rop extensions not supported!" << std::endl;
+    std::cout << "RASTER extensions not supported!" << std::endl;
     cleanup();
     return -1;
   }
