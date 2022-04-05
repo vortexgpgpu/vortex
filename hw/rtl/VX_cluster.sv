@@ -44,14 +44,14 @@ module VX_cluster #(
     // TODO: remove
     `UNUSED_VAR (raster_perf_if.mem_reads)
     `UNUSED_VAR (raster_perf_if.mem_latency)
-    `unused_var (perf_rcache_if.reads)
-    `unused_var (perf_rcache_if.writes)
-    `unused_var (perf_rcache_if.read_misses)
-    `unused_var (perf_rcache_if.write_misses)
-    `unused_var (perf_rcache_if.bank_stalls)
-    `unused_var (perf_rcache_if.mshr_stalls)
-    `unused_var (perf_rcache_if.mem_stalls)
-    `unused_var (perf_rcache_if.crsp_stalls)
+    `UNUSED_VAR (perf_rcache_if.reads)
+    `UNUSED_VAR (perf_rcache_if.writes)
+    `UNUSED_VAR (perf_rcache_if.read_misses)
+    `UNUSED_VAR (perf_rcache_if.write_misses)
+    `UNUSED_VAR (perf_rcache_if.bank_stalls)
+    `UNUSED_VAR (perf_rcache_if.mshr_stalls)
+    `UNUSED_VAR (perf_rcache_if.mem_stalls)
+    `UNUSED_VAR (perf_rcache_if.crsp_stalls)
 `endif
 
     VX_cache_req_if #(
@@ -172,14 +172,14 @@ module VX_cluster #(
     `UNUSED_VAR (rop_perf_if.mem_reads)
     `UNUSED_VAR (rop_perf_if.mem_writes)
     `UNUSED_VAR (rop_perf_if.mem_latency)
-    `unused_var (perf_ocache_if.reads)
-    `unused_var (perf_ocache_if.writes)
-    `unused_var (perf_ocache_if.read_misses)
-    `unused_var (perf_ocache_if.write_misses)
-    `unused_var (perf_ocache_if.bank_stalls)
-    `unused_var (perf_ocache_if.mshr_stalls)
-    `unused_var (perf_ocache_if.mem_stalls)
-    `unused_var (perf_ocache_if.crsp_stalls)
+    `UNUSED_VAR (perf_ocache_if.reads)
+    `UNUSED_VAR (perf_ocache_if.writes)
+    `UNUSED_VAR (perf_ocache_if.read_misses)
+    `UNUSED_VAR (perf_ocache_if.write_misses)
+    `UNUSED_VAR (perf_ocache_if.bank_stalls)
+    `UNUSED_VAR (perf_ocache_if.mshr_stalls)
+    `UNUSED_VAR (perf_ocache_if.mem_stalls)
+    `UNUSED_VAR (perf_ocache_if.crsp_stalls)
 `endif
     
     VX_cache_req_if #(
@@ -328,6 +328,9 @@ module VX_cluster #(
         `endif
         `ifdef EXT_ROP_ENABLE        
             .rop_req_if     (per_core_rop_req_if[i]),
+        `ifdef PERF_ENABLE
+            .rop_perf_if   (rop_perf_if),
+        `endif
         `endif
 
             .mem_req_if     (per_core_mem_req_if[i]),

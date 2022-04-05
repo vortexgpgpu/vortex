@@ -8,10 +8,10 @@ Disassembly of section .init:
 80000000: 97 15 00 00                  	auipc	a1, 1
 80000004: 93 85 85 8f                  	addi	a1, a1, -1800
 80000008: 73 25 10 fc                  	csrr	a0, 4033
-8000000c: 0b 10 b5 00                  	vx_wspawn	a0, a1
+8000000c: 0b 10 b5 00                  	<unknown>
 80000010: ef 00 90 0e                  	jal	2280
 80000014: 13 05 10 00                  	addi	a0, zero, 1
-80000018: 0b 00 05 00                  	vx_tmc	a0
+80000018: 0b 00 05 00                  	<unknown>
 8000001c: 17 35 00 00                  	auipc	a0, 3
 80000020: 13 05 85 c1                  	addi	a0, a0, -1000
 80000024: 17 36 00 00                  	auipc	a2, 3
@@ -67,13 +67,13 @@ Disassembly of section .text:
 800000d4: 23 2a a1 06                  	sw	a0, 116(sp)
 800000d8: 23 22 a1 06                  	sw	a0, 100(sp)
 800000dc: 23 2a a1 04                  	sw	a0, 84(sp)
-800000e0: 0b 05 00 02                  	vx_rast	
+800000e0: 0b 05 00 02                  	<unknown>
 800000e4: 23 2a a1 02                  	sw	a0, 52(sp)
 800000e8: 93 75 15 00                  	andi	a1, a0, 1
 800000ec: 13 b6 15 00                  	seqz	a2, a1
-800000f0: 0b 20 06 00                  	vx_split	a2
+800000f0: 0b 20 06 00                  	<unknown>
 800000f4: 63 82 05 74                  	beqz	a1, 1860
-800000f8: f3 25 40 cc                  	csrr	a1, tmask
+800000f8: f3 25 40 cc                  	csrr	a1, 3268
 800000fc: 23 26 b1 00                  	sw	a1, 12(sp)
 80000100: b7 15 00 80                  	lui	a1, 524289
 80000104: 93 85 85 87                  	addi	a1, a1, -1928
@@ -85,11 +85,11 @@ Disassembly of section .text:
 8000011c: 23 2a 01 01                  	sw	a6, 20(sp)
 80000120: 03 2c 81 01                  	lw	s8, 24(sp)
 80000124: 6f 00 c0 01                  	j	28
-80000128: 0b 30 00 00                  	vx_join	
-8000012c: 0b 05 00 02                  	vx_rast	
+80000128: 0b 30 00 00                  	<unknown>
+8000012c: 0b 05 00 02                  	<unknown>
 80000130: 23 2a a1 02                  	sw	a0, 52(sp)
 80000134: 93 75 15 00                  	andi	a1, a0, 1
-80000138: 0b 80 15 00                  	vx_pred	a1
+80000138: 0b 80 15 00                  	<unknown>
 8000013c: 63 8a 05 6e                  	beqz	a1, 1780
 80000140: 73 24 20 7c                  	csrr	s0, 1986
 80000144: f3 24 60 7c                  	csrr	s1, 1990
@@ -113,9 +113,9 @@ Disassembly of section .text:
 8000018c: 93 05 0b 00                  	mv	a1, s6
 80000190: ef 00 50 30                  	jal	2820
 80000194: 03 25 81 02                  	lw	a0, 40(sp)
-80000198: ab 1d 85 04                  	vx_imadd	s11, a0, s0, zero, 2
+80000198: ab 1d 85 04                  	<unknown>
 8000019c: 03 25 81 02                  	lw	a0, 40(sp)
-800001a0: 2b 1d 95 04                  	vx_imadd	s10, a0, s1, zero, 2
+800001a0: 2b 1d 95 04                  	<unknown>
 800001a4: 73 24 30 7c                  	csrr	s0, 1987
 800001a8: f3 24 70 7c                  	csrr	s1, 1991
 800001ac: 73 25 b0 7c                  	csrr	a0, 1995
@@ -136,9 +136,9 @@ Disassembly of section .text:
 800001e8: 93 05 0b 00                  	mv	a1, s6
 800001ec: ef 00 90 2a                  	jal	2728
 800001f0: 03 25 81 02                  	lw	a0, 40(sp)
-800001f4: ab 1b 85 04                  	vx_imadd	s7, a0, s0, zero, 2
+800001f4: ab 1b 85 04                  	<unknown>
 800001f8: 03 25 81 02                  	lw	a0, 40(sp)
-800001fc: 2b 19 95 04                  	vx_imadd	s2, a0, s1, zero, 2
+800001fc: 2b 19 95 04                  	<unknown>
 80000200: f3 24 40 7c                  	csrr	s1, 1988
 80000204: 73 24 80 7c                  	csrr	s0, 1992
 80000208: 73 25 c0 7c                  	csrr	a0, 1996
@@ -159,9 +159,9 @@ Disassembly of section .text:
 80000244: 93 05 0b 00                  	mv	a1, s6
 80000248: ef 00 d0 24                  	jal	2636
 8000024c: 03 25 81 02                  	lw	a0, 40(sp)
-80000250: ab 1a 95 04                  	vx_imadd	s5, a0, s1, zero, 2
+80000250: ab 1a 95 04                  	<unknown>
 80000254: 03 25 81 02                  	lw	a0, 40(sp)
-80000258: 2b 1a 85 04                  	vx_imadd	s4, a0, s0, zero, 2
+80000258: 2b 1a 85 04                  	<unknown>
 8000025c: 73 24 50 7c                  	csrr	s0, 1989
 80000260: f3 24 90 7c                  	csrr	s1, 1993
 80000264: 73 25 d0 7c                  	csrr	a0, 1997
@@ -182,9 +182,9 @@ Disassembly of section .text:
 800002a0: 93 05 0b 00                  	mv	a1, s6
 800002a4: ef 00 10 1f                  	jal	2544
 800002a8: 03 25 81 02                  	lw	a0, 40(sp)
-800002ac: ab 15 85 04                  	vx_imadd	a1, a0, s0, zero, 2
+800002ac: ab 15 85 04                  	<unknown>
 800002b0: 03 25 81 02                  	lw	a0, 40(sp)
-800002b4: ab 18 95 04                  	vx_imadd	a7, a0, s1, zero, 2
+800002b4: ab 18 95 04                  	<unknown>
 800002b8: 13 05 80 07                  	addi	a0, zero, 120
 800002bc: 33 86 a9 02                  	<unknown>
 800002c0: 03 25 c1 01                  	lw	a0, 28(sp)
@@ -466,7 +466,7 @@ Disassembly of section .text:
 80000710: 23 20 b1 02                  	sw	a1, 32(sp)
 80000714: 93 f6 15 00                  	andi	a3, a1, 1
 80000718: 13 b5 16 00                  	seqz	a0, a3
-8000071c: 0b 20 05 00                  	vx_split	a0
+8000071c: 0b 20 05 00                  	<unknown>
 80000720: 13 d5 45 00                  	srli	a0, a1, 4
 80000724: 03 26 01 01                  	lw	a2, 16(sp)
 80000728: 33 76 c5 00                  	and	a2, a0, a2
@@ -482,10 +482,10 @@ Disassembly of section .text:
 80000750: 93 96 16 00                  	slli	a3, a3, 1
 80000754: b3 86 f6 00                  	add	a3, a3, a5
 80000758: 23 a0 96 00                  	sw	s1, 0(a3)
-8000075c: 0b 30 00 00                  	vx_join	
+8000075c: 0b 30 00 00                  	<unknown>
 80000760: 93 f6 25 00                  	andi	a3, a1, 2
 80000764: 13 b7 16 00                  	seqz	a4, a3
-80000768: 0b 20 07 00                  	vx_split	a4
+80000768: 0b 20 07 00                  	<unknown>
 8000076c: 63 8a 06 02                  	beqz	a3, 52
 80000770: 93 16 16 00                  	slli	a3, a2, 1
 80000774: 03 47 c8 00                  	lbu	a4, 12(a6)
@@ -499,10 +499,10 @@ Disassembly of section .text:
 80000794: 93 97 17 00                  	slli	a5, a5, 1
 80000798: b3 86 f6 00                  	add	a3, a3, a5
 8000079c: 23 a0 e6 00                  	sw	a4, 0(a3)
-800007a0: 0b 30 00 00                  	vx_join	
+800007a0: 0b 30 00 00                  	<unknown>
 800007a4: 93 f6 45 00                  	andi	a3, a1, 4
 800007a8: 13 b7 16 00                  	seqz	a4, a3
-800007ac: 0b 20 07 00                  	vx_split	a4
+800007ac: 0b 20 07 00                  	<unknown>
 800007b0: 63 8a 06 02                  	beqz	a3, 52
 800007b4: 83 46 c8 00                  	lbu	a3, 12(a6)
 800007b8: 13 17 15 00                  	slli	a4, a0, 1
@@ -516,10 +516,10 @@ Disassembly of section .text:
 800007d8: 33 87 e4 02                  	<unknown>
 800007dc: b3 86 e6 00                  	add	a3, a3, a4
 800007e0: 23 a0 86 00                  	sw	s0, 0(a3)
-800007e4: 0b 30 00 00                  	vx_join	
+800007e4: 0b 30 00 00                  	<unknown>
 800007e8: 93 f5 85 00                  	andi	a1, a1, 8
 800007ec: 93 b6 15 00                  	seqz	a3, a1
-800007f0: 0b a0 06 00                  	vx_split	a3
+800007f0: 0b a0 06 00                  	<unknown>
 800007f4: e3 8a 05 92                  	beqz	a1, -1740
 800007f8: 93 15 16 00                  	slli	a1, a2, 1
 800007fc: 93 e5 15 00                  	ori	a1, a1, 1
@@ -536,8 +536,8 @@ Disassembly of section .text:
 80000828: 23 20 c5 00                  	sw	a2, 0(a0)
 8000082c: 6f f0 df 8f                  	j	-1796
 80000830: 03 25 c1 00                  	lw	a0, 12(sp)
-80000834: 0b 00 05 00                  	vx_tmc	a0
-80000838: 0b 30 00 00                  	vx_join	
+80000834: 0b 00 05 00                  	<unknown>
+80000838: 0b 30 00 00                  	<unknown>
 8000083c: 83 2d c1 07                  	lw	s11, 124(sp)
 80000840: 03 2d 01 08                  	lw	s10, 128(sp)
 80000844: 83 2c 41 08                  	lw	s9, 132(sp)
@@ -590,11 +590,11 @@ Disassembly of section .text:
 800008e8: ef 00 00 42                  	jal	1056
 800008ec: 93 01 04 00                  	mv	gp, s0
 800008f0: 13 05 00 00                  	mv	a0, zero
-800008f4: 0b 00 05 00                  	vx_tmc	a0
+800008f4: 0b 00 05 00                  	<unknown>
 
 800008f8 vx_set_sp:
 800008f8: 13 05 f0 ff                  	addi	a0, zero, -1
-800008fc: 0b 00 05 00                  	vx_tmc	a0
+800008fc: 0b 00 05 00                  	<unknown>
 80000900: 37 01 00 ff                  	lui	sp, 1044480
 80000904: b7 25 00 00                  	lui	a1, 2
 80000908: 73 26 20 cc                  	csrr	a2, 3266
@@ -603,7 +603,7 @@ Disassembly of section .text:
 80000914: f3 26 30 cc                  	csrr	a3, 3267
 80000918: 63 86 06 00                  	beqz	a3, 12
 8000091c: 13 05 00 00                  	mv	a0, zero
-80000920: 0b 00 05 00                  	vx_tmc	a0
+80000920: 0b 00 05 00                  	<unknown>
 
 80000924 RETURN:
 80000924: 67 80 00 00                  	ret
@@ -714,7 +714,7 @@ Disassembly of section .text:
 80000ab0: e3 98 84 fe                  	bne	s1, s0, -16
 80000ab4: 03 27 4a 01                  	lw	a4, 20(s4)
 80000ab8: 93 07 00 00                  	mv	a5, zero
-80000abc: 0b c0 e7 00                  	vx_bar	a5, a4
+80000abc: 0b c0 e7 00                  	<unknown>
 80000ac0: 83 20 c1 01                  	lw	ra, 28(sp)
 80000ac4: 03 24 81 01                  	lw	s0, 24(sp)
 80000ac8: 83 24 41 01                  	lw	s1, 20(sp)
@@ -742,11 +742,11 @@ Disassembly of section .text:
 80000b10: 13 01 01 ff                  	addi	sp, sp, -16
 80000b14: 23 26 11 00                  	sw	ra, 12(sp)
 80000b18: 93 07 f0 ff                  	addi	a5, zero, -1
-80000b1c: 0b 80 07 00                  	vx_tmc	a5
+80000b1c: 0b 80 07 00                  	<unknown>
 80000b20: ef f0 9f ef                  	jal	-264
 80000b24: f3 27 30 cc                  	csrr	a5, 3267
 80000b28: 93 b7 17 00                  	seqz	a5, a5
-80000b2c: 0b 80 07 00                  	vx_tmc	a5
+80000b2c: 0b 80 07 00                  	<unknown>
 80000b30: 83 20 c1 00                  	lw	ra, 12(sp)
 80000b34: 13 01 01 01                  	addi	sp, sp, 16
 80000b38: 67 80 00 00                  	ret
@@ -816,22 +816,22 @@ Disassembly of section .text:
 80000c30: 23 2e f1 00                  	sw	a5, 28(sp)
 80000c34: 17 07 00 00                  	auipc	a4, 0
 80000c38: 13 07 c7 ed                  	addi	a4, a4, -292
-80000c3c: 0b 90 e7 00                  	vx_wspawn	a5, a4
+80000c3c: 0b 90 e7 00                  	<unknown>
 80000c40: 93 07 f0 ff                  	addi	a5, zero, -1
-80000c44: 0b 80 07 00                  	vx_tmc	a5
+80000c44: 0b 80 07 00                  	<unknown>
 80000c48: ef f0 1f dd                  	jal	-560
 80000c4c: f3 27 30 cc                  	csrr	a5, 3267
 80000c50: 93 b7 17 00                  	seqz	a5, a5
-80000c54: 0b 80 07 00                  	vx_tmc	a5
+80000c54: 0b 80 07 00                  	<unknown>
 80000c58: e3 0e 04 f8                  	beqz	s0, -100
 80000c5c: b3 04 99 02                  	<unknown>
 80000c60: 13 09 10 00                  	addi	s2, zero, 1
 80000c64: 33 18 89 00                  	sll	a6, s2, s0
 80000c68: 13 08 f8 ff                  	addi	a6, a6, -1
 80000c6c: 23 28 91 00                  	sw	s1, 16(sp)
-80000c70: 0b 00 08 00                  	vx_tmc	a6
+80000c70: 0b 00 08 00                  	<unknown>
 80000c74: ef f0 df e6                  	jal	-404
-80000c78: 0b 00 09 00                  	vx_tmc	s2
+80000c78: 0b 00 09 00                  	<unknown>
 80000c7c: 83 20 c1 02                  	lw	ra, 44(sp)
 80000c80: 03 24 81 02                  	lw	s0, 40(sp)
 80000c84: 83 24 41 02                  	lw	s1, 36(sp)
@@ -856,13 +856,13 @@ Disassembly of section .text:
 80000cc4 label_loop:
 80000cc4: b3 02 94 40                  	sub	t0, s0, s1
 80000cc8: 13 b3 12 00                  	seqz	t1, t0
-80000ccc: 0b 20 03 00                  	vx_split	t1
+80000ccc: 0b 20 03 00                  	<unknown>
 80000cd0: 63 96 02 00                  	bnez	t0, 12
 80000cd4: 13 85 09 00                  	mv	a0, s3
 80000cd8: e7 00 0a 00                  	jalr	s4
 
 80000cdc label_join:
-80000cdc: 0b 30 00 00                  	vx_join	
+80000cdc: 0b 30 00 00                  	<unknown>
 80000ce0: 13 04 14 00                  	addi	s0, s0, 1
 80000ce4: e3 40 24 ff                  	blt	s0, s2, -32
 80000ce8: 83 20 41 01                  	lw	ra, 20(sp)
@@ -1698,7 +1698,7 @@ Disassembly of section .data:
 800028be: 6d e6                        	<unknown>
 800028c0: ec de                        	<unknown>
 800028c2: 05 00                        	<unknown>
-800028c4: 0b 00 00 00                  	vx_tmc	zero
+800028c4: 0b 00 00 00                  	<unknown>
 		...
 
 Disassembly of section .sdata:
@@ -1962,7 +1962,7 @@ Disassembly of section .debug_info:
      156: 04 37                        	<unknown>
      158: 0b 33 00 00                  	<unknown>
      15c: 00 08                        	<unknown>
-     15e: 0b 40 02 00                  	vx_bar	tp, zero
+     15e: 0b 40 02 00                  	<unknown>
      162: 00 04                        	<unknown>
      164: 37 14 33 00                  	lui	s0, 817
      168: 00 00                        	<unknown>
@@ -2163,7 +2163,7 @@ Disassembly of section .debug_info:
      33a: 56 00                        	<unknown>
      33c: 00 00                        	<unknown>
      33e: 0c 0b                        	<unknown>
-     340: ab 02 00 00                  	vx_tex	t0, zero, zero, zero
+     340: ab 02 00 00                  	<unknown>
      344: 04 bf                        	<unknown>
      346: 09 56                        	<unknown>
      348: 00 00                        	<unknown>
@@ -2509,7 +2509,7 @@ Disassembly of section .debug_info:
      682: 00 00                        	<unknown>
      684: 17 c3 02 00                  	auipc	t1, 44
      688: 00 04                        	<unknown>
-     68a: 2b 01 07 33                  	vx_cmov	sp, a4, a6, t1
+     68a: 2b 01 07 33                  	<unknown>
      68e: 00 00                        	<unknown>
      690: 00 04                        	<unknown>
      692: 17 dc 04 00                  	auipc	s8, 77
@@ -2680,7 +2680,7 @@ Disassembly of section .debug_info:
      81a: 00 08                        	<unknown>
      81c: bc 05                        	<unknown>
      81e: 00 00                        	<unknown>
-     820: 2b 08 00 00                  	vx_tex	a6, zero, zero, zero
+     820: 2b 08 00 00                  	<unknown>
      824: 09 2c                        	<unknown>
      826: 00 00                        	<unknown>
      828: 00 07                        	<unknown>
@@ -2980,7 +2980,7 @@ Disassembly of section .debug_info:
      ac2: 04 2c                        	<unknown>
      ac4: 00 00                        	<unknown>
      ac6: 00 0b                        	<unknown>
-     ac8: 2b 06 db 0a                  	vx_cmov	a2, s6, a3, ra
+     ac8: 2b 06 db 0a                  	<unknown>
      acc: 00 00                        	<unknown>
      ace: 24 41                        	<unknown>
      ad0: 06 00                        	<unknown>
@@ -3080,7 +3080,7 @@ Disassembly of section .debug_info:
      ba4: 6c 6c                        	<unknown>
      ba6: 00 0d                        	<unknown>
      ba8: f7 01 0a 28                  	<unknown>
-     bac: 0b 00 00 00                  	vx_tmc	zero
+     bac: 0b 00 00 00                  	<unknown>
      bb0: 04 bb                        	<unknown>
      bb2: 02 00                        	<unknown>
      bb4: 00 0d                        	<unknown>
@@ -3121,7 +3121,7 @@ Disassembly of section .debug_info:
      c0c: 28 75                        	<unknown>
      c0e: 00 01                        	<unknown>
      c10: cf 04 12 28                  	<unknown>
-     c14: 0b 00 00 00                  	vx_tmc	zero
+     c14: 0b 00 00 00                  	<unknown>
      c18: 00 00                        	<unknown>
      c1a: 00 28                        	<unknown>
      c1c: 76 00                        	<unknown>
@@ -3247,7 +3247,7 @@ Disassembly of section .debug_info:
      d46: 00 78                        	<unknown>
      d48: 04 00                        	<unknown>
      d4a: 00 2f                        	<unknown>
-     d4c: 2b 10 00 00                  	vx_imadd	zero, zero, zero, zero, 0
+     d4c: 2b 10 00 00                  	<unknown>
      d50: 96 04                        	<unknown>
      d52: 00 00                        	<unknown>
      d54: 2f 38 10 00                  	<unknown>
@@ -3531,7 +3531,7 @@ Disassembly of section .debug_info:
      fe6: 5f 61 00 01                  	<unknown>
      fea: 2e 04                        	<unknown>
      fec: 04 1c                        	<unknown>
-     fee: 0b 00 00 00                  	vx_tmc	zero
+     fee: 0b 00 00 00                  	<unknown>
      ff2: 36 53                        	<unknown>
      ff4: 10 00                        	<unknown>
      ff6: 00 37                        	<unknown>
@@ -3620,7 +3620,7 @@ Disassembly of section .debug_info:
     10c6: 35 5f                        	<unknown>
     10c8: 5f 6d 00 01                  	<unknown>
     10cc: 5f 04 08 1c                  	<unknown>
-    10d0: 0b 00 00 00                  	vx_tmc	zero
+    10d0: 0b 00 00 00                  	<unknown>
     10d4: 36 35                        	<unknown>
     10d6: 11 00                        	<unknown>
     10d8: 00 37                        	<unknown>
@@ -3680,7 +3680,7 @@ Disassembly of section .debug_info:
     115c: 5f 78 00 01                  	<unknown>
     1160: 95 04                        	<unknown>
     1162: 05 1c                        	<unknown>
-    1164: 0b 00 00 00                  	vx_tmc	zero
+    1164: 0b 00 00 00                  	<unknown>
     1168: 38 35                        	<unknown>
     116a: 6d 31                        	<unknown>
     116c: 00 01                        	<unknown>
@@ -3731,7 +3731,7 @@ Disassembly of section .debug_info:
     11d6: 5f 6d 00 01                  	<unknown>
     11da: b0 04                        	<unknown>
     11dc: 08 1c                        	<unknown>
-    11de: 0b 00 00 00                  	vx_tmc	zero
+    11de: 0b 00 00 00                  	<unknown>
     11e2: 36 50                        	<unknown>
     11e4: 12 00                        	<unknown>
     11e6: 00 37                        	<unknown>
@@ -3776,7 +3776,7 @@ Disassembly of section .debug_info:
     1246: 00 01                        	<unknown>
     1248: b1 04                        	<unknown>
     124a: 08 1c                        	<unknown>
-    124c: 0b 00 00 00                  	vx_tmc	zero
+    124c: 0b 00 00 00                  	<unknown>
     1250: 36 63                        	<unknown>
     1252: 12 00                        	<unknown>
     1254: 00 35                        	<unknown>
@@ -3790,7 +3790,7 @@ Disassembly of section .debug_info:
     1266: 5f 78 00 01                  	<unknown>
     126a: be 04                        	<unknown>
     126c: 05 1c                        	<unknown>
-    126e: 0b 00 00 00                  	vx_tmc	zero
+    126e: 0b 00 00 00                  	<unknown>
     1272: 00 00                        	<unknown>
     1274: 0f 04 34 0b                  	<unknown>
     1278: 00 00                        	<unknown>
@@ -9008,7 +9008,7 @@ Disassembly of section .symtab:
 		...
      20e: f1 ff                        	<unknown>
      210: 53 00 00 00                  	<unknown>
-     214: 0b 00 00 00                  	vx_tmc	zero
+     214: 0b 00 00 00                  	<unknown>
      218: 00 00                        	<unknown>
      21a: 00 00                        	<unknown>
      21c: 00 00                        	<unknown>
@@ -9182,7 +9182,7 @@ Disassembly of section .symtab:
      41e: f1 ff                        	<unknown>
      420: 3d 01                        	<unknown>
      422: 00 00                        	<unknown>
-     424: 0b 00 00 00                  	vx_tmc	zero
+     424: 0b 00 00 00                  	<unknown>
      428: 00 00                        	<unknown>
      42a: 00 00                        	<unknown>
      42c: 00 00                        	<unknown>
@@ -9403,7 +9403,7 @@ Disassembly of section .symtab:
      6be: f1 ff                        	<unknown>
      6c0: 3d 01                        	<unknown>
      6c2: 00 00                        	<unknown>
-     6c4: 0b 00 00 00                  	vx_tmc	zero
+     6c4: 0b 00 00 00                  	<unknown>
      6c8: 00 00                        	<unknown>
      6ca: 00 00                        	<unknown>
      6cc: 00 00                        	<unknown>
@@ -9572,7 +9572,7 @@ Disassembly of section .symtab:
 		...
      8be: f1 ff                        	<unknown>
      8c0: 53 00 00 00                  	<unknown>
-     8c4: 0b 00 00 00                  	vx_tmc	zero
+     8c4: 0b 00 00 00                  	<unknown>
      8c8: 00 00                        	<unknown>
      8ca: 00 00                        	<unknown>
      8cc: 00 00                        	<unknown>
@@ -9746,7 +9746,7 @@ Disassembly of section .symtab:
      ace: f1 ff                        	<unknown>
      ad0: 3d 01                        	<unknown>
      ad2: 00 00                        	<unknown>
-     ad4: 0b 00 00 00                  	vx_tmc	zero
+     ad4: 0b 00 00 00                  	<unknown>
      ad8: 00 00                        	<unknown>
      ada: 00 00                        	<unknown>
      adc: 00 00                        	<unknown>
@@ -9915,7 +9915,7 @@ Disassembly of section .symtab:
 		...
      cce: f1 ff                        	<unknown>
      cd0: 53 00 00 00                  	<unknown>
-     cd4: 0b 00 00 00                  	vx_tmc	zero
+     cd4: 0b 00 00 00                  	<unknown>
      cd8: 00 00                        	<unknown>
      cda: 00 00                        	<unknown>
      cdc: 00 00                        	<unknown>
@@ -10132,7 +10132,7 @@ Disassembly of section .symtab:
      f3e: f1 ff                        	<unknown>
      f40: 3d 01                        	<unknown>
      f42: 00 00                        	<unknown>
-     f44: 0b 00 00 00                  	vx_tmc	zero
+     f44: 0b 00 00 00                  	<unknown>
      f48: 00 00                        	<unknown>
      f4a: 00 00                        	<unknown>
      f4c: 00 00                        	<unknown>
@@ -10301,7 +10301,7 @@ Disassembly of section .symtab:
 		...
     113e: f1 ff                        	<unknown>
     1140: 53 00 00 00                  	<unknown>
-    1144: 0b 00 00 00                  	vx_tmc	zero
+    1144: 0b 00 00 00                  	<unknown>
     1148: 00 00                        	<unknown>
     114a: 00 00                        	<unknown>
     114c: 00 00                        	<unknown>
@@ -10412,7 +10412,7 @@ Disassembly of section .symtab:
     128a: 00 00                        	<unknown>
     128c: 00 00                        	<unknown>
     128e: f1 ff                        	<unknown>
-    1290: ab 02 00 00                  	vx_tex	t0, zero, zero, zero
+    1290: ab 02 00 00                  	<unknown>
 		...
     129c: 04 00                        	<unknown>
     129e: f1 ff                        	<unknown>

@@ -285,7 +285,7 @@ module VX_shared_mem #(
 
     `POP_COUNT(perf_reads_per_cycle, perf_reads_per_mask);
     `POP_COUNT(perf_writes_per_cycle, perf_writes_per_mask);
-    wire perf_crsp_stall_per_cycle = rsp_valid & ~rsp_ready;
+    wire perf_crsp_stall_per_cycle = (|(rsp_valid & ~rsp_ready));
 
     reg [`PERF_CTR_BITS-1:0] perf_reads;
     reg [`PERF_CTR_BITS-1:0] perf_writes;

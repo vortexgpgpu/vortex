@@ -22,6 +22,9 @@ module VX_csr_data #(
 `endif
 `ifdef EXT_ROP_ENABLE
     VX_gpu_csr_if.master                rop_csr_if,
+`ifdef PERF_ENABLE
+    VX_rop_perf_if.slave                rop_perf_if,
+`endif
 `endif
 
     VX_cmt_to_csr_if.slave              cmt_to_csr_if,
@@ -280,6 +283,14 @@ module VX_csr_data #(
             `CSR_MPM_TEX_READS_H    : read_data_r = {`NUM_THREADS{32'(tex_perf_if.mem_reads[`PERF_CTR_BITS-1:32])}};
             `CSR_MPM_TEX_LAT        : read_data_r = {`NUM_THREADS{tex_perf_if.mem_latency[31:0]}};
             `CSR_MPM_TEX_LAT_H      : read_data_r = {`NUM_THREADS{32'(tex_perf_if.mem_latency[`PERF_CTR_BITS-1:32])}};
+        `endif
+        `ifdef EXT_ROP_ENABLE
+            `CSR_MPM_ROP_READS      : read_data_r = {`NUM_THREADS{rop_perf_if.mem_reads[31:0]}};
+            `CSR_MPM_ROP_READS_H    : read_data_r = {`NUM_THREADS{32'(rop_perf_if.mem_reads[`PERF_CTR_BITS-1:32])}};
+            `CSR_MPM_ROP_WRITES     : read_data_r = {`NUM_THREADS{rop_perf_if.mem_writes[31:0]}};
+            `CSR_MPM_ROP_WRITES_H   : read_data_r = {`NUM_THREADS{32'(rop_perf_if.mem_writes[`PERF_CTR_BITS-1:32])}};
+            `CSR_MPM_ROP_LAT        : read_data_r = {`NUM_THREADS{rop_perf_if.mem_latency[31:0]}};
+            `CSR_MPM_ROP_LAT_H      : read_data_r = {`NUM_THREADS{32'(rop_perf_if.mem_latency[`PERF_CTR_BITS-1:32])}};
         `endif
             // PERF: reserved            
             `CSR_MPM_RESERVED       : read_data_r = '0;

@@ -28,6 +28,9 @@ module VX_pipeline #(
 `endif
 `ifdef EXT_ROP_ENABLE        
     VX_rop_req_if               rop_req_if,
+`ifdef PERF_ENABLE
+    VX_rop_perf_if.slave        rop_perf_if,
+`endif
 `endif
 
 `ifdef PERF_ENABLE
@@ -157,6 +160,9 @@ module VX_pipeline #(
     `endif
     `ifdef EXT_ROP_ENABLE        
         .rop_req_if     (rop_req_if),
+    `ifdef PERF_ENABLE
+        .rop_perf_if    (rop_perf_if),
+    `endif
     `endif
 
         .cmt_to_csr_if  (cmt_to_csr_if),   

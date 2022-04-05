@@ -92,6 +92,13 @@
 `define CSR_MPM_TEX_READS_H         12'hB9B
 `define CSR_MPM_TEX_LAT             12'hB1C     // texture latency
 `define CSR_MPM_TEX_LAT_H           12'hB9C
+// PERF: ropunit
+`define CSR_MPM_ROP_READS           12'hB1D     // rop memory reads
+`define CSR_MPM_ROP_READS_H         12'hB9D
+`define CSR_MPM_ROP_WRITES          12'hB1E     // rop memory writes
+`define CSR_MPM_ROP_WRITES_H        12'hB9E
+`define CSR_MPM_ROP_LAT             12'hB1F     // rop memory latency
+`define CSR_MPM_ROP_LAT_H           12'hB9F
 
 // Machine Information Registers
 `define CSR_MVENDORID               12'hF11

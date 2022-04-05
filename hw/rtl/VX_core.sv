@@ -17,6 +17,9 @@ module VX_core #(
 `endif
 `ifdef EXT_ROP_ENABLE        
     VX_rop_req_if           rop_req_if,
+`ifdef PERF_ENABLE
+    VX_rop_perf_if.slave    rop_perf_if,
+`endif
 `endif
 
     // Memory
@@ -101,6 +104,9 @@ module VX_core #(
     `endif
     `ifdef EXT_ROP_ENABLE        
         .rop_req_if     (rop_req_if),
+    `ifdef PERF_ENABLE
+        .rop_perf_if    (rop_perf_if),
+    `endif
     `endif
 
         .sim_ebreak     (sim_ebreak),

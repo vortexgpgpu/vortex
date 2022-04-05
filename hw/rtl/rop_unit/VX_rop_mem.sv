@@ -65,10 +65,25 @@ module VX_rop_mem #(
     `UNUSED_VAR (dcrs)
 
 `ifdef PERF_ENABLE
-    // TODO
-    assign rop_perf_if.mem_reads = 0;
-    assign rop_perf_if.mem_writes = 0;
-    assign rop_perf_if.mem_latency = 0;
+    reg [`PERF_CTR_BITS-1:0] perf_mem_reads;
+    reg [`PERF_CTR_BITS-1:0] perf_mem_writes;
+    reg [`PERF_CTR_BITS-1:0] perf_mem_latency;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_mem_reads   <= 0;
+            perf_mem_writes  <= 0;
+            perf_mem_latency <= 0;
+        end else begin
+            perf_mem_reads   <= perf_mem_reads  + {`PERF_CTR_BITS{mreq_valid & ~mreq_rw}};
+            perf_mem_writes  <= perf_mem_writes + {`PERF_CTR_BITS{mreq_valid & mreq_rw}};
+            perf_mem_latency <= 0;
+        end
+    end
+
+    assign rop_perf_if.mem_reads   = perf_mem_reads;
+    assign rop_perf_if.mem_writes  = perf_mem_writes;
+    assign rop_perf_if.mem_latency = perf_mem_latency;
 `endif
 
     //////////////////////////////////////////////////////////////////

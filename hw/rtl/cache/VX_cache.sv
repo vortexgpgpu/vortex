@@ -686,10 +686,10 @@ module VX_cache #(
     `POP_COUNT(perf_write_miss_per_cycle,  perf_write_miss_per_bank);
     `POP_COUNT(perf_mshr_stall_per_cycle,  perf_mshr_stall_per_bank);
     
-    wire [NUM_REQS-1:0] perf_crsp_stall_per_mask = core_rsp_valid & ~core_rsp_ready;
+    wire [NUM_REQS-1:0] perf_crsp_stall_per_mask = core_rsp_valid_c & ~core_rsp_ready_c;
     `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_mask);
 
-    wire perf_mem_stall_per_cycle = mem_req_valid & ~mem_req_ready;
+    wire perf_mem_stall_per_cycle = mem_req_valid_c & ~mem_req_ready_c;
 
     reg [`PERF_CTR_BITS-1:0] perf_core_reads;
     reg [`PERF_CTR_BITS-1:0] perf_core_writes;
