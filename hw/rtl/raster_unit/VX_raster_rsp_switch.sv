@@ -42,10 +42,8 @@ module VX_raster_rsp_switch #(
         end
     end
 
-    always_comb begin
-        raster_req_if.empty = empty;
-        raster_req_if.stamps = stamps;
-        raster_req_if.valid = valid;
-    end
+    assign raster_req_if.empty = empty;
+    assign raster_req_if.stamps = stamps;
+    assign raster_req_if.valid = valid;
 
 endmodule
