@@ -1,5 +1,6 @@
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_reset_relay #(
     parameter N     = 1,
     parameter DEPTH = 1
@@ -29,3 +30,4 @@ module VX_reset_relay #(
     end
   
 endmodule
+`TRACING_ON

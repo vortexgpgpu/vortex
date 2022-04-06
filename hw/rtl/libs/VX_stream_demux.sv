@@ -1,5 +1,6 @@
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_stream_demux #(
     parameter NUM_REQS       = 1,
     parameter LANES          = 1,
@@ -121,3 +122,4 @@ module VX_stream_demux #(
     end
     
 endmodule
+`TRACING_ON
