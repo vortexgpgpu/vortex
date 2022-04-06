@@ -1,5 +1,6 @@
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_lerp_fx #(
     parameter N = 8
 ) (
@@ -10,8 +11,11 @@ module VX_lerp_fx #(
 );
     localparam N2  = 2 * N;
     localparam ONE = 1 << N;
+
     wire [N2:0] sum = in1 * (N+1)'((N+1)'(ONE) - frac) + in2 * frac;
     `UNUSED_VAR (sum)
+    
     assign out = sum[N2-1:N];
 
 endmodule
+`TRACING_ON

@@ -1,6 +1,6 @@
 `include "VX_platform.vh"
 
-//`TRACING_OFF
+`TRACING_OFF
 module VX_mem_streamer #(
     parameter NUM_REQS = 4,
     parameter ADDRW = 32,
@@ -299,4 +299,4 @@ module VX_mem_streamer #(
     assign rsp_stall = rsp_valid & ~rsp_ready;
 
 endmodule
-// `TRACING_ON
+`TRACING_ON
