@@ -107,11 +107,13 @@ module VX_raster_unit #(
     VX_raster_extents #(
         .RASTER_TILE_SIZE(RASTER_TILE_SIZE)
     ) raster_extents (
+        // .clk(clk),
         .edges(edges),
         .extents(extents)
     );
 
     VX_raster_edge_functions raster_edge_function (
+        // .clk(clk),
         .x_loc(x_loc),
         .y_loc(y_loc),
         .edges(edges),
@@ -123,7 +125,7 @@ module VX_raster_unit #(
     logic [`RASTER_DIM_BITS-1:0] temp_quad_x_loc[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0],
         temp_quad_y_loc[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0];
     logic [3:0] temp_quad_masks[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0];
-    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_quad_bcoords[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0];
+    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_quad_bcoords[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0];
     logic [NUM_SLICES-1:0] quad_queue_empty;
     logic [NUM_SLICES-1:0] quad_pop;
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_out_pid [NUM_SLICES-1:0];
@@ -165,7 +167,7 @@ module VX_raster_unit #(
     logic [`RASTER_DIM_BITS-1:0] out_quad_x_loc[RASTER_QUAD_OUTPUT_RATE-1:0];
     logic [`RASTER_DIM_BITS-1:0] out_quad_y_loc[RASTER_QUAD_OUTPUT_RATE-1:0];
     logic [3:0] out_quad_masks[RASTER_QUAD_OUTPUT_RATE-1:0];
-    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0];
+    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0];
     logic arbiter_valid;
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] out_pid;
     generate
@@ -198,7 +200,7 @@ module VX_raster_unit #(
                 arbiter_valid = !quad_queue_empty[0];
                 if (!quad_queue_empty[0]) begin
                     quad_pop[0] = 1;
-                    if (|quad_valid) begin
+                    if (|quad_valid[0]) begin
                         out_quad_x_loc = temp_quad_x_loc[0];
                         out_quad_y_loc = temp_quad_y_loc[0];
                         out_quad_masks = temp_quad_masks[0];
@@ -216,7 +218,7 @@ module VX_raster_unit #(
         .CLUSTER_ID (CLUSTER_ID),
         .RASTER_QUAD_OUTPUT_RATE (RASTER_QUAD_OUTPUT_RATE)
     ) raster_rsp_switch (
-        .valid(arbiter_valid),
+        .valid(arbiter_valid | raster_unit_ready),
         .empty(raster_unit_ready),
         // Quad data
         .x_loc(out_quad_x_loc),

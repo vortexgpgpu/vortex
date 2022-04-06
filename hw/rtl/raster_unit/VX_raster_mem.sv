@@ -278,7 +278,7 @@ module VX_raster_mem #(
         .req_valid(mem_fire), // NOTE: This should ensure stalls
         .req_rw(0),
         .req_mask(mem_req_mask),
-        .req_byteen(4'hf),   /// TODO: USE THIS PIN
+        `UNUSED_PIN (req_byteen),
         .req_addr(fire_mem_req_addr),
         `UNUSED_PIN (req_data),
         .req_tag(mem_tag_type), //tag type appended to tag
@@ -308,24 +308,24 @@ module VX_raster_mem #(
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
         if (|cache_req_if.valid) begin
-            dpi_trace("%d: raster-cache-req:\n\tvalid=",
+            dpi_trace(2, "%d: raster-cache-req:\n\tvalid=",
                 $time);
-            `TRACE_ARRAY1D(cache_req_if.valid, 9);
-            dpi_trace("\n\taddr=");
-            `TRACE_ARRAY1D(cache_req_if.addr, 9);
-            dpi_trace("\n\ttag=");
-            `TRACE_ARRAY1D(cache_req_if.tag, 9);
-            dpi_trace("\n");
+            `TRACE_ARRAY1D(2, cache_req_if.valid, 9);
+            dpi_trace(2, "\n\taddr=");
+            `TRACE_ARRAY1D(2, cache_req_if.addr, 9);
+            dpi_trace(2, "\n\ttag=");
+            `TRACE_ARRAY1D(2, cache_req_if.tag, 9);
+            dpi_trace(2, "\n");
         end
         if (|cache_rsp_if.valid) begin
-            dpi_trace("%d: raster-cache-rsp:\n\tvalid=",
+            dpi_trace(2, "%d: raster-cache-rsp:\n\tvalid=",
                 $time);
-            `TRACE_ARRAY1D(cache_rsp_if.valid, 9);
-            dpi_trace("\n\tdata=");
-            `TRACE_ARRAY1D(cache_rsp_if.data, 9);
-            dpi_trace("\n\ttag=");
-            `TRACE_ARRAY1D(cache_rsp_if.tag, 9);
-            dpi_trace("\n");
+            `TRACE_ARRAY1D(2, cache_rsp_if.valid, 9);
+            dpi_trace(2, "\n\tdata=");
+            `TRACE_ARRAY1D(2, cache_rsp_if.data, 9);
+            dpi_trace(2, "\n\ttag=");
+            `TRACE_ARRAY1D(2, cache_rsp_if.tag, 9);
+            dpi_trace(2, "\n");
         end  
     end
 `endif
