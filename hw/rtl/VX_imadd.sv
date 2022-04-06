@@ -95,6 +95,7 @@ module VX_imadd (
 
     VX_pipe_register #(
         .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
+        .DEPTH  (2),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
