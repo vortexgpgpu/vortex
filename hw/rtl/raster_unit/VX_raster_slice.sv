@@ -80,7 +80,6 @@ module VX_raster_slice #(
     //        forwarded directly here.
     always @(posedge clk) begin
         if (reset) begin
-            done <= 0;
             // Reset all globals and signals
             for (integer i = 0; i < 3; ++i) begin
                 global_extents[i] <= 0;
@@ -220,6 +219,7 @@ module VX_raster_slice #(
     // Stop pushing the last tile back in
     //logic last_block;
     always @(posedge clk) begin
+        done <= 0;
         // check if the current block is going to be the last block
         if (fifo_empty == 1 && valid_tile == 0 && valid_block == 1)
             done <= 1;
