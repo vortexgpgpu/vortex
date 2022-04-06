@@ -51,9 +51,9 @@ module VX_raster_dcr #(
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
         if (dcr_wr_valid) begin
-            dpi_trace("%d: raster-dcr: state=", $time);
-            trace_raster_state(dcr_wr_addr);
-            dpi_trace(", data=0x%0h\n", dcr_wr_data);
+            dpi_trace(1, "%d: raster-dcr: state=", $time);
+            trace_raster_state(1, dcr_wr_addr);
+            dpi_trace(1, ", data=0x%0h\n", dcr_wr_data);
         end
     end
 `endif

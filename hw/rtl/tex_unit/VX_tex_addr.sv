@@ -166,42 +166,42 @@ module VX_tex_addr #(
     
     always @(posedge clk) begin
         if (req_valid && ~stall_out) begin
-            dpi_trace("%d: *** tex-addr: log_pitch=", $time); 
-            `TRACE_ARRAY1D(log_pitch, NUM_REQS);
-            dpi_trace(", mip_addr=");
-            `TRACE_ARRAY1D(mip_addr, NUM_REQS);
-            dpi_trace(", req_logdims=");
-            `TRACE_ARRAY2D(req_logdims, 2, NUM_REQS);  
-            dpi_trace(", clamped_lo=");
-            `TRACE_ARRAY2D(clamped_lo, 2, NUM_REQS);    
-            dpi_trace(", clamped_hi=");
-            `TRACE_ARRAY2D(clamped_hi, 2, NUM_REQS);
-            dpi_trace(", mip_addr=");
-            `TRACE_ARRAY1D(mip_addr, NUM_REQS);
-            dpi_trace("\n");
+            dpi_trace(2, "%d: *** tex-addr: log_pitch=", $time); 
+            `TRACE_ARRAY1D(2, log_pitch, NUM_REQS);
+            dpi_trace(2, ", mip_addr=");
+            `TRACE_ARRAY1D(2, mip_addr, NUM_REQS);
+            dpi_trace(2, ", req_logdims=");
+            `TRACE_ARRAY2D(2, req_logdims, 2, NUM_REQS);  
+            dpi_trace(2, ", clamped_lo=");
+            `TRACE_ARRAY2D(2, clamped_lo, 2, NUM_REQS);    
+            dpi_trace(2, ", clamped_hi=");
+            `TRACE_ARRAY2D(2, clamped_hi, 2, NUM_REQS);
+            dpi_trace(2, ", mip_addr=");
+            `TRACE_ARRAY1D(2, mip_addr, NUM_REQS);
+            dpi_trace(2, "\n");
         end
 
         if (valid_s0 && ~stall_out) begin
-            dpi_trace("%d: *** tex-addr: scaled_lo=", $time); 
-            `TRACE_ARRAY2D(scaled_lo, 2, NUM_REQS);
-            dpi_trace(", scaled_hi=");
-            `TRACE_ARRAY2D(scaled_hi, 2, NUM_REQS);  
-            dpi_trace(", offset_u_lo=");
-            `TRACE_ARRAY1D(offset_u_lo, NUM_REQS);
-            dpi_trace(", offset_u_hi=");
-            `TRACE_ARRAY1D(offset_u_hi, NUM_REQS);    
-            dpi_trace(", offset_v_lo=");
-            `TRACE_ARRAY1D(offset_v_lo, NUM_REQS);
-            dpi_trace(", offset_v_hi=");
-            `TRACE_ARRAY1D(offset_v_hi, NUM_REQS);
-            dpi_trace("\n");
+            dpi_trace(2, "%d: *** tex-addr: scaled_lo=", $time); 
+            `TRACE_ARRAY2D(2, scaled_lo, 2, NUM_REQS);
+            dpi_trace(2, ", scaled_hi=");
+            `TRACE_ARRAY2D(2, scaled_hi, 2, NUM_REQS);  
+            dpi_trace(2, ", offset_u_lo=");
+            `TRACE_ARRAY1D(2, offset_u_lo, NUM_REQS);
+            dpi_trace(2, ", offset_u_hi=");
+            `TRACE_ARRAY1D(2, offset_u_hi, NUM_REQS);    
+            dpi_trace(2, ", offset_v_lo=");
+            `TRACE_ARRAY1D(2, offset_v_lo, NUM_REQS);
+            dpi_trace(2, ", offset_v_hi=");
+            `TRACE_ARRAY1D(2, offset_v_hi, NUM_REQS);
+            dpi_trace(2, "\n");
         end
 
         if (rsp_valid && rsp_ready) begin
-            dpi_trace("%d: core%0d-tex-addr: wid=%0d, PC=0x%0h, tmask=%b, req_filter=%0d, lgstride=%0d, addr=", 
+            dpi_trace(2, "%d: core%0d-tex-addr: wid=%0d, PC=0x%0h, tmask=%b, req_filter=%0d, lgstride=%0d, addr=", 
                     $time, CORE_ID, rsp_wid, rsp_PC, rsp_tmask, rsp_filter, rsp_lgstride);
-            `TRACE_ARRAY2D(rsp_addr, 4, NUM_REQS);
-            dpi_trace(" (#%0d)\n", rsp_uuid);
+            `TRACE_ARRAY2D(2, rsp_addr, 4, NUM_REQS);
+            dpi_trace(2, " (#%0d)\n", rsp_uuid);
         end
     end
 `endif
