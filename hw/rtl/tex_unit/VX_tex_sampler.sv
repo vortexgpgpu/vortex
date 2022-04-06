@@ -65,16 +65,18 @@ module VX_tex_sampler #(
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         for (genvar j = 0; j < 4; ++j) begin
             VX_lerp_fx #(
-                .N (8)
+                .N (8),
+                .F (`TEX_BLEND_FRAC)
             ) tex_lerp_ul (
                 .in1  (fmt_texels_s0[i][0][j*8 +: 8]),
                 .in2  (fmt_texels_s0[i][1][j*8 +: 8]),
                 .frac (req_blends_s0[i][0]),
                 .out  (texel_ul[i][j*8 +: 8])
             );
-
+                
             VX_lerp_fx #(
-                .N (8)
+                .N (8),
+                .F (`TEX_BLEND_FRAC)
             ) tex_lerp_uh (
                 .in1  (fmt_texels_s0[i][2][j*8 +: 8]),
                 .in2  (fmt_texels_s0[i][3][j*8 +: 8]),
@@ -87,6 +89,7 @@ module VX_tex_sampler #(
 
     VX_pipe_register #(
         .DATAW  (1 + NUM_REQS + REQ_INFOW + (NUM_REQS * `TEX_BLEND_FRAC) + (2 * NUM_REQS * 32)),
+        .DEPTH  (2),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
@@ -99,7 +102,8 @@ module VX_tex_sampler #(
     for (genvar i = 0; i < NUM_REQS; i++) begin
         for (genvar j = 0; j < 4; ++j) begin
             VX_lerp_fx #(
-                .N (8)
+                .N (8),
+                .F (`TEX_BLEND_FRAC)
             ) tex_lerp_v (
                 .in1  (texel_ul_s1[i][j*8 +: 8]),
                 .in2  (texel_uh_s1[i][j*8 +: 8]),
@@ -113,6 +117,7 @@ module VX_tex_sampler #(
     
     VX_pipe_register #(
         .DATAW  (1 + NUM_REQS + REQ_INFOW + (NUM_REQS * 32)),
+        .DEPTH  (2),
         .RESETW (1)
     ) pipe_reg2 (
         .clk      (clk),
@@ -135,20 +140,20 @@ module VX_tex_sampler #(
 
     always @(posedge clk) begin        
         if (req_valid && req_ready) begin
-            dpi_trace("%d: core%0d-tex-sampler-req: wid=%0d, PC=0x%0h, tmask=%b, format=%0d, data=", 
+            dpi_trace(2, "%d: core%0d-tex-sampler-req: wid=%0d, PC=0x%0h, tmask=%b, format=%0d, data=", 
                     $time, CORE_ID, req_wid, req_PC, req_tmask, req_format);
-            `TRACE_ARRAY2D(req_data, 4, NUM_REQS);
-            dpi_trace(", u0=");
-            `TRACE_ARRAY1D(req_blends[0], NUM_REQS);
-            dpi_trace(", v0=");
-            `TRACE_ARRAY1D(req_blends[1], NUM_REQS);
-            dpi_trace(" (#%0d\n", req_uuid);
+            `TRACE_ARRAY2D(2, req_data, 4, NUM_REQS);
+            dpi_trace(2, ", u0=");
+            `TRACE_ARRAY1D(2, req_blends[0], NUM_REQS);
+            dpi_trace(2, ", v0=");
+            `TRACE_ARRAY1D(2, req_blends[1], NUM_REQS);
+            dpi_trace(2, " (#%0d\n", req_uuid);
         end
         if (rsp_valid && rsp_ready) begin
-            dpi_trace("%d: core%0d-tex-sampler-rsp: wid=%0d, PC=0x%0h, tmask=%b, data=", 
+            dpi_trace(2, "%d: core%0d-tex-sampler-rsp: wid=%0d, PC=0x%0h, tmask=%b, data=", 
                     $time, CORE_ID, rsp_wid, rsp_PC, rsp_tmask);
-            `TRACE_ARRAY1D(rsp_data, NUM_REQS);
-            dpi_trace(" (#%0d\n", rsp_uuid);
+            `TRACE_ARRAY1D(2, rsp_data, NUM_REQS);
+            dpi_trace(2, " (#%0d\n", rsp_uuid);
         end        
     end
 `endif  

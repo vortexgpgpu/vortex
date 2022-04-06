@@ -24,9 +24,9 @@ module VX_rop_ds #(
     input wire [NUM_LANES-1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_zpass,
     input wire [NUM_LANES-1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_zfail,
     input wire [NUM_LANES-1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_fail,
-    input wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]    stencil_ref,
-    input wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]    stencil_mask,
-    input wire [`ROP_STENCIL_BITS-1:0]                  stencil_writemask,
+    input wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]   stencil_ref,
+    input wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]   stencil_mask,
+    input wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]   stencil_writemask,
 
     // Input values
     input wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0]     depth_ref,
@@ -84,7 +84,7 @@ module VX_rop_ds #(
         assign stencil_op[i] = spass[i] ? (dpass[i] ? stencil_zpass[i] : stencil_zfail[i]) : stencil_fail[i];
     end    
 
-    wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] stenil_result;
+    wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] stencil_result;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         VX_rop_stencil_op #(
@@ -93,7 +93,7 @@ module VX_rop_ds #(
             .stencil_op     (stencil_op[i]),
             .stencil_ref    (stencil_ref[i]),
             .stencil_val    (stencil_val[i]),
-            .stencil_result (stenil_result[i])
+            .stencil_result (stencil_result[i])
         );
     end
 
@@ -101,7 +101,7 @@ module VX_rop_ds #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         for (genvar j = 0; j < `ROP_STENCIL_BITS; ++j) begin
-            assign stencil_write[i][j] = stencil_writemask[j] ? stenil_result[i][j] : stencil_val[i][j];
+            assign stencil_write[i][j] = stencil_writemask[i][j] ? stencil_result[i][j] : stencil_val[i][j];
         end
     end
 
@@ -116,8 +116,8 @@ module VX_rop_ds #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall),
-        .data_in  ({valid_in,  tag_in,  depth_write,  stencil_write, test_result}),
-        .data_out ({valid_out, tag_out, depth_out,    stencil_out,    test_out})
+        .data_in  ({valid_in,  tag_in,  depth_write, stencil_write, test_result}),
+        .data_out ({valid_out, tag_out, depth_out,   stencil_out,   test_out})
     );
 
 endmodule

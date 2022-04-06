@@ -76,9 +76,9 @@ module VX_tex_dcr #(
 `ifdef DBG_TRACE_TEX
     always @(posedge clk) begin
         if (dcr_wr_valid) begin
-            dpi_trace("%d: tex-dcr: stage=%0d, state=", $time, tex_stage);
-            trace_tex_dcr(dcr_wr_addr);
-            dpi_trace(", data=0x%0h\n", dcr_wr_data);
+            dpi_trace(1, "%d: tex-dcr: stage=%0d, state=", $time, tex_stage);
+            trace_tex_dcr(1, dcr_wr_addr);
+            dpi_trace(1, ", data=0x%0h\n", dcr_wr_data);
         end
     end
 `endif

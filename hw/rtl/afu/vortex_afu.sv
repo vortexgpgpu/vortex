@@ -195,36 +195,36 @@ always @(posedge clk) begin
       MMIO_CMD_ARG0: begin
         cmd_args[0] <= 64'(cp2af_sRxPort.c0.data);
       `ifdef DBG_TRACE_AFU 
-        dpi_trace("%d: MMIO_CMD_ARG0: data=0x%0h\n", $time, 64'(cp2af_sRxPort.c0.data));
+        dpi_trace(2, "%d: MMIO_CMD_ARG0: data=0x%0h\n", $time, 64'(cp2af_sRxPort.c0.data));
       `endif
       end
       MMIO_CMD_ARG1: begin
         cmd_args[1] <= 64'(cp2af_sRxPort.c0.data);
       `ifdef DBG_TRACE_AFU
-        dpi_trace("%d: MMIO_CMD_ARG1: data=0x%0h\n", $time, 64'(cp2af_sRxPort.c0.data));
+        dpi_trace(2, "%d: MMIO_CMD_ARG1: data=0x%0h\n", $time, 64'(cp2af_sRxPort.c0.data));
       `endif
       end
       MMIO_CMD_ARG2: begin
         cmd_args[2] <= 64'(cp2af_sRxPort.c0.data);
       `ifdef DBG_TRACE_AFU
-        dpi_trace("%d: MMIO_CMD_ARG2: data=%0d\n", $time, 64'(cp2af_sRxPort.c0.data));
+        dpi_trace(2, "%d: MMIO_CMD_ARG2: data=%0d\n", $time, 64'(cp2af_sRxPort.c0.data));
       `endif
       end
       MMIO_CMD_TYPE: begin
       `ifdef DBG_TRACE_AFU
-        dpi_trace("%d: MMIO_CMD_TYPE: data=%0d\n", $time, 64'(cp2af_sRxPort.c0.data));
+        dpi_trace(2, "%d: MMIO_CMD_TYPE: data=%0d\n", $time, 64'(cp2af_sRxPort.c0.data));
       `endif
       end
     `ifdef SCOPE
       MMIO_SCOPE_WRITE: begin
       `ifdef DBG_TRACE_AFU
-        dpi_trace("%d: MMIO_SCOPE_WRITE: data=0x%0h\n", $time, 64'(cp2af_sRxPort.c0.data));
+        dpi_trace(2, "%d: MMIO_SCOPE_WRITE: data=0x%0h\n", $time, 64'(cp2af_sRxPort.c0.data));
       `endif
       end
     `endif
       default: begin
         `ifdef DBG_TRACE_AFU
-          dpi_trace("%d: Unknown MMIO Wr: addr=0x%0h, data=0x%0h\n", $time, mmio_hdr.address, 64'(cp2af_sRxPort.c0.data));
+          dpi_trace(2, "%d: Unknown MMIO Wr: addr=0x%0h, data=0x%0h\n", $time, mmio_hdr.address, 64'(cp2af_sRxPort.c0.data));
         `endif
       end
     endcase
@@ -252,7 +252,7 @@ always @(posedge clk) begin
         mmio_tx.data <= 64'({cout_q_dout, !cout_q_empty, 8'(state)});
       `ifdef DBG_TRACE_AFU
         if (state != STATE_WIDTH'(mmio_tx.data)) begin
-          dpi_trace("%d: MMIO_STATUS: addr=0x%0h, state=%0d\n", $time, mmio_hdr.address, state);
+          dpi_trace(2, "%d: MMIO_STATUS: addr=0x%0h, state=%0d\n", $time, mmio_hdr.address, state);
         end
       `endif
       end
@@ -260,28 +260,28 @@ always @(posedge clk) begin
       MMIO_SCOPE_READ: begin
         mmio_tx.data <= cmd_scope_rdata;
       `ifdef DBG_TRACE_AFU
-        dpi_trace("%d: MMIO_SCOPE_READ: data=0x%0h\n", $time, cmd_scope_rdata);
+        dpi_trace(2, "%d: MMIO_SCOPE_READ: data=0x%0h\n", $time, cmd_scope_rdata);
       `endif
       end
     `endif
       MMIO_DEV_CAPS: begin
         mmio_tx.data <= dev_caps;
       `ifdef DBG_TRACE_AFU
-        dpi_trace("%d: MMIO_DEV_CAPS: data=0x%0h\n", $time, dev_caps);
+        dpi_trace(2, "%d: MMIO_DEV_CAPS: data=0x%0h\n", $time, dev_caps);
       `endif
       end      
       MMIO_ISA_CAPS: begin
         mmio_tx.data <= isa_caps;
       `ifdef DBG_TRACE_AFU
         if (state != STATE_WIDTH'(mmio_tx.data)) begin
-          dpi_trace("%d: MMIO_ISA_CAPS: data=%0d\n", $time, isa_caps);
+          dpi_trace(2, "%d: MMIO_ISA_CAPS: data=%0d\n", $time, isa_caps);
         end
       `endif
       end
       default: begin
         mmio_tx.data <= 64'h0;
       `ifdef DBG_TRACE_AFU
-        dpi_trace("%d: Unknown MMIO Rd: addr=0x%0h\n", $time, mmio_hdr.address);
+        dpi_trace(2, "%d: Unknown MMIO Rd: addr=0x%0h\n", $time, mmio_hdr.address);
       `endif
       end
     endcase
@@ -319,25 +319,25 @@ always @(posedge clk) begin
         case (cmd_type)
           CMD_MEM_READ: begin     
           `ifdef DBG_TRACE_AFU
-            dpi_trace("%d: STATE MEM_READ: ia=0x%0h addr=0x%0h size=%0d\n", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size);
+            dpi_trace(2, "%d: STATE MEM_READ: ia=0x%0h addr=0x%0h size=%0d\n", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size);
           `endif
             state <= STATE_MEM_READ;   
           end 
           CMD_MEM_WRITE: begin      
           `ifdef DBG_TRACE_AFU
-            dpi_trace("%d: STATE MEM_WRITE: ia=0x%0h addr=0x%0h size=%0d\n", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size);
+            dpi_trace(2, "%d: STATE MEM_WRITE: ia=0x%0h addr=0x%0h size=%0d\n", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size);
           `endif
             state <= STATE_MEM_WRITE;
           end
           CMD_DCR_WRITE: begin      
           `ifdef DBG_TRACE_AFU
-            dpi_trace("%d: STATE DCR_WRITE: addr=0x%0h data=%0d\n", $time, cmd_dcr_addr, cmd_dcr_data);
+            dpi_trace(2, "%d: STATE DCR_WRITE: addr=0x%0h data=%0d\n", $time, cmd_dcr_addr, cmd_dcr_data);
           `endif
             state <= STATE_DCR_WRITE;
           end
           CMD_RUN: begin        
           `ifdef DBG_TRACE_AFU
-            dpi_trace("%d: STATE RUN\n", $time);
+            dpi_trace(2, "%d: STATE RUN\n", $time);
           `endif
             vx_start <= 1;            
             state <= STATE_RUN;                    
@@ -352,7 +352,7 @@ always @(posedge clk) begin
         if (cmd_mem_rd_done) begin
           state <= STATE_IDLE;
         `ifdef DBG_TRACE_AFU
-          dpi_trace("%d: STATE IDLE\n", $time);
+          dpi_trace(2, "%d: STATE IDLE\n", $time);
         `endif
         end
       end
@@ -361,7 +361,7 @@ always @(posedge clk) begin
         if (cmd_mem_wr_done) begin
           state <= STATE_IDLE;
         `ifdef DBG_TRACE_AFU
-          dpi_trace("%d: STATE IDLE\n", $time);
+          dpi_trace(2, "%d: STATE IDLE\n", $time);
         `endif
         end
       end
@@ -370,7 +370,7 @@ always @(posedge clk) begin
         if (cmd_dcr_wr_done) begin
           state <= STATE_IDLE;
         `ifdef DBG_TRACE_AFU
-          dpi_trace("%d: STATE IDLE\n", $time);
+          dpi_trace(2, "%d: STATE IDLE\n", $time);
         `endif
         end
       end
@@ -382,7 +382,7 @@ always @(posedge clk) begin
             vx_started <= 0;
             state <= STATE_IDLE;
           `ifdef DBG_TRACE_AFU
-            dpi_trace("%d: STATE IDLE\n", $time);
+            dpi_trace(2, "%d: STATE IDLE\n", $time);
           `endif
           end
         end else begin
@@ -692,7 +692,7 @@ always @(posedge clk) begin
     cci_rd_req_addr <= cci_rd_req_addr + 1;
     cci_rd_req_ctr  <= cci_rd_req_ctr + 1;
   `ifdef DBG_TRACE_AFU
-    dpi_trace("%d: CCI Rd Req: addr=0x%0h, tag=0x%0h, rem=%0d, pending=%0d\n", $time, cci_rd_req_addr, cci_rd_req_tag, (cmd_data_size - cci_rd_req_ctr - 1), cci_pending_reads);
+    dpi_trace(2, "%d: CCI Rd Req: addr=0x%0h, tag=0x%0h, rem=%0d, pending=%0d\n", $time, cci_rd_req_addr, cci_rd_req_tag, (cmd_data_size - cci_rd_req_ctr - 1), cci_pending_reads);
   `endif
   end
 
@@ -702,13 +702,13 @@ always @(posedge clk) begin
       cci_mem_wr_req_addr_base <= cci_mem_wr_req_addr_base + CCI_ADDR_WIDTH'(CCI_RD_WINDOW_SIZE);
     end
   `ifdef DBG_TRACE_AFU
-    dpi_trace("%d: CCI Rd Rsp: idx=%0d, ctr=%0d, data=0x%0h\n", $time, cci_rd_rsp_tag, cci_rd_rsp_ctr, cp2af_sRxPort.c0.data);
+    dpi_trace(2, "%d: CCI Rd Rsp: idx=%0d, ctr=%0d, data=0x%0h\n", $time, cci_rd_rsp_tag, cci_rd_rsp_ctr, cp2af_sRxPort.c0.data);
   `endif
   end 
 
   if (cci_rdq_pop) begin
   `ifdef DBG_TRACE_AFU
-    dpi_trace("%d: CCI Rd Queue Pop: pending=%0d\n", $time, cci_pending_reads);
+    dpi_trace(2, "%d: CCI Rd Queue Pop: pending=%0d\n", $time, cci_pending_reads);
   `endif
   end
 
@@ -849,13 +849,13 @@ begin
       cci_wr_req_done <= 1;
     end
   `ifdef DBG_TRACE_AFU
-    dpi_trace("%d: CCI Wr Req: addr=0x%0h, rem=%0d, pending=%0d, data=0x%0h\n", $time, cci_wr_req_addr, (cci_wr_req_ctr - 1), cci_pending_writes, af2cp_sTxPort.c1.data);
+    dpi_trace(2, "%d: CCI Wr Req: addr=0x%0h, rem=%0d, pending=%0d, data=0x%0h\n", $time, cci_wr_req_addr, (cci_wr_req_ctr - 1), cci_pending_writes, af2cp_sTxPort.c1.data);
   `endif
   end
 
   if (cci_wr_rsp_fire) begin 
   `ifdef DBG_TRACE_AFU     
-    dpi_trace("%d: CCI Wr Rsp: pending=%0d\n", $time, cci_pending_writes);  
+    dpi_trace(2, "%d: CCI Wr Rsp: pending=%0d\n", $time, cci_pending_writes);  
   `endif    
   end
 end

@@ -230,6 +230,7 @@ private:
   uint32_t stencil_front_zfail_;
   uint32_t stencil_front_fail_;
   uint32_t stencil_front_mask_;
+  uint32_t stencil_front_writemask_;
   uint32_t stencil_front_ref_;
   uint32_t stencil_back_func_;
   uint32_t stencil_back_zpass_;
@@ -237,7 +238,7 @@ private:
   uint32_t stencil_back_fail_;
   uint32_t stencil_back_mask_;
   uint32_t stencil_back_ref_;
-  uint32_t stencil_writemask_;
+  uint32_t stencil_back_writemask_;
   bool depth_enabled_;
   bool stencil_front_enabled_;
   bool stencil_back_enabled_;
@@ -257,26 +258,26 @@ private:
     stencil_front_fail_ = dcrs_.read(DCR_ROP_STENCIL_FAIL) & 0xffff;
     stencil_front_ref_  = dcrs_.read(DCR_ROP_STENCIL_REF) & 0xffff;
     stencil_front_mask_ = dcrs_.read(DCR_ROP_STENCIL_MASK) & 0xffff;    
+    stencil_front_writemask_ = dcrs_.read(DCR_ROP_STENCIL_WRITEMASK) & 0xffff;
+
     stencil_back_func_  = dcrs_.read(DCR_ROP_STENCIL_FUNC) >> 16;
     stencil_back_zpass_ = dcrs_.read(DCR_ROP_STENCIL_ZPASS) >> 16;
     stencil_back_zfail_ = dcrs_.read(DCR_ROP_STENCIL_ZFAIL) >> 16;
     stencil_back_fail_  = dcrs_.read(DCR_ROP_STENCIL_FAIL) >> 16;    
     stencil_back_ref_   = dcrs_.read(DCR_ROP_STENCIL_REF) >> 16;
     stencil_back_mask_  = dcrs_.read(DCR_ROP_STENCIL_MASK) >> 16;
-    stencil_writemask_  = dcrs_.read(DCR_ROP_STENCIL_WRITEMASK);
+    stencil_back_writemask_ = dcrs_.read(DCR_ROP_STENCIL_WRITEMASK) >> 16;
 
     depth_enabled_      = !((depth_func_ == ROP_DEPTH_FUNC_ALWAYS) 
                          && !depth_writemask_);
     
     stencil_front_enabled_ = !((stencil_front_func_  == ROP_DEPTH_FUNC_ALWAYS) 
                             && (stencil_front_zpass_ == ROP_STENCIL_OP_KEEP)
-                            && (stencil_front_zfail_ == ROP_STENCIL_OP_KEEP)
-                            && (stencil_front_mask_  == ROP_STENCIL_MASK));
+                            && (stencil_front_zfail_ == ROP_STENCIL_OP_KEEP));
     
     stencil_back_enabled_ = !((stencil_back_func_  == ROP_DEPTH_FUNC_ALWAYS) 
                            && (stencil_back_zpass_ == ROP_STENCIL_OP_KEEP)
-                           && (stencil_back_zfail_ == ROP_STENCIL_OP_KEEP)
-                           && (stencil_back_mask_  == ROP_STENCIL_MASK));
+                           && (stencil_back_zfail_ == ROP_STENCIL_OP_KEEP));
 
     initialized_ = true;
   }
@@ -284,8 +285,9 @@ private:
   bool doDepthStencilTest(uint32_t x, uint32_t y, uint32_t is_backface, uint32_t depth)  { 
     auto depth_ref     = depth & ROP_DEPTH_MASK;    
     auto stencil_func  = is_backface ? stencil_back_func_ : stencil_front_func_;    
-    auto stencil_mask  = is_backface ? stencil_back_mask_ : stencil_front_mask_;
     auto stencil_ref   = is_backface ? stencil_back_ref_ : stencil_front_ref_;    
+    auto stencil_mask  = is_backface ? stencil_back_mask_ : stencil_front_mask_;
+    auto stencil_writemask = is_backface ? stencil_back_writemask_ : stencil_front_writemask_;
     auto stencil_ref_m = stencil_ref & stencil_mask;
 
     uint32_t buf_addr = buf_baseaddr_ + y * buf_pitch_ + x * 4;
@@ -298,7 +300,7 @@ private:
 
     uint32_t stencil_val_m = stencil_val & stencil_mask;
 
-    uint32_t writeMask = stencil_writemask_ << ROP_DEPTH_BITS;
+    uint32_t writeMask = stencil_writemask << ROP_DEPTH_BITS;
 
     uint32_t stencil_op;
 
@@ -318,7 +320,7 @@ private:
     auto stencil_result = DoStencilOp(stencil_op, stencil_ref, stencil_val);
 
     // Write the depth stencil value
-    //printf("depth_stencil[%d,%d]=(%d, %d)\n", x, y, depth_ref, stencil_result);
+    //printf("*** rop-depthstencil: x=%d, y=%d, depth_val=0x%x, depth_ref=0x%x, stencil_val=0x%x, stencil_result=0x%x, passed=%s\n", x, y, depth_val, depth_ref, stencil_val, stencil_result, (passed ? "Y":"N"));
     auto merged_value = (stencil_result << ROP_DEPTH_BITS) | depth_ref;
     auto write_value = (stored_value & ~writeMask) | (merged_value & writeMask);
     mem_->write(&write_value, buf_addr, 4);
@@ -439,10 +441,8 @@ public:
 
     uint32_t buf_addr = buf_baseaddr_ + y * buf_pitch_ + x * 4;
 
-    uint32_t stored_value;
-    if (buf_writemask_ != 0) {
-      mem_->read(&stored_value, buf_addr, 4);   
-    }
+    uint32_t stored_value = 0;
+    mem_->read(&stored_value, buf_addr, 4);
 
     cocogfx::ColorARGB src(color);
     cocogfx::ColorARGB dst(stored_value);
@@ -455,7 +455,7 @@ public:
       result_color = src;
     }
 
-    // printf("color[%d,%d]=(%d,%d,%d,%d)\n", x, y, result_color.r, result_color.g, result_color.b, result_color.a);
+    //printf("*** rop-color: x=%d, y=%d, r=%d, g=%d, b=%d, a=%d)\n", x, y, result_color.r, result_color.g, result_color.b, result_color.a);
     uint32_t writemask = (((buf_writemask_ >> 0) & 0x1) * 0x000000ff) 
                        | (((buf_writemask_ >> 1) & 0x1) * 0x0000ff00) 
                        | (((buf_writemask_ >> 2) & 0x1) * 0x00ff0000) 
@@ -498,8 +498,9 @@ public:
     }   
 
     void write(uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth) {      
-      if (depthtencil_.write(x, y, is_backface, depth))
+      if (depthtencil_.write(x, y, is_backface, depth)) {
         blender_.write(x, y, color);
+      }
     }
 
     void tick() {

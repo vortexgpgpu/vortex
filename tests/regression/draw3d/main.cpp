@@ -36,13 +36,13 @@ uint32_t clear_depth = 0xFFFFFFFF;
 uint32_t dst_width  = 128;
 uint32_t dst_height = 128;
 
-uint32_t zbuf_stride = 4;
-uint32_t zbuf_pitch  = dst_width * zbuf_stride;
-uint32_t zbuf_size   = dst_height * zbuf_pitch;
+uint32_t zbuf_stride;
+uint32_t zbuf_pitch;
+uint32_t zbuf_size;
 
-uint32_t cbuf_stride = 4;
-uint32_t cbuf_pitch  = dst_width * cbuf_stride;
-uint32_t cbuf_size   = dst_width * cbuf_pitch;
+uint32_t cbuf_stride;
+uint32_t cbuf_pitch;
+uint32_t cbuf_size;
 
 vx_device_h device = nullptr;
 vx_buffer_h staging_buf = nullptr;
@@ -341,8 +341,8 @@ int main(int argc, char *argv[]) {
 
   uint64_t isa_flags;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
-  if (0 == (isa_flags & (VX_ISA_EXT_RASTER | VX_ISA_EXT_ROP))) {
-    std::cout << "raster or rop extensions not supported!" << std::endl;
+  if (0 == (isa_flags & (VX_ISA_EXT_RASTER | VX_ISA_EXT_ROP | VX_ISA_EXT_IMADD))) {
+    std::cout << "RASTER or ROP or IMADD extensions not supported!" << std::endl;
     cleanup();
     return -1;
   }
@@ -353,6 +353,14 @@ int main(int argc, char *argv[]) {
   // upload program
   std::cout << "upload program" << std::endl;  
   RT_CHECK(vx_upload_kernel_file(device, kernel_file));
+
+  zbuf_stride = 4;
+  zbuf_pitch  = dst_width * zbuf_stride;
+  zbuf_size   = dst_height * zbuf_pitch;
+
+  cbuf_stride = 4;
+  cbuf_pitch  = dst_width * cbuf_stride;
+  cbuf_size   = dst_width * cbuf_pitch;
 
   // allocate device memory  
   RT_CHECK(vx_mem_alloc(device, zbuf_size, &zbuf_addr));

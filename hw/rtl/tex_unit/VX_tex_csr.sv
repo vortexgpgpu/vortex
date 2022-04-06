@@ -67,18 +67,18 @@ module VX_tex_csr #(
 `ifdef DBG_TRACE_TEX
     always @(posedge clk) begin
         if (tex_csr_if.read_enable) begin
-            dpi_trace("%d: core%0d-tex-csr-read: wid=%0d, tmask=%b, state=", $time, CORE_ID, tex_csr_if.read_wid, tex_csr_if.read_tmask);
-            trace_tex_csr(tex_csr_if.read_addr);
-            dpi_trace(", data=");
-            `TRACE_ARRAY1D(tex_csr_if.read_data, `NUM_THREADS);
-            dpi_trace(" (#%0d)\n", tex_csr_if.read_uuid);
+            dpi_trace(1, "%d: core%0d-tex-csr-read: wid=%0d, tmask=%b, state=", $time, CORE_ID, tex_csr_if.read_wid, tex_csr_if.read_tmask);
+            trace_tex_csr(1, tex_csr_if.read_addr);
+            dpi_trace(1, ", data=");
+            `TRACE_ARRAY1D(1, tex_csr_if.read_data, `NUM_THREADS);
+            dpi_trace(1, " (#%0d)\n", tex_csr_if.read_uuid);
         end
         if (tex_csr_if.write_enable) begin
-            dpi_trace("%d: core%0d-tex-csr-write: wid=%0d, tmask=%b, state=", $time, CORE_ID, tex_csr_if.write_wid, tex_csr_if.write_tmask);
-            trace_tex_csr(tex_csr_if.write_addr);
-            dpi_trace(", data=");
-            `TRACE_ARRAY1D(tex_csr_if.write_data, `NUM_THREADS);
-            dpi_trace(" (#%0d)\n", tex_csr_if.write_uuid);
+            dpi_trace(1, "%d: core%0d-tex-csr-write: wid=%0d, tmask=%b, state=", $time, CORE_ID, tex_csr_if.write_wid, tex_csr_if.write_tmask);
+            trace_tex_csr(1, tex_csr_if.write_addr);
+            dpi_trace(1, ", data=");
+            `TRACE_ARRAY1D(1, tex_csr_if.write_data, `NUM_THREADS);
+            dpi_trace(1, " (#%0d)\n", tex_csr_if.write_uuid);
         end
     end
 `endif

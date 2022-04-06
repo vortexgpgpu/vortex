@@ -16,15 +16,15 @@ module VX_rop_blend_multadd #(
     output rgba_t color_out
 );
 
-    wire [15:0] product_src_r = src_color.r * src_factor.r;
-    wire [15:0] product_src_g = src_color.g * src_factor.g;
-    wire [15:0] product_src_b = src_color.b * src_factor.b;
-    wire [15:0] product_src_a = src_color.a * src_factor.a;
+    wire [15:0] product_src_r = (src_color.r * src_factor.r + 16'hff);
+    wire [15:0] product_src_g = (src_color.g * src_factor.g + 16'hff);
+    wire [15:0] product_src_b = (src_color.b * src_factor.b + 16'hff);
+    wire [15:0] product_src_a = (src_color.a * src_factor.a + 16'hff);
 
-    wire [15:0] product_dst_r = dst_color.r * dst_factor.r;
-    wire [15:0] product_dst_g = dst_color.g * dst_factor.g;
-    wire [15:0] product_dst_b = dst_color.b * dst_factor.b;
-    wire [15:0] product_dst_a = dst_color.a * dst_factor.a;
+    wire [15:0] product_dst_r = (dst_color.r * dst_factor.r + 16'hff);
+    wire [15:0] product_dst_g = (dst_color.g * dst_factor.g + 16'hff);
+    wire [15:0] product_dst_b = (dst_color.b * dst_factor.b + 16'hff);
+    wire [15:0] product_dst_a = (dst_color.a * dst_factor.a + 16'hff);
 
     reg [15:0] sum_r, sum_g, sum_b, sum_a;
 

@@ -33,8 +33,8 @@ static void Inverse(void* arg) {
 	InverseArg invArg; \
 	invArg.s = int64_t(F0.data()) + int64_t(F1.data()) + int64_t(F2.data()); \
 	vx_serial(Inverse, &invArg); \
-    dx[i] = fixed24_t::make(vx_imadd(invArg.r.data(), F0.data(), 0, 2)); \
-    dy[i] = fixed24_t::make(vx_imadd(invArg.r.data(), F1.data(), 0, 2)); \
+    dx[i] = fixed24_t::make(int32_t(int64_t(invArg.r.data()) * int64_t(F0.data()) >> 16)); \
+    dy[i] = fixed24_t::make(int32_t(int64_t(invArg.r.data()) * int64_t(F1.data()) >> 16)); \
 }
 
 #define GRADIENTS \
@@ -44,8 +44,8 @@ static void Inverse(void* arg) {
 	GRADIENTS_i(3) \
 
 #define INTERPOLATE_i(i, dst, src) { \
-	auto tmp = vx_imadd(src.x.data(), dx[i].data(), src.z.data(), 3); \
-	     tmp = vx_imadd(src.y.data(), dy[i].data(), tmp, 3); \
+	auto tmp = int32_t(int64_t(src.x.data()) * int64_t(dx[i].data()) >> 24) + src.z.data(); \
+        tmp  = int32_t(int64_t(src.y.data()) * int64_t(dy[i].data()) >> 24) + tmp; \
 	dst[i] = fixed24_t::make(tmp); \
 }
 

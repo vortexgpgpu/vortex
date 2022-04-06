@@ -28,7 +28,7 @@ DBG_TRACE_FLAGS += -DDBG_TRACE_TEX
 DBG_TRACE_FLAGS += -DDBG_TRACE_RASTER
 DBG_TRACE_FLAGS += -DDBG_TRACE_ROP
 
-DBG_FLAGS += $(DBG_TRACE_FLAGS)
+DBG_FLAGS += -DDEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
 
 SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp
 SRCS += $(DPI_DIR)/util_dpi.cpp $(DPI_DIR)/float_dpi.cpp
@@ -61,8 +61,8 @@ VL_FLAGS += -j $(THREADS)
 
 # Debugigng
 ifdef DEBUG
-	VL_FLAGS += --trace --trace-structs -DVCD_OUTPUT $(DBG_FLAGS)
-	CXXFLAGS += -g -O0 -DVCD_OUTPUT $(DBG_FLAGS)
+	VL_FLAGS += --trace --trace-structs $(DBG_FLAGS)
+	CXXFLAGS += -g -O0 $(DBG_FLAGS)
 else    
 	VL_FLAGS += -DNDEBUG
 	CXXFLAGS += -O2 -DNDEBUG

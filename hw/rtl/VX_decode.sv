@@ -394,7 +394,6 @@ module VX_decode  #(
                             3'h0: begin // RASTER
                             ex_type   = `EX_GPU;
                             op_type   = `INST_OP_BITS'(`INST_GPU_RASTER);
-                            is_wstall = 1;
                             use_rd    = 1;
                             `USED_IREG (rd);
                             end
@@ -529,11 +528,11 @@ module VX_decode  #(
 `ifdef DBG_TRACE_CORE_PIPELINE
     always @(posedge clk) begin
         if (decode_if.valid && decode_if.ready) begin
-            dpi_trace("%d: core%0d-decode: wid=%0d, PC=0x%0h, ex=", $time, CORE_ID, decode_if.wid, decode_if.PC);
-            trace_ex_type(decode_if.ex_type);
-            dpi_trace(", op=");
-            trace_ex_op(decode_if.ex_type, decode_if.op_type, decode_if.op_mod);
-            dpi_trace(", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=0x%0h, use_pc=%b, use_imm=%b (#%0d)\n",
+            dpi_trace(1, "%d: core%0d-decode: wid=%0d, PC=0x%0h, ex=", $time, CORE_ID, decode_if.wid, decode_if.PC);
+            trace_ex_type(1, decode_if.ex_type);
+            dpi_trace(1, ", op=");
+            trace_ex_op(1, decode_if.ex_type, decode_if.op_type, decode_if.op_mod);
+            dpi_trace(1, ", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=0x%0h, use_pc=%b, use_imm=%b (#%0d)\n",
                 decode_if.op_mod, decode_if.tmask, decode_if.wb, decode_if.rd, decode_if.rs1, decode_if.rs2, decode_if.rs3, decode_if.imm, decode_if.use_PC, decode_if.use_imm, decode_if.uuid);
         end
     end

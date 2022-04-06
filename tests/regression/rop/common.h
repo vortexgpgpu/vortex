@@ -10,10 +10,11 @@
 typedef struct {
   uint32_t  num_tasks;
   uint32_t  dst_width;
-  uint32_t  dst_height;
-  bool      backface;
+  uint32_t  dst_height;  
   uint32_t  color;
   uint32_t  depth;
+  bool      backface;
+  bool      blend_enable;
 } kernel_arg_t;
 
 #endif

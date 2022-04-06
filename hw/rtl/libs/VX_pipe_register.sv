@@ -60,17 +60,22 @@ module VX_pipe_register #(
             assign data_out = {value_r, value_d};
         end
     end else begin
-        VX_shift_register #(
-            .DATAW  (DATAW),
-            .RESETW (RESETW),
-            .DEPTH  (DEPTH)
-        ) shift_reg (
-            .clk      (clk),
-            .reset    (reset),
-            .enable   (enable),
-            .data_in  (data_in),
-            .data_out (data_out)
-        );
+        wire [DEPTH:0][DATAW-1:0] data_delayed;        
+        assign data_delayed[0] = data_in;
+        for (genvar i = 1; i <= DEPTH; ++i) begin
+            VX_pipe_register #(
+                .DATAW  (DATAW),
+                .RESETW (RESETW),
+                .DEPTH  (1)
+            ) pipe_reg (
+                .clk      (clk),
+                .reset    (reset),
+                .enable   (enable),
+                .data_in  (data_delayed[i-1]),
+                .data_out (data_delayed[i])
+            );
+        end
+        assign data_out = data_delayed[DEPTH];
     end
 
 endmodule

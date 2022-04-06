@@ -1,12 +1,11 @@
 `include "VX_platform.vh"
 
-// `TRACING_OFF
+`TRACING_OFF
 module VX_mem_streamer #(
     parameter NUM_REQS = 4,
     parameter ADDRW = 32,
     parameter DATAW = 32,
     parameter TAGW = 32,
-    parameter WORD_SIZE = 4,
     parameter QUEUE_SIZE = 16,
     parameter PARTIAL_RESPONSE = 0,
     parameter DUPLICATE_ADDR = 0,
@@ -19,7 +18,7 @@ module VX_mem_streamer #(
     input wire                              req_valid,
     input wire                              req_rw,
     input wire [NUM_REQS-1:0]               req_mask,
-    input wire [WORD_SIZE-1:0]              req_byteen,
+    input wire [NUM_REQS-1:0][BYTEENW-1:0]  req_byteen,
     input wire [NUM_REQS-1:0][ADDRW-1:0]    req_addr,
     input wire [NUM_REQS-1:0][DATAW-1:0]    req_data,
     input wire [TAGW-1:0]                   req_tag,
@@ -35,7 +34,7 @@ module VX_mem_streamer #(
     // Memory request
     output wire [NUM_REQS-1:0]              mem_req_valid,
     output wire [NUM_REQS-1:0]              mem_req_rw,
-    output wire [NUM_REQS-1:0][WORD_SIZE-1:0] mem_req_byteen,
+    output wire [NUM_REQS-1:0][BYTEENW-1:0] mem_req_byteen,
     output wire [NUM_REQS-1:0][ADDRW-1:0]   mem_req_addr,
     output wire [NUM_REQS-1:0][DATAW-1:0]   mem_req_data,
     output wire [NUM_REQS-1:0][QUEUE_ADDRW-1:0] mem_req_tag,
@@ -48,10 +47,14 @@ module VX_mem_streamer #(
     output wire [NUM_REQS-1:0]              mem_rsp_ready
   );
 
+    localparam BYTEENW = DATAW / 8;
     localparam QUEUE_ADDRW = `CLOG2(QUEUE_SIZE);
    
+    `STATIC_ASSERT (DATAW == 8 * (DATAW / 8), ("invalid parameter"))
     `STATIC_ASSERT ((0 == PARTIAL_RESPONSE) || (1 == PARTIAL_RESPONSE), ("invalid parameter"))
     `STATIC_ASSERT ((0 == DUPLICATE_ADDR) || (1 == DUPLICATE_ADDR), ("invalid parameter"))
+
+    `RUNTIME_ASSERT((~req_valid || req_mask != 0), ("invalid input"));
 
     // Detect duplicate addresses
     wire [NUM_REQS-1:0] req_dup_mask;
@@ -59,7 +62,7 @@ module VX_mem_streamer #(
     // Pending queue
     wire                           sreq_rw;
     wire [NUM_REQS-1:0]            sreq_mask;
-    wire [WORD_SIZE-1:0]           sreq_byteen;
+    wire [NUM_REQS-1:0][BYTEENW-1:0] sreq_byteen;
     wire [NUM_REQS-1:0][ADDRW-1:0] sreq_addr;
     wire [NUM_REQS-1:0][DATAW-1:0] sreq_data;
     wire [QUEUE_ADDRW-1:0]         sreq_tag;
@@ -128,7 +131,7 @@ module VX_mem_streamer #(
     assign req_ready = !sreq_full && !stag_full;
 
     VX_fifo_queue #(
-        .DATAW	 (1 + NUM_REQS + WORD_SIZE + (NUM_REQS * ADDRW) + (NUM_REQS * DATAW) + QUEUE_ADDRW),
+        .DATAW	 (1 + NUM_REQS * (1 + BYTEENW + ADDRW + DATAW) + QUEUE_ADDRW),
         .SIZE	 (QUEUE_SIZE),
         .OUT_REG (1)
     ) req_store (
@@ -257,7 +260,7 @@ module VX_mem_streamer #(
     // Memory request
     assign mem_req_valid  = sreq_mask & ~req_sent_mask & {NUM_REQS{~sreq_empty}};
     assign mem_req_rw     = {NUM_REQS{sreq_rw}};
-    assign mem_req_byteen = {NUM_REQS{sreq_byteen}};
+    assign mem_req_byteen = sreq_byteen;
     assign mem_req_addr   = sreq_addr;
     assign mem_req_data   = sreq_data;
     assign mem_req_tag    = {NUM_REQS{sreq_tag}};
@@ -296,4 +299,4 @@ module VX_mem_streamer #(
     assign rsp_stall = rsp_valid & ~rsp_ready;
 
 endmodule
-// `TRACING_ON
+`TRACING_ON
