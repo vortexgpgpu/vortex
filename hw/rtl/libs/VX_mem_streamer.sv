@@ -108,7 +108,7 @@ module VX_mem_streamer #(
 
     // Detect duplicate addresses
    
-    if (DUPLICATE_ADDR == 1) begin
+    if (DUPLICATE_ADDR == 0) begin
         assign req_dup_mask = req_mask;
     end else begin
         wire [NUM_REQS-2:0] addr_matches;
