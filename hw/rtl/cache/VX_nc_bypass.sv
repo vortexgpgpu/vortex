@@ -5,6 +5,8 @@ module VX_nc_bypass #(
     parameter NUM_REQS          = 1,
     parameter NC_TAG_BIT        = 0,
 
+    parameter BYPASS            = 0,
+
     parameter CORE_ADDR_WIDTH   = 1,
     parameter CORE_DATA_SIZE    = 1, 
     parameter CORE_TAG_IN_WIDTH = 1,
@@ -105,7 +107,11 @@ module VX_nc_bypass #(
     wire core_req_nc_valid;    
     
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign core_req_nc_tids[i] = core_req_tag_in[i][NC_TAG_BIT];
+        if (BYPASS) begin
+            assign core_req_nc_tids[i] = 1'b1;
+        end else begin
+            assign core_req_nc_tids[i] = core_req_tag_in[i][NC_TAG_BIT];
+        end
     end
 
     assign core_req_valid_in_nc = core_req_valid_in & core_req_nc_tids;

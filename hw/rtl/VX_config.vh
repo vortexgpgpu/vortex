@@ -35,6 +35,12 @@
     `define SM_ENABLED   0
 `endif
 
+`ifdef OCACHE_ENABLE
+    `define OCACHE_ENABLED   1
+`else
+    `define OCACHE_ENABLED   0
+`endif
+
 `ifdef L2_ENABLE
     `define L2_ENABLED   1
 `else
@@ -288,6 +294,13 @@
 
 // Icache Configurable Knobs //////////////////////////////////////////////////
 
+// Enable/disable icache
+`ifdef ICACHE_ENABLE
+    `define ICACHE_ENABLED   1
+`else
+    `define ICACHE_ENABLED   0
+`endif
+
 // Size of cache in bytes
 `ifndef ICACHE_SIZE
 `define ICACHE_SIZE 16384
@@ -324,6 +337,13 @@
 `endif
 
 // Dcache Configurable Knobs //////////////////////////////////////////////////
+
+// Enable/disable dcache
+`ifdef DCACHE_ENABLE
+    `define DCACHE_ENABLED   1
+`else
+    `define DCACHE_ENABLED   0
+`endif
 
 // Size of cache in bytes
 `ifndef DCACHE_SIZE

@@ -43,7 +43,10 @@ module VX_cache #(
     parameter MEM_TAG_WIDTH         = (32 - $clog2(CACHE_LINE_SIZE)),
 
     // enable bypass for non-cacheable addresses
-    parameter NC_ENABLE             = 0
+    parameter NC_ENABLE             = 0,
+
+    // Force bypass for all requests
+    parameter BYPASS                = 0
  ) (
     `SCOPE_IO_VX_cache    
     
@@ -230,11 +233,13 @@ module VX_cache #(
     wire [MEM_TAG_IN_WIDTH-1:0]     mem_rsp_tag_c;
     wire                            mem_rsp_ready_c;
 
-    if (NC_ENABLE) begin
+    if (NC_ENABLE || BYPASS) begin
         VX_nc_bypass #( 
             .NUM_PORTS         (NUM_PORTS),
             .NUM_REQS          (NUM_REQS),
             .NC_TAG_BIT        (0),
+
+            .BYPASS            (BYPASS),
 
             .CORE_ADDR_WIDTH   (`WORD_ADDR_WIDTH),
             .CORE_DATA_SIZE    (WORD_SIZE),    

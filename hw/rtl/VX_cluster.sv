@@ -256,7 +256,8 @@ module VX_cluster #(
         .REQ_DBG_IDW        (0),
         .CORE_TAG_WIDTH     (`OCACHE_TAG_WIDTH),
         .MEM_TAG_WIDTH      (`OCACHE_MEM_TAG_WIDTH),
-        .NC_ENABLE          (0)
+        .NC_ENABLE          (0),
+        .BYPASS             (`OCACHE_ENABLED==0)
     ) ocache (
         `SCOPE_BIND_VX_cluster_ocache
 
