@@ -98,7 +98,7 @@ Core::Core(const SimContext& ctx,
 
   tex_unit_ = TexUnit::Create("tex_unit", TexUnit::Config{
     2, // address latency
-    4, // sampler latency
+    6, // sampler latency
   }, this);
   raster_svc_ = RasterSvc::Create("raster_svc", this, raster_unit);
   rop_svc_ = RopSvc::Create("rop_svc", this, rop_unit);
