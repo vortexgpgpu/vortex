@@ -160,7 +160,7 @@ module VX_raster_be #(
         ) quad_fifo_queue (
             .clk        (clk),
             .reset      (reset),
-            .push       (push && quad_masks != 0),
+            .push       (push && quad_masks[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i] != 0),
             .pop        (pop),
             .data_in    (fifo_push_data),
             .data_out   (fifo_pop_data),

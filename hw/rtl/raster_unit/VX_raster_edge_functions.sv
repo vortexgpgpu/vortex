@@ -1,8 +1,10 @@
 // Module to evaluate the edge function
 
+`include "VX_raster_define.vh"
+
 module VX_raster_edge_functions (
     // input logic clk,
-    input logic signed [`RASTER_DIM_BITS-1:0]  x_loc, y_loc,
+    input logic [`RASTER_DIM_BITS-1:0]  x_loc, y_loc,
     input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] edges[2:0][2:0],
     output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] edge_func_val[2:0]
 );

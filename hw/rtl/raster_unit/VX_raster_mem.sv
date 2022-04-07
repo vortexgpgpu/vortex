@@ -29,7 +29,7 @@ module VX_raster_mem #(
     // Raster slice interactions
     input logic [RASTER_SLICE_NUM-1:0]                          raster_slice_ready,
     output logic [`RASTER_DIM_BITS-1:0]                         out_x_loc, out_y_loc,
-    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              out_edges[2:0][2:0],
+    output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]              out_edges[2:0][2:0],
     output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              out_pid,
     output logic [RASTER_SLICE_BITS-1:0]                        out_slice_index,
 

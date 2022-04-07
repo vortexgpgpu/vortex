@@ -47,7 +47,7 @@ module VX_raster_unit #(
 
     // Output from the request
     logic [`RASTER_DIM_BITS-1:0]                         x_loc, y_loc;
-    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              edges[2:0][2:0];
+    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]              edges[2:0][2:0];
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              pid;
     // Slice selected for tile
     logic [RASTER_SLICE_BITS-1:0]                       slice_index;
@@ -101,8 +101,8 @@ module VX_raster_unit #(
     );
 
     // Complete the edge function values and extents
-    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] edge_func_val[2:0];
-    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] extents [2:0];
+    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] edge_func_val[2:0];
+    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] extents [2:0];
 
     VX_raster_extents #(
         .RASTER_TILE_SIZE(RASTER_TILE_SIZE)
