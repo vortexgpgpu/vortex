@@ -1,4 +1,4 @@
-`include "VX_cache_define.vh"
+`include "VX_platform.vh"
 
 module VX_nc_bypass #(
     parameter NUM_PORTS         = 1,
@@ -55,7 +55,7 @@ module VX_nc_bypass #(
     input wire [MEM_ADDR_WIDTH-1:0]     mem_req_addr_in,
     input wire [NUM_PORTS-1:0]          mem_req_pmask_in,
     input wire [NUM_PORTS-1:0][CORE_DATA_SIZE-1:0] mem_req_byteen_in,
-    input wire [NUM_PORTS-1:0][MEM_SELECT_BITS-1:0] mem_req_wsel_in,
+    input wire [NUM_PORTS-1:0][MEM_SEL_BITS-1:0] mem_req_wsel_in,
     input wire [NUM_PORTS-1:0][CORE_DATA_WIDTH-1:0] mem_req_data_in,
     input wire [MEM_TAG_IN_WIDTH-1:0]   mem_req_tag_in,
     output  wire                        mem_req_ready_in,
@@ -66,7 +66,7 @@ module VX_nc_bypass #(
     output wire [MEM_ADDR_WIDTH-1:0]    mem_req_addr_out,
     output wire [NUM_PORTS-1:0]         mem_req_pmask_out,
     output wire [NUM_PORTS-1:0][CORE_DATA_SIZE-1:0] mem_req_byteen_out, 
-    output wire [NUM_PORTS-1:0][MEM_SELECT_BITS-1:0] mem_req_wsel_out,
+    output wire [NUM_PORTS-1:0][MEM_SEL_BITS-1:0] mem_req_wsel_out,
     output wire [NUM_PORTS-1:0][CORE_DATA_WIDTH-1:0] mem_req_data_out,
     output wire [MEM_TAG_OUT_WIDTH-1:0] mem_req_tag_out,
     input  wire                         mem_req_ready_out,
@@ -89,10 +89,10 @@ module VX_nc_bypass #(
     localparam CORE_DATA_WIDTH    = CORE_DATA_SIZE * 8;
     localparam MEM_DATA_WIDTH     = MEM_DATA_SIZE * 8;
     localparam CORE_TAG_OUT_WIDTH = CORE_TAG_IN_WIDTH - 1;
-    localparam MEM_SELECT_BITS    = `UP(`CLOG2(MEM_DATA_SIZE / CORE_DATA_SIZE));
+    localparam MEM_SEL_BITS       = `UP(`CLOG2(MEM_DATA_SIZE / CORE_DATA_SIZE));
 
-    localparam CORE_REQ_TIDW = `LOG2UP(NUM_REQS);
-    localparam MUX_DATAW = CORE_TAG_IN_WIDTH + CORE_DATA_WIDTH + CORE_DATA_SIZE + CORE_ADDR_WIDTH + 1;
+    localparam REQ_SEL_BITS = `LOG2UP(NUM_REQS);
+    localparam MUX_DATAW    = CORE_TAG_IN_WIDTH + CORE_DATA_WIDTH + CORE_DATA_SIZE + CORE_ADDR_WIDTH + 1;
 
     localparam CORE_LDATAW = $clog2(CORE_DATA_WIDTH);
     localparam MEM_LDATAW  = $clog2(MEM_DATA_WIDTH);
@@ -101,8 +101,8 @@ module VX_nc_bypass #(
     // core request handling
 
     wire [NUM_REQS-1:0] core_req_valid_in_nc;
-    wire [NUM_REQS-1:0] core_req_nc_tids;    
-    wire [CORE_REQ_TIDW-1:0] core_req_nc_tid;
+    wire [NUM_REQS-1:0] core_req_nc_idxs;    
+    wire [REQ_SEL_BITS-1:0] core_req_nc_idx;
     wire [NUM_REQS-1:0] core_req_nc_sel;
     wire core_req_nc_valid;    
     
@@ -114,18 +114,18 @@ module VX_nc_bypass #(
         end
     end
 
-    assign core_req_valid_in_nc = core_req_valid_in & core_req_nc_tids;
+    assign core_req_valid_in_nc = core_req_valid_in & core_req_nc_idxs;
 
     VX_priority_encoder #(
         .N (NUM_REQS)
     ) core_req_sel (
         .data_in   (core_req_valid_in_nc),
-        .index     (core_req_nc_tid),
+        .index     (core_req_nc_idx),
         .onehot    (core_req_nc_sel),
         .valid_out (core_req_nc_valid)
     );
 
-    assign core_req_valid_out  = core_req_valid_in & ~core_req_nc_tids;
+    assign core_req_valid_out  = core_req_valid_in & ~core_req_nc_idxs;
     assign core_req_rw_out     = core_req_rw_in;
     assign core_req_addr_out   = core_req_addr_in;
     assign core_req_byteen_out = core_req_byteen_in;
@@ -181,7 +181,7 @@ module VX_nc_bypass #(
             assign core_req_nc_mux_in[i] = {core_req_tag_in[i], core_req_data_in[i], core_req_byteen_in[i], core_req_addr_in[i], core_req_rw_in[i]};
         end
 
-        assign {core_req_tag_in_sel, core_req_data_in_sel, core_req_byteen_in_sel, core_req_addr_in_sel, core_req_rw_in_sel} = core_req_nc_mux_in[core_req_nc_tid];
+        assign {core_req_tag_in_sel, core_req_data_in_sel, core_req_byteen_in_sel, core_req_addr_in_sel, core_req_rw_in_sel} = core_req_nc_mux_in[core_req_nc_idx];
     end else begin
         assign core_req_tag_in_sel    = core_req_tag_in;
         assign core_req_data_in_sel   = core_req_data_in;
@@ -195,7 +195,7 @@ module VX_nc_bypass #(
     
     if (D != 0) begin
         reg [NUM_PORTS-1:0][CORE_DATA_SIZE-1:0]  mem_req_byteen_in_r;
-        reg [NUM_PORTS-1:0][MEM_SELECT_BITS-1:0] mem_req_wsel_in_r;
+        reg [NUM_PORTS-1:0][MEM_SEL_BITS-1:0] mem_req_wsel_in_r;
         reg [NUM_PORTS-1:0][CORE_DATA_WIDTH-1:0] mem_req_data_in_r;
         
         wire [D-1:0] req_addr_idx = core_req_addr_in_sel[D-1:0];
@@ -215,7 +215,7 @@ module VX_nc_bypass #(
         assign mem_req_byteen_out = mem_req_valid_in ? mem_req_byteen_in : mem_req_byteen_in_r;
         assign mem_req_wsel_out   = mem_req_valid_in ? mem_req_wsel_in : mem_req_wsel_in_r;
         assign mem_req_data_out   = mem_req_valid_in ? mem_req_data_in : mem_req_data_in_r;
-        assign mem_req_tag_out    = mem_req_valid_in ? MEM_TAG_OUT_WIDTH'(mem_req_tag_in_c) : MEM_TAG_OUT_WIDTH'({core_req_nc_tid, req_addr_idx, core_req_tag_in_sel});
+        assign mem_req_tag_out    = mem_req_valid_in ? MEM_TAG_OUT_WIDTH'(mem_req_tag_in_c) : MEM_TAG_OUT_WIDTH'({core_req_nc_idx, req_addr_idx, core_req_tag_in_sel});
     end else begin
         `UNUSED_VAR (mem_req_wsel_in)
         `UNUSED_VAR (mem_req_pmask_in)
@@ -223,7 +223,7 @@ module VX_nc_bypass #(
         assign mem_req_byteen_out = mem_req_valid_in ? mem_req_byteen_in : core_req_byteen_in_sel;
         assign mem_req_data_out   = mem_req_valid_in ? mem_req_data_in : core_req_data_in_sel;
         assign mem_req_wsel_out   = 0;
-        assign mem_req_tag_out    = mem_req_valid_in ? MEM_TAG_OUT_WIDTH'(mem_req_tag_in_c) : MEM_TAG_OUT_WIDTH'({core_req_nc_tid, core_req_tag_in_sel});
+        assign mem_req_tag_out    = mem_req_valid_in ? MEM_TAG_OUT_WIDTH'(mem_req_tag_in_c) : MEM_TAG_OUT_WIDTH'({core_req_nc_idx, core_req_tag_in_sel});
     end
 
     // core response handling
@@ -244,12 +244,12 @@ module VX_nc_bypass #(
         );
     end
 
-    wire [CORE_REQ_TIDW-1:0] rsp_tid = mem_rsp_tag_in[(CORE_TAG_IN_WIDTH + D) +: CORE_REQ_TIDW];
+    wire [REQ_SEL_BITS-1:0] rsp_idx = mem_rsp_tag_in[(CORE_TAG_IN_WIDTH + D) +: REQ_SEL_BITS];
     
     reg [NUM_REQS-1:0] rsp_nc_valid_r;
     always @(*) begin
         rsp_nc_valid_r = 0;
-        rsp_nc_valid_r[rsp_tid] = is_mem_rsp_nc;
+        rsp_nc_valid_r[rsp_idx] = is_mem_rsp_nc;
     end
 
     assign core_rsp_valid_out = core_rsp_valid_in | rsp_nc_valid_r;
@@ -285,6 +285,6 @@ module VX_nc_bypass #(
         .data_out (mem_rsp_tag_out)
     );
 
-    assign mem_rsp_ready_in = is_mem_rsp_nc ? (~core_rsp_valid_in[rsp_tid] && core_rsp_ready_out[rsp_tid]) : mem_rsp_ready_out;
+    assign mem_rsp_ready_in = is_mem_rsp_nc ? (~core_rsp_valid_in[rsp_idx] && core_rsp_ready_out[rsp_idx]) : mem_rsp_ready_out;
 
 endmodule

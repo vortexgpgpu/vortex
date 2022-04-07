@@ -123,9 +123,9 @@ module VX_rop_dcr (
 `ifdef DBG_TRACE_ROP
     always @(posedge clk) begin
         if (dcr_wr_valid) begin
-            dpi_trace("%d: rop-dcr: state=", $time);
-            trace_rop_state(dcr_wr_addr);
-            dpi_trace(", data=0x%0h\n", dcr_wr_data);
+            dpi_trace(1, "%d: rop-dcr: state=", $time);
+            trace_rop_state(1, dcr_wr_addr);
+            dpi_trace(1, ", data=0x%0h\n", dcr_wr_data);
         end
     end
 `endif

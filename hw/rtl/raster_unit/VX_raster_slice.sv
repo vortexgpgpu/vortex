@@ -69,7 +69,11 @@ module VX_raster_slice #(
     // Incoming tile data from fifo
     logic [`RASTER_DIM_BITS-1:0]               fifo_tile_x_loc, fifo_tile_y_loc;
     logic [RASTER_LEVEL_DATA_BITS-1:0]              fifo_tile_level;
-    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]          fifo_tile_edge_func_val[2:0];
+    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]          fifo_tile_edge_func_val[2:0];
+
+    // Sub-tile data output from tile-evaluator
+    logic [`RASTER_DIM_BITS-1:0]      subtile_x_loc[3:0], subtile_y_loc[3:0];
+    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] subtile_edge_func_val[3:0][2:0];
 
     // Tile data selector to choose tile data from:
     //     1. Input tile
@@ -80,7 +84,6 @@ module VX_raster_slice #(
     //        forwarded directly here.
     always @(posedge clk) begin
         if (reset) begin
-            done <= 0;
             // Reset all globals and signals
             for (integer i = 0; i < 3; ++i) begin
                 global_extents[i] <= 0;
@@ -124,10 +127,6 @@ module VX_raster_slice #(
     //  2. FIFO empty
     //  3. FIFO pop data is invalid
     assign ready = (fifo_empty == 1) && (block_fifo_empty == 1) && (valid_tile == 0);
-
-    // Sub-tile data output from tile-evaluator
-    logic [`RASTER_DIM_BITS-1:0]      subtile_x_loc[3:0], subtile_y_loc[3:0];
-    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] subtile_edge_func_val[3:0][2:0];
 
     /**********************************
             TILE EVALUATOR
@@ -220,6 +219,7 @@ module VX_raster_slice #(
     // Stop pushing the last tile back in
     //logic last_block;
     always @(posedge clk) begin
+        done <= 0;
         // check if the current block is going to be the last block
         if (fifo_empty == 1 && valid_tile == 0 && valid_block == 1)
             done <= 1;

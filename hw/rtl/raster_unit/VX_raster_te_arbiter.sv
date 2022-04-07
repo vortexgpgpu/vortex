@@ -55,7 +55,7 @@ module VX_raster_te_arbiter #(
 
     // Arbitrate over the available entries to pop and generate index to pop for sub=tile
     VX_rr_arbiter #(
-        .NUM_REQS   (4),
+        .NUM_REQS   (4)
     ) tile_fifo_arbiter (
         .clk            (clk),
         .reset          (reset),

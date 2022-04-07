@@ -198,7 +198,7 @@ module VX_raster_unit #(
                 arbiter_valid = !quad_queue_empty[0];
                 if (!quad_queue_empty[0]) begin
                     quad_pop[0] = 1;
-                    if (|quad_valid) begin
+                    if (|quad_valid[0]) begin
                         out_quad_x_loc = temp_quad_x_loc[0];
                         out_quad_y_loc = temp_quad_y_loc[0];
                         out_quad_masks = temp_quad_masks[0];

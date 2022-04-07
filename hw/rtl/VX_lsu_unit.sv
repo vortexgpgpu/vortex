@@ -389,30 +389,30 @@ module VX_lsu_unit #(
     wire cache_req_fire_any = (| cache_req_fire);
     always @(posedge clk) begin    
         if (lsu_req_if.valid && fence_wait) begin
-            dpi_trace("%d: *** D$%0d fence wait\n", $time, CORE_ID);
+            dpi_trace(1, "%d: *** D$%0d fence wait\n", $time, CORE_ID);
         end
         if (cache_req_fire_any) begin
             if (cache_req_if.rw[0]) begin
-                dpi_trace("%d: D$%0d Wr Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, cache_req_fire);
-                `TRACE_ARRAY1D(req_addr, `NUM_THREADS);
-                dpi_trace(", tag=0x%0h, byteen=0x%0h, type=", req_tag, cache_req_if.byteen);
-                `TRACE_ARRAY1D(req_addr_type, `NUM_THREADS);
-                dpi_trace(", data=");
-                `TRACE_ARRAY1D(cache_req_if.data, `NUM_THREADS);
-                dpi_trace(", (#%0d)\n", req_uuid);
+                dpi_trace(1, "%d: D$%0d Wr Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, cache_req_fire);
+                `TRACE_ARRAY1D(1, req_addr, `NUM_THREADS);
+                dpi_trace(1, ", tag=0x%0h, byteen=0x%0h, type=", req_tag, cache_req_if.byteen);
+                `TRACE_ARRAY1D(1, req_addr_type, `NUM_THREADS);
+                dpi_trace(1, ", data=");
+                `TRACE_ARRAY1D(1, cache_req_if.data, `NUM_THREADS);
+                dpi_trace(1, ", (#%0d)\n", req_uuid);
             end else begin
-                dpi_trace("%d: D$%0d Rd Req: prefetch=%b, wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, req_is_prefetch, req_wid, req_pc, cache_req_fire);
-                `TRACE_ARRAY1D(req_addr, `NUM_THREADS);
-                dpi_trace(", tag=0x%0h, byteen=0x%0h, type=", req_tag, cache_req_if.byteen);
-                `TRACE_ARRAY1D(req_addr_type, `NUM_THREADS);
-                dpi_trace(", rd=%0d, is_dup=%b (#%0d)\n", req_rd, req_is_dup, req_uuid);
+                dpi_trace(1, "%d: D$%0d Rd Req: prefetch=%b, wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, req_is_prefetch, req_wid, req_pc, cache_req_fire);
+                `TRACE_ARRAY1D(1, req_addr, `NUM_THREADS);
+                dpi_trace(1, ", tag=0x%0h, byteen=0x%0h, type=", req_tag, cache_req_if.byteen);
+                `TRACE_ARRAY1D(1, req_addr_type, `NUM_THREADS);
+                dpi_trace(1, ", rd=%0d, is_dup=%b (#%0d)\n", req_rd, req_is_dup, req_uuid);
             end
         end
         if (cache_rsp_fire) begin
-            dpi_trace("%d: D$%0d Rsp: prefetch=%b, wid=%0d, PC=0x%0h, tmask=%b, tag=0x%0h, rd=%0d, data=", 
+            dpi_trace(1, "%d: D$%0d Rsp: prefetch=%b, wid=%0d, PC=0x%0h, tmask=%b, tag=0x%0h, rd=%0d, data=", 
                 $time, CORE_ID, rsp_is_prefetch, rsp_wid, rsp_pc, cache_rsp_tmask, mbuf_raddr, rsp_rd);
-            `TRACE_ARRAY1D(cache_rsp_data, `NUM_THREADS);
-            dpi_trace(", is_dup=%b (#%0d)\n", rsp_is_dup, rsp_uuid);
+            `TRACE_ARRAY1D(1, cache_rsp_data, `NUM_THREADS);
+            dpi_trace(1, ", is_dup=%b (#%0d)\n", rsp_is_dup, rsp_uuid);
         end
     end
 `endif

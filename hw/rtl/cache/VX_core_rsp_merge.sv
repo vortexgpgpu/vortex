@@ -21,7 +21,7 @@ module VX_core_rsp_merge #(
     input  wire [NUM_BANKS-1:0]                     per_bank_core_rsp_valid,
     input  wire [NUM_BANKS-1:0][NUM_PORTS-1:0]      per_bank_core_rsp_pmask,
     input  wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_WIDTH-1:0] per_bank_core_rsp_data,
-    input  wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(REQS_BITS)-1:0] per_bank_core_rsp_idx,   
+    input  wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(REQ_SEL_BITS)-1:0] per_bank_core_rsp_idx,   
     input  wire [NUM_BANKS-1:0][NUM_PORTS-1:0][TAG_WIDTH-1:0] per_bank_core_rsp_tag,   
     output wire [NUM_BANKS-1:0]                     per_bank_core_rsp_ready,
 
@@ -32,7 +32,7 @@ module VX_core_rsp_merge #(
     input  wire [NUM_REQS-1:0]                  core_rsp_ready
 );
     localparam WORD_WIDTH    = WORD_SIZE * 8;
-    localparam REQS_BITS     = `CLOG2(NUM_REQS);
+    localparam REQ_SEL_BITS  = `CLOG2(NUM_REQS);
     localparam BANK_SEL_BITS = `CLOG2(NUM_BANKS);
     localparam PORTS_BITS    = `CLOG2(NUM_PORTS);
 

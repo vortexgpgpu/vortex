@@ -12,11 +12,11 @@ module VX_flush_ctrl #(
 ) (
     input wire  clk,
     input wire  reset,    
-    output wire [`LINE_SELECT_BITS-1:0] addr_out,
+    output wire [`LINE_SEL_BITS-1:0] addr_out,
     output wire valid_out
 );
     reg flush_enable;
-    reg [`LINE_SELECT_BITS-1:0] flush_ctr;
+    reg [`LINE_SEL_BITS-1:0] flush_ctr;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -24,7 +24,7 @@ module VX_flush_ctrl #(
             flush_ctr    <= 0;
         end else begin
             if (flush_enable) begin
-                if (flush_ctr == ((2 ** `LINE_SELECT_BITS)-1)) begin
+                if (flush_ctr == ((2 ** `LINE_SEL_BITS)-1)) begin
                     flush_enable <= 0;
                 end
                 flush_ctr <= flush_ctr + 1;            
