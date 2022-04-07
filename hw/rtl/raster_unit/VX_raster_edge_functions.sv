@@ -25,4 +25,4 @@ module VX_raster_edge_functions (
 //     end
 // `endif
 
-endmodule;
+endmodule

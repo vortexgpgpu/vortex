@@ -13,7 +13,7 @@ module VX_raster_rsp_switch #(
     input signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0],
     // TODO: Remove lint
     /* verilator lint_off UNUSED */
-    input [`RASTER_PRIMITIVE_DATA_BITS-1:0] pid,
+    input [`RASTER_PRIMITIVE_DATA_BITS-1:0] pid[RASTER_QUAD_OUTPUT_RATE-1:0],
     /* verilator lint_on UNUSED */
 
     // Output
@@ -29,7 +29,7 @@ module VX_raster_rsp_switch #(
             // stamps[i].bcoord_x = bcoords[i][0];
             // stamps[i].bcoord_y = bcoords[i][1];
             // stamps[i].bcoord_z = bcoords[i][2];
-            stamps[i].pid      = pid[`RASTER_PID_BITS-1:0];
+            stamps[i].pid      = pid[i][`RASTER_PID_BITS-1:0];
         end
     end
 

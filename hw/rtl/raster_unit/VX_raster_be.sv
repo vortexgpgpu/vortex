@@ -30,7 +30,7 @@ module VX_raster_be #(
     // Quad related output data
     output logic [`RASTER_DIM_BITS-1:0]              out_quad_x_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
     output logic [`RASTER_DIM_BITS-1:0]              out_quad_y_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
-    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_pid,
+    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_pid[RASTER_QUAD_OUTPUT_RATE-1:0],
     output logic [3:0]                               out_quad_masks[RASTER_QUAD_OUTPUT_RATE-1:0],
     output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0],
     output logic [RASTER_QUAD_OUTPUT_RATE-1:0]       valid
@@ -76,7 +76,7 @@ module VX_raster_be #(
                 .edges(edges),
                 .edge_func_val(local_edge_func_val[i*RASTER_QUAD_NUM+j]),
                 .masks(temp_quad_masks[i*RASTER_QUAD_NUM+j]),
-                .bcoords(temp_quad_bcoords[i])
+                .bcoords(temp_quad_bcoords[i*RASTER_QUAD_NUM+j])
             );
         end
     end
@@ -151,7 +151,7 @@ module VX_raster_be #(
             out_quad_bcoords[i][0][0], out_quad_bcoords[i][0][1], out_quad_bcoords[i][0][2], out_quad_bcoords[i][0][3],
             out_quad_bcoords[i][1][0], out_quad_bcoords[i][1][1], out_quad_bcoords[i][1][2], out_quad_bcoords[i][1][3],
             out_quad_bcoords[i][2][0], out_quad_bcoords[i][2][1], out_quad_bcoords[i][2][2], out_quad_bcoords[i][2][3],
-            out_pid, fifo_valid} = fifo_pop_data;
+            out_pid[i], fifo_valid} = fifo_pop_data;
         assign valid[i] = fifo_valid && !empty_flag[i];
         VX_fifo_queue #(
             .DATAW	    (FIFO_DATA_WIDTH),

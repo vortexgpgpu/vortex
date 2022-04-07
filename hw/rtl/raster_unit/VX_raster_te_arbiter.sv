@@ -1,3 +1,4 @@
+
 // Rasterization tile arbiter
 // Functionality: Stores 4 sub-tiles and returns 1 based on arbitration
 
@@ -18,7 +19,7 @@ module VX_raster_te_arbiter #(
     output logic                                fifo_full, fifo_empty, fifo_data_valid
 );
 
-    localparam RASTER_TILE_FIFO_DEPTH = RASTER_TILE_SIZE/RASTER_BLOCK_SIZE;
+    localparam RASTER_TILE_FIFO_DEPTH = RASTER_TILE_SIZE*2/RASTER_BLOCK_SIZE;
     
 
     // Per FIFO flags

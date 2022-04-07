@@ -119,16 +119,16 @@ module VX_raster_unit #(
         .edges(edges),
         .edge_func_val(edge_func_val)
     );
-
+    /* verilator lint_off UNUSED */
     logic [RASTER_QUAD_OUTPUT_RATE-1:0] quad_valid [NUM_SLICES-1:0];
-    
+    /* verilator lint_on UNUSED */
     logic [`RASTER_DIM_BITS-1:0] temp_quad_x_loc[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0],
         temp_quad_y_loc[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0];
     logic [3:0] temp_quad_masks[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0];
     logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_quad_bcoords[NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0];
     logic [NUM_SLICES-1:0] quad_queue_empty;
     logic [NUM_SLICES-1:0] quad_pop;
-    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_out_pid [NUM_SLICES-1:0];
+    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_out_pid [NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0];
     
     // TODO: Add raster slices in generate block here
     for (genvar i = 0; i < RASTER_SLICE_BITS; ++i) begin
@@ -169,7 +169,7 @@ module VX_raster_unit #(
     logic [3:0] out_quad_masks[RASTER_QUAD_OUTPUT_RATE-1:0];
     logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0];
     logic arbiter_valid;
-    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] out_pid;
+    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] out_pid[RASTER_QUAD_OUTPUT_RATE-1:0];
     generate
         // add arbiter if # raster slice > 1
         if (NUM_SLICES > 1) begin
@@ -197,16 +197,22 @@ module VX_raster_unit #(
         end
         else begin
             always_comb begin
+                quad_pop[0] = 0;
                 arbiter_valid = !quad_queue_empty[0];
+                out_quad_x_loc = temp_quad_x_loc[0];
+                out_quad_y_loc = temp_quad_y_loc[0];
+                out_quad_masks = temp_quad_masks[0];
+                out_quad_bcoords = temp_quad_bcoords[0];
+                out_pid          = temp_out_pid[0];
                 if (!quad_queue_empty[0]) begin
                     quad_pop[0] = 1;
-                    if (|quad_valid[0]) begin
-                        out_quad_x_loc = temp_quad_x_loc[0];
-                        out_quad_y_loc = temp_quad_y_loc[0];
-                        out_quad_masks = temp_quad_masks[0];
-                        out_quad_bcoords = temp_quad_bcoords[0];
-                        out_pid          = temp_out_pid[0];
-                    end
+                    // //if (|quad_valid[0]) begin
+                    //     out_quad_x_loc = temp_quad_x_loc[0];
+                    //     out_quad_y_loc = temp_quad_y_loc[0];
+                    //     out_quad_masks = temp_quad_masks[0];
+                    //     out_quad_bcoords = temp_quad_bcoords[0];
+                    //     out_pid          = temp_out_pid[0];
+                    //end
                 end
             end
         end
