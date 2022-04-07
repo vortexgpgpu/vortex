@@ -41,6 +41,12 @@
     `define OCACHE_ENABLED   0
 `endif
 
+`ifdef RCACHE_ENABLE
+    `define RCACHE_ENABLED   1
+`else
+    `define RCACHE_ENABLED   0
+`endif
+
 `ifdef L2_ENABLE
     `define L2_ENABLED   1
 `else

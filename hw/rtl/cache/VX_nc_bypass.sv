@@ -108,9 +108,9 @@ module VX_nc_bypass #(
     
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         if (BYPASS) begin
-            assign core_req_nc_tids[i] = 1'b1;
+            assign core_req_nc_idxs[i] = 1'b1;
         end else begin
-            assign core_req_nc_tids[i] = core_req_tag_in[i][NC_TAG_BIT];
+            assign core_req_nc_idxs[i] = core_req_tag_in[i][NC_TAG_BIT];
         end
     end
 
