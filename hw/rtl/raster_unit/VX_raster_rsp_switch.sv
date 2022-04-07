@@ -36,9 +36,9 @@ module VX_raster_rsp_switch #(
     // Assign for bcoords array type transformation
     for (genvar i = 0; i < RASTER_QUAD_OUTPUT_RATE; ++i) begin
         for (genvar j = 0; j < 4; ++j) begin
-            assign stamps[i].bcoord_x[i] = bcoords[i][0][j];
-            assign stamps[i].bcoord_y[i] = bcoords[i][1][j];
-            assign stamps[i].bcoord_z[i] = bcoords[i][2][j];
+            assign stamps[i].bcoord_x[j] = bcoords[i][0][j];
+            assign stamps[i].bcoord_y[j] = bcoords[i][1][j];
+            assign stamps[i].bcoord_z[j] = bcoords[i][2][j];
         end
     end
 
