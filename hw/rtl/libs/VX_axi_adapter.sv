@@ -1,5 +1,6 @@
 `include "VX_platform.vh"
 
+`TRACING_OFF
 module VX_axi_adapter #(
     parameter VX_DATA_WIDTH    = 512, 
     parameter VX_ADDR_WIDTH    = (32 - $clog2(VX_DATA_WIDTH/8)),            
@@ -151,3 +152,4 @@ module VX_axi_adapter #(
 	assign mem_req_ready    = mem_req_rw ? axi_write_ready : m_axi_arready;
 
 endmodule
+`TRACING_ON

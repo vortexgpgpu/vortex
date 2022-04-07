@@ -101,20 +101,20 @@ module VX_raster_csr #(
 
     always @(posedge clk) begin
         if (raster_csr_if.read_enable) begin
-            dpi_trace("%d: core%0d-raster-csr-read: wid=%0d, tmask=%b, state=", $time, CORE_ID, raster_csr_if.read_wid, raster_csr_if.read_tmask);
-            trace_raster_csr(raster_csr_if.read_addr);
-            dpi_trace(", data=");
-            `TRACE_ARRAY1D(raster_csr_if.read_data, `NUM_THREADS);
-            dpi_trace(" (#%0d)\n", raster_csr_if.read_uuid);
+            dpi_trace(1, "%d: core%0d-raster-csr-read: wid=%0d, tmask=%b, state=", $time, CORE_ID, raster_csr_if.read_wid, raster_csr_if.read_tmask);
+            trace_raster_csr(1, raster_csr_if.read_addr);
+            dpi_trace(1, ", data=");
+            `TRACE_ARRAY1D(1, raster_csr_if.read_data, `NUM_THREADS);
+            dpi_trace(1, " (#%0d)\n", raster_csr_if.read_uuid);
         end
         if (write_enable) begin
-            dpi_trace("%d: core%0d-raster-fetch: wid=%0d, tmask=%b, pos_x=", $time, CORE_ID, raster_svc_req_if.wid, raster_svc_req_if.tmask);
-            `TRACE_ARRAY1D(pos_x, `NUM_THREADS);
-            dpi_trace(", pos_y=");
-            `TRACE_ARRAY1D(pos_y, `NUM_THREADS);
-            dpi_trace(", mask=");
-            `TRACE_ARRAY1D(mask, `NUM_THREADS);
-            dpi_trace(" (#%0d)\n", raster_svc_req_if.uuid);
+            dpi_trace(1, "%d: core%0d-raster-fetch: wid=%0d, tmask=%b, pos_x=", $time, CORE_ID, raster_svc_req_if.wid, raster_svc_req_if.tmask);
+            `TRACE_ARRAY1D(1, pos_x, `NUM_THREADS);
+            dpi_trace(1, ", pos_y=");
+            `TRACE_ARRAY1D(1, pos_y, `NUM_THREADS);
+            dpi_trace(1, ", mask=");
+            `TRACE_ARRAY1D(1, mask, `NUM_THREADS);
+            dpi_trace(1, " (#%0d)\n", raster_svc_req_if.uuid);
         end
     end
 `endif

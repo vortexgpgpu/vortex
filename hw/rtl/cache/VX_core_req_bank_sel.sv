@@ -38,7 +38,7 @@ module VX_core_req_bank_sel #(
     output wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(WORD_SEL_BITS)-1:0] per_bank_core_req_wsel,
     output wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_core_req_byteen,
     output wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_WIDTH-1:0] per_bank_core_req_data,  
-    output wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(REQS_BITS)-1:0] per_bank_core_req_idx,
+    output wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(REQ_SEL_BITS)-1:0] per_bank_core_req_idx,
     output wire [NUM_BANKS-1:0][NUM_PORTS-1:0][TAG_WIDTH-1:0] per_bank_core_req_tag,
     input  wire [NUM_BANKS-1:0]                     per_bank_core_req_ready
 );
@@ -51,7 +51,7 @@ module VX_core_req_bank_sel #(
     localparam WORDS_PER_LINE = LINE_SIZE / WORD_SIZE;
 
     localparam WORD_WIDTH    = WORD_SIZE * 8;
-    localparam REQS_BITS     = `CLOG2(NUM_REQS);
+    localparam REQ_SEL_BITS  = `CLOG2(NUM_REQS);
     localparam BANK_SEL_BITS = `CLOG2(NUM_BANKS);
     localparam WORD_SEL_BITS = `CLOG2(WORDS_PER_LINE);
     
@@ -80,7 +80,7 @@ module VX_core_req_bank_sel #(
     reg [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(WORD_SEL_BITS)-1:0] per_bank_core_req_wsel_r;
     reg [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_core_req_byteen_r;
     reg [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_WIDTH-1:0] per_bank_core_req_data_r;
-    reg [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(REQS_BITS)-1:0] per_bank_core_req_idx_r;
+    reg [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(REQ_SEL_BITS)-1:0] per_bank_core_req_idx_r;
     reg [NUM_BANKS-1:0][NUM_PORTS-1:0][TAG_WIDTH-1:0] per_bank_core_req_tag_r;
     reg [NUM_BANKS-1:0]                         per_bank_core_req_rw_r;
     reg [NUM_BANKS-1:0][LINE_ADDR_WIDTH-1:0]   per_bank_core_req_addr_r;
@@ -132,7 +132,7 @@ module VX_core_req_bank_sel #(
                             per_bank_core_req_wsel_r[core_req_bid[i]][i % NUM_PORTS]   = core_req_wsel[i];
                             per_bank_core_req_byteen_r[core_req_bid[i]][i % NUM_PORTS] = core_req_byteen[i];
                             per_bank_core_req_data_r[core_req_bid[i]][i % NUM_PORTS]   = core_req_data[i];                        
-                            per_bank_core_req_idx_r[core_req_bid[i]][i % NUM_PORTS]    = `UP(REQS_BITS)'(i);                                                      
+                            per_bank_core_req_idx_r[core_req_bid[i]][i % NUM_PORTS]    = `UP(REQ_SEL_BITS)'(i);                                                      
                             per_bank_core_req_tag_r[core_req_bid[i]][i % NUM_PORTS]    = core_req_tag[i];
                             per_bank_core_req_rw_r[core_req_bid[i]]   = core_req_rw[i];
                             per_bank_core_req_addr_r[core_req_bid[i]] = core_req_line_addr[i];
@@ -169,7 +169,7 @@ module VX_core_req_bank_sel #(
                             per_bank_core_req_wsel_r[core_req_bid[i]][i % NUM_PORTS]   = core_req_wsel[i];
                             per_bank_core_req_byteen_r[core_req_bid[i]][i % NUM_PORTS] = core_req_byteen[i];
                             per_bank_core_req_data_r[core_req_bid[i]][i % NUM_PORTS]   = core_req_data[i];                        
-                            per_bank_core_req_idx_r[core_req_bid[i]][i % NUM_PORTS]    = `UP(REQS_BITS)'(i);    
+                            per_bank_core_req_idx_r[core_req_bid[i]][i % NUM_PORTS]    = `UP(REQ_SEL_BITS)'(i);    
                             per_bank_core_req_tag_r[core_req_bid[i]][i % NUM_PORTS]    = core_req_tag[i];
                             per_bank_core_req_rw_r[core_req_bid[i]]   = core_req_rw[i];
                             per_bank_core_req_addr_r[core_req_bid[i]] = core_req_line_addr[i];                            
@@ -206,7 +206,7 @@ module VX_core_req_bank_sel #(
                         per_bank_core_req_byteen_r[core_req_bid[i]]= core_req_byteen[i];
                         per_bank_core_req_data_r[core_req_bid[i]]  = core_req_data[i];
                         per_bank_core_req_tag_r[core_req_bid[i]]   = core_req_tag[i];
-                        per_bank_core_req_idx_r[core_req_bid[i]]   = `UP(REQS_BITS)'(i);
+                        per_bank_core_req_idx_r[core_req_bid[i]]   = `UP(REQ_SEL_BITS)'(i);
                     end
                 end
 

@@ -27,7 +27,7 @@ DBG_TRACE_FLAGS += -DDBG_TRACE_TEX
 DBG_TRACE_FLAGS += -DDBG_TRACE_RASTER
 DBG_TRACE_FLAGS += -DDBG_TRACE_ROP
 
-DBG_FLAGS += $(DBG_TRACE_FLAGS)
+DBG_FLAGS += -DDEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
 
 FPU_INCLUDE = -I$(RTL_DIR)/fp_cores -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src -I$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/fpnew/src
 TEX_INCLUDE = -I$(RTL_DIR)/tex_unit
@@ -64,8 +64,8 @@ VL_FLAGS += -j $(THREADS)
 
 # Debugigng
 ifdef DEBUG
-	VL_FLAGS += --trace --trace-structs -DVCD_OUTPUT $(DBG_FLAGS)
-	CXXFLAGS += -g -O0 -DVCD_OUTPUT $(DBG_FLAGS)
+	VL_FLAGS += --trace --trace-structs $(DBG_FLAGS)
+	CXXFLAGS += -g -O0 $(DBG_FLAGS)
 else    
 	VL_FLAGS += -DNDEBUG
 	CXXFLAGS += -O2 -DNDEBUG

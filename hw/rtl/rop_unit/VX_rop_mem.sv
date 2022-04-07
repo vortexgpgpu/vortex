@@ -69,15 +69,35 @@ module VX_rop_mem #(
     reg [`PERF_CTR_BITS-1:0] perf_mem_writes;
     reg [`PERF_CTR_BITS-1:0] perf_mem_latency;
 
+    wire [$clog2(`NUM_THREADS+1)-1:0] perf_mem_req_per_cycle;
+    wire [$clog2(`NUM_THREADS+1)-1:0] perf_mem_rsp_per_cycle;
+
+    wire [`NUM_THREADS-1:0] perf_mem_req_per_mask = cache_req_if.valid & cache_req_if.ready;
+    wire [`NUM_THREADS-1:0] perf_mem_rsp_per_mask = cache_rsp_if.valid & cache_rsp_if.ready;
+
+    `POP_COUNT(perf_mem_req_per_cycle, perf_mem_req_per_mask);    
+    `POP_COUNT(perf_mem_rsp_per_cycle, perf_mem_rsp_per_mask);
+
+    reg [`PERF_CTR_BITS-1:0] perf_pending_reads;   
+    wire [$clog2(`NUM_THREADS+1)+1-1:0] perf_pending_reads_cycle = perf_mem_req_per_cycle - perf_mem_rsp_per_cycle;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_pending_reads <= 0;
+        end else begin
+            perf_pending_reads <= perf_pending_reads + `PERF_CTR_BITS'($signed(perf_pending_reads_cycle));
+        end
+    end
+
     always @(posedge clk) begin
         if (reset) begin
             perf_mem_reads   <= 0;
             perf_mem_writes  <= 0;
             perf_mem_latency <= 0;
         end else begin
-            perf_mem_reads   <= perf_mem_reads  + {`PERF_CTR_BITS{mreq_valid & ~mreq_rw}};
-            perf_mem_writes  <= perf_mem_writes + {`PERF_CTR_BITS{mreq_valid & mreq_rw}};
-            perf_mem_latency <= 0;
+            perf_mem_reads   <= perf_mem_reads  + (`PERF_CTR_BITS'(mreq_valid) & `PERF_CTR_BITS'(!mreq_rw));
+            perf_mem_writes  <= perf_mem_writes + (`PERF_CTR_BITS'(mreq_valid) & `PERF_CTR_BITS'(mreq_rw));
+            perf_mem_latency <= perf_mem_latency + `PERF_CTR_BIS(perf_pending_reads);
         end
     end
 

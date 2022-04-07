@@ -125,26 +125,26 @@
 
 `define LTRIM(x, s) x[s-1:0]
 
-`define TRACE_ARRAY1D(a, m)                     \
-    dpi_trace("{");                             \
+`define TRACE_ARRAY1D(lvl, arr, m)              \
+    dpi_trace(lvl, "{");                        \
     for (integer i = (m-1); i >= 0; --i) begin  \
-        if (i != (m-1)) dpi_trace(", ");        \
-        dpi_trace("0x%0h", a[i]);               \
+        if (i != (m-1)) dpi_trace(lvl, ", ");   \
+        dpi_trace(lvl, "0x%0h", arr[i]);        \
     end                                         \
-    dpi_trace("}");                             \
+    dpi_trace(lvl, "}")
 
-`define TRACE_ARRAY2D(a, m, n)                  \
-    dpi_trace("{");                             \
+`define TRACE_ARRAY2D(lvl, arr, m, n)           \
+    dpi_trace(lvl, "{");                        \
     for (integer i = n-1; i >= 0; --i) begin    \
-        if (i != (n-1)) dpi_trace(", ");        \
-        dpi_trace("{");                         \
-        for (integer j = (m-1); j >= 0; --j) begin \
-            if (j != (m-1)) dpi_trace(", ");    \
-            dpi_trace("0x%0h", a[i][j]);        \
+        if (i != (n-1)) dpi_trace(lvl, ", ");   \
+        dpi_trace(lvl, "{");                    \
+        for (integer j = (m-1); j >= 0; --j) begin  \
+            if (j != (m-1)) dpi_trace(lvl, ", ");   \
+            dpi_trace(lvl, "0x%0h", arr[i][j]); \
         end                                     \
-        dpi_trace("}");                         \
+        dpi_trace(lvl, "}");                    \
     end                                         \
-    dpi_trace("}")
+    dpi_trace(lvl, "}")
 
 `define RESET_RELAY(signal)         \
     wire signal;                    \
