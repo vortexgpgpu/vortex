@@ -25,22 +25,6 @@
 `define NUM_BARRIERS 4
 `endif
 
-`ifndef SM_DISABLE
-`define SM_ENABLE
-`endif
-
-`ifdef SM_ENABLE
-    `define SM_ENABLED   1
-`else
-    `define SM_ENABLED   0
-`endif
-
-`ifdef OCACHE_ENABLE
-    `define OCACHE_ENABLED   1
-`else
-    `define OCACHE_ENABLED   0
-`endif
-
 `ifdef L2_ENABLE
     `define L2_ENABLED   1
 `else
@@ -287,18 +271,26 @@
 `define TEXQ_SIZE (`NUM_WARPS * 2)
 `endif
 
+// RASTER memeory queue size
+`ifndef RASTER_MEM_QUEUE_SIZE    
+`define RASTER_MEM_QUEUE_SIZE 8
+`endif
+
 // ROP memeory queue size
 `ifndef ROP_MEM_QUEUE_SIZE    
-`define ROP_MEM_QUEUE_SIZE  8
+`define ROP_MEM_QUEUE_SIZE 8
 `endif
 
 // Icache Configurable Knobs //////////////////////////////////////////////////
 
-// Enable/disable icache
+// Enable/disable cache
+`ifndef ICACHE_DISABLE
+`define ICACHE_ENABLE
+`endif
 `ifdef ICACHE_ENABLE
-    `define ICACHE_ENABLED   1
+    `define ICACHE_ENABLED 1
 `else
-    `define ICACHE_ENABLED   0
+    `define ICACHE_ENABLED 0
 `endif
 
 // Size of cache in bytes
@@ -338,11 +330,14 @@
 
 // Dcache Configurable Knobs //////////////////////////////////////////////////
 
-// Enable/disable dcache
+// Enable/disable cache
+`ifndef DCACHE_DISABLE
+`define DCACHE_ENABLE
+`endif
 `ifdef DCACHE_ENABLE
-    `define DCACHE_ENABLED   1
+    `define DCACHE_ENABLED 1
 `else
-    `define DCACHE_ENABLED   0
+    `define DCACHE_ENABLED 0
 `endif
 
 // Size of cache in bytes
@@ -439,6 +434,16 @@
 
 // Rcache Configurable Knobs //////////////////////////////////////////////////
 
+// Enable/disable cache
+`ifndef RCACHE_DISABLE
+`define RCACHE_ENABLE
+`endif
+`ifdef RCACHE_ENABLE
+    `define RCACHE_ENABLED 1
+`else
+    `define RCACHE_ENABLED 0
+`endif
+
 // Size of cache in bytes
 `ifndef RCACHE_SIZE
 `define RCACHE_SIZE 4096
@@ -486,6 +491,16 @@
 
 // Ocache Configurable Knobs //////////////////////////////////////////////////
 
+// Enable/disable cache
+`ifndef OCACHE_DISABLE
+`define OCACHE_ENABLE
+`endif
+`ifdef OCACHE_ENABLE
+    `define OCACHE_ENABLED 1
+`else
+    `define OCACHE_ENABLED 0
+`endif
+
 // Size of cache in bytes
 `ifndef OCACHE_SIZE
 `define OCACHE_SIZE 4096
@@ -532,6 +547,16 @@
 `endif
 
 // SM Configurable Knobs //////////////////////////////////////////////////////
+
+`ifndef SM_DISABLE
+`define SM_ENABLE
+`endif
+
+`ifdef SM_ENABLE
+    `define SM_ENABLED   1
+`else
+    `define SM_ENABLED   0
+`endif
 
 // per thread stack size
 `ifndef SMEM_LOCAL_SIZE

@@ -128,7 +128,8 @@ module VX_cluster #(
         .REQ_DBG_IDW        (0),
         .CORE_TAG_WIDTH     (`RCACHE_TAG_WIDTH),
         .MEM_TAG_WIDTH      (`RCACHE_MEM_TAG_WIDTH),
-        .NC_ENABLE          (0)
+        .NC_ENABLE          (0),
+        .PASSTHRU           (!`RCACHE_ENABLED)
     ) rcache (
         `SCOPE_BIND_VX_cluster_rcache
 
@@ -257,7 +258,7 @@ module VX_cluster #(
         .CORE_TAG_WIDTH     (`OCACHE_TAG_WIDTH),
         .MEM_TAG_WIDTH      (`OCACHE_MEM_TAG_WIDTH),
         .NC_ENABLE          (0),
-        .BYPASS             (`OCACHE_ENABLED==0)
+        .PASSTHRU           (!`OCACHE_ENABLED)
     ) ocache (
         `SCOPE_BIND_VX_cluster_ocache
 

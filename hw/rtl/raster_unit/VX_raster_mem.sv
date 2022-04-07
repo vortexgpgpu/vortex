@@ -269,7 +269,7 @@ module VX_raster_mem #(
         .NUM_REQS(NUM_REQS), // 3 edges and 3 coeffs in each edge
         .ADDRW(`RCACHE_ADDR_WIDTH),
         .DATAW(`RASTER_PRIMITIVE_DATA_BITS),
-        .QUEUE_SIZE(2**`RCACHE_TAG_WIDTH),
+        .QUEUE_SIZE(`RASTER_MEM_QUEUE_SIZE),
         .TAGW(TAG_MAX_BIT_INDEX) // the top bit will denote type of request
     ) raster_mem_streamer (
         .clk(clk),

@@ -83,7 +83,7 @@ module VX_mem_unit # (
         .REQ_DBG_IDW        (`UUID_BITS),
         .CORE_TAG_WIDTH     (`ICACHE_TAG_WIDTH),
         .MEM_TAG_WIDTH      (`ICACHE_MEM_TAG_WIDTH),
-        .BYPASS             (`ICACHE_ENABLED==0)
+        .PASSTHRU           (!`ICACHE_ENABLED)
     ) icache (
         `SCOPE_BIND_VX_mem_unit_icache
 
@@ -174,7 +174,8 @@ module VX_mem_unit # (
         .CORE_TAG_WIDTH     (`DCACHE_TEX_TAG_WIDTH+`EXT_TEX_ENABLED),
         .MEM_TAG_WIDTH      (`DCACHE_MEM_TAG_WIDTH),
         .NC_ENABLE          (1),
-        .BYPASS             (`DCACHE_ENABLED==0)
+        .NC_TAG_BIT         (0+`EXT_TEX_ENABLED),
+        .PASSTHRU           (!`DCACHE_ENABLED)
     ) dcache (
         `SCOPE_BIND_VX_mem_unit_dcache
 
