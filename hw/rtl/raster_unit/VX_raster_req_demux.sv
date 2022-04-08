@@ -7,21 +7,21 @@ module VX_raster_req_demux #(
     parameter BUFFERED       = 0,
     parameter string ARBITER = "R"
 ) (
-    input wire clk,
-    input wire reset,
+    input wire              clk,
+    input wire              reset,
 
     // input request   
-    VX_raster_req_if.slave    req_in_if,
+    VX_raster_req_if.slave  req_in_if,
 
     // output requests
-    VX_raster_req_if.master   req_out_if[NUM_REQS]
+    VX_raster_req_if.master req_out_if[NUM_REQS]
 );
     localparam REQ_DATAW = `NUM_THREADS + `NUM_THREADS * $bits(raster_stamp_t) + 1;
 
     if (NUM_REQS > 1) begin
-        wire [NUM_REQS-1:0] req_valid_out;
+        wire [NUM_REQS-1:0]                req_valid_out;
         wire [NUM_REQS-1:0][REQ_DATAW-1:0] req_data_out;
-        wire [NUM_REQS-1:0] req_ready_out;
+        wire [NUM_REQS-1:0]                req_ready_out;
 
         VX_stream_demux #(
             .NUM_REQS (NUM_REQS),

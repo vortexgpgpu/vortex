@@ -10,20 +10,20 @@ module VX_cache_demux #(
     parameter BUFFERED_RSP   = 0,
     parameter string ARBITER = "P"
 ) (
-    input wire clk,
-    input wire reset,
+    input wire              clk,
+    input wire              reset,
 
     // input requests        
-    VX_cache_req_if.slave     req_in_if,
+    VX_cache_req_if.slave   req_in_if,
 
     // input responses
-    VX_cache_rsp_if.master    rsp_in_if,
+    VX_cache_rsp_if.master  rsp_in_if,
     
     // output request
-    VX_cache_req_if.master    req_out_if[NUM_REQS],
+    VX_cache_req_if.master  req_out_if[NUM_REQS],
 
     // output response
-    VX_cache_rsp_if.slave     rsp_out_if[NUM_REQS]    
+    VX_cache_rsp_if.slave   rsp_out_if[NUM_REQS]    
 );  
     localparam ADDR_WIDTH    = (32-`CLOG2(DATA_SIZE));
     localparam DATA_WIDTH    = (8 * DATA_SIZE);
@@ -33,11 +33,11 @@ module VX_cache_demux #(
     localparam RSP_DATAW     = TAG_IN_WIDTH + DATA_WIDTH;
 
     if (NUM_REQS > 1) begin
-        wire [NUM_REQS-1:0][LANES-1:0] req_valid_out;
+        wire [NUM_REQS-1:0][LANES-1:0]                req_valid_out;
         wire [NUM_REQS-1:0][LANES-1:0][REQ_DATAW-1:0] req_data_out;
-        wire [NUM_REQS-1:0][LANES-1:0] req_ready_out;
+        wire [NUM_REQS-1:0][LANES-1:0]                req_ready_out;
 
-        wire [LANES-1:0][REQ_DATAW-1:0] req_data_in;        
+        wire [LANES-1:0][REQ_DATAW-1:0]    req_data_in;        
         wire [LANES-1:0][LOG_NUM_REQS-1:0] req_sel;
         
         for (genvar i = 0; i < LANES; ++i) begin

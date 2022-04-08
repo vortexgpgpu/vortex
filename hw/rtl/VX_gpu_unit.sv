@@ -263,6 +263,7 @@ module VX_gpu_unit #(
 `endif
 
     // can accept new request?
+    
     reg gpu_req_ready;
     always @(*) begin
         case (gpu_req_if.op_type)
@@ -282,6 +283,8 @@ module VX_gpu_unit #(
         endcase
     end   
     assign gpu_req_if.ready = gpu_req_ready;
+
+    // response arbitration
 
     VX_stream_mux #(
         .NUM_REQS (1 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED + `EXT_IMADD_ENABLED),
