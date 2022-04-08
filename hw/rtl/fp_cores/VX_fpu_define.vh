@@ -1,5 +1,5 @@
-`ifndef VX_FPU_DEFINE
-`define VX_FPU_DEFINE
+`ifndef VX_FPU_DEFINE_VH
+`define VX_FPU_DEFINE_VH
 
 `include "VX_define.vh"
 

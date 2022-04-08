@@ -1,5 +1,5 @@
-`ifndef VX_SCOPE
-`define VX_SCOPE
+`ifndef VX_SCOPE_VH
+`define VX_SCOPE_VH
 
 `ifdef SCOPE
 

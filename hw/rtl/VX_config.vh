@@ -1,5 +1,5 @@
-`ifndef VX_CONFIG
-`define VX_CONFIG
+`ifndef VX_CONFIG_VH
+`define VX_CONFIG_VH
 
 `ifndef XLEN
 `define XLEN 32

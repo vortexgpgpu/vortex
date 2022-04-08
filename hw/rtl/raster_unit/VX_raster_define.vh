@@ -1,5 +1,5 @@
-`ifndef VX_RASTER_DEFINE
-`define VX_RASTER_DEFINE
+`ifndef VX_RASTER_DEFINE_VH
+`define VX_RASTER_DEFINE_VH
 
 `include "VX_define.vh"
 

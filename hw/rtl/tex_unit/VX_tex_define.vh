@@ -1,5 +1,5 @@
-`ifndef VX_TEX_DEFINE
-`define VX_TEX_DEFINE
+`ifndef VX_TEX_DEFINE_VH
+`define VX_TEX_DEFINE_VH
 
 `include "VX_define.vh"
 

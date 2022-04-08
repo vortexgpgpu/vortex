@@ -1,5 +1,5 @@
-`ifndef VX_ROP_DEFINE
-`define VX_ROP_DEFINE
+`ifndef VX_ROP_DEFINE_VH
+`define VX_ROP_DEFINE_VH
 
 `include "VX_define.vh"
 

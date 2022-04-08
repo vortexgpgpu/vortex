@@ -1,5 +1,5 @@
-`ifndef VX_PLATFORM
-`define VX_PLATFORM
+`ifndef VX_PLATFORM_VH
+`define VX_PLATFORM_VH
 
 `ifndef SYNTHESIS
 `include "util_dpi.vh"
