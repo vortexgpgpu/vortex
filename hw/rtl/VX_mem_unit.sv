@@ -171,7 +171,7 @@ module VX_mem_unit # (
         .MREQ_SIZE          (`DCACHE_MREQ_SIZE),
         .WRITE_ENABLE       (1),
         .REQ_DBG_IDW        (`UUID_BITS),
-        .CORE_TAG_WIDTH     (`DCACHE_TEX_TAG_WIDTH+`EXT_TEX_ENABLED),
+        .CORE_TAG_WIDTH     (`DCACHE_TEX_TAG_WIDTH + `EXT_TEX_ENABLED),
         .MEM_TAG_WIDTH      (`DCACHE_MEM_TAG_WIDTH),
         .NC_ENABLE          (1),
         .NC_TAG_BIT         (0+`EXT_TEX_ENABLED),
