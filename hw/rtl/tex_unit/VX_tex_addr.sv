@@ -1,5 +1,7 @@
 `include "VX_tex_define.vh"
 
+import VX_tex_types::*;
+
 module VX_tex_addr #(
     parameter CORE_ID   = 0,
     parameter REQ_INFOW = 1,
@@ -55,7 +57,6 @@ module VX_tex_addr #(
     wire [`TEX_LGSTRIDE_BITS-1:0] log_stride, log_stride_s0;
     wire [NUM_REQS-1:0][31:0] mip_addr, mip_addr_s0;
     wire [NUM_REQS-1:0][PITCH_BITS-1:0] log_pitch, log_pitch_s0;
-    wire [NUM_REQS-1:0][PITCH_BITS-1:0] log_pitch, log_pitch_s0;
     
     wire stall_out;
 
@@ -92,7 +93,7 @@ module VX_tex_addr #(
                 .coord_o (clamped_hi[i][j])
             );
 
-            assign dim_shift[i][j] = (`TEX_FXD_FRAC - `TEX_BLEND_FRAC - (req_logdims[i][j] - mip_level[i]));
+            assign dim_shift[i][j] = SHIFT_BITS'(`TEX_FXD_FRAC - `TEX_BLEND_FRAC) - (req_logdims[i][j] - mip_level[i]);
         end
         assign log_pitch[i] = PITCH_BITS'(req_logdims[i][0] - mip_level[i]) + PITCH_BITS'(log_stride);        
         assign mip_addr[i]  = req_baseaddr + `TEX_ADDR_BITS'(req_mipoff[i]);

@@ -12,7 +12,10 @@ module VX_core_rsp_merge #(
     // core request tag size
     parameter TAG_WIDTH     = 1,
     // output register
-    parameter OUT_REG       = 0
+    parameter OUT_REG       = 0,
+
+    localparam WORD_WIDTH   = WORD_SIZE * 8,
+    localparam REQ_SEL_BITS = `CLOG2(NUM_REQS)
 ) (
     input wire clk,
     input wire reset,
@@ -31,8 +34,6 @@ module VX_core_rsp_merge #(
     output wire [NUM_REQS-1:0][WORD_WIDTH-1:0]  core_rsp_data,      
     input  wire [NUM_REQS-1:0]                  core_rsp_ready
 );
-    localparam WORD_WIDTH    = WORD_SIZE * 8;
-    localparam REQ_SEL_BITS  = `CLOG2(NUM_REQS);
     localparam BANK_SEL_BITS = `CLOG2(NUM_BANKS);
     localparam PORTS_BITS    = `CLOG2(NUM_PORTS);
 

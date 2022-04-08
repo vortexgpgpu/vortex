@@ -18,7 +18,9 @@ module VX_data_access #(
     // Enable cache writeable
     parameter WRITE_ENABLE      = 1,
     // Request debug identifier
-    parameter REQ_DBG_IDW       = 0
+    parameter REQ_DBG_IDW       = 0,
+
+    localparam WORD_SEL_BITS    = `UP(`WORD_SEL_BITS)
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -49,7 +51,6 @@ module VX_data_access #(
     `UNUSED_VAR (addr)
     `UNUSED_VAR (read)
 
-    localparam WORD_SEL_BITS = `UP(`WORD_SEL_BITS);
     localparam BYTEENW = WRITE_ENABLE ? CACHE_LINE_SIZE : 1;
 
     wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] rdata;
@@ -97,7 +98,7 @@ module VX_data_access #(
         assign wren  = fill;
     end
 
-    wire [NUM_WAYS-1:0][`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] read_data_local;
+    wire [NUM_WAYS-1:0][`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] per_way_rdata;
 
     for (genvar i = 0; i < NUM_WAYS; ++i) begin
         VX_sp_ram #(
@@ -110,20 +111,18 @@ module VX_data_access #(
             .addr  (line_addr),
             .wren  (wren & {BYTEENW{select_way[i]}}),
             .wdata (wdata),
-            .rdata (read_data_local[i]) 
+            .rdata (per_way_rdata[i]) 
         );
     end
    
-    if (NUM_WAYS > 1) begin
-        wire [`WAY_SEL_BITS-1:0] which_way;
-        for (genvar i = 0; i < NUM_WAYS; ++i) begin
-            assign which_way = select_way[i] ? i : 'z; 
-        end
-        assign rdata = read_data_local[which_way];
-    end else begin
-        `UNUSED_VAR (select_way)
-        assign rdata = read_data_local;
-    end
+    VX_onehot_mux #(
+        .DATAW (`WORDS_PER_LINE * `WORD_WIDTH),
+        .N     (NUM_WAYS)
+    ) rdata_select (
+        .data_in  (per_way_rdata),
+        .sel_in   (select_way),
+        .data_out (rdata)
+    );
 
     if (`WORDS_PER_LINE > 1) begin
         for (genvar i = 0; i < NUM_PORTS; ++i) begin

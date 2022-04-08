@@ -1,7 +1,6 @@
-`ifndef VX_RASTER_DCR_IF
-`define VX_RASTER_DCR_IF
-
 `include "VX_raster_define.vh"
+
+import VX_raster_types::*;
 
 interface VX_raster_dcr_if ();
 
@@ -16,5 +15,3 @@ interface VX_raster_dcr_if ();
     );
 
 endinterface
-
-`endif

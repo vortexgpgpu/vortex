@@ -2,6 +2,8 @@
 `include "fpnew_pkg.sv"
 `include "defs_div_sqrt_mvp.sv"
 
+import VX_fpu_types::*;
+
 `TRACING_OFF
 module VX_fpu_fpnew #(      
     parameter TAGW     = 1,

@@ -3,22 +3,22 @@
 module VX_scoreboard  #(
     parameter CORE_ID = 0
 ) (
-    input wire clk,
-    input wire reset,
+    input wire          clk,
+    input wire          reset,
 
-    VX_ibuffer_if.slave ibuffer_if,
+    VX_scoreboard_if.slave scoreboard_if,
     VX_writeback_if.slave writeback_if
 );
     reg [`NUM_WARPS-1:0][`NUM_REGS-1:0] inuse_regs, inuse_regs_n;
 
-    wire reserve_reg = ibuffer_if.valid && ibuffer_if.ready && ibuffer_if.wb;
+    wire reserve_reg = scoreboard_if.valid && scoreboard_if.ready && scoreboard_if.wb;
 
     wire release_reg = writeback_if.valid && writeback_if.ready && writeback_if.eop;
     
     always @(*) begin
         inuse_regs_n = inuse_regs;
         if (reserve_reg) begin
-            inuse_regs_n[ibuffer_if.wid][ibuffer_if.rd] = 1;                
+            inuse_regs_n[scoreboard_if.wid][scoreboard_if.rd] = 1;                
         end       
         if (release_reg) begin
             inuse_regs_n[writeback_if.wid][writeback_if.rd] = 0;
@@ -36,15 +36,15 @@ module VX_scoreboard  #(
     reg deq_inuse_rd, deq_inuse_rs1, deq_inuse_rs2, deq_inuse_rs3;
 
     always @(posedge clk) begin
-        deq_inuse_rd  <= inuse_regs_n[ibuffer_if.wid_n][ibuffer_if.rd_n];
-        deq_inuse_rs1 <= inuse_regs_n[ibuffer_if.wid_n][ibuffer_if.rs1_n];
-        deq_inuse_rs2 <= inuse_regs_n[ibuffer_if.wid_n][ibuffer_if.rs2_n];
-        deq_inuse_rs3 <= inuse_regs_n[ibuffer_if.wid_n][ibuffer_if.rs3_n];
+        deq_inuse_rd  <= inuse_regs_n[scoreboard_if.wid_n][scoreboard_if.rd_n];
+        deq_inuse_rs1 <= inuse_regs_n[scoreboard_if.wid_n][scoreboard_if.rs1_n];
+        deq_inuse_rs2 <= inuse_regs_n[scoreboard_if.wid_n][scoreboard_if.rs2_n];
+        deq_inuse_rs3 <= inuse_regs_n[scoreboard_if.wid_n][scoreboard_if.rs3_n];
     end
 
     assign writeback_if.ready = 1'b1;
 
-    assign ibuffer_if.ready = ~(deq_inuse_rd 
+    assign scoreboard_if.ready = ~(deq_inuse_rd 
                              | deq_inuse_rs1 
                              | deq_inuse_rs2 
                              | deq_inuse_rs3);
@@ -59,24 +59,24 @@ module VX_scoreboard  #(
             deadlock_ctr <= 0;
         end else begin
         `ifdef DBG_TRACE_CORE_PIPELINE
-            if (ibuffer_if.valid && ~ibuffer_if.ready) begin
-                dpi_trace(3, "%d: *** core%0d-stall: wid=%0d, PC=0x%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b (#%0d)\n", 
-                    $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.rd, ibuffer_if.wb, 
-                    deq_inuse_rd, deq_inuse_rs1, deq_inuse_rs2, deq_inuse_rs3, ibuffer_if.uuid);
+            if (scoreboard_if.valid && ~scoreboard_if.ready) begin
+                dpi_trace(3, "%d: *** core%0d-stall: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, wb=%0d, inuse=%b%b%b%b (#%0d)\n", 
+                    $time, CORE_ID, scoreboard_if.wid, scoreboard_if.PC, scoreboard_if.tmask, scoreboard_if.rd, scoreboard_if.wb, 
+                    deq_inuse_rd, deq_inuse_rs1, deq_inuse_rs2, deq_inuse_rs3, scoreboard_if.uuid);
             end
         `endif
             if (release_reg) begin
                 `ASSERT(inuse_regs[writeback_if.wid][writeback_if.rd] != 0,
-                    ("%t: *** core%0d: invalid writeback register: wid=%0d, PC=0x%0h, rd=%0d (#%0d)",
-                                $time, CORE_ID, writeback_if.wid, writeback_if.PC, writeback_if.rd,writeback_if.uuid));
+                    ("%t: *** core%0d: invalid writeback register: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d (#%0d)",
+                                $time, CORE_ID, writeback_if.wid, writeback_if.PC, writeback_if.tmask, writeback_if.rd, writeback_if.uuid));
             end
-            if (ibuffer_if.valid && ~ibuffer_if.ready) begin            
+            if (scoreboard_if.valid && ~scoreboard_if.ready) begin            
                 deadlock_ctr <= deadlock_ctr + 1;
                 `ASSERT(deadlock_ctr < deadlock_timeout,
-                    ("%t: *** core%0d-deadlock: wid=%0d, PC=0x%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b (#%0d)",
-                        $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.rd, ibuffer_if.wb, 
-                        deq_inuse_rd, deq_inuse_rs1, deq_inuse_rs2, deq_inuse_rs3, ibuffer_if.uuid));
-            end else if (ibuffer_if.valid && ibuffer_if.ready) begin
+                    ("%t: *** core%0d-deadlock: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, wb=%0d, inuse=%b%b%b%b (#%0d)",
+                        $time, CORE_ID, scoreboard_if.wid, scoreboard_if.PC, scoreboard_if.tmask, scoreboard_if.rd, scoreboard_if.wb, 
+                        deq_inuse_rd, deq_inuse_rs1, deq_inuse_rs2, deq_inuse_rs3, scoreboard_if.uuid));
+            end else if (scoreboard_if.valid && scoreboard_if.ready) begin
                 deadlock_ctr <= 0;
             end
         end

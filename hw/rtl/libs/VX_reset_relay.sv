@@ -8,8 +8,7 @@ module VX_reset_relay #(
     input wire  clk,
     input wire  reset,
     output wire [N-1:0] reset_o
-); 
-    
+);    
     if (DEPTH > 1) begin
         `PRESERVE_REG `DISABLE_BRAM reg [N-1:0] reset_r [DEPTH-1:0];
         always @(posedge clk) begin

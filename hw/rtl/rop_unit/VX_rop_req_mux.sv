@@ -1,12 +1,14 @@
 `include "VX_rop_define.vh"
 
+import VX_rop_types::*;
+
 module VX_rop_req_mux #(
     parameter NUM_REQS       = 1,
     parameter BUFFERED_REQ   = 0,
     parameter string ARBITER = "R"
 ) (
-    input wire clk,
-    input wire reset,
+    input wire              clk,
+    input wire              reset,
 
     // input requests    
     VX_rop_req_if.slave     req_in_if[NUM_REQS],
@@ -19,9 +21,9 @@ module VX_rop_req_mux #(
 
     if (NUM_REQS > 1) begin
 
-        wire [NUM_REQS-1:0] req_valid_in;
+        wire [NUM_REQS-1:0]                req_valid_in;
         wire [NUM_REQS-1:0][REQ_DATAW-1:0] req_data_in;
-        wire [NUM_REQS-1:0] req_ready_in;
+        wire [NUM_REQS-1:0]                req_ready_in;
 
         for (genvar i = 0; i < NUM_REQS; i++) begin
             assign req_valid_in[i] = req_in_if[i].valid;

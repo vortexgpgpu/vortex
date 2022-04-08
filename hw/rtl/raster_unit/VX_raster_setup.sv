@@ -1,5 +1,7 @@
 `include "VX_raster_define.vh"
 
+import VX_raster_types::*;
+
 // Module for triangle setup
 //  Description: Perform edge equation computation
 

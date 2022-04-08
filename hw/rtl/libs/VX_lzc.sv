@@ -2,15 +2,14 @@
 
 `TRACING_OFF
 module VX_lzc #(
-    parameter N    = 2,
-    parameter MODE = 0  // 0 -> trailing zero, 1 -> leading zero    
+    parameter N     = 2,
+    parameter MODE  = 0,  // 0 -> trailing zero, 1 -> leading zero    
+    localparam LOGN = `LOG2UP(N)
 ) (
     input  wire [N-1:0]    in_i,
     output wire [LOGN-1:0] cnt_o,
     output wire            valid_o
 );
-    localparam LOGN = `LOG2UP(N);
-
     if (N > 1) begin
 
         wire [N-1:0][LOGN-1:0] indices;

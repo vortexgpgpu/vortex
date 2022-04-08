@@ -1,16 +1,15 @@
-`ifndef VX_WARP_CTL_IF
-`define VX_WARP_CTL_IF
-
 `include "VX_define.vh"
+
+import VX_gpu_types::*;
 
 interface VX_warp_ctl_if ();
 
-    wire                    valid;
-    wire [`NW_BITS-1:0]     wid;
-    gpu_types::gpu_tmc_t    tmc;
-    gpu_types::gpu_wspawn_t wspawn;
-    gpu_types::gpu_barrier_t barrier;
-    gpu_types::gpu_split_t  split;
+    wire                valid;
+    wire [`NW_BITS-1:0] wid;
+    gpu_tmc_t           tmc;
+    gpu_wspawn_t        wspawn;
+    gpu_barrier_t       barrier;
+    gpu_split_t         split;
 
     modport master (
         output valid,
@@ -31,5 +30,3 @@ interface VX_warp_ctl_if ();
     );
 
 endinterface
-
-`endif

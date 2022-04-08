@@ -1,7 +1,6 @@
-`ifndef VX_ROP_DCR_IF
-`define VX_ROP_DCR_IF
-
 `include "VX_rop_define.vh"
+
+import VX_rop_types::*;
 
 interface VX_rop_dcr_if ();
 
@@ -16,5 +15,3 @@ interface VX_rop_dcr_if ();
     );
 
 endinterface
-
-`endif

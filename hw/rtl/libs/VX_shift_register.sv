@@ -4,15 +4,15 @@
 module VX_shift_register_nr #( 
     parameter DATAW  = 1,
     parameter DEPTH  = 1,
-    parameter NTAPS  = 1,    
-    parameter [(DEPTHW*NTAPS)-1:0] TAPS = {NTAPS{DEPTHW'(DEPTH-1)}}
+    parameter NTAPS  = 1    
 ) (
-    input wire clk,
-    input wire enable,
+    input wire                      clk,
+    input wire                      enable,
     input wire [DATAW-1:0]          data_in,
     output wire [(NTAPS*DATAW)-1:0] data_out
 );
     localparam DEPTHW = $clog2(DEPTH);
+    localparam [(DEPTHW*NTAPS)-1:0] TAPS = {NTAPS{DEPTHW'(DEPTH-1)}};
 
     reg [DEPTH-1:0][DATAW-1:0] entries;
 
@@ -33,16 +33,16 @@ endmodule
 module VX_shift_register_wr #( 
     parameter DATAW  = 1, 
     parameter DEPTH  = 1,
-    parameter NTAPS  = 1,    
-    parameter [(DEPTHW*NTAPS)-1:0] TAPS = {NTAPS{DEPTHW'(DEPTH-1)}}
+    parameter NTAPS  = 1    
 ) (
-    input wire clk,
-    input wire reset,
-    input wire enable,
+    input wire                      clk,
+    input wire                      reset,
+    input wire                      enable,
     input wire [DATAW-1:0]          data_in,
     output wire [(NTAPS*DATAW)-1:0] data_out
 );
     localparam DEPTHW = $clog2(DEPTH);
+    localparam [(DEPTHW*NTAPS)-1:0] TAPS = {NTAPS{DEPTHW'(DEPTH-1)}};
 
     reg [DEPTH-1:0][DATAW-1:0] entries;
 
@@ -66,16 +66,16 @@ module VX_shift_register #(
     parameter DATAW  = 1, 
     parameter RESETW = 0,
     parameter DEPTH  = 1,
-    parameter NTAPS  = 1,    
-    parameter [(DEPTHW*NTAPS)-1:0] TAPS = {NTAPS{DEPTHW'(DEPTH-1)}}
+    parameter NTAPS  = 1    
 ) (
-    input wire clk,
-    input wire reset,
-    input wire enable,
+    input wire                      clk,
+    input wire                      reset,
+    input wire                      enable,
     input wire [DATAW-1:0]          data_in,
     output wire [(NTAPS*DATAW)-1:0] data_out
 );
     localparam DEPTHW = $clog2(DEPTH);
+    localparam [(DEPTHW*NTAPS)-1:0] TAPS = {NTAPS{DEPTHW'(DEPTH-1)}};
 
     if (RESETW != 0) begin
         if (RESETW == DATAW) begin
@@ -83,8 +83,7 @@ module VX_shift_register #(
             VX_shift_register_wr #(
                 .DATAW (DATAW),
                 .DEPTH (DEPTH),
-                .NTAPS (NTAPS),
-                .TAPS  (TAPS)
+                .NTAPS (NTAPS)
             ) sr (
                 .clk      (clk),
                 .reset    (reset),
@@ -98,8 +97,7 @@ module VX_shift_register #(
             VX_shift_register_wr #(
                 .DATAW (RESETW),
                 .DEPTH (DEPTH),
-                .NTAPS (NTAPS),
-                .TAPS  (TAPS)
+                .NTAPS (NTAPS)
             ) sr_wr (
                 .clk      (clk),
                 .reset    (reset),
@@ -111,8 +109,7 @@ module VX_shift_register #(
             VX_shift_register_nr #(
                 .DATAW (DATAW-RESETW),
                 .DEPTH (DEPTH),
-                .NTAPS (NTAPS),
-                .TAPS  (TAPS)
+                .NTAPS (NTAPS)
             ) sr_nr (
                 .clk      (clk),
                 .enable   (enable),
@@ -129,8 +126,7 @@ module VX_shift_register #(
         VX_shift_register_nr #(
             .DATAW (DATAW),
             .DEPTH (DEPTH),
-            .NTAPS (NTAPS),
-            .TAPS  (TAPS)
+            .NTAPS (NTAPS)
         ) sr (
             .clk      (clk),
             .enable   (enable),

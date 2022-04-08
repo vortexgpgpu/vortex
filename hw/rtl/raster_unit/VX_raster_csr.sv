@@ -1,5 +1,7 @@
 `include "VX_raster_define.vh"
 
+import VX_raster_types::*;
+
 module VX_raster_csr #( 
     parameter CORE_ID = 0
 ) (
@@ -7,9 +9,11 @@ module VX_raster_csr #(
     input wire reset,
 
     // Inputs    
-    input wire write_enable,
-    VX_raster_svc_if.slave raster_svc_req_if,    
-    VX_raster_req_if.slave raster_req_if,
+    input wire                              write_enable,
+    input wire [`UUID_BITS-1:0]             write_uuid,
+    input wire [`NW_BITS-1:0]               write_wid,
+    input wire [`NUM_THREADS-1:0]           write_tmask,
+    input raster_stamp_t [`NUM_THREADS-1:0] write_data,
 
     // Output
     VX_gpu_csr_if.slave raster_csr_if
@@ -18,9 +22,9 @@ module VX_raster_csr #(
 
     raster_csrs_t [`NUM_THREADS-1:0] wdata;
     raster_csrs_t [`NUM_THREADS-1:0] rdata;
-    wire [`NUM_THREADS-1:0] wren;;
-    wire [`NW_BITS-1:0] waddr;
-    wire [`NW_BITS-1:0] raddr;
+    wire [`NUM_THREADS-1:0]          wren;
+    wire [`NW_BITS-1:0]              waddr;
+    wire [`NW_BITS-1:0]              raddr;
 
     // CSR registers
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
@@ -41,14 +45,14 @@ module VX_raster_csr #(
 
     // CSRs write
 
-    assign wren  = {`NUM_THREADS{write_enable}} & raster_req_if.tmask;
-    assign waddr = raster_svc_req_if.wid;
+    assign wren  = {`NUM_THREADS{write_enable}} & write_tmask;
+    assign waddr = write_wid;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign wdata[i].pos_mask = {raster_req_if.stamps[i].pos_y, raster_req_if.stamps[i].pos_x, raster_req_if.stamps[i].mask}; 
-        assign wdata[i].bcoord_x = raster_req_if.stamps[i].bcoord_x;
-        assign wdata[i].bcoord_y = raster_req_if.stamps[i].bcoord_y;
-        assign wdata[i].bcoord_z = raster_req_if.stamps[i].bcoord_z;    
+        assign wdata[i].pos_mask = {write_data[i].pos_y, write_data[i].pos_x, write_data[i].mask}; 
+        assign wdata[i].bcoord_x = write_data[i].bcoord_x;
+        assign wdata[i].bcoord_y = write_data[i].bcoord_y;
+        assign wdata[i].bcoord_z = write_data[i].bcoord_z;    
     end
     
     // CSRs read
@@ -94,9 +98,9 @@ module VX_raster_csr #(
     logic [`NUM_THREADS-1:0][3:0]                  mask;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign pos_x[i] = raster_req_if.stamps[i].pos_x;
-        assign pos_y[i] = raster_req_if.stamps[i].pos_y;
-        assign mask[i]  = raster_req_if.stamps[i].mask;
+        assign pos_x[i] = write_data[i].pos_x;
+        assign pos_y[i] = write_data[i].pos_y;
+        assign mask[i]  = write_data[i].mask;
     end
 
     always @(posedge clk) begin
@@ -108,13 +112,13 @@ module VX_raster_csr #(
             dpi_trace(1, " (#%0d)\n", raster_csr_if.read_uuid);
         end
         if (write_enable) begin
-            dpi_trace(1, "%d: core%0d-raster-fetch: wid=%0d, tmask=%b, pos_x=", $time, CORE_ID, raster_svc_req_if.wid, raster_svc_req_if.tmask);
+            dpi_trace(1, "%d: core%0d-raster-fetch: wid=%0d, tmask=%b, pos_x=", $time, CORE_ID, write_wid, write_tmask);
             `TRACE_ARRAY1D(1, pos_x, `NUM_THREADS);
             dpi_trace(1, ", pos_y=");
             `TRACE_ARRAY1D(1, pos_y, `NUM_THREADS);
             dpi_trace(1, ", mask=");
             `TRACE_ARRAY1D(1, mask, `NUM_THREADS);
-            dpi_trace(1, " (#%0d)\n", raster_svc_req_if.uuid);
+            dpi_trace(1, " (#%0d)\n", write_uuid);
         end
     end
 `endif

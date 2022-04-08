@@ -1,5 +1,7 @@
 `include "VX_raster_define.vh"
 
+import VX_raster_types::*;
+
 // Memory interface for the rasterization unit.
 // Performs the following:
 //  1. Break the request in tile and primitive fetch requests
@@ -276,7 +278,7 @@ module VX_raster_mem #(
         .reset(reset),
 
         .req_valid(mem_fire), // NOTE: This should ensure stalls
-        .req_rw(0),
+        .req_rw(1'b0),
         .req_mask(mem_req_mask),
         `UNUSED_PIN (req_byteen),
         .req_addr(fire_mem_req_addr),
@@ -289,7 +291,7 @@ module VX_raster_mem #(
         `UNUSED_PIN (rsp_mask),
         .rsp_data(mem_rsp_data),
         .rsp_tag(mem_rsp_tag),
-        .rsp_ready(1),
+        .rsp_ready(1'b1),
 
         .mem_req_valid(cache_req_if.valid),
         .mem_req_rw(cache_req_if.rw),

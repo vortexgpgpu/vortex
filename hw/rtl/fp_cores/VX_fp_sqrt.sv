@@ -1,5 +1,7 @@
 `include "VX_fpu_define.vh"
 
+import VX_fpu_types::*;
+
 module VX_fp_sqrt #( 
     parameter TAGW = 1,
     parameter LANES = 1

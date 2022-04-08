@@ -3,8 +3,8 @@
 module VX_ibuffer #(
     parameter CORE_ID = 0
 ) (
-    input wire clk,
-    input wire reset,
+    input wire          clk,
+    input wire          reset,
 
     // inputs
     VX_decode_if.slave  decode_if,  
@@ -12,7 +12,6 @@ module VX_ibuffer #(
     // outputs
     VX_ibuffer_if.master ibuffer_if
 );
-
     `UNUSED_PARAM (CORE_ID)
     
     localparam DATAW   = `UUID_BITS + `NUM_THREADS + 32 + `EX_BITS + `INST_OP_BITS + `INST_FRM_BITS + 1 + (`NR_BITS * 4) + 32 + 1 + 1;

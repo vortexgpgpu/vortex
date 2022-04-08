@@ -4,7 +4,8 @@
 module VX_generic_arbiter #(
     parameter NUM_REQS     = 1,
     parameter LOCK_ENABLE  = 0,
-    parameter string TYPE  = "P"
+    parameter string TYPE  = "P",
+    localparam LOG_NUM_REQS = `LOG2UP(NUM_REQS)
 ) (
     input  wire                     clk,
     input  wire                     reset,
@@ -14,8 +15,6 @@ module VX_generic_arbiter #(
     output wire [NUM_REQS-1:0]      grant_onehot,   
     output wire                     grant_valid
 );
-    localparam LOG_NUM_REQS = `LOG2UP(NUM_REQS);
-
     if (TYPE == "P") begin
         VX_fixed_arbiter #(
             .NUM_REQS    (NUM_REQS),

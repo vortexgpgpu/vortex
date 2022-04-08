@@ -3,7 +3,8 @@
 `TRACING_OFF
 module VX_fixed_arbiter #(
     parameter NUM_REQS    = 1,
-    parameter LOCK_ENABLE = 0
+    parameter LOCK_ENABLE = 0,
+    localparam LOG_NUM_REQS = `LOG2UP(NUM_REQS)
 ) (
     input  wire                     clk,
     input  wire                     reset,
@@ -12,14 +13,11 @@ module VX_fixed_arbiter #(
     output wire [LOG_NUM_REQS-1:0]  grant_index,
     output wire [NUM_REQS-1:0]      grant_onehot,   
     output wire                     grant_valid
-  );
-
+);
     `UNUSED_PARAM (LOCK_ENABLE)
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
     `UNUSED_VAR (unlock)
-
-    localparam LOG_NUM_REQS = `LOG2UP(NUM_REQS);
 
     if (NUM_REQS == 1)  begin        
         

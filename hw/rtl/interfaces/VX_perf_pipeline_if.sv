@@ -1,6 +1,3 @@
-`ifndef VX_PERF_PIPELINE_IF
-`define VX_PERF_PIPELINE_IF
-
 `include "VX_define.vh"
 
 interface VX_perf_pipeline_if ();
@@ -52,5 +49,3 @@ interface VX_perf_pipeline_if ();
     );
 
 endinterface
-
-`endif

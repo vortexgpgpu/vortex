@@ -1,7 +1,6 @@
-`ifndef VX_TEX_PERF_IF
-`define VX_TEX_PERF_IF
-
 `include "VX_define.vh"
+
+import VX_tex_types::*;
 
 interface VX_tex_perf_if ();
 
@@ -19,5 +18,3 @@ interface VX_tex_perf_if ();
     );
 
 endinterface
-
-`endif

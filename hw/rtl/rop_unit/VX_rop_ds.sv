@@ -1,5 +1,7 @@
 `include "VX_rop_define.vh"
 
+import VX_rop_types::*;
+
 module VX_rop_ds #(
     parameter CLUSTER_ID = 0,
     parameter NUM_LANES  = 4,

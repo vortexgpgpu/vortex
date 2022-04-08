@@ -1,6 +1,3 @@
-`ifndef VX_GPR_RSP_IF
-`define VX_GPR_RSP_IF
-
 `include "VX_define.vh"
 
 interface VX_gpr_rsp_if ();  
@@ -22,5 +19,3 @@ interface VX_gpr_rsp_if ();
     );
 
 endinterface
-
-`endif

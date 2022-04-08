@@ -1,5 +1,7 @@
 `include "VX_define.vh"
 
+import VX_fpu_types::*;
+
 module VX_fpu_unit #(
     parameter CORE_ID = 0
 ) (
@@ -13,8 +15,6 @@ module VX_fpu_unit #(
     input wire[`NUM_WARPS-1:0] csr_pending,
     output wire[`NUM_WARPS-1:0] req_pending
 ); 
-    import fpu_types::*;
-    
     `UNUSED_PARAM (CORE_ID)    
     localparam FPUQ_BITS = `LOG2UP(`FPUQ_SIZE);
 

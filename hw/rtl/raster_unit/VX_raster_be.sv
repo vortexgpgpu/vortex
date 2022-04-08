@@ -6,6 +6,8 @@
 
 `include "VX_raster_define.vh"
 
+import VX_raster_types::*;
+
 module VX_raster_be #(
     parameter RASTER_BLOCK_SIZE       = 4,
     parameter RASTER_QUAD_OUTPUT_RATE = 2,
@@ -67,8 +69,8 @@ module VX_raster_be #(
     for (genvar i = 0; i < RASTER_QUAD_NUM; ++i) begin
         for (genvar j = 0; j < RASTER_QUAD_NUM; ++j) begin
             always_comb begin
-                temp_quad_x_loc[i*RASTER_QUAD_NUM+j] = x_loc + i*2;
-                temp_quad_y_loc[i*RASTER_QUAD_NUM+j] = y_loc + j*2;
+                temp_quad_x_loc[i*RASTER_QUAD_NUM+j] = x_loc + `RASTER_DIM_BITS'(i*2);
+                temp_quad_y_loc[i*RASTER_QUAD_NUM+j] = y_loc + `RASTER_DIM_BITS'(j*2);
                 for (integer k = 0; k < 3; ++k)
                     local_edge_func_val[i*RASTER_QUAD_NUM+j][k] = edge_func_val[k] + i*2*edges[k][0] + j*2*edges[k][1];
             end
@@ -108,7 +110,7 @@ module VX_raster_be #(
         end
         // Arbitration condition
         else if (full == 0 && push == 1)
-            arbiter_index <= arbiter_index + 1;
+            arbiter_index <= arbiter_index + ARBITER_BITS'(1);
         else if (ready)
             valid_data <= 0;
     end
@@ -144,7 +146,7 @@ module VX_raster_be #(
                 quad_bcoords[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i][2][3],
                 pid,
                 (1'b1 && valid_data)
-            } : {FIFO_DATA_WIDTH{1'bz}};
+            } : 'x;
 
         logic fifo_valid;
         assign {out_quad_x_loc[i], out_quad_y_loc[i], out_quad_masks[i],

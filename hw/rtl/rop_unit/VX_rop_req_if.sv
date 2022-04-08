@@ -1,7 +1,6 @@
-`ifndef VX_ROP_REQ_IF
-`define VX_ROP_REQ_IF
-
 `include "VX_rop_define.vh"
+
+import VX_rop_types::*;
 
 interface VX_rop_req_if ();
 
@@ -38,5 +37,3 @@ interface VX_rop_req_if ();
     );
 
 endinterface
-
-`endif

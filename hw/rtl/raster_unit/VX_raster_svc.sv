@@ -1,5 +1,7 @@
 `include "VX_raster_define.vh"
 
+import VX_raster_types::*;
+
 module VX_raster_svc #(
     parameter CORE_ID = 0
 ) (
@@ -14,22 +16,26 @@ module VX_raster_svc #(
     VX_commit_if.master     raster_svc_rsp_if,
     VX_gpu_csr_if.slave     raster_csr_if    
 );
+    wire stall_out;
+
     // CSRs access
 
-    VX_raster_csr #(
-        .CORE_ID    (CORE_ID)
-    ) raster_csr (
-        .clk        (clk),
-        .reset      (reset),
-        // inputs
-        .write_enable (raster_req_if.valid & raster_svc_req_if.valid & ~stall_out),    
-        .raster_svc_req_if (raster_svc_req_if),
-        .raster_req_if (raster_req_if),
-        // outputs
-        .raster_csr_if (raster_csr_if)
-    );
+    wire csr_write_enable = raster_req_if.valid & raster_svc_req_if.valid & ~stall_out;
 
-    wire stall_out;
+    VX_raster_csr #(
+        .CORE_ID (CORE_ID)
+    ) raster_csr (
+        .clk            (clk),
+        .reset          (reset),
+        // inputs
+        .write_enable   (csr_write_enable),    
+        .write_uuid     (raster_svc_req_if.uuid),
+        .write_wid      (raster_svc_req_if.wid),
+        .write_tmask    (raster_svc_req_if.tmask),
+        .write_data     (raster_req_if.stamps),
+        // outputs
+        .raster_csr_if  (raster_csr_if)
+    );
 
     // it is possible to have ready = f(valid) when using arbiters, 
     // because of that we need to decouple raster_svc_req_if and raster_svc_rsp_if handshake with a pipe register

@@ -36,7 +36,10 @@ module VX_bank #(
     parameter REQ_DBG_IDW       = 0,
 
     // core request tag size
-    parameter CORE_TAG_WIDTH    = REQ_DBG_IDW
+    parameter CORE_TAG_WIDTH    = REQ_DBG_IDW,
+
+    localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE),
+    localparam WORD_SEL_BITS    = `UP(`WORD_SEL_BITS)
 ) (
     `SCOPE_IO_VX_bank
 
@@ -89,9 +92,7 @@ module VX_bank #(
     // flush
     input wire                          flush_enable,
     input wire [`LINE_SEL_BITS-1:0]  flush_addr
-);
-    localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE);
-    localparam WORD_SEL_BITS = `UP(`WORD_SEL_BITS);
+);  
 
 `IGNORE_UNUSED_BEGIN
     wire [`DBG_CACHE_REQ_IDW-1:0] req_id_sel, req_id_st0, req_id_st1;

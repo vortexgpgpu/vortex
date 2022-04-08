@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-interface VX_ibuffer_if ();
+interface VX_dispatch_if ();
 
     wire                    valid;    
     wire [`UUID_BITS-1:0]   uuid;
@@ -16,14 +16,6 @@ interface VX_ibuffer_if ();
     wire [31:0]             imm;
     wire [`NR_BITS-1:0]     rd;
     wire [`NR_BITS-1:0]     rs1;
-    wire [`NR_BITS-1:0]     rs2;
-    wire [`NR_BITS-1:0]     rs3;
-    
-    wire [`NR_BITS-1:0]     rd_n;
-    wire [`NR_BITS-1:0]     rs1_n;
-    wire [`NR_BITS-1:0]     rs2_n;
-    wire [`NR_BITS-1:0]     rs3_n;
-    wire [`NW_BITS-1:0]     wid_n;
 
     wire                    ready;
 
@@ -41,14 +33,7 @@ interface VX_ibuffer_if ();
         output use_imm,
         output imm,
         output rd,
-        output rs1,
-        output rs2,
-        output rs3,
-        output rd_n,
-        output rs1_n,
-        output rs2_n,
-        output rs3_n,
-        output wid_n,        
+        output rs1,    
         input  ready
     );
 
@@ -66,14 +51,7 @@ interface VX_ibuffer_if ();
         input  use_imm,
         input  imm,
         input  rd,
-        input  rs1,
-        input  rs2,
-        input  rs3,
-        input  rd_n,
-        input  rs1_n,
-        input  rs2_n,
-        input  rs3_n,
-        input  wid_n,        
+        input  rs1,   
         output ready
     );
     

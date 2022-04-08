@@ -34,9 +34,9 @@ module VX_mem_mux #(
 
     if (NUM_REQS > 1) begin
 
-        wire [NUM_REQS-1:0] req_valid_in;
+        wire [NUM_REQS-1:0]                req_valid_in;
         wire [NUM_REQS-1:0][REQ_DATAW-1:0] req_data_in;
-        wire [NUM_REQS-1:0] req_ready_in;
+        wire [NUM_REQS-1:0]                req_ready_in;
 
         for (genvar i = 0; i < NUM_REQS; i++) begin
             wire [TAG_OUT_WIDTH-1:0] req_tag_in;
@@ -75,9 +75,9 @@ module VX_mem_mux #(
 
         ///////////////////////////////////////////////////////////////////////
 
-        wire [NUM_REQS-1:0] rsp_valid_in;
+        wire [NUM_REQS-1:0]                rsp_valid_in;
         wire [NUM_REQS-1:0][RSP_DATAW-1:0] rsp_data_in;
-        wire [NUM_REQS-1:0] rsp_ready_in;
+        wire [NUM_REQS-1:0]                rsp_ready_in;
 
         wire [LOG_NUM_REQS-1:0] rsp_sel = rsp_out_if.tag[TAG_SEL_IDX +: LOG_NUM_REQS];
 

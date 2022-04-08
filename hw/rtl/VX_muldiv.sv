@@ -175,7 +175,7 @@ module VX_muldiv (
         .WIDTHQ (32),
         .WIDTHR (32),
         .LANES  (`NUM_THREADS),
-        .TAGW   (64 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1)
+        .TAGW   (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1)
     ) divide (
         .clk       (clk),
         .reset     (reset),        

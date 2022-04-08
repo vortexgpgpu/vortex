@@ -15,29 +15,29 @@ module VX_cache_mux #(
     localparam LOG_NUM_REQS = `CLOG2(NUM_REQS),
     localparam TAG_OUT_WIDTH = TAG_IN_WIDTH + LOG_NUM_REQS
 ) (
-    input wire clk,
-    input wire reset,
+    input wire              clk,
+    input wire              reset,
 
     // input requests        
-    VX_cache_req_if.slave     req_in_if[NUM_REQS],
+    VX_cache_req_if.slave   req_in_if[NUM_REQS],
 
     // input responses
-    VX_cache_rsp_if.master    rsp_in_if[NUM_REQS],
+    VX_cache_rsp_if.master  rsp_in_if[NUM_REQS],
     
     // output request
-    VX_cache_req_if.master    req_out_if,
+    VX_cache_req_if.master  req_out_if,
 
     // output response
-    VX_cache_rsp_if.slave     rsp_out_if
+    VX_cache_rsp_if.slave   rsp_out_if
 );  
     localparam REQ_DATAW = TAG_OUT_WIDTH + ADDR_WIDTH + 1 + DATA_SIZE + DATA_WIDTH;
     localparam RSP_DATAW = TAG_IN_WIDTH + DATA_WIDTH;
 
     if (NUM_REQS > 1) begin
 
-        wire [NUM_REQS-1:0][LANES-1:0] req_valid_in;
+        wire [NUM_REQS-1:0][LANES-1:0]                req_valid_in;
         wire [NUM_REQS-1:0][LANES-1:0][REQ_DATAW-1:0] req_data_in;
-        wire [NUM_REQS-1:0][LANES-1:0] req_ready_in;
+        wire [NUM_REQS-1:0][LANES-1:0]                req_ready_in;
 
         wire [LANES-1:0][REQ_DATAW-1:0] req_data_out;
 
@@ -85,11 +85,12 @@ module VX_cache_mux #(
 
         ///////////////////////////////////////////////////////////////////////
 
-        wire [NUM_REQS-1:0][LANES-1:0] rsp_valid_in;
+        wire [NUM_REQS-1:0][LANES-1:0]                rsp_valid_in;
         wire [NUM_REQS-1:0][LANES-1:0][RSP_DATAW-1:0] rsp_data_in;
-        wire [NUM_REQS-1:0][LANES-1:0] rsp_ready_in;
+        wire [NUM_REQS-1:0][LANES-1:0]                rsp_ready_in;
 
-        wire [LANES-1:0][RSP_DATAW-1:0] rsp_data_out;
+        wire [LANES-1:0][RSP_DATAW-1:0]    rsp_data_out;
+                
         wire [LANES-1:0][LOG_NUM_REQS-1:0] rsp_sel;
 
         for (genvar i = 0; i < LANES; ++i) begin

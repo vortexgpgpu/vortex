@@ -7,6 +7,8 @@
 
 `include "VX_raster_define.vh"
 
+import VX_raster_types::*;
+
 module VX_raster_slice #(
     parameter CLUSTER_ID              = 0,
     parameter RASTER_BLOCK_SIZE       = 8,
@@ -54,7 +56,7 @@ module VX_raster_slice #(
     logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  tile_edge_func_val[2:0];
 
     logic [RASTER_LEVEL_DATA_BITS-1:0] level_1;
-    assign level_1 = level + 1;
+    assign level_1 = level + RASTER_LEVEL_DATA_BITS'(1);
 
     // Control signsl
     logic        valid_tile, valid_block;

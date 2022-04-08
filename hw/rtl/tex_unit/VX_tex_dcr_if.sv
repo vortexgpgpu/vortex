@@ -1,10 +1,9 @@
-`ifndef VX_TEX_DCR_IF
-`define VX_TEX_DCR_IF
-
 `include "VX_tex_define.vh"
 
+import VX_tex_types::*;
+
 interface VX_tex_dcr_if #(
-    parameter NUM_STAGES
+    parameter NUM_STAGES = 1
 );
     tex_dcrs_t data [NUM_STAGES-1:0];
     
@@ -17,5 +16,3 @@ interface VX_tex_dcr_if #(
     );
 
 endinterface
-
-`endif

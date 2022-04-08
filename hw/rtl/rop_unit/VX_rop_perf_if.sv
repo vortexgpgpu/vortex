@@ -1,7 +1,6 @@
-`ifndef VX_ROP_PERF_IF
-`define VX_ROP_PERF_IF
-
 `include "VX_rop_define.vh"
+
+import VX_rop_types::*;
 
 interface VX_rop_perf_if ();
 
@@ -22,5 +21,3 @@ interface VX_rop_perf_if ();
     );
 
 endinterface
-
-`endif

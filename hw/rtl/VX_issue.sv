@@ -27,8 +27,8 @@ module VX_issue #(
     VX_gpr_req_if   gpr_req_if();
     VX_gpr_rsp_if   gpr_rsp_if();
     VX_writeback_if sboard_wb_if();
-    VX_ibuffer_if   scoreboard_if();
-    VX_ibuffer_if   dispatch_if();
+    VX_scoreboard_if scoreboard_if();
+    VX_dispatch_if  dispatch_if();
 
     // GPR request interface
     assign gpr_req_if.wid       = ibuffer_if.wid;
@@ -40,16 +40,20 @@ module VX_issue #(
     assign sboard_wb_if.valid   = writeback_if.valid;
     assign sboard_wb_if.uuid    = writeback_if.uuid;
     assign sboard_wb_if.wid     = writeback_if.wid;
+    assign sboard_wb_if.tmask   = writeback_if.tmask;
     assign sboard_wb_if.PC      = writeback_if.PC;
     assign sboard_wb_if.rd      = writeback_if.rd;
+    assign sboard_wb_if.data    = writeback_if.data;
     assign sboard_wb_if.eop     = writeback_if.eop;
+    `UNUSED_VAR (sboard_wb_if.ready)
         
     // scoreboard interface
     assign scoreboard_if.valid  = ibuffer_if.valid && dispatch_if.ready;
     assign scoreboard_if.uuid   = ibuffer_if.uuid;
     assign scoreboard_if.wid    = ibuffer_if.wid;
+    assign scoreboard_if.tmask  = ibuffer_if.tmask;
     assign scoreboard_if.PC     = ibuffer_if.PC;   
-    assign scoreboard_if.wb     = ibuffer_if.wb;      
+    assign scoreboard_if.wb     = ibuffer_if.wb;
     assign scoreboard_if.rd     = ibuffer_if.rd;
     assign scoreboard_if.rd_n   = ibuffer_if.rd_n;        
     assign scoreboard_if.rs1_n  = ibuffer_if.rs1_n;        
@@ -67,11 +71,11 @@ module VX_issue #(
     assign dispatch_if.op_type  = ibuffer_if.op_type; 
     assign dispatch_if.op_mod   = ibuffer_if.op_mod;    
     assign dispatch_if.wb       = ibuffer_if.wb;
-    assign dispatch_if.rd       = ibuffer_if.rd;
-    assign dispatch_if.rs1      = ibuffer_if.rs1;
-    assign dispatch_if.imm      = ibuffer_if.imm;        
     assign dispatch_if.use_PC   = ibuffer_if.use_PC;
     assign dispatch_if.use_imm  = ibuffer_if.use_imm;
+    assign dispatch_if.imm      = ibuffer_if.imm;
+    assign dispatch_if.rd       = ibuffer_if.rd;
+    assign dispatch_if.rs1      = ibuffer_if.rs1;
 
     // issue the instruction
     assign ibuffer_if.ready = scoreboard_if.ready && dispatch_if.ready;
@@ -93,10 +97,10 @@ module VX_issue #(
     VX_scoreboard #(
         .CORE_ID(CORE_ID)
     ) scoreboard (
-        .clk        (clk),
-        .reset      (scoreboard_reset),         
-        .writeback_if(sboard_wb_if),
-        .ibuffer_if (scoreboard_if)
+        .clk           (clk),
+        .reset         (scoreboard_reset),         
+        .writeback_if  (writeback_if),
+        .scoreboard_if (scoreboard_if)
     );
 
     VX_gpr_stage #(
@@ -112,7 +116,7 @@ module VX_issue #(
     VX_dispatch dispatch (
         .clk        (clk),      
         .reset      (dispatch_reset),
-        .ibuffer_if (dispatch_if),
+        .dispatch_if(dispatch_if),
         .gpr_rsp_if (gpr_rsp_if),
         .alu_req_if (alu_req_if),
         .lsu_req_if (lsu_req_if),        
