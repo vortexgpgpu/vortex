@@ -1,5 +1,7 @@
 `include "VX_raster_define.vh"
 
+import VX_raster_types::*;
+
 module VX_raster_svc #(
     parameter CORE_ID = 0
 ) (

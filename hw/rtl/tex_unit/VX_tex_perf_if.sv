@@ -3,6 +3,8 @@
 
 `include "VX_define.vh"
 
+import VX_tex_types::*;
+
 interface VX_tex_perf_if ();
 
     wire [`PERF_CTR_BITS-1:0] mem_reads;

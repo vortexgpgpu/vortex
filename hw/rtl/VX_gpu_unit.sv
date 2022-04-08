@@ -1,5 +1,7 @@
 `include "VX_define.vh"
 
+import VX_gpu_types::*;
+
 module VX_gpu_unit #(
     parameter CORE_ID = 0
 ) (
@@ -33,8 +35,6 @@ module VX_gpu_unit #(
     VX_warp_ctl_if.master warp_ctl_if,
     VX_commit_if.master gpu_commit_if
 );
-    import gpu_types::*;
-
     `UNUSED_PARAM (CORE_ID)
 
     localparam WCTL_DATAW = `GPU_TMC_BITS + `GPU_WSPAWN_BITS + `GPU_SPLIT_BITS + `GPU_BARRIER_BITS;

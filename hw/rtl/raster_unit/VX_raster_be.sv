@@ -6,6 +6,8 @@
 
 `include "VX_raster_define.vh"
 
+import VX_raster_types::*;
+
 module VX_raster_be #(
     parameter RASTER_BLOCK_SIZE       = 4,
     parameter RASTER_QUAD_OUTPUT_RATE = 2,

@@ -1,5 +1,7 @@
 `include "VX_fpu_define.vh"
 
+import VX_fpu_types::*;
+
 module VX_fpu_fpga #( 
     parameter TAGW = 4
 ) (

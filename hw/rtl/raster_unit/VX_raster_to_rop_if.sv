@@ -3,6 +3,8 @@
 
 `include "VX_raster_define.vh"
 
+import VX_raster_types::*;
+
 interface VX_raster_to_rop_if ();
 
     wire                            valid;

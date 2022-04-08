@@ -1,5 +1,7 @@
 `include "VX_tex_define.vh"
 
+import VX_tex_types::*;
+
 module VX_tex_wrap #(
     parameter CORE_ID = 0    
 ) (

@@ -4,6 +4,8 @@
 
 `include "VX_raster_define.vh"
 
+import VX_raster_types::*;
+
 module VX_raster_te_arbiter #(
     parameter RASTER_TILE_SIZE       = 16,
     parameter RASTER_BLOCK_SIZE      = 4,

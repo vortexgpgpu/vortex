@@ -1,5 +1,7 @@
 `include "VX_raster_define.vh"
 
+import VX_raster_types::*;
+
 // Top unit for the raster unit
 // Instantiates the following modules:
 //      1. DCR connections
