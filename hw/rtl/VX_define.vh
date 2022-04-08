@@ -206,13 +206,10 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 // non-cacheable tag bits
-`define NC_TAG_BIT              1
-
-// texture tag bits
-`define TEX_TAG_BIT             1
+`define NC_TAG_BITS             1
 
 // cache address type bits
-`define CACHE_ADDR_TYPE_BITS    (`NC_TAG_BIT + `SM_ENABLED)
+`define CACHE_ADDR_TYPE_BITS    (`NC_TAG_BITS + `SM_ENABLED)
 
 ////////////////////////// Icache Configurable Knobs //////////////////////////
 
@@ -247,7 +244,7 @@
 `define ICACHE_MEM_TAG_WIDTH    `_I_MEM_TAG_WIDTH
 `else
 `define _I_MEM_ADDR_RATIO_W     `CLOG2(`ICACHE_LINE_SIZE / `ICACHE_WORD_SIZE)
-`define _I_NC_MEM_TAG_WIDTH     (`LOG2UP(`ICACHE_NUM_REQS) + `_I_MEM_ADDR_RATIO_W + (`ICACHE_TAG_WIDTH))
+`define _I_NC_MEM_TAG_WIDTH     (`CLOG2(`ICACHE_NUM_REQS) + `_I_MEM_ADDR_RATIO_W + `ICACHE_TAG_WIDTH)
 `define ICACHE_MEM_TAG_WIDTH    `MAX(`_I_MEM_TAG_WIDTH,  `_I_NC_MEM_TAG_WIDTH)
 `endif
 
@@ -292,9 +289,9 @@
 `define DCACHE_TEX_TAG_SEL_BITS `DCACHE_SMEM_TAG_SEL_BITS
 `define DCACHE_TEX_TAG_WIDTH    `DCACHE_SMEM_TAG_WIDTH
 `endif
-`define _D_MEM_TAG_WIDTH        (`CLOG2(`DCACHE_NUM_BANKS) + `CLOG2(`DCACHE_MSHR_SIZE))
+`define _D_MEM_TAG_WIDTH        (`LOG2UP(`DCACHE_MSHR_SIZE) + `CLOG2(`DCACHE_NUM_BANKS) + `NC_TAG_BITS)
 `define _D_MEM_ADDR_RATIO_W     `CLOG2(`DCACHE_LINE_SIZE / `DCACHE_WORD_SIZE)
-`define _D_NC_MEM_TAG_WIDTH     (`LOG2UP(`DCACHE_NUM_REQS) + `_D_MEM_ADDR_RATIO_W + (`DCACHE_TEX_TAG_WIDTH + `EXT_TEX_ENABLED))
+`define _D_NC_MEM_TAG_WIDTH     (`CLOG2(`DCACHE_NUM_REQS) + `_D_MEM_ADDR_RATIO_W + `DCACHE_TEX_TAG_WIDTH)
 `define DCACHE_MEM_TAG_WIDTH    `MAX(`_D_MEM_TAG_WIDTH, `_D_NC_MEM_TAG_WIDTH)
 
 // Merged D-cache/I-cache memory tag
@@ -331,10 +328,11 @@
 `define L2_NUM_REQS             `NUM_CORES
 
 // Memory request tag bits
+`define _L2_MEM_TAG_WIDTH       (`LOG2UP(`L2_MSHR_SIZE) + `CLOG2(`L2_NUM_BANKS) + `NC_TAG_BITS)
 `define _L2_MEM_ADDR_RATIO_W    `CLOG2(`L2_CACHE_LINE_SIZE / `L2_WORD_SIZE)
 `define _L2_NC_MEM_TAG_WIDTH    (`CLOG2(`L2_NUM_REQS) + `_L2_MEM_ADDR_RATIO_W + `L1_MEM_TAG_WIDTH)
-`define _L2_MEM_TAG_WIDTH       `MAX((`CLOG2(`L2_NUM_BANKS) + `CLOG2(`L2_MSHR_SIZE) + `NC_TAG_BIT), `_L2_NC_MEM_TAG_WIDTH)
-`define L2X_MEM_TAG_WIDTH       (`L2_ENABLED ? `_L2_MEM_TAG_WIDTH : (`L1_MEM_TAG_WIDTH + `CLOG2(`L2_NUM_REQS)))
+`define _L2X_MEM_TAG_WIDTH      `MAX(`_L2_MEM_TAG_WIDTH, `_L2_NC_MEM_TAG_WIDTH)
+`define L2X_MEM_TAG_WIDTH       (`L2_ENABLED ? `_L2X_MEM_TAG_WIDTH : (`L1_MEM_TAG_WIDTH + `CLOG2(`L2_NUM_REQS)))
 `define L2_MEM_TAG_WIDTH        (`L2X_MEM_TAG_WIDTH + `CLOG2(1 + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED))
 
 ////////////////////////// L3cache Configurable Knobs /////////////////////////
@@ -362,10 +360,11 @@
 `define L3_NUM_REQS             `NUM_CLUSTERS
 
 // Memory request tag bits
+`define _L3_MEM_TAG_WIDTH       (`LOG2UP(`L3_MSHR_SIZE) + `CLOG2(`L3_NUM_BANKS) + `NC_TAG_BITS)
 `define _L3_MEM_ADDR_RATIO_W    `CLOG2(`L3_CACHE_LINE_SIZE / `L3_WORD_SIZE)
 `define _L3_NC_MEM_TAG_WIDTH    (`CLOG2(`L3_NUM_REQS) + `_L3_MEM_ADDR_RATIO_W + `L2_MEM_TAG_WIDTH)
-`define _L3_MEM_TAG_WIDTH       `MAX((`CLOG2(`L3_NUM_BANKS) + `CLOG2(`L3_MSHR_SIZE) + `NC_TAG_BIT), `_L3_NC_MEM_TAG_WIDTH)
-`define L3_MEM_TAG_WIDTH        (`L3_ENABLED ? `_L3_MEM_TAG_WIDTH : (`L2_MEM_TAG_WIDTH + `CLOG2(`L3_NUM_REQS)))
+`define _L3X_MEM_TAG_WIDTH      `MAX(`_L3_MEM_TAG_WIDTH, `_L3_NC_MEM_TAG_WIDTH)
+`define L3_MEM_TAG_WIDTH        (`L3_ENABLED ? `_L3X_MEM_TAG_WIDTH : (`L2_MEM_TAG_WIDTH + `CLOG2(`L3_NUM_REQS)))
 
 ////////////////////////// Tcache Configurable Knobs //////////////////////////
 
@@ -388,7 +387,14 @@
 `define TCACHE_NUM_REQS         `NUM_THREADS
 
 // Memory request tag bits
-`define TCACHE_MEM_TAG_WIDTH    (`CLOG2(`TCACHE_NUM_BANKS) + `CLOG2(`TCACHE_MSHR_SIZE))
+`define _T_MEM_TAG_WIDTH        (`LOG2UP(`TCACHE_MSHR_SIZE) + `CLOG2(`TCACHE_NUM_BANKS))
+`ifdef TCACHE_ENABLE
+`define TCACHE_MEM_TAG_WIDTH    `_T_MEM_TAG_WIDTH
+`else
+`define _T_MEM_ADDR_RATIO_W     `CLOG2(`TCACHE_LINE_SIZE / `TCACHE_WORD_SIZE)
+`define _T_NC_MEM_TAG_WIDTH     (`CLOG2(`TCACHE_NUM_REQS) + `_T_MEM_ADDR_RATIO_W + `TCACHE_TAG_WIDTH)
+`define TCACHE_MEM_TAG_WIDTH    `MAX(`_T_MEM_TAG_WIDTH,  `_T_NC_MEM_TAG_WIDTH)
+`endif
 
 ////////////////////////// Rcache Configurable Knobs //////////////////////////
 
@@ -417,12 +423,12 @@
 `define RCACHE_MEM_ADDR_WIDTH   (32 - `CLOG2(`RCACHE_LINE_SIZE))
 
 // Memory request tag bits
-`define _R_MEM_TAG_WIDTH        (`CLOG2(`RCACHE_NUM_BANKS) + `CLOG2(`RCACHE_MSHR_SIZE))
+`define _R_MEM_TAG_WIDTH        (`LOG2UP(`RCACHE_MSHR_SIZE) + `CLOG2(`RCACHE_NUM_BANKS))
 `ifdef RCACHE_ENABLE
 `define RCACHE_MEM_TAG_WIDTH    `_R_MEM_TAG_WIDTH
 `else
 `define _R_MEM_ADDR_RATIO_W     `CLOG2(`RCACHE_LINE_SIZE / `RCACHE_WORD_SIZE)
-`define _R_NC_MEM_TAG_WIDTH     (`LOG2UP(`RCACHE_NUM_REQS) + `_R_MEM_ADDR_RATIO_W + (`RCACHE_TAG_WIDTH))
+`define _R_NC_MEM_TAG_WIDTH     (`CLOG2(`RCACHE_NUM_REQS) + `_R_MEM_ADDR_RATIO_W + (`RCACHE_TAG_WIDTH))
 `define RCACHE_MEM_TAG_WIDTH    `MAX(`_R_MEM_TAG_WIDTH,  `_R_NC_MEM_TAG_WIDTH)
 `endif
 
@@ -453,12 +459,12 @@
 `define OCACHE_MEM_ADDR_WIDTH   (32 - `CLOG2(`OCACHE_LINE_SIZE))
 
 // Memory request tag bits
-`define _O_MEM_TAG_WIDTH        (`CLOG2(`OCACHE_NUM_BANKS) + `CLOG2(`OCACHE_MSHR_SIZE))
+`define _O_MEM_TAG_WIDTH        (`LOG2UP(`OCACHE_MSHR_SIZE) + `CLOG2(`OCACHE_NUM_BANKS))
 `ifdef OCACHE_ENABLE
 `define OCACHE_MEM_TAG_WIDTH    `_O_MEM_TAG_WIDTH
 `else
 `define _O_MEM_ADDR_RATIO_W     `CLOG2(`OCACHE_LINE_SIZE / `OCACHE_WORD_SIZE)
-`define _O_NC_MEM_TAG_WIDTH     (`LOG2UP(`OCACHE_NUM_REQS) + `_O_MEM_ADDR_RATIO_W + (`OCACHE_TAG_WIDTH))
+`define _O_NC_MEM_TAG_WIDTH     (`CLOG2(`OCACHE_NUM_REQS) + `_O_MEM_ADDR_RATIO_W + (`OCACHE_TAG_WIDTH))
 `define OCACHE_MEM_TAG_WIDTH    `MAX(`_O_MEM_TAG_WIDTH,  `_O_NC_MEM_TAG_WIDTH)
 `endif
 

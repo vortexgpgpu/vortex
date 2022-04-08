@@ -27,7 +27,7 @@
         "Vortex": {
             "submodules": {
                 "cluster": {"type":"VX_cluster", "count":"`NUM_CLUSTERS"},
-                "l3cache": {"type":"VX_cache", "enabled":"`L3_ENABLE", "params":{"NUM_BANKS":"`L3_NUM_BANKS"}}
+                "l3cache": {"type":"VX_cache", "enabled":"`L3_ENABLED", "params":{"NUM_BANKS":"`L3_NUM_BANKS"}}
             }
         },
         "VX_cluster": {
@@ -35,7 +35,7 @@
                 "core": {"type":"VX_core", "count":"`NUM_CORES", "enabled":true},
                 "rcache": {"type":"VX_cache", "enabled":"`EXT_RASTER_ENABLED", "params":{"NUM_BANKS":"`RCACHE_NUM_BANKS"}},
                 "ocache": {"type":"VX_cache", "enabled":"`EXT_ROP_ENABLED", "params":{"NUM_BANKS":"`OCACHE_NUM_BANKS"}},
-                "l2cache": {"type":"VX_cache", "enabled":"`L2_ENABLE", "params":{"NUM_BANKS":"`L2_NUM_BANKS"}}
+                "l2cache": {"type":"VX_cache", "enabled":"`L2_ENABLED", "params":{"NUM_BANKS":"`L2_NUM_BANKS"}}
             }
         },
         "VX_core": {
@@ -89,7 +89,7 @@
     "taps": {     
         "afu": {                                     
             "!cmd_type":3,
-            "!state":2,
+            "!state":3,
             "?cci_sRxPort_c0_mmioRdValid":1,
             "?cci_sRxPort_c0_mmioWrValid":1,
             "mmio_hdr_address":16,            
@@ -156,11 +156,11 @@
             "?icache_req_fire": 1,            
             "icache_req_uuid": "`UUID_BITS",
             "icache_req_addr": 32,
-            "icache_req_tag":"`ICACHE_CORE_TAG_ID_BITS",
+            "icache_req_tag":"`ICACHE_TAG_SEL_BITS",
             "?icache_rsp_fire": 1,
             "icache_rsp_uuid": "`UUID_BITS",
             "icache_rsp_data": 32,
-            "icache_rsp_tag":"`ICACHE_CORE_TAG_ID_BITS"
+            "icache_rsp_tag":"`ICACHE_TAG_SEL_BITS"
         },
         "afu/vortex/cluster/core/pipeline/issue": {
             "?issue_fire": 1,

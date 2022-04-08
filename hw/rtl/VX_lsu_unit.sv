@@ -344,17 +344,17 @@ module VX_lsu_unit #(
     assign cache_rsp_ready = ~load_rsp_stall;
 
     // scope registration
-    `SCOPE_ASSIGN (cache_req_fire,  cache_req_fire);
-    `SCOPE_ASSIGN (cache_req_uuid,  req_uuid);
-    `SCOPE_ASSIGN (cache_req_addr,  req_addr);    
-    `SCOPE_ASSIGN (cache_req_rw,    ~req_wb);
-    `SCOPE_ASSIGN (cache_req_byteen,cache_req_if.byteen);
-    `SCOPE_ASSIGN (cache_req_data,  cache_req_if.data);
-    `SCOPE_ASSIGN (cache_req_tag,   req_tag);
-    `SCOPE_ASSIGN (cache_rsp_fire,  cache_rsp_tmask & {`NUM_THREADS{cache_rsp_fire}});
-    `SCOPE_ASSIGN (cache_rsp_uuid,  rsp_uuid);    
-    `SCOPE_ASSIGN (cache_rsp_data,  cache_rsp_data);
-    `SCOPE_ASSIGN (cache_rsp_tag,   mbuf_raddr);
+    `SCOPE_ASSIGN (dcache_req_fire,  cache_req_fire);
+    `SCOPE_ASSIGN (dcache_req_uuid,  req_uuid);
+    `SCOPE_ASSIGN (dcache_req_addr,  req_addr);    
+    `SCOPE_ASSIGN (dcache_req_rw,    ~req_wb);
+    `SCOPE_ASSIGN (dcache_req_byteen,cache_req_if.byteen);
+    `SCOPE_ASSIGN (dcache_req_data,  cache_req_if.data);
+    `SCOPE_ASSIGN (dcache_req_tag,   req_tag);
+    `SCOPE_ASSIGN (dcache_rsp_fire,  cache_rsp_tmask & {`NUM_THREADS{cache_rsp_fire}});
+    `SCOPE_ASSIGN (dcache_rsp_uuid,  rsp_uuid);    
+    `SCOPE_ASSIGN (dcache_rsp_data,  cache_rsp_data);
+    `SCOPE_ASSIGN (dcache_rsp_tag,   mbuf_raddr);
 
 `ifndef SYNTHESIS
     reg [`LSUQ_SIZE-1:0][(`NW_BITS + 32 + `NR_BITS + `UUID_BITS + 64 + 1)-1:0] pending_reqs;

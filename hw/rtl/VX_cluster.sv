@@ -380,7 +380,7 @@ module VX_cluster #(
         .WRITE_ENABLE       (1),       
         .REQ_DBG_IDW        (`UUID_BITS),   
         .CORE_TAG_WIDTH     (`L1_MEM_TAG_WIDTH),
-        .MEM_TAG_WIDTH      (`L2_MEM_TAG_WIDTH),
+        .MEM_TAG_WIDTH      (`L2X_MEM_TAG_WIDTH),
         .NC_ENABLE          (1)
     ) l2cache (
         `SCOPE_BIND_VX_cluster_l2cache
@@ -425,7 +425,7 @@ module VX_cluster #(
     localparam MEM_ARB_SIZE = 1 + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED;
     localparam RCACHE_MEM_TAG_WIDTH_ = `EXT_RASTER_ENABLED ? `RCACHE_MEM_TAG_WIDTH : 0;
     localparam OCACHE_MEM_TAG_WIDTH_ = `EXT_ROP_ENABLED ? `OCACHE_MEM_TAG_WIDTH : 0;
-    localparam MEM_ARB_TAG_WIDTH = `MAX(`MAX(`L2X_MEM_TAG_WIDTH, RCACHE_MEM_TAG_WIDTH_),OCACHE_MEM_TAG_WIDTH_);
+    localparam MEM_ARB_TAG_WIDTH = `MAX(`MAX(`L2X_MEM_TAG_WIDTH, RCACHE_MEM_TAG_WIDTH_), OCACHE_MEM_TAG_WIDTH_);
 
     VX_mem_req_if #(
         .DATA_WIDTH (`L2_MEM_DATA_WIDTH),

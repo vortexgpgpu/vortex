@@ -209,7 +209,11 @@ module VX_nc_bypass #(
         assign mem_req_byteen_out = mem_req_valid_in ? mem_req_byteen_in : mem_req_byteen_in_r;
         assign mem_req_wsel_out   = mem_req_valid_in ? mem_req_wsel_in : mem_req_wsel_in_r;
         assign mem_req_data_out   = mem_req_valid_in ? mem_req_data_in : mem_req_data_in_r;
-        assign mem_req_tag_out    = mem_req_valid_in ? MEM_TAG_OUT_WIDTH'(mem_req_tag_in_c) : MEM_TAG_OUT_WIDTH'({core_req_nc_idx, req_addr_idx, core_req_tag_in_sel});
+        if (NUM_REQS > 1) begin
+            assign mem_req_tag_out = mem_req_valid_in ? MEM_TAG_OUT_WIDTH'(mem_req_tag_in_c) : MEM_TAG_OUT_WIDTH'({core_req_nc_idx, req_addr_idx, core_req_tag_in_sel});
+        end else begin 
+            assign mem_req_tag_out = mem_req_valid_in ? MEM_TAG_OUT_WIDTH'(mem_req_tag_in_c) : MEM_TAG_OUT_WIDTH'({req_addr_idx, core_req_tag_in_sel});
+        end
     end else begin
         `UNUSED_VAR (mem_req_wsel_in)
         `UNUSED_VAR (mem_req_pmask_in)
@@ -217,7 +221,11 @@ module VX_nc_bypass #(
         assign mem_req_byteen_out = mem_req_valid_in ? mem_req_byteen_in : core_req_byteen_in_sel;
         assign mem_req_data_out   = mem_req_valid_in ? mem_req_data_in : core_req_data_in_sel;
         assign mem_req_wsel_out   = 0;
-        assign mem_req_tag_out    = mem_req_valid_in ? MEM_TAG_OUT_WIDTH'(mem_req_tag_in_c) : MEM_TAG_OUT_WIDTH'({core_req_nc_idx, core_req_tag_in_sel});
+        if (NUM_REQS > 1) begin
+            assign mem_req_tag_out = mem_req_valid_in ? MEM_TAG_OUT_WIDTH'(mem_req_tag_in_c) : MEM_TAG_OUT_WIDTH'({core_req_nc_idx, core_req_tag_in_sel});
+        end else begin
+            assign mem_req_tag_out = mem_req_valid_in ? MEM_TAG_OUT_WIDTH'(mem_req_tag_in_c) : MEM_TAG_OUT_WIDTH'({core_req_tag_in_sel});
+        end
     end
 
     // core response handling
@@ -243,7 +251,12 @@ module VX_nc_bypass #(
         );
     end
 
-    wire [REQ_SEL_BITS-1:0] rsp_idx = mem_rsp_tag_in[(CORE_TAG_IN_WIDTH + D) +: REQ_SEL_BITS];
+    wire [REQ_SEL_BITS-1:0] rsp_idx;
+    if (NUM_REQS > 1) begin
+        assign rsp_idx = mem_rsp_tag_in[(CORE_TAG_IN_WIDTH + D) +: REQ_SEL_BITS];
+    end else begin 
+        assign rsp_idx = 1'b0;
+    end
     
     reg [NUM_REQS-1:0] rsp_nc_valid_r;
     always @(*) begin
