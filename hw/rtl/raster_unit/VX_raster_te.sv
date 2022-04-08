@@ -63,8 +63,8 @@ module VX_raster_te #(
         valid_tile = !((eval0 < 0) || (eval1 < 0) || (eval2 < 9));
         // If tile valid => sub-divide into sub-tiles
         if (valid_tile) begin
-            sub_tile_bits = `RASTER_DIM_BITS'(RASTER_TILE_SIZE_BITS) - `RASTER_DIM_BITS'(level) - 1;
-            sub_tile_size = 1 << sub_tile_bits;
+            sub_tile_bits = `RASTER_DIM_BITS'(RASTER_TILE_SIZE_BITS) - `RASTER_DIM_BITS'(level) - `RASTER_DIM_BITS'(1);
+            sub_tile_size = `RASTER_DIM_BITS'(1) << sub_tile_bits;
             if (sub_tile_bits >= `RASTER_DIM_BITS'(RASTER_BLOCK_SIZE_BITS)) begin
                 // divide into sub tiles as still bigger than block
                 //valid_block = 0;

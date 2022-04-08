@@ -131,6 +131,7 @@ module VX_raster_unit #(
     logic [NUM_SLICES-1:0] quad_queue_empty;
     logic [NUM_SLICES-1:0] quad_pop;
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_out_pid [NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0];
+    logic arbiter_valid;
     
     // TODO: Add raster slices in generate block here
     for (genvar i = 0; i < RASTER_SLICE_BITS; ++i) begin
@@ -169,8 +170,7 @@ module VX_raster_unit #(
     logic [`RASTER_DIM_BITS-1:0] out_quad_x_loc[RASTER_QUAD_OUTPUT_RATE-1:0];
     logic [`RASTER_DIM_BITS-1:0] out_quad_y_loc[RASTER_QUAD_OUTPUT_RATE-1:0];
     logic [3:0] out_quad_masks[RASTER_QUAD_OUTPUT_RATE-1:0];
-    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0];
-    logic arbiter_valid;
+    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0];    
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] out_pid[RASTER_QUAD_OUTPUT_RATE-1:0];
     generate
         // add arbiter if # raster slice > 1
