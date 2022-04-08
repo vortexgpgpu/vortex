@@ -29,8 +29,10 @@ module VX_raster_svc #(
         .reset          (reset),
         // inputs
         .write_enable   (csr_write_enable),    
-        .raster_svc_req_if (raster_svc_req_if),
-        .raster_req_if  (raster_req_if),
+        .write_uuid     (raster_svc_req_if.uuid),
+        .write_wid      (raster_svc_req_if.wid),
+        .write_tmask    (raster_svc_req_if.tmask),
+        .write_data     (raster_req_if.stamps),
         // outputs
         .raster_csr_if  (raster_csr_if)
     );

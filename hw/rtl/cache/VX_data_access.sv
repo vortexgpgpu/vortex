@@ -116,7 +116,7 @@ module VX_data_access #(
     end
    
     VX_onehot_mux #(
-        .DATAW (`WORDS_PER_LINE),
+        .DATAW (`WORDS_PER_LINE * `WORD_WIDTH),
         .N     (NUM_WAYS)
     ) rdata_select (
         .data_in  (per_way_rdata),
