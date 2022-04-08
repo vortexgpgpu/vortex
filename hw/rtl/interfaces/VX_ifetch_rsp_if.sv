@@ -1,6 +1,3 @@
-`ifndef VX_IFETCH_RSP_IF
-`define VX_IFETCH_RSP_IF
-
 `include "VX_define.vh"
 
 interface VX_ifetch_rsp_if ();
@@ -34,5 +31,3 @@ interface VX_ifetch_rsp_if ();
     );
 
 endinterface
-
-`endif

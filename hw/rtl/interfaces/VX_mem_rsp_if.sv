@@ -1,7 +1,4 @@
-`ifndef VX_MEM_RSP_IF
-`define VX_MEM_RSP_IF
-
-`include "../cache/VX_cache_define.vh"
+`include "VX_cache_define.vh"
 
 interface VX_mem_rsp_if #(
     parameter DATA_WIDTH = 1,
@@ -28,5 +25,3 @@ interface VX_mem_rsp_if #(
     );    
 
 endinterface
-
-`endif

@@ -1,6 +1,3 @@
-`ifndef VX_LSU_REQ_IF
-`define VX_LSU_REQ_IF
-
 `include "VX_define.vh"
 
 interface VX_lsu_req_if ();
@@ -55,5 +52,3 @@ interface VX_lsu_req_if ();
     );
 
 endinterface
-
-`endif

@@ -1,6 +1,3 @@
-`ifndef VX_FPU_REQ_IF
-`define VX_FPU_REQ_IF
-
 `include "VX_define.vh"
 
 interface VX_fpu_req_if ();
@@ -52,5 +49,3 @@ interface VX_fpu_req_if ();
     );
 
 endinterface
-
-`endif

@@ -1,6 +1,3 @@
-`ifndef VX_IBUFFER_IF
-`define VX_IBUFFER_IF
-
 `include "VX_define.vh"
 
 interface VX_ibuffer_if ();
@@ -81,5 +78,3 @@ interface VX_ibuffer_if ();
     );
     
 endinterface
-
-`endif

@@ -1,6 +1,3 @@
-`ifndef VX_RASTER_TO_ROP_IF
-`define VX_RASTER_TO_ROP_IF
-
 `include "VX_raster_define.vh"
 
 import VX_raster_types::*;
@@ -35,7 +32,3 @@ interface VX_raster_to_rop_if ();
     );
 
 endinterface
-
-`endif
- 
- 

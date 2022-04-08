@@ -1,5 +1,8 @@
 `timescale 1ns/1ns
+
 `include "VX_rop_blend.sv"
+
+import VX_rop_types::*;
 
 `define check(x, y) if ((x == y) !== 1) if ((x == y) === 0) $error("x=%h, expected=%h", x, y); else $warning("x=%h, expected=%h", x, y)
 

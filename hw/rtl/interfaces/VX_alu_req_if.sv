@@ -1,6 +1,3 @@
-`ifndef VX_ALU_REQ_IF
-`define VX_ALU_REQ_IF
-
 `include "VX_define.vh"
 
 interface VX_alu_req_if ();
@@ -64,5 +61,3 @@ interface VX_alu_req_if ();
     );
 
 endinterface
-
-`endif

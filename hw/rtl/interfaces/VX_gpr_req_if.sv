@@ -1,6 +1,3 @@
-`ifndef VX_GPR_REQ_IF
-`define VX_GPR_REQ_IF
-
 `include "VX_define.vh"
 
 interface VX_gpr_req_if ();  
@@ -25,5 +22,3 @@ interface VX_gpr_req_if ();
     );
 
 endinterface
-
-`endif

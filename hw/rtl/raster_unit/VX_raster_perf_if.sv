@@ -1,6 +1,3 @@
-`ifndef VX_RASTER_PERF_IF
-`define VX_RASTER_PERF_IF
-
 `include "VX_raster_define.vh"
 
 import VX_raster_types::*;
@@ -21,5 +18,3 @@ interface VX_raster_perf_if ();
     );
 
 endinterface
-
-`endif

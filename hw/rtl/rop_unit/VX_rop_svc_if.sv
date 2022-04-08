@@ -1,6 +1,3 @@
-`ifndef VX_ROP_SVC_IF
-`define VX_ROP_SVC_IF
-
 `include "VX_rop_define.vh"
 
 import VX_rop_types::*;
@@ -51,5 +48,3 @@ interface VX_rop_svc_if ();
     );
 
 endinterface
-`endif
- 

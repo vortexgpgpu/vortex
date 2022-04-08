@@ -1,6 +1,3 @@
-`ifndef VX_RASTER_SVC_IF
-`define VX_RASTER_SVC_IF
-
 `include "VX_raster_define.vh"
 
 import VX_raster_types::*;
@@ -41,7 +38,3 @@ interface VX_raster_svc_if ();
     );
 
 endinterface
-`endif
-
-
- 

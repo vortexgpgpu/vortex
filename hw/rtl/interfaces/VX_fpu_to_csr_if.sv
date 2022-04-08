@@ -1,6 +1,3 @@
-`ifndef VX_FPU_TO_CSR_IF
-`define VX_FPU_TO_CSR_IF
-
 `include "VX_define.vh"
 
 import VX_fpu_types::*;
@@ -31,5 +28,3 @@ interface VX_fpu_to_csr_if ();
     );
 
 endinterface
-
-`endif
