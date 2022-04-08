@@ -10,10 +10,10 @@ module VX_raster_rsp_switch #(
     input [`RASTER_DIM_BITS-1:0]      x_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
     input [`RASTER_DIM_BITS-1:0]      y_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
     input [3:0]                             masks[RASTER_QUAD_OUTPUT_RATE-1:0],
-    input [`RASTER_PRIMITIVE_DATA_BITS-1:0] bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0],
+    input signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0],
     // TODO: Remove lint
     /* verilator lint_off UNUSED */
-    input [`RASTER_PRIMITIVE_DATA_BITS-1:0] pid,
+    input [`RASTER_PRIMITIVE_DATA_BITS-1:0] pid[RASTER_QUAD_OUTPUT_RATE-1:0],
     /* verilator lint_on UNUSED */
 
     // Output
@@ -29,16 +29,16 @@ module VX_raster_rsp_switch #(
             // stamps[i].bcoord_x = bcoords[i][0];
             // stamps[i].bcoord_y = bcoords[i][1];
             // stamps[i].bcoord_z = bcoords[i][2];
-            stamps[i].pid      = pid[`RASTER_PID_BITS-1:0];
+            stamps[i].pid      = pid[i][`RASTER_PID_BITS-1:0];
         end
     end
 
     // Assign for bcoords array type transformation
     for (genvar i = 0; i < RASTER_QUAD_OUTPUT_RATE; ++i) begin
         for (genvar j = 0; j < 4; ++j) begin
-            assign stamps[i].bcoord_x[i] = bcoords[i][0][j];
-            assign stamps[i].bcoord_y[i] = bcoords[i][1][j];
-            assign stamps[i].bcoord_z[i] = bcoords[i][2][j];
+            assign stamps[i].bcoord_x[j] = bcoords[i][0][j];
+            assign stamps[i].bcoord_y[j] = bcoords[i][1][j];
+            assign stamps[i].bcoord_z[j] = bcoords[i][2][j];
         end
     end
 

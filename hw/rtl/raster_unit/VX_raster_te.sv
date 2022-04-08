@@ -44,6 +44,19 @@ module VX_raster_te #(
     logic [`RASTER_DIM_BITS-1:0] sub_tile_bits;
 
     always_comb begin
+        valid_block = 0;
+
+        // Reset values
+        for (integer i = 0; i < 2; ++i) begin
+            for (integer j = 0; j < 2; ++j) begin
+                tile_x_loc[i*2+j] = `RASTER_DIM_BITS'(1'b0);
+                tile_y_loc[i*2+j] = `RASTER_DIM_BITS'(1'b0);
+                for (integer k = 0; k < 3; ++k) begin
+                    tile_edge_func_val[i*2+j][k] = `RASTER_PRIMITIVE_DATA_BITS'(1'b0);
+                end
+            end
+        end
+
         // Check if tile has triangle
         valid_tile = !((eval0 < 0) || (eval1 < 0) || (eval2 < 9));
         // If tile valid => sub-divide into sub-tiles
@@ -52,7 +65,7 @@ module VX_raster_te #(
             sub_tile_size = 1 << sub_tile_bits;
             if (sub_tile_bits >= `RASTER_DIM_BITS'(RASTER_BLOCK_SIZE_BITS)) begin
                 // divide into sub tiles as still bigger than block
-                valid_block = 0;
+                //valid_block = 0;
                 // generate sub-tile data
                 for (integer i = 0; i < 2; ++i) begin
                     for (integer j = 0; j < 2; ++j) begin

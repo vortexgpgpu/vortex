@@ -30,9 +30,9 @@ module VX_raster_be #(
     // Quad related output data
     output logic [`RASTER_DIM_BITS-1:0]              out_quad_x_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
     output logic [`RASTER_DIM_BITS-1:0]              out_quad_y_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
-    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_pid,
+    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_pid[RASTER_QUAD_OUTPUT_RATE-1:0],
     output logic [3:0]                               out_quad_masks[RASTER_QUAD_OUTPUT_RATE-1:0],
-    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0],
+    output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0],
     output logic [RASTER_QUAD_OUTPUT_RATE-1:0]       valid
 );
 
@@ -49,7 +49,7 @@ module VX_raster_be #(
         quad_y_loc[RASTER_QUAD_SPACE-1:0];
     logic [3:0] temp_quad_masks[RASTER_QUAD_SPACE-1:0], 
         quad_masks[RASTER_QUAD_SPACE-1:0];
-    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_quad_bcoords[RASTER_QUAD_SPACE-1:0][2:0][3:0],
+    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_quad_bcoords[RASTER_QUAD_SPACE-1:0][2:0][3:0],
         quad_bcoords[RASTER_QUAD_SPACE-1:0][2:0][3:0];
 
     // Wire to hold the edge function values for quad evaluation
@@ -76,7 +76,7 @@ module VX_raster_be #(
                 .edges(edges),
                 .edge_func_val(local_edge_func_val[i*RASTER_QUAD_NUM+j]),
                 .masks(temp_quad_masks[i*RASTER_QUAD_NUM+j]),
-                .bcoords(temp_quad_bcoords[i])
+                .bcoords(temp_quad_bcoords[i*RASTER_QUAD_NUM+j])
             );
         end
     end
@@ -127,8 +127,8 @@ module VX_raster_be #(
         logic [FIFO_DATA_WIDTH-1:0] fifo_push_data, fifo_pop_data;
         assign fifo_push_data = (arbiter_index*RASTER_QUAD_OUTPUT_RATE + i) < RASTER_QUAD_SPACE ?
             {
-                quad_x_loc[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i],
-                quad_y_loc[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i],
+                quad_x_loc[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i] >> 1,
+                quad_y_loc[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i] >> 1,
                 quad_masks[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i],
                 quad_bcoords[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i][0][0],
                 quad_bcoords[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i][0][1],
@@ -151,7 +151,7 @@ module VX_raster_be #(
             out_quad_bcoords[i][0][0], out_quad_bcoords[i][0][1], out_quad_bcoords[i][0][2], out_quad_bcoords[i][0][3],
             out_quad_bcoords[i][1][0], out_quad_bcoords[i][1][1], out_quad_bcoords[i][1][2], out_quad_bcoords[i][1][3],
             out_quad_bcoords[i][2][0], out_quad_bcoords[i][2][1], out_quad_bcoords[i][2][2], out_quad_bcoords[i][2][3],
-            out_pid, fifo_valid} = fifo_pop_data;
+            out_pid[i], fifo_valid} = fifo_pop_data;
         assign valid[i] = fifo_valid && !empty_flag[i];
         VX_fifo_queue #(
             .DATAW	    (FIFO_DATA_WIDTH),
@@ -160,7 +160,7 @@ module VX_raster_be #(
         ) quad_fifo_queue (
             .clk        (clk),
             .reset      (reset),
-            .push       (push),
+            .push       (push && quad_masks[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i] != 0),
             .pop        (pop),
             .data_in    (fifo_push_data),
             .data_out   (fifo_pop_data),
@@ -174,5 +174,20 @@ module VX_raster_be #(
 
     assign full = &(full_flag);
     assign empty = &(empty_flag);
+
+`ifdef DBG_TRACE_CORE_PIPELINE
+    always @(posedge clk) begin
+        if (pop) begin
+            for (int i = 0; i < RASTER_QUAD_OUTPUT_RATE; ++i) begin
+                if (valid[i]) begin
+                    dpi_trace(1, "raster-quad: %d: x_loc = %0d, y_loc = %0d, pid=%0d, mask=%d\nbcoords=%d %d %d %d, %d %d %d %d, %d %d %d %d", 
+                        $time, out_quad_x_loc[i], out_quad_y_loc[i], out_pid[i], out_quad_masks[i], out_quad_bcoords[i][0][0], out_quad_bcoords[i][0][1], out_quad_bcoords[i][0][2], out_quad_bcoords[i][0][3],
+            out_quad_bcoords[i][1][0], out_quad_bcoords[i][1][1], out_quad_bcoords[i][1][2], out_quad_bcoords[i][1][3],
+            out_quad_bcoords[i][2][0], out_quad_bcoords[i][2][1], out_quad_bcoords[i][2][2], out_quad_bcoords[i][2][3]);
+                end
+            end
+        end
+    end
+`endif
 
 endmodule
