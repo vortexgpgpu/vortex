@@ -79,6 +79,8 @@ module VX_raster_csr #(
 
     assign raster_csr_if.read_data = read_data_r;
 
+    `UNUSED_VAR (write_uuid)
+
     `UNUSED_VAR (raster_csr_if.read_enable)
     `UNUSED_VAR (raster_csr_if.read_uuid)
     `UNUSED_VAR (raster_csr_if.read_tmask)
