@@ -14,7 +14,14 @@ module VX_core_req_bank_sel #(
     // Number of ports per banks
     parameter NUM_PORTS     = 1,
     // core request tag size
-    parameter TAG_WIDTH     = 3
+    parameter TAG_WIDTH     = 3,
+
+    localparam WORDS_PER_LINE   = LINE_SIZE / WORD_SIZE,
+    localparam WORD_WIDTH       = WORD_SIZE * 8,
+    localparam REQ_SEL_BITS     = `CLOG2(NUM_REQS),    
+    localparam WORD_SEL_BITS    = `CLOG2(WORDS_PER_LINE),
+    localparam BANK_SEL_BITS    = `CLOG2(NUM_BANKS),
+    localparam LINE_ADDR_WIDTH  = ADDR_WIDTH - BANK_SEL_BITS - WORD_SEL_BITS
 ) (
     input wire                                      clk,
     input wire                                      reset,
@@ -46,17 +53,8 @@ module VX_core_req_bank_sel #(
     `STATIC_ASSERT(NUM_PORTS <= NUM_BANKS, ("invalid value"))
 
     `UNUSED_VAR (clk)
-    `UNUSED_VAR (reset)
+    `UNUSED_VAR (reset)    
 
-    localparam WORDS_PER_LINE = LINE_SIZE / WORD_SIZE;
-
-    localparam WORD_WIDTH    = WORD_SIZE * 8;
-    localparam REQ_SEL_BITS  = `CLOG2(NUM_REQS);
-    localparam BANK_SEL_BITS = `CLOG2(NUM_BANKS);
-    localparam WORD_SEL_BITS = `CLOG2(WORDS_PER_LINE);
-    
-    localparam LINE_ADDR_WIDTH = ADDR_WIDTH - BANK_SEL_BITS - WORD_SEL_BITS;
-        
     wire [NUM_REQS-1:0][LINE_ADDR_WIDTH-1:0]    core_req_line_addr;
     wire [NUM_REQS-1:0][`UP(WORD_SEL_BITS)-1:0] core_req_wsel;
     wire [NUM_REQS-1:0][`UP(BANK_SEL_BITS)-1:0] core_req_bid;

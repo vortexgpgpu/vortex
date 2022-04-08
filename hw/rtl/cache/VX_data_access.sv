@@ -18,7 +18,9 @@ module VX_data_access #(
     // Enable cache writeable
     parameter WRITE_ENABLE      = 1,
     // Request debug identifier
-    parameter REQ_DBG_IDW       = 0
+    parameter REQ_DBG_IDW       = 0,
+
+    localparam WORD_SEL_BITS    = `UP(`WORD_SEL_BITS)
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -49,7 +51,6 @@ module VX_data_access #(
     `UNUSED_VAR (addr)
     `UNUSED_VAR (read)
 
-    localparam WORD_SEL_BITS = `UP(`WORD_SEL_BITS);
     localparam BYTEENW = WRITE_ENABLE ? CACHE_LINE_SIZE : 1;
 
     wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] rdata;
@@ -117,7 +118,7 @@ module VX_data_access #(
     if (NUM_WAYS > 1) begin
         wire [`WAY_SEL_BITS-1:0] which_way;
         for (genvar i = 0; i < NUM_WAYS; ++i) begin
-            assign which_way = select_way[i] ? i : 'z; 
+            assign which_way = select_way[i] ? `WAY_SEL_BITS'(i) : 'z; 
         end
         assign rdata = read_data_local[which_way];
     end else begin

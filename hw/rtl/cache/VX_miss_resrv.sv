@@ -21,7 +21,9 @@ module VX_miss_resrv #(
     // Request debug identifier
     parameter REQ_DBG_IDW       = 0,
     // core request tag size
-    parameter CORE_TAG_WIDTH    = REQ_DBG_IDW    
+    parameter CORE_TAG_WIDTH    = REQ_DBG_IDW,
+
+    localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE)
 ) (
     input wire clk,
     input wire reset,
@@ -63,9 +65,7 @@ module VX_miss_resrv #(
     input wire [MSHR_ADDR_WIDTH-1:0]    release_id
 );
     `UNUSED_PARAM (CACHE_ID)
-    `UNUSED_PARAM (BANK_ID)
-
-    localparam MSHR_ADDR_WIDTH = `LOG2UP(MSHR_SIZE);
+    `UNUSED_PARAM (BANK_ID)    
     
     reg [MSHR_SIZE-1:0][`LINE_ADDR_WIDTH-1:0] addr_table, addr_table_n;
     reg [MSHR_SIZE-1:0] valid_table, valid_table_n;

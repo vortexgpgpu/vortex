@@ -15,7 +15,12 @@ module VX_nc_bypass #(
     parameter MEM_ADDR_WIDTH    = 1,
     parameter MEM_DATA_SIZE     = 1,
     parameter MEM_TAG_IN_WIDTH  = 1,
-    parameter MEM_TAG_OUT_WIDTH = 1
+    parameter MEM_TAG_OUT_WIDTH = 1,
+
+    localparam CORE_DATA_WIDTH  = CORE_DATA_SIZE * 8,
+    localparam MEM_DATA_WIDTH   = MEM_DATA_SIZE * 8,
+    localparam CORE_TAG_OUT_WIDTH = CORE_TAG_IN_WIDTH - NC_ENABLE,
+    localparam MEM_SEL_BITS     = `UP(`CLOG2(MEM_DATA_SIZE / CORE_DATA_SIZE))
  ) ( 
     input wire clk,
     input wire reset,
@@ -85,12 +90,7 @@ module VX_nc_bypass #(
     input wire                          mem_rsp_ready_out
 );
     `UNUSED_VAR (clk)
-    `UNUSED_VAR (reset)
-
-    localparam CORE_DATA_WIDTH    = CORE_DATA_SIZE * 8;
-    localparam MEM_DATA_WIDTH     = MEM_DATA_SIZE * 8;
-    localparam CORE_TAG_OUT_WIDTH = CORE_TAG_IN_WIDTH - NC_ENABLE;
-    localparam MEM_SEL_BITS       = `UP(`CLOG2(MEM_DATA_SIZE / CORE_DATA_SIZE));
+    `UNUSED_VAR (reset)    
 
     localparam REQ_SEL_BITS = `LOG2UP(NUM_REQS);
     localparam MUX_DATAW    = CORE_TAG_IN_WIDTH + CORE_DATA_WIDTH + CORE_DATA_SIZE + CORE_ADDR_WIDTH + 1;

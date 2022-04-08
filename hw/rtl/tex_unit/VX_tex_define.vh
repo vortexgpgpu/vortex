@@ -24,7 +24,7 @@
 `define TEX_LGSTRIDE_MAX    2
 `define TEX_LGSTRIDE_BITS   2
 
-`define TEX_BLEND_FRAC      8
+`define TEX_BLEND_FRAC      `TEX_SUBPIXEL_BITS
 `define TEX_BLEND_ONE       (2 ** `TEX_BLEND_FRAC)
 
 `endif

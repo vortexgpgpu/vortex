@@ -32,7 +32,7 @@ interface VX_writeback_if ();
         input  PC,
         input  rd,
         input  data,
-        input  eop,    
+        input  eop,
         output ready
     );
 

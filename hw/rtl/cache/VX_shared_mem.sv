@@ -25,7 +25,9 @@ module VX_shared_mem #(
     parameter REQ_DBG_IDW                   = 0,
 
     // core request tag size
-    parameter TAG_WIDTH                     = REQ_DBG_IDW
+    parameter TAG_WIDTH                     = REQ_DBG_IDW,
+
+    localparam WORD_WIDTH = WORD_SIZE * 8
  ) (    
     input wire clk,
     input wire reset,   
@@ -54,10 +56,9 @@ module VX_shared_mem #(
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))
     `UNUSED_PARAM (IDNAME)
 
-    localparam REQ_SEL_BITS = `LOG2UP(NUM_REQS);
-    localparam WORD_WIDTH = WORD_SIZE * 8;
-    localparam NUM_WORDS  = SIZE / WORD_SIZE;
-    localparam WORDS_PER_BANK = NUM_WORDS / NUM_BANKS;
+    localparam REQ_SEL_BITS    = `LOG2UP(NUM_REQS);    
+    localparam NUM_WORDS       = SIZE / WORD_SIZE;
+    localparam WORDS_PER_BANK  = NUM_WORDS / NUM_BANKS;
     localparam BANK_ADDR_WIDTH = ADDR_WIDTH - `CLOG2(NUM_BANKS);
 
     wire [NUM_BANKS-1:0]                    per_bank_req_valid_unqual; 

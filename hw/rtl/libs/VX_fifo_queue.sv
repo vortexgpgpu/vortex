@@ -7,7 +7,8 @@ module VX_fifo_queue #(
     parameter ALM_FULL  = (SIZE - 1),
     parameter ALM_EMPTY = 1,
     parameter OUT_REG   = 0,
-    parameter LUTRAM    = 1
+    parameter LUTRAM    = 1,
+    localparam SIZEW    = $clog2(SIZE+1)
 ) ( 
     input  wire             clk,
     input  wire             reset,    
@@ -22,8 +23,7 @@ module VX_fifo_queue #(
     output wire [SIZEW-1:0] size
 ); 
     
-    localparam ADDRW = $clog2(SIZE);
-    localparam SIZEW = $clog2(SIZE+1);
+    localparam ADDRW = $clog2(SIZE);    
 
     `STATIC_ASSERT(`ISPOW2(SIZE), ("must be 0 or power of 2!"))
     

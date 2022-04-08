@@ -18,7 +18,6 @@ module VX_skid_buffer #(
     input  wire             ready_out,
     output wire             valid_out
 );
-
     if (PASSTHRU) begin
 
         `UNUSED_VAR (clk)
