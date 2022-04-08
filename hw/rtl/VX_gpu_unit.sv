@@ -67,6 +67,7 @@ module VX_gpu_unit #(
     wire is_wspawn = (gpu_req_if.op_type == `INST_GPU_WSPAWN);
     wire is_tmc    = (gpu_req_if.op_type == `INST_GPU_TMC);
     wire is_split  = (gpu_req_if.op_type == `INST_GPU_SPLIT);
+    wire is_join   = (gpu_req_if.op_type == `INST_GPU_JOIN);
     wire is_bar    = (gpu_req_if.op_type == `INST_GPU_BAR);
     wire is_pred   = (gpu_req_if.op_type == `INST_GPU_PRED);
 
@@ -115,7 +116,7 @@ module VX_gpu_unit #(
     assign barrier.size_m1 = (`NW_BITS)'(rs2_data - 1);       
 
     // Warp control response
-    wire wctl_req_valid = gpu_req_if.valid & (is_wspawn | is_tmc | is_split | is_bar | is_pred);
+    wire wctl_req_valid = gpu_req_if.valid & (is_wspawn | is_tmc | is_split | is_join | is_bar | is_pred);
     wire wctl_rsp_valid = wctl_req_valid;
     wire [WCTL_DATAW-1:0] wctl_rsp_data = {tmc, wspawn, split, barrier};
     wire wctl_rsp_ready;
@@ -314,7 +315,7 @@ module VX_gpu_unit #(
         `endif
         }),
         .data_in ({
-            {gpu_req_if.uuid, gpu_req_if.wid, gpu_req_if.tmask, gpu_req_if.PC, `NR_BITS'(0),  1'b0,          RSP_DATAW'(wctl_rsp_data),   1'b1,           1'b1}
+            {gpu_req_if.uuid, gpu_req_if.wid, gpu_req_if.tmask, gpu_req_if.PC, `NR_BITS'(0),  1'b0,          RSP_DATAW'(wctl_rsp_data),   1'b1,           ~is_join}
         `ifdef EXT_TEX_ENABLE
           , {tex_rsp_if.uuid, tex_rsp_if.wid, tex_rsp_if.tmask, tex_rsp_if.PC, tex_rsp_if.rd, tex_rsp_if.wb, RSP_DATAW'(tex_rsp_if.data), tex_rsp_if.eop, 1'b0}
         `endif
