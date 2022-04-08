@@ -1,3 +1,6 @@
+`ifndef VX_FPU_TYPES_VH
+`define VX_FPU_TYPES_VH
+
 `include "VX_define.vh"
 
 package VX_fpu_types;
@@ -21,3 +24,8 @@ typedef struct packed {
 } fflags_t;
 
 endpackage
+
+`define FP_CLASS_BITS   $bits(VX_fpu_types::fp_class_t)
+`define FFLAGS_BITS     $bits(VX_fpu_types::fflags_t)
+
+`endif

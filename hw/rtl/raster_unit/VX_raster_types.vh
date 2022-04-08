@@ -1,4 +1,11 @@
-`include "VX_raster_define.vh"
+`ifndef VX_RASTER_TYPES_VH
+`define VX_RASTER_TYPES_VH
+
+`include "VX_define.vh"
+
+`define RASTER_ADDR_BITS            32  
+`define RASTER_DCR_DATA_BITS        32
+`define RASTER_PRIMITIVE_DATA_BITS  32
 
 package VX_raster_types;
 
@@ -65,3 +72,5 @@ task trace_raster_csr (
 endtask
 
 endpackage
+
+`endif

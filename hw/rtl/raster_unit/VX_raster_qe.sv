@@ -4,8 +4,6 @@
 
 `include "VX_raster_define.vh"
 
-import VX_raster_types::*;
-
 module VX_raster_qe (
     // Primitive related data
     // edge equation data for the 3 edges and ax+by+c

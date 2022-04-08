@@ -7,8 +7,6 @@
 
 `include "VX_raster_define.vh"
 
-import VX_raster_types::*;
-
 module VX_raster_slice #(
     parameter CLUSTER_ID              = 0,
     parameter RASTER_BLOCK_SIZE       = 8,

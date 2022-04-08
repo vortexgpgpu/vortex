@@ -1,7 +1,5 @@
 `include "VX_rop_define.vh"
 
-import VX_rop_types::*;
-
 // Module for handling memory requests
 module VX_rop_mem #(
     parameter CLUSTER_ID = 0,

@@ -2,9 +2,10 @@
 `define VX_RASTER_DEFINE_VH
 
 `include "VX_define.vh"
+`include "VX_raster_types.vh"
 
-`define RASTER_ADDR_BITS            32  
-`define RASTER_DCR_DATA_BITS        32
-`define RASTER_PRIMITIVE_DATA_BITS  32
+`IGNORE_WARNINGS_BEGIN
+import VX_raster_types::*;
+`IGNORE_WARNINGS_END
 
 `endif

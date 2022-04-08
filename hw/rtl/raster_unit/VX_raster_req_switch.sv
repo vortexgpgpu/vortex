@@ -1,7 +1,5 @@
 `include "VX_raster_define.vh"
 
-import VX_raster_types::*;
-
 module VX_raster_req_switch #(  
     parameter CLUSTER_ID = 0,
     parameter RASTER_SLICE_NUM = 4,

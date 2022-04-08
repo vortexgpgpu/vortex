@@ -1,6 +1,9 @@
 `include "VX_define.vh"
+`include "VX_gpu_types.vh"
 
+`IGNORE_WARNINGS_BEGIN
 import VX_gpu_types::*;
+`IGNORE_WARNINGS_END
 
 interface VX_warp_ctl_if ();
 

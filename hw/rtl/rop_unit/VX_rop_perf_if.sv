@@ -1,7 +1,5 @@
 `include "VX_rop_define.vh"
 
-import VX_rop_types::*;
-
 interface VX_rop_perf_if ();
 
     wire [`PERF_CTR_BITS-1:0] mem_reads;

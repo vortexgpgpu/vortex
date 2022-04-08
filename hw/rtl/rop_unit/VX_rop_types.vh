@@ -1,4 +1,7 @@
-`include "VX_rop_define.vh"
+`ifndef VX_ROP_TYPES_VH
+`define VX_ROP_TYPES_VH
+
+`include "VX_define.vh"
 
 package VX_rop_types;
 
@@ -109,3 +112,5 @@ task trace_rop_csr (
 endtask
 
 endpackage
+
+`endif

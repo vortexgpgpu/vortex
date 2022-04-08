@@ -1,7 +1,5 @@
 `include "VX_tex_define.vh"
 
-import VX_tex_types::*;
-
 interface VX_tex_req_if ();
 
     wire                            valid;      

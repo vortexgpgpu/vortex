@@ -15,7 +15,6 @@ interface VX_dispatch_if ();
     wire                    use_imm;
     wire [31:0]             imm;
     wire [`NR_BITS-1:0]     rd;
-    wire [`NR_BITS-1:0]     rs1;
 
     wire                    ready;
 
@@ -33,7 +32,6 @@ interface VX_dispatch_if ();
         output use_imm,
         output imm,
         output rd,
-        output rs1,    
         input  ready
     );
 
@@ -51,7 +49,6 @@ interface VX_dispatch_if ();
         input  use_imm,
         input  imm,
         input  rd,
-        input  rs1,   
         output ready
     );
     

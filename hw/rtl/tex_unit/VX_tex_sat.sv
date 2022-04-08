@@ -1,7 +1,5 @@
 `include "VX_platform.vh"
 
-import VX_tex_types::*;
-
 module VX_tex_sat #(
     parameter IN_W  = 1,
     parameter OUT_W = 1,

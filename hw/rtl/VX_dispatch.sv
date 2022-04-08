@@ -50,7 +50,7 @@ module VX_dispatch (
         .valid_in  (alu_req_valid),
         .ready_in  (alu_req_ready),
         .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, next_PC,            alu_op_type,        dispatch_if.op_mod, dispatch_if.imm, dispatch_if.use_PC, dispatch_if.use_imm, dispatch_if.rd, dispatch_if.wb, tid,            gpr_rsp_if.rs1_data, gpr_rsp_if.rs2_data}),
-        .data_out  ({alu_req_if.uuid, alu_req_if.wid, alu_req_if.tmask, alu_req_if.PC, alu_req_if.next_PC, alu_req_if.op_type, alu_req_if.op_mod, alu_req_if.imm, alu_req_if.use_PC, alu_req_if.use_imm, alu_req_if.rd, alu_req_if.wb, alu_req_if.tid, alu_req_if.rs1_data, alu_req_if.rs2_data}),
+        .data_out  ({alu_req_if.uuid,  alu_req_if.wid,  alu_req_if.tmask,  alu_req_if.PC,  alu_req_if.next_PC, alu_req_if.op_type, alu_req_if.op_mod,  alu_req_if.imm,  alu_req_if.use_PC,  alu_req_if.use_imm,  alu_req_if.rd,  alu_req_if.wb,  alu_req_if.tid, alu_req_if.rs1_data, alu_req_if.rs2_data}),
         .valid_out (alu_req_if.valid),
         .ready_out (alu_req_if.ready)
     );

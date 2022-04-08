@@ -1,8 +1,6 @@
 
 `include "VX_fpu_define.vh"
 
-import VX_fpu_types::*;
-
 module VX_fp_class # (    
     parameter MAN_BITS = 23,
     parameter EXP_BITS = 8

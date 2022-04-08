@@ -205,16 +205,6 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define FP_CLASS_BITS       $bits(VX_fpu_types::fp_class_t)
-`define FFLAGS_BITS         $bits(VX_fpu_types::fflags_t)
-
-`define GPU_TMC_BITS        $bits(VX_gpu_types::gpu_tmc_t)
-`define GPU_WSPAWN_BITS     $bits(VX_gpu_types::gpu_wspawn_t)
-`define GPU_SPLIT_BITS      $bits(VX_gpu_types::gpu_split_t)
-`define GPU_BARRIER_BITS    $bits(VX_gpu_types::gpu_barrier_t)
-
-///////////////////////////////////////////////////////////////////////////////
-
 // non-cacheable tag bits
 `define NC_TAG_BIT              1
 

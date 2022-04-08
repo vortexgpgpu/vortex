@@ -2,8 +2,6 @@
 
 `include "VX_raster_define.vh"
 
-import VX_raster_types::*;
-
 module VX_raster_edge_functions (
     // input logic clk,
     input logic [`RASTER_DIM_BITS-1:0]  x_loc, y_loc,

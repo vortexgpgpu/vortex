@@ -1,6 +1,9 @@
 `include "VX_define.vh"
+`include "VX_fpu_types.vh"
 
+`IGNORE_WARNINGS_BEGIN
 import VX_fpu_types::*;
+`IGNORE_WARNINGS_END
 
 interface VX_fpu_to_csr_if ();
 

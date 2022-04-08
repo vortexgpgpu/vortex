@@ -1,7 +1,5 @@
 `include "VX_raster_define.vh"
 
-import VX_raster_types::*;
-
 // Memory interface for the rasterization unit.
 // Performs the following:
 //  1. Break the request in tile and primitive fetch requests

@@ -1,7 +1,5 @@
 `include "VX_raster_define.vh"
 
-import VX_raster_types::*;
-
 module VX_raster_extents #(
     parameter RASTER_TILE_SIZE = 64
 ) (

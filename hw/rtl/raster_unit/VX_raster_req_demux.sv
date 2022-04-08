@@ -1,7 +1,5 @@
 `include "VX_raster_define.vh"
 
-import VX_raster_types::*;
-
 module VX_raster_req_demux #(
     parameter NUM_REQS       = 1,
     parameter BUFFERED       = 0,

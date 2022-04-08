@@ -75,7 +75,6 @@ module VX_issue #(
     assign dispatch_if.use_imm  = ibuffer_if.use_imm;
     assign dispatch_if.imm      = ibuffer_if.imm;
     assign dispatch_if.rd       = ibuffer_if.rd;
-    assign dispatch_if.rs1      = ibuffer_if.rs1;
 
     // issue the instruction
     assign ibuffer_if.ready = scoreboard_if.ready && dispatch_if.ready;
