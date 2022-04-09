@@ -221,7 +221,8 @@ module VX_shared_mem #(
         .NUM_BANKS (NUM_BANKS),
         .NUM_PORTS (1),
         .WORD_SIZE (WORD_SIZE),        
-        .TAG_WIDTH (TAG_WIDTH)
+        .TAG_WIDTH (TAG_WIDTH),
+        .OUT_REG   (NUM_BANKS >= 2)
     ) rsp_merge (
         .clk                     (clk),
         .reset                   (reset),                    

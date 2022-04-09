@@ -23,12 +23,12 @@ module VX_issue #(
 `endif
     VX_gpu_req_if.master    gpu_req_if
 );
-    VX_ibuffer_if   ibuffer_if();    
-    VX_gpr_req_if   gpr_req_if();
-    VX_gpr_rsp_if   gpr_rsp_if();
-    VX_writeback_if sboard_wb_if();
-    VX_scoreboard_if scoreboard_if();
-    VX_dispatch_if  dispatch_if();
+    VX_ibuffer_if       ibuffer_if();    
+    VX_gpr_req_if       gpr_req_if();
+    VX_gpr_rsp_if       gpr_rsp_if();
+    VX_writeback_if     sboard_wb_if();
+    VX_scoreboard_if    scoreboard_if();
+    VX_dispatch_if      dispatch_if();
 
     // GPR request interface
     assign gpr_req_if.wid       = ibuffer_if.wid;

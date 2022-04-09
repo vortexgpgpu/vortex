@@ -658,11 +658,12 @@ module VX_cache #(
         end   
 
         VX_core_rsp_merge #(
+            .NUM_REQS  (NUM_REQS),
             .NUM_BANKS (NUM_BANKS),
             .NUM_PORTS (NUM_PORTS),
             .WORD_SIZE (WORD_SIZE),
-            .NUM_REQS  (NUM_REQS),
-            .TAG_WIDTH (CORE_TAG_X_WIDTH)
+            .TAG_WIDTH (CORE_TAG_X_WIDTH),
+            .OUT_REG   (NUM_BANKS >= 2)
         ) core_rsp_merge (
             .clk                     (clk),
             .reset                   (reset),                    
@@ -690,6 +691,7 @@ module VX_cache #(
         VX_stream_mux #(
             .NUM_REQS (NUM_BANKS),
             .DATAW    (`MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + NUM_PORTS * (1 + WORD_SIZE + WORD_SEL_BITS + `WORD_WIDTH)),
+            .BUFFERED (NUM_BANKS >= 2),
             .ARBITER  ("R")
         ) mem_req_mux (
             .clk       (clk),

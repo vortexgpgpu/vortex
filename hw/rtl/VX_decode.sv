@@ -481,10 +481,10 @@ module VX_decode  #(
     wire ifetch_rsp_fire = ifetch_rsp_if.valid && ifetch_rsp_if.ready;
 
     assign join_if.valid = ifetch_rsp_fire && is_join;
-    assign join_if.wid = ifetch_rsp_if.wid;
+    assign join_if.wid   = ifetch_rsp_if.wid;
 
-    assign wstall_if.valid = ifetch_rsp_fire;
-    assign wstall_if.wid = ifetch_rsp_if.wid;
+    assign wstall_if.valid   = ifetch_rsp_fire;
+    assign wstall_if.wid     = ifetch_rsp_if.wid;
     assign wstall_if.stalled = is_wstall;
 
     assign ifetch_rsp_if.ready = decode_if.ready;
