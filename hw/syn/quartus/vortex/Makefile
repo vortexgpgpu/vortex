@@ -4,12 +4,9 @@ SRC_FILE = Vortex.sv
 RTL_DIR = ../../../../rtl
 THIRD_PARTY_DIR = ../../../../../third_party
 
-CONFIGS += -set "DCACHE_NUM_PORTS=4"
-
 #CONFIGS += -set "NUM_CORES=4"
 
-#CONFIGS += -set "NUM_CLUSTERS=4" -set "NUM_CORES=4"
-#CONFIGS += -set "L2_ENABLE" -set "L2_CACHE_SIZE=131072" -set "ICACHE_DISABLE" -set "DCACHE_DISABLE"
+#CONFIGS += -set "NUM_CLUSTERS=1" -set "NUM_CORES=2" -set "L2_ENABLE" -set "L2_CACHE_SIZE=131072" -set "DICACHE_SIZE=8192" -set "DDCACHE_SIZE=8192"
 
 FAMILY = "Arria 10"
 DEVICE = 10AX115N3F40E2SG

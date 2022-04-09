@@ -14,9 +14,7 @@ module VX_tag_access #(
     // Size of a word in bytes
     parameter WORD_SIZE         = 1, 
     // Request debug identifier
-    parameter REQ_DBG_IDW       = 0,
-
-    localparam WAY_SEL_BITS     = `UP(`WAY_SEL_BITS)
+    parameter REQ_DBG_IDW       = 0
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -32,7 +30,7 @@ module VX_tag_access #(
     input wire [`LINE_ADDR_WIDTH-1:0]   addr,
     input wire                          fill,    
     input wire                          flush,
-    output wire [WAY_SEL_BITS-1:0]      way_idx,
+    output wire [NUM_WAYS-1:0]          way_sel,
     output wire                         tag_match
 );
 
@@ -87,13 +85,7 @@ module VX_tag_access #(
     assign tag_match = (| tag_match_way);
 
     // return the selected way
-    VX_onehot_encoder #( 
-        .N (NUM_WAYS)
-    ) way_enc (
-        .data_in  (fill_way | tag_match_way),
-        .data_out (way_idx),
-        `UNUSED_PIN (valid_out)
-    );
+    assign way_sel = fill_way | tag_match_way;
     
 `ifdef DBG_TRACE_CACHE_TAG
     always @(posedge clk) begin

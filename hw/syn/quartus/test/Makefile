@@ -4,6 +4,8 @@ SRC_FILE = Vortex.sv
 RTL_DIR = ../../../../rtl
 THIRD_PARTY_DIR = ../../../../../third_party
 
+CONFIGS += -set "EXT_GFX_ENABLE"
+
 FAMILY = "Arria 10"
 DEVICE = 10AX115N3F40E2SG
 FPU_CORE_PATH = $(RTL_DIR)/fp_cores/altera/arria10
@@ -60,7 +62,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES):
-	quartus_sh -t ../../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../../project.sdc -inc "$(RTL_INCLUDE)" -set "EXT_GFX_ENABLE" -set "NUM_WARPS=1" -set "NUM_THREADS=1"
+	quartus_sh -t ../../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../../project.sdc -inc "$(RTL_INCLUDE)" $(CONFIGS)
 	
 syn.chg:
 	$(STAMP) syn.chg
