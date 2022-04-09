@@ -91,8 +91,9 @@ module VX_bank #(
 
     // flush
     input wire                          flush_enable,
-    input wire [`LINE_SEL_BITS-1:0]  flush_addr
-);  
+    input wire [`LINE_SEL_BITS-1:0]     flush_addr
+);    
+    localparam WAY_SEL_BITS = `UP(`WAY_SEL_BITS);
 
 `IGNORE_UNUSED_BEGIN
     wire [`DBG_CACHE_REQ_IDW-1:0] req_id_sel, req_id_st0, req_id_st1;
@@ -235,8 +236,8 @@ module VX_bank #(
     wire tag_match_st0;
 
     // added for associativity
-    wire [NUM_WAYS-1:0] select_way_st0;
-    wire [NUM_WAYS-1:0] select_way_st1;
+    wire [WAY_SEL_BITS-1:0] way_idx_st0;
+    wire [WAY_SEL_BITS-1:0] way_idx_st1;
 
     VX_tag_access #(
         .CACHE_ID         (CACHE_ID),
@@ -260,7 +261,7 @@ module VX_bank #(
         .addr      (addr_st0),        
         .fill      (do_fill_st0),
         .flush     (do_flush_st0),
-        .select_way (select_way_st0),
+        .way_idx   (way_idx_st0),
         .tag_match (tag_match_st0)
     );
 
@@ -273,14 +274,14 @@ module VX_bank #(
     wire [MSHR_ADDR_WIDTH-1:0] mshr_id_a_st0 = (is_read_st0 || is_write_st0) ? mshr_alloc_id : mshr_id_st0;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH + NUM_PORTS * (WORD_SEL_BITS + WORD_SIZE + `REQ_SEL_BITS + 1 + CORE_TAG_WIDTH) + MSHR_ADDR_WIDTH + 1 + NUM_WAYS),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + WAY_SEL_BITS + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH + NUM_PORTS * (WORD_SEL_BITS + WORD_SIZE + `REQ_SEL_BITS + 1 + CORE_TAG_WIDTH) + MSHR_ADDR_WIDTH + 1),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (!crsq_stall),
-        .data_in  ({valid_st0, is_mshr_st0, is_fill_st0, is_read_st0, is_write_st0, miss_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_idx_st0, pmask_st0, tag_st0, mshr_id_a_st0, mshr_pending_st0, select_way_st0}),
-        .data_out ({valid_st1, is_mshr_st1, is_fill_st1, is_read_st1, is_write_st1, miss_st1, addr_st1, wdata_st1, wsel_st1, byteen_st1, req_idx_st1, pmask_st1, tag_st1, mshr_id_st1,   mshr_pending_st1, select_way_st1})
+        .data_in  ({valid_st0, is_mshr_st0, is_fill_st0, is_read_st0, is_write_st0, miss_st0, way_idx_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_idx_st0, pmask_st0, tag_st0, mshr_id_a_st0, mshr_pending_st0}),
+        .data_out ({valid_st1, is_mshr_st1, is_fill_st1, is_read_st1, is_write_st1, miss_st1, way_idx_st1, addr_st1, wdata_st1, wsel_st1, byteen_st1, req_idx_st1, pmask_st1, tag_st1, mshr_id_st1,   mshr_pending_st1})
     ); 
 
     `ASSIGN_REQ_DBG_ID (req_id_st1, tag_st1[0])
@@ -313,11 +314,10 @@ module VX_bank #(
 
         .stall      (crsq_stall),
 
-        .select_way (select_way_st1),
-
         .read       (do_read_st1 || do_mshr_st1),      
         .fill       (do_fill_st1),        
         .write      (do_write_st1 && !miss_st1),
+        .way_idx    (way_idx_st1),
         .addr       (addr_st1),
         .wsel       (wsel_st1),
         .pmask      (pmask_st1),
