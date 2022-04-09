@@ -96,8 +96,8 @@ module VX_stream_mux #(
         for (genvar i = 0; i < LANES; ++i) begin
             VX_skid_buffer #(
                 .DATAW    (DATAW),
-                .PASSTHRU (0 == BUFFERED),
-                .OUT_REG  (2 == BUFFERED)
+                .PASSTHRU (0 == 2'(BUFFERED)),
+                .OUT_REG  (2 == 2'(BUFFERED))
             ) out_buffer (
                 .clk       (clk),
                 .reset     (reset),
