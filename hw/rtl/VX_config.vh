@@ -14,11 +14,11 @@
 `endif
 
 `ifndef NUM_WARPS
-`define NUM_WARPS 2
+`define NUM_WARPS 4
 `endif
 
 `ifndef NUM_THREADS
-`define NUM_THREADS 2
+`define NUM_THREADS 4
 `endif
 
 `ifndef NUM_BARRIERS
@@ -627,7 +627,7 @@
 
 // Number of associative ways
 `ifndef L2_NUM_WAYS
-`define L2_NUM_WAYS 8
+`define L2_NUM_WAYS 4
 `endif
 
 // L3cache Configurable Knobs /////////////////////////////////////////////////
