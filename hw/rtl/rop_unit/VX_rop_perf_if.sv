@@ -8,6 +8,7 @@ interface VX_rop_perf_if ();
     wire [`PERF_CTR_BITS-1:0] mem_reads;
     wire [`PERF_CTR_BITS-1:0] mem_writes;
     wire [`PERF_CTR_BITS-1:0] mem_latency;
+    wire [`PERF_CTR_BITS-1:0] rop_inactive;
 
     modport master (
         output mem_reads,

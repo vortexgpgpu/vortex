@@ -40,4 +40,20 @@ module VX_rop_unit #(
         .rop_req_if     (rop_req_if)
     );
 
+`ifdef PERF_ENABLE
+    reg [`PERF_CTR_BITS-1:0] perf_rop_inactive;
+
+    wire perf_rop_inactive_cycle = ~rop_req_if.valid & rop_req_if.ready;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_rop_inactive <= 0;
+        end else begin
+            perf_rop_inactive <= perf_rop_inactive + `PERF_CTR_BITS(perf_rop_inactive_cycle);
+        end
+    end
+
+    assign rop_perf_if.rop_inactive = perf_rop_inactive;
+`endif
+
 endmodule
