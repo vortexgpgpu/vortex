@@ -40,9 +40,10 @@ module VX_gpu_unit #(
 );
     `UNUSED_PARAM (CORE_ID)
 
-    localparam WCTL_DATAW = `GPU_TMC_BITS + `GPU_WSPAWN_BITS + `GPU_SPLIT_BITS + `GPU_BARRIER_BITS;
-    localparam RSP_DATAW  = `MAX(`NUM_THREADS * 32, WCTL_DATAW);
-    localparam MUX_DATAW  = `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + RSP_DATAW + 1 + 1;
+    localparam WCTL_DATAW    = `GPU_TMC_BITS + `GPU_WSPAWN_BITS + `GPU_SPLIT_BITS + `GPU_BARRIER_BITS;
+    localparam RSP_DATAW     = `MAX(`NUM_THREADS * 32, WCTL_DATAW);
+    localparam RSP_MUX_DATAW = `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + RSP_DATAW + 1 + 1;
+    localparam RSP_MUX_NREQS = 1 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED + `EXT_IMADD_ENABLED;
 
     wire                    rsp_valid;
     wire [`UUID_BITS-1:0]   rsp_uuid;
@@ -290,9 +291,9 @@ module VX_gpu_unit #(
     // response arbitration
 
     VX_stream_mux #(
-        .NUM_REQS (1 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED + `EXT_IMADD_ENABLED),
-        .DATAW    (MUX_DATAW),
-        .BUFFERED (0),
+        .NUM_REQS (RSP_MUX_NREQS),
+        .DATAW    (RSP_MUX_DATAW),
+        .BUFFERED (RSP_MUX_NREQS > 2),
         .ARBITER  ("R")
     ) rsp_mux (
         .clk       (clk),
@@ -352,7 +353,7 @@ module VX_gpu_unit #(
     assign stall_out = ~gpu_commit_if.ready && gpu_commit_if.valid;
 
     VX_pipe_register #(
-        .DATAW  (1 + MUX_DATAW),
+        .DATAW  (1 + RSP_MUX_DATAW),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
