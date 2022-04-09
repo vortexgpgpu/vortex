@@ -1,7 +1,4 @@
-`ifndef VX_DCACHE_RSP_IF
-`define VX_DCACHE_RSP_IF
-
-`include "../cache/VX_cache_define.vh"
+`include "VX_cache_define.vh"
 
 interface VX_cache_rsp_if #(
     parameter NUM_REQS  = 1,
@@ -29,5 +26,3 @@ interface VX_cache_rsp_if #(
     );
 
 endinterface
-
-`endif

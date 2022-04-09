@@ -1,5 +1,5 @@
-`ifndef VX_TRACE_INSTR
-`define VX_TRACE_INSTR
+`ifndef VX_TRACE_INSTR_VH
+`define VX_TRACE_INSTR_VH
 
 `include "VX_define.vh"
 

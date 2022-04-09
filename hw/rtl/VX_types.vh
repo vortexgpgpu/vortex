@@ -1,5 +1,5 @@
-`ifndef VX_TYPES
-`define VX_TYPES
+`ifndef VX_TYPES_VH
+`define VX_TYPES_VH
 
 // Device configuration registers 
 `define NUM_DCRS                    4096

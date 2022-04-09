@@ -1,6 +1,3 @@
-`ifndef VX_GPU_CSR_IF
-`define VX_GPU_CSR_IF
-
 `include "VX_define.vh"
 
 interface VX_gpu_csr_if ();
@@ -52,5 +49,3 @@ interface VX_gpu_csr_if ();
     );
 
 endinterface
-
-`endif

@@ -1,6 +1,3 @@
-`ifndef VX_RASTER_REQ_IF
-`define VX_RASTER_REQ_IF
-
 `include "VX_raster_define.vh"
 
 interface VX_raster_req_if ();
@@ -28,5 +25,3 @@ interface VX_raster_req_if ();
     );
 
 endinterface
-
-`endif

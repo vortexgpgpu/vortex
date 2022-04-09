@@ -1,9 +1,9 @@
-`ifndef VX_FPU_TYPES
-`define VX_FPU_TYPES
+`ifndef VX_FPU_TYPES_VH
+`define VX_FPU_TYPES_VH
 
 `include "VX_define.vh"
 
-package fpu_types;
+package VX_fpu_types;
 
 typedef struct packed {
     logic is_normal;
@@ -15,8 +15,6 @@ typedef struct packed {
     logic is_signaling;    
 } fp_class_t;
 
-`define FP_CLASS_BITS  $bits(fpu_types::fp_class_t)
-
 typedef struct packed {
     logic NV; // 4-Invalid
     logic DZ; // 3-Divide by zero
@@ -25,8 +23,9 @@ typedef struct packed {
     logic NX; // 0-Inexact
 } fflags_t;
 
-`define FFLAGS_BITS  $bits(fpu_types::fflags_t)
-
 endpackage
+
+`define FP_CLASS_BITS   $bits(VX_fpu_types::fp_class_t)
+`define FFLAGS_BITS     $bits(VX_fpu_types::fflags_t)
 
 `endif

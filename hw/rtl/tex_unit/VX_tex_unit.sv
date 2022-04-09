@@ -178,11 +178,11 @@ module VX_tex_unit #(
     wire [$clog2(`NUM_THREADS+1)-1:0] perf_mem_req_per_cycle;
     wire [$clog2(`NUM_THREADS+1)-1:0] perf_mem_rsp_per_cycle;
 
-    wire [`NUM_THREADS-1:0] perf_mem_req_per_mask = cache_req_if.valid & cache_req_if.ready;
-    wire [`NUM_THREADS-1:0] perf_mem_rsp_per_mask = cache_rsp_if.valid & cache_rsp_if.ready;
+    wire [`NUM_THREADS-1:0] perf_mem_req_per_req = cache_req_if.valid & cache_req_if.ready;
+    wire [`NUM_THREADS-1:0] perf_mem_rsp_per_req = cache_rsp_if.tmask & {`NUM_THREADS{cache_rsp_if.valid & cache_rsp_if.ready}};
 
-    `POP_COUNT(perf_mem_req_per_cycle, perf_mem_req_per_mask);    
-    `POP_COUNT(perf_mem_rsp_per_cycle, perf_mem_rsp_per_mask);
+    `POP_COUNT(perf_mem_req_per_cycle, perf_mem_req_per_req);    
+    `POP_COUNT(perf_mem_rsp_per_cycle, perf_mem_rsp_per_req);
 
     reg [`PERF_CTR_BITS-1:0] perf_pending_reads;   
     wire [$clog2(`NUM_THREADS+1)+1-1:0] perf_pending_reads_cycle = perf_mem_req_per_cycle - perf_mem_rsp_per_cycle;

@@ -13,7 +13,7 @@
 #define SHR_UTILS_H
 
 // *********************************************************************
-// Generic utilities for NVIDIA GPU Computing SDK 
+// Generic utilities for NVIDIA GPU Computing SDK
 // *********************************************************************
 
 // reminders for output window and build log

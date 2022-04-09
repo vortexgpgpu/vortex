@@ -4,7 +4,8 @@
 module VX_rr_arbiter #(
     parameter NUM_REQS     = 1,
     parameter LOCK_ENABLE  = 0,
-    parameter MODEL        = 1    
+    parameter MODEL        = 1,
+    localparam LOG_NUM_REQS = `LOG2UP(NUM_REQS)
 ) (
     input  wire                     clk,
     input  wire                     reset,          
@@ -14,8 +15,6 @@ module VX_rr_arbiter #(
     output wire [NUM_REQS-1:0]      grant_onehot,   
     output wire                     grant_valid
 );
-    localparam LOG_NUM_REQS = `LOG2UP(NUM_REQS);
-
     if (NUM_REQS == 1)  begin
 
         `UNUSED_VAR (clk)

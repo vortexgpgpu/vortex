@@ -35,8 +35,8 @@ module VX_raster_slice #(
     output logic [`RASTER_DIM_BITS-1:0]             out_quad_x_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
         out_quad_y_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
     output logic [3:0]                                    out_quad_masks[RASTER_QUAD_OUTPUT_RATE-1:0],
-    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]        out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0],
-    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]        out_pid,
+    output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]        out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0],
+    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]        out_pid[RASTER_QUAD_OUTPUT_RATE-1:0],
     output logic [RASTER_QUAD_OUTPUT_RATE-1:0]            valid
 );
 
@@ -54,7 +54,7 @@ module VX_raster_slice #(
     logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  tile_edge_func_val[2:0];
 
     logic [RASTER_LEVEL_DATA_BITS-1:0] level_1;
-    assign level_1 = level + 1;
+    assign level_1 = level + RASTER_LEVEL_DATA_BITS'(1);
 
     // Control signsl
     logic        valid_tile, valid_block;
@@ -62,9 +62,6 @@ module VX_raster_slice #(
     logic        stall;
     logic        be_ready; // to track the status of the block evaluator
     logic        done;
-
-    // Stall used to wait for block queue to complete run if another needs to be inserted
-    assign stall = (valid_block == 1 && block_fifo_full == 1);
 
     // Incoming tile data from fifo
     logic [`RASTER_DIM_BITS-1:0]               fifo_tile_x_loc, fifo_tile_y_loc;
@@ -121,12 +118,6 @@ module VX_raster_slice #(
             end
         end
     end
-
-    // Decide the ready flag
-    //  1. Tile evaluator doesn't have a valid tile or (block -> block will be pushed to next pipe so no need to stall for it)
-    //  2. FIFO empty
-    //  3. FIFO pop data is invalid
-    assign ready = (fifo_empty == 1) && (block_fifo_empty == 1) && (valid_tile == 0);
 
     /**********************************
             TILE EVALUATOR
@@ -206,6 +197,16 @@ module VX_raster_slice #(
     ***********************************/
 
     logic block_fifo_full, block_fifo_empty;
+
+    
+    // Stall used to wait for block queue to complete run if another needs to be inserted
+    assign stall = (valid_block == 1 && block_fifo_full == 1);
+
+    // Decide the ready flag
+    //  1. Tile evaluator doesn't have a valid tile or (block -> block will be pushed to next pipe so no need to stall for it)
+    //  2. FIFO empty
+    //  3. FIFO pop data is invalid
+    assign ready = (fifo_empty == 1) && (block_fifo_empty == 1) && (valid_tile == 0);
 
     // Block evaluator data
     logic [`RASTER_DIM_BITS-1:0]   be_in_x_loc, be_in_y_loc;

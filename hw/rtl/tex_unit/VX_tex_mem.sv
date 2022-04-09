@@ -1,4 +1,5 @@
 `include "VX_tex_define.vh"
+
 module VX_tex_mem #(
     parameter CORE_ID   = 0,
     parameter REQ_INFOW = 1,
@@ -125,7 +126,7 @@ module VX_tex_mem #(
         if (reset || last_texel_sent) begin
             req_texel_idx <= 0;
         end else if (req_texel_valid && sent_all_ready) begin
-            req_texel_idx <= req_texel_idx + 1;
+            req_texel_idx <= req_texel_idx + 2'd1;
         end
     end
 

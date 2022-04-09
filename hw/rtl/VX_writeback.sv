@@ -25,11 +25,7 @@ module VX_writeback #(
     `UNUSED_PARAM (CORE_ID)
 
     localparam DATAW = `NW_BITS + 32 + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * 32) + 1;
-`ifdef EXT_F_ENABLE
-    localparam NUM_RSPS = 5;
-`else
-    localparam NUM_RSPS = 4;
-`endif
+    localparam NUM_RSPS = 5 + `EXT_F_ENABLED;
 
     wire wb_valid;
     wire [`NW_BITS-1:0] wb_wid;
@@ -46,7 +42,7 @@ module VX_writeback #(
         .NUM_REQS (NUM_RSPS),
         .DATAW    (DATAW),
         .BUFFERED (1),
-        .ARBITER  ("R")
+        .ARBITER  ("F")
     ) rsp_mux (
         .clk       (clk),
         .reset     (reset),

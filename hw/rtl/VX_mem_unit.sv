@@ -13,18 +13,18 @@ module VX_mem_unit # (
 `endif    
 
     // icache interface
-    VX_cache_req_if.slave  icache_req_if,  
-    VX_cache_rsp_if.master icache_rsp_if,
+    VX_cache_req_if.slave   icache_req_if,  
+    VX_cache_rsp_if.master  icache_rsp_if,
 
 
     // dcache interface
-    VX_cache_req_if.slave  dcache_req_if,
-    VX_cache_rsp_if.master dcache_rsp_if,    
+    VX_cache_req_if.slave   dcache_req_if,
+    VX_cache_rsp_if.master  dcache_rsp_if,    
 
 `ifdef EXT_TEX_ENABLE
     // tcache interface
-    VX_cache_req_if.slave  tcache_req_if,
-    VX_cache_rsp_if.master tcache_rsp_if,
+    VX_cache_req_if.slave   tcache_req_if,
+    VX_cache_rsp_if.master  tcache_rsp_if,
 `endif
 
     // Memory
@@ -63,26 +63,27 @@ module VX_mem_unit # (
     ) icache_rsp_qual_if[`ICACHE_NUM_REQS-1:0]();
 
     for (genvar i = 0; i < `ICACHE_NUM_REQS; ++i) begin
-        `CACHE_REQ_TO_MEM(icache_req_qual_if, icache_req_if, i);
+        `CACHE_REQ_TO_MEM (icache_req_qual_if, icache_req_if, i);
     end
 
     VX_cache #(
-        .CACHE_ID           (`ICACHE_ID),
-        .CACHE_SIZE         (`ICACHE_SIZE),
-        .CACHE_LINE_SIZE    (`ICACHE_LINE_SIZE),
-        .NUM_BANKS          (1),
-        .NUM_WAYS           (`ICACHE_NUM_WAYS),
-        .WORD_SIZE          (`ICACHE_WORD_SIZE),
-        .NUM_REQS           (1),
-        .CREQ_SIZE          (`ICACHE_CREQ_SIZE),
-        .CRSQ_SIZE          (`ICACHE_CRSQ_SIZE),
-        .MSHR_SIZE          (`ICACHE_MSHR_SIZE),
-        .MRSQ_SIZE          (`ICACHE_MRSQ_SIZE),
-        .MREQ_SIZE          (`ICACHE_MREQ_SIZE),
-        .WRITE_ENABLE       (0),
-        .REQ_DBG_IDW        (`UUID_BITS),
-        .CORE_TAG_WIDTH     (`ICACHE_TAG_WIDTH),
-        .MEM_TAG_WIDTH      (`ICACHE_MEM_TAG_WIDTH)
+        .CACHE_ID       (`ICACHE_ID),
+        .CACHE_SIZE     (`ICACHE_SIZE),
+        .CACHE_LINE_SIZE(`ICACHE_LINE_SIZE),
+        .NUM_BANKS      (1),
+        .NUM_WAYS       (`ICACHE_NUM_WAYS),
+        .WORD_SIZE      (`ICACHE_WORD_SIZE),
+        .NUM_REQS       (1),
+        .CREQ_SIZE      (`ICACHE_CREQ_SIZE),
+        .CRSQ_SIZE      (`ICACHE_CRSQ_SIZE),
+        .MSHR_SIZE      (`ICACHE_MSHR_SIZE),
+        .MRSQ_SIZE      (`ICACHE_MRSQ_SIZE),
+        .MREQ_SIZE      (`ICACHE_MREQ_SIZE),
+        .WRITE_ENABLE   (0),
+        .REQ_DBG_IDW    (`UUID_BITS),
+        .CORE_TAG_WIDTH (`ICACHE_TAG_WIDTH),
+        .MEM_TAG_WIDTH  (`ICACHE_MEM_TAG_WIDTH),
+        .PASSTHRU       (!`ICACHE_ENABLED)
     ) icache (
         `SCOPE_BIND_VX_mem_unit_icache
 
@@ -99,7 +100,7 @@ module VX_mem_unit # (
     );
 
     for (genvar i = 0; i < `ICACHE_NUM_REQS; ++i) begin
-        `CACHE_RSP_FROM_MEM(icache_rsp_if, icache_rsp_qual_if, i);
+        `CACHE_RSP_FROM_MEM (icache_rsp_if, icache_rsp_qual_if, i);
     end   
 
     ///////////////////////////////////////////////////////////////////////////
@@ -130,24 +131,24 @@ module VX_mem_unit # (
     VX_cache_req_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
         .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`DCACHE_TEX_TAG_WIDTH+`EXT_TEX_ENABLED)
+        .TAG_WIDTH (`DCACHE_TEX_TAG_WIDTH + `EXT_TEX_ENABLED)
     ) dcache_tex_req_if();
 
     VX_cache_rsp_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
         .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`DCACHE_TEX_TAG_WIDTH+`EXT_TEX_ENABLED)
+        .TAG_WIDTH (`DCACHE_TEX_TAG_WIDTH + `EXT_TEX_ENABLED)
     ) dcache_tex_rsp_if();
 
     VX_mem_req_if #(
         .DATA_WIDTH (`DCACHE_WORD_SIZE*8), 
         .ADDR_WIDTH (`DCACHE_ADDR_WIDTH),
-        .TAG_WIDTH  (`DCACHE_TEX_TAG_WIDTH+`EXT_TEX_ENABLED)
+        .TAG_WIDTH  (`DCACHE_TEX_TAG_WIDTH + `EXT_TEX_ENABLED)
     ) dcache_tex_req_qual_if[`DCACHE_NUM_REQS-1:0]();
 
     VX_mem_rsp_if #(
         .DATA_WIDTH (`DCACHE_WORD_SIZE*8), 
-        .TAG_WIDTH (`DCACHE_TEX_TAG_WIDTH+`EXT_TEX_ENABLED)
+        .TAG_WIDTH (`DCACHE_TEX_TAG_WIDTH + `EXT_TEX_ENABLED)
     ) dcache_tex_rsp_qual_if[`DCACHE_NUM_REQS-1:0]();
 
     for (genvar i = 0; i < `DCACHE_NUM_REQS; ++i) begin
@@ -155,24 +156,26 @@ module VX_mem_unit # (
     end
 
     VX_cache #(
-        .CACHE_ID           (`DCACHE_ID),
-        .CACHE_SIZE         (`DCACHE_SIZE),
-        .CACHE_LINE_SIZE    (`DCACHE_LINE_SIZE),
-        .NUM_BANKS          (`DCACHE_NUM_BANKS),
-        .NUM_WAYS           (`DCACHE_NUM_WAYS),
-        .NUM_PORTS          (`DCACHE_NUM_PORTS),
-        .WORD_SIZE          (`DCACHE_WORD_SIZE),
-        .NUM_REQS           (`DCACHE_NUM_REQS),
-        .CREQ_SIZE          (`DCACHE_CREQ_SIZE),
-        .CRSQ_SIZE          (`DCACHE_CRSQ_SIZE),
-        .MSHR_SIZE          (`DCACHE_MSHR_SIZE),
-        .MRSQ_SIZE          (`DCACHE_MRSQ_SIZE),
-        .MREQ_SIZE          (`DCACHE_MREQ_SIZE),
-        .WRITE_ENABLE       (1),
-        .REQ_DBG_IDW        (`UUID_BITS),
-        .CORE_TAG_WIDTH     (`DCACHE_TEX_TAG_WIDTH+`EXT_TEX_ENABLED),
-        .MEM_TAG_WIDTH      (`DCACHE_MEM_TAG_WIDTH),
-        .NC_ENABLE          (1)
+        .CACHE_ID       (`DCACHE_ID),
+        .CACHE_SIZE     (`DCACHE_SIZE),
+        .CACHE_LINE_SIZE(`DCACHE_LINE_SIZE),
+        .NUM_BANKS      (`DCACHE_NUM_BANKS),
+        .NUM_WAYS       (`DCACHE_NUM_WAYS),
+        .NUM_PORTS      (`DCACHE_NUM_PORTS),
+        .WORD_SIZE      (`DCACHE_WORD_SIZE),
+        .NUM_REQS       (`DCACHE_NUM_REQS),
+        .CREQ_SIZE      (`DCACHE_CREQ_SIZE),
+        .CRSQ_SIZE      (`DCACHE_CRSQ_SIZE),
+        .MSHR_SIZE      (`DCACHE_MSHR_SIZE),
+        .MRSQ_SIZE      (`DCACHE_MRSQ_SIZE),
+        .MREQ_SIZE      (`DCACHE_MREQ_SIZE),
+        .WRITE_ENABLE   (1),
+        .REQ_DBG_IDW    (`UUID_BITS),
+        .CORE_TAG_WIDTH (`DCACHE_TEX_TAG_WIDTH + `EXT_TEX_ENABLED),
+        .MEM_TAG_WIDTH  (`DCACHE_MEM_TAG_WIDTH),
+        .NC_ENABLE      (1),
+        .NC_TAG_BIT     (0+`EXT_TEX_ENABLED),
+        .PASSTHRU       (!`DCACHE_ENABLED)
     ) dcache (
         `SCOPE_BIND_VX_mem_unit_dcache
 
@@ -263,38 +266,38 @@ module VX_mem_unit # (
     end
 
     VX_shared_mem #(
-        .IDNAME             (`SMEM_ID),
-        .SIZE               (`SMEM_SIZE),
-        .NUM_REQS           (`DCACHE_NUM_REQS),
-        .NUM_BANKS          (`SMEM_NUM_BANKS),
-        .WORD_SIZE          (`DCACHE_WORD_SIZE),
-        .ADDR_WIDTH         (`SMEM_ADDR_WIDTH),
-        .CREQ_SIZE          (`SMEM_CREQ_SIZE),
-        .CRSQ_SIZE          (`SMEM_CRSQ_SIZE),
-        .REQ_DBG_IDW        (`UUID_BITS), 
-        .TAG_WIDTH          (`DCACHE_SMEM_TAG_WIDTH)
+        .IDNAME     (`SMEM_ID),
+        .SIZE       (`SMEM_SIZE),
+        .NUM_REQS   (`DCACHE_NUM_REQS),
+        .NUM_BANKS  (`SMEM_NUM_BANKS),
+        .WORD_SIZE  (`DCACHE_WORD_SIZE),
+        .ADDR_WIDTH (`SMEM_ADDR_WIDTH),
+        .CREQ_SIZE  (`SMEM_CREQ_SIZE),
+        .CRSQ_SIZE  (`SMEM_CRSQ_SIZE),
+        .REQ_DBG_IDW(`UUID_BITS), 
+        .TAG_WIDTH  (`DCACHE_SMEM_TAG_WIDTH)
     ) smem (            
-        .clk            (clk),
-        .reset          (smem_reset),
+        .clk        (clk),
+        .reset      (smem_reset),
 
     `ifdef PERF_ENABLE
-        .perf_cache_if  (perf_smem_if),
+        .perf_cache_if(perf_smem_if),
     `endif
 
         // Core request
-        .req_valid     (smem_req_if.valid),
-        .req_rw        (smem_req_if.rw),
-        .req_byteen    (smem_req_if.byteen),
-        .req_addr      (smem_req_addr),
-        .req_data      (smem_req_if.data),        
-        .req_tag       (smem_req_if.tag),
-        .req_ready     (smem_req_if.ready),
+        .req_valid  (smem_req_if.valid),
+        .req_rw     (smem_req_if.rw),
+        .req_byteen (smem_req_if.byteen),
+        .req_addr   (smem_req_addr),
+        .req_data   (smem_req_if.data),        
+        .req_tag    (smem_req_if.tag),
+        .req_ready  (smem_req_if.ready),
 
         // Core response
-        .rsp_valid     (smem_rsp_if.valid),
-        .rsp_data      (smem_rsp_if.data),
-        .rsp_tag       (smem_rsp_if.tag),
-        .rsp_ready     (smem_rsp_if.ready)
+        .rsp_valid  (smem_rsp_if.valid),
+        .rsp_data   (smem_rsp_if.data),
+        .rsp_tag    (smem_rsp_if.tag),
+        .rsp_ready  (smem_rsp_if.ready)
     );    
 `else
     // core to D-cache request

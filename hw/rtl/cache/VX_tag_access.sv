@@ -20,17 +20,17 @@ module VX_tag_access #(
     input wire                          reset,
 
 `IGNORE_UNUSED_BEGIN
-    input wire[`DBG_CACHE_REQ_IDW-1:0]  req_id,
+    input wire [`DBG_CACHE_REQ_IDW-1:0] req_id,
 `IGNORE_UNUSED_END
 
     input wire                          stall,
 
     // read/fill
     input wire                          lookup,
-    input wire[`LINE_ADDR_WIDTH-1:0]    addr,
+    input wire [`LINE_ADDR_WIDTH-1:0]   addr,
     input wire                          fill,    
     input wire                          flush,
-    output wire[NUM_WAYS-1:0]           select_way,
+    output wire [NUM_WAYS-1:0]          way_sel,
     output wire                         tag_match
 );
 
@@ -74,7 +74,7 @@ module VX_tag_access #(
             .clk(  clk),                 
             .addr  (line_addr),   
             .wren  (fill_way[i] || flush),
-            .wdata ({!flush, line_tag}), 
+            .wdata ({!flush,     line_tag}), 
             .rdata ({read_valid, read_tag})
         );
         
@@ -82,12 +82,10 @@ module VX_tag_access #(
     end
 
     // Check if any of the ways have tag match
-    assign tag_match = |tag_match_way;
+    assign tag_match = (| tag_match_way);
 
     // return the selected way
-    for (genvar i = 0; i < NUM_WAYS; ++i) begin
-        assign select_way[i] = fill_way[i] | tag_match_way[i];
-    end
+    assign way_sel = fill_way | tag_match_way;
     
 `ifdef DBG_TRACE_CACHE_TAG
     always @(posedge clk) begin

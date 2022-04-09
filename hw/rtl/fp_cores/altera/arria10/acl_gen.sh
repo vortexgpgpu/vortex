@@ -30,4 +30,4 @@ echo Generating IP cores for $FBITS
     #$CMD -name "$PREFIX"_utof  -frequency 300 FXPToFP 32 0 0 $EXP_BITS $MAN_BITS
 } > acl_gen.log 2>&1
 
-#cp $QUARTUS_HOME/dspba/backend/Libraries/sv/base/dspba_library_ver.sv .
+cp $QUARTUS_HOME/dspba/backend/Libraries/sv/base/dspba_library_ver.sv .

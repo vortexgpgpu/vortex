@@ -89,7 +89,7 @@ module VX_tex_sampler #(
 
     VX_pipe_register #(
         .DATAW  (1 + NUM_REQS + REQ_INFOW + (NUM_REQS * `TEX_BLEND_FRAC) + (2 * NUM_REQS * 32)),
-        .DEPTH  (2),
+        .DEPTH  (3),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
@@ -117,7 +117,7 @@ module VX_tex_sampler #(
     
     VX_pipe_register #(
         .DATAW  (1 + NUM_REQS + REQ_INFOW + (NUM_REQS * 32)),
-        .DEPTH  (2),
+        .DEPTH  (3),
         .RESETW (1)
     ) pipe_reg2 (
         .clk      (clk),

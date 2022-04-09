@@ -12,7 +12,6 @@ module VX_pipe_register #(
     input wire [DATAW-1:0]  data_in,
     output wire [DATAW-1:0] data_out
 );
-
     if (DEPTH == 0) begin        
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)

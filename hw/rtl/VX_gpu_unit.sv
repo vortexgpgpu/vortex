@@ -1,4 +1,9 @@
 `include "VX_define.vh"
+`include "VX_gpu_types.vh"
+
+`IGNORE_WARNINGS_BEGIN
+import VX_gpu_types::*;
+`IGNORE_WARNINGS_END
 
 module VX_gpu_unit #(
     parameter CORE_ID = 0
@@ -33,13 +38,12 @@ module VX_gpu_unit #(
     VX_warp_ctl_if.master warp_ctl_if,
     VX_commit_if.master gpu_commit_if
 );
-    import gpu_types::*;
-
     `UNUSED_PARAM (CORE_ID)
 
-    localparam WCTL_DATAW = `GPU_TMC_BITS + `GPU_WSPAWN_BITS + `GPU_SPLIT_BITS + `GPU_BARRIER_BITS;
-    localparam RSP_DATAW  = `MAX(`NUM_THREADS * 32, WCTL_DATAW);
-    localparam MUX_DATAW  = `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + RSP_DATAW + 1 + 1;
+    localparam WCTL_DATAW    = `GPU_TMC_BITS + `GPU_WSPAWN_BITS + `GPU_SPLIT_BITS + `GPU_BARRIER_BITS;
+    localparam RSP_DATAW     = `MAX(`NUM_THREADS * 32, WCTL_DATAW);
+    localparam RSP_MUX_DATAW = `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + RSP_DATAW + 1 + 1;
+    localparam RSP_MUX_NREQS = 1 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED + `EXT_IMADD_ENABLED;
 
     wire                    rsp_valid;
     wire [`UUID_BITS-1:0]   rsp_uuid;
@@ -64,6 +68,7 @@ module VX_gpu_unit #(
     wire is_wspawn = (gpu_req_if.op_type == `INST_GPU_WSPAWN);
     wire is_tmc    = (gpu_req_if.op_type == `INST_GPU_TMC);
     wire is_split  = (gpu_req_if.op_type == `INST_GPU_SPLIT);
+    wire is_join   = (gpu_req_if.op_type == `INST_GPU_JOIN);
     wire is_bar    = (gpu_req_if.op_type == `INST_GPU_BAR);
     wire is_pred   = (gpu_req_if.op_type == `INST_GPU_PRED);
 
@@ -112,7 +117,7 @@ module VX_gpu_unit #(
     assign barrier.size_m1 = (`NW_BITS)'(rs2_data - 1);       
 
     // Warp control response
-    wire wctl_req_valid = gpu_req_if.valid & (is_wspawn | is_tmc | is_split | is_bar | is_pred);
+    wire wctl_req_valid = gpu_req_if.valid & (is_wspawn | is_tmc | is_split | is_join | is_bar | is_pred);
     wire wctl_rsp_valid = wctl_req_valid;
     wire [WCTL_DATAW-1:0] wctl_rsp_data = {tmc, wspawn, split, barrier};
     wire wctl_rsp_ready;
@@ -263,6 +268,7 @@ module VX_gpu_unit #(
 `endif
 
     // can accept new request?
+    
     reg gpu_req_ready;
     always @(*) begin
         case (gpu_req_if.op_type)
@@ -283,10 +289,12 @@ module VX_gpu_unit #(
     end   
     assign gpu_req_if.ready = gpu_req_ready;
 
+    // response arbitration
+
     VX_stream_mux #(
-        .NUM_REQS (1 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED + `EXT_IMADD_ENABLED),
-        .DATAW    (MUX_DATAW),
-        .BUFFERED (0),
+        .NUM_REQS (RSP_MUX_NREQS),
+        .DATAW    (RSP_MUX_DATAW),
+        .BUFFERED (RSP_MUX_NREQS > 2),
         .ARBITER  ("R")
     ) rsp_mux (
         .clk       (clk),
@@ -308,7 +316,7 @@ module VX_gpu_unit #(
         `endif
         }),
         .data_in ({
-            {gpu_req_if.uuid, gpu_req_if.wid, gpu_req_if.tmask, gpu_req_if.PC, `NR_BITS'(0),  1'b0,          RSP_DATAW'(wctl_rsp_data),   1'b1,           1'b1}
+            {gpu_req_if.uuid, gpu_req_if.wid, gpu_req_if.tmask, gpu_req_if.PC, `NR_BITS'(0),  1'b0,          RSP_DATAW'(wctl_rsp_data),   1'b1,           ~is_join}
         `ifdef EXT_TEX_ENABLE
           , {tex_rsp_if.uuid, tex_rsp_if.wid, tex_rsp_if.tmask, tex_rsp_if.PC, tex_rsp_if.rd, tex_rsp_if.wb, RSP_DATAW'(tex_rsp_if.data), tex_rsp_if.eop, 1'b0}
         `endif
@@ -346,7 +354,7 @@ module VX_gpu_unit #(
     assign stall_out = ~gpu_commit_if.ready && gpu_commit_if.valid;
 
     VX_pipe_register #(
-        .DATAW  (1 + MUX_DATAW),
+        .DATAW  (1 + RSP_MUX_DATAW),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),

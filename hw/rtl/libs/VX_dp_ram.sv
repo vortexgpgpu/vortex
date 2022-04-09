@@ -10,7 +10,8 @@ module VX_dp_ram #(
     parameter LUTRAM      = 0,    
     parameter INIT_ENABLE = 0,
     parameter INIT_FILE   = "",
-    parameter [DATAW-1:0] INIT_VALUE = 0
+    parameter [DATAW-1:0] INIT_VALUE = 0,
+    localparam ADDRW = `LOG2UP(SIZE)
 ) ( 
     input wire               clk,
     input wire [BYTEENW-1:0] wren,
@@ -19,8 +20,6 @@ module VX_dp_ram #(
     input wire [ADDRW-1:0]   raddr,
     output wire [DATAW-1:0]  rdata
 );
-    localparam ADDRW = `LOG2UP(SIZE);
-
     `STATIC_ASSERT((1 == BYTEENW) || ((BYTEENW > 1) && 0 == (BYTEENW % 4)), ("invalid parameter"))
 
 `define RAM_INITIALIZATION                        \

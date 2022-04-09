@@ -10,14 +10,13 @@ module VX_lerp_fx #(
     input wire [F-1:0]  frac,
     output wire [N-1:0] out
 );
-    localparam N2  = 2 * N;
-    localparam ONE = 1 << F;
 
-    wire [F:0] sub = (F+1)'(ONE) - frac;
-    wire [(N+F):0] sum = in1 * sub + in2 * frac;
-    `UNUSED_VAR (sum)
-    
-    assign out = sum [F +: N];
+    wire [F:0]     one  = {1'b1, {F{1'b0}}};
+    wire [F+1:0]   sub  = one - (F+1)'(frac);
+    wire [(N+F):0] prod = in1 * sub + in2 * frac;
+    `UNUSED_VAR (prod)
+
+    assign out = prod [F +: N];
 
 endmodule
 `TRACING_ON

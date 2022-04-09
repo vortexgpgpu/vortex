@@ -12,7 +12,10 @@ module VX_core_rsp_merge #(
     // core request tag size
     parameter TAG_WIDTH     = 1,
     // output register
-    parameter OUT_REG       = 0
+    parameter OUT_REG       = 0,
+
+    localparam WORD_WIDTH   = WORD_SIZE * 8,
+    localparam REQ_SEL_BITS = `CLOG2(NUM_REQS)
 ) (
     input wire clk,
     input wire reset,
@@ -31,8 +34,6 @@ module VX_core_rsp_merge #(
     output wire [NUM_REQS-1:0][WORD_WIDTH-1:0]  core_rsp_data,      
     input  wire [NUM_REQS-1:0]                  core_rsp_ready
 );
-    localparam WORD_WIDTH    = WORD_SIZE * 8;
-    localparam REQ_SEL_BITS  = `CLOG2(NUM_REQS);
     localparam BANK_SEL_BITS = `CLOG2(NUM_BANKS);
     localparam PORTS_BITS    = `CLOG2(NUM_PORTS);
 
@@ -47,91 +48,52 @@ module VX_core_rsp_merge #(
 
         if (NUM_PORTS > 1) begin
 
-            reg [NUM_REQS-1:0][(PORTS_BITS + BANK_SEL_BITS)-1:0] bank_select_table;
-
-            reg [NUM_BANKS-1:0][NUM_PORTS-1:0] per_bank_core_rsp_sent_r, per_bank_core_rsp_sent;
-            wire [NUM_BANKS-1:0][NUM_PORTS-1:0] per_bank_core_rsp_sent_n;
-
-            for (genvar i = 0; i < NUM_BANKS; ++i) begin
-                assign per_bank_core_rsp_sent_n[i] = per_bank_core_rsp_sent_r[i] | per_bank_core_rsp_sent[i];
-            end
-        
-            always @(posedge clk) begin
-                if (reset) begin
-                    per_bank_core_rsp_sent_r <= '0;
-                end else begin
-                    for (integer i = 0; i < NUM_BANKS; ++i) begin
-                        if (per_bank_core_rsp_sent_n[i] == per_bank_core_rsp_pmask[i]) begin
-                            per_bank_core_rsp_sent_r[i] <= '0;
-                        end else begin
-                            per_bank_core_rsp_sent_r[i] <= per_bank_core_rsp_sent_n[i];
-                        end
-                    end
-                end
-            end 
-
             always @(*) begin
-                core_rsp_valid_unqual = '0;
-                core_rsp_tag_unqual   = 'x;
-                core_rsp_data_unqual  = 'x;
-                bank_select_table     = 'x;
+                core_rsp_valid_unqual     = '0;
+                core_rsp_tag_unqual       = 'x;
+                core_rsp_data_unqual      = 'x;
+                per_bank_core_rsp_ready_r = '0;
                 
-                for (integer i = NUM_BANKS-1; i >= 0; --i) begin
-                    for (integer p = 0; p < NUM_PORTS; ++p) begin 
-                        if (per_bank_core_rsp_valid[i] 
-                            && per_bank_core_rsp_pmask[i][p]
-                            && !per_bank_core_rsp_sent_r[i][p]) begin
-                            core_rsp_valid_unqual[per_bank_core_rsp_idx[i][p]] = 1;
-                            core_rsp_tag_unqual[per_bank_core_rsp_idx[i][p]]   = per_bank_core_rsp_tag[i][p];
-                            core_rsp_data_unqual[per_bank_core_rsp_idx[i][p]]  = per_bank_core_rsp_data[i][p];
-                            bank_select_table[per_bank_core_rsp_idx[i][p]] = {PORTS_BITS'(p), BANK_SEL_BITS'(i)};                      
+                for (integer i = 0; i < NUM_REQS; ++i) begin
+                    for (integer j = 0; j < NUM_BANKS * NUM_PORTS; ++j) begin                        
+                        bit [PORTS_BITS-1:0]    p = j[0 +: PORTS_BITS];
+                        bit [BANK_SEL_BITS-1:0] b = j[PORTS_BITS +: BANK_SEL_BITS];
+                        if (per_bank_core_rsp_valid[b] 
+                         && per_bank_core_rsp_pmask[b][p] 
+                         && per_bank_core_rsp_idx[b][p] == REQ_SEL_BITS'(i)) begin
+                            core_rsp_valid_unqual[i] = 1;
+                            core_rsp_tag_unqual[i]   = per_bank_core_rsp_tag[b][p];
+                            core_rsp_data_unqual[i]  = per_bank_core_rsp_data[b][p];
+                            per_bank_core_rsp_ready_r[b] = core_rsp_ready_unqual[i];
+                            break;
                         end
                     end
-                end 
-            end
-
-            always @(*) begin
-                per_bank_core_rsp_sent = '0;
-                for (integer i = 0; i < NUM_REQS; i++) begin
-                    if (core_rsp_valid_unqual[i]) begin
-                        per_bank_core_rsp_sent[bank_select_table[i][0 +: BANK_SEL_BITS]][bank_select_table[i][BANK_SEL_BITS +: PORTS_BITS]] = core_rsp_ready_unqual[i];
-                    end
-                end
-            end
-
-            always @(*) begin
-                for (integer i = 0; i < NUM_BANKS; i++) begin 
-                    per_bank_core_rsp_ready_r[i] = (per_bank_core_rsp_sent_n[i] == per_bank_core_rsp_pmask[i]);
-                end 
+                end    
             end
             
         end else begin
             
             `UNUSED_VAR (per_bank_core_rsp_pmask)
-            reg [NUM_REQS-1:0][NUM_BANKS-1:0] bank_select_table;
 
             always @(*) begin
-                core_rsp_valid_unqual = 0;
-                core_rsp_tag_unqual   = 'x;
-                core_rsp_data_unqual  = 'x;
-                bank_select_table     = 'x;
+                core_rsp_valid_unqual     = '0;
+                core_rsp_tag_unqual       = 'x;
+                core_rsp_data_unqual      = 'x;
+                per_bank_core_rsp_ready_r = '0;
                 
-                for (integer i = NUM_BANKS-1; i >= 0; --i) begin
-                    if (per_bank_core_rsp_valid[i]) begin
-                        core_rsp_valid_unqual[per_bank_core_rsp_idx[i]] = 1;
-                        core_rsp_tag_unqual[per_bank_core_rsp_idx[i]]   = per_bank_core_rsp_tag[i];
-                        core_rsp_data_unqual[per_bank_core_rsp_idx[i]]  = per_bank_core_rsp_data[i];
-                        bank_select_table[per_bank_core_rsp_idx[i]]  = (1 << i);
+                for (integer i = 0; i < NUM_REQS; ++i) begin
+                    for (integer j = 0; j < NUM_BANKS; ++j) begin
+                        if (per_bank_core_rsp_valid[j] 
+                         && per_bank_core_rsp_idx[j] == REQ_SEL_BITS'(i)) begin
+                            core_rsp_valid_unqual[i] = 1;
+                            core_rsp_tag_unqual[i]   = per_bank_core_rsp_tag[j];
+                            core_rsp_data_unqual[i]  = per_bank_core_rsp_data[j];
+                            per_bank_core_rsp_ready_r[j] = core_rsp_ready_unqual[i];
+                            break;
+                        end
                     end
                 end    
             end
-
-            always @(*) begin
-                for (integer i = 0; i < NUM_BANKS; ++i) begin 
-                    per_bank_core_rsp_ready_r[i] = core_rsp_ready_unqual[per_bank_core_rsp_idx[i]] 
-                                                && bank_select_table[per_bank_core_rsp_idx[i]][i];
-                end 
-            end 
         end
 
         for (genvar i = 0; i < NUM_REQS; i++) begin

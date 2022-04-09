@@ -1,12 +1,12 @@
-`ifndef VX_RASTER_DEFINE
-`define VX_RASTER_DEFINE
+`ifndef VX_RASTER_DEFINE_VH
+`define VX_RASTER_DEFINE_VH
 
 `include "VX_define.vh"
-`include "VX_types.vh"
+`include "VX_raster_types.vh"
 
-`define RASTER_ADDR_BITS            32  
-`define RASTER_DCR_DATA_BITS        32
-`define RASTER_PRIMITIVE_DATA_BITS  32
+`IGNORE_WARNINGS_BEGIN
+import VX_raster_types::*;
+`IGNORE_WARNINGS_END
 
 task trace_raster_state (
     input int                  level,
@@ -43,11 +43,5 @@ task trace_raster_csr (
         default:                dpi_trace(level, "?");
     endcase  
 endtask
-
-`include "VX_raster_types.vh"
-
-`IGNORE_WARNINGS_BEGIN
-import raster_types::*;
-`IGNORE_WARNINGS_END
 
 `endif

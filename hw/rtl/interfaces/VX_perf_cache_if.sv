@@ -1,6 +1,3 @@
-`ifndef VX_PERF_CACHE_IF
-`define VX_PERF_CACHE_IF
-
 `include "VX_define.vh"
 
 interface VX_perf_cache_if ();
@@ -37,5 +34,3 @@ interface VX_perf_cache_if ();
     );
 
 endinterface
-
-`endif

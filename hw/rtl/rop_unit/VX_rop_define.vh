@@ -1,7 +1,12 @@
-`ifndef VX_ROP_DEFINE
-`define VX_ROP_DEFINE
+`ifndef VX_ROP_DEFINE_VH
+`define VX_ROP_DEFINE_VH
 
 `include "VX_define.vh"
+`include "VX_rop_types.vh"
+
+`IGNORE_WARNINGS_BEGIN
+import VX_rop_types::*;
+`IGNORE_WARNINGS_END
 
 task trace_rop_state (
     input int                  level,
@@ -40,11 +45,5 @@ task trace_rop_csr (
         default:                dpi_trace(level, "?");
     endcase  
 endtask
-
-`include "VX_rop_types.vh"
-
-`IGNORE_WARNINGS_BEGIN
-import rop_types::*;
-`IGNORE_WARNINGS_END
 
 `endif

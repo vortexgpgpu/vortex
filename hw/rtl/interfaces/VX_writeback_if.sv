@@ -1,6 +1,3 @@
-`ifndef VX_WRITEBACK_IF
-`define VX_WRITEBACK_IF
-
 `include "VX_define.vh"
 
 interface VX_writeback_if ();
@@ -35,10 +32,8 @@ interface VX_writeback_if ();
         input  PC,
         input  rd,
         input  data,
-        input  eop,    
+        input  eop,
         output ready
     );
 
 endinterface
-
-`endif

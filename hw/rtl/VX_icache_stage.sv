@@ -53,7 +53,7 @@ module VX_icache_stage #(
         ("%t: *** invalid PC=0x%0h, wid=%0d, tmask=%b (#%0d)", $time, ifetch_req_if.PC, ifetch_req_if.wid, ifetch_req_if.tmask, ifetch_req_if.uuid))
 
     // Icache Request
-    assign icache_req_if.valid = ifetch_req_if.valid;
+    assign icache_req_if.valid  = ifetch_req_if.valid;
     assign icache_req_if.rw     = 0;
     assign icache_req_if.byteen = '0;
     assign icache_req_if.addr   = ifetch_req_if.PC[31:2];

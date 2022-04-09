@@ -1,9 +1,13 @@
-`ifndef VX_RASTER_TYPES
-`define VX_RASTER_TYPES
+`ifndef VX_RASTER_TYPES_VH
+`define VX_RASTER_TYPES_VH
 
 `include "VX_define.vh"
 
-package raster_types;
+`define RASTER_ADDR_BITS            32  
+`define RASTER_DCR_DATA_BITS        32
+`define RASTER_PRIMITIVE_DATA_BITS  32
+
+package VX_raster_types;
 
 typedef struct packed {
     logic [`RASTER_DCR_DATA_BITS-1:0] tbuf_addr;     // Tile buffer address

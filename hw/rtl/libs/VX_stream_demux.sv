@@ -7,7 +7,8 @@ module VX_stream_demux #(
     parameter DATAW          = 1,
     parameter string ARBITER = "",
     parameter LOCK_ENABLE    = 1,
-    parameter BUFFERED       = 0    
+    parameter BUFFERED       = 0,
+    localparam LOG_NUM_REQS  = `LOG2UP(NUM_REQS)
 ) (
     input  wire clk,
     input  wire reset,
@@ -21,10 +22,7 @@ module VX_stream_demux #(
     output wire [NUM_REQS-1:0][LANES-1:0]            valid_out,
     output wire [NUM_REQS-1:0][LANES-1:0][DATAW-1:0] data_out,
     input  wire [NUM_REQS-1:0][LANES-1:0]            ready_out
-  );
-
-    localparam LOG_NUM_REQS = `LOG2UP(NUM_REQS);
-  
+);
     if (NUM_REQS > 1)  begin
 
         wire [LANES-1:0] sel_fire = valid_in & ready_in; 
@@ -94,8 +92,8 @@ module VX_stream_demux #(
 
                 VX_skid_buffer #(
                     .DATAW    (DATAW),
-                    .PASSTHRU (0 == BUFFERED),
-                    .OUT_REG  (2 == BUFFERED)
+                    .PASSTHRU (0 == 2'(BUFFERED)),
+                    .OUT_REG  (2 == 2'(BUFFERED))
                 ) out_buffer (
                     .clk       (clk),
                     .reset     (reset),

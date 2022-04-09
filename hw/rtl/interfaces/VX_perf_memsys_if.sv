@@ -1,6 +1,3 @@
-`ifndef VX_PERF_MEMSYS_IF
-`define VX_PERF_MEMSYS_IF
-
 `include "VX_define.vh"
 
 interface VX_perf_memsys_if ();
@@ -55,5 +52,3 @@ interface VX_perf_memsys_if ();
     );
 
 endinterface
-
-`endif

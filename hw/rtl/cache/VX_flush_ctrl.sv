@@ -27,7 +27,7 @@ module VX_flush_ctrl #(
                 if (flush_ctr == ((2 ** `LINE_SEL_BITS)-1)) begin
                     flush_enable <= 0;
                 end
-                flush_ctr <= flush_ctr + 1;            
+                flush_ctr <= flush_ctr + `LINE_SEL_BITS'(1);           
             end
         end
     end

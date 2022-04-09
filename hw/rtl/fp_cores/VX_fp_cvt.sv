@@ -143,7 +143,7 @@ module VX_fp_cvt #(
         assign input_mant_s0[i] = encoded_mant_s0[i] << renorm_shamt_s0[i];
 
         // Unbias exponent and compensate for shift
-        wire [INT_EXP_WIDTH-1:0] fp_input_exp = fmt_exponent_s0[i] + (FMT_SHIFT_COMPENSATION - EXP_BIAS) - {1'b0, renorm_shamt_s0[i]};                                 
+        wire [INT_EXP_WIDTH-1:0] fp_input_exp = fmt_exponent_s0[i] + INT_EXP_WIDTH'(FMT_SHIFT_COMPENSATION - EXP_BIAS) - {1'b0, renorm_shamt_s0[i]};                                 
         wire [INT_EXP_WIDTH-1:0] int_input_exp = (INT_MAN_WIDTH-1) - {1'b0, renorm_shamt_s0[i]};
 
         assign input_exp_s0[i] = is_itof_s0 ? int_input_exp : fp_input_exp;
@@ -189,7 +189,7 @@ module VX_fp_cvt #(
         always @(*) begin           
         `IGNORE_WARNINGS_BEGIN     
             // Default assignment
-            final_exp       = input_exp_s1[i] + EXP_BIAS; // take exponent as is, only look at lower bits
+            final_exp       = input_exp_s1[i] + INT_EXP_WIDTH'(EXP_BIAS); // take exponent as is, only look at lower bits
             preshift_mant   = {input_mant_s1[i], 33'b0};  // Place mantissa to the left of the shifter
             denorm_shamt    = 0;      // right of mantissa
             of_before_round = 1'b0;
@@ -208,7 +208,7 @@ module VX_fp_cvt #(
                 end else if ($signed(input_exp_s1[i]) < $signed(1-EXP_BIAS)) begin
                     // Denormalize underflowing values
                     final_exp     = 0; // denormal result
-                    denorm_shamt  = (1-EXP_BIAS) - input_exp_s1[i]; // adjust right shifting               
+                    denorm_shamt  = SHAMT_BITS'(1-EXP_BIAS - input_exp_s1[i]); // adjust right shifting               
                 end
             end else begin                                
                 if ($signed(input_exp_s1[i]) >= $signed((MAX_INT_WIDTH-1) + unsigned_s1)) begin
@@ -220,7 +220,7 @@ module VX_fp_cvt #(
                     denorm_shamt = MAX_INT_WIDTH+1; // all bits go to the sticky
                 end else begin
                     // By default right shift mantissa to be an integer
-                    denorm_shamt = (MAX_INT_WIDTH-1) - input_exp_s1[i];
+                    denorm_shamt = SHAMT_BITS'((MAX_INT_WIDTH-1) - input_exp_s1[i]);
                 end              
             end     
         `IGNORE_WARNINGS_END  

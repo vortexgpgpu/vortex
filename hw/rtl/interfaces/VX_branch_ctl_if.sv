@@ -1,6 +1,3 @@
-`ifndef VX_BRANCH_RSP_IF
-`define VX_BRANCH_RSP_IF
-
 `include "VX_define.vh"
 
 interface VX_branch_ctl_if ();
@@ -25,5 +22,3 @@ interface VX_branch_ctl_if ();
     );
 
 endinterface
-
-`endif

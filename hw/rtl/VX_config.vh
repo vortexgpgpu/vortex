@@ -1,5 +1,5 @@
-`ifndef VX_CONFIG
-`define VX_CONFIG
+`ifndef VX_CONFIG_VH
+`define VX_CONFIG_VH
 
 `ifndef XLEN
 `define XLEN 32
@@ -14,25 +14,15 @@
 `endif
 
 `ifndef NUM_WARPS
-`define NUM_WARPS 2
+`define NUM_WARPS 4
 `endif
 
 `ifndef NUM_THREADS
-`define NUM_THREADS 2
+`define NUM_THREADS 4
 `endif
 
 `ifndef NUM_BARRIERS
 `define NUM_BARRIERS 4
-`endif
-
-`ifndef SM_DISABLE
-`define SM_ENABLE
-`endif
-
-`ifdef SM_ENABLE
-    `define SM_ENABLED   1
-`else
-    `define SM_ENABLED   0
 `endif
 
 `ifdef L2_ENABLE
@@ -281,12 +271,27 @@
 `define TEXQ_SIZE (`NUM_WARPS * 2)
 `endif
 
+// RASTER memeory queue size
+`ifndef RASTER_MEM_QUEUE_SIZE    
+`define RASTER_MEM_QUEUE_SIZE 8
+`endif
+
 // ROP memeory queue size
 `ifndef ROP_MEM_QUEUE_SIZE    
-`define ROP_MEM_QUEUE_SIZE  8
+`define ROP_MEM_QUEUE_SIZE 8
 `endif
 
 // Icache Configurable Knobs //////////////////////////////////////////////////
+
+// Enable/disable cache
+`ifndef ICACHE_DISABLE
+`define ICACHE_ENABLE
+`endif
+`ifdef ICACHE_ENABLE
+    `define ICACHE_ENABLED 1
+`else
+    `define ICACHE_ENABLED 0
+`endif
 
 // Size of cache in bytes
 `ifndef ICACHE_SIZE
@@ -324,6 +329,16 @@
 `endif
 
 // Dcache Configurable Knobs //////////////////////////////////////////////////
+
+// Enable/disable cache
+`ifndef DCACHE_DISABLE
+`define DCACHE_ENABLE
+`endif
+`ifdef DCACHE_ENABLE
+    `define DCACHE_ENABLED 1
+`else
+    `define DCACHE_ENABLED 0
+`endif
 
 // Size of cache in bytes
 `ifndef DCACHE_SIZE
@@ -367,7 +382,7 @@
 
 // Number of associative ways
 `ifndef DCACHE_NUM_WAYS
-`define DCACHE_NUM_WAYS 4
+`define DCACHE_NUM_WAYS 2
 `endif
 
 // Tcache Configurable Knobs //////////////////////////////////////////////////
@@ -414,10 +429,20 @@
 
 // Number of associative ways
 `ifndef TCACHE_NUM_WAYS
-`define TCACHE_NUM_WAYS 4
+`define TCACHE_NUM_WAYS 2
 `endif
 
 // Rcache Configurable Knobs //////////////////////////////////////////////////
+
+// Enable/disable cache
+`ifndef RCACHE_DISABLE
+`define RCACHE_ENABLE
+`endif
+`ifdef RCACHE_ENABLE
+    `define RCACHE_ENABLED 1
+`else
+    `define RCACHE_ENABLED 0
+`endif
 
 // Size of cache in bytes
 `ifndef RCACHE_SIZE
@@ -466,6 +491,16 @@
 
 // Ocache Configurable Knobs //////////////////////////////////////////////////
 
+// Enable/disable cache
+`ifndef OCACHE_DISABLE
+`define OCACHE_ENABLE
+`endif
+`ifdef OCACHE_ENABLE
+    `define OCACHE_ENABLED 1
+`else
+    `define OCACHE_ENABLED 0
+`endif
+
 // Size of cache in bytes
 `ifndef OCACHE_SIZE
 `define OCACHE_SIZE 4096
@@ -512,6 +547,16 @@
 `endif
 
 // SM Configurable Knobs //////////////////////////////////////////////////////
+
+`ifndef SM_DISABLE
+`define SM_ENABLE
+`endif
+
+`ifdef SM_ENABLE
+    `define SM_ENABLED   1
+`else
+    `define SM_ENABLED   0
+`endif
 
 // per thread stack size
 `ifndef SMEM_LOCAL_SIZE
@@ -582,7 +627,7 @@
 
 // Number of associative ways
 `ifndef L2_NUM_WAYS
-`define L2_NUM_WAYS 8
+`define L2_NUM_WAYS 4
 `endif
 
 // L3cache Configurable Knobs /////////////////////////////////////////////////

@@ -1,5 +1,5 @@
-`ifndef VX_FPU_DEFINE
-`define VX_FPU_DEFINE
+`ifndef VX_FPU_DEFINE_VH
+`define VX_FPU_DEFINE_VH
 
 `include "VX_define.vh"
 
@@ -7,8 +7,9 @@
 `include "float_dpi.vh"
 `endif
 
-`IGNORE_WARNINGS_BEGIN
-import fpu_types::*;
-`IGNORE_WARNINGS_END
+`include "VX_fpu_types.vh"
 
+`IGNORE_WARNINGS_BEGIN
+import VX_fpu_types::*;
+`IGNORE_WARNINGS_END
 `endif

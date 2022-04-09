@@ -1,9 +1,9 @@
-`ifndef VX_ROP_TYPES
-`define VX_ROP_TYPES
+`ifndef VX_ROP_TYPES_VH
+`define VX_ROP_TYPES_VH
 
 `include "VX_define.vh"
 
-package rop_types;
+package VX_rop_types;
 
 typedef struct packed {
     logic [7:0] a;

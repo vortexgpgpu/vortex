@@ -7,7 +7,8 @@ module VX_stream_mux #(
     parameter DATAW        = 1,
     parameter string ARBITER = "",
     parameter LOCK_ENABLE  = 1,
-    parameter BUFFERED     = 0
+    parameter BUFFERED     = 0,
+    localparam LOG_NUM_REQS = `CLOG2(NUM_REQS)
 ) (
     input  wire clk,
     input  wire reset,
@@ -22,8 +23,6 @@ module VX_stream_mux #(
     output wire [LANES-1:0][DATAW-1:0] data_out,    
     input  wire [LANES-1:0]            ready_out
 );
-    localparam LOG_NUM_REQS = `CLOG2(NUM_REQS);
-
     if (NUM_REQS > 1)  begin
         
         wire [LANES-1:0]                   sel_fire;
@@ -97,8 +96,8 @@ module VX_stream_mux #(
         for (genvar i = 0; i < LANES; ++i) begin
             VX_skid_buffer #(
                 .DATAW    (DATAW),
-                .PASSTHRU (0 == BUFFERED),
-                .OUT_REG  (2 == BUFFERED)
+                .PASSTHRU (0 == 2'(BUFFERED)),
+                .OUT_REG  (2 == 2'(BUFFERED))
             ) out_buffer (
                 .clk       (clk),
                 .reset     (reset),

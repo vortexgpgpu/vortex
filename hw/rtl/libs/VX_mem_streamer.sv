@@ -2,14 +2,16 @@
 
 `TRACING_OFF
 module VX_mem_streamer #(
-    parameter NUM_REQS = 4,
-    parameter ADDRW = 32,
-    parameter DATAW = 32,
-    parameter TAGW = 32,
-    parameter QUEUE_SIZE = 16,
+    parameter NUM_REQS      = 4,
+    parameter ADDRW         = 32,
+    parameter DATAW         = 32,
+    parameter TAGW          = 32,
+    parameter QUEUE_SIZE    = 16,
     parameter PARTIAL_RESPONSE = 0,
     parameter DUPLICATE_ADDR = 0,
-    parameter OUT_REG = 0
+    parameter OUT_REG       = 0,
+    localparam BYTEENW      = DATAW / 8,
+    localparam QUEUE_ADDRW  = `CLOG2(QUEUE_SIZE)
 ) (
     input wire clk,
     input wire reset,
@@ -47,9 +49,6 @@ module VX_mem_streamer #(
     output wire [NUM_REQS-1:0]              mem_rsp_ready
   );
 
-    localparam BYTEENW = DATAW / 8;
-    localparam QUEUE_ADDRW = `CLOG2(QUEUE_SIZE);
-   
     `STATIC_ASSERT (DATAW == 8 * (DATAW / 8), ("invalid parameter"))
     `STATIC_ASSERT ((0 == PARTIAL_RESPONSE) || (1 == PARTIAL_RESPONSE), ("invalid parameter"))
     `STATIC_ASSERT ((0 == DUPLICATE_ADDR) || (1 == DUPLICATE_ADDR), ("invalid parameter"))
@@ -108,7 +107,7 @@ module VX_mem_streamer #(
 
     // Detect duplicate addresses
    
-    if (DUPLICATE_ADDR == 1) begin
+    if (DUPLICATE_ADDR == 0) begin
         assign req_dup_mask = req_mask;
     end else begin
         wire [NUM_REQS-2:0] addr_matches;

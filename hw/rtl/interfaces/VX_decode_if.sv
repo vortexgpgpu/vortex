@@ -1,6 +1,3 @@
-`ifndef VX_DECODE_IF
-`define VX_DECODE_IF
-
 `include "VX_define.vh"
 
 interface VX_decode_if ();
@@ -64,5 +61,3 @@ interface VX_decode_if ();
     );
 
 endinterface
-
-`endif

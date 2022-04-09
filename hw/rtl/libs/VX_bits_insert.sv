@@ -7,10 +7,11 @@ module VX_bits_insert #(
     parameter POS = 0
 ) (
     input wire [N-1:0] data_in,    
-    input wire [S-1:0] sel_in,    
+    input wire [`UP(S)-1:0] sel_in,    
     output wire [N+S-1:0] data_out
 ); 
-    if (N == 0) begin
+    if (S == 0) begin
+        `UNUSED_VAR (sel_in)
         assign data_out = data_in;
     end else begin
         if (POS == 0) begin

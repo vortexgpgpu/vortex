@@ -7,9 +7,10 @@ all:
 	$(MAKE) -C guassian
 	$(MAKE) -C oclprintf
 	$(MAKE) -C psort
-	
+	$(MAKE) -C DotProduct
+
 run-simx:
-	$(MAKE) -C vecadd run-simx 
+	$(MAKE) -C vecadd run-simx
 	$(MAKE) -C sgemm run-simx
 	$(MAKE) -C saxpy run-simx
 	$(MAKE) -C sfilter run-simx
@@ -17,9 +18,10 @@ run-simx:
 	$(MAKE) -C guassian run-simx
 	$(MAKE) -C oclprintf run-simx
 	$(MAKE) -C psort run-simx
+	$(MAKE) -C DotProduct run-simx
 
 run-rtlsim:
-	$(MAKE) -C vecadd run-rtlsim 
+	$(MAKE) -C vecadd run-rtlsim
 	$(MAKE) -C sgemm run-rtlsim
 	$(MAKE) -C saxpy run-rtlsim
 	$(MAKE) -C sfilter run-rtlsim
@@ -27,9 +29,10 @@ run-rtlsim:
 	$(MAKE) -C guassian run-rtlsim
 	$(MAKE) -C oclprintf run-rtlsim
 	$(MAKE) -C psort run-rtlsim
+	$(MAKE) -C DotProduct run-rtlsim
 
 run-vlsim:
-	$(MAKE) -C vecadd run-vlsim 
+	$(MAKE) -C vecadd run-vlsim
 	$(MAKE) -C sgemm run-vlsim
 	$(MAKE) -C saxpy run-vlsim
 	$(MAKE) -C sfilter run-vlsim
@@ -37,6 +40,7 @@ run-vlsim:
 	$(MAKE) -C guassian run-vlsim
 	$(MAKE) -C oclprintf run-vlsim
 	$(MAKE) -C psort run-vlsim
+	$(MAKE) -C DotProduct run-vlsim
 
 clean:
 	$(MAKE) -C vecadd clean
@@ -47,6 +51,7 @@ clean:
 	$(MAKE) -C guassian clean
 	$(MAKE) -C oclprintf clean
 	$(MAKE) -C psort clean
+	$(MAKE) -C DotProduct clean
 
 clean-all:
 	$(MAKE) -C vecadd clean-all
@@ -57,3 +62,4 @@ clean-all:
 	$(MAKE) -C guassian clean-all
 	$(MAKE) -C oclprintf clean-all
 	$(MAKE) -C psort clean-all
+	$(MAKE) -C DotProduct clean-all

@@ -1,4 +1,9 @@
 `include "VX_define.vh"
+`include "VX_fpu_types.vh"
+
+`IGNORE_WARNINGS_BEGIN
+import VX_fpu_types::*;
+`IGNORE_WARNINGS_END
 
 module VX_csr_data #(
     parameter CORE_ID = 0
@@ -48,8 +53,6 @@ module VX_csr_data #(
     input wire [`CSR_ADDR_BITS-1:0]     write_addr,
     input wire [`NUM_THREADS-1:0][31:0] write_data
 );
-    import fpu_types::*;
-    
     reg [31:0] csr_satp;
     reg [31:0] csr_mstatus;
     reg [31:0] csr_medeleg;

@@ -1,6 +1,3 @@
-`ifndef VX_COMMIT_IF
-`define VX_COMMIT_IF
-
 `include "VX_define.vh"
 
 interface VX_commit_if ();
@@ -43,5 +40,3 @@ interface VX_commit_if ();
     );
 
 endinterface
-
-`endif

@@ -29,7 +29,7 @@ module VX_raster_mem #(
     // Raster slice interactions
     input logic [RASTER_SLICE_NUM-1:0]                          raster_slice_ready,
     output logic [`RASTER_DIM_BITS-1:0]                         out_x_loc, out_y_loc,
-    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              out_edges[2:0][2:0],
+    output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]              out_edges[2:0][2:0],
     output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              out_pid,
     output logic [RASTER_SLICE_BITS-1:0]                        out_slice_index,
 
@@ -269,14 +269,15 @@ module VX_raster_mem #(
         .NUM_REQS(NUM_REQS), // 3 edges and 3 coeffs in each edge
         .ADDRW(`RCACHE_ADDR_WIDTH),
         .DATAW(`RASTER_PRIMITIVE_DATA_BITS),
-        .QUEUE_SIZE(2**`RCACHE_TAG_WIDTH),
-        .TAGW(TAG_MAX_BIT_INDEX) // the top bit will denote type of request
+        .QUEUE_SIZE(`RASTER_MEM_QUEUE_SIZE),
+        .TAGW(TAG_MAX_BIT_INDEX), // the top bit will denote type of request
+        .OUT_REG (1)
     ) raster_mem_streamer (
         .clk(clk),
         .reset(reset),
 
         .req_valid(mem_fire), // NOTE: This should ensure stalls
-        .req_rw(0),
+        .req_rw(1'b0),
         .req_mask(mem_req_mask),
         `UNUSED_PIN (req_byteen),
         .req_addr(fire_mem_req_addr),
@@ -289,7 +290,7 @@ module VX_raster_mem #(
         `UNUSED_PIN (rsp_mask),
         .rsp_data(mem_rsp_data),
         .rsp_tag(mem_rsp_tag),
-        .rsp_ready(1),
+        .rsp_ready(1'b1),
 
         .mem_req_valid(cache_req_if.valid),
         .mem_req_rw(cache_req_if.rw),

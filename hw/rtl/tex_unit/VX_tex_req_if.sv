@@ -1,6 +1,3 @@
-`ifndef VX_TEX_REQ_IF
-`define VX_TEX_REQ_IF
-
 `include "VX_tex_define.vh"
 
 interface VX_tex_req_if ();
@@ -45,5 +42,3 @@ interface VX_tex_req_if ();
     );
 
 endinterface
-`endif
- 

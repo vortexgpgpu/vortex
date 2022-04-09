@@ -1,6 +1,3 @@
-`ifndef VX_GPU_REQ_IF
-`define VX_GPU_REQ_IF
-
 `include "VX_define.vh"
 
 interface VX_gpu_req_if();
@@ -58,5 +55,3 @@ interface VX_gpu_req_if();
     );
 
 endinterface
-
-`endif

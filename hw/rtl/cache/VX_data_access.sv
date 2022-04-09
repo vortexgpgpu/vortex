@@ -18,7 +18,9 @@ module VX_data_access #(
     // Enable cache writeable
     parameter WRITE_ENABLE      = 1,
     // Request debug identifier
-    parameter REQ_DBG_IDW       = 0
+    parameter REQ_DBG_IDW       = 0,
+
+    localparam WORD_SEL_BITS    = `UP(`WORD_SEL_BITS)
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -32,13 +34,13 @@ module VX_data_access #(
     input wire                          read,
     input wire                          fill, 
     input wire                          write,
-    input wire[`LINE_ADDR_WIDTH-1:0]    addr,
+    input wire [`LINE_ADDR_WIDTH-1:0]   addr,
     input wire [NUM_PORTS-1:0][WORD_SEL_BITS-1:0] wsel,
     input wire [NUM_PORTS-1:0]          pmask,
     input wire [NUM_PORTS-1:0][WORD_SIZE-1:0] byteen,
     input wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] fill_data,
     input wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] write_data,
-    input wire[NUM_WAYS-1:0]              select_way,
+    input wire [NUM_WAYS-1:0]           way_sel,
 
     output wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] read_data
 );
@@ -49,7 +51,6 @@ module VX_data_access #(
     `UNUSED_VAR (addr)
     `UNUSED_VAR (read)
 
-    localparam WORD_SEL_BITS = `UP(`WORD_SEL_BITS);
     localparam BYTEENW = WRITE_ENABLE ? CACHE_LINE_SIZE : 1;
 
     wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] rdata;
@@ -97,7 +98,7 @@ module VX_data_access #(
         assign wren  = fill;
     end
 
-    wire [NUM_WAYS-1:0][`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] read_data_local;
+    wire [NUM_WAYS-1:0][`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] per_way_rdata;
 
     for (genvar i = 0; i < NUM_WAYS; ++i) begin
         VX_sp_ram #(
@@ -108,22 +109,20 @@ module VX_data_access #(
         ) data_store (
             .clk   (clk),
             .addr  (line_addr),
-            .wren  (wren & {BYTEENW{select_way[i]}}),
+            .wren  (wren & {BYTEENW{way_sel[i]}}),
             .wdata (wdata),
-            .rdata (read_data_local[i]) 
+            .rdata (per_way_rdata[i]) 
         );
     end
    
-    if (NUM_WAYS > 1) begin
-        wire [`WAY_SEL_BITS-1:0] which_way;
-        for (genvar i = 0; i < NUM_WAYS; ++i) begin
-            assign which_way = select_way[i] ? i : 'z; 
-        end
-        assign rdata = read_data_local[which_way];
-    end else begin
-        `UNUSED_VAR (select_way)
-        assign rdata = read_data_local;
-    end
+    VX_onehot_mux #(
+        .DATAW (`WORDS_PER_LINE * `WORD_WIDTH),
+        .N     (NUM_WAYS)
+    ) rdata_select (
+        .data_in  (per_way_rdata),
+        .sel_in   (way_sel),
+        .data_out (rdata)
+    );
 
     if (`WORDS_PER_LINE > 1) begin
         for (genvar i = 0; i < NUM_PORTS; ++i) begin
@@ -138,13 +137,13 @@ module VX_data_access #(
 `ifdef DBG_TRACE_CACHE_DATA
     always @(posedge clk) begin 
         if (fill && ~stall) begin
-            dpi_trace(2, "%d: %s:%0d data-fill: addr=0x%0h, blk_addr=%0d, data=0x%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, fill_data);
+            dpi_trace(2, "%d: %s:%0d data-fill: addr=0x%0h, way=%0d, blk_addr=%0d, data=0x%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_idx, line_addr, fill_data);
         end
         if (read && ~stall) begin
-            dpi_trace(2, "%d: %s:%0d data-read: addr=0x%0h, blk_addr=%0d, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, read_data, req_id);
+            dpi_trace(2, "%d: %s:%0d data-read: addr=0x%0h, way=%0d, blk_addr=%0d, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_idx, line_addr, read_data, req_id);
         end 
         if (write && ~stall) begin
-            dpi_trace(2, "%d: %s:%0d data-write: addr=0x%0h, byteen=%b, blk_addr=%0d, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), byteen, line_addr, write_data, req_id);
+            dpi_trace(2, "%d: %s:%0d data-write: addr=0x%0h, way=%0d, blk_addr=%0d, byteen=%b, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_idx, line_addr, byteen, write_data, req_id);
         end      
     end    
 `endif

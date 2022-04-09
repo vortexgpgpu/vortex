@@ -5,6 +5,9 @@ module VX_nc_bypass #(
     parameter NUM_REQS          = 1,
     parameter NC_TAG_BIT        = 0,
 
+    parameter NC_ENABLE         = 0,
+    parameter PASSTHRU          = 0,
+
     parameter CORE_ADDR_WIDTH   = 1,
     parameter CORE_DATA_SIZE    = 1, 
     parameter CORE_TAG_IN_WIDTH = 1,
@@ -12,7 +15,12 @@ module VX_nc_bypass #(
     parameter MEM_ADDR_WIDTH    = 1,
     parameter MEM_DATA_SIZE     = 1,
     parameter MEM_TAG_IN_WIDTH  = 1,
-    parameter MEM_TAG_OUT_WIDTH = 1
+    parameter MEM_TAG_OUT_WIDTH = 1,
+
+    localparam CORE_DATA_WIDTH  = CORE_DATA_SIZE * 8,
+    localparam MEM_DATA_WIDTH   = MEM_DATA_SIZE * 8,
+    localparam CORE_TAG_OUT_WIDTH = CORE_TAG_IN_WIDTH - NC_ENABLE,
+    localparam MEM_SEL_BITS     = `UP(`CLOG2(MEM_DATA_SIZE / CORE_DATA_SIZE))
  ) ( 
     input wire clk,
     input wire reset,
@@ -82,12 +90,7 @@ module VX_nc_bypass #(
     input wire                          mem_rsp_ready_out
 );
     `UNUSED_VAR (clk)
-    `UNUSED_VAR (reset)
-
-    localparam CORE_DATA_WIDTH    = CORE_DATA_SIZE * 8;
-    localparam MEM_DATA_WIDTH     = MEM_DATA_SIZE * 8;
-    localparam CORE_TAG_OUT_WIDTH = CORE_TAG_IN_WIDTH - 1;
-    localparam MEM_SEL_BITS       = `UP(`CLOG2(MEM_DATA_SIZE / CORE_DATA_SIZE));
+    `UNUSED_VAR (reset)    
 
     localparam REQ_SEL_BITS = `LOG2UP(NUM_REQS);
     localparam MUX_DATAW    = CORE_TAG_IN_WIDTH + CORE_DATA_WIDTH + CORE_DATA_SIZE + CORE_ADDR_WIDTH + 1;
@@ -105,18 +108,29 @@ module VX_nc_bypass #(
     wire core_req_nc_valid;    
     
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign core_req_nc_idxs[i] = core_req_tag_in[i][NC_TAG_BIT];
+        if (PASSTHRU) begin
+            assign core_req_nc_idxs[i] = 1'b1;
+        end else begin
+            assign core_req_nc_idxs[i] = core_req_tag_in[i][NC_TAG_BIT];
+        end
     end
 
     assign core_req_valid_in_nc = core_req_valid_in & core_req_nc_idxs;
 
-    VX_priority_encoder #(
-        .N (NUM_REQS)
-    ) core_req_sel (
-        .data_in   (core_req_valid_in_nc),
-        .index     (core_req_nc_idx),
-        .onehot    (core_req_nc_sel),
-        .valid_out (core_req_nc_valid)
+    wire core_req_in_fire = | (core_req_valid_in & core_req_ready_in);
+
+    VX_generic_arbiter #(
+        .NUM_REQS    (NUM_REQS),
+        .TYPE        (PASSTHRU ? "R" : "P"),
+        .LOCK_ENABLE (1)
+    ) req_arb (
+        .clk          (clk),
+        .reset        (reset),
+        .unlock       (core_req_in_fire),
+        .requests     (core_req_valid_in_nc),        
+        .grant_index  (core_req_nc_idx),
+        .grant_onehot (core_req_nc_sel),
+        .grant_valid  (core_req_nc_valid)
     );
 
     assign core_req_valid_out  = core_req_valid_in & ~core_req_nc_idxs;
@@ -128,7 +142,7 @@ module VX_nc_bypass #(
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         VX_bits_remove #( 
             .N   (CORE_TAG_IN_WIDTH),
-            .S   (1),
+            .S   (NC_ENABLE),
             .POS (NC_TAG_BIT)
         ) core_req_tag_remove (
             .data_in  (core_req_tag_in[i]),
@@ -136,14 +150,9 @@ module VX_nc_bypass #(
         );
     end
 
-    if (NUM_REQS > 1) begin
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
-            assign core_req_ready_in[i] = core_req_valid_in_nc[i] ? 
-                (~mem_req_valid_in && mem_req_ready_out && core_req_nc_sel[i]) : core_req_ready_out[i];
-        end 
-    end else begin
-        `UNUSED_VAR (core_req_nc_sel)
-        assign core_req_ready_in = core_req_valid_in_nc ? (~mem_req_valid_in && mem_req_ready_out) : core_req_ready_out;
+    for (genvar i = 0; i < NUM_REQS; ++i) begin
+        assign core_req_ready_in[i] = core_req_valid_in_nc[i] ? (~mem_req_valid_in && mem_req_ready_out && core_req_nc_sel[i]) 
+                                                              : core_req_ready_out[i];
     end
 
     // memory request handling
@@ -151,45 +160,36 @@ module VX_nc_bypass #(
     assign mem_req_valid_out = mem_req_valid_in || core_req_nc_valid;
     assign mem_req_ready_in  = mem_req_ready_out;
 
-    wire [(MEM_TAG_IN_WIDTH+1)-1:0] mem_req_tag_in_c;
+    wire [(MEM_TAG_IN_WIDTH + NC_ENABLE)-1:0] mem_req_tag_in_c;
 
     VX_bits_insert #( 
         .N   (MEM_TAG_IN_WIDTH),
-        .S   (1),
+        .S   (NC_ENABLE),
         .POS (NC_TAG_BIT)
     ) mem_req_tag_insert (
         .data_in  (mem_req_tag_in),
-        .sel_in   ('0),
+        .sel_in   (1'b0),
         .data_out (mem_req_tag_in_c)
     );
 
     wire [CORE_TAG_IN_WIDTH-1:0] core_req_tag_in_sel;
-    wire [CORE_DATA_WIDTH-1:0] core_req_data_in_sel;
-    wire [CORE_DATA_SIZE-1:0]  core_req_byteen_in_sel;
-    wire [CORE_ADDR_WIDTH-1:0] core_req_addr_in_sel;
-    wire core_req_rw_in_sel;
+    wire [CORE_DATA_WIDTH-1:0]   core_req_data_in_sel;
+    wire [CORE_DATA_SIZE-1:0]    core_req_byteen_in_sel;
+    wire [CORE_ADDR_WIDTH-1:0]   core_req_addr_in_sel;
+    wire                         core_req_rw_in_sel;
 
-    if (NUM_REQS > 1) begin
-        wire [NUM_REQS-1:0][MUX_DATAW-1:0] core_req_nc_mux_in;
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
-            assign core_req_nc_mux_in[i] = {core_req_tag_in[i], core_req_data_in[i], core_req_byteen_in[i], core_req_addr_in[i], core_req_rw_in[i]};
-        end
-
-        assign {core_req_tag_in_sel, core_req_data_in_sel, core_req_byteen_in_sel, core_req_addr_in_sel, core_req_rw_in_sel} = core_req_nc_mux_in[core_req_nc_idx];
-    end else begin
-        assign core_req_tag_in_sel    = core_req_tag_in;
-        assign core_req_data_in_sel   = core_req_data_in;
-        assign core_req_byteen_in_sel = core_req_byteen_in;
-        assign core_req_addr_in_sel   = core_req_addr_in;
-        assign core_req_rw_in_sel     = core_req_rw_in;
+    wire [NUM_REQS-1:0][MUX_DATAW-1:0] core_req_nc_mux_in;
+    for (genvar i = 0; i < NUM_REQS; ++i) begin
+        assign core_req_nc_mux_in[i] = {core_req_tag_in[i], core_req_data_in[i], core_req_byteen_in[i], core_req_addr_in[i], core_req_rw_in[i]};
     end
+    assign {core_req_tag_in_sel, core_req_data_in_sel, core_req_byteen_in_sel, core_req_addr_in_sel, core_req_rw_in_sel} = core_req_nc_mux_in[core_req_nc_idx];
       
     assign mem_req_rw_out   = mem_req_valid_in ? mem_req_rw_in : core_req_rw_in_sel;
     assign mem_req_addr_out = mem_req_valid_in ? mem_req_addr_in : core_req_addr_in_sel[D +: MEM_ADDR_WIDTH];        
     
     if (D != 0) begin
         reg [NUM_PORTS-1:0][CORE_DATA_SIZE-1:0]  mem_req_byteen_in_r;
-        reg [NUM_PORTS-1:0][MEM_SEL_BITS-1:0] mem_req_wsel_in_r;
+        reg [NUM_PORTS-1:0][MEM_SEL_BITS-1:0]    mem_req_wsel_in_r;
         reg [NUM_PORTS-1:0][CORE_DATA_WIDTH-1:0] mem_req_data_in_r;
         
         wire [D-1:0] req_addr_idx = core_req_addr_in_sel[D-1:0];
@@ -209,7 +209,11 @@ module VX_nc_bypass #(
         assign mem_req_byteen_out = mem_req_valid_in ? mem_req_byteen_in : mem_req_byteen_in_r;
         assign mem_req_wsel_out   = mem_req_valid_in ? mem_req_wsel_in : mem_req_wsel_in_r;
         assign mem_req_data_out   = mem_req_valid_in ? mem_req_data_in : mem_req_data_in_r;
-        assign mem_req_tag_out    = mem_req_valid_in ? MEM_TAG_OUT_WIDTH'(mem_req_tag_in_c) : MEM_TAG_OUT_WIDTH'({core_req_nc_idx, req_addr_idx, core_req_tag_in_sel});
+        if (NUM_REQS > 1) begin
+            assign mem_req_tag_out = mem_req_valid_in ? MEM_TAG_OUT_WIDTH'(mem_req_tag_in_c) : MEM_TAG_OUT_WIDTH'({core_req_nc_idx, req_addr_idx, core_req_tag_in_sel});
+        end else begin 
+            assign mem_req_tag_out = mem_req_valid_in ? MEM_TAG_OUT_WIDTH'(mem_req_tag_in_c) : MEM_TAG_OUT_WIDTH'({req_addr_idx, core_req_tag_in_sel});
+        end
     end else begin
         `UNUSED_VAR (mem_req_wsel_in)
         `UNUSED_VAR (mem_req_pmask_in)
@@ -217,19 +221,28 @@ module VX_nc_bypass #(
         assign mem_req_byteen_out = mem_req_valid_in ? mem_req_byteen_in : core_req_byteen_in_sel;
         assign mem_req_data_out   = mem_req_valid_in ? mem_req_data_in : core_req_data_in_sel;
         assign mem_req_wsel_out   = 0;
-        assign mem_req_tag_out    = mem_req_valid_in ? MEM_TAG_OUT_WIDTH'(mem_req_tag_in_c) : MEM_TAG_OUT_WIDTH'({core_req_nc_idx, core_req_tag_in_sel});
+        if (NUM_REQS > 1) begin
+            assign mem_req_tag_out = mem_req_valid_in ? MEM_TAG_OUT_WIDTH'(mem_req_tag_in_c) : MEM_TAG_OUT_WIDTH'({core_req_nc_idx, core_req_tag_in_sel});
+        end else begin
+            assign mem_req_tag_out = mem_req_valid_in ? MEM_TAG_OUT_WIDTH'(mem_req_tag_in_c) : MEM_TAG_OUT_WIDTH'({core_req_tag_in_sel});
+        end
     end
 
     // core response handling
 
     wire [NUM_REQS-1:0][CORE_TAG_IN_WIDTH-1:0] core_rsp_tag_out_c;
 
-    wire is_mem_rsp_nc = mem_rsp_valid_in && mem_rsp_tag_in[NC_TAG_BIT];
+    wire is_mem_rsp_nc;
+    if (PASSTHRU) begin
+        assign is_mem_rsp_nc = mem_rsp_valid_in;
+    end else begin
+        assign is_mem_rsp_nc = mem_rsp_valid_in && mem_rsp_tag_in[NC_TAG_BIT];
+    end
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         VX_bits_insert #( 
             .N   (CORE_TAG_OUT_WIDTH),
-            .S   (1),
+            .S   (NC_ENABLE),
             .POS (NC_TAG_BIT)
         ) core_rsp_tag_insert (
             .data_in  (core_rsp_tag_in[i]),
@@ -238,7 +251,12 @@ module VX_nc_bypass #(
         );
     end
 
-    wire [REQ_SEL_BITS-1:0] rsp_idx = mem_rsp_tag_in[(CORE_TAG_IN_WIDTH + D) +: REQ_SEL_BITS];
+    wire [REQ_SEL_BITS-1:0] rsp_idx;
+    if (NUM_REQS > 1) begin
+        assign rsp_idx = mem_rsp_tag_in[(CORE_TAG_IN_WIDTH + D) +: REQ_SEL_BITS];
+    end else begin 
+        assign rsp_idx = 1'b0;
+    end
     
     reg [NUM_REQS-1:0] rsp_nc_valid_r;
     always @(*) begin
@@ -267,15 +285,20 @@ module VX_nc_bypass #(
 
     // memory response handling
 
-    assign mem_rsp_valid_out = mem_rsp_valid_in && ~mem_rsp_tag_in[NC_TAG_BIT];
+    if (PASSTHRU) begin
+        assign mem_rsp_valid_out = 1'b0;
+    end else begin
+        assign mem_rsp_valid_out = mem_rsp_valid_in && ~mem_rsp_tag_in[NC_TAG_BIT];
+    end
+
     assign mem_rsp_data_out  = mem_rsp_data_in;
 
     VX_bits_remove #( 
-        .N   (MEM_TAG_IN_WIDTH+1),
-        .S   (1),
+        .N   (MEM_TAG_IN_WIDTH + NC_ENABLE),
+        .S   (NC_ENABLE),
         .POS (NC_TAG_BIT)
     ) mem_rsp_tag_remove (
-        .data_in  (mem_rsp_tag_in[(MEM_TAG_IN_WIDTH+1)-1:0]),
+        .data_in  (mem_rsp_tag_in[(MEM_TAG_IN_WIDTH + NC_ENABLE)-1:0]),
         .data_out (mem_rsp_tag_out)
     );
 

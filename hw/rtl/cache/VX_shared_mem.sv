@@ -25,7 +25,9 @@ module VX_shared_mem #(
     parameter REQ_DBG_IDW                   = 0,
 
     // core request tag size
-    parameter TAG_WIDTH                     = REQ_DBG_IDW
+    parameter TAG_WIDTH                     = REQ_DBG_IDW,
+
+    localparam WORD_WIDTH = WORD_SIZE * 8
  ) (    
     input wire clk,
     input wire reset,   
@@ -54,10 +56,9 @@ module VX_shared_mem #(
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))
     `UNUSED_PARAM (IDNAME)
 
-    localparam REQ_SEL_BITS = `LOG2UP(NUM_REQS);
-    localparam WORD_WIDTH = WORD_SIZE * 8;
-    localparam NUM_WORDS  = SIZE / WORD_SIZE;
-    localparam WORDS_PER_BANK = NUM_WORDS / NUM_BANKS;
+    localparam REQ_SEL_BITS    = `LOG2UP(NUM_REQS);    
+    localparam NUM_WORDS       = SIZE / WORD_SIZE;
+    localparam WORDS_PER_BANK  = NUM_WORDS / NUM_BANKS;
     localparam BANK_ADDR_WIDTH = ADDR_WIDTH - `CLOG2(NUM_BANKS);
 
     wire [NUM_BANKS-1:0]                    per_bank_req_valid_unqual; 
@@ -220,7 +221,8 @@ module VX_shared_mem #(
         .NUM_BANKS (NUM_BANKS),
         .NUM_PORTS (1),
         .WORD_SIZE (WORD_SIZE),        
-        .TAG_WIDTH (TAG_WIDTH)
+        .TAG_WIDTH (TAG_WIDTH),
+        .OUT_REG   (NUM_BANKS >= 2)
     ) rsp_merge (
         .clk                     (clk),
         .reset                   (reset),                    
@@ -284,13 +286,15 @@ module VX_shared_mem #(
     // per cycle: reads, writes
     wire [$clog2(NUM_REQS+1)-1:0] perf_reads_per_cycle;
     wire [$clog2(NUM_REQS+1)-1:0] perf_writes_per_cycle;
+    wire [$clog2(NUM_REQS+1)-1:0] perf_crsp_stall_per_cycle;
 
-    wire [NUM_REQS-1:0] perf_reads_per_mask = req_valid & req_ready & ~req_rw;
-    wire [NUM_REQS-1:0] perf_writes_per_mask = req_valid & req_ready & req_rw;
+    wire [NUM_REQS-1:0] perf_reads_per_req = req_valid & req_ready & ~req_rw;
+    wire [NUM_REQS-1:0] perf_writes_per_req = req_valid & req_ready & req_rw;
+    wire [NUM_REQS-1:0] perf_crsp_stall_per_req = rsp_valid & ~rsp_ready;
 
-    `POP_COUNT(perf_reads_per_cycle, perf_reads_per_mask);
-    `POP_COUNT(perf_writes_per_cycle, perf_writes_per_mask);
-    wire perf_crsp_stall_per_cycle = (|(rsp_valid & ~rsp_ready));
+    `POP_COUNT(perf_reads_per_cycle, perf_reads_per_req);
+    `POP_COUNT(perf_writes_per_cycle, perf_writes_per_req);
+    `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_req);
 
     reg [`PERF_CTR_BITS-1:0] perf_reads;
     reg [`PERF_CTR_BITS-1:0] perf_writes;
