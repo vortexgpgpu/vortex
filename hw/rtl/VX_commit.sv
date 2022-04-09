@@ -23,6 +23,9 @@ module VX_commit #(
     // simulation helper signals
     output reg [`NUM_REGS-1:0][31:0] sim_last_wb_value
 );
+    localparam NUM_RSPS = 5 + `EXT_F_ENABLED;
+    localparam COMMIT_SIZEW = $clog2(NUM_RSPS * `NUM_THREADS + 1);
+
     // CSRs update
 
     wire alu_commit_fire = alu_commit_if.valid && alu_commit_if.ready;
@@ -43,15 +46,7 @@ module VX_commit #(
                 `endif
                     || gpu_commit_fire;
 
-`ifdef EXT_F_ENABLE
-    wire [(6*`NUM_THREADS)-1:0] commit_tmask;
-`else
-    wire [(5*`NUM_THREADS)-1:0] commit_tmask;
-`endif
-
-    wire [$clog2($bits(commit_tmask)+1)-1:0] commit_size;
-
-    assign commit_tmask = {
+    wire [NUM_RSPS * `NUM_THREADS-1:0] commit_tmask = {
         {`NUM_THREADS{alu_commit_fire}} & alu_commit_if.tmask,
         {`NUM_THREADS{ld_commit_fire}}  & ld_commit_if.tmask, 
         {`NUM_THREADS{st_commit_fire}}  & st_commit_if.tmask,
@@ -62,7 +57,22 @@ module VX_commit #(
         {`NUM_THREADS{gpu_commit_fire}} & gpu_commit_if.tmask
     };
     
+    wire [COMMIT_SIZEW-1:0] commit_size, commit_size_r;
+    wire commit_fire_r;
+
     `POP_COUNT(commit_size, commit_tmask);
+
+    VX_pipe_register #(
+        .DATAW  (1 + COMMIT_SIZEW),
+        .DEPTH  (`NUM_THREADS > 2),
+        .RESETW (0)
+    ) commit_size_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  ({commit_fire,   commit_size}),
+        .data_out ({commit_fire_r, commit_size_r})
+    );
 
     reg [`PERF_CTR_BITS-1:0] instret;
 
@@ -70,8 +80,8 @@ module VX_commit #(
        if (reset) begin
             instret <= 0;
         end else begin
-            if (commit_fire) begin
-                instret <= instret + `PERF_CTR_BITS'(commit_size);
+            if (commit_fire_r) begin
+                instret <= instret + `PERF_CTR_BITS'(commit_size_r);
             end
         end
     end
@@ -81,7 +91,7 @@ module VX_commit #(
     // Writeback
 
     VX_writeback #(
-        .CORE_ID(CORE_ID)
+        .CORE_ID (CORE_ID)
     ) writeback (
         .clk            (clk),
         .reset          (reset),

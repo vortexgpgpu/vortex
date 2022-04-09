@@ -40,12 +40,12 @@ Generation context:
     The new component name is acl_fdiv
     Frequency 250MHz 
     Deployment FPGA Arria10 
-Estimated resources LUTs 539, DSPs 5, RAMBits 32768, RAMBlocks 3 
+Estimated resources LUTs 493, DSPs 5, RAMBits 32768, RAMBlocks 3 
 The pipeline depth of the block is 15 cycle(s)
 @@start
 @name FPDiv@
 @latency 15@
-@LUT 539@
+@LUT 493@
 @DSP 5@
 @RAMBits 32768@
 @RAMBlockUsage 3@
@@ -70,12 +70,12 @@ Generation context:
     The new component name is acl_fsqrt
     Frequency 250MHz 
     Deployment FPGA Arria10 
-Estimated resources LUTs 271, DSPs 3, RAMBits 15872, RAMBlocks 3 
+Estimated resources LUTs 247, DSPs 3, RAMBits 15872, RAMBlocks 3 
 The pipeline depth of the block is 10 cycle(s)
 @@start
 @name FPSqrt@
 @latency 10@
-@LUT 271@
+@LUT 247@
 @DSP 3@
 @RAMBits 15872@
 @RAMBlockUsage 3@

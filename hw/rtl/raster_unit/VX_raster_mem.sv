@@ -270,7 +270,8 @@ module VX_raster_mem #(
         .ADDRW(`RCACHE_ADDR_WIDTH),
         .DATAW(`RASTER_PRIMITIVE_DATA_BITS),
         .QUEUE_SIZE(`RASTER_MEM_QUEUE_SIZE),
-        .TAGW(TAG_MAX_BIT_INDEX) // the top bit will denote type of request
+        .TAGW(TAG_MAX_BIT_INDEX), // the top bit will denote type of request
+        .OUT_REG (1)
     ) raster_mem_streamer (
         .clk(clk),
         .reset(reset),

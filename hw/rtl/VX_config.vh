@@ -325,7 +325,7 @@
 
 // Number of associative ways
 `ifndef ICACHE_NUM_WAYS
-`define ICACHE_NUM_WAYS 2
+`define ICACHE_NUM_WAYS 1
 `endif
 
 // Dcache Configurable Knobs //////////////////////////////////////////////////
@@ -352,7 +352,7 @@
 
 // Number of ports per bank
 `ifndef DCACHE_NUM_PORTS
-`define DCACHE_NUM_PORTS 1
+`define DCACHE_NUM_PORTS `NUM_THREADS
 `endif
 
 // Core Request Queue Size
@@ -382,7 +382,7 @@
 
 // Number of associative ways
 `ifndef DCACHE_NUM_WAYS
-`define DCACHE_NUM_WAYS 4
+`define DCACHE_NUM_WAYS 1
 `endif
 
 // Tcache Configurable Knobs //////////////////////////////////////////////////
@@ -429,7 +429,7 @@
 
 // Number of associative ways
 `ifndef TCACHE_NUM_WAYS
-`define TCACHE_NUM_WAYS 4
+`define TCACHE_NUM_WAYS 2
 `endif
 
 // Rcache Configurable Knobs //////////////////////////////////////////////////

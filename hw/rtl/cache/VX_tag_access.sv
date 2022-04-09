@@ -76,7 +76,7 @@ module VX_tag_access #(
             .clk(  clk),                 
             .addr  (line_addr),   
             .wren  (fill_way[i] || flush),
-            .wdata ({!flush, line_tag}), 
+            .wdata ({!flush,     line_tag}), 
             .rdata ({read_valid, read_tag})
         );
         
@@ -87,14 +87,10 @@ module VX_tag_access #(
     assign tag_match = (| tag_match_way);
 
     // return the selected way
-    wire [NUM_WAYS-1:0] way_sel;
-    for (genvar i = 0; i < NUM_WAYS; ++i) begin
-        assign way_sel[i] = fill_way[i] | tag_match_way[i];
-    end
     VX_onehot_encoder #( 
         .N (NUM_WAYS)
     ) way_enc (
-        .data_in  (way_sel),
+        .data_in  (fill_way | tag_match_way),
         .data_out (way_idx),
         `UNUSED_PIN (valid_out)
     );

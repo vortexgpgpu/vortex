@@ -231,7 +231,7 @@ module VX_mem_unit # (
         .TAG_SEL_IDX   (0),
         .ARBITER       ("P"),
         .BUFFERED_REQ  (2),
-        .BUFFERED_RSP  (1)
+        .BUFFERED_RSP  (0)
     ) dcache_smem_demux (
         .clk        (clk),
         .reset      (smem_arb_reset),
