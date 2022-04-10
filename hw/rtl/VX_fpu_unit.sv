@@ -178,6 +178,8 @@ module VX_fpu_unit #(
         end
     end
 
+    wire fpu_commit_fire = fpu_commit_if.valid && fpu_commit_if.ready;
+
     // send commit request
     assign fpu_commit_if.valid  = valid_out;
     assign fpu_commit_if.uuid   = rsp_uuid;
@@ -191,7 +193,7 @@ module VX_fpu_unit #(
     assign ready_out = fpu_commit_if.ready;
 
     // CSR fflags Update    
-    assign fpu_to_csr_if.write_enable = fpu_commit_if.valid && fpu_commit_if.ready && has_fflags;
+    assign fpu_to_csr_if.write_enable = fpu_commit_fire && has_fflags;
     assign fpu_to_csr_if.write_wid    = fpu_commit_if.wid;     
     assign fpu_to_csr_if.write_fflags = rsp_fflags;
 
@@ -204,7 +206,7 @@ module VX_fpu_unit #(
             if (fpu_req_if.valid && fpu_req_if.ready) begin
                  req_pending_r[fpu_req_if.wid] <= 1;
             end
-            if (fpu_commit_if.valid && fpu_commit_if.ready) begin
+            if (fpu_commit_fire) begin
                  req_pending_r[fpu_commit_if.wid] <= 0;
             end
         end

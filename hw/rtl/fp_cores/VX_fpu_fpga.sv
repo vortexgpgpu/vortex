@@ -184,6 +184,8 @@ module VX_fpu_fpga #(
         .valid_out  (per_core_valid_out[FPU_NCP])
     );
 
+    ///////////////////////////////////////////////////////////////////////////
+
     wire [NUM_FPC-1:0][RSP_MUX_DATAW-1:0] per_core_data_out;
 
     for (genvar i = 0; i < NUM_FPC; ++i) begin
