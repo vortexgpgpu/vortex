@@ -19,6 +19,9 @@ module VX_csr_unit #(
 `endif
 `ifdef EXT_RASTER_ENABLE
     VX_gpu_csr_if.master        raster_csr_if,
+`ifdef PERF_ENABLE
+    VX_raster_perf_if.slave     raster_perf_if,
+`endif
 `endif
 `ifdef EXT_ROP_ENABLE
     VX_gpu_csr_if.master        rop_csr_if,
@@ -68,6 +71,9 @@ module VX_csr_unit #(
     `endif
     `ifdef EXT_RASTER_ENABLE        
         .raster_csr_if  (raster_csr_if),
+    `ifdef PERF_ENABLE
+        .raster_perf_if (raster_perf_if),
+    `endif
     `endif
     `ifdef EXT_ROP_ENABLE
         .rop_csr_if     (rop_csr_if),

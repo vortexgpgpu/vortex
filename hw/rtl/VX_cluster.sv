@@ -42,16 +42,16 @@ module VX_cluster #(
     VX_raster_perf_if   raster_perf_if();
 
     // TODO: remove
-    `UNUSED_VAR (raster_perf_if.mem_reads)
-    `UNUSED_VAR (raster_perf_if.mem_latency)
-    `unused_var (perf_rcache_if.reads)
-    `unused_var (perf_rcache_if.writes)
-    `unused_var (perf_rcache_if.read_misses)
-    `unused_var (perf_rcache_if.write_misses)
-    `unused_var (perf_rcache_if.bank_stalls)
-    `unused_var (perf_rcache_if.mshr_stalls)
-    `unused_var (perf_rcache_if.mem_stalls)
-    `unused_var (perf_rcache_if.crsp_stalls)
+    //`UNUSED_VAR raster_perf_if.mem_reads)
+    //`UNUSED_VAR (raster_perf_if.mem_latency)
+    //`unused_var (perf_rcache_if.reads)
+    //`unused_var (perf_rcache_if.writes)
+    //`unused_var (perf_rcache_if.read_misses)
+    //`unused_var (perf_rcache_if.write_misses)
+    //`unused_var (perf_rcache_if.bank_stalls)
+    //`unused_var (perf_rcache_if.mshr_stalls)
+    //`unused_var (perf_rcache_if.mem_stalls)
+    // /`unused_var (perf_rcache_if.crsp_stalls)
 `endif
 
     VX_cache_req_if #(
@@ -327,6 +327,9 @@ module VX_cluster #(
         `endif
         `ifdef EXT_RASTER_ENABLE        
             .raster_req_if  (per_core_raster_req_if[i]),
+        `ifdef PERF_ENABLE
+            .raster_perf_if (raster_perf_if),
+        `endif
         `endif
         `ifdef EXT_ROP_ENABLE        
             .rop_req_if     (per_core_rop_req_if[i]),
