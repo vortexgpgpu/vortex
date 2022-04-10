@@ -42,10 +42,10 @@ module VX_csr_unit #(
     wire csr_we_s1;
     wire [`CSR_ADDR_BITS-1:0] csr_addr_s1;    
     wire [`NUM_THREADS-1:0][31:0] csr_read_data;
+    
+    wire write_enable;
     reg [`NUM_THREADS-1:0][31:0] csr_write_data_s0, csr_write_data_s1;
-
-    wire write_enable = csr_commit_if.valid && csr_we_s1;
-
+    
     wire [`NUM_THREADS-1:0][31:0] csr_req_data = csr_req_if.use_imm ? {`NUM_THREADS{32'(csr_req_if.imm)}} : csr_req_if.rs1_data;
 
     VX_csr_data #(
@@ -133,25 +133,29 @@ module VX_csr_unit #(
     wire stall_in = 0;
 `endif
 
-    wire csr_req_valid = csr_req_if.valid && !stall_in;  
+    wire csr_rsp_valid = csr_req_if.valid && ~stall_in;  
+    wire csr_rsp_ready;
 
-    wire stall_out = ~csr_commit_if.ready && csr_commit_if.valid;
-
-    VX_pipe_register #(
-        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + 2 * (`NUM_THREADS * 32)),
-        .RESETW (1)
-    ) pipe_reg (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (!stall_out),
-        .data_in  ({csr_req_valid,       csr_req_if.uuid,    csr_req_if.wid,    csr_req_if.tmask,    csr_req_if.PC,    csr_req_if.rd,    csr_req_if.wb,    csr_we_s0, csr_req_if.addr, csr_read_data_s0,   csr_write_data_s0}),
-        .data_out ({csr_commit_if.valid, csr_commit_if.uuid, csr_commit_if.wid, csr_commit_if.tmask, csr_commit_if.PC, csr_commit_if.rd, csr_commit_if.wb, csr_we_s1, csr_addr_s1,     csr_commit_if.data, csr_write_data_s1})
+    VX_skid_buffer #(
+        .DATAW   (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + 2 * (`NUM_THREADS * 32)),
+        .OUT_REG (1)
+    ) rsp_sbuf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (csr_rsp_valid),
+        .ready_in  (csr_rsp_ready),
+        .data_in   ({csr_req_if.uuid,    csr_req_if.wid,    csr_req_if.tmask,    csr_req_if.PC,    csr_req_if.rd,    csr_req_if.wb,    csr_we_s0, csr_req_if.addr, csr_read_data_s0,   csr_write_data_s0}),
+        .data_out  ({csr_commit_if.uuid, csr_commit_if.wid, csr_commit_if.tmask, csr_commit_if.PC, csr_commit_if.rd, csr_commit_if.wb, csr_we_s1, csr_addr_s1,     csr_commit_if.data, csr_write_data_s1}),
+        .valid_out (csr_commit_if.valid),
+        .ready_out (csr_commit_if.ready)
     );
+
+    assign write_enable = csr_commit_if.valid && csr_we_s1;
 
     assign csr_commit_if.eop = 1'b1;
 
     // can accept new request?
-    assign csr_req_if.ready = ~(stall_out || stall_in);
+    assign csr_req_if.ready = csr_rsp_ready && ~stall_in;
 
     // pending request
     reg [`NUM_WARPS-1:0] req_pending_r;
