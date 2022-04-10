@@ -142,6 +142,12 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   uint64_t tex_mem_reads = 0;
   uint64_t tex_mem_lat = 0;
 #endif
+#ifdef EXT_ROP_ENABLE
+  uint64_t rop_mem_reads = 0;
+  uint64_t rop_mem_writes = 0;
+  uint64_t rop_mem_lat = 0;
+  uint64_t rop_inactive_cycles = 0;
+#endif
 #endif     
 
   uint64_t num_cores;
@@ -293,6 +299,12 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     if (num_cores > 1) fprintf(stream, "PERF: core%d: tex memory latency=%d cycles\n", core_id, tex_avg_lat);
     tex_mem_lat += tex_lat_per_core;
   #endif
+  #ifdef EXT_ROP_ENABLE
+    rop_mem_reads  = get_csr_64(staging_ptr, CSR_MPM_ROP_READS);
+    rop_mem_writes = get_csr_64(staging_ptr, CSR_MPM_ROP_WRITES);
+    rop_mem_lat    = get_csr_64(staging_ptr, CSR_MPM_ROP_LAT);
+    rop_inactive_cycles = get_csr_64(staging_ptr, CSR_MPM_ROP_INACTIVE_CYC);
+  #endif
   #endif
   }  
   
@@ -333,6 +345,12 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   int tex_avg_lat = (int)(double(tex_mem_lat) / double(tex_mem_reads));
   fprintf(stream, "PERF: tex memory reads=%ld\n", tex_mem_reads);
   fprintf(stream, "PERF: tex memory latency=%d cycles\n", tex_avg_lat);
+#endif
+#ifdef EXT_ROP_ENABLE
+  fprintf(stream, "PERF: rop memory reads=%ld\n", rop_mem_reads);
+  fprintf(stream, "PERF: rop memory writes=%ld\n", rop_mem_writes);
+  fprintf(stream, "PERF: rop memory latency=%ld\n", rop_mem_lat);
+  fprintf(stream, "PERF: rop inactive cycles=%ld\n", rop_inactive_cycles);
 #endif
 #endif
 
