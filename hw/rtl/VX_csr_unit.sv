@@ -27,6 +27,9 @@ module VX_csr_unit #(
 `endif
 `ifdef EXT_ROP_ENABLE
     VX_gpu_csr_if.master        rop_csr_if,
+`ifdef PERF_ENABLE
+    VX_rop_perf_if.slave        rop_perf_if,
+`endif
 `endif
 
     VX_cmt_to_csr_if.slave      cmt_to_csr_if,
@@ -79,6 +82,9 @@ module VX_csr_unit #(
     `endif
     `ifdef EXT_ROP_ENABLE
         .rop_csr_if     (rop_csr_if),
+    `ifdef PERF_ENABLE
+        .rop_perf_if    (rop_perf_if),
+    `endif
     `endif
 
         .read_enable    (csr_req_if.valid),

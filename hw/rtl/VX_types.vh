@@ -118,6 +118,16 @@
 `define CSR_MPM_RAS_LAT             12'hB01     // raster latency
 `define CSR_MPM_RAS_LAT_H           12'hB81
 
+// PERF: render output
+`define CSR_MPM_ROP_READS           12'hB00     // rop memory reads
+`define CSR_MPM_ROP_READS_H         12'hB80
+`define CSR_MPM_ROP_WRITES          12'hB01     // rop memory writes
+`define CSR_MPM_ROP_WRITES_H        12'hB81
+`define CSR_MPM_ROP_LAT             12'hB02     // rop memory latency
+`define CSR_MPM_ROP_LAT_H           12'hB82
+`define CSR_MPM_ROP_INACTIVE_CYC    12'hB03     // rop inactive cycles
+`define CSR_MPM_ROP_INACTIVE_CYC_H  12'hB83
+
 // Machine Information Registers
 `define CSR_MVENDORID               12'hF11
 `define CSR_MARCHID                 12'hF12
