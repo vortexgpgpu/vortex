@@ -284,7 +284,7 @@ module VX_gpu_unit #(
     VX_stream_mux #(
         .NUM_REQS (RSP_MUX_SIZE),
         .DATAW    (RSP_MUX_DATAW),
-        .BUFFERED (2),
+        .BUFFERED (1),
         .ARBITER  ("R")
     ) rsp_mux (
         .clk       (clk),

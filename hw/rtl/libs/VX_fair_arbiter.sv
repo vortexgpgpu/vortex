@@ -28,9 +28,9 @@ module VX_fair_arbiter #(
 
         reg [NUM_REQS-1:0] buffer;
 
-        wire [NUM_REQS-1:0] buffer_qual = buffer & requests;
-        wire [NUM_REQS-1:0] requests_qual = (| buffer_qual) ? buffer_qual : requests;
-        wire [NUM_REQS-1:0] buffer_n = requests_qual & ~grant_onehot;
+        wire [NUM_REQS-1:0] buffer_qual   = buffer & requests;
+        wire [NUM_REQS-1:0] requests_qual = (| buffer) ? buffer_qual : requests;
+        wire [NUM_REQS-1:0] buffer_n      = requests_qual & ~grant_onehot;
 
         always @(posedge clk) begin
             if (reset) begin
@@ -50,10 +50,9 @@ module VX_fair_arbiter #(
             .requests     (requests_qual), 
             .grant_index  (grant_index),
             .grant_onehot (grant_onehot),
-            `UNUSED_PIN (grant_valid)
+            .grant_valid  (grant_valid)
         );
 
-        assign grant_valid = (| requests);
     end
     
 endmodule

@@ -39,3 +39,12 @@
 
 /top64/*
 !/top64/Makefile
+
+/test/*
+!/test/Makefile
+
+/texunit/*
+!/texunit/Makefile
+
+/vortex-gfx/*
+!/vortex-gfx/Makefile

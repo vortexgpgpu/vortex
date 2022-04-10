@@ -42,7 +42,7 @@ module VX_writeback #(
         .NUM_REQS (NUM_RSPS),
         .DATAW    (DATAW),
         .BUFFERED (1),
-        .ARBITER  ("R")
+        .ARBITER  ("F")
     ) rsp_mux (
         .clk       (clk),
         .reset     (reset),

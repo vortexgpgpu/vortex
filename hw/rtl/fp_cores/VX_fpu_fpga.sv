@@ -195,7 +195,7 @@ module VX_fpu_fpga #(
     VX_stream_mux #(
         .NUM_REQS (NUM_FPC),
         .DATAW    (RSP_MUX_DATAW),
-        .BUFFERED (2),
+        .BUFFERED (1),
         .ARBITER  ("R")
     ) rsp_mux (
         .clk       (clk),

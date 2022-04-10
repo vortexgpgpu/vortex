@@ -538,8 +538,8 @@ VX_mem_mux #(
   .ADDR_WIDTH     (LMEM_ADDR_WIDTH),
   .TAG_IN_WIDTH   (AVS_REQ_TAGW),
   .ARBITER        ("P"),
-  .BUFFERED_REQ   (2),
-  .BUFFERED_RSP   (2)
+  .BUFFERED_REQ   (1),
+  .BUFFERED_RSP   (1)
 ) mem_mux (
   .clk        (clk),
   .reset      (mem_arb_reset),
