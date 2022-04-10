@@ -199,7 +199,7 @@ module VX_alu_unit #(
     VX_stream_mux #(
         .NUM_REQS (RSP_MUX_SIZE),
         .DATAW    (RSP_MUX_DATAW),
-        .BUFFERED (1),
+        .BUFFERED (2),
         .ARBITER  ("R")
     ) rsp_mux (
         .clk       (clk),
