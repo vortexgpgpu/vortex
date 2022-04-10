@@ -39,6 +39,7 @@ module VX_raster_unit #(
     `STATIC_ASSERT(RASTER_TILE_FIFO_DEPTH >= (RASTER_TILE_SIZE*RASTER_TILE_SIZE)/(
         RASTER_BLOCK_SIZE*RASTER_BLOCK_SIZE) + 1, ("must be 0 or power of 2!"))
 
+    localparam MUL_LATENCY       = 3;
     localparam RASTER_SLICE_BITS = `LOG2UP(NUM_SLICES);
 
     raster_dcrs_t raster_dcrs;
@@ -112,13 +113,44 @@ module VX_raster_unit #(
         .extents(extents)
     );
 
-    VX_raster_edge_functions raster_edge_function (
-        // .clk(clk),
+    VX_raster_edge_functions #(
+        .MUL_LATENCY(MUL_LATENCY)
+    ) raster_edge_function (
+        .clk(clk),
         .x_loc(x_loc),
         .y_loc(y_loc),
         .edges(edges),
         .edge_func_val(edge_func_val)
     );
+
+    logic slice_valid;
+    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]              slice_pid;
+    logic [`RASTER_DIM_BITS-1:0]                         slice_x_loc, slice_y_loc;
+    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]              slice_edges[2:0][2:0];
+    logic [RASTER_SLICE_BITS-1:0]                       temp_slice_index;
+    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] slice_extents [2:0];
+    VX_shift_register #(
+        .DATAW  (1 +  2*`RASTER_DIM_BITS + `RASTER_PRIMITIVE_DATA_BITS +
+            RASTER_SLICE_BITS + 3*`RASTER_PRIMITIVE_DATA_BITS + 9*`RASTER_PRIMITIVE_DATA_BITS),
+        .DEPTH  (MUL_LATENCY),
+        .RESETW (1)
+    ) mul_shift_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  ({mem_valid, x_loc, y_loc, pid, slice_index,
+            extents[0], extents[1], extents[2],
+            edges[0][0], edges[0][1], edges[0][2],
+            edges[1][0], edges[1][1], edges[1][2],
+            edges[2][0], edges[2][1], edges[2][2]}),
+        .data_out ({slice_valid, slice_x_loc, slice_y_loc, slice_pid, temp_slice_index,
+            slice_extents[0], slice_extents[1], slice_extents[2],
+            slice_edges[0][0], slice_edges[0][1], slice_edges[0][2],
+            slice_edges[1][0], slice_edges[1][1], slice_edges[1][2],
+            slice_edges[2][0], slice_edges[2][1], slice_edges[2][2]})
+    );
+
+
     /* verilator lint_off UNUSED */
     logic [RASTER_QUAD_OUTPUT_RATE-1:0] quad_valid [NUM_SLICES-1:0];
     /* verilator lint_on UNUSED */
@@ -145,13 +177,13 @@ module VX_raster_unit #(
             // Input valid logic
             // 1. If memory data is valid
             // 2. If memory arbiter decides to assign data to this slice
-            .input_valid(mem_valid && (i == slice_index)),
-            .x_loc(x_loc),
-            .y_loc(y_loc),
-            .edges(edges),
-            .pid(pid),
+            .input_valid(slice_valid && (i == temp_slice_index)),
+            .x_loc(slice_x_loc),
+            .y_loc(slice_y_loc),
+            .edges(slice_edges),
+            .pid(slice_pid),
             .edge_func_val(edge_func_val),
-            .extents(extents),
+            .extents(slice_extents),
             // Pop quad only if the quad receiver outside the raster is ready
             .pop_quad(quad_pop[i] && arbiter_valid && raster_req_if.ready),
             .ready(raster_slice_ready[i]),
