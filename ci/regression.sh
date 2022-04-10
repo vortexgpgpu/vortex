@@ -32,6 +32,7 @@ CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-
 #CONFIGS="-DEXT_RASTER_ENABLE -DRCACHE_DISABLE " ./ci/blackbox.sh --driver=rtlsim --app=raster --args="-ttriangle.cgltrace -rtriangle_ref_8.png -w8 -h8"
 CONFIGS="-DEXT_ROP_ENABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png"
 CONFIGS="-DDCACHE_DISABLE -DICACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=demo
+CONFIGS="-DL1_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=demo --l2cache
 
 echo "smoke tests done!"
 }

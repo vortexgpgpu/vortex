@@ -32,8 +32,6 @@ module Vortex (
     input wire                              start,
     output wire                             busy
 );
-    `STATIC_ASSERT((`L3_ENABLED == 0 || `NUM_CLUSTERS > 1), ("invalid parameter"))
-
     VX_mem_req_if #(
         .DATA_WIDTH (`VX_MEM_DATA_WIDTH),
         .ADDR_WIDTH (`VX_MEM_ADDR_WIDTH),

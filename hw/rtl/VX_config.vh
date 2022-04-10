@@ -37,12 +37,22 @@
     `define L3_ENABLED   0
 `endif
 
+`ifdef L1_DISABLE
+    `define ICACHE_DISABLE
+    `define DCACHE_DISABLE
+    `define TCACHE_DISABLE
+`endif
+
 `ifndef MEM_BLOCK_SIZE
 `define MEM_BLOCK_SIZE 64
 `endif
 
 `ifndef L1_BLOCK_SIZE
+`ifdef L1_DISABLE
+`define L1_BLOCK_SIZE ((`L2_ENABLED || `L3_ENABLED) ? 4 : `MEM_BLOCK_SIZE)
+`else
 `define L1_BLOCK_SIZE ((`L2_ENABLED || `L3_ENABLED) ? 16 : `MEM_BLOCK_SIZE)
+`endif
 `endif
 
 `ifndef STARTUP_ADDR

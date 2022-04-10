@@ -29,8 +29,7 @@ module VX_cluster #(
 
     // Status
     output wire             busy
-); 
-    `STATIC_ASSERT((`L2_ENABLED == 0 || `NUM_CORES > 1), ("invalid parameter"))
+);
 
 `ifdef EXT_RASTER_ENABLE
 
