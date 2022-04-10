@@ -117,7 +117,7 @@ module VX_cache #(
 
     VX_skid_buffer #(
         .DATAW    (1+CACHE_LINE_SIZE+`MEM_ADDR_WIDTH+`CACHE_LINE_WIDTH+MEM_TAG_WIDTH),
-        .PASSTHRU (1 == NUM_BANKS)
+        .PASSTHRU (1 == NUM_BANKS && (!PASSTHRU || `WORD_SEL_BITS == 0))
     ) mem_req_sbuf (
         .clk       (clk),
         .reset     (reset),
@@ -140,7 +140,7 @@ module VX_cache #(
     for (genvar i = 0; i < NUM_REQS; i++) begin
         VX_skid_buffer #(
             .DATAW    (`WORD_WIDTH + CORE_TAG_WIDTH),
-            .PASSTHRU (1 == NUM_BANKS)
+            .PASSTHRU (1 == NUM_BANKS && (!PASSTHRU || `WORD_SEL_BITS == 0))
         ) core_rsp_sbuf (
             .clk       (clk),
             .reset     (reset),
