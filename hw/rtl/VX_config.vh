@@ -387,9 +387,19 @@
 
 // Tcache Configurable Knobs //////////////////////////////////////////////////
 
+// Enable/disable cache
+`ifndef TCACHE_DISABLE
+`define TCACHE_ENABLE
+`endif
+`ifdef TCACHE_ENABLE
+    `define TCACHE_ENABLED 1
+`else
+    `define TCACHE_ENABLED 0
+`endif
+
 // Size of cache in bytes
 `ifndef TCACHE_SIZE
-`define TCACHE_SIZE 4096
+`define TCACHE_SIZE 8192
 `endif
 
 // Number of banks

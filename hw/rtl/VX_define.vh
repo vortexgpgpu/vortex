@@ -282,26 +282,65 @@
 // Memory request tag bits
 `define DCACHE_SMEM_TAG_SEL_BITS (`DCACHE_TAG_SEL_BITS - `SM_ENABLED)
 `define DCACHE_SMEM_TAG_WIDTH   (`UUID_BITS + `DCACHE_SMEM_TAG_SEL_BITS)
-`ifdef EXT_TEX_ENABLE
-`define DCACHE_TEX_TAG_SEL_BITS `MAX(`DCACHE_SMEM_TAG_SEL_BITS, `TCACHE_TAG_SEL_BITS)
-`define DCACHE_TEX_TAG_WIDTH    (`UUID_BITS + `DCACHE_TEX_TAG_SEL_BITS)
-`else 
-`define DCACHE_TEX_TAG_SEL_BITS `DCACHE_SMEM_TAG_SEL_BITS
-`define DCACHE_TEX_TAG_WIDTH    `DCACHE_SMEM_TAG_WIDTH
-`endif
 `define _D_MEM_TAG_WIDTH        (`LOG2UP(`DCACHE_MSHR_SIZE) + `CLOG2(`DCACHE_NUM_BANKS) + `NC_TAG_BITS)
 `define _D_MEM_ADDR_RATIO_W     `CLOG2(`DCACHE_LINE_SIZE / `DCACHE_WORD_SIZE)
-`define _D_NC_MEM_TAG_WIDTH     (`CLOG2(`DCACHE_NUM_REQS) + `_D_MEM_ADDR_RATIO_W + (`DCACHE_TEX_TAG_WIDTH + `EXT_TEX_ENABLED))
+`define _D_NC_MEM_TAG_WIDTH     (`CLOG2(`DCACHE_NUM_REQS) + `_D_MEM_ADDR_RATIO_W + `DCACHE_SMEM_TAG_WIDTH)
 `define DCACHE_MEM_TAG_WIDTH    `MAX(`_D_MEM_TAG_WIDTH, `_D_NC_MEM_TAG_WIDTH)
-
-// Merged D-cache/I-cache memory tag
-`define L1_MEM_RGB_TAG_WIDTH    `MAX(`ICACHE_MEM_TAG_WIDTH, `DCACHE_MEM_TAG_WIDTH)
-`define L1_MEM_TAG_WIDTH        (`L1_MEM_RGB_TAG_WIDTH + `CLOG2(2))
 
 ////////////////////////// SM Configurable Knobs //////////////////////////////
 
 // Cache ID
 `define SMEM_ID                 $sformatf("core%0d-smem", CORE_ID)
+
+////////////////////////// Tcache Configurable Knobs //////////////////////////
+
+`define TCACHE_ID               $sformatf("core%0d-tcache", CORE_ID)
+
+// Word size in bytes
+`define TCACHE_WORD_SIZE        4
+`define TCACHE_ADDR_WIDTH       (32 - `CLOG2(`TCACHE_WORD_SIZE))
+
+// Block size in bytes
+`define TCACHE_LINE_SIZE        `L1_BLOCK_SIZE
+
+// Response tag select bits       
+`define TCACHE_TAG_SEL_BITS      2
+
+// Core request tag bits
+`define TCACHE_TAG_WIDTH        (`UUID_BITS + `TCACHE_TAG_SEL_BITS)
+
+// Memory request data bits
+`define TCACHE_MEM_DATA_WIDTH   (`TCACHE_LINE_SIZE * 8)
+
+// Memory request address bits
+`define TCACHE_MEM_ADDR_WIDTH   (32 - `CLOG2(`TCACHE_LINE_SIZE))
+
+// Memory byte enable bits
+`define TCACHE_MEM_BYTEEN_WIDTH `TCACHE_LINE_SIZE
+
+// Input request size
+`define TCACHE_NUM_REQS         `NUM_THREADS
+
+// Memory request tag bits
+`define _T_MEM_TAG_WIDTH        (`LOG2UP(`TCACHE_MSHR_SIZE) + `CLOG2(`TCACHE_NUM_BANKS))
+`ifdef TCACHE_ENABLE
+`define TCACHE_MEM_TAG_WIDTH    `_T_MEM_TAG_WIDTH
+`else
+`define _T_MEM_ADDR_RATIO_W     `CLOG2(`TCACHE_LINE_SIZE / `TCACHE_WORD_SIZE)
+`define _T_NC_MEM_TAG_WIDTH     (`CLOG2(`TCACHE_NUM_REQS) + `_T_MEM_ADDR_RATIO_W + `TCACHE_TAG_WIDTH)
+`define TCACHE_MEM_TAG_WIDTH    `MAX(`_T_MEM_TAG_WIDTH,  `_T_NC_MEM_TAG_WIDTH)
+`endif
+
+///////////////////////////////////////////////////////////////////////////////
+
+`ifdef EXT_TEX_ENABLE
+`define _L1_MEM_TAG_IN_WIDTH    `MAX(`ICACHE_MEM_TAG_WIDTH, `DCACHE_MEM_TAG_WIDTH)
+`define L1_MEM_TAG_IN_WIDTH     `MAX(`_L1_MEM_TAG_IN_WIDTH, `TCACHE_MEM_TAG_WIDTH)
+`define L1_MEM_TAG_WIDTH        (`L1_MEM_TAG_IN_WIDTH + `CLOG2(3))
+`else
+`define L1_MEM_TAG_IN_WIDTH     `MAX(`ICACHE_MEM_TAG_WIDTH, `DCACHE_MEM_TAG_WIDTH)
+`define L1_MEM_TAG_WIDTH        (`L1_MEM_TAG_IN_WIDTH + `CLOG2(2))
+`endif
 
 ////////////////////////// L2cache Configurable Knobs /////////////////////////
 
@@ -365,36 +404,6 @@
 `define _L3_NC_MEM_TAG_WIDTH    (`CLOG2(`L3_NUM_REQS) + `_L3_MEM_ADDR_RATIO_W + `L2_MEM_TAG_WIDTH)
 `define _L3X_MEM_TAG_WIDTH      `MAX(`_L3_MEM_TAG_WIDTH, `_L3_NC_MEM_TAG_WIDTH)
 `define L3_MEM_TAG_WIDTH        (`L3_ENABLED ? `_L3X_MEM_TAG_WIDTH : (`L2_MEM_TAG_WIDTH + `CLOG2(`L3_NUM_REQS)))
-
-////////////////////////// Tcache Configurable Knobs //////////////////////////
-
-`define TCACHE_ID               $sformatf("core%0d-tcache", CORE_ID)
-
-// Word size in bytes
-`define TCACHE_WORD_SIZE        4
-`define TCACHE_ADDR_WIDTH       (32 - `CLOG2(`TCACHE_WORD_SIZE))
-
-// Block size in bytes
-`define TCACHE_LINE_SIZE        `L1_CACHE_LINE_SIZE
-
-// Response tag select bits       
-`define TCACHE_TAG_SEL_BITS      2
-
-// Core request tag bits
-`define TCACHE_TAG_WIDTH        (`UUID_BITS + `TCACHE_TAG_SEL_BITS)
-
-// Input request size
-`define TCACHE_NUM_REQS         `NUM_THREADS
-
-// Memory request tag bits
-`define _T_MEM_TAG_WIDTH        (`LOG2UP(`TCACHE_MSHR_SIZE) + `CLOG2(`TCACHE_NUM_BANKS))
-`ifdef TCACHE_ENABLE
-`define TCACHE_MEM_TAG_WIDTH    `_T_MEM_TAG_WIDTH
-`else
-`define _T_MEM_ADDR_RATIO_W     `CLOG2(`TCACHE_LINE_SIZE / `TCACHE_WORD_SIZE)
-`define _T_NC_MEM_TAG_WIDTH     (`CLOG2(`TCACHE_NUM_REQS) + `_T_MEM_ADDR_RATIO_W + `TCACHE_TAG_WIDTH)
-`define TCACHE_MEM_TAG_WIDTH    `MAX(`_T_MEM_TAG_WIDTH,  `_T_NC_MEM_TAG_WIDTH)
-`endif
 
 ////////////////////////// Rcache Configurable Knobs //////////////////////////
 
