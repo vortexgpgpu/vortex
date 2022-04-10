@@ -267,4 +267,42 @@ module VX_raster_unit #(
         .raster_req_if(raster_req_if)
     );
 
+`ifdef PERF_ENABLE
+    wire [$clog2(`RCACHE_NUM_REQS+1)-1:0] perf_mem_req_per_cycle;
+    wire [$clog2(`RCACHE_NUM_REQS+1)-1:0] perf_mem_rsp_per_cycle;
+
+    wire [`RCACHE_NUM_REQS-1:0] perf_mem_req_per_req = cache_req_if.valid & cache_req_if.ready;
+    wire [`RCACHE_NUM_REQS-1:0] perf_mem_rsp_per_req = cache_rsp_if.valid & cache_rsp_if.ready;
+
+    `POP_COUNT(perf_mem_req_per_cycle, perf_mem_req_per_req);
+    `POP_COUNT(perf_mem_rsp_per_cycle, perf_mem_rsp_per_req);
+
+    reg [`PERF_CTR_BITS-1:0] perf_pending_reads;   
+    wire [$clog2(`RCACHE_NUM_REQS+1)+1-1:0] perf_pending_reads_cycle = perf_mem_req_per_cycle - perf_mem_rsp_per_cycle;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_pending_reads <= 0;
+        end else begin
+            perf_pending_reads <= perf_pending_reads + `PERF_CTR_BITS'($signed(perf_pending_reads_cycle));
+        end
+    end
+
+    reg [`PERF_CTR_BITS-1:0] perf_mem_reads;
+    reg [`PERF_CTR_BITS-1:0] perf_mem_latency;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_mem_reads   <= 0;
+            perf_mem_latency <= 0;
+        end else begin
+            perf_mem_reads   <= perf_mem_reads + `PERF_CTR_BITS'(perf_mem_req_per_cycle);
+            perf_mem_latency <= perf_mem_latency + `PERF_CTR_BITS'(perf_pending_reads);
+        end
+    end
+
+    assign raster_perf_if.mem_reads   = perf_mem_reads;
+    assign raster_perf_if.mem_latency = perf_mem_latency;
+`endif 
+
 endmodule

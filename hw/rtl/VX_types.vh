@@ -92,6 +92,11 @@
 `define CSR_MPM_TEX_READS_H         12'hB9B
 `define CSR_MPM_TEX_LAT             12'hB1C     // texture latency
 `define CSR_MPM_TEX_LAT_H           12'hB9C
+// PERF: rasterunit
+`define CSR_MPM_RAS_READS           12'hB1E     // raster accesses
+`define CSR_MPM_RAS_READS_H         12'hB9E
+`define CSR_MPM_RAS_LAT             12'hB1F     // raster latency
+`define CSR_MPM_RAS_LAT_H           12'hB9F
 
 // Machine Information Registers
 `define CSR_MVENDORID               12'hF11
