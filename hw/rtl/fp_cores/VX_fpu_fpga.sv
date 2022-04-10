@@ -34,6 +34,8 @@ module VX_fpu_fpga #(
     localparam FPU_NCP  = 4;
     localparam NUM_FPC  = 5;
     localparam FPC_BITS = `LOG2UP(NUM_FPC);
+
+    localparam RSP_MUX_DATAW = (`NUM_THREADS * 32) + 1 + (`NUM_THREADS * $bits(fflags_t)) + TAGW;
     
     wire [NUM_FPC-1:0] per_core_ready_in;
     wire [NUM_FPC-1:0][`NUM_THREADS-1:0][31:0] per_core_result;
@@ -67,7 +69,7 @@ module VX_fpu_fpga #(
             `INST_FPU_CVTWUS: begin core_select = FPU_CVT; end
             `INST_FPU_CVTSW:  begin core_select = FPU_CVT; is_itof = 1; is_signed = 1; end
             `INST_FPU_CVTSWU: begin core_select = FPU_CVT; is_itof = 1; end
-            default:     begin core_select = FPU_NCP; end
+            default:          begin core_select = FPU_NCP; end
         endcase
     end
 
@@ -182,35 +184,30 @@ module VX_fpu_fpga #(
         .valid_out  (per_core_valid_out[FPU_NCP])
     );
 
-    reg has_fflags_n;
-    fflags_t [`NUM_THREADS-1:0] fflags_n;
-    reg [`NUM_THREADS-1:0][31:0] result_n;
-    reg [TAGW-1:0] tag_out_n;
+    wire [NUM_FPC-1:0][RSP_MUX_DATAW-1:0] per_core_data_out;
 
-    always @(*) begin
-        per_core_ready_out = 0;
-        has_fflags_n       = 'x;
-        fflags_n           = 'x;
-        result_n           = 'x;
-        tag_out_n          = 'x;
-        for (integer i = 0; i < NUM_FPC; i++) begin
-            if (per_core_valid_out[i]) begin                
-                has_fflags_n = per_core_has_fflags[i];
-                fflags_n     = per_core_fflags[i];
-                result_n     = per_core_result[i];
-                tag_out_n    = per_core_tag_out[i];
-                per_core_ready_out[i] = ready_out;
-                break;
-            end
-        end
+    for (genvar i = 0; i < NUM_FPC; ++i) begin
+        assign per_core_data_out[i] = {per_core_result[i], per_core_has_fflags[i], per_core_fflags[i], per_core_tag_out[i]};
     end
 
-    assign valid_out  = (| per_core_valid_out);
-    assign has_fflags = has_fflags_n;
-    assign tag_out    = tag_out_n;
-    assign result     = result_n;    
-    assign fflags     = fflags_n;
+    VX_stream_mux #(
+        .NUM_REQS (NUM_FPC),
+        .DATAW    (RSP_MUX_DATAW),
+        .BUFFERED (1),
+        .ARBITER  ("R")
+    ) rsp_mux (
+        .clk       (clk),
+        .reset     (reset),
+        `UNUSED_PIN (sel_in),
+        .valid_in  (per_core_valid_out),
+        .data_in   (per_core_data_out),
+        .ready_in  (per_core_ready_out),
+        .valid_out (valid_out),
+        .data_out  ({result, has_fflags, fflags, tag_out}),
+        .ready_out (ready_out)
+    );
 
+    // can accept new request?
     assign ready_in = per_core_ready_in[core_select];
 
 endmodule

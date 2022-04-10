@@ -15,6 +15,9 @@ module VX_alu_unit #(
 );   
 
     `UNUSED_PARAM (CORE_ID)
+
+    localparam RSP_MUX_DATAW = `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + `NUM_THREADS * 32;
+    localparam RSP_MUX_SIZE  = 1 + `EXT_M_ENABLED;
     
     reg [`NUM_THREADS-1:0][31:0]  alu_result;    
     wire [`NUM_THREADS-1:0][31:0] add_result;   
@@ -182,41 +185,48 @@ module VX_alu_unit #(
 
     wire is_mul_op = `INST_ALU_IS_MUL(alu_req_if.op_mod);
 
-    assign ready_in = is_mul_op ? mul_ready_in : alu_ready_in;
-
     assign alu_valid_in = alu_req_if.valid && ~is_mul_op;
     assign mul_valid_in = alu_req_if.valid && is_mul_op;
-
-    assign alu_commit_if.valid = alu_valid_out || mul_valid_out;
-    assign alu_commit_if.uuid  = alu_valid_out ? alu_uuid  : mul_uuid;
-    assign alu_commit_if.wid   = alu_valid_out ? alu_wid   : mul_wid;
-    assign alu_commit_if.tmask = alu_valid_out ? alu_tmask : mul_tmask;
-    assign alu_commit_if.PC    = alu_valid_out ? alu_PC    : mul_PC;
-    assign alu_commit_if.rd    = alu_valid_out ? alu_rd    : mul_rd;
-    assign alu_commit_if.wb    = alu_valid_out ? alu_wb    : mul_wb;
-    assign alu_commit_if.data  = alu_valid_out ? alu_data  : mul_data;
-
-    assign alu_ready_out = alu_commit_if.ready;
-    assign mul_ready_out = alu_commit_if.ready & ~alu_valid_out; // ALU takes priority
+    assign ready_in     = is_mul_op ? mul_ready_in : alu_ready_in;
 
 `else 
 
-    assign ready_in = alu_ready_in;
-
     assign alu_valid_in = alu_req_if.valid;
-
-    assign alu_commit_if.valid = alu_valid_out;
-    assign alu_commit_if.uuid  = alu_uuid;
-    assign alu_commit_if.wid   = alu_wid;
-    assign alu_commit_if.tmask = alu_tmask;
-    assign alu_commit_if.PC    = alu_PC; 
-    assign alu_commit_if.rd    = alu_rd;    
-    assign alu_commit_if.wb    = alu_wb;
-    assign alu_commit_if.data  = alu_data;
-
-    assign alu_ready_out = alu_commit_if.ready;
+    assign ready_in     = alu_ready_in;
 
 `endif
+
+    VX_stream_mux #(
+        .NUM_REQS (RSP_MUX_SIZE),
+        .DATAW    (RSP_MUX_DATAW),
+        .BUFFERED (1),
+        .ARBITER  ("R")
+    ) rsp_mux (
+        .clk       (clk),
+        .reset     (reset),
+        `UNUSED_PIN (sel_in),
+        .valid_in  ({
+            alu_valid_out
+        `ifdef EXT_M_ENABLE
+            , mul_valid_out
+        `endif
+        }),
+        .data_in   ({
+            {alu_uuid, alu_wid, alu_tmask, alu_PC, alu_rd, alu_wb, alu_data}
+        `ifdef EXT_M_ENABLE
+            , {mul_uuid, mul_wid, mul_tmask, mul_PC, mul_rd, mul_wb, mul_data}
+        `endif
+        }),
+        .ready_in  ({
+            alu_ready_out
+        `ifdef EXT_M_ENABLE
+            , mul_ready_out
+        `endif
+        }),
+        .valid_out (alu_commit_if.valid),
+        .data_out  ({alu_commit_if.uuid, alu_commit_if.wid, alu_commit_if.tmask, alu_commit_if.PC, alu_commit_if.rd, alu_commit_if.wb, alu_commit_if.data}),
+        .ready_out (alu_commit_if.ready)
+    );
 
     assign alu_commit_if.eop = 1'b1;
 
