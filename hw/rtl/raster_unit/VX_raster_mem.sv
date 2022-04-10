@@ -40,7 +40,7 @@ module VX_raster_mem #(
     VX_cache_req_if.master cache_req_if,
     VX_cache_rsp_if.slave  cache_rsp_if
 );
-
+    localparam MUL_LATENCY       = 3;
     localparam NUM_REQS          = 9;
     localparam RASTER_TILE_BITS  = $clog2(RASTER_TILE_SIZE);
 
@@ -76,12 +76,14 @@ module VX_raster_mem #(
     logic fetch_fsm_complete;
 
     // Memory interactions
-    logic mem_req_valid, mem_req_ready, mem_rsp_valid;
+    logic mem_req_valid, mem_req_ready, mem_rsp_valid, temp_mem_rsp_valid;
     logic [8:0][`RASTER_DCR_DATA_BITS-1:0]       mem_req_addr;
     logic [8:0][`RASTER_PRIMITIVE_DATA_BITS-1:0] mem_rsp_data;
+    logic [8:0][`RASTER_PRIMITIVE_DATA_BITS-1:0] prim_mem_rsp_data;
+    logic [8:0][`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_mem_rsp_data;
     //localparam TAG_MAX_BIT_INDEX = RASTER_RS_INDEX_BITS-1 + 2;
     localparam TAG_MAX_BIT_INDEX = 2;
-    logic [TAG_MAX_BIT_INDEX-1:0]                  mem_rsp_tag; // size increased by 1 bit to account for the mem_tag_type
+    logic [TAG_MAX_BIT_INDEX-1:0]                  mem_rsp_tag, temp_mem_rsp_tag; // size increased by 1 bit to account for the mem_tag_type
     logic [1:0]                                  mem_tag_type;
     logic [8:0]                                  mem_req_mask;
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]      pid;
@@ -156,7 +158,7 @@ module VX_raster_mem #(
                     mem_req_mask <= PRIM_DATA_FETCH_MASK;
                     pid <= mem_rsp_data[0];
                     for (int i = 0; i < 9; ++i) begin
-                        mem_req_addr[i] <= temp_pbuf_addr + mem_rsp_data[0] * temp_pbuf_stride + 4*i;
+                        mem_req_addr[i] <= prim_mem_rsp_data[i];
                     end
                 end
                 else if (mem_rsp_tag[1:0] == PRIM_DATA_FETCH) begin
@@ -228,6 +230,43 @@ module VX_raster_mem #(
         end
     end
 
+    wire [`RASTER_PRIMITIVE_DATA_BITS-1:0] mul_result_tmp;
+
+    VX_multiplier #(
+        .WIDTHA  (`RASTER_PRIMITIVE_DATA_BITS),
+        .WIDTHB  (`RASTER_PRIMITIVE_DATA_BITS),
+        .WIDTHP  (`RASTER_PRIMITIVE_DATA_BITS),
+        .SIGNED  (0),
+        .LATENCY (MUL_LATENCY)
+    ) multiplier (
+        .clk    (clk),
+        .enable (1'b1),
+        .dataa  (mem_rsp_data[0]),
+        .datab  (temp_pbuf_stride),
+        .result (mul_result_tmp)
+    );
+    for (genvar i = 0; i < 9; i++) begin
+        assign prim_mem_rsp_data[i] = temp_pbuf_addr + mul_result_tmp + 4*i;
+    end
+
+    VX_shift_register #(
+        .DATAW  (1 + TAG_MAX_BIT_INDEX + 9*`RASTER_PRIMITIVE_DATA_BITS),
+        .DEPTH  (MUL_LATENCY),
+        .RESETW (1)
+    ) mul_shift_reg (
+        .clk(clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  ({temp_mem_rsp_valid, temp_mem_rsp_tag,
+            temp_mem_rsp_data[0], temp_mem_rsp_data[1], temp_mem_rsp_data[2],
+            temp_mem_rsp_data[3], temp_mem_rsp_data[4], temp_mem_rsp_data[5],
+            temp_mem_rsp_data[6], temp_mem_rsp_data[7], temp_mem_rsp_data[8]}),
+        .data_out ({mem_rsp_valid, mem_rsp_tag,
+            mem_rsp_data[0], mem_rsp_data[1], mem_rsp_data[2],
+            mem_rsp_data[3], mem_rsp_data[4], mem_rsp_data[5],
+            mem_rsp_data[6], mem_rsp_data[7], mem_rsp_data[8]})
+    );
+
     // Priority encoder to select a free index in the RS
     VX_priority_encoder #( 
         .N(RASTER_RS_SIZE)
@@ -286,10 +325,10 @@ module VX_raster_mem #(
         .req_ready(mem_req_ready),
         
         // Output response
-        .rsp_valid(mem_rsp_valid),
+        .rsp_valid(temp_mem_rsp_valid),
         `UNUSED_PIN (rsp_mask),
-        .rsp_data(mem_rsp_data),
-        .rsp_tag(mem_rsp_tag),
+        .rsp_data(temp_mem_rsp_data),
+        .rsp_tag(temp_mem_rsp_tag),
         .rsp_ready(1'b1),
 
         .mem_req_valid(cache_req_if.valid),

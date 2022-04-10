@@ -36,18 +36,16 @@ module VX_mem_unit # (
     VX_perf_cache_if perf_icache_if(), perf_dcache_if(), perf_smem_if();
 `endif
 
-    `RESET_RELAY (icache_reset);
-    `RESET_RELAY (dcache_reset);
-    `RESET_RELAY (mem_arb_reset);    
+    ///////////////////////////////////////////////////////////////////////////
     
     VX_mem_req_if #(
-        .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
-        .ADDR_WIDTH (`DCACHE_MEM_ADDR_WIDTH),
+        .DATA_WIDTH (`ICACHE_MEM_DATA_WIDTH),
+        .ADDR_WIDTH (`ICACHE_MEM_ADDR_WIDTH),
         .TAG_WIDTH  (`ICACHE_MEM_TAG_WIDTH)
     ) icache_mem_req_if();
 
     VX_mem_rsp_if #(
-        .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
+        .DATA_WIDTH (`ICACHE_MEM_DATA_WIDTH),
         .TAG_WIDTH  (`ICACHE_MEM_TAG_WIDTH)
     ) icache_mem_rsp_if();
 
@@ -59,12 +57,14 @@ module VX_mem_unit # (
 
     VX_mem_rsp_if #(
         .DATA_WIDTH (`ICACHE_WORD_SIZE*8), 
-        .TAG_WIDTH (`ICACHE_TAG_WIDTH)
+        .TAG_WIDTH  (`ICACHE_TAG_WIDTH)
     ) icache_rsp_qual_if[`ICACHE_NUM_REQS-1:0]();
 
     for (genvar i = 0; i < `ICACHE_NUM_REQS; ++i) begin
         `CACHE_REQ_TO_MEM (icache_req_qual_if, icache_req_if, i);
     end
+
+    `RESET_RELAY (icache_reset);
 
     VX_cache #(
         .CACHE_ID       (`ICACHE_ID),
@@ -101,7 +101,7 @@ module VX_mem_unit # (
 
     for (genvar i = 0; i < `ICACHE_NUM_REQS; ++i) begin
         `CACHE_RSP_FROM_MEM (icache_rsp_if, icache_rsp_qual_if, i);
-    end   
+    end
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -127,33 +127,23 @@ module VX_mem_unit # (
         .WORD_SIZE (`DCACHE_WORD_SIZE), 
         .TAG_WIDTH (`DCACHE_SMEM_TAG_WIDTH)
     ) dcache_smem_rsp_if();
-
-    VX_cache_req_if #(
-        .NUM_REQS  (`DCACHE_NUM_REQS), 
-        .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`DCACHE_TEX_TAG_WIDTH + `EXT_TEX_ENABLED)
-    ) dcache_tex_req_if();
-
-    VX_cache_rsp_if #(
-        .NUM_REQS  (`DCACHE_NUM_REQS), 
-        .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`DCACHE_TEX_TAG_WIDTH + `EXT_TEX_ENABLED)
-    ) dcache_tex_rsp_if();
-
+    
     VX_mem_req_if #(
         .DATA_WIDTH (`DCACHE_WORD_SIZE*8), 
         .ADDR_WIDTH (`DCACHE_ADDR_WIDTH),
-        .TAG_WIDTH  (`DCACHE_TEX_TAG_WIDTH + `EXT_TEX_ENABLED)
-    ) dcache_tex_req_qual_if[`DCACHE_NUM_REQS-1:0]();
+        .TAG_WIDTH  (`DCACHE_SMEM_TAG_WIDTH)
+    ) dcache_smem_req_qual_if[`DCACHE_NUM_REQS-1:0]();
 
     VX_mem_rsp_if #(
         .DATA_WIDTH (`DCACHE_WORD_SIZE*8), 
-        .TAG_WIDTH (`DCACHE_TEX_TAG_WIDTH + `EXT_TEX_ENABLED)
-    ) dcache_tex_rsp_qual_if[`DCACHE_NUM_REQS-1:0]();
+        .TAG_WIDTH  (`DCACHE_SMEM_TAG_WIDTH)
+    ) dcache_smem_rsp_qual_if[`DCACHE_NUM_REQS-1:0]();
 
     for (genvar i = 0; i < `DCACHE_NUM_REQS; ++i) begin
-        `CACHE_REQ_TO_MEM (dcache_tex_req_qual_if, dcache_tex_req_if, i);
+        `CACHE_REQ_TO_MEM (dcache_smem_req_qual_if, dcache_smem_req_if, i);
     end
+
+    `RESET_RELAY (dcache_reset);
 
     VX_cache #(
         .CACHE_ID       (`DCACHE_ID),
@@ -171,10 +161,10 @@ module VX_mem_unit # (
         .MREQ_SIZE      (`DCACHE_MREQ_SIZE),
         .WRITE_ENABLE   (1),
         .REQ_DBG_IDW    (`UUID_BITS),
-        .CORE_TAG_WIDTH (`DCACHE_TEX_TAG_WIDTH + `EXT_TEX_ENABLED),
+        .CORE_TAG_WIDTH (`DCACHE_SMEM_TAG_WIDTH),
         .MEM_TAG_WIDTH  (`DCACHE_MEM_TAG_WIDTH),
         .NC_ENABLE      (1),
-        .NC_TAG_BIT     (0+`EXT_TEX_ENABLED),
+        .NC_TAG_BIT     (0),
         .PASSTHRU       (!`DCACHE_ENABLED)
     ) dcache (
         `SCOPE_BIND_VX_mem_unit_dcache
@@ -185,17 +175,20 @@ module VX_mem_unit # (
         
         .clk            (clk),
         .reset          (dcache_reset),        
-        .core_req_if    (dcache_tex_req_qual_if),
-        .core_rsp_if    (dcache_tex_rsp_qual_if),
+        .core_req_if    (dcache_smem_req_qual_if),
+        .core_rsp_if    (dcache_smem_rsp_qual_if),
         .mem_req_if     (dcache_mem_req_if),
         .mem_rsp_if     (dcache_mem_rsp_if)
     ); 
 
     for (genvar i = 0; i < `DCACHE_NUM_REQS; ++i) begin
-        `CACHE_RSP_FROM_MEM (dcache_tex_rsp_if, dcache_tex_rsp_qual_if, i);
+        `CACHE_RSP_FROM_MEM (dcache_smem_rsp_if, dcache_smem_rsp_qual_if, i);
     end
 
+    ///////////////////////////////////////////////////////////////////////////
+
 `ifdef SM_ENABLE
+
     VX_cache_req_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
         .WORD_SIZE (`DCACHE_WORD_SIZE), 
@@ -299,7 +292,9 @@ module VX_mem_unit # (
         .rsp_tag    (smem_rsp_if.tag),
         .rsp_ready  (smem_rsp_if.ready)
     );    
+
 `else
+
     // core to D-cache request
     for (genvar i = 0; i < `DCACHE_NUM_REQS; ++i) begin
         VX_skid_buffer #(
@@ -321,103 +316,129 @@ module VX_mem_unit # (
 
 `endif    
 
+///////////////////////////////////////////////////////////////////////////////
+
 `ifdef EXT_TEX_ENABLE
 
-    VX_cache_req_if #(
-        .NUM_REQS  (`DCACHE_NUM_REQS), 
-        .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`DCACHE_TEX_TAG_WIDTH)
-    ) dcache_tex_mux_req_if[2]();
+    VX_mem_req_if #(
+        .DATA_WIDTH (`TCACHE_MEM_DATA_WIDTH),
+        .ADDR_WIDTH (`TCACHE_MEM_ADDR_WIDTH),
+        .TAG_WIDTH  (`TCACHE_MEM_TAG_WIDTH)
+    ) tcache_mem_req_if();
 
-    VX_cache_rsp_if #(
-        .NUM_REQS  (`DCACHE_NUM_REQS), 
-        .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`DCACHE_TEX_TAG_WIDTH)
-    ) dcache_tex_mux_rsp_if[2]();
+    VX_mem_rsp_if #(
+        .DATA_WIDTH (`TCACHE_MEM_DATA_WIDTH),
+        .TAG_WIDTH  (`TCACHE_MEM_TAG_WIDTH)
+    ) tcache_mem_rsp_if();
 
-    `ASSIGN_VX_CACHE_REQ_IF_XTAG (dcache_tex_mux_req_if[0], dcache_smem_req_if);
-    for (genvar i = 0; i < `DCACHE_NUM_REQS; ++i) begin
-        assign dcache_tex_mux_req_if[0].tag[i] = `DCACHE_TEX_TAG_WIDTH'(dcache_smem_req_if.tag[i]);
+    VX_mem_req_if #(
+        .DATA_WIDTH (`TCACHE_WORD_SIZE*8), 
+        .ADDR_WIDTH (`TCACHE_ADDR_WIDTH),
+        .TAG_WIDTH  (`TCACHE_TAG_WIDTH)
+    ) tcache_req_qual_if[`TCACHE_NUM_REQS-1:0]();
+
+    VX_mem_rsp_if #(
+        .DATA_WIDTH (`TCACHE_WORD_SIZE*8), 
+        .TAG_WIDTH  (`TCACHE_TAG_WIDTH)
+    ) tcache_rsp_qual_if[`TCACHE_NUM_REQS-1:0]();
+
+    for (genvar i = 0; i < `TCACHE_NUM_REQS; ++i) begin
+        `CACHE_REQ_TO_MEM (tcache_req_qual_if, tcache_req_if, i);
     end
 
-    `ASSIGN_VX_CACHE_RSP_IF_XTAG (dcache_smem_rsp_if, dcache_tex_mux_rsp_if[0]);
-    for (genvar i = 0; i < `DCACHE_NUM_REQS; ++i) begin
-        assign dcache_smem_rsp_if.tag[i] = `DCACHE_SMEM_TAG_WIDTH'(dcache_tex_mux_rsp_if[0].tag[i]);
-    end
+    `RESET_RELAY (tcache_reset);
 
-    `ASSIGN_VX_CACHE_REQ_IF_XTAG (dcache_tex_mux_req_if[1], tcache_req_if);
-    for (genvar i = 0; i < `DCACHE_NUM_REQS; ++i) begin
-        assign dcache_tex_mux_req_if[1].tag[i] = `DCACHE_TEX_TAG_WIDTH'(tcache_req_if.tag[i]);
-    end
+    VX_cache #(
+        .CACHE_ID       (`TCACHE_ID),
+        .CACHE_SIZE     (`TCACHE_SIZE),
+        .CACHE_LINE_SIZE(`TCACHE_LINE_SIZE),
+        .NUM_BANKS      (`TCACHE_NUM_BANKS),
+        .NUM_WAYS       (`TCACHE_NUM_WAYS),
+        .WORD_SIZE      (`TCACHE_WORD_SIZE),
+        .NUM_REQS       (`TCACHE_NUM_REQS),
+        .CREQ_SIZE      (`TCACHE_CREQ_SIZE),
+        .CRSQ_SIZE      (`TCACHE_CRSQ_SIZE),
+        .MSHR_SIZE      (`TCACHE_MSHR_SIZE),
+        .MRSQ_SIZE      (`TCACHE_MRSQ_SIZE),
+        .MREQ_SIZE      (`TCACHE_MREQ_SIZE),
+        .WRITE_ENABLE   (0),
+        .REQ_DBG_IDW    (`UUID_BITS),
+        .CORE_TAG_WIDTH (`TCACHE_TAG_WIDTH),
+        .MEM_TAG_WIDTH  (`TCACHE_MEM_TAG_WIDTH),
+        .PASSTHRU       (!`TCACHE_ENABLED)
+    ) tcache (
+        `SCOPE_BIND_VX_mem_unit_tcache
 
-    `ASSIGN_VX_CACHE_RSP_IF_XTAG (tcache_rsp_if, dcache_tex_mux_rsp_if[1]);
-    for (genvar i = 0; i < `DCACHE_NUM_REQS; ++i) begin
-        assign tcache_rsp_if.tag[i] = `TCACHE_TAG_WIDTH'(dcache_tex_mux_rsp_if[1].tag[i]);
-    end
+    `ifdef PERF_ENABLE
+        .perf_cache_if  (perf_tcache_if),
+    `endif
 
-    VX_cache_mux #(
-        .NUM_REQS      (2),
-        .LANES         (`NUM_THREADS),
-        .DATA_SIZE     (4),            
-        .TAG_IN_WIDTH  (`DCACHE_TEX_TAG_WIDTH),
-        .ARBITER       ("P"),
-        .TAG_SEL_IDX   (0)        
-    ) dcache_tex_mux (
-        .clk        (clk),
-        .reset      (reset),
-        .req_in_if  (dcache_tex_mux_req_if),
-        .rsp_in_if  (dcache_tex_mux_rsp_if),
-        .req_out_if (dcache_tex_req_if),
-        .rsp_out_if (dcache_tex_rsp_if)        
+        .clk            (clk),
+        .reset          (tcache_reset),
+        .core_req_if    (tcache_req_qual_if),
+        .core_rsp_if    (tcache_rsp_qual_if),
+        .mem_req_if     (tcache_mem_req_if),
+        .mem_rsp_if     (tcache_mem_rsp_if)
     );
 
-`else
+    for (genvar i = 0; i < `TCACHE_NUM_REQS; ++i) begin
+        `CACHE_RSP_FROM_MEM (tcache_rsp_if, tcache_rsp_qual_if, i);
+    end    
 
-    `ASSIGN_VX_CACHE_REQ_IF (dcache_tex_req_if, dcache_smem_req_if);
-    `ASSIGN_VX_CACHE_RSP_IF (dcache_smem_rsp_if, dcache_tex_rsp_if);
+`endif
 
-`endif    
+    ///////////////////////////////////////////////////////////////////////////    
 
     VX_mem_req_if #(
         .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
         .ADDR_WIDTH (`DCACHE_MEM_ADDR_WIDTH),
-        .TAG_WIDTH  (`L1_MEM_RGB_TAG_WIDTH)
-    ) l1_mem_req_if[2]();
+        .TAG_WIDTH  (`L1_MEM_TAG_IN_WIDTH)
+    ) l1_mem_req_if[2+`EXT_TEX_ENABLED]();
 
     VX_mem_rsp_if #(
         .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (`L1_MEM_RGB_TAG_WIDTH)
-    ) l1_mem_rsp_if[2]();    
+        .TAG_WIDTH  (`L1_MEM_TAG_IN_WIDTH)
+    ) l1_mem_rsp_if[2+`EXT_TEX_ENABLED]();
 
     `ASSIGN_VX_MEM_REQ_IF_XTAG (l1_mem_req_if[0], icache_mem_req_if);
-    assign l1_mem_req_if[0].tag = `L1_MEM_RGB_TAG_WIDTH'(icache_mem_req_if.tag);
+    assign l1_mem_req_if[0].tag = `L1_MEM_TAG_IN_WIDTH'(icache_mem_req_if.tag);
 
     `ASSIGN_VX_MEM_RSP_IF_XTAG (icache_mem_rsp_if, l1_mem_rsp_if[0]);
     assign icache_mem_rsp_if.tag = `ICACHE_MEM_TAG_WIDTH'(l1_mem_rsp_if[0].tag);
 
     `ASSIGN_VX_MEM_REQ_IF_XTAG (l1_mem_req_if[1], dcache_mem_req_if);
-    assign l1_mem_req_if[1].tag = `L1_MEM_RGB_TAG_WIDTH'(dcache_mem_req_if.tag);
+    assign l1_mem_req_if[1].tag = `L1_MEM_TAG_IN_WIDTH'(dcache_mem_req_if.tag);
 
     `ASSIGN_VX_MEM_RSP_IF_XTAG (dcache_mem_rsp_if, l1_mem_rsp_if[1]);
     assign dcache_mem_rsp_if.tag = `DCACHE_MEM_TAG_WIDTH'(l1_mem_rsp_if[1].tag);
-   
+
+`ifdef EXT_TEX_ENABLE
+    `ASSIGN_VX_MEM_REQ_IF_XTAG (l1_mem_req_if[2], tcache_mem_req_if);
+    assign l1_mem_req_if[2].tag = `L1_MEM_TAG_IN_WIDTH'(tcache_mem_req_if.tag);
+
+    `ASSIGN_VX_MEM_RSP_IF_XTAG (tcache_mem_rsp_if, l1_mem_rsp_if[2]);
+    assign tcache_mem_rsp_if.tag = `TCACHE_MEM_TAG_WIDTH'(l1_mem_rsp_if[2].tag);
+`endif
+
     VX_mem_mux #(
-        .NUM_REQS      (2),
+        .NUM_REQS      (2+`EXT_TEX_ENABLED),
         .DATA_WIDTH    (`DCACHE_MEM_DATA_WIDTH),
         .ADDR_WIDTH    (`DCACHE_MEM_ADDR_WIDTH),
-        .TAG_IN_WIDTH  (`L1_MEM_RGB_TAG_WIDTH),
+        .TAG_IN_WIDTH  (`L1_MEM_TAG_IN_WIDTH),
         .ARBITER       ("R"),
         .TAG_SEL_IDX   (1), // Skip 0 for NC flag
         .BUFFERED_REQ  (1),
         .BUFFERED_RSP  (2)
     ) mem_mux (
         .clk        (clk),
-        .reset      (mem_arb_reset),
+        .reset      (reset),
         .req_in_if  (l1_mem_req_if),
         .rsp_in_if  (l1_mem_rsp_if),
         .req_out_if (mem_req_if),        
         .rsp_out_if (mem_rsp_if)
     );
+
+    ///////////////////////////////////////////////////////////////////////////
 
 `ifdef PERF_ENABLE
     

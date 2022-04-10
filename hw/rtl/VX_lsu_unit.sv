@@ -327,32 +327,30 @@ module VX_lsu_unit #(
 
     // send load commit
 
-    wire load_rsp_stall = ~ld_commit_if.ready && ld_commit_if.valid;
-    
-    VX_pipe_register #(
-        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1),
-        .RESETW (1)
-    ) rsp_pipe_reg (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (!load_rsp_stall),
-        .data_in  ({cache_rsp_valid,   rsp_uuid,          rsp_wid,          rsp_tmask_qual,     rsp_pc,          rsp_rd,          rsp_wb,          rsp_data,          mbuf_pop}),
-        .data_out ({ld_commit_if.valid, ld_commit_if.uuid, ld_commit_if.wid, ld_commit_if.tmask, ld_commit_if.PC, ld_commit_if.rd, ld_commit_if.wb, ld_commit_if.data, ld_commit_if.eop})
+    VX_skid_buffer #(
+        .DATAW   (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1),
+        .OUT_REG (1)
+    ) rsp_sbuf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (cache_rsp_valid),
+        .ready_in  (cache_rsp_ready),
+        .data_in   ({rsp_uuid,          rsp_wid,          rsp_tmask_qual,     rsp_pc,          rsp_rd,          rsp_wb,          rsp_data,          mbuf_pop}),
+        .data_out  ({ld_commit_if.uuid, ld_commit_if.wid, ld_commit_if.tmask, ld_commit_if.PC, ld_commit_if.rd, ld_commit_if.wb, ld_commit_if.data, ld_commit_if.eop}),
+        .valid_out (ld_commit_if.valid),
+        .ready_out (ld_commit_if.ready)
     );
-
-    // Can accept new cache response?
-    assign cache_rsp_ready = ~load_rsp_stall;
 
     // scope registration
     `SCOPE_ASSIGN (dcache_req_fire,  cache_req_fire);
     `SCOPE_ASSIGN (dcache_req_uuid,  req_uuid);
-    `SCOPE_ASSIGN (dcache_req_addr,  req_addr);    
+    `SCOPE_ASSIGN (dcache_req_addr,  req_addr);
     `SCOPE_ASSIGN (dcache_req_rw,    ~req_wb);
     `SCOPE_ASSIGN (dcache_req_byteen,cache_req_if.byteen);
     `SCOPE_ASSIGN (dcache_req_data,  cache_req_if.data);
     `SCOPE_ASSIGN (dcache_req_tag,   req_tag);
     `SCOPE_ASSIGN (dcache_rsp_fire,  cache_rsp_tmask & {`NUM_THREADS{cache_rsp_fire}});
-    `SCOPE_ASSIGN (dcache_rsp_uuid,  rsp_uuid);    
+    `SCOPE_ASSIGN (dcache_rsp_uuid,  rsp_uuid);
     `SCOPE_ASSIGN (dcache_rsp_data,  cache_rsp_data);
     `SCOPE_ASSIGN (dcache_rsp_tag,   mbuf_raddr);
 

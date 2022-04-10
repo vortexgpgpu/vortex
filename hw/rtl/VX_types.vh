@@ -99,6 +99,11 @@
 `define CSR_MPM_ROP_WRITES_H        12'hB9E
 `define CSR_MPM_ROP_LAT             12'hB1F     // rop memory latency
 `define CSR_MPM_ROP_LAT_H           12'hB9F
+// PERF: rasterunit
+`define CSR_MPM_RAS_READS           12'hB20     // raster accesses
+`define CSR_MPM_RAS_READS_H         12'hBA0
+`define CSR_MPM_RAS_LAT             12'hB21     // raster latency
+`define CSR_MPM_RAS_LAT_H           12'hBA1
 
 // Machine Information Registers
 `define CSR_MVENDORID               12'hF11

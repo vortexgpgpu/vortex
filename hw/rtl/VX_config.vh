@@ -37,12 +37,22 @@
     `define L3_ENABLED   0
 `endif
 
+`ifdef L1_DISABLE
+    `define ICACHE_DISABLE
+    `define DCACHE_DISABLE
+    `define TCACHE_DISABLE
+`endif
+
 `ifndef MEM_BLOCK_SIZE
 `define MEM_BLOCK_SIZE 64
 `endif
 
 `ifndef L1_BLOCK_SIZE
+`ifdef L1_DISABLE
+`define L1_BLOCK_SIZE ((`L2_ENABLED || `L3_ENABLED) ? 4 : `MEM_BLOCK_SIZE)
+`else
 `define L1_BLOCK_SIZE ((`L2_ENABLED || `L3_ENABLED) ? 16 : `MEM_BLOCK_SIZE)
+`endif
 `endif
 
 `ifndef STARTUP_ADDR
@@ -387,9 +397,19 @@
 
 // Tcache Configurable Knobs //////////////////////////////////////////////////
 
+// Enable/disable cache
+`ifndef TCACHE_DISABLE
+`define TCACHE_ENABLE
+`endif
+`ifdef TCACHE_ENABLE
+    `define TCACHE_ENABLED 1
+`else
+    `define TCACHE_ENABLED 0
+`endif
+
 // Size of cache in bytes
 `ifndef TCACHE_SIZE
-`define TCACHE_SIZE 4096
+`define TCACHE_SIZE 8192
 `endif
 
 // Number of banks
@@ -674,7 +694,7 @@
 
 // Number of associative ways
 `ifndef L3_NUM_WAYS
-`define L3_NUM_WAYS 8
+`define L3_NUM_WAYS 4
 `endif
 
 `endif

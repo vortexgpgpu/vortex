@@ -24,6 +24,9 @@ module VX_csr_data #(
 `endif
 `ifdef EXT_RASTER_ENABLE
     VX_gpu_csr_if.master                raster_csr_if,
+`ifdef PERF_ENABLE
+    VX_raster_perf_if.slave             raster_perf_if,
+`endif
 `endif
 `ifdef EXT_ROP_ENABLE
     VX_gpu_csr_if.master                rop_csr_if,
@@ -288,12 +291,19 @@ module VX_csr_data #(
             `CSR_MPM_TEX_LAT_H      : read_data_r = {`NUM_THREADS{32'(tex_perf_if.mem_latency[`PERF_CTR_BITS-1:32])}};
         `endif
         `ifdef EXT_ROP_ENABLE
+            // PERF: ropunit
             `CSR_MPM_ROP_READS      : read_data_r = {`NUM_THREADS{rop_perf_if.mem_reads[31:0]}};
             `CSR_MPM_ROP_READS_H    : read_data_r = {`NUM_THREADS{32'(rop_perf_if.mem_reads[`PERF_CTR_BITS-1:32])}};
             `CSR_MPM_ROP_WRITES     : read_data_r = {`NUM_THREADS{rop_perf_if.mem_writes[31:0]}};
             `CSR_MPM_ROP_WRITES_H   : read_data_r = {`NUM_THREADS{32'(rop_perf_if.mem_writes[`PERF_CTR_BITS-1:32])}};
             `CSR_MPM_ROP_LAT        : read_data_r = {`NUM_THREADS{rop_perf_if.mem_latency[31:0]}};
             `CSR_MPM_ROP_LAT_H      : read_data_r = {`NUM_THREADS{32'(rop_perf_if.mem_latency[`PERF_CTR_BITS-1:32])}};
+        `ifdef EXT_RASTER_ENABLE
+            // PERF: rasterunit
+            `CSR_MPM_RAS_READS      : read_data_r = {`NUM_THREADS{raster_perf_if.mem_reads[31:0]}};
+            `CSR_MPM_RAS_READS_H    : read_data_r = {`NUM_THREADS{32'(raster_perf_if.mem_reads[`PERF_CTR_BITS-1:32])}};
+            `CSR_MPM_RAS_LAT        : read_data_r = {`NUM_THREADS{raster_perf_if.mem_latency[31:0]}};
+            `CSR_MPM_RAS_LAT_H      : read_data_r = {`NUM_THREADS{32'(raster_perf_if.mem_latency[`PERF_CTR_BITS-1:32])}};
         `endif
             // PERF: reserved            
             `CSR_MPM_RESERVED       : read_data_r = '0;

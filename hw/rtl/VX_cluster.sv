@@ -29,8 +29,7 @@ module VX_cluster #(
 
     // Status
     output wire             busy
-); 
-    `STATIC_ASSERT((`L2_ENABLED == 0 || `NUM_CORES > 1), ("invalid parameter"))
+);
 
 `ifdef EXT_RASTER_ENABLE
 
@@ -42,16 +41,16 @@ module VX_cluster #(
     VX_raster_perf_if   raster_perf_if();
 
     // TODO: remove
-    `UNUSED_VAR (raster_perf_if.mem_reads)
-    `UNUSED_VAR (raster_perf_if.mem_latency)
-    `UNUSED_VAR (perf_rcache_if.reads)
-    `UNUSED_VAR (perf_rcache_if.writes)
-    `UNUSED_VAR (perf_rcache_if.read_misses)
-    `UNUSED_VAR (perf_rcache_if.write_misses)
-    `UNUSED_VAR (perf_rcache_if.bank_stalls)
-    `UNUSED_VAR (perf_rcache_if.mshr_stalls)
-    `UNUSED_VAR (perf_rcache_if.mem_stalls)
-    `UNUSED_VAR (perf_rcache_if.crsp_stalls)
+    //`UNUSED_VAR raster_perf_if.mem_reads)
+    //`UNUSED_VAR (raster_perf_if.mem_latency)
+    //`unused_var (perf_rcache_if.reads)
+    //`unused_var (perf_rcache_if.writes)
+    //`unused_var (perf_rcache_if.read_misses)
+    //`unused_var (perf_rcache_if.write_misses)
+    //`unused_var (perf_rcache_if.bank_stalls)
+    //`unused_var (perf_rcache_if.mshr_stalls)
+    //`unused_var (perf_rcache_if.mem_stalls)
+    // /`unused_var (perf_rcache_if.crsp_stalls)
 `endif
 
     VX_cache_req_if #(
@@ -327,6 +326,9 @@ module VX_cluster #(
         `endif
         `ifdef EXT_RASTER_ENABLE        
             .raster_req_if  (per_core_raster_req_if[i]),
+        `ifdef PERF_ENABLE
+            .raster_perf_if (raster_perf_if),
+        `endif
         `endif
         `ifdef EXT_ROP_ENABLE        
             .rop_req_if     (per_core_rop_req_if[i]),
@@ -425,10 +427,11 @@ module VX_cluster #(
 
 `endif
 
-    localparam MEM_ARB_SIZE = 1 + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED;
+    localparam MEM_ARB_SIZE          = 1 + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED;
     localparam RCACHE_MEM_TAG_WIDTH_ = `EXT_RASTER_ENABLED ? `RCACHE_MEM_TAG_WIDTH : 0;
     localparam OCACHE_MEM_TAG_WIDTH_ = `EXT_ROP_ENABLED ? `OCACHE_MEM_TAG_WIDTH : 0;
-    localparam MEM_ARB_TAG_WIDTH = `MAX(`MAX(`L2X_MEM_TAG_WIDTH, RCACHE_MEM_TAG_WIDTH_), OCACHE_MEM_TAG_WIDTH_);
+    localparam _MEM_ARB_TAG_WIDTH    = `MAX(RCACHE_MEM_TAG_WIDTH_, OCACHE_MEM_TAG_WIDTH_);
+    localparam MEM_ARB_TAG_WIDTH     = `MAX(_MEM_ARB_TAG_WIDTH, `L2X_MEM_TAG_WIDTH);
 
     VX_mem_req_if #(
         .DATA_WIDTH (`L2_MEM_DATA_WIDTH),
