@@ -1,0 +1,172 @@
+CONFIGS=-DNUM_CLUSTERS=1 -DNUM_CORES=1 -DNUM_WARPS=2 -DNUM_THREADS=2   -DPERF_ENABLE -DEXT_GFX_ENABLE
+running: CONFIGS=-DNUM_CLUSTERS=1 -DNUM_CORES=1 -DNUM_WARPS=2 -DNUM_THREADS=2 -DPERF_ENABLE -DEXT_GFX_ENABLE make -C ./ci/../driver/rtlsim
+PERF: instrs=1005, cycles=3685, IPC=0.272727
+PERF: ibuffer stalls=14
+PERF: scoreboard stalls=421
+PERF: alu unit stalls=0
+PERF: lsu unit stalls=0
+PERF: csr unit stalls=0
+PERF: fpu unit stalls=0
+PERF: gpu unit stalls=0
+PERF: loads=124
+PERF: stores=107
+PERF: branches=185
+PERF: icache reads=685
+PERF: icache read misses=38 (hit ratio=94%)
+PERF: dcache reads=32
+PERF: dcache writes=37
+PERF: dcache read misses=7 (hit ratio=78%)
+PERF: dcache write misses=32 (hit ratio=13%)
+PERF: dcache bank stalls=0 (utilization=100%)
+PERF: dcache mshr stalls=0
+PERF: smem reads=62
+PERF: smem writes=59
+PERF: smem bank stalls=0 (utilization=100%)
+PERF: memory requests=103 (reads=41, writes=62)
+PERF: memory average latency=14 cycles
+PERF: tex memory reads=0
+PERF: tex memory latency=-2147483648 cycles
+PERF: rop memory reads=0
+PERF: rop memory writes=64
+PERF: rop memory latency=0
+PERF: rop inactive cycles=4102
+
+**************************************
+
+CONFIGS=-DNUM_CLUSTERS=1 -DNUM_CORES=1 -DNUM_WARPS=2 -DNUM_THREADS=2   -DPERF_ENABLE -DEXT_GFX_ENABLE
+running: CONFIGS=-DNUM_CLUSTERS=1 -DNUM_CORES=1 -DNUM_WARPS=2 -DNUM_THREADS=2 -DPERF_ENABLE -DEXT_GFX_ENABLE make -C ./ci/../driver/rtlsim
+PERF: instrs=2005, cycles=5275, IPC=0.380095
+PERF: ibuffer stalls=14
+PERF: scoreboard stalls=679
+PERF: alu unit stalls=0
+PERF: lsu unit stalls=0
+PERF: csr unit stalls=0
+PERF: fpu unit stalls=0
+PERF: gpu unit stalls=0
+PERF: loads=124
+PERF: stores=107
+PERF: branches=385
+PERF: icache reads=1185
+PERF: icache read misses=38 (hit ratio=96%)
+PERF: dcache reads=32
+PERF: dcache writes=37
+PERF: dcache read misses=7 (hit ratio=78%)
+PERF: dcache write misses=32 (hit ratio=13%)
+PERF: dcache bank stalls=0 (utilization=100%)
+PERF: dcache mshr stalls=0
+PERF: smem reads=62
+PERF: smem writes=59
+PERF: smem bank stalls=0 (utilization=100%)
+PERF: memory requests=103 (reads=41, writes=62)
+PERF: memory average latency=17 cycles
+PERF: tex memory reads=0
+PERF: tex memory latency=-2147483648 cycles
+PERF: rop memory reads=0
+PERF: rop memory writes=256
+PERF: rop memory latency=0
+PERF: rop inactive cycles=5596
+
+**************************************
+
+CONFIGS=-DNUM_CLUSTERS=1 -DNUM_CORES=1 -DNUM_WARPS=2 -DNUM_THREADS=2   -DPERF_ENABLE -DEXT_GFX_ENABLE
+running: CONFIGS=-DNUM_CLUSTERS=1 -DNUM_CORES=1 -DNUM_WARPS=2 -DNUM_THREADS=2 -DPERF_ENABLE -DEXT_GFX_ENABLE make -C ./ci/../driver/rtlsim
+PERF: instrs=5925, cycles=10831, IPC=0.547041
+PERF: ibuffer stalls=14
+PERF: scoreboard stalls=1675
+PERF: alu unit stalls=0
+PERF: lsu unit stalls=0
+PERF: csr unit stalls=0
+PERF: fpu unit stalls=0
+PERF: gpu unit stalls=0
+PERF: loads=124
+PERF: stores=107
+PERF: branches=1169
+PERF: icache reads=3145
+PERF: icache read misses=38 (hit ratio=98%)
+PERF: dcache reads=32
+PERF: dcache writes=37
+PERF: dcache read misses=7 (hit ratio=78%)
+PERF: dcache write misses=32 (hit ratio=13%)
+PERF: dcache bank stalls=0 (utilization=100%)
+PERF: dcache mshr stalls=0
+PERF: smem reads=62
+PERF: smem writes=59
+PERF: smem bank stalls=0 (utilization=100%)
+PERF: memory requests=103 (reads=41, writes=62)
+PERF: memory average latency=14 cycles
+PERF: tex memory reads=0
+PERF: tex memory latency=-2147483648 cycles
+PERF: rop memory reads=0
+PERF: rop memory writes=1024
+PERF: rop memory latency=0
+PERF: rop inactive cycles=10768
+
+**************************************
+
+CONFIGS=-DNUM_CLUSTERS=1 -DNUM_CORES=1 -DNUM_WARPS=2 -DNUM_THREADS=2   -DPERF_ENABLE -DEXT_GFX_ENABLE
+running: CONFIGS=-DNUM_CLUSTERS=1 -DNUM_CORES=1 -DNUM_WARPS=2 -DNUM_THREADS=2 -DPERF_ENABLE -DEXT_GFX_ENABLE make -C ./ci/../driver/rtlsim
+PERF: instrs=21445, cycles=33425, IPC=0.641586
+PERF: ibuffer stalls=14
+PERF: scoreboard stalls=5587
+PERF: alu unit stalls=0
+PERF: lsu unit stalls=0
+PERF: csr unit stalls=0
+PERF: fpu unit stalls=0
+PERF: gpu unit stalls=0
+PERF: loads=124
+PERF: stores=107
+PERF: branches=4273
+PERF: icache reads=10905
+PERF: icache read misses=38 (hit ratio=99%)
+PERF: dcache reads=32
+PERF: dcache writes=37
+PERF: dcache read misses=7 (hit ratio=78%)
+PERF: dcache write misses=32 (hit ratio=13%)
+PERF: dcache bank stalls=0 (utilization=100%)
+PERF: dcache mshr stalls=0
+PERF: smem reads=62
+PERF: smem writes=59
+PERF: smem bank stalls=0 (utilization=100%)
+PERF: memory requests=103 (reads=41, writes=62)
+PERF: memory average latency=16 cycles
+PERF: tex memory reads=0
+PERF: tex memory latency=-2147483648 cycles
+PERF: rop memory reads=0
+PERF: rop memory writes=4096
+PERF: rop memory latency=0
+PERF: rop inactive cycles=31826
+
+**************************************
+
+CONFIGS=-DNUM_CLUSTERS=1 -DNUM_CORES=1 -DNUM_WARPS=2 -DNUM_THREADS=2   -DPERF_ENABLE -DEXT_GFX_ENABLE
+running: CONFIGS=-DNUM_CLUSTERS=1 -DNUM_CORES=1 -DNUM_WARPS=2 -DNUM_THREADS=2 -DPERF_ENABLE -DEXT_GFX_ENABLE make -C ./ci/../driver/rtlsim
+PERF: instrs=83205, cycles=122919, IPC=0.676909
+PERF: ibuffer stalls=14
+PERF: scoreboard stalls=21091
+PERF: alu unit stalls=0
+PERF: lsu unit stalls=0
+PERF: csr unit stalls=0
+PERF: fpu unit stalls=0
+PERF: gpu unit stalls=0
+PERF: loads=124
+PERF: stores=107
+PERF: branches=16625
+PERF: icache reads=41785
+PERF: icache read misses=38 (hit ratio=99%)
+PERF: dcache reads=32
+PERF: dcache writes=37
+PERF: dcache read misses=7 (hit ratio=78%)
+PERF: dcache write misses=32 (hit ratio=13%)
+PERF: dcache bank stalls=0 (utilization=100%)
+PERF: dcache mshr stalls=0
+PERF: smem reads=62
+PERF: smem writes=59
+PERF: smem bank stalls=0 (utilization=100%)
+PERF: memory requests=103 (reads=41, writes=62)
+PERF: memory average latency=14 cycles
+PERF: tex memory reads=0
+PERF: tex memory latency=-2147483648 cycles
+PERF: rop memory reads=0
+PERF: rop memory writes=16384
+PERF: rop memory latency=0
+PERF: rop inactive cycles=115176

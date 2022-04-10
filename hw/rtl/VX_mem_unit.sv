@@ -33,7 +33,7 @@ module VX_mem_unit # (
 );
     
 `ifdef PERF_ENABLE
-    VX_perf_cache_if perf_icache_if(), perf_dcache_if(), perf_smem_if();
+    VX_perf_cache_if perf_icache_if(), perf_dcache_if(), perf_tcache_if(), perf_smem_if();
 `endif
 
     ///////////////////////////////////////////////////////////////////////////

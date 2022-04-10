@@ -172,6 +172,7 @@ module VX_cluster #(
     `UNUSED_VAR (rop_perf_if.mem_reads)
     `UNUSED_VAR (rop_perf_if.mem_writes)
     `UNUSED_VAR (rop_perf_if.mem_latency)
+    `UNUSED_VAR (rop_perf_if.inactive_cycles)
     `UNUSED_VAR (perf_ocache_if.reads)
     `UNUSED_VAR (perf_ocache_if.writes)
     `UNUSED_VAR (perf_ocache_if.read_misses)
