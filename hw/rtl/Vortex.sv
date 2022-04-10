@@ -56,6 +56,9 @@ module Vortex (
     assign mem_rsp_if.tag   = mem_rsp_tag;
     assign mem_rsp_ready = mem_rsp_if.ready;
 
+    VX_dcr_base_if #(
+    ) dcr_base_if();
+
 `ifdef EXT_TEX_ENABLE
     VX_tex_dcr_if #(
         .NUM_STAGES (`TEX_STAGE_COUNT)
@@ -71,6 +74,7 @@ module Vortex (
     VX_dcr_data dcr_data(
         .clk          (clk),
         .reset        (reset),
+        .dcr_base_if  (dcr_base_if),
     `ifdef EXT_TEX_ENABLE
         .tex_dcr_if    (tex_dcr_if),
     `endif
@@ -120,6 +124,7 @@ module Vortex (
             .clk            (clk),
             .reset          (cluster_reset),
             
+            .dcr_base_if    (dcr_base_if),
         `ifdef EXT_TEX_ENABLE
             .tex_dcr_if     (tex_dcr_if),
         `endif

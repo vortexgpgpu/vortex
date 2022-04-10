@@ -11,6 +11,8 @@ module VX_csr_unit #(
     VX_perf_pipeline_if.slave   perf_pipeline_if,
 `endif
 
+    VX_dcr_base_if              dcr_base_if,
+
 `ifdef EXT_TEX_ENABLE
     VX_gpu_csr_if.master        tex_csr_if,
 `ifdef PERF_ENABLE
@@ -62,7 +64,7 @@ module VX_csr_unit #(
     `ifdef EXT_F_ENABLE
         .fpu_to_csr_if  (fpu_to_csr_if), 
     `endif
-
+        .dcr_base_if    (dcr_base_if),
     `ifdef EXT_TEX_ENABLE        
         .tex_csr_if     (tex_csr_if),
     `ifdef PERF_ENABLE

@@ -16,6 +16,8 @@ module VX_csr_data #(
     VX_perf_pipeline_if.slave           perf_pipeline_if,
 `endif
 
+    VX_dcr_base_if                      dcr_base_if,
+
 `ifdef EXT_TEX_ENABLE
     VX_gpu_csr_if.master                tex_csr_if,
 `ifdef PERF_ENABLE
@@ -218,131 +220,153 @@ module VX_csr_data #(
             `CSR_MCYCLE     : read_data_r = {`NUM_THREADS{fetch_to_csr_if.cycles[31:0]}};
             `CSR_MCYCLE_H   : read_data_r = {`NUM_THREADS{32'(fetch_to_csr_if.cycles[`PERF_CTR_BITS-1:32])}};
             `CSR_MINSTRET   : read_data_r = {`NUM_THREADS{cmt_to_csr_if.instret[31:0]}};
-            `CSR_MINSTRET_H : read_data_r = {`NUM_THREADS{32'(cmt_to_csr_if.instret[`PERF_CTR_BITS-1:32])}};
+            `CSR_MINSTRET_H : read_data_r = {`NUM_THREADS{32'(cmt_to_csr_if.instret[`PERF_CTR_BITS-1:32])}};       
             
-        `ifdef PERF_ENABLE
-            // PERF: pipeline
-            `CSR_MPM_IBUF_ST    : read_data_r = {`NUM_THREADS{perf_pipeline_if.ibf_stalls[31:0]}};
-            `CSR_MPM_IBUF_ST_H  : read_data_r = {`NUM_THREADS{32'(perf_pipeline_if.ibf_stalls[`PERF_CTR_BITS-1:32])}};
-            `CSR_MPM_SCRB_ST    : read_data_r = {`NUM_THREADS{perf_pipeline_if.scb_stalls[31:0]}};
-            `CSR_MPM_SCRB_ST_H  : read_data_r = {`NUM_THREADS{32'(perf_pipeline_if.scb_stalls[`PERF_CTR_BITS-1:32])}};
-            `CSR_MPM_ALU_ST     : read_data_r = {`NUM_THREADS{perf_pipeline_if.alu_stalls[31:0]}};
-            `CSR_MPM_ALU_ST_H   : read_data_r = {`NUM_THREADS{32'(perf_pipeline_if.alu_stalls[`PERF_CTR_BITS-1:32])}};
-            `CSR_MPM_LSU_ST     : read_data_r = {`NUM_THREADS{perf_pipeline_if.lsu_stalls[31:0]}};
-            `CSR_MPM_LSU_ST_H   : read_data_r = {`NUM_THREADS{32'(perf_pipeline_if.lsu_stalls[`PERF_CTR_BITS-1:32])}};
-            `CSR_MPM_CSR_ST     : read_data_r = {`NUM_THREADS{perf_pipeline_if.csr_stalls[31:0]}};
-            `CSR_MPM_CSR_ST_H   : read_data_r = {`NUM_THREADS{32'(perf_pipeline_if.csr_stalls[`PERF_CTR_BITS-1:32])}};
-        `ifdef EXT_F_ENABLE    
-            `CSR_MPM_FPU_ST     : read_data_r = {`NUM_THREADS{perf_pipeline_if.fpu_stalls[31:0]}};
-            `CSR_MPM_FPU_ST_H   : read_data_r = {`NUM_THREADS{32'(perf_pipeline_if.fpu_stalls[`PERF_CTR_BITS-1:32])}};
-        `else        
-            `CSR_MPM_FPU_ST     : read_data_r = '0;
-            `CSR_MPM_FPU_ST_H   : read_data_r = '0;
-        `endif
-            `CSR_MPM_GPU_ST     : read_data_r = {`NUM_THREADS{perf_pipeline_if.gpu_stalls[31:0]}};
-            `CSR_MPM_GPU_ST_H   : read_data_r = {`NUM_THREADS{32'(perf_pipeline_if.gpu_stalls[`PERF_CTR_BITS-1:32])}};
-            // PERF: decode
-            `CSR_MPM_LOADS      : read_data_r = {`NUM_THREADS{perf_pipeline_if.loads[31:0]}};
-            `CSR_MPM_LOADS_H    : read_data_r = {`NUM_THREADS{32'(perf_pipeline_if.loads[`PERF_CTR_BITS-1:32])}};
-            `CSR_MPM_STORES     : read_data_r = {`NUM_THREADS{perf_pipeline_if.stores[31:0]}};
-            `CSR_MPM_STORES_H   : read_data_r = {`NUM_THREADS{32'(perf_pipeline_if.stores[`PERF_CTR_BITS-1:32])}};
-            `CSR_MPM_BRANCHES   : read_data_r = {`NUM_THREADS{perf_pipeline_if.branches[31:0]}};
-            `CSR_MPM_BRANCHES_H : read_data_r = {`NUM_THREADS{32'(perf_pipeline_if.branches[`PERF_CTR_BITS-1:32])}};
-            // PERF: icache
-            `CSR_MPM_ICACHE_READS       : read_data_r = {`NUM_THREADS{perf_memsys_if.icache_reads[31:0]}};
-            `CSR_MPM_ICACHE_READS_H     : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.icache_reads[`PERF_CTR_BITS-1:32])}};
-            `CSR_MPM_ICACHE_MISS_R      : read_data_r = {`NUM_THREADS{perf_memsys_if.icache_read_misses[31:0]}};
-            `CSR_MPM_ICACHE_MISS_R_H    : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.icache_read_misses[`PERF_CTR_BITS-1:32])}};
-            // PERF: dcache
-            `CSR_MPM_DCACHE_READS       : read_data_r = {`NUM_THREADS{perf_memsys_if.dcache_reads[31:0]}};
-            `CSR_MPM_DCACHE_READS_H     : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.dcache_reads[`PERF_CTR_BITS-1:32])}};
-            `CSR_MPM_DCACHE_WRITES      : read_data_r = {`NUM_THREADS{perf_memsys_if.dcache_writes[31:0]}};
-            `CSR_MPM_DCACHE_WRITES_H    : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.dcache_writes[`PERF_CTR_BITS-1:32])}};
-            `CSR_MPM_DCACHE_MISS_R      : read_data_r = {`NUM_THREADS{perf_memsys_if.dcache_read_misses[31:0]}};
-            `CSR_MPM_DCACHE_MISS_R_H    : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.dcache_read_misses[`PERF_CTR_BITS-1:32])}};
-            `CSR_MPM_DCACHE_MISS_W      : read_data_r = {`NUM_THREADS{perf_memsys_if.dcache_write_misses[31:0]}};
-            `CSR_MPM_DCACHE_MISS_W_H    : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.dcache_write_misses[`PERF_CTR_BITS-1:32])}};
-            `CSR_MPM_DCACHE_BANK_ST     : read_data_r = {`NUM_THREADS{perf_memsys_if.dcache_bank_stalls[31:0]}};
-            `CSR_MPM_DCACHE_BANK_ST_H   : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.dcache_bank_stalls[`PERF_CTR_BITS-1:32])}};
-            `CSR_MPM_DCACHE_MSHR_ST     : read_data_r = {`NUM_THREADS{perf_memsys_if.dcache_mshr_stalls[31:0]}};
-            `CSR_MPM_DCACHE_MSHR_ST_H   : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.dcache_mshr_stalls[`PERF_CTR_BITS-1:32])}};
-            // PERF: smem          
-            `CSR_MPM_SMEM_READS     : read_data_r = {`NUM_THREADS{perf_memsys_if.smem_reads[31:0]}};
-            `CSR_MPM_SMEM_READS_H   : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.smem_reads[`PERF_CTR_BITS-1:32])}};
-            `CSR_MPM_SMEM_WRITES    : read_data_r = {`NUM_THREADS{perf_memsys_if.smem_writes[31:0]}};
-            `CSR_MPM_SMEM_WRITES_H  : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.smem_writes[`PERF_CTR_BITS-1:32])}};
-            `CSR_MPM_SMEM_BANK_ST   : read_data_r = {`NUM_THREADS{perf_memsys_if.smem_bank_stalls[31:0]}};
-            `CSR_MPM_SMEM_BANK_ST_H : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.smem_bank_stalls[`PERF_CTR_BITS-1:32])}};
-            // PERF: memory
-            `CSR_MPM_MEM_READS      : read_data_r = {`NUM_THREADS{perf_memsys_if.mem_reads[31:0]}};
-            `CSR_MPM_MEM_READS_H    : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.mem_reads[`PERF_CTR_BITS-1:32])}};
-            `CSR_MPM_MEM_WRITES     : read_data_r = {`NUM_THREADS{perf_memsys_if.mem_writes[31:0]}};
-            `CSR_MPM_MEM_WRITES_H   : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.mem_writes[`PERF_CTR_BITS-1:32])}};
-            `CSR_MPM_MEM_LAT        : read_data_r = {`NUM_THREADS{perf_memsys_if.mem_latency[31:0]}};
-            `CSR_MPM_MEM_LAT_H      : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.mem_latency[`PERF_CTR_BITS-1:32])}};
-        `ifdef EXT_TEX_ENABLE
-            // PERF: texunit
-            `CSR_MPM_TEX_READS      : read_data_r = {`NUM_THREADS{tex_perf_if.mem_reads[31:0]}};
-            `CSR_MPM_TEX_READS_H    : read_data_r = {`NUM_THREADS{32'(tex_perf_if.mem_reads[`PERF_CTR_BITS-1:32])}};
-            `CSR_MPM_TEX_LAT        : read_data_r = {`NUM_THREADS{tex_perf_if.mem_latency[31:0]}};
-            `CSR_MPM_TEX_LAT_H      : read_data_r = {`NUM_THREADS{32'(tex_perf_if.mem_latency[`PERF_CTR_BITS-1:32])}};
-        `endif
-        `ifdef EXT_RASTER_ENABLE
-            // PERF: rasterunit
-            `CSR_MPM_RAS_READS      : read_data_r = {`NUM_THREADS{raster_perf_if.mem_reads[31:0]}};
-            `CSR_MPM_RAS_READS_H    : read_data_r = {`NUM_THREADS{32'(raster_perf_if.mem_reads[`PERF_CTR_BITS-1:32])}};
-            `CSR_MPM_RAS_LAT        : read_data_r = {`NUM_THREADS{raster_perf_if.mem_latency[31:0]}};
-            `CSR_MPM_RAS_LAT_H      : read_data_r = {`NUM_THREADS{32'(raster_perf_if.mem_latency[`PERF_CTR_BITS-1:32])}};
-        `endif
-            // PERF: reserved            
-            `CSR_MPM_RESERVED       : read_data_r = '0;
-            `CSR_MPM_RESERVED_H     : read_data_r = '0;
-        `endif
+            `CSR_SATP       : read_data_r = {`NUM_THREADS{32'(csr_satp)}};
             
-            `CSR_SATP      : read_data_r = {`NUM_THREADS{32'(csr_satp)}};
-            
-            `CSR_MSTATUS   : read_data_r = {`NUM_THREADS{32'(csr_mstatus)}};
-            `CSR_MISA      : read_data_r = {`NUM_THREADS{((($clog2(`XLEN)-4) << (`XLEN-2)) | `MISA_STD)}};
-            `CSR_MEDELEG   : read_data_r = {`NUM_THREADS{32'(csr_medeleg)}};
-            `CSR_MIDELEG   : read_data_r = {`NUM_THREADS{32'(csr_mideleg)}};
-            `CSR_MIE       : read_data_r = {`NUM_THREADS{32'(csr_mie)}};
-            `CSR_MTVEC     : read_data_r = {`NUM_THREADS{32'(csr_mtvec)}};
+            `CSR_MSTATUS    : read_data_r = {`NUM_THREADS{32'(csr_mstatus)}};
+            `CSR_MISA       : read_data_r = {`NUM_THREADS{((($clog2(`XLEN)-4) << (`XLEN-2)) | `MISA_STD)}};
+            `CSR_MEDELEG    : read_data_r = {`NUM_THREADS{32'(csr_medeleg)}};
+            `CSR_MIDELEG    : read_data_r = {`NUM_THREADS{32'(csr_mideleg)}};
+            `CSR_MIE        : read_data_r = {`NUM_THREADS{32'(csr_mie)}};
+            `CSR_MTVEC      : read_data_r = {`NUM_THREADS{32'(csr_mtvec)}};
 
-            `CSR_MEPC      : read_data_r = {`NUM_THREADS{32'(csr_mepc)}};
+            `CSR_MEPC       : read_data_r = {`NUM_THREADS{32'(csr_mepc)}};
 
-            `CSR_PMPCFG0   : read_data_r = {`NUM_THREADS{32'(csr_pmpcfg[0])}};
-            `CSR_PMPADDR0  : read_data_r = {`NUM_THREADS{32'(csr_pmpaddr[0])}};
+            `CSR_PMPCFG0    : read_data_r = {`NUM_THREADS{32'(csr_pmpcfg[0])}};
+            `CSR_PMPADDR0   : read_data_r = {`NUM_THREADS{32'(csr_pmpaddr[0])}};
             
-            `CSR_MVENDORID : read_data_r = {`NUM_THREADS{32'd`VENDOR_ID}};
-            `CSR_MARCHID   : read_data_r = {`NUM_THREADS{32'd`ARCHITECTURE_ID}};
-            `CSR_MIMPID    : read_data_r = {`NUM_THREADS{32'd`IMPLEMENTATION_ID}};
+            `CSR_MVENDORID  : read_data_r = {`NUM_THREADS{32'd`VENDOR_ID}};
+            `CSR_MARCHID    : read_data_r = {`NUM_THREADS{32'd`ARCHITECTURE_ID}};
+            `CSR_MIMPID     : read_data_r = {`NUM_THREADS{32'd`IMPLEMENTATION_ID}};
             default: begin
+                read_addr_valid_r = 0;
                 if ((read_addr >= `CSR_MPM_BASE && read_addr < (`CSR_MPM_BASE + 32))
                  || (read_addr >= `CSR_MPM_BASE_H && read_addr < (`CSR_MPM_BASE_H + 32))) begin
                     read_addr_valid_r = 1;
-                end else     
+                `ifdef PERF_ENABLE 
+                    case (dcr_base_if.csr_mpm_class)
+                    `DCR_MPM_CORE: begin
+                        case (read_addr)                        
+                        // PERF: pipeline
+                        `CSR_MPM_IBUF_ST    : read_data_r = {`NUM_THREADS{perf_pipeline_if.ibf_stalls[31:0]}};
+                        `CSR_MPM_IBUF_ST_H  : read_data_r = {`NUM_THREADS{32'(perf_pipeline_if.ibf_stalls[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_SCRB_ST    : read_data_r = {`NUM_THREADS{perf_pipeline_if.scb_stalls[31:0]}};
+                        `CSR_MPM_SCRB_ST_H  : read_data_r = {`NUM_THREADS{32'(perf_pipeline_if.scb_stalls[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_ALU_ST     : read_data_r = {`NUM_THREADS{perf_pipeline_if.alu_stalls[31:0]}};
+                        `CSR_MPM_ALU_ST_H   : read_data_r = {`NUM_THREADS{32'(perf_pipeline_if.alu_stalls[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_LSU_ST     : read_data_r = {`NUM_THREADS{perf_pipeline_if.lsu_stalls[31:0]}};
+                        `CSR_MPM_LSU_ST_H   : read_data_r = {`NUM_THREADS{32'(perf_pipeline_if.lsu_stalls[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_CSR_ST     : read_data_r = {`NUM_THREADS{perf_pipeline_if.csr_stalls[31:0]}};
+                        `CSR_MPM_CSR_ST_H   : read_data_r = {`NUM_THREADS{32'(perf_pipeline_if.csr_stalls[`PERF_CTR_BITS-1:32])}};
+                    `ifdef EXT_F_ENABLE    
+                        `CSR_MPM_FPU_ST     : read_data_r = {`NUM_THREADS{perf_pipeline_if.fpu_stalls[31:0]}};
+                        `CSR_MPM_FPU_ST_H   : read_data_r = {`NUM_THREADS{32'(perf_pipeline_if.fpu_stalls[`PERF_CTR_BITS-1:32])}};
+                    `else        
+                        `CSR_MPM_FPU_ST     : read_data_r = '0;
+                        `CSR_MPM_FPU_ST_H   : read_data_r = '0;
+                    `endif
+                        `CSR_MPM_GPU_ST     : read_data_r = {`NUM_THREADS{perf_pipeline_if.gpu_stalls[31:0]}};
+                        `CSR_MPM_GPU_ST_H   : read_data_r = {`NUM_THREADS{32'(perf_pipeline_if.gpu_stalls[`PERF_CTR_BITS-1:32])}};
+                        // PERF: decode
+                        `CSR_MPM_LOADS      : read_data_r = {`NUM_THREADS{perf_pipeline_if.loads[31:0]}};
+                        `CSR_MPM_LOADS_H    : read_data_r = {`NUM_THREADS{32'(perf_pipeline_if.loads[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_STORES     : read_data_r = {`NUM_THREADS{perf_pipeline_if.stores[31:0]}};
+                        `CSR_MPM_STORES_H   : read_data_r = {`NUM_THREADS{32'(perf_pipeline_if.stores[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_BRANCHES   : read_data_r = {`NUM_THREADS{perf_pipeline_if.branches[31:0]}};
+                        `CSR_MPM_BRANCHES_H : read_data_r = {`NUM_THREADS{32'(perf_pipeline_if.branches[`PERF_CTR_BITS-1:32])}};
+                        // PERF: icache
+                        `CSR_MPM_ICACHE_READS       : read_data_r = {`NUM_THREADS{perf_memsys_if.icache_reads[31:0]}};
+                        `CSR_MPM_ICACHE_READS_H     : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.icache_reads[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_ICACHE_MISS_R      : read_data_r = {`NUM_THREADS{perf_memsys_if.icache_read_misses[31:0]}};
+                        `CSR_MPM_ICACHE_MISS_R_H    : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.icache_read_misses[`PERF_CTR_BITS-1:32])}};
+                        // PERF: dcache
+                        `CSR_MPM_DCACHE_READS       : read_data_r = {`NUM_THREADS{perf_memsys_if.dcache_reads[31:0]}};
+                        `CSR_MPM_DCACHE_READS_H     : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.dcache_reads[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_DCACHE_WRITES      : read_data_r = {`NUM_THREADS{perf_memsys_if.dcache_writes[31:0]}};
+                        `CSR_MPM_DCACHE_WRITES_H    : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.dcache_writes[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_DCACHE_MISS_R      : read_data_r = {`NUM_THREADS{perf_memsys_if.dcache_read_misses[31:0]}};
+                        `CSR_MPM_DCACHE_MISS_R_H    : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.dcache_read_misses[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_DCACHE_MISS_W      : read_data_r = {`NUM_THREADS{perf_memsys_if.dcache_write_misses[31:0]}};
+                        `CSR_MPM_DCACHE_MISS_W_H    : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.dcache_write_misses[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_DCACHE_BANK_ST     : read_data_r = {`NUM_THREADS{perf_memsys_if.dcache_bank_stalls[31:0]}};
+                        `CSR_MPM_DCACHE_BANK_ST_H   : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.dcache_bank_stalls[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_DCACHE_MSHR_ST     : read_data_r = {`NUM_THREADS{perf_memsys_if.dcache_mshr_stalls[31:0]}};
+                        `CSR_MPM_DCACHE_MSHR_ST_H   : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.dcache_mshr_stalls[`PERF_CTR_BITS-1:32])}};
+                        // PERF: smem          
+                        `CSR_MPM_SMEM_READS     : read_data_r = {`NUM_THREADS{perf_memsys_if.smem_reads[31:0]}};
+                        `CSR_MPM_SMEM_READS_H   : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.smem_reads[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_SMEM_WRITES    : read_data_r = {`NUM_THREADS{perf_memsys_if.smem_writes[31:0]}};
+                        `CSR_MPM_SMEM_WRITES_H  : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.smem_writes[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_SMEM_BANK_ST   : read_data_r = {`NUM_THREADS{perf_memsys_if.smem_bank_stalls[31:0]}};
+                        `CSR_MPM_SMEM_BANK_ST_H : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.smem_bank_stalls[`PERF_CTR_BITS-1:32])}};
+                        // PERF: memory
+                        `CSR_MPM_MEM_READS      : read_data_r = {`NUM_THREADS{perf_memsys_if.mem_reads[31:0]}};
+                        `CSR_MPM_MEM_READS_H    : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.mem_reads[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_MEM_WRITES     : read_data_r = {`NUM_THREADS{perf_memsys_if.mem_writes[31:0]}};
+                        `CSR_MPM_MEM_WRITES_H   : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.mem_writes[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_MEM_LAT        : read_data_r = {`NUM_THREADS{perf_memsys_if.mem_latency[31:0]}};
+                        `CSR_MPM_MEM_LAT_H      : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.mem_latency[`PERF_CTR_BITS-1:32])}};
+                        // PERF: reserved            
+                        `CSR_MPM_RESERVED       : read_data_r = '0;
+                        `CSR_MPM_RESERVED_H     : read_data_r = '0;  
+                        default:;            
+                        endcase                                                     
+                    end
+                    `DCR_MPM_TEX: begin
+                    `ifdef EXT_TEX_ENABLE
+                        case (read_addr)
+                        `CSR_MPM_TEX_READS      : read_data_r = {`NUM_THREADS{tex_perf_if.mem_reads[31:0]}};
+                        `CSR_MPM_TEX_READS_H    : read_data_r = {`NUM_THREADS{32'(tex_perf_if.mem_reads[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_TEX_LAT        : read_data_r = {`NUM_THREADS{tex_perf_if.mem_latency[31:0]}};
+                        `CSR_MPM_TEX_LAT_H      : read_data_r = {`NUM_THREADS{32'(tex_perf_if.mem_latency[`PERF_CTR_BITS-1:32])}};
+                        default:;
+                        endcase
+                    `endif
+                    end
+                    `DCR_MPM_RASTER: begin
+                    `ifdef EXT_RASTER_ENABLE
+                        case (read_addr)
+                        `CSR_MPM_RAS_READS      : read_data_r = {`NUM_THREADS{raster_perf_if.mem_reads[31:0]}};
+                        `CSR_MPM_RAS_READS_H    : read_data_r = {`NUM_THREADS{32'(raster_perf_if.mem_reads[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_RAS_LAT        : read_data_r = {`NUM_THREADS{raster_perf_if.mem_latency[31:0]}};
+                        `CSR_MPM_RAS_LAT_H      : read_data_r = {`NUM_THREADS{32'(raster_perf_if.mem_latency[`PERF_CTR_BITS-1:32])}};
+                        default:;
+                        endcase
+                    `endif
+                    end
+                    `DCR_MPM_RESERVED0, 
+                    `DCR_MPM_RESERVED1,
+                    `DCR_MPM_RESERVED2,
+                    `DCR_MPM_RESERVED3,
+                    `DCR_MPM_UNUSED:;
+                    default:;
+                    endcase
+                `endif
+                end     
             `ifdef EXT_TEX_ENABLE    
-                if (tex_read_enable) begin
+                else if (tex_read_enable) begin
                     read_data_r = tex_csr_if.read_data;
                     read_addr_valid_r = 1;                    
-                end else
+                end
             `endif
             `ifdef EXT_RASTER_ENABLE
-                if (raster_read_enable) begin
+                else if (raster_read_enable) begin
                     read_data_r = raster_csr_if.read_data;
                     read_addr_valid_r = 1;                    
                 end else
             `endif
             `ifdef EXT_ROP_ENABLE
-                if (rop_read_enable) begin
+                else if (rop_read_enable) begin
                     read_data_r = rop_csr_if.read_data;
                     read_addr_valid_r = 1;                    
-                end else
+                end
             `endif
-                    read_addr_valid_r = 0;
             end
         endcase
-    end 
+    end
+
+    `UNUSED_VAR (dcr_base_if.csr_mpm_class)
 
     `RUNTIME_ASSERT(~read_enable || read_addr_valid_r, ("%t: *** invalid CSR read address: 0x%0h (#%0d)", $time, read_addr, read_uuid))
 

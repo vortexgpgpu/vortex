@@ -4,6 +4,8 @@ module VX_dcr_data (
     input wire clk,
     input wire reset,
 
+    VX_dcr_base_if.master   dcr_base_if,
+
 `ifdef EXT_TEX_ENABLE
     VX_tex_dcr_if.master    tex_dcr_if,
 `endif
@@ -21,6 +23,8 @@ module VX_dcr_data (
 );
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
+
+    wire is_base_dcr = (/*dcr_wr_addr >= `DCR_BASE_BEGIN &&*/ dcr_wr_addr < `DCR_BASE_END);
     
 `ifdef EXT_TEX_ENABLE
     wire is_tex_dcr = (dcr_wr_addr >= `DCR_TEX_STATE_BEGIN && dcr_wr_addr < `DCR_TEX_STATE_END);
@@ -34,7 +38,7 @@ module VX_dcr_data (
 
     reg dcr_addr_valid;
     always @(*) begin
-        dcr_addr_valid = 0;
+        dcr_addr_valid = is_base_dcr;
     `ifdef EXT_TEX_ENABLE
         if (is_tex_dcr) begin
             dcr_addr_valid = 1;
@@ -55,6 +59,25 @@ module VX_dcr_data (
     `RUNTIME_ASSERT(~dcr_wr_valid || dcr_addr_valid, ("%t: *** invalid device configuration register write address: 0x%0h, data=0x%0h", $time, dcr_wr_addr, dcr_wr_data));
 
     assign dcr_wr_ready = 1; // no handshaking needed
+
+    ///////////////////////////////////////////////////////////////////////////
+
+    reg [7:0] csr_mpm_class;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            csr_mpm_class <= `DCR_MPM_CORE;
+        end else if (dcr_wr_valid) begin
+            case (dcr_wr_addr)
+            `DCR_BASE_BEGIN: csr_mpm_class <= dcr_wr_data [7:0];
+            default:;
+            endcase
+        end
+    end
+
+    assign dcr_base_if.csr_mpm_class = csr_mpm_class;
+
+    ///////////////////////////////////////////////////////////////////////////
 
 `ifdef EXT_TEX_ENABLE
     VX_tex_dcr #(

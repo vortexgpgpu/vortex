@@ -12,6 +12,8 @@ module VX_execute #(
     VX_cache_req_if.master dcache_req_if,
     VX_cache_rsp_if.slave dcache_rsp_if,
 
+    VX_dcr_base_if        dcr_base_if,
+
 `ifdef EXT_TEX_ENABLE
     VX_tex_dcr_if.slave    tex_dcr_if,
     VX_cache_req_if.master tcache_req_if,
@@ -127,6 +129,7 @@ module VX_execute #(
     `else
         `UNUSED_PIN (req_pending),
     `endif
+        .dcr_base_if    (dcr_base_if),
     `ifdef EXT_TEX_ENABLE        
         .tex_csr_if     (tex_csr_if),
     `ifdef PERF_ENABLE

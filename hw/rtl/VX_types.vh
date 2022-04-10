@@ -5,6 +5,10 @@
 `define NUM_DCRS                    4096
 `define DCR_BITS                    12
 
+`define DCR_BASE_BEGIN              12'h000
+`define DCR_MPM_CLASS               12'h001
+`define DCR_BASE_END                12'h002
+
 // User Floating-Point CSRs
 `define CSR_FFLAGS                  12'h001
 `define CSR_FRM                     12'h002
@@ -24,9 +28,23 @@
 
 `define CSR_MEPC                    12'h341
 
-// Machine Performance-monitoring counters
+// Machine Performance-monitoring counters classes
+           
+`define DCR_MPM_CORE                0
+`define DCR_MPM_TEX                 1
+`define DCR_MPM_RASTER              2
+`define DCR_MPM_ROP                 3
+`define DCR_MPM_RESERVED0           4
+`define DCR_MPM_RESERVED1           5
+`define DCR_MPM_RESERVED2           6
+`define DCR_MPM_RESERVED3           7
+`define DCR_MPM_UNUSED              8
+
+// Machine Performance-monitoring core counters
+
 `define CSR_MPM_BASE                12'hB00
 `define CSR_MPM_BASE_H              12'hB80
+
 // PERF: pipeline
 `define CSR_MCYCLE                  12'hB00
 `define CSR_MCYCLE_H                12'hB80
@@ -87,16 +105,18 @@
 `define CSR_MPM_MEM_WRITES_H        12'hB99
 `define CSR_MPM_MEM_LAT             12'hB1A     // memory latency
 `define CSR_MPM_MEM_LAT_H           12'hB9A
-// PERF: texunit
-`define CSR_MPM_TEX_READS           12'hB1B     // texture accesses
-`define CSR_MPM_TEX_READS_H         12'hB9B
-`define CSR_MPM_TEX_LAT             12'hB1C     // texture latency
-`define CSR_MPM_TEX_LAT_H           12'hB9C
-// PERF: rasterunit
-`define CSR_MPM_RAS_READS           12'hB1E     // raster accesses
-`define CSR_MPM_RAS_READS_H         12'hB9E
-`define CSR_MPM_RAS_LAT             12'hB1F     // raster latency
-`define CSR_MPM_RAS_LAT_H           12'hB9F
+
+// PERF: texture unit
+`define CSR_MPM_TEX_READS           12'hB00     // texture accesses
+`define CSR_MPM_TEX_READS_H         12'hB80
+`define CSR_MPM_TEX_LAT             12'hB01     // texture latency
+`define CSR_MPM_TEX_LAT_H           12'hB81
+
+// PERF: raster unit
+`define CSR_MPM_RAS_READS           12'hB00     // raster accesses
+`define CSR_MPM_RAS_READS_H         12'hB80
+`define CSR_MPM_RAS_LAT             12'hB01     // raster latency
+`define CSR_MPM_RAS_LAT_H           12'hB81
 
 // Machine Information Registers
 `define CSR_MVENDORID               12'hF11
@@ -172,7 +192,7 @@
 `define TEX_FORMAT_L8               5
 `define TEX_FORMAT_A8               6
 
-`define DCR_TEX_STATE_BEGIN         12'h100
+`define DCR_TEX_STATE_BEGIN         (`DCR_BASE_END)
 `define DCR_TEX_STAGE               (`DCR_TEX_STATE_BEGIN+0)
 `define DCR_TEX_ADDR                (`DCR_TEX_STATE_BEGIN+1)
 `define DCR_TEX_LOGDIM              (`DCR_TEX_STATE_BEGIN+2)

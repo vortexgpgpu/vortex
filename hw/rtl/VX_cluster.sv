@@ -9,6 +9,8 @@ module VX_cluster #(
     input  wire             clk,
     input  wire             reset,
 
+    VX_dcr_base_if.slave    dcr_base_if,
+
 `ifdef EXT_TEX_ENABLE
     VX_tex_dcr_if.slave     tex_dcr_if,
 `endif
@@ -320,6 +322,8 @@ module VX_cluster #(
 
             .clk            (clk),
             .reset          (core_reset),
+
+            .dcr_base_if    (dcr_base_if),
 
         `ifdef EXT_TEX_ENABLE
             .tex_dcr_if     (tex_dcr_if),

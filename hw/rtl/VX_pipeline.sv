@@ -17,6 +17,8 @@ module VX_pipeline #(
     VX_cache_req_if.master     icache_req_if,
     VX_cache_rsp_if.slave      icache_rsp_if,
 
+    VX_dcr_base_if.slave       dcr_base_if,
+
 `ifdef EXT_TEX_ENABLE
     VX_tex_dcr_if.slave        tex_dcr_if,
     VX_cache_req_if.master     tcache_req_if,
@@ -149,6 +151,8 @@ module VX_pipeline #(
 
         .dcache_req_if  (dcache_req_if),
         .dcache_rsp_if  (dcache_rsp_if),
+
+        .dcr_base_if    (dcr_base_if),
 
     `ifdef EXT_TEX_ENABLE
         .tex_dcr_if     (tex_dcr_if),
