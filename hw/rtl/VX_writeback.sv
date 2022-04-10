@@ -25,7 +25,7 @@ module VX_writeback #(
     `UNUSED_PARAM (CORE_ID)
 
     localparam DATAW = `NW_BITS + 32 + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * 32) + 1;
-    localparam NUM_RSPS = 5 + `EXT_F_ENABLED;
+    localparam NUM_RSPS = 4 + `EXT_F_ENABLED;
 
     wire wb_valid;
     wire [`NW_BITS-1:0] wb_wid;
