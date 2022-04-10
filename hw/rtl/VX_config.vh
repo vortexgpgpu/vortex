@@ -674,7 +674,7 @@
 
 // Number of associative ways
 `ifndef L3_NUM_WAYS
-`define L3_NUM_WAYS 8
+`define L3_NUM_WAYS 4
 `endif
 
 `endif
