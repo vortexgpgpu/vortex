@@ -27,74 +27,62 @@ module VX_writeback #(
     localparam DATAW = `NW_BITS + 32 + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * 32) + 1;
     localparam NUM_RSPS = 4 + `EXT_F_ENABLED;
 
-    wire wb_valid;
-    wire [`NW_BITS-1:0] wb_wid;
-    wire [31:0] wb_PC;
-    wire [`NUM_THREADS-1:0] wb_tmask;
-    wire [`NR_BITS-1:0] wb_rd;
-    wire [`NUM_THREADS-1:0][31:0] wb_data;
-    wire wb_eop;
+`ifdef EXT_F_ENABLE
+    wire wb_fpu_ready_in;
+`endif
+    wire wb_gpu_ready_in;
+    wire wb_csr_ready_in;
+    wire wb_alu_ready_in;
+    wire wb_ld_ready_in;
 
-    wire [NUM_RSPS-1:0] rsp_ready;
-    wire stall;
-    
     VX_stream_mux #(
         .NUM_REQS (NUM_RSPS),
         .DATAW    (DATAW),
-        .BUFFERED (1),
+        .BUFFERED (2),
         .ARBITER  ("F")
     ) rsp_mux (
         .clk       (clk),
         .reset     (reset),
         `UNUSED_PIN (sel_in),
         .valid_in  ({            
-            gpu_commit_if.valid && gpu_commit_if.wb,
-            csr_commit_if.valid && csr_commit_if.wb,
-            alu_commit_if.valid && alu_commit_if.wb,    
         `ifdef EXT_F_ENABLE
             fpu_commit_if.valid && fpu_commit_if.wb,
         `endif
+            gpu_commit_if.valid && gpu_commit_if.wb,
+            csr_commit_if.valid && csr_commit_if.wb,
+            alu_commit_if.valid && alu_commit_if.wb,
             ld_commit_if.valid  && ld_commit_if.wb
         }),
-        .data_in   ({                                       
+        .data_in   ({                                  
+        `ifdef EXT_F_ENABLE
+            {fpu_commit_if.wid, fpu_commit_if.PC, fpu_commit_if.tmask, fpu_commit_if.rd, fpu_commit_if.data, fpu_commit_if.eop},
+        `endif     
             {gpu_commit_if.wid, gpu_commit_if.PC, gpu_commit_if.tmask, gpu_commit_if.rd, gpu_commit_if.data, gpu_commit_if.eop},
             {csr_commit_if.wid, csr_commit_if.PC, csr_commit_if.tmask, csr_commit_if.rd, csr_commit_if.data, csr_commit_if.eop},
             {alu_commit_if.wid, alu_commit_if.PC, alu_commit_if.tmask, alu_commit_if.rd, alu_commit_if.data, alu_commit_if.eop},
-        `ifdef EXT_F_ENABLE
-            {fpu_commit_if.wid, fpu_commit_if.PC, fpu_commit_if.tmask, fpu_commit_if.rd, fpu_commit_if.data, fpu_commit_if.eop},
-        `endif
-            { ld_commit_if.wid, ld_commit_if.PC,  ld_commit_if.tmask,  ld_commit_if.rd,  ld_commit_if.data,  ld_commit_if.eop}
+            {ld_commit_if.wid,  ld_commit_if.PC,  ld_commit_if.tmask,  ld_commit_if.rd,  ld_commit_if.data,  ld_commit_if.eop}
         }),
-        .ready_in  (rsp_ready),
-        .valid_out (wb_valid),
-        .data_out  ({wb_wid, wb_PC, wb_tmask, wb_rd, wb_data, wb_eop}),
-        .ready_out (~stall)
+        .ready_in  ({
+        `ifdef EXT_F_ENABLE
+            wb_fpu_ready_in,
+        `endif 
+            wb_gpu_ready_in,
+            wb_csr_ready_in,
+            wb_alu_ready_in,
+            wb_ld_ready_in
+        }),
+        .valid_out (writeback_if.valid),
+        .data_out  ({writeback_if.wid, writeback_if.PC, writeback_if.tmask, writeback_if.rd, writeback_if.data, writeback_if.eop}),
+        .ready_out (writeback_if.ready)
     );
 
-    assign ld_commit_if.ready = rsp_ready[0] || ~ld_commit_if.wb;
 `ifdef EXT_F_ENABLE
-    assign fpu_commit_if.ready = rsp_ready[1] || ~fpu_commit_if.wb;
-    assign alu_commit_if.ready = rsp_ready[2] || ~alu_commit_if.wb;
-    assign csr_commit_if.ready = rsp_ready[3] || ~csr_commit_if.wb;
-    assign gpu_commit_if.ready = rsp_ready[4] || ~gpu_commit_if.wb;
-`else
-    assign alu_commit_if.ready = rsp_ready[1] || ~alu_commit_if.wb;
-    assign csr_commit_if.ready = rsp_ready[2] || ~csr_commit_if.wb;
-    assign gpu_commit_if.ready = rsp_ready[3] || ~gpu_commit_if.wb;
+    assign fpu_commit_if.ready = wb_fpu_ready_in || ~fpu_commit_if.wb;
 `endif
-    
-    assign stall = ~writeback_if.ready && writeback_if.valid;
-    
-    VX_pipe_register #(
-        .DATAW  (1 + DATAW),
-        .RESETW (1)
-    ) pipe_reg (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (~stall),
-        .data_in  ({wb_valid,           wb_wid,           wb_PC,           wb_tmask,           wb_rd,           wb_data,           wb_eop}),
-        .data_out ({writeback_if.valid, writeback_if.wid, writeback_if.PC, writeback_if.tmask, writeback_if.rd, writeback_if.data, writeback_if.eop})
-    );
+    assign gpu_commit_if.ready = wb_gpu_ready_in || ~gpu_commit_if.wb;
+    assign csr_commit_if.ready = wb_csr_ready_in || ~csr_commit_if.wb;
+    assign alu_commit_if.ready = wb_alu_ready_in || ~alu_commit_if.wb;
+    assign ld_commit_if.ready  = wb_ld_ready_in  || ~ld_commit_if.wb;
     
     // simulation helper signal to get RISC-V tests Pass/Fail status
     always @(posedge clk) begin
