@@ -131,8 +131,8 @@
 `define CSR_MPM_ROP_WRITES_H        12'hB84
 `define CSR_MPM_ROP_LAT             12'hB05     // rop memory latency
 `define CSR_MPM_ROP_LAT_H           12'hB85
-`define CSR_MPM_ROP_INACTIVE_CYC    12'hB06     // rop inactive cycles
-`define CSR_MPM_ROP_INACTIVE_CYC_H  12'hB86
+`define CSR_MPM_ROP_IDLE_CYC        12'hB06     // rop idle cycles
+`define CSR_MPM_ROP_IDLE_CYC_H      12'hB86
 // PERF: rop cache
 // <TODO>
 

@@ -347,8 +347,8 @@ module VX_csr_data #(
                         `CSR_MPM_ROP_WRITES_H   : read_data_r = {`NUM_THREADS{32'(rop_perf_if.mem_writes[`PERF_CTR_BITS-1:32])}};
                         `CSR_MPM_ROP_LAT        : read_data_r = {`NUM_THREADS{rop_perf_if.mem_latency[31:0]}};
                         `CSR_MPM_ROP_LAT_H      : read_data_r = {`NUM_THREADS{32'(rop_perf_if.mem_latency[`PERF_CTR_BITS-1:32])}};
-                        `CSR_MPM_ROP_INACTIVE_CYC:   read_data_r = {`NUM_THREADS{rop_perf_if.inactive_cycles[31:0]}};
-                        `CSR_MPM_ROP_INACTIVE_CYC_H: read_data_r = {`NUM_THREADS{32'(rop_perf_if.inactive_cycles[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_ROP_IDLE_CYC   : read_data_r = {`NUM_THREADS{rop_perf_if.idle_cycles[31:0]}};
+                        `CSR_MPM_ROP_IDLE_CYC_H : read_data_r = {`NUM_THREADS{32'(rop_perf_if.idle_cycles[`PERF_CTR_BITS-1:32])}};
                         default:;
                         endcase
                     `endif

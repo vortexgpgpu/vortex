@@ -363,11 +363,11 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
       uint64_t rop_mem_reads  = get_csr_64(staging_ptr, CSR_MPM_ROP_READS);
       uint64_t rop_mem_writes = get_csr_64(staging_ptr, CSR_MPM_ROP_WRITES);
       uint64_t rop_mem_lat    = get_csr_64(staging_ptr, CSR_MPM_ROP_LAT);
-      uint64_t rop_inactive_cycles = get_csr_64(staging_ptr, CSR_MPM_ROP_INACTIVE_CYC);
+      uint64_t rop_idle_cycles = get_csr_64(staging_ptr, CSR_MPM_ROP_IDLE_CYC);
       fprintf(stream, "PERF: rop memory reads=%ld\n", rop_mem_reads);
       fprintf(stream, "PERF: rop memory writes=%ld\n", rop_mem_writes);
       fprintf(stream, "PERF: rop memory latency=%ld\n", rop_mem_lat);
-      fprintf(stream, "PERF: rop inactive cycles=%ld\n", rop_inactive_cycles);
+      fprintf(stream, "PERF: rop idle cycles=%ld\n", rop_idle_cycles);
       core_id = num_cores; // just dump core0
     #endif
     } break;

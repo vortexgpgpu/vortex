@@ -41,19 +41,19 @@ module VX_rop_unit #(
     );
 
 `ifdef PERF_ENABLE
-    reg [`PERF_CTR_BITS-1:0] perf_inactive_cycles;
+    reg [`PERF_CTR_BITS-1:0] perf_idle_cycles;
 
-    wire perf_inactive_cycle = ~rop_req_if.valid & rop_req_if.ready;
+    wire perf_idle_cycle = ~rop_req_if.valid & rop_req_if.ready;
 
     always @(posedge clk) begin
         if (reset) begin
-            perf_inactive_cycles <= 0;
+            perf_idle_cycles <= 0;
         end else begin
-            perf_inactive_cycles <= perf_inactive_cycles + `PERF_CTR_BITS'(perf_inactive_cycle);
+            perf_idle_cycles <= perf_idle_cycles + `PERF_CTR_BITS'(perf_idle_cycle);
         end
     end
 
-    assign rop_perf_if.inactive_cycles = perf_inactive_cycles;
+    assign rop_perf_if.idle_cycles = perf_idle_cycles;
 `endif
 
 endmodule
