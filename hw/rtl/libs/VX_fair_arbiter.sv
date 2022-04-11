@@ -40,10 +40,10 @@ module VX_fair_arbiter #(
             end
         end
                
-        VX_fixed_arbiter #(
+        VX_priority_arbiter #(
             .NUM_REQS    (NUM_REQS),
             .LOCK_ENABLE (LOCK_ENABLE)
-        ) fixed_arbiter (
+        ) priority_arbiter (
             .clk          (clk),
             .reset        (reset),
             .unlock       (unlock),

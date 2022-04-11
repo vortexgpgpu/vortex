@@ -1,7 +1,7 @@
 `include "VX_platform.vh"
 
-`TRACING_OFF
-module VX_fixed_arbiter #(
+//`TRACING_OFF
+module VX_priority_arbiter #(
     parameter NUM_REQS    = 1,
     parameter LOCK_ENABLE = 0,
     localparam LOG_NUM_REQS = `LOG2UP(NUM_REQS)
@@ -29,7 +29,7 @@ module VX_fixed_arbiter #(
 
         VX_priority_encoder #(
             .N (NUM_REQS)
-        ) tid_select (
+        ) priority_encoder (
             .data_in   (requests),
             .index     (grant_index),
             .onehot    (grant_onehot),
@@ -39,4 +39,4 @@ module VX_fixed_arbiter #(
     end
     
 endmodule
-`TRACING_ON
+//`TRACING_ON

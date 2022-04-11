@@ -16,7 +16,7 @@ module VX_generic_arbiter #(
     output wire                     grant_valid
 );
     if (TYPE == "P") begin
-        VX_fixed_arbiter #(
+        VX_priority_arbiter #(
             .NUM_REQS    (NUM_REQS),
             .LOCK_ENABLE (LOCK_ENABLE)
         ) grant_arb (
