@@ -371,6 +371,15 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
       core_id = num_cores; // just dump core0
     #endif
     } break;
+    case DCR_MPM_CLASS_RASTER: {
+    #ifdef EXT_RASTER_ENABLE
+      uint64_t raster_mem_reads  = get_csr_64(staging_ptr, CSR_MPM_RAS_READS);
+      uint64_t raster_mem_lat    = get_csr_64(staging_ptr, CSR_MPM_RAS_LAT);
+      fprintf(stream, "PERF: raster memory reads=%ld\n", raster_mem_reads);
+      fprintf(stream, "PERF: raster memory latency=%ld\n", raster_mem_lat);
+      core_id = num_cores; // just dump core0
+    #endif
+    } break;
     }
   #endif
   }  
