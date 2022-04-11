@@ -9,6 +9,14 @@
 `define DCR_MPM_CLASS               12'h001
 `define DCR_BASE_END                12'h002
 
+// Machine Performance-monitoring counters classes
+
+`define DCR_MPM_CLASS_NONE          0           
+`define DCR_MPM_CLASS_CORE          1
+`define DCR_MPM_CLASS_TEX           2
+`define DCR_MPM_CLASS_RASTER        3
+`define DCR_MPM_CLASS_ROP           4
+
 // User Floating-Point CSRs
 `define CSR_FFLAGS                  12'h001
 `define CSR_FRM                     12'h002
@@ -28,30 +36,18 @@
 
 `define CSR_MEPC                    12'h341
 
-// Machine Performance-monitoring counters classes
-           
-`define DCR_MPM_CORE                0
-`define DCR_MPM_TEX                 1
-`define DCR_MPM_RASTER              2
-`define DCR_MPM_ROP                 3
-`define DCR_MPM_RESERVED0           4
-`define DCR_MPM_RESERVED1           5
-`define DCR_MPM_RESERVED2           6
-`define DCR_MPM_RESERVED3           7
-`define DCR_MPM_UNUSED              8
-
-// Machine Performance-monitoring core counters
-
 `define CSR_MPM_BASE                12'hB00
 `define CSR_MPM_BASE_H              12'hB80
 
-// PERF: pipeline
+// Machine Performance-monitoring core counters
+// PERF: Standard
 `define CSR_MCYCLE                  12'hB00
 `define CSR_MCYCLE_H                12'hB80
 `define CSR_MPM_RESERVED            12'hB01
 `define CSR_MPM_RESERVED_H          12'hB81
 `define CSR_MINSTRET                12'hB02
 `define CSR_MINSTRET_H              12'hB82
+// PERF: pipeline
 `define CSR_MPM_IBUF_ST             12'hB03
 `define CSR_MPM_IBUF_ST_H           12'hB83
 `define CSR_MPM_SCRB_ST             12'hB04
@@ -106,27 +102,36 @@
 `define CSR_MPM_MEM_LAT             12'hB1A     // memory latency
 `define CSR_MPM_MEM_LAT_H           12'hB9A
 
+// Machine Performance-monitoring texture counters
 // PERF: texture unit
-`define CSR_MPM_TEX_READS           12'hB00     // texture accesses
-`define CSR_MPM_TEX_READS_H         12'hB80
-`define CSR_MPM_TEX_LAT             12'hB01     // texture latency
-`define CSR_MPM_TEX_LAT_H           12'hB81
+`define CSR_MPM_TEX_READS           12'hB03     // texture accesses
+`define CSR_MPM_TEX_READS_H         12'hB83
+`define CSR_MPM_TEX_LAT             12'hB04     // texture latency
+`define CSR_MPM_TEX_LAT_H           12'hB84
+// PERF: texture cache
+// <TODO>
 
+// Machine Performance-monitoring raster counters
 // PERF: raster unit
-`define CSR_MPM_RAS_READS           12'hB00     // raster accesses
-`define CSR_MPM_RAS_READS_H         12'hB80
-`define CSR_MPM_RAS_LAT             12'hB01     // raster latency
-`define CSR_MPM_RAS_LAT_H           12'hB81
+`define CSR_MPM_RAS_READS           12'hB03     // raster accesses
+`define CSR_MPM_RAS_READS_H         12'hB83
+`define CSR_MPM_RAS_LAT             12'hB04     // raster latency
+`define CSR_MPM_RAS_LAT_H           12'hB84
+// PERF: raster cache
+// <TODO>
 
-// PERF: render output
-`define CSR_MPM_ROP_READS           12'hB00     // rop memory reads
-`define CSR_MPM_ROP_READS_H         12'hB80
-`define CSR_MPM_ROP_WRITES          12'hB01     // rop memory writes
-`define CSR_MPM_ROP_WRITES_H        12'hB81
-`define CSR_MPM_ROP_LAT             12'hB02     // rop memory latency
-`define CSR_MPM_ROP_LAT_H           12'hB82
-`define CSR_MPM_ROP_INACTIVE_CYC    12'hB03     // rop inactive cycles
-`define CSR_MPM_ROP_INACTIVE_CYC_H  12'hB83
+// Machine Performance-monitoring rop counters
+// PERF: rop unit
+`define CSR_MPM_ROP_READS           12'hB03     // rop memory reads
+`define CSR_MPM_ROP_READS_H         12'hB83
+`define CSR_MPM_ROP_WRITES          12'hB04     // rop memory writes
+`define CSR_MPM_ROP_WRITES_H        12'hB84
+`define CSR_MPM_ROP_LAT             12'hB05     // rop memory latency
+`define CSR_MPM_ROP_LAT_H           12'hB85
+`define CSR_MPM_ROP_INACTIVE_CYC    12'hB06     // rop inactive cycles
+`define CSR_MPM_ROP_INACTIVE_CYC_H  12'hB86
+// PERF: rop cache
+// <TODO>
 
 // Machine Information Registers
 `define CSR_MVENDORID               12'hF11

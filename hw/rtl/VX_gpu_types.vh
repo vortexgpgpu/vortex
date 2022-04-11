@@ -30,6 +30,10 @@ typedef struct packed {
     logic [`NW_BITS-1:0]    size_m1;
 } gpu_barrier_t;
 
+typedef struct packed {
+    logic [7:0]             mpm_class;
+} base_dcrs_t;
+
 endpackage
 
 `define GPU_TMC_BITS        $bits(VX_gpu_types::gpu_tmc_t)

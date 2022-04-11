@@ -1,4 +1,7 @@
 `include "VX_define.vh"
+`ifdef DBG_TRACE_CORE_PIPELINE
+`include "VX_trace_info.vh"
+`endif
 
 module VX_dcr_data (
     input wire clk,
@@ -62,20 +65,20 @@ module VX_dcr_data (
 
     ///////////////////////////////////////////////////////////////////////////
 
-    reg [7:0] csr_mpm_class;
+    base_dcrs_t base_dcrs;
 
     always @(posedge clk) begin
         if (reset) begin
-            csr_mpm_class <= `DCR_MPM_CORE;
+            base_dcrs <= '0;
         end else if (dcr_wr_valid) begin
             case (dcr_wr_addr)
-            `DCR_BASE_BEGIN: csr_mpm_class <= dcr_wr_data [7:0];
+            `DCR_MPM_CLASS: base_dcrs.mpm_class <= dcr_wr_data[7:0];
             default:;
             endcase
         end
     end
 
-    assign dcr_base_if.csr_mpm_class = csr_mpm_class;
+    assign dcr_base_if.data = base_dcrs;
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -118,6 +121,16 @@ module VX_dcr_data (
 
         .rop_dcr_if (rop_dcr_if)
     );
+`endif
+
+`ifdef DBG_TRACE_CORE_PIPELINE
+    always @(posedge clk) begin
+        if (dcr_wr_valid && is_base_dcr) begin
+            dpi_trace(1, "%d: base-dcr: state=", $time);
+            trace_base_dcr(1, dcr_wr_addr);
+            dpi_trace(1, ", data=0x%0h\n", dcr_wr_data);
+        end
+    end
 `endif
 
 endmodule

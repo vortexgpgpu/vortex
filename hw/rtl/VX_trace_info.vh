@@ -1,5 +1,5 @@
-`ifndef VX_TRACE_INSTR_VH
-`define VX_TRACE_INSTR_VH
+`ifndef VX_TRACE_INFO_VH
+`define VX_TRACE_INFO_VH
 
 `include "VX_define.vh"
 
@@ -148,6 +148,16 @@ task trace_ex_op (
     end    
     default: dpi_trace(level, "?");
     endcase 
+endtask
+
+task trace_base_dcr (
+    input int                  level,
+    input [`DCR_ADDR_BITS-1:0] addr
+);
+    case (addr)
+        `DCR_MPM_CLASS: dpi_trace(level, "MPM_CLASS");     
+        default:        dpi_trace(level, "?");
+    endcase  
 endtask
 
 `endif

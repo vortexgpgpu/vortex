@@ -3,7 +3,7 @@
 show_usage()
 {
     echo "Vortex BlackBox Test Driver v1.0"
-    echo "Usage: [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--perf] [--help]]"
+    echo "Usage: [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--perf=#class] [--help]]"
 }
 
 SCRIPT_DIR=$(dirname "$0")
@@ -21,6 +21,7 @@ DEBUG=0
 DEBUG_LEVEL=0
 SCOPE=0
 HAS_ARGS=0
+PERF_CLASS=0
 
 for i in "$@"
 do
@@ -67,8 +68,9 @@ case $i in
         CORES=1        
         shift
         ;;
-    --perf)
+    --perf=*)
         PERF_FLAG=-DPERF_ENABLE
+        PERF_CLASS=${i#*=}    
         shift
         ;;
     --args=*)
@@ -137,6 +139,9 @@ then
 fi
 
 echo "$CONFIGS+$DEBUG+$SCOPE" > $BLACKBOX_CACHE
+
+# export performance monitor class identifier
+export PERF_CLASS=$PERF_CLASS
 
 status=0
 

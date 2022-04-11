@@ -222,6 +222,8 @@ module VX_csr_data #(
             
             `CSR_MCYCLE     : read_data_r = {`NUM_THREADS{fetch_to_csr_if.cycles[31:0]}};
             `CSR_MCYCLE_H   : read_data_r = {`NUM_THREADS{32'(fetch_to_csr_if.cycles[`PERF_CTR_BITS-1:32])}};
+            `CSR_MPM_RESERVED : read_data_r = 'x;
+            `CSR_MPM_RESERVED_H : read_data_r = 'x;  
             `CSR_MINSTRET   : read_data_r = {`NUM_THREADS{cmt_to_csr_if.instret[31:0]}};
             `CSR_MINSTRET_H : read_data_r = {`NUM_THREADS{32'(cmt_to_csr_if.instret[`PERF_CTR_BITS-1:32])}};       
             
@@ -242,14 +244,15 @@ module VX_csr_data #(
             `CSR_MVENDORID  : read_data_r = {`NUM_THREADS{32'd`VENDOR_ID}};
             `CSR_MARCHID    : read_data_r = {`NUM_THREADS{32'd`ARCHITECTURE_ID}};
             `CSR_MIMPID     : read_data_r = {`NUM_THREADS{32'd`IMPLEMENTATION_ID}};
+
             default: begin
                 read_addr_valid_r = 0;
-                if ((read_addr >= `CSR_MPM_BASE && read_addr < (`CSR_MPM_BASE + 32))
+                if ((read_addr >= `CSR_MPM_BASE   && read_addr < (`CSR_MPM_BASE + 32))
                  || (read_addr >= `CSR_MPM_BASE_H && read_addr < (`CSR_MPM_BASE_H + 32))) begin
                     read_addr_valid_r = 1;
                 `ifdef PERF_ENABLE 
-                    case (dcr_base_if.csr_mpm_class)
-                    `DCR_MPM_CORE: begin
+                    case (dcr_base_if.data.mpm_class)
+                    `DCR_MPM_CLASS_CORE: begin
                         case (read_addr)                        
                         // PERF: pipeline
                         `CSR_MPM_IBUF_ST    : read_data_r = {`NUM_THREADS{perf_pipeline_if.ibf_stalls[31:0]}};
@@ -309,14 +312,11 @@ module VX_csr_data #(
                         `CSR_MPM_MEM_WRITES     : read_data_r = {`NUM_THREADS{perf_memsys_if.mem_writes[31:0]}};
                         `CSR_MPM_MEM_WRITES_H   : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.mem_writes[`PERF_CTR_BITS-1:32])}};
                         `CSR_MPM_MEM_LAT        : read_data_r = {`NUM_THREADS{perf_memsys_if.mem_latency[31:0]}};
-                        `CSR_MPM_MEM_LAT_H      : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.mem_latency[`PERF_CTR_BITS-1:32])}};
-                        // PERF: reserved            
-                        `CSR_MPM_RESERVED       : read_data_r = '0;
-                        `CSR_MPM_RESERVED_H     : read_data_r = '0;  
+                        `CSR_MPM_MEM_LAT_H      : read_data_r = {`NUM_THREADS{32'(perf_memsys_if.mem_latency[`PERF_CTR_BITS-1:32])}};                        
                         default:;            
                         endcase                                                     
                     end
-                    `DCR_MPM_TEX: begin
+                    `DCR_MPM_CLASS_TEX: begin
                     `ifdef EXT_TEX_ENABLE
                         case (read_addr)
                         `CSR_MPM_TEX_READS      : read_data_r = {`NUM_THREADS{tex_perf_if.mem_reads[31:0]}};
@@ -327,7 +327,7 @@ module VX_csr_data #(
                         endcase
                     `endif
                     end
-                    `DCR_MPM_RASTER: begin
+                    `DCR_MPM_CLASS_RASTER: begin
                     `ifdef EXT_RASTER_ENABLE
                         case (read_addr)
                         `CSR_MPM_RAS_READS      : read_data_r = {`NUM_THREADS{raster_perf_if.mem_reads[31:0]}};
@@ -338,7 +338,7 @@ module VX_csr_data #(
                         endcase
                     `endif
                     end
-                    `DCR_MPM_ROP: begin
+                    `DCR_MPM_CLASS_ROP: begin
                     `ifdef EXT_ROP_ENABLE
                         case (read_addr)
                         `CSR_MPM_ROP_READS      : read_data_r = {`NUM_THREADS{rop_perf_if.mem_reads[31:0]}};
@@ -347,17 +347,12 @@ module VX_csr_data #(
                         `CSR_MPM_ROP_WRITES_H   : read_data_r = {`NUM_THREADS{32'(rop_perf_if.mem_writes[`PERF_CTR_BITS-1:32])}};
                         `CSR_MPM_ROP_LAT        : read_data_r = {`NUM_THREADS{rop_perf_if.mem_latency[31:0]}};
                         `CSR_MPM_ROP_LAT_H      : read_data_r = {`NUM_THREADS{32'(rop_perf_if.mem_latency[`PERF_CTR_BITS-1:32])}};
-                        `CSR_MPM_ROP_INACTIVE_CYC:read_data_r = {`NUM_THREADS{rop_perf_if.inactive_cycles[31:0]}};
+                        `CSR_MPM_ROP_INACTIVE_CYC:   read_data_r = {`NUM_THREADS{rop_perf_if.inactive_cycles[31:0]}};
                         `CSR_MPM_ROP_INACTIVE_CYC_H: read_data_r = {`NUM_THREADS{32'(rop_perf_if.inactive_cycles[`PERF_CTR_BITS-1:32])}};
                         default:;
                         endcase
                     `endif
                     end
-                    `DCR_MPM_RESERVED0, 
-                    `DCR_MPM_RESERVED1,
-                    `DCR_MPM_RESERVED2,
-                    `DCR_MPM_RESERVED3,
-                    `DCR_MPM_UNUSED:;
                     default:;
                     endcase
                 `endif
@@ -384,7 +379,7 @@ module VX_csr_data #(
         endcase
     end
 
-    `UNUSED_VAR (dcr_base_if.csr_mpm_class)
+    `UNUSED_VAR (dcr_base_if.data)
 
     `RUNTIME_ASSERT(~read_enable || read_addr_valid_r, ("%t: *** invalid CSR read address: 0x%0h (#%0d)", $time, read_addr, read_uuid))
 

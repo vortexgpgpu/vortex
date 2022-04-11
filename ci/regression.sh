@@ -65,8 +65,8 @@ echo "begin texture tests..."
 CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=vlsim --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g0.png -g0"
 CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g0.png -g0"
 CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g0.png -g0"
-CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -osoccer_result.png -rsoccerref_g1.png -g1" --perf
-CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g1.png -g1" --perf
+CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -osoccer_result.png -rsoccerref_g1.png -g1" --perf=1
+CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g1.png -g1" --perf=1
 CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -orsoccer_result.png -rsoccer_ref_g2.png -g2"
 
 echo "coverage texture done!"
@@ -102,8 +102,8 @@ debug()
 {
 echo "begin debugging tests..."
 
-./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --perf --app=demo --args="-n1"
-./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --perf --app=demo --args="-n1"
+./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --perf=1 --app=demo --args="-n1"
+./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --perf=1 --app=demo --args="-n1"
 ./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --debug=1 --app=demo --args="-n1"
 ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --debug=1 --app=demo --args="-n1"
 ./ci/blackbox.sh --driver=vlsim --cores=1 --scope --app=basic --args="-t0 -n1"
@@ -120,13 +120,13 @@ CONFIGS=-DEXT_M_DISABLE ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=no_mf_e
 
 # disabling F extension
 CONFIGS=-DEXT_F_DISABLE ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=no_mf_ext
-CONFIGS=-DEXT_F_DISABLE ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=no_mf_ext --perf
-CONFIGS=-DEXT_F_DISABLE ./ci/blackbox.sh --driver=simx --cores=1 --app=no_mf_ext --perf
+CONFIGS=-DEXT_F_DISABLE ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=no_mf_ext --perf=1
+CONFIGS=-DEXT_F_DISABLE ./ci/blackbox.sh --driver=simx --cores=1 --app=no_mf_ext --perf=1
 
 # disable shared memory
 CONFIGS=-DSM_DISABLE ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=no_smem
-CONFIGS=-DSM_DISABLE ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=no_smem --perf
-CONFIGS=-DSM_DISABLE ./ci/blackbox.sh --driver=simx --cores=1 --app=no_smem --perf
+CONFIGS=-DSM_DISABLE ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=no_smem --perf=1
+CONFIGS=-DSM_DISABLE ./ci/blackbox.sh --driver=simx --cores=1 --app=no_smem --perf=1
 
 # using Default FPU core
 FPU_CORE=FPU_DEFAULT ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood

@@ -6,7 +6,7 @@ CXXFLAGS += -fPIC
 
 LDFLAGS += -shared -pthread
 
-SRCS = vortex.cpp ../common/vx_utils.cpp
+SRCS = vortex.cpp
 
 PROJECT = libvortex.so
 

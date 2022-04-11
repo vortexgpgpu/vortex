@@ -11,6 +11,7 @@
 #include <vx_malloc.h>
 
 #include <VX_config.h>
+#include <VX_types.h>
 
 #include <util.h>
 
@@ -172,34 +173,6 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifdef DUMP_PERF_STATS
-class AutoPerfDump {
-private:
-    std::list<vx_device_h> devices_;
-
-public:
-    AutoPerfDump() {} 
-
-    ~AutoPerfDump() {
-        for (auto device : devices_) {
-            vx_dump_perf(device, stdout);
-        }
-    }
-
-    void add_device(vx_device_h device) {
-        devices_.push_back(device);
-    }
-
-    void remove_device(vx_device_h device) {
-        devices_.remove(device);
-    }    
-};
-
-AutoPerfDump gAutoPerfDump;
-#endif
-
-///////////////////////////////////////////////////////////////////////////////
-
 extern int vx_dev_open(vx_device_h* hdevice) {
     if (nullptr == hdevice)
         return  -1;
@@ -207,7 +180,7 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     *hdevice = new vx_device();    
 
 #ifdef DUMP_PERF_STATS
-    gAutoPerfDump.add_device(*hdevice);
+    perf_add_device(*hdevice);
 #endif
 
     return 0;
@@ -220,8 +193,7 @@ extern int vx_dev_close(vx_device_h hdevice) {
     vx_device *device = ((vx_device*)hdevice);
 
 #ifdef DUMP_PERF_STATS
-    gAutoPerfDump.remove_device(hdevice);
-    vx_dump_perf(hdevice, stdout);
+    perf_remove_device(hdevice);
 #endif
 
     delete device;
