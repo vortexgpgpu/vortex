@@ -161,7 +161,7 @@ module VX_raster_be #(
             .clk        (clk),
             .reset      (reset),
             .push       (push && quad_masks[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i] != 0),
-            .pop        (pop),
+            .pop        (pop & !empty_flag[i]),
             .data_in    (fifo_push_data),
             .data_out   (fifo_pop_data),
             .full       (full_flag[i]),
@@ -172,7 +172,7 @@ module VX_raster_be #(
         );
     end
 
-    assign full = &(full_flag);
+    assign full = |(full_flag);
     assign empty = &(empty_flag);
 
 `ifdef DBG_TRACE_CORE_PIPELINE
