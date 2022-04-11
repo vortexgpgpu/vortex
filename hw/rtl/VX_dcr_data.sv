@@ -33,7 +33,7 @@ module VX_dcr_data (
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
 
-    wire is_base_dcr = (/*dcr_wr_addr >= `DCR_BASE_STATE_BEGIN &&*/ dcr_wr_addr < `DCR_BASE_STATE_END);
+    wire is_base_dcr = (dcr_wr_addr >= `DCR_BASE_STATE_BEGIN && dcr_wr_addr < `DCR_BASE_STATE_END);
     
 `ifdef EXT_TEX_ENABLE
     wire is_tex_dcr = (dcr_wr_addr >= `DCR_TEX_STATE_BEGIN && dcr_wr_addr < `DCR_TEX_STATE_END);

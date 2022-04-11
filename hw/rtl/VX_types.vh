@@ -5,7 +5,7 @@
 `define NUM_DCRS                    4096
 `define DCR_BITS                    12
 
-`define DCR_BASE_STATE_BEGIN        12'h000
+`define DCR_BASE_STATE_BEGIN        12'h001
 `define DCR_MPM_CLASS               12'h001
 `define DCR_BASE_STATE_END          12'h002
 
