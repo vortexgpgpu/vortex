@@ -1,7 +1,13 @@
 `include "VX_define.vh"
+`include "VX_gpu_types.vh"
 `ifdef DBG_TRACE_CORE_PIPELINE
 `include "VX_trace_info.vh"
 `endif
+
+`IGNORE_WARNINGS_BEGIN
+import VX_gpu_types::*;
+`IGNORE_WARNINGS_END
+
 
 module VX_dcr_data (
     input wire clk,
