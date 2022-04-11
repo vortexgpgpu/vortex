@@ -534,122 +534,146 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   case CSR_MCYCLE_H:
     // NumCycles
     return (uint32_t)(SimPlatform::instance().cycles() >> 32);
-  case CSR_MPM_IBUF_ST:
-    return perf_stats_.ibuf_stalls & 0xffffffff; 
-  case CSR_MPM_IBUF_ST_H:
-    return perf_stats_.ibuf_stalls >> 32; 
-  case CSR_MPM_SCRB_ST:
-    return perf_stats_.scrb_stalls & 0xffffffff; 
-  case CSR_MPM_SCRB_ST_H:
-    return perf_stats_.scrb_stalls >> 32; 
-  case CSR_MPM_ALU_ST:
-    return perf_stats_.alu_stalls & 0xffffffff; 
-  case CSR_MPM_ALU_ST_H:
-    return perf_stats_.alu_stalls >> 32; 
-  case CSR_MPM_LSU_ST:
-    return perf_stats_.lsu_stalls & 0xffffffff; 
-  case CSR_MPM_LSU_ST_H:
-    return perf_stats_.lsu_stalls >> 32; 
-  case CSR_MPM_CSR_ST:
-    return perf_stats_.csr_stalls & 0xffffffff; 
-  case CSR_MPM_CSR_ST_H:
-    return perf_stats_.csr_stalls >> 32; 
-  case CSR_MPM_FPU_ST:
-    return perf_stats_.fpu_stalls & 0xffffffff; 
-  case CSR_MPM_FPU_ST_H:
-    return perf_stats_.fpu_stalls >> 32; 
-  case CSR_MPM_GPU_ST:
-    return perf_stats_.gpu_stalls & 0xffffffff; 
-  case CSR_MPM_GPU_ST_H:
-    return perf_stats_.gpu_stalls >> 32; 
-  
-  case CSR_MPM_LOADS:
-    return perf_stats_.loads & 0xffffffff; 
-  case CSR_MPM_LOADS_H:
-    return perf_stats_.loads >> 32; 
-  case CSR_MPM_STORES:
-    return perf_stats_.stores & 0xffffffff; 
-  case CSR_MPM_STORES_H:
-    return perf_stats_.stores >> 32;
-  case CSR_MPM_BRANCHES:
-    return perf_stats_.branches & 0xffffffff; 
-  case CSR_MPM_BRANCHES_H:
-    return perf_stats_.branches >> 32; 
-
-  case CSR_MPM_ICACHE_READS:
-    return icache_->perf_stats().reads & 0xffffffff; 
-  case CSR_MPM_ICACHE_READS_H:
-    return icache_->perf_stats().reads >> 32; 
-  case CSR_MPM_ICACHE_MISS_R:
-    return icache_->perf_stats().read_misses & 0xffffffff;
-  case CSR_MPM_ICACHE_MISS_R_H:
-    return icache_->perf_stats().read_misses >> 32;
-  
-  case CSR_MPM_DCACHE_READS:
-    return dcache_->perf_stats().reads & 0xffffffff; 
-  case CSR_MPM_DCACHE_READS_H:
-    return dcache_->perf_stats().reads >> 32; 
-  case CSR_MPM_DCACHE_WRITES:
-    return dcache_->perf_stats().writes & 0xffffffff; 
-  case CSR_MPM_DCACHE_WRITES_H:
-    return dcache_->perf_stats().writes >> 32; 
-  case CSR_MPM_DCACHE_MISS_R:
-    return dcache_->perf_stats().read_misses & 0xffffffff; 
-  case CSR_MPM_DCACHE_MISS_R_H:
-    return dcache_->perf_stats().read_misses >> 32; 
-  case CSR_MPM_DCACHE_MISS_W:
-    return dcache_->perf_stats().write_misses & 0xffffffff; 
-  case CSR_MPM_DCACHE_MISS_W_H:
-    return dcache_->perf_stats().write_misses >> 32; 
-  case CSR_MPM_DCACHE_BANK_ST:
-    return dcache_->perf_stats().bank_stalls & 0xffffffff; 
-  case CSR_MPM_DCACHE_BANK_ST_H:
-    return dcache_->perf_stats().bank_stalls >> 32;
-  case CSR_MPM_DCACHE_MSHR_ST:
-    return dcache_->perf_stats().mshr_stalls & 0xffffffff; 
-  case CSR_MPM_DCACHE_MSHR_ST_H:
-    return dcache_->perf_stats().mshr_stalls >> 32;
-  
-  case CSR_MPM_SMEM_READS:
-    return sharedmem_->perf_stats().reads & 0xffffffff;
-  case CSR_MPM_SMEM_READS_H:
-    return sharedmem_->perf_stats().reads >> 32;
-  case CSR_MPM_SMEM_WRITES:
-    return sharedmem_->perf_stats().writes & 0xffffffff;
-  case CSR_MPM_SMEM_WRITES_H:
-    return sharedmem_->perf_stats().writes >> 32;
-  case CSR_MPM_SMEM_BANK_ST:
-    return sharedmem_->perf_stats().bank_stalls & 0xffffffff; 
-  case CSR_MPM_SMEM_BANK_ST_H:
-    return sharedmem_->perf_stats().bank_stalls >> 32; 
-
-  case CSR_MPM_MEM_READS:
-    return perf_stats_.mem_reads & 0xffffffff; 
-  case CSR_MPM_MEM_READS_H:
-    return perf_stats_.mem_reads >> 32; 
-  case CSR_MPM_MEM_WRITES:
-    return perf_stats_.mem_writes & 0xffffffff; 
-  case CSR_MPM_MEM_WRITES_H:
-    return perf_stats_.mem_writes >> 32; 
-  case CSR_MPM_MEM_LAT:
-    return perf_stats_.mem_latency & 0xffffffff; 
-  case CSR_MPM_MEM_LAT_H:
-    return perf_stats_.mem_latency >> 32; 
-
-#ifdef EXT_TEX_ENABLE
-  case CSR_MPM_TEX_READS:
-    return tex_unit_->perf_stats().reads & 0xffffffff;
-  case CSR_MPM_TEX_READS_H:
-     return tex_unit_->perf_stats().reads >> 32;
-  case CSR_MPM_TEX_LAT:
-    return tex_unit_->perf_stats().latency & 0xffffffff;
-  case CSR_MPM_TEX_LAT_H:
-    return tex_unit_->perf_stats().latency >> 32;
-#endif  
   default:
     if ((addr >= CSR_MPM_BASE && addr < (CSR_MPM_BASE + 32))
      || (addr >= CSR_MPM_BASE_H && addr < (CSR_MPM_BASE_H + 32))) {
       // user-defined MPM CSRs
+      auto perf_class = dcrs_.base_dcrs.read(DCR_MPM_CLASS);
+      switch (perf_class) {
+      case DCR_MPM_CLASS_CORE: {
+        switch (addr) {
+        case CSR_MPM_IBUF_ST:
+          return perf_stats_.ibuf_stalls & 0xffffffff; 
+        case CSR_MPM_IBUF_ST_H:
+          return perf_stats_.ibuf_stalls >> 32; 
+        case CSR_MPM_SCRB_ST:
+          return perf_stats_.scrb_stalls & 0xffffffff; 
+        case CSR_MPM_SCRB_ST_H:
+          return perf_stats_.scrb_stalls >> 32; 
+        case CSR_MPM_ALU_ST:
+          return perf_stats_.alu_stalls & 0xffffffff; 
+        case CSR_MPM_ALU_ST_H:
+          return perf_stats_.alu_stalls >> 32; 
+        case CSR_MPM_LSU_ST:
+          return perf_stats_.lsu_stalls & 0xffffffff; 
+        case CSR_MPM_LSU_ST_H:
+          return perf_stats_.lsu_stalls >> 32; 
+        case CSR_MPM_CSR_ST:
+          return perf_stats_.csr_stalls & 0xffffffff; 
+        case CSR_MPM_CSR_ST_H:
+          return perf_stats_.csr_stalls >> 32; 
+        case CSR_MPM_FPU_ST:
+          return perf_stats_.fpu_stalls & 0xffffffff; 
+        case CSR_MPM_FPU_ST_H:
+          return perf_stats_.fpu_stalls >> 32; 
+        case CSR_MPM_GPU_ST:
+          return perf_stats_.gpu_stalls & 0xffffffff; 
+        case CSR_MPM_GPU_ST_H:
+          return perf_stats_.gpu_stalls >> 32; 
+        
+        case CSR_MPM_LOADS:
+          return perf_stats_.loads & 0xffffffff; 
+        case CSR_MPM_LOADS_H:
+          return perf_stats_.loads >> 32; 
+        case CSR_MPM_STORES:
+          return perf_stats_.stores & 0xffffffff; 
+        case CSR_MPM_STORES_H:
+          return perf_stats_.stores >> 32;
+        case CSR_MPM_BRANCHES:
+          return perf_stats_.branches & 0xffffffff; 
+        case CSR_MPM_BRANCHES_H:
+          return perf_stats_.branches >> 32; 
+
+        case CSR_MPM_ICACHE_READS:
+          return icache_->perf_stats().reads & 0xffffffff; 
+        case CSR_MPM_ICACHE_READS_H:
+          return icache_->perf_stats().reads >> 32; 
+        case CSR_MPM_ICACHE_MISS_R:
+          return icache_->perf_stats().read_misses & 0xffffffff;
+        case CSR_MPM_ICACHE_MISS_R_H:
+          return icache_->perf_stats().read_misses >> 32;
+        
+        case CSR_MPM_DCACHE_READS:
+          return dcache_->perf_stats().reads & 0xffffffff; 
+        case CSR_MPM_DCACHE_READS_H:
+          return dcache_->perf_stats().reads >> 32; 
+        case CSR_MPM_DCACHE_WRITES:
+          return dcache_->perf_stats().writes & 0xffffffff; 
+        case CSR_MPM_DCACHE_WRITES_H:
+          return dcache_->perf_stats().writes >> 32; 
+        case CSR_MPM_DCACHE_MISS_R:
+          return dcache_->perf_stats().read_misses & 0xffffffff; 
+        case CSR_MPM_DCACHE_MISS_R_H:
+          return dcache_->perf_stats().read_misses >> 32; 
+        case CSR_MPM_DCACHE_MISS_W:
+          return dcache_->perf_stats().write_misses & 0xffffffff; 
+        case CSR_MPM_DCACHE_MISS_W_H:
+          return dcache_->perf_stats().write_misses >> 32; 
+        case CSR_MPM_DCACHE_BANK_ST:
+          return dcache_->perf_stats().bank_stalls & 0xffffffff; 
+        case CSR_MPM_DCACHE_BANK_ST_H:
+          return dcache_->perf_stats().bank_stalls >> 32;
+        case CSR_MPM_DCACHE_MSHR_ST:
+          return dcache_->perf_stats().mshr_stalls & 0xffffffff; 
+        case CSR_MPM_DCACHE_MSHR_ST_H:
+          return dcache_->perf_stats().mshr_stalls >> 32;
+        
+        case CSR_MPM_SMEM_READS:
+          return sharedmem_->perf_stats().reads & 0xffffffff;
+        case CSR_MPM_SMEM_READS_H:
+          return sharedmem_->perf_stats().reads >> 32;
+        case CSR_MPM_SMEM_WRITES:
+          return sharedmem_->perf_stats().writes & 0xffffffff;
+        case CSR_MPM_SMEM_WRITES_H:
+          return sharedmem_->perf_stats().writes >> 32;
+        case CSR_MPM_SMEM_BANK_ST:
+          return sharedmem_->perf_stats().bank_stalls & 0xffffffff; 
+        case CSR_MPM_SMEM_BANK_ST_H:
+          return sharedmem_->perf_stats().bank_stalls >> 32; 
+
+        case CSR_MPM_MEM_READS:
+          return perf_stats_.mem_reads & 0xffffffff; 
+        case CSR_MPM_MEM_READS_H:
+          return perf_stats_.mem_reads >> 32; 
+        case CSR_MPM_MEM_WRITES:
+          return perf_stats_.mem_writes & 0xffffffff; 
+        case CSR_MPM_MEM_WRITES_H:
+          return perf_stats_.mem_writes >> 32; 
+        case CSR_MPM_MEM_LAT:
+          return perf_stats_.mem_latency & 0xffffffff; 
+        case CSR_MPM_MEM_LAT_H:
+          return perf_stats_.mem_latency >> 32;
+        }
+      } break;
+      case DCR_MPM_CLASS_TEX: {
+        switch (addr) {
+        case CSR_MPM_TEX_READS:
+          return tex_unit_->perf_stats().reads & 0xffffffff;
+        case CSR_MPM_TEX_READS_H:
+          return tex_unit_->perf_stats().reads >> 32;
+        case CSR_MPM_TEX_LAT:
+          return tex_unit_->perf_stats().latency & 0xffffffff;
+        case CSR_MPM_TEX_LAT_H:
+          return tex_unit_->perf_stats().latency >> 32;
+        }
+      } break;
+      case DCR_MPM_CLASS_RASTER: {
+        switch (addr) {        
+        default:
+          return 0;
+        }
+      } break;
+      case DCR_MPM_CLASS_ROP: {
+        switch (addr) {        
+        default:
+          return 0;
+        }
+      } break;
+      default: {
+        std::cout << std::dec << "Error: invalid MPM CLASS: value=" << perf_class << std::endl;
+        std::abort();
+      } break;
+      }
     } else
   #ifdef EXT_RASTER_ENABLE
     if (addr >= CSR_RASTER_BEGIN

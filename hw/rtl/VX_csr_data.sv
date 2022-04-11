@@ -367,7 +367,7 @@ module VX_csr_data #(
                 else if (raster_read_enable) begin
                     read_data_r = raster_csr_if.read_data;
                     read_addr_valid_r = 1;                    
-                end else
+                end
             `endif
             `ifdef EXT_ROP_ENABLE
                 else if (rop_read_enable) begin

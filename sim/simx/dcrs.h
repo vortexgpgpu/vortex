@@ -7,6 +7,32 @@
 
 namespace vortex {
 
+class BaseDCRS {
+private:    
+    std::array<uint32_t, DCR_BASE_STATE_COUNT> states_;
+
+public:
+    BaseDCRS() {
+        this->clear();
+    }
+
+    void clear() {
+        for (auto& state : states_) {
+            state = 0;
+        }
+    }
+
+    uint32_t read(uint32_t addr) const {
+        uint32_t state = DCR_BASE_STATE(addr);
+        return states_.at(state);
+    }
+
+    void write(uint32_t addr, uint32_t value) {
+        uint32_t state = DCR_BASE_STATE(addr);
+        states_.at(state) = value;
+    }
+};
+
 class DCRS {
 public:
     DCRS();
@@ -15,10 +41,11 @@ public:
     void clear();
 
     void write(uint32_t addr, uint64_t value);
-
-    TexUnit::DCRS tex_dcrs;
+    
+    BaseDCRS        base_dcrs;
+    TexUnit::DCRS   tex_dcrs;
     RasterUnit::DCRS raster_dcrs;
-    RopUnit::DCRS rop_dcrs;
+    RopUnit::DCRS   rop_dcrs;
 };
 
 }

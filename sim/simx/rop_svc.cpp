@@ -50,7 +50,7 @@ public:
     void write(uint32_t wid, uint32_t tid, uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth) {
       __unused (wid);
       __unused (tid);
-      //printf("rop_write(wid=%d, tid=%d, x=%d, y=%d, backface=%s, color=%x, depth=%x)\n", wid, tid, x, y, (is_backface ? "Y":"N"), color, depth);
+      DT(3, "rop-svc: wid=" << std::dec << wid << ", tid=" << tid << ", x=" << x << ", y=" << y << ", backface=" << is_backface << ", color=0x" << std::hex << color << ", depth=0x" << depth);
       rop_unit_->write(x, y, is_backface, color, depth);
     }
 

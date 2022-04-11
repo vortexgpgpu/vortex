@@ -5,9 +5,12 @@
 `define NUM_DCRS                    4096
 `define DCR_BITS                    12
 
-`define DCR_BASE_BEGIN              12'h000
+`define DCR_BASE_STATE_BEGIN        12'h000
 `define DCR_MPM_CLASS               12'h001
-`define DCR_BASE_END                12'h002
+`define DCR_BASE_STATE_END          12'h002
+
+`define DCR_BASE_STATE(addr)        ((addr) - `DCR_BASE_STATE_BEGIN)
+`define DCR_BASE_STATE_COUNT        (`DCR_BASE_STATE_END-`DCR_BASE_STATE_BEGIN)
 
 // Machine Performance-monitoring counters classes
 
@@ -207,7 +210,7 @@
 `define TEX_FORMAT_L8               5
 `define TEX_FORMAT_A8               6
 
-`define DCR_TEX_STATE_BEGIN         (`DCR_BASE_END)
+`define DCR_TEX_STATE_BEGIN         (`DCR_BASE_STATE_END)
 `define DCR_TEX_STAGE               (`DCR_TEX_STATE_BEGIN+0)
 `define DCR_TEX_ADDR                (`DCR_TEX_STATE_BEGIN+1)
 `define DCR_TEX_LOGDIM              (`DCR_TEX_STATE_BEGIN+2)

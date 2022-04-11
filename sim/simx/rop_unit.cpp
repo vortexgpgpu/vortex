@@ -320,7 +320,7 @@ private:
     auto stencil_result = DoStencilOp(stencil_op, stencil_ref, stencil_val);
 
     // Write the depth stencil value
-    //printf("*** rop-depthstencil: x=%d, y=%d, depth_val=0x%x, depth_ref=0x%x, stencil_val=0x%x, stencil_result=0x%x, passed=%s\n", x, y, depth_val, depth_ref, stencil_val, stencil_result, (passed ? "Y":"N"));
+    DT(3, "rop-depthstencil: x=" << std::dec << x << ", y=" << y << ", depth_val=0x" << std::hex << depth_val << ", depth_ref=0x" << depth_ref << ", stencil_val=0x" << stencil_val << ", stencil_result=0x" << stencil_result << ", passed=" << passed);    
     auto merged_value = (stencil_result << ROP_DEPTH_BITS) | depth_ref;
     auto write_value = (stored_value & ~writeMask) | (merged_value & writeMask);
     mem_->write(&write_value, buf_addr, 4);
@@ -455,7 +455,7 @@ public:
       result_color = src;
     }
 
-    //printf("*** rop-color: x=%d, y=%d, r=%d, g=%d, b=%d, a=%d)\n", x, y, result_color.r, result_color.g, result_color.b, result_color.a);
+    DT(3, "rop-color: x=" << std::dec << x << ", y=" << y << std::hex << ", color=0x" << result_color);
     uint32_t writemask = (((buf_writemask_ >> 0) & 0x1) * 0x000000ff) 
                        | (((buf_writemask_ >> 1) & 0x1) * 0x0000ff00) 
                        | (((buf_writemask_ >> 2) & 0x1) * 0x00ff0000) 

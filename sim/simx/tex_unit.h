@@ -56,7 +56,7 @@ public:
             states_.at(stage_).at(state) = value;
         }
     };
-
+    
     struct PerfStats {
         uint64_t stalls;
         uint64_t reads;
