@@ -200,7 +200,18 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   uint64_t tex_mem_reads = 0;
   uint64_t tex_mem_lat = 0;
 #endif
-#endif     
+#ifdef EXT_ROP_ENABLE
+  uint64_t rop_mem_reads;
+  uint64_t rop_mem_writes;
+  uint64_t rop_mem_lat;
+  uint64_t rop_idle_cycles;
+  uint32_t rop_stall_cycles;
+#endif
+#ifdef EXT_RASTER_ENABLE
+  uint64_t raster_mem_reads;
+  uint64_t raster_mem_lat;
+#endif
+#endif
 
   uint64_t num_cores;
   ret = vx_dev_caps(device, VX_CAPS_MAX_CORES, &num_cores);
@@ -360,24 +371,21 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     } break;
     case DCR_MPM_CLASS_ROP: {
     #ifdef EXT_ROP_ENABLE
-      uint64_t rop_mem_reads  = get_csr_64(staging_ptr, CSR_MPM_ROP_READS);
-      uint64_t rop_mem_writes = get_csr_64(staging_ptr, CSR_MPM_ROP_WRITES);
-      uint64_t rop_mem_lat    = get_csr_64(staging_ptr, CSR_MPM_ROP_LAT);
-      uint64_t rop_idle_cycles = get_csr_64(staging_ptr, CSR_MPM_ROP_IDLE_CYC);
-      fprintf(stream, "PERF: rop memory reads=%ld\n", rop_mem_reads);
-      fprintf(stream, "PERF: rop memory writes=%ld\n", rop_mem_writes);
-      fprintf(stream, "PERF: rop memory latency=%ld\n", rop_mem_lat);
-      fprintf(stream, "PERF: rop idle cycles=%ld\n", rop_idle_cycles);
-      core_id = num_cores; // just dump core0
+      if (0 == core_id) {
+        rop_mem_reads    = get_csr_64(staging_ptr, CSR_MPM_ROP_READS);
+        rop_mem_writes   = get_csr_64(staging_ptr, CSR_MPM_ROP_WRITES);
+        rop_mem_lat      = get_csr_64(staging_ptr, CSR_MPM_ROP_LAT);
+        rop_idle_cycles  = get_csr_64(staging_ptr, CSR_MPM_ROP_IDLE);
+        rop_stall_cycles = get_csr_64(staging_ptr, CSR_MPM_ROP_STALL);
+      }      
     #endif
     } break;
     case DCR_MPM_CLASS_RASTER: {
     #ifdef EXT_RASTER_ENABLE
-      uint64_t raster_mem_reads  = get_csr_64(staging_ptr, CSR_MPM_RAS_READS);
-      uint64_t raster_mem_lat    = get_csr_64(staging_ptr, CSR_MPM_RAS_LAT);
-      fprintf(stream, "PERF: raster memory reads=%ld\n", raster_mem_reads);
-      fprintf(stream, "PERF: raster memory latency=%ld\n", raster_mem_lat);
-      core_id = num_cores; // just dump core0
+      if (0 == core_id) {
+        raster_mem_reads = get_csr_64(staging_ptr, CSR_MPM_RAS_READS);
+        raster_mem_lat   = get_csr_64(staging_ptr, CSR_MPM_RAS_LAT);
+      }
     #endif
     } break;
     }
@@ -425,6 +433,23 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     int tex_avg_lat = (int)(double(tex_mem_lat) / double(tex_mem_reads));
     fprintf(stream, "PERF: tex memory reads=%ld\n", tex_mem_reads);
     fprintf(stream, "PERF: tex memory latency=%d cycles\n", tex_avg_lat);
+  #endif
+  } break;
+  case DCR_MPM_CLASS_ROP: {
+  #ifdef EXT_ROP_ENABLE
+    int rop_idle_cycles_ratio = (int)(100 * double(rop_idle_cycles) / cycles);
+    int rop_stall_cycles_ratio = (int)(100 * double(rop_stall_cycles) / cycles);
+    fprintf(stream, "PERF: rop memory reads=%ld\n", rop_mem_reads);
+    fprintf(stream, "PERF: rop memory writes=%ld\n", rop_mem_writes);
+    fprintf(stream, "PERF: rop memory latency=%ld\n", rop_mem_lat);
+    fprintf(stream, "PERF: rop idle cycles=%d%%\n", rop_idle_cycles_ratio);
+    fprintf(stream, "PERF: rop stall cycles=%d%%\n", rop_stall_cycles_ratio);
+  #endif
+  } break;
+  case DCR_MPM_CLASS_RASTER: {
+  #ifdef EXT_RASTER_ENABLE
+    fprintf(stream, "PERF: raster memory reads=%ld\n", raster_mem_reads);
+    fprintf(stream, "PERF: raster memory latency=%ld\n", raster_mem_lat);
   #endif
   } break;
   }
