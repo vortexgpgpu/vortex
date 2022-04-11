@@ -539,7 +539,7 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
      || (addr >= CSR_MPM_BASE_H && addr < (CSR_MPM_BASE_H + 32))) {
       // user-defined MPM CSRs
       auto perf_class = dcrs_.base_dcrs.read(DCR_MPM_CLASS);
-      switch (perf_class) {      
+      switch (perf_class) {                
       case DCR_MPM_CLASS_NONE: 
         break;    
       case DCR_MPM_CLASS_CORE: {
@@ -659,7 +659,7 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
           return tex_unit_->perf_stats().latency >> 32;
         }
       } break;
-      
+      case DCR_MPM_CLASS_RASTER: {
         switch (addr) {        
         default:
           return 0;
