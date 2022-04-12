@@ -367,6 +367,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
       int tex_avg_lat = (int)(double(tex_lat_per_core) / double(tex_reads_per_core));
       if (num_cores > 1) fprintf(stream, "PERF: core%d: tex memory latency=%d cycles\n", core_id, tex_avg_lat);
       tex_mem_lat += tex_lat_per_core;
+      // <TODO: cache perf counters>
     #endif
     } break;
     case DCR_MPM_CLASS_ROP: {
@@ -377,6 +378,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
         rop_mem_lat      = get_csr_64(staging_ptr, CSR_MPM_ROP_LAT);
         rop_idle_cycles  = get_csr_64(staging_ptr, CSR_MPM_ROP_IDLE);
         rop_stall_cycles = get_csr_64(staging_ptr, CSR_MPM_ROP_STALL);
+        // <TODO: cache perf counters>
       }      
     #endif
     } break;
@@ -385,6 +387,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
       if (0 == core_id) {
         raster_mem_reads = get_csr_64(staging_ptr, CSR_MPM_RAS_READS);
         raster_mem_lat   = get_csr_64(staging_ptr, CSR_MPM_RAS_LAT);
+        // <TODO: cache perf counters>
       }
     #endif
     } break;
@@ -433,6 +436,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     int tex_avg_lat = (int)(double(tex_mem_lat) / double(tex_mem_reads));
     fprintf(stream, "PERF: tex memory reads=%ld\n", tex_mem_reads);
     fprintf(stream, "PERF: tex memory latency=%d cycles\n", tex_avg_lat);
+    // <TODO: cache perf counters>
   #endif
   } break;
   case DCR_MPM_CLASS_ROP: {
@@ -444,12 +448,14 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     fprintf(stream, "PERF: rop memory latency=%ld\n", rop_mem_lat);
     fprintf(stream, "PERF: rop idle cycles=%d%%\n", rop_idle_cycles_ratio);
     fprintf(stream, "PERF: rop stall cycles=%d%%\n", rop_stall_cycles_ratio);
+    // <TODO: cache perf counters>
   #endif
   } break;
   case DCR_MPM_CLASS_RASTER: {
   #ifdef EXT_RASTER_ENABLE
     fprintf(stream, "PERF: raster memory reads=%ld\n", raster_mem_reads);
     fprintf(stream, "PERF: raster memory latency=%ld\n", raster_mem_lat);
+    // <TODO: cache perf counters>
   #endif
   } break;
   }

@@ -323,6 +323,7 @@ module VX_csr_data #(
                         `CSR_MPM_TEX_READS_H    : read_data_r = {`NUM_THREADS{32'(tex_perf_if.mem_reads[`PERF_CTR_BITS-1:32])}};
                         `CSR_MPM_TEX_LAT        : read_data_r = {`NUM_THREADS{tex_perf_if.mem_latency[31:0]}};
                         `CSR_MPM_TEX_LAT_H      : read_data_r = {`NUM_THREADS{32'(tex_perf_if.mem_latency[`PERF_CTR_BITS-1:32])}};
+                        // <TODO: cache perf counters>
                         default:;
                         endcase
                     `endif
@@ -334,6 +335,7 @@ module VX_csr_data #(
                         `CSR_MPM_RAS_READS_H    : read_data_r = {`NUM_THREADS{32'(raster_perf_if.mem_reads[`PERF_CTR_BITS-1:32])}};
                         `CSR_MPM_RAS_LAT        : read_data_r = {`NUM_THREADS{raster_perf_if.mem_latency[31:0]}};
                         `CSR_MPM_RAS_LAT_H      : read_data_r = {`NUM_THREADS{32'(raster_perf_if.mem_latency[`PERF_CTR_BITS-1:32])}};
+                        // <TODO: cache perf counters>
                         default:;
                         endcase
                     `endif
@@ -351,6 +353,7 @@ module VX_csr_data #(
                         `CSR_MPM_ROP_IDLE_H     : read_data_r = {`NUM_THREADS{32'(rop_perf_if.idle_cycles[`PERF_CTR_BITS-1:32])}};
                         `CSR_MPM_ROP_STALL      : read_data_r = {`NUM_THREADS{rop_perf_if.stall_cycles[31:0]}};
                         `CSR_MPM_ROP_STALL_H    : read_data_r = {`NUM_THREADS{32'(rop_perf_if.stall_cycles[`PERF_CTR_BITS-1:32])}};
+                        // <TODO: cache perf counters>
                         default:;
                         endcase
                     `endif
