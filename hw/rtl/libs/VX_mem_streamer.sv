@@ -133,8 +133,8 @@ module VX_mem_streamer #(
         assign req_dup_mask = req_mask & {{(NUM_REQS-1){~req_dup}}, 1'b1};
 
         assign drsp_valid = crsp_valid;
-        assign drsp_mask  = {NUM_REQS{crsp_mask}};
-        assign drsp_data  = {NUM_REQS{crsp_data}};
+        assign drsp_mask  = {NUM_REQS{crsp_mask[0]}};
+        assign drsp_data  = {NUM_REQS{crsp_data[0]}};
         assign drsp_tag   = crsp_tag;
     end
 
