@@ -98,6 +98,12 @@ module VX_mem_streamer #(
     wire                                rsp_complete;
     reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0] rsp_rem_mask;
     wire [NUM_REQS-1:0]                 rsp_rem_mask_n;
+
+    wire                                drsp_valid;
+    wire [NUM_REQS-1:0]                 drsp_mask;
+    wire [NUM_REQS-1:0][DATAW-1:0]      drsp_data;
+    wire [TAGW-1:0]                     drsp_tag;
+
     wire                                crsp_valid;
     wire [NUM_REQS-1:0]                 crsp_mask;
     wire [NUM_REQS-1:0][DATAW-1:0]      crsp_data;
@@ -109,6 +115,12 @@ module VX_mem_streamer #(
    
     if (DUPLICATE_ADDR == 0) begin
         assign req_dup_mask = req_mask;
+
+        assign drsp_valid = crsp_valid;
+        assign drsp_mask  = crsp_mask;
+        assign drsp_data  = crsp_data;
+        assign drsp_tag   = crsp_tag;
+
     end else begin
         wire [NUM_REQS-2:0] addr_matches;
         wire req_dup;
@@ -119,6 +131,11 @@ module VX_mem_streamer #(
 
         assign req_dup = req_mask[0] && (& addr_matches);
         assign req_dup_mask = req_mask & {{(NUM_REQS-1){~req_dup}}, 1'b1};
+
+        assign drsp_valid = crsp_valid;
+        assign drsp_mask  = req_dup ? {NUM_REQS{crsp_mask[0]}} : crsp_mask;
+        assign drsp_data  = req_dup ? {NUM_REQS{crsp_data[0]}} : crsp_data;
+        assign drsp_tag   = crsp_tag;
     end
 
     //////////////////////////////////////////////////////////////////
@@ -214,7 +231,7 @@ module VX_mem_streamer #(
         assign crsp_mask  = mem_rsp_mask_s;
         assign crsp_data  = mem_rsp_data_s;
         assign crsp_tag   = stag_dout;
-        
+
     end else begin
 
         reg [QUEUE_SIZE-1:0][NUM_REQS-1:0][DATAW-1:0] rsp_store;
@@ -291,7 +308,7 @@ module VX_mem_streamer #(
         .clk      (clk),
         .reset    (reset),
         .enable	  (~rsp_stall),
-        .data_in  ({crsp_valid, crsp_mask, crsp_data, crsp_tag}),
+        .data_in  ({drsp_valid, drsp_mask, drsp_data, drsp_tag}),
         .data_out ({rsp_valid,  rsp_mask,  rsp_data,  rsp_tag})
     );
 
