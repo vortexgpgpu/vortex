@@ -233,51 +233,107 @@ def read_perf_log(path):
       
   return df
 
-def ipc_w_threads(df):
-  col_to_val_ls_d= {\
-    'clusters': [1],
-    'cores' : [1],
-    'warps' : [32],
-    'threads': [2,4,8,16,32],
-    'app': ['bfs', 'vecadd', 'sgemm'],
-    'args': ['cora.txt', \
-      'pubmed_diabetes.txt',
-      'p2p-Gnutella30.txt',
-      'CA-HepPh.txt',
-      'Cit-HepPh.txt',
-      'Slashdot0811.txt',
-      '-n2048',
-      '-n4096',
-      '-n16',
-      '-n32',
-      '-n64',
-      ]
-  }
-  df_f= filter_df( df, col_to_val_ls_d)
-  
+def multi_bar_plots(df, col_to_val_ls_d):
+  order= col_to_val_ls_d['args']
+      
+  # y= 'IPC'
+
+  # y= 'memory_average_latency'
+
+  # y= 'dcache_utilization'
+
+  # y= 'instrs'
+
+  # y= 'branches'
+
+  # df['branches_instrs_ratio'] = df['branches'] / (df['instrs'] + 1)
+  # y= 'branches_instrs_ratio'
+
+  df['dcache_reads_loads_ratio'] = df['dcache_reads'] * df['threads'] / (df['loads'] + 1)
+  y= 'dcache_reads_loads_ratio'
+
+  # df['full_utilization'] = df['IPC'] / (df['threads'] * df['cores'] * df['clusters'])
+  # y= 'full_utilization'
 
   sns.set(style= 'white')
-  sns.barplot(x= 'args', y= 'IPC', hue= 'threads', data=df_f)
+  # ax= sns.barplot(x= 'args', y= y, hue= 'threads', data=df, order= order)
+  ax= sns.barplot(x= y, y= 'args', hue= 'threads', data=df, order= order)
+  common_plt_cmd(ax, path= f'{y}.png', savefig= True)
 
-  plt.xticks(rotation=45)
+
+def common_plt_cmd(ax, path = None, savefig= False):
+  labels= [\
+  'cora',
+  'pubmed',
+  'CA-HEPh',
+  'Cit-HEPh',
+  'Gnutella',
+  'Slashdot',
+  # '2048',
+  # '4096',
+  'vecadd',
+  # '16',
+  # '32',
+  # '64',
+  'sgemm'
+  ]
+  # plt.xticks( ticks= list(range(len(labels))),
+  #   labels= labels,
+  #   rotation=90)
+  plt.yticks( ticks= list(range(len(labels))),
+    labels= labels,
+    )
+
+  labels= [4, 8, 16, 32, 64]
+  h, l= ax.get_legend_handles_labels()
+  ax.legend(h, labels, title= "Threads")
   plt.tight_layout()
-  plt.show()
+  plt.xlabel('Workloads')
 
-  sns.set(style= 'white')
-  sns.barplot(x= 'args', y= 'memory_average_latency', hue= 'threads', data=df_f)
+  if savefig:
+    assert path != None
+    plt.savefig(path, dpi =300)
+  else:
+    plt.show()
 
-  plt.show()
+
 
 def plot_bfs_perf():
-  path= '../ci/perf_regression.log'
-  df= read_perf_log(path)
+  # path= '../ci/perf_regression.log'
+  # df= read_perf_log(path)
+
+  csv_path= '../ci/perf_regression.csv'
+  logger.info(f'Reading dataframe from a csv file: {csv_path}')
+  df = pd.read_csv(csv_path)
   
   # csv_path= '../ci/perf_regression.csv'
   # with open(csv_path, 'w+') as fp:
   #   logger.info(f'Writing dataframe to csv file: {csv_path}')
   #   df.to_csv(fp)
 
-  ipc_w_threads(df)
+  col_to_val_ls_d= {\
+    'clusters': [1],
+    'cores' : [2],
+    'warps' : [32],
+    'l2cache' : [True],
+    'threads': [2,4,8,16,32],
+    'app': ['bfs', 'vecadd', 'sgemm'],
+    'args': [\
+      'cora.txt',
+      'pubmed_diabetes.txt',
+      'CA-HepPh.txt',
+      'Cit-HepPh.txt',
+      'p2p-Gnutella30.txt',
+      'Slashdot0811.txt',
+      # '-n2048',
+      '-n4096',
+      # '-n16',
+      # '-n32',
+      '-n64',
+      ]
+  }
+  df_f= filter_df( df, col_to_val_ls_d)
+  multi_bar_plots(df_f, col_to_val_ls_d)
   exit(1)
 
   col_to_val_ls_d= {\
