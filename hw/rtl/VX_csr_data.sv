@@ -34,6 +34,7 @@ module VX_csr_data #(
     VX_gpu_csr_if.master                rop_csr_if,
 `ifdef PERF_ENABLE
     VX_rop_perf_if.slave                rop_perf_if,
+    VX_perf_cache_if.slave              ocache_perf_if,
 `endif
 `endif
 
@@ -353,7 +354,23 @@ module VX_csr_data #(
                         `CSR_MPM_ROP_IDLE_H     : read_data_r = {`NUM_THREADS{32'(rop_perf_if.idle_cycles[`PERF_CTR_BITS-1:32])}};
                         `CSR_MPM_ROP_STALL      : read_data_r = {`NUM_THREADS{rop_perf_if.stall_cycles[31:0]}};
                         `CSR_MPM_ROP_STALL_H    : read_data_r = {`NUM_THREADS{32'(rop_perf_if.stall_cycles[`PERF_CTR_BITS-1:32])}};
-                        // <TODO: cache perf counters>
+                        // <ocache perf counters>
+                        `CSR_MPM_OCACHE_READS       : read_data_r = {`NUM_THREADS{ocache_perf_if.reads[31:0]}};
+                        `CSR_MPM_OCACHE_READS_H     : read_data_r = {`NUM_THREADS{32'(ocache_perf_if.reads[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_OCACHE_WRITES      : read_data_r = {`NUM_THREADS{ocache_perf_if.writes[31:0]}};
+                        `CSR_MPM_OCACHE_WRITES_H    : read_data_r = {`NUM_THREADS{32'(ocache_perf_if.writes[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_OCACHE_MISS_R      : read_data_r = {`NUM_THREADS{ocache_perf_if.read_misses[31:0]}};
+                        `CSR_MPM_OCACHE_MISS_R_H    : read_data_r = {`NUM_THREADS{32'(ocache_perf_if.read_misses[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_OCACHE_MISS_W      : read_data_r = {`NUM_THREADS{ocache_perf_if.write_misses[31:0]}};
+                        `CSR_MPM_OCACHE_MISS_W_H    : read_data_r = {`NUM_THREADS{32'(ocache_perf_if.write_misses[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_OCACHE_BANK_ST     : read_data_r = {`NUM_THREADS{ocache_perf_if.bank_stalls[31:0]}};
+                        `CSR_MPM_OCACHE_BANK_ST_H   : read_data_r = {`NUM_THREADS{32'(ocache_perf_if.bank_stalls[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_OCACHE_MSHR_ST     : read_data_r = {`NUM_THREADS{ocache_perf_if.mshr_stalls[31:0]}};
+                        `CSR_MPM_OCACHE_MSHR_ST_H   : read_data_r = {`NUM_THREADS{32'(ocache_perf_if.mshr_stalls[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_OCACHE_MEM_ST      : read_data_r = {`NUM_THREADS{ocache_perf_if.mem_stalls[31:0]}};
+                        `CSR_MPM_OCACHE_MEM_ST_H    : read_data_r = {`NUM_THREADS{32'(ocache_perf_if.mem_stalls[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_OCACHE_CRSP_ST     : read_data_r = {`NUM_THREADS{ocache_perf_if.crsp_stalls[31:0]}};
+                        `CSR_MPM_OCACHE_CRSP_ST_H   : read_data_r = {`NUM_THREADS{32'(ocache_perf_if.crsp_stalls[`PERF_CTR_BITS-1:32])}};
                         default:;
                         endcase
                     `endif
