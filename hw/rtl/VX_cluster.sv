@@ -70,6 +70,7 @@ module VX_cluster #(
     VX_raster_unit #(
         .CLUSTER_ID  (CLUSTER_ID),
         .NUM_SLICES  (1),
+        .RASTER_TILE_SIZE ((1 << `RASTER_TILE_LOGSIZE)),
         .NUM_OUTPUTS (`NUM_THREADS)
     ) raster_unit (
         .clk           (clk),
