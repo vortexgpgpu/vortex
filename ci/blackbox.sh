@@ -145,6 +145,9 @@ export PERF_CLASS=$PERF_CLASS
 
 status=0
 
+# ensure the stub driver is present
+make -C $VORTEX_HOME/driver/stub
+
 if [ $DEBUG -ne 0 ]
 then    
     if [ $SCOPE -eq 1 ]
