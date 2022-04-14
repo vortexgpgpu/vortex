@@ -20,20 +20,20 @@ module VX_raster_be #(
     output logic ready,      // to indicate it has sent all previous quad data
 
     // Block related input data
-    input logic [`RASTER_DIM_BITS-1:0]                   x_loc, y_loc,
+    input logic         [`RASTER_DIM_BITS-1:0]              x_loc, y_loc,
     // edge equation data for the 3 edges and ax+by+c
-    input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]       edges[2:0][2:0],
-    input logic        [`RASTER_PRIMITIVE_DATA_BITS-1:0]       pid,
+    input logic signed  [`RASTER_PRIMITIVE_DATA_BITS-1:0]   edges[2:0][2:0],
+    input logic         [`RASTER_PRIMITIVE_DATA_BITS-1:0]   pid,
     // edge function computation value propagated
-    input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]       edge_func_val[2:0],
+    input logic signed  [`RASTER_PRIMITIVE_DATA_BITS-1:0]   edge_func_val[2:0],
 
     // Quad related output data
-    output logic [`RASTER_DIM_BITS-1:0]              out_quad_x_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
-    output logic [`RASTER_DIM_BITS-1:0]              out_quad_y_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
-    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_pid[RASTER_QUAD_OUTPUT_RATE-1:0],
-    output logic [3:0]                               out_quad_masks[RASTER_QUAD_OUTPUT_RATE-1:0],
+    output logic        [`RASTER_DIM_BITS-1:0]              out_quad_x_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
+    output logic        [`RASTER_DIM_BITS-1:0]              out_quad_y_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
+    output logic        [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_pid[RASTER_QUAD_OUTPUT_RATE-1:0],
+    output logic        [3:0]                               out_quad_masks[RASTER_QUAD_OUTPUT_RATE-1:0],
     output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0],
-    output logic [RASTER_QUAD_OUTPUT_RATE-1:0]       valid
+    output logic        [RASTER_QUAD_OUTPUT_RATE-1:0]       valid
 );
 
     // Local parameter setup
@@ -43,17 +43,17 @@ module VX_raster_be #(
     localparam ARBITER_BITS              = $clog2(RASTER_QUAD_ARBITER_RANGE) + 1;
 
     // Temporary (temp_) for combinatorial part, quad_ register for data storage
-    logic [`RASTER_DIM_BITS-1:0]   temp_quad_x_loc[RASTER_QUAD_SPACE-1:0],
-        quad_x_loc[RASTER_QUAD_SPACE-1:0];
-    logic [`RASTER_DIM_BITS-1:0]   temp_quad_y_loc[RASTER_QUAD_SPACE-1:0],
-        quad_y_loc[RASTER_QUAD_SPACE-1:0];
-    logic [3:0] temp_quad_masks[RASTER_QUAD_SPACE-1:0], 
-        quad_masks[RASTER_QUAD_SPACE-1:0];
-    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_quad_bcoords[RASTER_QUAD_SPACE-1:0][2:0][3:0],
-        quad_bcoords[RASTER_QUAD_SPACE-1:0][2:0][3:0];
+    logic        [`RASTER_DIM_BITS-1:0]             temp_quad_x_loc     [RASTER_QUAD_SPACE-1:0],
+                                                    quad_x_loc          [RASTER_QUAD_SPACE-1:0];
+    logic        [`RASTER_DIM_BITS-1:0]             temp_quad_y_loc     [RASTER_QUAD_SPACE-1:0],
+                                                    quad_y_loc          [RASTER_QUAD_SPACE-1:0];
+    logic        [3:0]                              temp_quad_masks     [RASTER_QUAD_SPACE-1:0], 
+                                                    quad_masks          [RASTER_QUAD_SPACE-1:0];
+    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  temp_quad_bcoords   [RASTER_QUAD_SPACE-1:0][2:0][3:0],
+                                                    quad_bcoords        [RASTER_QUAD_SPACE-1:0][2:0][3:0];
 
     // Wire to hold the edge function values for quad evaluation
-    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] local_edge_func_val[RASTER_QUAD_SPACE-1:0][2:0];
+    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  local_edge_func_val [RASTER_QUAD_SPACE-1:0][2:0];
 
     // Status signal to log if it is working on valid data
     logic valid_data;
@@ -73,10 +73,10 @@ module VX_raster_be #(
                     local_edge_func_val[i*RASTER_QUAD_NUM+j][k] = edge_func_val[k] + i*2*edges[k][0] + j*2*edges[k][1];
             end
             VX_raster_qe qe (
-                .edges(edges),
-                .edge_func_val(local_edge_func_val[i*RASTER_QUAD_NUM+j]),
-                .masks(temp_quad_masks[i*RASTER_QUAD_NUM+j]),
-                .bcoords(temp_quad_bcoords[i*RASTER_QUAD_NUM+j])
+                .edges          (edges),
+                .edge_func_val  (local_edge_func_val[i*RASTER_QUAD_NUM+j]),
+                .masks          (temp_quad_masks[i*RASTER_QUAD_NUM+j]),
+                .bcoords        (temp_quad_bcoords[i*RASTER_QUAD_NUM+j])
             );
         end
     end
@@ -99,18 +99,18 @@ module VX_raster_be #(
         // Reset condition
         if (reset == 1) begin
             arbiter_index <= RASTER_QUAD_ARBITER_RANGE[ARBITER_BITS-1:0] - 1;
-            valid_data <= 0;
+            valid_data    <= 0;
         end
         // Initialization condition
         else if (input_valid == 1) begin
             arbiter_index <= 0;
-            valid_data <= 1;
+            valid_data    <= 1;
         end
         // Arbitration condition
         else if (full == 0 && push == 1)
             arbiter_index <= arbiter_index + ARBITER_BITS'(1);
         else if (ready)
-            valid_data <= 0;
+            valid_data    <= 0;
     end
 
     assign push = (arbiter_index < (RASTER_QUAD_ARBITER_RANGE[ARBITER_BITS-1:0])) && !full && !reset && valid_data;
@@ -180,10 +180,11 @@ module VX_raster_be #(
         if (pop) begin
             for (int i = 0; i < RASTER_QUAD_OUTPUT_RATE; ++i) begin
                 if (valid[i]) begin
-                    dpi_trace(1, "raster-quad: %d: x_loc = %0d, y_loc = %0d, pid=%0d, mask=%d\nbcoords=%d %d %d %d, %d %d %d %d, %d %d %d %d", 
-                        $time, out_quad_x_loc[i], out_quad_y_loc[i], out_pid[i], out_quad_masks[i], out_quad_bcoords[i][0][0], out_quad_bcoords[i][0][1], out_quad_bcoords[i][0][2], out_quad_bcoords[i][0][3],
-            out_quad_bcoords[i][1][0], out_quad_bcoords[i][1][1], out_quad_bcoords[i][1][2], out_quad_bcoords[i][1][3],
-            out_quad_bcoords[i][2][0], out_quad_bcoords[i][2][1], out_quad_bcoords[i][2][2], out_quad_bcoords[i][2][3]);
+                    dpi_trace(1, "raster-quad: %d: x_loc = %0d, y_loc = %0d, pid=%0d, mask=%d\nbcoords=%d %d %d %d, %d %d %d %d, %d %d %d %d\n", 
+                        $time, out_quad_x_loc[i], out_quad_y_loc[i], out_pid[i], out_quad_masks[i],
+                        out_quad_bcoords[i][0][0], out_quad_bcoords[i][0][1], out_quad_bcoords[i][0][2], out_quad_bcoords[i][0][3],
+                        out_quad_bcoords[i][1][0], out_quad_bcoords[i][1][1], out_quad_bcoords[i][1][2], out_quad_bcoords[i][1][3],
+                        out_quad_bcoords[i][2][0], out_quad_bcoords[i][2][1], out_quad_bcoords[i][2][2], out_quad_bcoords[i][2][3]);
                 end
             end
         end

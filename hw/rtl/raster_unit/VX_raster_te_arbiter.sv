@@ -12,15 +12,14 @@ module VX_raster_te_arbiter #(
 ) (
     input logic                                 clk, reset,
     input logic [3:0]                           fifo_push, fifo_pop,
-    input logic [RASTER_FIFO_DATA_WIDTH-1:0]                data_push[3:0],
+    input logic [RASTER_FIFO_DATA_WIDTH-1:0]    data_push[3:0],
 
-    output logic [RASTER_FIFO_DATA_WIDTH-1:0]               data_pop,
+    output logic [RASTER_FIFO_DATA_WIDTH-1:0]   data_pop,
     output logic [3:0]                          fifo_index_onehot,
     output logic                                fifo_full, fifo_empty, fifo_data_valid
 );
 
-    localparam RASTER_TILE_FIFO_DEPTH = RASTER_TILE_SIZE*2/RASTER_BLOCK_SIZE;
-    
+    localparam RASTER_TILE_FIFO_DEPTH = (RASTER_TILE_SIZE*RASTER_TILE_SIZE)/(RASTER_BLOCK_SIZE*RASTER_BLOCK_SIZE);
 
     // Per FIFO flags
     logic [3:0] empty_flag, full_flag;

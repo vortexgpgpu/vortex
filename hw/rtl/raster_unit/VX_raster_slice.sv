@@ -16,28 +16,28 @@ module VX_raster_slice #(
     parameter RASTER_TILE_FIFO_DEPTH  = 16
 ) (
     // Standard inputs
-    input logic                                           clk, reset,
+    input logic                                             clk, reset,
     // To indicate valid input provided
-    input logic                                           input_valid,
+    input logic                                             input_valid,
     // Tile information
-    input logic [`RASTER_DIM_BITS-1:0]              x_loc, y_loc,
+    input logic        [`RASTER_DIM_BITS-1:0]               x_loc, y_loc,
     // Primitive information
-    input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  edges[2:0][2:0],
-    input logic        [`RASTER_PRIMITIVE_DATA_BITS-1:0]  pid,
-    input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  edge_func_val[2:0],
-    input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  extents[2:0],
+    input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    edges[2:0][2:0],
+    input logic        [`RASTER_PRIMITIVE_DATA_BITS-1:0]    pid,
+    input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    edge_func_val[2:0],
+    input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    extents[2:0],
 
     // Hand-shaking signals
-    input logic                                           pop_quad,
-    output logic                                          ready, quad_queue_empty,
+    input logic                                             pop_quad,
+    output logic                                            ready, quad_queue_empty,
 
     // Output sub-tiles data
-    output logic [`RASTER_DIM_BITS-1:0]             out_quad_x_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
-        out_quad_y_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
-    output logic [3:0]                                    out_quad_masks[RASTER_QUAD_OUTPUT_RATE-1:0],
-    output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]        out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0],
-    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]        out_pid[RASTER_QUAD_OUTPUT_RATE-1:0],
-    output logic [RASTER_QUAD_OUTPUT_RATE-1:0]            valid
+    output logic        [`RASTER_DIM_BITS-1:0]              out_quad_x_loc  [RASTER_QUAD_OUTPUT_RATE-1:0],
+                                                            out_quad_y_loc  [RASTER_QUAD_OUTPUT_RATE-1:0],
+    output logic        [3:0]                               out_quad_masks  [RASTER_QUAD_OUTPUT_RATE-1:0],
+    output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0],
+    output logic        [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_pid         [RASTER_QUAD_OUTPUT_RATE-1:0],
+    output logic        [RASTER_QUAD_OUTPUT_RATE-1:0]       valid
 );
 
     localparam RASTER_LEVEL_DATA_BITS = $clog2(RASTER_TILE_SIZE/RASTER_BLOCK_SIZE) + 1;
@@ -49,8 +49,8 @@ module VX_raster_slice #(
     logic        [`RASTER_PRIMITIVE_DATA_BITS-1:0]  global_pid;
 
     // Store the tile relevant data as global regs as TE is combinatorial
-    logic [`RASTER_DIM_BITS-1:0]              tile_x_loc, tile_y_loc;
-    logic [RASTER_LEVEL_DATA_BITS-1:0]              level;
+    logic        [`RASTER_DIM_BITS-1:0]             tile_x_loc, tile_y_loc;
+    logic        [RASTER_LEVEL_DATA_BITS-1:0]       level;
     logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  tile_edge_func_val[2:0];
 
     logic [RASTER_LEVEL_DATA_BITS-1:0] level_1;
@@ -64,13 +64,13 @@ module VX_raster_slice #(
     logic        done;
 
     // Incoming tile data from fifo
-    logic [`RASTER_DIM_BITS-1:0]               fifo_tile_x_loc, fifo_tile_y_loc;
-    logic [RASTER_LEVEL_DATA_BITS-1:0]              fifo_tile_level;
-    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]          fifo_tile_edge_func_val[2:0];
+    logic        [`RASTER_DIM_BITS-1:0]             fifo_tile_x_loc, fifo_tile_y_loc;
+    logic        [RASTER_LEVEL_DATA_BITS-1:0]       fifo_tile_level;
+    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  fifo_tile_edge_func_val[2:0];
 
     // Sub-tile data output from tile-evaluator
-    logic [`RASTER_DIM_BITS-1:0]      subtile_x_loc[3:0], subtile_y_loc[3:0];
-    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] subtile_edge_func_val[3:0][2:0];
+    logic        [`RASTER_DIM_BITS-1:0]             subtile_x_loc[3:0], subtile_y_loc[3:0];
+    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  subtile_edge_func_val[3:0][2:0];
 
     // Tile data selector to choose tile data from:
     //     1. Input tile
@@ -83,8 +83,8 @@ module VX_raster_slice #(
         if (reset) begin
             // Reset all globals and signals
             for (integer i = 0; i < 3; ++i) begin
-                global_extents[i] <= 0;
-                tile_edge_func_val[i] <= 0;
+                global_extents[i]      <= 0;
+                tile_edge_func_val[i]  <= 0;
                 for (integer j = 0; j < 3; ++j) begin
                     global_edges[i][j] <= 0;
                 end
@@ -123,21 +123,21 @@ module VX_raster_slice #(
             TILE EVALUATOR
     ***********************************/
     VX_raster_te #(
-        .RASTER_TILE_SIZE(RASTER_TILE_SIZE),
-        .RASTER_BLOCK_SIZE(RASTER_BLOCK_SIZE),
-        .RASTER_LEVEL_DATA_BITS(RASTER_LEVEL_DATA_BITS)
+        .RASTER_TILE_SIZE       (RASTER_TILE_SIZE),
+        .RASTER_BLOCK_SIZE      (RASTER_BLOCK_SIZE),
+        .RASTER_LEVEL_DATA_BITS (RASTER_LEVEL_DATA_BITS)
     ) tile_evaluator (
-        .level(level),
-        .x_loc(tile_x_loc),
-        .y_loc(tile_y_loc),
-        .edges(global_edges),
-        .edge_func_val(tile_edge_func_val),
-        .extents(global_extents),
-        .valid_tile(valid_tile),
-        .valid_block(valid_block),
-        .tile_x_loc(subtile_x_loc),
-        .tile_y_loc(subtile_y_loc),
-        .tile_edge_func_val(subtile_edge_func_val)
+        .level                  (level),
+        .x_loc                  (tile_x_loc),
+        .y_loc                  (tile_y_loc),
+        .edges                  (global_edges),
+        .edge_func_val          (tile_edge_func_val),
+        .extents                (global_extents),
+        .valid_tile             (valid_tile),
+        .valid_block            (valid_block),
+        .tile_x_loc             (subtile_x_loc),
+        .tile_y_loc             (subtile_y_loc),
+        .tile_edge_func_val     (subtile_edge_func_val)
     );
 
     /**********************************
@@ -154,7 +154,8 @@ module VX_raster_slice #(
     logic [RASTER_FIFO_DATA_WIDTH-1:0] fifo_data_push[3:0];
     for (genvar i = 0; i < 4; ++i) begin
         assign fifo_data_push[i] = {level_1, subtile_x_loc[i], subtile_y_loc[i], 
-            subtile_edge_func_val[i][0], subtile_edge_func_val[i][1],
+            subtile_edge_func_val[i][0],
+            subtile_edge_func_val[i][1],
             subtile_edge_func_val[i][2]};
     end
 
@@ -176,19 +177,19 @@ module VX_raster_slice #(
     end
 
     VX_raster_te_arbiter #(
-        .RASTER_TILE_SIZE(RASTER_TILE_SIZE),
-        .RASTER_BLOCK_SIZE(RASTER_BLOCK_SIZE)
+        .RASTER_TILE_SIZE   (RASTER_TILE_SIZE),
+        .RASTER_BLOCK_SIZE  (RASTER_BLOCK_SIZE)
     ) tile_arbiter (
-        .clk(clk), 
-        .reset(reset),
-        .fifo_push({4{valid_tile}} & fifo_push_mask),  // Push only tiles, not blocks
-        .fifo_pop(fifo_pop),
-        .data_push(fifo_data_push),
-        .data_pop(fifo_data_pop),
-        .fifo_full(fifo_full),
-        .fifo_empty(fifo_empty),
-        .fifo_data_valid(fifo_tile_valid),
-        .fifo_index_onehot(fifo_index_onehot)
+        .clk                (clk),
+        .reset              (reset),
+        .fifo_push          ({4{valid_tile}} & fifo_push_mask),  // Push only tiles, not blocks
+        .fifo_pop           (fifo_pop),
+        .data_push          (fifo_data_push),
+        .data_pop           (fifo_data_pop),
+        .fifo_full          (fifo_full),
+        .fifo_empty         (fifo_empty),
+        .fifo_data_valid    (fifo_tile_valid),
+        .fifo_index_onehot  (fifo_index_onehot)
     );
 
 
@@ -252,27 +253,27 @@ module VX_raster_slice #(
     );
 
     VX_raster_be #(
-        .RASTER_BLOCK_SIZE(RASTER_BLOCK_SIZE),
+        .RASTER_BLOCK_SIZE      (RASTER_BLOCK_SIZE),
         .RASTER_QUAD_OUTPUT_RATE(RASTER_QUAD_OUTPUT_RATE),
-        .RASTER_QUAD_FIFO_DEPTH(RASTER_QUAD_FIFO_DEPTH)
+        .RASTER_QUAD_FIFO_DEPTH (RASTER_QUAD_FIFO_DEPTH)
     ) block_evaluator (
-        .clk(clk),
-        .reset(reset),
-        .input_valid(be_fifo_pop),
-        .x_loc(be_in_x_loc),
-        .y_loc(be_in_y_loc),
-        .edges(global_edges),
-        .pid(global_pid),
-        .edge_func_val(be_in_edge_func_val),
-        .out_quad_x_loc(out_quad_x_loc),
-        .out_quad_y_loc(out_quad_y_loc),
-        .out_quad_masks(out_quad_masks),
-        .out_quad_bcoords(out_quad_bcoords),
-        .out_pid(out_pid),
-        .valid(valid), 
-        .ready(be_ready),
-        .pop(pop_quad),
-        .empty(quad_queue_empty)
+        .clk                    (clk),
+        .reset                  (reset),
+        .input_valid            (be_fifo_pop),
+        .x_loc                  (be_in_x_loc),
+        .y_loc                  (be_in_y_loc),
+        .edges                  (global_edges),
+        .pid                    (global_pid),
+        .edge_func_val          (be_in_edge_func_val),
+        .out_quad_x_loc         (out_quad_x_loc),
+        .out_quad_y_loc         (out_quad_y_loc),
+        .out_quad_masks         (out_quad_masks),
+        .out_quad_bcoords       (out_quad_bcoords),
+        .out_pid                (out_pid),
+        .valid                  (valid), 
+        .ready                  (be_ready),
+        .pop                    (pop_quad),
+        .empty                  (quad_queue_empty)
     );
 
 endmodule
