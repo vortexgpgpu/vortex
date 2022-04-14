@@ -42,15 +42,15 @@ module VX_cluster #(
     VX_perf_cache_if    perf_rcache_if();
     VX_raster_perf_if   raster_perf_if();
 
-    // TODO: remove
-    `UNUSED_VAR (perf_rcache_if.reads)
-    `UNUSED_VAR (perf_rcache_if.writes)
-    `UNUSED_VAR (perf_rcache_if.read_misses)
-    `UNUSED_VAR (perf_rcache_if.write_misses)
-    `UNUSED_VAR (perf_rcache_if.bank_stalls)
-    `UNUSED_VAR (perf_rcache_if.mshr_stalls)
-    `UNUSED_VAR (perf_rcache_if.mem_stalls)
-    `UNUSED_VAR (perf_rcache_if.crsp_stalls)
+    // // TODO: remove
+    // `UNUSED_VAR (perf_rcache_if.reads)
+    // `UNUSED_VAR (perf_rcache_if.writes)
+    // `UNUSED_VAR (perf_rcache_if.read_misses)
+    // `UNUSED_VAR (perf_rcache_if.write_misses)
+    // `UNUSED_VAR (perf_rcache_if.bank_stalls)
+    // `UNUSED_VAR (perf_rcache_if.mshr_stalls)
+    // `UNUSED_VAR (perf_rcache_if.mem_stalls)
+    // `UNUSED_VAR (perf_rcache_if.crsp_stalls)
 `endif
 
     VX_cache_req_if #(
@@ -328,6 +328,7 @@ module VX_cluster #(
             .raster_req_if  (per_core_raster_req_if[i]),
         `ifdef PERF_ENABLE
             .raster_perf_if (raster_perf_if),
+            .perf_rcache_if (perf_rcache_if),
         `endif
         `endif
         `ifdef EXT_ROP_ENABLE        

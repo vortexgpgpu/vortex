@@ -121,7 +121,22 @@
 `define CSR_MPM_RAS_LAT             12'hB04     // raster latency
 `define CSR_MPM_RAS_LAT_H           12'hB84
 // PERF: raster cache
-// <TODO>
+`define CSR_MPM_RCACHE_READS        12'hB05     // total reads
+`define CSR_MPM_RCACHE_READS_H      12'hB85
+`define CSR_MPM_RCACHE_WRITES       12'hB06     // total writes
+`define CSR_MPM_RCACHE_WRITES_H     12'hB86
+`define CSR_MPM_RCACHE_MISS_R       12'hB07     // read misses
+`define CSR_MPM_RCACHE_MISS_R_H     12'hB87
+`define CSR_MPM_RCACHE_MISS_W       12'hB08     // write misses
+`define CSR_MPM_RCACHE_MISS_W_H     12'hB88
+`define CSR_MPM_RCACHE_BANK_ST      12'hB09     // bank stalls
+`define CSR_MPM_RCACHE_BANK_ST_H    12'hB89
+`define CSR_MPM_RCACHE_MSHR_ST      12'hB0A     // MSHR stalls
+`define CSR_MPM_RCACHE_MSHR_ST_H    12'hB8A
+`define CSR_MPM_RCACHE_MEM_ST       12'hB0B     // mem stalls
+`define CSR_MPM_RCACHE_MEM_ST_H     12'hB8B
+`define CSR_MPM_RCACHE_CRSP_ST      12'hB0C     // CRSP stalls
+`define CSR_MPM_RCACHE_CRSP_ST_H    12'hB8C
 
 // Machine Performance-monitoring rop counters
 // PERF: rop unit

@@ -219,6 +219,15 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
 #ifdef EXT_RASTER_ENABLE
   uint64_t raster_mem_reads;
   uint64_t raster_mem_lat;
+  // PERF: raster cache
+  uint64_t rcache_reads;       
+  uint64_t rcache_writes;      
+  uint64_t rcache_read_misses; 
+  uint64_t rcache_write_misses;
+  uint64_t rcache_bank_stalls; 
+  uint64_t rcache_mshr_stalls; 
+  uint64_t rcache_mem_stalls;  
+  uint64_t rcache_crsp_stalls;
 #endif
 #endif
 
@@ -377,6 +386,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
       if (num_cores > 1) fprintf(stream, "PERF: core%d: tex memory latency=%d cycles\n", core_id, tex_avg_lat);
       tex_mem_lat += tex_lat_per_core;
       // <TODO: cache perf counters>
+
     #endif
     } break;
     case DCR_MPM_CLASS_ROP: {
@@ -387,7 +397,6 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
         rop_mem_lat      = get_csr_64(staging_ptr, CSR_MPM_ROP_LAT);
         rop_idle_cycles  = get_csr_64(staging_ptr, CSR_MPM_ROP_IDLE);
         rop_stall_cycles = get_csr_64(staging_ptr, CSR_MPM_ROP_STALL);
-        // <TODO: cache perf counters>
         rop_ocache_reads        = get_csr_64(staging_ptr, CSR_MPM_OCACHE_READS);
         rop_ocache_writes       = get_csr_64(staging_ptr, CSR_MPM_OCACHE_WRITES);
         rop_ocache_read_misses  = get_csr_64(staging_ptr, CSR_MPM_OCACHE_MISS_R);
@@ -402,9 +411,16 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     case DCR_MPM_CLASS_RASTER: {
     #ifdef EXT_RASTER_ENABLE
       if (0 == core_id) {
-        raster_mem_reads = get_csr_64(staging_ptr, CSR_MPM_RAS_READS);
-        raster_mem_lat   = get_csr_64(staging_ptr, CSR_MPM_RAS_LAT);
-        // <TODO: cache perf counters>
+        raster_mem_reads      = get_csr_64(staging_ptr, CSR_MPM_RAS_READS);
+        raster_mem_lat        = get_csr_64(staging_ptr, CSR_MPM_RAS_LAT);
+        rcache_reads          = get_csr_64(staging_ptr, CSR_MPM_RCACHE_READS);
+        rcache_writes         = get_csr_64(staging_ptr, CSR_MPM_RCACHE_WRITES);
+        rcache_read_misses    = get_csr_64(staging_ptr, CSR_MPM_RCACHE_MISS_R);
+        rcache_write_misses   = get_csr_64(staging_ptr, CSR_MPM_RCACHE_MISS_W);
+        rcache_bank_stalls    = get_csr_64(staging_ptr, CSR_MPM_RCACHE_BANK_ST);
+        rcache_mshr_stalls    = get_csr_64(staging_ptr, CSR_MPM_RCACHE_MSHR_ST);
+        rcache_mem_stalls     = get_csr_64(staging_ptr, CSR_MPM_RCACHE_MEM_ST);
+        rcache_crsp_stalls    = get_csr_64(staging_ptr, CSR_MPM_RCACHE_CRSP_ST);
       }
     #endif
     } break;
@@ -483,7 +499,17 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   #ifdef EXT_RASTER_ENABLE
     fprintf(stream, "PERF: raster memory reads=%ld\n", raster_mem_reads);
     fprintf(stream, "PERF: raster memory latency=%ld\n", raster_mem_lat);
-    // <TODO: cache perf counters>
+    int rcache_read_hit_ratio = (int)((1.0 - (double(rcache_read_misses) / double(rcache_reads))) * 100);
+    int rcache_write_hit_ratio = (int)((1.0 - (double(rcache_write_misses) / double(rcache_reads))) * 100);
+    int rcache_bank_utilization = (int)((double(rcache_reads + rcache_writes) / double(rcache_reads + rcache_writes + rcache_bank_stalls)) * 100);
+    fprintf(stream, "PERF: rcache reads=%ld\n", rcache_reads);
+    fprintf(stream, "PERF: rcache writes=%ld\n", rcache_writes);
+    fprintf(stream, "PERF: rcache read misses=%ld (hit ratio=%d%%)\n", rcache_read_misses, rcache_read_hit_ratio);
+    fprintf(stream, "PERF: rcache write misses=%ld (hit ratio=%d%%)\n", rcache_write_misses, rcache_write_hit_ratio);  
+    fprintf(stream, "PERF: rcache bank stalls=%ld (utilization=%d%%)\n", rcache_bank_stalls, rcache_bank_utilization);
+    fprintf(stream, "PERF: rcache mshr stalls=%ld\n", rcache_mshr_stalls);
+    fprintf(stream, "PERF: rcache mem stalls=%ld\n", rcache_mem_stalls);
+    fprintf(stream, "PERF: rcache crsp stalls=%ld\n", rcache_crsp_stalls);
   #endif
   } break;
   }
