@@ -70,6 +70,7 @@ module VX_cluster #(
     VX_raster_unit #(
         .CLUSTER_ID  (CLUSTER_ID),
         .NUM_SLICES  (1),
+        .RASTER_TILE_SIZE ((1 << `RASTER_TILE_LOGSIZE)),
         .NUM_OUTPUTS (`NUM_THREADS)
     ) raster_unit (
         .clk           (clk),
@@ -165,18 +166,18 @@ module VX_cluster #(
     VX_rop_req_if       rop_req_if();
 
 `ifdef PERF_ENABLE
-    VX_perf_cache_if    perf_ocache_if();
+    VX_perf_cache_if    ocache_perf_if();
     VX_rop_perf_if      rop_perf_if(); 
     
     // TODO: remove
-    `UNUSED_VAR (perf_ocache_if.reads)
-    `UNUSED_VAR (perf_ocache_if.writes)
-    `UNUSED_VAR (perf_ocache_if.read_misses)
-    `UNUSED_VAR (perf_ocache_if.write_misses)
-    `UNUSED_VAR (perf_ocache_if.bank_stalls)
-    `UNUSED_VAR (perf_ocache_if.mshr_stalls)
-    `UNUSED_VAR (perf_ocache_if.mem_stalls)
-    `UNUSED_VAR (perf_ocache_if.crsp_stalls)
+    //`UNUSED_VAR (ocache_perf_if.reads)
+    //`UNUSED_VAR (ocache_perf_if.writes)
+    //`UNUSED_VAR (ocache_perf_if.read_misses)
+    //`UNUSED_VAR (ocache_perf_if.write_misses)
+    //`UNUSED_VAR (ocache_perf_if.bank_stalls)
+    //`UNUSED_VAR (ocache_perf_if.mshr_stalls)
+    //`UNUSED_VAR (ocache_perf_if.mem_stalls)
+    //`UNUSED_VAR (ocache_perf_if.crsp_stalls)
 `endif
     
     VX_cache_req_if #(
@@ -259,7 +260,7 @@ module VX_cluster #(
         `SCOPE_BIND_VX_cluster_ocache
 
     `ifdef PERF_ENABLE
-        .perf_cache_if  (perf_ocache_if),
+        .perf_cache_if  (ocache_perf_if),
     `endif
         
         .clk            (clk),
@@ -332,7 +333,8 @@ module VX_cluster #(
         `ifdef EXT_ROP_ENABLE        
             .rop_req_if     (per_core_rop_req_if[i]),
         `ifdef PERF_ENABLE
-            .rop_perf_if   (rop_perf_if),
+            .rop_perf_if    (rop_perf_if),
+            .ocache_perf_if (ocache_perf_if),
         `endif
         `endif
 
