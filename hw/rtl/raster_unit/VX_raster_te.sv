@@ -11,23 +11,25 @@ module VX_raster_te #(
     parameter RASTER_BLOCK_SIZE      = 4,
     parameter RASTER_LEVEL_DATA_BITS = ($clog2(RASTER_TILE_SIZE/RASTER_BLOCK_SIZE) + 1)
 ) (
+    // Input valid
+    input logic input_valid,
     // Level value in recursive descent
-    input logic [RASTER_LEVEL_DATA_BITS-1:0]                 level,
+    input logic        [RASTER_LEVEL_DATA_BITS-1:0]         level,
     // Tile data
-    input logic [`RASTER_DIM_BITS-1:0]                  x_loc, y_loc,
+    input logic        [`RASTER_DIM_BITS-1:0]               x_loc, y_loc,
     // Primitive data
     // edge equation data for the 3 edges and ax+by+c
-    input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]      edges[2:0][2:0],
+    input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    edges[2:0][2:0],
     // edge function computation value propagated
-    input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]      edge_func_val[2:0],
-    input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]      extents[2:0],
+    input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    edge_func_val[2:0],
+    input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    extents[2:0],
 
     // Status signals
-    output logic                                              valid_tile, valid_block,
+    output logic                                            valid_tile, valid_block,
     // Sub-tile related data
-    output logic [`RASTER_DIM_BITS-1:0]                 tile_x_loc[3:0],
+    output logic        [`RASTER_DIM_BITS-1:0]              tile_x_loc[3:0],
         tile_y_loc[3:0],
-    output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]     tile_edge_func_val[3:0][2:0]
+    output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   tile_edge_func_val[3:0][2:0]
 );
     localparam RASTER_TILE_FIFO_DEPTH    = RASTER_TILE_SIZE/RASTER_BLOCK_SIZE;
     localparam RASTER_TILE_SIZE_BITS     = $clog2(RASTER_TILE_SIZE);
@@ -58,7 +60,7 @@ module VX_raster_te #(
         end
 
         // Check if tile has triangle
-        valid_tile = !((eval0 < 0) || (eval1 < 0) || (eval2 < 0));
+        valid_tile = (!((eval0 < 0) || (eval1 < 0) || (eval2 < 0))) & input_valid;
         // If tile valid => sub-divide into sub-tiles
         if (valid_tile) begin
             sub_tile_bits = `RASTER_DIM_BITS'(RASTER_TILE_SIZE_BITS) - `RASTER_DIM_BITS'(level) - `RASTER_DIM_BITS'(1);

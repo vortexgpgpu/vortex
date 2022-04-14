@@ -6,9 +6,9 @@ module VX_raster_edge_functions #(
     parameter MUL_LATENCY = 3
 ) (
     input logic clk,
-    input logic [`RASTER_DIM_BITS-1:0]  x_loc, y_loc,
-    input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] edges[2:0][2:0],
-    output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] edge_func_val[2:0]
+    input logic         [`RASTER_DIM_BITS-1:0]              x_loc, y_loc,
+    input logic signed  [`RASTER_PRIMITIVE_DATA_BITS-1:0]   edges[2:0][2:0],
+    output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   edge_func_val[2:0]
 );
     for (genvar i = 0; i < 3; ++i) begin
 
@@ -47,14 +47,5 @@ module VX_raster_edge_functions #(
             edge_func_val[i] = val1 + val2 + edges[i][2];
         end
     end
-
-// `ifdef DBG_TRACE_CORE_PIPELINE
-//     always @(posedge clk) begin
-//         for (int i = 0; i < 3; ++i) begin
-//             dpi_trace(1, "Edge func eval: %d: x_loc = %0d, y_loc = %0d, i=%d , a = %d, b = %d, c = %d, val = %d\n", 
-//                 $time, x_loc, y_loc, i, edges[i][0], edges[i][1], edges[i][2], edge_func_val[i]);
-//         end
-//     end
-// `endif
 
 endmodule
