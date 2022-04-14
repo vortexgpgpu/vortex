@@ -72,6 +72,8 @@ module VX_raster_slice #(
     logic        [`RASTER_DIM_BITS-1:0]             subtile_x_loc[3:0], subtile_y_loc[3:0];
     logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  subtile_edge_func_val[3:0][2:0];
 
+    logic tile_data_valid;
+
     // Tile data selector to choose tile data from:
     //     1. Input tile
     //     2. Sub-tile for queue
@@ -80,6 +82,7 @@ module VX_raster_slice #(
     //        be empty. So, instead of wasting 1 cycle, sub=tile
     //        forwarded directly here.
     always @(posedge clk) begin
+        tile_data_valid <= 0;
         if (reset) begin
             // Reset all globals and signals
             for (integer i = 0; i < 3; ++i) begin
@@ -101,6 +104,7 @@ module VX_raster_slice #(
                 global_extents     <= extents;
                 global_edges       <= edges;
                 global_pid         <= pid;
+                tile_data_valid    <= 1;
             end
             // sub-tile rerouter used only 1 onces for the parent tile
             else if (level == 0 && fifo_empty == 1 && fifo_tile_valid == 0) begin
@@ -108,6 +112,7 @@ module VX_raster_slice #(
                 tile_y_loc         <= subtile_y_loc[0];
                 level              <= level_1;
                 tile_edge_func_val <= subtile_edge_func_val[0];
+                tile_data_valid    <= 1;
             end
             // else ready from the fifo is it is not empty and fifo tile is valid
             else if (fifo_empty == 0 && fifo_tile_valid == 1) begin
@@ -115,6 +120,7 @@ module VX_raster_slice #(
                 tile_y_loc         <= fifo_tile_y_loc;
                 level              <= fifo_tile_level;
                 tile_edge_func_val <= fifo_tile_edge_func_val;
+                tile_data_valid    <= 1;
             end
         end
     end
@@ -127,6 +133,7 @@ module VX_raster_slice #(
         .RASTER_BLOCK_SIZE      (RASTER_BLOCK_SIZE),
         .RASTER_LEVEL_DATA_BITS (RASTER_LEVEL_DATA_BITS)
     ) tile_evaluator (
+        .input_valid            (tile_data_valid),
         .level                  (level),
         .x_loc                  (tile_x_loc),
         .y_loc                  (tile_y_loc),
@@ -177,8 +184,9 @@ module VX_raster_slice #(
     end
 
     VX_raster_te_arbiter #(
-        .RASTER_TILE_SIZE   (RASTER_TILE_SIZE),
-        .RASTER_BLOCK_SIZE  (RASTER_BLOCK_SIZE)
+        .RASTER_TILE_SIZE       (RASTER_TILE_SIZE),
+        .RASTER_BLOCK_SIZE      (RASTER_BLOCK_SIZE),
+        .RASTER_TILE_FIFO_DEPTH (RASTER_TILE_FIFO_DEPTH)
     ) tile_arbiter (
         .clk                (clk),
         .reset              (reset),

@@ -137,7 +137,7 @@ module VX_raster_mem #(
                 temp_tile_count  <= 0;
             end
             // If it gets a valid memory response
-            if (mem_rsp_valid && fetch_fsm_complete == 0) begin
+            else if (mem_rsp_valid && fetch_fsm_complete == 0) begin
                 // If not generate the tiles and primitives
                 // Check the reponse tag type
                 if (mem_rsp_tag[1:0] == TILE_FETCH) begin
@@ -243,7 +243,7 @@ module VX_raster_mem #(
     ) multiplier (
         .clk    (clk),
         .enable (1'b1),
-        .dataa  (mem_rsp_data[0]),
+        .dataa  (temp_mem_rsp_data[0]),
         .datab  (temp_pbuf_stride),
         .result (mul_result_tmp)
     );
@@ -254,9 +254,9 @@ module VX_raster_mem #(
     VX_shift_register #(
         .DATAW  (1 + TAG_MAX_BIT_INDEX + 9*`RASTER_PRIMITIVE_DATA_BITS),
         .DEPTH  (MUL_LATENCY),
-        .RESETW (1)
+        .RESETW (1 + TAG_MAX_BIT_INDEX)
     ) mul_shift_reg (
-        .clk(clk),
+        .clk      (clk),
         .reset    (reset),
         .enable   (1'b1),
         .data_in  ({temp_mem_rsp_valid, temp_mem_rsp_tag,
@@ -346,6 +346,18 @@ module VX_raster_mem #(
         .mem_rsp_tag    (cache_rsp_if.tag),
         .mem_rsp_ready  (cache_rsp_if.ready)
     );
+
+`ifdef DBG_TRACE_CORE_PIPELINE
+    always @(posedge clk) begin
+        if (out_valid) begin
+            dpi_trace(1, "%d: raster-mem-dispatch: x=%0d, y=%0d, pid=%0d, edge1.x=%0d, edge1.y=%0d, edge1.z=%0d, edge2.x=%0d, edge2.y=%0d, edge2.z=%0d, edge3.x=%0d, edge3.y=%0d, edge3.z=%0d\n",
+                $time, out_x_loc, out_y_loc, out_pid,
+                out_edges[0][0], out_edges[0][1], out_edges[0][2],
+                out_edges[1][0], out_edges[1][1], out_edges[1][2],
+                out_edges[2][0], out_edges[2][1], out_edges[2][2]);
+        end
+    end
+`endif
 
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin

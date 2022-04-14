@@ -16,7 +16,7 @@ module VX_raster_unit #(
     parameter RASTER_RS_SIZE          = 8,          // Reservation station size
     parameter RASTER_QUAD_OUTPUT_RATE = NUM_OUTPUTS,// Rate output quad generation
     parameter RASTER_QUAD_FIFO_DEPTH  = 64,         // Quad fifo depth
-    parameter RASTER_TILE_FIFO_DEPTH  = (RASTER_TILE_SIZE*RASTER_TILE_SIZE)/(
+    parameter RASTER_TILE_FIFO_DEPTH  = 128*(RASTER_TILE_SIZE*RASTER_TILE_SIZE)/(
         RASTER_BLOCK_SIZE*RASTER_BLOCK_SIZE)        // tile fifo depth
 ) (
     input wire clk,

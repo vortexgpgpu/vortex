@@ -11,6 +11,8 @@ module VX_raster_te #(
     parameter RASTER_BLOCK_SIZE      = 4,
     parameter RASTER_LEVEL_DATA_BITS = ($clog2(RASTER_TILE_SIZE/RASTER_BLOCK_SIZE) + 1)
 ) (
+    // Input valid
+    input logic input_valid,
     // Level value in recursive descent
     input logic        [RASTER_LEVEL_DATA_BITS-1:0]         level,
     // Tile data
@@ -58,7 +60,7 @@ module VX_raster_te #(
         end
 
         // Check if tile has triangle
-        valid_tile = !((eval0 < 0) || (eval1 < 0) || (eval2 < 0));
+        valid_tile = (!((eval0 < 0) || (eval1 < 0) || (eval2 < 0))) & input_valid;
         // If tile valid => sub-divide into sub-tiles
         if (valid_tile) begin
             sub_tile_bits = `RASTER_DIM_BITS'(RASTER_TILE_SIZE_BITS) - `RASTER_DIM_BITS'(level) - `RASTER_DIM_BITS'(1);
