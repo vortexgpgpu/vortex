@@ -153,20 +153,20 @@
 // PERF: rop cache
 `define CSR_MPM_OCACHE_READS        12'hB08     // total reads
 `define CSR_MPM_OCACHE_READS_H      12'hB88
-`define CSR_MPM_OCACHE_WRITES       12'hB19     // total writes
-`define CSR_MPM_OCACHE_WRITES_H     12'hB99
-`define CSR_MPM_OCACHE_MISS_R       12'hB1A     // read misses
-`define CSR_MPM_OCACHE_MISS_R_H     12'hB9A
-`define CSR_MPM_OCACHE_MISS_W       12'hB1B     // write misses
-`define CSR_MPM_OCACHE_MISS_W_H     12'hB9B
-`define CSR_MPM_OCACHE_BANK_ST      12'hB1C     // bank stalls
-`define CSR_MPM_OCACHE_BANK_ST_H    12'hB9C
-`define CSR_MPM_OCACHE_MSHR_ST      12'hB1D     // MSHR stalls
-`define CSR_MPM_OCACHE_MSHR_ST_H    12'hB9D
-`define CSR_MPM_OCACHE_MEM_ST       12'hB1E     // mem stalls
-`define CSR_MPM_OCACHE_MEM_ST_H     12'hB9E
-`define CSR_MPM_OCACHE_CRSP_ST      12'hB1F     // CRSP stalls
-`define CSR_MPM_OCACHE_CRSP_ST_H    12'hB9F
+`define CSR_MPM_OCACHE_WRITES       12'hB09     // total writes
+`define CSR_MPM_OCACHE_WRITES_H     12'hB89
+`define CSR_MPM_OCACHE_MISS_R       12'hB0A     // read misses
+`define CSR_MPM_OCACHE_MISS_R_H     12'hB8A
+`define CSR_MPM_OCACHE_MISS_W       12'hB0B     // write misses
+`define CSR_MPM_OCACHE_MISS_W_H     12'hB8B
+`define CSR_MPM_OCACHE_BANK_ST      12'hB0C     // bank stalls
+`define CSR_MPM_OCACHE_BANK_ST_H    12'hB8C
+`define CSR_MPM_OCACHE_MSHR_ST      12'hB0D     // MSHR stalls
+`define CSR_MPM_OCACHE_MSHR_ST_H    12'hB8D
+`define CSR_MPM_OCACHE_MEM_ST       12'hB0E     // mem stalls
+`define CSR_MPM_OCACHE_MEM_ST_H     12'hB8E
+`define CSR_MPM_OCACHE_CRSP_ST      12'hB0F     // CRSP stalls
+`define CSR_MPM_OCACHE_CRSP_ST_H    12'hB8F
 
 // Machine Information Registers
 `define CSR_MVENDORID               12'hF11

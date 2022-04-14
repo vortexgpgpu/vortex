@@ -35,7 +35,7 @@ module VX_execute #(
     VX_raster_req_if        raster_req_if,
 `ifdef PERF_ENABLE
     VX_raster_perf_if.slave raster_perf_if,
-    VX_perf_cache_if.slace  perf_rcache_if,
+    VX_perf_cache_if.slave  perf_rcache_if,
 `endif
 `endif
 `ifdef EXT_ROP_ENABLE        
