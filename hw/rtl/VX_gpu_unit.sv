@@ -22,12 +22,15 @@ module VX_gpu_unit #(
     VX_cache_req_if.master  tcache_req_if,
     VX_cache_rsp_if.slave   tcache_rsp_if,
 `ifdef PERF_ENABLE
-    VX_tex_perf_if.slave    tex_perf_if,
+    VX_tex_perf_if.master   tex_perf_if,
 `endif
 `endif
 `ifdef EXT_RASTER_ENABLE        
     VX_gpu_csr_if.slave     raster_csr_if,
     VX_raster_req_if        raster_req_if,
+`ifdef PERF_ENABLE
+    VX_raster_svc_perf_if.master raster_svc_perf_if,
+`endif
 `endif
 `ifdef EXT_ROP_ENABLE        
     VX_gpu_csr_if.slave     rop_csr_if,
@@ -169,6 +172,9 @@ module VX_gpu_unit #(
     ) raster_svc (
         .clk                (clk),
         .reset              (reset),
+    `ifdef PERF_ENABLE
+        .raster_svc_perf_if (raster_svc_perf_if),
+    `endif
         .raster_svc_req_if  (raster_svc_req_if),        
         .raster_svc_rsp_if  (raster_svc_rsp_if),  
         .raster_req_if      (raster_req_if),
