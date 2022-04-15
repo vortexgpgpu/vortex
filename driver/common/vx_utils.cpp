@@ -230,6 +230,14 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   uint64_t rop_ocache_mem_stalls = 0;  
   uint64_t rop_ocache_crsp_stalls = 0;
 #endif
+#ifdef EXT_RASTER_ENABLE
+  uint64_t raster_mem_reads = 0;
+  uint64_t raster_mem_lat = 0;
+  // PERF: raster cache
+  uint64_t rcache_reads = 0;  
+  uint64_t rcache_read_misses = 0;
+  uint64_t rcache_bank_stalls = 0;
+#endif
 #endif
 
   uint64_t num_cores;
@@ -429,6 +437,17 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
       }      
     #endif
     } break;
+    case DCR_MPM_CLASS_RASTER: {
+    #ifdef EXT_RASTER_ENABLE
+      if (0 == core_id) {
+        raster_mem_reads      = get_csr_64(staging_ptr, CSR_MPM_RAS_READS);
+        raster_mem_lat        = get_csr_64(staging_ptr, CSR_MPM_RAS_LAT);
+        rcache_reads          = get_csr_64(staging_ptr, CSR_MPM_RCACHE_READS);
+        rcache_read_misses    = get_csr_64(staging_ptr, CSR_MPM_RCACHE_MISS_R);
+        rcache_bank_stalls    = get_csr_64(staging_ptr, CSR_MPM_RCACHE_BANK_ST);
+      }
+    #endif
+    } break;
     }
   #endif
   }  
@@ -510,6 +529,17 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     fprintf(stream, "PERF: ocache read misses=%ld (hit ratio=%d%%)\n", rop_ocache_read_misses, ocache_read_hit_ratio);
     fprintf(stream, "PERF: ocache write misses=%ld (hit ratio=%d%%)\n", rop_ocache_write_misses, ocache_write_hit_ratio);  
     fprintf(stream, "PERF: ocache bank stalls=%ld (utilization=%d%%)\n", rop_ocache_bank_stalls, ocache_bank_utilization);
+  #endif
+  } break;
+  case DCR_MPM_CLASS_RASTER: {
+  #ifdef EXT_RASTER_ENABLE
+    fprintf(stream, "PERF: raster memory reads=%ld\n", raster_mem_reads);
+    fprintf(stream, "PERF: raster memory latency=%ld\n", raster_mem_lat);
+    int rcache_read_hit_ratio = (int)((1.0 - (double(rcache_read_misses) / double(rcache_reads))) * 100);
+    int rcache_bank_utilization = (int)((double(rcache_reads) / double(rcache_reads + rcache_bank_stalls)) * 100);
+    fprintf(stream, "PERF: rcache reads=%ld\n", rcache_reads);
+    fprintf(stream, "PERF: rcache read misses=%ld (hit ratio=%d%%)\n", rcache_read_misses, rcache_read_hit_ratio);
+    fprintf(stream, "PERF: rcache bank stalls=%ld (utilization=%d%%)\n", rcache_bank_stalls, rcache_bank_utilization);
   #endif
   } break;
   }

@@ -132,7 +132,16 @@
 `define CSR_MPM_RASTER_STALL        12'hB05     // raster stall cycles
 `define CSR_MPM_RASTER_STALL_H      12'hB85
 // PERF: raster cache
-// <TODO>
+`define CSR_MPM_RCACHE_READS        12'hB05     // total reads
+`define CSR_MPM_RCACHE_READS_H      12'hB85
+`define CSR_MPM_RCACHE_WRITES       12'hB06     // total writes
+`define CSR_MPM_RCACHE_WRITES_H     12'hB86
+`define CSR_MPM_RCACHE_MISS_R       12'hB07     // read misses
+`define CSR_MPM_RCACHE_MISS_R_H     12'hB87
+`define CSR_MPM_RCACHE_MISS_W       12'hB08     // write misses
+`define CSR_MPM_RCACHE_MISS_W_H     12'hB88
+`define CSR_MPM_RCACHE_BANK_ST      12'hB09     // bank stalls
+`define CSR_MPM_RCACHE_BANK_ST_H    12'hB89
 
 // Machine Performance-monitoring rop counters
 // PERF: rop unit
