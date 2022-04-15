@@ -39,11 +39,14 @@ module VX_imadd (
     wire [31:0]             PC_s;
     wire [`NR_BITS-1:0]     rd_s;
     wire                    wb_s;
-    wire [`INST_MOD_BITS-1:0] op_mod_s;
+    wire [1:0] shift, shift_s;
     wire [`NUM_THREADS-1:0][31:0] data_in3_s;
 
     wire [`NUM_THREADS-1:0][31:0] mul_result;
     wire [`NUM_THREADS-1:0][31:0] add_result;
+
+    assign shift = op_mod[1:0];
+    `UNUSED_VAR (op_mod)
 
     wire stall_out;    
 
@@ -54,13 +57,13 @@ module VX_imadd (
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         wire [31:0] mul_in1 = data_in1[i];
         wire [31:0] mul_in2 = data_in2[i];
-        wire [47:0] mul_result_tmp;
+        wire [55:0] mul_result_tmp;
 
         VX_multiplier #(
             .WIDTHA  (32),
             .WIDTHB  (32),
-            .WIDTHP  (48),
-            .SIGNED  (0),
+            .WIDTHP  (56), // 56-24=32
+            .SIGNED  (1),
             .LATENCY (`LATENCY_IMUL+1)
         ) multiplier (
             .clk    (clk),
@@ -70,19 +73,19 @@ module VX_imadd (
             .result (mul_result_tmp)
         );
 
-        assign mul_result[i] = 32'($signed(mul_result_tmp) >> (op_mod_s * 8));
+        assign mul_result[i] = 32'($signed(mul_result_tmp) >> $signed({shift_s, 3'b0}));
     end
 
     VX_shift_register #(
-        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + `INST_MOD_BITS + (`NUM_THREADS * 32)),
+        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 2 + (`NUM_THREADS * 32)),
         .DEPTH  (`LATENCY_IMUL+1),
         .RESETW (1)
     ) mul_shift_reg (
         .clk(clk),
         .reset    (reset),
         .enable   (mul_ready_in),
-        .data_in  ({valid_in, uuid_in, wid_in, tmask_in, PC_in, rd_in, wb_in, op_mod,   data_in3}),
-        .data_out ({valid_s,  uuid_s,  wid_s,  tmask_s,  PC_s,  rd_s,  wb_s,  op_mod_s, data_in3_s})
+        .data_in  ({valid_in, uuid_in, wid_in, tmask_in, PC_in, rd_in, wb_in, shift,   data_in3}),
+        .data_out ({valid_s,  uuid_s,  wid_s,  tmask_s,  PC_s,  rd_s,  wb_s,  shift_s, data_in3_s})
     );
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin

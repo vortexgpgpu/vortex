@@ -68,4 +68,22 @@ module VX_rop_svc #(
     assign rop_svc_rsp_if.wb   = 0;
     assign rop_svc_rsp_if.eop  = 1'b1;
 
+`ifdef DBG_TRACE_TEX
+    always @(posedge clk) begin
+        if (rop_svc_req_if.valid && rop_svc_req_if.ready) begin
+            dpi_trace(1, "%d: core%0d-rop-req: wid=%0d, PC=0x%0h, tmask=%b, x=", $time, CORE_ID, rop_svc_req_if.wid, rop_svc_req_if.PC, rop_svc_req_if.tmask);
+            `TRACE_ARRAY1D(1, rop_svc_req_if.pos_x, `NUM_THREADS);
+            dpi_trace(1, ", y=");
+            `TRACE_ARRAY1D(1, rop_svc_req_if.pos_y, `NUM_THREADS);
+            dpi_trace(1, ", backface=");
+            `TRACE_ARRAY1D(1, rop_svc_req_if.backface, `NUM_THREADS);
+            dpi_trace(1, ", color=");
+            `TRACE_ARRAY1D(1, rop_svc_req_if.color, `NUM_THREADS);
+            dpi_trace(1, ", depth=");
+            `TRACE_ARRAY1D(1, rop_svc_req_if.depth, `NUM_THREADS);
+            dpi_trace(1, " (#%0d)\n", tex_req_if.uuid);
+        end
+    end
+`endif
+
 endmodule

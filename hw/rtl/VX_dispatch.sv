@@ -70,8 +70,8 @@ module VX_dispatch (
         .reset     (reset),
         .valid_in  (lsu_req_valid),
         .ready_in  (lsu_req_ready),
-        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, lsu_op_type,        lsu_is_fence,        dispatch_if.imm,    dispatch_if.rd, dispatch_if.wb, gpr_rsp_if.rs1_data,  gpr_rsp_if.rs2_data, lsu_is_prefetch}),
-        .data_out  ({lsu_req_if.uuid, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, lsu_req_if.op_type, lsu_req_if.is_fence, lsu_req_if.offset, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.base_addr, lsu_req_if.store_data, lsu_req_if.is_prefetch}),
+        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, lsu_op_type,        lsu_is_fence,        dispatch_if.imm,   dispatch_if.rd, dispatch_if.wb, gpr_rsp_if.rs1_data,  gpr_rsp_if.rs2_data,   lsu_is_prefetch}),
+        .data_out  ({lsu_req_if.uuid,  lsu_req_if.wid,  lsu_req_if.tmask,  lsu_req_if.PC,  lsu_req_if.op_type, lsu_req_if.is_fence, lsu_req_if.offset, lsu_req_if.rd,  lsu_req_if.wb,  lsu_req_if.base_addr, lsu_req_if.store_data, lsu_req_if.is_prefetch}),
         .valid_out (lsu_req_if.valid),
         .ready_out (lsu_req_if.ready)
     );
@@ -92,7 +92,7 @@ module VX_dispatch (
         .valid_in  (csr_req_valid),
         .ready_in  (csr_req_ready),
         .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, csr_op_type,        csr_addr,        dispatch_if.rd, dispatch_if.wb, dispatch_if.use_imm, csr_imm,        gpr_rsp_if.rs1_data}),
-        .data_out  ({csr_req_if.uuid, csr_req_if.wid, csr_req_if.tmask, csr_req_if.PC, csr_req_if.op_type, csr_req_if.addr, csr_req_if.rd, csr_req_if.wb, csr_req_if.use_imm, csr_req_if.imm, csr_req_if.rs1_data}),
+        .data_out  ({csr_req_if.uuid,  csr_req_if.wid,  csr_req_if.tmask,  csr_req_if.PC,  csr_req_if.op_type, csr_req_if.addr, csr_req_if.rd,  csr_req_if.wb,  csr_req_if.use_imm,  csr_req_if.imm, csr_req_if.rs1_data}),
         .valid_out (csr_req_if.valid),
         .ready_out (csr_req_if.ready)
     );
@@ -112,7 +112,7 @@ module VX_dispatch (
         .valid_in  (fpu_req_valid),
         .ready_in  (fpu_req_ready),
         .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, fpu_op_type,        dispatch_if.op_mod, dispatch_if.rd, dispatch_if.wb, gpr_rsp_if.rs1_data, gpr_rsp_if.rs2_data, gpr_rsp_if.rs3_data}),
-        .data_out  ({fpu_req_if.uuid, fpu_req_if.wid, fpu_req_if.tmask, fpu_req_if.PC, fpu_req_if.op_type, fpu_req_if.op_mod, fpu_req_if.rd, fpu_req_if.wb, fpu_req_if.rs1_data, fpu_req_if.rs2_data, fpu_req_if.rs3_data}),
+        .data_out  ({fpu_req_if.uuid,  fpu_req_if.wid,  fpu_req_if.tmask,  fpu_req_if.PC,  fpu_req_if.op_type, fpu_req_if.op_mod,  fpu_req_if.rd,  fpu_req_if.wb,  fpu_req_if.rs1_data, fpu_req_if.rs2_data, fpu_req_if.rs3_data}),
         .valid_out (fpu_req_if.valid),
         .ready_out (fpu_req_if.ready)
     );
@@ -134,7 +134,7 @@ module VX_dispatch (
         .valid_in  (gpu_req_valid),
         .ready_in  (gpu_req_ready),
         .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, next_PC,            gpu_op_type,        dispatch_if.op_mod, dispatch_if.rd, dispatch_if.wb, tid,            gpr_rsp_if.rs1_data, gpr_rsp_if.rs2_data, gpr_rsp_if.rs3_data}),
-        .data_out  ({gpu_req_if.uuid, gpu_req_if.wid, gpu_req_if.tmask, gpu_req_if.PC, gpu_req_if.next_PC, gpu_req_if.op_type, gpu_req_if.op_mod, gpu_req_if.rd, gpu_req_if.wb, gpu_req_if.tid, gpu_req_if.rs1_data, gpu_req_if.rs2_data, gpu_req_if.rs3_data}),
+        .data_out  ({gpu_req_if.uuid,  gpu_req_if.wid,  gpu_req_if.tmask,  gpu_req_if.PC,  gpu_req_if.next_PC, gpu_req_if.op_type, gpu_req_if.op_mod,  gpu_req_if.rd,  gpu_req_if.wb,  gpu_req_if.tid, gpu_req_if.rs1_data, gpu_req_if.rs2_data, gpu_req_if.rs3_data}),
         .valid_out (gpu_req_if.valid),
         .ready_out (gpu_req_if.ready)
     ); 
