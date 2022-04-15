@@ -180,8 +180,8 @@ module VX_raster_be #(
         if (pop) begin
             for (int i = 0; i < RASTER_QUAD_OUTPUT_RATE; ++i) begin
                 if (valid[i]) begin
-                    dpi_trace(2, "%d: raster-be-out[%0d]: x=%0d, y=%0d, pid=%0d, mask=%0d, bcoords={%d %d %d %d, %d %d %d %d, %d %d %d %d}\n",
-                        $time, i, out_quad_x_loc[i], out_quad_y_loc[i], out_pid[i], out_quad_masks[i],
+                    dpi_trace(2, "%d: raster-be-out[%0d]: x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={%d %d %d %d, %d %d %d %d, %d %d %d %d}\n",
+                        $time, i, out_quad_x_loc[i], out_quad_y_loc[i], out_quad_masks[i], out_pid[i],
                         out_quad_bcoords[i][0][0], out_quad_bcoords[i][0][1], out_quad_bcoords[i][0][2], out_quad_bcoords[i][0][3],
                         out_quad_bcoords[i][1][0], out_quad_bcoords[i][1][1], out_quad_bcoords[i][1][2], out_quad_bcoords[i][1][3],
                         out_quad_bcoords[i][2][0], out_quad_bcoords[i][2][1], out_quad_bcoords[i][2][2], out_quad_bcoords[i][2][3]);

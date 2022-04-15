@@ -70,9 +70,9 @@ module VX_raster_svc #(
     always @(posedge clk) begin
         if (csr_write_enable) begin
             for (integer i = 0; i < `NUM_THREADS; ++i) begin
-                dpi_trace(1, "%d: raster-svc-stamp[%0d]: empty=%b, x=%0d, y=%0d, pid=%0d, mask=%0d, bcoords={%0d %0d %0d %0d, %0d %0d %0d %0d, %0d %0d %0d %0d}\n", 
+                dpi_trace(1, "%d: raster-svc-stamp[%0d]: empty=%b, x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={%0d %0d %0d %0d, %0d %0d %0d %0d, %0d %0d %0d %0d}\n", 
                     $time, i, raster_req_if.empty,
-                    raster_req_if.stamps[i].pos_x,  raster_req_if.stamps[i].pos_y, raster_req_if.stamps[i].pid, raster_req_if.stamps[i].mask,
+                    raster_req_if.stamps[i].pos_x,  raster_req_if.stamps[i].pos_y, raster_req_if.stamps[i].mask, raster_req_if.stamps[i].pid,
                     raster_req_if.stamps[i].bcoord_x[0], raster_req_if.stamps[i].bcoord_x[1], raster_req_if.stamps[i].bcoord_x[2], raster_req_if.stamps[i].bcoord_x[3],
                     raster_req_if.stamps[i].bcoord_y[0], raster_req_if.stamps[i].bcoord_y[1], raster_req_if.stamps[i].bcoord_y[2], raster_req_if.stamps[i].bcoord_y[3],
                     raster_req_if.stamps[i].bcoord_z[0], raster_req_if.stamps[i].bcoord_z[1], raster_req_if.stamps[i].bcoord_z[2], raster_req_if.stamps[i].bcoord_z[3]
