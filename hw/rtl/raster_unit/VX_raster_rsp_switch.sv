@@ -7,13 +7,13 @@ module VX_raster_rsp_switch #(
     input valid,
     input empty,
     // Quad data
-    input [`RASTER_DIM_BITS-1:0]      x_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
-    input [`RASTER_DIM_BITS-1:0]      y_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
-    input [3:0]                             masks[RASTER_QUAD_OUTPUT_RATE-1:0],
-    input signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0],
+    input        [`RASTER_DIM_BITS-1:0]             x_loc   [RASTER_QUAD_OUTPUT_RATE-1:0],
+    input        [`RASTER_DIM_BITS-1:0]             y_loc   [RASTER_QUAD_OUTPUT_RATE-1:0],
+    input        [3:0]                              masks   [RASTER_QUAD_OUTPUT_RATE-1:0],
+    input signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  bcoords [RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0],
     // TODO: Remove lint
     /* verilator lint_off UNUSED */
-    input [`RASTER_PRIMITIVE_DATA_BITS-1:0] pid[RASTER_QUAD_OUTPUT_RATE-1:0],
+    input        [`RASTER_PRIMITIVE_DATA_BITS-1:0]  pid     [RASTER_QUAD_OUTPUT_RATE-1:0],
     /* verilator lint_on UNUSED */
 
     // Output
@@ -26,9 +26,6 @@ module VX_raster_rsp_switch #(
             stamps[i].pos_x    = x_loc[i][`RASTER_DIM_BITS-2:0];
             stamps[i].pos_y    = y_loc[i][`RASTER_DIM_BITS-2:0];
             stamps[i].mask     = masks[i];
-            // stamps[i].bcoord_x = bcoords[i][0];
-            // stamps[i].bcoord_y = bcoords[i][1];
-            // stamps[i].bcoord_z = bcoords[i][2];
             stamps[i].pid      = pid[i][`RASTER_PID_BITS-1:0];
         end
     end
@@ -42,8 +39,8 @@ module VX_raster_rsp_switch #(
         end
     end
 
-    assign raster_req_if.empty = empty;
+    assign raster_req_if.empty  = empty;
     assign raster_req_if.stamps = stamps;
-    assign raster_req_if.valid = valid;
+    assign raster_req_if.valid  = valid;
 
 endmodule

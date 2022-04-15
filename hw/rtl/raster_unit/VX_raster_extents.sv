@@ -14,12 +14,4 @@ module VX_raster_extents #(
             << $clog2(RASTER_TILE_SIZE);
     end
 
-// `ifdef DBG_TRACE_CORE_PIPELINE
-//     always @(posedge clk) begin
-//         for (int i = 0; i < 3; ++i) begin
-//             dpi_trace(1, "Extents: %d: i=%d , val = %d\n", 
-//                 $time, i, extents[i]);
-//         end
-//     end
-// `endif
 endmodule

@@ -204,6 +204,15 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   // PERF: texunit
   uint64_t tex_mem_reads = 0;
   uint64_t tex_mem_lat = 0;
+  // PERF: tex tcache
+  uint64_t tcache_reads;       
+  uint64_t tcache_writes;      
+  uint64_t tcache_read_misses; 
+  uint64_t tcache_write_misses;
+  uint64_t tcache_bank_stalls; 
+  uint64_t tcache_mshr_stalls; 
+  uint64_t tcache_mem_stalls;  
+  uint64_t tcache_crsp_stalls;
 #endif
 #ifdef EXT_RASTER_ENABLE
   uint64_t raster_mem_reads;
@@ -382,7 +391,15 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
       int tex_avg_lat = (int)(double(tex_lat_per_core) / double(tex_reads_per_core));
       if (num_cores > 1) fprintf(stream, "PERF: core%d: tex memory latency=%d cycles\n", core_id, tex_avg_lat);
       tex_mem_lat += tex_lat_per_core;
-      // <TODO: cache perf counters>
+      // <cache perf counters>
+      tcache_reads        = get_csr_64(staging_ptr, CSR_MPM_TCACHE_READS);
+      tcache_writes       = get_csr_64(staging_ptr, CSR_MPM_TCACHE_WRITES);
+      tcache_read_misses  = get_csr_64(staging_ptr, CSR_MPM_TCACHE_MISS_R);
+      tcache_write_misses = get_csr_64(staging_ptr, CSR_MPM_TCACHE_MISS_W);
+      tcache_bank_stalls  = get_csr_64(staging_ptr, CSR_MPM_TCACHE_BANK_ST);
+      tcache_mshr_stalls  = get_csr_64(staging_ptr, CSR_MPM_TCACHE_MSHR_ST);
+      tcache_mem_stalls   = get_csr_64(staging_ptr, CSR_MPM_TCACHE_MEM_ST);
+      tcache_crsp_stalls  = get_csr_64(staging_ptr, CSR_MPM_TCACHE_CRSP_ST);
     #endif
     } break;
     case DCR_MPM_CLASS_RASTER: {
@@ -403,7 +420,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
         rop_mem_lat      = get_csr_64(staging_ptr, CSR_MPM_ROP_LAT);
         rop_idle_cycles  = get_csr_64(staging_ptr, CSR_MPM_ROP_IDLE);
         rop_stall_cycles = get_csr_64(staging_ptr, CSR_MPM_ROP_STALL);
-        // <TODO: cache perf counters>
+        // <cache perf counters>
         rop_ocache_reads        = get_csr_64(staging_ptr, CSR_MPM_OCACHE_READS);
         rop_ocache_writes       = get_csr_64(staging_ptr, CSR_MPM_OCACHE_WRITES);
         rop_ocache_read_misses  = get_csr_64(staging_ptr, CSR_MPM_OCACHE_MISS_R);
@@ -460,7 +477,14 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     int tex_avg_lat = (int)(double(tex_mem_lat) / double(tex_mem_reads));
     fprintf(stream, "PERF: tex memory reads=%ld\n", tex_mem_reads);
     fprintf(stream, "PERF: tex memory average latency=%d cycles\n", tex_avg_lat);
-    // <TODO: cache perf counters>
+    int tcache_read_hit_ratio = (int)((1.0 - (double(tcache_read_misses) / double(tcache_reads))) * 100);
+    int tcache_write_hit_ratio = (int)((1.0 - (double(tcache_write_misses) / double(tcache_writes))) * 100);
+    int tcache_bank_utilization = (int)((double(tcache_reads + tcache_writes) / double(tcache_reads + tcache_writes + tcache_bank_stalls)) * 100);
+    fprintf(stream, "PERF: tcache reads=%ld\n", tcache_reads);
+    fprintf(stream, "PERF: tcache writes=%ld\n", tcache_writes);
+    fprintf(stream, "PERF: tcache read misses=%ld (hit ratio=%d%%)\n", tcache_read_misses, tcache_read_hit_ratio);
+    fprintf(stream, "PERF: tcache write misses=%ld (hit ratio=%d%%)\n", tcache_write_misses, tcache_write_hit_ratio);  
+    fprintf(stream, "PERF: tcache bank stalls=%ld (utilization=%d%%)\n", tcache_bank_stalls, tcache_bank_utilization);
   #endif
   } break;
   case DCR_MPM_CLASS_RASTER: {
@@ -492,9 +516,6 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     fprintf(stream, "PERF: ocache read misses=%ld (hit ratio=%d%%)\n", rop_ocache_read_misses, ocache_read_hit_ratio);
     fprintf(stream, "PERF: ocache write misses=%ld (hit ratio=%d%%)\n", rop_ocache_write_misses, ocache_write_hit_ratio);  
     fprintf(stream, "PERF: ocache bank stalls=%ld (utilization=%d%%)\n", rop_ocache_bank_stalls, ocache_bank_utilization);
-    fprintf(stream, "PERF: ocache mshr stalls=%ld\n", rop_ocache_mshr_stalls);
-    fprintf(stream, "PERF: ocache mem stalls=%ld\n", rop_ocache_mem_stalls);
-    fprintf(stream, "PERF: ocache crsp stalls=%ld\n", rop_ocache_crsp_stalls);
   #endif
   } break;
   }

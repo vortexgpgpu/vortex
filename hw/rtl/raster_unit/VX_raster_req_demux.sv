@@ -22,20 +22,20 @@ module VX_raster_req_demux #(
         wire [NUM_REQS-1:0]                req_ready_out;
 
         VX_stream_demux #(
-            .NUM_REQS (NUM_REQS),
-            .DATAW    (REQ_DATAW),
-            .BUFFERED (BUFFERED),
-            .ARBITER  (ARBITER)
+            .NUM_REQS   (NUM_REQS),
+            .DATAW      (REQ_DATAW),
+            .BUFFERED   (BUFFERED),
+            .ARBITER    (ARBITER)
         ) req_demux (
-            .clk       (clk),
-            .reset     (reset),
+            .clk        (clk),
+            .reset      (reset),
             `UNUSED_PIN (sel_in),
-            .valid_in  (req_in_if.valid),
-            .data_in   ({req_in_if.tmask, req_in_if.stamps, req_in_if.empty}),
-            .ready_in  (req_in_if.ready),
-            .valid_out (req_valid_out),
-            .data_out  (req_data_out),
-            .ready_out (req_ready_out)
+            .valid_in   (req_in_if.valid),
+            .data_in    ({req_in_if.tmask, req_in_if.stamps, req_in_if.empty}),
+            .ready_in   (req_in_if.ready),
+            .valid_out  (req_valid_out),
+            .data_out   (req_data_out),
+            .ready_out  (req_ready_out)
         );
         
         for (genvar i = 0; i < NUM_REQS; i++) begin
@@ -53,7 +53,7 @@ module VX_raster_req_demux #(
         assign req_out_if[0].tmask  = req_in_if.tmask;
         assign req_out_if[0].stamps = req_in_if.stamps;
         assign req_out_if[0].empty  = req_in_if.empty;
-        assign req_in_if.ready = req_out_if[0].ready;
+        assign req_in_if.ready      = req_out_if[0].ready;
 
     end
 
