@@ -151,13 +151,15 @@ private:
   std::vector<IBuffer> ibuffers_;
   Scoreboard scoreboard_;
   std::vector<ExeUnit::Ptr> exe_units_;
-  CacheSim::Ptr icache_;
-  CacheSim::Ptr dcache_;
-  CacheSim::Ptr tcache_;
-  SharedMem::Ptr sharedmem_;
-  TexUnit::Ptr tex_unit_;
-  RasterSvc::Ptr raster_svc_;
-  RopSvc::Ptr rop_svc_;
+  CacheSim::Ptr   icache_;
+  CacheSim::Ptr   dcache_;
+  CacheSim::Ptr   tcache_;
+  SharedMem::Ptr  sharedmem_;
+  TexUnit::Ptr    tex_unit_;
+  RasterUnit::Ptr raster_unit_;
+  RasterSvc::Ptr  raster_svc_;
+  RopUnit::Ptr    rop_unit_;  
+  RopSvc::Ptr     rop_svc_;
   Switch<MemReq, MemRsp>::Ptr l1_mem_switch_;
 
   PipelineLatch fetch_latch_;

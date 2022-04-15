@@ -75,7 +75,7 @@ public:
       }
     }
 
-    uint32_t read(int32_t u, int32_t v, int32_t lod, TraceData* trace_data) {
+    uint32_t read(int32_t u, int32_t v, int32_t lod, TraceData::Ptr trace_data) {
       auto xu = TFixed<TEX_FXD_FRAC>::make(u);
       auto xv = TFixed<TEX_FXD_FRAC>::make(v);
       auto base_addr  = dcrs_.read(DCR_TEX_ADDR) + dcrs_.read(DCR_TEX_MIPOFF(lod));
@@ -161,6 +161,11 @@ public:
         tcache_rsp_port.pop();
     }
 
+    for (int i = 0, n = pending_reqs_.size(); i < n; ++i) {
+      if (pending_reqs_.contains(i))
+        perf_stats_.latency += pending_reqs_.at(i).count;
+    }
+
     // check input queue
     if (simobject_->Input.empty())
         return;
@@ -178,7 +183,7 @@ public:
     }
 
     // send memory request
-    auto trace_data = dynamic_cast<TraceData*>(trace->data);
+    auto trace_data = std::dynamic_pointer_cast<TraceData>(trace->data);
 
     uint32_t addr_count = 0;
     for (auto& mem_addr : trace_data->mem_addrs) {
@@ -203,7 +208,6 @@ public:
             DT(3, "tex-req: addr=" << std::hex << mem_addr.addr << ", tag=" << tag 
                 << ", tid=" << t << ", "<< trace);
             ++perf_stats_.reads;
-            ++perf_stats_.latency += pending_reqs_.size();
         }
     }
 
@@ -241,7 +245,7 @@ void TexUnit::csr_write(uint32_t addr, uint32_t value) {
   impl_->csr_write(addr, value);
 }
 
-uint32_t TexUnit::read(int32_t u, int32_t v, int32_t lod, TraceData* trace_data) {
+uint32_t TexUnit::read(int32_t u, int32_t v, int32_t lod, TraceData::Ptr trace_data) {
   return impl_->read(u, v, lod, trace_data);
 }
 

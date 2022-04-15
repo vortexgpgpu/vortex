@@ -7,14 +7,14 @@
 module VX_raster_qe (
     // Primitive related data
     // edge equation data for the 3 edges and ax+by+c
-    input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]       edges[2:0][2:0],
+    input logic signed  [`RASTER_PRIMITIVE_DATA_BITS-1:0]       edges[2:0][2:0],
     // edge function computation value propagated
-    input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]       edge_func_val[2:0],
+    input logic signed  [`RASTER_PRIMITIVE_DATA_BITS-1:0]       edge_func_val[2:0],
 
     // Mask bits for the 2x2 quad
-    output logic [3:0] masks,
+    output logic        [3:0]                                   masks,
     // barycentric coordinates
-    output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]             bcoords[2:0][3:0] // dim1 => quad index
+    output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]       bcoords[2:0][3:0] // dim1 => quad index
 );
 
     // New edge value for all 4 pixels (0,0) (0,1) (1,0) (1,1)

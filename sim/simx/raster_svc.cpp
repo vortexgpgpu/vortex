@@ -75,7 +75,10 @@ public:
       uint32_t ltid = wid * arch_.num_threads() + tid;
       auto& csr = csrs_.at(ltid);
       csr.set_stamp(stamp);
-      DT(3, "raster-svc: wid=" << std::dec << wid << ", tid=" << tid << ", x=" << stamp->x << ", y=" << stamp->y << ", mask=" << stamp->mask << ", pid=" << stamp->pid);
+      DT(2, "raster-svc: wid=" << std::dec << wid << ", tid=" << tid << ", x=" << stamp->x << ", y=" << stamp->y << ", mask=" << stamp->mask << ", pid=" << stamp->pid << ", bcoords={" 
+        << stamp->bcoords[0].x.data() << " " << stamp->bcoords[1].x.data() << " " << stamp->bcoords[2].x.data() << " " << stamp->bcoords[3].x.data() << ", " 
+        << stamp->bcoords[0].y.data() << " " << stamp->bcoords[1].y.data() << " " << stamp->bcoords[2].y.data() << " " << stamp->bcoords[3].y.data() << ", "
+        << stamp->bcoords[0].z.data() << " " << stamp->bcoords[1].z.data() << " " << stamp->bcoords[2].z.data() << " " << stamp->bcoords[3].z.data() << "}");
       return (stamp->pid << 1) | 1;
     }
 
@@ -117,10 +120,18 @@ public:
     void tick() {
       // check input queue
       if (simobject_->Input.empty())
-          return;
+        return;
 
       auto trace = simobject_->Input.front();
 
+      if (!raster_unit_->Output.empty()) {        
+        auto& num_stamps = raster_unit_->Output.front();
+        if (--num_stamps == 0) {
+          raster_unit_->Output.pop();
+        }
+      } else if (!raster_unit_->done())
+        return;
+      
       simobject_->Output.send(trace, 1);
 
       auto time = simobject_->Input.pop();
@@ -128,7 +139,7 @@ public:
     }
 
     const PerfStats& perf_stats() const { 
-        return perf_stats_; 
+      return perf_stats_; 
     }
 };
 

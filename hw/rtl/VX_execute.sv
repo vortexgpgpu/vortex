@@ -18,6 +18,9 @@ module VX_execute #(
     VX_tex_dcr_if.slave    tex_dcr_if,
     VX_cache_req_if.master tcache_req_if,
     VX_cache_rsp_if.slave  tcache_rsp_if,
+`ifdef PERF_ENABLE
+    VX_perf_cache_if.slave perf_tcache_if,
+`endif
 `endif
 
     // commit interface
@@ -139,6 +142,7 @@ module VX_execute #(
         .tex_csr_if     (tex_csr_if),
     `ifdef PERF_ENABLE
         .tex_perf_if    (tex_perf_if),
+        .perf_tcache_if (perf_tcache_if),
     `endif
     `endif
     `ifdef EXT_RASTER_ENABLE        

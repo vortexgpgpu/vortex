@@ -1,6 +1,6 @@
 CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -pedantic -Wfatal-errors
 
-CXXFLAGS += -I../include -I../../runtime -I../../hw
+CXXFLAGS += -I../include -I../../runtime -I../../hw -I../../sim/common
 
 CXXFLAGS += -fPIC
 

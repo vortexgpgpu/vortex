@@ -682,7 +682,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->exe_type = ExeType::LSU;    
     trace->lsu_type = LsuType::LOAD;
     trace->used_iregs.set(rsrc0);
-    auto trace_data = new LsuTraceData(num_threads);
+    auto trace_data = std::make_shared<LsuTraceData>(num_threads);
     trace->data = trace_data;
     if ((opcode == L_INST )
      || (opcode == FL && func3 == 2)
@@ -750,7 +750,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->lsu_type = LsuType::STORE;
     trace->used_iregs.set(rsrc0);
     trace->used_iregs.set(rsrc1);    
-    auto trace_data = new LsuTraceData(num_threads);
+    auto trace_data = std::make_shared<LsuTraceData>(num_threads);
     trace->data = trace_data;
     if ((opcode == S_INST)
      || (opcode == FS && func3 == 2)
@@ -1325,7 +1325,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         DPN(3, std::endl);
 
         active_ = tmask_.any();
-        trace->data = new GPUTraceData(active_ << id_);
+        trace->data = std::make_shared<GPUTraceData>(active_ << id_);
       } break;
       case 1: {
         // WSPAWN
@@ -1334,7 +1334,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
         trace->fetch_stall = true;
-        trace->data = new GPUTraceData(core_->wspawn(rsdata.at(ts)[0].i, rsdata.at(ts)[1].i));
+        trace->data = std::make_shared<GPUTraceData>(core_->wspawn(rsdata.at(ts)[0].i, rsdata.at(ts)[1].i));
       } break;
       case 2: {
         // SPLIT    
@@ -1401,14 +1401,14 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
         trace->fetch_stall = true;
-        trace->data = new GPUTraceData(core_->barrier(rsdata[ts][0].i, rsdata[ts][1].i, id_));
+        trace->data = std::make_shared<GPUTraceData>(core_->barrier(rsdata[ts][0].i, rsdata[ts][1].i, id_));
       } break;
       case 5: {
         // PREFETCH
         trace->exe_type = ExeType::LSU; 
         trace->lsu_type = LsuType::PREFETCH; 
         trace->used_iregs.set(rsrc0);
-        auto trace_data = new LsuTraceData(num_threads);
+        auto trace_data = std::make_shared<LsuTraceData>(num_threads);
         trace->data = trace_data;
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t))
@@ -1452,7 +1452,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
         trace->used_iregs.set(rsrc2);
-        auto trace_data = new TexUnit::TraceData();
+        auto trace_data = std::make_shared<TexUnit::TraceData>();
         trace->data = trace_data;
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t))
@@ -1484,6 +1484,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
         trace->used_iregs.set(rsrc2);
+        auto trace_data = std::make_shared<RopUnit::TraceData>();
+        trace->data = trace_data;
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t))
             continue;
@@ -1493,7 +1495,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           auto f = (pos_face >> 0)  & 0x1;
           auto x = (pos_face >> 1)  & 0x7fff;
           auto y = (pos_face >> 16) & 0x7fff;
-          core_->rop_svc_->write(id_, t, x, y, f, color, depth);
+          core_->rop_svc_->write(id_, t, x, y, f, color, depth, trace_data);
         }
       } break;
       default:

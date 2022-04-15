@@ -8,6 +8,7 @@
 #include <stringutil.h>
 #include <VX_config.h>
 #include <simobject.h>
+#include "debug.h"
 
 namespace vortex {
 
@@ -384,6 +385,7 @@ public:
         if (tag_shift_) {
           req.tag = (req.tag << tag_shift_) | j;
         }
+        DT(3, this->name() << "-" << req);
         ReqOut.send(req, delay_);                
         req_in.pop();
         this->update_cursor(j);
@@ -399,7 +401,8 @@ public:
         port_id = rsp.tag & ((1 << tag_shift_)-1);
         rsp.tag >>= tag_shift_;
       }      
-      RspOut.at(port_id).send(rsp, 1);
+      DT(3, this->name() << "-" << rsp);
+      RspOut.at(port_id).send(rsp, 1);      
       RspIn.pop();
     }
   }
@@ -411,9 +414,9 @@ public:
   }
 
   std::vector<SimPort<Req>>  ReqIn;
-  SimPort<Req>              ReqOut;
+  SimPort<Req>               ReqOut;
   SimPort<Rsp>               RspIn;    
-  std::vector<SimPort<Rsp>> RspOut;
+  std::vector<SimPort<Rsp>>  RspOut;
 };
 
 }

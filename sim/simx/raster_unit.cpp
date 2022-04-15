@@ -42,6 +42,18 @@ static fixed16_t calcEdgeExtents(const vec3_fx_t& e) {
   return corners[i].x + corners[i].y;
 }
 
+struct prim_mem_trace_t {
+  uint32_t              prim_addr;
+  std::vector<uint32_t> edge_addrs;
+  uint32_t              stamps;
+};
+
+struct tile_mem_trace_t {
+  std::vector<uint32_t>       header_addrs;
+  std::list<prim_mem_trace_t> primitives;
+  bool end_of_tile;
+};
+
 class Rasterizer {
 private:    
   const Arch& arch_;
@@ -65,7 +77,9 @@ private:
   RasterUnit::Stamp* stamps_head_;
   RasterUnit::Stamp *stamps_tail_;
   uint32_t           stamps_size_;
+  std::list<tile_mem_trace_t> mem_traces_;
   bool initialized_;  
+  bool done_;
 
   void stamps_push(RasterUnit::Stamp* stamp) {
     assert(stamp);
@@ -98,6 +112,14 @@ private:
     uint32_t mask = 0;
     std::array<vec3_fx_t, 4> bcoords;
 
+    fixed16_t zero(0);
+    for (int i = 0; i < 4; ++i)
+    {
+      bcoords[i].x = zero;
+      bcoords[i].y = zero;
+      bcoords[i].z = zero;
+    }
+
     for (uint32_t j = 0; j < 2; ++j) {
       auto ee0 = e0;
       auto ee1 = e1;
@@ -129,7 +151,11 @@ private:
       // add stamp to queue
       auto pos_x = x >> 1;
       auto pos_y = y >> 1;
-      // printf("*** raster-quad: x=%d, y=%d, mask=%d, pid=%d\n", pos_x, pos_y, mask, pid_);
+      // printf("raster-quad: x_loc = %d, y_loc = %d, pid = %d, mask=%d, bcoords = %d %d %d %d, %d %d %d %d, %d %d %d %d\n",
+      //   pos_x, pos_y, pid_, mask,
+      //   bcoords[0].x.data(), bcoords[1].x.data(), bcoords[2].x.data(), bcoords[3].x.data(),
+      //   bcoords[0].y.data(), bcoords[1].y.data(), bcoords[2].y.data(), bcoords[3].y.data(),
+      //   bcoords[0].z.data(), bcoords[1].z.data(), bcoords[2].z.data(), bcoords[3].z.data());
       this->stamps_push(new RasterUnit::Stamp(pos_x, pos_y, mask, bcoords, pid_));
     }
   }
@@ -284,12 +310,18 @@ private:
 
   void renderNextPrimitive() {    
     if (0 == num_prims_) {
+      mem_traces_.push_back({});      
+      auto& mem_trace = mem_traces_.back();
+      mem_trace.end_of_tile = false;
+
       // read next tile header from tile buffer
       uint32_t tile_xy;
       mem_->read(&tile_xy, tbuf_addr_, 4);
+      mem_trace.header_addrs.push_back(tbuf_addr_);
       // printf("*** raster-mem: add=%d, tile_xy=%d\n", tbuf_addr_, tile_xy);
       tbuf_addr_ += 4;
       mem_->read(&num_prims_, tbuf_addr_, 4);
+      mem_trace.header_addrs.push_back(tbuf_addr_);
       // printf("*** raster-mem: add=%d, num_prims=%d\n", tbuf_addr_, num_prims_);
       tbuf_addr_ += 4;
       assert(num_prims_ > 0);
@@ -298,8 +330,13 @@ private:
       cur_prim_ = 0;
     }
 
+    assert(!mem_traces_.empty());
+    auto& mem_trace = mem_traces_.back();
+    prim_mem_trace_t prim_trace;
+
     // read next primitive index from tile buffer
     mem_->read(&pid_, tbuf_addr_, 4);
+    prim_trace.prim_addr = tbuf_addr_;
     // printf("*** raster-mem: add=%d, pid=%d\n", tbuf_addr_, pid_);
     tbuf_addr_ += 4;
 
@@ -313,14 +350,17 @@ private:
     auto pbuf_addr = pbuf_baseaddr_ + pid_ * pbuf_stride_;
     for (int i = 0; i < 3; ++i) {
       mem_->read(&primitive.edges[i].x, pbuf_addr, 4);
-      // printf("*** raster-mem: add=%d, edge.x=%d\n", pbuf_addr, primitive.edges[i].x.data());
+      prim_trace.edge_addrs.push_back(pbuf_addr);
       pbuf_addr += 4;
+      // printf("*** raster-mem: add=%d, edge.x=%d\n", pbuf_addr, primitive.edges[i].x.data());      
       mem_->read(&primitive.edges[i].y, pbuf_addr, 4);
+      prim_trace.edge_addrs.push_back(pbuf_addr);
+      pbuf_addr += 4;
       // printf("*** raster-mem: add=%d, edge.y=%d\n", pbuf_addr, primitive.edges[i].y.data());
-      pbuf_addr += 4;
       mem_->read(&primitive.edges[i].z, pbuf_addr, 4);
-      // printf("*** raster-mem: add=%d, edge.z=%d\n", pbuf_addr, primitive.edges[i].z.data());
+      prim_trace.edge_addrs.push_back(pbuf_addr);
       pbuf_addr += 4;
+      // printf("*** raster-mem: add=%d, edge.z=%d\n", pbuf_addr, primitive.edges[i].z.data());
     }
 
     // printf("*** raster-edge0: a=%d, b=%d, c=%d\n", primitive.edges[0].x.data(), primitive.edges[0].y.data(), primitive.edges[0].z.data());
@@ -344,15 +384,18 @@ private:
       this->renderBlock(block_logsize_, primitive, x, y, e0, e1, e2);
     }
 
+    // printf("*** raster: generated %d stamps\n", stamps_size_);
+    prim_trace.stamps = stamps_size_;
+    mem_trace.primitives.push_back(prim_trace);
+
     // Move to next primitive
     ++cur_prim_;
     if (cur_prim_ == num_prims_) {
+      mem_trace.end_of_tile = true;
       // Move to next tile      
       ++cur_tile_;
       num_prims_ = 0;
     }
-
-    // printf("*** raster: generated %d stamps\n", stamps_size_);
   }
 
 public:
@@ -367,7 +410,8 @@ public:
     , stamps_head_(nullptr)
     , stamps_tail_(nullptr)
     , stamps_size_(0)
-    , initialized_(false) {
+    , initialized_(false)
+    , done_(false) {
     assert(block_logsize >= 1);
     assert(tile_logsize >= block_logsize);
   }
@@ -387,11 +431,12 @@ public:
   RasterUnit::Stamp* fetch() {      
     if (!initialized_) {
       this->initialize();
-    }
-    
+    }    
     do {
-      if (stamps_head_ == nullptr && cur_tile_ == num_tiles_)
+      if (stamps_head_ == nullptr && cur_tile_ == num_tiles_) {
+        done_ = true;
         return nullptr;
+      }
       if (stamps_head_ == nullptr) {
         this->renderNextPrimitive();
       }      
@@ -401,14 +446,34 @@ public:
     this->stamps_pop();
     return stamp;
   }
+  
+  bool done() const {
+    return done_;
+  }
+
+  auto& mem_traces() {
+    return mem_traces_;
+  }
 };
 
 class RasterUnit::Impl {
 private:
+  enum class e_mem_trace_state {
+    header,
+    primitive,
+    edges
+  };
+
+  struct pending_req_t {
+    uint32_t count;
+  };
+
   RasterUnit* simobject_;        
   const Arch& arch_;
   Rasterizer rasterizer_;
-  PerfStats perf_stats_;
+  PerfStats perf_stats_;  
+  HashTable<pending_req_t> pending_reqs_;
+  e_mem_trace_state mem_trace_state_;
 
 public:
   Impl(RasterUnit* simobject,     
@@ -419,16 +484,23 @@ public:
     : simobject_(simobject)
     , arch_(arch)
     , rasterizer_(arch, dcrs, tile_logsize, block_logsize)
+    , pending_reqs_(RASTER_MEM_QUEUE_SIZE)
+    , mem_trace_state_(e_mem_trace_state::header)
   {}
 
   ~Impl() {}
 
   void clear() {
     rasterizer_.clear();
+    mem_trace_state_ = e_mem_trace_state::header;
   }  
 
   void attach_ram(RAM* mem) {
     rasterizer_.attach_ram(mem);
+  }
+
+  bool done() const {
+    return rasterizer_.done();
   }
 
   RasterUnit::Stamp* fetch() {      
@@ -436,7 +508,93 @@ public:
   }
 
   void tick() {
-    //--
+    auto& mem_traces = rasterizer_.mem_traces();
+
+    // handle memory response
+    if (!simobject_->MemRsps.empty()) {
+      assert(!mem_traces.empty());
+      auto& mem_rsp = simobject_->MemRsps.front();
+      auto& entry = pending_reqs_.at(mem_rsp.tag);
+      assert(entry.count);
+      --entry.count; // track remaining blocks 
+      if (0 == entry.count) {
+        switch (mem_trace_state_) {
+        case e_mem_trace_state::header: {
+          mem_trace_state_ = e_mem_trace_state::primitive;
+        } break;
+        case e_mem_trace_state::primitive: {
+          mem_trace_state_ = e_mem_trace_state::edges;
+        } break;
+        case e_mem_trace_state::edges: {          
+          auto& mem_trace = mem_traces.front();
+          auto& primitive = mem_trace.primitives.front();
+          simobject_->Output.send(primitive.stamps, 8);
+          mem_trace.primitives.pop_front();
+          if (mem_trace.primitives.empty() && mem_trace.end_of_tile) {
+            mem_trace_state_ = e_mem_trace_state::header;
+            mem_traces.pop_front();
+          } else {
+            mem_trace_state_ = e_mem_trace_state::primitive;
+          }
+        } break; 
+        default:
+          break; 
+        }
+        pending_reqs_.release(mem_rsp.tag);
+      }
+      simobject_->MemRsps.pop();
+    }
+
+    for (int i = 0, n = pending_reqs_.size(); i < n; ++i) {
+      if (pending_reqs_.contains(i))
+        perf_stats_.latency += pending_reqs_.at(i).count;
+    }
+
+    if (mem_traces.empty())
+      return;
+
+    // check pending queue is empty    
+    if (!pending_reqs_.empty())          
+      return;
+
+    auto& mem_trace = mem_traces.front();
+
+    std::vector<uint32_t> addresses;
+
+    switch (mem_trace_state_) {
+    case e_mem_trace_state::header: {
+      addresses = mem_trace.header_addrs;
+    } break;
+    case e_mem_trace_state::primitive: {
+      if (!mem_trace.primitives.empty()) {
+        auto& primitive = mem_trace.primitives.front();
+        addresses.push_back(primitive.prim_addr);
+      }
+    } break;
+    case e_mem_trace_state::edges: {
+      if (!mem_trace.primitives.empty()) {    
+        auto& primitive = mem_trace.primitives.front();
+        addresses = primitive.edge_addrs;
+      }
+    } break; 
+    default:
+      break; 
+    }
+
+    if (addresses.empty())
+      return;
+
+    auto tag = pending_reqs_.allocate({(uint32_t)addresses.size()});
+    for (auto addr : addresses) {
+      MemReq mem_req;
+      mem_req.addr    = addr;
+      mem_req.write   = false;
+      mem_req.tag     = tag;
+      mem_req.core_id = 0;
+      mem_req.uuid    = 0;
+      simobject_->MemReqs.send(mem_req, 1);
+      ++perf_stats_.reads;
+    }
   }
 
   const PerfStats& perf_stats() const { 
@@ -453,7 +611,8 @@ RasterUnit::RasterUnit(const SimContext& ctx,
                        uint32_t tile_logsize, 
                        uint32_t block_logsize) 
   : SimObject<RasterUnit>(ctx, name)
-  , Input(this)
+  , MemReqs(this)
+  , MemRsps(this)
   , Output(this)
   , impl_(new Impl(this, arch, dcrs, tile_logsize, block_logsize)) 
 {}
@@ -468,6 +627,10 @@ void RasterUnit::reset() {
 
 void RasterUnit::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
+}
+
+bool RasterUnit::done() const {
+  return impl_->done();
 }
 
 RasterUnit::Stamp* RasterUnit::fetch() {

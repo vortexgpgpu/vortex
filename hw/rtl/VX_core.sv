@@ -80,6 +80,9 @@ module VX_core #(
         .WORD_SIZE (`TCACHE_WORD_SIZE), 
         .TAG_WIDTH (`TCACHE_TAG_WIDTH)
     ) tcache_rsp_if();
+`ifdef PERF_ENABLE
+    VX_perf_cache_if perf_tcache_if();
+`endif
 `endif
     
     VX_pipeline #(
@@ -107,6 +110,9 @@ module VX_core #(
         .tex_dcr_if     (tex_dcr_if),
         .tcache_req_if  (tcache_req_if),
         .tcache_rsp_if  (tcache_rsp_if),
+    `ifdef PERF_ENABLE
+        .perf_tcache_if (perf_tcache_if),
+    `endif
     `endif
     `ifdef EXT_RASTER_ENABLE        
         .raster_req_if  (raster_req_if),
@@ -153,6 +159,9 @@ module VX_core #(
         // tcache interface
         .tcache_req_if  (tcache_req_if),
         .tcache_rsp_if  (tcache_rsp_if),
+    `ifdef PERF_ENABLE
+        .perf_tcache_if  (perf_tcache_if),
+    `endif
     `endif
 
         // Memory
