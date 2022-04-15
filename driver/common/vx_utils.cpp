@@ -224,10 +224,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   uint64_t rcache_writes;      
   uint64_t rcache_read_misses; 
   uint64_t rcache_write_misses;
-  uint64_t rcache_bank_stalls; 
-  uint64_t rcache_mshr_stalls; 
-  uint64_t rcache_mem_stalls;  
-  uint64_t rcache_crsp_stalls;
+  uint64_t rcache_bank_stalls;
 #endif
 #endif
 
@@ -418,9 +415,6 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
         rcache_read_misses    = get_csr_64(staging_ptr, CSR_MPM_RCACHE_MISS_R);
         rcache_write_misses   = get_csr_64(staging_ptr, CSR_MPM_RCACHE_MISS_W);
         rcache_bank_stalls    = get_csr_64(staging_ptr, CSR_MPM_RCACHE_BANK_ST);
-        rcache_mshr_stalls    = get_csr_64(staging_ptr, CSR_MPM_RCACHE_MSHR_ST);
-        rcache_mem_stalls     = get_csr_64(staging_ptr, CSR_MPM_RCACHE_MEM_ST);
-        rcache_crsp_stalls    = get_csr_64(staging_ptr, CSR_MPM_RCACHE_CRSP_ST);
       }
     #endif
     } break;
@@ -507,9 +501,6 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     fprintf(stream, "PERF: rcache read misses=%ld (hit ratio=%d%%)\n", rcache_read_misses, rcache_read_hit_ratio);
     fprintf(stream, "PERF: rcache write misses=%ld (hit ratio=%d%%)\n", rcache_write_misses, rcache_write_hit_ratio);  
     fprintf(stream, "PERF: rcache bank stalls=%ld (utilization=%d%%)\n", rcache_bank_stalls, rcache_bank_utilization);
-    fprintf(stream, "PERF: rcache mshr stalls=%ld\n", rcache_mshr_stalls);
-    fprintf(stream, "PERF: rcache mem stalls=%ld\n", rcache_mem_stalls);
-    fprintf(stream, "PERF: rcache crsp stalls=%ld\n", rcache_crsp_stalls);
   #endif
   } break;
   }

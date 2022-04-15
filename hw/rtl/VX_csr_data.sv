@@ -347,12 +347,6 @@ module VX_csr_data #(
                         `CSR_MPM_RCACHE_MISS_W_H    : read_data_r = {`NUM_THREADS{32'(perf_rcache_if.write_misses[`PERF_CTR_BITS-1:32])}};
                         `CSR_MPM_RCACHE_BANK_ST     : read_data_r = {`NUM_THREADS{perf_rcache_if.bank_stalls[31:0]}};
                         `CSR_MPM_RCACHE_BANK_ST_H   : read_data_r = {`NUM_THREADS{32'(perf_rcache_if.bank_stalls[`PERF_CTR_BITS-1:32])}};
-                        `CSR_MPM_RCACHE_MSHR_ST     : read_data_r = {`NUM_THREADS{perf_rcache_if.mshr_stalls[31:0]}};
-                        `CSR_MPM_RCACHE_MSHR_ST_H   : read_data_r = {`NUM_THREADS{32'(perf_rcache_if.mshr_stalls[`PERF_CTR_BITS-1:32])}};
-                        `CSR_MPM_RCACHE_MEM_ST      : read_data_r = {`NUM_THREADS{perf_rcache_if.mem_stalls[31:0]}};
-                        `CSR_MPM_RCACHE_MEM_ST_H    : read_data_r = {`NUM_THREADS{32'(perf_rcache_if.mem_stalls[`PERF_CTR_BITS-1:32])}};
-                        `CSR_MPM_RCACHE_CRSP_ST     : read_data_r = {`NUM_THREADS{perf_rcache_if.crsp_stalls[31:0]}};
-                        `CSR_MPM_RCACHE_CRSP_ST_H   : read_data_r = {`NUM_THREADS{32'(perf_rcache_if.crsp_stalls[`PERF_CTR_BITS-1:32])}};
                         default:;
                         endcase
                     `endif

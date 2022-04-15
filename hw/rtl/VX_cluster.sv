@@ -41,16 +41,6 @@ module VX_cluster #(
 `ifdef PERF_ENABLE
     VX_perf_cache_if    perf_rcache_if();
     VX_raster_perf_if   raster_perf_if();
-
-    // // TODO: remove
-    // `UNUSED_VAR (perf_rcache_if.reads)
-    // `UNUSED_VAR (perf_rcache_if.writes)
-    // `UNUSED_VAR (perf_rcache_if.read_misses)
-    // `UNUSED_VAR (perf_rcache_if.write_misses)
-    // `UNUSED_VAR (perf_rcache_if.bank_stalls)
-    // `UNUSED_VAR (perf_rcache_if.mshr_stalls)
-    // `UNUSED_VAR (perf_rcache_if.mem_stalls)
-    // `UNUSED_VAR (perf_rcache_if.crsp_stalls)
 `endif
 
     VX_cache_req_if #(

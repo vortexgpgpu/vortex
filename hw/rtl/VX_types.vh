@@ -131,12 +131,6 @@
 `define CSR_MPM_RCACHE_MISS_W_H     12'hB88
 `define CSR_MPM_RCACHE_BANK_ST      12'hB09     // bank stalls
 `define CSR_MPM_RCACHE_BANK_ST_H    12'hB89
-`define CSR_MPM_RCACHE_MSHR_ST      12'hB0A     // MSHR stalls
-`define CSR_MPM_RCACHE_MSHR_ST_H    12'hB8A
-`define CSR_MPM_RCACHE_MEM_ST       12'hB0B     // mem stalls
-`define CSR_MPM_RCACHE_MEM_ST_H     12'hB8B
-`define CSR_MPM_RCACHE_CRSP_ST      12'hB0C     // CRSP stalls
-`define CSR_MPM_RCACHE_CRSP_ST_H    12'hB8C
 
 // Machine Performance-monitoring rop counters
 // PERF: rop unit
