@@ -66,12 +66,15 @@ module VX_raster_csr #(
                 `CSR_RASTER_BCOORD_X0: read_data_r[i] = rdata[i].bcoord_x[0];
                 `CSR_RASTER_BCOORD_X1: read_data_r[i] = rdata[i].bcoord_x[1];
                 `CSR_RASTER_BCOORD_X2: read_data_r[i] = rdata[i].bcoord_x[2];
+                `CSR_RASTER_BCOORD_X3: read_data_r[i] = rdata[i].bcoord_x[3];
                 `CSR_RASTER_BCOORD_Y0: read_data_r[i] = rdata[i].bcoord_y[0];
                 `CSR_RASTER_BCOORD_Y1: read_data_r[i] = rdata[i].bcoord_y[1];
                 `CSR_RASTER_BCOORD_Y2: read_data_r[i] = rdata[i].bcoord_y[2];
+                `CSR_RASTER_BCOORD_Y3: read_data_r[i] = rdata[i].bcoord_y[3];
                 `CSR_RASTER_BCOORD_Z0: read_data_r[i] = rdata[i].bcoord_z[0];
                 `CSR_RASTER_BCOORD_Z1: read_data_r[i] = rdata[i].bcoord_z[1];
                 `CSR_RASTER_BCOORD_Z2: read_data_r[i] = rdata[i].bcoord_z[2];
+                `CSR_RASTER_BCOORD_Z3: read_data_r[i] = rdata[i].bcoord_z[3];
                 default:;
             endcase
         end
