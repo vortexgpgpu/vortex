@@ -112,7 +112,16 @@
 `define CSR_MPM_TEX_LAT             12'hB04     // texture latency
 `define CSR_MPM_TEX_LAT_H           12'hB84
 // PERF: texture cache
-// <TODO>
+`define CSR_MPM_TCACHE_READS        12'hB05     // total reads
+`define CSR_MPM_TCACHE_READS_H      12'hB85
+`define CSR_MPM_TCACHE_WRITES       12'hB06     // total write
+`define CSR_MPM_TCACHE_WRITES_H     12'hB86
+`define CSR_MPM_TCACHE_MISS_R       12'hB07     // read misses
+`define CSR_MPM_TCACHE_MISS_R_H     12'hB87
+`define CSR_MPM_TCACHE_MISS_W       12'hB08     // write misse
+`define CSR_MPM_TCACHE_MISS_W_H     12'hB88
+`define CSR_MPM_TCACHE_BANK_ST      12'hB09     // bank stalls
+`define CSR_MPM_TCACHE_BANK_ST_H    12'hB89
 
 // Machine Performance-monitoring raster counters
 // PERF: raster unit
@@ -146,12 +155,6 @@
 `define CSR_MPM_OCACHE_MISS_W_H     12'hB9B
 `define CSR_MPM_OCACHE_BANK_ST      12'hB1C     // bank stalls
 `define CSR_MPM_OCACHE_BANK_ST_H    12'hB9C
-`define CSR_MPM_OCACHE_MSHR_ST      12'hB1D     // MSHR stalls
-`define CSR_MPM_OCACHE_MSHR_ST_H    12'hB9D
-`define CSR_MPM_OCACHE_MEM_ST       12'hB1E     // mem stalls
-`define CSR_MPM_OCACHE_MEM_ST_H     12'hB9E
-`define CSR_MPM_OCACHE_CRSP_ST      12'hB1F     // CRSP stalls
-`define CSR_MPM_OCACHE_CRSP_ST_H    12'hB9F
 
 // Machine Information Registers
 `define CSR_MVENDORID               12'hF11

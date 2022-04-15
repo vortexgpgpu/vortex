@@ -168,16 +168,6 @@ module VX_cluster #(
 `ifdef PERF_ENABLE
     VX_perf_cache_if    ocache_perf_if();
     VX_rop_perf_if      rop_perf_if(); 
-    
-    // TODO: remove
-    //`UNUSED_VAR (ocache_perf_if.reads)
-    //`UNUSED_VAR (ocache_perf_if.writes)
-    //`UNUSED_VAR (ocache_perf_if.read_misses)
-    //`UNUSED_VAR (ocache_perf_if.write_misses)
-    //`UNUSED_VAR (ocache_perf_if.bank_stalls)
-    //`UNUSED_VAR (ocache_perf_if.mshr_stalls)
-    //`UNUSED_VAR (ocache_perf_if.mem_stalls)
-    //`UNUSED_VAR (ocache_perf_if.crsp_stalls)
 `endif
     
     VX_cache_req_if #(

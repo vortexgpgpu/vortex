@@ -25,6 +25,9 @@ module VX_mem_unit # (
     // tcache interface
     VX_cache_req_if.slave   tcache_req_if,
     VX_cache_rsp_if.master  tcache_rsp_if,
+`ifdef PERF_ENABLE
+    VX_perf_cache_if.slave  perf_tcache_if,
+`endif
 `endif
 
     // Memory
@@ -33,7 +36,7 @@ module VX_mem_unit # (
 );
     
 `ifdef PERF_ENABLE
-    VX_perf_cache_if perf_icache_if(), perf_dcache_if(), perf_tcache_if(), perf_smem_if();
+    VX_perf_cache_if perf_icache_if(), perf_dcache_if(), perf_smem_if();
 `endif
 
     ///////////////////////////////////////////////////////////////////////////

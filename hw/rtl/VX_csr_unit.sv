@@ -17,6 +17,7 @@ module VX_csr_unit #(
     VX_gpu_csr_if.master        tex_csr_if,
 `ifdef PERF_ENABLE
     VX_tex_perf_if.slave        tex_perf_if,
+    VX_perf_cache_if.slave      perf_tcache_if,
 `endif
 `endif
 `ifdef EXT_RASTER_ENABLE
@@ -73,6 +74,7 @@ module VX_csr_unit #(
         .tex_csr_if     (tex_csr_if),
     `ifdef PERF_ENABLE
         .tex_perf_if    (tex_perf_if),
+        .perf_tcache_if (perf_tcache_if),
     `endif
     `endif
     `ifdef EXT_RASTER_ENABLE        
