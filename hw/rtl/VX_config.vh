@@ -283,7 +283,7 @@
 
 // RASTER memeory queue size
 `ifndef RASTER_MEM_QUEUE_SIZE    
-`define RASTER_MEM_QUEUE_SIZE 1
+`define RASTER_MEM_QUEUE_SIZE 2
 `endif
 
 // ROP memeory queue size
