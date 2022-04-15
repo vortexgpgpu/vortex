@@ -254,12 +254,12 @@ module VX_raster_unit #(
         .raster_req_if              (raster_req_if)
     );
 
-`ifdef DBG_TRACE_CORE_PIPELINE
+`ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
         if (raster_req_if.ready && raster_req_if.valid) begin
             for (int i = 0; i < RASTER_QUAD_OUTPUT_RATE; ++i) begin
-                dpi_trace(1, "raster-quad-dispatched: %d: empty=%b, x_loc = %0d, y_loc = %0d, pid=%0d, mask=%0d\nbcoords=%0d %0d %0d %0d, %0d %0d %0d %0d, %0d %0d %0d %0d\n", 
-                    $time, raster_req_if.empty,
+                dpi_trace(1, "%d: raster-out[%0d]: empty=%b, x_loc=%0d, y_loc=%0d, pid=%0d, mask=%0d, bcoords={%0d %0d %0d %0d, %0d %0d %0d %0d, %0d %0d %0d %0d}\n",
+                    $time, i, raster_req_if.empty,
                     raster_req_if.stamps[i].pos_x,  raster_req_if.stamps[i].pos_y, raster_req_if.stamps[i].pid, raster_req_if.stamps[i].mask,
                     raster_req_if.stamps[i].bcoord_x[0], raster_req_if.stamps[i].bcoord_x[1], raster_req_if.stamps[i].bcoord_x[2], raster_req_if.stamps[i].bcoord_x[3],
                     raster_req_if.stamps[i].bcoord_y[0], raster_req_if.stamps[i].bcoord_y[1], raster_req_if.stamps[i].bcoord_y[2], raster_req_if.stamps[i].bcoord_y[3],

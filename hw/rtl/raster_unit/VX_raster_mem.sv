@@ -347,37 +347,30 @@ module VX_raster_mem #(
         .mem_rsp_ready  (cache_rsp_if.ready)
     );
 
-`ifdef DBG_TRACE_CORE_PIPELINE
+`ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
         if (out_valid) begin
-            dpi_trace(1, "%d: raster-mem-dispatch: x=%0d, y=%0d, pid=%0d, edge1.x=%0d, edge1.y=%0d, edge1.z=%0d, edge2.x=%0d, edge2.y=%0d, edge2.z=%0d, edge3.x=%0d, edge3.y=%0d, edge3.z=%0d\n",
+            dpi_trace(2, "%d: raster-mem-dispatch: x=%0d, y=%0d, pid=%0d, edge1.x=%0d, edge1.y=%0d, edge1.z=%0d, edge2.x=%0d, edge2.y=%0d, edge2.z=%0d, edge3.x=%0d, edge3.y=%0d, edge3.z=%0d\n",
                 $time, out_x_loc, out_y_loc, out_pid,
                 out_edges[0][0], out_edges[0][1], out_edges[0][2],
                 out_edges[1][0], out_edges[1][1], out_edges[1][2],
                 out_edges[2][0], out_edges[2][1], out_edges[2][2]);
         end
-    end
-`endif
-
-`ifdef DBG_TRACE_RASTER
-    always @(posedge clk) begin
         if (|cache_req_if.valid) begin
-            dpi_trace(2, "%d: raster-cache-req:\n\tvalid=",
-                $time);
+            dpi_trace(2, "%d: raster-mem-cache-req: valid=", $time);
             `TRACE_ARRAY1D(2, cache_req_if.valid, 9);
-            dpi_trace(2, "\n\taddr=");
+            dpi_trace(2, ", addr=");
             `TRACE_ARRAY1D(2, cache_req_if.addr, 9);
-            dpi_trace(2, "\n\ttag=");
+            dpi_trace(2, ", tag=");
             `TRACE_ARRAY1D(2, cache_req_if.tag, 9);
             dpi_trace(2, "\n");
         end
         if (|cache_rsp_if.valid) begin
-            dpi_trace(2, "%d: raster-cache-rsp:\n\tvalid=",
-                $time);
+            dpi_trace(2, "%d: raster-mem-cache-rsp: valid=", $time);
             `TRACE_ARRAY1D(2, cache_rsp_if.valid, 9);
-            dpi_trace(2, "\n\tdata=");
+            dpi_trace(2, ", data=");
             `TRACE_ARRAY1D(2, cache_rsp_if.data, 9);
-            dpi_trace(2, "\n\ttag=");
+            dpi_trace(2, ", tag=");
             `TRACE_ARRAY1D(2, cache_rsp_if.tag, 9);
             dpi_trace(2, "\n");
         end  
