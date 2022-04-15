@@ -389,8 +389,8 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
       uint64_t tcache_reads_per_core       = get_csr_64(staging_ptr, CSR_MPM_TCACHE_READS);
       uint64_t tcache_read_misses_per_core = get_csr_64(staging_ptr, CSR_MPM_TCACHE_MISS_R);
       uint64_t tcache_bank_stalls_per_core = get_csr_64(staging_ptr, CSR_MPM_TCACHE_BANK_ST);
-      int tcache_read_hit_ratio = (int)((1.0 - (double(tcache_read_misses) / double(tcache_reads))) * 100);
-      int tcache_bank_utilization = (int)((double(tcache_reads + tcache_writes) / double(tcache_reads + tcache_bank_stalls)) * 100);
+      int tcache_read_hit_ratio = (int)((1.0 - (double(tcache_read_misses_per_core) / double(tcache_reads_per_core))) * 100);
+      int tcache_bank_utilization = (int)((double(tcache_reads_per_core) / double(tcache_reads_per_core + tcache_bank_stalls_per_core)) * 100);
       if (num_cores > 1) fprintf(stream, "PERF: tcache reads=%ld\n", tcache_reads_per_core);
       if (num_cores > 1) fprintf(stream, "PERF: tcache read misses=%ld (hit ratio=%d%%)\n", tcache_read_misses_per_core, tcache_read_hit_ratio);
       if (num_cores > 1) fprintf(stream, "PERF: tcache bank stalls=%ld (utilization=%d%%)\n", tcache_bank_stalls_per_core, tcache_bank_utilization);
@@ -475,7 +475,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     fprintf(stream, "PERF: tex memory reads=%ld\n", tex_mem_reads);
     fprintf(stream, "PERF: tex memory average latency=%d cycles\n", tex_avg_lat);
     int tcache_read_hit_ratio = (int)((1.0 - (double(tcache_read_misses) / double(tcache_reads))) * 100);
-    int tcache_bank_utilization = (int)((double(tcache_reads + tcache_writes) / double(tcache_reads + tcache_bank_stalls)) * 100);
+    int tcache_bank_utilization = (int)((double(tcache_reads) / double(tcache_reads + tcache_bank_stalls)) * 100);
     fprintf(stream, "PERF: tcache reads=%ld\n", tcache_reads);
     fprintf(stream, "PERF: tcache read misses=%ld (hit ratio=%d%%)\n", tcache_read_misses, tcache_read_hit_ratio);
     fprintf(stream, "PERF: tcache bank stalls=%ld (utilization=%d%%)\n", tcache_bank_stalls, tcache_bank_utilization);
