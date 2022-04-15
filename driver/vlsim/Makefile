@@ -6,7 +6,7 @@ SCRIPT_DIR=../../hw/scripts
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
 
-CXXFLAGS += -I. -I../include -I../../hw -I$(VLSIM_DIR)
+CXXFLAGS += -I. -I../include -I../../hw -I$(VLSIM_DIR) -I$(VLSIM_DIR)/../common
 
 # Position independent code
 CXXFLAGS += -fPIC
