@@ -117,10 +117,18 @@ public:
     void tick() {
       // check input queue
       if (simobject_->Input.empty())
-          return;
+        return;
 
       auto trace = simobject_->Input.front();
 
+      if (!raster_unit_->Output.empty()) {        
+        auto& num_stamps = raster_unit_->Output.front();
+        if (--num_stamps == 0) {
+          raster_unit_->Output.pop();
+        }
+      } else if (!raster_unit_->done())
+        return;
+      
       simobject_->Output.send(trace, 1);
 
       auto time = simobject_->Input.pop();
@@ -128,7 +136,7 @@ public:
     }
 
     const PerfStats& perf_stats() const { 
-        return perf_stats_; 
+      return perf_stats_; 
     }
 };
 

@@ -116,10 +116,12 @@
 
 // Machine Performance-monitoring raster counters
 // PERF: raster unit
-`define CSR_MPM_RAS_READS           12'hB03     // raster accesses
-`define CSR_MPM_RAS_READS_H         12'hB83
-`define CSR_MPM_RAS_LAT             12'hB04     // raster latency
-`define CSR_MPM_RAS_LAT_H           12'hB84
+`define CSR_MPM_RASTER_READS        12'hB03     // raster accesses
+`define CSR_MPM_RASTER_READS_H      12'hB83
+`define CSR_MPM_RASTER_LAT          12'hB04     // raster latency
+`define CSR_MPM_RASTER_LAT_H        12'hB84
+`define CSR_MPM_RASTER_STALL        12'hB05     // raster stall cycles
+`define CSR_MPM_RASTER_STALL_H      12'hB85
 // PERF: raster cache
 // <TODO>
 

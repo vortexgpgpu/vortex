@@ -332,10 +332,12 @@ module VX_csr_data #(
                     `DCR_MPM_CLASS_RASTER: begin
                     `ifdef EXT_RASTER_ENABLE
                         case (read_addr)
-                        `CSR_MPM_RAS_READS      : read_data_r = {`NUM_THREADS{raster_perf_if.mem_reads[31:0]}};
-                        `CSR_MPM_RAS_READS_H    : read_data_r = {`NUM_THREADS{32'(raster_perf_if.mem_reads[`PERF_CTR_BITS-1:32])}};
-                        `CSR_MPM_RAS_LAT        : read_data_r = {`NUM_THREADS{raster_perf_if.mem_latency[31:0]}};
-                        `CSR_MPM_RAS_LAT_H      : read_data_r = {`NUM_THREADS{32'(raster_perf_if.mem_latency[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_RASTER_READS   : read_data_r = {`NUM_THREADS{raster_perf_if.mem_reads[31:0]}};
+                        `CSR_MPM_RASTER_READS_H : read_data_r = {`NUM_THREADS{32'(raster_perf_if.mem_reads[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_RASTER_LAT     : read_data_r = {`NUM_THREADS{raster_perf_if.mem_latency[31:0]}};
+                        `CSR_MPM_RASTER_LAT_H   : read_data_r = {`NUM_THREADS{32'(raster_perf_if.mem_latency[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_RASTER_STALL   : read_data_r = {`NUM_THREADS{raster_perf_if.stall_cycles[31:0]}};
+                        `CSR_MPM_RASTER_STALL_H : read_data_r = {`NUM_THREADS{32'(raster_perf_if.stall_cycles[`PERF_CTR_BITS-1:32])}};
                         // <TODO: cache perf counters>
                         default:;
                         endcase

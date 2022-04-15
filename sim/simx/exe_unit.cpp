@@ -89,7 +89,7 @@ void LsuUnit::tick() {
         return;
 
     auto trace = Input.front();
-    auto trace_data = dynamic_cast<LsuTraceData*>(trace->data);
+    auto trace_data = std::dynamic_pointer_cast<LsuTraceData>(trace->data);
 
     if (trace->lsu_type == LsuType::FENCE) {
         // schedule fence lock
@@ -287,12 +287,12 @@ void GpuUnit::tick() {
     switch  (trace->gpu_type) {
     case GpuType::TMC: {
         Output.send(trace, 1);
-        auto trace_data = dynamic_cast<GPUTraceData*>(trace->data);
+        auto trace_data = std::dynamic_pointer_cast<GPUTraceData>(trace->data);
         core_->active_warps_.set(trace->wid, trace_data->active_warps.test(trace->wid));
     }   break;
     case GpuType::WSPAWN: {
         Output.send(trace, 1);
-        auto trace_data = dynamic_cast<GPUTraceData*>(trace->data);
+        auto trace_data = std::dynamic_pointer_cast<GPUTraceData>(trace->data);
         core_->active_warps_ = trace_data->active_warps;
     }   break;
     case GpuType::SPLIT:
@@ -301,7 +301,7 @@ void GpuUnit::tick() {
         break;
     case GpuType::BAR: {
         Output.send(trace, 1);
-        auto trace_data = dynamic_cast<GPUTraceData*>(trace->data);
+        auto trace_data = std::dynamic_pointer_cast<GPUTraceData>(trace->data);
         if (trace_data->active_warps != 0) 
             core_->active_warps_ |= trace_data->active_warps;
         else

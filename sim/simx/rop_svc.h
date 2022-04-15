@@ -12,40 +12,31 @@ class RopUnit;
 
 class RopSvc : public SimObject<RopSvc> {
 public:
-    struct PerfStats {
-        uint64_t stalls;
+  
+  SimPort<pipeline_trace_t*> Input;
+  SimPort<pipeline_trace_t*> Output;
 
-        PerfStats() 
-            : stalls(0)
-        {}
-    };
-    
-    SimPort<pipeline_trace_t*> Input;
-    SimPort<pipeline_trace_t*> Output;
+  RopSvc(const SimContext& ctx, 
+          const char* name,  
+          Core* core,
+          RopUnit::Ptr rop_unit);    
 
-    RopSvc(const SimContext& ctx, 
-           const char* name,  
-           Core* core,
-           RopUnit::Ptr rop_unit);    
+  ~RopSvc();
 
-    ~RopSvc();
+  void reset();
 
-    void reset();
+  uint32_t csr_read(uint32_t wid, uint32_t tid, uint32_t addr);
+  
+  void csr_write(uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value);
 
-    uint32_t csr_read(uint32_t wid, uint32_t tid, uint32_t addr);
-    
-    void csr_write(uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value);
+  void write(uint32_t wid, uint32_t tid, uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, RopUnit::TraceData::Ptr trace_data);
 
-    void write(uint32_t wid, uint32_t tid, uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth);
-
-    void tick();
-
-    const PerfStats& perf_stats() const;
-    
+  void tick();
+  
 private:
 
-    class Impl;
-    Impl* impl_;
+  class Impl;
+  Impl* impl_;
 };
 
 }

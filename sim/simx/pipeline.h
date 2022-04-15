@@ -12,16 +12,19 @@ namespace vortex {
 
 class ITraceData {
 public:
+    using Ptr = std::shared_ptr<ITraceData>;
     ITraceData() {}
     virtual ~ITraceData() {}
 };
 
 struct LsuTraceData : public ITraceData {
+  using Ptr = std::shared_ptr<LsuTraceData>;
   std::vector<mem_addr_size_t> mem_addrs;
   LsuTraceData(uint32_t num_threads) : mem_addrs(num_threads) {}
 };
 
 struct GPUTraceData : public ITraceData {
+  using Ptr = std::shared_ptr<GPUTraceData>;
   const WarpMask active_warps;
   GPUTraceData(const WarpMask& active_warps) : active_warps(active_warps) {}
 };
@@ -59,7 +62,7 @@ public:
     GpuType  gpu_type;
   };
 
-  ITraceData* data;
+  ITraceData::Ptr data;
 
   bool fetch_stall;
 
@@ -82,10 +85,7 @@ public:
     , stalled_(false) 
   {}
   
-  ~pipeline_trace_t() {
-    if (data)
-      delete data;
-  }
+  ~pipeline_trace_t() {}
 
   bool suspend() {
     bool old = stalled_;

@@ -1,4 +1,5 @@
 #include "vx_utils.h"
+#include <util.h>
 #include <iostream>
 #include <fstream>
 #include <list>
@@ -60,12 +61,16 @@ AutoPerfDump gAutoPerfDump;
 void perf_add_device(vx_device_h device) {
 #ifdef DUMP_PERF_STATS
   gAutoPerfDump.add_device(device);
+#else
+  __unused (device);
 #endif
 }
 
 void perf_remove_device(vx_device_h device) {
 #ifdef DUMP_PERF_STATS
   gAutoPerfDump.remove_device(device);
+#else
+  __unused (device);
 #endif
 }
 
@@ -200,6 +205,11 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   uint64_t tex_mem_reads = 0;
   uint64_t tex_mem_lat = 0;
 #endif
+#ifdef EXT_RASTER_ENABLE
+  uint64_t raster_mem_reads;
+  uint64_t raster_mem_lat;
+  uint64_t raster_stall_cycles;
+#endif
 #ifdef EXT_ROP_ENABLE
   uint64_t rop_mem_reads;
   uint64_t rop_mem_writes;
@@ -215,10 +225,6 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   uint64_t rop_ocache_mshr_stalls; 
   uint64_t rop_ocache_mem_stalls;  
   uint64_t rop_ocache_crsp_stalls;
-#endif
-#ifdef EXT_RASTER_ENABLE
-  uint64_t raster_mem_reads;
-  uint64_t raster_mem_lat;
 #endif
 #endif
 
@@ -379,6 +385,16 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
       // <TODO: cache perf counters>
     #endif
     } break;
+    case DCR_MPM_CLASS_RASTER: {
+    #ifdef EXT_RASTER_ENABLE
+      if (0 == core_id) {
+        raster_mem_reads = get_csr_64(staging_ptr, CSR_MPM_RASTER_READS);
+        raster_mem_lat   = get_csr_64(staging_ptr, CSR_MPM_RASTER_LAT);
+        raster_stall_cycles = get_csr_64(staging_ptr, CSR_MPM_RASTER_STALL);
+        // <TODO: cache perf counters>
+      }
+    #endif
+    } break;
     case DCR_MPM_CLASS_ROP: {
     #ifdef EXT_ROP_ENABLE
       if (0 == core_id) {
@@ -397,15 +413,6 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
         rop_ocache_mem_stalls   = get_csr_64(staging_ptr, CSR_MPM_OCACHE_MEM_ST);
         rop_ocache_crsp_stalls  = get_csr_64(staging_ptr, CSR_MPM_OCACHE_CRSP_ST);
       }      
-    #endif
-    } break;
-    case DCR_MPM_CLASS_RASTER: {
-    #ifdef EXT_RASTER_ENABLE
-      if (0 == core_id) {
-        raster_mem_reads = get_csr_64(staging_ptr, CSR_MPM_RAS_READS);
-        raster_mem_lat   = get_csr_64(staging_ptr, CSR_MPM_RAS_LAT);
-        // <TODO: cache perf counters>
-      }
     #endif
     } break;
     }
@@ -452,17 +459,28 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   #ifdef EXT_TEX_ENABLE
     int tex_avg_lat = (int)(double(tex_mem_lat) / double(tex_mem_reads));
     fprintf(stream, "PERF: tex memory reads=%ld\n", tex_mem_reads);
-    fprintf(stream, "PERF: tex memory latency=%d cycles\n", tex_avg_lat);
+    fprintf(stream, "PERF: tex memory average latency=%d cycles\n", tex_avg_lat);
+    // <TODO: cache perf counters>
+  #endif
+  } break;
+  case DCR_MPM_CLASS_RASTER: {
+  #ifdef EXT_RASTER_ENABLE
+    int raster_mem_avg_lat = (int)(double(raster_mem_lat) / double(raster_mem_reads));
+    int raster_stall_cycles_ratio = (int)(100 * double(raster_stall_cycles) / cycles);
+    fprintf(stream, "PERF: raster memory reads=%ld\n", raster_mem_reads);
+    fprintf(stream, "PERF: raster memory latency=%d cycles\n", raster_mem_avg_lat);
+    fprintf(stream, "PERF: raster stall cycles=%d%%\n", raster_stall_cycles_ratio);
     // <TODO: cache perf counters>
   #endif
   } break;
   case DCR_MPM_CLASS_ROP: {
   #ifdef EXT_ROP_ENABLE
+    int rop_mem_avg_lat = (int)(double(rop_mem_lat) / double(rop_mem_reads + rop_mem_writes));
     int rop_idle_cycles_ratio = (int)(100 * double(rop_idle_cycles) / cycles);
     int rop_stall_cycles_ratio = (int)(100 * double(rop_stall_cycles) / cycles);
     fprintf(stream, "PERF: rop memory reads=%ld\n", rop_mem_reads);
     fprintf(stream, "PERF: rop memory writes=%ld\n", rop_mem_writes);
-    fprintf(stream, "PERF: rop memory latency=%ld\n", rop_mem_lat);
+    fprintf(stream, "PERF: rop memory average latency=%d cycles\n", rop_mem_avg_lat);
     fprintf(stream, "PERF: rop idle cycles=%d%%\n", rop_idle_cycles_ratio);
     fprintf(stream, "PERF: rop stall cycles=%d%%\n", rop_stall_cycles_ratio);
     // <cache perf counters>
@@ -477,13 +495,6 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     fprintf(stream, "PERF: ocache mshr stalls=%ld\n", rop_ocache_mshr_stalls);
     fprintf(stream, "PERF: ocache mem stalls=%ld\n", rop_ocache_mem_stalls);
     fprintf(stream, "PERF: ocache crsp stalls=%ld\n", rop_ocache_crsp_stalls);
-  #endif
-  } break;
-  case DCR_MPM_CLASS_RASTER: {
-  #ifdef EXT_RASTER_ENABLE
-    fprintf(stream, "PERF: raster memory reads=%ld\n", raster_mem_reads);
-    fprintf(stream, "PERF: raster memory latency=%ld\n", raster_mem_lat);
-    // <TODO: cache perf counters>
   #endif
   } break;
   }

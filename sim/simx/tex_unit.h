@@ -17,6 +17,7 @@ public:
     };
 
     struct TraceData : public ITraceData {
+        using Ptr = std::shared_ptr<TraceData>;
         std::vector<std::vector<mem_addr_size_t>> mem_addrs;
     };
 
@@ -81,7 +82,7 @@ public:
 
     void csr_write(uint32_t addr, uint32_t value);
 
-    uint32_t read(int32_t u, int32_t v, int32_t lod, TraceData* trace_data);
+    uint32_t read(int32_t u, int32_t v, int32_t lod, TraceData::Ptr trace_data);
     
     void tick();
 
