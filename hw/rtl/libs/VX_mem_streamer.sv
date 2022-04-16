@@ -312,7 +312,21 @@ module VX_mem_streamer #(
         .data_out ({rsp_valid,  rsp_mask,  rsp_data,  rsp_tag})
     );
 
+    //////////////////////////////////////////////////////////////////
+
     assign rsp_stall = rsp_valid & ~rsp_ready;
+
+    always @(posedge clk) begin
+        if (| mem_req_fire) begin
+            if (mem_req_rw[0]) 
+                dpi_trace(1, "%d: MEMSTREAM rd req mask=0b%0b, addr=0x%0h tag=0x%0h\n", $time, mem_req_valid, mem_req_addr, mem_req_tag);
+            else
+                dpi_trace(1, "%d: MEMSTREAM wr req mask=0b%0b, addr=0x%0h tag=0x%0h\n", $time, mem_req_valid, mem_req_addr, mem_req_tag);
+        end 
+        if (mem_rsp_fire) begin
+            dpi_trace(1, "%d: MEMSTREAM rsp mask=0b%0b, data=0x%0h tag=0x%0h\n", $time, mem_rsp_valid, mem_rsp_data, mem_req_tag);
+        end
+    end
 
 endmodule
 `TRACING_ON
