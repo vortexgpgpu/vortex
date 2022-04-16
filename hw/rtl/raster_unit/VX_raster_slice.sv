@@ -284,4 +284,18 @@ module VX_raster_slice #(
         .empty                  (quad_queue_empty)
     );
 
+`ifdef DBG_TRACE_RASTER
+    always @(posedge clk) begin
+        if (input_valid) begin
+            dpi_trace(2, "%d: raster-slice-in: x=%0d, y=%0d, pid=%0d, edge1.x=%0d, edge1.y=%0d, edge1.z=%0d, edge2.x=%0d, edge2.y=%0d, edge2.z=%0d, edge3.x=%0d, edge3.y=%0d, edge3.z=%0d, edge_func_val=%0d %0d %0d, extents=%0d %0d %0d\n",
+                $time, x_loc, y_loc, pid,
+                edges[0][0], edges[0][1], edges[0][2],
+                edges[1][0], edges[1][1], edges[1][2],
+                edges[2][0], edges[2][1], edges[2][2],
+                edge_func_val[0], edge_func_val[1], edge_func_val[2],
+                extents[0], extents[1], extents[2]);
+        end
+    end
+`endif
+
 endmodule

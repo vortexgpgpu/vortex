@@ -15,8 +15,8 @@ module VX_raster_unit #(
     parameter RASTER_BLOCK_SIZE       = 4,          // block size
     parameter RASTER_RS_SIZE          = 8,          // Reservation station size
     parameter RASTER_QUAD_OUTPUT_RATE = NUM_OUTPUTS,// Rate output quad generation
-    parameter RASTER_QUAD_FIFO_DEPTH  = 64,         // Quad fifo depth
-    parameter RASTER_TILE_FIFO_DEPTH  = 128*(RASTER_TILE_SIZE*RASTER_TILE_SIZE)/(
+    parameter RASTER_QUAD_FIFO_DEPTH  = 128,         // Quad fifo depth
+    parameter RASTER_TILE_FIFO_DEPTH  = (RASTER_TILE_SIZE*RASTER_TILE_SIZE)/(
         RASTER_BLOCK_SIZE*RASTER_BLOCK_SIZE)        // tile fifo depth
 ) (
     input wire clk,
@@ -66,6 +66,30 @@ module VX_raster_unit #(
         end
     end
 
+    // flag to denote that a valid raster mem data is being generated for the slice
+    // use this flag to stop the memory from generating another data and sending
+    localparam MEM_DELAY_BITS = `LOG2UP(MUL_LATENCY);
+    logic processing_mem_data;
+    logic [MEM_DELAY_BITS-1:0] delay_counter;
+    // FSM to stop multiple memory responses to the slices while one data set
+    // is being processed
+    always @(posedge clk) begin
+        if (reset) begin
+            processing_mem_data <= 0;
+            delay_counter <= {MEM_DELAY_BITS{1'b0}};
+        end
+        else if (delay_counter == MUL_LATENCY) begin
+            processing_mem_data <= 0;
+            delay_counter <= {MEM_DELAY_BITS{1'b0}};
+        end
+        else if (processing_mem_data == 1) begin
+            delay_counter <= delay_counter + 1;
+        end
+        else if (mem_valid) begin
+            processing_mem_data <= 1;
+            delay_counter <= delay_counter + 1;
+        end
+    end
 
     // Mem to raster slice control signals
     logic mem_valid;
@@ -83,7 +107,7 @@ module VX_raster_unit #(
         .tbuf_baseaddr      (raster_dcrs.tbuf_addr),
         .pbuf_baseaddr      (raster_dcrs.pbuf_addr),
         .pbuf_stride        (raster_dcrs.pbuf_stride),
-        .raster_slice_ready (raster_slice_ready),
+        .raster_slice_ready (raster_slice_ready & {NUM_SLICES{!processing_mem_data}}),
         .out_x_loc          (x_loc),
         .out_y_loc          (y_loc),
         .out_edges          (edges),
