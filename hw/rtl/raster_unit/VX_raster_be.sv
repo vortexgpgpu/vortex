@@ -61,7 +61,7 @@ module VX_raster_be #(
     logic full, push;
     logic [ARBITER_BITS-1:0] arbiter_index;
     // Per fifo signals
-    logic [RASTER_QUAD_OUTPUT_RATE-1:0] full_flag, empty_flag;
+    logic [RASTER_QUAD_OUTPUT_RATE-1:0] full_flag, empty_flag, push_flag, pop_flag;
 
     // Generate the RASTER_QUAD_NUM x RASTER_QUAD_NUM quad evaluators
     for (genvar i = 0; i < RASTER_QUAD_NUM; ++i) begin
@@ -125,6 +125,8 @@ module VX_raster_be #(
     for (genvar i = 0; i < RASTER_QUAD_OUTPUT_RATE; ++i) begin
         // Quad queue
         logic [FIFO_DATA_WIDTH-1:0] fifo_push_data, fifo_pop_data;
+        assign push_flag[i] = push && quad_masks[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i] != 0 && !full;
+        assign pop_flag[i]  = pop & !empty_flag[i];
         assign fifo_push_data = (arbiter_index*RASTER_QUAD_OUTPUT_RATE + i) < RASTER_QUAD_SPACE ?
             {
                 quad_x_loc[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i] >> 1,
@@ -160,8 +162,8 @@ module VX_raster_be #(
         ) quad_fifo_queue (
             .clk        (clk),
             .reset      (reset),
-            .push       (push && quad_masks[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i] != 0),
-            .pop        (pop & !empty_flag[i]),
+            .push       (push_flag[i]),
+            .pop        (pop_flag[i]),
             .data_in    (fifo_push_data),
             .data_out   (fifo_pop_data),
             .full       (full_flag[i]),
@@ -176,6 +178,16 @@ module VX_raster_be #(
     assign empty = &(empty_flag);
 
 `ifdef DBG_TRACE_RASTER
+    always @(posedge clk) begin
+        if (input_valid) begin
+            dpi_trace(2, "%d: raster-block-in: x=%0d, y=%0d, pid=%0d, edge1.x=%0d, edge1.y=%0d, edge1.z=%0d, edge2.x=%0d, edge2.y=%0d, edge2.z=%0d, edge3.x=%0d, edge3.y=%0d, edge3.z=%0d, edge_func_val=%0d %0d %0d\n",
+                $time, x_loc, y_loc, pid,
+                edges[0][0], edges[0][1], edges[0][2],
+                edges[1][0], edges[1][1], edges[1][2],
+                edges[2][0], edges[2][1], edges[2][2],
+                edge_func_val[0], edge_func_val[1], edge_func_val[2]);
+        end
+    end
     always @(posedge clk) begin
         if (pop) begin
             for (int i = 0; i < RASTER_QUAD_OUTPUT_RATE; ++i) begin

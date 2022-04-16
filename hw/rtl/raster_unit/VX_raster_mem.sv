@@ -30,8 +30,8 @@ module VX_raster_mem #(
     input logic         [RASTER_SLICE_NUM-1:0]              raster_slice_ready,
     output logic        [`RASTER_DIM_BITS-1:0]              out_x_loc, out_y_loc,
     output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_edges[2:0][2:0],
-    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]          out_pid,
-    output logic [RASTER_SLICE_BITS-1:0]                    out_slice_index,
+    output logic        [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_pid,
+    output logic        [RASTER_SLICE_BITS-1:0]             out_slice_index,
 
     // Status signals
     output logic        ready, out_valid,
@@ -216,7 +216,7 @@ module VX_raster_mem #(
 
             // Launch any valid packet
             // When any raster slice is ready
-            if (valid_raster_index && valid_rs_index) begin
+            if (valid_raster_index && valid_rs_index && raster_slice_ready[out_slice_index] && out_valid == 0) begin
                 {out_x_loc, out_y_loc,
                 out_edges[0][0], out_edges[0][1], out_edges[0][2],
                 out_edges[1][0], out_edges[1][1], out_edges[1][2],
