@@ -349,9 +349,22 @@ int main(int argc, char *argv[]) {
 
   CGLTrace trace;    
   RT_CHECK(trace.load(trace_file));
+  
+  uint64_t total_drawcalls  = trace.drawcalls.size();  
+  uint64_t total_textures   = trace.textures.size();
+  uint64_t total_vertices   = 0;
+  uint64_t total_primitives = 0;
+  for (auto& drawcall : trace.drawcalls) {
+    total_vertices += drawcall.vertices.size();
+    total_primitives += drawcall.primitives.size();
+  }
+  std::cout << "CGL Trace: drawcalls=" << std::dec << total_drawcalls 
+            << ", vertices=" << total_vertices 
+            << ", primitives=" << total_primitives 
+            << ", textures=" << total_textures << std::endl;
 
   // upload program
-  std::cout << "upload program" << std::endl;  
+  std::cout << "upload program" << std::endl;
   RT_CHECK(vx_upload_kernel_file(device, kernel_file));
 
   zbuf_stride = 4;
