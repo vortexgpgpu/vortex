@@ -1,5 +1,4 @@
 #include "vx_utils.h"
-#include <util.h>
 #include <iostream>
 #include <fstream>
 #include <list>
@@ -62,7 +61,7 @@ void perf_add_device(vx_device_h device) {
 #ifdef DUMP_PERF_STATS
   gAutoPerfDump.add_device(device);
 #else
-  __unused (device);
+  (void)device;
 #endif
 }
 
@@ -70,7 +69,7 @@ void perf_remove_device(vx_device_h device) {
 #ifdef DUMP_PERF_STATS
   gAutoPerfDump.remove_device(device);
 #else
-  __unused (device);
+  (void)device;
 #endif
 }
 
