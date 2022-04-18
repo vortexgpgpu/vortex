@@ -153,7 +153,8 @@ module VX_rop_mem #(
 
     VX_pipe_register #(
         .DATAW	(1 + 1 + NUM_REQS * (1 + 4 + `OCACHE_ADDR_WIDTH + 32) + TAG_WIDTH),
-        .RESETW (1)
+        .RESETW (1),
+        .DEPTH  (2)
     ) mreq_pipe_reg (
         .clk      (clk),
         .reset    (reset),
