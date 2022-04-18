@@ -229,10 +229,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   uint64_t rop_ocache_writes = 0;      
   uint64_t rop_ocache_read_misses = 0; 
   uint64_t rop_ocache_write_misses = 0;
-  uint64_t rop_ocache_bank_stalls = 0; 
-  uint64_t rop_ocache_mshr_stalls = 0; 
-  uint64_t rop_ocache_mem_stalls = 0;  
-  uint64_t rop_ocache_crsp_stalls = 0;
+  uint64_t rop_ocache_bank_stalls = 0;
 #endif
 #endif
 
@@ -428,9 +425,6 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
         rop_ocache_read_misses= get_csr_64(staging_ptr, CSR_MPM_OCACHE_MISS_R);
         rop_ocache_write_misses= get_csr_64(staging_ptr, CSR_MPM_OCACHE_MISS_W);
         rop_ocache_bank_stalls= get_csr_64(staging_ptr, CSR_MPM_OCACHE_BANK_ST);
-        rop_ocache_mshr_stalls= get_csr_64(staging_ptr, CSR_MPM_OCACHE_MSHR_ST);
-        rop_ocache_mem_stalls = get_csr_64(staging_ptr, CSR_MPM_OCACHE_MEM_ST);
-        rop_ocache_crsp_stalls= get_csr_64(staging_ptr, CSR_MPM_OCACHE_CRSP_ST);
       }
     #endif
     } break;
