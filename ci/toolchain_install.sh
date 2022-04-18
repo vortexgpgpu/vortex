@@ -11,7 +11,12 @@ OS="${OS:=ubuntu/bionic}"
 
 riscv()
 {
-    for x in {a..o} 
+    case $OS in
+    "centos/7") parts=$(eval echo {a..h}) ;;
+    *)          parts=$(eval echo {a..o}) ;;
+    esac
+    rm -f riscv-gnu-toolchain.tar.bz2.parta*
+    for x in $parts
     do
         wget $REPOSITORY/riscv-gnu-toolchain/$OS/riscv-gnu-toolchain.tar.bz2.parta$x
     done
@@ -24,6 +29,7 @@ riscv()
 
 riscv64()
 {
+    rm -f riscv64-gnu-toolchain.tar.bz2.parta*
     for x in {a..j} 
     do
         wget $REPOSITORY/riscv64-gnu-toolchain/$OS/riscv64-gnu-toolchain.tar.bz2.parta$x
@@ -37,7 +43,13 @@ riscv64()
 
 llvm()
 {
-    for x in {a..b} 
+    case $OS in
+    "centos/7") parts=$(eval echo {a..g}) ;;
+    *)          parts=$(eval echo {a..b}) ;;
+    esac
+    echo $parts
+    rm -f llvm-riscv.tar.bz2.parta*
+    for x in $parts
     do
         wget $REPOSITORY/llvm-riscv/$OS/llvm-riscv.tar.bz2.parta$x
     done
