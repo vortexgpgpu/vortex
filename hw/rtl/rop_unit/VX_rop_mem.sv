@@ -47,14 +47,14 @@ module VX_rop_mem #(
 
     localparam NUM_REQS = 2 * NUM_LANES;
 
-    wire                        mreq_valid;
-    wire                        mreq_rw;
-    wire [NUM_REQS-1:0]         mreq_mask;
-    wire [NUM_REQS-1:0][`OCACHE_ADDR_WIDTH-1:0] mreq_addr;
-    wire [NUM_REQS-1:0][31:0]   mreq_data;
-    wire [NUM_REQS-1:0][3:0]    mreq_byteen;
-    wire [TAG_WIDTH-1:0]        mreq_tag;
-    wire                        mreq_ready;
+    wire                        mreq_valid, mreq_valid_r;
+    wire                        mreq_rw, mreq_rw_r;
+    wire [NUM_REQS-1:0]         mreq_mask, mreq_mask_r;
+    wire [NUM_REQS-1:0][`OCACHE_ADDR_WIDTH-1:0] mreq_addr, mreq_addr_r;
+    wire [NUM_REQS-1:0][31:0]   mreq_data, mreq_data_r;
+    wire [NUM_REQS-1:0][3:0]    mreq_byteen, mreq_byteen_r;
+    wire [TAG_WIDTH-1:0]        mreq_tag, mreq_tag_r;
+    wire                        mreq_ready, mreq_ready_r;
     
     wire                        mrsp_valid;
     wire [NUM_REQS-1:0]         mrsp_mask;
@@ -149,6 +149,21 @@ module VX_rop_mem #(
     assign mreq_rw    = req_rw;
     assign mreq_tag   = req_tag;
 
+    wire mreq_stall = mreq_valid_r & ~mreq_ready_r;
+
+    VX_pipe_register #(
+        .DATAW	(1 + 1 + NUM_REQS * (1 + 4 + `OCACHE_ADDR_WIDTH + 32) + TAG_WIDTH),
+        .RESETW (1)
+    ) rsp_pipe_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable	  (~mreq_stall),
+        .data_in  ({mreq_valid,   mreq_rw,   mreq_mask,   mreq_byteen,   mreq_addr,   mreq_data,   mreq_tag}),
+        .data_out ({mreq_valid_r, mreq_rw_r, mreq_mask_r, mreq_byteen_r, mreq_addr_r, mreq_data_r, mreq_tag_r})
+    );
+
+    assign mreq_ready = ~mreq_stall;
+
     VX_mem_streamer #(
         .NUM_REQS         (NUM_REQS),
         .ADDRW            (`OCACHE_ADDR_WIDTH),
@@ -160,14 +175,14 @@ module VX_rop_mem #(
         .clk            (clk),
         .reset          (reset),
 
-        .req_valid      (mreq_valid),
-        .req_rw         (mreq_rw),
-        .req_mask       (mreq_mask),
-        .req_byteen     (mreq_byteen),
-        .req_addr       (mreq_addr),
-        .req_data       (mreq_data),
-        .req_tag        (mreq_tag),
-        .req_ready      (mreq_ready),
+        .req_valid      (mreq_valid_r),
+        .req_rw         (mreq_rw_r),
+        .req_mask       (mreq_mask_r),
+        .req_byteen     (mreq_byteen_r),
+        .req_addr       (mreq_addr_r),
+        .req_data       (mreq_data_r),
+        .req_tag        (mreq_tag_r),
+        .req_ready      (mreq_ready_r),
 
         .rsp_valid      (mrsp_valid),
         .rsp_mask       (mrsp_mask),
