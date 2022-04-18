@@ -12,7 +12,7 @@ module VX_raster_slice #(
     parameter RASTER_BLOCK_SIZE       = 8,
     parameter RASTER_TILE_SIZE        = 16,
     parameter RASTER_QUAD_OUTPUT_RATE = 4,
-    parameter RASTER_QUAD_FIFO_DEPTH  = 64,
+    parameter RASTER_QUAD_FIFO_DEPTH  = 1,
     parameter RASTER_TILE_FIFO_DEPTH  = 16
 ) (
     // Standard inputs
@@ -209,7 +209,8 @@ module VX_raster_slice #(
 
     
     // Stall used to wait for block queue to complete run if another needs to be inserted
-    assign stall = (valid_block == 1 && block_fifo_full == 1);
+    //assign stall = (valid_block == 1 && block_fifo_full == 1);
+    assign stall = (block_fifo_full == 1);
 
     // Decide the ready flag
     //  1. Tile evaluator doesn't have a valid tile or (block -> block will be pushed to next pipe so no need to stall for it)

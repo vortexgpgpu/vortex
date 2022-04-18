@@ -39,8 +39,8 @@ module VX_raster_be #(
     // Local parameter setup
     localparam RASTER_QUAD_NUM           = RASTER_BLOCK_SIZE/2;
     localparam RASTER_QUAD_SPACE         = RASTER_QUAD_NUM*RASTER_QUAD_NUM;
-    localparam RASTER_QUAD_ARBITER_RANGE = RASTER_QUAD_SPACE/RASTER_QUAD_OUTPUT_RATE;
-    localparam ARBITER_BITS              = $clog2(RASTER_QUAD_ARBITER_RANGE) + 1;
+    localparam RASTER_QUAD_ARBITER_RANGE = RASTER_QUAD_SPACE/RASTER_QUAD_OUTPUT_RATE + 1;
+    localparam ARBITER_BITS              = `LOG2UP(RASTER_QUAD_ARBITER_RANGE) + 1;
 
     // Temporary (temp_) for combinatorial part, quad_ register for data storage
     logic        [`RASTER_DIM_BITS-1:0]             temp_quad_x_loc     [RASTER_QUAD_SPACE-1:0],
@@ -113,11 +113,15 @@ module VX_raster_be #(
             valid_data    <= 0;
     end
 
+    /* verilator lint_off CMPCONST */
+    /* verilator lint_off UNSIGNED */
     assign push = (arbiter_index < (RASTER_QUAD_ARBITER_RANGE[ARBITER_BITS-1:0])) && !full && !reset && valid_data;
     assign ready = (
         arbiter_index > (RASTER_QUAD_ARBITER_RANGE[ARBITER_BITS-1:0]-1) ||
         arbiter_index == (RASTER_QUAD_ARBITER_RANGE[ARBITER_BITS-1:0]-1)
         ) && !full;
+    /* verilator lint_on CMPCONST */
+    /* verilator lint_on UNSIGNED */
 
     localparam FIFO_DATA_WIDTH = 2*`RASTER_DIM_BITS + 4 + `RASTER_PRIMITIVE_DATA_BITS*3*4 + 
         `RASTER_PRIMITIVE_DATA_BITS + 1;
@@ -125,7 +129,8 @@ module VX_raster_be #(
     for (genvar i = 0; i < RASTER_QUAD_OUTPUT_RATE; ++i) begin
         // Quad queue
         logic [FIFO_DATA_WIDTH-1:0] fifo_push_data, fifo_pop_data;
-        assign push_flag[i] = push && quad_masks[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i] != 0 && !full;
+        //assign push_flag[i] = push && quad_masks[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i] != 0 && !full;
+        assign push_flag[i] = push && !full;
         assign pop_flag[i]  = pop & !empty_flag[i];
         assign fifo_push_data = (arbiter_index*RASTER_QUAD_OUTPUT_RATE + i) < RASTER_QUAD_SPACE ?
             {
@@ -145,8 +150,8 @@ module VX_raster_be #(
                 quad_bcoords[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i][2][2],
                 quad_bcoords[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i][2][3],
                 pid,
-                (1'b1 && valid_data)
-            } : 'x;
+                (valid_data)
+            } : {FIFO_DATA_WIDTH{1'b0}};
 
         logic fifo_valid;
         assign {out_quad_x_loc[i], out_quad_y_loc[i], out_quad_masks[i],

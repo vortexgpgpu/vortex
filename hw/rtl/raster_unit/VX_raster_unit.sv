@@ -279,6 +279,14 @@ module VX_raster_unit #(
     );
 
 `ifdef DBG_TRACE_RASTER
+    // Print the debug status
+    // always @(posedge clk) begin
+    //     if (raster_req_if.ready) begin
+    //         dpi_trace(1, "%d: raster-status: unit_ready=%b, mem_ready=%b, slice_ready=%b, quad_queue_empty=%b, out_valid=%b, out_empty=%b",
+    //             $time, raster_unit_ready, raster_mem_ready, raster_slice_ready,
+    //             quad_queue_empty, arbiter_valid | raster_unit_ready, raster_unit_ready);
+    //     end
+    // end
     always @(posedge clk) begin
         if (raster_req_if.ready && raster_req_if.valid) begin
             for (int i = 0; i < RASTER_QUAD_OUTPUT_RATE; ++i) begin
