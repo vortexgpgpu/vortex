@@ -209,7 +209,11 @@
 `define NC_TAG_BITS             1
 
 // cache address type bits
-`define CACHE_ADDR_TYPE_BITS    (`NC_TAG_BITS + `SM_ENABLED)
+`ifdef SM_ENABLE
+`define CACHE_ADDR_TYPE_BITS    (`NC_TAG_BITS + 1)
+`else
+`define CACHE_ADDR_TYPE_BITS    `NC_TAG_BITS
+`endif
 
 ////////////////////////// Icache Configurable Knobs //////////////////////////
 
@@ -352,7 +356,11 @@
 `define L2_ADDR_WIDTH           (32-`CLOG2(`L2_WORD_SIZE))
 
 // Block size in bytes
-`define L2_CACHE_LINE_SIZE      (`L2_ENABLED ? `MEM_BLOCK_SIZE : `L2_WORD_SIZE)
+`ifdef L2_ENABLE
+`define L2_CACHE_LINE_SIZE      `MEM_BLOCK_SIZE
+`else
+`define L2_CACHE_LINE_SIZE      `L2_WORD_SIZE
+`endif
 
 // Memory request data bits
 `define L2_MEM_DATA_WIDTH       (`L2_CACHE_LINE_SIZE * 8)
@@ -371,7 +379,11 @@
 `define _L2_MEM_ADDR_RATIO_W    `CLOG2(`L2_CACHE_LINE_SIZE / `L2_WORD_SIZE)
 `define _L2_NC_MEM_TAG_WIDTH    (`CLOG2(`L2_NUM_REQS) + `_L2_MEM_ADDR_RATIO_W + `L1_MEM_TAG_WIDTH)
 `define _L2X_MEM_TAG_WIDTH      `MAX(`_L2_MEM_TAG_WIDTH, `_L2_NC_MEM_TAG_WIDTH)
-`define L2X_MEM_TAG_WIDTH       (`L2_ENABLED ? `_L2X_MEM_TAG_WIDTH : (`L1_MEM_TAG_WIDTH + `CLOG2(`L2_NUM_REQS)))
+`ifdef L2_ENABLE
+`define L2X_MEM_TAG_WIDTH       `_L2X_MEM_TAG_WIDTH
+`else
+`define L2X_MEM_TAG_WIDTH       (`L1_MEM_TAG_WIDTH + `CLOG2(`L2_NUM_REQS))
+`endif
 `define L2_MEM_TAG_WIDTH        (`L2X_MEM_TAG_WIDTH + `CLOG2(1 + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED))
 
 ////////////////////////// L3cache Configurable Knobs /////////////////////////
@@ -384,7 +396,11 @@
 `define L3_ADDR_WIDTH           (32 - `CLOG2(`L3_WORD_SIZE))
 
 // Block size in bytes
-`define L3_CACHE_LINE_SIZE      (`L3_ENABLED ? `MEM_BLOCK_SIZE : `L3_WORD_SIZE)
+`ifdef L3_ENABLE
+`define L3_CACHE_LINE_SIZE      `MEM_BLOCK_SIZE
+`else
+`define L3_CACHE_LINE_SIZE      `L3_WORD_SIZE
+`endif
 
 // Memory request data bits
 `define L3_MEM_DATA_WIDTH       (`L3_CACHE_LINE_SIZE * 8)
@@ -403,7 +419,11 @@
 `define _L3_MEM_ADDR_RATIO_W    `CLOG2(`L3_CACHE_LINE_SIZE / `L3_WORD_SIZE)
 `define _L3_NC_MEM_TAG_WIDTH    (`CLOG2(`L3_NUM_REQS) + `_L3_MEM_ADDR_RATIO_W + `L2_MEM_TAG_WIDTH)
 `define _L3X_MEM_TAG_WIDTH      `MAX(`_L3_MEM_TAG_WIDTH, `_L3_NC_MEM_TAG_WIDTH)
-`define L3_MEM_TAG_WIDTH        (`L3_ENABLED ? `_L3X_MEM_TAG_WIDTH : (`L2_MEM_TAG_WIDTH + `CLOG2(`L3_NUM_REQS)))
+`ifdef L3_ENABLE
+`define L3_MEM_TAG_WIDTH        `_L3X_MEM_TAG_WIDTH
+`else
+`define L3_MEM_TAG_WIDTH        (`L2_MEM_TAG_WIDTH + `CLOG2(`L3_NUM_REQS))
+`endif
 
 ////////////////////////// Rcache Configurable Knobs //////////////////////////
 

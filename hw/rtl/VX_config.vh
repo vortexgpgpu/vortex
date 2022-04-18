@@ -37,6 +37,13 @@
     `define L3_ENABLED   0
 `endif
 
+`ifdef CACHE_DISABLE
+    `define L1_DISABLE
+    `define TCACHE_DISABLE
+    `define RCACHE_DISABLE
+    `define OCACHE_DISABLE
+`endif
+
 `ifdef L1_DISABLE
     `define ICACHE_DISABLE
     `define DCACHE_DISABLE
