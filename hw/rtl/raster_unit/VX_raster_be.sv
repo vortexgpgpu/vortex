@@ -64,14 +64,22 @@ module VX_raster_be #(
     logic [RASTER_QUAD_OUTPUT_RATE-1:0] full_flag, empty_flag, push_flag, pop_flag;
 
     // Generate the RASTER_QUAD_NUM x RASTER_QUAD_NUM quad evaluators
+
     for (genvar i = 0; i < RASTER_QUAD_NUM; ++i) begin
         for (genvar j = 0; j < RASTER_QUAD_NUM; ++j) begin
-            always_comb begin
-                temp_quad_x_loc[i*RASTER_QUAD_NUM+j] = x_loc + `RASTER_DIM_BITS'(i*2);
-                temp_quad_y_loc[i*RASTER_QUAD_NUM+j] = y_loc + `RASTER_DIM_BITS'(j*2);
-                for (integer k = 0; k < 3; ++k)
-                    local_edge_func_val[i*RASTER_QUAD_NUM+j][k] = edge_func_val[k] + i*2*edges[k][0] + j*2*edges[k][1];
+            assign temp_quad_x_loc[i*RASTER_QUAD_NUM+j] = x_loc + `RASTER_DIM_BITS'(i*2);
+            assign temp_quad_y_loc[i*RASTER_QUAD_NUM+j] = y_loc + `RASTER_DIM_BITS'(j*2);
+        end
+    end
+    for (genvar i = 0; i < RASTER_QUAD_NUM; ++i) begin
+        for (genvar j = 0; j < RASTER_QUAD_NUM; ++j) begin
+            for (genvar k = 0; k < 3; ++k) begin
+                assign local_edge_func_val[i*RASTER_QUAD_NUM+j][k] = edge_func_val[k] + i*2*edges[k][0] + j*2*edges[k][1];
             end
+        end
+    end
+    for (genvar i = 0; i < RASTER_QUAD_NUM; ++i) begin
+        for (genvar j = 0; j < RASTER_QUAD_NUM; ++j) begin
             VX_raster_qe qe (
                 .edges          (edges),
                 .edge_func_val  (local_edge_func_val[i*RASTER_QUAD_NUM+j]),

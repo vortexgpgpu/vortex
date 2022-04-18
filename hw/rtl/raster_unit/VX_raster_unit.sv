@@ -56,6 +56,7 @@ module VX_raster_unit #(
 
     // Top raster unit ready signal
     logic raster_unit_ready, raster_mem_ready;
+    logic mem_valid;
 
     // FSM to control the valid signals for the rest of the system
     reg raster_input_valid;
@@ -68,7 +69,7 @@ module VX_raster_unit #(
 
     // flag to denote that a valid raster mem data is being generated for the slice
     // use this flag to stop the memory from generating another data and sending
-    localparam MEM_DELAY_BITS = `LOG2UP(MUL_LATENCY);
+    localparam MEM_DELAY_BITS = `LOG2UP(MUL_LATENCY) + 1;
     logic processing_mem_data;
     logic [MEM_DELAY_BITS-1:0] delay_counter;
     // FSM to stop multiple memory responses to the slices while one data set
@@ -92,7 +93,6 @@ module VX_raster_unit #(
     end
 
     // Mem to raster slice control signals
-    logic mem_valid;
     logic [NUM_SLICES-1:0] raster_slice_ready;
     VX_raster_mem #(
         .RASTER_SLICE_NUM   (NUM_SLICES),

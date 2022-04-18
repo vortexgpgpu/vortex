@@ -45,43 +45,32 @@ module VX_raster_te #(
     logic [`RASTER_DIM_BITS-1:0] sub_tile_size;
     logic [`RASTER_DIM_BITS-1:0] sub_tile_bits;
 
-    always_comb begin
-        valid_block = 0;
-
-        // Reset values
-        for (integer i = 0; i < 2; ++i) begin
-            for (integer j = 0; j < 2; ++j) begin
-                tile_x_loc[i*2+j] = `RASTER_DIM_BITS'(1'b0);
-                tile_y_loc[i*2+j] = `RASTER_DIM_BITS'(1'b0);
-                for (integer k = 0; k < 3; ++k) begin
-                    tile_edge_func_val[i*2+j][k] = `RASTER_PRIMITIVE_DATA_BITS'(1'b0);
-                end
+    // Generate the x,y loc and edge function values
+    for (genvar i = 0; i < 2; ++i) begin
+        for (genvar j = 0; j < 2; ++j) begin
+            assign tile_x_loc[i*2+j] = x_loc + `RASTER_DIM_BITS'(i)*sub_tile_size;
+            assign tile_y_loc[i*2+j] = y_loc + `RASTER_DIM_BITS'(j)*sub_tile_size;
+        end 
+    end
+    for (genvar i = 0; i < 2; ++i) begin
+        for (genvar j = 0; j < 2; ++j) begin
+            for (genvar k = 0; k < 3; ++k) begin
+                assign tile_edge_func_val[i*2+j][k] = edge_func_val[k]
+                    + i*(edges[k][0] << sub_tile_bits)
+                    + j*(edges[k][1] << sub_tile_bits);
             end
         end
+    end
 
+    always_comb begin
+        valid_block = 0;
         // Check if tile has triangle
         valid_tile = (!((eval0 < 0) || (eval1 < 0) || (eval2 < 0))) & input_valid;
         // If tile valid => sub-divide into sub-tiles
         if (valid_tile) begin
             sub_tile_bits = `RASTER_DIM_BITS'(RASTER_TILE_SIZE_BITS) - `RASTER_DIM_BITS'(level) - `RASTER_DIM_BITS'(1);
             sub_tile_size = `RASTER_DIM_BITS'(1) << sub_tile_bits;
-            if (sub_tile_bits >= `RASTER_DIM_BITS'(RASTER_BLOCK_SIZE_BITS)) begin
-                // divide into sub tiles as still bigger than block
-                //valid_block = 0;
-                // generate sub-tile data
-                for (integer i = 0; i < 2; ++i) begin
-                    for (integer j = 0; j < 2; ++j) begin
-                        tile_x_loc[i*2+j] = x_loc + `RASTER_DIM_BITS'(i)*sub_tile_size;
-                        tile_y_loc[i*2+j] = y_loc + `RASTER_DIM_BITS'(j)*sub_tile_size;
-                        for (integer k = 0; k < 3; ++k) begin
-                            tile_edge_func_val[i*2+j][k] = edge_func_val[k]
-                                + i*(edges[k][0] << sub_tile_bits)
-                                + j*(edges[k][1] << sub_tile_bits);
-                        end
-                    end
-                end
-            end
-            else begin
+            if (!(sub_tile_bits >= `RASTER_DIM_BITS'(RASTER_BLOCK_SIZE_BITS))) begin
                 // run block evaluator on valid block
                 valid_block = 1;
                 // Deassert valid_tile so that it tells whether it generated a block or tile or neither

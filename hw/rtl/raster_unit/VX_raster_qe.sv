@@ -20,13 +20,18 @@ module VX_raster_qe (
     // New edge value for all 4 pixels (0,0) (0,1) (1,0) (1,1)
     logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] new_edge_val [2:0][1:0][1:0];
 
+    // Generate new_edge_val
+    for (genvar i = 0; i < 2; ++i) begin
+        for (genvar j = 0; j < 2; ++j) begin
+            for (genvar k = 0; k < 3; ++k) begin
+                assign new_edge_val[k][i][j] = edge_func_val[k] + i*edges[k][0] + j*edges[k][1];
+            end
+        end
+    end
+
     for (genvar i = 0; i < 2; ++i) begin
         for (genvar j = 0; j < 2; ++j) begin
                 always_comb begin
-                    integer k;
-                    for (k = 0; k < 3; ++k) begin
-                        new_edge_val[k][i][j] = edge_func_val[k] + i*edges[k][0] + j*edges[k][1];
-                    end
                     masks[j*2 + i] = 0;
                     bcoords[0][j*2 + i] = 0;
                     bcoords[1][j*2 + i] = 0;
