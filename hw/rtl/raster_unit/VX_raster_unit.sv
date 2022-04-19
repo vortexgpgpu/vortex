@@ -71,6 +71,8 @@ module VX_raster_unit #(
     localparam MEM_DELAY_BITS = `LOG2UP(MUL_LATENCY);
     logic processing_mem_data;
     logic [MEM_DELAY_BITS-1:0] delay_counter;
+    logic mem_valid;
+    
     // FSM to stop multiple memory responses to the slices while one data set
     // is being processed
     always @(posedge clk) begin
@@ -91,8 +93,7 @@ module VX_raster_unit #(
         end
     end
 
-    // Mem to raster slice control signals
-    logic mem_valid;
+    // Mem to raster slice control signals    
     logic [NUM_SLICES-1:0] raster_slice_ready;
     VX_raster_mem #(
         .RASTER_SLICE_NUM   (NUM_SLICES),
