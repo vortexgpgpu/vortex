@@ -179,10 +179,14 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
       //printf("*** screen position: v0=(%f, %f), v1=(%f, %f), v2=(%f, %f)\n", q0.x, q0.y, q1.x, q1.y, q2.x, q2.y);
 
       rect_f_t tmp;
-      CalcBoundingBox(&tmp, q0, q1, q2);
-      bbox.left   = std::max<int32_t>(0, tmp.left);
-      bbox.right  = std::min<int32_t>(width, tmp.right);
-      bbox.top    = std::max<int32_t>(0, tmp.top);
+      CalcBoundingBox(&tmp, q0, q1, q2);      
+      tmp.left   = floor(tmp.left + 0.5f);
+      tmp.right  = ceil(tmp.right + 0.5f);
+      tmp.top    = floor(tmp.top + 0.5f);
+      tmp.bottom = ceil(tmp.bottom + 0.5f);
+      bbox.left   = std::max<int32_t>(0,      tmp.left);
+      bbox.right  = std::min<int32_t>(width,  tmp.right);
+      bbox.top    = std::max<int32_t>(0,      tmp.top);
       bbox.bottom = std::min<int32_t>(height, tmp.bottom);
 
       global_bbox.left   = std::min<uint32_t>(bbox.left, global_bbox.left);

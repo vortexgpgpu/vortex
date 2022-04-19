@@ -37,6 +37,13 @@
     `define L3_ENABLED   0
 `endif
 
+`ifdef CACHE_DISABLE
+    `define L1_DISABLE
+    `define TCACHE_DISABLE
+    `define RCACHE_DISABLE
+    `define OCACHE_DISABLE
+`endif
+
 `ifdef L1_DISABLE
     `define ICACHE_DISABLE
     `define DCACHE_DISABLE
@@ -283,12 +290,12 @@
 
 // RASTER memeory queue size
 `ifndef RASTER_MEM_QUEUE_SIZE    
-`define RASTER_MEM_QUEUE_SIZE 2
+`define RASTER_MEM_QUEUE_SIZE 4
 `endif
 
 // ROP memeory queue size
 `ifndef ROP_MEM_QUEUE_SIZE    
-`define ROP_MEM_QUEUE_SIZE 2
+`define ROP_MEM_QUEUE_SIZE 4
 `endif
 
 // Icache Configurable Knobs //////////////////////////////////////////////////

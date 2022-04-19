@@ -28,18 +28,18 @@ module VX_rop_slice #(
     localparam DS_TAG_WIDTH = NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 1 + 1 + 32);
     localparam BLEND_TAG_WIDTH  = NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 1);
 
-    wire                                    mem_req_valid;
-    wire [NUM_LANES-1:0]                    mem_req_mask;
-    wire [NUM_LANES-1:0]                    mem_req_ds_pass;
-    wire                                    mem_req_rw;
-    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] mem_req_pos_x;
-    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] mem_req_pos_y;
-    rgba_t [NUM_LANES-1:0]                  mem_req_color;
-    wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] mem_req_depth;
-    wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] mem_req_stencil;
-    wire [NUM_LANES-1:0]                    mem_req_backface;
-    wire [MEM_TAG_WIDTH-1:0]                mem_req_tag;
-    wire                                    mem_req_ready;
+    wire                                    mem_req_valid, mem_req_valid_r;
+    wire [NUM_LANES-1:0]                    mem_req_mask, mem_req_mask_r;
+    wire [NUM_LANES-1:0]                    mem_req_ds_pass, mem_req_ds_pass_r;
+    wire                                    mem_req_rw, mem_req_rw_r;
+    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] mem_req_pos_x, mem_req_pos_x_r;
+    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] mem_req_pos_y, mem_req_pos_y_r;
+    rgba_t [NUM_LANES-1:0]                  mem_req_color, mem_req_color_r;
+    wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] mem_req_depth, mem_req_depth_r;
+    wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] mem_req_stencil, mem_req_stencil_r;
+    wire [NUM_LANES-1:0]                    mem_req_backface, mem_req_backface_r;
+    wire [MEM_TAG_WIDTH-1:0]                mem_req_tag, mem_req_tag_r;
+    wire                                    mem_req_ready, mem_req_ready_r;
 
     wire                                    mem_rsp_valid;
     wire [NUM_LANES-1:0]                    mem_rsp_mask;
@@ -66,18 +66,18 @@ module VX_rop_slice #(
         .cache_req_if   (cache_req_if),
         .cache_rsp_if   (cache_rsp_if),
 
-        .req_valid      (mem_req_valid),
-        .req_mask       (mem_req_mask),
-        .req_ds_pass    (mem_req_ds_pass),
-        .req_rw         (mem_req_rw),
-        .req_pos_x      (mem_req_pos_x),
-        .req_pos_y      (mem_req_pos_y),
-        .req_color      (mem_req_color), 
-        .req_depth      (mem_req_depth),
-        .req_stencil    (mem_req_stencil),
-        .req_backface   (mem_req_backface),
-        .req_tag        (mem_req_tag),
-        .req_ready      (mem_req_ready),
+        .req_valid      (mem_req_valid_r),
+        .req_mask       (mem_req_mask_r),
+        .req_ds_pass    (mem_req_ds_pass_r),
+        .req_rw         (mem_req_rw_r),
+        .req_pos_x      (mem_req_pos_x_r),
+        .req_pos_y      (mem_req_pos_y_r),
+        .req_color      (mem_req_color_r), 
+        .req_depth      (mem_req_depth_r),
+        .req_stencil    (mem_req_stencil_r),
+        .req_backface   (mem_req_backface_r),
+        .req_tag        (mem_req_tag_r),
+        .req_ready      (mem_req_ready_r),
 
         .rsp_valid      (mem_rsp_valid),
         .rsp_mask       (mem_rsp_mask),
@@ -276,5 +276,20 @@ module VX_rop_slice #(
                                 (ds_enable ? ds_ready_in :
                                     (blend_enable ? blend_ready_in :
                                         1'b0));
+
+    wire mem_req_stall = mem_req_valid_r & ~mem_req_ready_r;
+
+    VX_pipe_register #(
+        .DATAW	(1 + 1 + NUM_LANES * (1 + 1 + 2 * `ROP_DIM_BITS + $bits(rgba_t) + `ROP_DEPTH_BITS + `ROP_STENCIL_BITS + 1) + MEM_TAG_WIDTH),
+        .RESETW (1)
+    ) mem_req_pipe_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable	  (~mem_req_stall),
+        .data_in  ({mem_req_valid,   mem_req_rw,   mem_req_mask,   mem_req_ds_pass,   mem_req_pos_x,   mem_req_pos_y,   mem_req_color,   mem_req_depth,   mem_req_stencil,   mem_req_backface,   mem_req_tag}),
+        .data_out ({mem_req_valid_r, mem_req_rw_r, mem_req_mask_r, mem_req_ds_pass_r, mem_req_pos_x_r, mem_req_pos_y_r, mem_req_color_r, mem_req_depth_r, mem_req_stencil_r, mem_req_backface_r, mem_req_tag_r})
+    );
+
+    assign mem_req_ready = ~mem_req_stall;
 
 endmodule

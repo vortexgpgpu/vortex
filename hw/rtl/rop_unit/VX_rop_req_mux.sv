@@ -2,7 +2,7 @@
 
 module VX_rop_req_mux #(
     parameter NUM_REQS       = 1,
-    parameter BUFFERED_REQ   = 0,
+    parameter BUFFERED       = 0,
     parameter string ARBITER = "R"
 ) (
     input wire              clk,
@@ -32,7 +32,7 @@ module VX_rop_req_mux #(
         VX_stream_mux #(            
             .NUM_REQS (NUM_REQS),
             .DATAW    (REQ_DATAW),
-            .BUFFERED (BUFFERED_REQ),
+            .BUFFERED (BUFFERED),
             .ARBITER  (ARBITER)
         ) req_mux (
             .clk       (clk),

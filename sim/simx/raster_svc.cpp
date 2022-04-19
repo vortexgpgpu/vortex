@@ -47,6 +47,7 @@ private:
     const Arch& arch_;
     RasterUnit::Ptr raster_unit_;    
     std::vector<CSR> csrs_;
+    uint32_t tick_stamps_;
     PerfStats perf_stats_;
 
 public:
@@ -58,6 +59,7 @@ public:
       , arch_(core->arch())
       , raster_unit_(raster_unit)
       , csrs_(core->arch().num_warps() * core->arch().num_threads())
+      , tick_stamps_(0)
     {}
 
     ~Impl() {}
@@ -66,6 +68,7 @@ public:
       for (auto& csr : csrs_) {
         csr.clear();
       }
+      tick_stamps_ = 0;
     } 
 
     uint32_t fetch(uint32_t wid, uint32_t tid) {      
@@ -124,14 +127,21 @@ public:
 
       auto trace = simobject_->Input.front();
 
-      if (!raster_unit_->Output.empty()) {        
-        auto& num_stamps = raster_unit_->Output.front();
-        if (--num_stamps == 0) {
+      if (!raster_unit_->done()) {
+        auto num_threads = trace->tmask.count();
+
+        while (tick_stamps_ < num_threads) {
+          if (raster_unit_->Output.empty())
+            return;       
+
+          auto& stampRsp = raster_unit_->Output.front();
+          tick_stamps_ += stampRsp.count;
           raster_unit_->Output.pop();
         }
-      } else if (!raster_unit_->done())
-        return;
-      
+        
+        tick_stamps_ -= num_threads;
+      }
+            
       simobject_->Output.send(trace, 1);
 
       auto time = simobject_->Input.pop();

@@ -141,7 +141,8 @@ module VX_cluster #(
     end  
 
     VX_raster_req_demux #(
-        .NUM_REQS (`NUM_CORES)
+        .NUM_REQS (`NUM_CORES),
+        .BUFFERED (1)
     ) raster_req_demux (
         .clk        (clk),
         .reset      (raster_reset),
@@ -258,7 +259,8 @@ module VX_cluster #(
     end
 
     VX_rop_req_mux #(
-        .NUM_REQS (`NUM_CORES)
+        .NUM_REQS (`NUM_CORES),
+        .BUFFERED (1)
     ) rop_req_mux (
         .clk        (clk),
         .reset      (rop_reset),
