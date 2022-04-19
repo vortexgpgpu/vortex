@@ -85,9 +85,15 @@ public:
       uint32_t state = DCR_RASTER_STATE(addr);
       states_.at(state) = value;
     }
-  };  SimPort<MemReq> MemReqs;
+  };  
+  
+  struct StampRsp {
+    uint32_t count;
+  };
+  
+  SimPort<MemReq> MemReqs;
   SimPort<MemRsp> MemRsps;
-  SimPort<uint32_t> Output;
+  SimPort<StampRsp> Output;
 
   RasterUnit(const SimContext& ctx, 
             const char* name,

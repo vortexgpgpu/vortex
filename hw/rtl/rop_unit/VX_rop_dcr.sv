@@ -42,7 +42,7 @@ module VX_rop_dcr (
                     dcrs.cbuf_addr <= dcr_wr_data[31:0];
                 end
                 `DCR_ROP_CBUF_PITCH: begin 
-                    dcrs.cbuf_pitch <= dcr_wr_data[31:0];
+                    dcrs.cbuf_pitch <= dcr_wr_data[`ROP_PITCH_BITS-1:0];
                 end
                 `DCR_ROP_CBUF_WRITEMASK: begin 
                     dcrs.cbuf_writemask <= dcr_wr_data[3:0];
@@ -51,7 +51,7 @@ module VX_rop_dcr (
                     dcrs.zbuf_addr <= dcr_wr_data[31:0];
                 end
                 `DCR_ROP_ZBUF_PITCH: begin 
-                    dcrs.zbuf_pitch <= dcr_wr_data[31:0];
+                    dcrs.zbuf_pitch <= dcr_wr_data[`ROP_PITCH_BITS-1:0];
                 end
                 `DCR_ROP_DEPTH_FUNC: begin 
                     dcrs.depth_func   <= dcr_wr_data[0 +: `ROP_DEPTH_FUNC_BITS];

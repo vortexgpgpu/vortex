@@ -314,16 +314,19 @@ private:
       auto& mem_trace = mem_traces_.back();
       mem_trace.end_of_tile = false;
 
-      // read next tile header from tile buffer
       uint32_t tile_xy;
+
+      // read next tile header from tile buffer
       mem_->read(&tile_xy, tbuf_addr_, 4);
       mem_trace.header_addrs.push_back(tbuf_addr_);
       // printf("*** raster-mem: add=%d, tile_xy=%d\n", tbuf_addr_, tile_xy);
       tbuf_addr_ += 4;
+      
       mem_->read(&num_prims_, tbuf_addr_, 4);
       mem_trace.header_addrs.push_back(tbuf_addr_);
       // printf("*** raster-mem: add=%d, num_prims=%d\n", tbuf_addr_, num_prims_);
       tbuf_addr_ += 4;
+
       assert(num_prims_ > 0);
       tile_x_ = (tile_xy & 0xffff) << tile_logsize_;
       tile_y_ = (tile_xy >> 16) << tile_logsize_;
@@ -351,16 +354,18 @@ private:
     for (int i = 0; i < 3; ++i) {
       mem_->read(&primitive.edges[i].x, pbuf_addr, 4);
       prim_trace.edge_addrs.push_back(pbuf_addr);
-      pbuf_addr += 4;
       // printf("*** raster-mem: add=%d, edge.x=%d\n", pbuf_addr, primitive.edges[i].x.data());      
+      pbuf_addr += 4;
+      
       mem_->read(&primitive.edges[i].y, pbuf_addr, 4);
       prim_trace.edge_addrs.push_back(pbuf_addr);
-      pbuf_addr += 4;
       // printf("*** raster-mem: add=%d, edge.y=%d\n", pbuf_addr, primitive.edges[i].y.data());
+      pbuf_addr += 4;
+      
       mem_->read(&primitive.edges[i].z, pbuf_addr, 4);
       prim_trace.edge_addrs.push_back(pbuf_addr);
-      pbuf_addr += 4;
       // printf("*** raster-mem: add=%d, edge.z=%d\n", pbuf_addr, primitive.edges[i].z.data());
+      pbuf_addr += 4;      
     }
 
     // printf("*** raster-edge0: a=%d, b=%d, c=%d\n", primitive.edges[0].x.data(), primitive.edges[0].y.data(), primitive.edges[0].z.data());
@@ -454,6 +459,10 @@ public:
   auto& mem_traces() {
     return mem_traces_;
   }
+
+  auto& mem_traces() const {
+    return mem_traces_;
+  }
 };
 
 class RasterUnit::Impl {
@@ -500,7 +509,8 @@ public:
   }
 
   bool done() const {
-    return rasterizer_.done();
+    return rasterizer_.done() 
+        && rasterizer_.mem_traces().empty();
   }
 
   RasterUnit::Stamp* fetch() {      
@@ -528,14 +538,17 @@ public:
         case e_mem_trace_state::edges: {          
           auto& mem_trace = mem_traces.front();
           auto& primitive = mem_trace.primitives.front();
-          simobject_->Output.send(primitive.stamps, 8);
+
+          StampRsp stampRsp{primitive.stamps};
+          simobject_->Output.send(stampRsp, 8);
+          
           mem_trace.primitives.pop_front();
           if (mem_trace.primitives.empty() && mem_trace.end_of_tile) {
             mem_trace_state_ = e_mem_trace_state::header;
             mem_traces.pop_front();
           } else {
             mem_trace_state_ = e_mem_trace_state::primitive;
-          }
+          }          
         } break; 
         default:
           break; 

@@ -256,10 +256,13 @@
 
 // Raster Units ///////////////////////////////////////////////////////////////
 
+`define RASTER_ADDR_BITS            32
 `define RASTER_DIM_BITS             15
+`define RASTER_STRIDE_BITS          3
 `define RASTER_PID_BITS             16
 `define RASTER_TILE_LOGSIZE         4
 `define RASTER_BLOCK_LOGSIZE        2
+`define RASTER_TILECNT_BITS         (2 * (`RASTER_DIM_BITS - `RASTER_TILE_LOGSIZE) + 1)
 
 `define DCR_RASTER_STATE_BEGIN      `DCR_TEX_STATE_END
 `define DCR_RASTER_TBUF_ADDR        (`DCR_RASTER_STATE_BEGIN+0)
@@ -275,6 +278,8 @@
 // Render Output Units ////////////////////////////////////////////////////////
 
 `define ROP_DIM_BITS                15
+
+`define ROP_PITCH_BITS              (`ROP_DIM_BITS + 2 + 1)
 
 `define ROP_DEPTH_BITS              24 
 `define ROP_DEPTH_MASK              ((1 << `ROP_DEPTH_BITS) - 1)

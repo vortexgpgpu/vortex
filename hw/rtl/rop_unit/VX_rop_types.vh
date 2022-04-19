@@ -14,11 +14,11 @@ typedef struct packed {
 
 typedef struct packed {
     logic [31:0]                        cbuf_addr;
-    logic [31:0]                        cbuf_pitch;
+    logic [`ROP_PITCH_BITS-1:0]         cbuf_pitch;
     logic [3:0]                         cbuf_writemask;
 
     logic [31:0]                        zbuf_addr;
-    logic [31:0]                        zbuf_pitch;
+    logic [`ROP_PITCH_BITS-1:0]         zbuf_pitch;
 
     logic                               depth_enable;
     logic [`ROP_DEPTH_FUNC_BITS-1:0]    depth_func;

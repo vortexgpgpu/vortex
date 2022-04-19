@@ -11,13 +11,12 @@ module VX_raster_edge_functions #(
     output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   edge_func_val[2:0]
 );
     for (genvar i = 0; i < 3; ++i) begin
-
-        logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] mul_val1, mul_val2;
+        logic signed [2*`RASTER_PRIMITIVE_DATA_BITS-1:0] mul_val1, mul_val2;
         VX_multiplier #(
             .WIDTHA  (`RASTER_PRIMITIVE_DATA_BITS),
             .WIDTHB  (`RASTER_DIM_BITS),
-            .WIDTHP  (`RASTER_PRIMITIVE_DATA_BITS),
-            .SIGNED  (0),
+            .WIDTHP  (2*`RASTER_PRIMITIVE_DATA_BITS),
+            .SIGNED  (1),
             .LATENCY (MUL_LATENCY)
         ) x_multiplier (
             .clk    (clk),
@@ -30,8 +29,8 @@ module VX_raster_edge_functions #(
         VX_multiplier #(
             .WIDTHA  (`RASTER_PRIMITIVE_DATA_BITS),
             .WIDTHB  (`RASTER_DIM_BITS),
-            .WIDTHP  (`RASTER_PRIMITIVE_DATA_BITS),
-            .SIGNED  (0),
+            .WIDTHP  (2*`RASTER_PRIMITIVE_DATA_BITS),
+            .SIGNED  (1),
             .LATENCY (MUL_LATENCY)
         ) y_multiplier (
             .clk    (clk),
@@ -41,11 +40,13 @@ module VX_raster_edge_functions #(
             .result (mul_val2)
         );
 
-        logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] val1 = (mul_val1) >>> 16;
-        logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] val2 = (mul_val2) >>> 16;
+/* verilator lint_off UNUSED */
+        logic signed [2*`RASTER_PRIMITIVE_DATA_BITS-1:0] val1 = (mul_val1);
+        logic signed [2*`RASTER_PRIMITIVE_DATA_BITS-1:0] val2 = (mul_val2);
         always_comb begin
-            edge_func_val[i] = val1 + val2 + edges[i][2];
+            edge_func_val[i] = val1[`RASTER_PRIMITIVE_DATA_BITS-1:0] + val2[`RASTER_PRIMITIVE_DATA_BITS-1:0] + edges[i][2];
         end
-    end
+/* verilator lint_on UNUSED */
 
+    end
 endmodule

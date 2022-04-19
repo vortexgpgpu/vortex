@@ -349,9 +349,34 @@ int main(int argc, char *argv[]) {
 
   CGLTrace trace;    
   RT_CHECK(trace.load(trace_file));
+  
+  uint64_t total_drawcalls  = trace.drawcalls.size();  
+  uint64_t total_textures   = trace.textures.size();
+  uint64_t total_vertices   = 0;
+  uint64_t total_primitives = 0;
+  bool depth_test    = false;
+  bool stencil_test  = false;
+  bool blend_enabled = false;
+  for (auto& drawcall : trace.drawcalls) {
+    if (drawcall.states.depth_test)
+      depth_test = true;
+    if (drawcall.states.stencil_test)
+      stencil_test = true;
+    if (drawcall.states.blend_enabled)
+      blend_enabled = true;
+    total_vertices += drawcall.vertices.size();
+    total_primitives += drawcall.primitives.size();
+  }
+  std::cout << "CGL Trace: drawcalls=" << std::dec << total_drawcalls 
+            << ", vertices=" << total_vertices 
+            << ", primitives=" << total_primitives 
+            << ", textures=" << total_textures
+            << ", depth=" << depth_test
+            << ", stencil=" << stencil_test
+            << ", blend=" << blend_enabled << std::endl;
 
   // upload program
-  std::cout << "upload program" << std::endl;  
+  std::cout << "upload program" << std::endl;
   RT_CHECK(vx_upload_kernel_file(device, kernel_file));
 
   zbuf_stride = 4;

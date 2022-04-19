@@ -30,8 +30,8 @@ module VX_raster_mem #(
     input logic         [RASTER_SLICE_NUM-1:0]              raster_slice_ready,
     output logic        [`RASTER_DIM_BITS-1:0]              out_x_loc, out_y_loc,
     output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_edges[2:0][2:0],
-    output logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]          out_pid,
-    output logic [RASTER_SLICE_BITS-1:0]                    out_slice_index,
+    output logic        [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_pid,
+    output logic        [RASTER_SLICE_BITS-1:0]             out_slice_index,
 
     // Status signals
     output logic        ready, out_valid,
@@ -90,6 +90,9 @@ module VX_raster_mem #(
     logic [8:0]                                  mem_req_mask;
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]      pid;
 
+    // Stall when unable to fire the mem_req
+    logic stall;
+
     // Stall signal
     //  -> assert when any entry in the RS is empty
     assign ready = |raster_rs_empty & mem_req_ready & fetch_fsm_complete;
@@ -115,6 +118,11 @@ module VX_raster_mem #(
                 raster_rs_valid[i] <= 0;
                 raster_rs_empty[i] <= 1;
             end
+        end
+        // Check for stall condition
+        else if (stall && mem_req_valid) begin
+            // re-assert the mem_req and don't change any other details
+            mem_req_valid <= 1;
         end
         else if (mem_req_ready) begin
             // On new input -> set the temp state values
@@ -213,22 +221,21 @@ module VX_raster_mem #(
                     mem_req_valid <= 0;
                 end
             end
-
-            // Launch any valid packet
-            // When any raster slice is ready
-            if (valid_raster_index && valid_rs_index) begin
-                {out_x_loc, out_y_loc,
-                out_edges[0][0], out_edges[0][1], out_edges[0][2],
-                out_edges[1][0], out_edges[1][1], out_edges[1][2],
-                out_edges[2][0], out_edges[2][1], out_edges[2][2],
-                out_pid} <= raster_rs[raster_rs_index];
-                raster_rs_valid[raster_rs_index] <= 0;
-                raster_rs_empty[raster_rs_index] <= 1;
-                out_valid <= 1;
-            end
-            else begin
-                out_valid <= 0;
-            end
+        end
+        // Launch any valid packet
+        // When any raster slice is ready
+        if (valid_raster_index && valid_rs_index && raster_slice_ready[out_slice_index] && out_valid == 0) begin
+            {out_x_loc, out_y_loc,
+            out_edges[0][0], out_edges[0][1], out_edges[0][2],
+            out_edges[1][0], out_edges[1][1], out_edges[1][2],
+            out_edges[2][0], out_edges[2][1], out_edges[2][2],
+            out_pid} <= raster_rs[raster_rs_index];
+            raster_rs_valid[raster_rs_index] <= 0;
+            raster_rs_empty[raster_rs_index] <= 1;
+            out_valid <= 1;
+        end
+        else begin
+            out_valid <= 0;
         end
     end
 
@@ -306,6 +313,7 @@ module VX_raster_mem #(
     // Memory streamer
     wire mem_fire;
     assign mem_fire = mem_req_ready && mem_req_valid && |raster_rs_empty;
+    assign stall = !mem_fire;
     VX_mem_streamer #(
         .NUM_REQS       (NUM_REQS), // 3 edges and 3 coeffs in each edge
         .ADDRW          (`RCACHE_ADDR_WIDTH),

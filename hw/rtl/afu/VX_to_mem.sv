@@ -6,7 +6,9 @@ module VX_to_mem #(
     parameter DST_DATA_WIDTH = 1, 
     parameter DST_ADDR_WIDTH = 1,                
     parameter SRC_TAG_WIDTH  = 1,
-    parameter DST_TAG_WIDTH  = 1
+    parameter DST_TAG_WIDTH  = 1,
+    localparam SRC_DATA_SIZE = (SRC_DATA_WIDTH / 8),
+    localparam DST_DATA_SIZE = (DST_DATA_WIDTH / 8)
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -37,10 +39,8 @@ module VX_to_mem #(
     output wire [SRC_TAG_WIDTH-1:0]     mem_rsp_tag_out, 
     input wire                          mem_rsp_ready_out
 );    
-    `STATIC_ASSERT ((DST_TAG_WIDTH >= SRC_TAG_WIDTH), ("oops!"))
+    `STATIC_ASSERT ((DST_TAG_WIDTH >= SRC_TAG_WIDTH), ("oops!"))    
     
-    localparam SRC_DATA_SIZE = (SRC_DATA_WIDTH / 8);
-    localparam DST_DATA_SIZE = (DST_DATA_WIDTH / 8);    
     localparam DST_LDATAW = $clog2(DST_DATA_WIDTH);
     localparam SRC_LDATAW = $clog2(SRC_DATA_WIDTH);
     localparam D = `ABS(DST_LDATAW - SRC_LDATAW);
