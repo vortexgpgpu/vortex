@@ -285,7 +285,7 @@ module VX_rop_slice #(
     ) mem_req_pipe_reg (
         .clk      (clk),
         .reset    (reset),
-        .enable	  (mem_req_stall),
+        .enable	  (~mem_req_stall),
         .data_in  ({mem_req_valid,   mem_req_rw,   mem_req_mask,   mem_req_ds_pass,   mem_req_pos_x,   mem_req_pos_y,   mem_req_color,   mem_req_depth,   mem_req_stencil,   mem_req_backface,   mem_req_tag}),
         .data_out ({mem_req_valid_r, mem_req_rw_r, mem_req_mask_r, mem_req_ds_pass_r, mem_req_pos_x_r, mem_req_pos_y_r, mem_req_color_r, mem_req_depth_r, mem_req_stencil_r, mem_req_backface_r, mem_req_tag_r})
     );
