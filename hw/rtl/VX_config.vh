@@ -290,12 +290,12 @@
 
 // RASTER memeory queue size
 `ifndef RASTER_MEM_QUEUE_SIZE    
-`define RASTER_MEM_QUEUE_SIZE 2
+`define RASTER_MEM_QUEUE_SIZE 4
 `endif
 
 // ROP memeory queue size
 `ifndef ROP_MEM_QUEUE_SIZE    
-`define ROP_MEM_QUEUE_SIZE 2
+`define ROP_MEM_QUEUE_SIZE 4
 `endif
 
 // Icache Configurable Knobs //////////////////////////////////////////////////
