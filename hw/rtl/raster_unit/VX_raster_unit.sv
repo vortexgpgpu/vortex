@@ -84,11 +84,11 @@ module VX_raster_unit #(
             delay_counter <= {MEM_DELAY_BITS{1'b0}};
         end
         else if (processing_mem_data == 1) begin
-            delay_counter <= delay_counter + 1;
+            delay_counter <= delay_counter + {{(MEM_DELAY_BITS-1){1'b0}}, 1'b1};
         end
         else if (mem_valid) begin
             processing_mem_data <= 1;
-            delay_counter <= delay_counter + 1;
+            delay_counter <= delay_counter + {{(MEM_DELAY_BITS-1){1'b0}}, 1'b1};
         end
     end
 

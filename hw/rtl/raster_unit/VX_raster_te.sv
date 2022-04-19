@@ -67,9 +67,9 @@ module VX_raster_te #(
         // Check if tile has triangle
         valid_tile = (!((eval0 < 0) || (eval1 < 0) || (eval2 < 0))) & input_valid;
         // If tile valid => sub-divide into sub-tiles
+        sub_tile_bits = `RASTER_DIM_BITS'(RASTER_TILE_SIZE_BITS) - `RASTER_DIM_BITS'(level) - `RASTER_DIM_BITS'(1);
+        sub_tile_size = `RASTER_DIM_BITS'(1) << sub_tile_bits;
         if (valid_tile) begin
-            sub_tile_bits = `RASTER_DIM_BITS'(RASTER_TILE_SIZE_BITS) - `RASTER_DIM_BITS'(level) - `RASTER_DIM_BITS'(1);
-            sub_tile_size = `RASTER_DIM_BITS'(1) << sub_tile_bits;
             if (!(sub_tile_bits >= `RASTER_DIM_BITS'(RASTER_BLOCK_SIZE_BITS))) begin
                 // run block evaluator on valid block
                 valid_block = 1;
