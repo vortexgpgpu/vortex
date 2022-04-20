@@ -72,7 +72,6 @@ module VX_raster_unit #(
     localparam MEM_DELAY_BITS = `LOG2UP(MUL_LATENCY) + 1;
     logic processing_mem_data;
     logic [MEM_DELAY_BITS-1:0] delay_counter;
-    logic mem_valid;
     
     // FSM to stop multiple memory responses to the slices while one data set
     // is being processed
