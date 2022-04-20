@@ -77,7 +77,7 @@ module VX_rop_blend #(
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
-        .enable   (!stall),
+        .enable   (~stall),
         .data_in  ({valid_in, tag_in, src_color,    dst_color,    src_factor,    dst_factor}),
         .data_out ({valid_s1, tag_s1, src_color_s1, dst_color_s1, src_factor_s1, dst_factor_s1})
     );
@@ -179,7 +179,7 @@ module VX_rop_blend #(
     ) pipe_reg2 (
         .clk      (clk),
         .reset    (reset),
-        .enable   (!stall),
+        .enable   (~stall),
         .data_in  ({valid_s1,  tag_s1,  color_out_s1}),
         .data_out ({valid_out, tag_out, color_out})
     );

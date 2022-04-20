@@ -105,7 +105,7 @@ module VX_rop_slice #(
 
     wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0]   ds_depth_out;      
     wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] ds_stencil_out;
-    wire [NUM_LANES-1:0]                        ds_test_out;
+    wire [NUM_LANES-1:0]                        ds_pass_out;
 
     wire [NUM_LANES-1:0][`ROP_DEPTH_FUNC_BITS-1:0] stencil_func;    
     wire [NUM_LANES-1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_zpass;
@@ -157,7 +157,7 @@ module VX_rop_slice #(
 
         .depth_out      (ds_depth_out),        
         .stencil_out    (ds_stencil_out),
-        .test_out       (ds_test_out)
+        .pass_out       (ds_pass_out)
     );
 
     ///////////////////////////////////////////////////////////////////////////
@@ -220,7 +220,7 @@ module VX_rop_slice #(
     wire blend_enable  = dcrs.blend_enable;
     wire blend_writeen = dcrs.blend_enable & color_writeen;
 
-    wire mem_readen = blend_enable | ds_enable;
+    wire mem_readen = ds_enable | blend_enable;
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -232,6 +232,8 @@ module VX_rop_slice #(
 
     wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] blend_write_pos_x, blend_write_pos_y;
     wire [NUM_LANES-1:0] blend_write_mask;
+
+    wire pending_reads_full;
     
     assign mem_req_tag = {rop_req_if.pos_x, rop_req_if.pos_y, rop_req_if.color, rop_req_if.depth, rop_req_if.backface};
     assign {mem_rsp_pos_x, mem_rsp_pos_y, blend_src_color, ds_depth_ref, ds_backface} = mem_readen ? mem_rsp_tag : mem_req_tag;
@@ -242,29 +244,29 @@ module VX_rop_slice #(
     assign blend_tag_in = {mem_rsp_pos_x, mem_rsp_pos_y, mem_rsp_mask};
     assign {blend_write_pos_x, blend_write_pos_y, blend_write_mask} = blend_tag_out;
 
-    wire blend_ds_read = mem_readen && rop_req_if.valid;
+    wire ds_blend_read = mem_readen && rop_req_if.valid && ~pending_reads_full;
 
-    wire blend_ds_write = (ds_writeen && blend_writeen) ? (ds_valid_out && blend_valid_out) :
+    wire ds_blend_write = (ds_writeen && blend_writeen) ? (ds_valid_out && blend_valid_out) :
                             (ds_writeen ? ds_valid_out :
                                 (blend_writeen ? blend_valid_out :
                                     1'b0));
 
     wire write_bypass = !ds_enable && !blend_enable && color_writeen && rop_req_if.valid;
 
-    assign mem_req_valid    = blend_ds_write || blend_ds_read || write_bypass;
-    assign mem_req_mask     = blend_ds_write ? (ds_enable ? ds_write_mask : blend_write_mask) : rop_req_if.tmask;
-    assign mem_req_ds_pass  = ds_enable ? ds_test_out : {NUM_LANES{1'b1}};
-    assign mem_req_rw       = blend_ds_write || write_bypass;
-    assign mem_req_backface = blend_ds_write ? ds_write_backface : rop_req_if.backface;
-    assign mem_req_pos_x    = blend_ds_write ? (ds_enable ? ds_write_pos_x : blend_write_pos_x) : rop_req_if.pos_x;
-    assign mem_req_pos_y    = blend_ds_write ? (ds_enable ? ds_write_pos_y : blend_write_pos_y) : rop_req_if.pos_y;
+    assign mem_req_valid    = ds_blend_write || ds_blend_read || write_bypass;
+    assign mem_req_mask     = ds_blend_write ? (ds_enable ? ds_write_mask : blend_write_mask) : rop_req_if.tmask;
+    assign mem_req_ds_pass  = ds_enable ? ds_pass_out : {NUM_LANES{1'b1}};
+    assign mem_req_rw       = ds_blend_write || write_bypass;
+    assign mem_req_backface = ds_blend_write ? ds_write_backface : rop_req_if.backface;
+    assign mem_req_pos_x    = ds_blend_write ? (ds_enable ? ds_write_pos_x : blend_write_pos_x) : rop_req_if.pos_x;
+    assign mem_req_pos_y    = ds_blend_write ? (ds_enable ? ds_write_pos_y : blend_write_pos_y) : rop_req_if.pos_y;
     assign mem_req_color    = blend_enable ? blend_color_out : (ds_enable ? ds_write_color : rop_req_if.color);
     assign mem_req_depth    = ds_depth_out;
     assign mem_req_stencil  = ds_stencil_out;
     
     assign ds_ready_out     = mem_req_ready && (~blend_enable || blend_valid_out);
     assign blend_ready_out  = mem_req_ready && (~ds_enable || ds_valid_out);
-    assign rop_req_if.ready = mem_req_ready && ((!ds_enable && !blend_enable) || ~blend_ds_write);
+    assign rop_req_if.ready = mem_req_ready && ((~ds_enable && ~blend_enable) || ~ds_blend_write) && ~pending_reads_full;
 
     assign ds_valid_in      = ds_enable && mem_rsp_valid && (~blend_enable || blend_ready_in);
     assign blend_valid_in   = blend_enable && mem_rsp_valid & (~ds_enable || ds_ready_in);
@@ -276,6 +278,22 @@ module VX_rop_slice #(
                                 (ds_enable ? ds_ready_in :
                                     (blend_enable ? blend_ready_in :
                                         1'b0));
+
+    wire mem_req_fire = mem_req_valid & mem_req_ready;
+
+    // to resolve potential deadlocks, 
+    // ensure pending reads do not fill the queue
+    VX_pending_size #( 
+        .SIZE (`ROP_MEM_QUEUE_SIZE - 1)
+    ) pending_reads (
+        .clk   (clk),
+        .reset (reset),
+        .incr  (mem_req_fire && ~mem_req_rw && (ds_writeen || blend_writeen)),
+        .decr  (mem_req_fire && mem_req_rw && (ds_writeen || blend_writeen)),
+        .full  (pending_reads_full),
+        `UNUSED_PIN (size),
+        `UNUSED_PIN (empty)
+    );   
 
     wire mem_req_stall = mem_req_valid_r & ~mem_req_ready_r;
 
