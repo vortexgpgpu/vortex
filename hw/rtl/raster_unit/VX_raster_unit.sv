@@ -15,7 +15,7 @@ module VX_raster_unit #(
     parameter RASTER_BLOCK_SIZE       = 4,          // block size
     parameter RASTER_RS_SIZE          = 8,          // Reservation station size
     parameter RASTER_QUAD_OUTPUT_RATE = NUM_OUTPUTS,// Rate output quad generation
-    parameter RASTER_QUAD_FIFO_DEPTH  = 128,         // Quad fifo depth
+    parameter RASTER_QUAD_FIFO_DEPTH  = 16,         // Quad fifo depth
     parameter RASTER_TILE_FIFO_DEPTH  = (RASTER_TILE_SIZE*RASTER_TILE_SIZE)/(
         RASTER_BLOCK_SIZE*RASTER_BLOCK_SIZE)        // tile fifo depth
 ) (
@@ -56,6 +56,7 @@ module VX_raster_unit #(
 
     // Top raster unit ready signal
     logic raster_unit_ready, raster_mem_ready;
+    logic mem_valid;
 
     // FSM to control the valid signals for the rest of the system
     reg raster_input_valid;
@@ -68,10 +69,9 @@ module VX_raster_unit #(
 
     // flag to denote that a valid raster mem data is being generated for the slice
     // use this flag to stop the memory from generating another data and sending
-    localparam MEM_DELAY_BITS = `LOG2UP(MUL_LATENCY);
+    localparam MEM_DELAY_BITS = `LOG2UP(MUL_LATENCY) + 1;
     logic processing_mem_data;
     logic [MEM_DELAY_BITS-1:0] delay_counter;
-    logic mem_valid;
     
     // FSM to stop multiple memory responses to the slices while one data set
     // is being processed
@@ -85,15 +85,15 @@ module VX_raster_unit #(
             delay_counter <= {MEM_DELAY_BITS{1'b0}};
         end
         else if (processing_mem_data == 1) begin
-            delay_counter <= delay_counter + 1;
+            delay_counter <= delay_counter + {{(MEM_DELAY_BITS-1){1'b0}}, 1'b1};
         end
         else if (mem_valid) begin
             processing_mem_data <= 1;
-            delay_counter <= delay_counter + 1;
+            delay_counter <= delay_counter + {{(MEM_DELAY_BITS-1){1'b0}}, 1'b1};
         end
     end
 
-    // Mem to raster slice control signals    
+    // Mem to raster slice control signals
     logic [NUM_SLICES-1:0] raster_slice_ready;
     VX_raster_mem #(
         .RASTER_SLICE_NUM   (NUM_SLICES),

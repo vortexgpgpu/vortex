@@ -24,8 +24,9 @@ module VX_pending_size #(
             used_r  <= 0;
             empty_r <= 1;
             full_r  <= 0;
-        end else begin
+        end else begin            
             `ASSERT(!incr || !full, ("runtime error"));
+            `ASSERT(!decr || !empty, ("runtime error"));
             if (incr) begin
                 if (!decr) begin
                     empty_r <= 0;
@@ -45,7 +46,11 @@ module VX_pending_size #(
     assign full  = full_r;
     
     if (SIZE > 1) begin
-        assign size = {full_r, used_r};
+        if (SIZEW > ADDRW) begin
+            assign size = {full_r, used_r};
+        end else begin
+            assign size = used_r;
+        end
     end else begin
         assign size = full_r;
     end

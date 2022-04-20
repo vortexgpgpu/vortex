@@ -59,7 +59,7 @@ module VX_cluster #(
 
     VX_raster_unit #(
         .CLUSTER_ID  (CLUSTER_ID),
-        .NUM_SLICES  (1),
+        .NUM_SLICES  (`RASTER_NUM_SLICES),
         .RASTER_TILE_SIZE (1 << `RASTER_TILE_LOGSIZE),
         .RASTER_BLOCK_SIZE(1 << `RASTER_BLOCK_LOGSIZE),
         .NUM_OUTPUTS (`NUM_THREADS)
@@ -178,7 +178,7 @@ module VX_cluster #(
 
     VX_rop_unit #(
         .CLUSTER_ID (CLUSTER_ID),
-        .NUM_SLICES (1),
+        .NUM_SLICES (`ROP_NUM_SLICES),
         .NUM_LANES  (`NUM_THREADS)
     ) rop_unit (
         .clk           (clk),

@@ -41,11 +41,14 @@ module VX_raster_be #(
     localparam RASTER_QUAD_SPACE         = RASTER_QUAD_NUM*RASTER_QUAD_NUM;
     localparam RASTER_QUAD_ARBITER_RANGE = RASTER_QUAD_SPACE/RASTER_QUAD_OUTPUT_RATE + 1;
     localparam ARBITER_BITS              = `LOG2UP(RASTER_QUAD_ARBITER_RANGE) + 1;
+    localparam QE_LATENCY                = 2;
 
     // Temporary (temp_) for combinatorial part, quad_ register for data storage
     logic        [`RASTER_DIM_BITS-1:0]             temp_quad_x_loc     [RASTER_QUAD_SPACE-1:0],
+                                                    temp_quad_x_loc_r   [RASTER_QUAD_SPACE-1:0],
                                                     quad_x_loc          [RASTER_QUAD_SPACE-1:0];
     logic        [`RASTER_DIM_BITS-1:0]             temp_quad_y_loc     [RASTER_QUAD_SPACE-1:0],
+                                                    temp_quad_y_loc_r   [RASTER_QUAD_SPACE-1:0],
                                                     quad_y_loc          [RASTER_QUAD_SPACE-1:0];
     logic        [3:0]                              temp_quad_masks     [RASTER_QUAD_SPACE-1:0], 
                                                     quad_masks          [RASTER_QUAD_SPACE-1:0];
@@ -63,16 +66,30 @@ module VX_raster_be #(
     // Per fifo signals
     logic [RASTER_QUAD_OUTPUT_RATE-1:0] full_flag, empty_flag, push_flag, pop_flag;
 
+    // FSM to track BE run start to end
+    logic fsm_complete;
+
     // Generate the RASTER_QUAD_NUM x RASTER_QUAD_NUM quad evaluators
+
     for (genvar i = 0; i < RASTER_QUAD_NUM; ++i) begin
         for (genvar j = 0; j < RASTER_QUAD_NUM; ++j) begin
-            always_comb begin
-                temp_quad_x_loc[i*RASTER_QUAD_NUM+j] = x_loc + `RASTER_DIM_BITS'(i*2);
-                temp_quad_y_loc[i*RASTER_QUAD_NUM+j] = y_loc + `RASTER_DIM_BITS'(j*2);
-                for (integer k = 0; k < 3; ++k)
-                    local_edge_func_val[i*RASTER_QUAD_NUM+j][k] = edge_func_val[k] + i*2*edges[k][0] + j*2*edges[k][1];
+            assign temp_quad_x_loc[i*RASTER_QUAD_NUM+j] = x_loc + `RASTER_DIM_BITS'(i*2);
+            assign temp_quad_y_loc[i*RASTER_QUAD_NUM+j] = y_loc + `RASTER_DIM_BITS'(j*2);
+        end
+    end
+    for (genvar i = 0; i < RASTER_QUAD_NUM; ++i) begin
+        for (genvar j = 0; j < RASTER_QUAD_NUM; ++j) begin
+            for (genvar k = 0; k < 3; ++k) begin
+                assign local_edge_func_val[i*RASTER_QUAD_NUM+j][k] = edge_func_val[k] + i*2*edges[k][0] + j*2*edges[k][1];
             end
+        end
+    end
+    for (genvar i = 0; i < RASTER_QUAD_NUM; ++i) begin
+        for (genvar j = 0; j < RASTER_QUAD_NUM; ++j) begin
             VX_raster_qe qe (
+                .clk            (clk),
+                .reset          (reset),
+                .enable         (fsm_complete),
                 .edges          (edges),
                 .edge_func_val  (local_edge_func_val[i*RASTER_QUAD_NUM+j]),
                 .masks          (temp_quad_masks[i*RASTER_QUAD_NUM+j]),
@@ -81,15 +98,58 @@ module VX_raster_be #(
         end
     end
 
+    logic input_valid_r;
+    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_pid_r;
+    VX_shift_register #(
+        .DATAW  (1 + `RASTER_PRIMITIVE_DATA_BITS),
+        .RESETW (1),
+        .DEPTH  (QE_LATENCY)
+    ) be_pipe_reg1 (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (fsm_complete),
+        .data_in  ({input_valid, pid}),
+        .data_out ({input_valid_r, temp_pid_r})
+    );
+
+    for (genvar i = 0; i < RASTER_QUAD_NUM; ++i) begin
+        for (genvar j = 0; j < RASTER_QUAD_NUM; ++j) begin
+            VX_shift_register #(
+                .DATAW  (`RASTER_DIM_BITS),
+                .RESETW (1),
+                .DEPTH  (QE_LATENCY)
+            ) be_pipe_reg2 (
+                .clk      (clk),
+                .reset    (reset),
+                .enable   (fsm_complete),
+                .data_in  (temp_quad_x_loc[i*RASTER_QUAD_NUM+j]),
+                .data_out (temp_quad_x_loc_r[i*RASTER_QUAD_NUM+j])
+            );
+            VX_shift_register #(
+                .DATAW  (`RASTER_DIM_BITS),
+                .RESETW (1),
+                .DEPTH  (QE_LATENCY)
+            ) be_pipe_reg3 (
+                .clk      (clk),
+                .reset    (reset),
+                .enable   (fsm_complete),
+                .data_in  (temp_quad_y_loc[i*RASTER_QUAD_NUM+j]),
+                .data_out (temp_quad_y_loc_r[i*RASTER_QUAD_NUM+j])
+            );
+        end
+    end
+
+    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] quad_pid [RASTER_QUAD_SPACE-1:0];
     // Store the temp results in registers
     for(genvar i = 0; i < RASTER_QUAD_SPACE; ++i) begin
         // Save the temp data into quad registers to prevent overwrite by redundant data
         always @(posedge clk) begin
-            if (input_valid == 1) begin // overwrite only the first time
-                quad_x_loc[i]   <= temp_quad_x_loc[i];
-                quad_y_loc[i]   <= temp_quad_y_loc[i];
+            if (input_valid_r == 1 && fsm_complete == 1) begin // overwrite only the first time
+                quad_x_loc[i]   <= temp_quad_x_loc_r[i];
+                quad_y_loc[i]   <= temp_quad_y_loc_r[i];
                 quad_masks[i]   <= temp_quad_masks[i];
                 quad_bcoords[i] <= temp_quad_bcoords[i];
+                quad_pid[i]     <= temp_pid_r;
             end
         end
     end
@@ -102,7 +162,7 @@ module VX_raster_be #(
             valid_data    <= 0;
         end
         // Initialization condition
-        else if (input_valid == 1) begin
+        else if (input_valid_r == 1 && fsm_complete == 1) begin
             arbiter_index <= 0;
             valid_data    <= 1;
         end
@@ -116,10 +176,11 @@ module VX_raster_be #(
     /* verilator lint_off CMPCONST */
     /* verilator lint_off UNSIGNED */
     assign push = (arbiter_index < (RASTER_QUAD_ARBITER_RANGE[ARBITER_BITS-1:0])) && !full && !reset && valid_data;
-    assign ready = (
+    assign fsm_complete = (
         arbiter_index > (RASTER_QUAD_ARBITER_RANGE[ARBITER_BITS-1:0]-1) ||
         arbiter_index == (RASTER_QUAD_ARBITER_RANGE[ARBITER_BITS-1:0]-1)
-        ) && !full;
+    );
+    assign ready = fsm_complete && !full;
     /* verilator lint_on CMPCONST */
     /* verilator lint_on UNSIGNED */
 
@@ -149,7 +210,7 @@ module VX_raster_be #(
                 quad_bcoords[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i][2][1],
                 quad_bcoords[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i][2][2],
                 quad_bcoords[arbiter_index*RASTER_QUAD_OUTPUT_RATE + i][2][3],
-                pid,
+                quad_pid    [arbiter_index*RASTER_QUAD_OUTPUT_RATE + i],
                 (valid_data)
             } : {FIFO_DATA_WIDTH{1'b0}};
 

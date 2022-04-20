@@ -50,11 +50,11 @@ module VX_raster_slice #(
 
     // Store the tile relevant data as global regs as TE is combinatorial
     logic        [`RASTER_DIM_BITS-1:0]             tile_x_loc, tile_y_loc;
-    logic        [RASTER_LEVEL_DATA_BITS-1:0]       level;
+    logic        [RASTER_LEVEL_DATA_BITS-1:0]       level, level_r;
     logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  tile_edge_func_val[2:0];
 
-    logic [RASTER_LEVEL_DATA_BITS-1:0] level_1;
-    assign level_1 = level + RASTER_LEVEL_DATA_BITS'(1);
+    // logic [RASTER_LEVEL_DATA_BITS-1:0] level_1;
+    // assign level_1 = level + RASTER_LEVEL_DATA_BITS'(1);
 
     // Control signsl
     logic        valid_tile, valid_block;
@@ -71,6 +71,10 @@ module VX_raster_slice #(
     // Sub-tile data output from tile-evaluator
     logic        [`RASTER_DIM_BITS-1:0]             subtile_x_loc[3:0], subtile_y_loc[3:0];
     logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  subtile_edge_func_val[3:0][2:0];
+
+    // Block data output from the tile-evaluator
+    logic        [`RASTER_DIM_BITS-1:0]             block_x_loc, block_y_loc;
+    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  block_edge_func_val[2:0];
 
     logic tile_data_valid;
 
@@ -107,10 +111,10 @@ module VX_raster_slice #(
                 tile_data_valid    <= 1;
             end
             // sub-tile rerouter used only 1 onces for the parent tile
-            else if (level == 0 && fifo_empty == 1 && fifo_tile_valid == 0) begin
+            else if (level == 0 && fifo_empty == 1 && fifo_tile_valid == 0 && valid_tile == 1) begin
                 tile_x_loc         <= subtile_x_loc[0];
                 tile_y_loc         <= subtile_y_loc[0];
-                level              <= level_1;
+                level              <= level + RASTER_LEVEL_DATA_BITS'(1);//level_1;
                 tile_edge_func_val <= subtile_edge_func_val[0];
                 tile_data_valid    <= 1;
             end
@@ -133,6 +137,9 @@ module VX_raster_slice #(
         .RASTER_BLOCK_SIZE      (RASTER_BLOCK_SIZE),
         .RASTER_LEVEL_DATA_BITS (RASTER_LEVEL_DATA_BITS)
     ) tile_evaluator (
+        .clk                    (clk),
+        .reset                  (reset),
+        .stall                  (stall),
         .input_valid            (tile_data_valid),
         .level                  (level),
         .x_loc                  (tile_x_loc),
@@ -144,7 +151,11 @@ module VX_raster_slice #(
         .valid_block            (valid_block),
         .tile_x_loc             (subtile_x_loc),
         .tile_y_loc             (subtile_y_loc),
-        .tile_edge_func_val     (subtile_edge_func_val)
+        .tile_edge_func_val     (subtile_edge_func_val),
+        .block_x_loc            (block_x_loc),
+        .block_y_loc            (block_y_loc),
+        .block_edge_func_val    (block_edge_func_val),
+        .tile_level             (level_r)
     );
 
     /**********************************
@@ -154,13 +165,13 @@ module VX_raster_slice #(
    // Create mask for sub-tile push into fifo
     logic [3:0] fifo_push_mask;
     for (genvar i = 0; i < 4; ++i) begin
-        assign fifo_push_mask[i] = ~(i == 0 && level == 0);
+        assign fifo_push_mask[i] = ~(i == 0 && level_r == 0);
     end
 
     // Create data_push data
     logic [RASTER_FIFO_DATA_WIDTH-1:0] fifo_data_push[3:0];
     for (genvar i = 0; i < 4; ++i) begin
-        assign fifo_data_push[i] = {level_1, subtile_x_loc[i], subtile_y_loc[i], 
+        assign fifo_data_push[i] = {level_r + RASTER_LEVEL_DATA_BITS'(1), subtile_x_loc[i], subtile_y_loc[i], 
             subtile_edge_func_val[i][0],
             subtile_edge_func_val[i][1],
             subtile_edge_func_val[i][2]};
@@ -216,7 +227,7 @@ module VX_raster_slice #(
     //  1. Tile evaluator doesn't have a valid tile or (block -> block will be pushed to next pipe so no need to stall for it)
     //  2. FIFO empty
     //  3. FIFO pop data is invalid
-    assign ready = (fifo_empty == 1) && (block_fifo_empty == 1) && (valid_tile == 0);
+    assign ready = (fifo_empty == 1) && (block_fifo_empty == 1) && (valid_tile == 0) && (fifo_empty == 1) && (tile_data_valid == 0);
 
     // Block evaluator data
     logic [`RASTER_DIM_BITS-1:0]   be_in_x_loc, be_in_y_loc;
@@ -232,7 +243,7 @@ module VX_raster_slice #(
     always @(posedge clk) begin
         done <= 0;
         // check if the current block is going to be the last block
-        if (fifo_empty == 1 && valid_tile == 0 && valid_block == 1)
+        if (fifo_empty == 1 && valid_tile == 0 && valid_block == 1 && tile_data_valid == 0)
             done <= 1;
     end
 
@@ -247,8 +258,8 @@ module VX_raster_slice #(
         .push       (valid_block == 1 && block_fifo_full == 0 && done == 0),
         .pop        (be_fifo_pop),
         .data_in    ({
-            tile_x_loc, tile_y_loc,
-            tile_edge_func_val[0], tile_edge_func_val[1], tile_edge_func_val[2]
+            block_x_loc, block_y_loc,
+            block_edge_func_val[0], block_edge_func_val[1], block_edge_func_val[2]
         }),
         .data_out   ({
             be_in_x_loc, be_in_y_loc,
@@ -297,6 +308,16 @@ module VX_raster_slice #(
                 extents[0], extents[1], extents[2]);
         end
     end
+
+    always @(posedge clk) begin
+        if (valid_block == 1 && block_fifo_full == 0 && done == 0) begin
+            dpi_trace(2, "%d: block-fifo-push: data_in=%0d, full=%b, empty=%b\n",
+            $time, {block_x_loc, block_y_loc,
+                block_edge_func_val[0], block_edge_func_val[1], block_edge_func_val[2]},
+                block_fifo_full, block_fifo_empty);
+        end
+    end
+
 `endif
 
 endmodule
