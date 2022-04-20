@@ -4,16 +4,6 @@
 #include <cocogfx/include/color.hpp>
 #include <cocogfx/include/math.hpp>
 
-struct InverseArg {
-	int64_t s;
-	fixed24_t r;
-};
-
-static void Inverse(void* arg) {
-	auto invArg = reinterpret_cast<InverseArg*>(arg);
-	invArg->r = fixed24_t::make((1ll << (16+24)) / invArg->s);
-}
-
 #define DEFAULTS_i(i) \
 	r[i] = fixed24_t(1.0f); \
 	g[i] = fixed24_t(1.0f); \
@@ -27,14 +17,12 @@ static void Inverse(void* arg) {
 	DEFAULTS_i(3)  \
 
 #define GRADIENTS_i(i) { \
-	auto F0 = fixed16_t::make(csr_read(CSR_RASTER_BCOORD_X##i)); \
-	auto F1 = fixed16_t::make(csr_read(CSR_RASTER_BCOORD_Y##i)); \
-	auto F2 = fixed16_t::make(csr_read(CSR_RASTER_BCOORD_Z##i)); \
-	InverseArg invArg; \
-	invArg.s = int64_t(F0.data()) + int64_t(F1.data()) + int64_t(F2.data()); \
-	vx_serial(Inverse, &invArg); \
-    dx[i] = fixed24_t::make(int32_t(int64_t(invArg.r.data()) * int64_t(F0.data()) >> 16)); \
-    dy[i] = fixed24_t::make(int32_t(int64_t(invArg.r.data()) * int64_t(F1.data()) >> 16)); \
+	auto F0 = static_cast<float>(fixed16_t::make(csr_read(CSR_RASTER_BCOORD_X##i))); \
+	auto F1 = static_cast<float>(fixed16_t::make(csr_read(CSR_RASTER_BCOORD_Y##i))); \
+	auto F2 = static_cast<float>(fixed16_t::make(csr_read(CSR_RASTER_BCOORD_Z##i))); \
+	auto r  = 1.0f / (F0 + F1 + F2);    \
+    dx[i] = fixed24_t(r * F0); 			\
+    dy[i] = fixed24_t(r * F1); 			\
 }
 
 #define GRADIENTS \
