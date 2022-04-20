@@ -293,9 +293,19 @@
 `define RASTER_MEM_QUEUE_SIZE 4
 `endif
 
+// RASTER number of slices
+`ifndef RASTER_NUM_SLICES    
+`define RASTER_NUM_SLICES 1
+`endif
+
 // ROP memeory queue size
 `ifndef ROP_MEM_QUEUE_SIZE    
 `define ROP_MEM_QUEUE_SIZE 4
+`endif
+
+// ROP number of slices
+`ifndef ROP_NUM_SLICES    
+`define ROP_NUM_SLICES 1
 `endif
 
 // Icache Configurable Knobs //////////////////////////////////////////////////

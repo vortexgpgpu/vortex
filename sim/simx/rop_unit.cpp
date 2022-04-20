@@ -495,7 +495,7 @@ public:
     , arch_(arch)
     , depthtencil_(arch, dcrs)
     , blender_(arch, dcrs)
-    , pending_reqs_(ROP_MEM_QUEUE_SIZE)
+    , pending_reqs_(ROP_MEM_QUEUE_SIZE * ROP_NUM_SLICES)
   {
     this->clear();
   }
