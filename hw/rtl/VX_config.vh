@@ -166,6 +166,8 @@
 
 `ifdef EXT_RASTER_ENABLE
     `define EXT_RASTER_ENABLED 1
+    `define RASTER_TILE_LOGSIZE         4
+    `define RASTER_BLOCK_LOGSIZE        2
 `else
     `define EXT_RASTER_ENABLED 0
 `endif
