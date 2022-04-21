@@ -171,7 +171,8 @@ module VX_rop_mem #(
         .DATAW            (32),
         .TAGW             (TAG_WIDTH),
         .QUEUE_SIZE       (`ROP_MEM_QUEUE_SIZE),
-        .PARTIAL_RESPONSE (0)
+        .PARTIAL_RESPONSE (0),
+        .OUT_REG          (1)
     ) mem_streamer (
         .clk            (clk),
         .reset          (reset),
