@@ -8,10 +8,10 @@ Disassembly of section .init:
 80000000: 97 15 00 00                  	auipc	a1, 1
 80000004: 93 85 85 9d                  	addi	a1, a1, -1576
 80000008: 73 25 10 fc                  	csrr	a0, 4033
-8000000c: 0b 10 b5 00                  	vx_wspawn	a0, a1
+8000000c: 0b 10 b5 00                  	<unknown>
 80000010: ef 00 90 1c                  	jal	2504
 80000014: 13 05 10 00                  	addi	a0, zero, 1
-80000018: 0b 00 05 00                  	vx_tmc	a0
+80000018: 0b 00 05 00                  	<unknown>
 8000001c: 17 25 00 00                  	auipc	a0, 2
 80000020: 13 05 c5 6b                  	addi	a0, a0, 1724
 80000024: 17 26 00 00                  	auipc	a2, 2
@@ -73,13 +73,13 @@ Disassembly of section .text:
 800000ec: 23 22 91 09                  	sw	s9, 132(sp)
 800000f0: 23 2a 91 07                  	sw	s9, 116(sp)
 800000f4: 23 22 91 07                  	sw	s9, 100(sp)
-800000f8: 8b 07 00 02                  	vx_rast	
+800000f8: 8b 07 00 02                  	<unknown>
 800000fc: 23 22 f1 02                  	sw	a5, 36(sp)
 80000100: 13 f5 17 00                  	andi	a0, a5, 1
 80000104: 13 36 15 00                  	seqz	a2, a0
-80000108: 0b 20 06 00                  	vx_split	a2
+80000108: 0b 20 06 00                  	<unknown>
 8000010c: e3 02 05 04                  	beqz	a0, 2116
-80000110: 73 25 40 cc                  	csrr	a0, tmask
+80000110: 73 25 40 cc                  	csrr	a0, 3268
 80000114: 23 24 a1 00                  	sw	a0, 8(sp)
 80000118: 37 25 00 80                  	lui	a0, 524290
 8000011c: 13 05 c5 6c                  	addi	a0, a0, 1740
@@ -109,11 +109,11 @@ Disassembly of section .text:
 8000017c: 37 0b 00 01                  	lui	s6, 4096
 80000180: 23 26 b1 00                  	sw	a1, 12(sp)
 80000184: 6f 00 c0 01                  	j	28
-80000188: 0b 30 00 00                  	vx_join	
-8000018c: 8b 07 00 02                  	vx_rast	
+80000188: 0b 30 00 00                  	<unknown>
+8000018c: 8b 07 00 02                  	<unknown>
 80000190: 23 22 f1 02                  	sw	a5, 36(sp)
 80000194: 13 f5 17 00                  	andi	a0, a5, 1
-80000198: 0b 00 15 00                  	vx_pred	a0
+80000198: 0b 00 15 00                  	<unknown>
 8000019c: 63 06 05 7a                  	beqz	a0, 1964
 800001a0: 73 25 20 7c                  	csrr	a0, 1986
 800001a4: 73 26 60 7c                  	csrr	a2, 1990
@@ -202,130 +202,130 @@ Disassembly of section .text:
 800002f0: b3 87 be 01                  	add	a5, t4, s11
 800002f4: 03 a7 47 02                  	lw	a4, 36(a5)
 800002f8: 03 a4 c7 02                  	lw	s0, 44(a5)
-800002fc: 2b 17 07 47                  	vx_imadd	a4, a4, a6, s0, 3
+800002fc: 2b 17 07 47                  	<unknown>
 80000300: 03 a4 87 02                  	lw	s0, 40(a5)
-80000304: 2b 17 54 76                  	vx_imadd	a4, s0, t0, a4, 3
+80000304: 2b 17 54 76                  	<unknown>
 80000308: 23 2c e1 08                  	sw	a4, 152(sp)
 8000030c: 03 a7 47 02                  	lw	a4, 36(a5)
 80000310: 03 a4 c7 02                  	lw	s0, 44(a5)
-80000314: 2b 17 d7 46                  	vx_imadd	a4, a4, a3, s0, 3
+80000314: 2b 17 d7 46                  	<unknown>
 80000318: 03 a4 87 02                  	lw	s0, 40(a5)
-8000031c: 2b 17 c4 76                  	vx_imadd	a4, s0, a2, a4, 3
+8000031c: 2b 17 c4 76                  	<unknown>
 80000320: 23 2e e1 08                  	sw	a4, 156(sp)
 80000324: 03 a7 47 02                  	lw	a4, 36(a5)
 80000328: 03 a4 c7 02                  	lw	s0, 44(a5)
-8000032c: 2b 17 a7 46                  	vx_imadd	a4, a4, a0, s0, 3
+8000032c: 2b 17 a7 46                  	<unknown>
 80000330: 03 a4 87 02                  	lw	s0, 40(a5)
-80000334: 2b 17 14 76                  	vx_imadd	a4, s0, ra, a4, 3
+80000334: 2b 17 14 76                  	<unknown>
 80000338: 23 20 e1 0a                  	sw	a4, 160(sp)
 8000033c: 03 a7 47 02                  	lw	a4, 36(a5)
 80000340: 03 a4 c7 02                  	lw	s0, 44(a5)
-80000344: 2b 17 67 46                  	vx_imadd	a4, a4, t1, s0, 3
+80000344: 2b 17 67 46                  	<unknown>
 80000348: 83 a7 87 02                  	lw	a5, 40(a5)
-8000034c: 2b 97 77 76                  	vx_imadd	a4, a5, t2, a4, 3
+8000034c: 2b 97 77 76                  	<unknown>
 80000350: 23 22 e1 0a                  	sw	a4, 164(sp)
 80000354: 03 c7 55 02                  	lbu	a4, 37(a1)
 80000358: 63 0c 07 18                  	beqz	a4, 408
 8000035c: b3 87 be 01                  	add	a5, t4, s11
 80000360: 03 a7 07 03                  	lw	a4, 48(a5)
 80000364: 03 a4 87 03                  	lw	s0, 56(a5)
-80000368: 2b 17 07 47                  	vx_imadd	a4, a4, a6, s0, 3
+80000368: 2b 17 07 47                  	<unknown>
 8000036c: 03 a4 47 03                  	lw	s0, 52(a5)
-80000370: 2b 17 54 76                  	vx_imadd	a4, s0, t0, a4, 3
+80000370: 2b 17 54 76                  	<unknown>
 80000374: 23 24 e1 08                  	sw	a4, 136(sp)
 80000378: 03 a7 07 03                  	lw	a4, 48(a5)
 8000037c: 03 a4 87 03                  	lw	s0, 56(a5)
-80000380: 2b 17 d7 46                  	vx_imadd	a4, a4, a3, s0, 3
+80000380: 2b 17 d7 46                  	<unknown>
 80000384: 03 a4 47 03                  	lw	s0, 52(a5)
-80000388: 2b 19 c4 76                  	vx_imadd	s2, s0, a2, a4, 3
+80000388: 2b 19 c4 76                  	<unknown>
 8000038c: 23 26 21 09                  	sw	s2, 140(sp)
 80000390: 03 a7 07 03                  	lw	a4, 48(a5)
 80000394: 03 a4 87 03                  	lw	s0, 56(a5)
-80000398: 2b 17 a7 46                  	vx_imadd	a4, a4, a0, s0, 3
+80000398: 2b 17 a7 46                  	<unknown>
 8000039c: 03 a4 47 03                  	lw	s0, 52(a5)
-800003a0: ab 19 14 76                  	vx_imadd	s3, s0, ra, a4, 3
+800003a0: ab 19 14 76                  	<unknown>
 800003a4: 23 28 31 09                  	sw	s3, 144(sp)
 800003a8: 03 a7 07 03                  	lw	a4, 48(a5)
 800003ac: 03 a4 87 03                  	lw	s0, 56(a5)
-800003b0: 2b 17 67 46                  	vx_imadd	a4, a4, t1, s0, 3
+800003b0: 2b 17 67 46                  	<unknown>
 800003b4: 03 a4 47 03                  	lw	s0, 52(a5)
-800003b8: ab 1c 74 76                  	vx_imadd	s9, s0, t2, a4, 3
+800003b8: ab 1c 74 76                  	<unknown>
 800003bc: 23 2a 91 09                  	sw	s9, 148(sp)
 800003c0: 03 a7 c7 03                  	lw	a4, 60(a5)
 800003c4: 03 a4 47 04                  	lw	s0, 68(a5)
-800003c8: 2b 17 07 47                  	vx_imadd	a4, a4, a6, s0, 3
+800003c8: 2b 17 07 47                  	<unknown>
 800003cc: 03 a4 07 04                  	lw	s0, 64(a5)
-800003d0: 2b 17 54 76                  	vx_imadd	a4, s0, t0, a4, 3
+800003d0: 2b 17 54 76                  	<unknown>
 800003d4: 23 2c e1 06                  	sw	a4, 120(sp)
 800003d8: 03 a7 c7 03                  	lw	a4, 60(a5)
 800003dc: 03 a4 47 04                  	lw	s0, 68(a5)
-800003e0: 2b 17 d7 46                  	vx_imadd	a4, a4, a3, s0, 3
+800003e0: 2b 17 d7 46                  	<unknown>
 800003e4: 03 a4 07 04                  	lw	s0, 64(a5)
-800003e8: 2b 1a c4 76                  	vx_imadd	s4, s0, a2, a4, 3
+800003e8: 2b 1a c4 76                  	<unknown>
 800003ec: 23 2e 41 07                  	sw	s4, 124(sp)
 800003f0: 03 a7 c7 03                  	lw	a4, 60(a5)
 800003f4: 03 a4 47 04                  	lw	s0, 68(a5)
-800003f8: 2b 17 a7 46                  	vx_imadd	a4, a4, a0, s0, 3
+800003f8: 2b 17 a7 46                  	<unknown>
 800003fc: 03 a4 07 04                  	lw	s0, 64(a5)
-80000400: ab 1a 14 76                  	vx_imadd	s5, s0, ra, a4, 3
+80000400: ab 1a 14 76                  	<unknown>
 80000404: 23 20 51 09                  	sw	s5, 128(sp)
 80000408: 03 a7 c7 03                  	lw	a4, 60(a5)
 8000040c: 03 a4 47 04                  	lw	s0, 68(a5)
-80000410: 2b 17 67 46                  	vx_imadd	a4, a4, t1, s0, 3
+80000410: 2b 17 67 46                  	<unknown>
 80000414: 03 a4 07 04                  	lw	s0, 64(a5)
-80000418: 2b 17 74 76                  	vx_imadd	a4, s0, t2, a4, 3
+80000418: 2b 17 74 76                  	<unknown>
 8000041c: 23 22 e1 08                  	sw	a4, 132(sp)
 80000420: 03 a7 87 04                  	lw	a4, 72(a5)
 80000424: 03 a4 07 05                  	lw	s0, 80(a5)
-80000428: 2b 17 07 47                  	vx_imadd	a4, a4, a6, s0, 3
+80000428: 2b 17 07 47                  	<unknown>
 8000042c: 03 a4 c7 04                  	lw	s0, 76(a5)
-80000430: 2b 1b 54 76                  	vx_imadd	s6, s0, t0, a4, 3
+80000430: 2b 1b 54 76                  	<unknown>
 80000434: 23 24 61 07                  	sw	s6, 104(sp)
 80000438: 03 a7 87 04                  	lw	a4, 72(a5)
 8000043c: 03 a4 07 05                  	lw	s0, 80(a5)
-80000440: 2b 17 d7 46                  	vx_imadd	a4, a4, a3, s0, 3
+80000440: 2b 17 d7 46                  	<unknown>
 80000444: 03 a4 c7 04                  	lw	s0, 76(a5)
-80000448: ab 1b c4 76                  	vx_imadd	s7, s0, a2, a4, 3
+80000448: ab 1b c4 76                  	<unknown>
 8000044c: 23 26 71 07                  	sw	s7, 108(sp)
 80000450: 03 a7 87 04                  	lw	a4, 72(a5)
 80000454: 03 a4 07 05                  	lw	s0, 80(a5)
-80000458: 2b 17 a7 46                  	vx_imadd	a4, a4, a0, s0, 3
+80000458: 2b 17 a7 46                  	<unknown>
 8000045c: 03 a4 c7 04                  	lw	s0, 76(a5)
-80000460: 2b 1c 14 76                  	vx_imadd	s8, s0, ra, a4, 3
+80000460: 2b 1c 14 76                  	<unknown>
 80000464: 23 28 81 07                  	sw	s8, 112(sp)
 80000468: 03 a7 87 04                  	lw	a4, 72(a5)
 8000046c: 03 a4 07 05                  	lw	s0, 80(a5)
-80000470: 2b 17 67 46                  	vx_imadd	a4, a4, t1, s0, 3
+80000470: 2b 17 67 46                  	<unknown>
 80000474: 03 a4 c7 04                  	lw	s0, 76(a5)
-80000478: 2b 17 74 76                  	vx_imadd	a4, s0, t2, a4, 3
+80000478: 2b 17 74 76                  	<unknown>
 8000047c: 23 2a e1 06                  	sw	a4, 116(sp)
 80000480: 03 a7 47 05                  	lw	a4, 84(a5)
 80000484: 83 a4 c7 05                  	lw	s1, 92(a5)
-80000488: 2b 17 07 4f                  	vx_imadd	a4, a4, a6, s1, 3
+80000488: 2b 17 07 4f                  	<unknown>
 8000048c: 83 a4 87 05                  	lw	s1, 88(a5)
-80000490: 2b 9d 54 76                  	vx_imadd	s10, s1, t0, a4, 3
+80000490: 2b 9d 54 76                  	<unknown>
 80000494: 23 2c a1 05                  	sw	s10, 88(sp)
 80000498: 03 a7 47 05                  	lw	a4, 84(a5)
 8000049c: 83 a4 c7 05                  	lw	s1, 92(a5)
-800004a0: ab 16 d7 4e                  	vx_imadd	a3, a4, a3, s1, 3
+800004a0: ab 16 d7 4e                  	<unknown>
 800004a4: 03 a7 87 05                  	lw	a4, 88(a5)
-800004a8: 2b 16 c7 6e                  	vx_imadd	a2, a4, a2, a3, 3
+800004a8: 2b 16 c7 6e                  	<unknown>
 800004ac: 23 2e c1 00                  	sw	a2, 28(sp)
 800004b0: 23 2e c1 04                  	sw	a2, 92(sp)
 800004b4: 03 a6 47 05                  	lw	a2, 84(a5)
 800004b8: 83 a6 c7 05                  	lw	a3, 92(a5)
-800004bc: 2b 15 a6 6e                  	vx_imadd	a0, a2, a0, a3, 3
+800004bc: 2b 15 a6 6e                  	<unknown>
 800004c0: 03 a6 87 05                  	lw	a2, 88(a5)
 800004c4: 83 20 01 04                  	lw	ra, 64(sp)
-800004c8: 2b 1e 16 56                  	vx_imadd	t3, a2, ra, a0, 3
+800004c8: 2b 1e 16 56                  	<unknown>
 800004cc: 23 20 c1 07                  	sw	t3, 96(sp)
 800004d0: 03 a5 47 05                  	lw	a0, 84(a5)
 800004d4: 03 23 41 05                  	lw	t1, 84(sp)
 800004d8: 03 a6 c7 05                  	lw	a2, 92(a5)
-800004dc: 2b 15 65 66                  	vx_imadd	a0, a0, t1, a2, 3
+800004dc: 2b 15 65 66                  	<unknown>
 800004e0: 03 a6 87 05                  	lw	a2, 88(a5)
 800004e4: 83 23 41 04                  	lw	t2, 68(sp)
-800004e8: 2b 15 76 56                  	vx_imadd	a0, a2, t2, a0, 3
+800004e8: 2b 15 76 56                  	<unknown>
 800004ec: 23 22 a1 06                  	sw	a0, 100(sp)
 800004f0: 03 c5 65 02                  	lbu	a0, 38(a1)
 800004f4: 63 04 05 28                  	beqz	a0, 648
@@ -334,60 +334,60 @@ Disassembly of section .text:
 80000500: 03 26 05 06                  	lw	a2, 96(a0)
 80000504: 83 22 81 04                  	lw	t0, 72(sp)
 80000508: 03 27 85 06                  	lw	a4, 104(a0)
-8000050c: 2b 16 56 76                  	vx_imadd	a2, a2, t0, a4, 3
+8000050c: 2b 16 56 76                  	<unknown>
 80000510: 03 27 45 06                  	lw	a4, 100(a0)
 80000514: 83 27 81 03                  	lw	a5, 56(sp)
-80000518: 2b 18 f7 66                  	vx_imadd	a6, a4, a5, a2, 3
+80000518: 2b 18 f7 66                  	<unknown>
 8000051c: 03 27 05 06                  	lw	a4, 96(a0)
 80000520: 03 24 c1 04                  	lw	s0, 76(sp)
 80000524: 03 26 85 06                  	lw	a2, 104(a0)
-80000528: 2b 16 87 66                  	vx_imadd	a2, a4, s0, a2, 3
+80000528: 2b 16 87 66                  	<unknown>
 8000052c: 03 27 45 06                  	lw	a4, 100(a0)
 80000530: 83 24 c1 03                  	lw	s1, 60(sp)
-80000534: ab 18 97 66                  	vx_imadd	a7, a4, s1, a2, 3
+80000534: ab 18 97 66                  	<unknown>
 80000538: 03 27 05 06                  	lw	a4, 96(a0)
 8000053c: 03 26 01 05                  	lw	a2, 80(sp)
 80000540: 83 26 85 06                  	lw	a3, 104(a0)
-80000544: ab 16 c7 6e                  	vx_imadd	a3, a4, a2, a3, 3
+80000544: ab 16 c7 6e                  	<unknown>
 80000548: 03 27 45 06                  	lw	a4, 100(a0)
-8000054c: ab 1d 17 6e                  	vx_imadd	s11, a4, ra, a3, 3
+8000054c: ab 1d 17 6e                  	<unknown>
 80000550: 03 27 05 06                  	lw	a4, 96(a0)
 80000554: 83 26 85 06                  	lw	a3, 104(a0)
-80000558: ab 16 67 6e                  	vx_imadd	a3, a4, t1, a3, 3
+80000558: ab 16 67 6e                  	<unknown>
 8000055c: 03 27 45 06                  	lw	a4, 100(a0)
-80000560: 2b 1e 77 6e                  	vx_imadd	t3, a4, t2, a3, 3
+80000560: 2b 1e 77 6e                  	<unknown>
 80000564: 83 26 c5 06                  	lw	a3, 108(a0)
 80000568: 03 27 45 07                  	lw	a4, 116(a0)
-8000056c: ab 96 56 76                  	vx_imadd	a3, a3, t0, a4, 3
+8000056c: ab 96 56 76                  	<unknown>
 80000570: 03 27 05 07                  	lw	a4, 112(a0)
-80000574: ab 16 f7 6e                  	vx_imadd	a3, a4, a5, a3, 3
+80000574: ab 16 f7 6e                  	<unknown>
 80000578: 03 27 c5 06                  	lw	a4, 108(a0)
 8000057c: 83 27 45 07                  	lw	a5, 116(a0)
-80000580: 2b 17 87 7e                  	vx_imadd	a4, a4, s0, a5, 3
+80000580: 2b 17 87 7e                  	<unknown>
 80000584: 83 27 05 07                  	lw	a5, 112(a0)
-80000588: 2b 97 97 76                  	vx_imadd	a4, a5, s1, a4, 3
+80000588: 2b 97 97 76                  	<unknown>
 8000058c: 83 27 c5 06                  	lw	a5, 108(a0)
 80000590: 83 24 45 07                  	lw	s1, 116(a0)
-80000594: 2b 96 c7 4e                  	vx_imadd	a2, a5, a2, s1, 3
+80000594: 2b 96 c7 4e                  	<unknown>
 80000598: 83 27 05 07                  	lw	a5, 112(a0)
-8000059c: 2b 96 17 66                  	vx_imadd	a2, a5, ra, a2, 3
+8000059c: 2b 96 17 66                  	<unknown>
 800005a0: 83 27 c5 06                  	lw	a5, 108(a0)
 800005a4: 83 24 45 07                  	lw	s1, 116(a0)
-800005a8: ab 97 67 4e                  	vx_imadd	a5, a5, t1, s1, 3
+800005a8: ab 97 67 4e                  	<unknown>
 800005ac: 03 25 05 07                  	lw	a0, 112(a0)
-800005b0: 2b 15 75 7e                  	vx_imadd	a0, a0, t2, a5, 3
+800005b0: 2b 15 75 7e                  	<unknown>
 800005b4: 93 57 18 40                  	srai	a5, a6, 1
 800005b8: 93 d6 16 40                  	srai	a3, a3, 1
-800005bc: ab 87 d7 00                  	vx_tex	a5, a5, a3, zero
+800005bc: ab 87 d7 00                  	<unknown>
 800005c0: 93 d6 18 40                  	srai	a3, a7, 1
 800005c4: 13 57 17 40                  	srai	a4, a4, 1
-800005c8: 2b 87 e6 00                  	vx_tex	a4, a3, a4, zero
+800005c8: 2b 87 e6 00                  	<unknown>
 800005cc: 93 d6 1d 40                  	srai	a3, s11, 1
 800005d0: 13 56 16 40                  	srai	a2, a2, 1
-800005d4: ab 86 c6 00                  	vx_tex	a3, a3, a2, zero
+800005d4: ab 86 c6 00                  	<unknown>
 800005d8: 13 56 1e 40                  	srai	a2, t3, 1
 800005dc: 13 55 15 40                  	srai	a0, a0, 1
-800005e0: 2b 08 a6 00                  	vx_tex	a6, a2, a0, zero
+800005e0: 2b 08 a6 00                  	<unknown>
 800005e4: 03 c6 75 02                  	lbu	a2, 39(a1)
 800005e8: 63 0a 06 26                  	beqz	a2, 628
 800005ec: 13 55 88 01                  	srli	a0, a6, 24
@@ -555,7 +555,7 @@ Disassembly of section .text:
 80000874: 23 20 c1 02                  	sw	a2, 32(sp)
 80000878: 13 77 16 00                  	andi	a4, a2, 1
 8000087c: 13 35 17 00                  	seqz	a0, a4
-80000880: 0b 20 05 00                  	vx_split	a0
+80000880: 0b 20 05 00                  	<unknown>
 80000884: 13 55 46 00                  	srli	a0, a2, 4
 80000888: 33 75 e5 01                  	and	a0, a0, t5
 8000088c: 93 56 26 01                  	srli	a3, a2, 18
@@ -565,11 +565,11 @@ Disassembly of section .text:
 8000089c: 93 94 16 01                  	slli	s1, a3, 17
 800008a0: 13 14 25 00                  	slli	s0, a0, 2
 800008a4: b3 64 94 00                  	or	s1, s0, s1
-800008a8: 2b 80 e4 7c                  	vx_rop	s1, a4, a5
-800008ac: 0b 30 00 00                  	vx_join	
+800008a8: 2b 80 e4 7c                  	<unknown>
+800008ac: 0b 30 00 00                  	<unknown>
 800008b0: 13 77 26 00                  	andi	a4, a2, 2
 800008b4: 93 37 17 00                  	seqz	a5, a4
-800008b8: 0b a0 07 00                  	vx_split	a5
+800008b8: 0b a0 07 00                  	<unknown>
 800008bc: 63 00 07 02                  	beqz	a4, 32
 800008c0: 13 97 16 01                  	slli	a4, a3, 17
 800008c4: 83 27 c1 02                  	lw	a5, 44(sp)
@@ -577,11 +577,11 @@ Disassembly of section .text:
 800008cc: 13 14 25 00                  	slli	s0, a0, 2
 800008d0: 33 67 87 00                  	or	a4, a4, s0
 800008d4: 13 67 27 00                  	ori	a4, a4, 2
-800008d8: 2b 00 f7 4c                  	vx_rop	a4, a5, s1
-800008dc: 0b 30 00 00                  	vx_join	
+800008d8: 2b 00 f7 4c                  	<unknown>
+800008dc: 0b 30 00 00                  	<unknown>
 800008e0: 13 77 46 00                  	andi	a4, a2, 4
 800008e4: 93 37 17 00                  	seqz	a5, a4
-800008e8: 0b a0 07 00                  	vx_split	a5
+800008e8: 0b a0 07 00                  	<unknown>
 800008ec: 63 02 07 02                  	beqz	a4, 36
 800008f0: 13 97 16 01                  	slli	a4, a3, 17
 800008f4: 83 27 01 03                  	lw	a5, 48(sp)
@@ -590,11 +590,11 @@ Disassembly of section .text:
 80000900: 33 67 87 00                  	or	a4, a4, s0
 80000904: 37 04 01 00                  	lui	s0, 16
 80000908: 33 67 87 00                  	or	a4, a4, s0
-8000090c: 2b 00 f7 4c                  	vx_rop	a4, a5, s1
-80000910: 0b 30 00 00                  	vx_join	
+8000090c: 2b 00 f7 4c                  	<unknown>
+80000910: 0b 30 00 00                  	<unknown>
 80000914: 13 76 86 00                  	andi	a2, a2, 8
 80000918: 13 37 16 00                  	seqz	a4, a2
-8000091c: 0b 20 07 00                  	vx_split	a4
+8000091c: 0b 20 07 00                  	<unknown>
 80000920: e3 04 06 86                  	beqz	a2, -1944
 80000924: 13 96 16 01                  	slli	a2, a3, 17
 80000928: 83 26 41 03                  	lw	a3, 52(sp)
@@ -603,11 +603,11 @@ Disassembly of section .text:
 80000934: 33 65 a6 00                  	or	a0, a2, a0
 80000938: 03 26 01 01                  	lw	a2, 16(sp)
 8000093c: 33 65 c5 00                  	or	a0, a0, a2
-80000940: 2b 00 d5 74                  	vx_rop	a0, a3, a4
+80000940: 2b 00 d5 74                  	<unknown>
 80000944: 6f f0 5f 84                  	j	-1980
 80000948: 03 25 81 00                  	lw	a0, 8(sp)
-8000094c: 0b 00 05 00                  	vx_tmc	a0
-80000950: 0b 30 00 00                  	vx_join	
+8000094c: 0b 00 05 00                  	<unknown>
+80000950: 0b 30 00 00                  	<unknown>
 80000954: 83 2d c1 0a                  	lw	s11, 172(sp)
 80000958: 03 2d 01 0b                  	lw	s10, 176(sp)
 8000095c: 83 2c 41 0b                  	lw	s9, 180(sp)
@@ -644,11 +644,11 @@ Disassembly of section .text:
 800009c8: ef 00 c0 3a                  	jal	940
 800009cc: 93 01 04 00                  	mv	gp, s0
 800009d0: 13 05 00 00                  	mv	a0, zero
-800009d4: 0b 00 05 00                  	vx_tmc	a0
+800009d4: 0b 00 05 00                  	<unknown>
 
 800009d8 vx_set_sp:
 800009d8: 13 05 f0 ff                  	addi	a0, zero, -1
-800009dc: 0b 00 05 00                  	vx_tmc	a0
+800009dc: 0b 00 05 00                  	<unknown>
 800009e0: 37 01 00 ff                  	lui	sp, 1044480
 800009e4: b7 25 00 00                  	lui	a1, 2
 800009e8: 73 26 20 cc                  	csrr	a2, 3266
@@ -657,7 +657,7 @@ Disassembly of section .text:
 800009f4: f3 26 30 cc                  	csrr	a3, 3267
 800009f8: 63 86 06 00                  	beqz	a3, 12
 800009fc: 13 05 00 00                  	mv	a0, zero
-80000a00: 0b 00 05 00                  	vx_tmc	a0
+80000a00: 0b 00 05 00                  	<unknown>
 
 80000a04 RETURN:
 80000a04: 67 80 00 00                  	ret
@@ -768,7 +768,7 @@ Disassembly of section .text:
 80000b90: e3 98 84 fe                  	bne	s1, s0, -16
 80000b94: 03 27 4a 01                  	lw	a4, 20(s4)
 80000b98: 93 07 00 00                  	mv	a5, zero
-80000b9c: 0b c0 e7 00                  	vx_bar	a5, a4
+80000b9c: 0b c0 e7 00                  	<unknown>
 80000ba0: 83 20 c1 01                  	lw	ra, 28(sp)
 80000ba4: 03 24 81 01                  	lw	s0, 24(sp)
 80000ba8: 83 24 41 01                  	lw	s1, 20(sp)
@@ -796,11 +796,11 @@ Disassembly of section .text:
 80000bf0: 13 01 01 ff                  	addi	sp, sp, -16
 80000bf4: 23 26 11 00                  	sw	ra, 12(sp)
 80000bf8: 93 07 f0 ff                  	addi	a5, zero, -1
-80000bfc: 0b 80 07 00                  	vx_tmc	a5
+80000bfc: 0b 80 07 00                  	<unknown>
 80000c00: ef f0 9f ef                  	jal	-264
 80000c04: f3 27 30 cc                  	csrr	a5, 3267
 80000c08: 93 b7 17 00                  	seqz	a5, a5
-80000c0c: 0b 80 07 00                  	vx_tmc	a5
+80000c0c: 0b 80 07 00                  	<unknown>
 80000c10: 83 20 c1 00                  	lw	ra, 12(sp)
 80000c14: 13 01 01 01                  	addi	sp, sp, 16
 80000c18: 67 80 00 00                  	ret
@@ -870,22 +870,22 @@ Disassembly of section .text:
 80000d10: 23 2e f1 00                  	sw	a5, 28(sp)
 80000d14: 17 07 00 00                  	auipc	a4, 0
 80000d18: 13 07 c7 ed                  	addi	a4, a4, -292
-80000d1c: 0b 90 e7 00                  	vx_wspawn	a5, a4
+80000d1c: 0b 90 e7 00                  	<unknown>
 80000d20: 93 07 f0 ff                  	addi	a5, zero, -1
-80000d24: 0b 80 07 00                  	vx_tmc	a5
+80000d24: 0b 80 07 00                  	<unknown>
 80000d28: ef f0 1f dd                  	jal	-560
 80000d2c: f3 27 30 cc                  	csrr	a5, 3267
 80000d30: 93 b7 17 00                  	seqz	a5, a5
-80000d34: 0b 80 07 00                  	vx_tmc	a5
+80000d34: 0b 80 07 00                  	<unknown>
 80000d38: e3 0e 04 f8                  	beqz	s0, -100
 80000d3c: b3 04 99 02                  	<unknown>
 80000d40: 13 09 10 00                  	addi	s2, zero, 1
 80000d44: 33 18 89 00                  	sll	a6, s2, s0
 80000d48: 13 08 f8 ff                  	addi	a6, a6, -1
 80000d4c: 23 28 91 00                  	sw	s1, 16(sp)
-80000d50: 0b 00 08 00                  	vx_tmc	a6
+80000d50: 0b 00 08 00                  	<unknown>
 80000d54: ef f0 df e6                  	jal	-404
-80000d58: 0b 00 09 00                  	vx_tmc	s2
+80000d58: 0b 00 09 00                  	<unknown>
 80000d5c: 83 20 c1 02                  	lw	ra, 44(sp)
 80000d60: 03 24 81 02                  	lw	s0, 40(sp)
 80000d64: 83 24 41 02                  	lw	s1, 36(sp)
@@ -1275,7 +1275,7 @@ Disassembly of section .data:
 80002356: 6d e6                        	<unknown>
 80002358: ec de                        	<unknown>
 8000235a: 05 00                        	<unknown>
-8000235c: 0b 00 00 00                  	vx_tmc	zero
+8000235c: 0b 00 00 00                  	<unknown>
 		...
 
 Disassembly of section .sdata:
@@ -1494,7 +1494,7 @@ Disassembly of section .symtab:
      13e: f1 ff                        	<unknown>
      140: 45 00                        	<unknown>
      142: 00 00                        	<unknown>
-     144: 0b 00 00 00                  	vx_tmc	zero
+     144: 0b 00 00 00                  	<unknown>
      148: 00 00                        	<unknown>
      14a: 00 00                        	<unknown>
      14c: 00 00                        	<unknown>
@@ -1664,7 +1664,7 @@ Disassembly of section .symtab:
 		...
      34e: f1 ff                        	<unknown>
      350: 2f 01 00 00                  	<unknown>
-     354: 0b 00 00 00                  	vx_tmc	zero
+     354: 0b 00 00 00                  	<unknown>
      358: 00 00                        	<unknown>
      35a: 00 00                        	<unknown>
      35c: 00 00                        	<unknown>
@@ -1877,7 +1877,7 @@ Disassembly of section .symtab:
 		...
      5ee: f1 ff                        	<unknown>
      5f0: 2f 01 00 00                  	<unknown>
-     5f4: 0b 00 00 00                  	vx_tmc	zero
+     5f4: 0b 00 00 00                  	<unknown>
      5f8: 00 00                        	<unknown>
      5fa: 00 00                        	<unknown>
      5fc: 00 00                        	<unknown>
@@ -2042,7 +2042,7 @@ Disassembly of section .symtab:
      7ee: f1 ff                        	<unknown>
      7f0: 45 00                        	<unknown>
      7f2: 00 00                        	<unknown>
-     7f4: 0b 00 00 00                  	vx_tmc	zero
+     7f4: 0b 00 00 00                  	<unknown>
      7f8: 00 00                        	<unknown>
      7fa: 00 00                        	<unknown>
      7fc: 00 00                        	<unknown>
@@ -2212,7 +2212,7 @@ Disassembly of section .symtab:
 		...
      9fe: f1 ff                        	<unknown>
      a00: 2f 01 00 00                  	<unknown>
-     a04: 0b 00 00 00                  	vx_tmc	zero
+     a04: 0b 00 00 00                  	<unknown>
      a08: 00 00                        	<unknown>
      a0a: 00 00                        	<unknown>
      a0c: 00 00                        	<unknown>
@@ -2377,7 +2377,7 @@ Disassembly of section .symtab:
      bfe: f1 ff                        	<unknown>
      c00: 45 00                        	<unknown>
      c02: 00 00                        	<unknown>
-     c04: 0b 00 00 00                  	vx_tmc	zero
+     c04: 0b 00 00 00                  	<unknown>
      c08: 00 00                        	<unknown>
      c0a: 00 00                        	<unknown>
      c0c: 00 00                        	<unknown>
@@ -2570,7 +2570,7 @@ Disassembly of section .symtab:
 		...
      e3e: f1 ff                        	<unknown>
      e40: 2f 01 00 00                  	<unknown>
-     e44: 0b 00 00 00                  	vx_tmc	zero
+     e44: 0b 00 00 00                  	<unknown>
      e48: 00 00                        	<unknown>
      e4a: 00 00                        	<unknown>
      e4c: 00 00                        	<unknown>
@@ -2735,7 +2735,7 @@ Disassembly of section .symtab:
     103e: f1 ff                        	<unknown>
     1040: 45 00                        	<unknown>
     1042: 00 00                        	<unknown>
-    1044: 0b 00 00 00                  	vx_tmc	zero
+    1044: 0b 00 00 00                  	<unknown>
     1048: 00 00                        	<unknown>
     104a: 00 00                        	<unknown>
     104c: 00 00                        	<unknown>

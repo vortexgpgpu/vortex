@@ -1,94 +1,70 @@
-#!/bin/bash
+#!/bin/sh
 
 # exit when any command fails
 set -e
 
+SCRIPT_DIR=$(dirname "$0")
+VORTEX_HOME=$SCRIPT_DIR/../../
+
 # ensure build
-make -s
+make -C $VORTEX_HOME -s
 
-simple()
+echo $SCRIPT_DIR
+echo $VORTEX_HOME
+
+rtlsim()
 {
-echo "begin rop tests"
+	LOG=./perf/rop/perf_rtlsim.log
 
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_8.png -w8 -h8" --perf=4 | grep 'PERF' > ./perf/rop/rop_perf.log
-echo -e "\n**************************************\n" >> ./perf/rop/rop_perf.log
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_16.png -w16 -h16" --perf=4 | grep 'PERF' >> ./perf/rop/rop_perf.log
-echo -e "\n**************************************\n" >> ./perf/rop/rop_perf.log
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_32.png -w32 -h32" --perf=4  | grep 'PERF' >> ./perf/rop/rop_perf.log
-echo -e "\n**************************************\n" >> ./perf/rop/rop_perf.log
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_64.png -w64 -h64" --perf=4 | grep 'PERF' >> ./perf/rop/rop_perf.log
-echo -e "\n**************************************\n" >> ./perf/rop/rop_perf.log
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png -w128 -h128" --perf=4 | grep 'PERF' >> ./perf/rop/rop_perf.log
+	echo "begin rtlsim rop tests"
 
-echo "rop tests done!"
+	# Clear log
+	echo > $LOG
+
+	for i in {1..16}
+	do
+		echo "NUM_CORES = " $i >> $LOG
+		CONFIGS="-DEXT_ROP_ENABLE" $VORTEX_HOME/ci/blackbox.sh --driver=rtlsim --cores=$i --app=rop --args="-rwhitebox_128.png -w128 -h128" --perf=4 | grep 'PERF' >> $LOG
+		echo "**************************************" >> $LOG
+	done
+
+	echo "rtlsim rop tests done!"
 }
 
-depth_stencil()
+
+simx()
 {
-echo "begin rop tests (with depth-stencil)"
+	LOG=./perf/rop/perf_simx.log
+	
+	echo "begin simx rop tests"
 
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_8.png -w8 -h8 -d" --perf=4 > ./perf/rop/rop_perf.log
-echo -e "\n**************************************\n" >> ./perf/rop/rop_perf.log
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_16.png -w16 -h16 -d" --perf=4 >> ./perf/rop/rop_perf.log
-echo -e "\n**************************************\n" >> ./perf/rop/rop_perf.log
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_32.png -w32 -h32 -d" --perf=4 >> ./perf/rop/rop_perf.log
-echo -e "\n**************************************\n" >> ./perf/rop/rop_perf.log
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_64.png -w64 -h64 -d" --perf=4 >> ./perf/rop/rop_perf.log
-echo -e "\n**************************************\n" >> ./perf/rop/rop_perf.log
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png -w128 -h128 -d" --perf=4 >> ./perf/rop/rop_perf.log
+	# Clear log
+	echo > $LOG
 
-echo "rop tests done!"
+	for i in {1..16}
+	do
+		echo "NUM_CORES = " $i >> $LOG
+		CONFIGS="-DEXT_GFX_ENABLE" $VORTEX_HOME/ci/blackbox.sh --driver=simx --cores=$i --app=rop --args="-rwhitebox_128.png -w128 -h128" --perf=4 | grep 'PERF' >> $LOG
+		echo "**************************************" >> $LOG
+	done
+
+	echo "simx rop tests done!"
 }
 
-blend()
-{
-echo "begin rop tests (with blend)"
-
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_8.png -w8 -h8 -b" --perf=4 > ./perf/rop/rop_perf.log
-echo -e "\n**************************************\n" >> ./perf/rop/rop_perf.log
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_16.png -w16 -h16 -b" --perf=4 >> ./perf/rop/rop_perf.log
-echo -e "\n**************************************\n" >> ./perf/rop/rop_perf.log
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_32.png -w32 -h32 -b" --perf=4 >> ./perf/rop/rop_perf.log
-echo -e "\n**************************************\n" >> ./perf/rop/rop_perf.log
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_64.png -w64 -h64 -b" --perf=4 >> ./perf/rop/rop_perf.log
-echo -e "\n**************************************\n" >> ./perf/rop/rop_perf.log
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png -w128 -h128 -b" --perf=4 >> ./perf/rop/rop_perf.log
-
-echo "rop tests done!"
-}
-
-depth_stencil_blend()
-{
-echo "begin rop tests (with depth-stencil & blend)"
-
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_8.png -w8 -h8 -b -d" --perf=4 > ./perf/rop/rop_perf.log
-echo -e "\n**************************************\n" >> ./perf/rop/rop_perf.log
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_16.png -w16 -h16 -b -d" --perf=4 >> ./perf/rop/rop_perf.log
-echo -e "\n**************************************\n" >> ./perf/rop/rop_perf.log
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_32.png -w32 -h32 -b -d" --perf=4 >> ./perf/rop/rop_perf.log
-echo -e "\n**************************************\n" >> ./perf/rop/rop_perf.log
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_64.png -w64 -h64 -b -d" --perf=4 >> ./perf/rop/rop_perf.log
-echo -e "\n**************************************\n" >> ./perf/rop/rop_perf.log
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png -w128 -h128 -b -d" --perf=4 >> ./perf/rop/rop_perf.log
-
-echo "rop tests done!"
-}
 
 usage()
 {
-    echo "usage: [-d] [-b] [-db] [-h|--help]"
+    echo "usage: [-r] [-s] [-h|--help]"
 }
 
 case $1 in
-    -d ) depth_stencil
+    -r ) rtlsim
             ;;
-    -b ) blend
-            ;;
-    -db ) depth_stencil_blend
+    -s ) simx
             ;;
     -h | --help ) usage
                     ;;
-    * ) simple
+    * ) simx
         ;;             
 esac
 shift
