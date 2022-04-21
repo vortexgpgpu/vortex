@@ -10,15 +10,9 @@ using namespace vortex;
 #define STAMP_POOL_MAX_SIZE   1024
 
 using fixed16_t = cocogfx::TFixed<16>;
-using fixed24_t = cocogfx::TFixed<23>;
 
 using vec2_fx_t = cocogfx::TVector2<fixed16_t>;
 using vec3_fx_t = cocogfx::TVector3<fixed16_t>;
-
-using vec2_fx2_t = cocogfx::TVector2<fixed24_t>;
-using vec3_fx2_t = cocogfx::TVector3<fixed24_t>;
-
-using rect_u_t = cocogfx::TRect<uint32_t>;
 
 struct primitive_t {
   vec3_fx_t edges[3];

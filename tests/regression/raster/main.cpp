@@ -218,6 +218,15 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
+  uint64_t max_cores, max_warps, max_threads;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_CORES, &max_cores));
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_WARPS, &max_warps));
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_THREADS, &max_threads));  
+
+  uint32_t num_tasks = max_cores * max_warps * max_threads;
+
+  std::cout << "number of tasks: " << std::dec << num_tasks << std::endl;
+
   CGLTrace trace;    
   RT_CHECK(trace.load(trace_file));
 
@@ -249,6 +258,7 @@ int main(int argc, char *argv[]) {
   staging_buf = nullptr;
 
   // update kernel arguments
+  kernel_arg.num_tasks     = num_tasks;
   kernel_arg.dst_width     = dst_width;
   kernel_arg.dst_height    = dst_height;
 

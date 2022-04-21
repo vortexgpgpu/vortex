@@ -105,10 +105,7 @@ void shader_function(int task_id, kernel_arg_t* kernel_arg) {
 
 int main() {
 	auto arg = reinterpret_cast<kernel_arg_t*>(KERNEL_ARG_DEV_MEM_ADDR);
-	auto num_warps = vx_num_warps();
-	auto num_threads = vx_num_threads();
-	auto total_threads = num_warps * num_threads;
-	vx_spawn_tasks(total_threads, (vx_spawn_tasks_cb)shader_function, arg);
+	vx_spawn_tasks(arg->num_tasks, (vx_spawn_tasks_cb)shader_function, arg);
 	//shader_function(0, arg);
 	return 0;
 }
