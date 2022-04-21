@@ -490,7 +490,7 @@
 
 // Number of banks
 `ifndef RCACHE_NUM_BANKS
-`define RCACHE_NUM_BANKS 1
+`define RCACHE_NUM_BANKS 4
 `endif
 
 // Number of ports per bank
