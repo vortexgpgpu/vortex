@@ -10,9 +10,41 @@ set -e
 make -s
 
 # draw3d benchmarks
-for TRACE in "${traces[@]}"
-do
-    echo -e "\n**************************************\n" >> $LOG
-    echo -e "draw3d $TRACE benchmark\n" >> $LOG
-    CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-t$TRACE.cgltrace -w8 -h8" >> $LOG
-done
+draw3d(){
+    echo > $LOG # clear log
+    for TRACE in "${traces[@]}"
+    do
+        echo -e "\n**************************************\n" >> $LOG
+        echo -e "draw3d $TRACE benchmark\n" >> $LOG
+        if [ $ALL = true ]
+        then
+            CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-t$TRACE.cgltrace -w8 -h8" >> $LOG
+        else
+            CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-t$TRACE.cgltrace -w8 -h8" | grep 'PERF' >> $LOG
+        fi
+    done
+    echo "draw3d tests done!"
+}
+
+usage()
+{
+    echo "usage: [-a|--all] [-h|--help]"
+}
+
+case $1 in
+    -a | --all )
+        ALL=true
+        draw3d
+        ;;
+    -h | --help )
+        usage
+        ;;
+    -* | --* )
+        echo "invalid option"
+        usage
+        ;;
+    * )
+        ALL=false
+        draw3d
+        ;;             
+esac
