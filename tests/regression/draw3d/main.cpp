@@ -334,7 +334,6 @@ int render(const CGLTrace& trace) {
     auto time_end = std::chrono::high_resolution_clock::now();
     double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
     printf("Elapsed time: %lg ms\n", elapsed);
-
   }
 
   // download destination buffer
@@ -479,7 +478,11 @@ int main(int argc, char *argv[]) {
 
   // run tests
   std::cout << "render" << std::endl;
+  auto begin_time = std::chrono::high_resolution_clock::now();
   RT_CHECK(render(trace));
+  auto end_time = std::chrono::high_resolution_clock::now();
+  double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - begin_time).count();
+  printf("Total elapsed time: %lg ms\n", elapsed);
 
   // cleanup
   std::cout << "cleanup" << std::endl;  
@@ -493,7 +496,7 @@ int main(int argc, char *argv[]) {
       std::cout << "FAILED!" << std::endl;
       return errors;
     }
-  } 
+  }  
 
   return 0;
 }
