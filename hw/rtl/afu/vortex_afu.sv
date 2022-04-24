@@ -541,7 +541,7 @@ VX_mem_mux #(
   .TAG_IN_WIDTH   (AVS_REQ_TAGW),
   .ARBITER        ("P"),
   .BUFFERED_REQ   (1),
-  .BUFFERED_RSP   (1)
+  .BUFFERED_RSP   (2)
 ) mem_mux (
   .clk        (clk),
   .reset      (mem_arb_reset),
