@@ -94,7 +94,9 @@ module VX_raster_unit #(
     end
 
     // Mem to raster slice control signals
+    /* verilator lint_off UNDRIVEN */
     logic [NUM_SLICES-1:0] raster_slice_ready;
+    /* verilator lint_on UNDRIVEN */
     VX_raster_mem #(
         .RASTER_SLICE_NUM   (NUM_SLICES),
         .RASTER_SLICE_BITS  (RASTER_SLICE_BITS),
@@ -169,10 +171,9 @@ module VX_raster_unit #(
             slice_edges[2][0], slice_edges[2][1], slice_edges[2][2]})
     );
 
-
+    /* verilator lint_off UNDRIVEN */
     /* verilator lint_off UNUSED */
     logic        [RASTER_QUAD_OUTPUT_RATE-1:0]      quad_valid          [NUM_SLICES-1:0];
-    /* verilator lint_on UNUSED */
     logic        [`RASTER_DIM_BITS-1:0]             temp_quad_x_loc     [NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0],
                                                     temp_quad_y_loc     [NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0];
     logic        [3:0]                              temp_quad_masks     [NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0];
@@ -180,11 +181,15 @@ module VX_raster_unit #(
     logic        [NUM_SLICES-1:0]                   quad_queue_empty;
     logic        [NUM_SLICES-1:0]                   quad_pop;
     logic        [`RASTER_PRIMITIVE_DATA_BITS-1:0]  temp_out_pid        [NUM_SLICES-1:0][RASTER_QUAD_OUTPUT_RATE-1:0];
+    /* verilator lint_on UNUSED */
+    /* verilator lint_on UNDRIVEN */
     logic arbiter_valid;
-    
+
     // TODO: Add raster slices in generate block here
-    for (genvar i = 0; i < RASTER_SLICE_BITS; ++i) begin
+    // for (genvar i = 0; i < RASTER_SLICE_BITS; ++i) begin
+    for (genvar i = 0; i < NUM_SLICES; ++i) begin
         VX_raster_slice #(
+            .SLICE_ID               (i),
             .RASTER_BLOCK_SIZE      (RASTER_BLOCK_SIZE),
             .RASTER_TILE_SIZE       (RASTER_TILE_SIZE),
             .RASTER_QUAD_OUTPUT_RATE(RASTER_QUAD_OUTPUT_RATE),
@@ -221,6 +226,7 @@ module VX_raster_unit #(
     logic        [3:0]                              out_quad_masks  [RASTER_QUAD_OUTPUT_RATE-1:0];
     logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0];    
     logic        [`RASTER_PRIMITIVE_DATA_BITS-1:0]  out_pid         [RASTER_QUAD_OUTPUT_RATE-1:0];
+    logic        [RASTER_QUAD_OUTPUT_RATE-1:0]      out_valid;
     generate
         // add arbiter if # raster slice > 1
         if (NUM_SLICES > 1) begin
@@ -243,6 +249,7 @@ module VX_raster_unit #(
                     out_quad_masks   = temp_quad_masks[quad_index];
                     out_quad_bcoords = temp_quad_bcoords[quad_index];
                     out_pid          = temp_out_pid[quad_index];
+                    out_valid        = quad_valid[quad_index];
                 end
             end
         end
@@ -255,6 +262,7 @@ module VX_raster_unit #(
                 out_quad_masks   = temp_quad_masks[0];
                 out_quad_bcoords = temp_quad_bcoords[0];
                 out_pid          = temp_out_pid[0];
+                out_valid        = quad_valid[0];
                 if (!quad_queue_empty[0]) begin
                     quad_pop[0]  = 1;
                 end
@@ -268,7 +276,7 @@ module VX_raster_unit #(
         .CLUSTER_ID                 (CLUSTER_ID),
         .RASTER_QUAD_OUTPUT_RATE    (RASTER_QUAD_OUTPUT_RATE)
     ) raster_rsp_switch (
-        .valid                      (arbiter_valid | raster_unit_ready),
+        .valid                      ((arbiter_valid & | out_valid) | raster_unit_ready),
         .empty                      (raster_unit_ready),
         // Quad data
         .x_loc                      (out_quad_x_loc),
@@ -340,5 +348,27 @@ module VX_raster_unit #(
     assign raster_perf_if.mem_reads   = perf_mem_reads;
     assign raster_perf_if.mem_latency = perf_mem_latency;
 `endif 
+
+// `ifdef PERF_ENABLE
+//     reg [`PERF_CTR_BITS-1:0] perf_stall_cycles, total_cycles;
+
+//     // wire perf_stall_cycle = raster_svc_req_if.valid && ~stall_out && ~raster_req_if.valid;
+//     wire perf_stall_cycle = raster_req_if.valid && ~raster_req_if.empty && ~raster_req_if.ready;
+
+//     always @(posedge clk) begin
+//         if (reset) begin
+//             perf_stall_cycles <= 0;
+//             total_cycles      <= 0;
+//         end else begin
+//             perf_stall_cycles <= perf_stall_cycles + `PERF_CTR_BITS'(perf_stall_cycle);
+//             total_cycles      <= total_cycles + 1;
+//         end
+//     end
+
+//     always @(posedge clk) begin
+//         dpi_trace(1, "%d: %0d %0d\n", $time, perf_stall_cycles, total_cycles);
+//     end
+// `endif
+
 
 endmodule
