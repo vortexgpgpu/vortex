@@ -168,31 +168,44 @@ module VX_muldiv (
 
     wire [`NUM_THREADS-1:0][31:0] div_result_tmp, rem_result_tmp;
     wire is_rem_op_out;
-    
-    VX_serial_div #(
-        .WIDTHN (32),
-        .WIDTHD (32),
-        .WIDTHQ (32),
-        .WIDTHR (32),
-        .LANES  (`NUM_THREADS),
-        .TAGW   (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1)
-    ) divide (
-        .clk       (clk),
-        .reset     (reset),        
-        .valid_in  (div_valid_in),
-        .ready_in  (div_ready_in),
-        .signed_mode(is_signed_div),
-        .tag_in    ({uuid_in, wid_in, tmask_in, PC_in, rd_in, wb_in, is_rem_op_in}),
-        .numer     (alu_in1),
-        .denom     (alu_in2),
-        .quotient  (div_result_tmp),
-        .remainder (rem_result_tmp),
-        .ready_out (div_ready_out),
-        .valid_out (div_valid_out),
-        .tag_out   ({div_uuid_out, div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, is_rem_op_out})
-    );
+
+    wire div_load = valid_in && ready_in;
+    wire [`NUM_THREADS-1:0] div_done;
+
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin    
+        VX_serial_div #(
+            .WIDTHN (32),
+            .WIDTHD (32),
+            .WIDTHQ (32),
+            .WIDTHR (32)
+        ) divide (
+            .clk       (clk),
+            .reset     (reset),        
+            .load      (div_load),
+            .signed_mode(is_signed_div),
+            .numer     (alu_in1[i]),
+            .denom     (alu_in2[i]),
+            .quotient  (div_result_tmp[i]),
+            .remainder (rem_result_tmp[i]),
+            .done      (div_done[i])
+        );
+    end
+
+    `UNUSED (div_done)
+
+    wire [(`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1)-1:0] div_tag_out;
+
+    always @(posedge clk) begin
+        if (div_load) begin
+            div_tag_out <= {uuid_in, wid_in, tmask_in, PC_in, rd_in, wb_in, is_rem_op_in};
+        end
+    end
+
+    assign ready_in  = !is_busy;
+    assign valid_out = done[0];
 
     assign div_result = is_rem_op_out ? rem_result_tmp : div_result_tmp; 
+    assign {div_uuid_out, div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, is_rem_op_out} = div_tag_out;    
 
 `endif
 

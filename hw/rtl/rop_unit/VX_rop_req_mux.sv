@@ -2,6 +2,7 @@
 
 module VX_rop_req_mux #(
     parameter NUM_REQS       = 1,
+    parameter NUM_LANES      = 1,
     parameter BUFFERED       = 0,
     parameter string ARBITER = "R"
 ) (
@@ -9,13 +10,13 @@ module VX_rop_req_mux #(
     input wire              reset,
 
     // input requests    
-    VX_rop_req_if.slave     req_in_if[NUM_REQS],
+    VX_rop_req_if.slave     req_in_if [NUM_REQS],
 
     // output request
     VX_rop_req_if.master    req_out_if
 );
 
-    localparam REQ_DATAW = 2 * `NUM_THREADS + 2 * (`NUM_THREADS * `ROP_DIM_BITS) + (`NUM_THREADS * 32) + (`NUM_THREADS * `ROP_DEPTH_BITS);
+    localparam REQ_DATAW = NUM_LANES * (1 + 2 * `ROP_DIM_BITS + $bits(rgba_t) + `ROP_DEPTH_BITS + 1);
 
     if (NUM_REQS > 1) begin
 

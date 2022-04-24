@@ -71,7 +71,8 @@ module VX_fpu_unit #(
 `ifdef FPU_DPI
 
     VX_fpu_dpi #(
-        .TAGW (FPUQ_BITS)
+        .NUM_LANES  (`NUM_THREADS),
+        .TAGW       (FPUQ_BITS)
     ) fpu_dpi (
         .clk        (clk),
         .reset      (reset),   
@@ -101,11 +102,12 @@ module VX_fpu_unit #(
 `elsif FPU_FPNEW
 
     VX_fpu_fpnew #(
-        .FMULADD  (1),
-        .FDIVSQRT (1),
-        .FNONCOMP (1),
-        .FCONV    (1),
-        .TAGW     (FPUQ_BITS)
+        .NUM_LANES  (`NUM_THREADS),
+        .FMULADD    (1),
+        .FDIVSQRT   (1),
+        .FNONCOMP   (1),
+        .FCONV      (1),
+        .TAGW       (FPUQ_BITS)
     ) fpu_fpnew (
         .clk        (clk),
         .reset      (reset),   
@@ -135,7 +137,8 @@ module VX_fpu_unit #(
 `else
 
     VX_fpu_fpga #(
-        .TAGW (FPUQ_BITS)
+        .NUM_LANES  (`NUM_THREADS),
+        .TAGW       (FPUQ_BITS)
     ) fpu_fpga (
         .clk        (clk),
         .reset      (reset),   
