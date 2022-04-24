@@ -9,6 +9,7 @@
 
 module VX_raster_slice #(
     parameter CLUSTER_ID              = 0,
+    parameter SLICE_ID                = 1,
     parameter RASTER_BLOCK_SIZE       = 8,
     parameter RASTER_TILE_SIZE        = 16,
     parameter RASTER_QUAD_OUTPUT_RATE = 4,
@@ -299,8 +300,8 @@ module VX_raster_slice #(
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
         if (input_valid) begin
-            dpi_trace(2, "%d: raster-slice-in: x=%0d, y=%0d, pid=%0d, edge1.x=%0d, edge1.y=%0d, edge1.z=%0d, edge2.x=%0d, edge2.y=%0d, edge2.z=%0d, edge3.x=%0d, edge3.y=%0d, edge3.z=%0d, edge_func_val=%0d %0d %0d, extents=%0d %0d %0d\n",
-                $time, x_loc, y_loc, pid,
+            dpi_trace(2, "%d: raster-slice-in[%0d]: x=%0d, y=%0d, pid=%0d, edge1.x=%0d, edge1.y=%0d, edge1.z=%0d, edge2.x=%0d, edge2.y=%0d, edge2.z=%0d, edge3.x=%0d, edge3.y=%0d, edge3.z=%0d, edge_func_val=%0d %0d %0d, extents=%0d %0d %0d\n",
+                $time, SLICE_ID, x_loc, y_loc, pid,
                 edges[0][0], edges[0][1], edges[0][2],
                 edges[1][0], edges[1][1], edges[1][2],
                 edges[2][0], edges[2][1], edges[2][2],
@@ -311,8 +312,8 @@ module VX_raster_slice #(
 
     always @(posedge clk) begin
         if (valid_block == 1 && block_fifo_full == 0 && done == 0) begin
-            dpi_trace(2, "%d: block-fifo-push: data_in=%0d, full=%b, empty=%b\n",
-            $time, {block_x_loc, block_y_loc,
+            dpi_trace(2, "%d: block-fifo-push[%0d]: data_in=%0d, full=%b, empty=%b\n",
+            $time, SLICE_ID, {block_x_loc, block_y_loc,
                 block_edge_func_val[0], block_edge_func_val[1], block_edge_func_val[2]},
                 block_fifo_full, block_fifo_empty);
         end

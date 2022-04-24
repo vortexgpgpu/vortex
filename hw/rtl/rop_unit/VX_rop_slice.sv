@@ -6,11 +6,6 @@ module VX_rop_slice #(
 ) (
     input wire clk,
     input wire reset,
-
-    // PERF
-`ifdef PERF_ENABLE
-    VX_rop_perf_if.master rop_perf_if,
-`endif
    
     // DCRs
     input rop_dcrs_t dcrs,
@@ -54,10 +49,6 @@ module VX_rop_slice #(
     ) rop_mem (
         .clk            (clk),
         .reset          (reset),
-
-    `ifdef PERF_ENABLE
-        .rop_perf_if    (rop_perf_if),
-    `endif
 
         .dcrs           (dcrs),
 

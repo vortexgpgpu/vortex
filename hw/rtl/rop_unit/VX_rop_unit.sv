@@ -24,10 +24,6 @@ module VX_rop_unit #(
     rop_dcrs_t dcrs;
     assign dcrs = rop_dcr_if.data;
 
-`ifdef PERF_ENABLE
-    VX_rop_perf_if per_slice_rop_perf_if[NUM_SLICES]();
-`endif
-
     VX_rop_req_if #(
         .NUM_LANES (NUM_LANES)
     ) per_slice_rop_req_if[NUM_SLICES]();
@@ -51,14 +47,9 @@ module VX_rop_unit #(
         ) rop_slice (
             .clk            (clk),
             .reset          (reset),
-        `ifdef PERF_ENABLE
-            .rop_perf_if    (per_slice_rop_perf_if[i]),
-        `endif
             .dcrs           (dcrs),
-
             .cache_req_if   (per_slice_cache_req_if[i]),
             .cache_rsp_if   (per_slice_cache_rsp_if[i]),
-
             .rop_req_if     (per_slice_rop_req_if[i])
         );
     end
@@ -81,7 +72,7 @@ module VX_rop_unit #(
         .TAG_IN_WIDTH (`OCACHE_TAG_SEL_BITS),
         .TAG_SEL_IDX  (0),
         .BUFFERED_REQ (1),
-        .BUFFERED_RSP (1),
+        .BUFFERED_RSP (1)
     ) cache_req_mux (
         .clk        (clk),
         .reset      (reset),
@@ -92,24 +83,62 @@ module VX_rop_unit #(
     );
 
 `ifdef PERF_ENABLE
-    reg [`PERF_CTR_BITS-1:0] perf_idle_cycles;
-    reg [`PERF_CTR_BITS-1:0] perf_stall_cycles;
 
-    wire perf_idle_cycle = ~rop_req_if.valid & rop_req_if.ready;
-    wire perf_stall_cycle = rop_req_if.valid & ~rop_req_if.ready;
+    wire [$clog2(`OCACHE_NUM_REQS+1)-1:0] perf_mem_rd_req_per_cycle;
+    wire [$clog2(`OCACHE_NUM_REQS+1)-1:0] perf_mem_wr_req_per_cycle;
+    wire [$clog2(`OCACHE_NUM_REQS+1)-1:0] perf_mem_rsp_per_cycle;
+    wire [$clog2(`OCACHE_NUM_REQS+1)+1-1:0] perf_pending_reads_cycle;
+
+    wire [`OCACHE_NUM_REQS-1:0] perf_mem_rd_req_per_mask = cache_req_if.valid & ~cache_req_if.rw & cache_req_if.ready;
+    wire [`OCACHE_NUM_REQS-1:0] perf_mem_wr_req_per_mask = cache_req_if.valid & cache_req_if.rw & cache_req_if.ready;
+    wire [`OCACHE_NUM_REQS-1:0] perf_mem_rsp_per_mask    = cache_rsp_if.valid & cache_rsp_if.ready;
+
+    `POP_COUNT(perf_mem_rd_req_per_cycle, perf_mem_rd_req_per_mask);    
+    `POP_COUNT(perf_mem_wr_req_per_cycle, perf_mem_wr_req_per_mask);    
+    `POP_COUNT(perf_mem_rsp_per_cycle,    perf_mem_rsp_per_mask);
+
+    reg [`PERF_CTR_BITS-1:0] perf_pending_reads;   
+    assign perf_pending_reads_cycle = perf_mem_rd_req_per_cycle - perf_mem_rsp_per_cycle;
 
     always @(posedge clk) begin
         if (reset) begin
+            perf_pending_reads <= 0;
+        end else begin
+            perf_pending_reads <= perf_pending_reads + `PERF_CTR_BITS'($signed(perf_pending_reads_cycle));
+        end
+    end
+
+    wire perf_idle_cycle  = ~rop_req_if.valid & rop_req_if.ready;
+    wire perf_stall_cycle = rop_req_if.valid & ~rop_req_if.ready;
+
+    reg [`PERF_CTR_BITS-1:0] perf_mem_reads;
+    reg [`PERF_CTR_BITS-1:0] perf_mem_writes;
+    reg [`PERF_CTR_BITS-1:0] perf_mem_latency;
+    reg [`PERF_CTR_BITS-1:0] perf_idle_cycles;
+    reg [`PERF_CTR_BITS-1:0] perf_stall_cycles;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_mem_reads    <= 0;
+            perf_mem_writes   <= 0;
+            perf_mem_latency  <= 0;
             perf_idle_cycles  <= 0;
             perf_stall_cycles <= 0;
         end else begin
-            perf_idle_cycles  <= perf_idle_cycles + `PERF_CTR_BITS'(perf_idle_cycle);
+            perf_mem_reads    <= perf_mem_reads    + `PERF_CTR_BITS'(perf_mem_rd_req_per_cycle);
+            perf_mem_writes   <= perf_mem_writes   + `PERF_CTR_BITS'(perf_mem_wr_req_per_cycle);
+            perf_mem_latency  <= perf_mem_latency  + `PERF_CTR_BITS'(perf_pending_reads);            
+            perf_idle_cycles  <= perf_idle_cycles  + `PERF_CTR_BITS'(perf_idle_cycle);
             perf_stall_cycles <= perf_stall_cycles + `PERF_CTR_BITS'(perf_stall_cycle);
         end
     end
 
-    assign rop_perf_if.idle_cycles = perf_idle_cycles;
+    assign rop_perf_if.mem_reads    = perf_mem_reads;
+    assign rop_perf_if.mem_writes   = perf_mem_writes;
+    assign rop_perf_if.mem_latency  = perf_mem_latency;
+    assign rop_perf_if.idle_cycles  = perf_idle_cycles;
     assign rop_perf_if.stall_cycles = perf_stall_cycles;
+
 `endif
 
 endmodule

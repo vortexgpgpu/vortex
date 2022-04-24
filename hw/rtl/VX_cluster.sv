@@ -37,7 +37,7 @@ module VX_cluster #(
 
     VX_raster_req_if #(
         .NUM_LANES (`NUM_THREADS)
-    ) per_core_raster_req_if[`NUM_CORES-1:0]();
+    ) per_core_raster_req_if[`NUM_CORES]();
 
     VX_raster_req_if #(
         .NUM_LANES (`NUM_THREADS)
@@ -95,12 +95,12 @@ module VX_cluster #(
         .DATA_WIDTH (`RCACHE_WORD_SIZE*8), 
         .ADDR_WIDTH (`RCACHE_ADDR_WIDTH),
         .TAG_WIDTH  (`RCACHE_TAG_WIDTH)
-    ) rcache_req_qual_if[`RCACHE_NUM_REQS-1:0]();
+    ) rcache_req_qual_if[`RCACHE_NUM_REQS]();
 
     VX_mem_rsp_if #(
         .DATA_WIDTH (`RCACHE_WORD_SIZE*8), 
         .TAG_WIDTH (`RCACHE_TAG_WIDTH)
-    ) rcache_rsp_qual_if[`RCACHE_NUM_REQS-1:0]();
+    ) rcache_rsp_qual_if[`RCACHE_NUM_REQS]();
 
     for (genvar i = 0; i < `RCACHE_NUM_REQS; ++i) begin
         `CACHE_REQ_TO_MEM(rcache_req_qual_if, rcache_req_if, i);
@@ -161,7 +161,7 @@ module VX_cluster #(
 
     VX_rop_req_if #(
         .NUM_LANES (`NUM_THREADS)
-    ) per_core_rop_req_if[`NUM_CORES-1:0]();
+    ) per_core_rop_req_if[`NUM_CORES]();
 
     VX_rop_req_if #(
         .NUM_LANES (`NUM_THREADS)
@@ -217,12 +217,12 @@ module VX_cluster #(
         .DATA_WIDTH (`OCACHE_WORD_SIZE*8), 
         .ADDR_WIDTH (`OCACHE_ADDR_WIDTH),
         .TAG_WIDTH  (`OCACHE_TAG_WIDTH)
-    ) ocache_req_qual_if[`OCACHE_NUM_REQS-1:0]();
+    ) ocache_req_qual_if[`OCACHE_NUM_REQS]();
 
     VX_mem_rsp_if #(
         .DATA_WIDTH (`OCACHE_WORD_SIZE*8), 
         .TAG_WIDTH (`OCACHE_TAG_WIDTH)
-    ) ocache_rsp_qual_if[`OCACHE_NUM_REQS-1:0]();
+    ) ocache_rsp_qual_if[`OCACHE_NUM_REQS]();
 
     for (genvar i = 0; i < `OCACHE_NUM_REQS; ++i) begin
         `CACHE_REQ_TO_MEM(ocache_req_qual_if, ocache_req_if, i);
@@ -291,12 +291,12 @@ module VX_cluster #(
         .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
         .ADDR_WIDTH (`DCACHE_MEM_ADDR_WIDTH),
         .TAG_WIDTH  (`L1_MEM_TAG_WIDTH)
-    ) per_core_mem_req_if[`NUM_CORES-1:0]();
+    ) per_core_mem_req_if[`NUM_CORES]();
     
     VX_mem_rsp_if #(
         .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
         .TAG_WIDTH  (`L1_MEM_TAG_WIDTH)
-    ) per_core_mem_rsp_if[`NUM_CORES-1:0]();
+    ) per_core_mem_rsp_if[`NUM_CORES]();
 
     wire [`NUM_CORES-1:0] per_core_busy;
 
@@ -432,12 +432,12 @@ module VX_cluster #(
         .DATA_WIDTH (`L2_MEM_DATA_WIDTH),
         .ADDR_WIDTH (`L2_MEM_ADDR_WIDTH),
         .TAG_WIDTH  (MEM_ARB_TAG_WIDTH)
-    ) mem_req_arb_if[MEM_ARB_SIZE-1:0]();
+    ) mem_req_arb_if[MEM_ARB_SIZE]();
     
     VX_mem_rsp_if #(
         .DATA_WIDTH (`L2_MEM_DATA_WIDTH),
         .TAG_WIDTH  (MEM_ARB_TAG_WIDTH)
-    ) mem_rsp_arb_if[MEM_ARB_SIZE-1:0]();
+    ) mem_rsp_arb_if[MEM_ARB_SIZE]();
 
     localparam RASTER_MEM_ARB_IDX = `EXT_RASTER_ENABLED;
     localparam ROP_MEM_ARB_IDX = 1 + `EXT_RASTER_ENABLED;

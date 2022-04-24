@@ -10,9 +10,9 @@ module VX_cache_mux #(
     parameter BUFFERED_RSP   = 0,
     parameter string ARBITER = "R",
 
-    localparam ADDR_WIDTH   = (32-`CLOG2(DATA_SIZE)),
-    localparam DATA_WIDTH   = (8 * DATA_SIZE),
-    localparam LOG_NUM_REQS = `CLOG2(NUM_REQS),
+    localparam ADDR_WIDTH    = (32-`CLOG2(DATA_SIZE)),
+    localparam DATA_WIDTH    = (8 * DATA_SIZE),
+    localparam LOG_NUM_REQS  = `CLOG2(NUM_REQS),
     localparam TAG_OUT_WIDTH = TAG_IN_WIDTH + LOG_NUM_REQS
 ) (
     input wire              clk,
@@ -140,18 +140,18 @@ module VX_cache_mux #(
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
 
-        assign req_out_if.valid  = req_in_if.valid;
-        assign req_out_if.tag    = req_in_if.tag;
-        assign req_out_if.addr   = req_in_if.addr;
-        assign req_out_if.rw     = req_in_if.rw;
-        assign req_out_if.byteen = req_in_if.byteen;
-        assign req_out_if.data   = req_in_if.data;
-        assign req_in_if.ready   = req_out_if.ready;
+        assign req_out_if.valid  = req_in_if[0].valid;
+        assign req_out_if.tag    = req_in_if[0].tag;
+        assign req_out_if.addr   = req_in_if[0].addr;
+        assign req_out_if.rw     = req_in_if[0].rw;
+        assign req_out_if.byteen = req_in_if[0].byteen;
+        assign req_out_if.data   = req_in_if[0].data;
+        assign req_in_if[0].ready = req_out_if.ready;
 
-        assign rsp_in_if.valid  = rsp_out_if.valid;
-        assign rsp_in_if.tag    = rsp_out_if.tag;
-        assign rsp_in_if.data   = rsp_out_if.data;
-        assign rsp_out_if.ready   = rsp_in_if.ready;
+        assign rsp_in_if[0].valid = rsp_out_if.valid;
+        assign rsp_in_if[0].tag   = rsp_out_if.tag;
+        assign rsp_in_if[0].data  = rsp_out_if.data;
+        assign rsp_out_if.ready = rsp_in_if[0].ready;
 
     end
 
