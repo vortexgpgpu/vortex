@@ -1,4 +1,4 @@
-`include "VX_platform.vh"
+`include "VX_define.vh"
 
 module VX_core_req_bank_sel #(  
     // Size of a line in bytes

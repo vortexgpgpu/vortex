@@ -1,4 +1,4 @@
-`include "VX_platform.vh"
+`include "VX_define.vh"
 
 module VX_core_rsp_merge #(
     // Number of Word requests per cycle

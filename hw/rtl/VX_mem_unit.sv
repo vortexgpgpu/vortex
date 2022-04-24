@@ -26,7 +26,7 @@ module VX_mem_unit # (
     VX_cache_req_if.slave   tcache_req_if,
     VX_cache_rsp_if.master  tcache_rsp_if,
 `ifdef PERF_ENABLE
-    VX_perf_cache_if.slave  perf_tcache_if,
+    VX_perf_cache_if.master perf_tcache_if,
 `endif
 `endif
 

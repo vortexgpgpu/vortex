@@ -26,7 +26,7 @@ module VX_tex_dcr #(
 
     always @(posedge clk) begin
         if (reset) begin
-            tex_stage <= '0;
+            tex_stage <= 0;
             for (integer  i = 0; i < NUM_STAGES; ++i) begin
                 tex_dcrs[i] <= '0;
             end

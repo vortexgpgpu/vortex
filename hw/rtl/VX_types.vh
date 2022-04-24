@@ -189,6 +189,7 @@
 `define CSR_TEX_BEGIN               12'h7C0
 `define CSR_TEX_STAGE               (`CSR_TEX_BEGIN+0)
 `define CSR_TEX_END                 (`CSR_TEX_BEGIN+1)
+`define CSR_TEX_COUNT               (`CSR_TEX_END-`CSR_TEX_BEGIN)
 
 // Raster unit CSRs
 `define CSR_RASTER_BEGIN            `CSR_TEX_END
@@ -206,12 +207,14 @@
 `define CSR_RASTER_BCOORD_Z2        (`CSR_RASTER_BEGIN+11)
 `define CSR_RASTER_BCOORD_Z3        (`CSR_RASTER_BEGIN+12)
 `define CSR_RASTER_END              (`CSR_RASTER_BEGIN+13)
+`define CSR_RASTER_COUNT            (`CSR_RASTER_END-`CSR_RASTER_BEGIN)
 
 // ROP unit CSRs
 `define CSR_ROP_BEGIN               `CSR_RASTER_END
 `define CSR_ROP_RT_IDX              (`CSR_ROP_BEGIN+0)
 `define CSR_ROP_SAMPLE_IDX          (`CSR_ROP_BEGIN+1)
 `define CSR_ROP_END                 (`CSR_ROP_BEGIN+2)
+`define CSR_ROP_COUNT               (`CSR_ROP_END-`CSR_ROP_BEGIN)
 
 // Texture Units //////////////////////////////////////////////////////////////
 

@@ -45,10 +45,9 @@ module VX_tex_csr #(
 
     reg [31:0] read_data_r;
     always @(*) begin
-        read_data_r = 'x;
         case (tex_csr_if.read_addr)
             `CSR_TEX_STAGE: read_data_r = 32'(reg_csrs.stage);
-            default:;
+            default:        read_data_r = 'x;
         endcase
     end
 
