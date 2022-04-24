@@ -60,10 +60,10 @@ module VX_cache #(
     input wire reset,
 
     // Core request
-    VX_mem_req_if.slave     core_req_if[NUM_REQS],
+    VX_mem_req_if.slave     core_req_if [NUM_REQS],
 
     // Core response
-    VX_mem_rsp_if.master    core_rsp_if[NUM_REQS],
+    VX_mem_rsp_if.master    core_rsp_if [NUM_REQS],
 
     // Memory request
     VX_mem_req_if.master    mem_req_if,

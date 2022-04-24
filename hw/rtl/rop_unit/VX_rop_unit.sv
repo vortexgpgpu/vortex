@@ -3,7 +3,7 @@
 module VX_rop_unit #(    
     parameter CLUSTER_ID = 0,    
     parameter NUM_SLICES = 1,
-    parameter NUM_LANES  = NUM_SLICES
+    parameter NUM_LANES  = 1
 ) (
     input wire clk,
     input wire reset,
@@ -23,21 +23,71 @@ module VX_rop_unit #(
 );
     rop_dcrs_t dcrs = rop_dcr_if.data;
 
-    VX_rop_slice #(
-        .CLUSTER_ID (CLUSTER_ID),
-        .NUM_LANES  (NUM_LANES)
-    ) rop_slice (
-        .clk            (clk),
-        .reset          (reset),
-    `ifdef PERF_ENABLE
-        .rop_perf_if    (rop_perf_if),
-    `endif
-        .dcrs           (dcrs),
+`ifdef PERF_ENABLE
+    VX_rop_perf_if per_slice_rop_perf_if[NUM_SLICES]();
+`endif
 
-        .cache_req_if   (cache_req_if),
-        .cache_rsp_if   (cache_rsp_if),
+    VX_rop_req_if #(
+        .NUM_LANES (NUM_LANES)
+    ) per_slice_rop_req_if[NUM_SLICES]();
 
-        .rop_req_if     (rop_req_if)
+    VX_cache_req_if #(
+        .NUM_REQS  (`OCACHE_NUM_REQS), 
+        .WORD_SIZE (`OCACHE_WORD_SIZE), 
+        .TAG_WIDTH (`OCACHE_TAG_SEL_BITS)
+    ) per_slice_cache_req_if[NUM_SLICES]();
+
+    VX_cache_rsp_if #(
+        .NUM_REQS  (`OCACHE_NUM_REQS), 
+        .WORD_SIZE (`OCACHE_WORD_SIZE), 
+        .TAG_WIDTH (`OCACHE_TAG_SEL_BITS)
+    ) per_slice_cache_rsp_if[NUM_SLICES]();
+
+    for (genvar i = 0; i < NUM_SLICES; ++i) begin
+        VX_rop_slice #(
+            .CLUSTER_ID (CLUSTER_ID),
+            .NUM_LANES  (NUM_LANES)
+        ) rop_slice (
+            .clk            (clk),
+            .reset          (reset),
+        `ifdef PERF_ENABLE
+            .rop_perf_if    (per_slice_rop_perf_if[i]),
+        `endif
+            .dcrs           (dcrs),
+
+            .cache_req_if   (per_slice_cache_req_if[i]),
+            .cache_rsp_if   (per_slice_cache_rsp_if[i]),
+
+            .rop_req_if     (per_slice_rop_req_if[i])
+        );
+    end
+
+    VX_rop_req_demux #(
+        .NUM_REQS  (NUM_SLICES),
+        .NUM_LANES (NUM_LANES),
+        .BUFFERED  (1)
+    ) rop_req_demux (
+        .clk        (clk),
+        .reset      (reset),
+        .req_in_if  (rop_req_if),
+        .req_out_if (per_slice_rop_req_if)
+    );
+
+    VX_cache_mux #(
+        .NUM_REQS     (NUM_SLICES),
+        .NUM_LANES    (`OCACHE_NUM_REQS),
+        .DATA_SIZE    (`OCACHE_WORD_SIZE),
+        .TAG_IN_WIDTH (`OCACHE_TAG_SEL_BITS),
+        .TAG_SEL_IDX  (0),
+        .BUFFERED_REQ (1),
+        .BUFFERED_RSP (1),
+    ) cache_req_mux (
+        .clk        (clk),
+        .reset      (reset),
+        .req_in_if  (per_slice_cache_req_if),        
+        .rsp_in_if  (per_slice_cache_rsp_if),
+        .req_out_if (cache_req_if),
+        .rsp_out_if (cache_rsp_if)
     );
 
 `ifdef PERF_ENABLE

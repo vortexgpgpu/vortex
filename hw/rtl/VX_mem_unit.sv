@@ -221,7 +221,7 @@ module VX_mem_unit # (
 
     VX_cache_demux #(
         .NUM_REQS      (2),
-        .LANES         (`NUM_THREADS),
+        .NUM_LANES     (`NUM_THREADS),
         .DATA_SIZE     (4),            
         .TAG_IN_WIDTH  (`DCACHE_TAG_WIDTH),
         .TAG_SEL_IDX   (0),

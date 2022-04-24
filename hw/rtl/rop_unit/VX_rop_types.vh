@@ -63,16 +63,6 @@ typedef struct packed {
     logic [7:0]                 sample_mask;
 } rop_csrs_t;
 
-typedef struct packed {
-    logic                                         valid;
-    logic [`NUM_THREADS-1:0]                      tmask; 
-    logic [`NUM_THREADS-1:0][`ROP_DIM_BITS-1:0]   pos_x;
-    logic [`NUM_THREADS-1:0][`ROP_DIM_BITS-1:0]   pos_y;
-    logic [`NUM_THREADS-1:0][31:0]                color;
-    logic [`NUM_THREADS-1:0][`ROP_DEPTH_BITS-1:0] depth;
-    logic [`NUM_THREADS-1:0]                      backface;
-} rop_queue_entry;
-
 endpackage
 
 `endif

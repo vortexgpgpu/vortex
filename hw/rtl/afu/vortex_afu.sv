@@ -533,13 +533,13 @@ VX_mem_rsp_if #(
 `RESET_RELAY (mem_arb_reset);
 
 VX_mem_mux #(
-  .NUM_REQS       (2),
-  .DATA_WIDTH     (LMEM_DATA_WIDTH),
-  .ADDR_WIDTH     (LMEM_ADDR_WIDTH),
-  .TAG_IN_WIDTH   (AVS_REQ_TAGW),
-  .ARBITER        ("P"),
-  .BUFFERED_REQ   (1),
-  .BUFFERED_RSP   (1)
+  .NUM_REQS     (2),
+  .DATA_WIDTH   (LMEM_DATA_WIDTH),
+  .ADDR_WIDTH   (LMEM_ADDR_WIDTH),
+  .TAG_IN_WIDTH (AVS_REQ_TAGW),
+  .ARBITER      ("P"),
+  .BUFFERED_REQ (1),
+  .BUFFERED_RSP (2)
 ) mem_mux (
   .clk        (clk),
   .reset      (mem_arb_reset),

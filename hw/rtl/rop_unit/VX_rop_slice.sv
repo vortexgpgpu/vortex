@@ -1,7 +1,5 @@
 `include "VX_rop_define.vh"
 
-
-
 module VX_rop_slice #(
     parameter CLUSTER_ID = 0,
     parameter NUM_LANES  = 4

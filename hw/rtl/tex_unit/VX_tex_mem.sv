@@ -35,8 +35,8 @@ module VX_tex_mem #(
     localparam RSP_CTR_W = $clog2(NUM_REQS * 4 + 1);
 
     wire                          cache_rsp_valid;
-    wire [`NUM_THREADS-1:0]       cache_rsp_tmask;
-    wire [`NUM_THREADS-1:0][31:0] cache_rsp_data;
+    wire [`TCACHE_NUM_REQS-1:0]   cache_rsp_tmask;
+    wire [`TCACHE_NUM_REQS-1:0][31:0] cache_rsp_data;
     wire [`TCACHE_TAG_WIDTH-1:0]  cache_rsp_tag;
     wire                          cache_rsp_ready;
 

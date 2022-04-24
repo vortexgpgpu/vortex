@@ -4,11 +4,12 @@
 
 `TRACING_OFF
 module VX_fpu_fpnew #(      
-    parameter TAGW     = 1,
-    parameter FMULADD  = 1,
-    parameter FDIVSQRT = 1,
-    parameter FNONCOMP = 1,
-    parameter FCONV    = 1
+    parameter NUM_LANES = 1,
+    parameter TAGW      = 1,
+    parameter FMULADD   = 1,
+    parameter FDIVSQRT  = 1,
+    parameter FNONCOMP  = 1,
+    parameter FCONV     = 1
 ) (
     input wire clk,
     input wire reset,
@@ -21,13 +22,13 @@ module VX_fpu_fpnew #(
     input wire [`INST_FPU_BITS-1:0] op_type,
     input wire [`INST_MOD_BITS-1:0] frm,
 
-    input wire [`NUM_THREADS-1:0][31:0]  dataa,
-    input wire [`NUM_THREADS-1:0][31:0]  datab,
-    input wire [`NUM_THREADS-1:0][31:0]  datac,
-    output wire [`NUM_THREADS-1:0][31:0] result, 
+    input wire [NUM_LANES-1:0][31:0]  dataa,
+    input wire [NUM_LANES-1:0][31:0]  datab,
+    input wire [NUM_LANES-1:0][31:0]  datac,
+    output wire [NUM_LANES-1:0][31:0] result, 
 
     output wire has_fflags,
-    output fflags_t [`NUM_THREADS-1:0] fflags,
+    output fflags_t [NUM_LANES-1:0] fflags,
 
     output wire [TAGW-1:0] tag_out,
 
@@ -70,14 +71,14 @@ module VX_fpu_fpnew #(
 
     reg [TAGW-1:0] fpu_tag_in, fpu_tag_out;
     
-    reg [2:0][`NUM_THREADS-1:0][31:0] fpu_operands;   
+    reg [2:0][NUM_LANES-1:0][31:0] fpu_operands;   
     
     wire [FMTF_BITS-1:0] fpu_src_fmt = fpnew_pkg::FP32;
     wire [FMTF_BITS-1:0] fpu_dst_fmt = fpnew_pkg::FP32;
     wire [FMTI_BITS-1:0] fpu_int_fmt = fpnew_pkg::INT32;
 
-    wire [`NUM_THREADS-1:0][31:0] fpu_result;
-    fpnew_pkg::status_t [`NUM_THREADS-1:0] fpu_status;
+    wire [NUM_LANES-1:0][31:0] fpu_result;
+    fpnew_pkg::status_t [NUM_LANES-1:0] fpu_status;
 
     reg [FOP_BITS-1:0] fpu_op;
     reg [`INST_FRM_BITS-1:0] fpu_rnd;
@@ -132,7 +133,7 @@ module VX_fpu_fpnew #(
         endcase
     end  
     
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < NUM_LANES; i++) begin
         if (0 == i) begin
             fpnew_top #( 
                 .Features       (FPU_FEATURES),

@@ -479,7 +479,7 @@
 `define OCACHE_TAG_SEL_BITS     `CLOG2(`ROP_MEM_QUEUE_SIZE)
 
 // Core request tag bits
-`define OCACHE_TAG_WIDTH        `OCACHE_TAG_SEL_BITS
+`define OCACHE_TAG_WIDTH        (`OCACHE_TAG_SEL_BITS + `CLOG2(`ROP_NUM_SLICES))
 
 // Memory request data bits
 `define OCACHE_MEM_DATA_WIDTH   (`OCACHE_LINE_SIZE * 8)

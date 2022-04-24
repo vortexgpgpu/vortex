@@ -1,14 +1,17 @@
 `include "VX_rop_define.vh"
 
-interface VX_rop_req_if ();
+interface VX_rop_req_if #(
+    parameter NUM_LANES = 1
+) ();
 
     wire                                    valid;
-    wire [`NUM_THREADS-1:0]                 tmask; 
-    wire [`NUM_THREADS-1:0][`ROP_DIM_BITS-1:0] pos_x;
-    wire [`NUM_THREADS-1:0][`ROP_DIM_BITS-1:0] pos_y;
-    wire [`NUM_THREADS-1:0][31:0]           color;
-    wire [`NUM_THREADS-1:0][`ROP_DEPTH_BITS-1:0] depth;
-    wire [`NUM_THREADS-1:0]                 backface;
+    
+    wire [NUM_LANES-1:0]                    tmask; 
+    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] pos_x;
+    wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] pos_y;
+    rgba_t [NUM_LANES-1:0]                  color;
+    wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] depth;
+    wire [NUM_LANES-1:0]                    backface;
 
     wire                                    ready;
 

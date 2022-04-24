@@ -35,8 +35,13 @@ module VX_cluster #(
 
 `ifdef EXT_RASTER_ENABLE
 
-    VX_raster_req_if    per_core_raster_req_if[`NUM_CORES-1:0]();
-    VX_raster_req_if    raster_req_if();
+    VX_raster_req_if #(
+        .NUM_LANES (`NUM_THREADS)
+    ) per_core_raster_req_if[`NUM_CORES-1:0]();
+
+    VX_raster_req_if #(
+        .NUM_LANES (`NUM_THREADS)
+    ) raster_req_if();
 
 `ifdef PERF_ENABLE
     VX_perf_cache_if    perf_rcache_if();
@@ -154,8 +159,13 @@ module VX_cluster #(
 
 `ifdef EXT_ROP_ENABLE
 
-    VX_rop_req_if       per_core_rop_req_if[`NUM_CORES-1:0]();
-    VX_rop_req_if       rop_req_if();
+    VX_rop_req_if #(
+        .NUM_LANES (`NUM_THREADS)
+    ) per_core_rop_req_if[`NUM_CORES-1:0]();
+
+    VX_rop_req_if #(
+        .NUM_LANES (`NUM_THREADS)
+    ) rop_req_if();
 
 `ifdef PERF_ENABLE
     VX_perf_cache_if    ocache_perf_if();

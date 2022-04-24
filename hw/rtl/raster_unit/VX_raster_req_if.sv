@@ -1,12 +1,14 @@
 `include "VX_raster_define.vh"
 
-interface VX_raster_req_if ();
+interface VX_raster_req_if #(
+    parameter NUM_LANES = 1
+) ();
 
-    wire                                valid;
-    wire [`NUM_THREADS-1:0]             tmask;    
-    raster_stamp_t [`NUM_THREADS-1:0]   stamps;
-    wire                                empty;    
-    wire                                ready;
+    wire                            valid;
+    wire [NUM_LANES-1:0]            tmask;    
+    raster_stamp_t [NUM_LANES-1:0]  stamps;
+    wire                            empty;    
+    wire                            ready;
 
     modport master (
         output valid,
