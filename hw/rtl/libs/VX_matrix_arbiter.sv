@@ -49,7 +49,7 @@ module VX_matrix_arbiter #(
             for (genvar j = i + 1; j < NUM_REQS; j++) begin
                 always @(posedge clk) begin                       
                     if (reset) begin         
-                        state[i][j] <= 0;
+                        state[i][j] <= '0;
                     end else begin
                         state[i][j] <= (state[i][j] || grant_unqual[j]) && !grant_unqual[i];
                     end
@@ -64,7 +64,7 @@ module VX_matrix_arbiter #(
             reg [NUM_REQS-1:0] grant_unqual_prev;
             always @(posedge clk) begin
                 if (reset) begin
-                    grant_unqual_prev <= 0;
+                    grant_unqual_prev <= '0;
                 end else if (unlock) begin
                     grant_unqual_prev <= grant_unqual;
                 end

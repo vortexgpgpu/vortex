@@ -264,7 +264,7 @@ module VX_mem_streamer #(
                     rsp_store[stag_raddr] <= crsp_data;
                 end
                 if (stag_pop) begin
-                    mask_store[stag_raddr] <= 0;
+                    mask_store[stag_raddr] <= '0;
                 end
             end
         end 
@@ -286,10 +286,10 @@ module VX_mem_streamer #(
 
     always @(posedge clk) begin
         if (reset)
-            req_sent_mask <= 0;
+            req_sent_mask <= '0;
         else begin
             if (req_complete)
-                req_sent_mask <= 0;
+                req_sent_mask <= '0;
             else
                 req_sent_mask <= req_sent_mask_n;
         end

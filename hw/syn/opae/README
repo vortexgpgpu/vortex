@@ -60,7 +60,7 @@ source /export/fpga/bin/setup-fpga-env fpga-pac-a10
 qsub-sim
 
 # build
-make ase
+make ase-1c
 
 # tests
 ./run_ase.sh build_arria10_ase_1c ../../../tests/regression/basic/basic -n1 -t0

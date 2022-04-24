@@ -127,7 +127,9 @@ wire vx_busy;
 
 reg [2:0][63:0] cmd_args;
 
-t_ccip_clAddr               cmd_io_addr = t_ccip_clAddr'(cmd_args[0]);
+t_ccip_clAddr cmd_io_addr;
+assign cmd_io_addr = t_ccip_clAddr'(cmd_args[0]);
+
 wire [CCI_ADDR_WIDTH-1:0] cmd_mem_addr  = CCI_ADDR_WIDTH'(cmd_args[1]);
 wire [CCI_ADDR_WIDTH-1:0] cmd_data_size = CCI_ADDR_WIDTH'(cmd_args[2]);
 

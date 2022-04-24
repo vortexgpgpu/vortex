@@ -26,14 +26,9 @@ module VX_tex_dcr #(
 
     always @(posedge clk) begin
         if (reset) begin
-            tex_stage <= 0;
+            tex_stage <= '0;
             for (integer  i = 0; i < NUM_STAGES; ++i) begin
-                tex_dcrs[i].mipoff  <= 0;
-                tex_dcrs[i].logdims <= 0;
-                tex_dcrs[i].wraps   <= 0;
-                tex_dcrs[i].baddr   <= 0;
-                tex_dcrs[i].format  <= 0;
-                tex_dcrs[i].filter  <= 0;
+                tex_dcrs[i] <= '0;
             end
         end else if (dcr_wr_valid) begin
             case (dcr_wr_addr)

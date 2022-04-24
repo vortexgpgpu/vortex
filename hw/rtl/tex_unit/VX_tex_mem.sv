@@ -158,7 +158,7 @@ module VX_tex_mem #(
 
     always @(posedge clk) begin
         if (reset || sent_all_ready) begin
-            texel_sent_mask <= 0;
+            texel_sent_mask <= '0;
         end else begin
             texel_sent_mask <= texel_sent_mask | dcache_req_fire;            
         end

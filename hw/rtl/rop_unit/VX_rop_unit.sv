@@ -21,7 +21,8 @@ module VX_rop_unit #(
     VX_rop_dcr_if.slave rop_dcr_if,
     VX_rop_req_if.slave rop_req_if
 );
-    rop_dcrs_t dcrs = rop_dcr_if.data;
+    rop_dcrs_t dcrs;
+    assign dcrs = rop_dcr_if.data;
 
     VX_rop_slice #(
         .CLUSTER_ID (CLUSTER_ID),

@@ -21,7 +21,7 @@ module VX_rop_csr #(
 
     always @(posedge clk) begin
         if (reset) begin
-            reg_csrs <= 0;
+            reg_csrs <= '0;
         end else if (rop_csr_if.write_enable) begin
             case (rop_csr_if.write_addr)
                 `CSR_ROP_RT_IDX:;

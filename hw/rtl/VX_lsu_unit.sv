@@ -190,11 +190,11 @@ module VX_lsu_unit #(
 
     always @(posedge clk) begin
         if (reset) begin
-            req_sent_mask <= 0;
+            req_sent_mask <= '0;
             is_req_start  <= 1;
         end else begin
             if (cache_req_ready) begin
-                req_sent_mask <= 0;
+                req_sent_mask <= '0;
                 is_req_start  <= 1;
             end else begin
                 req_sent_mask <= req_sent_mask_n;
