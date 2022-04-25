@@ -82,9 +82,6 @@ module VX_execute #(
 `endif
 `ifdef EXT_RASTER_ENABLE
     VX_gpu_csr_if raster_csr_if();
-`ifdef PERF_ENABLE
-    VX_raster_svc_perf_if raster_svc_perf_if();
-`endif
 `endif
 `ifdef EXT_ROP_ENABLE
     VX_gpu_csr_if rop_csr_if();
@@ -152,7 +149,6 @@ module VX_execute #(
         .raster_csr_if  (raster_csr_if),
     `ifdef PERF_ENABLE
         .raster_perf_if (raster_perf_if),
-        .raster_svc_perf_if (raster_svc_perf_if),
         .perf_rcache_if (perf_rcache_if),
     `endif
     `endif
@@ -204,9 +200,6 @@ module VX_execute #(
     `ifdef EXT_RASTER_ENABLE        
         .raster_csr_if  (raster_csr_if),
         .raster_req_if  (raster_req_if),
-    `ifdef PERF_ENABLE
-        .raster_svc_perf_if(raster_svc_perf_if),
-    `endif
     `endif
     `ifdef EXT_ROP_ENABLE        
         .rop_csr_if     (rop_csr_if),

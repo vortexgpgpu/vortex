@@ -471,6 +471,41 @@ public:
   }
 };
 
+class RopSlices {
+public:
+  RopSlices(const Arch& arch, const RopUnit::DCRS& dcrs) 
+    : depthtencils_(ROP_NUM_SLICES, {arch, dcrs})
+    , blenders_(ROP_NUM_SLICES, {arch, dcrs})
+    , slice_idx_(0)
+  {}
+
+  void clear() {
+    for (int i = 0; i < ROP_NUM_SLICES; ++i) {
+      depthtencils_.at(i).clear();
+      blenders_.at(i).clear();
+    }
+  }
+
+  void attach_ram(RAM* mem) {
+    for (int i = 0; i < ROP_NUM_SLICES; ++i) {
+      depthtencils_.at(i).attach_ram(mem);
+      blenders_.at(i).attach_ram(mem);
+    }
+  }   
+
+  void write(uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, RopUnit::TraceData::Ptr trace_data) {      
+    if (depthtencils_.at(slice_idx_).write(x, y, is_backface, depth, trace_data)) {
+      blenders_.at(slice_idx_).write(x, y, color, trace_data);
+    }
+    slice_idx_ = (slice_idx_ + 1) % ROP_NUM_SLICES;    
+  }
+
+private:
+  std::vector<DepthTencil> depthtencils_;
+  std::vector<Blender>     blenders_;
+  uint32_t                 slice_idx_;
+};
+
 class RopUnit::Impl {
 private:
   struct pending_req_t {
@@ -481,8 +516,7 @@ private:
   RopUnit* simobject_;    
   const Arch& arch_;    
   PerfStats perf_stats_;
-  DepthTencil depthtencil_;
-  Blender blender_;
+  RopSlices slices_;
   HashTable<pending_req_t> pending_reqs_;
 
 public:
@@ -491,9 +525,8 @@ public:
        const DCRS& dcrs) 
     : simobject_(simobject)
     , arch_(arch)
-    , depthtencil_(arch, dcrs)
-    , blender_(arch, dcrs)
-    , pending_reqs_(ROP_MEM_QUEUE_SIZE * ROP_NUM_SLICES)
+    , slices_(arch, dcrs)
+    , pending_reqs_(ROP_MEM_QUEUE_SIZE)
   {
     this->clear();
   }
@@ -501,19 +534,15 @@ public:
   ~Impl() {}
 
   void clear() {
-    depthtencil_.clear();
-    blender_.clear();
+    slices_.clear();
   }
 
   void attach_ram(RAM* mem) {
-    depthtencil_.attach_ram(mem);
-    blender_.attach_ram(mem);
+    slices_.attach_ram(mem);
   }   
 
   void write(uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, TraceData::Ptr trace_data) {      
-    if (depthtencil_.write(x, y, is_backface, depth, trace_data)) {
-      blender_.write(x, y, color, trace_data);
-    }
+    slices_.write(x, y, is_backface, color, depth, trace_data);
   }
 
   void tick() {

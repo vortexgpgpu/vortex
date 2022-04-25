@@ -406,9 +406,7 @@ module VX_cluster #(
         .NUM_REQS     (`NUM_CORES),
         .DATA_WIDTH   (`DCACHE_MEM_DATA_WIDTH),
         .ADDR_WIDTH   (`DCACHE_MEM_ADDR_WIDTH),           
-        .TAG_IN_WIDTH (`L1_MEM_TAG_WIDTH),            
-        .ARBITER      ("R"),
-        .TAG_SEL_IDX  (1), // Skip 0 for NC flag
+        .TAG_IN_WIDTH (`L1_MEM_TAG_WIDTH),
         .BUFFERED_REQ (1),
         .BUFFERED_RSP (1)
     ) mem_mux_core (
@@ -470,7 +468,9 @@ module VX_cluster #(
         .NUM_REQS     (MEM_ARB_SIZE),
         .DATA_WIDTH   (`L2_MEM_DATA_WIDTH),
         .ADDR_WIDTH   (`L2_MEM_ADDR_WIDTH),
-        .TAG_IN_WIDTH (MEM_ARB_TAG_WIDTH)
+        .TAG_IN_WIDTH (MEM_ARB_TAG_WIDTH),
+        .BUFFERED_REQ (1),
+        .BUFFERED_RSP (2)
     ) mem_mux_out (
         .clk        (clk),
         .reset      (reset),

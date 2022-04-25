@@ -24,7 +24,6 @@ module VX_csr_unit #(
     VX_gpu_csr_if.master        raster_csr_if,
 `ifdef PERF_ENABLE
     VX_raster_perf_if.slave     raster_perf_if,
-    VX_raster_svc_perf_if.slave raster_svc_perf_if,
     VX_perf_cache_if.slave      perf_rcache_if,
 `endif
 `endif
@@ -83,7 +82,6 @@ module VX_csr_unit #(
         .raster_csr_if  (raster_csr_if),
     `ifdef PERF_ENABLE
         .raster_perf_if (raster_perf_if),
-        .raster_svc_perf_if (raster_svc_perf_if),
         .perf_rcache_if (perf_rcache_if),
     `endif
     `endif

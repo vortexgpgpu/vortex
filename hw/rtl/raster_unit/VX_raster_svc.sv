@@ -5,10 +5,6 @@ module VX_raster_svc #(
 ) (
     input wire clk,
     input wire reset,
-    
-`ifdef PERF_ENABLE
-    VX_raster_svc_perf_if.master raster_svc_perf_if,
-`endif
 
     // Inputs    
     VX_raster_svc_if.slave raster_svc_req_if,    
@@ -68,22 +64,6 @@ module VX_raster_svc #(
     );
 
     assign raster_svc_rsp_if.eop  = 1'b1;
-
-`ifdef PERF_ENABLE
-    reg [`PERF_CTR_BITS-1:0] perf_stall_cycles;
-
-    wire perf_stall_cycle = raster_svc_req_if.valid && ~stall_out && ~raster_req_if.valid;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            perf_stall_cycles <= 0;
-        end else begin
-            perf_stall_cycles <= perf_stall_cycles + `PERF_CTR_BITS'(perf_stall_cycle);
-        end
-    end
-
-    assign raster_svc_perf_if.stall_cycles = perf_stall_cycles;
-`endif
 
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
