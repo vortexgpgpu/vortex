@@ -1,7 +1,7 @@
 `ifndef VX_CACHE_DEFINE_VH
 `define VX_CACHE_DEFINE_VH
 
-`include "VX_platform.vh"
+`include "VX_define.vh"
 
 // cache request identifier
 `define DBG_CACHE_REQ_IDW       `UP(REQ_DBG_IDW)

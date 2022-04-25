@@ -32,7 +32,7 @@ module VX_tex_csr #(
 
     always @(posedge clk) begin
         if (reset) begin
-            reg_csrs <= 0;
+            reg_csrs <= '0;
         end else if (tex_csr_if.write_enable) begin
             case (tex_csr_if.write_addr)
                 `CSR_TEX_STAGE: reg_csrs.stage <= tex_csr_if.write_data[tid][$clog2(NUM_STAGES)-1:0];
@@ -45,10 +45,9 @@ module VX_tex_csr #(
 
     reg [31:0] read_data_r;
     always @(*) begin
-        read_data_r = 'x;
         case (tex_csr_if.read_addr)
             `CSR_TEX_STAGE: read_data_r = 32'(reg_csrs.stage);
-            default:;
+            default:        read_data_r = 'x;
         endcase
     end
 

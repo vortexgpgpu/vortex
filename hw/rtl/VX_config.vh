@@ -166,8 +166,6 @@
 
 `ifdef EXT_RASTER_ENABLE
     `define EXT_RASTER_ENABLED 1
-    `define RASTER_TILE_LOGSIZE         4
-    `define RASTER_BLOCK_LOGSIZE        2
 `else
     `define EXT_RASTER_ENABLED 0
 `endif
@@ -298,6 +296,16 @@
 // RASTER number of slices
 `ifndef RASTER_NUM_SLICES    
 `define RASTER_NUM_SLICES 1
+`endif
+
+// RASTER tile size
+`ifndef RASTER_TILE_LOGSIZE
+`define RASTER_TILE_LOGSIZE 4
+`endif 
+
+// RASTER block size
+`ifndef RASTER_BLOCK_LOGSIZE
+`define RASTER_BLOCK_LOGSIZE 2
 `endif
 
 // ROP memeory queue size
@@ -490,7 +498,7 @@
 
 // Number of banks
 `ifndef RCACHE_NUM_BANKS
-`define RCACHE_NUM_BANKS 1
+`define RCACHE_NUM_BANKS 4
 `endif
 
 // Number of ports per bank

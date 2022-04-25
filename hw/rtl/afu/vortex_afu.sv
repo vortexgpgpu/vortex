@@ -127,7 +127,9 @@ wire vx_busy;
 
 reg [2:0][63:0] cmd_args;
 
-t_ccip_clAddr               cmd_io_addr = t_ccip_clAddr'(cmd_args[0]);
+t_ccip_clAddr cmd_io_addr;
+assign cmd_io_addr = t_ccip_clAddr'(cmd_args[0]);
+
 wire [CCI_ADDR_WIDTH-1:0] cmd_mem_addr  = CCI_ADDR_WIDTH'(cmd_args[1]);
 wire [CCI_ADDR_WIDTH-1:0] cmd_data_size = CCI_ADDR_WIDTH'(cmd_args[2]);
 
@@ -533,13 +535,13 @@ VX_mem_rsp_if #(
 `RESET_RELAY (mem_arb_reset);
 
 VX_mem_mux #(
-  .NUM_REQS       (2),
-  .DATA_WIDTH     (LMEM_DATA_WIDTH),
-  .ADDR_WIDTH     (LMEM_ADDR_WIDTH),
-  .TAG_IN_WIDTH   (AVS_REQ_TAGW),
-  .ARBITER        ("P"),
-  .BUFFERED_REQ   (1),
-  .BUFFERED_RSP   (1)
+  .NUM_REQS     (2),
+  .DATA_WIDTH   (LMEM_DATA_WIDTH),
+  .ADDR_WIDTH   (LMEM_ADDR_WIDTH),
+  .TAG_IN_WIDTH (AVS_REQ_TAGW),
+  .ARBITER      ("P"),
+  .BUFFERED_REQ (1),
+  .BUFFERED_RSP (2)
 ) mem_mux (
   .clk        (clk),
   .reset      (mem_arb_reset),

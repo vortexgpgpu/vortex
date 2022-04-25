@@ -35,7 +35,7 @@ module VX_rop_dcr (
 
     always @(posedge clk) begin
         if (reset) begin
-            dcrs <= 0;
+            dcrs <= '0;
         end else if (dcr_wr_valid) begin
             case (dcr_wr_addr)                
                 `DCR_ROP_CBUF_ADDR: begin 

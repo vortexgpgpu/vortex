@@ -1,7 +1,8 @@
 `include "VX_fpu_define.vh"
 
-module VX_fpu_fpga #( 
-    parameter TAGW = 4
+module VX_fpu_fpga #(
+    parameter NUM_LANES = 1, 
+    parameter TAGW      = 4
 ) (
     input wire clk,
     input wire reset,
@@ -14,13 +15,13 @@ module VX_fpu_fpga #(
     input wire [`INST_FPU_BITS-1:0] op_type,
     input wire [`INST_MOD_BITS-1:0] frm,
 
-    input wire [`NUM_THREADS-1:0][31:0]  dataa,
-    input wire [`NUM_THREADS-1:0][31:0]  datab,
-    input wire [`NUM_THREADS-1:0][31:0]  datac,
-    output wire [`NUM_THREADS-1:0][31:0] result, 
+    input wire [NUM_LANES-1:0][31:0]  dataa,
+    input wire [NUM_LANES-1:0][31:0]  datab,
+    input wire [NUM_LANES-1:0][31:0]  datac,
+    output wire [NUM_LANES-1:0][31:0] result, 
 
     output wire has_fflags,
-    output fflags_t [`NUM_THREADS-1:0] fflags,
+    output fflags_t [NUM_LANES-1:0] fflags,
 
     output wire [TAGW-1:0] tag_out,
 
@@ -35,16 +36,16 @@ module VX_fpu_fpga #(
     localparam NUM_FPC  = 5;
     localparam FPC_BITS = `LOG2UP(NUM_FPC);
 
-    localparam RSP_MUX_DATAW = (`NUM_THREADS * 32) + 1 + (`NUM_THREADS * $bits(fflags_t)) + TAGW;
+    localparam RSP_MUX_DATAW = (NUM_LANES * 32) + 1 + (NUM_LANES * $bits(fflags_t)) + TAGW;
     
     wire [NUM_FPC-1:0] per_core_ready_in;
-    wire [NUM_FPC-1:0][`NUM_THREADS-1:0][31:0] per_core_result;
+    wire [NUM_FPC-1:0][NUM_LANES-1:0][31:0] per_core_result;
     wire [NUM_FPC-1:0][TAGW-1:0] per_core_tag_out;
     reg [NUM_FPC-1:0] per_core_ready_out;
     wire [NUM_FPC-1:0] per_core_valid_out;
     
     wire [NUM_FPC-1:0] per_core_has_fflags;  
-    fflags_t [NUM_FPC-1:0][`NUM_THREADS-1:0] per_core_fflags;  
+    fflags_t [NUM_FPC-1:0][NUM_LANES-1:0] per_core_fflags;  
 
     reg [FPC_BITS-1:0] core_select;
     reg do_madd, do_sub, do_neg, is_itof, is_signed;
@@ -80,8 +81,8 @@ module VX_fpu_fpga #(
     `RESET_RELAY (ncp_reset);
 
     VX_fp_fma #(
-        .TAGW (TAGW),
-        .LANES(`NUM_THREADS)
+        .NUM_LANES (NUM_LANES),
+        .TAGW      (TAGW)
     ) fp_fma (
         .clk        (clk), 
         .reset      (fma_reset),   
@@ -104,8 +105,8 @@ module VX_fpu_fpga #(
     );
 
     VX_fp_div #(
-        .TAGW (TAGW),
-        .LANES(`NUM_THREADS)
+        .NUM_LANES (NUM_LANES),
+        .TAGW      (TAGW)
     ) fp_div (
         .clk        (clk), 
         .reset      (div_reset),   
@@ -124,8 +125,8 @@ module VX_fpu_fpga #(
     );
 
     VX_fp_sqrt #(
-        .TAGW (TAGW),
-        .LANES(`NUM_THREADS)
+        .NUM_LANES (NUM_LANES),
+        .TAGW      (TAGW)
     ) fp_sqrt (
         .clk        (clk), 
         .reset      (sqrt_reset),   
@@ -143,8 +144,8 @@ module VX_fpu_fpga #(
     );
 
     VX_fp_cvt #(
-        .TAGW (TAGW),
-        .LANES(`NUM_THREADS)
+        .NUM_LANES (NUM_LANES),
+        .TAGW      (TAGW)
     ) fp_cvt (
         .clk        (clk), 
         .reset      (cvt_reset),   
@@ -164,8 +165,8 @@ module VX_fpu_fpga #(
     );
 
     VX_fp_ncomp #(
-        .TAGW (TAGW),
-        .LANES(`NUM_THREADS)
+        .NUM_LANES (NUM_LANES),
+        .TAGW      (TAGW)
     ) fp_ncomp (
         .clk        (clk),
         .reset      (ncp_reset),   

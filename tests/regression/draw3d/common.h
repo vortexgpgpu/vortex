@@ -4,6 +4,7 @@
 #include <VX_config.h>
 #include <VX_types.h>
 #include <cocogfx/include/fixed.hpp>
+#include <cocogfx/include/math.hpp>
 #include <stdint.h>
 
 #define KERNEL_ARG_DEV_MEM_ADDR 0x7ffff000
@@ -50,7 +51,63 @@ typedef struct {
   uint32_t num_prims;
 } rast_tile_header_t;
 
+class RasterDCRS {
+private:
+  uint32_t states_[DCR_RASTER_STATE_COUNT];
+
+public:
+  RasterDCRS() {
+    this->clear();
+  }
+
+  void clear() {
+    for (auto& state : states_) {
+      state = 0;
+    }
+  }
+
+  uint32_t read(uint32_t addr) const {
+    uint32_t state = DCR_RASTER_STATE(addr);
+    return states_[state];
+  }
+
+  void write(uint32_t addr, uint32_t value) {
+    uint32_t state = DCR_RASTER_STATE(addr);
+    states_[state] = value;
+  }
+};  
+
+class RopDCRS {
+private:
+  uint32_t states_[DCR_ROP_STATE_COUNT];
+
+public:
+  RopDCRS() {
+    this->clear();
+  }
+
+  void clear() {
+    for (auto& state : states_) {
+      state = 0;
+    }
+  }
+
+  uint32_t read(uint32_t addr) const {
+    uint32_t state = DCR_ROP_STATE(addr);
+    return states_[state];
+  }
+
+  void write(uint32_t addr, uint32_t value) {
+    uint32_t state = DCR_ROP_STATE(addr);
+    states_[state] = value;
+  }
+};
+
+class GpuSW;
+
 typedef struct {
+  uint32_t log_num_tasks;
+  
   uint32_t dst_width;
   uint32_t dst_height;
 
@@ -68,6 +125,13 @@ typedef struct {
   bool color_enabled;
   bool tex_enabled; 
   bool tex_modulate;
+  bool sw_rast;
+  bool sw_rop;
+  bool sw_interp;
+
+  RasterDCRS raster_dcrs;
+  RopDCRS    rop_dcrs;
+  GpuSW*     gpu_sw;
 } kernel_arg_t;
 
 #endif

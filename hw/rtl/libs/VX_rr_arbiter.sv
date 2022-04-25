@@ -41,7 +41,7 @@ module VX_rr_arbiter #(
 
         always @(posedge clk) begin                       
             if (reset) begin         
-                state <= 0;
+                state <= '0;
             end else if (!LOCK_ENABLE || unlock) begin
                 state <= grant_index_r;
             end
@@ -77,7 +77,7 @@ module VX_rr_arbiter #(
 
         always @(posedge clk) begin                       
             if (reset) begin         
-                state <= 0;
+                state <= '0;
             end else if (!LOCK_ENABLE || unlock) begin
                 state <= grant_index_r;
             end
@@ -157,7 +157,7 @@ module VX_rr_arbiter #(
 
         always @(posedge clk) begin                       
             if (reset) begin         
-                state <= 0;
+                state <= '0;
             end else if (!LOCK_ENABLE || unlock) begin
                 state <= grant_index_r;
             end
@@ -235,7 +235,7 @@ module VX_rr_arbiter #(
 
         always @(posedge clk) begin                       
             if (reset) begin         
-                state <= 0;
+                state <= '0;
             end else if (!LOCK_ENABLE || unlock) begin
                 state <= grant_index_r;
             end

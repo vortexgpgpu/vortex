@@ -1,4 +1,4 @@
-`include "VX_cache_define.vh"
+`include "VX_define.vh"
 
 interface VX_mem_rsp_if #(
     parameter DATA_WIDTH = 1,

@@ -51,6 +51,8 @@ typedef struct {
 } rast_tile_header_t;
 
 typedef struct {
+  uint32_t num_tasks;
+
   uint32_t dst_width;
   uint32_t dst_height;
 

@@ -9,11 +9,6 @@ module VX_rop_mem #(
     input wire clk,
     input wire reset,
 
-    // PERF
-`ifdef PERF_ENABLE
-    VX_rop_perf_if.master rop_perf_if,
-`endif
-
     // Device configuration
     input rop_dcrs_t dcrs,
 
@@ -64,53 +59,6 @@ module VX_rop_mem #(
 
     `UNUSED_VAR (dcrs)
 
-`ifdef PERF_ENABLE
-    wire [$clog2(NUM_REQS+1)-1:0] perf_mem_rd_req_per_cycle;
-    wire [$clog2(NUM_REQS+1)-1:0] perf_mem_wr_req_per_cycle;
-    wire [$clog2(NUM_REQS+1)-1:0] perf_mem_rsp_per_cycle;
-
-    wire [NUM_REQS-1:0] perf_mem_rd_req_per_mask = cache_req_if.valid & ~cache_req_if.rw & cache_req_if.ready;
-    wire [NUM_REQS-1:0] perf_mem_wr_req_per_mask = cache_req_if.valid & cache_req_if.rw & cache_req_if.ready;
-    wire [NUM_REQS-1:0] perf_mem_rsp_per_mask = cache_rsp_if.valid & cache_rsp_if.ready;
-
-    `POP_COUNT(perf_mem_rd_req_per_cycle, perf_mem_rd_req_per_mask);    
-    `POP_COUNT(perf_mem_wr_req_per_cycle, perf_mem_wr_req_per_mask);    
-    `POP_COUNT(perf_mem_rsp_per_cycle, perf_mem_rsp_per_mask);
-
-    reg [`PERF_CTR_BITS-1:0] perf_pending_reads;   
-    wire [$clog2(NUM_REQS+1)+1-1:0] perf_pending_reads_cycle = perf_mem_rd_req_per_cycle - perf_mem_rsp_per_cycle;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            perf_pending_reads <= 0;
-        end else begin
-            perf_pending_reads <= perf_pending_reads + `PERF_CTR_BITS'($signed(perf_pending_reads_cycle));
-        end
-    end
-
-    reg [`PERF_CTR_BITS-1:0] perf_mem_reads;
-    reg [`PERF_CTR_BITS-1:0] perf_mem_writes;
-    reg [`PERF_CTR_BITS-1:0] perf_mem_latency;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            perf_mem_reads   <= 0;
-            perf_mem_writes  <= 0;
-            perf_mem_latency <= 0;
-        end else begin
-            perf_mem_reads   <= perf_mem_reads   + `PERF_CTR_BITS'(perf_mem_rd_req_per_cycle);
-            perf_mem_writes  <= perf_mem_writes  + `PERF_CTR_BITS'(perf_mem_wr_req_per_cycle);
-            perf_mem_latency <= perf_mem_latency + `PERF_CTR_BITS'(perf_pending_reads);
-        end
-    end
-
-    assign rop_perf_if.mem_reads   = perf_mem_reads;
-    assign rop_perf_if.mem_writes  = perf_mem_writes;
-    assign rop_perf_if.mem_latency = perf_mem_latency;
-`endif
-
-    //////////////////////////////////////////////////////////////////
-
     wire color_enable = req_rw ? (dcrs.cbuf_writemask != 0) : dcrs.blend_enable;
     wire [3:0] color_byteen = dcrs.cbuf_writemask;
 
@@ -154,7 +102,7 @@ module VX_rop_mem #(
     VX_pipe_register #(
         .DATAW	(1 + 1 + NUM_REQS * (1 + 4 + `OCACHE_ADDR_WIDTH + 32) + TAG_WIDTH),
         .RESETW (1),
-        .DEPTH  (3)
+        .DEPTH  (4)
     ) mreq_pipe_reg (
         .clk      (clk),
         .reset    (reset),
@@ -171,7 +119,8 @@ module VX_rop_mem #(
         .DATAW            (32),
         .TAGW             (TAG_WIDTH),
         .QUEUE_SIZE       (`ROP_MEM_QUEUE_SIZE),
-        .PARTIAL_RESPONSE (0)
+        .PARTIAL_RESPONSE (0),
+        .OUT_REG          (1)
     ) mem_streamer (
         .clk            (clk),
         .reset          (reset),

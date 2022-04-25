@@ -145,7 +145,7 @@ module VX_ibuffer #(
     
     always @(posedge clk) begin
         if (reset)  begin            
-            valid_table <= 0;
+            valid_table <= '0;
             deq_valid   <= 0;  
             num_warps   <= 0;
         end else begin

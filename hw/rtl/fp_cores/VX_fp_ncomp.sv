@@ -3,9 +3,9 @@
 /// Modified port of noncomp module from fpnew Libray 
 /// reference: https://github.com/pulp-platform/fpnew
 
-module VX_fp_ncomp #( 
-    parameter TAGW = 1,
-    parameter LANES = 1
+module VX_fp_ncomp #(
+    parameter NUM_LANES = 1,
+    parameter TAGW = 1
 ) (
     input wire clk,
     input wire reset,
@@ -18,12 +18,12 @@ module VX_fp_ncomp #(
     input wire [`INST_FPU_BITS-1:0] op_type,
     input wire [`INST_FRM_BITS-1:0] frm,
 
-    input wire [LANES-1:0][31:0]  dataa,
-    input wire [LANES-1:0][31:0]  datab,
-    output wire [LANES-1:0][31:0] result, 
+    input wire [NUM_LANES-1:0][31:0]  dataa,
+    input wire [NUM_LANES-1:0][31:0]  datab,
+    output wire [NUM_LANES-1:0][31:0] result, 
 
     output wire has_fflags,
-    output fflags_t [LANES-1:0] fflags,
+    output fflags_t [NUM_LANES-1:0] fflags,
 
     output wire [TAGW-1:0] tag_out,
 
@@ -44,14 +44,14 @@ module VX_fp_ncomp #(
                 //SIG_NAN   = 32'h00000100,
                 QUT_NAN     = 32'h00000200;
 
-    wire [LANES-1:0]        a_sign, b_sign;
-    wire [LANES-1:0][7:0]   a_exponent, b_exponent;
-    wire [LANES-1:0][22:0]  a_mantissa, b_mantissa;
-    fp_class_t [LANES-1:0]  a_clss, b_clss;
-    wire [LANES-1:0]        a_smaller, ab_equal;
+    wire [NUM_LANES-1:0]        a_sign, b_sign;
+    wire [NUM_LANES-1:0][7:0]   a_exponent, b_exponent;
+    wire [NUM_LANES-1:0][22:0]  a_mantissa, b_mantissa;
+    fp_class_t [NUM_LANES-1:0]  a_clss, b_clss;
+    wire [NUM_LANES-1:0]        a_smaller, ab_equal;
 
     // Setup
-    for (genvar i = 0; i < LANES; i++) begin
+    for (genvar i = 0; i < NUM_LANES; i++) begin
         assign     a_sign[i] = dataa[i][31]; 
         assign a_exponent[i] = dataa[i][30:23];
         assign a_mantissa[i] = dataa[i][22:0];
@@ -88,17 +88,17 @@ module VX_fp_ncomp #(
     wire [TAGW-1:0]         tag_in_s0;
     wire [`INST_FPU_BITS-1:0] op_type_s0;
     wire [`INST_FRM_BITS-1:0] frm_s0;
-    wire [LANES-1:0][31:0]  dataa_s0, datab_s0;
-    wire [LANES-1:0]        a_sign_s0, b_sign_s0;
-    wire [LANES-1:0][7:0]   a_exponent_s0;
-    wire [LANES-1:0][22:0]  a_mantissa_s0;
-    fp_class_t [LANES-1:0]  a_clss_s0, b_clss_s0;
-    wire [LANES-1:0]        a_smaller_s0, ab_equal_s0;
+    wire [NUM_LANES-1:0][31:0]  dataa_s0, datab_s0;
+    wire [NUM_LANES-1:0]        a_sign_s0, b_sign_s0;
+    wire [NUM_LANES-1:0][7:0]   a_exponent_s0;
+    wire [NUM_LANES-1:0][22:0]  a_mantissa_s0;
+    fp_class_t [NUM_LANES-1:0]  a_clss_s0, b_clss_s0;
+    wire [NUM_LANES-1:0]        a_smaller_s0, ab_equal_s0;
 
     wire stall;
 
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + `INST_FPU_BITS + `INST_FRM_BITS + LANES * (2 * 32 + 1 + 1 + 8 + 23 + 2 * $bits(fp_class_t) + 1 + 1)),
+        .DATAW  (1 + TAGW + `INST_FPU_BITS + `INST_FRM_BITS + NUM_LANES * (2 * 32 + 1 + 1 + 8 + 23 + 2 * $bits(fp_class_t) + 1 + 1)),
         .RESETW (1),
         .DEPTH  (0)
     ) pipe_reg0 (
@@ -110,8 +110,8 @@ module VX_fp_ncomp #(
     ); 
 
     // FCLASS
-    reg [LANES-1:0][31:0] fclass_mask;  // generate a 10-bit mask for integer reg
-    for (genvar i = 0; i < LANES; i++) begin
+    reg [NUM_LANES-1:0][31:0] fclass_mask;  // generate a 10-bit mask for integer reg
+    for (genvar i = 0; i < NUM_LANES; i++) begin
         always @(*) begin 
             if (a_clss_s0[i].is_normal) begin
                 fclass_mask[i] = a_sign_s0[i] ? NEG_NORM : POS_NORM;
@@ -135,8 +135,8 @@ module VX_fp_ncomp #(
     end
 
     // Min/Max    
-    reg [LANES-1:0][31:0] fminmax_res;  // result of fmin/fmax
-    for (genvar i = 0; i < LANES; i++) begin
+    reg [NUM_LANES-1:0][31:0] fminmax_res;  // result of fmin/fmax
+    for (genvar i = 0; i < NUM_LANES; i++) begin
         always @(*) begin
             if (a_clss_s0[i].is_nan && b_clss_s0[i].is_nan)
                 fminmax_res[i] = {1'b0, 8'hff, 1'b1, 22'd0}; // canonical qNaN
@@ -155,8 +155,8 @@ module VX_fp_ncomp #(
     end
 
     // Sign injection    
-    reg [LANES-1:0][31:0] fsgnj_res;    // result of sign injection
-    for (genvar i = 0; i < LANES; i++) begin
+    reg [NUM_LANES-1:0][31:0] fsgnj_res;    // result of sign injection
+    for (genvar i = 0; i < NUM_LANES; i++) begin
         always @(*) begin
             case (frm_s0)
                 0: fsgnj_res[i] = { b_sign_s0[i], a_exponent_s0[i], a_mantissa_s0[i]};
@@ -168,9 +168,9 @@ module VX_fp_ncomp #(
     end
 
     // Comparison    
-    reg [LANES-1:0][31:0] fcmp_res;     // result of comparison
-    fflags_t [LANES-1:0]  fcmp_fflags;  // comparison fflags
-    for (genvar i = 0; i < LANES; i++) begin
+    reg [NUM_LANES-1:0][31:0] fcmp_res;     // result of comparison
+    fflags_t [NUM_LANES-1:0]  fcmp_fflags;  // comparison fflags
+    for (genvar i = 0; i < NUM_LANES; i++) begin
         always @(*) begin
             case (frm_s0)
                 `INST_FRM_RNE: begin // LE
@@ -210,10 +210,10 @@ module VX_fp_ncomp #(
 
     // outputs
 
-    reg [LANES-1:0][31:0] tmp_result;
-    fflags_t [LANES-1:0] tmp_fflags;
+    reg [NUM_LANES-1:0][31:0] tmp_result;
+    fflags_t [NUM_LANES-1:0] tmp_fflags;
 
-    for (genvar i = 0; i < LANES; i++) begin
+    for (genvar i = 0; i < NUM_LANES; i++) begin
         always @(*) begin
             case (op_type_s0)
                 `INST_FPU_CLASS: begin
@@ -255,7 +255,7 @@ module VX_fp_ncomp #(
     assign stall = ~ready_out && valid_out;
 
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + (LANES * 32) + 1 + (LANES * `FFLAGS_BITS)),
+        .DATAW  (1 + TAGW + (NUM_LANES * 32) + 1 + (NUM_LANES * `FFLAGS_BITS)),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),

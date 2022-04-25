@@ -60,7 +60,6 @@ module VX_raster_csr #(
     reg [`NUM_THREADS-1:0][31:0] read_data_r;
     always @(*) begin
         for (integer i = 0; i < `NUM_THREADS; ++i) begin
-            read_data_r[i] = 'x;
             case (raster_csr_if.read_addr)
                 `CSR_RASTER_POS_MASK:  read_data_r[i] = rdata[i].pos_mask;
                 `CSR_RASTER_BCOORD_X0: read_data_r[i] = rdata[i].bcoord_x[0];
@@ -75,7 +74,7 @@ module VX_raster_csr #(
                 `CSR_RASTER_BCOORD_Z1: read_data_r[i] = rdata[i].bcoord_z[1];
                 `CSR_RASTER_BCOORD_Z2: read_data_r[i] = rdata[i].bcoord_z[2];
                 `CSR_RASTER_BCOORD_Z3: read_data_r[i] = rdata[i].bcoord_z[3];
-                default:;
+                default:               read_data_r[i] = 'x;
             endcase
         end
     end

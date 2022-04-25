@@ -3,9 +3,9 @@
 /// Modified port of cast module from fpnew Libray 
 /// reference: https://github.com/pulp-platform/fpnew
 
-module VX_fp_cvt #( 
-    parameter TAGW = 1,
-    parameter LANES = 1
+module VX_fp_cvt #(
+    parameter NUM_LANES = 1,
+    parameter TAGW = 1
 ) (
     input wire clk,
     input wire reset,   
@@ -20,11 +20,11 @@ module VX_fp_cvt #(
     input wire is_itof,
     input wire is_signed,
 
-    input wire [LANES-1:0][31:0]  dataa,
-    output wire [LANES-1:0][31:0] result, 
+    input wire [NUM_LANES-1:0][31:0]  dataa,
+    output wire [NUM_LANES-1:0][31:0] result, 
 
     output wire has_fflags,
-    output fflags_t [LANES-1:0] fflags,
+    output fflags_t [NUM_LANES-1:0] fflags,
 
     output wire [TAGW-1:0] tag_out,
 
@@ -59,9 +59,9 @@ module VX_fp_cvt #(
     
     // Input processing
     
-    fp_class_t [LANES-1:0] fp_clss;
+    fp_class_t [NUM_LANES-1:0] fp_clss;
       
-    for (genvar i = 0; i < LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         VX_fp_class #( 
             .EXP_BITS (EXP_BITS),
             .MAN_BITS (MAN_BITS)
@@ -72,11 +72,11 @@ module VX_fp_cvt #(
         );
     end
 
-    wire [LANES-1:0][INT_MAN_WIDTH-1:0] encoded_mant; // input mantissa with implicit bit    
-    wire [LANES-1:0][INT_EXP_WIDTH-1:0] fmt_exponent;    
-    wire [LANES-1:0]                    input_sign;
+    wire [NUM_LANES-1:0][INT_MAN_WIDTH-1:0] encoded_mant; // input mantissa with implicit bit    
+    wire [NUM_LANES-1:0][INT_EXP_WIDTH-1:0] fmt_exponent;    
+    wire [NUM_LANES-1:0]                    input_sign;
     
-    for (genvar i = 0; i < LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
     `IGNORE_WARNINGS_BEGIN
         wire [INT_MAN_WIDTH-1:0] int_mantissa;
         wire [INT_MAN_WIDTH-1:0] fmt_mantissa;
@@ -98,15 +98,15 @@ module VX_fp_cvt #(
     wire                    is_itof_s0;
     wire                    unsigned_s0;
     wire [2:0]              rnd_mode_s0;
-    fp_class_t [LANES-1:0]  fp_clss_s0;
-    wire [LANES-1:0]        input_sign_s0;
-    wire [LANES-1:0][INT_EXP_WIDTH-1:0] fmt_exponent_s0;
-    wire [LANES-1:0][INT_MAN_WIDTH-1:0] encoded_mant_s0;
+    fp_class_t [NUM_LANES-1:0]  fp_clss_s0;
+    wire [NUM_LANES-1:0]        input_sign_s0;
+    wire [NUM_LANES-1:0][INT_EXP_WIDTH-1:0] fmt_exponent_s0;
+    wire [NUM_LANES-1:0][INT_MAN_WIDTH-1:0] encoded_mant_s0;
 
     wire stall;
 
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + 1 + `INST_FRM_BITS + 1 + LANES * ($bits(fp_class_t) + 1 + INT_EXP_WIDTH + INT_MAN_WIDTH)),
+        .DATAW  (1 + TAGW + 1 + `INST_FRM_BITS + 1 + NUM_LANES * ($bits(fp_class_t) + 1 + INT_EXP_WIDTH + INT_MAN_WIDTH)),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
@@ -118,10 +118,10 @@ module VX_fp_cvt #(
     
     // Normalization
 
-    wire [LANES-1:0][LZC_RESULT_WIDTH-1:0] renorm_shamt_s0; // renormalization shift amount
-    wire [LANES-1:0] mant_is_zero_s0;                       // for integer zeroes
+    wire [NUM_LANES-1:0][LZC_RESULT_WIDTH-1:0] renorm_shamt_s0; // renormalization shift amount
+    wire [NUM_LANES-1:0] mant_is_zero_s0;                       // for integer zeroes
 
-    for (genvar i = 0; i < LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         wire mant_is_nonzero;
         VX_lzc #(
             .N    (INT_MAN_WIDTH),
@@ -134,10 +134,10 @@ module VX_fp_cvt #(
         assign mant_is_zero_s0[i] = ~mant_is_nonzero;  
     end
 
-    wire [LANES-1:0][INT_MAN_WIDTH-1:0] input_mant_s0;      // normalized input mantissa    
-    wire [LANES-1:0][INT_EXP_WIDTH-1:0] input_exp_s0;       // unbiased true exponent
+    wire [NUM_LANES-1:0][INT_MAN_WIDTH-1:0] input_mant_s0;      // normalized input mantissa    
+    wire [NUM_LANES-1:0][INT_EXP_WIDTH-1:0] input_exp_s0;       // unbiased true exponent
     
-    for (genvar i = 0; i < LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
     `IGNORE_WARNINGS_BEGIN
        // Realign input mantissa, append zeroes if destination is wider
         assign input_mant_s0[i] = encoded_mant_s0[i] << renorm_shamt_s0[i];
@@ -157,14 +157,14 @@ module VX_fp_cvt #(
     wire                    is_itof_s1;
     wire                    unsigned_s1;
     wire [2:0]              rnd_mode_s1;
-    fp_class_t [LANES-1:0]  fp_clss_s1;
-    wire [LANES-1:0]        input_sign_s1;
-    wire [LANES-1:0]        mant_is_zero_s1;
-    wire [LANES-1:0][INT_MAN_WIDTH-1:0] input_mant_s1;
-    wire [LANES-1:0][INT_EXP_WIDTH-1:0] input_exp_s1;
+    fp_class_t [NUM_LANES-1:0]  fp_clss_s1;
+    wire [NUM_LANES-1:0]        input_sign_s1;
+    wire [NUM_LANES-1:0]        mant_is_zero_s1;
+    wire [NUM_LANES-1:0][INT_MAN_WIDTH-1:0] input_mant_s1;
+    wire [NUM_LANES-1:0][INT_EXP_WIDTH-1:0] input_exp_s1;
 
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + 1 + `INST_FRM_BITS + 1 + LANES * ($bits(fp_class_t) + 1 + 1 + INT_MAN_WIDTH + INT_EXP_WIDTH)),
+        .DATAW  (1 + TAGW + 1 + `INST_FRM_BITS + 1 + NUM_LANES * ($bits(fp_class_t) + 1 + 1 + INT_MAN_WIDTH + INT_EXP_WIDTH)),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
@@ -176,11 +176,11 @@ module VX_fp_cvt #(
 
     // Perform adjustments to mantissa and exponent
 
-    wire [LANES-1:0][2*INT_MAN_WIDTH:0] destination_mant_s1;
-    wire [LANES-1:0][INT_EXP_WIDTH-1:0] final_exp_s1;
-    wire [LANES-1:0]                    of_before_round_s1;
+    wire [NUM_LANES-1:0][2*INT_MAN_WIDTH:0] destination_mant_s1;
+    wire [NUM_LANES-1:0][INT_EXP_WIDTH-1:0] final_exp_s1;
+    wire [NUM_LANES-1:0]                    of_before_round_s1;
 
-    for (genvar i = 0; i < LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         reg [2*INT_MAN_WIDTH:0] preshift_mant;      // mantissa before final shift                
         reg [SHAMT_BITS-1:0]    denorm_shamt;       // shift amount for denormalization
         reg [INT_EXP_WIDTH-1:0] final_exp;          // after eventual adjustments
@@ -238,15 +238,15 @@ module VX_fp_cvt #(
     wire                    is_itof_s2;
     wire                    unsigned_s2;
     wire [2:0]              rnd_mode_s2;
-    fp_class_t [LANES-1:0]  fp_clss_s2;   
-    wire [LANES-1:0]        mant_is_zero_s2;
-    wire [LANES-1:0]        input_sign_s2;
-    wire [LANES-1:0][2*INT_MAN_WIDTH:0] destination_mant_s2;
-    wire [LANES-1:0][INT_EXP_WIDTH-1:0] final_exp_s2;
-    wire [LANES-1:0]        of_before_round_s2;
+    fp_class_t [NUM_LANES-1:0]  fp_clss_s2;   
+    wire [NUM_LANES-1:0]        mant_is_zero_s2;
+    wire [NUM_LANES-1:0]        input_sign_s2;
+    wire [NUM_LANES-1:0][2*INT_MAN_WIDTH:0] destination_mant_s2;
+    wire [NUM_LANES-1:0][INT_EXP_WIDTH-1:0] final_exp_s2;
+    wire [NUM_LANES-1:0]        of_before_round_s2;
     
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + 1 + 1 + `INST_FRM_BITS + LANES * ($bits(fp_class_t) + 1 + 1 + (2*INT_MAN_WIDTH+1) + INT_EXP_WIDTH + 1)),
+        .DATAW  (1 + TAGW + 1 + 1 + `INST_FRM_BITS + NUM_LANES * ($bits(fp_class_t) + 1 + 1 + (2*INT_MAN_WIDTH+1) + INT_EXP_WIDTH + 1)),
         .RESETW (1)
     ) pipe_reg2 (
         .clk      (clk),
@@ -256,13 +256,13 @@ module VX_fp_cvt #(
         .data_out ({valid_in_s2, tag_in_s2, is_itof_s2, unsigned_s2, rnd_mode_s2, fp_clss_s2, mant_is_zero_s2, input_sign_s2, destination_mant_s2, final_exp_s2, of_before_round_s2})
     );
 
-    wire [LANES-1:0]       rounded_sign;
-    wire [LANES-1:0][31:0] rounded_abs;     // absolute value of result after rounding
-    wire [LANES-1:0][1:0]  fp_round_sticky_bits, int_round_sticky_bits;
+    wire [NUM_LANES-1:0]       rounded_sign;
+    wire [NUM_LANES-1:0][31:0] rounded_abs;     // absolute value of result after rounding
+    wire [NUM_LANES-1:0][1:0]  fp_round_sticky_bits, int_round_sticky_bits;
     
     // Rouding and classification
    
-    for (genvar i = 0; i < LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         wire [MAN_BITS-1:0]      final_mant;        // mantissa after adjustments
         wire [MAX_INT_WIDTH-1:0] final_int;         // integer shifted in position
         wire [1:0]               round_sticky_bits;
@@ -307,15 +307,15 @@ module VX_fp_cvt #(
     wire [TAGW-1:0]         tag_in_s3;
     wire                    is_itof_s3;
     wire                    unsigned_s3;
-    fp_class_t [LANES-1:0]  fp_clss_s3;   
-    wire [LANES-1:0]        mant_is_zero_s3;
-    wire [LANES-1:0]        input_sign_s3;
-    wire [LANES-1:0]        rounded_sign_s3;
-    wire [LANES-1:0][31:0]  rounded_abs_s3;
-    wire [LANES-1:0]        of_before_round_s3;
+    fp_class_t [NUM_LANES-1:0]  fp_clss_s3;   
+    wire [NUM_LANES-1:0]        mant_is_zero_s3;
+    wire [NUM_LANES-1:0]        input_sign_s3;
+    wire [NUM_LANES-1:0]        rounded_sign_s3;
+    wire [NUM_LANES-1:0][31:0]  rounded_abs_s3;
+    wire [NUM_LANES-1:0]        of_before_round_s3;
 
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + 1 + 1 + LANES * ($bits(fp_class_t) + 1 + 1 + 32 + 1 + 1)),
+        .DATAW  (1 + TAGW + 1 + 1 + NUM_LANES * ($bits(fp_class_t) + 1 + 1 + 32 + 1 + 1)),
         .RESETW (1)
     ) pipe_reg3 (
         .clk      (clk),
@@ -325,13 +325,13 @@ module VX_fp_cvt #(
         .data_out ({valid_in_s3, tag_in_s3, is_itof_s3, unsigned_s3, fp_clss_s3, mant_is_zero_s3, input_sign_s3, rounded_abs_s3, rounded_sign_s3, of_before_round_s3})
     );
      
-    wire [LANES-1:0] of_after_round;
-    wire [LANES-1:0] uf_after_round;
-    wire [LANES-1:0][31:0] fmt_result;
-    wire [LANES-1:0][31:0] rounded_int_res; // after possible inversion
-    wire [LANES-1:0] rounded_int_res_zero;  // after rounding
+    wire [NUM_LANES-1:0] of_after_round;
+    wire [NUM_LANES-1:0] uf_after_round;
+    wire [NUM_LANES-1:0][31:0] fmt_result;
+    wire [NUM_LANES-1:0][31:0] rounded_int_res; // after possible inversion
+    wire [NUM_LANES-1:0] rounded_int_res_zero;  // after rounding
 
-    for (genvar i = 0; i < LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         // Assemble regular result, nan box short ones. Int zeroes need to be detected
         assign fmt_result[i] = (is_itof_s3 & mant_is_zero_s3[i]) ? 0 : {rounded_sign_s3[i], rounded_abs_s3[i][EXP_BITS+MAN_BITS-1:0]};
 
@@ -346,14 +346,14 @@ module VX_fp_cvt #(
 
     // FP Special case handling
 
-    wire [LANES-1:0][31:0]  fp_special_result;
-    fflags_t [LANES-1:0]    fp_special_status;
-    wire [LANES-1:0]        fp_result_is_special;
+    wire [NUM_LANES-1:0][31:0]  fp_special_result;
+    fflags_t [NUM_LANES-1:0]    fp_special_status;
+    wire [NUM_LANES-1:0]        fp_result_is_special;
 
     localparam logic [EXP_BITS-1:0] QNAN_EXPONENT = 2**EXP_BITS-1;
     localparam logic [MAN_BITS-1:0] QNAN_MANTISSA = 2**(MAN_BITS-1);
 
-    for (genvar i = 0; i < LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         // Detect special case from source format, I2F casts don't produce a special result
         assign fp_result_is_special[i] = ~is_itof_s3 & (fp_clss_s3[i].is_zero | fp_clss_s3[i].is_nan);
 
@@ -367,11 +367,11 @@ module VX_fp_cvt #(
 
     // INT Special case handling
 
-    reg [LANES-1:0][31:0]   int_special_result;
-    fflags_t [LANES-1:0]    int_special_status;
-    wire [LANES-1:0]        int_result_is_special;
+    reg [NUM_LANES-1:0][31:0]   int_special_result;
+    fflags_t [NUM_LANES-1:0]    int_special_status;
+    wire [NUM_LANES-1:0]        int_result_is_special;
 
-    for (genvar i = 0; i < LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
          // Assemble result according to destination format
         always @(*) begin
             if (input_sign_s3[i] && !fp_clss_s3[i].is_nan) begin
@@ -395,10 +395,10 @@ module VX_fp_cvt #(
 
     // Result selection and Output handshake
 
-    fflags_t [LANES-1:0] tmp_fflags;    
-    wire [LANES-1:0][31:0] tmp_result;
+    fflags_t [NUM_LANES-1:0] tmp_fflags;    
+    wire [NUM_LANES-1:0][31:0] tmp_result;
 
-    for (genvar i = 0; i < LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         fflags_t    fp_regular_status, int_regular_status;
         fflags_t    fp_status, int_status;    
         wire [31:0] fp_result, int_result;
@@ -428,7 +428,7 @@ module VX_fp_cvt #(
     assign stall = ~ready_out && valid_out;
 
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + (LANES * 32) + (LANES * `FFLAGS_BITS)),
+        .DATAW  (1 + TAGW + (NUM_LANES * 32) + (NUM_LANES * `FFLAGS_BITS)),
         .RESETW (1)
     ) pipe_reg4 (
         .clk      (clk),

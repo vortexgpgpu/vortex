@@ -1,8 +1,8 @@
 `include "VX_fpu_define.vh"
 
-module VX_fp_div #( 
-    parameter TAGW = 1,
-    parameter LANES = 1
+module VX_fp_div #(
+    parameter NUM_LANES = 1,
+    parameter TAGW = 1
 ) (
     input wire clk,
     input wire reset,   
@@ -14,12 +14,12 @@ module VX_fp_div #(
 
     input wire [`INST_FRM_BITS-1:0] frm,
     
-    input wire [LANES-1:0][31:0]  dataa,
-    input wire [LANES-1:0][31:0]  datab,
-    output wire [LANES-1:0][31:0] result,  
+    input wire [NUM_LANES-1:0][31:0]  dataa,
+    input wire [NUM_LANES-1:0][31:0]  datab,
+    output wire [NUM_LANES-1:0][31:0] result,  
 
     output wire has_fflags,
-    output fflags_t [LANES-1:0] fflags,
+    output fflags_t [NUM_LANES-1:0] fflags,
 
     output wire [TAGW-1:0] tag_out,
 
@@ -29,7 +29,7 @@ module VX_fp_div #(
     wire stall = ~ready_out && valid_out;
     wire enable = ~stall;
 
-    for (genvar i = 0; i < LANES; i++) begin        
+    for (genvar i = 0; i < NUM_LANES; i++) begin        
     `ifdef VERILATOR
         reg [31:0] r;
         fflags_t f;

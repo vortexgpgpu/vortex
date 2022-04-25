@@ -103,12 +103,12 @@ module Vortex (
         .DATA_WIDTH (`L2_MEM_DATA_WIDTH),
         .ADDR_WIDTH (`L2_MEM_ADDR_WIDTH),
         .TAG_WIDTH  (`L2_MEM_TAG_WIDTH)
-    ) per_cluster_mem_req_if[`NUM_CLUSTERS-1:0]();        
+    ) per_cluster_mem_req_if[`NUM_CLUSTERS]();        
 
     VX_mem_rsp_if #(
         .DATA_WIDTH (`L2_MEM_DATA_WIDTH),
         .TAG_WIDTH  (`L2_MEM_TAG_WIDTH)
-    ) per_cluster_mem_rsp_if[`NUM_CLUSTERS-1:0]();
+    ) per_cluster_mem_rsp_if[`NUM_CLUSTERS]();
 
     wire [`NUM_CLUSTERS-1:0] per_cluster_busy;
 

@@ -14,10 +14,10 @@ module VX_mem_mux #(
     input wire              reset,
 
     // input requests        
-    VX_mem_req_if.slave     req_in_if[NUM_REQS],
+    VX_mem_req_if.slave     req_in_if [NUM_REQS],
 
     // input responses
-    VX_mem_rsp_if.master    rsp_in_if[NUM_REQS],
+    VX_mem_rsp_if.master    rsp_in_if [NUM_REQS],
     
     // output request
     VX_mem_req_if.master    req_out_if,

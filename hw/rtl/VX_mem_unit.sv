@@ -26,7 +26,7 @@ module VX_mem_unit # (
     VX_cache_req_if.slave   tcache_req_if,
     VX_cache_rsp_if.master  tcache_rsp_if,
 `ifdef PERF_ENABLE
-    VX_perf_cache_if.slave  perf_tcache_if,
+    VX_perf_cache_if.master perf_tcache_if,
 `endif
 `endif
 
@@ -56,12 +56,12 @@ module VX_mem_unit # (
         .DATA_WIDTH (`ICACHE_WORD_SIZE*8), 
         .ADDR_WIDTH (`ICACHE_ADDR_WIDTH),
         .TAG_WIDTH  (`ICACHE_TAG_WIDTH)
-    ) icache_req_qual_if[`ICACHE_NUM_REQS-1:0]();
+    ) icache_req_qual_if[`ICACHE_NUM_REQS]();
 
     VX_mem_rsp_if #(
         .DATA_WIDTH (`ICACHE_WORD_SIZE*8), 
         .TAG_WIDTH  (`ICACHE_TAG_WIDTH)
-    ) icache_rsp_qual_if[`ICACHE_NUM_REQS-1:0]();
+    ) icache_rsp_qual_if[`ICACHE_NUM_REQS]();
 
     for (genvar i = 0; i < `ICACHE_NUM_REQS; ++i) begin
         `CACHE_REQ_TO_MEM (icache_req_qual_if, icache_req_if, i);
@@ -135,12 +135,12 @@ module VX_mem_unit # (
         .DATA_WIDTH (`DCACHE_WORD_SIZE*8), 
         .ADDR_WIDTH (`DCACHE_ADDR_WIDTH),
         .TAG_WIDTH  (`DCACHE_SMEM_TAG_WIDTH)
-    ) dcache_smem_req_qual_if[`DCACHE_NUM_REQS-1:0]();
+    ) dcache_smem_req_qual_if[`DCACHE_NUM_REQS]();
 
     VX_mem_rsp_if #(
         .DATA_WIDTH (`DCACHE_WORD_SIZE*8), 
         .TAG_WIDTH  (`DCACHE_SMEM_TAG_WIDTH)
-    ) dcache_smem_rsp_qual_if[`DCACHE_NUM_REQS-1:0]();
+    ) dcache_smem_rsp_qual_if[`DCACHE_NUM_REQS]();
 
     for (genvar i = 0; i < `DCACHE_NUM_REQS; ++i) begin
         `CACHE_REQ_TO_MEM (dcache_smem_req_qual_if, dcache_smem_req_if, i);
@@ -221,7 +221,7 @@ module VX_mem_unit # (
 
     VX_cache_demux #(
         .NUM_REQS      (2),
-        .LANES         (`NUM_THREADS),
+        .NUM_LANES     (`NUM_THREADS),
         .DATA_SIZE     (4),            
         .TAG_IN_WIDTH  (`DCACHE_TAG_WIDTH),
         .TAG_SEL_IDX   (0),
@@ -338,12 +338,12 @@ module VX_mem_unit # (
         .DATA_WIDTH (`TCACHE_WORD_SIZE*8), 
         .ADDR_WIDTH (`TCACHE_ADDR_WIDTH),
         .TAG_WIDTH  (`TCACHE_TAG_WIDTH)
-    ) tcache_req_qual_if[`TCACHE_NUM_REQS-1:0]();
+    ) tcache_req_qual_if[`TCACHE_NUM_REQS]();
 
     VX_mem_rsp_if #(
         .DATA_WIDTH (`TCACHE_WORD_SIZE*8), 
         .TAG_WIDTH  (`TCACHE_TAG_WIDTH)
-    ) tcache_rsp_qual_if[`TCACHE_NUM_REQS-1:0]();
+    ) tcache_rsp_qual_if[`TCACHE_NUM_REQS]();
 
     for (genvar i = 0; i < `TCACHE_NUM_REQS; ++i) begin
         `CACHE_REQ_TO_MEM (tcache_req_qual_if, tcache_req_if, i);

@@ -1,8 +1,8 @@
 `include "VX_fpu_define.vh"
 
-module VX_fp_fma #( 
-    parameter TAGW = 1,
-    parameter LANES = 1
+module VX_fp_fma #(
+    parameter NUM_LANES = 1, 
+    parameter TAGW = 1
 ) (
     input wire clk,
     input wire reset,   
@@ -18,13 +18,13 @@ module VX_fp_fma #(
     input wire  do_sub,
     input wire  do_neg,
 
-    input wire [LANES-1:0][31:0]  dataa,
-    input wire [LANES-1:0][31:0]  datab,
-    input wire [LANES-1:0][31:0]  datac,
-    output wire [LANES-1:0][31:0] result,  
+    input wire [NUM_LANES-1:0][31:0]  dataa,
+    input wire [NUM_LANES-1:0][31:0]  datab,
+    input wire [NUM_LANES-1:0][31:0]  datac,
+    output wire [NUM_LANES-1:0][31:0] result,  
 
     output wire has_fflags,
-    output fflags_t [LANES-1:0] fflags,
+    output fflags_t [NUM_LANES-1:0] fflags,
 
     output wire [TAGW-1:0] tag_out,
 
@@ -35,7 +35,7 @@ module VX_fp_fma #(
     wire stall = ~ready_out && valid_out;
     wire enable = ~stall;
 
-    for (genvar i = 0; i < LANES; i++) begin       
+    for (genvar i = 0; i < NUM_LANES; i++) begin       
         reg [31:0] a, b, c;
 
         always @(*) begin

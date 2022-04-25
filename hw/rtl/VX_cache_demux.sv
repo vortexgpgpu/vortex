@@ -2,7 +2,7 @@
 
 module VX_cache_demux #(
     parameter NUM_REQS       = 1, 
-    parameter LANES          = 1,
+    parameter NUM_LANES      = 1,
     parameter DATA_SIZE      = 1,
     parameter TAG_IN_WIDTH   = 1,
     parameter TAG_SEL_IDX    = 0,   
@@ -20,10 +20,10 @@ module VX_cache_demux #(
     VX_cache_rsp_if.master  rsp_in_if,
     
     // output request
-    VX_cache_req_if.master  req_out_if[NUM_REQS],
+    VX_cache_req_if.master  req_out_if [NUM_REQS],
 
     // output response
-    VX_cache_rsp_if.slave   rsp_out_if[NUM_REQS]    
+    VX_cache_rsp_if.slave   rsp_out_if [NUM_REQS]    
 );  
     localparam ADDR_WIDTH    = (32-`CLOG2(DATA_SIZE));
     localparam DATA_WIDTH    = (8 * DATA_SIZE);
@@ -33,14 +33,14 @@ module VX_cache_demux #(
     localparam RSP_DATAW     = TAG_IN_WIDTH + DATA_WIDTH;
 
     if (NUM_REQS > 1) begin
-        wire [NUM_REQS-1:0][LANES-1:0]                req_valid_out;
-        wire [NUM_REQS-1:0][LANES-1:0][REQ_DATAW-1:0] req_data_out;
-        wire [NUM_REQS-1:0][LANES-1:0]                req_ready_out;
+        wire [NUM_REQS-1:0][NUM_LANES-1:0]                req_valid_out;
+        wire [NUM_REQS-1:0][NUM_LANES-1:0][REQ_DATAW-1:0] req_data_out;
+        wire [NUM_REQS-1:0][NUM_LANES-1:0]                req_ready_out;
 
-        wire [LANES-1:0][REQ_DATAW-1:0]    req_data_in;        
-        wire [LANES-1:0][LOG_NUM_REQS-1:0] req_sel;
+        wire [NUM_LANES-1:0][REQ_DATAW-1:0]    req_data_in;        
+        wire [NUM_LANES-1:0][LOG_NUM_REQS-1:0] req_sel;
         
-        for (genvar i = 0; i < LANES; ++i) begin
+        for (genvar i = 0; i < NUM_LANES; ++i) begin
 
             wire [TAG_OUT_WIDTH-1:0] req_tag_in;
             
@@ -59,7 +59,7 @@ module VX_cache_demux #(
 
         VX_stream_demux #(
             .NUM_REQS (NUM_REQS),
-            .LANES    (LANES),
+            .NUM_LANES(NUM_LANES),
             .DATAW    (REQ_DATAW),
             .BUFFERED (BUFFERED_REQ)
         ) req_demux (
@@ -75,7 +75,7 @@ module VX_cache_demux #(
         );
         
         for (genvar i = 0; i < NUM_REQS; i++) begin
-            for (genvar j = 0; j < LANES; ++j) begin
+            for (genvar j = 0; j < NUM_LANES; ++j) begin
                 assign req_out_if[i].valid[j] = req_valid_out[i][j];
                 assign {req_out_if[i].tag[j], req_out_if[i].addr[j], req_out_if[i].rw[j], req_out_if[i].byteen[j], req_out_if[i].data[j]} = req_data_out[i][j];
                 assign req_ready_out[i][j] = req_out_if[i].ready[j];
@@ -84,14 +84,14 @@ module VX_cache_demux #(
 
         ///////////////////////////////////////////////////////////////////////        
 
-        wire [NUM_REQS-1:0][LANES-1:0] rsp_valid_out;
-        wire [NUM_REQS-1:0][LANES-1:0][RSP_DATAW-1:0] rsp_data_out;
-        wire [NUM_REQS-1:0][LANES-1:0] rsp_ready_out;
+        wire [NUM_REQS-1:0][NUM_LANES-1:0] rsp_valid_out;
+        wire [NUM_REQS-1:0][NUM_LANES-1:0][RSP_DATAW-1:0] rsp_data_out;
+        wire [NUM_REQS-1:0][NUM_LANES-1:0] rsp_ready_out;
 
-        wire [LANES-1:0][RSP_DATAW-1:0] rsp_data_in;
+        wire [NUM_LANES-1:0][RSP_DATAW-1:0] rsp_data_in;
         
         for (genvar i = 0; i < NUM_REQS; i++) begin
-            for (genvar j = 0; j < LANES; ++j) begin     
+            for (genvar j = 0; j < NUM_LANES; ++j) begin     
                 wire [TAG_IN_WIDTH-1:0] rsp_tag_out;
                 
                 VX_bits_insert #( 
@@ -112,7 +112,7 @@ module VX_cache_demux #(
 
         VX_stream_mux #(            
             .NUM_REQS (NUM_REQS),
-            .LANES    (LANES),
+            .NUM_LANES(NUM_LANES),
             .DATAW    (RSP_DATAW),
             .BUFFERED (BUFFERED_RSP),
             .ARBITER  (ARBITER)
@@ -128,7 +128,7 @@ module VX_cache_demux #(
             .ready_out (rsp_in_if.ready)
         );
 
-        for (genvar i = 0; i < LANES; ++i) begin
+        for (genvar i = 0; i < NUM_LANES; ++i) begin
             assign {rsp_in_if.tag[i], rsp_in_if.data[i]} = rsp_data_in[i];
         end
 

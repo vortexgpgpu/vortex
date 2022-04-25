@@ -49,19 +49,19 @@ kernel.elf: $(VX_SRCS)
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
-run-simx: $(PROJECT) kernel.bin   
+run-simx: $(PROJECT) kernel.bin kernel.dump
 	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 	
-run-fpga: $(PROJECT) kernel.bin   
+run-fpga: $(PROJECT) kernel.bin kernel.dump 
 	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/fpga:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
-run-asesim: $(PROJECT) kernel.bin   
+run-asesim: $(PROJECT) kernel.bin kernel.dump
 	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/asesim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 	
-run-vlsim: $(PROJECT) kernel.bin   
+run-vlsim: $(PROJECT) kernel.bin kernel.dump
 	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/vlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
-run-rtlsim: $(PROJECT) kernel.bin   
+run-rtlsim: $(PROJECT) kernel.bin kernel.dump
 	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
 .depend: $(SRCS)

@@ -8,8 +8,6 @@
 
 using namespace vortex;
 
-using fixed24_t = cocogfx::TFixed<23>;
-
 static bool DoCompare(uint32_t func, uint32_t a, uint32_t b) {
   switch (func) {
   default:
@@ -408,6 +406,16 @@ private:
     initialized_ = true;
   }
 
+  cocogfx::ColorARGB doBlend(cocogfx::ColorARGB src, cocogfx::ColorARGB dst, cocogfx::ColorARGB cst) {        
+    auto s_rgb = DoBlendFunc(blend_src_rgb_, src, dst, cst);
+    auto s_a   = DoBlendFunc(blend_src_a_, src, dst, cst);
+    auto d_rgb = DoBlendFunc(blend_dst_rgb_, src, dst, cst);
+    auto d_a   = DoBlendFunc(blend_dst_a_, src, dst, cst);
+    auto rgb   = DoBlendMode(blend_mode_rgb_, logic_op_, src, dst, s_rgb, d_rgb);
+    auto a     = DoBlendMode(blend_mode_a_, logic_op_, src, dst, s_a, d_a);
+    return cocogfx::ColorARGB(a.a, rgb.r, rgb.g, rgb.b);
+  }
+
 public:
   Blender(const Arch& arch, const RopUnit::DCRS& dcrs) 
     : arch_(arch)
@@ -423,16 +431,6 @@ public:
 
   void attach_ram(RAM* mem) {
     mem_ = mem;
-  }
-
-  cocogfx::ColorARGB doBlend(cocogfx::ColorARGB src, cocogfx::ColorARGB dst, cocogfx::ColorARGB cst) {        
-    auto s_rgb = DoBlendFunc(blend_src_rgb_, src, dst, cst);
-    auto s_a   = DoBlendFunc(blend_src_a_, src, dst, cst);
-    auto d_rgb = DoBlendFunc(blend_dst_rgb_, src, dst, cst);
-    auto d_a   = DoBlendFunc(blend_dst_a_, src, dst, cst);
-    auto rgb   = DoBlendMode(blend_mode_rgb_, logic_op_, src, dst, s_rgb, d_rgb);
-    auto a     = DoBlendMode(blend_mode_a_, logic_op_, src, dst, s_a, d_a);
-    return cocogfx::ColorARGB(a.a, rgb.r, rgb.g, rgb.b);
   }
 
   void write(uint32_t x, uint32_t y, uint32_t color, RopUnit::TraceData::Ptr trace_data) {

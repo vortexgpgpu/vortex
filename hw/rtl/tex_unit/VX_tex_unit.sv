@@ -177,6 +177,7 @@ module VX_tex_unit #(
 `ifdef PERF_ENABLE
     wire [$clog2(`NUM_THREADS+1)-1:0] perf_mem_req_per_cycle;
     wire [$clog2(`NUM_THREADS+1)-1:0] perf_mem_rsp_per_cycle;
+    wire [$clog2(`NUM_THREADS+1)+1-1:0] perf_pending_reads_cycle;
 
     wire [`NUM_THREADS-1:0] perf_mem_req_per_req = cache_req_if.valid & cache_req_if.ready;
     wire [`NUM_THREADS-1:0] perf_mem_rsp_per_req = cache_rsp_if.valid & cache_rsp_if.ready;
@@ -185,7 +186,7 @@ module VX_tex_unit #(
     `POP_COUNT(perf_mem_rsp_per_cycle, perf_mem_rsp_per_req);
 
     reg [`PERF_CTR_BITS-1:0] perf_pending_reads;   
-    wire [$clog2(`NUM_THREADS+1)+1-1:0] perf_pending_reads_cycle = perf_mem_req_per_cycle - perf_mem_rsp_per_cycle;
+    assign perf_pending_reads_cycle = perf_mem_req_per_cycle - perf_mem_rsp_per_cycle;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -209,7 +210,7 @@ module VX_tex_unit #(
     end
 
     assign tex_perf_if.mem_reads   = perf_mem_reads;
-    assign tex_perf_if.mem_latency = perf_mem_latency;
+    assign tex_perf_if.mem_latency = perf_pending_reads;
 `endif  
 
 `ifdef DBG_TRACE_TEX

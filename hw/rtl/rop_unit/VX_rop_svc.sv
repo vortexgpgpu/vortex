@@ -33,12 +33,12 @@ module VX_rop_svc #(
 
     `UNUSED_VAR (rop_csrs)
 
-    wire stall_out;
+    wire rop_rsp_valid, rop_rsp_ready;
 
     // it is possible to have ready = f(valid) when using arbiters, 
     // because of that we need to decouple rop_svc_req_if and rop_svc_rsp_if handshake with a pipe register
 
-    assign rop_req_if.valid    = rop_svc_req_if.valid & ~stall_out;
+    assign rop_req_if.valid    = rop_svc_req_if.valid & rop_rsp_ready;
     assign rop_req_if.tmask    = rop_svc_req_if.tmask;
     assign rop_req_if.pos_x    = rop_svc_req_if.pos_x;
     assign rop_req_if.pos_y    = rop_svc_req_if.pos_y;
@@ -46,21 +46,21 @@ module VX_rop_svc #(
     assign rop_req_if.depth    = rop_svc_req_if.depth;
     assign rop_req_if.backface = rop_svc_req_if.backface;
 
-    assign rop_svc_req_if.ready = rop_req_if.ready & ~stall_out;
+    assign rop_svc_req_if.ready = rop_req_if.ready & rop_rsp_ready;
 
-    wire response_valid = rop_svc_req_if.valid & rop_req_if.ready;
+    assign rop_rsp_valid = rop_svc_req_if.valid & rop_req_if.ready;
 
-    assign stall_out = ~rop_svc_rsp_if.ready && rop_svc_rsp_if.valid;
-
-    VX_pipe_register #(
-        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32),
-        .RESETW (1)
-    ) pipe_reg (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (!stall_out),
-        .data_in  ({response_valid,       rop_svc_req_if.uuid, rop_svc_req_if.wid, rop_svc_req_if.tmask, rop_svc_req_if.PC}),
-        .data_out ({rop_svc_rsp_if.valid, rop_svc_rsp_if.uuid, rop_svc_rsp_if.wid, rop_svc_rsp_if.tmask, rop_svc_rsp_if.PC})
+    VX_skid_buffer #(
+        .DATAW (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32)
+    ) rsp_sbuf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (rop_rsp_valid),
+        .ready_in  (rop_rsp_ready),
+        .data_in   ({rop_svc_req_if.uuid, rop_svc_req_if.wid, rop_svc_req_if.tmask, rop_svc_req_if.PC}),
+        .data_out  ({rop_svc_rsp_if.uuid, rop_svc_rsp_if.wid, rop_svc_rsp_if.tmask, rop_svc_rsp_if.PC}),
+        .valid_out (rop_svc_rsp_if.valid),
+        .ready_out (rop_svc_rsp_if.ready)
     );
 
     assign rop_svc_rsp_if.data = 'x;

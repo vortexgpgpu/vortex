@@ -88,7 +88,7 @@ module VX_warp_sched #(
             if (warp_ctl_if.valid && warp_ctl_if.barrier.valid) begin
                 stalled_warps[warp_ctl_if.wid] <= 0;
                 if (reached_barrier_limit) begin
-                    barrier_masks[warp_ctl_if.barrier.id] <= 0;
+                    barrier_masks[warp_ctl_if.barrier.id] <= '0;
                 end else begin
                     barrier_masks[warp_ctl_if.barrier.id][warp_ctl_if.wid] <= 1;
                 end
