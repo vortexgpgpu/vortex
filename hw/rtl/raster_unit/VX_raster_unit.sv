@@ -333,43 +333,27 @@ module VX_raster_unit #(
         end
     end
 
+    wire perf_stall_cycle = raster_req_if.valid && ~raster_req_if.ready && ~raster_req_if.empty;
+
     reg [`PERF_CTR_BITS-1:0] perf_mem_reads;
     reg [`PERF_CTR_BITS-1:0] perf_mem_latency;
+    reg [`PERF_CTR_BITS-1:0] perf_stall_cycles;
 
     always @(posedge clk) begin
         if (reset) begin
-            perf_mem_reads   <= 0;
-            perf_mem_latency <= 0;
+            perf_mem_reads    <= 0;
+            perf_mem_latency  <= 0;
+            perf_stall_cycles <= 0;
         end else begin
-            perf_mem_reads   <= perf_mem_reads + `PERF_CTR_BITS'(perf_mem_req_per_cycle);
-            perf_mem_latency <= perf_mem_latency + `PERF_CTR_BITS'(perf_pending_reads);
+            perf_mem_reads    <= perf_mem_reads + `PERF_CTR_BITS'(perf_mem_req_per_cycle);
+            perf_mem_latency  <= perf_mem_latency + `PERF_CTR_BITS'(perf_pending_reads);
+            perf_stall_cycles <= perf_stall_cycles + `PERF_CTR_BITS'(perf_stall_cycle);
         end
     end
 
-    assign raster_perf_if.mem_reads   = perf_mem_reads;
-    assign raster_perf_if.mem_latency = perf_mem_latency;
-`endif 
-
-// `ifdef PERF_ENABLE
-//     reg [`PERF_CTR_BITS-1:0] perf_stall_cycles, total_cycles;
-
-//     // wire perf_stall_cycle = raster_svc_req_if.valid && ~stall_out && ~raster_req_if.valid;
-//     wire perf_stall_cycle = raster_req_if.valid && ~raster_req_if.empty && ~raster_req_if.ready;
-
-//     always @(posedge clk) begin
-//         if (reset) begin
-//             perf_stall_cycles <= 0;
-//             total_cycles      <= 0;
-//         end else begin
-//             perf_stall_cycles <= perf_stall_cycles + `PERF_CTR_BITS'(perf_stall_cycle);
-//             total_cycles      <= total_cycles + 1;
-//         end
-//     end
-
-//     always @(posedge clk) begin
-//         dpi_trace(1, "%d: %0d %0d\n", $time, perf_stall_cycles, total_cycles);
-//     end
-// `endif
-
+    assign raster_perf_if.mem_reads    = perf_mem_reads;
+    assign raster_perf_if.mem_latency  = perf_mem_latency;
+    assign raster_perf_if.stall_cycles = perf_stall_cycles;
+`endif
 
 endmodule
