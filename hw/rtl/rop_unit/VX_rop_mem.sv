@@ -115,6 +115,7 @@ module VX_rop_mem #(
 
     VX_mem_streamer #(
         .NUM_REQS         (NUM_REQS),
+        .NUM_BANKS        (`OCACHE_NUM_REQS)
         .ADDRW            (`OCACHE_ADDR_WIDTH),
         .DATAW            (32),
         .TAGW             (TAG_WIDTH),
