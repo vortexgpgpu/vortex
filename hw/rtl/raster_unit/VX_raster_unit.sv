@@ -229,48 +229,47 @@ module VX_raster_unit #(
     logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  out_quad_bcoords[RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0];    
     logic        [`RASTER_PRIMITIVE_DATA_BITS-1:0]  out_pid         [RASTER_QUAD_OUTPUT_RATE-1:0];
     logic        [RASTER_QUAD_OUTPUT_RATE-1:0]      out_valid;
-    generate
-        // add arbiter if # raster slice > 1
-        if (NUM_SLICES > 1) begin
-            logic [RASTER_SLICE_BITS-1:0] quad_index;
-            VX_fair_arbiter #(
-                .NUM_REQS       (NUM_SLICES)
-            ) tile_fifo_arb (
-                .clk            (clk),
-                .reset          (reset),
-                `UNUSED_PIN     (unlock),
-                .requests       (~quad_queue_empty),
-                .grant_index    (quad_index),
-                .grant_onehot   (quad_pop),
-                .grant_valid    (arbiter_valid)
-            );
-            always_comb begin
-                if (arbiter_valid) begin
-                    out_quad_x_loc   = temp_quad_x_loc[quad_index];
-                    out_quad_y_loc   = temp_quad_y_loc[quad_index];
-                    out_quad_masks   = temp_quad_masks[quad_index];
-                    out_quad_bcoords = temp_quad_bcoords[quad_index];
-                    out_pid          = temp_out_pid[quad_index];
-                    out_valid        = quad_valid[quad_index];
-                end
+
+    // add arbiter if # raster slice > 1
+    if (NUM_SLICES > 1) begin
+        logic [RASTER_SLICE_BITS-1:0] quad_index;
+        VX_fair_arbiter #(
+            .NUM_REQS       (NUM_SLICES)
+        ) tile_fifo_arb (
+            .clk            (clk),
+            .reset          (reset),
+            `UNUSED_PIN     (unlock),
+            .requests       (~quad_queue_empty),
+            .grant_index    (quad_index),
+            .grant_onehot   (quad_pop),
+            .grant_valid    (arbiter_valid)
+        );
+        always_comb begin
+            if (arbiter_valid) begin
+                out_quad_x_loc   = temp_quad_x_loc[quad_index];
+                out_quad_y_loc   = temp_quad_y_loc[quad_index];
+                out_quad_masks   = temp_quad_masks[quad_index];
+                out_quad_bcoords = temp_quad_bcoords[quad_index];
+                out_pid          = temp_out_pid[quad_index];
+                out_valid        = quad_valid[quad_index];
             end
         end
-        else begin
-            always_comb begin
-                quad_pop[0] = 0;
-                arbiter_valid    = !quad_queue_empty[0];
-                out_quad_x_loc   = temp_quad_x_loc[0];
-                out_quad_y_loc   = temp_quad_y_loc[0];
-                out_quad_masks   = temp_quad_masks[0];
-                out_quad_bcoords = temp_quad_bcoords[0];
-                out_pid          = temp_out_pid[0];
-                out_valid        = quad_valid[0];
-                if (!quad_queue_empty[0]) begin
-                    quad_pop[0]  = 1;
-                end
+    end
+    else begin
+        always_comb begin
+            quad_pop[0] = 0;
+            arbiter_valid    = !quad_queue_empty[0];
+            out_quad_x_loc   = temp_quad_x_loc[0];
+            out_quad_y_loc   = temp_quad_y_loc[0];
+            out_quad_masks   = temp_quad_masks[0];
+            out_quad_bcoords = temp_quad_bcoords[0];
+            out_pid          = temp_out_pid[0];
+            out_valid        = quad_valid[0];
+            if (!quad_queue_empty[0]) begin
+                quad_pop[0]  = 1;
             end
         end
-    endgenerate
+    end
 
     assign raster_unit_ready = (&raster_slice_ready) & raster_mem_ready & (&quad_queue_empty);
 
