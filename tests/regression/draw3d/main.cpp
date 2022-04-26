@@ -130,6 +130,9 @@ void cleanup() {
 int render(const CGLTrace& trace) {
   RasterDCRS raster_dcrs;
   RopDCRS    rop_dcrs;
+  
+  std::cout << "render" << std::endl;
+  auto time_begin = std::chrono::high_resolution_clock::now();
 
   // render each draw call
   for (auto& drawcall : trace.drawcalls) {
@@ -347,6 +350,10 @@ int render(const CGLTrace& trace) {
     vx_buf_free(staging_buf);
     staging_buf = nullptr;
   }
+  
+  auto time_end = std::chrono::high_resolution_clock::now();
+  double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_begin).count();
+  printf("Total elapsed time: %lg ms\n", elapsed);
 
   // save output image
   std::cout << "save output image" << std::endl;
@@ -477,12 +484,7 @@ int main(int argc, char *argv[]) {
   kernel_arg.zbuf_addr     = zbuf_addr;
 
   // run tests
-  std::cout << "render" << std::endl;
-  auto begin_time = std::chrono::high_resolution_clock::now();
   RT_CHECK(render(trace));
-  auto end_time = std::chrono::high_resolution_clock::now();
-  double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - begin_time).count();
-  printf("Total elapsed time: %lg ms\n", elapsed);
 
   // cleanup
   std::cout << "cleanup" << std::endl;  

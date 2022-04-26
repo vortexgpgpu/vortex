@@ -221,7 +221,6 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   uint64_t rop_mem_reads = 0;
   uint64_t rop_mem_writes = 0;
   uint64_t rop_mem_lat = 0;
-  uint64_t rop_idle_cycles = 0;
   uint32_t rop_stall_cycles = 0;
   // PERF: rop ocache
   uint64_t rop_ocache_reads = 0;       
@@ -416,7 +415,6 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
         rop_mem_reads         = get_csr_64(staging_ptr, CSR_MPM_ROP_READS);
         rop_mem_writes        = get_csr_64(staging_ptr, CSR_MPM_ROP_WRITES);
         rop_mem_lat           = get_csr_64(staging_ptr, CSR_MPM_ROP_LAT);
-        rop_idle_cycles       = get_csr_64(staging_ptr, CSR_MPM_ROP_IDLE);
         rop_stall_cycles      = get_csr_64(staging_ptr, CSR_MPM_ROP_STALL);
         // cache perf counters
         rop_ocache_reads      = get_csr_64(staging_ptr, CSR_MPM_OCACHE_READS);
@@ -487,7 +485,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     int raster_stall_cycles_ratio = (int)(100 * double(raster_stall_cycles) / cycles);
     fprintf(stream, "PERF: raster memory reads=%ld\n", raster_mem_reads);
     fprintf(stream, "PERF: raster memory latency=%d cycles\n", raster_mem_avg_lat);
-    fprintf(stream, "PERF: raster stall cycles=%d%%\n", raster_stall_cycles_ratio);
+    fprintf(stream, "PERF: raster stall cycles=%ld cycles (%d%%)\n", raster_stall_cycles, raster_stall_cycles_ratio);
     // cache perf counters
     int rcache_read_hit_ratio = (int)((1.0 - (double(rcache_read_misses) / double(rcache_reads))) * 100);
     int rcache_bank_utilization = (int)((double(rcache_reads) / double(rcache_reads + rcache_bank_stalls)) * 100);
@@ -499,13 +497,11 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   case DCR_MPM_CLASS_ROP: {
   #ifdef EXT_ROP_ENABLE
     int rop_mem_avg_lat = (int)(double(rop_mem_lat) / double(rop_mem_reads + rop_mem_writes));
-    int rop_idle_cycles_ratio = (int)(100 * double(rop_idle_cycles) / cycles);
     int rop_stall_cycles_ratio = (int)(100 * double(rop_stall_cycles) / cycles);
     fprintf(stream, "PERF: rop memory reads=%ld\n", rop_mem_reads);
     fprintf(stream, "PERF: rop memory writes=%ld\n", rop_mem_writes);
     fprintf(stream, "PERF: rop memory average latency=%d cycles\n", rop_mem_avg_lat);
-    fprintf(stream, "PERF: rop idle cycles=%d%%\n", rop_idle_cycles_ratio);
-    fprintf(stream, "PERF: rop stall cycles=%d%%\n", rop_stall_cycles_ratio);
+    fprintf(stream, "PERF: rop stall cycles=%ld cycles (%d%%)\n", rop_stall_cycles, rop_stall_cycles_ratio);
     // cache perf counters
     int ocache_read_hit_ratio = (int)((1.0 - (double(rop_ocache_read_misses) / double(rop_ocache_reads))) * 100);
     int ocache_write_hit_ratio = (int)((1.0 - (double(rop_ocache_write_misses) / double(rop_ocache_writes))) * 100);

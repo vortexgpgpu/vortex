@@ -108,13 +108,11 @@ module VX_rop_unit #(
         end
     end
 
-    wire perf_idle_cycle  = ~rop_req_if.valid & rop_req_if.ready;
     wire perf_stall_cycle = rop_req_if.valid & ~rop_req_if.ready;
 
     reg [`PERF_CTR_BITS-1:0] perf_mem_reads;
     reg [`PERF_CTR_BITS-1:0] perf_mem_writes;
     reg [`PERF_CTR_BITS-1:0] perf_mem_latency;
-    reg [`PERF_CTR_BITS-1:0] perf_idle_cycles;
     reg [`PERF_CTR_BITS-1:0] perf_stall_cycles;
 
     always @(posedge clk) begin
@@ -122,13 +120,11 @@ module VX_rop_unit #(
             perf_mem_reads    <= 0;
             perf_mem_writes   <= 0;
             perf_mem_latency  <= 0;
-            perf_idle_cycles  <= 0;
             perf_stall_cycles <= 0;
         end else begin
             perf_mem_reads    <= perf_mem_reads    + `PERF_CTR_BITS'(perf_mem_rd_req_per_cycle);
             perf_mem_writes   <= perf_mem_writes   + `PERF_CTR_BITS'(perf_mem_wr_req_per_cycle);
-            perf_mem_latency  <= perf_mem_latency  + `PERF_CTR_BITS'(perf_pending_reads);            
-            perf_idle_cycles  <= perf_idle_cycles  + `PERF_CTR_BITS'(perf_idle_cycle);
+            perf_mem_latency  <= perf_mem_latency  + `PERF_CTR_BITS'(perf_pending_reads);
             perf_stall_cycles <= perf_stall_cycles + `PERF_CTR_BITS'(perf_stall_cycle);
         end
     end
@@ -136,7 +132,6 @@ module VX_rop_unit #(
     assign rop_perf_if.mem_reads    = perf_mem_reads;
     assign rop_perf_if.mem_writes   = perf_mem_writes;
     assign rop_perf_if.mem_latency  = perf_mem_latency;
-    assign rop_perf_if.idle_cycles  = perf_idle_cycles;
     assign rop_perf_if.stall_cycles = perf_stall_cycles;
 
 `endif

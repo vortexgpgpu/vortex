@@ -5,10 +5,6 @@ module VX_raster_svc #(
 ) (
     input wire clk,
     input wire reset,
-    
-`ifdef PERF_ENABLE
-    VX_raster_svc_perf_if.master raster_svc_perf_if,
-`endif
 
     // Inputs    
     VX_raster_svc_if.slave raster_svc_req_if,    
@@ -18,11 +14,11 @@ module VX_raster_svc #(
     VX_commit_if.master    raster_svc_rsp_if,
     VX_gpu_csr_if.slave    raster_csr_if    
 );
-    wire stall_out;
+    wire raster_rsp_valid, raster_rsp_ready;
 
     // CSRs access
 
-    wire csr_write_enable = raster_req_if.valid & raster_svc_req_if.valid & ~stall_out;
+    wire csr_write_enable = raster_req_if.valid & raster_svc_req_if.valid & raster_rsp_ready;
 
     VX_raster_csr #(
         .CORE_ID (CORE_ID)
@@ -42,11 +38,11 @@ module VX_raster_svc #(
     // it is possible to have ready = f(valid) when using arbiters, 
     // because of that we need to decouple raster_svc_req_if and raster_svc_rsp_if handshake with a pipe register
 
-    assign raster_svc_req_if.ready = raster_req_if.valid & ~stall_out;
+    assign raster_svc_req_if.ready = raster_req_if.valid & raster_rsp_ready;
 
-    assign raster_req_if.ready = raster_svc_req_if.valid & ~stall_out;
+    assign raster_req_if.ready = raster_svc_req_if.valid & raster_rsp_ready;
 
-    wire response_valid = raster_svc_req_if.valid & raster_req_if.valid;
+    assign raster_rsp_valid = raster_svc_req_if.valid & raster_req_if.valid;
 
     wire [`NUM_THREADS-1:0][31:0] response_data;
 
@@ -54,36 +50,20 @@ module VX_raster_svc #(
         assign response_data[i] = {31'(raster_req_if.stamps[i].pid), !raster_req_if.empty};
     end
 
-    assign stall_out = ~raster_svc_rsp_if.ready && raster_svc_rsp_if.valid;
-
-    VX_pipe_register #(
-        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
-        .RESETW (1)
-    ) pipe_reg (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (!stall_out),
-        .data_in  ({response_valid,          raster_svc_req_if.uuid, raster_svc_req_if.wid, raster_svc_req_if.tmask, raster_svc_req_if.PC, raster_svc_req_if.rd, raster_svc_req_if.wb, response_data}),
-        .data_out ({raster_svc_rsp_if.valid, raster_svc_rsp_if.uuid, raster_svc_rsp_if.wid, raster_svc_rsp_if.tmask, raster_svc_rsp_if.PC, raster_svc_rsp_if.rd, raster_svc_rsp_if.wb, raster_svc_rsp_if.data})
+    VX_skid_buffer #(
+        .DATAW (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32))
+    ) rsp_sbuf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (raster_rsp_valid),
+        .ready_in  (raster_rsp_ready),
+        .data_in   ({raster_svc_req_if.uuid, raster_svc_req_if.wid, raster_svc_req_if.tmask, raster_svc_req_if.PC, raster_svc_req_if.rd, raster_svc_req_if.wb, response_data}),
+        .data_out  ({raster_svc_rsp_if.uuid, raster_svc_rsp_if.wid, raster_svc_rsp_if.tmask, raster_svc_rsp_if.PC, raster_svc_rsp_if.rd, raster_svc_rsp_if.wb, raster_svc_rsp_if.data}),
+        .valid_out (raster_svc_rsp_if.valid),
+        .ready_out (raster_svc_rsp_if.ready)
     );
 
     assign raster_svc_rsp_if.eop  = 1'b1;
-
-`ifdef PERF_ENABLE
-    reg [`PERF_CTR_BITS-1:0] perf_stall_cycles;
-
-    wire perf_stall_cycle = raster_svc_req_if.valid && ~stall_out && ~raster_req_if.valid;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            perf_stall_cycles <= 0;
-        end else begin
-            perf_stall_cycles <= perf_stall_cycles + `PERF_CTR_BITS'(perf_stall_cycle);
-        end
-    end
-
-    assign raster_svc_perf_if.stall_cycles = perf_stall_cycles;
-`endif
 
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
