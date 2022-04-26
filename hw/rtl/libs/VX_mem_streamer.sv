@@ -468,15 +468,15 @@ module VX_mem_streamer #(
         always @(posedge clk) begin
             if (| mem_req_fire) begin
                 if (| mem_req_rw)
-                    dpi_trace(1, "%d: MEMSTREAM wr req NUM_REQS=%0d, NUM_BANKS=%0d, NUM_BATCHES=%0d, tag=0b%b, batch=%0d, mask=0b%b, req_sent_mask=0b%b, addr=0x%h, addrw=%0d, empty=%d\n", $time, NUM_REQS, NUM_BANKS, NUM_BATCHES, mem_req_tag, req_batch_sel, mem_req_valid, req_sent_mask_n, mem_req_addr, $bits(mem_req_addr), sreq_empty);
+                    dpi_trace(1, "%d: MEMSTREAM wr req NUM_REQS=%0d, NUM_BANKS=%0d, NUM_BATCHES=%0d, tag=0b%b, batch=%0d, mask=0b%b, req_sent_mask=0b%b, complete=%0d, addr=0x%h, addrw=%0d, empty=%d\n", $time, NUM_REQS, NUM_BANKS, NUM_BATCHES, mem_req_tag, req_batch_sel, mem_req_valid, req_sent_mask_n, req_complete, mem_req_addr, $bits(mem_req_addr), sreq_empty);
                 else
-                    dpi_trace(1, "%d: MEMSTREAM rd req NUM_REQS=%0d, NUM_BANKS=%0d, NUM_BATCHES=%0d, tag=0b%b, batch=%0d, mask=0b%b, req_sent_mask=0b%b, addr=0x%h, addrw=%0d, empty=%d\n", $time, NUM_REQS, NUM_BANKS, NUM_BATCHES, mem_req_tag, req_batch_sel, mem_req_valid, req_sent_mask_n, mem_req_addr, $bits(mem_req_addr), sreq_empty);
+                    dpi_trace(1, "%d: MEMSTREAM rd req NUM_REQS=%0d, NUM_BANKS=%0d, NUM_BATCHES=%0d, tag=0b%b, batch=%0d, mask=0b%b, req_sent_mask=0b%b, complete=%0d, addr=0x%h, addrw=%0d, empty=%d\n", $time, NUM_REQS, NUM_BANKS, NUM_BATCHES, mem_req_tag, req_batch_sel, mem_req_valid, req_sent_mask_n, req_complete, mem_req_addr, $bits(mem_req_addr), sreq_empty);
             end 
             if (mem_rsp_fire) begin
-                dpi_trace(1, "%d: MEMSTREAM rsp tag=0b%b, batch=%0d, mask=0b%b, data=0x%0h\n", $time, crsp_tag, rsp_batch_sel, crsp_mask, crsp_data);
+                dpi_trace(1, "%d: MEMSTREAM rsp tag=0b%b, batch=%0d, mask=0b%b, data=0x%0h\n", $time, mem_rsp_tag_s, rsp_batch_sel, crsp_mask, crsp_data);
             end
             if (sreq_push) begin
-                dpi_trace(1, "%d: MEMSTREAM req push tag=0b%b, addr=0x%h, empty=%d\n", $time, stag_waddr, req_addr, sreq_empty);
+                dpi_trace(1, "%d: MEMSTREAM req push NUM_REQS=%0d, NUM_BANKS=%0d, NUM_BATCHES=%0d, tag=0b%b, mask=0b%b, addr=0x%h, empty=%d\n", $time, NUM_REQS, NUM_BANKS, NUM_BATCHES, stag_waddr, req_mask, req_addr, sreq_empty);
             end
             if (sreq_pop) begin
                 dpi_trace(1, "%d: MEMSTREAM req pop empty=%d\n", $time, sreq_empty);
@@ -758,10 +758,10 @@ module VX_mem_streamer #(
                     dpi_trace(1, "%d: MEMSTREAM rd req NUM_REQS=%0d, tag=0b%b, mask=0b%b, req_sent_mask=0b%b, addr=0x%0h, empty=%d\n", $time, NUM_REQS, mem_req_tag, mem_req_valid, req_sent_mask_n, mem_req_addr, sreq_empty);
             end 
             if (mem_rsp_fire) begin
-                dpi_trace(1, "%d: MEMSTREAM rsp tag=0b%b, mask=0b%b, data=0x%0h\n", $time, crsp_tag, crsp_mask, crsp_data);
+                dpi_trace(1, "%d: MEMSTREAM rsp tag=0b%b, mask=0b%b, data=0x%0h\n", $time, stag_raddr, crsp_mask, crsp_data);
             end
             if (sreq_push) begin
-                dpi_trace(1, "%d: MEMSTREAM req push tag=0b%b, addr=0x%0h, empty=%d\n", $time, stag_waddr, req_addr, sreq_empty);
+                dpi_trace(1, "%d: MEMSTREAM req push tag=0b%b, addr=0x%0h, empty=%0d\n", $time, stag_waddr, req_addr, sreq_empty);
             end
             if (sreq_pop) begin
                 dpi_trace(1, "%d: MEMSTREAM req pop empty=%d\n", $time, sreq_empty);
