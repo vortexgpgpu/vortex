@@ -114,6 +114,7 @@ module VX_mem_streamer #(
 
         // Memory request
         wire [NUM_BANKS-1:0]                                mem_req_fire;
+        wire [NUM_BANKS-1:0]                                mem_req_mask;
         reg  [NUM_BATCHES-1:0][NUM_BANKS-1:0]               req_sent_mask;
         wire [NUM_BATCHES-1:0][NUM_BANKS-1:0]               req_sent_mask_n;
         wire                                                req_complete;
@@ -121,6 +122,7 @@ module VX_mem_streamer #(
 
         wire [NUM_BATCHES-1:0][NUM_BANKS-1:0]                mem_req_valid_b;
         wire [NUM_BATCHES-1:0][NUM_BANKS-1:0]                mem_req_rw_b;
+        wire [NUM_BATCHES-1:0][NUM_BANKS-1:0]                mem_req_mask_b;
         wire [NUM_BATCHES-1:0][NUM_BANKS-1:0][BYTEENW-1:0]   mem_req_byteen_b;
         wire [NUM_BATCHES-1:0][NUM_BANKS-1:0][ADDRW-1:0]     mem_req_addr_b;
         wire [NUM_BATCHES-1:0][NUM_BANKS-1:0][DATAW-1:0]     mem_req_data_b;
@@ -350,6 +352,7 @@ module VX_mem_streamer #(
             if ((NUM_REQS % NUM_BANKS != 0) && (i == NUM_BATCHES - 1)) begin
                 assign mem_req_valid_b[i]  = {{(NUM_BANKS - NUM_REQS % NUM_BANKS){1'b0}}, sreq_mask[i * NUM_BANKS +: (NUM_REQS % NUM_BANKS)]} & ~req_sent_mask[i] & {NUM_BANKS{~sreq_empty}};
                 assign mem_req_rw_b[i]     = {NUM_BANKS{sreq_rw}};
+                assign mem_req_mask_b[i]   = {{(NUM_BANKS - NUM_REQS % NUM_BANKS){1'b0}}, sreq_mask[i * NUM_BANKS +: (NUM_REQS % NUM_BANKS)]};
                 assign mem_req_byteen_b[i] = {{((NUM_BANKS - NUM_REQS % NUM_BANKS) * BYTEENW){1'b0}}, sreq_byteen[i * NUM_BANKS +: (NUM_REQS % NUM_BANKS)]};
                 assign mem_req_addr_b[i]   = {{((NUM_BANKS - NUM_REQS % NUM_BANKS) * ADDRW){1'b0}}, sreq_addr[i * NUM_BANKS +: (NUM_REQS % NUM_BANKS)]};
                 assign mem_req_data_b[i]   = {{((NUM_BANKS - NUM_REQS % NUM_BANKS) * DATAW){1'b0}}, sreq_data[i * NUM_BANKS +: (NUM_REQS % NUM_BANKS)]};
@@ -358,6 +361,7 @@ module VX_mem_streamer #(
             end else begin
                 assign mem_req_valid_b[i]  = sreq_mask[i * NUM_BANKS +: NUM_BANKS] & ~req_sent_mask[i] & {NUM_BANKS{~sreq_empty}};
                 assign mem_req_rw_b[i]     = {NUM_BANKS{sreq_rw}};
+                assign mem_req_mask_b[i]   = sreq_mask[i * NUM_BANKS +: NUM_BANKS];
                 assign mem_req_byteen_b[i] = sreq_byteen[i * NUM_BANKS +: NUM_BANKS];
                 assign mem_req_addr_b[i]   = sreq_addr[i * NUM_BANKS +: NUM_BANKS];
                 assign mem_req_data_b[i]   = sreq_data[i * NUM_BANKS +: NUM_BANKS];
@@ -382,6 +386,15 @@ module VX_mem_streamer #(
             .data_in  (mem_req_rw_b),
             .sel_in   (req_batch_sel),
             .data_out (mem_req_rw)
+        );
+
+        VX_mux #(
+            .DATAW (NUM_BANKS),
+            .N     (NUM_BATCHES)
+        ) mask_sel_mux (
+            .data_in  (mem_req_mask_b),
+            .sel_in   (req_batch_sel),
+            .data_out (mem_req_mask)
         );
 
         VX_mux #(
@@ -421,8 +434,8 @@ module VX_mem_streamer #(
         );
 
         // All batches in a request have been sent
-        assign req_complete    = (req_sent_mask_n == mem_req_valid_b);
-        assign req_complete_b  = (req_sent_mask_n[req_batch_sel] == mem_req_valid);
+        assign req_complete    = (req_sent_mask_n == mem_req_mask_b);
+        assign req_complete_b  = (req_sent_mask_n[req_batch_sel] == mem_req_mask);
 
         for (genvar i = 0; i < NUM_BATCHES; ++i) begin
             assign req_sent_mask_n[i] = (i == req_batch_sel) ? req_sent_mask[i] | mem_req_fire : req_sent_mask[i];
@@ -468,9 +481,9 @@ module VX_mem_streamer #(
         always @(posedge clk) begin
             if (| mem_req_fire) begin
                 if (| mem_req_rw)
-                    dpi_trace(1, "%d: MEMSTREAM wr req NUM_REQS=%0d, NUM_BANKS=%0d, NUM_BATCHES=%0d, tag=0b%b, batch=%0d, mask=0b%b, req_sent_mask=0b%b, complete=%0d, addr=0x%h, addrw=%0d, empty=%d\n", $time, NUM_REQS, NUM_BANKS, NUM_BATCHES, mem_req_tag, req_batch_sel, mem_req_valid, req_sent_mask_n, req_complete, mem_req_addr, $bits(mem_req_addr), sreq_empty);
+                    dpi_trace(1, "%d: MEMSTREAM wr req NUM_REQS=%0d, NUM_BANKS=%0d, NUM_BATCHES=%0d, tag=0b%b, batch=%0d, mask=0b%b, req_sent_mask_n=0b%b, mem_req_valid_b=0b%b, complete=%0d, addr=0x%h, addrw=%0d, empty=%d\n", $time, NUM_REQS, NUM_BANKS, NUM_BATCHES, mem_req_tag, req_batch_sel, mem_req_valid, req_sent_mask_n, mem_req_valid_b, req_complete, mem_req_addr, $bits(mem_req_addr), sreq_empty);
                 else
-                    dpi_trace(1, "%d: MEMSTREAM rd req NUM_REQS=%0d, NUM_BANKS=%0d, NUM_BATCHES=%0d, tag=0b%b, batch=%0d, mask=0b%b, req_sent_mask=0b%b, complete=%0d, addr=0x%h, addrw=%0d, empty=%d\n", $time, NUM_REQS, NUM_BANKS, NUM_BATCHES, mem_req_tag, req_batch_sel, mem_req_valid, req_sent_mask_n, req_complete, mem_req_addr, $bits(mem_req_addr), sreq_empty);
+                    dpi_trace(1, "%d: MEMSTREAM rd req NUM_REQS=%0d, NUM_BANKS=%0d, NUM_BATCHES=%0d, tag=0b%b, batch=%0d, mask=0b%b, req_sent_mask_n=0b%b, mem_req_valid_b=0b%b, complete=%0d, addr=0x%h, addrw=%0d, empty=%d\n", $time, NUM_REQS, NUM_BANKS, NUM_BATCHES, mem_req_tag, req_batch_sel, mem_req_valid, req_sent_mask_n, mem_req_valid_b, req_complete, mem_req_addr, $bits(mem_req_addr), sreq_empty);
             end 
             if (mem_rsp_fire) begin
                 dpi_trace(1, "%d: MEMSTREAM rsp tag=0b%b, batch=%0d, mask=0b%b, data=0x%0h\n", $time, mem_rsp_tag_s, rsp_batch_sel, crsp_mask, crsp_data);
