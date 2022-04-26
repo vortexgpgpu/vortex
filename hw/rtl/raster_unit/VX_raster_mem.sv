@@ -123,7 +123,7 @@ module VX_raster_mem #(
         end
         else begin
             // On new input -> set the temp state values
-            if (ready && input_valid && valid_rs_empty_index && fetch_fsm_complete == 1) begin
+            if (input_valid && valid_rs_empty_index && fetch_fsm_complete == 1) begin
                 temp_pbuf_addr   <= pbuf_baseaddr;
                 temp_num_tiles   <= num_tiles;
                 temp_pbuf_stride <= pbuf_stride;
