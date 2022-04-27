@@ -72,7 +72,6 @@ private:
   RasterUnit::Stamp *stamps_tail_;
   uint32_t           stamps_size_;
   std::list<tile_mem_trace_t> mem_traces_;
-  bool initialized_;  
   bool done_;
 
   void stamps_push(RasterUnit::Stamp* stamp) {
@@ -285,23 +284,6 @@ private:
     }
   }
 
-  void initialize() {
-    // get device configuration
-    num_tiles_     = dcrs_.read(DCR_RASTER_TILE_COUNT);
-    tbuf_baseaddr_ = dcrs_.read(DCR_RASTER_TBUF_ADDR);
-    pbuf_baseaddr_ = dcrs_.read(DCR_RASTER_PBUF_ADDR);
-    pbuf_stride_   = dcrs_.read(DCR_RASTER_PBUF_STRIDE);
-    dst_width_     = dcrs_.read(DCR_RASTER_DST_SIZE) & 0xffff;
-    dst_height_    = dcrs_.read(DCR_RASTER_DST_SIZE) >> 16;
-
-    tbuf_addr_ = tbuf_baseaddr_;
-    cur_tile_  = 0;
-    cur_prim_  = 0;
-    num_prims_ = 0;      
-    
-    initialized_ = true;
-  }
-
   void renderNextPrimitive() {    
     if (0 == num_prims_) {
       mem_traces_.push_back({});      
@@ -409,7 +391,6 @@ public:
     , stamps_head_(nullptr)
     , stamps_tail_(nullptr)
     , stamps_size_(0)
-    , initialized_(false)
     , done_(false) {
     assert(block_logsize >= 1);
     assert(tile_logsize >= block_logsize);
@@ -417,20 +398,28 @@ public:
 
   ~Rasterizer() {
     //--
-  }
+  } 
 
-  void clear() {
-    initialized_ = false;
-  }  
+  void initialize() {
+    // get device configuration
+    num_tiles_     = dcrs_.read(DCR_RASTER_TILE_COUNT);
+    tbuf_baseaddr_ = dcrs_.read(DCR_RASTER_TBUF_ADDR);
+    pbuf_baseaddr_ = dcrs_.read(DCR_RASTER_PBUF_ADDR);
+    pbuf_stride_   = dcrs_.read(DCR_RASTER_PBUF_STRIDE);
+    dst_width_     = dcrs_.read(DCR_RASTER_DST_SIZE) & 0xffff;
+    dst_height_    = dcrs_.read(DCR_RASTER_DST_SIZE) >> 16;
+
+    tbuf_addr_ = tbuf_baseaddr_;
+    cur_tile_  = 0;
+    cur_prim_  = 0;
+    num_prims_ = 0;
+  }
 
   void attach_ram(RAM* mem) {
     mem_ = mem;
   }
 
-  RasterUnit::Stamp* fetch() {      
-    if (!initialized_) {
-      this->initialize();
-    }    
+  RasterUnit::Stamp* fetch() {
     do {
       if (stamps_head_ == nullptr && cur_tile_ == num_tiles_) {
         done_ = true;
@@ -440,7 +429,6 @@ public:
         this->renderNextPrimitive();
       }      
     } while (stamps_head_ == nullptr);
-    
     auto stamp = stamps_head_;
     this->stamps_pop();
     return stamp;
@@ -494,7 +482,7 @@ public:
   ~Impl() {}
 
   void clear() {
-    rasterizer_.clear();
+    rasterizer_.initialize();
     mem_trace_state_ = e_mem_trace_state::header;
   }  
 

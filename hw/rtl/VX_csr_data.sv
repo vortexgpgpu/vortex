@@ -36,7 +36,7 @@ module VX_csr_data #(
     VX_gpu_csr_if.master                rop_csr_if,
 `ifdef PERF_ENABLE
     VX_rop_perf_if.slave                rop_perf_if,
-    VX_perf_cache_if.slave              ocache_perf_if,
+    VX_perf_cache_if.slave              perf_ocache_if,
 `endif
 `endif
 
@@ -330,14 +330,12 @@ module VX_csr_data #(
                         // cache perf counters
                         `CSR_MPM_TCACHE_READS   : read_data_r = {`NUM_THREADS{perf_tcache_if.reads[31:0]}};
                         `CSR_MPM_TCACHE_READS_H : read_data_r = {`NUM_THREADS{32'(perf_tcache_if.reads[`PERF_CTR_BITS-1:32])}};
-                        `CSR_MPM_TCACHE_WRITES  : read_data_r = {`NUM_THREADS{perf_tcache_if.writes[31:0]}};
-                        `CSR_MPM_TCACHE_WRITES_H: read_data_r = {`NUM_THREADS{32'(perf_tcache_if.writes[`PERF_CTR_BITS-1:32])}};
                         `CSR_MPM_TCACHE_MISS_R  : read_data_r = {`NUM_THREADS{perf_tcache_if.read_misses[31:0]}};
                         `CSR_MPM_TCACHE_MISS_R_H: read_data_r = {`NUM_THREADS{32'(perf_tcache_if.read_misses[`PERF_CTR_BITS-1:32])}};
-                        `CSR_MPM_TCACHE_MISS_W  : read_data_r = {`NUM_THREADS{perf_tcache_if.write_misses[31:0]}};
-                        `CSR_MPM_TCACHE_MISS_W_H: read_data_r = {`NUM_THREADS{32'(perf_tcache_if.write_misses[`PERF_CTR_BITS-1:32])}};
                         `CSR_MPM_TCACHE_BANK_ST : read_data_r = {`NUM_THREADS{perf_tcache_if.bank_stalls[31:0]}};
-                        `CSR_MPM_TCACHE_BANK_ST_H: read_data_r = {`NUM_THREADS{32'(perf_tcache_if.bank_stalls[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_TCACHE_BANK_ST_H:read_data_r = {`NUM_THREADS{32'(perf_tcache_if.bank_stalls[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_TCACHE_MSHR_ST  :read_data_r = {`NUM_THREADS{perf_tcache_if.mshr_stalls[31:0]}};
+                        `CSR_MPM_TCACHE_MSHR_ST_H:read_data_r = {`NUM_THREADS{32'(perf_tcache_if.mshr_stalls[`PERF_CTR_BITS-1:32])}};
                     `endif
                         default:;
                         endcase
@@ -359,7 +357,9 @@ module VX_csr_data #(
                         `CSR_MPM_RCACHE_MISS_R  : read_data_r = {`NUM_THREADS{perf_rcache_if.read_misses[31:0]}};
                         `CSR_MPM_RCACHE_MISS_R_H: read_data_r = {`NUM_THREADS{32'(perf_rcache_if.read_misses[`PERF_CTR_BITS-1:32])}};
                         `CSR_MPM_RCACHE_BANK_ST : read_data_r = {`NUM_THREADS{perf_rcache_if.bank_stalls[31:0]}};
-                        `CSR_MPM_RCACHE_BANK_ST_H: read_data_r = {`NUM_THREADS{32'(perf_rcache_if.bank_stalls[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_RCACHE_BANK_ST_H:read_data_r = {`NUM_THREADS{32'(perf_rcache_if.bank_stalls[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_RCACHE_MSHR_ST  :read_data_r = {`NUM_THREADS{perf_rcache_if.mshr_stalls[31:0]}};
+                        `CSR_MPM_RCACHE_MSHR_ST_H:read_data_r = {`NUM_THREADS{32'(perf_rcache_if.mshr_stalls[`PERF_CTR_BITS-1:32])}};
                     `endif
                         default:;
                         endcase
@@ -378,16 +378,18 @@ module VX_csr_data #(
                         `CSR_MPM_ROP_STALL_H    : read_data_r = {`NUM_THREADS{32'(rop_perf_if.stall_cycles[`PERF_CTR_BITS-1:32])}};
                     `ifdef OCACHE_ENABLE
                         // cache perf counters
-                        `CSR_MPM_OCACHE_READS   : read_data_r = {`NUM_THREADS{ocache_perf_if.reads[31:0]}};
-                        `CSR_MPM_OCACHE_READS_H : read_data_r = {`NUM_THREADS{32'(ocache_perf_if.reads[`PERF_CTR_BITS-1:32])}};
-                        `CSR_MPM_OCACHE_WRITES  : read_data_r = {`NUM_THREADS{ocache_perf_if.writes[31:0]}};
-                        `CSR_MPM_OCACHE_WRITES_H: read_data_r = {`NUM_THREADS{32'(ocache_perf_if.writes[`PERF_CTR_BITS-1:32])}};
-                        `CSR_MPM_OCACHE_MISS_R  : read_data_r = {`NUM_THREADS{ocache_perf_if.read_misses[31:0]}};
-                        `CSR_MPM_OCACHE_MISS_R_H: read_data_r = {`NUM_THREADS{32'(ocache_perf_if.read_misses[`PERF_CTR_BITS-1:32])}};
-                        `CSR_MPM_OCACHE_MISS_W  : read_data_r = {`NUM_THREADS{ocache_perf_if.write_misses[31:0]}};
-                        `CSR_MPM_OCACHE_MISS_W_H: read_data_r = {`NUM_THREADS{32'(ocache_perf_if.write_misses[`PERF_CTR_BITS-1:32])}};
-                        `CSR_MPM_OCACHE_BANK_ST : read_data_r = {`NUM_THREADS{ocache_perf_if.bank_stalls[31:0]}};
-                        `CSR_MPM_OCACHE_BANK_ST_H:read_data_r = {`NUM_THREADS{32'(ocache_perf_if.bank_stalls[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_OCACHE_READS   : read_data_r = {`NUM_THREADS{perf_ocache_if.reads[31:0]}};
+                        `CSR_MPM_OCACHE_READS_H : read_data_r = {`NUM_THREADS{32'(perf_ocache_if.reads[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_OCACHE_WRITES  : read_data_r = {`NUM_THREADS{perf_ocache_if.writes[31:0]}};
+                        `CSR_MPM_OCACHE_WRITES_H: read_data_r = {`NUM_THREADS{32'(perf_ocache_if.writes[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_OCACHE_MISS_R  : read_data_r = {`NUM_THREADS{perf_ocache_if.read_misses[31:0]}};
+                        `CSR_MPM_OCACHE_MISS_R_H: read_data_r = {`NUM_THREADS{32'(perf_ocache_if.read_misses[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_OCACHE_MISS_W  : read_data_r = {`NUM_THREADS{perf_ocache_if.write_misses[31:0]}};
+                        `CSR_MPM_OCACHE_MISS_W_H: read_data_r = {`NUM_THREADS{32'(perf_ocache_if.write_misses[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_OCACHE_BANK_ST : read_data_r = {`NUM_THREADS{perf_ocache_if.bank_stalls[31:0]}};
+                        `CSR_MPM_OCACHE_BANK_ST_H:read_data_r = {`NUM_THREADS{32'(perf_ocache_if.bank_stalls[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_OCACHE_MSHR_ST  :read_data_r = {`NUM_THREADS{perf_ocache_if.mshr_stalls[31:0]}};
+                        `CSR_MPM_OCACHE_MSHR_ST_H:read_data_r = {`NUM_THREADS{32'(perf_ocache_if.mshr_stalls[`PERF_CTR_BITS-1:32])}};
                     `endif
                         default:;
                         endcase

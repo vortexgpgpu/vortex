@@ -189,7 +189,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   uint64_t dcache_writes = 0;
   uint64_t dcache_read_misses = 0;
   uint64_t dcache_write_misses = 0;
-  uint64_t dcache_bank_stalls = 0;  
+  uint64_t dcache_bank_stalls = 0; 
   uint64_t dcache_mshr_stalls = 0;
   // PERF: shared memory
   uint64_t smem_reads = 0;
@@ -206,7 +206,8 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   // PERF: tex tcache
   uint64_t tcache_reads = 0; 
   uint64_t tcache_read_misses = 0;
-  uint64_t tcache_bank_stalls = 0;
+  uint64_t tcache_bank_stalls = 0; 
+  uint64_t tcache_mshr_stalls = 0;
 #endif
 #ifdef EXT_RASTER_ENABLE
   uint64_t raster_mem_reads = 0;
@@ -215,19 +216,21 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   // PERF: raster cache
   uint64_t rcache_reads = 0;  
   uint64_t rcache_read_misses = 0;
-  uint64_t rcache_bank_stalls = 0;
+  uint64_t rcache_bank_stalls = 0; 
+  uint64_t rcache_mshr_stalls = 0;
 #endif
 #ifdef EXT_ROP_ENABLE
   uint64_t rop_mem_reads = 0;
   uint64_t rop_mem_writes = 0;
   uint64_t rop_mem_lat = 0;
-  uint32_t rop_stall_cycles = 0;
+  uint64_t rop_stall_cycles = 0;
   // PERF: rop ocache
-  uint64_t rop_ocache_reads = 0;       
-  uint64_t rop_ocache_writes = 0;      
-  uint64_t rop_ocache_read_misses = 0; 
-  uint64_t rop_ocache_write_misses = 0;
-  uint64_t rop_ocache_bank_stalls = 0;
+  uint64_t ocache_reads = 0;       
+  uint64_t ocache_writes = 0;      
+  uint64_t ocache_read_misses = 0; 
+  uint64_t ocache_write_misses = 0;
+  uint64_t ocache_bank_stalls = 0;   
+  uint64_t ocache_mshr_stalls = 0;
 #endif
 #endif
 
@@ -385,15 +388,18 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
       // cache perf counters
       uint64_t tcache_reads_per_core       = get_csr_64(staging_ptr, CSR_MPM_TCACHE_READS);
       uint64_t tcache_read_misses_per_core = get_csr_64(staging_ptr, CSR_MPM_TCACHE_MISS_R);
-      uint64_t tcache_bank_stalls_per_core = get_csr_64(staging_ptr, CSR_MPM_TCACHE_BANK_ST);
+      uint64_t tcache_bank_st_per_core     = get_csr_64(staging_ptr, CSR_MPM_TCACHE_BANK_ST);
+      uint64_t tcache_mshr_st_per_core     = get_csr_64(staging_ptr, CSR_MPM_TCACHE_MSHR_ST);
       int tcache_read_hit_ratio = (int)((1.0 - (double(tcache_read_misses_per_core) / double(tcache_reads_per_core))) * 100);
-      int tcache_bank_utilization = (int)((double(tcache_reads_per_core) / double(tcache_reads_per_core + tcache_bank_stalls_per_core)) * 100);
-      if (num_cores > 1) fprintf(stream, "PERF: tcache reads=%ld\n", tcache_reads_per_core);
-      if (num_cores > 1) fprintf(stream, "PERF: tcache read misses=%ld (hit ratio=%d%%)\n", tcache_read_misses_per_core, tcache_read_hit_ratio);
-      if (num_cores > 1) fprintf(stream, "PERF: tcache bank stalls=%ld (utilization=%d%%)\n", tcache_bank_stalls_per_core, tcache_bank_utilization);
+      int tcache_bank_utilization = (int)((double(tcache_reads_per_core) / double(tcache_reads_per_core + tcache_bank_st_per_core)) * 100);
+      if (num_cores > 1) fprintf(stream, "PERF: core%d: tcache reads=%ld\n", core_id, tcache_reads_per_core);
+      if (num_cores > 1) fprintf(stream, "PERF: core%d: tcache read misses=%ld (hit ratio=%d%%)\n", core_id, tcache_read_misses_per_core, tcache_read_hit_ratio);
+      if (num_cores > 1) fprintf(stream, "PERF: core%d: tcache bank stalls=%ld (utilization=%d%%)\n", core_id, tcache_bank_st_per_core, tcache_bank_utilization);      
+      if (num_cores > 1) fprintf(stream, "PERF: core%d: tcache mshr stalls=%ld\n", core_id, tcache_mshr_st_per_core);      
       tcache_reads       += tcache_reads_per_core;
       tcache_read_misses += tcache_read_misses_per_core;
-      tcache_bank_stalls += tcache_bank_stalls_per_core;
+      tcache_bank_stalls += tcache_bank_st_per_core;
+      tcache_mshr_stalls += tcache_mshr_st_per_core;
     #endif
     } break;
     case DCR_MPM_CLASS_RASTER: {
@@ -406,22 +412,24 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
         rcache_reads        = get_csr_64(staging_ptr, CSR_MPM_RCACHE_READS);
         rcache_read_misses  = get_csr_64(staging_ptr, CSR_MPM_RCACHE_MISS_R);
         rcache_bank_stalls  = get_csr_64(staging_ptr, CSR_MPM_RCACHE_BANK_ST);
+        rcache_mshr_stalls  = get_csr_64(staging_ptr, CSR_MPM_RCACHE_MSHR_ST);
       }
     #endif
     } break;
     case DCR_MPM_CLASS_ROP: {
     #ifdef EXT_ROP_ENABLE
       if (0 == core_id) {
-        rop_mem_reads         = get_csr_64(staging_ptr, CSR_MPM_ROP_READS);
-        rop_mem_writes        = get_csr_64(staging_ptr, CSR_MPM_ROP_WRITES);
-        rop_mem_lat           = get_csr_64(staging_ptr, CSR_MPM_ROP_LAT);
-        rop_stall_cycles      = get_csr_64(staging_ptr, CSR_MPM_ROP_STALL);
+        rop_mem_reads       = get_csr_64(staging_ptr, CSR_MPM_ROP_READS);
+        rop_mem_writes      = get_csr_64(staging_ptr, CSR_MPM_ROP_WRITES);
+        rop_mem_lat         = get_csr_64(staging_ptr, CSR_MPM_ROP_LAT);
+        rop_stall_cycles    = get_csr_64(staging_ptr, CSR_MPM_ROP_STALL);
         // cache perf counters
-        rop_ocache_reads      = get_csr_64(staging_ptr, CSR_MPM_OCACHE_READS);
-        rop_ocache_writes     = get_csr_64(staging_ptr, CSR_MPM_OCACHE_WRITES);
-        rop_ocache_read_misses= get_csr_64(staging_ptr, CSR_MPM_OCACHE_MISS_R);
-        rop_ocache_write_misses= get_csr_64(staging_ptr, CSR_MPM_OCACHE_MISS_W);
-        rop_ocache_bank_stalls= get_csr_64(staging_ptr, CSR_MPM_OCACHE_BANK_ST);
+        ocache_reads        = get_csr_64(staging_ptr, CSR_MPM_OCACHE_READS);
+        ocache_writes       = get_csr_64(staging_ptr, CSR_MPM_OCACHE_WRITES);
+        ocache_read_misses  = get_csr_64(staging_ptr, CSR_MPM_OCACHE_MISS_R);
+        ocache_write_misses = get_csr_64(staging_ptr, CSR_MPM_OCACHE_MISS_W);
+        ocache_bank_stalls  = get_csr_64(staging_ptr, CSR_MPM_OCACHE_BANK_ST);
+        ocache_mshr_stalls  = get_csr_64(staging_ptr, CSR_MPM_OCACHE_MSHR_ST);
       }
     #endif
     } break;
@@ -477,6 +485,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     fprintf(stream, "PERF: tcache reads=%ld\n", tcache_reads);
     fprintf(stream, "PERF: tcache read misses=%ld (hit ratio=%d%%)\n", tcache_read_misses, tcache_read_hit_ratio);
     fprintf(stream, "PERF: tcache bank stalls=%ld (utilization=%d%%)\n", tcache_bank_stalls, tcache_bank_utilization);
+    fprintf(stream, "PERF: tcache mshr stalls=%ld\n", tcache_mshr_stalls);
   #endif
   } break;
   case DCR_MPM_CLASS_RASTER: {
@@ -492,6 +501,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     fprintf(stream, "PERF: rcache reads=%ld\n", rcache_reads);
     fprintf(stream, "PERF: rcache read misses=%ld (hit ratio=%d%%)\n", rcache_read_misses, rcache_read_hit_ratio);
     fprintf(stream, "PERF: rcache bank stalls=%ld (utilization=%d%%)\n", rcache_bank_stalls, rcache_bank_utilization);
+    fprintf(stream, "PERF: rcache mshr stalls=%ld\n",rdcache_mshr_stalls);
   #endif
   } break;
   case DCR_MPM_CLASS_ROP: {
@@ -503,14 +513,15 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     fprintf(stream, "PERF: rop memory average latency=%d cycles\n", rop_mem_avg_lat);
     fprintf(stream, "PERF: rop stall cycles=%ld cycles (%d%%)\n", rop_stall_cycles, rop_stall_cycles_ratio);
     // cache perf counters
-    int ocache_read_hit_ratio = (int)((1.0 - (double(rop_ocache_read_misses) / double(rop_ocache_reads))) * 100);
-    int ocache_write_hit_ratio = (int)((1.0 - (double(rop_ocache_write_misses) / double(rop_ocache_writes))) * 100);
-    int ocache_bank_utilization = (int)((double(rop_ocache_reads + rop_ocache_writes) / double(rop_ocache_reads + rop_ocache_writes + rop_ocache_bank_stalls)) * 100);
-    fprintf(stream, "PERF: ocache reads=%ld\n", rop_ocache_reads);
-    fprintf(stream, "PERF: ocache writes=%ld\n", rop_ocache_writes);
-    fprintf(stream, "PERF: ocache read misses=%ld (hit ratio=%d%%)\n", rop_ocache_read_misses, ocache_read_hit_ratio);
-    fprintf(stream, "PERF: ocache write misses=%ld (hit ratio=%d%%)\n", rop_ocache_write_misses, ocache_write_hit_ratio);  
-    fprintf(stream, "PERF: ocache bank stalls=%ld (utilization=%d%%)\n", rop_ocache_bank_stalls, ocache_bank_utilization);
+    int ocache_read_hit_ratio = (int)((1.0 - (double(ocache_read_misses) / double(ocache_reads))) * 100);
+    int ocache_write_hit_ratio = (int)((1.0 - (double(ocache_write_misses) / double(ocache_writes))) * 100);
+    int ocache_bank_utilization = (int)((double(ocache_reads + ocache_writes) / double(ocache_reads + ocache_writes + ocache_bank_stalls)) * 100);
+    fprintf(stream, "PERF: ocache reads=%ld\n", ocache_reads);
+    fprintf(stream, "PERF: ocache writes=%ld\n", ocache_writes);
+    fprintf(stream, "PERF: ocache read misses=%ld (hit ratio=%d%%)\n", ocache_read_misses, ocache_read_hit_ratio);
+    fprintf(stream, "PERF: ocache write misses=%ld (hit ratio=%d%%)\n", ocache_write_misses, ocache_write_hit_ratio);  
+    fprintf(stream, "PERF: ocache bank stalls=%ld (utilization=%d%%)\n", ocache_bank_stalls, ocache_bank_utilization);
+    fprintf(stream, "PERF: ocache mshr stalls=%ld\n", ocache_mshr_stalls);
   #endif
   } break;
   default:
