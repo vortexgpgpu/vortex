@@ -9,7 +9,8 @@
 module VX_raster_be #(
     parameter RASTER_BLOCK_SIZE       = 4,
     parameter RASTER_QUAD_OUTPUT_RATE = 2,
-    parameter RASTER_QUAD_FIFO_DEPTH  = 16
+    parameter RASTER_QUAD_FIFO_DEPTH  = 16,
+    parameter SLICE_ID                = 1
 ) (
     // Standard inputs
     input logic clk, reset,
@@ -26,6 +27,8 @@ module VX_raster_be #(
     input logic         [`RASTER_PRIMITIVE_DATA_BITS-1:0]   pid,
     // edge function computation value propagated
     input logic signed  [`RASTER_PRIMITIVE_DATA_BITS-1:0]   edge_func_val[2:0],
+    // Rendering region
+    input logic         [`RASTER_DIM_BITS-1:0]              dst_width, dst_height,
 
     // Quad related output data
     output logic        [`RASTER_DIM_BITS-1:0]              out_quad_x_loc[RASTER_QUAD_OUTPUT_RATE-1:0],
@@ -86,14 +89,21 @@ module VX_raster_be #(
     end
     for (genvar i = 0; i < RASTER_QUAD_NUM; ++i) begin
         for (genvar j = 0; j < RASTER_QUAD_NUM; ++j) begin
-            VX_raster_qe qe (
+            VX_raster_qe #(
+                .SLICE_ID       (SLICE_ID),
+                .QUAD_ID        (i*RASTER_QUAD_NUM+j)
+            ) qe (
                 .clk            (clk),
                 .reset          (reset),
                 .enable         (fsm_complete),
                 .edges          (edges),
                 .edge_func_val  (local_edge_func_val[i*RASTER_QUAD_NUM+j]),
                 .masks          (temp_quad_masks[i*RASTER_QUAD_NUM+j]),
-                .bcoords        (temp_quad_bcoords[i*RASTER_QUAD_NUM+j])
+                .bcoords        (temp_quad_bcoords[i*RASTER_QUAD_NUM+j]),
+                .dst_width      (dst_width),
+                .dst_height     (dst_height),
+                .x_loc          (temp_quad_x_loc[i*RASTER_QUAD_NUM+j]),
+                .y_loc          (temp_quad_y_loc[i*RASTER_QUAD_NUM+j])
             );
         end
     end
@@ -246,8 +256,8 @@ module VX_raster_be #(
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
         if (input_valid) begin
-            dpi_trace(2, "%d: raster-block-in: x=%0d, y=%0d, pid=%0d, edge1.x=%0d, edge1.y=%0d, edge1.z=%0d, edge2.x=%0d, edge2.y=%0d, edge2.z=%0d, edge3.x=%0d, edge3.y=%0d, edge3.z=%0d, edge_func_val=%0d %0d %0d\n",
-                $time, x_loc, y_loc, pid,
+            dpi_trace(2, "%d: raster-block-in: x=%0d, y=%0d, pid=%0d, dst_width=%0d, dst_height=%0d, edge1={%0d, %0d, %0d}, edge2={%0d, %0d, %0d}, edge3={%0d, %0d, %0d}, edge_func_val=%0d %0d %0d\n",
+                $time, x_loc, y_loc, pid, dst_width, dst_height,
                 edges[0][0], edges[0][1], edges[0][2],
                 edges[1][0], edges[1][1], edges[1][2],
                 edges[2][0], edges[2][1], edges[2][2],

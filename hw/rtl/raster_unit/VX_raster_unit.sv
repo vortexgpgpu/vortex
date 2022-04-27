@@ -217,7 +217,9 @@ module VX_raster_unit #(
             .out_quad_y_loc         (temp_quad_y_loc[i]),
             .out_quad_masks         (temp_quad_masks[i]),
             .out_quad_bcoords       (temp_quad_bcoords[i]),
-            .valid                  (quad_valid[i])
+            .valid                  (quad_valid[i]),
+            .dst_width              (raster_dcrs.dst_width),
+            .dst_height             (raster_dcrs.dst_height)
         );
     end
 

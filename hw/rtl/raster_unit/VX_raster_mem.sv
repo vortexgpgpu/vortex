@@ -60,7 +60,6 @@ module VX_raster_mem #(
                                         temp_num_prims, temp_num_tiles,
                                         temp_pbuf_stride;
     logic [`RASTER_DIM_BITS-1:0]        temp_x_loc, temp_y_loc;
-    logic [`RASTER_DCR_DATA_BITS-1:0]   temp_prim_count, temp_tile_count;
 
     // Holds x_loc, y_loc, edge_func_val, edges, pid -> extents are calculated on the fly
     localparam RASTER_RS_DATA_WIDTH = 2*`RASTER_DIM_BITS + 3*3*`RASTER_PRIMITIVE_DATA_BITS + `RASTER_PRIMITIVE_DATA_BITS;
@@ -83,7 +82,7 @@ module VX_raster_mem #(
     logic [8:0][`RASTER_PRIMITIVE_DATA_BITS-1:0] mem_rsp_data;
     logic [8:0][`RASTER_PRIMITIVE_DATA_BITS-1:0] prim_mem_rsp_data;
     logic [8:0][`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_mem_rsp_data;
-    //localparam TAG_MAX_BIT_INDEX = RASTER_RS_INDEX_BITS-1 + 2;
+
     localparam TAG_MAX_BIT_INDEX = 2;
     logic [TAG_MAX_BIT_INDEX-1:0]                mem_rsp_tag, temp_mem_rsp_tag; // size increased by 1 bit to account for the mem_tag_type
     logic [1:0]                                  mem_tag_type;
@@ -98,7 +97,7 @@ module VX_raster_mem #(
     assign ready = |raster_rs_empty & mem_req_ready & fetch_fsm_complete;
 
     // Check for fsm completion
-    assign fetch_fsm_complete = temp_tile_count == temp_num_tiles;
+    assign fetch_fsm_complete = temp_num_tiles == 0;
 
     always @(posedge clk) begin
         // Setting default values:
@@ -111,8 +110,6 @@ module VX_raster_mem #(
             temp_pbuf_addr  <= 0;
             temp_num_prims  <= 0;
             temp_num_tiles  <= 0;
-            temp_prim_count <= 0;
-            temp_tile_count <= 0;
             pid <= 0;
             for (int i = 0; i < RASTER_RS_SIZE; ++i) begin
                 raster_rs_valid[i] <= 0;
@@ -124,9 +121,9 @@ module VX_raster_mem #(
             // re-assert the mem_req and don't change any other details
             mem_req_valid <= 1;
         end
-        else if (mem_req_ready) begin
+        else begin
             // On new input -> set the temp state values
-            if (ready && input_valid && valid_rs_empty_index && (temp_tile_count != num_tiles) && fetch_fsm_complete == 1) begin
+            if (ready && input_valid && valid_rs_empty_index && fetch_fsm_complete == 1) begin
                 temp_pbuf_addr   <= pbuf_baseaddr;
                 temp_num_tiles   <= num_tiles;
                 temp_pbuf_stride <= pbuf_stride;
@@ -140,9 +137,6 @@ module VX_raster_mem #(
                 // To indicate the address for next fetch
                 temp_tbuf_addr   <= tbuf_baseaddr + 4 + 4;
 
-                // Reset the counter
-                temp_prim_count  <= 0;
-                temp_tile_count  <= 0;
             end
             // If it gets a valid memory response
             else if (mem_rsp_valid && fetch_fsm_complete == 0) begin
@@ -183,14 +177,13 @@ module VX_raster_mem #(
                     raster_rs_valid[raster_rs_empty_index] <= 1;
 
                     // Incrememnt the prim and tile count register
-                    if (temp_prim_count + 1 == temp_num_prims) begin
+                    if (temp_num_prims - 1 == 0) begin
                         // => Last primitive fetched
-                        temp_prim_count <= 0;
-                        temp_tile_count <= temp_tile_count + 1;
+                        temp_num_tiles <= temp_num_tiles - 1;
                         // Check if this was last tile
-                        if (temp_tile_count + 1 == temp_num_tiles) begin
+                        if (temp_num_tiles - 1 == 0) begin
                             // => this was last tile
-                            temp_tile_count <= temp_tile_count + 1;
+                            temp_num_tiles <= temp_num_tiles - 1;
                         end
                         else begin
                             // Fetch the next tile
@@ -206,7 +199,7 @@ module VX_raster_mem #(
                         end
                     end
                     else begin
-                        temp_prim_count <= temp_prim_count + 1;
+                        temp_num_prims <= temp_num_prims - 1;
                         // Launch the request to get next primitive id // Launch the pid fetch
                         mem_tag_type    <= PRIM_ID_FETCH;
                         mem_req_valid   <= 1;
@@ -224,7 +217,8 @@ module VX_raster_mem #(
         end
         // Launch any valid packet
         // When any raster slice is ready
-        if (valid_raster_index && valid_rs_index && raster_slice_ready[out_slice_index] && out_valid == 0) begin
+        if (valid_raster_index && valid_rs_index && raster_slice_ready[out_slice_index] && out_valid == 0 &&
+            raster_rs_valid[raster_rs_index]) begin
             {out_x_loc, out_y_loc,
             out_edges[0][0], out_edges[0][1], out_edges[0][2],
             out_edges[1][0], out_edges[1][1], out_edges[1][2],
@@ -312,7 +306,7 @@ module VX_raster_mem #(
 
     // Memory streamer
     wire mem_fire;
-    assign mem_fire = mem_req_ready && mem_req_valid && |raster_rs_empty;
+    assign mem_fire = mem_req_ready && mem_req_valid && |raster_rs_empty && !fetch_fsm_complete;
     assign stall = !mem_fire;
     VX_mem_streamer #(
         .NUM_REQS       (NUM_REQS), // 3 edges and 3 coeffs in each edge

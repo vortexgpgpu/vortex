@@ -27,6 +27,8 @@ module VX_raster_slice #(
     input logic        [`RASTER_PRIMITIVE_DATA_BITS-1:0]    pid,
     input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    edge_func_val[2:0],
     input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    extents[2:0],
+    // Rendering region
+    input logic         [`RASTER_DIM_BITS-1:0]              dst_width, dst_height,
 
     // Hand-shaking signals
     input logic                                             pop_quad,
@@ -276,7 +278,8 @@ module VX_raster_slice #(
     VX_raster_be #(
         .RASTER_BLOCK_SIZE      (RASTER_BLOCK_SIZE),
         .RASTER_QUAD_OUTPUT_RATE(RASTER_QUAD_OUTPUT_RATE),
-        .RASTER_QUAD_FIFO_DEPTH (RASTER_QUAD_FIFO_DEPTH)
+        .RASTER_QUAD_FIFO_DEPTH (RASTER_QUAD_FIFO_DEPTH),
+        .SLICE_ID               (SLICE_ID)
     ) block_evaluator (
         .clk                    (clk),
         .reset                  (reset),
@@ -294,7 +297,9 @@ module VX_raster_slice #(
         .valid                  (valid), 
         .ready                  (be_ready),
         .pop                    (pop_quad),
-        .empty                  (quad_queue_empty)
+        .empty                  (quad_queue_empty),
+        .dst_width              (dst_width),
+        .dst_height             (dst_height)
     );
 
 `ifdef DBG_TRACE_RASTER
