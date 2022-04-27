@@ -72,7 +72,9 @@ public:
        const Arch &arch, 
        const DCRS &dcrs,
        RasterUnit::Ptr raster_unit,
-       RopUnit::Ptr rop_unit);
+       RopUnit::Ptr rop_unit,
+       CacheSim::Ptr rcache,
+       CacheSim::Ptr ocache);
 
   ~Core();
 
@@ -154,6 +156,8 @@ private:
   CacheSim::Ptr   icache_;
   CacheSim::Ptr   dcache_;
   CacheSim::Ptr   tcache_;
+  CacheSim::Ptr   rcache_;
+  CacheSim::Ptr   ocache_;
   SharedMem::Ptr  sharedmem_;
   TexUnit::Ptr    tex_unit_;
   RasterUnit::Ptr raster_unit_;

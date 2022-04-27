@@ -501,7 +501,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     fprintf(stream, "PERF: rcache reads=%ld\n", rcache_reads);
     fprintf(stream, "PERF: rcache read misses=%ld (hit ratio=%d%%)\n", rcache_read_misses, rcache_read_hit_ratio);
     fprintf(stream, "PERF: rcache bank stalls=%ld (utilization=%d%%)\n", rcache_bank_stalls, rcache_bank_utilization);
-    fprintf(stream, "PERF: rcache mshr stalls=%ld\n",rdcache_mshr_stalls);
+    fprintf(stream, "PERF: rcache mshr stalls=%ld\n", rcache_mshr_stalls);
   #endif
   } break;
   case DCR_MPM_CLASS_ROP: {
