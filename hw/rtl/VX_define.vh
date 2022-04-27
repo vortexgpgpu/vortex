@@ -436,14 +436,20 @@
 // Block size in bytes
 `define RCACHE_LINE_SIZE        `L2_CACHE_LINE_SIZE
 
+// Input request size
+`define RCACHE_NUM_REQS         `RCACHE_NUM_BANKS
+ 
+ // Raster memory request size
+`define RASTER_MEM_REQS         9
+
 // Response tag select bits       
 `define RCACHE_TAG_SEL_BITS     `CLOG2(`RASTER_MEM_QUEUE_SIZE)
 
-// Core request tag bits
-`define RCACHE_TAG_WIDTH        `RCACHE_TAG_SEL_BITS
+// Batch select bits
+`define RCACHE_BATCH_SEL_BITS   `CLOG2((`RASTER_MEM_REQS + `RCACHE_NUM_REQS - 1) / `RCACHE_NUM_REQS)
 
-// Input request size
-`define RCACHE_NUM_REQS          9
+// Core request tag bits
+`define RCACHE_TAG_WIDTH        (`RCACHE_TAG_SEL_BITS + `RCACHE_BATCH_SEL_BITS)
 
 // Memory request data bits
 `define RCACHE_MEM_DATA_WIDTH   (`RCACHE_LINE_SIZE * 8)
@@ -473,13 +479,19 @@
 `define OCACHE_LINE_SIZE        `L2_CACHE_LINE_SIZE
 
 // Input request size
-`define OCACHE_NUM_REQS         (2 * `NUM_THREADS)
+`define OCACHE_NUM_REQS         `OCACHE_NUM_BANKS
+
+// ROP memory request size
+`define ROP_MEM_REQS            (2 * `NUM_THREADS)
 
 // Response tag select bits       
 `define OCACHE_TAG_SEL_BITS     `CLOG2(`ROP_MEM_QUEUE_SIZE)
 
+// Batch select bits
+`define OCACHE_BATCH_SEL_BITS   `CLOG2((`ROP_MEM_REQS + `OCACHE_NUM_REQS - 1) / `OCACHE_NUM_REQS)
+
 // Core request tag bits
-`define OCACHE_TAG_WIDTH        (`OCACHE_TAG_SEL_BITS + `CLOG2(`ROP_NUM_SLICES))
+`define OCACHE_TAG_WIDTH        (`OCACHE_TAG_SEL_BITS + `CLOG2(`ROP_NUM_SLICES) + `OCACHE_BATCH_SEL_BITS)
 
 // Memory request data bits
 `define OCACHE_MEM_DATA_WIDTH   (`OCACHE_LINE_SIZE * 8)

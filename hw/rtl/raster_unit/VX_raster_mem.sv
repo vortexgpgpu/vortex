@@ -41,7 +41,7 @@ module VX_raster_mem #(
     VX_cache_rsp_if.slave  cache_rsp_if
 );
     localparam MUL_LATENCY       = 3;
-    localparam NUM_REQS          = 9;
+    localparam NUM_REQS          = `RASTER_MEM_REQS;
     localparam RASTER_TILE_BITS  = $clog2(RASTER_TILE_SIZE);
 
     // Bit tag identifier for type of memory request
@@ -310,6 +310,7 @@ module VX_raster_mem #(
     assign stall = !mem_fire;
     VX_mem_streamer #(
         .NUM_REQS       (NUM_REQS), // 3 edges and 3 coeffs in each edge
+        .NUM_BANKS      (`RCACHE_NUM_REQS),
         .ADDRW          (`RCACHE_ADDR_WIDTH),
         .DATAW          (`RASTER_PRIMITIVE_DATA_BITS),
         .QUEUE_SIZE     (`RASTER_MEM_QUEUE_SIZE),

@@ -162,7 +162,8 @@ module VX_raster_req_switch #(
 
     // Memory streamer
     VX_mem_streamer #(
-        .NUM_REQS(9), // 3 edges and 3 coeffs in each edge
+        .NUM_REQS(`RASTER_MEM_REQS), // 3 edges and 3 coeffs in each edge
+        .NUM_BANKS(`RCACHE_NUM_REQS),
         .ADDRW(`RASTER_DCR_DATA_BITS),
         .DATAW(`RASTER_PRIMITIVE_DATA_BITS),
         .TAGW(RASTER_RS_INDEX_BITS)
