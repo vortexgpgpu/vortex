@@ -18,7 +18,9 @@ module VX_raster_qe #(
     input logic signed  [`RASTER_PRIMITIVE_DATA_BITS-1:0]       edge_func_val[2:0],
 
     // Rendering region
+    /* verilator lint_off UNUSED */
     input logic         [`RASTER_DIM_BITS-1:0]                  dst_width, dst_height,
+    /* verilator lint_on UNUSED */
 
     // Mask bits for the 2x2 quad
     output logic        [3:0]                                   masks,
@@ -28,7 +30,9 @@ module VX_raster_qe #(
 
     logic signed  [`RASTER_PRIMITIVE_DATA_BITS-1:0]       edges_r[2:0][2:0];
     logic signed  [`RASTER_PRIMITIVE_DATA_BITS-1:0]       edge_func_val_r[2:0];
+    /* verilator lint_off UNUSED */
     logic         [`RASTER_DIM_BITS-1:0]                  x_loc_r, y_loc_r;
+    /* verilator lint_on UNUSED */
 
     VX_pipe_register #(
         .DATAW  (2*`RASTER_DIM_BITS + 3*3*`RASTER_PRIMITIVE_DATA_BITS + 3*`RASTER_PRIMITIVE_DATA_BITS),
@@ -92,12 +96,12 @@ module VX_raster_qe #(
                     bcoords[1][j*2 + i] = 0;
                     bcoords[2][j*2 + i] = 0;
                     if (new_edge_val_r[0][i][j] >= 0 && new_edge_val_r[1][i][j] >= 0 && new_edge_val_r[2][i][j] >= 0) begin
-                        if ((x_loc_r + i) < dst_width && (y_loc_r + j) < dst_height) begin
+                        // if ((x_loc_r + i) < dst_width && (y_loc_r + j) < dst_height) begin
                             masks[j*2 + i] = 1;
                             bcoords[0][j*2 + i] = new_edge_val_r[0][i][j];
                             bcoords[1][j*2 + i] = new_edge_val_r[1][i][j];
                             bcoords[2][j*2 + i] = new_edge_val_r[2][i][j];
-                        end
+                        // end
                     end
                 end
             end
