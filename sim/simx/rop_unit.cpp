@@ -219,16 +219,12 @@ private:
   const Arch& arch_;
   const RopUnit::DCRS& dcrs_;
   RAM* mem_;
-  uint32_t buf_baseaddr_;
-  uint32_t buf_pitch_;
   uint32_t depth_func_;
-  bool     depth_writemask_;
   uint32_t stencil_front_func_;
   uint32_t stencil_front_zpass_;
   uint32_t stencil_front_zfail_;
   uint32_t stencil_front_fail_;
   uint32_t stencil_front_mask_;
-  uint32_t stencil_front_writemask_;
   uint32_t stencil_front_ref_;
   uint32_t stencil_back_func_;
   uint32_t stencil_back_zpass_;
@@ -236,27 +232,30 @@ private:
   uint32_t stencil_back_fail_;
   uint32_t stencil_back_mask_;
   uint32_t stencil_back_ref_;
-  uint32_t stencil_back_writemask_;
+  
   bool depth_enabled_;
   bool stencil_front_enabled_;
   bool stencil_back_enabled_;
-  bool initialized_;
+
+public:
+  DepthTencil(const Arch& arch, const RopUnit::DCRS& dcrs) 
+    : arch_(arch)
+    , dcrs_(dcrs)
+  {}
+
+  ~DepthTencil() {}
 
   void initialize() {
     // get device configuration
-    buf_baseaddr_       = dcrs_.read(DCR_ROP_ZBUF_ADDR);
-    buf_pitch_          = dcrs_.read(DCR_ROP_ZBUF_PITCH);
-    
     depth_func_         = dcrs_.read(DCR_ROP_DEPTH_FUNC);
-    depth_writemask_    = dcrs_.read(DCR_ROP_DEPTH_WRITEMASK) & 0x1;
+    bool depth_writemask = dcrs_.read(DCR_ROP_DEPTH_WRITEMASK) & 0x1;
 
     stencil_front_func_ = dcrs_.read(DCR_ROP_STENCIL_FUNC) & 0xffff;
     stencil_front_zpass_= dcrs_.read(DCR_ROP_STENCIL_ZPASS) & 0xffff;
     stencil_front_zfail_= dcrs_.read(DCR_ROP_STENCIL_ZFAIL) & 0xffff;
     stencil_front_fail_ = dcrs_.read(DCR_ROP_STENCIL_FAIL) & 0xffff;
     stencil_front_ref_  = dcrs_.read(DCR_ROP_STENCIL_REF) & 0xffff;
-    stencil_front_mask_ = dcrs_.read(DCR_ROP_STENCIL_MASK) & 0xffff;    
-    stencil_front_writemask_ = dcrs_.read(DCR_ROP_STENCIL_WRITEMASK) & 0xffff;
+    stencil_front_mask_ = dcrs_.read(DCR_ROP_STENCIL_MASK) & 0xffff;
 
     stencil_back_func_  = dcrs_.read(DCR_ROP_STENCIL_FUNC) >> 16;
     stencil_back_zpass_ = dcrs_.read(DCR_ROP_STENCIL_ZPASS) >> 16;
@@ -264,10 +263,8 @@ private:
     stencil_back_fail_  = dcrs_.read(DCR_ROP_STENCIL_FAIL) >> 16;    
     stencil_back_ref_   = dcrs_.read(DCR_ROP_STENCIL_REF) >> 16;
     stencil_back_mask_  = dcrs_.read(DCR_ROP_STENCIL_MASK) >> 16;
-    stencil_back_writemask_ = dcrs_.read(DCR_ROP_STENCIL_WRITEMASK) >> 16;
 
-    depth_enabled_      = !((depth_func_ == ROP_DEPTH_FUNC_ALWAYS) 
-                         && !depth_writemask_);
+    depth_enabled_ = !((depth_func_ == ROP_DEPTH_FUNC_ALWAYS) && !depth_writemask);
     
     stencil_front_enabled_ = !((stencil_front_func_  == ROP_DEPTH_FUNC_ALWAYS) 
                             && (stencil_front_zpass_ == ROP_STENCIL_OP_KEEP)
@@ -276,30 +273,19 @@ private:
     stencil_back_enabled_ = !((stencil_back_func_  == ROP_DEPTH_FUNC_ALWAYS) 
                            && (stencil_back_zpass_ == ROP_STENCIL_OP_KEEP)
                            && (stencil_back_zfail_ == ROP_STENCIL_OP_KEEP));
-
-    initialized_ = true;
   }
 
-  bool doDepthStencilTest(uint32_t x, uint32_t y, uint32_t is_backface, uint32_t depth, RopUnit::TraceData::Ptr trace_data)  { 
-    auto depth_ref     = depth & ROP_DEPTH_MASK;    
-    auto stencil_func  = is_backface ? stencil_back_func_ : stencil_front_func_;    
-    auto stencil_ref   = is_backface ? stencil_back_ref_ : stencil_front_ref_;    
-    auto stencil_mask  = is_backface ? stencil_back_mask_ : stencil_front_mask_;
-    auto stencil_writemask = is_backface ? stencil_back_writemask_ : stencil_front_writemask_;
+  bool run(uint32_t is_backface, uint32_t depth, uint32_t depthstencil_val, uint32_t* depthstencil_result) {
+    auto depth_val   = depthstencil_val & ROP_DEPTH_MASK;
+    auto stencil_val = depthstencil_val >> ROP_DEPTH_BITS;
+    auto depth_ref   = depth & ROP_DEPTH_MASK;
+      
+    auto stencil_func = is_backface ? stencil_back_func_ : stencil_front_func_;    
+    auto stencil_ref  = is_backface ? stencil_back_ref_  : stencil_front_ref_;    
+    auto stencil_mask = is_backface ? stencil_back_mask_ : stencil_front_mask_;
+    
     auto stencil_ref_m = stencil_ref & stencil_mask;
-
-    uint32_t buf_addr = buf_baseaddr_ + y * buf_pitch_ + x * 4;
-
-    uint32_t stored_value;          
-    mem_->read(&stored_value, buf_addr, 4);     
-    trace_data->ds_mem_addrs.push_back({buf_addr, 4});
-
-    uint32_t stencil_val = stored_value >> ROP_DEPTH_BITS;
-    uint32_t depth_val   = stored_value & ROP_DEPTH_MASK;   
-
-    uint32_t stencil_val_m = stencil_val & stencil_mask;
-
-    uint32_t writeMask = stencil_writemask << ROP_DEPTH_BITS;
+    auto stencil_val_m = stencil_val & stencil_mask;
 
     uint32_t stencil_op;
 
@@ -307,7 +293,6 @@ private:
     if (passed) {
       passed = DoCompare(depth_func_, depth_ref, depth_val);
       if (passed) {
-        writeMask |= (depth_writemask_ ? ROP_DEPTH_MASK : 0);
         stencil_op = is_backface ? stencil_back_zpass_ : stencil_front_zpass_;              
       } else {
         stencil_op = is_backface ? stencil_back_zfail_ : stencil_front_zfail_;
@@ -315,47 +300,20 @@ private:
     } else {
       stencil_op = is_backface ? stencil_back_fail_ : stencil_front_fail_;
     }
-
+    
     auto stencil_result = DoStencilOp(stencil_op, stencil_ref, stencil_val);
 
-    // Write the depth stencil value
-    DT(3, "rop-depthstencil: x=" << std::dec << x << ", y=" << y << ", depth_val=0x" << std::hex << depth_val << ", depth_ref=0x" << depth_ref << ", stencil_val=0x" << stencil_val << ", stencil_result=0x" << stencil_result << ", passed=" << passed);    
-    if (writeMask) {
-      auto merged_value = (stencil_result << ROP_DEPTH_BITS) | depth_ref;
-      auto write_value = (stored_value & ~writeMask) | (merged_value & writeMask);
-      mem_->write(&write_value, buf_addr, 4);
-      trace_data->ds_write;
-    }
+    *depthstencil_result = (stencil_result << ROP_DEPTH_BITS) | depth_ref;
 
     return passed;
   }
 
-public:
-  DepthTencil(const Arch& arch, const RopUnit::DCRS& dcrs) 
-    : arch_(arch)
-    , dcrs_(dcrs)  
-    , initialized_(false)
-  {}
-
-  ~DepthTencil() {}
-
-  void clear() {
-    initialized_ = false;
+  bool depth_enabled() const {
+    return depth_enabled_;
   }
 
-  void attach_ram(RAM* mem) {
-    mem_ = mem;
-  }
-
-  bool write(uint32_t x, uint32_t y, bool is_backface, uint32_t depth, RopUnit::TraceData::Ptr trace_data) {
-    if (!initialized_) {
-      this->initialize();
-    }
-    auto stencil_enabled = is_backface ? stencil_back_enabled_ : stencil_front_enabled_;
-    if (stencil_enabled || depth_enabled_) {
-      return this->doDepthStencilTest(x, y, is_backface, depth, trace_data);
-    }
-    return true;
+  bool stencil_enabled(bool is_backface) const {
+    return is_backface ? stencil_back_enabled_ : stencil_front_enabled_;
   }
 };
 
@@ -364,10 +322,6 @@ private:
   const Arch& arch_;
   const RopUnit::DCRS& dcrs_;
   RAM* mem_;
-  
-  uint32_t buf_baseaddr_;
-  uint32_t buf_pitch_;
-  uint32_t buf_writemask_;
 
   uint32_t blend_mode_rgb_;
   uint32_t blend_mode_a_;
@@ -378,15 +332,18 @@ private:
   uint32_t blend_const_;
   uint32_t logic_op_;
   
-  bool blend_enabled_;
-  bool initialized_;
+  bool enabled_;
+
+public:
+  Blender(const Arch& arch, const RopUnit::DCRS& dcrs) 
+    : arch_(arch)
+    , dcrs_(dcrs)
+  {}
+
+  ~Blender() {}
 
   void initialize() {
     // get device configuration
-    buf_baseaddr_   = dcrs_.read(DCR_ROP_CBUF_ADDR);
-    buf_pitch_      = dcrs_.read(DCR_ROP_CBUF_PITCH);
-    buf_writemask_  = dcrs_.read(DCR_ROP_CBUF_WRITEMASK) & 0xf;
-
     blend_mode_rgb_ = dcrs_.read(DCR_ROP_BLEND_MODE) & 0xffff;
     blend_mode_a_   = dcrs_.read(DCR_ROP_BLEND_MODE) >> 16;
     blend_src_rgb_  = (dcrs_.read(DCR_ROP_BLEND_FUNC) >>  0) & 0xff;
@@ -396,77 +353,132 @@ private:
     blend_const_    = dcrs_.read(DCR_ROP_BLEND_CONST);
     logic_op_       = dcrs_.read(DCR_ROP_LOGIC_OP);  
 
-    blend_enabled_  = !((blend_mode_rgb_ == ROP_BLEND_MODE_ADD)
+    enabled_        = !((blend_mode_rgb_ == ROP_BLEND_MODE_ADD)
                      && (blend_mode_a_   == ROP_BLEND_MODE_ADD) 
                      && (blend_src_rgb_  == ROP_BLEND_FUNC_ONE) 
                      && (blend_src_a_    == ROP_BLEND_FUNC_ONE) 
                      && (blend_dst_rgb_  == ROP_BLEND_FUNC_ZERO) 
                      && (blend_dst_a_    == ROP_BLEND_FUNC_ZERO));
-
-    initialized_ = true;
   }
 
-  cocogfx::ColorARGB doBlend(cocogfx::ColorARGB src, cocogfx::ColorARGB dst, cocogfx::ColorARGB cst) {        
+  uint32_t run(uint32_t srcColor, uint32_t dstColor) {
+    cocogfx::ColorARGB src(srcColor);
+    cocogfx::ColorARGB dst(dstColor);
+    cocogfx::ColorARGB cst(blend_const_);
+
     auto s_rgb = DoBlendFunc(blend_src_rgb_, src, dst, cst);
     auto s_a   = DoBlendFunc(blend_src_a_, src, dst, cst);
     auto d_rgb = DoBlendFunc(blend_dst_rgb_, src, dst, cst);
     auto d_a   = DoBlendFunc(blend_dst_a_, src, dst, cst);
     auto rgb   = DoBlendMode(blend_mode_rgb_, logic_op_, src, dst, s_rgb, d_rgb);
     auto a     = DoBlendMode(blend_mode_a_, logic_op_, src, dst, s_a, d_a);
-    return cocogfx::ColorARGB(a.a, rgb.r, rgb.g, rgb.b);
+    cocogfx::ColorARGB result(a.a, rgb.r, rgb.g, rgb.b);
+
+    return result.value;
   }
 
-public:
-  Blender(const Arch& arch, const RopUnit::DCRS& dcrs) 
+  bool enabled() const {
+    return enabled_;
+  }
+};
+
+class MemoryUnit {
+private:
+  const Arch& arch_;
+  const RopUnit::DCRS& dcrs_;
+  RAM* mem_;
+  
+  uint32_t zbuf_baseaddr_;
+  uint32_t zbuf_pitch_;
+  bool     depth_writemask_;
+  uint32_t stencil_front_writemask_; 
+  uint32_t stencil_back_writemask_;
+
+  uint32_t cbuf_baseaddr_;
+  uint32_t cbuf_pitch_;
+  uint32_t cbuf_writemask_;
+
+  bool color_read_;
+  bool color_write_;
+
+public:  
+  MemoryUnit(const Arch& arch, const RopUnit::DCRS& dcrs) 
     : arch_(arch)
-    , dcrs_(dcrs) 
-    , initialized_(false)
+    , dcrs_(dcrs)
   {}
 
-  ~Blender() {}
+  void initialize() {
+    // get device configuration
+    zbuf_baseaddr_ = dcrs_.read(DCR_ROP_ZBUF_ADDR);
+    zbuf_pitch_    = dcrs_.read(DCR_ROP_ZBUF_PITCH);
+    depth_writemask_ = dcrs_.read(DCR_ROP_DEPTH_WRITEMASK) & 0x1;
+    stencil_front_writemask_ = dcrs_.read(DCR_ROP_STENCIL_WRITEMASK) & 0xffff;
+    stencil_back_writemask_ = dcrs_.read(DCR_ROP_STENCIL_WRITEMASK) >> 16;
 
-  void clear() {
-    initialized_ = false;
+    cbuf_baseaddr_ = dcrs_.read(DCR_ROP_CBUF_ADDR);
+    cbuf_pitch_    = dcrs_.read(DCR_ROP_CBUF_PITCH);
+    auto cbuf_writemask = dcrs_.read(DCR_ROP_CBUF_WRITEMASK) & 0xf;
+    cbuf_writemask_ = (((cbuf_writemask >> 0) & 0x1) * 0x000000ff) 
+                    | (((cbuf_writemask >> 1) & 0x1) * 0x0000ff00) 
+                    | (((cbuf_writemask >> 2) & 0x1) * 0x00ff0000) 
+                    | (((cbuf_writemask >> 3) & 0x1) * 0xff000000);
+    color_read_  = (cbuf_writemask != 0xf);
+    color_write_ = (cbuf_writemask != 0x0);
   }
 
   void attach_ram(RAM* mem) {
     mem_ = mem;
   }
 
-  void write(uint32_t x, uint32_t y, uint32_t color, RopUnit::TraceData::Ptr trace_data) {
-    if (!initialized_) {
-      this->initialize();
+  void read(bool depth_enable,
+            bool stencil_enable, 
+            bool blend_enable,
+            uint32_t x, 
+            uint32_t y,
+            uint32_t* depthstencil,
+            uint32_t* color, 
+            RopUnit::TraceData::Ptr trace_data) {
+    if (depth_enable || stencil_enable) {
+      uint32_t zbuf_addr = zbuf_baseaddr_ + y * zbuf_pitch_ + x * 4;
+      mem_->read(depthstencil, zbuf_addr, 4);     
+      trace_data->mem_rd_addrs.push_back({zbuf_addr, 4});
     }
 
-    if (0 == buf_writemask_)
-      return;
+    if (color_write_ && (color_read_ || blend_enable)) {
+      uint32_t cbuf_addr = cbuf_baseaddr_ + y * cbuf_pitch_ + x * 4;
+      mem_->read(color, cbuf_addr, 4);
+      trace_data->mem_rd_addrs.push_back({cbuf_addr, 4});
+    }
+  }
 
-    uint32_t buf_addr = buf_baseaddr_ + y * buf_pitch_ + x * 4;
-
-    uint32_t stored_value = 0;
-    mem_->read(&stored_value, buf_addr, 4);
-    trace_data->color_mem_addrs.push_back({buf_addr, 4});
-
-    cocogfx::ColorARGB src(color);
-    cocogfx::ColorARGB dst(stored_value);
-    cocogfx::ColorARGB cst(blend_const_);
-
-    cocogfx::ColorARGB result_color;
-    if (blend_enabled_) {
-      result_color = this->doBlend(src, dst, cst);
-    } else {
-      result_color = src;
+  void write(bool depth_enable,
+             bool stencil_enable, 
+             bool ds_passed,
+             bool is_backface,
+             uint32_t dst_depthstencil,
+             uint32_t dst_color,
+             uint32_t x, 
+             uint32_t y, 
+             uint32_t depthstencil, 
+             uint32_t color, 
+             RopUnit::TraceData::Ptr trace_data) {
+    auto stencil_writemask = is_backface ? stencil_back_writemask_ : stencil_front_writemask_;
+    uint32_t writeMask = (stencil_enable ? (stencil_writemask << ROP_DEPTH_BITS) : 0) 
+                       | ((depth_enable && ds_passed && depth_writemask_) ? ROP_DEPTH_MASK : 0);
+    if (writeMask) {      
+      uint32_t write_value = (dst_depthstencil & ~writeMask) | (depthstencil & writeMask);
+      uint32_t zbuf_addr = zbuf_baseaddr_ + y * zbuf_pitch_ + x * 4;        
+      mem_->write(&write_value, zbuf_addr, 4);
+      trace_data->mem_wr_addrs.push_back({zbuf_addr, 4});
+      DT(3, "rop-depthstencil: x=" << std::dec << x << ", y=" << y << ", depthstencil=0x" << std::hex << write_value);
     }
 
-    DT(3, "rop-color: x=" << std::dec << x << ", y=" << y << std::hex << ", color=0x" << result_color);
-    uint32_t writemask = (((buf_writemask_ >> 0) & 0x1) * 0x000000ff) 
-                       | (((buf_writemask_ >> 1) & 0x1) * 0x0000ff00) 
-                       | (((buf_writemask_ >> 2) & 0x1) * 0x00ff0000) 
-                       | (((buf_writemask_ >> 3) & 0x1) * 0xff000000);
-    if (writemask) {
-      auto write_value = (stored_value & ~writemask) | (result_color & writemask);
-      mem_->write(&write_value, buf_addr, 4);
-      trace_data->color_write;
+    if (color_write_ && ds_passed) {   
+      uint32_t write_value = (dst_color & ~cbuf_writemask_) | (color & cbuf_writemask_);
+      uint32_t cbuf_addr = cbuf_baseaddr_ + y * cbuf_pitch_ + x * 4;
+      mem_->write(&write_value, cbuf_addr, 4);
+      trace_data->mem_wr_addrs.push_back({cbuf_addr, 4});
+      DT(3, "rop-color: x=" << std::dec << x << ", y=" << y << ", color=0x" << std::hex << write_value);
     }
   }
 };
@@ -474,36 +486,58 @@ public:
 class RopSlices {
 public:
   RopSlices(const Arch& arch, const RopUnit::DCRS& dcrs) 
-    : depthtencils_(ROP_NUM_SLICES, {arch, dcrs})
+    : memoryUnits_(ROP_NUM_SLICES, {arch, dcrs})
+    , depthStencils_(ROP_NUM_SLICES, {arch, dcrs})
     , blenders_(ROP_NUM_SLICES, {arch, dcrs})
     , slice_idx_(0)
   {}
 
   void clear() {
     for (int i = 0; i < ROP_NUM_SLICES; ++i) {
-      depthtencils_.at(i).clear();
-      blenders_.at(i).clear();
+      depthStencils_.at(i).initialize();
+      blenders_.at(i).initialize();
+      memoryUnits_.at(i).initialize();
     }
   }
 
   void attach_ram(RAM* mem) {
     for (int i = 0; i < ROP_NUM_SLICES; ++i) {
-      depthtencils_.at(i).attach_ram(mem);
-      blenders_.at(i).attach_ram(mem);
+      memoryUnits_.at(i).attach_ram(mem);
     }
   }   
 
-  void write(uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, RopUnit::TraceData::Ptr trace_data) {      
-    if (depthtencils_.at(slice_idx_).write(x, y, is_backface, depth, trace_data)) {
-      blenders_.at(slice_idx_).write(x, y, color, trace_data);
+  void write(uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, RopUnit::TraceData::Ptr trace_data) {   
+    auto& memoryUnit   = memoryUnits_.at(slice_idx_);
+    auto& depthStencil = depthStencils_.at(slice_idx_);
+    auto& blender      = blenders_.at(slice_idx_);
+
+    auto depth_enabled   = depthStencil.depth_enabled();
+    auto stencil_enabled = depthStencil.stencil_enabled(is_backface);
+    auto blend_enabled   = blender.enabled();
+
+    uint32_t depthstencil;    
+    uint32_t dst_depthstencil;
+    uint32_t dst_color;    
+
+    memoryUnit.read(depth_enabled, stencil_enabled, blend_enabled, x, y, &dst_depthstencil, &dst_color, trace_data);
+    
+    auto ds_passed = !(depth_enabled || stencil_enabled)
+                  || depthStencil.run(is_backface, depth, dst_depthstencil, &depthstencil);
+    
+    if (blend_enabled && ds_passed) {
+      color = blender.run(color, dst_color);
     }
+    
+    memoryUnit.write(depth_enabled, stencil_enabled, ds_passed, is_backface, dst_depthstencil, dst_color, x, y, depthstencil, color, trace_data);     
+
     slice_idx_ = (slice_idx_ + 1) % ROP_NUM_SLICES;    
   }
 
 private:
-  std::vector<DepthTencil> depthtencils_;
-  std::vector<Blender>     blenders_;
-  uint32_t                 slice_idx_;
+  std::vector<::MemoryUnit> memoryUnits_;
+  std::vector<DepthTencil>  depthStencils_;
+  std::vector<Blender>      blenders_;
+  uint32_t                  slice_idx_;
 };
 
 class RopUnit::Impl {
@@ -555,29 +589,17 @@ public:
       assert(entry.count);
       --entry.count; // track remaining blocks 
       if (0 == entry.count) {
-        if (entry.data->ds_write) {
-          for (uint32_t i = 0, n = entry.data->ds_mem_addrs.size(); i < n; ++i) {
-            MemReq mem_req;
-            mem_req.addr  = entry.data->ds_mem_addrs.at(i).addr;
-            mem_req.write = true;
-            mem_req.tag   = mem_rsp.tag;
-            mem_req.core_id = mem_rsp.core_id;
-            mem_req.uuid = mem_rsp.uuid;
-            simobject_->MemReqs.at(i).send(mem_req, 2);
-            ++perf_stats_.writes;
-          }
-        }
-        if (entry.data->color_write) {
-          for (uint32_t i = 0, n = entry.data->color_mem_addrs.size(); i < n; ++i) {
-            MemReq mem_req;
-            mem_req.addr  = entry.data->color_mem_addrs.at(i).addr;
-            mem_req.write = true;
-            mem_req.tag   = mem_rsp.tag;
-            mem_req.core_id = mem_rsp.core_id;
-            mem_req.uuid = mem_rsp.uuid;
-            simobject_->MemReqs.at(i).send(mem_req, 2);
-            ++perf_stats_.writes;
-          }
+        auto& mem_wr_addrs = entry.data->mem_wr_addrs;
+        for (uint32_t i = 0, n = mem_wr_addrs.size(); i < n; ++i) {
+          uint32_t j = i % simobject_->MemReqs.size();
+          MemReq mem_req;
+          mem_req.addr  = mem_wr_addrs.at(i).addr;
+          mem_req.write = true;
+          mem_req.tag   = 0;
+          mem_req.core_id = mem_rsp.core_id;
+          mem_req.uuid = mem_rsp.uuid;
+          simobject_->MemReqs.at(j).send(mem_req, 2);
+          ++perf_stats_.writes;
         }
         pending_reqs_.release(mem_rsp.tag);
       }   
@@ -593,38 +615,36 @@ public:
     if (simobject_->Input.empty())
       return;
 
-    // check pending queue capacity    
-    if (pending_reqs_.full())          
-      return;
-
+    // check pending queue capacity
     auto data = simobject_->Input.front();
-
-    uint32_t num_addrs = data->ds_mem_addrs.size() + data->color_mem_addrs.size();
-
-    auto tag = pending_reqs_.allocate({data, num_addrs});
-
-    for (uint32_t i = 0, n = data->ds_mem_addrs.size(); i < n; ++i) {
-      MemReq mem_req;
-      mem_req.addr  = data->ds_mem_addrs.at(i).addr;
-      mem_req.write = false;
-      mem_req.tag   = tag;
-      mem_req.core_id = data->core_id;
-      mem_req.uuid = data->uuid;
-      simobject_->MemReqs.at(i).send(mem_req, 1);
-      ++perf_stats_.reads;
+    if (!data->mem_rd_addrs.empty()) {
+      if (pending_reqs_.full())
+        return;
+      auto tag = pending_reqs_.allocate({data, (uint32_t)data->mem_rd_addrs.size()});
+      for (uint32_t i = 0, n = data->mem_rd_addrs.size(); i < n; ++i) {
+        uint32_t j = i % simobject_->MemReqs.size();
+        MemReq mem_req;
+        mem_req.addr  = data->mem_rd_addrs.at(i).addr;
+        mem_req.write = false;
+        mem_req.tag   = tag;
+        mem_req.core_id = data->core_id;
+        mem_req.uuid = data->uuid;
+        simobject_->MemReqs.at(j).send(mem_req, 1);
+        ++perf_stats_.reads;
+      }
+    } else {
+      for (uint32_t i = 0, n = data->mem_wr_addrs.size(); i < n; ++i) {
+        uint32_t j = i % simobject_->MemReqs.size();
+        MemReq mem_req;
+        mem_req.addr  = data->mem_wr_addrs.at(i).addr;
+        mem_req.write = true;
+        mem_req.tag   = 0;
+        mem_req.core_id = data->core_id;
+        mem_req.uuid = data->uuid;
+        simobject_->MemReqs.at(j).send(mem_req, 1);
+        ++perf_stats_.writes;
+      }
     }
-
-    for (uint32_t i = 0, n = data->color_mem_addrs.size(); i < n; ++i) {
-      MemReq mem_req;
-      mem_req.addr  = data->color_mem_addrs.at(i).addr;
-      mem_req.write = false;
-      mem_req.tag   = tag;
-      mem_req.core_id = data->core_id;
-      mem_req.uuid = data->uuid;
-      simobject_->MemReqs.at(i).send(mem_req, 1);
-      ++perf_stats_.reads;        
-    }
-
     auto time = simobject_->Input.pop();
     perf_stats_.stalls += (SimPlatform::instance().cycles() - time);
   }    

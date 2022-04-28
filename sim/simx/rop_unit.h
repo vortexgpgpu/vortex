@@ -27,10 +27,8 @@ public:
 
   struct TraceData : public ITraceData {
     using Ptr = std::shared_ptr<TraceData>;
-    std::vector<mem_addr_size_t> ds_mem_addrs;
-    std::vector<mem_addr_size_t> color_mem_addrs;
-    bool ds_write;
-    bool color_write;
+    std::vector<mem_addr_size_t> mem_rd_addrs;
+    std::vector<mem_addr_size_t> mem_wr_addrs;
     uint32_t core_id;
     uint32_t uuid;
   };

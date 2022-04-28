@@ -18,7 +18,9 @@ Core::Core(const SimContext& ctx,
            const Arch &arch, 
            const DCRS &dcrs,
            RasterUnit::Ptr raster_unit,
-           RopUnit::Ptr rop_unit)
+           RopUnit::Ptr rop_unit,
+           CacheSim::Ptr rcache,
+           CacheSim::Ptr ocache)
     : SimObject(ctx, "core")
     , MemRspPort(this)
     , MemReqPort(this)
@@ -78,6 +80,8 @@ Core::Core(const SimContext& ctx,
         TCACHE_MSHR_SIZE,       // mshr
         4,                      // pipeline latency
       }))
+    , rcache_(rcache)
+    , ocache_(ocache)
     , sharedmem_(SharedMem::Create("shared_mem", SharedMem::Config{
         uint32_t(SMEM_LOCAL_SIZE) * arch.num_warps() * arch.num_threads(),
         SMEM_LOCAL_SIZE,
@@ -606,6 +610,15 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         case CSR_MPM_TEX_READS_H: return tex_unit_->perf_stats().reads >> 32;
         case CSR_MPM_TEX_LAT:     return tex_unit_->perf_stats().latency & 0xffffffff;
         case CSR_MPM_TEX_LAT_H:   return tex_unit_->perf_stats().latency >> 32;
+
+        case CSR_MPM_TCACHE_READS:    return tcache_->perf_stats().reads & 0xffffffff; 
+        case CSR_MPM_TCACHE_READS_H:  return tcache_->perf_stats().reads >> 32;
+        case CSR_MPM_TCACHE_MISS_R:   return tcache_->perf_stats().read_misses & 0xffffffff; 
+        case CSR_MPM_TCACHE_MISS_R_H: return tcache_->perf_stats().read_misses >> 32;
+        case CSR_MPM_TCACHE_BANK_ST:  return tcache_->perf_stats().bank_stalls & 0xffffffff; 
+        case CSR_MPM_TCACHE_BANK_ST_H:return tcache_->perf_stats().bank_stalls >> 32;
+        case CSR_MPM_TCACHE_MSHR_ST:  return tcache_->perf_stats().mshr_stalls & 0xffffffff; 
+        case CSR_MPM_TCACHE_MSHR_ST_H:return tcache_->perf_stats().mshr_stalls >> 32;
         }
       } break;
       case DCR_MPM_CLASS_RASTER: {
@@ -616,6 +629,15 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         case CSR_MPM_RASTER_LAT_H:   return raster_unit_->perf_stats().latency >> 32;
         case CSR_MPM_RASTER_STALL:   return raster_svc_->perf_stats().stalls & 0xffffffff;
         case CSR_MPM_RASTER_STALL_H: return raster_svc_->perf_stats().stalls >> 32;
+
+        case CSR_MPM_RCACHE_READS:    return rcache_->perf_stats().reads & 0xffffffff; 
+        case CSR_MPM_RCACHE_READS_H:  return rcache_->perf_stats().reads >> 32; 
+        case CSR_MPM_RCACHE_MISS_R:   return rcache_->perf_stats().read_misses & 0xffffffff; 
+        case CSR_MPM_RCACHE_MISS_R_H: return rcache_->perf_stats().read_misses >> 32;  
+        case CSR_MPM_RCACHE_BANK_ST:  return rcache_->perf_stats().bank_stalls & 0xffffffff; 
+        case CSR_MPM_RCACHE_BANK_ST_H:return rcache_->perf_stats().bank_stalls >> 32;
+        case CSR_MPM_RCACHE_MSHR_ST:  return rcache_->perf_stats().mshr_stalls & 0xffffffff; 
+        case CSR_MPM_RCACHE_MSHR_ST_H:return rcache_->perf_stats().mshr_stalls >> 32;
         default:
           return 0;
         }
@@ -630,6 +652,19 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         case CSR_MPM_ROP_LAT_H:   return rop_unit_->perf_stats().latency >> 32;
         case CSR_MPM_ROP_STALL:   return rop_unit_->perf_stats().stalls & 0xffffffff;
         case CSR_MPM_ROP_STALL_H: return rop_unit_->perf_stats().stalls >> 32;
+
+        case CSR_MPM_OCACHE_READS:    return ocache_->perf_stats().reads & 0xffffffff; 
+        case CSR_MPM_OCACHE_READS_H:  return ocache_->perf_stats().reads >> 32; 
+        case CSR_MPM_OCACHE_WRITES:   return ocache_->perf_stats().writes & 0xffffffff; 
+        case CSR_MPM_OCACHE_WRITES_H: return ocache_->perf_stats().writes >> 32; 
+        case CSR_MPM_OCACHE_MISS_R:   return ocache_->perf_stats().read_misses & 0xffffffff; 
+        case CSR_MPM_OCACHE_MISS_R_H: return ocache_->perf_stats().read_misses >> 32; 
+        case CSR_MPM_OCACHE_MISS_W:   return ocache_->perf_stats().write_misses & 0xffffffff; 
+        case CSR_MPM_OCACHE_MISS_W_H: return ocache_->perf_stats().write_misses >> 32; 
+        case CSR_MPM_OCACHE_BANK_ST:  return ocache_->perf_stats().bank_stalls & 0xffffffff; 
+        case CSR_MPM_OCACHE_BANK_ST_H:return ocache_->perf_stats().bank_stalls >> 32;
+        case CSR_MPM_OCACHE_MSHR_ST:  return ocache_->perf_stats().mshr_stalls & 0xffffffff; 
+        case CSR_MPM_OCACHE_MSHR_ST_H:return ocache_->perf_stats().mshr_stalls >> 32;
         default:
           return 0;
         }

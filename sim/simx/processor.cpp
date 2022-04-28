@@ -76,7 +76,7 @@ public:
     // create cores
     for (uint32_t i = 0; i < num_cores; ++i) {
       auto j = i / cores_per_cluster;
-      cores_.at(i) = Core::Create(i, arch, dcrs_, raster_units_.at(j), rop_units_.at(j));
+      cores_.at(i) = Core::Create(i, arch, dcrs_, raster_units_.at(j), rop_units_.at(j), raster_caches.at(j), rop_caches.at(j));
     }
 
      // setup memory simulator

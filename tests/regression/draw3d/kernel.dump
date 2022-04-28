@@ -5408,6 +5408,29 @@ Disassembly of section .init_array:
 
 Disassembly of section .data:
 
+<<<<<<< HEAD
+800022a0 impure_data:
+800022a0: 00 00                        	<unknown>
+800022a2: 00 00                        	<unknown>
+800022a4: 8c 25                        	<unknown>
+800022a6: 00 80                        	<unknown>
+800022a8: f4 25                        	<unknown>
+800022aa: 00 80                        	<unknown>
+800022ac: 5c 26                        	<unknown>
+800022ae: 00 80                        	<unknown>
+		...
+80002348: 01 00                        	<unknown>
+8000234a: 00 00                        	<unknown>
+8000234c: 00 00                        	<unknown>
+8000234e: 00 00                        	<unknown>
+80002350: 0e 33                        	<unknown>
+80002352: cd ab                        	<unknown>
+80002354: 34 12                        	<unknown>
+80002356: 6d e6                        	<unknown>
+80002358: ec de                        	<unknown>
+8000235a: 05 00                        	<unknown>
+8000235c: 0b 00 00 00                  	<unknown>
+=======
 80006178 impure_data:
 80006178: 00 00                        	<unknown>
 8000617a: 00 00                        	<unknown>
@@ -5429,6 +5452,7 @@ Disassembly of section .data:
 80006230: ec de                        	<unknown>
 80006232: 05 00                        	<unknown>
 80006234: 0b 00 00 00                  	vx_tmc	zero
+>>>>>>> 161c5f11326106f1a6f2a7b0bb2a6f6f75814162
 		...
 
 800065a0 __malloc_av_:
@@ -6198,8 +6222,12 @@ Disassembly of section .symtab:
      13e: 02 00                        	<unknown>
      140: 00 00                        	<unknown>
      142: 00 00                        	<unknown>
+<<<<<<< HEAD
+     144: 0b 00 00 00                  	<unknown>
+=======
      144: 6c 20                        	<unknown>
      146: 00 80                        	<unknown>
+>>>>>>> 161c5f11326106f1a6f2a7b0bb2a6f6f75814162
      148: 00 00                        	<unknown>
      14a: 00 00                        	<unknown>
      14c: 00 00                        	<unknown>
@@ -6446,6 +6474,17 @@ Disassembly of section .symtab:
      32e: 02 00                        	<unknown>
      330: 00 00                        	<unknown>
      332: 00 00                        	<unknown>
+<<<<<<< HEAD
+     334: 01 00                        	<unknown>
+		...
+     33e: f1 ff                        	<unknown>
+     340: 27 01 00 00                  	<unknown>
+     344: 0a 00                        	<unknown>
+		...
+     34e: f1 ff                        	<unknown>
+     350: 2f 01 00 00                  	<unknown>
+     354: 0b 00 00 00                  	<unknown>
+=======
      334: 68 33                        	<unknown>
      336: 00 80                        	<unknown>
      338: 00 00                        	<unknown>
@@ -6464,6 +6503,7 @@ Disassembly of section .symtab:
      352: 00 00                        	<unknown>
      354: d4 35                        	<unknown>
      356: 00 80                        	<unknown>
+>>>>>>> 161c5f11326106f1a6f2a7b0bb2a6f6f75814162
      358: 00 00                        	<unknown>
      35a: 00 00                        	<unknown>
      35c: 00 00                        	<unknown>
@@ -6690,8 +6730,19 @@ Disassembly of section .symtab:
      5e4: 0d 00                        	<unknown>
 		...
      5ee: f1 ff                        	<unknown>
+<<<<<<< HEAD
+     5f0: 2f 01 00 00                  	<unknown>
+     5f4: 0b 00 00 00                  	<unknown>
+     5f8: 00 00                        	<unknown>
+     5fa: 00 00                        	<unknown>
+     5fc: 00 00                        	<unknown>
+     5fe: f1 ff                        	<unknown>
+     600: 37 01 00 00                  	lui	sp, 0
+     604: 0c 00                        	<unknown>
+=======
      5f0: 47 01 00 00                  	<unknown>
      5f4: 0e 00                        	<unknown>
+>>>>>>> 161c5f11326106f1a6f2a7b0bb2a6f6f75814162
 		...
      5fe: f1 ff                        	<unknown>
      600: 4f 01 00 00                  	<unknown>
@@ -6856,8 +6907,15 @@ Disassembly of section .symtab:
      7ee: f1 ff                        	<unknown>
      7f0: e5 01                        	<unknown>
      7f2: 00 00                        	<unknown>
+<<<<<<< HEAD
+     7f4: 0b 00 00 00                  	<unknown>
+     7f8: 00 00                        	<unknown>
+     7fa: 00 00                        	<unknown>
+     7fc: 00 00                        	<unknown>
+=======
      7f4: 04 00                        	<unknown>
 		...
+>>>>>>> 161c5f11326106f1a6f2a7b0bb2a6f6f75814162
      7fe: f1 ff                        	<unknown>
      800: ec 01                        	<unknown>
      802: 00 00                        	<unknown>
@@ -7023,10 +7081,18 @@ Disassembly of section .symtab:
      9f4: 04 00                        	<unknown>
 		...
      9fe: f1 ff                        	<unknown>
+<<<<<<< HEAD
+     a00: 2f 01 00 00                  	<unknown>
+     a04: 0b 00 00 00                  	<unknown>
+     a08: 00 00                        	<unknown>
+     a0a: 00 00                        	<unknown>
+     a0c: 00 00                        	<unknown>
+=======
      a00: e1 00                        	<unknown>
      a02: 00 00                        	<unknown>
      a04: 05 00                        	<unknown>
 		...
+>>>>>>> 161c5f11326106f1a6f2a7b0bb2a6f6f75814162
      a0e: f1 ff                        	<unknown>
      a10: e8 00                        	<unknown>
      a12: 00 00                        	<unknown>
@@ -7191,8 +7257,15 @@ Disassembly of section .symtab:
      bfe: f1 ff                        	<unknown>
      c00: e5 01                        	<unknown>
      c02: 00 00                        	<unknown>
+<<<<<<< HEAD
+     c04: 0b 00 00 00                  	<unknown>
+     c08: 00 00                        	<unknown>
+     c0a: 00 00                        	<unknown>
+     c0c: 00 00                        	<unknown>
+=======
      c04: 04 00                        	<unknown>
 		...
+>>>>>>> 161c5f11326106f1a6f2a7b0bb2a6f6f75814162
      c0e: f1 ff                        	<unknown>
      c10: ec 01                        	<unknown>
      c12: 00 00                        	<unknown>
@@ -7374,10 +7447,18 @@ Disassembly of section .symtab:
      e3a: 00 00                        	<unknown>
      e3c: 00 00                        	<unknown>
      e3e: f1 ff                        	<unknown>
+<<<<<<< HEAD
+     e40: 2f 01 00 00                  	<unknown>
+     e44: 0b 00 00 00                  	<unknown>
+     e48: 00 00                        	<unknown>
+     e4a: 00 00                        	<unknown>
+     e4c: 00 00                        	<unknown>
+=======
      e40: 84 00                        	<unknown>
      e42: 00 00                        	<unknown>
      e44: 08 00                        	<unknown>
 		...
+>>>>>>> 161c5f11326106f1a6f2a7b0bb2a6f6f75814162
      e4e: f1 ff                        	<unknown>
      e50: 8b 00 00 00                  	<unknown>
      e54: 09 00                        	<unknown>
@@ -7549,8 +7630,15 @@ Disassembly of section .symtab:
     103e: f1 ff                        	<unknown>
     1040: e5 01                        	<unknown>
     1042: 00 00                        	<unknown>
+<<<<<<< HEAD
+    1044: 0b 00 00 00                  	<unknown>
+    1048: 00 00                        	<unknown>
+    104a: 00 00                        	<unknown>
+    104c: 00 00                        	<unknown>
+=======
     1044: 04 00                        	<unknown>
 		...
+>>>>>>> 161c5f11326106f1a6f2a7b0bb2a6f6f75814162
     104e: f1 ff                        	<unknown>
     1050: ec 01                        	<unknown>
     1052: 00 00                        	<unknown>

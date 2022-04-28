@@ -114,14 +114,12 @@
 // PERF: texture cache
 `define CSR_MPM_TCACHE_READS        12'hB05     // total reads
 `define CSR_MPM_TCACHE_READS_H      12'hB85
-`define CSR_MPM_TCACHE_WRITES       12'hB06     // total write
-`define CSR_MPM_TCACHE_WRITES_H     12'hB86
-`define CSR_MPM_TCACHE_MISS_R       12'hB07     // read misses
-`define CSR_MPM_TCACHE_MISS_R_H     12'hB87
-`define CSR_MPM_TCACHE_MISS_W       12'hB08     // write misse
-`define CSR_MPM_TCACHE_MISS_W_H     12'hB88
-`define CSR_MPM_TCACHE_BANK_ST      12'hB09     // bank stalls
-`define CSR_MPM_TCACHE_BANK_ST_H    12'hB89
+`define CSR_MPM_TCACHE_MISS_R       12'hB06     // read misses
+`define CSR_MPM_TCACHE_MISS_R_H     12'hB86
+`define CSR_MPM_TCACHE_BANK_ST      12'hB07     // bank stalls
+`define CSR_MPM_TCACHE_BANK_ST_H    12'hB87
+`define CSR_MPM_TCACHE_MSHR_ST      12'hB08     // MSHR stalls
+`define CSR_MPM_TCACHE_MSHR_ST_H    12'hB88
 
 // Machine Performance-monitoring raster counters
 // PERF: raster unit
@@ -134,14 +132,12 @@
 // PERF: raster cache
 `define CSR_MPM_RCACHE_READS        12'hB06     // total reads
 `define CSR_MPM_RCACHE_READS_H      12'hB86
-`define CSR_MPM_RCACHE_WRITES       12'hB07     // total writes
-`define CSR_MPM_RCACHE_WRITES_H     12'hB87
-`define CSR_MPM_RCACHE_MISS_R       12'hB08     // read misses
-`define CSR_MPM_RCACHE_MISS_R_H     12'hB88
-`define CSR_MPM_RCACHE_MISS_W       12'hB09     // write misses
-`define CSR_MPM_RCACHE_MISS_W_H     12'hB89
-`define CSR_MPM_RCACHE_BANK_ST      12'hB0A     // bank stalls
-`define CSR_MPM_RCACHE_BANK_ST_H    12'hB8A
+`define CSR_MPM_RCACHE_MISS_R       12'hB07     // read misses
+`define CSR_MPM_RCACHE_MISS_R_H     12'hB87
+`define CSR_MPM_RCACHE_BANK_ST      12'hB08     // bank stalls
+`define CSR_MPM_RCACHE_BANK_ST_H    12'hB88
+`define CSR_MPM_RCACHE_MSHR_ST      12'hB09     // MSHR stalls
+`define CSR_MPM_RCACHE_MSHR_ST_H    12'hB89
 
 // Machine Performance-monitoring rop counters
 // PERF: rop unit
@@ -154,16 +150,18 @@
 `define CSR_MPM_ROP_STALL           12'hB06     // rop stall cycles
 `define CSR_MPM_ROP_STALL_H         12'hB86
 // PERF: rop cache
-`define CSR_MPM_OCACHE_READS        12'hB08     // total reads
-`define CSR_MPM_OCACHE_READS_H      12'hB88
-`define CSR_MPM_OCACHE_WRITES       12'hB19     // total writes
-`define CSR_MPM_OCACHE_WRITES_H     12'hB99
-`define CSR_MPM_OCACHE_MISS_R       12'hB1A     // read misses
-`define CSR_MPM_OCACHE_MISS_R_H     12'hB9A
-`define CSR_MPM_OCACHE_MISS_W       12'hB1B     // write misses
-`define CSR_MPM_OCACHE_MISS_W_H     12'hB9B
-`define CSR_MPM_OCACHE_BANK_ST      12'hB1C     // bank stalls
-`define CSR_MPM_OCACHE_BANK_ST_H    12'hB9C
+`define CSR_MPM_OCACHE_READS        12'hB07     // total reads
+`define CSR_MPM_OCACHE_READS_H      12'hB87
+`define CSR_MPM_OCACHE_WRITES       12'hB08     // total writes
+`define CSR_MPM_OCACHE_WRITES_H     12'hB88
+`define CSR_MPM_OCACHE_MISS_R       12'hB09     // read misses
+`define CSR_MPM_OCACHE_MISS_R_H     12'hB89
+`define CSR_MPM_OCACHE_MISS_W       12'hB0A     // write misses
+`define CSR_MPM_OCACHE_MISS_W_H     12'hB8A
+`define CSR_MPM_OCACHE_BANK_ST      12'hB0B     // bank stalls
+`define CSR_MPM_OCACHE_BANK_ST_H    12'hB8B
+`define CSR_MPM_OCACHE_MSHR_ST      12'hB0C     // MSHR stalls
+`define CSR_MPM_OCACHE_MSHR_ST_H    12'hB8C
 
 // Machine Information Registers
 `define CSR_MVENDORID               12'hF11

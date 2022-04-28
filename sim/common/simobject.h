@@ -84,9 +84,9 @@ public:
   }
 
   uint64_t pop() {
-    auto cycle = queue_.front().cycle;
+    auto cycles = queue_.front().cycles;
     queue_.pop();
-    return cycle;
+    return cycles;
   }  
 
   void tx_callback(const TxCallback& callback) {
@@ -96,21 +96,21 @@ public:
 protected:
   struct timed_pkt_t {
     Pkt      pkt;
-    uint64_t cycle;
+    uint64_t cycles;
   };
 
   std::queue<timed_pkt_t> queue_;
   SimPort*   peer_;
   TxCallback tx_cb_;
 
-  void push(const Pkt& data, uint64_t cycle) {
+  void push(const Pkt& data, uint64_t cycles) {
     if (tx_cb_) {
-      tx_cb_(data, cycle);
+      tx_cb_(data, cycles);
     }
     if (peer_) {
-      peer_->push(data, cycle);
+      peer_->push(data, cycles);
     } else {
-      queue_.push({data, cycle});
+      queue_.push({data, cycles});
     }
   }
 
@@ -129,14 +129,14 @@ public:
   
   virtual void fire() const = 0;
 
-  uint64_t time() const {
-    return time_;
+  uint64_t cycles() const {
+    return cycles_;
   }
 
 protected:
-  SimEventBase(uint64_t time) : time_(time) {}
+  SimEventBase(uint64_t cycles) : cycles_(cycles) {}
 
-  uint64_t time_;
+  uint64_t cycles_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -150,8 +150,8 @@ public:
 
   typedef std::function<void (const Pkt&)> Func;
 
-  SimCallEvent(const Func& func, const Pkt& pkt, uint64_t time) 
-    : SimEventBase(time)
+  SimCallEvent(const Func& func, const Pkt& pkt, uint64_t cycles) 
+    : SimEventBase(cycles)
     , func_(func)
     , pkt_(pkt)
   {}
@@ -180,11 +180,11 @@ template <typename Pkt>
 class SimPortEvent : public SimEventBase {
 public:
   void fire() const override {
-    const_cast<SimPort<Pkt>*>(port_)->push(pkt_, time_);
+    const_cast<SimPort<Pkt>*>(port_)->push(pkt_, cycles_);
   }
 
-  SimPortEvent(const SimPort<Pkt>* port, const Pkt& pkt, uint64_t time) 
-    : SimEventBase(time) 
+  SimPortEvent(const SimPort<Pkt>* port, const Pkt& pkt, uint64_t cycles) 
+    : SimEventBase(cycles) 
     , port_(port)
     , pkt_(pkt)
   {}
@@ -330,7 +330,7 @@ public:
     auto evt_it_end = events_.end();
     while (evt_it != evt_it_end) {
       auto& event = *evt_it;
-      if (cycles_ >= event->time()) {        
+      if (cycles_ >= event->cycles()) {        
         event->fire();
         evt_it = events_.erase(evt_it);
       } else {        

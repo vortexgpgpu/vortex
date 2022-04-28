@@ -168,7 +168,7 @@ module VX_cluster #(
     ) rop_req_if();
 
 `ifdef PERF_ENABLE
-    VX_perf_cache_if    ocache_perf_if();
+    VX_perf_cache_if    perf_ocache_if();
     VX_rop_perf_if      rop_perf_if(); 
 `endif
     
@@ -252,7 +252,7 @@ module VX_cluster #(
         `SCOPE_BIND_VX_cluster_ocache
 
     `ifdef PERF_ENABLE
-        .perf_cache_if  (ocache_perf_if),
+        .perf_cache_if  (perf_ocache_if),
     `endif
         
         .clk            (clk),
@@ -328,7 +328,7 @@ module VX_cluster #(
             .rop_req_if     (per_core_rop_req_if[i]),
         `ifdef PERF_ENABLE
             .rop_perf_if    (rop_perf_if),
-            .ocache_perf_if (ocache_perf_if),
+            .perf_ocache_if (perf_ocache_if),
         `endif
         `endif
 

@@ -39,7 +39,7 @@ module VX_pipeline #(
     VX_rop_req_if               rop_req_if,
 `ifdef PERF_ENABLE
     VX_rop_perf_if.slave        rop_perf_if,
-    VX_perf_cache_if.slave      ocache_perf_if,
+    VX_perf_cache_if.slave      perf_ocache_if,
 `endif
 `endif
 
@@ -181,7 +181,7 @@ module VX_pipeline #(
         .rop_req_if     (rop_req_if),
     `ifdef PERF_ENABLE
         .rop_perf_if    (rop_perf_if),
-        .ocache_perf_if (ocache_perf_if),
+        .perf_ocache_if (perf_ocache_if),
     `endif
     `endif
 

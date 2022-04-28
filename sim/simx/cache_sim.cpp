@@ -486,12 +486,14 @@ private:
 
             if (pipeline_req.mshr_replay) {
                 // send core response
-                for (auto& info : pipeline_req.ports) {
-                    if (!info.valid)
-                        continue;
-                    MemRsp core_rsp{info.req_tag, pipeline_req.core_id, pipeline_req.uuid};
-                    simobject_->CoreRspPorts.at(info.req_id).send(core_rsp, config_.latency);  
-                    DT(3, simobject_->name() << "-core-" << core_rsp);         
+                if (!pipeline_req.write || config_.write_reponse) {
+                    for (auto& info : pipeline_req.ports) {
+                        if (!info.valid)
+                            continue;
+                        MemRsp core_rsp{info.req_tag, pipeline_req.core_id, pipeline_req.uuid};
+                        simobject_->CoreRspPorts.at(info.req_id).send(core_rsp, config_.latency);  
+                        DT(3, simobject_->name() << "-core-" << core_rsp);         
+                    }
                 }
             } else {        
                 bool hit = false;
