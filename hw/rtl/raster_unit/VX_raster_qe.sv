@@ -92,7 +92,7 @@ module VX_raster_qe #(
                     bcoords[1][j*2 + i] = 0;
                     bcoords[2][j*2 + i] = 0;
                     if (new_edge_val_r[0][i][j] >= 0 && new_edge_val_r[1][i][j] >= 0 && new_edge_val_r[2][i][j] >= 0) begin
-                        if ((x_loc_r + i) < dst_width && (y_loc_r + j) < dst_height) begin
+                        if (((x_loc_r >> 1) + i) < dst_width && ((y_loc_r >> 1) + j) < dst_height) begin
                             masks[j*2 + i] = 1;
                             bcoords[0][j*2 + i] = new_edge_val_r[0][i][j];
                             bcoords[1][j*2 + i] = new_edge_val_r[1][i][j];

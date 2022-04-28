@@ -125,26 +125,15 @@ module VX_raster_be #(
     for (genvar i = 0; i < RASTER_QUAD_NUM; ++i) begin
         for (genvar j = 0; j < RASTER_QUAD_NUM; ++j) begin
             VX_shift_register #(
-                .DATAW  (`RASTER_DIM_BITS),
+                .DATAW  (2*`RASTER_DIM_BITS),
                 .RESETW (1),
                 .DEPTH  (QE_LATENCY)
             ) be_pipe_reg2 (
                 .clk      (clk),
                 .reset    (reset),
                 .enable   (fsm_complete),
-                .data_in  (temp_quad_x_loc[i*RASTER_QUAD_NUM+j]),
-                .data_out (temp_quad_x_loc_r[i*RASTER_QUAD_NUM+j])
-            );
-            VX_shift_register #(
-                .DATAW  (`RASTER_DIM_BITS),
-                .RESETW (1),
-                .DEPTH  (QE_LATENCY)
-            ) be_pipe_reg3 (
-                .clk      (clk),
-                .reset    (reset),
-                .enable   (fsm_complete),
-                .data_in  (temp_quad_y_loc[i*RASTER_QUAD_NUM+j]),
-                .data_out (temp_quad_y_loc_r[i*RASTER_QUAD_NUM+j])
+                .data_in  ({temp_quad_x_loc[i*RASTER_QUAD_NUM+j], temp_quad_y_loc[i*RASTER_QUAD_NUM+j]}),
+                .data_out ({temp_quad_x_loc_r[i*RASTER_QUAD_NUM+j], temp_quad_y_loc_r[i*RASTER_QUAD_NUM+j]})
             );
         end
     end
