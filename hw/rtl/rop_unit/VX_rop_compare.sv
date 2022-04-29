@@ -13,7 +13,7 @@ module VX_rop_compare #(
 );
     wire [DATAW:0] sub = (a - b);
     wire equal = (0 == sub);
-    wire less  = sub[DATAW-1];
+    wire less  = sub[DATAW];
 
     always @(*) begin
         case (func)
