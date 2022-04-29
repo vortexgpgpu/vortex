@@ -121,7 +121,7 @@ module VX_cluster #(
         .MRSQ_SIZE          (`RCACHE_MRSQ_SIZE),
         .MREQ_SIZE          (`RCACHE_MREQ_SIZE),
         .WRITE_ENABLE       (0),
-        .REQ_DBG_IDW        (0),
+        .REQ_UUID_BITS      (0),
         .CORE_TAG_WIDTH     (`RCACHE_TAG_WIDTH),
         .MEM_TAG_WIDTH      (`RCACHE_MEM_TAG_WIDTH),
         .NC_ENABLE          (0),
@@ -243,7 +243,7 @@ module VX_cluster #(
         .MRSQ_SIZE          (`OCACHE_MRSQ_SIZE),
         .MREQ_SIZE          (`OCACHE_MREQ_SIZE),
         .WRITE_ENABLE       (1),
-        .REQ_DBG_IDW        (0),
+        .REQ_UUID_BITS      (0),
         .CORE_TAG_WIDTH     (`OCACHE_TAG_WIDTH),
         .MEM_TAG_WIDTH      (`OCACHE_MEM_TAG_WIDTH),
         .NC_ENABLE          (0),
@@ -378,7 +378,7 @@ module VX_cluster #(
         .MRSQ_SIZE          (`L2_MRSQ_SIZE),
         .MREQ_SIZE          (`L2_MREQ_SIZE),
         .WRITE_ENABLE       (1),       
-        .REQ_DBG_IDW        (`UUID_BITS),   
+        .REQ_UUID_BITS      (`UUID_BITS),   
         .CORE_TAG_WIDTH     (`L1_MEM_TAG_WIDTH),
         .MEM_TAG_WIDTH      (`L2X_MEM_TAG_WIDTH),
         .NC_ENABLE          (1)
@@ -407,6 +407,7 @@ module VX_cluster #(
         .DATA_WIDTH   (`DCACHE_MEM_DATA_WIDTH),
         .ADDR_WIDTH   (`DCACHE_MEM_ADDR_WIDTH),           
         .TAG_IN_WIDTH (`L1_MEM_TAG_WIDTH),
+        .TAG_SEL_IDX  (1), // Skip 0 for NC flag
         .BUFFERED_REQ (1),
         .BUFFERED_RSP (1)
     ) mem_mux_core (
@@ -469,6 +470,7 @@ module VX_cluster #(
         .DATA_WIDTH   (`L2_MEM_DATA_WIDTH),
         .ADDR_WIDTH   (`L2_MEM_ADDR_WIDTH),
         .TAG_IN_WIDTH (MEM_ARB_TAG_WIDTH),
+        .TAG_SEL_IDX  (1), // Skip 0 for NC flag
         .BUFFERED_REQ (1),
         .BUFFERED_RSP (2)
     ) mem_mux_out (

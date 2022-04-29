@@ -183,7 +183,7 @@ module VX_tex_mem #(
         .NUM_REQS     (`TCACHE_NUM_REQS),
         .DATA_WIDTH   (`TCACHE_WORD_SIZE*8),
         .TAG_WIDTH    (`TCACHE_TAG_WIDTH),
-        .TAG_SEL_BITS (`TCACHE_TAG_SEL_BITS),
+        .TAG_SEL_BITS (`TCACHE_TAG_ID_BITS),
         .OUT_REG      (1)
     ) cache_rsp_sel (
         .clk            (clk),

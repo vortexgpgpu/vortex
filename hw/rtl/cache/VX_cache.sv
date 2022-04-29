@@ -34,10 +34,10 @@ module VX_cache #(
     parameter WRITE_ENABLE          = 1,
 
     // Request debug identifier
-    parameter REQ_DBG_IDW           = 0,
+    parameter REQ_UUID_BITS         = 0,
 
     // core request tag size
-    parameter CORE_TAG_WIDTH        = REQ_DBG_IDW,
+    parameter CORE_TAG_WIDTH        = REQ_UUID_BITS,
 
     // Memory request tag size
     parameter MEM_TAG_WIDTH         = (32 - $clog2(CACHE_LINE_SIZE)),
@@ -250,7 +250,9 @@ module VX_cache #(
             .MEM_ADDR_WIDTH    (`MEM_ADDR_WIDTH),
             .MEM_DATA_SIZE     (CACHE_LINE_SIZE),
             .MEM_TAG_IN_WIDTH  (MEM_TAG_IN_WIDTH),
-            .MEM_TAG_OUT_WIDTH (MEM_TAG_WIDTH)
+            .MEM_TAG_OUT_WIDTH (MEM_TAG_WIDTH),
+
+            .REQ_UUID_BITS     (REQ_UUID_BITS)
         ) nc_bypass (
             .clk                (clk),
             .reset              (reset),
@@ -600,7 +602,7 @@ module VX_cache #(
                 .MSHR_SIZE          (MSHR_SIZE),
                 .MREQ_SIZE          (MREQ_SIZE),
                 .WRITE_ENABLE       (WRITE_ENABLE),
-                .REQ_DBG_IDW        (REQ_DBG_IDW),
+                .REQ_UUID_BITS      (REQ_UUID_BITS),
                 .CORE_TAG_WIDTH     (CORE_TAG_X_WIDTH)
             ) bank (
                 `SCOPE_BIND_VX_cache_bank(i)
@@ -782,24 +784,24 @@ module VX_cache #(
 `ifdef DBG_TRACE_CACHE_BANK
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        wire [`DBG_CACHE_REQ_IDW-1:0] core_req_id;
-        wire [`DBG_CACHE_REQ_IDW-1:0] core_rsp_id;
+        wire [`UP(REQ_UUID_BITS)-1:0] core_req_uuid;
+        wire [`UP(REQ_UUID_BITS)-1:0] core_rsp_uuid;
 
         wire core_req_fire = core_req_if[i].valid & core_req_if[i].ready;
         wire core_rsp_fire = core_rsp_if[i].valid & core_rsp_if[i].ready;
 
-        `ASSIGN_REQ_DBG_ID (core_req_id, core_req_if[i].tag)
-        `ASSIGN_REQ_DBG_ID (core_rsp_id, core_rsp_if[i].tag)
+        `ASSIGN_REQ_UUID (core_req_uuid, core_req_if[i].tag)
+        `ASSIGN_REQ_UUID (core_rsp_uuid, core_rsp_if[i].tag)
         
         always @(posedge clk) begin
             if (core_req_fire) begin
                 if (core_req_if[i].rw)
-                    dpi_trace(1, "%d: %s core-wr-req: tid=%0d, addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", $time, CACHE_ID, i, `TO_FULL_ADDR(core_req_if[i].addr), core_req_if[i].tag, core_req_if[i].byteen, core_req_if[i].data, core_req_id);
+                    dpi_trace(1, "%d: %s core-wr-req: tid=%0d, addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", $time, CACHE_ID, i, `TO_FULL_ADDR(core_req_if[i].addr), core_req_if[i].tag, core_req_if[i].byteen, core_req_if[i].data, core_req_uuid);
                 else
-                    dpi_trace(1, "%d: %s core-rd-req: tid=%0d, addr=0x%0h, tag=0x%0h (#%0d)\n", $time, CACHE_ID, i, `TO_FULL_ADDR(core_req_if[i].addr), core_req_if[i].tag, core_req_id);
+                    dpi_trace(1, "%d: %s core-rd-req: tid=%0d, addr=0x%0h, tag=0x%0h (#%0d)\n", $time, CACHE_ID, i, `TO_FULL_ADDR(core_req_if[i].addr), core_req_if[i].tag, core_req_uuid);
             end
             if (core_rsp_fire) begin
-                dpi_trace(1, "%d: %s core-rd-rsp: tid=%0d, tag=0x%0h, data=0x%0h (#%0d)\n", $time, CACHE_ID, i, core_rsp_if[i].tag, core_rsp_if[i].data, core_rsp_id);
+                dpi_trace(1, "%d: %s core-rd-rsp: tid=%0d, tag=0x%0h, data=0x%0h (#%0d)\n", $time, CACHE_ID, i, core_rsp_if[i].tag, core_rsp_if[i].data, core_rsp_uuid);
             end        
         end
     end   

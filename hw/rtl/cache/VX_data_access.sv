@@ -18,7 +18,7 @@ module VX_data_access #(
     // Enable cache writeable
     parameter WRITE_ENABLE      = 1,
     // Request debug identifier
-    parameter REQ_DBG_IDW       = 0,
+    parameter REQ_UUID_BITS     = 0,
 
     localparam WORD_SEL_BITS    = `UP(`WORD_SEL_BITS)
 ) (
@@ -26,7 +26,7 @@ module VX_data_access #(
     input wire                          reset,
 
 `IGNORE_UNUSED_BEGIN
-    input wire[`DBG_CACHE_REQ_IDW-1:0]  req_id,
+    input wire[`UP(REQ_UUID_BITS)-1:0]  req_uuid,
 `IGNORE_UNUSED_END
 
     input wire                          stall,
@@ -140,10 +140,10 @@ module VX_data_access #(
             dpi_trace(3, "%d: %s:%0d data-fill: addr=0x%0h, way=%b, blk_addr=%0d, data=0x%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, fill_data);
         end
         if (read && ~stall) begin
-            dpi_trace(3, "%d: %s:%0d data-read: addr=0x%0h, way=%b, blk_addr=%0d, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, read_data, req_id);
+            dpi_trace(3, "%d: %s:%0d data-read: addr=0x%0h, way=%b, blk_addr=%0d, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, read_data, req_uuid);
         end 
         if (write && ~stall) begin
-            dpi_trace(3, "%d: %s:%0d data-write: addr=0x%0h, way=%b, blk_addr=%0d, byteen=%b, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, byteen, write_data, req_id);
+            dpi_trace(3, "%d: %s:%0d data-write: addr=0x%0h, way=%b, blk_addr=%0d, byteen=%b, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, byteen, write_data, req_uuid);
         end      
     end    
 `endif

@@ -31,13 +31,13 @@ module VX_rop_unit #(
     VX_cache_req_if #(
         .NUM_REQS  (`OCACHE_NUM_REQS), 
         .WORD_SIZE (`OCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`OCACHE_TAG_SEL_BITS)
+        .TAG_WIDTH (`OCACHE_TAG_ID_BITS)
     ) per_slice_cache_req_if[NUM_SLICES]();
 
     VX_cache_rsp_if #(
         .NUM_REQS  (`OCACHE_NUM_REQS), 
         .WORD_SIZE (`OCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`OCACHE_TAG_SEL_BITS)
+        .TAG_WIDTH (`OCACHE_TAG_ID_BITS)
     ) per_slice_cache_rsp_if[NUM_SLICES]();
 
     for (genvar i = 0; i < NUM_SLICES; ++i) begin
@@ -69,7 +69,7 @@ module VX_rop_unit #(
         .NUM_REQS     (NUM_SLICES),
         .NUM_LANES    (`OCACHE_NUM_REQS),
         .DATA_SIZE    (`OCACHE_WORD_SIZE),
-        .TAG_IN_WIDTH (`OCACHE_TAG_SEL_BITS),
+        .TAG_IN_WIDTH (`OCACHE_TAG_ID_BITS),
         .TAG_SEL_IDX  (0),
         .BUFFERED_REQ (1),
         .BUFFERED_RSP (1)

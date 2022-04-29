@@ -22,10 +22,10 @@ module VX_shared_mem #(
     parameter CRSQ_SIZE                     = 2,
 
     // Request debug identifier
-    parameter REQ_DBG_IDW                   = 0,
+    parameter REQ_UUID_BITS                 = 0,
 
     // core request tag size
-    parameter TAG_WIDTH                     = REQ_DBG_IDW,
+    parameter TAG_WIDTH                     = REQ_UUID_BITS,
 
     localparam WORD_WIDTH = WORD_SIZE * 8
  ) (    
@@ -240,15 +240,15 @@ module VX_shared_mem #(
 
 `ifdef DBG_TRACE_CACHE_BANK
 
-    wire [NUM_BANKS-1:0][`UP(REQ_DBG_IDW)-1:0] req_id_st0, req_id_st1;
+    wire [NUM_BANKS-1:0][`UP(REQ_UUID_BITS)-1:0] req_id_st0, req_id_st1;
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
-        if (REQ_DBG_IDW > 0) begin
-            assign req_id_st0[i] = per_bank_req_tag_unqual[i][TAG_WIDTH-1 : (TAG_WIDTH-REQ_DBG_IDW)];
-            assign req_id_st1[i] = per_bank_req_tag[i][TAG_WIDTH-1 : (TAG_WIDTH-REQ_DBG_IDW)];
+        if (REQ_UUID_BITS != 0) begin
+            assign req_uuid_st0[i] = per_bank_req_tag_unqual[i][TAG_WIDTH-1 -: REQ_UUID_BITS];
+            assign req_uuid_st1[i] = per_bank_req_tag[i][TAG_WIDTH-1 -: REQ_UUID_BITS];
         end else begin
-            assign req_id_st0[i] = 0;
-            assign req_id_st1[i] = 0;
+            assign req_uuid_st0[i] = 0;
+            assign req_uuid_st1[i] = 0;
         end
     end
 
@@ -258,10 +258,10 @@ module VX_shared_mem #(
                 if (per_bank_req_valid_unqual[i]) begin
                     if (per_bank_req_rw_unqual[i]) begin
                         dpi_trace(1, "%d: %s:%0d core-wr-req: addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", 
-                            $time, IDNAME, i, per_bank_req_addr_unqual[i], per_bank_req_tag_unqual[i], per_bank_req_byteen_unqual[i], per_bank_req_data_unqual[i], req_id_st0[i]);
+                            $time, IDNAME, i, per_bank_req_addr_unqual[i], per_bank_req_tag_unqual[i], per_bank_req_byteen_unqual[i], per_bank_req_data_unqual[i], req_uuid_st0[i]);
                     end else begin
                         dpi_trace(1, "%d: %s:%0d core-rd-req: addr=0x%0h, tag=0x%0h (#%0d)\n", 
-                            $time, IDNAME, i, per_bank_req_addr_unqual[i], per_bank_req_tag_unqual[i], req_id_st0[i]);
+                            $time, IDNAME, i, per_bank_req_addr_unqual[i], per_bank_req_tag_unqual[i], req_uuid_st0[i]);
                     end
                 end
             end
@@ -271,10 +271,10 @@ module VX_shared_mem #(
                 if (per_bank_req_valid[i]) begin
                     if (per_bank_req_rw[i]) begin
                         dpi_trace(1, "%d: %s:%0d core-wr-rsp: addr=0x%0h, tag=0x%0h, data=0x%0h (#%0d)\n", 
-                            $time, IDNAME, i, per_bank_req_addr[i], per_bank_req_tag[i], per_bank_req_data[i], req_id_st1[i]);
+                            $time, IDNAME, i, per_bank_req_addr[i], per_bank_req_tag[i], per_bank_req_data[i], req_uuid_st1[i]);
                     end else begin
                         dpi_trace(1, "%d: %s:%0d core-rd-rsp: addr=0x%0h, tag=0x%0h, data=0x%0h (#%0d)\n", 
-                            $time, IDNAME, i, per_bank_req_addr[i], per_bank_req_tag[i], per_bank_rsp_data[i], req_id_st1[i]);
+                            $time, IDNAME, i, per_bank_req_addr[i], per_bank_req_tag[i], per_bank_rsp_data[i], req_uuid_st1[i]);
                     end
                 end
             end

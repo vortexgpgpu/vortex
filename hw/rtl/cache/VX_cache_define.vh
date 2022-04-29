@@ -1,10 +1,7 @@
 `ifndef VX_CACHE_DEFINE_VH
 `define VX_CACHE_DEFINE_VH
 
-`include "VX_define.vh"
-
-// cache request identifier
-`define DBG_CACHE_REQ_IDW       `UP(REQ_DBG_IDW)
+`include "VX_define.vh"   
 
 `define REQ_SEL_BITS            `LOG2UP(NUM_REQS)
 
@@ -48,9 +45,9 @@
 
 `define LINE_TAG_ADDR(x)        x[`LINE_ADDR_WIDTH-1 : `LINE_SEL_BITS]
 
-`define ASSIGN_REQ_DBG_ID(dst, tag) \
-    if (REQ_DBG_IDW > 0) begin      \
-        assign dst = tag[CORE_TAG_WIDTH-1 : (CORE_TAG_WIDTH-REQ_DBG_IDW)]; \
+`define ASSIGN_REQ_UUID(dst, tag) \
+    if (REQ_UUID_BITS > 0) begin      \
+        assign dst = tag[CORE_TAG_WIDTH-1 -: REQ_UUID_BITS]; \
     end else begin \
         assign dst = 0; \
     end

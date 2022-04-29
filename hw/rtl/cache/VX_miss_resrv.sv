@@ -19,9 +19,9 @@ module VX_miss_resrv #(
     parameter MSHR_SIZE         = 1,
     
     // Request debug identifier
-    parameter REQ_DBG_IDW       = 0,
+    parameter REQ_UUID_BITS     = 0,
     // core request tag size
-    parameter CORE_TAG_WIDTH    = REQ_DBG_IDW,
+    parameter CORE_TAG_WIDTH    = REQ_UUID_BITS,
 
     localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE)
 ) (
@@ -29,9 +29,9 @@ module VX_miss_resrv #(
     input wire reset,
 
 `IGNORE_UNUSED_BEGIN
-    input wire[`DBG_CACHE_REQ_IDW-1:0]  deq_req_id,
-    input wire[`DBG_CACHE_REQ_IDW-1:0]  lkp_req_id,
-    input wire[`DBG_CACHE_REQ_IDW-1:0]  rel_req_id,
+    input wire[`UP(REQ_UUID_BITS)-1:0]  deq_req_uuid,
+    input wire[`UP(REQ_UUID_BITS)-1:0]  lkp_req_uuid,
+    input wire[`UP(REQ_UUID_BITS)-1:0]  rel_req_uuid,
 `IGNORE_UNUSED_END
 
     // allocate
@@ -205,21 +205,21 @@ module VX_miss_resrv #(
         if (allocate_fire || fill_valid || dequeue_fire || lookup_replay || lookup_valid || release_valid) begin
             if (allocate_fire)
                 dpi_trace(3, "%d: %s:%0d mshr-allocate: addr=0x%0h, id=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID,
-                    `LINE_TO_BYTE_ADDR(allocate_addr, BANK_ID), allocate_id, lkp_req_id);
+                    `LINE_TO_BYTE_ADDR(allocate_addr, BANK_ID), allocate_id, lkp_req_uuid);
             if (fill_valid)
                 dpi_trace(3, "%d: %s:%0d mshr-fill: addr=0x%0h, id=%0d, addr=0x%0h\n", $time, CACHE_ID, BANK_ID, 
                     `LINE_TO_BYTE_ADDR(addr_table[fill_id], BANK_ID), fill_id, `LINE_TO_BYTE_ADDR(fill_addr, BANK_ID));
             if (dequeue_fire)
                 dpi_trace(3, "%d: %s:%0d mshr-dequeue: addr=0x%0h, id=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, 
-                    `LINE_TO_BYTE_ADDR(dequeue_addr, BANK_ID), dequeue_id_r, deq_req_id);      
+                    `LINE_TO_BYTE_ADDR(dequeue_addr, BANK_ID), dequeue_id_r, deq_req_uuid);      
             if (lookup_replay)
                 dpi_trace(3, "%d: %s:%0d mshr-replay: addr=0x%0h, id=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, 
-                    `LINE_TO_BYTE_ADDR(lookup_addr, BANK_ID), lookup_id, lkp_req_id);
+                    `LINE_TO_BYTE_ADDR(lookup_addr, BANK_ID), lookup_id, lkp_req_uuid);
             if (lookup_valid)
                 dpi_trace(3, "%d: %s:%0d mshr-lookup: addr=0x%0h, id=%0d, match=%b (#%0d)\n", $time, CACHE_ID, BANK_ID, 
-                    `LINE_TO_BYTE_ADDR(lookup_addr, BANK_ID), lookup_id, lookup_match, lkp_req_id);
+                    `LINE_TO_BYTE_ADDR(lookup_addr, BANK_ID), lookup_id, lookup_match, lkp_req_uuid);
             if (release_valid)
-                dpi_trace(3, "%d: %s:%0d mshr-release id=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, release_id, rel_req_id);
+                dpi_trace(3, "%d: %s:%0d mshr-release id=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, release_id, rel_req_uuid);
             dpi_trace(3, "%d: %s:%0d mshr-table", $time, CACHE_ID, BANK_ID);
             for (integer i = 0; i < MSHR_SIZE; ++i) begin
                 if (valid_table[i]) begin

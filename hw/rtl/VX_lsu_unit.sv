@@ -161,7 +161,7 @@ module VX_lsu_unit #(
     wire mbuf_pop = cache_rsp_fire && (0 == rsp_rem_mask_n);
     
     assign mbuf_raddr = cache_rsp_tag[`CACHE_ADDR_TYPE_BITS +: `LSUQ_ADDR_BITS];
-    assign rsp_uuid   = cache_rsp_tag[`DCACHE_TAG_SEL_BITS +: `UUID_BITS];
+    assign rsp_uuid   = cache_rsp_tag[`DCACHE_TAG_ID_BITS +: `UUID_BITS];
     `UNUSED_VAR (cache_rsp_tag)
 
     // do not writeback from software prefetch
@@ -272,7 +272,7 @@ module VX_lsu_unit #(
         .NUM_REQS     (`DCACHE_NUM_REQS),
         .DATA_WIDTH   (`DCACHE_WORD_SIZE*8),
         .TAG_WIDTH    (`DCACHE_TAG_WIDTH),
-        .TAG_SEL_BITS (`DCACHE_TAG_SEL_BITS),
+        .TAG_SEL_BITS (`DCACHE_TAG_ID_BITS),
         .OUT_REG      (1)
     ) cache_rsp_sel (
         .clk            (clk),

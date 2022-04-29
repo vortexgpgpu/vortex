@@ -14,13 +14,13 @@ module VX_tag_access #(
     // Size of a word in bytes
     parameter WORD_SIZE         = 1, 
     // Request debug identifier
-    parameter REQ_DBG_IDW       = 0
+    parameter REQ_UUID_BITS     = 0
 ) (
     input wire                          clk,
     input wire                          reset,
 
 `IGNORE_UNUSED_BEGIN
-    input wire [`DBG_CACHE_REQ_IDW-1:0] req_id,
+    input wire [`UP(REQ_UUID_BITS)-1:0] req_uuid,
 `IGNORE_UNUSED_END
 
     input wire                          stall,
@@ -97,9 +97,9 @@ module VX_tag_access #(
         end
         if (lookup && ~stall) begin
             if (tag_match) begin
-                dpi_trace(3, "%d: %s:%0d tag-hit: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, line_tag, req_id);
+                dpi_trace(3, "%d: %s:%0d tag-hit: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, line_tag, req_uuid);
             end else begin
-                dpi_trace(3, "%d: %s:%0d tag-miss: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, line_tag, req_id);
+                dpi_trace(3, "%d: %s:%0d tag-miss: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, line_tag, req_uuid);
             end
         end          
     end    
