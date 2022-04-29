@@ -240,7 +240,7 @@ module VX_shared_mem #(
 
 `ifdef DBG_TRACE_CACHE_BANK
 
-    wire [NUM_BANKS-1:0][`UP(REQ_UUID_BITS)-1:0] req_id_st0, req_id_st1;
+    wire [NUM_BANKS-1:0][`UP(REQ_UUID_BITS)-1:0] req_uuid_st0, req_uuid_st1;
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         if (REQ_UUID_BITS != 0) begin
