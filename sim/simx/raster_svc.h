@@ -12,14 +12,7 @@ class RasterUnit;
 
 class RasterSvc : public SimObject<RasterSvc> {
 public:
-  struct PerfStats {
-    uint64_t stalls;
 
-    PerfStats() 
-      : stalls(0)
-    {}
-  };
-  
   SimPort<pipeline_trace_t*> Input;
   SimPort<pipeline_trace_t*> Output;
 
@@ -39,8 +32,6 @@ public:
   uint32_t fetch(uint32_t wid, uint32_t tid);
 
   void tick();
-
-  const PerfStats& perf_stats() const;
   
 private:
 

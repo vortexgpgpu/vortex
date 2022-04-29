@@ -48,7 +48,7 @@ private:
     RasterUnit::Ptr raster_unit_;    
     std::vector<CSR> csrs_;
     uint32_t tick_stamps_;
-    PerfStats perf_stats_;
+    uint64_t last_pop_time_;
 
 public:
     Impl(RasterSvc* simobject,     
@@ -69,6 +69,7 @@ public:
         csr.clear();
       }
       tick_stamps_ = 0;
+      last_pop_time_ = 0;
     } 
 
     uint32_t fetch(uint32_t wid, uint32_t tid) {      
@@ -144,12 +145,7 @@ public:
             
       simobject_->Output.send(trace, 1);
 
-      auto time = simobject_->Input.pop();
-      perf_stats_.stalls += (SimPlatform::instance().cycles() - time);
-    }
-
-    const PerfStats& perf_stats() const { 
-      return perf_stats_; 
+      simobject_->Input.pop();
     }
 };
 
@@ -187,8 +183,4 @@ uint32_t RasterSvc::fetch(uint32_t wid, uint32_t tid) {
 
 void RasterSvc::tick() {
   impl_->tick();
-}
-
-const RasterSvc::PerfStats& RasterSvc::perf_stats() const {
-  return impl_->perf_stats();
 }

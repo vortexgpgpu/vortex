@@ -627,8 +627,8 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         case CSR_MPM_RASTER_READS_H: return raster_unit_->perf_stats().reads >> 32;
         case CSR_MPM_RASTER_LAT:     return raster_unit_->perf_stats().latency & 0xffffffff;
         case CSR_MPM_RASTER_LAT_H:   return raster_unit_->perf_stats().latency >> 32;
-        case CSR_MPM_RASTER_STALL:   return raster_svc_->perf_stats().stalls & 0xffffffff;
-        case CSR_MPM_RASTER_STALL_H: return raster_svc_->perf_stats().stalls >> 32;
+        case CSR_MPM_RASTER_STALL:   return raster_unit_->perf_stats().stalls & 0xffffffff;
+        case CSR_MPM_RASTER_STALL_H: return raster_unit_->perf_stats().stalls >> 32;
 
         case CSR_MPM_RCACHE_READS:    return rcache_->perf_stats().reads & 0xffffffff; 
         case CSR_MPM_RCACHE_READS_H:  return rcache_->perf_stats().reads >> 32; 

@@ -54,10 +54,12 @@ public:
   struct PerfStats {        
     uint64_t reads;
     uint64_t latency;
+    uint64_t stalls;
 
     PerfStats() 
       : reads(0)
       , latency(0)
+      , stalls(0)
     {}
   };
   

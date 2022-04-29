@@ -483,63 +483,6 @@ public:
   }
 };
 
-class RopSlices {
-public:
-  RopSlices(const Arch& arch, const RopUnit::DCRS& dcrs) 
-    : memoryUnits_(ROP_NUM_SLICES, {arch, dcrs})
-    , depthStencils_(ROP_NUM_SLICES, {arch, dcrs})
-    , blenders_(ROP_NUM_SLICES, {arch, dcrs})
-    , slice_idx_(0)
-  {}
-
-  void clear() {
-    for (int i = 0; i < ROP_NUM_SLICES; ++i) {
-      depthStencils_.at(i).initialize();
-      blenders_.at(i).initialize();
-      memoryUnits_.at(i).initialize();
-    }
-  }
-
-  void attach_ram(RAM* mem) {
-    for (int i = 0; i < ROP_NUM_SLICES; ++i) {
-      memoryUnits_.at(i).attach_ram(mem);
-    }
-  }   
-
-  void write(uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, RopUnit::TraceData::Ptr trace_data) {   
-    auto& memoryUnit   = memoryUnits_.at(slice_idx_);
-    auto& depthStencil = depthStencils_.at(slice_idx_);
-    auto& blender      = blenders_.at(slice_idx_);
-
-    auto depth_enabled   = depthStencil.depth_enabled();
-    auto stencil_enabled = depthStencil.stencil_enabled(is_backface);
-    auto blend_enabled   = blender.enabled();
-
-    uint32_t depthstencil;    
-    uint32_t dst_depthstencil;
-    uint32_t dst_color;    
-
-    memoryUnit.read(depth_enabled, stencil_enabled, blend_enabled, x, y, &dst_depthstencil, &dst_color, trace_data);
-    
-    auto ds_passed = !(depth_enabled || stencil_enabled)
-                  || depthStencil.run(is_backface, depth, dst_depthstencil, &depthstencil);
-    
-    if (blend_enabled && ds_passed) {
-      color = blender.run(color, dst_color);
-    }
-    
-    memoryUnit.write(depth_enabled, stencil_enabled, ds_passed, is_backface, dst_depthstencil, dst_color, x, y, depthstencil, color, trace_data);     
-
-    slice_idx_ = (slice_idx_ + 1) % ROP_NUM_SLICES;    
-  }
-
-private:
-  std::vector<::MemoryUnit> memoryUnits_;
-  std::vector<DepthTencil>  depthStencils_;
-  std::vector<Blender>      blenders_;
-  uint32_t                  slice_idx_;
-};
-
 class RopUnit::Impl {
 private:
   struct pending_req_t {
@@ -550,8 +493,11 @@ private:
   RopUnit* simobject_;    
   const Arch& arch_;    
   PerfStats perf_stats_;
-  RopSlices slices_;
+  ::MemoryUnit memoryUnit_;
+  DepthTencil  depthStencil_;
+  Blender      blender_;
   HashTable<pending_req_t> pending_reqs_;
+  uint64_t last_pop_time_;
 
 public:
   Impl(RopUnit* simobject,      
@@ -559,8 +505,10 @@ public:
        const DCRS& dcrs) 
     : simobject_(simobject)
     , arch_(arch)
-    , slices_(arch, dcrs)
-    , pending_reqs_(ROP_MEM_QUEUE_SIZE)
+    , memoryUnit_(arch, dcrs)
+    , depthStencil_(arch, dcrs)
+    , blender_(arch, dcrs)
+    , pending_reqs_(ROP_MEM_QUEUE_SIZE * ROP_NUM_SLICES)
   {
     this->clear();
   }
@@ -568,15 +516,35 @@ public:
   ~Impl() {}
 
   void clear() {
-    slices_.clear();
+    depthStencil_.initialize();
+    blender_.initialize();
+    memoryUnit_.initialize();
+    last_pop_time_= 0;
   }
 
   void attach_ram(RAM* mem) {
-    slices_.attach_ram(mem);
+    memoryUnit_.attach_ram(mem);
   }   
 
   void write(uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, TraceData::Ptr trace_data) {      
-    slices_.write(x, y, is_backface, color, depth, trace_data);
+    auto depth_enabled   = depthStencil_.depth_enabled();
+    auto stencil_enabled = depthStencil_.stencil_enabled(is_backface);
+    auto blend_enabled   = blender_.enabled();
+
+    uint32_t depthstencil;    
+    uint32_t dst_depthstencil;
+    uint32_t dst_color;    
+
+    memoryUnit_.read(depth_enabled, stencil_enabled, blend_enabled, x, y, &dst_depthstencil, &dst_color, trace_data);
+    
+    auto ds_passed = !(depth_enabled || stencil_enabled)
+                  || depthStencil_.run(is_backface, depth, dst_depthstencil, &depthstencil);
+    
+    if (blend_enabled && ds_passed) {
+      color = blender_.run(color, dst_color);
+    }
+    
+    memoryUnit_.write(depth_enabled, stencil_enabled, ds_passed, is_backface, dst_depthstencil, dst_color, x, y, depthstencil, color, trace_data);     
   }
 
   void tick() {
@@ -609,11 +577,13 @@ public:
     for (int i = 0, n = pending_reqs_.size(); i < n; ++i) {
       if (pending_reqs_.contains(i))
         perf_stats_.latency += pending_reqs_.at(i).count;
-    }
+    }    
 
     // check input queue
     if (simobject_->Input.empty())
       return;
+
+    perf_stats_.stalls += simobject_->Input.stalled();
 
     // check pending queue capacity
     auto data = simobject_->Input.front();
@@ -645,8 +615,8 @@ public:
         ++perf_stats_.writes;
       }
     }
-    auto time = simobject_->Input.pop();
-    perf_stats_.stalls += (SimPlatform::instance().cycles() - time);
+
+    simobject_->Input.pop();
   }    
 
   const PerfStats& perf_stats() const { 

@@ -170,6 +170,8 @@ public:
     if (simobject_->Input.empty())
         return;
 
+    perf_stats_.stalls += simobject_->Input.stalled();
+
     auto trace = simobject_->Input.front();
 
     // check pending queue capacity    
@@ -211,8 +213,7 @@ public:
         }
     }
 
-    auto time = simobject_->Input.pop();
-    perf_stats_.stalls += (SimPlatform::instance().cycles() - time);
+    simobject_->Input.pop();
   }
 
   const PerfStats& perf_stats() const { 

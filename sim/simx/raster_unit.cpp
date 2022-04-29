@@ -475,7 +475,7 @@ public:
     : simobject_(simobject)
     , arch_(arch)
     , rasterizer_(arch, dcrs, tile_logsize, block_logsize)
-    , pending_reqs_(RASTER_MEM_QUEUE_SIZE * RASTER_NUM_SLICES)
+    , pending_reqs_(RASTER_MEM_QUEUE_SIZE)
     , mem_trace_state_(e_mem_trace_state::header)
   {}
 
@@ -544,6 +544,8 @@ public:
       if (pending_reqs_.contains(i))
         perf_stats_.latency += pending_reqs_.at(i).count;
     }
+
+    perf_stats_.stalls += simobject_->Output.stalled();
 
     if (mem_traces.empty())
       return;
