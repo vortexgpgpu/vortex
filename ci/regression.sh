@@ -19,6 +19,7 @@ make -C tests/runtime run-simx
 make -C tests/runtime run-rtlsim
 make -C tests/regression run-simx
 make -C tests/regression run-rtlsim
+CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
 CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g1.png -g1" --perf=2
 CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim  --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g1.png -g1" --perf=2
 CONFIGS="-DEXT_RASTER_ENABLE" ./ci/blackbox.sh --driver=simx --app=raster --args="-ttriangle.cgltrace -rtriangle_ref_128.png" --perf=3
