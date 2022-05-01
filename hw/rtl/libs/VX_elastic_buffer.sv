@@ -18,7 +18,7 @@ module VX_elastic_buffer #(
     input  wire             ready_out,
     output wire             valid_out
 );
-    `STATIC_ASSERT (SIZE != 1, ("invalid value"))
+    `STATIC_ASSERT (SIZE != 1, ("invalid parameter"))
 
     if (SIZE == 0) begin
 

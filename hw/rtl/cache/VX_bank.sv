@@ -518,7 +518,7 @@ module VX_bank #(
         end
         if (mreq_push) begin
             if (is_write_st1)
-                dpi_trace(2, "%d: %s:%0d writeback: addr=0x%0h, data=0x%0h, byteen=%b (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mreq_addr, BANK_ID), mreq_data, mreq_byteen, req_uuid_st1);
+                dpi_trace(2, "%d: %s:%0d writethrough: addr=0x%0h, data=0x%0h, byteen=%b (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mreq_addr, BANK_ID), mreq_data, mreq_byteen, req_uuid_st1);
             else
                 dpi_trace(2, "%d: %s:%0d fill-req: addr=0x%0h, id=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mreq_addr, BANK_ID), mreq_id, req_uuid_st1);
         end

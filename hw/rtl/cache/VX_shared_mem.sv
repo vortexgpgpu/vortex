@@ -53,7 +53,7 @@ module VX_shared_mem #(
     input  wire [NUM_REQS-1:0]                  rsp_ready
 );
 
-    `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))
+    `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid parameter"))
     `UNUSED_PARAM (IDNAME)
 
     localparam REQ_SEL_BITS    = `LOG2UP(NUM_REQS);    

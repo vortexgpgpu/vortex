@@ -49,8 +49,8 @@ module VX_core_req_bank_sel #(
     output wire [NUM_BANKS-1:0][NUM_PORTS-1:0][TAG_WIDTH-1:0] per_bank_core_req_tag,
     input  wire [NUM_BANKS-1:0]                     per_bank_core_req_ready
 );
-    `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid value"))
-    `STATIC_ASSERT(NUM_PORTS <= NUM_BANKS, ("invalid value"))
+    `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid parameter"))
+    `STATIC_ASSERT(NUM_PORTS <= NUM_BANKS, ("invalid parameter"))
 
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)    
