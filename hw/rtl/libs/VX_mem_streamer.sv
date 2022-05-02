@@ -186,10 +186,10 @@ module VX_mem_streamer #(
     // Handle memory requests /////////////////////////////////////////////////
 
     wire [NUM_BATCHES-1:0][BATCH_DATAW-1:0] mem_req_data_b;
-    wire [NUM_BATCHES-1:0][NUM_BANKS-1:0] mem_req_mask_b;
-    reg  [NUM_BATCHES-1:0][NUM_BANKS-1:0] req_sent_mask;
-    wire [NUM_BATCHES-1:0][NUM_BANKS-1:0] req_sent_mask_n;    
-    reg  [`UP(BATCH_SEL_BITS)-1:0] req_batch_idx;
+    wire [NUM_BATCHES-1:0][NUM_BANKS-1:0]   mem_req_mask_b;
+    reg  [NUM_BATCHES-1:0][NUM_BANKS-1:0]   req_sent_mask;
+    wire [NUM_BATCHES-1:0][NUM_BANKS-1:0]   req_sent_mask_n;    
+    reg  [`UP(BATCH_SEL_BITS)-1:0]          req_batch_idx;
 
     for (genvar i = 0; i < NUM_BATCHES; ++i) begin
         localparam SIZE = ((i + 1) * NUM_BANKS > NUM_REQS) ? REM_BATCH_SIZE : NUM_BANKS;
