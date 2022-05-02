@@ -61,6 +61,13 @@ module VX_mem_streamer #(
     `STATIC_ASSERT ((0 == DUPLICATE_ADDR) || (1 == DUPLICATE_ADDR), ("invalid parameter"))
     `RUNTIME_ASSERT ((~req_valid || req_mask != 0), ("invalid input"));  
 
+    wire                            mem_rsp_valid_s;
+    wire [NUM_BANKS-1:0]            mem_rsp_mask_s;
+    wire [NUM_BANKS-1:0][DATAW-1:0] mem_rsp_data_s;
+    wire [MEM_TAGW-1:0]             mem_rsp_tag_s;
+    wire                            mem_rsp_ready_s;
+    wire                            mem_rsp_fire;
+
     wire                            sreq_push;
     wire                            sreq_pop;
     wire                            sreq_full;
@@ -236,13 +243,6 @@ module VX_mem_streamer #(
     assign mem_req_fire = mem_req_valid & mem_req_ready; 
 
     // Handle memory responses ////////////////////////////////////////////////
-
-    wire                            mem_rsp_valid_s;
-    wire [NUM_BANKS-1:0]            mem_rsp_mask_s;
-    wire [NUM_BANKS-1:0][DATAW-1:0] mem_rsp_data_s;
-    wire [MEM_TAGW-1:0]             mem_rsp_tag_s;
-    wire                            mem_rsp_ready_s;
-    wire                            mem_rsp_fire;
 
     reg  [QUEUE_SIZE-1:0][NUM_BATCHES-1:0][NUM_BANKS-1:0] rsp_rem_mask;
     wire [NUM_BATCHES-1:0][NUM_BANKS-1:0]                 rsp_rem_mask_n;
