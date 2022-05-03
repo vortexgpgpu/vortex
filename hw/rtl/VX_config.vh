@@ -47,7 +47,6 @@
 `ifdef L1_DISABLE
     `define ICACHE_DISABLE
     `define DCACHE_DISABLE
-    `define TCACHE_DISABLE
 `endif
 
 `ifndef MEM_BLOCK_SIZE
