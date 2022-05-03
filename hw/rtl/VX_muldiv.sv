@@ -169,56 +169,30 @@ module VX_muldiv (
     wire [`NUM_THREADS-1:0][31:0] div_result_tmp, rem_result_tmp;
     wire is_rem_op_out;
 
-    wire div_fire_in  = div_valid_in && div_ready_in;
-    wire div_fire_out = div_valid_out && div_ready_out;
-
-    wire [`NUM_THREADS-1:0] div_done;
-
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin    
-        VX_serial_div #(
-            .WIDTHN (32),
-            .WIDTHD (32),
-            .WIDTHQ (32),
-            .WIDTHR (32)
-        ) divide (
-            .clk       (clk),
-            .reset     (reset),        
-            .load      (div_fire_in),
-            .signed_mode(is_signed_div),
-            .numer     (alu_in1[i]),
-            .denom     (alu_in2[i]),
-            .quotient  (div_result_tmp[i]),
-            .remainder (rem_result_tmp[i]),
-            .done      (div_done[i])
-        );
-    end
-
-    `UNUSED_VAR (div_done)
-
-    reg [(`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1)-1:0] div_tag_out;
-    reg div_busy;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            div_busy <= 0;
-        end begin
-            if (div_fire_in) begin
-                div_busy <= 1;
-            end else if (div_fire_out) begin
-                div_busy <= 0;
-            end
-        end
-        if (div_fire_in) begin
-            div_tag_out <= {uuid_in, wid_in, tmask_in, PC_in, rd_in, wb_in, is_rem_op_in};
-        end
-    end
+    VX_serial_div #(
+        .WIDTHN (32),
+        .WIDTHD (32),
+        .WIDTHQ (32),
+        .WIDTHR (32),
+        .LANES  (`NUM_THREADS),
+        .TAGW   (64 + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1)
+    ) divide (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (div_valid_in),
+        .ready_in  (div_ready_in),
+        .signed_mode(is_signed_div),
+        .tag_in    ({uuid_in, wid_in, tmask_in, PC_in, rd_in, wb_in, is_rem_op_in}),
+        .numer     (alu_in1),
+        .denom     (alu_in2),
+        .quotient  (div_result_tmp),
+        .remainder (rem_result_tmp),
+        .ready_out (div_ready_out),
+        .valid_out (div_valid_out),
+        .tag_out   ({div_uuid_out, div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, is_rem_op_out})
+    );
 
     assign div_result = is_rem_op_out ? rem_result_tmp : div_result_tmp; 
-
-    assign {div_uuid_out, div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, is_rem_op_out} = div_tag_out;    
-
-    assign div_ready_in  = ~div_busy;
-    assign div_valid_out = div_done[0];
 
 `endif
 

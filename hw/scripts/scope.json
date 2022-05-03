@@ -156,11 +156,11 @@
             "?icache_req_fire": 1,            
             "icache_req_uuid": "`UUID_BITS",
             "icache_req_addr": 32,
-            "icache_req_tag":"`ICACHE_TAG_SEL_BITS",
+            "icache_req_tag":"`ICACHE_TAG_ID_BITS",
             "?icache_rsp_fire": 1,
             "icache_rsp_uuid": "`UUID_BITS",
             "icache_rsp_data": 32,
-            "icache_rsp_tag":"`ICACHE_TAG_SEL_BITS"
+            "icache_rsp_tag":"`ICACHE_TAG_ID_BITS"
         },
         "afu/vortex/cluster/core/pipeline/issue": {
             "?issue_fire": 1,
