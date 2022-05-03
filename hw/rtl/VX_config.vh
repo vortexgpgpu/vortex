@@ -37,13 +37,6 @@
     `define L3_ENABLED   0
 `endif
 
-`ifdef CACHE_DISABLE
-    `define L1_DISABLE
-    `define TCACHE_DISABLE
-    `define RCACHE_DISABLE
-    `define OCACHE_DISABLE
-`endif
-
 `ifdef L1_DISABLE
     `define ICACHE_DISABLE
     `define DCACHE_DISABLE
@@ -497,7 +490,7 @@
 
 // Number of banks
 `ifndef RCACHE_NUM_BANKS
-`define RCACHE_NUM_BANKS 4
+`define RCACHE_NUM_BANKS 1
 `endif
 
 // Number of ports per bank
@@ -554,7 +547,7 @@
 
 // Number of banks
 `ifndef OCACHE_NUM_BANKS
-`define OCACHE_NUM_BANKS `NUM_THREADS
+`define OCACHE_NUM_BANKS 1
 `endif
 
 // Number of ports per bank
