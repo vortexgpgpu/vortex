@@ -553,18 +553,18 @@ VX_mem_mux #(
 
 //--
 
-`RESET_RELAY (avs_wrapper_reset);
+`RESET_RELAY (avs_adapter_reset);
 
-VX_avs_wrapper #(
+VX_avs_adapter #(
   .AVS_DATA_WIDTH  (LMEM_DATA_WIDTH), 
   .AVS_ADDR_WIDTH  (LMEM_ADDR_WIDTH),
   .AVS_BURST_WIDTH (LMEM_BURST_CTRW),
   .AVS_BANKS       (NUM_LOCAL_MEM_BANKS),
   .REQ_TAG_WIDTH   (AVS_REQ_TAGW + 1),
   .RD_QUEUE_SIZE   (AVS_RD_QUEUE_SIZE)
-) avs_wrapper (
+) avs_adapter (
   .clk              (clk),
-  .reset            (avs_wrapper_reset),
+  .reset            (avs_adapter_reset),
 
   // Memory request 
   .mem_req_valid    (mem_req_if.valid),

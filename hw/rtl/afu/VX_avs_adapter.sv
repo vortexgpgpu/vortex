@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_avs_wrapper #(    
+module VX_avs_adapter #(    
     parameter AVS_DATA_WIDTH  = 1, 
     parameter AVS_ADDR_WIDTH  = 1,    
     parameter AVS_BURST_WIDTH = 1,
