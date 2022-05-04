@@ -313,7 +313,7 @@ module VX_bank #(
 
         .stall      (crsq_stall),
 
-        .read       (do_read_st1 || do_mshr_st1),      
+        .read       ((do_read_st1 && !miss_st1) || do_mshr_st1),      
         .fill       (do_fill_st1),        
         .write      (do_write_st1 && !miss_st1),
         .way_sel    (way_sel_st1),

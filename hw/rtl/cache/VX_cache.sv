@@ -42,12 +42,11 @@ module VX_cache #(
     // Memory request tag size
     parameter MEM_TAG_WIDTH         = (32 - $clog2(CACHE_LINE_SIZE)),
 
-    // enable bypass for non-cacheable addresses
-    parameter NC_TAG_BIT            = 0,
-    parameter NC_ENABLE             = 0,
+    // Core response output register
+    parameter CORE_OUT_REG          = (NUM_BANKS > 1),
 
-    // Force bypass for all requests
-    parameter PASSTHRU              = 0
+    // Memory request output register
+    parameter MEM_OUT_REG           = (NUM_BANKS > 1)
  ) (
     `SCOPE_IO_VX_cache    
     
@@ -76,10 +75,8 @@ module VX_cache #(
     `STATIC_ASSERT(NUM_PORTS <= NUM_BANKS, ("invalid parameter"))
     `STATIC_ASSERT(NUM_BANKS == (1 << $clog2(NUM_BANKS)), ("invalid parameter"))
 
-    localparam WORD_SEL_BITS    = `UP(`WORD_SEL_BITS);
-    localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE);
-    localparam MEM_TAG_IN_WIDTH = `BANK_SEL_BITS + MSHR_ADDR_WIDTH;
-    localparam CORE_TAG_X_WIDTH = CORE_TAG_WIDTH - NC_ENABLE;
+    localparam WORD_SEL_BITS   = `UP(`WORD_SEL_BITS);
+    localparam MSHR_ADDR_WIDTH = `LOG2UP(MSHR_SIZE);
 
 `ifdef PERF_ENABLE
     wire [NUM_BANKS-1:0] perf_read_miss_per_bank;
@@ -96,35 +93,35 @@ module VX_cache #(
     wire [NUM_REQS-1:0]                     core_req_ready;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign core_req_valid[i] = core_req_if[i].valid;
-        assign core_req_rw[i] = core_req_if[i].rw;
-        assign core_req_addr[i] = core_req_if[i].addr;
-        assign core_req_byteen[i] = core_req_if[i].byteen;
-        assign core_req_data[i] = core_req_if[i].data;
-        assign core_req_tag[i] = core_req_if[i].tag;
+        assign core_req_valid[i]    = core_req_if[i].valid;
+        assign core_req_rw[i]       = core_req_if[i].rw;
+        assign core_req_addr[i]     = core_req_if[i].addr;
+        assign core_req_byteen[i]   = core_req_if[i].byteen;
+        assign core_req_data[i]     = core_req_if[i].data;
+        assign core_req_tag[i]      = core_req_if[i].tag;
         assign core_req_if[i].ready = core_req_ready[i];
     end
 
     ///////////////////////////////////////////////////////////////////////////
 
-    // memory request to skid buffer output
-    wire                             mem_req_valid_sb;
-    wire                             mem_req_rw_sb;
-    wire [CACHE_LINE_SIZE-1:0]       mem_req_byteen_sb;   
-    wire [`MEM_ADDR_WIDTH-1:0]       mem_req_addr_sb;
-    wire [`CACHE_LINE_WIDTH-1:0]     mem_req_data_sb;
-    wire [MEM_TAG_WIDTH-1:0]         mem_req_tag_sb;
-    wire                             mem_req_ready_sb;
+    // Memory request buffering
+    wire                             mem_req_valid_s;
+    wire                             mem_req_rw_s;
+    wire [CACHE_LINE_SIZE-1:0]       mem_req_byteen_s;
+    wire [`MEM_ADDR_WIDTH-1:0]       mem_req_addr_s;
+    wire [`CACHE_LINE_WIDTH-1:0]     mem_req_data_s;
+    wire [MEM_TAG_WIDTH-1:0]         mem_req_tag_s;
+    wire                             mem_req_ready_s;
 
     VX_skid_buffer #(
-        .DATAW    (1+CACHE_LINE_SIZE+`MEM_ADDR_WIDTH+`CACHE_LINE_WIDTH+MEM_TAG_WIDTH),
-        .PASSTHRU (1 == NUM_BANKS && (!PASSTHRU || `WORD_SEL_BITS == 0))
+        .DATAW    (1 + CACHE_LINE_SIZE + `MEM_ADDR_WIDTH + `CACHE_LINE_WIDTH + MEM_TAG_WIDTH),
+        .PASSTHRU (MEM_OUT_REG)
     ) mem_req_sbuf (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (mem_req_valid_sb),        
-        .ready_in  (mem_req_ready_sb),      
-        .data_in   ({mem_req_rw_sb, mem_req_byteen_sb, mem_req_addr_sb, mem_req_data_sb, mem_req_tag_sb}),
+        .valid_in  (mem_req_valid_s),        
+        .ready_in  (mem_req_ready_s),      
+        .data_in   ({mem_req_rw_s,  mem_req_byteen_s,  mem_req_addr_s,  mem_req_data_s,  mem_req_tag_s}),
         .data_out  ({mem_req_if.rw, mem_req_if.byteen, mem_req_if.addr, mem_req_if.data, mem_req_if.tag}),        
         .valid_out (mem_req_if.valid),        
         .ready_out (mem_req_if.ready)
@@ -132,22 +129,22 @@ module VX_cache #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    // Core response to skid buffer output
-    wire [NUM_REQS-1:0]                     core_rsp_valid_sb;
-    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]    core_rsp_data_sb;
-    wire [NUM_REQS-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag_sb;
-    wire [NUM_REQS-1:0]                     core_rsp_ready_sb;
+    // Core response buffering
+    wire [NUM_REQS-1:0]                     core_rsp_valid_s;
+    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]    core_rsp_data_s;
+    wire [NUM_REQS-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag_s;
+    wire [NUM_REQS-1:0]                     core_rsp_ready_s;
 
     for (genvar i = 0; i < NUM_REQS; i++) begin
         VX_skid_buffer #(
             .DATAW    (`WORD_WIDTH + CORE_TAG_WIDTH),
-            .PASSTHRU (1 == NUM_BANKS && (!PASSTHRU || `WORD_SEL_BITS == 0))
+            .PASSTHRU (CORE_OUT_REG)
         ) core_rsp_sbuf (
             .clk       (clk),
             .reset     (reset),
-            .valid_in  (core_rsp_valid_sb[i]),
-            .ready_in  (core_rsp_ready_sb[i]),
-            .data_in   ({core_rsp_data_sb[i], core_rsp_tag_sb[i]}),
+            .valid_in  (core_rsp_valid_s[i]),
+            .ready_in  (core_rsp_ready_s[i]),
+            .data_in   ({core_rsp_data_s[i],  core_rsp_tag_s[i]}),
             .data_out  ({core_rsp_if[i].data, core_rsp_if[i].tag}), 
             .valid_out (core_rsp_if[i].valid),
             .ready_out (core_rsp_if[i].ready)
@@ -156,12 +153,354 @@ module VX_cache #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    // multi-ported memory request
+    // Memory response buffering
+    wire                         mem_rsp_valid_s;
+    wire [`CACHE_LINE_WIDTH-1:0] mem_rsp_data_s;
+    wire [MEM_TAG_WIDTH-1:0]     mem_rsp_tag_s;
+    wire                         mem_rsp_ready_s;
+        
+    VX_elastic_buffer #(
+        .DATAW   (MEM_TAG_WIDTH + `CACHE_LINE_WIDTH), 
+        .SIZE    (MRSQ_SIZE),
+        .OUT_REG (MRSQ_SIZE > 2)
+    ) mem_rsp_queue (
+        .clk        (clk),
+        .reset      (reset),
+        .valid_in   (mem_rsp_if.valid),
+        .ready_in   (mem_rsp_if.ready),
+        .data_in    ({mem_rsp_if.tag, mem_rsp_if.data}),                
+        .data_out   ({mem_rsp_tag_s,  mem_rsp_data_s}),        
+        .valid_out  (mem_rsp_valid_s),
+        .ready_out  (mem_rsp_ready_s)
+    );
+
+    ///////////////////////////////////////////////////////////////////////
+
+    wire [`LINE_SEL_BITS-1:0] flush_addr;
+    wire                      flush_enable;
+
+    `RESET_RELAY (flush_reset);
+
+    VX_flush_ctrl #( 
+        .CACHE_SIZE (CACHE_SIZE),
+        .CACHE_LINE_SIZE (CACHE_LINE_SIZE),        
+        .NUM_BANKS  (NUM_BANKS),
+        .NUM_WAYS   (NUM_WAYS)
+    ) flush_ctrl (
+        .clk       (clk),
+        .reset     (flush_reset),
+        .addr_out  (flush_addr),
+        .valid_out (flush_enable)
+    );
+
+    ///////////////////////////////////////////////////////////////////////
+    
+    wire [NUM_BANKS-1:0]                        per_bank_core_req_valid;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0]         per_bank_core_req_pmask;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SEL_BITS-1:0] per_bank_core_req_wsel;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_core_req_byteen;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`WORD_WIDTH-1:0] per_bank_core_req_data;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`REQ_SEL_BITS-1:0] per_bank_core_req_idx;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] per_bank_core_req_tag;
+    wire [NUM_BANKS-1:0]                        per_bank_core_req_rw;  
+    wire [NUM_BANKS-1:0][`LINE_ADDR_WIDTH-1:0]  per_bank_core_req_addr;    
+    wire [NUM_BANKS-1:0]                        per_bank_core_req_ready;
+    
+    wire [NUM_BANKS-1:0]                        per_bank_core_rsp_valid;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0]         per_bank_core_rsp_pmask;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`WORD_WIDTH-1:0] per_bank_core_rsp_data;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`REQ_SEL_BITS-1:0] per_bank_core_rsp_idx;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] per_bank_core_rsp_tag;    
+    wire [NUM_BANKS-1:0]                        per_bank_core_rsp_ready;
+
+    wire [NUM_BANKS-1:0]                        per_bank_mem_req_valid;    
+    wire [NUM_BANKS-1:0]                        per_bank_mem_req_rw;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0]         per_bank_mem_req_pmask;  
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_mem_req_byteen;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SEL_BITS-1:0] per_bank_mem_req_wsel;
+    wire [NUM_BANKS-1:0][`MEM_ADDR_WIDTH-1:0]   per_bank_mem_req_addr;
+    wire [NUM_BANKS-1:0][MSHR_ADDR_WIDTH-1:0]   per_bank_mem_req_id;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`WORD_WIDTH-1:0] per_bank_mem_req_data;
+    wire [NUM_BANKS-1:0]                        per_bank_mem_req_ready;
+
+    wire [NUM_BANKS-1:0]                        per_bank_mem_rsp_ready;
+    
+    if (NUM_BANKS == 1) begin
+        assign mem_rsp_ready_s = per_bank_mem_rsp_ready;
+    end else begin
+        assign mem_rsp_ready_s = per_bank_mem_rsp_ready[`MEM_TAG_TO_BANK_ID(mem_rsp_tag_s)];
+    end
+
+    // Core request dispatch
+
+    VX_req_dispatch #(
+        .LINE_SIZE  (CACHE_LINE_SIZE),
+        .WORD_SIZE  (WORD_SIZE),
+        .ADDR_WIDTH (`WORD_ADDR_WIDTH),
+        .NUM_REQS   (NUM_REQS),
+        .NUM_BANKS  (NUM_BANKS),
+        .NUM_PORTS  (NUM_PORTS),        
+        .TAG_WIDTH  (CORE_TAG_WIDTH)
+    ) req_dispatch (        
+        .clk        (clk),
+        .reset      (reset),
+    `ifdef PERF_ENABLE        
+        .bank_stalls (perf_cache_if.bank_stalls),
+    `endif     
+        .core_req_valid          (core_req_valid),
+        .core_req_rw             (core_req_rw), 
+        .core_req_addr           (core_req_addr),
+        .core_req_byteen         (core_req_byteen),
+        .core_req_data           (core_req_data),
+        .core_req_tag            (core_req_tag),
+        .core_req_ready          (core_req_ready),
+        .per_bank_core_req_valid (per_bank_core_req_valid),
+        .per_bank_core_req_pmask (per_bank_core_req_pmask),
+        .per_bank_core_req_rw    (per_bank_core_req_rw),
+        .per_bank_core_req_addr  (per_bank_core_req_addr),
+        .per_bank_core_req_wsel  (per_bank_core_req_wsel),
+        .per_bank_core_req_byteen(per_bank_core_req_byteen),
+        .per_bank_core_req_data  (per_bank_core_req_data),
+        .per_bank_core_req_tag   (per_bank_core_req_tag),
+        .per_bank_core_req_idx   (per_bank_core_req_idx),
+        .per_bank_core_req_ready (per_bank_core_req_ready)
+    );
+
+    ///////////////////////////////////////////////////////////////////////
+    
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+        
+        wire                        curr_bank_core_req_valid;
+        wire [NUM_PORTS-1:0]        curr_bank_core_req_pmask;
+        wire [NUM_PORTS-1:0][WORD_SEL_BITS-1:0] curr_bank_core_req_wsel;
+        wire [NUM_PORTS-1:0][WORD_SIZE-1:0] curr_bank_core_req_byteen;
+        wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] curr_bank_core_req_data;
+        wire [NUM_PORTS-1:0][`REQ_SEL_BITS-1:0] curr_bank_core_req_idx;
+        wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] curr_bank_core_req_tag;
+        wire                        curr_bank_core_req_rw;  
+        wire [`LINE_ADDR_WIDTH-1:0] curr_bank_core_req_addr;        
+        wire                        curr_bank_core_req_ready;
+
+        wire                        curr_bank_core_rsp_valid;
+        wire [NUM_PORTS-1:0]        curr_bank_core_rsp_pmask;        
+        wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] curr_bank_core_rsp_data;
+        wire [NUM_PORTS-1:0][`REQ_SEL_BITS-1:0] curr_bank_core_rsp_idx;
+        wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] curr_bank_core_rsp_tag;
+        wire                        curr_bank_core_rsp_ready;
+
+        wire                        curr_bank_mem_req_valid;
+        wire                        curr_bank_mem_req_rw;
+        wire [NUM_PORTS-1:0]        curr_bank_mem_req_pmask;
+        wire [NUM_PORTS-1:0][WORD_SIZE-1:0] curr_bank_mem_req_byteen;
+        wire [NUM_PORTS-1:0][WORD_SEL_BITS-1:0] curr_bank_mem_req_wsel;
+        wire [`LINE_ADDR_WIDTH-1:0] curr_bank_mem_req_addr;
+        wire [MSHR_ADDR_WIDTH-1:0]  curr_bank_mem_req_id;
+        wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] curr_bank_mem_req_data;
+        wire                        curr_bank_mem_req_ready;
+
+        wire                        curr_bank_mem_rsp_valid;
+        wire [MSHR_ADDR_WIDTH-1:0]  curr_bank_mem_rsp_id;
+        wire [`CACHE_LINE_WIDTH-1:0] curr_bank_mem_rsp_data;
+        wire                        curr_bank_mem_rsp_ready;
+
+        // Core Req
+        assign curr_bank_core_req_valid   = per_bank_core_req_valid[i];
+        assign curr_bank_core_req_pmask   = per_bank_core_req_pmask[i];
+        assign curr_bank_core_req_addr    = per_bank_core_req_addr[i];
+        assign curr_bank_core_req_rw      = per_bank_core_req_rw[i];
+        assign curr_bank_core_req_wsel    = per_bank_core_req_wsel[i];
+        assign curr_bank_core_req_byteen  = per_bank_core_req_byteen[i];
+        assign curr_bank_core_req_data    = per_bank_core_req_data[i];
+        assign curr_bank_core_req_tag     = per_bank_core_req_tag[i];
+        assign curr_bank_core_req_idx     = per_bank_core_req_idx[i];
+        assign per_bank_core_req_ready[i] = curr_bank_core_req_ready;
+
+        // Core WB
+        assign curr_bank_core_rsp_ready   = per_bank_core_rsp_ready[i];
+        assign per_bank_core_rsp_valid[i] = curr_bank_core_rsp_valid;
+        assign per_bank_core_rsp_pmask[i] = curr_bank_core_rsp_pmask;
+        assign per_bank_core_rsp_idx  [i] = curr_bank_core_rsp_idx;
+        assign per_bank_core_rsp_tag  [i] = curr_bank_core_rsp_tag;
+        assign per_bank_core_rsp_data [i] = curr_bank_core_rsp_data;
+
+        // Memory request            
+        assign per_bank_mem_req_valid[i]  = curr_bank_mem_req_valid;          
+        assign per_bank_mem_req_rw[i]     = curr_bank_mem_req_rw;
+        assign per_bank_mem_req_pmask[i]  = curr_bank_mem_req_pmask;
+        assign per_bank_mem_req_byteen[i] = curr_bank_mem_req_byteen;
+        assign per_bank_mem_req_wsel[i]   = curr_bank_mem_req_wsel;
+        if (NUM_BANKS == 1) begin  
+            assign per_bank_mem_req_addr[i] = curr_bank_mem_req_addr;
+        end else begin
+            assign per_bank_mem_req_addr[i] = `LINE_TO_MEM_ADDR(curr_bank_mem_req_addr, i); 
+        end
+        assign per_bank_mem_req_id[i]   = curr_bank_mem_req_id;
+        assign per_bank_mem_req_data[i] = curr_bank_mem_req_data;
+        assign curr_bank_mem_req_ready  = per_bank_mem_req_ready[i];
+
+        // Memory response
+        if (NUM_BANKS == 1) begin
+            assign curr_bank_mem_rsp_valid = mem_rsp_valid_s;        
+        end else begin
+            assign curr_bank_mem_rsp_valid = mem_rsp_valid_s && (`MEM_TAG_TO_BANK_ID(mem_rsp_tag_s) == i);
+        end
+        assign curr_bank_mem_rsp_id      = `MEM_TAG_TO_REQ_ID(mem_rsp_tag_s);
+        assign curr_bank_mem_rsp_data    = mem_rsp_data_s;
+        assign per_bank_mem_rsp_ready[i] = curr_bank_mem_rsp_ready;
+
+        `RESET_RELAY (bank_reset);
+        
+        VX_bank #(                
+            .BANK_ID            (i),
+            .CACHE_ID           (CACHE_ID),
+            .CACHE_SIZE         (CACHE_SIZE),
+            .CACHE_LINE_SIZE    (CACHE_LINE_SIZE),
+            .NUM_BANKS          (NUM_BANKS),
+            .NUM_WAYS           (NUM_WAYS),
+            .NUM_PORTS          (NUM_PORTS),
+            .WORD_SIZE          (WORD_SIZE),
+            .NUM_REQS           (NUM_REQS),
+            .CREQ_SIZE          (CREQ_SIZE),
+            .CRSQ_SIZE          (CRSQ_SIZE),
+            .MSHR_SIZE          (MSHR_SIZE),
+            .MREQ_SIZE          (MREQ_SIZE),
+            .WRITE_ENABLE       (WRITE_ENABLE),
+            .REQ_UUID_BITS      (REQ_UUID_BITS),
+            .CORE_TAG_WIDTH     (CORE_TAG_WIDTH)
+        ) bank (
+            `SCOPE_BIND_VX_cache_bank(i)
+            
+            .clk                (clk),
+            .reset              (bank_reset),
+
+        `ifdef PERF_ENABLE
+            .perf_read_misses   (perf_read_miss_per_bank[i]),
+            .perf_write_misses  (perf_write_miss_per_bank[i]),
+            .perf_mshr_stalls   (perf_mshr_stall_per_bank[i]),
+        `endif
+                    
+            // Core request
+            .core_req_valid     (curr_bank_core_req_valid),
+            .core_req_pmask     (curr_bank_core_req_pmask),
+            .core_req_rw        (curr_bank_core_req_rw),
+            .core_req_byteen    (curr_bank_core_req_byteen),              
+            .core_req_addr      (curr_bank_core_req_addr),
+            .core_req_wsel      (curr_bank_core_req_wsel),
+            .core_req_data      (curr_bank_core_req_data),
+            .core_req_tag       (curr_bank_core_req_tag),
+            .core_req_idx       (curr_bank_core_req_idx),
+            .core_req_ready     (curr_bank_core_req_ready),
+
+            // Core response                
+            .core_rsp_valid     (curr_bank_core_rsp_valid),
+            .core_rsp_pmask     (curr_bank_core_rsp_pmask),
+            .core_rsp_idx       (curr_bank_core_rsp_idx),
+            .core_rsp_data      (curr_bank_core_rsp_data),
+            .core_rsp_tag       (curr_bank_core_rsp_tag),
+            .core_rsp_ready     (curr_bank_core_rsp_ready),
+
+            // Memory request
+            .mem_req_valid      (curr_bank_mem_req_valid),
+            .mem_req_rw         (curr_bank_mem_req_rw),
+            .mem_req_pmask      (curr_bank_mem_req_pmask),
+            .mem_req_byteen     (curr_bank_mem_req_byteen),
+            .mem_req_wsel       (curr_bank_mem_req_wsel),
+            .mem_req_addr       (curr_bank_mem_req_addr),
+            .mem_req_id         (curr_bank_mem_req_id),
+            .mem_req_data       (curr_bank_mem_req_data),   
+            .mem_req_ready      (curr_bank_mem_req_ready),
+
+            // Memory response
+            .mem_rsp_valid      (curr_bank_mem_rsp_valid),    
+            .mem_rsp_id         (curr_bank_mem_rsp_id),            
+            .mem_rsp_data       (curr_bank_mem_rsp_data),
+            .mem_rsp_ready      (curr_bank_mem_rsp_ready),
+
+            // flush    
+            .flush_enable       (flush_enable),
+            .flush_addr         (flush_addr)
+        );
+    end   
+
+    // Core responce merge
+
+    VX_rsp_merge #(
+        .NUM_REQS  (NUM_REQS),
+        .NUM_BANKS (NUM_BANKS),
+        .NUM_PORTS (NUM_PORTS),
+        .WORD_SIZE (WORD_SIZE),
+        .TAG_WIDTH (CORE_TAG_WIDTH)
+    ) rsp_merge (
+        .clk                     (clk),
+        .reset                   (reset),                    
+        .per_bank_core_rsp_valid (per_bank_core_rsp_valid),   
+        .per_bank_core_rsp_pmask (per_bank_core_rsp_pmask),   
+        .per_bank_core_rsp_data  (per_bank_core_rsp_data),
+        .per_bank_core_rsp_tag   (per_bank_core_rsp_tag),
+        .per_bank_core_rsp_idx   (per_bank_core_rsp_idx),   
+        .per_bank_core_rsp_ready (per_bank_core_rsp_ready),
+        .core_rsp_valid          (core_rsp_valid_s),
+        .core_rsp_tag            (core_rsp_tag_s),
+        .core_rsp_data           (core_rsp_data_s),  
+        .core_rsp_ready          (core_rsp_ready_s)
+    ); 
+
+    ///////////////////////////////////////////////////////////////////////////
+
+    wire                                    mem_req_valid_p;
+    wire                                    mem_req_rw_p;
     wire [NUM_PORTS-1:0][WORD_SIZE-1:0]     mem_req_byteen_p;
+    wire [`MEM_ADDR_WIDTH-1:0]              mem_req_addr_p;
     wire [NUM_PORTS-1:0]                    mem_req_pmask_p;    
     wire [NUM_PORTS-1:0][WORD_SEL_BITS-1:0] mem_req_wsel_p;
     wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0]   mem_req_data_p;
-    wire                                    mem_req_rw_p;
+    wire [MEM_TAG_WIDTH-1:0]                mem_req_tag_p;
+    wire [MSHR_ADDR_WIDTH-1:0]              mem_req_id_p;
+    wire                                    mem_req_ready_p;
+
+    // Memory request arbitration
+
+    wire [NUM_BANKS-1:0][(`MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + NUM_PORTS * (1 + WORD_SIZE + WORD_SEL_BITS + `WORD_WIDTH))-1:0] data_in;
+
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+        assign data_in[i] = {per_bank_mem_req_addr[i], 
+                             per_bank_mem_req_id[i], 
+                             per_bank_mem_req_rw[i], 
+                             per_bank_mem_req_pmask[i], 
+                             per_bank_mem_req_byteen[i], 
+                             per_bank_mem_req_wsel[i], 
+                             per_bank_mem_req_data[i]};
+    end
+    
+    VX_stream_mux #(
+        .NUM_REQS (NUM_BANKS),
+        .DATAW    (`MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + NUM_PORTS * (1 + WORD_SIZE + WORD_SEL_BITS + `WORD_WIDTH)),
+        .ARBITER  ("R")
+    ) mem_req_mux (
+        .clk       (clk),
+        .reset     (reset),
+        `UNUSED_PIN (sel_in),
+        .valid_in  (per_bank_mem_req_valid),
+        .data_in   (data_in),
+        .ready_in  (per_bank_mem_req_ready),   
+        .valid_out (mem_req_valid_p),   
+        .data_out  ({mem_req_addr_p, mem_req_id_p, mem_req_rw_p, mem_req_pmask_p, mem_req_byteen_p, mem_req_wsel_p, mem_req_data_p}),
+        .ready_out (mem_req_ready_p)
+    );
+
+    if (NUM_BANKS > 1) begin
+        wire [`BANK_SEL_BITS-1:0] mem_req_bank_id = `MEM_ADDR_TO_BANK_ID(mem_req_addr_p);
+        assign mem_req_tag_p = MEM_TAG_WIDTH'({mem_req_bank_id, mem_req_id_p});            
+    end else begin
+        assign mem_req_tag_p = MEM_TAG_WIDTH'(mem_req_id_p);
+    end   
+
+    // Memory request multi-port handling
+
+    assign mem_req_valid_s = mem_req_valid_p;
+    assign mem_req_addr_s  = mem_req_addr_p;
+    assign mem_req_tag_s   = mem_req_tag_p;
+    assign mem_req_ready_p = mem_req_ready_s;
 
     if (WRITE_ENABLE) begin
         if (`WORDS_PER_LINE > 1) begin
@@ -177,17 +516,16 @@ module VX_cache #(
                         mem_req_data_r[mem_req_wsel_p[i] * `WORD_WIDTH +: `WORD_WIDTH] = mem_req_data_p[i];
                     end
                 end
-            end
-
-            assign mem_req_rw_sb     = mem_req_rw_p;
-            assign mem_req_byteen_sb = mem_req_byteen_r;
-            assign mem_req_data_sb   = mem_req_data_r;
+            end            
+            assign mem_req_rw_s     = mem_req_rw_p;
+            assign mem_req_byteen_s = mem_req_byteen_r;
+            assign mem_req_data_s   = mem_req_data_r;
         end else begin
             `UNUSED_VAR (mem_req_pmask_p)
             `UNUSED_VAR (mem_req_wsel_p)  
-            assign mem_req_rw_sb     = mem_req_rw_p;
-            assign mem_req_byteen_sb = mem_req_byteen_p;
-            assign mem_req_data_sb   = mem_req_data_p;
+            assign mem_req_rw_s     = mem_req_rw_p;
+            assign mem_req_byteen_s = mem_req_byteen_p;            
+            assign mem_req_data_s   = mem_req_data_p;            
         end
     end else begin
         `UNUSED_VAR (mem_req_byteen_p)
@@ -196,523 +534,9 @@ module VX_cache #(
         `UNUSED_VAR (mem_req_data_p)
         `UNUSED_VAR (mem_req_rw_p)
         
-        assign mem_req_rw_sb     = 0;
-        assign mem_req_byteen_sb = 'x;
-        assign mem_req_data_sb   = 'x;
-    end
-
-    ///////////////////////////////////////////////////////////////////////////
-
-    // Core request    
-    wire [NUM_REQS-1:0]                     core_req_valid_c;
-    wire [NUM_REQS-1:0]                     core_req_rw_c;
-    wire [NUM_REQS-1:0][`WORD_ADDR_WIDTH-1:0] core_req_addr_c;
-    wire [NUM_REQS-1:0][WORD_SIZE-1:0]      core_req_byteen_c;
-    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]    core_req_data_c;
-    wire [NUM_REQS-1:0][CORE_TAG_X_WIDTH-1:0] core_req_tag_c;
-    wire [NUM_REQS-1:0]                     core_req_ready_c;
-
-    // Core response
-    wire [NUM_REQS-1:0]                     core_rsp_valid_c;
-    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]    core_rsp_data_c;
-    wire [NUM_REQS-1:0][CORE_TAG_X_WIDTH-1:0] core_rsp_tag_c;
-    wire [NUM_REQS-1:0]                     core_rsp_ready_c;
-
-    // Memory request
-    wire                            mem_req_valid_c;
-    wire                            mem_req_rw_c;
-    wire [`MEM_ADDR_WIDTH-1:0]      mem_req_addr_c;
-    wire [NUM_PORTS-1:0]            mem_req_pmask_c;
-    wire [NUM_PORTS-1:0][WORD_SIZE-1:0] mem_req_byteen_c;
-    wire [NUM_PORTS-1:0][WORD_SEL_BITS-1:0] mem_req_wsel_c;
-    wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] mem_req_data_c;
-    wire [MEM_TAG_IN_WIDTH-1:0]     mem_req_tag_c;
-    wire                            mem_req_ready_c;
-    
-    // Memory response
-    wire                            mem_rsp_valid_c;
-    wire [`CACHE_LINE_WIDTH-1:0]    mem_rsp_data_c;
-    wire [MEM_TAG_IN_WIDTH-1:0]     mem_rsp_tag_c;
-    wire                            mem_rsp_ready_c;
-
-    if (NC_ENABLE || PASSTHRU) begin
-        VX_nc_bypass #( 
-            .NUM_PORTS         (NUM_PORTS),
-            .NUM_REQS          (NUM_REQS),
-            .NC_TAG_BIT        (NC_TAG_BIT),
-
-            .NC_ENABLE         (NC_ENABLE),
-            .PASSTHRU          (PASSTHRU),
-
-            .CORE_ADDR_WIDTH   (`WORD_ADDR_WIDTH),
-            .CORE_DATA_SIZE    (WORD_SIZE),    
-            .CORE_TAG_IN_WIDTH (CORE_TAG_WIDTH),
-                
-            .MEM_ADDR_WIDTH    (`MEM_ADDR_WIDTH),
-            .MEM_DATA_SIZE     (CACHE_LINE_SIZE),
-            .MEM_TAG_IN_WIDTH  (MEM_TAG_IN_WIDTH),
-            .MEM_TAG_OUT_WIDTH (MEM_TAG_WIDTH),
-
-            .REQ_UUID_BITS     (REQ_UUID_BITS)
-        ) nc_bypass (
-            .clk                (clk),
-            .reset              (reset),
-
-            // Core request in
-            .core_req_valid_in  (core_req_valid),
-            .core_req_rw_in     (core_req_rw),
-            .core_req_byteen_in (core_req_byteen),
-            .core_req_addr_in   (core_req_addr),
-            .core_req_data_in   (core_req_data),        
-            .core_req_tag_in    (core_req_tag),
-            .core_req_ready_in  (core_req_ready),
-
-            // Core request out
-            .core_req_valid_out (core_req_valid_c),
-            .core_req_rw_out    (core_req_rw_c),
-            .core_req_byteen_out(core_req_byteen_c),
-            .core_req_addr_out  (core_req_addr_c),
-            .core_req_data_out  (core_req_data_c),        
-            .core_req_tag_out   (core_req_tag_c),
-            .core_req_ready_out (core_req_ready_c),
-
-            // Core response in
-            .core_rsp_valid_in  (core_rsp_valid_c),
-            .core_rsp_data_in   (core_rsp_data_c),
-            .core_rsp_tag_in    (core_rsp_tag_c),
-            .core_rsp_ready_in  (core_rsp_ready_c),
-
-            // Core response out
-            .core_rsp_valid_out (core_rsp_valid_sb),
-            .core_rsp_data_out  (core_rsp_data_sb),
-            .core_rsp_tag_out   (core_rsp_tag_sb),
-            .core_rsp_ready_out (core_rsp_ready_sb),
-
-            // Memory request in
-            .mem_req_valid_in   (mem_req_valid_c),
-            .mem_req_rw_in      (mem_req_rw_c),  
-            .mem_req_addr_in    (mem_req_addr_c),
-            .mem_req_pmask_in   (mem_req_pmask_c),
-            .mem_req_byteen_in  (mem_req_byteen_c),
-            .mem_req_wsel_in    (mem_req_wsel_c),
-            .mem_req_data_in    (mem_req_data_c),
-            .mem_req_tag_in     (mem_req_tag_c),
-            .mem_req_ready_in   (mem_req_ready_c),
-
-            // Memory request out
-            .mem_req_valid_out  (mem_req_valid_sb),
-            .mem_req_addr_out   (mem_req_addr_sb),
-            .mem_req_rw_out     (mem_req_rw_p),
-            .mem_req_pmask_out  (mem_req_pmask_p),
-            .mem_req_byteen_out (mem_req_byteen_p),
-            .mem_req_wsel_out   (mem_req_wsel_p),
-            .mem_req_data_out   (mem_req_data_p),
-            .mem_req_tag_out    (mem_req_tag_sb),
-            .mem_req_ready_out  (mem_req_ready_sb),
-
-            // Memory response in
-            .mem_rsp_valid_in   (mem_rsp_if.valid),        
-            .mem_rsp_data_in    (mem_rsp_if.data),
-            .mem_rsp_tag_in     (mem_rsp_if.tag),
-            .mem_rsp_ready_in   (mem_rsp_if.ready),
-
-            // Memory response out
-            .mem_rsp_valid_out  (mem_rsp_valid_c),        
-            .mem_rsp_data_out   (mem_rsp_data_c),
-            .mem_rsp_tag_out    (mem_rsp_tag_c),
-            .mem_rsp_ready_out  (mem_rsp_ready_c)
-        );
-    end else begin        
-        assign core_req_valid_c     = core_req_valid;
-        assign core_req_rw_c        = core_req_rw;
-        assign core_req_addr_c      = core_req_addr;
-        assign core_req_byteen_c    = core_req_byteen;
-        assign core_req_data_c      = core_req_data;
-        assign core_req_tag_c       = core_req_tag;
-        assign core_req_ready       = core_req_ready_c;
-
-        assign core_rsp_valid_sb    = core_rsp_valid_c;
-        assign core_rsp_data_sb     = core_rsp_data_c;
-        assign core_rsp_tag_sb      = core_rsp_tag_c;
-        assign core_rsp_ready_c     = core_rsp_ready_sb;
-
-        assign mem_req_valid_sb     = mem_req_valid_c;
-        assign mem_req_addr_sb      = mem_req_addr_c;
-        assign mem_req_rw_p         = mem_req_rw_c;
-        assign mem_req_pmask_p      = mem_req_pmask_c;
-        assign mem_req_byteen_p     = mem_req_byteen_c;
-        assign mem_req_wsel_p       = mem_req_wsel_c;
-        assign mem_req_data_p       = mem_req_data_c;
-        assign mem_req_tag_sb       = mem_req_tag_c;
-        assign mem_req_ready_c      = mem_req_ready_sb;
-
-        assign mem_rsp_valid_c      = mem_rsp_if.valid;
-        assign mem_rsp_data_c       = mem_rsp_if.data;
-        assign mem_rsp_tag_c        = mem_rsp_if.tag;
-        assign mem_rsp_if.ready     = mem_rsp_ready_c;
-    end 
-
-    if (PASSTHRU) begin
-
-        `UNUSED_VAR (core_req_valid_c)
-        `UNUSED_VAR (core_req_rw_c)
-        `UNUSED_VAR (core_req_addr_c)
-        `UNUSED_VAR (core_req_byteen_c)
-        `UNUSED_VAR (core_req_data_c)
-        `UNUSED_VAR (core_req_tag_c)
-        assign core_req_ready_c = 0;
-
-        assign core_rsp_valid_c = '0;
-        assign core_rsp_data_c  = 'x;
-        assign core_rsp_tag_c   = 'x;
-        `UNUSED_VAR (core_rsp_ready_c)
-
-        assign mem_req_valid_c  = 0;
-        assign mem_req_addr_c   = 'x;
-        assign mem_req_rw_c     = 'x;
-        assign mem_req_pmask_c  = 'x;
-        assign mem_req_byteen_c = 'x;
-        assign mem_req_wsel_c   = 'x;
-        assign mem_req_data_c   = 'x;
-        assign mem_req_tag_c    = 'x;
-        `UNUSED_VAR (mem_req_ready_c)
-
-        `UNUSED_VAR (mem_rsp_valid_c)
-        `UNUSED_VAR (mem_rsp_data_c)
-        `UNUSED_VAR (mem_rsp_tag_c)
-        assign mem_rsp_ready_c = 0;
-
-    `ifdef PERF_ENABLE
-        assign perf_read_miss_per_bank  = '0;
-        assign perf_write_miss_per_bank = '0;
-        assign perf_mshr_stall_per_bank = '0;
-    `endif
-
-    end else begin
-
-        wire [`CACHE_LINE_WIDTH-1:0] mem_rsp_data_qual;
-        wire [MEM_TAG_IN_WIDTH-1:0] mem_rsp_tag_qual;
-
-        wire mrsq_out_valid, mrsq_out_ready;
-
-        `RESET_RELAY (mrsq_reset);
-        
-        VX_elastic_buffer #(
-            .DATAW   (MEM_TAG_IN_WIDTH + `CACHE_LINE_WIDTH), 
-            .SIZE    (MRSQ_SIZE),
-            .OUT_REG (MRSQ_SIZE > 2)
-        ) mem_rsp_queue (
-            .clk        (clk),
-            .reset      (mrsq_reset),
-            .ready_in   (mem_rsp_ready_c),
-            .valid_in   (mem_rsp_valid_c),
-            .data_in    ({mem_rsp_tag_c,   mem_rsp_data_c}),                
-            .data_out   ({mem_rsp_tag_qual, mem_rsp_data_qual}),
-            .ready_out  (mrsq_out_ready),
-            .valid_out  (mrsq_out_valid)
-        );
-
-        `UNUSED_VAR (mem_rsp_tag_c)
-
-        ///////////////////////////////////////////////////////////////////////
-
-        wire [`LINE_SEL_BITS-1:0]   flush_addr;
-        wire                        flush_enable;
-
-        `RESET_RELAY (flush_reset);
-
-        VX_flush_ctrl #( 
-            .CACHE_SIZE (CACHE_SIZE),
-            .CACHE_LINE_SIZE (CACHE_LINE_SIZE),        
-            .NUM_BANKS  (NUM_BANKS),
-            .NUM_WAYS   (NUM_WAYS)
-        ) flush_ctrl (
-            .clk       (clk),
-            .reset     (flush_reset),
-            .addr_out  (flush_addr),
-            .valid_out (flush_enable)
-        );
-
-        ///////////////////////////////////////////////////////////////////////
-        
-        wire [NUM_BANKS-1:0]                        per_bank_core_req_valid;
-        wire [NUM_BANKS-1:0][NUM_PORTS-1:0]         per_bank_core_req_pmask;
-        wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SEL_BITS-1:0] per_bank_core_req_wsel;
-        wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_core_req_byteen;
-        wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`WORD_WIDTH-1:0] per_bank_core_req_data;
-        wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`REQ_SEL_BITS-1:0] per_bank_core_req_idx;
-        wire [NUM_BANKS-1:0][NUM_PORTS-1:0][CORE_TAG_X_WIDTH-1:0] per_bank_core_req_tag;
-        wire [NUM_BANKS-1:0]                        per_bank_core_req_rw;  
-        wire [NUM_BANKS-1:0][`LINE_ADDR_WIDTH-1:0]  per_bank_core_req_addr;    
-        wire [NUM_BANKS-1:0]                        per_bank_core_req_ready;
-        
-        wire [NUM_BANKS-1:0]                        per_bank_core_rsp_valid;
-        wire [NUM_BANKS-1:0][NUM_PORTS-1:0]         per_bank_core_rsp_pmask;
-        wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`WORD_WIDTH-1:0] per_bank_core_rsp_data;
-        wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`REQ_SEL_BITS-1:0] per_bank_core_rsp_idx;
-        wire [NUM_BANKS-1:0][NUM_PORTS-1:0][CORE_TAG_X_WIDTH-1:0] per_bank_core_rsp_tag;    
-        wire [NUM_BANKS-1:0]                        per_bank_core_rsp_ready;
-
-        wire [NUM_BANKS-1:0]                        per_bank_mem_req_valid;    
-        wire [NUM_BANKS-1:0]                        per_bank_mem_req_rw;
-        wire [NUM_BANKS-1:0][NUM_PORTS-1:0]         per_bank_mem_req_pmask;  
-        wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_mem_req_byteen;
-        wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SEL_BITS-1:0] per_bank_mem_req_wsel;
-        wire [NUM_BANKS-1:0][`MEM_ADDR_WIDTH-1:0]   per_bank_mem_req_addr;
-        wire [NUM_BANKS-1:0][MSHR_ADDR_WIDTH-1:0]   per_bank_mem_req_id;
-        wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`WORD_WIDTH-1:0] per_bank_mem_req_data;
-        wire [NUM_BANKS-1:0]                        per_bank_mem_req_ready;
-
-        wire [NUM_BANKS-1:0]                        per_bank_mem_rsp_ready;
-        
-        if (NUM_BANKS == 1) begin
-            assign mrsq_out_ready = per_bank_mem_rsp_ready;
-        end else begin
-            assign mrsq_out_ready = per_bank_mem_rsp_ready[`MEM_TAG_TO_BANK_ID(mem_rsp_tag_qual)];
-        end
-
-        VX_core_req_bank_sel #(
-            .LINE_SIZE  (CACHE_LINE_SIZE),
-            .WORD_SIZE  (WORD_SIZE),
-            .ADDR_WIDTH (`WORD_ADDR_WIDTH),
-            .NUM_REQS   (NUM_REQS),
-            .NUM_BANKS  (NUM_BANKS),
-            .NUM_PORTS  (NUM_PORTS),        
-            .TAG_WIDTH  (CORE_TAG_X_WIDTH)
-        ) core_req_bank_sel (        
-            .clk        (clk),
-            .reset      (reset),
-        `ifdef PERF_ENABLE        
-            .bank_stalls(perf_cache_if.bank_stalls),
-        `endif     
-            .core_req_valid          (core_req_valid_c),
-            .core_req_rw             (core_req_rw_c), 
-            .core_req_addr           (core_req_addr_c),
-            .core_req_byteen         (core_req_byteen_c),
-            .core_req_data           (core_req_data_c),
-            .core_req_tag            (core_req_tag_c),
-            .core_req_ready          (core_req_ready_c),
-            .per_bank_core_req_valid (per_bank_core_req_valid),
-            .per_bank_core_req_pmask (per_bank_core_req_pmask),
-            .per_bank_core_req_rw    (per_bank_core_req_rw),
-            .per_bank_core_req_addr  (per_bank_core_req_addr),
-            .per_bank_core_req_wsel  (per_bank_core_req_wsel),
-            .per_bank_core_req_byteen(per_bank_core_req_byteen),
-            .per_bank_core_req_data  (per_bank_core_req_data),
-            .per_bank_core_req_tag   (per_bank_core_req_tag),
-            .per_bank_core_req_idx   (per_bank_core_req_idx),
-            .per_bank_core_req_ready (per_bank_core_req_ready)
-        );
-
-        ///////////////////////////////////////////////////////////////////////
-        
-        for (genvar i = 0; i < NUM_BANKS; i++) begin
-            
-            wire                        curr_bank_core_req_valid;
-            wire [NUM_PORTS-1:0]        curr_bank_core_req_pmask;
-            wire [NUM_PORTS-1:0][WORD_SEL_BITS-1:0] curr_bank_core_req_wsel;
-            wire [NUM_PORTS-1:0][WORD_SIZE-1:0] curr_bank_core_req_byteen;
-            wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] curr_bank_core_req_data;
-            wire [NUM_PORTS-1:0][`REQ_SEL_BITS-1:0] curr_bank_core_req_idx;
-            wire [NUM_PORTS-1:0][CORE_TAG_X_WIDTH-1:0] curr_bank_core_req_tag;
-            wire                        curr_bank_core_req_rw;  
-            wire [`LINE_ADDR_WIDTH-1:0] curr_bank_core_req_addr;        
-            wire                        curr_bank_core_req_ready;
-
-            wire                        curr_bank_core_rsp_valid;
-            wire [NUM_PORTS-1:0]        curr_bank_core_rsp_pmask;        
-            wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] curr_bank_core_rsp_data;
-            wire [NUM_PORTS-1:0][`REQ_SEL_BITS-1:0] curr_bank_core_rsp_idx;
-            wire [NUM_PORTS-1:0][CORE_TAG_X_WIDTH-1:0] curr_bank_core_rsp_tag;
-            wire                        curr_bank_core_rsp_ready;
-
-            wire                        curr_bank_mem_req_valid;
-            wire                        curr_bank_mem_req_rw;
-            wire [NUM_PORTS-1:0]        curr_bank_mem_req_pmask;
-            wire [NUM_PORTS-1:0][WORD_SIZE-1:0] curr_bank_mem_req_byteen;
-            wire [NUM_PORTS-1:0][WORD_SEL_BITS-1:0] curr_bank_mem_req_wsel;
-            wire [`LINE_ADDR_WIDTH-1:0] curr_bank_mem_req_addr;
-            wire [MSHR_ADDR_WIDTH-1:0]  curr_bank_mem_req_id;
-            wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] curr_bank_mem_req_data;
-            wire                        curr_bank_mem_req_ready;
-
-            wire                        curr_bank_mem_rsp_valid;
-            wire [MSHR_ADDR_WIDTH-1:0]  curr_bank_mem_rsp_id;
-            wire [`CACHE_LINE_WIDTH-1:0] curr_bank_mem_rsp_data;
-            wire                        curr_bank_mem_rsp_ready;
-
-            // Core Req
-            assign curr_bank_core_req_valid   = per_bank_core_req_valid[i];
-            assign curr_bank_core_req_pmask   = per_bank_core_req_pmask[i];
-            assign curr_bank_core_req_addr    = per_bank_core_req_addr[i];
-            assign curr_bank_core_req_rw      = per_bank_core_req_rw[i];
-            assign curr_bank_core_req_wsel    = per_bank_core_req_wsel[i];
-            assign curr_bank_core_req_byteen  = per_bank_core_req_byteen[i];
-            assign curr_bank_core_req_data    = per_bank_core_req_data[i];
-            assign curr_bank_core_req_tag     = per_bank_core_req_tag[i];
-            assign curr_bank_core_req_idx     = per_bank_core_req_idx[i];
-            assign per_bank_core_req_ready[i] = curr_bank_core_req_ready;
-
-            // Core WB
-            assign curr_bank_core_rsp_ready   = per_bank_core_rsp_ready[i];
-            assign per_bank_core_rsp_valid[i] = curr_bank_core_rsp_valid;
-            assign per_bank_core_rsp_pmask[i] = curr_bank_core_rsp_pmask;
-            assign per_bank_core_rsp_idx  [i] = curr_bank_core_rsp_idx;
-            assign per_bank_core_rsp_tag  [i] = curr_bank_core_rsp_tag;
-            assign per_bank_core_rsp_data [i] = curr_bank_core_rsp_data;
-
-            // Memory request            
-            assign per_bank_mem_req_valid[i]  = curr_bank_mem_req_valid;          
-            assign per_bank_mem_req_rw[i]     = curr_bank_mem_req_rw;
-            assign per_bank_mem_req_pmask[i]  = curr_bank_mem_req_pmask;
-            assign per_bank_mem_req_byteen[i] = curr_bank_mem_req_byteen;
-            assign per_bank_mem_req_wsel[i]   = curr_bank_mem_req_wsel;
-            if (NUM_BANKS == 1) begin  
-                assign per_bank_mem_req_addr[i] = curr_bank_mem_req_addr;
-            end else begin
-                assign per_bank_mem_req_addr[i] = `LINE_TO_MEM_ADDR(curr_bank_mem_req_addr, i); 
-            end
-            assign per_bank_mem_req_id[i]   = curr_bank_mem_req_id;
-            assign per_bank_mem_req_data[i] = curr_bank_mem_req_data;
-            assign curr_bank_mem_req_ready  = per_bank_mem_req_ready[i];
-
-            // Memory response
-            if (NUM_BANKS == 1) begin
-                assign curr_bank_mem_rsp_valid = mrsq_out_valid;        
-            end else begin
-                assign curr_bank_mem_rsp_valid = mrsq_out_valid && (`MEM_TAG_TO_BANK_ID(mem_rsp_tag_qual) == i);
-            end
-            assign curr_bank_mem_rsp_id      = `MEM_TAG_TO_REQ_ID(mem_rsp_tag_qual);
-            assign curr_bank_mem_rsp_data    = mem_rsp_data_qual;
-            assign per_bank_mem_rsp_ready[i] = curr_bank_mem_rsp_ready;
-
-            `RESET_RELAY (bank_reset);
-            
-            VX_bank #(                
-                .BANK_ID            (i),
-                .CACHE_ID           (CACHE_ID),
-                .CACHE_SIZE         (CACHE_SIZE),
-                .CACHE_LINE_SIZE    (CACHE_LINE_SIZE),
-                .NUM_BANKS          (NUM_BANKS),
-                .NUM_WAYS           (NUM_WAYS),
-                .NUM_PORTS          (NUM_PORTS),
-                .WORD_SIZE          (WORD_SIZE),
-                .NUM_REQS           (NUM_REQS),
-                .CREQ_SIZE          (CREQ_SIZE),
-                .CRSQ_SIZE          (CRSQ_SIZE),
-                .MSHR_SIZE          (MSHR_SIZE),
-                .MREQ_SIZE          (MREQ_SIZE),
-                .WRITE_ENABLE       (WRITE_ENABLE),
-                .REQ_UUID_BITS      (REQ_UUID_BITS),
-                .CORE_TAG_WIDTH     (CORE_TAG_X_WIDTH)
-            ) bank (
-                `SCOPE_BIND_VX_cache_bank(i)
-                
-                .clk                (clk),
-                .reset              (bank_reset),
-
-            `ifdef PERF_ENABLE
-                .perf_read_misses   (perf_read_miss_per_bank[i]),
-                .perf_write_misses  (perf_write_miss_per_bank[i]),
-                .perf_mshr_stalls   (perf_mshr_stall_per_bank[i]),
-            `endif
-                        
-                // Core request
-                .core_req_valid     (curr_bank_core_req_valid),
-                .core_req_pmask     (curr_bank_core_req_pmask),
-                .core_req_rw        (curr_bank_core_req_rw),
-                .core_req_byteen    (curr_bank_core_req_byteen),              
-                .core_req_addr      (curr_bank_core_req_addr),
-                .core_req_wsel      (curr_bank_core_req_wsel),
-                .core_req_data      (curr_bank_core_req_data),
-                .core_req_tag       (curr_bank_core_req_tag),
-                .core_req_idx       (curr_bank_core_req_idx),
-                .core_req_ready     (curr_bank_core_req_ready),
-
-                // Core response                
-                .core_rsp_valid     (curr_bank_core_rsp_valid),
-                .core_rsp_pmask     (curr_bank_core_rsp_pmask),
-                .core_rsp_idx       (curr_bank_core_rsp_idx),
-                .core_rsp_data      (curr_bank_core_rsp_data),
-                .core_rsp_tag       (curr_bank_core_rsp_tag),
-                .core_rsp_ready     (curr_bank_core_rsp_ready),
-
-                // Memory request
-                .mem_req_valid      (curr_bank_mem_req_valid),
-                .mem_req_rw         (curr_bank_mem_req_rw),
-                .mem_req_pmask      (curr_bank_mem_req_pmask),
-                .mem_req_byteen     (curr_bank_mem_req_byteen),
-                .mem_req_wsel       (curr_bank_mem_req_wsel),
-                .mem_req_addr       (curr_bank_mem_req_addr),
-                .mem_req_id         (curr_bank_mem_req_id),
-                .mem_req_data       (curr_bank_mem_req_data),   
-                .mem_req_ready      (curr_bank_mem_req_ready),
-
-                // Memory response
-                .mem_rsp_valid      (curr_bank_mem_rsp_valid),    
-                .mem_rsp_id         (curr_bank_mem_rsp_id),            
-                .mem_rsp_data       (curr_bank_mem_rsp_data),
-                .mem_rsp_ready      (curr_bank_mem_rsp_ready),
-
-                // flush    
-                .flush_enable       (flush_enable),
-                .flush_addr         (flush_addr)
-            );
-        end   
-
-        VX_core_rsp_merge #(
-            .NUM_REQS  (NUM_REQS),
-            .NUM_BANKS (NUM_BANKS),
-            .NUM_PORTS (NUM_PORTS),
-            .WORD_SIZE (WORD_SIZE),
-            .TAG_WIDTH (CORE_TAG_X_WIDTH),
-            .OUT_REG   (NUM_BANKS >= 2)
-        ) core_rsp_merge (
-            .clk                     (clk),
-            .reset                   (reset),                    
-            .per_bank_core_rsp_valid (per_bank_core_rsp_valid),   
-            .per_bank_core_rsp_pmask (per_bank_core_rsp_pmask),   
-            .per_bank_core_rsp_data  (per_bank_core_rsp_data),
-            .per_bank_core_rsp_tag   (per_bank_core_rsp_tag),
-            .per_bank_core_rsp_idx   (per_bank_core_rsp_idx),   
-            .per_bank_core_rsp_ready (per_bank_core_rsp_ready),
-            .core_rsp_valid          (core_rsp_valid_c),
-            .core_rsp_tag            (core_rsp_tag_c),
-            .core_rsp_data           (core_rsp_data_c),  
-            .core_rsp_ready          (core_rsp_ready_c)
-        ); 
-
-        wire [NUM_BANKS-1:0][(`MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + NUM_PORTS * (1 + WORD_SIZE + WORD_SEL_BITS + `WORD_WIDTH))-1:0] data_in;
-        for (genvar i = 0; i < NUM_BANKS; ++i) begin
-            assign data_in[i] = {per_bank_mem_req_addr[i], per_bank_mem_req_id[i], per_bank_mem_req_rw[i], per_bank_mem_req_pmask[i], per_bank_mem_req_byteen[i], per_bank_mem_req_wsel[i], per_bank_mem_req_data[i]};
-        end
-
-        wire [MSHR_ADDR_WIDTH-1:0] mem_req_id;
-
-        `RESET_RELAY (mreq_reset);
-
-        VX_stream_mux #(
-            .NUM_REQS (NUM_BANKS),
-            .DATAW    (`MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + NUM_PORTS * (1 + WORD_SIZE + WORD_SEL_BITS + `WORD_WIDTH)),
-            .BUFFERED (NUM_BANKS >= 2),
-            .ARBITER  ("R")
-        ) mem_req_mux (
-            .clk       (clk),
-            .reset     (mreq_reset),
-            `UNUSED_PIN (sel_in),
-            .valid_in  (per_bank_mem_req_valid),
-            .data_in   (data_in),
-            .ready_in  (per_bank_mem_req_ready),   
-            .valid_out (mem_req_valid_c),   
-            .data_out  ({mem_req_addr_c, mem_req_id, mem_req_rw_c, mem_req_pmask_c, mem_req_byteen_c, mem_req_wsel_c, mem_req_data_c}),
-            .ready_out (mem_req_ready_c)
-        );
-
-        if (NUM_BANKS == 1) begin
-            assign mem_req_tag_c = MEM_TAG_IN_WIDTH'(mem_req_id);
-        end else begin
-            assign mem_req_tag_c = MEM_TAG_IN_WIDTH'({`MEM_ADDR_TO_BANK_ID(mem_req_addr_c), mem_req_id});
-        end
+        assign mem_req_rw_s     = 0;
+        assign mem_req_byteen_s = 'x;
+        assign mem_req_data_s   = 'x;
     end
 
 `ifdef PERF_ENABLE
@@ -721,8 +545,8 @@ module VX_cache #(
     wire [$clog2(NUM_REQS+1)-1:0] perf_core_writes_per_cycle;
     wire [$clog2(NUM_REQS+1)-1:0] perf_crsp_stall_per_cycle;
     
-    wire [NUM_REQS-1:0] perf_core_reads_per_req  = core_req_valid_c & core_req_ready_c & ~core_req_rw;
-    wire [NUM_REQS-1:0] perf_core_writes_per_req = core_req_valid_c & core_req_ready_c & core_req_rw;
+    wire [NUM_REQS-1:0] perf_core_reads_per_req  = core_req_valid & core_req_ready & ~core_req_rw;
+    wire [NUM_REQS-1:0] perf_core_writes_per_req = core_req_valid & core_req_ready & core_req_rw;
         
     // per cycle: read misses, write misses, msrq stalls, pipeline stalls
     wire [$clog2(NUM_BANKS+1)-1:0] perf_read_miss_per_cycle;
@@ -780,47 +604,6 @@ module VX_cache #(
     assign perf_cache_if.mshr_stalls  = perf_mshr_stalls;
     assign perf_cache_if.mem_stalls   = perf_mem_stalls;
     assign perf_cache_if.crsp_stalls  = perf_crsp_stalls;
-`endif
-
-`ifdef DBG_TRACE_CACHE_BANK
-
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
-        wire [`UP(REQ_UUID_BITS)-1:0] core_req_uuid;
-        wire [`UP(REQ_UUID_BITS)-1:0] core_rsp_uuid;
-
-        wire core_req_fire = core_req_if[i].valid & core_req_if[i].ready;
-        wire core_rsp_fire = core_rsp_if[i].valid & core_rsp_if[i].ready;
-
-        `ASSIGN_REQ_UUID (core_req_uuid, core_req_if[i].tag)
-        `ASSIGN_REQ_UUID (core_rsp_uuid, core_rsp_if[i].tag)
-        
-        always @(posedge clk) begin
-            if (core_req_fire) begin
-                if (core_req_if[i].rw)
-                    dpi_trace(1, "%d: %s core-wr-req: tid=%0d, addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", $time, CACHE_ID, i, `TO_FULL_ADDR(core_req_if[i].addr), core_req_if[i].tag, core_req_if[i].byteen, core_req_if[i].data, core_req_uuid);
-                else
-                    dpi_trace(1, "%d: %s core-rd-req: tid=%0d, addr=0x%0h, tag=0x%0h (#%0d)\n", $time, CACHE_ID, i, `TO_FULL_ADDR(core_req_if[i].addr), core_req_if[i].tag, core_req_uuid);
-            end
-            if (core_rsp_fire) begin
-                dpi_trace(1, "%d: %s core-rd-rsp: tid=%0d, tag=0x%0h, data=0x%0h (#%0d)\n", $time, CACHE_ID, i, core_rsp_if[i].tag, core_rsp_if[i].data, core_rsp_uuid);
-            end        
-        end
-    end   
-
-    wire mem_req_fire = mem_req_if.valid & mem_req_if.ready;
-    wire mem_rsp_fire = mem_rsp_if.valid & mem_rsp_if.ready;
-
-    always @(posedge clk) begin
-        if (mem_req_fire) begin
-            if (mem_req_if.rw)
-                dpi_trace(1, "%d: %s mem-wr-req: addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h\n", $time, CACHE_ID, `TO_FULL_ADDR(mem_req_if.addr), mem_req_if.tag, mem_req_if.byteen, mem_req_if.data);
-            else
-                dpi_trace(1, "%d: %s mem-rd-req: addr=0x%0h, tag=0x%0h\n", $time, CACHE_ID, `TO_FULL_ADDR(mem_req_if.addr), mem_req_if.tag);
-        end
-        if (mem_rsp_fire) begin
-            dpi_trace(1, "%d: %s mem-rd-rsp: tag=0x%0h, data=0x%0h\n", $time, CACHE_ID, mem_rsp_if.tag, mem_rsp_if.data);
-        end
-    end    
 `endif
 
 endmodule

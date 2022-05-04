@@ -65,12 +65,12 @@ module VX_shared_mem #(
     wire [NUM_BANKS-1:0]                    per_bank_req_rw_unqual;  
     wire [NUM_BANKS-1:0][BANK_ADDR_WIDTH-1:0] per_bank_req_addr_unqual;
     wire [NUM_BANKS-1:0][WORD_SIZE-1:0]     per_bank_req_byteen_unqual;
-    wire [NUM_BANKS-1:0][WORD_WIDTH-1:0]   per_bank_req_data_unqual;
+    wire [NUM_BANKS-1:0][WORD_WIDTH-1:0]    per_bank_req_data_unqual;
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0]     per_bank_req_tag_unqual;
-    wire [NUM_BANKS-1:0][REQ_SEL_BITS-1:0] per_bank_req_idx_unqual;
+    wire [NUM_BANKS-1:0][REQ_SEL_BITS-1:0]  per_bank_req_idx_unqual;
     wire [NUM_BANKS-1:0]                    per_bank_req_ready_unqual;
     
-    VX_core_req_bank_sel #(
+    VX_req_dispatch #(
         .LINE_SIZE  (WORD_SIZE),
         .WORD_SIZE  (WORD_SIZE),
         .ADDR_WIDTH (ADDR_WIDTH),
@@ -78,11 +78,11 @@ module VX_shared_mem #(
         .NUM_BANKS  (NUM_BANKS),
         .NUM_PORTS  (1),      
         .TAG_WIDTH  (TAG_WIDTH)
-    ) core_req_bank_sel (        
+    ) req_dispatch (        
         .clk        (clk),
         .reset      (reset),
     `ifdef PERF_ENABLE        
-        .bank_stalls(perf_cache_if.bank_stalls),
+        .bank_stalls (perf_cache_if.bank_stalls),
     `endif     
         .core_req_valid          (req_valid),
         .core_req_rw             (req_rw),
@@ -216,7 +216,7 @@ module VX_shared_mem #(
         assign per_bank_rsp_idx[i]   = per_bank_req_idx[i];
     end
 
-    VX_core_rsp_merge #(
+    VX_rsp_merge #(
         .NUM_REQS  (NUM_REQS),
         .NUM_BANKS (NUM_BANKS),
         .NUM_PORTS (1),

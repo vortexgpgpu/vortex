@@ -59,6 +59,10 @@
 
 `define SCOPE_IO_VX_cache
 
+`define SCOPE_IO_VX_cache_wrap
+
+`define SCOPE_BIND_VX_cache_wrap_cache
+
 `define SCOPE_BIND_VX_cache_bank(__i__)
 
 `define SCOPE_BIND_Vortex_l3cache

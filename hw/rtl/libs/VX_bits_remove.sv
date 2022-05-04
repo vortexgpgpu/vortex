@@ -9,7 +9,7 @@ module VX_bits_remove #(
     input wire [N-1:0] data_in, 
     output wire [N-S-1:0] data_out
 );
-    `STATIC_ASSERT (((POS + S) <= N), ("invalid parameter"))
+    `STATIC_ASSERT (((0 == S) || ((POS + S) <= N)), ("invalid parameter"))
     
     if (POS == 0 || S == 0) begin
         assign data_out = data_in[N-1:S];

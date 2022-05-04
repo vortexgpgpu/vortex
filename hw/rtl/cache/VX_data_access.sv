@@ -18,9 +18,7 @@ module VX_data_access #(
     // Enable cache writeable
     parameter WRITE_ENABLE      = 1,
     // Request debug identifier
-    parameter REQ_UUID_BITS     = 0,
-
-    localparam WORD_SEL_BITS    = `UP(`WORD_SEL_BITS)
+    parameter REQ_UUID_BITS     = 0
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -35,7 +33,7 @@ module VX_data_access #(
     input wire                          fill, 
     input wire                          write,
     input wire [`LINE_ADDR_WIDTH-1:0]   addr,
-    input wire [NUM_PORTS-1:0][WORD_SEL_BITS-1:0] wsel,
+    input wire [NUM_PORTS-1:0][`UP(`WORD_SEL_BITS)-1:0] wsel,
     input wire [NUM_PORTS-1:0]          pmask,
     input wire [NUM_PORTS-1:0][WORD_SIZE-1:0] byteen,
     input wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] fill_data,
@@ -129,6 +127,7 @@ module VX_data_access #(
             assign read_data[i] = rdata[wsel[i]];
         end
     end else begin
+        `UNUSED_VAR (wsel)
         assign read_data = rdata;
     end
 

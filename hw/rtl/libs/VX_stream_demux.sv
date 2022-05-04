@@ -53,7 +53,7 @@ module VX_stream_demux #(
 
             VX_generic_arbiter #(
                 .NUM_REQS    (NUM_REQS),
-                .LOCK_ENABLE (1),
+                .LOCK_ENABLE (LOCK_ENABLE),
                 .TYPE        (ARBITER)
             ) arbiter (
                 .clk          (clk),

@@ -106,7 +106,7 @@ module VX_cluster #(
         `CACHE_REQ_TO_MEM(rcache_req_qual_if, rcache_req_if, i);
     end
 
-    VX_cache #(
+    VX_cache_wrap #(
         .CACHE_ID           (`RCACHE_ID),
         .CACHE_SIZE         (`RCACHE_SIZE),
         .CACHE_LINE_SIZE    (`RCACHE_LINE_SIZE),
@@ -229,7 +229,7 @@ module VX_cluster #(
         `CACHE_REQ_TO_MEM(ocache_req_qual_if, ocache_req_if, i);
     end
 
-    VX_cache #(
+    VX_cache_wrap #(
         .CACHE_ID           (`OCACHE_ID),
         .CACHE_SIZE         (`OCACHE_SIZE),
         .CACHE_LINE_SIZE    (`OCACHE_LINE_SIZE),
@@ -365,7 +365,7 @@ module VX_cluster #(
 
     `RESET_RELAY (l2_reset);
 
-    VX_cache #(
+    VX_cache_wrap #(
         .CACHE_ID           (`L2_CACHE_ID),
         .CACHE_SIZE         (`L2_CACHE_SIZE),
         .CACHE_LINE_SIZE    (`L2_CACHE_LINE_SIZE),

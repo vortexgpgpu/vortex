@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_core_req_bank_sel #(  
+module VX_req_dispatch #(  
     // Size of a line in bytes
     parameter LINE_SIZE     = 4, 
     // Size of a word in bytes
