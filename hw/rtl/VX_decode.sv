@@ -487,6 +487,7 @@ module VX_decode  #(
     assign wstall_if.wid     = ifetch_rsp_if.wid;
     assign wstall_if.stalled = is_wstall;
 
+    assign ifetch_rsp_if.ibuf_pop = decode_if.ibuf_pop;
     assign ifetch_rsp_if.ready = decode_if.ready;
 
 `ifdef PERF_ENABLE

@@ -2,7 +2,7 @@
 
 interface VX_decode_if ();
 
-    wire                    valid;    
+    wire                    valid;
     wire [`UUID_BITS-1:0]   uuid;
     wire [`NW_BITS-1:0]     wid;
     wire [`NUM_THREADS-1:0] tmask;
@@ -18,6 +18,7 @@ interface VX_decode_if ();
     wire [`NR_BITS-1:0]     rs1;
     wire [`NR_BITS-1:0]     rs2;
     wire [`NR_BITS-1:0]     rs3;
+    wire [`NUM_WARPS-1:0]   ibuf_pop;
     wire                    ready;
 
     modport master (
@@ -37,6 +38,7 @@ interface VX_decode_if ();
         output rs1,
         output rs2,
         output rs3,
+        input  ibuf_pop,
         input  ready
     );
 
@@ -57,6 +59,7 @@ interface VX_decode_if ();
         input  rs1,
         input  rs2,
         input  rs3,
+        output ibuf_pop,
         output ready
     );
 

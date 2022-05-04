@@ -8,6 +8,7 @@ interface VX_ifetch_rsp_if ();
     wire [`NW_BITS-1:0]     wid;
     wire [31:0]             PC;
     wire [31:0]             data;
+    wire [`NUM_WARPS-1:0]   ibuf_pop;
     wire                    ready;
 
     modport master (
@@ -17,6 +18,7 @@ interface VX_ifetch_rsp_if ();
         output wid,
         output PC,
         output data,
+        input  ibuf_pop,
         input  ready
     );
 
@@ -27,6 +29,7 @@ interface VX_ifetch_rsp_if ();
         input  wid,
         input  PC,
         input  data,
+        output ibuf_pop,
         output ready
     );
 

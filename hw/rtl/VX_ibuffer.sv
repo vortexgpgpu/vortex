@@ -13,15 +13,18 @@ module VX_ibuffer #(
     VX_ibuffer_if.master ibuffer_if
 );
     `UNUSED_PARAM (CORE_ID)
+
+    localparam SIZE      = (`IBUF_SIZE + 1);
+    localparam ALM_FULL  = SIZE - 1;
+    localparam ALM_EMPTY = 1;
     
     localparam DATAW   = `UUID_BITS + `NUM_THREADS + 32 + `EX_BITS + `INST_OP_BITS + `INST_FRM_BITS + 1 + (`NR_BITS * 4) + 32 + 1 + 1;
-    localparam ADDRW   = $clog2(`IBUF_SIZE+1);
+    localparam ADDRW   = $clog2(SIZE);
     localparam NWARPSW = $clog2(`NUM_WARPS+1);
 
-    reg [`NUM_WARPS-1:0][ADDRW-1:0] used_r;
-    reg [`NUM_WARPS-1:0] full_r, empty_r, alm_empty_r;
-    
-    wire [`NUM_WARPS-1:0] q_full, q_empty, q_alm_empty;
+    `STATIC_ASSERT ((`IBUF_SIZE >= 2), ("invalid parameter"))
+
+    wire [`NUM_WARPS-1:0] q_full, q_empty, q_alm_full, q_alm_empty;
     wire [DATAW-1:0] q_data_in;
     wire [`NUM_WARPS-1:0][DATAW-1:0] q_data_prev;    
     reg [`NUM_WARPS-1:0][DATAW-1:0] q_data_out;
@@ -31,21 +34,24 @@ module VX_ibuffer #(
 
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin
 
-        wire writing = enq_fire && (i == decode_if.wid); 
-        wire reading = deq_fire && (i == ibuffer_if.wid);
+        reg [ADDRW-1:0] used_r;
+        reg full_r, empty_r, alm_full_r, alm_empty_r;
 
-        wire going_empty = empty_r[i] || (alm_empty_r[i] && reading);
+        wire push = enq_fire && (i == decode_if.wid); 
+        wire pop  = deq_fire && (i == ibuffer_if.wid);
+
+        wire going_empty = empty_r || (alm_empty_r && pop);
 
         VX_elastic_buffer #(
             .DATAW   (DATAW),
-            .SIZE    (`IBUF_SIZE),
+            .SIZE    (SIZE-1),
             .OUT_REG (1)
         ) queue (
             .clk      (clk),
             .reset    (reset),
-            .valid_in (writing && !going_empty),
+            .valid_in (push && !going_empty),
             .data_in  (q_data_in),            
-            .ready_out(reading),
+            .ready_out(pop),
             .data_out (q_data_prev[i]),            
             `UNUSED_PIN (ready_in),
             `UNUSED_PIN (valid_out)
@@ -53,40 +59,48 @@ module VX_ibuffer #(
 
         always @(posedge clk) begin
             if (reset) begin            
-                used_r[i]      <= 0;
-                full_r[i]      <= 0; 
-                empty_r[i]     <= 1; 
-                alm_empty_r[i] <= 1;
+                used_r      <= 0;
+                full_r      <= 0; 
+                alm_full_r  <= 0;
+                empty_r     <= 1; 
+                alm_empty_r <= 1;
             end else begin  
-                if (writing) begin
-                    if (!reading) begin
-                        empty_r[i] <= 0;
-                        if (used_r[i] == 1)
-                            alm_empty_r[i] <= 0;
-                        if (used_r[i] == ADDRW'(`IBUF_SIZE))
-                            full_r[i] <= 1;
+                if (push) begin
+                    if (!pop) begin
+                        empty_r <= 0;
+                        if (used_r == ADDRW'(ALM_EMPTY))
+                            alm_empty_r <= 0;
+                        if (used_r == ADDRW'(SIZE-1))
+                            full_r <= 1;
+                        if (used_r == ADDRW'(ALM_FULL-1))
+                            alm_full_r <= 1;
                     end
-                end else if (reading) begin
-                    full_r[i] <= 0; 
-                    if (used_r[i] == ADDRW'(1))
-                        empty_r[i] <= 1;
-                    if (used_r[i] == ADDRW'(2))
-                        alm_empty_r[i] <= 1;
+                end else if (pop) begin
+                    full_r <= 0; 
+                    if (used_r == ADDRW'(ALM_FULL))
+                        alm_full_r <= 0;
+                    if (used_r == ADDRW'(1))
+                        empty_r <= 1;
+                    if (used_r == ADDRW'(ALM_EMPTY+1))
+                        alm_empty_r <= 1;
                 end
-                used_r[i] <= used_r[i] + ADDRW'($signed(2'(writing) - 2'(reading)));
+                used_r <= used_r + ADDRW'($signed(2'(push) - 2'(pop)));
             end 
 
-            if (writing && going_empty) begin                                                       
+            if (push && going_empty) begin                                                       
                 q_data_out[i] <= q_data_in;
-            end else if (reading) begin
+            end else if (pop) begin
                 q_data_out[i] <= q_data_prev[i];
             end                  
         end
         
-        assign q_full[i]      = full_r[i];
-        assign q_empty[i]     = empty_r[i];
-        assign q_alm_empty[i] = alm_empty_r[i];
+        assign q_full[i]      = full_r;
+        assign q_empty[i]     = empty_r;
+        assign q_alm_full[i]  = alm_full_r;
+        assign q_alm_empty[i] = alm_empty_r;
     end
+
+    `UNUSED_VAR (q_alm_full)
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -150,21 +164,22 @@ module VX_ibuffer #(
             num_warps   <= 0;
         end else begin
             valid_table <= valid_table_n;            
-            deq_valid   <= deq_valid_n;
-            
-
+            deq_valid   <= deq_valid_n;            
             if (warp_added && !warp_removed) begin
                 num_warps <= num_warps + NWARPSW'(1);
             end else if (warp_removed && !warp_added) begin
                 num_warps <= num_warps - NWARPSW'(1);                
             end
-        end
-            
+        end            
         deq_wid    <= deq_wid_n;
         deq_wid_rr <= deq_wid_rr_n;
         deq_instr  <= deq_instr_n;
-    end
+    end    
     
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
+        assign decode_if.ibuf_pop[i] = deq_fire && (ibuffer_if.wid == `NW_BITS'(i));
+    end
+
     assign decode_if.ready = ~q_full[decode_if.wid];
     
     assign q_data_in = {decode_if.uuid,
