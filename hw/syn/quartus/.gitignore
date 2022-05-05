@@ -19,26 +19,11 @@
 /core/*
 !/core/Makefile
 
-/top1/*
-!/top1/Makefile
+/top/*
+!/top/Makefile
 
-/top2/*
-!/top2/Makefile
-
-/top4/*
-!/top4/Makefile
-
-/top8/*
-!/top8/Makefile
-
-/top16/*
-!/top16/Makefile
-
-/top32/*
-!/top32/Makefile
-
-/top64/*
-!/top64/Makefile
+/top-gfx/*
+!/top-gfx/Makefile
 
 /test/*
 !/test/Makefile

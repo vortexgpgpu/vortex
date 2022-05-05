@@ -1,6 +1,6 @@
 BUILD_DIR ?= build
 
-.PHONY: dogfood unittest pipeline smem cache fpu_core core vortex vortex-gfx top1 top2 top4 top8 top16 top32 top64 texunit test
+.PHONY: dogfood unittest pipeline smem cache fpu_core core vortex vortex-gfx top top-gfx texunit test
 
 dogfood:
 	mkdir -p dogfood/$(BUILD_DIR)
@@ -47,40 +47,15 @@ vortex-gfx:
 	cp vortex-gfx/Makefile vortex-gfx/$(BUILD_DIR)
 	$(MAKE) -C vortex-gfx/$(BUILD_DIR) clean && $(MAKE) -C vortex-gfx/$(BUILD_DIR) > vortex-gfx/$(BUILD_DIR)/build.log 2>&1 &
 
-top1:
-	mkdir -p top1/$(BUILD_DIR)
-	cp top1/Makefile top1/$(BUILD_DIR)
-	$(MAKE) -C top1/$(BUILD_DIR) clean && $(MAKE) -C top1/$(BUILD_DIR) > top1/$(BUILD_DIR)/build.log 2>&1 &
+top:
+	mkdir -p top/$(BUILD_DIR)
+	cp top/Makefile top/$(BUILD_DIR)
+	$(MAKE) -C top/$(BUILD_DIR) clean && $(MAKE) -C top/$(BUILD_DIR) > top/$(BUILD_DIR)/build.log 2>&1 &
 
-top2:
-	mkdir -p top2/$(BUILD_DIR)
-	cp top2/Makefile top2/$(BUILD_DIR)
-	$(MAKE) -C top2/$(BUILD_DIR) clean && $(MAKE) -C top2/$(BUILD_DIR) > top2/$(BUILD_DIR)/build.log 2>&1 &
-
-top4:
-	mkdir -p top4/$(BUILD_DIR)
-	cp top4/Makefile top4/$(BUILD_DIR)
-	$(MAKE) -C top4/$(BUILD_DIR) clean && $(MAKE) -C top4/$(BUILD_DIR) > top4/$(BUILD_DIR)/build.log 2>&1 &
-
-top8:
-	mkdir -p top8/$(BUILD_DIR)
-	cp top8/Makefile top8/$(BUILD_DIR)
-	$(MAKE) -C top8/$(BUILD_DIR) clean && $(MAKE) -C top8/$(BUILD_DIR) > top8/$(BUILD_DIR)/build.log 2>&1 &
-
-top16:
-	mkdir -p top16/$(BUILD_DIR)
-	cp top16/Makefile top16/$(BUILD_DIR)
-	$(MAKE) -C top16/$(BUILD_DIR) clean && $(MAKE) -C top16/$(BUILD_DIR) > top16/$(BUILD_DIR)/build.log 2>&1 &
-
-top32:
-	mkdir -p top32/$(BUILD_DIR)
-	cp top32/Makefile top32/$(BUILD_DIR)
-	$(MAKE) -C top32/$(BUILD_DIR) clean && $(MAKE) -C top32/$(BUILD_DIR) > top32/$(BUILD_DIR)/build.log 2>&1 &
-
-top64:
-	mkdir -p top64/$(BUILD_DIR)
-	cp top64/Makefile top64/$(BUILD_DIR)
-	$(MAKE) -C top64/$(BUILD_DIR) clean && $(MAKE) -C top64/$(BUILD_DIR) > top64/$(BUILD_DIR)/build.log 2>&1 &
+top-gfx:
+	mkdir -p top-gfx/$(BUILD_DIR)
+	cp top-gfx/Makefile top-gfx/$(BUILD_DIR)
+	$(MAKE) -C top-gfx/$(BUILD_DIR) clean && $(MAKE) -C top-gfx/$(BUILD_DIR) > top-gfx/$(BUILD_DIR)/build.log 2>&1 &
 
 texunit:
 	mkdir -p texunit/$(BUILD_DIR)

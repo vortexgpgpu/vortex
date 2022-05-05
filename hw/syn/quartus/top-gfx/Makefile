@@ -1,26 +1,27 @@
-PROJECT = Vortex
-TOP_LEVEL_ENTITY = Vortex
-SRC_FILE = Vortex.sv
+PROJECT = vortex_afu
+TOP_LEVEL_ENTITY = vortex_afu
+SRC_FILE = vortex_afu.sv
 RTL_DIR = ../../../../rtl
 THIRD_PARTY_DIR = ../../../../../third_party
 
 FAMILY = "Arria 10"
 DEVICE = 10AX115N3F40E2SG
-FPU_CORE_PATH = $(RTL_DIR)/fp_cores/altera/arria10
+FPU_CORE_PATH=$(RTL_DIR)/fp_cores/altera/arria10
 
 #FAMILY = "Stratix 10"
 #DEVICE = 1SX280HN2F43E2VG
 #FPU_CORE_PATH = $(RTL_DIR)/fp_cores/altera/stratix10
 
 CONFIGS += -set "EXT_GFX_ENABLE"
+CONFIGS += -set "NOPAE"
 
 #CONFIGS += -set "NUM_CORES=2" -set "L2_ENABLE" -set "L2_CACHE_SIZE=32768" -set "L1_DISABLE"
 CONFIGS += -set "NUM_CORES=4" -set "L2_ENABLE" -set "L2_CACHE_SIZE=65536" -set "L1_DISABLE"
 #CONFIGS +=  -set "NUM_CORES=8" -set "L2_ENABLE" -set "L2_CACHE_SIZE=131072" -set "L1_DISABLE"
 
 FPU_INCLUDE = $(RTL_DIR)/fp_cores;$(FPU_CORE_PATH);$(THIRD_PARTY_DIR)/fpnew/src;$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl;$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include;$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src
-GFX_INCLUDE = $(RTL_DIR)/tex_unit;$(RTL_DIR)/raster_unit;$(RTL_DIR)/rop_unit
-RTL_INCLUDE = $(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces;$(RTL_DIR)/cache;$(FPU_INCLUDE);$(GFX_INCLUDE)
+TEX_INCLUDE = $(RTL_DIR)/tex_unit;$(RTL_DIR)/raster_unit;$(RTL_DIR)/rop_unit
+RTL_INCLUDE = $(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces;$(RTL_DIR)/cache;$(RTL_DIR)/afu;$(RTL_DIR)/afu/ccip;$(FPU_INCLUDE);$(TEX_INCLUDE)
 
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
