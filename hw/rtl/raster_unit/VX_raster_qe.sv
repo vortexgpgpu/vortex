@@ -39,23 +39,27 @@ module VX_raster_qe #(
     end
 
     logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] new_edge_val_r [2:0][1:0][1:0];
+
+    logic [3*2*2*`RASTER_PRIMITIVE_DATA_BITS-1:0] pipe_reg_2_in, pipe_reg_2_r;
     for (genvar i = 0; i < 2; ++i) begin
         for (genvar j = 0; j < 2; ++j) begin
             for (genvar k = 0; k < 3; ++k) begin
-                VX_pipe_register #(
-                    .DATAW  (`RASTER_PRIMITIVE_DATA_BITS),
-                    .RESETW (1)
-                ) qe_pipe_reg_2 (
-                    .clk      (clk),
-                    .reset    (reset),
-                    .enable   (enable),
-                    .data_in  (new_edge_val[k][i][j]),
-                    .data_out (new_edge_val_r[k][i][j])
-                );
+                assign pipe_reg_2_in[((i*2+j)*3+k)*`RASTER_PRIMITIVE_DATA_BITS+:`RASTER_PRIMITIVE_DATA_BITS] = new_edge_val[k][i][j];
+                assign new_edge_val_r[k][i][j] = pipe_reg_2_r[((i*2+j)*3+k)*`RASTER_PRIMITIVE_DATA_BITS+:`RASTER_PRIMITIVE_DATA_BITS];
             end
         end
     end
 
+    VX_pipe_register #(
+        .DATAW  (3*2*2*`RASTER_PRIMITIVE_DATA_BITS),
+        .RESETW (1)
+    ) qe_pipe_reg_2 (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  (pipe_reg_2_in),
+        .data_out (pipe_reg_2_r)
+    );
 
     for (genvar i = 0; i < 2; ++i) begin
         for (genvar j = 0; j < 2; ++j) begin
