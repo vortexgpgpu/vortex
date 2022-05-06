@@ -89,6 +89,31 @@ module VX_raster_be #(
     end
     for (genvar i = 0; i < RASTER_QUAD_NUM; ++i) begin
         for (genvar j = 0; j < RASTER_QUAD_NUM; ++j) begin
+            logic signed  [`RASTER_PRIMITIVE_DATA_BITS-1:0]       edges_r[2:0][2:0];
+            logic signed  [`RASTER_PRIMITIVE_DATA_BITS-1:0]       edge_func_val_r[2:0];
+            logic         [`RASTER_DIM_BITS-1:0]                  x_loc_r, y_loc_r;
+            VX_pipe_register #(
+                .DATAW  (2*`RASTER_DIM_BITS + 3*3*`RASTER_PRIMITIVE_DATA_BITS + 3*`RASTER_PRIMITIVE_DATA_BITS),
+                .RESETW (1)
+            ) qe_pipe_reg_1 (
+                .clk      (clk),
+                .reset    (reset),
+                .enable   (fsm_complete),
+                .data_in  ({
+                    temp_quad_x_loc[i*RASTER_QUAD_NUM+j], temp_quad_y_loc[i*RASTER_QUAD_NUM+j],
+                    local_edge_func_val[i*RASTER_QUAD_NUM+j][0], local_edge_func_val[i*RASTER_QUAD_NUM+j][1], local_edge_func_val[i*RASTER_QUAD_NUM+j][2],
+                    edges[0][0], edges[0][1], edges[0][2],
+                    edges[1][0], edges[1][1], edges[1][2],
+                    edges[2][0], edges[2][1], edges[2][2]
+                }),
+                .data_out ({
+                    x_loc_r, y_loc_r,
+                    edge_func_val_r[0], edge_func_val_r[1], edge_func_val_r[2],
+                    edges_r[0][0], edges_r[0][1], edges_r[0][2],
+                    edges_r[1][0], edges_r[1][1], edges_r[1][2],
+                    edges_r[2][0], edges_r[2][1], edges_r[2][2]
+                })
+            );
             VX_raster_qe #(
                 .SLICE_ID       (SLICE_ID),
                 .QUAD_ID        (i*RASTER_QUAD_NUM+j)
@@ -96,14 +121,14 @@ module VX_raster_be #(
                 .clk            (clk),
                 .reset          (reset),
                 .enable         (fsm_complete),
-                .edges          (edges),
-                .edge_func_val  (local_edge_func_val[i*RASTER_QUAD_NUM+j]),
-                .masks          (temp_quad_masks[i*RASTER_QUAD_NUM+j]),
-                .bcoords        (temp_quad_bcoords[i*RASTER_QUAD_NUM+j]),
+                .edges          (edges_r),
+                .edge_func_val  (edge_func_val_r),
                 .dst_width      (dst_width),
                 .dst_height     (dst_height),
-                .x_loc          (temp_quad_x_loc[i*RASTER_QUAD_NUM+j]),
-                .y_loc          (temp_quad_y_loc[i*RASTER_QUAD_NUM+j])
+                .x_loc          (x_loc_r),
+                .y_loc          (y_loc_r),
+                .masks          (temp_quad_masks[i*RASTER_QUAD_NUM+j]),
+                .bcoords        (temp_quad_bcoords[i*RASTER_QUAD_NUM+j])
             );
         end
     end
