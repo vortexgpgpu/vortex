@@ -185,8 +185,7 @@ module VX_raster_unit #(
     /* verilator lint_on UNDRIVEN */
     logic arbiter_valid;
 
-    // TODO: Add raster slices in generate block here
-    // for (genvar i = 0; i < RASTER_SLICE_BITS; ++i) begin
+    // Raster slices in generate block here
     for (genvar i = 0; i < NUM_SLICES; ++i) begin
         VX_raster_slice #(
             .SLICE_ID               (i),

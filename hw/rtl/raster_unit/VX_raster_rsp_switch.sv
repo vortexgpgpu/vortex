@@ -11,10 +11,7 @@ module VX_raster_rsp_switch #(
     input        [`RASTER_DIM_BITS-1:0]             y_loc   [RASTER_QUAD_OUTPUT_RATE-1:0],
     input        [3:0]                              masks   [RASTER_QUAD_OUTPUT_RATE-1:0],
     input signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  bcoords [RASTER_QUAD_OUTPUT_RATE-1:0][2:0][3:0],
-    // TODO: Remove lint
-    /* verilator lint_off UNUSED */
     input        [`RASTER_PRIMITIVE_DATA_BITS-1:0]  pid     [RASTER_QUAD_OUTPUT_RATE-1:0],
-    /* verilator lint_on UNUSED */
 
     // Output
     VX_raster_req_if.master  raster_req_if

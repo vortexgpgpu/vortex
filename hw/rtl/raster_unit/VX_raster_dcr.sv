@@ -2,7 +2,6 @@
 
 module VX_raster_dcr #(  
     parameter CORE_ID = 0
-    // TODO
 ) (
     input wire clk,
     input wire reset,
