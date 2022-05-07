@@ -20,10 +20,13 @@ module VX_raster_qe #(
     // Rendering region
     input logic         [`RASTER_DIM_BITS-1:0]                  dst_width, dst_height,
 
+    input logic                                                out_enable,
+    // Output of piped x_loc, y_loc
+    output logic        [`RASTER_DIM_BITS-1:0]                  x_loc_o, y_loc_o,
     // Mask bits for the 2x2 quad
-    output logic        [3:0]                                   masks,
+    output logic        [3:0]                                   masks_o,
     // barycentric coordinates
-    output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]       bcoords[2:0][3:0] // dim1 => quad index
+    output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]       bcoords_o[2:0][3:0] // dim1 => quad index
 );
 
     // New edge value for all 4 pixels (0,0) (0,1) (1,0) (1,1)
@@ -50,17 +53,22 @@ module VX_raster_qe #(
         end
     end
 
+    logic        [`RASTER_DIM_BITS-1:0]                  x_loc_r, y_loc_r;
     VX_pipe_register #(
-        .DATAW  (3*2*2*`RASTER_PRIMITIVE_DATA_BITS),
+        .DATAW  (2*`RASTER_DIM_BITS + 3*2*2*`RASTER_PRIMITIVE_DATA_BITS),
         .RESETW (1)
     ) qe_pipe_reg_2 (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
-        .data_in  (pipe_reg_2_in),
-        .data_out (pipe_reg_2_r)
+        .data_in  ({x_loc, y_loc, pipe_reg_2_in}),
+        .data_out ({x_loc_r, y_loc_r, pipe_reg_2_r})
     );
 
+    // Mask bits for the 2x2 quad
+    logic        [3:0]                                   masks;
+    // barycentric coordinates
+    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]       bcoords[2:0][3:0]; // dim1 => quad index
     for (genvar i = 0; i < 2; ++i) begin
         for (genvar j = 0; j < 2; ++j) begin
             always_comb begin
@@ -79,5 +87,24 @@ module VX_raster_qe #(
             end
         end
     end
+
+    VX_pipe_register #(
+        .DATAW  (4 + 2*`RASTER_DIM_BITS + 3*4*`RASTER_PRIMITIVE_DATA_BITS),
+        .RESETW (4)
+    ) qe_pipe_reg_out (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (out_enable),
+        .data_in  ({masks, x_loc_r, y_loc_r,
+            bcoords[0][0], bcoords[0][1], bcoords[0][2], bcoords[0][3],
+            bcoords[1][0], bcoords[1][1], bcoords[1][2], bcoords[1][3],
+            bcoords[2][0], bcoords[2][1], bcoords[2][2], bcoords[2][3]
+        }),
+        .data_out ({masks_o, x_loc_o, y_loc_o,
+            bcoords_o[0][0], bcoords_o[0][1], bcoords_o[0][2], bcoords_o[0][3],
+            bcoords_o[1][0], bcoords_o[1][1], bcoords_o[1][2], bcoords_o[1][3],
+            bcoords_o[2][0], bcoords_o[2][1], bcoords_o[2][2], bcoords_o[2][3]
+            })
+    );
 
 endmodule

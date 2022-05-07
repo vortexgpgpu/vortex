@@ -44,14 +44,12 @@ module VX_raster_be #(
     localparam RASTER_QUAD_SPACE         = RASTER_QUAD_NUM*RASTER_QUAD_NUM;
     localparam RASTER_QUAD_ARBITER_RANGE = RASTER_QUAD_SPACE/RASTER_QUAD_OUTPUT_RATE + 1;
     localparam ARBITER_BITS              = `LOG2UP(RASTER_QUAD_ARBITER_RANGE) + 1;
-    localparam QE_LATENCY                = 2;
+    localparam QE_LATENCY                = 2; // Decided based on the number of pipe stages in quad evaluator
 
     // Temporary (temp_) for combinatorial part, quad_ register for data storage
     logic        [`RASTER_DIM_BITS-1:0]             temp_quad_x_loc     [RASTER_QUAD_SPACE-1:0],
-                                                    temp_quad_x_loc_r   [RASTER_QUAD_SPACE-1:0],
                                                     quad_x_loc          [RASTER_QUAD_SPACE-1:0];
     logic        [`RASTER_DIM_BITS-1:0]             temp_quad_y_loc     [RASTER_QUAD_SPACE-1:0],
-                                                    temp_quad_y_loc_r   [RASTER_QUAD_SPACE-1:0],
                                                     quad_y_loc          [RASTER_QUAD_SPACE-1:0];
     logic        [3:0]                              temp_quad_masks     [RASTER_QUAD_SPACE-1:0], 
                                                     quad_masks          [RASTER_QUAD_SPACE-1:0];
@@ -135,6 +133,7 @@ module VX_raster_be #(
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] quad_pid [RASTER_QUAD_SPACE-1:0];
     for (genvar i = 0; i < RASTER_QUAD_NUM; ++i) begin
         for (genvar j = 0; j < RASTER_QUAD_NUM; ++j) begin
+            logic [`RASTER_DIM_BITS-1:0] qe_x_loc_out, qe_y_loc_out;
             VX_raster_qe #(
                 .SLICE_ID       (SLICE_ID),
                 .QUAD_ID        (i*RASTER_QUAD_NUM+j)
@@ -148,25 +147,22 @@ module VX_raster_be #(
                 .dst_height     (dst_height),
                 .x_loc          (x_loc_r[i][j]),
                 .y_loc          (y_loc_r[i][j]),
-                .masks          (temp_quad_masks[i*RASTER_QUAD_NUM+j]),
-                .bcoords        (temp_quad_bcoords[i*RASTER_QUAD_NUM+j])
+                .x_loc_o        (qe_x_loc_out),
+                .y_loc_o        (qe_y_loc_out),
+                .masks_o        (temp_quad_masks[i*RASTER_QUAD_NUM+j]),
+                .bcoords_o      (temp_quad_bcoords[i*RASTER_QUAD_NUM+j]),
+                .out_enable     (input_valid_r == 1 && fsm_complete == 1)
             );
             // Save the temp data into quad registers to prevent overwrite by redundant data
-            always @(posedge clk) begin
-                if (input_valid_r == 1 && fsm_complete == 1) begin // overwrite only the first time
-                    quad_x_loc[i*RASTER_QUAD_NUM+j]   <= temp_quad_x_loc_r[i*RASTER_QUAD_NUM+j];
-                    quad_y_loc[i*RASTER_QUAD_NUM+j]   <= temp_quad_y_loc_r[i*RASTER_QUAD_NUM+j];
-                    quad_masks[i*RASTER_QUAD_NUM+j]   <= temp_quad_masks[i*RASTER_QUAD_NUM+j];
-                    quad_bcoords[i*RASTER_QUAD_NUM+j] <= temp_quad_bcoords[i*RASTER_QUAD_NUM+j];
-                    quad_pid[i*RASTER_QUAD_NUM+j]     <= temp_pid_r;
-                end
+            always_comb begin
+                quad_x_loc[i*RASTER_QUAD_NUM+j]   = qe_x_loc_out;
+                quad_y_loc[i*RASTER_QUAD_NUM+j]   = qe_y_loc_out;
+                quad_masks[i*RASTER_QUAD_NUM+j]   = temp_quad_masks[i*RASTER_QUAD_NUM+j];
+                quad_bcoords[i*RASTER_QUAD_NUM+j] = temp_quad_bcoords[i*RASTER_QUAD_NUM+j];
+                quad_pid[i*RASTER_QUAD_NUM+j]     = temp_pid_r;
             end
         end
     end
-
-    // Store the temp results in registers
-    // for(genvar i = 0; i < RASTER_QUAD_SPACE; ++i) begin
-    // end
 
     logic input_valid_r;
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_pid_r;
@@ -181,34 +177,6 @@ module VX_raster_be #(
         .data_in  ({input_valid, pid}),
         .data_out ({input_valid_r, temp_pid_r})
     );
-
-    logic [RASTER_QUAD_NUM*RASTER_QUAD_NUM*`RASTER_DIM_BITS-1:0] be_pipe_reg3_x_in, be_pipe_reg3_y_in;
-    logic [RASTER_QUAD_NUM*RASTER_QUAD_NUM*`RASTER_DIM_BITS-1:0] be_pipe_reg3_x_r, be_pipe_reg3_y_r;
-    for (genvar i = 0; i < RASTER_QUAD_NUM; ++i) begin
-        for (genvar j = 0; j < RASTER_QUAD_NUM; ++j) begin
-            assign be_pipe_reg3_x_in[(i*RASTER_QUAD_NUM+j)*`RASTER_DIM_BITS+:`RASTER_DIM_BITS] = temp_quad_x_loc[i*RASTER_QUAD_NUM+j];
-            assign be_pipe_reg3_y_in[(i*RASTER_QUAD_NUM+j)*`RASTER_DIM_BITS+:`RASTER_DIM_BITS] = temp_quad_y_loc[i*RASTER_QUAD_NUM+j];
-        end
-    end
-
-    VX_shift_register #(
-        .DATAW  (2*RASTER_QUAD_NUM*RASTER_QUAD_NUM*`RASTER_DIM_BITS),
-        .RESETW (1),
-        .DEPTH  (QE_LATENCY)
-    ) be_pipe_reg_3 (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (fsm_complete),
-        .data_in  ({be_pipe_reg3_x_in, be_pipe_reg3_y_in}),
-        .data_out ({be_pipe_reg3_x_r, be_pipe_reg3_y_r})
-    );
-
-    for (genvar i = 0; i < RASTER_QUAD_NUM; ++i) begin
-        for (genvar j = 0; j < RASTER_QUAD_NUM; ++j) begin
-            assign temp_quad_x_loc_r[i*RASTER_QUAD_NUM+j] = be_pipe_reg3_x_r[(i*RASTER_QUAD_NUM+j)*`RASTER_DIM_BITS+:`RASTER_DIM_BITS];
-            assign temp_quad_y_loc_r[i*RASTER_QUAD_NUM+j] = be_pipe_reg3_y_r[(i*RASTER_QUAD_NUM+j)*`RASTER_DIM_BITS+:`RASTER_DIM_BITS];
-        end
-    end
 
     // Simple arbiter implementation
     always @(posedge clk) begin
