@@ -46,7 +46,7 @@
 `define LINE_TAG_ADDR(x)        x[`LINE_ADDR_WIDTH-1 : `LINE_SEL_BITS]
 
 `define ASSIGN_REQ_UUID(dst, tag) \
-    if (REQ_UUID_BITS > 0) begin      \
+    if (REQ_UUID_BITS != 0) begin \
         assign dst = tag[CORE_TAG_WIDTH-1 -: REQ_UUID_BITS]; \
     end else begin \
         assign dst = 0; \

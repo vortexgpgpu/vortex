@@ -119,7 +119,7 @@
 `define MIN(x, y)   (((x) < (y)) ? (x) : (y))
 `define MAX(x, y)   (((x) > (y)) ? (x) : (y))
 
-`define UP(x)       (((x) > 0) ? (x) : 1)
+`define UP(x)       (((x) != 0) ? (x) : 1)
 
 `define RTRIM(x, s) x[$bits(x)-1:($bits(x)-s)]
 
