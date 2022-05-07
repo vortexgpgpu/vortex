@@ -56,14 +56,15 @@ int main(int argc, char **argv) {
 
     // create memory module
     RAM ram(RAM_PAGE_SIZE);
+    VirtualDevice virtualDevice(RAM_PAGE_SIZE);
 
     // load program
     {
       std::string program_ext(fileExtension(imgFileName.c_str()));
       if (program_ext == "bin") {
-        ram.loadBinImage(imgFileName.c_str(), STARTUP_ADDR);
+        virtualDevice.loadBinImage(imgFileName.c_str(), STARTUP_ADDR);
       } else if (program_ext == "hex") {
-        ram.loadHexImage(imgFileName.c_str());
+        virtualDevice.loadHexImage(imgFileName.c_str());
       } else {
         std::cout << "*** error: only *.bin or *.hex images supported." << std::endl;
         return -1;
@@ -74,7 +75,8 @@ int main(int argc, char **argv) {
     Processor processor(arch);
   
     // attach memory module
-    processor.attach_ram(&ram);   
+    processor.attach_ram(&ram); 
+    processor.attach_virtual_device(& virtualDevice);  
 
     // run simulation
     exitcode = processor.run();

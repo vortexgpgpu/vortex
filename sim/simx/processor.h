@@ -4,6 +4,7 @@ namespace vortex {
 
 class ArchDef;
 class RAM;
+class VirtualDevice;
 
 class Processor {
 public:
@@ -11,6 +12,7 @@ public:
   ~Processor();
 
   void attach_ram(RAM* mem);
+  void attach_virtual_device(VirtualDevice* virtualDevice);
 
   int run();
 

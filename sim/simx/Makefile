@@ -2,7 +2,7 @@ DESTDIR ?= .
 RTL_DIR = ../hw/rtl
 THIRD_PARTY_DIR = ../../third_party
 
-CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
+CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors -g
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I. -I../common -I../../hw
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
@@ -13,7 +13,7 @@ LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 LDFLAGS += -L$(THIRD_PARTY_DIR)/cocogfx -lcocogfx 
 LDFLAGS += -L$(THIRD_PARTY_DIR)/ramulator -lramulator
 
-SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp
+SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp ../common/processorRegs.cpp
 SRCS += args.cpp cache.cpp memsim.cpp warp.cpp core.cpp decode.cpp execute.cpp exeunit.cpp tex_unit.cpp processor.cpp
 
 OBJS := $(patsubst %.cpp, obj_dir/%.o, $(notdir $(SRCS)))

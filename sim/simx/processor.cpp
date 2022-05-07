@@ -1,6 +1,7 @@
 #include "processor.h"
 #include "core.h"
 #include "constants.h"
+#include "processorRegs.h"
 
 using namespace vortex;
 
@@ -11,12 +12,14 @@ private:
   std::vector<Switch<MemReq, MemRsp>::Ptr> l2_mem_switches_;
   Cache::Ptr l3cache_;
   Switch<MemReq, MemRsp>::Ptr l3_mem_switch_;
+  SupervisorRegisterContainer supervisorRegs_;
 
 public:
   Impl(const ArchDef& arch) 
     : cores_(arch.num_cores())
     , l2caches_(NUM_CLUSTERS)
     , l2_mem_switches_(NUM_CLUSTERS)
+    , supervisorRegs_(VirtualAddressTranslationMode::SV39)
   {
     SimPlatform::instance().initialize();
 
@@ -25,7 +28,9 @@ public:
 
     // create cores
     for (uint32_t i = 0; i < num_cores; ++i) {
-        cores_.at(i) = Core::Create(arch, i);
+        auto core = Core::Create(arch, i);
+        core->attach_supervisor_regs(& supervisorRegs_);
+        cores_.at(i) = core;
     }
 
      // setup memory simulator
@@ -131,8 +136,16 @@ public:
   }
 
   void attach_ram(RAM* ram) {
+    uint64_t rootPageAddress = ram->getPageRootTable();
+    this->supervisorRegs_.satp.updateRootPageTable(rootPageAddress);
     for (auto core : cores_) {
       core->attach_ram(ram);
+    }
+  }
+
+  void attach_virtual_device(VirtualDevice* virtualDevice){
+    for (auto core: cores_){
+      core->attach_virtual_device(virtualDevice);
     }
   }
 
@@ -171,6 +184,10 @@ Processor::~Processor() {
 
 void Processor::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
+}
+
+void Processor::attach_virtual_device(VirtualDevice* device){
+  impl_->attach_virtual_device(device);
 }
 
 int Processor::run() {

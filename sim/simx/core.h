@@ -22,6 +22,7 @@
 #include "scoreboard.h"
 #include "exeunit.h"
 #include "tex_unit.h"
+#include "processorRegs.h"
 
 namespace vortex {
 
@@ -72,6 +73,10 @@ public:
   ~Core();
 
   void attach_ram(RAM* ram);
+
+  void attach_virtual_device(VirtualDevice* virtualDevice);
+
+  void attach_supervisor_regs(SupervisorRegisterContainer* supervysorRegs);
 
   bool running() const;
 

@@ -28,7 +28,7 @@ DBG_TRACE_FLAGS += -DDBG_TRACE_TEX
 
 DBG_FLAGS += $(DBG_TRACE_FLAGS)
 
-SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp
+SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp ../common/processorRegs.cpp
 SRCS += $(DPI_DIR)/util_dpi.cpp $(DPI_DIR)/float_dpi.cpp
 SRCS += fpga.cpp opae_sim.cpp
 

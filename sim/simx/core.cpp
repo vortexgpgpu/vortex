@@ -20,7 +20,7 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
     , id_(id)
     , arch_(arch)
     , decoder_(arch)
-    , mmu_(0, arch.wsize(), true)
+    , mmu_(RAM_PAGE_SIZE, arch.wsize(), false)
     , smem_(RAM_PAGE_SIZE)
     , tex_units_(NUM_TEX_UNITS, this)
     , warps_(arch.num_warps())
@@ -168,7 +168,15 @@ void Core::reset() {
 
 void Core::attach_ram(RAM* ram) {
   // bind RAM to memory unit
-  mmu_.attach(*ram, 0, 0xFFFFFFFF);    
+  mmu_.attachRAM(*ram, 0, 0xFFFFFFFF);    
+}
+
+void Core::attach_virtual_device(VirtualDevice* device){
+  mmu_.attachVirtualDevice(*device);
+}
+
+void Core::attach_supervisor_regs(SupervisorRegisterContainer* supervisorContainer){
+  mmu_.attachSuperVisorregisters(*supervisorContainer);
 }
 
 void Core::cout_flush() {
