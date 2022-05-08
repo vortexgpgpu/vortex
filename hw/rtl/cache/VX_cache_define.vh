@@ -3,10 +3,10 @@
 
 `include "VX_define.vh"   
 
-`define REQ_SEL_BITS            `LOG2UP(NUM_REQS)
+`define REQ_SEL_BITS            `CLOG2(NUM_REQS)
 
-//                                tag              valid  tid             word_sel              
-`define MSHR_DATA_WIDTH         ((CORE_TAG_WIDTH + 1 +    `REQ_SEL_BITS + `UP(`WORD_SEL_BITS)) * NUM_PORTS)
+//                                tag              valid  req_idx              word_idx
+`define MSHR_DATA_WIDTH         ((CORE_TAG_WIDTH + 1 +    `UP(`REQ_SEL_BITS) + `UP(`WORD_SEL_BITS)) * NUM_PORTS)
 
 `define WORD_WIDTH              (8 * WORD_SIZE)
 

@@ -71,12 +71,12 @@ module VX_cache #(
     VX_mem_rsp_if.slave     mem_rsp_if
 );
 
-    `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid parameter"))
+    //`STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid parameter"))
     `STATIC_ASSERT(NUM_PORTS <= NUM_BANKS, ("invalid parameter"))
     `STATIC_ASSERT(NUM_BANKS == (1 << $clog2(NUM_BANKS)), ("invalid parameter"))
 
     localparam WORD_SEL_BITS   = `UP(`WORD_SEL_BITS);
-    localparam MSHR_ADDR_WIDTH = `LOG2UP(MSHR_SIZE);
+    localparam MSHR_ADDR_WIDTH = `CLOG2(MSHR_SIZE);
 
 `ifdef PERF_ENABLE
     wire [NUM_BANKS-1:0] perf_read_miss_per_bank;
@@ -200,7 +200,7 @@ module VX_cache #(
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SEL_BITS-1:0] per_bank_core_req_wsel;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_core_req_byteen;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`WORD_WIDTH-1:0] per_bank_core_req_data;
-    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`REQ_SEL_BITS-1:0] per_bank_core_req_idx;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(`REQ_SEL_BITS)-1:0] per_bank_core_req_idx;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] per_bank_core_req_tag;
     wire [NUM_BANKS-1:0]                        per_bank_core_req_rw;  
     wire [NUM_BANKS-1:0][`LINE_ADDR_WIDTH-1:0]  per_bank_core_req_addr;    
@@ -209,7 +209,7 @@ module VX_cache #(
     wire [NUM_BANKS-1:0]                        per_bank_core_rsp_valid;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0]         per_bank_core_rsp_pmask;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`WORD_WIDTH-1:0] per_bank_core_rsp_data;
-    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`REQ_SEL_BITS-1:0] per_bank_core_rsp_idx;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(`REQ_SEL_BITS)-1:0] per_bank_core_rsp_idx;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] per_bank_core_rsp_tag;    
     wire [NUM_BANKS-1:0]                        per_bank_core_rsp_ready;
 
@@ -275,7 +275,7 @@ module VX_cache #(
         wire [NUM_PORTS-1:0][WORD_SEL_BITS-1:0] curr_bank_core_req_wsel;
         wire [NUM_PORTS-1:0][WORD_SIZE-1:0] curr_bank_core_req_byteen;
         wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] curr_bank_core_req_data;
-        wire [NUM_PORTS-1:0][`REQ_SEL_BITS-1:0] curr_bank_core_req_idx;
+        wire [NUM_PORTS-1:0][`UP(`REQ_SEL_BITS)-1:0] curr_bank_core_req_idx;
         wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] curr_bank_core_req_tag;
         wire                        curr_bank_core_req_rw;  
         wire [`LINE_ADDR_WIDTH-1:0] curr_bank_core_req_addr;        
@@ -284,7 +284,7 @@ module VX_cache #(
         wire                        curr_bank_core_rsp_valid;
         wire [NUM_PORTS-1:0]        curr_bank_core_rsp_pmask;        
         wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] curr_bank_core_rsp_data;
-        wire [NUM_PORTS-1:0][`REQ_SEL_BITS-1:0] curr_bank_core_rsp_idx;
+        wire [NUM_PORTS-1:0][`UP(`REQ_SEL_BITS)-1:0] curr_bank_core_rsp_idx;
         wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] curr_bank_core_rsp_tag;
         wire                        curr_bank_core_rsp_ready;
 
