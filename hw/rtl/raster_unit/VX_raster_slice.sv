@@ -60,7 +60,7 @@ module VX_raster_slice #(
     // assign level_1 = level + RASTER_LEVEL_DATA_BITS'(1);
 
     // Control signsl
-    logic        valid_tile, valid_block;
+    logic        tile_valid, block_valid;
     logic        fifo_full, fifo_empty, fifo_tile_valid;
     logic        stall;
     logic        be_ready; // to track the status of the block evaluator
@@ -114,7 +114,7 @@ module VX_raster_slice #(
                 tile_data_valid    <= 1;
             end
             // sub-tile rerouter used only 1 onces for the parent tile
-            else if (level == 0 && fifo_empty == 1 && fifo_tile_valid == 0 && valid_tile == 1) begin
+            else if (level == 0 && fifo_empty == 1 && fifo_tile_valid == 0 && tile_valid == 1) begin
                 tile_x_loc         <= subtile_x_loc[0];
                 tile_y_loc         <= subtile_y_loc[0];
                 level              <= level + RASTER_LEVEL_DATA_BITS'(1);//level_1;
@@ -135,6 +135,30 @@ module VX_raster_slice #(
     /**********************************
             TILE EVALUATOR
     ***********************************/
+
+    logic input_valid_r;
+    logic        [RASTER_LEVEL_DATA_BITS-1:0]         level_te_pipe_r;
+    logic        [`RASTER_DIM_BITS-1:0]               x_loc_r, y_loc_r;
+    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    edge_func_val_r[2:0];
+
+    VX_pipe_register #(
+        .DATAW  (1 + RASTER_LEVEL_DATA_BITS + 2*`RASTER_DIM_BITS
+            + 3*`RASTER_PRIMITIVE_DATA_BITS),
+        .RESETW (1)
+    ) te_pipe_reg_1 (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (!stall),
+        .data_in  ({
+            tile_data_valid, level, tile_x_loc, tile_y_loc,
+            tile_edge_func_val[0], tile_edge_func_val[1], tile_edge_func_val[2]
+        }),
+        .data_out ({
+            input_valid_r, level_te_pipe_r, x_loc_r, y_loc_r,
+            edge_func_val_r[0], edge_func_val_r[1], edge_func_val_r[2]
+        })
+    );
+
     VX_raster_te #(
         .RASTER_TILE_SIZE       (RASTER_TILE_SIZE),
         .RASTER_BLOCK_SIZE      (RASTER_BLOCK_SIZE),
@@ -143,15 +167,15 @@ module VX_raster_slice #(
         .clk                    (clk),
         .reset                  (reset),
         .stall                  (stall),
-        .input_valid            (tile_data_valid),
-        .level                  (level),
-        .x_loc                  (tile_x_loc),
-        .y_loc                  (tile_y_loc),
+        .input_valid            (input_valid_r),
+        .level                  (level_te_pipe_r),
+        .x_loc                  (x_loc_r),
+        .y_loc                  (y_loc_r),
         .edges                  (global_edges),
-        .edge_func_val          (tile_edge_func_val),
+        .edge_func_val          (edge_func_val_r),
         .extents                (global_extents),
-        .valid_tile             (valid_tile),
-        .valid_block            (valid_block),
+        .tile_valid             (tile_valid),
+        .block_valid            (block_valid),
         .tile_x_loc             (subtile_x_loc),
         .tile_y_loc             (subtile_y_loc),
         .tile_edge_func_val     (subtile_edge_func_val),
@@ -187,7 +211,7 @@ module VX_raster_slice #(
 
     // Assert that fifo cannot be full when tile is valid
     always_comb
-        `ASSERT(!(fifo_full == 1 && valid_tile == 1), ("Raster insufficient subtile fifo depth"));
+        `ASSERT(!(fifo_full == 1 && tile_valid == 1), ("Raster insufficient subtile fifo depth"));
     // NOTE: condition not added in fifo_push check as it wil lead to deadlock => Assertion added
 
     // Set the pop logic based on stall if not stalled & not empty, then it will definitely pop
@@ -204,7 +228,7 @@ module VX_raster_slice #(
     ) tile_arbiter (
         .clk                (clk),
         .reset              (reset),
-        .fifo_push          ({4{valid_tile}} & fifo_push_mask),  // Push only tiles, not blocks
+        .fifo_push          ({4{tile_valid}} & fifo_push_mask),  // Push only tiles, not blocks
         .fifo_pop           (fifo_pop),
         .data_push          (fifo_data_push),
         .data_pop           (fifo_data_pop),
@@ -223,14 +247,15 @@ module VX_raster_slice #(
 
     
     // Stall used to wait for block queue to complete run if another needs to be inserted
-    //assign stall = (valid_block == 1 && block_fifo_full == 1);
+    //assign stall = (block_valid == 1 && block_fifo_full == 1);
     assign stall = (block_fifo_full == 1);
 
     // Decide the ready flag
     //  1. Tile evaluator doesn't have a valid tile or (block -> block will be pushed to next pipe so no need to stall for it)
     //  2. FIFO empty
     //  3. FIFO pop data is invalid
-    assign ready = (fifo_empty == 1) && (block_fifo_empty == 1) && (valid_tile == 0) && (fifo_empty == 1) && (tile_data_valid == 0);
+    assign ready = (fifo_empty == 1) && (block_fifo_empty == 1) && (tile_valid == 0) && (block_valid == 0) &&
+        (tile_data_valid == 0) && (input_valid_r == 0);
 
     // Block evaluator data
     logic [`RASTER_DIM_BITS-1:0]   be_in_x_loc, be_in_y_loc;
@@ -246,7 +271,7 @@ module VX_raster_slice #(
     always @(posedge clk) begin
         done <= 0;
         // check if the current block is going to be the last block
-        if (fifo_empty == 1 && valid_tile == 0 && valid_block == 1 && tile_data_valid == 0)
+        if (fifo_empty == 1 && tile_valid == 0 && block_valid == 1 && tile_data_valid == 0 && input_valid_r  == 0)
             done <= 1;
     end
 
@@ -258,7 +283,7 @@ module VX_raster_slice #(
     ) block_fifo_queue (
         .clk        (clk),
         .reset      (reset),
-        .push       (valid_block == 1 && block_fifo_full == 0 && done == 0),
+        .push       (block_valid == 1 && block_fifo_full == 0 && done == 0),
         .pop        (be_fifo_pop),
         .data_in    ({
             block_x_loc, block_y_loc,
@@ -316,7 +341,7 @@ module VX_raster_slice #(
     end
 
     always @(posedge clk) begin
-        if (valid_block == 1 && block_fifo_full == 0 && done == 0) begin
+        if (block_valid == 1 && block_fifo_full == 0 && done == 0) begin
             dpi_trace(2, "%d: block-fifo-push[%0d]: data_in=%0d, full=%b, empty=%b\n",
             $time, SLICE_ID, {block_x_loc, block_y_loc,
                 block_edge_func_val[0], block_edge_func_val[1], block_edge_func_val[2]},
