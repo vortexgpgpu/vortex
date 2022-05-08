@@ -87,11 +87,6 @@ module VX_raster_te #(
         end
     end
 
-    assign tile_level_r = level;
-    assign block_x_loc_r = x_loc;
-    assign block_y_loc_r = y_loc;
-    assign block_edge_func_val_r = edge_func_val;
-
     // Status signals
     logic                                            tile_valid_r, block_valid_r;
     // Sub-tile related data
@@ -104,6 +99,10 @@ module VX_raster_te #(
     logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   block_edge_func_val_r[2:0];
     logic        [RASTER_LEVEL_DATA_BITS-1:0]        tile_level_r;
 
+    assign tile_level_r = level;
+    assign block_x_loc_r = x_loc;
+    assign block_y_loc_r = y_loc;
+    assign block_edge_func_val_r = edge_func_val;
 
     VX_pipe_register #(
         .DATAW  (2 + 2*4*`RASTER_DIM_BITS + 4*3*`RASTER_PRIMITIVE_DATA_BITS + 2*`RASTER_DIM_BITS +
