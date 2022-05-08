@@ -164,6 +164,9 @@ module VX_raster_slice #(
         .RASTER_BLOCK_SIZE      (RASTER_BLOCK_SIZE),
         .RASTER_LEVEL_DATA_BITS (RASTER_LEVEL_DATA_BITS)
     ) tile_evaluator (
+        .clk                    (clk),
+        .reset                  (reset),
+        .stall                  (stall),
         .input_valid            (input_valid_r),
         .level                  (level_te_pipe_r),
         .x_loc                  (x_loc_r),
@@ -251,7 +254,8 @@ module VX_raster_slice #(
     //  1. Tile evaluator doesn't have a valid tile or (block -> block will be pushed to next pipe so no need to stall for it)
     //  2. FIFO empty
     //  3. FIFO pop data is invalid
-    assign ready = (fifo_empty == 1) && (block_fifo_empty == 1) && (tile_valid == 0) && (fifo_empty == 1) && (tile_data_valid == 0);
+    assign ready = (fifo_empty == 1) && (block_fifo_empty == 1) && (tile_valid == 0) && (block_valid == 0) &&
+        (tile_data_valid == 0) && (input_valid_r == 0);
 
     // Block evaluator data
     logic [`RASTER_DIM_BITS-1:0]   be_in_x_loc, be_in_y_loc;
@@ -267,7 +271,7 @@ module VX_raster_slice #(
     always @(posedge clk) begin
         done <= 0;
         // check if the current block is going to be the last block
-        if (fifo_empty == 1 && tile_valid == 0 && block_valid == 1 && tile_data_valid == 0)
+        if (fifo_empty == 1 && tile_valid == 0 && block_valid == 1 && tile_data_valid == 0 && input_valid_r  == 0)
             done <= 1;
     end
 
