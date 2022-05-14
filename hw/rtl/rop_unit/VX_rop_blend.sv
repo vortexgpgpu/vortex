@@ -34,6 +34,8 @@ module VX_rop_blend #(
     // Output values
     output rgba_t [NUM_LANES-1:0] color_out
 );
+    localparam LATENCY = `LATENCY_IMUL + 1;
+
     wire stall = ~ready_out && valid_out;
     
     assign ready_in = ~stall;
@@ -63,8 +65,8 @@ module VX_rop_blend #(
         );
     end
 
-    wire                 valid_s1;
-    wire [TAG_WIDTH-1:0] tag_s1;
+    wire                 valid_s1, valid_s2;
+    wire [TAG_WIDTH-1:0] tag_s1, tag_s2;
 
     rgba_t [NUM_LANES-1:0] src_color_s1;
     rgba_t [NUM_LANES-1:0] dst_color_s1;
@@ -73,6 +75,7 @@ module VX_rop_blend #(
 
     VX_pipe_register #(
         .DATAW  (1 + TAG_WIDTH + 32 * 4 * NUM_LANES),
+        .DEPTH  (2),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
@@ -82,72 +85,95 @@ module VX_rop_blend #(
         .data_out ({valid_s1, tag_s1, src_color_s1, dst_color_s1, src_factor_s1, dst_factor_s1})
     );
 
-    rgba_t [NUM_LANES-1:0] mult_add_color_out;
-    rgba_t [NUM_LANES-1:0] min_color_out;
-    rgba_t [NUM_LANES-1:0] max_color_out;
-    rgba_t [NUM_LANES-1:0] logic_op_color_out;
+    rgba_t [NUM_LANES-1:0] mult_add_color_s2;
+    rgba_t [NUM_LANES-1:0] min_color_s2;
+    rgba_t [NUM_LANES-1:0] max_color_s2;
+    rgba_t [NUM_LANES-1:0] logic_op_color_s2;
     
-    for (genvar i = 0; i < NUM_LANES; i++) begin : blend_op_inst
+    for (genvar i = 0; i < NUM_LANES; i++) begin
         VX_rop_blend_multadd #(
+            .LATENCY (LATENCY)
         ) rop_blend_multadd (
+            .clk        (clk),
+            .reset      (reset),
+            .enable     (~stall),
             .mode_rgb   (blend_mode_rgb),
             .mode_a     (blend_mode_a),
             .src_color  (src_color_s1[i]),
             .dst_color  (dst_color_s1[i]),
             .src_factor (src_factor_s1[i]),
             .dst_factor (dst_factor_s1[i]),
-            .color_out  (mult_add_color_out[i])
+            .color_out  (mult_add_color_s2[i])
         );
 
         VX_rop_blend_minmax #(
+            .LATENCY (LATENCY)
         ) rop_blend_minmax (
-            .src_color (src_color_s1[i]),
-            .dst_color (dst_color_s1[i]),
-            .min_out   (min_color_out[i]),
-            .max_out   (max_color_out[i])
+            .clk        (clk),
+            .reset      (reset),
+            .enable     (~stall),
+            .src_color  (src_color_s1[i]),
+            .dst_color  (dst_color_s1[i]),
+            .min_out    (min_color_s2[i]),
+            .max_out    (max_color_s2[i])
         );
 
         VX_rop_logic_op #(
+            .LATENCY (LATENCY)
         ) rop_logic_op (
-            .op        (logic_op),
-            .src_color (src_color_s1[i]),
-            .dst_color (dst_color_s1[i]),
-            .color_out (logic_op_color_out[i])
+            .clk        (clk),
+            .reset      (reset),
+            .enable     (~stall),
+            .op         (logic_op),
+            .src_color  (src_color_s1[i]),
+            .dst_color  (dst_color_s1[i]),
+            .color_out  (logic_op_color_s2[i])
         );
     end
 
-    rgba_t [NUM_LANES-1:0] color_out_s1;
+    VX_shift_register #(
+        .DATAW  (1 + TAG_WIDTH),
+        .DEPTH  (LATENCY)
+    ) shift_reg2 (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (~stall),
+        .data_in  ({valid_s1, tag_s1}),
+        .data_out ({valid_s2, tag_s2})
+    );
 
-    for (genvar i = 0; i < NUM_LANES; i++) begin : blend_color_out_inst
+    rgba_t [NUM_LANES-1:0] color_out_s2;
+
+    for (genvar i = 0; i < NUM_LANES; i++) begin
         always @(*) begin
             // RGB Component
             case (blend_mode_rgb)
                 `ROP_BLEND_MODE_ADD, 
                 `ROP_BLEND_MODE_SUB, 
                 `ROP_BLEND_MODE_REV_SUB: begin
-                    color_out_s1[i].r = mult_add_color_out[i].r;
-                    color_out_s1[i].g = mult_add_color_out[i].g;
-                    color_out_s1[i].b = mult_add_color_out[i].b;
+                    color_out_s2[i].r = mult_add_color_s2[i].r;
+                    color_out_s2[i].g = mult_add_color_s2[i].g;
+                    color_out_s2[i].b = mult_add_color_s2[i].b;
                     end
                 `ROP_BLEND_MODE_MIN: begin
-                    color_out_s1[i].r = min_color_out[i].r;
-                    color_out_s1[i].g = min_color_out[i].g;
-                    color_out_s1[i].b = min_color_out[i].b;
+                    color_out_s2[i].r = min_color_s2[i].r;
+                    color_out_s2[i].g = min_color_s2[i].g;
+                    color_out_s2[i].b = min_color_s2[i].b;
                     end
                 `ROP_BLEND_MODE_MAX: begin
-                    color_out_s1[i].r = max_color_out[i].r;
-                    color_out_s1[i].g = max_color_out[i].g;
-                    color_out_s1[i].b = max_color_out[i].b;
+                    color_out_s2[i].r = max_color_s2[i].r;
+                    color_out_s2[i].g = max_color_s2[i].g;
+                    color_out_s2[i].b = max_color_s2[i].b;
                     end
                 `ROP_BLEND_MODE_LOGICOP: begin
-                    color_out_s1[i].r = logic_op_color_out[i].r;
-                    color_out_s1[i].g = logic_op_color_out[i].g;
-                    color_out_s1[i].b = logic_op_color_out[i].b;
+                    color_out_s2[i].r = logic_op_color_s2[i].r;
+                    color_out_s2[i].g = logic_op_color_s2[i].g;
+                    color_out_s2[i].b = logic_op_color_s2[i].b;
                     end
                 default: begin
-                    color_out_s1[i].r = 'x;
-                    color_out_s1[i].g = 'x;
-                    color_out_s1[i].b = 'x;
+                    color_out_s2[i].r = 'x;
+                    color_out_s2[i].g = 'x;
+                    color_out_s2[i].b = 'x;
                     end
             endcase
             // Alpha Component
@@ -155,19 +181,19 @@ module VX_rop_blend #(
                 `ROP_BLEND_MODE_ADD, 
                 `ROP_BLEND_MODE_SUB, 
                 `ROP_BLEND_MODE_REV_SUB: begin
-                    color_out_s1[i].a = mult_add_color_out[i].a;
+                    color_out_s2[i].a = mult_add_color_s2[i].a;
                     end
                 `ROP_BLEND_MODE_MIN: begin
-                    color_out_s1[i].a = min_color_out[i].a;
+                    color_out_s2[i].a = min_color_s2[i].a;
                     end
                 `ROP_BLEND_MODE_MAX: begin
-                    color_out_s1[i].a = max_color_out[i].a;
+                    color_out_s2[i].a = max_color_s2[i].a;
                     end
                 `ROP_BLEND_MODE_LOGICOP: begin
-                    color_out_s1[i].a = logic_op_color_out[i].a;
+                    color_out_s2[i].a = logic_op_color_s2[i].a;
                     end
                 default: begin
-                    color_out_s1[i].a = 'x;
+                    color_out_s2[i].a = 'x;
                     end
             endcase
         end
@@ -176,11 +202,11 @@ module VX_rop_blend #(
     VX_pipe_register #(
         .DATAW  (1 + TAG_WIDTH + 32 * NUM_LANES),
         .RESETW (1)
-    ) pipe_reg2 (
+    ) pipe_reg3 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),
-        .data_in  ({valid_s1,  tag_s1,  color_out_s1}),
+        .data_in  ({valid_s2,  tag_s2,  color_out_s2}),
         .data_out ({valid_out, tag_out, color_out})
     );
 

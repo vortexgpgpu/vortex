@@ -1,140 +1,38 @@
 `include "VX_platform.vh"
 
 `TRACING_OFF
-module VX_shift_register_nr #( 
-    parameter DATAW  = 1,
-    parameter DEPTH  = 1,
-    parameter NTAPS  = 1    
-) (
-    input wire                      clk,
-    input wire                      enable,
-    input wire [DATAW-1:0]          data_in,
-    output wire [(NTAPS*DATAW)-1:0] data_out
-);
-    localparam DEPTHW = $clog2(DEPTH);
-    localparam [(DEPTHW*NTAPS)-1:0] TAPS = {NTAPS{DEPTHW'(DEPTH-1)}};
-
-    reg [DEPTH-1:0][DATAW-1:0] entries;
-
-    always @(posedge clk) begin
-        if (enable) begin                    
-            for (integer i = DEPTH-1; i > 0; --i)
-                entries[i] <= entries[i-1];
-            entries[0] <= data_in;
-        end
-    end
-
-    for (genvar i = 0; i < NTAPS; ++i) begin
-        assign data_out [i*DATAW+:DATAW] = entries [TAPS[i*DEPTHW+:DEPTHW]];
-    end
-
-endmodule
-
-module VX_shift_register_wr #( 
-    parameter DATAW  = 1, 
-    parameter DEPTH  = 1,
-    parameter NTAPS  = 1    
-) (
-    input wire                      clk,
-    input wire                      reset,
-    input wire                      enable,
-    input wire [DATAW-1:0]          data_in,
-    output wire [(NTAPS*DATAW)-1:0] data_out
-);
-    localparam DEPTHW = $clog2(DEPTH);
-    localparam [(DEPTHW*NTAPS)-1:0] TAPS = {NTAPS{DEPTHW'(DEPTH-1)}};
-
-    reg [DEPTH-1:0][DATAW-1:0] entries;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            entries <= '0;
-        end else if (enable) begin                    
-            for (integer i = DEPTH-1; i > 0; --i)
-                entries[i] <= entries[i-1];
-            entries[0] <= data_in;
-        end
-    end
-
-    for (genvar i = 0; i < NTAPS; ++i) begin
-        assign data_out [i*DATAW+:DATAW] = entries [TAPS[i*DEPTHW+:DEPTHW]];
-    end
-
-endmodule
-
 module VX_shift_register #( 
-    parameter DATAW  = 1, 
+    parameter DATAW  = 1,
     parameter RESETW = 0,
     parameter DEPTH  = 1,
     parameter NTAPS  = 1    
 ) (
-    input wire                      clk,
-    input wire                      reset,
-    input wire                      enable,
-    input wire [DATAW-1:0]          data_in,
-    output wire [(NTAPS*DATAW)-1:0] data_out
+    input wire                         clk,
+    input wire                         reset,
+    input wire                         enable,
+    input wire [DATAW-1:0]             data_in,
+    output wire [NTAPS-1:0][DATAW-1:0] data_out
 );
-    localparam DEPTHW = $clog2(DEPTH);
-    localparam [(DEPTHW*NTAPS)-1:0] TAPS = {NTAPS{DEPTHW'(DEPTH-1)}};
+    localparam TOTAL_DEPTH = NTAPS * DEPTH;
 
-    if (RESETW != 0) begin
-        if (RESETW == DATAW) begin
-    
-            VX_shift_register_wr #(
-                .DATAW (DATAW),
-                .DEPTH (DEPTH),
-                .NTAPS (NTAPS)
-            ) sr (
-                .clk      (clk),
-                .reset    (reset),
-                .enable   (enable),
-                .data_in  (data_in),
-                .data_out (data_out)
-            );
-    
-        end else begin
-    
-            VX_shift_register_wr #(
-                .DATAW (RESETW),
-                .DEPTH (DEPTH),
-                .NTAPS (NTAPS)
-            ) sr_wr (
-                .clk      (clk),
-                .reset    (reset),
-                .enable   (enable),
-                .data_in  (data_in[DATAW-1:DATAW-RESETW]),
-                .data_out (data_out[DATAW-1:DATAW-RESETW])
-            );
+    reg [TOTAL_DEPTH-1:0][DATAW-1:0] entries;
 
-            VX_shift_register_nr #(
-                .DATAW (DATAW-RESETW),
-                .DEPTH (DEPTH),
-                .NTAPS (NTAPS)
-            ) sr_nr (
-                .clk      (clk),
-                .enable   (enable),
-                .data_in  (data_in[DATAW-RESETW-1:0]),
-                .data_out (data_out[DATAW-RESETW-1:0])
-            );
-
+    always @(posedge clk) begin
+        for (integer i = 0; i < DATAW; ++i) begin
+            if ((i >= (DATAW-RESETW)) && reset) begin
+                for (integer j = 0; j < TOTAL_DEPTH; ++j)
+                    entries[j][i] <= 0;
+            end else if (enable) begin          
+                for (integer j = 1; j < TOTAL_DEPTH; ++j)
+                    entries[j-1][i] <= entries[j][i];
+                entries[TOTAL_DEPTH-1][i] <= data_in[i];
+            end
         end
+    end
 
-    end else begin        
-
-        `UNUSED_VAR (reset)
-    
-        VX_shift_register_nr #(
-            .DATAW (DATAW),
-            .DEPTH (DEPTH),
-            .NTAPS (NTAPS)
-        ) sr (
-            .clk      (clk),
-            .enable   (enable),
-            .data_in  (data_in),
-            .data_out (data_out)
-        );
-
-    end    
+    for (genvar i = 0; i < NTAPS; ++i) begin
+        assign data_out[i] = entries[i*DEPTH];
+    end
 
 endmodule
 `TRACING_ON

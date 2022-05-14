@@ -48,7 +48,7 @@ module VX_rop_ds #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         VX_rop_compare #(
-            .DATAW     (`ROP_DEPTH_BITS)
+            .DATAW (`ROP_DEPTH_BITS)
         ) rop_compare_depth (
             .func   (depth_func),
             .a      (depth_ref[i]),
@@ -91,11 +91,12 @@ module VX_rop_ds #(
     wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] stencil_ref_s;
     wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] stencil_val_s;
     wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] stencil_writemask_s;
-    wire [TAG_WIDTH-1:0]  tag_in_s;
+    wire [TAG_WIDTH-1:0] tag_in_s;
     
     VX_pipe_register #(
         .DATAW	(1 + NUM_LANES * (`ROP_STENCIL_OP_BITS + 3 * `ROP_STENCIL_BITS + `ROP_DEPTH_BITS + 1) + TAG_WIDTH),
-        .RESETW (1)
+        .RESETW (1),
+        .DEPTH  (2)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),

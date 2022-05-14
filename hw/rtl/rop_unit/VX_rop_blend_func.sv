@@ -45,6 +45,7 @@ module VX_rop_blend_func #(
             end
             default:                              return 8'hx;
         endcase
+        
     endfunction
 
     assign factor_out.b = blend_func(func_rgb, 0, src_color, dst_color, cst_color);

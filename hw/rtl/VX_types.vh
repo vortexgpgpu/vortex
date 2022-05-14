@@ -276,7 +276,7 @@
 
 `define ROP_DIM_BITS                15
 
-`define ROP_PITCH_BITS              (`ROP_DIM_BITS + 2 + 1)
+`define ROP_PITCH_BITS              (`ROP_DIM_BITS + `CLOG2(4) + 1)
 
 `define ROP_DEPTH_BITS              24 
 `define ROP_DEPTH_MASK              ((1 << `ROP_DEPTH_BITS) - 1)

@@ -64,7 +64,7 @@ module VX_imadd (
             .WIDTHB  (32),
             .WIDTHP  (56), // 56-24=32
             .SIGNED  (1),
-            .LATENCY (`LATENCY_IMUL+1)
+            .LATENCY (`LATENCY_IMUL)
         ) multiplier (
             .clk    (clk),
             .enable (mul_ready_in),
@@ -78,10 +78,10 @@ module VX_imadd (
 
     VX_shift_register #(
         .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 2 + (`NUM_THREADS * 32)),
-        .DEPTH  (`LATENCY_IMUL+1),
+        .DEPTH  (`LATENCY_IMUL),
         .RESETW (1)
-    ) mul_shift_reg (
-        .clk(clk),
+    ) shift_reg (
+        .clk      (clk),
         .reset    (reset),
         .enable   (mul_ready_in),
         .data_in  ({valid_in, uuid_in, wid_in, tmask_in, PC_in, rd_in, wb_in, shift,   data_in3}),
@@ -98,6 +98,7 @@ module VX_imadd (
 
     VX_pipe_register #(
         .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32)),
+        .DEPTH  (2),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
