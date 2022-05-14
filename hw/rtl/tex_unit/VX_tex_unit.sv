@@ -49,10 +49,12 @@ module VX_tex_unit #(
         .tex_csrs   (tex_csrs)
     );
 
-    // DCRs access
-
     tex_dcrs_t tex_dcrs;
-    assign tex_dcrs = tex_dcr_if.data[tex_csrs.stage];
+    always @(posedge clk) begin
+        tex_dcrs <= tex_dcr_if.data[tex_csrs.stage];
+    end
+
+    // mipmap select
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign mip_level[i]      = tex_req_if.lod[i][`TEX_LOD_BITS-1:0];

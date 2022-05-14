@@ -159,7 +159,6 @@ module VX_tex_addr #(
     wire [`NW_BITS-1:0]   rsp_wid;
     wire [31:0]           rsp_PC;
     wire [`UUID_BITS-1:0] rsp_uuid;
-    
 
     assign {rsp_wid, rsp_PC, rsp_uuid} = rsp_info[`NW_BITS+32+`UUID_BITS-1:0];
     

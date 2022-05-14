@@ -131,6 +131,9 @@ module VX_raster_be #(
     );
 
     logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] quad_pid [RASTER_QUAD_SPACE-1:0];
+    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_pid_r;
+    logic input_valid_r;
+    
     for (genvar i = 0; i < RASTER_QUAD_NUM; ++i) begin
         for (genvar j = 0; j < RASTER_QUAD_NUM; ++j) begin
             logic [`RASTER_DIM_BITS-1:0] qe_x_loc_out, qe_y_loc_out;
@@ -163,9 +166,7 @@ module VX_raster_be #(
             end
         end
     end
-
-    logic input_valid_r;
-    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_pid_r;
+    
     VX_shift_register #(
         .DATAW  (1 + `RASTER_PRIMITIVE_DATA_BITS),
         .RESETW (1),

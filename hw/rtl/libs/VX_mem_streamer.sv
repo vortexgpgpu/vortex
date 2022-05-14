@@ -224,7 +224,7 @@ module VX_mem_streamer #(
                 if (req_batch_idx == `UP(BATCH_SEL_BITS)'(NUM_BATCHES-1)) begin
                     req_batch_idx <= 0;
                 end else begin
-                    req_batch_idx <= req_batch_idx + 1;
+                    req_batch_idx <= req_batch_idx + `UP(BATCH_SEL_BITS)'(1);
                 end
             end
         end

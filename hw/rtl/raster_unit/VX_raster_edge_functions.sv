@@ -40,13 +40,12 @@ module VX_raster_edge_functions #(
             .result (mul_val2)
         );
 
-/* verilator lint_off UNUSED */
-        logic signed [2*`RASTER_PRIMITIVE_DATA_BITS-1:0] val1 = (mul_val1);
-        logic signed [2*`RASTER_PRIMITIVE_DATA_BITS-1:0] val2 = (mul_val2);
-        always_comb begin
-            edge_func_val[i] = val1[`RASTER_PRIMITIVE_DATA_BITS-1:0] + val2[`RASTER_PRIMITIVE_DATA_BITS-1:0] + edges[i][2];
-        end
-/* verilator lint_on UNUSED */
+        `UNUSED_VAR (mul_val1)
+        `UNUSED_VAR (mul_val2)
 
+        always_comb begin
+            edge_func_val[i] = mul_val1[`RASTER_PRIMITIVE_DATA_BITS-1:0] + mul_val2[`RASTER_PRIMITIVE_DATA_BITS-1:0] + edges[i][2];
+        end
     end
+
 endmodule

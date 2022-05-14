@@ -42,6 +42,13 @@ module VX_raster_te #(
     localparam RASTER_TILE_SIZE_BITS     = $clog2(RASTER_TILE_SIZE);
     localparam RASTER_BLOCK_SIZE_BITS    = $clog2(RASTER_BLOCK_SIZE);
 
+    // Status signals
+    logic                                            tile_valid_r, block_valid_r;
+    // Sub-tile related data
+    logic        [`RASTER_DIM_BITS-1:0]              tile_x_loc_r[3:0],
+                                                     tile_y_loc_r[3:0];
+    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   tile_edge_func_val_r[3:0][2:0];
+
 
     // Check if primitive within tile
     logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] eval0, eval1, eval2;
@@ -87,12 +94,6 @@ module VX_raster_te #(
         end
     end
 
-    // Status signals
-    logic                                            tile_valid_r, block_valid_r;
-    // Sub-tile related data
-    logic        [`RASTER_DIM_BITS-1:0]              tile_x_loc_r[3:0],
-                                                     tile_y_loc_r[3:0];
-    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   tile_edge_func_val_r[3:0][2:0];
     // Block related data
     logic        [`RASTER_DIM_BITS-1:0]              block_x_loc_r,
                                                      block_y_loc_r;
