@@ -13,6 +13,7 @@ typedef struct {
   uint32_t src2_addr;
   uint32_t src3_addr;
   uint32_t dst_addr;
+  bool     use_sw;
 } kernel_arg_t;
 
 #endif

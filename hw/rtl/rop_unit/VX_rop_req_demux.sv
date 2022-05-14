@@ -32,7 +32,7 @@ module VX_rop_req_demux #(
             .reset      (reset),
             `UNUSED_PIN (sel_in),
             .valid_in   (req_in_if.valid),
-            .data_in    ({req_in_if.tmask, req_in_if.pos_x, req_in_if.pos_y, req_in_if.color, req_in_if.depth, req_in_if.backface}),
+            .data_in    ({req_in_if.tmask, req_in_if.pos_x, req_in_if.pos_y, req_in_if.color, req_in_if.depth, req_in_if.face}),
             .ready_in   (req_in_if.ready),
             .valid_out  (req_valid_out),
             .data_out   (req_data_out),
@@ -41,7 +41,7 @@ module VX_rop_req_demux #(
         
         for (genvar i = 0; i < NUM_REQS; i++) begin
             assign req_out_if[i].valid = req_valid_out[i];
-            assign {req_out_if[i].tmask, req_out_if[i].pos_x, req_out_if[i].pos_y, req_out_if[i].color, req_out_if[i].depth, req_out_if[i].backface} = req_data_out[i];
+            assign {req_out_if[i].tmask, req_out_if[i].pos_x, req_out_if[i].pos_y, req_out_if[i].color, req_out_if[i].depth, req_out_if[i].face} = req_data_out[i];
             assign req_ready_out[i] = req_out_if[i].ready;
         end
 
@@ -56,7 +56,7 @@ module VX_rop_req_demux #(
         assign req_out_if[0].pos_y = req_in_if.pos_y;
         assign req_out_if[0].color = req_in_if.color;
         assign req_out_if[0].depth = req_in_if.depth;
-        assign req_out_if[0].backface = req_in_if.backface;
+        assign req_out_if[0].face  = req_in_if.face;
         assign req_in_if.ready = req_out_if[0].ready;
 
     end

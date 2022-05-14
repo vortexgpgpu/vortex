@@ -26,7 +26,7 @@ module VX_rop_req_mux #(
 
         for (genvar i = 0; i < NUM_REQS; i++) begin
             assign req_valid_in[i] = req_in_if[i].valid;
-            assign req_data_in[i] = {req_in_if[i].tmask, req_in_if[i].pos_x, req_in_if[i].pos_y, req_in_if[i].color, req_in_if[i].depth, req_in_if[i].backface};
+            assign req_data_in[i] = {req_in_if[i].tmask, req_in_if[i].pos_x, req_in_if[i].pos_y, req_in_if[i].color, req_in_if[i].depth, req_in_if[i].face};
             assign req_in_if[i].ready = req_ready_in[i];
         end        
 
@@ -43,7 +43,7 @@ module VX_rop_req_mux #(
             .data_in   (req_data_in),
             .ready_in  (req_ready_in),
             .valid_out (req_out_if.valid),
-            .data_out  ({req_out_if.tmask, req_out_if.pos_x, req_out_if.pos_y, req_out_if.color, req_out_if.depth, req_out_if.backface}),
+            .data_out  ({req_out_if.tmask, req_out_if.pos_x, req_out_if.pos_y, req_out_if.color, req_out_if.depth, req_out_if.face}),
             .ready_out (req_out_if.ready)
         );
 
@@ -52,14 +52,14 @@ module VX_rop_req_mux #(
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
 
-        assign req_out_if.valid    = req_in_if[0].valid;
+        assign req_out_if.valid = req_in_if[0].valid;
 
-        assign req_out_if.tmask    = req_in_if[0].tmask;
-        assign req_out_if.pos_x    = req_in_if[0].pos_x;
-        assign req_out_if.pos_y    = req_in_if[0].pos_y;
-        assign req_out_if.color    = req_in_if[0].color;
-        assign req_out_if.depth    = req_in_if[0].depth;
-        assign req_out_if.backface = req_in_if[0].backface;
+        assign req_out_if.tmask = req_in_if[0].tmask;
+        assign req_out_if.pos_x = req_in_if[0].pos_x;
+        assign req_out_if.pos_y = req_in_if[0].pos_y;
+        assign req_out_if.color = req_in_if[0].color;
+        assign req_out_if.depth = req_in_if[0].depth;
+        assign req_out_if.face  = req_in_if[0].face;
 
         assign req_in_if[0].ready  = req_out_if.ready;
 

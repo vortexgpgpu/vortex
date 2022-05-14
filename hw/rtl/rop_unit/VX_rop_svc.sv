@@ -46,8 +46,8 @@ module VX_rop_svc #(
         .reset     (reset),
         .valid_in  (rop_req_valid),
         .ready_in  (rop_req_ready),
-        .data_in   ({rop_svc_req_if.tmask, rop_svc_req_if.pos_x, rop_svc_req_if.pos_y, rop_svc_req_if.color, rop_svc_req_if.depth, rop_svc_req_if.backface}),
-        .data_out  ({rop_req_if.tmask,     rop_req_if.pos_x,     rop_req_if.pos_y,     rop_req_if.color,     rop_req_if.depth,     rop_req_if.backface}),
+        .data_in   ({rop_svc_req_if.tmask, rop_svc_req_if.pos_x, rop_svc_req_if.pos_y, rop_svc_req_if.color, rop_svc_req_if.depth, rop_svc_req_if.face}),
+        .data_out  ({rop_req_if.tmask,     rop_req_if.pos_x,     rop_req_if.pos_y,     rop_req_if.color,     rop_req_if.depth,     rop_req_if.face}),
         .valid_out (rop_req_if.valid),
         .ready_out (rop_req_if.ready)
     );
@@ -81,8 +81,8 @@ module VX_rop_svc #(
             `TRACE_ARRAY1D(1, rop_svc_req_if.pos_x, `NUM_THREADS);
             dpi_trace(1, ", y=");
             `TRACE_ARRAY1D(1, rop_svc_req_if.pos_y, `NUM_THREADS);
-            dpi_trace(1, ", backface=");
-            `TRACE_ARRAY1D(1, rop_svc_req_if.backface, `NUM_THREADS);
+            dpi_trace(1, ", face=");
+            `TRACE_ARRAY1D(1, rop_svc_req_if.face, `NUM_THREADS);
             dpi_trace(1, ", color=");
             `TRACE_ARRAY1D(1, rop_svc_req_if.color, `NUM_THREADS);
             dpi_trace(1, ", depth=");

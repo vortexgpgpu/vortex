@@ -41,24 +41,16 @@ module VX_tex_csr #(
         end
     end
 
-    // CSRs read
-
-    reg [31:0] read_data_r;
-    always @(*) begin
-        case (tex_csr_if.read_addr)
-            `CSR_TEX_STAGE: read_data_r = 32'(reg_csrs.stage);
-            default:        read_data_r = 'x;
-        endcase
-    end
-
-    assign tex_csr_if.read_data = {`NUM_THREADS{read_data_r}};
+    assign tex_csr_if.read_data = 'x;
 
     assign tex_csrs = reg_csrs;
 
     `UNUSED_VAR (tex_csr_if.read_enable)
+    `UNUSED_VAR (tex_csr_if.read_addr)
     `UNUSED_VAR (tex_csr_if.read_uuid)
     `UNUSED_VAR (tex_csr_if.read_wid)
     `UNUSED_VAR (tex_csr_if.read_tmask)
+
     `UNUSED_VAR (tex_csr_if.write_uuid)
     `UNUSED_VAR (tex_csr_if.write_wid)
     `UNUSED_VAR (tex_csr_if.write_tmask)

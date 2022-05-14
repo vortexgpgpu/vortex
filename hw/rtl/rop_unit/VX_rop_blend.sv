@@ -6,7 +6,10 @@ module VX_rop_blend #(
     parameter TAG_WIDTH  = 1
 ) (
     input wire  clk,
-    input wire  reset,   
+    input wire  reset,
+
+    // DCRs
+    input rop_dcrs_t dcrs,
 
     // Handshake
     input wire                  valid_in,
@@ -17,16 +20,6 @@ module VX_rop_blend #(
     output wire [TAG_WIDTH-1:0] tag_out,
     input wire                  ready_out,
 
-    // Configuration states
-    input wire [`ROP_BLEND_MODE_BITS-1:0] blend_mode_rgb,
-    input wire [`ROP_BLEND_MODE_BITS-1:0] blend_mode_a,
-    input wire [`ROP_BLEND_FUNC_BITS-1:0] blend_src_rgb,
-    input wire [`ROP_BLEND_FUNC_BITS-1:0] blend_src_a,
-    input wire [`ROP_BLEND_FUNC_BITS-1:0] blend_dst_rgb,
-    input wire [`ROP_BLEND_FUNC_BITS-1:0] blend_dst_a,
-    input wire rgba_t                     blend_const,
-    input wire [`ROP_LOGIC_OP_BITS-1:0]   logic_op,
-
     // Input values 
     input rgba_t [NUM_LANES-1:0] src_color,
     input rgba_t [NUM_LANES-1:0] dst_color,
@@ -35,6 +28,8 @@ module VX_rop_blend #(
     output rgba_t [NUM_LANES-1:0] color_out
 );
     localparam LATENCY = `LATENCY_IMUL + 1;
+
+    `UNUSED_VAR (dcrs)
 
     wire stall = ~ready_out && valid_out;
     
@@ -46,21 +41,21 @@ module VX_rop_blend #(
     for (genvar i = 0; i < NUM_LANES; i++) begin : blend_func_inst
         VX_rop_blend_func #(
         ) rop_blend_func_src (
-            .func_rgb   (blend_src_rgb),
-            .func_a     (blend_src_a),
+            .func_rgb   (dcrs.blend_src_rgb),
+            .func_a     (dcrs.blend_src_a),
             .src_color  (src_color[i]),
             .dst_color  (dst_color[i]),
-            .cst_color  (blend_const),
+            .cst_color  (dcrs.blend_const),
             .factor_out (src_factor[i])
         );
 
         VX_rop_blend_func #(
         ) rop_blend_func_dst (
-            .func_rgb   (blend_dst_rgb),
-            .func_a     (blend_dst_a),
+            .func_rgb   (dcrs.blend_dst_rgb),
+            .func_a     (dcrs.blend_dst_a),
             .src_color  (src_color[i]),
             .dst_color  (dst_color[i]),
-            .cst_color  (blend_const),
+            .cst_color  (dcrs.blend_const),
             .factor_out (dst_factor[i])
         );
     end
@@ -97,8 +92,8 @@ module VX_rop_blend #(
             .clk        (clk),
             .reset      (reset),
             .enable     (~stall),
-            .mode_rgb   (blend_mode_rgb),
-            .mode_a     (blend_mode_a),
+            .mode_rgb   (dcrs.blend_mode_rgb),
+            .mode_a     (dcrs.blend_mode_a),
             .src_color  (src_color_s1[i]),
             .dst_color  (dst_color_s1[i]),
             .src_factor (src_factor_s1[i]),
@@ -124,7 +119,7 @@ module VX_rop_blend #(
             .clk        (clk),
             .reset      (reset),
             .enable     (~stall),
-            .op         (logic_op),
+            .op         (dcrs.logic_op),
             .src_color  (src_color_s1[i]),
             .dst_color  (dst_color_s1[i]),
             .color_out  (logic_op_color_s2[i])
@@ -147,7 +142,7 @@ module VX_rop_blend #(
     for (genvar i = 0; i < NUM_LANES; i++) begin
         always @(*) begin
             // RGB Component
-            case (blend_mode_rgb)
+            case (dcrs.blend_mode_rgb)
                 `ROP_BLEND_MODE_ADD, 
                 `ROP_BLEND_MODE_SUB, 
                 `ROP_BLEND_MODE_REV_SUB: begin
@@ -177,7 +172,7 @@ module VX_rop_blend #(
                     end
             endcase
             // Alpha Component
-            case (blend_mode_a)
+            case (dcrs.blend_mode_a)
                 `ROP_BLEND_MODE_ADD, 
                 `ROP_BLEND_MODE_SUB, 
                 `ROP_BLEND_MODE_REV_SUB: begin

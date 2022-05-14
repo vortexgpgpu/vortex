@@ -15,6 +15,7 @@ typedef struct {
   uint32_t  depth;
   bool      backface;
   bool      blend_enable;
+  bool      use_sw;
 } kernel_arg_t;
 
 #endif

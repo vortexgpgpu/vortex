@@ -462,11 +462,12 @@ public:
              uint32_t depthstencil, 
              uint32_t color, 
              RopUnit::TraceData::Ptr trace_data) {
+
     auto stencil_writemask = is_backface ? stencil_back_writemask_ : stencil_front_writemask_;
-    uint32_t writeMask = (stencil_enable ? (stencil_writemask << ROP_DEPTH_BITS) : 0) 
-                       | ((depth_enable && ds_passed && depth_writemask_) ? ROP_DEPTH_MASK : 0);
-    if (writeMask) {      
-      uint32_t write_value = (dst_depthstencil & ~writeMask) | (depthstencil & writeMask);
+    auto ds_writeMask = ((depth_enable && ds_passed && depth_writemask_) ? ROP_DEPTH_MASK : 0) 
+                      | (stencil_enable ? (stencil_writemask << ROP_DEPTH_BITS) : 0);
+    if (ds_writeMask != 0) {      
+      uint32_t write_value = (dst_depthstencil & ~ds_writeMask) | (depthstencil & ds_writeMask);
       uint32_t zbuf_addr = zbuf_baseaddr_ + y * zbuf_pitch_ + x * 4;        
       mem_->write(&write_value, zbuf_addr, 4);
       trace_data->mem_wr_addrs.push_back({zbuf_addr, 4});
@@ -490,14 +491,14 @@ private:
     uint32_t count;
   };
 
-  RopUnit* simobject_;    
-  const Arch& arch_;    
-  PerfStats perf_stats_;
-  ::MemoryUnit memoryUnit_;
-  DepthTencil  depthStencil_;
-  Blender      blender_;
+  RopUnit*      simobject_;    
+  const Arch&   arch_;    
+  PerfStats     perf_stats_;
+  ::MemoryUnit  memoryUnit_;
+  DepthTencil   depthStencil_;
+  Blender       blender_;
   HashTable<pending_req_t> pending_reqs_;
-  uint64_t last_pop_time_;
+  uint64_t      last_pop_time_;
 
 public:
   Impl(RopUnit* simobject,      

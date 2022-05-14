@@ -53,17 +53,18 @@ vx_device_h device = nullptr;
 vx_buffer_h staging_buf = nullptr;
 uint64_t zbuf_addr = -1;
 uint64_t cbuf_addr = -1;
+bool use_sw = false;
 
 kernel_arg_t kernel_arg;
 
 static void show_usage() {
    std::cout << "Vortex Render Output Test." << std::endl;
-   std::cout << "Usage: [-c color] [-d depth] [-f face] [-k: kernel] [-o image] [-r reference] [-w width] [-h height]" << std::endl;
+   std::cout << "Usage: [-c color] [-d depth] [-b blend] [-f face] [-k: kernel] [-o image] [-r reference] [-w width] [-h height] [-z no_hw]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "o:r:k:w:h:c:bdfh?")) != -1) {
+  while ((c = getopt(argc, argv, "o:r:k:w:h:c:bdfz?")) != -1) {
     switch (c) {
     case 'o':
       output_file = optarg;
@@ -91,6 +92,9 @@ static void parse_args(int argc, char **argv) {
       break;
     case 'b':
       blend_enable = true;
+      break;
+    case 'z':
+      use_sw = true;
       break;
     case '?': {
       show_usage();
@@ -121,6 +125,7 @@ int render(uint32_t num_tasks) {
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
   {
+    kernel_arg.use_sw     = use_sw;
     kernel_arg.num_tasks  = num_tasks;
     kernel_arg.dst_width  = dst_width;
     kernel_arg.dst_height = dst_height;    

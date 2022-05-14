@@ -188,7 +188,7 @@ module VX_gpu_unit #(
     assign rop_svc_req_if.PC    = gpu_req_if.PC;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign rop_svc_req_if.backface[i] = gpu_req_if.rs1_data[i][0];
+        assign rop_svc_req_if.face[i]  = gpu_req_if.rs1_data[i][0];
         assign rop_svc_req_if.pos_x[i] = gpu_req_if.rs1_data[i][1 +: `ROP_DIM_BITS];
         assign rop_svc_req_if.pos_y[i] = gpu_req_if.rs1_data[i][16 +: `ROP_DIM_BITS];    
         assign rop_svc_req_if.color[i] = gpu_req_if.rs2_data[i];

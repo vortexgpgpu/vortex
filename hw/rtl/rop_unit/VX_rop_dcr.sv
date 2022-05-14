@@ -14,20 +14,20 @@ module VX_rop_dcr (
 );
 
 `define DEPTH_TEST_ENABLE(func, writemask) \
-            ~((func == `ROP_DEPTH_FUNC_ALWAYS) && ~writemask)
+        ~((func == `ROP_DEPTH_FUNC_ALWAYS) && ~writemask)
     
 `define STENCIL_TEST_ENABLE(func, zpass, zfail) \
-            ~((func  == `ROP_DEPTH_FUNC_ALWAYS) \
-           && (zpass == `ROP_STENCIL_OP_KEEP)   \
-           && (zfail == `ROP_STENCIL_OP_KEEP))
+         ~((func  == `ROP_DEPTH_FUNC_ALWAYS) \
+        && (zpass == `ROP_STENCIL_OP_KEEP)   \
+        && (zfail == `ROP_STENCIL_OP_KEEP))
 
 `define BLEND_ENABLE(mode_rgb, mode_a, src_rgb, src_a, dst_rgb, dst_a) \
-            ~((mode_rgb == `ROP_BLEND_MODE_ADD)  \
-           && (mode_a   == `ROP_BLEND_MODE_ADD)  \
-           && (src_rgb  == `ROP_BLEND_FUNC_ONE)  \
-           && (src_a    == `ROP_BLEND_FUNC_ONE)  \
-           && (dst_rgb  == `ROP_BLEND_FUNC_ZERO) \
-           && (dst_a    == `ROP_BLEND_FUNC_ZERO))
+         ~((mode_rgb == `ROP_BLEND_MODE_ADD)  \
+        && (mode_a   == `ROP_BLEND_MODE_ADD)  \
+        && (src_rgb  == `ROP_BLEND_FUNC_ONE)  \
+        && (src_a    == `ROP_BLEND_FUNC_ONE)  \
+        && (dst_rgb  == `ROP_BLEND_FUNC_ZERO) \
+        && (dst_a    == `ROP_BLEND_FUNC_ZERO))
 
     rop_dcrs_t dcrs;
 
@@ -62,38 +62,38 @@ module VX_rop_dcr (
                     dcrs.depth_enable    <= `DEPTH_TEST_ENABLE(dcrs.depth_func, dcr_wr_data[0]);
                 end
                 `DCR_ROP_STENCIL_FUNC: begin 
-                    dcrs.stencil_front_func   <= dcr_wr_data[0 +: `ROP_DEPTH_FUNC_BITS];
-                    dcrs.stencil_back_func    <= dcr_wr_data[16 +: `ROP_DEPTH_FUNC_BITS];
-                    dcrs.stencil_front_enable <= `STENCIL_TEST_ENABLE(dcr_wr_data[0 +: `ROP_DEPTH_FUNC_BITS], dcrs.stencil_front_zpass, dcrs.stencil_front_zfail);
-                    dcrs.stencil_back_enable  <= `STENCIL_TEST_ENABLE(dcr_wr_data[16 +: `ROP_DEPTH_FUNC_BITS], dcrs.stencil_back_zpass, dcrs.stencil_back_zfail);
+                    dcrs.stencil_func[0]   <= dcr_wr_data[0 +: `ROP_DEPTH_FUNC_BITS];
+                    dcrs.stencil_func[1]   <= dcr_wr_data[16 +: `ROP_DEPTH_FUNC_BITS];
+                    dcrs.stencil_enable[0] <= `STENCIL_TEST_ENABLE(dcr_wr_data[0 +: `ROP_DEPTH_FUNC_BITS], dcrs.stencil_zpass[0], dcrs.stencil_zfail[0]);
+                    dcrs.stencil_enable[1] <= `STENCIL_TEST_ENABLE(dcr_wr_data[16 +: `ROP_DEPTH_FUNC_BITS], dcrs.stencil_zpass[1], dcrs.stencil_zfail[1]);
                 end
                 `DCR_ROP_STENCIL_ZPASS: begin 
-                    dcrs.stencil_front_zpass  <= dcr_wr_data[0 +: `ROP_STENCIL_OP_BITS];
-                    dcrs.stencil_back_zpass   <= dcr_wr_data[16 +: `ROP_STENCIL_OP_BITS];
-                    dcrs.stencil_front_enable <= `STENCIL_TEST_ENABLE(dcrs.stencil_front_func, dcr_wr_data[0 +: `ROP_STENCIL_OP_BITS], dcrs.stencil_front_zfail);
-                    dcrs.stencil_back_enable  <= `STENCIL_TEST_ENABLE(dcrs.stencil_back_func, dcr_wr_data[16 +: `ROP_STENCIL_OP_BITS], dcrs.stencil_back_zfail);
+                    dcrs.stencil_zpass[0]  <= dcr_wr_data[0 +: `ROP_STENCIL_OP_BITS];
+                    dcrs.stencil_zpass[1]  <= dcr_wr_data[16 +: `ROP_STENCIL_OP_BITS];
+                    dcrs.stencil_enable[0] <= `STENCIL_TEST_ENABLE(dcrs.stencil_func[0], dcr_wr_data[0 +: `ROP_STENCIL_OP_BITS], dcrs.stencil_zfail[0]);
+                    dcrs.stencil_enable[1] <= `STENCIL_TEST_ENABLE(dcrs.stencil_func[1], dcr_wr_data[16 +: `ROP_STENCIL_OP_BITS], dcrs.stencil_zfail[1]);
                 end
                 `DCR_ROP_STENCIL_ZFAIL: begin 
-                    dcrs.stencil_front_zfail  <= dcr_wr_data[0 +: `ROP_STENCIL_OP_BITS];
-                    dcrs.stencil_back_zfail   <= dcr_wr_data[16 +: `ROP_STENCIL_OP_BITS];
-                    dcrs.stencil_front_enable <= `STENCIL_TEST_ENABLE(dcrs.stencil_front_func, dcrs.stencil_front_zpass, dcr_wr_data[0 +: `ROP_STENCIL_OP_BITS]);
-                    dcrs.stencil_back_enable  <= `STENCIL_TEST_ENABLE(dcrs.stencil_back_func, dcrs.stencil_back_zpass, dcr_wr_data[16 +: `ROP_STENCIL_OP_BITS]);
+                    dcrs.stencil_zfail[0]  <= dcr_wr_data[0 +: `ROP_STENCIL_OP_BITS];
+                    dcrs.stencil_zfail[1]  <= dcr_wr_data[16 +: `ROP_STENCIL_OP_BITS];
+                    dcrs.stencil_enable[0] <= `STENCIL_TEST_ENABLE(dcrs.stencil_func[0], dcrs.stencil_zpass[0], dcr_wr_data[0 +: `ROP_STENCIL_OP_BITS]);
+                    dcrs.stencil_enable[1] <= `STENCIL_TEST_ENABLE(dcrs.stencil_func[1], dcrs.stencil_zpass[1], dcr_wr_data[16 +: `ROP_STENCIL_OP_BITS]);
                 end
                 `DCR_ROP_STENCIL_FAIL: begin 
-                    dcrs.stencil_front_fail   <= dcr_wr_data[0 +: `ROP_STENCIL_OP_BITS];
-                    dcrs.stencil_back_fail    <= dcr_wr_data[16 +: `ROP_STENCIL_OP_BITS];
+                    dcrs.stencil_fail[0] <= dcr_wr_data[0 +: `ROP_STENCIL_OP_BITS];
+                    dcrs.stencil_fail[1] <= dcr_wr_data[16 +: `ROP_STENCIL_OP_BITS];
                 end                
                 `DCR_ROP_STENCIL_REF: begin 
-                    dcrs.stencil_front_ref    <= dcr_wr_data[0 +: `ROP_STENCIL_BITS];
-                    dcrs.stencil_back_ref     <= dcr_wr_data[16 +: `ROP_STENCIL_BITS];
+                    dcrs.stencil_ref[0] <= dcr_wr_data[0 +: `ROP_STENCIL_BITS];
+                    dcrs.stencil_ref[1] <= dcr_wr_data[16 +: `ROP_STENCIL_BITS];
                 end
                 `DCR_ROP_STENCIL_MASK: begin 
-                    dcrs.stencil_front_mask   <= dcr_wr_data[0 +: `ROP_STENCIL_BITS];
-                    dcrs.stencil_back_mask    <= dcr_wr_data[16 +: `ROP_STENCIL_BITS];
+                    dcrs.stencil_mask[0] <= dcr_wr_data[0 +: `ROP_STENCIL_BITS];
+                    dcrs.stencil_mask[1] <= dcr_wr_data[16 +: `ROP_STENCIL_BITS];
                 end
                 `DCR_ROP_STENCIL_WRITEMASK: begin 
-                    dcrs.stencil_front_writemask <= dcr_wr_data[0 +: `ROP_STENCIL_BITS];
-                    dcrs.stencil_back_writemask  <= dcr_wr_data[16 +: `ROP_STENCIL_BITS];
+                    dcrs.stencil_writemask[0] <= dcr_wr_data[0 +: `ROP_STENCIL_BITS];
+                    dcrs.stencil_writemask[1] <= dcr_wr_data[16 +: `ROP_STENCIL_BITS];
                 end
                 `DCR_ROP_BLEND_MODE: begin 
                     dcrs.blend_mode_rgb <= dcr_wr_data[0  +: `ROP_BLEND_MODE_BITS];

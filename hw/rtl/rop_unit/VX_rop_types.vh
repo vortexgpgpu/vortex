@@ -24,23 +24,14 @@ typedef struct packed {
     logic [`ROP_DEPTH_FUNC_BITS-1:0]    depth_func;
     logic                               depth_writemask;
     
-    logic                               stencil_front_enable;
-    logic [`ROP_DEPTH_FUNC_BITS-1:0]    stencil_front_func;    
-    logic [`ROP_STENCIL_OP_BITS-1:0]    stencil_front_zpass;
-    logic [`ROP_STENCIL_OP_BITS-1:0]    stencil_front_zfail;
-    logic [`ROP_STENCIL_OP_BITS-1:0]    stencil_front_fail;
-    logic [`ROP_STENCIL_BITS-1:0]       stencil_front_ref;
-    logic [`ROP_STENCIL_BITS-1:0]       stencil_front_mask;    
-    logic [`ROP_STENCIL_BITS-1:0]       stencil_front_writemask;
-
-    logic                               stencil_back_enable;
-    logic [`ROP_DEPTH_FUNC_BITS-1:0]    stencil_back_func;    
-    logic [`ROP_STENCIL_OP_BITS-1:0]    stencil_back_zpass;
-    logic [`ROP_STENCIL_OP_BITS-1:0]    stencil_back_zfail;
-    logic [`ROP_STENCIL_OP_BITS-1:0]    stencil_back_fail;
-    logic [`ROP_STENCIL_BITS-1:0]       stencil_back_ref;
-    logic [`ROP_STENCIL_BITS-1:0]       stencil_back_mask;
-    logic [`ROP_STENCIL_BITS-1:0]       stencil_back_writemask;
+    logic [1:0]                         stencil_enable;
+    logic [1:0][`ROP_DEPTH_FUNC_BITS-1:0] stencil_func;    
+    logic [1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_zpass;
+    logic [1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_zfail;
+    logic [1:0][`ROP_STENCIL_OP_BITS-1:0] stencil_fail;
+    logic [1:0][`ROP_STENCIL_BITS-1:0]  stencil_ref;
+    logic [1:0][`ROP_STENCIL_BITS-1:0]  stencil_mask;    
+    logic [1:0][`ROP_STENCIL_BITS-1:0]  stencil_writemask;
     
     logic                               blend_enable;
     logic [`ROP_BLEND_MODE_BITS-1:0]    blend_mode_rgb;

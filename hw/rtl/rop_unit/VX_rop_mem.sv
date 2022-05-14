@@ -26,7 +26,7 @@ module VX_rop_mem #(
     input rgba_t [NUM_LANES-1:0]                    req_color, 
     input wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] req_depth,
     input wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] req_stencil,
-    input wire [NUM_LANES-1:0]                      req_backface,
+    input wire [NUM_LANES-1:0]                      req_face,
     input wire [TAG_WIDTH-1:0]                      req_tag,
     output wire                                     req_ready,
 
@@ -65,13 +65,13 @@ module VX_rop_mem #(
     wire depth_enable = dcrs.depth_enable && (~req_rw || (dcrs.depth_writemask != 0));
     wire [2:0] depth_byteen = {3{dcrs.depth_writemask}};
 
-    wire stencil_front_enable = dcrs.stencil_back_enable && (~req_rw || (dcrs.stencil_back_writemask != 0));
-    wire stencil_back_enable  = dcrs.stencil_front_enable && (~req_rw || (dcrs.stencil_front_writemask != 0));
+    wire stencil_front_enable = dcrs.stencil_enable[0] && (~req_rw || (dcrs.stencil_writemask[0] != 0));
+    wire stencil_back_enable  = dcrs.stencil_enable[1] && (~req_rw || (dcrs.stencil_writemask[1] != 0));    
     wire stencil_enable = stencil_back_enable | stencil_front_enable;
 
     wire [NUM_LANES-1:0] stencil_byteen;
     for (genvar i = 0;  i < NUM_LANES; ++i) begin        
-        assign stencil_byteen[i] = req_backface[i] ? (dcrs.stencil_back_writemask != 0) : (dcrs.stencil_front_writemask != 0);
+        assign stencil_byteen[i] = (dcrs.stencil_writemask[req_face[i]] != 0);
     end
 
     wire mul_ready_in;

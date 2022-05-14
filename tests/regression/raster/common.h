@@ -61,6 +61,7 @@ typedef struct {
   uint32_t cbuf_pitch;  
 
   uint32_t prim_addr;
+  bool     use_sw;
 } kernel_arg_t;
 
 #endif

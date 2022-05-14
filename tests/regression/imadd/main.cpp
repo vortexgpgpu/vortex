@@ -29,16 +29,17 @@ vx_buffer_h src2_buf = nullptr;
 vx_buffer_h src3_buf = nullptr;
 vx_buffer_h src4_buf = nullptr;
 vx_buffer_h dst_buf  = nullptr;
+bool use_sw = false;
 kernel_arg_t kernel_arg;
 
 static void show_usage() {
    std::cout << "Vortex Test." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-n words] [-c] [-h: help]" << std::endl;
+   std::cout << "Usage: [-k: kernel] [-n words] [-c] [-z no_hw]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "n:k:ch?")) != -1) {
+  while ((c = getopt(argc, argv, "n:k:czh?")) != -1) {
     switch (c) {
     case 'n':
       count = atoi(optarg);
@@ -49,7 +50,9 @@ static void parse_args(int argc, char **argv) {
     case 'c':
       stop_on_error = false;
       break;
-    case 'h':
+    case 'z':
+      use_sw = true;
+      break;
     case '?': {
       show_usage();
       exit(0);
@@ -150,12 +153,13 @@ int main(int argc, char *argv[]) {
 
   kernel_arg.num_tasks = num_tasks;
   kernel_arg.task_size = count;
+  kernel_arg.use_sw    = use_sw;
 
   std::cout << "dev_src0=" << std::hex << kernel_arg.src0_addr << std::dec << std::endl;
   std::cout << "dev_src1=" << std::hex << kernel_arg.src1_addr << std::dec << std::endl;
   std::cout << "dev_src2=" << std::hex << kernel_arg.src2_addr << std::dec << std::endl;
   std::cout << "dev_src3=" << std::hex << kernel_arg.src3_addr << std::dec << std::endl;
-  std::cout << "dev_dst=" << std::hex << kernel_arg.dst_addr << std::dec << std::endl;
+  std::cout << "dev_dst="  << std::hex << kernel_arg.dst_addr << std::dec << std::endl;
   
   // allocate staging buffer  
   std::cout << "allocate staging buffer" << std::endl;

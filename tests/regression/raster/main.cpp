@@ -46,18 +46,20 @@ uint64_t cbuf_addr = -1;
 uint64_t tilebuf_addr = -1;
 uint64_t primbuf_addr = -1;
 
+bool use_sw = false;
+
 kernel_arg_t kernel_arg;
 
 uint32_t tile_size = 1 << RASTER_TILE_LOGSIZE;
 
 static void show_usage() {
    std::cout << "Vortex rasterizer Test." << std::endl;
-   std::cout << "Usage: [-t trace] [-o output] [-r reference] [-w width] [-h height]" << std::endl;
+   std::cout << "Usage: [-t trace] [-o output] [-r reference] [-w width] [-h height] [-z no_hw]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "t:i:o:r:w:h:t:?")) != -1) {
+  while ((c = getopt(argc, argv, "t:i:o:r:w:h:t:z?")) != -1) {
     switch (c) {
     case 't':
       trace_file = optarg;
@@ -70,6 +72,9 @@ static void parse_args(int argc, char **argv) {
       break;
     case 'w':
       dst_width = std::atoi(optarg);
+      break;
+    case 'z':
+      use_sw = true;
       break;
     case 'h':
       dst_height = std::atoi(optarg);
@@ -139,6 +144,7 @@ int render(const CGLTrace& trace) {
     // upload kernel argument
     std::cout << "upload kernel argument" << std::endl;
     {
+      kernel_arg.use_sw      = use_sw;
       kernel_arg.prim_addr   = primbuf_addr;
       kernel_arg.dst_width   = dst_width;
       kernel_arg.dst_height  = dst_height;

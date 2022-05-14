@@ -36,6 +36,7 @@ module VX_rop_csr #(
     assign rop_csrs = reg_csrs;
 
     `UNUSED_VAR (rop_csr_if.read_enable)
+    `UNUSED_VAR (rop_csr_if.read_addr)
     `UNUSED_VAR (rop_csr_if.read_uuid)
     `UNUSED_VAR (rop_csr_if.read_wid)
     `UNUSED_VAR (rop_csr_if.read_tmask)

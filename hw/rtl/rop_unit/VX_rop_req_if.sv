@@ -11,7 +11,7 @@ interface VX_rop_req_if #(
     wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] pos_y;
     rgba_t [NUM_LANES-1:0]                  color;
     wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] depth;
-    wire [NUM_LANES-1:0]                    backface;
+    wire [NUM_LANES-1:0]                    face;
 
     wire                                    ready;
 
@@ -22,7 +22,7 @@ interface VX_rop_req_if #(
         output pos_y,
         output color,
         output depth,
-        output backface,
+        output face,
         input  ready
     );
 
@@ -33,7 +33,7 @@ interface VX_rop_req_if #(
         input  pos_y,
         input  color,
         input  depth,
-        input  backface,
+        input  face,
         output ready
     );
 
