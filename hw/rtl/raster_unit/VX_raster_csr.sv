@@ -29,6 +29,7 @@ module VX_raster_csr #(
         VX_dp_ram #(
             .DATAW       ($bits(raster_csrs_t)),
             .SIZE        (`NUM_WARPS),
+            .LUTRAM      (1),
             .INIT_ENABLE (1),
             .INIT_VALUE  (0)
         ) dp_ram (

@@ -104,7 +104,7 @@ module VX_gpu_unit #(
     
     assign barrier.valid   = is_bar;
     assign barrier.id      = rs1_data[`NB_BITS-1:0];
-    assign barrier.size_m1 = (`NW_BITS)'(rs2_data - 1);       
+    assign barrier.size_m1 = `NW_BITS'(rs2_data - 1);       
 
     // Warp control response
     wire wctl_req_valid = gpu_req_if.valid & (is_wspawn | is_tmc | is_split | is_join | is_bar | is_pred);

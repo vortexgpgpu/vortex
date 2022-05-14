@@ -22,15 +22,15 @@ module VX_dp_ram #(
 );
     `STATIC_ASSERT((1 == BYTEENW) || ((BYTEENW > 1) && 0 == (BYTEENW % 4)), ("invalid parameter"))
 
-`define RAM_INITIALIZATION                        \
-    if (INIT_ENABLE) begin                        \
-        if (INIT_FILE != "") begin                \
-            initial $readmemh(INIT_FILE, ram);    \
-        end else begin                            \
-            initial                               \
-                for (integer i = 0; i < SIZE; ++i)\
-                    ram[i] = INIT_VALUE;          \
-        end                                       \
+`define RAM_INITIALIZATION                         \
+    if (INIT_ENABLE) begin                         \
+        if (INIT_FILE != "") begin                 \
+            initial $readmemh(INIT_FILE, ram);     \
+        end else begin                             \
+            initial                                \
+                for (integer i = 0; i < SIZE; ++i) \
+                    ram[i] = INIT_VALUE;           \
+        end                                        \
     end
 
 `ifdef SYNTHESIS
