@@ -96,9 +96,9 @@ module VX_raster_csr #(
     `UNUSED_VAR (raster_csr_if.write_tmask)
 
 `ifdef DBG_TRACE_TEX
-    logic [`NUM_THREADS-1:0][`RASTER_DIM_BITS-2:0] pos_x;
-    logic [`NUM_THREADS-1:0][`RASTER_DIM_BITS-2:0] pos_y;
-    logic [`NUM_THREADS-1:0][3:0]                  mask;
+    wire [`NUM_THREADS-1:0][`RASTER_DIM_BITS-2:0] pos_x;
+    wire [`NUM_THREADS-1:0][`RASTER_DIM_BITS-2:0] pos_y;
+    wire [`NUM_THREADS-1:0][3:0]                  mask;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign pos_x[i] = write_data[i].pos_x;

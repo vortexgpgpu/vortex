@@ -5,36 +5,36 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_te_arbiter #(
-    parameter RASTER_TILE_SIZE       = 16,
-    parameter RASTER_BLOCK_SIZE      = 4,
-    parameter RASTER_TILE_FIFO_DEPTH = 32,
-    parameter RASTER_LEVEL_DATA_BITS = $clog2(RASTER_TILE_SIZE/RASTER_BLOCK_SIZE) + 1,
+    parameter TILE_SIZE       = 16,
+    parameter BLOCK_SIZE      = 4,
+    parameter TILE_FIFO_DEPTH = 32,
+    parameter RASTER_LEVEL_DATA_BITS = $clog2(TILE_SIZE/BLOCK_SIZE) + 1,
     parameter RASTER_FIFO_DATA_WIDTH = (RASTER_LEVEL_DATA_BITS + 2*`RASTER_DIM_BITS + 3*`RASTER_PRIMITIVE_DATA_BITS)
 ) (
-    input logic                                 clk, reset,
-    input logic [3:0]                           fifo_push, fifo_pop,
-    input logic [RASTER_FIFO_DATA_WIDTH-1:0]    data_push[3:0],
+    input wire                                 clk, reset,
+    input wire [3:0]                           fifo_push, fifo_pop,
+    input wire [RASTER_FIFO_DATA_WIDTH-1:0]    data_push[3:0],
 
-    output logic [RASTER_FIFO_DATA_WIDTH-1:0]   data_pop,
-    output logic [3:0]                          fifo_index_onehot,
-    output logic                                fifo_full, fifo_empty, fifo_data_valid
+    output wire [RASTER_FIFO_DATA_WIDTH-1:0]   data_pop,
+    output wire [3:0]                          fifo_index_onehot,
+    output wire                                fifo_full, fifo_empty, fifo_data_valid
 );
 
-    // localparam RASTER_TILE_FIFO_DEPTH = (RASTER_TILE_SIZE*RASTER_TILE_SIZE)/(RASTER_BLOCK_SIZE*RASTER_BLOCK_SIZE);
+    // localparam TILE_FIFO_DEPTH = (TILE_SIZE*TILE_SIZE)/(BLOCK_SIZE*BLOCK_SIZE);
 
     // Per FIFO flags
-    logic [3:0] empty_flag, full_flag;
-    logic [RASTER_FIFO_DATA_WIDTH-1:0] data_pop_array[3:0];
+    wire [3:0] empty_flag, full_flag;
+    wire [RASTER_FIFO_DATA_WIDTH-1:0] data_pop_array[3:0];
 
     // Index selected from arbitration
-    logic [1:0] fifo_index;
+    wire [1:0] fifo_index;
 
     // Generate 4 queues for 4 sub-tiles
     for(genvar i = 0; i < 4; ++i) begin
         // Sub-tile queue
         VX_fifo_queue #(
             .DATAW	    (RASTER_FIFO_DATA_WIDTH),
-            .SIZE       (RASTER_TILE_FIFO_DEPTH),
+            .SIZE       (TILE_FIFO_DEPTH),
             .OUT_REG    (1)
         ) tile_fifo_queue (
             .clk        (clk),

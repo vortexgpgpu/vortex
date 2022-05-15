@@ -9,40 +9,41 @@
 //      depending on the ready signal from the slices
 
 module VX_raster_mem #(  
-    parameter RASTER_SLICE_NUM  = 4,
-    parameter RASTER_TILE_SIZE  = 16,
-    parameter RASTER_RS_SIZE    = 8, // Reservation station size
-    parameter RASTER_SLICE_BITS = `LOG2UP(RASTER_SLICE_NUM)
+    parameter NUM_SLICES = 4,
+    parameter TILE_SIZE  = 16,
+    parameter RS_SIZE    = 8,
+    parameter SLICE_BITS = `LOG2UP(NUM_SLICES)
 ) (
     // Standard inputs
-    input logic         clk,
-    input logic         reset,
-
-    // To indicate valid inputs provided
-    input logic         input_valid,
-    // Memory information
-    input logic         [`RASTER_DCR_DATA_BITS-1:0]         num_tiles,
-    input logic         [`RASTER_DCR_DATA_BITS-1:0]         tbuf_baseaddr,
-    input logic         [`RASTER_DCR_DATA_BITS-1:0]         pbuf_baseaddr,
-    input logic         [`RASTER_DCR_DATA_BITS-1:0]         pbuf_stride,
-
-    // Raster slice interactions
-    input logic         [RASTER_SLICE_NUM-1:0]              raster_slice_ready,
-    output logic        [`RASTER_DIM_BITS-1:0]              out_x_loc, out_y_loc,
-    output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_edges[2:0][2:0],
-    output logic        [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_pid,
-    output logic        [RASTER_SLICE_BITS-1:0]             out_slice_index,
-
-    // Status signals
-    output logic        ready, out_valid,
+    input wire         clk,
+    input wire         reset,
 
     // Memory interface
     VX_cache_req_if.master cache_req_if,
-    VX_cache_rsp_if.slave  cache_rsp_if
+    VX_cache_rsp_if.slave  cache_rsp_if,
+
+    // To indicate valid inputs provided
+    input wire         input_valid,
+    // Memory information
+    input wire         [`RASTER_DCR_DATA_BITS-1:0]         num_tiles,
+    input wire         [`RASTER_DCR_DATA_BITS-1:0]         tbuf_baseaddr,
+    input wire         [`RASTER_DCR_DATA_BITS-1:0]         pbuf_baseaddr,
+    input wire         [`RASTER_DCR_DATA_BITS-1:0]         pbuf_stride,
+
+    // Raster slice interactions
+    input wire         [NUM_SLICES-1:0]                    raster_slice_ready,
+    output wire        [`RASTER_DIM_BITS-1:0]              out_x_loc, out_y_loc,
+    output wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_edges[2:0][2:0],
+    output wire        [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_pid,
+    output wire        [SLICE_BITS-1:0]                    out_slice_index,
+
+    // Status signals
+    output wire ready,
+    output wire out_valid
 );
     localparam MUL_LATENCY       = 3;
     localparam NUM_REQS          = `RASTER_MEM_REQS;
-    localparam RASTER_TILE_BITS  = $clog2(RASTER_TILE_SIZE);
+    localparam RASTER_TILE_BITS  = $clog2(TILE_SIZE);
 
     // Bit tag identifier for type of memory request
     // Request #1: Tile and primitive id fetch => bit = 01
@@ -54,43 +55,45 @@ module VX_raster_mem #(
     localparam TILE_FETCH_MASK      = 9'(2'b11);
     localparam PRIM_ID_FETCH_MASK   = 9'(1'b1);
     localparam PRIM_DATA_FETCH_MASK = {9{1'b1}};
-
-    // Temp storage to cycle through all primitives and tiles
-    logic [`RASTER_DCR_DATA_BITS-1:0]   temp_tbuf_addr, temp_pbuf_addr,
-                                        temp_num_prims, temp_num_tiles,
-                                        temp_pbuf_stride;
-    logic [`RASTER_DIM_BITS-1:0]        temp_x_loc, temp_y_loc;
-
+    
     // Holds x_loc, y_loc, edge_func_val, edges, pid -> extents are calculated on the fly
     localparam RASTER_RS_DATA_WIDTH = 2*`RASTER_DIM_BITS + 3*3*`RASTER_PRIMITIVE_DATA_BITS + `RASTER_PRIMITIVE_DATA_BITS;
-    localparam RASTER_RS_INDEX_BITS = `LOG2UP(RASTER_RS_SIZE);
-
-    // Reservation station
-    logic [RASTER_RS_DATA_WIDTH-1:0]    raster_rs[RASTER_RS_SIZE-1:0];
-    logic [RASTER_RS_SIZE-1:0]          raster_rs_valid;
-    logic [RASTER_RS_SIZE-1:0]          raster_rs_empty;
-
-    logic [RASTER_RS_INDEX_BITS-1:0]    raster_rs_empty_index, raster_rs_index;
-
-    // Status signals
-    logic valid_raster_index, valid_rs_index, valid_rs_empty_index;
-    logic fetch_fsm_complete;
-
-    // Memory interactions
-    logic mem_req_valid, mem_req_ready, mem_rsp_valid, temp_mem_rsp_valid;
-    logic [8:0][`RASTER_DCR_DATA_BITS-1:0]       mem_req_addr;
-    logic [8:0][`RASTER_PRIMITIVE_DATA_BITS-1:0] mem_rsp_data;
-    logic [8:0][`RASTER_PRIMITIVE_DATA_BITS-1:0] prim_mem_rsp_data;
-    logic [8:0][`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_mem_rsp_data;
+    localparam RASTER_RS_INDEX_BITS = `LOG2UP(RS_SIZE);
 
     localparam TAG_MAX_BIT_INDEX = 2;
-    logic [TAG_MAX_BIT_INDEX-1:0]                mem_rsp_tag, temp_mem_rsp_tag; // size increased by 1 bit to account for the mem_tag_type
-    logic [1:0]                                  mem_tag_type;
-    logic [8:0]                                  mem_req_mask;
-    logic [`RASTER_PRIMITIVE_DATA_BITS-1:0]      pid;
+
+    // Temp storage to cycle through all primitives and tiles
+    reg [`RASTER_DCR_DATA_BITS-1:0] temp_tbuf_addr, temp_pbuf_addr,
+                                    temp_num_prims, temp_num_tiles,
+                                    temp_pbuf_stride;
+    reg [`RASTER_DIM_BITS-1:0] temp_x_loc, temp_y_loc;
+
+    // Reservation station
+    reg [RASTER_RS_DATA_WIDTH-1:0] raster_rs[RS_SIZE-1:0];
+    reg [RS_SIZE-1:0] raster_rs_valid;
+    reg [RS_SIZE-1:0] raster_rs_empty;
+
+    wire [RASTER_RS_INDEX_BITS-1:0]    raster_rs_empty_index, raster_rs_index;
+
+    // Status signals
+    wire valid_raster_index, valid_rs_index, valid_rs_empty_index;
+    wire fetch_fsm_complete;
+
+    // Memory interactions
+    reg mem_req_valid;
+    wire mem_req_ready, mem_rsp_valid, temp_mem_rsp_valid;
+    reg [8:0][`RASTER_DCR_DATA_BITS-1:0]       mem_req_addr;
+    wire [8:0][`RASTER_PRIMITIVE_DATA_BITS-1:0] mem_rsp_data;
+    wire [8:0][`RASTER_PRIMITIVE_DATA_BITS-1:0] prim_mem_rsp_data;
+    wire [8:0][`RASTER_PRIMITIVE_DATA_BITS-1:0] temp_mem_rsp_data;
+
+    wire [TAG_MAX_BIT_INDEX-1:0]                mem_rsp_tag, temp_mem_rsp_tag; // size increased by 1 bit to account for the mem_tag_type
+    reg [1:0]                                  mem_tag_type;
+    reg [8:0]                                  mem_req_mask;
+    reg [`RASTER_PRIMITIVE_DATA_BITS-1:0]      pid;
 
     // Stall when unable to fire the mem_req
-    logic stall;
+    wire stall;
 
     // Stall signal
     //  -> assert when any entry in the RS is empty
@@ -111,7 +114,7 @@ module VX_raster_mem #(
             temp_num_prims  <= 0;
             temp_num_tiles  <= 0;
             pid <= 0;
-            for (int i = 0; i < RASTER_RS_SIZE; ++i) begin
+            for (int i = 0; i < RS_SIZE; ++i) begin
                 raster_rs_valid[i] <= 0;
                 raster_rs_empty[i] <= 1;
             end
@@ -260,11 +263,13 @@ module VX_raster_mem #(
         .clk      (clk),
         .reset    (reset),
         .enable   (1'b1),
-        .data_in  ({temp_mem_rsp_valid, temp_mem_rsp_tag,
+        .data_in  ({
+            temp_mem_rsp_valid, temp_mem_rsp_tag,
             temp_mem_rsp_data[0], temp_mem_rsp_data[1], temp_mem_rsp_data[2],
             temp_mem_rsp_data[3], temp_mem_rsp_data[4], temp_mem_rsp_data[5],
             temp_mem_rsp_data[6], temp_mem_rsp_data[7], temp_mem_rsp_data[8]}),
-        .data_out ({mem_rsp_valid, mem_rsp_tag,
+        .data_out ({
+            mem_rsp_valid, mem_rsp_tag,
             mem_rsp_data[0], mem_rsp_data[1], mem_rsp_data[2],
             mem_rsp_data[3], mem_rsp_data[4], mem_rsp_data[5],
             mem_rsp_data[6], mem_rsp_data[7], mem_rsp_data[8]})
@@ -272,7 +277,7 @@ module VX_raster_mem #(
 
     // Priority encoder to select a free index in the RS
     VX_priority_encoder #( 
-        .N          (RASTER_RS_SIZE)
+        .N          (RS_SIZE)
     ) raster_empty_rs (
         .data_in    (raster_rs_empty),  
         `UNUSED_PIN (onehot),
@@ -282,7 +287,7 @@ module VX_raster_mem #(
 
     // Priority encoder to select the valid entry from RS to dispatch
     VX_priority_encoder #( 
-        .N          (RASTER_RS_SIZE)
+        .N          (RS_SIZE)
     ) raster_request_rs (
         .data_in    (raster_rs_valid),  
         `UNUSED_PIN (onehot),
@@ -291,7 +296,7 @@ module VX_raster_mem #(
     );
 
     VX_priority_encoder #(
-        .N          (RASTER_SLICE_NUM)
+        .N          (NUM_SLICES)
     ) raster_ready_select (
         .data_in    (raster_slice_ready),
         `UNUSED_PIN (onehot),
@@ -299,7 +304,7 @@ module VX_raster_mem #(
         .valid_out  (valid_raster_index)
     );
 
-    logic [8:0] [`RCACHE_ADDR_WIDTH-1:0] fire_mem_req_addr;
+    wire [8:0] [`RCACHE_ADDR_WIDTH-1:0] fire_mem_req_addr;
     for (genvar i = 0; i < 9; ++i) begin
         assign fire_mem_req_addr[i] = mem_req_addr[i][(32-`RCACHE_ADDR_WIDTH) +: `RCACHE_ADDR_WIDTH];
     end

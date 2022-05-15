@@ -63,11 +63,11 @@ module VX_cluster #(
     `RESET_RELAY (raster_reset);
 
     VX_raster_unit #(
-        .CLUSTER_ID  (CLUSTER_ID),
-        .NUM_SLICES  (`RASTER_NUM_SLICES),
-        .RASTER_TILE_SIZE (1 << `RASTER_TILE_LOGSIZE),
-        .RASTER_BLOCK_SIZE(1 << `RASTER_BLOCK_LOGSIZE),
-        .NUM_OUTPUTS (`NUM_THREADS)
+        .CLUSTER_ID   (CLUSTER_ID),
+        .NUM_SLICES   (`RASTER_NUM_SLICES),
+        .TILE_SIZE    (1 << `RASTER_TILE_LOGSIZE),
+        .BLOCK_SIZE   (1 << `RASTER_BLOCK_LOGSIZE),
+        .OUTPUT_QUADS (`NUM_THREADS)
     ) raster_unit (
         .clk           (clk),
         .reset         (raster_reset),

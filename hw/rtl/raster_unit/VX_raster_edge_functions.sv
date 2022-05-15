@@ -5,13 +5,13 @@
 module VX_raster_edge_functions #(
     parameter MUL_LATENCY = 3
 ) (
-    input logic clk,
-    input logic         [`RASTER_DIM_BITS-1:0]              x_loc, y_loc,
-    input logic signed  [`RASTER_PRIMITIVE_DATA_BITS-1:0]   edges[2:0][2:0],
-    output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   edge_func_val[2:0]
+    input wire clk,
+    input wire         [`RASTER_DIM_BITS-1:0]              x_loc, y_loc,
+    input wire signed  [`RASTER_PRIMITIVE_DATA_BITS-1:0]   edges[2:0][2:0],
+    output wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   edge_func_val[2:0]
 );
     for (genvar i = 0; i < 3; ++i) begin
-        logic signed [2*`RASTER_PRIMITIVE_DATA_BITS-1:0] mul_val1, mul_val2;
+        wire signed [2*`RASTER_PRIMITIVE_DATA_BITS-1:0] mul_val1, mul_val2;
         VX_multiplier #(
             .WIDTHA  (`RASTER_PRIMITIVE_DATA_BITS),
             .WIDTHB  (`RASTER_DIM_BITS),
@@ -43,9 +43,7 @@ module VX_raster_edge_functions #(
         `UNUSED_VAR (mul_val1)
         `UNUSED_VAR (mul_val2)
 
-        always_comb begin
-            edge_func_val[i] = mul_val1[`RASTER_PRIMITIVE_DATA_BITS-1:0] + mul_val2[`RASTER_PRIMITIVE_DATA_BITS-1:0] + edges[i][2];
-        end
+        assign edge_func_val[i] = mul_val1[`RASTER_PRIMITIVE_DATA_BITS-1:0] + mul_val2[`RASTER_PRIMITIVE_DATA_BITS-1:0] + edges[i][2];
     end
 
 endmodule

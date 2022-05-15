@@ -7,58 +7,61 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_te #(
-    parameter RASTER_TILE_SIZE       = 16,
-    parameter RASTER_BLOCK_SIZE      = 4,
-    parameter RASTER_LEVEL_DATA_BITS = ($clog2(RASTER_TILE_SIZE/RASTER_BLOCK_SIZE) + 1)
+    parameter TILE_SIZE       = 16,
+    parameter BLOCK_SIZE      = 4,
+    parameter RASTER_LEVEL_DATA_BITS = ($clog2(TILE_SIZE/BLOCK_SIZE) + 1)
 ) (
-    input logic clk, reset, stall,
+    input wire clk,
+    input wire reset,
+
+    input wire stall,
     // Input valid
-    input logic input_valid,
+    input wire input_valid,
     // Level value in recursive descent
-    input logic        [RASTER_LEVEL_DATA_BITS-1:0]         level,
+    input wire        [RASTER_LEVEL_DATA_BITS-1:0]         level,
     // Tile data
-    input logic        [`RASTER_DIM_BITS-1:0]               x_loc, y_loc,
+    input wire        [`RASTER_DIM_BITS-1:0]               x_loc, y_loc,
     // Primitive data
     // edge equation data for the 3 edges and ax+by+c
-    input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    edges[2:0][2:0],
+    input wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    edges[2:0][2:0],
     // edge function computation value propagated
-    input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    edge_func_val[2:0],
-    input logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    extents[2:0],
+    input wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    edge_func_val[2:0],
+    input wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    extents[2:0],
 
     // Status signals
-    output logic                                            tile_valid, block_valid,
+    output wire                                            tile_valid, block_valid,
     // Sub-tile related data
-    output logic        [`RASTER_DIM_BITS-1:0]              tile_x_loc[3:0],
+    output wire        [`RASTER_DIM_BITS-1:0]              tile_x_loc[3:0],
                                                             tile_y_loc[3:0],
-    output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   tile_edge_func_val[3:0][2:0],
+    output wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   tile_edge_func_val[3:0][2:0],
     // Block related data
-    output logic        [`RASTER_DIM_BITS-1:0]              block_x_loc,
+    output wire        [`RASTER_DIM_BITS-1:0]              block_x_loc,
                                                             block_y_loc,
-    output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   block_edge_func_val[2:0],
-    output logic        [RASTER_LEVEL_DATA_BITS-1:0]        tile_level
+    output wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   block_edge_func_val[2:0],
+    output wire        [RASTER_LEVEL_DATA_BITS-1:0]        tile_level
 );
 
-    localparam RASTER_TILE_FIFO_DEPTH    = RASTER_TILE_SIZE/RASTER_BLOCK_SIZE;
-    localparam RASTER_TILE_SIZE_BITS     = $clog2(RASTER_TILE_SIZE);
-    localparam RASTER_BLOCK_SIZE_BITS    = $clog2(RASTER_BLOCK_SIZE);
+    localparam TILE_FIFO_DEPTH    = TILE_SIZE/BLOCK_SIZE;
+    localparam RASTER_TILE_SIZE_BITS     = $clog2(TILE_SIZE);
+    localparam RASTER_BLOCK_SIZE_BITS    = $clog2(BLOCK_SIZE);
 
     // Status signals
-    logic                                            tile_valid_r, block_valid_r;
+    reg                                            tile_valid_r, block_valid_r;
     // Sub-tile related data
-    logic        [`RASTER_DIM_BITS-1:0]              tile_x_loc_r[3:0],
+    wire        [`RASTER_DIM_BITS-1:0]              tile_x_loc_r[3:0],
                                                      tile_y_loc_r[3:0];
-    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   tile_edge_func_val_r[3:0][2:0];
+    wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   tile_edge_func_val_r[3:0][2:0];
 
 
     // Check if primitive within tile
-    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] eval0, eval1, eval2;
+    wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] eval0, eval1, eval2;
     assign eval0 = (edge_func_val[0] + extents[0]) >> level;
     assign eval1 = (edge_func_val[1] + extents[1]) >> level;
     assign eval2 = (edge_func_val[2] + extents[2]) >> level;
 
     // Sub-tile specs info
-    logic [`RASTER_DIM_BITS-1:0] sub_tile_size;
-    logic [`RASTER_DIM_BITS-1:0] sub_tile_bits;
+    reg [`RASTER_DIM_BITS-1:0] sub_tile_size;
+    reg [`RASTER_DIM_BITS-1:0] sub_tile_bits;
 
     // Generate the x,y loc and edge function values
     for (genvar i = 0; i < 2; ++i) begin
@@ -95,10 +98,10 @@ module VX_raster_te #(
     end
 
     // Block related data
-    logic        [`RASTER_DIM_BITS-1:0]              block_x_loc_r,
+    wire        [`RASTER_DIM_BITS-1:0]              block_x_loc_r,
                                                      block_y_loc_r;
-    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   block_edge_func_val_r[2:0];
-    logic        [RASTER_LEVEL_DATA_BITS-1:0]        tile_level_r;
+    wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   block_edge_func_val_r[2:0];
+    wire        [RASTER_LEVEL_DATA_BITS-1:0]        tile_level_r;
 
     assign tile_level_r = level;
     assign block_x_loc_r = x_loc;

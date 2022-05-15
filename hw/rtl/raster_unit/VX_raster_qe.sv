@@ -8,29 +8,33 @@ module VX_raster_qe #(
     parameter SLICE_ID  = 1,
     parameter QUAD_ID   = 1
 ) (
-    input logic clk, reset, enable,
+    input wire clk,
+    input wire reset, 
+    
+    input wire enable,
+
     // Quad data
-    input logic         [`RASTER_DIM_BITS-1:0]                  x_loc, y_loc,
+    input wire         [`RASTER_DIM_BITS-1:0]                  x_loc, y_loc,
     // Primitive related data
     // edge equation data for the 3 edges and ax+by+c
-    input logic signed  [`RASTER_PRIMITIVE_DATA_BITS-1:0]       edges[2:0][2:0],
+    input wire signed  [`RASTER_PRIMITIVE_DATA_BITS-1:0]       edges[2:0][2:0],
     // edge function computation value propagated
-    input logic signed  [`RASTER_PRIMITIVE_DATA_BITS-1:0]       edge_func_val[2:0],
+    input wire signed  [`RASTER_PRIMITIVE_DATA_BITS-1:0]       edge_func_val[2:0],
 
     // Rendering region
-    input logic         [`RASTER_DIM_BITS-1:0]                  dst_width, dst_height,
+    input wire         [`RASTER_DIM_BITS-1:0]                  dst_width, dst_height,
 
-    input logic                                                out_enable,
+    input wire                                                out_enable,
     // Output of piped x_loc, y_loc
-    output logic        [`RASTER_DIM_BITS-1:0]                  x_loc_o, y_loc_o,
+    output wire        [`RASTER_DIM_BITS-1:0]                  x_loc_o, y_loc_o,
     // Mask bits for the 2x2 quad
-    output logic        [3:0]                                   masks_o,
+    output wire        [3:0]                                   masks_o,
     // barycentric coordinates
-    output logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]       bcoords_o[2:0][3:0] // dim1 => quad index
+    output wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]       bcoords_o[2:0][3:0] // dim1 => quad index
 );
 
     // New edge value for all 4 pixels (0,0) (0,1) (1,0) (1,1)
-    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] new_edge_val [2:0][1:0][1:0];
+    wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] new_edge_val [2:0][1:0][1:0];
 
     // Generate new_edge_val
     for (genvar i = 0; i < 2; ++i) begin
@@ -41,9 +45,9 @@ module VX_raster_qe #(
         end
     end
 
-    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] new_edge_val_r [2:0][1:0][1:0];
+    wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] new_edge_val_r [2:0][1:0][1:0];
 
-    logic [3*2*2*`RASTER_PRIMITIVE_DATA_BITS-1:0] pipe_reg_2_in, pipe_reg_2_r;
+    wire [3*2*2*`RASTER_PRIMITIVE_DATA_BITS-1:0] pipe_reg_2_in, pipe_reg_2_r;
     for (genvar i = 0; i < 2; ++i) begin
         for (genvar j = 0; j < 2; ++j) begin
             for (genvar k = 0; k < 3; ++k) begin
@@ -53,7 +57,7 @@ module VX_raster_qe #(
         end
     end
 
-    logic        [`RASTER_DIM_BITS-1:0]                  x_loc_r, y_loc_r;
+    wire        [`RASTER_DIM_BITS-1:0]                  x_loc_r, y_loc_r;
     VX_pipe_register #(
         .DATAW  (2*`RASTER_DIM_BITS + 3*2*2*`RASTER_PRIMITIVE_DATA_BITS),
         .RESETW (1)
@@ -66,9 +70,9 @@ module VX_raster_qe #(
     );
 
     // Mask bits for the 2x2 quad
-    logic        [3:0]                                   masks;
+    reg        [3:0]                                   masks;
     // barycentric coordinates
-    logic signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]       bcoords[2:0][3:0]; // dim1 => quad index
+    reg signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]       bcoords[2:0][3:0]; // dim1 => quad index
     for (genvar i = 0; i < 2; ++i) begin
         for (genvar j = 0; j < 2; ++j) begin
             always_comb begin
