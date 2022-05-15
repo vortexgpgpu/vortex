@@ -165,7 +165,7 @@ module VX_raster_te #(
     end
     always @(posedge clk) begin
         if (tile_valid) begin
-            for (int i = 0; i < 3; ++i) begin
+            for (integer i = 0; i < 3; ++i) begin
                 dpi_trace(2, "%d: raster-tile-out: tile_valid level=%0d, x=%0d, y=%0d, edge_func_val=%0d %0d %0d\n",
                     $time, tile_level, tile_x_loc[i], tile_y_loc[i],
                     tile_edge_func_val[i][0], tile_edge_func_val[i][1], tile_edge_func_val[i][2]);

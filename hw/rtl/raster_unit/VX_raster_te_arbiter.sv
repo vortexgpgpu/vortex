@@ -35,7 +35,7 @@ module VX_raster_te_arbiter #(
     wire [1:0] fifo_index;
 
     // Generate 4 queues for 4 sub-tiles
-    for(genvar i = 0; i < 4; ++i) begin
+    for (genvar i = 0; i < 4; ++i) begin
         // Sub-tile queue
         VX_fifo_queue #(
             .DATAW	    (FIFO_DATA_WIDTH),

@@ -63,7 +63,7 @@ module VX_raster_req_switch #(
         // Reset condition
         if (reset) begin
             mem_req_valid <= 0;
-            for (int i = 0; i < RS_SIZE; ++i) begin
+            for (integer i = 0; i < RS_SIZE; ++i) begin
                 raster_rs_valid[i] <= 0;
                 raster_rs_empty[i] <= 1;
             end
@@ -79,8 +79,8 @@ module VX_raster_req_switch #(
 
                 // Send the request to the memory stream reader
                 mem_req_valid <= 1;
-                for (int i = 0; i < 3; ++i) begin
-                    for (int j = 0; j < 3; ++j) begin
+                for (integer i = 0; i < 3; ++i) begin
+                    for (integer j = 0; j < 3; ++j) begin
                         mem_req_addr[i*3+j] <= mem_base_addr + (i*3+j)*mem_stride;
                     end
                 end
