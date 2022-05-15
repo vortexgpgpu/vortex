@@ -7,14 +7,15 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_be #(
-    parameter BLOCK_SIZE       = 4,
-    parameter OUTPUT_QUADS = 2,
-    parameter QUAD_FIFO_DEPTH  = 16,
-    parameter SLICE_ID                = 1
+    parameter BLOCK_SIZE      = 4,
+    parameter OUTPUT_QUADS    = 2,
+    parameter QUAD_FIFO_DEPTH = 16,
+    parameter SLICE_ID        = 1
 ) (
     // Standard inputs
     input wire clk,
-    input wire  reset,
+    input wire reset,
+
     input wire input_valid, // to indicate current input is a valid update
     input wire pop,         // to fetch data from the quad queue
     

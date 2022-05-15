@@ -14,9 +14,8 @@ module VX_raster_mem #(
     parameter RS_SIZE    = 8,
     parameter SLICE_BITS = `LOG2UP(NUM_SLICES)
 ) (
-    // Standard inputs
-    input wire         clk,
-    input wire         reset,
+    input wire clk,
+    input wire reset,
 
     // Memory interface
     VX_cache_req_if.master cache_req_if,

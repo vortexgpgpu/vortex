@@ -8,23 +8,28 @@ module VX_raster_te_arbiter #(
     parameter TILE_SIZE       = 16,
     parameter BLOCK_SIZE      = 4,
     parameter TILE_FIFO_DEPTH = 32,
-    parameter RASTER_LEVEL_DATA_BITS = $clog2(TILE_SIZE/BLOCK_SIZE) + 1,
-    parameter RASTER_FIFO_DATA_WIDTH = (RASTER_LEVEL_DATA_BITS + 2*`RASTER_DIM_BITS + 3*`RASTER_PRIMITIVE_DATA_BITS)
+    parameter LEVEL_DATA_BITS = $clog2(TILE_SIZE / BLOCK_SIZE) + 1,
+    parameter FIFO_DATA_WIDTH = (LEVEL_DATA_BITS + 2 * `RASTER_DIM_BITS + 3 * `RASTER_PRIMITIVE_DATA_BITS)
 ) (
-    input wire                                 clk, reset,
-    input wire [3:0]                           fifo_push, fifo_pop,
-    input wire [RASTER_FIFO_DATA_WIDTH-1:0]    data_push[3:0],
+    input wire                        clk,
+    input wire                        reset,
 
-    output wire [RASTER_FIFO_DATA_WIDTH-1:0]   data_pop,
-    output wire [3:0]                          fifo_index_onehot,
-    output wire                                fifo_full, fifo_empty, fifo_data_valid
+    input wire [3:0]                  fifo_push,
+    input wire [3:0]                  fifo_pop,
+    input wire [FIFO_DATA_WIDTH-1:0]  data_push[3:0],
+
+    output wire [FIFO_DATA_WIDTH-1:0] data_pop,    
+    output wire [3:0]                 fifo_index_onehot,
+    output wire                       fifo_data_valid,
+    output wire                       fifo_full,
+    output wire                       fifo_empty
 );
 
     // localparam TILE_FIFO_DEPTH = (TILE_SIZE*TILE_SIZE)/(BLOCK_SIZE*BLOCK_SIZE);
 
     // Per FIFO flags
     wire [3:0] empty_flag, full_flag;
-    wire [RASTER_FIFO_DATA_WIDTH-1:0] data_pop_array[3:0];
+    wire [FIFO_DATA_WIDTH-1:0] data_pop_array[3:0];
 
     // Index selected from arbitration
     wire [1:0] fifo_index;
@@ -33,7 +38,7 @@ module VX_raster_te_arbiter #(
     for(genvar i = 0; i < 4; ++i) begin
         // Sub-tile queue
         VX_fifo_queue #(
-            .DATAW	    (RASTER_FIFO_DATA_WIDTH),
+            .DATAW	    (FIFO_DATA_WIDTH),
             .SIZE       (TILE_FIFO_DEPTH),
             .OUT_REG    (1)
         ) tile_fifo_queue (

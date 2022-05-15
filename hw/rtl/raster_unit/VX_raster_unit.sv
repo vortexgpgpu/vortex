@@ -25,6 +25,8 @@ module VX_raster_unit #(
 
     // Inputs
     VX_raster_dcr_if.slave  raster_dcr_if,
+
+    // Outputs
     VX_raster_req_if.master raster_req_if
 );
     localparam MUL_LATENCY    = 3;
@@ -122,14 +124,15 @@ module VX_raster_unit #(
         .extents (extents)
     );
 
-    VX_raster_edge_functions #(
+    VX_raster_edge_function #(
         .MUL_LATENCY (MUL_LATENCY)
     ) raster_edge_function (
-        .clk           (clk),
-        .x_loc         (x_loc),
-        .y_loc         (y_loc),
-        .edges         (edges),
-        .edge_func_val (edge_func_val)
+        .clk    (clk),
+        .reset  (reset),
+        .x_loc  (x_loc),
+        .y_loc  (y_loc),
+        .edges  (edges),
+        .result (edge_func_val)
     );
 
     wire                                          slice_valid;

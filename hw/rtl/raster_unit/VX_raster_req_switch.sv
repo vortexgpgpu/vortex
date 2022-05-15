@@ -3,8 +3,8 @@
 module VX_raster_req_switch #(  
     parameter CLUSTER_ID = 0,
     parameter NUM_SLICES = 4,
-    parameter TILE_SIZE = 16,
-    parameter RS_SIZE = 8, // Reservation station size
+    parameter TILE_SIZE  = 16,
+    parameter RS_SIZE    = 8, // Reservation station size
     parameter SLICE_BITS = `LOG2UP(NUM_SLICES)
 ) (
     // Standard inputs
@@ -14,7 +14,8 @@ module VX_raster_req_switch #(
     // To indicate valid inputs provided
     input wire         input_valid,
     // Tile information
-    input wire [`RASTER_DIM_BITS-1:0]        x_loc, y_loc,
+    input wire [`RASTER_DIM_BITS-1:0]        x_loc,
+    input wire [`RASTER_DIM_BITS-1:0]        y_loc,
     // Edge function values
     input wire [`RASTER_PRIMITIVE_DATA_BITS-1:0]   edge_func_val[2:0],
     // Memory information
@@ -22,12 +23,13 @@ module VX_raster_req_switch #(
     input wire [`RASTER_DCR_DATA_BITS-1:0]         mem_stride,
 
     // Raster slice interactions
-    input wire [NUM_SLICES-1:0]                          raster_slice_ready,
-    output wire [`RASTER_DIM_BITS-1:0]                   out_x_loc, out_y_loc,
-    output wire [`RASTER_PRIMITIVE_DATA_BITS-1:0]              out_edges[2:0][2:0],
-    output wire [`RASTER_PRIMITIVE_DATA_BITS-1:0]              out_edge_func_val[2:0],
-    output wire [`RASTER_PRIMITIVE_DATA_BITS-1:0]              out_extents[2:0],
-    output wire [SLICE_BITS-1:0]                        out_slice_index,
+    input wire [NUM_SLICES-1:0]                     raster_slice_ready,
+    output wire [`RASTER_DIM_BITS-1:0]              out_x_loc,
+    output wire [`RASTER_DIM_BITS-1:0]              out_y_loc,
+    output wire [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_edges[2:0][2:0],
+    output wire [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_edge_func_val[2:0],
+    output wire [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_extents[2:0],
+    output wire [SLICE_BITS-1:0]                    out_slice_index,
 
     // Status signals
     output wire                                    ready
@@ -38,11 +40,11 @@ module VX_raster_req_switch #(
     localparam RASTER_RS_INDEX_BITS = `LOG2UP(RS_SIZE);
 
     // Reservation station
-    wire [RASTER_RS_DATA_WIDTH-1:0]    raster_rs[RS_SIZE-1:0];
-    wire [RS_SIZE-1:0]          raster_rs_valid;
-    wire [RS_SIZE-1:0]          raster_rs_empty;
+    wire [RASTER_RS_DATA_WIDTH-1:0] raster_rs[RS_SIZE-1:0];
+    wire [RS_SIZE-1:0]              raster_rs_valid;
+    wire [RS_SIZE-1:0]              raster_rs_empty;
 
-    wire [RASTER_RS_INDEX_BITS-1:0]    raster_rs_empty_index, raster_rs_index;
+    wire [RASTER_RS_INDEX_BITS-1:0] raster_rs_empty_index, raster_rs_index;
 
     // Status signals
     wire valid_raster_index, valid_rs_index, valid_rs_empty_index;

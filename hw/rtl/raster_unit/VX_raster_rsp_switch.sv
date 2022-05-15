@@ -1,11 +1,12 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_rsp_switch #(  
-    parameter CLUSTER_ID = 0,
+    parameter CLUSTER_ID   = 0,
     parameter OUTPUT_QUADS = 4
 ) (
     input wire valid,
     input wire empty,
+
     // Quad data
     input wire        [`RASTER_DIM_BITS-1:0]             x_loc   [OUTPUT_QUADS-1:0],
     input wire        [`RASTER_DIM_BITS-1:0]             y_loc   [OUTPUT_QUADS-1:0],
@@ -20,10 +21,10 @@ module VX_raster_rsp_switch #(
     raster_stamp_t [OUTPUT_QUADS-1:0]   stamps;
     for (genvar i = 0; i < OUTPUT_QUADS; ++i) begin
         always_comb begin
-            stamps[i].pos_x    = x_loc[i][`RASTER_DIM_BITS-2:0];
-            stamps[i].pos_y    = y_loc[i][`RASTER_DIM_BITS-2:0];
-            stamps[i].mask     = masks[i];
-            stamps[i].pid      = pid[i][`RASTER_PID_BITS-1:0];
+            stamps[i].pos_x = x_loc[i][`RASTER_DIM_BITS-2:0];
+            stamps[i].pos_y = y_loc[i][`RASTER_DIM_BITS-2:0];
+            stamps[i].mask  = masks[i];
+            stamps[i].pid   = pid[i][`RASTER_PID_BITS-1:0];
         end
     end
 

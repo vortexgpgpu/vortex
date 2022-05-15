@@ -8,43 +8,47 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_slice #(
-    parameter CLUSTER_ID       = 0,
-    parameter SLICE_ID         = 1,
-    parameter BLOCK_SIZE       = 8,
-    parameter TILE_SIZE        = 16,
-    parameter OUTPUT_QUADS     = 4,
-    parameter QUAD_FIFO_DEPTH  = 1,
-    parameter TILE_FIFO_DEPTH  = 16
+    parameter CLUSTER_ID      = 0,
+    parameter SLICE_ID        = 1,
+    parameter BLOCK_SIZE      = 8,
+    parameter TILE_SIZE       = 16,
+    parameter OUTPUT_QUADS    = 4,
+    parameter QUAD_FIFO_DEPTH = 1,
+    parameter TILE_FIFO_DEPTH = 16
 ) (
     // Standard inputs
     input wire                                             clk, reset,
     // To indicate valid input provided
     input wire                                             input_valid,
     // Tile information
-    input wire        [`RASTER_DIM_BITS-1:0]               x_loc, y_loc,
+    input wire        [`RASTER_DIM_BITS-1:0]               x_loc,
+    input wire        [`RASTER_DIM_BITS-1:0]               y_loc,
     // Primitive information
     input wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    edges[2:0][2:0],
     input wire        [`RASTER_PRIMITIVE_DATA_BITS-1:0]    pid,
     input wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    edge_func_val[2:0],
     input wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    extents[2:0],
     // Rendering region
-    input wire         [`RASTER_DIM_BITS-1:0]              dst_width, dst_height,
+    input wire         [`RASTER_DIM_BITS-1:0]              dst_width,
+    input wire         [`RASTER_DIM_BITS-1:0]              dst_height,
 
     // Hand-shaking signals
     input wire                                             pop_quad,
-    output wire                                            ready, quad_queue_empty,
+    output wire                                            ready, 
+    output wire                                            quad_queue_empty,
 
     // Output sub-tiles data
     output wire        [`RASTER_DIM_BITS-1:0]              out_quad_x_loc  [OUTPUT_QUADS-1:0],
-                                                            out_quad_y_loc  [OUTPUT_QUADS-1:0],
+                                                           out_quad_y_loc  [OUTPUT_QUADS-1:0],
     output wire        [3:0]                               out_quad_masks  [OUTPUT_QUADS-1:0],
     output wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_quad_bcoords[OUTPUT_QUADS-1:0][2:0][3:0],
     output wire        [`RASTER_PRIMITIVE_DATA_BITS-1:0]   out_pid         [OUTPUT_QUADS-1:0],
+    
     output wire        [OUTPUT_QUADS-1:0]                  valid
 );
 
-    localparam RASTER_LEVEL_DATA_BITS = $clog2(TILE_SIZE/BLOCK_SIZE) + 1;
-    localparam RASTER_FIFO_DATA_WIDTH = (RASTER_LEVEL_DATA_BITS + 2*`RASTER_DIM_BITS + 3*`RASTER_PRIMITIVE_DATA_BITS);
+    localparam LEVEL_DATA_BITS = $clog2(TILE_SIZE/BLOCK_SIZE) + 1;
+    localparam FIFO_DATA_WIDTH = (LEVEL_DATA_BITS + 2*`RASTER_DIM_BITS + 3*`RASTER_PRIMITIVE_DATA_BITS);
 
     // Store data which will stay same for tile throughout operation
     reg signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  global_extents[2:0];
@@ -53,8 +57,8 @@ module VX_raster_slice #(
 
     // Store the tile relevant data as global regs as TE is combinatorial
     reg        [`RASTER_DIM_BITS-1:0]             tile_x_loc, tile_y_loc;
-    reg        [RASTER_LEVEL_DATA_BITS-1:0]       level;
-    wire       [RASTER_LEVEL_DATA_BITS-1:0]       level_r;
+    reg        [LEVEL_DATA_BITS-1:0]       level;
+    wire       [LEVEL_DATA_BITS-1:0]       level_r;
     reg signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  tile_edge_func_val[2:0];
 
     // Control signsl
@@ -66,7 +70,7 @@ module VX_raster_slice #(
 
     // Incoming tile data from fifo
     wire        [`RASTER_DIM_BITS-1:0]             fifo_tile_x_loc, fifo_tile_y_loc;
-    wire        [RASTER_LEVEL_DATA_BITS-1:0]       fifo_tile_level;
+    wire        [LEVEL_DATA_BITS-1:0]       fifo_tile_level;
     wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]  fifo_tile_edge_func_val[2:0];
 
     // Sub-tile data output from tile-evaluator
@@ -115,7 +119,7 @@ module VX_raster_slice #(
             else if (level == 0 && fifo_empty == 1 && fifo_tile_valid == 0 && tile_valid == 1) begin
                 tile_x_loc         <= subtile_x_loc[0];
                 tile_y_loc         <= subtile_y_loc[0];
-                level              <= level + RASTER_LEVEL_DATA_BITS'(1);//level_1;
+                level              <= level + LEVEL_DATA_BITS'(1);//level_1;
                 tile_edge_func_val <= subtile_edge_func_val[0];
                 tile_data_valid    <= 1;
             end
@@ -135,12 +139,12 @@ module VX_raster_slice #(
     ***********************************/
 
     wire input_valid_r;
-    wire        [RASTER_LEVEL_DATA_BITS-1:0]         level_te_pipe_r;
+    wire        [LEVEL_DATA_BITS-1:0]         level_te_pipe_r;
     wire        [`RASTER_DIM_BITS-1:0]               x_loc_r, y_loc_r;
     wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    edge_func_val_r[2:0];
 
     VX_pipe_register #(
-        .DATAW  (1 + RASTER_LEVEL_DATA_BITS + 2*`RASTER_DIM_BITS
+        .DATAW  (1 + LEVEL_DATA_BITS + 2*`RASTER_DIM_BITS
             + 3*`RASTER_PRIMITIVE_DATA_BITS),
         .RESETW (1)
     ) te_pipe_reg_1 (
@@ -160,7 +164,7 @@ module VX_raster_slice #(
     VX_raster_te #(
         .TILE_SIZE       (TILE_SIZE),
         .BLOCK_SIZE      (BLOCK_SIZE),
-        .RASTER_LEVEL_DATA_BITS (RASTER_LEVEL_DATA_BITS)
+        .LEVEL_DATA_BITS (LEVEL_DATA_BITS)
     ) tile_evaluator (
         .clk                    (clk),
         .reset                  (reset),
@@ -194,15 +198,15 @@ module VX_raster_slice #(
     end
 
     // Create data_push data
-    wire [RASTER_FIFO_DATA_WIDTH-1:0] fifo_data_push[3:0];
+    wire [FIFO_DATA_WIDTH-1:0] fifo_data_push[3:0];
     for (genvar i = 0; i < 4; ++i) begin
-        assign fifo_data_push[i] = {level_r + RASTER_LEVEL_DATA_BITS'(1), subtile_x_loc[i], subtile_y_loc[i], 
+        assign fifo_data_push[i] = {level_r + LEVEL_DATA_BITS'(1), subtile_x_loc[i], subtile_y_loc[i], 
             subtile_edge_func_val[i][0],
             subtile_edge_func_val[i][1],
             subtile_edge_func_val[i][2]};
     end
 
-    wire [RASTER_FIFO_DATA_WIDTH-1:0] fifo_data_pop;
+    wire [FIFO_DATA_WIDTH-1:0] fifo_data_pop;
     // Create sub-tile data from the fifo output
     assign {fifo_tile_level, fifo_tile_x_loc, fifo_tile_y_loc, fifo_tile_edge_func_val[0],
         fifo_tile_edge_func_val[1], fifo_tile_edge_func_val[2]} = fifo_data_pop;
