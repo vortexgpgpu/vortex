@@ -268,6 +268,7 @@ module VX_cache #(
 
     ///////////////////////////////////////////////////////////////////////
     
+    // Generate all banks
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         
         wire                        curr_bank_core_req_valid;

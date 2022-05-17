@@ -189,7 +189,7 @@ module VX_rop_mem #(
         .ADDRW            (`OCACHE_ADDR_WIDTH),
         .DATAW            (32),
         .TAGW             (TAG_WIDTH),
-        .QUEUE_SIZE       (`ROP_MEM_QUEUE_SIZE),
+        .QUEUE_SIZE       (`ROP_MEM_PENDING_SIZE),
         .PARTIAL_RESPONSE (0),
         .OUT_REG          (1)
     ) mem_streamer (

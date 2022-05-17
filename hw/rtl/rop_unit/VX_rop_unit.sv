@@ -40,6 +40,7 @@ module VX_rop_unit #(
         .TAG_WIDTH (`OCACHE_TAG_ID_BITS)
     ) per_slice_cache_rsp_if[NUM_SLICES]();
 
+    // Generate all slices
     for (genvar i = 0; i < NUM_SLICES; ++i) begin
         VX_rop_slice #(
             .CLUSTER_ID (CLUSTER_ID),
@@ -56,8 +57,7 @@ module VX_rop_unit #(
 
     VX_rop_req_demux #(
         .NUM_REQS  (NUM_SLICES),
-        .NUM_LANES (NUM_LANES),
-        .BUFFERED  (1)
+        .NUM_LANES (NUM_LANES)
     ) rop_req_demux (
         .clk        (clk),
         .reset      (reset),

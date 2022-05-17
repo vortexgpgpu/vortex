@@ -62,12 +62,15 @@ module VX_cluster #(
 
     `RESET_RELAY (raster_reset);
 
-    VX_raster_unit #(
-        .CLUSTER_ID   (CLUSTER_ID),
-        .NUM_SLICES   (`RASTER_NUM_SLICES),
-        .TILE_SIZE    (1 << `RASTER_TILE_LOGSIZE),
-        .BLOCK_SIZE   (1 << `RASTER_BLOCK_LOGSIZE),
-        .OUTPUT_QUADS (`NUM_THREADS)
+    VX_raster_unit #( 
+        .CLUSTER_ID      (CLUSTER_ID),
+        .NUM_SLICES      (`RASTER_NUM_SLICES),
+        .TILE_LOGSIZE    (`RASTER_TILE_LOGSIZE),
+        .BLOCK_LOGSIZE   (`RASTER_BLOCK_LOGSIZE),
+        .MEM_FIFO_DEPTH  (`RASTER_MEM_FIFO_DEPTH),
+        .TILE_FIFO_DEPTH (`RASTER_TILE_FIFO_DEPTH),
+        .QUAD_FIFO_DEPTH (`RASTER_QUAD_FIFO_DEPTH),
+        .OUTPUT_QUADS    (`NUM_THREADS)
     ) raster_unit (
         .clk           (clk),
         .reset         (raster_reset),
@@ -147,8 +150,7 @@ module VX_cluster #(
 
     VX_raster_req_demux #(
         .NUM_REQS  (`NUM_CORES),
-        .NUM_LANES (`NUM_THREADS),
-        .BUFFERED  (1)
+        .NUM_LANES (`NUM_THREADS)
     ) raster_req_demux (
         .clk        (clk),
         .reset      (raster_reset),
@@ -272,7 +274,7 @@ module VX_cluster #(
     VX_rop_req_mux #(
         .NUM_REQS  (`NUM_CORES),
         .NUM_LANES (`NUM_THREADS),
-        .BUFFERED  (1)
+        .BUFFERED  ((`NUM_CORES > 2) ? 1 : 0)
     ) rop_req_mux (
         .clk        (clk),
         .reset      (rop_reset),
@@ -302,6 +304,7 @@ module VX_cluster #(
 
     wire [`NUM_CORES-1:0] per_core_busy;
 
+    // Generate all cores
     for (genvar i = 0; i < `NUM_CORES; i++) begin
 
         `RESET_RELAY (core_reset);

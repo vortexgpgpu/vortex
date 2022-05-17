@@ -275,14 +275,14 @@
 `define FPUQ_SIZE 8
 `endif
 
-// Texture Unit Request Queue
-`ifndef TEXQ_SIZE
-`define TEXQ_SIZE (`NUM_WARPS * 2)
+// Texture Unit memory pending Queue
+`ifndef TEX_MEM_PENDING_SIZE
+`define TEX_MEM_PENDING_SIZE (`NUM_WARPS * 2)
 `endif
 
-// RASTER memeory queue size
-`ifndef RASTER_MEM_QUEUE_SIZE    
-`define RASTER_MEM_QUEUE_SIZE 4
+// RASTER memory pending size
+`ifndef RASTER_MEM_PENDING_SIZE    
+`define RASTER_MEM_PENDING_SIZE 4
 `endif
 
 // RASTER number of slices
@@ -300,9 +300,24 @@
 `define RASTER_BLOCK_LOGSIZE 2
 `endif
 
-// ROP memeory queue size
-`ifndef ROP_MEM_QUEUE_SIZE    
-`define ROP_MEM_QUEUE_SIZE 4
+// RASTER memory queue size 
+`ifndef RASTER_MEM_FIFO_DEPTH    
+`define RASTER_MEM_FIFO_DEPTH 8
+`endif
+
+// RASTER tile queue size
+`ifndef RASTER_TILE_FIFO_DEPTH    
+`define RASTER_TILE_FIFO_DEPTH (1 << (2 * (`RASTER_TILE_LOGSIZE - `RASTER_BLOCK_LOGSIZE)))
+`endif
+
+// RASTER quad queue size
+`ifndef RASTER_QUAD_FIFO_DEPTH    
+`define RASTER_QUAD_FIFO_DEPTH 16
+`endif
+
+// ROP memory pending size
+`ifndef ROP_MEM_PENDING_SIZE    
+`define ROP_MEM_PENDING_SIZE 4
 `endif
 
 // ROP number of slices

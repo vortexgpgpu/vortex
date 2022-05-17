@@ -241,7 +241,7 @@ module VX_rop_slice #(
     // to resolve potential deadlocks, 
     // ensure pending reads do not fill the queue
     VX_pending_size #( 
-        .SIZE (`ROP_MEM_QUEUE_SIZE - 1)
+        .SIZE (`ROP_MEM_PENDING_SIZE - 1)
     ) pending_reads (
         .clk   (clk),
         .reset (reset),

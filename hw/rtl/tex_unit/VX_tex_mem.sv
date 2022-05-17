@@ -94,7 +94,7 @@ module VX_tex_mem #(
     
     VX_fifo_queue #(
         .DATAW   ((NUM_REQS * 4 * 30) + NUM_REQS + REQ_INFOW + `TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + (4 * NUM_REQS * 2) + 4), 
-        .SIZE    (`TEXQ_SIZE),
+        .SIZE    (`TEX_MEM_PENDING_SIZE),
         .OUT_REG (1)
     ) req_queue (
         .clk        (clk),

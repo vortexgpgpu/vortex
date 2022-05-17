@@ -395,9 +395,7 @@ always @(posedge clk) begin
         end        
       end
 
-      default: begin
-        state <= state;
-      end
+      default:;
 
     endcase
   end
