@@ -76,7 +76,7 @@ module VX_cache #(
     `STATIC_ASSERT(NUM_BANKS == (1 << $clog2(NUM_BANKS)), ("invalid parameter"))
 
     localparam WORD_SEL_BITS   = `UP(`WORD_SEL_BITS);
-    localparam MSHR_ADDR_WIDTH = `CLOG2(MSHR_SIZE);
+    localparam MSHR_ADDR_WIDTH = `LOG2UP(MSHR_SIZE);
 
 `ifdef PERF_ENABLE
     wire [NUM_BANKS-1:0] perf_read_miss_per_bank;

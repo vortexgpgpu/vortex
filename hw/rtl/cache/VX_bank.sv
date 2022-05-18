@@ -38,7 +38,7 @@ module VX_bank #(
     // core request tag size
     parameter CORE_TAG_WIDTH    = REQ_UUID_BITS,
 
-    localparam MSHR_ADDR_WIDTH  = `CLOG2(MSHR_SIZE),
+    localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE),
     localparam WORD_SEL_BITS    = `UP(`WORD_SEL_BITS)
 ) (
     `SCOPE_IO_VX_bank

@@ -67,8 +67,8 @@ module VX_rsp_merge #(
                 
                 for (integer i = 0; i < NUM_REQS; ++i) begin
                     for (integer j = 0; j < NUM_BANKS * NUM_PORTS; ++j) begin                        
-                        automatic bit [PORTS_BITS-1:0]    p = j[0 +: PORTS_BITS];
-                        automatic bit [BANK_SEL_BITS-1:0] b = j[PORTS_BITS +: BANK_SEL_BITS];
+                        integer p = j[0 +: PORTS_BITS];
+                        integer b = j[PORTS_BITS +: BANK_SEL_BITS];
                         if (per_bank_core_rsp_valid[b] 
                          && per_bank_core_rsp_pmask[b][p] 
                          && per_bank_core_rsp_idx[b][p] == `UP(REQ_SEL_BITS)'(i)) begin
