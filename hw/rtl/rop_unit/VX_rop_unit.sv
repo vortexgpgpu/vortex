@@ -24,10 +24,6 @@ module VX_rop_unit #(
     rop_dcrs_t dcrs;
     assign dcrs = rop_dcr_if.data;
 
-    VX_rop_req_if #(
-        .NUM_LANES (NUM_LANES)
-    ) per_slice_rop_req_if[NUM_SLICES]();
-
     VX_cache_req_if #(
         .NUM_REQS  (`OCACHE_NUM_REQS), 
         .WORD_SIZE (`OCACHE_WORD_SIZE), 
@@ -39,6 +35,10 @@ module VX_rop_unit #(
         .WORD_SIZE (`OCACHE_WORD_SIZE), 
         .TAG_WIDTH (`OCACHE_TAG_ID_BITS)
     ) per_slice_cache_rsp_if[NUM_SLICES]();
+    
+    VX_rop_req_if #(
+        .NUM_LANES (NUM_LANES)
+    ) per_slice_rop_req_if[NUM_SLICES]();
 
     // Generate all slices
     for (genvar i = 0; i < NUM_SLICES; ++i) begin
@@ -55,16 +55,6 @@ module VX_rop_unit #(
         );
     end
 
-    VX_rop_req_demux #(
-        .NUM_REQS  (NUM_SLICES),
-        .NUM_LANES (NUM_LANES)
-    ) rop_req_demux (
-        .clk        (clk),
-        .reset      (reset),
-        .req_in_if  (rop_req_if),
-        .req_out_if (per_slice_rop_req_if)
-    );
-
     VX_cache_mux #(
         .NUM_REQS     (NUM_SLICES),
         .NUM_LANES    (`OCACHE_NUM_REQS),
@@ -80,6 +70,16 @@ module VX_rop_unit #(
         .rsp_in_if  (per_slice_cache_rsp_if),
         .req_out_if (cache_req_if),
         .rsp_out_if (cache_rsp_if)
+    );
+
+    VX_rop_req_demux #(
+        .NUM_REQS  (NUM_SLICES),
+        .NUM_LANES (NUM_LANES)
+    ) rop_req_demux (
+        .clk        (clk),
+        .reset      (reset),
+        .req_in_if  (rop_req_if),
+        .req_out_if (per_slice_rop_req_if)
     );
 
 `ifdef PERF_ENABLE

@@ -3,57 +3,84 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_edge_function #(
-    parameter MUL_LATENCY = 3
+    parameter LATENCY = 3
 ) (
     input wire clk,
     input wire reset,
 
-    input wire         [`RASTER_DIM_BITS-1:0]            x_loc,
-    input wire         [`RASTER_DIM_BITS-1:0]            y_loc,
-    input wire signed  [`RASTER_PRIMITIVE_DATA_BITS-1:0] edges[2:0][2:0],
+    input wire                        enable,
+    input wire [`RASTER_DIM_BITS-1:0] x_loc,
+    input wire [`RASTER_DIM_BITS-1:0] y_loc,
+    input wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges,
 
-    output wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] result[2:0]
+    output wire [2:0][`RASTER_DATA_BITS-1:0] result
 );
     `UNUSED_VAR (reset)
 
-    for (genvar i = 0; i < 3; ++i) begin
-        wire signed [2*`RASTER_PRIMITIVE_DATA_BITS-1:0] prod_x;
-        wire signed [2*`RASTER_PRIMITIVE_DATA_BITS-1:0] prod_y;
+    `STATIC_ASSERT((LATENCY >= `LATENCY_IMUL), ("invalid parameter"))
 
+    wire [2:0][`RASTER_DATA_BITS-1:0] prod_x;
+    wire [2:0][`RASTER_DATA_BITS-1:0] prod_y;
+    wire [2:0][`RASTER_DATA_BITS-1:0] edge_c;
+    
+    wire [2:0][`RASTER_DATA_BITS-1:0] edge_c_s, result_s;
+
+    for (genvar i = 0; i < 3; ++i) begin
         VX_multiplier #(
-            .WIDTHA  (`RASTER_PRIMITIVE_DATA_BITS),
+            .WIDTHA  (`RASTER_DATA_BITS),
             .WIDTHB  (`RASTER_DIM_BITS),
-            .WIDTHP  (2 * `RASTER_PRIMITIVE_DATA_BITS),
+            .WIDTHP  (`RASTER_DATA_BITS),
             .SIGNED  (1),
-            .LATENCY (MUL_LATENCY)
+            .LATENCY (`LATENCY_IMUL)
         ) x_multiplier (
             .clk    (clk),
-            .enable (1'b1),
+            .enable (enable),
             .dataa  (edges[i][0]),
             .datab  (x_loc),
-            .result (prod_x)
+            .result (prod_x[i])
         );
 
         VX_multiplier #(
-            .WIDTHA  (`RASTER_PRIMITIVE_DATA_BITS),
+            .WIDTHA  (`RASTER_DATA_BITS),
             .WIDTHB  (`RASTER_DIM_BITS),
-            .WIDTHP  (2 * `RASTER_PRIMITIVE_DATA_BITS),
+            .WIDTHP  (`RASTER_DATA_BITS),
             .SIGNED  (1),
-            .LATENCY (MUL_LATENCY)
+            .LATENCY (`LATENCY_IMUL)
         ) y_multiplier (
             .clk    (clk),
-            .enable (1'b1),
+            .enable (enable),
             .dataa  (edges[i][1]),
             .datab  (y_loc),
-            .result (prod_y)
+            .result (prod_y[i])
         );
 
-        `UNUSED_VAR (prod_x)
-        `UNUSED_VAR (prod_y)
-
-        assign result[i] = prod_x[`RASTER_PRIMITIVE_DATA_BITS-1:0] 
-                         + prod_y[`RASTER_PRIMITIVE_DATA_BITS-1:0] 
-                         + edges[i][2];
+        assign edge_c[i] = edges[i][2];
     end
+
+    VX_shift_register #(
+        .DATAW (3 * `RASTER_DATA_BITS),
+        .DEPTH (LATENCY)
+    ) shift_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  ({edge_c}),
+        .data_out ({edge_c_s})
+    );
+
+    for (genvar i = 0; i < 3; ++i) begin
+        assign result_s[i] = prod_x[i] + prod_y[i] + edge_c_s[i];
+    end
+
+    VX_pipe_register #(
+        .DATAW (3 * `RASTER_DATA_BITS),
+        .DEPTH (LATENCY - `LATENCY_IMUL)
+    ) pipe_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  (result_s),
+        .data_out (result)
+    );
 
 endmodule

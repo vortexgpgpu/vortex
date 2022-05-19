@@ -7,174 +7,216 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_te #(
-    parameter TILE_SIZE       = 16,
-    parameter BLOCK_SIZE      = 4,
-    parameter LEVEL_DATA_BITS = ($clog2(TILE_SIZE/BLOCK_SIZE) + 1)
+    parameter TILE_LOGSIZE  = 6,
+    parameter BLOCK_LOGSIZE = 2  
 ) (
     input wire clk,
     input wire reset,
 
-    input wire stall,
-    
-    // Input valid
-    input wire input_valid,
-    
-    // Level value in recursive descent
-    input wire        [LEVEL_DATA_BITS-1:0]                level,
-    
-    // Tile data
-    input wire        [`RASTER_DIM_BITS-1:0]               x_loc,
-    input wire        [`RASTER_DIM_BITS-1:0]               y_loc,
-    
-    // Primitive data
-    // edge equation data for the 3 edges and ax+by+c
-    input wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    edges[2:0][2:0],
-    
-    // edge function computation value propagated
-    input wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    edge_func_val[2:0],
-    input wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]    extents[2:0],
+    output wire                         empty,
 
-    // Status signals
-    output wire                                            tile_valid,
-    output wire                                            block_valid,
-
-    // Sub-tile related data
-    output wire        [`RASTER_DIM_BITS-1:0]              tile_x_loc[3:0],
-                                                           tile_y_loc[3:0],
-    output wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   tile_edge_func_val[3:0][2:0],
-    // Block related data
-    output wire        [`RASTER_DIM_BITS-1:0]              block_x_loc,
-                                                           block_y_loc,
-    output wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   block_edge_func_val[2:0],
-
-    output wire        [LEVEL_DATA_BITS-1:0]               tile_level
+    // Inputs
+    input wire                          valid_in,
+    input wire [`RASTER_DIM_BITS-1:0]   x_loc_in,
+    input wire [`RASTER_DIM_BITS-1:0]   y_loc_in,
+    input wire [`RASTER_PID_BITS-1:0]   pid_in,
+    input wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_in,
+    input wire [2:0][`RASTER_DATA_BITS-1:0] extents_in,
+    output wire                         ready_in,
+    
+    // Outputs
+    output wire                         valid_out,
+    output wire [`RASTER_DIM_BITS-1:0]  x_loc_out,
+    output wire [`RASTER_DIM_BITS-1:0]  y_loc_out,
+    output wire [`RASTER_PID_BITS-1:0]  pid_out,
+    output wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_out,
+    input wire                          ready_out
 );
+    localparam LEVEL_BITS = (TILE_LOGSIZE - BLOCK_LOGSIZE) + 1;
+    localparam TILE_FIFO_DEPTH = 1 << (TILE_LOGSIZE - BLOCK_LOGSIZE);
+    localparam FIFO_DATA_WIDTH = 2 * `RASTER_DIM_BITS + 3 * `RASTER_DATA_BITS + LEVEL_BITS;
 
-    localparam TILE_FIFO_DEPTH        = TILE_SIZE/BLOCK_SIZE;
-    localparam RASTER_TILE_SIZE_BITS  = $clog2(TILE_SIZE);
-    localparam RASTER_BLOCK_SIZE_BITS = $clog2(BLOCK_SIZE);
+    wire stall;
 
-    // Status signals
-    reg                                            tile_valid_r, block_valid_r;
-    // Sub-tile related data
-    wire        [`RASTER_DIM_BITS-1:0]              tile_x_loc_r[3:0],
-                                                     tile_y_loc_r[3:0];
-    wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   tile_edge_func_val_r[3:0][2:0];
+    reg [2:0][`RASTER_DATA_BITS-1:0] tile_extents;
+    reg [2:0][2:0][`RASTER_DATA_BITS-1:0] tile_edges;
+    reg [`RASTER_PID_BITS-1:0]       tile_pid;
+    reg [`RASTER_DIM_BITS-1:0]       tile_x_loc;
+    reg [`RASTER_DIM_BITS-1:0]       tile_y_loc;
+    reg [2:0][`RASTER_DATA_BITS-1:0] tile_edge_eval;
+    reg [LEVEL_BITS-1:0]             tile_level;
 
+    wire [`RASTER_DIM_BITS-1:0]       tile_x_loc_r;
+    wire [`RASTER_DIM_BITS-1:0]       tile_y_loc_r;
+    wire [2:0][`RASTER_DATA_BITS-1:0] tile_edge_eval_r;
+    wire [LEVEL_BITS-1:0]             tile_level_r;
 
-    // Check if primitive within tile
-    wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0] eval0, eval1, eval2;
-    assign eval0 = (edge_func_val[0] + extents[0]) >> level;
-    assign eval1 = (edge_func_val[1] + extents[1]) >> level;
-    assign eval2 = (edge_func_val[2] + extents[2]) >> level;
+    wire [3:0][`RASTER_DIM_BITS-1:0] subtile_x_loc, subtile_x_loc_r;
+    wire [3:0][`RASTER_DIM_BITS-1:0] subtile_y_loc, subtile_y_loc_r;
+    wire [3:0][2:0][`RASTER_DATA_BITS-1:0] subtile_edge_eval, subtile_edge_eval_r;
+    wire [LEVEL_BITS-1:0] subtile_level, subtile_level_r;
 
-    // Sub-tile specs info
-    reg [`RASTER_DIM_BITS-1:0] sub_tile_size;
-    reg [`RASTER_DIM_BITS-1:0] sub_tile_bits;
+    wire [`RASTER_DIM_BITS-1:0] fifo_x_loc;
+    wire [`RASTER_DIM_BITS-1:0] fifo_y_loc;
+    wire [2:0][`RASTER_DATA_BITS-1:0] fifo_edge_eval;
+    wire [LEVEL_BITS-1:0]  fifo_level;
 
-    // Generate the x,y loc and edge function values
+    wire       fifo_arb_valid;    
+    wire [1:0] fifo_arb_index;
+    wire [3:0] fifo_arb_onehot;
+
+    reg tile_valid;
+    wire tile_valid_r;
+    wire is_block_r;
+
+    // fifo bypass first sub-tile
+    wire is_fifo_bypass = tile_valid_r && ~is_block_r && ~fifo_arb_valid;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            tile_valid <= 0;
+        end begin
+            if (~stall) begin
+                tile_valid <= 0;
+                if (fifo_arb_valid) begin
+                    // select fifo input
+                    tile_valid       <= 1;
+                    tile_x_loc       <= fifo_x_loc;
+                    tile_y_loc       <= fifo_y_loc;                
+                    tile_edge_eval   <= fifo_edge_eval;                
+                    tile_level       <= fifo_level;
+                end else 
+                if (is_fifo_bypass) begin
+                    // fifo bypass first sub-tile
+                    tile_valid      <= 1;
+                    tile_x_loc      <= subtile_x_loc_r[0];
+                    tile_y_loc      <= subtile_y_loc_r[0];                
+                    tile_edge_eval  <= subtile_edge_eval_r[0];                
+                    tile_level      <= subtile_level_r;
+                end else
+                if (valid_in && ~tile_valid) begin   
+                    // select new tile input             
+                    tile_valid       <= 1;
+                    tile_extents     <= extents_in;
+                    tile_edges       <= edges_in;
+                    tile_pid         <= pid_in;         
+                    tile_x_loc       <= x_loc_in;
+                    tile_y_loc       <= y_loc_in;
+                    tile_edge_eval[0]<= edges_in[0][2];
+                    tile_edge_eval[1]<= edges_in[1][2];
+                    tile_edge_eval[2]<= edges_in[2][2];
+                    tile_level       <= 0;
+                end
+            end
+        end
+    end
+
+    // Check if primitive is within current tile
+    wire signed [`RASTER_DATA_BITS-1:0] eval0 = $signed(tile_edge_eval[0] + tile_extents[0]) >> tile_level;
+    wire signed [`RASTER_DATA_BITS-1:0] eval1 = $signed(tile_edge_eval[1] + tile_extents[1]) >> tile_level;
+    wire signed [`RASTER_DATA_BITS-1:0] eval2 = $signed(tile_edge_eval[2] + tile_extents[2]) >> tile_level;
+    wire tile_valid_e = tile_valid && ((eval0 >= 0) && (eval1 >= 0) && (eval2 >= 0));
+
+    // Generate sub-tile info
+    wire [`RASTER_DIM_BITS-1:0] subtile_logsize = `RASTER_DIM_BITS'(TILE_LOGSIZE) - `RASTER_DIM_BITS'(tile_level) - 1;
+    wire is_block = (subtile_logsize < `RASTER_DIM_BITS'(BLOCK_LOGSIZE));
+    assign subtile_level = tile_level + LEVEL_BITS'(1);
     for (genvar i = 0; i < 2; ++i) begin
         for (genvar j = 0; j < 2; ++j) begin
-            assign tile_x_loc_r[i*2+j] = x_loc + `RASTER_DIM_BITS'(i)*sub_tile_size;
-            assign tile_y_loc_r[i*2+j] = y_loc + `RASTER_DIM_BITS'(j)*sub_tile_size;
+            assign subtile_x_loc[2 * i + j] = tile_x_loc + (`RASTER_DIM_BITS'(i) << subtile_logsize);
+            assign subtile_y_loc[2 * i + j] = tile_y_loc + (`RASTER_DIM_BITS'(j) << subtile_logsize);
+            for (genvar k = 0; k < 3; ++k) begin
+                assign subtile_edge_eval[2 * i + j][k] = i * (tile_edges[k][0] << subtile_logsize) + j * (tile_edges[k][1] << subtile_logsize) + tile_edge_eval[k];
+            end
         end 
     end
-    for (genvar i = 0; i < 2; ++i) begin
-        for (genvar j = 0; j < 2; ++j) begin
-            for (genvar k = 0; k < 3; ++k) begin
-                assign tile_edge_func_val_r[i*2+j][k] = edge_func_val[k]
-                    + i*(edges[k][0] << sub_tile_bits)
-                    + j*(edges[k][1] << sub_tile_bits);
-            end
-        end
-    end
-
-    always_comb begin
-        block_valid_r = 0;
-        // Check if tile has triangle
-        tile_valid_r = (!((eval0 < 0) || (eval1 < 0) || (eval2 < 0))) & input_valid;
-        // If tile valid => sub-divide into sub-tiles
-        sub_tile_bits = `RASTER_DIM_BITS'(RASTER_TILE_SIZE_BITS) - `RASTER_DIM_BITS'(level) - `RASTER_DIM_BITS'(1);
-        sub_tile_size = `RASTER_DIM_BITS'(1) << sub_tile_bits;
-        if (tile_valid_r) begin
-            if (!(sub_tile_bits >= `RASTER_DIM_BITS'(RASTER_BLOCK_SIZE_BITS))) begin
-                // run block evaluator on valid block
-                block_valid_r = 1;
-                // Deassert tile_valid_r so that it tells whether it generated a block or tile or neither
-                tile_valid_r = 0;
-            end
-        end
-    end
-
-    // Block related data
-    wire        [`RASTER_DIM_BITS-1:0]              block_x_loc_r,
-                                                     block_y_loc_r;
-    wire signed [`RASTER_PRIMITIVE_DATA_BITS-1:0]   block_edge_func_val_r[2:0];
-    wire        [LEVEL_DATA_BITS-1:0]        tile_level_r;
-
-    assign tile_level_r = level;
-    assign block_x_loc_r = x_loc;
-    assign block_y_loc_r = y_loc;
-    assign block_edge_func_val_r = edge_func_val;
 
     VX_pipe_register #(
-        .DATAW  (2 + 2*4*`RASTER_DIM_BITS + 4*3*`RASTER_PRIMITIVE_DATA_BITS + 2*`RASTER_DIM_BITS +
-            3*`RASTER_PRIMITIVE_DATA_BITS + LEVEL_DATA_BITS),
-        .RESETW (2)
+        .DATAW  (1 + 1 + 4 * (2 * `RASTER_DIM_BITS + 3 * `RASTER_DATA_BITS) + LEVEL_BITS + 2 * `RASTER_DIM_BITS + 3 * `RASTER_DATA_BITS + LEVEL_BITS),
+        .RESETW (1)
     ) te_pipe_reg_1 (
         .clk      (clk),
         .reset    (reset),
-        .enable   (!stall),
-        .data_in  ({
-            tile_valid_r, block_valid_r,
-            tile_x_loc_r[0], tile_x_loc_r[1], tile_x_loc_r[2], tile_x_loc_r[3],
-            tile_y_loc_r[0], tile_y_loc_r[1], tile_y_loc_r[2], tile_y_loc_r[3],
-            tile_edge_func_val_r[0][0], tile_edge_func_val_r[0][1], tile_edge_func_val_r[0][2],
-            tile_edge_func_val_r[1][0], tile_edge_func_val_r[1][1], tile_edge_func_val_r[1][2],
-            tile_edge_func_val_r[2][0], tile_edge_func_val_r[2][1], tile_edge_func_val_r[2][2],
-            tile_edge_func_val_r[3][0], tile_edge_func_val_r[3][1], tile_edge_func_val_r[3][2],
-            block_x_loc_r, block_y_loc_r,
-            block_edge_func_val_r[0], block_edge_func_val_r[1], block_edge_func_val_r[2],
-            tile_level_r
-        }),
-        .data_out ({
-            tile_valid, block_valid,
-            tile_x_loc[0], tile_x_loc[1], tile_x_loc[2], tile_x_loc[3],
-            tile_y_loc[0], tile_y_loc[1], tile_y_loc[2], tile_y_loc[3],
-            tile_edge_func_val[0][0], tile_edge_func_val[0][1], tile_edge_func_val[0][2],
-            tile_edge_func_val[1][0], tile_edge_func_val[1][1], tile_edge_func_val[1][2],
-            tile_edge_func_val[2][0], tile_edge_func_val[2][1], tile_edge_func_val[2][2],
-            tile_edge_func_val[3][0], tile_edge_func_val[3][1], tile_edge_func_val[3][2],
-            block_x_loc, block_y_loc,
-            block_edge_func_val[0], block_edge_func_val[1], block_edge_func_val[2],
-            tile_level
-        })
+        .enable   (~stall),
+        .data_in  ({tile_valid_e, is_block,   subtile_x_loc,   subtile_y_loc,   subtile_edge_eval,   subtile_level,   tile_x_loc,   tile_y_loc,   tile_edge_eval,   tile_level}),
+        .data_out ({tile_valid_r, is_block_r, subtile_x_loc_r, subtile_y_loc_r, subtile_edge_eval_r, subtile_level_r, tile_x_loc_r, tile_y_loc_r, tile_edge_eval_r, tile_level_r})
     );
+
+    wire [3:0] fifo_full, fifo_empty;
+    wire [3:0][FIFO_DATA_WIDTH-1:0] fifo_data_out;
+    
+    wire fifo_stall   = tile_valid_r && ~is_block_r && (| fifo_full);
+    wire output_stall = tile_valid_r && is_block_r && ~ready_out;
+    assign stall = fifo_stall || output_stall;
+
+    VX_priority_arbiter #(
+        .NUM_REQS (4)
+    ) fifo_arbiter (
+        .clk          (clk),
+        .reset        (reset),        
+        `UNUSED_PIN   (unlock),
+        .requests     (~fifo_empty),
+        .grant_index  (fifo_arb_index),
+        .grant_onehot (fifo_arb_onehot),
+        .grant_valid  (fifo_arb_valid)
+    );
+
+    for (genvar i = 0; i < 4; ++i) begin
+        wire fifo_push = tile_valid_r && ~is_block_r && ~(is_fifo_bypass && i == 0);
+        wire fifo_pop = ~fifo_empty[i] && fifo_arb_onehot[i] && ~output_stall; 
+
+        VX_fifo_queue #(
+            .DATAW	 (FIFO_DATA_WIDTH),
+            .SIZE    (TILE_FIFO_DEPTH),
+            .OUT_REG (1)
+        ) fifo_queue (
+            .clk        (clk),
+            .reset      (reset),
+            .push       (fifo_push),
+            .pop        (fifo_pop),
+            .data_in    ({subtile_x_loc_r[i], subtile_y_loc_r[i], subtile_edge_eval_r[i], subtile_level_r}),
+            .data_out   (fifo_data_out[i]),
+            .full       (fifo_full[i]),
+            .empty      (fifo_empty[i]),
+            `UNUSED_PIN (alm_full),
+            `UNUSED_PIN (alm_empty),
+            `UNUSED_PIN (size)
+        );
+    end
+
+    assign {fifo_x_loc, fifo_y_loc, fifo_edge_eval, fifo_level} = fifo_data_out[fifo_arb_index];
+
+    // Output signals
+
+    // can accept next input?
+    assign ready_in = ~stall           // pipeline not stalled
+                   && ~tile_valid      // no existing tile
+                   && ~fifo_arb_valid  // no valid fifo entry
+                   && ~is_fifo_bypass; // no fifo bypass
+
+    assign valid_out = tile_valid_r && is_block_r;
+    assign x_loc_out = tile_x_loc_r;
+    assign y_loc_out = tile_y_loc_r;
+    assign pid_out   = tile_pid;    
+    `EDGE_UPDATE (edges_out, tile_edges, tile_edge_eval_r);
+
+    assign empty = ready_in && ~valid_out;
+
+    `UNUSED_VAR (tile_level_r)
 
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
-        if (input_valid) begin
-            dpi_trace(2, "%d: raster-tile-in: level=%0d, x=%0d, y=%0d, edge1.x=%0d, edge1.y=%0d, edge1.z=%0d, edge2.x=%0d, edge2.y=%0d, edge2.z=%0d, edge3.x=%0d, edge3.y=%0d, edge3.z=%0d, edge_func_val=%0d %0d %0d, extents=%0d %0d %0d\n",
-                $time, level, x_loc, y_loc,
-                edges[0][0], edges[0][1], edges[0][2],
-                edges[1][0], edges[1][1], edges[1][2],
-                edges[2][0], edges[2][1], edges[2][2],
-                edge_func_val[0], edge_func_val[1], edge_func_val[2],
-                extents[0], extents[1], extents[2]);
+        if (valid_in && ready_in) begin
+            dpi_trace(2, "%d: raster-te-in: x=%0d, y=%0d, edge={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}, extents={0x%0h, 0x%0h, 0x%0h}\n",
+                $time, x_loc_in, y_loc_in,
+                edges_in[0][0], edges_in[0][1], edges_in[0][2],
+                edges_in[1][0], edges_in[1][1], edges_in[1][2],
+                edges_in[2][0], edges_in[2][1], edges_in[2][2],
+                extents_in[0],  extents_in[1],  extents_in[2]);
         end
-    end
-    always @(posedge clk) begin
-        if (tile_valid) begin
-            for (integer i = 0; i < 3; ++i) begin
-                dpi_trace(2, "%d: raster-tile-out: tile_valid level=%0d, x=%0d, y=%0d, edge_func_val=%0d %0d %0d\n",
-                    $time, tile_level, tile_x_loc[i], tile_y_loc[i],
-                    tile_edge_func_val[i][0], tile_edge_func_val[i][1], tile_edge_func_val[i][2]);
-            end
-        end
-        if (block_valid) begin
-            dpi_trace(2, "%d: raster-tile-out: block_valid level=%0d, x=%0d, y=%0d, edge_func_val=%0d %0d %0d\n",
-                $time, tile_level, block_x_loc, block_y_loc,
-                block_edge_func_val[0], block_edge_func_val[1], block_edge_func_val[2]);
+        if (tile_valid && ~stall) begin
+            dpi_trace(2, "%d: raster-te-tile: pass=%b, block=%b, level=%0d, x=%0d, y=%0d, edge_eval={0x%0h, 0x%0h, 0x%0h}\n",
+                $time, tile_valid_e, is_block, tile_level, tile_x_loc, tile_y_loc, tile_edge_eval[0], tile_edge_eval[1], tile_edge_eval[2]);
         end
     end
 `endif

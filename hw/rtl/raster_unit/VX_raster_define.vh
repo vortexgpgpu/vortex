@@ -8,6 +8,17 @@
 import VX_raster_types::*;
 `IGNORE_WARNINGS_END
 
+`define EDGE_UPDATE(dst, src, eval) \
+    assign dst[0][0] = src[0][0];   \
+    assign dst[1][0] = src[1][0];   \
+    assign dst[2][0] = src[2][0];   \
+    assign dst[0][1] = src[0][1];   \
+    assign dst[1][1] = src[1][1];   \
+    assign dst[2][1] = src[2][1];   \
+    assign dst[0][2] = eval[0];     \
+    assign dst[1][2] = eval[1];     \
+    assign dst[2][2] = eval[2]
+
 task trace_raster_state (
     input int                  level,
     input [`DCR_ADDR_BITS-1:0] state

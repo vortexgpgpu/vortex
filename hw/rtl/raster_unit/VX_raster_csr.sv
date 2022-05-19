@@ -49,9 +49,7 @@ module VX_raster_csr #(
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign wdata[i].pos_mask = {write_data[i].pos_y, write_data[i].pos_x, write_data[i].mask}; 
-        assign wdata[i].bcoord_x = write_data[i].bcoord_x;
-        assign wdata[i].bcoord_y = write_data[i].bcoord_y;
-        assign wdata[i].bcoord_z = write_data[i].bcoord_z;    
+        assign wdata[i].bcoords  = write_data[i].bcoords;
     end
     
     // CSRs read
@@ -62,19 +60,19 @@ module VX_raster_csr #(
     always @(*) begin
         for (integer i = 0; i < `NUM_THREADS; ++i) begin
             case (raster_csr_if.read_addr)
-                `CSR_RASTER_POS_MASK:  read_data_r[i] = rdata[i].pos_mask;
-                `CSR_RASTER_BCOORD_X0: read_data_r[i] = rdata[i].bcoord_x[0];
-                `CSR_RASTER_BCOORD_X1: read_data_r[i] = rdata[i].bcoord_x[1];
-                `CSR_RASTER_BCOORD_X2: read_data_r[i] = rdata[i].bcoord_x[2];
-                `CSR_RASTER_BCOORD_X3: read_data_r[i] = rdata[i].bcoord_x[3];
-                `CSR_RASTER_BCOORD_Y0: read_data_r[i] = rdata[i].bcoord_y[0];
-                `CSR_RASTER_BCOORD_Y1: read_data_r[i] = rdata[i].bcoord_y[1];
-                `CSR_RASTER_BCOORD_Y2: read_data_r[i] = rdata[i].bcoord_y[2];
-                `CSR_RASTER_BCOORD_Y3: read_data_r[i] = rdata[i].bcoord_y[3];
-                `CSR_RASTER_BCOORD_Z0: read_data_r[i] = rdata[i].bcoord_z[0];
-                `CSR_RASTER_BCOORD_Z1: read_data_r[i] = rdata[i].bcoord_z[1];
-                `CSR_RASTER_BCOORD_Z2: read_data_r[i] = rdata[i].bcoord_z[2];
-                `CSR_RASTER_BCOORD_Z3: read_data_r[i] = rdata[i].bcoord_z[3];
+                `CSR_RASTER_POS_MASK:  read_data_r[i] = rdata[i].pos_mask;                
+                `CSR_RASTER_BCOORD_X0: read_data_r[i] = rdata[i].bcoords[0][0];
+                `CSR_RASTER_BCOORD_Y0: read_data_r[i] = rdata[i].bcoords[0][1];
+                `CSR_RASTER_BCOORD_Z0: read_data_r[i] = rdata[i].bcoords[0][2];
+                `CSR_RASTER_BCOORD_X1: read_data_r[i] = rdata[i].bcoords[1][0];
+                `CSR_RASTER_BCOORD_Y1: read_data_r[i] = rdata[i].bcoords[1][1];
+                `CSR_RASTER_BCOORD_Z1: read_data_r[i] = rdata[i].bcoords[1][2];                
+                `CSR_RASTER_BCOORD_X2: read_data_r[i] = rdata[i].bcoords[2][0];
+                `CSR_RASTER_BCOORD_Y2: read_data_r[i] = rdata[i].bcoords[2][1];
+                `CSR_RASTER_BCOORD_Z2: read_data_r[i] = rdata[i].bcoords[2][2];                
+                `CSR_RASTER_BCOORD_X3: read_data_r[i] = rdata[i].bcoords[3][0];
+                `CSR_RASTER_BCOORD_Y3: read_data_r[i] = rdata[i].bcoords[3][1];
+                `CSR_RASTER_BCOORD_Z3: read_data_r[i] = rdata[i].bcoords[3][2];
                 default:               read_data_r[i] = 'x;
             endcase
         end

@@ -28,13 +28,13 @@ module VX_raster_dcr #(
                     dcrs.tbuf_addr <= dcr_wr_data[`RASTER_DCR_DATA_BITS-1:0];
                 end
                 `DCR_RASTER_TILE_COUNT: begin 
-                    dcrs.tile_count <= dcr_wr_data[`RASTER_DCR_DATA_BITS-1:0];
+                    dcrs.tile_count <= dcr_wr_data[`RASTER_TILE_BITS-1:0];
                 end
                 `DCR_RASTER_PBUF_ADDR: begin 
                     dcrs.pbuf_addr <= dcr_wr_data[`RASTER_DCR_DATA_BITS-1:0];
                 end
                 `DCR_RASTER_PBUF_STRIDE: begin 
-                    dcrs.pbuf_stride <= dcr_wr_data[`RASTER_DCR_DATA_BITS-1:0];
+                    dcrs.pbuf_stride <= dcr_wr_data[`RASTER_STRIDE_BITS-1:0];
                 end
                `DCR_RASTER_DST_SIZE: begin 
                     dcrs.dst_width  <= dcr_wr_data[0 +: `RASTER_DIM_BITS];

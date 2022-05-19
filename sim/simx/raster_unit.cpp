@@ -105,14 +105,6 @@ private:
     uint32_t mask = 0;
     std::array<vec3_fx_t, 4> bcoords;
 
-    fixed16_t zero(0);
-    for (int i = 0; i < 4; ++i)
-    {
-      bcoords[i].x = zero;
-      bcoords[i].y = zero;
-      bcoords[i].z = zero;
-    }
-
     for (uint32_t j = 0; j < 2; ++j) {
       auto ee0 = e0;
       auto ee1 = e1;
@@ -142,8 +134,8 @@ private:
     
     if (mask) {
       // add stamp to queue
-      auto pos_x = x >> 1;
-      auto pos_y = y >> 1;
+      auto pos_x = x / 2;
+      auto pos_y = y / 2;
       // printf("raster-quad: x_loc = %d, y_loc = %d, pid = %d, mask=%d, bcoords = %d %d %d %d, %d %d %d %d, %d %d %d %d\n",
       //   pos_x, pos_y, pid_, mask,
       //   bcoords[0].x.data(), bcoords[1].x.data(), bcoords[2].x.data(), bcoords[3].x.data(),
