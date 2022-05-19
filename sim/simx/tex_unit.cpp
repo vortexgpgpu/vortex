@@ -43,7 +43,7 @@ public:
       , dcrs_(core->dcrs_.tex_dcrs)      
       , tcache_(core->tcache_)
       , num_threads_(core->arch().num_threads())
-      , pending_reqs_(TEXQ_SIZE)
+      , pending_reqs_(TEX_MEM_PENDING_SIZE)
     {
       this->clear();
     }

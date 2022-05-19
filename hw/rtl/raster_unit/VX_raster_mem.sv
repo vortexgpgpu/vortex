@@ -304,25 +304,7 @@ module VX_raster_mem #(
                 edges_out[0][0], edges_out[0][1], edges_out[0][2],
                 edges_out[1][0], edges_out[1][1], edges_out[1][2],
                 edges_out[2][0], edges_out[2][1], edges_out[2][2]);
-        end
-        if (|cache_req_if.valid) begin
-            dpi_trace(3, "%d: raster-mem-cache-req: valid=", $time);
-            `TRACE_ARRAY1D(3, cache_req_if.valid, 9);
-            dpi_trace(3, ", addr=");
-            `TRACE_ARRAY1D(3, cache_req_if.addr, 9);
-            dpi_trace(3, ", tag=");
-            `TRACE_ARRAY1D(3, cache_req_if.tag, 9);
-            dpi_trace(3, "\n");
-        end
-        if (|cache_rsp_if.valid) begin
-            dpi_trace(3, "%d: raster-mem-cache-rsp: valid=", $time);
-            `TRACE_ARRAY1D(3, cache_rsp_if.valid, 9);
-            dpi_trace(3, ", data=");
-            `TRACE_ARRAY1D(3, cache_rsp_if.data, 9);
-            dpi_trace(3, ", tag=");
-            `TRACE_ARRAY1D(3, cache_rsp_if.tag, 9);
-            dpi_trace(3, "\n");
-        end  
+        end 
     end
 `endif
 

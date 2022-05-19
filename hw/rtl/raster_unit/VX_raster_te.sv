@@ -215,7 +215,7 @@ module VX_raster_te #(
                 extents_in[0],  extents_in[1],  extents_in[2]);
         end
         if (tile_valid && ~stall) begin
-            dpi_trace(2, "%d: raster-te-tile: pass=%b, block=%b, level=%0d, x=%0d, y=%0d, edge_eval={0x%0h, 0x%0h, 0x%0h}\n",
+            dpi_trace(2, "%d: raster-te-test: pass=%b, block=%b, level=%0d, x=%0d, y=%0d, edge_eval={0x%0h, 0x%0h, 0x%0h}\n",
                 $time, tile_valid_e, is_block, tile_level, tile_x_loc, tile_y_loc, tile_edge_eval[0], tile_edge_eval[1], tile_edge_eval[2]);
         end
     end
