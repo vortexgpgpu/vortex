@@ -155,13 +155,13 @@ module VX_raster_mem #(
                             mem_req_mask    <= TILE_FETCH_MASK;
                             mem_req_tag     <= 'x;
                             curr_tbuf_addr  <= curr_tbuf_addr + 4 + 4;
-                            curr_num_tiles  <= curr_num_tiles - 1;
+                            curr_num_tiles  <= curr_num_tiles - `RASTER_TILE_BITS'(1);
                         end else begin
                             // done, return to idle
                             state <= STATE_IDLE;
                         end
                     end
-                    rem_num_prims <= rem_num_prims - 1;
+                    rem_num_prims <= rem_num_prims - `RASTER_PID_BITS'(1);
                 end else                
                 if (fsm_req_fire) begin
                     // send next primitive address
@@ -171,7 +171,7 @@ module VX_raster_mem #(
                         mem_req_mask    <= PID_FETCH_MASK;
                         mem_req_tag     <= 'x;
                         curr_tbuf_addr  <= curr_tbuf_addr + 4;
-                        curr_num_prims  <= curr_num_prims - 1;
+                        curr_num_prims  <= curr_num_prims - `RASTER_PID_BITS'(1);
                     end
                 end
             end
@@ -273,8 +273,8 @@ module VX_raster_mem #(
 
     // Output buffer 
 
-    wire buf_out_valid = prim_data_rsp_valid
-                      && ~prim_addr_rsp_valid;
+    assign buf_out_valid = prim_data_rsp_valid
+                        && ~prim_addr_rsp_valid;
                       
     `UNUSED_VAR (mem_rsp_mask)
 

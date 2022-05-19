@@ -115,10 +115,10 @@ module VX_raster_be #(
         
     always @(*) begin
         for (integer i = 0; i < OUTPUT_BATCHES; ++i) begin
-            fifo_mask_in  = 0;
-            fifo_stamp_in = 'x;
+            fifo_mask_in[i]  = 0;
+            fifo_stamp_in[i] = 'x;
             for (integer j = 0; j < OUTPUT_QUADS; ++j) begin 
-                integer ii = i * OUTPUT_QUADS + j;
+                automatic integer ii = i * OUTPUT_QUADS + j;
                 if (ii < PER_BLOCK_QUADS) begin
                     fifo_mask_in[i][j] = qe_valid[ii];
                     fifo_stamp_in[i][j].pos_x   = qe_x_loc[ii][`RASTER_DIM_BITS-1:1];

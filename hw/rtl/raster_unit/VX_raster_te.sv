@@ -118,7 +118,7 @@ module VX_raster_te #(
     wire tile_valid_e = tile_valid && ((eval0 >= 0) && (eval1 >= 0) && (eval2 >= 0));
 
     // Generate sub-tile info
-    wire [`RASTER_DIM_BITS-1:0] subtile_logsize = `RASTER_DIM_BITS'(TILE_LOGSIZE) - `RASTER_DIM_BITS'(tile_level) - 1;
+    wire [`RASTER_DIM_BITS-1:0] subtile_logsize = `RASTER_DIM_BITS'(TILE_LOGSIZE-1) - `RASTER_DIM_BITS'(tile_level);
     wire is_block = (subtile_logsize < `RASTER_DIM_BITS'(BLOCK_LOGSIZE));
     assign subtile_level = tile_level + LEVEL_BITS'(1);
     for (genvar i = 0; i < 2; ++i) begin
