@@ -18,7 +18,7 @@ VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link$(XLEN).ld -Wl,--g
 
 VX_LDFLAGS += -lm
 
-VX_SRCS = kernel.c
+VX_SRCS = kernel.cpp
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
 
@@ -46,7 +46,7 @@ kernel.bin: kernel.elf
 	$(VX_CP) -O binary kernel.elf kernel.bin
 
 kernel.elf: $(VX_SRCS)
-	$(VX_CC) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -o kernel.elf
+	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -o kernel.elf
 
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
