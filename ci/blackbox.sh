@@ -145,6 +145,9 @@ export PERF_CLASS=$PERF_CLASS
 
 status=0
 
+# ensure config update
+make -C hw config
+
 # ensure the stub driver is present
 make -C $VORTEX_HOME/driver/stub
 

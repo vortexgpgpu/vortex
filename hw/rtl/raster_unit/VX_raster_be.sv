@@ -7,10 +7,10 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_be #(
-    parameter SLICE_ID        = 1,
-    parameter BLOCK_LOGSIZE   = 6,
+    parameter SLICE_ID        = 0,
+    parameter BLOCK_LOGSIZE   = 5,
     parameter OUTPUT_QUADS    = 2,
-    parameter QUAD_FIFO_DEPTH = 16    
+    parameter QUAD_FIFO_DEPTH = 4    
 ) (
     // Standard inputs
     input wire clk,

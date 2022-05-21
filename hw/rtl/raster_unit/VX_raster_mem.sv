@@ -7,7 +7,7 @@
 //  3. Store primitive data in an elastic buffer
 
 module VX_raster_mem #(  
-    parameter TILE_LOGSIZE = 16,
+    parameter TILE_LOGSIZE = 5,
     parameter QUEUE_SIZE   = 8
 ) (
     input wire clk,
@@ -34,61 +34,69 @@ module VX_raster_mem #(
 );
     `UNUSED_VAR (dcrs)
 
-    localparam MUL_LATENCY = 3;
-    localparam NUM_REQS    = `RASTER_MEM_REQS;
-    localparam FSM_BITS    = 2;
-    localparam TAG_WIDTH   = `RASTER_PID_BITS;
+    localparam MUL_LATENCY      = 3;
+    localparam NUM_REQS         = `RASTER_MEM_REQS;
+    localparam FSM_BITS         = 2;
+    localparam FETCH_FLAG_BITS  = 2;
+    localparam TAG_WIDTH        = `RASTER_PID_BITS + FETCH_FLAG_BITS;
 
-    localparam STATE_IDLE = 2'b00;
-    localparam STATE_TILE = 2'b01;
-    localparam STATE_PRIM = 2'b10;
+    localparam STATE_IDLE       = 2'b00;
+    localparam STATE_TILE       = 2'b01;
+    localparam STATE_PRIM       = 2'b10;
     
-    localparam TILE_FETCH_MASK  = 9'(2'b11);
-    localparam PID_FETCH_MASK   = 9'(1'b01);
-    localparam PDATA_FETCH_MASK = {9{1'b1}};
+    localparam FETCH_FLAG_TILE  = 2'b00;
+    localparam FETCH_FLAG_PID   = 2'b01;
+    localparam FETCH_FLAG_PDATA = 2'b10;
     
     // A primitive data contains (x_loc, y_loc, pid, edges)
-    localparam PRIM_DATA_WIDTH = 2 * `RASTER_DIM_BITS + `RASTER_PID_BITS + 9 * `RASTER_DATA_BITS;
+    localparam PRIM_DATA_WIDTH = 2 * `RASTER_DIM_BITS+ 9 * `RASTER_DATA_BITS + `RASTER_PID_BITS ;
 
     // Storage to cycle through all primitives and tiles
     reg [`RASTER_DCR_DATA_BITS-1:0] curr_tbuf_addr;
-    reg [`RASTER_PID_BITS-1:0]      curr_num_prims;
-    reg [`RASTER_PID_BITS-1:0]      rem_num_prims;
+    reg [`RASTER_PID_BITS-1:0]      curr_pid_reqs;
+    reg [`RASTER_PID_BITS-1:0]      curr_pid_rsps;
     reg [`RASTER_TILE_BITS-1:0]     curr_num_tiles;
     reg [`RASTER_DIM_BITS-1:0]      curr_x_loc;
     reg [`RASTER_DIM_BITS-1:0]      curr_y_loc;
 
     // Output buffer
-    wire buf_out_valid;
-    wire buf_out_ready;
+    wire buf_in_valid;
+    wire buf_in_ready;
 
     // Memory request
-    reg mem_req_valid;
+    reg mem_req_valid, mem_req_valid_qual;
     reg [NUM_REQS-1:0] mem_req_mask;
     reg [8:0][`RASTER_DCR_DATA_BITS-1:0] mem_req_addr;
     reg [TAG_WIDTH-1:0] mem_req_tag;
     wire mem_req_ready;
     
     // Memory response
-    wire mem_rsp_valid;    
-    reg [NUM_REQS-1:0] mem_rsp_mask;
+    wire mem_rsp_valid;
     wire [8:0][`RASTER_DATA_BITS-1:0] mem_rsp_data;    
     wire [TAG_WIDTH-1:0] mem_rsp_tag;
     wire mem_rsp_ready;
-
+    
+     // Primitive info
+    wire prim_id_rsp_valid;
+    wire prim_data_rsp_valid;
     wire prim_addr_rsp_valid;
+    wire prim_addr_rsp_ready;
     wire [8:0][`RASTER_DATA_BITS-1:0] prim_mem_addr;
-    wire [`RASTER_PID_BITS-1:0] prim_id;
+    wire [`RASTER_PID_BITS-1:0] primitive_id;
 
     // Memory fetch FSM
 
     reg [FSM_BITS-1:0] state;
+    
+    wire is_prim_id_req   = (mem_req_tag[FETCH_FLAG_BITS-1:0] == FETCH_FLAG_PID);
+    wire is_prim_id_rsp   = (mem_rsp_tag[FETCH_FLAG_BITS-1:0] == FETCH_FLAG_PID);
 
-    wire fsm_req_fire = mem_req_valid && mem_req_ready;
+    wire is_prim_data_req = (mem_req_tag[FETCH_FLAG_BITS-1:0] == FETCH_FLAG_PDATA);
+    wire is_prim_data_rsp = (mem_rsp_tag[FETCH_FLAG_BITS-1:0] == FETCH_FLAG_PDATA);
 
-    wire prim_data_rsp_valid = mem_rsp_valid 
-                            && (state == STATE_PRIM) 
-                            && mem_rsp_mask[1];
+    wire mem_req_fire = mem_req_valid_qual && mem_req_ready;
+
+    wire prim_addr_rsp_fire = prim_addr_rsp_valid && prim_addr_rsp_ready;
 
     wire prim_data_rsp_fire = prim_data_rsp_valid && mem_rsp_ready;
     
@@ -97,26 +105,28 @@ module VX_raster_mem #(
             state          <= STATE_IDLE; 
             mem_req_valid  <= 0;
             curr_tbuf_addr <= 0;
-            curr_num_prims <= 0;
-            rem_num_prims  <= 0; 
+            curr_pid_reqs  <= 0;
+            curr_pid_rsps  <= 0; 
             curr_num_tiles <= 0;          
         end begin
-            // deassert valid when request is sent
-            if (fsm_req_fire) begin
+            // deassert memory request when fired
+            if (mem_req_fire) begin
                 mem_req_valid <= 0; 
             end
 
             case (state)
             STATE_IDLE: begin
                 if (start && (dcrs.tile_count != 0)) begin
+                    // fetch the next tile header
                     state           <= STATE_TILE;         
                     mem_req_valid   <= 1;
-                    curr_num_tiles  <= dcrs.tile_count;                    
                     mem_req_addr[0] <= dcrs.tbuf_addr;
                     mem_req_addr[1] <= dcrs.tbuf_addr + 4;
-                    mem_req_mask    <= TILE_FETCH_MASK;
-                    mem_req_tag     <= 'x;
+                    mem_req_mask    <= 9'b11;
+                    mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_TILE);
+                    // set tile counters
                     curr_tbuf_addr  <= dcrs.tbuf_addr + 4 + 4;
+                    curr_num_tiles  <= dcrs.tile_count;
                 end
             end
             STATE_TILE: begin
@@ -125,54 +135,64 @@ module VX_raster_mem #(
                     state           <= STATE_PRIM;
                     curr_x_loc      <= `RASTER_DIM_BITS'(mem_rsp_data[0][0 +: 16] << TILE_LOGSIZE);
                     curr_y_loc      <= `RASTER_DIM_BITS'(mem_rsp_data[0][16 +: 16] << TILE_LOGSIZE);                    
-                    // send next primitive address
+                    // fetch next primitive pid
                     mem_req_valid   <= 1;   
                     mem_req_addr[0] <= curr_tbuf_addr;                    
-                    mem_req_mask    <= PID_FETCH_MASK;                    
-                    mem_req_tag     <= 'x;
-                    curr_tbuf_addr  <= curr_tbuf_addr + 4;
-                    curr_num_prims  <= mem_rsp_data[1][`RASTER_PID_BITS-1:0];
-                    rem_num_prims   <= mem_rsp_data[1][`RASTER_PID_BITS-1:0];
+                    mem_req_mask    <= 9'b1;                    
+                    mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_PID);
+                    // set primitive counters
+                    curr_pid_reqs   <= mem_rsp_data[1][`RASTER_PID_BITS-1:0];
+                    curr_pid_rsps   <= mem_rsp_data[1][`RASTER_PID_BITS-1:0];
                 end
             end
             STATE_PRIM: begin
-                if (prim_addr_rsp_valid) begin
-                    // handle primitive address response  
-                    mem_req_valid <= 1;
+                // handle memory submissions
+                if (mem_req_fire) begin
+                    if (is_prim_id_req) begin
+                        // update pid counters
+                        curr_tbuf_addr <= curr_tbuf_addr + 4;
+                        curr_pid_reqs  <= curr_pid_reqs - `RASTER_PID_BITS'(1);
+                    end
+
+                    if ((curr_pid_reqs > 1) 
+                     || (curr_pid_reqs == 1 && ~is_prim_id_req)) begin
+                        // fetch next primitive pid
+                        mem_req_valid   <= 1;                        
+                        mem_req_mask    <= 9'b1;
+                        mem_req_addr[0] <= curr_tbuf_addr + (is_prim_id_req ? 4 : 0);
+                        mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_PID);                        
+                    end
+                end
+
+                // handle primitive address response  
+                if (prim_addr_rsp_fire) begin                    
+                    mem_req_valid <= 1;                    
+                    mem_req_mask  <= 9'b111111111;
                     mem_req_addr  <= prim_mem_addr;
-                    mem_req_mask  <= PDATA_FETCH_MASK;
-                    mem_req_tag   <= prim_id;                        
-                end else
+                    mem_req_tag   <= TAG_WIDTH'({primitive_id, FETCH_FLAG_PDATA});
+                end 
+                
+                // handle primitive data response
                 if (prim_data_rsp_fire) begin
-                    // handle primitive data response
-                    if (rem_num_prims == 1) begin
-                        if (curr_num_tiles != 1) begin
-                            // Fetch the next tile
-                            state           <= STATE_TILE;
-                            mem_req_valid   <= 1;
-                            mem_req_addr[0] <= curr_tbuf_addr;
-                            mem_req_addr[1] <= curr_tbuf_addr + 4;
-                            mem_req_mask    <= TILE_FETCH_MASK;
-                            mem_req_tag     <= 'x;
-                            curr_tbuf_addr  <= curr_tbuf_addr + 4 + 4;
-                            curr_num_tiles  <= curr_num_tiles - `RASTER_TILE_BITS'(1);
-                        end else begin
+                    if (curr_pid_rsps == 1) begin
+                        if (curr_num_tiles == 1) begin
                             // done, return to idle
                             state <= STATE_IDLE;
+                        end else begin
+                            // fetch the next tile header
+                            state           <= STATE_TILE;
+                            mem_req_valid   <= 1;
+                            mem_req_mask    <= 9'b11;
+                            mem_req_addr[0] <= curr_tbuf_addr;
+                            mem_req_addr[1] <= curr_tbuf_addr + 4;                            
+                            mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_TILE);
+                            curr_tbuf_addr  <= curr_tbuf_addr + 4 + 4;
                         end
+                        // update tile counter
+                        curr_num_tiles <= curr_num_tiles - `RASTER_TILE_BITS'(1);
                     end
-                    rem_num_prims <= rem_num_prims - `RASTER_PID_BITS'(1);
-                end else                
-                if (fsm_req_fire) begin
-                    // send next primitive address
-                    if (curr_num_prims != 1) begin        
-                        mem_req_valid   <= 1;                
-                        mem_req_addr[0] <= curr_tbuf_addr;                   
-                        mem_req_mask    <= PID_FETCH_MASK;
-                        mem_req_tag     <= 'x;
-                        curr_tbuf_addr  <= curr_tbuf_addr + 4;
-                        curr_num_prims  <= curr_num_prims - `RASTER_PID_BITS'(1);
-                    end
+                    // update pid counter
+                    curr_pid_rsps <= curr_pid_rsps - `RASTER_PID_BITS'(1);
                 end
             end
             default:;
@@ -182,9 +202,37 @@ module VX_raster_mem #(
 
     // Memory streamer
 
-    // stall the memory response only if edge data cannot be taken
-    assign mem_rsp_ready = (~prim_data_rsp_valid || buf_out_ready)
-                        && ~prim_addr_rsp_valid;
+    // ensure that we have space in the output buffer to prevent memory deadlock
+    wire pending_output_full;
+    VX_pending_size #( 
+        .SIZE (QUEUE_SIZE-1)
+    ) pending_reads (
+        .clk   (clk),
+        .reset (reset),
+        .incr  (mem_req_fire && is_prim_id_req),
+        .decr  (valid_out && ready_out),
+        .full  (pending_output_full),
+        `UNUSED_PIN (size),
+        `UNUSED_PIN (empty)
+    );    
+    assign mem_req_valid_qual = mem_req_valid && (~is_prim_id_req || ~pending_output_full);
+
+    // the memory response is for primitive id
+    assign prim_id_rsp_valid = mem_rsp_valid && is_prim_id_rsp;
+
+    // the memory response is for primitive data
+    assign prim_data_rsp_valid = mem_rsp_valid && is_prim_data_rsp;
+
+    // stall primitive address handling if primitive data fetch stalls
+    wire prim_data_req_stall = mem_req_valid && is_prim_data_req && ~mem_req_ready;
+    assign prim_addr_rsp_ready = ~prim_data_req_stall || ~prim_addr_rsp_valid;
+
+    // Push primitive data into output buffer
+    assign buf_in_valid = prim_data_rsp_valid;
+
+    // stall the memory response
+    assign mem_rsp_ready = (~prim_id_rsp_valid || prim_addr_rsp_ready) 
+                        && (~prim_data_rsp_valid || buf_in_ready);
 
     wire [8:0][`RCACHE_ADDR_WIDTH-1:0] mem_req_addr_w;
     for (genvar i = 0; i < 9; ++i) begin
@@ -204,7 +252,7 @@ module VX_raster_mem #(
         .reset          (reset),
 
         // Input request
-        .req_valid      (mem_req_valid),
+        .req_valid      (mem_req_valid_qual),
         .req_rw         (1'b0),
         .req_mask       (mem_req_mask),
         `UNUSED_PIN     (req_byteen),
@@ -215,7 +263,7 @@ module VX_raster_mem #(
         
         // Output response
         .rsp_valid      (mem_rsp_valid),
-        .rsp_mask       (mem_rsp_mask),
+        `UNUSED_PIN     (rsp_mask),
         .rsp_data       (mem_rsp_data),
         .rsp_tag        (mem_rsp_tag),
         .rsp_ready      (mem_rsp_ready),        
@@ -246,7 +294,7 @@ module VX_raster_mem #(
         .LATENCY (MUL_LATENCY)
     ) multiplier (
         .clk    (clk),
-        .enable (1'b1),
+        .enable (prim_addr_rsp_ready),
         .dataa  (mem_rsp_data[0]),
         .datab  (dcrs.pbuf_stride),
         .result (prim_mem_offset)
@@ -256,9 +304,6 @@ module VX_raster_mem #(
         assign prim_mem_addr[i] = dcrs.pbuf_addr + prim_mem_offset + 4 * i;
     end
 
-    // onlt delay primitive addresses for multiplication (mask = 1)
-    wire mem_rsp_valid_p = mem_rsp_valid && ~mem_rsp_mask[1];
-
     VX_shift_register #(
         .DATAW  (1 + `RASTER_PID_BITS),
         .DEPTH  (MUL_LATENCY),
@@ -266,17 +311,12 @@ module VX_raster_mem #(
     ) mul_shift_reg (
         .clk      (clk),
         .reset    (reset),
-        .enable   (1'b1),
-        .data_in  ({mem_rsp_valid_p,     mem_rsp_data[0][`RASTER_PID_BITS-1:0]}),
-        .data_out ({prim_addr_rsp_valid, prim_id})
+        .enable   (prim_addr_rsp_ready),
+        .data_in  ({prim_id_rsp_valid,   mem_rsp_data[0][`RASTER_PID_BITS-1:0]}),
+        .data_out ({prim_addr_rsp_valid, primitive_id})
     );   
 
-    // Output buffer 
-
-    assign buf_out_valid = prim_data_rsp_valid
-                        && ~prim_addr_rsp_valid;
-                      
-    `UNUSED_VAR (mem_rsp_mask)
+    // Output buffer
 
     VX_elastic_buffer #(
         .DATAW   (PRIM_DATA_WIDTH), 
@@ -285,10 +325,10 @@ module VX_raster_mem #(
     ) buf_out (
         .clk        (clk),
         .reset      (reset),
-        .valid_in   (buf_out_valid),
-        .ready_in   (buf_out_ready),
-        .data_in    ({curr_x_loc, curr_y_loc, mem_rsp_tag, mem_rsp_data}),                
-        .data_out   ({x_loc_out,  y_loc_out,  pid_out,     edges_out}),
+        .valid_in   (buf_in_valid),
+        .ready_in   (buf_in_ready),
+        .data_in    ({curr_x_loc, curr_y_loc, mem_rsp_data, mem_rsp_tag[FETCH_FLAG_BITS +: `RASTER_PID_BITS]}),                
+        .data_out   ({x_loc_out,  y_loc_out,  edges_out,    pid_out}),
         .valid_out  (valid_out),
         .ready_out  (ready_out)
     );

@@ -258,6 +258,10 @@
 
 `define RESET_DELAY 6
 
+`ifndef STALL_TIMEOUT
+`define STALL_TIMEOUT (10000 * (1 ** (`L2_ENABLED + `L3_ENABLED)))
+`endif
+
 // Pipeline Queues ////////////////////////////////////////////////////////////
 
 // Size of Instruction Buffer
@@ -292,7 +296,7 @@
 
 // RASTER tile size
 `ifndef RASTER_TILE_LOGSIZE
-`define RASTER_TILE_LOGSIZE 4
+`define RASTER_TILE_LOGSIZE 5
 `endif 
 
 // RASTER block size
@@ -305,19 +309,14 @@
 `define RASTER_MEM_FIFO_DEPTH 8
 `endif
 
-// RASTER tile queue size
-`ifndef RASTER_TILE_FIFO_DEPTH    
-`define RASTER_TILE_FIFO_DEPTH (1 << (2 * (`RASTER_TILE_LOGSIZE - `RASTER_BLOCK_LOGSIZE)))
+// ROP memory pending size
+`ifndef ROP_MEM_PENDING_SIZE    
+`define ROP_MEM_PENDING_SIZE 4
 `endif
 
 // RASTER quad queue size
 `ifndef RASTER_QUAD_FIFO_DEPTH    
-`define RASTER_QUAD_FIFO_DEPTH 16
-`endif
-
-// ROP memory pending size
-`ifndef ROP_MEM_PENDING_SIZE    
-`define ROP_MEM_PENDING_SIZE 4
+`define RASTER_QUAD_FIFO_DEPTH 8
 `endif
 
 // ROP number of slices

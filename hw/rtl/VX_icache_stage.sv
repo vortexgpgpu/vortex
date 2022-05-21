@@ -18,7 +18,6 @@ module VX_icache_stage #(
     // reponse
     VX_ifetch_rsp_if.master ifetch_rsp_if
 );
-
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (reset)
 
@@ -50,7 +49,7 @@ module VX_icache_stage #(
     // Ensure that the ibuffer doesn't fill up.
     // This will resolve potential deadlock if ibuffer fills and the LSU stalls the execute stage due to pending dcache request.
     // This issue is particularly prevalent when the icache and dcache is disabled and both request share the same bus.
-    wire [`NUM_WARPS-1:0] pending_reads_full;
+    wire [`NUM_WARPS-1:0] pending_ibuf_full;
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin
         VX_pending_size #( 
             .SIZE (`IBUF_SIZE + 1)
@@ -59,7 +58,7 @@ module VX_icache_stage #(
             .reset (reset),
             .incr  (icache_req_fire && (ifetch_req_if.wid == `NW_BITS'(i))),
             .decr  (ifetch_rsp_if.ibuf_pop[i]),
-            .full  (pending_reads_full[i]),
+            .full  (pending_ibuf_full[i]),
             `UNUSED_PIN (size),
             `UNUSED_PIN (empty)
         );
@@ -69,7 +68,7 @@ module VX_icache_stage #(
         ("%t: *** invalid PC=0x%0h, wid=%0d, tmask=%b (#%0d)", $time, ifetch_req_if.PC, ifetch_req_if.wid, ifetch_req_if.tmask, ifetch_req_if.uuid))
 
     // Icache Request
-    assign icache_req_if.valid  = ifetch_req_if.valid && ~pending_reads_full[ifetch_req_if.wid];
+    assign icache_req_if.valid  = ifetch_req_if.valid && ~pending_ibuf_full[ifetch_req_if.wid];
     assign icache_req_if.rw     = 0;
     assign icache_req_if.byteen = '0;
     assign icache_req_if.addr   = ifetch_req_if.PC[31:2];
@@ -77,7 +76,7 @@ module VX_icache_stage #(
     assign icache_req_if.tag    = {ifetch_req_if.uuid, req_tag};
 
     // Can accept new request?
-    assign ifetch_req_if.ready = icache_req_if.ready && ~pending_reads_full[ifetch_req_if.wid];
+    assign ifetch_req_if.ready = icache_req_if.ready && ~pending_ibuf_full[ifetch_req_if.wid];
 
     wire [`NW_BITS-1:0] rsp_wid = rsp_tag;
 

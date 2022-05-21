@@ -245,12 +245,27 @@ module VX_warp_sched #(
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
-        .enable   (!stall_out),
+        .enable   (~stall_out),
         .data_in  ({schedule_valid,      instr_uuid,         schedule_tmask,      schedule_pc,      schedule_wid}),
         .data_out ({ifetch_req_if.valid, ifetch_req_if.uuid, ifetch_req_if.tmask, ifetch_req_if.PC, ifetch_req_if.wid})
     );
 
-    assign busy = (active_warps != 0); 
+    assign busy = (active_warps != 0);
+          
+    reg [31:0] timeout_ctr;
+    always @(posedge clk) begin
+        if (reset) begin
+            timeout_ctr <= 0;
+        end else begin        
+            if (active_warps !=0 && active_warps == stalled_warps) begin
+                `ASSERT(timeout_ctr < `STALL_TIMEOUT,
+                    ("%t: *** core%0d-scheduler-timeout: stalled_warps=%b", $time, CORE_ID, stalled_warps));
+                timeout_ctr <= timeout_ctr + 1;
+            end else if (active_warps == 0 || active_warps != stalled_warps) begin
+                timeout_ctr <= 0;
+            end
+        end
+    end
 
     `SCOPE_ASSIGN (wsched_scheduled,      warp_scheduled);
     `SCOPE_ASSIGN (wsched_schedule_uuid,  instr_uuid);

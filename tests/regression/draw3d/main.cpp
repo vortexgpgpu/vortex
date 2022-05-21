@@ -134,6 +134,8 @@ int render(const CGLTrace& trace) {
   std::cout << "render" << std::endl;
   auto time_begin = std::chrono::high_resolution_clock::now();
 
+  uint32_t draw_idx = 0; 
+
   // render each draw call
   for (auto& drawcall : trace.drawcalls) {
     auto& states = drawcall.states;
@@ -143,7 +145,7 @@ int render(const CGLTrace& trace) {
     
     // Perform tile binning
     auto num_tiles = Binning(tilebuf, primbuf, drawcall.vertices, drawcall.primitives, dst_width, dst_height, drawcall.viewport.near, drawcall.viewport.far, tile_size);
-    std::cout << "Binning allocated " << std::dec << num_tiles << " tiles with " << primbuf.size() << " total primitives." << std::endl;
+    std::cout << "Binning allocated " << std::dec << num_tiles << " tiles with " << (primbuf.size() / sizeof(rast_prim_t)) << " total primitives." << std::endl;
     if (0 == num_tiles)
       continue;
 
@@ -337,6 +339,12 @@ int render(const CGLTrace& trace) {
     auto time_end = std::chrono::high_resolution_clock::now();
     double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
     printf("Elapsed time: %lg ms\n", elapsed);
+
+    if (draw_idx < trace.drawcalls.size()-1) {
+      vx_dump_perf(device, stdout);
+    }
+
+    ++draw_idx;
   }
 
   // download destination buffer

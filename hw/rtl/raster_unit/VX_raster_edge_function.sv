@@ -15,21 +15,23 @@ module VX_raster_edge_function #(
 
     output wire [2:0][`RASTER_DATA_BITS-1:0] result
 );
+    localparam PROD_WIDTH = `RASTER_DATA_BITS + `RASTER_DIM_BITS;
+
     `UNUSED_VAR (reset)
 
     `STATIC_ASSERT((LATENCY >= `LATENCY_IMUL), ("invalid parameter"))
 
-    wire [2:0][`RASTER_DATA_BITS-1:0] prod_x;
-    wire [2:0][`RASTER_DATA_BITS-1:0] prod_y;
-    wire [2:0][`RASTER_DATA_BITS-1:0] edge_c;
+    wire [2:0][PROD_WIDTH-1:0] prod_x;
+    wire [2:0][PROD_WIDTH-1:0] prod_y;
+    wire [2:0][`RASTER_DATA_BITS-1:0] edge_c, edge_c_s;
     
-    wire [2:0][`RASTER_DATA_BITS-1:0] edge_c_s, result_s;
+    wire [2:0][`RASTER_DATA_BITS-1:0] result_s;
 
     for (genvar i = 0; i < 3; ++i) begin
         VX_multiplier #(
             .WIDTHA  (`RASTER_DATA_BITS),
             .WIDTHB  (`RASTER_DIM_BITS),
-            .WIDTHP  (`RASTER_DATA_BITS),
+            .WIDTHP  (PROD_WIDTH),
             .SIGNED  (1),
             .LATENCY (`LATENCY_IMUL)
         ) x_multiplier (
@@ -43,7 +45,7 @@ module VX_raster_edge_function #(
         VX_multiplier #(
             .WIDTHA  (`RASTER_DATA_BITS),
             .WIDTHB  (`RASTER_DIM_BITS),
-            .WIDTHP  (`RASTER_DATA_BITS),
+            .WIDTHP  (PROD_WIDTH),
             .SIGNED  (1),
             .LATENCY (`LATENCY_IMUL)
         ) y_multiplier (
@@ -69,7 +71,9 @@ module VX_raster_edge_function #(
     );
 
     for (genvar i = 0; i < 3; ++i) begin
-        assign result_s[i] = prod_x[i] + prod_y[i] + edge_c_s[i];
+        wire [PROD_WIDTH-1:0] sum = prod_x[i] + prod_y[i] + PROD_WIDTH'(edge_c_s[i]);
+        `UNUSED_VAR (sum)
+        assign result_s[i] = sum[`RASTER_DATA_BITS-1:0];
     end
 
     VX_pipe_register #(

@@ -3,11 +3,12 @@
 module VX_scoreboard  #(
     parameter CORE_ID = 0
 ) (
-    input wire          clk,
-    input wire          reset,
+    input wire              clk,
+    input wire              reset,
 
-    VX_scoreboard_if.slave scoreboard_if,
-    VX_writeback_if.slave writeback_if
+    VX_scoreboard_if.slave  scoreboard_if,
+    VX_writeback_if.slave   writeback_if,
+    output wire [3:0]       in_use_regs
 );
     reg [`NUM_WARPS-1:0][`NUM_REGS-1:0] inuse_regs, inuse_regs_n;
 
@@ -45,40 +46,25 @@ module VX_scoreboard  #(
     assign writeback_if.ready = 1'b1;
 
     assign scoreboard_if.ready = ~(deq_inuse_rd 
-                             | deq_inuse_rs1 
-                             | deq_inuse_rs2 
-                             | deq_inuse_rs3);
+                               | deq_inuse_rs1 
+                               | deq_inuse_rs2 
+                               | deq_inuse_rs3);
 
     `UNUSED_VAR (writeback_if.PC)
+    `UNUSED_VAR (scoreboard_if.PC)
+    `UNUSED_VAR (scoreboard_if.tmask)    
+    `UNUSED_VAR (scoreboard_if.uuid)
 
-    reg [31:0] deadlock_ctr;
-    wire [31:0] deadlock_timeout = 10000 * (1 ** (`L2_ENABLED + `L3_ENABLED));
+    assign in_use_regs[0] = deq_inuse_rd;
+    assign in_use_regs[1] = deq_inuse_rs1;
+    assign in_use_regs[2] = deq_inuse_rs2;
+    assign in_use_regs[3] = deq_inuse_rs3;
 
-    always @(posedge clk) begin
-        if (reset) begin
-            deadlock_ctr <= 0;
-        end else begin
-        `ifdef DBG_TRACE_CORE_PIPELINE
-            if (scoreboard_if.valid && ~scoreboard_if.ready) begin
-                dpi_trace(3, "%d: *** core%0d-stall: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, wb=%0d, inuse=%b%b%b%b (#%0d)\n", 
-                    $time, CORE_ID, scoreboard_if.wid, scoreboard_if.PC, scoreboard_if.tmask, scoreboard_if.rd, scoreboard_if.wb, 
-                    deq_inuse_rd, deq_inuse_rs1, deq_inuse_rs2, deq_inuse_rs3, scoreboard_if.uuid);
-            end
-        `endif
-            if (release_reg) begin
-                `ASSERT(inuse_regs[writeback_if.wid][writeback_if.rd] != 0,
-                    ("%t: *** core%0d: invalid writeback register: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d (#%0d)",
-                                $time, CORE_ID, writeback_if.wid, writeback_if.PC, writeback_if.tmask, writeback_if.rd, writeback_if.uuid));
-            end
-            if (scoreboard_if.valid && ~scoreboard_if.ready) begin            
-                deadlock_ctr <= deadlock_ctr + 1;
-                `ASSERT(deadlock_ctr < deadlock_timeout,
-                    ("%t: *** core%0d-deadlock: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, wb=%0d, inuse=%b%b%b%b (#%0d)",
-                        $time, CORE_ID, scoreboard_if.wid, scoreboard_if.PC, scoreboard_if.tmask, scoreboard_if.rd, scoreboard_if.wb, 
-                        deq_inuse_rd, deq_inuse_rs1, deq_inuse_rs2, deq_inuse_rs3, scoreboard_if.uuid));
-            end else if (scoreboard_if.valid && scoreboard_if.ready) begin
-                deadlock_ctr <= 0;
-            end
+    always @(posedge clk) begin  
+        if (release_reg) begin
+            `ASSERT(inuse_regs[writeback_if.wid][writeback_if.rd] != 0,
+                ("%t: *** core%0d: invalid writeback register: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d (#%0d)",
+                            $time, CORE_ID, writeback_if.wid, writeback_if.PC, writeback_if.tmask, writeback_if.rd, writeback_if.uuid));
         end
     end
 

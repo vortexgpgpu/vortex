@@ -23,12 +23,15 @@ module VX_issue #(
 `endif
     VX_gpu_req_if.master    gpu_req_if
 );
+
     VX_ibuffer_if       ibuffer_if();    
     VX_gpr_req_if       gpr_req_if();
     VX_gpr_rsp_if       gpr_rsp_if();
     VX_writeback_if     sboard_wb_if();
     VX_scoreboard_if    scoreboard_if();
     VX_dispatch_if      dispatch_if();
+
+    wire [3:0] in_use_regs;
 
     // GPR request interface
     assign gpr_req_if.wid       = ibuffer_if.wid;
@@ -99,7 +102,8 @@ module VX_issue #(
         .clk           (clk),
         .reset         (scoreboard_reset),         
         .writeback_if  (writeback_if),
-        .scoreboard_if (scoreboard_if)
+        .scoreboard_if (scoreboard_if),
+        .in_use_regs   (in_use_regs)
     );
 
     VX_gpr_stage #(
@@ -125,6 +129,28 @@ module VX_issue #(
     `endif
         .gpu_req_if (gpu_req_if)
     );
+    
+    reg [31:0] timeout_ctr;
+    always @(posedge clk) begin
+        if (reset) begin
+            timeout_ctr <= 0;
+        end else begin        
+            if (ibuffer_if.valid && ~ibuffer_if.ready) begin
+            `ifdef DBG_TRACE_CORE_PIPELINE
+                dpi_trace(3, "%d: *** core%0d-stall: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, wb=%0d, cycles=%0d, inuse=%b%b%b%b, dispatch=%b (#%0d)\n", 
+                    $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.rd, ibuffer_if.wb, timeout_ctr,
+                    in_use_regs[0], in_use_regs[1], in_use_regs[2], in_use_regs[3], ~dispatch_if.ready, ibuffer_if.uuid);
+            `endif
+                `ASSERT(timeout_ctr < `STALL_TIMEOUT,
+                    ("%t: *** core%0d-issue-timeout: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, wb=%0d, inuse=%b%b%b%b, dispatch=%b (#%0d)",
+                        $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.rd, ibuffer_if.wb, 
+                        in_use_regs[0], in_use_regs[1], in_use_regs[2], in_use_regs[3], ~dispatch_if.ready, ibuffer_if.uuid));
+                timeout_ctr <= timeout_ctr + 1;
+            end else if (ibuffer_if.valid && ibuffer_if.ready) begin
+                timeout_ctr <= 0;
+            end
+        end
+    end
 
     `SCOPE_ASSIGN (issue_fire,        ibuffer_if.valid && ibuffer_if.ready);
     `SCOPE_ASSIGN (issue_uuid,        ibuffer_if.uuid);

@@ -1,7 +1,7 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_extents #(
-    parameter TILE_LOGSIZE = 64
+    parameter TILE_LOGSIZE = 5
 ) (
     input wire signed [2:0][2:0][`RASTER_DATA_BITS-1:0] edges,
     output wire signed [2:0][`RASTER_DATA_BITS-1:0]     extents

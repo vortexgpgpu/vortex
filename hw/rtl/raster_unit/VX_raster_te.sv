@@ -7,7 +7,7 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_te #(
-    parameter TILE_LOGSIZE  = 6,
+    parameter TILE_LOGSIZE  = 5,
     parameter BLOCK_LOGSIZE = 2  
 ) (
     input wire clk,
@@ -32,8 +32,8 @@ module VX_raster_te #(
     output wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_out,
     input wire                          ready_out
 );
-    localparam LEVEL_BITS = (TILE_LOGSIZE - BLOCK_LOGSIZE) + 1;
-    localparam TILE_FIFO_DEPTH = 1 << (TILE_LOGSIZE - BLOCK_LOGSIZE);
+    localparam LEVEL_BITS      = (TILE_LOGSIZE - BLOCK_LOGSIZE) + 1;
+    localparam TILE_FIFO_DEPTH = 1 << (2 * (TILE_LOGSIZE - BLOCK_LOGSIZE));
     localparam FIFO_DATA_WIDTH = 2 * `RASTER_DIM_BITS + 3 * `RASTER_DATA_BITS + LEVEL_BITS;
 
     wire stall;
@@ -80,32 +80,32 @@ module VX_raster_te #(
                 tile_valid <= 0;
                 if (fifo_arb_valid) begin
                     // select fifo input
-                    tile_valid       <= 1;
-                    tile_x_loc       <= fifo_x_loc;
-                    tile_y_loc       <= fifo_y_loc;                
-                    tile_edge_eval   <= fifo_edge_eval;                
-                    tile_level       <= fifo_level;
+                    tile_valid          <= 1;
+                    tile_x_loc          <= fifo_x_loc;
+                    tile_y_loc          <= fifo_y_loc;                
+                    tile_edge_eval      <= fifo_edge_eval;                
+                    tile_level          <= fifo_level;
                 end else 
                 if (is_fifo_bypass) begin
                     // fifo bypass first sub-tile
-                    tile_valid      <= 1;
-                    tile_x_loc      <= subtile_x_loc_r[0];
-                    tile_y_loc      <= subtile_y_loc_r[0];                
-                    tile_edge_eval  <= subtile_edge_eval_r[0];                
-                    tile_level      <= subtile_level_r;
+                    tile_valid          <= 1;
+                    tile_x_loc          <= subtile_x_loc_r[0];
+                    tile_y_loc          <= subtile_y_loc_r[0];                
+                    tile_edge_eval      <= subtile_edge_eval_r[0];                
+                    tile_level          <= subtile_level_r;
                 end else
                 if (valid_in && ~tile_valid) begin   
                     // select new tile input             
-                    tile_valid       <= 1;
-                    tile_extents     <= extents_in;
-                    tile_edges       <= edges_in;
-                    tile_pid         <= pid_in;         
-                    tile_x_loc       <= x_loc_in;
-                    tile_y_loc       <= y_loc_in;
-                    tile_edge_eval[0]<= edges_in[0][2];
-                    tile_edge_eval[1]<= edges_in[1][2];
-                    tile_edge_eval[2]<= edges_in[2][2];
-                    tile_level       <= 0;
+                    tile_valid          <= 1;
+                    tile_extents        <= extents_in;
+                    tile_edges          <= edges_in;
+                    tile_pid            <= pid_in;         
+                    tile_x_loc          <= x_loc_in;
+                    tile_y_loc          <= y_loc_in;
+                    tile_edge_eval[0]   <= edges_in[0][2];
+                    tile_edge_eval[1]   <= edges_in[1][2];
+                    tile_edge_eval[2]   <= edges_in[2][2];
+                    tile_level          <= 0;
                 end
             end
         end

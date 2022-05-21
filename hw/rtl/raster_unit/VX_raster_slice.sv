@@ -9,12 +9,11 @@
 
 module VX_raster_slice #(
     parameter CLUSTER_ID      = 0,
-    parameter SLICE_ID        = 1,
-    parameter TILE_LOGSIZE    = 6,  // tile log size
+    parameter SLICE_ID        = 0,
+    parameter TILE_LOGSIZE    = 5,  // tile log size
     parameter BLOCK_LOGSIZE   = 2,  // block log size
     parameter OUTPUT_QUADS    = 4,
-    parameter QUAD_FIFO_DEPTH = 1,
-    parameter TILE_FIFO_DEPTH = 16
+    parameter QUAD_FIFO_DEPTH = 4
 ) (
     input wire clk,
     input wire reset,

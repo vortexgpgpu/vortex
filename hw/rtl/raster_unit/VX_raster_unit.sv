@@ -3,12 +3,11 @@
 module VX_raster_unit #(
     parameter CLUSTER_ID      = 0,
     parameter NUM_SLICES      = 1,  // number of raster slices
-    parameter TILE_LOGSIZE    = 6,  // tile log size
+    parameter TILE_LOGSIZE    = 5,  // tile log size
     parameter BLOCK_LOGSIZE   = 2,  // block log size
-    parameter MEM_FIFO_DEPTH  = 8,  // memory queue size
-    parameter TILE_FIFO_DEPTH = (1 << (2 * (TILE_LOGSIZE - BLOCK_LOGSIZE))), // tile queue size
-    parameter QUAD_FIFO_DEPTH = 16,  // quad queue size
-    parameter OUTPUT_QUADS    = 4  // number of output quads
+    parameter MEM_FIFO_DEPTH  = 4,  // memory queue size
+    parameter QUAD_FIFO_DEPTH = 4,  // quad queue size
+    parameter OUTPUT_QUADS    = 4   // number of output quads
     
 ) (
     input wire clk,
@@ -35,7 +34,6 @@ module VX_raster_unit #(
     localparam PRIM_DATA_WIDTH = 2 * `RASTER_DIM_BITS + `RASTER_PID_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS;
 
     `STATIC_ASSERT(TILE_LOGSIZE > BLOCK_LOGSIZE, ("invalid parameter"))
-    `STATIC_ASSERT(TILE_FIFO_DEPTH >= (1 << (2 * (TILE_LOGSIZE - BLOCK_LOGSIZE))), ("invalid parameter"))
     
     raster_dcrs_t raster_dcrs;
     assign raster_dcrs = raster_dcr_if.data;
@@ -191,8 +189,7 @@ module VX_raster_unit #(
             .TILE_LOGSIZE    (TILE_LOGSIZE),
             .BLOCK_LOGSIZE   (BLOCK_LOGSIZE),
             .OUTPUT_QUADS    (OUTPUT_QUADS),
-            .QUAD_FIFO_DEPTH (QUAD_FIFO_DEPTH),
-            .TILE_FIFO_DEPTH (TILE_FIFO_DEPTH)
+            .QUAD_FIFO_DEPTH (QUAD_FIFO_DEPTH)
         ) raster_slice (
             .clk        (clk),
             .reset      (reset),
