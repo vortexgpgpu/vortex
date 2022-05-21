@@ -112,13 +112,24 @@ module VX_stream_mux #(
 
     end else begin
     
-        `UNUSED_VAR (clk)
-        `UNUSED_VAR (reset)
         `UNUSED_VAR (sel_in)
-        
-        assign valid_out = valid_in;        
-        assign data_out  = data_in;
-        assign ready_in  = ready_out;
+
+        for (genvar i = 0; i < NUM_LANES; ++i) begin
+            VX_skid_buffer #(
+                .DATAW    (DATAW),
+                .PASSTHRU (BUFFERED == 0),
+                .OUT_REG  (BUFFERED > 1)
+            ) out_buffer (
+                .clk       (clk),
+                .reset     (reset),
+                .valid_in  (valid_in[0][i]),
+                .data_in   (data_in[0][i]),
+                .ready_in  (ready_in[0][i]),      
+                .valid_out (valid_out[i]),
+                .data_out  (data_out[i]),
+                .ready_out (ready_out[i])
+            );
+        end
 
     end
     

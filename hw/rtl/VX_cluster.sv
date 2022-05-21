@@ -149,7 +149,8 @@ module VX_cluster #(
 
     VX_raster_req_demux #(
         .NUM_REQS  (`NUM_CORES),
-        .NUM_LANES (`NUM_THREADS)
+        .NUM_LANES (`NUM_THREADS),
+        .BUFFERED  ((`NUM_CORES > 1) ? 1 : 0)
     ) raster_req_demux (
         .clk        (clk),
         .reset      (raster_reset),
@@ -412,8 +413,8 @@ module VX_cluster #(
         .ADDR_WIDTH   (`DCACHE_MEM_ADDR_WIDTH),           
         .TAG_IN_WIDTH (`L1_MEM_TAG_WIDTH),
         .TAG_SEL_IDX  (1), // Skip 0 for NC flag
-        .BUFFERED_REQ (1),
-        .BUFFERED_RSP (1)
+        .BUFFERED_REQ ((`NUM_CORES > 1) ? 1 : 0),
+        .BUFFERED_RSP ((`NUM_CORES > 1) ? 1 : 0)
     ) mem_mux_core (
         .clk        (clk),
         .reset      (mem_arb_reset),
@@ -475,8 +476,8 @@ module VX_cluster #(
         .ADDR_WIDTH   (`L2_MEM_ADDR_WIDTH),
         .TAG_IN_WIDTH (MEM_ARB_TAG_WIDTH),
         .TAG_SEL_IDX  (1), // Skip 0 for NC flag
-        .BUFFERED_REQ (1),
-        .BUFFERED_RSP (2)
+        .BUFFERED_REQ ((MEM_ARB_SIZE > 1) ? 1 : 0),
+        .BUFFERED_RSP ((MEM_ARB_SIZE > 1) ? 2 : 0)
     ) mem_mux_out (
         .clk        (clk),
         .reset      (reset),

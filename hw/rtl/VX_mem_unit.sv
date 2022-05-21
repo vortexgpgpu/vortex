@@ -424,7 +424,7 @@ module VX_mem_unit # (
 `endif
 
     VX_mem_mux #(
-        .NUM_REQS     (2+`EXT_TEX_ENABLED),
+        .NUM_REQS     (2 + `EXT_TEX_ENABLED),
         .DATA_WIDTH   (`DCACHE_MEM_DATA_WIDTH),
         .ADDR_WIDTH   (`DCACHE_MEM_ADDR_WIDTH),
         .TAG_IN_WIDTH (`L1_MEM_TAG_IN_WIDTH),        

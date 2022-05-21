@@ -61,8 +61,8 @@ module VX_rop_unit #(
         .DATA_SIZE    (`OCACHE_WORD_SIZE),
         .TAG_IN_WIDTH (`OCACHE_TAG_ID_BITS),
         .TAG_SEL_IDX  (0),
-        .BUFFERED_REQ (1),
-        .BUFFERED_RSP (1)
+        .BUFFERED_REQ ((NUM_SLICES > 1) ? 1 : 0),
+        .BUFFERED_RSP ((NUM_SLICES > 1) ? 1 : 0)
     ) cache_req_mux (
         .clk        (clk),
         .reset      (reset),
@@ -74,7 +74,8 @@ module VX_rop_unit #(
 
     VX_rop_req_demux #(
         .NUM_REQS  (NUM_SLICES),
-        .NUM_LANES (NUM_LANES)
+        .NUM_LANES (NUM_LANES),
+        .BUFFERED  ((NUM_SLICES > 1) ? 1 : 0)
     ) rop_req_demux (
         .clk        (clk),
         .reset      (reset),

@@ -82,13 +82,13 @@ module VX_stream_demux #(
             assign sel_onehot = sel_onehot_r;
         end
 
-        for (genvar j = 0; j < NUM_LANES; ++j) begin
+        for (genvar i = 0; i < NUM_LANES; ++i) begin
 
-            assign ready_in[j] = sel_ready[sel_index[j]][j]; 
+            assign ready_in[i] = sel_ready[sel_index[i]][i]; 
 
-            for (genvar i = 0; i < NUM_REQS; i++) begin
+            for (genvar j = 0; j < NUM_REQS; ++j) begin
 
-                wire sel_valid = valid_in[j] & sel_onehot[j][i];
+                wire sel_valid = valid_in[i] & sel_onehot[i][j];
 
                 VX_skid_buffer #(
                     .DATAW    (DATAW),
@@ -97,25 +97,36 @@ module VX_stream_demux #(
                 ) out_buffer (
                     .clk       (clk),
                     .reset     (reset),
-                    .valid_in  (sel_valid),        
-                    .data_in   (data_in[j]),
-                    .ready_in  (sel_ready[i][j]),      
-                    .valid_out (valid_out[i][j]),
-                    .data_out  (data_out[i][j]),
-                    .ready_out (ready_out[i][j])
+                    .valid_in  (sel_valid),  
+                    .data_in   (data_in[i]),
+                    .ready_in  (sel_ready[j][i]),
+                    .valid_out (valid_out[j][i]),
+                    .data_out  (data_out[j][i]),
+                    .ready_out (ready_out[j][i])
                 );
             end
         end
 
     end else begin
 
-        `UNUSED_VAR (clk)
-        `UNUSED_VAR (reset)
         `UNUSED_VAR (sel_in)
-        
-        assign valid_out = valid_in;        
-        assign data_out  = data_in;
-        assign ready_in  = ready_out;
+
+        for (genvar i = 0; i < NUM_LANES; ++i) begin
+            VX_skid_buffer #(
+                .DATAW    (DATAW),
+                .PASSTHRU (BUFFERED == 0),
+                .OUT_REG  (BUFFERED > 1)
+            ) out_buffer (
+                .clk       (clk),
+                .reset     (reset),
+                .valid_in  (valid_in[i]),
+                .data_in   (data_in[i]),
+                .ready_in  (ready_in[i]),      
+                .valid_out (valid_out[0][i]),
+                .data_out  (data_out[0][i]),
+                .ready_out (ready_out[0][i])
+            );
+        end
 
     end
     

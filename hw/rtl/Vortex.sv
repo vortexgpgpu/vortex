@@ -200,8 +200,8 @@ module Vortex (
         .DATA_WIDTH   (`L2_MEM_DATA_WIDTH),            
         .ADDR_WIDTH   (`L2_MEM_ADDR_WIDTH),
         .TAG_IN_WIDTH (`L2_MEM_TAG_WIDTH),
-        .BUFFERED_REQ (1),
-        .BUFFERED_RSP (1)
+        .BUFFERED_REQ ((`NUM_CLUSTERS > 1) ? 1 : 0),
+        .BUFFERED_RSP ((`NUM_CLUSTERS > 1) ? 1 : 0)
     ) mem_mux (
         .clk        (clk),
         .reset      (mem_arb_reset),

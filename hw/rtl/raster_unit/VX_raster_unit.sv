@@ -137,7 +137,8 @@ module VX_raster_unit #(
 
     VX_stream_demux #(
         .NUM_REQS (NUM_SLICES),
-        .DATAW    (PRIM_DATA_WIDTH)
+        .DATAW    (PRIM_DATA_WIDTH),
+        .BUFFERED (1)
     ) slice_req_demux (
         .clk        (clk),
         .reset      (reset),
@@ -218,7 +219,8 @@ module VX_raster_unit #(
 
     VX_raster_req_mux #(
         .NUM_REQS  (NUM_SLICES),
-        .NUM_LANES (OUTPUT_QUADS)
+        .NUM_LANES (OUTPUT_QUADS),
+        .BUFFERED  ((NUM_SLICES > 1) ? 1 : 0)
     ) raster_req_mux (
         .clk        (clk),
         .reset      (reset),

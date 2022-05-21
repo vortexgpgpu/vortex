@@ -144,10 +144,6 @@ module VX_raster_te #(
 
     wire [3:0] fifo_full, fifo_empty;
     wire [3:0][FIFO_DATA_WIDTH-1:0] fifo_data_out;
-    
-    wire fifo_stall   = tile_valid_r && ~is_block_r && (| fifo_full);
-    wire output_stall = tile_valid_r && is_block_r && ~ready_out;
-    assign stall = fifo_stall || output_stall;
 
     VX_priority_arbiter #(
         .NUM_REQS (4)
@@ -186,12 +182,15 @@ module VX_raster_te #(
 
     assign {fifo_x_loc, fifo_y_loc, fifo_edge_eval, fifo_level} = fifo_data_out[fifo_arb_index];
 
-    // Output signals
+    // pipeline stall
+    wire fifo_stall   = tile_valid_r && ~is_block_r && (| fifo_full);
+    wire output_stall = tile_valid_r && is_block_r && ~ready_out;
+    assign stall = fifo_stall || output_stall;
 
     // can accept next input?
-    assign ready_in = ~stall           // pipeline not stalled
-                   && ~tile_valid      // no existing tile
-                   && ~fifo_arb_valid  // no valid fifo entry
+    assign ready_in = ~stall           // no pipeline stall
+                   && ~tile_valid      // no tile in process
+                   && ~fifo_arb_valid  // no fifo input
                    && ~is_fifo_bypass; // no fifo bypass
 
     assign valid_out = tile_valid_r && is_block_r;
