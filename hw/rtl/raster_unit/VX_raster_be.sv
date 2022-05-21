@@ -113,10 +113,10 @@ module VX_raster_be #(
     reg [OUTPUT_BATCHES-1:0][OUTPUT_QUADS-1:0] fifo_mask_in;
     raster_stamp_t [OUTPUT_BATCHES-1:0][OUTPUT_QUADS-1:0] fifo_stamp_in;
         
-    always @(*) begin
-        for (integer i = 0; i < OUTPUT_BATCHES * OUTPUT_QUADS; ++i) begin
-            automatic integer q = i % OUTPUT_QUADS;
-            automatic integer b = i / OUTPUT_QUADS;
+    for (genvar i = 0; i < OUTPUT_BATCHES * OUTPUT_QUADS; ++i) begin
+        integer q = i % OUTPUT_QUADS;
+        integer b = i / OUTPUT_QUADS;
+        always @(*) begin
             fifo_mask_in[b][q]  = 0;
             fifo_stamp_in[b][q] = 'x;
             if (i < PER_BLOCK_QUADS) begin
