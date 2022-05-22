@@ -145,17 +145,8 @@ module VX_raster_te #(
     wire [3:0] fifo_full, fifo_empty;
     wire [3:0][FIFO_DATA_WIDTH-1:0] fifo_data_out;
 
-    VX_priority_arbiter #(
-        .NUM_REQS (4)
-    ) fifo_arbiter (
-        .clk          (clk),
-        .reset        (reset),        
-        `UNUSED_PIN   (unlock),
-        .requests     (~fifo_empty),
-        .grant_index  (fifo_arb_index),
-        .grant_onehot (fifo_arb_onehot),
-        .grant_valid  (fifo_arb_valid)
-    );
+    wire fifo_stall   = tile_valid_r && ~is_block_r && (| fifo_full);
+    wire output_stall = tile_valid_r && is_block_r && ~ready_out;
 
     for (genvar i = 0; i < 4; ++i) begin
         wire fifo_push = tile_valid_r && ~is_block_r && ~(is_fifo_bypass && i == 0);
@@ -182,9 +173,19 @@ module VX_raster_te #(
 
     assign {fifo_x_loc, fifo_y_loc, fifo_edge_eval, fifo_level} = fifo_data_out[fifo_arb_index];
 
+    VX_priority_arbiter #(
+        .NUM_REQS (4)
+    ) fifo_arbiter (
+        .clk          (clk),
+        .reset        (reset),        
+        `UNUSED_PIN   (unlock),
+        .requests     (~fifo_empty),
+        .grant_index  (fifo_arb_index),
+        .grant_onehot (fifo_arb_onehot),
+        .grant_valid  (fifo_arb_valid)
+    );
+
     // pipeline stall
-    wire fifo_stall   = tile_valid_r && ~is_block_r && (| fifo_full);
-    wire output_stall = tile_valid_r && is_block_r && ~ready_out;
     assign stall = fifo_stall || output_stall;
 
     // can accept next input?

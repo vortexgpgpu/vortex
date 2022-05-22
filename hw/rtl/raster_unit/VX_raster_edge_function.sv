@@ -15,7 +15,7 @@ module VX_raster_edge_function #(
 
     output wire [2:0][`RASTER_DATA_BITS-1:0] result
 );
-    localparam PROD_WIDTH = `RASTER_DATA_BITS + `RASTER_DIM_BITS;
+    localparam PROD_WIDTH = `RASTER_DATA_BITS + 1;
 
     `UNUSED_VAR (reset)
 
