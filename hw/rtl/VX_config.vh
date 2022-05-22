@@ -262,6 +262,10 @@
 `define STALL_TIMEOUT (10000 * (1 ** (`L2_ENABLED + `L3_ENABLED)))
 `endif
 
+`ifndef DEBUG_LEVEL
+`define DEBUG_LEVEL 3
+`endif
+
 // Pipeline Queues ////////////////////////////////////////////////////////////
 
 // Size of Instruction Buffer

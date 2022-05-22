@@ -206,16 +206,16 @@ module VX_raster_te #(
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
         if (valid_in && ready_in) begin
-            dpi_trace(2, "%d: raster-te-in: x=%0d, y=%0d, edge={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}, extents={0x%0h, 0x%0h, 0x%0h}\n",
+            `TRACE(2, ("%d: raster-te-in: x=%0d, y=%0d, edge={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}, extents={0x%0h, 0x%0h, 0x%0h}\n",
                 $time, x_loc_in, y_loc_in,
                 edges_in[0][0], edges_in[0][1], edges_in[0][2],
                 edges_in[1][0], edges_in[1][1], edges_in[1][2],
                 edges_in[2][0], edges_in[2][1], edges_in[2][2],
-                extents_in[0],  extents_in[1],  extents_in[2]);
+                extents_in[0],  extents_in[1],  extents_in[2]));
         end
         if (tile_valid && ~stall) begin
-            dpi_trace(2, "%d: raster-te-test: pass=%b, block=%b, level=%0d, x=%0d, y=%0d, edge_eval={0x%0h, 0x%0h, 0x%0h}\n",
-                $time, tile_valid_e, is_block, tile_level, tile_x_loc, tile_y_loc, tile_edge_eval[0], tile_edge_eval[1], tile_edge_eval[2]);
+            `TRACE(2, ("%d: raster-te-test: pass=%b, block=%b, level=%0d, x=%0d, y=%0d, edge_eval={0x%0h, 0x%0h, 0x%0h}\n",
+                $time, tile_valid_e, is_block, tile_level, tile_x_loc, tile_y_loc, tile_edge_eval[0], tile_edge_eval[1], tile_edge_eval[2]));
         end
     end
 `endif

@@ -120,7 +120,7 @@ module VX_csr_data #(
 
 `ifdef EXT_ROP_ENABLE
     wire rop_read_enable  = (read_addr >= `CSR_ROP_BEGIN && read_addr < `CSR_ROP_END);
-    wire rop_write_enable = (write_addr >= `CSR_ROP_BEGIN && write_addr < `CSR_ROP_END);;
+    wire rop_write_enable = (write_addr >= `CSR_ROP_BEGIN && write_addr < `CSR_ROP_END);
 
     assign rop_csr_if.read_enable = read_enable && rop_read_enable;
     assign rop_csr_if.read_uuid   = read_uuid;

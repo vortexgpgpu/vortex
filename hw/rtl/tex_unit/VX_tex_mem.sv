@@ -319,30 +319,30 @@ module VX_tex_mem #(
 
     always @(posedge clk) begin        
         if (dcache_req_fire_any) begin
-            dpi_trace(2, "%d: core%0d-tex-cache-req: wid=%0d, PC=0x%0h, tmask=%b, tag=0x%0h, addr=", 
-                    $time, CORE_ID, q_req_wid, q_req_PC, dcache_req_fire, req_texel_idx);
+            `TRACE(2, ("%d: core%0d-tex-cache-req: wid=%0d, PC=0x%0h, tmask=%b, tag=0x%0h, addr=", 
+                    $time, CORE_ID, q_req_wid, q_req_PC, dcache_req_fire, req_texel_idx));
             `TRACE_ARRAY1D(2, req_texel_addr, NUM_REQS);
-            dpi_trace(2, ", is_dup=%b  (#%0d)\n", req_texel_dup, q_req_uuid);
+            `TRACE(2, (", is_dup=%b  (#%0d)\n", req_texel_dup, q_req_uuid));
         end
         if (dcache_rsp_fire) begin
-            dpi_trace(2, "%d: core%0d-tex-cache-rsp: wid=%0d, PC=0x%0h, tmask=%b, tag=0x%0h, data=", 
-                    $time, CORE_ID, q_req_wid, q_req_PC, cache_rsp_tmask, rsp_texel_idx);
+            `TRACE(2, ("%d: core%0d-tex-cache-rsp: wid=%0d, PC=0x%0h, tmask=%b, tag=0x%0h, data=", 
+                    $time, CORE_ID, q_req_wid, q_req_PC, cache_rsp_tmask, rsp_texel_idx));
             `TRACE_ARRAY1D(2, cache_rsp_data, NUM_REQS);
-            dpi_trace(2, " (#%0d)\n", q_req_uuid);
+            `TRACE(2, (" (#%0d)\n", q_req_uuid));
         end
         if (req_valid && req_ready) begin
-            dpi_trace(2, "%d: core%0d-tex-mem-req: wid=%0d, PC=0x%0h, tmask=%b, filter=%0d, lgstride=%0d, baseaddr=", 
-                    $time, CORE_ID, req_wid, req_PC, req_tmask, req_filter, req_lgstride);
+            `TRACE(2, ("%d: core%0d-tex-mem-req: wid=%0d, PC=0x%0h, tmask=%b, filter=%0d, lgstride=%0d, baseaddr=", 
+                    $time, CORE_ID, req_wid, req_PC, req_tmask, req_filter, req_lgstride));
             `TRACE_ARRAY1D(2, req_baseaddr, NUM_REQS);
-            dpi_trace(2, ", addr="); 
+            `TRACE(2, (", addr=")); 
             `TRACE_ARRAY2D(2, req_addr, 4, NUM_REQS);
-            dpi_trace(2, " (#%0d)\n", req_uuid);
+            `TRACE(2, (" (#%0d)\n", req_uuid));
         end
         if (rsp_valid && rsp_ready) begin
-            dpi_trace(2, "%d: core%0d-tex-mem-rsp: wid=%0d, PC=0x%0h, tmask=%b, data=", 
-                    $time, CORE_ID, rsp_wid, rsp_PC, rsp_tmask);
+            `TRACE(2, ("%d: core%0d-tex-mem-rsp: wid=%0d, PC=0x%0h, tmask=%b, data=", 
+                    $time, CORE_ID, rsp_wid, rsp_PC, rsp_tmask));
             `TRACE_ARRAY2D(2, rsp_data, 4, NUM_REQS);
-            dpi_trace(2, " (#%0d)\n", rsp_uuid);
+            `TRACE(2, (" (#%0d)\n", rsp_uuid));
         end        
     end
 `endif

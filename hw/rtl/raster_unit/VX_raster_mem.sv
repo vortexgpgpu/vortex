@@ -339,11 +339,11 @@ module VX_raster_mem #(
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
         if (valid_out && ready_out) begin
-            dpi_trace(2, "%d: raster-mem-out: x=%0d, y=%0d, pid=%0d, edge={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
+            `TRACE(2, ("%d: raster-mem-out: x=%0d, y=%0d, pid=%0d, edge={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
                 $time, x_loc_out, y_loc_out, pid_out,
                 edges_out[0][0], edges_out[0][1], edges_out[0][2],
                 edges_out[1][0], edges_out[1][1], edges_out[1][2],
-                edges_out[2][0], edges_out[2][1], edges_out[2][2]);
+                edges_out[2][0], edges_out[2][1], edges_out[2][2]));
         end 
     end
 `endif

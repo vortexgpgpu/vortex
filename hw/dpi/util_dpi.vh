@@ -7,8 +7,8 @@ import "DPI-C" function void dpi_idiv(input logic enable, input int a, input int
 import "DPI-C" function int dpi_register();
 import "DPI-C" function void dpi_assert(int inst, input logic cond, input int delay);
 
-import "DPI-C" function void dpi_trace(input int level, input string format /*verilator sformat*/);
 import "DPI-C" function void dpi_trace_start();
 import "DPI-C" function void dpi_trace_stop();
+import "DPI-C" function logic dpi_trace_enabled();
 
 `endif

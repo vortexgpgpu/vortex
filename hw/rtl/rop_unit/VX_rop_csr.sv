@@ -49,11 +49,11 @@ module VX_rop_csr #(
 `ifdef DBG_TRACE_TEX
     always @(posedge clk) begin
         if (rop_csr_if.write_enable) begin
-            dpi_trace(1, "%d: core%0d-rop-csr-write: wid=%0d, tmask=%b, state=", $time, CORE_ID, rop_csr_if.write_wid, rop_csr_if.write_tmask);
+            `TRACE(1, ("%d: core%0d-rop-csr-write: wid=%0d, tmask=%b, state=", $time, CORE_ID, rop_csr_if.write_wid, rop_csr_if.write_tmask));
             trace_rop_csr(1, rop_csr_if.write_addr);
-            dpi_trace(1, ", data=");
+            `TRACE(1, (", data="));
             `TRACE_ARRAY1D(1, rop_csr_if.write_data, `NUM_THREADS);
-            dpi_trace(1, " (#%0d)\n", rop_csr_if.write_uuid);
+            `TRACE(1, (" (#%0d)\n", rop_csr_if.write_uuid));
         end
     end
 `endif

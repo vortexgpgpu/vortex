@@ -137,9 +137,9 @@ module VX_issue #(
         end else begin        
             if (ibuffer_if.valid && ~ibuffer_if.ready) begin
             `ifdef DBG_TRACE_CORE_PIPELINE
-                dpi_trace(3, "%d: *** core%0d-stall: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, wb=%0d, cycles=%0d, inuse=%b%b%b%b, dispatch=%b (#%0d)\n", 
+                `TRACE(3, ("%d: *** core%0d-stall: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, wb=%0d, cycles=%0d, inuse=%b%b%b%b, dispatch=%b (#%0d)\n",
                     $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.rd, ibuffer_if.wb, timeout_ctr,
-                    in_use_regs[0], in_use_regs[1], in_use_regs[2], in_use_regs[3], ~dispatch_if.ready, ibuffer_if.uuid);
+                    in_use_regs[0], in_use_regs[1], in_use_regs[2], in_use_regs[3], ~dispatch_if.ready, ibuffer_if.uuid));
             `endif
                 `ASSERT(timeout_ctr < `STALL_TIMEOUT,
                     ("%t: *** core%0d-issue-timeout: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, wb=%0d, inuse=%b%b%b%b, dispatch=%b (#%0d)",
@@ -236,18 +236,17 @@ module VX_issue #(
 `ifdef DBG_TRACE_CORE_PIPELINE
     always @(posedge clk) begin
         if (dispatch_if.valid && dispatch_if.ready) begin
-            dpi_trace(1, "%d: core%0d-issue: wid=%0d, PC=0x%0h, ex=", $time, CORE_ID, dispatch_if.wid, dispatch_if.PC);
+            `TRACE(1, ("%d: core%0d-issue: wid=%0d, PC=0x%0h, ex=", $time, CORE_ID, dispatch_if.wid, dispatch_if.PC));
             trace_ex_type(1, dispatch_if.ex_type);
-            dpi_trace(1, ", op=");
+            `TRACE(1, (", op="));
             trace_ex_op(1, dispatch_if.ex_type, dispatch_if.op_type, dispatch_if.op_mod);
-            dpi_trace(1, ", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1_data=",
-                dispatch_if.op_mod, dispatch_if.tmask, dispatch_if.wb, dispatch_if.rd);
+            `TRACE(1, (", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1_data=",  dispatch_if.op_mod, dispatch_if.tmask, dispatch_if.wb, dispatch_if.rd));
             `TRACE_ARRAY1D(1, gpr_rsp_if.rs1_data, `NUM_THREADS);
-            dpi_trace(1, ", rs2_data=");
+            `TRACE(1, (", rs2_data="));
             `TRACE_ARRAY1D(1, gpr_rsp_if.rs2_data, `NUM_THREADS);
-            dpi_trace(1, ", rs3_data=");
+            `TRACE(1, (", rs3_data="));
             `TRACE_ARRAY1D(1, gpr_rsp_if.rs3_data, `NUM_THREADS);
-            dpi_trace(1, " (#%0d)\n", dispatch_if.uuid);
+            `TRACE(1, (" (#%0d)\n", dispatch_if.uuid));
         end
     end
 `endif

@@ -13,13 +13,13 @@ task trace_tex_dcr (
     input [`DCR_ADDR_BITS-1:0] addr
 );
     case (addr)
-        `DCR_TEX_ADDR:      dpi_trace(level, "ADDR");     
-        `DCR_TEX_LOGDIM:    dpi_trace(level, "LOGDIM");
-        `DCR_TEX_FORMAT:    dpi_trace(level, "FORMAT");
-        `DCR_TEX_FILTER:    dpi_trace(level, "FILTER");
-        `DCR_TEX_WRAP:      dpi_trace(level, "WRAP");
+        `DCR_TEX_ADDR:      `TRACE(level, ("ADDR"));
+        `DCR_TEX_LOGDIM:    `TRACE(level, ("LOGDIM"));
+        `DCR_TEX_FORMAT:    `TRACE(level, ("FORMAT"));
+        `DCR_TEX_FILTER:    `TRACE(level, ("FILTER"));
+        `DCR_TEX_WRAP:      `TRACE(level, ("WRAP"));
         //`DCR_TEX_MIPOFF
-        default:            dpi_trace(level, "MIPOFF");
+        default:            `TRACE(level, ("MIPOFF"));
     endcase  
 endtask
 
@@ -28,8 +28,8 @@ task trace_tex_csr (
     input [`CSR_ADDR_BITS-1:0] addr
 );
     case (addr)
-        `CSR_TEX_STAGE:  dpi_trace(level, "STAGE"); 
-        default:         dpi_trace(level, "?");
+        `CSR_TEX_STAGE:  `TRACE(level, ("STAGE")); 
+        default:         `TRACE(level, ("?"));
     endcase  
 endtask
 

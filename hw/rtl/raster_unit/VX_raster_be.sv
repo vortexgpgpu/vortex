@@ -215,21 +215,21 @@ module VX_raster_be #(
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
         if (valid_in && ready_in) begin
-            dpi_trace(2, "%d: raster-block-in: x=%0d, y=%0d, pid=%0d, edge={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
+            `TRACE(2, ("%d: raster-block-in: x=%0d, y=%0d, pid=%0d, edge={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
                 $time, x_loc_in, y_loc_in, pid_in,
                 edges_in[0][0], edges_in[0][1], edges_in[0][2],
                 edges_in[1][0], edges_in[1][1], edges_in[1][2],
-                edges_in[2][0], edges_in[2][1], edges_in[2][2]);
+                edges_in[2][0], edges_in[2][1], edges_in[2][2]));
         end
         
         for (integer i = 0; i < OUTPUT_QUADS; ++i) begin
             if (valid_out && ready_out) begin
-                dpi_trace(2, "%d: raster-be-out[%0d]: x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
+                `TRACE(2, ("%d: raster-be-out[%0d]: x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
                     $time, i, stamps_out[i].pos_x, stamps_out[i].pos_y, mask_out[i], stamps_out[i].pid,
                     stamps_out[i].bcoords[0][0], stamps_out[i].bcoords[0][1], stamps_out[i].bcoords[0][2], 
                     stamps_out[i].bcoords[1][0], stamps_out[i].bcoords[1][1], stamps_out[i].bcoords[1][2], 
                     stamps_out[i].bcoords[2][0], stamps_out[i].bcoords[2][1], stamps_out[i].bcoords[2][2], 
-                    stamps_out[i].bcoords[3][0], stamps_out[i].bcoords[3][1], stamps_out[i].bcoords[3][2]);
+                    stamps_out[i].bcoords[3][0], stamps_out[i].bcoords[3][1], stamps_out[i].bcoords[3][2]));
             end
         end
     end

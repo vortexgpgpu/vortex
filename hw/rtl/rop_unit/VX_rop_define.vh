@@ -13,25 +13,25 @@ task trace_rop_state (
     input [`DCR_ADDR_BITS-1:0] state
 );
     case (state)
-        `DCR_ROP_CBUF_ADDR:         dpi_trace(level, "CBUF_ADDR");
-        `DCR_ROP_CBUF_PITCH:        dpi_trace(level, "CBUF_PITCH");
-        `DCR_ROP_CBUF_WRITEMASK:    dpi_trace(level, "CBUF_WRITEMASK");
-        `DCR_ROP_ZBUF_ADDR:         dpi_trace(level, "ZBUF_ADDR");
-        `DCR_ROP_ZBUF_PITCH:        dpi_trace(level, "ZBUF_PITCH");
-        `DCR_ROP_DEPTH_FUNC:        dpi_trace(level, "DEPTH_FUNC");
-        `DCR_ROP_DEPTH_WRITEMASK:   dpi_trace(level, "DEPTH_WRITEMASK");
-        `DCR_ROP_STENCIL_FUNC:      dpi_trace(level, "STENCIL_FUNC");        
-        `DCR_ROP_STENCIL_ZPASS:     dpi_trace(level, "STENCIL_ZPASS");
-        `DCR_ROP_STENCIL_ZFAIL:     dpi_trace(level, "STENCIL_ZFAIL");
-        `DCR_ROP_STENCIL_FAIL:      dpi_trace(level, "STENCIL_FAIL");
-        `DCR_ROP_STENCIL_REF:       dpi_trace(level, "STENCIL_REF");
-        `DCR_ROP_STENCIL_MASK:      dpi_trace(level, "STENCIL_MASK");        
-        `DCR_ROP_STENCIL_WRITEMASK: dpi_trace(level, "STENCIL_WRITEMASK");
-        `DCR_ROP_BLEND_MODE:        dpi_trace(level, "BLEND_MODE");
-        `DCR_ROP_BLEND_FUNC:        dpi_trace(level, "BLEND_FUNC");
-        `DCR_ROP_BLEND_CONST:       dpi_trace(level, "BLEND_CONST");
-        `DCR_ROP_LOGIC_OP:          dpi_trace(level, "LOGIC_OP");        
-        default:                    dpi_trace(level, "?");
+        `DCR_ROP_CBUF_ADDR:         `TRACE(level, ("CBUF_ADDR"));
+        `DCR_ROP_CBUF_PITCH:        `TRACE(level, ("CBUF_PITCH"));
+        `DCR_ROP_CBUF_WRITEMASK:    `TRACE(level, ("CBUF_WRITEMASK"));
+        `DCR_ROP_ZBUF_ADDR:         `TRACE(level, ("ZBUF_ADDR"));
+        `DCR_ROP_ZBUF_PITCH:        `TRACE(level, ("ZBUF_PITCH"));
+        `DCR_ROP_DEPTH_FUNC:        `TRACE(level, ("DEPTH_FUNC"));
+        `DCR_ROP_DEPTH_WRITEMASK:   `TRACE(level, ("DEPTH_WRITEMASK"));
+        `DCR_ROP_STENCIL_FUNC:      `TRACE(level, ("STENCIL_FUNC"));        
+        `DCR_ROP_STENCIL_ZPASS:     `TRACE(level, ("STENCIL_ZPASS"));
+        `DCR_ROP_STENCIL_ZFAIL:     `TRACE(level, ("STENCIL_ZFAIL"));
+        `DCR_ROP_STENCIL_FAIL:      `TRACE(level, ("STENCIL_FAIL"));
+        `DCR_ROP_STENCIL_REF:       `TRACE(level, ("STENCIL_REF"));
+        `DCR_ROP_STENCIL_MASK:      `TRACE(level, ("STENCIL_MASK"));        
+        `DCR_ROP_STENCIL_WRITEMASK: `TRACE(level, ("STENCIL_WRITEMASK"));
+        `DCR_ROP_BLEND_MODE:        `TRACE(level, ("BLEND_MODE"));
+        `DCR_ROP_BLEND_FUNC:        `TRACE(level, ("BLEND_FUNC"));
+        `DCR_ROP_BLEND_CONST:       `TRACE(level, ("BLEND_CONST"));
+        `DCR_ROP_LOGIC_OP:          `TRACE(level, ("LOGIC_OP"));        
+        default:                    `TRACE(level, ("?"));
     endcase  
 endtask
 
@@ -40,9 +40,9 @@ task trace_rop_csr (
     input [`CSR_ADDR_BITS-1:0] addr
 );
     case (addr)
-        `CSR_ROP_RT_IDX:        dpi_trace(level, "RT_IDX");
-        `CSR_ROP_SAMPLE_IDX:    dpi_trace(level, "SAMPLE_IDX");
-        default:                dpi_trace(level, "?");
+        `CSR_ROP_RT_IDX:        `TRACE(level, ("RT_IDX"));
+        `CSR_ROP_SAMPLE_IDX:    `TRACE(level, ("SAMPLE_IDX"));
+        default:                `TRACE(level, ("?"));
     endcase  
 endtask
 

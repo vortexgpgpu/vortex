@@ -132,9 +132,9 @@ module VX_dcr_data (
 `ifdef DBG_TRACE_CORE_PIPELINE
     always @(posedge clk) begin
         if (dcr_wr_valid && is_base_dcr) begin
-            dpi_trace(1, "%d: base-dcr: state=", $time);
+            `TRACE(1, ("%d: base-dcr: state=", $time));
             trace_base_dcr(1, dcr_wr_addr);
-            dpi_trace(1, ", data=0x%0h\n", dcr_wr_data);
+            `TRACE(1, (", data=0x%0h\n", dcr_wr_data));
         end
     end
 `endif

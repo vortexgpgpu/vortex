@@ -238,22 +238,6 @@ module VX_raster_unit #(
     assign raster_req_if.empty  = raster_req_tmp_if.empty && no_slice_input;
     assign raster_req_tmp_if.ready = raster_req_if.ready;
 
-`ifdef DBG_TRACE_RASTER
-    always @(posedge clk) begin
-        if (raster_req_if.ready && raster_req_if.valid) begin
-            for (integer i = 0; i < OUTPUT_QUADS; ++i) begin
-                dpi_trace(1, "%d: raster-out[%0d]: empty=%b, x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
-                    $time, i, raster_req_if.empty,
-                    raster_req_if.stamps[i].pos_x,  raster_req_if.stamps[i].pos_y, raster_req_if.stamps[i].mask, raster_req_if.stamps[i].pid,
-                    raster_req_if.stamps[i].bcoords[0][0], raster_req_if.stamps[i].bcoords[0][1], raster_req_if.stamps[i].bcoords[0][2], 
-                    raster_req_if.stamps[i].bcoords[1][0], raster_req_if.stamps[i].bcoords[1][1], raster_req_if.stamps[i].bcoords[1][2], 
-                    raster_req_if.stamps[i].bcoords[2][0], raster_req_if.stamps[i].bcoords[2][1], raster_req_if.stamps[i].bcoords[2][2], 
-                    raster_req_if.stamps[i].bcoords[3][0], raster_req_if.stamps[i].bcoords[3][1], raster_req_if.stamps[i].bcoords[3][2]);
-            end
-        end
-    end
-`endif
-
 `ifdef PERF_ENABLE
     wire [$clog2(`RCACHE_NUM_REQS+1)-1:0] perf_mem_req_per_cycle;
     wire [$clog2(`RCACHE_NUM_REQS+1)-1:0] perf_mem_rsp_per_cycle;
@@ -297,6 +281,22 @@ module VX_raster_unit #(
     assign raster_perf_if.mem_reads    = perf_mem_reads;
     assign raster_perf_if.mem_latency  = perf_mem_latency;
     assign raster_perf_if.stall_cycles = perf_stall_cycles;
+`endif
+
+`ifdef DBG_TRACE_RASTER
+    always @(posedge clk) begin
+        if (raster_req_if.ready && raster_req_if.valid) begin
+            for (integer i = 0; i < OUTPUT_QUADS; ++i) begin
+                `TRACE(1, ("%d: raster-out[%0d]: empty=%b, x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
+                    $time, i, raster_req_if.empty,
+                    raster_req_if.stamps[i].pos_x,  raster_req_if.stamps[i].pos_y, raster_req_if.stamps[i].mask, raster_req_if.stamps[i].pid,
+                    raster_req_if.stamps[i].bcoords[0][0], raster_req_if.stamps[i].bcoords[0][1], raster_req_if.stamps[i].bcoords[0][2], 
+                    raster_req_if.stamps[i].bcoords[1][0], raster_req_if.stamps[i].bcoords[1][1], raster_req_if.stamps[i].bcoords[1][2], 
+                    raster_req_if.stamps[i].bcoords[2][0], raster_req_if.stamps[i].bcoords[2][1], raster_req_if.stamps[i].bcoords[2][2], 
+                    raster_req_if.stamps[i].bcoords[3][0], raster_req_if.stamps[i].bcoords[3][1], raster_req_if.stamps[i].bcoords[3][2]));
+            end
+        end
+    end
 `endif
 
 endmodule

@@ -69,6 +69,12 @@
         assert(cond) else $error msg; \
     end
 
+`ifdef VERILATOR
+`define TRACE(level, args) if (level <= `DEBUG_LEVEL && dpi_trace_enabled()) $write args
+`else
+`define TRACE(level, args) if (level <= `DEBUG_LEVEL) $write args
+`endif
+
 `define TRACING_ON  /* verilator tracing_on */
 `define TRACING_OFF /* verilator tracing_off */
 
@@ -83,9 +89,10 @@
 `define UNUSED_VAR(x)
 `define UNUSED_PIN(x) . x ()
 `define ERROR(msg)
-`define ASSERT(cond, msg) if (cond);
+`define ASSERT(cond, msg)
 `define STATIC_ASSERT(cond, msg)
 `define RUNTIME_ASSERT(cond, msg)
+`define TRACE(level, msg)
 `define TRACING_ON
 `define TRACING_OFF
 
@@ -126,25 +133,25 @@
 `define LTRIM(x, s) x[s-1:0]
 
 `define TRACE_ARRAY1D(lvl, arr, m)              \
-    dpi_trace(lvl, "{");                        \
+    `TRACE(lvl, ("{"));                         \
     for (integer i = (m-1); i >= 0; --i) begin  \
-        if (i != (m-1)) dpi_trace(lvl, ", ");   \
-        dpi_trace(lvl, "0x%0h", arr[i]);        \
+        if (i != (m-1)) `TRACE(lvl, (", "));    \
+        `TRACE(lvl, ("0x%0h", arr[i]));         \
     end                                         \
-    dpi_trace(lvl, "}")
+    `TRACE(lvl, ("}"));
 
 `define TRACE_ARRAY2D(lvl, arr, m, n)           \
-    dpi_trace(lvl, "{");                        \
+    `TRACE(lvl, ("{"));                         \
     for (integer i = n-1; i >= 0; --i) begin    \
-        if (i != (n-1)) dpi_trace(lvl, ", ");   \
-        dpi_trace(lvl, "{");                    \
-        for (integer j = (m-1); j >= 0; --j) begin  \
-            if (j != (m-1)) dpi_trace(lvl, ", ");   \
-            dpi_trace(lvl, "0x%0h", arr[i][j]); \
+        if (i != (n-1)) `TRACE(lvl, (", "));    \
+        `TRACE(lvl, ("{"));                     \
+        for (integer j = (m-1); j >= 0; --j) begin \
+            if (j != (m-1)) `TRACE(lvl, (", "));\
+            `TRACE(lvl, ("0x%0h", arr[i][j]));  \
         end                                     \
-        dpi_trace(lvl, "}");                    \
+        `TRACE(lvl, ("}"));                     \
     end                                         \
-    dpi_trace(lvl, "}")
+    `TRACE(lvl, ("}"))
 
 `define RESET_RELAY(signal)         \
     wire signal;                    \

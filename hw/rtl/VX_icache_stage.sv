@@ -103,10 +103,10 @@ module VX_icache_stage #(
 `ifdef DBG_TRACE_CORE_ICACHE
     always @(posedge clk) begin
         if (icache_req_fire) begin
-            dpi_trace(1, "%d: I$%0d req: wid=%0d, PC=0x%0h (#%0d)\n", $time, CORE_ID, ifetch_req_if.wid, ifetch_req_if.PC, ifetch_req_if.uuid);
+            `TRACE(1, ("%d: I$%0d req: wid=%0d, PC=0x%0h (#%0d)\n", $time, CORE_ID, ifetch_req_if.wid, ifetch_req_if.PC, ifetch_req_if.uuid));
         end
         if (ifetch_rsp_if.valid && ifetch_rsp_if.ready) begin
-            dpi_trace(1, "%d: I$%0d rsp: wid=%0d, PC=0x%0h, data=0x%0h (#%0d)\n", $time, CORE_ID, ifetch_rsp_if.wid, ifetch_rsp_if.PC, ifetch_rsp_if.data, ifetch_rsp_if.uuid);
+            `TRACE(1, ("%d: I$%0d rsp: wid=%0d, PC=0x%0h, data=0x%0h (#%0d)\n", $time, CORE_ID, ifetch_rsp_if.wid, ifetch_rsp_if.PC, ifetch_rsp_if.data, ifetch_rsp_if.uuid));
         end
     end
 `endif
