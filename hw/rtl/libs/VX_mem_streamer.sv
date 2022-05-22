@@ -372,42 +372,42 @@ module VX_mem_streamer #(
     /*
     always @(posedge clk) begin
         if (req_valid && req_ready) begin            
-            `TRACE(1, ("%d: memstream req: rw=%b, mask=%b, byteen=", $time, req_rw, req_mask));
+            dpi_trace(1, "%d: memstream req: rw=%b, mask=%b, byteen=", $time, req_rw, req_mask);
             `TRACE_ARRAY1D(1, req_byteen, NUM_REQS);
-            `TRACE(1, (", addr="));
+            dpi_trace(1, ", addr=");
             `TRACE_ARRAY1D(1, req_addr, NUM_REQS);
-            `TRACE(1, (", data="));
+            dpi_trace(1, ", data=");
             `TRACE_ARRAY1D(1, req_data, NUM_REQS);
-            `TRACE(1, (", tag=0x%0h\n", req_tag));
+            dpi_trace(1, ", tag=0x%0h\n", req_tag);
         end
         if (rsp_valid && rsp_ready) begin
-            `TRACE(1, ("%d: memstream rsp: mask=%b, data=", $time, rsp_mask));
+            dpi_trace(1, "%d: memstream rsp: mask=%b, data=", $time, rsp_mask);
              `TRACE_ARRAY1D(1, rsp_data, NUM_REQS);
-            `TRACE(1, (", tag=0x%0h\n", rsp_tag));
+            dpi_trace(1, ", tag=0x%0h\n", rsp_tag);
         end
         if (| mem_req_fire) begin
             if (| mem_req_rw) begin
-                `TRACE(1, ("%d: memstream mem-wr-req: valid=%b, byteen=", $time, mem_req_fire));
+                dpi_trace(1, "%d: memstream mem-wr-req: valid=%b, byteen=", $time, mem_req_fire);
                 `TRACE_ARRAY1D(1, mem_req_byteen, NUM_BANKS);
-                `TRACE(1, (", addr="));
+                dpi_trace(1, ", addr=");
                 `TRACE_ARRAY1D(1, mem_req_addr, NUM_BANKS);
-                `TRACE(1, (", data="));
+                dpi_trace(1, ", data=");
                 `TRACE_ARRAY1D(1, mem_req_data, NUM_BANKS);
-                `TRACE(1, (", tag="));
+                dpi_trace(1, ", tag=");
                 `TRACE_ARRAY1D(1, mem_req_tag, NUM_BANKS);
-                `TRACE(1, (", batch=%0d\n", req_batch_idx));
+                dpi_trace(1, ", batch=%0d\n", req_batch_idx);
             end else begin
-                `TRACE(1, ("%d: memstream mem-rd-req: valid=%b, addr=", $time, mem_req_fire));
+                dpi_trace(1, "%d: memstream mem-rd-req: valid=%b, addr=", $time, mem_req_fire);
                 `TRACE_ARRAY1D(1, mem_req_addr, NUM_BANKS);
-                `TRACE(1, (", tag="));
+                dpi_trace(1, ", tag=");
                 `TRACE_ARRAY1D(1, mem_req_tag, NUM_BANKS);
-                `TRACE(1, (", batch=%0d\n", req_batch_idx));
+                dpi_trace(1, ", batch=%0d\n", req_batch_idx);
             end
         end 
         if (mem_rsp_fire) begin
-            `TRACE(1, ("%d: memstream mem-rd-rsp: mask=%b, data=", $time, mem_rsp_mask_s));                
+            dpi_trace(1, "%d: memstream mem-rd-rsp: mask=%b, data=", $time, mem_rsp_mask_s);                
             `TRACE_ARRAY1D(1, mem_rsp_data_s, NUM_BANKS);
-            `TRACE(1, (", tag=0x%0h, batch=%0d\n", mem_rsp_tag_s, rsp_batch_idx));
+            dpi_trace(1, ", tag=0x%0h, batch=%0d\n", mem_rsp_tag_s, rsp_batch_idx);
         end
     end
     */

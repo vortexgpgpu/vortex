@@ -94,7 +94,7 @@ module VX_rop_mem #(
 
         wire [31:0] baddr  = dcrs.zbuf_addr + (req_pos_x[i] * 4);                
         wire        mask   = req_mask[i] && (stencil_enable || (depth_enable && (~req_rw || req_ds_pass[i])));
-        wire [3:0]  byteen = {stencil_byteen[i], depth_byteen};
+        wire [3:0]  byteen = req_rw ? {stencil_byteen[i], depth_byteen} : 4'b1111;
         wire [31:0] data   = {req_stencil[i], req_depth[i]};      
 
         VX_shift_register #(
@@ -133,7 +133,7 @@ module VX_rop_mem #(
 
         wire [31:0] baddr  = dcrs.cbuf_addr + (req_pos_x[i - NUM_LANES] * 4);
         wire        mask   = req_mask[i - NUM_LANES] && color_enable && (~req_rw || req_ds_pass[i - NUM_LANES]);        
-        wire [3:0]  byteen = color_byteen;
+        wire [3:0]  byteen = req_rw ? color_byteen : 4'b1111;
         wire [31:0] data   = req_color[i - NUM_LANES];        
 
         VX_shift_register #(

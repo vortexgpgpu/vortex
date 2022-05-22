@@ -259,7 +259,7 @@ module VX_lsu_unit #(
         assign cache_req_if.valid[i]  = req_valid && req_dep_ready && req_tmask_dup[i] && !req_sent_mask[i];
         assign cache_req_if.rw[i]     = ~req_wb;
         assign cache_req_if.addr[i]   = req_addr[i][31:2];
-        assign cache_req_if.byteen[i] = mem_req_byteen;
+        assign cache_req_if.byteen[i] = req_wb ? 4'b1111 : mem_req_byteen;
         assign cache_req_if.data[i]   = mem_req_data;
         assign cache_req_if.tag[i]    = {req_uuid, req_tag, req_addr_type[i]};
     end

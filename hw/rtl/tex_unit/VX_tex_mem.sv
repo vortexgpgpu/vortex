@@ -173,7 +173,7 @@ module VX_tex_mem #(
     assign cache_req_if.valid  = {NUM_REQS{req_texel_valid}} & q_req_tmask & req_dup_mask & ~texel_sent_mask;
     assign cache_req_if.rw     = {NUM_REQS{1'b0}};
     assign cache_req_if.addr   = req_texel_addr;
-    assign cache_req_if.byteen = {NUM_REQS{4'b0}};
+    assign cache_req_if.byteen = {NUM_REQS{4'b1111}};
     assign cache_req_if.data   = 'x;
     assign cache_req_if.tag    = {NUM_REQS{q_req_uuid, req_texel_idx}};
 

@@ -235,8 +235,10 @@ module VX_raster_mem #(
                         && (~prim_data_rsp_valid || buf_in_ready);
 
     wire [8:0][`RCACHE_ADDR_WIDTH-1:0] mem_req_addr_w;
+    wire [8:0][`RCACHE_WORD_SIZE-1:0] mem_req_byteen;
     for (genvar i = 0; i < 9; ++i) begin
         assign mem_req_addr_w[i] = mem_req_addr[i][(32 - `RCACHE_ADDR_WIDTH) +: `RCACHE_ADDR_WIDTH];
+        assign mem_req_byteen[i] = {`RCACHE_WORD_SIZE{1'b1}};
     end
 
     VX_mem_streamer #(
@@ -255,7 +257,7 @@ module VX_raster_mem #(
         .req_valid      (mem_req_valid_qual),
         .req_rw         (1'b0),
         .req_mask       (mem_req_mask),
-        `UNUSED_PIN     (req_byteen),
+        .req_byteen     (mem_req_byteen),
         .req_addr       (mem_req_addr_w),
         `UNUSED_PIN     (req_data),
         .req_tag        (mem_req_tag),

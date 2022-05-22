@@ -70,7 +70,7 @@ module VX_icache_stage #(
     // Icache Request
     assign icache_req_if.valid  = ifetch_req_if.valid && ~pending_ibuf_full[ifetch_req_if.wid];
     assign icache_req_if.rw     = 0;
-    assign icache_req_if.byteen = '0;
+    assign icache_req_if.byteen = 4'b1111;
     assign icache_req_if.addr   = ifetch_req_if.PC[31:2];
     assign icache_req_if.data   = '0;
     assign icache_req_if.tag    = {ifetch_req_if.uuid, req_tag};
