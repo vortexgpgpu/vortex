@@ -36,7 +36,7 @@ Disassembly of section .text:
 80000060: 6f 30 d0 4c                  	j	15564
 80000064: 67 80 00 00                  	ret
 
-80000068 _Z15shader_functioniP12kernel_arg_t:
+80000068 _Z18shader_function_hwiP12kernel_arg_t:
 80000068: 13 01 01 f3                  	addi	sp, sp, -208
 8000006c: 23 26 11 0c                  	sw	ra, 204(sp)
 80000070: 23 24 81 0c                  	sw	s0, 200(sp)
@@ -2089,7 +2089,7 @@ Disassembly of section .text:
 80002064: e3 18 05 f6                  	bnez	a0, -144
 80002068: 6f f0 1f f9                  	j	-112
 
-8000206c _Z23shader_function_sw_rastiP12kernel_arg_t:
+8000206c _Z18shader_function_swiP12kernel_arg_t:
 8000206c: 83 a5 c5 08                  	lw	a1, 140(a1)
 80002070: 13 06 05 00                  	mv	a2, a0
 80002074: 13 85 05 00                  	mv	a0, a1
@@ -2103,7 +2103,7 @@ Disassembly of section .text:
 8000208c: 23 2a 91 0a                  	sw	s1, 180(sp)
 80002090: b7 f5 ff 7f                  	lui	a1, 524287
 80002094: 83 a8 05 00                  	lw	a7, 0(a1)
-80002098: 13 05 40 00                  	addi	a0, zero, 4
+80002098: 13 05 50 00                  	addi	a0, zero, 5
 8000209c: 23 22 a1 00                  	sw	a0, 4(sp)
 800020a0: 13 05 20 00                  	addi	a0, zero, 2
 800020a4: 23 24 a1 00                  	sw	a0, 8(sp)
@@ -5408,29 +5408,6 @@ Disassembly of section .init_array:
 
 Disassembly of section .data:
 
-<<<<<<< HEAD
-800022a0 impure_data:
-800022a0: 00 00                        	<unknown>
-800022a2: 00 00                        	<unknown>
-800022a4: 8c 25                        	<unknown>
-800022a6: 00 80                        	<unknown>
-800022a8: f4 25                        	<unknown>
-800022aa: 00 80                        	<unknown>
-800022ac: 5c 26                        	<unknown>
-800022ae: 00 80                        	<unknown>
-		...
-80002348: 01 00                        	<unknown>
-8000234a: 00 00                        	<unknown>
-8000234c: 00 00                        	<unknown>
-8000234e: 00 00                        	<unknown>
-80002350: 0e 33                        	<unknown>
-80002352: cd ab                        	<unknown>
-80002354: 34 12                        	<unknown>
-80002356: 6d e6                        	<unknown>
-80002358: ec de                        	<unknown>
-8000235a: 05 00                        	<unknown>
-8000235c: 0b 00 00 00                  	<unknown>
-=======
 80006178 impure_data:
 80006178: 00 00                        	<unknown>
 8000617a: 00 00                        	<unknown>
@@ -5452,7 +5429,6 @@ Disassembly of section .data:
 80006230: ec de                        	<unknown>
 80006232: 05 00                        	<unknown>
 80006234: 0b 00 00 00                  	vx_tmc	zero
->>>>>>> 161c5f11326106f1a6f2a7b0bb2a6f6f75814162
 		...
 
 800065a0 __malloc_av_:
@@ -6222,12 +6198,8 @@ Disassembly of section .symtab:
      13e: 02 00                        	<unknown>
      140: 00 00                        	<unknown>
      142: 00 00                        	<unknown>
-<<<<<<< HEAD
-     144: 0b 00 00 00                  	<unknown>
-=======
      144: 6c 20                        	<unknown>
      146: 00 80                        	<unknown>
->>>>>>> 161c5f11326106f1a6f2a7b0bb2a6f6f75814162
      148: 00 00                        	<unknown>
      14a: 00 00                        	<unknown>
      14c: 00 00                        	<unknown>
@@ -6474,17 +6446,6 @@ Disassembly of section .symtab:
      32e: 02 00                        	<unknown>
      330: 00 00                        	<unknown>
      332: 00 00                        	<unknown>
-<<<<<<< HEAD
-     334: 01 00                        	<unknown>
-		...
-     33e: f1 ff                        	<unknown>
-     340: 27 01 00 00                  	<unknown>
-     344: 0a 00                        	<unknown>
-		...
-     34e: f1 ff                        	<unknown>
-     350: 2f 01 00 00                  	<unknown>
-     354: 0b 00 00 00                  	<unknown>
-=======
      334: 68 33                        	<unknown>
      336: 00 80                        	<unknown>
      338: 00 00                        	<unknown>
@@ -6503,7 +6464,6 @@ Disassembly of section .symtab:
      352: 00 00                        	<unknown>
      354: d4 35                        	<unknown>
      356: 00 80                        	<unknown>
->>>>>>> 161c5f11326106f1a6f2a7b0bb2a6f6f75814162
      358: 00 00                        	<unknown>
      35a: 00 00                        	<unknown>
      35c: 00 00                        	<unknown>
@@ -6730,19 +6690,8 @@ Disassembly of section .symtab:
      5e4: 0d 00                        	<unknown>
 		...
      5ee: f1 ff                        	<unknown>
-<<<<<<< HEAD
-     5f0: 2f 01 00 00                  	<unknown>
-     5f4: 0b 00 00 00                  	<unknown>
-     5f8: 00 00                        	<unknown>
-     5fa: 00 00                        	<unknown>
-     5fc: 00 00                        	<unknown>
-     5fe: f1 ff                        	<unknown>
-     600: 37 01 00 00                  	lui	sp, 0
-     604: 0c 00                        	<unknown>
-=======
      5f0: 47 01 00 00                  	<unknown>
      5f4: 0e 00                        	<unknown>
->>>>>>> 161c5f11326106f1a6f2a7b0bb2a6f6f75814162
 		...
      5fe: f1 ff                        	<unknown>
      600: 4f 01 00 00                  	<unknown>
@@ -6907,15 +6856,8 @@ Disassembly of section .symtab:
      7ee: f1 ff                        	<unknown>
      7f0: e5 01                        	<unknown>
      7f2: 00 00                        	<unknown>
-<<<<<<< HEAD
-     7f4: 0b 00 00 00                  	<unknown>
-     7f8: 00 00                        	<unknown>
-     7fa: 00 00                        	<unknown>
-     7fc: 00 00                        	<unknown>
-=======
      7f4: 04 00                        	<unknown>
 		...
->>>>>>> 161c5f11326106f1a6f2a7b0bb2a6f6f75814162
      7fe: f1 ff                        	<unknown>
      800: ec 01                        	<unknown>
      802: 00 00                        	<unknown>
@@ -7081,18 +7023,10 @@ Disassembly of section .symtab:
      9f4: 04 00                        	<unknown>
 		...
      9fe: f1 ff                        	<unknown>
-<<<<<<< HEAD
-     a00: 2f 01 00 00                  	<unknown>
-     a04: 0b 00 00 00                  	<unknown>
-     a08: 00 00                        	<unknown>
-     a0a: 00 00                        	<unknown>
-     a0c: 00 00                        	<unknown>
-=======
      a00: e1 00                        	<unknown>
      a02: 00 00                        	<unknown>
      a04: 05 00                        	<unknown>
 		...
->>>>>>> 161c5f11326106f1a6f2a7b0bb2a6f6f75814162
      a0e: f1 ff                        	<unknown>
      a10: e8 00                        	<unknown>
      a12: 00 00                        	<unknown>
@@ -7257,15 +7191,8 @@ Disassembly of section .symtab:
      bfe: f1 ff                        	<unknown>
      c00: e5 01                        	<unknown>
      c02: 00 00                        	<unknown>
-<<<<<<< HEAD
-     c04: 0b 00 00 00                  	<unknown>
-     c08: 00 00                        	<unknown>
-     c0a: 00 00                        	<unknown>
-     c0c: 00 00                        	<unknown>
-=======
      c04: 04 00                        	<unknown>
 		...
->>>>>>> 161c5f11326106f1a6f2a7b0bb2a6f6f75814162
      c0e: f1 ff                        	<unknown>
      c10: ec 01                        	<unknown>
      c12: 00 00                        	<unknown>
@@ -7447,18 +7374,10 @@ Disassembly of section .symtab:
      e3a: 00 00                        	<unknown>
      e3c: 00 00                        	<unknown>
      e3e: f1 ff                        	<unknown>
-<<<<<<< HEAD
-     e40: 2f 01 00 00                  	<unknown>
-     e44: 0b 00 00 00                  	<unknown>
-     e48: 00 00                        	<unknown>
-     e4a: 00 00                        	<unknown>
-     e4c: 00 00                        	<unknown>
-=======
      e40: 84 00                        	<unknown>
      e42: 00 00                        	<unknown>
      e44: 08 00                        	<unknown>
 		...
->>>>>>> 161c5f11326106f1a6f2a7b0bb2a6f6f75814162
      e4e: f1 ff                        	<unknown>
      e50: 8b 00 00 00                  	<unknown>
      e54: 09 00                        	<unknown>
@@ -7630,15 +7549,8 @@ Disassembly of section .symtab:
     103e: f1 ff                        	<unknown>
     1040: e5 01                        	<unknown>
     1042: 00 00                        	<unknown>
-<<<<<<< HEAD
-    1044: 0b 00 00 00                  	<unknown>
-    1048: 00 00                        	<unknown>
-    104a: 00 00                        	<unknown>
-    104c: 00 00                        	<unknown>
-=======
     1044: 04 00                        	<unknown>
 		...
->>>>>>> 161c5f11326106f1a6f2a7b0bb2a6f6f75814162
     104e: f1 ff                        	<unknown>
     1050: ec 01                        	<unknown>
     1052: 00 00                        	<unknown>
@@ -8080,457 +7992,463 @@ Disassembly of section .symtab:
     155e: 02 00                        	<unknown>
     1560: 65 03                        	<unknown>
     1562: 00 00                        	<unknown>
-    1564: a8 39                        	<unknown>
+    1564: 68 00                        	<unknown>
     1566: 00 80                        	<unknown>
-    1568: 58 01                        	<unknown>
+    1568: 3c 11                        	<unknown>
     156a: 00 00                        	<unknown>
     156c: 12 00                        	<unknown>
     156e: 02 00                        	<unknown>
-    1570: 65 07                        	<unknown>
+    1570: 8c 03                        	<unknown>
     1572: 00 00                        	<unknown>
-    1574: b0 3e                        	<unknown>
+    1574: a8 39                        	<unknown>
     1576: 00 80                        	<unknown>
-    1578: 8c 00                        	<unknown>
+    1578: 58 01                        	<unknown>
     157a: 00 00                        	<unknown>
     157c: 12 00                        	<unknown>
     157e: 02 00                        	<unknown>
-    1580: 74 03                        	<unknown>
-    1582: 00 00                        	<unknown>
-    1584: 0c 4b                        	<unknown>
+    1580: 87 07 00 00                  	<unknown>
+    1584: b0 3e                        	<unknown>
     1586: 00 80                        	<unknown>
-    1588: 04 00                        	<unknown>
+    1588: 8c 00                        	<unknown>
     158a: 00 00                        	<unknown>
     158c: 12 00                        	<unknown>
     158e: 02 00                        	<unknown>
-    1590: 84 03                        	<unknown>
-    1592: 00 00                        	<unknown>
-    1594: 84 6a                        	<unknown>
+    1590: 9b 03 00 00                  	<unknown>
+    1594: 0c 4b                        	<unknown>
     1596: 00 80                        	<unknown>
     1598: 04 00                        	<unknown>
     159a: 00 00                        	<unknown>
-    159c: 11 00                        	<unknown>
-    159e: 08 00                        	<unknown>
-    15a0: 8a 03                        	<unknown>
-    15a2: 00 00                        	<unknown>
-    15a4: 04 6a                        	<unknown>
+    159c: 12 00                        	<unknown>
+    159e: 02 00                        	<unknown>
+    15a0: ab 03 00 00                  	vx_tex	t2, zero, zero, zero
+    15a4: 84 6a                        	<unknown>
     15a6: 00 80                        	<unknown>
-    15a8: 80 00                        	<unknown>
+    15a8: 04 00                        	<unknown>
     15aa: 00 00                        	<unknown>
     15ac: 11 00                        	<unknown>
     15ae: 08 00                        	<unknown>
-    15b0: 98 03                        	<unknown>
+    15b0: b1 03                        	<unknown>
     15b2: 00 00                        	<unknown>
-    15b4: a8 69                        	<unknown>
+    15b4: 04 6a                        	<unknown>
     15b6: 00 80                        	<unknown>
-    15b8: 00 00                        	<unknown>
+    15b8: 80 00                        	<unknown>
     15ba: 00 00                        	<unknown>
-    15bc: 10 00                        	<unknown>
-    15be: 06 00                        	<unknown>
-    15c0: a8 03                        	<unknown>
-    15c2: 00 00                        	<unknown>
-    15c4: 30 2e                        	<unknown>
+    15bc: 11 00                        	<unknown>
+    15be: 08 00                        	<unknown>
+    15c0: bf 03 00 00                  	<unknown>
+    15c4: a8 69                        	<unknown>
     15c6: 00 80                        	<unknown>
-    15c8: cc 02                        	<unknown>
+    15c8: 00 00                        	<unknown>
     15ca: 00 00                        	<unknown>
-    15cc: 22 00                        	<unknown>
-    15ce: 02 00                        	<unknown>
-    15d0: c1 03                        	<unknown>
-    15d2: 00 00                        	<unknown>
-    15d4: 78 69                        	<unknown>
+    15cc: 10 00                        	<unknown>
+    15ce: 06 00                        	<unknown>
+    15d0: cf 03 00 00                  	<unknown>
+    15d4: 30 2e                        	<unknown>
     15d6: 00 80                        	<unknown>
-    15d8: 00 00                        	<unknown>
+    15d8: cc 02                        	<unknown>
     15da: 00 00                        	<unknown>
-    15dc: 10 00                        	<unknown>
-    15de: f1 ff                        	<unknown>
-    15e0: d2 03                        	<unknown>
+    15dc: 22 00                        	<unknown>
+    15de: 02 00                        	<unknown>
+    15e0: e8 03                        	<unknown>
     15e2: 00 00                        	<unknown>
-    15e4: 3c 3f                        	<unknown>
+    15e4: 78 69                        	<unknown>
     15e6: 00 80                        	<unknown>
-    15e8: dc 00                        	<unknown>
+    15e8: 00 00                        	<unknown>
     15ea: 00 00                        	<unknown>
-    15ec: 12 00                        	<unknown>
-    15ee: 02 00                        	<unknown>
-    15f0: db 03 00 00                  	<unknown>
-    15f4: d8 69                        	<unknown>
+    15ec: 10 00                        	<unknown>
+    15ee: f1 ff                        	<unknown>
+    15f0: f9 03                        	<unknown>
+    15f2: 00 00                        	<unknown>
+    15f4: 3c 3f                        	<unknown>
     15f6: 00 80                        	<unknown>
-    15f8: 04 00                        	<unknown>
+    15f8: dc 00                        	<unknown>
     15fa: 00 00                        	<unknown>
-    15fc: 11 00                        	<unknown>
-    15fe: 07 00 ec 03                  	<unknown>
+    15fc: 12 00                        	<unknown>
+    15fe: 02 00                        	<unknown>
+    1600: 02 04                        	<unknown>
     1602: 00 00                        	<unknown>
-    1604: 8c 41                        	<unknown>
+    1604: d8 69                        	<unknown>
     1606: 00 80                        	<unknown>
     1608: 04 00                        	<unknown>
     160a: 00 00                        	<unknown>
-    160c: 12 00                        	<unknown>
-    160e: 02 00                        	<unknown>
-    1610: f6 03                        	<unknown>
+    160c: 11 00                        	<unknown>
+    160e: 07 00 13 04                  	<unknown>
     1612: 00 00                        	<unknown>
-    1614: 18 40                        	<unknown>
+    1614: 8c 41                        	<unknown>
     1616: 00 80                        	<unknown>
-    1618: b8 00                        	<unknown>
+    1618: 04 00                        	<unknown>
     161a: 00 00                        	<unknown>
     161c: 12 00                        	<unknown>
     161e: 02 00                        	<unknown>
-    1620: 03 04 00 00                  	lb	s0, 0(zero)
-    1624: 10 4b                        	<unknown>
+    1620: 1d 04                        	<unknown>
+    1622: 00 00                        	<unknown>
+    1624: 18 40                        	<unknown>
     1626: 00 80                        	<unknown>
-    1628: 60 00                        	<unknown>
+    1628: b8 00                        	<unknown>
     162a: 00 00                        	<unknown>
     162c: 12 00                        	<unknown>
     162e: 02 00                        	<unknown>
-    1630: 0b 04 00 00                  	<unknown>
-    1634: 64 33                        	<unknown>
+    1630: 2a 04                        	<unknown>
+    1632: 00 00                        	<unknown>
+    1634: 10 4b                        	<unknown>
     1636: 00 80                        	<unknown>
-    1638: 70 02                        	<unknown>
+    1638: 60 00                        	<unknown>
     163a: 00 00                        	<unknown>
-    163c: 22 00                        	<unknown>
+    163c: 12 00                        	<unknown>
     163e: 02 00                        	<unknown>
-    1640: 60 04                        	<unknown>
+    1640: 32 04                        	<unknown>
     1642: 00 00                        	<unknown>
-    1644: d4 69                        	<unknown>
+    1644: 64 33                        	<unknown>
     1646: 00 80                        	<unknown>
-    1648: 04 00                        	<unknown>
+    1648: 70 02                        	<unknown>
     164a: 00 00                        	<unknown>
-    164c: 11 00                        	<unknown>
-    164e: 07 00 78 04                  	<unknown>
-    1652: 00 00                        	<unknown>
-    1654: a8 69                        	<unknown>
+    164c: 22 00                        	<unknown>
+    164e: 02 00                        	<unknown>
+    1650: 87 04 00 00                  	<unknown>
+    1654: d4 69                        	<unknown>
     1656: 00 80                        	<unknown>
     1658: 04 00                        	<unknown>
     165a: 00 00                        	<unknown>
     165c: 11 00                        	<unknown>
-    165e: 06 00                        	<unknown>
-    1660: 8b 04 00 00                  	<unknown>
-    1664: 94 37                        	<unknown>
+    165e: 07 00 9f 04                  	<unknown>
+    1662: 00 00                        	<unknown>
+    1664: a8 69                        	<unknown>
     1666: 00 80                        	<unknown>
-    1668: 94 00                        	<unknown>
+    1668: 04 00                        	<unknown>
     166a: 00 00                        	<unknown>
-    166c: 12 00                        	<unknown>
-    166e: 02 00                        	<unknown>
-    1670: 9d 04                        	<unknown>
+    166c: 11 00                        	<unknown>
+    166e: 06 00                        	<unknown>
+    1670: b2 04                        	<unknown>
     1672: 00 00                        	<unknown>
-    1674: 14 3d                        	<unknown>
+    1674: 94 37                        	<unknown>
     1676: 00 80                        	<unknown>
-    1678: 18 00                        	<unknown>
+    1678: 94 00                        	<unknown>
     167a: 00 00                        	<unknown>
     167c: 12 00                        	<unknown>
     167e: 02 00                        	<unknown>
-    1680: a3 04 00 00                  	sb	zero, 9(zero)
-    1684: 78 37                        	<unknown>
+    1680: c4 04                        	<unknown>
+    1682: 00 00                        	<unknown>
+    1684: 14 3d                        	<unknown>
     1686: 00 80                        	<unknown>
-    1688: 0c 00                        	<unknown>
+    1688: 18 00                        	<unknown>
     168a: 00 00                        	<unknown>
     168c: 12 00                        	<unknown>
     168e: 02 00                        	<unknown>
-    1690: a9 04                        	<unknown>
+    1690: ca 04                        	<unknown>
     1692: 00 00                        	<unknown>
-    1694: 28 38                        	<unknown>
+    1694: 78 37                        	<unknown>
     1696: 00 80                        	<unknown>
-    1698: 5c 00                        	<unknown>
+    1698: 0c 00                        	<unknown>
     169a: 00 00                        	<unknown>
     169c: 12 00                        	<unknown>
     169e: 02 00                        	<unknown>
-    16a0: bb 04 00 00                  	<unknown>
-    16a4: b0 22                        	<unknown>
+    16a0: d0 04                        	<unknown>
+    16a2: 00 00                        	<unknown>
+    16a4: 28 38                        	<unknown>
     16a6: 00 80                        	<unknown>
-    16a8: c4 01                        	<unknown>
+    16a8: 5c 00                        	<unknown>
     16aa: 00 00                        	<unknown>
-    16ac: 22 00                        	<unknown>
+    16ac: 12 00                        	<unknown>
     16ae: 02 00                        	<unknown>
-    16b0: d1 04                        	<unknown>
+    16b0: e2 04                        	<unknown>
     16b2: 00 00                        	<unknown>
-    16b4: 48 37                        	<unknown>
+    16b4: b0 22                        	<unknown>
     16b6: 00 80                        	<unknown>
-    16b8: 00 00                        	<unknown>
+    16b8: c4 01                        	<unknown>
     16ba: 00 00                        	<unknown>
-    16bc: 12 00                        	<unknown>
+    16bc: 22 00                        	<unknown>
     16be: 02 00                        	<unknown>
-    16c0: db 04 00 00                  	<unknown>
-    16c4: b0 4c                        	<unknown>
+    16c0: f8 04                        	<unknown>
+    16c2: 00 00                        	<unknown>
+    16c4: 48 37                        	<unknown>
     16c6: 00 80                        	<unknown>
-    16c8: 14 03                        	<unknown>
+    16c8: 00 00                        	<unknown>
     16ca: 00 00                        	<unknown>
     16cc: 12 00                        	<unknown>
     16ce: 02 00                        	<unknown>
-    16d0: e3 04 00 00                  	beqz	zero, 2056
-    16d4: 2c 42                        	<unknown>
+    16d0: 02 05                        	<unknown>
+    16d2: 00 00                        	<unknown>
+    16d4: b0 4c                        	<unknown>
     16d6: 00 80                        	<unknown>
-    16d8: 24 01                        	<unknown>
+    16d8: 14 03                        	<unknown>
     16da: 00 00                        	<unknown>
     16dc: 12 00                        	<unknown>
     16de: 02 00                        	<unknown>
-    16e0: f4 04                        	<unknown>
+    16e0: 0a 05                        	<unknown>
     16e2: 00 00                        	<unknown>
-    16e4: c8 69                        	<unknown>
+    16e4: 2c 42                        	<unknown>
     16e6: 00 80                        	<unknown>
-    16e8: 04 00                        	<unknown>
+    16e8: 24 01                        	<unknown>
     16ea: 00 00                        	<unknown>
-    16ec: 11 00                        	<unknown>
-    16ee: 06 00                        	<unknown>
-    16f0: ba 05                        	<unknown>
-    16f2: 00 00                        	<unknown>
-    16f4: 00 00                        	<unknown>
+    16ec: 12 00                        	<unknown>
+    16ee: 02 00                        	<unknown>
+    16f0: 1b 05 00 00                  	<unknown>
+    16f4: c8 69                        	<unknown>
     16f6: 00 80                        	<unknown>
-    16f8: 50 00                        	<unknown>
+    16f8: 04 00                        	<unknown>
     16fa: 00 00                        	<unknown>
-    16fc: 12 00                        	<unknown>
-    16fe: 01 00                        	<unknown>
-    1700: a5 06                        	<unknown>
+    16fc: 11 00                        	<unknown>
+    16fe: 06 00                        	<unknown>
+    1700: e1 05                        	<unknown>
     1702: 00 00                        	<unknown>
-    1704: e0 40                        	<unknown>
+    1704: 00 00                        	<unknown>
     1706: 00 80                        	<unknown>
-    1708: 18 00                        	<unknown>
+    1708: 50 00                        	<unknown>
     170a: 00 00                        	<unknown>
     170c: 12 00                        	<unknown>
-    170e: 02 00                        	<unknown>
-    1710: 07 05 00 00                  	<unknown>
-    1714: 90 41                        	<unknown>
+    170e: 01 00                        	<unknown>
+    1710: cc 06                        	<unknown>
+    1712: 00 00                        	<unknown>
+    1714: e0 40                        	<unknown>
     1716: 00 80                        	<unknown>
-    1718: 9c 00                        	<unknown>
+    1718: 18 00                        	<unknown>
     171a: 00 00                        	<unknown>
     171c: 12 00                        	<unknown>
     171e: 02 00                        	<unknown>
-    1720: 1b 05 00 00                  	<unknown>
-    1724: 74 24                        	<unknown>
+    1720: 2e 05                        	<unknown>
+    1722: 00 00                        	<unknown>
+    1724: 90 41                        	<unknown>
     1726: 00 80                        	<unknown>
-    1728: 08 03                        	<unknown>
+    1728: 9c 00                        	<unknown>
     172a: 00 00                        	<unknown>
-    172c: 22 00                        	<unknown>
+    172c: 12 00                        	<unknown>
     172e: 02 00                        	<unknown>
-    1730: 45 05                        	<unknown>
+    1730: 42 05                        	<unknown>
     1732: 00 00                        	<unknown>
-    1734: 64 29                        	<unknown>
+    1734: 74 24                        	<unknown>
     1736: 00 80                        	<unknown>
-    1738: cc 04                        	<unknown>
+    1738: 08 03                        	<unknown>
     173a: 00 00                        	<unknown>
     173c: 22 00                        	<unknown>
     173e: 02 00                        	<unknown>
-    1740: 74 05                        	<unknown>
+    1740: 6c 05                        	<unknown>
     1742: 00 00                        	<unknown>
-    1744: dc 69                        	<unknown>
+    1744: 64 29                        	<unknown>
     1746: 00 80                        	<unknown>
-    1748: 28 00                        	<unknown>
+    1748: cc 04                        	<unknown>
     174a: 00 00                        	<unknown>
-    174c: 11 00                        	<unknown>
-    174e: 08 00                        	<unknown>
-    1750: 8e 05                        	<unknown>
-    1752: 00 00                        	<unknown>
-    1754: 88 6a                        	<unknown>
+    174c: 22 00                        	<unknown>
+    174e: 02 00                        	<unknown>
+    1750: 9b 05 00 00                  	<unknown>
+    1754: dc 69                        	<unknown>
     1756: 00 80                        	<unknown>
-    1758: 00 00                        	<unknown>
+    1758: 28 00                        	<unknown>
     175a: 00 00                        	<unknown>
-    175c: 10 00                        	<unknown>
+    175c: 11 00                        	<unknown>
     175e: 08 00                        	<unknown>
-    1760: 9a 05                        	<unknown>
+    1760: b5 05                        	<unknown>
     1762: 00 00                        	<unknown>
-    1764: a0 65                        	<unknown>
+    1764: 88 6a                        	<unknown>
     1766: 00 80                        	<unknown>
-    1768: 08 04                        	<unknown>
+    1768: 00 00                        	<unknown>
     176a: 00 00                        	<unknown>
-    176c: 11 00                        	<unknown>
-    176e: 05 00                        	<unknown>
-    1770: a7 05 00 00                  	<unknown>
-    1774: 08 4b                        	<unknown>
+    176c: 10 00                        	<unknown>
+    176e: 08 00                        	<unknown>
+    1770: c1 05                        	<unknown>
+    1772: 00 00                        	<unknown>
+    1774: a0 65                        	<unknown>
     1776: 00 80                        	<unknown>
-    1778: 04 00                        	<unknown>
+    1778: 08 04                        	<unknown>
     177a: 00 00                        	<unknown>
-    177c: 12 00                        	<unknown>
-    177e: 02 00                        	<unknown>
-    1780: b5 05                        	<unknown>
+    177c: 11 00                        	<unknown>
+    177e: 05 00                        	<unknown>
+    1780: ce 05                        	<unknown>
     1782: 00 00                        	<unknown>
-    1784: d0 69                        	<unknown>
+    1784: 08 4b                        	<unknown>
     1786: 00 80                        	<unknown>
-    1788: 00 00                        	<unknown>
+    1788: 04 00                        	<unknown>
     178a: 00 00                        	<unknown>
-    178c: 10 00                        	<unknown>
-    178e: 07 00 c1 05                  	<unknown>
+    178c: 12 00                        	<unknown>
+    178e: 02 00                        	<unknown>
+    1790: dc 05                        	<unknown>
     1792: 00 00                        	<unknown>
-    1794: 74 3d                        	<unknown>
+    1794: d0 69                        	<unknown>
     1796: 00 80                        	<unknown>
-    1798: dc 00                        	<unknown>
+    1798: 00 00                        	<unknown>
     179a: 00 00                        	<unknown>
-    179c: 12 00                        	<unknown>
-    179e: 02 00                        	<unknown>
-    17a0: c8 05                        	<unknown>
+    179c: 10 00                        	<unknown>
+    179e: 07 00 e8 05                  	<unknown>
     17a2: 00 00                        	<unknown>
-    17a4: 80 20                        	<unknown>
+    17a4: 74 3d                        	<unknown>
     17a6: 00 80                        	<unknown>
-    17a8: 30 02                        	<unknown>
+    17a8: dc 00                        	<unknown>
     17aa: 00 00                        	<unknown>
     17ac: 12 00                        	<unknown>
     17ae: 02 00                        	<unknown>
-    17b0: cd 05                        	<unknown>
-    17b2: 00 00                        	<unknown>
-    17b4: d0 69                        	<unknown>
+    17b0: ef 05 00 00                  	jal	a1, 0
+    17b4: 80 20                        	<unknown>
     17b6: 00 80                        	<unknown>
-    17b8: 04 00                        	<unknown>
+    17b8: 30 02                        	<unknown>
     17ba: 00 00                        	<unknown>
-    17bc: 11 00                        	<unknown>
-    17be: 07 00 e4 05                  	<unknown>
+    17bc: 12 00                        	<unknown>
+    17be: 02 00                        	<unknown>
+    17c0: f4 05                        	<unknown>
     17c2: 00 00                        	<unknown>
-    17c4: a4 11                        	<unknown>
+    17c4: d0 69                        	<unknown>
     17c6: 00 80                        	<unknown>
-    17c8: c8 0e                        	<unknown>
+    17c8: 04 00                        	<unknown>
     17ca: 00 00                        	<unknown>
-    17cc: 12 00                        	<unknown>
-    17ce: 02 00                        	<unknown>
-    17d0: 41 06                        	<unknown>
+    17cc: 11 00                        	<unknown>
+    17ce: 07 00 0b 06                  	<unknown>
     17d2: 00 00                        	<unknown>
-    17d4: fc 30                        	<unknown>
+    17d4: a4 11                        	<unknown>
     17d6: 00 80                        	<unknown>
-    17d8: 68 02                        	<unknown>
+    17d8: c8 0e                        	<unknown>
     17da: 00 00                        	<unknown>
-    17dc: 22 00                        	<unknown>
+    17dc: 12 00                        	<unknown>
     17de: 02 00                        	<unknown>
-    17e0: 95 06                        	<unknown>
+    17e0: 68 06                        	<unknown>
     17e2: 00 00                        	<unknown>
-    17e4: 50 43                        	<unknown>
+    17e4: fc 30                        	<unknown>
     17e6: 00 80                        	<unknown>
-    17e8: b8 07                        	<unknown>
+    17e8: 68 02                        	<unknown>
     17ea: 00 00                        	<unknown>
-    17ec: 12 00                        	<unknown>
+    17ec: 22 00                        	<unknown>
     17ee: 02 00                        	<unknown>
-    17f0: 9f 06 00 00                  	<unknown>
-    17f4: f8 40                        	<unknown>
+    17f0: bc 06                        	<unknown>
+    17f2: 00 00                        	<unknown>
+    17f4: 50 43                        	<unknown>
     17f6: 00 80                        	<unknown>
-    17f8: 1c 00                        	<unknown>
+    17f8: b8 07                        	<unknown>
     17fa: 00 00                        	<unknown>
     17fc: 12 00                        	<unknown>
     17fe: 02 00                        	<unknown>
-    1800: ac 06                        	<unknown>
+    1800: c6 06                        	<unknown>
     1802: 00 00                        	<unknown>
-    1804: 70 4b                        	<unknown>
+    1804: f8 40                        	<unknown>
     1806: 00 80                        	<unknown>
-    1808: 40 01                        	<unknown>
+    1808: 1c 00                        	<unknown>
     180a: 00 00                        	<unknown>
     180c: 12 00                        	<unknown>
     180e: 02 00                        	<unknown>
-    1810: bb 06 00 00                  	<unknown>
-    1814: 7c 27                        	<unknown>
+    1810: d3 06 00 00                  	<unknown>
+    1814: 70 4b                        	<unknown>
     1816: 00 80                        	<unknown>
-    1818: e8 01                        	<unknown>
+    1818: 40 01                        	<unknown>
     181a: 00 00                        	<unknown>
-    181c: 22 00                        	<unknown>
+    181c: 12 00                        	<unknown>
     181e: 02 00                        	<unknown>
-    1820: e6 06                        	<unknown>
+    1820: e2 06                        	<unknown>
     1822: 00 00                        	<unknown>
-    1824: 2c 3d                        	<unknown>
+    1824: 7c 27                        	<unknown>
     1826: 00 80                        	<unknown>
-    1828: 14 00                        	<unknown>
+    1828: e8 01                        	<unknown>
     182a: 00 00                        	<unknown>
-    182c: 12 00                        	<unknown>
+    182c: 22 00                        	<unknown>
     182e: 02 00                        	<unknown>
-    1830: 7f 04 00 00                  	<unknown>
-    1834: c4 69                        	<unknown>
+    1830: 0d 07                        	<unknown>
+    1832: 00 00                        	<unknown>
+    1834: 2c 3d                        	<unknown>
     1836: 00 80                        	<unknown>
-    1838: 04 00                        	<unknown>
+    1838: 14 00                        	<unknown>
     183a: 00 00                        	<unknown>
-    183c: 11 00                        	<unknown>
-    183e: 06 00                        	<unknown>
-    1840: ed 06                        	<unknown>
+    183c: 12 00                        	<unknown>
+    183e: 02 00                        	<unknown>
+    1840: a6 04                        	<unknown>
     1842: 00 00                        	<unknown>
-    1844: 78 61                        	<unknown>
+    1844: c4 69                        	<unknown>
     1846: 00 80                        	<unknown>
-    1848: 00 00                        	<unknown>
+    1848: 04 00                        	<unknown>
     184a: 00 00                        	<unknown>
-    184c: 10 00                        	<unknown>
-    184e: 05 00                        	<unknown>
-    1850: fc 06                        	<unknown>
+    184c: 11 00                        	<unknown>
+    184e: 06 00                        	<unknown>
+    1850: 14 07                        	<unknown>
     1852: 00 00                        	<unknown>
-    1854: d0 69                        	<unknown>
+    1854: 6c 20                        	<unknown>
     1856: 00 80                        	<unknown>
-    1858: 00 00                        	<unknown>
+    1858: 14 00                        	<unknown>
     185a: 00 00                        	<unknown>
-    185c: 10 00                        	<unknown>
-    185e: 06 00                        	<unknown>
-    1860: ef 02 00 00                  	jal	t0, 0
-    1864: 88 6a                        	<unknown>
+    185c: 12 00                        	<unknown>
+    185e: 02 00                        	<unknown>
+    1860: 3b 07 00 00                  	<unknown>
+    1864: 78 61                        	<unknown>
     1866: 00 80                        	<unknown>
     1868: 00 00                        	<unknown>
     186a: 00 00                        	<unknown>
     186c: 10 00                        	<unknown>
-    186e: 08 00                        	<unknown>
-    1870: 03 07 00 00                  	lb	a4, 0(zero)
-    1874: 6c 20                        	<unknown>
+    186e: 05 00                        	<unknown>
+    1870: 4a 07                        	<unknown>
+    1872: 00 00                        	<unknown>
+    1874: d0 69                        	<unknown>
     1876: 00 80                        	<unknown>
-    1878: 14 00                        	<unknown>
+    1878: 00 00                        	<unknown>
     187a: 00 00                        	<unknown>
-    187c: 12 00                        	<unknown>
-    187e: 02 00                        	<unknown>
-    1880: 2f 07 00 00                  	<unknown>
-    1884: cc 69                        	<unknown>
+    187c: 10 00                        	<unknown>
+    187e: 06 00                        	<unknown>
+    1880: ef 02 00 00                  	jal	t0, 0
+    1884: 88 6a                        	<unknown>
     1886: 00 80                        	<unknown>
-    1888: 04 00                        	<unknown>
+    1888: 00 00                        	<unknown>
     188a: 00 00                        	<unknown>
-    188c: 11 00                        	<unknown>
-    188e: 06 00                        	<unknown>
-    1890: 5b 07 00 00                  	<unknown>
-    1894: 40 3d                        	<unknown>
+    188c: 10 00                        	<unknown>
+    188e: 08 00                        	<unknown>
+    1890: 51 07                        	<unknown>
+    1892: 00 00                        	<unknown>
+    1894: cc 69                        	<unknown>
     1896: 00 80                        	<unknown>
-    1898: 34 00                        	<unknown>
+    1898: 04 00                        	<unknown>
     189a: 00 00                        	<unknown>
-    189c: 12 00                        	<unknown>
-    189e: 02 00                        	<unknown>
-    18a0: 47 07 00 00                  	<unknown>
-    18a4: 84 37                        	<unknown>
+    189c: 11 00                        	<unknown>
+    189e: 06 00                        	<unknown>
+    18a0: 7d 07                        	<unknown>
+    18a2: 00 00                        	<unknown>
+    18a4: 40 3d                        	<unknown>
     18a6: 00 80                        	<unknown>
-    18a8: 08 00                        	<unknown>
+    18a8: 34 00                        	<unknown>
     18aa: 00 00                        	<unknown>
     18ac: 12 00                        	<unknown>
     18ae: 02 00                        	<unknown>
-    18b0: 4d 07                        	<unknown>
+    18b0: 69 07                        	<unknown>
     18b2: 00 00                        	<unknown>
-    18b4: 00 3b                        	<unknown>
+    18b4: 84 37                        	<unknown>
     18b6: 00 80                        	<unknown>
-    18b8: 14 02                        	<unknown>
+    18b8: 08 00                        	<unknown>
     18ba: 00 00                        	<unknown>
     18bc: 12 00                        	<unknown>
     18be: 02 00                        	<unknown>
-    18c0: 5a 07                        	<unknown>
-    18c2: 00 00                        	<unknown>
-    18c4: 34 37                        	<unknown>
+    18c0: 6f 07 00 00                  	jal	a4, 0
+    18c4: 00 3b                        	<unknown>
     18c6: 00 80                        	<unknown>
-    18c8: 00 00                        	<unknown>
+    18c8: 14 02                        	<unknown>
     18ca: 00 00                        	<unknown>
     18cc: 12 00                        	<unknown>
     18ce: 02 00                        	<unknown>
-    18d0: 60 07                        	<unknown>
+    18d0: 7c 07                        	<unknown>
     18d2: 00 00                        	<unknown>
-    18d4: 9c 3e                        	<unknown>
+    18d4: 34 37                        	<unknown>
     18d6: 00 80                        	<unknown>
-    18d8: 14 00                        	<unknown>
+    18d8: 00 00                        	<unknown>
     18da: 00 00                        	<unknown>
     18dc: 12 00                        	<unknown>
     18de: 02 00                        	<unknown>
-    18e0: 6f 07 00 00                  	jal	a4, 0
-    18e4: d4 35                        	<unknown>
+    18e0: 82 07                        	<unknown>
+    18e2: 00 00                        	<unknown>
+    18e4: 9c 3e                        	<unknown>
     18e6: 00 80                        	<unknown>
-    18e8: 60 01                        	<unknown>
+    18e8: 14 00                        	<unknown>
     18ea: 00 00                        	<unknown>
-    18ec: 22 00                        	<unknown>
+    18ec: 12 00                        	<unknown>
     18ee: 02 00                        	<unknown>
-    18f0: c1 07                        	<unknown>
+    18f0: 91 07                        	<unknown>
     18f2: 00 00                        	<unknown>
-    18f4: 14 41                        	<unknown>
+    18f4: d4 35                        	<unknown>
     18f6: 00 80                        	<unknown>
-    18f8: 10 00                        	<unknown>
+    18f8: 60 01                        	<unknown>
     18fa: 00 00                        	<unknown>
-    18fc: 12 00                        	<unknown>
+    18fc: 22 00                        	<unknown>
     18fe: 02 00                        	<unknown>
-    1900: cc 07                        	<unknown>
-    1902: 00 00                        	<unknown>
-    1904: d0 40                        	<unknown>
+    1900: e3 07 00 00                  	beqz	zero, 2062
+    1904: 14 41                        	<unknown>
     1906: 00 80                        	<unknown>
     1908: 10 00                        	<unknown>
     190a: 00 00                        	<unknown>
     190c: 12 00                        	<unknown>
     190e: 02 00                        	<unknown>
-    1910: d2 07                        	<unknown>
+    1910: ee 07                        	<unknown>
     1912: 00 00                        	<unknown>
-    1914: 68 00                        	<unknown>
+    1914: d0 40                        	<unknown>
     1916: 00 80                        	<unknown>
-    1918: 3c 11                        	<unknown>
+    1918: 10 00                        	<unknown>
     191a: 00 00                        	<unknown>
     191c: 12 00                        	<unknown>
     191e: 02 00                        	<unknown>
@@ -8859,454 +8777,453 @@ Disassembly of section .strtab:
      35a: 69 64                        	<unknown>
      35c: 00 5f                        	<unknown>
      35e: 6b 69 6c 6c                  	<unknown>
-     362: 5f 72 00 76                  	<unknown>
-     366: 78 5f                        	<unknown>
-     368: 73 70 61 77                  	csrci	1910, 2
-     36c: 6e 5f                        	<unknown>
-     36e: 74 61                        	<unknown>
-     370: 73 6b 73 00                  	csrrsi	s6, 7, 6
-     374: 5f 5f 6d 61                  	<unknown>
-     378: 6c 6c                        	<unknown>
-     37a: 6f 63 5f 75                  	jal	t1, 1011540
-     37e: 6e 6c                        	<unknown>
-     380: 6f 63 6b 00                  	jal	t1, 745478
-     384: 65 72                        	<unknown>
-     386: 72 6e                        	<unknown>
-     388: 6f 00 67 5f                  	j	460278
-     38c: 77 73 70 61                  	<unknown>
-     390: 77 6e 5f 61                  	<unknown>
-     394: 72 67                        	<unknown>
-     396: 73 00 5f 5f                  	<unknown>
-     39a: 53 44 41 54                  	<unknown>
-     39e: 41 5f                        	<unknown>
-     3a0: 42 45                        	<unknown>
-     3a2: 47 49 4e 5f                  	<unknown>
-     3a6: 5f 00 5f 5a                  	<unknown>
-     3aa: 4e 31                        	<unknown>
-     3ac: 30 52                        	<unknown>
-     3ae: 61 73                        	<unknown>
-     3b0: 74 65                        	<unknown>
-     3b2: 72 69                        	<unknown>
-     3b4: 7a 65                        	<unknown>
-     3b6: 72 36                        	<unknown>
-     3b8: 72 65                        	<unknown>
-     3ba: 6e 64                        	<unknown>
-     3bc: 65 72                        	<unknown>
-     3be: 45 6a                        	<unknown>
-     3c0: 00 5f                        	<unknown>
-     3c2: 5f 67 6c 6f                  	<unknown>
-     3c6: 62 61                        	<unknown>
-     3c8: 6c 5f                        	<unknown>
-     3ca: 70 6f                        	<unknown>
-     3cc: 69 6e                        	<unknown>
-     3ce: 74 65                        	<unknown>
-     3d0: 72 00                        	<unknown>
-     3d2: 5f 72 61 69                  	<unknown>
-     3d6: 73 65 5f 72                  	csrrsi	a0, 1829, 30
-     3da: 00 5f                        	<unknown>
-     3dc: 5f 6d 61 6c                  	<unknown>
-     3e0: 6c 6f                        	<unknown>
-     3e2: 63 5f 74 6f                  	bge	s0, s7, 1790
-     3e6: 70 5f                        	<unknown>
-     3e8: 70 61                        	<unknown>
-     3ea: 64 00                        	<unknown>
-     3ec: 5f 67 65 74                  	<unknown>
-     3f0: 70 69                        	<unknown>
-     3f2: 64 5f                        	<unknown>
-     3f4: 72 00                        	<unknown>
-     3f6: 5f 5f 73 69                  	<unknown>
-     3fa: 67 74 72 61                  	<unknown>
-     3fe: 6d 70                        	<unknown>
-     400: 5f 72 00 5f                  	<unknown>
-     404: 73 62 72 6b                  	csrrsi	tp, 1719, 4
-     408: 5f 72 00 5f                  	<unknown>
-     40c: 5a 4e                        	<unknown>
-     40e: 31 30                        	<unknown>
-     410: 52 61                        	<unknown>
-     412: 73 74 65 72                  	csrrci	s0, 1830, 10
-     416: 69 7a                        	<unknown>
-     418: 65 72                        	<unknown>
-     41a: 31 31                        	<unknown>
-     41c: 72 65                        	<unknown>
-     41e: 6e 64                        	<unknown>
-     420: 65 72                        	<unknown>
-     422: 42 6c                        	<unknown>
-     424: 6f 63 6b 45                  	jal	t1, 746582
-     428: 6a 6a                        	<unknown>
-     42a: 6a 52                        	<unknown>
-     42c: 4b 4e 53 5f                  	<unknown>
-     430: 31 31                        	<unknown>
-     432: 70 72                        	<unknown>
-     434: 69 6d                        	<unknown>
-     436: 69 74                        	<unknown>
-     438: 69 76                        	<unknown>
-     43a: 65 5f                        	<unknown>
-     43c: 74 45                        	<unknown>
-     43e: 6a 6a                        	<unknown>
-     440: 4e 37                        	<unknown>
-     442: 63 6f 63 6f                  	bltu	t1, s6, 1790
-     446: 67 66 78 36                  	<unknown>
-     44a: 54 46                        	<unknown>
-     44c: 69 78                        	<unknown>
-     44e: 65 64                        	<unknown>
-     450: 49 4c                        	<unknown>
-     452: 6a 31                        	<unknown>
-     454: 36 45                        	<unknown>
-     456: 69 45                        	<unknown>
-     458: 45 53                        	<unknown>
-     45a: 35 5f                        	<unknown>
-     45c: 53 35 5f 00                  	<unknown>
-     460: 5f 5f 6d 61                  	<unknown>
-     464: 6c 6c                        	<unknown>
-     466: 6f 63 5f 6d                  	jal	t1, 1011412
-     46a: 61 78                        	<unknown>
-     46c: 5f 73 62 72                  	<unknown>
-     470: 6b 65 64 5f                  	<unknown>
-     474: 6d 65                        	<unknown>
-     476: 6d 00                        	<unknown>
-     478: 5f 67 6c 6f                  	<unknown>
-     47c: 62 61                        	<unknown>
-     47e: 6c 5f                        	<unknown>
-     480: 69 6d                        	<unknown>
-     482: 70 75                        	<unknown>
-     484: 72 65                        	<unknown>
-     486: 5f 70 74 72                  	<unknown>
-     48a: 00 5f                        	<unknown>
-     48c: 5f 6c 69 62                  	<unknown>
-     490: 63 5f 69 6e                  	bge	s2, t1, 1790
-     494: 69 74                        	<unknown>
-     496: 5f 61 72 72                  	<unknown>
-     49a: 61 79                        	<unknown>
-     49c: 00 61                        	<unknown>
-     49e: 62 6f                        	<unknown>
-     4a0: 72 74                        	<unknown>
-     4a2: 00 5f                        	<unknown>
-     4a4: 73 62 72 6b                  	csrrsi	tp, 1719, 4
-     4a8: 00 5f                        	<unknown>
-     4aa: 5f 6c 69 62                  	<unknown>
-     4ae: 63 5f 66 69                  	bge	a2, s6, 1694
-     4b2: 6e 69                        	<unknown>
-     4b4: 5f 61 72 72                  	<unknown>
-     4b8: 61 79                        	<unknown>
-     4ba: 00 5f                        	<unknown>
-     4bc: 5a 4e                        	<unknown>
-     4be: 37 42 6c 65                  	lui	tp, 415428
-     4c2: 6e 64                        	<unknown>
-     4c4: 65 72                        	<unknown>
-     4c6: 35 77                        	<unknown>
-     4c8: 72 69                        	<unknown>
-     4ca: 74 65                        	<unknown>
-     4cc: 45 6a                        	<unknown>
-     4ce: 6a 6a                        	<unknown>
-     4d0: 00 76                        	<unknown>
-     4d2: 78 5f                        	<unknown>
-     4d4: 73 65 74 5f                  	csrrsi	a0, 1527, 8
-     4d8: 73 70 00 5f                  	csrci	1520, 0
-     4dc: 66 72                        	<unknown>
-     4de: 65 65                        	<unknown>
-     4e0: 5f 72 00 5f                  	<unknown>
-     4e4: 5f 63 61 6c                  	<unknown>
-     4e8: 6c 5f                        	<unknown>
-     4ea: 65 78                        	<unknown>
-     4ec: 69 74                        	<unknown>
-     4ee: 70 72                        	<unknown>
-     4f0: 6f 63 73 00                  	jal	t1, 223238
-     4f4: 5f 5f 6d 61                  	<unknown>
-     4f8: 6c 6c                        	<unknown>
-     4fa: 6f 63 5f 73                  	jal	t1, 1011508
-     4fe: 62 72                        	<unknown>
-     500: 6b 5f 62 61                  	<unknown>
-     504: 73 65 00 5f                  	csrrsi	a0, 1520, 0
-     508: 5f 72 65 67                  	<unknown>
-     50c: 69 73                        	<unknown>
-     50e: 74 65                        	<unknown>
-     510: 72 5f                        	<unknown>
-     512: 65 78                        	<unknown>
-     514: 69 74                        	<unknown>
-     516: 70 72                        	<unknown>
-     518: 6f 63 00 5f                  	jal	t1, 26096
-     51c: 5a 4e                        	<unknown>
-     51e: 31 31                        	<unknown>
-     520: 44 65                        	<unknown>
-     522: 70 74                        	<unknown>
-     524: 68 54                        	<unknown>
-     526: 65 6e                        	<unknown>
-     528: 63 69 6c 31                  	bltu	s8, s6, 786
-     52c: 38 64                        	<unknown>
-     52e: 6f 44 65 70                  	jal	s0, 345862
-     532: 74 68                        	<unknown>
-     534: 53 74 65 6e                  	<unknown>
-     538: 63 69 6c 54                  	bltu	s8, t1, 1362
-     53c: 65 73                        	<unknown>
-     53e: 74 45                        	<unknown>
-     540: 6a 6a                        	<unknown>
-     542: 6a 6a                        	<unknown>
-     544: 00 5f                        	<unknown>
-     546: 5a 31                        	<unknown>
-     548: 31 44                        	<unknown>
-     54a: 6f 42 6c 65                  	jal	tp, 804438
-     54e: 6e 64                        	<unknown>
-     550: 4d 6f                        	<unknown>
-     552: 64 65                        	<unknown>
-     554: 6a 6a                        	<unknown>
-     556: 4e 37                        	<unknown>
-     558: 63 6f 63 6f                  	bltu	t1, s6, 1790
-     55c: 67 66 78 39                  	<unknown>
-     560: 43 6f 6c 6f                  	<unknown>
-     564: 72 41                        	<unknown>
-     566: 52 47                        	<unknown>
-     568: 42 45                        	<unknown>
-     56a: 53 30 5f 53                  	<unknown>
-     56e: 30 5f                        	<unknown>
-     570: 53 30 5f 00                  	<unknown>
-     574: 5f 5f 6d 61                  	<unknown>
-     578: 6c 6c                        	<unknown>
-     57a: 6f 63 5f 63                  	jal	t1, 1011252
-     57e: 75 72                        	<unknown>
-     580: 72 65                        	<unknown>
-     582: 6e 74                        	<unknown>
-     584: 5f 6d 61 6c                  	<unknown>
-     588: 6c 69                        	<unknown>
-     58a: 6e 66                        	<unknown>
-     58c: 6f 00 5f 5f                  	j	986612
-     590: 42 53                        	<unknown>
-     592: 53 5f 45 4e                  	<unknown>
-     596: 44 5f                        	<unknown>
-     598: 5f 00 5f 5f                  	<unknown>
-     59c: 6d 61                        	<unknown>
-     59e: 6c 6c                        	<unknown>
-     5a0: 6f 63 5f 61                  	jal	t1, 1011220
-     5a4: 76 5f                        	<unknown>
-     5a6: 00 5f                        	<unknown>
-     5a8: 5f 6d 61 6c                  	<unknown>
-     5ac: 6c 6f                        	<unknown>
-     5ae: 63 5f 6c 6f                  	bge	s8, s6, 1790
-     5b2: 63 6b 00 5f                  	bltu	zero, a6, 1526
-     5b6: 5f 62 73 73                  	<unknown>
-     5ba: 5f 73 74 61                  	<unknown>
-     5be: 72 74                        	<unknown>
-     5c0: 00 6d                        	<unknown>
-     5c2: 65 6d                        	<unknown>
-     5c4: 73 65 74 00                  	csrrsi	a0, 7, 8
-     5c8: 6d 61                        	<unknown>
-     5ca: 69 6e                        	<unknown>
-     5cc: 00 5f                        	<unknown>
-     5ce: 5f 6d 61 6c                  	<unknown>
-     5d2: 6c 6f                        	<unknown>
-     5d4: 63 5f 6d 61                  	bge	s10, s6, 1566
-     5d8: 78 5f                        	<unknown>
-     5da: 74 6f                        	<unknown>
-     5dc: 74 61                        	<unknown>
-     5de: 6c 5f                        	<unknown>
-     5e0: 6d 65                        	<unknown>
-     5e2: 6d 00                        	<unknown>
-     5e4: 5f 5a 32 36                  	<unknown>
-     5e8: 73 68 61 64                  	csrrsi	a6, 1606, 2
-     5ec: 65 72                        	<unknown>
-     5ee: 5f 66 75 6e                  	<unknown>
-     5f2: 63 74 69 6f                  	bgeu	s2, s6, 1768
-     5f6: 6e 5f                        	<unknown>
-     5f8: 73 77 5f 72                  	csrrci	a4, 1829, 30
-     5fc: 61 73                        	<unknown>
-     5fe: 74 5f                        	<unknown>
-     600: 63 62 50 31                  	bltu	zero, s5, 772
-     604: 32 6b                        	<unknown>
-     606: 65 72                        	<unknown>
-     608: 6e 65                        	<unknown>
-     60a: 6c 5f                        	<unknown>
-     60c: 61 72                        	<unknown>
-     60e: 67 5f 74 6a                  	<unknown>
-     612: 6a 6a                        	<unknown>
-     614: 50 4b                        	<unknown>
-     616: 4e 37                        	<unknown>
-     618: 63 6f 63 6f                  	bltu	t1, s6, 1790
-     61c: 67 66 78 38                  	<unknown>
-     620: 54 56                        	<unknown>
-     622: 65 63                        	<unknown>
-     624: 74 6f                        	<unknown>
-     626: 72 33                        	<unknown>
-     628: 49 4e                        	<unknown>
-     62a: 53 31 5f 36                  	<unknown>
-     62e: 54 46                        	<unknown>
-     630: 69 78                        	<unknown>
-     632: 65 64                        	<unknown>
-     634: 49 4c                        	<unknown>
-     636: 6a 31                        	<unknown>
-     638: 36 45                        	<unknown>
-     63a: 69 45                        	<unknown>
-     63c: 45 45                        	<unknown>
-     63e: 45 6a                        	<unknown>
-     640: 00 5f                        	<unknown>
-     642: 5a 4e                        	<unknown>
-     644: 31 30                        	<unknown>
-     646: 52 61                        	<unknown>
-     648: 73 74 65 72                  	csrrci	s0, 1830, 10
-     64c: 69 7a                        	<unknown>
-     64e: 65 72                        	<unknown>
-     650: 31 30                        	<unknown>
-     652: 72 65                        	<unknown>
-     654: 6e 64                        	<unknown>
-     656: 65 72                        	<unknown>
-     658: 54 69                        	<unknown>
-     65a: 6c 65                        	<unknown>
-     65c: 45 6a                        	<unknown>
-     65e: 6a 6a                        	<unknown>
-     660: 52 4b                        	<unknown>
-     662: 4e 53                        	<unknown>
-     664: 5f 31 31 70                  	<unknown>
-     668: 72 69                        	<unknown>
-     66a: 6d 69                        	<unknown>
-     66c: 74 69                        	<unknown>
-     66e: 76 65                        	<unknown>
-     670: 5f 74 45 6a                  	<unknown>
-     674: 6a 4e                        	<unknown>
-     676: 37 63 6f 63                  	lui	t1, 407286
-     67a: 6f 67 66 78                  	jal	a4, 419718
-     67e: 36 54                        	<unknown>
-     680: 46 69                        	<unknown>
-     682: 78 65                        	<unknown>
-     684: 64 49                        	<unknown>
-     686: 4c 6a                        	<unknown>
-     688: 31 36                        	<unknown>
-     68a: 45 69                        	<unknown>
-     68c: 45 45                        	<unknown>
-     68e: 53 35 5f 53                  	<unknown>
-     692: 35 5f                        	<unknown>
-     694: 00 5f                        	<unknown>
-     696: 6d 61                        	<unknown>
-     698: 6c 6c                        	<unknown>
-     69a: 6f 63 5f 72                  	jal	t1, 1011492
-     69e: 00 5f                        	<unknown>
-     6a0: 69 6e                        	<unknown>
-     6a2: 69 74                        	<unknown>
-     6a4: 5f 73 69 67                  	<unknown>
-     6a8: 6e 61                        	<unknown>
-     6aa: 6c 00                        	<unknown>
-     6ac: 5f 6d 61 6c                  	<unknown>
-     6b0: 6c 6f                        	<unknown>
-     6b2: 63 5f 74 72                  	bge	s0, t2, 1854
-     6b6: 69 6d                        	<unknown>
-     6b8: 5f 72 00 5f                  	<unknown>
-     6bc: 5a 31                        	<unknown>
-     6be: 31 44                        	<unknown>
-     6c0: 6f 42 6c 65                  	jal	tp, 804438
-     6c4: 6e 64                        	<unknown>
-     6c6: 46 75                        	<unknown>
-     6c8: 6e 63                        	<unknown>
-     6ca: 6a 4e                        	<unknown>
-     6cc: 37 63 6f 63                  	lui	t1, 407286
-     6d0: 6f 67 66 78                  	jal	a4, 419718
-     6d4: 39 43                        	<unknown>
-     6d6: 6f 6c 6f 72                  	jal	s8, 1009446
-     6da: 41 52                        	<unknown>
-     6dc: 47 42 45 53                  	<unknown>
-     6e0: 30 5f                        	<unknown>
-     6e2: 53 30 5f 00                  	<unknown>
-     6e6: 61 74                        	<unknown>
-     6e8: 65 78                        	<unknown>
-     6ea: 69 74                        	<unknown>
-     6ec: 00 5f                        	<unknown>
-     6ee: 5f 44 41 54                  	<unknown>
-     6f2: 41 5f                        	<unknown>
-     6f4: 42 45                        	<unknown>
-     6f6: 47 49 4e 5f                  	<unknown>
-     6fa: 5f 00 5f 65                  	<unknown>
-     6fe: 64 61                        	<unknown>
-     700: 74 61                        	<unknown>
-     702: 00 5f                        	<unknown>
-     704: 5a 32                        	<unknown>
-     706: 33 73 68 61                  	<unknown>
-     70a: 64 65                        	<unknown>
-     70c: 72 5f                        	<unknown>
-     70e: 66 75                        	<unknown>
-     710: 6e 63                        	<unknown>
-     712: 74 69                        	<unknown>
-     714: 6f 6e 5f 73                  	jal	t3, 1011508
-     718: 77 5f 72 61                  	<unknown>
-     71c: 73 74 69 50                  	csrrci	s0, 1286, 18
-     720: 31 32                        	<unknown>
-     722: 6b 65 72 6e                  	<unknown>
-     726: 65 6c                        	<unknown>
-     728: 5f 61 72 67                  	<unknown>
-     72c: 5f 74 00 5f                  	<unknown>
-     730: 5f 6d 61 6c                  	<unknown>
-     734: 6c 6f                        	<unknown>
-     736: 63 5f 74 72                  	bge	s0, t2, 1854
-     73a: 69 6d                        	<unknown>
-     73c: 5f 74 68 72                  	<unknown>
-     740: 65 73                        	<unknown>
-     742: 68 6f                        	<unknown>
-     744: 6c 64                        	<unknown>
-     746: 00 5f                        	<unknown>
-     748: 6b 69 6c 6c                  	<unknown>
-     74c: 00 76                        	<unknown>
-     74e: 78 5f                        	<unknown>
-     750: 70 65                        	<unknown>
-     752: 72 66                        	<unknown>
-     754: 5f 64 75 6d                  	<unknown>
-     758: 70 00                        	<unknown>
-     75a: 5f 65 78 69                  	<unknown>
-     75e: 74 00                        	<unknown>
-     760: 5f 69 6e 69                  	<unknown>
-     764: 74 5f                        	<unknown>
-     766: 73 69 67 6e                  	csrrsi	s2, 1766, 14
-     76a: 61 6c                        	<unknown>
-     76c: 5f 72 00 5f                  	<unknown>
-     770: 5a 4e                        	<unknown>
-     772: 31 30                        	<unknown>
-     774: 52 61                        	<unknown>
-     776: 73 74 65 72                  	csrrci	s0, 1830, 10
-     77a: 69 7a                        	<unknown>
-     77c: 65 72                        	<unknown>
-     77e: 31 30                        	<unknown>
-     780: 72 65                        	<unknown>
-     782: 6e 64                        	<unknown>
-     784: 65 72                        	<unknown>
-     786: 51 75                        	<unknown>
-     788: 61 64                        	<unknown>
-     78a: 45 6a                        	<unknown>
-     78c: 52 4b                        	<unknown>
-     78e: 4e 53                        	<unknown>
-     790: 5f 31 31 70                  	<unknown>
-     794: 72 69                        	<unknown>
-     796: 6d 69                        	<unknown>
-     798: 74 69                        	<unknown>
-     79a: 76 65                        	<unknown>
-     79c: 5f 74 45 6a                  	<unknown>
-     7a0: 6a 4e                        	<unknown>
-     7a2: 37 63 6f 63                  	lui	t1, 407286
-     7a6: 6f 67 66 78                  	jal	a4, 419718
-     7aa: 36 54                        	<unknown>
-     7ac: 46 69                        	<unknown>
-     7ae: 78 65                        	<unknown>
-     7b0: 64 49                        	<unknown>
-     7b2: 4c 6a                        	<unknown>
-     7b4: 31 36                        	<unknown>
-     7b6: 45 69                        	<unknown>
-     7b8: 45 45                        	<unknown>
-     7ba: 53 35 5f 53                  	<unknown>
-     7be: 35 5f                        	<unknown>
-     7c0: 00 5f                        	<unknown>
-     7c2: 5f 73 69 67                  	<unknown>
-     7c6: 74 72                        	<unknown>
-     7c8: 61 6d                        	<unknown>
-     7ca: 70 00                        	<unknown>
-     7cc: 72 61                        	<unknown>
-     7ce: 69 73                        	<unknown>
-     7d0: 65 00                        	<unknown>
-     7d2: 5f 5a 31 35                  	<unknown>
-     7d6: 73 68 61 64                  	csrrsi	a6, 1606, 2
-     7da: 65 72                        	<unknown>
-     7dc: 5f 66 75 6e                  	<unknown>
-     7e0: 63 74 69 6f                  	bgeu	s2, s6, 1768
-     7e4: 6e 69                        	<unknown>
-     7e6: 50 31                        	<unknown>
-     7e8: 32 6b                        	<unknown>
-     7ea: 65 72                        	<unknown>
-     7ec: 6e 65                        	<unknown>
-     7ee: 6c 5f                        	<unknown>
-     7f0: 61 72                        	<unknown>
-     7f2: 67 5f 74 00                  	<unknown>
+     362: 5f 72 00 5f                  	<unknown>
+     366: 5a 31                        	<unknown>
+     368: 38 73                        	<unknown>
+     36a: 68 61                        	<unknown>
+     36c: 64 65                        	<unknown>
+     36e: 72 5f                        	<unknown>
+     370: 66 75                        	<unknown>
+     372: 6e 63                        	<unknown>
+     374: 74 69                        	<unknown>
+     376: 6f 6e 5f 68                  	jal	t3, 1011332
+     37a: 77 69 50 31                  	<unknown>
+     37e: 32 6b                        	<unknown>
+     380: 65 72                        	<unknown>
+     382: 6e 65                        	<unknown>
+     384: 6c 5f                        	<unknown>
+     386: 61 72                        	<unknown>
+     388: 67 5f 74 00                  	<unknown>
+     38c: 76 78                        	<unknown>
+     38e: 5f 73 70 61                  	<unknown>
+     392: 77 6e 5f 74                  	<unknown>
+     396: 61 73                        	<unknown>
+     398: 6b 73 00 5f                  	<unknown>
+     39c: 5f 6d 61 6c                  	<unknown>
+     3a0: 6c 6f                        	<unknown>
+     3a2: 63 5f 75 6e                  	bge	a0, t2, 1790
+     3a6: 6c 6f                        	<unknown>
+     3a8: 63 6b 00 65                  	bltu	zero, a6, 1622
+     3ac: 72 72                        	<unknown>
+     3ae: 6e 6f                        	<unknown>
+     3b0: 00 67                        	<unknown>
+     3b2: 5f 77 73 70                  	<unknown>
+     3b6: 61 77                        	<unknown>
+     3b8: 6e 5f                        	<unknown>
+     3ba: 61 72                        	<unknown>
+     3bc: 67 73 00 5f                  	<unknown>
+     3c0: 5f 53 44 41                  	<unknown>
+     3c4: 54 41                        	<unknown>
+     3c6: 5f 42 45 47                  	<unknown>
+     3ca: 49 4e                        	<unknown>
+     3cc: 5f 5f 00 5f                  	<unknown>
+     3d0: 5a 4e                        	<unknown>
+     3d2: 31 30                        	<unknown>
+     3d4: 52 61                        	<unknown>
+     3d6: 73 74 65 72                  	csrrci	s0, 1830, 10
+     3da: 69 7a                        	<unknown>
+     3dc: 65 72                        	<unknown>
+     3de: 36 72                        	<unknown>
+     3e0: 65 6e                        	<unknown>
+     3e2: 64 65                        	<unknown>
+     3e4: 72 45                        	<unknown>
+     3e6: 6a 00                        	<unknown>
+     3e8: 5f 5f 67 6c                  	<unknown>
+     3ec: 6f 62 61 6c                  	jal	tp, 91846
+     3f0: 5f 70 6f 69                  	<unknown>
+     3f4: 6e 74                        	<unknown>
+     3f6: 65 72                        	<unknown>
+     3f8: 00 5f                        	<unknown>
+     3fa: 72 61                        	<unknown>
+     3fc: 69 73                        	<unknown>
+     3fe: 65 5f                        	<unknown>
+     400: 72 00                        	<unknown>
+     402: 5f 5f 6d 61                  	<unknown>
+     406: 6c 6c                        	<unknown>
+     408: 6f 63 5f 74                  	jal	t1, 1011524
+     40c: 6f 70 5f 70                  	j	1015556
+     410: 61 64                        	<unknown>
+     412: 00 5f                        	<unknown>
+     414: 67 65 74 70                  	<unknown>
+     418: 69 64                        	<unknown>
+     41a: 5f 72 00 5f                  	<unknown>
+     41e: 5f 73 69 67                  	<unknown>
+     422: 74 72                        	<unknown>
+     424: 61 6d                        	<unknown>
+     426: 70 5f                        	<unknown>
+     428: 72 00                        	<unknown>
+     42a: 5f 73 62 72                  	<unknown>
+     42e: 6b 5f 72 00                  	<unknown>
+     432: 5f 5a 4e 31                  	<unknown>
+     436: 30 52                        	<unknown>
+     438: 61 73                        	<unknown>
+     43a: 74 65                        	<unknown>
+     43c: 72 69                        	<unknown>
+     43e: 7a 65                        	<unknown>
+     440: 72 31                        	<unknown>
+     442: 31 72                        	<unknown>
+     444: 65 6e                        	<unknown>
+     446: 64 65                        	<unknown>
+     448: 72 42                        	<unknown>
+     44a: 6c 6f                        	<unknown>
+     44c: 63 6b 45 6a                  	bltu	a0, tp, 1718
+     450: 6a 6a                        	<unknown>
+     452: 52 4b                        	<unknown>
+     454: 4e 53                        	<unknown>
+     456: 5f 31 31 70                  	<unknown>
+     45a: 72 69                        	<unknown>
+     45c: 6d 69                        	<unknown>
+     45e: 74 69                        	<unknown>
+     460: 76 65                        	<unknown>
+     462: 5f 74 45 6a                  	<unknown>
+     466: 6a 4e                        	<unknown>
+     468: 37 63 6f 63                  	lui	t1, 407286
+     46c: 6f 67 66 78                  	jal	a4, 419718
+     470: 36 54                        	<unknown>
+     472: 46 69                        	<unknown>
+     474: 78 65                        	<unknown>
+     476: 64 49                        	<unknown>
+     478: 4c 6a                        	<unknown>
+     47a: 31 36                        	<unknown>
+     47c: 45 69                        	<unknown>
+     47e: 45 45                        	<unknown>
+     480: 53 35 5f 53                  	<unknown>
+     484: 35 5f                        	<unknown>
+     486: 00 5f                        	<unknown>
+     488: 5f 6d 61 6c                  	<unknown>
+     48c: 6c 6f                        	<unknown>
+     48e: 63 5f 6d 61                  	bge	s10, s6, 1566
+     492: 78 5f                        	<unknown>
+     494: 73 62 72 6b                  	csrrsi	tp, 1719, 4
+     498: 65 64                        	<unknown>
+     49a: 5f 6d 65 6d                  	<unknown>
+     49e: 00 5f                        	<unknown>
+     4a0: 67 6c 6f 62                  	<unknown>
+     4a4: 61 6c                        	<unknown>
+     4a6: 5f 69 6d 70                  	<unknown>
+     4aa: 75 72                        	<unknown>
+     4ac: 65 5f                        	<unknown>
+     4ae: 70 74                        	<unknown>
+     4b0: 72 00                        	<unknown>
+     4b2: 5f 5f 6c 69                  	<unknown>
+     4b6: 62 63                        	<unknown>
+     4b8: 5f 69 6e 69                  	<unknown>
+     4bc: 74 5f                        	<unknown>
+     4be: 61 72                        	<unknown>
+     4c0: 72 61                        	<unknown>
+     4c2: 79 00                        	<unknown>
+     4c4: 61 62                        	<unknown>
+     4c6: 6f 72 74 00                  	jal	tp, 292870
+     4ca: 5f 73 62 72                  	<unknown>
+     4ce: 6b 00 5f 5f                  	<unknown>
+     4d2: 6c 69                        	<unknown>
+     4d4: 62 63                        	<unknown>
+     4d6: 5f 66 69 6e                  	<unknown>
+     4da: 69 5f                        	<unknown>
+     4dc: 61 72                        	<unknown>
+     4de: 72 61                        	<unknown>
+     4e0: 79 00                        	<unknown>
+     4e2: 5f 5a 4e 37                  	<unknown>
+     4e6: 42 6c                        	<unknown>
+     4e8: 65 6e                        	<unknown>
+     4ea: 64 65                        	<unknown>
+     4ec: 72 35                        	<unknown>
+     4ee: 77 72 69 74                  	<unknown>
+     4f2: 65 45                        	<unknown>
+     4f4: 6a 6a                        	<unknown>
+     4f6: 6a 00                        	<unknown>
+     4f8: 76 78                        	<unknown>
+     4fa: 5f 73 65 74                  	<unknown>
+     4fe: 5f 73 70 00                  	<unknown>
+     502: 5f 66 72 65                  	<unknown>
+     506: 65 5f                        	<unknown>
+     508: 72 00                        	<unknown>
+     50a: 5f 5f 63 61                  	<unknown>
+     50e: 6c 6c                        	<unknown>
+     510: 5f 65 78 69                  	<unknown>
+     514: 74 70                        	<unknown>
+     516: 72 6f                        	<unknown>
+     518: 63 73 00 5f                  	bgeu	zero, a6, 1510
+     51c: 5f 6d 61 6c                  	<unknown>
+     520: 6c 6f                        	<unknown>
+     522: 63 5f 73 62                  	bge	t1, t2, 1598
+     526: 72 6b                        	<unknown>
+     528: 5f 62 61 73                  	<unknown>
+     52c: 65 00                        	<unknown>
+     52e: 5f 5f 72 65                  	<unknown>
+     532: 67 69 73 74                  	<unknown>
+     536: 65 72                        	<unknown>
+     538: 5f 65 78 69                  	<unknown>
+     53c: 74 70                        	<unknown>
+     53e: 72 6f                        	<unknown>
+     540: 63 00 5f 5a                  	beq	t5, t0, 1440
+     544: 4e 31                        	<unknown>
+     546: 31 44                        	<unknown>
+     548: 65 70                        	<unknown>
+     54a: 74 68                        	<unknown>
+     54c: 54 65                        	<unknown>
+     54e: 6e 63                        	<unknown>
+     550: 69 6c                        	<unknown>
+     552: 31 38                        	<unknown>
+     554: 64 6f                        	<unknown>
+     556: 44 65                        	<unknown>
+     558: 70 74                        	<unknown>
+     55a: 68 53                        	<unknown>
+     55c: 74 65                        	<unknown>
+     55e: 6e 63                        	<unknown>
+     560: 69 6c                        	<unknown>
+     562: 54 65                        	<unknown>
+     564: 73 74 45 6a                  	csrrci	s0, 1700, 10
+     568: 6a 6a                        	<unknown>
+     56a: 6a 00                        	<unknown>
+     56c: 5f 5a 31 31                  	<unknown>
+     570: 44 6f                        	<unknown>
+     572: 42 6c                        	<unknown>
+     574: 65 6e                        	<unknown>
+     576: 64 4d                        	<unknown>
+     578: 6f 64 65 6a                  	jal	s0, 353958
+     57c: 6a 4e                        	<unknown>
+     57e: 37 63 6f 63                  	lui	t1, 407286
+     582: 6f 67 66 78                  	jal	a4, 419718
+     586: 39 43                        	<unknown>
+     588: 6f 6c 6f 72                  	jal	s8, 1009446
+     58c: 41 52                        	<unknown>
+     58e: 47 42 45 53                  	<unknown>
+     592: 30 5f                        	<unknown>
+     594: 53 30 5f 53                  	<unknown>
+     598: 30 5f                        	<unknown>
+     59a: 00 5f                        	<unknown>
+     59c: 5f 6d 61 6c                  	<unknown>
+     5a0: 6c 6f                        	<unknown>
+     5a2: 63 5f 63 75                  	bge	t1, s6, 1886
+     5a6: 72 72                        	<unknown>
+     5a8: 65 6e                        	<unknown>
+     5aa: 74 5f                        	<unknown>
+     5ac: 6d 61                        	<unknown>
+     5ae: 6c 6c                        	<unknown>
+     5b0: 69 6e                        	<unknown>
+     5b2: 66 6f                        	<unknown>
+     5b4: 00 5f                        	<unknown>
+     5b6: 5f 42 53 53                  	<unknown>
+     5ba: 5f 45 4e 44                  	<unknown>
+     5be: 5f 5f 00 5f                  	<unknown>
+     5c2: 5f 6d 61 6c                  	<unknown>
+     5c6: 6c 6f                        	<unknown>
+     5c8: 63 5f 61 76                  	bge	sp, t1, 1918
+     5cc: 5f 00 5f 5f                  	<unknown>
+     5d0: 6d 61                        	<unknown>
+     5d2: 6c 6c                        	<unknown>
+     5d4: 6f 63 5f 6c                  	jal	t1, 1011396
+     5d8: 6f 63 6b 00                  	jal	t1, 745478
+     5dc: 5f 5f 62 73                  	<unknown>
+     5e0: 73 5f 73 74                  	csrrwi	t5, 1863, 6
+     5e4: 61 72                        	<unknown>
+     5e6: 74 00                        	<unknown>
+     5e8: 6d 65                        	<unknown>
+     5ea: 6d 73                        	<unknown>
+     5ec: 65 74                        	<unknown>
+     5ee: 00 6d                        	<unknown>
+     5f0: 61 69                        	<unknown>
+     5f2: 6e 00                        	<unknown>
+     5f4: 5f 5f 6d 61                  	<unknown>
+     5f8: 6c 6c                        	<unknown>
+     5fa: 6f 63 5f 6d                  	jal	t1, 1011412
+     5fe: 61 78                        	<unknown>
+     600: 5f 74 6f 74                  	<unknown>
+     604: 61 6c                        	<unknown>
+     606: 5f 6d 65 6d                  	<unknown>
+     60a: 00 5f                        	<unknown>
+     60c: 5a 32                        	<unknown>
+     60e: 36 73                        	<unknown>
+     610: 68 61                        	<unknown>
+     612: 64 65                        	<unknown>
+     614: 72 5f                        	<unknown>
+     616: 66 75                        	<unknown>
+     618: 6e 63                        	<unknown>
+     61a: 74 69                        	<unknown>
+     61c: 6f 6e 5f 73                  	jal	t3, 1011508
+     620: 77 5f 72 61                  	<unknown>
+     624: 73 74 5f 63                  	csrrci	s0, 1589, 30
+     628: 62 50                        	<unknown>
+     62a: 31 32                        	<unknown>
+     62c: 6b 65 72 6e                  	<unknown>
+     630: 65 6c                        	<unknown>
+     632: 5f 61 72 67                  	<unknown>
+     636: 5f 74 6a 6a                  	<unknown>
+     63a: 6a 50                        	<unknown>
+     63c: 4b 4e 37 63                  	<unknown>
+     640: 6f 63 6f 67                  	jal	t1, 1009270
+     644: 66 78                        	<unknown>
+     646: 38 54                        	<unknown>
+     648: 56 65                        	<unknown>
+     64a: 63 74 6f 72                  	bgeu	t5, t1, 1832
+     64e: 33 49 4e 53                  	<unknown>
+     652: 31 5f                        	<unknown>
+     654: 36 54                        	<unknown>
+     656: 46 69                        	<unknown>
+     658: 78 65                        	<unknown>
+     65a: 64 49                        	<unknown>
+     65c: 4c 6a                        	<unknown>
+     65e: 31 36                        	<unknown>
+     660: 45 69                        	<unknown>
+     662: 45 45                        	<unknown>
+     664: 45 45                        	<unknown>
+     666: 6a 00                        	<unknown>
+     668: 5f 5a 4e 31                  	<unknown>
+     66c: 30 52                        	<unknown>
+     66e: 61 73                        	<unknown>
+     670: 74 65                        	<unknown>
+     672: 72 69                        	<unknown>
+     674: 7a 65                        	<unknown>
+     676: 72 31                        	<unknown>
+     678: 30 72                        	<unknown>
+     67a: 65 6e                        	<unknown>
+     67c: 64 65                        	<unknown>
+     67e: 72 54                        	<unknown>
+     680: 69 6c                        	<unknown>
+     682: 65 45                        	<unknown>
+     684: 6a 6a                        	<unknown>
+     686: 6a 52                        	<unknown>
+     688: 4b 4e 53 5f                  	<unknown>
+     68c: 31 31                        	<unknown>
+     68e: 70 72                        	<unknown>
+     690: 69 6d                        	<unknown>
+     692: 69 74                        	<unknown>
+     694: 69 76                        	<unknown>
+     696: 65 5f                        	<unknown>
+     698: 74 45                        	<unknown>
+     69a: 6a 6a                        	<unknown>
+     69c: 4e 37                        	<unknown>
+     69e: 63 6f 63 6f                  	bltu	t1, s6, 1790
+     6a2: 67 66 78 36                  	<unknown>
+     6a6: 54 46                        	<unknown>
+     6a8: 69 78                        	<unknown>
+     6aa: 65 64                        	<unknown>
+     6ac: 49 4c                        	<unknown>
+     6ae: 6a 31                        	<unknown>
+     6b0: 36 45                        	<unknown>
+     6b2: 69 45                        	<unknown>
+     6b4: 45 53                        	<unknown>
+     6b6: 35 5f                        	<unknown>
+     6b8: 53 35 5f 00                  	<unknown>
+     6bc: 5f 6d 61 6c                  	<unknown>
+     6c0: 6c 6f                        	<unknown>
+     6c2: 63 5f 72 00                  	bge	tp, t2, 30
+     6c6: 5f 69 6e 69                  	<unknown>
+     6ca: 74 5f                        	<unknown>
+     6cc: 73 69 67 6e                  	csrrsi	s2, 1766, 14
+     6d0: 61 6c                        	<unknown>
+     6d2: 00 5f                        	<unknown>
+     6d4: 6d 61                        	<unknown>
+     6d6: 6c 6c                        	<unknown>
+     6d8: 6f 63 5f 74                  	jal	t1, 1011524
+     6dc: 72 69                        	<unknown>
+     6de: 6d 5f                        	<unknown>
+     6e0: 72 00                        	<unknown>
+     6e2: 5f 5a 31 31                  	<unknown>
+     6e6: 44 6f                        	<unknown>
+     6e8: 42 6c                        	<unknown>
+     6ea: 65 6e                        	<unknown>
+     6ec: 64 46                        	<unknown>
+     6ee: 75 6e                        	<unknown>
+     6f0: 63 6a 4e 37                  	bltu	t3, s4, 884
+     6f4: 63 6f 63 6f                  	bltu	t1, s6, 1790
+     6f8: 67 66 78 39                  	<unknown>
+     6fc: 43 6f 6c 6f                  	<unknown>
+     700: 72 41                        	<unknown>
+     702: 52 47                        	<unknown>
+     704: 42 45                        	<unknown>
+     706: 53 30 5f 53                  	<unknown>
+     70a: 30 5f                        	<unknown>
+     70c: 00 61                        	<unknown>
+     70e: 74 65                        	<unknown>
+     710: 78 69                        	<unknown>
+     712: 74 00                        	<unknown>
+     714: 5f 5a 31 38                  	<unknown>
+     718: 73 68 61 64                  	csrrsi	a6, 1606, 2
+     71c: 65 72                        	<unknown>
+     71e: 5f 66 75 6e                  	<unknown>
+     722: 63 74 69 6f                  	bgeu	s2, s6, 1768
+     726: 6e 5f                        	<unknown>
+     728: 73 77 69 50                  	csrrci	a4, 1286, 18
+     72c: 31 32                        	<unknown>
+     72e: 6b 65 72 6e                  	<unknown>
+     732: 65 6c                        	<unknown>
+     734: 5f 61 72 67                  	<unknown>
+     738: 5f 74 00 5f                  	<unknown>
+     73c: 5f 44 41 54                  	<unknown>
+     740: 41 5f                        	<unknown>
+     742: 42 45                        	<unknown>
+     744: 47 49 4e 5f                  	<unknown>
+     748: 5f 00 5f 65                  	<unknown>
+     74c: 64 61                        	<unknown>
+     74e: 74 61                        	<unknown>
+     750: 00 5f                        	<unknown>
+     752: 5f 6d 61 6c                  	<unknown>
+     756: 6c 6f                        	<unknown>
+     758: 63 5f 74 72                  	bge	s0, t2, 1854
+     75c: 69 6d                        	<unknown>
+     75e: 5f 74 68 72                  	<unknown>
+     762: 65 73                        	<unknown>
+     764: 68 6f                        	<unknown>
+     766: 6c 64                        	<unknown>
+     768: 00 5f                        	<unknown>
+     76a: 6b 69 6c 6c                  	<unknown>
+     76e: 00 76                        	<unknown>
+     770: 78 5f                        	<unknown>
+     772: 70 65                        	<unknown>
+     774: 72 66                        	<unknown>
+     776: 5f 64 75 6d                  	<unknown>
+     77a: 70 00                        	<unknown>
+     77c: 5f 65 78 69                  	<unknown>
+     780: 74 00                        	<unknown>
+     782: 5f 69 6e 69                  	<unknown>
+     786: 74 5f                        	<unknown>
+     788: 73 69 67 6e                  	csrrsi	s2, 1766, 14
+     78c: 61 6c                        	<unknown>
+     78e: 5f 72 00 5f                  	<unknown>
+     792: 5a 4e                        	<unknown>
+     794: 31 30                        	<unknown>
+     796: 52 61                        	<unknown>
+     798: 73 74 65 72                  	csrrci	s0, 1830, 10
+     79c: 69 7a                        	<unknown>
+     79e: 65 72                        	<unknown>
+     7a0: 31 30                        	<unknown>
+     7a2: 72 65                        	<unknown>
+     7a4: 6e 64                        	<unknown>
+     7a6: 65 72                        	<unknown>
+     7a8: 51 75                        	<unknown>
+     7aa: 61 64                        	<unknown>
+     7ac: 45 6a                        	<unknown>
+     7ae: 52 4b                        	<unknown>
+     7b0: 4e 53                        	<unknown>
+     7b2: 5f 31 31 70                  	<unknown>
+     7b6: 72 69                        	<unknown>
+     7b8: 6d 69                        	<unknown>
+     7ba: 74 69                        	<unknown>
+     7bc: 76 65                        	<unknown>
+     7be: 5f 74 45 6a                  	<unknown>
+     7c2: 6a 4e                        	<unknown>
+     7c4: 37 63 6f 63                  	lui	t1, 407286
+     7c8: 6f 67 66 78                  	jal	a4, 419718
+     7cc: 36 54                        	<unknown>
+     7ce: 46 69                        	<unknown>
+     7d0: 78 65                        	<unknown>
+     7d2: 64 49                        	<unknown>
+     7d4: 4c 6a                        	<unknown>
+     7d6: 31 36                        	<unknown>
+     7d8: 45 69                        	<unknown>
+     7da: 45 45                        	<unknown>
+     7dc: 53 35 5f 53                  	<unknown>
+     7e0: 35 5f                        	<unknown>
+     7e2: 00 5f                        	<unknown>
+     7e4: 5f 73 69 67                  	<unknown>
+     7e8: 74 72                        	<unknown>
+     7ea: 61 6d                        	<unknown>
+     7ec: 70 00                        	<unknown>
+     7ee: 72 61                        	<unknown>
+     7f0: 69 73                        	<unknown>
+     7f2: 65 00                        	<unknown>
 
 Disassembly of section .shstrtab:
 

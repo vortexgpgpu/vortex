@@ -34,7 +34,6 @@ module VX_raster_mem #(
 );
     `UNUSED_VAR (dcrs)
 
-    localparam MUL_LATENCY      = 3;
     localparam NUM_REQS         = `RASTER_MEM_REQS;
     localparam FSM_BITS         = 2;
     localparam FETCH_FLAG_BITS  = 2;
@@ -293,7 +292,7 @@ module VX_raster_mem #(
         .WIDTHB  (`RASTER_STRIDE_BITS),
         .WIDTHP  (`RASTER_DATA_BITS),
         .SIGNED  (0),
-        .LATENCY (MUL_LATENCY)
+        .LATENCY (`LATENCY_IMUL)
     ) multiplier (
         .clk    (clk),
         .enable (prim_addr_rsp_ready),
@@ -308,7 +307,7 @@ module VX_raster_mem #(
 
     VX_shift_register #(
         .DATAW  (1 + `RASTER_PID_BITS),
-        .DEPTH  (MUL_LATENCY),
+        .DEPTH  (`LATENCY_IMUL),
         .RESETW (1)
     ) mul_shift_reg (
         .clk      (clk),
