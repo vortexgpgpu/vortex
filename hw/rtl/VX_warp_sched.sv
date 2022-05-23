@@ -258,8 +258,7 @@ module VX_warp_sched #(
             timeout_ctr <= 0;
         end else begin        
             if (active_warps !=0 && active_warps == stalled_warps) begin
-                `ASSERT(timeout_ctr < `STALL_TIMEOUT,
-                    ("%t: *** core%0d-scheduler-timeout: stalled_warps=%b", $time, CORE_ID, stalled_warps));
+                `ASSERT(timeout_ctr < `STALL_TIMEOUT, ("%t: *** core%0d-scheduler-timeout: stalled_warps=%b", $time, CORE_ID, stalled_warps));
                 timeout_ctr <= timeout_ctr + 1;
             end else if (active_warps == 0 || active_warps != stalled_warps) begin
                 timeout_ctr <= 0;

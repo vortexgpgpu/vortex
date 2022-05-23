@@ -1,4 +1,5 @@
 `include "VX_define.vh"
+`include "VX_trace_info.vh"
 
 module VX_issue #(
     parameter CORE_ID = 0

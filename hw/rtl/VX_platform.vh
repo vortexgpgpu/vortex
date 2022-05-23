@@ -9,8 +9,6 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`ifndef SYNTHESIS
-
 `ifndef NDEBUG
     `define DEBUG_BLOCK(x) /* verilator lint_off UNUSED */ \
                            x \
@@ -77,26 +75,6 @@
 
 `define TRACING_ON  /* verilator tracing_on */
 `define TRACING_OFF /* verilator tracing_off */
-
-`else // SYNTHESIS
-
-`define DEBUG_BLOCK(x)
-`define IGNORE_UNUSED_BEGIN
-`define IGNORE_UNUSED_END
-`define IGNORE_WARNINGS_BEGIN
-`define IGNORE_WARNINGS_END
-`define UNUSED_PARAM(x)
-`define UNUSED_VAR(x)
-`define UNUSED_PIN(x) . x ()
-`define ERROR(msg)
-`define ASSERT(cond, msg)
-`define STATIC_ASSERT(cond, msg)
-`define RUNTIME_ASSERT(cond, msg)
-`define TRACE(level, msg)
-`define TRACING_ON
-`define TRACING_OFF
-
-`endif // SYNTHESIS
 
 ///////////////////////////////////////////////////////////////////////////////
 

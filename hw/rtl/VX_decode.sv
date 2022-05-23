@@ -1,7 +1,5 @@
 `include "VX_define.vh"
-`ifdef DBG_TRACE_CORE_PIPELINE
 `include "VX_trace_info.vh"
-`endif
 
 `ifdef EXT_F_ENABLE
     `define USED_IREG(r) \
