@@ -155,8 +155,20 @@ private:
     // check if block overlap triangle    
     if ((e0 + (primitive.extents[0] << subBlockLogSize)) < fxZero 
      || (e1 + (primitive.extents[1] << subBlockLogSize)) < fxZero
-     || (e2 + (primitive.extents[2] << subBlockLogSize)) < fxZero)
+     || (e2 + (primitive.extents[2] << subBlockLogSize)) < fxZero) {
+      /*printf("*** raster-block: pass=0, level=%d, x=%d, y=%d, edge_eval={0x%x, 0x%x, 0x%x}, extend={0x%x, 0x%x, 0x%x}\n", 
+          (tile_logsize_ - subBlockLogSize), x, y, e0, e1, e2, 
+          (primitive.extents[0] << subBlockLogSize),
+          (primitive.extents[1] << subBlockLogSize),
+          (primitive.extents[2] << subBlockLogSize));*/
       return; 
+     } else {
+       /*printf("*** raster-block: pass=1, level=%d, x=%d, y=%d, edge_eval={0x%x, 0x%x, 0x%x}, extend={0x%x, 0x%x, 0x%x}\n", 
+          (tile_logsize_ - subBlockLogSize), x, y, e0, e1, e2, 
+          (primitive.extents[0] << subBlockLogSize),
+          (primitive.extents[1] << subBlockLogSize),
+          (primitive.extents[2] << subBlockLogSize));*/
+     }
   
     if (subBlockLogSize > 1) {
       // printf("*** raster-block: x=%d, y=%d\n", x, y);
@@ -218,8 +230,20 @@ private:
     // check if tile overlap triangle    
     if ((e0 + (primitive.extents[0] << subTileLogSize)) < fxZero 
      || (e1 + (primitive.extents[1] << subTileLogSize)) < fxZero
-     || (e2 + (primitive.extents[2] << subTileLogSize)) < fxZero)
+     || (e2 + (primitive.extents[2] << subTileLogSize)) < fxZero) {
+      /*printf("*** raster-tile: pass=0, level=%d, x=%d, y=%d, edge_eval={0x%x, 0x%x, 0x%x}, extend={0x%x, 0x%x, 0x%x}\n", 
+        (tile_logsize_ - subTileLogSize), x, y, e0, e1, e2, 
+        (primitive.extents[0] << subTileLogSize),
+        (primitive.extents[1] << subTileLogSize),
+        (primitive.extents[2] << subTileLogSize));*/
       return; 
+    } else {
+      /*printf("*** raster-tile: pass=1, level=%d, x=%d, y=%d, edge_eval={0x%x, 0x%x, 0x%x}, extend={0x%x, 0x%x, 0x%x}\n", 
+        (tile_logsize_ - subTileLogSize), x, y, e0, e1, e2, 
+        (primitive.extents[0] << subTileLogSize),
+        (primitive.extents[1] << subTileLogSize),
+        (primitive.extents[2] << subTileLogSize));*/
+    }
     
     if (subTileLogSize > block_logsize_) {
       // printf("*** raster-tile: x=%d, y=%d\n", x, y);
@@ -336,9 +360,10 @@ private:
       pbuf_addr += 4;      
     }
 
-    // printf("*** raster-edge0: a=%d, b=%d, c=%d\n", primitive.edges[0].x.data(), primitive.edges[0].y.data(), primitive.edges[0].z.data());
-    // printf("*** raster-edge1: a=%d, b=%d, c=%d\n", primitive.edges[1].x.data(), primitive.edges[1].y.data(), primitive.edges[1].z.data());
-    // printf("*** raster-edge2: a=%d, b=%d, c=%d\n", primitive.edges[2].x.data(), primitive.edges[2].y.data(), primitive.edges[2].z.data());
+    /*printf("*** raster-edges={{0x%x, 0x%x, 0x%x}, {0x%x, 0x%x, 0x%x}, {0x%x, 0x%x, 0x%x}}\n", 
+      primitive.edges[0].x.data(), primitive.edges[0].y.data(), primitive.edges[0].z.data(),
+      primitive.edges[1].x.data(), primitive.edges[1].y.data(), primitive.edges[1].z.data(),
+      primitive.edges[2].x.data(), primitive.edges[2].y.data(), primitive.edges[2].z.data());*/
 
     // Add tile corner edge offsets
     primitive.extents[0] = calcEdgeExtents(primitive.edges[0]);

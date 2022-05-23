@@ -135,7 +135,7 @@ using fixeduv_t = cocogfx::TFixed<TEX_FXD_FRAC>;
 	OUTPUT_i(2, mask, x, y, face, color, depth, func)  \
 	OUTPUT_i(3, mask, x, y, face, color, depth, func)
 
-void shader_function(int task_id, kernel_arg_t* kernel_arg) {
+void shader_function_hw(int task_id, kernel_arg_t* kernel_arg) {
 	auto prim_ptr = (rast_prim_t*)kernel_arg->prim_addr;
 	fixed24_t z[4], r[4], g[4], b[4], a[4], u[4], v[4];
 	fixed24_t dx[4], dy[4];
@@ -287,7 +287,7 @@ void shader_function_sw_rast_cb(kernel_arg_t* kernel_arg,
 	//}
 }
 
-void shader_function_sw_rast(int task_id, kernel_arg_t* kernel_arg) {
+void shader_function_sw(int task_id, kernel_arg_t* kernel_arg) {
 	kernel_arg->gpu_sw->rasterize(task_id);
 }
 
@@ -300,8 +300,8 @@ int main() {
 
 	arg->gpu_sw = &gpu_sw;
 
-	auto callback = arg->sw_rast ? (vx_spawn_tasks_cb)shader_function_sw_rast :
-							       (vx_spawn_tasks_cb)shader_function;
+	auto callback = arg->sw_rast ? (vx_spawn_tasks_cb)shader_function_sw:
+							       (vx_spawn_tasks_cb)shader_function_hw;
 
 	uint32_t num_tasks = 1 << arg->log_num_tasks;
 	vx_spawn_tasks(num_tasks, callback, arg);
