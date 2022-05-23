@@ -65,7 +65,7 @@ module VX_raster_te #(
     wire [1:0] fifo_arb_index;
     wire [3:0] fifo_arb_onehot;
 
-    reg tile_valid;
+    reg  tile_valid;
     wire tile_valid_r;
     wire is_block_r;
 
@@ -111,25 +111,30 @@ module VX_raster_te #(
         end
     end
 
-    // Check if primitive is within current tile
-    wire signed [`RASTER_DATA_BITS-1:0] eval0 = $signed(tile_edge_eval[0] + tile_extents[0]) >> tile_level;
-    wire signed [`RASTER_DATA_BITS-1:0] eval1 = $signed(tile_edge_eval[1] + tile_extents[1]) >> tile_level;
-    wire signed [`RASTER_DATA_BITS-1:0] eval2 = $signed(tile_edge_eval[2] + tile_extents[2]) >> tile_level;
-    wire tile_valid_e = tile_valid && ((eval0 >= 0) && (eval1 >= 0) && (eval2 >= 0));
-
     // Generate sub-tile info
-    wire [`RASTER_DIM_BITS-1:0] subtile_logsize = `RASTER_DIM_BITS'(TILE_LOGSIZE-1) - `RASTER_DIM_BITS'(tile_level);
-    wire is_block = (subtile_logsize < `RASTER_DIM_BITS'(BLOCK_LOGSIZE));
+    wire [`RASTER_DIM_BITS-1:0] tile_logsize = `RASTER_DIM_BITS'(TILE_LOGSIZE-1) - `RASTER_DIM_BITS'(tile_level);
+    wire is_block = (tile_logsize < `RASTER_DIM_BITS'(BLOCK_LOGSIZE));
     assign subtile_level = tile_level + LEVEL_BITS'(1);
     for (genvar i = 0; i < 2; ++i) begin
         for (genvar j = 0; j < 2; ++j) begin
-            assign subtile_x_loc[2 * i + j] = tile_x_loc + (`RASTER_DIM_BITS'(i) << subtile_logsize);
-            assign subtile_y_loc[2 * i + j] = tile_y_loc + (`RASTER_DIM_BITS'(j) << subtile_logsize);
+            assign subtile_x_loc[2 * i + j] = tile_x_loc + (`RASTER_DIM_BITS'(i) << tile_logsize);
+            assign subtile_y_loc[2 * i + j] = tile_y_loc + (`RASTER_DIM_BITS'(j) << tile_logsize);
             for (genvar k = 0; k < 3; ++k) begin
-                assign subtile_edge_eval[2 * i + j][k] = i * (tile_edges[k][0] << subtile_logsize) + j * (tile_edges[k][1] << subtile_logsize) + tile_edge_eval[k];
+                assign subtile_edge_eval[2 * i + j][k] = i * (tile_edges[k][0] << tile_logsize) + j * (tile_edges[k][1] << tile_logsize) + tile_edge_eval[k];
             end
-        end 
+        end
     end
+
+    // Check if primitive overlaps current tile
+    wire [2:0][`RASTER_DATA_BITS-1:0] edge_eval;
+    for (genvar i = 0; i < 3; ++i) begin
+        assign edge_eval[i] = tile_edge_eval[i] + (tile_extents[i] >> tile_level);
+    end
+    wire overlap = ~(edge_eval[0][`RASTER_DATA_BITS-1] 
+                  || edge_eval[1][`RASTER_DATA_BITS-1] 
+                  || edge_eval[2][`RASTER_DATA_BITS-1]);
+
+    wire tile_valid_e = tile_valid && overlap;
 
     VX_pipe_register #(
         .DATAW  (1 + 1 + 4 * (2 * `RASTER_DIM_BITS + 3 * `RASTER_DATA_BITS) + LEVEL_BITS + 2 * `RASTER_DIM_BITS + 3 * `RASTER_DATA_BITS + LEVEL_BITS),
@@ -216,7 +221,7 @@ module VX_raster_te #(
         end
         if (tile_valid && ~stall) begin
             `TRACE(2, ("%d: raster-te-test: pass=%b, block=%b, level=%0d, x=%0d, y=%0d, edge_eval={0x%0h, 0x%0h, 0x%0h}\n",
-                $time, tile_valid_e, is_block, tile_level, tile_x_loc, tile_y_loc, tile_edge_eval[0], tile_edge_eval[1], tile_edge_eval[2]));
+                $time, tile_valid_e, is_block, tile_level, tile_x_loc, tile_y_loc, edge_eval[0], edge_eval[1], edge_eval[2]));
         end
     end
 `endif

@@ -64,7 +64,8 @@ module VX_raster_be #(
     end
 
     VX_pipe_register #(
-        .DATAW (1 + `RASTER_PID_BITS + PER_BLOCK_QUADS * (2 * `RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS))        
+        .DATAW  (1 + `RASTER_PID_BITS + PER_BLOCK_QUADS * (2 * `RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS)),
+        .RESETW (1)   
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
@@ -215,7 +216,7 @@ module VX_raster_be #(
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
         if (valid_in && ready_in) begin
-            `TRACE(2, ("%d: raster-block-in: x=%0d, y=%0d, pid=%0d, edge={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
+            `TRACE(2, ("%d: raster-be-in: x=%0d, y=%0d, pid=%0d, edge={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
                 $time, x_loc_in, y_loc_in, pid_in,
                 edges_in[0][0], edges_in[0][1], edges_in[0][2],
                 edges_in[1][0], edges_in[1][1], edges_in[1][2],

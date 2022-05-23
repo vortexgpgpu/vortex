@@ -63,7 +63,7 @@ module VX_raster_qe #(
 
     VX_pipe_register #(
         .DATAW  (1 + NUM_QUADS + `RASTER_PID_BITS + NUM_QUADS * (4 + 2 * `RASTER_DIM_BITS + 4 * 3 * `RASTER_DATA_BITS)),
-        .RESETW (1)
+        .RESETW (1 + NUM_QUADS)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
