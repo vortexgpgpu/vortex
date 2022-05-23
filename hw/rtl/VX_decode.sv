@@ -100,7 +100,7 @@ module VX_decode  #(
             end
             `INST_R: begin 
                 ex_type = `EX_ALU;
-            `ifdef EXT_F_ENABLE
+            `ifdef EXT_M_ENABLE
                 if (func7[0]) begin
                     case (func3)
                         3'h0: op_type = `INST_OP_BITS'(`INST_MUL_MUL);
