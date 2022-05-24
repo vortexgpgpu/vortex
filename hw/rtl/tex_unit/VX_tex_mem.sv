@@ -78,7 +78,7 @@ module VX_tex_mem #(
         if (NUM_REQS > 1) begin
             wire [NUM_REQS-2:0] addr_matches;
             for (genvar j = 0; j < (NUM_REQS-1); ++j) begin                
-                assign addr_matches[j] = (mem_req_addr[i][j+1] == mem_req_addr[i][0]) || ~req_tmask[j+1];                
+                assign addr_matches[j] = (req_addr[j+1][i] == req_addr[0][i]) || ~req_tmask[j+1];
             end
             assign mem_req_dups[i] = req_tmask[0] && (& addr_matches);            
         end else begin
@@ -101,8 +101,7 @@ module VX_tex_mem #(
         .ADDRW      (`TCACHE_ADDR_WIDTH),
         .DATAW      (32),
         .QUEUE_SIZE (`TEX_MEM_PENDING_SIZE),
-        .TAGW       (TAG_WIDTH),
-        .OUT_REG    (1)
+        .TAGW       (TAG_WIDTH)
     ) mem_scheduler (
         .clk            (clk),
         .reset          (reset),
@@ -150,7 +149,7 @@ module VX_tex_mem #(
     
     assign {mem_rsp_info, mem_rsp_tmask, mem_rsp_lgstride, mem_rsp_align, mem_rsp_dups} = mem_rsp_tag;
 
-    wire [NUM_REQS-1:0][3:0][31:0] mem_rsp_data_qual;
+    reg [NUM_REQS-1:0][3:0][31:0] mem_rsp_data_qual;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin   
         for (genvar j = 0; j < 4; ++j) begin             
