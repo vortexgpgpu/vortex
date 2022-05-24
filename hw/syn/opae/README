@@ -59,10 +59,13 @@ source /export/fpga/bin/setup-fpga-env fpga-pac-a10
 # Acquire a sever node for running ASE simulations
 qsub-sim
 
-# build
+# build ASE driver
+make -C driver asesim
+
+# build ASE hw
 make ase-1c
 
-# tests
+# ASE tests
 ./run_ase.sh build_arria10_ase_1c ../../../tests/regression/basic/basic -n1 -t0
 ./run_ase.sh build_arria10_ase_1c ../../../tests/regression/basic/basic -n1 -t1
 ./run_ase.sh build_arria10_ase_1c ../../../tests/regression/basic/basic -n16
@@ -70,6 +73,7 @@ make ase-1c
 ./run_ase.sh build_arria10_ase_1c ../../../tests/regression/dogfood/dogfood -n16
 ./run_ase.sh build_arria10_ase_1c ../../../tests/opencl/vecadd/vecadd
 ./run_ase.sh build_arria10_ase_1c ../../../tests/opencl/sgemm/sgemm -n4
+./run_ase.sh build_arria10_ase_1c ../../../tests/regression/draw3d/draw3d -w8 -h8
 
 # modify "vsim_run.tcl" to dump VCD trace
 vcd file trace.vcd
