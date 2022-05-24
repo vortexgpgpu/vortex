@@ -68,9 +68,9 @@
     end
 
 `ifdef VERILATOR
-`define TRACE(level, args) if (level <= `DEBUG_LEVEL && dpi_trace_enabled()) $write args
+`define TRACE(level, args) dpi_trace(level, $sformatf args)
 `else
-`define TRACE(level, args) if (level <= `DEBUG_LEVEL) $write args
+`define TRACE(level, args) $write args
 `endif
 
 `define TRACING_ON  /* verilator tracing_on */

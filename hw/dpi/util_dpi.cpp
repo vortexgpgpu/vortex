@@ -8,6 +8,10 @@
 #include "verilated_vpi.h"
 #include "VX_config.h"
 
+#ifndef DEBUG_LEVEL
+#define DEBUG_LEVEL 3
+#endif
+
 extern "C" {
   void dpi_imul(bool enable, int a, int b, bool is_signed_a, bool is_signed_b, int* resultl, int* resulth);
   void dpi_idiv(bool enable, int a, int b, bool is_signed, int* quotient, int* remainder);
@@ -15,9 +19,9 @@ extern "C" {
   int dpi_register();
   void dpi_assert(int inst, bool cond, int delay);
 
+  void dpi_trace(int level, const char* format, ...);
   void dpi_trace_start();
   void dpi_trace_stop();
-  bool dpi_trace_enabled();
 }
 
 bool sim_trace_enabled();
@@ -93,6 +97,8 @@ void dpi_assert(int inst, bool cond, int delay) {
   }
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
 void dpi_imul(bool enable, int a, int b, bool is_signed_a, bool is_signed_b, int* resultl, int* resulth) {
   if (!enable)
     return;
@@ -148,14 +154,23 @@ void dpi_idiv(bool enable, int a, int b, bool is_signed, int* quotient, int* rem
   }
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
+void dpi_trace(int level, const char* format, ...) { 
+  if (level > DEBUG_LEVEL)
+    return;
+  if (!sim_trace_enabled())
+    return;
+  va_list va;
+	va_start(va, format);  
+	vprintf(format, va);
+	va_end(va);		  
+}
+
 void dpi_trace_start() { 
   sim_trace_enable(true);
 }
 
 void dpi_trace_stop() { 
   sim_trace_enable(false);
-}
-
-bool dpi_trace_enabled() { 
-  return sim_trace_enabled();
 }
