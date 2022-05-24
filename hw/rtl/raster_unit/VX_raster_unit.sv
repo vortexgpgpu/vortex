@@ -136,9 +136,9 @@ module VX_raster_unit #(
     wire [NUM_SLICES-1:0] slices_ready_in;
 
     VX_stream_demux #(
-        .NUM_REQS (NUM_SLICES),
-        .DATAW    (PRIM_DATA_WIDTH),
-        .BUFFERED (1)
+        .NUM_OUTPUTS (NUM_SLICES),
+        .DATAW       (PRIM_DATA_WIDTH),
+        .BUFFERED    (1)
     ) slice_req_demux (
         .clk        (clk),
         .reset      (reset),

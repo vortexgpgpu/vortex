@@ -55,10 +55,10 @@ module VX_mem_mux #(
     end        
 
     VX_stream_mux #(            
-        .NUM_REQS (NUM_REQS),
-        .DATAW    (REQ_DATAW),
-        .BUFFERED (BUFFERED_REQ),
-        .ARBITER  (ARBITER)
+        .NUM_INPUTS (NUM_REQS),
+        .DATAW      (REQ_DATAW),
+        .BUFFERED   (BUFFERED_REQ),
+        .ARBITER    (ARBITER)
     ) req_mux (
         .clk       (clk),
         .reset     (reset),
@@ -96,9 +96,9 @@ module VX_mem_mux #(
     );
 
     VX_stream_demux #(
-        .NUM_REQS (NUM_REQS),
-        .DATAW    (RSP_DATAW),
-        .BUFFERED (BUFFERED_RSP)
+        .NUM_OUTPUTS (NUM_REQS),
+        .DATAW       (RSP_DATAW),
+        .BUFFERED    (BUFFERED_RSP)
     ) rsp_demux (
         .clk       (clk),
         .reset     (reset),

@@ -22,10 +22,10 @@ module VX_raster_req_demux #(
     wire [NUM_REQS-1:0]                req_ready_out;
 
     VX_stream_demux #(
-        .NUM_REQS   (NUM_REQS),
-        .DATAW      (REQ_DATAW),
-        .BUFFERED   (BUFFERED),
-        .ARBITER    (ARBITER)
+        .NUM_OUTPUTS (NUM_REQS),
+        .DATAW       (REQ_DATAW),
+        .BUFFERED    (BUFFERED),
+        .ARBITER     (ARBITER)
     ) req_demux (
         .clk        (clk),
         .reset      (reset),

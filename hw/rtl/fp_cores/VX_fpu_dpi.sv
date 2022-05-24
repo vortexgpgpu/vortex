@@ -396,9 +396,9 @@ module VX_fpu_dpi #(
     end
 
     VX_stream_mux #(
-        .NUM_REQS (NUM_FPC),
-        .DATAW    (RSP_MUX_DATAW),
-        .BUFFERED (1),
+        .NUM_INPUTS (NUM_FPC),
+        .DATAW      (RSP_MUX_DATAW),
+        .BUFFERED   (1),
         .ARBITER  ("R")
     ) rsp_mux (
         .clk       (clk),

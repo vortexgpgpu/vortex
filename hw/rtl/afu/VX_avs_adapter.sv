@@ -142,9 +142,9 @@ module VX_avs_adapter #(
     end
 
     VX_stream_mux #(
-        .NUM_REQS (AVS_BANKS),
-        .DATAW    (AVS_DATA_WIDTH + REQ_TAG_WIDTH),
-        .ARBITER  ("R")
+        .NUM_INPUTS (AVS_BANKS),
+        .DATAW      (AVS_DATA_WIDTH + REQ_TAG_WIDTH),
+        .ARBITER    ("R")
     ) rsp_mux (
         .clk       (clk),
         .reset     (reset),

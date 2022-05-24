@@ -111,23 +111,22 @@ module VX_raster_be #(
 
     // Populate fifo inputs
     
-    reg [OUTPUT_BATCHES-1:0][OUTPUT_QUADS-1:0] fifo_mask_in;
+    wire [OUTPUT_BATCHES-1:0][OUTPUT_QUADS-1:0] fifo_mask_in;
     raster_stamp_t [OUTPUT_BATCHES-1:0][OUTPUT_QUADS-1:0] fifo_stamp_in;
         
     for (genvar i = 0; i < OUTPUT_BATCHES * OUTPUT_QUADS; ++i) begin
         integer q = i % OUTPUT_QUADS;
         integer b = i / OUTPUT_QUADS;
-        always @(*) begin
-            fifo_mask_in[b][q]  = 0;
-            fifo_stamp_in[b][q] = 'x;
-            if (i < PER_BLOCK_QUADS) begin
-                fifo_mask_in [b][q]         = qe_valid[i];
-                fifo_stamp_in[b][q].pos_x   = qe_x_loc[i][`RASTER_DIM_BITS-1:1];
-                fifo_stamp_in[b][q].pos_y   = qe_y_loc[i][`RASTER_DIM_BITS-1:1];
-                fifo_stamp_in[b][q].mask    = qe_mask[i];
-                fifo_stamp_in[b][q].pid     = qe_pid;
-                fifo_stamp_in[b][q].bcoords = qe_bcoords[i];
-            end            
+        if (i < PER_BLOCK_QUADS) begin
+            assign fifo_mask_in [b][q]         = qe_valid[i];
+            assign fifo_stamp_in[b][q].pos_x   = qe_x_loc[i][`RASTER_DIM_BITS-1:1];
+            assign fifo_stamp_in[b][q].pos_y   = qe_y_loc[i][`RASTER_DIM_BITS-1:1];
+            assign fifo_stamp_in[b][q].mask    = qe_mask[i];
+            assign fifo_stamp_in[b][q].pid     = qe_pid;
+            assign fifo_stamp_in[b][q].bcoords = qe_bcoords[i];
+        end else begin
+            assign fifo_mask_in[b][q]  = 0;
+            assign fifo_stamp_in[b][q] = 'x;
         end
     end
 

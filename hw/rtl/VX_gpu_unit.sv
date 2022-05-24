@@ -282,10 +282,10 @@ module VX_gpu_unit #(
     // response arbitration
 
     VX_stream_mux #(
-        .NUM_REQS (RSP_MUX_SIZE),
-        .DATAW    (RSP_MUX_DATAW),
-        .BUFFERED (1),
-        .ARBITER  ("R")
+        .NUM_INPUTS (RSP_MUX_SIZE),
+        .DATAW      (RSP_MUX_DATAW),
+        .BUFFERED   (1),
+        .ARBITER    ("R")
     ) rsp_mux (
         .clk       (clk),
         .reset     (reset),

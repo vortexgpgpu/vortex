@@ -2,53 +2,57 @@
 
 `TRACING_OFF
 module VX_stream_demux #(
-    parameter NUM_REQS       = 1,
+    parameter NUM_INPUTS     = 1,
+    parameter NUM_OUTPUTS    = 1,
     parameter NUM_LANES      = 1,
     parameter DATAW          = 1,
     parameter string ARBITER = "",
     parameter LOCK_ENABLE    = 1,
     parameter BUFFERED       = 0,
+    parameter NUM_REQS       = (NUM_OUTPUTS + NUM_INPUTS - 1) / NUM_INPUTS,
     localparam LOG_NUM_REQS  = `LOG2UP(NUM_REQS)
 ) (
     input  wire clk,
     input  wire reset,
 
-    input wire [NUM_LANES-1:0][`UP(LOG_NUM_REQS)-1:0] sel_in,
+    input wire [`UP(LOG_NUM_REQS)-1:0]                      sel_in,
 
-    input  wire [NUM_LANES-1:0]            valid_in,
-    input  wire [NUM_LANES-1:0][DATAW-1:0] data_in,    
-    output wire [NUM_LANES-1:0]            ready_in,
+    input  wire [NUM_INPUTS-1:0][NUM_LANES-1:0]             valid_in,
+    input  wire [NUM_INPUTS-1:0][NUM_LANES-1:0][DATAW-1:0]  data_in,    
+    output wire [NUM_INPUTS-1:0][NUM_LANES-1:0]             ready_in,
 
-    output wire [NUM_REQS-1:0][NUM_LANES-1:0]            valid_out,
-    output wire [NUM_REQS-1:0][NUM_LANES-1:0][DATAW-1:0] data_out,
-    input  wire [NUM_REQS-1:0][NUM_LANES-1:0]            ready_out
+    output wire [NUM_OUTPUTS-1:0][NUM_LANES-1:0]            valid_out,
+    output wire [NUM_OUTPUTS-1:0][NUM_LANES-1:0][DATAW-1:0] data_out,
+    input  wire [NUM_OUTPUTS-1:0][NUM_LANES-1:0]            ready_out
 );
-    if (NUM_REQS > 1)  begin
+    `STATIC_ASSERT ((NUM_OUTPUTS >= NUM_INPUTS), ("invalid parameter"))
 
-        wire [NUM_LANES-1:0] sel_fire = valid_in & ready_in; 
+    if (NUM_OUTPUTS > NUM_INPUTS)  begin
 
-        wire [NUM_REQS-1:0][NUM_LANES-1:0] sel_ready;
-        
-        wire [NUM_LANES-1:0][LOG_NUM_REQS-1:0] sel_index;
-        wire [NUM_LANES-1:0][NUM_REQS-1:0]     sel_onehot;
+        wire [NUM_REQS-1:0][NUM_INPUTS-1:0][NUM_LANES-1:0] sel_ready;
+
+        wire [LOG_NUM_REQS-1:0] sel_index;
+        wire [NUM_REQS-1:0]     sel_onehot;           
 
         if (ARBITER != "") begin   
             `UNUSED_VAR (sel_in)        
-            wire [NUM_REQS-1:0]     arb_requests;
-            wire [LOG_NUM_REQS-1:0] arb_index;
-            wire [NUM_REQS-1:0]     arb_onehot;
-            wire                    arb_unlock;
+            wire [NUM_REQS-1:0]  arb_requests;
+            wire                 arb_unlock;
 
             if (NUM_LANES > 1) begin
-                for (genvar i = 0; i < NUM_REQS; i++) begin
+                for (genvar i = 0; i < NUM_REQS; ++i) begin
                     assign arb_requests[i] = (| sel_ready[i]);
                 end
-                assign arb_unlock = (| sel_fire);
             end else begin
-                for (genvar i = 0; i < NUM_REQS; i++) begin
+                for (genvar i = 0; i < NUM_REQS; ++i) begin
                     assign arb_requests[i] = sel_ready[i];
                 end
-                assign arb_unlock = sel_fire;
+            end
+
+            if ((NUM_INPUTS * NUM_LANES) > 1) begin
+                assign arb_unlock = | (valid_in & ready_in);
+            end else begin
+                assign arb_unlock = valid_in & ready_in; 
             end
 
             VX_generic_arbiter #(
@@ -60,36 +64,51 @@ module VX_stream_demux #(
                 .reset        (reset),
                 .requests     (arb_requests),  
                 .unlock       (arb_unlock),
-                `UNUSED_PIN (grant_valid),
-                .grant_index  (arb_index),
-                .grant_onehot (arb_onehot)
+                `UNUSED_PIN   (grant_valid),
+                .grant_index  (sel_index),
+                .grant_onehot (sel_onehot)
             );
-
-            for (genvar i = 0; i < NUM_LANES; i++) begin
-                assign sel_index[i] = arb_index;
-                assign sel_onehot[i] = arb_onehot;
-            end            
         end else begin
-            `UNUSED_VAR (sel_fire)
             assign sel_index = sel_in;
-            reg [NUM_LANES-1:0][NUM_REQS-1:0] sel_onehot_r;
+            reg [NUM_REQS-1:0] sel_onehot_r;
             always @(*) begin
-                for (integer i = 0; i < NUM_LANES; ++i) begin
-                    sel_onehot_r[i]            = '0;
-                    sel_onehot_r[i][sel_in[i]] = 1;
-                end
+                sel_onehot_r = '0;
+                sel_onehot_r[sel_in] = 1;
             end
             assign sel_onehot = sel_onehot_r;
         end
 
-        for (genvar i = 0; i < NUM_LANES; ++i) begin
+        for (genvar i = 0; i < NUM_INPUTS; ++i) begin
+            for (genvar j = 0; j < NUM_REQS; ++j) begin            
+                localparam ii = j * NUM_INPUTS + i;
+                if (ii < NUM_OUTPUTS) begin
+                    for (genvar k = 0; k < NUM_LANES; ++k) begin
+                        VX_skid_buffer #(
+                            .DATAW    (DATAW),
+                            .PASSTHRU (BUFFERED == 0),
+                            .OUT_REG  (BUFFERED > 1)
+                        ) out_buffer (
+                            .clk       (clk),
+                            .reset     (reset),
+                            .valid_in  (valid_in[i][k] && sel_onehot[j]),
+                            .data_in   (data_in[i][k]),
+                            .ready_in  (sel_ready[j][i][k]),
+                            .valid_out (valid_out[ii][k]),
+                            .data_out  (data_out[ii][k]),
+                            .ready_out (ready_out[ii][k])
+                        );
+                    end
+                end                
+            end
+            assign ready_in[i] = sel_ready[sel_index][i];
+        end
 
-            assign ready_in[i] = sel_ready[sel_index[i]][i]; 
+    end else begin
 
-            for (genvar j = 0; j < NUM_REQS; ++j) begin
+        `UNUSED_VAR (sel_in)
 
-                wire sel_valid = valid_in[i] & sel_onehot[i][j];
-
+        for (genvar i = 0; i < NUM_INPUTS; ++i) begin
+            for (genvar j = 0; j < NUM_LANES; ++j) begin
                 VX_skid_buffer #(
                     .DATAW    (DATAW),
                     .PASSTHRU (BUFFERED == 0),
@@ -97,35 +116,14 @@ module VX_stream_demux #(
                 ) out_buffer (
                     .clk       (clk),
                     .reset     (reset),
-                    .valid_in  (sel_valid),  
-                    .data_in   (data_in[i]),
-                    .ready_in  (sel_ready[j][i]),
-                    .valid_out (valid_out[j][i]),
-                    .data_out  (data_out[j][i]),
-                    .ready_out (ready_out[j][i])
+                    .valid_in  (valid_in[i][j]),
+                    .data_in   (data_in[i][j]),
+                    .ready_in  (ready_in[i][j]),      
+                    .valid_out (valid_out[i][j]),
+                    .data_out  (data_out[i][j]),
+                    .ready_out (ready_out[i][j])
                 );
             end
-        end
-
-    end else begin
-
-        `UNUSED_VAR (sel_in)
-
-        for (genvar i = 0; i < NUM_LANES; ++i) begin
-            VX_skid_buffer #(
-                .DATAW    (DATAW),
-                .PASSTHRU (BUFFERED == 0),
-                .OUT_REG  (BUFFERED > 1)
-            ) out_buffer (
-                .clk       (clk),
-                .reset     (reset),
-                .valid_in  (valid_in[i]),
-                .data_in   (data_in[i]),
-                .ready_in  (ready_in[i]),      
-                .valid_out (valid_out[0][i]),
-                .data_out  (data_out[0][i]),
-                .ready_out (ready_out[0][i])
-            );
         end
 
     end

@@ -61,10 +61,10 @@ module VX_cache_demux #(
     end
 
     VX_stream_demux #(
-        .NUM_REQS (NUM_REQS),
-        .NUM_LANES(NUM_LANES),
-        .DATAW    (REQ_DATAW),
-        .BUFFERED (BUFFERED_REQ)
+        .NUM_OUTPUTS (NUM_REQS),
+        .NUM_LANES   (NUM_LANES),
+        .DATAW       (REQ_DATAW),
+        .BUFFERED    (BUFFERED_REQ)
     ) req_demux (
         .clk       (clk),
         .reset     (reset),
@@ -113,11 +113,11 @@ module VX_cache_demux #(
     end
 
     VX_stream_mux #(            
-        .NUM_REQS (NUM_REQS),
-        .NUM_LANES(NUM_LANES),
-        .DATAW    (RSP_DATAW),
-        .BUFFERED (BUFFERED_RSP),
-        .ARBITER  (ARBITER)
+        .NUM_INPUTS (NUM_REQS),
+        .NUM_LANES  (NUM_LANES),
+        .DATAW      (RSP_DATAW),
+        .BUFFERED   (BUFFERED_RSP),
+        .ARBITER    (ARBITER)
     ) rsp_mux (
         .clk       (clk),
         .reset     (reset),

@@ -36,10 +36,10 @@ module VX_writeback #(
     wire wb_ld_ready_in;
 
     VX_stream_mux #(
-        .NUM_REQS (NUM_RSPS),
-        .DATAW    (DATAW),
-        .BUFFERED (2),
-        .ARBITER  ("F")
+        .NUM_INPUTS (NUM_RSPS),
+        .DATAW      (DATAW),
+        .BUFFERED   (2),
+        .ARBITER    ("F")
     ) rsp_mux (
         .clk       (clk),
         .reset     (reset),

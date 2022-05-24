@@ -29,10 +29,10 @@ module VX_rop_req_mux #(
     end        
 
     VX_stream_mux #(            
-        .NUM_REQS (NUM_REQS),
-        .DATAW    (REQ_DATAW),
-        .BUFFERED (BUFFERED),
-        .ARBITER  (ARBITER)
+        .NUM_INPUTS (NUM_REQS),
+        .DATAW      (REQ_DATAW),
+        .BUFFERED   (BUFFERED),
+        .ARBITER    (ARBITER)
     ) req_mux (
         .clk       (clk),
         .reset     (reset),

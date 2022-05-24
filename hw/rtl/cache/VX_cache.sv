@@ -474,9 +474,9 @@ module VX_cache #(
     end
     
     VX_stream_mux #(
-        .NUM_REQS (NUM_BANKS),
-        .DATAW    (`MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + NUM_PORTS * (1 + WORD_SIZE + WORD_SEL_BITS + `WORD_WIDTH)),
-        .ARBITER  ("R")
+        .NUM_INPUTS (NUM_BANKS),
+        .DATAW      (`MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + NUM_PORTS * (1 + WORD_SIZE + WORD_SEL_BITS + `WORD_WIDTH)),
+        .ARBITER    ("R")
     ) mem_req_mux (
         .clk       (clk),
         .reset     (reset),
