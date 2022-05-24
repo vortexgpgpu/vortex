@@ -1,7 +1,7 @@
 `include "VX_platform.vh"
 
 `TRACING_OFF
-module VX_mem_streamer #(
+module VX_mem_scheduler #(
     parameter NUM_REQS      = 4,
     parameter NUM_BANKS     = 4,
     parameter ADDRW         = 32,

@@ -240,7 +240,7 @@ module VX_raster_mem #(
         assign mem_req_byteen[i] = {`RCACHE_WORD_SIZE{1'b1}};
     end
 
-    VX_mem_streamer #(
+    VX_mem_scheduler #(
         .NUM_REQS   (NUM_REQS), 
         .NUM_BANKS  (`RCACHE_NUM_REQS),
         .ADDRW      (`RCACHE_ADDR_WIDTH),
@@ -248,7 +248,7 @@ module VX_raster_mem #(
         .QUEUE_SIZE (`RASTER_MEM_PENDING_SIZE),
         .TAGW       (TAG_WIDTH),
         .OUT_REG    (1)
-    ) mem_streamer (
+    ) mem_scheduler (
         .clk            (clk),
         .reset          (reset),
 

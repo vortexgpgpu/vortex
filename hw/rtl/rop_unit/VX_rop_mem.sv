@@ -183,7 +183,7 @@ module VX_rop_mem #(
         .data_out ({mreq_valid_r,                mreq_rw_r, mreq_mask_r, mreq_byteen_r, mreq_addr_r, mreq_data_r, mreq_tag_r})
     );
 
-    VX_mem_streamer #(
+    VX_mem_scheduler #(
         .NUM_REQS         (NUM_REQS),
         .NUM_BANKS        (`OCACHE_NUM_REQS),
         .ADDRW            (`OCACHE_ADDR_WIDTH),
@@ -192,7 +192,7 @@ module VX_rop_mem #(
         .QUEUE_SIZE       (`ROP_MEM_PENDING_SIZE),
         .PARTIAL_RESPONSE (0),
         .OUT_REG          (1)
-    ) mem_streamer (
+    ) mem_scheduler (
         .clk            (clk),
         .reset          (reset),
 
