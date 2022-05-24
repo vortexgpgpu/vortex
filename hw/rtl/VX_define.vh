@@ -307,11 +307,20 @@
 // Block size in bytes
 `define TCACHE_LINE_SIZE        `L1_BLOCK_SIZE
 
+// Input request size
+`define TCACHE_NUM_REQS         `NUM_THREADS
+
+// Memory request size
+`define TEX_MEM_REQS            (4 * `NUM_THREADS)
+
+// Batch select bits
+`define TCACHE_BATCH_SEL_BITS   `CLOG2((`TEX_MEM_REQS + `TCACHE_NUM_REQS - 1) / `TCACHE_NUM_REQS)
+
 // Core request tag Id bits       
-`define TCACHE_TAG_ID_BITS      2
+`define TCACHE_TAG_ID_BITS      (`CLOG2(`TEX_MEM_PENDING_SIZE) + `TCACHE_BATCH_SEL_BITS)
 
 // Core request tag bits
-`define TCACHE_TAG_WIDTH        (`UUID_BITS + `TCACHE_TAG_ID_BITS )
+`define TCACHE_TAG_WIDTH        `TCACHE_TAG_ID_BITS
 
 // Memory request data bits
 `define TCACHE_MEM_DATA_WIDTH   (`TCACHE_LINE_SIZE * 8)
@@ -439,7 +448,7 @@
 // Input request size
 `define RCACHE_NUM_REQS         `RCACHE_NUM_BANKS
  
- // Raster memory request size
+// Raster memory request size
 `define RASTER_MEM_REQS         9
 
 // Batch select bits

@@ -48,7 +48,7 @@ module VX_raster_mem #(
     localparam FETCH_FLAG_PDATA = 2'b10;
     
     // A primitive data contains (x_loc, y_loc, pid, edges)
-    localparam PRIM_DATA_WIDTH = 2 * `RASTER_DIM_BITS+ 9 * `RASTER_DATA_BITS + `RASTER_PID_BITS ;
+    localparam PRIM_DATA_WIDTH = 2 * `RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS + `RASTER_PID_BITS;
 
     // Storage to cycle through all primitives and tiles
     reg [`RASTER_DCR_DATA_BITS-1:0] curr_tbuf_addr;

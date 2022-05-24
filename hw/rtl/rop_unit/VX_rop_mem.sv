@@ -40,7 +40,7 @@ module VX_rop_mem #(
     input wire                          rsp_ready
 );
 
-    localparam NUM_REQS = 2 * NUM_LANES;
+    localparam NUM_REQS = `ROP_MEM_REQS;
 
     wire                        mreq_valid, mreq_valid_r;
     wire                        mreq_rw, mreq_rw_r;

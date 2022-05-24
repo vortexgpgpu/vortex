@@ -365,7 +365,6 @@ module VX_mem_unit # (
         .MRSQ_SIZE      (`TCACHE_MRSQ_SIZE),
         .MREQ_SIZE      (`TCACHE_MREQ_SIZE),
         .WRITE_ENABLE   (0),
-        .REQ_UUID_BITS  (`UUID_BITS),
         .CORE_TAG_WIDTH (`TCACHE_TAG_WIDTH),
         .MEM_TAG_WIDTH  (`TCACHE_MEM_TAG_WIDTH),
         .PASSTHRU       (!`TCACHE_ENABLED)
