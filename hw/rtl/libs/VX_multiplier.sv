@@ -16,28 +16,6 @@ module VX_multiplier #(
 );
     `STATIC_ASSERT ((LATENCY <= 3), ("invalid parameter"))
 
-`ifdef QUARTUS
-
-    lpm_mult mult (
-        .clock  (clk),
-        .clken  (enable),
-        .dataa  (dataa),
-        .datab  (datab),
-        .result (result),        
-        .aclr   (1'b0),
-        .sclr   (1'b0),
-        .sum    (1'b0)
-    );
-
-    defparam mult.lpm_type   = "LPM_MULT",
-             mult.lpm_widtha = WIDTHA,
-             mult.lpm_widthb = WIDTHB,
-             mult.lpm_widthp = WIDTHP,
-             mult.lpm_representation = SIGNED ? "SIGNED" : "UNSIGNED",
-             mult.lpm_pipeline = LATENCY,
-             mult.lpm_hint   = "DEDICATED_MULTIPLIER_CIRCUITRY=YES,MAXIMIZE_SPEED=9";
-`else
-
     wire [WIDTHP-1:0] result_unqual;
 
     if (SIGNED) begin
@@ -64,8 +42,6 @@ module VX_multiplier #(
         end
         assign result = result_pipe[LATENCY-1]; 
     end
-
-`endif
 
 endmodule
 `TRACING_ON
