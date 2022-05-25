@@ -15,7 +15,7 @@ module VX_stream_mux #(
     input  wire clk,
     input  wire reset,
 
-    input wire  [`UP(LOG_NUM_REQS)-1:0]                     sel_in,
+    input wire  [NUM_LANES-1:0][`UP(LOG_NUM_REQS)-1:0]      sel_in,
 
     input  wire [NUM_INPUTS-1:0][NUM_LANES-1:0]             valid_in,
     input  wire [NUM_INPUTS-1:0][NUM_LANES-1:0][DATAW-1:0]  data_in,
@@ -49,13 +49,15 @@ module VX_stream_mux #(
         wire [NUM_OUTPUTS-1:0][NUM_LANES-1:0][DATAW-1:0] sel_data;
         wire [NUM_OUTPUTS-1:0][NUM_LANES-1:0]            sel_ready;
         
-        wire [LOG_NUM_REQS-1:0] sel_index;
-        wire [NUM_REQS-1:0]     sel_onehot;
+        wire [NUM_LANES-1:0][LOG_NUM_REQS-1:0] sel_index;
+        wire [NUM_LANES-1:0][NUM_REQS-1:0]     sel_onehot;
 
         if (ARBITER != "") begin   
             `UNUSED_VAR (sel_in)        
-            wire [NUM_REQS-1:0] arb_requests;
-            wire                arb_unlock;
+            wire [NUM_REQS-1:0]     arb_requests;
+            wire [LOG_NUM_REQS-1:0] arb_index;
+            wire [NUM_REQS-1:0]     arb_onehot;
+            wire                    arb_unlock;
 
             if (NUM_LANES > 1) begin
                 for (genvar i = 0; i < NUM_REQS; ++i) begin
@@ -83,27 +85,34 @@ module VX_stream_mux #(
                 .requests     (arb_requests),  
                 .unlock       (arb_unlock),
                 `UNUSED_PIN   (grant_valid),
-                .grant_index  (sel_index),
-                .grant_onehot (sel_onehot)
+                .grant_index  (arb_index),
+                .grant_onehot (arb_onehot)
             );
+            
+            for (genvar i = 0; i < NUM_LANES; i++) begin
+                assign sel_index[i]  = arb_index;
+                assign sel_onehot[i] = arb_onehot;
+            end
         end else begin
             assign sel_index = sel_in;
-            reg [NUM_REQS-1:0] sel_onehot_r;
+            reg [NUM_LANES-1:0][NUM_REQS-1:0] sel_onehot_r;
             always @(*) begin
-                sel_onehot_r = '0;
-                sel_onehot_r[sel_in] = 1;
+                for (integer i = 0; i < NUM_LANES; ++i) begin
+                    sel_onehot_r[i]            = '0;
+                    sel_onehot_r[i][sel_in[i]] = 1;
+                end
             end
             assign sel_onehot = sel_onehot_r;
         end        
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
             for (genvar j = 0; j < NUM_LANES; ++j) begin
-                assign sel_valid[i][j] = valid_in_r[sel_index][i][j];
-                assign sel_data[i][j]  = data_in_r[sel_index][i][j];
+                assign sel_valid[i][j] = valid_in_r[sel_index[j]][i][j];
+                assign sel_data[i][j]  = data_in_r[sel_index[j]][i][j];
                 for (genvar k = 0; k < NUM_REQS; ++k) begin
                     localparam ii = k * NUM_OUTPUTS + i;
                     if (ii < NUM_INPUTS) begin
-                        assign ready_in[ii][j] = sel_ready[i][j] && sel_onehot[k];
+                        assign ready_in[ii][j] = sel_ready[i][j] && sel_onehot[j][k];
                     end
                 end
             end

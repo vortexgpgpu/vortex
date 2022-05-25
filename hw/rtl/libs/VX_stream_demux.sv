@@ -15,7 +15,7 @@ module VX_stream_demux #(
     input  wire clk,
     input  wire reset,
 
-    input wire [`UP(LOG_NUM_REQS)-1:0]                      sel_in,
+    input wire [NUM_LANES-1:0][`UP(LOG_NUM_REQS)-1:0]       sel_in,
 
     input  wire [NUM_INPUTS-1:0][NUM_LANES-1:0]             valid_in,
     input  wire [NUM_INPUTS-1:0][NUM_LANES-1:0][DATAW-1:0]  data_in,    
@@ -31,13 +31,15 @@ module VX_stream_demux #(
 
         wire [NUM_REQS-1:0][NUM_INPUTS-1:0][NUM_LANES-1:0] sel_ready;
 
-        wire [LOG_NUM_REQS-1:0] sel_index;
-        wire [NUM_REQS-1:0]     sel_onehot;           
+        wire [NUM_LANES-1:0][LOG_NUM_REQS-1:0] sel_index;
+        wire [NUM_LANES-1:0][NUM_REQS-1:0]     sel_onehot;           
 
         if (ARBITER != "") begin   
             `UNUSED_VAR (sel_in)        
-            wire [NUM_REQS-1:0]  arb_requests;
-            wire                 arb_unlock;
+            wire [NUM_REQS-1:0]     arb_requests;
+            wire [LOG_NUM_REQS-1:0] arb_index;
+            wire [NUM_REQS-1:0]     arb_onehot;
+            wire                    arb_unlock;
 
             if (NUM_LANES > 1) begin
                 for (genvar i = 0; i < NUM_REQS; ++i) begin
@@ -65,24 +67,31 @@ module VX_stream_demux #(
                 .requests     (arb_requests),  
                 .unlock       (arb_unlock),
                 `UNUSED_PIN   (grant_valid),
-                .grant_index  (sel_index),
-                .grant_onehot (sel_onehot)
+                .grant_index  (arb_index),
+                .grant_onehot (arb_onehot)
             );
+
+            for (genvar i = 0; i < NUM_LANES; i++) begin
+                assign sel_index[i]  = arb_index;
+                assign sel_onehot[i] = arb_onehot;
+            end
         end else begin
             assign sel_index = sel_in;
-            reg [NUM_REQS-1:0] sel_onehot_r;
+            reg [NUM_LANES-1:0][NUM_REQS-1:0] sel_onehot_r;
             always @(*) begin
-                sel_onehot_r = '0;
-                sel_onehot_r[sel_in] = 1;
+                for (integer i = 0; i < NUM_LANES; ++i) begin
+                    sel_onehot_r[i]            = '0;
+                    sel_onehot_r[i][sel_in[i]] = 1;
+                end
             end
             assign sel_onehot = sel_onehot_r;
         end
 
         for (genvar i = 0; i < NUM_INPUTS; ++i) begin
-            for (genvar j = 0; j < NUM_REQS; ++j) begin            
-                localparam ii = j * NUM_INPUTS + i;
-                if (ii < NUM_OUTPUTS) begin
-                    for (genvar k = 0; k < NUM_LANES; ++k) begin
+            for (genvar j = 0; j < NUM_LANES; ++j) begin
+                for (genvar k = 0; k < NUM_REQS; ++k) begin            
+                    localparam ii = k * NUM_INPUTS + i;
+                    if (ii < NUM_OUTPUTS) begin                        
                         VX_skid_buffer #(
                             .DATAW    (DATAW),
                             .PASSTHRU (BUFFERED == 0),
@@ -90,17 +99,17 @@ module VX_stream_demux #(
                         ) out_buffer (
                             .clk       (clk),
                             .reset     (reset),
-                            .valid_in  (valid_in[i][k] && sel_onehot[j]),
-                            .data_in   (data_in[i][k]),
-                            .ready_in  (sel_ready[j][i][k]),
-                            .valid_out (valid_out[ii][k]),
-                            .data_out  (data_out[ii][k]),
-                            .ready_out (ready_out[ii][k])
+                            .valid_in  (valid_in[i][j] && sel_onehot[j][k]),
+                            .data_in   (data_in[i][j]),
+                            .ready_in  (sel_ready[k][i][j]),
+                            .valid_out (valid_out[ii][j]),
+                            .data_out  (data_out[ii][j]),
+                            .ready_out (ready_out[ii][j])
                         );
                     end
-                end                
-            end
-            assign ready_in[i] = sel_ready[sel_index][i];
+                end
+                assign ready_in[i][j] = sel_ready[sel_index[j]][i][j];
+            end            
         end
 
     end else begin
