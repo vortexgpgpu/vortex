@@ -52,8 +52,8 @@ module VX_raster_be #(
     
     // Per-quad edge evaluation
     for (genvar i = 0; i < PER_BLOCK_QUADS; ++i) begin
-        integer ii = i % NUM_QUADS_DIM;
-        integer jj = i / NUM_QUADS_DIM;
+        localparam ii = i % NUM_QUADS_DIM;
+        localparam jj = i / NUM_QUADS_DIM;
         assign quad_x_loc[i] = x_loc_in + `RASTER_DIM_BITS'(2 * ii);
         assign quad_y_loc[i] = y_loc_in + `RASTER_DIM_BITS'(2 * jj);
         wire [2:0][`RASTER_DATA_BITS-1:0] quad_edge_eval;
@@ -115,8 +115,8 @@ module VX_raster_be #(
     raster_stamp_t [OUTPUT_BATCHES-1:0][OUTPUT_QUADS-1:0] fifo_stamp_in;
         
     for (genvar i = 0; i < OUTPUT_BATCHES * OUTPUT_QUADS; ++i) begin
-        integer q = i % OUTPUT_QUADS;
-        integer b = i / OUTPUT_QUADS;
+        localparam q = i % OUTPUT_QUADS;
+        localparam b = i / OUTPUT_QUADS;
         if (i < PER_BLOCK_QUADS) begin
             assign fifo_mask_in [b][q]         = qe_valid[i];
             assign fifo_stamp_in[b][q].pos_x   = qe_x_loc[i][`RASTER_DIM_BITS-1:1];
