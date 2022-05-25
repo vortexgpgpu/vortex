@@ -58,6 +58,7 @@ module VX_raster_unit #(
 
     // Memory unit
     VX_raster_mem #(
+        .CLUSTER_ID   (CLUSTER_ID),
         .TILE_LOGSIZE (TILE_LOGSIZE),
         .QUEUE_SIZE   (MEM_FIFO_DEPTH)
     ) raster_mem (

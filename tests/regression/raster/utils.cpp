@@ -114,7 +114,7 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
 
   uint32_t tileLogSize = log2ceil(tileSize);
 
-  std::map<uint32_t, std::vector<uint32_t>> tiles;
+  std::map<std::pair<uint16_t, uint16_t>, std::vector<uint32_t>> tiles;
 
   std::vector<rast_prim_t> rast_prims;
   rast_prims.reserve(primitives.size());
@@ -258,8 +258,7 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
           //auto x = tx << tileLogSize;
           //auto y = ty << tileLogSize;
           //printf("*** Tile (%d,%d) :\n", x, y);
-          uint32_t tile_id = (ty << 16) | tx;
-          tiles[tile_id].push_back(p);
+          tiles[{tx, ty}].push_back(p);
           ++num_prims;
         }
         // update edge equation x components
@@ -282,10 +281,13 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
   {
     tilebuf.resize(tiles.size() * sizeof(rast_tile_header_t) + num_prims * sizeof(uint32_t));
     auto tile_data = tilebuf.data();
+    size_t offset = (tiles.size() - 1) * sizeof(rast_tile_header_t);
     for (auto it : tiles) {
-      rast_tile_header_t header{it.first, (uint32_t)it.second.size()};
-      *(rast_tile_header_t*)(tile_data) = header;
+      *(rast_tile_header_t*)(tile_data) = {it.first.first, it.first.second, (uint16_t)offset, (uint16_t)it.second.size()};
+      offset += 4 * (it.second.size() - 2);
       tile_data += sizeof(rast_tile_header_t);
+    }
+    for (auto it : tiles) {
       memcpy(tile_data, it.second.data(), it.second.size() * sizeof(uint32_t));
       tile_data += it.second.size() * sizeof(uint32_t);
     }

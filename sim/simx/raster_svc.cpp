@@ -72,7 +72,7 @@ public:
       last_pop_time_ = 0;
     } 
 
-    uint32_t fetch(uint32_t wid, uint32_t tid) {      
+    uint32_t fetch(uint32_t wid, uint32_t tid) {
       auto stamp = raster_unit_->fetch();
       if (nullptr == stamp)
         return 0;      

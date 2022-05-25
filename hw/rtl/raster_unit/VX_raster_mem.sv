@@ -6,7 +6,8 @@
 //  2. Form an FSM to keep a track of the return value types
 //  3. Store primitive data in an elastic buffer
 
-module VX_raster_mem #(  
+module VX_raster_mem #(
+    parameter CLUSTER_ID   = 0,
     parameter TILE_LOGSIZE = 5,
     parameter QUEUE_SIZE   = 8
 ) (
@@ -52,6 +53,7 @@ module VX_raster_mem #(
 
     // Storage to cycle through all primitives and tiles
     reg [`RASTER_DCR_DATA_BITS-1:0] curr_tbuf_addr;
+    reg [`RASTER_DCR_DATA_BITS-1:0] curr_prim_addr;
     reg [`RASTER_PID_BITS-1:0]      curr_pid_reqs;
     reg [`RASTER_PID_BITS-1:0]      curr_pid_rsps;
     reg [`RASTER_TILE_BITS-1:0]     curr_num_tiles;
@@ -98,15 +100,13 @@ module VX_raster_mem #(
     wire prim_addr_rsp_fire = prim_addr_rsp_valid && prim_addr_rsp_ready;
 
     wire prim_data_rsp_fire = prim_data_rsp_valid && mem_rsp_ready;
+
+    wire [`RASTER_DCR_DATA_BITS-1:0] curr_prim_addr_0 = curr_tbuf_addr + `RASTER_DCR_DATA_BITS'(mem_rsp_data[1][0 +: 16]);
     
     always @(posedge clk) begin
         if (reset) begin
-            state          <= STATE_IDLE; 
-            mem_req_valid  <= 0;
-            curr_tbuf_addr <= 0;
-            curr_pid_reqs  <= 0;
-            curr_pid_rsps  <= 0; 
-            curr_num_tiles <= 0;          
+            state <= STATE_IDLE; 
+            mem_req_valid <= 0;    
         end begin
             // deassert memory request when fired
             if (mem_req_fire) begin
@@ -115,33 +115,34 @@ module VX_raster_mem #(
 
             case (state)
             STATE_IDLE: begin
-                if (start && (dcrs.tile_count != 0)) begin
+                if (start && (CLUSTER_ID < dcrs.tile_count)) begin
                     // fetch the next tile header
                     state           <= STATE_TILE;         
                     mem_req_valid   <= 1;
-                    mem_req_addr[0] <= dcrs.tbuf_addr;
-                    mem_req_addr[1] <= dcrs.tbuf_addr + 4;
+                    mem_req_addr[0] <= dcrs.tbuf_addr + CLUSTER_ID * 8 + 0;
+                    mem_req_addr[1] <= dcrs.tbuf_addr + CLUSTER_ID * 8 + 4;
                     mem_req_mask    <= 9'b11;
                     mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_TILE);
                     // set tile counters
-                    curr_tbuf_addr  <= dcrs.tbuf_addr + 4 + 4;
-                    curr_num_tiles  <= dcrs.tile_count;
+                    curr_tbuf_addr  <= dcrs.tbuf_addr + CLUSTER_ID * 8 + 8;
+                    curr_num_tiles  <= (dcrs.tile_count - CLUSTER_ID + `NUM_CLUSTERS - 1) / `NUM_CLUSTERS;
                 end
             end
             STATE_TILE: begin
                 if (mem_rsp_valid) begin
                     // handle tile header response
                     state           <= STATE_PRIM;
-                    curr_x_loc      <= `RASTER_DIM_BITS'(mem_rsp_data[0][0 +: 16] << TILE_LOGSIZE);
+                    curr_x_loc      <= `RASTER_DIM_BITS'(mem_rsp_data[0][0  +: 16] << TILE_LOGSIZE);
                     curr_y_loc      <= `RASTER_DIM_BITS'(mem_rsp_data[0][16 +: 16] << TILE_LOGSIZE);                    
                     // fetch next primitive pid
                     mem_req_valid   <= 1;   
-                    mem_req_addr[0] <= curr_tbuf_addr;                    
+                    mem_req_addr[0] <= curr_prim_addr_0;
                     mem_req_mask    <= 9'b1;                    
                     mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_PID);
                     // set primitive counters
-                    curr_pid_reqs   <= mem_rsp_data[1][`RASTER_PID_BITS-1:0];
-                    curr_pid_rsps   <= mem_rsp_data[1][`RASTER_PID_BITS-1:0];
+                    curr_prim_addr  <= curr_prim_addr_0;
+                    curr_pid_reqs   <= mem_rsp_data[1][16 +: `RASTER_PID_BITS];
+                    curr_pid_rsps   <= mem_rsp_data[1][16 +: `RASTER_PID_BITS];
                 end
             end
             STATE_PRIM: begin
@@ -149,7 +150,7 @@ module VX_raster_mem #(
                 if (mem_req_fire) begin
                     if (is_prim_id_req) begin
                         // update pid counters
-                        curr_tbuf_addr <= curr_tbuf_addr + 4;
+                        curr_prim_addr <= curr_prim_addr + 4;
                         curr_pid_reqs  <= curr_pid_reqs - `RASTER_PID_BITS'(1);
                     end
 
@@ -158,7 +159,7 @@ module VX_raster_mem #(
                         // fetch next primitive pid
                         mem_req_valid   <= 1;                        
                         mem_req_mask    <= 9'b1;
-                        mem_req_addr[0] <= curr_tbuf_addr + (is_prim_id_req ? 4 : 0);
+                        mem_req_addr[0] <= curr_prim_addr + (is_prim_id_req ? 4 : 0);
                         mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_PID);                        
                     end
                 end
@@ -182,10 +183,10 @@ module VX_raster_mem #(
                             state           <= STATE_TILE;
                             mem_req_valid   <= 1;
                             mem_req_mask    <= 9'b11;
-                            mem_req_addr[0] <= curr_tbuf_addr;
-                            mem_req_addr[1] <= curr_tbuf_addr + 4;                            
+                            mem_req_addr[0] <= curr_tbuf_addr + (`NUM_CLUSTERS - 1) * 8;
+                            mem_req_addr[1] <= curr_tbuf_addr + (`NUM_CLUSTERS - 1) * 8 + 4;                            
                             mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_TILE);
-                            curr_tbuf_addr  <= curr_tbuf_addr + 4 + 4;
+                            curr_tbuf_addr  <= curr_tbuf_addr + (`NUM_CLUSTERS - 1) * 8 + 8;
                         end
                         // update tile counter
                         curr_num_tiles <= curr_num_tiles - `RASTER_TILE_BITS'(1);

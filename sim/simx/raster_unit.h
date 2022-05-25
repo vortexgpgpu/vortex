@@ -101,10 +101,13 @@ public:
             const char* name,
             const Arch &arch, 
             const DCRS& dcrs,
+            uint32_t index,
             uint32_t tile_logsize, 
             uint32_t block_logsize);    
 
   ~RasterUnit();
+
+  uint32_t id() const;
 
   void reset();
 

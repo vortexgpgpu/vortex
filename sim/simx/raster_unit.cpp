@@ -53,6 +53,7 @@ private:
   const Arch& arch_;
   const RasterUnit::DCRS& dcrs_;
   RAM* mem_;
+  uint32_t index_;
   uint32_t tile_logsize_;
   uint32_t block_logsize_;    
   uint32_t num_tiles_;
@@ -64,7 +65,8 @@ private:
   uint32_t dst_height_;
   uint32_t tile_x_;
   uint32_t tile_y_;
-  uint32_t num_prims_;    
+  uint32_t prim_offset_;
+  uint32_t prim_count_;    
   uint32_t cur_tile_;
   uint32_t cur_prim_;
   uint32_t pid_;
@@ -136,8 +138,8 @@ private:
       // add stamp to queue
       auto pos_x = x / 2;
       auto pos_y = y / 2;
-      // printf("raster-quad: x_loc = %d, y_loc = %d, pid = %d, mask=%d, bcoords = %d %d %d %d, %d %d %d %d, %d %d %d %d\n",
-      //   pos_x, pos_y, pid_, mask,
+      // printf("*** raster%d-quad: x_loc = %d, y_loc = %d, pid = %d, mask=%d, bcoords = %d %d %d %d, %d %d %d %d, %d %d %d %d\n",
+      //   index_, pos_x, pos_y, pid_, mask,
       //   bcoords[0].x.data(), bcoords[1].x.data(), bcoords[2].x.data(), bcoords[3].x.data(),
       //   bcoords[0].y.data(), bcoords[1].y.data(), bcoords[2].y.data(), bcoords[3].y.data(),
       //   bcoords[0].z.data(), bcoords[1].z.data(), bcoords[2].z.data(), bcoords[3].z.data());
@@ -156,22 +158,22 @@ private:
     if ((e0 + (primitive.extents[0] << subBlockLogSize)) < fxZero 
      || (e1 + (primitive.extents[1] << subBlockLogSize)) < fxZero
      || (e2 + (primitive.extents[2] << subBlockLogSize)) < fxZero) {
-      /*printf("*** raster-block: pass=0, level=%d, x=%d, y=%d, edge_eval={0x%x, 0x%x, 0x%x}, extend={0x%x, 0x%x, 0x%x}\n", 
-          (tile_logsize_ - subBlockLogSize), x, y, e0, e1, e2, 
+      /*printf("*** raster%d-block: pass=0, level=%d, x=%d, y=%d, edge_eval={0x%x, 0x%x, 0x%x}, extend={0x%x, 0x%x, 0x%x}\n", 
+          index_, (tile_logsize_ - subBlockLogSize), x, y, e0, e1, e2, 
           (primitive.extents[0] << subBlockLogSize),
           (primitive.extents[1] << subBlockLogSize),
           (primitive.extents[2] << subBlockLogSize));*/
       return; 
      } else {
-       /*printf("*** raster-block: pass=1, level=%d, x=%d, y=%d, edge_eval={0x%x, 0x%x, 0x%x}, extend={0x%x, 0x%x, 0x%x}\n", 
-          (tile_logsize_ - subBlockLogSize), x, y, e0, e1, e2, 
+       /*printf("*** raster%d-block: pass=1, level=%d, x=%d, y=%d, edge_eval={0x%x, 0x%x, 0x%x}, extend={0x%x, 0x%x, 0x%x}\n", 
+          index_, (tile_logsize_ - subBlockLogSize), x, y, e0, e1, e2, 
           (primitive.extents[0] << subBlockLogSize),
           (primitive.extents[1] << subBlockLogSize),
           (primitive.extents[2] << subBlockLogSize));*/
      }
   
     if (subBlockLogSize > 1) {
-      // printf("*** raster-block: x=%d, y=%d\n", x, y);
+      // printf("*** raster%d-block: x=%d, y=%d\n", index_, x, y);
 
       --subBlockLogSize;
       auto subBlockSize = 1 << subBlockLogSize;
@@ -231,22 +233,22 @@ private:
     if ((e0 + (primitive.extents[0] << subTileLogSize)) < fxZero 
      || (e1 + (primitive.extents[1] << subTileLogSize)) < fxZero
      || (e2 + (primitive.extents[2] << subTileLogSize)) < fxZero) {
-      /*printf("*** raster-tile: pass=0, level=%d, x=%d, y=%d, edge_eval={0x%x, 0x%x, 0x%x}, extend={0x%x, 0x%x, 0x%x}\n", 
-        (tile_logsize_ - subTileLogSize), x, y, e0, e1, e2, 
+      /*printf("*** raster%d-tile: pass=0, level=%d, x=%d, y=%d, edge_eval={0x%x, 0x%x, 0x%x}, extend={0x%x, 0x%x, 0x%x}\n", 
+        index_, (tile_logsize_ - subTileLogSize), x, y, e0, e1, e2, 
         (primitive.extents[0] << subTileLogSize),
         (primitive.extents[1] << subTileLogSize),
         (primitive.extents[2] << subTileLogSize));*/
       return; 
     } else {
-      /*printf("*** raster-tile: pass=1, level=%d, x=%d, y=%d, edge_eval={0x%x, 0x%x, 0x%x}, extend={0x%x, 0x%x, 0x%x}\n", 
-        (tile_logsize_ - subTileLogSize), x, y, e0, e1, e2, 
+      /*printf("*** raster%d-tile: pass=1, level=%d, x=%d, y=%d, edge_eval={0x%x, 0x%x, 0x%x}, extend={0x%x, 0x%x, 0x%x}\n", 
+        index_, (tile_logsize_ - subTileLogSize), x, y, e0, e1, e2, 
         (primitive.extents[0] << subTileLogSize),
         (primitive.extents[1] << subTileLogSize),
         (primitive.extents[2] << subTileLogSize));*/
     }
     
     if (subTileLogSize > block_logsize_) {
-      // printf("*** raster-tile: x=%d, y=%d\n", x, y);
+      // printf("*** raster%d-tile: x=%d, y=%d\n", index_, x, y);
 
       --subTileLogSize;
       auto subTileSize = 1 << subTileLogSize;
@@ -301,27 +303,31 @@ private:
   }
 
   void renderNextPrimitive() {    
-    if (0 == num_prims_) {
+    if (0 == prim_count_) {
       mem_traces_.push_back({});      
       auto& mem_trace = mem_traces_.back();
       mem_trace.end_of_tile = false;
 
       uint32_t tile_xy;
+      uint32_t prim_header;
 
       // read next tile header from tile buffer
       mem_->read(&tile_xy, tbuf_addr_, 4);
       mem_trace.header_addrs.push_back(tbuf_addr_);
-      // printf("*** raster-mem: add=%d, tile_xy=%d\n", tbuf_addr_, tile_xy);
-      tbuf_addr_ += 4;
-      
-      mem_->read(&num_prims_, tbuf_addr_, 4);
-      mem_trace.header_addrs.push_back(tbuf_addr_);
-      // printf("*** raster-mem: add=%d, num_prims=%d\n", tbuf_addr_, num_prims_);
-      tbuf_addr_ += 4;
-
-      assert(num_prims_ > 0);
       tile_x_ = (tile_xy & 0xffff) << tile_logsize_;
       tile_y_ = (tile_xy >> 16) << tile_logsize_;
+      printf("*** raster%d-mem: add=%d, tile_x=%d, tile_y=%d\n", index_, tbuf_addr_, tile_x_, tile_y_);
+      tbuf_addr_ += 4;
+      
+      mem_->read(&prim_header, tbuf_addr_, 4);
+      mem_trace.header_addrs.push_back(tbuf_addr_);
+      prim_offset_ = (prim_header & 0xffff);
+      prim_count_  = (prim_header >> 16);
+      printf("*** raster%d-mem: add=%d, prim_off=%d, prim_cnt=%d\n", index_, tbuf_addr_, prim_offset_, prim_count_);
+      tbuf_addr_ += 4;
+
+      assert(prim_count_ > 0);
+      
       cur_prim_ = 0;
     }
 
@@ -330,15 +336,15 @@ private:
     prim_mem_trace_t prim_trace;
 
     // read next primitive index from tile buffer
-    mem_->read(&pid_, tbuf_addr_, 4);
-    prim_trace.prim_addr = tbuf_addr_;
-    // printf("*** raster-mem: add=%d, pid=%d\n", tbuf_addr_, pid_);
-    tbuf_addr_ += 4;
+    prim_trace.prim_addr = tbuf_addr_  + prim_offset_;
+    mem_->read(&pid_, prim_trace.prim_addr, 4);    
+    printf("*** raster%d-mem: add=%d, pid=%d\n", index_, prim_trace.prim_addr, pid_);
+    prim_offset_ += 4;
 
     uint32_t x = tile_x_;
     uint32_t y = tile_y_;
 
-    // printf("*** raster-primitive: tile=%d/%d, prim=%d/%d, pid=%d, tx=%d, ty=%d\n", cur_tile_, num_tiles_, cur_prim_, num_prims_, pid_, x, y);
+    printf("*** raster%d-primitive: tile=%d/%d, prim=%d/%d, pid=%d, tx=%d, ty=%d\n", index_, cur_tile_, num_tiles_, cur_prim_, prim_count_, pid_, x, y);
 
     // get primitive edges
     primitive_t primitive;
@@ -346,21 +352,22 @@ private:
     for (int i = 0; i < 3; ++i) {
       mem_->read(&primitive.edges[i].x, pbuf_addr, 4);
       prim_trace.edge_addrs.push_back(pbuf_addr);
-      // printf("*** raster-mem: add=%d, edge.x=%d\n", pbuf_addr, primitive.edges[i].x.data());      
+      // printf("*** raster%d-mem: add=%d, edge.x=%d\n", index_, pbuf_addr, primitive.edges[i].x.data());      
       pbuf_addr += 4;
       
       mem_->read(&primitive.edges[i].y, pbuf_addr, 4);
       prim_trace.edge_addrs.push_back(pbuf_addr);
-      // printf("*** raster-mem: add=%d, edge.y=%d\n", pbuf_addr, primitive.edges[i].y.data());
+      // printf("*** raster%d-mem: add=%d, edge.y=%d\n", index_, pbuf_addr, primitive.edges[i].y.data());
       pbuf_addr += 4;
       
       mem_->read(&primitive.edges[i].z, pbuf_addr, 4);
       prim_trace.edge_addrs.push_back(pbuf_addr);
-      // printf("*** raster-mem: add=%d, edge.z=%d\n", pbuf_addr, primitive.edges[i].z.data());
+      // printf("*** raster%d-mem: add=%d, edge.z=%d\n", index_, pbuf_addr, primitive.edges[i].z.data());
       pbuf_addr += 4;      
     }
 
-    /*printf("*** raster-edges={{0x%x, 0x%x, 0x%x}, {0x%x, 0x%x, 0x%x}, {0x%x, 0x%x, 0x%x}}\n", 
+    /*printf("*** raster%d-edges={{0x%x, 0x%x, 0x%x}, {0x%x, 0x%x, 0x%x}, {0x%x, 0x%x, 0x%x}}\n", 
+      index_, 
       primitive.edges[0].x.data(), primitive.edges[0].y.data(), primitive.edges[0].z.data(),
       primitive.edges[1].x.data(), primitive.edges[1].y.data(), primitive.edges[1].z.data(),
       primitive.edges[2].x.data(), primitive.edges[2].y.data(), primitive.edges[2].z.data());*/
@@ -382,27 +389,30 @@ private:
       this->renderBlock(block_logsize_, primitive, x, y, e0, e1, e2);
     }
 
-    // printf("*** raster: generated %d stamps\n", stamps_size_);
+    // printf("*** raster%d: generated %d stamps\n", index_, stamps_size_);
     prim_trace.stamps = stamps_size_;
     mem_trace.primitives.push_back(prim_trace);
 
     // Move to next primitive
     ++cur_prim_;
-    if (cur_prim_ == num_prims_) {
+    if (cur_prim_ == prim_count_) {
       mem_trace.end_of_tile = true;
       // Move to next tile      
-      ++cur_tile_;
-      num_prims_ = 0;
+      cur_tile_  += NUM_CLUSTERS;
+      tbuf_addr_ += (NUM_CLUSTERS-1) * 8;
+      prim_count_ = 0;
     }
   }
 
 public:
   Rasterizer(const Arch& arch,
               const RasterUnit::DCRS& dcrs, 
+              uint32_t index,
               uint32_t tile_logsize, 
               uint32_t block_logsize) 
     : arch_(arch)
     , dcrs_(dcrs)
+    , index_(index)
     , tile_logsize_(tile_logsize)
     , block_logsize_(block_logsize)
     , stamps_head_(nullptr)
@@ -416,6 +426,10 @@ public:
   ~Rasterizer() {
     //--
   } 
+  
+  uint32_t id() const {
+    return index_;
+  }
 
   void initialize() {
     // get device configuration
@@ -426,10 +440,10 @@ public:
     dst_width_     = dcrs_.read(DCR_RASTER_DST_SIZE) & 0xffff;
     dst_height_    = dcrs_.read(DCR_RASTER_DST_SIZE) >> 16;
 
-    tbuf_addr_ = tbuf_baseaddr_;
-    cur_tile_  = 0;
-    cur_prim_  = 0;
-    num_prims_ = 0;
+    tbuf_addr_  = tbuf_baseaddr_ + index_ * 8;
+    cur_tile_   = index_;
+    cur_prim_   = 0;
+    prim_count_ = 0;
   }
 
   void attach_ram(RAM* mem) {
@@ -438,7 +452,7 @@ public:
 
   RasterUnit::Stamp* fetch() {
     do {
-      if (stamps_head_ == nullptr && cur_tile_ == num_tiles_) {
+      if (stamps_head_ == nullptr && cur_tile_ >= num_tiles_) {
         done_ = true;
         return nullptr;
       }
@@ -487,16 +501,21 @@ public:
   Impl(RasterUnit* simobject,     
        const Arch &arch,
        const DCRS& dcrs, 
+       uint32_t index,
        uint32_t tile_logsize, 
        uint32_t block_logsize) 
     : simobject_(simobject)
     , arch_(arch)
-    , rasterizer_(arch, dcrs, tile_logsize, block_logsize)
+    , rasterizer_(arch, dcrs, index, tile_logsize, block_logsize)
     , pending_reqs_(RASTER_MEM_PENDING_SIZE)
     , mem_trace_state_(e_mem_trace_state::header)
   {}
 
   ~Impl() {}
+
+  uint32_t id() const {
+    return rasterizer_.id();
+  }
 
   void clear() {
     rasterizer_.initialize();
@@ -622,17 +641,22 @@ RasterUnit::RasterUnit(const SimContext& ctx,
                        const char* name,                        
                        const Arch &arch, 
                        const DCRS& dcrs,
+                       uint32_t index,
                        uint32_t tile_logsize, 
                        uint32_t block_logsize) 
   : SimObject<RasterUnit>(ctx, name)
   , MemReqs(this)
   , MemRsps(this)
   , Output(this)
-  , impl_(new Impl(this, arch, dcrs, tile_logsize, block_logsize)) 
+  , impl_(new Impl(this, arch, dcrs, index, tile_logsize, block_logsize)) 
 {}
 
 RasterUnit::~RasterUnit() {
   delete impl_;
+}
+
+uint32_t RasterUnit::id() const {
+  return impl_->id();
 }
 
 void RasterUnit::reset() {

@@ -46,8 +46,10 @@ typedef struct {
 } rast_prim_t;
 
 typedef struct {
-  uint32_t tile_xy;
-  uint32_t num_prims;
+  uint16_t tile_x;
+  uint16_t tile_y;
+  uint16_t prim_start;
+  uint16_t prim_count;
 } rast_tile_header_t;
 
 typedef struct {

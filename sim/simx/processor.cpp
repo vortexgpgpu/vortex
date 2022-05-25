@@ -27,7 +27,7 @@ public:
 
     // create raster blocks
     for (uint32_t i = 0; i < NUM_CLUSTERS; ++i) {
-      raster_units_.at(i) = RasterUnit::Create("raster_unit", arch, dcrs_.raster_dcrs, RASTER_TILE_LOGSIZE, RASTER_BLOCK_LOGSIZE);
+      raster_units_.at(i) = RasterUnit::Create("raster_unit", arch, dcrs_.raster_dcrs, i, RASTER_TILE_LOGSIZE, RASTER_BLOCK_LOGSIZE);
       raster_caches.at(i) = CacheSim::Create("raster_cache", CacheSim::Config{
         log2ceil(RCACHE_SIZE),  // C
         log2ceil(MEM_BLOCK_SIZE), // B
