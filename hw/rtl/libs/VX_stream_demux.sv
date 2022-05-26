@@ -91,7 +91,7 @@ module VX_stream_demux #(
             for (genvar j = 0; j < NUM_LANES; ++j) begin
                 for (genvar k = 0; k < NUM_REQS; ++k) begin            
                     localparam ii = k * NUM_INPUTS + i;
-                    if (ii < NUM_OUTPUTS) begin                        
+                    if (ii < NUM_OUTPUTS) begin
                         VX_skid_buffer #(
                             .DATAW    (DATAW),
                             .PASSTHRU (BUFFERED == 0),
@@ -109,7 +109,7 @@ module VX_stream_demux #(
                     end
                 end
                 assign ready_in[i][j] = sel_ready[sel_index[j]][i][j];
-            end            
+            end
         end
 
     end else begin

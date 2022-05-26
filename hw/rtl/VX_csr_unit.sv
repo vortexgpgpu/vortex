@@ -47,14 +47,14 @@ module VX_csr_unit #(
 
     output wire[`NUM_WARPS-1:0] req_pending
 );    
-    wire csr_we_s1;
-    wire [`CSR_ADDR_BITS-1:0] csr_addr_s1;    
-    wire [`NUM_THREADS-1:0][31:0] csr_read_data;
     
-    wire write_enable;
-    reg [`NUM_THREADS-1:0][31:0] csr_write_data_s0, csr_write_data_s1;
-    
-    wire [`NUM_THREADS-1:0][31:0] csr_req_data = csr_req_if.use_imm ? {`NUM_THREADS{32'(csr_req_if.imm)}} : csr_req_if.rs1_data;
+    wire [`NUM_THREADS-1:0][31:0] csr_req_data;
+    wire [`NUM_THREADS-1:0][31:0] csr_read_data, csr_read_data_s0;
+    reg [`NUM_THREADS-1:0][31:0]  csr_write_data_s0, csr_write_data_s1;
+    wire                          write_enable;
+    wire [`CSR_ADDR_BITS-1:0]     csr_addr_s1;
+    reg                           csr_we_s0;
+    wire                          csr_we_s1;
 
     VX_csr_data #(
         .CORE_ID(CORE_ID)
@@ -106,14 +106,14 @@ module VX_csr_unit #(
         .write_addr     (csr_addr_s1),        
         .write_data     (csr_write_data_s1)
     );    
-
+    
     wire write_hazard = (csr_addr_s1 == csr_req_if.addr)
                      && (csr_commit_if.wid == csr_req_if.wid) 
                      && csr_commit_if.valid;
 
-    wire [`NUM_THREADS-1:0][31:0] csr_read_data_s0 = write_hazard ? csr_write_data_s1 : csr_read_data; 
-
-    reg csr_we_s0; 
+    assign csr_req_data = csr_req_if.use_imm ? {`NUM_THREADS{32'(csr_req_if.imm)}} : csr_req_if.rs1_data;
+    
+    assign csr_read_data_s0 = write_hazard ? csr_write_data_s1 : csr_read_data;    
     
     always @(*) begin      
         csr_we_s0 = 0;  
