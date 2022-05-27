@@ -23,12 +23,12 @@ module VX_decode  #(
 `endif
 
     // inputs
-    VX_ifetch_rsp_if.slave ifetch_rsp_if,
+    VX_ifetch_rsp_if.slave  ifetch_rsp_if,
 
     // outputs      
-    VX_decode_if.master decode_if,
-    VX_wstall_if.master wstall_if,
-    VX_join_if.master   join_if
+    VX_decode_if.master     decode_if,
+    VX_wrelease_if.master   wrelease_if,
+    VX_join_if.master       join_if
 );
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (clk)
@@ -481,9 +481,8 @@ module VX_decode  #(
     assign join_if.valid = ifetch_rsp_fire && is_join;
     assign join_if.wid   = ifetch_rsp_if.wid;
 
-    assign wstall_if.valid   = ifetch_rsp_fire;
-    assign wstall_if.wid     = ifetch_rsp_if.wid;
-    assign wstall_if.stalled = is_wstall;
+    assign wrelease_if.valid = ifetch_rsp_fire && ~is_wstall;
+    assign wrelease_if.wid   = ifetch_rsp_if.wid;
 
     assign ifetch_rsp_if.ibuf_pop = decode_if.ibuf_pop;
     assign ifetch_rsp_if.ready = decode_if.ready;

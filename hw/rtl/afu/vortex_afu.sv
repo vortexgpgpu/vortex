@@ -530,8 +530,6 @@ VX_mem_rsp_if #(
   .TAG_WIDTH  (AVS_REQ_TAGW+1)
 ) mem_rsp_if();
 
-`RESET_RELAY (mem_arb_reset);
-
 VX_mem_mux #(
   .NUM_REQS     (2),
   .DATA_WIDTH   (LMEM_DATA_WIDTH),
@@ -542,7 +540,7 @@ VX_mem_mux #(
   .BUFFERED_RSP (2)
 ) mem_mux (
   .clk        (clk),
-  .reset      (mem_arb_reset),
+  .reset      (reset),
   .req_in_if  (cci_vx_mem_req_if),
   .rsp_in_if  (cci_vx_mem_rsp_if),
   .req_out_if (mem_req_if),
@@ -550,8 +548,6 @@ VX_mem_mux #(
 );
 
 //--
-
-`RESET_RELAY (avs_adapter_reset);
 
 VX_avs_adapter #(
   .AVS_DATA_WIDTH  (LMEM_DATA_WIDTH), 
@@ -562,7 +558,7 @@ VX_avs_adapter #(
   .RD_QUEUE_SIZE   (AVS_RD_QUEUE_SIZE)
 ) avs_adapter (
   .clk              (clk),
-  .reset            (avs_adapter_reset),
+  .reset            (reset),
 
   // Memory request 
   .mem_req_valid    (mem_req_if.valid),
@@ -720,15 +716,13 @@ always @(posedge clk) begin
   end
 end
 
-`RESET_RELAY (cci_rdq_reset);
-
 VX_fifo_queue #(
   .DATAW   (CCI_RD_QUEUE_DATAW),
   .SIZE    (CCI_RD_QUEUE_SIZE),
   .OUT_REG (1)
 ) cci_rd_req_queue (
   .clk      (clk),
-  .reset    (cci_rdq_reset),
+  .reset    (reset),
   .push     (cci_rdq_push),
   .pop      (cci_rdq_pop),
   .data_in  (cci_rdq_din),
@@ -1011,7 +1005,7 @@ VX_fifo_queue #(
 
 wire scope_changed = `SCOPE_TRIGGER;
 
-`RESET_RELAY (scope_reset);
+`RESET_RELAY (scope_reset, reset);
 
 VX_scope #(
   .DATAW ($bits({`SCOPE_DATA_LIST,`SCOPE_UPDATE_LIST})),

@@ -21,7 +21,7 @@ module VX_commit #(
     VX_cmt_to_csr_if.master cmt_to_csr_if,
 
     // simulation helper signals
-    output reg [`NUM_REGS-1:0][31:0] sim_last_wb_value
+    output reg [`NUM_REGS-1:0][31:0] sim_wb_value
 );
     localparam NUM_RSPS = 5 + `EXT_F_ENABLED;
     localparam COMMIT_SIZEW = $clog2(NUM_RSPS * `NUM_THREADS + 1);
@@ -105,7 +105,7 @@ module VX_commit #(
         .gpu_commit_if  (gpu_commit_if),
         .writeback_if   (writeback_if),
         
-        .sim_last_wb_value (sim_last_wb_value)
+        .sim_wb_value   (sim_wb_value)
     );
 
     // store and gpu commits don't writeback  

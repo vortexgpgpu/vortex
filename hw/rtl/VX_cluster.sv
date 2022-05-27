@@ -27,7 +27,7 @@ module VX_cluster #(
 
     // simulation helper signals
     output wire             sim_ebreak,
-    output wire [`NUM_REGS-1:0][31:0] sim_last_wb_value,
+    output wire [`NUM_REGS-1:0][31:0] sim_wb_value,
 
     // Status
     output wire             busy
@@ -60,7 +60,7 @@ module VX_cluster #(
         .TAG_WIDTH (`RCACHE_TAG_WIDTH)
     ) rcache_rsp_if();
 
-    `RESET_RELAY (raster_reset);
+    `RESET_RELAY (raster_reset, reset);
 
     VX_raster_unit #( 
         .CLUSTER_ID      (CLUSTER_ID),
@@ -187,7 +187,7 @@ module VX_cluster #(
         .TAG_WIDTH (`OCACHE_TAG_WIDTH)
     ) ocache_rsp_if();
 
-    `RESET_RELAY (rop_reset);
+    `RESET_RELAY (rop_reset, reset);
 
     VX_rop_unit #(
         .CLUSTER_ID (CLUSTER_ID),
@@ -285,11 +285,11 @@ module VX_cluster #(
 `endif
 
     wire [`NUM_CORES-1:0] per_core_sim_ebreak;
-    wire [`NUM_CORES-1:0][`NUM_REGS-1:0][31:0] per_core_sim_last_wb_value;
+    wire [`NUM_CORES-1:0][`NUM_REGS-1:0][31:0] per_core_sim_wb_value;
     assign sim_ebreak = per_core_sim_ebreak[0];
-    assign sim_last_wb_value = per_core_sim_last_wb_value[0];
+    assign sim_wb_value = per_core_sim_wb_value[0];
     `UNUSED_VAR (per_core_sim_ebreak)
-    `UNUSED_VAR (per_core_sim_last_wb_value)
+    `UNUSED_VAR (per_core_sim_wb_value)
 
     VX_mem_req_if #(
         .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
@@ -307,7 +307,7 @@ module VX_cluster #(
     // Generate all cores
     for (genvar i = 0; i < `NUM_CORES; i++) begin
 
-        `RESET_RELAY (core_reset);
+        `RESET_RELAY (core_reset, reset);
 
         VX_core #(
             .CORE_ID ((CLUSTER_ID * `NUM_CORES) + i)
@@ -341,7 +341,7 @@ module VX_cluster #(
             .mem_rsp_if     (per_core_mem_rsp_if[i]),
 
             .sim_ebreak     (per_core_sim_ebreak[i]),
-            .sim_last_wb_value (per_core_sim_last_wb_value[i]),
+            .sim_wb_value   (per_core_sim_wb_value[i]),
 
             .busy           (per_core_busy[i])
         );
@@ -366,7 +366,7 @@ module VX_cluster #(
     VX_perf_cache_if perf_l2cache_if();
 `endif
 
-    `RESET_RELAY (l2_reset);
+    `RESET_RELAY (l2_reset, reset);
 
     VX_cache_wrap #(
         .CACHE_ID           (`L2_CACHE_ID),
@@ -405,8 +405,6 @@ module VX_cluster #(
 
 `else
 
-    `RESET_RELAY (mem_arb_reset);
-
     VX_mem_mux #(
         .NUM_REQS     (`NUM_CORES),
         .DATA_WIDTH   (`DCACHE_MEM_DATA_WIDTH),
@@ -417,7 +415,7 @@ module VX_cluster #(
         .BUFFERED_RSP ((`NUM_CORES > 1) ? 1 : 0)
     ) mem_mux_core (
         .clk        (clk),
-        .reset      (mem_arb_reset),
+        .reset      (reset),
         .req_in_if  (per_core_mem_req_if),        
         .rsp_in_if  (per_core_mem_rsp_if),
         .req_out_if (l2_mem_req_if),

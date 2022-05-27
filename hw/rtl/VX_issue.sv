@@ -83,10 +83,10 @@ module VX_issue #(
     // issue the instruction
     assign ibuffer_if.ready = scoreboard_if.ready && dispatch_if.ready;
 
-    `RESET_RELAY (ibuf_reset);
-    `RESET_RELAY (scoreboard_reset);
-    `RESET_RELAY (gpr_reset);
-    `RESET_RELAY (dispatch_reset);
+    `RESET_RELAY (ibuf_reset, reset);
+    `RESET_RELAY (scoreboard_reset, reset);
+    `RESET_RELAY (gpr_reset, reset);
+    `RESET_RELAY (dispatch_reset, reset);
 
     VX_ibuffer #(
         .CORE_ID(CORE_ID)
@@ -142,16 +142,16 @@ module VX_issue #(
                     $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.rd, ibuffer_if.wb, timeout_ctr,
                     in_use_regs[0], in_use_regs[1], in_use_regs[2], in_use_regs[3], ~dispatch_if.ready, ibuffer_if.uuid));
             `endif
-                `ASSERT(timeout_ctr < `STALL_TIMEOUT,
-                    ("%t: *** core%0d-issue-timeout: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, wb=%0d, inuse=%b%b%b%b, dispatch=%b (#%0d)",
-                        $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.rd, ibuffer_if.wb, 
-                        in_use_regs[0], in_use_regs[1], in_use_regs[2], in_use_regs[3], ~dispatch_if.ready, ibuffer_if.uuid));
                 timeout_ctr <= timeout_ctr + 1;
             end else if (ibuffer_if.valid && ibuffer_if.ready) begin
                 timeout_ctr <= 0;
             end
         end
     end
+    `RUNTIME_ASSERT(timeout_ctr < `STALL_TIMEOUT,
+                    ("%t: *** core%0d-issue-timeout: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, wb=%0d, inuse=%b%b%b%b, dispatch=%b (#%0d)",
+                        $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.rd, ibuffer_if.wb, 
+                        in_use_regs[0], in_use_regs[1], in_use_regs[2], in_use_regs[3], ~dispatch_if.ready, ibuffer_if.uuid));
 
     `SCOPE_ASSIGN (issue_fire,        ibuffer_if.valid && ibuffer_if.ready);
     `SCOPE_ASSIGN (issue_uuid,        ibuffer_if.uuid);

@@ -35,7 +35,7 @@ module VX_core #(
 
     // simulation helper signals
     output wire             sim_ebreak,
-    output wire [`NUM_REGS-1:0][31:0] sim_last_wb_value,
+    output wire [`NUM_REGS-1:0][31:0] sim_wb_value,
 
     // Status
     output wire             busy
@@ -130,7 +130,7 @@ module VX_core #(
     `endif
 
         .sim_ebreak     (sim_ebreak),
-        .sim_last_wb_value (sim_last_wb_value),
+        .sim_wb_value   (sim_wb_value),
 
         // Status
         .busy           (busy)

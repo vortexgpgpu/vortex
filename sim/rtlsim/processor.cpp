@@ -616,9 +616,9 @@ private:
 
   int get_last_wb_value(int reg) const {
   #ifdef AXI_BUS
-    return (int)device_->Vortex_axi->vortex->sim_last_wb_value[reg];
+    return (int)device_->Vortex_axi->vortex->sim_wb_value[reg];
   #else
-    return (int)device_->Vortex->sim_last_wb_value[reg];
+    return (int)device_->Vortex->sim_wb_value[reg];
   #endif
   }
 

@@ -22,7 +22,7 @@ module Vortex (
     input wire [`VX_MEM_TAG_WIDTH-1:0]      mem_rsp_tag,
     output wire                             mem_rsp_ready,
 
-    // DCR request
+    // DCR write request
     input  wire                             dcr_wr_valid,
     input  wire [`VX_DCR_ADDR_WIDTH-1:0]    dcr_wr_addr,
     input  wire [`VX_DCR_DATA_WIDTH-1:0]    dcr_wr_data,
@@ -70,10 +70,12 @@ module Vortex (
 `ifdef EXT_ROP_ENABLE
     VX_rop_dcr_if rop_dcr_if();
 `endif
+
+    `RESET_RELAY (dcr_reset, reset);
     
     VX_dcr_data dcr_data(
         .clk          (clk),
-        .reset        (reset),
+        .reset        (dcr_reset),
         .dcr_base_if  (dcr_base_if),
     `ifdef EXT_TEX_ENABLE
         .tex_dcr_if    (tex_dcr_if),
@@ -91,13 +93,13 @@ module Vortex (
     );
 
     wire sim_ebreak /* verilator public */;
-    wire [`NUM_REGS-1:0][31:0] sim_last_wb_value /* verilator public */;    
+    wire [`NUM_REGS-1:0][31:0] sim_wb_value /* verilator public */;    
     wire [`NUM_CLUSTERS-1:0] per_cluster_sim_ebreak;
-    wire [`NUM_CLUSTERS-1:0][`NUM_REGS-1:0][31:0] per_cluster_sim_last_wb_value;
+    wire [`NUM_CLUSTERS-1:0][`NUM_REGS-1:0][31:0] per_cluster_sim_wb_value;
     assign sim_ebreak = per_cluster_sim_ebreak[0];
-    assign sim_last_wb_value = per_cluster_sim_last_wb_value[0];
+    assign sim_wb_value = per_cluster_sim_wb_value[0];
     `UNUSED_VAR (per_cluster_sim_ebreak)
-    `UNUSED_VAR (per_cluster_sim_last_wb_value)
+    `UNUSED_VAR (per_cluster_sim_wb_value)
 
     VX_mem_req_if #(
         .DATA_WIDTH (`L2_MEM_DATA_WIDTH),
@@ -115,7 +117,7 @@ module Vortex (
     // Generate all clusters
     for (genvar i = 0; i < `NUM_CLUSTERS; i++) begin
 
-        `START_RELAY (cluster_reset);
+        `RESET_RELAY (cluster_reset, reset | start);
 
         VX_cluster #(
             .CLUSTER_ID (i)
@@ -140,7 +142,7 @@ module Vortex (
             .mem_rsp_if     (per_cluster_mem_rsp_if[i]),
 
             .sim_ebreak     (per_cluster_sim_ebreak[i]),
-            .sim_last_wb_value (per_cluster_sim_last_wb_value[i]),
+            .sim_wb_value   (per_cluster_sim_wb_value[i]),
 
             .busy           (per_cluster_busy[i])
         );
@@ -154,7 +156,7 @@ module Vortex (
     VX_perf_cache_if perf_l3cache_if();
 `endif
 
-    `START_RELAY (l3_reset);
+    `RESET_RELAY (l3_reset, reset | start);
 
     VX_cache_wrap #(
         .CACHE_ID           (`L3_CACHE_ID),
@@ -193,8 +195,6 @@ module Vortex (
 
 `else
 
-    `START_RELAY (mem_arb_reset);
-
     VX_mem_mux #(
         .NUM_REQS     (`NUM_CLUSTERS),
         .DATA_WIDTH   (`L2_MEM_DATA_WIDTH),            
@@ -204,7 +204,7 @@ module Vortex (
         .BUFFERED_RSP ((`NUM_CLUSTERS > 1) ? 1 : 0)
     ) mem_mux (
         .clk        (clk),
-        .reset      (mem_arb_reset),
+        .reset      (reset),
         .req_in_if  (per_cluster_mem_req_if),        
         .rsp_in_if  (per_cluster_mem_rsp_if),
         .req_out_if (mem_req_if),

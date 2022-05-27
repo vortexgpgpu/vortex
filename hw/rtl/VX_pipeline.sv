@@ -6,53 +6,53 @@ module VX_pipeline #(
     `SCOPE_IO_VX_pipeline
     
     // Clock
-    input wire                  clk,
-    input wire                  reset,
+    input wire              clk,
+    input wire              reset,
 
     // Dcache interface
-    VX_cache_req_if.master     dcache_req_if,
-    VX_cache_rsp_if.slave      dcache_rsp_if,
+    VX_cache_req_if.master  dcache_req_if,
+    VX_cache_rsp_if.slave   dcache_rsp_if,
 
     // Icache interface
-    VX_cache_req_if.master     icache_req_if,
-    VX_cache_rsp_if.slave      icache_rsp_if,
+    VX_cache_req_if.master  icache_req_if,
+    VX_cache_rsp_if.slave   icache_rsp_if,
 
-    VX_dcr_base_if.slave       dcr_base_if,
+    VX_dcr_base_if.slave    dcr_base_if,
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_dcr_if.slave        tex_dcr_if,
-    VX_cache_req_if.master     tcache_req_if,
-    VX_cache_rsp_if.slave      tcache_rsp_if,
+    VX_tex_dcr_if.slave     tex_dcr_if,
+    VX_cache_req_if.master  tcache_req_if,
+    VX_cache_rsp_if.slave   tcache_rsp_if,
 `ifdef PERF_ENABLE
-    VX_perf_cache_if.slave     perf_tcache_if,
+    VX_perf_cache_if.slave  perf_tcache_if,
 `endif
 `endif
 
 `ifdef EXT_RASTER_ENABLE        
-    VX_raster_req_if            raster_req_if,
+    VX_raster_req_if        raster_req_if,
 `ifdef PERF_ENABLE
-    VX_raster_perf_if.slave     raster_perf_if,
-    VX_perf_cache_if.slave      perf_rcache_if,
+    VX_raster_perf_if.slave raster_perf_if,
+    VX_perf_cache_if.slave  perf_rcache_if,
 `endif
 `endif
 `ifdef EXT_ROP_ENABLE
-    VX_rop_req_if               rop_req_if,
+    VX_rop_req_if           rop_req_if,
 `ifdef PERF_ENABLE
-    VX_rop_perf_if.slave        rop_perf_if,
-    VX_perf_cache_if.slave      perf_ocache_if,
+    VX_rop_perf_if.slave    rop_perf_if,
+    VX_perf_cache_if.slave  perf_ocache_if,
 `endif
 `endif
 
 `ifdef PERF_ENABLE
-    VX_perf_memsys_if.slave     perf_memsys_if,
+    VX_perf_memsys_if.slave perf_memsys_if,
 `endif
 
     // simulation helper signals
-    output wire                 sim_ebreak,
-    output wire [`NUM_REGS-1:0][31:0] sim_last_wb_value,
+    output wire             sim_ebreak,
+    output wire [`NUM_REGS-1:0][31:0] sim_wb_value,
 
     // Status
-    output wire                 busy
+    output wire             busy
 );
     VX_fetch_to_csr_if  fetch_to_csr_if();
     VX_cmt_to_csr_if    cmt_to_csr_if();
@@ -68,7 +68,7 @@ module VX_pipeline #(
 `endif
     VX_gpu_req_if       gpu_req_if();
     VX_writeback_if     writeback_if();     
-    VX_wstall_if        wstall_if();
+    VX_wrelease_if      wrelease_if();
     VX_join_if          join_if();
     VX_commit_if        alu_commit_if();
     VX_commit_if        ld_commit_if();
@@ -83,11 +83,11 @@ module VX_pipeline #(
     VX_perf_pipeline_if perf_pipeline_if();
 `endif
 
-    `RESET_RELAY (fetch_reset);
-    `RESET_RELAY (decode_reset);
-    `RESET_RELAY (issue_reset);
-    `RESET_RELAY (execute_reset);
-    `RESET_RELAY (commit_reset);
+    `RESET_RELAY (fetch_reset, reset);
+    `RESET_RELAY (decode_reset, reset);
+    `RESET_RELAY (issue_reset, reset);
+    `RESET_RELAY (execute_reset, reset);
+    `RESET_RELAY (commit_reset, reset);
 
     VX_fetch #(
         .CORE_ID(CORE_ID)
@@ -97,7 +97,7 @@ module VX_pipeline #(
         .reset          (fetch_reset),
         .icache_req_if  (icache_req_if),
         .icache_rsp_if  (icache_rsp_if), 
-        .wstall_if      (wstall_if),
+        .wrelease_if    (wrelease_if),
         .join_if        (join_if),        
         .warp_ctl_if    (warp_ctl_if),
         .branch_ctl_if  (branch_ctl_if),
@@ -116,7 +116,7 @@ module VX_pipeline #(
     `endif
         .ifetch_rsp_if  (ifetch_rsp_if),
         .decode_if      (decode_if),
-        .wstall_if      (wstall_if),
+        .wrelease_if    (wrelease_if),
         .join_if        (join_if)
     );
 
@@ -228,7 +228,7 @@ module VX_pipeline #(
         .writeback_if   (writeback_if),
         .cmt_to_csr_if  (cmt_to_csr_if),
 
-        .sim_last_wb_value (sim_last_wb_value)
+        .sim_wb_value   (sim_wb_value)
     );
     
 endmodule

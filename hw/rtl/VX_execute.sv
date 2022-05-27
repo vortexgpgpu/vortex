@@ -93,10 +93,10 @@ module VX_execute #(
     VX_fpu_to_csr_if fpu_to_csr_if();
 `endif
 
-    `RESET_RELAY (alu_reset);
-    `RESET_RELAY (lsu_reset);
-    `RESET_RELAY (csr_reset);
-    `RESET_RELAY (gpu_reset);
+    `RESET_RELAY (alu_reset, reset);
+    `RESET_RELAY (lsu_reset, reset);
+    `RESET_RELAY (csr_reset, reset);
+    `RESET_RELAY (gpu_reset, reset);
     
     VX_alu_unit #(
         .CORE_ID(CORE_ID)
@@ -166,7 +166,7 @@ module VX_execute #(
     );
 
 `ifdef EXT_F_ENABLE
-    `RESET_RELAY (fpu_reset);
+    `RESET_RELAY (fpu_reset, reset);
 
     VX_fpu_unit #(
         .CORE_ID(CORE_ID)

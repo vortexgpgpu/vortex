@@ -51,7 +51,7 @@ module VX_fp_div #(
             .data_out (result[i])
         );
     `else
-        `RESET_RELAY (fdiv_reset);
+        `RESET_RELAY (fdiv_reset, reset);
 
         acl_fdiv fdiv (
             .clk    (clk),

@@ -50,7 +50,7 @@ module VX_fp_sqrt #(
             .data_out (result[i])
         );
     `else
-        `RESET_RELAY (fsqrt_reset);
+        `RESET_RELAY (fsqrt_reset, reset);
 
         acl_fsqrt fsqrt (
             .clk    (clk),

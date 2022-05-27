@@ -1,21 +1,18 @@
 `include "VX_define.vh"
 
-interface VX_wstall_if();
+interface VX_wrelease_if();
 
     wire                valid;    
     wire [`NW_BITS-1:0] wid;
-    wire                stalled;
 
     modport master (
         output valid,
-        output wid,
-        output stalled
+        output wid
     );
 
     modport slave (
         input valid,
-        input wid,
-        input stalled
+        input wid
     );
 
 endinterface

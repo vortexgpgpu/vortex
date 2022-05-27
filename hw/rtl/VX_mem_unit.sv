@@ -67,7 +67,7 @@ module VX_mem_unit # (
         `CACHE_REQ_TO_MEM (icache_req_qual_if, icache_req_if, i);
     end
 
-    `RESET_RELAY (icache_reset);
+    `RESET_RELAY (icache_reset, reset);
 
     VX_cache_wrap #(
         .CACHE_ID       (`ICACHE_ID),
@@ -146,7 +146,7 @@ module VX_mem_unit # (
         `CACHE_REQ_TO_MEM (dcache_nosm_req_qual_if, dcache_nosm_req_if, i);
     end
 
-    `RESET_RELAY (dcache_reset);
+    `RESET_RELAY (dcache_reset, reset);
 
     VX_cache_wrap #(
         .CACHE_ID       (`DCACHE_ID),
@@ -204,8 +204,7 @@ module VX_mem_unit # (
         .TAG_WIDTH (`DCACHE_NOSM_TAG_WIDTH)
     ) smem_rsp_if();
 
-    `RESET_RELAY (smem_arb_reset);
-    `RESET_RELAY (smem_reset);
+    `RESET_RELAY (smem_reset, reset);
 
     VX_cache_req_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
@@ -230,7 +229,7 @@ module VX_mem_unit # (
         .BUFFERED_RSP  (1)
     ) dcache_nosm_demux (
         .clk        (clk),
-        .reset      (smem_arb_reset),
+        .reset      (reset),
         .req_in_if  (dcache_req_if),
         .rsp_in_if  (dcache_rsp_if),
         .req_out_if (dcache_nosm_demux_req_if),
@@ -349,7 +348,7 @@ module VX_mem_unit # (
         `CACHE_REQ_TO_MEM (tcache_req_qual_if, tcache_req_if, i);
     end
 
-    `RESET_RELAY (tcache_reset);
+    `RESET_RELAY (tcache_reset, reset);
 
     VX_cache_wrap #(
         .CACHE_ID       (`TCACHE_ID),

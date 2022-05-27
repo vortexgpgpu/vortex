@@ -179,7 +179,7 @@ module VX_cache #(
     wire [`LINE_SEL_BITS-1:0] flush_addr;
     wire                      flush_enable;
 
-    `RESET_RELAY (flush_reset);
+    `RESET_RELAY (flush_reset, reset);
 
     VX_flush_ctrl #( 
         .CACHE_SIZE (CACHE_SIZE),
@@ -349,7 +349,7 @@ module VX_cache #(
         assign curr_bank_mem_rsp_data    = mem_rsp_data_s;
         assign per_bank_mem_rsp_ready[i] = curr_bank_mem_rsp_ready;
 
-        `RESET_RELAY (bank_reset);
+        `RESET_RELAY (bank_reset, reset);
         
         VX_bank #(                
             .BANK_ID            (i),

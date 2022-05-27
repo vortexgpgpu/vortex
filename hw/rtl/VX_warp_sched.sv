@@ -9,7 +9,7 @@ module VX_warp_sched #(
     input wire              reset,
 
     VX_warp_ctl_if.slave    warp_ctl_if,
-    VX_wstall_if.slave      wstall_if,
+    VX_wrelease_if.slave    wrelease_if,
     VX_join_if.slave        join_if,
     VX_branch_ctl_if.slave  branch_ctl_if,
 
@@ -17,6 +17,7 @@ module VX_warp_sched #(
 
     VX_fetch_to_csr_if.master fetch_to_csr_if,
 
+    // Status
     output wire             busy
 );
 
@@ -131,8 +132,8 @@ module VX_warp_sched #(
                 warp_pcs[ifetch_req_if.wid] <= ifetch_req_if.PC + 4;
             end
 
-            if (wstall_if.valid) begin
-                stalled_warps[wstall_if.wid] <= wstall_if.stalled;
+            if (wrelease_if.valid) begin
+                stalled_warps[wrelease_if.wid] <= 0;
             end
 
             // join handling
@@ -253,18 +254,23 @@ module VX_warp_sched #(
     assign busy = (active_warps != 0);
           
     reg [31:0] timeout_ctr;
+    reg timeout_enable;
     always @(posedge clk) begin
         if (reset) begin
-            timeout_ctr <= 0;
-        end else begin        
-            if (active_warps !=0 && active_warps == stalled_warps) begin
-                `ASSERT(timeout_ctr < `STALL_TIMEOUT, ("%t: *** core%0d-scheduler-timeout: stalled_warps=%b", $time, CORE_ID, stalled_warps));
+            timeout_ctr    <= 0;
+            timeout_enable <= 0;
+        end else begin
+            if (wrelease_if.valid) begin
+                timeout_enable <= 1;
+            end
+            if (timeout_enable && active_warps !=0 && active_warps == stalled_warps) begin
                 timeout_ctr <= timeout_ctr + 1;
             end else if (active_warps == 0 || active_warps != stalled_warps) begin
                 timeout_ctr <= 0;
             end
         end
     end
+    `RUNTIME_ASSERT(timeout_ctr < `STALL_TIMEOUT, ("%t: *** core%0d-scheduler-timeout: stalled_warps=%b", $time, CORE_ID, stalled_warps));
 
     `SCOPE_ASSIGN (wsched_scheduled,      warp_scheduled);
     `SCOPE_ASSIGN (wsched_schedule_uuid,  instr_uuid);

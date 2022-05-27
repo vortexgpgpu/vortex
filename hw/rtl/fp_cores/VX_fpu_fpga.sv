@@ -74,11 +74,11 @@ module VX_fpu_fpga #(
         endcase
     end
 
-    `RESET_RELAY (fma_reset);
-    `RESET_RELAY (div_reset);
-    `RESET_RELAY (sqrt_reset);
-    `RESET_RELAY (cvt_reset);
-    `RESET_RELAY (ncp_reset);
+    `RESET_RELAY (fma_reset, reset);
+    `RESET_RELAY (div_reset, reset);
+    `RESET_RELAY (sqrt_reset, reset);
+    `RESET_RELAY (cvt_reset, reset);
+    `RESET_RELAY (ncp_reset, reset);
 
     VX_fp_fma #(
         .NUM_LANES (NUM_LANES),

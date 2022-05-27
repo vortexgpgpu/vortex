@@ -13,7 +13,7 @@ module VX_fetch #(
     VX_cache_rsp_if.slave  icache_rsp_if,
 
     // inputs
-    VX_wstall_if.slave      wstall_if,
+    VX_wrelease_if.slave    wrelease_if,
     VX_join_if.slave        join_if,
     VX_branch_ctl_if.slave  branch_ctl_if,
     VX_warp_ctl_if.slave    warp_ctl_if,
@@ -24,7 +24,7 @@ module VX_fetch #(
     // csr interface
     VX_fetch_to_csr_if.master fetch_to_csr_if,
 
-    // busy status
+    // Status
     output wire             busy
 );
 
@@ -39,14 +39,14 @@ module VX_fetch #(
         .reset            (reset),     
 
         .warp_ctl_if      (warp_ctl_if),
-        .wstall_if        (wstall_if),
+        .wrelease_if      (wrelease_if),
         .join_if          (join_if),
         .branch_ctl_if    (branch_ctl_if),
 
         .ifetch_req_if    (ifetch_req_if),
 
         .fetch_to_csr_if  (fetch_to_csr_if),
-        
+
         .busy             (busy)
     ); 
 
