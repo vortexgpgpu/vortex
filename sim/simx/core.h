@@ -22,8 +22,8 @@
 #include "scoreboard.h"
 #include "exe_unit.h"
 #include "tex_unit.h"
-#include "raster_svc.h"
-#include "rop_svc.h"
+#include "raster_agent.h"
+#include "rop_agent.h"
 #include "dcrs.h"
 
 namespace vortex {
@@ -161,9 +161,9 @@ private:
   SharedMem::Ptr  sharedmem_;
   TexUnit::Ptr    tex_unit_;
   RasterUnit::Ptr raster_unit_;
-  RasterSvc::Ptr  raster_svc_;
+  RasterAgent::Ptr raster_agent_;
   RopUnit::Ptr    rop_unit_;  
-  RopSvc::Ptr     rop_svc_;
+  RopAgent::Ptr   rop_agent_;
   Switch<MemReq, MemRsp>::Ptr l1_mem_switch_;
 
   PipelineLatch fetch_latch_;
@@ -189,8 +189,8 @@ private:
   friend class FpuUnit;
   friend class GpuUnit;
   friend class TexUnit;
-  friend class RasterSvc;
-  friend class RopSvc;
+  friend class RasterAgent;
+  friend class RopAgent;
 };
 
 } // namespace vortex

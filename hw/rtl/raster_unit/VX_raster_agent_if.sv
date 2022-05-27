@@ -1,6 +1,6 @@
 `include "VX_raster_define.vh"
 
-interface VX_raster_svc_if ();
+interface VX_raster_agent_if ();
 
     wire                        valid;
 

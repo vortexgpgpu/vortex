@@ -10,18 +10,18 @@ namespace vortex {
 class Core;
 class RasterUnit;
 
-class RasterSvc : public SimObject<RasterSvc> {
+class RasterAgent : public SimObject<RasterAgent> {
 public:
 
   SimPort<pipeline_trace_t*> Input;
   SimPort<pipeline_trace_t*> Output;
 
-  RasterSvc(const SimContext& ctx, 
-            const char* name,  
-            Core* core,
-            RasterUnit::Ptr raster_unit);    
+  RasterAgent(const SimContext& ctx, 
+              const char* name,
+              Core* core,
+              RasterUnit::Ptr raster_unit);  
 
-  ~RasterSvc();
+  ~RasterAgent();
 
   void reset();
 

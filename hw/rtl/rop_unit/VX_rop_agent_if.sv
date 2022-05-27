@@ -1,6 +1,6 @@
 `include "VX_rop_define.vh"
 
-interface VX_rop_svc_if ();
+interface VX_rop_agent_if ();
 
     wire                                    valid;
 

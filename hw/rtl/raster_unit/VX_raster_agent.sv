@@ -1,24 +1,24 @@
 `include "VX_raster_define.vh"
 
-module VX_raster_svc #(
+module VX_raster_agent #(
     parameter CORE_ID = 0
 ) (
     input wire clk,
     input wire reset,
 
     // Inputs    
-    VX_raster_svc_if.slave raster_svc_req_if,    
+    VX_raster_agent_if.slave raster_agent_req_if,    
     VX_raster_req_if.slave raster_req_if,
         
     // Outputs
-    VX_commit_if.master    raster_svc_rsp_if,
+    VX_commit_if.master    raster_agent_rsp_if,
     VX_gpu_csr_if.slave    raster_csr_if    
 );
     wire raster_rsp_valid, raster_rsp_ready;
 
     // CSRs access
 
-    wire csr_write_enable = raster_req_if.valid & raster_svc_req_if.valid & raster_rsp_ready;
+    wire csr_write_enable = raster_req_if.valid & raster_agent_req_if.valid & raster_rsp_ready;
 
     VX_raster_csr #(
         .CORE_ID (CORE_ID)
@@ -27,22 +27,22 @@ module VX_raster_svc #(
         .reset          (reset),
         // inputs
         .write_enable   (csr_write_enable),    
-        .write_uuid     (raster_svc_req_if.uuid),
-        .write_wid      (raster_svc_req_if.wid),
-        .write_tmask    (raster_svc_req_if.tmask),
+        .write_uuid     (raster_agent_req_if.uuid),
+        .write_wid      (raster_agent_req_if.wid),
+        .write_tmask    (raster_agent_req_if.tmask),
         .write_data     (raster_req_if.stamps),
         // outputs
         .raster_csr_if  (raster_csr_if)
     );
 
     // it is possible to have ready = f(valid) when using arbiters, 
-    // because of that we need to decouple raster_svc_req_if and raster_svc_rsp_if handshake with a pipe register
+    // because of that we need to decouple raster_agent_req_if and raster_agent_rsp_if handshake with a pipe register
 
-    assign raster_svc_req_if.ready = raster_req_if.valid & raster_rsp_ready;
+    assign raster_agent_req_if.ready = raster_req_if.valid & raster_rsp_ready;
 
-    assign raster_req_if.ready = raster_svc_req_if.valid & raster_rsp_ready;
+    assign raster_req_if.ready = raster_agent_req_if.valid & raster_rsp_ready;
 
-    assign raster_rsp_valid = raster_svc_req_if.valid & raster_req_if.valid;
+    assign raster_rsp_valid = raster_agent_req_if.valid & raster_req_if.valid;
 
     wire [`NUM_THREADS-1:0][31:0] response_data;
 
@@ -57,13 +57,13 @@ module VX_raster_svc #(
         .reset     (reset),
         .valid_in  (raster_rsp_valid),
         .ready_in  (raster_rsp_ready),
-        .data_in   ({raster_svc_req_if.uuid, raster_svc_req_if.wid, raster_svc_req_if.tmask, raster_svc_req_if.PC, raster_svc_req_if.rd, raster_svc_req_if.wb, response_data}),
-        .data_out  ({raster_svc_rsp_if.uuid, raster_svc_rsp_if.wid, raster_svc_rsp_if.tmask, raster_svc_rsp_if.PC, raster_svc_rsp_if.rd, raster_svc_rsp_if.wb, raster_svc_rsp_if.data}),
-        .valid_out (raster_svc_rsp_if.valid),
-        .ready_out (raster_svc_rsp_if.ready)
+        .data_in   ({raster_agent_req_if.uuid, raster_agent_req_if.wid, raster_agent_req_if.tmask, raster_agent_req_if.PC, raster_agent_req_if.rd, raster_agent_req_if.wb, response_data}),
+        .data_out  ({raster_agent_rsp_if.uuid, raster_agent_rsp_if.wid, raster_agent_rsp_if.tmask, raster_agent_rsp_if.PC, raster_agent_rsp_if.rd, raster_agent_rsp_if.wb, raster_agent_rsp_if.data}),
+        .valid_out (raster_agent_rsp_if.valid),
+        .ready_out (raster_agent_rsp_if.ready)
     );
 
-    assign raster_svc_rsp_if.eop  = 1'b1;
+    assign raster_agent_rsp_if.eop  = 1'b1;
 
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin

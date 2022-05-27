@@ -1430,7 +1430,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t))
             continue;        
-          auto result = core_->raster_svc_->fetch(id_, t);
+          auto result = core_->raster_agent_->fetch(id_, t);
           rddata[t].i = result;
         }
         rd_write = true;
@@ -1496,7 +1496,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           auto f = (pos_face >> 0)  & 0x1;
           auto x = (pos_face >> 1)  & 0x7fff;
           auto y = (pos_face >> 16) & 0x7fff;
-          core_->rop_svc_->write(id_, t, x, y, f, color, depth, trace_data);
+          core_->rop_agent_->write(id_, t, x, y, f, color, depth, trace_data);
         }
       } break;
       default:

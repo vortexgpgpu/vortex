@@ -10,18 +10,18 @@ namespace vortex {
 class Core;
 class RopUnit;
 
-class RopSvc : public SimObject<RopSvc> {
+class RopAgent : public SimObject<RopAgent> {
 public:
   
   SimPort<pipeline_trace_t*> Input;
   SimPort<pipeline_trace_t*> Output;
 
-  RopSvc(const SimContext& ctx, 
-          const char* name,  
-          Core* core,
-          RopUnit::Ptr rop_unit);    
+  RopAgent(const SimContext& ctx, 
+           const char* name, 
+           Core* core,
+           RopUnit::Ptr rop_unit);   
 
-  ~RopSvc();
+  ~RopAgent();
 
   void reset();
 

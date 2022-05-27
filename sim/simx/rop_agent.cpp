@@ -1,19 +1,19 @@
-#include "rop_svc.h"
+#include "rop_agent.h"
 #include "rop_unit.h"
 #include "core.h"
 #include <VX_config.h>
 
 using namespace vortex;
 
-class RopSvc::Impl {
+class RopAgent::Impl {
 private:
-  RopSvc* simobject_;
+  RopAgent* simobject_;
   Core* core_;    
   const Arch& arch_;    
   RopUnit::Ptr rop_unit_;
 
 public:
-  Impl(RopSvc* simobject,      
+  Impl(RopAgent* simobject,      
        Core* core,
        RopUnit::Ptr rop_unit) 
     : simobject_(simobject)
@@ -74,36 +74,36 @@ public:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-RopSvc::RopSvc(const SimContext& ctx, 
-               const char* name,  
-               Core* core,
-               RopUnit::Ptr rop_unit) 
-  : SimObject<RopSvc>(ctx, name)
+RopAgent::RopAgent(const SimContext& ctx, 
+                   const char* name,
+                   Core* core,
+                   RopUnit::Ptr rop_unit)
+  : SimObject<RopAgent>(ctx, name)
   , Input(this)
   , Output(this)
   , impl_(new Impl(this, core, rop_unit)) 
 {}
 
-RopSvc::~RopSvc() {
+RopAgent::~RopAgent() {
   delete impl_;
 }
 
-void RopSvc::reset() {
+void RopAgent::reset() {
   impl_->clear();
 }
 
-uint32_t RopSvc::csr_read(uint32_t wid, uint32_t tid, uint32_t addr) {
+uint32_t RopAgent::csr_read(uint32_t wid, uint32_t tid, uint32_t addr) {
   return impl_->csr_read(wid, tid, addr);
 }
 
-void RopSvc::csr_write(uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value) {
+void RopAgent::csr_write(uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value) {
   impl_->csr_write(wid, tid, addr, value);
 }
 
-void RopSvc::write(uint32_t wid, uint32_t tid, uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, RopUnit::TraceData::Ptr trace_data) {
+void RopAgent::write(uint32_t wid, uint32_t tid, uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, RopUnit::TraceData::Ptr trace_data) {
   impl_->write(wid, tid, x, y, is_backface, color, depth, trace_data);
 }
 
-void RopSvc::tick() {
+void RopAgent::tick() {
   impl_->tick();
 }

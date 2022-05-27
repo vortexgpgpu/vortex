@@ -1,4 +1,4 @@
-#include "raster_svc.h"
+#include "raster_agent.h"
 #include "raster_unit.h"
 #include "core.h"
 #include <VX_config.h>
@@ -11,7 +11,7 @@ using fixed24_t = cocogfx::TFixed<24>;
 
 using vec2_fx2_t = cocogfx::TVector2<fixed24_t>;
 
-class RasterSvc::Impl {
+class RasterAgent::Impl {
 private:
 
   class CSR {
@@ -42,7 +42,7 @@ private:
       }
     };
 
-    RasterSvc* simobject_;  
+    RasterAgent* simobject_;  
     Core* core_;      
     const Arch& arch_;
     RasterUnit::Ptr raster_unit_;    
@@ -51,7 +51,7 @@ private:
     uint64_t last_pop_time_;
 
 public:
-    Impl(RasterSvc* simobject,     
+    Impl(RasterAgent* simobject,     
          Core* core,
          RasterUnit::Ptr raster_unit) 
       : simobject_(simobject)
@@ -152,36 +152,36 @@ public:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-RasterSvc::RasterSvc(const SimContext& ctx, 
-                     const char* name,  
-                     Core* core,
-                     RasterUnit::Ptr raster_unit)  
-: SimObject<RasterSvc>(ctx, name)
+RasterAgent::RasterAgent(const SimContext& ctx, 
+                         const char* name,
+                         Core* core,
+                         RasterUnit::Ptr raster_unit)
+: SimObject<RasterAgent>(ctx, name)
   , Input(this)
   , Output(this)
   , impl_(new Impl(this, core, raster_unit)) 
 {}
 
-RasterSvc::~RasterSvc() {
+RasterAgent::~RasterAgent() {
   delete impl_;
 }
 
-void RasterSvc::reset() {
+void RasterAgent::reset() {
   impl_->clear();
 }
 
-uint32_t RasterSvc::csr_read(uint32_t wid, uint32_t tid, uint32_t addr) {
+uint32_t RasterAgent::csr_read(uint32_t wid, uint32_t tid, uint32_t addr) {
   return impl_->csr_read(wid, tid, addr);
 }
 
-void RasterSvc::csr_write(uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value) {
+void RasterAgent::csr_write(uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value) {
   impl_->csr_write(wid, tid, addr, value);
 }
 
-uint32_t RasterSvc::fetch(uint32_t wid, uint32_t tid) {
+uint32_t RasterAgent::fetch(uint32_t wid, uint32_t tid) {
   return impl_->fetch(wid, tid);
 }
 
-void RasterSvc::tick() {
+void RasterAgent::tick() {
   impl_->tick();
 }
