@@ -42,7 +42,6 @@ module VX_tex_mem #(
     wire                           mem_req_ready;
 
     wire                           mem_rsp_valid;
-    wire [3:0][NUM_REQS-1:0]       mem_rsp_mask;
     wire [3:0][NUM_REQS-1:0][31:0] mem_rsp_data;
     wire [TAG_WIDTH-1:0]           mem_rsp_tag;
     wire                           mem_rsp_ready;
@@ -140,7 +139,7 @@ module VX_tex_mem #(
         
         // Output response
         .rsp_valid      (mem_rsp_valid),
-        .rsp_mask       (mem_rsp_mask),
+        `UNUSED_PIN     (rsp_mask),
         .rsp_data       (mem_rsp_data),
         .rsp_tag        (mem_rsp_tag),
         .rsp_ready      (mem_rsp_ready),        
@@ -174,9 +173,8 @@ module VX_tex_mem #(
     reg [NUM_REQS-1:0][3:0][31:0] mem_rsp_data_qual;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin   
-        for (genvar j = 0; j < 4; ++j) begin             
-            wire [31:0] src_mask = {32{mem_rsp_mask[j][i]}};
-            wire [31:0] src_data = ((i == 0 || mem_rsp_dups[j]) ? mem_rsp_data[j][0] : mem_rsp_data[j][i]) & src_mask;
+        for (genvar j = 0; j < 4; ++j) begin
+            wire [31:0] src_data = ((i == 0 || mem_rsp_dups[j]) ? mem_rsp_data[j][0] : mem_rsp_data[j][i]);
 
             reg [31:0] rsp_data_shifted;
             always @(*) begin
