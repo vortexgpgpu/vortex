@@ -79,11 +79,11 @@ public:
       uint32_t ltid = wid * arch_.num_threads() + tid;
       auto& csr = csrs_.at(ltid);
       csr.set_stamp(stamp);
-      DT(2, "raster-svc: wid=" << std::dec << wid << ", tid=" << tid << ", x=" << stamp->x << ", y=" << stamp->y << ", mask=" << stamp->mask << ", pid=" << stamp->pid << ", bcoords=" 
-        <<  "{{" << stamp->bcoords[0].x.data() << ", " << stamp->bcoords[0].y.data() << ", " << stamp->bcoords[0].z.data() << "}"
-        << ", {" << stamp->bcoords[1].x.data() << ", " << stamp->bcoords[1].y.data() << ", " << stamp->bcoords[1].z.data() << "}"
-        << ", {" << stamp->bcoords[2].x.data() << ", " << stamp->bcoords[2].y.data() << ", " << stamp->bcoords[2].z.data() << "}"
-        << ", {" << stamp->bcoords[3].x.data() << ", " << stamp->bcoords[3].y.data() << ", " << stamp->bcoords[3].z.data() << "}}");
+      DT(2, "raster-svc: wid=" << std::dec << wid << ", tid=" << tid << ", x=" << stamp->x << ", y=" << stamp->y << ", mask=" << stamp->mask << ", pid=" << stamp->pid << ", bcoords=" << std::hex
+        <<  "{{0x" << stamp->bcoords[0].x.data() << ", 0x" << stamp->bcoords[0].y.data() << ", 0x" << stamp->bcoords[0].z.data() << "}"
+        << ", {0x" << stamp->bcoords[1].x.data() << ", 0x" << stamp->bcoords[1].y.data() << ", 0x" << stamp->bcoords[1].z.data() << "}"
+        << ", {0x" << stamp->bcoords[2].x.data() << ", 0x" << stamp->bcoords[2].y.data() << ", 0x" << stamp->bcoords[2].z.data() << "}"
+        << ", {0x" << stamp->bcoords[3].x.data() << ", 0x" << stamp->bcoords[3].y.data() << ", 0x" << stamp->bcoords[3].z.data() << "}}");
       return (stamp->pid << 1) | 1;
     }
 

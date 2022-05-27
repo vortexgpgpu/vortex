@@ -545,7 +545,7 @@ public:
       color = blender_.run(color, dst_color);
     }
     
-    memoryUnit_.write(depth_enabled, stencil_enabled, ds_passed, is_backface, dst_depthstencil, dst_color, x, y, depthstencil, color, trace_data);     
+    memoryUnit_.write(depth_enabled, stencil_enabled, ds_passed, is_backface, dst_depthstencil, dst_color, x, y, depthstencil, color, trace_data);
   }
 
   void tick() {

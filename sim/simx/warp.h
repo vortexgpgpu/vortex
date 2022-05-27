@@ -110,10 +110,10 @@ private:
   Word PC_;
   ThreadMask tmask_;  
   
-  std::vector<std::vector<Word>> ireg_file_;
-  std::vector<std::vector<FWord>> freg_file_;
-  std::vector<std::vector<Byte>> vreg_file_;
-  std::stack<DomStackEntry> dom_stack_;
+  std::vector<std::vector<Word>>     ireg_file_;
+  std::vector<std::vector<uint64_t>> freg_file_;
+  std::vector<std::vector<Byte>>     vreg_file_;
+  std::stack<DomStackEntry>          dom_stack_;
 
   struct vtype vtype_;
   uint32_t vl_;

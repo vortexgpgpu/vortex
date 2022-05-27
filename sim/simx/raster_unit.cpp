@@ -316,14 +316,14 @@ private:
       mem_trace.header_addrs.push_back(tbuf_addr_);
       tile_x_ = (tile_xy & 0xffff) << tile_logsize_;
       tile_y_ = (tile_xy >> 16) << tile_logsize_;
-      printf("*** raster%d-mem: add=%d, tile_x=%d, tile_y=%d\n", index_, tbuf_addr_, tile_x_, tile_y_);
+      //printf("*** raster%d-mem: add=%d, tile_x=%d, tile_y=%d\n", index_, tbuf_addr_, tile_x_, tile_y_);
       tbuf_addr_ += 4;
       
       mem_->read(&prim_header, tbuf_addr_, 4);
       mem_trace.header_addrs.push_back(tbuf_addr_);
       prim_offset_ = (prim_header & 0xffff);
       prim_count_  = (prim_header >> 16);
-      printf("*** raster%d-mem: add=%d, prim_off=%d, prim_cnt=%d\n", index_, tbuf_addr_, prim_offset_, prim_count_);
+      //printf("*** raster%d-mem: add=%d, prim_off=%d, prim_cnt=%d\n", index_, tbuf_addr_, prim_offset_, prim_count_);
       tbuf_addr_ += 4;
 
       assert(prim_count_ > 0);
@@ -338,13 +338,13 @@ private:
     // read next primitive index from tile buffer
     prim_trace.prim_addr = tbuf_addr_  + prim_offset_;
     mem_->read(&pid_, prim_trace.prim_addr, 4);    
-    printf("*** raster%d-mem: add=%d, pid=%d\n", index_, prim_trace.prim_addr, pid_);
+    //printf("*** raster%d-mem: add=%d, pid=%d\n", index_, prim_trace.prim_addr, pid_);
     prim_offset_ += 4;
 
     uint32_t x = tile_x_;
     uint32_t y = tile_y_;
 
-    printf("*** raster%d-primitive: tile=%d/%d, prim=%d/%d, pid=%d, tx=%d, ty=%d\n", index_, cur_tile_, num_tiles_, cur_prim_, prim_count_, pid_, x, y);
+    //printf("*** raster%d-primitive: tile=%d/%d, prim=%d/%d, pid=%d, tx=%d, ty=%d\n", index_, cur_tile_, num_tiles_, cur_prim_, prim_count_, pid_, x, y);
 
     // get primitive edges
     primitive_t primitive;
