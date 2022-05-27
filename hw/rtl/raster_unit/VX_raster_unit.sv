@@ -286,7 +286,7 @@ module VX_raster_unit #(
 
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
-        if (raster_req_if.ready && raster_req_if.valid) begin
+        if (raster_req_if.valid && raster_req_if.ready) begin
             for (integer i = 0; i < OUTPUT_QUADS; ++i) begin
                 `TRACE(1, ("%d: raster-out[%0d]: empty=%b, x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
                     $time, i, raster_req_if.empty,
