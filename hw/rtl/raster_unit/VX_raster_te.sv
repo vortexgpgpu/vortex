@@ -1,12 +1,12 @@
-// Tile evaluator block
-// Functionality: Evaluates the input tile to check:
-//     1. If it is valid => overlaps triangle
-//     2. If it is a block
-//     3. Else divides it into 4
+// Tile evaluator
+// Functionality: Receives a tile
+//     1. Recursive descend sub-tiles that overlap primitive
+//     2. Stop when tile size matches block
 
 `include "VX_raster_define.vh"
 
 module VX_raster_te #(
+    parameter RASTER_ID     = "",
     parameter TILE_LOGSIZE  = 5,
     parameter BLOCK_LOGSIZE = 2  
 ) (
@@ -212,16 +212,16 @@ module VX_raster_te #(
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
         if (valid_in && ready_in) begin
-            `TRACE(2, ("%d: raster-te-in: x=%0d, y=%0d, edge={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}, extents={0x%0h, 0x%0h, 0x%0h}\n",
-                $time, x_loc_in, y_loc_in,
+            `TRACE(2, ("%d: %s-te-in: x=%0d, y=%0d, edge={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}, extents={0x%0h, 0x%0h, 0x%0h}\n",
+                $time, RASTER_ID, x_loc_in, y_loc_in,
                 edges_in[0][0], edges_in[0][1], edges_in[0][2],
                 edges_in[1][0], edges_in[1][1], edges_in[1][2],
                 edges_in[2][0], edges_in[2][1], edges_in[2][2],
                 extents_in[0],  extents_in[1],  extents_in[2]));
         end
         if (tile_valid && ~stall) begin
-            `TRACE(2, ("%d: raster-te-test: pass=%b, block=%b, level=%0d, x=%0d, y=%0d, edge_eval={0x%0h, 0x%0h, 0x%0h}\n",
-                $time, tile_valid_e, is_block, tile_level, tile_x_loc, tile_y_loc, edge_eval[0], edge_eval[1], edge_eval[2]));
+            `TRACE(2, ("%d: %s-te-test: pass=%b, block=%b, level=%0d, x=%0d, y=%0d, edge_eval={0x%0h, 0x%0h, 0x%0h}\n",
+                $time, RASTER_ID, tile_valid_e, is_block, tile_level, tile_x_loc, tile_y_loc, edge_eval[0], edge_eval[1], edge_eval[2]));
         end
     end
 `endif

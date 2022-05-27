@@ -1,11 +1,11 @@
-// Quad evaluator block
-// Functionality: Receives a 2x2 quad with primitive information
-//     check whether quad pixels are within the primitive
+// Quad evaluator
+// Functionality: Receives a 2x2 quads
+//      check whether primitive overlaps each quad
 
 `include "VX_raster_define.vh"
 
 module VX_raster_qe #(
-    parameter SLICE_ID  = 0,
+    parameter RASTER_ID = "",
     parameter NUM_QUADS = 4
 ) (
     input wire clk,

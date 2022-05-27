@@ -63,8 +63,10 @@ module VX_cluster #(
     `RESET_RELAY (raster_reset, reset);
 
     VX_raster_unit #( 
-        .CLUSTER_ID      (CLUSTER_ID),
-        .NUM_SLICES      (`RASTER_NUM_SLICES),
+        .RASTER_ID       ($sformatf("cluster%0d-raster", CLUSTER_ID)),
+        .INSTANCE_ID     (CLUSTER_ID),
+        .NUM_INSTANCES   (`NUM_CLUSTERS),
+        .NUM_PES         (`RASTER_NUM_PES),
         .TILE_LOGSIZE    (`RASTER_TILE_LOGSIZE),
         .BLOCK_LOGSIZE   (`RASTER_BLOCK_LOGSIZE),
         .MEM_FIFO_DEPTH  (`RASTER_MEM_FIFO_DEPTH),
@@ -190,7 +192,7 @@ module VX_cluster #(
     `RESET_RELAY (rop_reset, reset);
 
     VX_rop_unit #(
-        .CLUSTER_ID (CLUSTER_ID),
+        .ROP_ID     ($sformatf("cluster%0d-rop", CLUSTER_ID)),
         .NUM_SLICES (`ROP_NUM_SLICES),
         .NUM_LANES  (`NUM_THREADS)
     ) rop_unit (

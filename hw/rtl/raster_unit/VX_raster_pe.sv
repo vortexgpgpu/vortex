@@ -1,17 +1,10 @@
-// Raster slice
-// Functionality:
-//     1. Recursive descent
-//     2. Tile evaluation
-//     3. Quad evaluation and storage
-//     4. Return the quad(s)
-
 `include "VX_raster_define.vh"
 
-module VX_raster_slice #(
+module VX_raster_pe #(
     parameter CLUSTER_ID      = 0,
     parameter SLICE_ID        = 0,
-    parameter TILE_LOGSIZE    = 5,  // tile log size
-    parameter BLOCK_LOGSIZE   = 2,  // block log size
+    parameter TILE_LOGSIZE    = 5,
+    parameter BLOCK_LOGSIZE   = 2,
     parameter OUTPUT_QUADS    = 4,
     parameter QUAD_FIFO_DEPTH = 4
 ) (
@@ -53,6 +46,7 @@ module VX_raster_slice #(
     wire                        block_ready;
     
     VX_raster_te #(
+        .RASTER_ID     (RASTER_ID),
         .TILE_LOGSIZE  (TILE_LOGSIZE),
         .BLOCK_LOGSIZE (BLOCK_LOGSIZE)
     ) tile_evaluator (
@@ -99,7 +93,7 @@ module VX_raster_slice #(
     );
 
     VX_raster_be #(
-        .SLICE_ID        (SLICE_ID),
+        .RASTER_ID       (RASTER_ID),
         .BLOCK_LOGSIZE   (BLOCK_LOGSIZE),
         .OUTPUT_QUADS    (OUTPUT_QUADS),
         .QUAD_FIFO_DEPTH (QUAD_FIFO_DEPTH)

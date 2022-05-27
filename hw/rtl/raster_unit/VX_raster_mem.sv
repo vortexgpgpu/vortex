@@ -7,9 +7,11 @@
 //  3. Store primitive data in an elastic buffer
 
 module VX_raster_mem #(
-    parameter CLUSTER_ID   = 0,
-    parameter TILE_LOGSIZE = 5,
-    parameter QUEUE_SIZE   = 8
+    parameter RASTER_ID     = "",
+    parameter INSTANCE_ID   = 0,
+    parameter NUM_INSTANCES = 1, 
+    parameter TILE_LOGSIZE  = 5,
+    parameter QUEUE_SIZE    = 8
 ) (
     input wire clk,
     input wire reset,
@@ -115,17 +117,17 @@ module VX_raster_mem #(
 
             case (state)
             STATE_IDLE: begin
-                if (start && (CLUSTER_ID < dcrs.tile_count)) begin
+                if (start && (INSTANCE_ID < dcrs.tile_count)) begin
                     // fetch the next tile header
                     state           <= STATE_TILE;         
                     mem_req_valid   <= 1;
-                    mem_req_addr[0] <= dcrs.tbuf_addr + CLUSTER_ID * 8 + 0;
-                    mem_req_addr[1] <= dcrs.tbuf_addr + CLUSTER_ID * 8 + 4;
+                    mem_req_addr[0] <= dcrs.tbuf_addr + INSTANCE_ID * 8 + 0;
+                    mem_req_addr[1] <= dcrs.tbuf_addr + INSTANCE_ID * 8 + 4;
                     mem_req_mask    <= 9'b11;
                     mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_TILE);
                     // set tile counters
-                    curr_tbuf_addr  <= dcrs.tbuf_addr + CLUSTER_ID * 8 + 8;
-                    curr_num_tiles  <= (dcrs.tile_count - `RASTER_TILE_BITS'(CLUSTER_ID + `NUM_CLUSTERS - 1)) / `NUM_CLUSTERS;
+                    curr_tbuf_addr  <= dcrs.tbuf_addr + INSTANCE_ID * 8 + 8;
+                    curr_num_tiles  <= (dcrs.tile_count - `RASTER_TILE_BITS'(INSTANCE_ID + NUM_INSTANCES - 1)) / NUM_INSTANCES;
                 end
             end
             STATE_TILE: begin
@@ -183,10 +185,10 @@ module VX_raster_mem #(
                             state           <= STATE_TILE;
                             mem_req_valid   <= 1;
                             mem_req_mask    <= 9'b11;
-                            mem_req_addr[0] <= curr_tbuf_addr + (`NUM_CLUSTERS - 1) * 8;
-                            mem_req_addr[1] <= curr_tbuf_addr + (`NUM_CLUSTERS - 1) * 8 + 4;                            
+                            mem_req_addr[0] <= curr_tbuf_addr + (NUM_INSTANCES - 1) * 8;
+                            mem_req_addr[1] <= curr_tbuf_addr + (NUM_INSTANCES - 1) * 8 + 4;                            
                             mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_TILE);
-                            curr_tbuf_addr  <= curr_tbuf_addr + (`NUM_CLUSTERS - 1) * 8 + 8;
+                            curr_tbuf_addr  <= curr_tbuf_addr + (NUM_INSTANCES - 1) * 8 + 8;
                         end
                         // update tile counter
                         curr_num_tiles <= curr_num_tiles - `RASTER_TILE_BITS'(1);
@@ -341,8 +343,8 @@ module VX_raster_mem #(
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
         if (valid_out && ready_out) begin
-            `TRACE(2, ("%d: raster-mem-out: x=%0d, y=%0d, pid=%0d, edge={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
-                $time, x_loc_out, y_loc_out, pid_out,
+            `TRACE(2, ("%d: %s-mem-out: x=%0d, y=%0d, pid=%0d, edge={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
+                $time, RASTER_ID, x_loc_out, y_loc_out, pid_out,
                 edges_out[0][0], edges_out[0][1], edges_out[0][2],
                 edges_out[1][0], edges_out[1][1], edges_out[1][2],
                 edges_out[2][0], edges_out[2][1], edges_out[2][2]));

@@ -280,7 +280,7 @@
 
 // Size of FPU Request Queue
 `ifndef FPUQ_SIZE
-`define FPUQ_SIZE 8
+`define FPUQ_SIZE (`NUM_WARPS * 2)
 `endif
 
 // Texture Unit memory pending Queue
@@ -293,9 +293,9 @@
 `define RASTER_MEM_PENDING_SIZE 4
 `endif
 
-// RASTER number of slices
-`ifndef RASTER_NUM_SLICES    
-`define RASTER_NUM_SLICES 1
+// RASTER number of PEs
+`ifndef RASTER_NUM_PES    
+`define RASTER_NUM_PES 1
 `endif
 
 // RASTER tile size

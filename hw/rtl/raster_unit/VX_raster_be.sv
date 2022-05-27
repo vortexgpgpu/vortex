@@ -1,13 +1,12 @@
-// Block level evaluator
-// Functionality: Receives a block of AxA (where A is pow(2))
-//     1. Breaks it into quad and runs quad evaluators on it
+// Block evaluator
+// Functionality: Receives a block of NxN quads
+//     1. Breaks it into quads and runs quad evaluators on it
 //     2. Stores the result in quad queues
-//     3. Queues direction read as outputs
 
 `include "VX_raster_define.vh"
 
 module VX_raster_be #(
-    parameter SLICE_ID        = 0,
+    parameter RASTER_ID       = "",
     parameter BLOCK_LOGSIZE   = 5,
     parameter OUTPUT_QUADS    = 2,
     parameter QUAD_FIFO_DEPTH = 4    
@@ -83,7 +82,7 @@ module VX_raster_be #(
     wire [PER_BLOCK_QUADS-1:0][3:0][2:0][`RASTER_DATA_BITS-1:0] qe_bcoords;    
     
     VX_raster_qe #(
-        .SLICE_ID  (SLICE_ID),
+        .RASTER_ID (RASTER_ID),
         .NUM_QUADS (PER_BLOCK_QUADS)
     ) quad_evaluator (
         .clk        (clk),
