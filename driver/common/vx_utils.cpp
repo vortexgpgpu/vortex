@@ -20,6 +20,13 @@ bool is_aligned(uint64_t addr, uint64_t alignment) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+DeviceConfig::DeviceConfig() {
+  data_[DCR_STARTUP_ADDR] = STARTUP_ADDR;
+  data_[DCR_MPM_CLASS] = 0;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
 class AutoPerfDump {
 public:
     AutoPerfDump() : perf_class_(0) {}

@@ -158,14 +158,20 @@ public:
             future_.wait(); // ensure prior run completed
         }        
         processor_.write_dcr(addr, value);
+        dcrs_.write(addr, value);
         return 0;
+    }
+
+    uint64_t read_dcr(uint32_t addr) const {
+        return dcrs_.read(addr);
     }
 
 private:
 
     RAM                 ram_;
     Processor           processor_;
-    MemoryAllocator     mem_allocator_;     
+    MemoryAllocator     mem_allocator_;
+    DeviceConfig        dcrs_;
     std::future<void>   future_;
 };
 
@@ -174,6 +180,8 @@ private:
 extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
    if (nullptr == hdevice)
         return  -1;
+
+    vx_device *device = ((vx_device*)hdevice);
 
     switch (caps_id) {
     case VX_CAPS_VERSION:
@@ -198,7 +206,7 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
         *value = ALLOC_BASE_ADDR;
         break;
     case VX_CAPS_KERNEL_BASE_ADDR:
-        *value = STARTUP_ADDR;
+         *value = device->read_dcr(DCR_STARTUP_ADDR);
         break;    
     case VX_CAPS_ISA_FLAGS:
         *value = ((uint64_t(MISA_EXT))<<32) | ((log2floor(XLEN)-4) << 30) | MISA_STD;

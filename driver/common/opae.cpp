@@ -70,7 +70,8 @@ public:
     ~vx_device() {}
 
     fpga_handle fpga;
-    vortex::MemoryAllocator mem_allocator;
+    vortex::MemoryAllocator mem_allocator;    
+    DeviceConfig dcrs;
     unsigned version;
     unsigned num_cores;
     unsigned num_warps;
@@ -117,7 +118,7 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
         *value = ALLOC_BASE_ADDR;
         break;
     case VX_CAPS_KERNEL_BASE_ADDR:
-        *value = STARTUP_ADDR;
+        *value = device->dcrs.read(DCR_STARTUP_ADDR);
         break;
     case VX_CAPS_ISA_FLAGS:
         *value = device->isa_caps;
@@ -533,6 +534,9 @@ extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint64_t value) {
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG0, addr));
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG1, value));
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_DCR_WRITE));
+
+    // save the value
+    device->dcrs.write(addr, value);
 
     return 0;
 }
