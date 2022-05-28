@@ -23,7 +23,7 @@ Warp::Warp(Core *core, uint32_t id)
 
 void Warp::clear() {
   active_ = false;
-  PC_ = STARTUP_ADDR;
+  PC_ = core_->dcrs().base_dcrs.read(DCR_STARTUP_ADDR);
   tmask_.reset();  
   issued_instrs_ = 0;
   for (uint32_t i = 0, n = arch_.num_threads(); i < n; ++i) {

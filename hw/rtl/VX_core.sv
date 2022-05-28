@@ -40,6 +40,12 @@ module VX_core #(
     // Status
     output wire             busy
 );
+
+    base_dcrs_t base_dcrs;
+    always @(posedge clk) begin
+        base_dcrs <= dcr_base_if.data;
+    end
+
 `ifdef PERF_ENABLE
     VX_perf_memsys_if perf_memsys_if();
 `endif
@@ -96,6 +102,8 @@ module VX_core #(
         .clk            (clk),
         .reset          (reset),
 
+        .base_dcrs      (base_dcrs),
+
         // dcache interface
         .dcache_req_if  (dcache_req_if),
         .dcache_rsp_if  (dcache_rsp_if),
@@ -103,8 +111,6 @@ module VX_core #(
         // icache interface
         .icache_req_if  (icache_req_if),
         .icache_rsp_if  (icache_rsp_if),
-
-        .dcr_base_if    (dcr_base_if),
 
     `ifdef EXT_TEX_ENABLE
         .tex_dcr_if     (tex_dcr_if),

@@ -8,6 +8,8 @@ module VX_warp_sched #(
     input wire              clk,
     input wire              reset,
 
+    input base_dcrs_t       base_dcrs,
+
     VX_warp_ctl_if.slave    warp_ctl_if,
     VX_wrelease_if.slave    wrelease_if,
     VX_join_if.slave        join_if,
@@ -65,6 +67,8 @@ module VX_warp_sched #(
         end        
     end
 
+    `UNUSED_VAR (base_dcrs)
+
     always @(posedge clk) begin
         if (reset) begin
             barrier_masks   <= '0;
@@ -77,7 +81,7 @@ module VX_warp_sched #(
             cycles          <= '0;
 
             // activate first warp
-            warp_pcs[0]     <= `STARTUP_ADDR;
+            warp_pcs[0]     <= base_dcrs.startup_addr;
             active_warps[0] <= 1;
             thread_masks[0] <= 1;
         end else begin            

@@ -11,12 +11,12 @@ module VX_csr_data #(
     input wire clk,
     input wire reset,
 
+    input base_dcrs_t base_dcrs,
+
 `ifdef PERF_ENABLE
     VX_perf_memsys_if.slave             perf_memsys_if,
     VX_perf_pipeline_if.slave           perf_pipeline_if,
 `endif
-
-    VX_dcr_base_if                      dcr_base_if,
 
 `ifdef EXT_TEX_ENABLE
     VX_gpu_csr_if.master                tex_csr_if,
@@ -254,7 +254,7 @@ module VX_csr_data #(
                  || (read_addr >= `CSR_MPM_BASE_H && read_addr < (`CSR_MPM_BASE_H + 32))) begin
                     read_addr_valid_r = 1;
                 `ifdef PERF_ENABLE 
-                    case (dcr_base_if.data.mpm_class)
+                    case (base_dcrs.mpm_class)
                     `DCR_MPM_CLASS_CORE: begin
                         case (read_addr)                        
                         // PERF: pipeline
@@ -421,7 +421,7 @@ module VX_csr_data #(
         endcase
     end
 
-    `UNUSED_VAR (dcr_base_if.data)
+    `UNUSED_VAR (base_dcrs)
 
     `RUNTIME_ASSERT(~read_enable || read_addr_valid_r, ("%t: *** invalid CSR read address: 0x%0h (#%0d)", $time, read_addr, read_uuid))
 

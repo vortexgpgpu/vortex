@@ -8,6 +8,8 @@ module VX_fetch #(
     input wire clk,
     input wire reset,
 
+    input base_dcrs_t      base_dcrs,
+
     // Icache interface
     VX_cache_req_if.master icache_req_if,
     VX_cache_rsp_if.slave  icache_rsp_if,
@@ -36,7 +38,9 @@ module VX_fetch #(
         `SCOPE_BIND_VX_fetch_warp_sched
 
         .clk              (clk),
-        .reset            (reset),     
+        .reset            (reset),   
+
+        .base_dcrs        (base_dcrs),  
 
         .warp_ctl_if      (warp_ctl_if),
         .wrelease_if      (wrelease_if),

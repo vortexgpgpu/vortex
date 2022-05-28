@@ -6,12 +6,12 @@ module VX_csr_unit #(
     input wire                  clk,
     input wire                  reset,
 
+    input base_dcrs_t           base_dcrs,
+
 `ifdef PERF_ENABLE
     VX_perf_memsys_if.slave     perf_memsys_if,
     VX_perf_pipeline_if.slave   perf_pipeline_if,
 `endif
-
-    VX_dcr_base_if              dcr_base_if,
 
 `ifdef EXT_TEX_ENABLE
     VX_gpu_csr_if.master        tex_csr_if,
@@ -61,6 +61,9 @@ module VX_csr_unit #(
     ) csr_data (
         .clk            (clk),
         .reset          (reset),
+
+        .base_dcrs      (base_dcrs),
+
     `ifdef PERF_ENABLE
         .perf_memsys_if (perf_memsys_if),
         .perf_pipeline_if(perf_pipeline_if),
@@ -69,8 +72,7 @@ module VX_csr_unit #(
         .fetch_to_csr_if(fetch_to_csr_if),
     `ifdef EXT_F_ENABLE
         .fpu_to_csr_if  (fpu_to_csr_if), 
-    `endif
-        .dcr_base_if    (dcr_base_if),
+    `endif        
     `ifdef EXT_TEX_ENABLE        
         .tex_csr_if     (tex_csr_if),
     `ifdef PERF_ENABLE

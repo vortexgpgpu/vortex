@@ -8,11 +8,11 @@ module VX_execute #(
     input wire clk, 
     input wire reset,    
 
+    input base_dcrs_t      base_dcrs,
+
     // Dcache interface
     VX_cache_req_if.master dcache_req_if,
-    VX_cache_rsp_if.slave dcache_rsp_if,
-
-    VX_dcr_base_if        dcr_base_if,
+    VX_cache_rsp_if.slave  dcache_rsp_if,
 
 `ifdef EXT_TEX_ENABLE
     VX_tex_dcr_if.slave    tex_dcr_if,
@@ -135,9 +135,9 @@ module VX_execute #(
         .fpu_pending    (fpu_pending),        
         .req_pending    (csr_pending),
     `else
-        `UNUSED_PIN (req_pending),
+        `UNUSED_PIN     (req_pending),
     `endif
-        .dcr_base_if    (dcr_base_if),
+        .base_dcrs      (base_dcrs),
     `ifdef EXT_TEX_ENABLE        
         .tex_csr_if     (tex_csr_if),
     `ifdef PERF_ENABLE

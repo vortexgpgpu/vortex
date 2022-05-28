@@ -74,9 +74,11 @@ module VX_dcr_data (
     always @(posedge clk) begin
         if (reset) begin
             base_dcrs <= '0;
+            base_dcrs.startup_addr <= `STARTUP_ADDR;
         end else if (dcr_wr_valid) begin
             case (dcr_wr_addr)
-            `DCR_MPM_CLASS: base_dcrs.mpm_class <= dcr_wr_data[7:0];
+            `DCR_STARTUP_ADDR : base_dcrs.startup_addr <= dcr_wr_data[`XLEN-1:0];
+            `DCR_MPM_CLASS    : base_dcrs.mpm_class    <= dcr_wr_data[7:0];
             default:;
             endcase
         end

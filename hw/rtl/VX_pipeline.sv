@@ -9,6 +9,8 @@ module VX_pipeline #(
     input wire              clk,
     input wire              reset,
 
+    input base_dcrs_t       base_dcrs,
+
     // Dcache interface
     VX_cache_req_if.master  dcache_req_if,
     VX_cache_rsp_if.slave   dcache_rsp_if,
@@ -16,8 +18,6 @@ module VX_pipeline #(
     // Icache interface
     VX_cache_req_if.master  icache_req_if,
     VX_cache_rsp_if.slave   icache_rsp_if,
-
-    VX_dcr_base_if.slave    dcr_base_if,
 
 `ifdef EXT_TEX_ENABLE
     VX_tex_dcr_if.slave     tex_dcr_if,
@@ -94,6 +94,7 @@ module VX_pipeline #(
     ) fetch (
         `SCOPE_BIND_VX_pipeline_fetch
         .clk            (clk),
+        .base_dcrs      (base_dcrs),
         .reset          (fetch_reset),
         .icache_req_if  (icache_req_if),
         .icache_rsp_if  (icache_rsp_if), 
@@ -152,15 +153,15 @@ module VX_pipeline #(
         .clk            (clk),
         .reset          (execute_reset),
 
+        .base_dcrs      (base_dcrs),
+
     `ifdef PERF_ENABLE
         .perf_memsys_if (perf_memsys_if),
         .perf_pipeline_if (perf_pipeline_if),
     `endif 
 
         .dcache_req_if  (dcache_req_if),
-        .dcache_rsp_if  (dcache_rsp_if),
-
-        .dcr_base_if    (dcr_base_if),
+        .dcache_rsp_if  (dcache_rsp_if),        
 
     `ifdef EXT_TEX_ENABLE
         .tex_dcr_if     (tex_dcr_if),
