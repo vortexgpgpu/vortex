@@ -1,8 +1,8 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_unit #(
-    parameter RASTER_ID       = "",
-    parameter INSTANCE_ID     = 0,
+    parameter string INSTANCE_ID = "",
+    parameter INSTANCE_IDX    = 0,
     parameter NUM_INSTANCES   = 1, 
     parameter NUM_PES         = 1,  // number of processing elements
     parameter TILE_LOGSIZE    = 5,  // tile log size
@@ -60,8 +60,8 @@ module VX_raster_unit #(
 
     // Memory unit
     VX_raster_mem #(
-        .RASTER_ID    (RASTER_ID),
         .INSTANCE_ID  (INSTANCE_ID),
+        .INSTANCE_IDX (INSTANCE_IDX),
         .NUM_INSTANCES(NUM_INSTANCES),
         .TILE_LOGSIZE (TILE_LOGSIZE),
         .QUEUE_SIZE   (MEM_FIFO_DEPTH)
@@ -126,8 +126,8 @@ module VX_raster_unit #(
         .clk      (clk),
         .reset    (reset),
         .enable   (edge_func_enable),
-        .data_in  ({mem_unit_valid, mem_x_loc,   mem_y_loc,   mem_pid,   mem_edges,   mem_extents}),
-        .data_out ({pe_valid,    pe_x_loc, pe_y_loc, pe_pid, pe_edges, pe_extents})
+        .data_in  ({mem_unit_valid, mem_x_loc, mem_y_loc, mem_pid, mem_edges, mem_extents}),
+        .data_out ({pe_valid,       pe_x_loc,  pe_y_loc,  pe_pid,  pe_edges,  pe_extents})
     );
 
     `EDGE_UPDATE (pe_edges_e, pe_edges, edge_eval);
@@ -167,7 +167,7 @@ module VX_raster_unit #(
     VX_pending_size #( 
         .SIZE (MEM_FIFO_DEPTH)
     ) pending_pe_inputs (
-        .clk   (clk),E_ID
+        .clk   (clk),
         .reset (reset),
         .incr  (mem_unit_fire),
         .decr  (pes_input_fire),
@@ -176,22 +176,30 @@ module VX_raster_unit #(
         `UNUSED_PIN (full)
     );
 
+    wire no_pe_input = ~mem_unit_busy 
+                    && ~mem_unit_valid 
+                    && no_pending_pe_input;
+
     VX_raster_req_if #(
         .NUM_LANES (OUTPUT_QUADS)
     ) per_pe_raster_req_if[NUM_PES]();
 
+    wire [NUM_PES-1:0] pe_empty_out;
+
     // Generate all PEs
     for (genvar i = 0; i < NUM_PES; ++i) begin
-        wire [`RASTER_DIM_BITS-1:0]         pe_x_loc_in;
-        wire [`RASTER_DIM_BITS-1:0]         pe_y_loc_in;
-        wire [`RASTER_PID_BITS-1:0]         pe_pid_in;
+        wire [`RASTER_DIM_BITS-1:0]       pe_x_loc_in;
+        wire [`RASTER_DIM_BITS-1:0]       pe_y_loc_in;
+        wire [`RASTER_PID_BITS-1:0]       pe_pid_in;
         wire [2:0][2:0][`RASTER_DATA_BITS-1:0] pe_edges_in;
-        wire [2:0][`RASTER_DATA_BITS-1:0]   pe_extents_in;
+        wire [2:0][`RASTER_DATA_BITS-1:0] pe_extents_in;
+
+        wire pe_valid_out;        
 
         assign {pe_x_loc_in, pe_y_loc_in, pe_pid_in, pe_edges_in, pe_extents_in} = pes_data_in[i];
 
         VX_raster_pe #(
-            .RASTER_ID       (RASTER_ID),            
+            .INSTANCE_ID     (INSTANCE_ID),            
             .TILE_LOGSIZE    (TILE_LOGSIZE),
             .BLOCK_LOGSIZE   (BLOCK_LOGSIZE),
             .OUTPUT_QUADS    (OUTPUT_QUADS),
@@ -210,38 +218,27 @@ module VX_raster_unit #(
             .extents_in (pe_extents_in),
             .ready_in   (pes_ready_in[i]),
 
-            .valid_out  (per_pe_raster_req_if[i].valid),
+            .valid_out  (pe_valid_out),
             .mask_out   (per_pe_raster_req_if[i].tmask),
             .stamps_out (per_pe_raster_req_if[i].stamps),
-            .empty_out  (per_pe_raster_req_if[i].empty),
+            .empty_out  (pe_empty_out[i]),
             .ready_out  (per_pe_raster_req_if[i].ready)
         );
+
+        assign per_pe_raster_req_if[i].empty = (& pe_empty_out) && no_pe_input;
+        assign per_pe_raster_req_if[i].valid = pe_valid_out || per_pe_raster_req_if[i].empty;        
     end
-                     
-    VX_raster_req_if #(
-        .NUM_LANES (OUTPUT_QUADS)
-    ) raster_req_tmp_if();
 
     VX_raster_req_mux #(
-        .NUM_REQS  (NUM_PES),
-        .NUM_LANES (OUTPUT_QUADS),
-        .BUFFERED  ((NUM_PES > 1) ? 1 : 0)
+        .NUM_INPUTS (NUM_PES),
+        .NUM_LANES  (OUTPUT_QUADS),
+        .BUFFERED   ((NUM_PES > 1) ? 1 : 0)
     ) raster_req_mux (
         .clk        (clk),
         .reset      (reset),
         .req_in_if  (per_pe_raster_req_if),
-        .req_out_if (raster_req_tmp_if)
-    );   
-
-    wire no_pe_input = ~mem_unit_busy 
-                       && ~mem_unit_valid 
-                       && no_pending_pe_input;
-
-    assign raster_req_if.valid  = raster_req_tmp_if.valid || raster_req_if.empty;
-    assign raster_req_if.tmask  = raster_req_tmp_if.tmask;
-    assign raster_req_if.stamps = raster_req_tmp_if.stamps;
-    assign raster_req_if.empty  = raster_req_tmp_if.empty && no_pe_input;
-    assign raster_req_tmp_if.ready = raster_req_if.ready;
+        .req_out_if (raster_req_if)
+    );
 
 `ifdef PERF_ENABLE
     wire [$clog2(`RCACHE_NUM_REQS+1)-1:0] perf_mem_req_per_cycle;
@@ -293,7 +290,7 @@ module VX_raster_unit #(
         if (raster_req_if.valid && raster_req_if.ready) begin
             for (integer i = 0; i < OUTPUT_QUADS; ++i) begin
                 `TRACE(1, ("%d: %s-out[%0d]: empty=%b, x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
-                    $time, RASTER_ID, i, raster_req_if.empty,
+                    $time, INSTANCE_ID, i, raster_req_if.empty,
                     raster_req_if.stamps[i].pos_x,  raster_req_if.stamps[i].pos_y, raster_req_if.stamps[i].mask, raster_req_if.stamps[i].pid,
                     raster_req_if.stamps[i].bcoords[0][0], raster_req_if.stamps[i].bcoords[0][1], raster_req_if.stamps[i].bcoords[0][2], 
                     raster_req_if.stamps[i].bcoords[1][0], raster_req_if.stamps[i].bcoords[1][1], raster_req_if.stamps[i].bcoords[1][2], 

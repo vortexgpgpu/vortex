@@ -70,7 +70,7 @@ module VX_mem_unit # (
     `RESET_RELAY (icache_reset, reset);
 
     VX_cache_wrap #(
-        .CACHE_ID       (`ICACHE_ID),
+        .INSTANCE_ID    (`ICACHE_ID),
         .CACHE_SIZE     (`ICACHE_SIZE),
         .CACHE_LINE_SIZE(`ICACHE_LINE_SIZE),
         .NUM_BANKS      (1),
@@ -149,7 +149,7 @@ module VX_mem_unit # (
     `RESET_RELAY (dcache_reset, reset);
 
     VX_cache_wrap #(
-        .CACHE_ID       (`DCACHE_ID),
+        .INSTANCE_ID    (`DCACHE_ID),
         .CACHE_SIZE     (`DCACHE_SIZE),
         .CACHE_LINE_SIZE(`DCACHE_LINE_SIZE),
         .NUM_BANKS      (`DCACHE_NUM_BANKS),
@@ -351,7 +351,7 @@ module VX_mem_unit # (
     `RESET_RELAY (tcache_reset, reset);
 
     VX_cache_wrap #(
-        .CACHE_ID       (`TCACHE_ID),
+        .INSTANCE_ID    (`TCACHE_ID),
         .CACHE_SIZE     (`TCACHE_SIZE),
         .CACHE_LINE_SIZE(`TCACHE_LINE_SIZE),
         .NUM_BANKS      (`TCACHE_NUM_BANKS),

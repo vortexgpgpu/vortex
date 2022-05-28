@@ -1,8 +1,7 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_pe #(
-    parameter CLUSTER_ID      = 0,
-    parameter SLICE_ID        = 0,
+    parameter string INSTANCE_ID = "",
     parameter TILE_LOGSIZE    = 5,
     parameter BLOCK_LOGSIZE   = 2,
     parameter OUTPUT_QUADS    = 4,
@@ -46,7 +45,7 @@ module VX_raster_pe #(
     wire                        block_ready;
     
     VX_raster_te #(
-        .RASTER_ID     (RASTER_ID),
+        .INSTANCE_ID   (INSTANCE_ID),
         .TILE_LOGSIZE  (TILE_LOGSIZE),
         .BLOCK_LOGSIZE (BLOCK_LOGSIZE)
     ) tile_evaluator (
@@ -93,7 +92,7 @@ module VX_raster_pe #(
     );
 
     VX_raster_be #(
-        .RASTER_ID       (RASTER_ID),
+        .INSTANCE_ID     (INSTANCE_ID),
         .BLOCK_LOGSIZE   (BLOCK_LOGSIZE),
         .OUTPUT_QUADS    (OUTPUT_QUADS),
         .QUAD_FIFO_DEPTH (QUAD_FIFO_DEPTH)

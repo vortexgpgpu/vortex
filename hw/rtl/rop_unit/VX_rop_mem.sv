@@ -2,9 +2,9 @@
 
 // Module for handling memory requests
 module VX_rop_mem #(
-    parameter CLUSTER_ID = 0,
-    parameter NUM_LANES  = 4,
-    parameter TAG_WIDTH  = 1
+    parameter string INSTANCE_ID = "",
+    parameter NUM_LANES = 4,
+    parameter TAG_WIDTH = 1
 ) (
     input wire clk,
     input wire reset,

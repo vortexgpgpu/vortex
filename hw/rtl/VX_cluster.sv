@@ -41,11 +41,12 @@ module VX_cluster #(
 
     VX_raster_req_if #(
         .NUM_LANES (`NUM_THREADS)
-    ) raster_req_if();
+    ) raster_reqs_if[`NUM_RASTER_UNITS]();
 
 `ifdef PERF_ENABLE
-    VX_perf_cache_if    perf_rcache_if();
-    VX_raster_perf_if   raster_perf_if();
+    VX_perf_cache_if  perf_rcache_if();
+    VX_raster_perf_if raster_perfs_if[`NUM_RASTER_UNITS]();
+    VX_raster_perf_if raster_perf_if[`NUM_CORES]();
 `endif
 
     VX_cache_req_if #(
@@ -60,28 +61,72 @@ module VX_cluster #(
         .TAG_WIDTH (`RCACHE_TAG_WIDTH)
     ) rcache_rsp_if();
 
-    `RESET_RELAY (raster_reset, reset);
+    VX_cache_req_if #(
+        .NUM_REQS  (`RCACHE_NUM_REQS), 
+        .WORD_SIZE (`RCACHE_WORD_SIZE), 
+        .TAG_WIDTH (`RCACHE_TAG_ID_BITS)
+    ) rcache_reqs_if[`NUM_RASTER_UNITS]();
 
-    VX_raster_unit #( 
-        .RASTER_ID       ($sformatf("cluster%0d-raster", CLUSTER_ID)),
-        .INSTANCE_ID     (CLUSTER_ID),
-        .NUM_INSTANCES   (`NUM_CLUSTERS),
-        .NUM_PES         (`RASTER_NUM_PES),
-        .TILE_LOGSIZE    (`RASTER_TILE_LOGSIZE),
-        .BLOCK_LOGSIZE   (`RASTER_BLOCK_LOGSIZE),
-        .MEM_FIFO_DEPTH  (`RASTER_MEM_FIFO_DEPTH),
-        .QUAD_FIFO_DEPTH (`RASTER_QUAD_FIFO_DEPTH),
-        .OUTPUT_QUADS    (`NUM_THREADS)
-    ) raster_unit (
-        .clk           (clk),
-        .reset         (raster_reset),
-    `ifdef PERF_ENABLE
-        .raster_perf_if(raster_perf_if),
-    `endif
-        .raster_req_if (raster_req_if),
-        .raster_dcr_if (raster_dcr_if),        
-        .cache_req_if  (rcache_req_if),
-        .cache_rsp_if  (rcache_rsp_if)
+    VX_cache_rsp_if #(
+        .NUM_REQS  (`RCACHE_NUM_REQS), 
+        .WORD_SIZE (`RCACHE_WORD_SIZE), 
+        .TAG_WIDTH (`RCACHE_TAG_ID_BITS)
+    ) rcache_rsps_if[`NUM_RASTER_UNITS]();
+
+    // Generate all raster units
+    for (genvar i = 0; i < `NUM_RASTER_UNITS; ++i) begin
+        `RESET_RELAY (raster_reset, reset);
+
+        VX_raster_unit #( 
+            .INSTANCE_ID     ($sformatf("cluster%0d-raster%0d", CLUSTER_ID, i)),
+            .INSTANCE_IDX    (CLUSTER_ID * `NUM_RASTER_UNITS + i),
+            .NUM_INSTANCES   (`NUM_CLUSTERS * `NUM_RASTER_UNITS),
+            .NUM_PES         (`RASTER_NUM_PES),
+            .TILE_LOGSIZE    (`RASTER_TILE_LOGSIZE),
+            .BLOCK_LOGSIZE   (`RASTER_BLOCK_LOGSIZE),
+            .MEM_FIFO_DEPTH  (`RASTER_MEM_FIFO_DEPTH),
+            .QUAD_FIFO_DEPTH (`RASTER_QUAD_FIFO_DEPTH),
+            .OUTPUT_QUADS    (`NUM_THREADS)
+        ) raster_unit (
+            .clk           (clk),
+            .reset         (raster_reset),
+        `ifdef PERF_ENABLE
+            .raster_perf_if(raster_perfs_if[i]),
+        `endif
+            .raster_req_if (raster_reqs_if[i]),
+            .raster_dcr_if (raster_dcr_if),        
+            .cache_req_if  (rcache_reqs_if[i]),
+            .cache_rsp_if  (rcache_rsps_if[i])
+        );
+    end
+
+    VX_cache_mux #(
+        .NUM_REQS     (`NUM_RASTER_UNITS),
+        .NUM_LANES    (`RCACHE_NUM_REQS),
+        .DATA_SIZE    (`RCACHE_WORD_SIZE),
+        .TAG_IN_WIDTH (`RCACHE_TAG_ID_BITS),
+        .TAG_SEL_IDX  (0),
+        .BUFFERED_REQ ((`NUM_RASTER_UNITS > 1) ? 1 : 0),
+        .BUFFERED_RSP ((`NUM_RASTER_UNITS > 1) ? 1 : 0)
+    ) rcache_req_mux (
+        .clk        (clk),
+        .reset      (reset),
+        .req_in_if  (rcache_reqs_if),
+        .rsp_in_if  (rcache_rsps_if),
+        .req_out_if (rcache_req_if),
+        .rsp_out_if (rcache_rsp_if)
+    );
+
+    VX_raster_req_demux #(
+        .NUM_INPUTS  (`NUM_RASTER_UNITS),
+        .NUM_LANES   (`NUM_THREADS),
+        .NUM_OUTPUTS (`NUM_CORES),
+        .BUFFERED    ((`NUM_CORES > 1) ? 1 : 0)
+    ) raster_req_demux (
+        .clk        (clk),
+        .reset      (reset),
+        .req_in_if  (raster_reqs_if),
+        .req_out_if (per_core_raster_req_if)
     );
 
     VX_mem_req_if #(
@@ -110,26 +155,28 @@ module VX_cluster #(
         `CACHE_REQ_TO_MEM(rcache_req_qual_if, rcache_req_if, i);
     end
 
+    `RESET_RELAY (rcache_reset, reset);
+
     VX_cache_wrap #(
-        .CACHE_ID           (`RCACHE_ID),
-        .CACHE_SIZE         (`RCACHE_SIZE),
-        .CACHE_LINE_SIZE    (`RCACHE_LINE_SIZE),
-        .NUM_BANKS          (`RCACHE_NUM_BANKS),
-        .NUM_WAYS           (`RCACHE_NUM_WAYS),
-        .NUM_PORTS          (`RCACHE_NUM_PORTS),
-        .WORD_SIZE          (`RCACHE_WORD_SIZE),
-        .NUM_REQS           (`RCACHE_NUM_REQS),
-        .CREQ_SIZE          (`RCACHE_CREQ_SIZE),
-        .CRSQ_SIZE          (`RCACHE_CRSQ_SIZE),
-        .MSHR_SIZE          (`RCACHE_MSHR_SIZE),
-        .MRSQ_SIZE          (`RCACHE_MRSQ_SIZE),
-        .MREQ_SIZE          (`RCACHE_MREQ_SIZE),
-        .WRITE_ENABLE       (0),
-        .REQ_UUID_BITS      (0),
-        .CORE_TAG_WIDTH     (`RCACHE_TAG_WIDTH),
-        .MEM_TAG_WIDTH      (`RCACHE_MEM_TAG_WIDTH),
-        .NC_ENABLE          (0),
-        .PASSTHRU           (!`RCACHE_ENABLED)
+        .INSTANCE_ID    (`RCACHE_ID),
+        .CACHE_SIZE     (`RCACHE_SIZE),
+        .CACHE_LINE_SIZE(`RCACHE_LINE_SIZE),
+        .NUM_BANKS      (`RCACHE_NUM_BANKS),
+        .NUM_WAYS       (`RCACHE_NUM_WAYS),
+        .NUM_PORTS      (`RCACHE_NUM_PORTS),
+        .WORD_SIZE      (`RCACHE_WORD_SIZE),
+        .NUM_REQS       (`RCACHE_NUM_REQS),
+        .CREQ_SIZE      (`RCACHE_CREQ_SIZE),
+        .CRSQ_SIZE      (`RCACHE_CRSQ_SIZE),
+        .MSHR_SIZE      (`RCACHE_MSHR_SIZE),
+        .MRSQ_SIZE      (`RCACHE_MRSQ_SIZE),
+        .MREQ_SIZE      (`RCACHE_MREQ_SIZE),
+        .WRITE_ENABLE   (0),
+        .REQ_UUID_BITS  (0),
+        .CORE_TAG_WIDTH (`RCACHE_TAG_WIDTH),
+        .MEM_TAG_WIDTH  (`RCACHE_MEM_TAG_WIDTH),
+        .NC_ENABLE      (0),
+        .PASSTHRU       (!`RCACHE_ENABLED)
     ) rcache (
         `SCOPE_BIND_VX_cluster_rcache
 
@@ -138,7 +185,7 @@ module VX_cluster #(
     `endif
         
         .clk            (clk),
-        .reset          (raster_reset),
+        .reset          (rcache_reset),
         .core_req_if    (rcache_req_qual_if),
         .core_rsp_if    (rcache_rsp_qual_if),
         .mem_req_if     (rcache_mem_req_if),
@@ -147,18 +194,7 @@ module VX_cluster #(
 
     for (genvar i = 0; i < `RCACHE_NUM_REQS; ++i) begin
         `CACHE_RSP_FROM_MEM(rcache_rsp_if, rcache_rsp_qual_if, i);
-    end  
-
-    VX_raster_req_demux #(
-        .NUM_REQS  (`NUM_CORES),
-        .NUM_LANES (`NUM_THREADS),
-        .BUFFERED  ((`NUM_CORES > 1) ? 1 : 0)
-    ) raster_req_demux (
-        .clk        (clk),
-        .reset      (raster_reset),
-        .req_in_if  (raster_req_if),
-        .req_out_if (per_core_raster_req_if)
-    );
+    end
 
 `endif
 
@@ -170,11 +206,12 @@ module VX_cluster #(
 
     VX_rop_req_if #(
         .NUM_LANES (`NUM_THREADS)
-    ) rop_req_if();
+    ) rop_reqs_if[`NUM_ROP_UNITS]();
 
 `ifdef PERF_ENABLE
-    VX_perf_cache_if    perf_ocache_if();
-    VX_rop_perf_if      rop_perf_if(); 
+    VX_perf_cache_if perf_ocache_if();
+    VX_rop_perf_if   rop_perfs_if[`NUM_ROP_UNITS]();
+    VX_rop_perf_if   rop_perf_if[`NUM_CORES]();
 `endif
     
     VX_cache_req_if #(
@@ -189,22 +226,65 @@ module VX_cluster #(
         .TAG_WIDTH (`OCACHE_TAG_WIDTH)
     ) ocache_rsp_if();
 
-    `RESET_RELAY (rop_reset, reset);
+    VX_cache_req_if #(
+        .NUM_REQS  (`OCACHE_NUM_REQS), 
+        .WORD_SIZE (`OCACHE_WORD_SIZE), 
+        .TAG_WIDTH (`OCACHE_TAG_ID_BITS)
+    ) ocache_reqs_if[`NUM_ROP_UNITS]();
 
-    VX_rop_unit #(
-        .ROP_ID     ($sformatf("cluster%0d-rop", CLUSTER_ID)),
-        .NUM_SLICES (`ROP_NUM_SLICES),
-        .NUM_LANES  (`NUM_THREADS)
-    ) rop_unit (
-        .clk           (clk),
-        .reset         (rop_reset),
-    `ifdef PERF_ENABLE
-        .rop_perf_if   (rop_perf_if),
-    `endif
-        .rop_req_if    (rop_req_if),
-        .rop_dcr_if    (rop_dcr_if),
-        .cache_req_if  (ocache_req_if),
-        .cache_rsp_if  (ocache_rsp_if)
+    VX_cache_rsp_if #(
+        .NUM_REQS  (`OCACHE_NUM_REQS), 
+        .WORD_SIZE (`OCACHE_WORD_SIZE), 
+        .TAG_WIDTH (`OCACHE_TAG_ID_BITS)
+    ) ocache_rsps_if[`NUM_ROP_UNITS]();
+
+    // Generate all rop units
+    for (genvar i = 0; i < `NUM_ROP_UNITS; ++i) begin
+        `RESET_RELAY (rop_reset, reset);
+
+        VX_rop_unit #(
+            .INSTANCE_ID ($sformatf("cluster%0d-rop%0d", CLUSTER_ID, i)),
+            .NUM_LANES   (`NUM_THREADS)
+        ) rop_unit (
+            .clk           (clk),
+            .reset         (rop_reset),
+        `ifdef PERF_ENABLE
+            .rop_perf_if   (rop_perfs_if[i]),
+        `endif
+            .rop_req_if    (rop_reqs_if[i]),
+            .rop_dcr_if    (rop_dcr_if),
+            .cache_req_if  (ocache_reqs_if[i]),
+            .cache_rsp_if  (ocache_rsps_if[i])
+        );
+    end
+    
+    VX_cache_mux #(
+        .NUM_REQS     (`NUM_ROP_UNITS),
+        .NUM_LANES    (`OCACHE_NUM_REQS),
+        .DATA_SIZE    (`OCACHE_WORD_SIZE),
+        .TAG_IN_WIDTH (`OCACHE_TAG_ID_BITS),
+        .TAG_SEL_IDX  (0),
+        .BUFFERED_REQ ((`NUM_ROP_UNITS > 1) ? 1 : 0),
+        .BUFFERED_RSP ((`NUM_ROP_UNITS > 1) ? 1 : 0)
+    ) ocache_req_mux (
+        .clk        (clk),
+        .reset      (reset),
+        .req_in_if  (ocache_reqs_if),
+        .rsp_in_if  (ocache_rsps_if),
+        .req_out_if (ocache_req_if),
+        .rsp_out_if (ocache_rsp_if)
+    );
+
+    VX_rop_req_mux #(
+        .NUM_INPUTS  (`NUM_CORES),
+        .NUM_LANES   (`NUM_THREADS),
+        .NUM_OUTPUTS (`NUM_ROP_UNITS),
+        .BUFFERED    ((`NUM_CORES > 1) ? 1 : 0)
+    ) rop_req_mux (
+        .clk        (clk),
+        .reset      (reset),
+        .req_in_if  (per_core_rop_req_if),
+        .req_out_if (rop_reqs_if)
     );
 
     VX_mem_req_if #(
@@ -233,26 +313,28 @@ module VX_cluster #(
         `CACHE_REQ_TO_MEM(ocache_req_qual_if, ocache_req_if, i);
     end
 
+    `RESET_RELAY (ocache_reset, reset);
+
     VX_cache_wrap #(
-        .CACHE_ID           (`OCACHE_ID),
-        .CACHE_SIZE         (`OCACHE_SIZE),
-        .CACHE_LINE_SIZE    (`OCACHE_LINE_SIZE),
-        .NUM_BANKS          (`OCACHE_NUM_BANKS),
-        .NUM_WAYS           (`OCACHE_NUM_WAYS),
-        .NUM_PORTS          (`OCACHE_NUM_PORTS),
-        .WORD_SIZE          (`OCACHE_WORD_SIZE),
-        .NUM_REQS           (`OCACHE_NUM_REQS),
-        .CREQ_SIZE          (`OCACHE_CREQ_SIZE),
-        .CRSQ_SIZE          (`OCACHE_CRSQ_SIZE),
-        .MSHR_SIZE          (`OCACHE_MSHR_SIZE),
-        .MRSQ_SIZE          (`OCACHE_MRSQ_SIZE),
-        .MREQ_SIZE          (`OCACHE_MREQ_SIZE),
-        .WRITE_ENABLE       (1),
-        .REQ_UUID_BITS      (0),
-        .CORE_TAG_WIDTH     (`OCACHE_TAG_WIDTH),
-        .MEM_TAG_WIDTH      (`OCACHE_MEM_TAG_WIDTH),
-        .NC_ENABLE          (0),
-        .PASSTHRU           (!`OCACHE_ENABLED)
+        .INSTANCE_ID    (`OCACHE_ID),
+        .CACHE_SIZE     (`OCACHE_SIZE),
+        .CACHE_LINE_SIZE(`OCACHE_LINE_SIZE),
+        .NUM_BANKS      (`OCACHE_NUM_BANKS),
+        .NUM_WAYS       (`OCACHE_NUM_WAYS),
+        .NUM_PORTS      (`OCACHE_NUM_PORTS),
+        .WORD_SIZE      (`OCACHE_WORD_SIZE),
+        .NUM_REQS       (`OCACHE_NUM_REQS),
+        .CREQ_SIZE      (`OCACHE_CREQ_SIZE),
+        .CRSQ_SIZE      (`OCACHE_CRSQ_SIZE),
+        .MSHR_SIZE      (`OCACHE_MSHR_SIZE),
+        .MRSQ_SIZE      (`OCACHE_MRSQ_SIZE),
+        .MREQ_SIZE      (`OCACHE_MREQ_SIZE),
+        .WRITE_ENABLE   (1),
+        .REQ_UUID_BITS  (0),
+        .CORE_TAG_WIDTH (`OCACHE_TAG_WIDTH),
+        .MEM_TAG_WIDTH  (`OCACHE_MEM_TAG_WIDTH),
+        .NC_ENABLE      (0),
+        .PASSTHRU       (!`OCACHE_ENABLED)
     ) ocache (
         `SCOPE_BIND_VX_cluster_ocache
 
@@ -261,7 +343,7 @@ module VX_cluster #(
     `endif
         
         .clk            (clk),
-        .reset          (rop_reset),
+        .reset          (ocache_reset),
 
         .core_req_if    (ocache_req_qual_if),
         .core_rsp_if    (ocache_rsp_qual_if),
@@ -272,17 +354,6 @@ module VX_cluster #(
     for (genvar i = 0; i < `OCACHE_NUM_REQS; ++i) begin
         `CACHE_RSP_FROM_MEM(ocache_rsp_if, ocache_rsp_qual_if, i);
     end
-
-    VX_rop_req_mux #(
-        .NUM_REQS  (`NUM_CORES),
-        .NUM_LANES (`NUM_THREADS),
-        .BUFFERED  ((`NUM_CORES > 2) ? 1 : 0)
-    ) rop_req_mux (
-        .clk        (clk),
-        .reset      (rop_reset),
-        .req_in_if  (per_core_rop_req_if),
-        .req_out_if (rop_req_if)
-    );
 
 `endif
 
@@ -327,14 +398,14 @@ module VX_cluster #(
         `ifdef EXT_RASTER_ENABLE        
             .raster_req_if  (per_core_raster_req_if[i]),
         `ifdef PERF_ENABLE
-            .raster_perf_if (raster_perf_if),
+            .raster_perf_if (raster_perf_if[0]),
             .perf_rcache_if (perf_rcache_if),
         `endif
         `endif
         `ifdef EXT_ROP_ENABLE        
             .rop_req_if     (per_core_rop_req_if[i]),
         `ifdef PERF_ENABLE
-            .rop_perf_if    (rop_perf_if),
+            .rop_perf_if    (rop_perf_if[0]),
             .perf_ocache_if (perf_ocache_if),
         `endif
         `endif
@@ -371,24 +442,24 @@ module VX_cluster #(
     `RESET_RELAY (l2_reset, reset);
 
     VX_cache_wrap #(
-        .CACHE_ID           (`L2_CACHE_ID),
-        .CACHE_SIZE         (`L2_CACHE_SIZE),
-        .CACHE_LINE_SIZE    (`L2_CACHE_LINE_SIZE),
-        .NUM_BANKS          (`L2_NUM_BANKS),
-        .NUM_WAYS           (`L2_NUM_WAYS),
-        .NUM_PORTS          (`L2_NUM_PORTS),
-        .WORD_SIZE          (`L2_WORD_SIZE),
-        .NUM_REQS           (`L2_NUM_REQS),
-        .CREQ_SIZE          (`L2_CREQ_SIZE),
-        .CRSQ_SIZE          (`L2_CRSQ_SIZE),
-        .MSHR_SIZE          (`L2_MSHR_SIZE),
-        .MRSQ_SIZE          (`L2_MRSQ_SIZE),
-        .MREQ_SIZE          (`L2_MREQ_SIZE),
-        .WRITE_ENABLE       (1),       
-        .REQ_UUID_BITS      (`UUID_BITS),   
-        .CORE_TAG_WIDTH     (`L1_MEM_TAG_WIDTH),
-        .MEM_TAG_WIDTH      (`L2X_MEM_TAG_WIDTH),
-        .NC_ENABLE          (1)
+        .INSTANCE_ID    (`L2_CACHE_ID),
+        .CACHE_SIZE     (`L2_CACHE_SIZE),
+        .CACHE_LINE_SIZE(`L2_CACHE_LINE_SIZE),
+        .NUM_BANKS      (`L2_NUM_BANKS),
+        .NUM_WAYS       (`L2_NUM_WAYS),
+        .NUM_PORTS      (`L2_NUM_PORTS),
+        .WORD_SIZE      (`L2_WORD_SIZE),
+        .NUM_REQS       (`L2_NUM_REQS),
+        .CREQ_SIZE      (`L2_CREQ_SIZE),
+        .CRSQ_SIZE      (`L2_CRSQ_SIZE),
+        .MSHR_SIZE      (`L2_MSHR_SIZE),
+        .MRSQ_SIZE      (`L2_MRSQ_SIZE),
+        .MREQ_SIZE      (`L2_MREQ_SIZE),
+        .WRITE_ENABLE   (1),       
+        .REQ_UUID_BITS  (`UUID_BITS),   
+        .CORE_TAG_WIDTH (`L1_MEM_TAG_WIDTH),
+        .MEM_TAG_WIDTH  (`L2X_MEM_TAG_WIDTH),
+        .NC_ENABLE      (1)
     ) l2cache (
         `SCOPE_BIND_VX_cluster_l2cache
             

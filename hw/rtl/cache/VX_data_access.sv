@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_data_access #(
-    parameter string CACHE_ID   = "",
+    parameter string INSTANCE_ID= "",
     parameter BANK_ID           = 0,
     // Size of cache in bytes
     parameter CACHE_SIZE        = 1, 
@@ -42,7 +42,7 @@ module VX_data_access #(
 
     output wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] read_data
 );
-    `UNUSED_PARAM (CACHE_ID)
+    `UNUSED_PARAM (INSTANCE_ID)
     `UNUSED_PARAM (BANK_ID)
     `UNUSED_PARAM (WORD_SIZE)
     `UNUSED_VAR (reset)
@@ -136,13 +136,13 @@ module VX_data_access #(
 `ifdef DBG_TRACE_CACHE_DATA
     always @(posedge clk) begin 
         if (fill && ~stall) begin
-            `TRACE(3, ("%d: %s:%0d data-fill: addr=0x%0h, way=%b, blk_addr=%0d, data=0x%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, fill_data));
+            `TRACE(3, ("%d: %s:%0d data-fill: addr=0x%0h, way=%b, blk_addr=%0d, data=0x%0h\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, fill_data));
         end
         if (read && ~stall) begin
-            `TRACE(3, ("%d: %s:%0d data-read: addr=0x%0h, way=%b, blk_addr=%0d, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, read_data, req_uuid));
+            `TRACE(3, ("%d: %s:%0d data-read: addr=0x%0h, way=%b, blk_addr=%0d, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, read_data, req_uuid));
         end 
         if (write && ~stall) begin
-            `TRACE(3, ("%d: %s:%0d data-write: addr=0x%0h, way=%b, blk_addr=%0d, byteen=%b, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, byteen, write_data, req_uuid));
+            `TRACE(3, ("%d: %s:%0d data-write: addr=0x%0h, way=%b, blk_addr=%0d, byteen=%b, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, byteen, write_data, req_uuid));
         end      
     end    
 `endif

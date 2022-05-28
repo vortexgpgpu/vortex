@@ -41,14 +41,8 @@ module VX_stream_demux #(
             wire [NUM_REQS-1:0]     arb_onehot;
             wire                    arb_unlock;
 
-            if (NUM_LANES > 1) begin
-                for (genvar i = 0; i < NUM_REQS; ++i) begin
-                    assign arb_requests[i] = (| sel_ready[i]);
-                end
-            end else begin
-                for (genvar i = 0; i < NUM_REQS; ++i) begin
-                    assign arb_requests[i] = sel_ready[i];
-                end
+            for (genvar i = 0; i < NUM_REQS; ++i) begin
+                assign arb_requests[i] = (| sel_ready[i]);
             end
 
             if ((NUM_INPUTS * NUM_LANES) > 1) begin

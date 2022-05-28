@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_bank #(
-    parameter string CACHE_ID   = "",
+    parameter string INSTANCE_ID= "",
     parameter BANK_ID           = 0,
 
     // Number of Word requests per cycle
@@ -239,14 +239,14 @@ module VX_bank #(
     wire [NUM_WAYS-1:0] way_sel_st1;
 
     VX_tag_access #(
-        .CACHE_ID         (CACHE_ID),
-        .BANK_ID          (BANK_ID),        
-        .CACHE_SIZE       (CACHE_SIZE),
-        .CACHE_LINE_SIZE  (CACHE_LINE_SIZE),
-        .NUM_BANKS        (NUM_BANKS),
-        .NUM_WAYS         (NUM_WAYS),
-        .WORD_SIZE        (WORD_SIZE),   
-        .REQ_UUID_BITS    (REQ_UUID_BITS)
+        .INSTANCE_ID    (INSTANCE_ID),
+        .BANK_ID        (BANK_ID),        
+        .CACHE_SIZE     (CACHE_SIZE),
+        .CACHE_LINE_SIZE(CACHE_LINE_SIZE),
+        .NUM_BANKS      (NUM_BANKS),
+        .NUM_WAYS       (NUM_WAYS),
+        .WORD_SIZE      (WORD_SIZE),   
+        .REQ_UUID_BITS  (REQ_UUID_BITS)
     ) tag_access (
         .clk       (clk),
         .reset     (reset),
@@ -295,7 +295,7 @@ module VX_bank #(
     `UNUSED_VAR (wdata_st1)
     
     VX_data_access #(
-        .CACHE_ID       (CACHE_ID),
+        .INSTANCE_ID    (INSTANCE_ID),
         .BANK_ID        (BANK_ID),        
         .CACHE_SIZE     (CACHE_SIZE),
         .CACHE_LINE_SIZE(CACHE_LINE_SIZE),
@@ -344,16 +344,16 @@ module VX_bank #(
     );
 
     VX_miss_resrv #(
-        .CACHE_ID           (CACHE_ID),
-        .BANK_ID            (BANK_ID),        
-        .CACHE_LINE_SIZE    (CACHE_LINE_SIZE),
-        .NUM_BANKS          (NUM_BANKS),
-        .NUM_PORTS          (NUM_PORTS),
-        .WORD_SIZE          (WORD_SIZE),
-        .NUM_REQS           (NUM_REQS),
-        .MSHR_SIZE          (MSHR_SIZE),
-        .REQ_UUID_BITS      (REQ_UUID_BITS),
-        .CORE_TAG_WIDTH     (CORE_TAG_WIDTH)
+        .INSTANCE_ID    (INSTANCE_ID),
+        .BANK_ID        (BANK_ID),        
+        .CACHE_LINE_SIZE(CACHE_LINE_SIZE),
+        .NUM_BANKS      (NUM_BANKS),
+        .NUM_PORTS      (NUM_PORTS),
+        .WORD_SIZE      (WORD_SIZE),
+        .NUM_REQS       (NUM_REQS),
+        .MSHR_SIZE      (MSHR_SIZE),
+        .REQ_UUID_BITS  (REQ_UUID_BITS),
+        .CORE_TAG_WIDTH (CORE_TAG_WIDTH)
     ) miss_resrv (
         .clk                (clk),
         .reset              (reset),
@@ -496,31 +496,31 @@ module VX_bank #(
 
     always @(posedge clk) begin
         if (pipeline_stall) begin
-            `TRACE(3, ("%d: *** %s:%0d stall: crsq=%b, mreq=%b, mshr=%b\n", $time, CACHE_ID, BANK_ID, crsq_stall, mreq_alm_full, mshr_alm_full));
+            `TRACE(3, ("%d: *** %s:%0d stall: crsq=%b, mreq=%b, mshr=%b\n", $time, INSTANCE_ID, BANK_ID, crsq_stall, mreq_alm_full, mshr_alm_full));
         end
         if (flush_enable) begin
-            `TRACE(2, ("%d: %s:%0d flush: addr=0x%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(flush_addr, BANK_ID)));
+            `TRACE(2, ("%d: %s:%0d flush: addr=0x%0h\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(flush_addr, BANK_ID)));
         end
         if (mem_rsp_fire) begin
-            `TRACE(2, ("%d: %s:%0d fill-rsp: addr=0x%0h, id=%0d, data=0x%0h\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mem_rsp_addr, BANK_ID), mem_rsp_id, mem_rsp_data));
+            `TRACE(2, ("%d: %s:%0d fill-rsp: addr=0x%0h, id=%0d, data=0x%0h\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mem_rsp_addr, BANK_ID), mem_rsp_id, mem_rsp_data));
         end
         if (mshr_fire) begin
-            `TRACE(2, ("%d: %s:%0d mshr-pop: addr=0x%0h, tag=0x%0h, pmask=%b, tid=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mshr_addr, BANK_ID), mshr_tag, mshr_pmask, mshr_idx, req_uuid_sel));
+            `TRACE(2, ("%d: %s:%0d mshr-pop: addr=0x%0h, tag=0x%0h, pmask=%b, tid=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mshr_addr, BANK_ID), mshr_tag, mshr_pmask, mshr_idx, req_uuid_sel));
         end
         if (creq_fire) begin
             if (creq_rw)
-                `TRACE(2, ("%d: %s:%0d core-wr-req: addr=0x%0h, tag=0x%0h, pmask=%b, tid=%0d, byteen=%b, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(creq_addr, BANK_ID), creq_tag, creq_pmask, creq_idx, creq_byteen, creq_data, req_uuid_sel));
+                `TRACE(2, ("%d: %s:%0d core-wr-req: addr=0x%0h, tag=0x%0h, pmask=%b, tid=%0d, byteen=%b, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(creq_addr, BANK_ID), creq_tag, creq_pmask, creq_idx, creq_byteen, creq_data, req_uuid_sel));
             else
-                `TRACE(2, ("%d: %s:%0d core-rd-req: addr=0x%0h, tag=0x%0h, pmask=%b, tid=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(creq_addr, BANK_ID), creq_tag, creq_pmask, creq_idx, req_uuid_sel));
+                `TRACE(2, ("%d: %s:%0d core-rd-req: addr=0x%0h, tag=0x%0h, pmask=%b, tid=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(creq_addr, BANK_ID), creq_tag, creq_pmask, creq_idx, req_uuid_sel));
         end
         if (crsq_fire) begin
-            `TRACE(2, ("%d: %s:%0d core-rd-rsp: addr=0x%0h, tag=0x%0h, pmask=%b, tid=%0d, data=0x%0h (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), crsq_tag, crsq_pmask, crsq_idx, crsq_data, req_uuid_st1));
+            `TRACE(2, ("%d: %s:%0d core-rd-rsp: addr=0x%0h, tag=0x%0h, pmask=%b, tid=%0d, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID), crsq_tag, crsq_pmask, crsq_idx, crsq_data, req_uuid_st1));
         end
         if (mreq_push) begin
             if (is_write_st1)
-                `TRACE(2, ("%d: %s:%0d writethrough: addr=0x%0h, data=0x%0h, byteen=%b (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mreq_addr, BANK_ID), mreq_data, mreq_byteen, req_uuid_st1));
+                `TRACE(2, ("%d: %s:%0d writethrough: addr=0x%0h, data=0x%0h, byteen=%b (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mreq_addr, BANK_ID), mreq_data, mreq_byteen, req_uuid_st1));
             else
-                `TRACE(2, ("%d: %s:%0d fill-req: addr=0x%0h, id=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mreq_addr, BANK_ID), mreq_id, req_uuid_st1));
+                `TRACE(2, ("%d: %s:%0d fill-req: addr=0x%0h, id=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mreq_addr, BANK_ID), mreq_id, req_uuid_st1));
         end
     end    
 `endif

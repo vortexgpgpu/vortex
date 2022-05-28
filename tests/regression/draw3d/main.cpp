@@ -317,7 +317,7 @@ int render(const CGLTrace& trace) {
 
       if (kernel_arg.tex_modulate && !kernel_arg.color_enabled)
         kernel_arg.tex_modulate = false;
-      if (kernel_arg.tex_enabled && kernel_arg.color_enabled && ~kernel_arg.tex_modulate)
+      if (kernel_arg.tex_enabled && kernel_arg.color_enabled && !kernel_arg.tex_modulate)
         kernel_arg.color_enabled = false;
       
       RT_CHECK(vx_buf_alloc(device, sizeof(kernel_arg_t), &staging_buf));

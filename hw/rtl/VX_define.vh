@@ -458,7 +458,7 @@
 `define RCACHE_TAG_ID_BITS      (`CLOG2(`RASTER_MEM_PENDING_SIZE) + `RCACHE_BATCH_SEL_BITS)
 
 // Core request tag bits
-`define RCACHE_TAG_WIDTH        `RCACHE_TAG_ID_BITS 
+`define RCACHE_TAG_WIDTH        (`RCACHE_TAG_ID_BITS + `CLOG2(`NUM_RASTER_UNITS))
 
 // Memory request data bits
 `define RCACHE_MEM_DATA_WIDTH   (`RCACHE_LINE_SIZE * 8)
@@ -500,7 +500,7 @@
 `define OCACHE_TAG_ID_BITS      (`CLOG2(`ROP_MEM_PENDING_SIZE) + `OCACHE_BATCH_SEL_BITS)
 
 // Core request tag bits
-`define OCACHE_TAG_WIDTH        (`OCACHE_TAG_ID_BITS + `CLOG2(`ROP_NUM_SLICES))
+`define OCACHE_TAG_WIDTH        (`OCACHE_TAG_ID_BITS + `CLOG2(`NUM_ROP_UNITS))
 
 // Memory request data bits
 `define OCACHE_MEM_DATA_WIDTH   (`OCACHE_LINE_SIZE * 8)

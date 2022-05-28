@@ -6,7 +6,7 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_be #(
-    parameter RASTER_ID       = "",
+    parameter string INSTANCE_ID = "",
     parameter BLOCK_LOGSIZE   = 5,
     parameter OUTPUT_QUADS    = 2,
     parameter QUAD_FIFO_DEPTH = 4    
@@ -82,8 +82,8 @@ module VX_raster_be #(
     wire [PER_BLOCK_QUADS-1:0][3:0][2:0][`RASTER_DATA_BITS-1:0] qe_bcoords;    
     
     VX_raster_qe #(
-        .RASTER_ID (RASTER_ID),
-        .NUM_QUADS (PER_BLOCK_QUADS)
+        .INSTANCE_ID (INSTANCE_ID),
+        .NUM_QUADS   (PER_BLOCK_QUADS)
     ) quad_evaluator (
         .clk        (clk),
         .reset      (reset),
@@ -214,8 +214,8 @@ module VX_raster_be #(
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
         if (valid_in && ready_in) begin
-            `TRACE(2, ("%d: raster-be-in: x=%0d, y=%0d, pid=%0d, edge={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
-                $time, x_loc_in, y_loc_in, pid_in,
+            `TRACE(2, ("%d: %s-be-in: x=%0d, y=%0d, pid=%0d, edge={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
+                $time, INSTANCE_ID, x_loc_in, y_loc_in, pid_in,
                 edges_in[0][0], edges_in[0][1], edges_in[0][2],
                 edges_in[1][0], edges_in[1][1], edges_in[1][2],
                 edges_in[2][0], edges_in[2][1], edges_in[2][2]));
@@ -223,8 +223,8 @@ module VX_raster_be #(
         
         for (integer i = 0; i < OUTPUT_QUADS; ++i) begin
             if (valid_out && ready_out) begin
-                `TRACE(2, ("%d: raster-be-out[%0d]: x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
-                    $time, i, stamps_out[i].pos_x, stamps_out[i].pos_y, mask_out[i], stamps_out[i].pid,
+                `TRACE(2, ("%d: %s-be-out[%0d]: x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
+                    $time, INSTANCE_ID, i, stamps_out[i].pos_x, stamps_out[i].pos_y, mask_out[i], stamps_out[i].pid,
                     stamps_out[i].bcoords[0][0], stamps_out[i].bcoords[0][1], stamps_out[i].bcoords[0][2], 
                     stamps_out[i].bcoords[1][0], stamps_out[i].bcoords[1][1], stamps_out[i].bcoords[1][2], 
                     stamps_out[i].bcoords[2][0], stamps_out[i].bcoords[2][1], stamps_out[i].bcoords[2][2], 

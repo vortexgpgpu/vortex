@@ -6,7 +6,7 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_te #(
-    parameter RASTER_ID     = "",
+    parameter string INSTANCE_ID = "",
     parameter TILE_LOGSIZE  = 5,
     parameter BLOCK_LOGSIZE = 2  
 ) (
@@ -213,7 +213,7 @@ module VX_raster_te #(
     always @(posedge clk) begin
         if (valid_in && ready_in) begin
             `TRACE(2, ("%d: %s-te-in: x=%0d, y=%0d, edge={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}, extents={0x%0h, 0x%0h, 0x%0h}\n",
-                $time, RASTER_ID, x_loc_in, y_loc_in,
+                $time, INSTANCE_ID, x_loc_in, y_loc_in,
                 edges_in[0][0], edges_in[0][1], edges_in[0][2],
                 edges_in[1][0], edges_in[1][1], edges_in[1][2],
                 edges_in[2][0], edges_in[2][1], edges_in[2][2],
@@ -221,7 +221,7 @@ module VX_raster_te #(
         end
         if (tile_valid && ~stall) begin
             `TRACE(2, ("%d: %s-te-test: pass=%b, block=%b, level=%0d, x=%0d, y=%0d, edge_eval={0x%0h, 0x%0h, 0x%0h}\n",
-                $time, RASTER_ID, tile_valid_e, is_block, tile_level, tile_x_loc, tile_y_loc, edge_eval[0], edge_eval[1], edge_eval[2]));
+                $time, INSTANCE_ID, tile_valid_e, is_block, tile_level, tile_x_loc, tile_y_loc, edge_eval[0], edge_eval[1], edge_eval[2]));
         end
     end
 `endif

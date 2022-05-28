@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_cache #(
-    parameter string CACHE_ID       = "",
+    parameter string INSTANCE_ID    = "",
 
     // Number of Word requests per cycle
     parameter NUM_REQS              = 4,
@@ -352,22 +352,22 @@ module VX_cache #(
         `RESET_RELAY (bank_reset, reset);
         
         VX_bank #(                
-            .BANK_ID            (i),
-            .CACHE_ID           (CACHE_ID),
-            .CACHE_SIZE         (CACHE_SIZE),
-            .CACHE_LINE_SIZE    (CACHE_LINE_SIZE),
-            .NUM_BANKS          (NUM_BANKS),
-            .NUM_WAYS           (NUM_WAYS),
-            .NUM_PORTS          (NUM_PORTS),
-            .WORD_SIZE          (WORD_SIZE),
-            .NUM_REQS           (NUM_REQS),
-            .CREQ_SIZE          (CREQ_SIZE),
-            .CRSQ_SIZE          (CRSQ_SIZE),
-            .MSHR_SIZE          (MSHR_SIZE),
-            .MREQ_SIZE          (MREQ_SIZE),
-            .WRITE_ENABLE       (WRITE_ENABLE),
-            .REQ_UUID_BITS      (REQ_UUID_BITS),
-            .CORE_TAG_WIDTH     (CORE_TAG_WIDTH)
+            .BANK_ID        (i),
+            .INSTANCE_ID    (INSTANCE_ID),
+            .CACHE_SIZE     (CACHE_SIZE),
+            .CACHE_LINE_SIZE(CACHE_LINE_SIZE),
+            .NUM_BANKS      (NUM_BANKS),
+            .NUM_WAYS       (NUM_WAYS),
+            .NUM_PORTS      (NUM_PORTS),
+            .WORD_SIZE      (WORD_SIZE),
+            .NUM_REQS       (NUM_REQS),
+            .CREQ_SIZE      (CREQ_SIZE),
+            .CRSQ_SIZE      (CRSQ_SIZE),
+            .MSHR_SIZE      (MSHR_SIZE),
+            .MREQ_SIZE      (MREQ_SIZE),
+            .WRITE_ENABLE   (WRITE_ENABLE),
+            .REQ_UUID_BITS  (REQ_UUID_BITS),
+            .CORE_TAG_WIDTH (CORE_TAG_WIDTH)
         ) bank (
             `SCOPE_BIND_VX_cache_bank(i)
             

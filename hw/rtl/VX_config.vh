@@ -86,6 +86,16 @@
 `define STACK_SIZE 8192
 `endif
 
+`define RESET_DELAY 6
+
+`ifndef STALL_TIMEOUT
+`define STALL_TIMEOUT (10000 * (1 ** (`L2_ENABLED + `L3_ENABLED)))
+`endif
+
+`ifndef DEBUG_LEVEL
+`define DEBUG_LEVEL 3
+`endif
+
 // ISA Extensions /////////////////////////////////////////////////////////////
 
 `ifndef EXT_M_DISABLE
@@ -256,16 +266,6 @@
 `define LATENCY_FCVT 5
 `endif
 
-`define RESET_DELAY 6
-
-`ifndef STALL_TIMEOUT
-`define STALL_TIMEOUT (10000 * (1 ** (`L2_ENABLED + `L3_ENABLED)))
-`endif
-
-`ifndef DEBUG_LEVEL
-`define DEBUG_LEVEL 3
-`endif
-
 // Pipeline Queues ////////////////////////////////////////////////////////////
 
 // Size of Instruction Buffer
@@ -283,9 +283,23 @@
 `define FPUQ_SIZE (`NUM_WARPS * 2)
 `endif
 
+// Texture Units ///////////////////////////////////////////////////////////////
+
+// Number of texture units
+`ifndef NUM_TEX_UNITS
+`define NUM_TEX_UNITS `UP(`NUM_CORES / 8)
+`endif
+
 // Texture Unit memory pending Queue
 `ifndef TEX_MEM_PENDING_SIZE
 `define TEX_MEM_PENDING_SIZE (`NUM_WARPS * 2)
+`endif
+
+// Raster Units ////////////////////////////////////////////////////////////////
+
+// Number of raster units
+`ifndef NUM_RASTER_UNITS
+`define NUM_RASTER_UNITS 1
 `endif
 
 // RASTER memory pending size
@@ -313,6 +327,13 @@
 `define RASTER_MEM_FIFO_DEPTH 8
 `endif
 
+// Rop Units ///////////////////////////////////////////////////////////////////
+
+// Number of rop units
+`ifndef NUM_ROP_UNITS
+`define NUM_ROP_UNITS 1
+`endif
+
 // ROP memory pending size
 `ifndef ROP_MEM_PENDING_SIZE    
 `define ROP_MEM_PENDING_SIZE 4
@@ -321,11 +342,6 @@
 // RASTER quad queue size
 `ifndef RASTER_QUAD_FIFO_DEPTH    
 `define RASTER_QUAD_FIFO_DEPTH 8
-`endif
-
-// ROP number of slices
-`ifndef ROP_NUM_SLICES    
-`define ROP_NUM_SLICES 1
 `endif
 
 // Icache Configurable Knobs //////////////////////////////////////////////////

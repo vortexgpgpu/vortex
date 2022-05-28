@@ -159,7 +159,7 @@ module Vortex (
     `RESET_RELAY (l3_reset, reset | start);
 
     VX_cache_wrap #(
-        .CACHE_ID           (`L3_CACHE_ID),
+        .INSTANCE_ID        (`L3_CACHE_ID),
         .CACHE_SIZE         (`L3_CACHE_SIZE),
         .CACHE_LINE_SIZE    (`L3_CACHE_LINE_SIZE),
         .NUM_BANKS          (`L3_NUM_BANKS),

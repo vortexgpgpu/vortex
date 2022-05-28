@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_cache_wrap #(
-    parameter string CACHE_ID       = "",
+    parameter string INSTANCE_ID    = "",
 
     // Number of Word requests per cycle
     parameter NUM_REQS              = 4,
@@ -332,6 +332,17 @@ module VX_cache_wrap #(
         `UNUSED_VAR (mem_rsp_tag_b)
         assign mem_rsp_ready_b = 0;
 
+    `ifdef PERF_ENABLE
+        assign perf_cache_if.reads        = 'x;
+        assign perf_cache_if.writes       = 'x;
+        assign perf_cache_if.read_misses  = 'x;
+        assign perf_cache_if.write_misses = 'x;
+        assign perf_cache_if.bank_stalls  = 'x;
+        assign perf_cache_if.mshr_stalls  = 'x;
+        assign perf_cache_if.mem_stalls   = 'x;
+        assign perf_cache_if.crsp_stalls  = 'x;
+    `endif
+
     end else begin
 
         VX_mem_req_if #(
@@ -387,7 +398,7 @@ module VX_cache_wrap #(
         assign mem_rsp_ready_b = mem_rsp_wrap_if.ready;
 
         VX_cache #(
-            .CACHE_ID       (CACHE_ID),
+            .INSTANCE_ID    (INSTANCE_ID),
             .CACHE_SIZE     (CACHE_SIZE),
             .CACHE_LINE_SIZE(CACHE_LINE_SIZE),
             .NUM_BANKS      (NUM_BANKS),
@@ -439,12 +450,12 @@ module VX_cache_wrap #(
         always @(posedge clk) begin
             if (core_req_fire) begin
                 if (core_req_if[i].rw)
-                    `TRACE(1, ("%d: %s core-wr-req: tid=%0d, addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", $time, CACHE_ID, i, `TO_FULL_ADDR(core_req_if[i].addr), core_req_if[i].tag, core_req_if[i].byteen, core_req_if[i].data, core_req_uuid));
+                    `TRACE(1, ("%d: %s core-wr-req: tid=%0d, addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, i, `TO_FULL_ADDR(core_req_if[i].addr), core_req_if[i].tag, core_req_if[i].byteen, core_req_if[i].data, core_req_uuid));
                 else
-                    `TRACE(1, ("%d: %s core-rd-req: tid=%0d, addr=0x%0h, tag=0x%0h (#%0d)\n", $time, CACHE_ID, i, `TO_FULL_ADDR(core_req_if[i].addr), core_req_if[i].tag, core_req_uuid));
+                    `TRACE(1, ("%d: %s core-rd-req: tid=%0d, addr=0x%0h, tag=0x%0h (#%0d)\n", $time, INSTANCE_ID, i, `TO_FULL_ADDR(core_req_if[i].addr), core_req_if[i].tag, core_req_uuid));
             end
             if (core_rsp_fire) begin
-                `TRACE(1, ("%d: %s core-rd-rsp: tid=%0d, tag=0x%0h, data=0x%0h (#%0d)\n", $time, CACHE_ID, i, core_rsp_if[i].tag, core_rsp_if[i].data, core_rsp_uuid));
+                `TRACE(1, ("%d: %s core-rd-rsp: tid=%0d, tag=0x%0h, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, i, core_rsp_if[i].tag, core_rsp_if[i].data, core_rsp_uuid));
             end        
         end
     end   
@@ -466,12 +477,12 @@ module VX_cache_wrap #(
     always @(posedge clk) begin
         if (mem_req_fire) begin
             if (mem_req_if.rw)
-                `TRACE(1, ("%d: %s mem-wr-req: addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", $time, CACHE_ID, `TO_FULL_ADDR(mem_req_if.addr), mem_req_if.tag, mem_req_if.byteen, mem_req_if.data, mem_req_uuid));
+                `TRACE(1, ("%d: %s mem-wr-req: addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, `TO_FULL_ADDR(mem_req_if.addr), mem_req_if.tag, mem_req_if.byteen, mem_req_if.data, mem_req_uuid));
             else
-                `TRACE(1, ("%d: %s mem-rd-req: addr=0x%0h, tag=0x%0h (#%0d)\n", $time, CACHE_ID, `TO_FULL_ADDR(mem_req_if.addr), mem_req_if.tag, mem_req_uuid));
+                `TRACE(1, ("%d: %s mem-rd-req: addr=0x%0h, tag=0x%0h (#%0d)\n", $time, INSTANCE_ID, `TO_FULL_ADDR(mem_req_if.addr), mem_req_if.tag, mem_req_uuid));
         end
         if (mem_rsp_fire) begin
-            `TRACE(1, ("%d: %s mem-rd-rsp: tag=0x%0h, data=0x%0h (#%0d)\n", $time, CACHE_ID, mem_rsp_if.tag, mem_rsp_if.data, mem_rsp_uuid));
+            `TRACE(1, ("%d: %s mem-rd-rsp: tag=0x%0h, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, mem_rsp_if.tag, mem_rsp_if.data, mem_rsp_uuid));
         end
     end    
 `endif

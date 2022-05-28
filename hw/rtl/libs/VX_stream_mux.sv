@@ -59,14 +59,8 @@ module VX_stream_mux #(
             wire [NUM_REQS-1:0]     arb_onehot;
             wire                    arb_unlock;
 
-            if (NUM_LANES > 1) begin
-                for (genvar i = 0; i < NUM_REQS; ++i) begin
-                    assign arb_requests[i] = (| valid_in_r[i]);
-                end
-            end else begin
-                for (genvar i = 0; i < NUM_REQS; ++i) begin
-                    assign arb_requests[i] = valid_in_r[i];
-                end
+            for (genvar i = 0; i < NUM_REQS; ++i) begin
+                assign arb_requests[i] = (| valid_in_r[i]);
             end            
 
             if ((NUM_OUTPUTS * NUM_LANES) > 1) begin

@@ -20,9 +20,9 @@
 	auto F0 = static_cast<float>(fixed16_t::make(csr_read(CSR_RASTER_BCOORD_X##i))); \
 	auto F1 = static_cast<float>(fixed16_t::make(csr_read(CSR_RASTER_BCOORD_Y##i))); \
 	auto F2 = static_cast<float>(fixed16_t::make(csr_read(CSR_RASTER_BCOORD_Z##i))); \
-	auto r  = 1.0f / (F0 + F1 + F2);    \
-    dx[i] = fixed24_t(r * F0); 			\
-    dy[i] = fixed24_t(r * F1); 			\
+	auto r  = 1.0f / (F0 + F1 + F2); \
+    dx[i] = fixed24_t(r * F0); 		 \
+    dy[i] = fixed24_t(r * F1); 		 \
 }
 
 #define GRADIENTS \
@@ -56,21 +56,21 @@
 	TO_RGBA_i(3, dst, src_r, src_g, src_b, src_a)
 
 #define OUTPUT_i(i, mask, x, y, color) \
-	if (mask & (1 << i)) {							\
-		auto pos_x = (x << 1) + (i & 1);			\
-		auto pos_y = (y << 1) + (i >> 1);			\
+	if (mask & (1 << i)) {				  \
+		auto pos_x = (x << 1) + (i & 1);  \
+		auto pos_y = (y << 1) + (i >> 1); \
 		auto dst_ptr = reinterpret_cast<uint32_t*>(kernel_arg->cbuf_addr + pos_x * kernel_arg->cbuf_stride + pos_y * kernel_arg->cbuf_pitch); \
 		*dst_ptr = color[i].value; \
 	}
 
 #define OUTPUT(color) \
-	auto __DIVERGENT__ pos_mask = csr_read(CSR_RASTER_POS_MASK); \
-	auto mask = (pos_mask >> 0) & 0xf;			 \
+	auto __DIVERGENT__ pos_mask = csr_read(CSR_RASTER_POS_MASK);  \
+	auto mask = (pos_mask >> 0) & 0xf;                            \
 	auto x    = (pos_mask >> 4) & ((1 << (RASTER_DIM_BITS-1))-1); \
 	auto y    = (pos_mask >> (4 + (RASTER_DIM_BITS-1))) & ((1 << (RASTER_DIM_BITS-1))-1); \
-	OUTPUT_i(0, mask, x, y, color)  \
-	OUTPUT_i(1, mask, x, y, color)  \
-	OUTPUT_i(2, mask, x, y, color)  \
+	OUTPUT_i(0, mask, x, y, color) \
+	OUTPUT_i(1, mask, x, y, color) \
+	OUTPUT_i(2, mask, x, y, color) \
 	OUTPUT_i(3, mask, x, y, color)
 
 void shader_function(int task_id, kernel_arg_t* kernel_arg) {

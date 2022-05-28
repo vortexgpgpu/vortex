@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_miss_resrv #(
-    parameter string CACHE_ID   = "",
+    parameter string INSTANCE_ID= "",
     parameter BANK_ID           = 0, 
     
     // Number of Word requests per cycle
@@ -64,7 +64,7 @@ module VX_miss_resrv #(
     input wire                          release_valid,
     input wire [MSHR_ADDR_WIDTH-1:0]    release_id
 );
-    `UNUSED_PARAM (CACHE_ID)
+    `UNUSED_PARAM (INSTANCE_ID)
     `UNUSED_PARAM (BANK_ID)    
     
     reg [MSHR_SIZE-1:0][`LINE_ADDR_WIDTH-1:0] addr_table, addr_table_n;
@@ -164,10 +164,10 @@ module VX_miss_resrv #(
         `ASSERT(!release_valid || valid_table[release_id], ("runtime error"));
     end
     
-    `RUNTIME_ASSERT((!allocate_fire || ~valid_table[allocate_id]), ("%t: *** %s:%0d in-use allocation: addr=0x%0h, id=%0d", $time, CACHE_ID, BANK_ID, 
+    `RUNTIME_ASSERT((!allocate_fire || ~valid_table[allocate_id]), ("%t: *** %s:%0d in-use allocation: addr=0x%0h, id=%0d", $time, INSTANCE_ID, BANK_ID, 
         `LINE_TO_BYTE_ADDR(allocate_addr, BANK_ID), allocate_id))
     
-    `RUNTIME_ASSERT((!fill_valid || valid_table[fill_id]), ("%t: *** %s:%0d invalid fill: addr=0x%0h, id=%0d", $time, CACHE_ID, BANK_ID, 
+    `RUNTIME_ASSERT((!fill_valid || valid_table[fill_id]), ("%t: *** %s:%0d invalid fill: addr=0x%0h, id=%0d", $time, INSTANCE_ID, BANK_ID, 
         `LINE_TO_BYTE_ADDR(addr_table[fill_id], BANK_ID), fill_id))
 
     VX_dp_ram #(
@@ -204,23 +204,23 @@ module VX_miss_resrv #(
     always @(posedge clk) begin
         if (allocate_fire || fill_valid || dequeue_fire || lookup_replay || lookup_valid || release_valid) begin
             if (allocate_fire)
-                `TRACE(3, ("%d: %s:%0d mshr-allocate: addr=0x%0h, id=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID,
+                `TRACE(3, ("%d: %s:%0d mshr-allocate: addr=0x%0h, id=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID,
                     `LINE_TO_BYTE_ADDR(allocate_addr, BANK_ID), allocate_id, lkp_req_uuid));
             if (fill_valid)
-                `TRACE(3, ("%d: %s:%0d mshr-fill: addr=0x%0h, id=%0d, addr=0x%0h\n", $time, CACHE_ID, BANK_ID, 
+                `TRACE(3, ("%d: %s:%0d mshr-fill: addr=0x%0h, id=%0d, addr=0x%0h\n", $time, INSTANCE_ID, BANK_ID, 
                     `LINE_TO_BYTE_ADDR(addr_table[fill_id], BANK_ID), fill_id, `LINE_TO_BYTE_ADDR(fill_addr, BANK_ID)));
             if (dequeue_fire)
-                `TRACE(3, ("%d: %s:%0d mshr-dequeue: addr=0x%0h, id=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, 
+                `TRACE(3, ("%d: %s:%0d mshr-dequeue: addr=0x%0h, id=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID, 
                     `LINE_TO_BYTE_ADDR(dequeue_addr, BANK_ID), dequeue_id_r, deq_req_uuid));
             if (lookup_replay)
-                `TRACE(3, ("%d: %s:%0d mshr-replay: addr=0x%0h, id=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, 
+                `TRACE(3, ("%d: %s:%0d mshr-replay: addr=0x%0h, id=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID, 
                     `LINE_TO_BYTE_ADDR(lookup_addr, BANK_ID), lookup_id, lkp_req_uuid));
             if (lookup_valid)
-                `TRACE(3, ("%d: %s:%0d mshr-lookup: addr=0x%0h, id=%0d, match=%b (#%0d)\n", $time, CACHE_ID, BANK_ID, 
+                `TRACE(3, ("%d: %s:%0d mshr-lookup: addr=0x%0h, id=%0d, match=%b (#%0d)\n", $time, INSTANCE_ID, BANK_ID, 
                     `LINE_TO_BYTE_ADDR(lookup_addr, BANK_ID), lookup_id, lookup_match, lkp_req_uuid));
             if (release_valid)
-                `TRACE(3, ("%d: %s:%0d mshr-release id=%0d (#%0d)\n", $time, CACHE_ID, BANK_ID, release_id, rel_req_uuid));
-            `TRACE(3, ("%d: %s:%0d mshr-table", $time, CACHE_ID, BANK_ID));
+                `TRACE(3, ("%d: %s:%0d mshr-release id=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID, release_id, rel_req_uuid));
+            `TRACE(3, ("%d: %s:%0d mshr-table", $time, INSTANCE_ID, BANK_ID));
             for (integer i = 0; i < MSHR_SIZE; ++i) begin
                 if (valid_table[i]) begin
                     `TRACE(3, (" "));                    
