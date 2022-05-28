@@ -159,7 +159,6 @@
 `define INST_LSU_WSIZE(x)    x[1:0]
 `define INST_LSU_IS_MEM(x)   (3'h0 == x)
 `define INST_LSU_IS_FENCE(x) (3'h1 == x)
-`define INST_LSU_IS_PREFETCH(x) (3'h2 == x)
 
 `define INST_FENCE_BITS      1
 `define INST_FENCE_D         1'h0

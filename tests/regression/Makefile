@@ -10,7 +10,6 @@ all:
 	$(MAKE) -C fence
 	$(MAKE) -C no_mf_ext
 	$(MAKE) -C no_smem
-	$(MAKE) -C prefetch
 	$(MAKE) -C tex
 	$(MAKE) -C draw3d
 	$(MAKE) -C raster
@@ -28,7 +27,6 @@ run-simx:
 	$(MAKE) -C fence run-simx
 	$(MAKE) -C no_mf_ext run-simx
 	$(MAKE) -C no_smem run-simx
-	$(MAKE) -C prefetch run-simx
 #	$(MAKE) -C draw3d run-simx
 #	$(MAKE) -C raster run-simx
 #	$(MAKE) -C rop run-simx
@@ -45,7 +43,6 @@ run-rtlsim:
 	$(MAKE) -C fence run-rtlsim
 	$(MAKE) -C no_mf_ext run-rtlsim
 	$(MAKE) -C no_smem run-rtlsim
-	$(MAKE) -C prefetch run-rtlsim
 #	$(MAKE) -C draw3d run-rtlsim
 #	$(MAKE) -C raster run-rtlsim
 #   $(MAKE) -C rop run-rtlsim
@@ -62,7 +59,6 @@ run-vlsim:
 	$(MAKE) -C fence run-vlsim
 	$(MAKE) -C no_mf_ext run-vlsim
 	$(MAKE) -C no_smem run-vlsim
-	$(MAKE) -C prefetch run-vlsim
 #	$(MAKE) -C draw3d run-vlsim
 #	$(MAKE) -C raster run-vlsim
 #	$(MAKE) -C rop run-vlsim
@@ -79,7 +75,6 @@ clean:
 	$(MAKE) -C fence clean
 	$(MAKE) -C no_mf_ext clean
 	$(MAKE) -C no_smem clean
-	$(MAKE) -C prefetch clean
 	$(MAKE) -C tex clean
 	$(MAKE) -C draw3d clean
 	$(MAKE) -C raster clean
@@ -97,7 +92,6 @@ clean-all:
 	$(MAKE) -C fence clean-all
 	$(MAKE) -C no_mf_ext clean-all
 	$(MAKE) -C no_smem clean-all
-	$(MAKE) -C prefetch clean-all
 	$(MAKE) -C tex clean-all
 	$(MAKE) -C draw3d clean
 	$(MAKE) -C raster clean

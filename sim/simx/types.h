@@ -103,16 +103,14 @@ inline std::ostream &operator<<(std::ostream &os, const AluType& type) {
 enum class LsuType {
   LOAD,
   STORE,
-  FENCE,
-  PREFETCH,    
+  FENCE
 };
 
 inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
   switch (type) {
-  case LsuType::LOAD:     os << "LOAD"; break;
-  case LsuType::STORE:    os << "STORE"; break;
-  case LsuType::FENCE:    os << "FENCE"; break;
-  case LsuType::PREFETCH: os << "PREFETCH"; break;
+  case LsuType::LOAD:  os << "LOAD"; break;
+  case LsuType::STORE: os << "STORE"; break;
+  case LsuType::FENCE: os << "FENCE"; break;
   }
   return os;
 }

@@ -1404,20 +1404,6 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         trace->fetch_stall = true;
         trace->data = std::make_shared<GPUTraceData>(core_->barrier(rsdata[ts][0].i, rsdata[ts][1].i, id_));
       } break;
-      case 5: {
-        // PREFETCH
-        trace->exe_type = ExeType::LSU; 
-        trace->lsu_type = LsuType::PREFETCH; 
-        trace->used_iregs.set(rsrc0);
-        auto trace_data = std::make_shared<LsuTraceData>(num_threads);
-        trace->data = trace_data;
-        for (uint32_t t = 0; t < num_threads; ++t) {
-          if (!tmask_.test(t))
-            continue;
-          auto mem_addr = rsdata[t][0].u;
-          trace_data->mem_addrs.at(t) = {mem_addr, 4};
-        }
-      } break;
       default:
         std::abort();
       }

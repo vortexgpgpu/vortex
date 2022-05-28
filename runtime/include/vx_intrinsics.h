@@ -257,11 +257,6 @@ inline void vx_barrier(unsigned barried_id, unsigned num_warps) {
     RISCV_INSN_R_011(RISCV_CUSTOM0, 4, 0, barried_id, num_warps);
 }
 
-// Prefetch
-inline void vx_prefetch(unsigned addr) {
-    RISCV_INSN_R_010(RISCV_CUSTOM0, 5, 0, addr, 0);
-}
-
 // Return active warp's thread id 
 inline int vx_thread_id() {
     int result;

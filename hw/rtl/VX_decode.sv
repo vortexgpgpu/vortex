@@ -377,12 +377,6 @@ module VX_decode  #(
                                 is_wstall = 1;
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
-                            end                
-                            3'h5: begin // PREFETCH
-                                ex_type = `EX_LSU;
-                                op_type = `INST_OP_BITS'(`INST_LSU_LW);
-                                op_mod  = `INST_MOD_BITS'(2);
-                                `USED_IREG (rs1);
                             end
                             default:;
                         endcase
