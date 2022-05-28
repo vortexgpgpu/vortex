@@ -433,8 +433,6 @@ module VX_cluster #(
         .TAG_WIDTH  (`L2X_MEM_TAG_WIDTH)
     ) l2_mem_rsp_if();
 
-`ifdef L2_ENABLE
-
 `ifdef PERF_ENABLE
     VX_perf_cache_if perf_l2cache_if();
 `endif
@@ -459,7 +457,8 @@ module VX_cluster #(
         .REQ_UUID_BITS  (`UUID_BITS),   
         .CORE_TAG_WIDTH (`L1_MEM_TAG_WIDTH),
         .MEM_TAG_WIDTH  (`L2X_MEM_TAG_WIDTH),
-        .NC_ENABLE      (1)
+        .NC_ENABLE      (1),
+        .PASSTHRU       (!`L2_ENABLED)
     ) l2cache (
         `SCOPE_BIND_VX_cluster_l2cache
             
@@ -475,27 +474,6 @@ module VX_cluster #(
         .mem_req_if     (l2_mem_req_if),
         .mem_rsp_if     (l2_mem_rsp_if)
     );
-
-`else
-
-    VX_mem_mux #(
-        .NUM_REQS     (`NUM_CORES),
-        .DATA_WIDTH   (`DCACHE_MEM_DATA_WIDTH),
-        .ADDR_WIDTH   (`DCACHE_MEM_ADDR_WIDTH),           
-        .TAG_IN_WIDTH (`L1_MEM_TAG_WIDTH),
-        .TAG_SEL_IDX  (1), // Skip 0 for NC flag
-        .BUFFERED_REQ ((`NUM_CORES > 1) ? 1 : 0),
-        .BUFFERED_RSP ((`NUM_CORES > 1) ? 1 : 0)
-    ) mem_mux_core (
-        .clk        (clk),
-        .reset      (reset),
-        .req_in_if  (per_core_mem_req_if),        
-        .rsp_in_if  (per_core_mem_rsp_if),
-        .req_out_if (l2_mem_req_if),
-        .rsp_out_if (l2_mem_rsp_if)
-    );
-
-`endif
 
     localparam MEM_ARB_SIZE          = 1 + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED;
     localparam RCACHE_MEM_TAG_WIDTH_ = `EXT_RASTER_ENABLED ? `RCACHE_MEM_TAG_WIDTH : 0;

@@ -101,6 +101,9 @@ module Vortex (
     `UNUSED_VAR (per_cluster_sim_ebreak)
     `UNUSED_VAR (per_cluster_sim_wb_value)
 
+    // also reset device on start
+    wire reset_or_start = reset || start;
+
     VX_mem_req_if #(
         .DATA_WIDTH (`L2_MEM_DATA_WIDTH),
         .ADDR_WIDTH (`L2_MEM_ADDR_WIDTH),
@@ -117,7 +120,7 @@ module Vortex (
     // Generate all clusters
     for (genvar i = 0; i < `NUM_CLUSTERS; i++) begin
 
-        `RESET_RELAY (cluster_reset, reset | start);
+        `RESET_RELAY (cluster_reset, reset_or_start);
 
         VX_cluster #(
             .CLUSTER_ID (i)
@@ -150,33 +153,32 @@ module Vortex (
 
     assign busy = (| per_cluster_busy);
 
-`ifdef L3_ENABLE
-
 `ifdef PERF_ENABLE
     VX_perf_cache_if perf_l3cache_if();
 `endif
 
-    `RESET_RELAY (l3_reset, reset | start);
+    `RESET_RELAY (l3_reset, reset_or_start);
 
     VX_cache_wrap #(
-        .INSTANCE_ID        (`L3_CACHE_ID),
-        .CACHE_SIZE         (`L3_CACHE_SIZE),
-        .CACHE_LINE_SIZE    (`L3_CACHE_LINE_SIZE),
-        .NUM_BANKS          (`L3_NUM_BANKS),
-        .NUM_WAYS           (`L3_NUM_WAYS),
-        .NUM_PORTS          (`L3_NUM_PORTS),
-        .WORD_SIZE          (`L3_WORD_SIZE),
-        .NUM_REQS           (`L3_NUM_REQS),
-        .CREQ_SIZE          (`L3_CREQ_SIZE),
-        .CRSQ_SIZE          (`L3_CRSQ_SIZE),
-        .MSHR_SIZE          (`L3_MSHR_SIZE),
-        .MRSQ_SIZE          (`L3_MRSQ_SIZE),
-        .MREQ_SIZE          (`L3_MREQ_SIZE),
-        .WRITE_ENABLE       (1),
-        .REQ_UUID_BITS      (`UUID_BITS),
-        .CORE_TAG_WIDTH     (`L2_MEM_TAG_WIDTH),
-        .MEM_TAG_WIDTH      (`L3_MEM_TAG_WIDTH),
-        .NC_ENABLE          (1)
+        .INSTANCE_ID    (`L3_CACHE_ID),
+        .CACHE_SIZE     (`L3_CACHE_SIZE),
+        .CACHE_LINE_SIZE(`L3_CACHE_LINE_SIZE),
+        .NUM_BANKS      (`L3_NUM_BANKS),
+        .NUM_WAYS       (`L3_NUM_WAYS),
+        .NUM_PORTS      (`L3_NUM_PORTS),
+        .WORD_SIZE      (`L3_WORD_SIZE),
+        .NUM_REQS       (`L3_NUM_REQS),
+        .CREQ_SIZE      (`L3_CREQ_SIZE),
+        .CRSQ_SIZE      (`L3_CRSQ_SIZE),
+        .MSHR_SIZE      (`L3_MSHR_SIZE),
+        .MRSQ_SIZE      (`L3_MRSQ_SIZE),
+        .MREQ_SIZE      (`L3_MREQ_SIZE),
+        .WRITE_ENABLE   (1),
+        .REQ_UUID_BITS  (`UUID_BITS),
+        .CORE_TAG_WIDTH (`L2_MEM_TAG_WIDTH),
+        .MEM_TAG_WIDTH  (`L3_MEM_TAG_WIDTH),
+        .NC_ENABLE      (1),
+        .PASSTHRU       (!`L3_ENABLED)
     ) l3cache (
         `SCOPE_BIND_Vortex_l3cache
 
@@ -192,26 +194,6 @@ module Vortex (
         .mem_req_if     (mem_req_if),
         .mem_rsp_if     (mem_rsp_if)
     );
-
-`else
-
-    VX_mem_mux #(
-        .NUM_REQS     (`NUM_CLUSTERS),
-        .DATA_WIDTH   (`L2_MEM_DATA_WIDTH),            
-        .ADDR_WIDTH   (`L2_MEM_ADDR_WIDTH),
-        .TAG_IN_WIDTH (`L2_MEM_TAG_WIDTH),
-        .BUFFERED_REQ ((`NUM_CLUSTERS > 1) ? 1 : 0),
-        .BUFFERED_RSP ((`NUM_CLUSTERS > 1) ? 1 : 0)
-    ) mem_mux (
-        .clk        (clk),
-        .reset      (reset),
-        .req_in_if  (per_cluster_mem_req_if),        
-        .rsp_in_if  (per_cluster_mem_rsp_if),
-        .req_out_if (mem_req_if),
-        .rsp_out_if (mem_rsp_if)
-    );    
-
-`endif
 
     `SCOPE_ASSIGN (reset, reset);
     `SCOPE_ASSIGN (mem_req_fire, mem_req_valid && mem_req_ready);
