@@ -143,9 +143,9 @@ public:
     }
   }
 
-  void attach_virtual_device(VirtualDevice* virtualDevice){
+  void attachVirtualDevice(VirtualDevice* virtualDevice){
     for (auto core: cores_){
-      core->attach_virtual_device(virtualDevice);
+      core->attachVirtualDevice(virtualDevice);
     }
   }
 
@@ -186,8 +186,8 @@ void Processor::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
 }
 
-void Processor::attach_virtual_device(VirtualDevice* device){
-  impl_->attach_virtual_device(device);
+void Processor::attachVirtualDevice(VirtualDevice* device){
+  impl_->attachVirtualDevice(device);
 }
 
 int Processor::run() {

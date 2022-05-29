@@ -120,37 +120,27 @@ MemoryUnit::MemoryUnit(uint64_t pageSize, uint64_t addrBytes, bool disableVm)
   ram_ = nullptr;
 }
 
-MemoryUnit::MemoryUnit(uint64_t pageSize, uint64_t addrBytes, uint64_t rootPageNumber)
-  : pageSize_(pageSize)
-  , addrBytes_(addrBytes)
-  , disableVM_(false) {
-    tlb_[0] = TLBEntry(0, 077);
-}
-
 void MemoryUnit::attach(MemDevice &m, uint64_t start, uint64_t end) {
   decoder_.map(start, end, m);
 }
 
 MemoryUnit::TLBEntry MemoryUnit::tlbLookup(uint64_t vAddr, uint32_t flagMask) {
   auto iter = tlb_.find(vAddr / pageSize_);
-  std::cout<< "Looking for addr" <<std::bitset<64>(vAddr)<<std::endl;
   if (iter != tlb_.end()) {
     if (iter->second.flags & flagMask){
       iter->second.updateAccessBit(true);
       return iter->second;
     }
     else {
-      std::cout<<"Security viotion"<<std::endl;
       throw TlbMiss(vAddr);
     }
   } else {
-    std::cout<<"Address not found"<<vAddr<<std::endl;
     throw TlbMiss(vAddr);
   }
 }
 
 void MemoryUnit::read(void *data, uint64_t addr, uint64_t size, bool sup) {
-  updateTLBIfNeeded();
+  accessBitUpdate();
   uint64_t pAddr;
   if (disableVM_) {
     pAddr = addr;
@@ -158,25 +148,23 @@ void MemoryUnit::read(void *data, uint64_t addr, uint64_t size, bool sup) {
     uint32_t flagMask = sup ? 8 : 1;
     try{
       TLBEntry t = this->tlbLookup(addr, flagMask);  
-      pAddr = t.pfn * pageSize_ + addr % pageSize_;   
-      std::cout<<"Tlb hit. Adress: "<<std::bitset<64>(addr)<<"Physical address"<<std::endl;
+      pAddr = t.pfn * pageSize_ + addr % pageSize_;
     }
     catch(TlbMiss e){
-       std::cout<<"Tlb miss Address: "<< std::bitset<64>(addr)<< std::endl;
        pAddr = handleTlbMiss(addr);
-       std::cout<<"Translate vAddr: "<< std::bitset<64>(addr)<< "To: "<< std::bitset<64>(pAddr) << std::endl;
     }
   }
+
   return decoder_.read(data, pAddr, size);
 }
 
-uint64_t MemoryUnit::translateVirtualToPhysical(uint64_t vAddr,  uint32_t flagMask){
-  MultibaleAddressBase* virtualAddress = virtualAddressFactory_->createMultitableAddressFromBits(vAddr);
+uint64_t MemoryUnit::translateVirtualToPhysical(uint64_t vAddr, uint32_t flagMask){
+  MultitableAddressBase* virtualAddress = virtualAddressFactory_->createMultitableAddressFromBits(vAddr);
   uint64_t currentPageNumber = supervisorContainer_->satp.getRootPageNumber();
   uint64_t address;
   uint64_t pte;
   uint64_t pAddr;
-  for(int i  = virtualAddress->levelCount() - 1;i >=0; i-- ){  
+  for (int i = virtualAddress->levelCount() - 1; i >= 0; i--){  
     address = (currentPageNumber << 12) + (virtualAddress->getOffsetForLevel(i))*sizeof(uint64_t);
     this->ram_->read(&pte, address, sizeof(uint64_t));
     TablePageEntryBase tableEntry(pte);
@@ -192,7 +180,7 @@ uint64_t MemoryUnit::translateVirtualToPhysical(uint64_t vAddr,  uint32_t flagMa
          }
     }else{
       // return invalid address 
-      supervisorContainer_->scause.setPageFaultExceptionAccured(true);
+      supervisorContainer_->scause.setPageFaultExceptionOccured(true);
       supervisorContainer_->stval.updateValue(vAddr);
       return -1;
     }
@@ -205,7 +193,7 @@ uint64_t MemoryUnit:: handlePageFault(){
   uint64_t causeVAddr = supervisorContainer_->stval.value();
   uint64_t currentPageNumber = supervisorContainer_->satp.getRootPageNumber();
   auto vAddr = virtualAddressFactory_->createMultitableAddressFromBits(causeVAddr);
-  for(int i=vAddr->levelCount()-1;i>=1;i--){
+  for (int i = vAddr->levelCount()-1; i >= 1; i--){
       uint64_t  address = (currentPageNumber << 12) + (vAddr->getOffsetForLevel(i))*sizeof(uint64_t);
       uint64_t pteBits;
       ram_->read(&pteBits,address, sizeof(uint64_t));
@@ -216,7 +204,7 @@ uint64_t MemoryUnit:: handlePageFault(){
       else{
         uint64_t newTableAddress;
         uint16_t flags=1;
-        newTableAddress = allocate_translation_table();
+        newTableAddress = allocateTranslationTable();
         uint64_t newTableEntry = (newTableAddress << 8)  | flags;
 
         this->ram_->write(&newTableEntry, address, sizeof(uint64_t));
@@ -230,13 +218,13 @@ uint64_t MemoryUnit:: handlePageFault(){
   uint64_t newRAMPageNumber = ram_->getFirstFreeTable();
   uint64_t newPageAddress = newRAMPageNumber << 12;
   uint8_t* virtualPageData = new uint8_t[pageSize_];
-  requestVirtualPage(virtualPageData, causeVAddr);
+  requestVirtualPage(virtualPageData, (causeVAddr>>12)<<12);
   ram_->write(virtualPageData, newPageAddress, pageSize_);
   uint64_t newTableEntry = (newRAMPageNumber << 8)  | flags;
   ram_->write(&newTableEntry, address, sizeof(uint64_t));
   uint64_t pAddr = (newPageAddress) | pageOffset; 
 
-  this->supervisorContainer_->scause.setPageFaultExceptionAccured(false);
+  this->supervisorContainer_->scause.setPageFaultExceptionOccured(false);
   return pAddr;
 }
 
@@ -244,11 +232,11 @@ void MemoryUnit::requestVirtualPage(uint8_t* data, uint64_t virtualAddress){
   virtualDevice_->read(data, virtualAddress, pageSize_);  
 }
 
-uint64_t MemoryUnit::allocate_translation_table(){
+uint64_t MemoryUnit::allocateTranslationTable(){
   uint64_t newPageAddress = this->ram_->getFirstFreeTable();
   uint8_t zeroByte = 0;
   uint64_t currentPageAddress = newPageAddress << 12;
-  for(int i=0;i< pageSize_;i++){
+  for (int i = 0; i < pageSize_; i++){
     this->ram_->write(&zeroByte, currentPageAddress, sizeof(uint8_t));
     currentPageAddress+= 1;
   }
@@ -256,9 +244,8 @@ uint64_t MemoryUnit::allocate_translation_table(){
   return newPageAddress;
 }
 
-
 void MemoryUnit::write(const void *data, uint64_t addr, uint64_t size, bool sup) {
-  updateTLBIfNeeded();
+  accessBitUpdate();
   uint64_t pAddr;
   if (disableVM_) {
     pAddr = addr;
@@ -277,15 +264,14 @@ void MemoryUnit::write(const void *data, uint64_t addr, uint64_t size, bool sup)
 }
 
 void MemoryUnit::tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags) {
-  MultibaleAddressBase* vAddr =virtualAddressFactory_->createMultitableAddressFromBits(virt);
+  MultitableAddressBase* vAddr = virtualAddressFactory_->createMultitableAddressFromBits(virt);
   TLBEntry entry(phys, flags);
-  std::cout<<"[TlbAdd] vAddr:"<<std::bitset<64>(vAddr->getVirtualAddress())<<"->"<<std::bitset<64>(phys)<<std::endl;
   entry.updateAccessBit(true);
   tlb_[vAddr->getVirtualAddress()] = entry;
 }
 
-void MemoryUnit::tlbRm() {
-  for(auto& it: tlb_){
+void MemoryUnit::tlbEvict() {
+  for (auto& it : tlb_){
     if(!it.second.isAccessBitSet){
       tlb_.erase(it.first);
     }
@@ -321,7 +307,7 @@ void MemoryUnit::setupAddressFactories(){
   }
 }
 
-void MemoryUnit::updateTLBIfNeeded(){
+void MemoryUnit::accessBitUpdate(){
   if(memoryAccessCount_ == RefreshTblRate){
     memoryAccessCount_ = 0;
   }
@@ -339,16 +325,16 @@ void MemoryUnit::updateTLBIfNeeded(){
   uint64_t MemoryUnit::handleTlbMiss(uint64_t vaddr)
   {
    if(tlb_.size() == maxPageTableEntriesCount){
-     tlbRm();
+     tlbEvict();
    }
-   uint32_t flagMask = 1;
 
+   uint32_t flagMask = 1;
    uint64_t pAddr =  translateVirtualToPhysical(vaddr,flagMask);
    //check if page not translated because of page fault
-   if(supervisorContainer_->scause.checkIsPageFaultExceptionAccured()){
+   if(supervisorContainer_->scause.checkIsPageFaultExceptionOccured()){
      pAddr = handlePageFault();
-
    }
+
    tlbAdd(vaddr, pAddr / pageSize_, flagMask);
    return pAddr; 
   }

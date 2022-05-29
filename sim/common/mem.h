@@ -106,9 +106,9 @@ class TablePageEntryBase{
 
 };
 
-class MultibaleAddressBase{
+class MultitableAddressBase{
   public:
-  MultibaleAddressBase(uint64_t addr){
+  MultitableAddressBase(uint64_t addr){
     address_ = addr;
   }
 
@@ -144,7 +144,7 @@ class MultibaleAddressBase{
 
 class VirtualAddressFactoryBase{
   public:
-  virtual MultibaleAddressBase* createMultitableAddressFromBits(uint64_t addr) = 0;
+  virtual MultitableAddressBase* createMultitableAddressFromBits(uint64_t addr) = 0;
 };
 
 class PhysicalTableEntryFactoryBase{
@@ -225,7 +225,6 @@ public:
   };
 
   MemoryUnit(uint64_t pageSize, uint64_t addrBytes, bool disableVm = false);
-  MemoryUnit(uint64_t pageSize, uint64_t addrBytes, uint64_t rootAddress);
   void attach(MemDevice &m, uint64_t start, uint64_t end);
   void read(void *data, uint64_t addr, uint64_t size, bool sup);  
   void write(const void *data, uint64_t addr, uint64_t size, bool sup);
@@ -235,7 +234,9 @@ public:
   void requestVirtualPage(uint8_t* data,uint64_t virtualAddr);
 
   void tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags);
-  void tlbRm();
+  void tlbEvict();
+  void tlbRm(uint64_t va);
+  
   void tlbFlush() {
     tlb_.clear();
   }
@@ -287,11 +288,11 @@ private:
   uint64_t translateVirtualToPhysical(uint64_t vAddr, uint32_t flagMask);
   TLBEntry tlbLookup(uint64_t vAddr, uint32_t flagMask);
 
-  void updateTLBIfNeeded();
+  void accessBitUpdate();
   void markTableAccessed(uint64_t vAddr);
   void markTableExecutable(uint64_t vAddr);
   uint64_t handlePageFault();
-  uint64_t allocate_translation_table();
+  uint64_t allocateTranslationTable();
   void setupAddressFactories();
   uint64_t handleTlbMiss(uint64_t vaddr);
 
@@ -329,10 +330,10 @@ class SV39TablePageEntry: public TablePageEntryBase
   SV39TablePageEntry(uint64_t pte): TablePageEntryBase(pte){};
 };
 
-class SV39VirtualAddress: public MultibaleAddressBase
+class SV39VirtualAddress: public MultitableAddressBase
 {
   public:
-  SV39VirtualAddress(uint64_t address):MultibaleAddressBase(address){}
+  SV39VirtualAddress(uint64_t address):MultitableAddressBase(address){}
   int levelCount() override { return 3;}
   int pageOffsetLength() override { return  12;}
   protected:
@@ -347,7 +348,7 @@ class SV39PageTableEntryFactory:public  PhysicalTableEntryFactoryBase{
 
 class SV39VirtualAddressFactory: public VirtualAddressFactoryBase{
   public:
-  MultibaleAddressBase* createMultitableAddressFromBits(uint64_t addr) override{
+  MultitableAddressBase* createMultitableAddressFromBits(uint64_t addr) override{
     return new SV39VirtualAddress(addr);
   }
 };

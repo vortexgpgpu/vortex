@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
   
     // attach memory module
     processor.attach_ram(&ram); 
-    processor.attach_virtual_device(& virtualDevice);  
+    processor.attachVirtualDevice(& virtualDevice);  
 
     // run simulation
     exitcode = processor.run();

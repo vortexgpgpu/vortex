@@ -171,7 +171,7 @@ void Core::attach_ram(RAM* ram) {
   mmu_.attachRAM(*ram, 0, 0xFFFFFFFF);    
 }
 
-void Core::attach_virtual_device(VirtualDevice* device){
+void Core::attachVirtualDevice(VirtualDevice* device){
   mmu_.attachVirtualDevice(*device);
 }
 

@@ -12,7 +12,7 @@ public:
   ~Processor();
 
   void attach_ram(RAM* mem);
-  void attach_virtual_device(VirtualDevice* virtualDevice);
+  void attachVirtualDevice(VirtualDevice* virtualDevice);
 
   int run();
 

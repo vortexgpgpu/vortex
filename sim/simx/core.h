@@ -74,7 +74,7 @@ public:
 
   void attach_ram(RAM* ram);
 
-  void attach_virtual_device(VirtualDevice* virtualDevice);
+  void attachVirtualDevice(VirtualDevice* virtualDevice);
 
   void attach_supervisor_regs(SupervisorRegisterContainer* supervysorRegs);
 
