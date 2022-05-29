@@ -263,9 +263,19 @@
 // Block size in bytes
 `define DCACHE_LINE_SIZE        `L1_BLOCK_SIZE
 
+// Input request size
+`define DCACHE_NUM_REQS         `NUM_THREADS
+
+// Memory request size
+`define LSU_MEM_REQS            `NUM_THREADS
+
+// Batch select bits
+`define DCACHE_NUM_BATCHES      ((`LSU_MEM_REQS + `DCACHE_NUM_REQS - 1) / `DCACHE_NUM_REQS)
+`define DCACHE_BATCH_SEL_BITS   `CLOG2(`DCACHE_NUM_BATCHES)
+
 // Core request tag Id bits
-`define LSUQ_ADDR_BITS          `LOG2UP(`LSUQ_SIZE)
-`define DCACHE_TAG_ID_BITS      (`LSUQ_ADDR_BITS + `CACHE_ADDR_TYPE_BITS)
+`define LSUQ_TAG_BITS           (`CLOG2(`LSUQ_SIZE) + `DCACHE_BATCH_SEL_BITS)
+`define DCACHE_TAG_ID_BITS      (`LSUQ_TAG_BITS + `CACHE_ADDR_TYPE_BITS)
 
 // Core request tag bits
 `define DCACHE_TAG_WIDTH        (`UUID_BITS + `DCACHE_TAG_ID_BITS)
@@ -278,9 +288,6 @@
 
 // Memory byte enable bits
 `define DCACHE_MEM_BYTEEN_WIDTH `DCACHE_LINE_SIZE
-
-// Input request size
-`define DCACHE_NUM_REQS         `NUM_THREADS
 
 // Memory request tag bits
 `define DCACHE_NOSM_TAG_ID_BITS (`DCACHE_TAG_ID_BITS - `SM_ENABLED)

@@ -243,13 +243,15 @@ module VX_raster_mem #(
         assign mem_req_byteen[i] = {`RCACHE_WORD_SIZE{1'b1}};
     end
 
+    // schedule memory request
+
     VX_mem_scheduler #(
         .NUM_REQS   (NUM_REQS), 
         .NUM_BANKS  (`RCACHE_NUM_REQS),
-        .ADDRW      (`RCACHE_ADDR_WIDTH),
-        .DATAW      (`RASTER_DATA_BITS),
+        .ADDR_WIDTH (`RCACHE_ADDR_WIDTH),
+        .DATA_WIDTH (`RASTER_DATA_BITS),
         .QUEUE_SIZE (`RASTER_MEM_PENDING_SIZE),
-        .TAGW       (TAG_WIDTH),
+        .TAG_WIDTH  (TAG_WIDTH),
         .OUT_REG    (1)
     ) mem_scheduler (
         .clk            (clk),
@@ -263,6 +265,7 @@ module VX_raster_mem #(
         .req_addr       (mem_req_addr_w),
         `UNUSED_PIN     (req_data),
         .req_tag        (mem_req_tag),
+        `UNUSED_PIN     (req_empty),
         .req_ready      (mem_req_ready),
         
         // Output response
@@ -270,6 +273,7 @@ module VX_raster_mem #(
         `UNUSED_PIN     (rsp_mask),
         .rsp_data       (mem_rsp_data),
         .rsp_tag        (mem_rsp_tag),
+        `UNUSED_PIN     (rsp_eop),
         .rsp_ready      (mem_rsp_ready),        
 
         // Memory request

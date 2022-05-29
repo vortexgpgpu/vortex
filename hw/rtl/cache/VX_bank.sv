@@ -41,8 +41,6 @@ module VX_bank #(
     localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE),
     localparam WORD_SEL_BITS    = `UP(`WORD_SEL_BITS)
 ) (
-    `SCOPE_IO_VX_bank
-
     input wire clk,
     input wire reset,
 
@@ -471,17 +469,6 @@ module VX_bank #(
     assign mem_req_valid = !mreq_empty;
 
 ///////////////////////////////////////////////////////////////////////////////
-                         
-    `SCOPE_ASSIGN (valid_st0, valid_st0);
-    `SCOPE_ASSIGN (valid_st1, valid_st1);
-    `SCOPE_ASSIGN (is_fill_st0, is_fill_st0);
-    `SCOPE_ASSIGN (is_mshr_st0, is_mshr_st0);
-    `SCOPE_ASSIGN (miss_st0, miss_st0);  
-    `SCOPE_ASSIGN (crsq_stall, crsq_stall);
-    `SCOPE_ASSIGN (mreq_alm_full, mreq_alm_full);
-    `SCOPE_ASSIGN (mshr_alm_full, mshr_alm_full);
-    `SCOPE_ASSIGN (addr_st0, `LINE_TO_BYTE_ADDR(addr_st0, BANK_ID));
-    `SCOPE_ASSIGN (addr_st1, `LINE_TO_BYTE_ADDR(addr_st1, BANK_ID));
 
 `ifdef PERF_ENABLE
     assign perf_read_misses  = do_read_st1 && miss_st1;

@@ -183,15 +183,16 @@ module VX_rop_mem #(
         .data_out ({mreq_valid_r,                mreq_rw_r, mreq_mask_r, mreq_byteen_r, mreq_addr_r, mreq_data_r, mreq_tag_r})
     );
 
+    // schedule memory request
+
     VX_mem_scheduler #(
-        .NUM_REQS         (NUM_REQS),
-        .NUM_BANKS        (`OCACHE_NUM_REQS),
-        .ADDRW            (`OCACHE_ADDR_WIDTH),
-        .DATAW            (32),
-        .TAGW             (TAG_WIDTH),
-        .QUEUE_SIZE       (`ROP_MEM_PENDING_SIZE),
-        .PARTIAL_RESPONSE (0),
-        .OUT_REG          (1)
+        .NUM_REQS    (NUM_REQS),
+        .NUM_BANKS   (`OCACHE_NUM_REQS),
+        .ADDR_WIDTH  (`OCACHE_ADDR_WIDTH),
+        .DATA_WIDTH  (32),
+        .TAG_WIDTH   (TAG_WIDTH),
+        .QUEUE_SIZE  (`ROP_MEM_PENDING_SIZE),
+        .OUT_REG     (1)
     ) mem_scheduler (
         .clk            (clk),
         .reset          (reset),
@@ -203,12 +204,14 @@ module VX_rop_mem #(
         .req_addr       (mreq_addr_r),
         .req_data       (mreq_data_r),
         .req_tag        (mreq_tag_r),
+        `UNUSED_PIN     (req_empty),
         .req_ready      (mreq_ready_r),
 
         .rsp_valid      (mrsp_valid),
         .rsp_mask       (mrsp_mask),
         .rsp_data       (mrsp_data),
         .rsp_tag        (mrsp_tag),
+        `UNUSED_PIN     (rsp_eop),
         .rsp_ready      (mrsp_ready),
 
         .mem_req_valid  (cache_req_if.valid),

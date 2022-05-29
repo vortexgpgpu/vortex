@@ -3,8 +3,6 @@
 module VX_mem_unit # (
     parameter CORE_ID = 0
 ) (
-    `SCOPE_IO_VX_mem_unit
-
     input wire              clk,
     input wire              reset,
     
@@ -88,8 +86,6 @@ module VX_mem_unit # (
         .MEM_TAG_WIDTH  (`ICACHE_MEM_TAG_WIDTH),
         .PASSTHRU       (!`ICACHE_ENABLED)
     ) icache (
-        `SCOPE_BIND_VX_mem_unit_icache
-
     `ifdef PERF_ENABLE
         .perf_cache_if  (perf_icache_if),
     `endif
@@ -170,8 +166,6 @@ module VX_mem_unit # (
         .NC_TAG_BIT     (0),
         .PASSTHRU       (!`DCACHE_ENABLED)
     ) dcache (
-        `SCOPE_BIND_VX_mem_unit_dcache
-
     `ifdef PERF_ENABLE
         .perf_cache_if  (perf_dcache_if),
     `endif
@@ -220,7 +214,7 @@ module VX_mem_unit # (
 
     VX_cache_demux #(
         .NUM_REQS      (2),
-        .NUM_LANES     (`NUM_THREADS),
+        .NUM_LANES     (`DCACHE_NUM_REQS),
         .DATA_SIZE     (4),            
         .TAG_IN_WIDTH  (`DCACHE_TAG_WIDTH),
         .TAG_SEL_IDX   (0),
@@ -246,17 +240,17 @@ module VX_mem_unit # (
     `define __BANK_ADDR_OFFSET  `CLOG2(`STACK_SIZE / `DCACHE_WORD_SIZE)
     `define __WORD_SEL_BITS     `CLOG2(`SMEM_LOCAL_SIZE / `DCACHE_WORD_SIZE)
     `define __WARP_SEL_BITS     `CLOG2(`NUM_WARPS)
-    `define __BANK_SEL_BITS     `CLOG2(`SMEM_NUM_BANKS)
-    `define SMEM_ADDR_WIDTH     (`__WARP_SEL_BITS + `__WORD_SEL_BITS + `__BANK_SEL_BITS)
+    `define __THREAD_SEL_BITS   `CLOG2(`NUM_THREADS)
+    `define SMEM_ADDR_WIDTH     (`__WARP_SEL_BITS + `__WORD_SEL_BITS + `__THREAD_SEL_BITS)
 
     wire [`DCACHE_NUM_REQS-1:0][`SMEM_ADDR_WIDTH-1:0] smem_req_addr;    
     for (genvar i = 0; i < `DCACHE_NUM_REQS; ++i) begin
-        if (`__BANK_SEL_BITS != 0) begin
-            assign smem_req_addr[i][0 +: `__BANK_SEL_BITS] = smem_req_if.addr[i][`__BANK_ADDR_OFFSET +: `__BANK_SEL_BITS];
+        if (`__THREAD_SEL_BITS != 0) begin
+            assign smem_req_addr[i][0 +: `__THREAD_SEL_BITS] = smem_req_if.addr[i][`__BANK_ADDR_OFFSET +: `__THREAD_SEL_BITS];
         end
-        assign smem_req_addr[i][`__BANK_SEL_BITS +: `__WORD_SEL_BITS] = smem_req_if.addr[i][0 +: `__WORD_SEL_BITS];        
+        assign smem_req_addr[i][`__THREAD_SEL_BITS +: `__WORD_SEL_BITS] = smem_req_if.addr[i][0 +: `__WORD_SEL_BITS];        
         if (`__WARP_SEL_BITS != 0) begin
-            assign smem_req_addr[i][`__BANK_SEL_BITS + `__WORD_SEL_BITS +: `__WARP_SEL_BITS] = smem_req_if.addr[i][(`__BANK_ADDR_OFFSET + `__BANK_SEL_BITS) +: `__WARP_SEL_BITS];
+            assign smem_req_addr[i][`__THREAD_SEL_BITS + `__WORD_SEL_BITS +: `__WARP_SEL_BITS] = smem_req_if.addr[i][(`__BANK_ADDR_OFFSET + `__THREAD_SEL_BITS) +: `__WARP_SEL_BITS];
         end
     end
 
@@ -368,8 +362,6 @@ module VX_mem_unit # (
         .MEM_TAG_WIDTH  (`TCACHE_MEM_TAG_WIDTH),
         .PASSTHRU       (!`TCACHE_ENABLED)
     ) tcache (
-        `SCOPE_BIND_VX_mem_unit_tcache
-
     `ifdef PERF_ENABLE
         .perf_cache_if  (perf_tcache_if),
     `endif

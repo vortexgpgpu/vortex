@@ -94,33 +94,13 @@ module VX_tex_mem #(
     assign mem_req_tag   = {req_info, req_tmask, req_lgstride, mem_req_align, mem_req_dups};
     assign req_ready     = mem_req_ready;
 
-    wire                           mem_req_valid_r;
-    wire [3:0][NUM_REQS-1:0]       mem_req_mask_r;
-    wire [3:0][NUM_REQS-1:0][29:0] mem_req_addr_r;
-    wire [3:0][NUM_REQS-1:0][3:0]  mem_req_byteen_r;
-    wire [TAG_WIDTH-1:0]           mem_req_tag_r;
-    wire                           mem_req_ready_r;
-
-    wire stall_in = mem_req_valid_r && ~mem_req_ready_r;
-
-    VX_pipe_register #(
-        .DATAW  (1 + 4 * NUM_REQS * (1 + 30 + 4) + TAG_WIDTH),
-        .RESETW (1)
-    ) req_pipe_reg (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (~stall_in),
-        .data_in  ({mem_req_valid,   mem_req_mask,   mem_req_byteen,   mem_req_addr,   mem_req_tag}),
-        .data_out ({mem_req_valid_r, mem_req_mask_r, mem_req_byteen_r, mem_req_addr_r, mem_req_tag_r})
-    );
-
-    assign mem_req_ready = ~stall_in;
+    // schedule memory request
 
     VX_mem_scheduler #(
         .NUM_REQS   (`TEX_MEM_REQS), 
         .NUM_BANKS  (`TCACHE_NUM_REQS),
-        .ADDRW      (`TCACHE_ADDR_WIDTH),
-        .DATAW      (32),
+        .ADDR_WIDTH (`TCACHE_ADDR_WIDTH),
+        .DATA_WIDTH (32),
         .QUEUE_SIZE (`TEX_MEM_PENDING_SIZE),
         .TAGW       (TAG_WIDTH)
     ) mem_scheduler (
@@ -128,20 +108,22 @@ module VX_tex_mem #(
         .reset          (reset),
 
         // Input request
-        .req_valid      (mem_req_valid_r),
+        .req_valid      (mem_req_valid),
         .req_rw         (1'b0),
-        .req_mask       (mem_req_mask_r),
-        .req_byteen     (mem_req_byteen_r),
-        .req_addr       (mem_req_addr_r),
+        .req_mask       (mem_req_mask),
+        .req_byteen     (mem_req_byteen),
+        .req_addr       (mem_req_addr),
         `UNUSED_PIN     (req_data),
-        .req_tag        (mem_req_tag_r),
-        .req_ready      (mem_req_ready_r),
+        .req_tag        (mem_req_tag),
+        `UNUSED_PIN     (req_empty),
+        .req_ready      (mem_req_ready),
         
         // Output response
         .rsp_valid      (mem_rsp_valid),
         `UNUSED_PIN     (rsp_mask),
         .rsp_data       (mem_rsp_data),
         .rsp_tag        (mem_rsp_tag),
+        `UNUSED_PIN     (rsp_eop),
         .rsp_ready      (mem_rsp_ready),        
 
         // Memory request

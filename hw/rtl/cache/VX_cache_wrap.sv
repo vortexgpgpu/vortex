@@ -49,8 +49,6 @@ module VX_cache_wrap #(
     // Force bypass for all requests
     parameter PASSTHRU              = 0
  ) (
-    `SCOPE_IO_VX_cache_wrap
-    
     // PERF
 `ifdef PERF_ENABLE
     VX_perf_cache_if.master perf_cache_if,
@@ -418,8 +416,6 @@ module VX_cache_wrap #(
             .CORE_OUT_REG   (NUM_BANKS > 2),
             .MEM_OUT_REG    (NUM_BANKS > 2)
         ) cache (
-            `SCOPE_BIND_VX_cache_wrap_cache
-
             .clk            (clk),
             .reset          (reset),
 

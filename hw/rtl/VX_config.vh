@@ -643,7 +643,7 @@
 
 // Number of banks
 `ifndef SMEM_NUM_BANKS
-`define SMEM_NUM_BANKS `NUM_THREADS
+`define SMEM_NUM_BANKS `DCACHE_NUM_REQS
 `endif
 
 // Core Request Queue Size

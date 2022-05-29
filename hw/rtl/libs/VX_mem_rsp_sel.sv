@@ -68,9 +68,10 @@ module VX_mem_rsp_sel #(
 
         assign rsp_fire = grant_valid && rsp_ready_unqual;
         
-        VX_skid_buffer #(
-            .DATAW    (NUM_REQS + TAG_WIDTH + (NUM_REQS * DATA_WIDTH)),
-            .PASSTHRU (0 == OUT_REG)
+        VX_generic_buffer #(
+            .DATAW   (NUM_REQS + TAG_WIDTH + (NUM_REQS * DATA_WIDTH)),
+            .SKID    (OUT_REG >> 1),
+            .OUT_REG (OUT_REG & 1)
         ) out_sbuf (
             .clk       (clk),
             .reset     (reset),

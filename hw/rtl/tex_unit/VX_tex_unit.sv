@@ -149,6 +149,12 @@ module VX_tex_unit #(
 
     // apply sampler
 
+    wire sampler_rsp_valid;
+    wire [`NUM_THREADS-1:0] sampler_rsp_tmask;
+    wire [`NUM_THREADS-1:0][31:0] sampler_rsp_data;
+    wire [REQ_INFO_W-1:0] sampler_rsp_info;
+    wire sampler_rsp_ready;
+
     VX_tex_sampler #(
         .CORE_ID   (CORE_ID),
         .REQ_INFOW (REQ_INFO_W),
@@ -161,17 +167,30 @@ module VX_tex_unit #(
         .req_valid  (mem_rsp_valid),  
         .req_tmask  (mem_rsp_tmask),
         .req_data   (mem_rsp_data), 
-        .req_blends (mem_rsp_info[(REQ_INFO_W+`TEX_FORMAT_BITS) +: BLEND_FRAC_W]),
+        .req_blends (mem_rsp_info[(REQ_INFO_W + `TEX_FORMAT_BITS) +: BLEND_FRAC_W]),
         .req_format (mem_rsp_info[REQ_INFO_W +: `TEX_FORMAT_BITS]),
         .req_info   (mem_rsp_info[0 +: REQ_INFO_W]),
         .req_ready  (mem_rsp_ready),
 
         // outputs
-        .rsp_valid  (tex_rsp_if.valid),
-        .rsp_tmask  (tex_rsp_if.tmask),
-        .rsp_data   (tex_rsp_if.data),
-        .rsp_info   ({tex_rsp_if.rd, tex_rsp_if.wb, tex_rsp_if.wid, tex_rsp_if.PC, tex_rsp_if.uuid}),
-        .rsp_ready  (tex_rsp_if.ready)
+        .rsp_valid  (sampler_rsp_valid),
+        .rsp_tmask  (sampler_rsp_tmask),
+        .rsp_data   (sampler_rsp_data),
+        .rsp_info   (sampler_rsp_info),
+        .rsp_ready  (sampler_rsp_ready)
+    );
+
+    VX_skid_buffer #(
+        .DATAW (REQ_INFO_W + `NUM_THREADS * (1 + 32))
+    ) rsp_sbuf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (sampler_rsp_valid),
+        .ready_in  (sampler_rsp_ready),
+        .data_in   ({sampler_rsp_info, sampler_rsp_tmask, sampler_rsp_data}),
+        .data_out  ({tex_rsp_if.rd, tex_rsp_if.wb, tex_rsp_if.wid, tex_rsp_if.PC, tex_rsp_if.uuid, tex_rsp_if.tmask, tex_rsp_if.data}),
+        .valid_out (tex_rsp_if.valid),
+        .ready_out (tex_rsp_if.ready)
     );
 
     assign tex_rsp_if.eop = 1;

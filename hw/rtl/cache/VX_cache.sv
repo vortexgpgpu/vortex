@@ -47,9 +47,7 @@ module VX_cache #(
 
     // Memory request output register
     parameter MEM_OUT_REG           = (NUM_BANKS > 1)
- ) (
-    `SCOPE_IO_VX_cache    
-    
+ ) (    
     // PERF
 `ifdef PERF_ENABLE
     VX_perf_cache_if.master perf_cache_if,
@@ -368,9 +366,7 @@ module VX_cache #(
             .WRITE_ENABLE   (WRITE_ENABLE),
             .REQ_UUID_BITS  (REQ_UUID_BITS),
             .CORE_TAG_WIDTH (CORE_TAG_WIDTH)
-        ) bank (
-            `SCOPE_BIND_VX_cache_bank(i)
-            
+        ) bank (          
             .clk                (clk),
             .reset              (bank_reset),
 

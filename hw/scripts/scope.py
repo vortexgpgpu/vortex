@@ -384,9 +384,7 @@ def load_config(filename):
 
 def eval_node(text, params):
     def clog2(x):
-        l2 = math.log2(x)
-        cl = math.ceil(l2)
-        return int(cl)
+        return int(x).bit_length() - 1
 
     if not type(text) == str:
         return text

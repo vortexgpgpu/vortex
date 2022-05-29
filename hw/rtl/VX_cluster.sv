@@ -178,8 +178,6 @@ module VX_cluster #(
         .NC_ENABLE      (0),
         .PASSTHRU       (!`RCACHE_ENABLED)
     ) rcache (
-        `SCOPE_BIND_VX_cluster_rcache
-
     `ifdef PERF_ENABLE
         .perf_cache_if  (perf_rcache_if),
     `endif
@@ -336,8 +334,6 @@ module VX_cluster #(
         .NC_ENABLE      (0),
         .PASSTHRU       (!`OCACHE_ENABLED)
     ) ocache (
-        `SCOPE_BIND_VX_cluster_ocache
-
     `ifdef PERF_ENABLE
         .perf_cache_if  (perf_ocache_if),
     `endif
@@ -459,9 +455,7 @@ module VX_cluster #(
         .MEM_TAG_WIDTH  (`L2X_MEM_TAG_WIDTH),
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L2_ENABLED)
-    ) l2cache (
-        `SCOPE_BIND_VX_cluster_l2cache
-            
+    ) l2cache (            
         .clk            (clk),
         .reset          (l2_reset),
 

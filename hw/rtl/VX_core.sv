@@ -145,7 +145,6 @@ module VX_core #(
     VX_mem_unit #(
         .CORE_ID(CORE_ID)
     ) mem_unit (
-        `SCOPE_BIND_VX_core_mem_unit
     `ifdef PERF_ENABLE
         .perf_memsys_if (perf_memsys_if),
     `endif

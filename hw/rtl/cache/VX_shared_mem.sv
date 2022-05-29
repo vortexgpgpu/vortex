@@ -53,13 +53,14 @@ module VX_shared_mem #(
     input  wire [NUM_REQS-1:0]                  rsp_ready
 );
 
-    `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid parameter"))
     `UNUSED_PARAM (IDNAME)
 
-    localparam REQ_SEL_BITS    = `CLOG2(NUM_REQS);    
+    localparam REQ_SEL_BITS    = `CLOG2(NUM_REQS);
     localparam NUM_WORDS       = SIZE / WORD_SIZE;
     localparam WORDS_PER_BANK  = NUM_WORDS / NUM_BANKS;
-    localparam BANK_ADDR_WIDTH = ADDR_WIDTH - `CLOG2(NUM_BANKS);
+    localparam BANK_ADDR_WIDTH = `CLOG2(WORDS_PER_BANK);
+
+    `STATIC_ASSERT(ADDR_WIDTH == (BANK_ADDR_WIDTH + `CLOG2(NUM_BANKS)), ("invalid parameter"))
 
     wire [NUM_BANKS-1:0]                    per_bank_req_valid_unqual; 
     wire [NUM_BANKS-1:0]                    per_bank_req_rw_unqual;  

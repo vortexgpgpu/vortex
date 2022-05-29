@@ -180,8 +180,6 @@ module Vortex (
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L3_ENABLED)
     ) l3cache (
-        `SCOPE_BIND_Vortex_l3cache
-
         .clk            (clk),
         .reset          (l3_reset),
 
