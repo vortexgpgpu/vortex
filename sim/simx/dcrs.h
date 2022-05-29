@@ -20,7 +20,7 @@ public:
         for (auto& state : states_) {
             state = 0;
         }
-        states_[DCR_STARTUP_ADDR] = STARTUP_ADDR;
+        this->write(DCR_STARTUP_ADDR, STARTUP_ADDR);
     }
 
     uint32_t read(uint32_t addr) const {

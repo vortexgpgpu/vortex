@@ -40,6 +40,6 @@ void DCRS::write(uint32_t addr, uint64_t value) {
     return;
   }
 
-  std::cout << std::hex << "Error: invalid global DCR read addr=0x" << addr << ", value=0x" << value << std::endl;
+  std::cout << std::hex << "Error: invalid global DCR addr=0x" << addr << std::endl;
   std::abort();
 }
