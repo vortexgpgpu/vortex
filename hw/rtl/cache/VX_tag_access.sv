@@ -30,7 +30,7 @@ module VX_tag_access #(
     input wire [`LINE_ADDR_WIDTH-1:0]   addr,
     input wire                          fill,    
     input wire                          flush,
-    output wire [NUM_WAYS-1:0]          way_sel,
+    output wire [`WAY_SEL_BITS-1:0]     way_sel,
     output wire                         tag_match
 );
 
@@ -39,53 +39,71 @@ module VX_tag_access #(
     `UNUSED_VAR (reset)
     `UNUSED_VAR (lookup)
 
-    wire [NUM_WAYS-1:0] tag_match_way;
-    wire [`LINE_SEL_BITS-1:0] line_addr = addr[`LINE_SEL_BITS-1:0];
-    wire [`TAG_SEL_BITS-1:0] line_tag = `LINE_TAG_ADDR(addr);    
-    wire [NUM_WAYS-1:0] fill_way;
+    localparam TAG_WIDTH = `TAG_SEL_BITS + 1;
+    localparam TAG_BYTES = ((TAG_WIDTH + 7) / 8);
 
+    wire [NUM_WAYS-1:0] tag_matches;
+    wire [`LINE_SEL_BITS-1:0] line_addr = addr[`LINE_SEL_BITS-1:0];
+    wire [`TAG_SEL_BITS-1:0]  line_tag = `LINE_TAG_ADDR(addr);    
+    reg [`WAY_SEL_BITS-1:0]   repl_way;
+    
     if (NUM_WAYS > 1)  begin
-        reg [NUM_WAYS-1:0] repl_way;
         // cyclic assignment of replacement way
         always @(posedge clk) begin
             if (reset)
-                repl_way <= 1;
-            else 
-                if (!stall) begin // hold the value on stalls prevent filling different slots twice
-                    repl_way <= {repl_way[NUM_WAYS-2:0], repl_way[NUM_WAYS-1]};
-                end
-        end        
-        for (genvar i = 0; i < NUM_WAYS; ++i) begin
-            assign fill_way[i] = fill & repl_way[i];
+                repl_way <= 0;
+            else if (!stall) begin // hold the value on stalls prevent filling different slots twice
+                repl_way <= repl_way + `WAY_SEL_BITS'(1);
+            end
         end
     end else begin
-        assign fill_way = fill;
+        `UNUSED_VAR (repl_way)
     end
+
+    wire [NUM_WAYS-1:0][(8 * TAG_BYTES)-1:0] wdata, rdata;
+    wire [NUM_WAYS-1:0][TAG_BYTES-1:0] byteen;
 
     for (genvar i = 0; i < NUM_WAYS; ++i) begin
         wire [`TAG_SEL_BITS-1:0] read_tag;
         wire read_valid;
 
-        VX_sp_ram #(
-            .DATAW      (`TAG_SEL_BITS + 1),
-            .SIZE       (`LINES_PER_BANK),
-            .NO_RWCHECK (1)
-        ) tag_store (
-            .clk(  clk),                 
-            .addr  (line_addr),   
-            .wren  (fill_way[i] || flush),
-            .wdata ({!flush,     line_tag}), 
-            .rdata ({read_valid, read_tag})
-        );
+        assign wdata[i]  = (8 * TAG_BYTES)'({!flush, line_tag});
+        assign byteen[i] = {TAG_BYTES{((fill && repl_way == `WAY_SEL_BITS'(i)) || flush)}};
         
-        assign tag_match_way[i] = read_valid && (line_tag == read_tag);
+        assign {read_valid, read_tag} = rdata[i][(`TAG_SEL_BITS+1)-1:0];
+        assign tag_matches[i] = read_valid && (line_tag == read_tag);
     end
 
-    // Check if any of the ways have tag match
-    assign tag_match = (| tag_match_way);
+    VX_sp_ram #(
+        .DATAW      (8 * TAG_BYTES * NUM_WAYS),
+        .SIZE       (`LINES_PER_BANK),
+        .BYTEENW    (TAG_BYTES * NUM_WAYS),
+        .NO_RWCHECK (1)
+    ) tag_store (
+        .clk   (clk),                 
+        .addr  (line_addr),
+        .wren  (byteen),
+        .wdata (wdata), 
+        .rdata (rdata)
+    );
+
+    // found a tag match?
+    assign tag_match = (| tag_matches);
 
     // return the selected way
-    assign way_sel = fill_way | tag_match_way;
+    if (NUM_WAYS > 1)  begin
+        wire [`WAY_SEL_BITS-1:0] sel_way;
+        VX_onehot_encoder #(
+            .N (NUM_WAYS)
+        ) encoder (
+            .data_in    (tag_matches),
+            .data_out   (sel_way),
+            `UNUSED_PIN (valid_out)
+        );
+        assign way_sel = fill ? repl_way : sel_way;
+    end else begin
+        assign way_sel = 0;
+    end
     
 `ifdef DBG_TRACE_CACHE_TAG
     always @(posedge clk) begin
