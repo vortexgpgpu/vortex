@@ -73,8 +73,8 @@ module VX_fifo_queue #(
                 alm_full_r  <= 0;
                 used_r      <= 0;
             end else begin
-                `ASSERT(!push || !full, ("runtime error"));
-                `ASSERT(!pop || !empty, ("runtime error"));
+                `ASSERT(~(push && ~pop) || ~full, ("runtime error"));
+                `ASSERT(~(pop && ~push) || ~empty, ("runtime error"));
                 if (push) begin
                     if (!pop) begin
                         empty_r <= 0;

@@ -19,7 +19,7 @@ module VX_sp_ram #(
     input wire [DATAW-1:0]   wdata,
     output wire [DATAW-1:0]  rdata
 );
-    `STATIC_ASSERT((1 == BYTEENW) || ((BYTEENW > 1) && 0 == (BYTEENW % 4)), ("invalid parameter"))
+    //`STATIC_ASSERT((1 == BYTEENW) || ((BYTEENW > 1) && 0 == (BYTEENW % 4)), ("invalid parameter"))
 
 `define RAM_INITIALIZATION                        \
     if (INIT_ENABLE) begin                        \

@@ -89,7 +89,7 @@ module VX_raster_unit #(
 
     wire [2:0][`RASTER_DATA_BITS-1:0] edge_eval;
     wire [2:0][`RASTER_DATA_BITS-1:0] mem_extents;
-    wire edge_func_enable;
+    wire edge_func_stall;
 
     VX_raster_extents #(
         .TILE_LOGSIZE (TILE_LOGSIZE)
@@ -103,7 +103,7 @@ module VX_raster_unit #(
     ) raster_edge_function (
         .clk    (clk),
         .reset  (reset),
-        .enable (edge_func_enable),
+        .enable (~edge_func_stall),
         .x_loc  (mem_x_loc),
         .y_loc  (mem_y_loc),
         .edges  (mem_edges),
@@ -125,16 +125,16 @@ module VX_raster_unit #(
     ) edge_func_shift_reg (
         .clk      (clk),
         .reset    (reset),
-        .enable   (edge_func_enable),
+        .enable   (~edge_func_stall),
         .data_in  ({mem_unit_valid, mem_x_loc, mem_y_loc, mem_pid, mem_edges, mem_extents}),
         .data_out ({pe_valid,       pe_x_loc,  pe_y_loc,  pe_pid,  pe_edges,  pe_extents})
     );
 
     `EDGE_UPDATE (pe_edges_e, pe_edges, edge_eval);
 
-    assign edge_func_enable = pe_ready || ~pe_valid;
+    assign edge_func_stall = pe_valid && ~pe_ready;
 
-    assign mem_unit_ready = edge_func_enable;
+    assign mem_unit_ready = ~edge_func_stall;
 
     wire [NUM_PES-1:0] pes_valid_in;    
     wire [NUM_PES-1:0][PRIM_DATA_WIDTH-1:0] pes_data_in;
@@ -165,7 +165,7 @@ module VX_raster_unit #(
     wire pes_input_fire = | (pes_valid_in & pes_ready_in);
 
     VX_pending_size #( 
-        .SIZE (MEM_FIFO_DEPTH)
+        .SIZE (EDGE_FUNC_LATENCY + 2)
     ) pending_pe_inputs (
         .clk   (clk),
         .reset (reset),

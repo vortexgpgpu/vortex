@@ -292,7 +292,7 @@
 
 // Texture Unit memory pending Queue
 `ifndef TEX_MEM_PENDING_SIZE
-`define TEX_MEM_PENDING_SIZE (`NUM_WARPS * 2)
+`define TEX_MEM_PENDING_SIZE `MAX(2, `NUM_WARPS)
 `endif
 
 // Raster Units ////////////////////////////////////////////////////////////////
@@ -322,9 +322,14 @@
 `define RASTER_BLOCK_LOGSIZE 2
 `endif
 
+// RASTER quad queue size
+`ifndef RASTER_QUAD_FIFO_DEPTH    
+`define RASTER_QUAD_FIFO_DEPTH `MAX(2, `NUM_CORES)
+`endif
+
 // RASTER memory queue size 
 `ifndef RASTER_MEM_FIFO_DEPTH    
-`define RASTER_MEM_FIFO_DEPTH 8
+`define RASTER_MEM_FIFO_DEPTH 4
 `endif
 
 // Rop Units ///////////////////////////////////////////////////////////////////
@@ -336,12 +341,7 @@
 
 // ROP memory pending size
 `ifndef ROP_MEM_PENDING_SIZE    
-`define ROP_MEM_PENDING_SIZE 4
-`endif
-
-// RASTER quad queue size
-`ifndef RASTER_QUAD_FIFO_DEPTH    
-`define RASTER_QUAD_FIFO_DEPTH 8
+`define ROP_MEM_PENDING_SIZE `MAX(2, `NUM_WARPS)
 `endif
 
 // Icache Configurable Knobs //////////////////////////////////////////////////
