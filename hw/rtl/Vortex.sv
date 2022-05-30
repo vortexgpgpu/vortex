@@ -219,7 +219,7 @@ module Vortex (
     end
 `endif
 
-`ifndef NDEBUG
+`ifdef SIMULATION
     always @(posedge clk) begin
         $fflush(); // flush stdout buffer
     end

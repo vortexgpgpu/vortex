@@ -164,8 +164,9 @@ assign cmd_scope_write = cp2af_sRxPort.c0.mmioWrValid && (MMIO_SCOPE_WRITE == mm
 wire [COUT_QUEUE_DATAW-1:0] cout_q_dout;
 wire cout_q_full, cout_q_empty;
 
-// disable assertions until full reset
+`ifdef SIMULATION
 `ifndef VERILATOR
+// disable assertions until full reset
 reg [$clog2(`RESET_DELAY+1)-1:0] assert_delay_ctr;
 initial begin
   $assertoff;  
@@ -174,12 +175,13 @@ always @(posedge clk) begin
   if (reset) begin
     assert_delay_ctr <= 0;
   end else begin
-    assert_delay_ctr <= assert_delay_ctr + 1;
+    assert_delay_ctr <= assert_delay_ctr + $bits(assert_delay_ctr)'(1);
     if (assert_delay_ctr == (`RESET_DELAY-1)) begin
       $asserton; // enable assertions
     end
   end
 end
+`endif
 `endif
 
 always @(posedge clk) begin
@@ -303,7 +305,7 @@ always @(posedge clk) begin
   if (state == STATE_IDLE) begin
     vx_reset_ctr <= 0;
   end else if (state == STATE_RUN) begin
-    vx_reset_ctr <= vx_reset_ctr + 1;
+    vx_reset_ctr <= vx_reset_ctr + $bits(vx_reset_ctr)'(1);
   end
 end
 
@@ -686,7 +688,7 @@ always @(posedge clk) begin
 
   if (cci_rd_req_fire) begin  
     cci_rd_req_addr <= cci_rd_req_addr + 1;
-    cci_rd_req_ctr  <= cci_rd_req_ctr + 1;
+    cci_rd_req_ctr  <= cci_rd_req_ctr + $bits(cci_rd_req_ctr)'(1);
   `ifdef DBG_TRACE_AFU
     `TRACE(2, ("%d: CCI Rd Req: addr=0x%0h, tag=0x%0h, rem=%0d, pending=%0d\n", $time, cci_rd_req_addr, cci_rd_req_tag, (cmd_data_size - cci_rd_req_ctr - 1), cci_pending_reads));
   `endif

@@ -105,25 +105,34 @@ $(BUILD_DIR)_$(DEVICE_FAMILY)_fpga_32c/build/dcp.qpf:
 $(BUILD_DIR)_$(DEVICE_FAMILY)_fpga_64c/build/dcp.qpf:
 	afu_synth_setup -s setup.cfg $(BUILD_DIR)_$(DEVICE_FAMILY)_fpga_64c
 
-gen-sources-1c:
+gen-sources-ase-1c:
+	./gen_sources.sh $(CFLAGS) $(CONFIG1) -DSIMULATION > sources.txt
+
+gen-sources-ase-2c:
+	./gen_sources.sh $(CFLAGS) $(CONFIG2) -DSIMULATION > sources.txt
+
+gen-sources-ase-4c:
+	./gen_sources.sh $(CFLAGS) $(CONFIG4) -DSIMULATION > sources.txt
+
+gen-sources-fpga-1c:
 	./gen_sources.sh $(CFLAGS) $(CONFIG1) > sources.txt
 
-gen-sources-2c:
+gen-sources-fpga-2c:
 	./gen_sources.sh $(CFLAGS) $(CONFIG2) > sources.txt
 
-gen-sources-4c:
+gen-sources-fpga-4c:
 	./gen_sources.sh $(CFLAGS) $(CONFIG4) > sources.txt
 
-gen-sources-8c:
+gen-sources-fpga-8c:
 	./gen_sources.sh $(CFLAGS) $(CONFIG8) > sources.txt
 
-gen-sources-16c:
+gen-sources-fpga-16c:
 	./gen_sources.sh $(CFLAGS) $(CONFIG16) > sources.txt
 
-gen-sources-32c:
+gen-sources-fpga-32c:
 	./gen_sources.sh $(CFLAGS) $(CONFIG32) > sources.txt
 
-gen-sources-64c:
+gen-sources-fpga-64c:
 	./gen_sources.sh $(CFLAGS) $(CONFIG64) > sources.txt
 
 # setup
@@ -150,37 +159,37 @@ setup-fpga-64c: $(BUILD_DIR)_$(DEVICE_FAMILY)_fpga_64c/build/dcp.qpf
 
 # build
 
-ase-1c: gen-sources-1c setup-ase-1c
+ase-1c: gen-sources-ase-1c setup-ase-1c
 	make -C $(BUILD_DIR)_$(DEVICE_FAMILY)_ase_1c
 	cp $(RTL_DIR)/fp_cores/altera/$(DEVICE_FAMILY)/*.hex $(BUILD_DIR)_$(DEVICE_FAMILY)_ase_1c/work
 
-ase-2c: gen-sources-2c setup-ase-2c
+ase-2c: gen-sources-ase-2c setup-ase-2c
 	make -C $(BUILD_DIR)_$(DEVICE_FAMILY)_ase_2c
 	cp $(RTL_DIR)/fp_cores/altera/$(DEVICE_FAMILY)/*.hex $(BUILD_DIR)_$(DEVICE_FAMILY)_ase_2c/work
 
-ase-4c: gen-sources-4c setup-ase-4c
+ase-4c: gen-sources-ase-4c setup-ase-4c
 	make -C $(BUILD_DIR)_$(DEVICE_FAMILY)_ase_4c
 	cp $(RTL_DIR)/fp_cores/altera/$(DEVICE_FAMILY)/*.hex $(BUILD_DIR)_$(DEVICE_FAMILY)_ase_4c/work
 
-fpga-1c: gen-sources-1c setup-fpga-1c
+fpga-1c: gen-sources-fpga-1c setup-fpga-1c
 	cd $(BUILD_DIR)_$(DEVICE_FAMILY)_fpga_1c && $(RUN_SYNTH)
 
-fpga-2c: gen-sources-2c setup-fpga-2c
+fpga-2c: gen-sources-fpga-2c setup-fpga-2c
 	cd $(BUILD_DIR)_$(DEVICE_FAMILY)_fpga_2c && $(RUN_SYNTH)
 
-fpga-4c: gen-sources-4c setup-fpga-4c
+fpga-4c: gen-sources-fpga-4c setup-fpga-4c
 	cd $(BUILD_DIR)_$(DEVICE_FAMILY)_fpga_4c && $(RUN_SYNTH)
 
-fpga-8c: gen-sources-8c setup-fpga-8c
+fpga-8c: gen-sources-fpga-8c setup-fpga-8c
 	cd $(BUILD_DIR)_$(DEVICE_FAMILY)_fpga_8c && $(RUN_SYNTH)
 
-fpga-16c: gen-sources-16c setup-fpga-16c
+fpga-16c: gen-sources-fpga-16c setup-fpga-16c
 	cd $(BUILD_DIR)_$(DEVICE_FAMILY)_fpga_16c && $(RUN_SYNTH)
 
-fpga-32c: gen-sources-32c setup-fpga-32c
+fpga-32c: gen-sources-fpga-32c setup-fpga-32c
 	cd $(BUILD_DIR)_$(DEVICE_FAMILY)_fpga_32c && $(RUN_SYNTH)
 
-fpga-64c: gen-sources-64c setup-fpga-64c
+fpga-64c: gen-sources-fpga-64c setup-fpga-64c
 	cd $(BUILD_DIR)_$(DEVICE_FAMILY)_fpga_64c && $(RUN_SYNTH)
 
 # cleanup

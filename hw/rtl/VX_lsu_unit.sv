@@ -31,7 +31,7 @@ module VX_lsu_unit #(
     localparam STACK_START_W = MEM_ADDRW'(`STACK_BASE_ADDR >> MEM_ASHIFT);
     localparam STACK_END_W = MEM_ADDRW'((`STACK_BASE_ADDR - TOTAL_STACK_SIZE) >> MEM_ASHIFT);
 
-    // req_uuid, req_addr_type, req_wid, req_pc, req_tmask, req_rd, req_op_type, req_align, req_is_dup
+    //                     uuid,        addr_type,                               wid,       PC,  tmask,         rd,        op_type,         align,                        is_dup
     localparam TAG_WIDTH = `UUID_BITS + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + `NW_BITS + 32 + `NUM_THREADS + `NR_BITS + `INST_LSU_BITS + (`NUM_THREADS * REQ_ASHIFT) + 1;
 
     `STATIC_ASSERT(0 == (`IO_BASE_ADDR % MEM_ASHIFT), ("invalid parameter"))
@@ -40,23 +40,7 @@ module VX_lsu_unit #(
     `STATIC_ASSERT(`STACK_SIZE == `MEM_BLOCK_SIZE * (`STACK_SIZE / `MEM_BLOCK_SIZE), ("invalid parameter"))
     `STATIC_ASSERT(`SMEM_LOCAL_SIZE >= `MEM_BLOCK_SIZE, ("invalid parameter"))
 
-    wire                          req_valid;
-    wire [`UUID_BITS-1:0]         req_uuid;
-    wire [`NUM_THREADS-1:0]       req_tmask;
-    wire [`NUM_THREADS-1:0][31:0] req_addr;       
-    wire [`INST_LSU_BITS-1:0]     req_op_type;
-    wire [`NUM_THREADS-1:0][31:0] req_data;   
-    wire [`NR_BITS-1:0]           req_rd;
-    wire                          req_wb;
-    wire [`NW_BITS-1:0]           req_wid;
-    wire [31:0]                   req_pc;
-    wire                          req_is_dup;
-    wire                          req_ready;
-    
-    wire mem_req_empty;
-    wire mem_rsp_eop;
-
-    wire [`NUM_THREADS-1:0][`CACHE_ADDR_TYPE_BITS-1:0] lsu_addr_type, req_addr_type;
+    wire [`NUM_THREADS-1:0][`CACHE_ADDR_TYPE_BITS-1:0] lsu_addr_type;
 
     // full address calculation
 
@@ -98,26 +82,14 @@ module VX_lsu_unit #(
     `endif
     end
 
+    wire mem_req_empty;
+    wire lsu_valid, lsu_ready;
+
     // fence: stall the pipeline until all pending requests are sent
-    wire fence_wait = lsu_req_if.is_fence && (req_valid || ~mem_req_empty);
+    wire fence_wait = lsu_req_if.is_fence && ~mem_req_empty;
     
-    wire stall_in = req_valid && ~req_ready;
-    
-    wire lsu_valid = lsu_req_if.valid && ~fence_wait;
-
-    VX_pipe_register #(
-        .DATAW  (1 + 1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + (`NUM_THREADS * 32) + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + `INST_LSU_BITS + `NR_BITS + 1 + (`NUM_THREADS * 32)),
-        .RESETW (1)
-    ) req_pipe_reg (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (!stall_in),
-        .data_in  ({lsu_valid, lsu_is_dup, lsu_req_if.uuid, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, full_addr, lsu_addr_type, lsu_req_if.op_type, lsu_req_if.rd, lsu_req_if.wb, lsu_req_if.store_data}),
-        .data_out ({req_valid, req_is_dup, req_uuid,        req_wid,        req_tmask,        req_pc,        req_addr,  req_addr_type, req_op_type,        req_rd,        req_wb,        req_data})
-    );
-
-    // Can accept new request?
-    assign lsu_req_if.ready = ~stall_in && ~fence_wait;
+    assign lsu_valid = lsu_req_if.valid && ~fence_wait;
+    assign lsu_req_if.ready = lsu_ready && ~fence_wait;
 
     // schedule memory request    
 
@@ -125,8 +97,8 @@ module VX_lsu_unit #(
     wire [`NUM_THREADS-1:0]        mem_req_mask;
     wire                           mem_req_rw;  
     wire [`NUM_THREADS-1:0][29:0]  mem_req_addr;
-    wire [`NUM_THREADS-1:0][3:0]   mem_req_byteen;
-    wire [`NUM_THREADS-1:0][31:0]  mem_req_data;
+    reg  [`NUM_THREADS-1:0][3:0]   mem_req_byteen;
+    reg  [`NUM_THREADS-1:0][31:0]  mem_req_data;
     wire [TAG_WIDTH-1:0]           mem_req_tag;
     wire                           mem_req_ready;
 
@@ -134,32 +106,33 @@ module VX_lsu_unit #(
     wire [`NUM_THREADS-1:0]        mem_rsp_mask;
     wire [`NUM_THREADS-1:0][31:0]  mem_rsp_data;
     wire [TAG_WIDTH-1:0]           mem_rsp_tag;
+    wire                           mem_rsp_eop;
     wire                           mem_rsp_ready;
 
-    assign mem_req_valid = req_valid;
-    assign req_ready = mem_req_ready;
+    assign mem_req_valid = lsu_valid;
+    assign lsu_ready = mem_req_ready;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign mem_req_mask[i] = req_tmask[i] && (~req_is_dup || (i == 0));
+        assign mem_req_mask[i] = lsu_req_if.tmask[i] && (~lsu_is_dup || (i == 0));
     end
 
-    assign mem_req_rw = ~req_wb;
+    assign mem_req_rw = ~lsu_req_if.wb;
 
     // address formatting
 
     wire [`NUM_THREADS-1:0][REQ_ASHIFT-1:0] req_align;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin  
-        assign mem_req_addr[i] = req_addr[i][31:2];
-        assign req_align[i] = req_addr[i][1:0];
+        assign req_align[i] = full_addr[i][1:0];
+        assign mem_req_addr[i] = full_addr[i][31:2];
     end
 
     // data formatting
     
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         always @(*) begin
-            mem_req_byteen[i] = {4{req_wb}};
-            case (`INST_LSU_WSIZE(req_op_type))
+            mem_req_byteen[i] = {4{lsu_req_if.wb}};
+            case (`INST_LSU_WSIZE(lsu_req_if.op_type))
                 0: mem_req_byteen[i][req_align[i]] = 1;
                 1: begin
                     mem_req_byteen[i][req_align[i]] = 1;
@@ -170,17 +143,17 @@ module VX_lsu_unit #(
         end
 
         always @(*) begin
-            mem_req_data[i] = req_data[i];
+            mem_req_data[i] = lsu_req_if.store_data[i];
             case (req_align[i])
-                1: mem_req_data[i][31:8]  = req_data[i][23:0];
-                2: mem_req_data[i][31:16] = req_data[i][15:0];
-                3: mem_req_data[i][31:24] = req_data[i][7:0];
+                1: mem_req_data[i][31:8]  = lsu_req_if.store_data[i][23:0];
+                2: mem_req_data[i][31:16] = lsu_req_if.store_data[i][15:0];
+                3: mem_req_data[i][31:24] = lsu_req_if.store_data[i][7:0];
                 default:;
             endcase
         end
     end
 
-    assign mem_req_tag = {req_uuid, req_addr_type, req_wid, req_tmask, req_pc, req_rd, req_op_type, req_align, req_is_dup};
+    assign mem_req_tag = {lsu_req_if.uuid, lsu_addr_type, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, lsu_req_if.rd, lsu_req_if.op_type, req_align, lsu_is_dup};
 
      VX_cache_req_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
@@ -195,6 +168,7 @@ module VX_lsu_unit #(
     ) cache_rsp_tmp_if();
 
     VX_mem_scheduler #(
+        .INSTANCE_ID($sformatf("core%0d-lsu-memsched", CORE_ID)),
         .NUM_REQS   (`LSU_MEM_REQS), 
         .NUM_BANKS  (`DCACHE_NUM_REQS),
         .ADDR_WIDTH (`DCACHE_ADDR_WIDTH),
@@ -257,30 +231,33 @@ module VX_lsu_unit #(
         wire [`CLOG2(`LSUQ_SIZE)-1:0]                      cache_req_tag,  cache_rsp_tag;
 
         if (`DCACHE_NUM_BATCHES > 1) begin
-            wire [`DCACHE_NUM_BATCHES-1:0][`DCACHE_NUM_REQS-1:0][`CACHE_ADDR_TYPE_BITS-1:0] cache_req_type_w, cache_rsp_type_w;
-            wire [`DCACHE_BATCH_SEL_BITS-1:0] cache_req_bid,  cache_rsp_bid;
+            wire [`DCACHE_NUM_BATCHES-1:0][`DCACHE_NUM_REQS-1:0][`CACHE_ADDR_TYPE_BITS-1:0] cache_req_type_b, cache_rsp_type_b;
+            wire [`DCACHE_BATCH_SEL_BITS-1:0] cache_req_bid, cache_rsp_bid;
 
             for (genvar j = 0; j < `DCACHE_NUM_BATCHES; ++j) begin
                 localparam k = j * `DCACHE_NUM_REQS + i;                
                 if (k < `NUM_THREADS) begin
-                    assign cache_req_type_w[j][i] = cache_req_type[k];
-                    assign cache_rsp_type[k] = cache_rsp_type_w[j][i];
+                    assign cache_req_type_b[j][i] = cache_req_type[k];
+                    assign cache_rsp_type[k] = cache_rsp_type_b[j][i];
                 end else begin
-                    assign cache_req_type_w[j][i] = 'x;
-                    `UNUSED_VAR (cache_rsp_type_w[j][i])
+                    assign cache_req_type_b[j][i] = 'x;
+                    `UNUSED_VAR (cache_rsp_type_b[j][i])
                 end
             end
+
+            wire [`CACHE_ADDR_TYPE_BITS-1:0] cache_rsp_type_bi = cache_rsp_type_b[cache_rsp_bid][i];
 
             assign {cache_req_uuid, cache_req_type, cache_req_bid, cache_req_tag} = cache_req_tmp_if.tag[i];
             assign cache_rsp_tmp_if.tag[i] = {cache_rsp_uuid, cache_rsp_type, cache_rsp_bid, cache_rsp_tag};        
 
-            assign cache_req_if.tag[i] = {cache_req_uuid, cache_req_bid, cache_req_tag, cache_req_type_w[cache_req_bid][i]};
-            assign {cache_rsp_uuid, cache_rsp_bid, cache_rsp_tag, cache_rsp_type_w[cache_rsp_bid][i]} = cache_rsp_if.tag[i];
+            assign cache_req_if.tag[i] = {cache_req_uuid, cache_req_bid, cache_req_tag, cache_req_type_b[cache_req_bid][i]};
+            assign {cache_rsp_uuid, cache_rsp_bid, cache_rsp_tag, cache_rsp_type_bi} = cache_rsp_if.tag[i];
 
             for (genvar j = 0; j < `DCACHE_NUM_REQS; ++j) begin
-                if (i != j) begin
-                    `UNUSED_VAR (cache_req_type_w[cache_req_bid][j])
-                    assign cache_rsp_type_w[cache_req_bid][j] = 0;
+                if (i != j) begin                    
+                    wire [`CACHE_ADDR_TYPE_BITS-1:0] cache_rsp_type_bj = cache_rsp_type_b[cache_rsp_bid][j];
+                    `UNUSED_VAR (cache_req_type_b[cache_req_bid][j])
+                    assign cache_rsp_type_bj = 0;
                 end
             end
         end else begin
@@ -316,10 +293,10 @@ module VX_lsu_unit #(
     // send store commit
 
     assign st_commit_if.valid = mem_req_fire && mem_req_rw;
-    assign st_commit_if.uuid  = req_uuid;
-    assign st_commit_if.wid   = req_wid;
-    assign st_commit_if.tmask = req_tmask;
-    assign st_commit_if.PC    = req_pc;
+    assign st_commit_if.uuid  = lsu_req_if.uuid;
+    assign st_commit_if.wid   = lsu_req_if.wid;
+    assign st_commit_if.tmask = lsu_req_if.tmask;
+    assign st_commit_if.PC    = lsu_req_if.PC;
     assign st_commit_if.rd    = 0;
     assign st_commit_if.wb    = 0;
     assign st_commit_if.eop   = 1'b1;
@@ -366,9 +343,9 @@ module VX_lsu_unit #(
 
     // scope registration
     `SCOPE_ASSIGN (dcache_req_fire,  mem_req_fire);
-    `SCOPE_ASSIGN (dcache_req_uuid,  req_uuid);
-    `SCOPE_ASSIGN (dcache_req_addr,  req_addr);
-    `SCOPE_ASSIGN (dcache_req_rw,    ~req_wb);
+    `SCOPE_ASSIGN (dcache_req_uuid,  lsu_req_if.uuid);
+    `SCOPE_ASSIGN (dcache_req_addr,  full_addr);
+    `SCOPE_ASSIGN (dcache_req_rw,    ~lsu_req_if.wb);
     `SCOPE_ASSIGN (dcache_req_byteen, mem_req_byteen);
     `SCOPE_ASSIGN (dcache_req_data,  mem_req_data);
     `SCOPE_ASSIGN (dcache_rsp_fire,  mem_rsp_fire);
@@ -382,19 +359,19 @@ module VX_lsu_unit #(
         end
         if (mem_req_fire) begin
             if (mem_req_rw) begin
-                `TRACE(1, ("%d: D$%0d Wr Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, mem_req_mask));
-                `TRACE_ARRAY1D(1, req_addr, `NUM_THREADS);
+                `TRACE(1, ("%d: D$%0d Wr Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, lsu_req_if.wid, lsu_req_if.PC, mem_req_mask));
+                `TRACE_ARRAY1D(1, full_addr, `NUM_THREADS);
                 `TRACE(1, (", tag=0x%0h, byteen=0x%0h, type=", mem_req_tag, mem_req_byteen));
-                `TRACE_ARRAY1D(1, req_addr_type, `NUM_THREADS);
+                `TRACE_ARRAY1D(1, lsu_addr_type, `NUM_THREADS);
                 `TRACE(1, (", data="));
                 `TRACE_ARRAY1D(1, mem_req_data, `NUM_THREADS);
-                `TRACE(1, (", is_dup=%b (#%0d)\n", req_is_dup, req_uuid));
+                `TRACE(1, (", is_dup=%b (#%0d)\n", lsu_is_dup, lsu_req_if.uuid));
             end else begin
-                `TRACE(1, ("%d: D$%0d Rd Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, req_wid, req_pc, mem_req_mask));
-                `TRACE_ARRAY1D(1, req_addr, `NUM_THREADS);
+                `TRACE(1, ("%d: D$%0d Rd Req: wid=%0d, PC=0x%0h, tmask=%b, addr=", $time, CORE_ID, lsu_req_if.wid, lsu_req_if.PC, mem_req_mask));
+                `TRACE_ARRAY1D(1, full_addr, `NUM_THREADS);
                 `TRACE(1, (", tag=0x%0h, byteen=0x%0h, type=", mem_req_tag, mem_req_byteen));
-                `TRACE_ARRAY1D(1, req_addr_type, `NUM_THREADS);
-                `TRACE(1, (", rd=%0d, is_dup=%b (#%0d)\n", req_rd, req_is_dup, req_uuid));
+                `TRACE_ARRAY1D(1, lsu_addr_type, `NUM_THREADS);
+                `TRACE(1, (", rd=%0d, is_dup=%b (#%0d)\n", lsu_req_if.rd, lsu_is_dup, lsu_req_if.uuid));
             end
         end
         if (mem_rsp_fire) begin

@@ -246,6 +246,7 @@ module VX_raster_mem #(
     // schedule memory request
 
     VX_mem_scheduler #(
+        .INSTANCE_ID($sformatf("%s-memsched", INSTANCE_ID)),
         .NUM_REQS   (NUM_REQS), 
         .NUM_BANKS  (`RCACHE_NUM_REQS),
         .ADDR_WIDTH (`RCACHE_ADDR_WIDTH),

@@ -97,6 +97,7 @@ module VX_tex_mem #(
     // schedule memory request
 
     VX_mem_scheduler #(
+        .INSTANCE_ID($sformatf("core%0d-tex-memsched", CORE_ID)),
         .NUM_REQS   (`TEX_MEM_REQS), 
         .NUM_BANKS  (`TCACHE_NUM_REQS),
         .ADDR_WIDTH (`TCACHE_ADDR_WIDTH),

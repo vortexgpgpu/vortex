@@ -2,6 +2,7 @@
 
 `TRACING_OFF
 module VX_mem_scheduler #(
+    parameter string INSTANCE_ID = "",
     parameter NUM_REQS      = 4,
     parameter NUM_BANKS     = 4,
     parameter ADDR_WIDTH    = 32,
@@ -10,7 +11,6 @@ module VX_mem_scheduler #(
     parameter UUID_WIDTH    = 0,
     parameter QUEUE_SIZE    = 16,
     parameter PARTIAL_RESPONSE = 0,
-    parameter DUPLICATE_ADDR = 0,
     parameter OUT_REG       = 0,
 
     localparam BYTEENW      = DATA_WIDTH / 8,
@@ -64,7 +64,6 @@ module VX_mem_scheduler #(
 
     `STATIC_ASSERT (DATA_WIDTH == 8 * (DATA_WIDTH / 8), ("invalid parameter"))
     `STATIC_ASSERT ((0 == PARTIAL_RESPONSE) || (1 == PARTIAL_RESPONSE), ("invalid parameter"))
-    `STATIC_ASSERT ((0 == DUPLICATE_ADDR) || (1 == DUPLICATE_ADDR), ("invalid parameter"))
     `RUNTIME_ASSERT ((~req_valid || req_mask != 0), ("invalid input"));  
 
     wire                            mem_rsp_valid_s;
@@ -99,49 +98,13 @@ module VX_mem_scheduler #(
     wire [NUM_REQS-1:0][DATA_WIDTH-1:0] crsp_data;
     wire [TAG_WIDTH-1:0]            crsp_tag;
     wire                            crsp_ready;
-    
-    // Duplicate address optimization /////////////////////////////////////////
-
-    wire [NUM_REQS-1:0] req_dup_mask; 
-    wire rsp_dup;   
-
-    if (DUPLICATE_ADDR) begin
-
-        reg [QUEUE_SIZE-1:0] rsp_dups;
-        wire [NUM_REQS-2:0]  addr_matches;
-
-        for (genvar i = 0; i < NUM_REQS-1; ++i) begin
-            assign addr_matches[i] = (req_addr[i+1] == req_addr[0]) || ~req_mask[i+1];
-        end
-
-        wire req_dup = req_mask[0] && (& addr_matches);        
-
-        always @(posedge clk) begin
-            if (reset) begin
-                rsp_dups <= '0;
-            end else begin
-                if (sreq_push) begin
-                    rsp_dups[stag_waddr] <= req_dup;
-                end
-            end
-        end
-        
-        assign req_dup_mask = req_mask & {{(NUM_REQS-1){~req_dup}}, 1'b1};
-        assign rsp_dup      = rsp_dups[stag_raddr];
-
-    end else begin
-
-        assign req_dup_mask = req_mask;
-        assign rsp_dup      = 1'b0;
-
-    end    
 
     // Store request //////////////////////////////////////////////////////
 
     wire req_complete;
 
-    assign sreq_push = req_valid && !sreq_full && !stag_full;
-    assign sreq_pop  = req_complete;
+    assign sreq_push = req_valid && ~sreq_full && (req_rw || ~stag_full);
+    assign sreq_pop  = ~sreq_empty && req_complete;
     assign req_ready = !sreq_full && !stag_full;
     
     wire [`UP(UUID_WIDTH)-1:0] req_uuid;
@@ -160,8 +123,8 @@ module VX_mem_scheduler #(
         .reset      (reset),
         .push       (sreq_push),
         .pop        (sreq_pop),
-        .data_in    ({req_rw,  req_dup_mask, req_byteen,  req_addr,  req_data,  req_uuid,  stag_waddr}),
-        .data_out   ({sreq_rw, sreq_mask,    sreq_byteen, sreq_addr, sreq_data, sreq_uuid, sreq_tag}),
+        .data_in    ({req_rw,  req_mask,  req_byteen,  req_addr,  req_data,  req_uuid,  stag_waddr}),
+        .data_out   ({sreq_rw, sreq_mask, sreq_byteen, sreq_addr, sreq_data, sreq_uuid, sreq_tag}),
         .full       (sreq_full),
         .empty      (sreq_empty),
         `UNUSED_PIN (alm_full),
@@ -205,30 +168,46 @@ module VX_mem_scheduler #(
     // Handle memory requests /////////////////////////////////////////////////
 
     wire [NUM_BATCHES-1:0][BATCH_DATAW-1:0] mem_req_data_b;
-    wire [NUM_BATCHES-1:0][NUM_BANKS-1:0]   mem_req_mask_b;    
-    wire [NUM_BANKS-1:0] mem_req_fire;
-    reg  [NUM_BANKS-1:0] req_sent_mask;
-    wire [NUM_BANKS-1:0] req_sent_mask_n;
+    wire [NUM_BATCHES-1:0][NUM_BANKS-1:0]   mem_req_mask_b;
+    reg  [NUM_BANKS-1:0]           req_sent_mask;
+    wire [NUM_BANKS-1:0]           req_sent_mask_n;
     reg  [`UP(BATCH_SEL_BITS)-1:0] req_batch_idx;
-
+    
     for (genvar i = 0; i < NUM_BATCHES; ++i) begin
         localparam SIZE = ((i + 1) * NUM_BANKS > NUM_REQS) ? REM_BATCH_SIZE : NUM_BANKS;
-        assign mem_req_mask_b[i] = NUM_BANKS'(sreq_mask[i * NUM_BANKS +: SIZE]);
         assign mem_req_data_b[i] = {
             {NUM_BANKS{sreq_rw}},
             (NUM_BANKS * BYTEENW)'(sreq_byteen[i * NUM_BANKS +: SIZE]),
             (NUM_BANKS * ADDR_WIDTH)'(sreq_addr[i * NUM_BANKS +: SIZE]),
             (NUM_BANKS * DATA_WIDTH)'(sreq_data[i * NUM_BANKS +: SIZE])
         };
+    end    
+
+    wire [NUM_REQS-1:0] req_sent_mask_all;
+    for (genvar i = 0; i < NUM_REQS; ++i) begin
+        if (NUM_BATCHES > 1) begin
+            localparam j = i / NUM_BANKS;
+            localparam k = i % NUM_BANKS;
+            wire [BATCH_SEL_BITS-1:0] batch_idx = BATCH_SEL_BITS'(i / NUM_BANKS);
+            if (j < (NUM_BATCHES-1)) begin
+                assign req_sent_mask_all[i] = (batch_idx < req_batch_idx) ? sreq_mask[i] : ((batch_idx == req_batch_idx) & req_sent_mask_n[k]);
+            end else begin
+                assign req_sent_mask_all[i] = (batch_idx == req_batch_idx) & req_sent_mask_n[k];
+            end            
+        end else begin
+            assign req_sent_mask_all[i] = req_sent_mask_n[i];
+        end
     end
 
-    assign mem_req_fire = mem_req_valid & mem_req_ready;
+    wire [NUM_BANKS-1:0] mem_req_fire = mem_req_valid & mem_req_ready;
+
+    assign mem_req_mask_b = (NUM_BATCHES * NUM_BANKS)'(sreq_mask);
 
     assign req_sent_mask_n = req_sent_mask | mem_req_fire;
+    
+    assign req_complete = (req_sent_mask_all == sreq_mask);
 
     wire req_complete_b = ~sreq_empty && (req_sent_mask_n == mem_req_mask_b[req_batch_idx]);
-
-    assign req_complete = req_complete_b && (req_batch_idx == `UP(BATCH_SEL_BITS)'(NUM_BATCHES-1));
 
     always @(posedge clk) begin
         if (reset) begin
@@ -236,12 +215,13 @@ module VX_mem_scheduler #(
             req_batch_idx <= 0;
         end else begin
             if (req_complete_b) begin
-                req_sent_mask <= '0;
-                if (req_batch_idx == `UP(BATCH_SEL_BITS)'(NUM_BATCHES-1)) begin
+                if (req_complete 
+                 || (req_batch_idx == `UP(BATCH_SEL_BITS)'(NUM_BATCHES-1))) begin
                     req_batch_idx <= 0;
                 end else begin
                     req_batch_idx <= req_batch_idx + `UP(BATCH_SEL_BITS)'(1);
                 end
+                req_sent_mask <= 0;
             end else begin
                 req_sent_mask <= req_sent_mask_n;
             end
@@ -269,9 +249,10 @@ module VX_mem_scheduler #(
 
     // Handle memory responses ////////////////////////////////////////////////
 
-    reg  [QUEUE_SIZE-1:0][REQ_SIZEW-1:0] rsp_rem_size;
-    reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0]  rsp_orig_mask;
-    wire [`UP(BATCH_SEL_BITS)-1:0]       rsp_batch_idx;
+    reg  [QUEUE_SIZE-1:0][NUM_BATCHES-1:0][NUM_BANKS-1:0] rsp_rem_mask;
+    wire [NUM_BATCHES-1:0][NUM_BANKS-1:0]                 rsp_rem_mask_n; 
+    reg  [QUEUE_SIZE-1:0][NUM_REQS-1:0] rsp_orig_mask;
+    wire [`UP(BATCH_SEL_BITS)-1:0]      rsp_batch_idx;
 
     // Select memory response
     VX_mem_rsp_sel #(
@@ -296,29 +277,26 @@ module VX_mem_scheduler #(
 
     if (NUM_BATCHES > 1) begin
         assign rsp_batch_idx = mem_rsp_tag_s[QUEUE_ADDRW +: BATCH_SEL_BITS];
+        for (genvar i = 0; i < NUM_BATCHES; ++i) begin
+            assign rsp_rem_mask_n[i] = rsp_rem_mask[stag_raddr][i] & ~({NUM_BANKS{(i == rsp_batch_idx)}} & mem_rsp_mask_s);
+        end
     end else begin
         assign rsp_batch_idx = 0;
-    end
+        assign rsp_rem_mask_n = rsp_rem_mask[stag_raddr] & ~mem_rsp_mask_s;
+    end   
 
-    wire [REQ_SIZEW-1:0] rsp_rem_size_0;
-    `POP_COUNT(rsp_rem_size_0, req_dup_mask);
-
-    wire [$clog2(NUM_BANKS+1)-1:0] rsp_rem_size_r;
-    `POP_COUNT(rsp_rem_size_r, mem_rsp_mask_s);
-
-    assign rsp_complete = (rsp_rem_size[stag_raddr] == REQ_SIZEW'(rsp_rem_size_r));
+    assign rsp_complete = (0 == rsp_rem_mask_n);
 
     always @(posedge clk) begin
         if (reset) begin
-            rsp_orig_mask <= '0;
-            rsp_rem_size  <= '0;
+            rsp_rem_mask <= '0;
         end else begin
             if (sreq_push) begin
                 rsp_orig_mask[stag_waddr] <= req_mask;
-                rsp_rem_size[stag_waddr]  <= rsp_rem_size_0;
+                rsp_rem_mask[stag_waddr]  <= (NUM_BATCHES * NUM_BANKS)'(req_mask);
             end
             if (mem_rsp_fire) begin
-                rsp_rem_size[stag_raddr] <= rsp_rem_size[stag_raddr] - REQ_SIZEW'(rsp_rem_size_r);
+                rsp_rem_mask[stag_raddr] <= rsp_rem_mask_n;
             end
         end
     end
@@ -333,8 +311,8 @@ module VX_mem_scheduler #(
 
         for (genvar i = 0; i < NUM_BATCHES; ++i) begin
             localparam SIZE = ((i + 1) * NUM_BANKS > NUM_REQS) ? REM_BATCH_SIZE : NUM_BANKS;
-            assign crsp_mask[i] = rsp_dup ? rsp_orig_mask[stag_raddr][i]: ((i == rsp_batch_idx) ? mem_rsp_mask_s : '0);
-            assign crsp_data[i * NUM_BANKS +: SIZE] = rsp_dup ? {SIZE{mem_rsp_data_s[0]}} : mem_rsp_data_s[0 +: SIZE];
+            assign crsp_mask[i] = {NUM_BANKS{(i == rsp_batch_idx)}} & mem_rsp_mask_s;
+            assign crsp_data[i * NUM_BANKS +: SIZE] = mem_rsp_data_s[0 +: SIZE];
         end
     
     end else begin
@@ -350,13 +328,13 @@ module VX_mem_scheduler #(
         assign crsp_mask  = rsp_orig_mask[stag_raddr];        
 
         for (genvar i = 0; i < NUM_BANKS; ++i) begin
-            assign mem_rsp_data_m[i] = mem_rsp_mask_s[i] ? mem_rsp_data_s[i] : '0;
+            assign mem_rsp_data_m[i] = {DATA_WIDTH{mem_rsp_mask_s[i]}} & mem_rsp_data_s[i];
         end
 
         for (genvar i = 0; i < NUM_BATCHES; ++i) begin
             localparam SIZE = ((i + 1) * NUM_BANKS > NUM_REQS) ? REM_BATCH_SIZE : NUM_BANKS;
-            assign rsp_store_n[i] = rsp_store[stag_raddr][i] | ((i == rsp_batch_idx) ? mem_rsp_data_m : '0);
-            assign crsp_data[i * NUM_BANKS +: SIZE] = rsp_dup ? {SIZE{mem_rsp_data_s[0]}} : rsp_store_n[i][0 +: SIZE];
+            assign rsp_store_n[i] = rsp_store[stag_raddr][i] | ({NUM_BANKS * DATA_WIDTH{(i == rsp_batch_idx)}} & mem_rsp_data_m);
+            assign crsp_data[i * NUM_BANKS +: SIZE] = rsp_store_n[i][0 +: SIZE];
         end
         
         always @(posedge clk) begin
@@ -436,7 +414,7 @@ module VX_mem_scheduler #(
             if (pending_reqs[i][0]) begin
                 `ASSERT(($time - pending_reqs[i][1 +: 64]) < `STALL_TIMEOUT, 
                     ("%t: *** mem_scheduler response timeout: remaining=%b, tag=0x%0h (#%0d)", 
-                        $time, rsp_rem_size[i], pending_reqs[i][1+64 +: TAG_ONLY_WIDTH], 
+                        $time, rsp_rem_mask[i], pending_reqs[i][1+64 +: TAG_ONLY_WIDTH], 
                                                 pending_reqs[i][1+64+TAG_ONLY_WIDTH +: `UUID_BITS]));
             end
         end
@@ -447,7 +425,7 @@ module VX_mem_scheduler #(
 
     /*always @(posedge clk) begin
         if (req_valid && req_ready) begin            
-            dpi_trace(1, "%d: mem_scheduler req: rw=%b, mask=%b, byteen=", $time, req_rw, req_mask);
+            dpi_trace(1, "%d: %s-req: rw=%b, mask=%b, byteen=", $time, INSTANCE_ID, req_rw, req_mask);
             `TRACE_ARRAY1D(1, req_byteen, NUM_REQS);
             dpi_trace(1, ", addr=");
             `TRACE_ARRAY1D(1, req_addr, NUM_REQS);
@@ -456,13 +434,13 @@ module VX_mem_scheduler #(
             dpi_trace(1, ", tag=0x%0h (#%0d)\n", req_tag, req_dbg_uuid);
         end
         if (rsp_valid && rsp_ready) begin
-            dpi_trace(1, "%d: mem_scheduler rsp: mask=%b, data=", $time, rsp_mask);
+            dpi_trace(1, "%d: %s-rsp: mask=%b, data=", $time, INSTANCE_ID, rsp_mask);
              `TRACE_ARRAY1D(1, rsp_data, NUM_REQS);
             dpi_trace(1, ", tag=0x%0h (#%0d)\n", rsp_tag, rsp_dbg_uuid);
         end
         if (| mem_req_fire) begin
             if (| mem_req_rw) begin
-                dpi_trace(1, "%d: mem_scheduler mem-wr-req: valid=%b, byteen=", $time, mem_req_fire);
+                dpi_trace(1, "%d: %s-mem-wr: valid=%b, byteen=", $time, INSTANCE_ID, mem_req_fire);
                 `TRACE_ARRAY1D(1, mem_req_byteen, NUM_BANKS);
                 dpi_trace(1, ", addr=");
                 `TRACE_ARRAY1D(1, mem_req_addr, NUM_BANKS);
@@ -472,7 +450,7 @@ module VX_mem_scheduler #(
                 `TRACE_ARRAY1D(1, stag_waddr, NUM_BANKS);
                 dpi_trace(1, ", batch=%0d (#%0d)\n", req_batch_idx, mem_req_dbg_uuid);
             end else begin
-                dpi_trace(1, "%d: mem_scheduler mem-rd-req: valid=%b, addr=", $time, mem_req_fire);
+                dpi_trace(1, "%d: %s-mem-rd: valid=%b, addr=", $time, INSTANCE_ID, mem_req_fire);
                 `TRACE_ARRAY1D(1, mem_req_addr, NUM_BANKS);
                 dpi_trace(1, ", tag=");
                 `TRACE_ARRAY1D(1, stag_waddr, NUM_BANKS);
@@ -480,7 +458,7 @@ module VX_mem_scheduler #(
             end
         end 
         if (mem_rsp_fire) begin
-            dpi_trace(1, "%d: mem_scheduler mem-rd-rsp: mask=%b, data=", $time, mem_rsp_mask_s);                
+            dpi_trace(1, "%d: %s-mem-rsp: mask=%b, data=", $time, INSTANCE_ID, mem_rsp_mask_s);                
             `TRACE_ARRAY1D(1, mem_rsp_data_s, NUM_BANKS);
             dpi_trace(1, ", tag=0x%0h, batch=%0d (#%0d)\n", stag_raddr, rsp_batch_idx, mem_rsp_dbg_uuid);
         end
