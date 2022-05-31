@@ -93,12 +93,13 @@ module VX_tag_access #(
     // return the selected way
     if (NUM_WAYS > 1)  begin
         wire [`WAY_SEL_BITS-1:0] sel_way;
-        VX_onehot_encoder #(
-            .N (NUM_WAYS)
+        VX_lzc #(
+            .N       (NUM_WAYS),
+            .REVERSE (1)
         ) encoder (
-            .data_in    (tag_matches),
-            .data_out   (sel_way),
-            `UNUSED_PIN (valid_out)
+            .in_i  (tag_matches),
+            .cnt_o (sel_way),
+            `UNUSED_PIN (valid_o)
         );
         assign way_sel = fill ? repl_way : sel_way;
     end else begin

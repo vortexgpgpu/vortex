@@ -47,7 +47,8 @@ module VX_priority_encoder #(
         );
 
         VX_lzc #(
-            .N (N)
+            .N       (N),
+            .REVERSE (1)
         ) lzc (
             .in_i  (reversed),            
             .cnt_o (index),
@@ -67,7 +68,8 @@ module VX_priority_encoder #(
         assign onehot[N-1:0] = reversed[N-1:0] & ~higher_pri_regs[N-1:0];
 
         VX_lzc #(
-            .N (N)
+            .N       (N),
+            .REVERSE (1)
         ) lzc (
             .in_i    (reversed),            
             .cnt_o   (index),
@@ -79,7 +81,8 @@ module VX_priority_encoder #(
         assign onehot = reversed & ~(reversed-1);
 
         VX_lzc #(
-            .N (N)
+            .N       (N),
+            .REVERSE (1)
         ) lzc (
             .in_i    (reversed),           
             .cnt_o   (index),

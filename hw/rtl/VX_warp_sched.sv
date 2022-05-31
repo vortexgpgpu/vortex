@@ -226,7 +226,8 @@ module VX_warp_sched #(
     wire [`NUM_WARPS-1:0] ready_warps = active_warps & ~(stalled_warps | barrier_stalls);
 
     VX_lzc #(
-        .N (`NUM_WARPS)
+        .N       (`NUM_WARPS),
+        .REVERSE (1)
     ) wid_select (
         .in_i    (ready_warps),
         .cnt_o   (schedule_wid),

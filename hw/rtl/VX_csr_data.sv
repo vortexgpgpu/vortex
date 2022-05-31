@@ -77,7 +77,8 @@ module VX_csr_data #(
     wire [`NT_BITS-1:0] tid;
 
     VX_lzc #(
-        .N (`NUM_THREADS)
+        .N       (`NUM_THREADS),
+        .REVERSE (1)
     ) tid_select (
         .in_i       (write_tmask),
         .cnt_o      (tid),

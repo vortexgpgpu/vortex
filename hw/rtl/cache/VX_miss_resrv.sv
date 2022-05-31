@@ -102,7 +102,8 @@ module VX_miss_resrv #(
     end
 
     VX_lzc #(
-        .N (MSHR_SIZE)
+        .N       (MSHR_SIZE),
+        .REVERSE (1)
     ) dequeue_sel (
         .in_i    (valid_table_x & ready_table_x),
         .cnt_o   (dequeue_id_x),
@@ -110,7 +111,8 @@ module VX_miss_resrv #(
     );
 
     VX_lzc #(
-        .N (MSHR_SIZE)
+        .N       (MSHR_SIZE),
+        .REVERSE (1)
     ) allocate_sel (
         .in_i    (~valid_table_n),
         .cnt_o   (allocate_id_n),

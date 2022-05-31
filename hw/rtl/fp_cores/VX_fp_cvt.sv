@@ -124,8 +124,7 @@ module VX_fp_cvt #(
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         wire mant_is_nonzero;
         VX_lzc #(
-            .N    (INT_MAN_WIDTH),
-            .MODE (1)
+            .N (INT_MAN_WIDTH)
         ) lzc (
             .in_i    (encoded_mant_s0[i]),
             .cnt_o   (renorm_shamt_s0[i]),

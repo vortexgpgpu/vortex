@@ -30,7 +30,8 @@ module VX_index_buffer #(
     wire [ADDRW-1:0] free_index;
 
     VX_lzc #(
-        .N (SIZE)
+        .N       (SIZE),
+        .REVERSE (1)
     ) free_slots_sel (
         .in_i    (free_slots_n),
         .cnt_o   (free_index),

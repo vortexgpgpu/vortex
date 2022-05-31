@@ -27,7 +27,8 @@ module VX_dispatch (
     wire gpu_req_ready;
 
     VX_lzc #(
-        .N (`NUM_THREADS)
+        .N       (`NUM_THREADS),
+        .REVERSE (1)
     ) tid_select (
         .in_i       (dispatch_if.tmask),
         .cnt_o      (tid),

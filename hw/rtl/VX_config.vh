@@ -1,6 +1,20 @@
 `ifndef VX_CONFIG_VH
 `define VX_CONFIG_VH
 
+`ifndef MIN
+`define MIN(x, y)   (((x) < (y)) ? (x) : (y))
+`endif
+
+`ifndef MAX
+`define MAX(x, y)   (((x) > (y)) ? (x) : (y))
+`endif
+
+`ifndef UP
+`define UP(x)       (((x) != 0) ? (x) : 1)
+`endif
+
+///////////////////////////////////////////////////////////////////////////////
+
 `ifndef XLEN
 `define XLEN 32
 `endif

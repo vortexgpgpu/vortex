@@ -101,10 +101,17 @@
 
 `define ABS(x)      (($signed(x) < 0) ? (-$signed(x)) : (x));
 
+`ifndef MIN
 `define MIN(x, y)   (((x) < (y)) ? (x) : (y))
-`define MAX(x, y)   (((x) > (y)) ? (x) : (y))
+`endif
 
+`ifndef MAX
+`define MAX(x, y)   (((x) > (y)) ? (x) : (y))
+`endif
+
+`ifndef UP
 `define UP(x)       (((x) != 0) ? (x) : 1)
+`endif
 
 `define RTRIM(x, s) x[$bits(x)-1:($bits(x)-s)]
 

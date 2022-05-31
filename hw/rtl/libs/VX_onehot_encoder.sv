@@ -84,16 +84,16 @@ module VX_onehot_encoder #(
                 index_r = 'x; 
                 for (integer i = N-1; i >= 0; --i) begin
                     if (data_in[i]) begin                
-                        index_r = `LOG2UP(N)'(i);
+                        index_r = LN'(i);
                     end
                 end
             end
         end else begin
             always @(*) begin        
                 index_r = 'x; 
-                for (integer i = 0; i < N; i++) begin
+                for (integer i = 0; i < N; ++i) begin
                     if (data_in[i]) begin                
-                        index_r = `LOG2UP(N)'(i);
+                        index_r = LN'(i);
                     end
                 end
             end
