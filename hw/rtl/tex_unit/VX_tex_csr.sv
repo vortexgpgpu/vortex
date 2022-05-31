@@ -24,9 +24,9 @@ module VX_tex_csr #(
         .N       (`NUM_THREADS),
         .REVERSE (1)
     ) tid_select (
-        .in_i       (tex_csr_if.write_tmask),
-        .cnt_o      (tid),
-        `UNUSED_PIN (valid_o)
+        .data_in  (tex_csr_if.write_tmask),
+        .data_out (tid),
+        `UNUSED_PIN (valid_out)
     );
 
     // CSRs write

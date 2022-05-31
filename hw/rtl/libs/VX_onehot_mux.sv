@@ -15,7 +15,7 @@ module VX_onehot_mux #(
             reg [DATAW-1:0] data_out_r;
             always @(*) begin
                 data_out_r = 'x;
-                for (genvar i = 0; i < N; ++i) begin
+                for (integer i = 0; i < N; ++i) begin
                     if (sel_in[i]) begin
                         data_out_r = data_in[i];
                     end

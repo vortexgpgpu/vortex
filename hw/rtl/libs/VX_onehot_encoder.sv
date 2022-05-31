@@ -25,11 +25,10 @@ module VX_onehot_encoder #(
         assign valid_out = (| data_in);
 
     end else if (MODEL == 1) begin
-        localparam M = 1 << LN;        
     `IGNORE_WARNINGS_BEGIN
+        localparam M = 1 << LN;    
         wire [LN:0][M-1:0] addr;
         wire [LN:0][M-1:0] v;
-    `IGNORE_WARNINGS_END
     
         // base case, also handle padding for non-power of two inputs
         assign v[0] = REVERSE ? (M'(data_in) << (M - N)) : M'(data_in);
@@ -61,6 +60,7 @@ module VX_onehot_encoder #(
     
         assign data_out = addr[LN][LN-1:0];
         assign valid_out = v[LN][0];
+    `IGNORE_WARNINGS_END
     end else if (MODEL == 2) begin 
 
         for (genvar j = 0; j < LN; ++j) begin
