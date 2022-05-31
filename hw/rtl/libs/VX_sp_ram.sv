@@ -19,17 +19,18 @@ module VX_sp_ram #(
     input wire [DATAW-1:0]   wdata,
     output wire [DATAW-1:0]  rdata
 );
-    //`STATIC_ASSERT((1 == BYTEENW) || ((BYTEENW > 1) && 0 == (BYTEENW % 4)), ("invalid parameter"))
+    `STATIC_ASSERT((BYTEENW == 1) || (BYTEENW * 8 == DATAW), ("invalid parameter"))
 
-`define RAM_INITIALIZATION                        \
-    if (INIT_ENABLE) begin                        \
-        if (INIT_FILE != "") begin                \
-            initial $readmemh(INIT_FILE, ram);    \
-        end else begin                            \
-            initial                               \
-                for (integer i = 0; i < SIZE; ++i)\
-                    ram[i] = INIT_VALUE;          \
-        end                                       \
+`define RAM_INITIALIZATION                          \
+    if (INIT_ENABLE) begin                          \
+        initial begin                               \
+            if (INIT_FILE != "") begin              \
+                $readmemh(INIT_FILE, ram);          \
+            end else begin                          \
+                for (integer i = 0; i < SIZE; ++i)  \
+                    ram[i] = INIT_VALUE;            \
+            end                                     \
+        end                                         \
     end
 
 `ifdef SYNTHESIS

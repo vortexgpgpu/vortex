@@ -38,7 +38,7 @@ module VX_data_access #(
     input wire [NUM_PORTS-1:0][WORD_SIZE-1:0] byteen,
     input wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] fill_data,
     input wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] write_data,
-    input wire [`WAY_SEL_BITS-1:0]      way_sel,
+    input wire [NUM_WAYS-1:0]           way_sel,
 
     output wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] read_data
 );
@@ -96,17 +96,30 @@ module VX_data_access #(
         assign wren  = fill;
     end
 
-    VX_sp_ram #(
-        .DATAW      (`CACHE_LINE_WIDTH),
-        .SIZE       (`LINES_PER_BANK * NUM_WAYS),
-        .BYTEENW    (BYTEENW),
-        .NO_RWCHECK (1)
-    ) data_store (
-        .clk   (clk),
-        .addr  ({way_sel, line_addr}),
-        .wren  (wren),
-        .wdata (wdata),
-        .rdata (rdata) 
+    wire [NUM_WAYS-1:0][`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] per_way_rdata;
+
+    for (genvar i = 0; i < NUM_WAYS; ++i) begin
+        VX_sp_ram #(
+            .DATAW      (`CACHE_LINE_WIDTH),
+            .SIZE       (`LINES_PER_BANK),
+            .BYTEENW    (BYTEENW),
+            .NO_RWCHECK (1)
+        ) data_store (
+            .clk   (clk),
+            .addr  (line_addr),
+            .wren  (wren & {BYTEENW{way_sel[i]}}),
+            .wdata (wdata),
+            .rdata (per_way_rdata[i]) 
+        );
+    end
+   
+    VX_onehot_mux #(
+        .DATAW (`WORDS_PER_LINE * `WORD_WIDTH),
+        .N     (NUM_WAYS)
+    ) rdata_select (
+        .data_in  (per_way_rdata),
+        .sel_in   (way_sel),
+        .data_out (rdata)
     );
 
     if (`WORDS_PER_LINE > 1) begin

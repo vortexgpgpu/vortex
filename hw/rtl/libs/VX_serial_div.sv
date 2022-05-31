@@ -18,7 +18,7 @@ module VX_serial_div #(
         
     input wire                      ready_out,
     output wire                     valid_out,
-    output wire [TAGW-1:0]          tag_out
+    output wire [TAGW-1:0]          tag_out,
 
     input wire                      is_signed,
     input wire [LANES-1:0][WIDTHN-1:0] numer,

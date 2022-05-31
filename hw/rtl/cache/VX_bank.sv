@@ -233,8 +233,8 @@ module VX_bank #(
     wire tag_match_st0;
 
     // added for associativity
-    wire [`WAY_SEL_BITS-1:0] way_sel_st0;
-    wire [`WAY_SEL_BITS-1:0] way_sel_st1;
+    wire [NUM_WAYS-1:0] way_sel_st0;
+    wire [NUM_WAYS-1:0] way_sel_st1;
 
     VX_tag_access #(
         .INSTANCE_ID    (INSTANCE_ID),
@@ -271,7 +271,7 @@ module VX_bank #(
     wire [MSHR_ADDR_WIDTH-1:0] mshr_id_a_st0 = (is_read_st0 || is_write_st0) ? mshr_alloc_id : mshr_id_st0;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + `WAY_SEL_BITS + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH + NUM_PORTS * (WORD_SEL_BITS + WORD_SIZE + `UP(`REQ_SEL_BITS) + 1 + CORE_TAG_WIDTH) + MSHR_ADDR_WIDTH + 1),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + NUM_WAYS + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH + NUM_PORTS * (WORD_SEL_BITS + WORD_SIZE + `UP(`REQ_SEL_BITS) + 1 + CORE_TAG_WIDTH) + MSHR_ADDR_WIDTH + 1),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),

@@ -186,7 +186,7 @@ module VX_muldiv (
 
         .ready_out (div_ready_out),
         .valid_out (div_valid_out),
-        .tag_out   ({div_uuid_out, div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, is_rem_op_out})
+        .tag_out   ({div_uuid_out, div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, is_rem_op_out}),
 
         .is_signed (is_signed_div),        
         .numer     (alu_in1),
