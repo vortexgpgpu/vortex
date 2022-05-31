@@ -45,7 +45,7 @@ module VX_tag_access #(
     wire [NUM_WAYS-1:0] tag_matches;
     wire [`LINE_SEL_BITS-1:0] line_addr = addr[`LINE_SEL_BITS-1:0];
     wire [`TAG_SEL_BITS-1:0]  line_tag = `LINE_TAG_ADDR(addr);    
-    reg [`WAY_SEL_BITS-1:0]   repl_way;
+    logic [`WAY_SEL_BITS-1:0]   repl_way;
     
     if (NUM_WAYS > 1)  begin
         // cyclic assignment of replacement way
@@ -57,7 +57,7 @@ module VX_tag_access #(
             end
         end
     end else begin
-        `UNUSED_VAR (repl_way)
+        assign repl_way = 0;
     end
 
     wire [NUM_WAYS-1:0][(8 * TAG_BYTES)-1:0] wdata, rdata;
