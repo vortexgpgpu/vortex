@@ -103,9 +103,8 @@ module VX_mem_scheduler #(
 
     wire req_complete;
 
-    assign sreq_push = req_valid && ~sreq_full && (req_rw || ~stag_full);
+    assign sreq_push = req_valid && req_ready;
     assign sreq_pop  = ~sreq_empty && req_complete;
-    assign req_ready = !sreq_full && !stag_full;
     
     wire [`UP(UUID_WIDTH)-1:0] req_uuid;
     if (UUID_WIDTH != 0) begin
@@ -132,7 +131,11 @@ module VX_mem_scheduler #(
         `UNUSED_PIN (size)
     );
 
-    assign req_empty = sreq_empty;
+    // can accept another request?
+    assign req_ready = ~sreq_full && (req_rw || ~stag_full);
+
+    // no pending requests
+    assign req_empty = sreq_empty && stag_empty;
 
     // Tag store //////////////////////////////////////////////////////////////
 
@@ -291,7 +294,7 @@ module VX_mem_scheduler #(
         if (reset) begin
             rsp_rem_mask <= '0;
         end else begin
-            if (sreq_push) begin
+            if (stag_push) begin
                 rsp_orig_mask[stag_waddr] <= req_mask;
                 rsp_rem_mask[stag_waddr]  <= (NUM_BATCHES * NUM_BANKS)'(req_mask);
             end
@@ -341,7 +344,7 @@ module VX_mem_scheduler #(
             if (reset) begin
                 rsp_store  <= '0;
             end else begin
-                if (sreq_push) begin                    
+                if (stag_push) begin                    
                     rsp_store[stag_waddr] <= '0;
                 end
                 if (mem_rsp_fire) begin
@@ -413,8 +416,8 @@ module VX_mem_scheduler #(
         for (integer i = 0; i < QUEUE_SIZE; ++i) begin
             if (pending_reqs[i][0]) begin
                 `ASSERT(($time - pending_reqs[i][1 +: 64]) < `STALL_TIMEOUT, 
-                    ("%t: *** mem_scheduler response timeout: remaining=%b, tag=0x%0h (#%0d)", 
-                        $time, rsp_rem_mask[i], pending_reqs[i][1+64 +: TAG_ONLY_WIDTH], 
+                    ("%t: *** %s response timeout: remaining=%b, tag=0x%0h (#%0d)", 
+                        $time, INSTANCE_ID, rsp_rem_mask[i], pending_reqs[i][1+64 +: TAG_ONLY_WIDTH], 
                                                 pending_reqs[i][1+64+TAG_ONLY_WIDTH +: `UUID_BITS]));
             end
         end
