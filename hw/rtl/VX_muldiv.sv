@@ -179,17 +179,21 @@ module VX_muldiv (
     ) divide (
         .clk       (clk),
         .reset     (reset),
+        
         .valid_in  (div_valid_in),
         .ready_in  (div_ready_in),
-        .signed_mode(is_signed_div),
         .tag_in    ({uuid_in, wid_in, tmask_in, PC_in, rd_in, wb_in, is_rem_op_in}),
-        .numer     (alu_in1),
-        .denom     (alu_in2),
-        .quotient  (div_result_tmp),
-        .remainder (rem_result_tmp),
+
         .ready_out (div_ready_out),
         .valid_out (div_valid_out),
         .tag_out   ({div_uuid_out, div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, is_rem_op_out})
+
+        .is_signed (is_signed_div),        
+        .numer     (alu_in1),
+        .denom     (alu_in2),
+
+        .quotient  (div_result_tmp),
+        .remainder (rem_result_tmp)        
     );
 
     assign div_result = is_rem_op_out ? rem_result_tmp : div_result_tmp; 

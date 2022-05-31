@@ -12,9 +12,16 @@ module VX_onehot_mux #(
 ); 
     if (N > 1) begin
         if (MODEL == 1) begin
-            for (genvar i = 0; i < N; ++i) begin
-                assign data_out = sel_in[i] ? data_in[i] : 'z;
+            reg [DATAW-1:0] data_out_r;
+            always @(*) begin
+                data_out_r = 'x;
+                for (genvar i = 0; i < N; ++i) begin
+                    if (sel_in[i]) begin
+                        data_out_r = data_in[i];
+                    end
+                end
             end
+            assign data_out = data_out_r; 
         end else if (MODEL == 2) begin           
             reg [DATAW-1:0] data_out_r;
             always @(*) begin
@@ -36,17 +43,6 @@ module VX_onehot_mux #(
                 end
                 assign data_out[i] = (| gather);
             end       
-        end else begin
-            reg [DATAW-1:0] data_out_r;
-            always @(*) begin
-                data_out_r = 'x;
-                for (integer i = N-1; i >= 0; --i) begin
-                    if (sel_in[i]) begin
-                        data_out_r = data_in[i];
-                    end
-                end
-            end
-            assign data_out = data_out_r; 
         end
     end else begin
         `UNUSED_VAR (sel_in)

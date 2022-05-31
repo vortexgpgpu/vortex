@@ -97,9 +97,9 @@ module VX_tag_access #(
             .N       (NUM_WAYS),
             .REVERSE (1)
         ) encoder (
-            .in_i  (tag_matches),
-            .cnt_o (sel_way),
-            `UNUSED_PIN (valid_o)
+            .data_in  (tag_matches),
+            .data_out (sel_way),
+            `UNUSED_PIN (valid_out)
         );
         assign way_sel = fill ? repl_way : sel_way;
     end else begin

@@ -6,21 +6,21 @@ module VX_lzc #(
     parameter REVERSE = 0,  // 0 -> leading zero, 1 -> trailing zero,
     localparam LOGN   = `LOG2UP(N)
 ) (
-    input  wire [N-1:0]    in_i,
-    output wire [LOGN-1:0] cnt_o,
-    output wire            valid_o
+    input  wire [N-1:0]    data_in,
+    output wire [LOGN-1:0] data_out,
+    output wire            valid_out
 );
     if (N == 1) begin
 
         `UNUSED_PARAM (REVERSE)
 
-        assign cnt_o   = 0;
-        assign valid_o = in_i;
+        assign data_out  = 0;
+        assign valid_out = data_in;
 
     end else if (N == 2) begin
 
-        assign cnt_o   = in_i[REVERSE];
-        assign valid_o = (| in_i);
+        assign data_out  = data_in[REVERSE];
+        assign valid_out = (| data_in);
 
     end else begin
 
@@ -35,10 +35,10 @@ module VX_lzc #(
             .DATAW   (LOGN),
             .REVERSE (!REVERSE)
         ) find_first (        
-            .data_i  (indices),
-            .valid_i (in_i),
-            .data_o  (cnt_o),
-            .valid_o (valid_o)
+            .data_in   (indices),
+            .valid_in  (data_in),
+            .data_out  (data_out),
+            .valid_out (valid_out)
         );
 
     end

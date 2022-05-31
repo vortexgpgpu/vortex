@@ -150,8 +150,8 @@
     VX_popcount #(          \
         .N ($bits(in))      \
     ) __``out (             \
-        .in_i  (in),        \
-        .cnt_o (out)        \
+        .data_in  (in),     \
+        .data_out (out)     \
     )
 
 `endif

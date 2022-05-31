@@ -105,18 +105,18 @@ module VX_miss_resrv #(
         .N       (MSHR_SIZE),
         .REVERSE (1)
     ) dequeue_sel (
-        .in_i    (valid_table_x & ready_table_x),
-        .cnt_o   (dequeue_id_x),
-        .valid_o (dequeue_val_x)
+        .data_in   (valid_table_x & ready_table_x),
+        .data_out  (dequeue_id_x),
+        .valid_out (dequeue_val_x)
     );
 
     VX_lzc #(
         .N       (MSHR_SIZE),
         .REVERSE (1)
     ) allocate_sel (
-        .in_i    (~valid_table_n),
-        .cnt_o   (allocate_id_n),
-        .valid_o (allocate_rdy_n)
+        .data_in   (~valid_table_n),
+        .data_out  (allocate_id_n),
+        .valid_out (allocate_rdy_n)
     );
 
     always @(*) begin

@@ -25,44 +25,42 @@ module VX_onehot_encoder #(
         assign valid_out = (| data_in);
 
     end else if (MODEL == 1) begin
+        localparam M = 1 << LN;        
     `IGNORE_WARNINGS_BEGIN
-        localparam levels_lp = $clog2(N);
-        localparam aligned_width_lp = 1 << $clog2(N);
-    
-        wire [levels_lp:0][aligned_width_lp-1:0] addr;
-        wire [levels_lp:0][aligned_width_lp-1:0] v; 
+        wire [LN:0][M-1:0] addr;
+        wire [LN:0][M-1:0] v;
+    `IGNORE_WARNINGS_END
     
         // base case, also handle padding for non-power of two inputs
-        assign v[0] = REVERSE ? (data_in << (aligned_width_lp - N)) : ((aligned_width_lp)'(data_in));
+        assign v[0] = REVERSE ? (M'(data_in) << (M - N)) : M'(data_in);
         assign addr[0] = 'x;
     
-        for (genvar level = 1; level < levels_lp+1; level=level+1) begin
-            localparam segments_lp      = 2**(levels_lp-level);
-            localparam segment_slot_lp  = aligned_width_lp/segments_lp;
-            localparam segment_width_lp = level; // how many bits are needed at each level
+        for (genvar lvl = 1; lvl < (LN+1); ++lvl) begin
+            localparam SN = 1 << (LN - lvl);
+            localparam SI = M / SN;
+            localparam SW = lvl;
         
-            for (genvar segment = 0; segment < segments_lp; segment=segment+1) begin
+            for (genvar s = 0; s < SN; ++s) begin
                 wire [1:0] vs = {
-                    v[level-1][segment*segment_slot_lp+(segment_slot_lp >> 1)],
-                    v[level-1][segment*segment_slot_lp]
+                    v[lvl-1][s*SI+(SI>>1)],
+                    v[lvl-1][s*SI]
                 };
             
-                assign v[level][segment*segment_slot_lp] = (| vs);
+                assign v[lvl][s*SI] = (| vs);
 
-                if (level == 1) begin
-                    assign addr[level][(segment*segment_slot_lp)+:segment_width_lp] = vs[!REVERSE]; 
+                if (lvl == 1) begin
+                    assign addr[lvl][s*SI +: SW] = vs[!REVERSE]; 
                 end else begin
-                    assign addr[level][(segment*segment_slot_lp)+:segment_width_lp] = { 
+                    assign addr[lvl][s*SI +: SW] = { 
                         vs[!REVERSE],
-                        addr[level-1][segment*segment_slot_lp+:segment_width_lp-1] | addr[level-1][segment*segment_slot_lp+(segment_slot_lp >> 1)+:segment_width_lp-1]
+                        addr[lvl-1][s*SI +: SW-1] | addr[lvl-1][s*SI+(SI>>1) +: SW-1]
                     };
                 end        
             end  
         end	
     
-        assign data_out = addr[levels_lp][`LOG2UP(N)-1:0];
-        assign valid_out = v[levels_lp][0];
-    `IGNORE_WARNINGS_END
+        assign data_out = addr[LN][LN-1:0];
+        assign valid_out = v[LN][0];
     end else if (MODEL == 2) begin 
 
         for (genvar j = 0; j < LN; ++j) begin

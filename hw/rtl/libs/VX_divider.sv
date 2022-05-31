@@ -10,10 +10,10 @@ module VX_divider #(
     parameter DSIGNED = 0,
     parameter LATENCY = 0
 ) (
-    input wire clk,
-    input wire enable, 
-    input wire [WIDTHN-1:0] numer,
-    input wire [WIDTHD-1:0] denom,
+    input wire               clk,
+    input wire               enable, 
+    input wire [WIDTHN-1:0]  numer,
+    input wire [WIDTHD-1:0]  denom,
     output wire [WIDTHQ-1:0] quotient,
     output wire [WIDTHR-1:0] remainder
 );

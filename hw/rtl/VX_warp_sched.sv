@@ -229,9 +229,9 @@ module VX_warp_sched #(
         .N       (`NUM_WARPS),
         .REVERSE (1)
     ) wid_select (
-        .in_i    (ready_warps),
-        .cnt_o   (schedule_wid),
-        .valid_o (schedule_valid)
+        .data_in   (ready_warps),
+        .data_out  (schedule_wid),
+        .valid_out (schedule_valid)
     );
 
     wire [`NUM_WARPS-1:0][(`NUM_THREADS + 32)-1:0] schedule_data;

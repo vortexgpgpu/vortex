@@ -7,20 +7,20 @@ module VX_index_buffer #(
     parameter LUTRAM = 1,
     localparam ADDRW = `LOG2UP(SIZE)
 ) (
-    input  wire clk,
-    input  wire reset,
+    input  wire             clk,
+    input  wire             reset,
 
     output wire [ADDRW-1:0] write_addr,
     input  wire [DATAW-1:0] write_data,            
-    input  wire acquire_slot,
+    input  wire             acquire_slot,
 
     input  wire [ADDRW-1:0] read_addr,
     output wire [DATAW-1:0] read_data,
     input  wire [ADDRW-1:0] release_addr,
-    input  wire release_slot,
+    input  wire             release_slot,
     
-    output wire empty,
-    output wire full    
+    output wire             empty,
+    output wire             full    
 );
     reg [SIZE-1:0] free_slots, free_slots_n;
     reg [ADDRW-1:0] write_addr_r;
@@ -33,9 +33,9 @@ module VX_index_buffer #(
         .N       (SIZE),
         .REVERSE (1)
     ) free_slots_sel (
-        .in_i    (free_slots_n),
-        .cnt_o   (free_index),
-        .valid_o (free_valid)
+        .data_in   (free_slots_n),
+        .data_out  (free_index),
+        .valid_out (free_valid)
     );  
 
     always @(*) begin

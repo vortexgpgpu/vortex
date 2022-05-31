@@ -8,21 +8,21 @@ module VX_mem_rsp_sel #(
     parameter TAG_SEL_BITS  = 0,
     parameter OUT_REG       = 0
 ) (
-    input wire              clk,
-    input wire              reset,
+input wire                              clk,
+    input wire                          reset,
 
     // input response
-    input wire [NUM_REQS-1:0]                   rsp_valid_in,
-    input wire [NUM_REQS-1:0][DATA_WIDTH-1:0]   rsp_data_in,
-    input wire [NUM_REQS-1:0][TAG_WIDTH-1:0]    rsp_tag_in,
-    output wire [NUM_REQS-1:0]                  rsp_ready_in,
+    input wire [NUM_REQS-1:0]           rsp_valid_in,
+    input wire [NUM_REQS-1:0][DATA_WIDTH-1:0] rsp_data_in,
+    input wire [NUM_REQS-1:0][TAG_WIDTH-1:0] rsp_tag_in,
+    output wire [NUM_REQS-1:0]          rsp_ready_in,
 
     // output responses
-    output wire                             rsp_valid_out,
-    output wire [NUM_REQS-1:0]              rsp_tmask_out,
+    output wire                         rsp_valid_out,
+    output wire [NUM_REQS-1:0]          rsp_tmask_out,
     output wire [NUM_REQS-1:0][DATA_WIDTH-1:0] rsp_data_out,
-    output wire [TAG_WIDTH-1:0]             rsp_tag_out,
-    input wire                              rsp_ready_out
+    output wire [TAG_WIDTH-1:0]         rsp_tag_out,
+    input wire                          rsp_ready_out
 );
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)

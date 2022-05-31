@@ -6,9 +6,9 @@ module VX_bits_insert #(
     parameter S   = 1,
     parameter POS = 0
 ) (
-    input wire [N-1:0] data_in,    
+    input wire [N-1:0]      data_in,    
     input wire [`UP(S)-1:0] sel_in,    
-    output wire [N+S-1:0] data_out
+    output wire [N+S-1:0]   data_out
 ); 
     if (S == 0) begin
         `UNUSED_VAR (sel_in)

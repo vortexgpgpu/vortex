@@ -80,9 +80,9 @@ module VX_csr_data #(
         .N       (`NUM_THREADS),
         .REVERSE (1)
     ) tid_select (
-        .in_i       (write_tmask),
-        .cnt_o      (tid),
-        `UNUSED_PIN (valid_o)
+        .data_in  (write_tmask),
+        .data_out (tid),
+        `UNUSED_PIN (valid_out)
     );    
 
 `ifdef EXT_TEX_ENABLE    

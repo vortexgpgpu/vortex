@@ -5,8 +5,8 @@ module VX_reset_relay #(
     parameter N     = 1,
     parameter DEPTH = 1
 ) (
-    input wire  clk,
-    input wire  reset,
+    input wire          clk,
+    input wire          reset,
     output wire [N-1:0] reset_o
 );    
     if (DEPTH > 1) begin

@@ -50,9 +50,9 @@ module VX_priority_encoder #(
             .N       (N),
             .REVERSE (1)
         ) lzc (
-            .in_i  (reversed),            
-            .cnt_o (index),
-            `UNUSED_PIN (valid_o)
+            .data_in  (reversed),            
+            .data_out (index),
+            `UNUSED_PIN (valid_out)
         );
 
         assign onehot    = scan_lo & {(~scan_lo[N-2:0]), 1'b1};
@@ -71,9 +71,9 @@ module VX_priority_encoder #(
             .N       (N),
             .REVERSE (1)
         ) lzc (
-            .in_i    (reversed),            
-            .cnt_o   (index),
-            .valid_o (valid_out)
+            .data_in   (reversed),            
+            .data_out  (index),
+            .valid_out (valid_out)
         );
 
     end else if (MODEL == 3) begin
@@ -84,9 +84,9 @@ module VX_priority_encoder #(
             .N       (N),
             .REVERSE (1)
         ) lzc (
-            .in_i    (reversed),           
-            .cnt_o   (index),
-            .valid_o (valid_out)
+            .data_in   (reversed),           
+            .data_out  (index),
+            .valid_out (valid_out)
         );
 
     end else begin

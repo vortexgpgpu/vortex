@@ -7,10 +7,10 @@ module VX_find_first #(
     parameter REVERSE = 0
     
 ) (
-    input  wire [N-1:0][DATAW-1:0] data_i,
-    input  wire [N-1:0]            valid_i,    
-    output wire [DATAW-1:0]        data_o,
-    output wire                    valid_o
+    input  wire [N-1:0][DATAW-1:0] data_in,
+    input  wire [N-1:0]            valid_in,    
+    output wire [DATAW-1:0]        data_out,
+    output wire                    valid_out
 );
     localparam LOGN = $clog2(N);
     localparam TL   = (1 << LOGN) - 1;
@@ -22,8 +22,8 @@ module VX_find_first #(
 `IGNORE_WARNINGS_END
 
     for (genvar i = 0; i < N; ++i) begin
-        assign s_n[TL+i] = REVERSE ? valid_i[N-1-i] : valid_i[i];
-        assign d_n[TL+i] = REVERSE ? data_i[N-1-i] : data_i[i];
+        assign s_n[TL+i] = REVERSE ? valid_in[N-1-i] : valid_in[i];
+        assign d_n[TL+i] = REVERSE ? data_in[N-1-i] : data_in[i];
     end
     
     for (genvar i = TL+N; i < TN; ++i) begin
@@ -38,8 +38,8 @@ module VX_find_first #(
         end
     end     
         
-    assign valid_o = s_n[0];
-    assign data_o  = d_n[0];
+    assign valid_out = s_n[0];
+    assign data_out  = d_n[0];
   
 endmodule
 `TRACING_ON

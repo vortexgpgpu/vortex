@@ -30,9 +30,9 @@ module VX_dispatch (
         .N       (`NUM_THREADS),
         .REVERSE (1)
     ) tid_select (
-        .in_i       (dispatch_if.tmask),
-        .cnt_o      (tid),
-        `UNUSED_PIN (valid_o)
+        .data_in  (dispatch_if.tmask),
+        .data_out (tid),
+        `UNUSED_PIN (valid_out)
     );
 
     wire [31:0] next_PC = dispatch_if.PC + 4;

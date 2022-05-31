@@ -6,20 +6,20 @@ module VX_popcount #(
     parameter N     = 1,
     localparam M    = $clog2(N+1)  
 ) (
-    input  wire [N-1:0] in_i,
-    output wire [M-1:0] cnt_o
+    input  wire [N-1:0] data_in,
+    output wire [M-1:0] data_out
 );
     `UNUSED_PARAM (MODEL)    
 
 `ifndef SYNTHESIS
-    assign cnt_o = $countones(in_i);
+    assign data_out = $countones(data_in);
 `else
 `ifdef QUARTUS
-    assign cnt_o = $countones(in_i);
+    assign data_out = $countones(data_in);
 `else
     if (N == 1) begin
 
-        assign cnt_o = in_i;
+        assign data_out = data_in;
 
     end else if (MODEL == 1) begin
     `IGNORE_WARNINGS_BEGIN
@@ -29,7 +29,7 @@ module VX_popcount #(
         wire [M-1:0] tmp [0:PN-1] [0:PN-1];
         
         for (genvar i = 0; i < N; ++i) begin        
-            assign tmp[0][i] = in_i[i];
+            assign tmp[0][i] = data_in[i];
         end
 
         for (genvar i = N; i < PN; ++i) begin        
@@ -42,7 +42,7 @@ module VX_popcount #(
             end
         end
 
-        assign cnt_o = tmp[LOGPN][0];
+        assign data_out = tmp[LOGPN][0];
     `IGNORE_WARNINGS_END
     end else begin
 
@@ -52,12 +52,12 @@ module VX_popcount #(
             cnt_r = '0;
             for (integer i = 0; i < N; ++i) begin
             `IGNORE_WARNINGS_BEGIN
-                cnt_r = cnt_r + in_i[i];
+                cnt_r = cnt_r + data_in[i];
             `IGNORE_WARNINGS_END
             end
         end
 
-        assign cnt_o = cnt_r;
+        assign data_out = cnt_r;
     
     end
 `endif

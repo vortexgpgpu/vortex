@@ -126,9 +126,9 @@ module VX_fp_cvt #(
         VX_lzc #(
             .N (INT_MAN_WIDTH)
         ) lzc (
-            .in_i    (encoded_mant_s0[i]),
-            .cnt_o   (renorm_shamt_s0[i]),
-            .valid_o (mant_is_nonzero)
+            .data_in   (encoded_mant_s0[i]),
+            .data_out  (renorm_shamt_s0[i]),
+            .valid_out (mant_is_nonzero)
         );
         assign mant_is_zero_s0[i] = ~mant_is_nonzero;  
     end
