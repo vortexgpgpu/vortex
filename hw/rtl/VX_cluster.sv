@@ -117,12 +117,12 @@ module VX_cluster #(
         .rsp_out_if (rcache_rsp_if)
     );
 
-    VX_raster_req_demux #(
+    VX_raster_arb #(
         .NUM_INPUTS  (`NUM_RASTER_UNITS),
         .NUM_LANES   (`NUM_THREADS),
         .NUM_OUTPUTS (`NUM_CORES),
         .BUFFERED    ((`NUM_CORES > 1) ? 1 : 0)
-    ) raster_req_arb (
+    ) raster_arb (
         .clk        (clk),
         .reset      (reset),
         .req_in_if  (raster_reqs_if),
@@ -273,12 +273,12 @@ module VX_cluster #(
         .rsp_out_if (ocache_rsp_if)
     );
 
-    VX_rop_req_mux #(
+    VX_rop_arb #(
         .NUM_INPUTS  (`NUM_CORES),
         .NUM_LANES   (`NUM_THREADS),
         .NUM_OUTPUTS (`NUM_ROP_UNITS),
         .BUFFERED    ((`NUM_CORES > 1) ? 1 : 0)
-    ) rop_req_mux (
+    ) rop_arb (
         .clk        (clk),
         .reset      (reset),
         .req_in_if  (per_core_rop_req_if),

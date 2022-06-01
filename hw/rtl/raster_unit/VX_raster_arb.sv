@@ -1,27 +1,27 @@
-`include "VX_rop_define.vh"
+`include "VX_raster_define.vh"
 
-module VX_rop_req_demux #(
+module VX_raster_arb #(
     parameter NUM_INPUTS     = 1,
     parameter NUM_OUTPUTS    = 1,
     parameter NUM_LANES      = 1,
     parameter BUFFERED       = 0,
     parameter string ARBITER = "R"
 ) (
-    input wire           clk,
-    input wire           reset,
+    input wire              clk,
+    input wire              reset,
 
     // input request   
-    VX_rop_req_if.slave  req_in_if [NUM_INPUTS],
+    VX_raster_req_if.slave  req_in_if [NUM_INPUTS],
 
     // output requests
-    VX_rop_req_if.master req_out_if [NUM_OUTPUTS]
+    VX_raster_req_if.master req_out_if [NUM_OUTPUTS]
 );
-    localparam REQ_DATAW = NUM_LANES * (1 + 2 * `ROP_DIM_BITS + $bits(rgba_t) + `ROP_DEPTH_BITS + 1);
+    localparam REQ_DATAW = NUM_LANES * (1 + $bits(raster_stamp_t)) + 1;
 
     wire [NUM_INPUTS-1:0]                 req_valid_in;
     wire [NUM_INPUTS-1:0][REQ_DATAW-1:0]  req_data_in;
     wire [NUM_INPUTS-1:0]                 req_ready_in;
-    
+
     wire [NUM_OUTPUTS-1:0]                req_valid_out;
     wire [NUM_OUTPUTS-1:0][REQ_DATAW-1:0] req_data_out;
     wire [NUM_OUTPUTS-1:0]                req_ready_out;
@@ -43,15 +43,21 @@ module VX_rop_req_demux #(
         .ready_out  (req_ready_out)
     );
 
+    wire [NUM_INPUTS-1:0] empty_mask;
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin
-        assign req_valid_in[i] = req_in_if[i].valid;
-        assign req_data_in[i] = {req_in_if[i].tmask, req_in_if[i].pos_x, req_in_if[i].pos_y, req_in_if[i].color, req_in_if[i].depth, req_in_if[i].face};
+        assign empty_mask[i] = req_in_if[i].empty;
+    end
+    wire empty_all = (& empty_mask);
+
+    for (genvar i = 0; i < NUM_INPUTS; ++i) begin
+        assign req_valid_in[i] = req_in_if[i].valid || empty_all;
+        assign req_data_in[i]  = {req_in_if[i].tmask, req_in_if[i].stamps, empty_all};
         assign req_in_if[i].ready = req_ready_in[i];
     end
     
     for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
         assign req_out_if[i].valid = req_valid_out[i];
-        assign {req_out_if[i].tmask, req_out_if[i].pos_x, req_out_if[i].pos_y, req_out_if[i].color, req_out_if[i].depth, req_out_if[i].face} = req_data_out[i];
+        assign {req_out_if[i].tmask, req_out_if[i].stamps, req_out_if[i].empty} = req_data_out[i];
         assign req_ready_out[i] = req_out_if[i].ready;
     end
 

@@ -608,4 +608,11 @@
     assign dst.tag[i] = src[i].tag; \
     assign src[i].ready = dst.ready[i]
 
+`define ASSIGN_VX_RASTER_REQ_IF(dst, src) \
+    assign dst.valid = src.valid; \
+    assign dst.tmask = src.tmask; \
+    assign dst.stamps = src.stamps; \
+    assign dst.empty = src.empty; \
+    assign src.ready = dst.ready
+
 `endif

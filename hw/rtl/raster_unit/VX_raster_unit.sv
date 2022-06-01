@@ -181,7 +181,11 @@ module VX_raster_unit #(
 
     VX_raster_req_if #(
         .NUM_LANES (OUTPUT_QUADS)
-    ) per_pe_raster_req_if[NUM_PES]();
+    ) pe_raster_req_if[NUM_PES]();
+
+    VX_raster_req_if #(
+        .NUM_LANES (OUTPUT_QUADS)
+    ) raster_req_tmp_if[1]();
 
     wire [NUM_PES-1:0] pe_empty_out;
 
@@ -218,26 +222,28 @@ module VX_raster_unit #(
             .ready_in   (pes_ready_in[i]),
 
             .valid_out  (pe_valid_out),
-            .mask_out   (per_pe_raster_req_if[i].tmask),
-            .stamps_out (per_pe_raster_req_if[i].stamps),
+            .mask_out   (pe_raster_req_if[i].tmask),
+            .stamps_out (pe_raster_req_if[i].stamps),
             .empty_out  (pe_empty_out[i]),
-            .ready_out  (per_pe_raster_req_if[i].ready)
+            .ready_out  (pe_raster_req_if[i].ready)
         );
 
-        assign per_pe_raster_req_if[i].empty = (& pe_empty_out) && no_pe_input;
-        assign per_pe_raster_req_if[i].valid = pe_valid_out || per_pe_raster_req_if[i].empty;        
+        assign pe_raster_req_if[i].empty = (& pe_empty_out) && no_pe_input;
+        assign pe_raster_req_if[i].valid = pe_valid_out || pe_raster_req_if[i].empty;        
     end
 
-    VX_raster_req_mux #(
+    VX_raster_arb #(
         .NUM_INPUTS (NUM_PES),
         .NUM_LANES  (OUTPUT_QUADS),
         .BUFFERED   ((NUM_PES > 1) ? 1 : 0)
-    ) raster_req_mux (
+    ) raster_arb (
         .clk        (clk),
         .reset      (reset),
-        .req_in_if  (per_pe_raster_req_if),
-        .req_out_if (raster_req_if)
+        .req_in_if  (pe_raster_req_if),
+        .req_out_if (raster_req_tmp_if)
     );
+
+    `ASSIGN_VX_RASTER_REQ_IF (raster_req_if, raster_req_tmp_if[0]);
 
 `ifdef PERF_ENABLE
     wire [$clog2(`RCACHE_NUM_REQS+1)-1:0] perf_mem_req_per_cycle;
