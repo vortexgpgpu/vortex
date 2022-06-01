@@ -35,15 +35,14 @@ module VX_writeback #(
     wire wb_alu_ready_in;
     wire wb_ld_ready_in;
 
-    VX_stream_mux #(
+    VX_stream_arb #(
         .NUM_INPUTS (NUM_RSPS),
         .DATAW      (DATAW),
         .BUFFERED   (2),
         .ARBITER    ("F")
-    ) rsp_mux (
+    ) rsp_arb (
         .clk       (clk),
         .reset     (reset),
-        `UNUSED_PIN (sel_in),
         .valid_in  ({            
         `ifdef EXT_F_ENABLE
             fpu_commit_if.valid && fpu_commit_if.wb,

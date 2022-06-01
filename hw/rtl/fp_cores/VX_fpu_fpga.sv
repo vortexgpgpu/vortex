@@ -193,15 +193,14 @@ module VX_fpu_fpga #(
         assign per_core_data_out[i] = {per_core_result[i], per_core_has_fflags[i], per_core_fflags[i], per_core_tag_out[i]};
     end
 
-    VX_stream_mux #(
+    VX_stream_arb #(
         .NUM_INPUTS (NUM_FPC),
         .DATAW      (RSP_MUX_DATAW),
         .BUFFERED   (1),
-        .ARBITER  ("R")
-    ) rsp_mux (
+        .ARBITER    ("R")
+    ) rsp_arb (
         .clk       (clk),
         .reset     (reset),
-        `UNUSED_PIN (sel_in),
         .valid_in  (per_core_valid_out),
         .data_in   (per_core_data_out),
         .ready_in  (per_core_ready_out),

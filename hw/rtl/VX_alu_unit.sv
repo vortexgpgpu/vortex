@@ -196,15 +196,14 @@ module VX_alu_unit #(
 
 `endif
 
-    VX_stream_mux #(
+    VX_stream_arb #(
         .NUM_INPUTS (RSP_MUX_SIZE),
         .DATAW      (RSP_MUX_DATAW),
         .BUFFERED   (1),
         .ARBITER    ("R")
-    ) rsp_mux (
+    ) rsp_arb (
         .clk       (clk),
         .reset     (reset),
-        `UNUSED_PIN (sel_in),
         .valid_in  ({
             alu_valid_out
         `ifdef EXT_M_ENABLE

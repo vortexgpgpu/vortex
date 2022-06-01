@@ -27,16 +27,15 @@ module VX_rop_req_mux #(
     wire [NUM_OUTPUTS-1:0][REQ_DATAW-1:0] req_data_out;
     wire [NUM_OUTPUTS-1:0]                req_ready_out;
 
-    VX_stream_mux #(            
+    VX_stream_arb #(            
         .NUM_INPUTS (NUM_INPUTS),
         .NUM_OUTPUTS(NUM_OUTPUTS),
         .DATAW      (REQ_DATAW),
         .BUFFERED   (BUFFERED),
         .ARBITER    (ARBITER)
-    ) req_mux (
+    ) req_arb (
         .clk        (clk),
         .reset      (reset),
-        `UNUSED_PIN (sel_in),
         .valid_in   (req_valid_in),
         .data_in    (req_data_in),
         .ready_in   (req_ready_in),

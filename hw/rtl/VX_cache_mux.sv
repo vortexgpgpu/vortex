@@ -58,16 +58,15 @@ module VX_cache_mux #(
         end
     end
 
-    VX_stream_mux #(            
+    VX_stream_arb #(            
         .NUM_INPUTS (NUM_REQS),
         .NUM_LANES  (NUM_LANES),
         .DATAW      (REQ_DATAW),
         .BUFFERED   (BUFFERED_REQ),
         .ARBITER    (ARBITER)
-    ) req_mux (
+    ) req_arb (
         .clk       (clk),
         .reset     (reset),
-        `UNUSED_PIN (sel_in),
         .valid_in  (req_valid_in),
         .data_in   (req_data_in),
         .ready_in  (req_ready_in),
@@ -110,12 +109,12 @@ module VX_cache_mux #(
         assign rsp_data_out[i] = {rsp_tag_out, rsp_out_if.data[i]};
     end
 
-    VX_stream_demux #(
+    VX_stream_switch #(
         .NUM_OUTPUTS (NUM_REQS),
         .NUM_LANES   (NUM_LANES),
         .DATAW       (RSP_DATAW),
         .BUFFERED    (BUFFERED_RSP)
-    ) rsp_demux (
+    ) rsp_switch (
         .clk       (clk),
         .reset     (reset),
         .sel_in    (rsp_sel),

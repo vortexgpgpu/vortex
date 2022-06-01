@@ -140,14 +140,13 @@ module VX_raster_unit #(
     wire [NUM_PES-1:0][PRIM_DATA_WIDTH-1:0] pes_data_in;
     wire [NUM_PES-1:0] pes_ready_in;
 
-    VX_stream_demux #(
+    VX_stream_arb #(
         .NUM_OUTPUTS (NUM_PES),
         .DATAW       (PRIM_DATA_WIDTH),
         .BUFFERED    (1)
-    ) pe_req_demux (
+    ) pe_req_arb (
         .clk        (clk),
         .reset      (reset),
-        `UNUSED_PIN (sel_in),
         .valid_in   (pe_valid),
         .ready_in   (pe_ready),
         .data_in    ({pe_x_loc, pe_y_loc, pe_pid, pe_edges_e, pe_extents}),

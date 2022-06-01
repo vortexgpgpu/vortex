@@ -60,12 +60,12 @@ module VX_cache_demux #(
         assign req_data_in[i] = {req_tag_in, req_in_if.addr[i], req_in_if.rw[i], req_in_if.byteen[i], req_in_if.data[i]};
     end
 
-    VX_stream_demux #(
+    VX_stream_switch #(
         .NUM_OUTPUTS (NUM_REQS),
         .NUM_LANES   (NUM_LANES),
         .DATAW       (REQ_DATAW),
         .BUFFERED    (BUFFERED_REQ)
-    ) req_demux (
+    ) req_switch (
         .clk       (clk),
         .reset     (reset),
         .sel_in    (req_sel),
@@ -112,16 +112,15 @@ module VX_cache_demux #(
         end
     end
 
-    VX_stream_mux #(            
+    VX_stream_arb #(            
         .NUM_INPUTS (NUM_REQS),
         .NUM_LANES  (NUM_LANES),
         .DATAW      (RSP_DATAW),
         .BUFFERED   (BUFFERED_RSP),
         .ARBITER    (ARBITER)
-    ) rsp_mux (
+    ) rsp_arb (
         .clk       (clk),
         .reset     (reset),
-        `UNUSED_PIN (sel_in),
         .valid_in  (rsp_valid_out),
         .data_in   (rsp_data_out),
         .ready_in  (rsp_ready_out),

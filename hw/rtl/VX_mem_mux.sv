@@ -54,15 +54,14 @@ module VX_mem_mux #(
         assign req_in_if[i].ready = req_ready_in[i];
     end        
 
-    VX_stream_mux #(            
+    VX_stream_arb #(            
         .NUM_INPUTS (NUM_REQS),
         .DATAW      (REQ_DATAW),
         .BUFFERED   (BUFFERED_REQ),
         .ARBITER    (ARBITER)
-    ) req_mux (
+    ) req_arb (
         .clk       (clk),
         .reset     (reset),
-        `UNUSED_PIN (sel_in),
         .valid_in  (req_valid_in),
         .data_in   (req_data_in),
         .ready_in  (req_ready_in),
@@ -95,11 +94,11 @@ module VX_mem_mux #(
         .data_out (rsp_tag_out)
     );
 
-    VX_stream_demux #(
+    VX_stream_switch #(
         .NUM_OUTPUTS (NUM_REQS),
         .DATAW       (RSP_DATAW),
         .BUFFERED    (BUFFERED_RSP)
-    ) rsp_demux (
+    ) rsp_switch (
         .clk       (clk),
         .reset     (reset),
         .sel_in    (rsp_sel),

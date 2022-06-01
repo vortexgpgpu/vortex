@@ -122,7 +122,7 @@ module VX_cluster #(
         .NUM_LANES   (`NUM_THREADS),
         .NUM_OUTPUTS (`NUM_CORES),
         .BUFFERED    ((`NUM_CORES > 1) ? 1 : 0)
-    ) raster_req_demux (
+    ) raster_req_arb (
         .clk        (clk),
         .reset      (reset),
         .req_in_if  (raster_reqs_if),

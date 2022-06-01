@@ -281,15 +281,14 @@ module VX_gpu_unit #(
 
     // response arbitration
 
-    VX_stream_mux #(
+    VX_stream_arb #(
         .NUM_INPUTS (RSP_MUX_SIZE),
         .DATAW      (RSP_MUX_DATAW),
         .BUFFERED   (1),
         .ARBITER    ("R")
-    ) rsp_mux (
+    ) rsp_arb (
         .clk       (clk),
         .reset     (reset),
-        `UNUSED_PIN (sel_in),
         .valid_in  ({
             wctl_rsp_valid
         `ifdef EXT_TEX_ENABLE

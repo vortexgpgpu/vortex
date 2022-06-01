@@ -469,14 +469,13 @@ module VX_cache #(
                              per_bank_mem_req_data[i]};
     end
     
-    VX_stream_mux #(
+    VX_stream_arb #(
         .NUM_INPUTS (NUM_BANKS),
         .DATAW      (`MEM_ADDR_WIDTH + MSHR_ADDR_WIDTH + 1 + NUM_PORTS * (1 + WORD_SIZE + WORD_SEL_BITS + `WORD_WIDTH)),
         .ARBITER    ("R")
-    ) mem_req_mux (
+    ) mem_req_arb (
         .clk       (clk),
         .reset     (reset),
-        `UNUSED_PIN (sel_in),
         .valid_in  (per_bank_mem_req_valid),
         .data_in   (data_in),
         .ready_in  (per_bank_mem_req_ready),   

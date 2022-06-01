@@ -204,13 +204,13 @@ module VX_mem_unit # (
         .NUM_REQS  (`DCACHE_NUM_REQS), 
         .WORD_SIZE (`DCACHE_WORD_SIZE), 
         .TAG_WIDTH (`DCACHE_NOSM_TAG_WIDTH)
-    ) dcache_nosm_demux_req_if[2]();
+    ) dcache_nosm_switch_req_if[2]();
 
     VX_cache_rsp_if #(
         .NUM_REQS  (`DCACHE_NUM_REQS), 
         .WORD_SIZE (`DCACHE_WORD_SIZE), 
         .TAG_WIDTH (`DCACHE_NOSM_TAG_WIDTH)
-    ) dcache_nosm_demux_rsp_if[2]();
+    ) dcache_nosm_switch_rsp_if[2]();
 
     VX_cache_demux #(
         .NUM_REQS      (2),
@@ -226,14 +226,14 @@ module VX_mem_unit # (
         .reset      (reset),
         .req_in_if  (dcache_req_if),
         .rsp_in_if  (dcache_rsp_if),
-        .req_out_if (dcache_nosm_demux_req_if),
-        .rsp_out_if (dcache_nosm_demux_rsp_if)
+        .req_out_if (dcache_nosm_switch_req_if),
+        .rsp_out_if (dcache_nosm_switch_rsp_if)
     );
 
-    `ASSIGN_VX_CACHE_REQ_IF (dcache_nosm_req_if, dcache_nosm_demux_req_if[0]);
-    `ASSIGN_VX_CACHE_RSP_IF (dcache_nosm_demux_rsp_if[0], dcache_nosm_rsp_if);
-    `ASSIGN_VX_CACHE_REQ_IF (smem_req_if, dcache_nosm_demux_req_if[1]);
-    `ASSIGN_VX_CACHE_RSP_IF (dcache_nosm_demux_rsp_if[1], smem_rsp_if);
+    `ASSIGN_VX_CACHE_REQ_IF (dcache_nosm_req_if, dcache_nosm_switch_req_if[0]);
+    `ASSIGN_VX_CACHE_RSP_IF (dcache_nosm_switch_rsp_if[0], dcache_nosm_rsp_if);
+    `ASSIGN_VX_CACHE_REQ_IF (smem_req_if, dcache_nosm_switch_req_if[1]);
+    `ASSIGN_VX_CACHE_RSP_IF (dcache_nosm_switch_rsp_if[1], smem_rsp_if);
 
     // shared memory address mapping:  
     // addr = [warp_idx][per_thread_word_idx][bank_idx]
