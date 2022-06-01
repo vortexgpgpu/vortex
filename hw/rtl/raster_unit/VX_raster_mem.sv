@@ -127,7 +127,7 @@ module VX_raster_mem #(
                     mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_TILE);
                     // set tile counters
                     curr_tbuf_addr  <= dcrs.tbuf_addr + INSTANCE_IDX * 8 + 8;
-                    curr_num_tiles  <= (dcrs.tile_count - `RASTER_TILE_BITS'(INSTANCE_IDX + NUM_INSTANCES - 1)) / `RASTER_TILE_BITS'(NUM_INSTANCES);
+                    curr_num_tiles  <= (dcrs.tile_count + `RASTER_TILE_BITS'(NUM_INSTANCES-INSTANCE_IDX-1)) / `RASTER_TILE_BITS'(NUM_INSTANCES);
                 end
             end
             STATE_TILE: begin
