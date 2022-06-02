@@ -204,49 +204,43 @@ module VX_gpu_unit #(
 
 `ifdef EXT_IMADD_ENABLE    
 
+    wire                          imadd_valid_in;
     wire [`UUID_BITS-1:0]         imadd_uuid_out;
     wire [`NW_BITS-1:0]           imadd_wid_out;
     wire [`NUM_THREADS-1:0]       imadd_tmask_out;
     wire [31:0]                   imadd_PC_out;
-    wire [`NR_BITS-1:0]           imadd_rd_out;
-    wire                          imadd_wb_out;
-    wire [`NUM_THREADS-1:0][31:0] imadd_data_out;
-    wire                          imadd_valid_in;
+    wire [`NR_BITS-1:0]           imadd_rd_out; 
     wire                          imadd_ready_in;
+
     wire                          imadd_valid_out;
+    wire [`NUM_THREADS-1:0][31:0] imadd_data_out;
     wire                          imadd_ready_out;
 
     assign imadd_valid_in = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_IMADD);
 
-    VX_imadd imadd (
+    VX_imadd #(
+        .NUM_LANES  (`NUM_THREADS),
+        .DATA_WIDTH (32),
+        .MAX_SHIFT  (24),
+        .SIGNED     (1),
+        .TAG_WIDTH  (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS)
+    ) imadd (
         .clk        (clk),
         .reset      (reset),
         
         // Inputs
-        .op_mod     (gpu_req_if.op_mod),
-        .uuid_in    (gpu_req_if.uuid),
-        .wid_in     (gpu_req_if.wid),
-        .tmask_in   (gpu_req_if.tmask),
-        .PC_in      (gpu_req_if.PC),
-        .rd_in      (gpu_req_if.rd),
-        .wb_in      (gpu_req_if.wb),
+        .valid_in   (imadd_valid_in),
+        .shift_in   ({gpu_req_if.op_mod[1:0], 3'b0}),
         .data_in1   (gpu_req_if.rs1_data),
         .data_in2   (gpu_req_if.rs2_data),
         .data_in3   (gpu_req_if.rs3_data),
+        .tag_in     ({gpu_req_if.uuid, gpu_req_if.wid, gpu_req_if.tmask, gpu_req_if.PC, gpu_req_if.rd}),
+        .ready_in   (imadd_ready_in),
 
         // Outputs
-        .uuid_out   (imadd_uuid_out),
-        .wid_out    (imadd_wid_out),
-        .tmask_out  (imadd_tmask_out),
-        .PC_out     (imadd_PC_out),
-        .rd_out     (imadd_rd_out),
-        .wb_out     (imadd_wb_out),
-        .data_out   (imadd_data_out),
-
-        // handshake
-        .valid_in   (imadd_valid_in),
-        .ready_in   (imadd_ready_in),
         .valid_out  (imadd_valid_out),
+        .tag_out    ({imadd_uuid_out, imadd_wid_out, imadd_tmask_out, imadd_PC_out, imadd_rd_out}),
+        .data_out   (imadd_data_out),
         .ready_out  (imadd_ready_out)
     );
 
@@ -311,7 +305,7 @@ module VX_gpu_unit #(
           , {rop_agent_rsp_if.uuid, rop_agent_rsp_if.wid, rop_agent_rsp_if.tmask, rop_agent_rsp_if.PC, rop_agent_rsp_if.rd, rop_agent_rsp_if.wb, RSP_DATAW'(rop_agent_rsp_if.data), rop_agent_rsp_if.eop, 1'b0}
         `endif
         `ifdef EXT_IMADD_ENABLE
-          , {imadd_uuid_out, imadd_wid_out, imadd_tmask_out, imadd_PC_out, imadd_rd_out, imadd_wb_out, RSP_DATAW'(imadd_data_out), 1'b1, 1'b0}
+          , {imadd_uuid_out, imadd_wid_out, imadd_tmask_out, imadd_PC_out, imadd_rd_out, 1'b1, RSP_DATAW'(imadd_data_out), 1'b1, 1'b0}
         `endif
         }),
         .ready_in ({

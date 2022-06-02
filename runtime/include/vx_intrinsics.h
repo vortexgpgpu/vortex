@@ -201,8 +201,8 @@ __asm__ (".set reg_t6  , 31");
 })
 
 // Texture load
-#define vx_tex(unit, u, v, lod) \
-    RISCV_INSN_R4(RISCV_CUSTOM1, 0, unit, u, v, lod)
+#define vx_tex(stage, u, v, lod) \
+    RISCV_INSN_R4(RISCV_CUSTOM1, 0, stage, u, v, lod)
 
 // Conditional move
 inline unsigned vx_cmov(unsigned c, unsigned t, unsigned f) {

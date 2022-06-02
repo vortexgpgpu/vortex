@@ -383,12 +383,14 @@ module VX_decode  #(
                     end
                     7'h01: begin
                         case (func3)
+                        `ifdef EXT_RASTER_ENABLE
                             3'h0: begin // RASTER
-                            ex_type   = `EX_GPU;
-                            op_type   = `INST_OP_BITS'(`INST_GPU_RASTER);
-                            use_rd    = 1;
-                            `USED_IREG (rd);
+                                ex_type   = `EX_GPU;
+                                op_type   = `INST_OP_BITS'(`INST_GPU_RASTER);
+                                use_rd    = 1;
+                                `USED_IREG (rd);
                             end
+                        `endif
                             default:;
                         endcase
                     end
@@ -420,6 +422,7 @@ module VX_decode  #(
                                 `USED_IREG (rs2);
                                 `USED_IREG (rs3);
                             end
+                        `ifdef EXT_ROP_ENABLE
                             2'h1: begin // ROP
                                 ex_type = `EX_GPU;
                                 op_type = `INST_OP_BITS'(`INST_GPU_ROP);
@@ -427,9 +430,11 @@ module VX_decode  #(
                                 `USED_IREG (rs2);
                                 `USED_IREG (rs3);
                             end
+                        `endif
                             default:;
                         endcase
                     end
+                `ifdef EXT_IMADD_ENABLE
                     3'h2: begin // IMADD
                         ex_type = `EX_GPU;
                         op_type = `INST_OP_BITS'(`INST_GPU_IMADD);
@@ -440,6 +445,7 @@ module VX_decode  #(
                         `USED_IREG (rs2);
                         `USED_IREG (rs3);
                     end
+                `endif
                     default:;
                 endcase
             end

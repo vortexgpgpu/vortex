@@ -89,11 +89,11 @@ Disassembly of section .text:
 8000012c: 13 76 15 00                  	andi	a2, a0, 1
 80000130: 0b 00 16 00                  	vx_pred	a2
 80000134: 63 08 06 68                  	beqz	a2, 1680
-80000138: 73 26 20 7c                  	csrr	a2, 1986
+80000138: 73 26 10 7c                  	csrr	a2, 1985
 8000013c: 13 55 15 00                  	srli	a0, a0, 1
-80000140: f3 26 60 7c                  	csrr	a3, 1990
+80000140: f3 26 50 7c                  	csrr	a3, 1989
 80000144: d3 71 06 d0                  	<unknown>
-80000148: 73 26 a0 7c                  	csrr	a2, 1994
+80000148: 73 26 90 7c                  	csrr	a2, 1993
 8000014c: d3 f1 01 10                  	<unknown>
 80000150: 53 f2 06 d0                  	<unknown>
 80000154: 53 72 02 10                  	<unknown>
@@ -106,12 +106,12 @@ Disassembly of section .text:
 80000170: d3 f1 21 10                  	<unknown>
 80000174: d3 9e 01 c0                  	<unknown>
 80000178: d3 71 52 10                  	<unknown>
-8000017c: 73 26 30 7c                  	csrr	a2, 1987
+8000017c: 73 26 20 7c                  	csrr	a2, 1986
 80000180: d3 f1 21 10                  	<unknown>
 80000184: 53 9e 01 c0                  	<unknown>
-80000188: f3 26 70 7c                  	csrr	a3, 1991
+80000188: f3 26 60 7c                  	csrr	a3, 1990
 8000018c: d3 71 06 d0                  	<unknown>
-80000190: 73 26 b0 7c                  	csrr	a2, 1995
+80000190: 73 26 a0 7c                  	csrr	a2, 1994
 80000194: d3 f1 01 10                  	<unknown>
 80000198: 53 f2 06 d0                  	<unknown>
 8000019c: 53 72 02 10                  	<unknown>
@@ -124,12 +124,12 @@ Disassembly of section .text:
 800001b8: d3 f1 21 10                  	<unknown>
 800001bc: 53 9a 01 c0                  	<unknown>
 800001c0: d3 71 52 10                  	<unknown>
-800001c4: 73 26 40 7c                  	csrr	a2, 1988
+800001c4: 73 26 30 7c                  	csrr	a2, 1987
 800001c8: d3 f1 21 10                  	<unknown>
 800001cc: 53 9f 01 c0                  	<unknown>
-800001d0: f3 26 80 7c                  	csrr	a3, 1992
+800001d0: f3 26 70 7c                  	csrr	a3, 1991
 800001d4: d3 71 06 d0                  	<unknown>
-800001d8: 73 26 c0 7c                  	csrr	a2, 1996
+800001d8: 73 26 b0 7c                  	csrr	a2, 1995
 800001dc: d3 f1 01 10                  	<unknown>
 800001e0: 53 f2 06 d0                  	<unknown>
 800001e4: 53 72 02 10                  	<unknown>
@@ -142,12 +142,12 @@ Disassembly of section .text:
 80000200: d3 f1 21 10                  	<unknown>
 80000204: 53 9b 01 c0                  	<unknown>
 80000208: d3 71 52 10                  	<unknown>
-8000020c: f3 26 50 7c                  	csrr	a3, 1989
+8000020c: f3 26 40 7c                  	csrr	a3, 1988
 80000210: d3 f1 21 10                  	<unknown>
 80000214: d3 9a 01 c0                  	<unknown>
-80000218: f3 24 90 7c                  	csrr	s1, 1993
+80000218: f3 24 80 7c                  	csrr	s1, 1992
 8000021c: d3 f1 06 d0                  	<unknown>
-80000220: f3 26 d0 7c                  	csrr	a3, 1997
+80000220: f3 26 c0 7c                  	csrr	a3, 1996
 80000224: d3 f1 01 10                  	<unknown>
 80000228: 53 f2 04 d0                  	<unknown>
 8000022c: 53 72 02 10                  	<unknown>
@@ -436,7 +436,7 @@ Disassembly of section .text:
 80000698: 33 05 75 02                  	<unknown>
 8000069c: 13 55 85 01                  	srli	a0, a0, 24
 800006a0: a3 0b a1 00                  	sb	a0, 23(sp)
-800006a4: 73 26 10 7c                  	csrr	a2, 1985
+800006a4: 73 26 00 7c                  	csrr	a2, 1984
 800006a8: 23 20 c1 00                  	sw	a2, 0(sp)
 800006ac: 13 77 16 00                  	andi	a4, a2, 1
 800006b0: 13 35 17 00                  	seqz	a0, a4
