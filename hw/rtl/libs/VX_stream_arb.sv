@@ -88,9 +88,7 @@ module VX_stream_arb #(
             for (genvar j = 0; j < NUM_OUTPUTS; ++j) begin
                 localparam ii = i * NUM_OUTPUTS + j;                
                 if (ii < NUM_INPUTS) begin                    
-                    for (genvar k = 0; k < NUM_LANES; ++k) begin
-                        assign ready_in[ii][k] = ready_out_r[j][k] && arb_onehot[i];
-                    end
+                    assign ready_in[ii] = ready_out_r[j] & {NUM_LANES{arb_onehot[i]}};
                 end
             end
         end

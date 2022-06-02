@@ -13,23 +13,10 @@ private:
       uint32_t count;
     };
 
-    class CSR {
-    public:
-      uint32_t stage;  
-      
-      CSR() { this->clear(); }
-      ~CSR() { this->clear(); }
-
-      void clear() {
-        stage = 0;
-      }
-    };
-
     TexUnit* simobject_;
     Config config_;
     Core* core_;
     const DCRS& dcrs_;
-    CSR csrs_;
     CacheSim::Ptr tcache_;
     uint32_t num_threads_;
     HashTable<pending_req_t> pending_reqs_;
@@ -52,43 +39,28 @@ public:
 
     void clear() {
       pending_reqs_.clear();
-      csrs_.clear();
     }
 
-    uint32_t csr_read(uint32_t addr) {
-      switch (addr) {
-      case CSR_TEX_STAGE:
-        return csrs_.stage;
-      default:
-        std::abort();
-      }
-      return 0;
-    }
+    uint32_t read(uint32_t stage, int32_t u, int32_t v, uint32_t lod, TraceData::Ptr trace_data) {      
+      auto mip_off    = dcrs_.read(stage, DCR_TEX_MIPOFF(lod));
+      auto base_addr  = dcrs_.read(stage, DCR_TEX_ADDR);
+      auto logdim     = dcrs_.read(stage, DCR_TEX_LOGDIM);      
+      auto format     = dcrs_.read(stage, DCR_TEX_FORMAT);    
+      auto filter     = dcrs_.read(stage, DCR_TEX_FILTER);    
+      auto wrap       = dcrs_.read(stage, DCR_TEX_WRAP);
 
-    void csr_write(uint32_t addr, uint32_t value) {
-      switch (addr) {
-      case CSR_TEX_STAGE:
-        csrs_.stage = value;
-        break;
-      default:
-        std::abort();
-      }
-    }
+      base_addr += mip_off;
 
-    uint32_t read(int32_t u, int32_t v, int32_t lod, TraceData::Ptr trace_data) {
-      auto xu = TFixed<TEX_FXD_FRAC>::make(u);
-      auto xv = TFixed<TEX_FXD_FRAC>::make(v);
-      auto base_addr  = dcrs_.read(DCR_TEX_ADDR) + dcrs_.read(DCR_TEX_MIPOFF(lod));
-      auto logdim     = dcrs_.read(DCR_TEX_LOGDIM);
       auto log_width  = std::max<int32_t>((logdim & 0xffff) - lod, 0);
       auto log_height = std::max<int32_t>((logdim >> 16) - lod, 0);
-      auto format     = dcrs_.read(DCR_TEX_FORMAT);    
-      auto filter     = dcrs_.read(DCR_TEX_FILTER);    
-      auto wrap       = dcrs_.read(DCR_TEX_WRAP);
-      auto wrapu      = wrap & 0xffff;
-      auto wrapv      = wrap >> 16;
+      
+      auto wrapu = wrap & 0xffff;
+      auto wrapv = wrap >> 16;     
 
       auto stride = Stride(format);
+
+      auto xu = TFixed<TEX_FXD_FRAC>::make(u);
+      auto xv = TFixed<TEX_FXD_FRAC>::make(v);
       
       switch (filter) {
       case TEX_FILTER_BILINEAR: {
@@ -238,16 +210,8 @@ void TexUnit::reset() {
   impl_->clear();
 }
 
-uint32_t TexUnit::csr_read(uint32_t addr) {
-  return impl_->csr_read(addr);
-}
-
-void TexUnit::csr_write(uint32_t addr, uint32_t value) {
-  impl_->csr_write(addr, value);
-}
-
-uint32_t TexUnit::read(int32_t u, int32_t v, int32_t lod, TraceData::Ptr trace_data) {
-  return impl_->read(u, v, lod, trace_data);
+uint32_t TexUnit::read(uint32_t stage, int32_t u, int32_t v, uint32_t lod, TraceData::Ptr trace_data) {
+  return impl_->read(stage, u, v, lod, trace_data);
 }
 
 void TexUnit::tick() {

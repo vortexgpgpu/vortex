@@ -51,31 +51,33 @@ module VX_raster_agent #(
     end
 
     VX_skid_buffer #(
-        .DATAW (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32))
+        .DATAW (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + (`NUM_THREADS * 32))
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (raster_rsp_valid),
         .ready_in  (raster_rsp_ready),
-        .data_in   ({raster_agent_req_if.uuid, raster_agent_req_if.wid, raster_agent_req_if.tmask, raster_agent_req_if.PC, raster_agent_req_if.rd, raster_agent_req_if.wb, response_data}),
-        .data_out  ({raster_agent_rsp_if.uuid, raster_agent_rsp_if.wid, raster_agent_rsp_if.tmask, raster_agent_rsp_if.PC, raster_agent_rsp_if.rd, raster_agent_rsp_if.wb, raster_agent_rsp_if.data}),
+        .data_in   ({raster_agent_req_if.uuid, raster_agent_req_if.wid, raster_agent_req_if.tmask, raster_agent_req_if.PC, raster_agent_req_if.rd, response_data}),
+        .data_out  ({raster_agent_rsp_if.uuid, raster_agent_rsp_if.wid, raster_agent_rsp_if.tmask, raster_agent_rsp_if.PC, raster_agent_rsp_if.rd, raster_agent_rsp_if.data}),
         .valid_out (raster_agent_rsp_if.valid),
         .ready_out (raster_agent_rsp_if.ready)
     );
 
+    assign raster_agent_rsp_if.wb   = 1'b1;
     assign raster_agent_rsp_if.eop  = 1'b1;
 
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin
-        if (csr_write_enable) begin
+        if (raster_agent_req_if.valid && raster_agent_req_if.ready) begin
             for (integer i = 0; i < `NUM_THREADS; ++i) begin
-                `TRACE(1, ("%d: core%0d-raster-stamp[%0d]: empty=%b, x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n", 
-                    $time, CORE_ID, i, raster_req_if.empty,
+                `TRACE(1, ("%d: core%0d-raster-stamp[%0d]: wid=%0d, PC=0x%0h, tmask=%b, empty=%b, x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}} (#%0d)\n", 
+                    $time, CORE_ID, i, raster_agent_req_if.wid, raster_agent_req_if.PC, raster_agent_req_if.tmask,
+                    raster_req_if.empty,
                     raster_req_if.stamps[i].pos_x,  raster_req_if.stamps[i].pos_y, raster_req_if.stamps[i].mask, raster_req_if.stamps[i].pid,
                     raster_req_if.stamps[i].bcoords[0][0], raster_req_if.stamps[i].bcoords[0][1], raster_req_if.stamps[i].bcoords[0][2], 
                     raster_req_if.stamps[i].bcoords[1][0], raster_req_if.stamps[i].bcoords[1][1], raster_req_if.stamps[i].bcoords[1][2], 
                     raster_req_if.stamps[i].bcoords[2][0], raster_req_if.stamps[i].bcoords[2][1], raster_req_if.stamps[i].bcoords[2][2], 
-                    raster_req_if.stamps[i].bcoords[3][0], raster_req_if.stamps[i].bcoords[3][1], raster_req_if.stamps[i].bcoords[3][2]));
+                    raster_req_if.stamps[i].bcoords[3][0], raster_req_if.stamps[i].bcoords[3][1], raster_req_if.stamps[i].bcoords[3][2], raster_agent_req_if.uuid));
             end
         end
     end

@@ -13,7 +13,7 @@ module VX_csr_data #(
     input wire clk,
     input wire reset,
 
-    input base_dcrs_t base_dcrs,
+    input base_dcrs_t                   base_dcrs,
 
 `ifdef PERF_ENABLE
     VX_perf_memsys_if.slave             perf_memsys_if,
@@ -56,6 +56,7 @@ module VX_csr_data #(
     input wire [`CSR_ADDR_BITS-1:0]     read_addr,
     output wire [`NUM_THREADS-1:0][31:0] read_data,
 
+    input wire [`NT_BITS-1:0]           write_tid,
     input wire                          write_enable, 
     input wire [`UUID_BITS-1:0]         write_uuid,
     input wire [`NW_BITS-1:0]           write_wid,
@@ -73,17 +74,6 @@ module VX_csr_data #(
     reg [31:0] csr_pmpcfg [0:0];
     reg [31:0] csr_pmpaddr [0:0];
     reg [`NUM_WARPS-1:0][`INST_FRM_BITS+`FFLAGS_BITS-1:0] fcsr;
-
-    wire [`NT_BITS-1:0] tid;
-
-    VX_lzc #(
-        .N       (`NUM_THREADS),
-        .REVERSE (1)
-    ) tid_select (
-        .data_in  (write_tmask),
-        .data_out (tid),
-        `UNUSED_PIN (valid_out)
-    );    
 
 `ifdef EXT_TEX_ENABLE    
     wire tex_read_enable  = (read_addr >= `CSR_TEX_BEGIN && read_addr < `CSR_TEX_END);
@@ -152,18 +142,18 @@ module VX_csr_data #(
         `endif
             if (write_enable) begin
                 case (write_addr)
-                    `CSR_FFLAGS:   fcsr[write_wid][`FFLAGS_BITS-1:0] <= write_data[tid][`FFLAGS_BITS-1:0];
-                    `CSR_FRM:      fcsr[write_wid][`INST_FRM_BITS+`FFLAGS_BITS-1:`FFLAGS_BITS] <= write_data[tid][`INST_FRM_BITS-1:0];
-                    `CSR_FCSR:     fcsr[write_wid]  <= write_data[tid][`FFLAGS_BITS+`INST_FRM_BITS-1:0];
-                    `CSR_SATP:     csr_satp         <= write_data[tid];
-                    `CSR_MSTATUS:  csr_mstatus      <= write_data[tid];
-                    `CSR_MEDELEG:  csr_medeleg      <= write_data[tid];
-                    `CSR_MIDELEG:  csr_mideleg      <= write_data[tid];
-                    `CSR_MIE:      csr_mie          <= write_data[tid];
-                    `CSR_MTVEC:    csr_mtvec        <= write_data[tid];
-                    `CSR_MEPC:     csr_mepc         <= write_data[tid];
-                    `CSR_PMPCFG0:  csr_pmpcfg[0]    <= write_data[tid];
-                    `CSR_PMPADDR0: csr_pmpaddr[0]   <= write_data[tid];
+                    `CSR_FFLAGS:   fcsr[write_wid][`FFLAGS_BITS-1:0] <= write_data[write_tid][`FFLAGS_BITS-1:0];
+                    `CSR_FRM:      fcsr[write_wid][`INST_FRM_BITS+`FFLAGS_BITS-1:`FFLAGS_BITS] <= write_data[write_tid][`INST_FRM_BITS-1:0];
+                    `CSR_FCSR:     fcsr[write_wid]  <= write_data[write_tid][`FFLAGS_BITS+`INST_FRM_BITS-1:0];
+                    `CSR_SATP:     csr_satp         <= write_data[write_tid];
+                    `CSR_MSTATUS:  csr_mstatus      <= write_data[write_tid];
+                    `CSR_MEDELEG:  csr_medeleg      <= write_data[write_tid];
+                    `CSR_MIDELEG:  csr_mideleg      <= write_data[write_tid];
+                    `CSR_MIE:      csr_mie          <= write_data[write_tid];
+                    `CSR_MTVEC:    csr_mtvec        <= write_data[write_tid];
+                    `CSR_MEPC:     csr_mepc         <= write_data[write_tid];
+                    `CSR_PMPCFG0:  csr_pmpcfg[0]    <= write_data[write_tid];
+                    `CSR_PMPADDR0: csr_pmpaddr[0]   <= write_data[write_tid];
                     default: begin
                         write_addr_valid_r = 0;
                         `ifdef EXT_TEX_ENABLE
@@ -195,7 +185,7 @@ module VX_csr_data #(
 
     wire [`NUM_THREADS-1:0][31:0] wtid, ltid, gtid;
 
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign wtid[i] = 32'(i);
         assign ltid[i] = (32'(read_wid) << `NT_BITS) + i;
         assign gtid[i] = 32'((CORE_ID << (`NW_BITS + `NT_BITS)) + (32'(read_wid) << `NT_BITS) + i);

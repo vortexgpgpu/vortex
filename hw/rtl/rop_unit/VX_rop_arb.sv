@@ -27,6 +27,12 @@ module VX_rop_arb #(
     wire [NUM_OUTPUTS-1:0][REQ_DATAW-1:0] req_data_out;
     wire [NUM_OUTPUTS-1:0]                req_ready_out;
 
+    for (genvar i = 0; i < NUM_INPUTS; ++i) begin
+        assign req_valid_in[i] = req_in_if[i].valid;
+        assign req_data_in[i] = {req_in_if[i].mask, req_in_if[i].pos_x, req_in_if[i].pos_y, req_in_if[i].color, req_in_if[i].depth, req_in_if[i].face};
+        assign req_in_if[i].ready = req_ready_in[i];
+    end
+
     VX_stream_arb #(            
         .NUM_INPUTS (NUM_INPUTS),
         .NUM_OUTPUTS(NUM_OUTPUTS),
@@ -43,16 +49,10 @@ module VX_rop_arb #(
         .data_out   (req_data_out),
         .ready_out  (req_ready_out)
     );
-
-    for (genvar i = 0; i < NUM_INPUTS; ++i) begin
-        assign req_valid_in[i] = req_in_if[i].valid;
-        assign req_data_in[i] = {req_in_if[i].tmask, req_in_if[i].pos_x, req_in_if[i].pos_y, req_in_if[i].color, req_in_if[i].depth, req_in_if[i].face};
-        assign req_in_if[i].ready = req_ready_in[i];
-    end
     
     for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
         assign req_out_if[i].valid = req_valid_out[i];
-        assign {req_out_if[i].tmask, req_out_if[i].pos_x, req_out_if[i].pos_y, req_out_if[i].color, req_out_if[i].depth, req_out_if[i].face} = req_data_out[i];
+        assign {req_out_if[i].mask, req_out_if[i].pos_x, req_out_if[i].pos_y, req_out_if[i].color, req_out_if[i].depth, req_out_if[i].face} = req_data_out[i];
         assign req_ready_out[i] = req_out_if[i].ready;
     end
 

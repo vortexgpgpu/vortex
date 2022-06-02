@@ -14,19 +14,9 @@ module VX_mem_unit # (
     VX_cache_req_if.slave   icache_req_if,  
     VX_cache_rsp_if.master  icache_rsp_if,
 
-
     // dcache interface
     VX_cache_req_if.slave   dcache_req_if,
-    VX_cache_rsp_if.master  dcache_rsp_if,    
-
-`ifdef EXT_TEX_ENABLE
-    // tcache interface
-    VX_cache_req_if.slave   tcache_req_if,
-    VX_cache_rsp_if.master  tcache_rsp_if,
-`ifdef PERF_ENABLE
-    VX_perf_cache_if.master perf_tcache_if,
-`endif
-`endif
+    VX_cache_rsp_if.master  dcache_rsp_if,
 
     // Memory
     VX_mem_req_if.master    mem_req_if,
@@ -68,7 +58,7 @@ module VX_mem_unit # (
     `RESET_RELAY (icache_reset, reset);
 
     VX_cache_wrap #(
-        .INSTANCE_ID    (`ICACHE_ID),
+        .INSTANCE_ID    ($sformatf("core%0d-icache", CORE_ID)),
         .CACHE_SIZE     (`ICACHE_SIZE),
         .CACHE_LINE_SIZE(`ICACHE_LINE_SIZE),
         .NUM_BANKS      (1),
@@ -145,7 +135,7 @@ module VX_mem_unit # (
     `RESET_RELAY (dcache_reset, reset);
 
     VX_cache_wrap #(
-        .INSTANCE_ID    (`DCACHE_ID),
+        .INSTANCE_ID    ($sformatf("core%0d-dcache", CORE_ID)),
         .CACHE_SIZE     (`DCACHE_SIZE),
         .CACHE_LINE_SIZE(`DCACHE_LINE_SIZE),
         .NUM_BANKS      (`DCACHE_NUM_BANKS),
@@ -212,7 +202,7 @@ module VX_mem_unit # (
         .TAG_WIDTH (`DCACHE_NOSM_TAG_WIDTH)
     ) dcache_nosm_switch_rsp_if[2]();
 
-    VX_cache_demux #(
+    VX_smem_switch #(
         .NUM_REQS      (2),
         .NUM_LANES     (`DCACHE_NUM_REQS),
         .DATA_SIZE     (4),            
@@ -221,7 +211,7 @@ module VX_mem_unit # (
         .ARBITER       ("P"),
         .BUFFERED_REQ  (1),
         .BUFFERED_RSP  (1)
-    ) dcache_nosm_demux (
+    ) dcache_nosm_switch (
         .clk        (clk),
         .reset      (reset),
         .req_in_if  (dcache_req_if),
@@ -255,7 +245,7 @@ module VX_mem_unit # (
     end
 
     VX_shared_mem #(
-        .IDNAME     (`SMEM_ID),
+        .IDNAME     ($sformatf("core%0d-smem", CORE_ID)),
         .SIZE       (`SMEM_SIZE),
         .NUM_REQS   (`DCACHE_NUM_REQS),
         .NUM_BANKS  (`SMEM_NUM_BANKS),
@@ -310,74 +300,6 @@ module VX_mem_unit # (
     // D-cache to core reponse
     `ASSIGN_VX_CACHE_RSP_IF (dcache_rsp_if, dcache_nosm_rsp_if);
 
-`endif    
-
-///////////////////////////////////////////////////////////////////////////////
-
-`ifdef EXT_TEX_ENABLE
-
-    VX_mem_req_if #(
-        .DATA_WIDTH (`TCACHE_MEM_DATA_WIDTH),
-        .ADDR_WIDTH (`TCACHE_MEM_ADDR_WIDTH),
-        .TAG_WIDTH  (`TCACHE_MEM_TAG_WIDTH)
-    ) tcache_mem_req_if();
-
-    VX_mem_rsp_if #(
-        .DATA_WIDTH (`TCACHE_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (`TCACHE_MEM_TAG_WIDTH)
-    ) tcache_mem_rsp_if();
-
-    VX_mem_req_if #(
-        .DATA_WIDTH (`TCACHE_WORD_SIZE*8), 
-        .ADDR_WIDTH (`TCACHE_ADDR_WIDTH),
-        .TAG_WIDTH  (`TCACHE_TAG_WIDTH)
-    ) tcache_req_qual_if[`TCACHE_NUM_REQS]();
-
-    VX_mem_rsp_if #(
-        .DATA_WIDTH (`TCACHE_WORD_SIZE*8), 
-        .TAG_WIDTH  (`TCACHE_TAG_WIDTH)
-    ) tcache_rsp_qual_if[`TCACHE_NUM_REQS]();
-
-    for (genvar i = 0; i < `TCACHE_NUM_REQS; ++i) begin
-        `CACHE_REQ_TO_MEM (tcache_req_qual_if, tcache_req_if, i);
-    end
-
-    `RESET_RELAY (tcache_reset, reset);
-
-    VX_cache_wrap #(
-        .INSTANCE_ID    (`TCACHE_ID),
-        .CACHE_SIZE     (`TCACHE_SIZE),
-        .CACHE_LINE_SIZE(`TCACHE_LINE_SIZE),
-        .NUM_BANKS      (`TCACHE_NUM_BANKS),
-        .NUM_WAYS       (`TCACHE_NUM_WAYS),
-        .WORD_SIZE      (`TCACHE_WORD_SIZE),
-        .NUM_REQS       (`TCACHE_NUM_REQS),
-        .CREQ_SIZE      (`TCACHE_CREQ_SIZE),
-        .CRSQ_SIZE      (`TCACHE_CRSQ_SIZE),
-        .MSHR_SIZE      (`TCACHE_MSHR_SIZE),
-        .MRSQ_SIZE      (`TCACHE_MRSQ_SIZE),
-        .MREQ_SIZE      (`TCACHE_MREQ_SIZE),
-        .WRITE_ENABLE   (0),
-        .CORE_TAG_WIDTH (`TCACHE_TAG_WIDTH),
-        .MEM_TAG_WIDTH  (`TCACHE_MEM_TAG_WIDTH),
-        .PASSTHRU       (!`TCACHE_ENABLED)
-    ) tcache (
-    `ifdef PERF_ENABLE
-        .perf_cache_if  (perf_tcache_if),
-    `endif
-
-        .clk            (clk),
-        .reset          (tcache_reset),
-        .core_req_if    (tcache_req_qual_if),
-        .core_rsp_if    (tcache_rsp_qual_if),
-        .mem_req_if     (tcache_mem_req_if),
-        .mem_rsp_if     (tcache_mem_rsp_if)
-    );
-
-    for (genvar i = 0; i < `TCACHE_NUM_REQS; ++i) begin
-        `CACHE_RSP_FROM_MEM (tcache_rsp_if, tcache_rsp_qual_if, i);
-    end    
-
 `endif
 
     ///////////////////////////////////////////////////////////////////////////    
@@ -386,12 +308,12 @@ module VX_mem_unit # (
         .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
         .ADDR_WIDTH (`DCACHE_MEM_ADDR_WIDTH),
         .TAG_WIDTH  (`L1_MEM_TAG_IN_WIDTH)
-    ) l1_mem_req_if[2+`EXT_TEX_ENABLED]();
+    ) l1_mem_req_if[2]();
 
     VX_mem_rsp_if #(
         .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
         .TAG_WIDTH  (`L1_MEM_TAG_IN_WIDTH)
-    ) l1_mem_rsp_if[2+`EXT_TEX_ENABLED]();
+    ) l1_mem_rsp_if[2]();
 
     `ASSIGN_VX_MEM_REQ_IF_XTAG (l1_mem_req_if[0], icache_mem_req_if);
     assign l1_mem_req_if[0].tag = `L1_MEM_TAG_IN_WIDTH'(icache_mem_req_if.tag);
@@ -405,24 +327,16 @@ module VX_mem_unit # (
     `ASSIGN_VX_MEM_RSP_IF_XTAG (dcache_mem_rsp_if, l1_mem_rsp_if[1]);
     assign dcache_mem_rsp_if.tag = `DCACHE_MEM_TAG_WIDTH'(l1_mem_rsp_if[1].tag);
 
-`ifdef EXT_TEX_ENABLE
-    `ASSIGN_VX_MEM_REQ_IF_XTAG (l1_mem_req_if[2], tcache_mem_req_if);
-    assign l1_mem_req_if[2].tag = `L1_MEM_TAG_IN_WIDTH'(tcache_mem_req_if.tag);
-
-    `ASSIGN_VX_MEM_RSP_IF_XTAG (tcache_mem_rsp_if, l1_mem_rsp_if[2]);
-    assign tcache_mem_rsp_if.tag = `TCACHE_MEM_TAG_WIDTH'(l1_mem_rsp_if[2].tag);
-`endif
-
-    VX_mem_mux #(
-        .NUM_REQS     (2 + `EXT_TEX_ENABLED),
+    VX_mem_arb #(
+        .NUM_REQS     (2),
         .DATA_WIDTH   (`DCACHE_MEM_DATA_WIDTH),
         .ADDR_WIDTH   (`DCACHE_MEM_ADDR_WIDTH),
         .TAG_IN_WIDTH (`L1_MEM_TAG_IN_WIDTH),        
-        .ARBITER      (`EXT_TEX_ENABLED ? "R" : "P"),
+        .ARBITER      ("P"),
         .TAG_SEL_IDX  (1), // Skip 0 for NC flag
         .BUFFERED_REQ (1),
         .BUFFERED_RSP (2)
-    ) mem_mux (
+    ) mem_arb (
         .clk        (clk),
         .reset      (reset),
         .req_in_if  (l1_mem_req_if),

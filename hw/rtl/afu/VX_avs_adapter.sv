@@ -55,12 +55,12 @@ module VX_avs_adapter #(
         assign req_bank_sel = 0;
     end
 
-    for (genvar i = 0; i < AVS_BANKS; i++) begin
+    for (genvar i = 0; i < AVS_BANKS; ++i) begin
         assign avs_reqq_ready[i] = !req_queue_going_full[i] && !avs_waitrequest[i];
         assign avs_reqq_push[i] = mem_req_valid && !mem_req_rw && avs_reqq_ready[i] && (req_bank_sel == i);  
     end
 
-    for (genvar i = 0; i < AVS_BANKS; i++) begin
+    for (genvar i = 0; i < AVS_BANKS; ++i) begin
         VX_pending_size #( 
             .SIZE (RD_QUEUE_SIZE)
         ) pending_size (
@@ -92,7 +92,7 @@ module VX_avs_adapter #(
         );
     end    
 
-    for (genvar i = 0; i < AVS_BANKS; i++) begin
+    for (genvar i = 0; i < AVS_BANKS; ++i) begin
         assign avs_read[i]       = mem_req_valid && !mem_req_rw && !req_queue_going_full[i] && (req_bank_sel == i);
         assign avs_write[i]      = mem_req_valid && mem_req_rw && !req_queue_going_full[i] && (req_bank_sel == i);
         assign avs_address[i]    = mem_req_addr;
@@ -116,7 +116,7 @@ module VX_avs_adapter #(
     wire [AVS_BANKS-1:0][AVS_DATA_WIDTH-1:0] avs_rspq_data_out;
     wire [AVS_BANKS-1:0] avs_rspq_empty;
 
-    for (genvar i = 0; i < AVS_BANKS; i++) begin
+    for (genvar i = 0; i < AVS_BANKS; ++i) begin
         VX_fifo_queue #(
             .DATAW (AVS_DATA_WIDTH),
             .SIZE  (RD_QUEUE_SIZE)
@@ -135,7 +135,7 @@ module VX_avs_adapter #(
         );
     end
     
-    for (genvar i = 0; i < AVS_BANKS; i++) begin
+    for (genvar i = 0; i < AVS_BANKS; ++i) begin
         assign rsp_arb_valid_in[i] = !avs_rspq_empty[i];
         assign rsp_arb_data_in[i]  = {avs_rspq_data_out[i], avs_reqq_tag_out[i]};
         assign avs_reqq_pop[i]     = rsp_arb_valid_in[i] && rsp_arb_ready_in[i];

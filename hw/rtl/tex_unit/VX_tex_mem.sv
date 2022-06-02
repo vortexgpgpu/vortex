@@ -1,9 +1,9 @@
 `include "VX_tex_define.vh"
 
 module VX_tex_mem #(
-    parameter CORE_ID   = 0,
+    parameter string INSTANCE_ID = "",
     parameter REQ_INFOW = 1,
-    parameter NUM_REQS  = 1
+    parameter NUM_LANES  = 1
 ) (    
     input wire clk,
     input wire reset,
@@ -14,43 +14,41 @@ module VX_tex_mem #(
 
     // inputs
     input wire                          req_valid,
-    input wire [NUM_REQS-1:0]           req_tmask,
+    input wire [NUM_LANES-1:0]          req_mask,
     input wire [`TEX_FILTER_BITS-1:0]   req_filter,
     input wire [`TEX_LGSTRIDE_BITS-1:0] req_lgstride,
-    input wire [NUM_REQS-1:0][31:0]     req_baseaddr,
-    input wire [NUM_REQS-1:0][3:0][31:0] req_addr,
+    input wire [NUM_LANES-1:0][31:0]    req_baseaddr,
+    input wire [NUM_LANES-1:0][3:0][31:0] req_addr,
     input wire [REQ_INFOW-1:0]          req_info,
     output wire                         req_ready,
 
     // outputs
     output wire                         rsp_valid,
-    output wire [NUM_REQS-1:0]          rsp_tmask,
-    output wire [NUM_REQS-1:0][3:0][31:0] rsp_data,
+    output wire [NUM_LANES-1:0]         rsp_mask,
+    output wire [NUM_LANES-1:0][3:0][31:0] rsp_data,
     output wire [REQ_INFOW-1:0]         rsp_info,
     input wire                          rsp_ready    
 );
 
-    `UNUSED_PARAM (CORE_ID)
-
-    localparam TAG_WIDTH = REQ_INFOW + NUM_REQS + `TEX_LGSTRIDE_BITS + (NUM_REQS * 4 * 2) + 4;
+    localparam TAG_WIDTH = REQ_INFOW + NUM_LANES + `TEX_LGSTRIDE_BITS + (NUM_LANES * 4 * 2) + 4;
 
     wire                           mem_req_valid;
-    wire [3:0][NUM_REQS-1:0]       mem_req_mask;
-    wire [3:0][NUM_REQS-1:0][29:0] mem_req_addr;
-    wire [3:0][NUM_REQS-1:0][3:0]  mem_req_byteen;
+    wire [3:0][NUM_LANES-1:0]       mem_req_mask;
+    wire [3:0][NUM_LANES-1:0][29:0] mem_req_addr;
+    wire [3:0][NUM_LANES-1:0][3:0]  mem_req_byteen;
     wire [TAG_WIDTH-1:0]           mem_req_tag;
     wire                           mem_req_ready;
 
     wire                           mem_rsp_valid;
-    wire [3:0][NUM_REQS-1:0][31:0] mem_rsp_data;
+    wire [3:0][NUM_LANES-1:0][31:0] mem_rsp_data;
     wire [TAG_WIDTH-1:0]           mem_rsp_tag;
     wire                           mem_rsp_ready;
     
     // full address calculation
 
-    wire [NUM_REQS-1:0][3:0][31:0] full_addr;    
+    wire [NUM_LANES-1:0][3:0][31:0] full_addr;    
     
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         for (genvar j = 0; j < 4; ++j) begin
             assign full_addr[i][j] = req_baseaddr[i] + req_addr[i][j];
         end
@@ -58,9 +56,9 @@ module VX_tex_mem #(
     
     // reorder addresses into per-quad requests
 
-    wire [3:0][NUM_REQS-1:0][1:0] mem_req_align;
+    wire [3:0][NUM_LANES-1:0][1:0] mem_req_align;
 
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         for (genvar j = 0; j < 4; ++j) begin
             assign mem_req_addr[j][i]   = full_addr[i][j][31:2];       
             assign mem_req_align[j][i]  = full_addr[i][j][1:0];
@@ -74,30 +72,30 @@ module VX_tex_mem #(
 
     for (genvar i = 0; i < 4; ++i) begin
         wire texel_valid = req_filter || (i == 0);
-        if (NUM_REQS > 1) begin
-            wire [NUM_REQS-2:0] addr_matches;
-            for (genvar j = 0; j < (NUM_REQS-1); ++j) begin                
-                assign addr_matches[j] = (req_addr[j+1][i] == req_addr[0][i]) || ~req_tmask[j+1];
+        if (NUM_LANES > 1) begin
+            wire [NUM_LANES-2:0] addr_matches;
+            for (genvar j = 0; j < (NUM_LANES-1); ++j) begin                
+                assign addr_matches[j] = (req_addr[j+1][i] == req_addr[0][i]) || ~req_mask[j+1];
             end
-            assign mem_req_dups[i] = req_tmask[0] && (& addr_matches);            
+            assign mem_req_dups[i] = req_mask[0] && (& addr_matches);            
         end else begin
             assign mem_req_dups[i] = 0;
         end
-        for (genvar j = 0; j < NUM_REQS; ++j) begin
-            assign mem_req_mask[i][j] = req_tmask[j] && texel_valid && (~mem_req_dups[i] || (j == 0));
+        for (genvar j = 0; j < NUM_LANES; ++j) begin
+            assign mem_req_mask[i][j] = req_mask[j] && texel_valid && (~mem_req_dups[i] || (j == 0));
         end
     end
 
     // submit request to memory   
 
     assign mem_req_valid = req_valid;
-    assign mem_req_tag   = {req_info, req_tmask, req_lgstride, mem_req_align, mem_req_dups};
+    assign mem_req_tag   = {req_info, req_mask, req_lgstride, mem_req_align, mem_req_dups};
     assign req_ready     = mem_req_ready;
 
     // schedule memory request
 
     VX_mem_scheduler #(
-        .INSTANCE_ID($sformatf("core%0d-tex-memsched", CORE_ID)),
+        .INSTANCE_ID($sformatf("%s-memsched", INSTANCE_ID)),
         .NUM_REQS   (`TEX_MEM_REQS), 
         .NUM_BANKS  (`TCACHE_NUM_REQS),
         .ADDR_WIDTH (`TCACHE_ADDR_WIDTH),
@@ -146,16 +144,16 @@ module VX_tex_mem #(
     // handle memory response
 
     wire [REQ_INFOW-1:0]          mem_rsp_info;
-    wire [NUM_REQS-1:0]           mem_rsp_tmask;
+    wire [NUM_LANES-1:0]          mem_rsp_mask;
     wire [`TEX_LGSTRIDE_BITS-1:0] mem_rsp_lgstride;    
-    wire [3:0][NUM_REQS-1:0][1:0] mem_rsp_align;
+    wire [3:0][NUM_LANES-1:0][1:0] mem_rsp_align;
     wire [3:0]                    mem_rsp_dups;
     
-    assign {mem_rsp_info, mem_rsp_tmask, mem_rsp_lgstride, mem_rsp_align, mem_rsp_dups} = mem_rsp_tag;
+    assign {mem_rsp_info, mem_rsp_mask, mem_rsp_lgstride, mem_rsp_align, mem_rsp_dups} = mem_rsp_tag;
 
-    reg [NUM_REQS-1:0][3:0][31:0] mem_rsp_data_qual;
+    reg [NUM_LANES-1:0][3:0][31:0] mem_rsp_data_qual;
 
-    for (genvar i = 0; i < NUM_REQS; ++i) begin   
+    for (genvar i = 0; i < NUM_LANES; ++i) begin   
         for (genvar j = 0; j < 4; ++j) begin
             wire [31:0] src_data = ((i == 0 || mem_rsp_dups[j]) ? mem_rsp_data[j][0] : mem_rsp_data[j][i]);
 
@@ -179,39 +177,32 @@ module VX_tex_mem #(
     wire stall_out = rsp_valid && ~rsp_ready;
     
     VX_pipe_register #(
-        .DATAW  (1 + NUM_REQS + REQ_INFOW + (4 * NUM_REQS * 32)),
+        .DATAW  (1 + NUM_LANES + REQ_INFOW + (4 * NUM_LANES * 32)),
         .RESETW (1)
     ) rsp_pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({mem_rsp_valid, mem_rsp_tmask, mem_rsp_info, mem_rsp_data_qual}),
-        .data_out ({rsp_valid,     rsp_tmask,     rsp_info,     rsp_data})
+        .data_in  ({mem_rsp_valid, mem_rsp_mask, mem_rsp_info, mem_rsp_data_qual}),
+        .data_out ({rsp_valid,     rsp_mask,     rsp_info,     rsp_data})
     );
 
     assign mem_rsp_ready = ~stall_out;
 
-`ifdef DBG_TRACE_TEX    
-    wire [`NW_BITS-1:0] req_wid, rsp_wid;
-    wire [31:0] req_PC, rsp_PC;
-    wire [`UUID_BITS-1:0] req_uuid, rsp_uuid;    
-    assign {req_wid, req_PC, req_uuid} = req_info[`NW_BITS+32+`UUID_BITS-1:0];
-    assign {rsp_wid, rsp_PC, rsp_uuid} = rsp_info[`NW_BITS+32+`UUID_BITS-1:0];
+`ifdef DBG_TRACE_TEX
 
     always @(posedge clk) begin 
         if (req_valid && req_ready) begin
-            `TRACE(2, ("%d: core%0d-tex-mem-req: wid=%0d, PC=0x%0h, tmask=%b, filter=%0d, lgstride=%0d, baseaddr=", 
-                    $time, CORE_ID, req_wid, req_PC, req_tmask, req_filter, req_lgstride));
-            `TRACE_ARRAY1D(2, req_baseaddr, NUM_REQS);
+            `TRACE(2, ("%d: %s-mem-req: mask=%b, filter=%0d, lgstride=%0d, baseaddr=", $time, INSTANCE_ID, req_mask, req_filter, req_lgstride));
+            `TRACE_ARRAY1D(2, req_baseaddr, NUM_LANES);
             `TRACE(2, (", addr=")); 
-            `TRACE_ARRAY2D(2, req_addr, 4, NUM_REQS);
-            `TRACE(2, (" (#%0d)\n", req_uuid));
+            `TRACE_ARRAY2D(2, req_addr, 4, NUM_LANES);
+            `TRACE(2, (" (#%0d)\n", req_info[REQ_INFOW-1 -: `UUID_BITS]));
         end
         if (rsp_valid && rsp_ready) begin
-            `TRACE(2, ("%d: core%0d-tex-mem-rsp: wid=%0d, PC=0x%0h, tmask=%b, data=", 
-                    $time, CORE_ID, rsp_wid, rsp_PC, rsp_tmask));
-            `TRACE_ARRAY2D(2, rsp_data, 4, NUM_REQS);
-            `TRACE(2, (" (#%0d)\n", rsp_uuid));
+            `TRACE(2, ("%d: %s-mem-rsp: mask=%b, data=", $time, INSTANCE_ID, rsp_mask));
+            `TRACE_ARRAY2D(2, rsp_data, 4, NUM_LANES);
+            `TRACE(2, (" (#%0d)\n", rsp_info[REQ_INFOW-1 -: `UUID_BITS]));
         end        
     end
 `endif

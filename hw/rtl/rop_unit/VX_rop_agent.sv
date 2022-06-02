@@ -47,7 +47,7 @@ module VX_rop_agent #(
         .valid_in  (rop_req_valid),
         .ready_in  (rop_req_ready),
         .data_in   ({rop_agent_req_if.tmask, rop_agent_req_if.pos_x, rop_agent_req_if.pos_y, rop_agent_req_if.color, rop_agent_req_if.depth, rop_agent_req_if.face}),
-        .data_out  ({rop_req_if.tmask,     rop_req_if.pos_x,     rop_req_if.pos_y,     rop_req_if.color,     rop_req_if.depth,     rop_req_if.face}),
+        .data_out  ({rop_req_if.mask,        rop_req_if.pos_x,       rop_req_if.pos_y,       rop_req_if.color,       rop_req_if.depth,       rop_req_if.face}),
         .valid_out (rop_req_if.valid),
         .ready_out (rop_req_if.ready)
     );
@@ -87,7 +87,7 @@ module VX_rop_agent #(
             `TRACE_ARRAY1D(1, rop_agent_req_if.color, `NUM_THREADS);
             `TRACE(1, (", depth="));
             `TRACE_ARRAY1D(1, rop_agent_req_if.depth, `NUM_THREADS);
-            `TRACE(1, (" (#%0d)\n", rop_agent_req_if.uuid));
+            `TRACE(1, (", face=%b (#%0d)\n", rop_agent_req_if.face, rop_agent_req_if.uuid));
         end
     end
 `endif

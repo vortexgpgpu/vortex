@@ -8,7 +8,9 @@ extern "C" {
 
 #define NUM_CORES_MAX 32
 
+#ifndef MIN
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+#endif
 
 typedef struct {
 	vx_spawn_tasks_cb callback;

@@ -9,8 +9,7 @@ interface VX_raster_agent_if ();
     wire [`NUM_THREADS-1:0]     tmask;
     wire [31:0]                 PC;
     wire [`NR_BITS-1:0]         rd;
-    wire                        wb;
-
+    
     wire                        ready;
 
     modport master (
@@ -20,7 +19,6 @@ interface VX_raster_agent_if ();
         output tmask,
         output PC,
         output rd,
-        output wb,
         input  ready
     );
 
@@ -31,7 +29,6 @@ interface VX_raster_agent_if ();
         input  tmask,
         input  PC,
         input  rd,
-        input  wb,
         output ready
     );
 

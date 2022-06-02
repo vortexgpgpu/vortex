@@ -40,6 +40,11 @@ public:
             }
         }
 
+        uint32_t read(uint32_t stage, uint32_t addr) const {
+            uint32_t state = DCR_TEX_STATE(addr-1);
+            return states_.at(stage).at(state);
+        }
+
         uint32_t read(uint32_t addr) const {
             if (addr == DCR_TEX_STAGE) {
                 return stage_;
@@ -78,11 +83,7 @@ public:
 
     void reset();
 
-    uint32_t csr_read(uint32_t addr);
-
-    void csr_write(uint32_t addr, uint32_t value);
-
-    uint32_t read(int32_t u, int32_t v, int32_t lod, TraceData::Ptr trace_data);
+    uint32_t read(uint32_t stage, int32_t u, int32_t v, uint32_t lod, TraceData::Ptr trace_data);
     
     void tick();
 

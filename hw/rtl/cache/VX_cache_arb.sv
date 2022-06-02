@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_cache_mux #(    
+module VX_cache_arb #(    
     parameter NUM_REQS       = 1, 
     parameter NUM_LANES      = 1,
     parameter DATA_SIZE      = 1,
@@ -81,15 +81,15 @@ module VX_cache_mux #(
 
     ///////////////////////////////////////////////////////////////////////
 
-    wire [NUM_REQS-1:0][NUM_LANES-1:0]                rsp_valid_in;
-    wire [NUM_REQS-1:0][NUM_LANES-1:0][RSP_DATAW-1:0] rsp_data_in;
-    wire [NUM_REQS-1:0][NUM_LANES-1:0]                rsp_ready_in;
-    wire [NUM_LANES-1:0][RSP_DATAW-1:0]               rsp_data_out;            
-    wire [NUM_LANES-1:0][`UP(LOG_NUM_REQS)-1:0]       rsp_sel;
+     for (genvar i = 0; i < NUM_LANES; ++i) begin
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+        wire [NUM_REQS-1:0]                rsp_valid_in;
+        wire [NUM_REQS-1:0][RSP_DATAW-1:0] rsp_data_in;
+        wire [NUM_REQS-1:0]                rsp_ready_in;
 
-        wire [TAG_IN_WIDTH-1:0] rsp_tag_out;
+        wire [RSP_DATAW-1:0]         rsp_data_out;
+        wire [TAG_IN_WIDTH-1:0]      rsp_tag_out;
+        wire [`UP(LOG_NUM_REQS)-1:0] rsp_sel_out;
 
         VX_bits_remove #( 
             .N   (TAG_OUT_WIDTH),
@@ -101,37 +101,34 @@ module VX_cache_mux #(
         );            
 
         if (NUM_REQS > 1) begin
-            assign rsp_sel[i] = rsp_out_if.tag[i][TAG_SEL_IDX +: LOG_NUM_REQS];
+            assign rsp_sel_out = rsp_out_if.tag[i][TAG_SEL_IDX +: LOG_NUM_REQS];
         end else begin
-            assign rsp_sel[i] = 0;
+            assign rsp_sel_out = 0;
         end
 
-        assign rsp_data_out[i] = {rsp_tag_out, rsp_out_if.data[i]};
-    end
+        assign rsp_data_out = {rsp_tag_out, rsp_out_if.data[i]};
 
-    VX_stream_switch #(
-        .NUM_OUTPUTS (NUM_REQS),
-        .NUM_LANES   (NUM_LANES),
-        .DATAW       (RSP_DATAW),
-        .BUFFERED    (BUFFERED_RSP)
-    ) rsp_switch (
-        .clk       (clk),
-        .reset     (reset),
-        .sel_in    (rsp_sel),
-        .valid_in  (rsp_out_if.valid),
-        .data_in   (rsp_data_out),
-        .ready_in  (rsp_out_if.ready),
-        .valid_out (rsp_valid_in),
-        .data_out  (rsp_data_in),
-        .ready_out (rsp_ready_in)
-    );
-    
-    for (genvar i = 0; i < NUM_REQS; i++) begin
-        for (genvar j = 0; j < NUM_LANES; ++j) begin
-            assign rsp_in_if[i].valid[j] = rsp_valid_in[i][j];
-            assign {rsp_in_if[i].tag[j], rsp_in_if[i].data[j]} = rsp_data_in[i][j];        
-            assign rsp_ready_in[i][j] = rsp_in_if[i].ready[j];
+        VX_stream_switch #(
+            .NUM_OUTPUTS (NUM_REQS),
+            .DATAW       (RSP_DATAW),
+            .BUFFERED    (BUFFERED_RSP)
+        ) rsp_switch (
+            .clk       (clk),
+            .reset     (reset),
+            .sel_in    (rsp_sel_out),
+            .valid_in  (rsp_out_if.valid[i]),
+            .data_in   (rsp_data_out),
+            .ready_in  (rsp_out_if.ready[i]),
+            .valid_out (rsp_valid_in),
+            .data_out  (rsp_data_in),
+            .ready_out (rsp_ready_in)
+        );
+        
+        for (genvar j = 0; j < NUM_REQS; ++j) begin
+            assign rsp_in_if[j].valid[i] = rsp_valid_in[j];
+            assign {rsp_in_if[j].tag[i], rsp_in_if[j].data[i]} = rsp_data_in[j];
+            assign rsp_ready_in[j] = rsp_in_if[j].ready[i];
         end
-    end
+    end    
 
 endmodule

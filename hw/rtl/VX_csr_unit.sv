@@ -56,6 +56,7 @@ module VX_csr_unit #(
     wire [`NUM_THREADS-1:0][31:0] csr_req_data;
     wire [`NUM_THREADS-1:0][31:0] csr_read_data, csr_read_data_s0;
     reg [`NUM_THREADS-1:0][31:0]  csr_write_data_s0, csr_write_data_s1;
+    wire [`NT_BITS-1:0]           write_tid;
     wire                          write_enable;
     wire [`CSR_ADDR_BITS-1:0]     csr_addr_s1;
     reg                           csr_we_s0;
@@ -73,18 +74,22 @@ module VX_csr_unit #(
         .perf_memsys_if (perf_memsys_if),
         .perf_pipeline_if(perf_pipeline_if),
     `endif
+
         .cmt_to_csr_if  (cmt_to_csr_if),
         .fetch_to_csr_if(fetch_to_csr_if),
+    
     `ifdef EXT_F_ENABLE
         .fpu_to_csr_if  (fpu_to_csr_if), 
     `endif        
+
     `ifdef EXT_TEX_ENABLE        
-        .tex_csr_if     (tex_csr_if),
+        .tex_csr_if     (tex_csr_if),    
     `ifdef PERF_ENABLE
         .tex_perf_if    (tex_perf_if),
         .perf_tcache_if (perf_tcache_if),
     `endif
     `endif
+    
     `ifdef EXT_RASTER_ENABLE        
         .raster_csr_if  (raster_csr_if),
     `ifdef PERF_ENABLE
@@ -92,6 +97,7 @@ module VX_csr_unit #(
         .perf_rcache_if (perf_rcache_if),
     `endif
     `endif
+
     `ifdef EXT_ROP_ENABLE
         .rop_csr_if     (rop_csr_if),
     `ifdef PERF_ENABLE
@@ -106,6 +112,8 @@ module VX_csr_unit #(
         .read_tmask     (csr_req_if.tmask),    
         .read_addr      (csr_req_if.addr),
         .read_data      (csr_read_data),
+
+        .write_tid      (write_tid),
         .write_enable   (write_enable),       
         .write_uuid     (csr_commit_if.uuid),
         .write_wid      (csr_commit_if.wid),
@@ -158,14 +166,14 @@ module VX_csr_unit #(
     wire csr_rsp_ready;
 
     VX_skid_buffer #(
-        .DATAW (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + 2 * (`NUM_THREADS * 32))
+        .DATAW (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + `NT_BITS + 2 * (`NUM_THREADS * 32))
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (csr_rsp_valid),
         .ready_in  (csr_rsp_ready),
-        .data_in   ({csr_req_if.uuid,    csr_req_if.wid,    csr_req_if.tmask,    csr_req_if.PC,    csr_req_if.rd,    csr_req_if.wb,    csr_we_s0, csr_req_if.addr, csr_read_data_s0,   csr_write_data_s0}),
-        .data_out  ({csr_commit_if.uuid, csr_commit_if.wid, csr_commit_if.tmask, csr_commit_if.PC, csr_commit_if.rd, csr_commit_if.wb, csr_we_s1, csr_addr_s1,     csr_commit_if.data, csr_write_data_s1}),
+        .data_in   ({csr_req_if.uuid,    csr_req_if.wid,    csr_req_if.tmask,    csr_req_if.PC,    csr_req_if.rd,    csr_req_if.wb,    csr_we_s0, csr_req_if.addr, csr_read_data_s0,   csr_req_if.tid, csr_write_data_s0}),
+        .data_out  ({csr_commit_if.uuid, csr_commit_if.wid, csr_commit_if.tmask, csr_commit_if.PC, csr_commit_if.rd, csr_commit_if.wb, csr_we_s1, csr_addr_s1,     csr_commit_if.data, write_tid,      csr_write_data_s1}),
         .valid_out (csr_commit_if.valid),
         .ready_out (csr_commit_if.ready)
     );

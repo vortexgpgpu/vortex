@@ -6,7 +6,7 @@ interface VX_rop_req_if #(
 
     wire                                    valid;
     
-    wire [NUM_LANES-1:0]                    tmask; 
+    wire [NUM_LANES-1:0]                    mask; 
     wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] pos_x;
     wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] pos_y;
     rgba_t [NUM_LANES-1:0]                  color;
@@ -17,7 +17,7 @@ interface VX_rop_req_if #(
 
     modport master (
         output valid,
-        output tmask,
+        output mask,
         output pos_x,
         output pos_y,
         output color,
@@ -28,7 +28,7 @@ interface VX_rop_req_if #(
 
     modport slave (
         input  valid,
-        input  tmask,
+        input  mask,
         input  pos_x,
         input  pos_y,
         input  color,

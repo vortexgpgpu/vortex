@@ -532,7 +532,7 @@ VX_mem_rsp_if #(
   .TAG_WIDTH  (AVS_REQ_TAGW+1)
 ) mem_rsp_if();
 
-VX_mem_mux #(
+VX_mem_arb #(
   .NUM_REQS     (2),
   .DATA_WIDTH   (LMEM_DATA_WIDTH),
   .ADDR_WIDTH   (LMEM_ADDR_WIDTH),
@@ -540,7 +540,7 @@ VX_mem_mux #(
   .ARBITER      ("P"),
   .BUFFERED_REQ (1),
   .BUFFERED_RSP (2)
-) mem_mux (
+) mem_arb (
   .clk        (clk),
   .reset      (reset),
   .req_in_if  (cci_vx_mem_req_if),

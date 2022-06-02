@@ -24,7 +24,6 @@ module VX_raster_pe #(
 
     // Outputs
     output wire                                     valid_out,
-    output wire [OUTPUT_QUADS-1:0]                  mask_out,    
     output raster_stamp_t [OUTPUT_QUADS-1:0]        stamps_out, 
     output wire                                     empty_out,
     input  wire                                     ready_out
@@ -112,7 +111,6 @@ module VX_raster_pe #(
         .ready_in   (block_ready_b),
         
         .valid_out  (valid_out),
-        .mask_out   (mask_out),
         .stamps_out (stamps_out),
         .ready_out  (ready_out)
     );

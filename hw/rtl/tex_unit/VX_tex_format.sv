@@ -1,13 +1,10 @@
 `include "VX_tex_define.vh"
 
-module VX_tex_format #(
-    parameter CORE_ID = 0
-) (
+module VX_tex_format (
     input wire [`TEX_FORMAT_BITS-1:0] format,
-    input wire [31:0]   texel_in,    
-    output wire [31:0]  texel_out
+    input wire [31:0]               texel_in,    
+    output wire [31:0]              texel_out
 );  
-    `UNUSED_PARAM (CORE_ID)
 
     reg [31:0] texel_out_r;
 

@@ -17,17 +17,24 @@ module VX_core #(
     VX_dcr_base_if.slave    dcr_base_if,
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_dcr_if.slave     tex_dcr_if,
+    VX_tex_req_if.master    tex_req_if,
+    VX_tex_rsp_if.slave     tex_rsp_if,
+`ifdef PERF_ENABLE
+    VX_tex_perf_if.slave    tex_perf_if,
+    VX_perf_cache_if.slave  perf_tcache_if,
 `endif
+`endif
+
 `ifdef EXT_RASTER_ENABLE        
-    VX_raster_req_if        raster_req_if,
+    VX_raster_req_if.slave  raster_req_if,
 `ifdef PERF_ENABLE
     VX_raster_perf_if.slave raster_perf_if,
     VX_perf_cache_if.slave  perf_rcache_if,
 `endif
 `endif
+
 `ifdef EXT_ROP_ENABLE        
-    VX_rop_req_if           rop_req_if,
+    VX_rop_req_if.master    rop_req_if,
 `ifdef PERF_ENABLE
     VX_rop_perf_if.slave    rop_perf_if,
     VX_perf_cache_if.slave  perf_ocache_if,
@@ -78,23 +85,6 @@ module VX_core #(
         .WORD_SIZE (`ICACHE_WORD_SIZE), 
         .TAG_WIDTH (`ICACHE_TAG_WIDTH)
     ) icache_rsp_if();
-
-`ifdef EXT_TEX_ENABLE
-    VX_cache_req_if #(
-        .NUM_REQS  (`TCACHE_NUM_REQS), 
-        .WORD_SIZE (`TCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`TCACHE_TAG_WIDTH)
-    ) tcache_req_if();
-
-    VX_cache_rsp_if #(
-        .NUM_REQS  (`TCACHE_NUM_REQS), 
-        .WORD_SIZE (`TCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`TCACHE_TAG_WIDTH)
-    ) tcache_rsp_if();
-`ifdef PERF_ENABLE
-    VX_perf_cache_if perf_tcache_if();
-`endif
-`endif
     
     VX_pipeline #(
         .CORE_ID(CORE_ID)
@@ -118,13 +108,14 @@ module VX_core #(
         .icache_rsp_if  (icache_rsp_if),
 
     `ifdef EXT_TEX_ENABLE
-        .tex_dcr_if     (tex_dcr_if),
-        .tcache_req_if  (tcache_req_if),
-        .tcache_rsp_if  (tcache_rsp_if),
+        .tex_req_if     (tex_req_if),
+        .tex_rsp_if     (tex_rsp_if),
     `ifdef PERF_ENABLE
+        .tex_perf_if    (tex_perf_if),
         .perf_tcache_if (perf_tcache_if),
     `endif
     `endif
+    
     `ifdef EXT_RASTER_ENABLE        
         .raster_req_if  (raster_req_if),
     `ifdef PERF_ENABLE
@@ -132,6 +123,7 @@ module VX_core #(
         .perf_rcache_if (perf_rcache_if),
     `endif
     `endif
+
     `ifdef EXT_ROP_ENABLE        
         .rop_req_if     (rop_req_if),
     `ifdef PERF_ENABLE
@@ -164,15 +156,6 @@ module VX_core #(
         // icache interface
         .icache_req_if  (icache_req_if),
         .icache_rsp_if  (icache_rsp_if),
-
-    `ifdef EXT_TEX_ENABLE
-        // tcache interface
-        .tcache_req_if  (tcache_req_if),
-        .tcache_rsp_if  (tcache_rsp_if),
-    `ifdef PERF_ENABLE
-        .perf_tcache_if  (perf_tcache_if),
-    `endif
-    `endif
 
         // Memory
         .mem_req_if     (mem_req_if),

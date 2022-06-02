@@ -201,24 +201,23 @@ __asm__ (".set reg_t6  , 31");
 })
 
 // Texture load
-inline unsigned vx_tex(unsigned u, unsigned v, unsigned lod) {
-    return RISCV_INSN_R4(RISCV_CUSTOM1, 0, 0, u, v, lod);
-}
+#define vx_tex(unit, u, v, lod) \
+    RISCV_INSN_R4(RISCV_CUSTOM1, 0, unit, u, v, lod)
 
 // Conditional move
 inline unsigned vx_cmov(unsigned c, unsigned t, unsigned f) {
-	return RISCV_INSN_R4(RISCV_CUSTOM1, 0, 1, c, t, f);
+	return RISCV_INSN_R4(RISCV_CUSTOM1, 1, 0, c, t, f);
 }
 
 // Rop write
 inline void vx_rop(unsigned x, unsigned y, unsigned face, unsigned color, unsigned depth) {
     unsigned pos_face = (y << 16) | (x << 1) | face;
-    RISCV_INSN_R4_0111(RISCV_CUSTOM1, 0, 2, pos_face, color, depth);
+    RISCV_INSN_R4_0111(RISCV_CUSTOM1, 1, 1, pos_face, color, depth);
 }
 
 // Integer multiply add
 #define vx_imadd(a, b, c, shift) \
-    RISCV_INSN_R4(RISCV_CUSTOM1, 1, (shift), a, b, c)
+    RISCV_INSN_R4(RISCV_CUSTOM1, 2, shift, a, b, c)
 
 // Raster load
 inline unsigned vx_rast() {

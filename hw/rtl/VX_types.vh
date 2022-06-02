@@ -184,8 +184,7 @@
 
 // Texture unit CSRs
 `define CSR_TEX_BEGIN               12'h7C0
-`define CSR_TEX_STAGE               (`CSR_TEX_BEGIN+0)
-`define CSR_TEX_END                 (`CSR_TEX_BEGIN+1)
+`define CSR_TEX_END                 (`CSR_TEX_BEGIN+0)
 `define CSR_TEX_COUNT               (`CSR_TEX_END-`CSR_TEX_BEGIN)
 
 // Raster unit CSRs

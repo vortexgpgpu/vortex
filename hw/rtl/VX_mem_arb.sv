@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_mem_mux #(    
+module VX_mem_arb #(    
     parameter NUM_REQS       = 1, 
     parameter DATA_WIDTH     = 1,
     parameter ADDR_WIDTH     = 1,
@@ -36,7 +36,7 @@ module VX_mem_mux #(
     wire [NUM_REQS-1:0][REQ_DATAW-1:0] req_data_in;
     wire [NUM_REQS-1:0]                req_ready_in;
 
-    for (genvar i = 0; i < NUM_REQS; i++) begin
+    for (genvar i = 0; i < NUM_REQS; ++i) begin
         wire [TAG_OUT_WIDTH-1:0] req_tag_in;
 
         VX_bits_insert #( 
@@ -110,7 +110,7 @@ module VX_mem_mux #(
         .ready_out (rsp_ready_in)
     );
     
-    for (genvar i = 0; i < NUM_REQS; i++) begin
+    for (genvar i = 0; i < NUM_REQS; ++i) begin
         assign rsp_in_if[i].valid = rsp_valid_in[i];
         assign {rsp_in_if[i].tag, rsp_in_if[i].data} = rsp_data_in[i];        
         assign rsp_ready_in[i] = rsp_in_if[i].ready;

@@ -214,10 +214,10 @@
 `define CACHE_ADDR_TYPE_BITS    `NC_TAG_BITS
 `endif
 
-////////////////////////// Icache Configurable Knobs //////////////////////////
+`define ARB_SEL_COUNT(a, b)     ((a > b) ? ((a + b - 1) / b) : ((b + a - 1) / a))
+`define ARB_SEL_BITS(a, b)      `CLOG2(`ARB_SEL_COUNT(a, b))
 
-// Cache ID
-`define ICACHE_ID               $sformatf("core%0d-icache", CORE_ID)
+////////////////////////// Icache Definitions /////////////////////////////////
 
 // Word size in bytes
 `define ICACHE_WORD_SIZE        4
@@ -251,10 +251,7 @@
 `define ICACHE_MEM_TAG_WIDTH    (`MAX(`_I_MEM_TAG_WIDTH,  `_I_NC_MEM_TAG_WIDTH) + `NC_TAG_BITS)
 `endif
 
-////////////////////////// Dcache Configurable Knobs //////////////////////////
-
-// Cache ID
-`define DCACHE_ID               $sformatf("core%0d-dcache", CORE_ID)
+////////////////////////// Dcache Definitions /////////////////////////////////
 
 // Word size in bytes
 `define DCACHE_WORD_SIZE        4
@@ -297,14 +294,13 @@
 `define _D_NC_MEM_TAG_WIDTH     (`CLOG2(`DCACHE_NUM_REQS) + `_D_WORD_SEL_BITS + `DCACHE_NOSM_TAG_WIDTH)
 `define DCACHE_MEM_TAG_WIDTH    `MAX(`_D_MEM_TAG_WIDTH, `_D_NC_MEM_TAG_WIDTH)
 
-////////////////////////// SM Configurable Knobs //////////////////////////////
+////////////////////////// Texture Unit Definitions ///////////////////////////
 
-// Cache ID
-`define SMEM_ID                 $sformatf("core%0d-smem", CORE_ID)
+//                              uuid,         wid,       PC,   rd,    
+`define TEX_REQ_TAG_WIDTH       (`UUID_BITS + `NW_BITS + 32 + `NR_BITS)
+`define TEX_REQX_TAG_WIDTH      (`TEX_REQ_TAG_WIDTH + `ARB_SEL_BITS(`NUM_CORES, `NUM_TEX_UNITS))
 
-////////////////////////// Tcache Configurable Knobs //////////////////////////
-
-`define TCACHE_ID               $sformatf("core%0d-tcache", CORE_ID)
+////////////////////////// Tcache Definitions /////////////////////////////////
 
 // Word size in bytes
 `define TCACHE_WORD_SIZE        4
@@ -326,7 +322,7 @@
 `define TCACHE_TAG_ID_BITS      (`CLOG2(`TEX_MEM_PENDING_SIZE) + `TCACHE_BATCH_SEL_BITS)
 
 // Core request tag bits
-`define TCACHE_TAG_WIDTH        `TCACHE_TAG_ID_BITS
+`define TCACHE_TAG_WIDTH        (`TCACHE_TAG_ID_BITS + `CLOG2(`NUM_TEX_UNITS))
 
 // Memory request data bits
 `define TCACHE_MEM_DATA_WIDTH   (`TCACHE_LINE_SIZE * 8)
@@ -352,14 +348,8 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`ifdef EXT_TEX_ENABLE
-`define _L1_MEM_TAG_IN_WIDTH    `MAX(`ICACHE_MEM_TAG_WIDTH, `DCACHE_MEM_TAG_WIDTH)
-`define L1_MEM_TAG_IN_WIDTH     `MAX(`_L1_MEM_TAG_IN_WIDTH, `TCACHE_MEM_TAG_WIDTH)
-`define L1_MEM_TAG_WIDTH        (`L1_MEM_TAG_IN_WIDTH + `CLOG2(3))
-`else
 `define L1_MEM_TAG_IN_WIDTH     `MAX(`ICACHE_MEM_TAG_WIDTH, `DCACHE_MEM_TAG_WIDTH)
 `define L1_MEM_TAG_WIDTH        (`L1_MEM_TAG_IN_WIDTH + `CLOG2(2))
-`endif
 
 ////////////////////////// L2cache Configurable Knobs /////////////////////////
 
@@ -399,7 +389,7 @@
 `else
 `define L2X_MEM_TAG_WIDTH       (`L1_MEM_TAG_WIDTH + `CLOG2(`L2_NUM_REQS))
 `endif
-`define L2_MEM_TAG_WIDTH        (`L2X_MEM_TAG_WIDTH + `CLOG2(1 + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED))
+`define L2_MEM_TAG_WIDTH        (`L2X_MEM_TAG_WIDTH + `CLOG2(1 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED))
 
 ////////////////////////// L3cache Configurable Knobs /////////////////////////
 
@@ -440,9 +430,7 @@
 `define L3_MEM_TAG_WIDTH        (`L2_MEM_TAG_WIDTH + `CLOG2(`L3_NUM_REQS))
 `endif
 
-////////////////////////// Rcache Configurable Knobs //////////////////////////
-
-`define RCACHE_ID               $sformatf("cluster%0d-rcache", CLUSTER_ID)
+////////////////////////// Rcache Definitions /////////////////////////////////
 
 // Word size in bytes
 `define RCACHE_WORD_SIZE        4
@@ -482,9 +470,7 @@
 `define RCACHE_MEM_TAG_WIDTH    (`MAX(`_R_MEM_TAG_WIDTH,  `_R_NC_MEM_TAG_WIDTH) + `NC_TAG_BITS)
 `endif
 
-////////////////////////// Ocache Configurable Knobs //////////////////////////
-
-`define OCACHE_ID               $sformatf("cluster%0d-ocache", CLUSTER_ID)
+////////////////////////// Ocache Definitions /////////////////////////////////
 
 // Word size in bytes
 `define OCACHE_WORD_SIZE        4
@@ -610,7 +596,6 @@
 
 `define ASSIGN_VX_RASTER_REQ_IF(dst, src) \
     assign dst.valid = src.valid; \
-    assign dst.tmask = src.tmask; \
     assign dst.stamps = src.stamps; \
     assign dst.empty = src.empty; \
     assign src.ready = dst.ready

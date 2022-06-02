@@ -5,7 +5,7 @@ module VX_tex_sat #(
     parameter OUT_W = 1,
     parameter MODEL = 1
 ) (
-    input wire [IN_W-1:0] data_in,   
+    input wire [IN_W-1:0]   data_in,   
     output wire [OUT_W-1:0] data_out
 ); 
     `STATIC_ASSERT(((OUT_W+1) < IN_W), ("invalid parameter"))

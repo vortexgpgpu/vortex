@@ -1,12 +1,9 @@
 `include "VX_tex_define.vh"
 
-module VX_tex_stride #(
-    parameter CORE_ID = 0
-) (
-    input wire [`TEX_FORMAT_BITS-1:0]  format,
+module VX_tex_stride (
+    input wire [`TEX_FORMAT_BITS-1:0]    format,
     output wire [`TEX_LGSTRIDE_BITS-1:0] log_stride
 );  
-    `UNUSED_PARAM (CORE_ID)
 
     reg [`TEX_LGSTRIDE_BITS-1:0] log_stride_r;  
 

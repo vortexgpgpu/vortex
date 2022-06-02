@@ -9,7 +9,8 @@ interface VX_csr_req_if ();
     wire [31:0]             PC;
     wire [`INST_CSR_BITS-1:0] op_type;
     wire [`CSR_ADDR_BITS-1:0] addr;
-    wire [`NUM_THREADS-1:0][31:0] rs1_data;
+    wire [`NT_BITS-1:0]     tid;
+    wire [`NUM_THREADS-1:0][31:0] rs1_data;    
     wire                    use_imm;
     wire [`NRI_BITS-1:0]    imm;
     wire [`NR_BITS-1:0]     rd;
@@ -24,6 +25,7 @@ interface VX_csr_req_if ();
         output PC,
         output op_type,
         output addr,
+        output tid,
         output rs1_data,        
         output use_imm,
         output imm,
@@ -40,6 +42,7 @@ interface VX_csr_req_if ();
         input  PC,
         input  op_type,
         input  addr,
+        input  tid,
         input  rs1_data,        
         input  use_imm,
         input  imm,

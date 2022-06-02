@@ -1,15 +1,11 @@
 `include "VX_tex_define.vh"
 
-module VX_tex_wrap #(
-    parameter CORE_ID = 0    
-) (
+module VX_tex_wrap (
     input wire [`TEX_WRAP_BITS-1:0] wrap_i,
-    input wire [`TEX_FXD_BITS-1:0] coord_i,
+    input wire [`TEX_FXD_BITS-1:0]  coord_i,
     output wire [`TEX_FXD_FRAC-1:0] coord_o
 );
     
-    `UNUSED_PARAM (CORE_ID)
-
     reg [`TEX_FXD_FRAC-1:0] coord_r;
 
     wire [`TEX_FXD_FRAC-1:0] clamp;

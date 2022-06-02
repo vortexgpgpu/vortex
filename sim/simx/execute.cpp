@@ -1431,28 +1431,29 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   } break;
   case EXT2: {    
     switch (func3) {    
-    case 0: 
+    case 0: { // TEX
+      trace->exe_type = ExeType::GPU; 
+      trace->gpu_type = GpuType::TEX;
+      trace->used_iregs.set(rsrc0);
+      trace->used_iregs.set(rsrc1);
+      trace->used_iregs.set(rsrc2);
+      auto trace_data = std::make_shared<TexUnit::TraceData>();
+      trace->data = trace_data;
+      for (uint32_t t = 0; t < num_threads; ++t) {
+        if (!tmask_.test(t))
+          continue;        
+        auto u     = rsdata[t][0].i;
+        auto v     = rsdata[t][1].i;
+        auto lod   = rsdata[t][2].i;
+        auto stage = func2;
+        auto color = core_->tex_unit_->read(stage, u, v, lod, trace_data);
+        rddata[t].i = color;
+      }
+      rd_write = true;
+    } break;
+    case 1:
       switch (func2) {
-      case 0: { // TEX
-        trace->exe_type = ExeType::GPU; 
-        trace->gpu_type = GpuType::TEX;
-        trace->used_iregs.set(rsrc0);
-        trace->used_iregs.set(rsrc1);
-        trace->used_iregs.set(rsrc2);
-        auto trace_data = std::make_shared<TexUnit::TraceData>();
-        trace->data = trace_data;
-        for (uint32_t t = 0; t < num_threads; ++t) {
-          if (!tmask_.test(t))
-            continue;        
-          auto u     = rsdata[t][0].i;
-          auto v     = rsdata[t][1].i;
-          auto lod   = rsdata[t][2].i;
-          auto color = core_->tex_unit_->read(u, v, lod, trace_data);
-          rddata[t].i = color;
-        }
-        rd_write = true;
-      } break;
-      case 1: { // CMOV
+      case 0: { // CMOV
         trace->exe_type = ExeType::GPU;
         trace->gpu_type = GpuType::CMOV;
         trace->used_iregs.set(rsrc0);
@@ -1465,7 +1466,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         }
         rd_write = true;
       } break;
-      case 2: { // ROP
+      case 1: { // ROP
         trace->exe_type = ExeType::GPU; 
         trace->gpu_type = GpuType::ROP;
         trace->used_iregs.set(rsrc0);
@@ -1489,7 +1490,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         std::abort();
       }
       break;      
-    case 1: { // IMADD
+    case 2: { // IMADD
       trace->exe_type = ExeType::GPU;
       trace->gpu_type = GpuType::IMADD;
       trace->used_iregs.set(rsrc0);

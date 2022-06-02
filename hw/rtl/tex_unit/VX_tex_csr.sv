@@ -18,17 +18,6 @@ module VX_tex_csr #(
 
     tex_csrs_t reg_csrs;
 
-    wire [`NT_BITS-1:0] tid;
-
-    VX_lzc #(
-        .N       (`NUM_THREADS),
-        .REVERSE (1)
-    ) tid_select (
-        .data_in  (tex_csr_if.write_tmask),
-        .data_out (tid),
-        `UNUSED_PIN (valid_out)
-    );
-
     // CSRs write
 
     always @(posedge clk) begin
@@ -36,7 +25,7 @@ module VX_tex_csr #(
             reg_csrs <= '0;
         end else if (tex_csr_if.write_enable) begin
             case (tex_csr_if.write_addr)
-                `CSR_TEX_STAGE: reg_csrs.stage <= tex_csr_if.write_data[tid][$clog2(NUM_STAGES)-1:0];
+                // TODO
                 default:;
             endcase
         end
@@ -55,16 +44,10 @@ module VX_tex_csr #(
     `UNUSED_VAR (tex_csr_if.write_uuid)
     `UNUSED_VAR (tex_csr_if.write_wid)
     `UNUSED_VAR (tex_csr_if.write_tmask)
+    `UNUSED_VAR (tex_csr_if.write_data)
 
 `ifdef DBG_TRACE_TEX
     always @(posedge clk) begin
-        if (tex_csr_if.read_enable) begin
-            `TRACE(1, ("%d: core%0d-tex-csr-read: wid=%0d, tmask=%b, state=", $time, CORE_ID, tex_csr_if.read_wid, tex_csr_if.read_tmask));
-            trace_tex_csr(1, tex_csr_if.read_addr);
-            `TRACE(1, (", data="));
-            `TRACE_ARRAY1D(1, tex_csr_if.read_data, `NUM_THREADS);
-            `TRACE(1, (" (#%0d)\n", tex_csr_if.read_uuid));
-        end
         if (tex_csr_if.write_enable) begin
             `TRACE(1, ("%d: core%0d-tex-csr-write: wid=%0d, tmask=%b, state=", $time, CORE_ID, tex_csr_if.write_wid, tex_csr_if.write_tmask));
             trace_tex_csr(1, tex_csr_if.write_addr);

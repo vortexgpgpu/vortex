@@ -217,7 +217,7 @@ module VX_rop_unit #(
     wire write_bypass = !ds_enable && !blend_enable && color_writeen && rop_req_if.valid;
 
     assign mem_req_valid    = ds_blend_write || ds_blend_read || write_bypass;
-    assign mem_req_mask     = ds_blend_write ? (ds_enable ? ds_write_mask : blend_write_mask) : rop_req_if.tmask;
+    assign mem_req_mask     = ds_blend_write ? (ds_enable ? ds_write_mask : blend_write_mask) : rop_req_if.mask;
     assign mem_req_ds_pass  = ds_enable ? ds_pass_out : {NUM_LANES{1'b1}};
     assign mem_req_rw       = ds_blend_write || write_bypass;
     assign mem_req_face     = ds_blend_write ? ds_write_face : rop_req_if.face;

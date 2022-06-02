@@ -222,7 +222,6 @@ module VX_raster_unit #(
             .ready_in   (pes_ready_in[i]),
 
             .valid_out  (pe_valid_out),
-            .mask_out   (pe_raster_req_if[i].tmask),
             .stamps_out (pe_raster_req_if[i].stamps),
             .empty_out  (pe_empty_out[i]),
             .ready_out  (pe_raster_req_if[i].ready)

@@ -13,20 +13,11 @@ module VX_execute #(
     input wire clk, 
     input wire reset,    
 
-    input base_dcrs_t      base_dcrs,
+    input base_dcrs_t       base_dcrs,
 
     // Dcache interface
-    VX_cache_req_if.master dcache_req_if,
-    VX_cache_rsp_if.slave  dcache_rsp_if,
-
-`ifdef EXT_TEX_ENABLE
-    VX_tex_dcr_if.slave    tex_dcr_if,
-    VX_cache_req_if.master tcache_req_if,
-    VX_cache_rsp_if.slave  tcache_rsp_if,
-`ifdef PERF_ENABLE
-    VX_perf_cache_if.slave perf_tcache_if,
-`endif
-`endif
+    VX_cache_req_if.master  dcache_req_if,
+    VX_cache_rsp_if.slave   dcache_rsp_if,
 
     // commit interface
     VX_cmt_to_csr_if.slave  cmt_to_csr_if,
@@ -39,15 +30,25 @@ module VX_execute #(
     VX_perf_pipeline_if.slave perf_pipeline_if,
  `endif
 
+`ifdef EXT_TEX_ENABLE
+    VX_tex_req_if.master    tex_req_if,
+    VX_tex_rsp_if.slave     tex_rsp_if,
+`ifdef PERF_ENABLE
+    VX_tex_perf_if.slave    tex_perf_if,
+    VX_perf_cache_if.slave  perf_tcache_if,
+`endif
+`endif
+
 `ifdef EXT_RASTER_ENABLE        
-    VX_raster_req_if        raster_req_if,
+    VX_raster_req_if.slave  raster_req_if,
 `ifdef PERF_ENABLE
     VX_raster_perf_if.slave raster_perf_if,
     VX_perf_cache_if.slave  perf_rcache_if,
 `endif
 `endif
+
 `ifdef EXT_ROP_ENABLE        
-    VX_rop_req_if           rop_req_if,
+    VX_rop_req_if.master    rop_req_if,
 `ifdef PERF_ENABLE
     VX_rop_perf_if.slave    rop_perf_if,
     VX_perf_cache_if.slave  perf_ocache_if,
@@ -81,13 +82,12 @@ module VX_execute #(
 
 `ifdef EXT_TEX_ENABLE
     VX_gpu_csr_if tex_csr_if();
-`ifdef PERF_ENABLE
-    VX_tex_perf_if tex_perf_if();
 `endif
-`endif
+
 `ifdef EXT_RASTER_ENABLE
     VX_gpu_csr_if raster_csr_if();
 `endif
+
 `ifdef EXT_ROP_ENABLE
     VX_gpu_csr_if rop_csr_if();
 `endif
@@ -131,10 +131,12 @@ module VX_execute #(
     ) csr_unit (
         .clk            (clk),
         .reset          (csr_reset),   
+    
     `ifdef PERF_ENABLE
         .perf_memsys_if (perf_memsys_if),
         .perf_pipeline_if(perf_pipeline_if),
     `endif
+    
     `ifdef EXT_F_ENABLE  
         .fpu_to_csr_if  (fpu_to_csr_if),
         .fpu_pending    (fpu_pending),        
@@ -143,6 +145,7 @@ module VX_execute #(
         `UNUSED_PIN     (req_pending),
     `endif
         .base_dcrs      (base_dcrs),
+    
     `ifdef EXT_TEX_ENABLE        
         .tex_csr_if     (tex_csr_if),
     `ifdef PERF_ENABLE
@@ -150,6 +153,7 @@ module VX_execute #(
         .perf_tcache_if (perf_tcache_if),
     `endif
     `endif
+    
     `ifdef EXT_RASTER_ENABLE        
         .raster_csr_if  (raster_csr_if),
     `ifdef PERF_ENABLE
@@ -157,6 +161,7 @@ module VX_execute #(
         .perf_rcache_if (perf_rcache_if),
     `endif
     `endif
+
     `ifdef EXT_ROP_ENABLE        
         .rop_csr_if     (rop_csr_if),
     `ifdef PERF_ENABLE
@@ -164,6 +169,7 @@ module VX_execute #(
         .perf_ocache_if (perf_ocache_if),
     `endif
     `endif
+
         .cmt_to_csr_if  (cmt_to_csr_if),
         .fetch_to_csr_if(fetch_to_csr_if),
         .csr_req_if     (csr_req_if),   
@@ -193,23 +199,23 @@ module VX_execute #(
         .clk            (clk),
         .reset          (gpu_reset),    
         .gpu_req_if     (gpu_req_if),
+    
     `ifdef EXT_TEX_ENABLE
         .tex_csr_if     (tex_csr_if),
-        .tex_dcr_if     (tex_dcr_if),
-        .tcache_req_if  (tcache_req_if),
-        .tcache_rsp_if  (tcache_rsp_if),
-    `ifdef PERF_ENABLE
-        .tex_perf_if    (tex_perf_if),
+        .tex_req_if     (tex_req_if),
+        .tex_rsp_if     (tex_rsp_if),
     `endif
-    `endif
+    
     `ifdef EXT_RASTER_ENABLE        
         .raster_csr_if  (raster_csr_if),
         .raster_req_if  (raster_req_if),
     `endif
+
     `ifdef EXT_ROP_ENABLE        
         .rop_csr_if     (rop_csr_if),
         .rop_req_if     (rop_req_if),
     `endif
+    
         .warp_ctl_if    (warp_ctl_if),
         .gpu_commit_if  (gpu_commit_if)
     );

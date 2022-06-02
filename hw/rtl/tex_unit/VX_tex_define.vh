@@ -28,7 +28,6 @@ task trace_tex_csr (
     input [`CSR_ADDR_BITS-1:0] addr
 );
     case (addr)
-        `CSR_TEX_STAGE:  `TRACE(level, ("STAGE")); 
         default:         `TRACE(level, ("?"));
     endcase  
 endtask

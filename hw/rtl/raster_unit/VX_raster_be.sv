@@ -30,7 +30,6 @@ module VX_raster_be #(
     
      // Outputs
     output wire                         valid_out,
-    output wire [OUTPUT_QUADS-1:0]      mask_out,    
     output raster_stamp_t [OUTPUT_QUADS-1:0] stamps_out,
     input  wire                         ready_out
 );
@@ -39,7 +38,7 @@ module VX_raster_be #(
     localparam PER_BLOCK_QUADS = NUM_QUADS_DIM * NUM_QUADS_DIM;
     localparam OUTPUT_BATCHES  = (PER_BLOCK_QUADS + OUTPUT_QUADS - 1) / OUTPUT_QUADS;
     localparam OUTPUT_SEL_BITS = `LOG2UP(OUTPUT_BATCHES);
-    localparam FIFO_DATA_WIDTH = OUTPUT_QUADS + OUTPUT_QUADS * $bits(raster_stamp_t);
+    localparam FIFO_DATA_WIDTH = OUTPUT_QUADS * $bits(raster_stamp_t);
 
     wire stall;
 
@@ -192,8 +191,8 @@ module VX_raster_be #(
         .reset      (reset),
         .push       (fifo_push),
         .pop        (fifo_pop),
-        .data_in    ({fifo_mask_in[fifo_arb_index], fifo_stamp_in[fifo_arb_index]}),
-        .data_out   ({mask_out,                     stamps_out}),
+        .data_in    ({fifo_stamp_in[fifo_arb_index]}),
+        .data_out   ({stamps_out}),
         .full       (fifo_full),
         .empty      (fifo_empty),
         `UNUSED_PIN (alm_full),
@@ -224,7 +223,7 @@ module VX_raster_be #(
         for (integer i = 0; i < OUTPUT_QUADS; ++i) begin
             if (valid_out && ready_out) begin
                 `TRACE(2, ("%d: %s-be-out[%0d]: x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
-                    $time, INSTANCE_ID, i, stamps_out[i].pos_x, stamps_out[i].pos_y, mask_out[i], stamps_out[i].pid,
+                    $time, INSTANCE_ID, i, stamps_out[i].pos_x, stamps_out[i].pos_y, stamps_out[i].mask, stamps_out[i].pid,
                     stamps_out[i].bcoords[0][0], stamps_out[i].bcoords[0][1], stamps_out[i].bcoords[0][2], 
                     stamps_out[i].bcoords[1][0], stamps_out[i].bcoords[1][1], stamps_out[i].bcoords[1][2], 
                     stamps_out[i].bcoords[2][0], stamps_out[i].bcoords[2][1], stamps_out[i].bcoords[2][2], 
