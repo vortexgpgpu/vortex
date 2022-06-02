@@ -33,7 +33,7 @@ module VX_multiplier #(
                 result_pipe[0] <= result_unqual;
             end
         end
-        for (genvar i = 1; i < LATENCY; i++) begin
+        for (genvar i = 1; i < LATENCY; ++i) begin
             always @(posedge clk) begin
                 if (enable) begin
                     result_pipe[i] <= result_pipe[i-1];

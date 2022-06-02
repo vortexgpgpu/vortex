@@ -93,7 +93,7 @@ module VX_raster_csr #(
     `UNUSED_VAR (raster_csr_if.write_wid)
     `UNUSED_VAR (raster_csr_if.write_tmask)
 
-`ifdef DBG_TRACE_TEX
+`ifdef DBG_TRACE_RASTER
     wire [`NUM_THREADS-1:0][`RASTER_DIM_BITS-2:0] pos_x;
     wire [`NUM_THREADS-1:0][`RASTER_DIM_BITS-2:0] pos_y;
     wire [`NUM_THREADS-1:0][3:0]                  mask;

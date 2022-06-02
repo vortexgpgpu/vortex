@@ -19,7 +19,7 @@ input wire                              clk,
 
     // output responses
     output wire                         rsp_valid_out,
-    output wire [NUM_REQS-1:0]          rsp_tmask_out,
+    output wire [NUM_REQS-1:0]          rsp_mask_out,
     output wire [NUM_REQS-1:0][DATA_WIDTH-1:0] rsp_data_out,
     output wire [TAG_WIDTH-1:0]         rsp_tag_out,
     input wire                          rsp_ready_out
@@ -58,7 +58,7 @@ input wire                              clk,
             rsp_valid_sel = 0;              
             rsp_ready_sel = 0;
             
-            for (integer i = 0; i < NUM_REQS; i++) begin
+            for (integer i = 0; i < NUM_REQS; ++i) begin
                 if (rsp_tag_in[i][TAG_SEL_BITS-1:0] == rsp_tag_sel[TAG_SEL_BITS-1:0]) begin
                     rsp_valid_sel[i] = rsp_valid_in[i];                    
                     rsp_ready_sel[i] = rsp_ready_unqual;
@@ -79,7 +79,7 @@ input wire                              clk,
             .data_in   ({rsp_valid_sel, rsp_tag_sel, rsp_data_in}),
             .ready_in  (rsp_ready_unqual),      
             .valid_out (rsp_valid_out),
-            .data_out  ({rsp_tmask_out, rsp_tag_out, rsp_data_out}),
+            .data_out  ({rsp_mask_out, rsp_tag_out, rsp_data_out}),
             .ready_out (rsp_ready_out)
         );  
 
@@ -88,7 +88,7 @@ input wire                              clk,
     end else begin
 
         assign rsp_valid_out = rsp_valid_in;
-        assign rsp_tmask_out = 1'b1;
+        assign rsp_mask_out = 1'b1;
         assign rsp_tag_out   = rsp_tag_in;
         assign rsp_data_out  = rsp_data_in;
         assign rsp_ready_in = rsp_ready_out;

@@ -17,7 +17,7 @@ module VX_tb_divide();
 
     wire [31:0] o_div[0:7], o_rem[0:7];
 
-    for (genvar i = 0; i < 8; i++) begin
+    for (genvar i = 0; i < 8; ++i) begin
         VX_divide#(
             .WIDTHN(32),
             .WIDTHD(32),

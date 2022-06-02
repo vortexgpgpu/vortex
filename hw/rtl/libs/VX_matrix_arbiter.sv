@@ -30,8 +30,8 @@ module VX_matrix_arbiter #(
         wire [NUM_REQS-1:0] pri [NUM_REQS-1:0];
         wire [NUM_REQS-1:0] grant_unqual;
         
-        for (genvar i = 0; i < NUM_REQS; i++) begin      
-            for (genvar j = 0; j < NUM_REQS; j++) begin
+        for (genvar i = 0; i < NUM_REQS; ++i) begin      
+            for (genvar j = 0; j < NUM_REQS; ++j) begin
                 if (j > i) begin
                     assign pri[j][i] = requests[i] && state[i][j];
                 end 
@@ -45,8 +45,8 @@ module VX_matrix_arbiter #(
             assign grant_unqual[i] = requests[i] && !(| pri[i]);
         end
         
-        for (genvar i = 0; i < NUM_REQS; i++) begin      
-            for (genvar j = i + 1; j < NUM_REQS; j++) begin
+        for (genvar i = 0; i < NUM_REQS; ++i) begin      
+            for (genvar j = i + 1; j < NUM_REQS; ++j) begin
                 always @(posedge clk) begin                       
                     if (reset) begin         
                         state[i][j] <= '0;

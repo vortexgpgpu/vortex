@@ -44,7 +44,7 @@ module VX_sp_ram #(
                 `RAM_INITIALIZATION
 
                 always @(posedge clk) begin
-                    for (integer i = 0; i < BYTEENW; i++) begin
+                    for (integer i = 0; i < BYTEENW; ++i) begin
                         if (wren[i])
                             ram[addr][i] <= wdata[i * 8 +: 8];
                     end
@@ -69,7 +69,7 @@ module VX_sp_ram #(
                `RAM_INITIALIZATION
 
                 always @(posedge clk) begin
-                    for (integer i = 0; i < BYTEENW; i++) begin
+                    for (integer i = 0; i < BYTEENW; ++i) begin
                         if (wren[i])
                             ram[addr][i] <= wdata[i * 8 +: 8];
                     end
@@ -97,7 +97,7 @@ module VX_sp_ram #(
                 `RAM_INITIALIZATION
 
                 always @(posedge clk) begin
-                    for (integer i = 0; i < BYTEENW; i++) begin
+                    for (integer i = 0; i < BYTEENW; ++i) begin
                         if (wren[i])
                             ram[addr][i] <= wdata[i * 8 +: 8];
                     end
@@ -123,7 +123,7 @@ module VX_sp_ram #(
                     `RAM_INITIALIZATION
 
                     always @(posedge clk) begin
-                        for (integer i = 0; i < BYTEENW; i++) begin
+                        for (integer i = 0; i < BYTEENW; ++i) begin
                             if (wren[i])
                                 ram[addr][i] <= wdata[i * 8 +: 8];
                         end
@@ -147,7 +147,7 @@ module VX_sp_ram #(
                     `RAM_INITIALIZATION
 
                     always @(posedge clk) begin                        
-                        for (integer i = 0; i < BYTEENW; i++) begin
+                        for (integer i = 0; i < BYTEENW; ++i) begin
                             if (wren[i])
                                 ram[addr][i] <= wdata[i * 8 +: 8];
                         end
@@ -176,7 +176,7 @@ module VX_sp_ram #(
             `RAM_INITIALIZATION
 
             always @(posedge clk) begin
-                for (integer i = 0; i < BYTEENW; i++) begin
+                for (integer i = 0; i < BYTEENW; ++i) begin
                     if (wren[i])
                         ram[addr][i] <= wdata[i * 8 +: 8];
                 end
@@ -204,7 +204,7 @@ module VX_sp_ram #(
             `RAM_INITIALIZATION
 
             always @(posedge clk) begin
-                for (integer i = 0; i < BYTEENW; i++) begin
+                for (integer i = 0; i < BYTEENW; ++i) begin
                     if (wren[i])
                         ram[addr][i] <= wdata[i * 8 +: 8];
                 end

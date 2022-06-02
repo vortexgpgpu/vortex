@@ -46,7 +46,7 @@ module VX_rop_csr #(
     `UNUSED_VAR (rop_csr_if.write_wid)
     `UNUSED_VAR (rop_csr_if.write_tmask)
 
-`ifdef DBG_TRACE_TEX
+`ifdef DBG_TRACE_ROP
     always @(posedge clk) begin
         if (rop_csr_if.write_enable) begin
             `TRACE(1, ("%d: core%0d-rop-csr-write: wid=%0d, tmask=%b, state=", $time, CORE_ID, rop_csr_if.write_wid, rop_csr_if.write_tmask));

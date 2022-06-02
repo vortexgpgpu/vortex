@@ -77,7 +77,7 @@ module VX_divider #(
         reg [WIDTHN-1:0] quotient_pipe [LATENCY-1:0];
         reg [WIDTHD-1:0] remainder_pipe [LATENCY-1:0];
 
-        for (genvar i = 0; i < LATENCY; i++) begin
+        for (genvar i = 0; i < LATENCY; ++i) begin
             always @(posedge clk) begin                
                 if (enable) begin
                     quotient_pipe[i]  <= (0 == i) ? quotient_unqual  : quotient_pipe[i-1];

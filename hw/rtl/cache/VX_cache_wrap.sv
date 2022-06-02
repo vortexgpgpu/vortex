@@ -129,7 +129,7 @@ module VX_cache_wrap #(
     wire [NUM_REQS-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag_s;
     wire [NUM_REQS-1:0]                     core_rsp_ready_s;
 
-    for (genvar i = 0; i < NUM_REQS; i++) begin
+    for (genvar i = 0; i < NUM_REQS; ++i) begin
         VX_skid_buffer #(
             .DATAW    (`WORD_WIDTH + CORE_TAG_WIDTH),
             .PASSTHRU (1 == NUM_BANKS && (!PASSTHRU || `WORD_SEL_BITS == 0))

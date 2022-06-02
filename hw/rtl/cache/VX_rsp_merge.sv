@@ -109,7 +109,7 @@ module VX_rsp_merge #(
             end
         end
 
-        for (genvar i = 0; i < NUM_REQS; i++) begin
+        for (genvar i = 0; i < NUM_REQS; ++i) begin
             VX_skid_buffer #(
                 .DATAW    (WORD_WIDTH + TAG_WIDTH),
                 .PASSTHRU (0 == OUT_REG)

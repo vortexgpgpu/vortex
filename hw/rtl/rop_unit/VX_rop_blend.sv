@@ -38,7 +38,7 @@ module VX_rop_blend #(
     rgba_t [NUM_LANES-1:0]  src_factor;
     rgba_t [NUM_LANES-1:0]  dst_factor;
 
-    for (genvar i = 0; i < NUM_LANES; i++) begin : blend_func_inst
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : blend_func_inst
         VX_rop_blend_func #(
         ) rop_blend_func_src (
             .func_rgb   (dcrs.blend_src_rgb),
@@ -85,7 +85,7 @@ module VX_rop_blend #(
     rgba_t [NUM_LANES-1:0] max_color_s2;
     rgba_t [NUM_LANES-1:0] logic_op_color_s2;
     
-    for (genvar i = 0; i < NUM_LANES; i++) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         VX_rop_blend_multadd #(
             .LATENCY (LATENCY)
         ) rop_blend_multadd (
@@ -139,7 +139,7 @@ module VX_rop_blend #(
 
     rgba_t [NUM_LANES-1:0] color_out_s2;
 
-    for (genvar i = 0; i < NUM_LANES; i++) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         always @(*) begin
             // RGB Component
             case (dcrs.blend_mode_rgb)

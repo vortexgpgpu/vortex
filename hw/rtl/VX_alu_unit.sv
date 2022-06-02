@@ -42,22 +42,22 @@ module VX_alu_unit #(
     wire [`NUM_THREADS-1:0][31:0] alu_in2_imm  = alu_req_if.use_imm ? {`NUM_THREADS{alu_req_if.imm}} : alu_in2;
     wire [`NUM_THREADS-1:0][31:0] alu_in2_less = (alu_req_if.use_imm && ~is_br_op) ? {`NUM_THREADS{alu_req_if.imm}} : alu_in2;
 
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign add_result[i] = alu_in1_PC[i] + alu_in2_imm[i];
     end
 
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         wire [32:0] sub_in1 = {alu_signed & alu_in1[i][31], alu_in1[i]};
         wire [32:0] sub_in2 = {alu_signed & alu_in2_less[i][31], alu_in2_less[i]};
         assign sub_result[i] = sub_in1 - sub_in2;
     end
 
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin    
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin    
         wire [32:0] shr_in1 = {alu_signed & alu_in1[i][31], alu_in1[i]};
         assign shr_result[i] = 32'($signed(shr_in1) >>> alu_in2_imm[i][4:0]);
     end        
 
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin 
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin 
         always @(*) begin
             case (alu_op)
                 `INST_ALU_AND: msc_result[i] = alu_in1[i] & alu_in2_imm[i];
@@ -69,7 +69,7 @@ module VX_alu_unit #(
         end
     end
             
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         always @(*) begin
             case (alu_op_class)                        
                 2'b00: alu_result[i] = add_result[i];               // ADD, LUI, AUIPC 

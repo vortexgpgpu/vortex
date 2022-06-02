@@ -169,7 +169,7 @@ module VX_shared_mem #(
     assign creq_out_ready = write_only || (bank_rsp_read_ready && crsq_last_read);
 
     // Generate memory banks
-    for (genvar i = 0; i < NUM_BANKS; i++) begin
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin
         wire [WORD_SIZE-1:0] wren = per_bank_req_byteen[i]
                                   & {WORD_SIZE{per_bank_req_valid[i] && per_bank_req_rw[i]}};
         VX_sp_ram #(

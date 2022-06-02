@@ -133,7 +133,7 @@ module VX_fpu_fpnew #(
         endcase
     end  
     
-    for (genvar i = 0; i < NUM_LANES; i++) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         if (0 == i) begin
             fpnew_top #( 
                 .Features       (FPU_FEATURES),

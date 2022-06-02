@@ -65,7 +65,7 @@ module VX_dcr_data (
 
     `RUNTIME_ASSERT(~dcr_wr_valid || dcr_addr_valid, ("%t: *** invalid device configuration register write address: 0x%0h, data=0x%0h", $time, dcr_wr_addr, dcr_wr_data));
 
-    assign dcr_wr_ready = 1; // no handshaking needed
+    assign dcr_wr_ready = 1'b1; // no handshaking needed
 
     ///////////////////////////////////////////////////////////////////////////
 

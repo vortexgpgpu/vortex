@@ -187,7 +187,7 @@ module VX_warp_sched #(
     wire [(32+`NUM_THREADS)-1:0] ipdom_data [`NUM_WARPS-1:0]; 
     wire ipdom_index [`NUM_WARPS-1:0];   
     
-    for (genvar i = 0; i < `NUM_WARPS; i++) begin
+    for (genvar i = 0; i < `NUM_WARPS; ++i) begin
         wire push = warp_ctl_if.valid 
                  && warp_ctl_if.split.valid
                  && (i == warp_ctl_if.wid);

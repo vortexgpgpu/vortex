@@ -35,7 +35,7 @@ module VX_scan #(
     end else begin
         // general case
         wire [N-1:0] fill;
-	    for (genvar i = 0; i < LOGN; i++) begin
+	    for (genvar i = 0; i < LOGN; ++i) begin
             wire [N-1:0] shifted = N'({fill, t[i]} >> (1<<i));
             if (OP == 0) begin
 		        assign fill = {N{1'b0}};
@@ -54,7 +54,7 @@ module VX_scan #(
     if (REVERSE) begin
         assign data_out = t[LOGN];
     end else begin
-        for (genvar i = 0; i < N; i++) begin
+        for (genvar i = 0; i < N; ++i) begin
             assign data_out[i] = t[LOGN][N-1-i];
         end        
     end

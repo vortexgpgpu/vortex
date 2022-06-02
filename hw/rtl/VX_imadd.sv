@@ -54,7 +54,7 @@ module VX_imadd (
 
     ///////////////////////////////////////////////////////////////////////////
 
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         wire [31:0] mul_in1 = data_in1[i];
         wire [31:0] mul_in2 = data_in2[i];
         wire [55:0] mul_result_tmp;
@@ -88,7 +88,7 @@ module VX_imadd (
         .data_out ({valid_s,  uuid_s,  wid_s,  tmask_s,  PC_s,  rd_s,  wb_s,  shift_s, data_in3_s})
     );
 
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign add_result[i] = mul_result[i] + data_in3_s[i];
     end
 

@@ -118,7 +118,7 @@ module Vortex (
     wire [`NUM_CLUSTERS-1:0] per_cluster_busy;
 
     // Generate all clusters
-    for (genvar i = 0; i < `NUM_CLUSTERS; i++) begin
+    for (genvar i = 0; i < `NUM_CLUSTERS; ++i) begin
 
         `RESET_RELAY (cluster_reset, reset_or_start);
 

@@ -51,7 +51,7 @@ module VX_fp_ncomp #(
     wire [NUM_LANES-1:0]        a_smaller, ab_equal;
 
     // Setup
-    for (genvar i = 0; i < NUM_LANES; i++) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign     a_sign[i] = dataa[i][31]; 
         assign a_exponent[i] = dataa[i][30:23];
         assign a_mantissa[i] = dataa[i][22:0];
@@ -111,7 +111,7 @@ module VX_fp_ncomp #(
 
     // FCLASS
     reg [NUM_LANES-1:0][31:0] fclass_mask;  // generate a 10-bit mask for integer reg
-    for (genvar i = 0; i < NUM_LANES; i++) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         always @(*) begin 
             if (a_clss_s0[i].is_normal) begin
                 fclass_mask[i] = a_sign_s0[i] ? NEG_NORM : POS_NORM;
@@ -136,7 +136,7 @@ module VX_fp_ncomp #(
 
     // Min/Max    
     reg [NUM_LANES-1:0][31:0] fminmax_res;  // result of fmin/fmax
-    for (genvar i = 0; i < NUM_LANES; i++) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         always @(*) begin
             if (a_clss_s0[i].is_nan && b_clss_s0[i].is_nan)
                 fminmax_res[i] = {1'b0, 8'hff, 1'b1, 22'd0}; // canonical qNaN
@@ -156,7 +156,7 @@ module VX_fp_ncomp #(
 
     // Sign injection    
     reg [NUM_LANES-1:0][31:0] fsgnj_res;    // result of sign injection
-    for (genvar i = 0; i < NUM_LANES; i++) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         always @(*) begin
             case (frm_s0)
                 0: fsgnj_res[i] = { b_sign_s0[i], a_exponent_s0[i], a_mantissa_s0[i]};
@@ -170,7 +170,7 @@ module VX_fp_ncomp #(
     // Comparison    
     reg [NUM_LANES-1:0][31:0] fcmp_res;     // result of comparison
     fflags_t [NUM_LANES-1:0]  fcmp_fflags;  // comparison fflags
-    for (genvar i = 0; i < NUM_LANES; i++) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         always @(*) begin
             case (frm_s0)
                 `INST_FRM_RNE: begin // LE
@@ -213,7 +213,7 @@ module VX_fp_ncomp #(
     reg [NUM_LANES-1:0][31:0] tmp_result;
     fflags_t [NUM_LANES-1:0] tmp_fflags;
 
-    for (genvar i = 0; i < NUM_LANES; i++) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         always @(*) begin
             case (op_type_s0)
                 `INST_FPU_CLASS: begin

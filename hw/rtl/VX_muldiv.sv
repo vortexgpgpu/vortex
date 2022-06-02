@@ -57,7 +57,7 @@ module VX_muldiv (
 
     wire mul_fire_in = mul_valid_in && mul_ready_in;
 
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         wire [31:0] mul_resultl, mul_resulth;
         always @(*) begin        
             dpi_imul (mul_fire_in, alu_in1[i], alu_in2[i], is_signed_mul_a, is_signed_mul_b, mul_resultl, mul_resulth);
@@ -81,7 +81,7 @@ module VX_muldiv (
     
     wire is_mulh_out;
 
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         wire [32:0] mul_in1 = {is_signed_mul_a & alu_in1[i][31], alu_in1[i]};
         wire [32:0] mul_in2 = {is_signed_mul_b & alu_in2[i][31], alu_in2[i]};
     `IGNORE_UNUSED_BEGIN
@@ -142,7 +142,7 @@ module VX_muldiv (
 
     wire div_fire_in = div_valid_in && div_ready_in;
     
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         wire [31:0] div_quotient, div_remainder;
         always @(*) begin        
             dpi_idiv (div_fire_in, alu_in1[i], alu_in2[i], is_signed_div, div_quotient, div_remainder);

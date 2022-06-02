@@ -272,7 +272,7 @@ module VX_mem_scheduler #(
         .rsp_tag_in    (mem_rsp_tag),
         .rsp_ready_in  (mem_rsp_ready),
         .rsp_valid_out (mem_rsp_valid_s),
-        .rsp_tmask_out (mem_rsp_mask_s),
+        .rsp_mask_out  (mem_rsp_mask_s),
         .rsp_data_out  (mem_rsp_data_s),
         .rsp_tag_out   (mem_rsp_tag_s),
         .rsp_ready_out (mem_rsp_ready_s)

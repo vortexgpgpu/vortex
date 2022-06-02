@@ -132,7 +132,7 @@ module VX_fpu_dpi #(
         wire fma_fire = fma_valid && fma_ready;
 
         always @(*) begin        
-            for (integer i = 0; i < NUM_LANES; i++) begin
+            for (integer i = 0; i < NUM_LANES; ++i) begin
                 dpi_fadd   (fma_fire, dataa[i], datab[i], frm, result_fadd[i], fflags_fadd[i]);
                 dpi_fsub   (fma_fire, dataa[i], datab[i], frm, result_fsub[i], fflags_fsub[i]);
                 dpi_fmul   (fma_fire, dataa[i], datab[i], frm, result_fmul[i], fflags_fmul[i]);
@@ -191,7 +191,7 @@ module VX_fpu_dpi #(
         wire fdiv_fire = fdiv_valid && fdiv_ready;
         
         always @(*) begin        
-            for (integer i = 0; i < NUM_LANES; i++) begin
+            for (integer i = 0; i < NUM_LANES; ++i) begin
                 dpi_fdiv (fdiv_fire, dataa[i], datab[i], frm, result_fdiv[i], fflags_fdiv[i]);
             end
         end
@@ -226,7 +226,7 @@ module VX_fpu_dpi #(
         wire fsqrt_fire = fsqrt_valid && fsqrt_ready;
         
         always @(*) begin        
-            for (integer i = 0; i < NUM_LANES; i++) begin
+            for (integer i = 0; i < NUM_LANES; ++i) begin
                 dpi_fsqrt (fsqrt_fire, dataa[i], frm, result_fsqrt[i], fflags_fsqrt[i]);
             end
         end
@@ -270,7 +270,7 @@ module VX_fpu_dpi #(
         wire fcvt_fire = fcvt_valid && fcvt_ready;
                 
         always @(*) begin        
-            for (integer i = 0; i < NUM_LANES; i++) begin
+            for (integer i = 0; i < NUM_LANES; ++i) begin
                 dpi_itof (fcvt_fire, dataa[i], frm, result_itof[i], fflags_itof[i]);
                 dpi_utof (fcvt_fire, dataa[i], frm, result_utof[i], fflags_utof[i]);
                 dpi_ftoi (fcvt_fire, dataa[i], frm, result_ftoi[i], fflags_ftoi[i]);
@@ -336,7 +336,7 @@ module VX_fpu_dpi #(
         wire fncp_fire = fncp_valid && fncp_ready;
                 
         always @(*) begin        
-            for (integer i = 0; i < NUM_LANES; i++) begin
+            for (integer i = 0; i < NUM_LANES; ++i) begin
                 dpi_fclss  (fncp_fire, dataa[i], result_fclss[i]);
                 dpi_flt    (fncp_fire, dataa[i], datab[i], result_flt[i], fflags_flt[i]);
                 dpi_fle    (fncp_fire, dataa[i], datab[i], result_fle[i], fflags_fle[i]);
