@@ -301,7 +301,7 @@
 
 // Number of texture units
 `ifndef NUM_TEX_UNITS
-`define NUM_TEX_UNITS 1
+`define NUM_TEX_UNITS `UP(`NUM_CORES / 8)
 `endif
 
 // Texture Unit memory pending Queue

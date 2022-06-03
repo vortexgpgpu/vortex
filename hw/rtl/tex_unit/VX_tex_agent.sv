@@ -78,8 +78,8 @@ module VX_tex_agent #(
         .ready_out (tex_agent_rsp_if.ready)
     );
 
-    assign tex_agent_rsp_if.wb   = 1'b1;
-    assign tex_agent_rsp_if.eop  = 1'b1;
+    assign tex_agent_rsp_if.wb  = 1'b1;
+    assign tex_agent_rsp_if.eop = 1'b1;
 
 `ifdef DBG_TRACE_TEX
     always @(posedge clk) begin
@@ -90,7 +90,7 @@ module VX_tex_agent #(
             `TRACE_ARRAY1D(1, tex_agent_req_if.coords[1], `NUM_THREADS);
             `TRACE(1, (", lod="));
             `TRACE_ARRAY1D(1, tex_agent_req_if.lod, `NUM_THREADS);
-            `TRACE(1, (", stage=%0d, tag=0x%0h (#%0d)\n", tex_req_tag, tex_agent_req_if.stage, tex_agent_req_if.uuid));
+            `TRACE(1, (", stage=%0d, tag=0x%0h (#%0d)\n", tex_agent_req_if.stage, tex_req_tag, tex_agent_req_if.uuid));
         end
         if (tex_agent_rsp_if.valid && tex_agent_rsp_if.ready) begin
             `TRACE(1, ("%d: core%0d-tex-rsp: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, texels=", $time, CORE_ID, tex_agent_rsp_if.wid, tex_agent_rsp_if.PC, tex_agent_rsp_if.tmask, tex_agent_rsp_if.rd));

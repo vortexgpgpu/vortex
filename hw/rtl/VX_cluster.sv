@@ -129,8 +129,8 @@ module VX_cluster #(
         .NUM_LANES    (`NUM_THREADS),
         .NUM_OUTPUTS  (`NUM_TEX_UNITS),
         .TAG_WIDTH    (`TEX_REQ_TAG_WIDTH),
-        .BUFFERED_REQ ((`NUM_CORES > 1 || `NUM_TEX_UNITS > 1) ? 1 : 0),
-        .BUFFERED_RSP ((`NUM_CORES > 1 || `NUM_TEX_UNITS > 1) ? 1 : 0)
+        .BUFFERED_REQ ((`NUM_CORES != `NUM_TEX_UNITS) ? 1 : 0),
+        .BUFFERED_RSP ((`NUM_CORES != `NUM_TEX_UNITS) ? 1 : 0)
     ) tex_arb (
         .clk        (clk),
         .reset      (reset),
@@ -295,7 +295,7 @@ module VX_cluster #(
         .NUM_INPUTS  (`NUM_RASTER_UNITS),
         .NUM_LANES   (`NUM_THREADS),
         .NUM_OUTPUTS (`NUM_CORES),
-        .BUFFERED    ((`NUM_CORES > 1 || `NUM_RASTER_UNITS > 1) ? 1 : 0)
+        .BUFFERED    ((`NUM_CORES != `NUM_RASTER_UNITS) ? 1 : 0)
     ) raster_arb (
         .clk        (clk),
         .reset      (reset),
@@ -451,7 +451,7 @@ module VX_cluster #(
         .NUM_INPUTS  (`NUM_CORES),
         .NUM_LANES   (`NUM_THREADS),
         .NUM_OUTPUTS (`NUM_ROP_UNITS),
-        .BUFFERED    ((`NUM_CORES > 1 || `NUM_ROP_UNITS > 1) ? 1 : 0)
+        .BUFFERED    ((`NUM_CORES != `NUM_ROP_UNITS) ? 1 : 0)
     ) rop_arb (
         .clk        (clk),
         .reset      (reset),

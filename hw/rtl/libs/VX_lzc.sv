@@ -17,11 +17,6 @@ module VX_lzc #(
         assign data_out  = 0;
         assign valid_out = data_in;
 
-    end else if (N == 2) begin
-
-        assign data_out  = data_in[REVERSE];
-        assign valid_out = (| data_in);
-
     end else begin
 
         wire [N-1:0][LOGN-1:0] indices;

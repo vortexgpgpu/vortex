@@ -214,8 +214,7 @@
 `define CACHE_ADDR_TYPE_BITS    `NC_TAG_BITS
 `endif
 
-`define ARB_SEL_COUNT(a, b)     ((a > b) ? ((a + b - 1) / b) : ((b + a - 1) / a))
-`define ARB_SEL_BITS(a, b)      `CLOG2(`ARB_SEL_COUNT(a, b))
+`define ARB_SEL_BITS(I, O)      ((I > O) ? `CLOG2((I + O - 1) / O) : 0)
 
 ////////////////////////// Icache Definitions /////////////////////////////////
 

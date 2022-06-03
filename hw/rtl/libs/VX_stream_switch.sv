@@ -9,12 +9,13 @@ module VX_stream_switch #(
     parameter LOCK_ENABLE    = 1,
     parameter BUFFERED       = 0,
     parameter NUM_REQS       = (NUM_INPUTS > NUM_OUTPUTS) ? ((NUM_INPUTS + NUM_OUTPUTS - 1) / NUM_OUTPUTS) : ((NUM_OUTPUTS + NUM_INPUTS - 1) / NUM_INPUTS),
+    parameter SEL_COUNT      = `MIN(NUM_INPUTS, NUM_OUTPUTS),
     localparam LOG_NUM_REQS  = `CLOG2(NUM_REQS)
 ) (
     input  wire clk,
     input  wire reset,
 
-    input wire  [`UP(LOG_NUM_REQS)-1:0]                     sel_in,
+    input wire  [SEL_COUNT-1:0][`UP(LOG_NUM_REQS)-1:0]      sel_in,
 
     input  wire [NUM_INPUTS-1:0][NUM_LANES-1:0]             valid_in,
     input  wire [NUM_INPUTS-1:0][NUM_LANES-1:0][DATAW-1:0]  data_in,
@@ -48,14 +49,16 @@ module VX_stream_switch #(
         wire [NUM_OUTPUTS-1:0][NUM_LANES-1:0][DATAW-1:0] data_out_r;
         wire [NUM_OUTPUTS-1:0][NUM_LANES-1:0]            ready_out_r;
 
-        assign valid_out_r = valid_in_r[sel_in];
-        assign data_out_r  = data_in_r[sel_in];
+        for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
+            assign valid_out_r[i] = valid_in_r[sel_in[i]][i];
+            assign data_out_r[i]  = data_in_r[sel_in[i]][i];
+        end
 
         for (genvar i = 0; i < NUM_REQS; ++i) begin
             for (genvar j = 0; j < NUM_OUTPUTS; ++j) begin
                 localparam ii = i * NUM_OUTPUTS + j;                
                 if (ii < NUM_INPUTS) begin                    
-                    assign ready_in[ii] = ready_out_r[j] & {NUM_LANES{(sel_in == `UP(LOG_NUM_REQS)'(i))}};
+                    assign ready_in[ii] = ready_out_r[j] & {NUM_LANES{(sel_in[j] == LOG_NUM_REQS'(i))}};
                 end
             end
         end
@@ -81,15 +84,21 @@ module VX_stream_switch #(
 
     end else if (NUM_OUTPUTS > NUM_INPUTS) begin
     
+        wire [NUM_REQS_A-1:0][NUM_INPUTS-1:0][NUM_LANES-1:0] valid_out_r;
         wire [NUM_REQS_A-1:0][NUM_INPUTS-1:0][NUM_LANES-1:0] ready_out_r;
 
-        assign ready_in = ready_out_r[sel_in];
+        for (genvar i = 0; i < NUM_INPUTS; ++i) begin
+            for (genvar j = 0; j < NUM_REQS_A; ++j) begin
+                assign valid_out_r[j][i] = valid_in[i] & {NUM_LANES{(sel_in[i] == LOG_NUM_REQS'(j))}};
+            end
+            assign ready_in[i] = ready_out_r[sel_in[i]][i];
+        end
 
         for (genvar i = 0; i < NUM_REQS_A; ++i) begin
             for (genvar j = 0; j < NUM_INPUTS; ++j) begin
                 localparam ii = i * NUM_INPUTS + j;
                 if (ii < NUM_OUTPUTS) begin
-                    for (genvar k = 0; k < NUM_LANES; ++k) begin                    
+                    for (genvar k = 0; k < NUM_LANES; ++k) begin
                         VX_skid_buffer #(
                             .DATAW    (DATAW),
                             .PASSTHRU (BUFFERED == 0),
@@ -97,7 +106,7 @@ module VX_stream_switch #(
                         ) out_buffer (
                             .clk       (clk),
                             .reset     (reset),
-                            .valid_in  (valid_in[j][k] && (sel_in == `UP(LOG_NUM_REQS)'(i))),
+                            .valid_in  (valid_out_r[i][j][k]),
                             .data_in   (data_in[j][k]),
                             .ready_in  (ready_out_r[i][j][k]),
                             .valid_out (valid_out[ii][k]),

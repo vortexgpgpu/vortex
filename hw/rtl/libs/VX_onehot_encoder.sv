@@ -5,7 +5,7 @@
 
 `TRACING_OFF
 module VX_onehot_encoder #(
-    parameter N       = 1,    
+    parameter N       = 1,
     parameter REVERSE = 0,
     parameter MODEL   = 1,
     localparam LN     = `LOG2UP(N)
@@ -61,14 +61,14 @@ module VX_onehot_encoder #(
         assign data_out = addr[LN][LN-1:0];
         assign valid_out = v[LN][0];
     `IGNORE_WARNINGS_END
-    end else if (MODEL == 2) begin 
+    end else if (MODEL == 2 && REVERSE == 0) begin 
 
         for (genvar j = 0; j < LN; ++j) begin
             wire [N-1:0] mask;
             for (genvar i = 0; i < N; ++i) begin
                 assign mask[i] = i[j];
             end
-            assign data_out[j] = |(mask & data_in);
+            assign data_out[j] = | (mask & data_in);
         end
 
         assign valid_out = (| data_in);
@@ -82,7 +82,7 @@ module VX_onehot_encoder #(
                 index_r = 'x; 
                 for (integer i = N-1; i >= 0; --i) begin
                     if (data_in[i]) begin                
-                        index_r = LN'(i);
+                        index_r = LN'(N-1-i);
                     end
                 end
             end
