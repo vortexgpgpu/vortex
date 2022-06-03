@@ -10,7 +10,7 @@ module VX_bank #(
     // Size of cache in bytes
     parameter CACHE_SIZE        = 1, 
     // Size of line inside a bank in bytes
-    parameter CACHE_LINE_SIZE   = 1, 
+    parameter LINE_SIZE         = 1, 
     // Number of banks
     parameter NUM_BANKS         = 1,
     // Number of ports per banks
@@ -84,7 +84,7 @@ module VX_bank #(
     // Memory response
     input wire                          mem_rsp_valid,
     input wire [MSHR_ADDR_WIDTH-1:0]    mem_rsp_id,
-    input wire [`CACHE_LINE_WIDTH-1:0]  mem_rsp_data,
+    input wire [`LINE_WIDTH-1:0]        mem_rsp_data,
     output wire                         mem_rsp_ready,
 
     // flush
@@ -146,7 +146,7 @@ module VX_bank #(
     wire [NUM_PORTS-1:0]            pmask_st0, pmask_st1;
     wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] tag_st0, tag_st1;
     wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] rdata_st1;
-    wire [`CACHE_LINE_WIDTH-1:0]    wdata_st0, wdata_st1;
+    wire [`LINE_WIDTH-1:0]          wdata_st0, wdata_st1;
     wire [MSHR_ADDR_WIDTH-1:0]      mshr_id_st0, mshr_id_st1;
     wire                            valid_st0, valid_st1;        
     wire                            is_fill_st0, is_fill_st1;
@@ -192,14 +192,14 @@ module VX_bank #(
     `ASSIGN_REQ_UUID (req_uuid_sel, mshr_creq_tag)
     `UNUSED_VAR (mshr_creq_tag)
 
-    wire [`CACHE_LINE_WIDTH-1:0] wdata_sel;    
+    wire [`LINE_WIDTH-1:0] wdata_sel;    
     assign wdata_sel[(NUM_PORTS * `WORD_WIDTH)-1:0] = (mem_rsp_valid || !WRITE_ENABLE) ? mem_rsp_data[(NUM_PORTS * `WORD_WIDTH)-1:0] : creq_data;
-    for (genvar i = NUM_PORTS * `WORD_WIDTH; i < `CACHE_LINE_WIDTH; ++i) begin
+    for (genvar i = NUM_PORTS * `WORD_WIDTH; i < `LINE_WIDTH; ++i) begin
         assign wdata_sel[i] = mem_rsp_data[i];
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH + NUM_PORTS * (WORD_SEL_BITS + WORD_SIZE + `UP(`REQ_SEL_BITS) + 1 + CORE_TAG_WIDTH) + MSHR_ADDR_WIDTH),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `LINE_WIDTH + NUM_PORTS * (WORD_SEL_BITS + WORD_SIZE + `UP(`REQ_SEL_BITS) + 1 + CORE_TAG_WIDTH) + MSHR_ADDR_WIDTH),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
@@ -240,7 +240,7 @@ module VX_bank #(
         .INSTANCE_ID    (INSTANCE_ID),
         .BANK_ID        (BANK_ID),        
         .CACHE_SIZE     (CACHE_SIZE),
-        .CACHE_LINE_SIZE(CACHE_LINE_SIZE),
+        .LINE_SIZE      (LINE_SIZE),
         .NUM_BANKS      (NUM_BANKS),
         .NUM_WAYS       (NUM_WAYS),
         .WORD_SIZE      (WORD_SIZE),   
@@ -271,7 +271,7 @@ module VX_bank #(
     wire [MSHR_ADDR_WIDTH-1:0] mshr_id_a_st0 = (is_read_st0 || is_write_st0) ? mshr_alloc_id : mshr_id_st0;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + NUM_WAYS + `LINE_ADDR_WIDTH + `CACHE_LINE_WIDTH + NUM_PORTS * (WORD_SEL_BITS + WORD_SIZE + `UP(`REQ_SEL_BITS) + 1 + CORE_TAG_WIDTH) + MSHR_ADDR_WIDTH + 1),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + NUM_WAYS + `LINE_ADDR_WIDTH + `LINE_WIDTH + NUM_PORTS * (WORD_SEL_BITS + WORD_SIZE + `UP(`REQ_SEL_BITS) + 1 + CORE_TAG_WIDTH) + MSHR_ADDR_WIDTH + 1),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
@@ -296,7 +296,7 @@ module VX_bank #(
         .INSTANCE_ID    (INSTANCE_ID),
         .BANK_ID        (BANK_ID),        
         .CACHE_SIZE     (CACHE_SIZE),
-        .CACHE_LINE_SIZE(CACHE_LINE_SIZE),
+        .LINE_SIZE      (LINE_SIZE),
         .NUM_BANKS      (NUM_BANKS),
         .NUM_WAYS       (NUM_WAYS),
         .NUM_PORTS      (NUM_PORTS),
@@ -344,7 +344,7 @@ module VX_bank #(
     VX_miss_resrv #(
         .INSTANCE_ID    (INSTANCE_ID),
         .BANK_ID        (BANK_ID),        
-        .CACHE_LINE_SIZE(CACHE_LINE_SIZE),
+        .LINE_SIZE      (LINE_SIZE),
         .NUM_BANKS      (NUM_BANKS),
         .NUM_PORTS      (NUM_PORTS),
         .WORD_SIZE      (WORD_SIZE),

@@ -6,7 +6,7 @@ module VX_data_access #(
     // Size of cache in bytes
     parameter CACHE_SIZE        = 1, 
     // Size of line inside a bank in bytes
-    parameter CACHE_LINE_SIZE   = 1, 
+    parameter LINE_SIZE         = 1, 
     // Number of banks
     parameter NUM_BANKS         = 1, 
     // Number of ports per banks
@@ -49,7 +49,7 @@ module VX_data_access #(
     `UNUSED_VAR (addr)
     `UNUSED_VAR (read)
 
-    localparam BYTEENW = WRITE_ENABLE ? CACHE_LINE_SIZE : 1;
+    localparam BYTEENW = WRITE_ENABLE ? LINE_SIZE : 1;
 
     wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] rdata;
     wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] wdata;
@@ -100,7 +100,7 @@ module VX_data_access #(
 
     for (genvar i = 0; i < NUM_WAYS; ++i) begin
         VX_sp_ram #(
-            .DATAW      (`CACHE_LINE_WIDTH),
+            .DATAW      (`LINE_WIDTH),
             .SIZE       (`LINES_PER_BANK),
             .BYTEENW    (BYTEENW),
             .NO_RWCHECK (1)

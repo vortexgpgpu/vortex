@@ -60,7 +60,7 @@ module VX_mem_unit # (
     VX_cache_wrap #(
         .INSTANCE_ID    ($sformatf("core%0d-icache", CORE_ID)),
         .CACHE_SIZE     (`ICACHE_SIZE),
-        .CACHE_LINE_SIZE(`ICACHE_LINE_SIZE),
+        .LINE_SIZE      (`ICACHE_LINE_SIZE),
         .NUM_BANKS      (1),
         .NUM_WAYS       (`ICACHE_NUM_WAYS),
         .WORD_SIZE      (`ICACHE_WORD_SIZE),
@@ -137,7 +137,7 @@ module VX_mem_unit # (
     VX_cache_wrap #(
         .INSTANCE_ID    ($sformatf("core%0d-dcache", CORE_ID)),
         .CACHE_SIZE     (`DCACHE_SIZE),
-        .CACHE_LINE_SIZE(`DCACHE_LINE_SIZE),
+        .LINE_SIZE      (`DCACHE_LINE_SIZE),
         .NUM_BANKS      (`DCACHE_NUM_BANKS),
         .NUM_WAYS       (`DCACHE_NUM_WAYS),
         .NUM_PORTS      (`DCACHE_NUM_PORTS),

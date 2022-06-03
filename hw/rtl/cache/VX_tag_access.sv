@@ -6,7 +6,7 @@ module VX_tag_access #(
     // Size of cache in bytes
     parameter CACHE_SIZE        = 1, 
     // Size of line inside a bank in bytes
-    parameter CACHE_LINE_SIZE   = 1, 
+    parameter LINE_SIZE         = 1, 
     // Number of banks
     parameter NUM_BANKS         = 1, 
     // Number of associative ways

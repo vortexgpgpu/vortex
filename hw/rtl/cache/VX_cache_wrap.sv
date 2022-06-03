@@ -7,11 +7,11 @@ module VX_cache_wrap #(
     parameter NUM_REQS              = 4,
 
     // Size of cache in bytes
-    parameter CACHE_SIZE            = 16384, 
+    parameter CACHE_SIZE            = 4096, 
     // Size of line inside a bank in bytes
-    parameter CACHE_LINE_SIZE       = 64, 
+    parameter LINE_SIZE             = 64, 
     // Number of banks
-    parameter NUM_BANKS             = NUM_REQS,
+    parameter NUM_BANKS             = 1,
     // Number of ports per banks
     parameter NUM_PORTS             = 1,
     // Number of associative ways
@@ -39,9 +39,6 @@ module VX_cache_wrap #(
     // core request tag size
     parameter CORE_TAG_WIDTH        = REQ_UUID_BITS,
 
-    // Memory request tag size
-    parameter MEM_TAG_WIDTH         = (32 - $clog2(CACHE_LINE_SIZE)),
-
     // enable bypass for non-cacheable addresses
     parameter NC_TAG_BIT            = 0,
     parameter NC_ENABLE             = 0,
@@ -49,13 +46,14 @@ module VX_cache_wrap #(
     // Force bypass for all requests
     parameter PASSTHRU              = 0
  ) (
+    
+    input wire clk,
+    input wire reset,
+
     // PERF
 `ifdef PERF_ENABLE
     VX_perf_cache_if.master perf_cache_if,
 `endif
-    
-    input wire clk,
-    input wire reset,
 
     // Core request
     VX_mem_req_if.slave     core_req_if [NUM_REQS],
@@ -70,13 +68,16 @@ module VX_cache_wrap #(
     VX_mem_rsp_if.slave     mem_rsp_if
 );
 
-    //`STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid parameter"))
+    `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid parameter"))
+    `STATIC_ASSERT(NUM_PORTS <= NUM_BANKS, ("invalid parameter"))
     `STATIC_ASSERT(NUM_BANKS == (1 << $clog2(NUM_BANKS)), ("invalid parameter"))
 
     localparam WORD_SEL_BITS    = `UP(`WORD_SEL_BITS);
-    localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE);
-    localparam MEM_TAG_IN_WIDTH = `BANK_SEL_BITS + MSHR_ADDR_WIDTH;
+    localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE);    
     localparam CORE_TAG_X_WIDTH = CORE_TAG_WIDTH - NC_ENABLE;
+    localparam MEM_TAG_X_WIDTH  = MSHR_ADDR_WIDTH + `BANK_SEL_BITS;
+    localparam MEM_TAG_NC_WIDTH = `REQ_SEL_BITS + `WORD_SEL_BITS + TAG_WIDTH;
+    localparam MEM_TAG_WIDTH    = `MAX(MEM_TAG_X_WIDTH, MEM_TAG_NC_WIDTH);
 
     wire [NUM_REQS-1:0]                     core_req_valid;
     wire [NUM_REQS-1:0]                     core_req_rw;
@@ -101,14 +102,14 @@ module VX_cache_wrap #(
     // Memory request buffering
     wire                             mem_req_valid_s;
     wire                             mem_req_rw_s;
-    wire [CACHE_LINE_SIZE-1:0]       mem_req_byteen_s;   
+    wire [LINE_SIZE-1:0]             mem_req_byteen_s;   
     wire [`MEM_ADDR_WIDTH-1:0]       mem_req_addr_s;
-    wire [`CACHE_LINE_WIDTH-1:0]     mem_req_data_s;
+    wire [`LINE_WIDTH-1:0]           mem_req_data_s;
     wire [MEM_TAG_WIDTH-1:0]         mem_req_tag_s;
     wire                             mem_req_ready_s;
 
     VX_skid_buffer #(
-        .DATAW    (1 + CACHE_LINE_SIZE + `MEM_ADDR_WIDTH + `CACHE_LINE_WIDTH + MEM_TAG_WIDTH),
+        .DATAW    (1 + LINE_SIZE + `MEM_ADDR_WIDTH + `LINE_WIDTH + MEM_TAG_WIDTH),
         .PASSTHRU (1 == NUM_BANKS && (!PASSTHRU || `WORD_SEL_BITS == 0))
     ) mem_req_sbuf (
         .clk       (clk),
@@ -166,15 +167,15 @@ module VX_cache_wrap #(
     wire                            mem_req_valid_b;
     wire                            mem_req_rw_b;
     wire [`MEM_ADDR_WIDTH-1:0]      mem_req_addr_b;
-    wire [CACHE_LINE_SIZE-1:0]      mem_req_byteen_b;
-    wire [`CACHE_LINE_WIDTH-1:0]    mem_req_data_b;
-    wire [MEM_TAG_IN_WIDTH-1:0]     mem_req_tag_b;
+    wire [LINE_SIZE-1:0]            mem_req_byteen_b;
+    wire [`LINE_WIDTH-1:0]          mem_req_data_b;
+    wire [MEM_TAG_X_WIDTH-1:0]     mem_req_tag_b;
     wire                            mem_req_ready_b;
     
     // Memory response
     wire                            mem_rsp_valid_b;
-    wire [`CACHE_LINE_WIDTH-1:0]    mem_rsp_data_b;
-    wire [MEM_TAG_IN_WIDTH-1:0]     mem_rsp_tag_b;
+    wire [`LINE_WIDTH-1:0]          mem_rsp_data_b;
+    wire [MEM_TAG_X_WIDTH-1:0]     mem_rsp_tag_b;
     wire                            mem_rsp_ready_b;
 
     if (NC_ENABLE || PASSTHRU) begin
@@ -190,8 +191,8 @@ module VX_cache_wrap #(
             .CORE_TAG_IN_WIDTH (CORE_TAG_WIDTH),
                 
             .MEM_ADDR_WIDTH    (`MEM_ADDR_WIDTH),
-            .MEM_DATA_SIZE     (CACHE_LINE_SIZE),
-            .MEM_TAG_IN_WIDTH  (MEM_TAG_IN_WIDTH),
+            .MEM_DATA_SIZE     (LINE_SIZE),
+            .MEM_TAG_IN_WIDTH  (MEM_TAG_X_WIDTH),
             .MEM_TAG_OUT_WIDTH (MEM_TAG_WIDTH),
 
             .REQ_UUID_BITS     (REQ_UUID_BITS)
@@ -355,14 +356,14 @@ module VX_cache_wrap #(
         ) core_rsp_wrap_if[NUM_REQS]();
 
         VX_mem_req_if #(
-            .DATA_WIDTH (`CACHE_LINE_WIDTH), 
+            .DATA_WIDTH (`LINE_WIDTH), 
             .ADDR_WIDTH (`MEM_ADDR_WIDTH),
-            .TAG_WIDTH  (MEM_TAG_IN_WIDTH)
+            .TAG_WIDTH  (MEM_TAG_X_WIDTH)
         ) mem_req_wrap_if();
 
         VX_mem_rsp_if #(
-            .DATA_WIDTH (`CACHE_LINE_WIDTH), 
-            .TAG_WIDTH  (MEM_TAG_IN_WIDTH)
+            .DATA_WIDTH (`LINE_WIDTH), 
+            .TAG_WIDTH  (MEM_TAG_X_WIDTH)
         ) mem_rsp_wrap_if();
 
         for (genvar i = 0; i < NUM_REQS; ++i) begin
@@ -398,7 +399,7 @@ module VX_cache_wrap #(
         VX_cache #(
             .INSTANCE_ID    (INSTANCE_ID),
             .CACHE_SIZE     (CACHE_SIZE),
-            .CACHE_LINE_SIZE(CACHE_LINE_SIZE),
+            .LINE_SIZE      (LINE_SIZE),
             .NUM_BANKS      (NUM_BANKS),
             .NUM_WAYS       (NUM_WAYS),
             .NUM_PORTS      (NUM_PORTS),
@@ -411,8 +412,7 @@ module VX_cache_wrap #(
             .MREQ_SIZE      (MREQ_SIZE),
             .WRITE_ENABLE   (WRITE_ENABLE),
             .REQ_UUID_BITS  (REQ_UUID_BITS),
-            .CORE_TAG_WIDTH (CORE_TAG_X_WIDTH),        
-            .MEM_TAG_WIDTH  (MEM_TAG_IN_WIDTH),
+            .CORE_TAG_WIDTH (CORE_TAG_X_WIDTH),
             .CORE_OUT_REG   (NUM_BANKS > 2),
             .MEM_OUT_REG    (NUM_BANKS > 2)
         ) cache (

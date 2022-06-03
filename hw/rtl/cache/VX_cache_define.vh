@@ -10,17 +10,17 @@
 
 `define WORD_WIDTH              (8 * WORD_SIZE)
 
-`define CACHE_LINE_WIDTH        (8 * CACHE_LINE_SIZE)
+`define LINE_WIDTH              (8 * LINE_SIZE)
 
 `define BANK_SIZE               (CACHE_SIZE / NUM_BANKS)
 
 `define WAY_SEL_BITS            `CLOG2(NUM_WAYS)
 
-`define LINES_PER_BANK          (`BANK_SIZE / (CACHE_LINE_SIZE * NUM_WAYS))
-`define WORDS_PER_LINE          (CACHE_LINE_SIZE / WORD_SIZE)
+`define LINES_PER_BANK          (`BANK_SIZE / (LINE_SIZE * NUM_WAYS))
+`define WORDS_PER_LINE          (LINE_SIZE / WORD_SIZE)
 
 `define WORD_ADDR_WIDTH         (32-`CLOG2(WORD_SIZE))
-`define MEM_ADDR_WIDTH          (32-`CLOG2(CACHE_LINE_SIZE))
+`define MEM_ADDR_WIDTH          (32-`CLOG2(LINE_SIZE))
 `define LINE_ADDR_WIDTH         (`MEM_ADDR_WIDTH-`CLOG2(NUM_BANKS))
 
 // Word select

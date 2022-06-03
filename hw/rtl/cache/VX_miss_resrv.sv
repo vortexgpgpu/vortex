@@ -8,7 +8,7 @@ module VX_miss_resrv #(
     parameter NUM_REQS          = 1, 
     
     // Size of line inside a bank in bytes
-    parameter CACHE_LINE_SIZE   = 1, 
+    parameter LINE_SIZE         = 1, 
     // Number of banks
     parameter NUM_BANKS         = 1,
     // Number of ports per banks

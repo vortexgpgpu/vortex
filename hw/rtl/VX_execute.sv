@@ -28,7 +28,7 @@ module VX_execute #(
 `ifdef PERF_ENABLE
     VX_perf_memsys_if.slave perf_memsys_if,
     VX_perf_pipeline_if.slave perf_pipeline_if,
- `endif
+`endif
 
 `ifdef EXT_TEX_ENABLE
     VX_tex_req_if.master    tex_req_if,

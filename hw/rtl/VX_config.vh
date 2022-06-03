@@ -368,6 +368,12 @@
     `define ICACHE_ENABLED 1
 `else
     `define ICACHE_ENABLED 0
+    `define NUM_ICACHES 0
+`endif
+
+// Number of caches
+`ifndef NUM_ICACHES
+`define NUM_ICACHES `UP(`NUM_CORES / 8)
 `endif
 
 // Size of cache in bytes
@@ -415,6 +421,12 @@
     `define DCACHE_ENABLED 1
 `else
     `define DCACHE_ENABLED 0
+    `define NUM_DCACHES 0
+`endif
+
+// Number of caches
+`ifndef NUM_DCACHES
+`define NUM_DCACHES `UP(`NUM_CORES / 8)
 `endif
 
 // Size of cache in bytes
@@ -472,6 +484,12 @@
     `define TCACHE_ENABLED 1
 `else
     `define TCACHE_ENABLED 0
+    `define NUM_TCACHES 0
+`endif
+
+// Number of caches
+`ifndef NUM_TCACHES
+`define NUM_TCACHES `UP(`NUM_TEX_UNITS / 4)
 `endif
 
 // Size of cache in bytes
@@ -529,6 +547,12 @@
     `define RCACHE_ENABLED 1
 `else
     `define RCACHE_ENABLED 0
+    `define NUM_RCACHES 0
+`endif
+
+// Number of caches
+`ifndef NUM_RCACHES
+`define NUM_RCACHES `UP(`NUM_RASTER_UNITS / 4)
 `endif
 
 // Size of cache in bytes
@@ -586,6 +610,12 @@
     `define OCACHE_ENABLED 1
 `else
     `define OCACHE_ENABLED 0
+    `define NUM_OCACHES 0
+`endif
+
+// Number of caches
+`ifndef NUM_OCACHES
+`define NUM_OCACHES `UP(`NUM_ROP_UNITS / 4)
 `endif
 
 // Size of cache in bytes
@@ -638,7 +668,6 @@
 `ifndef SM_DISABLE
 `define SM_ENABLE
 `endif
-
 `ifdef SM_ENABLE
     `define SM_ENABLED   1
 `else
@@ -652,7 +681,7 @@
 
 // Size of storage in bytes
 `ifndef SMEM_SIZE
-`define SMEM_SIZE (`SMEM_LOCAL_SIZE * `NUM_WARPS * `NUM_THREADS)
+`define SMEM_SIZE (`NUM_CORES * `NUM_WARPS * `NUM_THREADS * `SMEM_LOCAL_SIZE)
 `endif
 
 // Number of banks

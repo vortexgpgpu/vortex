@@ -8,13 +8,23 @@ import VX_gpu_types::*;
 module VX_core #( 
     parameter CORE_ID = 0
 ) (        
-    `SCOPE_IO_VX_core
+    `SCOPE_IO_VX_pipeline
     
     // Clock
-    input  wire             clk,
-    input  wire             reset,
+    input wire              clk,
+    input wire              reset,
 
-    VX_dcr_base_if.slave    dcr_base_if,
+    input base_dcrs_t       base_dcrs,
+
+`ifdef PERF_ENABLE
+    VX_perf_memsys_if.slave perf_memsys_if,
+`endif
+
+    VX_cache_req_if.master  dcache_req_if,
+    VX_cache_rsp_if.slave   dcache_rsp_if,
+
+    VX_cache_req_if.master  icache_req_if,
+    VX_cache_rsp_if.slave   icache_rsp_if,
 
 `ifdef EXT_TEX_ENABLE
     VX_tex_req_if.master    tex_req_if,
@@ -33,7 +43,7 @@ module VX_core #(
 `endif
 `endif
 
-`ifdef EXT_ROP_ENABLE        
+`ifdef EXT_ROP_ENABLE
     VX_rop_req_if.master    rop_req_if,
 `ifdef PERF_ENABLE
     VX_rop_perf_if.slave    rop_perf_if,
@@ -41,9 +51,9 @@ module VX_core #(
 `endif
 `endif
 
-    // Memory
-    VX_mem_req_if.master    mem_req_if,
-    VX_mem_rsp_if.slave     mem_rsp_if,
+`ifdef PERF_ENABLE
+    VX_perf_memsys_if.slave perf_memsys_if,
+`endif
 
     // simulation helper signals
     output wire             sim_ebreak,
@@ -52,60 +62,114 @@ module VX_core #(
     // Status
     output wire             busy
 );
-
-    base_dcrs_t base_dcrs;
-    always @(posedge clk) begin
-        base_dcrs <= dcr_base_if.data;
-    end
+    VX_fetch_to_csr_if  fetch_to_csr_if();
+    VX_cmt_to_csr_if    cmt_to_csr_if();
+    VX_decode_if        decode_if();
+    VX_branch_ctl_if    branch_ctl_if();
+    VX_warp_ctl_if      warp_ctl_if();
+    VX_ifetch_rsp_if    ifetch_rsp_if();
+    VX_alu_req_if       alu_req_if();
+    VX_lsu_req_if       lsu_req_if();
+    VX_csr_req_if       csr_req_if();
+`ifdef EXT_F_ENABLE 
+    VX_fpu_req_if       fpu_req_if(); 
+`endif
+    VX_gpu_req_if       gpu_req_if();
+    VX_writeback_if     writeback_if();     
+    VX_wrelease_if      wrelease_if();
+    VX_join_if          join_if();
+    VX_commit_if        alu_commit_if();
+    VX_commit_if        ld_commit_if();
+    VX_commit_if        st_commit_if();
+    VX_commit_if        csr_commit_if();  
+`ifdef EXT_F_ENABLE
+    VX_commit_if        fpu_commit_if();     
+`endif
+    VX_commit_if        gpu_commit_if();     
 
 `ifdef PERF_ENABLE
-    VX_perf_memsys_if perf_memsys_if();
+    VX_perf_pipeline_if perf_pipeline_if();
 `endif
 
-    VX_cache_req_if #(
-        .NUM_REQS  (`DCACHE_NUM_REQS), 
-        .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`DCACHE_TAG_WIDTH)
-    ) dcache_req_if();
+    `RESET_RELAY (fetch_reset, reset);
+    `RESET_RELAY (decode_reset, reset);
+    `RESET_RELAY (issue_reset, reset);
+    `RESET_RELAY (execute_reset, reset);
+    `RESET_RELAY (commit_reset, reset);
 
-    VX_cache_rsp_if #(
-        .NUM_REQS  (`DCACHE_NUM_REQS), 
-        .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`DCACHE_TAG_WIDTH)
-    ) dcache_rsp_if();
-    
-    VX_cache_req_if #(
-        .NUM_REQS  (`ICACHE_NUM_REQS), 
-        .WORD_SIZE (`ICACHE_WORD_SIZE), 
-        .TAG_WIDTH (`ICACHE_TAG_WIDTH)
-    ) icache_req_if();
-
-    VX_cache_rsp_if #(
-        .NUM_REQS  (`ICACHE_NUM_REQS), 
-        .WORD_SIZE (`ICACHE_WORD_SIZE), 
-        .TAG_WIDTH (`ICACHE_TAG_WIDTH)
-    ) icache_rsp_if();
-    
-    VX_pipeline #(
+    VX_fetch #(
         .CORE_ID(CORE_ID)
-    ) pipeline (
-        `SCOPE_BIND_VX_core_pipeline
+    ) fetch (
+        `SCOPE_BIND_VX_pipeline_fetch
+        .clk            (clk),
+        .base_dcrs      (base_dcrs),
+        .reset          (fetch_reset),
+        .icache_req_if  (icache_req_if),
+        .icache_rsp_if  (icache_rsp_if), 
+        .wrelease_if    (wrelease_if),
+        .join_if        (join_if),        
+        .warp_ctl_if    (warp_ctl_if),
+        .branch_ctl_if  (branch_ctl_if),
+        .ifetch_rsp_if  (ifetch_rsp_if),
+        .fetch_to_csr_if(fetch_to_csr_if),
+        .busy           (busy)
+    );
+
+    VX_decode #(
+        .CORE_ID(CORE_ID)
+    ) decode (
+        .clk            (clk),
+        .reset          (decode_reset),        
     `ifdef PERF_ENABLE
-        .perf_memsys_if (perf_memsys_if),
+        .perf_decode_if (perf_pipeline_if.decode),
     `endif
+        .ifetch_rsp_if  (ifetch_rsp_if),
+        .decode_if      (decode_if),
+        .wrelease_if    (wrelease_if),
+        .join_if        (join_if)
+    );
+
+    VX_issue #(
+        .CORE_ID(CORE_ID)
+    ) issue (
+        `SCOPE_BIND_VX_pipeline_issue
 
         .clk            (clk),
-        .reset          (reset),
+        .reset          (issue_reset),
+
+    `ifdef PERF_ENABLE
+        .perf_issue_if  (perf_pipeline_if.issue),
+    `endif
+
+        .decode_if      (decode_if),
+        .writeback_if   (writeback_if),
+
+        .alu_req_if     (alu_req_if),
+        .lsu_req_if     (lsu_req_if),        
+        .csr_req_if     (csr_req_if),
+    `ifdef EXT_F_ENABLE
+        .fpu_req_if     (fpu_req_if),
+    `endif
+        .gpu_req_if     (gpu_req_if)
+    );
+
+    VX_execute #(
+        .CORE_ID(CORE_ID)
+    ) execute (
+        `SCOPE_BIND_VX_pipeline_execute
+        
+        .clk            (clk),
+        .reset          (execute_reset),
 
         .base_dcrs      (base_dcrs),
 
-        // dcache interface
-        .dcache_req_if  (dcache_req_if),
-        .dcache_rsp_if  (dcache_rsp_if),
+    `ifdef PERF_ENABLE
+        .perf_memsys_if (perf_memsys_if),
+        .perf_pipeline_if (perf_pipeline_if),
+    `endif 
 
-        // icache interface
-        .icache_req_if  (icache_req_if),
-        .icache_rsp_if  (icache_rsp_if),
+        .dcache_req_if  (dcache_req_if),
+        .dcache_rsp_if  (dcache_rsp_if),        
 
     `ifdef EXT_TEX_ENABLE
         .tex_req_if     (tex_req_if),
@@ -132,39 +196,50 @@ module VX_core #(
     `endif
     `endif
 
-        .sim_ebreak     (sim_ebreak),
-        .sim_wb_value   (sim_wb_value),
-
-        // Status
-        .busy           (busy)
-    );
-
-    VX_mem_unit #(
-        .CORE_ID(CORE_ID)
-    ) mem_unit (
-    `ifdef PERF_ENABLE
-        .perf_memsys_if (perf_memsys_if),
-    `endif
-
-        .clk            (clk),
-        .reset          (reset),
-
-        // dcache interface
-        .dcache_req_if  (dcache_req_if),
-        .dcache_rsp_if  (dcache_rsp_if),
+        .cmt_to_csr_if  (cmt_to_csr_if),   
+        .fetch_to_csr_if(fetch_to_csr_if),              
         
-        // icache interface
-        .icache_req_if  (icache_req_if),
-        .icache_rsp_if  (icache_rsp_if),
+        .alu_req_if     (alu_req_if),
+        .lsu_req_if     (lsu_req_if),        
+        .csr_req_if     (csr_req_if),
+    `ifdef EXT_F_ENABLE
+        .fpu_req_if     (fpu_req_if),
+    `endif
+        .gpu_req_if     (gpu_req_if),
 
-        // Memory
-        .mem_req_if     (mem_req_if),
-        .mem_rsp_if     (mem_rsp_if)
+        .warp_ctl_if    (warp_ctl_if),
+        .branch_ctl_if  (branch_ctl_if),        
+        .alu_commit_if  (alu_commit_if),
+        .ld_commit_if   (ld_commit_if),        
+        .st_commit_if   (st_commit_if),       
+        .csr_commit_if  (csr_commit_if),
+    `ifdef EXT_F_ENABLE
+        .fpu_commit_if  (fpu_commit_if),
+    `endif
+        .gpu_commit_if  (gpu_commit_if),
+
+        .sim_ebreak     (sim_ebreak)
+    );    
+
+    VX_commit #(
+        .CORE_ID(CORE_ID)
+    ) commit (
+        .clk            (clk),
+        .reset          (commit_reset),
+
+        .alu_commit_if  (alu_commit_if),
+        .ld_commit_if   (ld_commit_if),        
+        .st_commit_if   (st_commit_if),
+        .csr_commit_if  (csr_commit_if),
+    `ifdef EXT_F_ENABLE
+        .fpu_commit_if  (fpu_commit_if),
+    `endif
+        .gpu_commit_if  (gpu_commit_if),
+        
+        .writeback_if   (writeback_if),
+        .cmt_to_csr_if  (cmt_to_csr_if),
+
+        .sim_wb_value   (sim_wb_value)
     );
     
 endmodule
-
-
-
-
-

@@ -7,11 +7,11 @@ module VX_cache #(
     parameter NUM_REQS              = 4,
 
     // Size of cache in bytes
-    parameter CACHE_SIZE            = 16384, 
+    parameter CACHE_SIZE            = 4096, 
     // Size of line inside a bank in bytes
-    parameter CACHE_LINE_SIZE       = 64, 
+    parameter LINE_SIZE             = 64, 
     // Number of banks
-    parameter NUM_BANKS             = NUM_REQS,
+    parameter NUM_BANKS             = 1,
     // Number of ports per banks
     parameter NUM_PORTS             = 1,
     // Number of associative ways
@@ -38,9 +38,6 @@ module VX_cache #(
 
     // core request tag size
     parameter CORE_TAG_WIDTH        = REQ_UUID_BITS,
-
-    // Memory request tag size
-    parameter MEM_TAG_WIDTH         = (32 - $clog2(CACHE_LINE_SIZE)),
 
     // Core response output register
     parameter CORE_OUT_REG          = (NUM_BANKS > 1),
@@ -69,12 +66,13 @@ module VX_cache #(
     VX_mem_rsp_if.slave     mem_rsp_if
 );
 
-    //`STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid parameter"))
+    `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid parameter"))
     `STATIC_ASSERT(NUM_PORTS <= NUM_BANKS, ("invalid parameter"))
     `STATIC_ASSERT(NUM_BANKS == (1 << $clog2(NUM_BANKS)), ("invalid parameter"))
 
     localparam WORD_SEL_BITS   = `UP(`WORD_SEL_BITS);
     localparam MSHR_ADDR_WIDTH = `LOG2UP(MSHR_SIZE);
+    localparam MEM_TAG_WIDTH   = MSHR_ADDR_WIDTH + `BANK_SEL_BITS;
 
 `ifdef PERF_ENABLE
     wire [NUM_BANKS-1:0] perf_read_miss_per_bank;
@@ -105,14 +103,14 @@ module VX_cache #(
     // Memory request buffering
     wire                             mem_req_valid_s;
     wire                             mem_req_rw_s;
-    wire [CACHE_LINE_SIZE-1:0]       mem_req_byteen_s;
+    wire [LINE_SIZE-1:0]             mem_req_byteen_s;
     wire [`MEM_ADDR_WIDTH-1:0]       mem_req_addr_s;
-    wire [`CACHE_LINE_WIDTH-1:0]     mem_req_data_s;
+    wire [`LINE_WIDTH-1:0]           mem_req_data_s;
     wire [MEM_TAG_WIDTH-1:0]         mem_req_tag_s;
     wire                             mem_req_ready_s;
 
     VX_skid_buffer #(
-        .DATAW    (1 + CACHE_LINE_SIZE + `MEM_ADDR_WIDTH + `CACHE_LINE_WIDTH + MEM_TAG_WIDTH),
+        .DATAW    (1 + LINE_SIZE + `MEM_ADDR_WIDTH + `LINE_WIDTH + MEM_TAG_WIDTH),
         .PASSTHRU (MEM_OUT_REG)
     ) mem_req_sbuf (
         .clk       (clk),
@@ -153,12 +151,12 @@ module VX_cache #(
 
     // Memory response buffering
     wire                         mem_rsp_valid_s;
-    wire [`CACHE_LINE_WIDTH-1:0] mem_rsp_data_s;
+    wire [`LINE_WIDTH-1:0]       mem_rsp_data_s;
     wire [MEM_TAG_WIDTH-1:0]     mem_rsp_tag_s;
     wire                         mem_rsp_ready_s;
         
     VX_elastic_buffer #(
-        .DATAW   (MEM_TAG_WIDTH + `CACHE_LINE_WIDTH), 
+        .DATAW   (MEM_TAG_WIDTH + `LINE_WIDTH), 
         .SIZE    (MRSQ_SIZE),
         .OUT_REG (MRSQ_SIZE > 2)
     ) mem_rsp_queue (
@@ -181,7 +179,7 @@ module VX_cache #(
 
     VX_flush_ctrl #( 
         .CACHE_SIZE (CACHE_SIZE),
-        .CACHE_LINE_SIZE (CACHE_LINE_SIZE),        
+        .LINE_SIZE  (LINE_SIZE),        
         .NUM_BANKS  (NUM_BANKS),
         .NUM_WAYS   (NUM_WAYS)
     ) flush_ctrl (
@@ -232,7 +230,7 @@ module VX_cache #(
     // Core request dispatch
 
     VX_req_dispatch #(
-        .LINE_SIZE  (CACHE_LINE_SIZE),
+        .LINE_SIZE  (LINE_SIZE),
         .WORD_SIZE  (WORD_SIZE),
         .ADDR_WIDTH (`WORD_ADDR_WIDTH),
         .NUM_REQS   (NUM_REQS),
@@ -299,7 +297,7 @@ module VX_cache #(
 
         wire                        curr_bank_mem_rsp_valid;
         wire [MSHR_ADDR_WIDTH-1:0]  curr_bank_mem_rsp_id;
-        wire [`CACHE_LINE_WIDTH-1:0] curr_bank_mem_rsp_data;
+        wire [`LINE_WIDTH-1:0]      curr_bank_mem_rsp_data;
         wire                        curr_bank_mem_rsp_ready;
 
         // Core Req
@@ -353,7 +351,7 @@ module VX_cache #(
             .BANK_ID        (i),
             .INSTANCE_ID    (INSTANCE_ID),
             .CACHE_SIZE     (CACHE_SIZE),
-            .CACHE_LINE_SIZE(CACHE_LINE_SIZE),
+            .LINE_SIZE      (LINE_SIZE),
             .NUM_BANKS      (NUM_BANKS),
             .NUM_WAYS       (NUM_WAYS),
             .NUM_PORTS      (NUM_PORTS),
@@ -500,8 +498,8 @@ module VX_cache #(
 
     if (WRITE_ENABLE) begin
         if (`WORDS_PER_LINE > 1) begin
-            reg [CACHE_LINE_SIZE-1:0]   mem_req_byteen_r;
-            reg [`CACHE_LINE_WIDTH-1:0] mem_req_data_r;
+            reg [LINE_SIZE-1:0]   mem_req_byteen_r;
+            reg [`LINE_WIDTH-1:0] mem_req_data_r;
 
             always @(*) begin
                 mem_req_byteen_r = 0;
@@ -531,7 +529,7 @@ module VX_cache #(
         `UNUSED_VAR (mem_req_rw_p)
         
         assign mem_req_rw_s     = 0;
-        assign mem_req_byteen_s = {CACHE_LINE_SIZE{1'b1}};
+        assign mem_req_byteen_s = {LINE_SIZE{1'b1}};
         assign mem_req_data_s   = 'x;
     end
 

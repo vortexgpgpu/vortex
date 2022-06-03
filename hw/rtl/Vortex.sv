@@ -160,9 +160,9 @@ module Vortex (
     `RESET_RELAY (l3_reset, reset_or_start);
 
     VX_cache_wrap #(
-        .INSTANCE_ID    (`L3_CACHE_ID),
+        .INSTANCE_ID    ("l3cache"),
         .CACHE_SIZE     (`L3_CACHE_SIZE),
-        .CACHE_LINE_SIZE(`L3_CACHE_LINE_SIZE),
+        .LINE_SIZE      (`L3_LINE_SIZE),
         .NUM_BANKS      (`L3_NUM_BANKS),
         .NUM_WAYS       (`L3_NUM_WAYS),
         .NUM_PORTS      (`L3_NUM_PORTS),
@@ -176,7 +176,6 @@ module Vortex (
         .WRITE_ENABLE   (1),
         .REQ_UUID_BITS  (`UUID_BITS),
         .CORE_TAG_WIDTH (`L2_MEM_TAG_WIDTH),
-        .MEM_TAG_WIDTH  (`L3_MEM_TAG_WIDTH),
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L3_ENABLED)
     ) l3cache (
