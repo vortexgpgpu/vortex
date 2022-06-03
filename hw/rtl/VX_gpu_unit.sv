@@ -205,14 +205,14 @@ module VX_gpu_unit #(
 `ifdef EXT_IMADD_ENABLE    
 
     wire                          imadd_valid_in;
+    wire                          imadd_ready_in;
+
+    wire                          imadd_valid_out;
     wire [`UUID_BITS-1:0]         imadd_uuid_out;
     wire [`NW_BITS-1:0]           imadd_wid_out;
     wire [`NUM_THREADS-1:0]       imadd_tmask_out;
     wire [31:0]                   imadd_PC_out;
     wire [`NR_BITS-1:0]           imadd_rd_out; 
-    wire                          imadd_ready_in;
-
-    wire                          imadd_valid_out;
     wire [`NUM_THREADS-1:0][31:0] imadd_data_out;
     wire                          imadd_ready_out;
 

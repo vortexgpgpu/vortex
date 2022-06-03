@@ -3,8 +3,6 @@
 
 `include "VX_define.vh"
 
-`define TEX_STAGE_BITS      `LOG2UP(`TEX_STAGE_COUNT)
-
 `define TEX_FXD_INT         (`TEX_FXD_BITS - `TEX_FXD_FRAC)
 `define TEX_FXD_ONE         (2 ** `TEX_FXD_FRAC)
 `define TEX_FXD_HALF        (`TEX_FXD_ONE >> 1)

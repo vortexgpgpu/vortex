@@ -183,9 +183,8 @@ module VX_raster_be #(
     assign fifo_pop = valid_out && ready_out;
 
     VX_fifo_queue #(
-        .DATAW	 (FIFO_DATA_WIDTH),
-        .SIZE    (QUAD_FIFO_DEPTH),
-        .OUT_REG (1)
+        .DATAW (FIFO_DATA_WIDTH),
+        .SIZE  (QUAD_FIFO_DEPTH)
     ) fifo_queue (
         .clk        (clk),
         .reset      (reset),

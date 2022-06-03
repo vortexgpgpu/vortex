@@ -1,4 +1,4 @@
-`include "VX_define.vh"
+`include "VX_tex_define.vh"
 
 module VX_tex_arb #(    
     parameter NUM_INPUTS     = 1,

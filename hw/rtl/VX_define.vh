@@ -306,7 +306,7 @@
 `define TCACHE_ADDR_WIDTH       (32 - `CLOG2(`TCACHE_WORD_SIZE))
 
 // Block size in bytes
-`define TCACHE_LINE_SIZE        `L1_BLOCK_SIZE
+`define TCACHE_LINE_SIZE        `L2_CACHE_LINE_SIZE
 
 // Input request size
 `define TCACHE_NUM_REQS         `NUM_THREADS

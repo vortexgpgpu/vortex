@@ -215,6 +215,8 @@
 // Texture Units //////////////////////////////////////////////////////////////
 
 `define TEX_STAGE_COUNT             2
+`define TEX_STAGE_BITS              1
+
 `define TEX_SUBPIXEL_BITS           8
 
 `define TEX_DIM_BITS                15

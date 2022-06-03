@@ -234,7 +234,7 @@ module VX_raster_unit #(
     VX_raster_arb #(
         .NUM_INPUTS (NUM_PES),
         .NUM_LANES  (OUTPUT_QUADS),
-        .BUFFERED   ((NUM_PES > 1) ? 1 : 0)
+        .BUFFERED   (1)
     ) raster_arb (
         .clk        (clk),
         .reset      (reset),
