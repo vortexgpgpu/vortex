@@ -1,4 +1,9 @@
 `include "VX_define.vh"
+`include "VX_cache_types.vh"
+
+`IGNORE_WARNINGS_BEGIN
+import VX_cache_types::*;
+`IGNORE_WARNINGS_END
 
 module VX_cluster #(
     parameter CLUSTER_ID = 0
@@ -403,22 +408,22 @@ module VX_cluster #(
 
     VX_mem_req_if #(
         .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (`DCACHE_MEM_TAG_WIDTH)
+        .TAG_WIDTH  (DCACHE_MEM_TAG_WIDTH)
     ) dcache_mem_req_if();
     
     VX_mem_rsp_if #(
         .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (`DCACHE_MEM_TAG_WIDTH)
+        .TAG_WIDTH  (DCACHE_MEM_TAG_WIDTH)
     ) dcache_mem_rsp_if();
 
     VX_mem_req_if #(
         .DATA_WIDTH (`ICACHE_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (`ICACHE_MEM_TAG_WIDTH)
+        .TAG_WIDTH  (ICACHE_MEM_TAG_WIDTH)
     ) icache_mem_req_if();
     
     VX_mem_rsp_if #(
         .DATA_WIDTH (`ICACHE_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (`ICACHE_MEM_TAG_WIDTH)
+        .TAG_WIDTH  (ICACHE_MEM_TAG_WIDTH)
     ) icache_mem_rsp_if();
 
 `ifdef PERF_ENABLE
@@ -535,13 +540,13 @@ module VX_cluster #(
     assign l2_mem_req_if[I_MEM_ARB_IDX].tag = `L1_MEM_TAG_WIDTH'(icache_mem_req_if.tag);
 
     `ASSIGN_VX_MEM_RSP_IF_XTAG (icache_mem_rsp_if, l2_mem_rsp_if[I_MEM_ARB_IDX]);
-    assign icache_mem_rsp_if.tag = `ICACHE_MEM_TAG_WIDTH'(l2_mem_rsp_if[I_MEM_ARB_IDX].tag);
+    assign icache_mem_rsp_if.tag = ICACHE_MEM_TAG_WIDTH'(l2_mem_rsp_if[I_MEM_ARB_IDX].tag);
 
     `ASSIGN_VX_MEM_REQ_IF_XTAG (l2_mem_req_if[D_MEM_ARB_IDX], dcache_mem_req_if);
     assign l2_mem_req_if[D_MEM_ARB_IDX].tag = `L1_MEM_TAG_WIDTH'(dcache_mem_req_if.tag);
 
     `ASSIGN_VX_MEM_RSP_IF_XTAG (dcache_mem_rsp_if, l2_mem_rsp_if[D_MEM_ARB_IDX]);
-    assign dcache_mem_rsp_if.tag = `DCACHE_MEM_TAG_WIDTH'(l2_mem_rsp_if[D_MEM_ARB_IDX].tag);
+    assign dcache_mem_rsp_if.tag = DCACHE_MEM_TAG_WIDTH'(l2_mem_rsp_if[D_MEM_ARB_IDX].tag);
 
 `ifdef EXT_TEX_ENABLE
     `ASSIGN_VX_MEM_REQ_IF_XTAG (l2_mem_req_if[T_MEM_ARB_IDX], tcache_mem_req_if);

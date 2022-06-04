@@ -1,4 +1,9 @@
 `include "VX_define.vh"
+`include "VX_cache_types.vh"
+
+`IGNORE_WARNINGS_BEGIN
+import VX_cache_types::*;
+`IGNORE_WARNINGS_END
 
 module Vortex (
     `SCOPE_IO_Vortex
@@ -34,12 +39,12 @@ module Vortex (
 );
     VX_mem_req_if #(
         .DATA_WIDTH (`L3_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (`L3_MEM_TAG_WIDTH)
+        .TAG_WIDTH  (L3_MEM_TAG_WIDTH)
     ) mem_req_if();
 
     VX_mem_rsp_if #(
         .DATA_WIDTH (`L3_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (`L3_MEM_TAG_WIDTH)
+        .TAG_WIDTH  (L3_MEM_TAG_WIDTH)
     ) mem_rsp_if();
 
     assign mem_req_valid = mem_req_if.valid;
@@ -105,12 +110,12 @@ module Vortex (
 
     VX_mem_req_if #(
         .DATA_WIDTH (`L2_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (`L2_MEM_TAG_WIDTH)
+        .TAG_WIDTH  (L2_MEM_TAG_WIDTH)
     ) per_cluster_mem_req_if[`NUM_CLUSTERS]();        
 
     VX_mem_rsp_if #(
         .DATA_WIDTH (`L2_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (`L2_MEM_TAG_WIDTH)
+        .TAG_WIDTH  (L2_MEM_TAG_WIDTH)
     ) per_cluster_mem_rsp_if[`NUM_CLUSTERS]();
 
     wire [`NUM_CLUSTERS-1:0] per_cluster_busy;
@@ -173,7 +178,7 @@ module Vortex (
         .MREQ_SIZE      (`L3_MREQ_SIZE),
         .WRITE_ENABLE   (1),
         .UUID_BITS      (`UUID_BITS),
-        .TAG_WIDTH      (`L2_MEM_TAG_WIDTH),
+        .TAG_WIDTH      (L2_MEM_TAG_WIDTH),
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L3_ENABLED)
     ) l3cache (

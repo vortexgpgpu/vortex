@@ -252,15 +252,6 @@
 // Memory request data bits
 `define ICACHE_MEM_DATA_WIDTH   (`ICACHE_LINE_SIZE * 8)
 
-// Memory request tag bits
-`define _ICACHE_TAG_WIDTH       (`ICACHE_NOSM_TAG_WIDTH + `ARB_SEL_BITS(`NUM_CORES, `UP(`NUM_ICACHES)))
-`ifdef ICACHE_ENABLE
-`define _ICACHE_MEM_TAG_WIDTH   `CACHE_MEM_TAG_WIDTH(`ICACHE_MSHR_SIZE, `ICACHE_NUM_BANKS)
-`else
-`define _ICACHE_MEM_TAG_WIDTH   `CACHE_BYPASS_TAG_WIDTH(`ICACHE_NUM_REQS, `ICACHE_LINE_SIZE, `ICACHE_WORD_SIZE, `_ICACHE_TAG_WIDTH)
-`endif
-`define ICACHE_MEM_TAG_WIDTH    (`_ICACHE_MEM_TAG_WIDTH + `ARB_SEL_BITS(`UP(`NUM_ICACHES), 1))
-
 ////////////////////////// Dcache Definitions /////////////////////////////////
 
 // Word size in bytes
@@ -292,16 +283,6 @@
 
 // Memory byte enable bits
 `define DCACHE_MEM_BYTEEN_WIDTH `DCACHE_LINE_SIZE
-
-// Memory request tag bits
-`define DCACHE_NOSM_TAG_WIDTH   (`DCACHE_TAG_WIDTH - `SM_ENABLED)
-`define _DCACHE_NOSM_TAG_WIDTH  (`DCACHE_NOSM_TAG_WIDTH + `ARB_SEL_BITS(`NUM_CORES, `UP(`NUM_DCACHES)))
-`ifdef DCACHE_ENABLE
-`define _DCACHE_MEM_TAG_WIDTH   `CACHE_NC_MEM_TAG_WIDTH(`DCACHE_MSHR_SIZE, `DCACHE_NUM_BANKS, `DCACHE_NUM_REQS, `DCACHE_LINE_SIZE, `DCACHE_WORD_SIZE, `_DCACHE_NOSM_TAG_WIDTH)
-`else
-`define _DCACHE_MEM_TAG_WIDTH   `CACHE_NC_BYPASS_TAG_WIDTH(`DCACHE_NUM_REQS, `DCACHE_LINE_SIZE, `DCACHE_WORD_SIZE, `DCACHE_TAG_WIDTH)
-`endif
-`define DCACHE_MEM_TAG_WIDTH    (`_DCACHE_MEM_TAG_WIDTH + `ARB_SEL_BITS(`UP(`NUM_DCACHES), 1))
 
 ////////////////////////// Texture Unit Definitions ///////////////////////////
 
@@ -425,7 +406,7 @@
 
 /////////////////////////////// L1 Definitions ////////////////////////////////
 
-`define _2_MEM_TAG_IN_WIDTH     `MAX(`ICACHE_MEM_TAG_WIDTH, `DCACHE_MEM_TAG_WIDTH)
+`define _2_MEM_TAG_IN_WIDTH     `MAX(ICACHE_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH)
 `ifdef TCACHE_ENABLE
 `define _3_MEM_TAG_IN_WIDTH     `MAX(`TCACHE_MEM_TAG_WIDTH, `_2_MEM_TAG_IN_WIDTH)
 `else
@@ -470,13 +451,6 @@
 // Input request size
 `define L2_NUM_REQS             `NUM_L1_OUTPUTS
 
-// Memory request tag bits
-`ifdef L2_ENABLE
-`define L2_MEM_TAG_WIDTH        `CACHE_NC_MEM_TAG_WIDTH(`L2_MSHR_SIZE, `L2_NUM_BANKS, `L2_NUM_REQS, `L2_LINE_SIZE, `L2_WORD_SIZE, `L2_TAG_WIDTH)
-`else
-`define L2_MEM_TAG_WIDTH        `CACHE_NC_BYPASS_TAG_WIDTH(`L2_NUM_REQS, `L2_LINE_SIZE, `L2_WORD_SIZE, `L2_TAG_WIDTH)
-`endif
-
 /////////////////////////////// L3 Definitions ////////////////////////////////
 
 // Word size in bytes
@@ -491,7 +465,7 @@
 `endif
 
 // Core request tag bits
-`define L3_TAG_WIDTH            (`L2_MEM_TAG_WIDTH + `CLOG2(`NUM_CLUSTERS))
+`define L3_TAG_WIDTH            (L2_MEM_TAG_WIDTH + `CLOG2(`NUM_CLUSTERS))
 
 // Memory request data bits
 `define L3_MEM_DATA_WIDTH       (`L3_LINE_SIZE * 8)
@@ -505,19 +479,12 @@
 // Input request size
 `define L3_NUM_REQS             `NUM_CLUSTERS
 
-// Memory request tag bits
-`ifdef L3_ENABLE
-`define L3_MEM_TAG_WIDTH        `CACHE_NC_MEM_TAG_WIDTH(`L3_MSHR_SIZE, `L3_NUM_BANKS, `L3_NUM_REQS, `L3_LINE_SIZE, `L3_WORD_SIZE, `L3_TAG_WIDTH)
-`else
-`define L3_MEM_TAG_WIDTH        `CACHE_NC_BYPASS_TAG_WIDTH(`L3_NUM_REQS, `L3_LINE_SIZE, `L3_WORD_SIZE, `L3_TAG_WIDTH)
-`endif
-
 ///////////////////////////////////////////////////////////////////////////////
 
 `define VX_MEM_BYTEEN_WIDTH     `L3_MEM_BYTEEN_WIDTH   
 `define VX_MEM_ADDR_WIDTH       `L3_MEM_ADDR_WIDTH
 `define VX_MEM_DATA_WIDTH       `L3_MEM_DATA_WIDTH
-`define VX_MEM_TAG_WIDTH        `L3_MEM_TAG_WIDTH
+`define VX_MEM_TAG_WIDTH        L3_MEM_TAG_WIDTH
 `define VX_DCR_ADDR_WIDTH       `DCR_ADDR_BITS
 `define VX_DCR_DATA_WIDTH       32
 
