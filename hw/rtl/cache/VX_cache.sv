@@ -34,10 +34,10 @@ module VX_cache #(
     parameter WRITE_ENABLE          = 1,
 
     // Request debug identifier
-    parameter REQ_UUID_BITS         = 0,
+    parameter UUID_BITS             = 0,
 
     // core request tag size
-    parameter CORE_TAG_WIDTH        = REQ_UUID_BITS,
+    parameter TAG_WIDTH             = UUID_BITS + 1,
 
     // Core response output register
     parameter CORE_OUT_REG          = (NUM_BANKS > 1),
@@ -85,7 +85,7 @@ module VX_cache #(
     wire [NUM_REQS-1:0][`WORD_ADDR_WIDTH-1:0] core_req_addr;
     wire [NUM_REQS-1:0][WORD_SIZE-1:0]      core_req_byteen;
     wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]    core_req_data;
-    wire [NUM_REQS-1:0][CORE_TAG_WIDTH-1:0] core_req_tag;
+    wire [NUM_REQS-1:0][TAG_WIDTH-1:0]      core_req_tag;
     wire [NUM_REQS-1:0]                     core_req_ready;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
@@ -126,14 +126,14 @@ module VX_cache #(
     ///////////////////////////////////////////////////////////////////////////
 
     // Core response buffering
-    wire [NUM_REQS-1:0]                     core_rsp_valid_s;
-    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]    core_rsp_data_s;
-    wire [NUM_REQS-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag_s;
-    wire [NUM_REQS-1:0]                     core_rsp_ready_s;
+    wire [NUM_REQS-1:0]                  core_rsp_valid_s;
+    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0] core_rsp_data_s;
+    wire [NUM_REQS-1:0][TAG_WIDTH-1:0]   core_rsp_tag_s;
+    wire [NUM_REQS-1:0]                  core_rsp_ready_s;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         VX_skid_buffer #(
-            .DATAW    (`WORD_WIDTH + CORE_TAG_WIDTH),
+            .DATAW    (`WORD_WIDTH + TAG_WIDTH),
             .PASSTHRU (CORE_OUT_REG)
         ) core_rsp_sbuf (
             .clk       (clk),
@@ -197,7 +197,7 @@ module VX_cache #(
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_core_req_byteen;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`WORD_WIDTH-1:0] per_bank_core_req_data;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(`REQ_SEL_BITS)-1:0] per_bank_core_req_idx;
-    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] per_bank_core_req_tag;
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][TAG_WIDTH-1:0] per_bank_core_req_tag;
     wire [NUM_BANKS-1:0]                        per_bank_core_req_rw;  
     wire [NUM_BANKS-1:0][`LINE_ADDR_WIDTH-1:0]  per_bank_core_req_addr;    
     wire [NUM_BANKS-1:0]                        per_bank_core_req_ready;
@@ -206,7 +206,7 @@ module VX_cache #(
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0]         per_bank_core_rsp_pmask;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`WORD_WIDTH-1:0] per_bank_core_rsp_data;
     wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(`REQ_SEL_BITS)-1:0] per_bank_core_rsp_idx;
-    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] per_bank_core_rsp_tag;    
+    wire [NUM_BANKS-1:0][NUM_PORTS-1:0][TAG_WIDTH-1:0] per_bank_core_rsp_tag;    
     wire [NUM_BANKS-1:0]                        per_bank_core_rsp_ready;
 
     wire [NUM_BANKS-1:0]                        per_bank_mem_req_valid;    
@@ -236,7 +236,7 @@ module VX_cache #(
         .NUM_REQS   (NUM_REQS),
         .NUM_BANKS  (NUM_BANKS),
         .NUM_PORTS  (NUM_PORTS),        
-        .TAG_WIDTH  (CORE_TAG_WIDTH)
+        .TAG_WIDTH  (TAG_WIDTH)
     ) req_dispatch (        
         .clk        (clk),
         .reset      (reset),
@@ -273,7 +273,7 @@ module VX_cache #(
         wire [NUM_PORTS-1:0][WORD_SIZE-1:0] curr_bank_core_req_byteen;
         wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] curr_bank_core_req_data;
         wire [NUM_PORTS-1:0][`UP(`REQ_SEL_BITS)-1:0] curr_bank_core_req_idx;
-        wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] curr_bank_core_req_tag;
+        wire [NUM_PORTS-1:0][TAG_WIDTH-1:0] curr_bank_core_req_tag;
         wire                        curr_bank_core_req_rw;  
         wire [`LINE_ADDR_WIDTH-1:0] curr_bank_core_req_addr;        
         wire                        curr_bank_core_req_ready;
@@ -282,7 +282,7 @@ module VX_cache #(
         wire [NUM_PORTS-1:0]        curr_bank_core_rsp_pmask;        
         wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] curr_bank_core_rsp_data;
         wire [NUM_PORTS-1:0][`UP(`REQ_SEL_BITS)-1:0] curr_bank_core_rsp_idx;
-        wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] curr_bank_core_rsp_tag;
+        wire [NUM_PORTS-1:0][TAG_WIDTH-1:0] curr_bank_core_rsp_tag;
         wire                        curr_bank_core_rsp_ready;
 
         wire                        curr_bank_mem_req_valid;
@@ -348,22 +348,22 @@ module VX_cache #(
         `RESET_RELAY (bank_reset, reset);
         
         VX_bank #(                
-            .BANK_ID        (i),
-            .INSTANCE_ID    (INSTANCE_ID),
-            .CACHE_SIZE     (CACHE_SIZE),
-            .LINE_SIZE      (LINE_SIZE),
-            .NUM_BANKS      (NUM_BANKS),
-            .NUM_WAYS       (NUM_WAYS),
-            .NUM_PORTS      (NUM_PORTS),
-            .WORD_SIZE      (WORD_SIZE),
-            .NUM_REQS       (NUM_REQS),
-            .CREQ_SIZE      (CREQ_SIZE),
-            .CRSQ_SIZE      (CRSQ_SIZE),
-            .MSHR_SIZE      (MSHR_SIZE),
-            .MREQ_SIZE      (MREQ_SIZE),
-            .WRITE_ENABLE   (WRITE_ENABLE),
-            .REQ_UUID_BITS  (REQ_UUID_BITS),
-            .CORE_TAG_WIDTH (CORE_TAG_WIDTH)
+            .BANK_ID      (i),
+            .INSTANCE_ID  (INSTANCE_ID),
+            .CACHE_SIZE   (CACHE_SIZE),
+            .LINE_SIZE    (LINE_SIZE),
+            .NUM_BANKS    (NUM_BANKS),
+            .NUM_WAYS     (NUM_WAYS),
+            .NUM_PORTS    (NUM_PORTS),
+            .WORD_SIZE    (WORD_SIZE),
+            .NUM_REQS     (NUM_REQS),
+            .CREQ_SIZE    (CREQ_SIZE),
+            .CRSQ_SIZE    (CRSQ_SIZE),
+            .MSHR_SIZE    (MSHR_SIZE),
+            .MREQ_SIZE    (MREQ_SIZE),
+            .WRITE_ENABLE (WRITE_ENABLE),
+            .UUID_BITS    (UUID_BITS),
+            .TAG_WIDTH    (TAG_WIDTH)
         ) bank (          
             .clk                (clk),
             .reset              (bank_reset),
@@ -424,7 +424,7 @@ module VX_cache #(
         .NUM_BANKS (NUM_BANKS),
         .NUM_PORTS (NUM_PORTS),
         .WORD_SIZE (WORD_SIZE),
-        .TAG_WIDTH (CORE_TAG_WIDTH)
+        .TAG_WIDTH (TAG_WIDTH)
     ) rsp_merge (
         .clk                     (clk),
         .reset                   (reset),                    

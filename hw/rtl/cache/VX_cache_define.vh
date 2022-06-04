@@ -5,8 +5,8 @@
 
 `define REQ_SEL_BITS            `CLOG2(NUM_REQS)
 
-//                                tag              valid  req_idx              word_idx
-`define MSHR_DATA_WIDTH         ((CORE_TAG_WIDTH + 1 +    `UP(`REQ_SEL_BITS) + `UP(`WORD_SEL_BITS)) * NUM_PORTS)
+//                                tag         valid req_idx              word_idx
+`define MSHR_DATA_WIDTH         ((TAG_WIDTH + 1 +   `UP(`REQ_SEL_BITS) + `UP(`WORD_SEL_BITS)) * NUM_PORTS)
 
 `define WORD_WIDTH              (8 * WORD_SIZE)
 
@@ -46,8 +46,8 @@
 `define LINE_TAG_ADDR(x)        x[`LINE_ADDR_WIDTH-1 : `LINE_SEL_BITS]
 
 `define ASSIGN_REQ_UUID(dst, tag) \
-    if (REQ_UUID_BITS != 0) begin \
-        assign dst = tag[CORE_TAG_WIDTH-1 -: REQ_UUID_BITS]; \
+    if (UUID_BITS != 0) begin \
+        assign dst = tag[TAG_WIDTH-1 -: UUID_BITS]; \
     end else begin \
         assign dst = 0; \
     end

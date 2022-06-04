@@ -112,7 +112,6 @@ module VX_cluster #(
 
     VX_mem_req_if #(
         .DATA_WIDTH (`TCACHE_MEM_DATA_WIDTH),
-        .ADDR_WIDTH (`TCACHE_MEM_ADDR_WIDTH),
         .TAG_WIDTH  (`TCACHE_MEM_TAG_WIDTH)
     ) tcache_mem_req_if();
     
@@ -141,9 +140,8 @@ module VX_cluster #(
         .MRSQ_SIZE      (`TCACHE_MRSQ_SIZE),
         .MREQ_SIZE      (`TCACHE_MREQ_SIZE),
         .WRITE_ENABLE   (0),
-        .REQ_UUID_BITS  (0),
-        .CORE_TAG_WIDTH (`TCACHE_TAG_WIDTH),
-        .MEM_TAG_WIDTH  (`TCACHE_MEM_TAG_WIDTH),
+        .UUID_BITS      (0),
+        .TAG_WIDTH      (`TCACHE_TAG_WIDTH),
         .NC_ENABLE      (0)
     ) tcache (
     `ifdef PERF_ENABLE
@@ -228,7 +226,6 @@ module VX_cluster #(
 
     VX_mem_req_if #(
         .DATA_WIDTH (`RCACHE_MEM_DATA_WIDTH),
-        .ADDR_WIDTH (`RCACHE_MEM_ADDR_WIDTH),
         .TAG_WIDTH  (`RCACHE_MEM_TAG_WIDTH)
     ) rcache_mem_req_if();
     
@@ -257,9 +254,8 @@ module VX_cluster #(
         .MRSQ_SIZE      (`RCACHE_MRSQ_SIZE),
         .MREQ_SIZE      (`RCACHE_MREQ_SIZE),
         .WRITE_ENABLE   (0),
-        .REQ_UUID_BITS  (0),
-        .CORE_TAG_WIDTH (`RCACHE_TAG_WIDTH),
-        .MEM_TAG_WIDTH  (`RCACHE_MEM_TAG_WIDTH),
+        .UUID_BITS      (0),
+        .TAG_WIDTH      (`RCACHE_TAG_WIDTH),
         .NC_ENABLE      (0)
     ) rcache (
     `ifdef PERF_ENABLE
@@ -284,7 +280,7 @@ module VX_cluster #(
 
     VX_rop_req_if #(
         .NUM_LANES (`NUM_THREADS)
-    ) rop_reqs_if[`NUM_ROP_UNITS]();
+    ) rop_req_if[`NUM_ROP_UNITS]();
 
     VX_rop_arb #(
         .NUM_INPUTS  (`NUM_CORES),
@@ -295,7 +291,7 @@ module VX_cluster #(
         .clk        (clk),
         .reset      (reset),
         .req_in_if  (per_core_rop_req_if),
-        .req_out_if (rop_reqs_if)
+        .req_out_if (rop_req_if)
     );
 
     VX_cache_req_if #(
@@ -337,7 +333,6 @@ module VX_cluster #(
 
     VX_mem_req_if #(
         .DATA_WIDTH (`OCACHE_MEM_DATA_WIDTH),
-        .ADDR_WIDTH (`OCACHE_MEM_ADDR_WIDTH),
         .TAG_WIDTH  (`OCACHE_MEM_TAG_WIDTH)
     ) ocache_mem_req_if();
     
@@ -366,11 +361,9 @@ module VX_cluster #(
         .MRSQ_SIZE      (`OCACHE_MRSQ_SIZE),
         .MREQ_SIZE      (`OCACHE_MREQ_SIZE),
         .WRITE_ENABLE   (1),
-        .REQ_UUID_BITS  (0),
-        .CORE_TAG_WIDTH (`OCACHE_TAG_WIDTH),
-        .MEM_TAG_WIDTH  (`OCACHE_MEM_TAG_WIDTH),
-        .NC_ENABLE      (0),
-        .PASSTHRU       (!`OCACHE_ENABLED)
+        .UUID_BITS      (0),
+        .TAG_WIDTH      (`OCACHE_TAG_WIDTH),
+        .NC_ENABLE      (0)
     ) ocache (
     `ifdef PERF_ENABLE
         .perf_cache_if  (perf_ocache_if),
@@ -413,7 +406,6 @@ module VX_cluster #(
 
     VX_mem_req_if #(
         .DATA_WIDTH (`DCACHE_MEM_DATA_WIDTH),
-        .ADDR_WIDTH (`DCACHE_MEM_ADDR_WIDTH),
         .TAG_WIDTH  (`DCACHE_MEM_TAG_WIDTH)
     ) dcache_mem_req_if();
     
@@ -424,7 +416,6 @@ module VX_cluster #(
 
     VX_mem_req_if #(
         .DATA_WIDTH (`ICACHE_MEM_DATA_WIDTH),
-        .ADDR_WIDTH (`ICACHE_MEM_ADDR_WIDTH),
         .TAG_WIDTH  (`ICACHE_MEM_TAG_WIDTH)
     ) icache_mem_req_if();
     
@@ -456,7 +447,7 @@ module VX_cluster #(
         .dcache_mem_rsp_if (dcache_mem_rsp_if),  
 
         .icache_mem_req_if (icache_mem_req_if),
-        .icache_mem_rsp_if (icache_mem_rsp_if),
+        .icache_mem_rsp_if (icache_mem_rsp_if)
     );
 
     wire [`NUM_CORES-1:0] per_core_sim_ebreak;
@@ -528,15 +519,14 @@ module VX_cluster #(
     assign busy = (| per_core_busy);
 
     VX_mem_req_if #(
-        .DATA_WIDTH (`L2_MEM_DATA_WIDTH),
-        .ADDR_WIDTH (`L2_MEM_ADDR_WIDTH),
-        .TAG_WIDTH  (`L2_MEM_TAG_WIDTH)
-    ) l2_mem_req_if[`NUM_L1_INPUTS]();
+        .DATA_WIDTH (`L2_WORD_SIZE * 8),
+        .TAG_WIDTH  (`L2_TAG_WIDTH)
+    ) l2_mem_req_if[`L2_NUM_REQS]();
     
     VX_mem_rsp_if #(
-        .DATA_WIDTH (`L2_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (`L2_MEM_TAG_WIDTH)
-    ) l2_mem_rsp_if[`NUM_L1_INPUTS]();
+        .DATA_WIDTH (`L2_WORD_SIZE * 8),
+        .TAG_WIDTH  (`L2_TAG_WIDTH)
+    ) l2_mem_rsp_if[`L2_NUM_REQS]();
 
     localparam I_MEM_ARB_IDX = 0;
     localparam D_MEM_ARB_IDX = I_MEM_ARB_IDX + 1;
@@ -560,27 +550,27 @@ module VX_cluster #(
     assign dcache_mem_rsp_if.tag = `DCACHE_MEM_TAG_WIDTH'(l2_mem_rsp_if[D_MEM_ARB_IDX].tag);
 
 `ifdef EXT_TEX_ENABLE
-    `ASSIGN_VX_MEM_REQ_IF_XTAG (l2_mem_req_if[TEX_MEM_ARB_IDX], tcache_mem_req_if);
-    assign l2_mem_req_if[TEX_MEM_ARB_IDX].tag = `L1_MEM_TAG_WIDTH'(tcache_mem_req_if.tag);
+    `ASSIGN_VX_MEM_REQ_IF_XTAG (l2_mem_req_if[T_MEM_ARB_IDX], tcache_mem_req_if);
+    assign l2_mem_req_if[T_MEM_ARB_IDX].tag = `L1_MEM_TAG_WIDTH'(tcache_mem_req_if.tag);
 
-    `ASSIGN_VX_MEM_RSP_IF_XTAG (tcache_mem_rsp_if, l2_mem_rsp_if[TEX_MEM_ARB_IDX]);
-    assign tcache_mem_rsp_if.tag = `TCACHE_MEM_TAG_WIDTH'(l2_mem_rsp_if[TEX_MEM_ARB_IDX].tag);
+    `ASSIGN_VX_MEM_RSP_IF_XTAG (tcache_mem_rsp_if, l2_mem_rsp_if[T_MEM_ARB_IDX]);
+    assign tcache_mem_rsp_if.tag = `TCACHE_MEM_TAG_WIDTH'(l2_mem_rsp_if[T_MEM_ARB_IDX].tag);
 `endif
 
 `ifdef EXT_RASTER_ENABLE
-    `ASSIGN_VX_MEM_REQ_IF_XTAG (l2_mem_req_if[RASTER_MEM_ARB_IDX], rcache_mem_req_if);
-    assign l2_mem_req_if[RASTER_MEM_ARB_IDX].tag = `L1_MEM_TAG_WIDTH'(rcache_mem_req_if.tag);
+    `ASSIGN_VX_MEM_REQ_IF_XTAG (l2_mem_req_if[R_MEM_ARB_IDX], rcache_mem_req_if);
+    assign l2_mem_req_if[R_MEM_ARB_IDX].tag = `L1_MEM_TAG_WIDTH'(rcache_mem_req_if.tag);
 
-    `ASSIGN_VX_MEM_RSP_IF_XTAG (rcache_mem_rsp_if, l2_mem_rsp_if[RASTER_MEM_ARB_IDX]);
-    assign rcache_mem_rsp_if.tag = `RCACHE_MEM_TAG_WIDTH'(l2_mem_rsp_if[RASTER_MEM_ARB_IDX].tag);
+    `ASSIGN_VX_MEM_RSP_IF_XTAG (rcache_mem_rsp_if, l2_mem_rsp_if[R_MEM_ARB_IDX]);
+    assign rcache_mem_rsp_if.tag = `RCACHE_MEM_TAG_WIDTH'(l2_mem_rsp_if[R_MEM_ARB_IDX].tag);
 `endif
 
 `ifdef EXT_ROP_ENABLE
-    `ASSIGN_VX_MEM_REQ_IF_XTAG (l2_mem_req_if[ROP_MEM_ARB_IDX], ocache_mem_req_if);
-    assign l2_mem_req_if[ROP_MEM_ARB_IDX].tag = `L1_MEM_TAG_WIDTH'(ocache_mem_req_if.tag);
+    `ASSIGN_VX_MEM_REQ_IF_XTAG (l2_mem_req_if[O_MEM_ARB_IDX], ocache_mem_req_if);
+    assign l2_mem_req_if[O_MEM_ARB_IDX].tag = `L1_MEM_TAG_WIDTH'(ocache_mem_req_if.tag);
 
-    `ASSIGN_VX_MEM_RSP_IF_XTAG (ocache_mem_rsp_if, l2_mem_rsp_if[ROP_MEM_ARB_IDX]);
-    assign ocache_mem_rsp_if.tag = `OCACHE_MEM_TAG_WIDTH'(l2_mem_rsp_if[ROP_MEM_ARB_IDX].tag);
+    `ASSIGN_VX_MEM_RSP_IF_XTAG (ocache_mem_rsp_if, l2_mem_rsp_if[O_MEM_ARB_IDX]);
+    assign ocache_mem_rsp_if.tag = `OCACHE_MEM_TAG_WIDTH'(l2_mem_rsp_if[O_MEM_ARB_IDX].tag);
 `endif     
 
 `ifdef PERF_ENABLE
@@ -604,8 +594,8 @@ module VX_cluster #(
         .MRSQ_SIZE      (`L2_MRSQ_SIZE),
         .MREQ_SIZE      (`L2_MREQ_SIZE),
         .WRITE_ENABLE   (1),       
-        .REQ_UUID_BITS  (`UUID_BITS),   
-        .CORE_TAG_WIDTH (`L1_MEM_TAG_WIDTH),
+        .UUID_BITS      (`UUID_BITS),   
+        .TAG_WIDTH      (`L1_MEM_TAG_WIDTH),
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L2_ENABLED)
     ) l2cache (            

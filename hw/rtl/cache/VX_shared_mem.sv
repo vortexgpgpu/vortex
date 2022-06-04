@@ -22,10 +22,10 @@ module VX_shared_mem #(
     parameter CRSQ_SIZE                     = 2,
 
     // Request debug identifier
-    parameter REQ_UUID_BITS                 = 0,
+    parameter UUID_BITS                     = 0,
 
     // core request tag size
-    parameter TAG_WIDTH                     = REQ_UUID_BITS,
+    parameter TAG_WIDTH                     = UUID_BITS + 1,
 
     localparam WORD_WIDTH = WORD_SIZE * 8
  ) (    
@@ -281,12 +281,12 @@ module VX_shared_mem #(
 
 `ifdef DBG_TRACE_CACHE_BANK
 
-    wire [NUM_BANKS-1:0][`UP(REQ_UUID_BITS)-1:0] req_uuid_st0, req_uuid_st1;
+    wire [NUM_BANKS-1:0][`UP(UUID_BITS)-1:0] req_uuid_st0, req_uuid_st1;
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
-        if (REQ_UUID_BITS != 0) begin
-            assign req_uuid_st0[i] = per_bank_req_tag_unqual[i][TAG_WIDTH-1 -: REQ_UUID_BITS];
-            assign req_uuid_st1[i] = per_bank_req_tag[i][TAG_WIDTH-1 -: REQ_UUID_BITS];
+        if (UUID_BITS != 0) begin
+            assign req_uuid_st0[i] = per_bank_req_tag_unqual[i][TAG_WIDTH-1 -: UUID_BITS];
+            assign req_uuid_st1[i] = per_bank_req_tag[i][TAG_WIDTH-1 -: UUID_BITS];
         end else begin
             assign req_uuid_st0[i] = 0;
             assign req_uuid_st1[i] = 0;

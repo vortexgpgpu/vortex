@@ -87,7 +87,7 @@ module VX_tex_arb #(
         assign req_ready_out[i] = req_out_if[i].ready;
     end
 
-    ///////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////
 
     wire [NUM_INPUTS-1:0]                 rsp_valid_out;
     wire [NUM_INPUTS-1:0][RSP_DATAW-1:0]  rsp_data_out;

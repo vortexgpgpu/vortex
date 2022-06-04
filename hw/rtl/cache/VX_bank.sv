@@ -33,10 +33,10 @@ module VX_bank #(
     parameter WRITE_ENABLE      = 1,
 
     // Request debug identifier
-    parameter REQ_UUID_BITS     = 0,
+    parameter UUID_BITS         = 0,
 
     // core request tag size
-    parameter CORE_TAG_WIDTH    = REQ_UUID_BITS,
+    parameter TAG_WIDTH         = UUID_BITS + 1,
 
     localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE),
     localparam WORD_SEL_BITS    = `UP(`WORD_SEL_BITS)
@@ -57,7 +57,7 @@ module VX_bank #(
     input wire [NUM_PORTS-1:0][WORD_SIZE-1:0] core_req_byteen,
     input wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] core_req_data,  
     input wire [NUM_PORTS-1:0][`UP(`REQ_SEL_BITS)-1:0] core_req_idx,
-    input wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] core_req_tag,
+    input wire [NUM_PORTS-1:0][TAG_WIDTH-1:0] core_req_tag,
     input wire                          core_req_rw,  
     input wire [`LINE_ADDR_WIDTH-1:0]   core_req_addr,
     output wire                         core_req_ready,
@@ -67,7 +67,7 @@ module VX_bank #(
     output wire [NUM_PORTS-1:0]         core_rsp_pmask,
     output wire [NUM_PORTS-1:0][`UP(`REQ_SEL_BITS)-1:0] core_rsp_idx,
     output wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] core_rsp_data,
-    output wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag,
+    output wire [NUM_PORTS-1:0][TAG_WIDTH-1:0] core_rsp_tag,
     input  wire                         core_rsp_ready,
 
     // Memory request
@@ -93,7 +93,7 @@ module VX_bank #(
 );
 
 `IGNORE_UNUSED_BEGIN
-    wire [`UP(REQ_UUID_BITS)-1:0] req_uuid_sel, req_uuid_st0, req_uuid_st1;
+    wire [`UP(UUID_BITS)-1:0] req_uuid_sel, req_uuid_st0, req_uuid_st1;
 `IGNORE_UNUSED_END
 
     wire                                       creq_valid;
@@ -102,13 +102,13 @@ module VX_bank #(
     wire [NUM_PORTS-1:0][WORD_SIZE-1:0]        creq_byteen;
     wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0]      creq_data;
     wire [NUM_PORTS-1:0][`UP(`REQ_SEL_BITS)-1:0] creq_idx;  
-    wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0]   creq_tag;
+    wire [NUM_PORTS-1:0][TAG_WIDTH-1:0]        creq_tag;
     wire                                       creq_rw;  
     wire [`LINE_ADDR_WIDTH-1:0]                creq_addr;    
     wire                                       creq_ready;
 
     VX_elastic_buffer #(
-        .DATAW (1 + `LINE_ADDR_WIDTH + NUM_PORTS * (1 + WORD_SEL_BITS + WORD_SIZE + `WORD_WIDTH + `UP(`REQ_SEL_BITS) + CORE_TAG_WIDTH)),
+        .DATAW (1 + `LINE_ADDR_WIDTH + NUM_PORTS * (1 + WORD_SEL_BITS + WORD_SIZE + `WORD_WIDTH + `UP(`REQ_SEL_BITS) + TAG_WIDTH)),
         .SIZE  (CREQ_SIZE)
     ) core_req_queue (
         .clk        (clk),
@@ -132,7 +132,7 @@ module VX_bank #(
     wire                            mshr_alm_full;
     wire [MSHR_ADDR_WIDTH-1:0]      mshr_dequeue_id;
     wire [`LINE_ADDR_WIDTH-1:0]     mshr_addr;
-    wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] mshr_tag;    
+    wire [NUM_PORTS-1:0][TAG_WIDTH-1:0] mshr_tag;    
     wire [NUM_PORTS-1:0][WORD_SEL_BITS-1:0] mshr_wsel;
     wire [NUM_PORTS-1:0][`UP(`REQ_SEL_BITS)-1:0] mshr_idx;
     wire [NUM_PORTS-1:0]            mshr_pmask;
@@ -144,7 +144,7 @@ module VX_bank #(
     wire [NUM_PORTS-1:0][WORD_SIZE-1:0] byteen_st0, byteen_st1;
     wire [NUM_PORTS-1:0][`UP(`REQ_SEL_BITS)-1:0] req_idx_st0, req_idx_st1;
     wire [NUM_PORTS-1:0]            pmask_st0, pmask_st1;
-    wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] tag_st0, tag_st1;
+    wire [NUM_PORTS-1:0][TAG_WIDTH-1:0] tag_st0, tag_st1;
     wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] rdata_st1;
     wire [`LINE_WIDTH-1:0]          wdata_st0, wdata_st1;
     wire [MSHR_ADDR_WIDTH-1:0]      mshr_id_st0, mshr_id_st1;
@@ -188,7 +188,7 @@ module VX_bank #(
     wire mem_rsp_fire = mem_rsp_valid && mem_rsp_ready;
     wire creq_fire    = creq_valid && creq_ready;
 
-    wire [CORE_TAG_WIDTH-1:0] mshr_creq_tag = mshr_enable ? mshr_tag[0] : creq_tag[0];
+    wire [TAG_WIDTH-1:0] mshr_creq_tag = mshr_enable ? mshr_tag[0] : creq_tag[0];
     `ASSIGN_REQ_UUID (req_uuid_sel, mshr_creq_tag)
     `UNUSED_VAR (mshr_creq_tag)
 
@@ -199,7 +199,7 @@ module VX_bank #(
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `LINE_WIDTH + NUM_PORTS * (WORD_SEL_BITS + WORD_SIZE + `UP(`REQ_SEL_BITS) + 1 + CORE_TAG_WIDTH) + MSHR_ADDR_WIDTH),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `LINE_WIDTH + NUM_PORTS * (WORD_SEL_BITS + WORD_SIZE + `UP(`REQ_SEL_BITS) + 1 + TAG_WIDTH) + MSHR_ADDR_WIDTH),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
@@ -237,29 +237,29 @@ module VX_bank #(
     wire [NUM_WAYS-1:0] way_sel_st1;
 
     VX_tag_access #(
-        .INSTANCE_ID    (INSTANCE_ID),
-        .BANK_ID        (BANK_ID),        
-        .CACHE_SIZE     (CACHE_SIZE),
-        .LINE_SIZE      (LINE_SIZE),
-        .NUM_BANKS      (NUM_BANKS),
-        .NUM_WAYS       (NUM_WAYS),
-        .WORD_SIZE      (WORD_SIZE),   
-        .REQ_UUID_BITS  (REQ_UUID_BITS)
+        .INSTANCE_ID(INSTANCE_ID),
+        .BANK_ID    (BANK_ID),        
+        .CACHE_SIZE (CACHE_SIZE),
+        .LINE_SIZE  (LINE_SIZE),
+        .NUM_BANKS  (NUM_BANKS),
+        .NUM_WAYS   (NUM_WAYS),
+        .WORD_SIZE  (WORD_SIZE),   
+        .UUID_BITS  (UUID_BITS)
     ) tag_access (
-        .clk       (clk),
-        .reset     (reset),
+        .clk        (clk),
+        .reset      (reset),
 
-        .req_uuid  (req_uuid_st0),
+        .req_uuid   (req_uuid_st0),
         
-        .stall     (crsq_stall),
+        .stall      (crsq_stall),
 
         // read/Fill
-        .lookup    (do_lookup_st0),
-        .addr      (addr_st0),        
-        .fill      (do_fill_st0),
-        .flush     (do_flush_st0),
-        .way_sel   (way_sel_st0),
-        .tag_match (tag_match_st0)
+        .lookup     (do_lookup_st0),
+        .addr       (addr_st0),        
+        .fill       (do_fill_st0),
+        .flush      (do_flush_st0),
+        .way_sel    (way_sel_st0),
+        .tag_match  (tag_match_st0)
     );
 
     // we have a core request hit
@@ -271,7 +271,7 @@ module VX_bank #(
     wire [MSHR_ADDR_WIDTH-1:0] mshr_id_a_st0 = (is_read_st0 || is_write_st0) ? mshr_alloc_id : mshr_id_st0;
 
     VX_pipe_register #(
-        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + NUM_WAYS + `LINE_ADDR_WIDTH + `LINE_WIDTH + NUM_PORTS * (WORD_SEL_BITS + WORD_SIZE + `UP(`REQ_SEL_BITS) + 1 + CORE_TAG_WIDTH) + MSHR_ADDR_WIDTH + 1),
+        .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + NUM_WAYS + `LINE_ADDR_WIDTH + `LINE_WIDTH + NUM_PORTS * (WORD_SEL_BITS + WORD_SIZE + `UP(`REQ_SEL_BITS) + 1 + TAG_WIDTH) + MSHR_ADDR_WIDTH + 1),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
@@ -293,16 +293,16 @@ module VX_bank #(
     `UNUSED_VAR (wdata_st1)
     
     VX_data_access #(
-        .INSTANCE_ID    (INSTANCE_ID),
-        .BANK_ID        (BANK_ID),        
-        .CACHE_SIZE     (CACHE_SIZE),
-        .LINE_SIZE      (LINE_SIZE),
-        .NUM_BANKS      (NUM_BANKS),
-        .NUM_WAYS       (NUM_WAYS),
-        .NUM_PORTS      (NUM_PORTS),
-        .WORD_SIZE      (WORD_SIZE),
-        .WRITE_ENABLE   (WRITE_ENABLE),
-        .REQ_UUID_BITS  (REQ_UUID_BITS)
+        .INSTANCE_ID  (INSTANCE_ID),
+        .BANK_ID      (BANK_ID),        
+        .CACHE_SIZE   (CACHE_SIZE),
+        .LINE_SIZE    (LINE_SIZE),
+        .NUM_BANKS    (NUM_BANKS),
+        .NUM_WAYS     (NUM_WAYS),
+        .NUM_PORTS    (NUM_PORTS),
+        .WORD_SIZE    (WORD_SIZE),
+        .WRITE_ENABLE (WRITE_ENABLE),
+        .UUID_BITS    (UUID_BITS)
      ) data_access (
         .clk        (clk),
         .reset      (reset),
@@ -342,16 +342,16 @@ module VX_bank #(
     );
 
     VX_miss_resrv #(
-        .INSTANCE_ID    (INSTANCE_ID),
-        .BANK_ID        (BANK_ID),        
-        .LINE_SIZE      (LINE_SIZE),
-        .NUM_BANKS      (NUM_BANKS),
-        .NUM_PORTS      (NUM_PORTS),
-        .WORD_SIZE      (WORD_SIZE),
-        .NUM_REQS       (NUM_REQS),
-        .MSHR_SIZE      (MSHR_SIZE),
-        .REQ_UUID_BITS  (REQ_UUID_BITS),
-        .CORE_TAG_WIDTH (CORE_TAG_WIDTH)
+        .INSTANCE_ID (INSTANCE_ID),
+        .BANK_ID     (BANK_ID),        
+        .LINE_SIZE   (LINE_SIZE),
+        .NUM_BANKS   (NUM_BANKS),
+        .NUM_PORTS   (NUM_PORTS),
+        .WORD_SIZE   (WORD_SIZE),
+        .NUM_REQS    (NUM_REQS),
+        .MSHR_SIZE   (MSHR_SIZE),
+        .UUID_BITS   (UUID_BITS),
+        .TAG_WIDTH   (TAG_WIDTH)
     ) miss_resrv (
         .clk                (clk),
         .reset              (reset),
@@ -396,7 +396,7 @@ module VX_bank #(
     wire [NUM_PORTS-1:0] crsq_pmask;
     wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] crsq_data;
     wire [NUM_PORTS-1:0][`UP(`REQ_SEL_BITS)-1:0] crsq_idx;
-    wire [NUM_PORTS-1:0][CORE_TAG_WIDTH-1:0] crsq_tag;
+    wire [NUM_PORTS-1:0][TAG_WIDTH-1:0] crsq_tag;
     
     assign crsq_valid = (do_read_st1 && !miss_st1) 
                      || do_mshr_st1;
@@ -409,7 +409,7 @@ module VX_bank #(
     assign crsq_tag   = tag_st1;
 
     VX_elastic_buffer #(
-        .DATAW   (NUM_PORTS * (CORE_TAG_WIDTH + 1 + `WORD_WIDTH + `UP(`REQ_SEL_BITS))),
+        .DATAW   (NUM_PORTS * (TAG_WIDTH + 1 + `WORD_WIDTH + `UP(`REQ_SEL_BITS))),
         .SIZE    (CRSQ_SIZE),
         .OUT_REG (1 == NUM_BANKS)
     ) core_rsp_req (

@@ -33,14 +33,13 @@ module Vortex (
     output wire                             busy
 );
     VX_mem_req_if #(
-        .DATA_WIDTH (`VX_MEM_DATA_WIDTH),
-        .ADDR_WIDTH (`VX_MEM_ADDR_WIDTH),
-        .TAG_WIDTH  (`VX_MEM_TAG_WIDTH)
+        .DATA_WIDTH (`L3_MEM_DATA_WIDTH),
+        .TAG_WIDTH  (`L3_MEM_TAG_WIDTH)
     ) mem_req_if();
 
     VX_mem_rsp_if #(
-        .DATA_WIDTH (`VX_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (`VX_MEM_TAG_WIDTH)
+        .DATA_WIDTH (`L3_MEM_DATA_WIDTH),
+        .TAG_WIDTH  (`L3_MEM_TAG_WIDTH)
     ) mem_rsp_if();
 
     assign mem_req_valid = mem_req_if.valid;
@@ -106,7 +105,6 @@ module Vortex (
 
     VX_mem_req_if #(
         .DATA_WIDTH (`L2_MEM_DATA_WIDTH),
-        .ADDR_WIDTH (`L2_MEM_ADDR_WIDTH),
         .TAG_WIDTH  (`L2_MEM_TAG_WIDTH)
     ) per_cluster_mem_req_if[`NUM_CLUSTERS]();        
 
@@ -174,8 +172,8 @@ module Vortex (
         .MRSQ_SIZE      (`L3_MRSQ_SIZE),
         .MREQ_SIZE      (`L3_MREQ_SIZE),
         .WRITE_ENABLE   (1),
-        .REQ_UUID_BITS  (`UUID_BITS),
-        .CORE_TAG_WIDTH (`L2_MEM_TAG_WIDTH),
+        .UUID_BITS      (`UUID_BITS),
+        .TAG_WIDTH      (`L2_MEM_TAG_WIDTH),
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L3_ENABLED)
     ) l3cache (

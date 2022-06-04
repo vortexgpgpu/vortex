@@ -34,10 +34,10 @@ module VX_cache_wrap #(
     parameter WRITE_ENABLE          = 1,
 
     // Request debug identifier
-    parameter REQ_UUID_BITS         = 0,
+    parameter UUID_BITS             = 0,
 
     // core request tag size
-    parameter CORE_TAG_WIDTH        = REQ_UUID_BITS,
+    parameter TAG_WIDTH             = UUID_BITS + 1,
 
     // enable bypass for non-cacheable addresses
     parameter NC_TAG_BIT            = 0,
@@ -74,7 +74,7 @@ module VX_cache_wrap #(
 
     localparam WORD_SEL_BITS    = `UP(`WORD_SEL_BITS);
     localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE);    
-    localparam CORE_TAG_X_WIDTH = CORE_TAG_WIDTH - NC_ENABLE;
+    localparam CORE_TAG_X_WIDTH = TAG_WIDTH - NC_ENABLE;
     localparam MEM_TAG_X_WIDTH  = MSHR_ADDR_WIDTH + `BANK_SEL_BITS;
     localparam MEM_TAG_NC_WIDTH = `REQ_SEL_BITS + `WORD_SEL_BITS + TAG_WIDTH;
     localparam MEM_TAG_WIDTH    = `MAX(MEM_TAG_X_WIDTH, MEM_TAG_NC_WIDTH);
@@ -84,7 +84,7 @@ module VX_cache_wrap #(
     wire [NUM_REQS-1:0][`WORD_ADDR_WIDTH-1:0] core_req_addr;
     wire [NUM_REQS-1:0][WORD_SIZE-1:0]      core_req_byteen;
     wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]    core_req_data;
-    wire [NUM_REQS-1:0][CORE_TAG_WIDTH-1:0] core_req_tag;
+    wire [NUM_REQS-1:0][TAG_WIDTH-1:0]      core_req_tag;
     wire [NUM_REQS-1:0]                     core_req_ready;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
@@ -125,14 +125,14 @@ module VX_cache_wrap #(
     ///////////////////////////////////////////////////////////////////////////
 
     // Core response buffering
-    wire [NUM_REQS-1:0]                     core_rsp_valid_s;
-    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0]    core_rsp_data_s;
-    wire [NUM_REQS-1:0][CORE_TAG_WIDTH-1:0] core_rsp_tag_s;
-    wire [NUM_REQS-1:0]                     core_rsp_ready_s;
+    wire [NUM_REQS-1:0]                  core_rsp_valid_s;
+    wire [NUM_REQS-1:0][`WORD_WIDTH-1:0] core_rsp_data_s;
+    wire [NUM_REQS-1:0][TAG_WIDTH-1:0]   core_rsp_tag_s;
+    wire [NUM_REQS-1:0]                  core_rsp_ready_s;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         VX_skid_buffer #(
-            .DATAW    (`WORD_WIDTH + CORE_TAG_WIDTH),
+            .DATAW    (`WORD_WIDTH + TAG_WIDTH),
             .PASSTHRU (1 == NUM_BANKS && (!PASSTHRU || `WORD_SEL_BITS == 0))
         ) core_rsp_sbuf (
             .clk       (clk),
@@ -188,14 +188,14 @@ module VX_cache_wrap #(
 
             .CORE_ADDR_WIDTH   (`WORD_ADDR_WIDTH),
             .CORE_DATA_SIZE    (WORD_SIZE),    
-            .CORE_TAG_IN_WIDTH (CORE_TAG_WIDTH),
+            .CORE_TAG_IN_WIDTH (TAG_WIDTH),
                 
             .MEM_ADDR_WIDTH    (`MEM_ADDR_WIDTH),
             .MEM_DATA_SIZE     (LINE_SIZE),
             .MEM_TAG_IN_WIDTH  (MEM_TAG_X_WIDTH),
             .MEM_TAG_OUT_WIDTH (MEM_TAG_WIDTH),
 
-            .REQ_UUID_BITS     (REQ_UUID_BITS)
+            .UUID_BITS         (UUID_BITS)
         ) nc_bypass (
             .clk                (clk),
             .reset              (reset),
@@ -281,6 +281,8 @@ module VX_cache_wrap #(
         assign mem_req_data_s   = mem_req_data_b;
         assign mem_req_ready_b  = mem_req_ready_s;
 
+        // Add explicit NC=0 flag to the memory request tag
+
         VX_bits_insert #( 
             .N   (MEM_TAG_WIDTH-1),
             .POS (NC_TAG_BIT)
@@ -293,6 +295,8 @@ module VX_cache_wrap #(
         assign mem_rsp_valid_b  = mem_rsp_if.valid;
         assign mem_rsp_data_b   = mem_rsp_if.data;
         assign mem_rsp_if.ready = mem_rsp_ready_b;
+
+        // Remove NC flag from the memory response tag
 
         VX_bits_remove #( 
             .N   (MEM_TAG_WIDTH),
@@ -346,7 +350,6 @@ module VX_cache_wrap #(
 
         VX_mem_req_if #(
             .DATA_WIDTH (`WORD_WIDTH),
-            .ADDR_WIDTH (`WORD_ADDR_WIDTH),
             .TAG_WIDTH  (CORE_TAG_X_WIDTH)
         ) core_req_wrap_if[NUM_REQS]();
         
@@ -357,7 +360,6 @@ module VX_cache_wrap #(
 
         VX_mem_req_if #(
             .DATA_WIDTH (`LINE_WIDTH), 
-            .ADDR_WIDTH (`MEM_ADDR_WIDTH),
             .TAG_WIDTH  (MEM_TAG_X_WIDTH)
         ) mem_req_wrap_if();
 
@@ -397,24 +399,24 @@ module VX_cache_wrap #(
         assign mem_rsp_ready_b = mem_rsp_wrap_if.ready;
 
         VX_cache #(
-            .INSTANCE_ID    (INSTANCE_ID),
-            .CACHE_SIZE     (CACHE_SIZE),
-            .LINE_SIZE      (LINE_SIZE),
-            .NUM_BANKS      (NUM_BANKS),
-            .NUM_WAYS       (NUM_WAYS),
-            .NUM_PORTS      (NUM_PORTS),
-            .WORD_SIZE      (WORD_SIZE),
-            .NUM_REQS       (NUM_REQS),
-            .CREQ_SIZE      (CREQ_SIZE),
-            .CRSQ_SIZE      (CRSQ_SIZE),
-            .MSHR_SIZE      (MSHR_SIZE),
-            .MRSQ_SIZE      (MRSQ_SIZE),
-            .MREQ_SIZE      (MREQ_SIZE),
-            .WRITE_ENABLE   (WRITE_ENABLE),
-            .REQ_UUID_BITS  (REQ_UUID_BITS),
-            .CORE_TAG_WIDTH (CORE_TAG_X_WIDTH),
-            .CORE_OUT_REG   (NUM_BANKS > 2),
-            .MEM_OUT_REG    (NUM_BANKS > 2)
+            .INSTANCE_ID  (INSTANCE_ID),
+            .CACHE_SIZE   (CACHE_SIZE),
+            .LINE_SIZE    (LINE_SIZE),
+            .NUM_BANKS    (NUM_BANKS),
+            .NUM_WAYS     (NUM_WAYS),
+            .NUM_PORTS    (NUM_PORTS),
+            .WORD_SIZE    (WORD_SIZE),
+            .NUM_REQS     (NUM_REQS),
+            .CREQ_SIZE    (CREQ_SIZE),
+            .CRSQ_SIZE    (CRSQ_SIZE),
+            .MSHR_SIZE    (MSHR_SIZE),
+            .MRSQ_SIZE    (MRSQ_SIZE),
+            .MREQ_SIZE    (MREQ_SIZE),
+            .WRITE_ENABLE (WRITE_ENABLE),
+            .UUID_BITS    (UUID_BITS),
+            .TAG_WIDTH    (CORE_TAG_X_WIDTH),
+            .CORE_OUT_REG (NUM_BANKS > 2),
+            .MEM_OUT_REG  (NUM_BANKS > 2)
         ) cache (
             .clk            (clk),
             .reset          (reset),
@@ -434,8 +436,8 @@ module VX_cache_wrap #(
 `ifdef DBG_TRACE_CACHE_BANK
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        wire [`UP(REQ_UUID_BITS)-1:0] core_req_uuid;
-        wire [`UP(REQ_UUID_BITS)-1:0] core_rsp_uuid;
+        wire [`UP(UUID_BITS)-1:0] core_req_uuid;
+        wire [`UP(UUID_BITS)-1:0] core_rsp_uuid;
 
         `ASSIGN_REQ_UUID (core_req_uuid, core_req_if[i].tag)
         `ASSIGN_REQ_UUID (core_rsp_uuid, core_rsp_if[i].tag)
@@ -456,12 +458,12 @@ module VX_cache_wrap #(
         end
     end   
 
-    wire [`UP(REQ_UUID_BITS)-1:0] mem_req_uuid;
-    wire [`UP(REQ_UUID_BITS)-1:0] mem_rsp_uuid;
+    wire [`UP(UUID_BITS)-1:0] mem_req_uuid;
+    wire [`UP(UUID_BITS)-1:0] mem_rsp_uuid;
 
-    if ((REQ_UUID_BITS != 0) && (NC_ENABLE || PASSTHRU)) begin
-        assign mem_req_uuid = mem_req_if.tag[MEM_TAG_WIDTH-1 -: REQ_UUID_BITS];
-        assign mem_rsp_uuid = mem_rsp_if.tag[MEM_TAG_WIDTH-1 -: REQ_UUID_BITS];
+    if ((UUID_BITS != 0) && (NC_ENABLE || PASSTHRU)) begin
+        assign mem_req_uuid = mem_req_if.tag[MEM_TAG_WIDTH-1 -: UUID_BITS];
+        assign mem_rsp_uuid = mem_rsp_if.tag[MEM_TAG_WIDTH-1 -: UUID_BITS];
     end else begin
         assign mem_req_uuid = 0;
         assign mem_rsp_uuid = 0;

@@ -14,13 +14,13 @@ module VX_tag_access #(
     // Size of a word in bytes
     parameter WORD_SIZE         = 1, 
     // Request debug identifier
-    parameter REQ_UUID_BITS     = 0
+    parameter UUID_BITS         = 0
 ) (
     input wire                          clk,
     input wire                          reset,
 
 `IGNORE_UNUSED_BEGIN
-    input wire [`UP(REQ_UUID_BITS)-1:0] req_uuid,
+    input wire [`UP(UUID_BITS)-1:0]     req_uuid,
 `IGNORE_UNUSED_END
 
     input wire                          stall,

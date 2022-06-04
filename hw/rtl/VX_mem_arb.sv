@@ -3,7 +3,8 @@
 module VX_mem_arb #(    
     parameter NUM_REQS       = 1, 
     parameter DATA_WIDTH     = 1,
-    parameter ADDR_WIDTH     = 1,
+    localparam DATA_SIZE     = (DATA_WIDTH / 8),
+    parameter ADDR_WIDTH     = (32 - `CLOG2(DATA_SIZE)),
     parameter TAG_IN_WIDTH   = 1,    
     parameter TAG_SEL_IDX    = 0,
     parameter BUFFERED_REQ   = 0,
@@ -26,7 +27,6 @@ module VX_mem_arb #(
     VX_mem_rsp_if.slave     rsp_out_if
 );   
     
-    localparam DATA_SIZE     = (DATA_WIDTH / 8);
     localparam LOG_NUM_REQS  = `CLOG2(NUM_REQS);
     localparam TAG_OUT_WIDTH = TAG_IN_WIDTH + LOG_NUM_REQS;
     localparam REQ_DATAW = TAG_OUT_WIDTH + ADDR_WIDTH + 1 + DATA_SIZE + DATA_WIDTH;
@@ -70,7 +70,7 @@ module VX_mem_arb #(
         .ready_out (req_out_if.ready)
     );
 
-    ///////////////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////////////////
 
     wire [NUM_REQS-1:0]                rsp_valid_in;
     wire [NUM_REQS-1:0][RSP_DATAW-1:0] rsp_data_in;
