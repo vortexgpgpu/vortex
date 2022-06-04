@@ -247,7 +247,7 @@ module VX_rop_unit #(
     // to resolve potential deadlocks, 
     // ensure pending reads do not fill the queue
     VX_pending_size #( 
-        .SIZE (`ROP_MEM_PENDING_SIZE - 1)
+        .SIZE (`ROP_MEM_QUEUE_SIZE - 1)
     ) pending_reads (
         .clk   (clk),
         .reset (reset),
@@ -275,10 +275,10 @@ module VX_rop_unit #(
 
 `ifdef PERF_ENABLE
 
-    wire [$clog2(`OCACHE_NUM_REQS+1)-1:0] perf_mem_rd_req_per_cycle;
-    wire [$clog2(`OCACHE_NUM_REQS+1)-1:0] perf_mem_wr_req_per_cycle;
-    wire [$clog2(`OCACHE_NUM_REQS+1)-1:0] perf_mem_rsp_per_cycle;
-    wire [$clog2(`OCACHE_NUM_REQS+1)+1-1:0] perf_pending_reads_cycle;
+    wire [$clog2(OCACHE_NUM_REQS+1)-1:0] perf_mem_rd_req_per_cycle;
+    wire [$clog2(OCACHE_NUM_REQS+1)-1:0] perf_mem_wr_req_per_cycle;
+    wire [$clog2(OCACHE_NUM_REQS+1)-1:0] perf_mem_rsp_per_cycle;
+    wire [$clog2(OCACHE_NUM_REQS+1)+1-1:0] perf_pending_reads_cycle;
 
     wire [`OCACHE_NUM_REQS-1:0] perf_mem_rd_req_per_mask = cache_req_if.valid & ~cache_req_if.rw & cache_req_if.ready;
     wire [`OCACHE_NUM_REQS-1:0] perf_mem_wr_req_per_mask = cache_req_if.valid & cache_req_if.rw & cache_req_if.ready;

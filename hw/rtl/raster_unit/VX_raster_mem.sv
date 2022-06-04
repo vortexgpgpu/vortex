@@ -37,7 +37,7 @@ module VX_raster_mem #(
 );
     `UNUSED_VAR (dcrs)
 
-    localparam NUM_REQS         = `RASTER_MEM_REQS;
+    localparam NUM_REQS         = RASTER_MEM_REQS;
     localparam FSM_BITS         = 2;
     localparam FETCH_FLAG_BITS  = 2;
     localparam TAG_WIDTH        = `RASTER_PID_BITS + FETCH_FLAG_BITS;
@@ -236,11 +236,11 @@ module VX_raster_mem #(
     assign mem_rsp_ready = (~prim_id_rsp_valid || prim_addr_rsp_ready) 
                         && (~prim_data_rsp_valid || buf_in_ready);
 
-    wire [8:0][`RCACHE_ADDR_WIDTH-1:0] mem_req_addr_w;
-    wire [8:0][`RCACHE_WORD_SIZE-1:0] mem_req_byteen;
+    wire [8:0][RCACHE_ADDR_WIDTH-1:0] mem_req_addr_w;
+    wire [8:0][RCACHE_WORD_SIZE-1:0] mem_req_byteen;
     for (genvar i = 0; i < 9; ++i) begin
-        assign mem_req_addr_w[i] = mem_req_addr[i][(32 - `RCACHE_ADDR_WIDTH) +: `RCACHE_ADDR_WIDTH];
-        assign mem_req_byteen[i] = {`RCACHE_WORD_SIZE{1'b1}};
+        assign mem_req_addr_w[i] = mem_req_addr[i][(32 - RCACHE_ADDR_WIDTH) +: RCACHE_ADDR_WIDTH];
+        assign mem_req_byteen[i] = {RCACHE_WORD_SIZE{1'b1}};
     end
 
     // schedule memory request
@@ -248,10 +248,10 @@ module VX_raster_mem #(
     VX_mem_scheduler #(
         .INSTANCE_ID($sformatf("%s-memsched", INSTANCE_ID)),
         .NUM_REQS   (NUM_REQS), 
-        .NUM_BANKS  (`RCACHE_NUM_REQS),
-        .ADDR_WIDTH (`RCACHE_ADDR_WIDTH),
+        .NUM_BANKS  (RCACHE_NUM_REQS),
+        .ADDR_WIDTH (RCACHE_ADDR_WIDTH),
         .DATA_WIDTH (`RASTER_DATA_BITS),
-        .QUEUE_SIZE (`RASTER_MEM_PENDING_SIZE),
+        .QUEUE_SIZE (`RASTER_MEM_QUEUE_SIZE),
         .TAG_WIDTH  (TAG_WIDTH),
         .OUT_REG    (1)
     ) mem_scheduler (

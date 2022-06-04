@@ -245,9 +245,9 @@ module VX_raster_unit #(
     `ASSIGN_VX_RASTER_REQ_IF (raster_req_if, raster_req_tmp_if[0]);
 
 `ifdef PERF_ENABLE
-    wire [$clog2(`RCACHE_NUM_REQS+1)-1:0] perf_mem_req_per_cycle;
-    wire [$clog2(`RCACHE_NUM_REQS+1)-1:0] perf_mem_rsp_per_cycle;
-    wire [$clog2(`RCACHE_NUM_REQS+1)+1-1:0] perf_pending_reads_cycle;
+    wire [$clog2(RCACHE_NUM_REQS+1)-1:0] perf_mem_req_per_cycle;
+    wire [$clog2(RCACHE_NUM_REQS+1)-1:0] perf_mem_rsp_per_cycle;
+    wire [$clog2(RCACHE_NUM_REQS+1)+1-1:0] perf_pending_reads_cycle;
 
     wire [`RCACHE_NUM_REQS-1:0] perf_mem_req_per_req = cache_req_if.valid & cache_req_if.ready;
     wire [`RCACHE_NUM_REQS-1:0] perf_mem_rsp_per_req = cache_rsp_if.valid & cache_rsp_if.ready;

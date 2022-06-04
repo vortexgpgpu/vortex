@@ -1,4 +1,9 @@
 `include "VX_define.vh"
+`include "VX_cache_types.vh"
+
+`IGNORE_WARNINGS_BEGIN
+import VX_cache_types::*;
+`IGNORE_WARNINGS_END
 
 module VX_lsu_unit #(
     parameter CORE_ID = 0
@@ -21,7 +26,7 @@ module VX_lsu_unit #(
 );
     localparam MEM_ASHIFT = `CLOG2(`MEM_BLOCK_SIZE);    
     localparam MEM_ADDRW  = 32 - MEM_ASHIFT;
-    localparam REQ_ASHIFT = `CLOG2(`DCACHE_WORD_SIZE);
+    localparam REQ_ASHIFT = `CLOG2(DCACHE_WORD_SIZE);
 
     localparam STACK_SIZE_W = `STACK_SIZE >> MEM_ASHIFT;
     localparam STACK_ADDR_W = `CLOG2(STACK_SIZE_W);
@@ -156,22 +161,22 @@ module VX_lsu_unit #(
     assign mem_req_tag = {lsu_req_if.uuid, lsu_addr_type, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, lsu_req_if.rd, lsu_req_if.op_type, req_align, lsu_is_dup};
 
      VX_cache_req_if #(
-        .NUM_REQS  (`DCACHE_NUM_REQS), 
-        .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`UUID_BITS + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + `LSUQ_TAG_BITS)
+        .NUM_REQS  (DCACHE_NUM_REQS), 
+        .WORD_SIZE (DCACHE_WORD_SIZE), 
+        .TAG_WIDTH (`UUID_BITS + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + LSUQ_TAG_BITS)
     ) cache_req_tmp_if();
 
     VX_cache_rsp_if #(
-        .NUM_REQS  (`DCACHE_NUM_REQS), 
-        .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`UUID_BITS + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + `LSUQ_TAG_BITS)
+        .NUM_REQS  (DCACHE_NUM_REQS), 
+        .WORD_SIZE (DCACHE_WORD_SIZE), 
+        .TAG_WIDTH (`UUID_BITS + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + LSUQ_TAG_BITS)
     ) cache_rsp_tmp_if();
 
     VX_mem_scheduler #(
         .INSTANCE_ID($sformatf("core%0d-lsu-memsched", CORE_ID)),
-        .NUM_REQS   (`LSU_MEM_REQS), 
-        .NUM_BANKS  (`DCACHE_NUM_REQS),
-        .ADDR_WIDTH (`DCACHE_ADDR_WIDTH),
+        .NUM_REQS   (LSU_MEM_REQS), 
+        .NUM_BANKS  (DCACHE_NUM_REQS),
+        .ADDR_WIDTH (DCACHE_ADDR_WIDTH),
         .DATA_WIDTH (32),
         .QUEUE_SIZE (`LSUQ_SIZE),
         .TAG_WIDTH  (TAG_WIDTH),
@@ -225,17 +230,17 @@ module VX_lsu_unit #(
     `ASSIGN_VX_CACHE_REQ_IF_XTAG (cache_req_if, cache_req_tmp_if);
     `ASSIGN_VX_CACHE_RSP_IF_XTAG (cache_rsp_tmp_if, cache_rsp_if);
     
-    for (genvar i = 0; i < `DCACHE_NUM_REQS; ++i) begin
+    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
         wire [`UUID_BITS-1:0]                              cache_req_uuid, cache_rsp_uuid;
         wire [`NUM_THREADS-1:0][`CACHE_ADDR_TYPE_BITS-1:0] cache_req_type, cache_rsp_type;        
         wire [`CLOG2(`LSUQ_SIZE)-1:0]                      cache_req_tag,  cache_rsp_tag;
 
-        if (`DCACHE_NUM_BATCHES > 1) begin
-            wire [`DCACHE_NUM_BATCHES-1:0][`DCACHE_NUM_REQS-1:0][`CACHE_ADDR_TYPE_BITS-1:0] cache_req_type_b, cache_rsp_type_b;
-            wire [`DCACHE_BATCH_SEL_BITS-1:0] cache_req_bid, cache_rsp_bid;
+        if (DCACHE_NUM_BATCHES > 1) begin
+            wire [DCACHE_NUM_BATCHES-1:0][DCACHE_NUM_REQS-1:0][`CACHE_ADDR_TYPE_BITS-1:0] cache_req_type_b, cache_rsp_type_b;
+            wire [DCACHE_BATCH_SEL_BITS-1:0] cache_req_bid, cache_rsp_bid;
 
-            for (genvar j = 0; j < `DCACHE_NUM_BATCHES; ++j) begin
-                localparam k = j * `DCACHE_NUM_REQS + i;                
+            for (genvar j = 0; j < DCACHE_NUM_BATCHES; ++j) begin
+                localparam k = j * DCACHE_NUM_REQS + i;                
                 if (k < `NUM_THREADS) begin
                     assign cache_req_type_b[j][i] = cache_req_type[k];
                     assign cache_rsp_type[k] = cache_rsp_type_b[j][i];
@@ -253,7 +258,7 @@ module VX_lsu_unit #(
             assign cache_req_if.tag[i] = {cache_req_uuid, cache_req_bid, cache_req_tag, cache_req_type_b[cache_req_bid][i]};
             assign {cache_rsp_uuid, cache_rsp_bid, cache_rsp_tag, cache_rsp_type_bi} = cache_rsp_if.tag[i];
 
-            for (genvar j = 0; j < `DCACHE_NUM_REQS; ++j) begin
+            for (genvar j = 0; j < DCACHE_NUM_REQS; ++j) begin
                 if (i != j) begin                    
                     wire [`CACHE_ADDR_TYPE_BITS-1:0] cache_rsp_type_bj = cache_rsp_type_b[cache_rsp_bid][j];
                     `UNUSED_VAR (cache_req_type_b[cache_req_bid][j])
@@ -267,7 +272,7 @@ module VX_lsu_unit #(
             assign cache_req_if.tag[i] = {cache_req_uuid, cache_req_tag, cache_req_type[i]};
             assign {cache_rsp_uuid, cache_rsp_tag, cache_rsp_type[i]} = cache_rsp_if.tag[i];
 
-            for (genvar j = 0; j < `DCACHE_NUM_REQS; ++j) begin
+            for (genvar j = 0; j < DCACHE_NUM_REQS; ++j) begin
                 if (i != j) begin
                     `UNUSED_VAR (cache_req_type[j])
                     assign cache_rsp_type[j] = 0;

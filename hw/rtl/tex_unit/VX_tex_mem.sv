@@ -96,11 +96,11 @@ module VX_tex_mem #(
 
     VX_mem_scheduler #(
         .INSTANCE_ID($sformatf("%s-memsched", INSTANCE_ID)),
-        .NUM_REQS   (`TEX_MEM_REQS), 
-        .NUM_BANKS  (`TCACHE_NUM_REQS),
-        .ADDR_WIDTH (`TCACHE_ADDR_WIDTH),
+        .NUM_REQS   (TEX_MEM_REQS), 
+        .NUM_BANKS  (TCACHE_NUM_REQS),
+        .ADDR_WIDTH (TCACHE_ADDR_WIDTH),
         .DATA_WIDTH (32),
-        .QUEUE_SIZE (`TEX_MEM_PENDING_SIZE),
+        .QUEUE_SIZE (`TEX_MEM_QUEUE_SIZE),
         .TAG_WIDTH  (TAG_WIDTH)
     ) mem_scheduler (
         .clk            (clk),

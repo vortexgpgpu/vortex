@@ -44,19 +44,19 @@ module VX_mem_unit # (
         .NUM_INPUTS     (`NUM_CORES),
         .TAG_SEL_IDX    (0),
         .CACHE_SIZE     (`ICACHE_SIZE),
-        .LINE_SIZE      (`ICACHE_LINE_SIZE),
-        .NUM_BANKS      (`ICACHE_NUM_BANKS),
+        .LINE_SIZE      (ICACHE_LINE_SIZE),
+        .NUM_BANKS      (ICACHE_NUM_BANKS),
         .NUM_WAYS       (`ICACHE_NUM_WAYS),
-        .WORD_SIZE      (`ICACHE_WORD_SIZE),
-        .NUM_REQS       (`ICACHE_NUM_REQS),
+        .WORD_SIZE      (ICACHE_WORD_SIZE),
+        .NUM_REQS       (ICACHE_NUM_REQS),
         .CREQ_SIZE      (`ICACHE_CREQ_SIZE),
         .CRSQ_SIZE      (`ICACHE_CRSQ_SIZE),
         .MSHR_SIZE      (`ICACHE_MSHR_SIZE),
         .MRSQ_SIZE      (`ICACHE_MRSQ_SIZE),
         .MREQ_SIZE      (`ICACHE_MREQ_SIZE),
+        .TAG_WIDTH      (ICACHE_TAG_WIDTH),
         .WRITE_ENABLE   (0),
-        .UUID_BITS      (`UUID_BITS),
-        .TAG_WIDTH      (`ICACHE_TAG_WIDTH)
+        .UUID_BITS      (`UUID_BITS)        
     ) icache (
     `ifdef PERF_ENABLE
         .perf_cache_if  (perf_icache_if),
@@ -72,15 +72,15 @@ module VX_mem_unit # (
     ///////////////////////////////////////////////////////////////////////////
 
     VX_cache_req_if #(
-        .NUM_REQS  (`DCACHE_NUM_REQS), 
-        .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`DCACHE_NOSM_TAG_WIDTH)
+        .NUM_REQS  (DCACHE_NUM_REQS), 
+        .WORD_SIZE (DCACHE_WORD_SIZE), 
+        .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
     ) dcache_nosm_req_if[`NUM_CORES]();
 
     VX_cache_rsp_if #(
-        .NUM_REQS  (`DCACHE_NUM_REQS), 
-        .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`DCACHE_NOSM_TAG_WIDTH)
+        .NUM_REQS  (DCACHE_NUM_REQS), 
+        .WORD_SIZE (DCACHE_WORD_SIZE), 
+        .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
     ) dcache_nosm_rsp_if[`NUM_CORES]();
 
     `RESET_RELAY (dcache_reset, reset);
@@ -91,20 +91,20 @@ module VX_mem_unit # (
         .NUM_INPUTS     (`NUM_CORES),
         .TAG_SEL_IDX    (1),
         .CACHE_SIZE     (`DCACHE_SIZE),
-        .LINE_SIZE      (`DCACHE_LINE_SIZE),
+        .LINE_SIZE      (DCACHE_LINE_SIZE),
         .NUM_BANKS      (`DCACHE_NUM_BANKS),
         .NUM_WAYS       (`DCACHE_NUM_WAYS),
         .NUM_PORTS      (`DCACHE_NUM_PORTS),
-        .WORD_SIZE      (`DCACHE_WORD_SIZE),
-        .NUM_REQS       (`DCACHE_NUM_REQS),
+        .WORD_SIZE      (DCACHE_WORD_SIZE),
+        .NUM_REQS       (DCACHE_NUM_REQS),
         .CREQ_SIZE      (`DCACHE_CREQ_SIZE),
         .CRSQ_SIZE      (`DCACHE_CRSQ_SIZE),
         .MSHR_SIZE      (`DCACHE_MSHR_SIZE),
         .MRSQ_SIZE      (`DCACHE_MRSQ_SIZE),
         .MREQ_SIZE      (`DCACHE_MREQ_SIZE),
+        .TAG_WIDTH      (DCACHE_NOSM_TAG_WIDTH),
         .WRITE_ENABLE   (1),
-        .UUID_BITS      (`UUID_BITS),
-        .TAG_WIDTH      (`DCACHE_NOSM_TAG_WIDTH),
+        .UUID_BITS      (`UUID_BITS),        
         .NC_ENABLE      (1),
         .NC_TAG_BIT     (0)
     ) dcache (
@@ -125,35 +125,35 @@ module VX_mem_unit # (
 `ifdef SM_ENABLE
 
     VX_cache_req_if #(
-        .NUM_REQS  (`DCACHE_NUM_REQS), 
-        .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`DCACHE_NOSM_TAG_WIDTH)
+        .NUM_REQS  (DCACHE_NUM_REQS), 
+        .WORD_SIZE (DCACHE_WORD_SIZE), 
+        .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
     ) per_core_smem_req_if[`NUM_CORES]();
 
     VX_cache_rsp_if #(
-        .NUM_REQS  (`DCACHE_NUM_REQS), 
-        .WORD_SIZE (`DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`DCACHE_NOSM_TAG_WIDTH)
+        .NUM_REQS  (DCACHE_NUM_REQS), 
+        .WORD_SIZE (DCACHE_WORD_SIZE), 
+        .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
     ) per_core_smem_rsp_if[`NUM_CORES]();
 
     for (genvar i = 0; i < `NUM_CORES; ++i) begin
         VX_cache_req_if #(
-            .NUM_REQS  (`DCACHE_NUM_REQS), 
-            .WORD_SIZE (`DCACHE_WORD_SIZE), 
-            .TAG_WIDTH (`DCACHE_NOSM_TAG_WIDTH)
+            .NUM_REQS  (DCACHE_NUM_REQS), 
+            .WORD_SIZE (DCACHE_WORD_SIZE), 
+            .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
         ) dcache_nosm_switch_req_if[2]();
 
         VX_cache_rsp_if #(
-            .NUM_REQS  (`DCACHE_NUM_REQS), 
-            .WORD_SIZE (`DCACHE_WORD_SIZE), 
-            .TAG_WIDTH (`DCACHE_NOSM_TAG_WIDTH)
+            .NUM_REQS  (DCACHE_NUM_REQS), 
+            .WORD_SIZE (DCACHE_WORD_SIZE), 
+            .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
         ) dcache_nosm_switch_rsp_if[2]();
 
         VX_smem_switch #(
             .NUM_REQS     (2),
-            .NUM_LANES    (`DCACHE_NUM_REQS),
+            .NUM_LANES    (DCACHE_NUM_REQS),
             .DATA_SIZE    (4),            
-            .TAG_WIDTH    (`DCACHE_TAG_WIDTH),
+            .TAG_WIDTH    (DCACHE_TAG_WIDTH),
             .TAG_SEL_IDX  (0),
             .ARBITER      ("P"),
             .BUFFERED_REQ (1),
@@ -173,25 +173,25 @@ module VX_mem_unit # (
         `ASSIGN_VX_CACHE_RSP_IF (dcache_nosm_switch_rsp_if[1], per_core_smem_rsp_if[i]);
     end
 
-    localparam DCACHE_SM_TAG_WIDTH = `DCACHE_NOSM_TAG_WIDTH + `NC_BITS;
+    localparam DCACHE_SM_TAG_WIDTH = DCACHE_NOSM_TAG_WIDTH + `NC_BITS;
 
     VX_cache_req_if #(
-        .NUM_REQS  (`DCACHE_NUM_REQS), 
-        .WORD_SIZE (`DCACHE_WORD_SIZE), 
+        .NUM_REQS  (DCACHE_NUM_REQS), 
+        .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_SM_TAG_WIDTH)
     ) smem_req_if[1]();
 
     VX_cache_rsp_if #(
-        .NUM_REQS  (`DCACHE_NUM_REQS), 
-        .WORD_SIZE (`DCACHE_WORD_SIZE), 
+        .NUM_REQS  (DCACHE_NUM_REQS), 
+        .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_SM_TAG_WIDTH)
     ) smem_rsp_if[1](); 
 
     VX_cache_arb #(
         .NUM_INPUTS   (`NUM_CORES),
-        .NUM_LANES    (`DCACHE_NUM_REQS),
-        .DATA_SIZE    (`DCACHE_WORD_SIZE),
-        .TAG_WIDTH    (`DCACHE_NOSM_TAG_WIDTH),
+        .NUM_LANES    (DCACHE_NUM_REQS),
+        .DATA_SIZE    (DCACHE_WORD_SIZE),
+        .TAG_WIDTH    (DCACHE_NOSM_TAG_WIDTH),
         .TAG_SEL_IDX  (0),
         .BUFFERED_REQ ((`NUM_CORES != 1) ? 1 : 0),
         .BUFFERED_RSP ((`NUM_CORES != 1) ? 1 : 0)
@@ -206,12 +206,12 @@ module VX_mem_unit # (
 
     // shared memory address mapping:  
     // [core_idx][warp_idx][word_idx][thread_idx] <= [core_idx][warp_idx][thread_idx][bank_offset..word_idx]
-    localparam BANK_ADDR_OFFSET = `CLOG2(`STACK_SIZE / `DCACHE_WORD_SIZE);
-    localparam WORD_SEL_BITS    = `CLOG2(`SMEM_LOCAL_SIZE / `DCACHE_WORD_SIZE);
+    localparam BANK_ADDR_OFFSET = `CLOG2(`STACK_SIZE / DCACHE_WORD_SIZE);
+    localparam WORD_SEL_BITS    = `CLOG2(`SMEM_LOCAL_SIZE / DCACHE_WORD_SIZE);
     localparam SMEM_ADDR_WIDTH  = (`NC_BITS + `NW_BITS + `NT_BITS + WORD_SEL_BITS);
 
-    wire [`DCACHE_NUM_REQS-1:0][SMEM_ADDR_WIDTH-1:0] smem_req_addr;        
-    for (genvar i = 0; i < `DCACHE_NUM_REQS; ++i) begin
+    wire [DCACHE_NUM_REQS-1:0][SMEM_ADDR_WIDTH-1:0] smem_req_addr;        
+    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
         if (`NT_BITS != 0) begin
             assign smem_req_addr[i][0 +: `NT_BITS] = smem_req_if[0].addr[i][BANK_ADDR_OFFSET +: `NT_BITS];
         end        
@@ -229,9 +229,9 @@ module VX_mem_unit # (
     VX_shared_mem #(
         .IDNAME     ($sformatf("cluster%0d-smem", CLUSTER_ID)),
         .SIZE       (`SMEM_SIZE),
-        .NUM_REQS   (`DCACHE_NUM_REQS),
+        .NUM_REQS   (DCACHE_NUM_REQS),
         .NUM_BANKS  (`SMEM_NUM_BANKS),
-        .WORD_SIZE  (`DCACHE_WORD_SIZE),
+        .WORD_SIZE  (DCACHE_WORD_SIZE),
         .ADDR_WIDTH (SMEM_ADDR_WIDTH),
         .CREQ_SIZE  (`SMEM_CREQ_SIZE),
         .CRSQ_SIZE  (`SMEM_CRSQ_SIZE),

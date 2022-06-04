@@ -40,12 +40,12 @@ module VX_rop_mem #(
     input wire                                      rsp_ready
 );
 
-    localparam NUM_REQS = `ROP_MEM_REQS;
+    localparam NUM_REQS = ROP_MEM_REQS;
 
     wire                        mreq_valid, mreq_valid_r;
     wire                        mreq_rw, mreq_rw_r;
     wire [NUM_REQS-1:0]         mreq_mask, mreq_mask_r;
-    wire [NUM_REQS-1:0][`OCACHE_ADDR_WIDTH-1:0] mreq_addr, mreq_addr_r;
+    wire [NUM_REQS-1:0][OCACHE_ADDR_WIDTH-1:0] mreq_addr, mreq_addr_r;
     wire [NUM_REQS-1:0][31:0]   mreq_data, mreq_data_r;
     wire [NUM_REQS-1:0][3:0]    mreq_byteen, mreq_byteen_r;
     wire [TAG_WIDTH-1:0]        mreq_tag, mreq_tag_r;
@@ -111,7 +111,7 @@ module VX_rop_mem #(
 
         wire [31:0] addr = baddr_s + m_y_pitch;
 
-        assign mreq_addr[i] = addr[(32-`OCACHE_ADDR_WIDTH) +: `OCACHE_ADDR_WIDTH];
+        assign mreq_addr[i] = addr[(32-OCACHE_ADDR_WIDTH) +: OCACHE_ADDR_WIDTH];
         `UNUSED_VAR (addr)
     end
 
@@ -150,7 +150,7 @@ module VX_rop_mem #(
 
         wire [31:0] addr = baddr_s + m_y_pitch;
 
-        assign mreq_addr[i] = addr[(32-`OCACHE_ADDR_WIDTH) +: `OCACHE_ADDR_WIDTH];
+        assign mreq_addr[i] = addr[(32-OCACHE_ADDR_WIDTH) +: OCACHE_ADDR_WIDTH];
         `UNUSED_VAR (addr)     
     end
 
@@ -173,7 +173,7 @@ module VX_rop_mem #(
     assign req_ready = mul_ready_in;
 
     VX_pipe_register #(
-        .DATAW	(1 + 1 + NUM_REQS * (1 + 4 + `OCACHE_ADDR_WIDTH + 32) + TAG_WIDTH),
+        .DATAW	(1 + 1 + NUM_REQS * (1 + 4 + OCACHE_ADDR_WIDTH + 32) + TAG_WIDTH),
         .RESETW (1)
     ) mreq_pipe_reg (
         .clk      (clk),
@@ -188,11 +188,11 @@ module VX_rop_mem #(
     VX_mem_scheduler #(
         .INSTANCE_ID($sformatf("%s-memsched", INSTANCE_ID)),
         .NUM_REQS   (NUM_REQS),
-        .NUM_BANKS  (`OCACHE_NUM_REQS),
-        .ADDR_WIDTH (`OCACHE_ADDR_WIDTH),
+        .NUM_BANKS  (OCACHE_NUM_REQS),
+        .ADDR_WIDTH (OCACHE_ADDR_WIDTH),
         .DATA_WIDTH (32),
         .TAG_WIDTH  (TAG_WIDTH),
-        .QUEUE_SIZE (`ROP_MEM_PENDING_SIZE),
+        .QUEUE_SIZE (`ROP_MEM_QUEUE_SIZE),
         .OUT_REG    (1)
     ) mem_scheduler (
         .clk            (clk),

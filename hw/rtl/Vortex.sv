@@ -38,12 +38,12 @@ module Vortex (
     output wire                             busy
 );
     VX_mem_req_if #(
-        .DATA_WIDTH (`L3_MEM_DATA_WIDTH),
+        .DATA_WIDTH (L3_MEM_DATA_WIDTH),
         .TAG_WIDTH  (L3_MEM_TAG_WIDTH)
     ) mem_req_if();
 
     VX_mem_rsp_if #(
-        .DATA_WIDTH (`L3_MEM_DATA_WIDTH),
+        .DATA_WIDTH (L3_MEM_DATA_WIDTH),
         .TAG_WIDTH  (L3_MEM_TAG_WIDTH)
     ) mem_rsp_if();
 
@@ -109,12 +109,12 @@ module Vortex (
     wire reset_or_start = reset || start;
 
     VX_mem_req_if #(
-        .DATA_WIDTH (`L2_MEM_DATA_WIDTH),
+        .DATA_WIDTH (L2_MEM_DATA_WIDTH),
         .TAG_WIDTH  (L2_MEM_TAG_WIDTH)
     ) per_cluster_mem_req_if[`NUM_CLUSTERS]();        
 
     VX_mem_rsp_if #(
-        .DATA_WIDTH (`L2_MEM_DATA_WIDTH),
+        .DATA_WIDTH (L2_MEM_DATA_WIDTH),
         .TAG_WIDTH  (L2_MEM_TAG_WIDTH)
     ) per_cluster_mem_rsp_if[`NUM_CLUSTERS]();
 
@@ -165,20 +165,20 @@ module Vortex (
     VX_cache_wrap #(
         .INSTANCE_ID    ("l3cache"),
         .CACHE_SIZE     (`L3_CACHE_SIZE),
-        .LINE_SIZE      (`L3_LINE_SIZE),
+        .LINE_SIZE      (L3_LINE_SIZE),
         .NUM_BANKS      (`L3_NUM_BANKS),
         .NUM_WAYS       (`L3_NUM_WAYS),
         .NUM_PORTS      (`L3_NUM_PORTS),
-        .WORD_SIZE      (`L3_WORD_SIZE),
-        .NUM_REQS       (`L3_NUM_REQS),
+        .WORD_SIZE      (L3_WORD_SIZE),
+        .NUM_REQS       (L3_NUM_REQS),
         .CREQ_SIZE      (`L3_CREQ_SIZE),
         .CRSQ_SIZE      (`L3_CRSQ_SIZE),
         .MSHR_SIZE      (`L3_MSHR_SIZE),
         .MRSQ_SIZE      (`L3_MRSQ_SIZE),
         .MREQ_SIZE      (`L3_MREQ_SIZE),
-        .WRITE_ENABLE   (1),
-        .UUID_BITS      (`UUID_BITS),
         .TAG_WIDTH      (L2_MEM_TAG_WIDTH),
+        .WRITE_ENABLE   (1),
+        .UUID_BITS      (`UUID_BITS),        
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L3_ENABLED)
     ) l3cache (
