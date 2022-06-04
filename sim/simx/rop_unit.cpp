@@ -509,7 +509,7 @@ public:
     , memoryUnit_(arch, dcrs)
     , depthStencil_(arch, dcrs)
     , blender_(arch, dcrs)
-    , pending_reqs_(ROP_MEM_PENDING_SIZE)
+    , pending_reqs_(ROP_MEM_QUEUE_SIZE)
   {
     this->clear();
   }

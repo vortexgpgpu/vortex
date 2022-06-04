@@ -507,7 +507,7 @@ public:
     : simobject_(simobject)
     , arch_(arch)
     , rasterizer_(arch, dcrs, index, tile_logsize, block_logsize)
-    , pending_reqs_(RASTER_MEM_PENDING_SIZE)
+    , pending_reqs_(RASTER_MEM_QUEUE_SIZE)
     , mem_trace_state_(e_mem_trace_state::header)
   {}
 
