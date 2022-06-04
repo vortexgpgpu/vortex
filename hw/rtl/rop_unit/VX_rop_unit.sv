@@ -199,7 +199,7 @@ module VX_rop_unit #(
     wire pending_reads_full;
     
     assign mem_req_tag = {rop_req_if.pos_x, rop_req_if.pos_y, rop_req_if.color, rop_req_if.depth, rop_req_if.face};
-    assign {mem_rsp_pos_x, mem_rsp_pos_y, blend_src_color, ds_depth_ref, ds_face} = mem_readen ? mem_rsp_tag : mem_req_tag;
+    assign {mem_rsp_pos_x, mem_rsp_pos_y, blend_src_color, ds_depth_ref, ds_face} = mem_rsp_tag;
 
     assign ds_tag_in = {mem_rsp_pos_x, mem_rsp_pos_y, mem_rsp_mask, ds_face, blend_src_color};
     assign {ds_write_pos_x, ds_write_pos_y, ds_write_mask, ds_write_face, ds_write_color} = ds_tag_out;
