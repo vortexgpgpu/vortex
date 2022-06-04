@@ -43,7 +43,7 @@ CONFIG16 := -DNUM_CLUSTERS=2 -DNUM_CORES=8 -DL2_ENABLE -DL2_CACHE_SIZE=131072 -D
 CONFIG32 := -DNUM_CLUSTERS=4 -DNUM_CORES=8 -DL2_ENABLE -DL2_CACHE_SIZE=131072 -DL1_DISABLE -DTCACHE_DISABLE $(CONFIGS)
 CONFIG64 := -DNUM_CLUSTERS=8 -DNUM_CORES=8 -DL2_ENABLE -DL2_CACHE_SIZE=131072 -DL1_DISABLE -DTCACHE_DISABLE $(CONFIGS)
 
-FPU_INCLUDE = -I$(RTL_DIR)/fp_cores -I$(RTL_DIR)/fp_cores/altera/$(DEVICE_FAMILY)
+FPU_INCLUDE = -I$(RTL_DIR)/fpu_unit -I$(RTL_DIR)/fpu_unit/altera/$(DEVICE_FAMILY)
 TEX_INCLUDE = -I$(RTL_DIR)/tex_unit
 RASTER_INCLUDE = -I$(RTL_DIR)/raster_unit
 ROP_INCLUDE = -I$(RTL_DIR)/rop_unit
@@ -161,15 +161,15 @@ setup-fpga-64c: $(BUILD_DIR)_$(DEVICE_FAMILY)_fpga_64c/build/dcp.qpf
 
 ase-1c: gen-sources-ase-1c setup-ase-1c
 	make -C $(BUILD_DIR)_$(DEVICE_FAMILY)_ase_1c
-	cp $(RTL_DIR)/fp_cores/altera/$(DEVICE_FAMILY)/*.hex $(BUILD_DIR)_$(DEVICE_FAMILY)_ase_1c/work
+	cp $(RTL_DIR)/fpu_unit/altera/$(DEVICE_FAMILY)/*.hex $(BUILD_DIR)_$(DEVICE_FAMILY)_ase_1c/work
 
 ase-2c: gen-sources-ase-2c setup-ase-2c
 	make -C $(BUILD_DIR)_$(DEVICE_FAMILY)_ase_2c
-	cp $(RTL_DIR)/fp_cores/altera/$(DEVICE_FAMILY)/*.hex $(BUILD_DIR)_$(DEVICE_FAMILY)_ase_2c/work
+	cp $(RTL_DIR)/fpu_unit/altera/$(DEVICE_FAMILY)/*.hex $(BUILD_DIR)_$(DEVICE_FAMILY)_ase_2c/work
 
 ase-4c: gen-sources-ase-4c setup-ase-4c
 	make -C $(BUILD_DIR)_$(DEVICE_FAMILY)_ase_4c
-	cp $(RTL_DIR)/fp_cores/altera/$(DEVICE_FAMILY)/*.hex $(BUILD_DIR)_$(DEVICE_FAMILY)_ase_4c/work
+	cp $(RTL_DIR)/fpu_unit/altera/$(DEVICE_FAMILY)/*.hex $(BUILD_DIR)_$(DEVICE_FAMILY)_ase_4c/work
 
 fpga-1c: gen-sources-fpga-1c setup-fpga-1c
 	cd $(BUILD_DIR)_$(DEVICE_FAMILY)_fpga_1c && $(RUN_SYNTH)

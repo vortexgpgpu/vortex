@@ -6,11 +6,11 @@ THIRD_PARTY_DIR = ../../../../../third_party
 
 FAMILY = "Arria 10"
 DEVICE = 10AX115N3F40E2SG
-FPU_CORE_PATH = $(RTL_DIR)/fp_cores/altera/arria10
+FPU_CORE_PATH = $(RTL_DIR)/fpu_unit/altera/arria10
 
 #FAMILY = "Stratix 10"
 #DEVICE = 1SX280HN2F43E2VG
-#FPU_CORE_PATH = $(RTL_DIR)/fp_cores/altera/stratix10
+#FPU_CORE_PATH = $(RTL_DIR)/fpu_unit/altera/stratix10
 
 CONFIGS += -set "EXT_GFX_ENABLE"
 
@@ -21,7 +21,7 @@ CONFIGS += -set "NUM_CORES=2" -set "L2_ENABLE" -set "L2_CACHE_SIZE=32768" -set "
 #CONFIGS += -set "NUM_CORES=4" -set "L2_ENABLE" -set "L2_CACHE_SIZE=65536" -set "L1_DISABLE"
 #CONFIGS +=  -set "NUM_CORES=8" -set "L2_ENABLE" -set "L2_CACHE_SIZE=131072" -set "L1_DISABLE"
 
-FPU_INCLUDE = $(RTL_DIR)/fp_cores;$(FPU_CORE_PATH);$(THIRD_PARTY_DIR)/fpnew/src;$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl;$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include;$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src
+FPU_INCLUDE = $(RTL_DIR)/fpu_unit;$(FPU_CORE_PATH);$(THIRD_PARTY_DIR)/fpnew/src;$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl;$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include;$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src
 GFX_INCLUDE = $(RTL_DIR)/tex_unit;$(RTL_DIR)/raster_unit;$(RTL_DIR)/rop_unit
 RTL_INCLUDE = $(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces;$(RTL_DIR)/cache;$(FPU_INCLUDE);$(GFX_INCLUDE)
 
