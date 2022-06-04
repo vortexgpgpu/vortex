@@ -1,4 +1,9 @@
 `include "VX_tex_define.vh"
+`include "VX_cache_types.vh"
+
+`IGNORE_WARNINGS_BEGIN
+import VX_cache_types::*;
+`IGNORE_WARNINGS_END
 
 module VX_tex_mem #(
     parameter string INSTANCE_ID = "",
