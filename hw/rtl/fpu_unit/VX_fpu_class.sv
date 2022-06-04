@@ -1,7 +1,7 @@
 
 `include "VX_fpu_define.vh"
 
-module VX_fp_class # (    
+module VX_fpu_class # (    
     parameter MAN_BITS = 23,
     parameter EXP_BITS = 8
 ) (

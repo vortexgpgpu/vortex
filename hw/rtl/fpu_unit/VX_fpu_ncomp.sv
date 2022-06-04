@@ -3,7 +3,7 @@
 /// Modified port of noncomp module from fpnew Libray 
 /// reference: https://github.com/pulp-platform/fpnew
 
-module VX_fp_ncomp #(
+module VX_fpu_ncomp #(
     parameter NUM_LANES = 1,
     parameter TAGW = 1
 ) (
@@ -60,7 +60,7 @@ module VX_fp_ncomp #(
         assign b_exponent[i] = datab[i][30:23];
         assign b_mantissa[i] = datab[i][22:0];
 
-        VX_fp_class #( 
+        VX_fpu_class #( 
             .EXP_BITS (EXP_BITS),
             .MAN_BITS (MAN_BITS)
         ) fp_class_a (
@@ -69,7 +69,7 @@ module VX_fp_ncomp #(
             .clss_o (a_clss[i])
         );
 
-        VX_fp_class #( 
+        VX_fpu_class #( 
             .EXP_BITS (EXP_BITS),
             .MAN_BITS (MAN_BITS)
         ) fp_class_b (
