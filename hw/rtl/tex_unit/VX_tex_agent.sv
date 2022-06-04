@@ -58,15 +58,15 @@ module VX_tex_agent #(
 
     // handle texture response
 
-    wire [`UUID_BITS-1:0] tex_rsp_uuid;
-    wire [`NW_BITS-1:0]   tex_rsp_wid;
-    wire [31:0]           tex_rsp_PC;
-    wire [`NR_BITS-1:0]   tex_rsp_rd;
+    wire [`UUID_BITS-1:0]   tex_rsp_uuid;
+    wire [`UP(`NW_BITS)-1:0] tex_rsp_wid;
+    wire [31:0]             tex_rsp_PC;
+    wire [`NR_BITS-1:0]     tex_rsp_rd;
 
     assign {tex_rsp_uuid, tex_rsp_wid, tex_rsp_PC, tex_rsp_rd} = tex_rsp_if.tag;
 
     VX_skid_buffer #(
-        .DATAW (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + (`NUM_THREADS * 32))
+        .DATAW (`UUID_BITS + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + (`NUM_THREADS * 32))
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),

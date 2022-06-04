@@ -56,7 +56,7 @@ module VX_csr_unit #(
     wire [`NUM_THREADS-1:0][31:0] csr_req_data;
     wire [`NUM_THREADS-1:0][31:0] csr_read_data, csr_read_data_s0;
     reg [`NUM_THREADS-1:0][31:0]  csr_write_data_s0, csr_write_data_s1;
-    wire [`NT_BITS-1:0]           write_tid;
+    wire [`UP(`NT_BITS)-1:0]      write_tid;
     wire                          write_enable;
     wire [`CSR_ADDR_BITS-1:0]     csr_addr_s1;
     reg                           csr_we_s0;
@@ -166,7 +166,7 @@ module VX_csr_unit #(
     wire csr_rsp_ready;
 
     VX_skid_buffer #(
-        .DATAW (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + `NT_BITS + 2 * (`NUM_THREADS * 32))
+        .DATAW (`UUID_BITS + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + `UP(`NT_BITS) + 2 * (`NUM_THREADS * 32))
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),

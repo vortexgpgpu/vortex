@@ -57,7 +57,7 @@ module VX_rop_agent #(
     assign rop_rsp_valid = rop_agent_req_if.valid & rop_req_ready;
 
     VX_skid_buffer #(
-        .DATAW (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32)
+        .DATAW (`UUID_BITS + `UP(`NW_BITS) + `NUM_THREADS + 32)
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),

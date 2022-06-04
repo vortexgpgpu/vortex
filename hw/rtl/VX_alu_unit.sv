@@ -16,7 +16,7 @@ module VX_alu_unit #(
 
     `UNUSED_PARAM (CORE_ID)
 
-    localparam RSP_MUX_DATAW = `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + `NUM_THREADS * 32;
+    localparam RSP_MUX_DATAW = `UUID_BITS + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1 + `NUM_THREADS * 32;
     localparam RSP_MUX_SIZE  = 1 + `EXT_M_ENABLED;
     
     reg [`NUM_THREADS-1:0][31:0]  alu_result;    
@@ -100,7 +100,7 @@ module VX_alu_unit #(
     wire                          alu_valid_out;
     wire                          alu_ready_out;
     wire [`UUID_BITS-1:0]         alu_uuid;
-    wire [`NW_BITS-1:0]           alu_wid;
+    wire [`UP(`NW_BITS)-1:0]      alu_wid;
     wire [`NUM_THREADS-1:0]       alu_tmask;
     wire [31:0]                   alu_PC;
     wire [`NR_BITS-1:0]           alu_rd;   
@@ -116,7 +116,7 @@ module VX_alu_unit #(
     assign alu_ready_in = alu_ready_out || ~alu_valid_out;
 
     VX_pipe_register #(
-        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `INST_BR_BITS + 1 + 1 + 32),
+        .DATAW  (1 + `UUID_BITS + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `INST_BR_BITS + 1 + 1 + 32),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
@@ -143,7 +143,7 @@ module VX_alu_unit #(
     wire                          mul_valid_out;    
     wire                          mul_ready_out;
     wire [`UUID_BITS-1:0]         mul_uuid;
-    wire [`NW_BITS-1:0]           mul_wid;
+    wire [`UP(`NW_BITS)-1:0]      mul_wid;
     wire [`NUM_THREADS-1:0]       mul_tmask;
     wire [31:0]                   mul_PC;
     wire [`NR_BITS-1:0]           mul_rd;

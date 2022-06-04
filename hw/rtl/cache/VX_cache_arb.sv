@@ -70,11 +70,12 @@ module VX_cache_arb #(
     end
 
     VX_stream_arb #(            
-        .NUM_INPUTS (NUM_INPUTS),
-        .NUM_LANES  (NUM_LANES),
-        .DATAW      (REQ_DATAW),
-        .BUFFERED   (BUFFERED_REQ),
-        .ARBITER    (ARBITER)
+        .NUM_INPUTS  (NUM_INPUTS),
+        .NUM_OUTPUTS (NUM_OUTPUTS),
+        .NUM_LANES   (NUM_LANES),
+        .DATAW       (REQ_DATAW),
+        .BUFFERED    (BUFFERED_REQ),
+        .ARBITER     (ARBITER)
     ) req_arb (
         .clk       (clk),
         .reset     (reset),

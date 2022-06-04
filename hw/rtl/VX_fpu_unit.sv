@@ -26,7 +26,7 @@ module VX_fpu_unit #(
     wire ready_out;
 
     wire [`UUID_BITS-1:0]   rsp_uuid;
-    wire [`NW_BITS-1:0]     rsp_wid;
+    wire [`UP(`NW_BITS)-1:0] rsp_wid;
     wire [`NUM_THREADS-1:0] rsp_tmask;
     wire [31:0]             rsp_PC;
     wire [`NR_BITS-1:0]     rsp_rd;
@@ -43,7 +43,7 @@ module VX_fpu_unit #(
     wire fpuq_pop  = valid_out && ready_out;
 
     VX_index_buffer #(
-        .DATAW   (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1),
+        .DATAW   (`UUID_BITS + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1),
         .SIZE    (`FPUQ_SIZE)
     ) req_metadata  (
         .clk          (clk),

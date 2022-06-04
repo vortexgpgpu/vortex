@@ -195,7 +195,7 @@ module VX_mem_unit # (
         .TAG_SEL_IDX  (0),
         .BUFFERED_REQ ((`NUM_CORES != 1) ? 1 : 0),
         .BUFFERED_RSP ((`NUM_CORES != 1) ? 1 : 0)
-    ) cache_arb (
+    ) smem_arb (
         .clk        (clk),
         .reset      (reset),
         .req_in_if  (per_core_smem_req_if),

@@ -51,15 +51,15 @@ module VX_csr_data #(
 
     input wire                          read_enable,
     input wire [`UUID_BITS-1:0]         read_uuid,
-    input wire [`NW_BITS-1:0]           read_wid,
+    input wire [`UP(`NW_BITS)-1:0]      read_wid,
     input wire [`NUM_THREADS-1:0]       read_tmask,
     input wire [`CSR_ADDR_BITS-1:0]     read_addr,
     output wire [`NUM_THREADS-1:0][31:0] read_data,
 
-    input wire [`NT_BITS-1:0]           write_tid,
+    input wire [`UP(`NT_BITS)-1:0]      write_tid,
     input wire                          write_enable, 
     input wire [`UUID_BITS-1:0]         write_uuid,
-    input wire [`NW_BITS-1:0]           write_wid,
+    input wire [`UP(`NW_BITS)-1:0]      write_wid,
     input wire [`NUM_THREADS-1:0]       write_tmask,
     input wire [`CSR_ADDR_BITS-1:0]     write_addr,
     input wire [`NUM_THREADS-1:0][31:0] write_data

@@ -171,13 +171,13 @@ module VX_cache_wrap #(
     wire [`MEM_ADDR_WIDTH-1:0]      mem_req_addr_b;
     wire [LINE_SIZE-1:0]            mem_req_byteen_b;
     wire [`LINE_WIDTH-1:0]          mem_req_data_b;
-    wire [MEM_TAG_X_WIDTH-1:0]     mem_req_tag_b;
+    wire [MEM_TAG_X_WIDTH-1:0]      mem_req_tag_b;
     wire                            mem_req_ready_b;
     
     // Memory response
     wire                            mem_rsp_valid_b;
     wire [`LINE_WIDTH-1:0]          mem_rsp_data_b;
-    wire [MEM_TAG_X_WIDTH-1:0]     mem_rsp_tag_b;
+    wire [MEM_TAG_X_WIDTH-1:0]      mem_rsp_tag_b;
     wire                            mem_rsp_ready_b;
 
     if (NC_ENABLE || PASSTHRU) begin

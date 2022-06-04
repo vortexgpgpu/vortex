@@ -22,7 +22,7 @@ module VX_icache_stage #(
     `UNUSED_VAR (reset)
 
     wire [`UUID_BITS-1:0] rsp_uuid;
-    wire [`NW_BITS-1:0] req_tag, rsp_tag;    
+    wire [`UP(`NW_BITS)-1:0] req_tag, rsp_tag;    
 
     wire icache_req_fire = icache_req_if.valid && icache_req_if.ready;
     
@@ -56,7 +56,7 @@ module VX_icache_stage #(
         ) pending_reads (
             .clk   (clk),
             .reset (reset),
-            .incr  (icache_req_fire && (ifetch_req_if.wid == `NW_BITS'(i))),
+            .incr  (icache_req_fire && (ifetch_req_if.wid == `UP(`NW_BITS)'(i))),
             .decr  (ifetch_rsp_if.ibuf_pop[i]),
             .full  (pending_ibuf_full[i]),
             `UNUSED_PIN (size),
@@ -78,7 +78,7 @@ module VX_icache_stage #(
     // Can accept new request?
     assign ifetch_req_if.ready = icache_req_if.ready && ~pending_ibuf_full[ifetch_req_if.wid];
 
-    wire [`NW_BITS-1:0] rsp_wid = rsp_tag;
+    wire [`UP(`NW_BITS)-1:0] rsp_wid = rsp_tag;
 
     assign ifetch_rsp_if.valid = icache_rsp_if.valid;
     assign ifetch_rsp_if.tmask = rsp_tmask;

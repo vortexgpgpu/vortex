@@ -9,7 +9,7 @@ module VX_raster_csr #(
     // Inputs    
     input wire                              write_enable,
     input wire [`UUID_BITS-1:0]             write_uuid,
-    input wire [`NW_BITS-1:0]               write_wid,
+    input wire [`UP(`NW_BITS)-1:0]          write_wid,
     input wire [`NUM_THREADS-1:0]           write_tmask,
     input raster_stamp_t [`NUM_THREADS-1:0] write_data,
 
@@ -21,8 +21,8 @@ module VX_raster_csr #(
     raster_csrs_t [`NUM_THREADS-1:0] wdata;
     raster_csrs_t [`NUM_THREADS-1:0] rdata;
     wire [`NUM_THREADS-1:0]          wren;
-    wire [`NW_BITS-1:0]              waddr;
-    wire [`NW_BITS-1:0]              raddr;
+    wire [`UP(`NW_BITS)-1:0]         waddr;
+    wire [`UP(`NW_BITS)-1:0]         raddr;
 
     // CSR registers
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin

@@ -2,7 +2,7 @@
 
 module VX_tex_sampler #(
     parameter string INSTANCE_ID = "",
-    parameter REQ_INFOW = `NW_BITS + 32,
+    parameter REQ_INFOW = 1,
     parameter NUM_LANES = 1   
 ) (
     input wire clk,

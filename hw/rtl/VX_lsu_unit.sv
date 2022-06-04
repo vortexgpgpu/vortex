@@ -31,8 +31,8 @@ module VX_lsu_unit #(
     localparam STACK_START_W = MEM_ADDRW'(`STACK_BASE_ADDR >> MEM_ASHIFT);
     localparam STACK_END_W = MEM_ADDRW'((`STACK_BASE_ADDR - TOTAL_STACK_SIZE) >> MEM_ASHIFT);
 
-    //                     uuid,        addr_type,                               wid,       PC,  tmask,         rd,        op_type,         align,                        is_dup
-    localparam TAG_WIDTH = `UUID_BITS + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + `NW_BITS + 32 + `NUM_THREADS + `NR_BITS + `INST_LSU_BITS + (`NUM_THREADS * REQ_ASHIFT) + 1;
+    //                     uuid,        addr_type,                               wid,            PC,  tmask,         rd,        op_type,         align,                        is_dup
+    localparam TAG_WIDTH = `UUID_BITS + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + `UP(`NW_BITS) + 32 + `NUM_THREADS + `NR_BITS + `INST_LSU_BITS + (`NUM_THREADS * REQ_ASHIFT) + 1;
 
     `STATIC_ASSERT(0 == (`IO_BASE_ADDR % MEM_ASHIFT), ("invalid parameter"))
     `STATIC_ASSERT(0 == (`STACK_BASE_ADDR % MEM_ASHIFT), ("invalid parameter"))    
@@ -278,7 +278,7 @@ module VX_lsu_unit #(
     
     wire [`UUID_BITS-1:0] rsp_uuid;
     wire [`NUM_THREADS-1:0][`CACHE_ADDR_TYPE_BITS-1:0] rsp_addr_type;
-    wire [`NW_BITS-1:0] rsp_wid;
+    wire [`UP(`NW_BITS)-1:0] rsp_wid;
     wire [`NUM_THREADS-1:0] rsp_tmask;
     wire [31:0] rsp_pc;
     wire [`NR_BITS-1:0] rsp_rd;
@@ -329,7 +329,7 @@ module VX_lsu_unit #(
     // send load commit
 
     VX_skid_buffer #(
-        .DATAW (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1)
+        .DATAW (`UUID_BITS + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1)
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),

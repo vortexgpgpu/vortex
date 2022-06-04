@@ -48,7 +48,7 @@ module VX_warp_sched #(
     reg [31:0]              wspawn_pc;
     reg [`NUM_WARPS-1:0]    use_wspawn;   
 
-    wire [`NW_BITS-1:0]     schedule_wid;
+    wire [`UP(`NW_BITS)-1:0] schedule_wid;
     wire [`NUM_THREADS-1:0] schedule_tmask;
     wire [31:0]             schedule_pc;
     wire                    schedule_valid;
@@ -172,7 +172,7 @@ module VX_warp_sched #(
     wire [`NUM_WARPS-1:0] barrier_mask = barrier_masks[warp_ctl_if.barrier.id];
     `POP_COUNT(active_barrier_count, barrier_mask);
 
-    assign reached_barrier_limit = (active_barrier_count[`NW_BITS-1:0] == warp_ctl_if.barrier.size_m1);
+    assign reached_barrier_limit = (active_barrier_count[`UP(`NW_BITS)-1:0] == warp_ctl_if.barrier.size_m1);
 
     reg [`NUM_WARPS-1:0] barrier_stalls;
     always @(*) begin
@@ -251,7 +251,7 @@ module VX_warp_sched #(
                                      + `UUID_BITS'(CORE_ID);
 
     VX_pipe_register #( 
-        .DATAW  (1 + `UUID_BITS + `NUM_THREADS + 32 + `NW_BITS),
+        .DATAW  (1 + `UUID_BITS + `NUM_THREADS + 32 + `UP(`NW_BITS)),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),

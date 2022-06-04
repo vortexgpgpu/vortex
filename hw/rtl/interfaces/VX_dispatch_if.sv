@@ -2,21 +2,21 @@
 
 interface VX_dispatch_if ();
 
-    wire                    valid;    
-    wire [`UUID_BITS-1:0]   uuid;
-    wire [`NW_BITS-1:0]     wid;
-    wire [`NUM_THREADS-1:0] tmask;
-    wire [31:0]             PC;
-    wire [`EX_BITS-1:0]     ex_type;    
-    wire [`INST_OP_BITS-1:0] op_type; 
-    wire [`INST_MOD_BITS-1:0] op_mod;    
-    wire                    wb;
-    wire                    use_PC;
-    wire                    use_imm;
-    wire [31:0]             imm;
-    wire [`NR_BITS-1:0]     rd;
+    wire                        valid;    
+    wire [`UUID_BITS-1:0]       uuid;
+    wire [`UP(`NW_BITS)-1:0]    wid;
+    wire [`NUM_THREADS-1:0]     tmask;
+    wire [31:0]                 PC;
+    wire [`EX_BITS-1:0]         ex_type;    
+    wire [`INST_OP_BITS-1:0]    op_type; 
+    wire [`INST_MOD_BITS-1:0]   op_mod;    
+    wire                        wb;
+    wire                        use_PC;
+    wire                        use_imm;
+    wire [31:0]                 imm;
+    wire [`NR_BITS-1:0]         rd;
 
-    wire                    ready;
+    wire                        ready;
 
     modport master (
         output valid,

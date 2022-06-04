@@ -5,7 +5,7 @@ interface VX_writeback_if ();
     wire                            valid;
     wire [`UUID_BITS-1:0]           uuid;
     wire [`NUM_THREADS-1:0]         tmask;
-    wire [`NW_BITS-1:0]             wid; 
+    wire [`UP(`NW_BITS)-1:0]        wid; 
     wire [31:0]                     PC;
     wire [`NR_BITS-1:0]             rd;
     wire [`NUM_THREADS-1:0][31:0]   data;

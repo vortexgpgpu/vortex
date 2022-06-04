@@ -105,8 +105,8 @@ module VX_ibuffer #(
     ///////////////////////////////////////////////////////////////////////////
 
     reg [`NUM_WARPS-1:0] valid_table, valid_table_n;
-    reg [`NW_BITS-1:0] deq_wid, deq_wid_n;
-    reg [`NW_BITS-1:0] deq_wid_rr, deq_wid_rr_n;
+    reg [`UP(`NW_BITS)-1:0] deq_wid, deq_wid_n;
+    reg [`UP(`NW_BITS)-1:0] deq_wid_rr, deq_wid_rr_n;
     reg deq_valid, deq_valid_n;
     reg [DATAW-1:0] deq_instr, deq_instr_n;
     reg [NWARPSW-1:0] num_warps;
@@ -177,7 +177,7 @@ module VX_ibuffer #(
     end    
     
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin
-        assign decode_if.ibuf_pop[i] = deq_fire && (ibuffer_if.wid == `NW_BITS'(i));
+        assign decode_if.ibuf_pop[i] = deq_fire && (ibuffer_if.wid == `UP(`NW_BITS)'(i));
     end
 
     assign decode_if.ready = ~q_full[decode_if.wid];

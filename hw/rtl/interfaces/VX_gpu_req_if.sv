@@ -2,21 +2,21 @@
 
 interface VX_gpu_req_if();
 
-    wire                    valid;
-    wire [`UUID_BITS-1:0]   uuid;
-    wire [`NW_BITS-1:0]     wid;
-    wire [`NUM_THREADS-1:0] tmask;
-    wire [31:0]             PC;
-    wire [31:0]             next_PC;
-    wire [`INST_GPU_BITS-1:0] op_type;
-    wire [`INST_MOD_BITS-1:0] op_mod;
-    wire [`NT_BITS-1:0]     tid;
-    wire [`NUM_THREADS-1:0][31:0] rs1_data;
-    wire [`NUM_THREADS-1:0][31:0] rs2_data;
-    wire [`NUM_THREADS-1:0][31:0] rs3_data;
-    wire [`NR_BITS-1:0]     rd;
-    wire                    wb;
-    wire                    ready;
+    wire                            valid;
+    wire [`UUID_BITS-1:0]           uuid;
+    wire [`UP(`NW_BITS)-1:0]        wid;
+    wire [`NUM_THREADS-1:0]         tmask;
+    wire [31:0]                     PC;
+    wire [31:0]                     next_PC;
+    wire [`INST_GPU_BITS-1:0]       op_type;
+    wire [`INST_MOD_BITS-1:0]       op_mod;
+    wire [`UP(`NT_BITS)-1:0]        tid;
+    wire [`NUM_THREADS-1:0][31:0]   rs1_data;
+    wire [`NUM_THREADS-1:0][31:0]   rs2_data;
+    wire [`NUM_THREADS-1:0][31:0]   rs3_data;
+    wire [`NR_BITS-1:0]             rd;
+    wire                            wb;
+    wire                            ready;
 
     modport master (
         output valid,
