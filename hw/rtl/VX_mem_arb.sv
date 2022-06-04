@@ -5,7 +5,7 @@ module VX_mem_arb #(
     parameter DATA_WIDTH     = 1,
     localparam DATA_SIZE     = (DATA_WIDTH / 8),
     parameter ADDR_WIDTH     = (32 - `CLOG2(DATA_SIZE)),
-    parameter TAG_IN_WIDTH   = 1,    
+    parameter TAG_WIDTH      = 1,    
     parameter TAG_SEL_IDX    = 0,
     parameter BUFFERED_REQ   = 0,
     parameter BUFFERED_RSP   = 0,
@@ -28,9 +28,9 @@ module VX_mem_arb #(
 );   
     
     localparam LOG_NUM_REQS  = `CLOG2(NUM_REQS);
-    localparam TAG_OUT_WIDTH = TAG_IN_WIDTH + LOG_NUM_REQS;
+    localparam TAG_OUT_WIDTH = TAG_WIDTH + LOG_NUM_REQS;
     localparam REQ_DATAW = TAG_OUT_WIDTH + ADDR_WIDTH + 1 + DATA_SIZE + DATA_WIDTH;
-    localparam RSP_DATAW = TAG_IN_WIDTH + DATA_WIDTH;
+    localparam RSP_DATAW = TAG_WIDTH + DATA_WIDTH;
 
     wire [NUM_REQS-1:0]                req_valid_in;
     wire [NUM_REQS-1:0][REQ_DATAW-1:0] req_data_in;
@@ -40,7 +40,7 @@ module VX_mem_arb #(
         wire [TAG_OUT_WIDTH-1:0] req_tag_in;
 
         VX_bits_insert #( 
-            .N   (TAG_IN_WIDTH),
+            .N   (TAG_WIDTH),
             .S   (LOG_NUM_REQS),
             .POS (TAG_SEL_IDX)
         ) bits_insert (
@@ -83,7 +83,7 @@ module VX_mem_arb #(
         assign rsp_sel = 0;
     end
 
-    wire [TAG_IN_WIDTH-1:0] rsp_tag_out;
+    wire [TAG_WIDTH-1:0] rsp_tag_out;
 
     VX_bits_remove #( 
         .N   (TAG_OUT_WIDTH),

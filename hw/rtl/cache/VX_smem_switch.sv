@@ -4,7 +4,7 @@ module VX_smem_switch #(
     parameter NUM_REQS       = 1, 
     parameter NUM_LANES      = 1,
     parameter DATA_SIZE      = 1,
-    parameter TAG_IN_WIDTH   = 1,
+    parameter TAG_WIDTH      = 1,
     parameter TAG_SEL_IDX    = 0,   
     parameter BUFFERED_REQ   = 0,
     parameter BUFFERED_RSP   = 0,
@@ -28,9 +28,9 @@ module VX_smem_switch #(
     localparam ADDR_WIDTH    = (32-`CLOG2(DATA_SIZE));
     localparam DATA_WIDTH    = (8 * DATA_SIZE);
     localparam LOG_NUM_REQS  = `CLOG2(NUM_REQS);
-    localparam TAG_OUT_WIDTH = TAG_IN_WIDTH - LOG_NUM_REQS;
+    localparam TAG_OUT_WIDTH = TAG_WIDTH - LOG_NUM_REQS;
     localparam REQ_DATAW     = TAG_OUT_WIDTH + ADDR_WIDTH + 1 + DATA_SIZE + DATA_WIDTH;
-    localparam RSP_DATAW     = TAG_IN_WIDTH + DATA_WIDTH;      
+    localparam RSP_DATAW     = TAG_WIDTH + DATA_WIDTH;      
         
     for (genvar i = 0; i < NUM_LANES; ++i) begin
 
@@ -43,7 +43,7 @@ module VX_smem_switch #(
         wire [`UP(LOG_NUM_REQS)-1:0] req_sel_in;
         
         VX_bits_remove #( 
-            .N   (TAG_IN_WIDTH),
+            .N   (TAG_WIDTH),
             .S   (LOG_NUM_REQS),
             .POS (TAG_SEL_IDX)
         ) bits_remove (
@@ -91,7 +91,7 @@ module VX_smem_switch #(
     
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         for (genvar j = 0; j < NUM_LANES; ++j) begin     
-            wire [TAG_IN_WIDTH-1:0] rsp_tag_out;
+            wire [TAG_WIDTH-1:0] rsp_tag_out;
             
             VX_bits_insert #( 
                 .N   (TAG_OUT_WIDTH),

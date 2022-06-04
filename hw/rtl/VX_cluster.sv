@@ -74,13 +74,13 @@ module VX_cluster #(
     VX_cache_req_if #(
         .NUM_REQS  (`TCACHE_NUM_REQS), 
         .WORD_SIZE (`TCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`TCACHE_TAG_ID_BITS)
+        .TAG_WIDTH (`TCACHE_TAG_WIDTH)
     ) tcache_req_if[`NUM_TEX_UNITS]();
 
     VX_cache_rsp_if #(
         .NUM_REQS  (`TCACHE_NUM_REQS), 
         .WORD_SIZE (`TCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`TCACHE_TAG_ID_BITS)
+        .TAG_WIDTH (`TCACHE_TAG_WIDTH)
     ) tcache_rsp_if[`NUM_TEX_UNITS]();
 
 `ifdef PERF_ENABLE
@@ -146,8 +146,7 @@ module VX_cluster #(
     ) tcache (
     `ifdef PERF_ENABLE
         .perf_cache_if  (perf_tcache_if),
-    `endif
-        
+    `endif        
         .clk            (clk),
         .reset          (tcache_reset),
         .core_req_if    (tcache_req_if),
@@ -183,13 +182,13 @@ module VX_cluster #(
     VX_cache_req_if #(
         .NUM_REQS  (`RCACHE_NUM_REQS), 
         .WORD_SIZE (`RCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`RCACHE_TAG_ID_BITS)
+        .TAG_WIDTH (`RCACHE_TAG_WIDTH)
     ) rcache_req_if[`NUM_RASTER_UNITS]();
 
     VX_cache_rsp_if #(
         .NUM_REQS  (`RCACHE_NUM_REQS), 
         .WORD_SIZE (`RCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`RCACHE_TAG_ID_BITS)
+        .TAG_WIDTH (`RCACHE_TAG_WIDTH)
     ) rcache_rsp_if[`NUM_RASTER_UNITS]();
 
 `ifdef PERF_ENABLE
@@ -260,8 +259,7 @@ module VX_cluster #(
     ) rcache (
     `ifdef PERF_ENABLE
         .perf_cache_if  (perf_rcache_if),
-    `endif
-        
+    `endif        
         .clk            (clk),
         .reset          (rcache_reset),
         .core_req_if    (rcache_req_if),
@@ -297,13 +295,13 @@ module VX_cluster #(
     VX_cache_req_if #(
         .NUM_REQS  (`OCACHE_NUM_REQS), 
         .WORD_SIZE (`OCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`OCACHE_TAG_ID_BITS)
+        .TAG_WIDTH (`OCACHE_TAG_WIDTH)
     ) ocache_req_if[`NUM_ROP_UNITS]();
 
     VX_cache_rsp_if #(
         .NUM_REQS  (`OCACHE_NUM_REQS), 
         .WORD_SIZE (`OCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`OCACHE_TAG_ID_BITS)
+        .TAG_WIDTH (`OCACHE_TAG_WIDTH)
     ) ocache_rsp_if[`NUM_ROP_UNITS]();
 
 `ifdef PERF_ENABLE
@@ -367,8 +365,7 @@ module VX_cluster #(
     ) ocache (
     `ifdef PERF_ENABLE
         .perf_cache_if  (perf_ocache_if),
-    `endif
-        
+    `endif        
         .clk            (clk),
         .reset          (ocache_reset),
 
@@ -436,7 +433,6 @@ module VX_cluster #(
     `ifdef PERF_ENABLE
         .perf_memsys_if    (perf_memsys_if),
     `endif
-
         .dcache_req_if     (per_core_dcache_req_if),
         .dcache_rsp_if     (per_core_dcache_rsp_if),        
         
@@ -471,7 +467,6 @@ module VX_cluster #(
 
             .clk            (clk),
             .reset          (core_reset),
-
             .dcr_base_if    (dcr_base_if),
 
          `ifdef PERF_ENABLE
@@ -511,7 +506,6 @@ module VX_cluster #(
 
             .sim_ebreak     (per_core_sim_ebreak[i]),
             .sim_wb_value   (per_core_sim_wb_value[i]),
-
             .busy           (per_core_busy[i])
         );
     end
@@ -601,11 +595,9 @@ module VX_cluster #(
     ) l2cache (            
         .clk            (clk),
         .reset          (l2_reset),
-
     `ifdef PERF_ENABLE
         .perf_cache_if  (perf_l2cache_if),
-    `endif  
-
+    `endif
         .core_req_if    (l2_mem_req_if),
         .core_rsp_if    (l2_mem_rsp_if),
         .mem_req_if     (mem_req_if),

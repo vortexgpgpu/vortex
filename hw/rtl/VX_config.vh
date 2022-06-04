@@ -289,12 +289,12 @@
 
 // Size of LSU Request Queue
 `ifndef LSUQ_SIZE
-`define LSUQ_SIZE (`NUM_WARPS * 2)
+`define LSUQ_SIZE `MAX(2, `NUM_WARPS * 2)
 `endif
 
 // Size of FPU Request Queue
 `ifndef FPUQ_SIZE
-`define FPUQ_SIZE (`NUM_WARPS * 2)
+`define FPUQ_SIZE `MAX(2, `NUM_WARPS * 2)
 `endif
 
 // Texture Units ///////////////////////////////////////////////////////////////
@@ -373,7 +373,7 @@
 
 // Number of caches
 `ifndef NUM_ICACHES
-`define NUM_ICACHES `UP(`NUM_CORES / 8)
+`define NUM_ICACHES `UP(`NUM_CORES / 4)
 `endif
 
 // Size of cache in bytes
@@ -393,7 +393,7 @@
 
 // Miss Handling Register Size
 `ifndef ICACHE_MSHR_SIZE
-`define ICACHE_MSHR_SIZE `NUM_WARPS
+`define ICACHE_MSHR_SIZE `MAX(2, `NUM_WARPS)
 `endif
 
 // Memory Request Queue Size
@@ -426,7 +426,7 @@
 
 // Number of caches
 `ifndef NUM_DCACHES
-`define NUM_DCACHES `UP(`NUM_CORES / 8)
+`define NUM_DCACHES `UP(`NUM_CORES / 4)
 `endif
 
 // Size of cache in bytes
@@ -494,7 +494,7 @@
 
 // Size of cache in bytes
 `ifndef TCACHE_SIZE
-`define TCACHE_SIZE 8192
+`define TCACHE_SIZE 4096
 `endif
 
 // Number of banks
@@ -519,7 +519,7 @@
 
 // Miss Handling Register Size
 `ifndef TCACHE_MSHR_SIZE
-`define TCACHE_MSHR_SIZE (`NUM_THREADS * 4)
+`define TCACHE_MSHR_SIZE 8
 `endif
 
 // Memory Request Queue Size
@@ -708,7 +708,7 @@
 
 // Number of banks
 `ifndef L2_NUM_BANKS
-`define L2_NUM_BANKS ((`NUM_CORES < 4) ? `NUM_CORES : 4)
+`define L2_NUM_BANKS 2
 `endif
 
 // Number of ports per bank
@@ -755,7 +755,7 @@
 
 // Number of banks
 `ifndef L3_NUM_BANKS
-`define L3_NUM_BANKS ((`NUM_CLUSTERS < 4) ? `NUM_CORES : 4)
+`define L3_NUM_BANKS `MIN(4, `NUM_CLUSTERS)
 `endif
 
 // Number of ports per bank

@@ -14,7 +14,7 @@ module VX_core #(
     input wire              clk,
     input wire              reset,
 
-    input base_dcrs_t       base_dcrs,
+    VX_dcr_base_if.slave    dcr_base_if,
 
 `ifdef PERF_ENABLE
     VX_perf_memsys_if.slave perf_memsys_if,
@@ -90,6 +90,11 @@ module VX_core #(
 `ifdef PERF_ENABLE
     VX_perf_pipeline_if perf_pipeline_if();
 `endif
+
+    base_dcrs_t base_dcrs;
+    always @(posedge clk) begin
+        base_dcrs <= dcr_base_if.data;
+    end
 
     `RESET_RELAY (fetch_reset, reset);
     `RESET_RELAY (decode_reset, reset);

@@ -72,11 +72,12 @@ module VX_cache_cluster #(
 
     localparam PASSTHRU  = (NUM_UNITS == 0);
     localparam WORD_ADDR = 32 - `CLOG2(WORD_SIZE);
-    localparam ARB_TAG_WIDTH = TAG_WIDTH + `ARB_SEL_BITS(NUM_INPUTS, `UP(NUM_UNITS));
-    localparam MEM_TAG_WIDTH = PASSTHRU ? (NC_ENABLE ? `CACHE_NC_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, TAG_WIDTH) : 
-                                                       `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, TAG_WIDTH)) : 
-                                          (NC_ENABLE ? `CACHE_NC_MEM_TAG_WIDTH(MRSQ_SIZE, NUM_BANKS, NUM_REQS, LINE_SIZE, WORD_SIZE, TAG_WIDTH) :
-                                                       `CACHE_MEM_TAG_WIDTH(MRSQ_SIZE, NUM_BANKS));   
+    localparam ARB_TAG_WIDTH = TAG_WIDTH + `ARB_SEL_BITS(NUM_INPUTS, `UP(NUM_UNITS));    
+    localparam MEM_TAG_WIDTH = PASSTHRU ? (NC_ENABLE ? `CACHE_NC_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH) : 
+                                                       `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH)) : 
+                                          (NC_ENABLE ? `CACHE_NC_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH) :
+                                                       `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS));
+
     VX_mem_req_if #(
         .DATA_WIDTH (`LINE_WIDTH),
         .TAG_WIDTH  (MEM_TAG_WIDTH)
@@ -155,7 +156,7 @@ module VX_cache_cluster #(
             .MREQ_SIZE    (MREQ_SIZE),
             .WRITE_ENABLE (WRITE_ENABLE),
             .UUID_BITS    (UUID_BITS),
-            .TAG_WIDTH    (TAG_WIDTH),
+            .TAG_WIDTH    (ARB_TAG_WIDTH),
             .NC_ENABLE    (NC_ENABLE),
             .PASSTHRU     (PASSTHRU)
         ) cache (
@@ -176,7 +177,7 @@ module VX_cache_cluster #(
     VX_mem_arb #(
         .NUM_REQS     (`UP(NUM_UNITS)),
         .DATA_WIDTH   (`LINE_WIDTH),
-        .TAG_IN_WIDTH (MEM_TAG_WIDTH),
+        .TAG_WIDTH    (MEM_TAG_WIDTH),
         .TAG_SEL_IDX  (1), // Skip 0 for NC flag
         .BUFFERED_REQ ((`UP(NUM_UNITS) > 1) ? 1 : 0),
         .BUFFERED_RSP ((`UP(NUM_UNITS) > 1) ? 2 : 0)

@@ -148,7 +148,7 @@ module VX_mem_unit # (
             .NUM_REQS     (2),
             .NUM_LANES    (`DCACHE_NUM_REQS),
             .DATA_SIZE    (4),            
-            .TAG_IN_WIDTH (`DCACHE_TAG_WIDTH),
+            .TAG_WIDTH    (`DCACHE_TAG_WIDTH),
             .TAG_SEL_IDX  (0),
             .ARBITER      ("P"),
             .BUFFERED_REQ (1),

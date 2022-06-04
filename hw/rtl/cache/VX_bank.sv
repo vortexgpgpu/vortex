@@ -365,7 +365,7 @@ module VX_bank #(
         .allocate_addr      (addr_st0),
         .allocate_data      ({wsel_st0, tag_st0, req_idx_st0, pmask_st0}),
         .allocate_id        (mshr_alloc_id),
-        `UNUSED_PIN (allocate_ready),
+        `UNUSED_PIN         (allocate_ready),
 
         // lookup
         .lookup_valid       (mshr_lookup),

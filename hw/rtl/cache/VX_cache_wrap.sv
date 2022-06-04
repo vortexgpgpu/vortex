@@ -76,8 +76,10 @@ module VX_cache_wrap #(
     localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE);    
     localparam CORE_TAG_X_WIDTH = TAG_WIDTH - NC_ENABLE;
     localparam MEM_TAG_X_WIDTH  = MSHR_ADDR_WIDTH + `BANK_SEL_BITS;
-    localparam MEM_TAG_NC_WIDTH = `REQ_SEL_BITS + `WORD_SEL_BITS + TAG_WIDTH;
-    localparam MEM_TAG_WIDTH    = `MAX(MEM_TAG_X_WIDTH, MEM_TAG_NC_WIDTH);
+    localparam MEM_TAG_WIDTH    = PASSTHRU ? (NC_ENABLE ? `CACHE_NC_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, TAG_WIDTH) : 
+                                                          `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, TAG_WIDTH)) : 
+                                             (NC_ENABLE ? `CACHE_NC_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, NUM_REQS, LINE_SIZE, WORD_SIZE, TAG_WIDTH) :
+                                                          `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS));
 
     wire [NUM_REQS-1:0]                     core_req_valid;
     wire [NUM_REQS-1:0]                     core_req_rw;
