@@ -88,6 +88,9 @@
 `define CACHE_CLUSTER_MEM_ARB_TAG(tag_width, num_caches) \
         (tag_width + `ARB_SEL_BITS(`UP(num_caches), 1))
 
+`define CACHE_CLUSTER_MEM_TAG_WIDTH(mshr_size, num_banks, num_caches) \
+        `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_MEM_TAG_WIDTH(mshr_size, num_banks),  num_caches)
+
 `define CACHE_CLUSTER_NC_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, tag_width, num_inputs, num_caches) \
         `CACHE_CLUSTER_MEM_ARB_TAG(`CLOG2(num_reqs) + `CLOG2(line_size / word_size) + `CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches)), num_caches)
 
