@@ -11,7 +11,8 @@ module VX_mem_scheduler #(
     parameter UUID_WIDTH    = 0,
     parameter QUEUE_SIZE    = 16,
     parameter PARTIAL_RESPONSE = 0,
-    parameter OUT_REG       = 0,
+    parameter CORE_OUT_REG  = 0,
+    parameter MEM_OUT_REG   = 0,
 
     localparam BYTEENW      = DATA_WIDTH / 8,
     localparam NUM_BATCHES  = (NUM_REQS + NUM_BANKS - 1) / NUM_BANKS,
@@ -64,7 +65,15 @@ module VX_mem_scheduler #(
 
     `STATIC_ASSERT (DATA_WIDTH == 8 * (DATA_WIDTH / 8), ("invalid parameter"))
     `STATIC_ASSERT ((0 == PARTIAL_RESPONSE) || (1 == PARTIAL_RESPONSE), ("invalid parameter"))
-    `RUNTIME_ASSERT ((~req_valid || req_mask != 0), ("invalid input"));  
+    `RUNTIME_ASSERT ((~req_valid || req_mask != 0), ("invalid input"));
+
+    wire [NUM_BANKS-1:0]             mem_req_valid_s;
+    wire [NUM_BANKS-1:0]             mem_req_rw_s;
+    wire [NUM_BANKS-1:0][BYTEENW-1:0] mem_req_byteen_s;
+    wire [NUM_BANKS-1:0][ADDR_WIDTH-1:0] mem_req_addr_s;
+    wire [NUM_BANKS-1:0][DATA_WIDTH-1:0] mem_req_data_s;
+    wire [NUM_BANKS-1:0][MEM_TAGW-1:0]mem_req_tag_s;
+    wire [NUM_BANKS-1:0]            mem_req_ready_s;
 
     wire                            mem_rsp_valid_s;
     wire [NUM_BANKS-1:0]            mem_rsp_mask_s;
@@ -202,11 +211,11 @@ module VX_mem_scheduler #(
         end
     end
 
-    wire [NUM_BANKS-1:0] mem_req_fire = mem_req_valid & mem_req_ready;
+    wire [NUM_BANKS-1:0] mem_req_fire_s = mem_req_valid_s & mem_req_ready_s;
 
     assign mem_req_mask_b = (NUM_BATCHES * NUM_BANKS)'(sreq_mask);
 
-    assign req_sent_mask_n = req_sent_mask | mem_req_fire;
+    assign req_sent_mask_n = req_sent_mask | mem_req_fire_s;
     
     assign req_complete = (req_sent_mask_all == sreq_mask);
 
@@ -231,23 +240,40 @@ module VX_mem_scheduler #(
         end
     end
 
-    assign mem_req_valid = mem_req_mask_b[req_batch_idx] & ~req_sent_mask & {NUM_BANKS{~sreq_empty}};
+    assign mem_req_valid_s = mem_req_mask_b[req_batch_idx] & ~req_sent_mask & {NUM_BANKS{~sreq_empty}};
 
-    assign {mem_req_rw, mem_req_byteen, mem_req_addr, mem_req_data} = mem_req_data_b[req_batch_idx];
+    assign {mem_req_rw_s, mem_req_byteen_s, mem_req_addr_s, mem_req_data_s} = mem_req_data_b[req_batch_idx];
 
     if (UUID_WIDTH != 0) begin
         if (NUM_BATCHES > 1) begin
-            assign mem_req_tag = {NUM_BANKS{{sreq_uuid, req_batch_idx, sreq_tag}}};
+            assign mem_req_tag_s = {NUM_BANKS{{sreq_uuid, req_batch_idx, sreq_tag}}};
         end else begin
-            assign mem_req_tag = {NUM_BANKS{{sreq_uuid, sreq_tag}}};
+            assign mem_req_tag_s = {NUM_BANKS{{sreq_uuid, sreq_tag}}};
         end
     end else begin
         `UNUSED_VAR (sreq_uuid)
         if (NUM_BATCHES > 1) begin
-            assign mem_req_tag = {NUM_BANKS{{req_batch_idx, sreq_tag}}};
+            assign mem_req_tag_s = {NUM_BANKS{{req_batch_idx, sreq_tag}}};
         end else begin
-            assign mem_req_tag = {NUM_BANKS{sreq_tag}};
+            assign mem_req_tag_s = {NUM_BANKS{sreq_tag}};
         end
+    end
+
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+        VX_generic_buffer #(
+            .DATAW   (1 + BYTEENW + ADDR_WIDTH + DATA_WIDTH + MEM_TAGW),
+            .SKID    (MEM_OUT_REG >> 1),
+            .OUT_REG (MEM_OUT_REG & 1)
+        ) mem_req_buf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (mem_req_valid_s[i]),
+            .ready_in  (mem_req_ready_s[i]),
+            .data_in   ({mem_req_rw_s[i], mem_req_byteen_s[i], mem_req_addr_s[i], mem_req_data_s[i], mem_req_tag_s[i]}),
+            .data_out  ({mem_req_rw[i],   mem_req_byteen[i],   mem_req_addr[i],   mem_req_data[i],   mem_req_tag[i]}),
+            .valid_out (mem_req_valid[i]),
+            .ready_out (mem_req_ready[i])
+        );
     end
 
     // Handle memory responses ////////////////////////////////////////////////
@@ -364,9 +390,9 @@ module VX_mem_scheduler #(
 
     VX_generic_buffer #(
         .DATAW   (NUM_REQS + (NUM_REQS * DATA_WIDTH) + TAG_WIDTH),
-        .SKID    (OUT_REG >> 1),
-        .OUT_REG (OUT_REG & 1)
-    ) rsp_sbuf (
+        .SKID    (CORE_OUT_REG >> 1),
+        .OUT_REG (CORE_OUT_REG & 1)
+    ) rsp_buf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (crsp_valid),  
@@ -441,20 +467,20 @@ module VX_mem_scheduler #(
              `TRACE_ARRAY1D(1, rsp_data, NUM_REQS);
             dpi_trace(1, ", tag=0x%0h (#%0d)\n", rsp_tag, rsp_dbg_uuid);
         end
-        if (| mem_req_fire) begin
-            if (| mem_req_rw) begin
-                dpi_trace(1, "%d: %s-mem-wr: valid=%b, byteen=", $time, INSTANCE_ID, mem_req_fire);
-                `TRACE_ARRAY1D(1, mem_req_byteen, NUM_BANKS);
+        if (| mem_req_fire_s) begin
+            if (| mem_req_rw_s) begin
+                dpi_trace(1, "%d: %s-mem-wr: valid=%b, byteen=", $time, INSTANCE_ID, mem_req_fire_s);
+                `TRACE_ARRAY1D(1, mem_req_byteen_s, NUM_BANKS);
                 dpi_trace(1, ", addr=");
-                `TRACE_ARRAY1D(1, mem_req_addr, NUM_BANKS);
+                `TRACE_ARRAY1D(1, mem_req_addr_s, NUM_BANKS);
                 dpi_trace(1, ", data=");
-                `TRACE_ARRAY1D(1, mem_req_data, NUM_BANKS);
+                `TRACE_ARRAY1D(1, mem_req_data_s, NUM_BANKS);
                 dpi_trace(1, ", tag=");
                 `TRACE_ARRAY1D(1, stag_waddr, NUM_BANKS);
                 dpi_trace(1, ", batch=%0d (#%0d)\n", req_batch_idx, mem_req_dbg_uuid);
             end else begin
                 dpi_trace(1, "%d: %s-mem-rd: valid=%b, addr=", $time, INSTANCE_ID, mem_req_fire);
-                `TRACE_ARRAY1D(1, mem_req_addr, NUM_BANKS);
+                `TRACE_ARRAY1D(1, mem_req_addr_s, NUM_BANKS);
                 dpi_trace(1, ", tag=");
                 `TRACE_ARRAY1D(1, stag_waddr, NUM_BANKS);
                 dpi_trace(1, ", batch=%0d (#%0d)\n", req_batch_idx, mem_req_dbg_uuid);

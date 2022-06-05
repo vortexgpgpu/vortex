@@ -23,7 +23,7 @@ module VX_dp_ram #(
     `STATIC_ASSERT((1 == BYTEENW) || ((BYTEENW > 1) && 0 == (BYTEENW % 4)), ("invalid parameter"))
 
 `define RAM_INITIALIZATION                         \
-    if (INIT_ENABLE) begin                         \
+    if (INIT_ENABLE != 0) begin                    \
         if (INIT_FILE != "") begin                 \
             initial $readmemh(INIT_FILE, ram);     \
         end else begin                             \
@@ -34,8 +34,8 @@ module VX_dp_ram #(
     end
 
 `ifdef SYNTHESIS
-    if (LUTRAM) begin
-        if (OUT_REG) begin        
+    if (LUTRAM != 0) begin
+        if (OUT_REG != 0) begin        
             reg [DATAW-1:0] rdata_r;
             if (BYTEENW > 1) begin
                 `USE_FAST_BRAM reg [BYTEENW-1:0][7:0] ram [SIZE-1:0];
@@ -87,7 +87,7 @@ module VX_dp_ram #(
             end         
         end
     end else begin
-        if (OUT_REG) begin
+        if (OUT_REG != 0) begin
             reg [DATAW-1:0] rdata_r;
 
             if (BYTEENW > 1) begin
@@ -115,7 +115,7 @@ module VX_dp_ram #(
             end
             assign rdata = rdata_r;
         end else begin
-            if (NO_RWCHECK) begin
+            if (NO_RWCHECK != 0) begin
                 if (BYTEENW > 1) begin
                     `NO_RW_RAM_CHECK reg [BYTEENW-1:0][7:0] ram [SIZE-1:0];
 
@@ -167,7 +167,7 @@ module VX_dp_ram #(
         end
     end
 `else
-    if (OUT_REG) begin
+    if (OUT_REG != 0) begin
         reg [DATAW-1:0] rdata_r;
         if (BYTEENW > 1) begin
             reg [BYTEENW-1:0][7:0] ram [SIZE-1:0];

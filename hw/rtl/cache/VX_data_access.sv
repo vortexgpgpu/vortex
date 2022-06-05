@@ -56,7 +56,7 @@ module VX_data_access #(
     wire [BYTEENW-1:0] wren;
     wire [`LINE_SEL_BITS-1:0] line_addr = addr[`LINE_SEL_BITS-1:0];
 
-    if (WRITE_ENABLE) begin
+    if (WRITE_ENABLE != 0) begin
         if (`WORDS_PER_LINE > 1) begin
             reg [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] wdata_r;
             reg [`WORDS_PER_LINE-1:0][WORD_SIZE-1:0] wren_r;

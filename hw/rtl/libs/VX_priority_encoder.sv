@@ -14,7 +14,7 @@ module VX_priority_encoder #(
 );
     wire [N-1:0] reversed; 
 
-    if (REVERSE) begin
+    if (REVERSE != 0) begin
         for (genvar i = 0; i < N; ++i) begin
             assign reversed[N-i-1] = data_in[i];
         end        

@@ -18,7 +18,7 @@ module VX_multiplier #(
 
     wire [WIDTHP-1:0] result_unqual;
 
-    if (SIGNED) begin
+    if (SIGNED != 0) begin
         assign result_unqual = $signed(dataa) * $signed(datab);
     end else begin
         assign result_unqual = dataa * datab;

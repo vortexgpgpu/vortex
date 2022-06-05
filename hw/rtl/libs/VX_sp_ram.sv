@@ -22,7 +22,7 @@ module VX_sp_ram #(
     `STATIC_ASSERT((BYTEENW == 1) || (BYTEENW * 8 == DATAW), ("invalid parameter"))
 
 `define RAM_INITIALIZATION                          \
-    if (INIT_ENABLE) begin                          \
+    if (INIT_ENABLE != 0) begin                     \
         initial begin                               \
             if (INIT_FILE != "") begin              \
                 $readmemh(INIT_FILE, ram);          \
@@ -34,8 +34,8 @@ module VX_sp_ram #(
     end
 
 `ifdef SYNTHESIS
-    if (LUTRAM) begin
-        if (OUT_REG) begin        
+    if (LUTRAM != 0) begin
+        if (OUT_REG != 0) begin        
             reg [DATAW-1:0] rdata_r;
 
             if (BYTEENW > 1) begin
@@ -88,7 +88,7 @@ module VX_sp_ram #(
             end         
         end
     end else begin
-        if (OUT_REG) begin
+        if (OUT_REG != 0) begin
             reg [DATAW-1:0] rdata_r;
 
             if (BYTEENW > 1) begin
@@ -116,7 +116,7 @@ module VX_sp_ram #(
             end
             assign rdata = rdata_r;
         end else begin
-            if (NO_RWCHECK) begin
+            if (NO_RWCHECK != 0) begin
                 if (BYTEENW > 1) begin
                     `NO_RW_RAM_CHECK reg [BYTEENW-1:0][7:0] ram [SIZE-1:0];
 
@@ -168,7 +168,7 @@ module VX_sp_ram #(
         end
     end
 `else
-    if (OUT_REG) begin
+    if (OUT_REG != 0) begin
         reg [DATAW-1:0] rdata_r;
         if (BYTEENW > 1) begin
             reg [BYTEENW-1:0][7:0] ram [SIZE-1:0];

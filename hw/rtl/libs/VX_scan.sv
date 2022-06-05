@@ -19,7 +19,7 @@ module VX_scan #(
     wire [LOGN:0][N-1:0] t;   
 
     // reverses bits
-    if (REVERSE) begin
+    if (REVERSE != 0) begin
         assign t[0] = data_in;
     end else begin
         assign t[0] = {<<{data_in}};
@@ -51,7 +51,7 @@ module VX_scan #(
     end   
 
     // reverse bits
-    if (REVERSE) begin
+    if (REVERSE != 0) begin
         assign data_out = t[LOGN];
     end else begin
         for (genvar i = 0; i < N; ++i) begin

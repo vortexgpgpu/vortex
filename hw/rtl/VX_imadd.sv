@@ -70,7 +70,7 @@ module VX_imadd #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         wire [DATA_WIDTH-1:0] mul_shift;
-        if (SIGNED) begin
+        if (SIGNED != 0) begin
             assign mul_shift = DATA_WIDTH'($signed(mul_result[i]) >> $signed(shift_in_s));
         end else begin
             assign mul_shift = DATA_WIDTH'(mul_result[i] >> shift_in_s);

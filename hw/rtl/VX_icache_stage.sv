@@ -1,4 +1,9 @@
 `include "VX_define.vh"
+`include "VX_cache_types.vh"
+
+`IGNORE_WARNINGS_BEGIN
+import VX_cache_types::*;
+`IGNORE_WARNINGS_END
 
 module VX_icache_stage #(
     parameter CORE_ID = 0
@@ -21,10 +26,15 @@ module VX_icache_stage #(
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (reset)
 
+    wire icache_req_valid;
+    wire [ICACHE_ADDR_WIDTH-1:0] icache_req_addr;
+    wire [ICACHE_TAG_WIDTH-1:0] icache_req_tag;
+    wire icache_req_ready;
+
     wire [`UUID_BITS-1:0] rsp_uuid;
     wire [`UP(`NW_BITS)-1:0] req_tag, rsp_tag;    
 
-    wire icache_req_fire = icache_req_if.valid && icache_req_if.ready;
+    wire icache_req_fire = icache_req_valid && icache_req_ready;
     
     assign req_tag = ifetch_req_if.wid;
     
@@ -68,15 +78,28 @@ module VX_icache_stage #(
         ("%t: *** invalid PC=0x%0h, wid=%0d, tmask=%b (#%0d)", $time, ifetch_req_if.PC, ifetch_req_if.wid, ifetch_req_if.tmask, ifetch_req_if.uuid))
 
     // Icache Request
-    assign icache_req_if.valid  = ifetch_req_if.valid && ~pending_ibuf_full[ifetch_req_if.wid];
+    
+    assign icache_req_valid = ifetch_req_if.valid && ~pending_ibuf_full[ifetch_req_if.wid];
+    assign icache_req_addr  = ifetch_req_if.PC[31:2];
+    assign icache_req_tag   = {ifetch_req_if.uuid, req_tag};
+    assign ifetch_req_if.ready = icache_req_ready && ~pending_ibuf_full[ifetch_req_if.wid];
+
+    VX_skid_buffer #(
+        .DATAW (ICACHE_ADDR_WIDTH + ICACHE_TAG_WIDTH)
+    ) req_sbuf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (icache_req_valid),
+        .ready_in  (icache_req_ready),
+        .data_in   ({icache_req_addr,    icache_req_tag}),
+        .data_out  ({icache_req_if.addr, icache_req_if.tag}),
+        .valid_out (icache_req_if.valid),
+        .ready_out (icache_req_if.ready)
+    );
+
     assign icache_req_if.rw     = 0;
     assign icache_req_if.byteen = 4'b1111;
-    assign icache_req_if.addr   = ifetch_req_if.PC[31:2];
-    assign icache_req_if.data   = '0;
-    assign icache_req_if.tag    = {ifetch_req_if.uuid, req_tag};
-
-    // Can accept new request?
-    assign ifetch_req_if.ready = icache_req_if.ready && ~pending_ibuf_full[ifetch_req_if.wid];
+    assign icache_req_if.data   = '0;    
 
     wire [`UP(`NW_BITS)-1:0] rsp_wid = rsp_tag;
 
@@ -92,8 +115,8 @@ module VX_icache_stage #(
 
     `SCOPE_ASSIGN (icache_req_fire, icache_req_fire);
     `SCOPE_ASSIGN (icache_req_uuid, ifetch_req_if.uuid);
-    `SCOPE_ASSIGN (icache_req_addr, {icache_req_if.addr, 2'b0});    
-    `SCOPE_ASSIGN (icache_req_tag,  req_tag);
+    `SCOPE_ASSIGN (icache_req_addr, icache_req_addr);
+    `SCOPE_ASSIGN (icache_req_tag,  icache_req_tag);
 
     `SCOPE_ASSIGN (icache_rsp_fire, icache_rsp_if.valid && icache_rsp_if.ready);
     `SCOPE_ASSIGN (icache_rsp_uuid, rsp_uuid);

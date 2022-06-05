@@ -139,7 +139,7 @@ module VX_scope #(
             end
 
             if (recording) begin
-                if (UPDW_ENABLE) begin
+                if (UPDW_ENABLE != 0) begin
                     if (delta_flush
                      || changed
                      || (trigger_id != prev_trigger_id)) begin
@@ -200,7 +200,7 @@ module VX_scope #(
         end
 
         if (recording) begin
-            if (UPDW_ENABLE) begin
+            if (UPDW_ENABLE != 0) begin
                 if (delta_flush
                  || changed
                  || (trigger_id != prev_trigger_id)) begin

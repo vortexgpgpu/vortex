@@ -309,7 +309,7 @@ module VX_cache_wrap #(
         );
     end 
 
-    if (PASSTHRU) begin
+    if (PASSTHRU != 0) begin
 
         `UNUSED_VAR (core_req_valid_b)
         `UNUSED_VAR (core_req_rw_b)

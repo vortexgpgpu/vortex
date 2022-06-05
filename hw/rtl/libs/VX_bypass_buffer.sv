@@ -14,7 +14,7 @@ module VX_bypass_buffer #(
     input  wire             ready_out,
     output wire             valid_out
 ); 
-    if (PASSTHRU) begin
+    if (PASSTHRU != 0) begin
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
         assign ready_in  = ready_out;

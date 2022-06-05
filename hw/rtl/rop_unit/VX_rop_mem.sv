@@ -191,14 +191,14 @@ module VX_rop_mem #(
     // schedule memory request
 
     VX_mem_scheduler #(
-        .INSTANCE_ID($sformatf("%s-memsched", INSTANCE_ID)),
-        .NUM_REQS   (NUM_REQS),
-        .NUM_BANKS  (OCACHE_NUM_REQS),
-        .ADDR_WIDTH (OCACHE_ADDR_WIDTH),
-        .DATA_WIDTH (32),
-        .TAG_WIDTH  (TAG_WIDTH),
-        .QUEUE_SIZE (`ROP_MEM_QUEUE_SIZE),
-        .OUT_REG    (1)
+        .INSTANCE_ID  ($sformatf("%s-memsched", INSTANCE_ID)),
+        .NUM_REQS     (NUM_REQS),
+        .NUM_BANKS    (OCACHE_NUM_REQS),
+        .ADDR_WIDTH   (OCACHE_ADDR_WIDTH),
+        .DATA_WIDTH   (32),
+        .TAG_WIDTH    (TAG_WIDTH),
+        .QUEUE_SIZE   (`ROP_MEM_QUEUE_SIZE),
+        .CORE_OUT_REG (1)
     ) mem_scheduler (
         .clk            (clk),
         .reset          (reset),
