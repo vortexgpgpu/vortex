@@ -400,7 +400,7 @@
 
 // Miss Handling Register Size
 `ifndef ICACHE_MSHR_SIZE
-`define ICACHE_MSHR_SIZE `MAX(2, `NUM_WARPS)
+`define ICACHE_MSHR_SIZE `MIN(`MAX(`NUM_WARPS * `UP(`NUM_CORES / `NUM_ICACHES), 2), 16)
 `endif
 
 // Memory Request Queue Size
@@ -463,7 +463,7 @@
 
 // Miss Handling Register Size
 `ifndef DCACHE_MSHR_SIZE
-`define DCACHE_MSHR_SIZE `LSUQ_SIZE
+`define DCACHE_MSHR_SIZE `MIN(`MAX(`LSUQ_SIZE * `UP(`NUM_CORES / `NUM_DCACHES), 2), 16)
 `endif
 
 // Memory Request Queue Size
