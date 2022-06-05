@@ -77,7 +77,7 @@ module VX_onehot_encoder #(
 
         reg [LN-1:0] index_r;
 
-        if (REVERSE) begin
+        if (REVERSE != 0) begin
             always @(*) begin        
                 index_r = 'x; 
                 for (integer i = N-1; i >= 0; --i) begin

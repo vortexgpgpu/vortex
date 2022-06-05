@@ -18,7 +18,7 @@ module VX_skid_buffer #(
     input  wire             ready_out,
     output wire             valid_out
 );
-    if (PASSTHRU) begin
+    if (PASSTHRU != 0) begin
 
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)
@@ -27,7 +27,7 @@ module VX_skid_buffer #(
         assign data_out  = data_in;
         assign ready_in  = ready_out;
 
-    end else if (NOBACKPRESSURE) begin
+    end else if (NOBACKPRESSURE != 0) begin
 
         `RUNTIME_ASSERT(ready_out, ("%t: *** ready_out should always be asserted", $time))
 
@@ -48,7 +48,7 @@ module VX_skid_buffer #(
     
     end else begin
 
-        if (OUT_REG) begin
+        if (OUT_REG != 0) begin
 
             reg [DATAW-1:0] data_out_r;
             reg [DATAW-1:0] buffer;

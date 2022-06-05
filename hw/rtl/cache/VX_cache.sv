@@ -496,7 +496,7 @@ module VX_cache #(
     assign mem_req_tag_s   = mem_req_tag_p;
     assign mem_req_ready_p = mem_req_ready_s;
 
-    if (WRITE_ENABLE) begin
+    if (WRITE_ENABLE != 0) begin
         if (`WORDS_PER_LINE > 1) begin
             reg [LINE_SIZE-1:0]   mem_req_byteen_r;
             reg [`LINE_WIDTH-1:0] mem_req_data_r;

@@ -108,7 +108,7 @@ module VX_nc_bypass #(
     wire core_req_nc_valid;    
     
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        if (PASSTHRU) begin
+        if (PASSTHRU != 0) begin
             assign core_req_nc_idxs[i] = 1'b1;
         end else begin
             assign core_req_nc_idxs[i] = core_req_tag_in[i][NC_TAG_BIT];
@@ -247,7 +247,7 @@ module VX_nc_bypass #(
     wire [NUM_REQS-1:0][CORE_TAG_IN_WIDTH-1:0] core_rsp_tag_in_nc;
 
     wire is_mem_rsp_nc;
-    if (PASSTHRU) begin
+    if (PASSTHRU != 0) begin
         assign is_mem_rsp_nc = mem_rsp_valid_in;
     end else begin
         assign is_mem_rsp_nc = mem_rsp_valid_in && mem_rsp_tag_in[NC_TAG_BIT];
@@ -314,7 +314,7 @@ module VX_nc_bypass #(
 
     // memory response handling
 
-    if (PASSTHRU) begin
+    if (PASSTHRU != 0) begin
         assign mem_rsp_valid_out = 1'b0;
     end else begin
         assign mem_rsp_valid_out = mem_rsp_valid_in && ~mem_rsp_tag_in[NC_TAG_BIT];
