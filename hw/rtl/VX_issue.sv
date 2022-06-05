@@ -20,7 +20,7 @@ module VX_issue #(
     VX_lsu_req_if.master    lsu_req_if,    
     VX_csr_req_if.master    csr_req_if,
 `ifdef EXT_F_ENABLE
-    VX_fpu_req_if.master    fpu_req_if,    
+    VX_fpu_agent_if.master  fpu_agent_if,    
 `endif
     VX_gpu_req_if.master    gpu_req_if
 );
@@ -126,7 +126,7 @@ module VX_issue #(
         .lsu_req_if (lsu_req_if),        
         .csr_req_if (csr_req_if),
     `ifdef EXT_F_ENABLE
-        .fpu_req_if (fpu_req_if),
+        .fpu_agent_if(fpu_agent_if),
     `endif
         .gpu_req_if (gpu_req_if)
     );

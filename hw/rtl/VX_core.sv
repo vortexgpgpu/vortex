@@ -24,7 +24,12 @@ module VX_core #(
     VX_cache_rsp_if.slave   dcache_rsp_if,
 
     VX_cache_req_if.master  icache_req_if,
-    VX_cache_rsp_if.slave   icache_rsp_if,
+    VX_cache_rsp_if.slave   icache_rsp_if,    
+
+`ifdef EXT_F_ENABLE
+    VX_fpu_req_if.master    fpu_req_if,
+    VX_fpu_rsp_if.slave     fpu_rsp_if,
+`endif
 
 `ifdef EXT_TEX_ENABLE
     VX_tex_req_if.master    tex_req_if,
@@ -72,7 +77,7 @@ module VX_core #(
     VX_lsu_req_if       lsu_req_if();
     VX_csr_req_if       csr_req_if();
 `ifdef EXT_F_ENABLE 
-    VX_fpu_req_if       fpu_req_if(); 
+    VX_fpu_agent_if     fpu_agent_if();
 `endif
     VX_gpu_req_if       gpu_req_if();
     VX_writeback_if     writeback_if();     
@@ -153,7 +158,7 @@ module VX_core #(
         .lsu_req_if     (lsu_req_if),        
         .csr_req_if     (csr_req_if),
     `ifdef EXT_F_ENABLE
-        .fpu_req_if     (fpu_req_if),
+        .fpu_agent_if   (fpu_agent_if),
     `endif
         .gpu_req_if     (gpu_req_if)
     );
@@ -170,11 +175,18 @@ module VX_core #(
 
     `ifdef PERF_ENABLE
         .perf_memsys_if (perf_memsys_if),
-        .perf_pipeline_if (perf_pipeline_if),
+        .perf_pipeline_if(perf_pipeline_if),
     `endif 
 
         .dcache_req_if  (dcache_req_if),
-        .dcache_rsp_if  (dcache_rsp_if),        
+        .dcache_rsp_if  (dcache_rsp_if),
+    
+    `ifdef EXT_F_ENABLE
+        .fpu_agent_if   (fpu_agent_if),
+        .fpu_req_if     (fpu_req_if),
+        .fpu_rsp_if     (fpu_rsp_if),
+        .fpu_commit_if  (fpu_commit_if),
+    `endif   
 
     `ifdef EXT_TEX_ENABLE
         .tex_req_if     (tex_req_if),
@@ -207,9 +219,6 @@ module VX_core #(
         .alu_req_if     (alu_req_if),
         .lsu_req_if     (lsu_req_if),        
         .csr_req_if     (csr_req_if),
-    `ifdef EXT_F_ENABLE
-        .fpu_req_if     (fpu_req_if),
-    `endif
         .gpu_req_if     (gpu_req_if),
 
         .warp_ctl_if    (warp_ctl_if),
@@ -218,9 +227,6 @@ module VX_core #(
         .ld_commit_if   (ld_commit_if),        
         .st_commit_if   (st_commit_if),       
         .csr_commit_if  (csr_commit_if),
-    `ifdef EXT_F_ENABLE
-        .fpu_commit_if  (fpu_commit_if),
-    `endif
         .gpu_commit_if  (gpu_commit_if),
 
         .sim_ebreak     (sim_ebreak)

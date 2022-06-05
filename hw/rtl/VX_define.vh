@@ -206,7 +206,12 @@
 
 //                              uuid,         wid,            PC,   rd,    
 `define TEX_REQ_TAG_WIDTH       (`UUID_BITS + `UP(`NW_BITS) + 32 + `NR_BITS)
-`define TEX_REQX_TAG_WIDTH      (`TEX_REQ_TAG_WIDTH + `ARB_SEL_BITS(`NUM_CORES, `NUM_TEX_UNITS))
+`define TEX_REQ_ARB_TAG_WIDTH   (`TEX_REQ_TAG_WIDTH + `ARB_SEL_BITS(`NUM_CORES, `NUM_TEX_UNITS))
+
+////////////////////// Floating-Point Unit Definitions ////////////////////////
+
+`define FPU_REQ_TAG_WIDTH       `LOG2UP(`FPUQ_SIZE)
+`define FPU_REQ_ARB_TAG_WIDTH   (`FPU_REQ_TAG_WIDTH + `ARB_SEL_BITS(`NUM_CORES, `NUM_FPU_UNITS))
 
 ///////////////////////////////////////////////////////////////////////////////
 

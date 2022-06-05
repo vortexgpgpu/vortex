@@ -3,7 +3,7 @@
 /// Modified port of cast module from fpnew Libray 
 /// reference: https://github.com/pulp-platform/fpnew
 
-module VX_fp_cvt #(
+module VX_fpu_cvt #(
     parameter NUM_LANES = 1,
     parameter TAGW = 1
 ) (
@@ -62,7 +62,7 @@ module VX_fp_cvt #(
     fp_class_t [NUM_LANES-1:0] fp_clss;
       
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        VX_fp_class #( 
+        VX_fpu_class #( 
             .EXP_BITS (EXP_BITS),
             .MAN_BITS (MAN_BITS)
         ) fp_class (
@@ -286,7 +286,7 @@ module VX_fp_cvt #(
         assign pre_round_abs = is_itof_s2 ? fmt_pre_round_abs : final_int;
 
         // Perform the rounding
-        VX_fp_rounding #(
+        VX_fpu_rounding #(
             .DAT_WIDTH (32)
         ) fp_rounding (
             .abs_value_i    (pre_round_abs),

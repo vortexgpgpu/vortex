@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-interface VX_fpu_req_if ();
+interface VX_fpu_agent_if ();
 
     wire                            valid;
     wire [`UUID_BITS-1:0]           uuid;
@@ -12,8 +12,7 @@ interface VX_fpu_req_if ();
     wire [`NUM_THREADS-1:0][31:0]   rs1_data;
     wire [`NUM_THREADS-1:0][31:0]   rs2_data;
     wire [`NUM_THREADS-1:0][31:0]   rs3_data;
-    wire [`NR_BITS-1:0]             rd;
-    wire                            wb;        
+    wire [`NR_BITS-1:0]             rd;   
     wire                            ready;
 
     modport master (
@@ -28,7 +27,6 @@ interface VX_fpu_req_if ();
         output rs2_data,
         output rs3_data,
         output rd,
-        output wb,
         input  ready
     );
 
@@ -44,7 +42,6 @@ interface VX_fpu_req_if ();
         input  rs2_data,
         input  rs3_data,
         input  rd,
-        input  wb,
         output ready
     );
 

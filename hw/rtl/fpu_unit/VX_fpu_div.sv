@@ -1,8 +1,8 @@
 `include "VX_fpu_define.vh"
 
-module VX_fp_sqrt #( 
+module VX_fpu_div #(
     parameter NUM_LANES = 1,
-    parameter TAGW = 1    
+    parameter TAGW = 1
 ) (
     input wire clk,
     input wire reset,   
@@ -11,10 +11,11 @@ module VX_fp_sqrt #(
     input wire  valid_in,
 
     input wire [TAGW-1:0] tag_in,
-    
-    input wire [`INST_FRM_BITS-1:0] frm,
 
+    input wire [`INST_FRM_BITS-1:0] frm,
+    
     input wire [NUM_LANES-1:0][31:0]  dataa,
+    input wire [NUM_LANES-1:0][31:0]  datab,
     output wire [NUM_LANES-1:0][31:0] result,  
 
     output wire has_fflags,
@@ -28,19 +29,19 @@ module VX_fp_sqrt #(
     wire stall = ~ready_out && valid_out;
     wire enable = ~stall;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin
+    for (genvar i = 0; i < NUM_LANES; ++i) begin        
     `ifdef VERILATOR
         reg [31:0] r;
         fflags_t f;
 
         always @(*) begin        
-            dpi_fsqrt (enable && valid_in, dataa[i], frm, r, f);
+            dpi_fdiv (enable && valid_in, dataa[i], datab[i], frm, r, f);
         end
         `UNUSED_VAR (f)
 
         VX_shift_register #(
             .DATAW  (32),
-            .DEPTH  (`LATENCY_FSQRT),
+            .DEPTH  (`LATENCY_FDIV),
             .RESETW (1)
         ) shift_req_dpi (
             .clk      (clk),
@@ -50,13 +51,14 @@ module VX_fp_sqrt #(
             .data_out (result[i])
         );
     `else
-        `RESET_RELAY (fsqrt_reset, reset);
+        `RESET_RELAY (fdiv_reset, reset);
 
-        acl_fsqrt fsqrt (
+        acl_fdiv fdiv (
             .clk    (clk),
-            .areset (fsqrt_reset),
+            .areset (fdiv_reset),
             .en     (enable),
             .a      (dataa[i]),
+            .b      (datab[i]),
             .q      (result[i])
         );
     `endif
@@ -64,7 +66,7 @@ module VX_fp_sqrt #(
 
     VX_shift_register #(
         .DATAW  (1 + TAGW),
-        .DEPTH  (`LATENCY_FSQRT),
+        .DEPTH  (`LATENCY_FDIV),
         .RESETW (1)
     ) shift_reg (
         .clk      (clk),

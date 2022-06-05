@@ -13,7 +13,7 @@ module VX_dispatch (
     VX_lsu_req_if.master    lsu_req_if,
     VX_csr_req_if.master    csr_req_if,
 `ifdef EXT_F_ENABLE
-    VX_fpu_req_if.master    fpu_req_if,
+    VX_fpu_agent_if.master  fpu_agent_if,
 `endif
     VX_gpu_req_if.master    gpu_req_if    
 );
@@ -104,17 +104,17 @@ module VX_dispatch (
     wire [`INST_FPU_BITS-1:0] fpu_op_type = `INST_FPU_BITS'(dispatch_if.op_type);
         
     VX_skid_buffer #(
-        .DATAW   (`UUID_BITS + `UP(`NW_BITS) + `NUM_THREADS + 32 + `INST_FPU_BITS + `INST_MOD_BITS + `NR_BITS + 1 + (3 * `NUM_THREADS * 32)),
+        .DATAW   (`UUID_BITS + `UP(`NW_BITS) + `NUM_THREADS + 32 + `INST_FPU_BITS + `INST_MOD_BITS + `NR_BITS + (3 * `NUM_THREADS * 32)),
         .OUT_REG (1)
     ) fpu_buffer (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (fpu_req_valid),
         .ready_in  (fpu_req_ready),
-        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, fpu_op_type,        dispatch_if.op_mod, dispatch_if.rd, dispatch_if.wb, gpr_rsp_if.rs1_data, gpr_rsp_if.rs2_data, gpr_rsp_if.rs3_data}),
-        .data_out  ({fpu_req_if.uuid,  fpu_req_if.wid,  fpu_req_if.tmask,  fpu_req_if.PC,  fpu_req_if.op_type, fpu_req_if.op_mod,  fpu_req_if.rd,  fpu_req_if.wb,  fpu_req_if.rs1_data, fpu_req_if.rs2_data, fpu_req_if.rs3_data}),
-        .valid_out (fpu_req_if.valid),
-        .ready_out (fpu_req_if.ready)
+        .data_in   ({dispatch_if.uuid,   dispatch_if.wid,   dispatch_if.tmask,   dispatch_if.PC,   fpu_op_type,          dispatch_if.op_mod,   dispatch_if.rd,   gpr_rsp_if.rs1_data,   gpr_rsp_if.rs2_data,   gpr_rsp_if.rs3_data}),
+        .data_out  ({fpu_agent_if.uuid,  fpu_agent_if.wid,  fpu_agent_if.tmask,  fpu_agent_if.PC,  fpu_agent_if.op_type, fpu_agent_if.op_mod,  fpu_agent_if.rd,  fpu_agent_if.rs1_data, fpu_agent_if.rs2_data, fpu_agent_if.rs3_data}),
+        .valid_out (fpu_agent_if.valid),
+        .ready_out (fpu_agent_if.ready)
     );
 `else
     `UNUSED_VAR (gpr_rsp_if.rs3_data)

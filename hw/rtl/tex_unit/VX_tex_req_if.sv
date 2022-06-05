@@ -7,13 +7,10 @@ interface VX_tex_req_if #(
 
     wire                            valid;
     wire [NUM_LANES-1:0]            mask;
-
     wire [1:0][NUM_LANES-1:0][31:0] coords;
     wire [NUM_LANES-1:0][`TEX_LOD_BITS-1:0] lod;
     wire [`TEX_STAGE_BITS-1:0]      stage;
-
-    wire [TAG_WIDTH-1:0]            tag;
-    
+    wire [TAG_WIDTH-1:0]            tag;    
     wire                            ready;
 
     modport master (

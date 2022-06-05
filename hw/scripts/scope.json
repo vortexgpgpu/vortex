@@ -5,7 +5,7 @@
         "../rtl",
         "../rtl/afu",        
         "../rtl/cache",        
-        "../rtl/fp_cores",
+        "../rtl/fpu_unit",
         "../rtl/interfaces",
         "../rtl/libs"        
     ],
@@ -14,8 +14,8 @@
         "../rtl/VX_platform.vh",
         "../rtl/VX_define.vh",
         "../rtl/VX_gpu_types.vh",
-        "../rtl/fp_cores/VX_fpu_types.vh",
-        "../rtl/fp_cores/VX_fpu_define.vh",
+        "../rtl/fpu_unit/VX_fpu_types.vh",
+        "../rtl/fpu_unit/VX_fpu_define.vh",
         "../rtl/cache/VX_cache_define.vh"
     ],
     "modules": {

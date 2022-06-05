@@ -80,7 +80,7 @@ module VX_fpu_fpga #(
     `RESET_RELAY (cvt_reset, reset);
     `RESET_RELAY (ncp_reset, reset);
 
-    VX_fp_fma #(
+    VX_fpu_fma #(
         .NUM_LANES (NUM_LANES),
         .TAGW      (TAGW)
     ) fp_fma (
@@ -104,7 +104,7 @@ module VX_fpu_fpga #(
         .valid_out  (per_core_valid_out[FPU_FMA])
     );
 
-    VX_fp_div #(
+    VX_fpu_div #(
         .NUM_LANES (NUM_LANES),
         .TAGW      (TAGW)
     ) fp_div (
@@ -124,7 +124,7 @@ module VX_fpu_fpga #(
         .valid_out  (per_core_valid_out[FPU_DIV])
     );
 
-    VX_fp_sqrt #(
+    VX_fpu_sqrt #(
         .NUM_LANES (NUM_LANES),
         .TAGW      (TAGW)
     ) fp_sqrt (
@@ -143,7 +143,7 @@ module VX_fpu_fpga #(
         .valid_out  (per_core_valid_out[FPU_SQRT])
     );
 
-    VX_fp_cvt #(
+    VX_fpu_cvt #(
         .NUM_LANES (NUM_LANES),
         .TAGW      (TAGW)
     ) fp_cvt (
@@ -164,7 +164,7 @@ module VX_fpu_fpga #(
         .valid_out  (per_core_valid_out[FPU_CVT])
     );
 
-    VX_fp_ncomp #(
+    VX_fpu_ncomp #(
         .NUM_LANES (NUM_LANES),
         .TAGW      (TAGW)
     ) fp_ncomp (
