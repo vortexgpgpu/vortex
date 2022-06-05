@@ -65,32 +65,24 @@ module VX_tag_access #(
         assign fill_way = fill;
     end
 
-    wire [NUM_WAYS-1:0][(8 * TAG_BYTES)-1:0] wdata, rdata;
-    wire [NUM_WAYS-1:0][TAG_BYTES-1:0] byteen;
-
     for (genvar i = 0; i < NUM_WAYS; ++i) begin
         wire [`TAG_SEL_BITS-1:0] read_tag;
         wire read_valid;
 
-        assign wdata[i]  = (8 * TAG_BYTES)'({!flush, line_tag});
-        assign byteen[i] = {TAG_BYTES{(fill_way[i] || flush)}};
+        VX_sp_ram #(
+            .DATAW      (`TAG_SEL_BITS + 1),
+            .SIZE       (`LINES_PER_BANK),
+            .NO_RWCHECK (1)
+        ) tag_store (
+            .clk(  clk),                 
+            .addr  (line_addr),   
+            .wren  (fill_way[i] || flush),
+            .wdata ({!flush,     line_tag}), 
+            .rdata ({read_valid, read_tag})
+        );
         
-        assign {read_valid, read_tag} = rdata[i][(`TAG_SEL_BITS+1)-1:0];
         assign tag_matches[i] = read_valid && (line_tag == read_tag);
     end
-
-    VX_sp_ram #(
-        .DATAW      (8 * TAG_BYTES * NUM_WAYS),
-        .SIZE       (`LINES_PER_BANK),
-        .BYTEENW    (TAG_BYTES * NUM_WAYS),
-        .NO_RWCHECK (1)
-    ) tag_store (
-        .clk   (clk),                 
-        .addr  (line_addr),
-        .wren  (byteen),
-        .wdata (wdata), 
-        .rdata (rdata)
-    );
 
     // found a tag match?
     assign tag_match = (| tag_matches);

@@ -100,13 +100,14 @@ module VX_tex_mem #(
     // schedule memory request
 
     VX_mem_scheduler #(
-        .INSTANCE_ID($sformatf("%s-memsched", INSTANCE_ID)),
-        .NUM_REQS   (TEX_MEM_REQS), 
-        .NUM_BANKS  (TCACHE_NUM_REQS),
-        .ADDR_WIDTH (TCACHE_ADDR_WIDTH),
-        .DATA_WIDTH (32),
-        .QUEUE_SIZE (`TEX_MEM_QUEUE_SIZE),
-        .TAG_WIDTH  (TAG_WIDTH)
+        .INSTANCE_ID ($sformatf("%s-memsched", INSTANCE_ID)),
+        .NUM_REQS    (TEX_MEM_REQS), 
+        .NUM_BANKS   (TCACHE_NUM_REQS),
+        .ADDR_WIDTH  (TCACHE_ADDR_WIDTH),
+        .DATA_WIDTH  (32),
+        .QUEUE_SIZE  (`TEX_MEM_QUEUE_SIZE),
+        .TAG_WIDTH   (TAG_WIDTH),
+        .MEM_OUT_REG (2)
     ) mem_scheduler (
         .clk            (clk),
         .reset          (reset),

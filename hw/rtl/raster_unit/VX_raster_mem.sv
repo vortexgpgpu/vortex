@@ -251,14 +251,14 @@ module VX_raster_mem #(
     // schedule memory request
 
     VX_mem_scheduler #(
-        .INSTANCE_ID($sformatf("%s-memsched", INSTANCE_ID)),
-        .NUM_REQS   (NUM_REQS), 
-        .NUM_BANKS  (RCACHE_NUM_REQS),
-        .ADDR_WIDTH (RCACHE_ADDR_WIDTH),
-        .DATA_WIDTH (`RASTER_DATA_BITS),
-        .QUEUE_SIZE (`RASTER_MEM_QUEUE_SIZE),
-        .TAG_WIDTH  (TAG_WIDTH),
-        .OUT_REG    (1)
+        .INSTANCE_ID  ($sformatf("%s-memsched", INSTANCE_ID)),
+        .NUM_REQS     (NUM_REQS), 
+        .NUM_BANKS    (RCACHE_NUM_REQS),
+        .ADDR_WIDTH   (RCACHE_ADDR_WIDTH),
+        .DATA_WIDTH   (`RASTER_DATA_BITS),
+        .QUEUE_SIZE   (`RASTER_MEM_QUEUE_SIZE),
+        .TAG_WIDTH    (TAG_WIDTH),
+        .CORE_OUT_REG (1)
     ) mem_scheduler (
         .clk            (clk),
         .reset          (reset),

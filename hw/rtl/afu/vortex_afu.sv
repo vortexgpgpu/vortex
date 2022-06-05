@@ -7,9 +7,12 @@
 `include "afu_json_info.vh"
 `endif
 
+`include "VX_cache_types.vh"
+
 /* verilator lint_off IMPORTSTAR */ 
 import ccip_if_pkg::*;
 import local_mem_cfg_pkg::*;
+import VX_cache_types::*;
 /* verilator lint_on IMPORTSTAR */
 
 `include "VX_define.vh"

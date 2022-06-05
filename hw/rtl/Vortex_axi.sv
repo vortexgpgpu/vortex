@@ -1,4 +1,9 @@
 `include "VX_define.vh"
+`include "VX_cache_types.vh"
+
+`IGNORE_WARNINGS_BEGIN
+import VX_cache_types::*;
+`IGNORE_WARNINGS_END
 
 module Vortex_axi #(
     parameter AXI_DATA_WIDTH   = `VX_MEM_DATA_WIDTH, 
