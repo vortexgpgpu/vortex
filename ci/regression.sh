@@ -25,6 +25,7 @@ CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm --cores=
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=vlsim --app=sgemm --cores=2 --debug=3
 CONFIGS="-DEXT_GFX_ENABLE -DL1_DISABLE -DSM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm --cores=2 --l2cache
 CONFIGS="-DNUM_DCACHES=2 -DNUM_ICACHES=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm --cores=4 --cores=2 --warps=1 --threads=2
+CONFIGS="-DNUM_FPU_UNITS=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm --cores=4
 
 CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g1.png -g1" --perf=2
 CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim  --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g1.png -g1" --perf=2

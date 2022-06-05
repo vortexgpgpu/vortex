@@ -292,6 +292,13 @@
 `define LSUQ_SIZE `MAX(2, `NUM_WARPS * 2)
 `endif
 
+// Floating-Point Units ///////////////////////////////////////////////////////
+
+// Number of FPU units
+`ifndef NUM_FPU_UNITS
+`define NUM_FPU_UNITS `UP(`NUM_CORES / 4)
+`endif
+
 // Size of FPU Request Queue
 `ifndef FPUQ_SIZE
 `define FPUQ_SIZE `MAX(2, `NUM_WARPS * 2)

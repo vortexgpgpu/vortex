@@ -19,7 +19,7 @@ module VX_scoreboard  #(
     always @(*) begin
         inuse_regs_n = inuse_regs;
         if (reserve_reg) begin
-            inuse_regs_n[scoreboard_if.wid][scoreboard_if.rd] = 1;                
+            inuse_regs_n[scoreboard_if.wid][scoreboard_if.rd] = 1; 
         end       
         if (release_reg) begin
             inuse_regs_n[writeback_if.wid][writeback_if.rd] = 0;

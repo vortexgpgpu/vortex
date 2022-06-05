@@ -52,12 +52,12 @@ module VX_cluster #(
 
     VX_tex_req_if #(
         .NUM_LANES (`NUM_THREADS),
-        .TAG_WIDTH (`TEX_REQX_TAG_WIDTH)
+        .TAG_WIDTH (`TEX_REQ_ARB_TAG_WIDTH)
     ) tex_req_if[`NUM_TEX_UNITS]();
 
     VX_tex_rsp_if #(
         .NUM_LANES (`NUM_THREADS),
-        .TAG_WIDTH (`TEX_REQX_TAG_WIDTH)
+        .TAG_WIDTH (`TEX_REQ_ARB_TAG_WIDTH)
     ) tex_rsp_if[`NUM_TEX_UNITS]();
 
     VX_tex_arb #(
@@ -100,7 +100,7 @@ module VX_cluster #(
         VX_tex_unit #(
             .INSTANCE_ID ($sformatf("cluster%0d-tex%0d", CLUSTER_ID, i)),
             .NUM_LANES   (`NUM_THREADS),
-            .TAG_WIDTH   (`TEX_REQX_TAG_WIDTH)
+            .TAG_WIDTH   (`TEX_REQ_ARB_TAG_WIDTH)
         ) tex_unit (
             .clk           (clk),
             .reset         (tex_reset),
@@ -382,6 +382,62 @@ module VX_cluster #(
 
 `endif
 
+`ifdef EXT_F_ENABLE
+
+    VX_fpu_req_if #(
+        .NUM_LANES (`NUM_THREADS),
+        .TAG_WIDTH (`FPU_REQ_TAG_WIDTH)
+    ) per_core_fpu_req_if[`NUM_CORES]();
+
+    VX_fpu_rsp_if #(
+        .NUM_LANES (`NUM_THREADS),
+        .TAG_WIDTH (`FPU_REQ_TAG_WIDTH)
+    ) per_core_fpu_rsp_if[`NUM_CORES]();
+
+    VX_fpu_req_if #(
+        .NUM_LANES (`NUM_THREADS),
+        .TAG_WIDTH (`FPU_REQ_ARB_TAG_WIDTH)
+    ) fpu_req_if[`NUM_FPU_UNITS]();
+
+    VX_fpu_rsp_if #(
+        .NUM_LANES (`NUM_THREADS),
+        .TAG_WIDTH (`FPU_REQ_ARB_TAG_WIDTH)
+    ) fpu_rsp_if[`NUM_FPU_UNITS]();
+
+    VX_fpu_arb #(
+        .NUM_INPUTS   (`NUM_CORES),
+        .NUM_LANES    (`NUM_THREADS),
+        .NUM_OUTPUTS  (`NUM_FPU_UNITS),
+        .TAG_WIDTH    (`FPU_REQ_TAG_WIDTH),
+        .BUFFERED_REQ ((`NUM_CORES != `NUM_FPU_UNITS) ? 1 : 0),
+        .BUFFERED_RSP ((`NUM_CORES != `NUM_FPU_UNITS) ? 1 : 0)
+    ) fpu_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .req_in_if  (per_core_fpu_req_if),
+        .rsp_in_if  (per_core_fpu_rsp_if),
+        .req_out_if (fpu_req_if),
+        .rsp_out_if (fpu_rsp_if)
+    );
+
+    // Generate all floating-point units
+    for (genvar i = 0; i < `NUM_FPU_UNITS; ++i) begin
+        `RESET_RELAY (fpu_reset, reset);
+
+        VX_fpu_unit #(
+            .INSTANCE_ID ($sformatf("cluster%0d-fpu", CLUSTER_ID)),
+            .NUM_LANES   (`NUM_THREADS),
+            .TAG_WIDTH   (`FPU_REQ_ARB_TAG_WIDTH)
+        ) fpu_unit (
+            .clk        (clk),
+            .reset      (fpu_reset),        
+            .fpu_req_if (fpu_req_if[i]), 
+            .fpu_rsp_if (fpu_rsp_if[i])  
+        );
+    end
+
+`endif
+
     VX_cache_req_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
@@ -483,6 +539,11 @@ module VX_cluster #(
 
             .icache_req_if  (per_core_icache_req_if[i]),
             .icache_rsp_if  (per_core_icache_rsp_if[i]),
+
+        `ifdef EXT_F_ENABLE
+            .fpu_req_if     (per_core_fpu_req_if[i]),
+            .fpu_rsp_if     (per_core_fpu_rsp_if[i]),
+        `endif
 
         `ifdef EXT_TEX_ENABLE
             .tex_req_if     (per_core_tex_req_if[i]),

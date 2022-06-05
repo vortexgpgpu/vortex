@@ -30,6 +30,13 @@ module VX_execute #(
     VX_perf_pipeline_if.slave perf_pipeline_if,
 `endif
 
+`ifdef EXT_F_ENABLE
+    VX_fpu_agent_if.slave   fpu_agent_if,
+    VX_fpu_req_if.master    fpu_req_if,
+    VX_fpu_rsp_if.slave     fpu_rsp_if,
+    VX_commit_if.master     fpu_commit_if,
+`endif
+
 `ifdef EXT_TEX_ENABLE
     VX_tex_req_if.master    tex_req_if,
     VX_tex_rsp_if.slave     tex_rsp_if,
@@ -53,28 +60,22 @@ module VX_execute #(
     VX_rop_perf_if.slave    rop_perf_if,
     VX_perf_cache_if.slave  perf_ocache_if,
 `endif
-`endif
-    
-    // inputs    
+`endif    
+  
     VX_alu_req_if.slave     alu_req_if,
-    VX_lsu_req_if.slave     lsu_req_if,    
-    VX_csr_req_if.slave     csr_req_if,  
-`ifdef EXT_F_ENABLE
-    VX_fpu_req_if.slave     fpu_req_if,    
-`endif
-    VX_gpu_req_if.slave     gpu_req_if,
-    
-    // outputs
     VX_branch_ctl_if.master branch_ctl_if,    
-    VX_warp_ctl_if.master   warp_ctl_if,
     VX_commit_if.master     alu_commit_if,
+    
+    VX_lsu_req_if.slave     lsu_req_if,    
     VX_commit_if.master     ld_commit_if,
     VX_commit_if.master     st_commit_if,
+    
+    VX_csr_req_if.slave     csr_req_if,
     VX_commit_if.master     csr_commit_if,
-`ifdef EXT_F_ENABLE
-    VX_commit_if.master     fpu_commit_if,
-`endif
-    VX_commit_if.master     gpu_commit_if,
+    
+    VX_gpu_req_if.slave     gpu_req_if,
+    VX_warp_ctl_if.master   warp_ctl_if,
+    VX_commit_if.master     gpu_commit_if,    
 
     // simulation helper signals
     output wire             sim_ebreak
@@ -179,12 +180,14 @@ module VX_execute #(
 `ifdef EXT_F_ENABLE
     `RESET_RELAY (fpu_reset, reset);
 
-    VX_fpu_unit #(
+    VX_fpu_agent #(
         .CORE_ID(CORE_ID)
-    ) fpu_unit (
+    ) fpu_agent (
         .clk            (clk),
-        .reset          (fpu_reset),        
-        .fpu_req_if     (fpu_req_if), 
+        .reset          (fpu_reset),    
+        .fpu_agent_if   (fpu_agent_if), 
+        .fpu_req_if     (fpu_req_if),
+        .fpu_rsp_if     (fpu_rsp_if),
         .fpu_to_csr_if  (fpu_to_csr_if), 
         .fpu_commit_if  (fpu_commit_if),
         .csr_pending    (csr_pending),
