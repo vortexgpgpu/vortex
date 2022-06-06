@@ -166,23 +166,7 @@ module VX_cluster #(
 
     VX_raster_req_if #(
         .NUM_LANES (`NUM_THREADS)
-    ) per_core_raster_req_if[`NUM_CORES]();
-
-    VX_raster_req_if #(
-        .NUM_LANES (`NUM_THREADS)
     ) raster_req_if[`NUM_RASTER_UNITS]();
-
-    VX_raster_arb #(
-        .NUM_INPUTS  (`NUM_RASTER_UNITS),
-        .NUM_LANES   (`NUM_THREADS),
-        .NUM_OUTPUTS (`NUM_CORES),
-        .BUFFERED    ((`NUM_CORES != `NUM_RASTER_UNITS) ? 1 : 0)
-    ) raster_arb (
-        .clk        (clk),
-        .reset      (reset),
-        .req_in_if  (raster_req_if),
-        .req_out_if (per_core_raster_req_if)
-    );
 
     VX_cache_req_if #(
         .NUM_REQS  (RCACHE_NUM_REQS), 
@@ -227,6 +211,22 @@ module VX_cluster #(
             .cache_rsp_if  (rcache_rsp_if[i])
         );
     end
+
+    VX_raster_req_if #(
+        .NUM_LANES (`NUM_THREADS)
+    ) per_core_raster_req_if[`NUM_CORES]();
+
+    VX_raster_arb #(
+        .NUM_INPUTS  (`NUM_RASTER_UNITS),
+        .NUM_LANES   (`NUM_THREADS),
+        .NUM_OUTPUTS (`NUM_CORES),
+        .BUFFERED    ((`NUM_CORES != `NUM_RASTER_UNITS) ? 1 : 0)
+    ) raster_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .req_in_if  (raster_req_if),
+        .req_out_if (per_core_raster_req_if)
+    );
 
     VX_mem_req_if #(
         .DATA_WIDTH (RCACHE_MEM_DATA_WIDTH),

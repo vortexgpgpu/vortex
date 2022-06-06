@@ -117,88 +117,88 @@ module VX_gpu_unit #(
     `UNUSED_VAR (gpu_req_if.rd)
     
 `ifdef EXT_TEX_ENABLE
-    VX_tex_agent_if tex_agent_req_if();
-    VX_commit_if    tex_agent_rsp_if();
+    VX_tex_agent_if tex_agent_if();
+    VX_commit_if    tex_commit_if();
 
-    assign tex_agent_req_if.valid = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_TEX);
-    assign tex_agent_req_if.uuid  = gpu_req_if.uuid;
-    assign tex_agent_req_if.wid   = gpu_req_if.wid;
-    assign tex_agent_req_if.tmask = gpu_req_if.tmask;
-    assign tex_agent_req_if.PC    = gpu_req_if.PC;
-    assign tex_agent_req_if.rd    = gpu_req_if.rd;
-    assign tex_agent_req_if.stage = gpu_req_if.op_mod[`TEX_STAGE_BITS-1:0];
+    assign tex_agent_if.valid = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_TEX);
+    assign tex_agent_if.uuid  = gpu_req_if.uuid;
+    assign tex_agent_if.wid   = gpu_req_if.wid;
+    assign tex_agent_if.tmask = gpu_req_if.tmask;
+    assign tex_agent_if.PC    = gpu_req_if.PC;
+    assign tex_agent_if.rd    = gpu_req_if.rd;
+    assign tex_agent_if.stage = gpu_req_if.op_mod[`TEX_STAGE_BITS-1:0];
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign tex_agent_req_if.coords[0][i] = gpu_req_if.rs1_data[i];
-        assign tex_agent_req_if.coords[1][i] = gpu_req_if.rs2_data[i];
-        assign tex_agent_req_if.lod[i]       = gpu_req_if.rs3_data[i][0 +: `TEX_LOD_BITS];        
+        assign tex_agent_if.coords[0][i] = gpu_req_if.rs1_data[i];
+        assign tex_agent_if.coords[1][i] = gpu_req_if.rs2_data[i];
+        assign tex_agent_if.lod[i]       = gpu_req_if.rs3_data[i][0 +: `TEX_LOD_BITS];        
     end
 
     VX_tex_agent #(
         .CORE_ID (CORE_ID)
     ) tex_agent (
-        .clk              (clk),
-        .reset            (reset),
-        .tex_csr_if       (tex_csr_if),
-        .tex_agent_req_if (tex_agent_req_if),        
-        .tex_agent_rsp_if (tex_agent_rsp_if),
-        .tex_req_if       (tex_req_if),
-        .tex_rsp_if       (tex_rsp_if)
+        .clk           (clk),
+        .reset         (reset),
+        .tex_csr_if    (tex_csr_if),
+        .tex_agent_if  (tex_agent_if),        
+        .tex_commit_if (tex_commit_if),
+        .tex_req_if    (tex_req_if),
+        .tex_rsp_if    (tex_rsp_if)
     );        
 `endif
 
 `ifdef EXT_RASTER_ENABLE
     
-    VX_raster_agent_if raster_agent_req_if();
-    VX_commit_if       raster_agent_rsp_if();
+    VX_raster_agent_if raster_agent_if();
+    VX_commit_if       raster_commit_if();
 
-    assign raster_agent_req_if.valid = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_RASTER);
-    assign raster_agent_req_if.uuid  = gpu_req_if.uuid;
-    assign raster_agent_req_if.wid   = gpu_req_if.wid;
-    assign raster_agent_req_if.tmask = gpu_req_if.tmask;
-    assign raster_agent_req_if.PC    = gpu_req_if.PC;
-    assign raster_agent_req_if.rd    = gpu_req_if.rd;
+    assign raster_agent_if.valid = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_RASTER);
+    assign raster_agent_if.uuid  = gpu_req_if.uuid;
+    assign raster_agent_if.wid   = gpu_req_if.wid;
+    assign raster_agent_if.tmask = gpu_req_if.tmask;
+    assign raster_agent_if.PC    = gpu_req_if.PC;
+    assign raster_agent_if.rd    = gpu_req_if.rd;
 
     VX_raster_agent #(
         .CORE_ID (CORE_ID)
     ) raster_agent (
-        .clk                 (clk),
-        .reset               (reset),
-        .raster_csr_if       (raster_csr_if),
-        .raster_req_if       (raster_req_if),
-        .raster_agent_req_if (raster_agent_req_if),        
-        .raster_agent_rsp_if (raster_agent_rsp_if)        
+        .clk              (clk),
+        .reset            (reset),
+        .raster_csr_if    (raster_csr_if),
+        .raster_req_if    (raster_req_if),
+        .raster_agent_if  (raster_agent_if),        
+        .raster_commit_if (raster_commit_if)        
     );        
 `endif
 
 `ifdef EXT_ROP_ENABLE
     
-    VX_rop_agent_if rop_agent_req_if();
-    VX_commit_if    rop_agent_rsp_if();
+    VX_rop_agent_if rop_agent_if();
+    VX_commit_if    rop_commit_if();
 
-    assign rop_agent_req_if.valid = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_ROP);
-    assign rop_agent_req_if.uuid  = gpu_req_if.uuid;
-    assign rop_agent_req_if.wid   = gpu_req_if.wid;
-    assign rop_agent_req_if.tmask = gpu_req_if.tmask;
-    assign rop_agent_req_if.PC    = gpu_req_if.PC;
+    assign rop_agent_if.valid = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_ROP);
+    assign rop_agent_if.uuid  = gpu_req_if.uuid;
+    assign rop_agent_if.wid   = gpu_req_if.wid;
+    assign rop_agent_if.tmask = gpu_req_if.tmask;
+    assign rop_agent_if.PC    = gpu_req_if.PC;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign rop_agent_req_if.face[i]  = gpu_req_if.rs1_data[i][0];
-        assign rop_agent_req_if.pos_x[i] = gpu_req_if.rs1_data[i][1 +: `ROP_DIM_BITS];
-        assign rop_agent_req_if.pos_y[i] = gpu_req_if.rs1_data[i][16 +: `ROP_DIM_BITS];
-        assign rop_agent_req_if.color[i] = gpu_req_if.rs2_data[i];
-        assign rop_agent_req_if.depth[i] = gpu_req_if.rs3_data[i][`ROP_DEPTH_BITS-1:0];
+        assign rop_agent_if.face[i]  = gpu_req_if.rs1_data[i][0];
+        assign rop_agent_if.pos_x[i] = gpu_req_if.rs1_data[i][1 +: `ROP_DIM_BITS];
+        assign rop_agent_if.pos_y[i] = gpu_req_if.rs1_data[i][16 +: `ROP_DIM_BITS];
+        assign rop_agent_if.color[i] = gpu_req_if.rs2_data[i];
+        assign rop_agent_if.depth[i] = gpu_req_if.rs3_data[i][`ROP_DEPTH_BITS-1:0];
     end    
             
     VX_rop_agent #(
         .CORE_ID (CORE_ID)
     ) rop_agent (
-        .clk              (clk),
-        .reset            (reset),
-        .rop_csr_if       (rop_csr_if),
-        .rop_agent_req_if (rop_agent_req_if),
-        .rop_agent_rsp_if (rop_agent_rsp_if),
-        .rop_req_if       (rop_req_if)        
+        .clk           (clk),
+        .reset         (reset),
+        .rop_csr_if    (rop_csr_if),
+        .rop_agent_if  (rop_agent_if),
+        .rop_commit_if (rop_commit_if),
+        .rop_req_if    (rop_req_if)        
     );        
 `endif
 
@@ -252,13 +252,13 @@ module VX_gpu_unit #(
     always @(*) begin
         case (gpu_req_if.op_type)
     `ifdef EXT_TEX_ENABLE
-        `INST_GPU_TEX: gpu_req_ready = tex_agent_req_if.ready;
+        `INST_GPU_TEX: gpu_req_ready = tex_agent_if.ready;
     `endif
     `ifdef EXT_RASTER_ENABLE
-        `INST_GPU_RASTER: gpu_req_ready = raster_agent_req_if.ready;
+        `INST_GPU_RASTER: gpu_req_ready = raster_agent_if.ready;
     `endif
     `ifdef EXT_ROP_ENABLE
-        `INST_GPU_ROP: gpu_req_ready = rop_agent_req_if.ready;
+        `INST_GPU_ROP: gpu_req_ready = rop_agent_if.ready;
     `endif
     `ifdef EXT_IMADD_ENABLE
         `INST_GPU_IMADD: gpu_req_ready = imadd_ready_in;
@@ -281,13 +281,13 @@ module VX_gpu_unit #(
         .valid_in  ({
             wctl_rsp_valid
         `ifdef EXT_TEX_ENABLE
-          , tex_agent_rsp_if.valid
+          , tex_commit_if.valid
         `endif
         `ifdef EXT_RASTER_ENABLE
-          , raster_agent_rsp_if.valid
+          , raster_commit_if.valid
         `endif
         `ifdef EXT_ROP_ENABLE
-          , rop_agent_rsp_if.valid
+          , rop_commit_if.valid
         `endif
         `ifdef EXT_IMADD_ENABLE
           , imadd_valid_out
@@ -296,13 +296,13 @@ module VX_gpu_unit #(
         .data_in ({
             {gpu_req_if.uuid, gpu_req_if.wid, gpu_req_if.tmask, gpu_req_if.PC, `NR_BITS'(0), 1'b0, RSP_DATAW'(wctl_rsp_data), 1'b1, ~is_join}
         `ifdef EXT_TEX_ENABLE
-          , {tex_agent_rsp_if.uuid, tex_agent_rsp_if.wid, tex_agent_rsp_if.tmask, tex_agent_rsp_if.PC, tex_agent_rsp_if.rd, tex_agent_rsp_if.wb, RSP_DATAW'(tex_agent_rsp_if.data), tex_agent_rsp_if.eop, 1'b0}
+          , {tex_commit_if.uuid, tex_commit_if.wid, tex_commit_if.tmask, tex_commit_if.PC, tex_commit_if.rd, tex_commit_if.wb, RSP_DATAW'(tex_commit_if.data), tex_commit_if.eop, 1'b0}
         `endif
         `ifdef EXT_RASTER_ENABLE
-          , {raster_agent_rsp_if.uuid, raster_agent_rsp_if.wid, raster_agent_rsp_if.tmask, raster_agent_rsp_if.PC, raster_agent_rsp_if.rd, raster_agent_rsp_if.wb, RSP_DATAW'(raster_agent_rsp_if.data), raster_agent_rsp_if.eop, 1'b0}
+          , {raster_commit_if.uuid, raster_commit_if.wid, raster_commit_if.tmask, raster_commit_if.PC, raster_commit_if.rd, raster_commit_if.wb, RSP_DATAW'(raster_commit_if.data), raster_commit_if.eop, 1'b0}
         `endif
         `ifdef EXT_ROP_ENABLE
-          , {rop_agent_rsp_if.uuid, rop_agent_rsp_if.wid, rop_agent_rsp_if.tmask, rop_agent_rsp_if.PC, rop_agent_rsp_if.rd, rop_agent_rsp_if.wb, RSP_DATAW'(rop_agent_rsp_if.data), rop_agent_rsp_if.eop, 1'b0}
+          , {rop_commit_if.uuid, rop_commit_if.wid, rop_commit_if.tmask, rop_commit_if.PC, rop_commit_if.rd, rop_commit_if.wb, RSP_DATAW'(rop_commit_if.data), rop_commit_if.eop, 1'b0}
         `endif
         `ifdef EXT_IMADD_ENABLE
           , {imadd_uuid_out, imadd_wid_out, imadd_tmask_out, imadd_PC_out, imadd_rd_out, 1'b1, RSP_DATAW'(imadd_data_out), 1'b1, 1'b0}
@@ -311,13 +311,13 @@ module VX_gpu_unit #(
         .ready_in ({
             wctl_rsp_ready
         `ifdef EXT_TEX_ENABLE
-          , tex_agent_rsp_if.ready
+          , tex_commit_if.ready
         `endif
         `ifdef EXT_RASTER_ENABLE
-          , raster_agent_rsp_if.ready
+          , raster_commit_if.ready
         `endif
         `ifdef EXT_ROP_ENABLE
-          , rop_agent_rsp_if.ready
+          , rop_commit_if.ready
         `endif
         `ifdef EXT_IMADD_ENABLE
           , imadd_ready_out
