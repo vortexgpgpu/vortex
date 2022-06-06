@@ -8,7 +8,7 @@ module VX_raster_csr #(
 
     // Inputs    
     input wire                              write_enable,
-    input wire [`UUID_BITS-1:0]             write_uuid,
+    input wire [`UP(`UUID_BITS)-1:0]        write_uuid,
     input wire [`UP(`NW_BITS)-1:0]          write_wid,
     input wire [`NUM_THREADS-1:0]           write_tmask,
     input raster_stamp_t [`NUM_THREADS-1:0] write_data,

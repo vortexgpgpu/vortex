@@ -16,7 +16,7 @@ module VX_nc_bypass #(
     parameter MEM_TAG_IN_WIDTH  = 1,
     parameter MEM_TAG_OUT_WIDTH = 1,
 
-    parameter UUID_BITS         = 0,
+    parameter UUID_WIDTH        = 0,
  
     localparam CORE_DATA_WIDTH  = CORE_DATA_SIZE * 8,
     localparam MEM_DATA_WIDTH   = MEM_DATA_SIZE * 8,
@@ -94,7 +94,7 @@ module VX_nc_bypass #(
     localparam WORDS_PER_LINE   = MEM_DATA_SIZE / CORE_DATA_SIZE;
     localparam WSEL_BITS        = `CLOG2(WORDS_PER_LINE);
 
-    localparam CORE_TAG_ID_BITS = CORE_TAG_IN_WIDTH - UUID_BITS;
+    localparam CORE_TAG_ID_BITS = CORE_TAG_IN_WIDTH - UUID_WIDTH;
     localparam MEM_TAG_ID_BITS  = REQ_SEL_BITS + WSEL_BITS + CORE_TAG_ID_BITS;
 
     localparam MEM_TAG_OUT_NC_WIDTH = MEM_TAG_OUT_WIDTH - 1 + NC_ENABLE;
@@ -212,8 +212,8 @@ module VX_nc_bypass #(
 
     wire [MEM_TAG_OUT_NC_WIDTH-1:0] mem_req_tag_bypass;   
 
-    if (UUID_BITS != 0) begin
-        assign mem_req_tag_bypass = {core_req_tag_in_sel[CORE_TAG_ID_BITS +: UUID_BITS], mem_req_tag_id_bypass};
+    if (UUID_WIDTH != 0) begin
+        assign mem_req_tag_bypass = {core_req_tag_in_sel[CORE_TAG_ID_BITS +: UUID_WIDTH], mem_req_tag_id_bypass};
     end else begin
         assign mem_req_tag_bypass = mem_req_tag_id_bypass;
     end
@@ -305,8 +305,8 @@ module VX_nc_bypass #(
     end
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        if (UUID_BITS != 0) begin
-            assign core_rsp_tag_out[i] = core_rsp_valid_in[i] ? core_rsp_tag_in_nc[i] : {mem_rsp_tag_in_nc[MEM_TAG_OUT_NC_WIDTH-1 -: UUID_BITS], mem_rsp_tag_in_nc[CORE_TAG_ID_BITS-1:0]};
+        if (UUID_WIDTH != 0) begin
+            assign core_rsp_tag_out[i] = core_rsp_valid_in[i] ? core_rsp_tag_in_nc[i] : {mem_rsp_tag_in_nc[MEM_TAG_OUT_NC_WIDTH-1 -: UUID_WIDTH], mem_rsp_tag_in_nc[CORE_TAG_ID_BITS-1:0]};
         end else begin
             assign core_rsp_tag_out[i] = core_rsp_valid_in[i] ? core_rsp_tag_in_nc[i] : mem_rsp_tag_in_nc[CORE_TAG_ID_BITS-1:0];
         end

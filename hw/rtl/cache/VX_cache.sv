@@ -34,10 +34,10 @@ module VX_cache #(
     parameter WRITE_ENABLE          = 1,
 
     // Request debug identifier
-    parameter UUID_BITS             = 0,
+    parameter UUID_WIDTH            = 0,
 
     // core request tag size
-    parameter TAG_WIDTH             = UUID_BITS + 1,
+    parameter TAG_WIDTH             = UUID_WIDTH + 1,
 
     // Core response output register
     parameter CORE_OUT_REG          = (NUM_BANKS > 1),
@@ -362,7 +362,7 @@ module VX_cache #(
             .MSHR_SIZE    (MSHR_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
             .WRITE_ENABLE (WRITE_ENABLE),
-            .UUID_BITS    (UUID_BITS),
+            .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (TAG_WIDTH)
         ) bank (          
             .clk                (clk),

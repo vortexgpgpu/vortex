@@ -19,9 +19,9 @@ module VX_miss_resrv #(
     parameter MSHR_SIZE         = 1,
     
     // Request debug identifier
-    parameter UUID_BITS         = 0,
+    parameter UUID_WIDTH        = 0,
     // core request tag size
-    parameter TAG_WIDTH         = UUID_BITS + 1,
+    parameter TAG_WIDTH         = UUID_WIDTH + 1,
 
     localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE)
 ) (
@@ -29,9 +29,9 @@ module VX_miss_resrv #(
     input wire reset,
 
 `IGNORE_UNUSED_BEGIN
-    input wire[`UP(UUID_BITS)-1:0]      deq_req_uuid,
-    input wire[`UP(UUID_BITS)-1:0]      lkp_req_uuid,
-    input wire[`UP(UUID_BITS)-1:0]      rel_req_uuid,
+    input wire[`UP(UUID_WIDTH)-1:0]     deq_req_uuid,
+    input wire[`UP(UUID_WIDTH)-1:0]     lkp_req_uuid,
+    input wire[`UP(UUID_WIDTH)-1:0]     rel_req_uuid,
 `IGNORE_UNUSED_END
 
     // allocate

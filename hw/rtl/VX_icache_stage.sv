@@ -31,7 +31,7 @@ module VX_icache_stage #(
     wire [ICACHE_TAG_WIDTH-1:0] icache_req_tag;
     wire icache_req_ready;
 
-    wire [`UUID_BITS-1:0] rsp_uuid;
+    wire [`UP(`UUID_BITS)-1:0] rsp_uuid;
     wire [`UP(`NW_BITS)-1:0] req_tag, rsp_tag;    
 
     wire icache_req_fire = icache_req_valid && icache_req_ready;

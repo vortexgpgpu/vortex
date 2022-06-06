@@ -3,14 +3,14 @@
 interface VX_gpu_csr_if ();
 
     wire                          read_enable;
-    wire [`UUID_BITS-1:0]         read_uuid;
+    wire [`UP(`UUID_BITS)-1:0]    read_uuid;
     wire [`UP(`NW_BITS)-1:0]      read_wid;
     wire [`NUM_THREADS-1:0]       read_tmask;
     wire [`CSR_ADDR_BITS-1:0]     read_addr;
     wire [`NUM_THREADS-1:0][31:0] read_data;
 
     wire                          write_enable; 
-    wire [`UUID_BITS-1:0]         write_uuid;
+    wire [`UP(`UUID_BITS)-1:0]    write_uuid;
     wire [`UP(`NW_BITS)-1:0]      write_wid;
     wire [`NUM_THREADS-1:0]       write_tmask;
     wire [`CSR_ADDR_BITS-1:0]     write_addr;

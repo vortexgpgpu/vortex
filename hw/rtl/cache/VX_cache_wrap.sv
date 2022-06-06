@@ -34,10 +34,10 @@ module VX_cache_wrap #(
     parameter WRITE_ENABLE          = 1,
 
     // Request debug identifier
-    parameter UUID_BITS             = 0,
+    parameter UUID_WIDTH            = 0,
 
     // core request tag size
-    parameter TAG_WIDTH             = UUID_BITS + 1,
+    parameter TAG_WIDTH             = UUID_WIDTH + 1,
 
     // enable bypass for non-cacheable addresses
     parameter NC_TAG_BIT            = 0,
@@ -197,7 +197,7 @@ module VX_cache_wrap #(
             .MEM_TAG_IN_WIDTH  (MEM_TAG_X_WIDTH),
             .MEM_TAG_OUT_WIDTH (MEM_TAG_WIDTH),
 
-            .UUID_BITS         (UUID_BITS)
+            .UUID_WIDTH        (UUID_WIDTH)
         ) nc_bypass (
             .clk                (clk),
             .reset              (reset),
@@ -415,7 +415,7 @@ module VX_cache_wrap #(
             .MRSQ_SIZE    (MRSQ_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
             .WRITE_ENABLE (WRITE_ENABLE),
-            .UUID_BITS    (UUID_BITS),
+            .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (CORE_TAG_X_WIDTH),
             .CORE_OUT_REG (NUM_BANKS > 2),
             .MEM_OUT_REG  (NUM_BANKS > 2)
@@ -438,8 +438,8 @@ module VX_cache_wrap #(
 `ifdef DBG_TRACE_CACHE_BANK
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        wire [`UP(UUID_BITS)-1:0] core_req_uuid;
-        wire [`UP(UUID_BITS)-1:0] core_rsp_uuid;
+        wire [`UP(UUID_WIDTH)-1:0] core_req_uuid;
+        wire [`UP(UUID_WIDTH)-1:0] core_rsp_uuid;
 
         `ASSIGN_REQ_UUID (core_req_uuid, core_req_if[i].tag)
         `ASSIGN_REQ_UUID (core_rsp_uuid, core_rsp_if[i].tag)
@@ -460,12 +460,12 @@ module VX_cache_wrap #(
         end
     end   
 
-    wire [`UP(UUID_BITS)-1:0] mem_req_uuid;
-    wire [`UP(UUID_BITS)-1:0] mem_rsp_uuid;
+    wire [`UP(UUID_WIDTH)-1:0] mem_req_uuid;
+    wire [`UP(UUID_WIDTH)-1:0] mem_rsp_uuid;
 
-    if ((UUID_BITS != 0) && (NC_ENABLE || PASSTHRU)) begin
-        assign mem_req_uuid = mem_req_if.tag[MEM_TAG_WIDTH-1 -: UUID_BITS];
-        assign mem_rsp_uuid = mem_rsp_if.tag[MEM_TAG_WIDTH-1 -: UUID_BITS];
+    if ((UUID_WIDTH != 0) && (NC_ENABLE || PASSTHRU)) begin
+        assign mem_req_uuid = mem_req_if.tag[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
+        assign mem_rsp_uuid = mem_rsp_if.tag[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
     end else begin
         assign mem_req_uuid = 0;
         assign mem_rsp_uuid = 0;

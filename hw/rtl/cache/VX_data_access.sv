@@ -18,13 +18,13 @@ module VX_data_access #(
     // Enable cache writeable
     parameter WRITE_ENABLE      = 1,
     // Request debug identifier
-    parameter UUID_BITS         = 0
+    parameter UUID_WIDTH        = 0
 ) (
     input wire                          clk,
     input wire                          reset,
 
 `IGNORE_UNUSED_BEGIN
-    input wire[`UP(UUID_BITS)-1:0]      req_uuid,
+    input wire[`UP(UUID_WIDTH)-1:0]     req_uuid,
 `IGNORE_UNUSED_END
 
     input wire                          stall,

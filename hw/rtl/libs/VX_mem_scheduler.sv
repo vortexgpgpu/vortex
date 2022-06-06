@@ -403,17 +403,17 @@ module VX_mem_scheduler #(
         .ready_out (rsp_ready)
     );  
 
-`ifndef SYNTHESIS
-    wire [`UUID_BITS-1:0] req_dbg_uuid;
-    wire [`UUID_BITS-1:0] rsp_dbg_uuid;
-    wire [`UUID_BITS-1:0] mem_req_dbg_uuid;
-    wire [`UUID_BITS-1:0] mem_rsp_dbg_uuid;
+`ifdef SIMULATION
+    wire [`UP(`UUID_BITS)-1:0] req_dbg_uuid;
+    wire [`UP(`UUID_BITS)-1:0] rsp_dbg_uuid;
+    wire [`UP(`UUID_BITS)-1:0] mem_req_dbg_uuid;
+    wire [`UP(`UUID_BITS)-1:0] mem_rsp_dbg_uuid;
 
     if (UUID_WIDTH != 0) begin
-        assign req_dbg_uuid = req_tag[TAG_WIDTH-1 -: `UUID_BITS];
-        assign rsp_dbg_uuid = rsp_tag[TAG_WIDTH-1 -: `UUID_BITS];
-        assign mem_req_dbg_uuid = sreq_uuid[UUID_WIDTH-1 -: `UUID_BITS];
-        assign mem_rsp_dbg_uuid = mem_rsp_tag_s[MEM_TAGW-1 -: `UUID_BITS];
+        assign req_dbg_uuid = req_tag[TAG_WIDTH-1 -: `UP(`UUID_BITS)];
+        assign rsp_dbg_uuid = rsp_tag[TAG_WIDTH-1 -: `UP(`UUID_BITS)];
+        assign mem_req_dbg_uuid = sreq_uuid[UUID_WIDTH-1 -: `UP(`UUID_BITS)];
+        assign mem_rsp_dbg_uuid = mem_rsp_tag_s[MEM_TAGW-1 -: `UP(`UUID_BITS)];
     end else begin
         assign req_dbg_uuid = 0;
         assign rsp_dbg_uuid = 0;
@@ -426,7 +426,7 @@ module VX_mem_scheduler #(
     `UNUSED_VAR (mem_req_dbg_uuid)
     `UNUSED_VAR (mem_rsp_dbg_uuid)
 
-    reg [QUEUE_SIZE-1:0][(`UUID_BITS + TAG_ONLY_WIDTH + 64 + 1)-1:0] pending_reqs;
+    reg [QUEUE_SIZE-1:0][(`UP(`UUID_BITS) + TAG_ONLY_WIDTH + 64 + 1)-1:0] pending_reqs;
     always @(posedge clk) begin
         if (reset) begin
             pending_reqs <= '0;
@@ -444,7 +444,7 @@ module VX_mem_scheduler #(
                 `ASSERT(($time - pending_reqs[i][1 +: 64]) < `STALL_TIMEOUT, 
                     ("%t: *** %s response timeout: remaining=%b, tag=0x%0h (#%0d)", 
                         $time, INSTANCE_ID, rsp_rem_mask[i], pending_reqs[i][1+64 +: TAG_ONLY_WIDTH], 
-                                                pending_reqs[i][1+64+TAG_ONLY_WIDTH +: `UUID_BITS]));
+                                                pending_reqs[i][1+64+TAG_ONLY_WIDTH +: `UP(`UUID_BITS)]));
             end
         end
     end

@@ -166,7 +166,7 @@ module VX_csr_unit #(
     wire csr_rsp_ready;
 
     VX_skid_buffer #(
-        .DATAW (`UUID_BITS + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + `UP(`NT_BITS) + 2 * (`NUM_THREADS * 32))
+        .DATAW (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + `UP(`NT_BITS) + 2 * (`NUM_THREADS * 32))
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),

@@ -178,7 +178,7 @@ module Vortex (
         .MREQ_SIZE      (`L3_MREQ_SIZE),
         .TAG_WIDTH      (L2_MEM_TAG_WIDTH),
         .WRITE_ENABLE   (1),
-        .UUID_BITS      (`UUID_BITS),        
+        .UUID_WIDTH     (`UUID_BITS),        
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L3_ENABLED)
     ) l3cache (

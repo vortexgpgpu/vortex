@@ -40,7 +40,7 @@ module VX_gpu_unit #(
 
     localparam WCTL_DATAW    = `GPU_TMC_BITS + `GPU_WSPAWN_BITS + `GPU_SPLIT_BITS + `GPU_BARRIER_BITS;
     localparam RSP_DATAW     = `MAX(`NUM_THREADS * 32, WCTL_DATAW);
-    localparam RSP_ARB_DATAW = `UUID_BITS + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1 + RSP_DATAW + 1 + 1;
+    localparam RSP_ARB_DATAW = `UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1 + RSP_DATAW + 1 + 1;
     localparam RSP_ARB_SIZE  = 1 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED + `EXT_IMADD_ENABLED;
 
     wire [RSP_DATAW-1:0] rsp_data;
@@ -208,7 +208,7 @@ module VX_gpu_unit #(
     wire                          imadd_ready_in;
 
     wire                          imadd_valid_out;
-    wire [`UUID_BITS-1:0]         imadd_uuid_out;
+    wire [`UP(`UUID_BITS)-1:0]    imadd_uuid_out;
     wire [`UP(`NW_BITS)-1:0]      imadd_wid_out;
     wire [`NUM_THREADS-1:0]       imadd_tmask_out;
     wire [31:0]                   imadd_PC_out;
@@ -223,7 +223,7 @@ module VX_gpu_unit #(
         .DATA_WIDTH (32),
         .MAX_SHIFT  (24),
         .SIGNED     (1),
-        .TAG_WIDTH  (`UUID_BITS + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS)
+        .TAG_WIDTH  (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS)
     ) imadd (
         .clk        (clk),
         .reset      (reset),
