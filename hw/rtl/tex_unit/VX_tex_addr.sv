@@ -17,9 +17,9 @@ module VX_tex_addr #(
     input wire [`TEX_FILTER_BITS-1:0]   req_filter,
     input wire [1:0][`TEX_WRAP_BITS-1:0] req_wraps,
     input wire [`TEX_ADDR_BITS-1:0]     req_baseaddr,
-    input wire [NUM_LANES-1:0][`TEX_LOD_BITS-1:0] mip_level,
+    input wire [NUM_LANES-1:0][`TEX_LOD_BITS-1:0] req_miplevel,
     input wire [NUM_LANES-1:0][`TEX_MIPOFF_BITS-1:0] req_mipoff,    
-    input wire [NUM_LANES-1:0][1:0][`TEX_LOD_BITS-1:0] req_logdims,
+    input wire [1:0][`TEX_LOD_BITS-1:0] req_logdims,
     input wire [REQ_INFOW-1:0]          req_info,    
     output wire                         req_ready,
 
@@ -67,7 +67,7 @@ module VX_tex_addr #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         for (genvar j = 0; j < 2; ++j) begin
-            wire [`TEX_FXD_FRAC-1:0] delta    = `TEX_FXD_FRAC'((SCALED_DIM'(`TEX_FXD_HALF) << mip_level[i]) >> req_logdims[i][j]);
+            wire [`TEX_FXD_FRAC-1:0] delta    = `TEX_FXD_FRAC'((SCALED_DIM'(`TEX_FXD_HALF) << req_miplevel[i]) >> req_logdims[j]);
             wire [`TEX_FXD_BITS-1:0] coord_lo = req_filter ? (req_coords[j][i] - `TEX_FXD_BITS'(delta)) : req_coords[j][i];
             wire [`TEX_FXD_BITS-1:0] coord_hi = req_filter ? (req_coords[j][i] + `TEX_FXD_BITS'(delta)) : req_coords[j][i];
 
@@ -83,9 +83,9 @@ module VX_tex_addr #(
                 .coord_o (clamped_hi[i][j])
             );
 
-            assign dim_shift[i][j] = SHIFT_BITS'(`TEX_FXD_FRAC - `TEX_BLEND_FRAC) - (req_logdims[i][j] - mip_level[i]);
+            assign dim_shift[i][j] = SHIFT_BITS'(`TEX_FXD_FRAC - `TEX_BLEND_FRAC) - (req_logdims[j] - req_miplevel[i]);
         end
-        assign log_pitch[i] = PITCH_BITS'(req_logdims[i][0] - mip_level[i]) + PITCH_BITS'(log_stride);        
+        assign log_pitch[i] = PITCH_BITS'(req_logdims[0] - req_miplevel[i]) + PITCH_BITS'(log_stride);        
         assign mip_addr[i]  = req_baseaddr + `TEX_ADDR_BITS'(req_mipoff[i]);
     end
 
@@ -155,7 +155,7 @@ module VX_tex_addr #(
             `TRACE(2, (", mip_addr="));
             `TRACE_ARRAY1D(2, mip_addr, NUM_LANES);
             `TRACE(2, (", req_logdims="));
-            `TRACE_ARRAY2D(2, req_logdims, 2, NUM_LANES);  
+            `TRACE_ARRAY1D(2, req_logdims, 2);  
             `TRACE(2, (", clamped_lo="));
             `TRACE_ARRAY2D(2, clamped_lo, 2, NUM_LANES);    
             `TRACE(2, (", clamped_hi="));

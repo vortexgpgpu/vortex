@@ -36,7 +36,7 @@ module VX_tex_dcr #(
                     tex_stage <= dcr_wr_data[$clog2(NUM_STAGES)-1:0];
                 end
                 `DCR_TEX_ADDR: begin 
-                    tex_dcrs[tex_stage].baddr <= dcr_wr_data[`TEX_ADDR_BITS-1:0];
+                    tex_dcrs[tex_stage].baseaddr <= dcr_wr_data[`TEX_ADDR_BITS-1:0];
                 end
                 `DCR_TEX_FORMAT: begin 
                     tex_dcrs[tex_stage].format <= dcr_wr_data[`TEX_FORMAT_BITS-1:0];

@@ -25,23 +25,46 @@ module VX_tex_unit #(
     VX_tex_rsp_if.master    tex_rsp_if
 );
 
-    localparam BLEND_FRAC_W = (2 * NUM_LANES * `TEX_BLEND_FRAC);    
+    localparam BLEND_FRAC_W = (2 * NUM_LANES * `TEX_BLEND_FRAC);  
 
-    wire [NUM_LANES-1:0][`TEX_LOD_BITS-1:0]      mip_level;
-    wire [NUM_LANES-1:0][`TEX_MIPOFF_BITS-1:0]   sel_mipoff;
-    wire [NUM_LANES-1:0][1:0][`TEX_LOD_BITS-1:0] sel_logdims;
+    // Texture stage select 
+
+    wire                                        req_valid;
+    wire [NUM_LANES-1:0]                        req_mask;          
+    logic [`TEX_FILTER_BITS-1:0]                req_filter;    
+    logic [`TEX_FORMAT_BITS-1:0]                req_format;    
+    logic [1:0][`TEX_WRAP_BITS-1:0]             req_wraps;
+    wire [1:0][`TEX_LOD_BITS-1:0]               req_logdims;
+    logic [`TEX_ADDR_BITS-1:0]                  req_baseaddr;
+    wire [1:0][NUM_LANES-1:0][31:0]             req_coords;
+    wire [NUM_LANES-1:0][`TEX_LOD_BITS-1:0]     req_miplevel, sel_miplevel;
+    wire [NUM_LANES-1:0][`TEX_MIPOFF_BITS-1:0]  req_mipoff, sel_mipoff;    
+    wire [TAG_WIDTH-1:0]                        req_tag;
+    wire                                        req_ready;
 
     tex_dcrs_t tex_dcrs;
     assign tex_dcrs = tex_dcr_if.data[tex_req_if.stage];
 
-    // mipmap select
-
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        assign mip_level[i]      = tex_req_if.lod[i][`TEX_LOD_BITS-1:0];
-        assign sel_mipoff[i]     = tex_dcrs.mipoff[mip_level[i]];
-        assign sel_logdims[i][0] = tex_dcrs.logdims[0];
-        assign sel_logdims[i][1] = tex_dcrs.logdims[1];
+        assign sel_miplevel[i]  = tex_req_if.lod[i][`TEX_LOD_BITS-1:0];
+        assign sel_mipoff[i] = tex_dcrs.mipoff[sel_miplevel[i]];
     end
+
+    wire stall_in = req_valid && ~req_ready;
+
+    VX_pipe_register #(
+        .DATAW  (1 + NUM_LANES  + `TEX_FILTER_BITS + `TEX_FORMAT_BITS + 2 * `TEX_WRAP_BITS + 2 * `TEX_LOD_BITS + `TEX_ADDR_BITS + NUM_LANES * (2 * 32 + `TEX_LOD_BITS + `TEX_MIPOFF_BITS) + TAG_WIDTH),
+        .RESETW (1)
+    ) pipe_reg0 (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (~stall_in),
+        .data_in  ({tex_req_if.valid, tex_req_if.mask, tex_dcrs.filter, tex_dcrs.format, tex_dcrs.wraps, tex_dcrs.logdims, tex_dcrs.baseaddr, tex_req_if.coords, sel_miplevel, sel_mipoff, tex_req_if.tag}),
+        .data_out ({req_valid,        req_mask,        req_filter,      req_format,      req_wraps,      req_logdims,      req_baseaddr,      req_coords,        req_miplevel, req_mipoff, req_tag})
+    );
+
+    // can accept new request?
+    assign tex_req_if.ready = ~stall_in; 
 
     // address generation
 
@@ -64,18 +87,18 @@ module VX_tex_unit #(
         .reset      (reset),
 
         // inputs
-        .req_valid  (tex_req_if.valid),
-        .req_mask   (tex_req_if.mask),
-        .req_coords (tex_req_if.coords),
-        .req_format (tex_dcrs.format),
-        .req_filter (tex_dcrs.filter),
-        .req_wraps  (tex_dcrs.wraps),
-        .req_baseaddr(tex_dcrs.baddr),    
-        .mip_level  (mip_level),
-        .req_mipoff (sel_mipoff),
-        .req_logdims(sel_logdims),
-        .req_info   ({tex_req_if.tag, tex_dcrs.format}),
-        .req_ready  (tex_req_if.ready),
+        .req_valid  (req_valid),
+        .req_mask   (req_mask),
+        .req_coords (req_coords),
+        .req_format (req_format),
+        .req_filter (req_filter),
+        .req_wraps  (req_wraps),
+        .req_baseaddr(req_baseaddr),    
+        .req_miplevel(req_miplevel),
+        .req_mipoff (req_mipoff),
+        .req_logdims(req_logdims),
+        .req_info   ({req_tag, req_format}),
+        .req_ready  (req_ready),
 
         // outputs
         .rsp_valid  (mem_req_valid), 
