@@ -2,20 +2,20 @@
 
 interface VX_rop_agent_if ();
 
-    wire                                    valid;
+    wire                                        valid;
 
-    wire [`UUID_BITS-1:0]                   uuid;
-    wire [`UP(`NW_BITS)-1:0]                wid;
-    wire [`NUM_THREADS-1:0]                 tmask;    
-    wire [31:0]                             PC;
+    wire [`UP(`UUID_BITS)-1:0]                  uuid;
+    wire [`UP(`NW_BITS)-1:0]                    wid;
+    wire [`NUM_THREADS-1:0]                     tmask;    
+    wire [31:0]                                 PC;
 
-    wire [`NUM_THREADS-1:0][`ROP_DIM_BITS-1:0] pos_x;
-    wire [`NUM_THREADS-1:0][`ROP_DIM_BITS-1:0] pos_y;
-    wire [`NUM_THREADS-1:0]                 face;
-    wire [`NUM_THREADS-1:0][31:0]           color;
+    wire [`NUM_THREADS-1:0][`ROP_DIM_BITS-1:0]  pos_x;
+    wire [`NUM_THREADS-1:0][`ROP_DIM_BITS-1:0]  pos_y;
+    wire [`NUM_THREADS-1:0]                     face;
+    wire [`NUM_THREADS-1:0][31:0]               color;
     wire [`NUM_THREADS-1:0][`ROP_DEPTH_BITS-1:0] depth;
     
-    wire                                    ready;
+    wire                                        ready;
 
     modport master (
         output valid,

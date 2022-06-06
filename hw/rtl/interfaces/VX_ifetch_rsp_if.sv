@@ -2,14 +2,14 @@
 
 interface VX_ifetch_rsp_if ();
 
-    wire                    valid;
-    wire [`UUID_BITS-1:0]   uuid;
-    wire [`NUM_THREADS-1:0] tmask;    
-    wire [`UP(`NW_BITS)-1:0] wid;
-    wire [31:0]             PC;
-    wire [31:0]             data;
-    wire [`NUM_WARPS-1:0]   ibuf_pop;
-    wire                    ready;
+    wire                        valid;
+    wire [`UP(`UUID_BITS)-1:0]  uuid;
+    wire [`NUM_THREADS-1:0]     tmask;    
+    wire [`UP(`NW_BITS)-1:0]    wid;
+    wire [31:0]                 PC;
+    wire [31:0]                 data;
+    wire [`NUM_WARPS-1:0]       ibuf_pop;
+    wire                        ready;
 
     modport master (
         output valid,

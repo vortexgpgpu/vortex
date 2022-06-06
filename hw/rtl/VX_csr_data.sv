@@ -50,7 +50,7 @@ module VX_csr_data #(
 `endif
 
     input wire                          read_enable,
-    input wire [`UUID_BITS-1:0]         read_uuid,
+    input wire [`UP(`UUID_BITS)-1:0]    read_uuid,
     input wire [`UP(`NW_BITS)-1:0]      read_wid,
     input wire [`NUM_THREADS-1:0]       read_tmask,
     input wire [`CSR_ADDR_BITS-1:0]     read_addr,
@@ -58,7 +58,7 @@ module VX_csr_data #(
 
     input wire [`UP(`NT_BITS)-1:0]      write_tid,
     input wire                          write_enable, 
-    input wire [`UUID_BITS-1:0]         write_uuid,
+    input wire [`UP(`UUID_BITS)-1:0]    write_uuid,
     input wire [`UP(`NW_BITS)-1:0]      write_wid,
     input wire [`NUM_THREADS-1:0]       write_tmask,
     input wire [`CSR_ADDR_BITS-1:0]     write_addr,

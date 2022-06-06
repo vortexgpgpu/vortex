@@ -33,10 +33,10 @@ module VX_bank #(
     parameter WRITE_ENABLE      = 1,
 
     // Request debug identifier
-    parameter UUID_BITS         = 0,
+    parameter UUID_WIDTH        = 0,
 
     // core request tag size
-    parameter TAG_WIDTH         = UUID_BITS + 1,
+    parameter TAG_WIDTH         = UUID_WIDTH + 1,
 
     localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE),
     localparam WORD_SEL_BITS    = `UP(`WORD_SEL_BITS)
@@ -93,7 +93,7 @@ module VX_bank #(
 );
 
 `IGNORE_UNUSED_BEGIN
-    wire [`UP(UUID_BITS)-1:0] req_uuid_sel, req_uuid_st0, req_uuid_st1;
+    wire [`UP(UUID_WIDTH)-1:0] req_uuid_sel, req_uuid_st0, req_uuid_st1;
 `IGNORE_UNUSED_END
 
     wire                                       creq_valid;
@@ -244,7 +244,7 @@ module VX_bank #(
         .NUM_BANKS  (NUM_BANKS),
         .NUM_WAYS   (NUM_WAYS),
         .WORD_SIZE  (WORD_SIZE),   
-        .UUID_BITS  (UUID_BITS)
+        .UUID_WIDTH (UUID_WIDTH)
     ) tag_access (
         .clk        (clk),
         .reset      (reset),
@@ -302,7 +302,7 @@ module VX_bank #(
         .NUM_PORTS    (NUM_PORTS),
         .WORD_SIZE    (WORD_SIZE),
         .WRITE_ENABLE (WRITE_ENABLE),
-        .UUID_BITS    (UUID_BITS)
+        .UUID_WIDTH   (UUID_WIDTH)
      ) data_access (
         .clk        (clk),
         .reset      (reset),
@@ -350,7 +350,7 @@ module VX_bank #(
         .WORD_SIZE   (WORD_SIZE),
         .NUM_REQS    (NUM_REQS),
         .MSHR_SIZE   (MSHR_SIZE),
-        .UUID_BITS   (UUID_BITS),
+        .UUID_WIDTH  (UUID_WIDTH),
         .TAG_WIDTH   (TAG_WIDTH)
     ) miss_resrv (
         .clk                (clk),

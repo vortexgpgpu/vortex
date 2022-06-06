@@ -18,7 +18,7 @@ localparam ICACHE_LINE_SIZE	    = `L1_BLOCK_SIZE;
 localparam ICACHE_TAG_ID_BITS	= `UP(`NW_BITS);
 
 // Core request tag bits
-localparam ICACHE_TAG_WIDTH	    = (`UUID_BITS + ICACHE_TAG_ID_BITS);
+localparam ICACHE_TAG_WIDTH	    = (`UP(`UUID_BITS) + ICACHE_TAG_ID_BITS);
 
 // Input request size
 localparam ICACHE_NUM_REQS	    = 1;
@@ -60,7 +60,7 @@ localparam LSUQ_TAG_BITS	    = (`CLOG2(`LSUQ_SIZE) + DCACHE_BATCH_SEL_BITS);
 localparam DCACHE_TAG_ID_BITS	= (LSUQ_TAG_BITS + `CACHE_ADDR_TYPE_BITS);
 
 // Core request tag bits
-localparam DCACHE_TAG_WIDTH	    = (`UUID_BITS + DCACHE_TAG_ID_BITS);
+localparam DCACHE_TAG_WIDTH	    = (`UP(`UUID_BITS) + DCACHE_TAG_ID_BITS);
  
 // Memory request data bits
 localparam DCACHE_MEM_DATA_WIDTH= (DCACHE_LINE_SIZE * 8);

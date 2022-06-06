@@ -36,11 +36,11 @@ module VX_tex_agent #(
 
     // Store request metadata
 
-    wire [`UUID_BITS-1:0]   rsp_uuid;
-    wire [`UP(`NW_BITS)-1:0] rsp_wid;
-    wire [`NUM_THREADS-1:0] rsp_tmask;
-    wire [31:0]             rsp_PC;
-    wire [`NR_BITS-1:0]     rsp_rd;
+    wire [`UP(`UUID_BITS)-1:0]  rsp_uuid;
+    wire [`UP(`NW_BITS)-1:0]    rsp_wid;
+    wire [`NUM_THREADS-1:0]     rsp_tmask;
+    wire [31:0]                 rsp_PC;
+    wire [`NR_BITS-1:0]         rsp_rd;
 
     wire [`TEX_REQ_TAG_WIDTH-1:0] req_tag, rsp_tag;    
     wire mdata_full;
@@ -51,7 +51,7 @@ module VX_tex_agent #(
     assign rsp_tag = tex_rsp_if.tag;
 
     VX_index_buffer #(
-        .DATAW   (`UUID_BITS + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS),
+        .DATAW   (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS),
         .SIZE    (`TEX_REQ_QUEUE_SIZE)
     ) metadata_store  (
         .clk          (clk),
@@ -89,7 +89,7 @@ module VX_tex_agent #(
     // handle texture response
 
     VX_skid_buffer #(
-        .DATAW (`UUID_BITS + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + (`NUM_THREADS * 32))
+        .DATAW (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + (`NUM_THREADS * 32))
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),

@@ -56,7 +56,7 @@ module VX_mem_unit # (
         .MREQ_SIZE      (`ICACHE_MREQ_SIZE),
         .TAG_WIDTH      (ICACHE_TAG_WIDTH),
         .WRITE_ENABLE   (0),
-        .UUID_BITS      (`UUID_BITS)        
+        .UUID_WIDTH     (`UUID_BITS)        
     ) icache (
     `ifdef PERF_ENABLE
         .perf_cache_if  (perf_icache_if),
@@ -104,7 +104,7 @@ module VX_mem_unit # (
         .MREQ_SIZE      (`DCACHE_MREQ_SIZE),
         .TAG_WIDTH      (DCACHE_NOSM_TAG_WIDTH),
         .WRITE_ENABLE   (1),
-        .UUID_BITS      (`UUID_BITS),        
+        .UUID_WIDTH     (`UUID_BITS),        
         .NC_ENABLE      (1),
         .NC_TAG_BIT     (0)
     ) dcache (
@@ -235,7 +235,7 @@ module VX_mem_unit # (
         .ADDR_WIDTH (SMEM_ADDR_WIDTH),
         .CREQ_SIZE  (`SMEM_CREQ_SIZE),
         .CRSQ_SIZE  (`SMEM_CRSQ_SIZE),
-        .UUID_BITS  (`UUID_BITS), 
+        .UUID_WIDTH (`UUID_BITS), 
         .TAG_WIDTH  (DCACHE_SM_TAG_WIDTH)
     ) smem (            
         .clk        (clk),

@@ -56,7 +56,8 @@ module VX_warp_sched #(
 
     reg [`PERF_CTR_BITS-1:0]    cycles;
 
-    reg [`NUM_WARPS-1:0][`UUID_BITS-1:0] issued_instrs;
+    reg [`NUM_WARPS-1:0][`UP(`UUID_BITS)-1:0] issued_instrs;
+    wire [`UP(`UUID_BITS)-1:0] instr_uuid;
 
     wire ifetch_req_fire = ifetch_req_if.valid && ifetch_req_if.ready;
 
@@ -246,12 +247,16 @@ module VX_warp_sched #(
 
     assign warp_scheduled = schedule_valid && ~stall_out;
 
-    wire [`UUID_BITS-1:0] instr_uuid = (issued_instrs[schedule_wid] * `NUM_WARPS * `NUM_CORES * `NUM_CLUSTERS)
-                                     + (schedule_wid * `NUM_CORES * `NUM_CLUSTERS)
-                                     + `UUID_BITS'(CORE_ID);
+`ifdef SIMULATION
+    assign instr_uuid = (issued_instrs[schedule_wid] * `NUM_WARPS * `NUM_CORES * `NUM_CLUSTERS)
+                      + (schedule_wid * `NUM_CORES * `NUM_CLUSTERS)
+                      + `UUID_BITS'(CORE_ID);
+`else
+    assign instr_uuid = 0;
+`endif
 
     VX_pipe_register #( 
-        .DATAW  (1 + `UUID_BITS + `NUM_THREADS + 32 + `UP(`NW_BITS)),
+        .DATAW  (1 + `UP(`UUID_BITS) + `NUM_THREADS + 32 + `UP(`NW_BITS)),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),

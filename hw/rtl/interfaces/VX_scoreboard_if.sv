@@ -3,8 +3,8 @@
 interface VX_scoreboard_if ();
 
     wire                        valid;    
-    wire [`UUID_BITS-1:0]       uuid;
-    wire [`UP(`NW_BITS)-1:0]     wid;
+    wire [`UP(`UUID_BITS)-1:0]  uuid;
+    wire [`UP(`NW_BITS)-1:0]    wid;
     wire [`NUM_THREADS-1:0]     tmask;
     wire [31:0]                 PC;   
     wire                        wb;

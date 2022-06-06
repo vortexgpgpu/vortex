@@ -23,7 +23,7 @@ module VX_fpu_agent #(
 ); 
     // Store request metadata
 
-    wire [`UUID_BITS-1:0]   rsp_uuid;
+    wire [`UP(`UUID_BITS)-1:0] rsp_uuid;
     wire [`UP(`NW_BITS)-1:0] rsp_wid;
     wire [`NUM_THREADS-1:0] rsp_tmask;
     wire [31:0]             rsp_PC;
@@ -38,7 +38,7 @@ module VX_fpu_agent #(
     assign rsp_tag = fpu_rsp_if.tag;
 
     VX_index_buffer #(
-        .DATAW   (`UUID_BITS + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS),
+        .DATAW   (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS),
         .SIZE    (`FPU_REQ_QUEUE_SIZE)
     ) metadata_store  (
         .clk          (clk),
@@ -101,7 +101,7 @@ module VX_fpu_agent #(
     assign fpu_to_csr_if.write_fflags = rsp_fflags;
 
     VX_skid_buffer #(
-        .DATAW (`UUID_BITS + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + (`NUM_THREADS * 32))
+        .DATAW (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + (`NUM_THREADS * 32))
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),

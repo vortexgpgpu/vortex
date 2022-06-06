@@ -33,7 +33,11 @@
 
 `define PERF_CTR_BITS   44
 
+`ifdef SIMULATION
 `define UUID_BITS       44
+`else
+`define UUID_BITS       0
+`endif
 
 ///////////////////////////////////////////////////////////////////////////////
 

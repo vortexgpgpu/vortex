@@ -135,7 +135,7 @@ module VX_cluster #(
         .MREQ_SIZE      (`RCACHE_MREQ_SIZE),
         .TAG_WIDTH      (RCACHE_TAG_WIDTH),
         .WRITE_ENABLE   (0),
-        .UUID_BITS      (0),        
+        .UUID_WIDTH     (0),        
         .NC_ENABLE      (0)
     ) rcache (
     `ifdef PERF_ENABLE
@@ -241,7 +241,7 @@ module VX_cluster #(
         .MREQ_SIZE      (`OCACHE_MREQ_SIZE),
         .TAG_WIDTH      (OCACHE_TAG_WIDTH),
         .WRITE_ENABLE   (1),
-        .UUID_BITS      (0),        
+        .UUID_WIDTH     (0),        
         .NC_ENABLE      (0)
     ) ocache (
     `ifdef PERF_ENABLE
@@ -365,7 +365,7 @@ module VX_cluster #(
         .MREQ_SIZE      (`TCACHE_MREQ_SIZE),
         .TAG_WIDTH      (TCACHE_TAG_WIDTH),
         .WRITE_ENABLE   (0),
-        .UUID_BITS      (0),        
+        .UUID_WIDTH     (0),        
         .NC_ENABLE      (0)
     ) tcache (
     `ifdef PERF_ENABLE
@@ -653,7 +653,7 @@ module VX_cluster #(
         .MREQ_SIZE      (`L2_MREQ_SIZE),
         .TAG_WIDTH      (L1_MEM_TAG_WIDTH),
         .WRITE_ENABLE   (1),       
-        .UUID_BITS      (`UUID_BITS),           
+        .UUID_WIDTH     (`UUID_BITS),           
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L2_ENABLED)
     ) l2cache (            

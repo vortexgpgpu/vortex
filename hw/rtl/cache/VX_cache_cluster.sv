@@ -38,10 +38,10 @@ module VX_cache_cluster #(
     parameter WRITE_ENABLE          = 1,
 
     // Request debug identifier
-    parameter UUID_BITS             = 0,
+    parameter UUID_WIDTH            = 0,
 
     // core request tag size
-    parameter TAG_WIDTH             = UUID_BITS + 1,
+    parameter TAG_WIDTH             = UUID_WIDTH + 1,
 
     // enable bypass for non-cacheable addresses
     parameter NC_TAG_BIT            = 0,
@@ -155,7 +155,7 @@ module VX_cache_cluster #(
             .MRSQ_SIZE    (MRSQ_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
             .WRITE_ENABLE (WRITE_ENABLE),
-            .UUID_BITS    (UUID_BITS),
+            .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (ARB_TAG_WIDTH),
             .NC_ENABLE    (NC_ENABLE),
             .PASSTHRU     (PASSTHRU)
