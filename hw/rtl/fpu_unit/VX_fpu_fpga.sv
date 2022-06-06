@@ -195,9 +195,9 @@ module VX_fpu_fpga #(
 
     VX_stream_arb #(
         .NUM_INPUTS (NUM_FPC),
-        .DATAW      (RSP_MUX_DATAW),
-        .BUFFERED   (1),
-        .ARBITER    ("R")
+        .DATAW      (RSP_MUX_DATAW),        
+        .ARBITER    ("R"),
+        .BUFFERED   (2)
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),

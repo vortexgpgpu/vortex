@@ -40,7 +40,7 @@ module VX_rop_agent #(
     // because of that we need to decouple rop_agent_if and rop_commit_if handshake with a pipe register
 
     VX_skid_buffer #(
-        .DATAW (`NUM_THREADS * (1 + 2 * `ROP_DIM_BITS + 32 + `ROP_DEPTH_BITS + 1))
+        .DATAW   (`NUM_THREADS * (1 + 2 * `ROP_DIM_BITS + 32 + `ROP_DEPTH_BITS + 1))
     ) req_sbuf (
         .clk       (clk),
         .reset     (reset),
