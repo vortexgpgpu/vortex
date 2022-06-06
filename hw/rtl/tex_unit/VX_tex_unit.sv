@@ -92,7 +92,6 @@ module VX_tex_unit #(
     // retrieve texel values from memory  
 
     wire mem_rsp_valid;
-    wire [NUM_LANES-1:0] mem_rsp_mask;
     wire [NUM_LANES-1:0][3:0][31:0] mem_rsp_data;
     wire [(TAG_WIDTH + `TEX_FORMAT_BITS + BLEND_FRAC_W)-1:0] mem_rsp_info;
     wire mem_rsp_ready;        
@@ -111,7 +110,7 @@ module VX_tex_unit #(
 
         // inputs
         .req_valid (mem_req_valid),
-        .req_mask (mem_req_mask),
+        .req_mask  (mem_req_mask),
         .req_filter(mem_req_filter), 
         .req_lgstride(mem_req_lgstride),
         .req_baseaddr(mem_req_baseaddr),    
@@ -121,7 +120,6 @@ module VX_tex_unit #(
 
         // outputs
         .rsp_valid (mem_rsp_valid),
-        .rsp_mask (mem_rsp_mask),
         .rsp_data  (mem_rsp_data),
         .rsp_info  (mem_rsp_info),
         .rsp_ready (mem_rsp_ready)
@@ -130,7 +128,6 @@ module VX_tex_unit #(
     // apply sampler
 
     wire sampler_rsp_valid;
-    wire [NUM_LANES-1:0] sampler_rsp_mask;
     wire [NUM_LANES-1:0][31:0] sampler_rsp_data;
     wire [TAG_WIDTH-1:0] sampler_rsp_info;
     wire sampler_rsp_ready;
@@ -144,8 +141,7 @@ module VX_tex_unit #(
         .reset      (reset),
 
         // inputs
-        .req_valid  (mem_rsp_valid),  
-        .req_mask   (mem_rsp_mask),
+        .req_valid  (mem_rsp_valid),
         .req_data   (mem_rsp_data), 
         .req_blends (mem_rsp_info[0 +: BLEND_FRAC_W]),
         .req_format (mem_rsp_info[BLEND_FRAC_W +: `TEX_FORMAT_BITS]),
@@ -154,21 +150,20 @@ module VX_tex_unit #(
 
         // outputs
         .rsp_valid  (sampler_rsp_valid),
-        .rsp_mask   (sampler_rsp_mask),
         .rsp_data   (sampler_rsp_data),
         .rsp_info   (sampler_rsp_info),
         .rsp_ready  (sampler_rsp_ready)
     );
 
     VX_skid_buffer #(
-        .DATAW (NUM_LANES * (1 + 32) + TAG_WIDTH)
+        .DATAW (NUM_LANES * 32 + TAG_WIDTH)
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (sampler_rsp_valid),
         .ready_in  (sampler_rsp_ready),
-        .data_in   ({sampler_rsp_mask, sampler_rsp_data,  sampler_rsp_info}),
-        .data_out  ({tex_rsp_if.mask,  tex_rsp_if.texels, tex_rsp_if.tag}),
+        .data_in   ({sampler_rsp_data,  sampler_rsp_info}),
+        .data_out  ({tex_rsp_if.texels, tex_rsp_if.tag}),
         .valid_out (tex_rsp_if.valid),
         .ready_out (tex_rsp_if.ready)
     );
@@ -223,8 +218,7 @@ module VX_tex_unit #(
             `TRACE(1, (", tag=0x%0h (#%0d)\n", tex_req_if.tag, tex_req_if.tag[TAG_WIDTH-1 -: `UUID_BITS]));
         end
         if (tex_rsp_if.valid && tex_rsp_if.ready) begin
-            `TRACE(1, ("%d: %s-rsp: mask=%b, texels=",
-                    $time, INSTANCE_ID, tex_rsp_if.mask));
+            `TRACE(1, ("%d: %s-rsp: texels=", $time, INSTANCE_ID));
             `TRACE_ARRAY1D(1, tex_rsp_if.texels, NUM_LANES);
             `TRACE(1, (", tag=0x%0h (#%0d)\n", tex_rsp_if.tag, tex_rsp_if.tag[TAG_WIDTH-1 -: `UUID_BITS]));
         end

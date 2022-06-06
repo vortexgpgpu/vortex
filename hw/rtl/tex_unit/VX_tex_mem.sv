@@ -29,18 +29,17 @@ module VX_tex_mem #(
 
     // outputs
     output wire                         rsp_valid,
-    output wire [NUM_LANES-1:0]         rsp_mask,
     output wire [NUM_LANES-1:0][3:0][31:0] rsp_data,
     output wire [REQ_INFOW-1:0]         rsp_info,
     input wire                          rsp_ready    
 );
 
-    localparam TAG_WIDTH = REQ_INFOW + NUM_LANES + `TEX_LGSTRIDE_BITS + (NUM_LANES * 4 * 2) + 4;
+    localparam TAG_WIDTH = REQ_INFOW + `TEX_LGSTRIDE_BITS + (NUM_LANES * 4 * 2) + 4;
 
     wire                           mem_req_valid;
-    wire [3:0][NUM_LANES-1:0]       mem_req_mask;
+    wire [3:0][NUM_LANES-1:0]      mem_req_mask;
     wire [3:0][NUM_LANES-1:0][29:0] mem_req_addr;
-    wire [3:0][NUM_LANES-1:0][3:0]  mem_req_byteen;
+    wire [3:0][NUM_LANES-1:0][3:0] mem_req_byteen;
     wire [TAG_WIDTH-1:0]           mem_req_tag;
     wire                           mem_req_ready;
 
@@ -94,7 +93,7 @@ module VX_tex_mem #(
     // submit request to memory   
 
     assign mem_req_valid = req_valid;
-    assign mem_req_tag   = {req_info, req_mask, req_lgstride, mem_req_align, mem_req_dups};
+    assign mem_req_tag   = {req_info, req_lgstride, mem_req_align, mem_req_dups};
     assign req_ready     = mem_req_ready;
 
     // schedule memory request
@@ -150,12 +149,11 @@ module VX_tex_mem #(
     // handle memory response
 
     wire [REQ_INFOW-1:0]          mem_rsp_info;
-    wire [NUM_LANES-1:0]          mem_rsp_mask;
     wire [`TEX_LGSTRIDE_BITS-1:0] mem_rsp_lgstride;    
     wire [3:0][NUM_LANES-1:0][1:0] mem_rsp_align;
     wire [3:0]                    mem_rsp_dups;
     
-    assign {mem_rsp_info, mem_rsp_mask, mem_rsp_lgstride, mem_rsp_align, mem_rsp_dups} = mem_rsp_tag;
+    assign {mem_rsp_info, mem_rsp_lgstride, mem_rsp_align, mem_rsp_dups} = mem_rsp_tag;
 
     reg [NUM_LANES-1:0][3:0][31:0] mem_rsp_data_qual;
 
@@ -183,14 +181,14 @@ module VX_tex_mem #(
     wire stall_out = rsp_valid && ~rsp_ready;
     
     VX_pipe_register #(
-        .DATAW  (1 + NUM_LANES + REQ_INFOW + (4 * NUM_LANES * 32)),
+        .DATAW  (1 + REQ_INFOW + (4 * NUM_LANES * 32)),
         .RESETW (1)
     ) rsp_pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({mem_rsp_valid, mem_rsp_mask, mem_rsp_info, mem_rsp_data_qual}),
-        .data_out ({rsp_valid,     rsp_mask,     rsp_info,     rsp_data})
+        .data_in  ({mem_rsp_valid, mem_rsp_info, mem_rsp_data_qual}),
+        .data_out ({rsp_valid,     rsp_info,     rsp_data})
     );
 
     assign mem_rsp_ready = ~stall_out;
@@ -206,7 +204,7 @@ module VX_tex_mem #(
             `TRACE(2, (" (#%0d)\n", req_info[REQ_INFOW-1 -: `UUID_BITS]));
         end
         if (rsp_valid && rsp_ready) begin
-            `TRACE(2, ("%d: %s-mem-rsp: mask=%b, data=", $time, INSTANCE_ID, rsp_mask));
+            `TRACE(2, ("%d: %s-mem-rsp: data=", $time, INSTANCE_ID));
             `TRACE_ARRAY2D(2, rsp_data, 4, NUM_LANES);
             `TRACE(2, (" (#%0d)\n", rsp_info[REQ_INFOW-1 -: `UUID_BITS]));
         end        

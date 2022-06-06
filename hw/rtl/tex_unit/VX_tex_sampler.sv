@@ -9,8 +9,7 @@ module VX_tex_sampler #(
     input wire reset,
 
     // inputs
-    input wire                          req_valid,   
-    input wire [NUM_LANES-1:0]          req_mask, 
+    input wire                          req_valid,
     input wire [`TEX_FORMAT_BITS-1:0]   req_format,    
     input wire [NUM_LANES-1:0][1:0][`TEX_BLEND_FRAC-1:0] req_blends,
     input wire [NUM_LANES-1:0][3:0][31:0] req_data,
@@ -19,14 +18,12 @@ module VX_tex_sampler #(
 
     // ouputs
     output wire                         rsp_valid,
-    output wire [NUM_LANES-1:0]         rsp_mask, 
     output wire [NUM_LANES-1:0][31:0]   rsp_data,
     output wire [REQ_INFOW-1:0]         rsp_info,    
     input wire                          rsp_ready
 );   
 
     wire valid_s0, valid_s1;
-    wire [NUM_LANES-1:0] req_mask_s0, req_mask_s1; 
     wire [REQ_INFOW-1:0] req_info_s0, req_info_s1;
     wire [NUM_LANES-1:0][31:0] texel_ul, texel_uh;
     wire [NUM_LANES-1:0][31:0] texel_ul_s1, texel_uh_s1;
@@ -48,14 +45,14 @@ module VX_tex_sampler #(
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_LANES + REQ_INFOW + (NUM_LANES * 2 * `TEX_BLEND_FRAC) + (NUM_LANES * 4 * 32)),
+        .DATAW  (1 + REQ_INFOW + (NUM_LANES * 2 * `TEX_BLEND_FRAC) + (NUM_LANES * 4 * 32)),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({req_valid, req_mask,    req_info,    req_blends,    fmt_texels}),
-        .data_out ({valid_s0,  req_mask_s0, req_info_s0, req_blends_s0, fmt_texels_s0})
+        .data_in  ({req_valid, req_info,    req_blends,    fmt_texels}),
+        .data_out ({valid_s0,  req_info_s0, req_blends_s0, fmt_texels_s0})
     );
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
@@ -84,15 +81,15 @@ module VX_tex_sampler #(
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_LANES + REQ_INFOW + (NUM_LANES * `TEX_BLEND_FRAC) + (2 * NUM_LANES * 32)),
+        .DATAW  (1 + REQ_INFOW + (NUM_LANES * `TEX_BLEND_FRAC) + (2 * NUM_LANES * 32)),
         .DEPTH  (3),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({valid_s0, req_mask_s0, req_info_s0, blend_v,    texel_ul,    texel_uh}),
-        .data_out ({valid_s1, req_mask_s1, req_info_s1, blend_v_s1, texel_ul_s1, texel_uh_s1})
+        .data_in  ({valid_s0, req_info_s0, blend_v,    texel_ul,    texel_uh}),
+        .data_out ({valid_s1, req_info_s1, blend_v_s1, texel_ul_s1, texel_uh_s1})
     );
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
@@ -112,24 +109,24 @@ module VX_tex_sampler #(
     assign stall_out = rsp_valid && ~rsp_ready;
     
     VX_pipe_register #(
-        .DATAW  (1 + NUM_LANES + REQ_INFOW + (NUM_LANES * 32)),
+        .DATAW  (1 + REQ_INFOW + (NUM_LANES * 32)),
         .DEPTH  (2),
         .RESETW (1)
     ) pipe_reg2 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({valid_s1,  req_mask_s1, req_info_s1, texel_v}),
-        .data_out ({rsp_valid, rsp_mask,    rsp_info,    rsp_data})
+        .data_in  ({valid_s1,  req_info_s1, texel_v}),
+        .data_out ({rsp_valid, rsp_info,    rsp_data})
     );
 
     // can accept new request?
-    assign req_ready = ~stall_out;   
+    assign req_ready = ~stall_out;
 
 `ifdef DBG_TRACE_TEX
     always @(posedge clk) begin        
         if (req_valid && req_ready) begin
-            `TRACE(2, ("%d: %s-sampler-req: mask=%b, format=%0d, data=", $time, INSTANCE_ID, req_mask, req_format));
+            `TRACE(2, ("%d: %s-sampler-req: format=%0d, data=", $time, INSTANCE_ID, req_format));
             `TRACE_ARRAY2D(2, req_data, 4, NUM_LANES);
             `TRACE(2, (", u0="));
             `TRACE_ARRAY1D(2, req_blends[0], NUM_LANES);
@@ -138,7 +135,7 @@ module VX_tex_sampler #(
             `TRACE(2, (" (#%0d\n", req_info[REQ_INFOW-1 -: `UUID_BITS]));
         end
         if (rsp_valid && rsp_ready) begin
-            `TRACE(2, ("%d: %s-sampler-rsp: mask=%b, data=", $time, INSTANCE_ID, rsp_mask));
+            `TRACE(2, ("%d: %s-sampler-rsp: data=", $time, INSTANCE_ID));
             `TRACE_ARRAY1D(2, rsp_data, NUM_LANES);
             `TRACE(2, (" (#%0d\n", rsp_info[REQ_INFOW-1 -: `UUID_BITS]));
         end        

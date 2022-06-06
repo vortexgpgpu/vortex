@@ -7,12 +7,12 @@ module VX_rop_agent #(
     input wire reset,
 
     // Inputs    
-    VX_rop_agent_if.slave     rop_agent_req_if,    
-    VX_gpu_csr_if.slave     rop_csr_if,  
+    VX_rop_agent_if.slave rop_agent_if,    
+    VX_gpu_csr_if.slave   rop_csr_if,  
 
     // Outputs    
-    VX_commit_if.master     rop_agent_rsp_if,
-    VX_rop_req_if.master    rop_req_if
+    VX_commit_if.master   rop_commit_if,
+    VX_rop_req_if.master  rop_req_if
 );
     // CSRs access
 
@@ -37,7 +37,7 @@ module VX_rop_agent #(
     wire rop_rsp_valid, rop_rsp_ready;
 
     // it is possible to have ready = f(valid) when using arbiters, 
-    // because of that we need to decouple rop_agent_req_if and rop_agent_rsp_if handshake with a pipe register
+    // because of that we need to decouple rop_agent_if and rop_commit_if handshake with a pipe register
 
     VX_skid_buffer #(
         .DATAW (`NUM_THREADS * (1 + 2 * `ROP_DIM_BITS + 32 + `ROP_DEPTH_BITS + 1))
@@ -46,15 +46,15 @@ module VX_rop_agent #(
         .reset     (reset),
         .valid_in  (rop_req_valid),
         .ready_in  (rop_req_ready),
-        .data_in   ({rop_agent_req_if.tmask, rop_agent_req_if.pos_x, rop_agent_req_if.pos_y, rop_agent_req_if.color, rop_agent_req_if.depth, rop_agent_req_if.face}),
-        .data_out  ({rop_req_if.mask,        rop_req_if.pos_x,       rop_req_if.pos_y,       rop_req_if.color,       rop_req_if.depth,       rop_req_if.face}),
+        .data_in   ({rop_agent_if.tmask, rop_agent_if.pos_x, rop_agent_if.pos_y, rop_agent_if.color, rop_agent_if.depth, rop_agent_if.face}),
+        .data_out  ({rop_req_if.mask,    rop_req_if.pos_x,   rop_req_if.pos_y,   rop_req_if.color,   rop_req_if.depth,   rop_req_if.face}),
         .valid_out (rop_req_if.valid),
         .ready_out (rop_req_if.ready)
     );
 
-    assign rop_req_valid = rop_agent_req_if.valid & rop_rsp_ready;
-    assign rop_agent_req_if.ready = rop_req_ready & rop_rsp_ready;
-    assign rop_rsp_valid = rop_agent_req_if.valid & rop_req_ready;
+    assign rop_req_valid = rop_agent_if.valid & rop_rsp_ready;
+    assign rop_agent_if.ready = rop_req_ready & rop_rsp_ready;
+    assign rop_rsp_valid = rop_agent_if.valid & rop_req_ready;
 
     VX_skid_buffer #(
         .DATAW (`UUID_BITS + `UP(`NW_BITS) + `NUM_THREADS + 32)
@@ -63,31 +63,31 @@ module VX_rop_agent #(
         .reset     (reset),
         .valid_in  (rop_rsp_valid),
         .ready_in  (rop_rsp_ready),
-        .data_in   ({rop_agent_req_if.uuid, rop_agent_req_if.wid, rop_agent_req_if.tmask, rop_agent_req_if.PC}),
-        .data_out  ({rop_agent_rsp_if.uuid, rop_agent_rsp_if.wid, rop_agent_rsp_if.tmask, rop_agent_rsp_if.PC}),
-        .valid_out (rop_agent_rsp_if.valid),
-        .ready_out (rop_agent_rsp_if.ready)
+        .data_in   ({rop_agent_if.uuid,  rop_agent_if.wid,  rop_agent_if.tmask,  rop_agent_if.PC}),
+        .data_out  ({rop_commit_if.uuid, rop_commit_if.wid, rop_commit_if.tmask, rop_commit_if.PC}),
+        .valid_out (rop_commit_if.valid),
+        .ready_out (rop_commit_if.ready)
     );
 
-    assign rop_agent_rsp_if.data = 'x;
-    assign rop_agent_rsp_if.rd   = 'x;
-    assign rop_agent_rsp_if.wb   = 0;
-    assign rop_agent_rsp_if.eop  = 1'b1;
+    assign rop_commit_if.data = 'x;
+    assign rop_commit_if.rd   = 'x;
+    assign rop_commit_if.wb   = 0;
+    assign rop_commit_if.eop  = 1'b1;
 
 `ifdef DBG_TRACE_ROP
     always @(posedge clk) begin
-        if (rop_agent_req_if.valid && rop_agent_req_if.ready) begin
-            `TRACE(1, ("%d: core%0d-rop-req: wid=%0d, PC=0x%0h, tmask=%b, x=", $time, CORE_ID, rop_agent_req_if.wid, rop_agent_req_if.PC, rop_agent_req_if.tmask));
-            `TRACE_ARRAY1D(1, rop_agent_req_if.pos_x, `NUM_THREADS);
+        if (rop_agent_if.valid && rop_agent_if.ready) begin
+            `TRACE(1, ("%d: core%0d-rop-req: wid=%0d, PC=0x%0h, tmask=%b, x=", $time, CORE_ID, rop_agent_if.wid, rop_agent_if.PC, rop_agent_if.tmask));
+            `TRACE_ARRAY1D(1, rop_agent_if.pos_x, `NUM_THREADS);
             `TRACE(1, (", y="));
-            `TRACE_ARRAY1D(1, rop_agent_req_if.pos_y, `NUM_THREADS);
+            `TRACE_ARRAY1D(1, rop_agent_if.pos_y, `NUM_THREADS);
             `TRACE(1, (", face="));
-            `TRACE_ARRAY1D(1, rop_agent_req_if.face, `NUM_THREADS);
+            `TRACE_ARRAY1D(1, rop_agent_if.face, `NUM_THREADS);
             `TRACE(1, (", color="));
-            `TRACE_ARRAY1D(1, rop_agent_req_if.color, `NUM_THREADS);
+            `TRACE_ARRAY1D(1, rop_agent_if.color, `NUM_THREADS);
             `TRACE(1, (", depth="));
-            `TRACE_ARRAY1D(1, rop_agent_req_if.depth, `NUM_THREADS);
-            `TRACE(1, (", face=%b (#%0d)\n", rop_agent_req_if.face, rop_agent_req_if.uuid));
+            `TRACE_ARRAY1D(1, rop_agent_if.depth, `NUM_THREADS);
+            `TRACE(1, (", face=%b (#%0d)\n", rop_agent_if.face, rop_agent_if.uuid));
         end
     end
 `endif

@@ -300,8 +300,8 @@
 `endif
 
 // Size of FPU Request Queue
-`ifndef FPUQ_SIZE
-`define FPUQ_SIZE `MAX(2, `NUM_WARPS * 2)
+`ifndef FPU_REQ_QUEUE_SIZE
+`define FPU_REQ_QUEUE_SIZE `MAX(2, `NUM_WARPS * 2)
 `endif
 
 // Texture Units ///////////////////////////////////////////////////////////////
@@ -309,6 +309,11 @@
 // Number of texture units
 `ifndef NUM_TEX_UNITS
 `define NUM_TEX_UNITS `UP(`NUM_CORES / 8)
+`endif
+
+// Size of texture Request Queue
+`ifndef TEX_REQ_QUEUE_SIZE
+`define TEX_REQ_QUEUE_SIZE `MAX(2, `NUM_WARPS * 2)
 `endif
 
 // Texture Unit memory pending Queue

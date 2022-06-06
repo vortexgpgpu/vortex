@@ -29,7 +29,7 @@ module VX_tex_arb #(
     localparam LOG_NUM_REQS  = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
     localparam TAG_OUT_WIDTH = TAG_WIDTH + LOG_NUM_REQS;
     localparam REQ_DATAW     = TAG_OUT_WIDTH + NUM_LANES * (1 + 2 * 32 + `TEX_LOD_BITS) + `TEX_STAGE_BITS;
-    localparam RSP_DATAW     = TAG_WIDTH + NUM_LANES * (1 + 32);
+    localparam RSP_DATAW     = TAG_WIDTH + NUM_LANES * 32;
     
     ///////////////////////////////////////////////////////////////////////
 
@@ -114,7 +114,7 @@ module VX_tex_arb #(
             );
 
             assign rsp_valid_in[i] = rsp_out_if[i].valid;
-            assign rsp_data_in[i] = {rsp_tag_out, rsp_out_if[i].mask, rsp_out_if[i].texels};
+            assign rsp_data_in[i] = {rsp_tag_out, rsp_out_if[i].texels};
             assign rsp_out_if[i].ready = rsp_ready_in[i];
 
             if (NUM_INPUTS > 1) begin
@@ -145,7 +145,7 @@ module VX_tex_arb #(
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
             assign rsp_valid_in[i] = rsp_out_if[i].valid;        
-            assign rsp_data_in[i]  = {rsp_out_if[i].tag, rsp_out_if[i].mask, rsp_out_if[i].texels};
+            assign rsp_data_in[i]  = {rsp_out_if[i].tag, rsp_out_if[i].texels};
             assign rsp_out_if[i].ready = rsp_ready_in[i];
         end
 
@@ -170,7 +170,7 @@ module VX_tex_arb #(
     
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin
         assign rsp_in_if[i].valid = rsp_valid_out[i];
-        assign {rsp_in_if[i].tag, rsp_in_if[i].mask, rsp_in_if[i].texels} = rsp_data_out[i];        
+        assign {rsp_in_if[i].tag,rsp_in_if[i].texels} = rsp_data_out[i];        
         assign rsp_ready_out[i] = rsp_in_if[i].ready;
     end
 

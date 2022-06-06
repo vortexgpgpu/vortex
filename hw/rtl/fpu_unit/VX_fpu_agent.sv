@@ -21,8 +21,7 @@ module VX_fpu_agent #(
     input wire[`NUM_WARPS-1:0] csr_pending,
     output wire[`NUM_WARPS-1:0] req_pending
 ); 
-    `UNUSED_PARAM (CORE_ID)    
-    localparam FPUQ_BITS = `LOG2UP(`FPUQ_SIZE);
+    // Store request metadata
 
     wire [`UUID_BITS-1:0]   rsp_uuid;
     wire [`UP(`NW_BITS)-1:0] rsp_wid;
@@ -30,28 +29,28 @@ module VX_fpu_agent #(
     wire [31:0]             rsp_PC;
     wire [`NR_BITS-1:0]     rsp_rd;
 
-    wire [FPUQ_BITS-1:0] req_tag, rsp_tag;    
-    wire fpuq_full;
+    wire [`FPU_REQ_TAG_WIDTH-1:0] req_tag, rsp_tag;    
+    wire mdata_full;
 
-    wire fpuq_push = fpu_agent_if.valid && fpu_agent_if.ready;
-    wire fpuq_pop  = fpu_rsp_if.valid && fpu_rsp_if.ready;
+    wire mdata_push = fpu_agent_if.valid && fpu_agent_if.ready;
+    wire mdata_pop  = fpu_rsp_if.valid && fpu_rsp_if.ready;
 
     assign rsp_tag = fpu_rsp_if.tag;
 
     VX_index_buffer #(
         .DATAW   (`UUID_BITS + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS),
-        .SIZE    (`FPUQ_SIZE)
-    ) req_metadata  (
+        .SIZE    (`FPU_REQ_QUEUE_SIZE)
+    ) metadata_store  (
         .clk          (clk),
         .reset        (reset),
-        .acquire_slot (fpuq_push),       
+        .acquire_slot (mdata_push),       
         .write_addr   (req_tag),                
         .read_addr    (rsp_tag),
         .release_addr (rsp_tag),        
         .write_data   ({fpu_agent_if.uuid, fpu_agent_if.wid, fpu_agent_if.tmask, fpu_agent_if.PC, fpu_agent_if.rd}),                    
         .read_data    ({rsp_uuid,          rsp_wid,          rsp_tmask,          rsp_PC,          rsp_rd}), 
-        .release_slot (fpuq_pop),     
-        .full         (fpuq_full),
+        .release_slot (mdata_pop),     
+        .full         (mdata_full),
         `UNUSED_PIN (empty)
     );
 
@@ -60,16 +59,16 @@ module VX_fpu_agent #(
     assign fpu_to_csr_if.read_wid = fpu_agent_if.wid;    
     assign req_frm = (fpu_agent_if.op_mod == `INST_FRM_DYN) ? fpu_to_csr_if.read_frm : fpu_agent_if.op_mod;
 
-    wire fpuq_and_csr_ready = ~fpuq_full && !csr_pending[fpu_agent_if.wid];
-
-    wire valid_in, ready_in;    
-    assign valid_in = fpu_agent_if.valid && fpuq_and_csr_ready;
-    assign fpu_agent_if.ready = ready_in && fpuq_and_csr_ready;    
-
     // submit FPU request
 
+    wire mdata_and_csr_ready = ~mdata_full && !csr_pending[fpu_agent_if.wid];
+
+    wire valid_in, ready_in;    
+    assign valid_in = fpu_agent_if.valid && mdata_and_csr_ready;
+    assign fpu_agent_if.ready = ready_in && mdata_and_csr_ready;    
+
     VX_skid_buffer #(
-        .DATAW (`INST_FPU_BITS + `INST_FRM_BITS + `NUM_THREADS * 3 * 32 + FPUQ_BITS)
+        .DATAW (`INST_FPU_BITS + `INST_FRM_BITS + `NUM_THREADS * 3 * 32 + `FPU_REQ_TAG_WIDTH)
     ) req_sbuf (
         .clk       (clk),
         .reset     (reset),
