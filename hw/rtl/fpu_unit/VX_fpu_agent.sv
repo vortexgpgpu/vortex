@@ -18,7 +18,7 @@ module VX_fpu_agent #(
     VX_fpu_req_if.master    fpu_req_if,
     VX_fpu_rsp_if.slave     fpu_rsp_if,
 
-    input wire[`NUM_WARPS-1:0] csr_pending,
+    input wire[`NUM_WARPS-1:0]  csr_pending,
     output wire[`NUM_WARPS-1:0] req_pending
 ); 
     // Store request metadata
@@ -61,7 +61,7 @@ module VX_fpu_agent #(
 
     // submit FPU request
 
-    wire mdata_and_csr_ready = ~mdata_full && !csr_pending[fpu_agent_if.wid];
+    wire mdata_and_csr_ready = ~mdata_full && ~csr_pending[fpu_agent_if.wid];
 
     wire valid_in, ready_in;    
     assign valid_in = fpu_agent_if.valid && mdata_and_csr_ready;

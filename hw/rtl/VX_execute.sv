@@ -81,6 +81,9 @@ module VX_execute #(
     output wire             sim_ebreak
 );
 
+    wire [`NUM_WARPS-1:0] gpu_pending;
+    wire [`NUM_WARPS-1:0] csr_pending;
+
 `ifdef EXT_TEX_ENABLE
     VX_gpu_csr_if tex_csr_if();
 `endif
@@ -94,7 +97,6 @@ module VX_execute #(
 `endif
 
 `ifdef EXT_F_ENABLE
-    wire [`NUM_WARPS-1:0] csr_pending;
     wire [`NUM_WARPS-1:0] fpu_pending;
     VX_fpu_to_csr_if fpu_to_csr_if();
 `endif
@@ -137,10 +139,12 @@ module VX_execute #(
         .perf_memsys_if (perf_memsys_if),
         .perf_pipeline_if(perf_pipeline_if),
     `endif
+
+        .gpu_pending    (gpu_pending),
     
     `ifdef EXT_F_ENABLE  
         .fpu_to_csr_if  (fpu_to_csr_if),
-        .fpu_pending    (fpu_pending),        
+        .fpu_pending    (fpu_pending),   
         .req_pending    (csr_pending),
     `else
         `UNUSED_PIN     (req_pending),
@@ -220,13 +224,16 @@ module VX_execute #(
     `endif
     
         .warp_ctl_if    (warp_ctl_if),
-        .gpu_commit_if  (gpu_commit_if)
+        .gpu_commit_if  (gpu_commit_if),
+
+        .csr_pending    (csr_pending),
+        .req_pending    (gpu_pending) 
     );
 
     // simulation helper signal to get RISC-V tests Pass/Fail status
     assign sim_ebreak = alu_req_if.valid && alu_req_if.ready
-                 && `INST_ALU_IS_BR(alu_req_if.op_mod)
-                 && (`INST_BR_BITS'(alu_req_if.op_type) == `INST_BR_EBREAK 
-                  || `INST_BR_BITS'(alu_req_if.op_type) == `INST_BR_ECALL);
+                     && `INST_ALU_IS_BR(alu_req_if.op_mod)
+                     && (`INST_BR_BITS'(alu_req_if.op_type) == `INST_BR_EBREAK
+                      || `INST_BR_BITS'(alu_req_if.op_type) == `INST_BR_ECALL);
 
 endmodule

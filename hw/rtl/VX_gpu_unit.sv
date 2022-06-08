@@ -34,7 +34,10 @@ module VX_gpu_unit #(
 
     // Outputs
     VX_warp_ctl_if.master warp_ctl_if,
-    VX_commit_if.master gpu_commit_if
+    VX_commit_if.master gpu_commit_if,
+
+    input wire[`NUM_WARPS-1:0]  csr_pending,
+    output wire[`NUM_WARPS-1:0] req_pending
 );
     `UNUSED_PARAM (CORE_ID)
 
@@ -45,6 +48,12 @@ module VX_gpu_unit #(
 
     wire [RSP_DATAW-1:0] rsp_data;
     wire                 rsp_is_wctl;
+
+    wire gpu_req_valid;
+    reg gpu_req_ready;
+
+    wire csr_ready = ~csr_pending[gpu_req_if.wid];
+    wire gpu_req_valid = gpu_req_if.valid && csr_ready;
 
     // Warp control block
 
@@ -105,7 +114,7 @@ module VX_gpu_unit #(
     assign barrier.size_m1 = `UP(`NW_BITS)'(rs2_data - 1);       
 
     // Warp control response
-    wire wctl_req_valid = gpu_req_if.valid & (is_wspawn | is_tmc | is_split | is_join | is_bar | is_pred);
+    wire wctl_req_valid = gpu_req_valid & (is_wspawn | is_tmc | is_split | is_join | is_bar | is_pred);
     wire wctl_rsp_valid = wctl_req_valid;
     wire [WCTL_DATAW-1:0] wctl_rsp_data = {tmc, wspawn, split, barrier};
     wire wctl_rsp_ready;
@@ -120,7 +129,7 @@ module VX_gpu_unit #(
     VX_tex_agent_if tex_agent_if();
     VX_commit_if    tex_commit_if();
 
-    assign tex_agent_if.valid = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_TEX);
+    assign tex_agent_if.valid = gpu_req_valid && (gpu_req_if.op_type == `INST_GPU_TEX);
     assign tex_agent_if.uuid  = gpu_req_if.uuid;
     assign tex_agent_if.wid   = gpu_req_if.wid;
     assign tex_agent_if.tmask = gpu_req_if.tmask;
@@ -152,7 +161,7 @@ module VX_gpu_unit #(
     VX_raster_agent_if raster_agent_if();
     VX_commit_if       raster_commit_if();
 
-    assign raster_agent_if.valid = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_RASTER);
+    assign raster_agent_if.valid = gpu_req_valid && (gpu_req_if.op_type == `INST_GPU_RASTER);
     assign raster_agent_if.uuid  = gpu_req_if.uuid;
     assign raster_agent_if.wid   = gpu_req_if.wid;
     assign raster_agent_if.tmask = gpu_req_if.tmask;
@@ -176,7 +185,7 @@ module VX_gpu_unit #(
     VX_rop_agent_if rop_agent_if();
     VX_commit_if    rop_commit_if();
 
-    assign rop_agent_if.valid = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_ROP);
+    assign rop_agent_if.valid = gpu_req_valid && (gpu_req_if.op_type == `INST_GPU_ROP);
     assign rop_agent_if.uuid  = gpu_req_if.uuid;
     assign rop_agent_if.wid   = gpu_req_if.wid;
     assign rop_agent_if.tmask = gpu_req_if.tmask;
@@ -216,7 +225,7 @@ module VX_gpu_unit #(
     wire [`NUM_THREADS-1:0][31:0] imadd_data_out;
     wire                          imadd_ready_out;
 
-    assign imadd_valid_in = gpu_req_if.valid && (gpu_req_if.op_type == `INST_GPU_IMADD);
+    assign imadd_valid_in = gpu_req_valid && (gpu_req_if.op_type == `INST_GPU_IMADD);
 
     VX_imadd #(
         .NUM_LANES  (`NUM_THREADS),
@@ -248,7 +257,6 @@ module VX_gpu_unit #(
 
     // can accept new request?
     
-    reg gpu_req_ready;
     always @(*) begin
         case (gpu_req_if.op_type)
     `ifdef EXT_TEX_ENABLE
@@ -266,7 +274,7 @@ module VX_gpu_unit #(
         default: gpu_req_ready = wctl_req_ready;
         endcase
     end   
-    assign gpu_req_if.ready = gpu_req_ready;
+    assign gpu_req_if.ready = gpu_req_ready && csr_ready;
 
     // response arbitration
 
@@ -342,5 +350,22 @@ module VX_gpu_unit #(
     `SCOPE_ASSIGN (gpu_rsp_wspawn, warp_ctl_if.wspawn.valid);          
     `SCOPE_ASSIGN (gpu_rsp_split, warp_ctl_if.split.valid);
     `SCOPE_ASSIGN (gpu_rsp_barrier, warp_ctl_if.barrier.valid);
+
+    // pending request
+
+    reg [`NUM_WARPS-1:0] req_pending_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            req_pending_r <= 0;
+        end else begin                      
+            if (gpu_req_if.valid && gpu_req_if.ready) begin
+                 req_pending_r[gpu_req_if.wid] <= 1;
+            end
+            if (gpu_commit_if.valid && gpu_commit_if.ready) begin
+                 req_pending_r[gpu_commit_if.wid] <= 0;
+            end
+        end
+    end
+    assign req_pending = req_pending_r;
 
 endmodule

@@ -49,6 +49,7 @@ module VX_csr_unit #(
     VX_fpu_to_csr_if.slave      fpu_to_csr_if,
     input wire[`NUM_WARPS-1:0]  fpu_pending,
 `endif
+    input wire[`NUM_WARPS-1:0]  gpu_pending,
 
     output wire[`NUM_WARPS-1:0] req_pending
 );    
@@ -157,7 +158,8 @@ module VX_csr_unit #(
     end         
 
 `ifdef EXT_F_ENABLE
-    wire stall_in = fpu_pending[csr_req_if.wid];
+    wire stall_in = fpu_pending[csr_req_if.wid] 
+                 || gpu_pending[csr_req_if.wid];
 `else 
     wire stall_in = 0;
 `endif
