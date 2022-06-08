@@ -68,7 +68,8 @@ module VX_fpu_agent #(
     assign fpu_agent_if.ready = ready_in && mdata_and_csr_ready;    
 
     VX_skid_buffer #(
-        .DATAW (`INST_FPU_BITS + `INST_FRM_BITS + `NUM_THREADS * 3 * 32 + `FPU_REQ_TAG_WIDTH)
+        .DATAW   (`INST_FPU_BITS + `INST_FRM_BITS + `NUM_THREADS * 3 * 32 + `FPU_REQ_TAG_WIDTH),
+        .OUT_REG (1)
     ) req_sbuf (
         .clk       (clk),
         .reset     (reset),

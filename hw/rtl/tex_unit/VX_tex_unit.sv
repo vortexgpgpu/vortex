@@ -179,7 +179,8 @@ module VX_tex_unit #(
     );
 
     VX_skid_buffer #(
-        .DATAW (NUM_LANES * 32 + TAG_WIDTH)
+        .DATAW   (NUM_LANES * 32 + TAG_WIDTH),
+        .OUT_REG (1)
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),

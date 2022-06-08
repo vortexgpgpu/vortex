@@ -32,7 +32,7 @@ module VX_raster_csr #(
             .LUTRAM      (1),
             .INIT_ENABLE (1),
             .INIT_VALUE  (0)
-        ) dp_ram (
+        ) stamp_store (
             .clk   (clk),
             .wren  (wren[i]),
             .waddr (waddr),

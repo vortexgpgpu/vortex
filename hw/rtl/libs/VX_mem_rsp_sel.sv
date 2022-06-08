@@ -39,12 +39,12 @@ input wire                              clk,
             .NUM_REQS    (NUM_REQS),
             .LOCK_ENABLE (1)
         ) arbiter (
-            .clk          (clk),
-            .reset        (reset),
-            .unlock       (rsp_fire),
-            .requests     (rsp_valid_in), 
-            .grant_valid  (grant_valid),
-            .grant_index  (grant_index),
+            .clk         (clk),
+            .reset       (reset),
+            .unlock      (rsp_fire),
+            .requests    (rsp_valid_in), 
+            .grant_valid (grant_valid),
+            .grant_index (grant_index),
             `UNUSED_PIN (grant_onehot)            
         );
 
@@ -88,10 +88,10 @@ input wire                              clk,
     end else begin
 
         assign rsp_valid_out = rsp_valid_in;
-        assign rsp_mask_out = 1'b1;
+        assign rsp_mask_out  = 1'b1;
         assign rsp_tag_out   = rsp_tag_in;
         assign rsp_data_out  = rsp_data_in;
-        assign rsp_ready_in = rsp_ready_out;
+        assign rsp_ready_in  = rsp_ready_out;
 
     end
 

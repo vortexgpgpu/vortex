@@ -706,11 +706,6 @@
 `define SMEM_CREQ_SIZE 2
 `endif
 
-// Core Response Queue Size
-`ifndef SMEM_CRSQ_SIZE
-`define SMEM_CRSQ_SIZE 2
-`endif
-
 // L2cache Configurable Knobs /////////////////////////////////////////////////
 
 // Size of cache in bytes

@@ -187,7 +187,7 @@ module VX_mem_unit # (
             .TAG_WIDTH    (DCACHE_TAG_WIDTH),
             .TAG_SEL_IDX  (0),
             .ARBITER      ("P"),
-            .BUFFERED_REQ (1),
+            .BUFFERED_REQ (3),
             .BUFFERED_RSP (1)
         ) dcache_nosm_switch (
             .clk        (clk),
@@ -264,8 +264,8 @@ module VX_mem_unit # (
         .NUM_BANKS  (`SMEM_NUM_BANKS),
         .WORD_SIZE  (DCACHE_WORD_SIZE),
         .ADDR_WIDTH (SMEM_ADDR_WIDTH),
-        .CREQ_SIZE  (`SMEM_CREQ_SIZE),
-        .CRSQ_SIZE  (`SMEM_CRSQ_SIZE),
+        .REQ_SIZE   (`SMEM_CREQ_SIZE),
+        .OUT_REG    (2),
         .UUID_WIDTH (`UUID_BITS), 
         .TAG_WIDTH  (DCACHE_SM_TAG_WIDTH)
     ) smem (            

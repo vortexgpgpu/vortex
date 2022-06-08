@@ -437,14 +437,14 @@ VX_mem_rsp_if #(
   .TAG_WIDTH  (AVS_REQ_TAGW)
 ) cci_vx_mem_rsp_if[1:0]();
 
-VX_to_mem #(
+VX_mem_adapter #(
   .SRC_DATA_WIDTH (CCI_DATA_WIDTH), 
   .DST_DATA_WIDTH (LMEM_DATA_WIDTH), 
   .SRC_ADDR_WIDTH (CCI_ADDR_WIDTH),  
   .DST_ADDR_WIDTH (LMEM_ADDR_WIDTH),         
   .SRC_TAG_WIDTH  (CCI_ADDR_WIDTH),
   .DST_TAG_WIDTH  (AVS_REQ_TAGW)
-) cci_to_mem (
+) cci_mem_adapter (
   .clk                (clk),
   .reset              (reset),
 
@@ -485,14 +485,14 @@ assign vx_mem_req_valid_qual = vx_mem_req_valid && vx_started;
 
 assign vx_mem_req_ready = vx_mem_is_cout ? ~cout_q_full : vx_mem_req_ready_qual;
 
-VX_to_mem #(
+VX_mem_adapter #(
   .SRC_DATA_WIDTH (`VX_MEM_DATA_WIDTH),
   .DST_DATA_WIDTH (LMEM_DATA_WIDTH),  
   .SRC_ADDR_WIDTH (`VX_MEM_ADDR_WIDTH),    
   .DST_ADDR_WIDTH (LMEM_ADDR_WIDTH),
   .SRC_TAG_WIDTH  (`VX_MEM_TAG_WIDTH),
   .DST_TAG_WIDTH  (AVS_REQ_TAGW)
-) vx_to_mem (
+) vx_mem_adapter (
   .clk                (clk),
   .reset              (reset),
 

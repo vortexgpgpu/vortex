@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_to_mem #(
+module VX_mem_adapter #(
     parameter SRC_DATA_WIDTH = 1, 
     parameter SRC_ADDR_WIDTH = 1,            
     parameter DST_DATA_WIDTH = 1, 

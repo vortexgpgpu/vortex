@@ -107,8 +107,8 @@ module VX_cache_cluster #(
         .DATA_SIZE    (WORD_SIZE),
         .TAG_WIDTH    (TAG_WIDTH),
         .TAG_SEL_IDX  (TAG_SEL_IDX),
-        .BUFFERED_REQ ((NUM_INPUTS != `UP(NUM_UNITS)) ? 1 : 0),
-        .BUFFERED_RSP ((NUM_INPUTS != `UP(NUM_UNITS)) ? 1 : 0)
+        .BUFFERED_REQ ((NUM_INPUTS != `UP(NUM_UNITS)) ? 2 : 0),
+        .BUFFERED_RSP ((NUM_INPUTS != `UP(NUM_UNITS)) ? 2 : 0)
     ) cache_arb (
         .clk        (clk),
         .reset      (reset),
@@ -157,6 +157,8 @@ module VX_cache_cluster #(
             .WRITE_ENABLE (WRITE_ENABLE),
             .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (ARB_TAG_WIDTH),
+            .CORE_OUT_REG (3),
+            .MEM_OUT_REG  (2),
             .NC_ENABLE    (NC_ENABLE),
             .PASSTHRU     (PASSTHRU)
         ) cache (
@@ -179,7 +181,7 @@ module VX_cache_cluster #(
         .DATA_WIDTH   (`LINE_WIDTH),
         .TAG_WIDTH    (MEM_TAG_WIDTH),
         .TAG_SEL_IDX  (1), // Skip 0 for NC flag
-        .BUFFERED_REQ ((`UP(NUM_UNITS) > 1) ? 1 : 0),
+        .BUFFERED_REQ ((`UP(NUM_UNITS) > 1) ? 2 : 0),
         .BUFFERED_RSP ((`UP(NUM_UNITS) > 1) ? 2 : 0)
     ) mem_arb (
         .clk        (clk),

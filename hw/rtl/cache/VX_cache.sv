@@ -40,10 +40,10 @@ module VX_cache #(
     parameter TAG_WIDTH             = UUID_WIDTH + 1,
 
     // Core response output register
-    parameter CORE_OUT_REG          = (NUM_BANKS > 1),
+    parameter CORE_OUT_REG          = 0,
 
     // Memory request output register
-    parameter MEM_OUT_REG           = (NUM_BANKS > 1)
+    parameter MEM_OUT_REG           = 0
  ) (    
     // PERF
 `ifdef PERF_ENABLE
@@ -74,6 +74,9 @@ module VX_cache #(
     localparam MSHR_ADDR_WIDTH = `LOG2UP(MSHR_SIZE);
     localparam MEM_TAG_WIDTH   = MSHR_ADDR_WIDTH + `BANK_SEL_BITS;
 
+    localparam CORE_REQ_BUF_ENABLE = (1 != NUM_BANKS) || (1 != NUM_REQS);
+    localparam MEM_REQ_BUF_ENABLE  = (1 != NUM_BANKS);
+
 `ifdef PERF_ENABLE
     wire [NUM_BANKS-1:0] perf_read_miss_per_bank;
     wire [NUM_BANKS-1:0] perf_write_miss_per_bank;
@@ -100,31 +103,6 @@ module VX_cache #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    // Memory request buffering
-    wire                             mem_req_valid_s;
-    wire                             mem_req_rw_s;
-    wire [LINE_SIZE-1:0]             mem_req_byteen_s;
-    wire [`MEM_ADDR_WIDTH-1:0]       mem_req_addr_s;
-    wire [`LINE_WIDTH-1:0]           mem_req_data_s;
-    wire [MEM_TAG_WIDTH-1:0]         mem_req_tag_s;
-    wire                             mem_req_ready_s;
-
-    VX_skid_buffer #(
-        .DATAW    (1 + LINE_SIZE + `MEM_ADDR_WIDTH + `LINE_WIDTH + MEM_TAG_WIDTH),
-        .PASSTHRU (MEM_OUT_REG)
-    ) mem_req_sbuf (
-        .clk       (clk),
-        .reset     (reset),
-        .valid_in  (mem_req_valid_s),        
-        .ready_in  (mem_req_ready_s),      
-        .data_in   ({mem_req_rw_s,  mem_req_byteen_s,  mem_req_addr_s,  mem_req_data_s,  mem_req_tag_s}),
-        .data_out  ({mem_req_if.rw, mem_req_if.byteen, mem_req_if.addr, mem_req_if.data, mem_req_if.tag}),        
-        .valid_out (mem_req_if.valid),        
-        .ready_out (mem_req_if.ready)
-    );
-
-    ///////////////////////////////////////////////////////////////////////////
-
     // Core response buffering
     wire [NUM_REQS-1:0]                  core_rsp_valid_s;
     wire [NUM_REQS-1:0][`WORD_WIDTH-1:0] core_rsp_data_s;
@@ -132,9 +110,10 @@ module VX_cache #(
     wire [NUM_REQS-1:0]                  core_rsp_ready_s;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        VX_skid_buffer #(
-            .DATAW    (`WORD_WIDTH + TAG_WIDTH),
-            .PASSTHRU (CORE_OUT_REG)
+        VX_generic_buffer #(
+            .DATAW   (`WORD_WIDTH + TAG_WIDTH),
+            .SKID    (CORE_REQ_BUF_ENABLE && (CORE_OUT_REG >> 1) != 1),
+            .OUT_REG (CORE_REQ_BUF_ENABLE && (CORE_OUT_REG & 1) != 1)
         ) core_rsp_sbuf (
             .clk       (clk),
             .reset     (reset),
@@ -146,6 +125,32 @@ module VX_cache #(
             .ready_out (core_rsp_if[i].ready)
         );
     end
+
+    ///////////////////////////////////////////////////////////////////////////
+
+    // Memory request buffering
+    wire                             mem_req_valid_s;
+    wire                             mem_req_rw_s;
+    wire [LINE_SIZE-1:0]             mem_req_byteen_s;
+    wire [`MEM_ADDR_WIDTH-1:0]       mem_req_addr_s;
+    wire [`LINE_WIDTH-1:0]           mem_req_data_s;
+    wire [MEM_TAG_WIDTH-1:0]         mem_req_tag_s;
+    wire                             mem_req_ready_s;
+
+    VX_generic_buffer #(
+        .DATAW   (1 + LINE_SIZE + `MEM_ADDR_WIDTH + `LINE_WIDTH + MEM_TAG_WIDTH),
+        .SKID    (MEM_REQ_BUF_ENABLE && (MEM_OUT_REG >> 1) != 1),
+        .OUT_REG (MEM_REQ_BUF_ENABLE && (MEM_OUT_REG & 1) != 1)
+    ) mem_req_sbuf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (mem_req_valid_s),        
+        .ready_in  (mem_req_ready_s),      
+        .data_in   ({mem_req_rw_s,  mem_req_byteen_s,  mem_req_addr_s,  mem_req_data_s,  mem_req_tag_s}),
+        .data_out  ({mem_req_if.rw, mem_req_if.byteen, mem_req_if.addr, mem_req_if.data, mem_req_if.tag}),        
+        .valid_out (mem_req_if.valid),        
+        .ready_out (mem_req_if.ready)
+    );
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -363,7 +368,9 @@ module VX_cache #(
             .MREQ_SIZE    (MREQ_SIZE),
             .WRITE_ENABLE (WRITE_ENABLE),
             .UUID_WIDTH   (UUID_WIDTH),
-            .TAG_WIDTH    (TAG_WIDTH)
+            .TAG_WIDTH    (TAG_WIDTH),
+            .CORE_OUT_REG (CORE_REQ_BUF_ENABLE ? 0 : CORE_OUT_REG),
+            .MEM_OUT_REG  (MEM_REQ_BUF_ENABLE ? 0 : MEM_OUT_REG)
         ) bank (          
             .clk                (clk),
             .reset              (bank_reset),
@@ -426,8 +433,6 @@ module VX_cache #(
         .WORD_SIZE (WORD_SIZE),
         .TAG_WIDTH (TAG_WIDTH)
     ) rsp_merge (
-        .clk                     (clk),
-        .reset                   (reset),                    
         .per_bank_core_rsp_valid (per_bank_core_rsp_valid),   
         .per_bank_core_rsp_pmask (per_bank_core_rsp_pmask),   
         .per_bank_core_rsp_data  (per_bank_core_rsp_data),

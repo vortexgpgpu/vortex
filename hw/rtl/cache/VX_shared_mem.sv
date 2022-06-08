@@ -1,31 +1,33 @@
 `include "VX_define.vh"
 
 module VX_shared_mem #(
-    parameter string  IDNAME                = "",
+    parameter string  IDNAME    = "",
 
     // Size of cache in bytes
-    parameter SIZE                          = (1024*16), 
+    parameter SIZE              = (1024*16), 
     
     // Number of Word requests per cycle
-    parameter NUM_REQS                      = 4, 
+    parameter NUM_REQS          = 4, 
     // Number of banks
-    parameter NUM_BANKS                     = 2,
+    parameter NUM_BANKS         = 2,
 
     // Address width
-    parameter ADDR_WIDTH                    = 8,
+    parameter ADDR_WIDTH        = 8,
     // Size of a word in bytes
-    parameter WORD_SIZE                     = 4, 
+    parameter WORD_SIZE         = 4, 
 
-    // Core Request Queue Size
-    parameter CREQ_SIZE                     = 2,
-    // Core Response Queue Size
-    parameter CRSQ_SIZE                     = 2,
+    // Request Queue Size
+    parameter REQ_SIZE          = 2,
 
     // Request debug identifier
-    parameter UUID_WIDTH                    = 0,
+    parameter UUID_WIDTH        = 0,
 
-    // core request tag size
-    parameter TAG_WIDTH                     = UUID_WIDTH + 1,
+    // Request tag size
+    parameter TAG_WIDTH         = UUID_WIDTH + 1,
+
+    // Response output register
+    parameter OUT_REG           = 0,
+
 
     localparam WORD_WIDTH = WORD_SIZE * 8
  ) (    
@@ -126,7 +128,7 @@ module VX_shared_mem #(
 
     VX_elastic_buffer #(
         .DATAW   (NUM_BANKS * (1 + 1 + BANK_ADDR_WIDTH + WORD_SIZE + WORD_WIDTH + TAG_WIDTH + `UP(REQ_SEL_BITS))), 
-        .SIZE    (CREQ_SIZE),
+        .SIZE    (REQ_SIZE),
         .OUT_REG (1)   // output should be registered for the data_store addr port
     ) req_queue (
         .clk        (clk),
@@ -218,27 +220,46 @@ module VX_shared_mem #(
         assign per_bank_rsp_idx[i]   = per_bank_req_idx[i];
     end
 
+    wire [NUM_REQS-1:0]                 rsp_valid_s;
+    wire [NUM_REQS-1:0][WORD_WIDTH-1:0] rsp_data_s;
+    wire [NUM_REQS-1:0][TAG_WIDTH-1:0]  rsp_tag_s;
+    wire [NUM_REQS-1:0]                 rsp_ready_s;
+
     VX_rsp_merge #(
         .NUM_REQS  (NUM_REQS),
         .NUM_BANKS (NUM_BANKS),
         .NUM_PORTS (1),
         .WORD_SIZE (WORD_SIZE),        
-        .TAG_WIDTH (TAG_WIDTH),
-        .OUT_REG   (NUM_BANKS >= 2)
+        .TAG_WIDTH (TAG_WIDTH)
     ) rsp_merge (
-        .clk                     (clk),
-        .reset                   (reset),                    
         .per_bank_core_rsp_valid (per_bank_rsp_valid),   
         .per_bank_core_rsp_pmask (per_bank_rsp_pmask),   
         .per_bank_core_rsp_data  (per_bank_rsp_data),
         .per_bank_core_rsp_tag   (per_bank_rsp_tag),
         .per_bank_core_rsp_idx   (per_bank_rsp_idx),   
         .per_bank_core_rsp_ready (per_bank_rsp_ready),
-        .core_rsp_valid          (rsp_valid),
-        .core_rsp_tag            (rsp_tag),
-        .core_rsp_data           (rsp_data),  
-        .core_rsp_ready          (rsp_ready)
+        .core_rsp_valid          (rsp_valid_s),
+        .core_rsp_tag            (rsp_tag_s),
+        .core_rsp_data           (rsp_data_s),  
+        .core_rsp_ready          (rsp_ready_s)
     );
+
+    for (genvar i = 0; i < NUM_REQS; ++i) begin
+        VX_generic_buffer #(
+            .DATAW   (WORD_WIDTH + TAG_WIDTH),
+            .SKID    (OUT_REG >> 1),
+            .OUT_REG (OUT_REG & 1)
+        ) rsp_sbuf (
+            .clk       (clk),
+            .reset     (reset),
+            .valid_in  (rsp_valid_s[i]),
+            .ready_in  (rsp_ready_s[i]),
+            .data_in   ({rsp_data_s[i], rsp_tag_s[i]}),
+            .data_out  ({rsp_data[i], rsp_tag[i]}), 
+            .valid_out (rsp_valid[i]),
+            .ready_out (rsp_ready[i])
+        );
+    end
 
 `ifdef PERF_ENABLE
     // per cycle: reads, writes
