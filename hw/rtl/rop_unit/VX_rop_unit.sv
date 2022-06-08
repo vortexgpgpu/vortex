@@ -280,9 +280,9 @@ module VX_rop_unit #(
     wire [$clog2(OCACHE_NUM_REQS+1)-1:0] perf_mem_rsp_per_cycle;
     wire [$clog2(OCACHE_NUM_REQS+1)+1-1:0] perf_pending_reads_cycle;
 
-    wire [`OCACHE_NUM_REQS-1:0] perf_mem_rd_req_per_mask = cache_req_if.valid & ~cache_req_if.rw & cache_req_if.ready;
-    wire [`OCACHE_NUM_REQS-1:0] perf_mem_wr_req_per_mask = cache_req_if.valid & cache_req_if.rw & cache_req_if.ready;
-    wire [`OCACHE_NUM_REQS-1:0] perf_mem_rsp_per_mask    = cache_rsp_if.valid & cache_rsp_if.ready;
+    wire [OCACHE_NUM_REQS-1:0] perf_mem_rd_req_per_mask = cache_req_if.valid & ~cache_req_if.rw & cache_req_if.ready;
+    wire [OCACHE_NUM_REQS-1:0] perf_mem_wr_req_per_mask = cache_req_if.valid & cache_req_if.rw & cache_req_if.ready;
+    wire [OCACHE_NUM_REQS-1:0] perf_mem_rsp_per_mask    = cache_rsp_if.valid & cache_rsp_if.ready;
 
     `POP_COUNT(perf_mem_rd_req_per_cycle, perf_mem_rd_req_per_mask);    
     `POP_COUNT(perf_mem_wr_req_per_cycle, perf_mem_wr_req_per_mask);    

@@ -249,8 +249,8 @@ module VX_raster_unit #(
     wire [$clog2(RCACHE_NUM_REQS+1)-1:0] perf_mem_rsp_per_cycle;
     wire [$clog2(RCACHE_NUM_REQS+1)+1-1:0] perf_pending_reads_cycle;
 
-    wire [`RCACHE_NUM_REQS-1:0] perf_mem_req_per_req = cache_req_if.valid & cache_req_if.ready;
-    wire [`RCACHE_NUM_REQS-1:0] perf_mem_rsp_per_req = cache_rsp_if.valid & cache_rsp_if.ready;
+    wire [RCACHE_NUM_REQS-1:0] perf_mem_req_per_req = cache_req_if.valid & cache_req_if.ready;
+    wire [RCACHE_NUM_REQS-1:0] perf_mem_rsp_per_req = cache_rsp_if.valid & cache_rsp_if.ready;
 
     `POP_COUNT(perf_mem_req_per_cycle, perf_mem_req_per_req);
     `POP_COUNT(perf_mem_rsp_per_cycle, perf_mem_rsp_per_req);

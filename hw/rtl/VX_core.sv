@@ -56,10 +56,6 @@ module VX_core #(
 `endif
 `endif
 
-`ifdef PERF_ENABLE
-    VX_perf_memsys_if.slave perf_memsys_if,
-`endif
-
     // simulation helper signals
     output wire             sim_ebreak,
     output wire [`NUM_REGS-1:0][31:0] sim_wb_value,
