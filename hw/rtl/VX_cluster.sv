@@ -652,7 +652,9 @@ module VX_cluster #(
         .MRSQ_SIZE      (`L2_MRSQ_SIZE),
         .MREQ_SIZE      (`L2_MREQ_SIZE),
         .TAG_WIDTH      (L1_MEM_TAG_WIDTH),
-        .WRITE_ENABLE   (1),       
+        .WRITE_ENABLE   (1),
+        .CORE_OUT_REG   (3),
+        .MEM_OUT_REG    (2),
         .UUID_WIDTH     (`UUID_BITS),           
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L2_ENABLED)

@@ -85,7 +85,8 @@ module VX_icache_stage #(
     assign ifetch_req_if.ready = icache_req_ready && ~pending_ibuf_full[ifetch_req_if.wid];
 
     VX_skid_buffer #(
-        .DATAW (ICACHE_ADDR_WIDTH + ICACHE_TAG_WIDTH)
+        .DATAW   (ICACHE_ADDR_WIDTH + ICACHE_TAG_WIDTH),
+        .OUT_REG (1)
     ) req_sbuf (
         .clk       (clk),
         .reset     (reset),

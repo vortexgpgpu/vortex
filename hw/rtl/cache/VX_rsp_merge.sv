@@ -11,15 +11,10 @@ module VX_rsp_merge #(
     parameter WORD_SIZE     = 1, 
     // core request tag size
     parameter TAG_WIDTH     = 1,
-    // output register
-    parameter OUT_REG       = 0,
 
     localparam WORD_WIDTH   = WORD_SIZE * 8,
     localparam REQ_SEL_BITS = `CLOG2(NUM_REQS)
 ) (
-    input wire clk,
-    input wire reset,
-
     // Per Bank WB
     input  wire [NUM_BANKS-1:0]                     per_bank_core_rsp_valid,
     input  wire [NUM_BANKS-1:0][NUM_PORTS-1:0]      per_bank_core_rsp_pmask,
@@ -109,50 +104,27 @@ module VX_rsp_merge #(
             end
         end
 
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
-            VX_skid_buffer #(
-                .DATAW    (WORD_WIDTH + TAG_WIDTH),
-                .PASSTHRU (0 == OUT_REG)
-            ) out_sbuf (
-                .clk       (clk),
-                .reset     (reset),
-                .valid_in  (core_rsp_valid_unqual[i]),                
-                .ready_in  (core_rsp_ready_unqual[i]),
-                .data_in   ({core_rsp_data_unqual[i], core_rsp_tag_unqual[i]}),
-                .data_out  ({core_rsp_data[i],        core_rsp_tag[i]}),
-                .valid_out (core_rsp_valid[i]),                
-                .ready_out (core_rsp_ready[i])
-            );
-        end
+        assign core_rsp_valid = core_rsp_valid_unqual;
+        assign {core_rsp_data, core_rsp_tag} = {core_rsp_data_unqual, core_rsp_tag_unqual};
+        assign core_rsp_ready_unqual = core_rsp_ready;
 
         assign per_bank_core_rsp_ready = per_bank_core_rsp_ready_r;
 
     end else begin
 
-        `UNUSED_VAR (clk)
-        `UNUSED_VAR (reset)
         `UNUSED_VAR (per_bank_core_rsp_pmask)
 
         if (NUM_REQS > 1) begin
 
-            reg [NUM_REQS-1:0]                 core_rsp_valid_unqual;            
-            reg [NUM_REQS-1:0][WORD_WIDTH-1:0] core_rsp_data_unqual;
-            reg [NUM_REQS-1:0][TAG_WIDTH-1:0]  core_rsp_tag_unqual;
-            
+            reg [NUM_REQS-1:0] core_rsp_valid_unqual;            
             always @(*) begin
                 core_rsp_valid_unqual = 0;
                 core_rsp_valid_unqual[per_bank_core_rsp_idx] = per_bank_core_rsp_valid;
-
-                core_rsp_data_unqual = 'x;
-                core_rsp_data_unqual[per_bank_core_rsp_idx] = per_bank_core_rsp_data;
-
-                core_rsp_tag_unqual = 'x;
-                core_rsp_tag_unqual[per_bank_core_rsp_idx] = per_bank_core_rsp_tag;
             end 
 
             assign core_rsp_valid = core_rsp_valid_unqual;
-            assign core_rsp_data  = core_rsp_data_unqual;            
-            assign core_rsp_tag   = core_rsp_tag_unqual;            
+            assign core_rsp_data  = {NUM_REQS{per_bank_core_rsp_data}};
+            assign core_rsp_tag   = {NUM_REQS{per_bank_core_rsp_tag}};           
             assign per_bank_core_rsp_ready = core_rsp_ready[per_bank_core_rsp_idx];
             
         end else begin

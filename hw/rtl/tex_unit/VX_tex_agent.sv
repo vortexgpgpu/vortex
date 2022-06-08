@@ -74,7 +74,8 @@ module VX_tex_agent #(
     assign tex_agent_if.ready = ready_in && ~mdata_full;    
 
     VX_skid_buffer #(
-        .DATAW (`NUM_THREADS * (1 + 2 * 32 + `TEX_LOD_BITS) + `TEX_STAGE_BITS + `TEX_REQ_TAG_WIDTH)
+        .DATAW   (`NUM_THREADS * (1 + 2 * 32 + `TEX_LOD_BITS) + `TEX_STAGE_BITS + `TEX_REQ_TAG_WIDTH),
+        .OUT_REG (1)
     ) req_sbuf (
         .clk       (clk),
         .reset     (reset),
