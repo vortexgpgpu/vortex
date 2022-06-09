@@ -366,42 +366,42 @@ module VX_bank #(
         .UUID_WIDTH  (UUID_WIDTH),
         .TAG_WIDTH   (TAG_WIDTH)
     ) miss_resrv (
-        .clk                (clk),
-        .reset              (reset),
+        .clk            (clk),
+        .reset          (reset),
 
-        .deq_req_uuid       (req_uuid_sel),
-        .lkp_req_uuid       (req_uuid_st0),
-        .rel_req_uuid       (req_uuid_st1),
+        .deq_req_uuid   (req_uuid_sel),
+        .lkp_req_uuid   (req_uuid_st0),
+        .rel_req_uuid   (req_uuid_st1),
 
         // allocate
-        .allocate_valid     (mshr_allocate),
-        .allocate_addr      (addr_st0),
-        .allocate_data      ({wsel_st0, tag_st0, req_idx_st0, pmask_st0}),
-        .allocate_id        (mshr_alloc_id),
-        `UNUSED_PIN         (allocate_ready),
+        .allocate_valid (mshr_allocate),
+        .allocate_addr  (addr_st0),
+        .allocate_data  ({wsel_st0, tag_st0, req_idx_st0, pmask_st0}),
+        .allocate_id    (mshr_alloc_id),
+        `UNUSED_PIN     (allocate_ready),
 
         // lookup
-        .lookup_valid       (mshr_lookup),
-        .lookup_replay      (mshr_replay),
-        .lookup_id          (mshr_alloc_id),
-        .lookup_addr        (addr_st0),
-        .lookup_match       (mshr_pending_st0),
+        .lookup_valid   (mshr_lookup),
+        .lookup_replay  (mshr_replay),
+        .lookup_id      (mshr_alloc_id),
+        .lookup_addr    (addr_st0),
+        .lookup_match   (mshr_pending_st0),
 
         // fill
-        .fill_valid         (mem_rsp_fire),
-        .fill_id            (mem_rsp_id),
-        .fill_addr          (mem_rsp_addr),
+        .fill_valid     (mem_rsp_fire),
+        .fill_id        (mem_rsp_id),
+        .fill_addr      (mem_rsp_addr),
 
         // dequeue
-        .dequeue_valid      (mshr_valid),
-        .dequeue_id         (mshr_dequeue_id),
-        .dequeue_addr       (mshr_addr),
-        .dequeue_data       ({mshr_wsel, mshr_tag, mshr_idx, mshr_pmask}),
-        .dequeue_ready      (mshr_ready),
+        .dequeue_valid  (mshr_valid),
+        .dequeue_id     (mshr_dequeue_id),
+        .dequeue_addr   (mshr_addr),
+        .dequeue_data   ({mshr_wsel, mshr_tag, mshr_idx, mshr_pmask}),
+        .dequeue_ready  (mshr_ready),
 
         // release
-        .release_valid      (mshr_release),
-        .release_id         (mshr_id_st1)
+        .release_valid  (mshr_release),
+        .release_id     (mshr_id_st1)
     );
 
     // Enqueue core response
@@ -425,7 +425,7 @@ module VX_bank #(
         .DATAW   (NUM_PORTS * (TAG_WIDTH + 1 + `WORD_WIDTH + `UP(`REQ_SEL_BITS))),
         .SIZE    (CRSQ_SIZE),
         .OUT_REG (CORE_OUT_REG)
-    ) core_rsp_req (
+    ) core_rsp_queue (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (crsq_valid),        

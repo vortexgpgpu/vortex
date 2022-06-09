@@ -58,8 +58,10 @@ module VX_skid_buffer #(
                 if (fire_in) begin
                     buffer <= data_in;
                 end
-                if (~stall_out) begin
-                    data_out_r <= use_buffer ? buffer : data_in;
+                if (~stall_out && ~use_buffer) begin
+                    data_out_r <= data_in;                    
+                end else if (ready_out) begin
+                    data_out_r <= buffer;
                 end
             end
 
