@@ -35,7 +35,7 @@ input wire                              clk,
         wire grant_valid;
         wire rsp_fire;
 
-        VX_prioriry_arbiter #(
+        VX_priority_arbiter #(
             .NUM_REQS (NUM_REQS)
         ) arbiter (
             .clk         (clk),
