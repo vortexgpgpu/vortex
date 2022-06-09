@@ -74,8 +74,8 @@ module VX_cache #(
     localparam MSHR_ADDR_WIDTH = `LOG2UP(MSHR_SIZE);
     localparam MEM_TAG_WIDTH   = MSHR_ADDR_WIDTH + `BANK_SEL_BITS;
 
-    localparam CORE_REQ_BUF_ENABLE = (1 != NUM_BANKS) || (1 != NUM_REQS);
-    localparam MEM_REQ_BUF_ENABLE  = (1 != NUM_BANKS);
+    localparam CORE_REQ_BUF_ENABLE = (NUM_BANKS != 1) || (NUM_REQS != 1);
+    localparam MEM_REQ_BUF_ENABLE  = (NUM_BANKS != 1);
 
 `ifdef PERF_ENABLE
     wire [NUM_BANKS-1:0] perf_read_miss_per_bank;
@@ -112,8 +112,8 @@ module VX_cache #(
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         VX_generic_buffer #(
             .DATAW   (`WORD_WIDTH + TAG_WIDTH),
-            .SKID    (CORE_REQ_BUF_ENABLE && (CORE_OUT_REG >> 1) != 1),
-            .OUT_REG (CORE_REQ_BUF_ENABLE && (CORE_OUT_REG & 1) != 1)
+            .SKID    (CORE_REQ_BUF_ENABLE ? (CORE_OUT_REG >> 1) : 0),
+            .OUT_REG (CORE_REQ_BUF_ENABLE ? (CORE_OUT_REG & 1) : 0)
         ) core_rsp_sbuf (
             .clk       (clk),
             .reset     (reset),
@@ -139,8 +139,8 @@ module VX_cache #(
 
     VX_generic_buffer #(
         .DATAW   (1 + LINE_SIZE + `MEM_ADDR_WIDTH + `LINE_WIDTH + MEM_TAG_WIDTH),
-        .SKID    (MEM_REQ_BUF_ENABLE && (MEM_OUT_REG >> 1) != 1),
-        .OUT_REG (MEM_REQ_BUF_ENABLE && (MEM_OUT_REG & 1) != 1)
+        .SKID    (MEM_REQ_BUF_ENABLE ? (MEM_OUT_REG >> 1) : 0),
+        .OUT_REG (MEM_REQ_BUF_ENABLE ? (MEM_OUT_REG & 1) : 0)
     ) mem_req_sbuf (
         .clk       (clk),
         .reset     (reset),

@@ -161,7 +161,7 @@ module VX_cache_cluster #(
             .MEM_OUT_REG  (2),
             .NC_ENABLE    (NC_ENABLE),
             .PASSTHRU     (PASSTHRU)
-        ) cache (
+        ) cache_wrap (
         `ifdef PERF_ENABLE
             .perf_cache_if (perf_cache_if[i]),
         `endif

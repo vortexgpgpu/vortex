@@ -39,15 +39,14 @@ module VX_mem_unit # (
     VX_mem_req_if.master    mem_req_if,
     VX_mem_rsp_if.slave     mem_rsp_if
 );
-    VX_mem_req_if #(
-        .DATA_WIDTH (DCACHE_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (DCACHE_MEM_TAG_WIDTH)
-    ) dcache_mem_req_if();
     
-    VX_mem_rsp_if #(
-        .DATA_WIDTH (DCACHE_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (DCACHE_MEM_TAG_WIDTH)
-    ) dcache_mem_rsp_if();
+`ifdef PERF_ENABLE
+    VX_perf_cache_if perf_icache_if[`NUM_ICACHE]();
+    VX_perf_cache_if perf_dcache_if[`NUM_DCACHE]();
+    VX_perf_cache_if perf_smem_if();
+`endif   
+
+    /////////////////////////////// I-Cache ///////////////////////////////////
 
     VX_mem_req_if #(
         .DATA_WIDTH (ICACHE_MEM_DATA_WIDTH),
@@ -58,14 +57,6 @@ module VX_mem_unit # (
         .DATA_WIDTH (ICACHE_MEM_DATA_WIDTH),
         .TAG_WIDTH  (ICACHE_MEM_TAG_WIDTH)
     ) icache_mem_rsp_if();
-    
-`ifdef PERF_ENABLE
-    VX_perf_cache_if perf_icache_if[`NUM_ICACHE]();
-    VX_perf_cache_if perf_dcache_if[`NUM_DCACHE]();
-    VX_perf_cache_if perf_smem_if();
-`endif
-
-    /////////////////////////////// I-Cache ///////////////////////////////////
     
     `RESET_RELAY (icache_reset, reset);
 
@@ -102,17 +93,27 @@ module VX_mem_unit # (
 
     /////////////////////////////// D-Cache ///////////////////////////////////
 
+    VX_mem_req_if #(
+        .DATA_WIDTH (DCACHE_MEM_DATA_WIDTH),
+        .TAG_WIDTH  (DCACHE_MEM_TAG_WIDTH)
+    ) dcache_mem_req_if();
+    
+    VX_mem_rsp_if #(
+        .DATA_WIDTH (DCACHE_MEM_DATA_WIDTH),
+        .TAG_WIDTH  (DCACHE_MEM_TAG_WIDTH)
+    ) dcache_mem_rsp_if();
+
     VX_cache_req_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-    ) dcache_nosm_req_if[`NUM_CORES]();
+    ) dcache_nosm_req_if [`NUM_CORES]();
 
     VX_cache_rsp_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-    ) dcache_nosm_rsp_if[`NUM_CORES]();
+    ) dcache_nosm_rsp_if [`NUM_CORES]();
 
     `RESET_RELAY (dcache_reset, reset);
 
@@ -159,13 +160,13 @@ module VX_mem_unit # (
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-    ) per_core_smem_req_if[`NUM_CORES]();
+    ) per_core_smem_req_if [`NUM_CORES]();
 
     VX_cache_rsp_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-    ) per_core_smem_rsp_if[`NUM_CORES]();
+    ) per_core_smem_rsp_if [`NUM_CORES]();
 
     for (genvar i = 0; i < `NUM_CORES; ++i) begin
         VX_cache_req_if #(
@@ -537,7 +538,7 @@ module VX_mem_unit # (
         .UUID_WIDTH     (`UUID_BITS),           
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L2_ENABLED)
-    ) l2cache (            
+    ) l2cache_wrap (            
         .clk            (clk),
         .reset          (l2_reset),
     `ifdef PERF_ENABLE

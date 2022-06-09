@@ -35,9 +35,8 @@ input wire                              clk,
         wire grant_valid;
         wire rsp_fire;
 
-        VX_rr_arbiter #(
-            .NUM_REQS    (NUM_REQS),
-            .LOCK_ENABLE (1)
+        VX_prioriry_arbiter #(
+            .NUM_REQS (NUM_REQS)
         ) arbiter (
             .clk         (clk),
             .reset       (reset),

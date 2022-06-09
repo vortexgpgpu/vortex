@@ -183,7 +183,7 @@ module Vortex (
         .UUID_WIDTH     (`UUID_BITS),  
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L3_ENABLED)
-    ) l3cache (
+    ) l3cache_wrap (
         .clk            (clk),
         .reset          (l3_reset),
 
