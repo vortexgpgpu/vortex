@@ -535,7 +535,9 @@ module VX_mem_unit # (
         .MREQ_SIZE      (`L2_MREQ_SIZE),
         .TAG_WIDTH      (L1_MEM_TAG_WIDTH),
         .WRITE_ENABLE   (1),       
-        .UUID_WIDTH     (`UUID_BITS),           
+        .UUID_WIDTH     (`UUID_BITS),
+        .CORE_OUT_REG   (3),
+        .MEM_OUT_REG    (2),   
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L2_ENABLED)
     ) l2cache_wrap (            
