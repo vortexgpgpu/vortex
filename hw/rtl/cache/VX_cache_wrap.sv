@@ -74,9 +74,10 @@ module VX_cache_wrap #(
     VX_mem_rsp_if.slave     mem_rsp_if
 );
 
-    `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid parameter"))
-    `STATIC_ASSERT(NUM_PORTS <= NUM_BANKS, ("invalid parameter"))
+    `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid parameter"))    
     `STATIC_ASSERT(NUM_BANKS == (1 << $clog2(NUM_BANKS)), ("invalid parameter"))
+    `STATIC_ASSERT(NUM_PORTS <= NUM_REQS, ("invalid parameter"))
+    `STATIC_ASSERT(NUM_PORTS <= `WORDS_PER_LINE, ("invalid parameter"))
 
     localparam WORD_SEL_BITS    = `UP(`WORD_SEL_BITS);
     localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE);    

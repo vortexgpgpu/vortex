@@ -479,7 +479,7 @@ module VX_mem_scheduler #(
                 `TRACE_ARRAY1D(1, stag_waddr, NUM_BANKS);
                 dpi_trace(1, ", batch=%0d (#%0d)\n", req_batch_idx, mem_req_dbg_uuid);
             end else begin
-                dpi_trace(1, "%d: %s-mem-rd: valid=%b, addr=", $time, INSTANCE_ID, mem_req_fire);
+                dpi_trace(1, "%d: %s-mem-rd: valid=%b, addr=", $time, INSTANCE_ID, mem_req_fire_s);
                 `TRACE_ARRAY1D(1, mem_req_addr_s, NUM_BANKS);
                 dpi_trace(1, ", tag=");
                 `TRACE_ARRAY1D(1, stag_waddr, NUM_BANKS);

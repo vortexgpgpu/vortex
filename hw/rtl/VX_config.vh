@@ -448,7 +448,7 @@
 
 // Number of banks
 `ifndef DCACHE_NUM_BANKS
-`define DCACHE_NUM_BANKS `NUM_THREADS
+`define DCACHE_NUM_BANKS `UP(`NUM_THREADS / 2)
 `endif
 
 // Number of ports per bank

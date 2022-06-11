@@ -142,7 +142,7 @@ module VX_cache_cluster #(
         `RESET_RELAY (cache_reset, reset);
 
         VX_cache_wrap #(
-            .INSTANCE_ID  ($sformatf("%s%d", INSTANCE_ID, i)),
+            .INSTANCE_ID  ($sformatf("%s%0d", INSTANCE_ID, i)),
             .CACHE_SIZE   (CACHE_SIZE),
             .LINE_SIZE    (LINE_SIZE),
             .NUM_BANKS    (NUM_BANKS),

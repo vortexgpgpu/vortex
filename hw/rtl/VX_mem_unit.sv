@@ -61,7 +61,7 @@ module VX_mem_unit # (
     `RESET_RELAY (icache_reset, reset);
 
     VX_cache_cluster #(
-        .INSTANCE_ID    ($sformatf("cluster-icache", CLUSTER_ID)),    
+        .INSTANCE_ID    ($sformatf("cluster%0d-icache", CLUSTER_ID)),    
         .NUM_UNITS      (`NUM_ICACHES),
         .NUM_INPUTS     (`NUM_CORES),
         .TAG_SEL_IDX    (0),
@@ -118,7 +118,7 @@ module VX_mem_unit # (
     `RESET_RELAY (dcache_reset, reset);
 
     VX_cache_cluster #(
-        .INSTANCE_ID    ($sformatf("cluster-dcache", CLUSTER_ID)),    
+        .INSTANCE_ID    ($sformatf("cluster%0d-dcache", CLUSTER_ID)),    
         .NUM_UNITS      (`NUM_DCACHES),
         .NUM_INPUTS     (`NUM_CORES),
         .TAG_SEL_IDX    (1),
