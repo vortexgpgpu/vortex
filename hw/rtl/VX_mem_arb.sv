@@ -57,8 +57,8 @@ module VX_mem_arb #(
     VX_stream_arb #(            
         .NUM_INPUTS (NUM_REQS),
         .DATAW      (REQ_DATAW),
-        .BUFFERED   (BUFFERED_REQ),
-        .ARBITER    (ARBITER)
+        .ARBITER    (ARBITER),
+        .BUFFERED   (BUFFERED_REQ)        
     ) req_arb (
         .clk       (clk),
         .reset     (reset),

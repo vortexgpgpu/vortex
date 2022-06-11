@@ -199,8 +199,8 @@ module VX_alu_unit #(
     VX_stream_arb #(
         .NUM_INPUTS (RSP_MUX_SIZE),
         .DATAW      (RSP_MUX_DATAW),
-        .BUFFERED   (1),
-        .ARBITER    ("R")
+        .ARBITER    ("R"),
+        .BUFFERED   (1)
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),

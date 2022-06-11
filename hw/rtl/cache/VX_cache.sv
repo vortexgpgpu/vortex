@@ -114,7 +114,7 @@ module VX_cache #(
             .DATAW   (`WORD_WIDTH + TAG_WIDTH),
             .SKID    (CORE_REQ_BUF_ENABLE ? (CORE_OUT_REG >> 1) : 0),
             .OUT_REG (CORE_REQ_BUF_ENABLE ? (CORE_OUT_REG & 1) : 0)
-        ) core_rsp_sbuf (
+        ) core_rsp_buf (
             .clk       (clk),
             .reset     (reset),
             .valid_in  (core_rsp_valid_s[i]),
@@ -141,7 +141,7 @@ module VX_cache #(
         .DATAW   (1 + LINE_SIZE + `MEM_ADDR_WIDTH + `LINE_WIDTH + MEM_TAG_WIDTH),
         .SKID    (MEM_REQ_BUF_ENABLE ? (MEM_OUT_REG >> 1) : 0),
         .OUT_REG (MEM_REQ_BUF_ENABLE ? (MEM_OUT_REG & 1) : 0)
-    ) mem_req_sbuf (
+    ) mem_req_buf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (mem_req_valid_s),        

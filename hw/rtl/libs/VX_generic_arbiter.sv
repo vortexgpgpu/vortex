@@ -16,6 +16,7 @@ module VX_generic_arbiter #(
     output wire                     grant_valid
 );
     if (TYPE == "P") begin
+
         VX_priority_arbiter #(
             .NUM_REQS    (NUM_REQS),
             .LOCK_ENABLE (LOCK_ENABLE)
@@ -28,7 +29,9 @@ module VX_generic_arbiter #(
             .grant_index  (grant_index),
             .grant_onehot (grant_onehot)
         );
+
     end else if (TYPE == "R") begin
+
         VX_rr_arbiter #(
             .NUM_REQS    (NUM_REQS),
             .LOCK_ENABLE (LOCK_ENABLE)
@@ -41,7 +44,9 @@ module VX_generic_arbiter #(
             .grant_index  (grant_index),
             .grant_onehot (grant_onehot)
         );
+
     end else if (TYPE == "F") begin
+
         VX_fair_arbiter #(
             .NUM_REQS    (NUM_REQS),
             .LOCK_ENABLE (LOCK_ENABLE)
@@ -54,7 +59,9 @@ module VX_generic_arbiter #(
             .grant_index  (grant_index),
             .grant_onehot (grant_onehot)
         );
+
     end else if (TYPE == "M") begin
+
         VX_matrix_arbiter #(
             .NUM_REQS    (NUM_REQS),
             .LOCK_ENABLE (LOCK_ENABLE)
@@ -67,8 +74,26 @@ module VX_generic_arbiter #(
             .grant_index  (grant_index),
             .grant_onehot (grant_onehot)
         );
+
+    end else if (TYPE == "C") begin
+
+        VX_cyclic_arbiter #(
+            .NUM_REQS    (NUM_REQS),
+            .LOCK_ENABLE (LOCK_ENABLE)
+        ) grant_arb (
+            .clk          (clk),
+            .reset        (reset),
+            .unlock       (unlock),
+            .requests     (requests), 
+            .grant_valid  (grant_valid),
+            .grant_index  (grant_index),
+            .grant_onehot (grant_onehot)
+        );
+
     end else begin
+
         `ERROR(("invalid parameter"));
+        
     end
     
 endmodule

@@ -112,9 +112,9 @@ module VX_smem_switch #(
     VX_stream_arb #(            
         .NUM_INPUTS (NUM_REQS),
         .NUM_LANES  (NUM_LANES),
-        .DATAW      (RSP_DATAW),
-        .BUFFERED   (BUFFERED_RSP),
-        .ARBITER    (ARBITER)
+        .DATAW      (RSP_DATAW),        
+        .ARBITER    (ARBITER),
+        .BUFFERED   (BUFFERED_RSP)
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),

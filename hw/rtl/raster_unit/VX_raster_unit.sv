@@ -143,7 +143,8 @@ module VX_raster_unit #(
     VX_stream_arb #(
         .NUM_OUTPUTS (NUM_PES),
         .DATAW       (PRIM_DATA_WIDTH),
-        .BUFFERED    (1)
+        .ARBITER     ("R"),
+        .BUFFERED    (1)       
     ) pe_req_arb (
         .clk        (clk),
         .reset      (reset),
@@ -234,6 +235,7 @@ module VX_raster_unit #(
     VX_raster_arb #(
         .NUM_INPUTS (NUM_PES),
         .NUM_LANES  (OUTPUT_QUADS),
+        .ARBITER    ("R"),
         .BUFFERED   (2)
     ) raster_arb (
         .clk        (clk),
