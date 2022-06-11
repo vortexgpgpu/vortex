@@ -53,7 +53,7 @@ module VX_gpu_unit #(
     reg gpu_req_ready;
 
     wire csr_ready = ~csr_pending[gpu_req_if.wid];
-    wire gpu_req_valid = gpu_req_if.valid && csr_ready;
+    assign gpu_req_valid = gpu_req_if.valid && csr_ready;
 
     // Warp control block
 
@@ -282,7 +282,7 @@ module VX_gpu_unit #(
         .NUM_INPUTS (RSP_ARB_SIZE),
         .DATAW      (RSP_ARB_DATAW),
         .ARBITER    ("R"),
-        .BUFFERED   (1)      
+        .BUFFERED   (1)
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),
