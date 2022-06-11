@@ -52,7 +52,7 @@ module VX_req_dispatch #(
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid parameter"))    
     `STATIC_ASSERT(NUM_BANKS == (1 << $clog2(NUM_BANKS)), ("invalid parameter"))
     `STATIC_ASSERT(NUM_PORTS <= NUM_REQS, ("invalid parameter"))
-    `STATIC_ASSERT(NUM_PORTS <= `WORDS_PER_LINE, ("invalid parameter"))
+    `STATIC_ASSERT(NUM_PORTS <= WORDS_PER_LINE, ("invalid parameter"))
 
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)    

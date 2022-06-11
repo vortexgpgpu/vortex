@@ -275,7 +275,7 @@ module VX_cluster #(
         .NUM_LANES    (`NUM_THREADS),
         .NUM_OUTPUTS  (`NUM_FPU_UNITS),
         .TAG_WIDTH    (`FPU_REQ_TAG_WIDTH),
-        .ARBITER      ("R"),
+        .ARBITER      ((`NUM_CORES > 8) ? "C" : "R"),
         .BUFFERED_REQ ((`NUM_CORES != `NUM_FPU_UNITS) ? 1 : 0)
     ) fpu_arb (
         .clk        (clk),

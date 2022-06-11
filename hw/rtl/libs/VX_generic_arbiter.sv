@@ -20,7 +20,7 @@ module VX_generic_arbiter #(
         VX_priority_arbiter #(
             .NUM_REQS    (NUM_REQS),
             .LOCK_ENABLE (LOCK_ENABLE)
-        ) grant_arb (
+        ) priority_arbiter (
             .clk          (clk),
             .reset        (reset),
             .unlock       (unlock),
@@ -35,7 +35,7 @@ module VX_generic_arbiter #(
         VX_rr_arbiter #(
             .NUM_REQS    (NUM_REQS),
             .LOCK_ENABLE (LOCK_ENABLE)
-        ) grant_arb (
+        ) rr_arbiter (
             .clk          (clk),
             .reset        (reset),
             .unlock       (unlock),
@@ -50,7 +50,7 @@ module VX_generic_arbiter #(
         VX_fair_arbiter #(
             .NUM_REQS    (NUM_REQS),
             .LOCK_ENABLE (LOCK_ENABLE)
-        ) grant_arb (
+        ) fair_arbiter (
             .clk          (clk),
             .reset        (reset),
             .unlock       (unlock),
@@ -65,7 +65,7 @@ module VX_generic_arbiter #(
         VX_matrix_arbiter #(
             .NUM_REQS    (NUM_REQS),
             .LOCK_ENABLE (LOCK_ENABLE)
-        ) grant_arb (
+        ) matrix_arbiter (
             .clk          (clk),
             .reset        (reset),
             .unlock       (unlock),
@@ -80,7 +80,7 @@ module VX_generic_arbiter #(
         VX_cyclic_arbiter #(
             .NUM_REQS    (NUM_REQS),
             .LOCK_ENABLE (LOCK_ENABLE)
-        ) grant_arb (
+        ) cyclic_arbiter (
             .clk          (clk),
             .reset        (reset),
             .unlock       (unlock),

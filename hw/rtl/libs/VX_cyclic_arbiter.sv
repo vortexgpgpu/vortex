@@ -52,6 +52,7 @@ module VX_cyclic_arbiter #(
 
         assign grant_index  = grant_index_r;    
         assign grant_onehot = grant_onehot_r;
+        assign grant_valid  = requests[grant_index_r];
 
     end
     
