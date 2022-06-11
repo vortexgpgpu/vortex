@@ -30,29 +30,28 @@ module VX_cyclic_arbiter #(
 
         localparam IS_POW2 = (1 << LOG_NUM_REQS) == NUM_REQS;
 
-        reg [LOG_NUM_REQS-1:0] ctr_r;
+        reg [LOG_NUM_REQS-1:0] grant_index_r;
 
         always @(posedge clk) begin
             if (reset) begin
-                ctr_r <= 0;
+                grant_index_r <= 0;
             end else begin                
-                ctr_r <= ctr_r + LOG_NUM_REQS'(1);
-                if (IS_POW2 && ctr_r == LOG_NUM_REQS'(NUM_REQS-1)) begin
-                    ctr_r <= 0;
+                if (!IS_POW2 && grant_index_r == LOG_NUM_REQS'(NUM_REQS-1)) begin
+                    grant_index_r <= 0;
+                end else begin
+                    grant_index_r <= grant_index_r + LOG_NUM_REQS'(1);
                 end
             end
         end
 
-        assign grant_index = ctr_r;
-        
-        VX_priority_encoder #(
-            .N (NUM_REQS)
-        ) priority_encoder (
-            .data_in   (requests),
-            .index     (grant_index),
-            .onehot    (grant_onehot),
-            .valid_out (grant_valid)
-        );        
+        reg [NUM_REQS-1:0] grant_onehot_r;
+        always @(*) begin
+            grant_onehot_r = '0;
+            grant_onehot_r[grant_index_r] = 1'b1;
+        end
+
+        assign grant_index  = grant_index_r;    
+        assign grant_onehot = grant_onehot_r;
 
     end
     

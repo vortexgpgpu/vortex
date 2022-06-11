@@ -135,7 +135,7 @@ module VX_warp_sched #(
                     thread_masks[schedule_wid] <= 1;
                 end
 
-                issued_instrs[schedule_wid] <= issued_instrs[schedule_wid] + 1;
+                issued_instrs[schedule_wid] <= issued_instrs[schedule_wid] + `UP(`UUID_BITS)'(1);
             end
 
             if (ifetch_req_fire) begin
