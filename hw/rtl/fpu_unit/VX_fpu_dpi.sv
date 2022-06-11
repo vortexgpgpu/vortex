@@ -397,9 +397,9 @@ module VX_fpu_dpi #(
 
     VX_stream_arb #(
         .NUM_INPUTS (NUM_FPC),
-        .DATAW      (RSP_ARB_DATAW),
-        .BUFFERED   (1),
-        .ARBITER  ("R")
+        .DATAW      (RSP_ARB_DATAW),        
+        .ARBITER    ("R"),
+        .BUFFERED   (1)
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),

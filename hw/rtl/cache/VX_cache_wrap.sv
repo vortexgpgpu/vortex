@@ -124,7 +124,7 @@ module VX_cache_wrap #(
             .DATAW   (`WORD_WIDTH + TAG_WIDTH),
             .SKID    ((NC_BYPASS && !DIRECT_PASSTHRU) ? (CORE_OUT_REG >> 1) : 0),
             .OUT_REG ((NC_BYPASS && !DIRECT_PASSTHRU) ? (CORE_OUT_REG & 1) : 0)
-        ) core_rsp_sbuf (
+        ) core_rsp_buf (
             .clk       (clk),
             .reset     (reset),
             .valid_in  (core_rsp_valid_s[i]),
@@ -151,7 +151,7 @@ module VX_cache_wrap #(
         .DATAW   (1 + LINE_SIZE + `MEM_ADDR_WIDTH + `LINE_WIDTH + MEM_TAG_WIDTH),
         .SKID    ((NC_BYPASS && !DIRECT_PASSTHRU) ? (MEM_OUT_REG >> 1) : 0),
         .OUT_REG ((NC_BYPASS && !DIRECT_PASSTHRU) ? (MEM_OUT_REG & 1) : 0)
-    ) mem_req_sbuf (
+    ) mem_req_buf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (mem_req_valid_s),        

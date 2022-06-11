@@ -511,7 +511,7 @@
 
 // Number of banks
 `ifndef TCACHE_NUM_BANKS
-`define TCACHE_NUM_BANKS `NUM_THREADS
+`define TCACHE_NUM_BANKS `UP(`NUM_THREADS / 2)
 `endif
 
 // Number of ports per bank

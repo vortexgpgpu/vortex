@@ -74,8 +74,8 @@ module VX_cache_arb #(
         .NUM_OUTPUTS (NUM_OUTPUTS),
         .NUM_LANES   (NUM_LANES),
         .DATAW       (REQ_DATAW),
-        .BUFFERED    (BUFFERED_REQ),
-        .ARBITER     (ARBITER)
+        .ARBITER     (ARBITER),
+        .BUFFERED    (BUFFERED_REQ)
     ) req_arb (
         .clk       (clk),
         .reset     (reset),
@@ -163,8 +163,8 @@ module VX_cache_arb #(
                 .NUM_INPUTS  (NUM_OUTPUTS),
                 .NUM_OUTPUTS (NUM_INPUTS),
                 .DATAW       (RSP_DATAW),
-                .BUFFERED    (BUFFERED_RSP),
-                .ARBITER     (ARBITER)
+                .ARBITER     (ARBITER),
+                .BUFFERED    (BUFFERED_RSP)                
             ) req_arb (
                 .clk       (clk),
                 .reset     (reset),

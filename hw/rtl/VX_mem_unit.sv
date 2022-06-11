@@ -188,7 +188,7 @@ module VX_mem_unit # (
             .TAG_WIDTH    (DCACHE_TAG_WIDTH),
             .TAG_SEL_IDX  (0),
             .ARBITER      ("P"),
-            .BUFFERED_REQ (3),
+            .BUFFERED_REQ (2),
             .BUFFERED_RSP (1)
         ) dcache_nosm_switch (
             .clk        (clk),
@@ -225,8 +225,9 @@ module VX_mem_unit # (
         .DATA_SIZE    (DCACHE_WORD_SIZE),
         .TAG_WIDTH    (DCACHE_NOSM_TAG_WIDTH),
         .TAG_SEL_IDX  (0),
+        .ARBITER      ((`NUM_CORES > 8) ? "C" : "R"),
         .BUFFERED_REQ ((`NUM_CORES != 1) ? 1 : 0),
-        .BUFFERED_RSP ((`NUM_CORES != 1) ? 1 : 0)
+        .BUFFERED_RSP ((`NUM_CORES != 1) ? 1 : 0)        
     ) smem_arb (
         .clk        (clk),
         .reset      (reset),
@@ -535,7 +536,9 @@ module VX_mem_unit # (
         .MREQ_SIZE      (`L2_MREQ_SIZE),
         .TAG_WIDTH      (L1_MEM_TAG_WIDTH),
         .WRITE_ENABLE   (1),       
-        .UUID_WIDTH     (`UUID_BITS),           
+        .UUID_WIDTH     (`UUID_BITS),
+        .CORE_OUT_REG   (3),
+        .MEM_OUT_REG    (2),   
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L2_ENABLED)
     ) l2cache_wrap (            

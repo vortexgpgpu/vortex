@@ -68,8 +68,8 @@ module VX_tex_arb #(
         .NUM_INPUTS  (NUM_INPUTS),
         .NUM_OUTPUTS (NUM_OUTPUTS),
         .DATAW       (REQ_DATAW),
-        .BUFFERED    (BUFFERED_REQ),
-        .ARBITER     (ARBITER)
+        .ARBITER     (ARBITER),
+        .BUFFERED    (BUFFERED_REQ)        
     ) req_arb (
         .clk       (clk),
         .reset     (reset),
@@ -152,9 +152,9 @@ module VX_tex_arb #(
         VX_stream_arb #(            
             .NUM_INPUTS  (NUM_OUTPUTS),
             .NUM_OUTPUTS (NUM_INPUTS),
-            .DATAW       (RSP_DATAW),
-            .BUFFERED    (BUFFERED_RSP),
-            .ARBITER     (ARBITER)
+            .DATAW       (RSP_DATAW),            
+            .ARBITER     (ARBITER),
+            .BUFFERED    (BUFFERED_RSP)
         ) req_arb (
             .clk       (clk),
             .reset     (reset),
