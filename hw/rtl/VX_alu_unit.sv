@@ -16,8 +16,8 @@ module VX_alu_unit #(
 
     `UNUSED_PARAM (CORE_ID)
 
-    localparam RSP_MUX_DATAW = `UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1 + `NUM_THREADS * 32;
-    localparam RSP_MUX_SIZE  = 1 + `EXT_M_ENABLED;
+    localparam RSP_ARB_DATAW = `UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1 + `NUM_THREADS * 32;
+    localparam RSP_ARB_SIZE  = 1 + `EXT_M_ENABLED;
     
     reg [`NUM_THREADS-1:0][31:0]  alu_result;    
     wire [`NUM_THREADS-1:0][31:0] add_result;   
@@ -197,8 +197,8 @@ module VX_alu_unit #(
 `endif
 
     VX_stream_arb #(
-        .NUM_INPUTS (RSP_MUX_SIZE),
-        .DATAW      (RSP_MUX_DATAW),
+        .NUM_INPUTS (RSP_ARB_SIZE),
+        .DATAW      (RSP_ARB_DATAW),
         .BUFFERED   (1),
         .ARBITER    ("R")
     ) rsp_arb (

@@ -36,7 +36,7 @@ module VX_fpu_fpga #(
     localparam NUM_FPC  = 5;
     localparam FPC_BITS = `LOG2UP(NUM_FPC);
 
-    localparam RSP_MUX_DATAW = (NUM_LANES * 32) + 1 + (NUM_LANES * $bits(fflags_t)) + TAGW;
+    localparam RSP_ARB_DATAW = (NUM_LANES * 32) + 1 + (NUM_LANES * $bits(fflags_t)) + TAGW;
     
     wire [NUM_FPC-1:0] per_core_ready_in;
     wire [NUM_FPC-1:0][NUM_LANES-1:0][31:0] per_core_result;
@@ -187,7 +187,7 @@ module VX_fpu_fpga #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire [NUM_FPC-1:0][RSP_MUX_DATAW-1:0] per_core_data_out;
+    wire [NUM_FPC-1:0][RSP_ARB_DATAW-1:0] per_core_data_out;
 
     for (genvar i = 0; i < NUM_FPC; ++i) begin
         assign per_core_data_out[i] = {per_core_result[i], per_core_has_fflags[i], per_core_fflags[i], per_core_tag_out[i]};
@@ -195,7 +195,7 @@ module VX_fpu_fpga #(
 
     VX_stream_arb #(
         .NUM_INPUTS (NUM_FPC),
-        .DATAW      (RSP_MUX_DATAW),        
+        .DATAW      (RSP_ARB_DATAW),        
         .ARBITER    ("R"),
         .BUFFERED   (2)
     ) rsp_arb (
