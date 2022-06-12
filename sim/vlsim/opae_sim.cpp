@@ -242,7 +242,14 @@ private:
       this->eval();
     } 
 
-    device_->reset = 0;
+    device_->reset = 0;    
+
+    for (int i = 0; i < RESET_DELAY; ++i) {
+      device_->clk = 0;
+      this->eval();
+      device_->clk = 1;
+      this->eval();
+    }
     
     // Turn on assertion after reset
     Verilated::assertOn(true);

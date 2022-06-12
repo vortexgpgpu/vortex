@@ -47,6 +47,7 @@ module VX_mem_unit # (
     VX_perf_cache_if perf_icache_if();
     VX_perf_cache_if perf_dcache_if();
     VX_perf_cache_if perf_smem_if();
+    VX_perf_cache_if perf_l2cache_if();
 `endif   
 
     /////////////////////////////// I-Cache ///////////////////////////////////
@@ -515,10 +516,6 @@ module VX_mem_unit # (
 
     `ASSIGN_VX_MEM_RSP_IF_XTAG (ocache_mem_rsp_if, l2_mem_rsp_if[O_MEM_ARB_IDX]);
     assign ocache_mem_rsp_if.tag = OCACHE_MEM_TAG_WIDTH'(l2_mem_rsp_if[O_MEM_ARB_IDX].tag);
-`endif     
-
-`ifdef PERF_ENABLE
-    VX_perf_cache_if perf_l2cache_if();
 `endif
 
     `RESET_RELAY (l2_reset, reset);
@@ -563,6 +560,7 @@ module VX_mem_unit # (
 
     assign perf_memsys_if.icache_reads       = perf_icache_if.reads;
     assign perf_memsys_if.icache_read_misses = perf_icache_if.read_misses;
+    
     assign perf_memsys_if.dcache_reads       = perf_dcache_if.reads;
     assign perf_memsys_if.dcache_writes      = perf_dcache_if.writes;
     assign perf_memsys_if.dcache_read_misses = perf_dcache_if.read_misses;
@@ -603,10 +601,10 @@ module VX_mem_unit # (
             perf_mem_lat    <= 0;
         end else begin  
             if (mem_req_if.valid && mem_req_if.ready && !mem_req_if.rw) begin
-                perf_mem_reads <= perf_mem_reads + `PERF_CTR_BITS'd1;
+                perf_mem_reads <= perf_mem_reads + `PERF_CTR_BITS'(1);
             end
             if (mem_req_if.valid && mem_req_if.ready && mem_req_if.rw) begin
-                perf_mem_writes <= perf_mem_writes + `PERF_CTR_BITS'd1;
+                perf_mem_writes <= perf_mem_writes + `PERF_CTR_BITS'(1);
             end      
             perf_mem_lat <= perf_mem_lat + perf_mem_pending_reads;
         end

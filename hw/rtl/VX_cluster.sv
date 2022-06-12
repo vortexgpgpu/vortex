@@ -374,11 +374,12 @@ module VX_cluster #(
 
             .clk            (clk),
             .reset          (core_reset),
-            .dcr_base_if    (dcr_base_if),
 
         `ifdef PERF_ENABLE
             .perf_memsys_if (perf_memsys_total_if),
         `endif
+            
+            .dcr_base_if    (dcr_base_if),
 
             .dcache_req_if  (per_core_dcache_req_if[i]),
             .dcache_rsp_if  (per_core_dcache_rsp_if[i]),
@@ -392,28 +393,28 @@ module VX_cluster #(
         `endif
 
         `ifdef EXT_TEX_ENABLE
-            .tex_req_if     (per_core_tex_req_if[i]),
-            .tex_rsp_if     (per_core_tex_rsp_if[i]),
         `ifdef PERF_ENABLE
             .perf_tex_if    (perf_tex_total_if),
             .perf_tcache_if (perf_tcache_total_if),
         `endif
+            .tex_req_if     (per_core_tex_req_if[i]),
+            .tex_rsp_if     (per_core_tex_rsp_if[i]),
         `endif
 
-        `ifdef EXT_RASTER_ENABLE        
-            .raster_req_if  (per_core_raster_req_if[i]),
+        `ifdef EXT_RASTER_ENABLE
         `ifdef PERF_ENABLE
             .perf_raster_if (perf_raster_total_if),
             .perf_rcache_if (perf_rcache_total_if),
         `endif
+            .raster_req_if  (per_core_raster_req_if[i]),
         `endif
         
-        `ifdef EXT_ROP_ENABLE        
-            .rop_req_if     (per_core_rop_req_if[i]),
+        `ifdef EXT_ROP_ENABLE
         `ifdef PERF_ENABLE
             .perf_rop_if    (perf_rop_total_if),
             .perf_ocache_if (perf_ocache_total_if),
         `endif
+            .rop_req_if     (per_core_rop_req_if[i]),
         `endif
 
             .sim_ebreak     (per_core_sim_ebreak[i]),

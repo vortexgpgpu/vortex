@@ -14,11 +14,11 @@ module VX_core #(
     input wire              clk,
     input wire              reset,
 
-    VX_dcr_base_if.slave    dcr_base_if,
-
 `ifdef PERF_ENABLE
     VX_perf_memsys_if.slave perf_memsys_if,
 `endif
+
+    VX_dcr_base_if.slave    dcr_base_if,
 
     VX_cache_req_if.master  dcache_req_if,
     VX_cache_rsp_if.slave   dcache_rsp_if,
@@ -32,28 +32,28 @@ module VX_core #(
 `endif
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_req_if.master    tex_req_if,
-    VX_tex_rsp_if.slave     tex_rsp_if,
 `ifdef PERF_ENABLE
     VX_tex_perf_if.slave    perf_tex_if,
     VX_perf_cache_if.slave  perf_tcache_if,
 `endif
+    VX_tex_req_if.master    tex_req_if,
+    VX_tex_rsp_if.slave     tex_rsp_if,
 `endif
 
-`ifdef EXT_RASTER_ENABLE        
-    VX_raster_req_if.slave  raster_req_if,
+`ifdef EXT_RASTER_ENABLE
 `ifdef PERF_ENABLE
     VX_raster_perf_if.slave perf_raster_if,
     VX_perf_cache_if.slave  perf_rcache_if,
 `endif
+    VX_raster_req_if.slave  raster_req_if,
 `endif
 
 `ifdef EXT_ROP_ENABLE
-    VX_rop_req_if.master    rop_req_if,
 `ifdef PERF_ENABLE
     VX_rop_perf_if.slave    perf_rop_if,
     VX_perf_cache_if.slave  perf_ocache_if,
 `endif
+    VX_rop_req_if.master    rop_req_if,
 `endif
 
     // simulation helper signals
