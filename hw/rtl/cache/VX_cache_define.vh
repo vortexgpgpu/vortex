@@ -100,4 +100,32 @@
 `define CACHE_CLUSTER_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, line_size, word_size, tag_width, num_inputs, num_caches) \
         `CACHE_CLUSTER_MEM_ARB_TAG(`MAX(`CACHE_MEM_TAG_WIDTH(mshr_size, num_banks), `CACHE_NC_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, `CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches))), num_caches)
 
+///////////////////////////////////////////////////////////////////////////////
+
+`define PERF_CACHE_ADD(dst, src, count) \
+    `REDUCE_ADD (dst, src, reads, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, writes, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, read_misses, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, write_misses, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, bank_stalls, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, mshr_stalls, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, mem_stalls, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, crsp_stalls, `PERF_CTR_BITS, count)
+
+`define PERF_MEMSYS_ADD(dst, src, count) \
+    `REDUCE_ADD (dst, src, icache_reads, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, icache_read_misses, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, dcache_reads, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, dcache_writes, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, dcache_read_misses, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, dcache_write_misses, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, dcache_bank_stalls, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, dcache_mshr_stalls, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, smem_reads, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, smem_writes, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, smem_bank_stalls, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, mem_reads, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, mem_writes, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, mem_latency, `PERF_CTR_BITS, count)
+
 `endif

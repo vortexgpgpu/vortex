@@ -22,16 +22,19 @@ module VX_mem_unit # (
     VX_cache_rsp_if.master  dcache_rsp_if [`NUM_CORES],
 
 `ifdef EXT_TEX_ENABLE
+    VX_perf_cache_if.master perf_tcache_if,
     VX_cache_req_if.slave   tcache_req_if [`NUM_TEX_UNITS],
     VX_cache_rsp_if.master  tcache_rsp_if [`NUM_TEX_UNITS],
 `endif
 
 `ifdef EXT_RASTER_ENABLE
+    VX_perf_cache_if.master perf_rcache_if,
     VX_cache_req_if.slave   rcache_req_if [`NUM_RASTER_UNITS],
     VX_cache_rsp_if.master  rcache_rsp_if [`NUM_RASTER_UNITS],
 `endif 
 
 `ifdef EXT_ROP_ENABLE
+    VX_perf_cache_if.master perf_ocache_if,
     VX_cache_req_if.slave   ocache_req_if [`NUM_ROP_UNITS],
     VX_cache_rsp_if.master  ocache_rsp_if [`NUM_ROP_UNITS],
 `endif
@@ -41,8 +44,8 @@ module VX_mem_unit # (
 );
     
 `ifdef PERF_ENABLE
-    VX_perf_cache_if perf_icache_if[`NUM_ICACHE]();
-    VX_perf_cache_if perf_dcache_if[`NUM_DCACHE]();
+    VX_perf_cache_if perf_icache_if();
+    VX_perf_cache_if perf_dcache_if();
     VX_perf_cache_if perf_smem_if();
 `endif   
 
@@ -565,7 +568,7 @@ module VX_mem_unit # (
     assign perf_memsys_if.dcache_read_misses = perf_dcache_if.read_misses;
     assign perf_memsys_if.dcache_write_misses= perf_dcache_if.write_misses;
     assign perf_memsys_if.dcache_bank_stalls = perf_dcache_if.bank_stalls;
-    assign perf_memsys_if.dcache_mshr_stalls = perf_dcache_if.mshr_stalls;    
+    assign perf_memsys_if.dcache_mshr_stalls = perf_dcache_if.mshr_stalls;
 
 `ifdef SM_ENABLE
     assign perf_memsys_if.smem_reads         = perf_smem_if.reads;

@@ -17,7 +17,7 @@ module VX_raster_unit #(
 
     // PERF
 `ifdef PERF_ENABLE
-    VX_raster_perf_if.master raster_perf_if,
+    VX_raster_perf_if.master perf_raster_if,
 `endif
 
     // Memory interface
@@ -286,9 +286,9 @@ module VX_raster_unit #(
         end
     end
 
-    assign raster_perf_if.mem_reads    = perf_mem_reads;
-    assign raster_perf_if.mem_latency  = perf_mem_latency;
-    assign raster_perf_if.stall_cycles = perf_stall_cycles;
+    assign perf_raster_if.mem_reads    = perf_mem_reads;
+    assign perf_raster_if.mem_latency  = perf_mem_latency;
+    assign perf_raster_if.stall_cycles = perf_stall_cycles;
 `endif
 
 `ifdef DBG_TRACE_RASTER

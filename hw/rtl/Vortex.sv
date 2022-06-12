@@ -1,6 +1,18 @@
 `include "VX_define.vh"
 `include "VX_cache_types.vh"
 
+`ifdef EXT_TEX_ENABLE
+`include "VX_tex_define.vh"
+`endif
+
+`ifdef EXT_RASTER_ENABLE
+`include "VX_raster_define.vh"
+`endif
+
+`ifdef EXT_ROP_ENABLE
+`include "VX_rop_define.vh"
+`endif
+
 `IGNORE_WARNINGS_BEGIN
 import VX_cache_types::*;
 `IGNORE_WARNINGS_END
@@ -37,6 +49,14 @@ module Vortex (
     input wire                              start,
     output wire                             busy
 );
+
+`ifdef PERF_ENABLE
+    VX_perf_memsys_if perf_memsys_if[`NUM_CLUSTERS]();
+    VX_perf_memsys_if perf_memsys_total_if();
+    VX_perf_cache_if  perf_l3cache_if();
+    `PERF_MEMSYS_ADD (perf_memsys_total_if, perf_memsys_if, `NUM_CLUSTERS);
+`endif
+
     VX_mem_req_if #(
         .DATA_WIDTH (L3_MEM_DATA_WIDTH),
         .TAG_WIDTH  (L3_MEM_TAG_WIDTH)
@@ -64,15 +84,41 @@ module Vortex (
     ) dcr_base_if();
 
 `ifdef EXT_TEX_ENABLE
+`ifdef PERF_ENABLE    
+    VX_tex_perf_if      perf_tex_if[`NUM_CLUSTERS]();
+    VX_perf_cache_if    perf_tcache_if[`NUM_CLUSTERS]();
+    VX_tex_perf_if      perf_tex_total_if();
+    VX_perf_cache_if    perf_tcache_total_if();
+    `PERF_TEX_ADD (perf_tex_total_if, perf_tex_if, `NUM_CLUSTERS);
+    `PERF_CACHE_ADD (perf_tcache_total_if, perf_tcache_if, `NUM_CLUSTERS);
+`endif
     VX_tex_dcr_if #(
         .NUM_STAGES (`TEX_STAGE_COUNT)
     ) tex_dcr_if();
 `endif
+
 `ifdef EXT_RASTER_ENABLE
-    VX_raster_dcr_if raster_dcr_if();
+`ifdef PERF_ENABLE    
+    VX_raster_perf_if   perf_raster_if[`NUM_CLUSTERS]();
+    VX_perf_cache_if    perf_rcache_if[`NUM_CLUSTERS]();
+    VX_raster_perf_if   perf_raster_total_if();
+    VX_perf_cache_if    perf_rcache_total_if();
+    `PERF_RASTER_ADD (perf_raster_total_if, perf_raster_if, `NUM_CLUSTERS);
+    `PERF_CACHE_ADD (perf_rcache_total_if, perf_rcache_if, `NUM_CLUSTERS);
 `endif
+    VX_raster_dcr_if    raster_dcr_if();
+`endif
+
 `ifdef EXT_ROP_ENABLE
-    VX_rop_dcr_if rop_dcr_if();
+`ifdef PERF_ENABLE    
+    VX_rop_perf_if      perf_rop_if[`NUM_CLUSTERS]();
+    VX_perf_cache_if    perf_ocache_if[`NUM_CLUSTERS]();
+    VX_rop_perf_if      perf_rop_total_if();
+    VX_perf_cache_if    perf_ocache_total_if();
+    `PERF_ROP_ADD (perf_rop_total_if, perf_rop_if, `NUM_CLUSTERS);
+    `PERF_CACHE_ADD (perf_ocache_total_if, perf_ocache_if, `NUM_CLUSTERS);
+`endif
+    VX_rop_dcr_if       rop_dcr_if();
 `endif
 
     `RESET_RELAY (dcr_reset, reset);
@@ -130,35 +176,57 @@ module Vortex (
         ) cluster (
             `SCOPE_BIND_Vortex_cluster(i)
 
-            .clk            (clk),
-            .reset          (cluster_reset),
+            .clk                (clk),
+            .reset              (cluster_reset),
+
+        `ifdef PERF_ENABLE
+            .perf_memsys_if     (perf_memsys_if[i]),
+            .perf_memsys_total_if (perf_memsys_total_if),
+        `endif
             
-            .dcr_base_if    (dcr_base_if),
+            .dcr_base_if        (dcr_base_if),
+
         `ifdef EXT_TEX_ENABLE
-            .tex_dcr_if     (tex_dcr_if),
+        `ifdef PERF_ENABLE
+            .perf_tex_if        (perf_tex_if[i]),
+            .perf_tcache_if     (perf_tcache_if[i]), 
+            .perf_tex_total_if  (perf_tex_total_if),                       
+            .perf_tcache_total_if (perf_tcache_total_if),
         `endif
+            .tex_dcr_if         (tex_dcr_if),
+        `endif
+
         `ifdef EXT_RASTER_ENABLE
-            .raster_dcr_if  (raster_dcr_if),  
+        `ifdef PERF_ENABLE
+            .perf_raster_if     (perf_raster_if[i]),
+            .perf_rcache_if     (perf_rcache_if[i]), 
+            .perf_raster_total_if (perf_raster_total_if),                       
+            .perf_rcache_total_if (perf_rcache_total_if),
         `endif
+            .raster_dcr_if      (raster_dcr_if),  
+        `endif
+        
         `ifdef EXT_ROP_ENABLE
-            .rop_dcr_if     (rop_dcr_if),
+        `ifdef PERF_ENABLE
+            .perf_rop_if        (perf_rop_if[i]),
+            .perf_ocache_if     (perf_ocache_if[i]),    
+            .perf_rop_total_if  (perf_rop_total_if),                    
+            .perf_ocache_total_if (perf_ocache_total_if),
+        `endif
+            .rop_dcr_if         (rop_dcr_if),
         `endif
 
-            .mem_req_if     (per_cluster_mem_req_if[i]),
-            .mem_rsp_if     (per_cluster_mem_rsp_if[i]),
+            .mem_req_if         (per_cluster_mem_req_if[i]),
+            .mem_rsp_if         (per_cluster_mem_rsp_if[i]),
 
-            .sim_ebreak     (per_cluster_sim_ebreak[i]),
-            .sim_wb_value   (per_cluster_sim_wb_value[i]),
+            .sim_ebreak         (per_cluster_sim_ebreak[i]),
+            .sim_wb_value       (per_cluster_sim_wb_value[i]),
 
-            .busy           (per_cluster_busy[i])
+            .busy               (per_cluster_busy[i])
         );
     end
 
     assign busy = (| per_cluster_busy);
-
-`ifdef PERF_ENABLE
-    VX_perf_cache_if perf_l3cache_if();
-`endif
 
     `RESET_RELAY (l3_reset, reset_or_start);
 

@@ -131,21 +131,14 @@
             "!cci_pending_writes_full": 1,
             "?afu_mem_req_fire": 1,            
             "afu_mem_req_addr": 26,
-            "afu_mem_req_tag": "`VX_MEM_TAG_WIDTH+1",
-            "?afu_mem_rsp_fire": 1,
-            "afu_mem_rsp_tag": "`VX_MEM_TAG_WIDTH+1"
+            "?afu_mem_rsp_fire": 1
         },
         "afu/vortex": {
             "!reset": 1,
             "?mem_req_fire": 1,
             "mem_req_addr": 32,
             "mem_req_rw": 1,
-            "mem_req_byteen":"`VX_MEM_BYTEEN_WIDTH",
-            "mem_req_data":"`VX_MEM_DATA_WIDTH",
-            "mem_req_tag":"`VX_MEM_TAG_WIDTH",
             "?mem_rsp_fire": 1,
-            "mem_rsp_data":"`VX_MEM_DATA_WIDTH",
-            "mem_rsp_tag":"`VX_MEM_TAG_WIDTH",
             "busy": 1       
         },
         "afu/vortex/cluster/core/pipeline/fetch/warp_sched": {
@@ -161,11 +154,11 @@
             "?icache_req_fire": 1,            
             "icache_req_uuid": "`UUID_BITS",
             "icache_req_addr": 32,
-            "icache_req_tag":"`ICACHE_TAG_ID_BITS",
+            "icache_req_tag":"`UP(`NW_BITS)",
             "?icache_rsp_fire": 1,
             "icache_rsp_uuid": "`UUID_BITS",
             "icache_rsp_data": 32,
-            "icache_rsp_tag":"`ICACHE_TAG_ID_BITS"
+            "icache_rsp_tag":"`UP(`NW_BITS)"
         },
         "afu/vortex/cluster/core/pipeline/issue": {
             "?issue_fire": 1,

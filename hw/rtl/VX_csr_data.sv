@@ -23,21 +23,21 @@ module VX_csr_data #(
 `ifdef EXT_TEX_ENABLE
     VX_gpu_csr_if.master                tex_csr_if,
 `ifdef PERF_ENABLE
-    VX_tex_perf_if.slave                tex_perf_if,
+    VX_tex_perf_if.slave                perf_tex_if,
     VX_perf_cache_if.slave              perf_tcache_if,
 `endif
 `endif
 `ifdef EXT_RASTER_ENABLE
     VX_gpu_csr_if.master                raster_csr_if,
 `ifdef PERF_ENABLE
-    VX_raster_perf_if.slave             raster_perf_if,
+    VX_raster_perf_if.slave             perf_raster_if,
     VX_perf_cache_if.slave              perf_rcache_if,
 `endif
 `endif
 `ifdef EXT_ROP_ENABLE
     VX_gpu_csr_if.master                rop_csr_if,
 `ifdef PERF_ENABLE
-    VX_rop_perf_if.slave                rop_perf_if,
+    VX_rop_perf_if.slave                perf_rop_if,
     VX_perf_cache_if.slave              perf_ocache_if,
 `endif
 `endif
@@ -315,10 +315,10 @@ module VX_csr_data #(
                     `DCR_MPM_CLASS_TEX: begin
                     `ifdef EXT_TEX_ENABLE
                         case (read_addr)
-                        `CSR_MPM_TEX_READS      : read_data_r = {`NUM_THREADS{tex_perf_if.mem_reads[31:0]}};
-                        `CSR_MPM_TEX_READS_H    : read_data_r = {`NUM_THREADS{32'(tex_perf_if.mem_reads[`PERF_CTR_BITS-1:32])}};
-                        `CSR_MPM_TEX_LAT        : read_data_r = {`NUM_THREADS{tex_perf_if.mem_latency[31:0]}};
-                        `CSR_MPM_TEX_LAT_H      : read_data_r = {`NUM_THREADS{32'(tex_perf_if.mem_latency[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_TEX_READS      : read_data_r = {`NUM_THREADS{perf_tex_if.mem_reads[31:0]}};
+                        `CSR_MPM_TEX_READS_H    : read_data_r = {`NUM_THREADS{32'(perf_tex_if.mem_reads[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_TEX_LAT        : read_data_r = {`NUM_THREADS{perf_tex_if.mem_latency[31:0]}};
+                        `CSR_MPM_TEX_LAT_H      : read_data_r = {`NUM_THREADS{32'(perf_tex_if.mem_latency[`PERF_CTR_BITS-1:32])}};
                     `ifdef TCACHE_ENABLE
                         // cache perf counters
                         `CSR_MPM_TCACHE_READS   : read_data_r = {`NUM_THREADS{perf_tcache_if.reads[31:0]}};
@@ -337,12 +337,12 @@ module VX_csr_data #(
                     `DCR_MPM_CLASS_RASTER: begin
                     `ifdef EXT_RASTER_ENABLE
                         case (read_addr)
-                        `CSR_MPM_RASTER_READS   : read_data_r = {`NUM_THREADS{raster_perf_if.mem_reads[31:0]}};
-                        `CSR_MPM_RASTER_READS_H : read_data_r = {`NUM_THREADS{32'(raster_perf_if.mem_reads[`PERF_CTR_BITS-1:32])}};
-                        `CSR_MPM_RASTER_LAT     : read_data_r = {`NUM_THREADS{raster_perf_if.mem_latency[31:0]}};
-                        `CSR_MPM_RASTER_LAT_H   : read_data_r = {`NUM_THREADS{32'(raster_perf_if.mem_latency[`PERF_CTR_BITS-1:32])}};
-                        `CSR_MPM_RASTER_STALL   : read_data_r = {`NUM_THREADS{raster_perf_if.stall_cycles[31:0]}};
-                        `CSR_MPM_RASTER_STALL_H : read_data_r = {`NUM_THREADS{32'(raster_perf_if.stall_cycles[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_RASTER_READS   : read_data_r = {`NUM_THREADS{perf_raster_if.mem_reads[31:0]}};
+                        `CSR_MPM_RASTER_READS_H : read_data_r = {`NUM_THREADS{32'(perf_raster_if.mem_reads[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_RASTER_LAT     : read_data_r = {`NUM_THREADS{perf_raster_if.mem_latency[31:0]}};
+                        `CSR_MPM_RASTER_LAT_H   : read_data_r = {`NUM_THREADS{32'(perf_raster_if.mem_latency[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_RASTER_STALL   : read_data_r = {`NUM_THREADS{perf_raster_if.stall_cycles[31:0]}};
+                        `CSR_MPM_RASTER_STALL_H : read_data_r = {`NUM_THREADS{32'(perf_raster_if.stall_cycles[`PERF_CTR_BITS-1:32])}};
                     `ifdef RCACHE_ENABLE
                         // cache perf counters
                         `CSR_MPM_RCACHE_READS   : read_data_r = {`NUM_THREADS{perf_rcache_if.reads[31:0]}};
@@ -361,14 +361,14 @@ module VX_csr_data #(
                     `DCR_MPM_CLASS_ROP: begin
                     `ifdef EXT_ROP_ENABLE
                         case (read_addr)
-                        `CSR_MPM_ROP_READS      : read_data_r = {`NUM_THREADS{rop_perf_if.mem_reads[31:0]}};
-                        `CSR_MPM_ROP_READS_H    : read_data_r = {`NUM_THREADS{32'(rop_perf_if.mem_reads[`PERF_CTR_BITS-1:32])}};
-                        `CSR_MPM_ROP_WRITES     : read_data_r = {`NUM_THREADS{rop_perf_if.mem_writes[31:0]}};
-                        `CSR_MPM_ROP_WRITES_H   : read_data_r = {`NUM_THREADS{32'(rop_perf_if.mem_writes[`PERF_CTR_BITS-1:32])}};
-                        `CSR_MPM_ROP_LAT        : read_data_r = {`NUM_THREADS{rop_perf_if.mem_latency[31:0]}};
-                        `CSR_MPM_ROP_LAT_H      : read_data_r = {`NUM_THREADS{32'(rop_perf_if.mem_latency[`PERF_CTR_BITS-1:32])}};
-                        `CSR_MPM_ROP_STALL      : read_data_r = {`NUM_THREADS{rop_perf_if.stall_cycles[31:0]}};
-                        `CSR_MPM_ROP_STALL_H    : read_data_r = {`NUM_THREADS{32'(rop_perf_if.stall_cycles[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_ROP_READS      : read_data_r = {`NUM_THREADS{perf_rop_if.mem_reads[31:0]}};
+                        `CSR_MPM_ROP_READS_H    : read_data_r = {`NUM_THREADS{32'(perf_rop_if.mem_reads[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_ROP_WRITES     : read_data_r = {`NUM_THREADS{perf_rop_if.mem_writes[31:0]}};
+                        `CSR_MPM_ROP_WRITES_H   : read_data_r = {`NUM_THREADS{32'(perf_rop_if.mem_writes[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_ROP_LAT        : read_data_r = {`NUM_THREADS{perf_rop_if.mem_latency[31:0]}};
+                        `CSR_MPM_ROP_LAT_H      : read_data_r = {`NUM_THREADS{32'(perf_rop_if.mem_latency[`PERF_CTR_BITS-1:32])}};
+                        `CSR_MPM_ROP_STALL      : read_data_r = {`NUM_THREADS{perf_rop_if.stall_cycles[31:0]}};
+                        `CSR_MPM_ROP_STALL_H    : read_data_r = {`NUM_THREADS{32'(perf_rop_if.stall_cycles[`PERF_CTR_BITS-1:32])}};
                     `ifdef OCACHE_ENABLE
                         // cache perf counters
                         `CSR_MPM_OCACHE_READS   : read_data_r = {`NUM_THREADS{perf_ocache_if.reads[31:0]}};
