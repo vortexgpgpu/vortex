@@ -22,19 +22,25 @@ module VX_mem_unit # (
     VX_cache_rsp_if.master  dcache_rsp_if [`NUM_CORES],
 
 `ifdef EXT_TEX_ENABLE
+`ifdef PERF_ENABLE
     VX_perf_cache_if.master perf_tcache_if,
+`endif
     VX_cache_req_if.slave   tcache_req_if [`NUM_TEX_UNITS],
     VX_cache_rsp_if.master  tcache_rsp_if [`NUM_TEX_UNITS],
 `endif
 
 `ifdef EXT_RASTER_ENABLE
+`ifdef PERF_ENABLE
     VX_perf_cache_if.master perf_rcache_if,
+`endif
     VX_cache_req_if.slave   rcache_req_if [`NUM_RASTER_UNITS],
     VX_cache_rsp_if.master  rcache_rsp_if [`NUM_RASTER_UNITS],
 `endif 
 
 `ifdef EXT_ROP_ENABLE
+`ifdef PERF_ENABLE
     VX_perf_cache_if.master perf_ocache_if,
+`endif
     VX_cache_req_if.slave   ocache_req_if [`NUM_ROP_UNITS],
     VX_cache_rsp_if.master  ocache_rsp_if [`NUM_ROP_UNITS],
 `endif
