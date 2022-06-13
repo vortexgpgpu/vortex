@@ -132,12 +132,12 @@ module VX_tex_sampler #(
             `TRACE_ARRAY1D(2, req_blends[0], NUM_LANES);
             `TRACE(2, (", v0="));
             `TRACE_ARRAY1D(2, req_blends[1], NUM_LANES);
-            `TRACE(2, (" (#%0d\n", req_info[REQ_INFOW-1 -: `UUID_BITS]));
+            `TRACE(2, (" (#%0d)\n", req_info[REQ_INFOW-1 -: `UUID_BITS]));
         end
         if (rsp_valid && rsp_ready) begin
             `TRACE(2, ("%d: %s-sampler-rsp: data=", $time, INSTANCE_ID));
             `TRACE_ARRAY1D(2, rsp_data, NUM_LANES);
-            `TRACE(2, (" (#%0d\n", rsp_info[REQ_INFOW-1 -: `UUID_BITS]));
+            `TRACE(2, (" (#%0d)\n", rsp_info[REQ_INFOW-1 -: `UUID_BITS]));
         end        
     end
 `endif  

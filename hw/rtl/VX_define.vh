@@ -208,7 +208,7 @@
 
 ////////////////////////// Texture Unit Definitions ///////////////////////////
 
-`define TEX_REQ_TAG_WIDTH       `LOG2UP(`TEX_REQ_QUEUE_SIZE)
+`define TEX_REQ_TAG_WIDTH       (`UP(`UUID_BITS) + `LOG2UP(`TEX_REQ_QUEUE_SIZE))
 `define TEX_REQ_ARB_TAG_WIDTH   (`TEX_REQ_TAG_WIDTH + `ARB_SEL_BITS(`NUM_CORES, `NUM_TEX_UNITS))
 
 ////////////////////// Floating-Point Unit Definitions ////////////////////////
