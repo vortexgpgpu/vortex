@@ -93,6 +93,6 @@ clean-all:
 	$(MAKE) -C no_mf_ext clean-all
 	$(MAKE) -C no_smem clean-all
 	$(MAKE) -C tex clean-all
-	$(MAKE) -C draw3d clean
-	$(MAKE) -C raster clean
+	$(MAKE) -C draw3d clean-all
+	$(MAKE) -C raster clean-all
 	$(MAKE) -C rop clean-all
