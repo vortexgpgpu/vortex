@@ -237,7 +237,7 @@ module VX_lsu_unit #(
 
         if (DCACHE_NUM_BATCHES > 1) begin
 
-            wire [DCACHE_NUM_BATCHES-1:0][DCACHE_NUM_REQS-1:0][`CACHE_ADDR_TYPE_BITS-1:0] cache_req_type_b, cache_rsp_type_b;            
+            wire [DCACHE_NUM_BATCHES-1:0][`CACHE_ADDR_TYPE_BITS-1:0] cache_req_type_b, cache_rsp_type_b;            
             wire [`CACHE_ADDR_TYPE_BITS-1:0] cache_req_type_bi, cache_rsp_type_bi;
             wire [DCACHE_BATCH_SEL_BITS-1:0] cache_req_bid, cache_rsp_bid;
 
@@ -247,24 +247,17 @@ module VX_lsu_unit #(
             assign cache_req_if.tag[i] = {cache_req_uuid, cache_req_bid, cache_req_tag, cache_req_type_bi};
             assign {cache_rsp_uuid, cache_rsp_bid, cache_rsp_tag, cache_rsp_type_bi} = cache_rsp_if.tag[i];
 
-            assign cache_req_type_bi = cache_req_type_b[cache_req_bid][i];
-            assign cache_rsp_type_b[cache_rsp_bid][i] = cache_rsp_type_bi;
+            assign cache_req_type_bi = cache_req_type_b[cache_req_bid];
+            assign cache_rsp_type_b = {DCACHE_NUM_BATCHES{cache_rsp_type_bi}};
 
             for (genvar j = 0; j < DCACHE_NUM_BATCHES; ++j) begin
                 localparam k = j * DCACHE_NUM_REQS + i;                
                 if (k < `NUM_THREADS) begin
-                    assign cache_req_type_b[j][i] = cache_req_type[k];
-                    assign cache_rsp_type[k] = cache_rsp_type_b[j][i];
+                    assign cache_req_type_b[j] = cache_req_type[k];
+                    assign cache_rsp_type[k] = cache_rsp_type_b[j];
                 end else begin
-                    assign cache_req_type_b[j][i] = 'x;
-                    `UNUSED_VAR (cache_rsp_type_b[j][i])
-                end
-            end
-
-            for (genvar j = 0; j < DCACHE_NUM_REQS; ++j) begin
-                if (i != j) begin                    
-                    `UNUSED_VAR (cache_req_type_b[cache_req_bid][j])
-                    assign cache_rsp_type_b[cache_rsp_bid][j] = 'x;
+                    assign cache_req_type_b[j] = 'x;
+                    `UNUSED_VAR (cache_rsp_type_b[j])
                 end
             end
 
