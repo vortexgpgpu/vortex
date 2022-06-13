@@ -109,6 +109,10 @@
 `define MAX(x, y)   (((x) > (y)) ? (x) : (y))
 `endif
 
+`ifndef CLAMP
+`define CLAMP(x, lo, hi)   (((x) > (hi)) ? (hi) : (((x) < (lo)) ? (lo) : (x)))
+`endif
+
 `ifndef UP
 `define UP(x)       (((x) != 0) ? (x) : 1)
 `endif

@@ -1,8 +1,7 @@
 `include "VX_tex_define.vh"
 
 module VX_tex_csr #( 
-    parameter CORE_ID    = 0,
-    parameter NUM_STAGES = 2
+    parameter CORE_ID = 0
 ) (
     input wire clk,
     input wire reset,

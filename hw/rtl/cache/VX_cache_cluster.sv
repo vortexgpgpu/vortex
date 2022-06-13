@@ -70,8 +70,7 @@ module VX_cache_cluster #(
 
     `STATIC_ASSERT(NUM_INPUTS >= `UP(NUM_UNITS), ("invalid parameter"))
 
-    localparam PASSTHRU  = (NUM_UNITS == 0);
-    localparam WORD_ADDR = 32 - `CLOG2(WORD_SIZE);
+    localparam PASSTHRU = (NUM_UNITS == 0);
     localparam ARB_TAG_WIDTH = TAG_WIDTH + `ARB_SEL_BITS(NUM_INPUTS, `UP(NUM_UNITS));    
     localparam MEM_TAG_WIDTH = PASSTHRU ? (NC_ENABLE ? `CACHE_NC_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH) : 
                                                        `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH)) : 

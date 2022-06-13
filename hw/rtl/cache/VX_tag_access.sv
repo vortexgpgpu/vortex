@@ -34,13 +34,11 @@ module VX_tag_access #(
     output wire                         tag_match
 );
 
-    `UNUSED_PARAM (INSTANCE_ID)
     `UNUSED_PARAM (BANK_ID)
     `UNUSED_VAR (reset)
     `UNUSED_VAR (lookup)
 
     localparam TAG_WIDTH = `TAG_SEL_BITS + 1;
-    localparam TAG_BYTES = ((TAG_WIDTH + 7) / 8);
 
     wire [NUM_WAYS-1:0] tag_matches;
     wire [`LINE_SEL_BITS-1:0] line_addr = addr[`LINE_SEL_BITS-1:0];

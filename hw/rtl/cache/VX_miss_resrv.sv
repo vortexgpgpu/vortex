@@ -64,7 +64,6 @@ module VX_miss_resrv #(
     input wire                          release_valid,
     input wire [MSHR_ADDR_WIDTH-1:0]    release_id
 );
-    `UNUSED_PARAM (INSTANCE_ID)
     `UNUSED_PARAM (BANK_ID)    
     
     reg [MSHR_SIZE-1:0][`LINE_ADDR_WIDTH-1:0] addr_table, addr_table_n;

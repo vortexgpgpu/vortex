@@ -33,7 +33,7 @@ localparam ICACHE_MEM_DATA_WIDTH= (ICACHE_LINE_SIZE * 8);
 `ifdef ICACHE_ENABLE
 localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_MEM_TAG_WIDTH(`ICACHE_MSHR_SIZE, ICACHE_NUM_BANKS, `NUM_ICACHES);
 `else
-localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_TAG_WIDTH(ICACHE_NUM_REQS, ICACHE_LINE_SIZE, ICACHE_WORD_SIZE, ICACHE_ARB_TAG_WIDTH, `NUM_CORES, `NUM_ICACHES);
+localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_TAG_WIDTH(ICACHE_NUM_REQS, ICACHE_LINE_SIZE, ICACHE_WORD_SIZE, ICACHE_TAG_WIDTH, `NUM_CORES, `NUM_ICACHES);
 `endif
 
 ////////////////////////// Dcache Definitions /////////////////////////////////
@@ -188,7 +188,6 @@ localparam NUM_L1_OUTPUTS       = (2 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + 
 
 // Word size in bytes
 localparam L2_WORD_SIZE	        = `L1_BLOCK_SIZE;
-localparam L2_ADDR_WIDTH	    = (32 - `CLOG2(L2_WORD_SIZE));
 
 // Block size in bytes
 `ifdef L2_ENABLE
@@ -217,7 +216,6 @@ localparam L2_MEM_TAG_WIDTH     = `CACHE_NC_BYPASS_TAG_WIDTH(L2_NUM_REQS, L2_LIN
 
 // Word size in bytes
 localparam L3_WORD_SIZE	        = L2_LINE_SIZE;
-localparam L3_ADDR_WIDTH	    = (32 - `CLOG2(L3_WORD_SIZE));
 
 // Block size in bytes
 `ifdef L3_ENABLE

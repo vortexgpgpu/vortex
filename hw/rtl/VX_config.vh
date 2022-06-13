@@ -9,8 +9,12 @@
 `define MAX(x, y)   (((x) > (y)) ? (x) : (y))
 `endif
 
+`ifndef CLAMP
+`define CLAMP(x, lo, hi)   (((x) > (hi)) ? (hi) : (((x) < (lo)) ? (lo) : (x)))
+`endif
+
 `ifndef UP
-`define UP(x)       (((x) != 0) ? (x) : 1)
+`define UP(x)   (((x) != 0) ? (x) : 1)
 `endif
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -405,7 +409,7 @@
 
 // Miss Handling Register Size
 `ifndef ICACHE_MSHR_SIZE
-`define ICACHE_MSHR_SIZE `MIN(`MAX(`NUM_WARPS * `UP(`NUM_CORES / `NUM_ICACHES), 2), 16)
+`define ICACHE_MSHR_SIZE `CLAMP(`NUM_WARPS * `UP(`NUM_CORES / `UP(`NUM_ICACHES)), 2, 16)
 `endif
 
 // Memory Request Queue Size
@@ -468,7 +472,7 @@
 
 // Miss Handling Register Size
 `ifndef DCACHE_MSHR_SIZE
-`define DCACHE_MSHR_SIZE `MIN(`MAX(`LSUQ_SIZE * `UP(`NUM_CORES / `NUM_DCACHES), 2), 16)
+`define DCACHE_MSHR_SIZE `CLAMP(`LSUQ_SIZE * `UP(`NUM_CORES / `UP(`NUM_DCACHES)), 2, 16)
 `endif
 
 // Memory Request Queue Size
@@ -484,6 +488,37 @@
 // Number of associative ways
 `ifndef DCACHE_NUM_WAYS
 `define DCACHE_NUM_WAYS 2
+`endif
+
+// SM Configurable Knobs //////////////////////////////////////////////////////
+
+`ifndef SM_DISABLE
+`define SM_ENABLE
+`endif
+`ifdef SM_ENABLE
+    `define SM_ENABLED   1
+`else
+    `define SM_ENABLED   0
+`endif
+
+// per thread stack size
+`ifndef SMEM_LOCAL_SIZE
+`define SMEM_LOCAL_SIZE 1024
+`endif
+
+// Size of storage in bytes
+`ifndef SMEM_SIZE
+`define SMEM_SIZE (`NUM_CORES * `NUM_WARPS * `NUM_THREADS * `SMEM_LOCAL_SIZE)
+`endif
+
+// Number of banks
+`ifndef SMEM_NUM_BANKS
+`define SMEM_NUM_BANKS `UP(`NUM_THREADS / 2)
+`endif
+
+// Core Request Queue Size
+`ifndef SMEM_CREQ_SIZE
+`define SMEM_CREQ_SIZE 2
 `endif
 
 // Tcache Configurable Knobs //////////////////////////////////////////////////
@@ -673,37 +708,6 @@
 // Number of associative ways
 `ifndef OCACHE_NUM_WAYS
 `define OCACHE_NUM_WAYS 2
-`endif
-
-// SM Configurable Knobs //////////////////////////////////////////////////////
-
-`ifndef SM_DISABLE
-`define SM_ENABLE
-`endif
-`ifdef SM_ENABLE
-    `define SM_ENABLED   1
-`else
-    `define SM_ENABLED   0
-`endif
-
-// per thread stack size
-`ifndef SMEM_LOCAL_SIZE
-`define SMEM_LOCAL_SIZE 1024
-`endif
-
-// Size of storage in bytes
-`ifndef SMEM_SIZE
-`define SMEM_SIZE (`NUM_CORES * `NUM_WARPS * `NUM_THREADS * `SMEM_LOCAL_SIZE)
-`endif
-
-// Number of banks
-`ifndef SMEM_NUM_BANKS
-`define SMEM_NUM_BANKS DCACHE_NUM_REQS
-`endif
-
-// Core Request Queue Size
-`ifndef SMEM_CREQ_SIZE
-`define SMEM_CREQ_SIZE 2
 `endif
 
 // L2cache Configurable Knobs /////////////////////////////////////////////////
