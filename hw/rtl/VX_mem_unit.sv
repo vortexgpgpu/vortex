@@ -260,7 +260,7 @@ module VX_mem_unit # (
     `RESET_RELAY (smem_reset, reset);
     
     VX_shared_mem #(
-        .IDNAME     ($sformatf("cluster%0d-smem", CLUSTER_ID)),
+        .INSTANCE_ID($sformatf("cluster%0d-smem", CLUSTER_ID)),
         .SIZE       (`SMEM_SIZE),
         .NUM_REQS   (DCACHE_NUM_REQS),
         .NUM_BANKS  (`SMEM_NUM_BANKS),
