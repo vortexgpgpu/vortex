@@ -9,7 +9,7 @@ module VX_rop_unit #(
 
     // PERF
 `ifdef PERF_ENABLE
-    VX_rop_perf_if.master rop_perf_if,
+    VX_rop_perf_if.master perf_rop_if,
 `endif
 
     // Memory interface
@@ -320,10 +320,10 @@ module VX_rop_unit #(
         end
     end
 
-    assign rop_perf_if.mem_reads    = perf_mem_reads;
-    assign rop_perf_if.mem_writes   = perf_mem_writes;
-    assign rop_perf_if.mem_latency  = perf_mem_latency;
-    assign rop_perf_if.stall_cycles = perf_stall_cycles;
+    assign perf_rop_if.mem_reads    = perf_mem_reads;
+    assign perf_rop_if.mem_writes   = perf_mem_writes;
+    assign perf_rop_if.mem_latency  = perf_mem_latency;
+    assign perf_rop_if.stall_cycles = perf_stall_cycles;
 
 `endif
 

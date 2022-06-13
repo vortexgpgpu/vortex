@@ -11,55 +11,80 @@ module VX_cluster #(
     `SCOPE_IO_VX_cluster
 
     // Clock
-    input  wire             clk,
-    input  wire             reset,
+    input  wire                 clk,
+    input  wire                 reset,
 
-    VX_dcr_base_if.slave    dcr_base_if,
+`ifdef PERF_ENABLE
+    VX_perf_memsys_if.master    perf_memsys_if,
+    VX_perf_memsys_if.slave     perf_memsys_total_if,
+`endif
+
+    VX_dcr_base_if.slave        dcr_base_if,
 
 `ifdef EXT_TEX_ENABLE
-    VX_tex_dcr_if.slave     tex_dcr_if,
+`ifdef PERF_ENABLE
+    VX_tex_perf_if.master       perf_tex_if,
+    VX_perf_cache_if.master     perf_tcache_if,
+    VX_tex_perf_if.slave        perf_tex_total_if,
+    VX_perf_cache_if.slave      perf_tcache_total_if,
 `endif
+    VX_tex_dcr_if.slave         tex_dcr_if,
+`endif
+
 `ifdef EXT_RASTER_ENABLE
-    VX_raster_dcr_if.slave  raster_dcr_if,
+`ifdef PERF_ENABLE
+    VX_raster_perf_if.master    perf_raster_if,
+    VX_perf_cache_if.master     perf_rcache_if,
+    VX_raster_perf_if.slave     perf_raster_total_if,
+    VX_perf_cache_if.slave      perf_rcache_total_if,
 `endif
+    VX_raster_dcr_if.slave      raster_dcr_if,
+`endif
+
 `ifdef EXT_ROP_ENABLE
-    VX_rop_dcr_if.slave     rop_dcr_if,
+`ifdef PERF_ENABLE
+    VX_rop_perf_if.master       perf_rop_if,
+    VX_perf_cache_if.master     perf_ocache_if,
+    VX_rop_perf_if.slave        perf_rop_total_if,
+    VX_perf_cache_if.slave      perf_ocache_total_if,
+`endif
+    VX_rop_dcr_if.slave         rop_dcr_if,
 `endif
 
     // Memory
-    VX_mem_req_if.master    mem_req_if,
-    VX_mem_rsp_if.slave     mem_rsp_if,
+    VX_mem_req_if.master        mem_req_if,
+    VX_mem_rsp_if.slave         mem_rsp_if,
 
     // simulation helper signals
-    output wire             sim_ebreak,
+    output wire                 sim_ebreak,
     output wire [`NUM_REGS-1:0][31:0] sim_wb_value,
 
     // Status
-    output wire             busy
+    output wire                 busy
 );
 
 `ifdef EXT_RASTER_ENABLE
 
 `ifdef PERF_ENABLE
-    VX_perf_cache_if  perf_rcache_if();
-    VX_raster_perf_if raster_perf_if [`NUM_RASTER_UNITS]();
+    VX_raster_perf_if perf_raster_unit_if[`NUM_RASTER_UNITS]();
+    `PERF_RASTER_ADD (perf_raster_if, perf_raster_unit_if, `NUM_RASTER_UNITS);
 `endif
 
     VX_cache_req_if #(
         .NUM_REQS  (RCACHE_NUM_REQS), 
         .WORD_SIZE (RCACHE_WORD_SIZE), 
         .TAG_WIDTH (RCACHE_TAG_WIDTH)
-    ) rcache_req_if [`NUM_RASTER_UNITS]();
+    ) rcache_req_if[`NUM_RASTER_UNITS]();
 
     VX_cache_rsp_if #(
         .NUM_REQS  (RCACHE_NUM_REQS), 
         .WORD_SIZE (RCACHE_WORD_SIZE), 
         .TAG_WIDTH (RCACHE_TAG_WIDTH)
-    ) rcache_rsp_if [`NUM_RASTER_UNITS]();
+    ) rcache_rsp_if[`NUM_RASTER_UNITS]();
 
     VX_raster_req_if #(
         .NUM_LANES (`NUM_THREADS)
-    ) raster_req_if [`NUM_RASTER_UNITS]();
+    ) raster_req_if[`NUM_RASTER_UNITS]();
 
     // Generate all raster units
     for (genvar i = 0; i < `NUM_RASTER_UNITS; ++i) begin
@@ -79,7 +104,7 @@ module VX_cluster #(
             .clk           (clk),
             .reset         (raster_reset),
         `ifdef PERF_ENABLE
-            .raster_perf_if(raster_perf_if[i]),
+            .perf_raster_if(perf_raster_unit_if[i]),
         `endif
             .raster_dcr_if (raster_dcr_if),
             .raster_req_if (raster_req_if[i]),
@@ -90,7 +115,7 @@ module VX_cluster #(
 
     VX_raster_req_if #(
         .NUM_LANES (`NUM_THREADS)
-    ) per_core_raster_req_if [`NUM_CORES]();
+    ) per_core_raster_req_if[`NUM_CORES]();
 
     VX_raster_arb #(
         .NUM_INPUTS  (`NUM_RASTER_UNITS),
@@ -110,29 +135,29 @@ module VX_cluster #(
 `ifdef EXT_ROP_ENABLE
 
 `ifdef PERF_ENABLE
-    VX_perf_cache_if perf_ocache_if();
-    VX_rop_perf_if rop_perf_if [`NUM_ROP_UNITS]();
+    VX_rop_perf_if perf_rop_unit_if[`NUM_ROP_UNITS]();
+    `PERF_ROP_ADD (perf_rop_if, perf_rop_unit_if, `NUM_ROP_UNITS);
 `endif
 
     VX_cache_req_if #(
         .NUM_REQS  (OCACHE_NUM_REQS), 
         .WORD_SIZE (OCACHE_WORD_SIZE), 
         .TAG_WIDTH (OCACHE_TAG_WIDTH)
-    ) ocache_req_if [`NUM_ROP_UNITS]();
+    ) ocache_req_if[`NUM_ROP_UNITS]();
 
     VX_cache_rsp_if #(
         .NUM_REQS  (OCACHE_NUM_REQS), 
         .WORD_SIZE (OCACHE_WORD_SIZE), 
         .TAG_WIDTH (OCACHE_TAG_WIDTH)
-    ) ocache_rsp_if [`NUM_ROP_UNITS]();
+    ) ocache_rsp_if[`NUM_ROP_UNITS]();
 
     VX_rop_req_if #(
         .NUM_LANES (`NUM_THREADS)
-    ) per_core_rop_req_if [`NUM_CORES]();
+    ) per_core_rop_req_if[`NUM_CORES]();
 
     VX_rop_req_if #(
         .NUM_LANES (`NUM_THREADS)
-    ) rop_req_if [`NUM_ROP_UNITS]();
+    ) rop_req_if[`NUM_ROP_UNITS]();
 
     VX_rop_arb #(
         .NUM_INPUTS  (`NUM_CORES),
@@ -158,7 +183,7 @@ module VX_cluster #(
             .clk           (clk),
             .reset         (rop_reset),
         `ifdef PERF_ENABLE
-            .rop_perf_if   (rop_perf_if[i]),
+            .perf_rop_if   (perf_rop_unit_if[i]),
         `endif
             .rop_dcr_if    (rop_dcr_if),
             .rop_req_if    (rop_req_if[i]),            
@@ -172,41 +197,41 @@ module VX_cluster #(
 `ifdef EXT_TEX_ENABLE
 
 `ifdef PERF_ENABLE
-    VX_perf_cache_if perf_tcache_if();
-    VX_tex_perf_if tex_perf_if [`NUM_TEX_UNITS]();
+    VX_tex_perf_if perf_tex_unit_if[`NUM_TEX_UNITS]();
+    `PERF_TEX_ADD (perf_tex_if, perf_tex_unit_if, `NUM_TEX_UNITS);
 `endif
 
     VX_cache_req_if #(
         .NUM_REQS  (TCACHE_NUM_REQS), 
         .WORD_SIZE (TCACHE_WORD_SIZE), 
         .TAG_WIDTH (TCACHE_TAG_WIDTH)
-    ) tcache_req_if [`NUM_TEX_UNITS]();
+    ) tcache_req_if[`NUM_TEX_UNITS]();
 
     VX_cache_rsp_if #(
         .NUM_REQS  (TCACHE_NUM_REQS), 
         .WORD_SIZE (TCACHE_WORD_SIZE), 
         .TAG_WIDTH (TCACHE_TAG_WIDTH)
-    ) tcache_rsp_if [`NUM_TEX_UNITS]();
+    ) tcache_rsp_if[`NUM_TEX_UNITS]();
 
     VX_tex_req_if #(
         .NUM_LANES (`NUM_THREADS),
         .TAG_WIDTH (`TEX_REQ_TAG_WIDTH)
-    ) per_core_tex_req_if [`NUM_CORES]();
+    ) per_core_tex_req_if[`NUM_CORES]();
 
     VX_tex_rsp_if #(
         .NUM_LANES (`NUM_THREADS),
         .TAG_WIDTH (`TEX_REQ_TAG_WIDTH)
-    ) per_core_tex_rsp_if [`NUM_CORES]();
+    ) per_core_tex_rsp_if[`NUM_CORES]();
 
     VX_tex_req_if #(
         .NUM_LANES (`NUM_THREADS),
         .TAG_WIDTH (`TEX_REQ_ARB_TAG_WIDTH)
-    ) tex_req_if [`NUM_TEX_UNITS]();
+    ) tex_req_if[`NUM_TEX_UNITS]();
 
     VX_tex_rsp_if #(
         .NUM_LANES (`NUM_THREADS),
         .TAG_WIDTH (`TEX_REQ_ARB_TAG_WIDTH)
-    ) tex_rsp_if [`NUM_TEX_UNITS]();
+    ) tex_rsp_if[`NUM_TEX_UNITS]();
 
     VX_tex_arb #(
         .NUM_INPUTS   (`NUM_CORES),
@@ -236,7 +261,7 @@ module VX_cluster #(
             .clk          (clk),
             .reset        (tex_reset),
         `ifdef PERF_ENABLE
-            .tex_perf_if  (tex_perf_if[i]),
+            .perf_tex_if  (perf_tex_unit_if[i]),
         `endif 
             .tex_dcr_if   (tex_dcr_if),
             .tex_req_if   (tex_req_if[i]),
@@ -304,33 +329,29 @@ module VX_cluster #(
 
 `endif
 
-`ifdef PERF_ENABLE
-    VX_perf_memsys_if perf_memsys_if();
-`endif
-
     VX_cache_req_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_TAG_WIDTH)
-    ) per_core_dcache_req_if [`NUM_CORES]();
+    ) per_core_dcache_req_if[`NUM_CORES]();
 
     VX_cache_rsp_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_TAG_WIDTH)
-    ) per_core_dcache_rsp_if [`NUM_CORES]();
+    ) per_core_dcache_rsp_if[`NUM_CORES]();
     
     VX_cache_req_if #(
         .NUM_REQS  (ICACHE_NUM_REQS), 
         .WORD_SIZE (ICACHE_WORD_SIZE), 
         .TAG_WIDTH (ICACHE_TAG_WIDTH)
-    ) per_core_icache_req_if [`NUM_CORES]();
+    ) per_core_icache_req_if[`NUM_CORES]();
 
     VX_cache_rsp_if #(
         .NUM_REQS  (ICACHE_NUM_REQS), 
         .WORD_SIZE (ICACHE_WORD_SIZE), 
         .TAG_WIDTH (ICACHE_TAG_WIDTH)
-    ) per_core_icache_rsp_if [`NUM_CORES]();
+    ) per_core_icache_rsp_if[`NUM_CORES]();
 
     wire [`NUM_CORES-1:0] per_core_sim_ebreak;
     wire [`NUM_CORES-1:0][`NUM_REGS-1:0][31:0] per_core_sim_wb_value;
@@ -353,11 +374,12 @@ module VX_cluster #(
 
             .clk            (clk),
             .reset          (core_reset),
-            .dcr_base_if    (dcr_base_if),
 
-         `ifdef PERF_ENABLE
-            .perf_memsys_if (perf_memsys_if),
-        `endif       
+        `ifdef PERF_ENABLE
+            .perf_memsys_if (perf_memsys_total_if),
+        `endif
+            
+            .dcr_base_if    (dcr_base_if),
 
             .dcache_req_if  (per_core_dcache_req_if[i]),
             .dcache_rsp_if  (per_core_dcache_rsp_if[i]),
@@ -371,28 +393,28 @@ module VX_cluster #(
         `endif
 
         `ifdef EXT_TEX_ENABLE
+        `ifdef PERF_ENABLE
+            .perf_tex_if    (perf_tex_total_if),
+            .perf_tcache_if (perf_tcache_total_if),
+        `endif
             .tex_req_if     (per_core_tex_req_if[i]),
             .tex_rsp_if     (per_core_tex_rsp_if[i]),
-        `ifdef PERF_ENABLE
-            .tex_perf_if    (tex_perf_if[0]),
-            .perf_tcache_if (perf_tcache_if),
-        `endif
         `endif
 
-        `ifdef EXT_RASTER_ENABLE        
-            .raster_req_if  (per_core_raster_req_if[i]),
+        `ifdef EXT_RASTER_ENABLE
         `ifdef PERF_ENABLE
-            .raster_perf_if (raster_perf_if[0]),
-            .perf_rcache_if (perf_rcache_if),
+            .perf_raster_if (perf_raster_total_if),
+            .perf_rcache_if (perf_rcache_total_if),
         `endif
+            .raster_req_if  (per_core_raster_req_if[i]),
         `endif
         
-        `ifdef EXT_ROP_ENABLE        
-            .rop_req_if     (per_core_rop_req_if[i]),
+        `ifdef EXT_ROP_ENABLE
         `ifdef PERF_ENABLE
-            .rop_perf_if    (rop_perf_if[0]),
-            .perf_ocache_if (perf_ocache_if),
+            .perf_rop_if    (perf_rop_total_if),
+            .perf_ocache_if (perf_ocache_total_if),
         `endif
+            .rop_req_if     (per_core_rop_req_if[i]),
         `endif
 
             .sim_ebreak     (per_core_sim_ebreak[i]),
@@ -406,9 +428,11 @@ module VX_cluster #(
     ) mem_unit (
         .clk                (clk),
         .reset              (reset),
+
     `ifdef PERF_ENABLE
         .perf_memsys_if     (perf_memsys_if),
     `endif
+
         .dcache_req_if      (per_core_dcache_req_if),
         .dcache_rsp_if      (per_core_dcache_rsp_if),
         
@@ -416,16 +440,25 @@ module VX_cluster #(
         .icache_rsp_if      (per_core_icache_rsp_if),
 
     `ifdef EXT_TEX_ENABLE
+    `ifdef PERF_ENABLE
+        .perf_tcache_if     (perf_tcache_if),
+    `endif
         .tcache_req_if      (tcache_req_if),
         .tcache_rsp_if      (tcache_rsp_if),
     `endif
 
     `ifdef EXT_RASTER_ENABLE
+    `ifdef PERF_ENABLE
+        .perf_rcache_if     (perf_rcache_if),
+    `endif
         .rcache_req_if      (rcache_req_if),
         .rcache_rsp_if      (rcache_rsp_if),
     `endif 
 
     `ifdef EXT_ROP_ENABLE
+    `ifdef PERF_ENABLE
+        .perf_ocache_if     (perf_ocache_if),
+    `endif
         .ocache_req_if      (ocache_req_if),
         .ocache_rsp_if      (ocache_rsp_if),
     `endif

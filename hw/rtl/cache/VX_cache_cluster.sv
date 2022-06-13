@@ -52,7 +52,7 @@ module VX_cache_cluster #(
 
     // PERF
 `ifdef PERF_ENABLE
-    VX_perf_cache_if.master perf_cache_if [`UP(NUM_UNITS)],
+    VX_perf_cache_if.master perf_cache_if,
 `endif
 
     // Core request
@@ -77,6 +77,11 @@ module VX_cache_cluster #(
                                                        `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH)) : 
                                           (NC_ENABLE ? `CACHE_NC_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH) :
                                                        `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS));
+
+`ifdef PERF_ENABLE
+    VX_perf_cache_if perf_cache_unit_if[`UP(NUM_UNITS)]();
+    `PERF_CACHE_ADD (perf_cache_if, perf_cache_unit_if, `UP(NUM_UNITS));
+`endif
 
     VX_mem_req_if #(
         .DATA_WIDTH (`LINE_WIDTH),
@@ -164,7 +169,7 @@ module VX_cache_cluster #(
             .PASSTHRU     (PASSTHRU)
         ) cache_wrap (
         `ifdef PERF_ENABLE
-            .perf_cache_if (perf_cache_if[i]),
+            .perf_cache_if (perf_cache_unit_if[i]),
         `endif
             
             .clk         (clk),

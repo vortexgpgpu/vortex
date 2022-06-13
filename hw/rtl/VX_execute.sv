@@ -41,7 +41,7 @@ module VX_execute #(
     VX_tex_req_if.master    tex_req_if,
     VX_tex_rsp_if.slave     tex_rsp_if,
 `ifdef PERF_ENABLE
-    VX_tex_perf_if.slave    tex_perf_if,
+    VX_tex_perf_if.slave    perf_tex_if,
     VX_perf_cache_if.slave  perf_tcache_if,
 `endif
 `endif
@@ -49,7 +49,7 @@ module VX_execute #(
 `ifdef EXT_RASTER_ENABLE        
     VX_raster_req_if.slave  raster_req_if,
 `ifdef PERF_ENABLE
-    VX_raster_perf_if.slave raster_perf_if,
+    VX_raster_perf_if.slave perf_raster_if,
     VX_perf_cache_if.slave  perf_rcache_if,
 `endif
 `endif
@@ -57,7 +57,7 @@ module VX_execute #(
 `ifdef EXT_ROP_ENABLE        
     VX_rop_req_if.master    rop_req_if,
 `ifdef PERF_ENABLE
-    VX_rop_perf_if.slave    rop_perf_if,
+    VX_rop_perf_if.slave    perf_rop_if,
     VX_perf_cache_if.slave  perf_ocache_if,
 `endif
 `endif    
@@ -154,7 +154,7 @@ module VX_execute #(
     `ifdef EXT_TEX_ENABLE        
         .tex_csr_if     (tex_csr_if),
     `ifdef PERF_ENABLE
-        .tex_perf_if    (tex_perf_if),
+        .perf_tex_if    (perf_tex_if),
         .perf_tcache_if (perf_tcache_if),
     `endif
     `endif
@@ -162,7 +162,7 @@ module VX_execute #(
     `ifdef EXT_RASTER_ENABLE        
         .raster_csr_if  (raster_csr_if),
     `ifdef PERF_ENABLE
-        .raster_perf_if (raster_perf_if),
+        .perf_raster_if (perf_raster_if),
         .perf_rcache_if (perf_rcache_if),
     `endif
     `endif
@@ -170,7 +170,7 @@ module VX_execute #(
     `ifdef EXT_ROP_ENABLE        
         .rop_csr_if     (rop_csr_if),
     `ifdef PERF_ENABLE
-        .rop_perf_if    (rop_perf_if),
+        .perf_rop_if    (perf_rop_if),
         .perf_ocache_if (perf_ocache_if),
     `endif
     `endif

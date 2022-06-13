@@ -10,7 +10,7 @@ module VX_tex_unit #(
 
     // PERF
 `ifdef PERF_ENABLE
-    VX_tex_perf_if.master   tex_perf_if,
+    VX_tex_perf_if.master   perf_tex_if,
 `endif
 
     // Memory interface
@@ -227,8 +227,8 @@ module VX_tex_unit #(
         end
     end
 
-    assign tex_perf_if.mem_reads   = perf_mem_reads;
-    assign tex_perf_if.mem_latency = perf_pending_reads;
+    assign perf_tex_if.mem_reads   = perf_mem_reads;
+    assign perf_tex_if.mem_latency = perf_pending_reads;
 `endif  
 
 `ifdef DBG_TRACE_TEX

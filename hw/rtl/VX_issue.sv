@@ -203,21 +203,21 @@ module VX_issue #(
         `endif
         end else begin
             if (decode_if.valid & ~decode_if.ready) begin
-                perf_ibf_stalls <= perf_ibf_stalls  + `PERF_CTR_BITS'd1;
+                perf_ibf_stalls <= perf_ibf_stalls  + `PERF_CTR_BITS'(1);
             end
             if (scoreboard_if.valid & ~scoreboard_if.ready) begin 
-                perf_scb_stalls <= perf_scb_stalls  + `PERF_CTR_BITS'd1;
+                perf_scb_stalls <= perf_scb_stalls  + `PERF_CTR_BITS'(1);
             end
             if (dispatch_if.valid & ~dispatch_if.ready) begin
                 case (dispatch_if.ex_type)
-                `EX_ALU: perf_alu_stalls <= perf_alu_stalls + `PERF_CTR_BITS'd1;
+                `EX_ALU: perf_alu_stalls <= perf_alu_stalls + `PERF_CTR_BITS'(1);
             `ifdef EXT_F_ENABLE
-                `EX_FPU: perf_fpu_stalls <= perf_fpu_stalls + `PERF_CTR_BITS'd1;
+                `EX_FPU: perf_fpu_stalls <= perf_fpu_stalls + `PERF_CTR_BITS'(1);
             `endif
-                `EX_LSU: perf_lsu_stalls <= perf_lsu_stalls + `PERF_CTR_BITS'd1;
-                `EX_CSR: perf_csr_stalls <= perf_csr_stalls + `PERF_CTR_BITS'd1;
+                `EX_LSU: perf_lsu_stalls <= perf_lsu_stalls + `PERF_CTR_BITS'(1);
+                `EX_CSR: perf_csr_stalls <= perf_csr_stalls + `PERF_CTR_BITS'(1);
                 //`EX_GPU:
-                default: perf_gpu_stalls <= perf_gpu_stalls + `PERF_CTR_BITS'd1;
+                default: perf_gpu_stalls <= perf_gpu_stalls + `PERF_CTR_BITS'(1);
                 endcase
             end
         end

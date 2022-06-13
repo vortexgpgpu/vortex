@@ -46,4 +46,10 @@ task trace_rop_csr (
     endcase  
 endtask
 
+`define PERF_ROP_ADD(dst, src, count) \
+    `REDUCE_ADD (dst, src, mem_reads, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, mem_writes, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, mem_latency, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, stall_cycles, `PERF_CTR_BITS, count)
+
 `endif

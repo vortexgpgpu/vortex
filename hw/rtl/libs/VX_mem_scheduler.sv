@@ -194,21 +194,20 @@ module VX_mem_scheduler #(
             (NUM_BANKS * DATA_WIDTH)'(sreq_data[i * NUM_BANKS +: SIZE])
         };
     end    
-
-    wire [NUM_REQS-1:0] req_sent_mask_all;
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
-        if (NUM_BATCHES > 1) begin
+    
+    if (NUM_BATCHES > 1) begin
+        wire [NUM_REQS-1:0] req_sent_mask_all;
+        for (genvar i = 0; i < NUM_REQS; ++i) begin
             localparam j = i / NUM_BANKS;
             localparam k = i % NUM_BANKS;
-            wire [BATCH_SEL_BITS-1:0] batch_idx = BATCH_SEL_BITS'(i / NUM_BANKS);
-            if (j < (NUM_BATCHES-1)) begin
-                assign req_sent_mask_all[i] = (batch_idx < req_batch_idx) ? sreq_mask[i] : ((batch_idx == req_batch_idx) & req_sent_mask_n[k]);
-            end else begin
-                assign req_sent_mask_all[i] = (batch_idx == req_batch_idx) & req_sent_mask_n[k];
-            end            
-        end else begin
-            assign req_sent_mask_all[i] = req_sent_mask_n[i];
+            wire req_sent_curr = (req_batch_idx == BATCH_SEL_BITS'(j)) && req_sent_mask_n[k];
+            assign req_sent_mask_all[i] = ((j < (NUM_BATCHES-1)) && (req_batch_idx > BATCH_SEL_BITS'(j))) 
+                                         | (req_sent_curr & sreq_mask[i]) 
+                                         | (~req_sent_curr & ~sreq_mask[i]);
         end
+        assign req_complete = (& req_sent_mask_all);
+    end else begin
+        assign req_complete = (req_sent_mask_n == sreq_mask);
     end
 
     wire [NUM_BANKS-1:0] mem_req_fire_s = mem_req_valid_s & mem_req_ready_s;
@@ -216,8 +215,6 @@ module VX_mem_scheduler #(
     assign mem_req_mask_b = (NUM_BATCHES * NUM_BANKS)'(sreq_mask);
 
     assign req_sent_mask_n = req_sent_mask | mem_req_fire_s;
-    
-    assign req_complete = (req_sent_mask_all == sreq_mask);
 
     wire req_complete_b = ~sreq_empty && (req_sent_mask_n == mem_req_mask_b[req_batch_idx]);
 

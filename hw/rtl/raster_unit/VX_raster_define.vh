@@ -55,4 +55,9 @@ task trace_raster_csr (
     endcase  
 endtask
 
+`define PERF_RASTER_ADD(dst, src, count) \
+    `REDUCE_ADD (dst, src, mem_reads, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, mem_latency, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, stall_cycles, `PERF_CTR_BITS, count)
+
 `endif
