@@ -9,16 +9,18 @@ module VX_reduce #(
     input wire [N-1:0][DATAW-1:0] data_in,
     output wire [DATAW-1:0]       data_out
 );
+`IGNORE_WARNINGS_BEGIN
     wire [N-1:0][DATAW-1:0] tmp;
+`IGNORE_WARNINGS_END
 
     assign tmp[0] = data_in[0];
 
     for (genvar i = 1; i < N; ++i) begin                    
         if (OP == "+") begin
             assign tmp[i] = tmp[i-1] + data_in[i];
-        end if (OP == "^") begin
+        end else if (OP == "^") begin
             assign tmp[i] = tmp[i-1] ^ data_in[i];
-        end if (OP == "&") begin
+        end else if (OP == "&") begin
             assign tmp[i] = tmp[i-1] & data_in[i];
         end else if (OP == "|") begin
             assign tmp[i] = tmp[i-1] | data_in[i];

@@ -198,7 +198,7 @@ module VX_rop_mem #(
         .DATA_WIDTH   (32),
         .TAG_WIDTH    (TAG_WIDTH),
         .QUEUE_SIZE   (`ROP_MEM_QUEUE_SIZE),
-        .CORE_OUT_REG (1)
+        .CORE_OUT_REG (3)
     ) mem_scheduler (
         .clk            (clk),
         .reset          (reset),

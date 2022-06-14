@@ -322,8 +322,8 @@
 
 `define REDUCE_ADD(dst, src, field, width, count) \
     wire [count-1:0][width-1:0] __reduce_add_i_``src``field; \
-    wire [count-1:0][width-1:0] __reduce_add_o_``dst``field; \
-    reg [count-1:0][width-1:0] __reduce_add_r_``dst``field; \
+    wire [width-1:0] __reduce_add_o_``dst``field; \
+    reg [width-1:0] __reduce_add_r_``dst``field; \
     for (genvar i = 0; i < count; ++i) assign __reduce_add_i_``src``field[i] = ``src[i].``field; \
     VX_reduce #(.N(count), .DATAW(width), .OP("+")) __reduce_add_``dst``field (__reduce_add_i_``src``field, __reduce_add_o_``dst``field) ; \
     always @(posedge clk) begin \

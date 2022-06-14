@@ -6,6 +6,9 @@ set -e
 # ensure build
 make -s
 
+# clear drivers
+make -C driver clean
+
 # clear blackbox cache
 rm -f blackbox.*.cache
 
