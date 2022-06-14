@@ -1,4 +1,5 @@
 `include "VX_fpu_define.vh"
+`include "cf_math_pkg.sv"
 `include "fpnew_pkg.sv"
 `include "defs_div_sqrt_mvp.sv"
 
