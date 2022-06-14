@@ -1004,9 +1004,7 @@ VX_fifo_queue #(
 `SCOPE_ASSIGN (cci_pending_writes_full, cci_pending_writes_full);
 `SCOPE_ASSIGN (afu_mem_req_fire, (mem_req_if.valid && mem_req_if.ready));
 `SCOPE_ASSIGN (afu_mem_req_addr, mem_req_if.addr);
-`SCOPE_ASSIGN (afu_mem_req_tag, mem_req_if.tag);
 `SCOPE_ASSIGN (afu_mem_rsp_fire, (mem_rsp_if.valid && mem_rsp_if.ready));
-`SCOPE_ASSIGN (afu_mem_rsp_tag, mem_rsp_if.tag);
 
 wire scope_changed = `SCOPE_TRIGGER;
 

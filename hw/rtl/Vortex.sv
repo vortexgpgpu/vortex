@@ -269,12 +269,7 @@ module Vortex (
     `SCOPE_ASSIGN (mem_req_fire, mem_req_valid && mem_req_ready);
     `SCOPE_ASSIGN (mem_req_addr, `TO_FULL_ADDR(mem_req_addr));
     `SCOPE_ASSIGN (mem_req_rw,   mem_req_rw);
-    `SCOPE_ASSIGN (mem_req_byteen, mem_req_byteen);
-    `SCOPE_ASSIGN (mem_req_data, mem_req_data);
-    `SCOPE_ASSIGN (mem_req_tag,  mem_req_tag);
     `SCOPE_ASSIGN (mem_rsp_fire, mem_rsp_valid && mem_rsp_ready);
-    `SCOPE_ASSIGN (mem_rsp_data, mem_rsp_data);
-    `SCOPE_ASSIGN (mem_rsp_tag,  mem_rsp_tag);
     `SCOPE_ASSIGN (busy, busy);
 
 `ifdef DBG_TRACE_CORE_MEM

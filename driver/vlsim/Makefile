@@ -46,7 +46,7 @@ PROJECT = libvortex.so
 all: $(PROJECT)
 
 scope-defs.h: $(SCRIPT_DIR)/scope.json
-	$(SCRIPT_DIR)/scope.py $(CONFIGS) -cc scope-defs.h -vl $(RTL_DIR)/scope-defs.vh $(SCRIPT_DIR)/scope.json
+	$(SCRIPT_DIR)/scope.py -DSIMULATION $(CONFIGS) -cc scope-defs.h -vl $(RTL_DIR)/scope-defs.vh $(SCRIPT_DIR)/scope.json
 
 # generate scope data
 scope: scope-defs.h
