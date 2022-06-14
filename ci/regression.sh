@@ -3,14 +3,14 @@
 # exit when any command fails
 set -e
 
-# ensure build
-make -s
-
 # clear drivers
 make -C driver clean
 
 # clear blackbox cache
 rm -f blackbox.*.cache
+
+# ensure build
+make -s
 
 smoke() 
 {
@@ -300,6 +300,8 @@ while [ "$1" != "" ]; do
         -coverage ) coverage
                 ;;
         -tex ) tex
+                ;;
+        -graphics ) graphics
                 ;;
         -cluster ) cluster
                 ;;
