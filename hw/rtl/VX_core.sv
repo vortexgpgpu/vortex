@@ -8,7 +8,7 @@ import VX_gpu_types::*;
 module VX_core #( 
     parameter CORE_ID = 0
 ) (        
-    `SCOPE_IO_VX_pipeline
+    `SCOPE_IO_VX_core
     
     // Clock
     input wire              clk,
@@ -106,7 +106,7 @@ module VX_core #(
     VX_fetch #(
         .CORE_ID(CORE_ID)
     ) fetch (
-        `SCOPE_BIND_VX_pipeline_fetch
+        `SCOPE_BIND_VX_core_fetch
         .clk            (clk),
         .base_dcrs      (base_dcrs),
         .reset          (fetch_reset),
@@ -138,7 +138,7 @@ module VX_core #(
     VX_issue #(
         .CORE_ID(CORE_ID)
     ) issue (
-        `SCOPE_BIND_VX_pipeline_issue
+        `SCOPE_BIND_VX_core_issue
 
         .clk            (clk),
         .reset          (issue_reset),
@@ -162,7 +162,7 @@ module VX_core #(
     VX_execute #(
         .CORE_ID(CORE_ID)
     ) execute (
-        `SCOPE_BIND_VX_pipeline_execute
+        `SCOPE_BIND_VX_core_execute
         
         .clk            (clk),
         .reset          (execute_reset),

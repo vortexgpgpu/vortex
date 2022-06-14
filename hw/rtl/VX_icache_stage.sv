@@ -116,13 +116,11 @@ module VX_icache_stage #(
 
     `SCOPE_ASSIGN (icache_req_fire, icache_req_fire);
     `SCOPE_ASSIGN (icache_req_uuid, ifetch_req_if.uuid);
-    `SCOPE_ASSIGN (icache_req_addr, icache_req_addr);
-    `SCOPE_ASSIGN (icache_req_tag,  icache_req_tag);
+    `SCOPE_ASSIGN (icache_req_addr, ifetch_req_if.PC);
 
     `SCOPE_ASSIGN (icache_rsp_fire, icache_rsp_if.valid && icache_rsp_if.ready);
     `SCOPE_ASSIGN (icache_rsp_uuid, rsp_uuid);
     `SCOPE_ASSIGN (icache_rsp_data, icache_rsp_if.data);
-    `SCOPE_ASSIGN (icache_rsp_tag,  rsp_tag);
 
 `ifdef DBG_TRACE_CORE_ICACHE
     always @(posedge clk) begin

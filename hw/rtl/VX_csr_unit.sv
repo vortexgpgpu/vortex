@@ -157,12 +157,14 @@ module VX_csr_unit #(
         endcase
     end         
 
-`ifdef EXT_F_ENABLE
-    wire stall_in = fpu_pending[csr_req_if.wid] 
-                 || gpu_pending[csr_req_if.wid];
-`else 
-    wire stall_in = 0;
-`endif
+    reg stall_in_r;
+    always @(*) begin
+        stall_in_r = gpu_pending[csr_req_if.wid];
+    `ifdef EXT_F_ENABLE
+        stall_in_r |= fpu_pending[csr_req_if.wid];
+    `endif 
+    end
+    wire stall_in = stall_in_r;
 
     wire csr_rsp_valid = csr_req_if.valid && ~stall_in;  
     wire csr_rsp_ready;

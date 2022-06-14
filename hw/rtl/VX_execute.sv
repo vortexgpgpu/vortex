@@ -133,7 +133,9 @@ module VX_execute #(
         .CORE_ID(CORE_ID)
     ) csr_unit (
         .clk            (clk),
-        .reset          (csr_reset),   
+        .reset          (csr_reset),
+
+        .base_dcrs      (base_dcrs),
     
     `ifdef PERF_ENABLE
         .perf_memsys_if (perf_memsys_if),
@@ -141,15 +143,13 @@ module VX_execute #(
     `endif
 
         .gpu_pending    (gpu_pending),
+
+        .req_pending    (csr_pending),
     
     `ifdef EXT_F_ENABLE  
         .fpu_to_csr_if  (fpu_to_csr_if),
-        .fpu_pending    (fpu_pending),   
-        .req_pending    (csr_pending),
-    `else
-        `UNUSED_PIN     (req_pending),
-    `endif
-        .base_dcrs      (base_dcrs),
+        .fpu_pending    (fpu_pending),
+    `endif        
     
     `ifdef EXT_TEX_ENABLE        
         .tex_csr_if     (tex_csr_if),

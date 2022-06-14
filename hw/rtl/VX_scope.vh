@@ -21,13 +21,9 @@
 
 `define SCOPE_IO_VX_warp_sched
 
-`define SCOPE_IO_VX_pipeline
-
-`define SCOPE_BIND_VX_pipeline_fetch
+`define SCOPE_BIND_VX_core_fetch
 
 `define SCOPE_IO_VX_core
-
-`define SCOPE_BIND_VX_core_pipeline
 
 `define SCOPE_IO_VX_cluster
 
@@ -49,11 +45,11 @@
 
 `define SCOPE_BIND_VX_execute_gpu_unit
 
-`define SCOPE_BIND_VX_pipeline_execute
+`define SCOPE_BIND_VX_core_execute
 
 `define SCOPE_IO_VX_issue
 
-`define SCOPE_BIND_VX_pipeline_issue
+`define SCOPE_BIND_VX_core_issue
 
 `define SCOPE_IO_VX_bank
 

@@ -801,13 +801,13 @@ def main():
     global include_dirs
     global macros
     global br_stack
+    
+    if args.D:
+        load_defines(args.D)
 
     if args.I:
         for dir in args.I:
             load_include_path(dir)
-    
-    if args.D:
-        load_defines(args.D)
 
     config = load_config(args.config) 
     
