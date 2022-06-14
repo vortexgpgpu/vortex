@@ -173,14 +173,15 @@ module VX_lsu_unit #(
     ) cache_rsp_tmp_if();
 
     VX_mem_scheduler #(
-        .INSTANCE_ID($sformatf("core%0d-lsu-memsched", CORE_ID)),
-        .NUM_REQS   (LSU_MEM_REQS), 
-        .NUM_BANKS  (DCACHE_NUM_REQS),
-        .ADDR_WIDTH (DCACHE_ADDR_WIDTH),
-        .DATA_WIDTH (32),
-        .QUEUE_SIZE (`LSUQ_SIZE),
-        .TAG_WIDTH  (TAG_WIDTH),
-        .UUID_WIDTH (`UP(`UUID_BITS) + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS))
+        .INSTANCE_ID ($sformatf("core%0d-lsu-memsched", CORE_ID)),
+        .NUM_REQS    (LSU_MEM_REQS), 
+        .NUM_BANKS   (DCACHE_NUM_REQS),
+        .ADDR_WIDTH  (DCACHE_ADDR_WIDTH),
+        .DATA_WIDTH  (32),
+        .QUEUE_SIZE  (`LSUQ_SIZE),
+        .TAG_WIDTH   (TAG_WIDTH),
+        .UUID_WIDTH  (`UP(`UUID_BITS) + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS)),
+        .MEM_OUT_REG (3)
     ) mem_scheduler (
         .clk            (clk),
         .reset          (reset),

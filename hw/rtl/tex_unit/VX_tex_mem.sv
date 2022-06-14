@@ -106,7 +106,7 @@ module VX_tex_mem #(
         .DATA_WIDTH  (32),
         .QUEUE_SIZE  (`TEX_MEM_QUEUE_SIZE),
         .TAG_WIDTH   (TAG_WIDTH),
-        .MEM_OUT_REG (2)
+        .MEM_OUT_REG (3)
     ) mem_scheduler (
         .clk            (clk),
         .reset          (reset),

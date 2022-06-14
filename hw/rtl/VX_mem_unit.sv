@@ -544,7 +544,7 @@ module VX_mem_unit # (
         .WRITE_ENABLE   (1),       
         .UUID_WIDTH     (`UUID_BITS),
         .CORE_OUT_REG   (3),
-        .MEM_OUT_REG    (2),   
+        .MEM_OUT_REG    (3),
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L2_ENABLED)
     ) l2cache_wrap (            

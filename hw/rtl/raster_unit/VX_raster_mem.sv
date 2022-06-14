@@ -258,7 +258,8 @@ module VX_raster_mem #(
         .DATA_WIDTH   (`RASTER_DATA_BITS),
         .QUEUE_SIZE   (`RASTER_MEM_QUEUE_SIZE),
         .TAG_WIDTH    (TAG_WIDTH),
-        .CORE_OUT_REG (1)
+        .CORE_OUT_REG (1),
+        .MEM_OUT_REG  (3)
     ) mem_scheduler (
         .clk            (clk),
         .reset          (reset),

@@ -248,7 +248,7 @@ module Vortex (
         .WRITE_ENABLE   (1),
         .UUID_WIDTH     (`UUID_BITS),  
         .CORE_OUT_REG   (3),
-        .MEM_OUT_REG    (2),
+        .MEM_OUT_REG    (3),
         .NC_ENABLE      (1),
         .PASSTHRU       (!`L3_ENABLED)
     ) l3cache_wrap (

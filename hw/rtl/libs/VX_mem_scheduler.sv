@@ -286,7 +286,7 @@ module VX_mem_scheduler #(
         .DATA_WIDTH   (DATA_WIDTH),
         .TAG_WIDTH    (MEM_TAGW),
         .TAG_SEL_BITS (MEM_TAGW - UUID_WIDTH),
-        .OUT_REG      (1)
+        .OUT_REG      (3)
     ) mem_rsp_sel (
         .clk           (clk),
         .reset         (reset),
@@ -301,29 +301,27 @@ module VX_mem_scheduler #(
         .rsp_ready_out (mem_rsp_ready_s)
     );
 
+    wire [NUM_BATCHES-1:0][NUM_BANKS-1:0] rsp_rem_mask_curr = rsp_rem_mask[stag_raddr];
+
     if (NUM_BATCHES > 1) begin
         assign rsp_batch_idx = mem_rsp_tag_s[QUEUE_ADDRW +: BATCH_SEL_BITS];
         for (genvar i = 0; i < NUM_BATCHES; ++i) begin
-            assign rsp_rem_mask_n[i] = rsp_rem_mask[stag_raddr][i] & ~({NUM_BANKS{(i == rsp_batch_idx)}} & mem_rsp_mask_s);
+            assign rsp_rem_mask_n[i] = rsp_rem_mask_curr[i] & ~({NUM_BANKS{(i == rsp_batch_idx)}} & mem_rsp_mask_s);
         end
     end else begin
         assign rsp_batch_idx = 0;
-        assign rsp_rem_mask_n = rsp_rem_mask[stag_raddr] & ~mem_rsp_mask_s;
+        assign rsp_rem_mask_n = rsp_rem_mask_curr & ~mem_rsp_mask_s;
     end   
 
     assign rsp_complete = (0 == rsp_rem_mask_n);
 
     always @(posedge clk) begin
-        if (reset) begin
-            rsp_rem_mask <= '0;
-        end else begin
-            if (stag_push) begin
-                rsp_orig_mask[stag_waddr] <= req_mask;
-                rsp_rem_mask[stag_waddr]  <= (NUM_BATCHES * NUM_BANKS)'(req_mask);
-            end
-            if (mem_rsp_fire) begin
-                rsp_rem_mask[stag_raddr] <= rsp_rem_mask_n;
-            end
+        if (stag_push) begin
+            rsp_orig_mask[stag_waddr] <= req_mask;
+            rsp_rem_mask[stag_waddr]  <= (NUM_BATCHES * NUM_BANKS)'(req_mask);
+        end
+        if (mem_rsp_fire) begin
+            rsp_rem_mask[stag_raddr] <= rsp_rem_mask_n;
         end
     end
 
