@@ -644,7 +644,7 @@
 
 // Number of associative ways
 `ifndef RCACHE_NUM_WAYS
-`define RCACHE_NUM_WAYS 1
+`define RCACHE_NUM_WAYS 2
 `endif
 
 // Ocache Configurable Knobs //////////////////////////////////////////////////
