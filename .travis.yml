@@ -19,7 +19,7 @@ install:
   - export PATH=$VERILATOR_ROOT/bin:$PATH
   # Install toolchain
   - ci/toolchain_install.sh -all
-  # clone build directory
+  # build project
   - make -s
 
 # stages ordering
@@ -32,17 +32,20 @@ jobs:
       name: coverage
       script: cp -r $PWD ../build_coverage && cd ../build_coverage && ./ci/travis_run.py ./ci/regression.sh -coverage
     - stage: test
+      name: coverage64
+      script: cp -r $PWD ../build_coverage64 && cd ../build_coverage64 && ./ci/travis_run.py ./ci/regression64.sh -coverage
+    - stage: test
       name: tex
       script: cp -r $PWD ../build_tex && cd ../build_tex && ./ci/travis_run.py ./ci/regression.sh -tex
     - stage: test
       name: cluster
-      script: cp -r $PWD ../build_cluster && cd ../build_cluster && ./ci/travis_run.py ./ci/regression.sh -cluster
-    - stage: test
-      name: debug
-      script: cp -r $PWD ../build_debug && cd ../build_debug && ./ci/travis_run.py ./ci/regression.sh -debug
+      script: cp -r $PWD ../build_cluster && cd ../build_cluster && ./ci/travis_run.py ./ci/regression.sh -cluster    
     - stage: test
       name: config
       script: cp -r $PWD ../build_config && cd ../build_config && ./ci/travis_run.py ./ci/regression.sh -config
+    - stage: test
+      name: debug
+      script: cp -r $PWD ../build_debug && cd ../build_debug && ./ci/travis_run.py ./ci/regression.sh -debug
     - stage: test
       name: stress0
       script: cp -r $PWD ../build_stress0 && cd ../build_stress0 && ./ci/travis_run.py ./ci/regression.sh -stress0
@@ -52,6 +55,12 @@ jobs:
     - stage: test
       name: compiler
       script: cp -r $PWD ../build_compiler && cd ../build_compiler && ./ci/travis_run.py ./ci/test_compiler.sh
+    - stage: test
+      name: tex
+      script: cp -r $PWD ../build_tex && cd ../build_tex && ./ci/travis_run.py ./ci/regression.sh -tex
+    - stage: test
+      name: unittest
+      script: cp -r $PWD ../build_unittest && cd ../build_unittest && ./ci/travis_run.py ./ci/regression.sh -unittest
   
 after_success:
   # Gather code coverage

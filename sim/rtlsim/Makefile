@@ -13,16 +13,15 @@ LDFLAGS += ../$(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 LDFLAGS += -L../$(THIRD_PARTY_DIR)/ramulator -lramulator
 
 # control RTL debug tracing states
-DBG_TRACE_FLAGS += -DDBG_TRACE_PIPELINE  
+DBG_TRACE_FLAGS += -DDBG_TRACE_CORE_PIPELINE  
 DBG_TRACE_FLAGS += -DDBG_TRACE_CORE_ICACHE
 DBG_TRACE_FLAGS += -DDBG_TRACE_CORE_DCACHE
+DBG_TRACE_FLAGS += -DDBG_TRACE_CORE_MEM
 DBG_TRACE_FLAGS += -DDBG_TRACE_CACHE_BANK 
 DBG_TRACE_FLAGS += -DDBG_TRACE_CACHE_MSHR
 DBG_TRACE_FLAGS += -DDBG_TRACE_CACHE_TAG
 DBG_TRACE_FLAGS += -DDBG_TRACE_CACHE_DATA
-DBG_TRACE_FLAGS += -DDBG_TRACE_MEM
-DBG_TRACE_FLAGS += -DDBG_TRACE_OPAE
-DBG_TRACE_FLAGS += -DDBG_TRACE_AVS
+DBG_TRACE_FLAGS += -DDBG_TRACE_AFU
 DBG_TRACE_FLAGS += -DDBG_TRACE_SCOPE
 DBG_TRACE_FLAGS += -DDBG_TRACE_TEX
 
@@ -54,16 +53,14 @@ VL_FLAGS += $(CONFIGS)
 CXXFLAGS += $(CONFIGS)
 
 # Enable Verilator multithreaded simulation
-#THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
+THREADS ?= $(shell python -c 'import multiprocessing as mp; print(mp.cpu_count())')
+VL_FLAGS += -j $(THREADS)
 #VL_FLAGS += --threads $(THREADS)
-
-# Enable VCD trace
-VCD_TRACE = -DVCD_OUTPUT
 
 # Debugigng
 ifdef DEBUG
-	VL_FLAGS += $(VCD_TRACE) --trace --trace-structs $(DBG_FLAGS)
-	CXXFLAGS += -g -O0 $(VCD_TRACE) $(DBG_FLAGS)
+	VL_FLAGS += --trace --trace-structs -DVCD_OUTPUT $(DBG_FLAGS)
+	CXXFLAGS += -g -O0 -DVCD_OUTPUT $(DBG_FLAGS)
 else    
 	VL_FLAGS += -DNDEBUG
 	CXXFLAGS += -O2 -DNDEBUG
@@ -83,14 +80,12 @@ VL_FLAGS += -DIDIV_DPI
 FPU_CORE ?= FPU_DPI
 VL_FLAGS += -D$(FPU_CORE)
 
-THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(max(1, mp.cpu_count() // 2))')
-
 PROJECT = rtlsim
 
 all: $(PROJECT)
 
 $(DESTDIR)/$(PROJECT): $(SRCS) main.cpp
-	verilator --build $(VL_FLAGS) $^ $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$@
+	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$@
 	
 $(DESTDIR)/lib$(PROJECT).so: $(SRCS)
 	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS)' -LDFLAGS '-shared $(LDFLAGS)' -o ../$@

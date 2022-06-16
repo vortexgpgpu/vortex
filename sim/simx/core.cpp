@@ -13,7 +13,7 @@
 
 using namespace vortex;
 
-Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
+Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
     : SimObject(ctx, "Core")
     , MemRspPort(this)
     , MemReqPort(this)
@@ -73,7 +73,7 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, Word id)
     , decode_latch_("decode")
     , pending_icache_(arch_.num_warps())
 {  
-  for (int i = 0; i < arch_.num_warps(); ++i) {
+  for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
     warps_.at(i) = std::make_shared<Warp>(this, i);
   }
 
@@ -195,7 +195,7 @@ void Core::tick() {
 
 void Core::schedule() {
   bool foundSchedule = false;
-  int scheduled_warp = last_schedule_wid_;
+  uint32_t scheduled_warp = last_schedule_wid_;
 
   // round robin scheduling
   for (size_t wid = 0, nw = arch_.num_warps(); wid < nw; ++wid) {    
@@ -367,11 +367,11 @@ void Core::commit() {
   }
 }
 
-WarpMask Core::wspawn(int num_warps, int nextPC) {
+WarpMask Core::wspawn(uint32_t num_warps, uint32_t nextPC) {
   WarpMask ret(1);
-  int active_warps = std::min<int>(num_warps, arch_.num_warps());
+  uint32_t active_warps = std::min<uint32_t>(num_warps, arch_.num_warps());
   DP(3, "*** Activate " << (active_warps-1) << " warps at PC: " << std::hex << nextPC);
-  for (int i = 1; i < active_warps; ++i) {
+  for (uint32_t i = 1; i < active_warps; ++i) {
     auto warp = warps_.at(i);
     warp->setPC(nextPC);
     warp->setTmask(0, true);
@@ -380,7 +380,7 @@ WarpMask Core::wspawn(int num_warps, int nextPC) {
   return ret;
 }
 
-WarpMask Core::barrier(int bar_id, int count, int warp_id) {
+WarpMask Core::barrier(uint32_t bar_id, uint32_t count, uint32_t warp_id) {
   WarpMask ret(0);
   auto& barrier = barriers_.at(bar_id);
   barrier.set(warp_id);
@@ -389,7 +389,7 @@ WarpMask Core::barrier(int bar_id, int count, int warp_id) {
     DP(3, "*** Suspend warp #" << warp_id << " at barrier #" << bar_id);
     return ret;
   }
-  for (int i = 0; i < arch_.num_warps(); ++i) {
+  for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
     if (barrier.test(i)) {
       DP(3, "*** Resume warp #" << i << " at barrier #" << bar_id);
       warps_.at(i)->activate();
@@ -400,45 +400,45 @@ WarpMask Core::barrier(int bar_id, int count, int warp_id) {
   return ret;
 }
 
-Word Core::icache_read(Addr addr, Size size) {
-  Word data;
-  mmu_.read(&data, addr, size, 0);
-  return data;
+void Core::icache_read(void *data, uint64_t addr, uint32_t size) {
+  mmu_.read(data, addr, size, 0);
 }
 
-Word Core::dcache_read(Addr addr, Size size) {  
-  Word data;
+void Core::dcache_read(void *data, uint64_t addr, uint32_t size) {  
   auto type = get_addr_type(addr, size);
   if (type == AddrType::Shared) {
-    smem_.read(&data, addr & (SMEM_SIZE-1), size);
+    addr &= (SMEM_SIZE-1);
+    smem_.read(data, addr, size);
   } else {  
-    mmu_.read(&data, addr, size, 0);
+    mmu_.read(data, addr, size, 0);
   }
-  return data;
 }
 
-void Core::dcache_write(Addr addr, Word data, Size size) {  
+void Core::dcache_write(const void* data, uint64_t addr, uint32_t size) {  
   if (addr >= IO_COUT_ADDR 
    && addr <= (IO_COUT_ADDR + IO_COUT_SIZE - 1)) {
-     this->writeToStdOut(addr, data);
+     this->writeToStdOut(data, addr, size);
   } else {
     auto type = get_addr_type(addr, size);
     if (type == AddrType::Shared) {
-      smem_.write(&data, addr & (SMEM_SIZE-1), size);
+      addr &= (SMEM_SIZE-1);
+      smem_.write(data, addr, size);
     } else {
-      mmu_.write(&data, addr, size, 0);
+      mmu_.write(data, addr, size, 0);
     }
   }
 }
 
-Word Core::tex_read(uint32_t unit, Word u, Word v, Word lod, std::vector<mem_addr_size_t>* mem_addrs) {
+uint32_t Core::tex_read(uint32_t unit, uint32_t u, uint32_t v, uint32_t lod, std::vector<mem_addr_size_t>* mem_addrs) {
   return tex_units_.at(unit).read(u, v, lod, mem_addrs);
 }
 
-void Core::writeToStdOut(Addr addr, Word data) {
+void Core::writeToStdOut(const void* data, uint64_t addr, uint32_t size) {
+  if (size != 1)
+    std::abort();
   uint32_t tid = (addr - IO_COUT_ADDR) & (IO_COUT_SIZE-1);
   auto& ss_buf = print_bufs_[tid];
-  char c = (char)data;
+  char c = *(char*)data;
   ss_buf << c;
   if (c == '\n') {
     std::cout << std::dec << "#" << tid << ": " << ss_buf.str() << std::flush;
@@ -446,7 +446,7 @@ void Core::writeToStdOut(Addr addr, Word data) {
   }
 }
 
-Word Core::get_csr(Addr addr, int tid, int wid) {
+uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   switch (addr) {
   case CSR_SATP:
   case CSR_PMPCFG0:
@@ -502,13 +502,13 @@ Word Core::get_csr(Addr addr, int tid, int wid) {
     return perf_stats_.instrs & 0xffffffff;
   case CSR_MINSTRET_H:
     // NumInsts
-    return (Word)(perf_stats_.instrs >> 32);
+    return (uint32_t)(perf_stats_.instrs >> 32);
   case CSR_MCYCLE:
     // NumCycles
-    return (Word)SimPlatform::instance().cycles();
+    return (uint32_t)SimPlatform::instance().cycles();
   case CSR_MCYCLE_H:
     // NumCycles
-    return (Word)(SimPlatform::instance().cycles() >> 32);
+    return (uint32_t)(SimPlatform::instance().cycles() >> 32);
   case CSR_MPM_IBUF_ST:
     return perf_stats_.ibuf_stalls & 0xffffffff; 
   case CSR_MPM_IBUF_ST_H:
@@ -644,7 +644,7 @@ Word Core::get_csr(Addr addr, int tid, int wid) {
   return 0;
 }
 
-void Core::set_csr(Addr addr, Word value, int /*tid*/, int wid) {
+void Core::set_csr(uint32_t addr, uint32_t value, uint32_t /*tid*/, uint32_t wid) {
   if (addr == CSR_FFLAGS) {
     fcsrs_.at(wid) = (fcsrs_.at(wid) & ~0x1F) | (value & 0x1F);
   } else if (addr == CSR_FRM) {

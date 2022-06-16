@@ -1,4 +1,6 @@
 
+XLEN ?= 32
+
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 VORTEX_DRV_PATH ?= $(realpath ../../../driver)
 VORTEX_RT_PATH ?= $(realpath ../../../runtime)
@@ -18,18 +20,24 @@ VX_CFLAGS += -Xclang -target-feature -Xclang +vortex
 VX_CFLAGS += --sysroot=${SYSROOT} --gcc-toolchain=${RISCV_TOOLCHAIN_PATH}
 VX_CFLAGS += -I${VORTEX_HW_PATH} -I${VORTEX_RT_PATH}/include 
 
-VX_LDFLAGS += -Wl,-Bstatic,-T${VORTEX_RT_PATH}/linker/vx_link.ld,--gc-sections ${VORTEX_RT_PATH}/libvortexrt.a
+VX_LDFLAGS += -Wl,-Bstatic,-T${VORTEX_RT_PATH}/linker/vx_link$(XLEN).ld,--gc-sections ${VORTEX_RT_PATH}/libvortexrt.a
 
 VX_DPFLAGS = -arch=riscv32 -mcpu=generic-rv32 -mattr=+m,+f -mattr=+vortex
 
 VX_SRCS = kernel.c
 
-#CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -pedantic -Wfatal-errors
-CXXFLAGS += -std=c++11 -O0 -g -Wall -Wextra -pedantic -Wfatal-errors
+CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
 
 CXXFLAGS += -I$(VORTEX_DRV_PATH)/include
 
 LDFLAGS += -L$(VORTEX_DRV_PATH)/stub -lvortex
+
+# Debugigng
+ifdef DEBUG
+	CXXFLAGS += -g -O0
+else    
+	CXXFLAGS += -O2 -DNDEBUG
+endif
 
 PROJECT = sort
 

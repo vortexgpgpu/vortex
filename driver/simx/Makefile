@@ -1,7 +1,6 @@
 SIMX_DIR = ../../sim/simx
 
-CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -Wfatal-errors 
-#CXXFLAGS += -std=c++11 -g -O0 -Wall -Wextra -Wfatal-errors
+CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
 
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I../include -I../common -I../../hw -I$(SIMX_DIR) -I$(SIMX_DIR)/../common
@@ -11,7 +10,14 @@ CXXFLAGS += -DDUMP_PERF_STATS
 LDFLAGS += -shared -pthread
 LDFLAGS += -L. -lsimx
 
-SRCS = vortex.cpp ../common/vx_utils.cpp 
+SRCS = vortex.cpp ../common/vx_utils.cpp
+
+# Debugigng
+ifdef DEBUG
+	CXXFLAGS += -g -O0
+else    
+	CXXFLAGS += -O2 -DNDEBUG
+endif
 
 PROJECT = libvortex.so
 

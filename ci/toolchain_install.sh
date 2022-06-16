@@ -20,6 +20,19 @@ riscv()
     rm -rf riscv-gnu-toolchain
 }
 
+riscv64()
+{
+    for x in {a..j} 
+    do
+        wget $REPOSITORY/riscv64-gnu-toolchain/ubuntu/bionic/riscv64-gnu-toolchain.tar.bz2.parta$x
+    done
+    cat riscv64-gnu-toolchain.tar.bz2.parta* > riscv64-gnu-toolchain.tar.bz2
+    tar -xvf riscv64-gnu-toolchain.tar.bz2
+    rm -f riscv64-gnu-toolchain.tar.bz2*
+    cp -r riscv64-gnu-toolchain $DESTDIR
+    rm -rf riscv64-gnu-toolchain
+}
+
 llvm()
 {
     for x in {a..b} 
@@ -53,7 +66,7 @@ verilator()
 
 usage()
 {
-    echo "usage: toolchain_install [[-riscv] [-llvm] [-pocl] [-verilator] [-all] [-h|--help]]"
+    echo "usage: toolchain_install [[-riscv] [-riscv64] [-llvm] [-pocl] [-verilator] [-all] [-h|--help]]"
 }
 
 while [ "$1" != "" ]; do
@@ -64,9 +77,12 @@ while [ "$1" != "" ]; do
                      ;;
         -riscv ) riscv
                  ;;
+        -riscv64 ) riscv64
+                 ;;
         -llvm ) llvm
                 ;;
         -all ) riscv
+               riscv64
                llvm
                pocl
                verilator

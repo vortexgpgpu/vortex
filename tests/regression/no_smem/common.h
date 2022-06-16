@@ -5,8 +5,8 @@
 
 typedef struct {
   uint32_t size;
-  uint32_t src_ptr;
-  uint32_t dst_ptr;  
+  uint32_t src_addr;
+  uint32_t dst_addr;  
 } kernel_arg_t;
 
 #endif

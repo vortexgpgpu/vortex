@@ -1,11 +1,25 @@
-RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
+XLEN ?= 32
 
-CC = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
-AR = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc-ar
-DP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
-CP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
+ifeq ($(XLEN),32)
+RISCV_TOOLCHAIN_PATH = /opt/riscv-gnu-toolchain
+else
+RISCV_TOOLCHAIN_PATH = /opt/riscv64-gnu-toolchain
+endif
 
-CFLAGS += -O3 -march=rv32imf -mabi=ilp32f -Wstack-usage=1024 -fno-exceptions -fdata-sections -ffunction-sections
+RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf-
+
+CC = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)gcc
+AR = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)gcc-ar
+DP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)objdump
+CP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)objcopy
+
+ifeq ($(XLEN),32)
+CFLAGS += -march=rv32imf -mabi=ilp32f
+else
+CFLAGS += -march=rv64imfd -mabi=lp64d
+endif
+
+CFLAGS += -O3 -mcmodel=medany -Wstack-usage=1024 -fno-exceptions -fdata-sections -ffunction-sections
 CFLAGS += -I./include -I../hw
 
 PROJECT = libvortexrt

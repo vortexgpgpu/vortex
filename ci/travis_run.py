@@ -4,19 +4,22 @@ import time
 import threading
 import subprocess
 
-PingInterval = 15
+# This script executes a long-running command while outputing "still running ..." periodically
+# to notify Travis build system that the program has not hanged
 
-def PingCallback(stop):
+PING_INTERVAL=15
+
+def monitor(stop):
     wait_time = 0    
     while True:                   
-        time.sleep(PingInterval)     
-        wait_time += PingInterval   
+        time.sleep(PING_INTERVAL)     
+        wait_time += PING_INTERVAL   
         print(" + still running (" + str(wait_time) + "s) ...")
         sys.stdout.flush()        
         if stop(): 
             break
 
-def run_command(command):
+def execute(command):
     process = subprocess.Popen(command, stdout=subprocess.PIPE)
     while True:
         output = process.stdout.readline()
@@ -24,18 +27,23 @@ def run_command(command):
             break
         if output:
             print output.strip()
+            sys.stdout.flush()
     return process.returncode
 
 def main(argv):
 
-    stop_threads = False
-    t = threading.Thread(target = PingCallback, args =(lambda : stop_threads, ))
+    # start monitoring thread
+    stop_monitor = False
+    t = threading.Thread(target = monitor, args =(lambda : stop_monitor, ))
     t.start()
 
-    exitcode = run_command(argv)
+    # execute command
+    exitcode = execute(argv)    
     print(" + exitcode="+str(exitcode))
-
-    stop_threads = True
+    sys.stdout.flush()
+    
+    # terminate monitoring thread
+    stop_monitor = True
     t.join()
 
     sys.exit(exitcode)

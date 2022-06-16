@@ -4,7 +4,6 @@
 #include <vortex.h>
 #include <chrono>
 #include "common.h"
-#include "kernel_scheduler.h"
 
 #define RT_CHECK(_expr)                                         \
    do {                                                         \
@@ -24,6 +23,7 @@ uint32_t count = 0;
 
 vx_device_h device = nullptr;
 vx_buffer_h staging_buf = nullptr;
+kernel_arg_t kernel_arg;
 
 static void show_usage() {
    std::cout << "Vortex Test." << std::endl;
@@ -57,9 +57,11 @@ static void parse_args(int argc, char **argv) {
 
 void cleanup() {
   if (staging_buf) {
-    vx_buf_release(staging_buf);
+    vx_buf_free(staging_buf);
   }
   if (device) {
+    vx_mem_free(device, kernel_arg.src_addr);
+    vx_mem_free(device, kernel_arg.dst_addr);
     vx_dev_close(device);
   }
 }
@@ -152,7 +154,7 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
   }
   std::cout << "upload source buffer" << std::endl;
   auto t0 = std::chrono::high_resolution_clock::now();
-  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src_ptr, buf_size, 0));
+  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src_addr, buf_size, 0));
   auto t1 = std::chrono::high_resolution_clock::now();
 
   // clear destination buffer
@@ -163,7 +165,7 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
     }
   }  
   std::cout << "clear destination buffer" << std::endl;
-  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_ptr, buf_size, 0));
+  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_addr, buf_size, 0));
 
   // start device
   std::cout << "start execution" << std::endl;
@@ -175,7 +177,7 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
   // read destination buffer from local memory
   std::cout << "read destination buffer from local memory" << std::endl;
   auto t4 = std::chrono::high_resolution_clock::now();
-  RT_CHECK(vx_copy_from_dev(staging_buf, kernel_arg.dst_ptr, buf_size, 0));
+  RT_CHECK(vx_copy_from_dev(staging_buf, kernel_arg.dst_addr, buf_size, 0));
   auto t5 = std::chrono::high_resolution_clock::now();
 
   
@@ -215,8 +217,7 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
 int main(int argc, char *argv[]) {
 
   size_t value; 
-  kernel_arg_t kernel_arg;
-
+  
   // parse command arguments
   parse_args(argc, argv);
 
@@ -238,25 +239,25 @@ int main(int argc, char *argv[]) {
   std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
 
   // allocate device memory
-  RT_CHECK(vx_alloc_dev_mem(device, buf_size, &value));
-  kernel_arg.src_ptr = value;
-  RT_CHECK(vx_alloc_dev_mem(device, buf_size, &value));
-  kernel_arg.dst_ptr = value;
+  RT_CHECK(vx_mem_alloc(device, buf_size, &value));
+  kernel_arg.src_addr = value;
+  RT_CHECK(vx_mem_alloc(device, buf_size, &value));
+  kernel_arg.dst_addr = value;
 
   kernel_arg.count = num_points;
 
-  std::cout << "dev_src=" << std::hex << kernel_arg.src_ptr << std::endl;
-  std::cout << "dev_dst=" << std::hex << kernel_arg.dst_ptr << std::endl;
+  std::cout << "dev_src=" << std::hex << kernel_arg.src_addr << std::endl;
+  std::cout << "dev_dst=" << std::hex << kernel_arg.dst_addr << std::endl;
 
   // allocate shared memory  
   std::cout << "allocate shared memory" << std::endl;
   uint32_t alloc_size = std::max<uint32_t>(buf_size, sizeof(kernel_arg_t));
-  RT_CHECK(vx_alloc_shared_mem(device, alloc_size, &staging_buf));
+  RT_CHECK(vx_buf_alloc(device, alloc_size, &staging_buf));
 
   // run tests  
   if (0 == test || -1 == test) {
     std::cout << "run memcopy test" << std::endl;
-    RT_CHECK(run_memcopy_test(kernel_arg.src_ptr, 0x0badf00d40ff40ff, num_blocks));
+    RT_CHECK(run_memcopy_test(kernel_arg.src_addr, 0x0badf00d40ff40ff, num_blocks));
   }
 
   if (1 == test || -1 == test) {

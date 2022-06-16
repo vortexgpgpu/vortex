@@ -5,9 +5,9 @@
 
 void kernel_body(int task_id, kernel_arg_t* arg) {
 	uint32_t stride    = arg->stride;
-	uint32_t* addr_ptr = (uint32_t*)arg->addr_ptr;
-	float* src_ptr     = (float*)arg->src_ptr;	
-	float* dst_ptr     = (float*)arg->dst_ptr;
+	uint32_t* addr_ptr = (uint32_t*)arg->src0_addr;
+	float* src_ptr     = (float*)arg->src1_addr;	
+	float* dst_ptr     = (float*)arg->dst_addr;
 	
 	uint32_t offset = task_id * stride;
 

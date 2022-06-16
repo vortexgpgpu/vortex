@@ -6,6 +6,11 @@ set -e
 # ensure build
 make -s
 
+unittest() 
+{
+make -C tests/unittest run
+}
+
 coverage() 
 {
 echo "begin coverage tests..."
@@ -139,8 +144,8 @@ FPU_CORE=FPU_DEFAULT CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driv
 FPU_CORE=FPU_DEFAULT CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
 CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr
 CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr
-CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=vlsim --cores=4 --app=printf
-CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=vlsim --cores=4 --app=printf
+CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=vlsim --app=printf
+CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=vlsim --app=printf
 
 echo "stress0 tests done!"
 }
@@ -156,11 +161,13 @@ echo "stress1 tests done!"
 
 usage()
 {
-    echo "usage: regression [-coverage] [-tex] [-cluster] [-debug] [-config] [-stress[#n]] [-all] [-h|--help]"
+    echo "usage: regression [-unittest] [-coverage] [-tex] [-cluster] [-debug] [-config] [-stress[#n]] [-all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
     case $1 in
+        -unittest ) unittest
+                ;;
         -coverage ) coverage
                 ;;
         -tex ) tex
@@ -178,7 +185,8 @@ while [ "$1" != "" ]; do
         -stress ) stress0
                   stress1
                 ;;
-        -all ) coverage
+        -all ) unittest
+               coverage
                tex
                cluster
                debug
