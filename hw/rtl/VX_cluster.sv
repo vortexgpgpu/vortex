@@ -121,7 +121,7 @@ module VX_cluster #(
         .NUM_INPUTS  (`NUM_RASTER_UNITS),
         .NUM_LANES   (`NUM_THREADS),
         .NUM_OUTPUTS (`NUM_CORES),
-        .ARBITER     ((`NUM_CORES > 8) ? "C" : "R"),
+        .ARBITER     ("R"),
         .BUFFERED    ((`NUM_CORES != `NUM_RASTER_UNITS) ? 1 : 0)
     ) raster_arb (
         .clk        (clk),
@@ -163,7 +163,7 @@ module VX_cluster #(
         .NUM_INPUTS  (`NUM_CORES),
         .NUM_LANES   (`NUM_THREADS),
         .NUM_OUTPUTS (`NUM_ROP_UNITS),
-        .ARBITER     ((`NUM_CORES > 8) ? "C" : "R"),
+        .ARBITER     (("R"),
         .BUFFERED    ((`NUM_CORES != `NUM_ROP_UNITS) ? 1 : 0)
     ) rop_arb (
         .clk        (clk),
@@ -238,7 +238,7 @@ module VX_cluster #(
         .NUM_LANES    (`NUM_THREADS),
         .NUM_OUTPUTS  (`NUM_TEX_UNITS),
         .TAG_WIDTH    (`TEX_REQ_TAG_WIDTH),
-        .ARBITER      ((`NUM_CORES > 8) ? "C" : "R"),
+        .ARBITER      ("R"),
         .BUFFERED_REQ ((`NUM_CORES != `NUM_TEX_UNITS) ? 1 : 0)
     ) tex_arb (
         .clk        (clk),
@@ -300,7 +300,7 @@ module VX_cluster #(
         .NUM_LANES    (`NUM_THREADS),
         .NUM_OUTPUTS  (`NUM_FPU_UNITS),
         .TAG_WIDTH    (`FPU_REQ_TAG_WIDTH),
-        .ARBITER      ((`NUM_CORES > 8) ? "C" : "R"),
+        .ARBITER      ("R"),
         .BUFFERED_REQ ((`NUM_CORES != `NUM_FPU_UNITS) ? 1 : 0)
     ) fpu_arb (
         .clk        (clk),
