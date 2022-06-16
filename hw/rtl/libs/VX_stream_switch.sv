@@ -25,16 +25,14 @@ module VX_stream_switch #(
     output wire [NUM_OUTPUTS-1:0][NUM_LANES-1:0][DATAW-1:0] data_out,    
     input  wire [NUM_OUTPUTS-1:0][NUM_LANES-1:0]            ready_out
 );
-    localparam NUM_REQS_A = 1 << LOG_NUM_REQS;
-
     if (NUM_INPUTS > NUM_OUTPUTS) begin
 
-        wire [NUM_REQS_A-1:0][NUM_OUTPUTS-1:0][NUM_LANES-1:0]             valid_in_r;
-        wire [NUM_REQS_A-1:0][NUM_OUTPUTS-1:0][NUM_LANES-1:0][DATAW-1:0]  data_in_r;
+        wire [NUM_OUTPUTS-1:0][NUM_REQS-1:0][NUM_LANES-1:0]             valid_in_r;
+        wire [NUM_OUTPUTS-1:0][NUM_REQS-1:0][NUM_LANES-1:0][DATAW-1:0]  data_in_r;
 
-        for (genvar i = 0; i < NUM_REQS_A; ++i) begin
-            for (genvar j = 0; j < NUM_OUTPUTS; ++j) begin
-                localparam ii = i * NUM_OUTPUTS + j;
+        for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
+            for (genvar j = 0; j < NUM_REQS; ++j) begin
+                localparam ii = i * NUM_REQS + j;
                 if (ii < NUM_INPUTS) begin
                     assign valid_in_r[i][j] = valid_in[ii];
                     assign data_in_r[i][j]  = data_in[ii];
@@ -50,15 +48,15 @@ module VX_stream_switch #(
         wire [NUM_OUTPUTS-1:0][NUM_LANES-1:0]            ready_out_r;
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
-            assign valid_out_r[i] = valid_in_r[sel_in[i]][i];
-            assign data_out_r[i]  = data_in_r[sel_in[i]][i];
+            assign valid_out_r[i] = valid_in_r[i][sel_in[i]];
+            assign data_out_r[i]  = data_in_r[i][sel_in[i]];
         end
 
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
-            for (genvar j = 0; j < NUM_OUTPUTS; ++j) begin
-                localparam ii = i * NUM_OUTPUTS + j;                
+        for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
+            for (genvar j = 0; j < NUM_REQS; ++j) begin
+                localparam ii = i * NUM_REQS + j;                
                 if (ii < NUM_INPUTS) begin                    
-                    assign ready_in[ii] = ready_out_r[j] & {NUM_LANES{(sel_in[j] == LOG_NUM_REQS'(i))}};
+                    assign ready_in[ii] = ready_out_r[i] & {NUM_LANES{(sel_in[i] == LOG_NUM_REQS'(j))}};
                 end
             end
         end
@@ -84,19 +82,19 @@ module VX_stream_switch #(
 
     end else if (NUM_OUTPUTS > NUM_INPUTS) begin
     
-        wire [NUM_REQS_A-1:0][NUM_INPUTS-1:0][NUM_LANES-1:0] valid_out_r;
-        wire [NUM_REQS_A-1:0][NUM_INPUTS-1:0][NUM_LANES-1:0] ready_out_r;
+        wire [NUM_INPUTS-1:0][NUM_REQS-1:0][NUM_LANES-1:0] valid_out_r;
+        wire [NUM_INPUTS-1:0][NUM_REQS-1:0][NUM_LANES-1:0] ready_out_r;
 
         for (genvar i = 0; i < NUM_INPUTS; ++i) begin
-            for (genvar j = 0; j < NUM_REQS_A; ++j) begin
-                assign valid_out_r[j][i] = valid_in[i] & {NUM_LANES{(sel_in[i] == LOG_NUM_REQS'(j))}};
+            for (genvar j = 0; j < NUM_REQS; ++j) begin
+                assign valid_out_r[i][j] = valid_in[i] & {NUM_LANES{(sel_in[i] == LOG_NUM_REQS'(j))}};
             end
-            assign ready_in[i] = ready_out_r[sel_in[i]][i];
+            assign ready_in[i] = ready_out_r[i][sel_in[i]];
         end
 
-        for (genvar i = 0; i < NUM_REQS_A; ++i) begin
-            for (genvar j = 0; j < NUM_INPUTS; ++j) begin
-                localparam ii = i * NUM_INPUTS + j;
+        for (genvar i = 0; i < NUM_INPUTS; ++i) begin
+            for (genvar j = 0; j < NUM_REQS; ++j) begin
+                localparam ii = i * NUM_REQS + j;
                 if (ii < NUM_OUTPUTS) begin
                     for (genvar k = 0; k < NUM_LANES; ++k) begin
                         VX_skid_buffer #(
@@ -107,7 +105,7 @@ module VX_stream_switch #(
                             .clk       (clk),
                             .reset     (reset),
                             .valid_in  (valid_out_r[i][j][k]),
-                            .data_in   (data_in[j][k]),
+                            .data_in   (data_in[i][k]),
                             .ready_in  (ready_out_r[i][j][k]),
                             .valid_out (valid_out[ii][k]),
                             .data_out  (data_out[ii][k]),
@@ -115,6 +113,7 @@ module VX_stream_switch #(
                         );
                     end
                 end else begin
+                    `UNUSED_VAR (valid_out_r[i][j])
                     assign ready_out_r[i][j] = '0;
                 end                
             end

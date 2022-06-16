@@ -27,6 +27,7 @@ module VX_tex_arb #(
 );   
     
     localparam LOG_NUM_REQS  = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
+    localparam NUM_REQS      = 1 << LOG_NUM_REQS;
     localparam TAG_OUT_WIDTH = TAG_WIDTH + LOG_NUM_REQS;
     localparam REQ_DATAW     = TAG_OUT_WIDTH + NUM_LANES * (1 + 2 * 32 + `TEX_LOD_BITS) + `TEX_STAGE_BITS;
     localparam RSP_DATAW     = TAG_WIDTH + NUM_LANES * 32;
@@ -48,7 +49,7 @@ module VX_tex_arb #(
 
         if (NUM_INPUTS > NUM_OUTPUTS) begin
             wire [TAG_OUT_WIDTH-1:0] req_tag_in;
-            localparam r = i / NUM_OUTPUTS;
+            localparam r = i % NUM_REQS;
             VX_bits_insert #( 
                 .N   (TAG_WIDTH),
                 .S   (LOG_NUM_REQS),
