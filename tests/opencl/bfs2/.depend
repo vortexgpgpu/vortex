@@ -1,0 +1,3 @@
+main.o: main.cc /home/u109558/BIN/pocl/runtime/include/CL/cl.h \
+ /home/u109558/BIN/pocl/runtime/include/CL/cl_version.h \
+ /home/u109558/BIN/pocl/runtime/include/CL/cl_platform.h util.h
