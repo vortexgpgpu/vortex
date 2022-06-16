@@ -111,7 +111,7 @@ module VX_cache_cluster #(
         .DATA_SIZE    (WORD_SIZE),
         .TAG_WIDTH    (TAG_WIDTH),
         .TAG_SEL_IDX  (TAG_SEL_IDX),
-        .ARBITER      ((NUM_INPUTS > 8) ? "C" : "R"),
+        .ARBITER      ((NUM_INPUTS >= 8) ? "C" : "R"),
         .BUFFERED_REQ ((NUM_INPUTS != `UP(NUM_UNITS)) ? 2 : 0),
         .BUFFERED_RSP ((NUM_INPUTS != `UP(NUM_UNITS)) ? 2 : 0)        
     ) cache_arb (
@@ -186,7 +186,7 @@ module VX_cache_cluster #(
         .DATA_WIDTH   (`LINE_WIDTH),
         .TAG_WIDTH    (MEM_TAG_WIDTH),
         .TAG_SEL_IDX  (1), // Skip 0 for NC flag
-        .ARBITER      ((`UP(NUM_UNITS) > 8) ? "C" : "R"),
+        .ARBITER      ((`UP(NUM_UNITS) >= 8) ? "C" : "R"),
         .BUFFERED_REQ ((`UP(NUM_UNITS) > 1) ? 2 : 0),
         .BUFFERED_RSP ((`UP(NUM_UNITS) > 1) ? 2 : 0)        
     ) mem_arb (

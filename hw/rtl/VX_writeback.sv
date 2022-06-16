@@ -38,7 +38,7 @@ module VX_writeback #(
     VX_stream_arb #(
         .NUM_INPUTS (NUM_RSPS),
         .DATAW      (DATAW),
-        .ARBITER    ("F"),
+        .ARBITER    ("R"),
         .BUFFERED   (2)        
     ) rsp_arb (
         .clk       (clk),
