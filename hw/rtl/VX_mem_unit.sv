@@ -235,7 +235,7 @@ module VX_mem_unit # (
         .DATA_SIZE    (DCACHE_WORD_SIZE),
         .TAG_WIDTH    (DCACHE_NOSM_TAG_WIDTH),
         .TAG_SEL_IDX  (0),
-        .ARBITER      ((`NUM_CORES >= 8) ? "C" : "R"),
+        .ARBITER      ("R"),
         .BUFFERED_REQ ((`NUM_CORES != 1) ? 2 : 0),
         .BUFFERED_RSP ((`NUM_CORES != 1) ? 2 : 0)        
     ) smem_arb (
