@@ -31,12 +31,12 @@ module VX_raster_qe #(
     output wire [NUM_QUADS-1:0][3:0]                    mask_out,    
     output wire [NUM_QUADS-1:0][`RASTER_DIM_BITS-1:0]   x_loc_out,
     output wire [NUM_QUADS-1:0][`RASTER_DIM_BITS-1:0]   y_loc_out,    
-    output wire [NUM_QUADS-1:0][3:0][2:0][`RASTER_DATA_BITS-1:0] bcoords_out
+    output wire [NUM_QUADS-1:0][2:0][3:0][`RASTER_DATA_BITS-1:0] bcoords_out
 );
     `UNUSED_VAR (dcrs)
 
     wire [NUM_QUADS-1:0] valid;
-    wire [NUM_QUADS-1:0][3:0][2:0][`RASTER_DATA_BITS-1:0] edge_eval;
+    wire [NUM_QUADS-1:0][2:0][3:0][`RASTER_DATA_BITS-1:0] edge_eval;
     wire [NUM_QUADS-1:0][3:0] overlap;
 
      // Check if primitive overlaps current quad
@@ -44,7 +44,7 @@ module VX_raster_qe #(
         for (genvar i = 0; i < 2; ++i) begin
             for (genvar j = 0; j < 2; ++j) begin            
                 for (genvar k = 0; k < 3; ++k) begin
-                    assign edge_eval[q][2 * j + i][k] = i * edges_in[q][k][0] + j * edges_in[q][k][1] + edges_in[q][k][2];
+                    assign edge_eval[q][k][2 * j + i] = i * edges_in[q][k][0] + j * edges_in[q][k][1] + edges_in[q][k][2];
                 end                
                 assign overlap[q][2 * j + i] = ~(edge_eval[q][2 * j + i][0][`RASTER_DATA_BITS-1] 
                                               || edge_eval[q][2 * j + i][1][`RASTER_DATA_BITS-1] 

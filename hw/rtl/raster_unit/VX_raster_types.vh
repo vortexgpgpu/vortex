@@ -25,13 +25,13 @@ typedef struct packed {
     logic [`RASTER_DIM_BITS-2:0] pos_x;     // quad x position
     logic [`RASTER_DIM_BITS-2:0] pos_y;     // quad y position
     logic [3:0]                  mask;      // quad mask
-    logic [3:0][2:0][31:0]       bcoords;   // barycentric coordinates
+    logic [2:0][3:0][31:0]       bcoords;   // barycentric coordinates
     logic [`RASTER_PID_BITS-1:0] pid;       // primitive index
 } raster_stamp_t;
 
 typedef struct packed {
     logic [31:0]           pos_mask;
-    logic [3:0][2:0][31:0] bcoords;
+    logic [2:0][3:0][31:0] bcoords;
 } raster_csrs_t;
 
 endpackage

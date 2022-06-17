@@ -8,7 +8,7 @@ module VX_stream_arb #(
     parameter DATAW          = 1,
     parameter string ARBITER = "P",
     parameter LOCK_ENABLE    = 1,
-    parameter MAX_FANOUT     = 4,
+    parameter MAX_FANOUT     = `MAX(8 / NUM_LANES, 4),
     parameter BUFFERED       = 0    
 ) (
     input  wire clk,
@@ -240,7 +240,7 @@ module VX_stream_arb #(
             for (genvar i = 0; i < BATCHES; ++i) begin
 
                 localparam BATCH_BEGIN = i * MAX_FANOUT;
-                localparam BATCH_END   = `MIN(BATCH_BEGIN + MAX_FANOUT, NUM_INPUTS);
+                localparam BATCH_END   = `MIN(BATCH_BEGIN + MAX_FANOUT, NUM_OUTPUTS);
                 localparam BATCH_SIZE  = BATCH_END - BATCH_BEGIN;
 
                 VX_stream_arb #(

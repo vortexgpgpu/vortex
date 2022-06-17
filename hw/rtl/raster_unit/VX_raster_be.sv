@@ -78,7 +78,7 @@ module VX_raster_be #(
     wire [PER_BLOCK_QUADS-1:0][3:0] qe_mask;
     wire [PER_BLOCK_QUADS-1:0][`RASTER_DIM_BITS-1:0] qe_x_loc;
     wire [PER_BLOCK_QUADS-1:0][`RASTER_DIM_BITS-1:0] qe_y_loc;    
-    wire [PER_BLOCK_QUADS-1:0][3:0][2:0][`RASTER_DATA_BITS-1:0] qe_bcoords;    
+    wire [PER_BLOCK_QUADS-1:0][2:0][3:0][`RASTER_DATA_BITS-1:0] qe_bcoords;    
     
     VX_raster_qe #(
         .INSTANCE_ID (INSTANCE_ID),
@@ -121,7 +121,7 @@ module VX_raster_be #(
             assign fifo_stamp_in[b][q].pos_y   = qe_y_loc[i][`RASTER_DIM_BITS-1:1];
             assign fifo_stamp_in[b][q].mask    = qe_mask[i];
             assign fifo_stamp_in[b][q].pid     = qe_pid;
-            assign fifo_stamp_in[b][q].bcoords = qe_bcoords[i];
+            assign fifo_stamp_in[b][q].bcoords[0] = qe_bcoords[i];
         end else begin
             assign fifo_mask_in[b][q]  = 0;
             assign fifo_stamp_in[b][q] = 'x;
@@ -223,10 +223,10 @@ module VX_raster_be #(
             if (valid_out && ready_out) begin
                 `TRACE(2, ("%d: %s-be-out[%0d]: x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
                     $time, INSTANCE_ID, i, stamps_out[i].pos_x, stamps_out[i].pos_y, stamps_out[i].mask, stamps_out[i].pid,
-                    stamps_out[i].bcoords[0][0], stamps_out[i].bcoords[0][1], stamps_out[i].bcoords[0][2], 
-                    stamps_out[i].bcoords[1][0], stamps_out[i].bcoords[1][1], stamps_out[i].bcoords[1][2], 
-                    stamps_out[i].bcoords[2][0], stamps_out[i].bcoords[2][1], stamps_out[i].bcoords[2][2], 
-                    stamps_out[i].bcoords[3][0], stamps_out[i].bcoords[3][1], stamps_out[i].bcoords[3][2]));
+                    stamps_out[i].bcoords[0][0], stamps_out[i].bcoords[1][0], stamps_out[i].bcoords[2][0], 
+                    stamps_out[i].bcoords[0][1], stamps_out[i].bcoords[1][1], stamps_out[i].bcoords[2][1], 
+                    stamps_out[i].bcoords[0][2], stamps_out[i].bcoords[1][2], stamps_out[i].bcoords[2][2], 
+                    stamps_out[i].bcoords[0][3], stamps_out[i].bcoords[1][3], stamps_out[i].bcoords[2][3]));
             end
         end
     end

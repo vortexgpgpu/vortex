@@ -56,29 +56,10 @@ module VX_raster_csr #(
 
     assign raddr = raster_csr_if.read_wid;
 
-    reg [`NUM_THREADS-1:0][31:0] read_data_r;
-    always @(*) begin
-        for (integer i = 0; i < `NUM_THREADS; ++i) begin
-            case (raster_csr_if.read_addr)
-                `CSR_RASTER_POS_MASK:  read_data_r[i] = rdata[i].pos_mask;                
-                `CSR_RASTER_BCOORD_X0: read_data_r[i] = rdata[i].bcoords[0][0];
-                `CSR_RASTER_BCOORD_Y0: read_data_r[i] = rdata[i].bcoords[0][1];
-                `CSR_RASTER_BCOORD_Z0: read_data_r[i] = rdata[i].bcoords[0][2];
-                `CSR_RASTER_BCOORD_X1: read_data_r[i] = rdata[i].bcoords[1][0];
-                `CSR_RASTER_BCOORD_Y1: read_data_r[i] = rdata[i].bcoords[1][1];
-                `CSR_RASTER_BCOORD_Z1: read_data_r[i] = rdata[i].bcoords[1][2];                
-                `CSR_RASTER_BCOORD_X2: read_data_r[i] = rdata[i].bcoords[2][0];
-                `CSR_RASTER_BCOORD_Y2: read_data_r[i] = rdata[i].bcoords[2][1];
-                `CSR_RASTER_BCOORD_Z2: read_data_r[i] = rdata[i].bcoords[2][2];                
-                `CSR_RASTER_BCOORD_X3: read_data_r[i] = rdata[i].bcoords[3][0];
-                `CSR_RASTER_BCOORD_Y3: read_data_r[i] = rdata[i].bcoords[3][1];
-                `CSR_RASTER_BCOORD_Z3: read_data_r[i] = rdata[i].bcoords[3][2];
-                default:               read_data_r[i] = 'x;
-            endcase
-        end
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+        wire [`CSR_RASTER_COUNT-1:0][31:0] read_data = rdata[i];
+        assign raster_csr_if.read_data[i] = read_data[raster_csr_if.read_addr[`CLOG2(`CSR_RASTER_COUNT)-1:0]];
     end
-
-    assign raster_csr_if.read_data = read_data_r;
 
     `UNUSED_VAR (write_uuid)
 

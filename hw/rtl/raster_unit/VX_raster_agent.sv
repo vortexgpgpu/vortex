@@ -74,10 +74,10 @@ module VX_raster_agent #(
                     $time, CORE_ID, i, raster_agent_if.wid, raster_agent_if.PC, raster_agent_if.tmask,
                     raster_req_if.empty,
                     raster_req_if.stamps[i].pos_x,  raster_req_if.stamps[i].pos_y, raster_req_if.stamps[i].mask, raster_req_if.stamps[i].pid,
-                    raster_req_if.stamps[i].bcoords[0][0], raster_req_if.stamps[i].bcoords[0][1], raster_req_if.stamps[i].bcoords[0][2], 
-                    raster_req_if.stamps[i].bcoords[1][0], raster_req_if.stamps[i].bcoords[1][1], raster_req_if.stamps[i].bcoords[1][2], 
-                    raster_req_if.stamps[i].bcoords[2][0], raster_req_if.stamps[i].bcoords[2][1], raster_req_if.stamps[i].bcoords[2][2], 
-                    raster_req_if.stamps[i].bcoords[3][0], raster_req_if.stamps[i].bcoords[3][1], raster_req_if.stamps[i].bcoords[3][2], raster_agent_if.uuid));
+                    raster_req_if.stamps[i].bcoords[0][0], raster_req_if.stamps[i].bcoords[1][0], raster_req_if.stamps[i].bcoords[2][0], 
+                    raster_req_if.stamps[i].bcoords[0][1], raster_req_if.stamps[i].bcoords[1][1], raster_req_if.stamps[i].bcoords[2][1], 
+                    raster_req_if.stamps[i].bcoords[0][2], raster_req_if.stamps[i].bcoords[1][2], raster_req_if.stamps[i].bcoords[2][2], 
+                    raster_req_if.stamps[i].bcoords[0][3], raster_req_if.stamps[i].bcoords[1][3], raster_req_if.stamps[i].bcoords[2][3], raster_agent_if.uuid));
             end
         end
     end

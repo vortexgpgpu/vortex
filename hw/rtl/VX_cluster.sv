@@ -121,7 +121,8 @@ module VX_cluster #(
         .NUM_INPUTS  (`NUM_RASTER_UNITS),
         .NUM_LANES   (`NUM_THREADS),
         .NUM_OUTPUTS (`NUM_CORES),
-        .ARBITER     ("R")
+        .ARBITER     ("R"),
+        .BUFFERED    ((`NUM_CORES != `NUM_RASTER_UNITS) ? 2 : 0)
     ) raster_arb (
         .clk        (clk),
         .reset      (reset),

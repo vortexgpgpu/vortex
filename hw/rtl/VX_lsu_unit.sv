@@ -243,13 +243,12 @@ module VX_lsu_unit #(
             wire [DCACHE_BATCH_SEL_BITS-1:0] cache_req_bid, cache_rsp_bid;
 
             assign {cache_req_uuid, cache_req_type, cache_req_bid, cache_req_tag} = cache_req_tmp_if.tag[i];
-            assign cache_rsp_tmp_if.tag[i] = {cache_rsp_uuid, cache_rsp_type, cache_rsp_bid, cache_rsp_tag};        
-
-            assign cache_req_if.tag[i] = {cache_req_uuid, cache_req_bid, cache_req_tag, cache_req_type_bi};
-            assign {cache_rsp_uuid, cache_rsp_bid, cache_rsp_tag, cache_rsp_type_bi} = cache_rsp_if.tag[i];
-
             assign cache_req_type_bi = cache_req_type_b[cache_req_bid];
+            assign cache_req_if.tag[i] = {cache_req_uuid, cache_req_bid, cache_req_tag, cache_req_type_bi};
+
+            assign {cache_rsp_uuid, cache_rsp_bid, cache_rsp_tag, cache_rsp_type_bi} = cache_rsp_if.tag[i];
             assign cache_rsp_type_b = {DCACHE_NUM_BATCHES{cache_rsp_type_bi}};
+            assign cache_rsp_tmp_if.tag[i] = {cache_rsp_uuid, cache_rsp_type, cache_rsp_bid, cache_rsp_tag};
 
             for (genvar j = 0; j < DCACHE_NUM_BATCHES; ++j) begin
                 localparam k = j * DCACHE_NUM_REQS + i;                
@@ -265,10 +264,10 @@ module VX_lsu_unit #(
         end else begin
             
             assign {cache_req_uuid, cache_req_type, cache_req_tag} = cache_req_tmp_if.tag[i];
-            assign cache_rsp_tmp_if.tag[i] = {cache_rsp_uuid, cache_rsp_type, cache_rsp_tag};        
-
             assign cache_req_if.tag[i] = {cache_req_uuid, cache_req_tag, cache_req_type[i]};
+
             assign {cache_rsp_uuid, cache_rsp_tag, cache_rsp_type[i]} = cache_rsp_if.tag[i];
+            assign cache_rsp_tmp_if.tag[i] = {cache_rsp_uuid, cache_rsp_type, cache_rsp_tag};        
 
             for (genvar j = 0; j < DCACHE_NUM_REQS; ++j) begin
                 if (i != j) begin
