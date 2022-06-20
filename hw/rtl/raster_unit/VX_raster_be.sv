@@ -121,7 +121,7 @@ module VX_raster_be #(
             assign fifo_stamp_in[b][q].pos_y   = qe_y_loc[i][`RASTER_DIM_BITS-1:1];
             assign fifo_stamp_in[b][q].mask    = qe_mask[i];
             assign fifo_stamp_in[b][q].pid     = qe_pid;
-            assign fifo_stamp_in[b][q].bcoords[0] = qe_bcoords[i];
+            assign fifo_stamp_in[b][q].bcoords = qe_bcoords[i];
         end else begin
             assign fifo_mask_in[b][q]  = 0;
             assign fifo_stamp_in[b][q] = 'x;
