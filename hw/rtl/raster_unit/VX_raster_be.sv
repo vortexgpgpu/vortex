@@ -78,7 +78,7 @@ module VX_raster_be #(
     wire [PER_BLOCK_QUADS-1:0][3:0] qe_mask;
     wire [PER_BLOCK_QUADS-1:0][`RASTER_DIM_BITS-1:0] qe_x_loc;
     wire [PER_BLOCK_QUADS-1:0][`RASTER_DIM_BITS-1:0] qe_y_loc;    
-    wire [PER_BLOCK_QUADS-1:0][2:0][3:0][`RASTER_DATA_BITS-1:0] qe_bcoords;    
+    wire [PER_BLOCK_QUADS-1:0][2:0][3:0][`RASTER_DATA_BITS-1:0] qe_bcoords;
     
     VX_raster_qe #(
         .INSTANCE_ID (INSTANCE_ID),
@@ -121,7 +121,7 @@ module VX_raster_be #(
             assign fifo_stamp_in[b][q].pos_y   = qe_y_loc[i][`RASTER_DIM_BITS-1:1];
             assign fifo_stamp_in[b][q].mask    = qe_mask[i];
             assign fifo_stamp_in[b][q].pid     = qe_pid;
-            assign fifo_stamp_in[b][q].bcoords[0] = qe_bcoords[i];
+            assign fifo_stamp_in[b][q].bcoords = qe_bcoords[i];
         end else begin
             assign fifo_mask_in[b][q]  = 0;
             assign fifo_stamp_in[b][q] = 'x;
