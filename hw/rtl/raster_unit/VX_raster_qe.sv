@@ -46,9 +46,9 @@ module VX_raster_qe #(
                 for (genvar k = 0; k < 3; ++k) begin
                     assign edge_eval[q][k][2 * j + i] = i * edges_in[q][k][0] + j * edges_in[q][k][1] + edges_in[q][k][2];
                 end                
-                assign overlap[q][2 * j + i] = ~(edge_eval[q][2 * j + i][0][`RASTER_DATA_BITS-1] 
-                                              || edge_eval[q][2 * j + i][1][`RASTER_DATA_BITS-1] 
-                                              || edge_eval[q][2 * j + i][2][`RASTER_DATA_BITS-1]);
+                assign overlap[q][2 * j + i] = ~(edge_eval[q][0][2 * j + i][`RASTER_DATA_BITS-1] 
+                                              || edge_eval[q][1][2 * j + i][`RASTER_DATA_BITS-1] 
+                                              || edge_eval[q][2][2 * j + i][`RASTER_DATA_BITS-1]);
             end
         end
 

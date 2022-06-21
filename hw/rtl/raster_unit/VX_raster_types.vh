@@ -30,8 +30,8 @@ typedef struct packed {
 } raster_stamp_t;
 
 typedef struct packed {
-    logic [31:0]           pos_mask;
     logic [2:0][3:0][31:0] bcoords;
+    logic [31:0]           pos_mask;
 } raster_csrs_t;
 
 endpackage
