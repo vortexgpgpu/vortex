@@ -78,7 +78,7 @@ module VX_raster_be #(
     wire [PER_BLOCK_QUADS-1:0][3:0] qe_mask;
     wire [PER_BLOCK_QUADS-1:0][`RASTER_DIM_BITS-1:0] qe_x_loc;
     wire [PER_BLOCK_QUADS-1:0][`RASTER_DIM_BITS-1:0] qe_y_loc;    
-    wire [PER_BLOCK_QUADS-1:0][2:0][3:0][`RASTER_DATA_BITS-1:0] qe_bcoords;    
+    wire [PER_BLOCK_QUADS-1:0][2:0][3:0][`RASTER_DATA_BITS-1:0] qe_bcoords;
     
     VX_raster_qe #(
         .INSTANCE_ID (INSTANCE_ID),

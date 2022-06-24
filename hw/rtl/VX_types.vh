@@ -182,11 +182,6 @@
 `define CSR_NW                      12'hFC1
 `define CSR_NC                      12'hFC2
 
-// Texture unit CSRs
-`define CSR_TEX_BEGIN               12'h7C0
-`define CSR_TEX_END                 (`CSR_TEX_BEGIN+0)
-`define CSR_TEX_COUNT               (`CSR_TEX_END-`CSR_TEX_BEGIN)
-
 // Raster unit CSRs
 `define CSR_RASTER_BEGIN            12'h7C0
 `define CSR_RASTER_POS_MASK         (`CSR_RASTER_BEGIN+0)
@@ -206,11 +201,16 @@
 `define CSR_RASTER_COUNT            (`CSR_RASTER_END-`CSR_RASTER_BEGIN)
 
 // ROP unit CSRs
-`define CSR_ROP_BEGIN               12'h7D0
+`define CSR_ROP_BEGIN               `CSR_RASTER_END
 `define CSR_ROP_RT_IDX              (`CSR_ROP_BEGIN+0)
 `define CSR_ROP_SAMPLE_IDX          (`CSR_ROP_BEGIN+1)
 `define CSR_ROP_END                 (`CSR_ROP_BEGIN+2)
 `define CSR_ROP_COUNT               (`CSR_ROP_END-`CSR_ROP_BEGIN)
+
+// Texture unit CSRs
+`define CSR_TEX_BEGIN               `CSR_ROP_END
+`define CSR_TEX_END                 (`CSR_TEX_BEGIN+0)
+`define CSR_TEX_COUNT               (`CSR_TEX_END-`CSR_TEX_BEGIN)
 
 // Texture Units //////////////////////////////////////////////////////////////
 

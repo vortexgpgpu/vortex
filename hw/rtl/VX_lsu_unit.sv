@@ -181,6 +181,7 @@ module VX_lsu_unit #(
         .QUEUE_SIZE  (`LSUQ_SIZE),
         .TAG_WIDTH   (TAG_WIDTH),
         .UUID_WIDTH  (`UP(`UUID_BITS) + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS)),
+        .RSP_PARTIAL (1),
         .MEM_OUT_REG (3)
     ) mem_scheduler (
         .clk            (clk),
