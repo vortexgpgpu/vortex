@@ -8,7 +8,7 @@ module VX_stream_arb #(
     parameter DATAW          = 1,
     parameter string ARBITER = "P",
     parameter LOCK_ENABLE    = 1,
-    parameter MAX_FANOUT     = `MAX(8 / NUM_LANES, 4),
+    parameter MAX_FANOUT     = `MAX(4 / NUM_LANES, 4),
     parameter BUFFERED       = 0    
 ) (
     input  wire clk,

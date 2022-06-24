@@ -300,7 +300,7 @@
 
 // Number of FPU units
 `ifndef NUM_FPU_UNITS
-`define NUM_FPU_UNITS `UP(`NUM_CORES / 4)
+`define NUM_FPU_UNITS `UP(`NUM_CORES / 8)
 `endif
 
 // Size of FPU Request Queue
@@ -452,7 +452,7 @@
 
 // Number of banks
 `ifndef DCACHE_NUM_BANKS
-`define DCACHE_NUM_BANKS `UP(`NUM_THREADS / 2)
+`define DCACHE_NUM_BANKS `NUM_THREADS
 `endif
 
 // Number of ports per bank
@@ -513,7 +513,7 @@
 
 // Number of banks
 `ifndef SMEM_NUM_BANKS
-`define SMEM_NUM_BANKS `UP(`NUM_THREADS / 2)
+`define SMEM_NUM_BANKS `NUM_THREADS
 `endif
 
 // Core Request Queue Size
@@ -546,7 +546,7 @@
 
 // Number of banks
 `ifndef TCACHE_NUM_BANKS
-`define TCACHE_NUM_BANKS `UP(`NUM_THREADS / 2)
+`define TCACHE_NUM_BANKS `NUM_THREADS
 `endif
 
 // Number of ports per bank
@@ -672,7 +672,7 @@
 
 // Number of banks
 `ifndef OCACHE_NUM_BANKS
-`define OCACHE_NUM_BANKS 1
+`define OCACHE_NUM_BANKS `NUM_THREADS
 `endif
 
 // Number of ports per bank
