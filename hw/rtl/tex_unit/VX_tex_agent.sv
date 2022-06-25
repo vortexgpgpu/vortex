@@ -55,7 +55,7 @@ module VX_tex_agent #(
     VX_index_buffer #(
         .DATAW (`UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS),
         .SIZE  (`TEX_REQ_QUEUE_SIZE)
-    ) tag_store  (
+    ) tag_store (
         .clk          (clk),
         .reset        (reset),
         .acquire_slot (mdata_push),       
