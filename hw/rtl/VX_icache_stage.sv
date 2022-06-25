@@ -47,7 +47,7 @@ module VX_icache_stage #(
         .DATAW  (32 + `NUM_THREADS),
         .SIZE   (`NUM_WARPS),
         .LUTRAM (1)
-    ) req_metadata (
+    ) tag_store (
         .clk   (clk),        
         .wren  (icache_req_fire),
         .waddr (req_tag),

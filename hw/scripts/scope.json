@@ -33,10 +33,15 @@
         },
         "VX_cluster": {
             "submodules": {
-                "core": {"type":"VX_core", "count":"`NUM_CORES", "enabled":true},
+                "socket": {"type":"VX_socket", "count":"`NUM_CORES", "enabled":true},
                 "rcache": {"type":"VX_cache_wrap", "enabled":"`EXT_RASTER_ENABLED", "params":{"NUM_BANKS":"`RCACHE_NUM_BANKS"}},
                 "ocache": {"type":"VX_cache_wrap", "enabled":"`EXT_ROP_ENABLED", "params":{"NUM_BANKS":"`OCACHE_NUM_BANKS"}},
                 "l2cache": {"type":"VX_cache_wrap", "enabled":"`L2_ENABLED", "params":{"NUM_BANKS":"`L2_NUM_BANKS"}}
+            }
+        },
+        "VX_socket": {
+            "submodules": {
+                "core": {"type":"VX_core", "count":"1", "enabled":true}
             }
         },
         "VX_core": {
@@ -136,7 +141,7 @@
             "?mem_rsp_fire": 1,
             "busy": 1       
         },
-        "afu/vortex/cluster/core/fetch/warp_sched": {
+        "afu/vortex/cluster/socket/core/fetch/warp_sched": {
             "?wsched_scheduled": 1,
             "wsched_schedule_uuid": "`UP(`UUID_BITS)",
             "wsched_active_warps": "`NUM_WARPS",
@@ -145,7 +150,7 @@
             "wsched_schedule_wid": "`NW_BITS",
             "wsched_schedule_pc": 32         
         },
-        "afu/vortex/cluster/core/fetch/icache_stage": {
+        "afu/vortex/cluster/socket/core/fetch/icache_stage": {
             "?icache_req_fire": 1,            
             "icache_req_uuid": "`UP(`UUID_BITS)",
             "icache_req_addr": 32,
@@ -153,7 +158,7 @@
             "icache_rsp_uuid": "`UP(`UUID_BITS)",
             "icache_rsp_data": 32
         },
-        "afu/vortex/cluster/core/issue": {
+        "afu/vortex/cluster/socket/core/issue": {
             "?issue_fire": 1,
             "issue_uuid": "`UP(`UUID_BITS)",
             "issue_tmask":"`NUM_THREADS",            
@@ -180,7 +185,7 @@
             "!scoreboard_delay": 1,        
             "!dispatch_delay": 1
         },
-        "afu/vortex/cluster/core/execute/lsu_unit": {
+        "afu/vortex/cluster/socket/core/execute/lsu_unit": {
             "?dcache_req_fire":1,
             "dcache_req_uuid": "`UP(`UUID_BITS)",
             "dcache_req_addr":"`NUM_THREADS * 32",
@@ -191,7 +196,7 @@
             "dcache_rsp_uuid": "`UP(`UUID_BITS)",
             "dcache_rsp_data":"`NUM_THREADS * 32"
         },
-        "afu/vortex/cluster/core/execute/gpu_unit": {
+        "afu/vortex/cluster/socket/core/execute/gpu_unit": {
             "?gpu_rsp_valid": 1,
             "gpu_rsp_uuid": "`UP(`UUID_BITS)", 
             "gpu_rsp_tmc": 1, 

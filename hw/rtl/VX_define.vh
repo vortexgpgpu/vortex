@@ -206,15 +206,21 @@
 `define INST_GPU_IMADD       4'hA
 `define INST_GPU_BITS        4
 
+///////////////////////////////////////////////////////////////////////////////
+
+`define NUM_SOCKETS             `UP(`NUM_CORES / `SOCKET_SIZE)
+
 ////////////////////////// Texture Unit Definitions ///////////////////////////
 
 `define TEX_REQ_TAG_WIDTH       (`UP(`UUID_BITS) + `LOG2UP(`TEX_REQ_QUEUE_SIZE))
-`define TEX_REQ_ARB_TAG_WIDTH   (`TEX_REQ_TAG_WIDTH + `ARB_SEL_BITS(`NUM_CORES, `NUM_TEX_UNITS))
+`define TEX_REQ_ARB1_TAG_WIDTH  (`TEX_REQ_TAG_WIDTH + `ARB_SEL_BITS(`SOCKET_SIZE, 1))
+`define TEX_REQ_ARB2_TAG_WIDTH  (`TEX_REQ_ARB1_TAG_WIDTH + `ARB_SEL_BITS(`NUM_SOCKETS, `NUM_TEX_UNITS))
 
 ////////////////////// Floating-Point Unit Definitions ////////////////////////
 
 `define FPU_REQ_TAG_WIDTH       `LOG2UP(`FPU_REQ_QUEUE_SIZE)
-`define FPU_REQ_ARB_TAG_WIDTH   (`FPU_REQ_TAG_WIDTH + `ARB_SEL_BITS(`NUM_CORES, `NUM_FPU_UNITS))
+`define FPU_REQ_ARB1_TAG_WIDTH  (`FPU_REQ_TAG_WIDTH + `ARB_SEL_BITS(`SOCKET_SIZE, 1))
+`define FPU_REQ_ARB2_TAG_WIDTH  (`FPU_REQ_ARB1_TAG_WIDTH + `ARB_SEL_BITS(`NUM_SOCKETS, `NUM_FPU_UNITS))
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -318,6 +324,49 @@
     assign dst.valid = src.valid; \
     assign dst.stamps = src.stamps; \
     assign dst.empty = src.empty; \
+    assign src.ready = dst.ready
+
+`define ASSIGN_VX_ROP_REQ_IF(dst, src) \
+    assign dst.valid = src.valid; \
+    assign dst.mask  = src.mask; \
+    assign dst.pos_x = src.pos_x; \
+    assign dst.pos_y = src.pos_y; \
+    assign dst.color = src.color; \
+    assign dst.depth = src.depth; \
+    assign dst.face  = src.face; \
+    assign src.ready = dst.ready
+
+`define ASSIGN_VX_TEX_REQ_IF(dst, src) \
+    assign dst.valid = src.valid; \
+    assign dst.mask  = src.mask; \
+    assign dst.coords= src.coords; \
+    assign dst.lod   = src.lod; \
+    assign dst.stage = src.stage; \
+    assign dst.tag   = src.tag; \
+    assign src.ready = dst.ready
+
+`define ASSIGN_VX_TEX_RSP_IF(dst, src) \
+    assign dst.valid = src.valid; \
+    assign dst.texels= src.texels; \
+    assign dst.tag   = src.tag; \
+    assign src.ready = dst.ready
+
+`define ASSIGN_VX_FPU_REQ_IF(dst, src) \
+    assign dst.valid = src.valid; \
+    assign dst.op_type= src.op_type; \
+    assign dst.frm   = src.frm; \
+    assign dst.dataa = src.dataa; \
+    assign dst.datab = src.datab; \
+    assign dst.datac = src.datac; \
+    assign dst.tag   = src.tag; \
+    assign src.ready = dst.ready
+
+`define ASSIGN_VX_FPU_RSP_IF(dst, src) \
+    assign dst.valid = src.valid; \
+    assign dst.result= src.result; \
+    assign dst.fflags= src.fflags; \
+    assign dst.has_fflags = src.has_fflags; \
+    assign dst.tag   = src.tag; \
     assign src.ready = dst.ready
 
 `define REDUCE_ADD(dst, src, field, width, count) \

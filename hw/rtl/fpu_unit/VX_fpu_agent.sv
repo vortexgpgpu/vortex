@@ -21,7 +21,7 @@ module VX_fpu_agent #(
     input wire[`NUM_WARPS-1:0]  csr_pending,
     output wire[`NUM_WARPS-1:0] req_pending
 ); 
-    // Store request metadata
+    // Store request info
 
     wire [`UP(`UUID_BITS)-1:0] rsp_uuid;
     wire [`UP(`NW_BITS)-1:0] rsp_wid;
@@ -40,7 +40,7 @@ module VX_fpu_agent #(
     VX_index_buffer #(
         .DATAW   (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS),
         .SIZE    (`FPU_REQ_QUEUE_SIZE)
-    ) metadata_store  (
+    ) tag_store  (
         .clk          (clk),
         .reset        (reset),
         .acquire_slot (mdata_push),       

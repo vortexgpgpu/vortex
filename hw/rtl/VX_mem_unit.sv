@@ -15,11 +15,11 @@ module VX_mem_unit # (
     VX_perf_memsys_if.master perf_memsys_if,
 `endif    
 
-    VX_cache_req_if.slave   icache_req_if [`NUM_CORES],  
-    VX_cache_rsp_if.master  icache_rsp_if [`NUM_CORES],
+    VX_cache_req_if.slave   icache_req_if [`NUM_SOCKETS],  
+    VX_cache_rsp_if.master  icache_rsp_if [`NUM_SOCKETS],
 
-    VX_cache_req_if.slave   dcache_req_if [`NUM_CORES],
-    VX_cache_rsp_if.master  dcache_rsp_if [`NUM_CORES],
+    VX_cache_req_if.slave   dcache_req_if [`NUM_SOCKETS],
+    VX_cache_rsp_if.master  dcache_rsp_if [`NUM_SOCKETS],
 
 `ifdef EXT_TEX_ENABLE
 `ifdef PERF_ENABLE
@@ -73,7 +73,7 @@ module VX_mem_unit # (
     VX_cache_cluster #(
         .INSTANCE_ID    ($sformatf("cluster%0d-icache", CLUSTER_ID)),    
         .NUM_UNITS      (`NUM_ICACHES),
-        .NUM_INPUTS     (`NUM_CORES),
+        .NUM_INPUTS     (`NUM_SOCKETS),
         .TAG_SEL_IDX    (0),
         .CACHE_SIZE     (`ICACHE_SIZE),
         .LINE_SIZE      (ICACHE_LINE_SIZE),
@@ -86,7 +86,7 @@ module VX_mem_unit # (
         .MSHR_SIZE      (`ICACHE_MSHR_SIZE),
         .MRSQ_SIZE      (`ICACHE_MRSQ_SIZE),
         .MREQ_SIZE      (`ICACHE_MREQ_SIZE),
-        .TAG_WIDTH      (ICACHE_TAG_WIDTH),
+        .TAG_WIDTH      (ICACHE_ARB_TAG_WIDTH),
         .WRITE_ENABLE   (0),
         .UUID_WIDTH     (`UUID_BITS)        
     ) icache (
@@ -117,20 +117,20 @@ module VX_mem_unit # (
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-    ) dcache_nosm_req_if [`NUM_CORES]();
+    ) dcache_nosm_req_if [`NUM_SOCKETS]();
 
     VX_cache_rsp_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-    ) dcache_nosm_rsp_if [`NUM_CORES]();
+    ) dcache_nosm_rsp_if [`NUM_SOCKETS]();
 
     `RESET_RELAY (dcache_reset, reset);
 
     VX_cache_cluster #(
         .INSTANCE_ID    ($sformatf("cluster%0d-dcache", CLUSTER_ID)),    
         .NUM_UNITS      (`NUM_DCACHES),
-        .NUM_INPUTS     (`NUM_CORES),
+        .NUM_INPUTS     (`NUM_SOCKETS),
         .TAG_SEL_IDX    (1),
         .CACHE_SIZE     (`DCACHE_SIZE),
         .LINE_SIZE      (DCACHE_LINE_SIZE),
@@ -170,15 +170,15 @@ module VX_mem_unit # (
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-    ) per_core_smem_req_if [`NUM_CORES]();
+    ) per_core_smem_req_if [`NUM_SOCKETS]();
 
     VX_cache_rsp_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-    ) per_core_smem_rsp_if [`NUM_CORES]();
+    ) per_core_smem_rsp_if [`NUM_SOCKETS]();
 
-    for (genvar i = 0; i < `NUM_CORES; ++i) begin
+    for (genvar i = 0; i < `NUM_SOCKETS; ++i) begin
         VX_cache_req_if #(
             .NUM_REQS  (DCACHE_NUM_REQS), 
             .WORD_SIZE (DCACHE_WORD_SIZE), 
@@ -195,7 +195,7 @@ module VX_mem_unit # (
             .NUM_REQS     (2),
             .NUM_LANES    (DCACHE_NUM_REQS),
             .DATA_SIZE    (4),            
-            .TAG_WIDTH    (DCACHE_TAG_WIDTH),
+            .TAG_WIDTH    (DCACHE_ARB_TAG_WIDTH),
             .TAG_SEL_IDX  (0),
             .ARBITER      ("P"),
             .BUFFERED_REQ (2),
@@ -215,7 +215,7 @@ module VX_mem_unit # (
         `ASSIGN_VX_CACHE_RSP_IF (dcache_nosm_switch_rsp_if[1], per_core_smem_rsp_if[i]);
     end
 
-    localparam DCACHE_SM_TAG_WIDTH = DCACHE_NOSM_TAG_WIDTH + `NC_BITS;
+    localparam DCACHE_SM_TAG_WIDTH = DCACHE_NOSM_TAG_WIDTH + `ARB_SEL_BITS(`NUM_SOCKETS, 1);
 
     VX_cache_req_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
@@ -230,14 +230,14 @@ module VX_mem_unit # (
     ) smem_rsp_if[1](); 
 
     VX_cache_arb #(
-        .NUM_INPUTS   (`NUM_CORES),
+        .NUM_INPUTS   (`NUM_SOCKETS),
         .NUM_LANES    (DCACHE_NUM_REQS),
         .DATA_SIZE    (DCACHE_WORD_SIZE),
         .TAG_WIDTH    (DCACHE_NOSM_TAG_WIDTH),
         .TAG_SEL_IDX  (0),
         .ARBITER      ("R"),
-        .BUFFERED_REQ ((`NUM_CORES != 1) ? 2 : 0),
-        .BUFFERED_RSP ((`NUM_CORES != 1) ? 2 : 0)        
+        .BUFFERED_REQ ((`NUM_SOCKETS != 1) ? 2 : 0),
+        .BUFFERED_RSP ((`NUM_SOCKETS != 1) ? 2 : 0)        
     ) smem_arb (
         .clk        (clk),
         .reset      (reset),
@@ -306,7 +306,7 @@ module VX_mem_unit # (
 
 `else
 
-    for (genvar i = 0; i < `NUM_CORES; ++i) begin
+    for (genvar i = 0; i < `NUM_SOCKETS; ++i) begin
         `ASSIGN_VX_CACHE_REQ_IF (dcache_nosm_req_if[i], dcache_req_if[i]);
         `ASSIGN_VX_CACHE_RSP_IF (dcache_rsp_if[i], dcache_nosm_rsp_if[i]);
     end

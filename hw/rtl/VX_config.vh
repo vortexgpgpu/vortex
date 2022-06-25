@@ -43,6 +43,10 @@
 `define NUM_BARRIERS 4
 `endif
 
+`ifndef SOCKET_SIZE
+`define SOCKET_SIZE `MIN(4, `NUM_CORES)
+`endif
+
 `ifdef L2_ENABLE
     `define L2_ENABLED   1
 `else

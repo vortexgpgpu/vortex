@@ -27,7 +27,9 @@
 
 `define SCOPE_IO_VX_cluster
 
-`define SCOPE_BIND_VX_cluster_core(__i__)
+`define SCOPE_BIND_VX_cluster_socket(__i__)
+
+`define SCOPE_BIND_VX_socket_core(__i__)
 
 `define SCOPE_IO_Vortex
 

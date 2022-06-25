@@ -37,7 +37,7 @@ module VX_tex_agent #(
 
     `UNUSED_VAR (tex_csrs)
 
-    // Store request metadata
+    // Store request info
 
     wire [`UP(`UUID_BITS)-1:0]  rsp_uuid;
     wire [`UP(`NW_BITS)-1:0]    rsp_wid;
@@ -55,7 +55,7 @@ module VX_tex_agent #(
     VX_index_buffer #(
         .DATAW (`UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS),
         .SIZE  (`TEX_REQ_QUEUE_SIZE)
-    ) metadata_store  (
+    ) tag_store  (
         .clk          (clk),
         .reset        (reset),
         .acquire_slot (mdata_push),       
