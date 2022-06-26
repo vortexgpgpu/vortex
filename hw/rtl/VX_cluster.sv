@@ -411,12 +411,10 @@ module VX_cluster #(
     // Generate all sockets
     for (genvar i = 0; i < `NUM_SOCKETS; ++i) begin
 
-        localparam SOCKET_ID = (CLUSTER_ID * `NUM_SOCKETS) + i;
-
         `RESET_RELAY (socket_reset, reset);
 
         VX_socket #(
-            .SOCKET_ID (SOCKET_ID)
+            .SOCKET_ID ((CLUSTER_ID * `NUM_SOCKETS) + i)
         ) socket (
             `SCOPE_BIND_VX_cluster_socket(i)
 

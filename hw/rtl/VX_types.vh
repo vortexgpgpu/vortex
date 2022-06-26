@@ -1,7 +1,8 @@
 `ifndef VX_TYPES_VH
 `define VX_TYPES_VH
 
-// Device configuration registers 
+// Device configuration registers
+
 `define NUM_DCRS                    4096
 `define DCR_BITS                    12
 
@@ -22,6 +23,7 @@
 `define DCR_MPM_CLASS_ROP           4
 
 // User Floating-Point CSRs
+
 `define CSR_FFLAGS                  12'h001
 `define CSR_FRM                     12'h002
 `define CSR_FCSR                    12'h003
@@ -165,12 +167,14 @@
 `define CSR_MPM_OCACHE_MSHR_ST_H    12'hB8C
 
 // Machine Information Registers
+
 `define CSR_MVENDORID               12'hF11
 `define CSR_MARCHID                 12'hF12
 `define CSR_MIMPID                  12'hF13
 `define CSR_MHARTID                 12'hF14
 
 // GPGU CSRs
+
 `define CSR_WTID                    12'hCC0
 `define CSR_LTID                    12'hCC1
 `define CSR_GTID                    12'hCC2
@@ -183,6 +187,7 @@
 `define CSR_NC                      12'hFC2
 
 // Raster unit CSRs
+
 `define CSR_RASTER_BEGIN            12'h7C0
 `define CSR_RASTER_POS_MASK         (`CSR_RASTER_BEGIN+0)
 `define CSR_RASTER_BCOORD_X0        (`CSR_RASTER_BEGIN+1)
@@ -201,6 +206,7 @@
 `define CSR_RASTER_COUNT            (`CSR_RASTER_END-`CSR_RASTER_BEGIN)
 
 // ROP unit CSRs
+
 `define CSR_ROP_BEGIN               `CSR_RASTER_END
 `define CSR_ROP_RT_IDX              (`CSR_ROP_BEGIN+0)
 `define CSR_ROP_SAMPLE_IDX          (`CSR_ROP_BEGIN+1)
@@ -208,6 +214,7 @@
 `define CSR_ROP_COUNT               (`CSR_ROP_END-`CSR_ROP_BEGIN)
 
 // Texture unit CSRs
+
 `define CSR_TEX_BEGIN               `CSR_ROP_END
 `define CSR_TEX_END                 (`CSR_TEX_BEGIN+0)
 `define CSR_TEX_COUNT               (`CSR_TEX_END-`CSR_TEX_BEGIN)

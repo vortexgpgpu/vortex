@@ -318,7 +318,7 @@ module VX_mem_scheduler #(
     assign rsp_complete = (0 == rsp_rem_size_n);
 
     always @(posedge clk) begin
-        if (mem_req_fire_s != 0 && req_sent_mask == 0 && req_batch_idx == 0) begin
+        if (mem_req_fire_s != 0 && req_sent_mask == 0 && req_batch_idx == 0 && reqq_rw == 0) begin
             rsp_rem_size[reqq_tag] <= reqq_size;
         end
         if (mem_rsp_fire) begin
@@ -369,11 +369,11 @@ module VX_mem_scheduler #(
         
         always @(posedge clk) begin
             if (reset) begin
-                rsp_store  <= '0;
+                rsp_store <= '0;
             end else begin
-                if (ibuf_push) begin              
-                    rsp_orig_mask[ibuf_waddr] <= req_mask;
+                if (ibuf_push) begin  
                     rsp_store[ibuf_waddr] <= '0;
+                    rsp_orig_mask[ibuf_waddr] <= req_mask;
                 end
                 if (mem_rsp_fire) begin
                     rsp_store[ibuf_raddr] <= rsp_store_n;
@@ -444,9 +444,8 @@ module VX_mem_scheduler #(
         for (integer i = 0; i < QUEUE_SIZE; ++i) begin
             if (pending_reqs[i][0]) begin
                 `ASSERT(($time - pending_reqs[i][1 +: 64]) < `STALL_TIMEOUT, 
-                    ("%t: *** %s response timeout: remaining=%b, tag=0x%0h (#%0d)", 
-                        $time, INSTANCE_ID, rsp_rem_size[i], pending_reqs[i][1+64 +: TAG_ONLY_WIDTH], 
-                                                pending_reqs[i][1+64+TAG_ONLY_WIDTH +: `UP(`UUID_BITS)]));
+                    ("%t: *** %s response timeout: remaining=%0d, tag=0x%0h (#%0d)", 
+                        $time, INSTANCE_ID, rsp_rem_size[i], pending_reqs[i][1+64 +: TAG_ONLY_WIDTH], pending_reqs[i][1+64+TAG_ONLY_WIDTH +: `UP(`UUID_BITS)]));
             end
         end
     end

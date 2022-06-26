@@ -213,13 +213,13 @@
 ////////////////////////// Texture Unit Definitions ///////////////////////////
 
 `define TEX_REQ_TAG_WIDTH       (`UP(`UUID_BITS) + `LOG2UP(`TEX_REQ_QUEUE_SIZE))
-`define TEX_REQ_ARB1_TAG_WIDTH  (`TEX_REQ_TAG_WIDTH + `ARB_SEL_BITS(`SOCKET_SIZE, 1))
+`define TEX_REQ_ARB1_TAG_WIDTH  (`TEX_REQ_TAG_WIDTH + `CLOG2(`SOCKET_SIZE))
 `define TEX_REQ_ARB2_TAG_WIDTH  (`TEX_REQ_ARB1_TAG_WIDTH + `ARB_SEL_BITS(`NUM_SOCKETS, `NUM_TEX_UNITS))
 
 ////////////////////// Floating-Point Unit Definitions ////////////////////////
 
 `define FPU_REQ_TAG_WIDTH       `LOG2UP(`FPU_REQ_QUEUE_SIZE)
-`define FPU_REQ_ARB1_TAG_WIDTH  (`FPU_REQ_TAG_WIDTH + `ARB_SEL_BITS(`SOCKET_SIZE, 1))
+`define FPU_REQ_ARB1_TAG_WIDTH  (`FPU_REQ_TAG_WIDTH + `CLOG2(`SOCKET_SIZE))
 `define FPU_REQ_ARB2_TAG_WIDTH  (`FPU_REQ_ARB1_TAG_WIDTH + `ARB_SEL_BITS(`NUM_SOCKETS, `NUM_FPU_UNITS))
 
 ///////////////////////////////////////////////////////////////////////////////

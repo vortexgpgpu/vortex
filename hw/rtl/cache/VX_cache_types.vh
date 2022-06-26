@@ -19,7 +19,7 @@ localparam ICACHE_TAG_ID_BITS	= `UP(`NW_BITS);
 
 // Core request tag bits
 localparam ICACHE_TAG_WIDTH	    = (`UP(`UUID_BITS) + ICACHE_TAG_ID_BITS);
-localparam ICACHE_ARB_TAG_WIDTH	= (ICACHE_TAG_WIDTH + `ARB_SEL_BITS(`SOCKET_SIZE, 1));
+localparam ICACHE_ARB_TAG_WIDTH	= (ICACHE_TAG_WIDTH + `CLOG2(`SOCKET_SIZE));
 
 // Input request size
 localparam ICACHE_NUM_REQS	    = 1;
@@ -62,7 +62,7 @@ localparam DCACHE_TAG_ID_BITS	= (LSUQ_TAG_BITS + `CACHE_ADDR_TYPE_BITS);
 
 // Core request tag bits
 localparam DCACHE_TAG_WIDTH	    = (`UP(`UUID_BITS) + DCACHE_TAG_ID_BITS);
-localparam DCACHE_ARB_TAG_WIDTH	= (DCACHE_TAG_WIDTH + `ARB_SEL_BITS(`SOCKET_SIZE, 1));
+localparam DCACHE_ARB_TAG_WIDTH	= (DCACHE_TAG_WIDTH + `CLOG2(`SOCKET_SIZE));
  
 // Memory request data bits
 localparam DCACHE_MEM_DATA_WIDTH= (DCACHE_LINE_SIZE * 8);
