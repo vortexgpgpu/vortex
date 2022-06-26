@@ -10,7 +10,7 @@ import VX_gpu_types::*;
 module VX_socket #( 
     parameter SOCKET_ID = 0
 ) (        
-    `SCOPE_IO_VX_core
+    `SCOPE_IO_VX_socket
     
     // Clock
     input wire              clk,
