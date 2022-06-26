@@ -47,7 +47,7 @@ localparam DCACHE_ADDR_WIDTH	= (32 - `CLOG2(DCACHE_WORD_SIZE));
 localparam DCACHE_LINE_SIZE 	= `L1_BLOCK_SIZE;
 
 // Input request size
-localparam DCACHE_NUM_REQS	    = `DCACHE_NUM_BANKS;
+localparam DCACHE_NUM_REQS	    = `MAX(`DCACHE_NUM_BANKS, `SMEM_NUM_BANKS);
 
 // Memory request size
 localparam LSU_MEM_REQS	        = `NUM_THREADS;
