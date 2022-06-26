@@ -25,6 +25,8 @@
 
 `define SCOPE_IO_VX_core
 
+`define SCOPE_IO_VX_socket
+
 `define SCOPE_IO_VX_cluster
 
 `define SCOPE_BIND_VX_cluster_socket(__i__)
