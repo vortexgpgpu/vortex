@@ -158,15 +158,13 @@ module VX_shared_mem #(
     wire [NUM_BANKS-1:0][0:0][TAG_WIDTH-1:0] per_bank_rsp_tag;   
     wire [NUM_BANKS-1:0]                     per_bank_rsp_ready;
 
-    wire crsq_last_read;
+    wire req_read_sent_last;
 
     wire [NUM_BANKS-1:0] req_read_mask = per_bank_req_valid & ~per_bank_req_rw;
 
     wire write_only = ~(| req_read_mask);
-
-    wire bank_rsp_read_ready = | (req_read_mask & per_bank_rsp_ready);
     
-    assign creq_out_ready = write_only || (bank_rsp_read_ready && crsq_last_read);
+    assign creq_out_ready = write_only || req_read_sent_last;
 
     // Generate memory banks
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
@@ -195,14 +193,14 @@ module VX_shared_mem #(
 
     assign req_read_sent_n = req_read_sent_r | (req_read_mask & per_bank_rsp_ready);
 
-    assign crsq_last_read = (req_read_sent_n == req_read_mask);
+    assign req_read_sent_last = (req_read_sent_n == req_read_mask);
 
     always @(posedge clk) begin
         if (reset) begin
             req_read_sent_r <= 0;
         end else begin
             if (| per_bank_rsp_fire) begin
-                if (crsq_last_read) begin
+                if (req_read_sent_last) begin
                     req_read_sent_r <= 0;
                 end else begin
                     req_read_sent_r <= req_read_sent_n;

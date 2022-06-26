@@ -39,19 +39,19 @@ module VX_rsp_merge #(
 
         reg [NUM_REQS-1:0] core_rsp_valid_unqual;
         reg [NUM_REQS-1:0][WORD_WIDTH-1:0] core_rsp_data_unqual;
-        reg [NUM_BANKS-1:0] per_bank_core_rsp_ready_r;
+        reg [NUM_BANKS-1:0] per_bank_core_rsp_ready_unqual;
                 
         reg [NUM_REQS-1:0][TAG_WIDTH-1:0] core_rsp_tag_unqual;
         wire [NUM_REQS-1:0] core_rsp_ready_unqual;
 
-        reg [NUM_REQS-1:0][BANK_SEL_BITS-1:0] per_req_banks;
+        reg [NUM_REQS-1:0][BANK_SEL_BITS-1:0] per_req_banks_sel;
         
         always @(*) begin
-            core_rsp_valid_unqual     = '0;
-            core_rsp_tag_unqual       = 'x;
-            core_rsp_data_unqual      = 'x;
-            per_bank_core_rsp_ready_r = '0;
-            per_req_banks             = 'x;
+            core_rsp_valid_unqual          = '0;
+            core_rsp_tag_unqual            = 'x;
+            core_rsp_data_unqual           = 'x;
+            per_bank_core_rsp_ready_unqual = '0;
+            per_req_banks_sel              = 'x;
 
             for (integer b = NUM_BANKS-1; b >= 0; --b) begin
                 for (integer p = NUM_PORTS-1; p >= 0; --p) begin 
@@ -60,14 +60,14 @@ module VX_rsp_merge #(
                         core_rsp_valid_unqual[per_bank_core_rsp_idx[b][p]] = 1;
                         core_rsp_data_unqual[per_bank_core_rsp_idx[b][p]]  = per_bank_core_rsp_data[b][p];
                         core_rsp_tag_unqual[per_bank_core_rsp_idx[b][p]]   = per_bank_core_rsp_tag[b][p];
-                        per_req_banks[per_bank_core_rsp_idx[b][p]] = BANK_SEL_BITS'(b);
+                        per_req_banks_sel[per_bank_core_rsp_idx[b][p]]     = BANK_SEL_BITS'(b);
                     end
                 end
             end
 
             for (integer r = 0; r < NUM_REQS; ++r) begin      
                 if (core_rsp_valid_unqual[r]) begin 
-                    per_bank_core_rsp_ready_r[per_req_banks[r]] = core_rsp_ready_unqual[r];
+                    per_bank_core_rsp_ready_unqual[per_req_banks_sel[r]] = core_rsp_ready_unqual[r];
                 end
             end
         end
@@ -76,7 +76,7 @@ module VX_rsp_merge #(
         assign {core_rsp_data, core_rsp_tag} = {core_rsp_data_unqual, core_rsp_tag_unqual};
         assign core_rsp_ready_unqual = core_rsp_ready;
 
-        assign per_bank_core_rsp_ready = per_bank_core_rsp_ready_r;
+        assign per_bank_core_rsp_ready = per_bank_core_rsp_ready_unqual;
 
     end else if (NUM_REQS > 1) begin
 
