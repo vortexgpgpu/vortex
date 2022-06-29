@@ -10,21 +10,25 @@
 #include "core.h"
 #include "debug.h"
 #include "constants.h"
+#include "processor_impl.h"
 
 using namespace vortex;
 
 Core::Core(const SimContext& ctx, 
-           uint32_t id, 
+           uint32_t core_id, 
+           Cluster* cluster,
            const Arch &arch, 
            const DCRS &dcrs,
+           SharedMem::Ptr  sharedmem,
            RasterUnit::Ptr raster_unit,
            RopUnit::Ptr rop_unit,
-           CacheSim::Ptr rcache,
-           CacheSim::Ptr ocache)
+           TexUnit::Ptr tex_unit)
     : SimObject(ctx, "core")
-    , MemRspPort(this)
-    , MemReqPort(this)
-    , id_(id)
+    , icache_req_ports(1, this)
+    , icache_rsp_ports(1, this)
+    , dcache_req_ports(arch.num_threads(), this)
+    , dcache_rsp_ports(arch.num_threads(), this)
+    , core_id_(core_id)
     , arch_(arch)
     , dcrs_(dcrs)
     , decoder_(arch)
@@ -35,74 +39,14 @@ Core::Core(const SimContext& ctx,
     , ibuffers_(arch.num_warps(), IBUF_SIZE)
     , scoreboard_(arch_) 
     , exe_units_((int)ExeType::MAX)
-    , icache_(CacheSim::Create("icache", CacheSim::Config{
-        log2ceil(ICACHE_SIZE),  // C
-        log2ceil(L1_BLOCK_SIZE),// B
-        log2ceil(sizeof(uint32_t)), // W
-        log2ceil(ICACHE_NUM_WAYS),// A
-        32,                     // address bits    
-        1,                      // number of banks
-        1,                      // number of ports
-        1,                      // number of requests
-        true,                   // write-through
-        false,                  // write response
-        0,                      // victim size
-        (uint8_t)arch.num_warps(), // mshr
-        2,                      // pipeline latency
-      }))
-    , dcache_(CacheSim::Create("dcache", CacheSim::Config{
-        log2ceil(DCACHE_SIZE),  // C
-        log2ceil(L1_BLOCK_SIZE),// B
-        log2ceil(sizeof(Word)), // W
-        log2ceil(DCACHE_NUM_WAYS),// A
-        32,                     // address bits    
-        DCACHE_NUM_BANKS,       // number of banks
-        DCACHE_NUM_PORTS,       // number of ports
-        (uint8_t)arch.num_threads(), // number of requests
-        true,                   // write-through
-        false,                  // write response
-        0,                      // victim size
-        DCACHE_MSHR_SIZE,       // mshr
-        4,                      // pipeline latency
-      }))
-    , tcache_(CacheSim::Create("tcache", CacheSim::Config{
-        log2ceil(TCACHE_SIZE),  // C
-        log2ceil(L1_BLOCK_SIZE),// B
-        log2ceil(sizeof(uint32_t)), // W
-        log2ceil(TCACHE_NUM_WAYS),// A
-        32,                     // address bits    
-        TCACHE_NUM_BANKS,       // number of banks
-        TCACHE_NUM_PORTS,       // number of ports
-        (uint8_t)arch.num_threads(), // number of requests
-        false,                  // write-through
-        false,                  // write response
-        0,                      // victim size
-        TCACHE_MSHR_SIZE,       // mshr
-        4,                      // pipeline latency
-      }))
-    , rcache_(rcache)
-    , ocache_(ocache)
-    , sharedmem_(SharedMem::Create("shared_mem", SharedMem::Config{
-        uint32_t(SMEM_LOCAL_SIZE) * arch.num_warps() * arch.num_threads(),
-        SMEM_LOCAL_SIZE,
-        arch.num_threads(), 
-        arch.num_threads(),
-        log2ceil(STACK_SIZE),
-        1,
-        false
-      }))
-    , tex_unit_(TexUnit::Create("tex_unit", TexUnit::Config{
-        2, // address latency
-        6, // sampler latency
-      }, this))
+    , tex_unit_(tex_unit)
     , raster_unit_(raster_unit)
-    , raster_agent_(RasterAgent::Create("raster_agent", this, raster_unit))
     , rop_unit_(rop_unit)
-    , rop_agent_(RopAgent::Create("rop_agent", this, rop_unit))
-    , l1_mem_switch_(Switch<MemReq, MemRsp>::Create("l1_arb", ArbiterType::Priority, 3))
+    , sharedmem_(sharedmem)
     , fetch_latch_("fetch")
     , decode_latch_("decode")
     , pending_icache_(arch_.num_warps())
+    , cluster_(cluster)
 {  
   for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
     warps_.at(i) = std::make_shared<Warp>(this, i);
@@ -115,28 +59,6 @@ Core::Core(const SimContext& ctx,
   exe_units_.at((int)ExeType::CSR) = SimPlatform::instance().create_object<CsrUnit>(this);
   exe_units_.at((int)ExeType::FPU) = SimPlatform::instance().create_object<FpuUnit>(this);  
   exe_units_.at((int)ExeType::GPU) = SimPlatform::instance().create_object<GpuUnit>(this);
-
-  // connect l1 switch
-  icache_->MemReqPort.bind(&l1_mem_switch_->ReqIn[0]);
-  l1_mem_switch_->RspOut[0].bind(&icache_->MemRspPort);
-  dcache_->MemReqPort.bind(&l1_mem_switch_->ReqIn[1]);
-  l1_mem_switch_->RspOut[1].bind(&dcache_->MemRspPort);
-  tcache_->MemReqPort.bind(&l1_mem_switch_->ReqIn[2]);
-  l1_mem_switch_->RspOut[2].bind(&tcache_->MemRspPort);    
-  l1_mem_switch_->ReqOut.bind(&this->MemReqPort);
-  this->MemRspPort.bind(&l1_mem_switch_->RspIn);
-
-  // memory perf callbacks
-  MemReqPort.tx_callback([&](const MemReq& req, uint64_t cycle){
-    __unused (cycle);
-    perf_stats_.mem_reads   += !req.write;
-    perf_stats_.mem_writes  += req.write;
-    perf_mem_pending_reads_ += !req.write;    
-  });
-  MemRspPort.tx_callback([&](const MemRsp&, uint64_t cycle){
-    __unused (cycle);
-    --perf_mem_pending_reads_;
-  });
 
   this->reset();
 }
@@ -179,7 +101,6 @@ void Core::reset() {
   committed_instrs_ = 0;
   ecall_ = false;
   ebreak_ = false;
-  perf_mem_pending_reads_ = 0;
   perf_stats_ = PerfStats();
 }
 
@@ -203,9 +124,6 @@ void Core::tick() {
   this->decode();
   this->fetch();
   this->schedule();
-
-  // update perf counter  
-  perf_stats_.mem_latency += perf_mem_pending_reads_;
 
   DPN(2, std::flush);
 }
@@ -242,7 +160,7 @@ void Core::schedule() {
 
 void Core::fetch() {
   // handle icache reponse
-  auto& icache_rsp_port = icache_->CoreRspPorts.at(0);      
+  auto& icache_rsp_port = icache_rsp_ports.at(0);
   if (!icache_rsp_port.empty()){
     auto& mem_rsp = icache_rsp_port.front();
     auto trace = pending_icache_.at(mem_rsp.tag);
@@ -259,9 +177,9 @@ void Core::fetch() {
     mem_req.addr  = trace->PC;
     mem_req.write = false;
     mem_req.tag   = pending_icache_.allocate(trace);    
-    mem_req.core_id = trace->cid;
-    mem_req.uuid = trace->uuid;
-    icache_->CoreReqPorts.at(0).send(mem_req, 1);    
+    mem_req.cid   = trace->cid;
+    mem_req.uuid  = trace->uuid;
+    icache_req_ports.at(0).send(mem_req, 1);    
     DT(3, "icache-req: addr=" << std::hex << mem_req.addr << ", tag=" << mem_req.tag << ", " << *trace);
     fetch_latch_.pop();
   }    
@@ -354,7 +272,7 @@ void Core::commit() {
   for (auto& exe_unit : exe_units_) {
     if (!exe_unit->Output.empty()) {
       auto trace = exe_unit->Output.front();    
-
+      
       // allow only one commit that updates registers
       if (trace->wb && wb)
         continue;        
@@ -362,6 +280,7 @@ void Core::commit() {
 
       // advance to commit stage
       DT(3, "pipeline-commit: " << *trace);
+      assert(trace->cid == core_id_);
 
       // update scoreboard
       scoreboard_.release(trace);
@@ -477,6 +396,7 @@ void Core::writeToStdOut(const void* data, uint64_t addr, uint32_t size) {
 }
 
 uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
+  auto proc_perf = cluster_->processor()->perf_stats();
   switch (addr) {
   case CSR_SATP:
   case CSR_PMPCFG0:
@@ -505,16 +425,16 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   case CSR_GTID:
     // Processor threadID
     return tid + (wid * arch_.num_threads()) + 
-        (arch_.num_threads() * arch_.num_warps() * id_);
+        (arch_.num_threads() * arch_.num_warps() * core_id_);
   case CSR_LWID:
     // Core warpID
     return wid;
   case CSR_GWID:
     // Processor warpID        
-    return wid + (arch_.num_warps() * id_);
+    return wid + (arch_.num_warps() * core_id_);
   case CSR_GCID:
     // Processor coreID
-    return id_;
+    return core_id_;
   case CSR_TMASK:
     // Processor coreID
     return warps_.at(wid)->getTmask();
@@ -571,100 +491,100 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         case CSR_MPM_BRANCHES:  return perf_stats_.branches & 0xffffffff; 
         case CSR_MPM_BRANCHES_H:return perf_stats_.branches >> 32; 
 
-        case CSR_MPM_ICACHE_READS:    return icache_->perf_stats().reads & 0xffffffff; 
-        case CSR_MPM_ICACHE_READS_H:  return icache_->perf_stats().reads >> 32; 
-        case CSR_MPM_ICACHE_MISS_R:   return icache_->perf_stats().read_misses & 0xffffffff;
-        case CSR_MPM_ICACHE_MISS_R_H: return icache_->perf_stats().read_misses >> 32;
+        case CSR_MPM_ICACHE_READS:    return proc_perf.clusters.icache.reads & 0xffffffff; 
+        case CSR_MPM_ICACHE_READS_H:  return proc_perf.clusters.icache.reads >> 32; 
+        case CSR_MPM_ICACHE_MISS_R:   return proc_perf.clusters.icache.read_misses & 0xffffffff;
+        case CSR_MPM_ICACHE_MISS_R_H: return proc_perf.clusters.icache.read_misses >> 32;
         
-        case CSR_MPM_DCACHE_READS:    return dcache_->perf_stats().reads & 0xffffffff; 
-        case CSR_MPM_DCACHE_READS_H:  return dcache_->perf_stats().reads >> 32; 
-        case CSR_MPM_DCACHE_WRITES:   return dcache_->perf_stats().writes & 0xffffffff; 
-        case CSR_MPM_DCACHE_WRITES_H: return dcache_->perf_stats().writes >> 32; 
-        case CSR_MPM_DCACHE_MISS_R:   return dcache_->perf_stats().read_misses & 0xffffffff; 
-        case CSR_MPM_DCACHE_MISS_R_H: return dcache_->perf_stats().read_misses >> 32; 
-        case CSR_MPM_DCACHE_MISS_W:   return dcache_->perf_stats().write_misses & 0xffffffff; 
-        case CSR_MPM_DCACHE_MISS_W_H: return dcache_->perf_stats().write_misses >> 32; 
-        case CSR_MPM_DCACHE_BANK_ST:  return dcache_->perf_stats().bank_stalls & 0xffffffff; 
-        case CSR_MPM_DCACHE_BANK_ST_H:return dcache_->perf_stats().bank_stalls >> 32;
-        case CSR_MPM_DCACHE_MSHR_ST:  return dcache_->perf_stats().mshr_stalls & 0xffffffff; 
-        case CSR_MPM_DCACHE_MSHR_ST_H:return dcache_->perf_stats().mshr_stalls >> 32;
+        case CSR_MPM_DCACHE_READS:    return proc_perf.clusters.dcache.reads & 0xffffffff; 
+        case CSR_MPM_DCACHE_READS_H:  return proc_perf.clusters.dcache.reads >> 32; 
+        case CSR_MPM_DCACHE_WRITES:   return proc_perf.clusters.dcache.writes & 0xffffffff; 
+        case CSR_MPM_DCACHE_WRITES_H: return proc_perf.clusters.dcache.writes >> 32; 
+        case CSR_MPM_DCACHE_MISS_R:   return proc_perf.clusters.dcache.read_misses & 0xffffffff; 
+        case CSR_MPM_DCACHE_MISS_R_H: return proc_perf.clusters.dcache.read_misses >> 32; 
+        case CSR_MPM_DCACHE_MISS_W:   return proc_perf.clusters.dcache.write_misses & 0xffffffff; 
+        case CSR_MPM_DCACHE_MISS_W_H: return proc_perf.clusters.dcache.write_misses >> 32; 
+        case CSR_MPM_DCACHE_BANK_ST:  return proc_perf.clusters.dcache.bank_stalls & 0xffffffff; 
+        case CSR_MPM_DCACHE_BANK_ST_H:return proc_perf.clusters.dcache.bank_stalls >> 32;
+        case CSR_MPM_DCACHE_MSHR_ST:  return proc_perf.clusters.dcache.mshr_stalls & 0xffffffff; 
+        case CSR_MPM_DCACHE_MSHR_ST_H:return proc_perf.clusters.dcache.mshr_stalls >> 32;
         
-        case CSR_MPM_SMEM_READS:    return sharedmem_->perf_stats().reads & 0xffffffff;
-        case CSR_MPM_SMEM_READS_H:  return sharedmem_->perf_stats().reads >> 32;
-        case CSR_MPM_SMEM_WRITES:   return sharedmem_->perf_stats().writes & 0xffffffff;
-        case CSR_MPM_SMEM_WRITES_H: return sharedmem_->perf_stats().writes >> 32;
-        case CSR_MPM_SMEM_BANK_ST:  return sharedmem_->perf_stats().bank_stalls & 0xffffffff; 
-        case CSR_MPM_SMEM_BANK_ST_H:return sharedmem_->perf_stats().bank_stalls >> 32; 
+        case CSR_MPM_SMEM_READS:    return proc_perf.clusters.sharedmem.reads & 0xffffffff;
+        case CSR_MPM_SMEM_READS_H:  return proc_perf.clusters.sharedmem.reads >> 32;
+        case CSR_MPM_SMEM_WRITES:   return proc_perf.clusters.sharedmem.writes & 0xffffffff;
+        case CSR_MPM_SMEM_WRITES_H: return proc_perf.clusters.sharedmem.writes >> 32;
+        case CSR_MPM_SMEM_BANK_ST:  return proc_perf.clusters.sharedmem.bank_stalls & 0xffffffff; 
+        case CSR_MPM_SMEM_BANK_ST_H:return proc_perf.clusters.sharedmem.bank_stalls >> 32; 
 
-        case CSR_MPM_MEM_READS:   return perf_stats_.mem_reads & 0xffffffff; 
-        case CSR_MPM_MEM_READS_H: return perf_stats_.mem_reads >> 32; 
-        case CSR_MPM_MEM_WRITES:  return perf_stats_.mem_writes & 0xffffffff; 
-        case CSR_MPM_MEM_WRITES_H:return perf_stats_.mem_writes >> 32; 
-        case CSR_MPM_MEM_LAT:     return perf_stats_.mem_latency & 0xffffffff; 
-        case CSR_MPM_MEM_LAT_H:   return perf_stats_.mem_latency >> 32;
+        case CSR_MPM_MEM_READS:   return proc_perf.mem_reads & 0xffffffff; 
+        case CSR_MPM_MEM_READS_H: return proc_perf.mem_reads >> 32; 
+        case CSR_MPM_MEM_WRITES:  return proc_perf.mem_writes & 0xffffffff; 
+        case CSR_MPM_MEM_WRITES_H:return proc_perf.mem_writes >> 32; 
+        case CSR_MPM_MEM_LAT:     return proc_perf.mem_latency & 0xffffffff; 
+        case CSR_MPM_MEM_LAT_H:   return proc_perf.mem_latency >> 32;
         }
       } break;
       case DCR_MPM_CLASS_TEX: {
         switch (addr) {
-        case CSR_MPM_TEX_READS:   return tex_unit_->perf_stats().reads & 0xffffffff;
-        case CSR_MPM_TEX_READS_H: return tex_unit_->perf_stats().reads >> 32;
-        case CSR_MPM_TEX_LAT:     return tex_unit_->perf_stats().latency & 0xffffffff;
-        case CSR_MPM_TEX_LAT_H:   return tex_unit_->perf_stats().latency >> 32;
+        case CSR_MPM_TEX_READS:   return proc_perf.clusters.tex_unit.reads & 0xffffffff;
+        case CSR_MPM_TEX_READS_H: return proc_perf.clusters.tex_unit.reads >> 32;
+        case CSR_MPM_TEX_LAT:     return proc_perf.clusters.tex_unit.latency & 0xffffffff;
+        case CSR_MPM_TEX_LAT_H:   return proc_perf.clusters.tex_unit.latency >> 32;
 
-        case CSR_MPM_TCACHE_READS:    return tcache_->perf_stats().reads & 0xffffffff; 
-        case CSR_MPM_TCACHE_READS_H:  return tcache_->perf_stats().reads >> 32;
-        case CSR_MPM_TCACHE_MISS_R:   return tcache_->perf_stats().read_misses & 0xffffffff; 
-        case CSR_MPM_TCACHE_MISS_R_H: return tcache_->perf_stats().read_misses >> 32;
-        case CSR_MPM_TCACHE_BANK_ST:  return tcache_->perf_stats().bank_stalls & 0xffffffff; 
-        case CSR_MPM_TCACHE_BANK_ST_H:return tcache_->perf_stats().bank_stalls >> 32;
-        case CSR_MPM_TCACHE_MSHR_ST:  return tcache_->perf_stats().mshr_stalls & 0xffffffff; 
-        case CSR_MPM_TCACHE_MSHR_ST_H:return tcache_->perf_stats().mshr_stalls >> 32;
+        case CSR_MPM_TCACHE_READS:    return proc_perf.clusters.tcache.reads & 0xffffffff; 
+        case CSR_MPM_TCACHE_READS_H:  return proc_perf.clusters.tcache.reads >> 32;
+        case CSR_MPM_TCACHE_MISS_R:   return proc_perf.clusters.tcache.read_misses & 0xffffffff; 
+        case CSR_MPM_TCACHE_MISS_R_H: return proc_perf.clusters.tcache.read_misses >> 32;
+        case CSR_MPM_TCACHE_BANK_ST:  return proc_perf.clusters.tcache.bank_stalls & 0xffffffff; 
+        case CSR_MPM_TCACHE_BANK_ST_H:return proc_perf.clusters.tcache.bank_stalls >> 32;
+        case CSR_MPM_TCACHE_MSHR_ST:  return proc_perf.clusters.tcache.mshr_stalls & 0xffffffff; 
+        case CSR_MPM_TCACHE_MSHR_ST_H:return proc_perf.clusters.tcache.mshr_stalls >> 32;
         }
       } break;
       case DCR_MPM_CLASS_RASTER: {
         switch (addr) {        
-        case CSR_MPM_RASTER_READS:   return raster_unit_->perf_stats().reads & 0xffffffff;
-        case CSR_MPM_RASTER_READS_H: return raster_unit_->perf_stats().reads >> 32;
-        case CSR_MPM_RASTER_LAT:     return raster_unit_->perf_stats().latency & 0xffffffff;
-        case CSR_MPM_RASTER_LAT_H:   return raster_unit_->perf_stats().latency >> 32;
-        case CSR_MPM_RASTER_STALL:   return raster_unit_->perf_stats().stalls & 0xffffffff;
-        case CSR_MPM_RASTER_STALL_H: return raster_unit_->perf_stats().stalls >> 32;
+        case CSR_MPM_RASTER_READS:   return proc_perf.clusters.raster_unit.reads & 0xffffffff;
+        case CSR_MPM_RASTER_READS_H: return proc_perf.clusters.raster_unit.reads >> 32;
+        case CSR_MPM_RASTER_LAT:     return proc_perf.clusters.raster_unit.latency & 0xffffffff;
+        case CSR_MPM_RASTER_LAT_H:   return proc_perf.clusters.raster_unit.latency >> 32;
+        case CSR_MPM_RASTER_STALL:   return proc_perf.clusters.raster_unit.stalls & 0xffffffff;
+        case CSR_MPM_RASTER_STALL_H: return proc_perf.clusters.raster_unit.stalls >> 32;
 
-        case CSR_MPM_RCACHE_READS:    return rcache_->perf_stats().reads & 0xffffffff; 
-        case CSR_MPM_RCACHE_READS_H:  return rcache_->perf_stats().reads >> 32; 
-        case CSR_MPM_RCACHE_MISS_R:   return rcache_->perf_stats().read_misses & 0xffffffff; 
-        case CSR_MPM_RCACHE_MISS_R_H: return rcache_->perf_stats().read_misses >> 32;  
-        case CSR_MPM_RCACHE_BANK_ST:  return rcache_->perf_stats().bank_stalls & 0xffffffff; 
-        case CSR_MPM_RCACHE_BANK_ST_H:return rcache_->perf_stats().bank_stalls >> 32;
-        case CSR_MPM_RCACHE_MSHR_ST:  return rcache_->perf_stats().mshr_stalls & 0xffffffff; 
-        case CSR_MPM_RCACHE_MSHR_ST_H:return rcache_->perf_stats().mshr_stalls >> 32;
+        case CSR_MPM_RCACHE_READS:    return proc_perf.clusters.rcache.reads & 0xffffffff; 
+        case CSR_MPM_RCACHE_READS_H:  return proc_perf.clusters.rcache.reads >> 32; 
+        case CSR_MPM_RCACHE_MISS_R:   return proc_perf.clusters.rcache.read_misses & 0xffffffff; 
+        case CSR_MPM_RCACHE_MISS_R_H: return proc_perf.clusters.rcache.read_misses >> 32;  
+        case CSR_MPM_RCACHE_BANK_ST:  return proc_perf.clusters.rcache.bank_stalls & 0xffffffff; 
+        case CSR_MPM_RCACHE_BANK_ST_H:return proc_perf.clusters.rcache.bank_stalls >> 32;
+        case CSR_MPM_RCACHE_MSHR_ST:  return proc_perf.clusters.rcache.mshr_stalls & 0xffffffff; 
+        case CSR_MPM_RCACHE_MSHR_ST_H:return proc_perf.clusters.rcache.mshr_stalls >> 32;
         default:
           return 0;
         }
       } break;
       case DCR_MPM_CLASS_ROP: {
         switch (addr) { 
-        case CSR_MPM_ROP_READS:   return rop_unit_->perf_stats().reads & 0xffffffff;
-        case CSR_MPM_ROP_READS_H: return rop_unit_->perf_stats().reads >> 32;
-        case CSR_MPM_ROP_WRITES:  return rop_unit_->perf_stats().writes & 0xffffffff;
-        case CSR_MPM_ROP_WRITES_H:return rop_unit_->perf_stats().writes >> 32;
-        case CSR_MPM_ROP_LAT:     return rop_unit_->perf_stats().latency & 0xffffffff;
-        case CSR_MPM_ROP_LAT_H:   return rop_unit_->perf_stats().latency >> 32;
-        case CSR_MPM_ROP_STALL:   return rop_unit_->perf_stats().stalls & 0xffffffff;
-        case CSR_MPM_ROP_STALL_H: return rop_unit_->perf_stats().stalls >> 32;
+        case CSR_MPM_ROP_READS:   return proc_perf.clusters.rop_unit.reads & 0xffffffff;
+        case CSR_MPM_ROP_READS_H: return proc_perf.clusters.rop_unit.reads >> 32;
+        case CSR_MPM_ROP_WRITES:  return proc_perf.clusters.rop_unit.writes & 0xffffffff;
+        case CSR_MPM_ROP_WRITES_H:return proc_perf.clusters.rop_unit.writes >> 32;
+        case CSR_MPM_ROP_LAT:     return proc_perf.clusters.rop_unit.latency & 0xffffffff;
+        case CSR_MPM_ROP_LAT_H:   return proc_perf.clusters.rop_unit.latency >> 32;
+        case CSR_MPM_ROP_STALL:   return proc_perf.clusters.rop_unit.stalls & 0xffffffff;
+        case CSR_MPM_ROP_STALL_H: return proc_perf.clusters.rop_unit.stalls >> 32;
 
-        case CSR_MPM_OCACHE_READS:    return ocache_->perf_stats().reads & 0xffffffff; 
-        case CSR_MPM_OCACHE_READS_H:  return ocache_->perf_stats().reads >> 32; 
-        case CSR_MPM_OCACHE_WRITES:   return ocache_->perf_stats().writes & 0xffffffff; 
-        case CSR_MPM_OCACHE_WRITES_H: return ocache_->perf_stats().writes >> 32; 
-        case CSR_MPM_OCACHE_MISS_R:   return ocache_->perf_stats().read_misses & 0xffffffff; 
-        case CSR_MPM_OCACHE_MISS_R_H: return ocache_->perf_stats().read_misses >> 32; 
-        case CSR_MPM_OCACHE_MISS_W:   return ocache_->perf_stats().write_misses & 0xffffffff; 
-        case CSR_MPM_OCACHE_MISS_W_H: return ocache_->perf_stats().write_misses >> 32; 
-        case CSR_MPM_OCACHE_BANK_ST:  return ocache_->perf_stats().bank_stalls & 0xffffffff; 
-        case CSR_MPM_OCACHE_BANK_ST_H:return ocache_->perf_stats().bank_stalls >> 32;
-        case CSR_MPM_OCACHE_MSHR_ST:  return ocache_->perf_stats().mshr_stalls & 0xffffffff; 
-        case CSR_MPM_OCACHE_MSHR_ST_H:return ocache_->perf_stats().mshr_stalls >> 32;
+        case CSR_MPM_OCACHE_READS:    return proc_perf.clusters.ocache.reads & 0xffffffff; 
+        case CSR_MPM_OCACHE_READS_H:  return proc_perf.clusters.ocache.reads >> 32; 
+        case CSR_MPM_OCACHE_WRITES:   return proc_perf.clusters.ocache.writes & 0xffffffff; 
+        case CSR_MPM_OCACHE_WRITES_H: return proc_perf.clusters.ocache.writes >> 32; 
+        case CSR_MPM_OCACHE_MISS_R:   return proc_perf.clusters.ocache.read_misses & 0xffffffff; 
+        case CSR_MPM_OCACHE_MISS_R_H: return proc_perf.clusters.ocache.read_misses >> 32; 
+        case CSR_MPM_OCACHE_MISS_W:   return proc_perf.clusters.ocache.write_misses & 0xffffffff; 
+        case CSR_MPM_OCACHE_MISS_W_H: return proc_perf.clusters.ocache.write_misses >> 32; 
+        case CSR_MPM_OCACHE_BANK_ST:  return proc_perf.clusters.ocache.bank_stalls & 0xffffffff; 
+        case CSR_MPM_OCACHE_BANK_ST_H:return proc_perf.clusters.ocache.bank_stalls >> 32;
+        case CSR_MPM_OCACHE_MSHR_ST:  return proc_perf.clusters.ocache.mshr_stalls & 0xffffffff; 
+        case CSR_MPM_OCACHE_MSHR_ST_H:return proc_perf.clusters.ocache.mshr_stalls >> 32;
         default:
           return 0;
         }
@@ -678,13 +598,13 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   #ifdef EXT_RASTER_ENABLE
     if (addr >= CSR_RASTER_BEGIN
      && addr < CSR_RASTER_END) {
-      return raster_agent_->csr_read(wid, tid, addr);
+      return raster_unit_->csr_read(core_id_, wid, tid, addr);
     } else
   #endif
   #ifdef EXT_ROP_ENABLE
     if (addr >= CSR_ROP_BEGIN
      && addr < CSR_ROP_END) {
-      return rop_agent_->csr_read(wid, tid, addr);
+      return rop_unit_->csr_read(core_id_, wid, tid, addr);
     } else
   #endif  
     {
@@ -721,13 +641,13 @@ void Core::set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid) {
   #ifdef EXT_RASTER_ENABLE
     if (addr >= CSR_RASTER_BEGIN
      && addr < CSR_RASTER_END) {
-      raster_agent_->csr_write(wid, tid, addr, value);
+      raster_unit_->csr_write(core_id_, wid, tid, addr, value);
     } else
   #endif
   #ifdef EXT_ROP_ENABLE
     if (addr >= CSR_ROP_BEGIN
      && addr < CSR_ROP_END) {
-      rop_agent_->csr_write(wid, tid, addr, value);
+      rop_unit_->csr_write(core_id_, wid, tid, addr, value);
     } else
   #endif
     {

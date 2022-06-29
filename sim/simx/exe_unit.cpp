@@ -25,7 +25,6 @@ void NopUnit::tick() {
 
 LsuUnit::LsuUnit(const SimContext& ctx, Core* core) 
     : ExeUnit(ctx, core, "LSU")
-    , dcache_(core->dcache_)
     , pending_rd_reqs_(LSUQ_SIZE)
     , num_threads_(core->arch().num_threads())     
     , fence_lock_(false)
@@ -39,7 +38,7 @@ void LsuUnit::reset() {
 void LsuUnit::tick() {
     // handle dcache response
     for (uint32_t t = 0; t < num_threads_; ++t) {
-        auto& dcache_rsp_port = dcache_->CoreRspPorts.at(t);
+        auto& dcache_rsp_port = core_->dcache_rsp_ports.at(t);
         if (dcache_rsp_port.empty())
             continue;
         auto& mem_rsp = dcache_rsp_port.front();
@@ -142,27 +141,21 @@ void LsuUnit::tick() {
         if (!trace->tmask.test(t))
             continue;
         
-        auto& dcache_req_port = dcache_->CoreReqPorts.at(t);
+        auto& dcache_req_port = core_->dcache_req_ports.at(t);
         auto mem_addr = trace_data->mem_addrs.at(t);
         auto type = core_->get_addr_type(mem_addr.addr);
 
         MemReq mem_req;
         mem_req.addr  = mem_addr.addr;
         mem_req.write = is_write;
-        mem_req.non_cacheable = (type == AddrType::IO); 
+        mem_req.addr_type = type; 
         mem_req.tag   = tag;
-        mem_req.core_id = trace->cid;
-        mem_req.uuid = trace->uuid;
-        
-        if (type == AddrType::Shared) {
-            core_->sharedmem_->Inputs.at(t).send(mem_req, 2);
-            DT(3, "smem-req: addr=" << std::hex << mem_req.addr << ", tag=" << tag 
-                << ", type=" << trace->lsu_type << ", tid=" << t << ", " << *trace);
-        } else {            
-            dcache_req_port.send(mem_req, 2);
-            DT(3, "dcache-req: addr=" << std::hex << mem_req.addr << ", tag=" << tag 
-                << ", type=" << trace->lsu_type << ", tid=" << t << ", nc=" << mem_req.non_cacheable << ", " << *trace);
-        }        
+        mem_req.cid   = trace->cid;
+        mem_req.uuid  = trace->uuid;        
+             
+        dcache_req_port.send(mem_req, 2);
+        DT(3, "dcache-req: addr=" << std::hex << mem_req.addr << ", tag=" << tag 
+            << ", lsu_type=" << trace->lsu_type << ", tid=" << t << ", addr_type=" << mem_req.addr_type << ", " << *trace);
         
         if (is_dup)
             break;
@@ -259,12 +252,12 @@ void FpuUnit::tick() {
 GpuUnit::GpuUnit(const SimContext& ctx, Core* core) 
     : ExeUnit(ctx, core, "GPU")   
     , tex_unit_(core->tex_unit_)
-    , raster_agent_(core->raster_agent_)
-    , rop_agent_(core->rop_agent_)
+    , raster_unit_(core->raster_unit_)
+    , rop_unit_(core->rop_unit_)
     , pending_rsps_{
         &core->tex_unit_->Output,
-        &core->raster_agent_->Output,
-        &core->rop_agent_->Output
+        &core->raster_unit_->Output,
+        &core->rop_unit_->Output
     }
 {}
     
@@ -274,6 +267,8 @@ void GpuUnit::tick() {
         if (pending_rsp->empty())
             continue;
         auto trace = pending_rsp->front();
+        if (trace->cid != core_->id())
+            continue;
         Output.send(trace, 1);
         pending_rsp->pop();
     }
@@ -311,10 +306,10 @@ void GpuUnit::tick() {
         tex_unit_->Input.send(trace, 1);
         break;
     case GpuType::RASTER:
-        raster_agent_->Input.send(trace, 1);
+        raster_unit_->Input.send(trace, 1);
         break;
     case GpuType::ROP:
-        rop_agent_->Input.send(trace, 1);
+        rop_unit_->Input.send(trace, 1);
         break;    
     case GpuType::CMOV:
         Output.send(trace, 3);

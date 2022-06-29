@@ -1,5 +1,5 @@
 #include "rop_unit.h"
-#include "core.h"
+#include "mem.h"
 #include <VX_config.h>
 #include <cocogfx/include/fixed.hpp>
 #include <cocogfx/include/math.hpp>
@@ -317,6 +317,8 @@ public:
   }
 };
 
+///////////////////////////////////////////////////////////////////////////////
+
 class Blender {
 private:
   const Arch& arch_;
@@ -381,6 +383,8 @@ public:
     return enabled_;
   }
 };
+
+///////////////////////////////////////////////////////////////////////////////
 
 class MemoryUnit {
 private:
@@ -484,6 +488,8 @@ public:
   }
 };
 
+///////////////////////////////////////////////////////////////////////////////
+
 class RopUnit::Impl {
 private:
   struct pending_req_t {
@@ -501,7 +507,8 @@ private:
   uint64_t      last_pop_time_;
 
 public:
-  Impl(RopUnit* simobject,      
+  Impl(RopUnit* simobject,   
+       uint32_t cores_per_unit,   
        const Arch &arch,
        const DCRS& dcrs) 
     : simobject_(simobject)
@@ -511,6 +518,7 @@ public:
     , blender_(arch, dcrs)
     , pending_reqs_(ROP_MEM_QUEUE_SIZE)
   {
+    __unused (cores_per_unit);
     this->clear();
   }
 
@@ -523,11 +531,108 @@ public:
     last_pop_time_= 0;
   }
 
+  void tick() {
+    // handle memory response
+    for (auto& port : simobject_->MemRsps) {
+      if (port.empty())
+        continue;
+      auto& mem_rsp = port.front();
+      auto& entry = pending_reqs_.at(mem_rsp.tag);
+      assert(entry.count);
+      --entry.count; // track remaining blocks 
+      if (0 == entry.count) {
+        auto& mem_wr_addrs = entry.data->mem_wr_addrs;
+        for (uint32_t i = 0, n = mem_wr_addrs.size(); i < n; ++i) {
+          uint32_t j = i % simobject_->MemReqs.size();
+          MemReq mem_req;
+          mem_req.addr  = mem_wr_addrs.at(i).addr;
+          mem_req.write = true;
+          mem_req.tag   = 0;
+          mem_req.cid   = mem_rsp.cid;
+          mem_req.uuid  = mem_rsp.uuid;
+          simobject_->MemReqs.at(j).send(mem_req, 2);
+          ++perf_stats_.writes;
+        }
+        pending_reqs_.release(mem_rsp.tag);
+      }   
+      port.pop();
+    }    
+
+    for (int i = 0, n = pending_reqs_.size(); i < n; ++i) {
+      if (pending_reqs_.contains(i))
+        perf_stats_.latency += pending_reqs_.at(i).count;
+    }    
+
+    // check input trace
+    if (simobject_->Input.empty())
+      return;
+    perf_stats_.stalls += simobject_->Input.stalled();    
+    auto trace = simobject_->Input.front();    
+    auto data  = std::dynamic_pointer_cast<RopUnit::TraceData>(trace->data);
+    data->cid  = trace->cid;
+    data->uuid = trace->uuid;
+    if (!data->mem_rd_addrs.empty()) {
+      if (pending_reqs_.full())
+        return;
+      auto tag = pending_reqs_.allocate({data, (uint32_t)data->mem_rd_addrs.size()});
+      for (uint32_t i = 0, n = data->mem_rd_addrs.size(); i < n; ++i) {
+        uint32_t j = i % simobject_->MemReqs.size();
+        MemReq mem_req;
+        mem_req.addr  = data->mem_rd_addrs.at(i).addr;
+        mem_req.write = false;
+        mem_req.tag   = tag;
+        mem_req.cid   = data->cid;
+        mem_req.uuid  = data->uuid;
+        simobject_->MemReqs.at(j).send(mem_req, 1);
+        ++perf_stats_.reads;
+      }
+    } else {
+      for (uint32_t i = 0, n = data->mem_wr_addrs.size(); i < n; ++i) {
+        uint32_t j = i % simobject_->MemReqs.size();
+        MemReq mem_req;
+        mem_req.addr  = data->mem_wr_addrs.at(i).addr;
+        mem_req.write = true;
+        mem_req.tag   = 0;
+        mem_req.cid   = data->cid;
+        mem_req.uuid  = data->uuid;
+        simobject_->MemReqs.at(j).send(mem_req, 1);
+        ++perf_stats_.writes;
+      }
+    }
+
+    simobject_->Output.send(trace, 1);
+    simobject_->Input.pop();
+  }
+
   void attach_ram(RAM* mem) {
     memoryUnit_.attach_ram(mem);
+  }
+
+  uint32_t csr_read(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t addr) {
+    //--
+    __unused (cid);
+    __unused (wid);
+    __unused (tid);
+    __unused (addr);
+    return 0;
+  }
+
+  void csr_write(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value) {
+    //--
+    __unused (cid);
+    __unused (wid);
+    __unused (tid);
+    __unused (addr);
+    __unused (value);
   }   
 
-  void write(uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, TraceData::Ptr trace_data) {      
+  void write(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, RopUnit::TraceData::Ptr trace_data) {      
+    __unused (cid);
+    __unused (wid);
+    __unused (tid);
+    
+    DT(2, "rop-write: cid=" << std::dec << cid << ", wid=" << wid << ", tid=" << tid << ", x=" << x << ", y=" << y << ", backface=" << is_backface << ", color=0x" << std::hex << color << ", depth=0x" << depth);
+
     auto depth_enabled   = depthStencil_.depth_enabled();
     auto stencil_enabled = depthStencil_.stencil_enabled(is_backface);
     auto blend_enabled   = blender_.enabled();
@@ -548,78 +653,6 @@ public:
     memoryUnit_.write(depth_enabled, stencil_enabled, ds_passed, is_backface, dst_depthstencil, dst_color, x, y, depthstencil, color, trace_data);
   }
 
-  void tick() {
-    // handle memory response
-    for (auto& port : simobject_->MemRsps) {
-      if (port.empty())
-        continue;
-      auto& mem_rsp = port.front();
-      auto& entry = pending_reqs_.at(mem_rsp.tag);
-      assert(entry.count);
-      --entry.count; // track remaining blocks 
-      if (0 == entry.count) {
-        auto& mem_wr_addrs = entry.data->mem_wr_addrs;
-        for (uint32_t i = 0, n = mem_wr_addrs.size(); i < n; ++i) {
-          uint32_t j = i % simobject_->MemReqs.size();
-          MemReq mem_req;
-          mem_req.addr  = mem_wr_addrs.at(i).addr;
-          mem_req.write = true;
-          mem_req.tag   = 0;
-          mem_req.core_id = mem_rsp.core_id;
-          mem_req.uuid = mem_rsp.uuid;
-          simobject_->MemReqs.at(j).send(mem_req, 2);
-          ++perf_stats_.writes;
-        }
-        pending_reqs_.release(mem_rsp.tag);
-      }   
-      port.pop();
-    }    
-
-    for (int i = 0, n = pending_reqs_.size(); i < n; ++i) {
-      if (pending_reqs_.contains(i))
-        perf_stats_.latency += pending_reqs_.at(i).count;
-    }    
-
-    // check input queue
-    if (simobject_->Input.empty())
-      return;
-
-    perf_stats_.stalls += simobject_->Input.stalled();
-
-    // check pending queue capacity
-    auto data = simobject_->Input.front();
-    if (!data->mem_rd_addrs.empty()) {
-      if (pending_reqs_.full())
-        return;
-      auto tag = pending_reqs_.allocate({data, (uint32_t)data->mem_rd_addrs.size()});
-      for (uint32_t i = 0, n = data->mem_rd_addrs.size(); i < n; ++i) {
-        uint32_t j = i % simobject_->MemReqs.size();
-        MemReq mem_req;
-        mem_req.addr  = data->mem_rd_addrs.at(i).addr;
-        mem_req.write = false;
-        mem_req.tag   = tag;
-        mem_req.core_id = data->core_id;
-        mem_req.uuid = data->uuid;
-        simobject_->MemReqs.at(j).send(mem_req, 1);
-        ++perf_stats_.reads;
-      }
-    } else {
-      for (uint32_t i = 0, n = data->mem_wr_addrs.size(); i < n; ++i) {
-        uint32_t j = i % simobject_->MemReqs.size();
-        MemReq mem_req;
-        mem_req.addr  = data->mem_wr_addrs.at(i).addr;
-        mem_req.write = true;
-        mem_req.tag   = 0;
-        mem_req.core_id = data->core_id;
-        mem_req.uuid = data->uuid;
-        simobject_->MemReqs.at(j).send(mem_req, 1);
-        ++perf_stats_.writes;
-      }
-    }
-
-    simobject_->Input.pop();
-  }    
-
   const PerfStats& perf_stats() const { 
     return perf_stats_; 
   }
@@ -628,14 +661,16 @@ public:
 ///////////////////////////////////////////////////////////////////////////////
 
 RopUnit::RopUnit(const SimContext& ctx, 
-                 const char* name,                         
+                 const char* name,          
+                 uint32_t cores_per_unit,             
                  const Arch &arch, 
                  const DCRS& dcrs) 
   : SimObject<RopUnit>(ctx, name)
   , MemReqs(arch.num_threads(), this)
   , MemRsps(arch.num_threads(), this)
   , Input(this)
-  , impl_(new Impl(this, arch, dcrs)) 
+  , Output(this)
+  , impl_(new Impl(this, cores_per_unit, arch, dcrs)) 
 {}
 
 RopUnit::~RopUnit() {
@@ -646,16 +681,24 @@ void RopUnit::reset() {
   impl_->clear();
 }
 
+void RopUnit::tick() {
+  impl_->tick();
+}
+
 void RopUnit::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
 }
 
-void RopUnit::write(uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, TraceData::Ptr trace_data) {
-  impl_->write(x, y, is_backface, color, depth, trace_data);
+uint32_t RopUnit::csr_read(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t addr) {
+  return impl_->csr_read(cid, wid, tid, addr);
 }
 
-void RopUnit::tick() {
-  impl_->tick();
+void RopUnit::csr_write(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value) {
+  impl_->csr_write(cid, wid, tid, addr, value);
+}
+
+void RopUnit::write(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, RopUnit::TraceData::Ptr trace_data) {
+  impl_->write(cid, wid, tid, x, y, is_backface, color, depth, trace_data);
 }
 
 const RopUnit::PerfStats& RopUnit::perf_stats() const {

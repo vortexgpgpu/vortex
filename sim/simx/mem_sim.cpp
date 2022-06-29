@@ -83,7 +83,7 @@ public:
             mem_req.addr,
             mem_req.write ? ramulator::Request::Type::WRITE : ramulator::Request::Type::READ,
             std::bind(&Impl::dram_callback, this, placeholders::_1, mem_req.tag, mem_req.uuid),
-            mem_req.core_id
+            mem_req.cid
         );
 
         if (!dram_->send(dram_req))

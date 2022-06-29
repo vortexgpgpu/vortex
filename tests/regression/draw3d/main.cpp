@@ -237,18 +237,18 @@ int render(const CGLTrace& trace) {
       auto blend_src = toVXBlendFunc(states.blend_src);
       auto blend_dst = toVXBlendFunc(states.blend_dst);
       ROP_DCR_WRITE(DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)   // DST
-                                             | (ROP_BLEND_MODE_ADD << 0));  // SRC
+                                      | (ROP_BLEND_MODE_ADD << 0));  // SRC
       ROP_DCR_WRITE(DCR_ROP_BLEND_FUNC, (blend_dst << 24)            // DST_A
-                                             | (blend_dst << 16)            // DST_RGB 
-                                             | (blend_src << 8)             // SRC_A
-                                             | (blend_src << 0));           // SRC_RGB
+                                      | (blend_dst << 16)            // DST_RGB 
+                                      | (blend_src << 8)             // SRC_A
+                                      | (blend_src << 0));           // SRC_RGB
     } else {
       ROP_DCR_WRITE(DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)   // DST
-                                             | (ROP_BLEND_MODE_ADD << 0));  // SRC
+                                      | (ROP_BLEND_MODE_ADD << 0));  // SRC
       ROP_DCR_WRITE(DCR_ROP_BLEND_FUNC, (ROP_BLEND_FUNC_ZERO << 24)  // DST_A
-                                             | (ROP_BLEND_FUNC_ZERO << 16)  // DST_RGB 
-                                             | (ROP_BLEND_FUNC_ONE << 8)    // SRC_A
-                                             | (ROP_BLEND_FUNC_ONE << 0));  // SRC_RGB
+                                      | (ROP_BLEND_FUNC_ZERO << 16)  // DST_RGB 
+                                      | (ROP_BLEND_FUNC_ONE << 8)    // SRC_A
+                                      | (ROP_BLEND_FUNC_ONE << 0));  // SRC_RGB
     }
     
     if (states.texture_enabled) {

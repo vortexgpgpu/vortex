@@ -4,10 +4,10 @@
 #include <VX_types.h>
 #include "pipeline.h"
 #include "types.h"
+
 namespace vortex {
 
 class RAM;
-class Core;
 
 class RopUnit : public SimObject<RopUnit> {
 public:
@@ -23,13 +23,21 @@ public:
       , latency(0)
       , stalls(0)
     {}
+
+    PerfStats& operator+=(const PerfStats& rhs) {
+      this->reads   += rhs.reads;
+      this->writes  += rhs.writes;
+      this->latency += rhs.latency;
+      this->stalls  += rhs.stalls;
+      return *this;
+    }
   };
 
   struct TraceData : public ITraceData {
     using Ptr = std::shared_ptr<TraceData>;
     std::vector<mem_addr_size_t> mem_rd_addrs;
     std::vector<mem_addr_size_t> mem_wr_addrs;
-    uint32_t core_id;
+    uint32_t cid;
     uint32_t uuid;
   };
 
@@ -62,22 +70,28 @@ public:
   std::vector<SimPort<MemReq>> MemReqs;
   std::vector<SimPort<MemRsp>> MemRsps;
 
-  SimPort<TraceData::Ptr> Input;
+  SimPort<pipeline_trace_t*> Input;
+  SimPort<pipeline_trace_t*> Output;
 
   RopUnit(const SimContext& ctx, 
           const char* name,  
+          uint32_t cores_per_unit,
           const Arch &arch, 
           const DCRS& dcrs);    
 
   ~RopUnit();
 
-  void attach_ram(RAM* mem);
-
   void reset();
 
-  void write(uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, TraceData::Ptr trace_data);
-
   void tick();
+
+  void attach_ram(RAM* mem);
+  
+  uint32_t csr_read(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t addr);
+  
+  void csr_write(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value);
+
+  void write(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, RopUnit::TraceData::Ptr trace_data);
 
   const PerfStats& perf_stats() const;
 

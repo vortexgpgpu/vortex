@@ -6,6 +6,7 @@ namespace vortex {
 
 class Arch;
 class RAM;
+class ProcessorImpl;
 
 class Processor {
 public:
@@ -19,8 +20,7 @@ public:
   void write_dcr(uint32_t addr, uint64_t value);
 
 private:
-  class Impl;
-  Impl* impl_;
+  ProcessorImpl* impl_;
 };
 
 }

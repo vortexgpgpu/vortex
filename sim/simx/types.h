@@ -211,29 +211,30 @@ inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
 struct MemReq {
     uint64_t addr;
     bool write;
-    bool non_cacheable;
+    AddrType addr_type;
     uint32_t tag;
-    uint32_t core_id;    
+    uint32_t cid;    
     uint64_t uuid;
 
     MemReq(uint64_t _addr = 0, 
            bool _write = false,
-           bool _non_cacheable = false,
+           AddrType _addr_type = AddrType::Global,
            uint64_t _tag = 0, 
-           uint32_t _core_id = 0,
+           uint32_t _cid = 0,
            uint64_t _uuid = 0
     )   : addr(_addr)
         , write(_write)
-        , non_cacheable(_non_cacheable)
+        , addr_type(_addr_type)
         , tag(_tag)
-        , core_id(_core_id)
+        , cid(_cid)
         , uuid(_uuid)
     {}
 };
 
 inline std::ostream &operator<<(std::ostream &os, const MemReq& req) {
   os << "mem-" << (req.write ? "wr" : "rd") << ": ";
-  os << "addr=" << std::hex << req.addr << std::dec << ", tag=" << req.tag << ", core_id=" << req.core_id;
+  os << "addr=" << std::hex << req.addr << ", type=" << req.addr_type;
+  os << std::dec << ", tag=" << req.tag << ", cid=" << req.cid;
   os << " (#" << std::dec << req.uuid << ")";
   return os;
 }
@@ -242,17 +243,17 @@ inline std::ostream &operator<<(std::ostream &os, const MemReq& req) {
 
 struct MemRsp {
     uint64_t tag;    
-    uint32_t core_id;
+    uint32_t cid;
     uint64_t uuid;
-    MemRsp(uint64_t _tag = 0, uint32_t _core_id = 0, uint64_t _uuid = 0)
+    MemRsp(uint64_t _tag = 0, uint32_t _cid = 0, uint64_t _uuid = 0)
       : tag (_tag) 
-      , core_id(_core_id)
+      , cid(_cid)
       , uuid(_uuid)
     {}
 };
 
 inline std::ostream &operator<<(std::ostream &os, const MemRsp& rsp) {
-  os << "mem-rsp: tag=" << rsp.tag << ", core_id=" << rsp.core_id;
+  os << "mem-rsp: tag=" << rsp.tag << ", cid=" << rsp.cid;
   os << " (#" << std::dec << rsp.uuid << ")";
   return os;
 }
@@ -331,90 +332,175 @@ public:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-template <typename Req, typename Rsp, uint32_t MaxInputs = 32>
+template <typename Req, typename Rsp>
 class Switch : public SimObject<Switch<Req, Rsp>> {
 private:
   ArbiterType type_;
   uint32_t delay_;  
-  uint32_t cursor_;
-  uint32_t tag_shift_;
+  std::vector<uint32_t> cursors_;
+  uint32_t lg_num_reqs_;
 
 public:
+  std::vector<SimPort<Req>>  ReqIn;
+  std::vector<SimPort<Rsp>>  RspIn;
+
+  std::vector<SimPort<Req>>  ReqOut;  
+  std::vector<SimPort<Rsp>>  RspOut;
+
   Switch(
     const SimContext& ctx, 
     const char* name, 
     ArbiterType type, 
-    uint32_t num_inputs, 
+    uint32_t num_inputs = 1, 
+    uint32_t num_outputs = 1,
     uint32_t delay = 1
   ) 
-    : SimObject<Switch<Req, Rsp, MaxInputs>>(ctx, name)    
+    : SimObject<Switch<Req, Rsp>>(ctx, name)    
     , type_(type)
     , delay_(delay)
-    , cursor_(0)
-    , tag_shift_(log2ceil(num_inputs))
-    , ReqIn(num_inputs, this)
-    , ReqOut(this)
-    , RspIn(this)    
-    , RspOut(num_inputs, this)
+    , cursors_(num_outputs, 0)
+    , lg_num_reqs_(log2ceil(num_inputs / num_outputs))    
+    , ReqIn(num_inputs,   this)
+    , RspIn(num_inputs,   this)
+    , ReqOut(num_outputs, this)    
+    , RspOut(num_outputs, this)
   {
-    assert(delay_ != 0);
-    assert(num_inputs <= MaxInputs);
-    if (num_inputs == 1) {
-      // bypass
-      ReqIn.at(0).bind(&ReqOut);
-      RspIn.bind(&RspOut.at(0));
+    assert(delay != 0);    
+    assert(num_inputs <= 32);
+    assert(num_outputs <= 32);
+    assert(num_inputs >= num_outputs);
+
+    if (num_inputs == num_outputs) {
+      // bypass mode
+      for (uint32_t i = 0; i < num_inputs; ++i) {
+        ReqIn.at(i).bind(&ReqOut.at(i));
+        RspOut.at(i).bind(&RspIn.at(i));
+      }
     }
   }
 
   void reset() {
-    cursor_ = 0;
+    for (auto& cursor : cursors_) {
+      cursor = 0;
+    }
   }
 
-  void tick() {  
-    if (ReqIn.size() == 1)
+  void tick() {
+
+    uint32_t I = ReqIn.size();
+    uint32_t O = ReqOut.size();
+    uint32_t R = 1 << lg_num_reqs_;
+
+    // skip bypass mode
+    if (I == O)
       return;
         
-    // process incomming requests    
-    for (uint32_t i = 0, n = ReqIn.size(); i < n; ++i) {      
-      uint32_t j = (cursor_ + i) % n;
-      auto& req_in = ReqIn.at(j);      
-      if (!req_in.empty()) {
-        auto& req = req_in.front();
-        if (tag_shift_) {
-          req.tag = (req.tag << tag_shift_) | j;
+    // process incomming requests        
+    for (uint32_t o = 0; o < O; ++o) {
+      for (uint32_t r = 0; r < R; ++r) {
+        uint32_t i = (cursors_.at(o) + r) & (R-1);
+        uint32_t j = o * R + i;
+        if (j >= I)
+          continue;
+        
+        auto& req_in = ReqIn.at(j);
+        if (!req_in.empty()) {
+          auto& req = req_in.front();
+          if (lg_num_reqs_ != 0) {
+            req.tag = (req.tag << lg_num_reqs_) | i;
+          }
+          DT(4, this->name() << "-" << req);
+          ReqOut.at(o).send(req, delay_);                
+          req_in.pop();
+          this->update_cursor(o, i);
+          break;
         }
-        DT(3, this->name() << "-" << req);
-        ReqOut.send(req, delay_);                
-        req_in.pop();
-        this->update_cursor(j);
-        break;
       }
-    } 
-
-    // process incoming reponses
-    if (!RspIn.empty()) {
-      auto& rsp = RspIn.front();    
-      uint32_t port_id = 0;
-      if (tag_shift_) {
-        port_id = rsp.tag & ((1 << tag_shift_)-1);
-        rsp.tag >>= tag_shift_;
-      }      
-      DT(3, this->name() << "-" << rsp);
-      RspOut.at(port_id).send(rsp, 1);      
-      RspIn.pop();
+      
+      // process incoming reponses
+      if (!RspOut.at(o).empty()) {
+        auto& rsp = RspOut.at(o).front();
+        uint32_t i = 0;
+        if (lg_num_reqs_ != 0) {
+          i = rsp.tag & (R-1);
+          rsp.tag >>= lg_num_reqs_;
+        }      
+        DT(4, this->name() << "-" << rsp);
+        uint32_t j = o * R + i;
+        RspIn.at(j).send(rsp, 1);      
+        RspOut.at(o).pop();
+      }
     }
   }
 
-  void update_cursor(uint32_t grant) {
+  void update_cursor(uint32_t index, uint32_t grant) {
     if (type_ == ArbiterType::RoundRobin) {
-      cursor_ = grant + 1;
+      cursors_.at(index) = grant + 1;
     }
   }
+};
 
-  std::vector<SimPort<Req>>  ReqIn;
-  SimPort<Req>               ReqOut;
-  SimPort<Rsp>               RspIn;    
-  std::vector<SimPort<Rsp>>  RspOut;
+///////////////////////////////////////////////////////////////////////////////
+
+class SMemDemux : public SimObject<SMemDemux> {
+private:
+  uint32_t delay_;
+
+public:
+  SimPort<MemReq>  ReqIn;
+  SimPort<MemRsp>  RspIn;
+
+  SimPort<MemReq>  ReqSm;
+  SimPort<MemRsp>  RspSm;
+
+  SimPort<MemReq>  ReqDc;
+  SimPort<MemRsp>  RspDc;
+
+  SMemDemux(
+    const SimContext& ctx, 
+    const char* name, 
+    uint32_t delay = 1
+  ) : SimObject<SMemDemux>(ctx, name)    
+    , delay_(delay)
+    , ReqIn(this)
+    , RspIn(this)
+    , ReqSm(this)
+    , RspSm(this)
+    , ReqDc(this)
+    , RspDc(this)
+  {}
+
+  void reset() {
+    //--
+  }
+
+  void tick() {
+    // process incomming requests  
+    if (!ReqIn.empty()) {
+      auto& req = ReqIn.front();
+      DT(4, this->name() << "-" << req);
+      if (req.addr_type == AddrType::Shared) {
+        ReqSm.send(req, delay_);
+      } else {
+        ReqDc.send(req, delay_);
+      }
+      ReqIn.pop();
+    }   
+      
+    // process incoming reponses
+    if (!RspSm.empty()) {
+      auto& rsp = RspSm.front();
+      DT(4, this->name() << "-" << rsp);
+      RspIn.send(rsp, 1);
+      RspSm.pop();
+    }
+    if (!RspDc.empty()) {
+      auto& rsp = RspDc.front();
+      DT(4, this->name() << "-" << rsp);
+      RspIn.send(rsp, 1);
+      RspDc.pop();
+    }
+  }
 };
 
 }

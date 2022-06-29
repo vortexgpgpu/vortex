@@ -823,12 +823,12 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         }                
       } else {
         trace->exe_type = ExeType::CSR;
-        csr_value = core_->get_csr(csr_addr, t, id_);
+        csr_value = core_->get_csr(csr_addr, t, warp_id_);
         switch (func3) {
         case 1: {
           // RV32I: CSRRW
           rddata[t].i = csr_value;
-          core_->set_csr(csr_addr, rsdata[t][0].i, t, id_);      
+          core_->set_csr(csr_addr, rsdata[t][0].i, t, warp_id_);      
           trace->used_iregs.set(rsrc0);
           rd_write = true;
           break;
@@ -837,7 +837,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           // RV32I: CSRRS
           rddata[t].i = csr_value;
           if (rsdata[t][0].i) {
-            core_->set_csr(csr_addr, csr_value | rsdata[t][0].i, t, id_);
+            core_->set_csr(csr_addr, csr_value | rsdata[t][0].i, t, warp_id_);
           }
           trace->used_iregs.set(rsrc0);
           rd_write = true;
@@ -847,7 +847,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           // RV32I: CSRRC
           rddata[t].i = csr_value;
           if (rsdata[t][0].i) {
-            core_->set_csr(csr_addr, csr_value & ~rsdata[t][0].i, t, id_);
+            core_->set_csr(csr_addr, csr_value & ~rsdata[t][0].i, t, warp_id_);
           }
           trace->used_iregs.set(rsrc0);
           rd_write = true;
@@ -856,7 +856,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         case 5: {
           // RV32I: CSRRWI
           rddata[t].i = csr_value;
-          core_->set_csr(csr_addr, rsrc0, t, id_);      
+          core_->set_csr(csr_addr, rsrc0, t, warp_id_);      
           rd_write = true;
           break;
         }
@@ -864,7 +864,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           // RV32I: CSRRSI;
           rddata[t].i = csr_value;
           if (rsrc0) {
-            core_->set_csr(csr_addr, csr_value | rsrc0, t, id_);
+            core_->set_csr(csr_addr, csr_value | rsrc0, t, warp_id_);
           }
           rd_write = true;
           break;
@@ -873,7 +873,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           // RV32I: CSRRCI
           rddata[t].i = csr_value;
           if (rsrc0) {
-            core_->set_csr(csr_addr, csr_value & ~rsrc0, t, id_);
+            core_->set_csr(csr_addr, csr_value & ~rsrc0, t, warp_id_);
           }
           rd_write = true;
           break;
@@ -896,7 +896,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     for (uint32_t t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue; 
-      uint32_t frm = get_fpu_rm(func3, core_, t, id_);
+      uint32_t frm = get_fpu_rm(func3, core_, t, warp_id_);
       uint32_t fflags = 0;
       switch (func7) {
       case 0x00: { // RV32F: FADD.S
@@ -1229,7 +1229,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         break;
       }
       }
-      update_fcrs(fflags, core_, t, id_);
+      update_fcrs(fflags, core_, t, warp_id_);
     }
     rd_write = true;
     break;
@@ -1245,7 +1245,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     for (uint32_t t = 0; t < num_threads; ++t) {
       if (!tmask_.test(t))
         continue;
-      uint32_t frm = get_fpu_rm(func3, core_, t, id_);
+      uint32_t frm = get_fpu_rm(func3, core_, t, warp_id_);
       uint32_t fflags = 0;
       switch (opcode) {
       case FMADD:
@@ -1283,7 +1283,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       default:
         break;
       }              
-      update_fcrs(fflags, core_, t, id_);
+      update_fcrs(fflags, core_, t, warp_id_);
     }
     rd_write = true;
     break;
@@ -1326,7 +1326,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         DPN(3, std::endl);
 
         active_ = tmask_.any();
-        trace->data = std::make_shared<GPUTraceData>(active_ << id_);
+        trace->data = std::make_shared<GPUTraceData>(active_ << warp_id_);
       } break;
       case 1: {
         // WSPAWN
@@ -1402,7 +1402,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
         trace->fetch_stall = true;
-        trace->data = std::make_shared<GPUTraceData>(core_->barrier(rsdata[ts][0].i, rsdata[ts][1].i, id_));
+        trace->data = std::make_shared<GPUTraceData>(core_->barrier(rsdata[ts][0].i, rsdata[ts][1].i, warp_id_));
       } break;
       default:
         std::abort();
@@ -1416,7 +1416,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t))
             continue;        
-          auto result = core_->raster_agent_->fetch(id_, t);
+          auto result = core_->raster_unit_->fetch(core_->id(), warp_id_, t);
           rddata[t].i = result;
         }
         rd_write = true;
@@ -1483,7 +1483,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           auto f = (pos_face >> 0)  & 0x1;
           auto x = (pos_face >> 1)  & 0x7fff;
           auto y = (pos_face >> 16) & 0x7fff;
-          core_->rop_agent_->write(id_, t, x, y, f, color, depth, trace_data);
+          core_->rop_unit_->write(core_->id(), warp_id_, t, x, y, f, color, depth, trace_data);
         }
       } break;
       default:

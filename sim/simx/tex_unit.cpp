@@ -1,5 +1,5 @@
 #include "tex_unit.h"
-#include "core.h"
+#include "mem.h"
 #include <texturing.h>
 #include <VX_config.h>
 
@@ -15,23 +15,22 @@ private:
 
     TexUnit* simobject_;
     Config config_;
-    Core* core_;
-    const DCRS& dcrs_;
-    CacheSim::Ptr tcache_;
+    const DCRS& dcrs_;    
+    RAM*  mem_;
     uint32_t num_threads_;
     HashTable<pending_req_t> pending_reqs_;
     PerfStats perf_stats_;
 
 public:
-    Impl(TexUnit* simobject, const Config& config, Core* core) 
+    Impl(TexUnit* simobject, uint32_t cores_per_unit, const Arch &arch, const DCRS& dcrs, const Config& config)
       : simobject_(simobject)
       , config_(config)
-      , core_(core) 
-      , dcrs_(core->dcrs_.tex_dcrs)      
-      , tcache_(core->tcache_)
-      , num_threads_(core->arch().num_threads())
+      , dcrs_(dcrs)
+      , mem_(nullptr)
+      , num_threads_(arch.num_threads())
       , pending_reqs_(TEX_MEM_QUEUE_SIZE)
     {
+      __unused (cores_per_unit);
       this->clear();
     }
 
@@ -39,6 +38,10 @@ public:
 
     void clear() {
       pending_reqs_.clear();
+    }
+
+    void attach_ram(RAM* mem) {
+      mem_ = mem;
     }
 
     uint32_t read(uint32_t stage, int32_t u, int32_t v, uint32_t lod, TraceData::Ptr trace_data) {      
@@ -77,10 +80,10 @@ public:
 
         // memory lookup
         uint32_t texel00(0), texel01(0), texel10(0), texel11(0);
-        core_->dcache_read(&texel00, addr00, stride);
-        core_->dcache_read(&texel01, addr01, stride);
-        core_->dcache_read(&texel10, addr10, stride);
-        core_->dcache_read(&texel11, addr11, stride);
+        mem_->read(&texel00, addr00, stride);
+        mem_->read(&texel01, addr01, stride);
+        mem_->read(&texel10, addr10, stride);
+        mem_->read(&texel11, addr11, stride);
 
         trace_data->mem_addrs.push_back({{addr00, stride}, 
                                          {addr01, stride}, 
@@ -101,7 +104,7 @@ public:
 
         // memory lookup
         uint32_t texel(0);
-        core_->dcache_read(&texel, addr, stride);
+        mem_->read(&texel, addr, stride);
         trace_data->mem_addrs.push_back({{addr, stride}});
 
         // filtering
@@ -117,13 +120,13 @@ public:
   void tick() {
     // handle memory response
     for (uint32_t t = 0; t < num_threads_; ++t) {
-        auto& tcache_rsp_port = tcache_->CoreRspPorts.at(t);
+        auto& tcache_rsp_port = simobject_->MemRsps.at(t);
         if (tcache_rsp_port.empty())
             continue;
         auto& mem_rsp = tcache_rsp_port.front();
         auto& entry = pending_reqs_.at(mem_rsp.tag);  
         auto trace = entry.trace;
-        DT(3, "tex-rsp: tag=" << mem_rsp.tag << ", tid=" << t << ", " << *trace);  
+        DT(3, simobject_->name() << "-tex-rsp: tag=" << mem_rsp.tag << ", tid=" << t << ", " << *trace);  
         assert(entry.count);
         --entry.count; // track remaining blocks 
         if (0 == entry.count) {
@@ -149,7 +152,7 @@ public:
     // check pending queue capacity    
     if (pending_reqs_.full()) {
         if (!trace->suspend()) {
-            DT(3, "*** tex-queue-stall: " << *trace);
+            DT(3, "*** " << simobject_->name() << "-tex-queue-stall: " << *trace);
         }
         return;
     } else {
@@ -170,16 +173,16 @@ public:
         if (!trace->tmask.test(t))
             continue;
 
-        auto& tcache_req_port = tcache_->CoreReqPorts.at(t);
+        auto& tcache_req_port = simobject_->MemReqs.at(t);
         for (auto& mem_addr : trace_data->mem_addrs.at(t)) {
             MemReq mem_req;
             mem_req.addr  = mem_addr.addr;
             mem_req.write = (trace->lsu_type == LsuType::STORE);
             mem_req.tag   = tag;
-            mem_req.core_id = core_->id();
-            mem_req.uuid = trace->uuid;
+            mem_req.cid   = trace->cid;
+            mem_req.uuid  = trace->uuid;
             tcache_req_port.send(mem_req, config_.address_latency);
-            DT(3, "tex-req: addr=" << std::hex << mem_addr.addr << ", tag=" << tag 
+            DT(3, simobject_->name() << "-tex-req: addr=" << std::hex << mem_addr.addr << ", tag=" << tag 
                 << ", tid=" << t << ", "<< trace);
             ++perf_stats_.reads;
         }
@@ -195,11 +198,18 @@ public:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-TexUnit::TexUnit(const SimContext& ctx, const char* name, const Config& config, Core* core) 
+TexUnit::TexUnit(const SimContext& ctx, 
+                 const char* name, 
+                 uint32_t cores_per_unit,
+                 const Arch &arch, 
+                 const DCRS& dcrs,   
+                 const Config& config)
   : SimObject<TexUnit>(ctx, name)
+  , MemReqs(arch.num_threads(), this)
+  , MemRsps(arch.num_threads(), this)
   , Input(this)
   , Output(this)
-  , impl_(new Impl(this, config, core)) 
+  , impl_(new Impl(this, cores_per_unit, arch, dcrs, config)) 
 {}
 
 TexUnit::~TexUnit() {
@@ -210,12 +220,16 @@ void TexUnit::reset() {
   impl_->clear();
 }
 
-uint32_t TexUnit::read(uint32_t stage, int32_t u, int32_t v, uint32_t lod, TraceData::Ptr trace_data) {
-  return impl_->read(stage, u, v, lod, trace_data);
-}
-
 void TexUnit::tick() {
   impl_->tick();
+}
+
+void TexUnit::attach_ram(RAM* mem) {
+  impl_->attach_ram(mem);
+}
+
+uint32_t TexUnit::read(uint32_t stage, int32_t u, int32_t v, uint32_t lod, TraceData::Ptr trace_data) {
+  return impl_->read(stage, u, v, lod, trace_data);
 }
 
 const TexUnit::PerfStats& TexUnit::perf_stats() const {

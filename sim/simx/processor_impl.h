@@ -1,0 +1,53 @@
+#pragma once
+
+#include "mem_sim.h"
+#include "cache_sim.h"
+#include "constants.h"
+#include "dcrs.h"
+#include "cluster.h"
+
+namespace vortex {
+
+class ProcessorImpl {
+private:
+  std::vector<std::shared_ptr<Cluster>> clusters_;
+  DCRS dcrs_;
+  MemSim::Ptr   memsim_;
+  CacheSim::Ptr l3cache_;
+  uint64_t perf_mem_reads_;
+  uint64_t perf_mem_writes_;
+  uint64_t perf_mem_pending_reads_;   
+
+  void clear_perf_counters() {
+    perf_mem_reads_ = 0;
+    perf_mem_writes_ = 0;
+    perf_mem_pending_reads_ = 0;   
+  }
+
+public:
+  struct PerfStats {
+    uint64_t mem_reads;
+    uint64_t mem_writes;
+    uint64_t mem_latency;
+    Cluster::PerfStats clusters;
+
+    PerfStats()
+      : mem_reads(0)
+      , mem_writes(0)
+      , mem_latency(0)
+    {}
+  };
+
+  ProcessorImpl(const Arch& arch);
+  ~ProcessorImpl();
+
+  void attach_ram(RAM* mem);
+
+  int run();
+
+  void write_dcr(uint32_t addr, uint64_t value);
+
+  ProcessorImpl::PerfStats perf_stats() const;
+};
+
+}

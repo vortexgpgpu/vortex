@@ -6,10 +6,11 @@
 #include <cocogfx/include/math.hpp>
 #include "types.h"
 #include "pipeline.h"
+
 namespace vortex {
 
 class RAM;
-class Core;
+
 class RasterUnit : public SimObject<RasterUnit> {
 public:
   using fixed16_t = cocogfx::TFixed<16>;
@@ -50,6 +51,11 @@ public:
       return instance;
     }
   };
+
+  struct Config {
+    uint32_t tile_logsize;
+    uint32_t block_logsize;
+  };
   
   struct PerfStats {        
     uint64_t reads;
@@ -61,6 +67,13 @@ public:
       , latency(0)
       , stalls(0)
     {}
+    
+    PerfStats& operator+=(const PerfStats& rhs) {
+      this->reads   += rhs.reads;
+      this->latency += rhs.latency;
+      this->stalls  += rhs.stalls;
+      return *this;
+    }
   };
   
   class DCRS {
@@ -87,37 +100,37 @@ public:
       uint32_t state = DCR_RASTER_STATE(addr);
       states_.at(state) = value;
     }
-  };  
-  
-  struct StampRsp {
-    uint32_t count;
   };
   
   SimPort<MemReq> MemReqs;
   SimPort<MemRsp> MemRsps;
-  SimPort<StampRsp> Output;
 
+  SimPort<pipeline_trace_t*> Input;
+  SimPort<pipeline_trace_t*> Output;
+  
   RasterUnit(const SimContext& ctx, 
             const char* name,
-            const Arch &arch, 
-            const DCRS& dcrs,
             uint32_t index,
-            uint32_t tile_logsize, 
-            uint32_t block_logsize);    
+            uint32_t cores_per_unit,
+            const Arch &arch, 
+            const DCRS& dcrs,            
+            const Config& config);    
 
   ~RasterUnit();
 
-  uint32_t id() const;
-
   void reset();
 
-  void attach_ram(RAM* mem);
-
-  bool done() const;
-
-  Stamp* fetch();    
-
   void tick();
+
+  uint32_t id() const;
+
+  void attach_ram(RAM* mem); 
+
+  uint32_t csr_read(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t addr);
+
+  void csr_write(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value);
+
+  uint32_t fetch(uint32_t cid, uint32_t wid, uint32_t tid);
 
   const PerfStats& perf_stats() const;
 

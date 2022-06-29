@@ -124,7 +124,7 @@ struct bank_req_t {
     bool mshr_replay;
     uint64_t tag;
     uint32_t set_id;
-    uint32_t core_id;
+    uint32_t cid;
     uint64_t uuid;
     std::vector<bank_req_port_t> ports;
 
@@ -134,7 +134,7 @@ struct bank_req_t {
         , mshr_replay(false)
         , tag(0)
         , set_id(0)
-        , core_id(0)
+        , cid(0)
         , uuid(0)
         , ports(size)
     {}
@@ -257,7 +257,7 @@ private:
     Config config_;
     params_t params_;
     std::vector<bank_t> banks_;
-    Switch<MemReq, MemRsp>::Ptr mem_switch_;    
+    Switch<MemReq, MemRsp>::Ptr bank_switch_;    
     Switch<MemReq, MemRsp>::Ptr bypass_switch_;
     std::vector<SimPort<MemReq>> mem_req_ports_;
     std::vector<SimPort<MemRsp>> mem_rsp_ports_;
@@ -276,21 +276,36 @@ public:
         , mem_req_ports_(config.num_banks, simobject)
         , mem_rsp_ports_(config.num_banks, simobject)
     {
-        bypass_switch_ = Switch<MemReq, MemRsp>::Create("bypass_arb", ArbiterType::Priority, 2);
-        bypass_switch_->ReqOut.bind(&simobject->MemReqPort);
-        simobject->MemRspPort.bind(&bypass_switch_->RspIn);
+        char sname[100];
+        snprintf(sname, 100, "%s-bypass-arb", simobject->name().c_str());
+
+        if (config_.bypass) {            
+            bypass_switch_ = Switch<MemReq, MemRsp>::Create(sname, ArbiterType::RoundRobin, config_.num_inputs);            
+            for (uint32_t i = 0; i < config_.num_inputs; ++i) {
+               simobject->CoreReqPorts.at(i).bind(&bypass_switch_->ReqIn.at(i));
+               bypass_switch_->RspIn.at(i).bind(&simobject->CoreRspPorts.at(i));
+            }
+            bypass_switch_->ReqOut.at(0).bind(&simobject->MemReqPort);
+            simobject->MemRspPort.bind(&bypass_switch_->RspOut.at(0));
+            return;
+        }
+        
+        bypass_switch_ = Switch<MemReq, MemRsp>::Create(sname, ArbiterType::Priority, 2);
+        bypass_switch_->ReqOut.at(0).bind(&simobject->MemReqPort);
+        simobject->MemRspPort.bind(&bypass_switch_->RspOut.at(0));
 
         if (config.num_banks > 1) {
-            mem_switch_ = Switch<MemReq, MemRsp>::Create("mem_arb", ArbiterType::RoundRobin, config.num_banks);
+            snprintf(sname, 100, "%s-bank-arb", simobject->name().c_str());
+            bank_switch_ = Switch<MemReq, MemRsp>::Create(sname, ArbiterType::RoundRobin, config.num_banks);
             for (uint32_t i = 0, n = config.num_banks; i < n; ++i) {
-                mem_req_ports_.at(i).bind(&mem_switch_->ReqIn.at(i));
-                mem_switch_->RspOut.at(i).bind(&mem_rsp_ports_.at(i));
+                mem_req_ports_.at(i).bind(&bank_switch_->ReqIn.at(i));
+                bank_switch_->RspIn.at(i).bind(&mem_rsp_ports_.at(i));
             }    
-            mem_switch_->ReqOut.bind(&bypass_switch_->ReqIn.at(0));
-            bypass_switch_->RspOut.at(0).bind(&mem_switch_->RspIn);
+            bank_switch_->ReqOut.at(0).bind(&bypass_switch_->ReqIn.at(0));
+            bypass_switch_->RspIn.at(0).bind(&bank_switch_->RspOut.at(0));
         } else {
             mem_req_ports_.at(0).bind(&bypass_switch_->ReqIn.at(0));
-            bypass_switch_->RspOut.at(0).bind(&mem_rsp_ports_.at(0));
+            bypass_switch_->RspIn.at(0).bind(&mem_rsp_ports_.at(0));
         }
 
         // calculate tag flush cycles
@@ -298,6 +313,9 @@ public:
     }
 
     void reset() {
+        if (config_.bypass)
+            return;
+
         for (auto& bank : banks_) {
             bank.clear();
         }
@@ -308,6 +326,9 @@ public:
     }
 
     void tick() {
+        if (config_.bypass)
+            return;
+
         // wait on flush cycles
         if (flush_cycles_ != 0) {
             --flush_cycles_;
@@ -321,12 +342,12 @@ public:
         perf_stats_.mem_latency += pending_fill_reqs_;
 
         // handle bypasss responses
-        auto& bypass_port = bypass_switch_->RspOut.at(1);            
+        auto& bypass_port = bypass_switch_->RspIn.at(1);            
         if (!bypass_port.empty()) {
             auto& mem_rsp = bypass_port.front();
             uint32_t req_id = mem_rsp.tag & ((1 << params_.log2_num_inputs)-1);                
             uint64_t tag = mem_rsp.tag >> params_.log2_num_inputs;
-            MemRsp core_rsp{tag, mem_rsp.core_id, mem_rsp.uuid};
+            MemRsp core_rsp{tag, mem_rsp.cid, mem_rsp.uuid};
             simobject_->CoreRspPorts.at(req_id).send(core_rsp, config_.latency);
             DT(3, simobject_->name() << "-core-" << core_rsp);
             bypass_port.pop();
@@ -361,7 +382,7 @@ public:
             auto& core_req = core_req_port.front();
 
             // check cache bypassing
-            if (core_req.non_cacheable) {
+            if (core_req.addr_type == AddrType::IO) {
                 DT(3, simobject_->name() << "-core-" << core_req);
 
                 // send bypass request
@@ -384,7 +405,7 @@ public:
             bank_req.mshr_replay = false;
             bank_req.tag = tag;            
             bank_req.set_id = set_id;       
-            bank_req.core_id = core_req.core_id;
+            bank_req.cid = core_req.cid;
             bank_req.uuid = core_req.uuid;
             bank_req.ports.at(port_id) = {true, req_id, core_req.tag};
 
@@ -458,7 +479,7 @@ private:
         }
 
         if (core_req.write && config_.write_reponse) {
-            MemRsp core_rsp{core_req.tag, core_req.core_id, core_req.uuid};
+            MemRsp core_rsp{core_req.tag, core_req.cid, core_req.uuid};
             simobject_->CoreRspPorts.at(req_id).send(core_rsp, 1);            
             DT(3, simobject_->name() << "-core-" << core_rsp);
         }
@@ -490,7 +511,7 @@ private:
                     for (auto& info : pipeline_req.ports) {
                         if (!info.valid)
                             continue;
-                        MemRsp core_rsp{info.req_tag, pipeline_req.core_id, pipeline_req.uuid};
+                        MemRsp core_rsp{info.req_tag, pipeline_req.cid, pipeline_req.uuid};
                         simobject_->CoreRspPorts.at(info.req_id).send(core_rsp, config_.latency);  
                         DT(3, simobject_->name() << "-core-" << core_rsp);         
                     }
@@ -534,7 +555,7 @@ private:
                             MemReq mem_req;
                             mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, hit_block.tag);
                             mem_req.write = true;
-                            mem_req.core_id = pipeline_req.core_id;
+                            mem_req.cid = pipeline_req.cid;
                             mem_req.uuid = pipeline_req.uuid;
                             mem_req_ports_.at(bank_id).send(mem_req, 1);
                             DT(3, simobject_->name() << "-dram-" << mem_req);
@@ -548,7 +569,7 @@ private:
                         for (auto& info : pipeline_req.ports) {     
                             if (!info.valid)
                                 continue;
-                            MemRsp core_rsp{info.req_tag, pipeline_req.core_id, pipeline_req.uuid};
+                            MemRsp core_rsp{info.req_tag, pipeline_req.cid, pipeline_req.uuid};
                             simobject_->CoreRspPorts.at(info.req_id).send(core_rsp, config_.latency);
                             DT(3, simobject_->name() << "-core-" << core_rsp);
                         }
@@ -569,7 +590,7 @@ private:
                             MemReq mem_req;
                             mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, repl_block.tag);
                             mem_req.write = true;
-                            mem_req.core_id = pipeline_req.core_id;
+                            mem_req.cid = pipeline_req.cid;
                             mem_req_ports_.at(bank_id).send(mem_req, 1);
                             DT(3, simobject_->name() << "-dram-" << mem_req);
                             ++perf_stats_.evictions;
@@ -582,7 +603,7 @@ private:
                             MemReq mem_req;
                             mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, pipeline_req.tag);
                             mem_req.write = true;
-                            mem_req.core_id = pipeline_req.core_id;
+                            mem_req.cid = pipeline_req.cid;
                             mem_req.uuid = pipeline_req.uuid;
                             mem_req_ports_.at(bank_id).send(mem_req, 1);
                             DT(3, simobject_->name() << "-dram-" << mem_req);
@@ -592,7 +613,7 @@ private:
                             for (auto& info : pipeline_req.ports) {
                                 if (!info.valid)
                                     continue;       
-                                MemRsp core_rsp{info.req_tag, pipeline_req.core_id, pipeline_req.uuid};
+                                MemRsp core_rsp{info.req_tag, pipeline_req.cid, pipeline_req.uuid};
                                 simobject_->CoreRspPorts.at(info.req_id).send(core_rsp, config_.latency);
                                 DT(3, simobject_->name() << "-core-" << core_rsp);
                             }
@@ -610,7 +631,7 @@ private:
                             mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, pipeline_req.tag);
                             mem_req.write = false;
                             mem_req.tag   = mshr_id;
-                            mem_req.core_id = pipeline_req.core_id;
+                            mem_req.cid = pipeline_req.cid;
                             mem_req.uuid = pipeline_req.uuid;
                             mem_req_ports_.at(bank_id).send(mem_req, 1);
                             DT(3, simobject_->name() << "-dram-" << mem_req);

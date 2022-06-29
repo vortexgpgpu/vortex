@@ -99,7 +99,7 @@ public:
 };
 
 inline std::ostream &operator<<(std::ostream &os, const pipeline_trace_t& state) {
-  os << "coreid=" << state.cid << ", wid=" << state.wid << ", PC=" << std::hex << state.PC;
+  os << "cid=" << state.cid << ", wid=" << state.wid << ", PC=" << std::hex << state.PC;
   os << ", wb=" << state.wb;
   if (state.wb) {
      os << ", rd=" << state.rdest_type << std::dec << state.rdest;

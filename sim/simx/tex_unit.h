@@ -1,13 +1,12 @@
 #pragma once
 
 #include <simobject.h>
-#include <vector>
 #include <VX_types.h>
 #include "pipeline.h"
 
 namespace vortex {
 
-class Core;
+class RAM;
 
 class TexUnit : public SimObject<TexUnit> {
 public:
@@ -73,19 +72,37 @@ public:
             , reads(0)
             , latency(0)
         {}
+
+        PerfStats& operator+=(const PerfStats& rhs) {
+            this->reads   += rhs.reads;
+            this->latency += rhs.latency;
+            this->stalls  += rhs.stalls;
+            return *this;
+        }
     };
+
+    std::vector<SimPort<MemReq>> MemReqs;
+    std::vector<SimPort<MemRsp>> MemRsps;
 
     SimPort<pipeline_trace_t*> Input;
     SimPort<pipeline_trace_t*> Output;
 
-    TexUnit(const SimContext& ctx, const char* name, const Config& config, Core* core);    
+    TexUnit(const SimContext& ctx,
+            const char* name, 
+            uint32_t cores_per_unit,
+            const Arch &arch, 
+            const DCRS& dcrs,      
+            const Config& config);
+
     ~TexUnit();
 
     void reset();
 
-    uint32_t read(uint32_t stage, int32_t u, int32_t v, uint32_t lod, TraceData::Ptr trace_data);
-    
     void tick();
+
+    void attach_ram(RAM* mem);
+
+    uint32_t read(uint32_t stage, int32_t u, int32_t v, uint32_t lod, TraceData::Ptr trace_data);
 
     const PerfStats& perf_stats() const;
 

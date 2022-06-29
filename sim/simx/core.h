@@ -22,11 +22,13 @@
 #include "scoreboard.h"
 #include "exe_unit.h"
 #include "tex_unit.h"
-#include "raster_agent.h"
-#include "rop_agent.h"
+#include "raster_unit.h"
+#include "rop_unit.h"
 #include "dcrs.h"
 
 namespace vortex {
+
+class Cluster;
 
 class Core : public SimObject<Core> {
 public:
@@ -42,9 +44,6 @@ public:
     uint64_t loads;
     uint64_t stores;
     uint64_t branches;
-    uint64_t mem_reads;
-    uint64_t mem_writes;
-    uint64_t mem_latency;
 
     PerfStats() 
       : instrs(0)
@@ -58,23 +57,24 @@ public:
       , loads(0)
       , stores(0)
       , branches(0)
-      , mem_reads(0)
-      , mem_writes(0)
-      , mem_latency(0)
     {}
   };
 
-  SimPort<MemRsp> MemRspPort;
-  SimPort<MemReq> MemReqPort;
+  std::vector<SimPort<MemReq>> icache_req_ports;
+  std::vector<SimPort<MemRsp>> icache_rsp_ports;
+
+  std::vector<SimPort<MemReq>> dcache_req_ports;
+  std::vector<SimPort<MemRsp>> dcache_rsp_ports;
 
   Core(const SimContext& ctx, 
-       uint32_t id, 
+       uint32_t core_id, 
+       Cluster* cluster,
        const Arch &arch, 
        const DCRS &dcrs,
+       SharedMem::Ptr  sharedmem,
        RasterUnit::Ptr raster_unit,
        RopUnit::Ptr rop_unit,
-       CacheSim::Ptr rcache,
-       CacheSim::Ptr ocache);
+       TexUnit::Ptr tex_unit);
 
   ~Core();
 
@@ -87,7 +87,7 @@ public:
   void tick();
 
   uint32_t id() const {
-    return id_;
+    return core_id_;
   }
 
   const Arch& arch() const {
@@ -96,10 +96,6 @@ public:
 
   const DCRS& dcrs() const {
     return dcrs_;
-  }
-
-  const PerfStats& perf_stats() const {
-    return perf_stats_;
   }
 
   uint32_t getIRegValue(int reg) const {
@@ -140,7 +136,7 @@ private:
 
   void cout_flush();
 
-  uint32_t id_;
+  uint32_t core_id_;
   const Arch& arch_;
   const DCRS &dcrs_;
   
@@ -153,18 +149,10 @@ private:
   std::vector<IBuffer> ibuffers_;
   Scoreboard scoreboard_;
   std::vector<ExeUnit::Ptr> exe_units_;
-  CacheSim::Ptr   icache_;
-  CacheSim::Ptr   dcache_;
-  CacheSim::Ptr   tcache_;
-  CacheSim::Ptr   rcache_;
-  CacheSim::Ptr   ocache_;
-  SharedMem::Ptr  sharedmem_;
   TexUnit::Ptr    tex_unit_;
   RasterUnit::Ptr raster_unit_;
-  RasterAgent::Ptr raster_agent_;
-  RopUnit::Ptr    rop_unit_;  
-  RopAgent::Ptr   rop_agent_;
-  Switch<MemReq, MemRsp>::Ptr l1_mem_switch_;
+  RopUnit::Ptr    rop_unit_;
+  SharedMem::Ptr  sharedmem_;
 
   PipelineLatch fetch_latch_;
   PipelineLatch decode_latch_;
@@ -180,7 +168,8 @@ private:
   std::unordered_map<int, std::stringstream> print_bufs_;
   
   PerfStats perf_stats_;
-  uint64_t perf_mem_pending_reads_;
+  
+  Cluster* cluster_;
 
   friend class Warp;
   friend class LsuUnit;
@@ -191,6 +180,7 @@ private:
   friend class TexUnit;
   friend class RasterAgent;
   friend class RopAgent;
+  friend class TexAgent;
 };
 
 } // namespace vortex

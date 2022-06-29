@@ -14,8 +14,8 @@ LDFLAGS += -L$(THIRD_PARTY_DIR)/cocogfx -lcocogfx
 LDFLAGS += -L$(THIRD_PARTY_DIR)/ramulator -lramulator
 
 SRCS = ../common/util.cpp ../common/mem.cpp ../common/rvfloats.cpp
-SRCS += args.cpp processor.cpp warp.cpp core.cpp decode.cpp execute.cpp exe_unit.cpp cache_sim.cpp mem_sim.cpp shared_mem.cpp dcrs.cpp
-SRCS += tex_unit.cpp raster_agent.cpp rop_agent.cpp raster_unit.cpp rop_unit.cpp
+SRCS += args.cpp processor.cpp cluster.cpp core.cpp warp.cpp decode.cpp execute.cpp exe_unit.cpp cache_sim.cpp mem_sim.cpp shared_mem.cpp dcrs.cpp
+SRCS += tex_unit.cpp raster_unit.cpp rop_unit.cpp
 
 # Debugigng
 ifdef DEBUG

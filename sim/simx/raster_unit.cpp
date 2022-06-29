@@ -1,9 +1,9 @@
 #include "raster_unit.h"
-#include "core.h"
 #include <VX_config.h>
 #include "mempool.h"
 #include <cocogfx/include/fixed.hpp>
 #include <cocogfx/include/math.hpp>
+#include "mem.h"
 
 using namespace vortex;
 
@@ -50,10 +50,10 @@ struct tile_mem_trace_t {
 
 class Rasterizer {
 private:    
+  uint32_t index_;
   const Arch& arch_;
   const RasterUnit::DCRS& dcrs_;
-  RAM* mem_;
-  uint32_t index_;
+  RAM* mem_;  
   uint32_t tile_logsize_;
   uint32_t block_logsize_;    
   uint32_t num_tiles_;
@@ -105,7 +105,10 @@ private:
                   fixed16_t e1, 
                   fixed16_t e2) {
     uint32_t mask = 0;
-    std::array<vec3_fx_t, 4> bcoords;
+    std::array<vec3_fx_t, 4> bcoords = {vec3_fx_t{fxZero, fxZero, fxZero}, 
+                                        vec3_fx_t{fxZero, fxZero, fxZero}, 
+                                        vec3_fx_t{fxZero, fxZero, fxZero}, 
+                                        vec3_fx_t{fxZero, fxZero, fxZero}};
 
     for (uint32_t j = 0; j < 2; ++j) {
       auto ee0 = e0;
@@ -405,14 +408,14 @@ private:
   }
 
 public:
-  Rasterizer(const Arch& arch,
-              const RasterUnit::DCRS& dcrs, 
-              uint32_t index,
-              uint32_t tile_logsize, 
-              uint32_t block_logsize) 
-    : arch_(arch)
-    , dcrs_(dcrs)
-    , index_(index)
+  Rasterizer(uint32_t index,
+             const Arch& arch,
+             const RasterUnit::DCRS& dcrs,               
+             uint32_t tile_logsize, 
+             uint32_t block_logsize) 
+    : index_(index)
+    , arch_(arch)
+    , dcrs_(dcrs)    
     , tile_logsize_(tile_logsize)
     , block_logsize_(block_logsize)
     , stamps_head_(nullptr)
@@ -478,12 +481,41 @@ public:
   }
 };
 
+///////////////////////////////////////////////////////////////////////////////
+
 class RasterUnit::Impl {
 private:
   enum class e_mem_trace_state {
     header,
     primitive,
     edges
+  };
+
+  class CSR {
+  private:
+    RasterUnit::Stamp *stamp_;
+
+  public:
+    CSR() : stamp_(nullptr) { this->clear(); }    
+    ~CSR() { this->clear(); }
+
+    void clear() {
+      if (stamp_) {
+        delete stamp_;
+        stamp_ = nullptr;
+      }
+    }
+
+    void set_stamp(RasterUnit::Stamp *stamp) {
+      if (stamp_)
+        delete stamp_;
+      stamp_ = stamp;
+    }
+
+    RasterUnit::Stamp* get_stamp() const {
+      assert(stamp_);
+      return stamp_;
+    }
   };
 
   struct pending_req_t {
@@ -493,22 +525,28 @@ private:
   RasterUnit* simobject_;        
   const Arch& arch_;
   Rasterizer rasterizer_;
-  PerfStats perf_stats_;  
+  std::vector<CSR> csrs_;
+  std::queue<uint32_t> stamps_;  
+  uint32_t fetched_stamps_;
   HashTable<pending_req_t> pending_reqs_;
   e_mem_trace_state mem_trace_state_;
-
+  PerfStats perf_stats_; 
+  uint32_t cores_per_unit_;
+  
 public:
   Impl(RasterUnit* simobject,     
-       const Arch &arch,
-       const DCRS& dcrs, 
        uint32_t index,
-       uint32_t tile_logsize, 
-       uint32_t block_logsize) 
-    : simobject_(simobject)
+       uint32_t cores_per_unit,
+       const Arch &arch,
+       const DCRS& dcrs,       
+       const Config& config) 
+    : simobject_(simobject)    
     , arch_(arch)
-    , rasterizer_(arch, dcrs, index, tile_logsize, block_logsize)
-    , pending_reqs_(RASTER_MEM_QUEUE_SIZE)
+    , rasterizer_(index, arch, dcrs, config.tile_logsize, config.block_logsize)
+    , csrs_(cores_per_unit * arch.num_warps() * arch.num_threads())
+    , pending_reqs_(RASTER_MEM_QUEUE_SIZE)    
     , mem_trace_state_(e_mem_trace_state::header)
+    , cores_per_unit_(cores_per_unit)
   {}
 
   ~Impl() {}
@@ -520,25 +558,47 @@ public:
   void clear() {
     rasterizer_.initialize();
     mem_trace_state_ = e_mem_trace_state::header;
-  }  
-
-  void attach_ram(RAM* mem) {
-    rasterizer_.attach_ram(mem);
-  }
-
-  bool done() const {
-    return rasterizer_.done() 
-        && rasterizer_.mem_traces().empty();
-  }
-
-  RasterUnit::Stamp* fetch() {      
-    return rasterizer_.fetch();
+    for (auto& csr : csrs_) {
+      csr.clear();
+    }
+    fetched_stamps_ = 0;
   }
 
   void tick() {
-    auto& mem_traces = rasterizer_.mem_traces();
+    // check input queue
+    if (!simobject_->Input.empty()) {
+      auto trace = simobject_->Input.front();
+      auto raster_done = rasterizer_.done() 
+                      && rasterizer_.mem_traces().empty() 
+                      && stamps_.empty();
 
-    // handle memory response
+      if (raster_done) {
+        // no more stamps
+        simobject_->Output.send(trace, 1);
+        simobject_->Input.pop();
+      } else {
+        // fetch stamps to service each request 
+        // the request size is the current number of active threads
+        auto num_threads = trace->tmask.count();
+        uint32_t fetched_stamps = fetched_stamps_;
+        while (fetched_stamps < num_threads) {
+          if (stamps_.empty())
+            break;
+          auto count = stamps_.front();
+          fetched_stamps += count;
+          stamps_.pop();
+        }
+        if (fetched_stamps >= num_threads) {
+          fetched_stamps -= num_threads;
+          simobject_->Output.send(trace, 1);
+          simobject_->Input.pop();
+        }
+        fetched_stamps_ = fetched_stamps;
+      }                  
+    }
+
+    // process memory traces
+    auto& mem_traces = rasterizer_.mem_traces();
     if (!simobject_->MemRsps.empty()) {
       assert(!mem_traces.empty());
       auto& mem_rsp = simobject_->MemRsps.front();
@@ -557,8 +617,7 @@ public:
           auto& mem_trace = mem_traces.front();
           auto& primitive = mem_trace.primitives.front();
 
-          StampRsp stampRsp{primitive.stamps};
-          simobject_->Output.send(stampRsp, 8);
+          stamps_.push(primitive.stamps);
           
           mem_trace.primitives.pop_front();
           if (mem_trace.primitives.empty() && mem_trace.end_of_tile) {
@@ -620,14 +679,86 @@ public:
     auto tag = pending_reqs_.allocate({(uint32_t)addresses.size()});
     for (auto addr : addresses) {
       MemReq mem_req;
-      mem_req.addr    = addr;
-      mem_req.write   = false;
-      mem_req.tag     = tag;
-      mem_req.core_id = 0;
-      mem_req.uuid    = 0;
+      mem_req.addr  = addr;
+      mem_req.write = false;
+      mem_req.tag   = tag;
+      mem_req.cid   = 0;
+      mem_req.uuid  = 0;
       simobject_->MemReqs.send(mem_req, 1);
       ++perf_stats_.reads;
     }
+  }
+
+  void attach_ram(RAM* mem) {
+    rasterizer_.attach_ram(mem);
+  }
+  
+  uint32_t csr_read(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t addr) {
+    uint32_t lcid = cid % cores_per_unit_;
+    uint32_t index = (lcid * arch_.num_warps() + wid) * arch_.num_threads() + tid;
+    auto& csr = csrs_.at(index);
+    auto stamp = csr.get_stamp();
+
+    uint32_t value;
+
+    switch (addr) {
+    case CSR_RASTER_POS_MASK:
+      value = (stamp->y << (4 + RASTER_DIM_BITS-1)) | (stamp->x << 4) | stamp->mask;      
+      DT(2, "raster-csr: cid=" << std::dec << cid << ", wid=" << wid <<", tid=" << tid << ", pos_mask=" << value);
+      break;
+    case CSR_RASTER_BCOORD_X0:
+    case CSR_RASTER_BCOORD_X1:
+    case CSR_RASTER_BCOORD_X2:
+    case CSR_RASTER_BCOORD_X3:
+      value = stamp->bcoords.at(addr - CSR_RASTER_BCOORD_X0).x.data();
+      DT(2, "raster-csr: cid=" << std::dec << cid << ", wid=" << wid <<", tid=" << tid << ", bcoord.x" << (addr - CSR_RASTER_BCOORD_X0) << ", value=" << std::hex << value);
+      break;
+    case CSR_RASTER_BCOORD_Y0:
+    case CSR_RASTER_BCOORD_Y1:
+    case CSR_RASTER_BCOORD_Y2:
+    case CSR_RASTER_BCOORD_Y3:
+      value = stamp->bcoords.at(addr - CSR_RASTER_BCOORD_Y0).y.data();
+      DT(2, "raster-csr: cid=" << std::dec << cid << ", wid=" << wid <<", tid=" << tid << ", bcoord.y" << (addr - CSR_RASTER_BCOORD_Y0) << ", value=" << std::hex << value);
+      break;
+    case CSR_RASTER_BCOORD_Z0:
+    case CSR_RASTER_BCOORD_Z1:
+    case CSR_RASTER_BCOORD_Z2:
+    case CSR_RASTER_BCOORD_Z3:
+      value = stamp->bcoords.at(addr - CSR_RASTER_BCOORD_Z0).z.data();
+      DT(2, "raster-csr: cid=" << std::dec << cid << ", wid=" << wid <<", tid=" << tid << ", bcoord.z" << (addr - CSR_RASTER_BCOORD_Z0) << ", value=" << std::hex << value);
+      break;
+    default:
+      std::abort();
+    }
+    
+    return value;
+  }
+
+  void csr_write(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value) {
+    __unused (cid);
+    __unused (wid);
+    __unused (tid);
+    __unused (addr);
+    __unused (value);
+  } 
+
+  uint32_t fetch(uint32_t cid, uint32_t wid, uint32_t tid) {
+    auto stamp = rasterizer_.fetch();
+    if (nullptr == stamp)
+      return 0;
+
+    uint32_t lcid = cid % cores_per_unit_;
+    uint32_t index = (lcid * arch_.num_warps() + wid) * arch_.num_threads() + tid;
+    auto& csr = csrs_.at(index);
+    csr.set_stamp(stamp);
+    
+    DT(2, "raster-fetch: cid=" << std::dec << cid << ", wid=" << wid <<", tid=" << tid << ", x=" << stamp->x << ", y=" << stamp->y << ", mask=" << stamp->mask << ", pid=" << stamp->pid << ", bcoords=" << std::hex
+      <<  "{{0x" << stamp->bcoords[0].x.data() << ", 0x" << stamp->bcoords[0].y.data() << ", 0x" << stamp->bcoords[0].z.data() << "}"
+      << ", {0x" << stamp->bcoords[1].x.data() << ", 0x" << stamp->bcoords[1].y.data() << ", 0x" << stamp->bcoords[1].z.data() << "}"
+      << ", {0x" << stamp->bcoords[2].x.data() << ", 0x" << stamp->bcoords[2].y.data() << ", 0x" << stamp->bcoords[2].z.data() << "}"
+      << ", {0x" << stamp->bcoords[3].x.data() << ", 0x" << stamp->bcoords[3].y.data() << ", 0x" << stamp->bcoords[3].z.data() << "}}");
+
+    return (stamp->pid << 1) | 1;
   }
 
   const PerfStats& perf_stats() const { 
@@ -638,45 +769,50 @@ public:
 ///////////////////////////////////////////////////////////////////////////////
 
 RasterUnit::RasterUnit(const SimContext& ctx, 
-                       const char* name,                        
+                       const char* name,     
+                       uint32_t index,                   
+                       uint32_t cores_per_unit,
                        const Arch &arch, 
                        const DCRS& dcrs,
-                       uint32_t index,
-                       uint32_t tile_logsize, 
-                       uint32_t block_logsize) 
+                       const Config& config) 
   : SimObject<RasterUnit>(ctx, name)
   , MemReqs(this)
   , MemRsps(this)
+  , Input(this)
   , Output(this)
-  , impl_(new Impl(this, arch, dcrs, index, tile_logsize, block_logsize)) 
+  , impl_(new Impl(this, index, cores_per_unit, arch, dcrs, config)) 
 {}
 
 RasterUnit::~RasterUnit() {
   delete impl_;
 }
 
-uint32_t RasterUnit::id() const {
-  return impl_->id();
-}
-
 void RasterUnit::reset() {
   impl_->clear();
+}
+
+void RasterUnit::tick() {
+  impl_->tick();
+}
+
+uint32_t RasterUnit::id() const {
+  return impl_->id();
 }
 
 void RasterUnit::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
 }
 
-bool RasterUnit::done() const {
-  return impl_->done();
+uint32_t RasterUnit::csr_read(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t addr) {
+  return impl_->csr_read(cid, wid, tid, addr);
 }
 
-RasterUnit::Stamp* RasterUnit::fetch() {
-  return impl_->fetch();
+void RasterUnit::csr_write(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value) {
+  impl_->csr_write(cid, wid, tid, addr, value);
 }
 
-void RasterUnit::tick() {
-  impl_->tick();
+uint32_t RasterUnit::fetch(uint32_t cid, uint32_t wid, uint32_t tid) {
+  return impl_->fetch(cid, wid, tid);
 }
 
 const RasterUnit::PerfStats& RasterUnit::perf_stats() const {

@@ -10,8 +10,8 @@
 
 using namespace vortex;
 
-Warp::Warp(Core *core, uint32_t id)
-    : id_(id)
+Warp::Warp(Core *core, uint32_t warp_id)
+    : warp_id_(warp_id)
     , arch_(core->arch())
     , core_(core)
     , ireg_file_(core->arch().num_threads(), std::vector<Word>(core->arch().num_regs()))
@@ -42,9 +42,9 @@ void Warp::clear() {
 pipeline_trace_t* Warp::eval() {
   assert(tmask_.any());
 
-  uint64_t uuid = ((issued_instrs_++ * arch_.num_warps() + id_) * arch_.num_cores()) + core_->id();
+  uint64_t uuid = ((issued_instrs_++ * arch_.num_warps() + warp_id_) * arch_.num_cores()) + core_->id();
   
-  DPH(1, "Fetch: coreid=" << core_->id() << ", wid=" << id_ << ", tmask=");
+  DPH(1, "Fetch: cid=" << core_->id() << ", wid=" << warp_id_ << ", tmask=");
   for (uint32_t i = 0, n = arch_.num_threads(); i < n; ++i)
     DPN(1, tmask_.test(n-i-1));
   DPN(1, ", PC=0x" << std::hex << PC_ << " (#" << std::dec << uuid << ")" << std::endl);
@@ -64,7 +64,7 @@ pipeline_trace_t* Warp::eval() {
   // Create trace
   auto trace = new pipeline_trace_t(uuid);
   trace->cid   = core_->id();
-  trace->wid   = id_;
+  trace->wid   = warp_id_;
   trace->PC    = PC_;
   trace->tmask = tmask_;
   trace->rdest = instr->getRDest();

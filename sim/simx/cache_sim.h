@@ -8,6 +8,7 @@ namespace vortex {
 class CacheSim : public SimObject<CacheSim> {
 public:
     struct Config {
+        bool    bypass;         // cache bypass
         uint8_t C;              // log2 cache size
         uint8_t B;              // log2 block size
         uint8_t W;              // log2 word size
@@ -45,6 +46,19 @@ public:
             , mshr_stalls(0)
             , mem_latency(0)
         {}
+
+        PerfStats& operator+=(const PerfStats& rhs) {
+            this->reads += rhs.reads;
+            this->writes += rhs.writes;
+            this->read_misses += rhs.read_misses;
+            this->write_misses += rhs.write_misses;
+            this->evictions += rhs.evictions;
+            this->pipeline_stalls += rhs.pipeline_stalls;
+            this->bank_stalls += rhs.bank_stalls;
+            this->mshr_stalls += rhs.mshr_stalls;
+            this->mem_latency += rhs.mem_latency;
+            return *this;
+        }
     };
 
     std::vector<SimPort<MemReq>> CoreReqPorts;

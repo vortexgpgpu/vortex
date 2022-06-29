@@ -42,7 +42,7 @@ struct vtype {
 
 class Warp {
 public:
-  Warp(Core *core, uint32_t id);
+  Warp(Core *core, uint32_t warp_id);
 
   void clear();
   
@@ -65,7 +65,7 @@ public:
   }
 
   uint32_t id() const {
-    return id_;
+    return warp_id_;
   }
 
   uint32_t getPC() const {
@@ -101,7 +101,7 @@ private:
 
   void execute(const Instr &instr, pipeline_trace_t *trace);
   
-  uint32_t id_;
+  uint32_t warp_id_;
   const Arch& arch_;
   Core *core_;
   bool active_;

@@ -35,14 +35,14 @@ uint32_t clear_color = 0x00000000;
 uint32_t dst_width  = 128;
 uint32_t dst_height = 128;
 
-uint32_t cbuf_stride = 4;
-uint32_t cbuf_pitch  = dst_width * cbuf_stride;
-uint32_t cbuf_size   = dst_width * cbuf_pitch;
+uint32_t cbuf_stride;
+uint32_t cbuf_pitch;
+uint32_t cbuf_size;
 
 vx_device_h device = nullptr;
 vx_buffer_h staging_buf = nullptr;
 
-uint64_t cbuf_addr = -1;
+uint64_t cbuf_addr    = -1;
 uint64_t tilebuf_addr = -1;
 uint64_t primbuf_addr = -1;
 
@@ -73,11 +73,11 @@ static void parse_args(int argc, char **argv) {
     case 'w':
       dst_width = std::atoi(optarg);
       break;
-    case 'z':
-      use_sw = true;
-      break;
     case 'h':
       dst_height = std::atoi(optarg);
+      break;
+    case 'z':
+      use_sw = true;
       break;
     case '?': {
       show_usage();
@@ -239,6 +239,10 @@ int main(int argc, char *argv[]) {
   // upload program
   std::cout << "upload program" << std::endl;  
   RT_CHECK(vx_upload_kernel_file(device, kernel_file));
+
+  cbuf_stride = 4;
+  cbuf_pitch  = dst_width * cbuf_stride;
+  cbuf_size   = dst_width * cbuf_pitch;
 
   // allocate device memory  
   RT_CHECK(vx_mem_alloc(device, cbuf_size, &cbuf_addr));

@@ -4,8 +4,8 @@
 #include "pipeline.h"
 #include "cache_sim.h"
 #include "tex_unit.h"
-#include "raster_agent.h"
-#include "rop_agent.h"
+#include "raster_unit.h"
+#include "rop_unit.h"
 
 namespace vortex {
 
@@ -50,7 +50,6 @@ private:
       pipeline_trace_t* trace;
       uint32_t count;
     };
-    CacheSim::Ptr dcache_;
     HashTable<pending_req_t> pending_rd_reqs_;    
     uint32_t num_threads_;
     pipeline_trace_t* fence_state_;
@@ -95,9 +94,9 @@ public:
 
 class GpuUnit : public ExeUnit {
 private:    
-  TexUnit::Ptr     tex_unit_;
-  RasterAgent::Ptr raster_agent_;
-  RopAgent::Ptr    rop_agent_;
+  TexUnit::Ptr    tex_unit_;
+  RasterUnit::Ptr raster_unit_;
+  RopUnit::Ptr    rop_unit_;
   const std::vector<SimPort<pipeline_trace_t*>*> pending_rsps_;
 
 public:
