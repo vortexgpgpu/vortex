@@ -114,44 +114,43 @@ module VX_shared_mem #(
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0]     per_bank_req_tag;
     wire [NUM_BANKS-1:0][`UP(REQ_SEL_BITS)-1:0] per_bank_req_idx;
 
-    wire reqq_out_ready;
-    wire [(NUM_BANKS * REQQ_DATAW)-1:0] reqq_data_n;
-    wire reqq_full, reqq_empty;
+    wire reqq_out_valid, reqq_out_ready;
+    wire reqq_in_valid, reqq_in_ready;
 
-    wire reqq_in_valid = (| req_valid);
-    assign per_bank_req_ready_unqual = {NUM_BANKS{~reqq_full}};
+    wire reqq_in_fire = reqq_in_valid && reqq_in_ready;
+    `UNUSED_VAR (reqq_in_fire)
 
-    wire reqq_push = reqq_in_valid && ~reqq_full;
-    wire reqq_pop = ~reqq_empty && reqq_out_ready;
+    wire reqq_out_fire = reqq_out_valid && reqq_out_ready;
+    `UNUSED_VAR (reqq_out_fire)
 
-    VX_fifo_queue_ex #(
-        .DATAW (NUM_BANKS * REQQ_DATAW), 
-        .SIZE  (REQ_SIZE),
+    assign reqq_in_valid = (| req_valid);
+    assign per_bank_req_ready_unqual = {NUM_BANKS{reqq_in_ready}};
+
+    VX_elastic_buffer #(
+        .DATAW   (NUM_BANKS * (1 + 1 + BANK_ADDR_WIDTH + WORD_SIZE + WORD_WIDTH + TAG_WIDTH + `UP(REQ_SEL_BITS))), 
+        .SIZE    (REQ_SIZE),
+        .OUT_REG (1) // output should be registered for the data_store addr port
     ) req_queue (
         .clk      (clk),
         .reset    (reset),
-        .push     (reqq_push),        
-        .pop      (reqq_pop),
-        .full     (reqq_full),
-        .empty    (reqq_empty),
-        .data_in  ({per_bank_req_addr_unqual, 
+        .ready_in (reqq_in_ready),
+        .valid_in (reqq_in_valid),
+        .data_in  ({per_bank_req_valid_unqual,
+                    per_bank_req_rw_unqual, 
+                    per_bank_req_addr_unqual, 
                     per_bank_req_byteen_unqual, 
                     per_bank_req_data_unqual, 
                     per_bank_req_tag_unqual,
-                    per_bank_req_idx_unqual,
-                    per_bank_req_rw_unqual, 
-                    per_bank_req_valid_unqual}),
-        .data_out ({per_bank_req_addr, 
+                    per_bank_req_idx_unqual}),
+        .data_out ({per_bank_req_valid,
+                    per_bank_req_rw, 
+                    per_bank_req_addr, 
                     per_bank_req_byteen, 
                     per_bank_req_data, 
                     per_bank_req_tag,
-                    per_bank_req_idx,
-                    per_bank_req_rw,
-                    per_bank_req_valid}),
-        .data_out_n(reqq_data_n),
-        `UNUSED_PIN (alm_empty),
-        `UNUSED_PIN (alm_full),
-        `UNUSED_PIN (size)
+                    per_bank_req_idx}),
+        .ready_out (reqq_out_ready),
+        .valid_out (reqq_out_valid)
     );        
 
     wire [NUM_BANKS-1:0]                     per_bank_rsp_valid;
@@ -182,28 +181,26 @@ module VX_shared_mem #(
     // output response
     // Stall the input queue until all read results are sent
 
-    reg [NUM_BANKS-1:0] req_read_rem_r;
-    wire [NUM_BANKS-1:0] req_read_rem_n;
+    reg [NUM_BANKS-1:0] req_read_sent_r;
 
-    assign req_read_rem_n = req_read_rem_r & ~per_bank_rsp_ready;
+    wire [NUM_BANKS-1:0] req_read_mask = per_bank_req_valid & ~per_bank_req_rw;
 
-    assign reqq_out_ready = (0 == req_read_rem_n);
-
-    wire [NUM_BANKS-1:0] per_bank_req_valid_n = reqq_data_n[0 +: NUM_BANKS]; 
-    wire [NUM_BANKS-1:0] per_bank_req_rw_n = reqq_data_n[NUM_BANKS +: NUM_BANKS];
-    wire [NUM_BANKS-1:0] req_read_mask_n = per_bank_req_valid_n & ~per_bank_req_rw_n;
-    `UNUSED_VAR (reqq_data_n)
+    assign reqq_out_ready = (req_read_mask & ~(req_read_sent_r | per_bank_rsp_ready)) == 0;
 
     always @(posedge clk) begin
-        if ((reqq_push && reqq_empty) || reqq_pop) begin
-            req_read_rem_r <= req_read_mask_n;
+        if (reset) begin
+            req_read_sent_r <= 0;
         end else begin
-            req_read_rem_r <= req_read_rem_n;
+            if (reqq_out_ready) begin
+                req_read_sent_r <= 0;
+            end else begin
+                req_read_sent_r <= req_read_sent_r | (req_read_mask & per_bank_rsp_ready);
+            end
         end
     end
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
-        assign per_bank_rsp_valid[i] = ~reqq_empty && req_read_rem_r[i];
+        assign per_bank_rsp_valid[i] = reqq_out_valid & req_read_mask[i] & ~req_read_sent_r[i];
         assign per_bank_rsp_pmask[i] = 'x;
         assign per_bank_rsp_tag[i]   = per_bank_req_tag[i];
         assign per_bank_rsp_idx[i]   = per_bank_req_idx[i];
@@ -305,7 +302,7 @@ module VX_shared_mem #(
     end
 
     always @(posedge clk) begin        
-        if (reqq_push) begin
+        if (reqq_in_fire) begin
             for (integer i = 0; i < NUM_BANKS; ++i) begin
                 if (per_bank_req_valid_unqual[i]) begin
                     if (per_bank_req_rw_unqual[i]) begin
@@ -318,7 +315,7 @@ module VX_shared_mem #(
                 end
             end
         end
-        if (reqq_pop) begin
+        if (reqq_out_fire) begin
             for (integer i = 0; i < NUM_BANKS; ++i) begin
                 if (per_bank_req_valid[i]) begin
                     if (per_bank_req_rw[i]) begin
