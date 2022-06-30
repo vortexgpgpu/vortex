@@ -44,7 +44,7 @@ module VX_rsp_merge #(
             core_rsp_valid_unqual = '0;
             core_rsp_tag_unqual   = 'x;
             core_rsp_data_unqual  = 'x;
-            per_req_banks_sel     = 0;
+            per_req_banks_sel     = '0;
 
             for (integer b = NUM_BANKS-1; b >= 0; --b) begin
                 if (per_bank_core_rsp_valid[b]) begin
@@ -106,7 +106,7 @@ module VX_rsp_merge #(
 
         reg [NUM_REQS-1:0] core_rsp_valid_unqual;            
         always @(*) begin
-            core_rsp_valid_unqual = 0;
+            core_rsp_valid_unqual = '0;
             core_rsp_valid_unqual[per_bank_core_rsp_idx] = per_bank_core_rsp_valid;
         end 
 
