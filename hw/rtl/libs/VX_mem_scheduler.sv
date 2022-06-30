@@ -351,7 +351,7 @@ module VX_mem_scheduler #(
 
         assign crsp_valid = mem_rsp_valid_s & rsp_complete;
 
-        assign crsp_mask = rsp_orig_mask[ibuf_waddr];        
+        assign crsp_mask = rsp_orig_mask[ibuf_raddr];        
 
         for (genvar i = 0; i < NUM_BANKS; ++i) begin
             assign mem_rsp_data_m[i] = {DATA_WIDTH{mem_rsp_mask_s[i]}} & mem_rsp_data_s[i];

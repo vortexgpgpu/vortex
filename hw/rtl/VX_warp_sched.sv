@@ -90,7 +90,15 @@ module VX_warp_sched #(
             warp_pcs[0]     <= base_dcrs.startup_addr;
             active_warps[0] <= 1;
             thread_masks[0] <= 1;
-        end else begin            
+        end else begin
+            // join handling
+            if (join_if.valid) begin
+                if (join_else) begin
+                    warp_pcs[join_if.wid] <= join_pc;
+                end
+                thread_masks[join_if.wid] <= join_tmask;
+            end
+
             if (warp_ctl_if.valid && warp_ctl_if.wspawn.valid) begin
                 use_wspawn <= warp_ctl_if.wspawn.wmask & (~`NUM_WARPS'(1));
                 wspawn_pc  <= warp_ctl_if.wspawn.pc;
@@ -144,14 +152,6 @@ module VX_warp_sched #(
 
             if (wrelease_if.valid) begin
                 stalled_warps[wrelease_if.wid] <= 0;
-            end
-
-            // join handling
-            if (join_if.valid) begin
-                if (join_else) begin
-                    warp_pcs[join_if.wid] <= join_pc;
-                end
-                thread_masks[join_if.wid] <= join_tmask;
             end
 
             if (busy) begin
