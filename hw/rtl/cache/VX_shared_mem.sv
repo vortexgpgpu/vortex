@@ -60,8 +60,6 @@ module VX_shared_mem #(
     localparam WORDS_PER_BANK  = NUM_WORDS / NUM_BANKS;
     localparam BANK_ADDR_WIDTH = `CLOG2(WORDS_PER_BANK);
 
-    localparam REQQ_DATAW = 1 + 1 + BANK_ADDR_WIDTH + WORD_SIZE + WORD_WIDTH + TAG_WIDTH + `UP(REQ_SEL_BITS);
-
     `STATIC_ASSERT(ADDR_WIDTH == (BANK_ADDR_WIDTH + `CLOG2(NUM_BANKS)), ("invalid parameter"))
 
     wire [NUM_BANKS-1:0]                    per_bank_req_valid_unqual; 
@@ -182,13 +180,10 @@ module VX_shared_mem #(
     // Stall the input queue until all read results are sent
 
     reg [NUM_BANKS-1:0] req_read_sent_r;
-    wire [NUM_BANKS-1:0] req_read_sent_n, req_read_mask;
 
-    assign req_read_mask = per_bank_req_valid & ~per_bank_req_rw;
+    wire [NUM_BANKS-1:0] req_read_mask = per_bank_req_valid & ~per_bank_req_rw;
 
-    assign req_read_sent_n = req_read_sent_r | (req_read_mask & per_bank_rsp_ready);
-
-    wire req_read_sent_all = (req_read_sent_n == req_read_mask);
+    wire req_read_sent_all = 0 == (req_read_mask & ~(req_read_sent_r | per_bank_rsp_ready));
 
     always @(posedge clk) begin
         if (reset) begin
@@ -197,7 +192,7 @@ module VX_shared_mem #(
             if (req_read_sent_all) begin
                 req_read_sent_r <= 0;
             end else begin
-                req_read_sent_r <= req_read_sent_n;
+                req_read_sent_r <= req_read_sent_r | (req_read_mask & per_bank_rsp_ready);
             end
         end
     end
