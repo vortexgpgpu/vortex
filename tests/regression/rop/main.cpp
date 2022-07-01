@@ -7,8 +7,8 @@
 #include <assert.h>
 #include <vortex.h>
 #include "common.h"
-#include "utils.h"
 #include <cocogfx/include/fixed.hpp>
+#include <cocogfx/include/imageutil.hpp>
 
 using namespace cocogfx;
 

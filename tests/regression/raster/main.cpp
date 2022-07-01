@@ -10,6 +10,7 @@
 #include "common.h"
 #include "utils.h"
 #include <cocogfx/include/cgltrace.hpp>
+#include <cocogfx/include/imageutil.hpp>
 
 using namespace cocogfx;
 

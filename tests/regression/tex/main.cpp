@@ -7,7 +7,9 @@
 #include <assert.h>
 #include <vortex.h>
 #include "common.h"
-#include "utils.h"
+#include <bitmanip.h>
+#include <cocogfx/include/blitter.hpp>
+#include <cocogfx/include/imageutil.hpp>
 
 using namespace cocogfx;
 
@@ -139,7 +141,7 @@ int render(const kernel_arg_t& kernel_arg,
 
   // save output image
   std::cout << "save output image" << std::endl;  
-  //dump_image(dst_pixels, width, height, 4);  
+  //DumpImage(dst_pixels, width, height, 4);  
   RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, dst_pixels.data(), width, height, width * 4));
 
   return 0;
@@ -165,7 +167,7 @@ int main(int argc, char *argv[]) {
     }
     uint32_t src_bpp = Format::GetInfo(eformat).BytePerPixel;
     uint32_t src_pitch = src_width * src_bpp;
-    //dump_image(staging, src_width, src_height, src_bpp);
+    //DumpImage(staging, src_width, src_height, src_bpp);
     RT_CHECK(GenerateMipmaps(src_pixels, mip_offsets, staging.data(), eformat, src_width, src_height, src_pitch));    
   }  
 

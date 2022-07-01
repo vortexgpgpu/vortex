@@ -33,7 +33,7 @@ endif
 
 PROJECT = tex
 
-SRCS = main.cpp utils.cpp
+SRCS = main.cpp
 
 all: $(PROJECT) kernel.bin kernel.dump
  

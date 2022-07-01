@@ -10,6 +10,7 @@
 #include "common.h"
 #include "utils.h"
 #include <cocogfx/include/cgltrace.hpp>
+#include <cocogfx/include/imageutil.hpp>
 
 using namespace cocogfx;
 
@@ -501,7 +502,7 @@ int main(int argc, char *argv[]) {
   cleanup();  
 
   if (reference_file) {
-    auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8);
+    auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8, 2);
     if (0 == errors) {
       std::cout << "PASSED!" << std::endl;
     } else {
