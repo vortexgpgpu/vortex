@@ -238,7 +238,7 @@ module VX_mem_scheduler #(
         end
     end
 
-    assign mem_req_valid_s = mem_req_mask_b[req_batch_idx] & ~req_sent_mask & {NUM_BANKS{~reqq_empty}};
+    assign mem_req_valid_s = {NUM_BANKS{~reqq_empty}} & mem_req_mask_b[req_batch_idx] & ~req_sent_mask;
 
     assign {mem_req_rw_s, mem_req_byteen_s, mem_req_addr_s, mem_req_data_s} = mem_req_data_b[req_batch_idx];
 
@@ -318,7 +318,7 @@ module VX_mem_scheduler #(
     assign rsp_complete = (0 == rsp_rem_size_n);
 
     always @(posedge clk) begin
-        if (mem_req_fire_s != 0 && req_sent_mask == 0 && req_batch_idx == 0 && reqq_rw == 0) begin
+        if (~reqq_empty && ~reqq_rw && req_batch_idx == 0 && req_sent_mask == 0) begin
             rsp_rem_size[reqq_tag] <= reqq_size;
         end
         if (mem_rsp_fire) begin
@@ -355,7 +355,7 @@ module VX_mem_scheduler #(
 
         for (genvar i = 0; i < NUM_BANKS; ++i) begin
             assign mem_rsp_data_m[i] = {DATA_WIDTH{mem_rsp_mask_s[i]}} & mem_rsp_data_s[i];
-        end        
+        end
         
         always @(*) begin
             rsp_store_n = rsp_store[ibuf_raddr];
@@ -371,7 +371,7 @@ module VX_mem_scheduler #(
             if (reset) begin
                 rsp_store <= '0;
             end else begin
-                if (ibuf_push) begin  
+                if (ibuf_push) begin
                     rsp_store[ibuf_waddr] <= '0;
                     rsp_orig_mask[ibuf_waddr] <= req_mask;
                 end

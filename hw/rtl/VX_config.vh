@@ -389,6 +389,7 @@
 `else
     `define ICACHE_ENABLED 0
     `define NUM_ICACHES 0
+    `define ICACHE_NUM_BANKS 1
 `endif
 
 // Number of caches
@@ -442,6 +443,7 @@
 `else
     `define DCACHE_ENABLED 0
     `define NUM_DCACHES 0
+    `define DCACHE_NUM_BANKS 1
 `endif
 
 // Number of caches
@@ -503,6 +505,7 @@
     `define SM_ENABLED   1
 `else
     `define SM_ENABLED   0
+    `define SMEM_NUM_BANKS 1
 `endif
 
 // per thread stack size
@@ -536,6 +539,7 @@
 `else
     `define TCACHE_ENABLED 0
     `define NUM_TCACHES 0
+    `define TCACHE_NUM_BANKS 1
 `endif
 
 // Number of caches
@@ -599,6 +603,7 @@
 `else
     `define RCACHE_ENABLED 0
     `define NUM_RCACHES 0
+    `define RCACHE_NUM_BANKS 1
 `endif
 
 // Number of caches
@@ -661,7 +666,8 @@
     `define OCACHE_ENABLED 1
 `else
     `define OCACHE_ENABLED 0
-    `define NUM_OCACHES 0
+    `define NUM_OCACHES 0    
+    `define OCACHE_NUM_BANKS 1
 `endif
 
 // Number of caches
