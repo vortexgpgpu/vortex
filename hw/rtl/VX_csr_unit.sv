@@ -132,27 +132,18 @@ module VX_csr_unit #(
     assign csr_read_data_s0 = write_hazard ? csr_write_data_s1 : csr_read_data;    
     
     always @(*) begin      
-        csr_we_s0 = 0;  
-        for (integer i = 0; i < `NUM_THREADS; ++i) begin
-            csr_we_s0 |= (csr_req_data[i] != 0);
-        end
+        csr_we_s0 = (| csr_req_data);
         case (csr_req_if.op_type)
             `INST_CSR_RW: begin
-                for (integer i = 0; i < `NUM_THREADS; ++i) begin
-                    csr_write_data_s0[i] = csr_req_data[i];
-                end
+                csr_write_data_s0 = csr_req_data;
                 csr_we_s0 = 1;
             end
             `INST_CSR_RS: begin
-                for (integer i = 0; i < `NUM_THREADS; ++i) begin
-                    csr_write_data_s0[i] = csr_read_data_s0[i] | csr_req_data[i];
-                end
+                csr_write_data_s0 = csr_read_data_s0 | csr_req_data;
             end
             //`INST_CSR_RC
             default: begin
-                for (integer i = 0; i < `NUM_THREADS; ++i) begin
-                    csr_write_data_s0[i] = csr_read_data_s0[i] & ~csr_req_data[i];
-                end
+                csr_write_data_s0 = csr_read_data_s0 & ~csr_req_data;
             end
         endcase
     end         
