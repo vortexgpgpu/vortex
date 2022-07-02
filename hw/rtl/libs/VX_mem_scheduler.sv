@@ -111,10 +111,10 @@ module VX_mem_scheduler #(
 
     // Request queue //////////////////////////////////////////////////////////
 
-    wire req_complete;
+    wire req_sent_all;
 
     assign reqq_push = req_valid && req_ready;
-    assign reqq_pop  = ~reqq_empty && req_complete;
+    assign reqq_pop  = ~reqq_empty && req_sent_all;
     
     wire [`UP(UUID_WIDTH)-1:0] req_uuid;
     if (UUID_WIDTH != 0) begin
@@ -182,9 +182,7 @@ module VX_mem_scheduler #(
 
     wire [NUM_BATCHES-1:0][BATCH_DATAW-1:0] mem_req_data_b;
     wire [NUM_BATCHES-1:0][NUM_BANKS-1:0]   mem_req_mask_b;
-    reg  [NUM_BANKS-1:0]           req_sent_mask;
-    wire [NUM_BANKS-1:0]           req_sent_mask_n;
-    reg  [`UP(BATCH_SEL_BITS)-1:0] req_batch_idx;
+    logic [`UP(BATCH_SEL_BITS)-1:0] req_batch_idx;
     
     for (genvar i = 0; i < NUM_BATCHES; ++i) begin
         localparam SIZE = ((i + 1) * NUM_BANKS > NUM_REQS) ? REM_BATCH_SIZE : NUM_BANKS;
@@ -194,51 +192,62 @@ module VX_mem_scheduler #(
             (NUM_BANKS * ADDR_WIDTH)'(reqq_addr[i * NUM_BANKS +: SIZE]),
             (NUM_BANKS * DATA_WIDTH)'(reqq_data[i * NUM_BANKS +: SIZE])
         };
-    end    
-    
-    if (NUM_BATCHES > 1) begin
-        wire [NUM_REQS-1:0] req_sent_mask_all;
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
-            localparam j = i / NUM_BANKS;
-            localparam k = i % NUM_BANKS;
-            wire req_sent_curr = (req_batch_idx == BATCH_SEL_BITS'(j)) && req_sent_mask_n[k];
-            assign req_sent_mask_all[i] = ((j < (NUM_BATCHES-1)) && (req_batch_idx > BATCH_SEL_BITS'(j))) 
-                                         | (req_sent_curr & reqq_mask[i]) 
-                                         | (~req_sent_curr & ~reqq_mask[i]);
-        end
-        assign req_complete = (& req_sent_mask_all);
-    end else begin
-        assign req_complete = (req_sent_mask_n == reqq_mask);
     end
-
-    wire [NUM_BANKS-1:0] mem_req_fire_s = mem_req_valid_s & mem_req_ready_s;
-
+    
     assign mem_req_mask_b = (NUM_BATCHES * NUM_BANKS)'(reqq_mask);
 
-    assign req_sent_mask_n = req_sent_mask | mem_req_fire_s;
+    logic [NUM_BANKS-1:0] batch_sent_mask, batch_sent_mask_n;
+    
+    assign batch_sent_mask_n = batch_sent_mask | mem_req_ready_s;
 
-    wire req_complete_b = ~reqq_empty && (req_sent_mask_n == mem_req_mask_b[req_batch_idx]);
+    wire req_sent_batch = (mem_req_mask_b[req_batch_idx] & ~batch_sent_mask_n) == 0;
 
     always @(posedge clk) begin
         if (reset) begin
-            req_sent_mask <= '0;
-            req_batch_idx <= 0;
+            batch_sent_mask <= '0;
         end else begin
-            if (req_complete_b) begin
-                if (req_complete 
-                 || (req_batch_idx == `UP(BATCH_SEL_BITS)'(NUM_BATCHES-1))) begin
-                    req_batch_idx <= 0;
+            if (~reqq_empty) begin
+                if (req_sent_batch) begin
+                    batch_sent_mask <= '0;
                 end else begin
-                    req_batch_idx <= req_batch_idx + `UP(BATCH_SEL_BITS)'(1);
+                    batch_sent_mask <= batch_sent_mask_n;
                 end
-                req_sent_mask <= 0;
-            end else begin
-                req_sent_mask <= req_sent_mask_n;
             end
         end
     end
+    
+    if (NUM_BATCHES > 1) begin
+        always @(posedge clk) begin
+            if (reset) begin
+                req_batch_idx <= 0;
+            end else begin
+                if (~reqq_empty && req_sent_batch) begin
+                    if (req_sent_all 
+                    || (req_batch_idx == `UP(BATCH_SEL_BITS)'(NUM_BATCHES-1))) begin
+                        req_batch_idx <= 0;
+                    end else begin
+                        req_batch_idx <= req_batch_idx + `UP(BATCH_SEL_BITS)'(1);
+                    end
+                end
+            end
+        end
 
-    assign mem_req_valid_s = {NUM_BANKS{~reqq_empty}} & mem_req_mask_b[req_batch_idx] & ~req_sent_mask;
+        wire [NUM_REQS-1:0] req_sent_mask;
+        for (genvar i = 0; i < NUM_REQS; ++i) begin
+            localparam batch_idx = i / NUM_BANKS;
+            localparam bank_idx  = i % NUM_BANKS;
+            wire req_sent_curr = (req_batch_idx == BATCH_SEL_BITS'(batch_idx)) && batch_sent_mask_n[bank_idx];
+            assign req_sent_mask[i] = ((batch_idx < (NUM_BATCHES-1)) && (req_batch_idx > BATCH_SEL_BITS'(batch_idx))) 
+                                    | (reqq_mask[i] && req_sent_curr) 
+                                    | ~reqq_mask[i];
+        end
+        assign req_sent_all = (& req_sent_mask);    
+    end else begin
+        assign req_batch_idx = 0;
+        assign req_sent_all = req_sent_batch;
+    end
+
+    assign mem_req_valid_s = {NUM_BANKS{~reqq_empty}} & mem_req_mask_b[req_batch_idx] & ~batch_sent_mask;
 
     assign {mem_req_rw_s, mem_req_byteen_s, mem_req_addr_s, mem_req_data_s} = mem_req_data_b[req_batch_idx];
 
@@ -318,7 +327,7 @@ module VX_mem_scheduler #(
     assign rsp_complete = (0 == rsp_rem_size_n);
 
     always @(posedge clk) begin
-        if (~reqq_empty && ~reqq_rw && req_batch_idx == 0 && req_sent_mask == 0) begin
+        if (~reqq_empty && ~reqq_rw && req_batch_idx == 0 && batch_sent_mask == 0) begin
             rsp_rem_size[reqq_tag] <= reqq_size;
         end
         if (mem_rsp_fire) begin
@@ -453,7 +462,9 @@ module VX_mem_scheduler #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    /*always @(posedge clk) begin
+    /*
+    wire [NUM_BANKS-1:0] mem_req_fire_s = mem_req_valid_s & mem_req_ready_s;
+    always @(posedge clk) begin
         if (req_valid && req_ready) begin            
             dpi_trace(1, "%d: %s-req: rw=%b, mask=%b, byteen=", $time, INSTANCE_ID, req_rw, req_mask);
             `TRACE_ARRAY1D(1, req_byteen, NUM_REQS);
