@@ -193,10 +193,10 @@ module VX_mem_scheduler #(
             (NUM_BANKS * DATA_WIDTH)'(reqq_data[i * NUM_BANKS +: SIZE])
         };
     end
-    
-    assign mem_req_mask_b = (NUM_BATCHES * NUM_BANKS)'(reqq_mask);
 
     logic [NUM_BANKS-1:0] batch_sent_mask, batch_sent_mask_n;
+    
+    assign mem_req_mask_b = (NUM_BATCHES * NUM_BANKS)'(reqq_mask);
     
     assign batch_sent_mask_n = batch_sent_mask | mem_req_ready_s;
 

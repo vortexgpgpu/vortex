@@ -179,22 +179,22 @@ module VX_shared_mem #(
     // output response
     // Stall the input queue until all read results are sent
 
-    logic [NUM_BANKS-1:0] req_read_sent_r, req_read_sent_n;
+    logic [NUM_BANKS-1:0] req_read_sent, req_read_sent_n, req_read_mask;
 
-    wire [NUM_BANKS-1:0] req_read_mask = per_bank_req_valid & ~per_bank_req_rw;
+    assign req_read_mask = per_bank_req_valid & ~per_bank_req_rw;
 
-    assign req_read_sent_n = req_read_sent_r | per_bank_rsp_ready;
+    assign req_read_sent_n = req_read_sent | per_bank_rsp_ready;
 
     wire req_read_sent_all = (req_read_mask & ~req_read_sent_n) == 0;
 
     always @(posedge clk) begin
         if (reset) begin
-            req_read_sent_r <= 0;
+            req_read_sent <= 0;
         end else begin
             if (req_read_sent_all) begin
-                req_read_sent_r <= 0;
+                req_read_sent <= 0;
             end else begin
-                req_read_sent_r <= req_read_sent_n;
+                req_read_sent <= req_read_sent_n;
             end
         end
     end
@@ -202,7 +202,7 @@ module VX_shared_mem #(
     assign reqq_out_ready = req_read_sent_all;
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
-        assign per_bank_rsp_valid[i] = reqq_out_valid & req_read_mask[i] & ~req_read_sent_r[i];
+        assign per_bank_rsp_valid[i] = reqq_out_valid & req_read_mask[i] & ~req_read_sent[i];
         assign per_bank_rsp_pmask[i] = 'x;
         assign per_bank_rsp_tag[i]   = per_bank_req_tag[i];
         assign per_bank_rsp_idx[i]   = per_bank_req_idx[i];
