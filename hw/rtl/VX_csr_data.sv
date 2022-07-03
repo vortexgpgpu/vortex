@@ -84,6 +84,7 @@ module VX_csr_data #(
     assign tex_csr_if.read_wid    = read_wid;
     assign tex_csr_if.read_tmask  = read_tmask;
     assign tex_csr_if.read_addr   = read_addr;
+    `UNUSED_VAR (tex_csr_if.read_data)
     
     assign tex_csr_if.write_enable = write_enable && tex_write_enable; 
     assign tex_csr_if.write_uuid   = write_uuid;
@@ -120,6 +121,7 @@ module VX_csr_data #(
     assign rop_csr_if.read_wid    = read_wid;
     assign rop_csr_if.read_tmask  = read_tmask;
     assign rop_csr_if.read_addr   = read_addr;
+    `UNUSED_VAR (rop_csr_if.read_data)
     
     assign rop_csr_if.write_enable = write_enable && rop_write_enable; 
     assign rop_csr_if.write_uuid   = write_uuid;
