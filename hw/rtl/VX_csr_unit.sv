@@ -131,12 +131,17 @@ module VX_csr_unit #(
     
     assign csr_read_data_s0 = write_hazard ? csr_write_data_s1 : csr_read_data;    
     
-    always @(*) begin      
-        csr_we_s0 = (| csr_req_data);
+    always @(*) begin
+        csr_we_s0 = (csr_req_if.op_type == `INST_CSR_RW);  
+        for (integer i = 0; i < `NUM_THREADS; ++i) begin
+            csr_we_s0 |= csr_req_if.tmask[i] && (csr_req_data[i] != 0);
+        end
+    end
+
+    always @(*) begin
         case (csr_req_if.op_type)
             `INST_CSR_RW: begin
                 csr_write_data_s0 = csr_req_data;
-                csr_we_s0 = 1;
             end
             `INST_CSR_RS: begin
                 csr_write_data_s0 = csr_read_data_s0 | csr_req_data;
@@ -146,7 +151,7 @@ module VX_csr_unit #(
                 csr_write_data_s0 = csr_read_data_s0 & ~csr_req_data;
             end
         endcase
-    end         
+    end
 
     reg stall_in_r;
     always @(*) begin
@@ -160,8 +165,9 @@ module VX_csr_unit #(
     wire csr_rsp_valid = csr_req_if.valid && ~stall_in;  
     wire csr_rsp_ready;
 
-    VX_skid_buffer #(
-        .DATAW (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + `UP(`NT_BITS) + 2 * (`NUM_THREADS * 32))
+    VX_generic_buffer #(
+        .DATAW   (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + `UP(`NT_BITS) + 2 * (`NUM_THREADS * 32)),
+        .OUT_REG (1)
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),
