@@ -70,7 +70,8 @@ module VX_fpu_arb #(
         .NUM_OUTPUTS (NUM_OUTPUTS),
         .DATAW       (REQ_DATAW),        
         .ARBITER     (ARBITER),
-        .BUFFERED    (BUFFERED_REQ)
+        .BUFFERED    (BUFFERED_REQ),
+        .MAX_FANOUT  (4)
     ) req_arb (
         .clk       (clk),
         .reset     (reset),
@@ -155,7 +156,8 @@ module VX_fpu_arb #(
             .NUM_OUTPUTS (NUM_INPUTS),
             .DATAW       (RSP_DATAW),            
             .ARBITER     (ARBITER),
-            .BUFFERED    (BUFFERED_RSP)
+            .BUFFERED    (BUFFERED_RSP),
+            .MAX_FANOUT  (4)
         ) req_arb (
             .clk       (clk),
             .reset     (reset),

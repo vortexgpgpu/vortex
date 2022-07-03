@@ -43,7 +43,8 @@ module VX_raster_arb #(
         .NUM_OUTPUTS(NUM_OUTPUTS),
         .DATAW      (REQ_DATAW),
         .ARBITER    (ARBITER),
-        .BUFFERED   (BUFFERED)        
+        .BUFFERED   (BUFFERED),
+        .MAX_FANOUT (4)
     ) req_arb (
         .clk        (clk),
         .reset      (reset),

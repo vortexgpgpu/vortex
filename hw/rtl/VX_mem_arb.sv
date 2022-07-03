@@ -58,7 +58,8 @@ module VX_mem_arb #(
         .NUM_INPUTS (NUM_REQS),
         .DATAW      (REQ_DATAW),
         .ARBITER    (ARBITER),
-        .BUFFERED   (BUFFERED_REQ)        
+        .BUFFERED   (BUFFERED_REQ),
+        .MAX_FANOUT (4)
     ) req_arb (
         .clk       (clk),
         .reset     (reset),

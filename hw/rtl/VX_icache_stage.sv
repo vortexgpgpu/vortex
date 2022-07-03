@@ -102,6 +102,8 @@ module VX_icache_stage #(
     assign icache_req_if.byteen = 4'b1111;
     assign icache_req_if.data   = '0;    
 
+    // Icache Response
+
     wire [`UP(`NW_BITS)-1:0] rsp_wid = rsp_tag;
 
     assign ifetch_rsp_if.valid = icache_rsp_if.valid;
