@@ -69,6 +69,7 @@ module VX_mem_scheduler #(
     `RUNTIME_ASSERT ((~req_valid || req_mask != 0), ("invalid input"));
 
     wire [NUM_BANKS-1:0]             mem_req_valid_s;
+    wire [NUM_BANKS-1:0]             mem_req_mask_s;
     wire [NUM_BANKS-1:0]             mem_req_rw_s;
     wire [NUM_BANKS-1:0][BYTEENW-1:0] mem_req_byteen_s;
     wire [NUM_BANKS-1:0][ADDR_WIDTH-1:0] mem_req_addr_s;
@@ -180,27 +181,44 @@ module VX_mem_scheduler #(
 
     // Handle memory requests /////////////////////////////////////////////////
 
-    wire [NUM_BATCHES-1:0][BATCH_DATAW-1:0] mem_req_data_b;
-    wire [NUM_BATCHES-1:0][NUM_BANKS-1:0]   mem_req_mask_b;
-    logic [`UP(BATCH_SEL_BITS)-1:0] req_batch_idx;
+    wire [NUM_BATCHES-1:0][NUM_BANKS-1:0] mem_req_mask_b;
+    wire [NUM_BATCHES-1:0][NUM_BANKS-1:0] mem_req_rw_b;
+    wire [NUM_BATCHES-1:0][NUM_BANKS-1:0][BYTEENW-1:0] mem_req_byteen_b; 
+    wire [NUM_BATCHES-1:0][NUM_BANKS-1:0][ADDR_WIDTH-1:0] mem_req_addr_b;
+    wire [NUM_BATCHES-1:0][NUM_BANKS-1:0][DATA_WIDTH-1:0] mem_req_data_b;
     
+    logic [`UP(BATCH_SEL_BITS)-1:0] req_batch_idx;
+
     for (genvar i = 0; i < NUM_BATCHES; ++i) begin
-        localparam SIZE = ((i + 1) * NUM_BANKS > NUM_REQS) ? REM_BATCH_SIZE : NUM_BANKS;
-        assign mem_req_data_b[i] = {
-            {NUM_BANKS{reqq_rw}},
-            (NUM_BANKS * BYTEENW)'(reqq_byteen[i * NUM_BANKS +: SIZE]),
-            (NUM_BANKS * ADDR_WIDTH)'(reqq_addr[i * NUM_BANKS +: SIZE]),
-            (NUM_BANKS * DATA_WIDTH)'(reqq_data[i * NUM_BANKS +: SIZE])
-        };
+        for (genvar j = 0; j < NUM_BANKS; ++j) begin
+            localparam r = i * NUM_BANKS + j;
+            if (r < NUM_REQS) begin
+                assign mem_req_mask_b[i][j]   = reqq_mask[r];
+                assign mem_req_rw_b[i][j]     = reqq_rw;
+                assign mem_req_byteen_b[i][j] = reqq_byteen[r];
+                assign mem_req_addr_b[i][j]   = reqq_addr[r];
+                assign mem_req_data_b[i][j]   = reqq_data[r];
+            end else begin
+                assign mem_req_mask_b[i][j]   = 0;
+                assign mem_req_rw_b[i][j]     = 'x;
+                assign mem_req_byteen_b[i][j] = 'x;
+                assign mem_req_addr_b[i][j]   = 'x;
+                assign mem_req_data_b[i][j]   = 'x;
+            end
+        end
     end
 
-    logic [NUM_BANKS-1:0] batch_sent_mask, batch_sent_mask_n;
-    
-    assign mem_req_mask_b = (NUM_BATCHES * NUM_BANKS)'(reqq_mask);
-    
-    assign batch_sent_mask_n = batch_sent_mask | mem_req_ready_s;
+    assign mem_req_mask_s   = mem_req_mask_b[req_batch_idx];
+    assign mem_req_rw_s     = mem_req_rw_b[req_batch_idx];
+    assign mem_req_byteen_s = mem_req_byteen_b[req_batch_idx];
+    assign mem_req_addr_s   = mem_req_addr_b[req_batch_idx];
+    assign mem_req_data_s   = mem_req_data_b[req_batch_idx];
 
-    wire req_sent_batch = (mem_req_mask_b[req_batch_idx] & ~batch_sent_mask_n) == 0;
+    reg [NUM_BANKS-1:0] batch_sent_mask;
+    
+    wire [NUM_BANKS-1:0] batch_sent_mask_n = batch_sent_mask | mem_req_ready_s;
+    
+    wire req_sent_batch = (mem_req_mask_s & ~batch_sent_mask_n) == 0;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -247,9 +265,7 @@ module VX_mem_scheduler #(
         assign req_sent_all = req_sent_batch;
     end
 
-    assign mem_req_valid_s = {NUM_BANKS{~reqq_empty}} & mem_req_mask_b[req_batch_idx] & ~batch_sent_mask;
-
-    assign {mem_req_rw_s, mem_req_byteen_s, mem_req_addr_s, mem_req_data_s} = mem_req_data_b[req_batch_idx];
+    assign mem_req_valid_s = {NUM_BANKS{~reqq_empty}} & mem_req_mask_s & ~batch_sent_mask;
 
     if (UUID_WIDTH != 0) begin
         if (NUM_BATCHES > 1) begin
@@ -345,8 +361,8 @@ module VX_mem_scheduler #(
 
         for (genvar i = 0; i < NUM_BATCHES; ++i) begin
             localparam SIZE = ((i + 1) * NUM_BANKS > NUM_REQS) ? REM_BATCH_SIZE : NUM_BANKS;
-            assign crsp_mask[i * NUM_BANKS +: SIZE] = {SIZE{(i == rsp_batch_idx)}} & mem_rsp_mask_s[0 +: SIZE];
-            assign crsp_data[i * NUM_BANKS +: SIZE] = mem_rsp_data_s[0 +: SIZE];
+            assign crsp_mask[i * NUM_BANKS +: SIZE] = {SIZE{(i == rsp_batch_idx)}} & mem_rsp_mask_s[SIZE-1:0];
+            assign crsp_data[i * NUM_BANKS +: SIZE] = mem_rsp_data_s[SIZE-1:0];
         end
     
     end else begin
@@ -373,7 +389,7 @@ module VX_mem_scheduler #(
 
         for (genvar i = 0; i < NUM_BATCHES; ++i) begin
             localparam SIZE = ((i + 1) * NUM_BANKS > NUM_REQS) ? REM_BATCH_SIZE : NUM_BANKS;
-            assign crsp_data[i * NUM_BANKS +: SIZE] = rsp_store_n[i][0 +: SIZE];
+            assign crsp_data[i * NUM_BANKS +: SIZE] = rsp_store_n[i][SIZE-1:0];
         end
         
         always @(posedge clk) begin

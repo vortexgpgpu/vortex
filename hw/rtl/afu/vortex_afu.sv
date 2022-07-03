@@ -75,7 +75,7 @@ localparam MMIO_CMD_ARG1      = `AFU_IMAGE_MMIO_CMD_ARG1;
 localparam MMIO_CMD_ARG2      = `AFU_IMAGE_MMIO_CMD_ARG2;
 localparam MMIO_STATUS        = `AFU_IMAGE_MMIO_STATUS;
 
-localparam COUT_TID_WIDTH     = $clog2(`IO_COUT_SIZE); 
+localparam COUT_TID_WIDTH     = $clog2(`VX_MEM_BYTEEN_WIDTH); 
 localparam COUT_QUEUE_DATAW   = COUT_TID_WIDTH + 8;
 localparam COUT_QUEUE_SIZE    = 64; 
 
@@ -481,9 +481,7 @@ wire vx_mem_is_cout;
 wire vx_mem_req_valid_qual;
 wire vx_mem_req_ready_qual;
 
-assign vx_mem_req_valid_qual = vx_mem_req_valid && vx_started;
-
-assign vx_mem_req_ready = vx_mem_is_cout ? ~cout_q_full : vx_mem_req_ready_qual;
+assign vx_mem_req_valid_qual = vx_mem_req_valid && ~vx_mem_is_cout && vx_started;
 
 VX_mem_adapter #(
   .SRC_DATA_WIDTH (`VX_MEM_DATA_WIDTH),
@@ -810,7 +808,7 @@ assign cci_mem_rsp_ready = !cp2af_sRxPort.c1TxAlmFull
                         && !cci_pending_writes_full;
 
 assign cmd_mem_rd_done = cci_wr_req_done
-                    && cci_pending_writes_empty;
+                      && cci_pending_writes_empty;
 
 // Send write requests to CCI
 always @(posedge clk) 
@@ -914,8 +912,9 @@ assign cmd_run_done = !vx_busy;
 
 // COUT HANDLING //////////////////////////////////////////////////////////////
 
-wire [COUT_TID_WIDTH-1:0] cout_tid;
-wire [7:0] cout_char;
+wire [`VX_MEM_BYTEEN_WIDTH-1:0][7:0] vx_mem_req_data_r;
+wire [COUT_TID_WIDTH-1:0] cout_tid, cout_tid_r;
+wire cout_pipe_valid, cout_pipe_valid_r;
 
 VX_onehot_encoder #(
   .N (`VX_MEM_BYTEEN_WIDTH)
@@ -925,21 +924,27 @@ VX_onehot_encoder #(
   `UNUSED_PIN (valid_out)
 );
 
-VX_onehot_mux #(
-  .DATAW (8),
-  .N     (`VX_MEM_BYTEEN_WIDTH)
-) cout_char_mux (
-  .data_in  (vx_mem_req_data),
-  .sel_in   (vx_mem_req_byteen),
-  .data_out (cout_char)
+wire cout_pipe_valid = vx_mem_req_valid && vx_mem_is_cout && vx_started;
+wire cout_pipe_stall = cout_pipe_valid_r && cout_q_full;
+
+VX_pipe_register #(
+    .DATAW  (1 + COUT_TID_WIDTH + `VX_MEM_DATA_WIDTH),
+    .RESETW (1)
+) cout_pipe_reg (
+    .clk      (clk),
+    .reset    (reset),
+    .enable   (~cout_pipe_stall),
+    .data_in  ({cout_pipe_valid,   cout_tid,   vx_mem_req_data}),
+    .data_out ({cout_pipe_valid_r, cout_tid_r, vx_mem_req_data_r})
 );
 
 assign vx_mem_is_cout = (vx_mem_req_addr == `VX_MEM_ADDR_WIDTH'(`IO_COUT_ADDR >> (32 - `VX_MEM_ADDR_WIDTH)));
 
-wire cout_q_push = vx_mem_req_valid 
-                && vx_started 
-                && vx_mem_is_cout 
-                && ~cout_q_full;
+assign vx_mem_req_ready = vx_mem_is_cout ? ~cout_pipe_stall : vx_mem_req_ready_qual;
+
+wire [7:0] cout_char = vx_mem_req_data_r[cout_tid_r];
+
+wire cout_q_push = cout_pipe_valid_r && ~cout_q_full;
 
 wire cout_q_pop = cp2af_sRxPort.c0.mmioRdValid 
                && (mmio_hdr.address == MMIO_STATUS)
@@ -953,7 +958,7 @@ VX_fifo_queue #(
   .reset    (reset),
   .push     (cout_q_push),
   .pop      (cout_q_pop),
-  .data_in  ({cout_tid, cout_char}),
+  .data_in  ({cout_tid_r, cout_char}),
   .data_out (cout_q_dout),
   .empty    (cout_q_empty),
   .full     (cout_q_full),
