@@ -14,10 +14,7 @@ module VX_shared_mem #(
     // Address width
     parameter ADDR_WIDTH        = 8,
     // Size of a word in bytes
-    parameter WORD_SIZE         = 4, 
-
-    // Request Queue Size
-    parameter REQ_SIZE          = 2,
+    parameter WORD_SIZE         = 4,
 
     // Request debug identifier
     parameter UUID_WIDTH        = 0,
@@ -104,52 +101,40 @@ module VX_shared_mem #(
         `UNUSED_PIN (per_bank_core_req_wsel)
     );
 
-    wire [NUM_BANKS-1:0]                    per_bank_req_valid; 
+    wire [NUM_BANKS-1:0]                    per_bank_req_valid;
     wire [NUM_BANKS-1:0]                    per_bank_req_rw;      
     wire [NUM_BANKS-1:0][BANK_ADDR_WIDTH-1:0] per_bank_req_addr;
     wire [NUM_BANKS-1:0][WORD_SIZE-1:0]     per_bank_req_byteen;
     wire [NUM_BANKS-1:0][WORD_WIDTH-1:0]    per_bank_req_data;
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0]     per_bank_req_tag;
     wire [NUM_BANKS-1:0][`UP(REQ_SEL_BITS)-1:0] per_bank_req_idx;
+    wire [NUM_BANKS-1:0]                    per_bank_req_ready;
 
-    wire reqq_out_valid, reqq_out_ready;
-    wire reqq_in_valid, reqq_in_ready;
-
-    wire reqq_in_fire = reqq_in_valid && reqq_in_ready;
-    `UNUSED_VAR (reqq_in_fire)
-
-    wire reqq_out_fire = reqq_out_valid && reqq_out_ready;
-    `UNUSED_VAR (reqq_out_fire)
-
-    assign reqq_in_valid = (| req_valid);
-    assign per_bank_req_ready_unqual = {NUM_BANKS{reqq_in_ready}};
-
-    VX_elastic_buffer #(
-        .DATAW   (NUM_BANKS * (1 + 1 + BANK_ADDR_WIDTH + WORD_SIZE + WORD_WIDTH + TAG_WIDTH + `UP(REQ_SEL_BITS))), 
-        .SIZE    (REQ_SIZE),
-        .OUT_REG (1) // output should be registered for the data_store addr port
-    ) req_queue (
-        .clk      (clk),
-        .reset    (reset),
-        .ready_in (reqq_in_ready),
-        .valid_in (reqq_in_valid),
-        .data_in  ({per_bank_req_valid_unqual,
-                    per_bank_req_rw_unqual, 
-                    per_bank_req_addr_unqual, 
-                    per_bank_req_byteen_unqual, 
-                    per_bank_req_data_unqual, 
-                    per_bank_req_tag_unqual,
-                    per_bank_req_idx_unqual}),
-        .data_out ({per_bank_req_valid,
-                    per_bank_req_rw, 
-                    per_bank_req_addr, 
-                    per_bank_req_byteen, 
-                    per_bank_req_data, 
-                    per_bank_req_tag,
-                    per_bank_req_idx}),
-        .ready_out (reqq_out_ready),
-        .valid_out (reqq_out_valid)
-    );        
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin
+        VX_skid_buffer #(
+            .DATAW   (1 + BANK_ADDR_WIDTH + WORD_SIZE + WORD_WIDTH + TAG_WIDTH + `UP(REQ_SEL_BITS)),
+            .OUT_REG (1) // output should be registered for the data_store addressing
+        ) req_sbuf (
+            .clk      (clk),
+            .reset    (reset),
+            .valid_in (per_bank_req_valid_unqual[i]),
+            .ready_in (per_bank_req_ready_unqual[i]),            
+            .data_in  ({per_bank_req_rw_unqual[i], 
+                        per_bank_req_addr_unqual[i], 
+                        per_bank_req_byteen_unqual[i], 
+                        per_bank_req_data_unqual[i], 
+                        per_bank_req_tag_unqual[i],
+                        per_bank_req_idx_unqual[i]}),
+            .data_out ({per_bank_req_rw[i], 
+                        per_bank_req_addr[i], 
+                        per_bank_req_byteen[i], 
+                        per_bank_req_data[i], 
+                        per_bank_req_tag[i],
+                        per_bank_req_idx[i]}),            
+            .valid_out (per_bank_req_valid[i]),
+            .ready_out (per_bank_req_ready[i])
+        );       
+    end 
 
     wire [NUM_BANKS-1:0]                     per_bank_rsp_valid;
     wire [NUM_BANKS-1:0][0:0]                per_bank_rsp_pmask;
@@ -169,43 +154,19 @@ module VX_shared_mem #(
             .NO_RWCHECK (1)
         ) data_store (
             .clk   (clk),
-            .addr  (per_bank_req_addr[i]),
             .wren  (wren),
+            .addr  (per_bank_req_addr[i]),            
             .wdata (per_bank_req_data[i]),
             .rdata (per_bank_rsp_data[i])
         );
     end
 
-    // output response
-    // Stall the input queue until all read results are sent
-
-    logic [NUM_BANKS-1:0] req_read_sent, req_read_sent_n, req_read_mask;
-
-    assign req_read_mask = per_bank_req_valid & ~per_bank_req_rw;
-
-    assign req_read_sent_n = req_read_sent | per_bank_rsp_ready;
-
-    wire req_read_sent_all = (req_read_mask & ~req_read_sent_n) == 0;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            req_read_sent <= 0;
-        end else begin
-            if (req_read_sent_all) begin
-                req_read_sent <= 0;
-            end else begin
-                req_read_sent <= req_read_sent_n;
-            end
-        end
-    end
-
-    assign reqq_out_ready = req_read_sent_all;
-
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
-        assign per_bank_rsp_valid[i] = reqq_out_valid & req_read_mask[i] & ~req_read_sent[i];
+        assign per_bank_rsp_valid[i] = per_bank_req_valid[i] & ~per_bank_req_rw[i];
         assign per_bank_rsp_pmask[i] = 'x;
         assign per_bank_rsp_tag[i]   = per_bank_req_tag[i];
         assign per_bank_rsp_idx[i]   = per_bank_req_idx[i];
+        assign per_bank_req_ready[i] = per_bank_req_rw[i] || per_bank_rsp_ready[i];
     end
 
     wire [NUM_REQS-1:0]                 rsp_valid_s;
@@ -237,13 +198,13 @@ module VX_shared_mem #(
             .DATAW   (WORD_WIDTH + TAG_WIDTH),
             .SKID    (OUT_REG >> 1),
             .OUT_REG (OUT_REG & 1)
-        ) rsp_sbuf (
+        ) rsp_sbuf_out (
             .clk       (clk),
             .reset     (reset),
             .valid_in  (rsp_valid_s[i]),
             .ready_in  (rsp_ready_s[i]),
             .data_in   ({rsp_data_s[i], rsp_tag_s[i]}),
-            .data_out  ({rsp_data[i], rsp_tag[i]}), 
+            .data_out  ({rsp_data[i],   rsp_tag[i]}), 
             .valid_out (rsp_valid[i]),
             .ready_out (rsp_ready[i])
         );
