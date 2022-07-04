@@ -265,30 +265,20 @@ module VX_shared_mem #(
     end
 
     always @(posedge clk) begin        
-        if (reqq_in_fire) begin
-            for (integer i = 0; i < NUM_BANKS; ++i) begin
-                if (per_bank_req_valid_unqual[i]) begin
-                    if (per_bank_req_rw_unqual[i]) begin
-                        `TRACE(1, ("%d: %s:%0d core-wr-req: addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", 
-                            $time, INSTANCE_ID, i, per_bank_req_addr_unqual[i], per_bank_req_tag_unqual[i], per_bank_req_byteen_unqual[i], per_bank_req_data_unqual[i], req_uuid_st0[i]));
-                    end else begin
-                        `TRACE(1, ("%d: %s:%0d core-rd-req: addr=0x%0h, tag=0x%0h (#%0d)\n", 
-                            $time, INSTANCE_ID, i, per_bank_req_addr_unqual[i], per_bank_req_tag_unqual[i], req_uuid_st0[i]));
-                    end
+        for (integer i = 0; i < NUM_BANKS; ++i) begin
+            if (per_bank_req_valid_unqual[i] && per_bank_req_ready_unqual[i]) begin
+                if (per_bank_req_rw_unqual[i]) begin
+                    `TRACE(1, ("%d: %s:%0d core-wr-req: addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", 
+                        $time, INSTANCE_ID, i, per_bank_req_addr_unqual[i], per_bank_req_tag_unqual[i], per_bank_req_byteen_unqual[i], per_bank_req_data_unqual[i], req_uuid_st0[i]));
+                end else begin
+                    `TRACE(1, ("%d: %s:%0d core-rd-req: addr=0x%0h, tag=0x%0h (#%0d)\n", 
+                        $time, INSTANCE_ID, i, per_bank_req_addr_unqual[i], per_bank_req_tag_unqual[i], req_uuid_st0[i]));
                 end
             end
-        end
-        if (reqq_out_fire) begin
-            for (integer i = 0; i < NUM_BANKS; ++i) begin
-                if (per_bank_req_valid[i]) begin
-                    if (per_bank_req_rw[i]) begin
-                        `TRACE(1, ("%d: %s:%0d core-wr-rsp: addr=0x%0h, tag=0x%0h, data=0x%0h (#%0d)\n", 
-                            $time, INSTANCE_ID, i, per_bank_req_addr[i], per_bank_req_tag[i], per_bank_req_data[i], req_uuid_st1[i]));
-                    end else begin
-                        `TRACE(1, ("%d: %s:%0d core-rd-rsp: addr=0x%0h, tag=0x%0h, data=0x%0h (#%0d)\n", 
-                            $time, INSTANCE_ID, i, per_bank_req_addr[i], per_bank_req_tag[i], per_bank_rsp_data[i], req_uuid_st1[i]));
-                    end
-                end
+
+            if (per_bank_rsp_valid[i] && per_bank_rsp_ready[i]) begin
+                `TRACE(1, ("%d: %s:%0d core-rd-rsp: tag=0x%0h, data=0x%0h (#%0d)\n", 
+                    $time, INSTANCE_ID, i, per_bank_rsp_tag[i], per_bank_rsp_data[i], req_uuid_st1[i]));
             end
         end
     end
