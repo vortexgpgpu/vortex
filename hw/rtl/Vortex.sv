@@ -15,8 +15,8 @@
 `endif
 
 `IGNORE_WARNINGS_BEGIN
-import VX_cache_types::*;
 import VX_gpu_types::*;
+import VX_cache_types::*;
 `IGNORE_WARNINGS_END
 
 module Vortex (
