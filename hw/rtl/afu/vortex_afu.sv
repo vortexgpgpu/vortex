@@ -912,10 +912,7 @@ assign cmd_run_done = !vx_busy;
 
 // COUT HANDLING //////////////////////////////////////////////////////////////
 
-wire [`VX_MEM_BYTEEN_WIDTH-1:0][7:0] vx_mem_req_data_r;
-wire [COUT_TID_WIDTH-1:0] cout_tid, cout_tid_r;
-wire cout_buf_valid_in, cout_buf_ready_in;
-wire cout_buf_valid_out, cout_buf_ready_out;
+wire [COUT_TID_WIDTH-1:0] cout_tid;
 
 VX_onehot_encoder #(
   .N (`VX_MEM_BYTEEN_WIDTH)
@@ -925,30 +922,14 @@ VX_onehot_encoder #(
   `UNUSED_PIN (valid_out)
 );
 
-wire cout_buf_valid_in  = vx_mem_req_valid && vx_mem_is_cout && vx_started;
-wire cout_buf_ready_out = ~cout_q_full;
-
-VX_generic_buffer #(
-    .DATAW   (COUT_TID_WIDTH + `VX_MEM_DATA_WIDTH),
-    .OUT_REG (1)
-) cout_buf (
-    .clk       (clk),
-    .reset     (reset),
-    .valid_in  (cout_buf_valid_in),
-    .ready_in  (cout_buf_ready_in),
-    .data_in   ({cout_tid,   vx_mem_req_data}),
-    .data_out  ({cout_tid_r, vx_mem_req_data_r}),
-    .valid_out (cout_buf_valid_out),
-    .ready_out (cout_buf_ready_out)
-);
-
 assign vx_mem_is_cout = (vx_mem_req_addr == `VX_MEM_ADDR_WIDTH'(`IO_COUT_ADDR >> (32 - `VX_MEM_ADDR_WIDTH)));
 
-assign vx_mem_req_ready = vx_mem_is_cout ? cout_buf_ready_in : vx_mem_req_ready_qual;
+assign vx_mem_req_ready = vx_mem_is_cout ? ~cout_q_full : vx_mem_req_ready_qual;
 
-wire [7:0] cout_char = vx_mem_req_data_r[cout_tid_r];
+wire [`VX_MEM_BYTEEN_WIDTH-1:0][7:0] vx_mem_req_data_m = vx_mem_req_data;
+wire [7:0] cout_char = vx_mem_req_data_m[cout_tid];
 
-wire cout_q_push = cout_buf_valid_out && cout_buf_ready_out;
+wire cout_q_push = vx_mem_req_valid && vx_mem_is_cout && vx_started && ~cout_q_full;
 
 wire cout_q_pop = cp2af_sRxPort.c0.mmioRdValid 
                && (mmio_hdr.address == MMIO_STATUS)
@@ -962,7 +943,7 @@ VX_fifo_queue #(
   .reset    (reset),
   .push     (cout_q_push),
   .pop      (cout_q_pop),
-  .data_in  ({cout_tid_r, cout_char}),
+  .data_in  ({cout_tid, cout_char}),
   .data_out (cout_q_dout),
   .empty    (cout_q_empty),
   .full     (cout_q_full),
