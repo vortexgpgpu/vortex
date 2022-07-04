@@ -37,11 +37,11 @@ module VX_elastic_buffer #(
         ) queue (
             .clk       (clk),
             .reset     (reset),
-            .valid_in  (valid_in),        
-            .data_in   (data_in),
-            .ready_in  (ready_in),      
-            .valid_out (valid_out),
+            .valid_in  (valid_in),                    
+            .ready_in  (ready_in),
+            .data_in   (data_in),          
             .data_out  (data_out),
+            .valid_out (valid_out),
             .ready_out (ready_out)
         );
     

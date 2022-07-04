@@ -47,10 +47,10 @@ module VX_stream_arb #(
                     .clk       (clk),
                     .reset     (reset),
                     .valid_in  (valid_in[BATCH_END-1: BATCH_BEGIN]),
+                    .ready_in  (ready_in[BATCH_END-1: BATCH_BEGIN]),
                     .data_in   (data_in[BATCH_END-1: BATCH_BEGIN]),
-                    .ready_in  (ready_in[BATCH_END-1: BATCH_BEGIN]),   
-                    .valid_out (valid_out[i]),
                     .data_out  (data_out[i]),
+                    .valid_out (valid_out[i]),
                     .ready_out (ready_out[i])
                 );
             end
@@ -103,10 +103,10 @@ module VX_stream_arb #(
                 .clk       (clk),
                 .reset     (reset),
                 .valid_in  (valid_tmp),
+                .ready_in  (ready_tmp),
                 .data_in   (data_tmp),
-                .ready_in  (ready_tmp),   
-                .valid_out (valid_out),   
                 .data_out  (data_out),
+                .valid_out (valid_out),
                 .ready_out (ready_out)
             );
 
@@ -199,12 +199,12 @@ module VX_stream_arb #(
                     .BUFFERED    (BUFFERED)
                 ) arb_slice (
                     .clk       (clk),
-                    .reset     (reset),                    
-                    .valid_in  (valid_in[i]),
-                    .data_in   (data_in[i]),
+                    .reset     (reset),              
+                    .valid_in  (valid_in[i]),                    
                     .ready_in  (ready_in[i]),
-                    .valid_out (valid_out[BATCH_END-1: BATCH_BEGIN]),
+                    .data_in   (data_in[i]),
                     .data_out  (data_out[BATCH_END-1: BATCH_BEGIN]),
+                    .valid_out (valid_out[BATCH_END-1: BATCH_BEGIN]),
                     .ready_out (ready_out[BATCH_END-1: BATCH_BEGIN])
                 );
             end
@@ -230,10 +230,10 @@ module VX_stream_arb #(
                 .clk       (clk),
                 .reset     (reset),
                 .valid_in  (valid_in),
-                .data_in   (data_in),
-                .ready_in  (ready_in),   
-                .valid_out (valid_tmp),   
+                .ready_in  (ready_in),
+                .data_in   (data_in),               
                 .data_out  (data_tmp),
+                .valid_out (valid_tmp),
                 .ready_out (ready_tmp)
             );
             
@@ -255,11 +255,11 @@ module VX_stream_arb #(
                 ) arb_slice (
                     .clk       (clk),
                     .reset     (reset),
-                    .valid_in  (valid_tmp[i]),
-                    .data_in   (data_tmp[i]),
+                    .valid_in  (valid_tmp[i]),                    
                     .ready_in  (ready_tmp[i]),
-                    .valid_out (valid_out[BATCH_END-1: BATCH_BEGIN]),
+                    .data_in   (data_tmp[i]),
                     .data_out  (data_out[BATCH_END-1: BATCH_BEGIN]),
+                    .valid_out (valid_out[BATCH_END-1: BATCH_BEGIN]),                    
                     .ready_out (ready_out[BATCH_END-1: BATCH_BEGIN])
                 );
             end
@@ -315,10 +315,10 @@ module VX_stream_arb #(
                         .clk       (clk),
                         .reset     (reset),
                         .valid_in  (valid_in[0][j] && arb_onehot[i]),
-                        .data_in   (data_in[0][j]),
                         .ready_in  (ready_out_r[i][j]),
-                        .valid_out (valid_out[i][j]),
+                        .data_in   (data_in[0][j]),                      
                         .data_out  (data_out[i][j]),
+                        .valid_out (valid_out[i][j]),
                         .ready_out (ready_out[i][j])
                     );
                 end
@@ -337,10 +337,10 @@ module VX_stream_arb #(
                     .clk       (clk),
                     .reset     (reset),
                     .valid_in  (valid_in[i][j]),
-                    .data_in   (data_in[i][j]),
-                    .ready_in  (ready_in[i][j]),      
-                    .valid_out (valid_out[i][j]),
-                    .data_out  (data_out[i][j]),
+                    .ready_in  (ready_in[i][j]),
+                    .data_in   (data_in[i][j]), 
+                    .data_out  (data_out[i][j]),                     
+                    .valid_out (valid_out[i][j]),                    
                     .ready_out (ready_out[i][j])
                 );
             end

@@ -301,21 +301,6 @@ module VX_gpu_unit #(
           , imadd_valid_out
         `endif
         }),
-        .data_in ({
-            {gpu_req_if.uuid, gpu_req_if.wid, gpu_req_if.tmask, gpu_req_if.PC, `NR_BITS'(0), 1'b0, RSP_DATAW'(wctl_rsp_data), 1'b1, ~is_join}
-        `ifdef EXT_TEX_ENABLE
-          , {tex_commit_if.uuid, tex_commit_if.wid, tex_commit_if.tmask, tex_commit_if.PC, tex_commit_if.rd, tex_commit_if.wb, RSP_DATAW'(tex_commit_if.data), tex_commit_if.eop, 1'b0}
-        `endif
-        `ifdef EXT_RASTER_ENABLE
-          , {raster_commit_if.uuid, raster_commit_if.wid, raster_commit_if.tmask, raster_commit_if.PC, raster_commit_if.rd, raster_commit_if.wb, RSP_DATAW'(raster_commit_if.data), raster_commit_if.eop, 1'b0}
-        `endif
-        `ifdef EXT_ROP_ENABLE
-          , {rop_commit_if.uuid, rop_commit_if.wid, rop_commit_if.tmask, rop_commit_if.PC, rop_commit_if.rd, rop_commit_if.wb, RSP_DATAW'(rop_commit_if.data), rop_commit_if.eop, 1'b0}
-        `endif
-        `ifdef EXT_IMADD_ENABLE
-          , {imadd_uuid_out, imadd_wid_out, imadd_tmask_out, imadd_PC_out, imadd_rd_out, 1'b1, RSP_DATAW'(imadd_data_out), 1'b1, 1'b0}
-        `endif
-        }),
         .ready_in ({
             wctl_rsp_ready
         `ifdef EXT_TEX_ENABLE
@@ -331,8 +316,23 @@ module VX_gpu_unit #(
           , imadd_ready_out
         `endif
         }),
-        .valid_out (gpu_commit_if.valid),
+        .data_in ({
+            {gpu_req_if.uuid, gpu_req_if.wid, gpu_req_if.tmask, gpu_req_if.PC, `NR_BITS'(0), 1'b0, RSP_DATAW'(wctl_rsp_data), 1'b1, ~is_join}
+        `ifdef EXT_TEX_ENABLE
+          , {tex_commit_if.uuid, tex_commit_if.wid, tex_commit_if.tmask, tex_commit_if.PC, tex_commit_if.rd, tex_commit_if.wb, RSP_DATAW'(tex_commit_if.data), tex_commit_if.eop, 1'b0}
+        `endif
+        `ifdef EXT_RASTER_ENABLE
+          , {raster_commit_if.uuid, raster_commit_if.wid, raster_commit_if.tmask, raster_commit_if.PC, raster_commit_if.rd, raster_commit_if.wb, RSP_DATAW'(raster_commit_if.data), raster_commit_if.eop, 1'b0}
+        `endif
+        `ifdef EXT_ROP_ENABLE
+          , {rop_commit_if.uuid, rop_commit_if.wid, rop_commit_if.tmask, rop_commit_if.PC, rop_commit_if.rd, rop_commit_if.wb, RSP_DATAW'(rop_commit_if.data), rop_commit_if.eop, 1'b0}
+        `endif
+        `ifdef EXT_IMADD_ENABLE
+          , {imadd_uuid_out, imadd_wid_out, imadd_tmask_out, imadd_PC_out, imadd_rd_out, 1'b1, RSP_DATAW'(imadd_data_out), 1'b1, 1'b0}
+        `endif
+        }),
         .data_out  ({gpu_commit_if.uuid, gpu_commit_if.wid, gpu_commit_if.tmask, gpu_commit_if.PC, gpu_commit_if.rd, gpu_commit_if.wb, rsp_data, gpu_commit_if.eop, rsp_is_wctl}),
+        .valid_out (gpu_commit_if.valid),
         .ready_out (gpu_commit_if.ready)
     );
 

@@ -157,6 +157,7 @@ module VX_alu_unit #(
         .reset      (reset),
         
         // Inputs
+        .valid_in   (mul_valid_in),
         .alu_op     (mul_op),
         .uuid_in    (alu_req_if.uuid),
         .wid_in     (alu_req_if.wid),
@@ -166,8 +167,10 @@ module VX_alu_unit #(
         .wb_in      (alu_req_if.wb),
         .alu_in1    (alu_req_if.rs1_data), 
         .alu_in2    (alu_req_if.rs2_data),
+        .ready_in   (mul_ready_in),
 
         // Outputs
+        .valid_out  (mul_valid_out),
         .wid_out    (mul_wid),
         .uuid_out   (mul_uuid),
         .tmask_out  (mul_tmask),
@@ -175,11 +178,6 @@ module VX_alu_unit #(
         .rd_out     (mul_rd),
         .wb_out     (mul_wb),
         .data_out   (mul_data),
-
-        // handshake
-        .valid_in   (mul_valid_in),
-        .ready_in   (mul_ready_in),
-        .valid_out  (mul_valid_out),
         .ready_out  (mul_ready_out)
     );
 
@@ -210,20 +208,20 @@ module VX_alu_unit #(
             , mul_valid_out
         `endif
         }),
-        .data_in   ({
-            {alu_uuid, alu_wid, alu_tmask, alu_PC, alu_rd, alu_wb, alu_data}
-        `ifdef EXT_M_ENABLE
-            , {mul_uuid, mul_wid, mul_tmask, mul_PC, mul_rd, mul_wb, mul_data}
-        `endif
-        }),
         .ready_in  ({
             alu_ready_out
         `ifdef EXT_M_ENABLE
             , mul_ready_out
         `endif
         }),
-        .valid_out (alu_commit_if.valid),
+        .data_in   ({
+            {alu_uuid, alu_wid, alu_tmask, alu_PC, alu_rd, alu_wb, alu_data}
+        `ifdef EXT_M_ENABLE
+            , {mul_uuid, mul_wid, mul_tmask, mul_PC, mul_rd, mul_wb, mul_data}
+        `endif
+        }),
         .data_out  ({alu_commit_if.uuid, alu_commit_if.wid, alu_commit_if.tmask, alu_commit_if.PC, alu_commit_if.rd, alu_commit_if.wb, alu_commit_if.data}),
+        .valid_out (alu_commit_if.valid),        
         .ready_out (alu_commit_if.ready)
     );
 

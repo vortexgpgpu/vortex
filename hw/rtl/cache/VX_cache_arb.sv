@@ -82,10 +82,10 @@ module VX_cache_arb #(
         .clk       (clk),
         .reset     (reset),
         .valid_in  (req_valid_in),
-        .data_in   (req_data_in),
         .ready_in  (req_ready_in),
-        .valid_out (req_valid_out),
-        .data_out  (req_data_out),
+        .data_in   (req_data_in),
+        .data_out  (req_data_out),     
+        .valid_out (req_valid_out),        
         .ready_out (req_ready_out)
     );
 
@@ -146,10 +146,10 @@ module VX_cache_arb #(
                 .reset     (reset),
                 .sel_in    (rsp_sel_in),
                 .valid_in  (rsp_valid_in),
-                .data_in   (rsp_data_in),
                 .ready_in  (rsp_ready_in),
-                .valid_out (rsp_valid_out),
-                .data_out  (rsp_data_out),
+                .data_in   (rsp_data_in),
+                .data_out  (rsp_data_out),              
+                .valid_out (rsp_valid_out),                
                 .ready_out (rsp_ready_out)
             );
 
@@ -172,10 +172,10 @@ module VX_cache_arb #(
                 .clk       (clk),
                 .reset     (reset),
                 .valid_in  (rsp_valid_in),
-                .data_in   (rsp_data_in),
                 .ready_in  (rsp_ready_in),
-                .valid_out (rsp_valid_out),
+                .data_in   (rsp_data_in),                
                 .data_out  (rsp_data_out),
+                .valid_out (rsp_valid_out),                
                 .ready_out (rsp_ready_out)
             );
 

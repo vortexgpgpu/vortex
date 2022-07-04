@@ -68,10 +68,10 @@ module VX_smem_switch #(
             .reset     (reset),
             .sel_in    (req_sel_in),
             .valid_in  (req_in_if.valid[i]),
-            .data_in   (req_data_in),
             .ready_in  (req_in_if.ready[i]),
-            .valid_out (req_valid_out),
+            .data_in   (req_data_in),
             .data_out  (req_data_out),
+            .valid_out (req_valid_out),
             .ready_out (req_ready_out)
         );
     
@@ -118,11 +118,11 @@ module VX_smem_switch #(
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (rsp_valid_out),
-        .data_in   (rsp_data_out),
+        .valid_in  (rsp_valid_out),        
         .ready_in  (rsp_ready_out),
-        .valid_out (rsp_in_if.valid),
+        .data_in   (rsp_data_out),     
         .data_out  (rsp_data_in),
+        .valid_out (rsp_in_if.valid),
         .ready_out (rsp_in_if.ready)
     );
 

@@ -523,11 +523,6 @@
 `define SMEM_NUM_BANKS `NUM_THREADS
 `endif
 
-// Core Request Queue Size
-`ifndef SMEM_CREQ_SIZE
-`define SMEM_CREQ_SIZE 2
-`endif
-
 // Tcache Configurable Knobs //////////////////////////////////////////////////
 
 // Enable/disable cache

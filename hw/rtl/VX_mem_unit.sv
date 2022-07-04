@@ -276,7 +276,6 @@ module VX_mem_unit # (
         .NUM_BANKS  (`SMEM_NUM_BANKS),
         .WORD_SIZE  (DCACHE_WORD_SIZE),
         .ADDR_WIDTH (SMEM_ADDR_WIDTH),
-        .REQ_SIZE   (`SMEM_CREQ_SIZE),
         .OUT_REG    (2),
         .UUID_WIDTH (`UUID_BITS), 
         .TAG_WIDTH  (DCACHE_SM_TAG_WIDTH)

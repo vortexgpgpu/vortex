@@ -119,8 +119,8 @@ module VX_bank #(
     ) core_req_queue (
         .clk        (clk),
         .reset      (reset),
-        .ready_in   (core_req_ready),
         .valid_in   (core_req_valid),
+        .ready_in   (core_req_ready),        
         .data_in    ({core_req_rw, core_req_addr, core_req_pmask, core_req_wsel, core_req_byteen, core_req_data, core_req_idx, core_req_tag}),                
         .data_out   ({creq_rw,     creq_addr,     creq_pmask,     creq_wsel,     creq_byteen,     creq_data,     creq_idx,     creq_tag}),
         .ready_out  (creq_ready),
@@ -420,9 +420,9 @@ module VX_bank #(
     ) core_rsp_queue (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (crsq_valid),        
+        .valid_in  (crsq_valid),
+        .ready_in  (crsq_ready),
         .data_in   ({crsq_tag, crsq_pmask, crsq_data, crsq_idx}),
-        .ready_in  (crsq_ready),      
         .valid_out (core_rsp_valid),
         .data_out  ({core_rsp_tag, core_rsp_pmask, core_rsp_data, core_rsp_idx}),
         .ready_out (core_rsp_ready)

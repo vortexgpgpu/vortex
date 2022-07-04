@@ -70,11 +70,11 @@ module VX_stream_switch #(
                 ) out_buffer (
                     .clk       (clk),
                     .reset     (reset),
-                    .valid_in  (valid_out_r[i][j]),
-                    .data_in   (data_out_r[i][j]),
+                    .valid_in  (valid_out_r[i][j]),                    
                     .ready_in  (ready_out_r[i][j]),
-                    .valid_out (valid_out[i][j]),
+                    .data_in   (data_out_r[i][j]),
                     .data_out  (data_out[i][j]),
+                    .valid_out (valid_out[i][j]),
                     .ready_out (ready_out[i][j])
                 );
             end
@@ -105,10 +105,10 @@ module VX_stream_switch #(
                             .clk       (clk),
                             .reset     (reset),
                             .valid_in  (valid_out_r[i][j][k]),
-                            .data_in   (data_in[i][k]),
                             .ready_in  (ready_out_r[i][j][k]),
-                            .valid_out (valid_out[ii][k]),
+                            .data_in   (data_in[i][k]),                                                     
                             .data_out  (data_out[ii][k]),
+                            .valid_out (valid_out[ii][k]),
                             .ready_out (ready_out[ii][k])
                         );
                     end
@@ -133,10 +133,10 @@ module VX_stream_switch #(
                     .clk       (clk),
                     .reset     (reset),
                     .valid_in  (valid_in[i][j]),
+                    .ready_in  (ready_in[i][j]),
                     .data_in   (data_in[i][j]),
-                    .ready_in  (ready_in[i][j]),      
-                    .valid_out (valid_out[i][j]),
                     .data_out  (data_out[i][j]),
+                    .valid_out (valid_out[i][j]),
                     .ready_out (ready_out[i][j])
                 );
             end

@@ -15,14 +15,12 @@ module testbench();
     rgba_t color_out;
     rgba_t src_factor;
     rgba_t dst_factor;
-
-
-
+    
     VX_rop_blend #() dut (
         .clk        (clk),
-        .reset      (reset),
-        .ready_in   (),
+        .reset      (reset),        
         .valid_in   (1), // only one needed
+        .ready_in   (),
         .ready_out  (0), // only one needed
         .valid_out  (),
         .dcrs       (dcrs),

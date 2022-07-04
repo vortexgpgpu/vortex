@@ -403,11 +403,11 @@ module VX_fpu_dpi #(
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (per_core_valid_out),
-        .data_in   (per_core_data_out),
+        .valid_in  (per_core_valid_out),        
         .ready_in  (per_core_ready_out),
-        .valid_out (valid_out),
+        .data_in   (per_core_data_out),
         .data_out  ({result, has_fflags, fflags, tag_out}),
+        .valid_out (valid_out),
         .ready_out (ready_out)
     );
 

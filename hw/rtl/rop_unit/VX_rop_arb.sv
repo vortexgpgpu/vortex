@@ -44,10 +44,10 @@ module VX_rop_arb #(
         .clk        (clk),
         .reset      (reset),
         .valid_in   (req_valid_in),
-        .data_in    (req_data_in),
         .ready_in   (req_ready_in),
-        .valid_out  (req_valid_out),
+        .data_in    (req_data_in),
         .data_out   (req_data_out),
+        .valid_out  (req_valid_out),
         .ready_out  (req_ready_out)
     );
     

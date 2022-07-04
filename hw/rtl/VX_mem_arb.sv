@@ -64,10 +64,10 @@ module VX_mem_arb #(
         .clk       (clk),
         .reset     (reset),
         .valid_in  (req_valid_in),
-        .data_in   (req_data_in),
         .ready_in  (req_ready_in),
-        .valid_out (req_out_if.valid),
+        .data_in   (req_data_in),                
         .data_out  ({req_out_if.tag, req_out_if.addr, req_out_if.rw, req_out_if.byteen, req_out_if.data}),
+        .valid_out (req_out_if.valid),
         .ready_out (req_out_if.ready)
     );
 
@@ -104,10 +104,10 @@ module VX_mem_arb #(
         .reset     (reset),
         .sel_in    (rsp_sel),
         .valid_in  (rsp_out_if.valid),
-        .data_in   ({rsp_tag_out, rsp_out_if.data}),
         .ready_in  (rsp_out_if.ready),
-        .valid_out (rsp_valid_in),
+        .data_in   ({rsp_tag_out, rsp_out_if.data}),        
         .data_out  (rsp_data_in),
+        .valid_out (rsp_valid_in),        
         .ready_out (rsp_ready_in)
     );
     

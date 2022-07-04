@@ -481,10 +481,10 @@ module VX_cache #(
         .clk       (clk),
         .reset     (reset),
         .valid_in  (per_bank_mem_req_valid),
+        .ready_in  (per_bank_mem_req_ready),
         .data_in   (data_in),
-        .ready_in  (per_bank_mem_req_ready),   
-        .valid_out (mem_req_valid_p),   
         .data_out  ({mem_req_addr_p, mem_req_id_p, mem_req_rw_p, mem_req_pmask_p, mem_req_byteen_p, mem_req_wsel_p, mem_req_data_p}),
+        .valid_out (mem_req_valid_p),
         .ready_out (mem_req_ready_p)
     );
 
