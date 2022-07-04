@@ -1,4 +1,5 @@
 `include "VX_define.vh"
+`include "VX_gpu_types.vh"
 `include "VX_cache_types.vh"
 
 `ifdef EXT_TEX_ENABLE
@@ -15,6 +16,7 @@
 
 `IGNORE_WARNINGS_BEGIN
 import VX_cache_types::*;
+import VX_gpu_types::*;
 `IGNORE_WARNINGS_END
 
 module Vortex (
@@ -166,10 +168,16 @@ module Vortex (
 
     wire [`NUM_CLUSTERS-1:0] per_cluster_busy;
 
+    base_dcrs_t base_dcrs;
+    assign base_dcrs = dcr_base_if.data;
+    `UNUSED_VAR (base_dcrs)
+
     // Generate all clusters
     for (genvar i = 0; i < `NUM_CLUSTERS; ++i) begin
 
-        `RESET_RELAY (cluster_reset, reset_or_start);
+        `RESET_RELAY_EX (cluster_reset, reset_or_start, (`NUM_CLUSTERS > 1));
+
+        `BUFFER_EX (cluster_base_dcrs, base_dcrs, (`NUM_CLUSTERS > 1));
 
         VX_cluster #(
             .CLUSTER_ID (i)
@@ -184,7 +192,7 @@ module Vortex (
             .perf_memsys_total_if (perf_memsys_total_if),
         `endif
             
-            .dcr_base_if        (dcr_base_if),
+            .base_dcrs          (cluster_base_dcrs),
 
         `ifdef EXT_TEX_ENABLE
         `ifdef PERF_ENABLE

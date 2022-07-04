@@ -142,12 +142,40 @@
     end                                         \
     `TRACE(lvl, ("}"))
 
-`define RESET_RELAY(signal, rst)  \
-    wire signal;                  \
-    VX_reset_relay __``signal (   \
-        .clk     (clk),           \
-        .reset   (rst),           \
-        .reset_o (signal)         \
+`define RESET_RELAY(dst, src)  \
+    wire dst;                  \
+    VX_reset_relay __``dst (   \
+        .clk     (clk),        \
+        .reset   (src),        \
+        .reset_o (dst)         \
+    )
+
+`define RESET_RELAY_EX(dst, src, ENABLE)    \
+    wire dst;                               \
+    VX_reset_relay #(.DEPTH(ENABLE)) __``dst ( \
+        .clk     (clk),                     \
+        .reset   (src),                     \
+        .reset_o (dst)                      \
+    )
+
+`define BUFFER(dst, src)        \
+    wire [$bits(src)-1:0] dst;  \
+    VX_pipe_register #(.DATAW($bits(src))) __``dst ( \
+        .clk      (clk),        \
+        .reset    (1'b0),       \
+        .enable   (1'b1),       \
+        .data_in  (src),        \
+        .data_out (dst)         \
+    )
+
+`define BUFFER_EX(dst, src, ENABLE) \
+    wire [$bits(src)-1:0] dst;      \
+    VX_pipe_register #(.DATAW($bits(src)), .DEPTH(ENABLE)) __``dst ( \
+        .clk      (clk),            \
+        .reset    (1'b0),           \
+        .enable   (1'b1),           \
+        .data_in  (src),            \
+        .data_out (dst)             \
     )
 
 `define POP_COUNT(out, in)  \

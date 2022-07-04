@@ -20,7 +20,7 @@ module VX_socket #(
     VX_perf_memsys_if.slave perf_memsys_if,
 `endif
 
-    VX_dcr_base_if.slave    dcr_base_if,
+    input base_dcrs_t       base_dcrs,
 
     VX_cache_req_if.master  dcache_req_if,
     VX_cache_rsp_if.slave   dcache_rsp_if,
@@ -308,7 +308,9 @@ module VX_socket #(
     // Generate all cores
     for (genvar i = 0; i < `SOCKET_SIZE; ++i) begin
 
-        `RESET_RELAY (core_reset, reset);
+        `RESET_RELAY_EX (core_reset, reset, (`SOCKET_SIZE > 1));        
+
+        `BUFFER_EX (core_base_dcrs, base_dcrs, (`SOCKET_SIZE > 1));
 
         VX_core #(
             .CORE_ID ((SOCKET_ID * `SOCKET_SIZE) + i)
@@ -322,8 +324,7 @@ module VX_socket #(
             .perf_memsys_if (perf_memsys_if),
         `endif
             
-            .dcr_base_if    (dcr_base_if),
-
+            .base_dcrs      (core_base_dcrs),
             .dcache_req_if  (per_core_dcache_req_if[i]),
             .dcache_rsp_if  (per_core_dcache_rsp_if[i]),
 

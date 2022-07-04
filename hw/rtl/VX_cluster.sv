@@ -19,7 +19,7 @@ module VX_cluster #(
     VX_perf_memsys_if.slave     perf_memsys_total_if,
 `endif
 
-    VX_dcr_base_if.slave        dcr_base_if,
+    input base_dcrs_t           base_dcrs,
 
 `ifdef EXT_TEX_ENABLE
 `ifdef PERF_ENABLE
@@ -88,6 +88,7 @@ module VX_cluster #(
 
     // Generate all raster units
     for (genvar i = 0; i < `NUM_RASTER_UNITS; ++i) begin
+
         `RESET_RELAY (raster_reset, reset);
 
         VX_raster_unit #( 
@@ -174,6 +175,7 @@ module VX_cluster #(
 
     // Generate all rop units
     for (genvar i = 0; i < `NUM_ROP_UNITS; ++i) begin
+
         `RESET_RELAY (rop_reset, reset);
 
         VX_rop_unit #(
@@ -251,6 +253,7 @@ module VX_cluster #(
 
     // Generate all texture units
     for (genvar i = 0; i < `NUM_TEX_UNITS; ++i) begin
+
         `RESET_RELAY (tex_reset, reset);
 
         VX_tex_unit #(
@@ -313,6 +316,7 @@ module VX_cluster #(
 
     // Generate all floating-point units
     for (genvar i = 0; i < `NUM_FPU_UNITS; ++i) begin
+
         `RESET_RELAY (fpu_reset, reset);
 
         VX_fpu_unit #(
@@ -411,7 +415,9 @@ module VX_cluster #(
     // Generate all sockets
     for (genvar i = 0; i < `NUM_SOCKETS; ++i) begin
 
-        `RESET_RELAY (socket_reset, reset);
+        `RESET_RELAY_EX (socket_reset, reset, (`NUM_SOCKETS > 1));
+
+        `BUFFER_EX (socket_base_dcrs, base_dcrs, (`NUM_SOCKETS > 1));
 
         VX_socket #(
             .SOCKET_ID ((CLUSTER_ID * `NUM_SOCKETS) + i)
@@ -425,7 +431,7 @@ module VX_cluster #(
             .perf_memsys_if (perf_memsys_total_if),
         `endif
             
-            .dcr_base_if    (dcr_base_if),
+            .base_dcrs      (socket_base_dcrs),
 
             .dcache_req_if  (per_socket_dcache_req_if[i]),
             .dcache_rsp_if  (per_socket_dcache_rsp_if[i]),

@@ -67,53 +67,53 @@ module VX_cache_cluster #(
     // Memory response
     VX_mem_rsp_if.slave     mem_rsp_if
 );
-
-    `STATIC_ASSERT(NUM_INPUTS >= `UP(NUM_UNITS), ("invalid parameter"))
-
-    localparam PASSTHRU = (NUM_UNITS == 0);
-    localparam ARB_TAG_WIDTH = TAG_WIDTH + `ARB_SEL_BITS(NUM_INPUTS, `UP(NUM_UNITS));    
+    localparam NUM_CACHES = `UP(NUM_UNITS);
+    localparam PASSTHRU   = (NUM_UNITS == 0);
+    localparam ARB_TAG_WIDTH = TAG_WIDTH + `ARB_SEL_BITS(NUM_INPUTS, NUM_CACHES);    
     localparam MEM_TAG_WIDTH = PASSTHRU ? (NC_ENABLE ? `CACHE_NC_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH) : 
                                                        `CACHE_BYPASS_TAG_WIDTH(NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH)) : 
                                           (NC_ENABLE ? `CACHE_NC_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, NUM_REQS, LINE_SIZE, WORD_SIZE, ARB_TAG_WIDTH) :
                                                        `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS));
 
+    `STATIC_ASSERT(NUM_INPUTS >= NUM_CACHES, ("invalid parameter"))
+
 `ifdef PERF_ENABLE
-    VX_perf_cache_if perf_cache_unit_if[`UP(NUM_UNITS)]();
-    `PERF_CACHE_ADD (perf_cache_if, perf_cache_unit_if, `UP(NUM_UNITS));
+    VX_perf_cache_if perf_cache_unit_if[NUM_CACHES]();
+    `PERF_CACHE_ADD (perf_cache_if, perf_cache_unit_if, NUM_CACHES);
 `endif
 
     VX_mem_req_if #(
         .DATA_WIDTH (`LINE_WIDTH),
         .TAG_WIDTH  (MEM_TAG_WIDTH)
-    ) cache_mem_req_if[`UP(NUM_UNITS)]();
+    ) cache_mem_req_if[NUM_CACHES]();
     
     VX_mem_rsp_if #(
         .DATA_WIDTH (`LINE_WIDTH),
         .TAG_WIDTH  (MEM_TAG_WIDTH)
-    ) cache_mem_rsp_if[`UP(NUM_UNITS)]();
+    ) cache_mem_rsp_if[NUM_CACHES]();
 
     VX_cache_req_if #(
         .NUM_REQS  (NUM_REQS), 
         .WORD_SIZE (WORD_SIZE),
         .TAG_WIDTH (ARB_TAG_WIDTH)
-    ) arb_core_req_if[`UP(NUM_UNITS)]();
+    ) arb_core_req_if[NUM_CACHES]();
 
     VX_cache_rsp_if #(
         .NUM_REQS  (NUM_REQS), 
         .WORD_SIZE (WORD_SIZE), 
         .TAG_WIDTH (ARB_TAG_WIDTH)
-    ) arb_core_rsp_if[`UP(NUM_UNITS)]();
+    ) arb_core_rsp_if[NUM_CACHES]();
 
     VX_cache_arb #(
         .NUM_INPUTS   (NUM_INPUTS),
-        .NUM_OUTPUTS  (`UP(NUM_UNITS)),
+        .NUM_OUTPUTS  (NUM_CACHES),
         .NUM_LANES    (NUM_REQS),
         .DATA_SIZE    (WORD_SIZE),
         .TAG_WIDTH    (TAG_WIDTH),
         .TAG_SEL_IDX  (TAG_SEL_IDX),
         .ARBITER      ("R"),
-        .BUFFERED_REQ ((NUM_INPUTS != `UP(NUM_UNITS)) ? 2 : 0),
-        .BUFFERED_RSP ((NUM_INPUTS != `UP(NUM_UNITS)) ? 2 : 0)
+        .BUFFERED_REQ ((NUM_INPUTS != NUM_CACHES) ? 2 : 0),
+        .BUFFERED_RSP ((NUM_INPUTS != NUM_CACHES) ? 2 : 0)
     ) cache_arb (
         .clk        (clk),
         .reset      (reset),
@@ -123,7 +123,7 @@ module VX_cache_cluster #(
         .rsp_out_if (arb_core_rsp_if)
     );
 
-    for (genvar i = 0; i < `UP(NUM_UNITS); ++i) begin
+    for (genvar i = 0; i < NUM_CACHES; ++i) begin
 
         VX_mem_req_if #(
             .DATA_WIDTH (`WORD_WIDTH),
@@ -143,7 +143,7 @@ module VX_cache_cluster #(
             `CACHE_RSP_FROM_MEM(arb_core_rsp_if[i], arb_core_rsp_m_if, j);
         end
 
-        `RESET_RELAY (cache_reset, reset);
+        `RESET_RELAY_EX (cache_reset, reset, (NUM_CACHES > 1));
 
         VX_cache_wrap #(
             .INSTANCE_ID  ($sformatf("%s%0d", INSTANCE_ID, i)),
@@ -182,13 +182,13 @@ module VX_cache_cluster #(
     end
 
     VX_mem_arb #(
-        .NUM_REQS     (`UP(NUM_UNITS)),
+        .NUM_REQS     (NUM_CACHES),
         .DATA_WIDTH   (`LINE_WIDTH),
         .TAG_WIDTH    (MEM_TAG_WIDTH),
         .TAG_SEL_IDX  (1), // Skip 0 for NC flag
         .ARBITER      ("R"),
-        .BUFFERED_REQ ((`UP(NUM_UNITS) > 1) ? 2 : 0),
-        .BUFFERED_RSP ((`UP(NUM_UNITS) > 1) ? 2 : 0)
+        .BUFFERED_REQ ((NUM_CACHES > 1) ? 2 : 0),
+        .BUFFERED_RSP ((NUM_CACHES > 1) ? 2 : 0)
     ) mem_arb (
         .clk        (clk),
         .reset      (reset),

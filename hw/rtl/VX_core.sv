@@ -18,7 +18,7 @@ module VX_core #(
     VX_perf_memsys_if.slave perf_memsys_if,
 `endif
 
-    VX_dcr_base_if.slave    dcr_base_if,
+    input base_dcrs_t       base_dcrs,
 
     VX_cache_req_if.master  dcache_req_if,
     VX_cache_rsp_if.slave   dcache_rsp_if,
@@ -91,11 +91,6 @@ module VX_core #(
 `ifdef PERF_ENABLE
     VX_perf_pipeline_if perf_pipeline_if();
 `endif
-
-    base_dcrs_t base_dcrs;
-    always @(posedge clk) begin
-        base_dcrs <= dcr_base_if.data;
-    end
 
     `RESET_RELAY (fetch_reset, reset);
     `RESET_RELAY (decode_reset, reset);
