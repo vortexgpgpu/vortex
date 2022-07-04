@@ -120,8 +120,8 @@ module VX_fpu_fpga #(
         .fflags     (per_core_fflags[FPU_DIV]),   
         .result     (per_core_result[FPU_DIV]),
         .tag_out    (per_core_tag_out[FPU_DIV]),
-        .ready_out  (per_core_ready_out[FPU_DIV]),
-        .valid_out  (per_core_valid_out[FPU_DIV])
+        .valid_out  (per_core_valid_out[FPU_DIV]),
+        .ready_out  (per_core_ready_out[FPU_DIV])
     );
 
     VX_fpu_sqrt #(
@@ -139,8 +139,8 @@ module VX_fpu_fpga #(
         .fflags     (per_core_fflags[FPU_SQRT]),
         .result     (per_core_result[FPU_SQRT]),
         .tag_out    (per_core_tag_out[FPU_SQRT]),
-        .ready_out  (per_core_ready_out[FPU_SQRT]),
-        .valid_out  (per_core_valid_out[FPU_SQRT])
+        .valid_out  (per_core_valid_out[FPU_SQRT]),
+        .ready_out  (per_core_ready_out[FPU_SQRT])
     );
 
     VX_fpu_cvt #(
@@ -160,8 +160,8 @@ module VX_fpu_fpga #(
         .fflags     (per_core_fflags[FPU_CVT]),
         .result     (per_core_result[FPU_CVT]),
         .tag_out    (per_core_tag_out[FPU_CVT]),
-        .ready_out  (per_core_ready_out[FPU_CVT]),
-        .valid_out  (per_core_valid_out[FPU_CVT])
+        .valid_out  (per_core_valid_out[FPU_CVT]),
+        .ready_out  (per_core_ready_out[FPU_CVT])
     );
 
     VX_fpu_ncomp #(
@@ -181,8 +181,8 @@ module VX_fpu_fpga #(
         .has_fflags (per_core_has_fflags[FPU_NCP]),
         .fflags     (per_core_fflags[FPU_NCP]),
         .tag_out    (per_core_tag_out[FPU_NCP]),
-        .ready_out  (per_core_ready_out[FPU_NCP]),
-        .valid_out  (per_core_valid_out[FPU_NCP])
+        .valid_out  (per_core_valid_out[FPU_NCP]),
+        .ready_out  (per_core_ready_out[FPU_NCP])
     );
 
     ///////////////////////////////////////////////////////////////////////////

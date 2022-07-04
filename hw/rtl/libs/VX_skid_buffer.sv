@@ -35,8 +35,8 @@ module VX_skid_buffer #(
             reg             valid_out_r;
             reg             use_buffer;
             
-            wire fire_in   = valid_in && ready_in;
-            wire stall_out = valid_out && ~ready_out;
+            wire push = valid_in && ready_in;
+            wire stall_out = valid_out_r && ~ready_out;
             
             always @(posedge clk) begin
                 if (reset) begin
@@ -55,7 +55,7 @@ module VX_skid_buffer #(
             end
 
             always @(posedge clk) begin
-                if (fire_in) begin
+                if (push) begin
                     buffer <= data_in;
                 end
                 if (~stall_out && ~use_buffer) begin

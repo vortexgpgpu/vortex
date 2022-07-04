@@ -123,8 +123,8 @@ module VX_bank #(
         .ready_in   (core_req_ready),        
         .data_in    ({core_req_rw, core_req_addr, core_req_pmask, core_req_wsel, core_req_byteen, core_req_data, core_req_idx, core_req_tag}),                
         .data_out   ({creq_rw,     creq_addr,     creq_pmask,     creq_wsel,     creq_byteen,     creq_data,     creq_idx,     creq_tag}),
-        .ready_out  (creq_ready),
-        .valid_out  (creq_valid)
+        .valid_out  (creq_valid),
+        .ready_out  (creq_ready)
     );
     
     wire                            mreq_alm_full;    
