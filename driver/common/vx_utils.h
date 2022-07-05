@@ -5,22 +5,14 @@
 #include <unordered_map>
 
 class DeviceConfig {
-public:
-    DeviceConfig();
-    
-    void write(uint32_t addr, uint64_t value) {
-        data_[addr] = value;
-    }
-
-    uint64_t read(uint32_t addr) const {
-        return data_.at(addr);
-    }
-
+public:    
+    void write(uint32_t addr, uint64_t value);
+    uint64_t read(uint32_t addr) const;
 private:
      std::unordered_map<uint32_t, uint64_t> data_;
 };
 
-void dcr_initialize();
+void dcr_initialize(vx_device_h device);
 
 uint64_t aligned_size(uint64_t size, uint64_t alignment);
 

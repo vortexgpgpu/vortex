@@ -81,16 +81,6 @@ public:
     std::array<uint32_t, DCR_RASTER_STATE_COUNT> states_;
 
   public:
-    DCRS() {
-      this->clear();
-    }
-
-    void clear() {
-      for (auto& state : states_) {
-        state = 0;
-      }
-    }
-
     uint32_t read(uint32_t addr) const {
       uint32_t state = DCR_RASTER_STATE(addr);
       return states_.at(state);

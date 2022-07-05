@@ -66,10 +66,8 @@ module Vortex_axi #(
     input  wire                         dcr_wr_valid,
     input  wire [`VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr,
     input  wire [`VX_DCR_DATA_WIDTH-1:0] dcr_wr_data,
-    output wire                         dcr_wr_ready,
 
-    // Control / status
-    input wire                          start,
+    // Status
     output wire                         busy
 );
     wire                            mem_req_valid;
@@ -174,9 +172,7 @@ module Vortex_axi #(
         .dcr_wr_valid   (dcr_wr_valid),
         .dcr_wr_addr    (dcr_wr_addr),
         .dcr_wr_data    (dcr_wr_data),
-        .dcr_wr_ready   (dcr_wr_ready),
 
-        .start          (start),
         .busy           (busy)
     );
 

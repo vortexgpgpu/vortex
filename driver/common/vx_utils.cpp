@@ -20,13 +20,6 @@ bool is_aligned(uint64_t addr, uint64_t alignment) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-DeviceConfig::DeviceConfig() {
-  data_[DCR_STARTUP_ADDR] = STARTUP_ADDR;
-  data_[DCR_MPM_CLASS] = 0;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
 class AutoPerfDump {
 public:
     AutoPerfDump() : perf_class_(0) {}
@@ -38,10 +31,10 @@ public:
     }
 
     void add_device(vx_device_h device) {
-      auto perf_class_s = getenv ("PERF_CLASS");
+      auto perf_class_s = getenv("PERF_CLASS");
       if (perf_class_s) {
         perf_class_ = std::atoi(perf_class_s);
-        vx_dcr_write(device, DCR_MPM_CLASS, perf_class_);
+        vx_dcr_write(device, DCR_BASE_MPM_CLASS, perf_class_);
       }
       devices_.push_back(device);
     }
@@ -156,10 +149,35 @@ extern int vx_upload_kernel_file(vx_device_h device, const char* filename) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-/*static uint32_t get_csr_32(const uint32_t* buffer, int addr) {
-  uint32_t value_lo = buffer[addr - CSR_MPM_BASE];
-  return value_lo;
-}*/
+void DeviceConfig::write(uint32_t addr, uint64_t value) {
+  data_[addr] = value;
+}
+
+uint64_t DeviceConfig::read(uint32_t addr) const {
+  return data_.at(addr);
+}
+
+void dcr_initialize(vx_device_h device) {
+  vx_dcr_write(device, DCR_BASE_STARTUP_ADDR, STARTUP_ADDR);
+  vx_dcr_write(device, DCR_BASE_MPM_CLASS, 0);
+
+  for (int i = 0; i < DCR_RASTER_STATE_COUNT; ++i) {
+    vx_dcr_write(device, DCR_RASTER_STATE_BEGIN + i, 0);
+  }
+
+  for (int i = 0; i < DCR_ROP_STATE_COUNT; ++i) {
+    vx_dcr_write(device, DCR_ROP_STATE_BEGIN + i, 0);
+  }
+
+  for (int i = 0; i < TEX_STAGE_COUNT; ++i) {
+    vx_dcr_write(device, DCR_TEX_STAGE + i, 0);
+    for (int j = 1; j < DCR_TEX_STATE_COUNT; ++j) {
+      vx_dcr_write(device, DCR_TEX_STATE_BEGIN + j, 0);
+    }
+  }
+}
+
+///////////////////////////////////////////////////////////////////////////////
 
 static uint64_t get_csr_64(const uint32_t* buffer, int addr) {
   uint32_t value_lo = buffer[addr - CSR_MPM_BASE];

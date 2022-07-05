@@ -9,8 +9,7 @@ module VX_raster_unit #(
     parameter BLOCK_LOGSIZE   = 2,  // block log size
     parameter MEM_FIFO_DEPTH  = 4,  // memory queue size
     parameter QUAD_FIFO_DEPTH = 4,  // quad queue size
-    parameter OUTPUT_QUADS    = 4   // number of output quads
-    
+    parameter OUTPUT_QUADS    = 4   // number of output quads    
 ) (
     input wire clk,
     input wire reset,
@@ -25,7 +24,7 @@ module VX_raster_unit #(
     VX_cache_rsp_if.slave   cache_rsp_if,
 
     // Inputs
-    VX_raster_dcr_if.slave  raster_dcr_if,
+    VX_dcr_write_if.slave   dcr_write_if,
 
     // Outputs
     VX_raster_req_if.master raster_req_if
@@ -36,10 +35,19 @@ module VX_raster_unit #(
     localparam PRIM_DATA_WIDTH = 2 * `RASTER_DIM_BITS + `RASTER_PID_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS;
 
     `STATIC_ASSERT(TILE_LOGSIZE > BLOCK_LOGSIZE, ("invalid parameter"))
-    
+
+    // DCRs
+
     raster_dcrs_t raster_dcrs;
-    assign raster_dcrs = raster_dcr_if.data;
-    `UNUSED_VAR (raster_dcrs)
+
+    VX_raster_dcr raster_dcr (
+        .clk        (clk),
+        .reset      (reset),
+        .dcr_write_if(dcr_write_if),
+        .raster_dcrs(raster_dcrs)
+    );
+
+    ///////////////////////////////////////////////////////////////////////////
 
     // Output from the request
     wire [`RASTER_DIM_BITS-1:0] mem_x_loc;

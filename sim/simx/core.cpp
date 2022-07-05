@@ -463,7 +463,7 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
     if ((addr >= CSR_MPM_BASE && addr < (CSR_MPM_BASE + 32))
      || (addr >= CSR_MPM_BASE_H && addr < (CSR_MPM_BASE_H + 32))) {
       // user-defined MPM CSRs
-      auto perf_class = dcrs_.base_dcrs.read(DCR_MPM_CLASS);
+      auto perf_class = dcrs_.base_dcrs.read(DCR_BASE_MPM_CLASS);
       switch (perf_class) {                
       case DCR_MPM_CLASS_NONE: 
         break;    

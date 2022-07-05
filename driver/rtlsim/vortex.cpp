@@ -206,7 +206,7 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
         *value = ALLOC_BASE_ADDR;
         break;
     case VX_CAPS_KERNEL_BASE_ADDR:
-         *value = device->read_dcr(DCR_STARTUP_ADDR);
+         *value = device->read_dcr(DCR_BASE_STARTUP_ADDR);
         break;    
     case VX_CAPS_ISA_FLAGS:
         *value = ((uint64_t(MISA_EXT))<<32) | ((log2floor(XLEN)-4) << 30) | MISA_STD;
@@ -226,9 +226,11 @@ extern int vx_dev_open(vx_device_h* hdevice) {
 
     *hdevice = new vx_device();
 
+    dcr_initialize(*hdevice);
+
 #ifdef DUMP_PERF_STATS
     perf_add_device(*hdevice);
-#endif
+#endif   
 
     return 0;
 }

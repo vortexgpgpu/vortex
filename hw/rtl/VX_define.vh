@@ -384,4 +384,14 @@
     end \
     assign ``dst.``field = __reduce_add_r_``dst``field
 
+`define BUFFER_DCR_WRITE_IF(dst, src, ENABLE)  \
+    VX_dcr_write_if dst();              \
+    VX_pipe_register #(.DATAW(1 + `VX_DCR_ADDR_WIDTH + `VX_DCR_DATA_WIDTH), .DEPTH(ENABLE)) __``dst ( \
+        .clk      (clk),                \
+        .reset    (1'b0),               \
+        .enable   (1'b1),               \
+        .data_in  ({src.valid, src.addr, src.data}), \
+        .data_out ({dst.valid, dst.addr, dst.data}) \
+    )
+
 `endif

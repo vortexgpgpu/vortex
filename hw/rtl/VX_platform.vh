@@ -158,26 +158,6 @@
         .reset_o (dst)                      \
     )
 
-`define BUFFER(dst, src)        \
-    wire [$bits(src)-1:0] dst;  \
-    VX_pipe_register #(.DATAW($bits(src))) __``dst ( \
-        .clk      (clk),        \
-        .reset    (1'b0),       \
-        .enable   (1'b1),       \
-        .data_in  (src),        \
-        .data_out (dst)         \
-    )
-
-`define BUFFER_EX(dst, src, ENABLE) \
-    wire [$bits(src)-1:0] dst;      \
-    VX_pipe_register #(.DATAW($bits(src)), .DEPTH(ENABLE)) __``dst ( \
-        .clk      (clk),            \
-        .reset    (1'b0),           \
-        .enable   (1'b1),           \
-        .data_in  (src),            \
-        .data_out (dst)             \
-    )
-
 `define POP_COUNT(out, in)  \
     VX_popcount #(          \
         .N ($bits(in))      \

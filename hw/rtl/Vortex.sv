@@ -45,10 +45,8 @@ module Vortex (
     input  wire                             dcr_wr_valid,
     input  wire [`VX_DCR_ADDR_WIDTH-1:0]    dcr_wr_addr,
     input  wire [`VX_DCR_DATA_WIDTH-1:0]    dcr_wr_data,
-    output wire                             dcr_wr_ready,
 
-    // Control / status
-    input wire                              start,
+    // Status
     output wire                             busy
 );
 
@@ -82,9 +80,6 @@ module Vortex (
     assign mem_rsp_if.tag   = mem_rsp_tag;
     assign mem_rsp_ready = mem_rsp_if.ready;
 
-    VX_dcr_base_if #(
-    ) dcr_base_if();
-
 `ifdef EXT_TEX_ENABLE
 `ifdef PERF_ENABLE    
     VX_tex_perf_if      perf_tex_if[`NUM_CLUSTERS]();
@@ -94,9 +89,6 @@ module Vortex (
     `PERF_TEX_ADD (perf_tex_total_if, perf_tex_if, `NUM_CLUSTERS);
     `PERF_CACHE_ADD (perf_tcache_total_if, perf_tcache_if, `NUM_CLUSTERS);
 `endif
-    VX_tex_dcr_if #(
-        .NUM_STAGES (`TEX_STAGE_COUNT)
-    ) tex_dcr_if();
 `endif
 
 `ifdef EXT_RASTER_ENABLE
@@ -108,7 +100,6 @@ module Vortex (
     `PERF_RASTER_ADD (perf_raster_total_if, perf_raster_if, `NUM_CLUSTERS);
     `PERF_CACHE_ADD (perf_rcache_total_if, perf_rcache_if, `NUM_CLUSTERS);
 `endif
-    VX_raster_dcr_if    raster_dcr_if();
 `endif
 
 `ifdef EXT_ROP_ENABLE
@@ -120,29 +111,7 @@ module Vortex (
     `PERF_ROP_ADD (perf_rop_total_if, perf_rop_if, `NUM_CLUSTERS);
     `PERF_CACHE_ADD (perf_ocache_total_if, perf_ocache_if, `NUM_CLUSTERS);
 `endif
-    VX_rop_dcr_if       rop_dcr_if();
 `endif
-
-    `RESET_RELAY (dcr_reset, reset);
-    
-    VX_dcr_data dcr_data(
-        .clk          (clk),
-        .reset        (dcr_reset),
-        .dcr_base_if  (dcr_base_if),
-    `ifdef EXT_TEX_ENABLE
-        .tex_dcr_if    (tex_dcr_if),
-    `endif
-    `ifdef EXT_RASTER_ENABLE
-        .raster_dcr_if (raster_dcr_if),  
-    `endif
-    `ifdef EXT_ROP_ENABLE
-        .rop_dcr_if    (rop_dcr_if),
-    `endif
-        .dcr_wr_valid (dcr_wr_valid),
-        .dcr_wr_addr  (dcr_wr_addr),
-        .dcr_wr_data  (dcr_wr_data),
-        .dcr_wr_ready (dcr_wr_ready)
-    );
 
     wire sim_ebreak /* verilator public */;
     wire [`NUM_REGS-1:0][31:0] sim_wb_value /* verilator public */;    
@@ -152,9 +121,6 @@ module Vortex (
     assign sim_wb_value = per_cluster_sim_wb_value[0];
     `UNUSED_VAR (per_cluster_sim_ebreak)
     `UNUSED_VAR (per_cluster_sim_wb_value)
-
-    // also reset device on start
-    wire reset_or_start = reset || start;
 
     VX_mem_req_if #(
         .DATA_WIDTH (L2_MEM_DATA_WIDTH),
@@ -166,18 +132,19 @@ module Vortex (
         .TAG_WIDTH  (L2_MEM_TAG_WIDTH)
     ) per_cluster_mem_rsp_if[`NUM_CLUSTERS]();
 
-    wire [`NUM_CLUSTERS-1:0] per_cluster_busy;
+    VX_dcr_write_if dcr_write_if();
+    assign dcr_write_if.valid = dcr_wr_valid;
+    assign dcr_write_if.addr  = dcr_wr_addr;
+    assign dcr_write_if.data  = dcr_wr_data;
 
-    base_dcrs_t base_dcrs;
-    assign base_dcrs = dcr_base_if.data;
-    `UNUSED_VAR (base_dcrs)
+    wire [`NUM_CLUSTERS-1:0] per_cluster_busy;
 
     // Generate all clusters
     for (genvar i = 0; i < `NUM_CLUSTERS; ++i) begin
 
-        `RESET_RELAY_EX (cluster_reset, reset_or_start, (`NUM_CLUSTERS > 1));
+        `RESET_RELAY_EX (cluster_reset, reset, (`NUM_CLUSTERS > 1));
 
-        `BUFFER_EX (cluster_base_dcrs, base_dcrs, (`NUM_CLUSTERS > 1));
+        `BUFFER_DCR_WRITE_IF(cluster_dcr_write_if, dcr_write_if, (`NUM_CLUSTERS > 1));
 
         VX_cluster #(
             .CLUSTER_ID (i)
@@ -192,7 +159,7 @@ module Vortex (
             .perf_memsys_total_if (perf_memsys_total_if),
         `endif
             
-            .base_dcrs          (cluster_base_dcrs),
+            .dcr_write_if       (cluster_dcr_write_if),
 
         `ifdef EXT_TEX_ENABLE
         `ifdef PERF_ENABLE
@@ -201,7 +168,6 @@ module Vortex (
             .perf_tex_total_if  (perf_tex_total_if),                       
             .perf_tcache_total_if (perf_tcache_total_if),
         `endif
-            .tex_dcr_if         (tex_dcr_if),
         `endif
 
         `ifdef EXT_RASTER_ENABLE
@@ -211,7 +177,6 @@ module Vortex (
             .perf_raster_total_if (perf_raster_total_if),                       
             .perf_rcache_total_if (perf_rcache_total_if),
         `endif
-            .raster_dcr_if      (raster_dcr_if),  
         `endif
         
         `ifdef EXT_ROP_ENABLE
@@ -221,7 +186,6 @@ module Vortex (
             .perf_rop_total_if  (perf_rop_total_if),                    
             .perf_ocache_total_if (perf_ocache_total_if),
         `endif
-            .rop_dcr_if         (rop_dcr_if),
         `endif
 
             .mem_req_if         (per_cluster_mem_req_if[i]),
@@ -236,7 +200,7 @@ module Vortex (
 
     assign busy = (| per_cluster_busy);
 
-    `RESET_RELAY (l3_reset, reset_or_start);
+    `RESET_RELAY (l3_reset, reset);
 
     VX_cache_wrap #(
         .INSTANCE_ID    ("l3cache"),

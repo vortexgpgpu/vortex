@@ -9,20 +9,33 @@ module VX_rop_unit #(
 
     // PERF
 `ifdef PERF_ENABLE
-    VX_rop_perf_if.master perf_rop_if,
+    VX_rop_perf_if.master   perf_rop_if,
 `endif
 
     // Memory interface
-    VX_cache_req_if.master cache_req_if,
-    VX_cache_rsp_if.slave  cache_rsp_if,
+    VX_cache_req_if.master  cache_req_if,
+    VX_cache_rsp_if.slave   cache_rsp_if,
 
     // Inputs
-    VX_rop_dcr_if.slave rop_dcr_if,
-    VX_rop_req_if.slave rop_req_if
+    VX_dcr_write_if.slave   dcr_write_if,
+    VX_rop_req_if.slave     rop_req_if
 );
     localparam MEM_TAG_WIDTH = NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 32 + `ROP_DEPTH_BITS + 1);
     localparam DS_TAG_WIDTH = NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 1 + 1 + 32);
     localparam BLEND_TAG_WIDTH  = NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 1);
+
+    // DCRs
+
+    rop_dcrs_t rop_dcrs;
+
+    VX_rop_dcr rop_dcr (
+        .clk        (clk),
+        .reset      (reset),
+        .dcr_write_if(dcr_write_if),
+        .rop_dcrs   (rop_dcrs)
+    );
+
+    ///////////////////////////////////////////////////////////////////////////
 
     wire                                    mem_req_valid, mem_req_valid_r;
     wire [NUM_LANES-1:0]                    mem_req_mask, mem_req_mask_r;
@@ -45,9 +58,6 @@ module VX_rop_unit #(
     wire [MEM_TAG_WIDTH-1:0]                mem_rsp_tag;
     wire                                    mem_rsp_ready;
 
-    rop_dcrs_t dcrs;
-    assign dcrs = rop_dcr_if.data;
-
     VX_rop_mem #(
         .INSTANCE_ID (INSTANCE_ID),
         .NUM_LANES   (NUM_LANES),
@@ -56,7 +66,7 @@ module VX_rop_unit #(
         .clk            (clk),
         .reset          (reset),
 
-        .dcrs           (dcrs),
+        .dcrs           (rop_dcrs),
 
         .cache_req_if   (cache_req_if),
         .cache_rsp_if   (cache_rsp_if),
@@ -110,7 +120,7 @@ module VX_rop_unit #(
         .clk            (clk),
         .reset          (reset),
 
-        .dcrs           (dcrs),
+        .dcrs           (rop_dcrs),
 
         .valid_in       (ds_valid_in),      
         .tag_in         (ds_tag_in), 
@@ -151,7 +161,7 @@ module VX_rop_unit #(
         .clk            (clk),
         .reset          (reset),
 
-        .dcrs           (dcrs),
+        .dcrs           (rop_dcrs),
 
         .valid_in       (blend_valid_in),      
         .tag_in         (blend_tag_in),
@@ -168,20 +178,20 @@ module VX_rop_unit #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire color_writeen = (dcrs.cbuf_writemask != 0);
+    wire color_writeen = (rop_dcrs.cbuf_writemask != 0);
 
-    wire depth_enable  = dcrs.depth_enable;
-    wire depth_writeen = dcrs.depth_enable && (dcrs.depth_writemask != 0);
+    wire depth_enable  = rop_dcrs.depth_enable;
+    wire depth_writeen = rop_dcrs.depth_enable && (rop_dcrs.depth_writemask != 0);
 
-    wire stencil_enable  = (| dcrs.stencil_enable);
-    wire stencil_writeen = (dcrs.stencil_enable[0] && (dcrs.stencil_writemask[0] != 0))
-                         | (dcrs.stencil_enable[1] && (dcrs.stencil_writemask[1] != 0));
+    wire stencil_enable  = (| rop_dcrs.stencil_enable);
+    wire stencil_writeen = (rop_dcrs.stencil_enable[0] && (rop_dcrs.stencil_writemask[0] != 0))
+                         | (rop_dcrs.stencil_enable[1] && (rop_dcrs.stencil_writemask[1] != 0));
 
     wire ds_enable  = depth_enable | stencil_enable;
     wire ds_writeen = depth_writeen | stencil_writeen;
 
-    wire blend_enable  = dcrs.blend_enable;
-    wire blend_writeen = dcrs.blend_enable & color_writeen;
+    wire blend_enable  = rop_dcrs.blend_enable;
+    wire blend_writeen = rop_dcrs.blend_enable & color_writeen;
 
     wire mem_readen = ds_enable | blend_enable;
 

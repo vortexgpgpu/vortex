@@ -18,7 +18,7 @@ module VX_core #(
     VX_perf_memsys_if.slave perf_memsys_if,
 `endif
 
-    input base_dcrs_t       base_dcrs,
+    VX_dcr_write_if.slave   dcr_write_if,
 
     VX_cache_req_if.master  dcache_req_if,
     VX_cache_rsp_if.slave   dcache_rsp_if,
@@ -98,13 +98,22 @@ module VX_core #(
     `RESET_RELAY (execute_reset, reset);
     `RESET_RELAY (commit_reset, reset);
 
+    base_dcrs_t base_dcrs;
+
+    VX_dcr_data dcr_data (
+        .clk        (clk),
+        .reset      (reset),
+        .dcr_write_if(dcr_write_if),
+        .base_dcrs  (base_dcrs)
+    );
+
     VX_fetch #(
         .CORE_ID(CORE_ID)
     ) fetch (
         `SCOPE_BIND_VX_core_fetch
         .clk            (clk),
-        .base_dcrs      (base_dcrs),
         .reset          (fetch_reset),
+        .base_dcrs      (base_dcrs),
         .icache_req_if  (icache_req_if),
         .icache_rsp_if  (icache_rsp_if), 
         .wrelease_if    (wrelease_if),

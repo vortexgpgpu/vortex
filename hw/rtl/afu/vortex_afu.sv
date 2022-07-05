@@ -299,7 +299,6 @@ end
 
 wire cmd_mem_rd_done;
 reg  cmd_mem_wr_done;
-wire cmd_dcr_wr_done;
 wire cmd_run_done;
 reg  vx_started;
 
@@ -374,12 +373,10 @@ always @(posedge clk) begin
       end
 
       STATE_DCR_WRITE: begin
-        if (cmd_dcr_wr_done) begin
-          state <= STATE_IDLE;
-        `ifdef DBG_TRACE_AFU
-          `TRACE(2, ("%d: STATE IDLE\n", $time));
-        `endif
-        end
+        state <= STATE_IDLE;
+      `ifdef DBG_TRACE_AFU
+        `TRACE(2, ("%d: STATE IDLE\n", $time));
+      `endif
       end
 
       STATE_RUN: begin 
@@ -873,13 +870,12 @@ assign cci_mem_req_tag   = cci_mem_req_rw ? cci_mem_wr_req_ctr : cci_mem_rd_req_
 wire                          vx_dcr_wr_valid = (STATE_DCR_WRITE == state);
 wire [`VX_DCR_ADDR_WIDTH-1:0] vx_dcr_wr_addr  = cmd_dcr_addr;
 wire [`VX_DCR_DATA_WIDTH-1:0] vx_dcr_wr_data  = cmd_dcr_data;
-wire                          vx_dcr_wr_ready;
 
 Vortex vortex (
   `SCOPE_BIND_afu_vortex
 
   .clk            (clk),
-  .reset          (reset),
+  .reset          (reset || vx_start),
 
   // Memory request 
   .mem_req_valid  (vx_mem_req_valid),
@@ -900,14 +896,11 @@ Vortex vortex (
   .dcr_wr_valid   (vx_dcr_wr_valid),
   .dcr_wr_addr    (vx_dcr_wr_addr),
   .dcr_wr_data    (vx_dcr_wr_data),
-  .dcr_wr_ready   (vx_dcr_wr_ready),
  
-  // Control / status
-  .start          (vx_start),
+  // Status
   .busy           (vx_busy)
 );
 
-assign cmd_dcr_wr_done = vx_dcr_wr_ready;
 assign cmd_run_done = !vx_busy;
 
 // COUT HANDLING //////////////////////////////////////////////////////////////

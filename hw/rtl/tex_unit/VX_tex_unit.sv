@@ -18,7 +18,7 @@ module VX_tex_unit #(
     VX_cache_rsp_if.slave   cache_rsp_if,
 
     // Inputs
-    VX_tex_dcr_if.slave     tex_dcr_if,
+    VX_dcr_write_if.slave   dcr_write_if,
     VX_tex_req_if.slave     tex_req_if,
     
     // Outputs
@@ -26,6 +26,20 @@ module VX_tex_unit #(
 );
 
     localparam BLEND_FRAC_W = (2 * NUM_LANES * `TEX_BLEND_FRAC);  
+
+    // DCRs
+    
+    tex_dcrs_t tex_dcrs;
+    
+    VX_tex_dcr #(
+        .NUM_STAGES (`TEX_STAGE_COUNT)
+    ) tex_dcr (
+        .clk        (clk),
+        .reset      (reset),
+        .dcr_write_if(dcr_write_if),
+        .stage      (tex_req_if.stage),
+        .tex_dcrs   (tex_dcrs)
+    );
 
     // Texture stage select 
 
@@ -41,9 +55,6 @@ module VX_tex_unit #(
     wire [NUM_LANES-1:0][`TEX_MIPOFF_BITS-1:0]  req_mipoff, sel_mipoff;    
     wire [TAG_WIDTH-1:0]                        req_tag;
     wire                                        req_ready;
-
-    tex_dcrs_t tex_dcrs;
-    assign tex_dcrs = tex_dcr_if.data[tex_req_if.stage];
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign sel_miplevel[i]  = tex_req_if.lod[i][`TEX_LOD_BITS-1:0];

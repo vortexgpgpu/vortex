@@ -155,7 +155,8 @@ task trace_base_dcr (
     input [`DCR_ADDR_BITS-1:0] addr
 );
     case (addr)
-        `DCR_MPM_CLASS: `TRACE(level, ("MPM_CLASS"));     
+        `DCR_BASE_STARTUP_ADDR: `TRACE(level, ("STARTUP_ADDR"));
+        `DCR_BASE_MPM_CLASS: `TRACE(level, ("MPM_CLASS"));
         default:        `TRACE(level, ("?"));
     endcase  
 endtask

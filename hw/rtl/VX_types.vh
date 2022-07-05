@@ -7,8 +7,8 @@
 `define DCR_BITS                    12
 
 `define DCR_BASE_STATE_BEGIN        12'h001
-`define DCR_STARTUP_ADDR            12'h001
-`define DCR_MPM_CLASS               12'h002
+`define DCR_BASE_STARTUP_ADDR       12'h001
+`define DCR_BASE_MPM_CLASS          12'h002
 `define DCR_BASE_STATE_END          12'h003
 
 `define DCR_BASE_STATE(addr)        ((addr) - `DCR_BASE_STATE_BEGIN)

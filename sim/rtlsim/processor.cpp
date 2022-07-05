@@ -599,10 +599,9 @@ private:
 
   void  eval_dcr_bus(bool clk) {
     if (!clk) {
-      dcr_wr_ready_ = device_->dcr_wr_ready;
       return;
     }
-    if (device_->dcr_wr_valid && dcr_wr_ready_) {
+    if (device_->dcr_wr_valid) {
       device_->dcr_wr_valid = 0;
     }
   }
@@ -657,8 +656,6 @@ private:
 
   bool mem_wr_rsp_active_;
   bool mem_wr_rsp_ready_;
-
-  bool dcr_wr_ready_;
 
   RAM *ram_;
 

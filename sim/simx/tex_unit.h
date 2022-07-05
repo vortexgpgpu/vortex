@@ -26,19 +26,6 @@ public:
         uint32_t stage_;
 
     public:
-        DCRS() {
-            this->clear();
-        }
-    
-        void clear() {
-            stage_ = 0;
-            for (auto& states : states_) {
-                for (auto& state : states) {
-                    state = 0;
-                }
-            }
-        }
-
         uint32_t read(uint32_t stage, uint32_t addr) const {
             uint32_t state = DCR_TEX_STATE(addr-1);
             return states_.at(stage).at(state);
