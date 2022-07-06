@@ -74,7 +74,11 @@ int main(int argc, char **argv) {
     Processor processor(arch);
   
     // attach memory module
-    processor.attach_ram(&ram);   
+    processor.attach_ram(&ram);
+
+	  // setup base DCRs
+    processor.write_dcr(DCR_BASE_STARTUP_ADDR, STARTUP_ADDR);
+	  processor.write_dcr(DCR_BASE_MPM_CLASS, 0);
 
     // run simulation
     exitcode = processor.run();

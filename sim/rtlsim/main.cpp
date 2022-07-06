@@ -6,6 +6,7 @@
 #include <util.h>
 #include <mem.h>
 #include <VX_config.h>
+#include <VX_types.h>
 #include "processor.h"
 
 #define RAM_PAGE_SIZE 4096
@@ -49,10 +50,20 @@ int main(int argc, char **argv) {
 	
 	parse_args(argc, argv);
 
+	// create memory module
 	vortex::RAM ram(RAM_PAGE_SIZE);
+
+	// create processor
 	vortex::Processor processor;
+
+	// attach memory module
 	processor.attach_ram(&ram);
 
+	// setup base DCRs
+	processor.write_dcr(DCR_BASE_STARTUP_ADDR, STARTUP_ADDR);
+	processor.write_dcr(DCR_BASE_MPM_CLASS, 0);
+
+	// run simulation
 	for (auto program : programs) {
 		std::cout << "Running " << program << "..." << std::endl;		
 
