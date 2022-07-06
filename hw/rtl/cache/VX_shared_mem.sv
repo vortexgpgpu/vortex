@@ -112,36 +112,28 @@ module VX_shared_mem #(
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
          VX_skid_buffer #(
-            .DATAW   (BANK_ADDR_WIDTH),
+            .DATAW   (1 + BANK_ADDR_WIDTH + `UP(REQ_SEL_BITS)),
             .OUT_REG (1) // output should be registered for the data_store addressing
-        ) req_sbuf_a (
+        ) req_sbuf0 (
             .clk       (clk),
             .reset     (reset),
             .valid_in  (per_bank_req_valid_unqual[i]),
             .ready_in  (per_bank_req_ready_unqual[i]),
-            .data_in   (per_bank_req_addr_unqual[i]),
-            .data_out  (per_bank_req_addr[i]),
+            .data_in   ({per_bank_req_rw_unqual[i], per_bank_req_addr_unqual[i], per_bank_req_idx_unqual[i]}),
+            .data_out  ({per_bank_req_rw[i],        per_bank_req_addr[i],        per_bank_req_idx[i]}),
             .valid_out (per_bank_req_valid[i]),
             .ready_out (per_bank_req_ready[i])
         );
         
         VX_skid_buffer #(
-            .DATAW (1 + WORD_SIZE + WORD_WIDTH + TAG_WIDTH + `UP(REQ_SEL_BITS))
-        ) req_sbuf_x (
+            .DATAW (WORD_SIZE + WORD_WIDTH + TAG_WIDTH)
+        ) req_sbuf1 (
             .clk      (clk),
             .reset    (reset),
             .valid_in (per_bank_req_valid_unqual[i]),
             `UNUSED_PIN (ready_in),            
-            .data_in  ({per_bank_req_rw_unqual[i], 
-                        per_bank_req_byteen_unqual[i], 
-                        per_bank_req_data_unqual[i], 
-                        per_bank_req_tag_unqual[i],
-                        per_bank_req_idx_unqual[i]}),
-            .data_out ({per_bank_req_rw[i], 
-                        per_bank_req_byteen[i], 
-                        per_bank_req_data[i], 
-                        per_bank_req_tag[i],
-                        per_bank_req_idx[i]}),            
+            .data_in  ({per_bank_req_byteen_unqual[i], per_bank_req_data_unqual[i], per_bank_req_tag_unqual[i]}),
+            .data_out ({per_bank_req_byteen[i],        per_bank_req_data[i],        per_bank_req_tag[i]}),
             `UNUSED_PIN (valid_out),
             .ready_out (per_bank_req_ready[i])
         );
