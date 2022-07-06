@@ -58,6 +58,7 @@ module VX_req_dispatch #(
     `UNUSED_VAR (reset)
 
     wire [NUM_REQS-1:0][LINE_ADDR_WIDTH-1:0]    core_req_line_addr;
+    wire [NUM_REQS-1:0][`UP(BANK_SEL_BITS)-1:0] core_req_bid;
     wire [NUM_REQS-1:0][`UP(WORD_SEL_BITS)-1:0] core_req_wsel;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin            
@@ -69,18 +70,17 @@ module VX_req_dispatch #(
         assign core_req_line_addr[i] = core_req_addr[i][(BANK_SEL_BITS + WORD_SEL_BITS) +: LINE_ADDR_WIDTH];
     end
 
-    if (NUM_REQS > 1) begin
-
-        wire [NUM_REQS-1:0][`UP(BANK_SEL_BITS)-1:0] core_req_bid;
-        wire [NUM_REQS-1:0] core_req_line_select;
-
-        if (NUM_BANKS > 1) begin
-            for (genvar i = 0; i < NUM_REQS; ++i) begin
-                assign core_req_bid[i] = core_req_addr[i][WORD_SEL_BITS +: BANK_SEL_BITS];
-            end
-        end else begin
-            assign core_req_bid = '0;
+    if (NUM_BANKS > 1) begin
+        for (genvar i = 0; i < NUM_REQS; ++i) begin
+            assign core_req_bid[i] = core_req_addr[i][WORD_SEL_BITS +: BANK_SEL_BITS];
         end
+    end else begin
+        assign core_req_bid = '0;
+    end
+
+    if (NUM_REQS > 1) begin
+        
+        wire [NUM_REQS-1:0] core_req_line_select;        
 
         if (NUM_PORTS > 1) begin
             reg [NUM_BANKS-1:0][LINE_ADDR_WIDTH-1:0] per_bank_line_addr_r;
@@ -170,6 +170,8 @@ module VX_req_dispatch #(
 
     end else begin
 
+        `UNUSED_VAR (core_req_bid)
+        
         assign per_bank_core_req_valid  = core_req_valid;
         assign per_bank_core_req_pmask  = 1;
         assign per_bank_core_req_rw     = core_req_rw;
