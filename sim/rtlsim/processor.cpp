@@ -166,7 +166,8 @@ public:
   #endif
 
     // start device
-    this->start();
+    this->reset();
+    running_ = true;
 
     // execute program
     while (device_->busy) {
@@ -181,7 +182,7 @@ public:
     this->wait(5); 
 
     // stop device
-    this->stop(); 
+    running_ = false;
 
     return exitcode;
   }
@@ -197,7 +198,7 @@ public:
 
 private:
 
-  void reset() { 
+  void reset() {
     running_ = false;
 
     print_bufs_.clear();
@@ -237,28 +238,8 @@ private:
     Verilated::assertOn(true);
 
     this->cout_flush();
-  }
-
-  void start() {
-
-    device_->start = 1;
-
-    for (int i = 0; i < RESET_DELAY; ++i) {
-      device_->clk = 0;
-      this->eval();
-      device_->clk = 1;
-      this->eval();
-    }  
-
-    device_->start = 0;    
 
     running_ = true;
-
-    this->cout_flush();
-  }
-
-  void stop() {
-    running_ = false;
   }
 
   void tick() {

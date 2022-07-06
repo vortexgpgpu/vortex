@@ -55,11 +55,10 @@ module VX_req_dispatch #(
     `STATIC_ASSERT(NUM_PORTS <= WORDS_PER_LINE, ("invalid parameter"))
 
     `UNUSED_VAR (clk)
-    `UNUSED_VAR (reset)    
+    `UNUSED_VAR (reset)
 
     wire [NUM_REQS-1:0][LINE_ADDR_WIDTH-1:0]    core_req_line_addr;
     wire [NUM_REQS-1:0][`UP(WORD_SEL_BITS)-1:0] core_req_wsel;
-    wire [NUM_REQS-1:0][`UP(BANK_SEL_BITS)-1:0] core_req_bid;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin            
         if (WORDS_PER_LINE > 1) begin
@@ -67,223 +66,138 @@ module VX_req_dispatch #(
         end else begin
             assign core_req_wsel[i] = 0;
         end
-        if (NUM_BANKS > 1) begin
-            assign core_req_bid[i] = core_req_addr[i][WORD_SEL_BITS +: BANK_SEL_BITS];
-        end else begin
-            assign core_req_bid[i] = 0;
-        end
         assign core_req_line_addr[i] = core_req_addr[i][(BANK_SEL_BITS + WORD_SEL_BITS) +: LINE_ADDR_WIDTH];
     end
 
-    reg [NUM_BANKS-1:0]                         per_bank_core_req_valid_r;
-    reg [NUM_BANKS-1:0][NUM_PORTS-1:0]          per_bank_core_req_pmask_r;
-    reg [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(WORD_SEL_BITS)-1:0] per_bank_core_req_wsel_r;
-    reg [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_core_req_byteen_r;
-    reg [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_WIDTH-1:0] per_bank_core_req_data_r;
-    reg [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(REQ_SEL_BITS)-1:0] per_bank_core_req_idx_r;
-    reg [NUM_BANKS-1:0][NUM_PORTS-1:0][TAG_WIDTH-1:0] per_bank_core_req_tag_r;
-    reg [NUM_BANKS-1:0]                         per_bank_core_req_rw_r;
-    reg [NUM_BANKS-1:0][LINE_ADDR_WIDTH-1:0]   per_bank_core_req_addr_r;
-    reg [NUM_REQS-1:0] core_req_ready_r;
+    if ((NUM_BANKS > 1) || (NUM_PORTS > 1)) begin
 
-    if (NUM_REQS > 1) begin
+        wire [NUM_REQS-1:0][`UP(BANK_SEL_BITS)-1:0] core_req_bid;
 
-        if (NUM_PORTS > 1) begin
-            
-            reg [NUM_BANKS-1:0][LINE_ADDR_WIDTH-1:0] per_bank_line_addr_r;
-            reg [NUM_BANKS-1:0] per_bank_rw_r;
-            wire [NUM_REQS-1:0] core_req_line_match;
-            
-            always @(*) begin
-                per_bank_line_addr_r = 'x;
-                for (integer i = NUM_REQS-1; i >= 0; --i) begin                                    
-                    if (core_req_valid[i]) begin
-                        per_bank_line_addr_r[core_req_bid[i]] = core_req_line_addr[i];
-                        per_bank_rw_r[core_req_bid[i]] = core_req_rw[i];
-                    end     
-                end
-            end
-            
-            for (genvar i = 0; i < NUM_REQS; ++i) begin
-                assign core_req_line_match[i] = (core_req_line_addr[i] == per_bank_line_addr_r[core_req_bid[i]]) 
-                                             && (core_req_rw[i] == per_bank_rw_r[core_req_bid[i]]);
-            end
-
-            if (NUM_PORTS < NUM_REQS) begin 
-
-                reg [NUM_BANKS-1:0][NUM_PORTS-1:0][NUM_REQS-1:0] req_select_table_r;
-
-                always @(*) begin
-                    per_bank_core_req_valid_r = 0;          
-                    per_bank_core_req_pmask_r = 0;
-                    per_bank_core_req_rw_r    = 'x;
-                    per_bank_core_req_addr_r  = 'x;
-                    per_bank_core_req_wsel_r  = 'x;
-                    per_bank_core_req_byteen_r= 'x;
-                    per_bank_core_req_data_r  = 'x;
-                    per_bank_core_req_tag_r   = 'x;
-                    per_bank_core_req_idx_r   = 'x;
-                    req_select_table_r        = 'x;
-
-                    for (integer i = NUM_REQS-1; i >= 0; --i) begin
-                        if (core_req_valid[i]) begin                    
-                            per_bank_core_req_valid_r[core_req_bid[i]]                 = 1;
-                            per_bank_core_req_pmask_r[core_req_bid[i]][i % NUM_PORTS]  = core_req_line_match[i];
-                            per_bank_core_req_wsel_r[core_req_bid[i]][i % NUM_PORTS]   = core_req_wsel[i];
-                            per_bank_core_req_byteen_r[core_req_bid[i]][i % NUM_PORTS] = core_req_byteen[i];
-                            per_bank_core_req_data_r[core_req_bid[i]][i % NUM_PORTS]   = core_req_data[i];                        
-                            per_bank_core_req_idx_r[core_req_bid[i]][i % NUM_PORTS]    = `UP(REQ_SEL_BITS)'(i);                                                      
-                            per_bank_core_req_tag_r[core_req_bid[i]][i % NUM_PORTS]    = core_req_tag[i];
-                            per_bank_core_req_rw_r[core_req_bid[i]]   = core_req_rw[i];
-                            per_bank_core_req_addr_r[core_req_bid[i]] = core_req_line_addr[i];
-                            req_select_table_r[core_req_bid[i]][i % NUM_PORTS] = (1 << i);
-                        end
-                    end
-                end
-
-                always @(*) begin
-                    for (integer i = 0; i < NUM_REQS; ++i) begin
-                        core_req_ready_r[i] = per_bank_core_req_ready[core_req_bid[i]]
-                                           && core_req_line_match[i]
-                                           && req_select_table_r[core_req_bid[i]][i % NUM_PORTS][i];
-                    end
-                end
-                
-            end else begin
-
-                always @(*) begin
-                    per_bank_core_req_valid_r = 0;
-                    per_bank_core_req_pmask_r = 0;
-                    per_bank_core_req_rw_r    = 'x;
-                    per_bank_core_req_addr_r  = 'x;
-                    per_bank_core_req_wsel_r  = 'x;
-                    per_bank_core_req_byteen_r= 'x;
-                    per_bank_core_req_data_r  = 'x;
-                    per_bank_core_req_tag_r   = 'x;
-                    per_bank_core_req_idx_r   = 'x;
-
-                    for (integer i = NUM_REQS-1; i >= 0; --i) begin                        
-                        if (core_req_valid[i]) begin               
-                            per_bank_core_req_valid_r[core_req_bid[i]]                 = 1;
-                            per_bank_core_req_pmask_r[core_req_bid[i]][i % NUM_PORTS]  = core_req_line_match[i];
-                            per_bank_core_req_wsel_r[core_req_bid[i]][i % NUM_PORTS]   = core_req_wsel[i];
-                            per_bank_core_req_byteen_r[core_req_bid[i]][i % NUM_PORTS] = core_req_byteen[i];
-                            per_bank_core_req_data_r[core_req_bid[i]][i % NUM_PORTS]   = core_req_data[i];                        
-                            per_bank_core_req_idx_r[core_req_bid[i]][i % NUM_PORTS]    = `UP(REQ_SEL_BITS)'(i);    
-                            per_bank_core_req_tag_r[core_req_bid[i]][i % NUM_PORTS]    = core_req_tag[i];
-                            per_bank_core_req_rw_r[core_req_bid[i]]   = core_req_rw[i];
-                            per_bank_core_req_addr_r[core_req_bid[i]] = core_req_line_addr[i];                            
-                        end
-                    end
-                end
-
-                always @(*) begin
-                    for (integer i = 0; i < NUM_REQS; ++i) begin
-                        core_req_ready_r[i] = per_bank_core_req_ready[core_req_bid[i]]
-                                           && core_req_line_match[i];
-                    end
-                end
-            end
-
-        end else begin
-
-            always @(*) begin
-                per_bank_core_req_valid_r = 0;
-                per_bank_core_req_rw_r    = 'x;
-                per_bank_core_req_addr_r  = 'x;
-                per_bank_core_req_wsel_r  = 'x;
-                per_bank_core_req_byteen_r= 'x;
-                per_bank_core_req_data_r  = 'x;
-                per_bank_core_req_tag_r   = 'x;
-                per_bank_core_req_idx_r   = 'x;
-
-                for (integer i = NUM_REQS-1; i >= 0; --i) begin                                
-                    if (core_req_valid[i]) begin                
-                        per_bank_core_req_valid_r[core_req_bid[i]] = 1;
-                        per_bank_core_req_rw_r[core_req_bid[i]]    = core_req_rw[i];
-                        per_bank_core_req_addr_r[core_req_bid[i]]  = core_req_line_addr[i];
-                        per_bank_core_req_wsel_r[core_req_bid[i]]  = core_req_wsel[i];
-                        per_bank_core_req_byteen_r[core_req_bid[i]]= core_req_byteen[i];
-                        per_bank_core_req_data_r[core_req_bid[i]]  = core_req_data[i];
-                        per_bank_core_req_tag_r[core_req_bid[i]]   = core_req_tag[i];
-                        per_bank_core_req_idx_r[core_req_bid[i]]   = `UP(REQ_SEL_BITS)'(i);
-                    end
-                end
-
-                per_bank_core_req_pmask_r = per_bank_core_req_valid_r;
-            end
-
+        for (genvar i = 0; i < NUM_REQS; ++i) begin            
             if (NUM_BANKS > 1) begin
-                always @(*) begin
-                    core_req_ready_r = 0;
-                    for (integer i = 0; i < NUM_BANKS; ++i) begin
-                        if (per_bank_core_req_valid_r[i]) begin
-                            core_req_ready_r[per_bank_core_req_idx_r[i]] = per_bank_core_req_ready[i];
-                        end
-                    end
-                end
+                assign core_req_bid[i] = core_req_addr[i][WORD_SEL_BITS +: BANK_SEL_BITS];
             end else begin
-                always @(*) begin
-                    core_req_ready_r = 0;     
-                    core_req_ready_r[per_bank_core_req_idx_r[0]] = per_bank_core_req_ready;
-                end
-            end
-        end        
-
-    end else begin
-
-        if (NUM_BANKS > 1) begin
-            always @(*) begin
-                per_bank_core_req_valid_r = 0;
-                per_bank_core_req_rw_r    = 'x;
-                per_bank_core_req_addr_r  = 'x;
-                per_bank_core_req_wsel_r  = 'x;
-                per_bank_core_req_byteen_r= 'x;
-                per_bank_core_req_data_r  = 'x;
-                per_bank_core_req_tag_r   = 'x;
-                per_bank_core_req_idx_r   = 'x;
-                per_bank_core_req_valid_r[core_req_bid[0]]  = core_req_valid;
-                per_bank_core_req_rw_r[core_req_bid[0]]     = core_req_rw;
-                per_bank_core_req_addr_r[core_req_bid[0]]   = core_req_line_addr;
-                per_bank_core_req_wsel_r[core_req_bid[0]]   = core_req_wsel;
-                per_bank_core_req_byteen_r[core_req_bid[0]] = core_req_byteen;
-                per_bank_core_req_data_r[core_req_bid[0]]   = core_req_data;
-                per_bank_core_req_tag_r[core_req_bid[0]]    = core_req_tag;
-                per_bank_core_req_idx_r[core_req_bid[0]]    = 0;
-                core_req_ready_r = per_bank_core_req_ready[core_req_bid[0]];
-
-                per_bank_core_req_pmask_r = per_bank_core_req_valid_r;
-            end
-        end else begin
-            `UNUSED_VAR (core_req_bid)
-            always @(*) begin
-                per_bank_core_req_valid_r  = core_req_valid;
-                per_bank_core_req_rw_r     = core_req_rw;
-                per_bank_core_req_addr_r   = core_req_line_addr;
-                per_bank_core_req_wsel_r   = core_req_wsel;
-                per_bank_core_req_byteen_r = core_req_byteen;
-                per_bank_core_req_data_r   = core_req_data;
-                per_bank_core_req_tag_r    = core_req_tag;
-                per_bank_core_req_idx_r    = 0;
-                core_req_ready_r = per_bank_core_req_ready;
-
-                per_bank_core_req_pmask_r  = per_bank_core_req_valid_r;
+                assign core_req_bid[i] = 0;
             end
         end
 
+        reg [NUM_BANKS-1:0][LINE_ADDR_WIDTH-1:0] per_bank_line_addr_r;
+        reg [NUM_BANKS-1:0]                      per_bank_rw_r;
+        wire [NUM_REQS-1:0]                      core_req_line_select;
+        
+        always @(*) begin
+            per_bank_line_addr_r = 'x;
+            for (integer i = NUM_REQS-1; i >= 0; --i) begin
+                if (core_req_valid[i]) begin
+                    per_bank_line_addr_r[core_req_bid[i]] = core_req_line_addr[i];
+                    per_bank_rw_r[core_req_bid[i]] = core_req_rw[i];
+                end     
+            end
+        end
+        
+        for (genvar i = 0; i < NUM_REQS; ++i) begin
+            assign core_req_line_select[i] = (core_req_line_addr[i] == per_bank_line_addr_r[core_req_bid[i]]) 
+                                          && (core_req_rw[i] == per_bank_rw_r[core_req_bid[i]]);
+        end  
+
+        logic [NUM_BANKS-1:0]                       per_bank_core_req_valid_r;
+        logic [NUM_BANKS-1:0][NUM_PORTS-1:0]        per_bank_core_req_pmask_r;
+        logic [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(WORD_SEL_BITS)-1:0] per_bank_core_req_wsel_r;
+        logic [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_core_req_byteen_r;
+        logic [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_WIDTH-1:0] per_bank_core_req_data_r;
+        logic [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(REQ_SEL_BITS)-1:0] per_bank_core_req_idx_r;
+        logic [NUM_BANKS-1:0][NUM_PORTS-1:0][TAG_WIDTH-1:0] per_bank_core_req_tag_r;
+        logic [NUM_BANKS-1:0]                       per_bank_core_req_rw_r;
+        logic [NUM_BANKS-1:0][LINE_ADDR_WIDTH-1:0]  per_bank_core_req_addr_r;
+        logic [NUM_REQS-1:0]                        core_req_ready_r;
+        logic [NUM_BANKS-1:0][NUM_PORTS-1:0][NUM_REQS-1:0] req_select_table_r;
+
+        always @(*) begin
+            per_bank_core_req_valid_r = 0;
+            per_bank_core_req_pmask_r = 0;
+            per_bank_core_req_rw_r    = 'x;
+            per_bank_core_req_addr_r  = 'x;
+            per_bank_core_req_wsel_r  = 'x;
+            per_bank_core_req_byteen_r= 'x;
+            per_bank_core_req_data_r  = 'x;
+            per_bank_core_req_tag_r   = 'x;
+            per_bank_core_req_idx_r   = 'x;
+
+            for (integer i = NUM_REQS-1; i >= 0; --i) begin
+                if (core_req_valid[i]) begin
+                    per_bank_core_req_valid_r[core_req_bid[i]]                 = 1;
+                    per_bank_core_req_pmask_r[core_req_bid[i]][i % NUM_PORTS]  = (1 == NUM_PORTS) || core_req_line_select[i];
+                    per_bank_core_req_wsel_r[core_req_bid[i]][i % NUM_PORTS]   = core_req_wsel[i];
+                    per_bank_core_req_byteen_r[core_req_bid[i]][i % NUM_PORTS] = core_req_byteen[i];
+                    per_bank_core_req_data_r[core_req_bid[i]][i % NUM_PORTS]   = core_req_data[i];
+                    per_bank_core_req_idx_r[core_req_bid[i]][i % NUM_PORTS]    = `UP(REQ_SEL_BITS)'(i);
+                    per_bank_core_req_tag_r[core_req_bid[i]][i % NUM_PORTS]    = core_req_tag[i];
+                    per_bank_core_req_rw_r[core_req_bid[i]]                    = core_req_rw[i];
+                    per_bank_core_req_addr_r[core_req_bid[i]]                  = core_req_line_addr[i];                    
+                end
+            end
+        end
+
+        if (NUM_PORTS > 1) begin            
+            always @(*) begin
+                req_select_table_r = 'x;
+                for (integer i = NUM_REQS-1; i >= 0; --i) begin
+                    if (core_req_valid[i]) begin
+                        req_select_table_r[core_req_bid[i]][i % NUM_PORTS] = (1 << i);
+                    end 
+                end                
+            end
+            
+            for (genvar i = 0; i < NUM_REQS; ++i) begin
+                assign core_req_ready_r[i] = per_bank_core_req_ready[core_req_bid[i]]
+                                          && core_req_line_select[i]
+                                          && ((NUM_REQS <= NUM_PORTS) 
+                                           || req_select_table_r[core_req_bid[i]][i % NUM_PORTS][i]);
+            end
+        end else begin
+            always @(*) begin
+                core_req_ready_r   = '0;
+                req_select_table_r = '0;
+
+                for (integer i = NUM_REQS-1; i >= 0; --i) begin
+                    if (core_req_valid[i]) begin
+                        req_select_table_r[core_req_bid[i]][0] = (1 << i);
+                    end 
+                end
+            end
+
+            for (genvar i = 0; i < NUM_REQS; ++i) begin
+                assign core_req_ready_r[i] = per_bank_core_req_ready[core_req_bid[i]] 
+                                          && req_select_table_r[core_req_bid[i]][0][i];
+            end
+        end
+
+        assign per_bank_core_req_valid  = per_bank_core_req_valid_r;
+        assign per_bank_core_req_pmask  = per_bank_core_req_pmask_r;
+        assign per_bank_core_req_rw     = per_bank_core_req_rw_r;
+        assign per_bank_core_req_addr   = per_bank_core_req_addr_r;
+        assign per_bank_core_req_wsel   = per_bank_core_req_wsel_r;
+        assign per_bank_core_req_byteen = per_bank_core_req_byteen_r;
+        assign per_bank_core_req_data   = per_bank_core_req_data_r;
+        assign per_bank_core_req_tag    = per_bank_core_req_tag_r;
+        assign per_bank_core_req_idx    = per_bank_core_req_idx_r;
+        assign core_req_ready = core_req_ready_r;
+
+    end else begin
+
+        assign per_bank_core_req_valid  = core_req_valid;
+        assign per_bank_core_req_pmask  = 1;
+        assign per_bank_core_req_rw     = core_req_rw;
+        assign per_bank_core_req_addr   = core_req_line_addr;
+        assign per_bank_core_req_wsel   = core_req_wsel;
+        assign per_bank_core_req_byteen = core_req_byteen;
+        assign per_bank_core_req_data   = core_req_data;
+        assign per_bank_core_req_tag    = core_req_tag;
+        assign per_bank_core_req_idx    = 0;
+        assign core_req_ready = per_bank_core_req_ready;
+
     end
-
-    assign per_bank_core_req_valid  = per_bank_core_req_valid_r;
-    assign per_bank_core_req_pmask  = per_bank_core_req_pmask_r;
-    assign per_bank_core_req_rw     = per_bank_core_req_rw_r;
-    assign per_bank_core_req_addr   = per_bank_core_req_addr_r;
-    assign per_bank_core_req_wsel   = per_bank_core_req_wsel_r;
-    assign per_bank_core_req_byteen = per_bank_core_req_byteen_r;
-    assign per_bank_core_req_data   = per_bank_core_req_data_r;
-    assign per_bank_core_req_tag    = per_bank_core_req_tag_r;
-    assign per_bank_core_req_idx    = per_bank_core_req_idx_r;
-    assign core_req_ready = core_req_ready_r;
-
+    
 `ifdef PERF_ENABLE
     reg [NUM_REQS-1:0] core_req_sel_r;
 

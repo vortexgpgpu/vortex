@@ -209,7 +209,7 @@ module VX_shared_mem #(
             .DATAW   (WORD_WIDTH + TAG_WIDTH),
             .SKID    (OUT_REG >> 1),
             .OUT_REG (OUT_REG & 1)
-        ) rsp_sbuf_out (
+        ) rsp_sbuf (
             .clk       (clk),
             .reset     (reset),
             .valid_in  (rsp_valid_s[i]),
