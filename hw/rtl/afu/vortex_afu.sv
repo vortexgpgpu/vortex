@@ -21,8 +21,8 @@ module vortex_afu #(
   parameter NUM_LOCAL_MEM_BANKS = 2
 ) (
   // global signals
-  input clk,
-  input reset,
+  input wire clk,
+  input wire reset,
 
   // IF signals between CCI and AFU
   input   t_if_ccip_Rx  cp2af_sRxPort,
@@ -32,12 +32,12 @@ module vortex_afu #(
   output  t_local_mem_data      avs_writedata [NUM_LOCAL_MEM_BANKS],
   input   t_local_mem_data      avs_readdata [NUM_LOCAL_MEM_BANKS],
   output  t_local_mem_addr      avs_address [NUM_LOCAL_MEM_BANKS],
-  input   logic                 avs_waitrequest [NUM_LOCAL_MEM_BANKS],
-  output  logic                 avs_write [NUM_LOCAL_MEM_BANKS],
-  output  logic                 avs_read [NUM_LOCAL_MEM_BANKS],
+  input   wire                  avs_waitrequest [NUM_LOCAL_MEM_BANKS],
+  output  wire                  avs_write [NUM_LOCAL_MEM_BANKS],
+  output  wire                  avs_read [NUM_LOCAL_MEM_BANKS],
   output  t_local_mem_byte_mask avs_byteenable [NUM_LOCAL_MEM_BANKS],
   output  t_local_mem_burst_cnt avs_burstcount [NUM_LOCAL_MEM_BANKS],
-  input                         avs_readdatavalid [NUM_LOCAL_MEM_BANKS]
+  input   wire                  avs_readdatavalid [NUM_LOCAL_MEM_BANKS]
 );
 
 localparam LMEM_DATA_WIDTH    = $bits(t_local_mem_data);

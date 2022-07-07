@@ -105,17 +105,17 @@ module VX_req_dispatch #(
             assign core_req_line_select = '1;
         end  
 
-        logic [NUM_BANKS-1:0]                       per_bank_core_req_valid_r;
-        logic [NUM_BANKS-1:0][NUM_PORTS-1:0]        per_bank_core_req_pmask_r;
-        logic [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(WORD_SEL_BITS)-1:0] per_bank_core_req_wsel_r;
-        logic [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_core_req_byteen_r;
-        logic [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_WIDTH-1:0] per_bank_core_req_data_r;
-        logic [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(REQ_SEL_BITS)-1:0] per_bank_core_req_idx_r;
-        logic [NUM_BANKS-1:0][NUM_PORTS-1:0][TAG_WIDTH-1:0] per_bank_core_req_tag_r;
-        logic [NUM_BANKS-1:0]                       per_bank_core_req_rw_r;
-        logic [NUM_BANKS-1:0][LINE_ADDR_WIDTH-1:0]  per_bank_core_req_addr_r;
-        logic [NUM_REQS-1:0]                        per_bank_core_req_ready_r;
-        logic [NUM_BANKS-1:0][NUM_PORTS-1:0][NUM_REQS-1:0] req_select_table_r;
+        reg [NUM_BANKS-1:0]                       per_bank_core_req_valid_r;
+        reg [NUM_BANKS-1:0][NUM_PORTS-1:0]        per_bank_core_req_pmask_r;
+        reg [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(WORD_SEL_BITS)-1:0] per_bank_core_req_wsel_r;
+        reg [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_SIZE-1:0] per_bank_core_req_byteen_r;
+        reg [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_WIDTH-1:0] per_bank_core_req_data_r;
+        reg [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(REQ_SEL_BITS)-1:0] per_bank_core_req_idx_r;
+        reg [NUM_BANKS-1:0][NUM_PORTS-1:0][TAG_WIDTH-1:0] per_bank_core_req_tag_r;
+        reg [NUM_BANKS-1:0]                       per_bank_core_req_rw_r;
+        reg [NUM_BANKS-1:0][LINE_ADDR_WIDTH-1:0]  per_bank_core_req_addr_r;
+        reg [NUM_REQS-1:0]                        per_bank_core_req_ready_r;
+        reg [NUM_BANKS-1:0][NUM_PORTS-1:0][NUM_REQS-1:0] req_select_table_r;
 
         always @(*) begin
             per_bank_core_req_valid_r = 0;

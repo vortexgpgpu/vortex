@@ -187,7 +187,7 @@ module VX_mem_scheduler #(
     wire [NUM_BATCHES-1:0][NUM_BANKS-1:0][ADDR_WIDTH-1:0] mem_req_addr_b;
     wire [NUM_BATCHES-1:0][NUM_BANKS-1:0][DATA_WIDTH-1:0] mem_req_data_b;
     
-    logic [`UP(BATCH_SEL_BITS)-1:0] req_batch_idx;
+    wire [`UP(BATCH_SEL_BITS)-1:0] req_batch_idx;
 
     for (genvar i = 0; i < NUM_BATCHES; ++i) begin
         for (genvar j = 0; j < NUM_BANKS; ++j) begin
@@ -235,16 +235,17 @@ module VX_mem_scheduler #(
     end
     
     if (NUM_BATCHES > 1) begin
+        reg [`UP(BATCH_SEL_BITS)-1:0] req_batch_idx_r;
         always @(posedge clk) begin
             if (reset) begin
-                req_batch_idx <= 0;
+                req_batch_idx_r <= 0;
             end else begin
                 if (~reqq_empty && req_sent_batch) begin
                     if (req_sent_all 
-                    || (req_batch_idx == `UP(BATCH_SEL_BITS)'(NUM_BATCHES-1))) begin
-                        req_batch_idx <= 0;
+                    || (req_batch_idx_r == `UP(BATCH_SEL_BITS)'(NUM_BATCHES-1))) begin
+                        req_batch_idx_r <= 0;
                     end else begin
-                        req_batch_idx <= req_batch_idx + `UP(BATCH_SEL_BITS)'(1);
+                        req_batch_idx_r <= req_batch_idx_r + `UP(BATCH_SEL_BITS)'(1);
                     end
                 end
             end
@@ -259,10 +260,11 @@ module VX_mem_scheduler #(
                                     | (reqq_mask[i] && req_sent_curr) 
                                     | ~reqq_mask[i];
         end
-        assign req_sent_all = (& req_sent_mask);    
+        assign req_batch_idx = req_batch_idx_r;
+        assign req_sent_all  = (& req_sent_mask);    
     end else begin
         assign req_batch_idx = 0;
-        assign req_sent_all = req_sent_batch;
+        assign req_sent_all  = req_sent_batch;
     end
 
     assign mem_req_valid_s = {NUM_BANKS{~reqq_empty}} & mem_req_mask_s & ~batch_sent_mask;
