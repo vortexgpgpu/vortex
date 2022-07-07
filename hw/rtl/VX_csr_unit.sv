@@ -133,6 +133,18 @@ module VX_csr_unit #(
     `ifdef PERF_ENABLE
         .perf_memsys_if (perf_memsys_if),
         .perf_pipeline_if(perf_pipeline_if),
+    `ifdef EXT_TEX_ENABLE        
+        .perf_tex_if    (perf_tex_if),
+        .perf_tcache_if (perf_tcache_if),
+    `endif    
+    `ifdef EXT_RASTER_ENABLE        
+        .perf_raster_if (perf_raster_if),
+        .perf_rcache_if (perf_rcache_if),
+    `endif
+    `ifdef EXT_ROP_ENABLE
+        .perf_rop_if    (perf_rop_if),
+        .perf_ocache_if (perf_ocache_if),
+    `endif
     `endif
 
         .cmt_to_csr_if  (cmt_to_csr_if),
@@ -140,31 +152,7 @@ module VX_csr_unit #(
     
     `ifdef EXT_F_ENABLE
         .fpu_to_csr_if  (fpu_to_csr_if), 
-    `endif        
-
-    `ifdef EXT_TEX_ENABLE        
-        .tex_csr_if     (tex_csr_if),    
-    `ifdef PERF_ENABLE
-        .perf_tex_if    (perf_tex_if),
-        .perf_tcache_if (perf_tcache_if),
-    `endif
-    `endif
-    
-    `ifdef EXT_RASTER_ENABLE        
-        .raster_csr_if  (raster_csr_if),
-    `ifdef PERF_ENABLE
-        .perf_raster_if (perf_raster_if),
-        .perf_rcache_if (perf_rcache_if),
-    `endif
-    `endif
-
-    `ifdef EXT_ROP_ENABLE
-        .rop_csr_if     (rop_csr_if),
-    `ifdef PERF_ENABLE
-        .perf_rop_if    (perf_rop_if),
-        .perf_ocache_if (perf_ocache_if),
-    `endif
-    `endif
+    `endif    
 
         .read_enable    (csr_req_if.valid && csr_rd_s0),
         .read_uuid      (csr_req_if.uuid),
@@ -219,7 +207,7 @@ module VX_csr_unit #(
 
     assign csr_req_data = csr_req_if.use_imm ? 32'(csr_req_if.imm) : csr_req_if.rs1_data[csr_req_if.tid];
 
-    assign csr_wr_s0 = (csr_write_enable || (csr_req_data != 0)) 
+    assign csr_wr_s0 = (csr_write_enable || (csr_req_data != 0))
                 `ifdef EXT_ROP_ENABLE
                     && !rop_addr_enable
                 `endif    
