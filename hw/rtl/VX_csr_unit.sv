@@ -54,15 +54,12 @@ module VX_csr_unit #(
     output wire[`NUM_WARPS-1:0] req_pending
 );
     
-    reg [`NUM_WARPS-1:0][31:0] csr_read_data_s0;    
-    reg [31:0]                 csr_write_data_s0;
-    wire [31:0]                csr_write_data_s1;
+    reg [`NUM_WARPS-1:0][31:0] csr_read_data;    
+    reg [31:0]                 csr_write_data;
     wire [31:0]                csr_read_data_ro, csr_read_data_rw;
-    wire [31:0]                csr_read_data_rw_qual;
     wire [31:0]                csr_req_data;
-    wire [`CSR_ADDR_BITS-1:0]  csr_addr_s1;
-    reg                        csr_rd_s0;
-    wire                       csr_wr_s0, csr_wr_s1;
+    reg                        csr_rd_enable;
+    wire                       csr_wr_enable;
 
     wire csr_write_enable = (csr_req_if.op_type == `INST_CSR_RW);
 
@@ -89,7 +86,7 @@ module VX_csr_unit #(
 
     wire raster_addr_enable = (csr_req_if.addr >= `CSR_RASTER_BEGIN && csr_req_if.addr < `CSR_RASTER_END);
     
-    assign raster_csr_if.read_enable = csr_req_if.valid &&  ~csr_write_enable && raster_addr_enable;
+    assign raster_csr_if.read_enable = csr_req_if.valid && ~csr_write_enable && raster_addr_enable;
     assign raster_csr_if.read_uuid   = csr_req_if.uuid;
     assign raster_csr_if.read_wid    = csr_req_if.wid;
     assign raster_csr_if.read_tmask  = csr_req_if.tmask;
@@ -154,7 +151,7 @@ module VX_csr_unit #(
         .fpu_to_csr_if  (fpu_to_csr_if), 
     `endif    
 
-        .read_enable    (csr_req_if.valid && csr_rd_s0),
+        .read_enable    (csr_req_if.valid && csr_rd_enable),
         .read_uuid      (csr_req_if.uuid),
         .read_wid       (csr_req_if.wid),    
         .read_tmask     (csr_req_if.tmask),    
@@ -162,20 +159,14 @@ module VX_csr_unit #(
         .read_data_ro   (csr_read_data_ro),
         .read_data_rw   (csr_read_data_rw),
 
-        .write_enable   (csr_commit_if.valid && csr_wr_s1),       
-        .write_uuid     (csr_commit_if.uuid),
-        .write_wid      (csr_commit_if.wid),
-        .write_addr     (csr_addr_s1),        
-        .write_data     (csr_write_data_s1)
+        .write_enable   (csr_req_if.valid && csr_wr_enable),       
+        .write_uuid     (csr_req_if.uuid),
+        .write_wid      (csr_req_if.wid),
+        .write_addr     (csr_req_if.addr),        
+        .write_data     (csr_write_data)
     );
 
     // CSR read
-    
-    wire write_hazard = (csr_addr_s1 == csr_req_if.addr)
-                     && (csr_commit_if.wid == csr_req_if.wid) 
-                     && csr_commit_if.valid;
-    
-    assign csr_read_data_rw_qual = write_hazard ? csr_write_data_s1 : csr_read_data_rw;  
 
     wire [`NUM_THREADS-1:0][31:0] wtid, ltid, gtid;
 
@@ -186,19 +177,19 @@ module VX_csr_unit #(
     end  
 
     always @(*) begin
-        csr_rd_s0 = 0;
+        csr_rd_enable = 0;
     `ifdef EXT_RASTER_ENABLE
         if (raster_addr_enable) begin
-            csr_read_data_s0 = raster_csr_if.read_data;
+            csr_read_data = raster_csr_if.read_data;
         end else
     `endif
         case (csr_req_if.addr)
-        `CSR_WTID : csr_read_data_s0 = wtid;
-        `CSR_LTID : csr_read_data_s0 = ltid;
-        `CSR_GTID : csr_read_data_s0 = gtid;
+        `CSR_WTID : csr_read_data = wtid;
+        `CSR_LTID : csr_read_data = ltid;
+        `CSR_GTID : csr_read_data = gtid;
         default : begin
-            csr_read_data_s0 = {`NUM_THREADS{csr_read_data_ro | csr_read_data_rw_qual}};
-            csr_rd_s0 = 1;
+            csr_read_data = {`NUM_THREADS{csr_read_data_ro | csr_read_data_rw}};
+            csr_rd_enable = 1;
         end
         endcase
     end
@@ -207,7 +198,7 @@ module VX_csr_unit #(
 
     assign csr_req_data = csr_req_if.use_imm ? 32'(csr_req_if.imm) : csr_req_if.rs1_data[csr_req_if.tid];
 
-    assign csr_wr_s0 = (csr_write_enable || (csr_req_data != 0))
+    assign csr_wr_enable = (csr_write_enable || (csr_req_data != 0))
                 `ifdef EXT_ROP_ENABLE
                     && !rop_addr_enable
                 `endif    
@@ -216,14 +207,14 @@ module VX_csr_unit #(
     always @(*) begin
         case (csr_req_if.op_type)
             `INST_CSR_RW: begin
-                csr_write_data_s0 = csr_req_data;
+                csr_write_data = csr_req_data;
             end
             `INST_CSR_RS: begin
-                csr_write_data_s0 = csr_read_data_rw_qual | csr_req_data;
+                csr_write_data = csr_read_data_rw | csr_req_data;
             end
             //`INST_CSR_RC
             default: begin
-                csr_write_data_s0 = csr_read_data_rw_qual & ~csr_req_data;
+                csr_write_data = csr_read_data_rw & ~csr_req_data;
             end
         endcase
     end
@@ -241,16 +232,15 @@ module VX_csr_unit #(
     wire csr_rsp_valid = csr_req_if.valid && ~stall_in;  
     wire csr_rsp_ready;
 
-    VX_generic_buffer #(
-        .DATAW   (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + `NUM_THREADS * 32 + 32),
-        .OUT_REG (1)
+    VX_skid_buffer #(
+        .DATAW (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1 + `NUM_THREADS * 32)
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (csr_rsp_valid),
         .ready_in  (csr_rsp_ready),
-        .data_in   ({csr_req_if.uuid,    csr_req_if.wid,    csr_req_if.tmask,    csr_req_if.PC,    csr_req_if.rd,    csr_req_if.wb,    csr_wr_s0, csr_req_if.addr, csr_read_data_s0,   csr_write_data_s0}),
-        .data_out  ({csr_commit_if.uuid, csr_commit_if.wid, csr_commit_if.tmask, csr_commit_if.PC, csr_commit_if.rd, csr_commit_if.wb, csr_wr_s1, csr_addr_s1,     csr_commit_if.data, csr_write_data_s1}),
+        .data_in   ({csr_req_if.uuid,    csr_req_if.wid,    csr_req_if.tmask,    csr_req_if.PC,    csr_req_if.rd,    csr_req_if.wb,    csr_read_data}),
+        .data_out  ({csr_commit_if.uuid, csr_commit_if.wid, csr_commit_if.tmask, csr_commit_if.PC, csr_commit_if.rd, csr_commit_if.wb, csr_commit_if.data}),
         .valid_out (csr_commit_if.valid),
         .ready_out (csr_commit_if.ready)
     );

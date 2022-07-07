@@ -111,6 +111,8 @@ module VX_commit #(
     // store and gpu commits don't writeback  
     assign st_commit_if.ready  = 1'b1;
 
+    `UNUSED_VAR (alu_commit_if.uuid)
+    
 `ifdef DBG_TRACE_CORE_PIPELINE
     always @(posedge clk) begin
         if (alu_commit_if.valid && alu_commit_if.ready) begin
