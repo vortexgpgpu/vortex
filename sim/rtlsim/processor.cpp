@@ -167,6 +167,7 @@ public:
 
     // start device
     this->reset();
+
     running_ = true;
 
     // execute program
@@ -179,10 +180,7 @@ public:
     }
 
     // wait 5 cycles to flush the pipeline
-    this->wait(5); 
-
-    // stop device
-    running_ = false;
+    this->wait(5);
 
     return exitcode;
   }
@@ -238,8 +236,6 @@ private:
     Verilated::assertOn(true);
 
     this->cout_flush();
-
-    running_ = true;
   }
 
   void tick() {
