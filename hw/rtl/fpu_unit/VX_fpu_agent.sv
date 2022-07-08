@@ -18,16 +18,16 @@ module VX_fpu_agent #(
     VX_fpu_req_if.master    fpu_req_if,
     VX_fpu_rsp_if.slave     fpu_rsp_if,
 
-    input wire[`NUM_WARPS-1:0]  csr_pending,
-    output wire[`NUM_WARPS-1:0] req_pending
+    input wire              csr_pending,
+    output wire             req_pending
 ); 
     // Store request info
 
     wire [`UP(`UUID_BITS)-1:0] rsp_uuid;
-    wire [`UP(`NW_BITS)-1:0] rsp_wid;
-    wire [`NUM_THREADS-1:0] rsp_tmask;
-    wire [31:0]             rsp_PC;
-    wire [`NR_BITS-1:0]     rsp_rd;
+    wire [`UP(`NW_BITS)-1:0]   rsp_wid;
+    wire [`NUM_THREADS-1:0]    rsp_tmask;
+    wire [31:0]                rsp_PC;
+    wire [`NR_BITS-1:0]        rsp_rd;
 
     wire [`FPU_REQ_TAG_WIDTH-1:0] req_tag, rsp_tag;    
     wire mdata_full;
@@ -61,7 +61,7 @@ module VX_fpu_agent #(
 
     // submit FPU request
 
-    wire mdata_and_csr_ready = ~mdata_full && ~csr_pending[fpu_agent_if.wid];
+    wire mdata_and_csr_ready = ~mdata_full && ~csr_pending;
 
     wire valid_in, ready_in;    
     assign valid_in = fpu_agent_if.valid && mdata_and_csr_ready;
@@ -101,6 +101,8 @@ module VX_fpu_agent #(
     assign fpu_to_csr_if.write_wid    = rsp_wid;     
     assign fpu_to_csr_if.write_fflags = rsp_fflags;
 
+    // commit
+
     VX_skid_buffer #(
         .DATAW (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + (`NUM_THREADS * 32))
     ) rsp_sbuf (
@@ -119,16 +121,16 @@ module VX_fpu_agent #(
 
     // pending request
 
-    reg [`NUM_WARPS-1:0] req_pending_r;
+    reg req_pending_r;
     always @(posedge clk) begin
         if (reset) begin
             req_pending_r <= 0;
         end else begin                      
             if (fpu_agent_if.valid && fpu_agent_if.ready) begin
-                 req_pending_r[fpu_agent_if.wid] <= 1;
+                 req_pending_r <= 1;
             end
             if (fpu_commit_if.valid && fpu_commit_if.ready) begin
-                 req_pending_r[fpu_commit_if.wid] <= 0;
+                 req_pending_r <= 0;
             end
         end
     end

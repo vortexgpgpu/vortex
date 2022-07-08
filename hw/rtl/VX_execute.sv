@@ -81,8 +81,8 @@ module VX_execute #(
     output wire             sim_ebreak
 );
 
-    wire [`NUM_WARPS-1:0] gpu_pending;
-    wire [`NUM_WARPS-1:0] csr_pending;
+    wire gpu_pending;
+    wire csr_pending;
 
 `ifdef EXT_TEX_ENABLE
     VX_gpu_csr_if tex_csr_if();
@@ -97,7 +97,7 @@ module VX_execute #(
 `endif
 
 `ifdef EXT_F_ENABLE
-    wire [`NUM_WARPS-1:0] fpu_pending;
+    wire fpu_pending;
     VX_fpu_to_csr_if fpu_to_csr_if();
 `endif
 

@@ -33,11 +33,11 @@ module VX_gpu_unit #(
 `endif
 
     // Outputs
-    VX_warp_ctl_if.master warp_ctl_if,
-    VX_commit_if.master gpu_commit_if,
+    VX_warp_ctl_if.master   warp_ctl_if,
+    VX_commit_if.master     gpu_commit_if,
 
-    input wire[`NUM_WARPS-1:0]  csr_pending,
-    output wire[`NUM_WARPS-1:0] req_pending
+    input wire              csr_pending,
+    output wire             req_pending
 );
     `UNUSED_PARAM (CORE_ID)
 
@@ -52,7 +52,7 @@ module VX_gpu_unit #(
     wire gpu_req_valid;
     reg gpu_req_ready;
 
-    wire csr_ready = ~csr_pending[gpu_req_if.wid];
+    wire csr_ready = ~csr_pending;
     assign gpu_req_valid = gpu_req_if.valid && csr_ready;
 
     // Warp control block
@@ -353,16 +353,16 @@ module VX_gpu_unit #(
 
     // pending request
 
-    reg [`NUM_WARPS-1:0] req_pending_r;
+    reg req_pending_r;
     always @(posedge clk) begin
         if (reset) begin
             req_pending_r <= 0;
         end else begin                      
             if (gpu_req_if.valid && gpu_req_if.ready) begin
-                 req_pending_r[gpu_req_if.wid] <= 1;
+                 req_pending_r <= 1;
             end
             if (gpu_commit_if.valid && gpu_commit_if.ready) begin
-                 req_pending_r[gpu_commit_if.wid] <= 0;
+                 req_pending_r <= 0;
             end
         end
     end

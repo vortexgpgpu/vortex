@@ -194,6 +194,8 @@ module VX_alu_unit #(
 
 `endif
 
+    // send response
+
     VX_stream_arb #(
         .NUM_INPUTS (RSP_ARB_SIZE),
         .DATAW      (RSP_ARB_DATAW),        

@@ -47,11 +47,11 @@ module VX_csr_unit #(
     
 `ifdef EXT_F_ENABLE
     VX_fpu_to_csr_if.slave      fpu_to_csr_if,
-    input wire[`NUM_WARPS-1:0]  fpu_pending,
+    input wire                  fpu_pending,
 `endif
-    input wire[`NUM_WARPS-1:0]  gpu_pending,
+    input wire                  gpu_pending,
 
-    output wire[`NUM_WARPS-1:0] req_pending
+    output wire                 req_pending
 );
     
     reg [`NUM_WARPS-1:0][31:0] csr_read_data;    
@@ -59,7 +59,26 @@ module VX_csr_unit #(
     wire [31:0]                csr_read_data_ro, csr_read_data_rw;
     wire [31:0]                csr_req_data;
     reg                        csr_rd_enable;
-    wire                       csr_wr_enable;
+    wire                       csr_wr_enable;    
+
+    reg csr_access_pending;    
+    `UNUSED_VAR (gpu_pending)
+    `UNUSED_VAR (fpu_pending)
+    always @(*) begin
+        csr_access_pending = 0;
+    `ifdef EXT_GFX_ENABLE
+        csr_access_pending |= gpu_pending;
+    `endif
+    `ifdef EXT_F_ENABLE
+        csr_access_pending |= fpu_pending;
+    `endif 
+    end
+
+    wire csr_req_valid = csr_req_if.valid && ~csr_access_pending;  
+    wire csr_req_ready;
+
+    // can accept new request?
+    assign csr_req_if.ready = csr_req_ready && ~csr_access_pending;
 
     wire csr_write_enable = (csr_req_if.op_type == `INST_CSR_RW);
 
@@ -67,14 +86,14 @@ module VX_csr_unit #(
 
     wire tex_addr_enable = (csr_req_if.addr >= `CSR_TEX_BEGIN && csr_req_if.addr < `CSR_TEX_END);
 
-    assign tex_csr_if.read_enable = csr_req_if.valid && ~csr_write_enable && tex_addr_enable;
+    assign tex_csr_if.read_enable = csr_req_valid && ~csr_write_enable && tex_addr_enable;
     assign tex_csr_if.read_uuid   = csr_req_if.uuid;
     assign tex_csr_if.read_wid    = csr_req_if.wid;
     assign tex_csr_if.read_tmask  = csr_req_if.tmask;
     assign tex_csr_if.read_addr   = csr_req_if.addr;
     `UNUSED_VAR (tex_csr_if.read_data)
     
-    assign tex_csr_if.write_enable = csr_req_if.valid && csr_write_enable && tex_addr_enable;
+    assign tex_csr_if.write_enable = csr_req_valid && csr_write_enable && tex_addr_enable;
     assign tex_csr_if.write_uuid   = csr_req_if.uuid;
     assign tex_csr_if.write_wid    = csr_req_if.wid;
     assign tex_csr_if.write_tmask  = csr_req_if.tmask;
@@ -86,13 +105,13 @@ module VX_csr_unit #(
 
     wire raster_addr_enable = (csr_req_if.addr >= `CSR_RASTER_BEGIN && csr_req_if.addr < `CSR_RASTER_END);
     
-    assign raster_csr_if.read_enable = csr_req_if.valid && ~csr_write_enable && raster_addr_enable;
+    assign raster_csr_if.read_enable = csr_req_valid && ~csr_write_enable && raster_addr_enable;
     assign raster_csr_if.read_uuid   = csr_req_if.uuid;
     assign raster_csr_if.read_wid    = csr_req_if.wid;
     assign raster_csr_if.read_tmask  = csr_req_if.tmask;
     assign raster_csr_if.read_addr   = csr_req_if.addr;
     
-    assign raster_csr_if.write_enable = csr_req_if.valid && csr_write_enable && raster_addr_enable;
+    assign raster_csr_if.write_enable = csr_req_valid && csr_write_enable && raster_addr_enable;
     assign raster_csr_if.write_uuid   = csr_req_if.uuid;
     assign raster_csr_if.write_wid    = csr_req_if.wid;
     assign raster_csr_if.write_tmask  = csr_req_if.tmask;
@@ -104,14 +123,14 @@ module VX_csr_unit #(
 
     wire rop_addr_enable = (csr_req_if.addr >= `CSR_ROP_BEGIN && csr_req_if.addr < `CSR_ROP_END);
 
-    assign rop_csr_if.read_enable = csr_req_if.valid && ~csr_write_enable && rop_addr_enable;
+    assign rop_csr_if.read_enable = csr_req_valid && ~csr_write_enable && rop_addr_enable;
     assign rop_csr_if.read_uuid   = csr_req_if.uuid;
     assign rop_csr_if.read_wid    = csr_req_if.wid;
     assign rop_csr_if.read_tmask  = csr_req_if.tmask;
     assign rop_csr_if.read_addr   = csr_req_if.addr;
     `UNUSED_VAR (rop_csr_if.read_data)
     
-    assign rop_csr_if.write_enable = csr_req_if.valid && csr_write_enable && rop_addr_enable; 
+    assign rop_csr_if.write_enable = csr_req_valid && csr_write_enable && rop_addr_enable; 
     assign rop_csr_if.write_uuid   = csr_req_if.uuid;
     assign rop_csr_if.write_wid    = csr_req_if.wid;
     assign rop_csr_if.write_tmask  = csr_req_if.tmask;
@@ -151,7 +170,7 @@ module VX_csr_unit #(
         .fpu_to_csr_if  (fpu_to_csr_if), 
     `endif    
 
-        .read_enable    (csr_req_if.valid && csr_rd_enable),
+        .read_enable    (csr_req_valid && csr_rd_enable),
         .read_uuid      (csr_req_if.uuid),
         .read_wid       (csr_req_if.wid),    
         .read_tmask     (csr_req_if.tmask),    
@@ -159,7 +178,7 @@ module VX_csr_unit #(
         .read_data_ro   (csr_read_data_ro),
         .read_data_rw   (csr_read_data_rw),
 
-        .write_enable   (csr_req_if.valid && csr_wr_enable),       
+        .write_enable   (csr_req_valid && csr_wr_enable),       
         .write_uuid     (csr_req_if.uuid),
         .write_wid      (csr_req_if.wid),
         .write_addr     (csr_req_if.addr),        
@@ -219,48 +238,34 @@ module VX_csr_unit #(
         endcase
     end
 
-    reg stall_in_r;
-    always @(*) begin
-        stall_in_r = gpu_pending[csr_req_if.wid];
-    `ifdef EXT_F_ENABLE
-        stall_in_r |= fpu_pending[csr_req_if.wid];
-    `endif 
-    end
-
-    wire stall_in = stall_in_r;
-
-    wire csr_rsp_valid = csr_req_if.valid && ~stall_in;  
-    wire csr_rsp_ready;
+    // send response
 
     VX_skid_buffer #(
         .DATAW (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1 + `NUM_THREADS * 32)
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (csr_rsp_valid),
-        .ready_in  (csr_rsp_ready),
+        .valid_in  (csr_req_valid),
+        .ready_in  (csr_req_ready),
         .data_in   ({csr_req_if.uuid,    csr_req_if.wid,    csr_req_if.tmask,    csr_req_if.PC,    csr_req_if.rd,    csr_req_if.wb,    csr_read_data}),
         .data_out  ({csr_commit_if.uuid, csr_commit_if.wid, csr_commit_if.tmask, csr_commit_if.PC, csr_commit_if.rd, csr_commit_if.wb, csr_commit_if.data}),
         .valid_out (csr_commit_if.valid),
         .ready_out (csr_commit_if.ready)
     );
 
-    assign csr_commit_if.eop = 1'b1;
-
-    // can accept new request?
-    assign csr_req_if.ready = csr_rsp_ready && ~stall_in;
+    assign csr_commit_if.eop = 1'b1;    
 
     // pending request
-    reg [`NUM_WARPS-1:0] req_pending_r;
+    reg req_pending_r;
     always @(posedge clk) begin
         if (reset) begin
             req_pending_r <= 0;
         end else begin
             if (csr_req_if.valid && csr_req_if.ready) begin
-                 req_pending_r[csr_req_if.wid] <= 1;
+                 req_pending_r <= 1;
             end
             if (csr_commit_if.valid && csr_commit_if.ready) begin
-                 req_pending_r[csr_commit_if.wid] <= 0;
+                 req_pending_r <= 0;
             end
         end
     end

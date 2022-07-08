@@ -63,8 +63,8 @@ module VX_csr_data #(
     reg [31:0] csr_mie;
     reg [31:0] csr_mtvec;
     reg [31:0] csr_mepc;    
-    reg [31:0] csr_pmpcfg [0:0];
-    reg [31:0] csr_pmpaddr [0:0];
+    reg [31:0] csr_pmpcfg;
+    reg [31:0] csr_pmpaddr;
     reg [`NUM_WARPS-1:0][`INST_FRM_BITS+`FFLAGS_BITS-1:0] fcsr;
 
     always @(posedge clk) begin
@@ -89,8 +89,8 @@ module VX_csr_data #(
                     `CSR_MIE:      csr_mie          <= write_data;
                     `CSR_MTVEC:    csr_mtvec        <= write_data;
                     `CSR_MEPC:     csr_mepc         <= write_data;
-                    `CSR_PMPCFG0:  csr_pmpcfg[0]    <= write_data;
-                    `CSR_PMPADDR0: csr_pmpaddr[0]   <= write_data;
+                    `CSR_PMPCFG0:  csr_pmpcfg       <= write_data;
+                    `CSR_PMPADDR0: csr_pmpaddr      <= write_data;
                     default: begin
                         `ASSERT(0, ("%t: *** invalid CSR write address: %0h (#%0d)", $time, write_addr, write_uuid));
                     end
@@ -143,8 +143,8 @@ module VX_csr_data #(
 
             `CSR_MEPC       : read_data_ro_r = 32'(csr_mepc);
 
-            `CSR_PMPCFG0    : read_data_ro_r = 32'(csr_pmpcfg[0]);
-            `CSR_PMPADDR0   : read_data_ro_r = 32'(csr_pmpaddr[0]);
+            `CSR_PMPCFG0    : read_data_ro_r = 32'(csr_pmpcfg);
+            `CSR_PMPADDR0   : read_data_ro_r = 32'(csr_pmpaddr);
             
             `CSR_MVENDORID  : read_data_ro_r = 32'd`VENDOR_ID;
             `CSR_MARCHID    : read_data_ro_r = 32'd`ARCHITECTURE_ID;
