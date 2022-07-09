@@ -54,7 +54,7 @@ module VX_csr_unit #(
     output wire                 req_pending
 );
     
-    reg [`NUM_WARPS-1:0][31:0] csr_read_data;    
+    reg [`NUM_THREADS-1:0][31:0] csr_read_data;
     reg [31:0]                 csr_write_data;
     wire [31:0]                csr_read_data_ro, csr_read_data_rw;
     wire [31:0]                csr_req_data;
