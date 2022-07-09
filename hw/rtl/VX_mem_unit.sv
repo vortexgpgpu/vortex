@@ -237,7 +237,7 @@ module VX_mem_unit # (
         .TAG_SEL_IDX  (0),
         .ARBITER      ("R"),
         .BUFFERED_REQ ((`NUM_SOCKETS != 1) ? 2 : 0),
-        .BUFFERED_RSP ((`NUM_SOCKETS != 1) ? 2 : 0)        
+        .BUFFERED_RSP ((`NUM_SOCKETS != 1) ? 1 : 0)        
     ) smem_arb (
         .clk        (clk),
         .reset      (reset),
@@ -276,9 +276,9 @@ module VX_mem_unit # (
         .NUM_BANKS  (`SMEM_NUM_BANKS),
         .WORD_SIZE  (DCACHE_WORD_SIZE),
         .ADDR_WIDTH (SMEM_ADDR_WIDTH),
-        .OUT_REG    (2),
         .UUID_WIDTH (`UUID_BITS), 
-        .TAG_WIDTH  (DCACHE_SM_TAG_WIDTH)
+        .TAG_WIDTH  (DCACHE_SM_TAG_WIDTH),
+        .OUT_REG    (2)
     ) smem (            
         .clk        (clk),
         .reset      (smem_reset),
