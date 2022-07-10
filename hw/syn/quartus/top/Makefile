@@ -14,9 +14,10 @@ FPU_CORE_PATH = $(RTL_DIR)/fpu_unit/altera/arria10
 
 CONFIGS += -set "NOPAE"
 
-#CONFIGS += -set "NUM_CORES=2" -set "L2_ENABLE" -set "L2_CACHE_SIZE=32768" -set "L1_DISABLE"
-CONFIGS += -set "NUM_CORES=4" -set "L2_ENABLE" -set "L2_CACHE_SIZE=65536" -set "L1_DISABLE"
-#CONFIGS +=  -set "NUM_CORES=8" -set "L2_ENABLE" -set "L2_CACHE_SIZE=131072" -set "L1_DISABLE"
+CONFIGS += -set "NUM_CORES=4"
+
+#CONFIGS += -set "L1_DISABLE" 
+#CONFIGS += -set "SM_DISABLE"
 
 FPU_INCLUDE = $(RTL_DIR)/fpu_unit;$(FPU_CORE_PATH);$(THIRD_PARTY_DIR)/fpnew/src;$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl;$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include;$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src
 TEX_INCLUDE = $(RTL_DIR)/tex_unit

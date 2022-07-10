@@ -719,7 +719,7 @@
 
 // Size of cache in bytes
 `ifndef L2_CACHE_SIZE
-`define L2_CACHE_SIZE 131072
+`define L2_CACHE_SIZE 1048576
 `endif
 
 // Number of banks
