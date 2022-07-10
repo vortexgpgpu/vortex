@@ -149,9 +149,8 @@ module VX_req_dispatch #(
             always @(*) begin
                 per_bank_core_req_ready_r[r] = 0;
                 for (integer b = 0; b < NUM_BANKS; ++b) begin
-                    if (per_bank_core_req_valid_r[b]
-                     && req_select_table_r[b][r % NUM_PORTS][r]
-                     && core_req_line_select[r]) begin
+                    if (per_bank_core_req_pmask_r[b][r % NUM_PORTS]
+                     && req_select_table_r[b][r % NUM_PORTS][r]) begin
                         per_bank_core_req_ready_r[r] = per_bank_core_req_ready[b];
                     end
                 end
