@@ -63,7 +63,6 @@ module VX_csr_unit #(
 
     reg csr_access_pending;    
     `UNUSED_VAR (gpu_pending)
-    `UNUSED_VAR (fpu_pending)
     always @(*) begin
         csr_access_pending = 0;
     `ifdef EXT_GFX_ENABLE
