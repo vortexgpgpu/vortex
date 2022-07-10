@@ -35,26 +35,25 @@ module VX_rsp_merge #(
 
     if ((NUM_BANKS > 1) || (NUM_PORTS > 1)) begin
 
-        reg [NUM_REQS-1:0] core_rsp_valid_r;
+        reg [NUM_REQS-1:0]                 core_rsp_valid_r;
         reg [NUM_REQS-1:0][WORD_WIDTH-1:0] core_rsp_data_r;
-        reg [NUM_REQS-1:0][TAG_WIDTH-1:0] core_rsp_tag_r;
-        reg [NUM_REQS-1:0][NUM_BANKS-1:0] bank_select_table_r;
+        reg [NUM_REQS-1:0][TAG_WIDTH-1:0]  core_rsp_tag_r;
+        reg [NUM_REQS-1:0][NUM_BANKS-1:0]  bank_select_table_r;
         
         always @(*) begin
             core_rsp_valid_r    = '0;
             core_rsp_tag_r      = 'x;
             core_rsp_data_r     = 'x;
-            bank_select_table_r = '0;
+            bank_select_table_r = 'x;
 
             for (integer b = NUM_BANKS-1; b >= 0; --b) begin
-                if (per_bank_core_rsp_valid[b]) begin
-                    for (integer p = 0; p < NUM_PORTS; ++p) begin 
-                        if ((NUM_PORTS == 1 || per_bank_core_rsp_pmask[b][p])) begin
-                            core_rsp_valid_r[per_bank_core_rsp_idx[b][p]]    = 1;
-                            core_rsp_data_r[per_bank_core_rsp_idx[b][p]]     = per_bank_core_rsp_data[b][p];
-                            core_rsp_tag_r[per_bank_core_rsp_idx[b][p]]      = per_bank_core_rsp_tag[b][p];
-                            bank_select_table_r[per_bank_core_rsp_idx[b][p]] = (1 << b);
-                        end
+                for (integer p = 0; p < NUM_PORTS; ++p) begin 
+                    if (per_bank_core_rsp_valid[b] 
+                     && (NUM_PORTS == 1 || per_bank_core_rsp_pmask[b][p])) begin
+                        core_rsp_valid_r[per_bank_core_rsp_idx[b][p]]    = 1;
+                        core_rsp_data_r[per_bank_core_rsp_idx[b][p]]     = per_bank_core_rsp_data[b][p];
+                        core_rsp_tag_r[per_bank_core_rsp_idx[b][p]]      = per_bank_core_rsp_tag[b][p];
+                        bank_select_table_r[per_bank_core_rsp_idx[b][p]] = (1 << b);
                     end
                 end
             end
@@ -70,7 +69,8 @@ module VX_rsp_merge #(
                     core_rsp_ready_any_r[b] = 0;
                     core_rsp_ready_all_r[b] = 1;
                     for (integer r = 0; r < NUM_REQS; ++r) begin
-                        if (bank_select_table_r[r][b]) begin
+                        if (core_rsp_valid_r[r] 
+                         && bank_select_table_r[r][b]) begin
                             core_rsp_ready_any_r[b] = 1'b1;
                             core_rsp_ready_all_r[b] &= core_rsp_ready[r];
                         end
@@ -88,7 +88,8 @@ module VX_rsp_merge #(
                 always @(*) begin
                     per_bank_core_rsp_ready_r[b] = 0;
                     for (integer r = 0; r < NUM_REQS; ++r) begin
-                        if (bank_select_table_r[r][b]) begin
+                        if (core_rsp_valid_r[r] 
+                         && bank_select_table_r[r][b]) begin
                             per_bank_core_rsp_ready_r[b] = core_rsp_ready[r];
                         end
                     end

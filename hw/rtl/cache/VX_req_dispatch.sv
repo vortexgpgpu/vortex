@@ -127,7 +127,7 @@ module VX_req_dispatch #(
             per_bank_core_req_data_r  = 'x;
             per_bank_core_req_tag_r   = 'x;
             per_bank_core_req_idx_r   = 'x;
-            req_select_table_r        = '0;
+            req_select_table_r        = 'x;
 
             for (integer i = NUM_REQS-1; i >= 0; --i) begin
                 if (core_req_valid[i]) begin
@@ -139,7 +139,7 @@ module VX_req_dispatch #(
                     per_bank_core_req_idx_r[core_req_bid[i]][i % NUM_PORTS]    = `UP(REQ_SEL_BITS)'(i);
                     per_bank_core_req_tag_r[core_req_bid[i]][i % NUM_PORTS]    = core_req_tag[i];
                     per_bank_core_req_rw_r[core_req_bid[i]]                    = core_req_rw[i];
-                    per_bank_core_req_addr_r[core_req_bid[i]]                  = core_req_line_addr[i];                    
+                    per_bank_core_req_addr_r[core_req_bid[i]]                  = core_req_line_addr[i];                 
                     req_select_table_r[core_req_bid[i]][i % NUM_PORTS]         = (1 << i);
                 end
             end
@@ -149,7 +149,8 @@ module VX_req_dispatch #(
             always @(*) begin
                 per_bank_core_req_ready_r[r] = 0;
                 for (integer b = 0; b < NUM_BANKS; ++b) begin
-                    if (req_select_table_r[b][r % NUM_PORTS][r] 
+                    if (per_bank_core_req_valid_r[b]
+                     && req_select_table_r[b][r % NUM_PORTS][r]
                      && core_req_line_select[r]) begin
                         per_bank_core_req_ready_r[r] = per_bank_core_req_ready[b];
                     end
