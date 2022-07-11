@@ -434,6 +434,8 @@ module VX_cache #(
         .WORD_SIZE (WORD_SIZE),
         .TAG_WIDTH (TAG_WIDTH)
     ) rsp_merge (
+        .clk                     (clk),
+        .reset                   (reset),
         .per_bank_core_rsp_valid (per_bank_core_rsp_valid),   
         .per_bank_core_rsp_pmask (per_bank_core_rsp_pmask),   
         .per_bank_core_rsp_data  (per_bank_core_rsp_data),

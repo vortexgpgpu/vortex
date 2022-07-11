@@ -111,7 +111,7 @@ module VX_shared_mem #(
     wire [NUM_BANKS-1:0]                    per_bank_req_ready;
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
-         VX_skid_buffer #(
+        VX_skid_buffer #(
             .DATAW   (1 + BANK_ADDR_WIDTH + `UP(REQ_SEL_BITS)),
             .OUT_REG (1) // output should be registered for the data_store addressing
         ) req_sbuf0 (
@@ -184,6 +184,8 @@ module VX_shared_mem #(
         .WORD_SIZE (WORD_SIZE),        
         .TAG_WIDTH (TAG_WIDTH)
     ) rsp_merge (
+        .clk                     (clk),
+        .reset                   (reset),
         .per_bank_core_rsp_valid (per_bank_rsp_valid),   
         .per_bank_core_rsp_pmask (per_bank_rsp_pmask),   
         .per_bank_core_rsp_data  (per_bank_rsp_data),

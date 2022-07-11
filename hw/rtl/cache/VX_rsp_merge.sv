@@ -15,6 +15,10 @@ module VX_rsp_merge #(
     localparam WORD_WIDTH   = WORD_SIZE * 8,
     localparam REQ_SEL_BITS = `CLOG2(NUM_REQS)
 ) (
+    input wire                                  clk,
+    input wire                                  reset,
+
+
     // Per Bank WB
     input  wire [NUM_BANKS-1:0]                 per_bank_core_rsp_valid,
     input  wire [NUM_BANKS-1:0][NUM_PORTS-1:0]  per_bank_core_rsp_pmask,
@@ -32,6 +36,9 @@ module VX_rsp_merge #(
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid parameter"))    
     `STATIC_ASSERT(NUM_BANKS == (1 << $clog2(NUM_BANKS)), ("invalid parameter"))
     `STATIC_ASSERT(NUM_PORTS <= NUM_REQS, ("invalid parameter"))
+
+    `UNUSED_VAR (clk)
+    `UNUSED_VAR (reset)
 
     if ((NUM_BANKS > 1) || (NUM_PORTS > 1)) begin
 
