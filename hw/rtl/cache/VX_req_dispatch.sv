@@ -141,10 +141,9 @@ module VX_req_dispatch #(
                 end
             end
             
-        end else if (NUM_BANKS > 1) begin
+        end else begin
 
             always @(*) begin
-                per_bank_core_req_valid_r = 0;
                 per_bank_core_req_pmask_r = 0;
                 per_bank_core_req_rw_r    = 'x;
                 per_bank_core_req_addr_r  = 'x;
@@ -157,11 +156,11 @@ module VX_req_dispatch #(
 
                 for (integer i = NUM_REQS-1; i >= 0; --i) begin
                     if (core_req_valid[i]) begin
-                        per_bank_core_req_valid_r[core_req_bid[i]]  = 1;                        
+                        per_bank_core_req_pmask_r[core_req_bid[i]]  = 1;                        
                         per_bank_core_req_wsel_r[core_req_bid[i]]   = core_req_wsel[i];
                         per_bank_core_req_byteen_r[core_req_bid[i]] = core_req_byteen[i];
                         per_bank_core_req_data_r[core_req_bid[i]]   = core_req_data[i];
-                        per_bank_core_req_idx_r[core_req_bid[i]]   = `UP(REQ_SEL_BITS)'(i);
+                        per_bank_core_req_idx_r[core_req_bid[i]]    = `UP(REQ_SEL_BITS)'(i);
                         per_bank_core_req_tag_r[core_req_bid[i]]    = core_req_tag[i];
                         per_bank_core_req_rw_r[core_req_bid[i]]     = core_req_rw[i];
                         per_bank_core_req_addr_r[core_req_bid[i]]   = core_req_line_addr[i];                 
@@ -169,42 +168,8 @@ module VX_req_dispatch #(
                     end
                 end
 
-                per_bank_core_req_pmask_r = per_bank_core_req_valid_r;
-            end
-            
-        end else begin
-
-            `UNUSED_VAR (core_req_bid)
-
-            always @(*) begin
-                per_bank_core_req_valid_r = 0;
-                per_bank_core_req_pmask_r = 0;
-                per_bank_core_req_rw_r    = 'x;
-                per_bank_core_req_addr_r  = 'x;
-                per_bank_core_req_wsel_r  = 'x;
-                per_bank_core_req_byteen_r= 'x;
-                per_bank_core_req_data_r  = 'x;
-                per_bank_core_req_tag_r   = 'x;
-                per_bank_core_req_idx_r   = 'x;
-                req_select_table_r        = 'x;
-
-                for (integer i = NUM_REQS-1; i >= 0; --i) begin
-                    if (core_req_valid[i]) begin
-                        per_bank_core_req_valid_r  = 1;                        
-                        per_bank_core_req_wsel_r   = core_req_wsel[i];
-                        per_bank_core_req_byteen_r = core_req_byteen[i];
-                        per_bank_core_req_data_r   = core_req_data[i];
-                        per_bank_core_req_idx_r    = `UP(REQ_SEL_BITS)'(i);
-                        per_bank_core_req_tag_r    = core_req_tag[i];
-                        per_bank_core_req_rw_r     = core_req_rw[i];
-                        per_bank_core_req_addr_r   = core_req_line_addr[i];                 
-                        req_select_table_r         = (1 << i);
-                    end
-                end
-
-                per_bank_core_req_pmask_r = per_bank_core_req_valid_r;
-            end
-
+                per_bank_core_req_valid_r = per_bank_core_req_pmask_r;
+            end            
         end
 
         for (genvar r = 0; r < NUM_REQS; ++r) begin
