@@ -144,7 +144,7 @@ module VX_req_dispatch #(
         end else begin
 
             always @(*) begin
-                per_bank_core_req_pmask_r = 0;
+                per_bank_core_req_valid_r = 0;
                 per_bank_core_req_rw_r    = 'x;
                 per_bank_core_req_addr_r  = 'x;
                 per_bank_core_req_wsel_r  = 'x;
@@ -156,7 +156,7 @@ module VX_req_dispatch #(
 
                 for (integer i = NUM_REQS-1; i >= 0; --i) begin
                     if (core_req_valid[i]) begin
-                        per_bank_core_req_pmask_r[core_req_bid[i]]  = 1;                        
+                        per_bank_core_req_valid_r[core_req_bid[i]]  = 1;                        
                         per_bank_core_req_wsel_r[core_req_bid[i]]   = core_req_wsel[i];
                         per_bank_core_req_byteen_r[core_req_bid[i]] = core_req_byteen[i];
                         per_bank_core_req_data_r[core_req_bid[i]]   = core_req_data[i];
@@ -168,7 +168,7 @@ module VX_req_dispatch #(
                     end
                 end
 
-                per_bank_core_req_valid_r = per_bank_core_req_pmask_r;
+                per_bank_core_req_pmask_r = per_bank_core_req_valid_r;
             end            
         end
 
