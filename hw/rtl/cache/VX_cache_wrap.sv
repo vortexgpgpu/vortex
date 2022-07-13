@@ -89,7 +89,7 @@ module VX_cache_wrap #(
                                                           `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS));
 
     localparam NC_BYPASS = (NC_ENABLE || PASSTHRU);
-    localparam DIRECT_PASSTHRU = PASSTHRU && (`WORD_SEL_BITS == 0);    
+    localparam DIRECT_PASSTHRU = PASSTHRU && (`WORD_SEL_BITS == 0) && (NUM_REQS == 1);
 
     localparam CORE_REQ_BUF_ENABLE = (1 != NUM_BANKS) || (1 != NUM_REQS);
     localparam MEM_REQ_BUF_ENABLE  = (1 != NUM_BANKS);
