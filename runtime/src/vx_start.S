@@ -4,32 +4,44 @@
 .global _start
 .type   _start, @function
 _start:
-  
-  # execute stack initialization on all warps
-  la a1, vx_set_sp
-  csrr a0, CSR_NW  # get num warps
-  .insn s 0x6b, 1, a1, 0(a0)  # wspawn a0, a1
-  jal vx_set_sp
 
+  # initialize per-thread registers
+  csrr a0, CSR_NW  # get num warps
+  la a1, init_regs
+  .insn s 0x6b, 1, a1, 0(a0)  # wspawn a0, a1
+  jal init_regs
+  # return back to single thread execution
+  li a0, 1
+  .insn s 0x6b, 0, x0, 0(a0)  # tmc a0
+
+  # initialize TLS for all warps
+  csrr a0, CSR_NW  # get num warps
+  la a1, __init_tls
+  .insn s 0x6b, 1, a1, 0(a0)  # wspawn a0, a1
+  call __init_tls
   # return back to single thread execution
   li a0, 1
   .insn s 0x6b, 0, x0, 0(a0)  # tmc a0
   
-  # Clear the bss segment
+  # clear BSS segment
   la      a0, _edata
   la      a2, _end
   sub     a2, a2, a0
   li      a1, 0
   call    memset
 
+  # Initialize trap vector
+  # a t0, trap_entry
+  # csrw mtvec, t0
+
   # Register global termination functions
-  la      a0, __libc_fini_array   
+  la      a0, __libc_fini_array
 
   # to be called upon exit
-  call    atexit                  
+  call    atexit
 
   # Run global initialization functions
-  call    __libc_init_array       
+  call    __libc_init_array
 
   # call main program routine
   call    main
@@ -49,9 +61,9 @@ _exit:
   .insn s 0x6b, 0, x0, 0(a0)  # tmc a0
 
 .section .text
-.type vx_set_sp, @function
-.global vx_set_sp
-vx_set_sp:
+.type init_regs, @function
+.global init_regs
+init_regs:
   # activate all threads
   li a0, -1
   .insn s 0x6b, 0, x0, 0(a0)  # tmc a0
@@ -66,12 +78,21 @@ vx_set_sp:
   # set stack pointer
   li sp, SMEM_BASE_ADDR # load stack base address
   #if SM_ENABLE
-  csrr a2, CSR_LTID    # get local thread id
+  csrr a0, CSR_LTID    # get local thread id
   #else
-  csrr a2, CSR_GTID    # get global thread id
+  csrr a0, CSR_GTID    # get global thread id
   #endif
-  slli a1, a2, STACK_LOG2_SIZE
-  sub  sp, sp, a1      # sub thread block
+  sll  a1, a0, STACK_LOG2_SIZE
+  sub  sp, sp, a1
+
+  # set thread pointer register
+  # use address space after BSS region
+  # ensure cacheline alignment
+  la      a1, __tcb_aligned_size
+  mul     a0, a0, a1
+  la      tp, _end + 63
+  add     tp, tp, a0
+  and     tp, tp, -64
 
   # disable active warps except warp0
   csrr a3, CSR_LWID    # get local wid

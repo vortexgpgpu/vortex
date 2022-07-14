@@ -89,12 +89,22 @@ SECTIONS
   .gcc_except_table   : ONLY_IF_RW { *(.gcc_except_table .gcc_except_table.*) }
   .exception_ranges   : ONLY_IF_RW { *(.exception_ranges*) }
   /* Thread Local Storage sections  */
-  .tdata    :
+  .tdata	  :
    {
      PROVIDE_HIDDEN (__tdata_start = .);
      *(.tdata .tdata.* .gnu.linkonce.td.*)
+     PROVIDE_HIDDEN (__tdata_end = .);
    }
-  .tbss     : { *(.tbss .tbss.* .gnu.linkonce.tb.*) *(.tcommon) }
+   PROVIDE (__tdata_size = SIZEOF (.tdata));
+  .tbss		  : 
+  {
+    PROVIDE_HIDDEN (__tbss_start = .);
+    PROVIDE_HIDDEN (__tbss_offset = ABSOLUTE (__tbss_start - __tdata_start)); 
+    *(.tbss .tbss.* .gnu.linkonce.tb.*) *(.tcommon)
+    PROVIDE_HIDDEN (__tbss_end = .);
+  }
+  PROVIDE (__tbss_size = SIZEOF (.tbss));
+  PROVIDE (__tcb_aligned_size = ALIGN(__tbss_end - __tdata_start, 64));
   .preinit_array    :
   {
     PROVIDE_HIDDEN (__preinit_array_start = .);
