@@ -16,7 +16,7 @@ VX_CFLAGS += -DSM_ENABLE=0 -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw
 
 VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections,--defsym=__stack_top=0xfefff000
 
-VX_RUNTIME = $(VORTEX_RT_PATH)/src/vx_start.S $(VORTEX_RT_PATH)/src/vx_perf.c
+VX_RUNTIME = $(VORTEX_RT_PATH)/src/vx_start.S $(VORTEX_RT_PATH)/src/vx_perf.c $(VORTEX_RT_PATH)/src/vx_syscalls.c
 
 VX_SRCS = kernel.c $(VX_RUNTIME)
 
