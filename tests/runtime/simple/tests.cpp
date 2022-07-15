@@ -13,7 +13,7 @@ int __attribute__ ((noinline)) check_error(const int* buffer, int offset, int si
 		if (value == ref_value)	{
 			//vx_printf("[%d] %c\n", i, value);
 		} else {
-			vx_printf("*** error: [%d] %x, expected %x\n", i, value, ref_value);
+			vx_printf("*** error: [%d] 0x%x, expected 0x%x\n", i, value, ref_value);
 			++errors;
 		}
 	}
@@ -300,4 +300,29 @@ int test_barrier() {
 	vx_wspawn(num_warps, barrier_kernel);
 	barrier_kernel();	
 	return check_error(barrier_buffer, 0, num_warps);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+int tls_buffer[8];
+__thread int tls_var;
+
+__attribute__ ((noinline)) void print_tls_var() {
+	unsigned wid = vx_warp_id();
+	tls_buffer[wid] = 65 + tls_var;
+}
+
+void tls_kernel() {
+	unsigned wid = vx_warp_id();
+	tls_var = wid;
+	print_tls_var();
+	vx_tmc(0 == wid);
+}
+
+int test_tls() {
+	vx_printf("TLS Test\n");
+	int num_warps = std::min(vx_num_warps(), 8);
+	vx_wspawn(num_warps, tls_kernel);
+	tls_kernel();
+	return check_error(tls_buffer, 0, num_warps);
 }

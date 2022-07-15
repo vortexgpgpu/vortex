@@ -4,33 +4,45 @@
 .section .init, "ax"
 .global _start
 .type   _start, @function
-_start:
-  
-  # execute stack initialization on all warps
-  la a1, vx_set_sp
-  csrr a0, CSR_NW  # get num warps
-  .insn r 0x0b, 1, 0, x0, a0, a1  # wspawn a0, a1
-  jal vx_set_sp
+_start:  
 
+  # initialize per-thread registers
+  csrr a0, CSR_NW  # get num warps
+  la a1, init_regs
+  .insn r 0x0b, 1, 0, x0, a0, a1  # wspawn a0, a1
+  jal init_regs
   # return back to single thread execution
   li a0, 1
   .insn r 0x0b, 0, 0, x0, a0, x0  # tmc a0
   
-  # Clear the bss segment
+  # initialize TLS for all warps
+  csrr a0, CSR_NW  # get num warps
+  la a1, __init_tls
+  .insn r 0x0b, 1, 0, x0, a0, a1  # wspawn a0, a1
+  call __init_tls
+  # return back to single thread execution
+  li a0, 1
+  .insn r 0x0b, 0, 0, x0, a0, x0  # tmc a0
+  
+  # clear BSS segment
   la      a0, _edata
   la      a2, _end
   sub     a2, a2, a0
   li      a1, 0
   call    memset
 
-  # Register global termination functions
+  # Initialize trap vector
+  # a t0, trap_entry
+  # csrw mtvec, t0
+
+  # register global termination functions
   la      a0, __libc_fini_array   
 
   # to be called upon exit
   call    atexit                  
 
-  # Run global initialization functions
-  call    __libc_init_array       
+  # run global initialization functions
+  call    __libc_init_array  
 
   # call main program routine
   call    main
@@ -50,23 +62,37 @@ _exit:
   .insn r 0x0b, 0, 0, x0, a0, x0  # tmc a0
 
 .section .text
-.type vx_set_sp, @function
-.global vx_set_sp
-vx_set_sp:
+.type init_regs, @function
+.global init_regs
+init_regs:
   # activate all threads
   li a0, -1
   .insn r 0x0b, 0, 0, x0, a0, x0  # tmc a0
+
+  # set global pointer register
+  .option push
+  .option norelax
+  la gp, __global_pointer
+  .option pop
   
-  # set per-thread stack register
+  # set stack pointer register
   li sp, STACK_BASE_ADDR # load stack base address
-  li a1, STACK_SIZE      # load stack size
-  csrr a2, CSR_GTID      # get global thread id
-  mul  a1, a1, a2
+  csrr a0, CSR_GTID      # get global thread id
+  sll  a1, a0, STACK_LOG2_SIZE
   sub  sp, sp, a1
 
+  # set thread pointer register
+  # use address space after BSS region
+  # ensure cacheline alignment
+  la      a1, __tcb_aligned_size
+  mul     a0, a0, a1
+  la      tp, _end + 63
+  add     tp, tp, a0
+  and     tp, tp, -64
+
   # disable active warps except warp0
-  csrr a3, CSR_LWID     # get local wid
-  beqz a3, RETURN
+  csrr a0, CSR_LWID     # get local wid
+  beqz a0, RETURN
   li a0, 0
   .insn r 0x0b, 0, 0, x0, a0, x0  # tmc a0
 RETURN:

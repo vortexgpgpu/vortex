@@ -26,6 +26,8 @@ int main() {
 
 	errors += test_barrier();
 
+	errors += test_tls();
+
 	if (0 == errors) {	
 		vx_printf("Passed!\n");
 	} else {

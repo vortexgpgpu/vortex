@@ -23,4 +23,6 @@ int test_tmask();
 
 int test_barrier();
 
+int test_tls();
+
 #endif

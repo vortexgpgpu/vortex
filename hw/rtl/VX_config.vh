@@ -104,9 +104,10 @@
 `define STACK_BASE_ADDR `IO_BASE_ADDR
 `endif
 
-`ifndef STACK_SIZE
-`define STACK_SIZE 8192
+`ifndef STACK_LOG2_SIZE
+`define STACK_LOG2_SIZE 13
 `endif
+`define STACK_SIZE (1 << `STACK_LOG2_SIZE)
 
 `define RESET_DELAY 6
 
