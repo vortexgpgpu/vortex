@@ -29,7 +29,7 @@ using namespace cocogfx;
 const char* kernel_file = "kernel.bin";
 const char* trace_file  = "triangle.cgltrace";
 const char* output_file = "output.png";
-const char* reference_file  = nullptr;
+const char* reference_file = nullptr;
 
 bool sw_rast = false;
 bool sw_rop = false;

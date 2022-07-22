@@ -91,19 +91,19 @@ done
 
 case $DRIVER in
     rtlsim)
-        DRIVER_PATH=$VORTEX_HOME/driver/rtlsim
+        DRIVER_PATH=$VORTEX_HOME/runtime/rtlsim
         ;;
     vlsim)
-        DRIVER_PATH=$VORTEX_HOME/driver/vlsim
+        DRIVER_PATH=$VORTEX_HOME/runtime/vlsim
         ;;
     asesim)
-        DRIVER_PATH=$VORTEX_HOME/driver/asesim
+        DRIVER_PATH=$VORTEX_HOME/runtime/asesim
         ;;
     fpga)
-        DRIVER_PATH=$VORTEX_HOME/driver/fpga
+        DRIVER_PATH=$VORTEX_HOME/runtime/fpga
         ;; 
     simx)
-        DRIVER_PATH=$VORTEX_HOME/driver/simx
+        DRIVER_PATH=$VORTEX_HOME/runtime/simx
         ;;
     *)
         echo "invalid driver: $DRIVER"
@@ -149,7 +149,7 @@ status=0
 make -C hw config
 
 # ensure the stub driver is present
-make -C $VORTEX_HOME/driver/stub
+make -C $VORTEX_HOME/runtime/stub
 
 if [ $DEBUG -ne 0 ]
 then    

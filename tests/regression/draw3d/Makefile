@@ -1,8 +1,8 @@
 XLEN ?= 32
 
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
-VORTEX_DRV_PATH ?= $(realpath ../../../driver)
-VORTEX_RT_PATH ?= $(wildcard ../../../runtime)
+VORTEX_RT_PATH ?= $(realpath ../../../runtime)
+VORTEX_KN_PATH ?= $(wildcard ../../../kernel)
 LLVM_PREFIX ?= /opt/llvm-riscv
 
 OPTS ?= 
@@ -23,17 +23,17 @@ VX_DP  = $(LLVM_PREFIX)/bin/llvm-objdump
 VX_CP  = $(LLVM_PREFIX)/bin/llvm-objcopy
 
 VX_CFLAGS += -std=c++17 -v -march=rv32imf -mabi=ilp32f -O3 -nostartfiles -fdata-sections -ffunction-sections
-VX_CFLAGS += -DENABLE_SW -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw -I$(VORTEX_RT_PATH)/../sim/common -I$(VORTEX_RT_PATH)/../third_party
+VX_CFLAGS += -DENABLE_SW -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw -I$(VORTEX_KN_PATH)/../sim/common -I$(VORTEX_KN_PATH)/../third_party
 
-VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections $(VORTEX_RT_PATH)/libvortexrt.a
+VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections $(VORTEX_KN_PATH)/libvortexrt.a
 
 VX_SRCS = kernel.cpp
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
 
-CXXFLAGS += -I$(VORTEX_DRV_PATH)/include -I$(VORTEX_RT_PATH)/../hw -I$(VORTEX_RT_PATH)/../sim/common -I$(VORTEX_RT_PATH)/../third_party
+CXXFLAGS += -I$(VORTEX_RT_PATH)/include -I$(VORTEX_KN_PATH)/../hw -I$(VORTEX_KN_PATH)/../sim/common -I$(VORTEX_KN_PATH)/../third_party
 
-LDFLAGS += -L/homes/tinebp/tools/boost/lib -L$(VORTEX_DRV_PATH)/stub -lvortex $(VORTEX_RT_PATH)/../third_party/cocogfx/libcocogfx.a -lpng -lz -lboost_serialization
+LDFLAGS += -L/homes/tinebp/tools/boost/lib -L$(VORTEX_RT_PATH)/stub -lvortex $(VORTEX_KN_PATH)/../third_party/cocogfx/libcocogfx.a -lpng -lz -lboost_serialization
 
 # Debugigng
 ifdef DEBUG
@@ -61,19 +61,19 @@ $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 run-simx: $(PROJECT) kernel.bin kernel.dump
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 	
 run-fpga: $(PROJECT) kernel.bin kernel.dump
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/fpga:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/fpga:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
 run-asesim: $(PROJECT) kernel.bin kernel.dump
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/asesim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/asesim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 	
 run-vlsim: $(PROJECT) kernel.bin kernel.dump
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/vlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/vlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
 run-rtlsim: $(PROJECT) kernel.bin kernel.dump
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;

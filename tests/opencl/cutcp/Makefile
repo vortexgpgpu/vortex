@@ -4,7 +4,7 @@ RISCV_TOOLCHAIN_PATH ?= $(wildcard ../../../../riscv-gnu-toolchain/drops)
 POCL_CC_PATH ?= $(wildcard ../../../../pocl/drops_riscv_cc)
 POCL_INC_PATH ?= $(wildcard ../include)
 POCL_LIB_PATH ?= $(wildcard ../lib)
-VORTEX_RT_PATH ?= $(wildcard ../../../runtime)
+VORTEX_KN_PATH ?= $(wildcard ../../../kernel)
 VX_SIMX_PATH ?= $(wildcard ../../../simx/obj_dir)
 
 CC  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
@@ -13,15 +13,15 @@ DMP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
 HEX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 GDB = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gdb
 
-VX_SRCS =  $(VORTEX_RT_PATH)/newlib/newlib.c
-VX_SRCS += $(VORTEX_RT_PATH)/startup/vx_start.S
-VX_SRCS += $(VORTEX_RT_PATH)/intrinsics/vx_intrinsics.S
-VX_SRCS += $(VORTEX_RT_PATH)/io/vx_io.S $(VORTEX_RT_PATH)/io/vx_io.c
-VX_SRCS += $(VORTEX_RT_PATH)/fileio/fileio.S
-VX_SRCS += $(VORTEX_RT_PATH)/tests/tests.c
-VX_SRCS += $(VORTEX_RT_PATH)/vx_api/vx_api.c
+VX_SRCS =  $(VORTEX_KN_PATH)/newlib/newlib.c
+VX_SRCS += $(VORTEX_KN_PATH)/startup/vx_start.S
+VX_SRCS += $(VORTEX_KN_PATH)/intrinsics/vx_intrinsics.S
+VX_SRCS += $(VORTEX_KN_PATH)/io/vx_io.S $(VORTEX_KN_PATH)/io/vx_io.c
+VX_SRCS += $(VORTEX_KN_PATH)/fileio/fileio.S
+VX_SRCS += $(VORTEX_KN_PATH)/tests/tests.c
+VX_SRCS += $(VORTEX_KN_PATH)/vx_api/vx_api.c
 
-VX_CFLAGS = -nostartfiles -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/startup/vx_link$(XLEN).ld
+VX_CFLAGS = -nostartfiles -Wl,-Bstatic,-T,$(VORTEX_KN_PATH)/startup/vx_link$(XLEN).ld
 
 CXXFLAGS =  -g -O0 -march=rv32im -mabi=ilp32 
 CXXFLAGS += -ffreestanding # program may not begin at main()
@@ -30,7 +30,7 @@ CXXFLAGS += -fno-rtti -fno-non-call-exceptions # disable RTTI and exceptions
 CXXFLAGS += -I$(POCL_INC_PATH) -I.
 
 VX_LIBS = -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/libOpenCL.a
-QEMU_LIBS = $(VORTEX_RT_PATH)/qemu/vx_api.c -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/libOpenCL.a
+QEMU_LIBS = $(VORTEX_KN_PATH)/qemu/vx_api.c -Wl,--whole-archive lib$(PROJECT).a -Wl,--no-whole-archive $(POCL_LIB_PATH)/libOpenCL.a
 
 PROJECT = cutcp
 

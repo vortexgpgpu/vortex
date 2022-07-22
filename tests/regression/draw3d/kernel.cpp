@@ -280,11 +280,11 @@ void shader_function_sw_rast_cb(kernel_arg_t* kernel_arg,
 		}
 	}
 
-	//if (kernel_arg->sw_rop) {
-	//	OUTPUT_SW(0, out_color, z, kernel_arg->gpu_sw->rop);
-	//} else {
+	if (kernel_arg->sw_rop) {
+		OUTPUT_SW(0, out_color, z, kernel_arg->gpu_sw->rop);
+	} else {
 		OUTPUT_SW(0, out_color, z, vx_rop);
-	//}
+	}
 }
 
 void shader_function_sw(int task_id, kernel_arg_t* kernel_arg) {

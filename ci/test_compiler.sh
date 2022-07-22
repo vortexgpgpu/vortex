@@ -9,17 +9,17 @@ make -s
 # clear POCL cache
 rm -rf ~/.cache/pocl
 
-# rebuild runtime
+# rebuild runtime library
 make -C runtime clean
 make -C runtime
 
-# rebuild drivers
-make -C driver clean
-make -C driver
+# rebuild kernel library
+make -C kernel clean
+make -C kernel
 
-# rebuild runtime tests
-make -C tests/runtime clean
-make -C tests/runtime
+# rebuild kernel tests
+make -C tests/kernel clean
+make -C tests/kernel
 
 # rebuild regression tests
 make -C tests/regression clean-all

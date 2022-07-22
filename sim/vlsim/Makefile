@@ -1,6 +1,7 @@
 DESTDIR ?= .
 RTL_DIR = ../../hw/rtl
 DPI_DIR = ../../hw/dpi
+AFU_DIR = ../../hw/afu/opae
 SCRIPT_DIR = ../../hw/scripts
 THIRD_PARTY_DIR = ../../third_party
 
@@ -40,7 +41,7 @@ RASTER_INCLUDE = -I$(RTL_DIR)/raster_unit
 ROP_INCLUDE = -I$(RTL_DIR)/rop_unit
 RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 RTL_INCLUDE += $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
-RTL_INCLUDE += -I$(RTL_DIR)/afu -I$(RTL_DIR)/afu/ccip
+RTL_INCLUDE += -I$(AFU_DIR) -I$(AFU_DIR)/ccip
 
 TOP = vortex_afu_shim
 
@@ -97,8 +98,8 @@ PROJECT = libopae-c-vlsim.so
 
 all: $(PROJECT)
 
-vortex_afu.h : $(RTL_DIR)/afu/vortex_afu.vh
-	$(SCRIPT_DIR)/gen_config.py -i $(RTL_DIR)/afu/vortex_afu.vh -o vortex_afu.h
+vortex_afu.h : $(AFU_DIR)/vortex_afu.vh
+	$(SCRIPT_DIR)/gen_config.py -i $(AFU_DIR)/vortex_afu.vh -o vortex_afu.h
 
 $(DESTDIR)/$(PROJECT): $(SRCS) vortex_afu.h
 	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(DESTDIR)/$(PROJECT)

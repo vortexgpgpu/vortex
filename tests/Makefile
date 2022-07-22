@@ -1,7 +1,7 @@
-all: runtime regression opencl riscv unittest
+all: kernel regression opencl riscv unittest
 
-runtime:
-	$(MAKE) -C runtime
+kernel:
+	$(MAKE) -C kernel
 
 regression:
 	$(MAKE) -C regression
@@ -16,17 +16,17 @@ unittest:
 	$(MAKE) -C unittest
 
 clean:
-	$(MAKE) -C runtime clean
+	$(MAKE) -C kernel clean
 	$(MAKE) -C regression clean
 	$(MAKE) -C opencl clean
 	$(MAKE) -C riscv clean
 	$(MAKE) -C unittest clean
 
 clean-all:
-	$(MAKE) -C runtime clean
+	$(MAKE) -C kernel clean
 	$(MAKE) -C regression clean-all
 	$(MAKE) -C opencl clean
 	$(MAKE) -C riscv clean
 	$(MAKE) -C unittest clean
 
-.PHONY: all runtime regression opencl riscv unittest
+.PHONY: all kernel regression opencl riscv unittest
