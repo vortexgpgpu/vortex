@@ -3,8 +3,8 @@
 # exit when any command fails
 set -e
 
-# clear drivers
-make -C driver clean
+# clear runtime
+make -C runtime clean
 
 # clear blackbox cache
 rm -f blackbox.*.cache
@@ -18,8 +18,8 @@ echo "begin smoke tests..."
 
 make -C tests/riscv/isa run-simx
 make -C tests/riscv/isa run-rtlsim
-make -C tests/runtime run-simx
-make -C tests/runtime run-rtlsim
+make -C tests/kernel run-simx
+make -C tests/kernel run-rtlsim
 make -C tests/regression run-simx
 make -C tests/regression run-rtlsim
 
@@ -39,11 +39,11 @@ coverage()
 {
 echo "begin coverage tests..."
 
-make -C tests/runtime run-rtlsim
+make -C tests/kernel run-rtlsim
 make -C tests/riscv/isa run-rtlsim
 make -C tests/regression run-vlsim
 make -C tests/opencl run-vlsim
-make -C tests/runtime run-simx
+make -C tests/kernel run-simx
 make -C tests/riscv/isa run-simx
 make -C tests/regression run-simx
 make -C tests/opencl run-simx

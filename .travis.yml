@@ -64,10 +64,10 @@ jobs:
   
 after_success:
   # Gather code coverage
-  - lcov --directory driver --capture --output-file driver.cov # capture trace  
-  - lcov --directory simx --capture --output-file simx.cov # capture trace    
-  - lcov --list driver.cov # output coverage data for debugging
-  - lcov --list simx.cov # output coverage data for debugging
+  - lcov --directory runtime --capture --output-file runtime.cov # capture trace  
+  - lcov --directory sim --capture --output-file sim.cov # capture trace    
+  - lcov --list runtime.cov # output coverage data for debugging
+  - lcov --list sim.cov # output coverage data for debugging
   # Upload coverage report
-  - bash <(curl -s https://codecov.io/bash) -f driver.cov
-  - bash <(curl -s https://codecov.io/bash) -f simx.cov
+  - bash <(curl -s https://codecov.io/bash) -f runtime.cov
+  - bash <(curl -s https://codecov.io/bash) -f sim.cov
