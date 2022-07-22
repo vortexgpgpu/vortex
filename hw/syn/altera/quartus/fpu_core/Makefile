@@ -1,16 +1,16 @@
 PROJECT = VX_fpu_fpga
 TOP_LEVEL_ENTITY = VX_fpu_fpga
 SRC_FILE = VX_fpu_fpga.sv
-RTL_DIR = ../../../../rtl
-THIRD_PARTY_DIR = ../../../../../third_party
+RTL_DIR = ../../../../../rtl
+THIRD_PARTY_DIR = ../../../../../../third_party
 
 FAMILY = "Arria 10"
 DEVICE = 10AX115N3F40E2SG
-IP_DIR = ../../ip/arria10
+IP_DIR = ../../../ip/arria10
 
 #FAMILY = "Stratix 10"
 #DEVICE = 1SX280HN2F43E2VG
-#IP_DIR = ../../ip/stratix10
+#IP_DIR = ../../../ip/stratix10
 
 FPU_INCLUDE = $(RTL_DIR)/fpu_unit;$(THIRD_PARTY_DIR)/fpnew/src;$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl;$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include;$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src
 RTL_INCLUDE = $(FPU_INCLUDE);$(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces;$(IP_DIR)

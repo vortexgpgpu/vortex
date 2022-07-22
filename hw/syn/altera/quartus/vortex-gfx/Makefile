@@ -1,16 +1,16 @@
 PROJECT = Vortex
 TOP_LEVEL_ENTITY = Vortex
 SRC_FILE = Vortex.sv
-RTL_DIR = ../../../../rtl
-THIRD_PARTY_DIR = ../../../../../third_party
+RTL_DIR = ../../../../../rtl
+THIRD_PARTY_DIR = ../../../../../../third_party
 
 FAMILY = "Arria 10"
 DEVICE = 10AX115N3F40E2SG
-IP_DIR = ../../ip/arria10
+IP_DIR = ../../../ip/arria10
 
 #FAMILY = "Stratix 10"
 #DEVICE = 1SX280HN2F43E2VG
-#IP_DIR = ../../ip/stratix10
+#IP_DIR = ../../../ip/stratix10
 
 CONFIGS += -set "EXT_GFX_ENABLE"
 

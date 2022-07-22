@@ -1,8 +1,8 @@
 DEVICE_FAMILY ?= arria10
 BUILD_DIR ?= build
-RTL_DIR = ../../rtl
-DPI_DIR = ../../dpi
-AFU_DIR = ../../afu/opae
+RTL_DIR = ../../../rtl
+DPI_DIR = ../../../dpi
+AFU_DIR = ../../../afu/opae
 IP_DIR  = ../ip/$(DEVICE_FAMILY)
 
 ifeq ($(shell which qsub-synth),)

@@ -1,16 +1,16 @@
 PROJECT = Core
 TOP_LEVEL_ENTITY = VX_core
 SRC_FILE = VX_core.sv
-RTL_DIR = ../../../../rtl
-THIRD_PARTY_DIR = ../../../../../third_party
+RTL_DIR = ../../../../../rtl
+THIRD_PARTY_DIR = ../../../../../../third_party
 
 FAMILY = "Arria 10"
 DEVICE = 10AX115N3F40E2SG
-IP_DIR = ../../ip/arria10
+IP_DIR = ../../../ip/arria10
 
 #FAMILY = "Stratix 10"
 #DEVICE = 1SX280HN2F43E2VG
-#IP_DIR = ../../ip/stratix10
+#IP_DIR = ../../../ip/stratix10
 
 FPU_INCLUDE = $(RTL_DIR)/fpu_unit;$(THIRD_PARTY_DIR)/fpnew/src;$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl;$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include;$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src
 TEX_INCLUDE = $(RTL_DIR)/tex_unit

@@ -1,7 +1,7 @@
 PROJECT = VX_cache
 TOP_LEVEL_ENTITY = VX_cache
 SRC_FILE = VX_cache.sv
-RTL_DIR = ../../../../rtl
+RTL_DIR = ../../../../../rtl
 
 FAMILY = "Arria 10"
 DEVICE = 10AX115N3F40E2SG
