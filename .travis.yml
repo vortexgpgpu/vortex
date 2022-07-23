@@ -11,6 +11,8 @@ addons:
         - valgrind
         - verilator
         - yosys
+        - libpng-dev
+        - libboost-serialization-dev
 
 install:
   # Set environments
@@ -37,6 +39,15 @@ jobs:
     - stage: test
       name: tex
       script: cp -r $PWD ../build_tex && cd ../build_tex && ./ci/travis_run.py ./ci/regression.sh -tex
+    - stage: test
+      name: rop
+      script: cp -r $PWD ../build_rop && cd ../build_rop && ./ci/travis_run.py ./ci/regression.sh -rop
+    - stage: test
+      name: raster
+      script: cp -r $PWD ../build_raster && cd ../build_raster && ./ci/travis_run.py ./ci/regression.sh -raster
+    - stage: test
+      name: graphics
+      script: cp -r $PWD ../build_graphics && cd ../build_graphics && ./ci/travis_run.py ./ci/regression.sh -graphics
     - stage: test
       name: cluster
       script: cp -r $PWD ../build_cluster && cd ../build_cluster && ./ci/travis_run.py ./ci/regression.sh -cluster    
