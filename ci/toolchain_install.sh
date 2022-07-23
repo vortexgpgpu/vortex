@@ -60,11 +60,39 @@ llvm()
     rm -rf llvm-riscv
 }
 
+llvm2()
+{
+    case $OS in
+    "centos/7") parts=$(eval echo {a..g}) ;;
+    *)          parts=$(eval echo {a..t}) ;;
+    esac
+    echo $parts
+    rm -f llvm-riscv2.tar.bz2.parta*
+    for x in $parts
+    do
+        wget $REPOSITORY/llvm-riscv/$OS/llvm-riscv2.tar.bz2.parta$x
+    done
+    cat llvm-riscv2.tar.bz2.parta* > llvm-riscv2.tar.bz2
+    tar -xvf llvm-riscv2.tar.bz2
+    rm -f llvm-riscv2.tar.bz2*
+    cp -r llvm-riscv $DESTDIR
+    rm -rf llvm-riscv
+}
+
 pocl()
 {
     wget $REPOSITORY/pocl/$OS/pocl.tar.bz2
     tar -xvf pocl.tar.bz2
     rm -f pocl.tar.bz2
+    cp -r pocl $DESTDIR
+    rm -rf pocl
+}
+
+pocl2()
+{
+    wget $REPOSITORY/pocl/$OS/pocl2.tar.bz2
+    tar -xvf pocl2.tar.bz2
+    rm -f pocl2.tar.bz2
     cp -r pocl $DESTDIR
     rm -rf pocl
 }
@@ -80,12 +108,14 @@ verilator()
 
 usage()
 {
-    echo "usage: toolchain_install [[-riscv] [-riscv64] [-llvm] [-pocl] [-verilator] [-all] [-h|--help]]"
+    echo "usage: toolchain_install [[-riscv] [-riscv64] [-llvm] [-llvm2] [-pocl] [-pocl2] [-verilator] [-all] [-h|--help]]"
 }
 
 while [ "$1" != "" ]; do
     case $1 in
         -pocl ) pocl
+                ;;
+        -pocl2 ) pocl2
                 ;;
         -verilator ) verilator
                      ;;
@@ -95,10 +125,12 @@ while [ "$1" != "" ]; do
                  ;;
         -llvm ) llvm
                 ;;
+        -llvm2 ) llvm2
+                ;;
         -all ) riscv
                riscv64
-               llvm
-               pocl
+               llvm2
+               pocl2
                verilator
                ;;
         -h | --help ) usage
