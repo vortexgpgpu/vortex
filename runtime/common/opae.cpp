@@ -79,6 +79,8 @@ public:
     uint64_t isa_caps;
 };
 
+///////////////////////////////////////////////////////////////////////////////
+
 typedef struct vx_buffer_ {
     uint64_t wsid;
     void* host_ptr;
