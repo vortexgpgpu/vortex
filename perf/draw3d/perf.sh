@@ -18,9 +18,9 @@ draw3d(){
         echo -e "draw3d $TRACE benchmark\n" >> $LOG
         if [ $ALL = true ]
         then
-            CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-t$TRACE.cgltrace -w8 -h8" >> $LOG
+            CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-t$TRACE.cgltrace -w512 -h512" >> $LOG
         else
-            CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-t$TRACE.cgltrace -w8 -h8" | grep 'PERF' >> $LOG
+            CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-t$TRACE.cgltrace -w512 -h512" | grep 'PERF' >> $LOG
         fi
     done
     echo "draw3d tests done!"

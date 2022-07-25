@@ -266,19 +266,11 @@
 `endif
 
 `ifndef LATENCY_FDIV
-`ifdef ALTERA_S10
-`define LATENCY_FDIV 34
-`else
 `define LATENCY_FDIV 15
-`endif
 `endif
 
 `ifndef LATENCY_FSQRT
-`ifdef ALTERA_S10
-`define LATENCY_FSQRT 25
-`else
 `define LATENCY_FSQRT 10
-`endif
 `endif
 
 `ifndef LATENCY_FDIVSQRT

@@ -25,12 +25,58 @@ module VX_fpu_div #(
 
     input wire  ready_out,
     output wire valid_out
-);    
-    wire stall = ~ready_out && valid_out;
+);
+
+`ifdef QUARTUS
+    
+    VX_acl_fdiv #(
+        .NUM_LANES  (NUM_LANES),
+        .TAGW       (TAGW)
+    ) fp_div (
+        .clk        (clk),
+        .reset      (reset),
+        .valid_in   (valid_in),
+        .ready_in   (ready_in),
+        .tag_in     (tag_in),
+        .frm        (frm),
+        .dataa      (dataa),
+        .datab      (datab),
+        .has_fflags (has_fflags),
+        .fflags     (fflags),
+        .result     (result),
+        .tag_out    (tag_out),
+        .valid_out  (valid_out),
+        .ready_out  (ready_out)
+    );
+
+`elsif VIVADO
+
+    VX_xil_fdiv #(
+        .NUM_LANES  (NUM_LANES),
+        .TAGW       (TAGW)
+    ) fp_div (
+        .clk        (clk),
+        .reset      (reset),
+        .valid_in   (valid_in),
+        .ready_in   (ready_in),
+        .tag_in     (tag_in),
+        .frm        (frm),
+        .dataa      (dataa), 
+        .datab      (datab),
+        .has_fflags (has_fflags),
+        .fflags     (fflags),
+        .result     (result),
+        .tag_out    (tag_out),
+        .valid_out  (valid_out),
+        .ready_out  (ready_out)
+    );
+
+`else
+
+    wire stall  = ~ready_out && valid_out;
     wire enable = ~stall;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin        
-    `ifdef VERILATOR
+    for (genvar i = 0; i < NUM_LANES; ++i) begin       
         reg [31:0] r;
         fflags_t f;
 
@@ -50,18 +96,6 @@ module VX_fpu_div #(
             .data_in  (r),
             .data_out (result[i])
         );
-    `else
-        `RESET_RELAY (fdiv_reset, reset);
-
-        acl_fdiv fdiv (
-            .clk    (clk),
-            .areset (fdiv_reset),
-            .en     (enable),
-            .a      (dataa[i]),
-            .b      (datab[i]),
-            .q      (result[i])
-        );
-    `endif
     end
 
     VX_shift_register #(
@@ -81,5 +115,7 @@ module VX_fpu_div #(
     `UNUSED_VAR (frm)
     assign has_fflags = 0;
     assign fflags = 0;
+
+`endif
 
 endmodule

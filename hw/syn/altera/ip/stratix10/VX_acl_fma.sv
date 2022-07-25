@@ -1,8 +1,9 @@
 `include "VX_fpu_define.vh"
 
-module VX_fpu_fma #(
+module VX_acl_fma #(
     parameter NUM_LANES = 1, 
-    parameter TAGW = 1
+    parameter TAGW = 1,
+    parameter LATENCY = 4
 ) (
     input wire clk,
     input wire reset,   
@@ -32,67 +33,11 @@ module VX_fpu_fma #(
     output wire valid_out
 );
 
-`ifdef QUARTUS
-    
-    VX_acl_fma #(
-        .NUM_LANES  (NUM_LANES),
-        .TAGW       (TAGW)
-    ) fp_fma (
-        .clk        (clk), 
-        .reset      (reset),   
-        .valid_in   (valid_in),
-        .ready_in   (ready_in),
-        .tag_in     (tag_in),
-        .frm        (frm),
-        .do_madd    (do_madd),
-        .do_sub     (do_sub),
-        .do_neg     (do_neg),
-        .dataa      (dataa), 
-        .datab      (datab),
-        .datac      (datac),
-        .has_fflags (has_fflags),
-        .fflags     (fflags),   
-        .result     (result),
-        .tag_out    (tag_out),
-        .valid_out  (valid_out),
-        .ready_out  (ready_out)
-    );
-
-`elsif VIVADO
-
-    VX_xil_fma #(
-        .NUM_LANES  (NUM_LANES),
-        .TAGW       (TAGW)
-    ) fp_fma (
-        .clk        (clk), 
-        .reset      (reset),   
-        .valid_in   (valid_in),
-        .ready_in   (ready_in),
-        .tag_in     (tag_in),
-        .frm        (frm),
-        .do_madd    (do_madd),
-        .do_sub     (do_sub),
-        .do_neg     (do_neg),
-        .dataa      (dataa), 
-        .datab      (datab),
-        .datac      (datac),
-        .has_fflags (has_fflags),
-        .fflags     (fflags),   
-        .result     (result),
-        .tag_out    (tag_out),
-        .valid_out  (valid_out),
-        .ready_out  (ready_out)
-    );
-
-`else
-
     wire stall = ~ready_out && valid_out;
     wire enable = ~stall;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin       
         reg [31:0] a, b, c;
-        reg [31:0] r;
-        fflags_t f;
 
         always @(*) begin
             if (do_madd) begin
@@ -115,27 +60,22 @@ module VX_fpu_fma #(
             end    
         end
 
-        always @(*) begin        
-            dpi_fmadd (enable && valid_in, a, b, c, frm, r, f);
-        end
-        `UNUSED_VAR (f)
+        `RESET_RELAY (fma_reset, reset);
 
-        VX_shift_register #(
-            .DATAW  (32),
-            .DEPTH  (`LATENCY_FMA),
-            .RESETW (1)
-        ) shift_req_dpi (
-            .clk      (clk),
-            .reset    (reset),
-            .enable   (enable),
-            .data_in  (r),
-            .data_out (result[i])
+        acl_fmadd fmadd (
+            .clk    (clk),
+            .areset (fma_reset),
+            .en     (enable),
+            .a      (a),
+            .b      (b),
+            .c      (c),
+            .q      (result[i])
         );
     end
     
     VX_shift_register #(
         .DATAW  (1 + TAGW),
-        .DEPTH  (`LATENCY_FMA),
+        .DEPTH  (LATENCY),
         .RESETW (1)
     ) shift_reg (
         .clk(clk),
@@ -150,7 +90,5 @@ module VX_fpu_fma #(
     `UNUSED_VAR (frm)
     assign has_fflags = 0;
     assign fflags = 0;
-
-`endif
 
 endmodule

@@ -25,11 +25,55 @@ module VX_fpu_sqrt #(
     input wire  ready_out,
     output wire valid_out
 );    
+
+`ifdef QUARTUS
+    
+    VX_acl_fsqrt #(
+        .NUM_LANES  (NUM_LANES),
+        .TAGW       (TAGW)
+    ) fp_sqrt (
+        .clk        (clk), 
+        .reset      (reset),   
+        .valid_in   (valid_in),
+        .ready_in   (ready_in),
+        .tag_in     (tag_in),
+        .frm        (frm),  
+        .dataa      (dataa),
+        .has_fflags (has_fflags),
+        .fflags     (fflags),   
+        .result     (result),
+        .tag_out    (tag_out),
+        .valid_out  (valid_out),
+        .ready_out  (ready_out)
+    );
+
+`elsif VIVADO
+
+    VX_xil_fsqrt #(
+        .NUM_LANES  (NUM_LANES),
+        .TAGW       (TAGW)
+    ) fp_sqrt (
+        .clk        (clk), 
+        .reset      (reset),   
+        .valid_in   (valid_in),
+        .ready_in   (ready_in),
+        .tag_in     (tag_in),
+        .frm        (frm),  
+        .dataa      (dataa),
+        .has_fflags (has_fflags),
+        .fflags     (fflags),   
+        .result     (result),
+        .tag_out    (tag_out),
+        .valid_out  (valid_out),
+        .ready_out  (ready_out)
+    );
+
+`else
+
     wire stall = ~ready_out && valid_out;
     wire enable = ~stall;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-    `ifdef VERILATOR
         reg [31:0] r;
         fflags_t f;
 
@@ -49,17 +93,6 @@ module VX_fpu_sqrt #(
             .data_in  (r),
             .data_out (result[i])
         );
-    `else
-        `RESET_RELAY (fsqrt_reset, reset);
-
-        acl_fsqrt fsqrt (
-            .clk    (clk),
-            .areset (fsqrt_reset),
-            .en     (enable),
-            .a      (dataa[i]),
-            .q      (result[i])
-        );
-    `endif
     end
 
     VX_shift_register #(
@@ -79,5 +112,7 @@ module VX_fpu_sqrt #(
     `UNUSED_VAR (frm)
     assign has_fflags = 0;
     assign fflags = 0;
+
+`endif
 
 endmodule

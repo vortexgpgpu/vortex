@@ -4,7 +4,7 @@ RTL_DIR=../../hw/rtl
 
 SCRIPT_DIR=../../hw/scripts
 
-OPAE_SYN_DIR=../../hw/syn/opae
+OPAE_SYN_DIR=../../hw/syn/altera/opae
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
 
