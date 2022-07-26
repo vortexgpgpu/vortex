@@ -137,6 +137,9 @@ int render(const CGLTrace& trace) {
 
   uint32_t draw_idx = 0; 
 
+  uint64_t instrs = 0;
+  uint64_t cycles = 0;
+
   // render each draw call
   for (auto& drawcall : trace.drawcalls) {
     auto& states = drawcall.states;
@@ -344,8 +347,15 @@ int render(const CGLTrace& trace) {
     printf("Elapsed time: %lg ms\n", elapsed);
 
     if (draw_idx < trace.drawcalls.size()-1) {
-      vx_dump_perf(device, stdout);
+      vx_dump_perf(device, stdout);      
     }
+
+    uint64_t instrs_;
+    uint64_t cycles_;
+    RT_CHECK(vx_perf_counter(device, CSR_MCYCLE, -1, &cycles_));
+    RT_CHECK(vx_perf_counter(device, CSR_MINSTRET, -1, &instrs_));
+    cycles += cycles_;
+    instrs += instrs_;
 
     ++draw_idx;
   }
@@ -364,7 +374,8 @@ int render(const CGLTrace& trace) {
   
   auto time_end = std::chrono::high_resolution_clock::now();
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_begin).count();
-  printf("Total elapsed time: %lg ms\n", elapsed);
+  float IPC = (float)(double(instrs) / double(cycles));
+  printf("Total elapsed time: %lg ms, instrs=%ld, cycles=%ld, IPC=%f\n", elapsed, instrs, cycles, IPC);
 
   // save output image
   std::cout << "save output image" << std::endl;

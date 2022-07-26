@@ -91,8 +91,9 @@ int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint64_t siz
 // upload kernel file to device
 int vx_upload_kernel_file(vx_device_h device, const char* filename);
 
-// dump performance counters
+// performance counters
 int vx_dump_perf(vx_device_h device, FILE* stream);
+int vx_perf_counter(vx_device_h device, int counter, int core_id, uint64_t* value);
 
 //////////////////////////// DEPRECATED FUNCTIONS /////////////////////////////
 int vx_alloc_dev_mem(vx_device_h hdevice, uint64_t size, uint64_t* dev_maddr);

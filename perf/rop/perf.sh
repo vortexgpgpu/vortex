@@ -18,7 +18,7 @@ rtlsim()
 	for i in 1 4 16
 	do
 		echo "NUM_CORES = " $i >> $LOG
-		CONFIGS="-DEXT_ROP_ENABLE" ./ci/blackbox.sh --driver=rtlsim --cores=$i --warps=4 --threads=4 --app=rop --args="-w128 -h128 -b -d" --perf=4 | grep 'PERF' >> $LOG
+		CONFIGS="-DEXT_ROP_ENABLE" ./ci/blackbox.sh --driver=rtlsim --cores=$i --warps=4 --threads=4 --app=rop --args="-w128 -h128 -b -d" --perf=4 | grep 'PERF\|Total elapsed time' >> $LOG
 		echo "**************************************" >> $LOG
 	done
 

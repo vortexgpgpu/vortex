@@ -326,7 +326,7 @@
 
 // Number of raster units
 `ifndef NUM_RASTER_UNITS
-`define NUM_RASTER_UNITS 1
+`define NUM_RASTER_UNITS `UP(`NUM_CORES / 16)
 `endif
 
 // RASTER memory pending size
@@ -363,7 +363,7 @@
 
 // Number of rop units
 `ifndef NUM_ROP_UNITS
-`define NUM_ROP_UNITS 1
+`define NUM_ROP_UNITS `UP(`NUM_CORES / 16)
 `endif
 
 // ROP memory pending size
@@ -712,7 +712,7 @@
 
 // Size of cache in bytes
 `ifndef L2_CACHE_SIZE
-`define L2_CACHE_SIZE 1048576
+`define L2_CACHE_SIZE 2097152
 `endif
 
 // Number of banks

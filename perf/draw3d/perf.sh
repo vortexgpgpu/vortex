@@ -1,27 +1,23 @@
 #!/bin/bash
 
-LOG=./perf/draw3d/draw3d_perf.log
-declare -a traces=(vase filmtv skybox coverflow evilskull polybump tekkaman carnival)
-
 # exit when any command fails
 set -e
 
-# ensure build
-make -s
+WIDTH=1920
+HEIGHT=1080
+
+LOG_FILE=./perf/draw3d/perf_${DEVICE_FAMILY}_${WIDTH}_${HEIGHT}.log
+
+declare -a traces=(vase filmtv skybox coverflow evilskull polybump tekkaman carnival)
 
 # draw3d benchmarks
 draw3d(){
-    echo > $LOG # clear log
-    for TRACE in "${traces[@]}"
+    echo > $LOG_FILE # clear log
+    for trace in "${traces[@]}"
     do
-        echo -e "\n**************************************\n" >> $LOG
-        echo -e "draw3d $TRACE benchmark\n" >> $LOG
-        if [ $ALL = true ]
-        then
-            CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-t$TRACE.cgltrace -w512 -h512" >> $LOG
-        else
-            CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-t$TRACE.cgltrace -w512 -h512" | grep 'PERF' >> $LOG
-        fi
+        echo -e "\n**************************************\n" >> $LOG_FILE
+        echo -e "draw3d $trace benchmark\n" >> $LOG_FILE
+        CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=fpga --app=draw3d --args="-t$trace.cgltrace -w${WIDTH} -h${HEIGHT}" | grep 'Total elapsed time:' >> $LOG_FILE
     done
     echo "draw3d tests done!"
 }

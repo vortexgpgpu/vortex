@@ -33,7 +33,7 @@ CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
 
 CXXFLAGS += -I$(VORTEX_RT_PATH)/include -I$(VORTEX_KN_PATH)/../hw -I$(VORTEX_KN_PATH)/../sim/common -I$(VORTEX_KN_PATH)/../third_party
 
-LDFLAGS += -L$(VORTEX_RT_PATH)/stub -lvortex $(VORTEX_KN_PATH)/../third_party/cocogfx/libcocogfx.a -lpng -lz -lboost_serialization
+LDFLAGS += -L/homes/tinebp/tools/boost/lib -L$(VORTEX_RT_PATH)/stub -lvortex $(VORTEX_KN_PATH)/../third_party/cocogfx/libcocogfx.a -lpng -lz -lboost_serialization
 
 # Debugigng
 ifdef DEBUG

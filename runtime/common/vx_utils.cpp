@@ -535,7 +535,62 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   // release allocated resources
   vx_buf_free(staging_buf);
 
-  return ret;
+  return 0;
+}
+
+extern int vx_perf_counter(vx_device_h device, int counter, int core_id, uint64_t* value) {
+  int ret = 0;
+
+  uint64_t num_cores;
+  ret = vx_dev_caps(device, VX_CAPS_MAX_CORES, &num_cores);
+  if (ret != 0)
+    return ret;
+
+  if (core_id >= (int)num_cores) {
+    std::cout << "error: core_id out of range" << std::endl;
+    return -1;
+  }
+
+  uint64_t mpm_mem_size = 64 * sizeof(uint32_t);
+
+  vx_buffer_h staging_buf;
+  ret = vx_buf_alloc(device, mpm_mem_size, &staging_buf);
+  if (ret != 0)
+    return ret;
+
+  auto staging_ptr = (uint32_t*)vx_host_ptr(staging_buf);
+
+  uint64_t _value = 0;
+  
+  unsigned i = 0;
+  if (core_id != -1) {
+    i = core_id;
+    num_cores = core_id + 1;
+  }
+      
+  for (i = 0; i < num_cores; ++i) {
+    uint64_t mpm_mem_addr = IO_CSR_ADDR + i * mpm_mem_size;    
+    ret = vx_copy_from_dev(staging_buf, mpm_mem_addr, mpm_mem_size, 0);
+    if (ret != 0) {
+      vx_buf_free(staging_buf);
+      return ret;
+    }
+
+    auto per_core_value = get_csr_64(staging_ptr, counter);     
+    if (counter == CSR_MCYCLE) {
+      _value = std::max<uint64_t>(per_core_value, _value);
+    } else {
+      _value += per_core_value;
+    }    
+  }
+
+  // release allocated resources
+  vx_buf_free(staging_buf);
+
+  // output
+  *value = _value;
+
+  return 0;
 }
 
 // Deprecated API functions
