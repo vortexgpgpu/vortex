@@ -101,6 +101,10 @@ module VX_execute #(
     VX_fpu_to_csr_if fpu_to_csr_if();
 `endif
 
+`ifdef PERF_ENABLE
+    VX_perf_gpu_if perf_gpu_if();
+`endif
+
     `RESET_RELAY (alu_reset, reset);
     `RESET_RELAY (lsu_reset, reset);
     `RESET_RELAY (csr_reset, reset);
@@ -140,6 +144,7 @@ module VX_execute #(
     `ifdef PERF_ENABLE
         .perf_memsys_if (perf_memsys_if),
         .perf_pipeline_if(perf_pipeline_if),
+        .perf_gpu_if    (perf_gpu_if),
     `endif
 
         .gpu_pending    (gpu_pending),
@@ -206,6 +211,10 @@ module VX_execute #(
         .clk            (clk),
         .reset          (gpu_reset),    
         .gpu_req_if     (gpu_req_if),
+
+    `ifdef PERF_ENABLE
+        .perf_gpu_if    (perf_gpu_if),
+    `endif
     
     `ifdef EXT_TEX_ENABLE
         .tex_csr_if     (tex_csr_if),

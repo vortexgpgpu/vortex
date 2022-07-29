@@ -303,9 +303,9 @@ module VX_mem_scheduler #(
 
     // Handle memory responses ////////////////////////////////////////////////
 
-    reg  [QUEUE_SIZE-1:0][REQ_SIZEW-1:0] rsp_rem_size;
-    wire [REQ_SIZEW-1:0]                 rsp_rem_size_n;
-    wire [`UP(BATCH_SEL_BITS)-1:0]       rsp_batch_idx;
+    reg  [REQ_SIZEW-1:0] rsp_rem_size [QUEUE_SIZE-1:0];
+    wire [REQ_SIZEW-1:0]           rsp_rem_size_n;
+    wire [`UP(BATCH_SEL_BITS)-1:0] rsp_batch_idx;
 
     // Select memory response
     VX_mem_rsp_sel #(
@@ -329,10 +329,18 @@ module VX_mem_scheduler #(
     );
 
     wire [REQ_SIZEW-1:0] reqq_size;
+    wire [NUM_BANKS-1:0] mem_rsp_mask_x;
     `POP_COUNT(reqq_size, reqq_mask);
 
     wire [BANK_SIZEW-1:0] mem_rsp_size;
-    `POP_COUNT(mem_rsp_size, mem_rsp_mask_s);
+    if (NUM_BANKS > 1) begin
+        `POP_COUNT(mem_rsp_size, mem_rsp_mask_s);
+        assign mem_rsp_mask_x = mem_rsp_mask_s;
+    end else begin
+        assign mem_rsp_size   = 1'b1;
+        assign mem_rsp_mask_x = 1'b1;
+        `UNUSED_VAR (mem_rsp_mask_s)
+    end
 
     if (NUM_BATCHES > 1) begin
         assign rsp_batch_idx = mem_rsp_tag_s[QUEUE_ADDRW +: BATCH_SEL_BITS];
@@ -363,49 +371,40 @@ module VX_mem_scheduler #(
 
         for (genvar i = 0; i < NUM_BATCHES; ++i) begin
             localparam SIZE = ((i + 1) * NUM_BANKS > NUM_REQS) ? REM_BATCH_SIZE : NUM_BANKS;
-            assign crsp_mask[i * NUM_BANKS +: SIZE] = {SIZE{(i == rsp_batch_idx)}} & mem_rsp_mask_s[SIZE-1:0];
+            assign crsp_mask[i * NUM_BANKS +: SIZE] = {SIZE{(i == rsp_batch_idx)}} & mem_rsp_mask_x[SIZE-1:0];
             assign crsp_data[i * NUM_BANKS +: SIZE] = mem_rsp_data_s[SIZE-1:0];
         end
     
     end else begin
 
-        reg [QUEUE_SIZE-1:0][NUM_BATCHES-1:0][NUM_BANKS-1:0][DATA_WIDTH-1:0] rsp_store;   
-        reg [NUM_BATCHES-1:0][NUM_BANKS-1:0][DATA_WIDTH-1:0]                 rsp_store_n;
+        reg [NUM_BATCHES-1:0][NUM_BANKS-1:0][DATA_WIDTH-1:0] rsp_store [QUEUE_SIZE-1:0];
         reg [QUEUE_SIZE-1:0][NUM_REQS-1:0] rsp_orig_mask;
         wire [NUM_BANKS-1:0][DATA_WIDTH-1:0] mem_rsp_data_m;
 
-        assign mem_rsp_ready_s = crsp_ready || ~rsp_complete;        
-
-        assign crsp_valid = mem_rsp_valid_s & rsp_complete;
-
-        assign crsp_mask = rsp_orig_mask[ibuf_raddr];        
-
         for (genvar i = 0; i < NUM_BANKS; ++i) begin
-            assign mem_rsp_data_m[i] = {DATA_WIDTH{mem_rsp_mask_s[i]}} & mem_rsp_data_s[i];
-        end
-        
-        always @(*) begin
-            rsp_store_n = rsp_store[ibuf_raddr];
-            rsp_store_n[rsp_batch_idx] |= mem_rsp_data_m;
-        end
-
-        for (genvar i = 0; i < NUM_BATCHES; ++i) begin
-            localparam SIZE = ((i + 1) * NUM_BANKS > NUM_REQS) ? REM_BATCH_SIZE : NUM_BANKS;
-            assign crsp_data[i * NUM_BANKS +: SIZE] = rsp_store_n[i][SIZE-1:0];
+            assign mem_rsp_data_m[i] = {DATA_WIDTH{mem_rsp_mask_x[i]}} & mem_rsp_data_s[i];
         end
         
         always @(posedge clk) begin
-            if (reset) begin
-                rsp_store <= '0;
-            end else begin
-                if (ibuf_push) begin
-                    rsp_store[ibuf_waddr] <= '0;
-                    rsp_orig_mask[ibuf_waddr] <= req_mask;
-                end
-                if (mem_rsp_fire) begin
-                    rsp_store[ibuf_raddr] <= rsp_store_n;
-                end
+            if (ibuf_push) begin
+                rsp_store[ibuf_waddr] <= '0;
+                rsp_orig_mask[ibuf_waddr] <= req_mask;
             end
+            if (mem_rsp_fire) begin
+                rsp_store[ibuf_raddr][rsp_batch_idx] <= mem_rsp_data_m;
+            end
+        end
+
+        assign mem_rsp_ready_s = crsp_ready || ~rsp_complete;      
+
+        assign crsp_valid = mem_rsp_valid_s & rsp_complete;
+
+        assign crsp_mask = rsp_orig_mask[ibuf_raddr];
+
+        for (genvar i = 0; i < NUM_BATCHES; ++i) begin
+            localparam SIZE = ((i + 1) * NUM_BANKS > NUM_REQS) ? REM_BATCH_SIZE : NUM_BANKS;
+            assign crsp_data[i * NUM_BANKS +: SIZE] = rsp_store[ibuf_raddr][i][SIZE-1:0] 
+                                                    | ({(SIZE * DATA_WIDTH){(i == rsp_batch_idx)}} & mem_rsp_data_m[SIZE-1:0]);
         end
     end
 
@@ -455,24 +454,28 @@ module VX_mem_scheduler #(
     `UNUSED_VAR (mem_req_dbg_uuid)
     `UNUSED_VAR (mem_rsp_dbg_uuid)
 
-    reg [QUEUE_SIZE-1:0][(`UP(`UUID_BITS) + TAG_ONLY_WIDTH + 64 + 1)-1:0] pending_reqs;
+    reg [(`UP(`UUID_BITS) + TAG_ONLY_WIDTH + 64)-1:0] pending_reqs [QUEUE_SIZE-1:0];
+    reg [QUEUE_SIZE-1:0] pending_req_valids;
+
     always @(posedge clk) begin
         if (reset) begin
-            pending_reqs <= '0;
-        end begin
+            pending_req_valids <= '0;
+        end else begin
             if (ibuf_push) begin            
-                pending_reqs[ibuf_waddr] <= {req_dbg_uuid, req_tag_only, $time, 1'b1};
+                pending_reqs[ibuf_waddr] <= {req_dbg_uuid, req_tag_only, $time};
+                pending_req_valids[ibuf_waddr] <= 1'b1;
             end
             if (ibuf_pop) begin
                 pending_reqs[ibuf_raddr] <= '0;
+                pending_req_valids[ibuf_raddr] <= 1'b0;
             end
         end
 
         for (integer i = 0; i < QUEUE_SIZE; ++i) begin
-            if (pending_reqs[i][0]) begin
-                `ASSERT(($time - pending_reqs[i][1 +: 64]) < `STALL_TIMEOUT, 
+            if (pending_req_valids[i]) begin
+                `ASSERT(($time - pending_reqs[i][0 +: 64]) < `STALL_TIMEOUT, 
                     ("%t: *** %s response timeout: remaining=%0d, tag=0x%0h (#%0d)", 
-                        $time, INSTANCE_ID, rsp_rem_size[i], pending_reqs[i][1+64 +: TAG_ONLY_WIDTH], pending_reqs[i][1+64+TAG_ONLY_WIDTH +: `UP(`UUID_BITS)]));
+                        $time, INSTANCE_ID, rsp_rem_size[i], pending_reqs[i][64 +: TAG_ONLY_WIDTH], pending_reqs[i][64+TAG_ONLY_WIDTH +: `UP(`UUID_BITS)]));
             end
         end
     end

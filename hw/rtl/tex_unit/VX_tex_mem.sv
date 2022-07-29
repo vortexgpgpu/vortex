@@ -170,28 +170,28 @@ module VX_tex_mem #(
 
             always @(*) begin
                 case (mem_rsp_lgstride)
-                0: mem_rsp_data_qual[i][j] = 32'(rsp_data_shifted[7:0]);
-                1: mem_rsp_data_qual[i][j] = 32'(rsp_data_shifted[15:0]);
-                default: mem_rsp_data_qual[i][j] = rsp_data_shifted;     
+                0:       mem_rsp_data_qual[i][j] = 32'(rsp_data_shifted[7:0]);
+                1:       mem_rsp_data_qual[i][j] = 32'(rsp_data_shifted[15:0]);
+                2:       mem_rsp_data_qual[i][j] = rsp_data_shifted;
+                default: mem_rsp_data_qual[i][j] = 'x;
                 endcase
             end
         end        
     end
 
-    wire stall_out = rsp_valid && ~rsp_ready;
-    
-    VX_pipe_register #(
-        .DATAW  (1 + REQ_INFOW + (4 * NUM_LANES * 32)),
-        .RESETW (1)
+    VX_generic_buffer #(
+        .DATAW   (REQ_INFOW + (4 * NUM_LANES * 32)),
+        .OUT_REG (1)
     ) rsp_pipe_reg (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (~stall_out),
-        .data_in  ({mem_rsp_valid, mem_rsp_info, mem_rsp_data_qual}),
-        .data_out ({rsp_valid,     rsp_info,     rsp_data})
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (mem_rsp_valid),
+        .ready_in  (mem_rsp_ready),
+        .data_in   ({mem_rsp_info, mem_rsp_data_qual}),
+        .data_out  ({rsp_info,     rsp_data}),
+        .valid_out (rsp_valid),
+        .ready_out (rsp_ready)
     );
-
-    assign mem_rsp_ready = ~stall_out;
 
 `ifdef DBG_TRACE_TEX
 

@@ -216,8 +216,8 @@ module VX_issue #(
             `endif
                 `EX_LSU: perf_lsu_stalls <= perf_lsu_stalls + `PERF_CTR_BITS'(1);
                 `EX_CSR: perf_csr_stalls <= perf_csr_stalls + `PERF_CTR_BITS'(1);
-                //`EX_GPU:
-                default: perf_gpu_stalls <= perf_gpu_stalls + `PERF_CTR_BITS'(1);
+                `EX_GPU: perf_gpu_stalls <= perf_gpu_stalls + `PERF_CTR_BITS'(1);
+                default:;
                 endcase
             end
         end

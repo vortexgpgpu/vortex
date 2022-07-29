@@ -266,40 +266,39 @@ module VX_rop_unit #(
         .full  (pending_reads_full),
         `UNUSED_PIN (size),
         `UNUSED_PIN (empty)
-    );   
-
-    wire mem_req_stall = mem_req_valid_r & ~mem_req_ready_r;
-
-    VX_pipe_register #(
-        .DATAW	(1 + 1 + NUM_LANES * (1 + 1 + 2 * `ROP_DIM_BITS + $bits(rgba_t) + `ROP_DEPTH_BITS + `ROP_STENCIL_BITS + 1) + MEM_TAG_WIDTH),
-        .RESETW (1)
-    ) mem_req_pipe_reg (
-        .clk      (clk),
-        .reset    (reset),
-        .enable	  (~mem_req_stall),
-        .data_in  ({mem_req_valid,   mem_req_rw,   mem_req_mask,   mem_req_ds_pass,   mem_req_pos_x,   mem_req_pos_y,   mem_req_color,   mem_req_depth,   mem_req_stencil,   mem_req_face,   mem_req_tag}),
-        .data_out ({mem_req_valid_r, mem_req_rw_r, mem_req_mask_r, mem_req_ds_pass_r, mem_req_pos_x_r, mem_req_pos_y_r, mem_req_color_r, mem_req_depth_r, mem_req_stencil_r, mem_req_face_r, mem_req_tag_r})
     );
 
-    assign mem_req_ready = ~mem_req_stall;
+    VX_generic_buffer #(
+        .DATAW	 (1 + NUM_LANES * (1 + 1 + 2 * `ROP_DIM_BITS + $bits(rgba_t) + `ROP_DEPTH_BITS + `ROP_STENCIL_BITS + 1) + MEM_TAG_WIDTH),
+        .OUT_REG (1)
+    ) mem_req_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (mem_req_valid),
+        .ready_in  (mem_req_ready),
+        .data_in   ({mem_req_rw,   mem_req_mask,   mem_req_ds_pass,   mem_req_pos_x,   mem_req_pos_y,   mem_req_color,   mem_req_depth,   mem_req_stencil,   mem_req_face,   mem_req_tag}),
+        .data_out  ({mem_req_rw_r, mem_req_mask_r, mem_req_ds_pass_r, mem_req_pos_x_r, mem_req_pos_y_r, mem_req_color_r, mem_req_depth_r, mem_req_stencil_r, mem_req_face_r, mem_req_tag_r}),
+        .valid_out (mem_req_valid_r),
+        .ready_out (mem_req_ready_r)
+    );
 
 `ifdef PERF_ENABLE
 
     wire [$clog2(OCACHE_NUM_REQS+1)-1:0] perf_mem_rd_req_per_cycle;
     wire [$clog2(OCACHE_NUM_REQS+1)-1:0] perf_mem_wr_req_per_cycle;
-    wire [$clog2(OCACHE_NUM_REQS+1)-1:0] perf_mem_rsp_per_cycle;
+    wire [$clog2(OCACHE_NUM_REQS+1)-1:0] perf_mem_rd_rsp_per_cycle;
     wire [$clog2(OCACHE_NUM_REQS+1)+1-1:0] perf_pending_reads_cycle;
 
     wire [OCACHE_NUM_REQS-1:0] perf_mem_rd_req_per_mask = cache_req_if.valid & ~cache_req_if.rw & cache_req_if.ready;
     wire [OCACHE_NUM_REQS-1:0] perf_mem_wr_req_per_mask = cache_req_if.valid & cache_req_if.rw & cache_req_if.ready;
-    wire [OCACHE_NUM_REQS-1:0] perf_mem_rsp_per_mask    = cache_rsp_if.valid & cache_rsp_if.ready;
+    wire [OCACHE_NUM_REQS-1:0] perf_mem_rd_rsp_per_mask = cache_rsp_if.valid & cache_rsp_if.ready;
 
     `POP_COUNT(perf_mem_rd_req_per_cycle, perf_mem_rd_req_per_mask);    
     `POP_COUNT(perf_mem_wr_req_per_cycle, perf_mem_wr_req_per_mask);    
-    `POP_COUNT(perf_mem_rsp_per_cycle,    perf_mem_rsp_per_mask);
+    `POP_COUNT(perf_mem_rd_rsp_per_cycle, perf_mem_rd_rsp_per_mask);
 
     reg [`PERF_CTR_BITS-1:0] perf_pending_reads;   
-    assign perf_pending_reads_cycle = perf_mem_rd_req_per_cycle - perf_mem_rsp_per_cycle;
+    assign perf_pending_reads_cycle = perf_mem_rd_req_per_cycle - perf_mem_rd_rsp_per_cycle;
 
     always @(posedge clk) begin
         if (reset) begin

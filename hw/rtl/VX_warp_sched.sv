@@ -52,6 +52,7 @@ module VX_warp_sched #(
     wire [`NUM_THREADS-1:0] schedule_tmask;
     wire [31:0]             schedule_pc;
     wire                    schedule_valid;
+    wire                    schedule_ready;
     wire                    warp_scheduled;
 
     reg [`PERF_CTR_BITS-1:0]    cycles;
@@ -243,9 +244,7 @@ module VX_warp_sched #(
 
     assign {schedule_tmask, schedule_pc} = schedule_data[schedule_wid];
 
-    wire stall_out = ~ifetch_req_if.ready && ifetch_req_if.valid;   
-
-    assign warp_scheduled = schedule_valid && ~stall_out;
+    assign warp_scheduled = schedule_valid && schedule_ready;
 
 `ifdef SIMULATION
     assign instr_uuid = (issued_instrs[schedule_wid] * `NUM_WARPS * `NUM_CORES * `NUM_CLUSTERS)
@@ -255,15 +254,18 @@ module VX_warp_sched #(
     assign instr_uuid = 0;
 `endif
 
-    VX_pipe_register #( 
-        .DATAW  (1 + `UP(`UUID_BITS) + `NUM_THREADS + 32 + `UP(`NW_BITS)),
-        .RESETW (1)
+    VX_generic_buffer #( 
+        .DATAW   (`UP(`UUID_BITS) + `NUM_THREADS + 32 + `UP(`NW_BITS)),
+        .OUT_REG (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
-        .enable   (~stall_out),
-        .data_in  ({schedule_valid,      instr_uuid,         schedule_tmask,      schedule_pc,      schedule_wid}),
-        .data_out ({ifetch_req_if.valid, ifetch_req_if.uuid, ifetch_req_if.tmask, ifetch_req_if.PC, ifetch_req_if.wid})
+        .valid_in (schedule_valid),
+        .ready_in (schedule_ready),
+        .data_in  ({instr_uuid,         schedule_tmask,      schedule_pc,      schedule_wid}),
+        .data_out ({ifetch_req_if.uuid, ifetch_req_if.tmask, ifetch_req_if.PC, ifetch_req_if.wid}),
+        .valid_out (ifetch_req_if.valid),
+        .ready_out (ifetch_req_if.ready)
     );
 
     assign busy = (active_warps != 0);

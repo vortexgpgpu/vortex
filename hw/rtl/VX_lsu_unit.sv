@@ -322,7 +322,8 @@ module VX_lsu_unit #(
             `INST_FMT_H:  rsp_data[i] = 32'(signed'(rsp_data16));
             `INST_FMT_BU: rsp_data[i] = 32'(unsigned'(rsp_data8));
             `INST_FMT_HU: rsp_data[i] = 32'(unsigned'(rsp_data16));
-            default: rsp_data[i] = rsp_data32;
+            `INST_FMT_W:  rsp_data[i] = rsp_data32;
+            default:      rsp_data[i] = 'x;
             endcase
         end        
     end   

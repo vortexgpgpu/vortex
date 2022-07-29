@@ -45,11 +45,11 @@ module VX_tex_unit #(
 
     wire                                        req_valid;
     wire [NUM_LANES-1:0]                        req_mask;          
-    logic [`TEX_FILTER_BITS-1:0]                req_filter;    
-    logic [`TEX_FORMAT_BITS-1:0]                req_format;    
-    logic [1:0][`TEX_WRAP_BITS-1:0]             req_wraps;
+    wire [`TEX_FILTER_BITS-1:0]                 req_filter;    
+    wire [`TEX_FORMAT_BITS-1:0]                 req_format;    
+    wire [1:0][`TEX_WRAP_BITS-1:0]              req_wraps;
     wire [1:0][`TEX_LOD_BITS-1:0]               req_logdims;
-    logic [`TEX_ADDR_BITS-1:0]                  req_baseaddr;
+    wire [`TEX_ADDR_BITS-1:0]                   req_baseaddr;
     wire [1:0][NUM_LANES-1:0][31:0]             req_coords;
     wire [NUM_LANES-1:0][`TEX_LOD_BITS-1:0]     req_miplevel, sel_miplevel;
     wire [NUM_LANES-1:0][`TEX_MIPOFF_BITS-1:0]  req_mipoff, sel_mipoff;    
@@ -61,21 +61,19 @@ module VX_tex_unit #(
         assign sel_mipoff[i] = tex_dcrs.mipoff[sel_miplevel[i]];
     end
 
-    wire stall_in = req_valid && ~req_ready;
-
-    VX_pipe_register #(
-        .DATAW  (1 + NUM_LANES  + `TEX_FILTER_BITS + `TEX_FORMAT_BITS + 2 * `TEX_WRAP_BITS + 2 * `TEX_LOD_BITS + `TEX_ADDR_BITS + NUM_LANES * (2 * 32 + `TEX_LOD_BITS + `TEX_MIPOFF_BITS) + TAG_WIDTH),
-        .RESETW (1)
-    ) pipe_reg0 (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (~stall_in),
-        .data_in  ({tex_req_if.valid, tex_req_if.mask, tex_dcrs.filter, tex_dcrs.format, tex_dcrs.wraps, tex_dcrs.logdims, tex_dcrs.baseaddr, tex_req_if.coords, sel_miplevel, sel_mipoff, tex_req_if.tag}),
-        .data_out ({req_valid,        req_mask,        req_filter,      req_format,      req_wraps,      req_logdims,      req_baseaddr,      req_coords,        req_miplevel, req_mipoff, req_tag})
+    VX_generic_buffer #(
+        .DATAW   (NUM_LANES  + `TEX_FILTER_BITS + `TEX_FORMAT_BITS + 2 * `TEX_WRAP_BITS + 2 * `TEX_LOD_BITS + `TEX_ADDR_BITS + NUM_LANES * (2 * 32 + `TEX_LOD_BITS + `TEX_MIPOFF_BITS) + TAG_WIDTH),
+        .OUT_REG (1)
+    ) pipe_reg (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (tex_req_if.valid),
+        .ready_in  (tex_req_if.ready),
+        .data_in   ({tex_req_if.mask, tex_dcrs.filter, tex_dcrs.format, tex_dcrs.wraps, tex_dcrs.logdims, tex_dcrs.baseaddr, tex_req_if.coords, sel_miplevel, sel_mipoff, tex_req_if.tag}),
+        .data_out  ({req_mask,        req_filter,      req_format,      req_wraps,      req_logdims,      req_baseaddr,      req_coords,        req_miplevel, req_mipoff, req_tag}),
+        .valid_out (req_valid),
+        .ready_out (req_ready)
     );
-
-    // can accept new request?
-    assign tex_req_if.ready = ~stall_in; 
 
     // address generation
 
@@ -239,7 +237,7 @@ module VX_tex_unit #(
     end
 
     assign perf_tex_if.mem_reads   = perf_mem_reads;
-    assign perf_tex_if.mem_latency = perf_pending_reads;
+    assign perf_tex_if.mem_latency = perf_mem_latency;
 `endif  
 
 `ifdef DBG_TRACE_TEX

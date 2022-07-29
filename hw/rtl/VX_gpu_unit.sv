@@ -13,6 +13,10 @@ module VX_gpu_unit #(
     input wire              clk,
     input wire              reset,
 
+`ifdef PERF_ENABLE
+    VX_perf_gpu_if.master   perf_gpu_if,
+`endif
+
     // Inputs
     VX_gpu_req_if.slave     gpu_req_if,
 
@@ -114,7 +118,7 @@ module VX_gpu_unit #(
     assign barrier.size_m1 = `UP(`NW_BITS)'(rs2_data - 1);       
 
     // Warp control response
-    wire wctl_req_valid = gpu_req_valid & (is_wspawn | is_tmc | is_split | is_join | is_bar | is_pred);
+    wire wctl_req_valid = gpu_req_valid && (is_wspawn | is_tmc | is_split | is_join | is_bar | is_pred);
     wire wctl_rsp_valid = wctl_req_valid;
     wire [WCTL_DATAW-1:0] wctl_rsp_data = {tmc, wspawn, split, barrier};
     wire wctl_rsp_ready;
@@ -367,5 +371,61 @@ module VX_gpu_unit #(
         end
     end
     assign req_pending = req_pending_r;
+
+`ifdef PERF_ENABLE
+`ifdef EXT_TEX_ENABLE
+    reg [`PERF_CTR_BITS-1:0] perf_tex_stalls;
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_tex_stalls <= 0;
+        end else begin
+            perf_tex_stalls <= perf_tex_stalls + `PERF_CTR_BITS'(tex_agent_if.valid && ~tex_agent_if.ready);
+        end
+    end
+    assign perf_gpu_if.tex_stalls = perf_tex_stalls;
+`endif
+`ifdef EXT_RASTER_ENABLE
+    reg [`PERF_CTR_BITS-1:0] perf_raster_stalls;
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_raster_stalls <= 0;
+        end else begin
+            perf_raster_stalls <= perf_raster_stalls + `PERF_CTR_BITS'(raster_agent_if.valid && ~raster_agent_if.ready);
+        end
+    end
+    assign perf_gpu_if.raster_stalls = perf_raster_stalls;
+`endif
+`ifdef EXT_ROP_ENABLE
+    reg [`PERF_CTR_BITS-1:0] perf_rop_stalls;
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_rop_stalls <= 0;
+        end else begin
+            perf_rop_stalls <= perf_rop_stalls + `PERF_CTR_BITS'(rop_agent_if.valid && ~rop_agent_if.ready);
+        end
+    end
+    assign perf_gpu_if.rop_stalls = perf_rop_stalls;
+`endif
+`ifdef EXT_IMADD_ENABLE
+    reg [`PERF_CTR_BITS-1:0] perf_imadd_stalls;
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_imadd_stalls <= 0;
+        end else begin
+            perf_imadd_stalls <= perf_imadd_stalls + `PERF_CTR_BITS'(imadd_valid_in && ~imadd_ready_in);
+        end
+    end
+    assign perf_gpu_if.imadd_stalls = perf_imadd_stalls;
+`endif
+    reg [`PERF_CTR_BITS-1:0] perf_wctl_stalls;
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_wctl_stalls <= 0;
+        end else begin
+            perf_wctl_stalls <= perf_wctl_stalls + `PERF_CTR_BITS'(wctl_req_valid && ~wctl_req_ready);
+        end
+    end
+    assign perf_gpu_if.wctl_stalls = perf_wctl_stalls;
+`endif
 
 endmodule

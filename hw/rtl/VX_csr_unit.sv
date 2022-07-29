@@ -16,6 +16,7 @@ module VX_csr_unit #(
 `ifdef PERF_ENABLE
     VX_perf_memsys_if.slave     perf_memsys_if,
     VX_perf_pipeline_if.slave   perf_pipeline_if,
+    VX_perf_gpu_if.slave        perf_gpu_if,
 `endif
 
 `ifdef EXT_TEX_ENABLE
@@ -148,6 +149,7 @@ module VX_csr_unit #(
     `ifdef PERF_ENABLE
         .perf_memsys_if (perf_memsys_if),
         .perf_pipeline_if(perf_pipeline_if),
+        .perf_gpu_if    (perf_gpu_if),
     `ifdef EXT_TEX_ENABLE        
         .perf_tex_if    (perf_tex_if),
         .perf_tcache_if (perf_tcache_if),

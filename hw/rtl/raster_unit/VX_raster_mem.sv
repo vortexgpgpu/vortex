@@ -114,7 +114,7 @@ module VX_raster_mem #(
         if (reset) begin
             state <= STATE_IDLE; 
             mem_req_valid <= 0;    
-        end begin
+        end else begin
             // deassert memory request when fired
             if (mem_req_fire) begin
                 mem_req_valid <= 0; 

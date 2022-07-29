@@ -18,6 +18,7 @@ module VX_csr_data #(
 `ifdef PERF_ENABLE
     VX_perf_memsys_if.slave             perf_memsys_if,
     VX_perf_pipeline_if.slave           perf_pipeline_if,
+    VX_perf_gpu_if.slave                perf_gpu_if,
 `ifdef EXT_TEX_ENABLE
     VX_tex_perf_if.slave                perf_tex_if,
     VX_perf_cache_if.slave              perf_tcache_if,
@@ -217,7 +218,10 @@ module VX_csr_data #(
                         `CSR_MPM_MEM_WRITES     : read_data_ro_r = perf_memsys_if.mem_writes[31:0];
                         `CSR_MPM_MEM_WRITES_H   : read_data_ro_r = 32'(perf_memsys_if.mem_writes[`PERF_CTR_BITS-1:32]);
                         `CSR_MPM_MEM_LAT        : read_data_ro_r = perf_memsys_if.mem_latency[31:0];
-                        `CSR_MPM_MEM_LAT_H      : read_data_ro_r = 32'(perf_memsys_if.mem_latency[`PERF_CTR_BITS-1:32]);                        
+                        `CSR_MPM_MEM_LAT_H      : read_data_ro_r = 32'(perf_memsys_if.mem_latency[`PERF_CTR_BITS-1:32]);   
+                        // PERF: wctl  
+                        `CSR_MPM_WCTL_ISSUE_ST   : read_data_ro_r = perf_gpu_if.wctl_stalls[31:0];
+                        `CSR_MPM_WCTL_ISSUE_ST_H : read_data_ro_r = 32'(perf_gpu_if.wctl_stalls[`PERF_CTR_BITS-1:32]);                   
                         default:;
                         endcase
                     end
@@ -239,6 +243,8 @@ module VX_csr_data #(
                         `CSR_MPM_TCACHE_MSHR_ST  :read_data_ro_r = perf_tcache_if.mshr_stalls[31:0];
                         `CSR_MPM_TCACHE_MSHR_ST_H:read_data_ro_r = 32'(perf_tcache_if.mshr_stalls[`PERF_CTR_BITS-1:32]);
                     `endif
+                        `CSR_MPM_TEX_ISSUE_ST   : read_data_ro_r = perf_gpu_if.tex_stalls[31:0];
+                        `CSR_MPM_TEX_ISSUE_ST_H : read_data_ro_r = 32'(perf_gpu_if.tex_stalls[`PERF_CTR_BITS-1:32]);
                         default:;
                         endcase
                     `endif
@@ -263,6 +269,8 @@ module VX_csr_data #(
                         `CSR_MPM_RCACHE_MSHR_ST  :read_data_ro_r = perf_rcache_if.mshr_stalls[31:0];
                         `CSR_MPM_RCACHE_MSHR_ST_H:read_data_ro_r = 32'(perf_rcache_if.mshr_stalls[`PERF_CTR_BITS-1:32]);
                     `endif
+                        `CSR_MPM_RASTER_ISSUE_ST   : read_data_ro_r = perf_gpu_if.raster_stalls[31:0];
+                        `CSR_MPM_RASTER_ISSUE_ST_H : read_data_ro_r = 32'(perf_gpu_if.raster_stalls[`PERF_CTR_BITS-1:32]);
                         default:;
                         endcase
                     `endif
@@ -293,6 +301,8 @@ module VX_csr_data #(
                         `CSR_MPM_OCACHE_MSHR_ST  :read_data_ro_r = perf_ocache_if.mshr_stalls[31:0];
                         `CSR_MPM_OCACHE_MSHR_ST_H:read_data_ro_r = 32'(perf_ocache_if.mshr_stalls[`PERF_CTR_BITS-1:32]);
                     `endif
+                        `CSR_MPM_ROP_ISSUE_ST   : read_data_ro_r = perf_gpu_if.rop_stalls[31:0];
+                        `CSR_MPM_ROP_ISSUE_ST_H : read_data_ro_r = 32'(perf_gpu_if.rop_stalls[`PERF_CTR_BITS-1:32]);
                         default:;
                         endcase
                     `endif
@@ -311,6 +321,13 @@ module VX_csr_data #(
     `UNUSED_VAR (base_dcrs)
 
     `RUNTIME_ASSERT(~read_enable || read_addr_valid_r, ("%t: *** invalid CSR read address: 0x%0h (#%0d)", $time, read_addr, read_uuid))    
+
+`ifdef PERF_ENABLE
+`ifdef EXT_IMADD_ENABLE
+    wire [`PERF_CTR_BITS-1:0] perf_imadd_stalls = perf_gpu_if.imadd_stalls;
+    `UNUSED_VAR (perf_imadd_stalls);
+`endif
+`endif
 
 `ifdef EXT_F_ENABLE    
     assign fpu_to_csr_if.read_frm = fcsr[fpu_to_csr_if.read_wid][`INST_FRM_BITS+`FFLAGS_BITS-1:`FFLAGS_BITS];

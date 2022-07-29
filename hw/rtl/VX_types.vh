@@ -107,6 +107,9 @@
 `define CSR_MPM_MEM_WRITES_H        12'hB99
 `define CSR_MPM_MEM_LAT             12'hB1A     // memory latency
 `define CSR_MPM_MEM_LAT_H           12'hB9A
+// PERF: wctl
+`define CSR_MPM_WCTL_ISSUE_ST       12'hB1B     // issue stalls
+`define CSR_MPM_WCTL_ISSUE_ST_H     12'hB9B
 
 // Machine Performance-monitoring texture counters
 // PERF: texture unit
@@ -123,6 +126,9 @@
 `define CSR_MPM_TCACHE_BANK_ST_H    12'hB87
 `define CSR_MPM_TCACHE_MSHR_ST      12'hB08     // MSHR stalls
 `define CSR_MPM_TCACHE_MSHR_ST_H    12'hB88
+// PERF: pipeline
+`define CSR_MPM_TEX_ISSUE_ST        12'hB09     // issue stalls
+`define CSR_MPM_TEX_ISSUE_ST_H      12'hB89
 
 // Machine Performance-monitoring raster counters
 // PERF: raster unit
@@ -141,6 +147,9 @@
 `define CSR_MPM_RCACHE_BANK_ST_H    12'hB88
 `define CSR_MPM_RCACHE_MSHR_ST      12'hB09     // MSHR stalls
 `define CSR_MPM_RCACHE_MSHR_ST_H    12'hB89
+// PERF: pipeline
+`define CSR_MPM_RASTER_ISSUE_ST     12'hB0A     // issue stalls
+`define CSR_MPM_RASTER_ISSUE_ST_H   12'hB8A
 
 // Machine Performance-monitoring rop counters
 // PERF: rop unit
@@ -165,6 +174,9 @@
 `define CSR_MPM_OCACHE_BANK_ST_H    12'hB8B
 `define CSR_MPM_OCACHE_MSHR_ST      12'hB0C     // MSHR stalls
 `define CSR_MPM_OCACHE_MSHR_ST_H    12'hB8C
+// PERF: pipeline
+`define CSR_MPM_ROP_ISSUE_ST        12'hB0D     // issue stalls
+`define CSR_MPM_ROP_ISSUE_ST_H      12'hB8D
 
 // Machine Information Registers
 

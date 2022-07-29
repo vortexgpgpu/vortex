@@ -202,6 +202,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   uint64_t csr_stalls = 0;
   uint64_t alu_stalls = 0;
   uint64_t gpu_stalls = 0;
+  uint64_t wctl_issue_stalls = 0;
   // PERF: decode
   uint64_t loads = 0;
   uint64_t stores = 0;
@@ -228,6 +229,8 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   // PERF: texunit
   uint64_t tex_mem_reads = 0;
   uint64_t tex_mem_lat = 0;
+  // PERF: tex issue
+  uint64_t tex_issue_stalls = 0;
   // PERF: tex tcache
   uint64_t tcache_reads = 0; 
   uint64_t tcache_read_misses = 0;
@@ -238,6 +241,8 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   uint64_t raster_mem_reads = 0;
   uint64_t raster_mem_lat = 0;
   uint64_t raster_stall_cycles = 0;
+  // PERF: raster issue
+  uint64_t raster_issue_stalls = 0;
   // PERF: raster cache
   uint64_t rcache_reads = 0;  
   uint64_t rcache_read_misses = 0;
@@ -249,6 +254,8 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   uint64_t rop_mem_writes = 0;
   uint64_t rop_mem_lat = 0;
   uint64_t rop_stall_cycles = 0;
+  // PERF: rop issue
+  uint64_t rop_issue_stalls = 0;
   // PERF: rop ocache
   uint64_t ocache_reads = 0;       
   uint64_t ocache_writes = 0;      
@@ -319,7 +326,11 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
       // gpu_stall
       uint64_t gpu_stalls_per_core = get_csr_64(staging_ptr, CSR_MPM_GPU_ST);
       if (num_cores > 1) fprintf(stream, "PERF: core%d: gpu unit stalls=%ld\n", core_id, gpu_stalls_per_core);
-      gpu_stalls += gpu_stalls_per_core;  
+      gpu_stalls += gpu_stalls_per_core;
+      // wctl_stall
+      uint64_t wctl_issue_stalls_per_core = get_csr_64(staging_ptr, CSR_MPM_WCTL_ISSUE_ST);
+      if (num_cores > 1) fprintf(stream, "PERF: core%d: wctl issue stalls=%ld\n", core_id, wctl_issue_stalls_per_core);
+      wctl_issue_stalls += wctl_issue_stalls_per_core;
 
       // PERF: decode
       // loads
@@ -403,6 +414,10 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
         tcache_bank_stalls = get_csr_64(staging_ptr, CSR_MPM_TCACHE_BANK_ST);
         tcache_mshr_stalls = get_csr_64(staging_ptr, CSR_MPM_TCACHE_MSHR_ST);
       }
+      // issue_stall
+      uint64_t issue_stalls_per_core = get_csr_64(staging_ptr, CSR_MPM_TEX_ISSUE_ST);
+      if (num_cores > 1) fprintf(stream, "PERF: core%d: tex issue stalls=%ld\n", core_id, issue_stalls_per_core);
+      tex_issue_stalls += issue_stalls_per_core;
     #endif
     } break;
     case DCR_MPM_CLASS_RASTER: {
@@ -417,6 +432,10 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
         rcache_bank_stalls  = get_csr_64(staging_ptr, CSR_MPM_RCACHE_BANK_ST);
         rcache_mshr_stalls  = get_csr_64(staging_ptr, CSR_MPM_RCACHE_MSHR_ST);
       }
+      // issue_stall
+      uint64_t raster_stalls_per_core = get_csr_64(staging_ptr, CSR_MPM_RASTER_ISSUE_ST);
+      if (num_cores > 1) fprintf(stream, "PERF: core%d: raster issue stalls=%ld\n", core_id, raster_stalls_per_core);
+      raster_issue_stalls += raster_stalls_per_core;
     #endif
     } break;
     case DCR_MPM_CLASS_ROP: {
@@ -434,6 +453,10 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
         ocache_bank_stalls  = get_csr_64(staging_ptr, CSR_MPM_OCACHE_BANK_ST);
         ocache_mshr_stalls  = get_csr_64(staging_ptr, CSR_MPM_OCACHE_MSHR_ST);
       }
+      // issue_stall
+      uint64_t rop_stalls_per_core = get_csr_64(staging_ptr, CSR_MPM_ROP_ISSUE_ST);
+      if (num_cores > 1) fprintf(stream, "PERF: core%d: rop issue stalls=%ld\n", core_id, rop_stalls_per_core);
+      rop_issue_stalls += rop_stalls_per_core;
     #endif
     } break;
     default:
@@ -461,6 +484,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     fprintf(stream, "PERF: csr unit stalls=%ld\n", csr_stalls);
     fprintf(stream, "PERF: fpu unit stalls=%ld\n", fpu_stalls);
     fprintf(stream, "PERF: gpu unit stalls=%ld\n", gpu_stalls);
+    fprintf(stream, "PERF: wctl issue stalls=%ld\n", wctl_issue_stalls);
     fprintf(stream, "PERF: loads=%ld\n", loads);
     fprintf(stream, "PERF: stores=%ld\n", stores);
     fprintf(stream, "PERF: branches=%ld\n", branches);
@@ -483,6 +507,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     int tex_avg_lat = (int)(double(tex_mem_lat) / double(tex_mem_reads));
     fprintf(stream, "PERF: tex memory reads=%ld\n", tex_mem_reads);
     fprintf(stream, "PERF: tex memory average latency=%d cycles\n", tex_avg_lat);
+    fprintf(stream, "PERF: tex issue stalls=%ld\n", tex_issue_stalls);
     int tcache_read_hit_ratio = (int)((1.0 - (double(tcache_read_misses) / double(tcache_reads))) * 100);
     int tcache_bank_utilization = (int)((double(tcache_reads) / double(tcache_reads + tcache_bank_stalls)) * 100);
     fprintf(stream, "PERF: tcache reads=%ld\n", tcache_reads);
@@ -498,6 +523,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     fprintf(stream, "PERF: raster memory reads=%ld\n", raster_mem_reads);
     fprintf(stream, "PERF: raster memory latency=%d cycles\n", raster_mem_avg_lat);
     fprintf(stream, "PERF: raster stall cycles=%ld cycles (%d%%)\n", raster_stall_cycles, raster_stall_cycles_ratio);
+    fprintf(stream, "PERF: raster issue stalls=%ld\n", raster_issue_stalls);
     // cache perf counters
     int rcache_read_hit_ratio = (int)((1.0 - (double(rcache_read_misses) / double(rcache_reads))) * 100);
     int rcache_bank_utilization = (int)((double(rcache_reads) / double(rcache_reads + rcache_bank_stalls)) * 100);
@@ -515,6 +541,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     fprintf(stream, "PERF: rop memory writes=%ld\n", rop_mem_writes);
     fprintf(stream, "PERF: rop memory average latency=%d cycles\n", rop_mem_avg_lat);
     fprintf(stream, "PERF: rop stall cycles=%ld cycles (%d%%)\n", rop_stall_cycles, rop_stall_cycles_ratio);
+    fprintf(stream, "PERF: rop issue stalls=%ld\n", rop_issue_stalls);
     // cache perf counters
     int ocache_read_hit_ratio = (int)((1.0 - (double(ocache_read_misses) / double(ocache_reads))) * 100);
     int ocache_write_hit_ratio = (int)((1.0 - (double(ocache_write_misses) / double(ocache_writes))) * 100);

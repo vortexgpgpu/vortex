@@ -314,12 +314,12 @@
 
 // Size of texture Request Queue
 `ifndef TEX_REQ_QUEUE_SIZE
-`define TEX_REQ_QUEUE_SIZE `MAX(2, `NUM_WARPS * 2)
+`define TEX_REQ_QUEUE_SIZE `MAX(2, `NUM_WARPS)
 `endif
 
-// Texture Unit memory pending Queue
+// Texture Unit memory pending Queue (quad=4)
 `ifndef TEX_MEM_QUEUE_SIZE
-`define TEX_MEM_QUEUE_SIZE `MAX(2, `NUM_WARPS)
+`define TEX_MEM_QUEUE_SIZE `MAX(2, `NUM_WARPS * 4)
 `endif
 
 // Raster Units ////////////////////////////////////////////////////////////////
@@ -356,7 +356,7 @@
 
 // RASTER memory queue size 
 `ifndef RASTER_MEM_FIFO_DEPTH    
-`define RASTER_MEM_FIFO_DEPTH 4
+`define RASTER_MEM_FIFO_DEPTH 8
 `endif
 
 // Rop Units ///////////////////////////////////////////////////////////////////
@@ -366,9 +366,9 @@
 `define NUM_ROP_UNITS `UP(`NUM_CORES / 16)
 `endif
 
-// ROP memory pending size
+// ROP memory pending size (quad=4)
 `ifndef ROP_MEM_QUEUE_SIZE    
-`define ROP_MEM_QUEUE_SIZE `MAX(2, `NUM_WARPS)
+`define ROP_MEM_QUEUE_SIZE `MAX(2, `NUM_WARPS * 4)
 `endif
 
 // Icache Configurable Knobs //////////////////////////////////////////////////
@@ -537,12 +537,12 @@
 
 // Size of cache in bytes
 `ifndef TCACHE_SIZE
-`define TCACHE_SIZE 4096
+`define TCACHE_SIZE 8192
 `endif
 
 // Number of banks
 `ifndef TCACHE_NUM_BANKS
-`define TCACHE_NUM_BANKS `NUM_THREADS
+`define TCACHE_NUM_BANKS 1
 `endif
 
 // Number of ports per bank
@@ -562,7 +562,7 @@
 
 // Miss Handling Register Size
 `ifndef TCACHE_MSHR_SIZE
-`define TCACHE_MSHR_SIZE 8
+`define TCACHE_MSHR_SIZE (8 * 4)
 `endif
 
 // Memory Request Queue Size
@@ -670,7 +670,7 @@
 
 // Number of banks
 `ifndef OCACHE_NUM_BANKS
-`define OCACHE_NUM_BANKS `NUM_THREADS
+`define OCACHE_NUM_BANKS 1
 `endif
 
 // Number of ports per bank
@@ -690,7 +690,7 @@
 
 // Miss Handling Register Size
 `ifndef OCACHE_MSHR_SIZE
-`define OCACHE_MSHR_SIZE 8
+`define OCACHE_MSHR_SIZE (8 * 4)
 `endif
 
 // Memory Request Queue Size
@@ -712,7 +712,11 @@
 
 // Size of cache in bytes
 `ifndef L2_CACHE_SIZE
+`ifdef ALTERA_S10
 `define L2_CACHE_SIZE 2097152
+`else
+`define L2_CACHE_SIZE 1048576
+`endif
 `endif
 
 // Number of banks
@@ -759,7 +763,11 @@
 
 // Size of cache in bytes
 `ifndef L3_CACHE_SIZE
+`ifdef ALTERA_S10
+`define L3_CACHE_SIZE 2097152
+`else
 `define L3_CACHE_SIZE 1048576
+`endif
 `endif
 
 // Number of banks

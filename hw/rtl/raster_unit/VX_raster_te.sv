@@ -75,7 +75,7 @@ module VX_raster_te #(
     always @(posedge clk) begin
         if (reset) begin
             tile_valid <= 0;
-        end begin
+        end else begin
             if (~stall) begin
                 tile_valid <= 0;
                 if (fifo_arb_valid) begin

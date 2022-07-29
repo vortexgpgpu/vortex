@@ -272,7 +272,7 @@ module VX_raster_unit #(
         if (reset) begin
             perf_pending_reads <= 0;
         end else begin
-            perf_pending_reads <= perf_pending_reads + `PERF_CTR_BITS'(perf_pending_reads_cycle);
+            perf_pending_reads <= perf_pending_reads + `PERF_CTR_BITS'($signed(perf_pending_reads_cycle));
         end
     end
 

@@ -63,8 +63,8 @@ module VX_alu_unit #(
                 `INST_ALU_AND: msc_result[i] = alu_in1[i] & alu_in2_imm[i];
                 `INST_ALU_OR:  msc_result[i] = alu_in1[i] | alu_in2_imm[i];
                 `INST_ALU_XOR: msc_result[i] = alu_in1[i] ^ alu_in2_imm[i];                
-                //`INST_ALU_SLL,
-                default:  msc_result[i] = alu_in1[i] << alu_in2_imm[i][4:0];
+                `INST_ALU_SLL: msc_result[i] = alu_in1[i] << alu_in2_imm[i][4:0];
+                default:       msc_result[i] = 'x;
             endcase
         end
     end
@@ -76,8 +76,7 @@ module VX_alu_unit #(
                 2'b01: alu_result[i] = {31'b0, sub_result[i][32]};  // SLTU, SLT
                 2'b10: alu_result[i] = is_sub ? sub_result[i][31:0] // SUB
                                               : shr_result[i];      // SRL, SRA
-                // 2'b11,
-                default: alu_result[i] = msc_result[i];             // AND, OR, XOR, SLL
+                2'b11: alu_result[i] = msc_result[i];               // AND, OR, XOR, SLL
             endcase
         end       
     end
