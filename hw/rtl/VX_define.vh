@@ -328,12 +328,13 @@
 
 `define ASSIGN_VX_ROP_REQ_IF(dst, src) \
     assign dst.valid = src.valid; \
-    assign dst.mask  = src.mask; \
+    assign dst.uuid  = src.uuid;  \
+    assign dst.mask  = src.mask;  \
     assign dst.pos_x = src.pos_x; \
     assign dst.pos_y = src.pos_y; \
     assign dst.color = src.color; \
     assign dst.depth = src.depth; \
-    assign dst.face  = src.face; \
+    assign dst.face  = src.face;  \
     assign src.ready = dst.ready
 
 `define ASSIGN_VX_TEX_REQ_IF(dst, src) \

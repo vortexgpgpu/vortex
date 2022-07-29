@@ -41,6 +41,7 @@ module VX_mem_scheduler #(
     output wire [TAG_WIDTH-1:0]             rsp_tag,
     output wire                             rsp_eop,
     input wire                              rsp_ready,
+    output wire                             write_notify,
 
     // Memory request
     output wire [NUM_BANKS-1:0]             mem_req_valid,
@@ -147,6 +148,9 @@ module VX_mem_scheduler #(
 
     // no pending requests
     assign req_empty = reqq_empty && ibuf_empty;
+
+    // notify write submisison 
+    assign write_notify = reqq_pop && reqq_rw;
 
     // Index buffer ///////////////////////////////////////////////////////////
 
@@ -483,7 +487,7 @@ module VX_mem_scheduler #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    /*
+`ifndef NDEBUG
     wire [NUM_BANKS-1:0] mem_req_fire_s = mem_req_valid_s & mem_req_ready_s;
     always @(posedge clk) begin
         if (req_valid && req_ready) begin            
@@ -524,7 +528,8 @@ module VX_mem_scheduler #(
             `TRACE_ARRAY1D(1, mem_rsp_data_s, NUM_BANKS);
             dpi_trace(1, ", tag=0x%0h, batch=%0d (#%0d)\n", ibuf_raddr, rsp_batch_idx, mem_rsp_dbg_uuid);
         end
-    end*/
+    end
+`endif
   
 endmodule
 `TRACING_ON

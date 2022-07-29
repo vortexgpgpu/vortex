@@ -281,7 +281,8 @@ module VX_raster_mem #(
         .rsp_data       (mem_rsp_data),
         .rsp_tag        (mem_rsp_tag),
         `UNUSED_PIN     (rsp_eop),
-        .rsp_ready      (mem_rsp_ready),        
+        .rsp_ready      (mem_rsp_ready), 
+        `UNUSED_PIN     (write_notify),        
 
         // Memory request
         .mem_req_valid  (cache_req_if.valid),

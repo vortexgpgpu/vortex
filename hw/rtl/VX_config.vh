@@ -562,7 +562,7 @@
 
 // Miss Handling Register Size
 `ifndef TCACHE_MSHR_SIZE
-`define TCACHE_MSHR_SIZE (8 * 4)
+`define TCACHE_MSHR_SIZE (8 * 8)
 `endif
 
 // Memory Request Queue Size
@@ -577,7 +577,7 @@
 
 // Number of associative ways
 `ifndef TCACHE_NUM_WAYS
-`define TCACHE_NUM_WAYS 2
+`define TCACHE_NUM_WAYS 1
 `endif
 
 // Rcache Configurable Knobs //////////////////////////////////////////////////
@@ -641,7 +641,7 @@
 
 // Number of associative ways
 `ifndef RCACHE_NUM_WAYS
-`define RCACHE_NUM_WAYS 2
+`define RCACHE_NUM_WAYS 1
 `endif
 
 // Ocache Configurable Knobs //////////////////////////////////////////////////
@@ -690,7 +690,7 @@
 
 // Miss Handling Register Size
 `ifndef OCACHE_MSHR_SIZE
-`define OCACHE_MSHR_SIZE (8 * 4)
+`define OCACHE_MSHR_SIZE (8 * 8)
 `endif
 
 // Memory Request Queue Size
@@ -705,7 +705,7 @@
 
 // Number of associative ways
 `ifndef OCACHE_NUM_WAYS
-`define OCACHE_NUM_WAYS 2
+`define OCACHE_NUM_WAYS 1
 `endif
 
 // L2cache Configurable Knobs /////////////////////////////////////////////////

@@ -42,7 +42,8 @@ module VX_rop_mem #(
     output wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] rsp_depth,
     output wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] rsp_stencil,
     output wire [TAG_WIDTH-1:0]                     rsp_tag,
-    input wire                                      rsp_ready
+    input wire                                      rsp_ready,
+    output wire                                     write_notify
 );
 
     localparam NUM_REQS = ROP_MEM_REQS;
@@ -197,6 +198,7 @@ module VX_rop_mem #(
         .ADDR_WIDTH   (OCACHE_ADDR_WIDTH),
         .DATA_WIDTH   (32),
         .TAG_WIDTH    (TAG_WIDTH),
+        .UUID_WIDTH   (`UP(`UUID_BITS)),
         .QUEUE_SIZE   (`ROP_MEM_QUEUE_SIZE),
         .CORE_OUT_REG (3)
     ) mem_scheduler (
@@ -219,6 +221,7 @@ module VX_rop_mem #(
         .rsp_tag        (mrsp_tag),
         `UNUSED_PIN     (rsp_eop),
         .rsp_ready      (mrsp_ready),
+        .write_notify   (write_notify), 
 
         .mem_req_valid  (cache_req_if.valid),
         .mem_req_rw     (cache_req_if.rw),

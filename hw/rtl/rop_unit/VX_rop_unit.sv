@@ -20,7 +20,7 @@ module VX_rop_unit #(
     VX_dcr_write_if.slave   dcr_write_if,
     VX_rop_req_if.slave     rop_req_if
 );
-    localparam MEM_TAG_WIDTH = NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 32 + `ROP_DEPTH_BITS + 1);
+    localparam MEM_TAG_WIDTH = `UP(`UUID_BITS) + NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 32 + `ROP_DEPTH_BITS + 1);
     localparam DS_TAG_WIDTH = NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 1 + 1 + 32);
     localparam BLEND_TAG_WIDTH  = NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 1);
 
@@ -57,6 +57,7 @@ module VX_rop_unit #(
     wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] mem_rsp_stencil;
     wire [MEM_TAG_WIDTH-1:0]                mem_rsp_tag;
     wire                                    mem_rsp_ready;
+    wire                                    mem_write_notify;
 
     VX_rop_mem #(
         .INSTANCE_ID (INSTANCE_ID),
@@ -90,7 +91,8 @@ module VX_rop_unit #(
         .rsp_depth      (mem_rsp_depth),
         .rsp_stencil    (mem_rsp_stencil),
         .rsp_tag        (mem_rsp_tag),
-        .rsp_ready      (mem_rsp_ready)
+        .rsp_ready      (mem_rsp_ready),
+        .write_notify   (mem_write_notify)
     );
 
     ///////////////////////////////////////////////////////////////////////////
@@ -198,6 +200,8 @@ module VX_rop_unit #(
     ///////////////////////////////////////////////////////////////////////////
 
     wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] mem_rsp_pos_x, mem_rsp_pos_y;
+    wire [`UP(`UUID_BITS)-1:0] mem_rsp_uuid;
+    `UNUSED_VAR (mem_rsp_uuid)
 
     wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] ds_write_pos_x, ds_write_pos_y;
     wire [NUM_LANES-1:0] ds_write_mask, ds_write_face;
@@ -208,8 +212,8 @@ module VX_rop_unit #(
 
     wire pending_reads_full;
     
-    assign mem_req_tag = {rop_req_if.pos_x, rop_req_if.pos_y, rop_req_if.color, rop_req_if.depth, rop_req_if.face};
-    assign {mem_rsp_pos_x, mem_rsp_pos_y, blend_src_color, ds_depth_ref, ds_face} = mem_rsp_tag;
+    assign mem_req_tag = {rop_req_if.uuid, rop_req_if.pos_x, rop_req_if.pos_y, rop_req_if.color, rop_req_if.depth, rop_req_if.face};
+    assign {mem_rsp_uuid, mem_rsp_pos_x, mem_rsp_pos_y, blend_src_color, ds_depth_ref, ds_face} = mem_rsp_tag;
 
     assign ds_tag_in = {mem_rsp_pos_x, mem_rsp_pos_y, mem_rsp_mask, ds_face, blend_src_color};
     assign {ds_write_pos_x, ds_write_pos_y, ds_write_mask, ds_write_face, ds_write_color} = ds_tag_out;
@@ -254,15 +258,15 @@ module VX_rop_unit #(
 
     wire mem_req_fire = mem_req_valid & mem_req_ready;
 
-    // to resolve potential deadlocks, 
-    // ensure pending reads do not fill the queue
+    // to prevent potential deadlocks, 
+    // ensure the memory scheduler's queue doesn't fill up
     VX_pending_size #( 
-        .SIZE (`ROP_MEM_QUEUE_SIZE - 1)
+        .SIZE (`ROP_MEM_QUEUE_SIZE)
     ) pending_reads (
         .clk   (clk),
         .reset (reset),
         .incr  (mem_req_fire && ~mem_req_rw && (ds_writeen || blend_writeen)),
-        .decr  (mem_req_fire && mem_req_rw && (ds_writeen || blend_writeen)),
+        .decr  (mem_write_notify && (ds_writeen || blend_writeen)),
         .full  (pending_reads_full),
         `UNUSED_PIN (size),
         `UNUSED_PIN (empty)

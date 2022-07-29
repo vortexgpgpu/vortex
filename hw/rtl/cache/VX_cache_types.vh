@@ -97,7 +97,7 @@ localparam TCACHE_BATCH_SEL_BITS=`ARB_SEL_BITS(TEX_MEM_REQS, TCACHE_NUM_REQS);
 localparam TCACHE_TAG_ID_BITS	= (`CLOG2(`TEX_MEM_QUEUE_SIZE) + TCACHE_BATCH_SEL_BITS);
 
 // Core request tag bits
-localparam TCACHE_TAG_WIDTH	    = TCACHE_TAG_ID_BITS;
+localparam TCACHE_TAG_WIDTH	    = (`UP(`UUID_BITS) + TCACHE_TAG_ID_BITS);
 
 // Memory request data bits
 localparam TCACHE_MEM_DATA_WIDTH= (TCACHE_LINE_SIZE * 8);
@@ -165,7 +165,7 @@ localparam OCACHE_BATCH_SEL_BITS= `ARB_SEL_BITS(ROP_MEM_REQS, OCACHE_NUM_REQS);
 localparam OCACHE_TAG_ID_BITS	= (`CLOG2(`ROP_MEM_QUEUE_SIZE) + OCACHE_BATCH_SEL_BITS);
 
 // Core request tag bits
-localparam OCACHE_TAG_WIDTH	    = OCACHE_TAG_ID_BITS;
+localparam OCACHE_TAG_WIDTH	    = (`UP(`UUID_BITS) + OCACHE_TAG_ID_BITS);
 
 // Memory request data bits
 localparam OCACHE_MEM_DATA_WIDTH= (OCACHE_LINE_SIZE * 8);

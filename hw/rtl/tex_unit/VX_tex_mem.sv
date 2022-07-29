@@ -106,6 +106,7 @@ module VX_tex_mem #(
         .DATA_WIDTH  (32),
         .QUEUE_SIZE  (`TEX_MEM_QUEUE_SIZE),
         .TAG_WIDTH   (TAG_WIDTH),
+        .UUID_WIDTH  (`UP(`UUID_BITS)),
         .MEM_OUT_REG (3)
     ) mem_scheduler (
         .clk            (clk),
@@ -128,7 +129,8 @@ module VX_tex_mem #(
         .rsp_data       (mem_rsp_data),
         .rsp_tag        (mem_rsp_tag),
         `UNUSED_PIN     (rsp_eop),
-        .rsp_ready      (mem_rsp_ready),        
+        .rsp_ready      (mem_rsp_ready),
+        `UNUSED_PIN     (write_notify),      
 
         // Memory request
         .mem_req_valid  (cache_req_if.valid),
