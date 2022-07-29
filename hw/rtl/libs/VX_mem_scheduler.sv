@@ -378,20 +378,21 @@ module VX_mem_scheduler #(
     end else begin
 
         reg [NUM_BATCHES-1:0][NUM_BANKS-1:0][DATA_WIDTH-1:0] rsp_store [QUEUE_SIZE-1:0];
+        wire [NUM_BATCHES-1:0][NUM_BANKS-1:0][DATA_WIDTH-1:0] rsp_store_n;
         reg [QUEUE_SIZE-1:0][NUM_REQS-1:0] rsp_orig_mask;
-        wire [NUM_BANKS-1:0][DATA_WIDTH-1:0] mem_rsp_data_m;
 
-        for (genvar i = 0; i < NUM_BANKS; ++i) begin
-            assign mem_rsp_data_m[i] = {DATA_WIDTH{mem_rsp_mask_x[i]}} & mem_rsp_data_s[i];
+        for (genvar i = 0; i < NUM_BATCHES; ++i) begin
+            for (genvar j = 0; j < NUM_BANKS; ++j) begin
+                assign rsp_store_n[i][j] = (i == rsp_batch_idx && mem_rsp_mask_x[j]) ? mem_rsp_data_s[j] : rsp_store[ibuf_raddr][i][j];
+            end
         end
         
         always @(posedge clk) begin
             if (ibuf_push) begin
-                rsp_store[ibuf_waddr] <= '0;
                 rsp_orig_mask[ibuf_waddr] <= req_mask;
             end
             if (mem_rsp_fire) begin
-                rsp_store[ibuf_raddr][rsp_batch_idx] <= mem_rsp_data_m;
+                rsp_store[ibuf_raddr] <= rsp_store_n;
             end
         end
 
@@ -403,8 +404,7 @@ module VX_mem_scheduler #(
 
         for (genvar i = 0; i < NUM_BATCHES; ++i) begin
             localparam SIZE = ((i + 1) * NUM_BANKS > NUM_REQS) ? REM_BATCH_SIZE : NUM_BANKS;
-            assign crsp_data[i * NUM_BANKS +: SIZE] = rsp_store[ibuf_raddr][i][SIZE-1:0] 
-                                                    | ({(SIZE * DATA_WIDTH){(i == rsp_batch_idx)}} & mem_rsp_data_m[SIZE-1:0]);
+            assign crsp_data[i * NUM_BANKS +: SIZE] = rsp_store_n[i][SIZE-1:0];
         end
     end
 
@@ -473,7 +473,7 @@ module VX_mem_scheduler #(
 
         for (integer i = 0; i < QUEUE_SIZE; ++i) begin
             if (pending_req_valids[i]) begin
-                `ASSERT(($time - pending_reqs[i][0 +: 64]) < `STALL_TIMEOUT, 
+                `ASSERT(($time - pending_reqs[i][0 +: 64]) < `STALL_TIMEOUT,
                     ("%t: *** %s response timeout: remaining=%0d, tag=0x%0h (#%0d)", 
                         $time, INSTANCE_ID, rsp_rem_size[i], pending_reqs[i][64 +: TAG_ONLY_WIDTH], pending_reqs[i][64+TAG_ONLY_WIDTH +: `UP(`UUID_BITS)]));
             end

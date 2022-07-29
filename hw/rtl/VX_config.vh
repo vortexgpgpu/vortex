@@ -314,10 +314,10 @@
 
 // Size of texture Request Queue
 `ifndef TEX_REQ_QUEUE_SIZE
-`define TEX_REQ_QUEUE_SIZE `MAX(2, `NUM_WARPS)
+`define TEX_REQ_QUEUE_SIZE `MAX(2, `NUM_WARPS * 4)
 `endif
 
-// Texture Unit memory pending Queue (quad=4)
+// Texture Unit memory pending Queue
 `ifndef TEX_MEM_QUEUE_SIZE
 `define TEX_MEM_QUEUE_SIZE `MAX(2, `NUM_WARPS * 4)
 `endif
@@ -366,7 +366,7 @@
 `define NUM_ROP_UNITS `UP(`NUM_CORES / 16)
 `endif
 
-// ROP memory pending size (quad=4)
+// ROP memory pending size
 `ifndef ROP_MEM_QUEUE_SIZE    
 `define ROP_MEM_QUEUE_SIZE `MAX(2, `NUM_WARPS * 4)
 `endif
