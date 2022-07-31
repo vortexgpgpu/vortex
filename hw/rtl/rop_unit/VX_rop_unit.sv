@@ -1,4 +1,9 @@
 `include "VX_rop_define.vh"
+`include "VX_cache_types.vh"
+
+`IGNORE_WARNINGS_BEGIN
+import VX_cache_types::*;
+`IGNORE_WARNINGS_END
 
 module VX_rop_unit #(
     parameter string INSTANCE_ID = "",

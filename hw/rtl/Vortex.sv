@@ -53,8 +53,7 @@ module Vortex (
 `ifdef PERF_ENABLE
     VX_perf_memsys_if perf_memsys_if[`NUM_CLUSTERS]();
     VX_perf_memsys_if perf_memsys_total_if();    
-    VX_perf_cache_if  perf_l3cache_if();
-    `PERF_MEMSYS_ADD (perf_memsys_total_if, perf_memsys_if, `NUM_CLUSTERS);
+    VX_perf_cache_if  perf_l3cache_if();    
 `endif
 
     VX_mem_req_if #(
@@ -238,6 +237,24 @@ module Vortex (
     );
 
 `ifdef PERF_ENABLE
+
+    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, icache_reads, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, icache_read_misses, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, dcache_reads, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, dcache_writes, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, dcache_read_misses, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, dcache_write_misses, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, dcache_bank_stalls, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, dcache_mshr_stalls, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, smem_reads, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, smem_writes, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, smem_bank_stalls, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, l2cache_reads, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, l2cache_writes, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, l2cache_read_misses, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, l2cache_write_misses, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, l2cache_bank_stalls, `PERF_CTR_BITS, `NUM_CLUSTERS);
+    `REDUCE_ADD (perf_memsys_total_if, perf_memsys_if, l2cache_mshr_stalls, `PERF_CTR_BITS, `NUM_CLUSTERS);
 
 `ifdef L3_ENABLE
     assign perf_memsys_total_if.l3cache_reads       = perf_l3cache_if.reads;

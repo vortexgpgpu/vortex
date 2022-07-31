@@ -545,7 +545,6 @@ module VX_cache #(
     // per cycle: core_reads, core_writes
     wire [$clog2(NUM_REQS+1)-1:0] perf_core_reads_per_cycle;
     wire [$clog2(NUM_REQS+1)-1:0] perf_core_writes_per_cycle;
-    wire [$clog2(NUM_REQS+1)-1:0] perf_crsp_stall_per_cycle;
     
     wire [NUM_REQS-1:0] perf_core_reads_per_req  = core_req_valid & core_req_ready & ~core_req_rw;
     wire [NUM_REQS-1:0] perf_core_writes_per_req = core_req_valid & core_req_ready & core_req_rw;

@@ -471,7 +471,7 @@
 
 // Miss Handling Register Size
 `ifndef DCACHE_MSHR_SIZE
-`define DCACHE_MSHR_SIZE 32
+`define DCACHE_MSHR_SIZE 16
 `endif
 
 // Memory Request Queue Size
@@ -562,7 +562,7 @@
 
 // Miss Handling Register Size
 `ifndef TCACHE_MSHR_SIZE
-`define TCACHE_MSHR_SIZE 32
+`define TCACHE_MSHR_SIZE 16
 `endif
 
 // Memory Request Queue Size
@@ -690,7 +690,7 @@
 
 // Miss Handling Register Size
 `ifndef OCACHE_MSHR_SIZE
-`define OCACHE_MSHR_SIZE 32
+`define OCACHE_MSHR_SIZE 16
 `endif
 
 // Memory Request Queue Size
@@ -741,7 +741,7 @@
 
 // Miss Handling Register Size
 `ifndef L2_MSHR_SIZE
-`define L2_MSHR_SIZE 64
+`define L2_MSHR_SIZE 16
 `endif
 
 // Memory Request Queue Size
@@ -792,7 +792,7 @@
 
 // Miss Handling Register Size
 `ifndef L3_MSHR_SIZE
-`define L3_MSHR_SIZE 64
+`define L3_MSHR_SIZE 16
 `endif
 
 // Memory Request Queue Size
