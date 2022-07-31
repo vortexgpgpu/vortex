@@ -124,6 +124,12 @@
     `REDUCE_ADD (dst, src, smem_reads, `PERF_CTR_BITS, count); \
     `REDUCE_ADD (dst, src, smem_writes, `PERF_CTR_BITS, count); \
     `REDUCE_ADD (dst, src, smem_bank_stalls, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, l2cache_reads, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, l2cache_writes, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, l2cache_read_misses, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, l2cache_write_misses, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, l2cache_bank_stalls, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, l2cache_mshr_stalls, `PERF_CTR_BITS, count); \
     `REDUCE_ADD (dst, src, mem_reads, `PERF_CTR_BITS, count); \
     `REDUCE_ADD (dst, src, mem_writes, `PERF_CTR_BITS, count); \
     `REDUCE_ADD (dst, src, mem_latency, `PERF_CTR_BITS, count)

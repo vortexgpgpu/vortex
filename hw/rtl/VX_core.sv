@@ -129,10 +129,7 @@ module VX_core #(
         .CORE_ID(CORE_ID)
     ) decode (
         .clk            (clk),
-        .reset          (decode_reset),        
-    `ifdef PERF_ENABLE
-        .perf_decode_if (perf_pipeline_if.decode),
-    `endif
+        .reset          (decode_reset),
         .ifetch_rsp_if  (ifetch_rsp_if),
         .decode_if      (decode_if),
         .wrelease_if    (wrelease_if),
@@ -174,7 +171,7 @@ module VX_core #(
         .base_dcrs      (base_dcrs),
 
     `ifdef PERF_ENABLE
-        .perf_memsys_if (perf_memsys_if),
+        .perf_memsys_if (perf_memsys_if),        
         .perf_pipeline_if(perf_pipeline_if),
     `endif 
 
@@ -252,5 +249,79 @@ module VX_core #(
 
         .sim_wb_value   (sim_wb_value)
     );
+
+`ifdef PERF_ENABLE
+
+    wire [$clog2(ICACHE_NUM_REQS+1)-1:0] perf_icache_req_per_cycle;
+    wire [$clog2(DCACHE_NUM_REQS+1)-1:0] perf_dcache_rd_req_per_cycle;
+    wire [$clog2(DCACHE_NUM_REQS+1)-1:0] perf_dcache_wr_req_per_cycle;
+
+    wire [$clog2(ICACHE_NUM_REQS+1)-1:0] perf_icache_rsp_per_cycle;    
+    wire [$clog2(DCACHE_NUM_REQS+1)-1:0] perf_dcache_rsp_per_cycle;    
+
+    wire [$clog2(ICACHE_NUM_REQS+1)+1-1:0] perf_icache_pending_read_cycle;
+    wire [$clog2(DCACHE_NUM_REQS+1)+1-1:0] perf_dcache_pending_read_cycle;
+
+    reg  [`PERF_CTR_BITS-1:0] perf_icache_pending_reads;
+    reg  [`PERF_CTR_BITS-1:0] perf_dcache_pending_reads;
+
+    reg  [`PERF_CTR_BITS-1:0] perf_ifetches;
+    reg  [`PERF_CTR_BITS-1:0] perf_loads;
+    reg  [`PERF_CTR_BITS-1:0] perf_stores;
+
+    wire [ICACHE_NUM_REQS-1:0] perf_icache_req_fire = icache_req_if.valid & icache_req_if.ready;
+    wire [ICACHE_NUM_REQS-1:0] perf_icache_rsp_fire = icache_rsp_if.valid & icache_rsp_if.ready;
+
+    wire [DCACHE_NUM_REQS-1:0] perf_dcache_rd_req_fire = dcache_req_if.valid & ~dcache_req_if.rw & dcache_req_if.ready;
+    wire [DCACHE_NUM_REQS-1:0] perf_dcache_wr_req_fire = dcache_req_if.valid & dcache_req_if.rw & dcache_req_if.ready;
+    wire [DCACHE_NUM_REQS-1:0] perf_dcache_rsp_fire = dcache_rsp_if.valid & dcache_rsp_if.ready;
+
+    `POP_COUNT(perf_icache_req_per_cycle, perf_icache_req_fire);
+    `POP_COUNT(perf_dcache_rd_req_per_cycle, perf_dcache_rd_req_fire);
+    `POP_COUNT(perf_dcache_wr_req_per_cycle, perf_dcache_wr_req_fire);
+
+    `POP_COUNT(perf_icache_rsp_per_cycle, perf_icache_rsp_fire);
+    `POP_COUNT(perf_dcache_rsp_per_cycle, perf_dcache_rsp_fire);
+      
+    assign perf_icache_pending_read_cycle = perf_icache_req_per_cycle - perf_icache_rsp_per_cycle;
+    assign perf_dcache_pending_read_cycle = perf_dcache_rd_req_per_cycle - perf_dcache_rsp_per_cycle;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_icache_pending_reads <= 0;
+            perf_dcache_pending_reads <= 0;
+        end else begin
+            perf_icache_pending_reads <= perf_icache_pending_reads + `PERF_CTR_BITS'($signed(perf_icache_pending_read_cycle));
+            perf_dcache_pending_reads <= perf_dcache_pending_reads + `PERF_CTR_BITS'($signed(perf_dcache_pending_read_cycle));
+        end
+    end
+    
+    reg [`PERF_CTR_BITS-1:0] perf_icache_lat;
+    reg [`PERF_CTR_BITS-1:0] perf_dcache_lat;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_ifetches   <= 0;
+            perf_loads      <= 0;
+            perf_stores     <= 0;
+            perf_icache_lat <= 0;
+            perf_dcache_lat <= 0;
+        end else begin
+            perf_ifetches   <= perf_ifetches   + `PERF_CTR_BITS'(perf_icache_req_per_cycle);
+            perf_loads      <= perf_loads      + `PERF_CTR_BITS'(perf_dcache_rd_req_per_cycle);
+            perf_stores     <= perf_stores     + `PERF_CTR_BITS'(perf_dcache_wr_req_per_cycle);
+            perf_icache_lat <= perf_icache_lat + perf_icache_pending_reads;
+            perf_dcache_lat <= perf_dcache_lat + perf_dcache_pending_reads;
+        end
+    end
+
+    assign perf_pipeline_if.ifetches = perf_ifetches;
+    assign perf_pipeline_if.loads = perf_loads;
+    assign perf_pipeline_if.stores = perf_stores;
+    assign perf_pipeline_if.load_latency = perf_dcache_lat;
+    assign perf_pipeline_if.ifetch_latency = perf_icache_lat;
+    assign perf_pipeline_if.load_latency = perf_dcache_lat;
+
+`endif
     
 endmodule

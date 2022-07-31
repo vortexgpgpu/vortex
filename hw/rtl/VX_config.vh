@@ -312,14 +312,14 @@
 `define NUM_TEX_UNITS `UP(`NUM_CORES / 8)
 `endif
 
-// Size of texture Request Queue
+// Size of texture Request Queue (Quad=4)
 `ifndef TEX_REQ_QUEUE_SIZE
 `define TEX_REQ_QUEUE_SIZE `MAX(2, `NUM_WARPS * 4)
 `endif
 
 // Texture Unit memory pending Queue
 `ifndef TEX_MEM_QUEUE_SIZE
-`define TEX_MEM_QUEUE_SIZE `MAX(2, `NUM_WARPS * 4)
+`define TEX_MEM_QUEUE_SIZE (`TEX_REQ_QUEUE_SIZE * 2)
 `endif
 
 // Raster Units ////////////////////////////////////////////////////////////////
@@ -407,7 +407,7 @@
 
 // Miss Handling Register Size
 `ifndef ICACHE_MSHR_SIZE
-`define ICACHE_MSHR_SIZE `CLAMP(`NUM_WARPS * `UP(`NUM_CORES / `UP(`NUM_ICACHES)), 2, 16)
+`define ICACHE_MSHR_SIZE 16
 `endif
 
 // Memory Request Queue Size
@@ -471,7 +471,7 @@
 
 // Miss Handling Register Size
 `ifndef DCACHE_MSHR_SIZE
-`define DCACHE_MSHR_SIZE `CLAMP(`LSUQ_SIZE * `UP(`NUM_CORES / `UP(`NUM_DCACHES)), 2, 16)
+`define DCACHE_MSHR_SIZE 32
 `endif
 
 // Memory Request Queue Size
@@ -562,7 +562,7 @@
 
 // Miss Handling Register Size
 `ifndef TCACHE_MSHR_SIZE
-`define TCACHE_MSHR_SIZE (8 * 8)
+`define TCACHE_MSHR_SIZE 32
 `endif
 
 // Memory Request Queue Size
@@ -626,7 +626,7 @@
 
 // Miss Handling Register Size
 `ifndef RCACHE_MSHR_SIZE
-`define RCACHE_MSHR_SIZE 8
+`define RCACHE_MSHR_SIZE 16
 `endif
 
 // Memory Request Queue Size
@@ -690,7 +690,7 @@
 
 // Miss Handling Register Size
 `ifndef OCACHE_MSHR_SIZE
-`define OCACHE_MSHR_SIZE (8 * 8)
+`define OCACHE_MSHR_SIZE 32
 `endif
 
 // Memory Request Queue Size
@@ -741,7 +741,7 @@
 
 // Miss Handling Register Size
 `ifndef L2_MSHR_SIZE
-`define L2_MSHR_SIZE 16
+`define L2_MSHR_SIZE 64
 `endif
 
 // Memory Request Queue Size
@@ -792,7 +792,7 @@
 
 // Miss Handling Register Size
 `ifndef L3_MSHR_SIZE
-`define L3_MSHR_SIZE 16
+`define L3_MSHR_SIZE 64
 `endif
 
 // Memory Request Queue Size

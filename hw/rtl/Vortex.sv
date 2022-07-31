@@ -52,7 +52,7 @@ module Vortex (
 
 `ifdef PERF_ENABLE
     VX_perf_memsys_if perf_memsys_if[`NUM_CLUSTERS]();
-    VX_perf_memsys_if perf_memsys_total_if();
+    VX_perf_memsys_if perf_memsys_total_if();    
     VX_perf_cache_if  perf_l3cache_if();
     `PERF_MEMSYS_ADD (perf_memsys_total_if, perf_memsys_if, `NUM_CLUSTERS);
 `endif
@@ -236,6 +236,62 @@ module Vortex (
         .mem_req_if     (mem_req_if),
         .mem_rsp_if     (mem_rsp_if)
     );
+
+`ifdef PERF_ENABLE
+
+`ifdef L3_ENABLE
+    assign perf_memsys_total_if.l3cache_reads       = perf_l3cache_if.reads;
+    assign perf_memsys_total_if.l3cache_writes      = perf_l3cache_if.writes;
+    assign perf_memsys_total_if.l3cache_read_misses = perf_l3cache_if.read_misses;
+    assign perf_memsys_total_if.l3cache_write_misses= perf_l3cache_if.write_misses;
+    assign perf_memsys_total_if.l3cache_bank_stalls = perf_l3cache_if.bank_stalls;
+    assign perf_memsys_total_if.l3cache_mshr_stalls = perf_l3cache_if.mshr_stalls;
+`else
+    assign perf_memsys_total_if.l3cache_reads       = 0;
+    assign perf_memsys_total_if.l3cache_writes      = 0;
+    assign perf_memsys_total_if.l3cache_read_misses = 0;
+    assign perf_memsys_total_if.l3cache_write_misses= 0;
+    assign perf_memsys_total_if.l3cache_bank_stalls = 0;
+    assign perf_memsys_total_if.l3cache_mshr_stalls = 0;
+`endif
+
+    reg [`PERF_CTR_BITS-1:0] perf_mem_pending_reads;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_mem_pending_reads <= 0;
+        end else begin
+            perf_mem_pending_reads <= perf_mem_pending_reads + 
+                `PERF_CTR_BITS'($signed(2'((mem_req_if.valid && mem_req_if.ready && !mem_req_if.rw) && !(mem_rsp_if.valid && mem_rsp_if.ready)) - 
+                    2'((mem_rsp_if.valid && mem_rsp_if.ready) && !(mem_req_if.valid && mem_req_if.ready && !mem_req_if.rw))));
+        end
+    end
+    
+    reg [`PERF_CTR_BITS-1:0] perf_mem_reads;
+    reg [`PERF_CTR_BITS-1:0] perf_mem_writes;
+    reg [`PERF_CTR_BITS-1:0] perf_mem_lat;
+
+    always @(posedge clk) begin
+        if (reset) begin       
+            perf_mem_reads  <= 0;
+            perf_mem_writes <= 0;
+            perf_mem_lat    <= 0;
+        end else begin  
+            if (mem_req_if.valid && mem_req_if.ready && !mem_req_if.rw) begin
+                perf_mem_reads <= perf_mem_reads + `PERF_CTR_BITS'(1);
+            end
+            if (mem_req_if.valid && mem_req_if.ready && mem_req_if.rw) begin
+                perf_mem_writes <= perf_mem_writes + `PERF_CTR_BITS'(1);
+            end      
+            perf_mem_lat <= perf_mem_lat + perf_mem_pending_reads;
+        end
+    end
+
+    assign perf_memsys_total_if.mem_reads   = perf_mem_reads;       
+    assign perf_memsys_total_if.mem_writes  = perf_mem_writes;
+    assign perf_memsys_total_if.mem_latency = perf_mem_lat;
+    
+`endif
 
     `SCOPE_ASSIGN (reset, reset);
     `SCOPE_ASSIGN (mem_req_fire, mem_req_valid && mem_req_ready);

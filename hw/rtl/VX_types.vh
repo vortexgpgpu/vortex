@@ -18,9 +18,10 @@
 
 `define DCR_MPM_CLASS_NONE          0           
 `define DCR_MPM_CLASS_CORE          1
-`define DCR_MPM_CLASS_TEX           2
-`define DCR_MPM_CLASS_RASTER        3
-`define DCR_MPM_CLASS_ROP           4
+`define DCR_MPM_CLASS_MEM           2
+`define DCR_MPM_CLASS_TEX           3
+`define DCR_MPM_CLASS_RASTER        4
+`define DCR_MPM_CLASS_ROP           5
 
 // User Floating-Point CSRs
 
@@ -68,48 +69,77 @@
 `define CSR_MPM_FPU_ST_H            12'hB88
 `define CSR_MPM_GPU_ST              12'hB09
 `define CSR_MPM_GPU_ST_H            12'hB89
-// PERF: decode
-`define CSR_MPM_LOADS               12'hB0A
-`define CSR_MPM_LOADS_H             12'hB8A
-`define CSR_MPM_STORES              12'hB0B
-`define CSR_MPM_STORES_H            12'hB8B
-`define CSR_MPM_BRANCHES            12'hB0C
-`define CSR_MPM_BRANCHES_H          12'hB8C
-// PERF: icache
-`define CSR_MPM_ICACHE_READS        12'hB0D     // total reads
-`define CSR_MPM_ICACHE_READS_H      12'hB8D
-`define CSR_MPM_ICACHE_MISS_R       12'hB0E     // read misses
-`define CSR_MPM_ICACHE_MISS_R_H     12'hB8E
-// PERF: dcache
-`define CSR_MPM_DCACHE_READS        12'hB0F     // total reads
-`define CSR_MPM_DCACHE_READS_H      12'hB8F
-`define CSR_MPM_DCACHE_WRITES       12'hB10     // total writes
-`define CSR_MPM_DCACHE_WRITES_H     12'hB90
-`define CSR_MPM_DCACHE_MISS_R       12'hB11     // read misses
-`define CSR_MPM_DCACHE_MISS_R_H     12'hB91
-`define CSR_MPM_DCACHE_MISS_W       12'hB12     // write misses
-`define CSR_MPM_DCACHE_MISS_W_H     12'hB92
-`define CSR_MPM_DCACHE_BANK_ST      12'hB13     // bank conflicts
-`define CSR_MPM_DCACHE_BANK_ST_H    12'hB93
-`define CSR_MPM_DCACHE_MSHR_ST      12'hB14     // MSHR stalls
-`define CSR_MPM_DCACHE_MSHR_ST_H    12'hB94
-// PERF: smem
-`define CSR_MPM_SMEM_READS          12'hB15     // total reads
-`define CSR_MPM_SMEM_READS_H        12'hB95
-`define CSR_MPM_SMEM_WRITES         12'hB16     // total writes
-`define CSR_MPM_SMEM_WRITES_H       12'hB96
-`define CSR_MPM_SMEM_BANK_ST        12'hB17     // bank conflicts
-`define CSR_MPM_SMEM_BANK_ST_H      12'hB97
 // PERF: memory
-`define CSR_MPM_MEM_READS           12'hB18     // memory reads
-`define CSR_MPM_MEM_READS_H         12'hB98
-`define CSR_MPM_MEM_WRITES          12'hB19     // memory writes
-`define CSR_MPM_MEM_WRITES_H        12'hB99
-`define CSR_MPM_MEM_LAT             12'hB1A     // memory latency
-`define CSR_MPM_MEM_LAT_H           12'hB9A
-// PERF: wctl
-`define CSR_MPM_WCTL_ISSUE_ST       12'hB1B     // issue stalls
-`define CSR_MPM_WCTL_ISSUE_ST_H     12'hB9B
+`define CSR_MPM_IFETCHES            12'hB0A
+`define CSR_MPM_IFETCHES_H          12'hB8A
+`define CSR_MPM_LOADS               12'hB0B
+`define CSR_MPM_LOADS_H             12'hB8B
+`define CSR_MPM_STORES              12'hB0C
+`define CSR_MPM_STORES_H            12'hB8C
+`define CSR_MPM_IFETCH_LAT          12'hB0D
+`define CSR_MPM_IFETCH_LAT_H        12'hB8D
+`define CSR_MPM_LOAD_LAT            12'hB0E 
+`define CSR_MPM_LOAD_LAT_H          12'hB8E
+
+// Machine Performance-monitoring memory counters
+// PERF: icache
+`define CSR_MPM_ICACHE_READS        12'hB03     // total reads
+`define CSR_MPM_ICACHE_READS_H      12'hB83
+`define CSR_MPM_ICACHE_MISS_R       12'hB04     // read misses
+`define CSR_MPM_ICACHE_MISS_R_H     12'hB84
+// PERF: dcache
+`define CSR_MPM_DCACHE_READS        12'hB05     // total reads
+`define CSR_MPM_DCACHE_READS_H      12'hB85
+`define CSR_MPM_DCACHE_WRITES       12'hB06     // total writes
+`define CSR_MPM_DCACHE_WRITES_H     12'hB86
+`define CSR_MPM_DCACHE_MISS_R       12'hB07     // read misses
+`define CSR_MPM_DCACHE_MISS_R_H     12'hB87
+`define CSR_MPM_DCACHE_MISS_W       12'hB08     // write misses
+`define CSR_MPM_DCACHE_MISS_W_H     12'hB88
+`define CSR_MPM_DCACHE_BANK_ST      12'hB09     // bank conflicts
+`define CSR_MPM_DCACHE_BANK_ST_H    12'hB89
+`define CSR_MPM_DCACHE_MSHR_ST      12'hB0A     // MSHR stalls
+`define CSR_MPM_DCACHE_MSHR_ST_H    12'hB8A
+// PERF: smem
+`define CSR_MPM_SMEM_READS          12'hB0B     // memory reads
+`define CSR_MPM_SMEM_READS_H        12'hB8B
+`define CSR_MPM_SMEM_WRITES         12'hB0C     // memory writes
+`define CSR_MPM_SMEM_WRITES_H       12'hB8C
+`define CSR_MPM_SMEM_BANK_ST        12'hB0D     // bank conflicts
+`define CSR_MPM_SMEM_BANK_ST_H      12'hB8D
+// PERF: l2cache
+`define CSR_MPM_L2CACHE_READS       12'hB0E     // total reads
+`define CSR_MPM_L2CACHE_READS_H     12'hB8E
+`define CSR_MPM_L2CACHE_WRITES      12'hB0F     // total writes
+`define CSR_MPM_L2CACHE_WRITES_H    12'hB8F
+`define CSR_MPM_L2CACHE_MISS_R      12'hB10     // read misses
+`define CSR_MPM_L2CACHE_MISS_R_H    12'hB90
+`define CSR_MPM_L2CACHE_MISS_W      12'hB11     // write misses
+`define CSR_MPM_L2CACHE_MISS_W_H    12'hB91
+`define CSR_MPM_L2CACHE_BANK_ST     12'hB12     // bank conflicts
+`define CSR_MPM_L2CACHE_BANK_ST_H   12'hB92
+`define CSR_MPM_L2CACHE_MSHR_ST     12'hB13     // MSHR stalls
+`define CSR_MPM_L2CACHE_MSHR_ST_H   12'hB93
+// PERF: l3cache
+`define CSR_MPM_L3CACHE_READS       12'hB14     // total reads
+`define CSR_MPM_L3CACHE_READS_H     12'hB94
+`define CSR_MPM_L3CACHE_WRITES      12'hB15     // total writes
+`define CSR_MPM_L3CACHE_WRITES_H    12'hB95
+`define CSR_MPM_L3CACHE_MISS_R      12'hB16     // read misses
+`define CSR_MPM_L3CACHE_MISS_R_H    12'hB96
+`define CSR_MPM_L3CACHE_MISS_W      12'hB17     // write misses
+`define CSR_MPM_L3CACHE_MISS_W_H    12'hB97
+`define CSR_MPM_L3CACHE_BANK_ST     12'hB18     // bank conflicts
+`define CSR_MPM_L3CACHE_BANK_ST_H   12'hB98
+`define CSR_MPM_L3CACHE_MSHR_ST     12'hB19     // MSHR stalls
+`define CSR_MPM_L3CACHE_MSHR_ST_H   12'hB99
+// PERF: memory
+`define CSR_MPM_MEM_READS           12'hB1A     // total reads
+`define CSR_MPM_MEM_READS_H         12'hB9A
+`define CSR_MPM_MEM_WRITES          12'hB1B     // total writes
+`define CSR_MPM_MEM_WRITES_H        12'hB9B
+`define CSR_MPM_MEM_LAT             12'hB1C     // memory latency
+`define CSR_MPM_MEM_LAT_H           12'hB9C
 
 // Machine Performance-monitoring texture counters
 // PERF: texture unit

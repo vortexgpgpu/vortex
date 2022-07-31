@@ -205,7 +205,6 @@ module VX_lsu_unit #(
         .rsp_tag        (mem_rsp_tag),
         .rsp_eop        (mem_rsp_eop),
         .rsp_ready      (mem_rsp_ready),
-        `UNUSED_PIN     (write_notify),       
 
         // Memory request
         .mem_req_valid  (cache_req_tmp_if.valid),

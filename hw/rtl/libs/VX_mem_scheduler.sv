@@ -33,6 +33,7 @@ module VX_mem_scheduler #(
     input wire [TAG_WIDTH-1:0]              req_tag,
     output wire                             req_empty,
     output wire                             req_ready,
+    output wire                             write_notify,
 
     // Output response
     output wire                             rsp_valid,
@@ -41,7 +42,6 @@ module VX_mem_scheduler #(
     output wire [TAG_WIDTH-1:0]             rsp_tag,
     output wire                             rsp_eop,
     input wire                              rsp_ready,
-    output wire                             write_notify,
 
     // Memory request
     output wire [NUM_BANKS-1:0]             mem_req_valid,
@@ -308,7 +308,7 @@ module VX_mem_scheduler #(
     // Handle memory responses ////////////////////////////////////////////////
 
     reg  [REQ_SIZEW-1:0] rsp_rem_size [QUEUE_SIZE-1:0];
-    wire [REQ_SIZEW-1:0]           rsp_rem_size_n;
+    wire [REQ_SIZEW-1:0] rsp_rem_size_n;
     wire [`UP(BATCH_SEL_BITS)-1:0] rsp_batch_idx;
 
     // Select memory response
@@ -383,7 +383,7 @@ module VX_mem_scheduler #(
 
         reg [NUM_BATCHES-1:0][NUM_BANKS-1:0][DATA_WIDTH-1:0] rsp_store [QUEUE_SIZE-1:0];
         wire [NUM_BATCHES-1:0][NUM_BANKS-1:0][DATA_WIDTH-1:0] rsp_store_n;
-        reg [QUEUE_SIZE-1:0][NUM_REQS-1:0] rsp_orig_mask;
+        reg [NUM_REQS-1:0] rsp_orig_mask [QUEUE_SIZE-1:0];
 
         for (genvar i = 0; i < NUM_BATCHES; ++i) begin
             for (genvar j = 0; j < NUM_BANKS; ++j) begin

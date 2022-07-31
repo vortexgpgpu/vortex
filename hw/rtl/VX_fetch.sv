@@ -65,7 +65,7 @@ module VX_fetch #(
         `SCOPE_BIND_VX_fetch_icache_stage
 
         .clk            (clk),
-        .reset          (reset),        
+        .reset          (reset),
         
         .icache_rsp_if  (icache_rsp_if),
         .icache_req_if  (icache_req_if),

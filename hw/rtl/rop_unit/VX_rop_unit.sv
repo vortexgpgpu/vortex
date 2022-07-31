@@ -84,6 +84,7 @@ module VX_rop_unit #(
         .req_face       (mem_req_face_r),
         .req_tag        (mem_req_tag_r),
         .req_ready      (mem_req_ready_r),
+        .write_notify   (mem_write_notify),
 
         .rsp_valid      (mem_rsp_valid),
         .rsp_mask       (mem_rsp_mask),
@@ -91,8 +92,7 @@ module VX_rop_unit #(
         .rsp_depth      (mem_rsp_depth),
         .rsp_stencil    (mem_rsp_stencil),
         .rsp_tag        (mem_rsp_tag),
-        .rsp_ready      (mem_rsp_ready),
-        .write_notify   (mem_write_notify)
+        .rsp_ready      (mem_rsp_ready)       
     );
 
     ///////////////////////////////////////////////////////////////////////////
@@ -293,13 +293,13 @@ module VX_rop_unit #(
     wire [$clog2(OCACHE_NUM_REQS+1)-1:0] perf_mem_rd_rsp_per_cycle;
     wire [$clog2(OCACHE_NUM_REQS+1)+1-1:0] perf_pending_reads_cycle;
 
-    wire [OCACHE_NUM_REQS-1:0] perf_mem_rd_req_per_mask = cache_req_if.valid & ~cache_req_if.rw & cache_req_if.ready;
-    wire [OCACHE_NUM_REQS-1:0] perf_mem_wr_req_per_mask = cache_req_if.valid & cache_req_if.rw & cache_req_if.ready;
-    wire [OCACHE_NUM_REQS-1:0] perf_mem_rd_rsp_per_mask = cache_rsp_if.valid & cache_rsp_if.ready;
+    wire [OCACHE_NUM_REQS-1:0] perf_mem_rd_req_fire = cache_req_if.valid & ~cache_req_if.rw & cache_req_if.ready;
+    wire [OCACHE_NUM_REQS-1:0] perf_mem_wr_req_fire = cache_req_if.valid & cache_req_if.rw & cache_req_if.ready;
+    wire [OCACHE_NUM_REQS-1:0] perf_mem_rd_rsp_fire = cache_rsp_if.valid & cache_rsp_if.ready;
 
-    `POP_COUNT(perf_mem_rd_req_per_cycle, perf_mem_rd_req_per_mask);    
-    `POP_COUNT(perf_mem_wr_req_per_cycle, perf_mem_wr_req_per_mask);    
-    `POP_COUNT(perf_mem_rd_rsp_per_cycle, perf_mem_rd_rsp_per_mask);
+    `POP_COUNT(perf_mem_rd_req_per_cycle, perf_mem_rd_req_fire);    
+    `POP_COUNT(perf_mem_wr_req_per_cycle, perf_mem_wr_req_fire);    
+    `POP_COUNT(perf_mem_rd_rsp_per_cycle, perf_mem_rd_rsp_fire);
 
     reg [`PERF_CTR_BITS-1:0] perf_pending_reads;   
     assign perf_pending_reads_cycle = perf_mem_rd_req_per_cycle - perf_mem_rd_rsp_per_cycle;

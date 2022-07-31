@@ -6,7 +6,11 @@ set -e
 WIDTH=1920
 HEIGHT=1080
 
-LOG_FILE=./perf/draw3d/perf_${DEVICE_FAMILY}_${WIDTH}_${HEIGHT}.log
+TOKEN=${1:-}_${DEVICE_FAMILY}_${WIDTH}x${HEIGHT}
+
+LOG_DIR=./perf/draw3d
+
+LOG_FILE=${LOG_DIR}/perf_${TOKEN}.log
 
 declare -a traces=(vase filmtv skybox coverflow evilskull polybump tekkaman carnival)
 

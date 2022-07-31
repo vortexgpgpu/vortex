@@ -18,10 +18,6 @@ module VX_decode  #(
     input  wire         clk,
     input  wire         reset,
 
-`ifdef PERF_ENABLE
-    VX_perf_pipeline_if.decode perf_decode_if,
-`endif
-
     // inputs
     VX_ifetch_rsp_if.slave  ifetch_rsp_if,
 
@@ -487,42 +483,6 @@ module VX_decode  #(
 
     assign ifetch_rsp_if.ibuf_pop = decode_if.ibuf_pop;
     assign ifetch_rsp_if.ready = decode_if.ready;
-
-`ifdef PERF_ENABLE
-    wire [$clog2(`NUM_THREADS+1)-1:0] perf_loads_per_cycle;
-    wire [$clog2(`NUM_THREADS+1)-1:0] perf_stores_per_cycle;
-    wire [$clog2(`NUM_THREADS+1)-1:0] perf_branches_per_cycle;
-
-    wire [`NUM_THREADS-1:0] perf_loads_per_thread = decode_if.tmask & {`NUM_THREADS{decode_if.ex_type  == `EX_LSU && `INST_LSU_IS_MEM(decode_if.op_mod) && decode_if.wb}};
-    wire [`NUM_THREADS-1:0] perf_stores_per_thread = decode_if.tmask & {`NUM_THREADS{decode_if.ex_type == `EX_LSU && `INST_LSU_IS_MEM(decode_if.op_mod) && ~decode_if.wb}};
-    wire [`NUM_THREADS-1:0] perf_branches_per_thread = decode_if.tmask & {`NUM_THREADS{decode_if.ex_type == `EX_ALU && `INST_ALU_IS_BR(decode_if.op_mod)}};
-
-    `POP_COUNT(perf_loads_per_cycle, perf_loads_per_thread);
-    `POP_COUNT(perf_stores_per_cycle, perf_stores_per_thread);
-    `POP_COUNT(perf_branches_per_cycle, perf_branches_per_thread);
-
-    reg [`PERF_CTR_BITS-1:0] perf_loads;
-    reg [`PERF_CTR_BITS-1:0] perf_stores;
-    reg [`PERF_CTR_BITS-1:0] perf_branches;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            perf_loads    <= 0;
-            perf_stores   <= 0;
-            perf_branches <= 0;
-        end else begin
-            if (decode_if.valid && decode_if.ready) begin
-                perf_loads    <= perf_loads + `PERF_CTR_BITS'(perf_loads_per_cycle);
-                perf_stores   <= perf_stores + `PERF_CTR_BITS'(perf_stores_per_cycle);
-                perf_branches <= perf_branches + `PERF_CTR_BITS'(perf_branches_per_cycle);
-            end
-        end
-    end
-    
-    assign perf_decode_if.loads    = perf_loads;
-    assign perf_decode_if.stores   = perf_stores;
-    assign perf_decode_if.branches = perf_branches;
-`endif
 
 `ifdef DBG_TRACE_CORE_PIPELINE
     always @(posedge clk) begin

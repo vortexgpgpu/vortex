@@ -139,10 +139,10 @@ module VX_warp_sched #(
                 stalled_warps[schedule_wid] <= 1;
 
                 // release wspawn
-                use_wspawn[schedule_wid] <= 0;
                 if (use_wspawn[schedule_wid]) begin
                     thread_masks[schedule_wid] <= 1;
                 end
+                use_wspawn[schedule_wid] <= 0;
 
                 issued_instrs[schedule_wid] <= issued_instrs[schedule_wid] + `UP(`UUID_BITS)'(1);
             end
@@ -248,8 +248,8 @@ module VX_warp_sched #(
 
 `ifdef SIMULATION
     assign instr_uuid = (issued_instrs[schedule_wid] * `NUM_WARPS * `NUM_CORES * `NUM_CLUSTERS)
-                      + (schedule_wid * `NUM_CORES * `NUM_CLUSTERS)
-                      + `UUID_BITS'(CORE_ID);
+                      + (`NUM_WARPS * CORE_ID)
+                      + `UUID_BITS'(schedule_wid);
 `else
     assign instr_uuid = 0;
 `endif

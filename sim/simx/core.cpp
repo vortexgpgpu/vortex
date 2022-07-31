@@ -424,14 +424,13 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
     return tid + (wid * arch_.num_threads());
   case CSR_GTID:
     // Processor threadID
-    return tid + (wid * arch_.num_threads()) + 
-        (arch_.num_threads() * arch_.num_warps() * core_id_);
+    return (core_id_ * arch_.num_warps() + wid) * arch_.num_threads() + tid;
   case CSR_LWID:
     // Core warpID
     return wid;
   case CSR_GWID:
     // Processor warpID        
-    return wid + (arch_.num_warps() * core_id_);
+    return core_id_ * arch_.num_warps() + wid;
   case CSR_GCID:
     // Processor coreID
     return core_id_;

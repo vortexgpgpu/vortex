@@ -34,6 +34,7 @@ module VX_rop_mem #(
     input wire [NUM_LANES-1:0]                      req_face,
     input wire [TAG_WIDTH-1:0]                      req_tag,
     output wire                                     req_ready,
+    output wire                                     write_notify,
 
     // Response interface
     output wire                                     rsp_valid,
@@ -42,8 +43,7 @@ module VX_rop_mem #(
     output wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] rsp_depth,
     output wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] rsp_stencil,
     output wire [TAG_WIDTH-1:0]                     rsp_tag,
-    input wire                                      rsp_ready,
-    output wire                                     write_notify
+    input wire                                      rsp_ready    
 );
 
     localparam NUM_REQS = ROP_MEM_REQS;
@@ -214,6 +214,7 @@ module VX_rop_mem #(
         .req_tag        (mreq_tag_r),
         `UNUSED_PIN     (req_empty),
         .req_ready      (mreq_ready_r),
+        .write_notify   (write_notify),
 
         .rsp_valid      (mrsp_valid),
         .rsp_mask       (mrsp_mask),
@@ -221,7 +222,6 @@ module VX_rop_mem #(
         .rsp_tag        (mrsp_tag),
         `UNUSED_PIN     (rsp_eop),
         .rsp_ready      (mrsp_ready),
-        .write_notify   (write_notify), 
 
         .mem_req_valid  (cache_req_if.valid),
         .mem_req_rw     (cache_req_if.rw),

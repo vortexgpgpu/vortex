@@ -12,7 +12,7 @@ module VX_icache_stage #(
 
     input  wire             clk,
     input  wire             reset,
-    
+
     // Icache interface
     VX_cache_req_if.master icache_req_if,
     VX_cache_rsp_if.slave  icache_rsp_if,

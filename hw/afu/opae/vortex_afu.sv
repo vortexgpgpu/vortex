@@ -49,7 +49,7 @@ localparam CCI_DATA_SIZE      = CCI_DATA_WIDTH / 8;
 localparam CCI_ADDR_WIDTH     = 32 - $clog2(CCI_DATA_SIZE);
 
 
-localparam AVS_RD_QUEUE_SIZE  = 4;
+localparam AVS_RD_QUEUE_SIZE  = 64;
 localparam _VX_MEM_TAG_WIDTH  = `VX_MEM_TAG_WIDTH;
 localparam _AVS_REQ_TAGW_VX   = _VX_MEM_TAG_WIDTH + $clog2(LMEM_DATA_WIDTH) - $clog2(`VX_MEM_DATA_WIDTH);
 localparam _AVS_REQ_TAGW_VX2  = `MAX(_VX_MEM_TAG_WIDTH, _AVS_REQ_TAGW_VX);
