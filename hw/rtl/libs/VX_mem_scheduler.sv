@@ -67,7 +67,7 @@ module VX_mem_scheduler #(
 
     `STATIC_ASSERT (DATA_WIDTH == 8 * (DATA_WIDTH / 8), ("invalid parameter"))
     `STATIC_ASSERT ((0 == RSP_PARTIAL) || (1 == RSP_PARTIAL), ("invalid parameter"))
-    `RUNTIME_ASSERT ((~req_valid || req_mask != 0), ("invalid input"));
+    `RUNTIME_ASSERT ((~req_valid || req_mask != 0), ("invalid request mask"));
 
     wire [NUM_BANKS-1:0]             mem_req_valid_s;
     wire [NUM_BANKS-1:0]             mem_req_mask_s;

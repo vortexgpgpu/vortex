@@ -23,8 +23,8 @@ module VX_rop_mem #(
 
     // Request interface
     input wire                                      req_valid,
-    input wire [NUM_LANES-1:0]                      req_mask,
-    input wire [NUM_LANES-1:0]                      req_ds_pass,
+    input wire [NUM_LANES-1:0]                      req_ds_mask,
+    input wire [NUM_LANES-1:0]                      req_c_mask,
     input wire                                      req_rw,
     input wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0]   req_pos_x,
     input wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0]   req_pos_y,
@@ -65,16 +65,8 @@ module VX_rop_mem #(
 
     `UNUSED_VAR (dcrs)
 
-    wire color_enable = req_rw ? (dcrs.cbuf_writemask != 0) : dcrs.blend_enable;
     wire [3:0] color_byteen = dcrs.cbuf_writemask;
-
-    wire depth_enable = dcrs.depth_enable && (~req_rw || (dcrs.depth_writemask != 0));
     wire [2:0] depth_byteen = {3{dcrs.depth_writemask}};
-
-    wire stencil_front_enable = dcrs.stencil_enable[0] && (~req_rw || (dcrs.stencil_writemask[0] != 0));
-    wire stencil_back_enable  = dcrs.stencil_enable[1] && (~req_rw || (dcrs.stencil_writemask[1] != 0));    
-    wire stencil_enable = stencil_back_enable | stencil_front_enable;
-
     wire [NUM_LANES-1:0] stencil_byteen;
     for (genvar i = 0;  i < NUM_LANES; ++i) begin        
         assign stencil_byteen[i] = (dcrs.stencil_writemask[req_face[i]] != 0);
@@ -82,6 +74,7 @@ module VX_rop_mem #(
 
     wire mul_ready_in;
 
+    // DS submission
     for (genvar i = 0;  i < NUM_LANES; ++i) begin
         wire [31:0] m_y_pitch, baddr_s;
 
@@ -98,8 +91,7 @@ module VX_rop_mem #(
             .result (m_y_pitch)
         );
 
-        wire [31:0] baddr  = dcrs.zbuf_addr + (req_pos_x[i] * 4);                
-        wire        mask   = req_mask[i] && (stencil_enable || (depth_enable && (~req_rw || req_ds_pass[i])));
+        wire [31:0] baddr  = dcrs.zbuf_addr + (req_pos_x[i] * 4);
         wire [3:0]  byteen = req_rw ? {stencil_byteen[i], depth_byteen} : 4'b1111;
         wire [31:0] data   = {req_stencil[i], req_depth[i]};      
 
@@ -111,8 +103,8 @@ module VX_rop_mem #(
             .clk      (clk),
             .reset    (reset),
             .enable   (mul_ready_in),
-            .data_in  ({mask,         byteen,         baddr,   data}),
-            .data_out ({mreq_mask[i], mreq_byteen[i], baddr_s, mreq_data[i]})
+            .data_in  ({req_ds_mask[i], byteen,         baddr,   data}),
+            .data_out ({mreq_mask[i],   mreq_byteen[i], baddr_s, mreq_data[i]})
         );
 
         wire [31:0] addr = baddr_s + m_y_pitch;
@@ -121,6 +113,7 @@ module VX_rop_mem #(
         `UNUSED_VAR (addr)
     end
 
+    // Bland submission
     for (genvar i = NUM_LANES; i < NUM_REQS; ++i) begin
         wire [31:0] m_y_pitch, baddr_s;
 
@@ -137,8 +130,7 @@ module VX_rop_mem #(
             .result (m_y_pitch)
         );
 
-        wire [31:0] baddr  = dcrs.cbuf_addr + (req_pos_x[i - NUM_LANES] * 4);
-        wire        mask   = req_mask[i - NUM_LANES] && color_enable && (~req_rw || req_ds_pass[i - NUM_LANES]);        
+        wire [31:0] baddr  = dcrs.cbuf_addr + (req_pos_x[i - NUM_LANES] * 4);   
         wire [3:0]  byteen = req_rw ? color_byteen : 4'b1111;
         wire [31:0] data   = req_color[i - NUM_LANES];        
 
@@ -150,8 +142,8 @@ module VX_rop_mem #(
             .clk      (clk),
             .reset    (reset),
             .enable   (mul_ready_in),
-            .data_in  ({mask,         byteen,         baddr,    data}),
-            .data_out ({mreq_mask[i], mreq_byteen[i], baddr_s,  mreq_data[i]})
+            .data_in  ({req_c_mask[i - NUM_LANES], byteen,         baddr,    data}),
+            .data_out ({mreq_mask[i],              mreq_byteen[i], baddr_s,  mreq_data[i]})
         );
 
         wire [31:0] addr = baddr_s + m_y_pitch;
@@ -172,7 +164,7 @@ module VX_rop_mem #(
         .data_out ({mreq_valid, mreq_rw, mreq_tag})
     );
 
-    wire mreq_stall = mreq_valid_r & ~mreq_ready_r;
+    wire mreq_stall = mreq_valid_r && ~mreq_ready_r;
 
     assign mul_ready_in = ~mreq_stall || ~mreq_valid;
 
@@ -185,8 +177,8 @@ module VX_rop_mem #(
         .clk      (clk),
         .reset    (reset),
         .enable	  (~mreq_stall),
-        .data_in  ({mreq_valid && (| mreq_mask), mreq_rw,   mreq_mask,   mreq_byteen,   mreq_addr,   mreq_data,   mreq_tag}),
-        .data_out ({mreq_valid_r,                mreq_rw_r, mreq_mask_r, mreq_byteen_r, mreq_addr_r, mreq_data_r, mreq_tag_r})
+        .data_in  ({mreq_valid,   mreq_rw,   mreq_mask,   mreq_byteen,   mreq_addr,   mreq_data,   mreq_tag}),
+        .data_out ({mreq_valid_r, mreq_rw_r, mreq_mask_r, mreq_byteen_r, mreq_addr_r, mreq_data_r, mreq_tag_r})
     );
 
     // schedule memory request

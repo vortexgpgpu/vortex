@@ -25,8 +25,8 @@ module VX_pending_size #(
             empty_r <= 1;
             full_r  <= 0;
         end else begin            
-            `ASSERT(~(incr && ~decr) || ~full, ("runtime error"));
-            `ASSERT(~(decr && ~incr) || ~empty, ("runtime error"));
+            `ASSERT(~(incr && ~decr) || ~full, ("runtime error: incrementing full counter"));
+            `ASSERT(~(decr && ~incr) || ~empty, ("runtime error: decrementing empty counter"));
             if (incr) begin
                 if (!decr) begin
                     empty_r <= 0;

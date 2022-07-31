@@ -37,8 +37,8 @@ module VX_fifo_queue #(
                 head_r <= 0;
                 size_r <= 0;                    
             end else begin
-                `ASSERT(!push || !full, ("runtime error"));
-                `ASSERT(!pop || !empty, ("runtime error"));
+                `ASSERT(!push || !full, ("runtime error: incrementing full queue"));
+                `ASSERT(!pop || !empty, ("runtime error: decrementing full queue"));
                 if (push) begin
                     if (!pop) begin
                         size_r <= 1;
@@ -73,8 +73,8 @@ module VX_fifo_queue #(
                 alm_full_r  <= 0;
                 used_r      <= 0;
             end else begin
-                `ASSERT(~(push && ~pop) || ~full, ("runtime error"));
-                `ASSERT(~(pop && ~push) || ~empty, ("runtime error"));
+                `ASSERT(~(push && ~pop) || ~full, ("runtime error: incrementing full queue"));
+                `ASSERT(~(pop && ~push) || ~empty, ("runtime error: decrementing empty queue"));
                 if (push) begin
                     if (!pop) begin
                         empty_r <= 0;

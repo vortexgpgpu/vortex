@@ -40,7 +40,7 @@ task trace_ex_op (
                 `INST_BR_URET:  `TRACE(level, ("URET"));    
                 `INST_BR_SRET:  `TRACE(level, ("SRET"));    
                 `INST_BR_MRET:  `TRACE(level, ("MRET"));    
-                default:   `TRACE(level, ("?"));
+                default:        `TRACE(level, ("?"));
             endcase                
         end else if (`INST_ALU_IS_MUL(op_mod)) begin
             case (`INST_MUL_BITS'(op_type))
@@ -52,7 +52,7 @@ task trace_ex_op (
                 `INST_MUL_DIVU:  `TRACE(level, ("DIVU"));
                 `INST_MUL_REM:   `TRACE(level, ("REM"));
                 `INST_MUL_REMU:  `TRACE(level, ("REMU"));
-                default:    `TRACE(level, ("?"));
+                default:         `TRACE(level, ("?"));
             endcase
         end else begin
             case (`INST_ALU_BITS'(op_type))
@@ -68,7 +68,7 @@ task trace_ex_op (
                 `INST_ALU_AND:   `TRACE(level, ("AND"));
                 `INST_ALU_LUI:   `TRACE(level, ("LUI"));
                 `INST_ALU_AUIPC: `TRACE(level, ("AUIPC"));
-                default:    `TRACE(level, ("?"));
+                default:         `TRACE(level, ("?"));
             endcase         
         end
     end
@@ -83,13 +83,13 @@ task trace_ex_op (
                 `INST_LSU_SB: `TRACE(level, ("SB"));
                 `INST_LSU_SH: `TRACE(level, ("SH"));
                 `INST_LSU_SW: `TRACE(level, ("SW"));
-                default: `TRACE(level, ("?"));
+                default:      `TRACE(level, ("?"));
             endcase
         end else if (op_mod == 1) begin
             case (`INST_FENCE_BITS'(op_type))
                 `INST_FENCE_D: `TRACE(level, ("DFENCE"));
                 `INST_FENCE_I: `TRACE(level, ("IFENCE"));
-                default: `TRACE(level, ("?"));
+                default:       `TRACE(level, ("?"));
             endcase
         end
     end
@@ -98,7 +98,7 @@ task trace_ex_op (
             `INST_CSR_RW: `TRACE(level, ("CSRW"));
             `INST_CSR_RS: `TRACE(level, ("CSRS"));
             `INST_CSR_RC: `TRACE(level, ("CSRC"));
-            default: `TRACE(level, ("?"));
+            default:      `TRACE(level, ("?"));
         endcase
     end
     `EX_FPU: begin
@@ -156,8 +156,8 @@ task trace_base_dcr (
 );
     case (addr)
         `DCR_BASE_STARTUP_ADDR: `TRACE(level, ("STARTUP_ADDR"));
-        `DCR_BASE_MPM_CLASS: `TRACE(level, ("MPM_CLASS"));
-        default:        `TRACE(level, ("?"));
+        `DCR_BASE_MPM_CLASS:    `TRACE(level, ("MPM_CLASS"));
+        default:                `TRACE(level, ("?"));
     endcase  
 endtask
 
