@@ -2,7 +2,7 @@ BUILD_DIR ?= build
 
 BUILD_DIR_X=$(BUILD_DIR)_$(DEVICE_FAMILY)
 
-.PHONY: dogfood unittest pipeline smem cache fpu_core core vortex vortex-gfx top top-gfx texunit test
+.PHONY: dogfood unittest pipeline smem cache fpu core vortex vortex-gfx top top-gfx texunit test
 
 dogfood:
 	mkdir -p dogfood/$(BUILD_DIR_X)
@@ -29,10 +29,10 @@ cache:
 	cp cache/Makefile cache/$(BUILD_DIR_X)
 	$(MAKE) -C cache/$(BUILD_DIR_X) clean && $(MAKE) -C cache/$(BUILD_DIR_X) > cache/$(BUILD_DIR_X)/build.log 2>&1 &
 
-fpu_core:
-	mkdir -p fpu_core/$(BUILD_DIR_X)
-	cp fpu_core/Makefile fpu_core/$(BUILD_DIR_X)
-	$(MAKE) -C fpu_core/$(BUILD_DIR_X) clean && $(MAKE) -C fpu_core/$(BUILD_DIR_X) > fpu_core/$(BUILD_DIR_X)/build.log 2>&1 &
+fpu:
+	mkdir -p fpu/$(BUILD_DIR_X)
+	cp fpu/Makefile fpu/$(BUILD_DIR_X)
+	$(MAKE) -C fpu/$(BUILD_DIR_X) clean && $(MAKE) -C fpu/$(BUILD_DIR_X) > fpu/$(BUILD_DIR_X)/build.log 2>&1 &
 
 core:
 	mkdir -p core/$(BUILD_DIR_X)

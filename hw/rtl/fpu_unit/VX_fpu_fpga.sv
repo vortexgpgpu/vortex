@@ -1,7 +1,7 @@
 `include "VX_fpu_define.vh"
 
 module VX_fpu_fpga #(
-    parameter NUM_LANES = 1, 
+    parameter NUM_LANES = 4, 
     parameter TAGW      = 4
 ) (
     input wire clk,

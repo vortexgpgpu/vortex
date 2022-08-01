@@ -12,6 +12,8 @@ ifeq ($(DEVICE_FAMILY), arria10)
 	IP_DIR = ../../../ip/arria10
 endif
 
+CONFIGS += -set "NDEBUG"
+
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
 # Executable Configuration

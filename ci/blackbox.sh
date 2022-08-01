@@ -22,6 +22,7 @@ DEBUG_LEVEL=0
 SCOPE=0
 HAS_ARGS=0
 PERF_CLASS=0
+REBUILD=1
 
 for i in "$@"
 do
@@ -76,6 +77,10 @@ case $i in
     --args=*)
         ARGS=${i#*=}
         HAS_ARGS=1
+        shift
+        ;;
+    --rebuild=*)
+        REBUILD=${i#*=}
         shift
         ;;
     --help)
@@ -133,12 +138,11 @@ then
     LAST_CONFIGS=`cat $BLACKBOX_CACHE`
 fi
 
-if [ "$CONFIGS+$DEBUG+$SCOPE" != "$LAST_CONFIGS" ]; 
+if [ "$CONFIGS+$DEBUG+$SCOPE" != "$LAST_CONFIGS" ] && [ $REBUILD != 0 ];
 then
     make -C $DRIVER_PATH clean
+    echo "$CONFIGS+$DEBUG+$SCOPE" > $BLACKBOX_CACHE
 fi
-
-echo "$CONFIGS+$DEBUG+$SCOPE" > $BLACKBOX_CACHE
 
 # export performance monitor class identifier
 export PERF_CLASS=$PERF_CLASS
