@@ -238,6 +238,40 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+`define CACHE_MEM_TAG_WIDTH(mshr_size, num_banks) \
+        (`CLOG2(mshr_size) + `CLOG2(num_banks) + `NC_TAG_BITS)
+        
+`define CACHE_NC_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, tag_width) \
+        (`CLOG2(num_reqs) + `CLOG2(line_size / word_size) + tag_width)
+
+`define CACHE_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, tag_width) \
+        (`CACHE_NC_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, tag_width) + `NC_TAG_BITS)
+
+`define CACHE_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, line_size, word_size, tag_width) \
+        `MAX(`CACHE_MEM_TAG_WIDTH(mshr_size, num_banks), `CACHE_NC_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, tag_width))
+
+///////////////////////////////////////////////////////////////////////////////
+
+`define CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches) \
+        (tag_width + `ARB_SEL_BITS(num_inputs, `UP(num_caches)))  
+
+`define CACHE_CLUSTER_MEM_ARB_TAG(tag_width, num_caches) \
+        (tag_width + `ARB_SEL_BITS(`UP(num_caches), 1))
+
+`define CACHE_CLUSTER_MEM_TAG_WIDTH(mshr_size, num_banks, num_caches) \
+        `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_MEM_TAG_WIDTH(mshr_size, num_banks),  num_caches)
+
+`define CACHE_CLUSTER_NC_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, tag_width, num_inputs, num_caches) \
+        `CACHE_CLUSTER_MEM_ARB_TAG((`CLOG2(num_reqs) + `CLOG2(line_size / word_size) + `CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches)), num_caches)
+
+`define CACHE_CLUSTER_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, tag_width, num_inputs, num_caches) \
+        `CACHE_CLUSTER_MEM_ARB_TAG((`CACHE_NC_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, `CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches)) + `NC_TAG_BITS), num_caches)
+
+`define CACHE_CLUSTER_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, line_size, word_size, tag_width, num_inputs, num_caches) \
+        `CACHE_CLUSTER_MEM_ARB_TAG(`MAX(`CACHE_MEM_TAG_WIDTH(mshr_size, num_banks), `CACHE_NC_BYPASS_TAG_WIDTH(num_reqs, line_size, word_size, `CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches))), num_caches)
+
+///////////////////////////////////////////////////////////////////////////////
+
 `define VX_MEM_BYTEEN_WIDTH     L3_LINE_SIZE   
 `define VX_MEM_ADDR_WIDTH       (32 - `CLOG2(L3_LINE_SIZE))
 `define VX_MEM_DATA_WIDTH       L3_MEM_DATA_WIDTH
@@ -394,5 +428,15 @@
         .data_in  ({src.valid, src.addr, src.data}), \
         .data_out ({dst.valid, dst.addr, dst.data}) \
     )
+
+`define PERF_CACHE_ADD(dst, src, count) \
+    `REDUCE_ADD (dst, src, reads, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, writes, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, read_misses, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, write_misses, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, bank_stalls, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, mshr_stalls, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, mem_stalls, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, crsp_stalls, `PERF_CTR_BITS, count)
 
 `endif

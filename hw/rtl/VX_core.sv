@@ -1,6 +1,5 @@
 `include "VX_define.vh"
 `include "VX_gpu_types.vh"
-`include "VX_cache_types.vh"
 
 `ifdef EXT_F_ENABLE
 `include "VX_fpu_define.vh"
@@ -20,10 +19,8 @@
 
 `IGNORE_WARNINGS_BEGIN
 `ifdef EXT_F_ENABLE
-import VX_gpu_types::*;
-`endif
 import VX_fpu_types::*;
-import VX_cache_types::*;
+`endif
 `IGNORE_WARNINGS_END
 
 module VX_core #( 

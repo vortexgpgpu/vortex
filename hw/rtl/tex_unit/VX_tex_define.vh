@@ -2,9 +2,11 @@
 `define VX_TEX_DEFINE_VH
 
 `include "VX_define.vh"
+`include "VX_gpu_types.vh"
 `include "VX_tex_types.vh"
 
 `IGNORE_WARNINGS_BEGIN
+import VX_gpu_types::*;
 import VX_tex_types::*;
 `IGNORE_WARNINGS_END
 
@@ -34,6 +36,7 @@ endtask
 
 `define PERF_TEX_ADD(dst, src, count) \
     `REDUCE_ADD (dst, src, mem_reads, `PERF_CTR_BITS, count); \
-    `REDUCE_ADD (dst, src, mem_latency, `PERF_CTR_BITS, count)
+    `REDUCE_ADD (dst, src, mem_latency, `PERF_CTR_BITS, count); \
+    `REDUCE_ADD (dst, src, stall_cycles, `PERF_CTR_BITS, count)
 
 `endif

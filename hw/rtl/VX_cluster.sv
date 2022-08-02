@@ -1,6 +1,5 @@
 `include "VX_define.vh"
 `include "VX_gpu_types.vh"
-`include "VX_cache_types.vh"
 
 `ifdef EXT_TEX_ENABLE
 `include "VX_tex_define.vh"
@@ -16,7 +15,6 @@
 
 `IGNORE_WARNINGS_BEGIN
 import VX_gpu_types::*;
-import VX_cache_types::*;
 `IGNORE_WARNINGS_END
 
 module VX_cluster #(
@@ -136,6 +134,8 @@ module VX_cluster #(
         .NUM_LANES (`NUM_THREADS)
     ) per_socket_raster_req_if[`NUM_SOCKETS]();
 
+    `RESET_RELAY (raster_arb_reset, reset);
+
     VX_raster_arb #(
         .NUM_INPUTS  (`NUM_RASTER_UNITS),
         .NUM_LANES   (`NUM_THREADS),
@@ -144,7 +144,7 @@ module VX_cluster #(
         .BUFFERED    ((`NUM_SOCKETS != `NUM_RASTER_UNITS) ? 2 : 0)
     ) raster_arb (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (raster_arb_reset),
         .req_in_if  (raster_req_if),
         .req_out_if (per_socket_raster_req_if)
     );    
@@ -178,6 +178,8 @@ module VX_cluster #(
         .NUM_LANES (`NUM_THREADS)
     ) rop_req_if[`NUM_ROP_UNITS]();
 
+    `RESET_RELAY (rop_arb_reset, reset);
+
     VX_rop_arb #(
         .NUM_INPUTS  (`NUM_SOCKETS),
         .NUM_LANES   (`NUM_THREADS),
@@ -186,7 +188,7 @@ module VX_cluster #(
         .BUFFERED    ((`NUM_SOCKETS != `NUM_ROP_UNITS) ? 2 : 0)
     ) rop_arb (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (rop_arb_reset),
         .req_in_if  (per_socket_rop_req_if),
         .req_out_if (rop_req_if)
     );
@@ -260,6 +262,8 @@ module VX_cluster #(
         .TAG_WIDTH (`TEX_REQ_ARB2_TAG_WIDTH)
     ) tex_rsp_if[`NUM_TEX_UNITS]();
 
+    `RESET_RELAY (tex_arb_reset, reset);
+
     VX_tex_arb #(
         .NUM_INPUTS   (`NUM_SOCKETS),
         .NUM_LANES    (`NUM_THREADS),
@@ -269,7 +273,7 @@ module VX_cluster #(
         .BUFFERED_REQ ((`NUM_SOCKETS != `NUM_TEX_UNITS) ? 2 : 0)
     ) tex_arb (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (tex_arb_reset),
         .req_in_if  (per_socket_tex_req_if),
         .rsp_in_if  (per_socket_tex_rsp_if),
         .req_out_if (tex_req_if),
@@ -330,6 +334,8 @@ module VX_cluster #(
         .TAG_WIDTH (`FPU_REQ_ARB2_TAG_WIDTH)
     ) fpu_rsp_if[`NUM_FPU_UNITS]();
 
+    `RESET_RELAY (fpu_arb_reset, reset);
+
     VX_fpu_arb #(
         .NUM_INPUTS   (`NUM_SOCKETS),
         .NUM_LANES    (`NUM_THREADS),
@@ -339,7 +345,7 @@ module VX_cluster #(
         .BUFFERED_REQ ((`NUM_SOCKETS != `NUM_FPU_UNITS) ? 2 : 0)
     ) fpu_arb (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (fpu_arb_reset),
         .req_in_if  (per_socket_fpu_req_if),
         .rsp_in_if  (per_socket_fpu_rsp_if),
         .req_out_if (fpu_req_if),
@@ -387,13 +393,15 @@ module VX_cluster #(
         .NUM_REQS  (ICACHE_NUM_REQS), 
         .WORD_SIZE (ICACHE_WORD_SIZE), 
         .TAG_WIDTH (ICACHE_ARB_TAG_WIDTH)
-    ) per_socket_icache_rsp_if[`NUM_SOCKETS]();    
+    ) per_socket_icache_rsp_if[`NUM_SOCKETS]();
+
+    `RESET_RELAY (mem_unit_reset, reset);
 
     VX_mem_unit #(
         .CLUSTER_ID (CLUSTER_ID)
     ) mem_unit (
         .clk                (clk),
-        .reset              (reset),
+        .reset              (mem_unit_reset),
 
     `ifdef PERF_ENABLE
         .perf_memsys_if     (perf_memsys_if),

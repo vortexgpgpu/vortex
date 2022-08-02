@@ -235,6 +235,8 @@ module VX_cache #(
 
     // Core request dispatch
 
+    `RESET_RELAY (req_dispatch_reset, reset);
+
     VX_req_dispatch #(
         .LINE_SIZE  (LINE_SIZE),
         .WORD_SIZE  (WORD_SIZE),
@@ -245,7 +247,7 @@ module VX_cache #(
         .TAG_WIDTH  (TAG_WIDTH)
     ) req_dispatch (        
         .clk        (clk),
-        .reset      (reset),
+        .reset      (req_dispatch_reset),
     `ifdef PERF_ENABLE        
         .bank_stalls (perf_cache_if.bank_stalls),
     `endif     
@@ -427,6 +429,8 @@ module VX_cache #(
 
     // Core responce merge
 
+    `RESET_RELAY (rsp_merge_reset, reset);
+
     VX_rsp_merge #(
         .NUM_REQS  (NUM_REQS),
         .NUM_BANKS (NUM_BANKS),
@@ -435,7 +439,7 @@ module VX_cache #(
         .TAG_WIDTH (TAG_WIDTH)
     ) rsp_merge (
         .clk                     (clk),
-        .reset                   (reset),
+        .reset                   (rsp_merge_reset),
         .per_bank_core_rsp_valid (per_bank_core_rsp_valid),   
         .per_bank_core_rsp_pmask (per_bank_core_rsp_pmask),   
         .per_bank_core_rsp_data  (per_bank_core_rsp_data),
@@ -474,6 +478,8 @@ module VX_cache #(
                              per_bank_mem_req_wsel[i], 
                              per_bank_mem_req_data[i]};
     end
+
+    `RESET_RELAY (mem_req_arb_reset, reset);
     
     VX_stream_arb #(
         .NUM_INPUTS (NUM_BANKS),
@@ -481,7 +487,7 @@ module VX_cache #(
         .ARBITER    ("R")
     ) mem_req_arb (
         .clk       (clk),
-        .reset     (reset),
+        .reset     (mem_req_arb_reset),
         .valid_in  (per_bank_mem_req_valid),
         .ready_in  (per_bank_mem_req_ready),
         .data_in   (data_in),

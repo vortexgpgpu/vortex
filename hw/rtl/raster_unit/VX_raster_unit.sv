@@ -1,9 +1,4 @@
 `include "VX_raster_define.vh"
-`include "VX_cache_types.vh"
-
-`IGNORE_WARNINGS_BEGIN
-import VX_cache_types::*;
-`IGNORE_WARNINGS_END
 
 module VX_raster_unit #(
     parameter string INSTANCE_ID = "",
@@ -71,6 +66,8 @@ module VX_raster_unit #(
         mem_unit_start <= reset;
     end
 
+    `RESET_RELAY (raster_mem_reset, reset);
+
     // Memory unit
     VX_raster_mem #(
         .INSTANCE_ID  (INSTANCE_ID),
@@ -80,7 +77,7 @@ module VX_raster_unit #(
         .QUEUE_SIZE   (MEM_FIFO_DEPTH)
     ) raster_mem (
         .clk          (clk),
-        .reset        (reset),
+        .reset        (raster_mem_reset),
 
         .start        (mem_unit_start),        
         .busy         (mem_unit_busy),
@@ -153,6 +150,8 @@ module VX_raster_unit #(
     wire [NUM_PES-1:0][PRIM_DATA_WIDTH-1:0] pes_data_in;
     wire [NUM_PES-1:0] pes_ready_in;
 
+    `RESET_RELAY (pe_req_arb_reset, reset);
+
     VX_stream_arb #(
         .NUM_OUTPUTS (NUM_PES),
         .DATAW       (PRIM_DATA_WIDTH),
@@ -160,7 +159,7 @@ module VX_raster_unit #(
         .BUFFERED    (1)       
     ) pe_req_arb (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (pe_req_arb_reset),
         .valid_in   (pe_valid),
         .ready_in   (pe_ready),
         .data_in    ({pe_x_loc, pe_y_loc, pe_pid, pe_edges_e, pe_extents}),
@@ -215,6 +214,8 @@ module VX_raster_unit #(
 
         assign {pe_x_loc_in, pe_y_loc_in, pe_pid_in, pe_edges_in, pe_extents_in} = pes_data_in[i];
 
+        `RESET_RELAY (raster_pe_reset, reset);
+
         VX_raster_pe #(
             .INSTANCE_ID     (INSTANCE_ID),            
             .TILE_LOGSIZE    (TILE_LOGSIZE),
@@ -223,7 +224,7 @@ module VX_raster_unit #(
             .QUAD_FIFO_DEPTH (QUAD_FIFO_DEPTH)
         ) raster_pe (
             .clk        (clk),
-            .reset      (reset),
+            .reset      (raster_pe_reset),
 
             .dcrs       (raster_dcrs),
 
@@ -245,6 +246,8 @@ module VX_raster_unit #(
         assign pe_raster_req_if[i].valid = pe_valid_out || pe_raster_req_if[i].empty;        
     end
 
+    `RESET_RELAY (raster_arb_reset, reset);
+
     VX_raster_arb #(
         .NUM_INPUTS (NUM_PES),
         .NUM_LANES  (OUTPUT_QUADS),
@@ -252,7 +255,7 @@ module VX_raster_unit #(
         .BUFFERED   (2)
     ) raster_arb (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (raster_arb_reset),
         .req_in_if  (pe_raster_req_if),
         .req_out_if (raster_req_tmp_if)
     );

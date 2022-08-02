@@ -104,6 +104,8 @@ module VX_cache_cluster #(
         .TAG_WIDTH (ARB_TAG_WIDTH)
     ) arb_core_rsp_if[NUM_CACHES]();
 
+    `RESET_RELAY (cache_arb_reset, reset);
+
     VX_cache_arb #(
         .NUM_INPUTS   (NUM_INPUTS),
         .NUM_OUTPUTS  (NUM_CACHES),
@@ -116,7 +118,7 @@ module VX_cache_cluster #(
         .BUFFERED_RSP ((NUM_INPUTS != NUM_CACHES) ? 2 : 0)
     ) cache_arb (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (cache_arb_reset),
         .req_in_if  (core_req_if),
         .rsp_in_if  (core_rsp_if),
         .req_out_if (arb_core_req_if),
@@ -181,6 +183,8 @@ module VX_cache_cluster #(
         );
     end
 
+    `RESET_RELAY (mem_arb_reset, reset);
+
     VX_mem_arb #(
         .NUM_REQS     (NUM_CACHES),
         .DATA_WIDTH   (`LINE_WIDTH),
@@ -191,7 +195,7 @@ module VX_cache_cluster #(
         .BUFFERED_RSP ((NUM_CACHES > 1) ? 2 : 0)
     ) mem_arb (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (mem_arb_reset),
         .req_in_if  (cache_mem_req_if),        
         .rsp_in_if  (cache_mem_rsp_if),
         .req_out_if (mem_req_if),
@@ -199,7 +203,6 @@ module VX_cache_cluster #(
     );
 
 endmodule
-
 
 ///////////////////////////////////////////////////////////////////////////////
 

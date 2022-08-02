@@ -1,9 +1,4 @@
 `include "VX_raster_define.vh"
-`include "VX_cache_types.vh"
-
-`IGNORE_WARNINGS_BEGIN
-import VX_cache_types::*;
-`IGNORE_WARNINGS_END
 
 // Memory interface for the rasterization unit.
 // Performs the following:

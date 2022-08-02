@@ -243,6 +243,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   // PERF: texunit
   uint64_t tex_mem_reads = 0;
   uint64_t tex_mem_lat = 0;
+  uint64_t tex_stall_cycles = 0;
   // PERF: tex issue
   uint64_t tex_issue_stalls = 0;
   // PERF: tex tcache
@@ -415,6 +416,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
       if (0 == core_id) {
         tex_mem_reads = get_csr_64(staging_ptr, CSR_MPM_TEX_READS);
         tex_mem_lat   = get_csr_64(staging_ptr, CSR_MPM_TEX_LAT);
+        tex_stall_cycles = get_csr_64(staging_ptr, CSR_MPM_TEX_STALL);
         // cache perf counters
         tcache_reads       = get_csr_64(staging_ptr, CSR_MPM_TCACHE_READS);
         tcache_read_misses = get_csr_64(staging_ptr, CSR_MPM_TCACHE_MISS_R);
@@ -536,8 +538,10 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   case DCR_MPM_CLASS_TEX: {
   #ifdef EXT_TEX_ENABLE
     int tex_avg_lat = (int)(double(tex_mem_lat) / double(tex_mem_reads));
+    int tex_stall_cycles_ratio = (int)(100 * double(tex_stall_cycles) / cycles);
     fprintf(stream, "PERF: tex memory reads=%ld\n", tex_mem_reads);
     fprintf(stream, "PERF: tex memory latency=%d cycles\n", tex_avg_lat);
+    fprintf(stream, "PERF: raster stall cycles=%ld cycles (%d%%)\n", tex_stall_cycles, tex_stall_cycles_ratio);
     fprintf(stream, "PERF: tex issue stalls=%ld\n", tex_issue_stalls);
     int tcache_read_hit_ratio = (int)((1.0 - (double(tcache_read_misses) / double(tcache_reads))) * 100);
     int tcache_bank_utilization = (int)((double(tcache_reads) / double(tcache_reads + tcache_bank_stalls)) * 100);

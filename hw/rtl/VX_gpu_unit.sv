@@ -147,11 +147,13 @@ module VX_gpu_unit #(
         assign tex_agent_if.lod[i]       = gpu_req_if.rs3_data[i][0 +: `TEX_LOD_BITS];        
     end
 
+    `RESET_RELAY (tex_reset, reset);
+
     VX_tex_agent #(
         .CORE_ID (CORE_ID)
     ) tex_agent (
         .clk           (clk),
-        .reset         (reset),
+        .reset         (tex_reset),
         .tex_csr_if    (tex_csr_if),
         .tex_agent_if  (tex_agent_if),        
         .tex_commit_if (tex_commit_if),
@@ -172,11 +174,13 @@ module VX_gpu_unit #(
     assign raster_agent_if.PC    = gpu_req_if.PC;
     assign raster_agent_if.rd    = gpu_req_if.rd;
 
+    `RESET_RELAY (raster_reset, reset);
+
     VX_raster_agent #(
         .CORE_ID (CORE_ID)
     ) raster_agent (
         .clk              (clk),
-        .reset            (reset),
+        .reset            (raster_reset),
         .raster_csr_if    (raster_csr_if),
         .raster_req_if    (raster_req_if),
         .raster_agent_if  (raster_agent_if),        
@@ -201,13 +205,15 @@ module VX_gpu_unit #(
         assign rop_agent_if.pos_y[i] = gpu_req_if.rs1_data[i][16 +: `ROP_DIM_BITS];
         assign rop_agent_if.color[i] = gpu_req_if.rs2_data[i];
         assign rop_agent_if.depth[i] = gpu_req_if.rs3_data[i][`ROP_DEPTH_BITS-1:0];
-    end    
+    end
+
+    `RESET_RELAY (rop_reset, reset);
             
     VX_rop_agent #(
         .CORE_ID (CORE_ID)
     ) rop_agent (
         .clk           (clk),
-        .reset         (reset),
+        .reset         (rop_reset),
         .rop_csr_if    (rop_csr_if),
         .rop_agent_if  (rop_agent_if),
         .rop_commit_if (rop_commit_if),
@@ -231,6 +237,8 @@ module VX_gpu_unit #(
 
     assign imadd_valid_in = gpu_req_valid && (gpu_req_if.op_type == `INST_GPU_IMADD);
 
+    `RESET_RELAY (imadd_reset, reset);
+
     VX_imadd #(
         .NUM_LANES  (`NUM_THREADS),
         .DATA_WIDTH (32),
@@ -239,7 +247,7 @@ module VX_gpu_unit #(
         .TAG_WIDTH  (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS)
     ) imadd (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (imadd_reset),
         
         // Inputs
         .valid_in   (imadd_valid_in),
@@ -282,6 +290,8 @@ module VX_gpu_unit #(
 
     // response arbitration
 
+    `RESET_RELAY (rsp_arb_reset, reset);
+
     VX_stream_arb #(
         .NUM_INPUTS (RSP_ARB_SIZE),
         .DATAW      (RSP_ARB_DATAW),
@@ -289,7 +299,7 @@ module VX_gpu_unit #(
         .BUFFERED   (1)
     ) rsp_arb (
         .clk       (clk),
-        .reset     (reset),
+        .reset     (rsp_arb_reset),
         .valid_in  ({
             wctl_rsp_valid
         `ifdef EXT_TEX_ENABLE

@@ -7,9 +7,6 @@
 /cache/*
 !/cache/Makefile
 
-/fpu_core/*
-!/fpu_core/Makefile
-
 /vortex/*
 !/vortex/Makefile
 
@@ -28,8 +25,17 @@
 /test/*
 !/test/Makefile
 
-/texunit/*
-!/texunit/Makefile
+/fpu_unit/*
+!/fpu_unit/Makefile
+
+/tex_unit/*
+!/tex_unit/Makefile
+
+/rop_unit/*
+!/rop_unit/Makefile
+
+/raster_unit/*
+!/raster_unit/Makefile
 
 /vortex-gfx/*
 !/vortex-gfx/Makefile

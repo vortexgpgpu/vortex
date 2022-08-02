@@ -1,10 +1,8 @@
 `include "VX_define.vh"
 `include "VX_gpu_types.vh"
-`include "VX_cache_types.vh"
 
 `IGNORE_WARNINGS_BEGIN
 import VX_gpu_types::*;
-import VX_cache_types::*;
 `IGNORE_WARNINGS_END
 
 module VX_socket #( 
@@ -72,6 +70,8 @@ module VX_socket #(
         .NUM_LANES (`NUM_THREADS)
     ) per_core_raster_req_if[`SOCKET_SIZE](), raster_req_tmp_if[1]();
 
+    `RESET_RELAY (raster_arb_reset, reset);
+
     VX_raster_arb #(
         .NUM_INPUTS  (1),
         .NUM_LANES   (`NUM_THREADS),
@@ -80,7 +80,7 @@ module VX_socket #(
         .BUFFERED    ((`SOCKET_SIZE > 1) ? 2 : 0)
     ) raster_arb (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (raster_arb_reset),
         .req_in_if  (raster_req_tmp_if),
         .req_out_if (per_core_raster_req_if)
     );
@@ -95,6 +95,8 @@ module VX_socket #(
         .NUM_LANES (`NUM_THREADS)
     ) per_core_rop_req_if[`SOCKET_SIZE](), rop_req_tmp_if[1]();
 
+    `RESET_RELAY (rop_arb_reset, reset);
+
     VX_rop_arb #(
         .NUM_INPUTS  (`SOCKET_SIZE),
         .NUM_LANES   (`NUM_THREADS),
@@ -103,7 +105,7 @@ module VX_socket #(
         .BUFFERED    ((`SOCKET_SIZE > 1) ? 2 : 0)
     ) rop_arb (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (rop_arb_reset),
         .req_in_if  (per_core_rop_req_if),
         .req_out_if (rop_req_tmp_if)
     );
@@ -134,6 +136,8 @@ module VX_socket #(
         .TAG_WIDTH (`TEX_REQ_ARB1_TAG_WIDTH)
     ) tex_rsp_tmp_if[1]();
 
+    `RESET_RELAY (tex_arb_reset, reset);
+
     VX_tex_arb #(
         .NUM_INPUTS   (`SOCKET_SIZE),
         .NUM_LANES    (`NUM_THREADS),
@@ -143,7 +147,7 @@ module VX_socket #(
         .BUFFERED_REQ ((`SOCKET_SIZE > 1) ? 2 : 0)
     ) tex_arb (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (tex_arb_reset),
         .req_in_if  (per_core_tex_req_if),
         .rsp_in_if  (per_core_tex_rsp_if),
         .req_out_if (tex_req_tmp_if),
@@ -177,6 +181,8 @@ module VX_socket #(
         .TAG_WIDTH (`FPU_REQ_ARB1_TAG_WIDTH)
     ) fpu_rsp_tmp_if[1]();
 
+    `RESET_RELAY (fpu_arb_reset, reset);
+
     VX_fpu_arb #(
         .NUM_INPUTS   (`SOCKET_SIZE),
         .NUM_LANES    (`NUM_THREADS),
@@ -186,7 +192,7 @@ module VX_socket #(
         .BUFFERED_REQ ((`SOCKET_SIZE > 1) ? 2 : 0)
     ) fpu_arb (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (fpu_arb_reset),
         .req_in_if  (per_core_fpu_req_if),
         .rsp_in_if  (per_core_fpu_rsp_if),
         .req_out_if (fpu_req_tmp_if),
@@ -224,6 +230,8 @@ module VX_socket #(
         .TAG_WIDTH (DCACHE_ARB_TAG_WIDTH)
     ) dcache_rsp_tmp_if[1]();
 
+    `RESET_RELAY (dcache_arb_reset, reset);
+
     VX_cache_arb #(
         .NUM_INPUTS   (`SOCKET_SIZE),
         .NUM_OUTPUTS  (1),
@@ -236,7 +244,7 @@ module VX_socket #(
         .BUFFERED_RSP ((`SOCKET_SIZE > 1) ? 2 : 0)
     ) dcache_arb (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (dcache_arb_reset),
         .req_in_if  (per_core_dcache_req_if),
         .rsp_in_if  (per_core_dcache_rsp_if),
         .req_out_if (dcache_req_tmp_if),
@@ -272,6 +280,8 @@ module VX_socket #(
         .TAG_WIDTH (ICACHE_ARB_TAG_WIDTH)
     ) icache_rsp_tmp_if[1]();
 
+    `RESET_RELAY (icache_arb_reset, reset);
+
     VX_cache_arb #(
         .NUM_INPUTS   (`SOCKET_SIZE),
         .NUM_OUTPUTS  (1),
@@ -284,7 +294,7 @@ module VX_socket #(
         .BUFFERED_RSP ((`SOCKET_SIZE > 1) ? 2 : 0)
     ) icache_arb (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (icache_arb_reset),
         .req_in_if  (per_core_icache_req_if),
         .rsp_in_if  (per_core_icache_rsp_if),
         .req_out_if (icache_req_tmp_if),

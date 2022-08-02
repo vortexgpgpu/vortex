@@ -264,6 +264,8 @@ module VX_csr_data #(
                         `CSR_MPM_TEX_READS_H    : read_data_ro_r = 32'(perf_tex_if.mem_reads[`PERF_CTR_BITS-1:32]);
                         `CSR_MPM_TEX_LAT        : read_data_ro_r = perf_tex_if.mem_latency[31:0];
                         `CSR_MPM_TEX_LAT_H      : read_data_ro_r = 32'(perf_tex_if.mem_latency[`PERF_CTR_BITS-1:32]);
+                        `CSR_MPM_TEX_STALL      : read_data_ro_r = perf_tex_if.stall_cycles[31:0];
+                        `CSR_MPM_TEX_STALL_H    : read_data_ro_r = 32'(perf_tex_if.stall_cycles[`PERF_CTR_BITS-1:32]);
                     `ifdef TCACHE_ENABLE
                         // cache perf counters
                         `CSR_MPM_TCACHE_READS   : read_data_ro_r = perf_tcache_if.reads[31:0];

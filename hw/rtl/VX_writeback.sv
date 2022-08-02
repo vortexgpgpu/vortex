@@ -35,6 +35,8 @@ module VX_writeback #(
     wire wb_alu_ready_in;
     wire wb_ld_ready_in;
 
+    `RESET_RELAY (rsp_arb_reset, reset);
+
     VX_stream_arb #(
         .NUM_INPUTS (NUM_RSPS),
         .DATAW      (DATAW),
@@ -42,7 +44,7 @@ module VX_writeback #(
         .BUFFERED   (2)        
     ) rsp_arb (
         .clk       (clk),
-        .reset     (reset),
+        .reset     (rsp_arb_reset),
         .valid_in  ({            
         `ifdef EXT_F_ENABLE
             fpu_commit_if.valid && fpu_commit_if.wb,

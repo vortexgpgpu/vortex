@@ -1,9 +1,4 @@
 `include "VX_tex_define.vh"
-`include "VX_cache_types.vh"
-
-`IGNORE_WARNINGS_BEGIN
-import VX_cache_types::*;
-`IGNORE_WARNINGS_END
 
 module VX_tex_unit #(  
     parameter string INSTANCE_ID = "",
@@ -228,21 +223,27 @@ module VX_tex_unit #(
         end
     end
 
+    wire perf_stall_cycle = rop_req_if.valid & ~rop_req_if.ready;
+
     reg [`PERF_CTR_BITS-1:0] perf_mem_reads;
     reg [`PERF_CTR_BITS-1:0] perf_mem_latency;
+    reg [`PERF_CTR_BITS-1:0] perf_stall_cycles;
 
     always @(posedge clk) begin
         if (reset) begin
-            perf_mem_reads   <= 0;
-            perf_mem_latency <= 0;
+            perf_mem_reads    <= 0;
+            perf_mem_latency  <= 0;
+            perf_stall_cycles <= 0;
         end else begin
-            perf_mem_reads   <= perf_mem_reads + `PERF_CTR_BITS'(perf_mem_req_per_cycle);
-            perf_mem_latency <= perf_mem_latency + `PERF_CTR_BITS'(perf_pending_reads);
+            perf_mem_reads    <= perf_mem_reads + `PERF_CTR_BITS'(perf_mem_req_per_cycle);
+            perf_mem_latency  <= perf_mem_latency + `PERF_CTR_BITS'(perf_pending_reads);            
+            perf_stall_cycles <= perf_stall_cycles + `PERF_CTR_BITS'(perf_stall_cycle);
         end
     end
 
-    assign perf_tex_if.mem_reads   = perf_mem_reads;
-    assign perf_tex_if.mem_latency = perf_mem_latency;
+    assign perf_tex_if.mem_reads    = perf_mem_reads;
+    assign perf_tex_if.mem_latency  = perf_mem_latency;
+    assign perf_rop_if.stall_cycles = perf_stall_cycles;
 `endif  
 
 `ifdef DBG_TRACE_TEX

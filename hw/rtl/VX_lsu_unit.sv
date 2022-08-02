@@ -1,8 +1,8 @@
 `include "VX_define.vh"
-`include "VX_cache_types.vh"
+`include "VX_gpu_types.vh"
 
 `IGNORE_WARNINGS_BEGIN
-import VX_cache_types::*;
+import VX_gpu_types::*;
 `IGNORE_WARNINGS_END
 
 module VX_lsu_unit #(
@@ -197,6 +197,7 @@ module VX_lsu_unit #(
         .req_tag        (mem_req_tag),
         .req_empty      (mem_req_empty),
         .req_ready      (mem_req_ready),
+        `UNUSED_PIN     (write_notify),
         
         // Output response
         .rsp_valid      (mem_rsp_valid),

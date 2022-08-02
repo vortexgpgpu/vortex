@@ -1,8 +1,8 @@
 `include "VX_define.vh"
-`include "VX_cache_types.vh"
+`include "VX_gpu_types.vh"
 
 `IGNORE_WARNINGS_BEGIN
-import VX_cache_types::*;
+import VX_gpu_types::*;
 `IGNORE_WARNINGS_END
 
 module VX_mem_unit # (
@@ -191,6 +191,8 @@ module VX_mem_unit # (
             .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
         ) dcache_nosm_switch_rsp_if[2]();
 
+        `RESET_RELAY (dcache_nosm_switch_reset, reset);
+
         VX_smem_switch #(
             .NUM_REQS     (2),
             .NUM_LANES    (DCACHE_NUM_REQS),
@@ -202,7 +204,7 @@ module VX_mem_unit # (
             .BUFFERED_RSP (1)
         ) dcache_nosm_switch (
             .clk        (clk),
-            .reset      (reset),
+            .reset      (dcache_nosm_switch_reset),
             .req_in_if  (dcache_req_if[i]),
             .rsp_in_if  (dcache_rsp_if[i]),
             .req_out_if (dcache_nosm_switch_req_if),
@@ -229,6 +231,8 @@ module VX_mem_unit # (
         .TAG_WIDTH (DCACHE_SM_TAG_WIDTH)
     ) smem_rsp_if[1](); 
 
+    `RESET_RELAY (smem_arb_reset, reset);
+
     VX_cache_arb #(
         .NUM_INPUTS   (`NUM_SOCKETS),
         .NUM_LANES    (DCACHE_NUM_REQS),
@@ -240,7 +244,7 @@ module VX_mem_unit # (
         .BUFFERED_RSP ((`NUM_SOCKETS != 1) ? 1 : 0)        
     ) smem_arb (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (smem_arb_reset),
         .req_in_if  (per_core_smem_req_if),
         .rsp_in_if  (per_core_smem_rsp_if),
         .req_out_if (smem_req_if),

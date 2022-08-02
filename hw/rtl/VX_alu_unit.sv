@@ -151,9 +151,11 @@ module VX_alu_unit #(
 
     wire [`INST_MUL_BITS-1:0] mul_op = `INST_MUL_BITS'(alu_req_if.op_type);
 
+    `RESET_RELAY (muldiv_reset, reset);
+
     VX_muldiv muldiv (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (muldiv_reset),
         
         // Inputs
         .valid_in   (mul_valid_in),
@@ -195,6 +197,8 @@ module VX_alu_unit #(
 
     // send response
 
+    `RESET_RELAY (rsp_arb_reset, reset);
+
     VX_stream_arb #(
         .NUM_INPUTS (RSP_ARB_SIZE),
         .DATAW      (RSP_ARB_DATAW),        
@@ -202,7 +206,7 @@ module VX_alu_unit #(
         .BUFFERED   (1)
     ) rsp_arb (
         .clk       (clk),
-        .reset     (reset),
+        .reset     (rsp_arb_reset),
         .valid_in  ({
             alu_valid_out
         `ifdef EXT_M_ENABLE
