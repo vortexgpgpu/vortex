@@ -321,3 +321,103 @@ module VX_raster_unit #(
 `endif
 
 endmodule
+
+///////////////////////////////////////////////////////////////////////////////
+
+module VX_raster_unit_top #(
+    parameter string INSTANCE_ID = "",
+    parameter INSTANCE_IDX    = 0,
+    parameter NUM_INSTANCES   = 1, 
+    parameter NUM_PES         = 1,  // number of processing elements
+    parameter TILE_LOGSIZE    = 5,  // tile log size
+    parameter BLOCK_LOGSIZE   = 2,  // block log size
+    parameter MEM_FIFO_DEPTH  = 8,  // memory queue size
+    parameter QUAD_FIFO_DEPTH = 8,  // quad queue size
+    parameter OUTPUT_QUADS    = 4   // number of output quads    
+) (
+    input wire                              clk,
+    input wire                              reset,
+    
+    input wire                              dcr_write_valid,
+    input wire [`VX_DCR_ADDR_WIDTH-1:0]     dcr_write_addr,
+    input wire [`VX_DCR_DATA_WIDTH-1:0]     dcr_write_data,
+
+    output wire                             raster_req_valid,  
+    output raster_stamp_t [OUTPUT_QUADS-1:0] raster_req_stamps,
+    output wire                             raster_req_empty,    
+    input wire                              raster_req_ready,
+
+    output wire [RCACHE_NUM_REQS-1:0]       cache_req_valid,
+    output wire [RCACHE_NUM_REQS-1:0]       cache_req_rw,
+    output wire [RCACHE_NUM_REQS-1:0][RCACHE_WORD_SIZE-1:0] cache_req_byteen,
+    output wire [RCACHE_NUM_REQS-1:0][RCACHE_ADDR_WIDTH-1:0] cache_req_addr,
+    output wire [RCACHE_NUM_REQS-1:0][RCACHE_WORD_SIZE*8-1:0] cache_req_data,
+    output wire [RCACHE_NUM_REQS-1:0][RCACHE_TAG_WIDTH-1:0] cache_req_tag,
+    input  wire [RCACHE_NUM_REQS-1:0]       cache_req_ready,
+
+    input wire  [RCACHE_NUM_REQS-1:0]       cache_rsp_valid,
+    input wire  [RCACHE_NUM_REQS-1:0][RCACHE_WORD_SIZE*8-1:0] cache_rsp_data,
+    input wire  [RCACHE_NUM_REQS-1:0][RCACHE_TAG_WIDTH-1:0] cache_rsp_tag,
+    output wire [RCACHE_NUM_REQS-1:0]       cache_rsp_ready
+);
+
+    VX_dcr_write_if dcr_write_if();
+
+    assign dcr_write_if.valid = dcr_write_valid;
+    assign dcr_write_if.addr = dcr_write_addr;
+    assign dcr_write_if.data = dcr_write_data;
+
+    VX_raster_req_if #(
+        .NUM_LANES (OUTPUT_QUADS)
+    ) raster_req_if();
+
+    assign raster_req_valid = raster_req_if.valid;
+    assign raster_req_stamps = raster_req_if.stamps;
+    assign raster_req_if.empty=raster_req_empty;
+    assign raster_req_if.ready = raster_req_ready;
+
+    VX_cache_req_if #(
+        .NUM_REQS  (RCACHE_NUM_REQS), 
+        .WORD_SIZE (RCACHE_WORD_SIZE), 
+        .TAG_WIDTH (RCACHE_TAG_WIDTH)
+    ) cache_req_if();
+
+    VX_cache_rsp_if #(
+        .NUM_REQS  (RCACHE_NUM_REQS), 
+        .WORD_SIZE (RCACHE_WORD_SIZE), 
+        .TAG_WIDTH (RCACHE_TAG_WIDTH)
+    ) cache_rsp_if();
+
+    assign cache_req_valid = cache_req_if.valid;
+    assign cache_req_rw = cache_req_if.rw;
+    assign cache_req_byteen = cache_req_if.byteen;
+    assign cache_req_addr = cache_req_if.addr;
+    assign cache_req_data = cache_req_if.data;
+    assign cache_req_tag = cache_req_if.tag;
+    assign cache_req_if.ready = cache_req_ready;
+
+    assign cache_rsp_if.valid = cache_rsp_valid;
+    assign cache_rsp_if.tag = cache_rsp_tag;
+    assign cache_rsp_if.data = cache_rsp_data;
+    assign cache_rsp_ready = cache_rsp_if.ready;
+    
+    VX_raster_unit #( 
+        .INSTANCE_ID     (INSTANCE_ID),
+        .INSTANCE_IDX    (INSTANCE_IDX),
+        .NUM_INSTANCES   (NUM_INSTANCES),
+        .NUM_PES         (NUM_PES),
+        .TILE_LOGSIZE    (TILE_LOGSIZE),
+        .BLOCK_LOGSIZE   (BLOCK_LOGSIZE),
+        .MEM_FIFO_DEPTH  (MEM_FIFO_DEPTH),
+        .QUAD_FIFO_DEPTH (QUAD_FIFO_DEPTH),
+        .OUTPUT_QUADS    (OUTPUT_QUADS)
+    ) raster_unit (
+        .clk           (clk),
+        .reset         (reset),
+        .dcr_write_if  (dcr_write_if),
+        .raster_req_if (raster_req_if),
+        .cache_req_if  (cache_req_if),
+        .cache_rsp_if  (cache_rsp_if)
+    );
+
+endmodule

@@ -577,7 +577,7 @@
 
 // Number of associative ways
 `ifndef TCACHE_NUM_WAYS
-`define TCACHE_NUM_WAYS 1
+`define TCACHE_NUM_WAYS 2
 `endif
 
 // Rcache Configurable Knobs //////////////////////////////////////////////////
@@ -641,7 +641,7 @@
 
 // Number of associative ways
 `ifndef RCACHE_NUM_WAYS
-`define RCACHE_NUM_WAYS 1
+`define RCACHE_NUM_WAYS 2
 `endif
 
 // Ocache Configurable Knobs //////////////////////////////////////////////////
@@ -705,7 +705,7 @@
 
 // Number of associative ways
 `ifndef OCACHE_NUM_WAYS
-`define OCACHE_NUM_WAYS 1
+`define OCACHE_NUM_WAYS 2
 `endif
 
 // L2cache Configurable Knobs /////////////////////////////////////////////////

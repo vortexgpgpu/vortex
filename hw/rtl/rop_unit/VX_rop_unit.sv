@@ -373,3 +373,99 @@ module VX_rop_unit #(
 `endif
 
 endmodule
+
+///////////////////////////////////////////////////////////////////////////////
+
+module VX_rop_unit_top #(
+    parameter string INSTANCE_ID = "",
+    parameter NUM_LANES = `NUM_THREADS
+) (
+    input wire                              clk,
+    input wire                              reset,
+    
+    input wire                              dcr_write_valid,
+    input wire [`VX_DCR_ADDR_WIDTH-1:0]     dcr_write_addr,
+    input wire [`VX_DCR_DATA_WIDTH-1:0]     dcr_write_data,
+
+    input  wire                             rop_req_valid,    
+    input  wire [`UP(`UUID_BITS)-1:0]       rop_req_uuid,
+    input  wire [NUM_LANES-1:0]             rop_req_mask, 
+    input  wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] rop_req_pos_x,
+    input  wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] rop_req_pos_y,
+    input  rgba_t [NUM_LANES-1:0]           rop_req_color,
+    input  wire [NUM_LANES-1:0][`ROP_DEPTH_BITS-1:0] rop_req_depth,
+    input  wire [NUM_LANES-1:0]             rop_req_face,
+    output wire                             rop_req_ready,
+
+    output wire [OCACHE_NUM_REQS-1:0]       cache_req_valid,
+    output wire [OCACHE_NUM_REQS-1:0]       cache_req_rw,
+    output wire [OCACHE_NUM_REQS-1:0][OCACHE_WORD_SIZE-1:0] cache_req_byteen,
+    output wire [OCACHE_NUM_REQS-1:0][OCACHE_ADDR_WIDTH-1:0] cache_req_addr,
+    output wire [OCACHE_NUM_REQS-1:0][OCACHE_WORD_SIZE*8-1:0] cache_req_data,
+    output wire [OCACHE_NUM_REQS-1:0][OCACHE_TAG_WIDTH-1:0] cache_req_tag,
+    input  wire [OCACHE_NUM_REQS-1:0]       cache_req_ready,
+
+    input wire  [OCACHE_NUM_REQS-1:0]       cache_rsp_valid,
+    input wire  [OCACHE_NUM_REQS-1:0][OCACHE_WORD_SIZE*8-1:0] cache_rsp_data,
+    input wire  [OCACHE_NUM_REQS-1:0][OCACHE_TAG_WIDTH-1:0] cache_rsp_tag,
+    output wire [OCACHE_NUM_REQS-1:0]       cache_rsp_ready
+);
+    
+    VX_dcr_write_if dcr_write_if();
+
+    assign dcr_write_if.valid = dcr_write_valid;
+    assign dcr_write_if.addr = dcr_write_addr;
+    assign dcr_write_if.data = dcr_write_data;
+
+    VX_rop_req_if #(
+        .NUM_LANES (NUM_LANES)
+    ) rop_req_if();
+    
+    assign rop_req_if.valid = rop_req_valid;    
+    assign rop_req_if.uuid = rop_req_uuid;
+    assign rop_req_if.mask = rop_req_mask; 
+    assign rop_req_if.pos_x = rop_req_pos_x;
+    assign rop_req_if.pos_y = rop_req_pos_y;
+    assign rop_req_if.color = rop_req_color;
+    assign rop_req_if.depth = rop_req_depth;
+    assign rop_req_if.face = rop_req_face;
+    assign rop_req_ready = rop_req_if.ready;
+
+    VX_cache_req_if #(
+        .NUM_REQS  (OCACHE_NUM_REQS), 
+        .WORD_SIZE (OCACHE_WORD_SIZE), 
+        .TAG_WIDTH (OCACHE_TAG_WIDTH)
+    ) cache_req_if();
+
+    VX_cache_rsp_if #(
+        .NUM_REQS  (OCACHE_NUM_REQS), 
+        .WORD_SIZE (OCACHE_WORD_SIZE), 
+        .TAG_WIDTH (OCACHE_TAG_WIDTH)
+    ) cache_rsp_if();
+
+    assign cache_req_valid = cache_req_if.valid;
+    assign cache_req_rw = cache_req_if.rw;
+    assign cache_req_byteen = cache_req_if.byteen;
+    assign cache_req_addr = cache_req_if.addr;
+    assign cache_req_data = cache_req_if.data;
+    assign cache_req_tag = cache_req_if.tag;
+    assign cache_req_if.ready = cache_req_ready;
+
+    assign cache_rsp_if.valid = cache_rsp_valid;
+    assign cache_rsp_if.tag = cache_rsp_tag;
+    assign cache_rsp_if.data = cache_rsp_data;
+    assign cache_rsp_ready = cache_rsp_if.ready;
+
+    VX_rop_unit #(
+        .INSTANCE_ID (INSTANCE_ID),
+        .NUM_LANES   (NUM_LANES)
+    ) rop_unit (
+        .clk           (clk),
+        .reset         (reset),
+        .dcr_write_if  (dcr_write_if),
+        .rop_req_if    (rop_req_if),
+        .cache_req_if  (cache_req_if),
+        .cache_rsp_if  (cache_rsp_if)
+    );
+
+endmodule

@@ -4,15 +4,15 @@ module VX_shared_mem #(
     parameter string  INSTANCE_ID = "",
 
     // Size of cache in bytes
-    parameter SIZE              = (1024*16), 
+    parameter SIZE              = (1024*16*8), 
     
     // Number of Word requests per cycle
     parameter NUM_REQS          = 4, 
     // Number of banks
-    parameter NUM_BANKS         = 2,
+    parameter NUM_BANKS         = 4,
 
     // Address width
-    parameter ADDR_WIDTH        = 8,
+    parameter ADDR_WIDTH        = 22,
     // Size of a word in bytes
     parameter WORD_SIZE         = 4,
 
@@ -20,16 +20,13 @@ module VX_shared_mem #(
     parameter UUID_WIDTH        = 0,
 
     // Request tag size
-    parameter TAG_WIDTH         = UUID_WIDTH + 1,
+    parameter TAG_WIDTH         = 16,
 
     // Response output register
-    parameter OUT_REG           = 0,
-
-
-    localparam WORD_WIDTH = WORD_SIZE * 8
+    parameter OUT_REG           = 1
  ) (    
     input wire clk,
-    input wire reset,   
+    input wire reset,
 
     // PERF
 `ifdef PERF_ENABLE
@@ -41,17 +38,18 @@ module VX_shared_mem #(
     input wire [NUM_REQS-1:0]                   req_rw,
     input wire [NUM_REQS-1:0][ADDR_WIDTH-1:0]   req_addr,
     input wire [NUM_REQS-1:0][WORD_SIZE-1:0]    req_byteen,
-    input wire [NUM_REQS-1:0][WORD_WIDTH-1:0]   req_data,
+    input wire [NUM_REQS-1:0][WORD_SIZE*8-1:0]  req_data,
     input wire [NUM_REQS-1:0][TAG_WIDTH-1:0]    req_tag,
     output wire [NUM_REQS-1:0]                  req_ready,
 
     // Core response
     output wire [NUM_REQS-1:0]                  rsp_valid,
-    output wire [NUM_REQS-1:0][WORD_WIDTH-1:0]  rsp_data,
+    output wire [NUM_REQS-1:0][WORD_SIZE*8-1:0] rsp_data,
     output wire [NUM_REQS-1:0][TAG_WIDTH-1:0]   rsp_tag,
     input  wire [NUM_REQS-1:0]                  rsp_ready
 );
 
+    localparam WORD_WIDTH      = WORD_SIZE * 8;
     localparam REQ_SEL_BITS    = `CLOG2(NUM_REQS);
     localparam NUM_WORDS       = SIZE / WORD_SIZE;
     localparam WORDS_PER_BANK  = NUM_WORDS / NUM_BANKS;

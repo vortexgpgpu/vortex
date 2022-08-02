@@ -264,3 +264,114 @@ module VX_tex_unit #(
 `endif
 
 endmodule
+
+///////////////////////////////////////////////////////////////////////////////
+
+module VX_tex_unit_top #(  
+    parameter string INSTANCE_ID = "",
+    parameter NUM_LANES = `NUM_THREADS,
+    parameter TAG_WIDTH = 8
+) (
+    input wire                              clk,
+    input wire                              reset,    
+
+    input wire                              dcr_write_valid,
+    input wire [`VX_DCR_ADDR_WIDTH-1:0]     dcr_write_addr,
+    input wire [`VX_DCR_DATA_WIDTH-1:0]     dcr_write_data,
+
+    input  wire                             tex_req_valid,
+    input  wire [NUM_LANES-1:0]             tex_req_mask,
+    input  wire [1:0][NUM_LANES-1:0][31:0] tex_req_coords,
+    input  wire [NUM_LANES-1:0][`TEX_LOD_BITS-1:0] tex_req_lod,
+    input  wire [`TEX_STAGE_BITS-1:0]       tex_req_stage,
+    input  wire [`TEX_REQ_TAG_WIDTH-1:0]    tex_req_tag,  
+    output wire                             tex_req_ready,
+
+    output wire                             tex_rsp_valid,
+    output wire [NUM_LANES-1:0][31:0]       tex_rsp_texels,
+    output wire [`TEX_REQ_TAG_WIDTH-1:0]    tex_rsp_tag, 
+    input  wire                             tex_rsp_ready,
+
+    output wire [TCACHE_NUM_REQS-1:0]       cache_req_valid,
+    output wire [TCACHE_NUM_REQS-1:0]       cache_req_rw,
+    output wire [TCACHE_NUM_REQS-1:0][TCACHE_WORD_SIZE-1:0] cache_req_byteen,
+    output wire [TCACHE_NUM_REQS-1:0][TCACHE_ADDR_WIDTH-1:0] cache_req_addr,
+    output wire [TCACHE_NUM_REQS-1:0][TCACHE_WORD_SIZE*8-1:0] cache_req_data,
+    output wire [TCACHE_NUM_REQS-1:0][TCACHE_TAG_WIDTH-1:0] cache_req_tag,
+    input  wire [TCACHE_NUM_REQS-1:0]       cache_req_ready,
+
+    input wire  [TCACHE_NUM_REQS-1:0]       cache_rsp_valid,
+    input wire  [TCACHE_NUM_REQS-1:0][TCACHE_WORD_SIZE*8-1:0] cache_rsp_data,
+    input wire  [TCACHE_NUM_REQS-1:0][TCACHE_TAG_WIDTH-1:0] cache_rsp_tag,
+    output wire [TCACHE_NUM_REQS-1:0]       cache_rsp_ready
+);
+    
+    VX_dcr_write_if dcr_write_if();
+
+    assign dcr_write_if.valid = dcr_write_valid;
+    assign dcr_write_if.addr = dcr_write_addr;
+    assign dcr_write_if.data = dcr_write_data;
+
+    VX_tex_req_if #(
+        .NUM_LANES (NUM_LANES),
+        .TAG_WIDTH (`TEX_REQ_TAG_WIDTH)
+    ) tex_req_if();
+
+    VX_tex_rsp_if #(
+        .NUM_LANES (NUM_LANES),
+        .TAG_WIDTH (`TEX_REQ_TAG_WIDTH)
+    ) tex_rsp_if();
+
+    assign tex_req_if.valid = tex_req_valid;
+    assign tex_req_if.mask = tex_req_mask;
+    assign tex_req_if.coords = tex_req_coords;
+    assign tex_req_if.lod = tex_req_lod;
+    assign tex_req_if.stage = tex_req_stage;
+    assign tex_req_if.tag = tex_req_tag;  
+    assign tex_req_ready = tex_req_if.ready;
+
+    assign tex_rsp_valid = tex_rsp_if.valid;
+    assign tex_rsp_texels = tex_rsp_if.texels;
+    assign tex_rsp_tag = tex_rsp_if.tag; 
+    assign tex_rsp_if.ready = tex_rsp_ready;
+
+    VX_cache_req_if #(
+        .NUM_REQS  (TCACHE_NUM_REQS), 
+        .WORD_SIZE (TCACHE_WORD_SIZE), 
+        .TAG_WIDTH (TCACHE_TAG_WIDTH)
+    ) cache_req_if();
+
+    VX_cache_rsp_if #(
+        .NUM_REQS  (TCACHE_NUM_REQS), 
+        .WORD_SIZE (TCACHE_WORD_SIZE), 
+        .TAG_WIDTH (TCACHE_TAG_WIDTH)
+    ) cache_rsp_if();
+
+    assign cache_req_valid = cache_req_if.valid;
+    assign cache_req_rw = cache_req_if.rw;
+    assign cache_req_byteen = cache_req_if.byteen;
+    assign cache_req_addr = cache_req_if.addr;
+    assign cache_req_data = cache_req_if.data;
+    assign cache_req_tag = cache_req_if.tag;
+    assign cache_req_if.ready = cache_req_ready;
+
+    assign cache_rsp_if.valid = cache_rsp_valid;
+    assign cache_rsp_if.tag = cache_rsp_tag;
+    assign cache_rsp_if.data = cache_rsp_data;
+    assign cache_rsp_ready = cache_rsp_if.ready;
+
+    VX_tex_unit #(
+        .INSTANCE_ID (INSTANCE_ID),
+        .NUM_LANES   (NUM_LANES),
+        .TAG_WIDTH   (TAG_WIDTH)
+    ) tex_unit (
+        .clk          (clk),
+        .reset        (reset),
+        .dcr_write_if (dcr_write_if),
+        .tex_req_if   (tex_req_if),
+        .tex_rsp_if   (tex_rsp_if),
+        .cache_req_if (cache_req_if),
+        .cache_rsp_if (cache_rsp_if)
+    );
+
+endmodule
