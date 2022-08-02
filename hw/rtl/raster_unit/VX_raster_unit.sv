@@ -40,9 +40,11 @@ module VX_raster_unit #(
 
     raster_dcrs_t raster_dcrs;
 
+    `RESET_RELAY (raster_dcr_reset, reset);
+
     VX_raster_dcr raster_dcr (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (raster_dcr_reset),
         .dcr_write_if(dcr_write_if),
         .raster_dcrs(raster_dcrs)
     );
@@ -61,12 +63,12 @@ module VX_raster_unit #(
     wire mem_unit_valid;    
     wire mem_unit_ready;
 
+    `RESET_RELAY (raster_mem_reset, reset);
+
     // Start execution    
     always @(posedge clk) begin
-        mem_unit_start <= reset;
+        mem_unit_start <= raster_mem_reset;
     end
-
-    `RESET_RELAY (raster_mem_reset, reset);
 
     // Memory unit
     VX_raster_mem #(

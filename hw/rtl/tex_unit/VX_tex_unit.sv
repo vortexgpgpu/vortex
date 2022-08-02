@@ -30,12 +30,14 @@ module VX_tex_unit #(
     // DCRs
     
     tex_dcrs_t tex_dcrs;
+
+    `RESET_RELAY (tex_dcr_reset, reset);
     
     VX_tex_dcr #(
         .NUM_STAGES (`TEX_STAGE_COUNT)
     ) tex_dcr (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (tex_dcr_reset),
         .dcr_write_if(dcr_write_if),
         .stage      (tex_req_if.stage),
         .tex_dcrs   (tex_dcrs)

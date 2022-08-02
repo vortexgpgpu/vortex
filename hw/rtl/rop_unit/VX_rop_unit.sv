@@ -28,9 +28,11 @@ module VX_rop_unit #(
 
     rop_dcrs_t rop_dcrs;
 
+    `RESET_RELAY (rop_dcr_reset, reset);
+
     VX_rop_dcr rop_dcr (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (rop_dcr_reset),
         .dcr_write_if(dcr_write_if),
         .rop_dcrs   (rop_dcrs)
     );

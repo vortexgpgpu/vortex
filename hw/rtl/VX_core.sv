@@ -110,6 +110,7 @@ module VX_core #(
     VX_perf_pipeline_if perf_pipeline_if();
 `endif
 
+    `RESET_RELAY (dcr_data_reset, reset);
     `RESET_RELAY (fetch_reset, reset);
     `RESET_RELAY (decode_reset, reset);
     `RESET_RELAY (issue_reset, reset);
@@ -120,7 +121,7 @@ module VX_core #(
 
     VX_dcr_data dcr_data (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (dcr_data_reset),
         .dcr_write_if(dcr_write_if),
         .base_dcrs  (base_dcrs)
     );
