@@ -541,7 +541,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
     int tex_stall_cycles_ratio = (int)(100 * double(tex_stall_cycles) / cycles);
     fprintf(stream, "PERF: tex memory reads=%ld\n", tex_mem_reads);
     fprintf(stream, "PERF: tex memory latency=%d cycles\n", tex_avg_lat);
-    fprintf(stream, "PERF: raster stall cycles=%ld cycles (%d%%)\n", tex_stall_cycles, tex_stall_cycles_ratio);
+    fprintf(stream, "PERF: tex stall cycles=%ld cycles (%d%%)\n", tex_stall_cycles, tex_stall_cycles_ratio);
     fprintf(stream, "PERF: tex issue stalls=%ld\n", tex_issue_stalls);
     int tcache_read_hit_ratio = (int)((1.0 - (double(tcache_read_misses) / double(tcache_reads))) * 100);
     int tcache_bank_utilization = (int)((double(tcache_reads) / double(tcache_reads + tcache_bank_stalls)) * 100);

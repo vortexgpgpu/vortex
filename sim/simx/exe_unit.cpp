@@ -27,15 +27,19 @@ LsuUnit::LsuUnit(const SimContext& ctx, Core* core)
     : ExeUnit(ctx, core, "LSU")
     , pending_rd_reqs_(LSUQ_SIZE)
     , num_threads_(core->arch().num_threads())     
+    , pending_loads_(0)
     , fence_lock_(false)
 {}
 
 void LsuUnit::reset() {
     pending_rd_reqs_.clear();
+    pending_loads_ = 0;
     fence_lock_ = false;
 }
 
 void LsuUnit::tick() {
+    core_->perf_stats_.load_latency += pending_loads_;
+
     // handle dcache response
     for (uint32_t t = 0; t < num_threads_; ++t) {
         auto& dcache_rsp_port = core_->dcache_rsp_ports.at(t);
@@ -52,7 +56,8 @@ void LsuUnit::tick() {
             Output.send(trace, 1);
             pending_rd_reqs_.release(mem_rsp.tag);
         } 
-        dcache_rsp_port.pop();  
+        dcache_rsp_port.pop();
+        --pending_loads_;
     }
 
     // handle shared memory response
@@ -72,6 +77,7 @@ void LsuUnit::tick() {
             pending_rd_reqs_.release(mem_rsp.tag);
         } 
         smem_rsp_port.pop();  
+        --pending_loads_;
     }
 
     if (fence_lock_) {
@@ -81,7 +87,7 @@ void LsuUnit::tick() {
         Output.send(fence_state_, 1);
         fence_lock_ = false;
         DT(3, "fence-unlock: " << fence_state_);
-    }
+    }    
 
     // check input queue
     if (Input.empty())
@@ -156,6 +162,9 @@ void LsuUnit::tick() {
         dcache_req_port.send(mem_req, 2);
         DT(3, "dcache-req: addr=" << std::hex << mem_req.addr << ", tag=" << tag 
             << ", lsu_type=" << trace->lsu_type << ", tid=" << t << ", addr_type=" << mem_req.addr_type << ", " << *trace);
+
+        ++pending_loads_;
+        ++core_->perf_stats_.loads;
         
         if (is_dup)
             break;
@@ -165,6 +174,8 @@ void LsuUnit::tick() {
     if (is_write) {
         pending_rd_reqs_.release(tag);
         Output.send(trace, 1);
+
+        ++core_->perf_stats_.stores;
     }
 
     // remove input
@@ -279,7 +290,9 @@ void GpuUnit::tick() {
 
     auto trace = Input.front();
 
-    switch  (trace->gpu_type) {
+    auto gpu_type = trace->gpu_type;
+
+    switch  (gpu_type) {
     case GpuType::TMC: {
         Output.send(trace, 1);
         auto trace_data = std::dynamic_pointer_cast<GPUTraceData>(trace->data);
@@ -325,6 +338,12 @@ void GpuUnit::tick() {
     if (trace->fetch_stall)  {
         core_->stalled_warps_.reset(trace->wid);
     }
+
     auto time = Input.pop();
-    core_->perf_stats_.gpu_stalls += (SimPlatform::instance().cycles() - time);
+    auto stalls = (SimPlatform::instance().cycles() - time);
+    
+    if (gpu_type == GpuType::TEX) core_->perf_stats_.tex_issue_stalls += stalls;
+    if (gpu_type == GpuType::ROP) core_->perf_stats_.rop_issue_stalls += stalls;
+    if (gpu_type == GpuType::RASTER) core_->perf_stats_.raster_issue_stalls += stalls;
+    core_->perf_stats_.gpu_stalls += stalls;
 }

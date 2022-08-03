@@ -32,6 +32,7 @@ set_global_assignment -name DEVICE $opts(device)
 set_global_assignment -name TOP_LEVEL_ENTITY $opts(top)
 set_global_assignment -name PROJECT_OUTPUT_DIRECTORY bin
 
+#set_global_assignment -name OPTIMIZATION_TECHNIQUE AREA
 set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
 set_global_assignment -name VERILOG_INPUT_VERSION SYSTEMVERILOG_2009
 set_global_assignment -name ADD_PASS_THROUGH_LOGIC_TO_INFERRED_RAMS ON

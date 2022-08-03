@@ -53,6 +53,7 @@ private:
     HashTable<pending_req_t> pending_rd_reqs_;    
     uint32_t num_threads_;
     pipeline_trace_t* fence_state_;
+    uint64_t pending_loads_;
     bool fence_lock_;
 
 public:

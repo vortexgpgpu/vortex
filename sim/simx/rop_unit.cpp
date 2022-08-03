@@ -566,7 +566,8 @@ public:
     // check input trace
     if (simobject_->Input.empty())
       return;
-    perf_stats_.stalls += simobject_->Input.stalled();    
+      
+    perf_stats_.stalls += simobject_->Input.stalled();
     auto trace = simobject_->Input.front();    
     auto data  = std::dynamic_pointer_cast<RopUnit::TraceData>(trace->data);
     data->cid  = trace->cid;

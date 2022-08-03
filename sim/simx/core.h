@@ -41,9 +41,14 @@ public:
     uint64_t csr_stalls;
     uint64_t fpu_stalls;
     uint64_t gpu_stalls;
+    uint64_t tex_issue_stalls;
+    uint64_t rop_issue_stalls;
+    uint64_t raster_issue_stalls;
+    uint64_t ifetches;
     uint64_t loads;
     uint64_t stores;
-    uint64_t branches;
+    uint64_t ifetch_latency;
+    uint64_t load_latency;
 
     PerfStats() 
       : instrs(0)
@@ -54,9 +59,14 @@ public:
       , csr_stalls(0)
       , fpu_stalls(0)
       , gpu_stalls(0)
+      , tex_issue_stalls(0)
+      , rop_issue_stalls(0)
+      , raster_issue_stalls(0)
+      , ifetches(0)
       , loads(0)
       , stores(0)
-      , branches(0)
+      , ifetch_latency(0)
+      , load_latency(0)
     {}
   };
 
@@ -164,6 +174,8 @@ private:
   uint64_t committed_instrs_;  
   bool ecall_;
   bool ebreak_;
+
+  uint64_t pending_ifetches_;
 
   std::unordered_map<int, std::stringstream> print_bufs_;
   

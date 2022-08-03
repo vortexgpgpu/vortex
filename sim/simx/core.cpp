@@ -102,6 +102,7 @@ void Core::reset() {
   ecall_ = false;
   ebreak_ = false;
   perf_stats_ = PerfStats();
+  pending_ifetches_ = 0;
 }
 
 void Core::attach_ram(RAM* ram) {
@@ -159,6 +160,8 @@ void Core::schedule() {
 }
 
 void Core::fetch() {
+  perf_stats_.ifetch_latency += pending_ifetches_;
+
   // handle icache reponse
   auto& icache_rsp_port = icache_rsp_ports.at(0);
   if (!icache_rsp_port.empty()){
@@ -168,6 +171,7 @@ void Core::fetch() {
     DT(3, "icache-rsp: addr=" << std::hex << trace->PC << ", tag=" << mem_rsp.tag << ", " << *trace);
     pending_icache_.release(mem_rsp.tag);
     icache_rsp_port.pop();
+    --pending_ifetches_;
   }
 
   // send icache request
@@ -180,9 +184,11 @@ void Core::fetch() {
     mem_req.cid   = trace->cid;
     mem_req.uuid  = trace->uuid;
     icache_req_ports.at(0).send(mem_req, 1);    
-    DT(3, "icache-req: addr=" << std::hex << mem_req.addr << ", tag=" << mem_req.tag << ", " << *trace);
-    fetch_latch_.pop();
-  }    
+    DT(3, "icache-req: addr=" << std::hex << mem_req.addr << ", tag=" << mem_req.tag << ", " << *trace);    
+    fetch_latch_.pop();    
+    ++pending_ifetches_;   
+    ++perf_stats_.ifetches;
+  }  
 }
 
 void Core::decode() {
@@ -214,8 +220,6 @@ void Core::decode() {
     perf_stats_.loads += active_threads;
   if (trace->exe_type == ExeType::LSU && trace->lsu_type == LsuType::STORE) 
     perf_stats_.stores += active_threads;
-  if (trace->exe_type == ExeType::ALU && trace->alu_type == AluType::BRANCH) 
-    perf_stats_.branches += active_threads;
 
   DT(3, "pipeline-decode: " << *trace);
 
@@ -483,13 +487,20 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         case CSR_MPM_GPU_ST:    return perf_stats_.gpu_stalls & 0xffffffff; 
         case CSR_MPM_GPU_ST_H:  return perf_stats_.gpu_stalls >> 32; 
         
+        case CSR_MPM_IFETCHES:  return perf_stats_.ifetches & 0xffffffff; 
+        case CSR_MPM_IFETCHES_H: return perf_stats_.ifetches >> 32; 
         case CSR_MPM_LOADS:     return perf_stats_.loads & 0xffffffff; 
         case CSR_MPM_LOADS_H:   return perf_stats_.loads >> 32; 
         case CSR_MPM_STORES:    return perf_stats_.stores & 0xffffffff; 
         case CSR_MPM_STORES_H:  return perf_stats_.stores >> 32;
-        case CSR_MPM_BRANCHES:  return perf_stats_.branches & 0xffffffff; 
-        case CSR_MPM_BRANCHES_H:return perf_stats_.branches >> 32; 
-
+        case CSR_MPM_IFETCH_LAT: return perf_stats_.ifetch_latency & 0xffffffff; 
+        case CSR_MPM_IFETCH_LAT_H: return perf_stats_.ifetch_latency >> 32; 
+        case CSR_MPM_LOAD_LAT:  return perf_stats_.load_latency & 0xffffffff; 
+        case CSR_MPM_LOAD_LAT_H: return perf_stats_.load_latency >> 32;
+       }
+      } break; 
+      case DCR_MPM_CLASS_MEM: {
+        switch (addr) {
         case CSR_MPM_ICACHE_READS:    return proc_perf.clusters.icache.reads & 0xffffffff; 
         case CSR_MPM_ICACHE_READS_H:  return proc_perf.clusters.icache.reads >> 32; 
         case CSR_MPM_ICACHE_MISS_R:   return proc_perf.clusters.icache.read_misses & 0xffffffff;
@@ -515,6 +526,32 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         case CSR_MPM_SMEM_BANK_ST:  return proc_perf.clusters.sharedmem.bank_stalls & 0xffffffff; 
         case CSR_MPM_SMEM_BANK_ST_H:return proc_perf.clusters.sharedmem.bank_stalls >> 32; 
 
+        case CSR_MPM_L2CACHE_READS:    return proc_perf.clusters.l2cache.reads & 0xffffffff; 
+        case CSR_MPM_L2CACHE_READS_H:  return proc_perf.clusters.l2cache.reads >> 32; 
+        case CSR_MPM_L2CACHE_WRITES:   return proc_perf.clusters.l2cache.writes & 0xffffffff; 
+        case CSR_MPM_L2CACHE_WRITES_H: return proc_perf.clusters.l2cache.writes >> 32; 
+        case CSR_MPM_L2CACHE_MISS_R:   return proc_perf.clusters.l2cache.read_misses & 0xffffffff; 
+        case CSR_MPM_L2CACHE_MISS_R_H: return proc_perf.clusters.l2cache.read_misses >> 32; 
+        case CSR_MPM_L2CACHE_MISS_W:   return proc_perf.clusters.l2cache.write_misses & 0xffffffff; 
+        case CSR_MPM_L2CACHE_MISS_W_H: return proc_perf.clusters.l2cache.write_misses >> 32; 
+        case CSR_MPM_L2CACHE_BANK_ST:  return proc_perf.clusters.l2cache.bank_stalls & 0xffffffff; 
+        case CSR_MPM_L2CACHE_BANK_ST_H:return proc_perf.clusters.l2cache.bank_stalls >> 32;
+        case CSR_MPM_L2CACHE_MSHR_ST:  return proc_perf.clusters.l2cache.mshr_stalls & 0xffffffff; 
+        case CSR_MPM_L2CACHE_MSHR_ST_H:return proc_perf.clusters.l2cache.mshr_stalls >> 32;
+
+        case CSR_MPM_L3CACHE_READS:    return proc_perf.l3cache.reads & 0xffffffff; 
+        case CSR_MPM_L3CACHE_READS_H:  return proc_perf.l3cache.reads >> 32; 
+        case CSR_MPM_L3CACHE_WRITES:   return proc_perf.l3cache.writes & 0xffffffff; 
+        case CSR_MPM_L3CACHE_WRITES_H: return proc_perf.l3cache.writes >> 32; 
+        case CSR_MPM_L3CACHE_MISS_R:   return proc_perf.l3cache.read_misses & 0xffffffff; 
+        case CSR_MPM_L3CACHE_MISS_R_H: return proc_perf.l3cache.read_misses >> 32; 
+        case CSR_MPM_L3CACHE_MISS_W:   return proc_perf.l3cache.write_misses & 0xffffffff; 
+        case CSR_MPM_L3CACHE_MISS_W_H: return proc_perf.l3cache.write_misses >> 32; 
+        case CSR_MPM_L3CACHE_BANK_ST:  return proc_perf.l3cache.bank_stalls & 0xffffffff; 
+        case CSR_MPM_L3CACHE_BANK_ST_H:return proc_perf.l3cache.bank_stalls >> 32;
+        case CSR_MPM_L3CACHE_MSHR_ST:  return proc_perf.l3cache.mshr_stalls & 0xffffffff; 
+        case CSR_MPM_L3CACHE_MSHR_ST_H:return proc_perf.l3cache.mshr_stalls >> 32;
+
         case CSR_MPM_MEM_READS:   return proc_perf.mem_reads & 0xffffffff; 
         case CSR_MPM_MEM_READS_H: return proc_perf.mem_reads >> 32; 
         case CSR_MPM_MEM_WRITES:  return proc_perf.mem_writes & 0xffffffff; 
@@ -529,6 +566,8 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         case CSR_MPM_TEX_READS_H: return proc_perf.clusters.tex_unit.reads >> 32;
         case CSR_MPM_TEX_LAT:     return proc_perf.clusters.tex_unit.latency & 0xffffffff;
         case CSR_MPM_TEX_LAT_H:   return proc_perf.clusters.tex_unit.latency >> 32;
+        case CSR_MPM_TEX_STALL:   return proc_perf.clusters.tex_unit.stalls & 0xffffffff;
+        case CSR_MPM_TEX_STALL_H: return proc_perf.clusters.tex_unit.stalls >> 32;
 
         case CSR_MPM_TCACHE_READS:    return proc_perf.clusters.tcache.reads & 0xffffffff; 
         case CSR_MPM_TCACHE_READS_H:  return proc_perf.clusters.tcache.reads >> 32;
@@ -538,6 +577,9 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         case CSR_MPM_TCACHE_BANK_ST_H:return proc_perf.clusters.tcache.bank_stalls >> 32;
         case CSR_MPM_TCACHE_MSHR_ST:  return proc_perf.clusters.tcache.mshr_stalls & 0xffffffff; 
         case CSR_MPM_TCACHE_MSHR_ST_H:return proc_perf.clusters.tcache.mshr_stalls >> 32;
+
+        case CSR_MPM_TEX_ISSUE_ST:    return perf_stats_.tex_issue_stalls & 0xffffffff;
+        case CSR_MPM_TEX_ISSUE_ST_H:  return perf_stats_.tex_issue_stalls >> 32;
         }
       } break;
       case DCR_MPM_CLASS_RASTER: {
@@ -557,6 +599,9 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         case CSR_MPM_RCACHE_BANK_ST_H:return proc_perf.clusters.rcache.bank_stalls >> 32;
         case CSR_MPM_RCACHE_MSHR_ST:  return proc_perf.clusters.rcache.mshr_stalls & 0xffffffff; 
         case CSR_MPM_RCACHE_MSHR_ST_H:return proc_perf.clusters.rcache.mshr_stalls >> 32;
+
+        case CSR_MPM_RASTER_ISSUE_ST: return perf_stats_.raster_issue_stalls & 0xffffffff;
+        case CSR_MPM_RASTER_ISSUE_ST_H: return perf_stats_.raster_issue_stalls >> 32;
         default:
           return 0;
         }
@@ -584,6 +629,9 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         case CSR_MPM_OCACHE_BANK_ST_H:return proc_perf.clusters.ocache.bank_stalls >> 32;
         case CSR_MPM_OCACHE_MSHR_ST:  return proc_perf.clusters.ocache.mshr_stalls & 0xffffffff; 
         case CSR_MPM_OCACHE_MSHR_ST_H:return proc_perf.clusters.ocache.mshr_stalls >> 32;
+
+        case CSR_MPM_ROP_ISSUE_ST:    return perf_stats_.rop_issue_stalls & 0xffffffff;
+        case CSR_MPM_ROP_ISSUE_ST_H:  return perf_stats_.rop_issue_stalls >> 32;
         default:
           return 0;
         }

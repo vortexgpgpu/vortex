@@ -39,6 +39,7 @@ public:
     CacheSim::PerfStats   icache;
     CacheSim::PerfStats   dcache;
     SharedMem::PerfStats  sharedmem;
+    CacheSim::PerfStats   l2cache;
     CacheSim::PerfStats   tcache;
     CacheSim::PerfStats   ocache;
     CacheSim::PerfStats   rcache;
@@ -50,6 +51,7 @@ public:
       this->icache      += rhs.icache;
       this->dcache      += rhs.dcache;
       this->sharedmem   += rhs.sharedmem;
+      this->l2cache     += rhs.l2cache;
       this->tcache      += rhs.tcache;
       this->ocache      += rhs.ocache;
       this->rcache      += rhs.rcache;

@@ -265,7 +265,7 @@ private:
     PerfStats perf_stats_;
     uint64_t pending_read_reqs_;
     uint64_t pending_write_reqs_;
-    uint64_t pending_fill_reqs_;    
+    uint64_t pending_fill_reqs_;
 
 public:
     Impl(CacheSim* simobject, const Config& config) 

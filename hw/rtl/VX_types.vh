@@ -147,18 +147,20 @@
 `define CSR_MPM_TEX_READS_H         12'hB83
 `define CSR_MPM_TEX_LAT             12'hB04     // texture latency
 `define CSR_MPM_TEX_LAT_H           12'hB84
+`define CSR_MPM_TEX_STALL           12'hB05     // texture latency
+`define CSR_MPM_TEX_STALL_H         12'hB85
 // PERF: texture cache
-`define CSR_MPM_TCACHE_READS        12'hB05     // total reads
-`define CSR_MPM_TCACHE_READS_H      12'hB85
-`define CSR_MPM_TCACHE_MISS_R       12'hB06     // read misses
-`define CSR_MPM_TCACHE_MISS_R_H     12'hB86
-`define CSR_MPM_TCACHE_BANK_ST      12'hB07     // bank stalls
-`define CSR_MPM_TCACHE_BANK_ST_H    12'hB87
-`define CSR_MPM_TCACHE_MSHR_ST      12'hB08     // MSHR stalls
-`define CSR_MPM_TCACHE_MSHR_ST_H    12'hB88
+`define CSR_MPM_TCACHE_READS        12'hB06     // total reads
+`define CSR_MPM_TCACHE_READS_H      12'hB86
+`define CSR_MPM_TCACHE_MISS_R       12'hB07     // read misses
+`define CSR_MPM_TCACHE_MISS_R_H     12'hB87
+`define CSR_MPM_TCACHE_BANK_ST      12'hB08     // bank stalls
+`define CSR_MPM_TCACHE_BANK_ST_H    12'hB88
+`define CSR_MPM_TCACHE_MSHR_ST      12'hB09     // MSHR stalls
+`define CSR_MPM_TCACHE_MSHR_ST_H    12'hB89
 // PERF: pipeline
-`define CSR_MPM_TEX_ISSUE_ST        12'hB09     // issue stalls
-`define CSR_MPM_TEX_ISSUE_ST_H      12'hB89
+`define CSR_MPM_TEX_ISSUE_ST        12'hB0A     // issue stalls
+`define CSR_MPM_TEX_ISSUE_ST_H      12'hB8A
 
 // Machine Performance-monitoring raster counters
 // PERF: raster unit

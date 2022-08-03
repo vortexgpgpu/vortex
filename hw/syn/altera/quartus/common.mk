@@ -1,4 +1,5 @@
 RTL_DIR = ../../../../../rtl
+AFU_DIR = ../../../../../afu/opae
 THIRD_PARTY_DIR = ../../../../../../third_party
 
 ifeq ($(DEVICE_FAMILY), stratix10)
