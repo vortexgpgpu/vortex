@@ -23,7 +23,7 @@ module VX_miss_resrv #(
     // core request tag size
     parameter TAG_WIDTH         = UUID_WIDTH + 1,
 
-    localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE)
+    parameter MSHR_ADDR_WIDTH   = `LOG2UP(MSHR_SIZE)
 ) (
     input wire clk,
     input wire reset,

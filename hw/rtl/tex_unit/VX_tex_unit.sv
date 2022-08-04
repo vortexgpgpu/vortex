@@ -31,13 +31,11 @@ module VX_tex_unit #(
     
     tex_dcrs_t tex_dcrs;
 
-    `RESET_RELAY (tex_dcr_reset, reset);
-    
     VX_tex_dcr #(
         .NUM_STAGES (`TEX_STAGE_COUNT)
     ) tex_dcr (
         .clk        (clk),
-        .reset      (tex_dcr_reset),
+        .reset      (reset),
         .dcr_write_if(dcr_write_if),
         .stage      (tex_req_if.stage),
         .tex_dcrs   (tex_dcrs)
@@ -88,6 +86,8 @@ module VX_tex_unit #(
     wire [NUM_LANES-1:0][31:0] mem_req_baseaddr;
     wire [(TAG_WIDTH + `TEX_FORMAT_BITS)-1:0] mem_req_info;
     wire mem_req_ready;
+
+    `RESET_RELAY (addr_reset, reset);
                 
     VX_tex_addr #(
         .INSTANCE_ID (INSTANCE_ID),
@@ -95,7 +95,7 @@ module VX_tex_unit #(
         .NUM_LANES   (NUM_LANES)
     ) tex_addr (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (addr_reset),
 
         // inputs
         .req_valid  (req_valid),
@@ -128,7 +128,9 @@ module VX_tex_unit #(
     wire mem_rsp_valid;
     wire [NUM_LANES-1:0][3:0][31:0] mem_rsp_data;
     wire [(TAG_WIDTH + `TEX_FORMAT_BITS + BLEND_FRAC_W)-1:0] mem_rsp_info;
-    wire mem_rsp_ready;        
+    wire mem_rsp_ready;      
+
+    `RESET_RELAY (mem_reset, reset);  
 
     VX_tex_mem #(
         .INSTANCE_ID (INSTANCE_ID),
@@ -136,7 +138,7 @@ module VX_tex_unit #(
         .NUM_LANES   (NUM_LANES)
     ) tex_mem (
         .clk       (clk),
-        .reset     (reset),
+        .reset     (mem_reset),
 
         // memory interface
         .cache_req_if (cache_req_if),
@@ -166,13 +168,15 @@ module VX_tex_unit #(
     wire [TAG_WIDTH-1:0] sampler_rsp_info;
     wire sampler_rsp_ready;
 
+    `RESET_RELAY (sample_reset, reset);
+
     VX_tex_sampler #(
         .INSTANCE_ID (INSTANCE_ID),
         .REQ_INFOW   (TAG_WIDTH),
         .NUM_LANES   (NUM_LANES)
     ) tex_sampler (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (sample_reset),
 
         // inputs
         .req_valid  (mem_rsp_valid),

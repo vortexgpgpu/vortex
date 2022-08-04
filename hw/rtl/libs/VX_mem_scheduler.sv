@@ -14,11 +14,11 @@ module VX_mem_scheduler #(
     parameter CORE_OUT_REG  = 0,
     parameter MEM_OUT_REG   = 0,
 
-    localparam BYTEENW      = DATA_WIDTH / 8,
-    localparam NUM_BATCHES  = (NUM_REQS + NUM_BANKS - 1) / NUM_BANKS,
-    localparam QUEUE_ADDRW  = `CLOG2(QUEUE_SIZE),
-    localparam BATCH_SEL_BITS = `CLOG2(NUM_BATCHES),
-    localparam MEM_TAGW     = UUID_WIDTH + QUEUE_ADDRW + BATCH_SEL_BITS
+    parameter BYTEENW      = DATA_WIDTH / 8,
+    parameter NUM_BATCHES  = (NUM_REQS + NUM_BANKS - 1) / NUM_BANKS,
+    parameter QUEUE_ADDRW  = `CLOG2(QUEUE_SIZE),
+    parameter BATCH_SEL_BITS = `CLOG2(NUM_BATCHES),
+    parameter MEM_TAGW     = UUID_WIDTH + QUEUE_ADDRW + BATCH_SEL_BITS
 ) (
     input wire clk,
     input wire reset,

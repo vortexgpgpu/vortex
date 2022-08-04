@@ -290,8 +290,6 @@ module VX_gpu_unit #(
 
     // response arbitration
 
-    `RESET_RELAY (rsp_arb_reset, reset);
-
     VX_stream_arb #(
         .NUM_INPUTS (RSP_ARB_SIZE),
         .DATAW      (RSP_ARB_DATAW),
@@ -299,7 +297,7 @@ module VX_gpu_unit #(
         .BUFFERED   (1)
     ) rsp_arb (
         .clk       (clk),
-        .reset     (rsp_arb_reset),
+        .reset     (reset),
         .valid_in  ({
             wctl_rsp_valid
         `ifdef EXT_TEX_ENABLE

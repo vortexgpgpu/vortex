@@ -44,8 +44,8 @@ module VX_bank #(
     // Memory request output register
     parameter MEM_OUT_REG       = 0,
 
-    localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE),
-    localparam WORD_SEL_BITS    = `UP(`WORD_SEL_BITS)
+    parameter MSHR_ADDR_WIDTH   = `LOG2UP(MSHR_SIZE),
+    parameter WORD_SEL_BITS     = `UP(`WORD_SEL_BITS)
 ) (
     input wire clk,
     input wire reset,

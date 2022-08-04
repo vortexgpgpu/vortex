@@ -2,8 +2,8 @@
 
 `TRACING_OFF
 module VX_pending_size #(
-    parameter SIZE   = 1,
-    localparam SIZEW = $clog2(SIZE+1)
+    parameter SIZE  = 1,
+    parameter SIZEW = $clog2(SIZE+1)
 ) (
     input wire  clk,
     input wire  reset,

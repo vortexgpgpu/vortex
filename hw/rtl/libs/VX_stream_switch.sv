@@ -2,15 +2,16 @@
 
 `TRACING_OFF
 module VX_stream_switch #(
-    parameter NUM_INPUTS     = 1,
-    parameter NUM_OUTPUTS    = 1,
-    parameter NUM_LANES      = 1,
-    parameter DATAW          = 1,
-    parameter LOCK_ENABLE    = 1,
-    parameter BUFFERED       = 0,
-    parameter NUM_REQS       = (NUM_INPUTS > NUM_OUTPUTS) ? ((NUM_INPUTS + NUM_OUTPUTS - 1) / NUM_OUTPUTS) : ((NUM_OUTPUTS + NUM_INPUTS - 1) / NUM_INPUTS),
-    parameter SEL_COUNT      = `MIN(NUM_INPUTS, NUM_OUTPUTS),
-    localparam LOG_NUM_REQS  = `CLOG2(NUM_REQS)
+    parameter NUM_INPUTS    = 1,
+    parameter NUM_OUTPUTS   = 1,
+    parameter NUM_LANES     = 1,
+    parameter DATAW         = 1,
+    parameter LOCK_ENABLE   = 1,
+    parameter BUFFERED      = 0,
+    parameter NUM_REQS      = (NUM_INPUTS > NUM_OUTPUTS) ? ((NUM_INPUTS + NUM_OUTPUTS - 1) / NUM_OUTPUTS) : ((NUM_OUTPUTS + NUM_INPUTS - 1) / NUM_INPUTS),
+    parameter SEL_COUNT     = `MIN(NUM_INPUTS, NUM_OUTPUTS),
+    parameter MAX_FANOUT    = 8,
+    parameter LOG_NUM_REQS  = `CLOG2(NUM_REQS)
 ) (
     input  wire clk,
     input  wire reset,

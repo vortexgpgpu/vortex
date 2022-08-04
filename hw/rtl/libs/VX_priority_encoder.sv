@@ -5,7 +5,7 @@ module VX_priority_encoder #(
     parameter N       = 1,  
     parameter REVERSE = 0,
     parameter MODEL   = 1,
-    localparam LN     = `LOG2UP(N)
+    parameter LN      = `LOG2UP(N)
 ) (
     input  wire [N-1:0]  data_in,  
     output wire [N-1:0]  onehot,

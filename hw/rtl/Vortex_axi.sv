@@ -9,7 +9,7 @@ module Vortex_axi #(
     parameter AXI_DATA_WIDTH   = `VX_MEM_DATA_WIDTH, 
     parameter AXI_ADDR_WIDTH   = 32,
     parameter AXI_TID_WIDTH    = `VX_MEM_TAG_WIDTH,
-    localparam AXI_STROBE_WIDTH = (AXI_DATA_WIDTH / 8)
+    parameter AXI_STROBE_WIDTH = (AXI_DATA_WIDTH / 8)
 )(
     // Clock
     input  wire                         clk,

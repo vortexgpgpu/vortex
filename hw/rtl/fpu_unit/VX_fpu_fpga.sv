@@ -193,8 +193,6 @@ module VX_fpu_fpga #(
         assign per_core_data_out[i] = {per_core_result[i], per_core_has_fflags[i], per_core_fflags[i], per_core_tag_out[i]};
     end
 
-    `RESET_RELAY (rsp_arb_reset, reset);
-
     VX_stream_arb #(
         .NUM_INPUTS (NUM_FPC),
         .DATAW      (RSP_ARB_DATAW),        
@@ -202,7 +200,7 @@ module VX_fpu_fpga #(
         .BUFFERED   (2)
     ) rsp_arb (
         .clk       (clk),
-        .reset     (rsp_arb_reset),
+        .reset     (reset),
         .valid_in  (per_core_valid_out),        
         .ready_in  (per_core_ready_out),
         .data_in   (per_core_data_out),

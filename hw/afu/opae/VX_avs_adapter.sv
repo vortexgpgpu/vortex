@@ -7,7 +7,7 @@ module VX_avs_adapter #(
     parameter AVS_BANKS       = 1, 
     parameter REQ_TAG_WIDTH   = 1,
     parameter RD_QUEUE_SIZE   = 1,
-    localparam AVS_BYTEENW = (AVS_DATA_WIDTH / 8)
+    parameter AVS_BYTEENW     = (AVS_DATA_WIDTH / 8)
 ) (
     input wire                          clk,
     input wire                          reset,

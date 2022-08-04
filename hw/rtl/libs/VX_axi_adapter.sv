@@ -8,8 +8,8 @@ module VX_axi_adapter #(
     parameter AXI_DATA_WIDTH   = VX_DATA_WIDTH, 
     parameter AXI_ADDR_WIDTH   = 32,
     parameter AXI_TID_WIDTH    = VX_TAG_WIDTH,
-    localparam VX_BYTEEN_WIDTH  = (VX_DATA_WIDTH / 8),
-    localparam AXI_STROBE_WIDTH = (AXI_DATA_WIDTH / 8)
+    parameter VX_BYTEEN_WIDTH  = (VX_DATA_WIDTH / 8),
+    parameter AXI_STROBE_WIDTH = (AXI_DATA_WIDTH / 8)
 ) (
     input  wire                         clk,
     input  wire                         reset,

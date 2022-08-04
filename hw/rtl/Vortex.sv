@@ -139,7 +139,7 @@ module Vortex (
     // Generate all clusters
     for (genvar i = 0; i < `NUM_CLUSTERS; ++i) begin
 
-        `RESET_RELAY_EX (cluster_reset, reset, (`NUM_CLUSTERS > 1));
+        `RESET_RELAY (cluster_reset, reset);
 
         `BUFFER_DCR_WRITE_IF(cluster_dcr_write_if, dcr_write_if, (`NUM_CLUSTERS > 1));
 

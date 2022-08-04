@@ -11,7 +11,7 @@ module VX_dp_ram #(
     parameter INIT_ENABLE = 0,
     parameter INIT_FILE   = "",
     parameter [DATAW-1:0] INIT_VALUE = 0,
-    localparam ADDRW = `LOG2UP(SIZE)
+    parameter ADDRW       = `LOG2UP(SIZE)
 ) ( 
     input wire               clk,
     input wire [BYTEENW-1:0] wren,

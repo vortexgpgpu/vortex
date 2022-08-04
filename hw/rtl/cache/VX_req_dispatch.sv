@@ -16,12 +16,12 @@ module VX_req_dispatch #(
     // core request tag size
     parameter TAG_WIDTH     = 3,
 
-    localparam WORDS_PER_LINE   = LINE_SIZE / WORD_SIZE,
-    localparam WORD_WIDTH       = WORD_SIZE * 8,
-    localparam REQ_SEL_BITS     = `CLOG2(NUM_REQS),    
-    localparam WORD_SEL_BITS    = `CLOG2(WORDS_PER_LINE),
-    localparam BANK_SEL_BITS    = `CLOG2(NUM_BANKS),
-    localparam LINE_ADDR_WIDTH  = ADDR_WIDTH - BANK_SEL_BITS - WORD_SEL_BITS
+    parameter WORDS_PER_LINE  = LINE_SIZE / WORD_SIZE,
+    parameter WORD_WIDTH      = WORD_SIZE * 8,
+    parameter REQ_SEL_BITS    = `CLOG2(NUM_REQS),    
+    parameter WORD_SEL_BITS   = `CLOG2(WORDS_PER_LINE),
+    parameter BANK_SEL_BITS   = `CLOG2(NUM_BANKS),
+    parameter LINE_ADDR_WIDTH = ADDR_WIDTH - BANK_SEL_BITS - WORD_SEL_BITS
 ) (
     input wire                                      clk,
     input wire                                      reset,

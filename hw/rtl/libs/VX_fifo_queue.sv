@@ -8,7 +8,7 @@ module VX_fifo_queue #(
     parameter ALM_EMPTY = 1,
     parameter OUT_REG   = 0,
     parameter LUTRAM    = 1,
-    localparam SIZEW    = $clog2(SIZE+1)
+    parameter SIZEW     = $clog2(SIZE+1)
 ) ( 
     input  wire             clk,
     input  wire             reset,    

@@ -130,7 +130,8 @@ module VX_tex_arb #(
             .NUM_INPUTS  (NUM_OUTPUTS),
             .NUM_OUTPUTS (NUM_INPUTS),        
             .DATAW       (RSP_DATAW),
-            .BUFFERED    (BUFFERED_RSP)
+            .BUFFERED    (BUFFERED_RSP),
+            .MAX_FANOUT  (4)
         ) rsp_switch (
             .clk       (clk),
             .reset     (reset),

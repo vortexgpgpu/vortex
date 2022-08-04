@@ -318,7 +318,7 @@ module VX_socket #(
     // Generate all cores
     for (genvar i = 0; i < `SOCKET_SIZE; ++i) begin
 
-        `RESET_RELAY_EX (core_reset, reset, (`SOCKET_SIZE > 1));        
+        `RESET_RELAY (core_reset, reset);
 
         `BUFFER_DCR_WRITE_IF(core_dcr_write_if, dcr_write_if, (`SOCKET_SIZE > 1));
 

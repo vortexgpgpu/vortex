@@ -4,7 +4,7 @@
 module VX_lzc #(
     parameter N       = 2,
     parameter REVERSE = 0,  // 0 -> leading zero, 1 -> trailing zero,
-    localparam LOGN   = `LOG2UP(N)
+    parameter LOGN    = `LOG2UP(N)
 ) (
     input  wire [N-1:0]    data_in,
     output wire [LOGN-1:0] data_out,

@@ -28,11 +28,9 @@ module VX_rop_unit #(
 
     rop_dcrs_t rop_dcrs;
 
-    `RESET_RELAY (rop_dcr_reset, reset);
-
     VX_rop_dcr rop_dcr (
         .clk        (clk),
-        .reset      (rop_dcr_reset),
+        .reset      (reset),
         .dcr_write_if(dcr_write_if),
         .rop_dcrs   (rop_dcrs)
     );
@@ -61,13 +59,15 @@ module VX_rop_unit #(
     wire                                    mem_rsp_ready;
     wire                                    mem_write_notify;
 
+    `RESET_RELAY (mem_reset, reset);
+
     VX_rop_mem #(
         .INSTANCE_ID (INSTANCE_ID),
         .NUM_LANES   (NUM_LANES),
         .TAG_WIDTH   (MEM_TAG_WIDTH)
     ) rop_mem (
         .clk            (clk),
-        .reset          (reset),
+        .reset          (mem_reset),
 
         .dcrs           (rop_dcrs),
 
@@ -116,13 +116,15 @@ module VX_rop_unit #(
     wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0] ds_stencil_out;
     wire [NUM_LANES-1:0]                        ds_pass_out;
 
+    `RESET_RELAY (ds_reset, reset);
+
     VX_rop_ds #(
         .INSTANCE_ID (INSTANCE_ID),
         .NUM_LANES   (NUM_LANES),
         .TAG_WIDTH   (DS_TAG_WIDTH)
     ) rop_ds (
         .clk            (clk),
-        .reset          (reset),
+        .reset          (ds_reset),
 
         .dcrs           (rop_dcrs),
 
@@ -157,13 +159,15 @@ module VX_rop_unit #(
     rgba_t [NUM_LANES-1:0]  blend_dst_color;
     rgba_t [NUM_LANES-1:0]  blend_color_out;
 
+    `RESET_RELAY (blend_reset, reset);
+
     VX_rop_blend #(
         .INSTANCE_ID (INSTANCE_ID),
         .NUM_LANES   (NUM_LANES),
         .TAG_WIDTH   (BLEND_TAG_WIDTH)
     ) rop_blend (
         .clk            (clk),
-        .reset          (reset),
+        .reset          (blend_reset),
 
         .dcrs           (rop_dcrs),
 

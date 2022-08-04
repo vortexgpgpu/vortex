@@ -145,7 +145,7 @@ module VX_cache_cluster #(
             `CACHE_RSP_FROM_MEM(arb_core_rsp_if[i], arb_core_rsp_m_if, j);
         end
 
-        `RESET_RELAY_EX (cache_reset, reset, (NUM_CACHES > 1));
+        `RESET_RELAY (cache_reset, reset);
 
         VX_cache_wrap #(
             .INSTANCE_ID  ($sformatf("%s%0d", INSTANCE_ID, i)),

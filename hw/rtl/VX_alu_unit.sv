@@ -197,8 +197,6 @@ module VX_alu_unit #(
 
     // send response
 
-    `RESET_RELAY (rsp_arb_reset, reset);
-
     VX_stream_arb #(
         .NUM_INPUTS (RSP_ARB_SIZE),
         .DATAW      (RSP_ARB_DATAW),        
@@ -206,7 +204,7 @@ module VX_alu_unit #(
         .BUFFERED   (1)
     ) rsp_arb (
         .clk       (clk),
-        .reset     (rsp_arb_reset),
+        .reset     (reset),
         .valid_in  ({
             alu_valid_out
         `ifdef EXT_M_ENABLE

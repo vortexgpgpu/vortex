@@ -12,8 +12,8 @@ module VX_rsp_merge #(
     // core request tag size
     parameter TAG_WIDTH     = 1,
 
-    localparam WORD_WIDTH   = WORD_SIZE * 8,
-    localparam REQ_SEL_BITS = `CLOG2(NUM_REQS)
+    parameter WORD_WIDTH    = WORD_SIZE * 8,
+    parameter REQ_SEL_BITS  = `CLOG2(NUM_REQS)
 ) (
     input wire                                  clk,
     input wire                                  reset,

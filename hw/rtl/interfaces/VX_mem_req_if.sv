@@ -2,7 +2,7 @@
 
 interface VX_mem_req_if #(
     parameter DATA_WIDTH = 1,
-    localparam DATA_SIZE = DATA_WIDTH / 8,
+    parameter DATA_SIZE  = DATA_WIDTH / 8,
     parameter ADDR_WIDTH = 32 - `CLOG2(DATA_SIZE),
     parameter TAG_WIDTH  = 1    
 ) ();

@@ -7,8 +7,8 @@ module VX_mem_adapter #(
     parameter DST_ADDR_WIDTH = 1,                
     parameter SRC_TAG_WIDTH  = 1,
     parameter DST_TAG_WIDTH  = 1,
-    localparam SRC_DATA_SIZE = (SRC_DATA_WIDTH / 8),
-    localparam DST_DATA_SIZE = (DST_DATA_WIDTH / 8)
+    parameter SRC_DATA_SIZE  = (SRC_DATA_WIDTH / 8),
+    parameter DST_DATA_SIZE  = (DST_DATA_WIDTH / 8)
 ) (
     input wire                          clk,
     input wire                          reset,

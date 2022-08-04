@@ -4,7 +4,7 @@
 module VX_popcount #(
     parameter MODEL = 1,
     parameter N     = 1,
-    localparam M    = $clog2(N+1)  
+    parameter M     = $clog2(N+1)  
 ) (
     input  wire [N-1:0] data_in,
     output wire [M-1:0] data_out

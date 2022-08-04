@@ -460,7 +460,7 @@ module VX_cluster #(
     // Generate all sockets
     for (genvar i = 0; i < `NUM_SOCKETS; ++i) begin
 
-        `RESET_RELAY_EX (socket_reset, reset, (`NUM_SOCKETS > 1));
+        `RESET_RELAY (socket_reset, reset);
 
         `BUFFER_DCR_WRITE_IF(socket_dcr_write_if, base_dcr_write_if, (`NUM_SOCKETS > 1));
 

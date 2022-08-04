@@ -3,7 +3,7 @@
 module VX_mem_arb #(    
     parameter NUM_REQS       = 1, 
     parameter DATA_WIDTH     = 1,
-    localparam DATA_SIZE     = (DATA_WIDTH / 8),
+    parameter DATA_SIZE      = (DATA_WIDTH / 8),
     parameter ADDR_WIDTH     = (32 - `CLOG2(DATA_SIZE)),
     parameter TAG_WIDTH      = 1,    
     parameter TAG_SEL_IDX    = 0,
@@ -98,7 +98,8 @@ module VX_mem_arb #(
     VX_stream_switch #(
         .NUM_OUTPUTS (NUM_REQS),
         .DATAW       (RSP_DATAW),
-        .BUFFERED    (BUFFERED_RSP)
+        .BUFFERED    (BUFFERED_RSP),
+        .MAX_FANOUT  (4)
     ) rsp_switch (
         .clk       (clk),
         .reset     (reset),

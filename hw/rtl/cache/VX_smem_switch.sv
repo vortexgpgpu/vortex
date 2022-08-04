@@ -62,7 +62,8 @@ module VX_smem_switch #(
         VX_stream_switch #(
             .NUM_OUTPUTS (NUM_REQS),
             .DATAW       (REQ_DATAW),
-            .BUFFERED    (BUFFERED_REQ)
+            .BUFFERED    (BUFFERED_REQ),
+            .MAX_FANOUT  (4)
         ) req_switch (
             .clk       (clk),
             .reset     (reset),
