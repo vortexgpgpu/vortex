@@ -19,10 +19,12 @@ proc panel_to_csv { panel_name csv_file } {
 
 # Dump names of all known panels
 proc do_dump_panelnames { } {
+	set fh [open "panels.txt" w]
 	set panel_names [get_report_panel_names]
 	foreach panel_name $panel_names {
-		post_message "$panel_name"
+		puts $fh "$panel_name"
 	}
+	close $fh
 }
 
 proc do_map_analysis { ProjectName } {
