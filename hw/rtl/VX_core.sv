@@ -18,6 +18,7 @@
 `endif
 
 `IGNORE_WARNINGS_BEGIN
+import VX_gpu_types::*;
 `ifdef EXT_F_ENABLE
 import VX_fpu_types::*;
 `endif

@@ -246,16 +246,16 @@ module VX_rop_unit #(
         assign ds_write_mask[i]       = ds_rsp_mask[i] && (stencil_writeen || (depth_writeen && ds_pass_out[i]));
         assign blend_write_mask[i]    = blend_rsp_mask[i] && blend_writeen && (~ds_enable || ds_pass_out[i]);  
         assign color_bypass_mask[i]   = rop_req_if.mask[i] && color_writeen;
-        assign ds_color_write_mask[i] = ds_rsp_mask[i] && color_writeen && ds_pass_out[i];
+        assign ds_color_write_mask[i] = ds_rsp_mask[i] && ds_pass_out[i];
     end
 
     assign mem_req_valid    = ds_blend_write || ds_blend_read || color_write;
     assign mem_req_ds_mask  = ds_valid_out ? ds_write_mask : ds_read_mask;
-    assign mem_req_c_mask   = blend_enable ? (blend_valid_out ? blend_write_mask : blend_read_mask) : (ds_color_writeen ? ds_color_write_mask : color_bypass_mask);
+    assign mem_req_c_mask   = write_bypass ? color_bypass_mask : (blend_valid_out ? blend_write_mask : (ds_valid_out ? ds_color_write_mask : blend_read_mask));
     assign mem_req_rw       = ds_blend_write || write_bypass;
     assign mem_req_face     = ds_write_face;
-    assign mem_req_pos_x    = ds_blend_write ? (ds_enable ? ds_write_pos_x : blend_write_pos_x) : rop_req_if.pos_x;
-    assign mem_req_pos_y    = ds_blend_write ? (ds_enable ? ds_write_pos_y : blend_write_pos_y) : rop_req_if.pos_y;
+    assign mem_req_pos_x    = ds_valid_out ? ds_write_pos_x : (blend_valid_out ? blend_write_pos_x : rop_req_if.pos_x);
+    assign mem_req_pos_y    = ds_valid_out ? ds_write_pos_y : (blend_valid_out ? blend_write_pos_y : rop_req_if.pos_y);
     assign mem_req_color    = blend_enable ? blend_color_out : (ds_enable ? ds_write_color : rop_req_if.color);
     assign mem_req_depth    = ds_depth_out;
     assign mem_req_stencil  = ds_stencil_out;
