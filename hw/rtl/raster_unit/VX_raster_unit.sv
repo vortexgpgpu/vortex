@@ -244,6 +244,8 @@ module VX_raster_unit #(
         assign pe_raster_req_if[i].valid = pe_valid_out || pe_raster_req_if[i].empty;        
     end
 
+    `RESET_RELAY (raster_arb_reset, reset);
+
     VX_raster_arb #(
         .NUM_INPUTS (NUM_PES),
         .NUM_LANES  (OUTPUT_QUADS),
@@ -251,7 +253,7 @@ module VX_raster_unit #(
         .BUFFERED   (2)
     ) raster_arb (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (raster_arb_reset),
         .req_in_if  (pe_raster_req_if),
         .req_out_if (raster_req_tmp_if)
     );

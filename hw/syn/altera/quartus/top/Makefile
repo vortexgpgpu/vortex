@@ -6,7 +6,7 @@ include ../../common.mk
 
 CONFIGS += -set "NOPAE"
 
-CONFIGS += -set "NUM_CORES=4"
+CONFIGS += -set "NUM_CORES=16"
 
 CONFIGS += -set "L2_ENABLE"
 
