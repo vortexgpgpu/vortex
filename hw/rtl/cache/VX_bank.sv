@@ -346,6 +346,8 @@ module VX_bank #(
         `UNUSED_PIN (empty)
     );
 
+    `RESET_RELAY (miss_resrv_reset, reset);
+
     VX_miss_resrv #(
         .INSTANCE_ID (INSTANCE_ID),
         .BANK_ID     (BANK_ID),        
@@ -359,7 +361,7 @@ module VX_bank #(
         .TAG_WIDTH   (TAG_WIDTH)
     ) miss_resrv (
         .clk            (clk),
-        .reset          (reset),
+        .reset          (miss_resrv_reset),
 
         .deq_req_uuid   (req_uuid_sel),
         .lkp_req_uuid   (req_uuid_st0),

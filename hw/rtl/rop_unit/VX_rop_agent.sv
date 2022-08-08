@@ -53,9 +53,9 @@ module VX_rop_agent #(
         .ready_out (rop_req_if.ready)
     );
 
-    assign rop_req_valid = rop_agent_if.valid & rop_rsp_ready;
-    assign rop_agent_if.ready = rop_req_ready & rop_rsp_ready;
-    assign rop_rsp_valid = rop_agent_if.valid & rop_req_ready;
+    assign rop_req_valid = rop_agent_if.valid && rop_rsp_ready;
+    assign rop_agent_if.ready = rop_req_ready && rop_rsp_ready;
+    assign rop_rsp_valid = rop_agent_if.valid && rop_req_ready;
 
     VX_skid_buffer #(
         .DATAW (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32)

@@ -193,10 +193,10 @@ module VX_rop_unit #(
 
     wire stencil_enable  = (| rop_dcrs.stencil_enable);
     wire stencil_writeen = (rop_dcrs.stencil_enable[0] && (rop_dcrs.stencil_writemask[0] != 0))
-                         | (rop_dcrs.stencil_enable[1] && (rop_dcrs.stencil_writemask[1] != 0));
+                        || (rop_dcrs.stencil_enable[1] && (rop_dcrs.stencil_writemask[1] != 0));
 
-    wire ds_enable  = depth_enable | stencil_enable;
-    wire ds_writeen = depth_writeen | stencil_writeen;
+    wire ds_enable  = depth_enable || stencil_enable;
+    wire ds_writeen = depth_writeen || stencil_writeen;
 
     wire blend_enable  = rop_dcrs.blend_enable;
     wire blend_writeen = rop_dcrs.blend_enable && color_writeen;
@@ -269,7 +269,7 @@ module VX_rop_unit #(
     assign rop_req_if.ready = mem_req_ready && ~ds_blend_write && ~pending_reads_full;
 
     assign ds_valid_in      = ds_enable && mem_rsp_valid && (~blend_enable || blend_ready_in);
-    assign blend_valid_in   = blend_enable && mem_rsp_valid & (~ds_enable || ds_ready_in);
+    assign blend_valid_in   = blend_enable && mem_rsp_valid && (~ds_enable || ds_ready_in);
     assign blend_dst_color  = mem_rsp_color;    
 
     assign ds_depth_val     = mem_rsp_depth;

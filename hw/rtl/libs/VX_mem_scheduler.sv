@@ -365,7 +365,7 @@ module VX_mem_scheduler #(
         end
     end
 
-    assign mem_rsp_fire = mem_rsp_valid_s & mem_rsp_ready_s;
+    assign mem_rsp_fire = mem_rsp_valid_s && mem_rsp_ready_s;
 
     if (RSP_PARTIAL == 1) begin
 
@@ -402,7 +402,7 @@ module VX_mem_scheduler #(
 
         assign mem_rsp_ready_s = crsp_ready || ~rsp_complete;      
 
-        assign crsp_valid = mem_rsp_valid_s & rsp_complete;
+        assign crsp_valid = mem_rsp_valid_s && rsp_complete;
 
         assign crsp_mask = rsp_orig_mask[ibuf_raddr];
 
@@ -465,14 +465,16 @@ module VX_mem_scheduler #(
         if (reset) begin
             pending_req_valids <= '0;
         end else begin
-            if (ibuf_push) begin            
-                pending_reqs[ibuf_waddr] <= {req_dbg_uuid, req_tag_only, $time};
+            if (ibuf_push) begin
                 pending_req_valids[ibuf_waddr] <= 1'b1;
             end
             if (ibuf_pop) begin
-                pending_reqs[ibuf_raddr] <= '0;
                 pending_req_valids[ibuf_raddr] <= 1'b0;
             end
+        end
+
+        if (ibuf_push) begin            
+            pending_reqs[ibuf_waddr] <= {req_dbg_uuid, req_tag_only, $time};
         end
 
         for (integer i = 0; i < QUEUE_SIZE; ++i) begin

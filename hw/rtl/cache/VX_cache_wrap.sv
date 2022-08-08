@@ -459,8 +459,8 @@ module VX_cache_wrap #(
         `ASSIGN_REQ_UUID (core_req_uuid, core_req_if[i].tag)
         `ASSIGN_REQ_UUID (core_rsp_uuid, core_rsp_if[i].tag)
 
-        wire core_req_fire = core_req_if[i].valid & core_req_if[i].ready;
-        wire core_rsp_fire = core_rsp_if[i].valid & core_rsp_if[i].ready;
+        wire core_req_fire = core_req_if[i].valid && core_req_if[i].ready;
+        wire core_rsp_fire = core_rsp_if[i].valid && core_rsp_if[i].ready;
 
         always @(posedge clk) begin
             if (core_req_fire) begin
@@ -486,8 +486,8 @@ module VX_cache_wrap #(
         assign mem_rsp_uuid = 0;
     end
 
-    wire mem_req_fire = mem_req_if.valid & mem_req_if.ready;
-    wire mem_rsp_fire = mem_rsp_if.valid & mem_rsp_if.ready;
+    wire mem_req_fire = mem_req_if.valid && mem_req_if.ready;
+    wire mem_rsp_fire = mem_rsp_if.valid && mem_rsp_if.ready;
 
     always @(posedge clk) begin
         if (mem_req_fire) begin

@@ -66,7 +66,8 @@ module VX_miss_resrv #(
 );
     `UNUSED_PARAM (BANK_ID)    
     
-    reg [MSHR_SIZE-1:0][`LINE_ADDR_WIDTH-1:0] addr_table, addr_table_n;
+    reg [`LINE_ADDR_WIDTH-1:0] addr_table [MSHR_SIZE-1:0];
+
     reg [MSHR_SIZE-1:0] valid_table, valid_table_n;
     reg [MSHR_SIZE-1:0] ready_table, ready_table_n;
     
@@ -93,7 +94,7 @@ module VX_miss_resrv #(
         valid_table_x = valid_table;
         ready_table_x = ready_table;
         if (dequeue_fire) begin
-            valid_table_x[dequeue_id] = 0;
+            valid_table_x[dequeue_id_r] = 0;
         end
         if (lookup_replay) begin            
             ready_table_x |= addr_matches;
@@ -121,7 +122,6 @@ module VX_miss_resrv #(
     always @(*) begin
         valid_table_n = valid_table_x;
         ready_table_n = ready_table_x;
-        addr_table_n  = addr_table;
         dequeue_val_n = dequeue_val_r;
         dequeue_id_n  = dequeue_id_r;
 
@@ -131,9 +131,8 @@ module VX_miss_resrv #(
         end
 
         if (allocate_fire) begin
-            valid_table_n[allocate_id] = 1;
-            ready_table_n[allocate_id] = 0;
-            addr_table_n[allocate_id]  = allocate_addr;
+            valid_table_n[allocate_id_r] = 1;
+            ready_table_n[allocate_id_r] = 0;
         end
 
         if (fill_valid) begin
@@ -147,6 +146,12 @@ module VX_miss_resrv #(
     end
 
     always @(posedge clk) begin
+         if (allocate_fire) begin
+            addr_table[allocate_id_r] <= allocate_addr;
+        end
+    end
+
+    always @(posedge clk) begin
         if (reset) begin
             valid_table    <= 0;
             allocate_rdy_r <= 0;
@@ -156,8 +161,8 @@ module VX_miss_resrv #(
             allocate_rdy_r <= allocate_rdy_n;
             dequeue_val_r  <= dequeue_val_n;      
         end
-        ready_table   <= ready_table_n;
-        addr_table    <= addr_table_n;                
+        
+        ready_table   <= ready_table_n;               
         dequeue_id_r  <= dequeue_id_n;
         allocate_id_r <= allocate_id_n;
 
@@ -165,8 +170,8 @@ module VX_miss_resrv #(
         `ASSERT(!release_valid || valid_table[release_id], ("runtime error"));
     end
     
-    `RUNTIME_ASSERT((!allocate_fire || ~valid_table[allocate_id]), ("%t: *** %s:%0d in-use allocation: addr=0x%0h, id=%0d", $time, INSTANCE_ID, BANK_ID, 
-        `LINE_TO_BYTE_ADDR(allocate_addr, BANK_ID), allocate_id))
+    `RUNTIME_ASSERT((!allocate_fire || ~valid_table[allocate_id_r]), ("%t: *** %s:%0d in-use allocation: addr=0x%0h, id=%0d", $time, INSTANCE_ID, BANK_ID, 
+        `LINE_TO_BYTE_ADDR(allocate_addr, BANK_ID), allocate_id_r))
     
     `RUNTIME_ASSERT((!fill_valid || valid_table[fill_id]), ("%t: *** %s:%0d invalid fill: addr=0x%0h, id=%0d", $time, INSTANCE_ID, BANK_ID, 
         `LINE_TO_BYTE_ADDR(addr_table[fill_id], BANK_ID), fill_id))
@@ -206,7 +211,7 @@ module VX_miss_resrv #(
         if (allocate_fire || fill_valid || dequeue_fire || lookup_replay || lookup_valid || release_valid) begin
             if (allocate_fire)
                 `TRACE(3, ("%d: %s:%0d mshr-allocate: addr=0x%0h, id=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID,
-                    `LINE_TO_BYTE_ADDR(allocate_addr, BANK_ID), allocate_id, lkp_req_uuid));
+                    `LINE_TO_BYTE_ADDR(allocate_addr, BANK_ID), allocate_id_r, lkp_req_uuid));
             if (fill_valid)
                 `TRACE(3, ("%d: %s:%0d mshr-fill: addr=0x%0h, id=%0d, addr=0x%0h\n", $time, INSTANCE_ID, BANK_ID, 
                     `LINE_TO_BYTE_ADDR(addr_table[fill_id], BANK_ID), fill_id, `LINE_TO_BYTE_ADDR(fill_addr, BANK_ID)));

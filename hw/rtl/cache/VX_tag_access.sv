@@ -56,7 +56,7 @@ module VX_tag_access #(
             end
         end        
         for (genvar i = 0; i < NUM_WAYS; ++i) begin
-            assign fill_way[i] = fill & repl_way[i];
+            assign fill_way[i] = fill && repl_way[i];
         end
     end else begin
         `UNUSED_VAR (stall)

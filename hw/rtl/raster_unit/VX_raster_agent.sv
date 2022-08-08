@@ -18,7 +18,7 @@ module VX_raster_agent #(
 
     // CSRs access
 
-    wire csr_write_enable = raster_req_if.valid & raster_agent_if.valid & raster_rsp_ready;
+    wire csr_write_enable = raster_req_if.valid && raster_agent_if.valid && raster_rsp_ready;
 
     VX_raster_csr #(
         .CORE_ID (CORE_ID)
@@ -38,11 +38,11 @@ module VX_raster_agent #(
     // it is possible to have ready = f(valid) when using arbiters, 
     // because of that we need to decouple raster_agent_if and raster_commit_if handshake with a pipe register
 
-    assign raster_agent_if.ready = raster_req_if.valid & raster_rsp_ready;
+    assign raster_agent_if.ready = raster_req_if.valid && raster_rsp_ready;
 
-    assign raster_req_if.ready = raster_agent_if.valid & raster_rsp_ready;
+    assign raster_req_if.ready = raster_agent_if.valid && raster_rsp_ready;
 
-    assign raster_rsp_valid = raster_agent_if.valid & raster_req_if.valid;
+    assign raster_rsp_valid = raster_agent_if.valid && raster_req_if.valid;
 
     wire [`NUM_THREADS-1:0][31:0] response_data;
 

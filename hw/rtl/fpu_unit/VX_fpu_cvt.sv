@@ -81,7 +81,7 @@ module VX_fpu_cvt #(
         wire [INT_MAN_WIDTH-1:0] int_mantissa;
         wire [INT_MAN_WIDTH-1:0] fmt_mantissa;
         wire fmt_sign       = dataa[i][31];
-        wire int_sign       = dataa[i][31] & is_signed;
+        wire int_sign       = dataa[i][31] && is_signed;
         assign int_mantissa = int_sign ? (-dataa[i]) : dataa[i];
         assign fmt_mantissa = INT_MAN_WIDTH'({fp_clss[i].is_normal, dataa[i][MAN_BITS-1:0]});
         assign fmt_exponent[i] = {1'b0, dataa[i][MAN_BITS +: EXP_BITS]} +

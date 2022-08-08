@@ -81,8 +81,8 @@ module VX_gpu_unit #(
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         wire taken = (gpu_req_if.rs1_data[i] != 0);
-        assign taken_tmask[i]     = gpu_req_if.tmask[i] & taken;
-        assign not_taken_tmask[i] = gpu_req_if.tmask[i] & ~taken;
+        assign taken_tmask[i]     = gpu_req_if.tmask[i] && taken;
+        assign not_taken_tmask[i] = gpu_req_if.tmask[i] && ~taken;
     end
 
     // tmc
@@ -118,7 +118,7 @@ module VX_gpu_unit #(
     assign barrier.size_m1 = `UP(`NW_BITS)'(rs2_data - 1);       
 
     // Warp control response
-    wire wctl_req_valid = gpu_req_valid && (is_wspawn | is_tmc | is_split | is_join | is_bar | is_pred);
+    wire wctl_req_valid = gpu_req_valid && (is_wspawn || is_tmc || is_split || is_join || is_bar || is_pred);
     wire wctl_rsp_valid = wctl_req_valid;
     wire [WCTL_DATAW-1:0] wctl_rsp_data = {tmc, wspawn, split, barrier};
     wire wctl_rsp_ready;

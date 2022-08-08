@@ -563,12 +563,12 @@ module VX_cache #(
     
     wire [NUM_REQS-1:0] perf_crsp_stall_per_req;
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign perf_crsp_stall_per_req[i] = core_rsp_if[i].valid & ~core_rsp_if[i].ready;
+        assign perf_crsp_stall_per_req[i] = core_rsp_if[i].valid && ~core_rsp_if[i].ready;
     end
 
     `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_req);
 
-    wire perf_mem_stall_per_cycle = mem_req_if.valid & ~mem_req_if.ready;
+    wire perf_mem_stall_per_cycle = mem_req_if.valid && ~mem_req_if.ready;
 
     reg [`PERF_CTR_BITS-1:0] perf_core_reads;
     reg [`PERF_CTR_BITS-1:0] perf_core_writes;

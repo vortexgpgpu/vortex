@@ -202,13 +202,13 @@ module VX_issue #(
             perf_fpu_stalls <= 0;
         `endif
         end else begin
-            if (decode_if.valid & ~decode_if.ready) begin
+            if (decode_if.valid && ~decode_if.ready) begin
                 perf_ibf_stalls <= perf_ibf_stalls  + `PERF_CTR_BITS'(1);
             end
-            if (scoreboard_if.valid & ~scoreboard_if.ready) begin 
+            if (scoreboard_if.valid && ~scoreboard_if.ready) begin 
                 perf_scb_stalls <= perf_scb_stalls  + `PERF_CTR_BITS'(1);
             end
-            if (dispatch_if.valid & ~dispatch_if.ready) begin
+            if (dispatch_if.valid && ~dispatch_if.ready) begin
                 case (dispatch_if.ex_type)
                 `EX_ALU: perf_alu_stalls <= perf_alu_stalls + `PERF_CTR_BITS'(1);
             `ifdef EXT_F_ENABLE

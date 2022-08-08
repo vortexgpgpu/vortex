@@ -55,7 +55,14 @@ module VX_csr_data #(
     input wire [31:0]                   write_data
 );
 
+    `UNUSED_VAR (reset)
+    `UNUSED_VAR (write_wid)
+
     // CSRs Write /////////////////////////////////////////////////////////////
+
+`ifdef EXT_F_ENABLE    
+    reg [`NUM_WARPS-1:0][`INST_FRM_BITS+`FFLAGS_BITS-1:0] fcsr;
+`endif
 
     reg [31:0] csr_satp;
     reg [31:0] csr_mstatus;
@@ -66,37 +73,38 @@ module VX_csr_data #(
     reg [31:0] csr_mepc;    
     reg [31:0] csr_pmpcfg;
     reg [31:0] csr_pmpaddr;
-    reg [`NUM_WARPS-1:0][`INST_FRM_BITS+`FFLAGS_BITS-1:0] fcsr;
 
     always @(posedge clk) begin
+    `ifdef EXT_F_ENABLE
         if (reset) begin
             fcsr <= '0;
         end else begin
-        `ifdef EXT_F_ENABLE
             if (fpu_to_csr_if.write_enable) begin
                 fcsr[fpu_to_csr_if.write_wid][`FFLAGS_BITS-1:0] <= fcsr[fpu_to_csr_if.write_wid][`FFLAGS_BITS-1:0]
                                                                  | fpu_to_csr_if.write_fflags;
             end
-        `endif
-            if (write_enable) begin
-                case (write_addr)
-                    `CSR_FFLAGS:   fcsr[write_wid][`FFLAGS_BITS-1:0] <= write_data[`FFLAGS_BITS-1:0];
-                    `CSR_FRM:      fcsr[write_wid][`INST_FRM_BITS+`FFLAGS_BITS-1:`FFLAGS_BITS] <= write_data[`INST_FRM_BITS-1:0];
-                    `CSR_FCSR:     fcsr[write_wid]  <= write_data[`FFLAGS_BITS+`INST_FRM_BITS-1:0];
-                    `CSR_SATP:     csr_satp         <= write_data;
-                    `CSR_MSTATUS:  csr_mstatus      <= write_data;
-                    `CSR_MEDELEG:  csr_medeleg      <= write_data;
-                    `CSR_MIDELEG:  csr_mideleg      <= write_data;
-                    `CSR_MIE:      csr_mie          <= write_data;
-                    `CSR_MTVEC:    csr_mtvec        <= write_data;
-                    `CSR_MEPC:     csr_mepc         <= write_data;
-                    `CSR_PMPCFG0:  csr_pmpcfg       <= write_data;
-                    `CSR_PMPADDR0: csr_pmpaddr      <= write_data;
-                    default: begin
-                        `ASSERT(0, ("%t: *** invalid CSR write address: %0h (#%0d)", $time, write_addr, write_uuid));
-                    end
-                endcase
-            end
+        end
+    `endif
+        if (write_enable) begin
+            case (write_addr)
+            `ifdef EXT_F_ENABLE
+                `CSR_FFLAGS:   fcsr[write_wid][`FFLAGS_BITS-1:0] <= write_data[`FFLAGS_BITS-1:0];
+                `CSR_FRM:      fcsr[write_wid][`INST_FRM_BITS+`FFLAGS_BITS-1:`FFLAGS_BITS] <= write_data[`INST_FRM_BITS-1:0];
+                `CSR_FCSR:     fcsr[write_wid]  <= write_data[`FFLAGS_BITS+`INST_FRM_BITS-1:0];
+            `endif
+                `CSR_SATP:     csr_satp     <= write_data;
+                `CSR_MSTATUS:  csr_mstatus  <= write_data;
+                `CSR_MEDELEG:  csr_medeleg  <= write_data;
+                `CSR_MIDELEG:  csr_mideleg  <= write_data;
+                `CSR_MIE:      csr_mie      <= write_data;
+                `CSR_MTVEC:    csr_mtvec    <= write_data;
+                `CSR_MEPC:     csr_mepc     <= write_data;
+                `CSR_PMPCFG0:  csr_pmpcfg   <= write_data;
+                `CSR_PMPADDR0: csr_pmpaddr  <= write_data;
+                default: begin
+                    `ASSERT(0, ("%t: *** invalid CSR write address: %0h (#%0d)", $time, write_addr, write_uuid));
+                end
+            endcase
         end
     end
 
@@ -111,10 +119,11 @@ module VX_csr_data #(
         read_data_rw_r    = '0;
         read_addr_valid_r = 1;
         case (read_addr)
+        `ifdef EXT_F_ENABLE
             `CSR_FFLAGS     : read_data_rw_r = 32'(fcsr[read_wid][`FFLAGS_BITS-1:0]);
             `CSR_FRM        : read_data_rw_r = 32'(fcsr[read_wid][`INST_FRM_BITS+`FFLAGS_BITS-1:`FFLAGS_BITS]);
             `CSR_FCSR       : read_data_rw_r = 32'(fcsr[read_wid]);
-            
+        `endif    
             `CSR_LWID       : read_data_ro_r = 32'(read_wid);
             /*`CSR_MHARTID ,*/
             `CSR_GWID       : read_data_ro_r = (CORE_ID << `NW_BITS) + 32'(read_wid);
@@ -354,7 +363,11 @@ module VX_csr_data #(
 
     `UNUSED_VAR (base_dcrs)
 
-    `RUNTIME_ASSERT(~read_enable || read_addr_valid_r, ("%t: *** invalid CSR read address: 0x%0h (#%0d)", $time, read_addr, read_uuid))    
+    `RUNTIME_ASSERT(~read_enable || read_addr_valid_r, ("%t: *** invalid CSR read address: 0x%0h (#%0d)", $time, read_addr, read_uuid))
+
+`ifdef EXT_F_ENABLE    
+    assign fpu_to_csr_if.read_frm = fcsr[fpu_to_csr_if.read_wid][`INST_FRM_BITS+`FFLAGS_BITS-1:`FFLAGS_BITS];
+`endif
 
 `ifdef PERF_ENABLE
 `ifdef EXT_IMADD_ENABLE
@@ -363,10 +376,6 @@ module VX_csr_data #(
 `endif
     wire [`PERF_CTR_BITS-1:0] perf_wctl_stalls = perf_gpu_if.wctl_stalls;
     `UNUSED_VAR (perf_wctl_stalls);
-`endif
-
-`ifdef EXT_F_ENABLE    
-    assign fpu_to_csr_if.read_frm = fcsr[fpu_to_csr_if.read_wid][`INST_FRM_BITS+`FFLAGS_BITS-1:`FFLAGS_BITS];
 `endif
 
 endmodule
