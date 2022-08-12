@@ -13,7 +13,7 @@ module VX_rsp_merge #(
     parameter TAG_WIDTH     = 1,
 
     parameter WORD_WIDTH    = WORD_SIZE * 8,
-    parameter REQ_SEL_BITS  = `CLOG2(NUM_REQS)
+    parameter REQ_SEL_BITS  = `LOG2UP(NUM_REQS)
 ) (
     input wire                                  clk,
     input wire                                  reset,
@@ -23,7 +23,7 @@ module VX_rsp_merge #(
     input  wire [NUM_BANKS-1:0]                 per_bank_core_rsp_valid,
     input  wire [NUM_BANKS-1:0][NUM_PORTS-1:0]  per_bank_core_rsp_pmask,
     input  wire [NUM_BANKS-1:0][NUM_PORTS-1:0][WORD_WIDTH-1:0] per_bank_core_rsp_data,
-    input  wire [NUM_BANKS-1:0][NUM_PORTS-1:0][`UP(REQ_SEL_BITS)-1:0] per_bank_core_rsp_idx,   
+    input  wire [NUM_BANKS-1:0][NUM_PORTS-1:0][REQ_SEL_BITS-1:0] per_bank_core_rsp_idx,   
     input  wire [NUM_BANKS-1:0][NUM_PORTS-1:0][TAG_WIDTH-1:0] per_bank_core_rsp_tag,   
     output wire [NUM_BANKS-1:0]                 per_bank_core_rsp_ready,
 
@@ -55,12 +55,15 @@ module VX_rsp_merge #(
 
             for (integer b = NUM_BANKS-1; b >= 0; --b) begin
                 for (integer p = 0; p < NUM_PORTS; ++p) begin 
-                    if (per_bank_core_rsp_valid[b] 
-                     && (NUM_PORTS == 1 || per_bank_core_rsp_pmask[b][p])) begin
-                        core_rsp_valid_r[per_bank_core_rsp_idx[b][p]]    = 1;
-                        core_rsp_data_r[per_bank_core_rsp_idx[b][p]]     = per_bank_core_rsp_data[b][p];
-                        core_rsp_tag_r[per_bank_core_rsp_idx[b][p]]      = per_bank_core_rsp_tag[b][p];
-                        bank_select_table_r[per_bank_core_rsp_idx[b][p]] = (1 << b);
+                    for (integer r = 0; r < NUM_REQS; ++r) begin
+                        if (per_bank_core_rsp_valid[b] 
+                        && (per_bank_core_rsp_idx[b][p] == REQ_SEL_BITS'(r))
+                        && (NUM_PORTS == 1 || per_bank_core_rsp_pmask[b][p])) begin
+                            core_rsp_valid_r[r]    = 1;
+                            core_rsp_data_r[r]     = per_bank_core_rsp_data[b][p];
+                            core_rsp_tag_r[r]      = per_bank_core_rsp_tag[b][p];
+                            bank_select_table_r[r] = (1 << b);
+                        end
                     end
                 end
             end
