@@ -8,8 +8,6 @@
 
 module VX_raster_mem #(
     parameter string INSTANCE_ID = "",
-    parameter INSTANCE_IDX  = 0,
-    parameter NUM_INSTANCES = 1, 
     parameter TILE_LOGSIZE  = 5,
     parameter QUEUE_SIZE    = 8
 ) (
@@ -117,17 +115,17 @@ module VX_raster_mem #(
 
             case (state)
             STATE_IDLE: begin
-                if (start && (INSTANCE_IDX < dcrs.tile_count)) begin
+                if (start) begin
                     // fetch the next tile header
                     state           <= STATE_TILE;         
                     mem_req_valid   <= 1;
-                    mem_req_addr[0] <= dcrs.tbuf_addr + INSTANCE_IDX * 8 + 0;
-                    mem_req_addr[1] <= dcrs.tbuf_addr + INSTANCE_IDX * 8 + 4;
+                    mem_req_addr[0] <= dcrs.tbuf_addr;
+                    mem_req_addr[1] <= dcrs.tbuf_addr + 4;
                     mem_req_mask    <= 9'b11;
                     mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_TILE);
                     // set tile counters
-                    curr_tbuf_addr  <= dcrs.tbuf_addr + INSTANCE_IDX * 8 + 8;
-                    curr_num_tiles  <= (dcrs.tile_count + `RASTER_TILE_BITS'(NUM_INSTANCES-INSTANCE_IDX-1)) / `RASTER_TILE_BITS'(NUM_INSTANCES);
+                    curr_tbuf_addr  <= dcrs.tbuf_addr + 8;
+                    curr_num_tiles  <= dcrs.tile_count;
                 end
             end
             STATE_TILE: begin
@@ -185,10 +183,10 @@ module VX_raster_mem #(
                             state           <= STATE_TILE;
                             mem_req_valid   <= 1;
                             mem_req_mask    <= 9'b11;
-                            mem_req_addr[0] <= curr_tbuf_addr + (NUM_INSTANCES - 1) * 8;
-                            mem_req_addr[1] <= curr_tbuf_addr + (NUM_INSTANCES - 1) * 8 + 4;                            
+                            mem_req_addr[0] <= curr_tbuf_addr;
+                            mem_req_addr[1] <= curr_tbuf_addr + 4;                            
                             mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_TILE);
-                            curr_tbuf_addr  <= curr_tbuf_addr + (NUM_INSTANCES - 1) * 8 + 8;
+                            curr_tbuf_addr  <= curr_tbuf_addr + 8;
                         end
                         // update tile counter
                         curr_num_tiles <= curr_num_tiles - `RASTER_TILE_BITS'(1);

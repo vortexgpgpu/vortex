@@ -28,7 +28,9 @@ module VX_rop_unit #(
 
     rop_dcrs_t rop_dcrs;
 
-    VX_rop_dcr rop_dcr (
+    VX_rop_dcr #( 
+        .INSTANCE_ID (INSTANCE_ID)
+    ) rop_dcr (
         .clk        (clk),
         .reset      (reset),
         .dcr_write_if(dcr_write_if),

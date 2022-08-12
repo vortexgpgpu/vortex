@@ -23,6 +23,9 @@ module VX_raster_qe #(
     input wire [`RASTER_PID_BITS-1:0]                   pid_in,
     input wire [NUM_QUADS-1:0][`RASTER_DIM_BITS-1:0]    x_loc_in,
     input wire [NUM_QUADS-1:0][`RASTER_DIM_BITS-1:0]    y_loc_in,
+    input wire [`RASTER_DIM_BITS-1:0]                   x_max_in,
+    input wire [`RASTER_DIM_BITS-1:0]                   y_min_in,
+    input wire [`RASTER_DIM_BITS-1:0]                   y_max_in,
     input wire [NUM_QUADS-1:0][2:0][2:0][`RASTER_DATA_BITS-1:0] edges_in,
 
     // Outputs
@@ -45,10 +48,15 @@ module VX_raster_qe #(
             for (genvar j = 0; j < 2; ++j) begin            
                 for (genvar k = 0; k < 3; ++k) begin
                     assign edge_eval[q][k][2 * j + i] = i * edges_in[q][k][0] + j * edges_in[q][k][1] + edges_in[q][k][2];
-                end                
+                end    
+                wire [`RASTER_DIM_BITS-1:0] quad_x = x_loc_in[q] | i;
+                wire [`RASTER_DIM_BITS-1:0] quad_y = y_loc_in[q] | j;
                 assign overlap[q][2 * j + i] = ~(edge_eval[q][0][2 * j + i][`RASTER_DATA_BITS-1] 
                                               || edge_eval[q][1][2 * j + i][`RASTER_DATA_BITS-1] 
-                                              || edge_eval[q][2][2 * j + i][`RASTER_DATA_BITS-1]);
+                                              || edge_eval[q][2][2 * j + i][`RASTER_DATA_BITS-1])
+                                           && (quad_x < x_max_in)
+                                           && (quad_y >= y_min_in)
+                                           && (quad_y < y_max_in);
             end
         end
 

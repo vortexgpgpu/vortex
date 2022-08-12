@@ -1,6 +1,8 @@
 `include "VX_rop_define.vh"
 
-module VX_rop_dcr (
+module VX_rop_dcr #(
+    parameter string INSTANCE_ID = ""
+) (
     input wire clk,
     input wire reset,
 
@@ -121,7 +123,7 @@ module VX_rop_dcr (
 `ifdef DBG_TRACE_ROP
     always @(posedge clk) begin
         if (dcr_write_if.valid) begin
-            `TRACE(1, ("%d: rop-dcr: state=", $time));
+            `TRACE(1, ("%d: %s-rop-dcr: state=", $time, INSTANCE_ID));
             trace_rop_state(1, dcr_write_if.addr);
             `TRACE(1, (", data=0x%0h\n", dcr_write_if.data));
         end

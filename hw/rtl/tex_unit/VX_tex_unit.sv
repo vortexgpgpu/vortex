@@ -32,7 +32,8 @@ module VX_tex_unit #(
     tex_dcrs_t tex_dcrs;
 
     VX_tex_dcr #(
-        .NUM_STAGES (`TEX_STAGE_COUNT)
+        .INSTANCE_ID (INSTANCE_ID),
+        .NUM_STAGES  (`TEX_STAGE_COUNT)
     ) tex_dcr (
         .clk        (clk),
         .reset      (reset),

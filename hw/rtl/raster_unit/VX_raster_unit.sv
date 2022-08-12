@@ -40,7 +40,11 @@ module VX_raster_unit #(
 
     raster_dcrs_t raster_dcrs;
 
-    VX_raster_dcr raster_dcr (
+    VX_raster_dcr #(
+        .INSTANCE_ID  (INSTANCE_ID),
+        .INSTANCE_IDX (INSTANCE_IDX),
+        .NUM_INSTANCES(NUM_INSTANCES)
+    ) raster_dcr (
         .clk        (clk),
         .reset      (reset),
         .dcr_write_if(dcr_write_if),
@@ -71,8 +75,6 @@ module VX_raster_unit #(
     // Memory unit
     VX_raster_mem #(
         .INSTANCE_ID  (INSTANCE_ID),
-        .INSTANCE_IDX (INSTANCE_IDX),
-        .NUM_INSTANCES(NUM_INSTANCES),
         .TILE_LOGSIZE (TILE_LOGSIZE),
         .QUEUE_SIZE   (MEM_FIFO_DEPTH)
     ) raster_mem (
@@ -229,6 +231,9 @@ module VX_raster_unit #(
             .valid_in   (pes_valid_in[i]),
             .x_loc_in   (pe_x_loc_in),
             .y_loc_in   (pe_y_loc_in),
+            .x_max_in   (raster_dcrs.dst_xmax),
+            .y_min_in   (raster_dcrs.dst_ymin),
+            .y_max_in   (raster_dcrs.dst_ymax),
             .edges_in   (pe_edges_in),
             .pid_in     (pe_pid_in),
             .extents_in (pe_extents_in),
