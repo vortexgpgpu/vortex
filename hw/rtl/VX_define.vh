@@ -419,15 +419,32 @@
     end \
     assign ``dst.``field = __reduce_add_r_``dst``field
 
-`define BUFFER_DCR_WRITE_IF(dst, src, ENABLE)  \
-    VX_dcr_write_if dst();              \
-    VX_pipe_register #(.DATAW(1 + `VX_DCR_ADDR_WIDTH + `VX_DCR_DATA_WIDTH), .DEPTH(ENABLE)) __``dst ( \
-        .clk      (clk),                \
-        .reset    (1'b0),               \
-        .enable   (1'b1),               \
-        .data_in  ({src.valid, src.addr, src.data}), \
-        .data_out ({dst.valid, dst.addr, dst.data}) \
-    )
+`define BUFFER_DCR_WRITE_IF(dst, src, enable) \
+    logic [(1 + `VX_DCR_ADDR_WIDTH + `VX_DCR_DATA_WIDTH)-1:0] __``dst; \
+    if (enable) begin \
+        always @(posedge clk) begin \
+            __``dst <= {src.valid, src.addr, src.data}; \
+        end \
+    end else begin \
+        assign __``dst = {src.valid, src.addr, src.data}; \
+    end \
+    VX_dcr_write_if dst(); \
+    assign {dst.valid, dst.addr, dst.data} = __``dst
+
+`define BUFFER_BUSY(src, enable) \
+    logic __busy; \
+    if (enable) begin \
+        always @(posedge clk) begin \
+            if (reset) begin \
+                __busy <= 1'b1; \
+            end else begin \
+                __busy <= src; \
+            end \
+        end \
+    end else begin \
+        assign __busy = src; \
+    end \
+    assign busy = __busy
 
 `define PERF_CACHE_ADD(dst, src, count) \
     `REDUCE_ADD (dst, src, reads, `PERF_CTR_BITS, count); \

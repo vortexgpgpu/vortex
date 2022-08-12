@@ -315,12 +315,12 @@ module VX_socket #(
 
     wire [`SOCKET_SIZE-1:0] per_core_busy;
 
+    `BUFFER_DCR_WRITE_IF (core_dcr_write_if, dcr_write_if, (`SOCKET_SIZE > 1));
+
     // Generate all cores
     for (genvar i = 0; i < `SOCKET_SIZE; ++i) begin
 
         `RESET_RELAY (core_reset, reset);
-
-        `BUFFER_DCR_WRITE_IF(core_dcr_write_if, dcr_write_if, (`SOCKET_SIZE > 1));
 
         VX_core #(
             .CORE_ID ((SOCKET_ID * `SOCKET_SIZE) + i)
@@ -377,7 +377,7 @@ module VX_socket #(
             .busy           (per_core_busy[i])
         );
     end
-    
-    assign busy = (| per_core_busy);
+
+    `BUFFER_BUSY ((| per_core_busy), (`SOCKET_SIZE > 1));
     
 endmodule

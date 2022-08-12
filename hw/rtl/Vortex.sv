@@ -141,7 +141,7 @@ module Vortex (
 
         `RESET_RELAY (cluster_reset, reset);
 
-        `BUFFER_DCR_WRITE_IF(cluster_dcr_write_if, dcr_write_if, (`NUM_CLUSTERS > 1));
+        `BUFFER_DCR_WRITE_IF (cluster_dcr_write_if, dcr_write_if, (`NUM_CLUSTERS > 1));
 
         VX_cluster #(
             .CLUSTER_ID (i)
@@ -195,7 +195,7 @@ module Vortex (
         );
     end
 
-    assign busy = (| per_cluster_busy);
+    `BUFFER_BUSY ((| per_cluster_busy), (`NUM_CLUSTERS > 1));
 
     `RESET_RELAY (l3_reset, reset);
 

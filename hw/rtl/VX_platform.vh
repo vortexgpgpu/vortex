@@ -142,9 +142,9 @@
     end                                         \
     `TRACE(lvl, ("}"))
 
-`define RESET_RELAY_EX(dst, src, ENABLE)    \
+`define RESET_RELAY_EX(dst, src, depth)     \
     wire dst;                               \
-    VX_reset_relay #(.DEPTH(ENABLE)) __``dst ( \
+    VX_reset_relay #(.DEPTH(depth)) __``dst ( \
         .clk     (clk),                     \
         .reset   (src),                     \
         .reset_o (dst)                      \

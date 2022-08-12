@@ -95,17 +95,17 @@ module VX_cluster #(
         .NUM_LANES (`NUM_THREADS)
     ) raster_req_if[`NUM_RASTER_UNITS]();
 
-    VX_dcr_write_if raster_dcr_write_if();
-    assign raster_dcr_write_if.valid = dcr_write_if.valid && (dcr_write_if.addr >= `DCR_RASTER_STATE_BEGIN && dcr_write_if.addr < `DCR_RASTER_STATE_END);
-    assign raster_dcr_write_if.addr  = dcr_write_if.addr;
-    assign raster_dcr_write_if.data  = dcr_write_if.data;
+    VX_dcr_write_if raster_dcr_write_tmp_if();
+    assign raster_dcr_write_tmp_if.valid = dcr_write_if.valid && (dcr_write_if.addr >= `DCR_RASTER_STATE_BEGIN && dcr_write_if.addr < `DCR_RASTER_STATE_END);
+    assign raster_dcr_write_tmp_if.addr  = dcr_write_if.addr;
+    assign raster_dcr_write_tmp_if.data  = dcr_write_if.data;
+
+    `BUFFER_DCR_WRITE_IF (raster_dcr_write_if, raster_dcr_write_tmp_if, 1);
 
     // Generate all raster units
     for (genvar i = 0; i < `NUM_RASTER_UNITS; ++i) begin
 
         `RESET_RELAY (raster_reset, reset);
-
-        `BUFFER_DCR_WRITE_IF(unit_dcr_write_if, raster_dcr_write_if, (`NUM_RASTER_UNITS > 1));
 
         VX_raster_unit #( 
             .INSTANCE_ID     ($sformatf("cluster%0d-raster%0d", CLUSTER_ID, i)),
@@ -123,7 +123,7 @@ module VX_cluster #(
         `ifdef PERF_ENABLE
             .perf_raster_if(perf_raster_unit_if[i]),
         `endif
-            .dcr_write_if  (unit_dcr_write_if),
+            .dcr_write_if  (raster_dcr_write_if),
             .raster_req_if (raster_req_if[i]),
             .cache_req_if  (rcache_req_if[i]),
             .cache_rsp_if  (rcache_rsp_if[i])
@@ -193,17 +193,17 @@ module VX_cluster #(
         .req_out_if (rop_req_if)
     );
 
-    VX_dcr_write_if rop_dcr_write_if();
-    assign rop_dcr_write_if.valid = dcr_write_if.valid && (dcr_write_if.addr >= `DCR_ROP_STATE_BEGIN && dcr_write_if.addr < `DCR_ROP_STATE_END);
-    assign rop_dcr_write_if.addr  = dcr_write_if.addr;
-    assign rop_dcr_write_if.data  = dcr_write_if.data;
+    VX_dcr_write_if rop_dcr_write_tmp_if();
+    assign rop_dcr_write_tmp_if.valid = dcr_write_if.valid && (dcr_write_if.addr >= `DCR_ROP_STATE_BEGIN && dcr_write_if.addr < `DCR_ROP_STATE_END);
+    assign rop_dcr_write_tmp_if.addr  = dcr_write_if.addr;
+    assign rop_dcr_write_tmp_if.data  = dcr_write_if.data;
+
+    `BUFFER_DCR_WRITE_IF (rop_dcr_write_if, rop_dcr_write_tmp_if, 1);
 
     // Generate all rop units
     for (genvar i = 0; i < `NUM_ROP_UNITS; ++i) begin
 
         `RESET_RELAY (rop_reset, reset);
-
-        `BUFFER_DCR_WRITE_IF(unit_dcr_write_if, rop_dcr_write_if, (`NUM_ROP_UNITS > 1));
 
         VX_rop_unit #(
             .INSTANCE_ID ($sformatf("cluster%0d-rop%0d", CLUSTER_ID, i)),
@@ -214,7 +214,7 @@ module VX_cluster #(
         `ifdef PERF_ENABLE
             .perf_rop_if   (perf_rop_unit_if[i]),
         `endif
-            .dcr_write_if  (unit_dcr_write_if),
+            .dcr_write_if  (rop_dcr_write_if),
             .rop_req_if    (rop_req_if[i]),            
             .cache_req_if  (ocache_req_if[i]),
             .cache_rsp_if  (ocache_rsp_if[i])
@@ -280,18 +280,18 @@ module VX_cluster #(
         .rsp_out_if (tex_rsp_if)
     );
 
-    VX_dcr_write_if tex_dcr_write_if();
-    assign tex_dcr_write_if.valid = dcr_write_if.valid && (dcr_write_if.addr >= `DCR_TEX_STATE_BEGIN && dcr_write_if.addr < `DCR_TEX_STATE_END);
-    assign tex_dcr_write_if.addr  = dcr_write_if.addr;
-    assign tex_dcr_write_if.data  = dcr_write_if.data;
+    VX_dcr_write_if tex_dcr_write_tmp_if();
+    assign tex_dcr_write_tmp_if.valid = dcr_write_if.valid && (dcr_write_if.addr >= `DCR_TEX_STATE_BEGIN && dcr_write_if.addr < `DCR_TEX_STATE_END);
+    assign tex_dcr_write_tmp_if.addr  = dcr_write_if.addr;
+    assign tex_dcr_write_tmp_if.data  = dcr_write_if.data;
+
+    `BUFFER_DCR_WRITE_IF (tex_dcr_write_if, tex_dcr_write_tmp_if, 1);
 
     // Generate all texture units
     for (genvar i = 0; i < `NUM_TEX_UNITS; ++i) begin
 
         `RESET_RELAY (tex_reset, reset);
 
-        `BUFFER_DCR_WRITE_IF(unit_dcr_write_if, tex_dcr_write_if, (`NUM_TEX_UNITS > 1));
-        
         VX_tex_unit #(
             .INSTANCE_ID ($sformatf("cluster%0d-tex%0d", CLUSTER_ID, i)),
             .NUM_LANES   (`NUM_THREADS),
@@ -302,7 +302,7 @@ module VX_cluster #(
         `ifdef PERF_ENABLE
             .perf_tex_if  (perf_tex_unit_if[i]),
         `endif 
-            .dcr_write_if (unit_dcr_write_if),
+            .dcr_write_if (tex_dcr_write_if),
             .tex_req_if   (tex_req_if[i]),
             .tex_rsp_if   (tex_rsp_if[i]),
             .cache_req_if (tcache_req_if[i]),
@@ -450,19 +450,19 @@ module VX_cluster #(
     `UNUSED_VAR (per_socket_sim_ebreak)
     `UNUSED_VAR (per_socket_sim_wb_value)
 
-    VX_dcr_write_if base_dcr_write_if();
-    assign base_dcr_write_if.valid = dcr_write_if.valid && (dcr_write_if.addr >= `DCR_BASE_STATE_BEGIN && dcr_write_if.addr < `DCR_BASE_STATE_END);
-    assign base_dcr_write_if.addr  = dcr_write_if.addr;
-    assign base_dcr_write_if.data  = dcr_write_if.data;
+    VX_dcr_write_if socket_dcr_write_tmp_if();
+    assign socket_dcr_write_tmp_if.valid = dcr_write_if.valid && (dcr_write_if.addr >= `DCR_BASE_STATE_BEGIN && dcr_write_if.addr < `DCR_BASE_STATE_END);
+    assign socket_dcr_write_tmp_if.addr  = dcr_write_if.addr;
+    assign socket_dcr_write_tmp_if.data  = dcr_write_if.data;
 
     wire [`NUM_SOCKETS-1:0] per_socket_busy;
+
+    `BUFFER_DCR_WRITE_IF (socket_dcr_write_if, socket_dcr_write_tmp_if, (`NUM_SOCKETS > 1));
 
     // Generate all sockets
     for (genvar i = 0; i < `NUM_SOCKETS; ++i) begin
 
         `RESET_RELAY (socket_reset, reset);
-
-        `BUFFER_DCR_WRITE_IF(socket_dcr_write_if, base_dcr_write_if, (`NUM_SOCKETS > 1));
 
         VX_socket #(
             .SOCKET_ID ((CLUSTER_ID * `NUM_SOCKETS) + i)
@@ -519,7 +519,7 @@ module VX_cluster #(
             .busy           (per_socket_busy[i])
         );
     end
-    
-    assign busy = (| per_socket_busy);
+
+    `BUFFER_BUSY ((| per_socket_busy), (`NUM_SOCKETS > 1));
 
 endmodule
