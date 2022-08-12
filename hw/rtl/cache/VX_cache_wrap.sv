@@ -415,6 +415,8 @@ module VX_cache_wrap #(
         assign mem_rsp_wrap_if.tag   = mem_rsp_tag_b;
         assign mem_rsp_ready_b = mem_rsp_wrap_if.ready;
 
+        `RESET_RELAY (cache_reset, reset);
+
         VX_cache #(
             .INSTANCE_ID  (INSTANCE_ID),
             .CACHE_SIZE   (CACHE_SIZE),
@@ -436,7 +438,7 @@ module VX_cache_wrap #(
             .MEM_OUT_REG  (NC_BYPASS ? 1 : MEM_OUT_REG)
         ) cache (
             .clk            (clk),
-            .reset          (reset),
+            .reset          (cache_reset),
 
         `ifdef PERF_ENABLE
             .perf_cache_if  (perf_cache_if),

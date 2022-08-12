@@ -44,10 +44,6 @@ set_global_assignment -name SYNTH_TIMING_DRIVEN_SYNTHESIS ON
 
 set_global_assignment -name SEED 1
 
-# Power estimation
-set_global_assignment -name POWER_PRESET_COOLING_SOLUTION "23 MM HEAT SINK WITH 200 LFPM AIRFLOW"
-set_global_assignment -name POWER_BOARD_THERMAL_MODEL "NONE (CONSERVATIVE)"
-
 switch $opts(family) {
     "Arria 10" {
         set_global_assignment -name VERILOG_MACRO ALTERA_A10    

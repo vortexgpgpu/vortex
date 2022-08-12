@@ -51,6 +51,36 @@ module VX_rr_arbiter #(
         assign grant_onehot = grant_onehot_r;
         assign grant_valid  = (| requests);        
 
+    end else if (NUM_REQS == 3)  begin
+
+        reg [LOG_NUM_REQS-1:0]  grant_index_r;
+        reg [NUM_REQS-1:0]      grant_onehot_r;  
+        reg [LOG_NUM_REQS-1:0]  state;
+
+        always @(*) begin
+            casez ({state, requests})
+            5'b00_001,
+            5'b01_0?1, 
+            5'b10_??1: begin grant_onehot_r = 3'b001; grant_index_r = LOG_NUM_REQS'(0); end
+            5'b00_?1?, 
+            5'b01_010, 
+            5'b10_?10: begin grant_onehot_r = 3'b010; grant_index_r = LOG_NUM_REQS'(1); end
+            default:   begin grant_onehot_r = 3'b100; grant_index_r = LOG_NUM_REQS'(2); end
+            endcase
+        end
+
+        always @(posedge clk) begin                       
+            if (reset) begin         
+                state <= '0;
+            end else if (!LOCK_ENABLE || unlock) begin
+                state <= grant_index_r;
+            end
+        end
+
+        assign grant_index  = grant_index_r;
+        assign grant_onehot = grant_onehot_r;
+        assign grant_valid  = (| requests);        
+
     end else if (NUM_REQS == 4)  begin
 
         reg [LOG_NUM_REQS-1:0]  grant_index_r;
@@ -72,6 +102,170 @@ module VX_rr_arbiter #(
             6'b10_0100, 
             6'b11_?100: begin grant_onehot_r = 4'b0100; grant_index_r = LOG_NUM_REQS'(2); end
             default:    begin grant_onehot_r = 4'b1000; grant_index_r = LOG_NUM_REQS'(3); end
+            endcase
+        end
+
+        always @(posedge clk) begin                       
+            if (reset) begin         
+                state <= '0;
+            end else if (!LOCK_ENABLE || unlock) begin
+                state <= grant_index_r;
+            end
+        end
+
+        assign grant_index  = grant_index_r;
+        assign grant_onehot = grant_onehot_r;
+        assign grant_valid  = (| requests);        
+
+    end else if (NUM_REQS == 5)  begin
+
+        reg [LOG_NUM_REQS-1:0]  grant_index_r;
+        reg [NUM_REQS-1:0]      grant_onehot_r;  
+        reg [LOG_NUM_REQS-1:0]  state;
+
+        always @(*) begin
+            casez ({state, requests})
+            8'b000_00001, 
+            8'b001_000?1, 
+            8'b010_00??1, 
+            8'b011_0???1,
+            8'b100_????1: begin grant_onehot_r = 5'b00001; grant_index_r = LOG_NUM_REQS'(0); end
+            8'b000_???1?, 
+            8'b001_00010, 
+            8'b010_00?10, 
+            8'b011_0??10, 
+            8'b100_???10: begin grant_onehot_r = 5'b00010; grant_index_r = LOG_NUM_REQS'(1); end
+            8'b000_??10?, 
+            8'b001_??1??, 
+            8'b010_00100, 
+            8'b011_0?100,
+            8'b100_??100: begin grant_onehot_r = 5'b00100; grant_index_r = LOG_NUM_REQS'(2); end
+            8'b000_?100?, 
+            8'b001_?10??, 
+            8'b010_?1???,
+            8'b011_01000, 
+            8'b100_?1000: begin grant_onehot_r = 5'b01000; grant_index_r = LOG_NUM_REQS'(3); end
+            default:      begin grant_onehot_r = 5'b10000; grant_index_r = LOG_NUM_REQS'(4); end
+            endcase
+        end
+
+        always @(posedge clk) begin                       
+            if (reset) begin         
+                state <= '0;
+            end else if (!LOCK_ENABLE || unlock) begin
+                state <= grant_index_r;
+            end
+        end
+
+        assign grant_index  = grant_index_r;
+        assign grant_onehot = grant_onehot_r;
+        assign grant_valid  = (| requests);        
+
+    end else if (NUM_REQS == 6)  begin
+
+        reg [LOG_NUM_REQS-1:0]  grant_index_r;
+        reg [NUM_REQS-1:0]      grant_onehot_r;  
+        reg [LOG_NUM_REQS-1:0]  state;
+
+        always @(*) begin
+            casez ({state, requests})
+            9'b000_000001, 
+            9'b001_0000?1, 
+            9'b010_000??1, 
+            9'b011_00???1, 
+            9'b100_0????1, 
+            9'b101_?????1: begin grant_onehot_r = 6'b000001; grant_index_r = LOG_NUM_REQS'(0); end
+            9'b000_????1?, 
+            9'b001_000010, 
+            9'b010_000?10, 
+            9'b011_00??10, 
+            9'b100_0???10, 
+            9'b101_????10: begin grant_onehot_r = 6'b000010; grant_index_r = LOG_NUM_REQS'(1); end
+            9'b000_???10?, 
+            9'b001_???1??, 
+            9'b010_000100, 
+            9'b011_00?100,
+            9'b100_0??100, 
+            9'b101_???100: begin grant_onehot_r = 6'b000100; grant_index_r = LOG_NUM_REQS'(2); end
+            9'b000_??100?, 
+            9'b001_??10??, 
+            9'b010_??1???,
+            9'b011_001000, 
+            9'b100_0?1000, 
+            9'b101_??1000: begin grant_onehot_r = 6'b001000; grant_index_r = LOG_NUM_REQS'(3); end
+            9'b000_?1000?, 
+            9'b001_?100??, 
+            9'b010_?10???,
+            9'b011_?1????, 
+            9'b100_010000, 
+            9'b101_?10000: begin grant_onehot_r = 6'b010000; grant_index_r = LOG_NUM_REQS'(4); end
+            default:       begin grant_onehot_r = 6'b100000; grant_index_r = LOG_NUM_REQS'(5); end
+            endcase
+        end
+
+        always @(posedge clk) begin                       
+            if (reset) begin         
+                state <= '0;
+            end else if (!LOCK_ENABLE || unlock) begin
+                state <= grant_index_r;
+            end
+        end
+
+        assign grant_index  = grant_index_r;
+        assign grant_onehot = grant_onehot_r;
+        assign grant_valid  = (| requests);        
+
+    end else if (NUM_REQS == 7)  begin
+
+        reg [LOG_NUM_REQS-1:0]  grant_index_r;
+        reg [NUM_REQS-1:0]      grant_onehot_r;  
+        reg [LOG_NUM_REQS-1:0]  state;
+
+        always @(*) begin
+            casez ({state, requests})
+            10'b000_000001, 
+            10'b001_0000?1, 
+            10'b010_000??1, 
+            10'b011_00???1, 
+            10'b100_00???1, 
+            10'b101_0????1, 
+            10'b110_?????1: begin grant_onehot_r = 7'b0000001; grant_index_r = LOG_NUM_REQS'(0); end
+            10'b000_?????1?, 
+            10'b001_0000010, 
+            10'b010_0000?10, 
+            10'b011_000??10, 
+            10'b100_00???10, 
+            10'b101_0????10, 
+            10'b110_?????10: begin grant_onehot_r = 7'b0000010; grant_index_r = LOG_NUM_REQS'(1); end
+            10'b000_????10?, 
+            10'b001_????1??, 
+            10'b010_0000100, 
+            10'b011_000?100,
+            10'b100_00??100, 
+            10'b101_0???100, 
+            10'b110_????100: begin grant_onehot_r = 7'b0000100; grant_index_r = LOG_NUM_REQS'(2); end
+            10'b000_???100?, 
+            10'b001_???10??, 
+            10'b010_???1???,
+            10'b011_0001000, 
+            10'b100_00?1000, 
+            10'b101_0??1000, 
+            10'b110_???1000: begin grant_onehot_r = 7'b0001000; grant_index_r = LOG_NUM_REQS'(3); end
+            10'b000_??1000?, 
+            10'b001_??100??, 
+            10'b010_??10???,
+            10'b011_??1????, 
+            10'b100_0010000, 
+            10'b101_0?10000, 
+            10'b110_??10000: begin grant_onehot_r = 7'b0010000; grant_index_r = LOG_NUM_REQS'(4); end
+            10'b000_?10000?, 
+            10'b001_?1000??, 
+            10'b010_?100???,
+            10'b011_?10????, 
+            10'b100_?1?????, 
+            10'b101_0100000, 
+            10'b110_?100000: begin grant_onehot_r = 7'b0100000; grant_index_r = LOG_NUM_REQS'(5); end
+            default:         begin grant_onehot_r = 7'b1000000; grant_index_r = LOG_NUM_REQS'(6); end
             endcase
         end
 

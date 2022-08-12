@@ -104,7 +104,7 @@ module VX_cache_cluster #(
         .TAG_WIDTH (ARB_TAG_WIDTH)
     ) arb_core_rsp_if[NUM_CACHES]();
 
-    `RESET_RELAY (cache_arb_reset, reset);
+    `RESET_RELAY_EX (cache_arb_reset, reset, (NUM_INPUTS != NUM_CACHES));
 
     VX_cache_arb #(
         .NUM_INPUTS   (NUM_INPUTS),
@@ -183,7 +183,7 @@ module VX_cache_cluster #(
         );
     end
 
-    `RESET_RELAY (mem_arb_reset, reset);
+    `RESET_RELAY_EX (mem_arb_reset, reset, (NUM_CACHES > 1));
 
     VX_mem_arb #(
         .NUM_REQS     (NUM_CACHES),

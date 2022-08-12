@@ -187,7 +187,9 @@ module VX_warp_sched #(
     // split/join stack management    
 
     wire [(32+`NUM_THREADS)-1:0] ipdom_data [`NUM_WARPS-1:0]; 
-    wire ipdom_index [`NUM_WARPS-1:0];   
+    wire ipdom_index [`NUM_WARPS-1:0];
+
+    `RESET_RELAY (ipdom_stack_reset, reset);
     
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin
         wire push = warp_ctl_if.valid 
@@ -207,7 +209,7 @@ module VX_warp_sched #(
             .DEPTH (2 ** (`NT_BITS+1))
         ) ipdom_stack (
             .clk   (clk),
-            .reset (reset),
+            .reset (ipdom_stack_reset),
             .push  (push),
             .pop   (pop),
             .pair  (warp_ctl_if.split.diverged),
@@ -268,7 +270,7 @@ module VX_warp_sched #(
         .ready_out (ifetch_req_if.ready)
     );
 
-    assign busy = (active_warps != 0);
+    `BUFFER_BUSY ((active_warps != 0), 1);
           
     reg [31:0] timeout_ctr;
     reg timeout_enable;
