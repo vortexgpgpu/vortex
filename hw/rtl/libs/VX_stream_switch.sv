@@ -62,15 +62,17 @@ module VX_stream_switch #(
             end
         end
 
+        `RESET_RELAY_EX (out_buf_reset, reset, BUFFERED != 0 && (NUM_OUTPUTS * NUM_LANES) > MAX_FANOUT);
+
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
             for (genvar j = 0; j < NUM_LANES; ++j) begin
                 VX_skid_buffer #(
                     .DATAW    (DATAW),
                     .PASSTHRU (BUFFERED == 0),
                     .OUT_REG  (BUFFERED > 1)
-                ) out_buffer (
+                ) out_buf (
                     .clk       (clk),
-                    .reset     (reset),
+                    .reset     (out_buf_reset),
                     .valid_in  (valid_out_r[i][j]),                    
                     .ready_in  (ready_out_r[i][j]),
                     .data_in   (data_out_r[i][j]),
@@ -93,6 +95,8 @@ module VX_stream_switch #(
             assign ready_in[i] = ready_out_r[i][sel_in[i]];
         end
 
+        `RESET_RELAY_EX (out_buf_reset, reset, BUFFERED != 0 && (NUM_OUTPUTS * NUM_LANES) > MAX_FANOUT);
+
         for (genvar i = 0; i < NUM_INPUTS; ++i) begin
             for (genvar j = 0; j < NUM_REQS; ++j) begin
                 localparam ii = i * NUM_REQS + j;
@@ -102,9 +106,9 @@ module VX_stream_switch #(
                             .DATAW    (DATAW),
                             .PASSTHRU (BUFFERED == 0),
                             .OUT_REG  (BUFFERED > 1)
-                        ) out_buffer (
+                        ) out_buf (
                             .clk       (clk),
-                            .reset     (reset),
+                            .reset     (out_buf_reset),
                             .valid_in  (valid_out_r[i][j][k]),
                             .ready_in  (ready_out_r[i][j][k]),
                             .data_in   (data_in[i][k]),                                                     
@@ -124,15 +128,17 @@ module VX_stream_switch #(
     
         `UNUSED_VAR (sel_in)
 
+        `RESET_RELAY_EX (out_buf_reset, reset, BUFFERED != 0 && (NUM_OUTPUTS * NUM_LANES) > MAX_FANOUT);
+
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
             for (genvar j = 0; j < NUM_LANES; ++j) begin
                 VX_skid_buffer #(
                     .DATAW    (DATAW),
                     .PASSTHRU (BUFFERED == 0),
                     .OUT_REG  (BUFFERED > 1)
-                ) out_buffer (
+                ) out_buf (
                     .clk       (clk),
-                    .reset     (reset),
+                    .reset     (out_buf_reset),
                     .valid_in  (valid_in[i][j]),
                     .ready_in  (ready_in[i][j]),
                     .data_in   (data_in[i][j]),

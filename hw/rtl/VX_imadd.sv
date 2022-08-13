@@ -30,13 +30,14 @@ module VX_imadd #(
     localparam PROD_WIDTH = DATA_WIDTH + MAX_SHIFT;
 
     wire                                 valid_in_s;
+    wire                                 ready_in_s;
     wire [SHIFT_WIDTH-1:0]               shift_in_s;
     wire [TAG_WIDTH-1:0]                 tag_in_s;
     wire [NUM_LANES-1:0][DATA_WIDTH-1:0] data_in3_s;    
     wire [NUM_LANES-1:0][PROD_WIDTH-1:0] mul_result;
     wire [NUM_LANES-1:0][DATA_WIDTH-1:0] result;
 
-    wire stall_in, stall_out;    
+    wire stall_in;    
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         VX_multiplier #(
@@ -54,7 +55,7 @@ module VX_imadd #(
         );
     end
 
-    assign stall_in = valid_in_s && stall_out;
+    assign stall_in = valid_in_s && ~ready_in_s;
     
     VX_shift_register #(
         .DATAW  (1 + SHIFT_WIDTH + NUM_LANES * DATA_WIDTH + TAG_WIDTH),
@@ -80,18 +81,17 @@ module VX_imadd #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    assign stall_out = valid_out && ~ready_out;
-
-    VX_pipe_register #(
-        .DATAW  (1 + NUM_LANES * DATA_WIDTH + TAG_WIDTH),
-        .DEPTH  (2),
-        .RESETW (1)
-    ) pipe_reg (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (~stall_out),
-        .data_in  ({valid_in_s, result,   tag_in_s}),
-        .data_out ({valid_out,  data_out, tag_out})
+    VX_skid_buffer #(
+        .DATAW (NUM_LANES * DATA_WIDTH + TAG_WIDTH)
+    ) rsp_sbuf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (valid_in_s),
+        .ready_in  (ready_in_s),
+        .data_in   ({result,   tag_in_s}),
+        .data_out  ({data_out, tag_out}),
+        .valid_out (valid_out),
+        .ready_out (ready_out)
     );
 
     // can accept new request?

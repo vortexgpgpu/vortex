@@ -108,8 +108,7 @@ module VX_shared_mem #(
     wire [NUM_BANKS-1:0][`UP(REQ_SEL_BITS)-1:0] per_bank_req_idx;
     wire [NUM_BANKS-1:0]                    per_bank_req_ready;
 
-    `RESET_RELAY (req_sbuf0_reset, reset);
-    `RESET_RELAY (req_sbuf1_reset, reset);
+    `RESET_RELAY (req_sbuf_reset, reset);
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         VX_skid_buffer #(
@@ -117,7 +116,7 @@ module VX_shared_mem #(
             .OUT_REG (1) // output should be registered for the data_store addressing
         ) req_sbuf0 (
             .clk       (clk),
-            .reset     (req_sbuf0_reset),
+            .reset     (req_sbuf_reset),
             .valid_in  (per_bank_req_valid_unqual[i]),
             .ready_in  (per_bank_req_ready_unqual[i]),
             .data_in   ({per_bank_req_rw_unqual[i], per_bank_req_addr_unqual[i], per_bank_req_idx_unqual[i]}),
@@ -130,7 +129,7 @@ module VX_shared_mem #(
             .DATAW (WORD_SIZE + WORD_WIDTH + TAG_WIDTH)
         ) req_sbuf1 (
             .clk      (clk),
-            .reset    (req_sbuf1_reset),
+            .reset    (req_sbuf_reset),
             .valid_in (per_bank_req_valid_unqual[i]),
             `UNUSED_PIN (ready_in),            
             .data_in  ({per_bank_req_byteen_unqual[i], per_bank_req_data_unqual[i], per_bank_req_tag_unqual[i]}),

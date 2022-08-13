@@ -243,6 +243,8 @@ module VX_raster_mem #(
 
     // schedule memory request
 
+    `RESET_RELAY (mem_scheduler_reset, reset);
+
     VX_mem_scheduler #(
         .INSTANCE_ID  ($sformatf("%s-memsched", INSTANCE_ID)),
         .NUM_REQS     (NUM_REQS), 
@@ -255,7 +257,7 @@ module VX_raster_mem #(
         .MEM_OUT_REG  (3)
     ) mem_scheduler (
         .clk            (clk),
-        .reset          (reset),
+        .reset          (mem_scheduler_reset),
 
         // Input request
         .req_valid      (mem_req_valid_qual),

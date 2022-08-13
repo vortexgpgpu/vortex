@@ -34,6 +34,8 @@ module VX_stream_arb #(
                 localparam BATCH_END   = `MIN(BATCH_BEGIN + NUM_REQS, NUM_INPUTS);
                 localparam BATCH_SIZE  = BATCH_END - BATCH_BEGIN;
 
+                `RESET_RELAY_EX (slice_reset, reset, BUFFERED != 0);
+
                 VX_stream_arb #(
                     .NUM_INPUTS  (BATCH_SIZE),
                     .NUM_OUTPUTS (1),   
@@ -45,7 +47,7 @@ module VX_stream_arb #(
                     .BUFFERED    (BUFFERED)
                 ) arb_slice (
                     .clk       (clk),
-                    .reset     (reset),
+                    .reset     (slice_reset),
                     .valid_in  (valid_in[BATCH_END-1: BATCH_BEGIN]),
                     .ready_in  (ready_in[BATCH_END-1: BATCH_BEGIN]),
                     .data_in   (data_in[BATCH_END-1: BATCH_BEGIN]),
@@ -69,6 +71,8 @@ module VX_stream_arb #(
                 localparam BATCH_END   = `MIN(BATCH_BEGIN + MAX_FANOUT, NUM_INPUTS);
                 localparam BATCH_SIZE  = BATCH_END - BATCH_BEGIN;
 
+                `RESET_RELAY_EX (slice_reset, reset, BUFFERED != 0);
+
                 VX_stream_arb #(
                     .NUM_INPUTS  (BATCH_SIZE),
                     .NUM_OUTPUTS (1),   
@@ -80,7 +84,7 @@ module VX_stream_arb #(
                     .BUFFERED    (BUFFERED)
                 ) arb_slice (
                     .clk       (clk),
-                    .reset     (reset),
+                    .reset     (slice_reset),
                     .valid_in  (valid_in[BATCH_END-1: BATCH_BEGIN]),
                     .data_in   (data_in[BATCH_END-1: BATCH_BEGIN]),
                     .ready_in  (ready_in[BATCH_END-1: BATCH_BEGIN]),   
@@ -158,14 +162,16 @@ module VX_stream_arb #(
                 assign ready_in[i] = ready_out_r & {NUM_LANES{arb_onehot[i]}};
             end
 
+            `RESET_RELAY_EX (out_buf_reset, reset, BUFFERED != 0 && NUM_LANES > MAX_FANOUT);
+
             for (genvar i = 0; i < NUM_LANES; ++i) begin
                 VX_skid_buffer #(
                     .DATAW    (DATAW),
                     .PASSTHRU (BUFFERED == 0),
                     .OUT_REG  (BUFFERED > 1)
-                ) out_buffer (
+                ) out_buf (
                     .clk       (clk),
-                    .reset     (reset),
+                    .reset     (out_buf_reset),
                     .valid_in  (valid_out_r[i]),
                     .data_in   (data_out_r[i]),
                     .ready_in  (ready_out_r[i]),
@@ -188,6 +194,8 @@ module VX_stream_arb #(
                 localparam BATCH_END   = `MIN(BATCH_BEGIN + NUM_REQS, NUM_OUTPUTS);
                 localparam BATCH_SIZE  = BATCH_END - BATCH_BEGIN;
 
+                `RESET_RELAY_EX (slice_reset, reset, BUFFERED != 0);
+
                 VX_stream_arb #(
                     .NUM_INPUTS  (1),
                     .NUM_OUTPUTS (BATCH_SIZE),
@@ -199,7 +207,7 @@ module VX_stream_arb #(
                     .BUFFERED    (BUFFERED)
                 ) arb_slice (
                     .clk       (clk),
-                    .reset     (reset),              
+                    .reset     (slice_reset),              
                     .valid_in  (valid_in[i]),                    
                     .ready_in  (ready_in[i]),
                     .data_in   (data_in[i]),
@@ -243,6 +251,8 @@ module VX_stream_arb #(
                 localparam BATCH_END   = `MIN(BATCH_BEGIN + MAX_FANOUT, NUM_OUTPUTS);
                 localparam BATCH_SIZE  = BATCH_END - BATCH_BEGIN;
 
+                `RESET_RELAY_EX (slice_reset, reset, BUFFERED != 0);
+
                 VX_stream_arb #(
                     .NUM_INPUTS  (1),
                     .NUM_OUTPUTS (BATCH_SIZE),   
@@ -254,7 +264,7 @@ module VX_stream_arb #(
                     .BUFFERED    (BUFFERED)
                 ) arb_slice (
                     .clk       (clk),
-                    .reset     (reset),
+                    .reset     (slice_reset),
                     .valid_in  (valid_tmp[i]),                    
                     .ready_in  (ready_tmp[i]),
                     .data_in   (data_tmp[i]),
@@ -305,15 +315,17 @@ module VX_stream_arb #(
                 assign arb_unlock = valid_in & ready_in;
             end
 
+            `RESET_RELAY_EX (out_buf_reset, reset, BUFFERED != 0 && (NUM_REQS * NUM_LANES) > MAX_FANOUT);
+
             for (genvar i = 0; i < NUM_REQS; ++i) begin
                 for (genvar j = 0; j < NUM_LANES; ++j) begin
                     VX_skid_buffer #(
                         .DATAW    (DATAW),
                         .PASSTHRU (BUFFERED == 0),
                         .OUT_REG  (BUFFERED > 1)
-                    ) out_buffer (
+                    ) out_buf (
                         .clk       (clk),
-                        .reset     (reset),
+                        .reset     (out_buf_reset),
                         .valid_in  (valid_in[0][j] && arb_onehot[i]),
                         .ready_in  (ready_out_r[i][j]),
                         .data_in   (data_in[0][j]),                      
@@ -327,15 +339,17 @@ module VX_stream_arb #(
     
     end else begin
 
+        `RESET_RELAY_EX (out_buf_reset, reset, BUFFERED != 0 && (NUM_OUTPUTS * NUM_LANES) > MAX_FANOUT);
+
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
             for (genvar j = 0; j < NUM_LANES; ++j) begin
                 VX_skid_buffer #(
                     .DATAW    (DATAW),
                     .PASSTHRU (BUFFERED == 0),
                     .OUT_REG  (BUFFERED > 1)
-                ) out_buffer (
+                ) out_buf (
                     .clk       (clk),
-                    .reset     (reset),
+                    .reset     (out_buf_reset),
                     .valid_in  (valid_in[i][j]),
                     .ready_in  (ready_in[i][j]),
                     .data_in   (data_in[i][j]), 

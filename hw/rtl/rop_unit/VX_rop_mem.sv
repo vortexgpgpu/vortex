@@ -180,6 +180,8 @@ module VX_rop_mem #(
 
     // schedule memory request
 
+    `RESET_RELAY (mem_scheduler_reset, reset);
+
     VX_mem_scheduler #(
         .INSTANCE_ID  ($sformatf("%s-memsched", INSTANCE_ID)),
         .NUM_REQS     (NUM_REQS),
@@ -192,7 +194,7 @@ module VX_rop_mem #(
         .CORE_OUT_REG (3)
     ) mem_scheduler (
         .clk            (clk),
-        .reset          (reset),
+        .reset          (mem_scheduler_reset),
 
         .req_valid      (mreq_valid_r),
         .req_rw         (mreq_rw_r),

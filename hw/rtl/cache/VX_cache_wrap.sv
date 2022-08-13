@@ -196,6 +196,9 @@ module VX_cache_wrap #(
     wire                            mem_rsp_ready_b;
 
     if (NC_BYPASS) begin
+       
+        `RESET_RELAY (nc_bypass_reset, reset);
+
         VX_nc_bypass #(
             .NUM_REQS          (NUM_REQS),
             .NC_TAG_BIT        (NC_TAG_BIT),
@@ -215,7 +218,7 @@ module VX_cache_wrap #(
             .UUID_WIDTH        (UUID_WIDTH)
         ) nc_bypass (
             .clk                (clk),
-            .reset              (reset),
+            .reset              (nc_bypass_reset),
 
             // Core request in
             .core_req_valid_in  (core_req_valid),
