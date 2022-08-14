@@ -367,6 +367,8 @@ module VX_raster_unit_top #(
     output wire [RCACHE_NUM_REQS-1:0]       cache_rsp_ready
 );
 
+    VX_raster_perf_if perf_raster_if();
+
     VX_dcr_write_if dcr_write_if();
 
     assign dcr_write_if.valid = dcr_write_valid;
@@ -420,6 +422,9 @@ module VX_raster_unit_top #(
     ) raster_unit (
         .clk           (clk),
         .reset         (reset),
+    `ifdef PERF_ENABLE
+        .perf_raster_if(perf_raster_if),
+    `endif 
         .dcr_write_if  (dcr_write_if),
         .raster_req_if (raster_req_if),
         .cache_req_if  (cache_req_if),

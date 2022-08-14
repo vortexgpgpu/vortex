@@ -413,6 +413,8 @@ module VX_rop_unit_top #(
     input wire  [OCACHE_NUM_REQS-1:0][OCACHE_TAG_WIDTH-1:0] cache_rsp_tag,
     output wire [OCACHE_NUM_REQS-1:0]       cache_rsp_ready
 );
+
+    VX_rop_perf_if perf_rop_if();
     
     VX_dcr_write_if dcr_write_if();
 
@@ -465,6 +467,9 @@ module VX_rop_unit_top #(
     ) rop_unit (
         .clk           (clk),
         .reset         (reset),
+    `ifdef PERF_ENABLE
+        .perf_rop_if   (perf_rop_if),
+    `endif 
         .dcr_write_if  (dcr_write_if),
         .rop_req_if    (rop_req_if),
         .cache_req_if  (cache_req_if),

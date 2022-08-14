@@ -314,6 +314,8 @@ module VX_tex_unit_top #(
     output wire [TCACHE_NUM_REQS-1:0]       cache_rsp_ready
 );
     
+    VX_tex_perf_if perf_tex_if();
+
     VX_dcr_write_if dcr_write_if();
 
     assign dcr_write_if.valid = dcr_write_valid;
@@ -375,6 +377,10 @@ module VX_tex_unit_top #(
     ) tex_unit (
         .clk          (clk),
         .reset        (reset),
+    `ifdef PERF_ENABLE
+        .perf_tex_if  (perf_tex_if),
+    `endif 
+        .dcr_write_if (tex_dcr_write_if),
         .dcr_write_if (dcr_write_if),
         .tex_req_if   (tex_req_if),
         .tex_rsp_if   (tex_rsp_if),
