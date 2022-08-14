@@ -230,7 +230,7 @@ module VX_tex_unit #(
         end
     end
 
-    wire perf_stall_cycle = rop_req_if.valid & ~rop_req_if.ready;
+    wire perf_stall_cycle = tex_req_if.valid & ~tex_req_if.ready;
 
     reg [`PERF_CTR_BITS-1:0] perf_mem_reads;
     reg [`PERF_CTR_BITS-1:0] perf_mem_latency;
@@ -250,7 +250,7 @@ module VX_tex_unit #(
 
     assign perf_tex_if.mem_reads    = perf_mem_reads;
     assign perf_tex_if.mem_latency  = perf_mem_latency;
-    assign perf_rop_if.stall_cycles = perf_stall_cycles;
+    assign perf_tex_if.stall_cycles = perf_stall_cycles;
 `endif  
 
 `ifdef DBG_TRACE_TEX
