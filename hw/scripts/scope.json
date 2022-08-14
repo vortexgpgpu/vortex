@@ -16,8 +16,7 @@
         "../rtl/VX_gpu_types.vh",
         "../rtl/fpu_unit/VX_fpu_types.vh",
         "../rtl/fpu_unit/VX_fpu_define.vh",
-        "../rtl/cache/VX_cache_define.vh",
-        "../rtl/cache/VX_cache_types.vh"
+        "../rtl/cache/VX_cache_define.vh"
     ],
     "modules": {
         "afu": {            
