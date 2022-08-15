@@ -415,13 +415,15 @@ module VX_bank #(
     assign crsq_data  = rdata_st1;
     assign crsq_tag   = tag_st1;
 
+    `RESET_RELAY (reset2, reset);
+
     VX_elastic_buffer #(
         .DATAW   (NUM_PORTS * (TAG_WIDTH + 1 + `WORD_WIDTH + `UP(`REQ_SEL_BITS))),
         .SIZE    (CRSQ_SIZE),
         .OUT_REG (CORE_OUT_REG)
     ) core_rsp_queue (
         .clk       (clk),
-        .reset     (reset),
+        .reset     (reset2),
         .valid_in  (crsq_valid),
         .ready_in  (crsq_ready),
         .data_in   ({crsq_tag, crsq_pmask, crsq_data, crsq_idx}),
@@ -461,7 +463,7 @@ module VX_bank #(
         .OUT_REG  (MEM_OUT_REG)
     ) mem_req_queue (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (reset2),
         .push       (mreq_push),
         .pop        (mreq_pop),
         .data_in    ({mreq_rw,    mreq_addr,    mreq_id,    mreq_pmask,    mreq_byteen,    mreq_wsel,    mreq_data}),

@@ -172,6 +172,8 @@ module VX_lsu_unit #(
         .TAG_WIDTH (`UP(`UUID_BITS) + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + LSUQ_TAG_BITS)
     ) cache_rsp_tmp_if();
 
+    `RESET_RELAY (mem_scheduler_reset, reset);
+
     VX_mem_scheduler #(
         .INSTANCE_ID ($sformatf("core%0d-lsu-memsched", CORE_ID)),
         .NUM_REQS    (LSU_MEM_REQS), 
@@ -185,7 +187,7 @@ module VX_lsu_unit #(
         .MEM_OUT_REG (3)
     ) mem_scheduler (
         .clk            (clk),
-        .reset          (reset),
+        .reset          (mem_scheduler_reset),
 
         // Input request
         .req_valid      (mem_req_valid),
