@@ -162,31 +162,32 @@ module VX_bank #(
     wire                            mshr_pending_st0, mshr_pending_st1;
 
     // prevent read-during-write hazard when accessing tags/data block RAMs
-    wire rdw_fill_hazard  = valid_st0 && is_fill_st0;
-    wire rdw_write_hazard = valid_st0 && is_write_st0 && ~creq_rw;
-    
-    // determine which queue to pop next in priority order 
-    wire mshr_grant  = !flush_enable;
+    wire rdw_fill_hazard_st0  = valid_st0 && is_fill_st0;
+    reg rdw_hazard_st1;
+
+    wire pipe_stall = crsq_stall || rdw_hazard_st1;
+
+    // determine which input to select in priority order 
+    wire mshr_grant  = ~flush_enable;
     wire mshr_enable = mshr_grant && mshr_valid; 
 
-    wire mrsq_grant  = !flush_enable && !mshr_enable;
+    wire mrsq_grant  = ~flush_enable && ~mshr_enable;
     wire mrsq_enable = mrsq_grant && mem_rsp_valid;
-    wire creq_grant  = !flush_enable && !mshr_enable && !mrsq_enable;                    
 
+    wire creq_grant  = ~flush_enable && ~mshr_enable && ~mrsq_enable;
     wire creq_enable = creq_grant && creq_valid;
 
     assign mshr_ready = mshr_grant
-                     && !rdw_fill_hazard    // prevent read-during-write hazard
-                     && !crsq_stall;        // ensure core_rsp_queue not full                     
+                     && ~rdw_fill_hazard_st0 // prevent read-during-write hazard
+                     && ~crsq_stall;        // ensure core_rsp_queue not full                     
 
     assign mem_rsp_ready = mrsq_grant
-                        && !crsq_stall;     // ensure core_rsp_queue not full
+                        && ~pipe_stall;
     
     assign creq_ready = creq_grant
-                     && !rdw_write_hazard   // prevent read-during-write hazard
-                     && !mreq_alm_full      // ensure mem_req_queue not full
-                     && !mshr_alm_full      // ensure mshr not full
-                     && !crsq_stall;        // ensure core_rsp_queue not full
+                     && ~mreq_alm_full      // ensure mem_req_queue not full
+                     && ~mshr_alm_full      // ensure mshr not full
+                     && ~pipe_stall;
 
     wire flush_fire   = flush_enable;
     wire mshr_fire    = mshr_valid && mshr_ready;
@@ -201,7 +202,7 @@ module VX_bank #(
     assign wdata_sel[(NUM_PORTS * `WORD_WIDTH)-1:0] = (mem_rsp_valid || !WRITE_ENABLE) ? mem_rsp_data[(NUM_PORTS * `WORD_WIDTH)-1:0] : creq_data;
     for (genvar i = NUM_PORTS * `WORD_WIDTH; i < `LINE_WIDTH; ++i) begin
         assign wdata_sel[i] = mem_rsp_data[i];
-    end
+    end    
 
     VX_pipe_register #(
         .DATAW  (1 + 1 + 1 + 1 + 1 + 1 + `LINE_ADDR_WIDTH + `LINE_WIDTH + NUM_PORTS * (WORD_SEL_BITS + WORD_SIZE + `UP(`REQ_SEL_BITS) + 1 + TAG_WIDTH) + MSHR_ADDR_WIDTH),
@@ -209,7 +210,7 @@ module VX_bank #(
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),
-        .enable   (!crsq_stall),
+        .enable   (~pipe_stall),
         .data_in  ({
             flush_fire || mshr_fire || mem_rsp_fire || creq_fire,
             flush_enable,
@@ -256,7 +257,7 @@ module VX_bank #(
 
         .req_uuid   (req_uuid_st0),
         
-        .stall      (crsq_stall),
+        .stall      (pipe_stall),
 
         // read/Fill
         .lookup     (do_lookup_st0),
@@ -281,10 +282,17 @@ module VX_bank #(
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
-        .enable   (!crsq_stall),
+        .enable   (~pipe_stall),
         .data_in  ({valid_st0, is_mshr_st0, is_fill_st0, is_read_st0, is_write_st0, miss_st0, way_sel_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_idx_st0, pmask_st0, tag_st0, mshr_id_a_st0, mshr_pending_st0}),
         .data_out ({valid_st1, is_mshr_st1, is_fill_st1, is_read_st1, is_write_st1, miss_st1, way_sel_st1, addr_st1, wdata_st1, wsel_st1, byteen_st1, req_idx_st1, pmask_st1, tag_st1, mshr_id_st1,   mshr_pending_st1})
     ); 
+
+    always @(posedge clk) begin
+        if (~crsq_stall) begin
+            rdw_hazard_st1 <= valid_st0 && is_read_st0 && valid_st1 && is_write_st1 && ~miss_st1 && (addr_st0 == addr_st1) 
+                           && ~rdw_hazard_st1;
+        end
+    end
 
     `ASSIGN_REQ_UUID (req_uuid_st1, tag_st1[0])
 
@@ -314,11 +322,11 @@ module VX_bank #(
 
         .req_uuid   (req_uuid_st1),
 
-        .stall      (crsq_stall),
+        .stall      (pipe_stall),
 
-        .read       ((do_read_st1 && !miss_st1) || do_mshr_st1),      
+        .read       ((do_read_st1 && ~miss_st1) || do_mshr_st1),      
         .fill       (do_fill_st1),        
-        .write      (do_write_st1 && !miss_st1),
+        .write      (do_write_st1 && ~miss_st1),
         .way_sel    (way_sel_st1),
         .addr       (addr_st1),
         .wsel       (wsel_st1),
@@ -329,10 +337,10 @@ module VX_bank #(
         .read_data  (rdata_st1)
     );
     
-    wire mshr_allocate = do_read_st0 && !crsq_stall;
-    wire mshr_replay   = do_fill_st0 && !crsq_stall;
+    wire mshr_allocate = do_read_st0 && ~crsq_stall;
+    wire mshr_replay   = do_fill_st0 && ~crsq_stall;
     wire mshr_lookup   = mshr_allocate;
-    wire mshr_release  = do_read_st1 && !miss_st1 && !crsq_stall;
+    wire mshr_release  = do_read_st1 && ~miss_st1 && ~pipe_stall;
 
     VX_pending_size #( 
         .SIZE (MSHR_SIZE)
@@ -405,10 +413,10 @@ module VX_bank #(
     wire [NUM_PORTS-1:0][`UP(`REQ_SEL_BITS)-1:0] crsq_idx;
     wire [NUM_PORTS-1:0][TAG_WIDTH-1:0] crsq_tag;
     
-    assign crsq_valid = (do_read_st1 && !miss_st1) 
+    assign crsq_valid = (do_read_st1 && ~miss_st1 && ~rdw_hazard_st1) 
                      || do_mshr_st1;
 
-    assign crsq_stall = crsq_valid && !crsq_ready;
+    assign crsq_stall = crsq_valid && ~crsq_ready;
 
     assign crsq_pmask = pmask_st1;
     assign crsq_idx   = req_idx_st1;
@@ -443,7 +451,7 @@ module VX_bank #(
     wire [MSHR_ADDR_WIDTH-1:0] mreq_id;
     wire mreq_rw;
 
-    assign mreq_push = (do_read_st1 && miss_st1 && !mshr_pending_st1)
+    assign mreq_push = (do_read_st1 && miss_st1 && ~mshr_pending_st1)
                      || do_write_st1;
 
     assign mreq_pop = mem_req_valid && mem_req_ready;
@@ -475,7 +483,7 @@ module VX_bank #(
         `UNUSED_PIN (size)
     );
 
-    assign mem_req_valid = !mreq_empty;
+    assign mem_req_valid = ~mreq_empty;
 
 ///////////////////////////////////////////////////////////////////////////////
 

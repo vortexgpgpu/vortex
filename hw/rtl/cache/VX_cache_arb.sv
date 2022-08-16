@@ -77,7 +77,7 @@ module VX_cache_arb #(
         .DATAW       (REQ_DATAW),
         .ARBITER     (ARBITER),
         .BUFFERED    (BUFFERED_REQ),
-        .MAX_FANOUT  (`MAX(4 / NUM_LANES, 4))
+        .MAX_FANOUT  (4)
     ) req_arb (
         .clk       (clk),
         .reset     (reset),
