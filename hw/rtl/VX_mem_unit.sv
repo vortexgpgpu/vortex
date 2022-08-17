@@ -166,18 +166,6 @@ module VX_mem_unit # (
 
 `ifdef SM_ENABLE
 
-    VX_cache_req_if #(
-        .NUM_REQS  (DCACHE_NUM_REQS), 
-        .WORD_SIZE (DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-    ) per_core_smem_req_if [`NUM_SOCKETS]();
-
-    VX_cache_rsp_if #(
-        .NUM_REQS  (DCACHE_NUM_REQS), 
-        .WORD_SIZE (DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-    ) per_core_smem_rsp_if [`NUM_SOCKETS]();
-
     for (genvar i = 0; i < `NUM_SOCKETS; ++i) begin
         VX_cache_req_if #(
             .NUM_REQS  (DCACHE_NUM_REQS), 
@@ -213,99 +201,66 @@ module VX_mem_unit # (
 
         `ASSIGN_VX_CACHE_REQ_IF (dcache_nosm_req_if[i], dcache_nosm_switch_req_if[0]);
         `ASSIGN_VX_CACHE_RSP_IF (dcache_nosm_switch_rsp_if[0], dcache_nosm_rsp_if[i]);
-        `ASSIGN_VX_CACHE_REQ_IF (per_core_smem_req_if[i], dcache_nosm_switch_req_if[1]);
-        `ASSIGN_VX_CACHE_RSP_IF (dcache_nosm_switch_rsp_if[1], per_core_smem_rsp_if[i]);
-    end
 
-    localparam DCACHE_SM_TAG_WIDTH = DCACHE_NOSM_TAG_WIDTH + `ARB_SEL_BITS(`NUM_SOCKETS, 1);
+        // shared memory address mapping:
+        // [core_idx][warp_idx][word_idx][thread_idx] <= [core_idx][warp_idx][thread_idx][bank_offset..word_idx]
+        localparam SOCKET_BITS      = `CLOG2(`SOCKET_SIZE);
+        localparam SMEM_SIZE        = `SOCKET_SIZE * `NUM_WARPS * `NUM_THREADS * `SMEM_LOCAL_SIZE;
+        localparam BANK_ADDR_OFFSET = `CLOG2(`STACK_SIZE / DCACHE_WORD_SIZE);
+        localparam WORD_SEL_BITS    = `CLOG2(`SMEM_LOCAL_SIZE / DCACHE_WORD_SIZE);
+        localparam SMEM_ADDR_WIDTH  = SOCKET_BITS + `NW_BITS + `NT_BITS + WORD_SEL_BITS;
 
-    VX_cache_req_if #(
-        .NUM_REQS  (DCACHE_NUM_REQS), 
-        .WORD_SIZE (DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (DCACHE_SM_TAG_WIDTH)
-    ) smem_req_if[1]();
+        wire [DCACHE_NUM_REQS-1:0][SMEM_ADDR_WIDTH-1:0] smem_req_addr;
 
-    VX_cache_rsp_if #(
-        .NUM_REQS  (DCACHE_NUM_REQS), 
-        .WORD_SIZE (DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (DCACHE_SM_TAG_WIDTH)
-    ) smem_rsp_if[1](); 
-
-    `RESET_RELAY (smem_arb_reset, reset);
-
-    VX_cache_arb #(
-        .NUM_INPUTS   (`NUM_SOCKETS),
-        .NUM_LANES    (DCACHE_NUM_REQS),
-        .DATA_SIZE    (DCACHE_WORD_SIZE),
-        .TAG_WIDTH    (DCACHE_NOSM_TAG_WIDTH),
-        .TAG_SEL_IDX  (0),
-        .ARBITER      ("R"),
-        .BUFFERED_REQ ((`NUM_SOCKETS != 1) ? 2 : 0),
-        .BUFFERED_RSP ((`NUM_SOCKETS != 1) ? 1 : 0)        
-    ) smem_arb (
-        .clk        (clk),
-        .reset      (smem_arb_reset),
-        .req_in_if  (per_core_smem_req_if),
-        .rsp_in_if  (per_core_smem_rsp_if),
-        .req_out_if (smem_req_if),
-        .rsp_out_if (smem_rsp_if)
-    );
-
-    // shared memory address mapping:  
-    // [core_idx][warp_idx][word_idx][thread_idx] <= [core_idx][warp_idx][thread_idx][bank_offset..word_idx]
-    localparam BANK_ADDR_OFFSET = `CLOG2(`STACK_SIZE / DCACHE_WORD_SIZE);
-    localparam WORD_SEL_BITS    = `CLOG2(`SMEM_LOCAL_SIZE / DCACHE_WORD_SIZE);
-    localparam SMEM_ADDR_WIDTH  = (`NC_BITS + `NW_BITS + `NT_BITS + WORD_SEL_BITS);
-
-    wire [DCACHE_NUM_REQS-1:0][SMEM_ADDR_WIDTH-1:0] smem_req_addr;        
-    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
-        if (`NT_BITS != 0) begin
-            assign smem_req_addr[i][0 +: `NT_BITS] = smem_req_if[0].addr[i][BANK_ADDR_OFFSET +: `NT_BITS];
-        end        
-        assign smem_req_addr[i][`NT_BITS +: WORD_SEL_BITS] = smem_req_if[0].addr[i][0 +: WORD_SEL_BITS];
-        if (`NW_BITS != 0) begin
-            assign smem_req_addr[i][(`NT_BITS + WORD_SEL_BITS) +: `NW_BITS] = smem_req_if[0].addr[i][(BANK_ADDR_OFFSET + `NT_BITS) +: `NW_BITS];
+        for (genvar j = 0; j < DCACHE_NUM_REQS; ++j) begin
+            if (`NT_BITS != 0) begin
+                assign smem_req_addr[j][0 +: `NT_BITS] = dcache_nosm_switch_req_if[1].addr[j][BANK_ADDR_OFFSET +: `NT_BITS];
+            end    
+            assign smem_req_addr[j][`NT_BITS +: WORD_SEL_BITS] = dcache_nosm_switch_req_if[1].addr[j][0 +: WORD_SEL_BITS];
+            if (`NW_BITS != 0) begin
+                assign smem_req_addr[j][(`NT_BITS + WORD_SEL_BITS) +: `NW_BITS] = dcache_nosm_switch_req_if[1].addr[j][(BANK_ADDR_OFFSET + `NT_BITS) +: `NW_BITS];
+            end
+            if (SOCKET_BITS != 0) begin
+                assign smem_req_addr[j][(`NT_BITS + WORD_SEL_BITS + `NW_BITS) +: SOCKET_BITS] = dcache_nosm_switch_req_if[1].addr[j][(BANK_ADDR_OFFSET + `NT_BITS + `NW_BITS) +: SOCKET_BITS];
+            end
         end
-        if (`NC_BITS != 0) begin
-            assign smem_req_addr[i][(`NT_BITS + WORD_SEL_BITS + `NW_BITS) +: `NC_BITS] = smem_req_if[0].addr[i][(BANK_ADDR_OFFSET + `NT_BITS + `NW_BITS) +: `NC_BITS];
-        end
-    end
 
-    `RESET_RELAY (smem_reset, reset);
-    
-    VX_shared_mem #(
-        .INSTANCE_ID($sformatf("cluster%0d-smem", CLUSTER_ID)),
-        .SIZE       (`SMEM_SIZE),
-        .NUM_REQS   (DCACHE_NUM_REQS),
-        .NUM_BANKS  (`SMEM_NUM_BANKS),
-        .WORD_SIZE  (DCACHE_WORD_SIZE),
-        .ADDR_WIDTH (SMEM_ADDR_WIDTH),
-        .UUID_WIDTH (`UUID_BITS), 
-        .TAG_WIDTH  (DCACHE_SM_TAG_WIDTH),
-        .OUT_REG    (2)
-    ) smem (            
-        .clk        (clk),
-        .reset      (smem_reset),
+        `RESET_RELAY (smem_reset, reset);
+        
+        VX_shared_mem #(
+            .INSTANCE_ID($sformatf("cluster%0d-smem%0d", CLUSTER_ID, i)),
+            .SIZE       (SMEM_SIZE),
+            .NUM_REQS   (DCACHE_NUM_REQS),
+            .NUM_BANKS  (`SMEM_NUM_BANKS),
+            .WORD_SIZE  (DCACHE_WORD_SIZE),
+            .ADDR_WIDTH (SMEM_ADDR_WIDTH),
+            .UUID_WIDTH (`UUID_BITS), 
+            .TAG_WIDTH  (DCACHE_NOSM_TAG_WIDTH),
+            .OUT_REG    (2)
+        ) smem (        
+            .clk        (clk),
+            .reset      (smem_reset),
 
-    `ifdef PERF_ENABLE
-        .perf_cache_if(perf_smem_if),
-    `endif
+        `ifdef PERF_ENABLE
+            .perf_cache_if(perf_smem_if),
+        `endif
 
-        // Core request
-        .req_valid  (smem_req_if[0].valid),
-        .req_rw     (smem_req_if[0].rw),
-        .req_byteen (smem_req_if[0].byteen),
-        .req_addr   (smem_req_addr),
-        .req_data   (smem_req_if[0].data),        
-        .req_tag    (smem_req_if[0].tag),
-        .req_ready  (smem_req_if[0].ready),
+            // Core request
+            .req_valid  (dcache_nosm_switch_req_if[1].valid),
+            .req_rw     (dcache_nosm_switch_req_if[1].rw),
+            .req_byteen (dcache_nosm_switch_req_if[1].byteen),
+            .req_addr   (smem_req_addr),
+            .req_data   (dcache_nosm_switch_req_if[1].data),        
+            .req_tag    (dcache_nosm_switch_req_if[1].tag),
+            .req_ready  (dcache_nosm_switch_req_if[1].ready),
 
-        // Core response
-        .rsp_valid  (smem_rsp_if[0].valid),
-        .rsp_data   (smem_rsp_if[0].data),
-        .rsp_tag    (smem_rsp_if[0].tag),
-        .rsp_ready  (smem_rsp_if[0].ready)
-    );    
+            // Core response
+            .rsp_valid  (dcache_nosm_switch_rsp_if[1].valid),
+            .rsp_data   (dcache_nosm_switch_rsp_if[1].data),
+            .rsp_tag    (dcache_nosm_switch_rsp_if[1].tag),
+            .rsp_ready  (dcache_nosm_switch_rsp_if[1].ready)
+        ); 
+    end   
 
 `else
 

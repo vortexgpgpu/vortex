@@ -506,11 +506,6 @@
 `define SMEM_LOCAL_SIZE 1024
 `endif
 
-// Size of storage in bytes
-`ifndef SMEM_SIZE
-`define SMEM_SIZE (`NUM_CORES * `NUM_WARPS * `NUM_THREADS * `SMEM_LOCAL_SIZE)
-`endif
-
 // Number of banks
 `ifndef SMEM_NUM_BANKS
 `define SMEM_NUM_BANKS `NUM_THREADS

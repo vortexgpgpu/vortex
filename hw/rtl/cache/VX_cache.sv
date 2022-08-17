@@ -110,6 +110,8 @@ module VX_cache #(
     wire [NUM_REQS-1:0][TAG_WIDTH-1:0]   core_rsp_tag_s;
     wire [NUM_REQS-1:0]                  core_rsp_ready_s;
 
+    `RESET_RELAY_EX (core_rsp_reset, reset, CORE_REQ_BUF_ENABLE && (CORE_OUT_REG != 0) && (NUM_REQS > 1));
+
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         VX_generic_buffer #(
             .DATAW   (`WORD_WIDTH + TAG_WIDTH),
@@ -117,7 +119,7 @@ module VX_cache #(
             .OUT_REG (CORE_REQ_BUF_ENABLE ? (CORE_OUT_REG & 1) : 0)
         ) core_rsp_buf (
             .clk       (clk),
-            .reset     (reset),
+            .reset     (core_rsp_reset),
             .valid_in  (core_rsp_valid_s[i]),
             .ready_in  (core_rsp_ready_s[i]),
             .data_in   ({core_rsp_data_s[i],  core_rsp_tag_s[i]}),
