@@ -22,6 +22,7 @@ draw3d(){
         echo -e "\n**************************************\n" >> $LOG_FILE
         echo -e "draw3d $trace benchmark\n" >> $LOG_FILE
         CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=fpga --app=draw3d --args="-t$trace.cgltrace -w${WIDTH} -h${HEIGHT}" | grep 'Total elapsed time:' >> $LOG_FILE
+        cp tests/regression/draw3d/output.png ${LOG_DIR}/perf_${TOKEN}_$trace.png
     done
     echo "draw3d tests done!"
 }

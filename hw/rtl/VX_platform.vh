@@ -142,16 +142,16 @@
     end                                         \
     `TRACE(lvl, ("}"))
 
-`define RESET_RELAY_EX(dst, src, depth)     \
-    wire dst;                               \
-    VX_reset_relay #(.DEPTH(depth)) __``dst ( \
-        .clk     (clk),                     \
-        .reset   (src),                     \
-        .reset_o (dst)                      \
+`define RESET_RELAY_EX(dst, src, size, fanout)  \
+    wire [size-1:0] dst;                        \
+    VX_reset_relay #(.N(size), .MAX_FANOUT(fanout)) __``dst ( \
+        .clk     (clk),                         \
+        .reset   (src),                         \
+        .reset_o (dst)                          \
     )
 
 `define RESET_RELAY(dst, src) \
-    `RESET_RELAY_EX (dst, src, 1)
+    `RESET_RELAY_EX (dst, src, 1, 0)
 
 `define POP_COUNT(out, in)  \
     VX_popcount #(          \

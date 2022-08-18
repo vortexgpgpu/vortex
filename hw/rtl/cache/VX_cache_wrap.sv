@@ -120,7 +120,7 @@ module VX_cache_wrap #(
     wire [NUM_REQS-1:0][TAG_WIDTH-1:0]   core_rsp_tag_s;
     wire [NUM_REQS-1:0]                  core_rsp_ready_s;
 
-    `RESET_RELAY_EX (core_rsp_reset, reset, (NC_BYPASS && !DIRECT_PASSTHRU) && (CORE_OUT_REG != 0) && (NUM_REQS > 1));
+    `RESET_RELAY_EX (core_rsp_reset, reset, 1, (NUM_REQS > 1) ? 0 : -1);
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         VX_generic_buffer #(
