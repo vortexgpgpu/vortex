@@ -1,6 +1,6 @@
-CXXFLAGS += -std=c++11 -O2 -Wall -Wextra -pedantic -Wfatal-errors
+CXXFLAGS += -std=c++17 -O2 -Wall -Wextra -pedantic -Wfatal-errors
 
-CXXFLAGS += -I../include -I../../runtime -I../../hw -I../../sim/common -I$(XILINX_XRT)/include
+CXXFLAGS += -I../include -I../common -I../../hw -I$(XILINX_XRT)/include
 
 CXXFLAGS += -fPIC
 

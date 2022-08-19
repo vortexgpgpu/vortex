@@ -1,3 +1,4 @@
+`ifndef SYNTHESIS
 `include "VX_fpu_define.vh"
 
 module VX_fpu_dpi #( 
@@ -414,3 +415,4 @@ module VX_fpu_dpi #(
     assign ready_in = per_core_ready_in[core_select];
 
 endmodule
+`endif

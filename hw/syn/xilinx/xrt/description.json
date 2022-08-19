@@ -1,0 +1,103 @@
+{
+    "name": "User Managed IP (RTL Kernel)", 
+    "description": [
+        "Simple example of user managed RTL Kernel."
+    ], 
+    "flow": "vitis",
+    "key_concepts": [
+        "User-Managed RTL Kernel"
+    ],
+    "keywords": [
+        "package_xo",
+        "ctrl_protocol",
+        "user_managed",
+        "xrt::ip",
+        "xrt::xclbin",
+        "xrt::kernel::get_kernels",
+        "xrt::kernel::get_cus",
+        "xrt::kernel::get_args",
+        "xrt::arg::get_offset",
+        "xrt::ip::write_register",
+        "xrt::ip::read_register"
+    ],
+    "platform_blocklist": [
+        "nodma"
+    ], 
+    "targets": [
+        "hw", 
+        "hw_emu"
+    ], 
+    "os": [
+        "Linux"
+    ], 
+    "runtime": [
+        "OpenCL"
+    ], 
+    "gui": false, 
+    "host": {
+        "host_exe": "rtl_user_managed",
+        "compiler": {
+            "sources": [
+                "REPO_DIR/common/includes/cmdparser/cmdlineparser.cpp",
+                "REPO_DIR/common/includes/logger/logger.cpp",
+                "src/host.cpp"
+            ], 
+            "includepaths": [
+                "REPO_DIR/common/includes/cmdparser",
+                "REPO_DIR/common/includes/logger"
+            ]
+        },
+        "linker" : {
+            "libraries" : ["uuid",
+                           "xrt_coreutil"
+               ]
+        }
+    }, 
+    "containers": [
+        {
+            "accelerators": [
+                {
+                    "kernel_type": "RTL", 
+                    "name": "vadd"
+                }
+            ], 
+            "name": "vadd"
+        }
+    ], 
+    "launch": [
+        {
+            "cmd_args": "-x BUILD/vadd.xclbin", 
+            "name": "generic launch for all flows"
+        }
+    ], 
+    "config_make": "config.mk", 
+    "output_files": [
+        "tmp_kernel_pack*",
+        "packaged_kernel*"
+    ],
+    "contributors": [
+        {
+            "url": "http://www.xilinx.com", 
+            "group": "Xilinx"
+        }
+    ], 
+    "testinfo": {
+        "disable": false,
+        "profile": "no",
+        "jobs": [
+            {
+                "index": 0,
+                "dependency": [],
+                "env": "",
+                "cmd": "",
+                "max_memory_MB": 32768,
+                "max_time_min": 300
+            }
+        ],
+        "targets": [
+            "vitis_hw_emu",
+            "vitis_hw"
+        ],
+        "category": "canary"
+    } 
+}
