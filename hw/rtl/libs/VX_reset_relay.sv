@@ -9,10 +9,10 @@ module VX_reset_relay #(
     input wire          reset,
     output wire [N-1:0] reset_o
 );    
-    if (N > MAX_FANOUT && MAX_FANOUT > 0) begin        
+    if (MAX_FANOUT >= 0 && N > MAX_FANOUT) begin
         localparam F = `UP(MAX_FANOUT);
         localparam R = N / F;
-        reg [R-1:0] reset_r;
+        `PRESERVE_REG `DISABLE_BRAM reg [R-1:0] reset_r;
         always @(posedge clk) begin
             reset_r <= {R{reset}};
         end

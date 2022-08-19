@@ -39,7 +39,7 @@ module VX_writeback #(
         .NUM_INPUTS (NUM_RSPS),
         .DATAW      (DATAW),
         .ARBITER    ("R"),
-        .BUFFERED   (2)        
+        .BUFFERED   (2) // ensure registered output for GPRs addressing     
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),

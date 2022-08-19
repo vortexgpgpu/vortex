@@ -47,11 +47,10 @@ module VX_miss_resrv #(
     output wire [`LINE_ADDR_WIDTH-1:0]  fill_addr,
 
     // lookup
-    input wire                          lookup_valid,
-    input wire                          lookup_replay,   
-    input wire [MSHR_ADDR_WIDTH-1:0]    lookup_id,
+    input wire                          lookup_find,
+    input wire                          lookup_replay,
     input wire [`LINE_ADDR_WIDTH-1:0]   lookup_addr,
-    output wire                         lookup_match,
+    output wire [MSHR_SIZE-1:0]         lookup_matches,
     
     // dequeue    
     output wire                         dequeue_valid,
@@ -198,17 +197,13 @@ module VX_miss_resrv #(
     assign dequeue_id     = dequeue_id_r;
     assign dequeue_addr   = addr_table[dequeue_id_r];
 
-    wire [MSHR_SIZE-1:0] lookup_entries;
-    for (genvar i = 0; i < MSHR_SIZE; ++i) begin
-        assign lookup_entries[i] = (i != lookup_id);
-    end
-    assign lookup_match = |(lookup_entries & valid_table & addr_matches);
+    assign lookup_matches = valid_table & addr_matches;
 
-    `UNUSED_VAR (lookup_valid)
+    `UNUSED_VAR (lookup_find)
 
 `ifdef DBG_TRACE_CACHE_MSHR        
     always @(posedge clk) begin
-        if (allocate_fire || fill_valid || dequeue_fire || lookup_replay || lookup_valid || release_valid) begin
+        if (allocate_fire || fill_valid || dequeue_fire || lookup_replay || lookup_find || release_valid) begin
             if (allocate_fire)
                 `TRACE(3, ("%d: %s:%0d mshr-allocate: addr=0x%0h, id=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID,
                     `LINE_TO_BYTE_ADDR(allocate_addr, BANK_ID), allocate_id_r, lkp_req_uuid));
@@ -219,11 +214,11 @@ module VX_miss_resrv #(
                 `TRACE(3, ("%d: %s:%0d mshr-dequeue: addr=0x%0h, id=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID, 
                     `LINE_TO_BYTE_ADDR(dequeue_addr, BANK_ID), dequeue_id_r, deq_req_uuid));
             if (lookup_replay)
-                `TRACE(3, ("%d: %s:%0d mshr-replay: addr=0x%0h, id=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID, 
-                    `LINE_TO_BYTE_ADDR(lookup_addr, BANK_ID), lookup_id, lkp_req_uuid));
-            if (lookup_valid)
-                `TRACE(3, ("%d: %s:%0d mshr-lookup: addr=0x%0h, id=%0d, match=%b (#%0d)\n", $time, INSTANCE_ID, BANK_ID, 
-                    `LINE_TO_BYTE_ADDR(lookup_addr, BANK_ID), lookup_id, lookup_match, lkp_req_uuid));
+                `TRACE(3, ("%d: %s:%0d mshr-replay: addr=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, 
+                    `LINE_TO_BYTE_ADDR(lookup_addr, BANK_ID), lkp_req_uuid));
+            if (lookup_find)
+                `TRACE(3, ("%d: %s:%0d mshr-lookup: addr=0x%0h, matches=%b (#%0d)\n", $time, INSTANCE_ID, BANK_ID, 
+                    `LINE_TO_BYTE_ADDR(lookup_addr, BANK_ID), lookup_matches, lkp_req_uuid));
             if (release_valid)
                 `TRACE(3, ("%d: %s:%0d mshr-release id=%0d (#%0d)\n", $time, INSTANCE_ID, BANK_ID, release_id, rel_req_uuid));
             `TRACE(3, ("%d: %s:%0d mshr-table", $time, INSTANCE_ID, BANK_ID));

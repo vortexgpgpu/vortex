@@ -90,7 +90,7 @@ module VX_csr_data #(
             `ifdef EXT_F_ENABLE
                 `CSR_FFLAGS:   fcsr[write_wid][`FFLAGS_BITS-1:0] <= write_data[`FFLAGS_BITS-1:0];
                 `CSR_FRM:      fcsr[write_wid][`INST_FRM_BITS+`FFLAGS_BITS-1:`FFLAGS_BITS] <= write_data[`INST_FRM_BITS-1:0];
-                `CSR_FCSR:     fcsr[write_wid]  <= write_data[`FFLAGS_BITS+`INST_FRM_BITS-1:0];
+                `CSR_FCSR:     fcsr[write_wid] <= write_data[`FFLAGS_BITS+`INST_FRM_BITS-1:0];
             `endif
                 `CSR_SATP:     csr_satp     <= write_data;
                 `CSR_MSTATUS:  csr_mstatus  <= write_data;
