@@ -3,7 +3,7 @@ BUILD_DIR ?= build
 RTL_DIR = ../../../rtl
 DPI_DIR = ../../../dpi
 AFU_DIR = ../../../afu/opae
-IP_DIR  = ../ip/$(DEVICE_FAMILY)
+IP_DIR  = ../../../ip/altera/$(DEVICE_FAMILY)
 
 ifeq ($(shell which qsub-synth),)
 	RUN_SYNTH=$(OPAE_PLATFORM_ROOT)/bin/run.sh > build.log 2>&1 &
