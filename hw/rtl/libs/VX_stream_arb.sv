@@ -162,7 +162,7 @@ module VX_stream_arb #(
                 assign ready_in[i] = ready_out_r & {NUM_LANES{arb_onehot[i]}};
             end
 
-            `RESET_RELAY_EX (out_buf_reset, reset, NUM_LANES, MAX_FANOUT);
+            `RESET_RELAY_EX (out_buf_reset, reset, 1, (NUM_LANES > MAX_FANOUT) ? 0 : -1);
 
             for (genvar i = 0; i < NUM_LANES; ++i) begin
                 VX_skid_buffer #(
@@ -171,7 +171,7 @@ module VX_stream_arb #(
                     .OUT_REG  (BUFFERED > 1)
                 ) out_buf (
                     .clk       (clk),
-                    .reset     (out_buf_reset[i]),
+                    .reset     (out_buf_reset),
                     .valid_in  (valid_out_r[i]),
                     .data_in   (data_out_r[i]),
                     .ready_in  (ready_out_r[i]),
@@ -315,7 +315,7 @@ module VX_stream_arb #(
                 assign arb_unlock = valid_in & ready_in;
             end
 
-            `RESET_RELAY_EX (out_buf_reset, reset, (NUM_REQS * NUM_LANES), MAX_FANOUT);
+            `RESET_RELAY_EX (out_buf_reset, reset, 1, ((NUM_REQS * NUM_LANES) > MAX_FANOUT) ? 0 : -1);
 
             for (genvar i = 0; i < NUM_REQS; ++i) begin
                 for (genvar j = 0; j < NUM_LANES; ++j) begin
@@ -326,7 +326,7 @@ module VX_stream_arb #(
                         .OUT_REG  (BUFFERED > 1)
                     ) out_buf (
                         .clk       (clk),
-                        .reset     (out_buf_reset[ii]),
+                        .reset     (out_buf_reset),
                         .valid_in  (valid_in[0][j] && arb_onehot[i]),
                         .ready_in  (ready_out_r[i][j]),
                         .data_in   (data_in[0][j]),                      
@@ -340,7 +340,7 @@ module VX_stream_arb #(
     
     end else begin
 
-        `RESET_RELAY_EX (out_buf_reset, reset, (NUM_OUTPUTS * NUM_LANES), MAX_FANOUT);
+        `RESET_RELAY_EX (out_buf_reset, reset, 1, ((NUM_OUTPUTS * NUM_LANES) > MAX_FANOUT) ? 0 : -1);
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
             for (genvar j = 0; j < NUM_LANES; ++j) begin
@@ -351,7 +351,7 @@ module VX_stream_arb #(
                     .OUT_REG  (BUFFERED > 1)
                 ) out_buf (
                     .clk       (clk),
-                    .reset     (out_buf_reset[ii]),
+                    .reset     (out_buf_reset),
                     .valid_in  (valid_in[i][j]),
                     .ready_in  (ready_in[i][j]),
                     .data_in   (data_in[i][j]), 

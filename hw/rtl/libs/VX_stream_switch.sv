@@ -62,7 +62,7 @@ module VX_stream_switch #(
             end
         end
 
-        `RESET_RELAY_EX (out_buf_reset, reset, (NUM_OUTPUTS * NUM_LANES), MAX_FANOUT);
+        `RESET_RELAY_EX (out_buf_reset, reset, 1, ((NUM_OUTPUTS * NUM_LANES) > MAX_FANOUT) ? 0 : -1);
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
             for (genvar j = 0; j < NUM_LANES; ++j) begin
@@ -73,7 +73,7 @@ module VX_stream_switch #(
                     .OUT_REG  (BUFFERED > 1)
                 ) out_buf (
                     .clk       (clk),
-                    .reset     (out_buf_reset[ii]),
+                    .reset     (out_buf_reset),
                     .valid_in  (valid_out_r[i][j]),                    
                     .ready_in  (ready_out_r[i][j]),
                     .data_in   (data_out_r[i][j]),
@@ -96,7 +96,7 @@ module VX_stream_switch #(
             assign ready_in[i] = ready_out_r[i][sel_in[i]];
         end
 
-        `RESET_RELAY_EX (out_buf_reset, reset, NUM_OUTPUTS, MAX_FANOUT);
+        `RESET_RELAY_EX (out_buf_reset, reset, 1, (NUM_OUTPUTS > MAX_FANOUT) ? 0 : -1);
 
         for (genvar i = 0; i < NUM_INPUTS; ++i) begin
             for (genvar j = 0; j < NUM_REQS; ++j) begin
@@ -109,7 +109,7 @@ module VX_stream_switch #(
                             .OUT_REG  (BUFFERED > 1)
                         ) out_buf (
                             .clk       (clk),
-                            .reset     (out_buf_reset[ii]),
+                            .reset     (out_buf_reset),
                             .valid_in  (valid_out_r[i][j][k]),
                             .ready_in  (ready_out_r[i][j][k]),
                             .data_in   (data_in[i][k]),                                                     
@@ -129,7 +129,7 @@ module VX_stream_switch #(
     
         `UNUSED_VAR (sel_in)
 
-        `RESET_RELAY_EX (out_buf_reset, reset, (NUM_OUTPUTS * NUM_LANES), MAX_FANOUT);
+        `RESET_RELAY_EX (out_buf_reset, reset, 1, ((NUM_OUTPUTS * NUM_LANES) > MAX_FANOUT) ? 0 : -1);
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
             for (genvar j = 0; j < NUM_LANES; ++j) begin
@@ -140,7 +140,7 @@ module VX_stream_switch #(
                     .OUT_REG  (BUFFERED > 1)
                 ) out_buf (
                     .clk       (clk),
-                    .reset     (out_buf_reset[ii]),
+                    .reset     (out_buf_reset),
                     .valid_in  (valid_in[i][j]),
                     .ready_in  (ready_in[i][j]),
                     .data_in   (data_in[i][j]),
