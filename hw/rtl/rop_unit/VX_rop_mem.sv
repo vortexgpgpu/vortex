@@ -92,12 +92,11 @@ module VX_rop_mem #(
         wire [31:0] data   = {req_stencil[i], req_depth[i]};      
 
         VX_shift_register #(
-            .DATAW  (1 + 4 + 32 + 32),
-            .DEPTH  (`LATENCY_IMUL),
-            .RESETW (1)
+            .DATAW (1 + 4 + 32 + 32),
+            .DEPTH (`LATENCY_IMUL)
         ) shift_reg (
             .clk      (clk),
-            .reset    (reset),
+            `UNUSED_PIN (reset),
             .enable   (mul_ready_in),
             .data_in  ({mask,         byteen,         baddr,   data}),
             .data_out ({mreq_mask[i], mreq_byteen[i], baddr_s, mreq_data[i]})
@@ -132,12 +131,11 @@ module VX_rop_mem #(
         wire [31:0] data   = req_color[i - NUM_LANES];        
 
         VX_shift_register #(
-            .DATAW  (1 + 4 + 32 + 32),
-            .DEPTH  (`LATENCY_IMUL),
-            .RESETW (1)
+            .DATAW (1 + 4 + 32 + 32),
+            .DEPTH (`LATENCY_IMUL)
         ) shift_reg (
             .clk      (clk),
-            .reset    (reset),
+            `UNUSED_PIN (reset),
             .enable   (mul_ready_in),
             .data_in  ({mask,         byteen,         baddr,    data}),
             .data_out ({mreq_mask[i], mreq_byteen[i], baddr_s,  mreq_data[i]})
@@ -180,8 +178,6 @@ module VX_rop_mem #(
 
     // schedule memory request
 
-    `RESET_RELAY (mem_scheduler_reset, reset);
-
     VX_mem_scheduler #(
         .INSTANCE_ID  ($sformatf("%s-memsched", INSTANCE_ID)),
         .NUM_REQS     (NUM_REQS),
@@ -194,7 +190,7 @@ module VX_rop_mem #(
         .CORE_OUT_REG (3)
     ) mem_scheduler (
         .clk            (clk),
-        .reset          (mem_scheduler_reset),
+        .reset          (reset),
 
         .req_valid      (mreq_valid_r),
         .req_rw         (mreq_rw_r),

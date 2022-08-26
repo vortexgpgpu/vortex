@@ -157,7 +157,7 @@ module VX_bank #(
     wire                            valid_st0, valid_st1;        
     wire                            is_fill_st0, is_fill_st1;
     wire                            is_mshr_st0, is_mshr_st1;    
-    wire                            miss_st0, miss_st1;
+    wire                            is_hit_st0, is_hit_st1;
     wire                            is_flush_st0;
     wire                            mshr_pending_st0, mshr_pending_st1;
 
@@ -268,11 +268,11 @@ module VX_bank #(
         .tag_match  (tag_match_st0)
     );
 
-    // we have a core request hit
-    assign miss_st0 = ~tag_match_st0;
+    // we have a tag match
+    assign is_hit_st0 = tag_match_st0;
 
     // ensure mshr reply never get a miss
-    `RUNTIME_ASSERT(tag_match_st0 || ~(valid_st0 && is_mshr_st0), ("runtime error"));
+    `RUNTIME_ASSERT (tag_match_st0 || ~(valid_st0 && is_mshr_st0), ("runtime error"));
 
     wire [MSHR_ADDR_WIDTH-1:0] mshr_id_a_st0 = is_read_st0 ? mshr_alloc_id : mshr_id_st0;
 
@@ -283,24 +283,35 @@ module VX_bank #(
         .clk      (clk),
         .reset    (reset),
         .enable   (~pipe_stall),
-        .data_in  ({valid_st0, is_mshr_st0, is_fill_st0, is_read_st0, is_write_st0, miss_st0, way_sel_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_idx_st0, pmask_st0, tag_st0, mshr_id_a_st0, mshr_pending_st0}),
-        .data_out ({valid_st1, is_mshr_st1, is_fill_st1, is_read_st1, is_write_st1, miss_st1, way_sel_st1, addr_st1, wdata_st1, wsel_st1, byteen_st1, req_idx_st1, pmask_st1, tag_st1, mshr_id_st1,   mshr_pending_st1})
-    ); 
-
-    always @(posedge clk) begin
-        if (~crsq_stall) begin
-            rdw_hazard_st1 <= valid_st0 && is_read_st0 && valid_st1 && is_write_st1 && ~miss_st1 && (addr_st0 == addr_st1) 
-                           && ~rdw_hazard_st1;
-        end
-    end
+        .data_in  ({valid_st0, is_mshr_st0, is_fill_st0, is_read_st0, is_write_st0, is_hit_st0, way_sel_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_idx_st0, pmask_st0, tag_st0, mshr_id_a_st0, mshr_pending_st0}),
+        .data_out ({valid_st1, is_mshr_st1, is_fill_st1, is_read_st1, is_write_st1, is_hit_st1, way_sel_st1, addr_st1, wdata_st1, wsel_st1, byteen_st1, req_idx_st1, pmask_st1, tag_st1, mshr_id_st1,   mshr_pending_st1})
+    );
 
     `ASSIGN_REQ_UUID (req_uuid_st1, tag_st1[0])
 
     wire do_read_st0  = valid_st0 && is_read_st0;
     wire do_read_st1  = valid_st1 && is_read_st1;
-    wire do_fill_st1  = valid_st1 && is_fill_st1;
     wire do_write_st1 = valid_st1 && is_write_st1;
-    wire do_mshr_st1  = valid_st1 && is_mshr_st1;
+    wire do_fill_st1  = valid_st1 && is_fill_st1;    
+    wire do_mshr_st1  = valid_st1 && is_mshr_st1; 
+
+    wire do_read_hit_st1 = do_read_st1 && is_hit_st1;
+    wire do_read_miss_st1 = do_read_st1 && ~is_hit_st1;
+
+    wire do_write_hit_st1 = do_write_st1 && is_hit_st1;
+    wire do_write_miss_st1 = do_write_st1 && ~is_hit_st1;
+
+    `UNUSED_VAR (do_write_miss_st1)
+
+    // detect read during write data hazard
+    always @(posedge clk) begin
+        if (reset) begin
+            rdw_hazard_st1 <= 0;
+        end else if (~crsq_stall) begin
+            rdw_hazard_st1 <= do_read_st0 && do_write_hit_st1 && (addr_st0 == addr_st1) 
+                           && ~rdw_hazard_st1;
+        end
+    end
 
     wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] creq_data_st1 = wdata_st1[0 +: NUM_PORTS * `WORD_WIDTH];
     `UNUSED_VAR (wdata_st1)
@@ -324,9 +335,9 @@ module VX_bank #(
 
         .stall      (pipe_stall),
 
-        .read       ((do_read_st1 && ~miss_st1) || do_mshr_st1),      
+        .read       (do_read_hit_st1 || do_mshr_st1),      
         .fill       (do_fill_st1),        
-        .write      (do_write_st1 && ~miss_st1),
+        .write      (do_write_hit_st1),
         .way_sel    (way_sel_st1),
         .addr       (addr_st1),
         .wsel       (wsel_st1),
@@ -341,7 +352,7 @@ module VX_bank #(
     wire mshr_allocate = do_read_st0 && ~crsq_stall;
     wire mshr_replay   = do_fill_st0 && ~crsq_stall;
     wire mshr_lookup   = mshr_allocate;
-    wire mshr_release  = do_read_st1 && ~miss_st1 && ~pipe_stall;
+    wire mshr_release  = do_read_hit_st1 && ~pipe_stall;
 
     VX_pending_size #( 
         .SIZE (MSHR_SIZE)
@@ -420,7 +431,7 @@ module VX_bank #(
     wire [NUM_PORTS-1:0][`UP(`REQ_SEL_BITS)-1:0] crsq_idx;
     wire [NUM_PORTS-1:0][TAG_WIDTH-1:0] crsq_tag;
     
-    assign crsq_valid = (do_read_st1 && ~miss_st1 && ~rdw_hazard_st1) 
+    assign crsq_valid = (do_read_hit_st1 && ~rdw_hazard_st1) 
                      || do_mshr_st1;
 
     assign crsq_stall = crsq_valid && ~crsq_ready;
@@ -456,7 +467,7 @@ module VX_bank #(
     wire [MSHR_ADDR_WIDTH-1:0] mreq_id;
     wire mreq_rw;
 
-    assign mreq_push = (do_read_st1 && miss_st1 && ~mshr_pending_st1)
+    assign mreq_push = (do_read_miss_st1 && ~mshr_pending_st1)
                      || do_write_st1;
 
     assign mreq_pop = mem_req_valid && mem_req_ready;
@@ -493,8 +504,8 @@ module VX_bank #(
 ///////////////////////////////////////////////////////////////////////////////
 
 `ifdef PERF_ENABLE
-    assign perf_read_misses  = do_read_st1 && miss_st1;
-    assign perf_write_misses = do_write_st1 && miss_st1;
+    assign perf_read_misses  = do_read_miss_st1;
+    assign perf_write_misses = do_write_miss_st1;
     assign perf_mshr_stalls  = mshr_alm_full;
 `endif
 

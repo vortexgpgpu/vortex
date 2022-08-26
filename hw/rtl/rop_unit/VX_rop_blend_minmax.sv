@@ -4,7 +4,6 @@ module VX_rop_blend_minmax #(
     parameter LATENCY = 1
 ) (
     input clk,
-    input reset,
     input enable,
 
     input rgba_t src_color,
@@ -56,7 +55,7 @@ module VX_rop_blend_minmax #(
         .DEPTH (LATENCY)
     ) shift_reg (
         .clk      (clk),
-        .reset    (reset),
+        `UNUSED_PIN (reset),
         .enable   (enable),
         .data_in  ({tmp_max, tmp_min}),
         .data_out ({max_out, min_out})

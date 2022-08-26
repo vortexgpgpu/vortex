@@ -4,7 +4,6 @@ module VX_rop_logic_op #(
     parameter LATENCY = 1
 ) (
     input clk,
-    input reset,
     input enable,
 
     input wire [`ROP_LOGIC_OP_BITS-1:0] op,
@@ -43,7 +42,7 @@ module VX_rop_logic_op #(
         .DEPTH  (LATENCY)
     ) shift_reg (
         .clk      (clk),
-        .reset    (reset),
+        `UNUSED_PIN (reset),
         .enable   (enable),
         .data_in  (tmp_color),
         .data_out (color_out)

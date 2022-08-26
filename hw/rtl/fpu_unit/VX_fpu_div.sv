@@ -87,11 +87,10 @@ module VX_fpu_div #(
 
         VX_shift_register #(
             .DATAW  (32),
-            .DEPTH  (`LATENCY_FDIV),
-            .RESETW (1)
+            .DEPTH  (`LATENCY_FDIV)
         ) shift_req_dpi (
             .clk      (clk),
-            .reset    (reset),
+            `UNUSED_PIN (reset),
             .enable   (enable),
             .data_in  (r),
             .data_out (result[i])
