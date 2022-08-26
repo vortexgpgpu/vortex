@@ -27,11 +27,9 @@ module VX_raster_csr #(
     // CSR registers
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         VX_dp_ram #(
-            .DATAW       ($bits(raster_csrs_t)),
-            .SIZE        (`NUM_WARPS),
-            .LUTRAM      (1),
-            .INIT_ENABLE (1),
-            .INIT_VALUE  (0)
+            .DATAW  ($bits(raster_csrs_t)),
+            .SIZE   (`NUM_WARPS),
+            .LUTRAM (1)
         ) stamp_store (
             .clk   (clk),
             .wren  (wren[i]),
