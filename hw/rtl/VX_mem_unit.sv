@@ -117,13 +117,13 @@ module VX_mem_unit # (
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-    ) dcache_nosm_req_if [`NUM_SOCKETS]();
+    ) dcache_smem_req_if [`NUM_SOCKETS]();
 
     VX_cache_rsp_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-    ) dcache_nosm_rsp_if [`NUM_SOCKETS]();
+    ) dcache_smem_rsp_if [`NUM_SOCKETS]();
 
     `RESET_RELAY (dcache_reset, reset);
 
@@ -156,8 +156,8 @@ module VX_mem_unit # (
         
         .clk            (clk),
         .reset          (dcache_reset),        
-        .core_req_if    (dcache_nosm_req_if),
-        .core_rsp_if    (dcache_nosm_rsp_if),
+        .core_req_if    (dcache_smem_req_if),
+        .core_rsp_if    (dcache_smem_rsp_if),
         .mem_req_if     (dcache_mem_req_if),
         .mem_rsp_if     (dcache_mem_rsp_if)
     );
@@ -171,15 +171,15 @@ module VX_mem_unit # (
             .NUM_REQS  (DCACHE_NUM_REQS), 
             .WORD_SIZE (DCACHE_WORD_SIZE), 
             .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-        ) dcache_nosm_switch_req_if[2]();
+        ) dcache_smem_switch_req_if[2]();
 
         VX_cache_rsp_if #(
             .NUM_REQS  (DCACHE_NUM_REQS), 
             .WORD_SIZE (DCACHE_WORD_SIZE), 
             .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-        ) dcache_nosm_switch_rsp_if[2]();
+        ) dcache_smem_switch_rsp_if[2]();
 
-        `RESET_RELAY (dcache_nosm_switch_reset, reset);
+        `RESET_RELAY (dcache_smem_switch_reset, reset);
 
         VX_smem_switch #(
             .NUM_REQS     (2),
@@ -188,19 +188,19 @@ module VX_mem_unit # (
             .TAG_WIDTH    (DCACHE_ARB_TAG_WIDTH),
             .TAG_SEL_IDX  (0),
             .ARBITER      ("P"),
-            .BUFFERED_REQ (2),
+            .BUFFERED_REQ (1),
             .BUFFERED_RSP (1)
-        ) dcache_nosm_switch (
+        ) dcache_smem_switch (
             .clk        (clk),
-            .reset      (dcache_nosm_switch_reset),
+            .reset      (dcache_smem_switch_reset),
             .req_in_if  (dcache_req_if[i]),
             .rsp_in_if  (dcache_rsp_if[i]),
-            .req_out_if (dcache_nosm_switch_req_if),
-            .rsp_out_if (dcache_nosm_switch_rsp_if)
+            .req_out_if (dcache_smem_switch_req_if),
+            .rsp_out_if (dcache_smem_switch_rsp_if)
         );
 
-        `ASSIGN_VX_CACHE_REQ_IF (dcache_nosm_req_if[i], dcache_nosm_switch_req_if[0]);
-        `ASSIGN_VX_CACHE_RSP_IF (dcache_nosm_switch_rsp_if[0], dcache_nosm_rsp_if[i]);
+        `ASSIGN_VX_CACHE_REQ_IF (dcache_smem_req_if[i], dcache_smem_switch_req_if[0]);
+        `ASSIGN_VX_CACHE_RSP_IF (dcache_smem_switch_rsp_if[0], dcache_smem_rsp_if[i]);
 
         // shared memory address mapping:
         // [core_idx][warp_idx][word_idx][thread_idx] <= [core_idx][warp_idx][thread_idx][bank_offset..word_idx]
@@ -214,14 +214,14 @@ module VX_mem_unit # (
 
         for (genvar j = 0; j < DCACHE_NUM_REQS; ++j) begin
             if (`NT_BITS != 0) begin
-                assign smem_req_addr[j][0 +: `NT_BITS] = dcache_nosm_switch_req_if[1].addr[j][BANK_ADDR_OFFSET +: `NT_BITS];
+                assign smem_req_addr[j][0 +: `NT_BITS] = dcache_smem_switch_req_if[1].addr[j][BANK_ADDR_OFFSET +: `NT_BITS];
             end    
-            assign smem_req_addr[j][`NT_BITS +: WORD_SEL_BITS] = dcache_nosm_switch_req_if[1].addr[j][0 +: WORD_SEL_BITS];
+            assign smem_req_addr[j][`NT_BITS +: WORD_SEL_BITS] = dcache_smem_switch_req_if[1].addr[j][0 +: WORD_SEL_BITS];
             if (`NW_BITS != 0) begin
-                assign smem_req_addr[j][(`NT_BITS + WORD_SEL_BITS) +: `NW_BITS] = dcache_nosm_switch_req_if[1].addr[j][(BANK_ADDR_OFFSET + `NT_BITS) +: `NW_BITS];
+                assign smem_req_addr[j][(`NT_BITS + WORD_SEL_BITS) +: `NW_BITS] = dcache_smem_switch_req_if[1].addr[j][(BANK_ADDR_OFFSET + `NT_BITS) +: `NW_BITS];
             end
             if (SOCKET_BITS != 0) begin
-                assign smem_req_addr[j][(`NT_BITS + WORD_SEL_BITS + `NW_BITS) +: SOCKET_BITS] = dcache_nosm_switch_req_if[1].addr[j][(BANK_ADDR_OFFSET + `NT_BITS + `NW_BITS) +: SOCKET_BITS];
+                assign smem_req_addr[j][(`NT_BITS + WORD_SEL_BITS + `NW_BITS) +: SOCKET_BITS] = dcache_smem_switch_req_if[1].addr[j][(BANK_ADDR_OFFSET + `NT_BITS + `NW_BITS) +: SOCKET_BITS];
             end
         end
 
@@ -246,27 +246,27 @@ module VX_mem_unit # (
         `endif
 
             // Core request
-            .req_valid  (dcache_nosm_switch_req_if[1].valid),
-            .req_rw     (dcache_nosm_switch_req_if[1].rw),
-            .req_byteen (dcache_nosm_switch_req_if[1].byteen),
+            .req_valid  (dcache_smem_switch_req_if[1].valid),
+            .req_rw     (dcache_smem_switch_req_if[1].rw),
+            .req_byteen (dcache_smem_switch_req_if[1].byteen),
             .req_addr   (smem_req_addr),
-            .req_data   (dcache_nosm_switch_req_if[1].data),        
-            .req_tag    (dcache_nosm_switch_req_if[1].tag),
-            .req_ready  (dcache_nosm_switch_req_if[1].ready),
+            .req_data   (dcache_smem_switch_req_if[1].data),        
+            .req_tag    (dcache_smem_switch_req_if[1].tag),
+            .req_ready  (dcache_smem_switch_req_if[1].ready),
 
             // Core response
-            .rsp_valid  (dcache_nosm_switch_rsp_if[1].valid),
-            .rsp_data   (dcache_nosm_switch_rsp_if[1].data),
-            .rsp_tag    (dcache_nosm_switch_rsp_if[1].tag),
-            .rsp_ready  (dcache_nosm_switch_rsp_if[1].ready)
+            .rsp_valid  (dcache_smem_switch_rsp_if[1].valid),
+            .rsp_data   (dcache_smem_switch_rsp_if[1].data),
+            .rsp_tag    (dcache_smem_switch_rsp_if[1].tag),
+            .rsp_ready  (dcache_smem_switch_rsp_if[1].ready)
         ); 
     end   
 
 `else
 
     for (genvar i = 0; i < `NUM_SOCKETS; ++i) begin
-        `ASSIGN_VX_CACHE_REQ_IF (dcache_nosm_req_if[i], dcache_req_if[i]);
-        `ASSIGN_VX_CACHE_RSP_IF (dcache_rsp_if[i], dcache_nosm_rsp_if[i]);
+        `ASSIGN_VX_CACHE_REQ_IF (dcache_smem_req_if[i], dcache_req_if[i]);
+        `ASSIGN_VX_CACHE_RSP_IF (dcache_rsp_if[i], dcache_smem_rsp_if[i]);
     end
 
 `endif

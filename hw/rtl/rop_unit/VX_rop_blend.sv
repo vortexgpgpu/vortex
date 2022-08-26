@@ -90,7 +90,6 @@ module VX_rop_blend #(
             .LATENCY (LATENCY)
         ) rop_blend_multadd (
             .clk        (clk),
-            .reset      (reset),
             .enable     (~stall),
             .mode_rgb   (dcrs.blend_mode_rgb),
             .mode_a     (dcrs.blend_mode_a),
@@ -105,7 +104,6 @@ module VX_rop_blend #(
             .LATENCY (LATENCY)
         ) rop_blend_minmax (
             .clk        (clk),
-            .reset      (reset),
             .enable     (~stall),
             .src_color  (src_color_s1[i]),
             .dst_color  (dst_color_s1[i]),
@@ -117,7 +115,6 @@ module VX_rop_blend #(
             .LATENCY (LATENCY)
         ) rop_logic_op (
             .clk        (clk),
-            .reset      (reset),
             .enable     (~stall),
             .op         (dcrs.logic_op),
             .src_color  (src_color_s1[i]),

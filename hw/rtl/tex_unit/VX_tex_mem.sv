@@ -93,8 +93,6 @@ module VX_tex_mem #(
 
     // schedule memory request
 
-    `RESET_RELAY (mem_scheduler_reset, reset);
-
     VX_mem_scheduler #(
         .INSTANCE_ID ($sformatf("%s-memsched", INSTANCE_ID)),
         .NUM_REQS    (TEX_MEM_REQS), 
@@ -107,7 +105,7 @@ module VX_tex_mem #(
         .MEM_OUT_REG (3)
     ) mem_scheduler (
         .clk            (clk),
-        .reset          (mem_scheduler_reset),
+        .reset          (reset),
 
         // Input request
         .req_valid      (mem_req_valid),

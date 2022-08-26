@@ -108,7 +108,7 @@ module VX_shared_mem #(
     wire [NUM_BANKS-1:0][`UP(REQ_SEL_BITS)-1:0] per_bank_req_idx;
     wire [NUM_BANKS-1:0]                    per_bank_req_ready;
 
-    `RESET_RELAY (req_sbuf_reset, reset);
+    `RESET_RELAY_EX (req_sbuf_reset, reset, 1, (NUM_BANKS > 1) ? 0 : -1);
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         VX_skid_buffer #(

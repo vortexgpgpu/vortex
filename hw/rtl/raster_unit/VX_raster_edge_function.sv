@@ -64,7 +64,7 @@ module VX_raster_edge_function #(
         .DEPTH (LATENCY)
     ) shift_reg (
         .clk      (clk),
-        .reset    (reset),
+        `UNUSED_PIN (reset),
         .enable   (enable),
         .data_in  ({edge_c}),
         .data_out ({edge_c_s})
