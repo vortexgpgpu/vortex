@@ -22,7 +22,7 @@ module VX_ibuffer #(
     localparam ADDRW   = $clog2(SIZE);
     localparam NWARPSW = $clog2(`NUM_WARPS+1);
 
-    `STATIC_ASSERT ((`IBUF_SIZE >= 2), ("invalid parameter"))
+    `STATIC_ASSERT ((`IBUF_SIZE > 1), ("invalid parameter"))
 
     wire [`NUM_WARPS-1:0] q_full, q_empty, q_alm_full, q_alm_empty;
     wire [DATAW-1:0] q_data_in;

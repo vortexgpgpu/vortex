@@ -201,7 +201,7 @@ module VX_alu_unit #(
         .NUM_INPUTS (RSP_ARB_SIZE),
         .DATAW      (RSP_ARB_DATAW),        
         .ARBITER    ("R"),
-        .BUFFERED   (1)
+        .BUFFERED   (2)
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),

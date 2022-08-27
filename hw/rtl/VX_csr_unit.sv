@@ -242,7 +242,8 @@ module VX_csr_unit #(
     // send response
 
     VX_skid_buffer #(
-        .DATAW (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1 + `NUM_THREADS * 32)
+        .DATAW   (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1 + `NUM_THREADS * 32),
+        .OUT_REG (1)
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),

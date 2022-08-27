@@ -252,9 +252,9 @@ module VX_gpu_unit #(
         // Inputs
         .valid_in   (imadd_valid_in),
         .shift_in   ({gpu_req_if.op_mod[1:0], 3'b0}),
-        .data_in1   (gpu_req_if.rs1_data),
-        .data_in2   (gpu_req_if.rs2_data),
-        .data_in3   (gpu_req_if.rs3_data),
+        .data1_in   (gpu_req_if.rs1_data),
+        .data2_in   (gpu_req_if.rs2_data),
+        .data3_in   (gpu_req_if.rs3_data),
         .tag_in     ({gpu_req_if.uuid, gpu_req_if.wid, gpu_req_if.tmask, gpu_req_if.PC, gpu_req_if.rd}),
         .ready_in   (imadd_ready_in),
 
@@ -294,7 +294,7 @@ module VX_gpu_unit #(
         .NUM_INPUTS (RSP_ARB_SIZE),
         .DATAW      (RSP_ARB_DATAW),
         .ARBITER    ("R"),
-        .BUFFERED   (1)
+        .BUFFERED   (2)
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),
