@@ -188,8 +188,8 @@ module VX_mem_unit # (
             .TAG_WIDTH    (DCACHE_ARB_TAG_WIDTH),
             .TAG_SEL_IDX  (0),
             .ARBITER      ("P"),
-            .BUFFERED_REQ (1),
-            .BUFFERED_RSP (1)
+            .BUFFERED_REQ (2),
+            .BUFFERED_RSP (2)
         ) dcache_smem_switch (
             .clk        (clk),
             .reset      (dcache_smem_switch_reset),
