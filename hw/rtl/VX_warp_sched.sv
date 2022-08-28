@@ -27,8 +27,10 @@ module VX_warp_sched #(
     // Status
     output wire             busy
 );
-
     `UNUSED_PARAM (CORE_ID)
+
+    localparam UUID_WIDTH = `UP(`UUID_BITS);
+    localparam NW_WIDTH   = `UP(`NW_BITS);
 
     wire                    join_else;
     wire [31:0]             join_pc;
@@ -48,7 +50,7 @@ module VX_warp_sched #(
     reg [31:0]              wspawn_pc;
     reg [`NUM_WARPS-1:0]    use_wspawn;   
 
-    wire [`UP(`NW_BITS)-1:0] schedule_wid;
+    wire [NW_WIDTH-1:0]     schedule_wid;
     wire [`NUM_THREADS-1:0] schedule_tmask;
     wire [31:0]             schedule_pc;
     wire                    schedule_valid;
@@ -57,8 +59,8 @@ module VX_warp_sched #(
 
     reg [`PERF_CTR_BITS-1:0]    cycles;
 
-    reg [`NUM_WARPS-1:0][`UP(`UUID_BITS)-1:0] issued_instrs;
-    wire [`UP(`UUID_BITS)-1:0] instr_uuid;
+    reg [`NUM_WARPS-1:0][UUID_WIDTH-1:0] issued_instrs;
+    wire [UUID_WIDTH-1:0] instr_uuid;
 
     wire ifetch_req_fire = ifetch_req_if.valid && ifetch_req_if.ready;
 
@@ -144,7 +146,7 @@ module VX_warp_sched #(
                 end
                 use_wspawn[schedule_wid] <= 0;
 
-                issued_instrs[schedule_wid] <= issued_instrs[schedule_wid] + `UP(`UUID_BITS)'(1);
+                issued_instrs[schedule_wid] <= issued_instrs[schedule_wid] + UUID_WIDTH'(1);
             end
 
             if (ifetch_req_fire) begin
@@ -174,7 +176,7 @@ module VX_warp_sched #(
     wire [`NUM_WARPS-1:0] barrier_mask = barrier_masks[warp_ctl_if.barrier.id];
     `POP_COUNT(active_barrier_count, barrier_mask);
 
-    assign reached_barrier_limit = (active_barrier_count[`UP(`NW_BITS)-1:0] == warp_ctl_if.barrier.size_m1);
+    assign reached_barrier_limit = (active_barrier_count[NW_WIDTH-1:0] == warp_ctl_if.barrier.size_m1);
 
     reg [`NUM_WARPS-1:0] barrier_stalls;
     always @(*) begin
@@ -257,7 +259,7 @@ module VX_warp_sched #(
 `endif
 
     VX_generic_buffer #( 
-        .DATAW   (`UP(`UUID_BITS) + `NUM_THREADS + 32 + `UP(`NW_BITS)),
+        .DATAW   (UUID_WIDTH + `NUM_THREADS + 32 + NW_WIDTH),
         .OUT_REG (1)
     ) pipe_reg (
         .clk      (clk),

@@ -24,6 +24,9 @@ module VX_lsu_unit #(
     VX_commit_if.master     ld_commit_if,
     VX_commit_if.master     st_commit_if
 );
+    localparam UUID_WIDTH = `UP(`UUID_BITS);
+    localparam NW_WIDTH   = `UP(`NW_BITS);
+
     localparam MEM_ASHIFT = `CLOG2(`MEM_BLOCK_SIZE);    
     localparam MEM_ADDRW  = 32 - MEM_ASHIFT;
     localparam REQ_ASHIFT = `CLOG2(DCACHE_WORD_SIZE);
@@ -36,8 +39,8 @@ module VX_lsu_unit #(
     localparam STACK_START_W = MEM_ADDRW'(`STACK_BASE_ADDR >> MEM_ASHIFT);
     localparam STACK_END_W = MEM_ADDRW'((`STACK_BASE_ADDR - TOTAL_STACK_SIZE) >> MEM_ASHIFT);
 
-    //                     uuid,             addr_type,                               wid,            PC,  tmask,         rd,        op_type,         align,                        is_dup
-    localparam TAG_WIDTH = `UP(`UUID_BITS) + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + `UP(`NW_BITS) + 32 + `NUM_THREADS + `NR_BITS + `INST_LSU_BITS + (`NUM_THREADS * REQ_ASHIFT) + 1;
+    //                     uuid,        addr_type,                               wid,       PC,  tmask,         rd,        op_type,         align,                        is_dup
+    localparam TAG_WIDTH = UUID_WIDTH + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + NW_WIDTH + 32 + `NUM_THREADS + `NR_BITS + `INST_LSU_BITS + (`NUM_THREADS * REQ_ASHIFT) + 1;
 
     `STATIC_ASSERT(0 == (`IO_BASE_ADDR % MEM_ASHIFT), ("invalid parameter"))
     `STATIC_ASSERT(0 == (`STACK_BASE_ADDR % MEM_ASHIFT), ("invalid parameter"))    
@@ -163,13 +166,13 @@ module VX_lsu_unit #(
      VX_cache_req_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`UP(`UUID_BITS) + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + LSUQ_TAG_BITS)
+        .TAG_WIDTH (UUID_WIDTH + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + LSUQ_TAG_BITS)
     ) cache_req_tmp_if();
 
     VX_cache_rsp_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (`UP(`UUID_BITS) + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + LSUQ_TAG_BITS)
+        .TAG_WIDTH (UUID_WIDTH + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + LSUQ_TAG_BITS)
     ) cache_rsp_tmp_if();
 
     `RESET_RELAY (mem_scheduler_reset, reset);
@@ -182,7 +185,7 @@ module VX_lsu_unit #(
         .DATA_WIDTH  (32),
         .QUEUE_SIZE  (`LSUQ_SIZE),
         .TAG_WIDTH   (TAG_WIDTH),
-        .UUID_WIDTH  (`UP(`UUID_BITS) + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS)),
+        .UUID_WIDTH  (UUID_WIDTH + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS)),
         .RSP_PARTIAL (1),
         .MEM_OUT_REG (3)
     ) mem_scheduler (
@@ -236,7 +239,7 @@ module VX_lsu_unit #(
     `ASSIGN_VX_CACHE_RSP_IF_XTAG (cache_rsp_tmp_if, cache_rsp_if);
     
     for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
-        wire [`UP(`UUID_BITS)-1:0]                         cache_req_uuid, cache_rsp_uuid;
+        wire [UUID_WIDTH-1:0]                              cache_req_uuid, cache_rsp_uuid;
         wire [`NUM_THREADS-1:0][`CACHE_ADDR_TYPE_BITS-1:0] cache_req_type, cache_rsp_type;        
         wire [`CLOG2(`LSUQ_SIZE)-1:0]                      cache_req_tag,  cache_rsp_tag;
 
@@ -282,9 +285,9 @@ module VX_lsu_unit #(
         end
     end
     
-    wire [`UP(`UUID_BITS)-1:0] rsp_uuid;
+    wire [UUID_WIDTH-1:0] rsp_uuid;
     wire [`NUM_THREADS-1:0][`CACHE_ADDR_TYPE_BITS-1:0] rsp_addr_type;
-    wire [`UP(`NW_BITS)-1:0] rsp_wid;
+    wire [NW_WIDTH-1:0] rsp_wid;
     wire [`NUM_THREADS-1:0] rsp_tmask;
     wire [31:0] rsp_pc;
     wire [`NR_BITS-1:0] rsp_rd;
@@ -336,7 +339,8 @@ module VX_lsu_unit #(
     // send load commit
 
     VX_skid_buffer #(
-        .DATAW (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1)
+        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1),
+        .OUT_REG (1)
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),

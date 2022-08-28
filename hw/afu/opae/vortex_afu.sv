@@ -439,7 +439,9 @@ VX_mem_adapter #(
   .SRC_ADDR_WIDTH (CCI_ADDR_WIDTH),  
   .DST_ADDR_WIDTH (LMEM_ADDR_WIDTH),         
   .SRC_TAG_WIDTH  (CCI_ADDR_WIDTH),
-  .DST_TAG_WIDTH  (AVS_REQ_TAGW)
+  .DST_TAG_WIDTH  (AVS_REQ_TAGW),
+  .BUFFERED_REQ   (0),
+  .BUFFERED_RSP   (0)
 ) cci_mem_adapter (
   .clk                (clk),
   .reset              (reset),
@@ -452,6 +454,11 @@ VX_mem_adapter #(
   .mem_req_tag_in     (cci_mem_req_tag), 
   .mem_req_ready_in   (cci_mem_req_ready), 
 
+  .mem_rsp_valid_in   (cci_mem_rsp_valid), 
+  .mem_rsp_data_in    (cci_mem_rsp_data), 
+  .mem_rsp_tag_in     (cci_mem_rsp_tag), 
+  .mem_rsp_ready_in   (cci_mem_rsp_ready),
+
   .mem_req_valid_out  (cci_vx_mem_req_if[1].valid),
   .mem_req_addr_out   (cci_vx_mem_req_if[1].addr),
   .mem_req_rw_out     (cci_vx_mem_req_if[1].rw),
@@ -460,15 +467,10 @@ VX_mem_adapter #(
   .mem_req_tag_out    (cci_vx_mem_req_if[1].tag),
   .mem_req_ready_out  (cci_vx_mem_req_if[1].ready), 
 
-  .mem_rsp_valid_in   (cci_vx_mem_rsp_if[1].valid), 
-  .mem_rsp_data_in    (cci_vx_mem_rsp_if[1].data), 
-  .mem_rsp_tag_in     (cci_vx_mem_rsp_if[1].tag), 
-  .mem_rsp_ready_in   (cci_vx_mem_rsp_if[1].ready),
-
-  .mem_rsp_valid_out  (cci_mem_rsp_valid), 
-  .mem_rsp_data_out   (cci_mem_rsp_data), 
-  .mem_rsp_tag_out    (cci_mem_rsp_tag), 
-  .mem_rsp_ready_out  (cci_mem_rsp_ready) 
+  .mem_rsp_valid_out  (cci_vx_mem_rsp_if[1].valid), 
+  .mem_rsp_data_out   (cci_vx_mem_rsp_if[1].data), 
+  .mem_rsp_tag_out    (cci_vx_mem_rsp_if[1].tag), 
+  .mem_rsp_ready_out  (cci_vx_mem_rsp_if[1].ready)
 );
 
 //--
@@ -485,7 +487,9 @@ VX_mem_adapter #(
   .SRC_ADDR_WIDTH (`VX_MEM_ADDR_WIDTH),    
   .DST_ADDR_WIDTH (LMEM_ADDR_WIDTH),
   .SRC_TAG_WIDTH  (`VX_MEM_TAG_WIDTH),
-  .DST_TAG_WIDTH  (AVS_REQ_TAGW)
+  .DST_TAG_WIDTH  (AVS_REQ_TAGW),
+  .BUFFERED_REQ   (0),
+  .BUFFERED_RSP   (2)
 ) vx_mem_adapter (
   .clk                (clk),
   .reset              (reset),
@@ -498,6 +502,11 @@ VX_mem_adapter #(
   .mem_req_tag_in     (vx_mem_req_tag), 
   .mem_req_ready_in   (vx_mem_req_ready_qual), 
 
+  .mem_rsp_valid_in   (vx_mem_rsp_valid), 
+  .mem_rsp_data_in    (vx_mem_rsp_data), 
+  .mem_rsp_tag_in     (vx_mem_rsp_tag), 
+  .mem_rsp_ready_in   (vx_mem_rsp_ready),
+
   .mem_req_valid_out  (cci_vx_mem_req_if[0].valid),
   .mem_req_addr_out   (cci_vx_mem_req_if[0].addr),
   .mem_req_rw_out     (cci_vx_mem_req_if[0].rw),
@@ -506,15 +515,10 @@ VX_mem_adapter #(
   .mem_req_tag_out    (cci_vx_mem_req_if[0].tag),
   .mem_req_ready_out  (cci_vx_mem_req_if[0].ready), 
 
-  .mem_rsp_valid_in   (cci_vx_mem_rsp_if[0].valid), 
-  .mem_rsp_data_in    (cci_vx_mem_rsp_if[0].data), 
-  .mem_rsp_tag_in     (cci_vx_mem_rsp_if[0].tag), 
-  .mem_rsp_ready_in   (cci_vx_mem_rsp_if[0].ready),
-
-  .mem_rsp_valid_out  (vx_mem_rsp_valid), 
-  .mem_rsp_data_out   (vx_mem_rsp_data), 
-  .mem_rsp_tag_out    (vx_mem_rsp_tag), 
-  .mem_rsp_ready_out  (vx_mem_rsp_ready) 
+  .mem_rsp_valid_out  (cci_vx_mem_rsp_if[0].valid), 
+  .mem_rsp_data_out   (cci_vx_mem_rsp_if[0].data), 
+  .mem_rsp_tag_out    (cci_vx_mem_rsp_if[0].tag), 
+  .mem_rsp_ready_out  (cci_vx_mem_rsp_if[0].ready)
 );
 
 //--
@@ -537,8 +541,8 @@ VX_mem_arb #(
   .ADDR_WIDTH   (LMEM_ADDR_WIDTH),
   .TAG_WIDTH    (AVS_REQ_TAGW),
   .ARBITER      ("P"),
-  .BUFFERED_REQ (1),
-  .BUFFERED_RSP (2)
+  .BUFFERED_REQ (0),
+  .BUFFERED_RSP (0)
 ) mem_arb (
   .clk        (clk),
   .reset      (mem_arb_reset),
@@ -553,12 +557,14 @@ VX_mem_arb #(
 `RESET_RELAY (avs_adapter_reset, reset);
 
 VX_avs_adapter #(
-  .AVS_DATA_WIDTH  (LMEM_DATA_WIDTH), 
-  .AVS_ADDR_WIDTH  (LMEM_ADDR_WIDTH),
-  .AVS_BURST_WIDTH (LMEM_BURST_CTRW),
-  .AVS_BANKS       (NUM_LOCAL_MEM_BANKS),
-  .REQ_TAG_WIDTH   (AVS_REQ_TAGW + 1),
-  .RD_QUEUE_SIZE   (AVS_RD_QUEUE_SIZE)
+  .DATA_WIDTH    (LMEM_DATA_WIDTH), 
+  .ADDR_WIDTH    (LMEM_ADDR_WIDTH),
+  .BURST_WIDTH   (LMEM_BURST_CTRW),
+  .NUM_BANKS     (NUM_LOCAL_MEM_BANKS),
+  .REQ_TAG_WIDTH (AVS_REQ_TAGW + 1),
+  .RD_QUEUE_SIZE (AVS_RD_QUEUE_SIZE),
+  .BUFFERED_REQ  (2),
+  .BUFFERED_RSP  (0)
 ) avs_adapter (
   .clk              (clk),
   .reset            (avs_adapter_reset),
@@ -659,7 +665,7 @@ always @(posedge clk) begin
     cci_rd_req_wait  <= 0;
   end else begin              
     if ((STATE_IDLE == state) 
-    &&  (CMD_MEM_WRITE == cmd_type)) begin
+     && (CMD_MEM_WRITE == cmd_type)) begin
       cci_rd_req_valid <= (cmd_data_size != 0);
       cci_rd_req_wait  <= 0;
     end
@@ -678,7 +684,7 @@ always @(posedge clk) begin
   end
 
   if ((STATE_IDLE == state) 
-  &&  (CMD_MEM_WRITE == cmd_type)) begin
+   && (CMD_MEM_WRITE == cmd_type)) begin
     cci_rd_req_addr    <= cmd_io_addr;
     cci_rd_req_ctr     <= 0;
     cci_rd_rsp_ctr     <= 0;
@@ -813,8 +819,7 @@ assign cmd_mem_rd_done = cci_wr_req_done
                       && cci_pending_writes_empty;
 
 // Send write requests to CCI
-always @(posedge clk) 
-begin
+always @(posedge clk) begin
   if (reset) begin
     cci_wr_req_fire <= 0;
   end else begin
@@ -1019,6 +1024,24 @@ VX_scope #(
 `else
   `UNUSED_PARAM (MMIO_SCOPE_READ)
   `UNUSED_PARAM (MMIO_SCOPE_WRITE)
+`endif
+
+///////////////////////////////////////////////////////////////////////////////
+
+`ifdef DBG_TRACE_AFU
+  always @(posedge clk) begin
+    for (integer i = 0; i < NUM_LOCAL_MEM_BANKS; ++i) begin
+      if (avs_write[i] && ~avs_waitrequest[i]) begin
+        `TRACE(2, ("%d: AVS Wr Req: addr=0x%0h, byteen=0x%0h, burst=0x%0h, data=0x%0h\n", $time, `TO_FULL_ADDR(avs_address[i]), avs_byteenable[i], avs_burstcount[i], avs_writedata[i]));                
+      end
+      if (avs_read[i] && ~avs_waitrequest[i]) begin   
+        `TRACE(2, ("%d: AVS Rd Req: addr=0x%0h, byteen=0x%0h,  burst=0x%0h\n", $time, `TO_FULL_ADDR(avs_address[i]), avs_byteenable[i], avs_burstcount[i]));
+      end 
+      if (avs_readdatavalid[i]) begin
+        `TRACE(2, ("%d: AVS Rd Rsp: data=0x%0h\n", $time, avs_readdata[i]));
+      end
+    end
+  end
 `endif
 
 endmodule

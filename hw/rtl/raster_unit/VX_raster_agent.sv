@@ -14,6 +14,10 @@ module VX_raster_agent #(
     VX_commit_if.master    raster_commit_if,
     VX_gpu_csr_if.slave    raster_csr_if    
 );
+
+    localparam UUID_WIDTH = `UP(`UUID_BITS);
+    localparam NW_WIDTH   = `UP(`NW_BITS);
+
     wire raster_rsp_valid, raster_rsp_ready;
 
     // CSRs access
@@ -51,7 +55,7 @@ module VX_raster_agent #(
     end
 
     VX_skid_buffer #(
-        .DATAW (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + (`NUM_THREADS * 32))
+        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + (`NUM_THREADS * 32))
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),

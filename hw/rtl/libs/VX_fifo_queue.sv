@@ -25,7 +25,11 @@ module VX_fifo_queue #(
     
     localparam ADDRW = $clog2(SIZE);    
 
-    `STATIC_ASSERT(`ISPOW2(SIZE), ("must be 0 or power of 2!"))
+    `STATIC_ASSERT(ALM_FULL > 0, ("alm_full must be greater than 0!"))
+    `STATIC_ASSERT(ALM_FULL < SIZE, ("alm_full must be smaller than size!"))
+    `STATIC_ASSERT(ALM_EMPTY > 0, ("alm_empty must be greater than 0!"))
+    `STATIC_ASSERT(ALM_EMPTY < SIZE, ("alm_empty must be smaller than size!"))
+    `STATIC_ASSERT(`ISPOW2(SIZE), ("size must be a power of 2!"))
     
     if (SIZE == 1) begin
 

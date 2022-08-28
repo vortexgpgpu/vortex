@@ -14,6 +14,7 @@ module VX_ibuffer #(
 );
     `UNUSED_PARAM (CORE_ID)
 
+    localparam NW_WIDTH  = `UP(`NW_BITS);
     localparam SIZE      = (`IBUF_SIZE + 1);
     localparam ALM_FULL  = SIZE - 1;
     localparam ALM_EMPTY = 1;
@@ -22,7 +23,7 @@ module VX_ibuffer #(
     localparam ADDRW   = $clog2(SIZE);
     localparam NWARPSW = $clog2(`NUM_WARPS+1);
 
-    `STATIC_ASSERT ((`IBUF_SIZE >= 2), ("invalid parameter"))
+    `STATIC_ASSERT ((`IBUF_SIZE > 1), ("invalid parameter"))
 
     wire [`NUM_WARPS-1:0] q_full, q_empty, q_alm_full, q_alm_empty;
     wire [DATAW-1:0] q_data_in;
@@ -105,8 +106,8 @@ module VX_ibuffer #(
     ///////////////////////////////////////////////////////////////////////////
 
     reg [`NUM_WARPS-1:0] valid_table, valid_table_n;
-    reg [`UP(`NW_BITS)-1:0] deq_wid, deq_wid_n;
-    reg [`UP(`NW_BITS)-1:0] deq_wid_rr, deq_wid_rr_n;
+    reg [NW_WIDTH-1:0] deq_wid, deq_wid_n;
+    reg [NW_WIDTH-1:0] deq_wid_rr, deq_wid_rr_n;
     reg deq_valid, deq_valid_n;
     reg [DATAW-1:0] deq_instr, deq_instr_n;
     reg [NWARPSW-1:0] num_warps;
@@ -177,7 +178,7 @@ module VX_ibuffer #(
     end    
     
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin
-        assign decode_if.ibuf_pop[i] = deq_fire && (ibuffer_if.wid == `UP(`NW_BITS)'(i));
+        assign decode_if.ibuf_pop[i] = deq_fire && (ibuffer_if.wid == NW_WIDTH'(i));
     end
 
     assign decode_if.ready = ~q_full[decode_if.wid];

@@ -16,6 +16,8 @@ module VX_tex_agent #(
     VX_commit_if.master     tex_commit_if
 );
 
+    localparam UUID_WIDTH = `UP(`UUID_BITS);
+    localparam NW_WIDTH   = `UP(`NW_BITS);
     localparam REQ_QUEUE_BITS = `LOG2UP(`TEX_REQ_QUEUE_SIZE);
 
     // CSRs access
@@ -39,11 +41,11 @@ module VX_tex_agent #(
 
     // Store request info
 
-    wire [`UP(`UUID_BITS)-1:0]  rsp_uuid;
-    wire [`UP(`NW_BITS)-1:0]    rsp_wid;
-    wire [`NUM_THREADS-1:0]     rsp_tmask;
-    wire [31:0]                 rsp_PC;
-    wire [`NR_BITS-1:0]         rsp_rd;
+    wire [UUID_WIDTH-1:0]   rsp_uuid;
+    wire [NW_WIDTH-1:0]     rsp_wid;
+    wire [`NUM_THREADS-1:0] rsp_tmask;
+    wire [31:0]             rsp_PC;
+    wire [`NR_BITS-1:0]     rsp_rd;
  
     wire [REQ_QUEUE_BITS-1:0] mdata_waddr, mdata_raddr;
     
@@ -53,7 +55,7 @@ module VX_tex_agent #(
     wire mdata_pop  = tex_rsp_if.valid && tex_rsp_if.ready;
 
     VX_index_buffer #(
-        .DATAW (`UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS),
+        .DATAW (NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS),
         .SIZE  (`TEX_REQ_QUEUE_SIZE)
     ) tag_store (
         .clk          (clk),
@@ -94,10 +96,10 @@ module VX_tex_agent #(
     // handle texture response
 
     assign mdata_raddr = tex_rsp_if.tag[0 +: REQ_QUEUE_BITS];
-    assign rsp_uuid    = tex_rsp_if.tag[REQ_QUEUE_BITS +: `UP(`UUID_BITS)];
+    assign rsp_uuid    = tex_rsp_if.tag[REQ_QUEUE_BITS +: UUID_WIDTH];
 
     VX_skid_buffer #(
-        .DATAW (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + (`NUM_THREADS * 32))
+        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + (`NUM_THREADS * 32))
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),
