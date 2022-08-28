@@ -29,7 +29,8 @@ module VX_tex_mem #(
     input wire                          rsp_ready    
 );
 
-    localparam TAG_WIDTH = REQ_INFOW + `TEX_LGSTRIDE_BITS + (NUM_LANES * 4 * 2) + 4;
+    localparam UUID_WIDTH = `UP(`UUID_BITS);
+    localparam TAG_WIDTH  = REQ_INFOW + `TEX_LGSTRIDE_BITS + (NUM_LANES * 4 * 2) + 4;
 
     wire                           mem_req_valid;
     wire [3:0][NUM_LANES-1:0]      mem_req_mask;
@@ -93,8 +94,6 @@ module VX_tex_mem #(
 
     // schedule memory request
 
-    `RESET_RELAY (mem_scheduler_reset, reset);
-
     VX_mem_scheduler #(
         .INSTANCE_ID ($sformatf("%s-memsched", INSTANCE_ID)),
         .NUM_REQS    (TEX_MEM_REQS), 
@@ -103,11 +102,11 @@ module VX_tex_mem #(
         .DATA_WIDTH  (32),
         .QUEUE_SIZE  (`TEX_MEM_QUEUE_SIZE),
         .TAG_WIDTH   (TAG_WIDTH),
-        .UUID_WIDTH  (`UP(`UUID_BITS)),
+        .UUID_WIDTH  (UUID_WIDTH),
         .MEM_OUT_REG (3)
     ) mem_scheduler (
         .clk            (clk),
-        .reset          (mem_scheduler_reset),
+        .reset          (reset),
 
         // Input request
         .req_valid      (mem_req_valid),

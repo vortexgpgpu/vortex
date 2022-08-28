@@ -20,7 +20,8 @@ module VX_rop_unit #(
     VX_dcr_write_if.slave   dcr_write_if,
     VX_rop_req_if.slave     rop_req_if
 );
-    localparam MEM_TAG_WIDTH = `UP(`UUID_BITS) + NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 32 + `ROP_DEPTH_BITS + 1);
+    localparam UUID_WIDTH = `UP(`UUID_BITS);
+    localparam MEM_TAG_WIDTH = UUID_WIDTH + NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 32 + `ROP_DEPTH_BITS + 1);
     localparam DS_TAG_WIDTH = NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 1 + 1 + 32);
     localparam BLEND_TAG_WIDTH  = NUM_LANES * (`ROP_DIM_BITS + `ROP_DIM_BITS + 1);
 
@@ -212,7 +213,7 @@ module VX_rop_unit #(
     ///////////////////////////////////////////////////////////////////////////
 
     wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] mem_rsp_pos_x, mem_rsp_pos_y;
-    wire [`UP(`UUID_BITS)-1:0] mem_rsp_uuid;
+    wire [UUID_WIDTH-1:0] mem_rsp_uuid;
     `UNUSED_VAR (mem_rsp_uuid)
 
     wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] ds_write_pos_x, ds_write_pos_y;

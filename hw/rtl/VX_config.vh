@@ -402,7 +402,7 @@
 
 // Core Response Queue Size
 `ifndef ICACHE_CRSQ_SIZE
-`define ICACHE_CRSQ_SIZE 2
+`define ICACHE_CRSQ_SIZE 4
 `endif
 
 // Miss Handling Register Size
@@ -466,7 +466,7 @@
 
 // Core Response Queue Size
 `ifndef DCACHE_CRSQ_SIZE
-`define DCACHE_CRSQ_SIZE 2
+`define DCACHE_CRSQ_SIZE 4
 `endif
 
 // Miss Handling Register Size
@@ -552,7 +552,7 @@
 
 // Core Response Queue Size
 `ifndef TCACHE_CRSQ_SIZE
-`define TCACHE_CRSQ_SIZE 2
+`define TCACHE_CRSQ_SIZE 4
 `endif
 
 // Miss Handling Register Size
@@ -616,7 +616,7 @@
 
 // Core Response Queue Size
 `ifndef RCACHE_CRSQ_SIZE
-`define RCACHE_CRSQ_SIZE 2
+`define RCACHE_CRSQ_SIZE 4
 `endif
 
 // Miss Handling Register Size
@@ -680,7 +680,7 @@
 
 // Core Response Queue Size
 `ifndef OCACHE_CRSQ_SIZE
-`define OCACHE_CRSQ_SIZE 2
+`define OCACHE_CRSQ_SIZE 4
 `endif
 
 // Miss Handling Register Size
@@ -731,7 +731,7 @@
 
 // Core Response Queue Size
 `ifndef L2_CRSQ_SIZE
-`define L2_CRSQ_SIZE 2
+`define L2_CRSQ_SIZE 4
 `endif
 
 // Miss Handling Register Size
@@ -782,7 +782,7 @@
 
 // Core Response Queue Size
 `ifndef L3_CRSQ_SIZE
-`define L3_CRSQ_SIZE 2
+`define L3_CRSQ_SIZE 4
 `endif
 
 // Miss Handling Register Size

@@ -18,20 +18,20 @@ module VX_raster_csr #(
 );
     `UNUSED_VAR (reset)
 
+    localparam NW_WIDTH = `UP(`NW_BITS);
+
     raster_csrs_t [`NUM_THREADS-1:0] wdata;
     raster_csrs_t [`NUM_THREADS-1:0] rdata;
     wire [`NUM_THREADS-1:0]          wren;
-    wire [`UP(`NW_BITS)-1:0]         waddr;
-    wire [`UP(`NW_BITS)-1:0]         raddr;
+    wire [NW_WIDTH-1:0]              waddr;
+    wire [NW_WIDTH-1:0]              raddr;
 
     // CSR registers
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         VX_dp_ram #(
-            .DATAW       ($bits(raster_csrs_t)),
-            .SIZE        (`NUM_WARPS),
-            .LUTRAM      (1),
-            .INIT_ENABLE (1),
-            .INIT_VALUE  (0)
+            .DATAW  ($bits(raster_csrs_t)),
+            .SIZE   (`NUM_WARPS),
+            .LUTRAM (1)
         ) stamp_store (
             .clk   (clk),
             .wren  (wren[i]),

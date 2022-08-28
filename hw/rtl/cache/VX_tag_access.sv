@@ -51,7 +51,7 @@ module VX_tag_access #(
         always @(posedge clk) begin
             if (reset) begin
                 repl_way <= 1;
-            end else if (!stall) begin // hold the value on stalls prevent filling different slots twice
+            end else if (~stall) begin // hold the value on stalls prevent filling different slots twice
                 repl_way <= {repl_way[NUM_WAYS-2:0], repl_way[NUM_WAYS-1]};
             end
         end        
@@ -68,14 +68,14 @@ module VX_tag_access #(
         wire read_valid;
 
         VX_sp_ram #(
-            .DATAW      (`TAG_SEL_BITS + 1),
-            .SIZE       (`LINES_PER_BANK),
+            .DATAW (1 + `TAG_SEL_BITS),
+            .SIZE  (`LINES_PER_BANK),
             .NO_RWCHECK (1)
         ) tag_store (
-            .clk(  clk),                 
+            .clk   (clk),                 
             .addr  (line_addr),   
             .wren  (fill_way[i] || flush),
-            .wdata ({!flush,     line_tag}), 
+            .wdata ({~flush,     line_tag}), 
             .rdata ({read_valid, read_tag})
         );
         

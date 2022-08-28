@@ -18,7 +18,6 @@ module VX_rop_blend_multadd #(
     parameter LATENCY = (`LATENCY_IMUL + 1)
 ) (
     input clk,
-    input reset,
     input enable,
 
     input wire [`ROP_BLEND_MODE_BITS-1:0] mode_rgb,
@@ -102,7 +101,7 @@ module VX_rop_blend_multadd #(
         .DEPTH  (LATENCY_REM)
     ) shift_reg (
         .clk      (clk),
-        .reset    (reset),
+        `UNUSED_PIN (reset),
         .enable   (enable),
         .data_in  ({sum_a[15:8], sum_r[15:8], sum_g[15:8], sum_b[15:8]}),
         .data_out ({color_out.a, color_out.r, color_out.g, color_out.b})

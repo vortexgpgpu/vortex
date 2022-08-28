@@ -165,8 +165,8 @@ module VX_miss_resrv #(
         dequeue_id_r  <= dequeue_id_n;
         allocate_id_r <= allocate_id_n;
 
-        `ASSERT(!allocate_fire || !valid_table[allocate_id_r], ("runtime error"));        
-        `ASSERT(!release_valid || valid_table[release_id], ("runtime error"));
+        `ASSERT(!allocate_fire || !valid_table[allocate_id_r], ("runtime error: allocating used entry"));        
+        `ASSERT(!release_valid || valid_table[release_id], ("runtime error: releasing unsued entry"));
     end
     
     `RUNTIME_ASSERT((!allocate_fire || ~valid_table[allocate_id_r]), ("%t: *** %s:%0d in-use allocation: addr=0x%0h, id=%0d", $time, INSTANCE_ID, BANK_ID, 

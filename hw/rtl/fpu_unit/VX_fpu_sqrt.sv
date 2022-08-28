@@ -84,11 +84,10 @@ module VX_fpu_sqrt #(
 
         VX_shift_register #(
             .DATAW  (32),
-            .DEPTH  (`LATENCY_FSQRT),
-            .RESETW (1)
+            .DEPTH  (`LATENCY_FSQRT)
         ) shift_req_dpi (
             .clk      (clk),
-            .reset    (reset),
+            `UNUSED_PIN (reset),
             .enable   (enable),
             .data_in  (r),
             .data_out (result[i])

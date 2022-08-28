@@ -26,13 +26,16 @@ module VX_icache_stage #(
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_VAR (reset)
 
+    localparam UUID_WIDTH = `UP(`UUID_BITS);
+    localparam NW_WIDTH   = `UP(`NW_BITS);
+
     wire icache_req_valid;
     wire [ICACHE_ADDR_WIDTH-1:0] icache_req_addr;
     wire [ICACHE_TAG_WIDTH-1:0] icache_req_tag;
     wire icache_req_ready;
 
-    wire [`UP(`UUID_BITS)-1:0] rsp_uuid;
-    wire [`UP(`NW_BITS)-1:0] req_tag, rsp_tag;    
+    wire [UUID_WIDTH-1:0] rsp_uuid;
+    wire [NW_WIDTH-1:0] req_tag, rsp_tag;    
 
     wire icache_req_fire = icache_req_valid && icache_req_ready;
     
@@ -66,7 +69,7 @@ module VX_icache_stage #(
         ) pending_reads (
             .clk   (clk),
             .reset (reset),
-            .incr  (icache_req_fire && (ifetch_req_if.wid == `UP(`NW_BITS)'(i))),
+            .incr  (icache_req_fire && (ifetch_req_if.wid == NW_WIDTH'(i))),
             .decr  (ifetch_rsp_if.ibuf_pop[i]),
             .full  (pending_ibuf_full[i]),
             `UNUSED_PIN (size),
@@ -104,7 +107,7 @@ module VX_icache_stage #(
 
     // Icache Response
 
-    wire [`UP(`NW_BITS)-1:0] rsp_wid = rsp_tag;
+    wire [NW_WIDTH-1:0] rsp_wid = rsp_tag;
 
     assign ifetch_rsp_if.valid = icache_rsp_if.valid;
     assign ifetch_rsp_if.tmask = rsp_tmask;
