@@ -14,6 +14,10 @@ module VX_rop_agent #(
     VX_commit_if.master   rop_commit_if,
     VX_rop_req_if.master  rop_req_if
 );
+    
+    localparam UUID_WIDTH = `UP(`UUID_BITS);
+    localparam NW_WIDTH   = `UP(`NW_BITS);
+
     // CSRs access
 
     rop_csrs_t rop_csrs;
@@ -40,7 +44,7 @@ module VX_rop_agent #(
     // because of that we need to decouple rop_agent_if and rop_commit_if handshake with a pipe register
 
     VX_skid_buffer #(
-        .DATAW   (`UP(`UUID_BITS) + `NUM_THREADS * (1 + 2 * `ROP_DIM_BITS + 32 + `ROP_DEPTH_BITS + 1)),
+        .DATAW   (UUID_WIDTH + `NUM_THREADS * (1 + 2 * `ROP_DIM_BITS + 32 + `ROP_DEPTH_BITS + 1)),
         .OUT_REG (1)
     ) req_sbuf (
         .clk       (clk),
@@ -58,7 +62,7 @@ module VX_rop_agent #(
     assign rop_rsp_valid = rop_agent_if.valid && rop_req_ready;
 
     VX_skid_buffer #(
-        .DATAW (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32)
+        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32)
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),
