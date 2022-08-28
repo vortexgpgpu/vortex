@@ -21,10 +21,10 @@ module VX_writeback #(
     // simulation helper signals
     output reg [`NUM_REGS-1:0][31:0] sim_wb_value
 );
-
     `UNUSED_PARAM (CORE_ID)
 
-    localparam DATAW = `UP(`NW_BITS) + 32 + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * 32) + 1;
+    localparam NW_WIDTH = `UP(`NW_BITS);
+    localparam DATAW    = NW_WIDTH + 32 + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * 32) + 1;
     localparam NUM_RSPS = 4 + `EXT_F_ENABLED;
 
 `ifdef EXT_F_ENABLE

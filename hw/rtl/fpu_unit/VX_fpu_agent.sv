@@ -20,11 +20,14 @@ module VX_fpu_agent #(
 
     input wire              csr_pending,
     output wire             req_pending
-); 
+);
+    localparam UUID_WIDTH = `UP(`UUID_BITS);
+    localparam NW_WIDTH   = `UP(`NW_BITS);
+    
     // Store request info
 
-    wire [`UP(`UUID_BITS)-1:0] rsp_uuid;
-    wire [`UP(`NW_BITS)-1:0]   rsp_wid;
+    wire [UUID_WIDTH-1:0] rsp_uuid;
+    wire [NW_WIDTH-1:0]   rsp_wid;
     wire [`NUM_THREADS-1:0]    rsp_tmask;
     wire [31:0]                rsp_PC;
     wire [`NR_BITS-1:0]        rsp_rd;
@@ -38,7 +41,7 @@ module VX_fpu_agent #(
     assign rsp_tag = fpu_rsp_if.tag;
 
     VX_index_buffer #(
-        .DATAW   (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS),
+        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS),
         .SIZE    (`FPU_REQ_QUEUE_SIZE)
     ) tag_store  (
         .clk          (clk),
@@ -104,7 +107,7 @@ module VX_fpu_agent #(
     // commit
 
     VX_skid_buffer #(
-        .DATAW   (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + (`NUM_THREADS * 32)),
+        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + (`NUM_THREADS * 32)),
         .OUT_REG (1)
     ) rsp_sbuf (
         .clk       (clk),
