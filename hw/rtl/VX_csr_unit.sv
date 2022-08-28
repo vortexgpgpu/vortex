@@ -54,6 +54,9 @@ module VX_csr_unit #(
 
     output wire                 req_pending
 );
+    localparam UUID_WIDTH = `UP(`UUID_BITS);
+    localparam NW_WIDTH   = `UP(`NW_BITS);
+
     
     reg [`NUM_THREADS-1:0][31:0] csr_read_data;
     reg [31:0]                 csr_write_data;
@@ -242,7 +245,7 @@ module VX_csr_unit #(
     // send response
 
     VX_skid_buffer #(
-        .DATAW   (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1 + `NUM_THREADS * 32),
+        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + `NUM_THREADS * 32),
         .OUT_REG (1)
     ) rsp_sbuf (
         .clk       (clk),

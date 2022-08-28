@@ -45,9 +45,11 @@ module VX_gpu_unit #(
 );
     `UNUSED_PARAM (CORE_ID)
 
+    localparam UUID_WIDTH    = `UP(`UUID_BITS);
+    localparam NW_WIDTH      = `UP(`NW_BITS);
     localparam WCTL_DATAW    = `GPU_TMC_BITS + `GPU_WSPAWN_BITS + `GPU_SPLIT_BITS + `GPU_BARRIER_BITS;
     localparam RSP_DATAW     = `MAX(`NUM_THREADS * 32, WCTL_DATAW);
-    localparam RSP_ARB_DATAW = `UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS + 1 + RSP_DATAW + 1 + 1;
+    localparam RSP_ARB_DATAW = UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + RSP_DATAW + 1 + 1;
     localparam RSP_ARB_SIZE  = 1 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED + `EXT_IMADD_ENABLED;
 
     wire [RSP_DATAW-1:0] rsp_data;
@@ -115,7 +117,7 @@ module VX_gpu_unit #(
     
     assign barrier.valid   = is_bar;
     assign barrier.id      = rs1_data[`NB_BITS-1:0];
-    assign barrier.size_m1 = `UP(`NW_BITS)'(rs2_data - 1);       
+    assign barrier.size_m1 = NW_WIDTH'(rs2_data - 1);       
 
     // Warp control response
     wire wctl_req_valid = gpu_req_valid && (is_wspawn || is_tmc || is_split || is_join || is_bar || is_pred);
@@ -227,8 +229,8 @@ module VX_gpu_unit #(
     wire                          imadd_ready_in;
 
     wire                          imadd_valid_out;
-    wire [`UP(`UUID_BITS)-1:0]    imadd_uuid_out;
-    wire [`UP(`NW_BITS)-1:0]      imadd_wid_out;
+    wire [UUID_WIDTH-1:0]         imadd_uuid_out;
+    wire [NW_WIDTH-1:0]           imadd_wid_out;
     wire [`NUM_THREADS-1:0]       imadd_tmask_out;
     wire [31:0]                   imadd_PC_out;
     wire [`NR_BITS-1:0]           imadd_rd_out; 
@@ -244,7 +246,7 @@ module VX_gpu_unit #(
         .DATA_WIDTH (32),
         .MAX_SHIFT  (24),
         .SIGNED     (1),
-        .TAG_WIDTH  (`UP(`UUID_BITS) + `UP(`NW_BITS) + `NUM_THREADS + 32 + `NR_BITS)
+        .TAG_WIDTH  (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS)
     ) imadd (
         .clk        (clk),
         .reset      (imadd_reset),
