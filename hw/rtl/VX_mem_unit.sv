@@ -487,7 +487,7 @@ module VX_mem_unit # (
     VX_cache_wrap #(
         .INSTANCE_ID    ($sformatf("cluster%0d-l2cache", CLUSTER_ID)),
         .CACHE_SIZE     (`L2_CACHE_SIZE),
-        .LINE_SIZE      (L2_LINE_SIZE),
+        .LINE_SIZE      (`L2_LINE_SIZE),
         .NUM_BANKS      (`L2_NUM_BANKS),
         .NUM_WAYS       (`L2_NUM_WAYS),
         .NUM_PORTS      (`L2_NUM_PORTS),

@@ -1,6 +1,10 @@
 `ifndef VX_PLATFORM_VH
 `define VX_PLATFORM_VH
 
+`ifndef SIMULATION
+`include "globals.vh"
+`endif
+
 `ifndef SYNTHESIS
 `include "util_dpi.vh"
 `endif

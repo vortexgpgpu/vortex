@@ -19,7 +19,7 @@ MK_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 COMMON_REPO ?= $(shell bash -c 'export MK_PATH=$(MK_PATH); echo $${MK_PATH%rtl_kernels/rtl_user_managed/*}')
 PWD = $(shell readlink -f .)
 XF_PROJ_ROOT = $(shell readlink -f $(COMMON_REPO))
-KERNEL_NAME = vortex_kernel
+KERNEL_NAME = vortex_afu
 
 
 ####################### Checking if PLATFORM in allowlist #####################

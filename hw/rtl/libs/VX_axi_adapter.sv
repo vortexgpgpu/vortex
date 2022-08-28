@@ -2,84 +2,78 @@
 
 `TRACING_OFF
 module VX_axi_adapter #(
-    parameter VX_DATA_WIDTH    = 512, 
-    parameter VX_ADDR_WIDTH    = (32 - $clog2(VX_DATA_WIDTH/8)),            
-    parameter VX_TAG_WIDTH     = 8,
-    parameter AXI_DATA_WIDTH   = VX_DATA_WIDTH, 
-    parameter AXI_ADDR_WIDTH   = 32,
-    parameter AXI_TID_WIDTH    = VX_TAG_WIDTH,
-    parameter VX_BYTEEN_WIDTH  = (VX_DATA_WIDTH / 8),
-    parameter AXI_STROBE_WIDTH = (AXI_DATA_WIDTH / 8)
+    parameter DATA_WIDTH = 512, 
+    parameter ADDR_WIDTH = (32 - $clog2(DATA_WIDTH/8)),            
+    parameter TAG_WIDTH  = 8
 ) (
-    input  wire                         clk,
-    input  wire                         reset,
+    input  wire                     clk,
+    input  wire                     reset,
 
     // Vortex request
-    input wire                          mem_req_valid,
-    input wire                          mem_req_rw,
-    input wire [VX_BYTEEN_WIDTH-1:0]    mem_req_byteen,
-    input wire [VX_ADDR_WIDTH-1:0]      mem_req_addr,
-    input wire [VX_DATA_WIDTH-1:0]      mem_req_data,
-    input wire [VX_TAG_WIDTH-1:0]       mem_req_tag,
+    input wire                      mem_req_valid,
+    input wire                      mem_req_rw,
+    input wire [DATA_WIDTH/8-1:0]   mem_req_byteen,
+    input wire [ADDR_WIDTH-1:0]     mem_req_addr,
+    input wire [DATA_WIDTH-1:0]     mem_req_data,
+    input wire [TAG_WIDTH-1:0]      mem_req_tag,
 
     // Vortex response
-    input wire                          mem_rsp_ready,
-    output wire                         mem_rsp_valid,        
-    output wire [VX_DATA_WIDTH-1:0]     mem_rsp_data,
-    output wire [VX_TAG_WIDTH-1:0]      mem_rsp_tag,
-    output wire                         mem_req_ready,
+    input wire                      mem_rsp_ready,
+    output wire                     mem_rsp_valid,        
+    output wire [DATA_WIDTH-1:0]    mem_rsp_data,
+    output wire [TAG_WIDTH-1:0]     mem_rsp_tag,
+    output wire                     mem_req_ready,
 
     // AXI write request address channel    
-    output wire [AXI_TID_WIDTH-1:0]     m_axi_awid,
-    output wire [AXI_ADDR_WIDTH-1:0]    m_axi_awaddr,
-    output wire [7:0]                   m_axi_awlen,
-    output wire [2:0]                   m_axi_awsize,
-    output wire [1:0]                   m_axi_awburst,
-    output wire                         m_axi_awlock,    
-    output wire [3:0]                   m_axi_awcache,
-    output wire [2:0]                   m_axi_awprot,        
-    output wire [3:0]                   m_axi_awqos,
-    output wire                         m_axi_awvalid,
-    input wire                          m_axi_awready,
+    output wire [TAG_WIDTH-1:0]     m_axi_awid,
+    output wire [ADDR_WIDTH-1:0]    m_axi_awaddr,
+    output wire [7:0]               m_axi_awlen,
+    output wire [2:0]               m_axi_awsize,
+    output wire [1:0]               m_axi_awburst,
+    output wire [1:0]               m_axi_awlock,    
+    output wire [3:0]               m_axi_awcache,
+    output wire [2:0]               m_axi_awprot,        
+    output wire [3:0]               m_axi_awqos,
+    output wire [3:0]               m_axi_awregion,
+    output wire                     m_axi_awvalid,
+    input wire                      m_axi_awready,
 
     // AXI write request data channel     
-    output wire [AXI_DATA_WIDTH-1:0]    m_axi_wdata,
-    output wire [AXI_STROBE_WIDTH-1:0]  m_axi_wstrb,    
-    output wire                         m_axi_wlast,  
-    output wire                         m_axi_wvalid, 
-    input wire                          m_axi_wready,
+    output wire [DATA_WIDTH-1:0]    m_axi_wdata,
+    output wire [DATA_WIDTH/8-1:0]  m_axi_wstrb,    
+    output wire                     m_axi_wlast,  
+    output wire                     m_axi_wvalid, 
+    input wire                      m_axi_wready,
 
     // AXI write response channel
-    input wire [AXI_TID_WIDTH-1:0]      m_axi_bid,
-    input wire [1:0]                    m_axi_bresp,  
-    input wire                          m_axi_bvalid,
-    output wire                         m_axi_bready,
+    input wire [TAG_WIDTH-1:0]      m_axi_bid,
+    input wire [1:0]                m_axi_bresp,  
+    input wire                      m_axi_bvalid,
+    output wire                     m_axi_bready,
     
     // AXI read address channel
-    output wire [AXI_TID_WIDTH-1:0]     m_axi_arid,
-    output wire [AXI_ADDR_WIDTH-1:0]    m_axi_araddr,
-    output wire [7:0]                   m_axi_arlen,
-    output wire [2:0]                   m_axi_arsize,
-    output wire [1:0]                   m_axi_arburst,    
-    output wire                         m_axi_arlock,    
-    output wire [3:0]                   m_axi_arcache,
-    output wire [2:0]                   m_axi_arprot,        
-    output wire [3:0]                   m_axi_arqos, 
-    output wire                         m_axi_arvalid,
-    input wire                          m_axi_arready,
+    output wire [TAG_WIDTH-1:0]     m_axi_arid,
+    output wire [ADDR_WIDTH-1:0]    m_axi_araddr,
+    output wire [7:0]               m_axi_arlen,
+    output wire [2:0]               m_axi_arsize,
+    output wire [1:0]               m_axi_arburst,    
+    output wire [1:0]               m_axi_arlock,    
+    output wire [3:0]               m_axi_arcache,
+    output wire [2:0]               m_axi_arprot,        
+    output wire [3:0]               m_axi_arqos, 
+    output wire [3:0]               m_axi_arregion,
+    output wire                     m_axi_arvalid,
+    input wire                      m_axi_arready,
     
     // AXI read response channel
-    input wire [AXI_TID_WIDTH-1:0]      m_axi_rid,
-    input wire [AXI_DATA_WIDTH-1:0]     m_axi_rdata,  
-    input wire [1:0]                    m_axi_rresp,
-    input wire                          m_axi_rlast,
-    input wire                          m_axi_rvalid,
-    output wire                         m_axi_rready
+    input wire [TAG_WIDTH-1:0]      m_axi_rid,
+    input wire [DATA_WIDTH-1:0]     m_axi_rdata,  
+    input wire [1:0]                m_axi_rresp,
+    input wire                      m_axi_rlast,
+    input wire                      m_axi_rvalid,
+    output wire                     m_axi_rready
 );    
-    localparam AXSIZE = $clog2(VX_DATA_WIDTH/8);
-
-    `STATIC_ASSERT((AXI_DATA_WIDTH == VX_DATA_WIDTH), ("invalid parameter"))
-    `STATIC_ASSERT((AXI_TID_WIDTH == VX_TAG_WIDTH), ("invalid parameter"))
+    localparam AXSIZE = $clog2(DATA_WIDTH/8);
 
     //`UNUSED_VAR ()
 
@@ -108,14 +102,15 @@ module VX_axi_adapter #(
     // AXI write request address channel        
     assign m_axi_awvalid    = mem_req_valid && mem_req_rw && !awvalid_ack;
     assign m_axi_awid       = mem_req_tag;
-    assign m_axi_awaddr     = AXI_ADDR_WIDTH'(mem_req_addr) << AXSIZE;
+    assign m_axi_awaddr     = ADDR_WIDTH'(mem_req_addr) << AXSIZE;
     assign m_axi_awlen      = 8'b00000000;    
     assign m_axi_awsize     = 3'(AXSIZE);
     assign m_axi_awburst    = 2'b00;    
-    assign m_axi_awlock     = 1'b0;    
+    assign m_axi_awlock     = 2'b00;    
     assign m_axi_awcache    = 4'b0;
-    assign m_axi_awprot     = 3'b0;
+    assign m_axi_awprot     = 3'b0;    
     assign m_axi_awqos      = 4'b0;
+    assign m_axi_awregion   = 4'b0;
 
     // AXI write request data channel        
     assign m_axi_wvalid     = mem_req_valid && mem_req_rw && !wvalid_ack;
@@ -131,14 +126,15 @@ module VX_axi_adapter #(
     // AXI read request channel
     assign m_axi_arvalid    = mem_req_valid && !mem_req_rw;
     assign m_axi_arid       = mem_req_tag;
-    assign m_axi_araddr     = AXI_ADDR_WIDTH'(mem_req_addr) << AXSIZE;
+    assign m_axi_araddr     = ADDR_WIDTH'(mem_req_addr) << AXSIZE;
     assign m_axi_arlen      = 8'b00000000;
     assign m_axi_arsize     = 3'(AXSIZE);
     assign m_axi_arburst    = 2'b00;  
-    assign m_axi_arlock     = 1'b0;    
+    assign m_axi_arlock     = 2'b00;    
     assign m_axi_arcache    = 4'b0;
     assign m_axi_arprot     = 3'b0;
     assign m_axi_arqos      = 4'b0;
+    assign m_axi_arregion   = 4'b0;
 
     // AXI read response channel    
     assign mem_rsp_valid    = m_axi_rvalid;

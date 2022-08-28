@@ -38,7 +38,6 @@ module VX_xil_fma #(
     for (genvar i = 0; i < NUM_LANES; ++i) begin       
         reg [31:0] a, b, c;
         wire [2:0] tuser;
-        wire tvalid_in;
 
         always @(*) begin
             if (do_madd) begin
@@ -60,25 +59,19 @@ module VX_xil_fma #(
                 end
             end    
         end
-        
-        `RESET_RELAY (fma_reset, reset);
-
-        assign tvalid_in = enable && valid_in;
 
         xil_fma fma (
             .aclk                    (clk),
-            .aresetn                 (~fma_reset),
-            .s_axis_a_tvalid         (tvalid_in),
+            .aclken                  (enable),
+            .s_axis_a_tvalid         (1'b1),
             .s_axis_a_tdata          (a),
-            .s_axis_b_tvalid         (tvalid_in),
+            .s_axis_b_tvalid         (1'b1),
             .s_axis_b_tdata          (b),
-            .s_axis_c_tvalid         (tvalid_in),
+            .s_axis_c_tvalid         (1'b1),
             .s_axis_c_tdata          (c),
-            .s_axis_operation_tvalid (tvalid_in),
-            .s_axis_operation_tdata  ('0),
-            .m_axis_result_tvalid    (valid_out),
+            `UNUSED_PIN (m_axis_result_tvalid),
             .m_axis_result_tdata     (result[i]),
-            .m_axis_result_tuser     (tuser[i])
+            .m_axis_result_tuser     (tuser)
         );
 
         assign fflags[i].NX = 1'b0;

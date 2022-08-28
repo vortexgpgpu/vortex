@@ -30,21 +30,16 @@ module VX_xil_fsqrt #(
     wire enable = ~stall;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        wire [0:0] tuser;
-        wire tvalid_in;
-
-        `RESET_RELAY (fsqrt_reset, reset);
-
-        assign tvalid_in = enable && valid_in;
+        wire [0:0] tuser;       
 
         xil_fsqrt fsqrt (
             .aclk                 (clk),
-            .aresetn              (~fsqrt_reset),
-            .s_axis_a_tvalid      (tvalid_in),
-            .s_axis_a_tdata       (a),
-            .m_axis_result_tvalid (valid_out),
+            .aclken               (enable),
+            .s_axis_a_tvalid      (1'b1),
+            .s_axis_a_tdata       (dataa[i]),
+            `UNUSED_PIN (m_axis_result_tvalid),
             .m_axis_result_tdata  (result[i]),
-            .m_axis_result_tuser  (tuser[i])
+            .m_axis_result_tuser  (tuser)
         );
 
         assign fflags[i].NX = 1'b0;

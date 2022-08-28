@@ -42,7 +42,7 @@ localparam ICACHE_WORD_SIZE	    = 4;
 localparam ICACHE_ADDR_WIDTH	= (32 - `CLOG2(ICACHE_WORD_SIZE));
 
 // Block size in bytes
-localparam ICACHE_LINE_SIZE	    = `L1_BLOCK_SIZE;
+localparam ICACHE_LINE_SIZE	    = `L1_LINE_SIZE;
 
 // Core request tag Id bits       
 localparam ICACHE_TAG_ID_BITS	= `UP(`NW_BITS);
@@ -74,7 +74,7 @@ localparam DCACHE_WORD_SIZE	    = 4;
 localparam DCACHE_ADDR_WIDTH	= (32 - `CLOG2(DCACHE_WORD_SIZE));
 
 // Block size in bytes
-localparam DCACHE_LINE_SIZE 	= `L1_BLOCK_SIZE;
+localparam DCACHE_LINE_SIZE 	= `L1_LINE_SIZE;
 
 // Input request size
 localparam DCACHE_NUM_REQS	    = `MAX(`DCACHE_NUM_BANKS, `SMEM_NUM_BANKS);
@@ -112,7 +112,7 @@ localparam TCACHE_WORD_SIZE	    = 4;
 localparam TCACHE_ADDR_WIDTH	= (32 - `CLOG2(TCACHE_WORD_SIZE));
 
 // Block size in bytes
-localparam TCACHE_LINE_SIZE	    = `L1_BLOCK_SIZE;
+localparam TCACHE_LINE_SIZE	    = `L1_LINE_SIZE;
 
 // Input request size
 localparam TCACHE_NUM_REQS	    = `TCACHE_NUM_BANKS;
@@ -146,7 +146,7 @@ localparam RCACHE_WORD_SIZE	    = 4;
 localparam RCACHE_ADDR_WIDTH	= (32 - `CLOG2(RCACHE_WORD_SIZE));
 
 // Block size in bytes
-localparam RCACHE_LINE_SIZE	    = `L1_BLOCK_SIZE;
+localparam RCACHE_LINE_SIZE	    = `L1_LINE_SIZE;
 
 // Input request size
 localparam RCACHE_NUM_REQS	    = `RCACHE_NUM_BANKS;
@@ -180,7 +180,7 @@ localparam OCACHE_WORD_SIZE	    = 4;
 localparam OCACHE_ADDR_WIDTH	= (32 - `CLOG2(OCACHE_WORD_SIZE));
 
 // Block size in bytes
-localparam OCACHE_LINE_SIZE	    = `L1_BLOCK_SIZE;
+localparam OCACHE_LINE_SIZE	    = `L1_LINE_SIZE;
 
 // Input request size
 localparam OCACHE_NUM_REQS	    = `OCACHE_NUM_BANKS;
@@ -219,14 +219,7 @@ localparam NUM_L1_OUTPUTS       = (2 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + 
 /////////////////////////////// L2 Parameters /////////////////////////////////
 
 // Word size in bytes
-localparam L2_WORD_SIZE	        = `L1_BLOCK_SIZE;
-
-// Block size in bytes
-`ifdef L2_ENABLE
-localparam L2_LINE_SIZE	        = `MEM_BLOCK_SIZE;
-`else
-localparam L2_LINE_SIZE	        = L2_WORD_SIZE;
-`endif
+localparam L2_WORD_SIZE	        = `L1_LINE_SIZE;
 
 // Input request size
 localparam L2_NUM_REQS	        = NUM_L1_OUTPUTS;
@@ -235,26 +228,19 @@ localparam L2_NUM_REQS	        = NUM_L1_OUTPUTS;
 localparam L2_TAG_WIDTH	        = L1_MEM_TAG_WIDTH;
 
 // Memory request data bits
-localparam L2_MEM_DATA_WIDTH	= (L2_LINE_SIZE * 8);
+localparam L2_MEM_DATA_WIDTH	= (`L2_LINE_SIZE * 8);
 
 // Memory request tag bits
 `ifdef L2_ENABLE
-localparam L2_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`L2_MSHR_SIZE, `L2_NUM_BANKS, L2_NUM_REQS, L2_LINE_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH);
+localparam L2_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`L2_MSHR_SIZE, `L2_NUM_BANKS, L2_NUM_REQS, `L2_LINE_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH);
 `else
-localparam L2_MEM_TAG_WIDTH     = `CACHE_NC_BYPASS_TAG_WIDTH(L2_NUM_REQS, L2_LINE_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH);
+localparam L2_MEM_TAG_WIDTH     = `CACHE_NC_BYPASS_TAG_WIDTH(L2_NUM_REQS, `L2_LINE_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH);
 `endif
 
 /////////////////////////////// L3 Parameters /////////////////////////////////
 
 // Word size in bytes
-localparam L3_WORD_SIZE	        = L2_LINE_SIZE;
-
-// Block size in bytes
-`ifdef L3_ENABLE
-localparam L3_LINE_SIZE	        = `MEM_BLOCK_SIZE;
-`else
-localparam L3_LINE_SIZE	        = L3_WORD_SIZE;
-`endif
+localparam L3_WORD_SIZE	        = `L2_LINE_SIZE;
 
 // Input request size
 localparam L3_NUM_REQS	        = `NUM_CLUSTERS;
@@ -263,13 +249,13 @@ localparam L3_NUM_REQS	        = `NUM_CLUSTERS;
 localparam L3_TAG_WIDTH	        = L2_MEM_TAG_WIDTH;
 
 // Memory request data bits
-localparam L3_MEM_DATA_WIDTH	= (L3_LINE_SIZE * 8);
+localparam L3_MEM_DATA_WIDTH	= (`L3_LINE_SIZE * 8);
 
 // Memory request tag bits
 `ifdef L3_ENABLE
-localparam L3_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`L3_MSHR_SIZE, `L3_NUM_BANKS, L3_NUM_REQS, L3_LINE_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH);
+localparam L3_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`L3_MSHR_SIZE, `L3_NUM_BANKS, L3_NUM_REQS, `L3_LINE_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH);
 `else
-localparam L3_MEM_TAG_WIDTH     = `CACHE_NC_BYPASS_TAG_WIDTH(L3_NUM_REQS, L3_LINE_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH);
+localparam L3_MEM_TAG_WIDTH     = `CACHE_NC_BYPASS_TAG_WIDTH(L3_NUM_REQS, `L3_LINE_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH);
 `endif
 
 endpackage

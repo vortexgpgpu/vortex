@@ -32,22 +32,17 @@ module VX_xil_fdiv #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         wire [3:0] tuser;
-        wire tvalid_in;
-
-        `RESET_RELAY (fdiv_reset, reset);
-
-        assign tvalid_in = enable && valid_in;
 
         xil_fdiv fdiv (
             .aclk                 (clk),
-            .aresetn              (~fdiv_reset),
-            .s_axis_a_tvalid      (tvalid_in),
-            .s_axis_a_tdata       (a),
-            .s_axis_b_tvalid      (tvalid_in),
-            .s_axis_b_tdata       (b),
-            .m_axis_result_tvalid (valid_out),
+            .aclken               (enable),
+            .s_axis_a_tvalid      (1'b1),
+            .s_axis_a_tdata       (dataa[i]),
+            .s_axis_b_tvalid      (1'b1),
+            .s_axis_b_tdata       (datab[i]),
+            `UNUSED_PIN (m_axis_result_tvalid),
             .m_axis_result_tdata  (result[i]),
-            .m_axis_result_tuser  (tuser[i])
+            .m_axis_result_tuser  (tuser)
         );
 
         assign fflags[i].NX = 1'b0;
@@ -58,15 +53,15 @@ module VX_xil_fdiv #(
     end
 
     VX_shift_register #(
-        .DATAW  (TAGW),
+        .DATAW  (1 + TAGW),
         .DEPTH  (LATENCY),
         .RESETW (1)
     ) shift_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
-        .data_in  (tag_in),
-        .data_out (tag_out)
+        .data_in  ({valid_in,  tag_in}),
+        .data_out ({valid_out, tag_out})
     );
 
     assign ready_in = enable;

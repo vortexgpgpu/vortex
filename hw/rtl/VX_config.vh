@@ -68,11 +68,11 @@
 `define MEM_BLOCK_SIZE 64
 `endif
 
-`ifndef L1_BLOCK_SIZE
+`ifndef L1_LINE_SIZE
 `ifdef L1_DISABLE
-`define L1_BLOCK_SIZE ((`L2_ENABLED || `L3_ENABLED) ? 4 : `MEM_BLOCK_SIZE)
+`define L1_LINE_SIZE ((`L2_ENABLED || `L3_ENABLED) ? 4 : `MEM_BLOCK_SIZE)
 `else
-`define L1_BLOCK_SIZE ((`L2_ENABLED || `L3_ENABLED) ? 16 : `MEM_BLOCK_SIZE)
+`define L1_LINE_SIZE ((`L2_ENABLED || `L3_ENABLED) ? 16 : `MEM_BLOCK_SIZE)
 `endif
 `endif
 
