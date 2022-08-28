@@ -392,7 +392,7 @@ module VX_rop_unit_top #(
     input wire [`VX_DCR_DATA_WIDTH-1:0]     dcr_write_data,
 
     input  wire                             rop_req_valid,    
-    input  wire [UUID_WIDTH-1:0]            rop_req_uuid,
+    input  wire [`UP(`UUID_BITS)-1:0]       rop_req_uuid,
     input  wire [NUM_LANES-1:0]             rop_req_mask, 
     input  wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] rop_req_pos_x,
     input  wire [NUM_LANES-1:0][`ROP_DIM_BITS-1:0] rop_req_pos_y,
