@@ -3,7 +3,7 @@ BUILD_DIR ?= build
 RTL_DIR = ../../../rtl
 DPI_DIR = ../../../dpi
 AFU_DIR = ../../../afu/opae
-IP_DIR  = ../../../ip/altera/$(DEVICE_FAMILY)
+IP_DIR  = ../../../ip/altera
 
 ifeq ($(shell which qsub-synth),)
 	RUN_SYNTH=$(OPAE_PLATFORM_ROOT)/bin/run.sh > build.log 2>&1 &
@@ -61,7 +61,7 @@ FPU_INCLUDE = -I$(RTL_DIR)/fpu_unit
 TEX_INCLUDE = -I$(RTL_DIR)/tex_unit
 RASTER_INCLUDE = -I$(RTL_DIR)/raster_unit
 ROP_INCLUDE = -I$(RTL_DIR)/rop_unit
-RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(IP_DIR)
+RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(IP_DIR) -I$(IP_DIR)/$(DEVICE_FAMILY)
 RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
 
 CFLAGS += $(RTL_INCLUDE)

@@ -1,16 +1,15 @@
 RTL_DIR = ../../../../../rtl
 AFU_DIR = ../../../../../afu/opae
 THIRD_PARTY_DIR = ../../../../../../third_party
+IP_DIR = ../../../../../ip/altera;../../../../../ip/altera/$(DEVICE_FAMILY)
 
 ifeq ($(DEVICE_FAMILY), stratix10)
     FAMILY = "Stratix 10"
-	DEVICE = 1SX280HN2F43E2VG
-	IP_DIR = ../../../../../ip/altera/stratix10
+	DEVICE = 1SX280HN2F43E2VG	
 endif
 ifeq ($(DEVICE_FAMILY), arria10)
     FAMILY = "Arria 10"
 	DEVICE = 10AX115N3F40E2SG
-	IP_DIR = ../../../../../ip/altera/arria10
 endif
 
 CONFIGS += -set "NDEBUG"
