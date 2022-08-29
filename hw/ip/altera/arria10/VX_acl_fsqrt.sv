@@ -30,11 +30,9 @@ module VX_acl_fsqrt #(
     wire enable = ~stall;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        `RESET_RELAY (fsqrt_reset, reset);
-
         acl_fsqrt fsqrt (
             .clk    (clk),
-            .areset (fsqrt_reset),
+            .areset (1'b0),
             .en     (enable),
             .a      (dataa[i]),
             .q      (result[i])

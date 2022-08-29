@@ -30,12 +30,10 @@ module VX_acl_fdiv #(
     wire stall = ~ready_out && valid_out;
     wire enable = ~stall;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin        
-        `RESET_RELAY (fdiv_reset, reset);
-
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         acl_fdiv fdiv (
             .clk    (clk),
-            .areset (fdiv_reset),
+            .areset (1'b0),
             .en     (enable),
             .a      (dataa[i]),
             .b      (datab[i]),
