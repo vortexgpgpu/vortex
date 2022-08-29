@@ -9,7 +9,7 @@ Vortex uses the SIMT (Single Instruction, Multiple Threads) execution model with
   - Each thread has its own register file (32 int + 32 fp registers)
   - Threads execute in parallel
 - **Warps**
-  - A logical clster of threads
+  - A logical cluster of threads
   - Each thread in a warp execute the same instruction
     - The PC is shared; maintain thread mask for Writeback
   - Warp's execution is time-multiplexed at log steps
