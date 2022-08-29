@@ -88,7 +88,9 @@ module VX_mem_unit # (
         .MREQ_SIZE      (`ICACHE_MREQ_SIZE),
         .TAG_WIDTH      (ICACHE_ARB_TAG_WIDTH),
         .UUID_WIDTH     (`UUID_BITS),
-        .WRITE_ENABLE   (0)     
+        .WRITE_ENABLE   (0),
+        .CORE_OUT_REG   (3),
+        .MEM_OUT_REG    (3)
     ) icache (
     `ifdef PERF_ENABLE
         .perf_cache_if  (perf_icache_if),
@@ -117,13 +119,13 @@ module VX_mem_unit # (
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-    ) dcache_smem_req_if [`NUM_SOCKETS]();
+    ) dcache_nosm_req_if [`NUM_SOCKETS]();
 
     VX_cache_rsp_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-    ) dcache_smem_rsp_if [`NUM_SOCKETS]();
+    ) dcache_nosm_rsp_if [`NUM_SOCKETS]();
 
     `RESET_RELAY (dcache_reset, reset);
 
@@ -148,7 +150,9 @@ module VX_mem_unit # (
         .UUID_WIDTH     (`UUID_BITS),
         .WRITE_ENABLE   (1),        
         .NC_ENABLE      (1),
-        .NC_TAG_BIT     (0)
+        .NC_TAG_BIT     (0),
+        .CORE_OUT_REG   (`SM_ENABLED ? 2 : 3),
+        .MEM_OUT_REG    (3)
     ) dcache (
     `ifdef PERF_ENABLE
         .perf_cache_if  (perf_dcache_if),
@@ -156,8 +160,8 @@ module VX_mem_unit # (
         
         .clk            (clk),
         .reset          (dcache_reset),        
-        .core_req_if    (dcache_smem_req_if),
-        .core_rsp_if    (dcache_smem_rsp_if),
+        .core_req_if    (dcache_nosm_req_if),
+        .core_rsp_if    (dcache_nosm_rsp_if),
         .mem_req_if     (dcache_mem_req_if),
         .mem_rsp_if     (dcache_mem_rsp_if)
     );
@@ -190,7 +194,7 @@ module VX_mem_unit # (
             .ARBITER      ("P"),
             .BUFFERED_REQ (2),
             .BUFFERED_RSP (2)
-        ) dcache_smem_switch (
+        ) smem_switch (
             .clk        (clk),
             .reset      (dcache_smem_switch_reset),
             .req_in_if  (dcache_req_if[i]),
@@ -199,8 +203,8 @@ module VX_mem_unit # (
             .rsp_out_if (dcache_smem_switch_rsp_if)
         );
 
-        `ASSIGN_VX_CACHE_REQ_IF (dcache_smem_req_if[i], dcache_smem_switch_req_if[0]);
-        `ASSIGN_VX_CACHE_RSP_IF (dcache_smem_switch_rsp_if[0], dcache_smem_rsp_if[i]);
+        `ASSIGN_VX_CACHE_REQ_IF (dcache_nosm_req_if[i], dcache_smem_switch_req_if[0]);
+        `ASSIGN_VX_CACHE_RSP_IF (dcache_smem_switch_rsp_if[0], dcache_nosm_rsp_if[i]);
 
         // shared memory address mapping:
         // [core_idx][warp_idx][word_idx][thread_idx] <= [core_idx][warp_idx][thread_idx][bank_offset..word_idx]
@@ -237,7 +241,7 @@ module VX_mem_unit # (
             .UUID_WIDTH (`UUID_BITS), 
             .TAG_WIDTH  (DCACHE_NOSM_TAG_WIDTH),
             .OUT_REG    (2)
-        ) smem (        
+        ) shared_mem (        
             .clk        (clk),
             .reset      (smem_reset),
 
@@ -265,8 +269,8 @@ module VX_mem_unit # (
 `else
 
     for (genvar i = 0; i < `NUM_SOCKETS; ++i) begin
-        `ASSIGN_VX_CACHE_REQ_IF (dcache_smem_req_if[i], dcache_req_if[i]);
-        `ASSIGN_VX_CACHE_RSP_IF (dcache_rsp_if[i], dcache_smem_rsp_if[i]);
+        `ASSIGN_VX_CACHE_REQ_IF (dcache_nosm_req_if[i], dcache_req_if[i]);
+        `ASSIGN_VX_CACHE_RSP_IF (dcache_rsp_if[i], dcache_nosm_rsp_if[i]);
     end
 
 `endif
@@ -307,7 +311,9 @@ module VX_mem_unit # (
         .TAG_WIDTH      (TCACHE_TAG_WIDTH),
         .WRITE_ENABLE   (0),
         .UUID_WIDTH     (`UUID_BITS),
-        .NC_ENABLE      (0)
+        .NC_ENABLE      (0),
+        .CORE_OUT_REG   (3),
+        .MEM_OUT_REG    (3)
     ) tcache (
     `ifdef PERF_ENABLE
         .perf_cache_if  (perf_tcache_if),
@@ -358,7 +364,9 @@ module VX_mem_unit # (
         .TAG_WIDTH      (OCACHE_TAG_WIDTH),
         .WRITE_ENABLE   (1),
         .UUID_WIDTH     (`UUID_BITS),
-        .NC_ENABLE      (0)
+        .NC_ENABLE      (0),
+        .CORE_OUT_REG   (3),
+        .MEM_OUT_REG    (3)
     ) ocache (
     `ifdef PERF_ENABLE
         .perf_cache_if  (perf_ocache_if),
@@ -410,7 +418,9 @@ module VX_mem_unit # (
         .TAG_WIDTH      (RCACHE_TAG_WIDTH),
         .WRITE_ENABLE   (0),
         .UUID_WIDTH     (0),        
-        .NC_ENABLE      (0)
+        .NC_ENABLE      (0),
+        .CORE_OUT_REG   (3),
+        .MEM_OUT_REG    (3)
     ) rcache (
     `ifdef PERF_ENABLE
         .perf_cache_if  (perf_rcache_if),
