@@ -107,8 +107,7 @@ module VX_fpu_agent #(
     // commit
 
     VX_skid_buffer #(
-        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + (`NUM_THREADS * 32)),
-        .OUT_REG (1)
+        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + (`NUM_THREADS * 32))
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),
