@@ -76,8 +76,11 @@ module vortex_afu #(
 
     `STATIC_ASSERT((C_M_AXI_GMEM_ID_WIDTH == `VX_MEM_TAG_WIDTH), ("invalid memory tag size: current=%0d, expected=%0d", C_M_AXI_GMEM_ID_WIDTH, `VX_MEM_TAG_WIDTH))
 
-	wire clk   = ap_clk;
-	wire reset = ~ap_rst_n;
+	// Register and invert reset signal.
+	reg reset;
+	always @(posedge ap_clk) begin
+		reset <= ~ap_rst_n;
+	end
 
 	reg  vx_reset;
 	wire vx_busy;
@@ -94,7 +97,7 @@ module vortex_afu #(
 	reg [$clog2(`RESET_DELAY+1)-1:0] vx_reset_ctr;
 	reg vx_running;
 
-	always @(posedge clk) begin
+	always @(posedge ap_clk) begin
 		if (~vx_running && vx_reset == 0 && ap_start) begin
 			vx_reset_ctr <= 0;
 		end else begin
@@ -102,7 +105,7 @@ module vortex_afu #(
 		end
 	end
 
-	always @(posedge clk) begin
+	always @(posedge ap_clk) begin
 		if (reset) begin
 			vx_reset   <= 0;
 			vx_running <= 0;
@@ -127,7 +130,7 @@ module vortex_afu #(
 		.AXI_ADDR_WIDTH (C_S_AXI_CONTROL_ADDR_WIDTH),
 		.AXI_DATA_WIDTH (C_S_AXI_CONTROL_DATA_WIDTH)
 	) afu_control (
-		.clk       		(clk),
+		.clk       		(ap_clk),
 		.reset     		(reset),	
 		.clk_en         (1'b1),
 		
@@ -173,7 +176,7 @@ module vortex_afu #(
 		.AXI_ADDR_WIDTH (C_M_AXI_GMEM_ADDR_WIDTH),
 		.AXI_TID_WIDTH  (C_M_AXI_GMEM_ID_WIDTH)
 	) vortex_axi (
-		.clk			(clk),
+		.clk			(ap_clk),
 		.reset			(reset || vx_reset),
 
 		.m_axi_awid		(m_axi_gmem_awid),

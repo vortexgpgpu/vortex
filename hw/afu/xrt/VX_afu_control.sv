@@ -57,9 +57,12 @@ module VX_afu_control #(
     //        bit 0  - Channel 0 (ap_done)
     //        bit 1  - Channel 1 (ap_ready)
     //        others - reserved
-    // 0x10 : Low 32-bit Data signal of dcr
-    // 0x14 : High 32-bit Data signal of dcr
-    // 0x18 : Control signal of dcr
+    // 0x10 : Low 32-bit Data signal of mem_addr
+    // 0x14 : High 32-bit Data signal of mem_addr
+    // 0x18 : Control signal of mem_addr
+    // 0x1C : Low 32-bit Data signal of dcr
+    // 0x20 : High 32-bit Data signal of dcr
+    // 0x24 : Control signal of dcr
     // (SC = Self Clear, COR = Clear on Read, TOW = Toggle on Write, COH = Clear on Handshake)
 
     // Parameter
@@ -70,9 +73,12 @@ module VX_afu_control #(
         ADDR_GIE            = 6'h04,
         ADDR_IER            = 6'h08,
         ADDR_ISR            = 6'h0c,
-        ADDR_DCR_0          = 6'h10,
-        ADDR_DCR_1          = 6'h14,
-        ADDR_DCR_CTRL       = 6'h18;
+        ADDR_MEM_0          = 6'h10,
+        ADDR_MEM_1          = 6'h14,
+        ADDR_MEM_CTRL       = 6'h18
+        ADDR_DCR_0          = 6'h1C,
+        ADDR_DCR_1          = 6'h20,
+        ADDR_DCR_CTRL       = 6'h24;
 
     localparam
         WSTATE_IDLE         = 2'd0,
@@ -105,6 +111,7 @@ module VX_afu_control #(
     reg                           int_gie = 2'b0;
     reg  [1:0]                    int_ier = 2'b0;
     reg  [1:0]                    int_isr = 2'b0;
+    reg  [63:0]                   int_mem = 64'b0;
     reg  [31:0]                   int_dcra = 32'b0;
     reg  [31:0]                   int_dcrv = 32'b0;
 
@@ -304,6 +311,26 @@ module VX_afu_control #(
                 int_isr[1] <= 1'b1;
             else if (wd_hs && waddr == ADDR_ISR && s_axi_wstrb[0])
                 int_isr[1] <= int_isr[1] ^ s_axi_wdata[1]; // toggle on write
+        end
+    end
+
+    // int_mem[31:0]
+    always @(posedge clk) begin
+        if (reset)
+            int_mem[31:0] <= 0;
+        else if (clk_en) begin
+            if (wd_hs && waddr == ADDR_MEM_0)
+                int_mem[31:0] <= (s_axi_wdata & wmask) | (int_mem[31:0] & ~wmask);
+        end
+    end
+
+     // int_mem[63:32]
+    always @(posedge clk) begin
+        if (reset)
+            int_mem[63:32] <= 0;
+        else if (clk_en) begin
+            if (wd_hs && waddr == ADDR_MEM_1)
+                int_mem[63:32] <= (s_axi_wdata & wmask) | (int_mem[63:32] & ~wmask);
         end
     end
 
