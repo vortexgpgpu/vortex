@@ -6,10 +6,9 @@ import VX_gpu_types::*;
 `IGNORE_WARNINGS_END
 
 module Vortex_axi #(
-    parameter AXI_DATA_WIDTH   = `VX_MEM_DATA_WIDTH, 
-    parameter AXI_ADDR_WIDTH   = 32,
-    parameter AXI_TID_WIDTH    = `VX_MEM_TAG_WIDTH,
-    parameter AXI_STROBE_WIDTH = (AXI_DATA_WIDTH / 8)
+    parameter AXI_DATA_WIDTH = `VX_MEM_DATA_WIDTH, 
+    parameter AXI_ADDR_WIDTH = 32,
+    parameter AXI_TID_WIDTH  = `VX_MEM_TAG_WIDTH
 )(
     // Clock
     input  wire                         clk,
@@ -21,16 +20,17 @@ module Vortex_axi #(
     output wire [7:0]                   m_axi_awlen,
     output wire [2:0]                   m_axi_awsize,
     output wire [1:0]                   m_axi_awburst,  
-    output wire                         m_axi_awlock,    
+    output wire [1:0]                   m_axi_awlock,    
     output wire [3:0]                   m_axi_awcache,
     output wire [2:0]                   m_axi_awprot,        
     output wire [3:0]                   m_axi_awqos,
+    output wire [3:0]                   m_axi_awregion,
     output wire                         m_axi_awvalid,
     input wire                          m_axi_awready,
 
     // AXI write request data channel     
     output wire [AXI_DATA_WIDTH-1:0]    m_axi_wdata,
-    output wire [AXI_STROBE_WIDTH-1:0]  m_axi_wstrb,    
+    output wire [AXI_DATA_WIDTH/8-1:0]  m_axi_wstrb,    
     output wire                         m_axi_wlast,  
     output wire                         m_axi_wvalid, 
     input wire                          m_axi_wready,
@@ -47,10 +47,11 @@ module Vortex_axi #(
     output wire [7:0]                   m_axi_arlen,
     output wire [2:0]                   m_axi_arsize,
     output wire [1:0]                   m_axi_arburst,            
-    output wire                         m_axi_arlock,    
+    output wire [1:0]                   m_axi_arlock,    
     output wire [3:0]                   m_axi_arcache,
     output wire [2:0]                   m_axi_arprot,        
     output wire [3:0]                   m_axi_arqos, 
+    output wire [3:0]                   m_axi_arregion,
     output wire                         m_axi_arvalid,
     input wire                          m_axi_arready,
     
@@ -84,14 +85,9 @@ module Vortex_axi #(
     wire                            mem_rsp_ready;
 
     VX_axi_adapter #(
-        .VX_DATA_WIDTH    (`VX_MEM_DATA_WIDTH), 
-        .VX_ADDR_WIDTH    (`VX_MEM_ADDR_WIDTH),            
-        .VX_TAG_WIDTH     (`VX_MEM_TAG_WIDTH),
-        .VX_BYTEEN_WIDTH  (AXI_STROBE_WIDTH),
-        .AXI_DATA_WIDTH   (AXI_DATA_WIDTH), 
-        .AXI_ADDR_WIDTH   (AXI_ADDR_WIDTH),
-        .AXI_TID_WIDTH    (AXI_TID_WIDTH),  
-        .AXI_STROBE_WIDTH (AXI_STROBE_WIDTH)
+        .DATA_WIDTH (AXI_DATA_WIDTH), 
+        .ADDR_WIDTH (AXI_ADDR_WIDTH),
+        .TAG_WIDTH  (AXI_TID_WIDTH)
     ) axi_adapter (
         .clk            (clk),
         .reset          (reset),
@@ -118,6 +114,7 @@ module Vortex_axi #(
         .m_axi_awcache  (m_axi_awcache),
         .m_axi_awprot   (m_axi_awprot),        
         .m_axi_awqos    (m_axi_awqos),  
+        .m_axi_awregion (m_axi_awregion),
         .m_axi_awvalid  (m_axi_awvalid),
         .m_axi_awready  (m_axi_awready),
 
@@ -141,6 +138,7 @@ module Vortex_axi #(
         .m_axi_arcache  (m_axi_arcache),
         .m_axi_arprot   (m_axi_arprot),        
         .m_axi_arqos    (m_axi_arqos),
+        .m_axi_arregion (m_axi_arregion),
         .m_axi_arvalid  (m_axi_arvalid),
         .m_axi_arready  (m_axi_arready),
         

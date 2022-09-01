@@ -1,69 +1,9 @@
-#
-# Copyright 2019-2021 Xilinx, Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# makefile-generator v1.0.3
-#
-# Points to top directory of Git repository
-MK_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
-COMMON_REPO ?= $(shell bash -c 'export MK_PATH=$(MK_PATH); echo $${MK_PATH%rtl_kernels/rtl_user_managed/*}')
-PWD = $(shell readlink -f .)
-XF_PROJ_ROOT = $(shell readlink -f $(COMMON_REPO))
-KERNEL_NAME = vortex_kernel
+.PHONY: help
 
-
-####################### Checking if PLATFORM in allowlist #####################
-
-PLATFORM_BLOCKLIST += nodma 
-ifneq ($(TARGET),$(findstring $(TARGET), hw hw_emu))
-$(error Application supports only hw hw_emu TARGET. Please use the target for running the application)
-endif
-PLATFORM ?= xilinx_u50_gen3x16_xdma_201920_3
-DEV_ARCH := $(shell platforminfo -p $(PLATFORM) | grep 'FPGA Family' | sed 's/.*://' | sed '/ai_engine/d' | sed 's/^[[:space:]]*//')
-CPU_TYPE := $(shell platforminfo -p $(PLATFORM) | grep 'CPU Type' | sed 's/.*://' | sed '/ai_engine/d' | sed 's/^[[:space:]]*//')
-
-ifeq ($(CPU_TYPE), cortex-a9)
-HOST_ARCH := aarch32
-else ifneq (,$(findstring cortex-a, $(CPU_TYPE)))
-HOST_ARCH := aarch64
-else
-HOST_ARCH := x86
-endif
-
-ifeq ($(DEV_ARCH), zynquplus)
-ifeq ($(HOST_ARCH), aarch64)
-include makefile_zynqmp.mk
-else
-include makefile_us_alveo.mk
-endif
-else ifeq ($(DEV_ARCH), zynq)
-include makefile_zynq7000.mk
-else ifeq ($(DEV_ARCH), versal)
-ifeq ($(HOST_ARCH), x86)
-include makefile_versal_alveo.mk
-else
-include makefile_versal_ps.mk
-endif
-else
-include makefile_us_alveo.mk
-endif
-
-################################ Help Section #################################
-
-help:
+help::
 	$(ECHO) "Makefile Usage:"
-	$(ECHO) "  make all TARGET=<sw_emu/hw_emu/hw> PLATFORM=<FPGA platform> EDGE_COMMON_SW=<rootfs and kernel image path>"
-	$(ECHO) "      Command to generate the design for specified Target and Shell."
+	$(ECHO) "  make all TARGET=<sw_emu/hw_emu/hw> PLATFORM=<FPGA platform>"
+	$(ECHO) "      Command to generate the design for specified Target and Device."
 	$(ECHO) ""
 	$(ECHO) "  make clean "
 	$(ECHO) "      Command to remove the generated non-hardware files."
@@ -71,20 +11,118 @@ help:
 	$(ECHO) "  make cleanall"
 	$(ECHO) "      Command to remove all the generated files."
 	$(ECHO) ""
-	$(ECHO) "  make test PLATFORM=<FPGA platform>"
-	$(ECHO) "      Command to run the application. This is same as 'run' target but does not have any makefile dependency."
-	$(ECHO) ""
-	$(ECHO) "  make sd_card TARGET=<sw_emu/hw_emu/hw> PLATFORM=<FPGA platform> EDGE_COMMON_SW=<rootfs and kernel image path>"
-	$(ECHO) "      Command to prepare sd_card files."
-	$(ECHO) ""
-	$(ECHO) "  make run TARGET=<sw_emu/hw_emu/hw> PLATFORM=<FPGA platform> EDGE_COMMON_SW=<rootfs and kernel image path>"
+	$(ECHO) "  make check TARGET=<sw_emu/hw_emu/hw> PLATFORM=<FPGA platform>"
 	$(ECHO) "      Command to run application in emulation."
 	$(ECHO) ""
-	$(ECHO) "  make build TARGET=<sw_emu/hw_emu/hw> PLATFORM=<FPGA platform> EDGE_COMMON_SW=<rootfs and kernel image path>"
-	$(ECHO) "      Command to build xclbin application."
+	$(ECHO) "  make run_nimbix PLATFORM=<FPGA platform>"
+	$(ECHO) "      Command to run application on Nimbix Cloud."
 	$(ECHO) ""
-	$(ECHO) "  make host EDGE_COMMON_SW=<rootfs and kernel image path>"
-	$(ECHO) "      Command to build host application."
-	$(ECHO) "      EDGE_COMMON_SW is required for SoC shells. Please download and use the pre-built image from - "
-	$(ECHO) "      https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/embedded-platforms.html"
+	$(ECHO) "  make aws_build PLATFORM=<FPGA platform>"
+	$(ECHO) "      Command to build AWS xclbin application on AWS Cloud."
 	$(ECHO) ""
+
+TARGET := hw
+PLATFORM :=
+XCLBIN := ./xclbin
+
+VPP := $(XILINX_VITIS)/bin/v++
+
+CP = cp -rf
+RMDIR = rm -rf
+
+ECHO:= @echo
+
+XO_CONTAINER = $(XCLBIN)/vortex_afu.$(TARGET).xo
+
+XCLBIN_CONTAINER = $(XCLBIN)/vortex_afu.$(TARGET).xclbin
+
+# Kernel compiler global settings
+CLFLAGS += -t $(TARGET) --platform $(PLATFORM) --save-temps
+
+##########################################################################
+# The below commands generate a XO file from a pre-exsisitng RTL kernel.
+###########################################################################
+
+VIVADO := $(XILINX_VIVADO)/bin/vivado
+$(XO_CONTAINER): ./scripts/package_kernel.tcl ./scripts/gen_xo.tcl
+	mkdir -p $(XCLBIN)
+	$(VIVADO) -mode batch -source scripts/gen_xo.tcl -tclargs $(XO_CONTAINER) vortex_afu $(TARGET) $(PLATFORM)
+
+###########################################################################
+#END OF GENERATION OF XO
+##########################################################################
+
+.PHONY: all clean cleanall emconfig
+
+all: check-devices $(XCLBIN_CONTAINER) emconfig
+
+# Building kernel
+$(XCLBIN_CONTAINER): $(XO_CONTAINER)
+	mkdir -p $(XCLBIN)
+	$(VPP) $(CLFLAGS) $(LDCLFLAGS) -lo $(XCLBIN_CONTAINER) $(XO_CONTAINER)
+
+emconfig: $(XCLBIN)/emconfig.json
+$(XCLBIN)/emconfig.json:
+	emconfigutil --platform $(PLATFORM) --od $(XCLBIN)
+
+# Cleaning stuff
+clean:
+	-$(RMDIR) $(XCLBIN)/{*sw_emu*,*hw_emu*}
+	-$(RMDIR) TempConfig system_estimate.xtxt *.rpt
+	-$(RMDIR) src/*.ll _v++_* .Xil emconfig.json dltmp* xmltmp* *.log *.jou
+
+cleanall: clean
+	-$(RMDIR) $(XCLBIN)
+	-$(RMDIR) _x.*
+	-$(RMDIR) ./tmp_kernel_pack* ./packaged_kernel* _x/
+
+#######################################################################
+# RTL Kernel only supports Hardware and Hardware Emulation.
+# THis line is to check that
+#########################################################################
+ifneq ($(TARGET),$(findstring $(TARGET), hw hw_emu))
+$(warning WARNING:Application supports only hw hw_emu TARGET. Please use the target for running the application)
+endif
+
+###################################################################
+#check the devices avaiable
+########################################################################
+
+check-devices:
+ifndef PLATFORM
+	$(error PLATFORM not set. Please set the PLATFORM properly and rerun. Run "make help" for more details.)
+endif
+
+############################################################################
+# check the VITIS environment
+#############################################################################
+
+ifndef XILINX_VITIS
+$(error XILINX_VITIS variable is not set, please set correctly and rerun)
+endif
+
+
+#################################################################
+# Enable profiling if needed
+#####################################################################a
+
+REPORT := no
+PROFILE := no
+DEBUG := no
+
+#'estimate' for estimate report generation
+#'system' for system report generation
+ifneq ($(REPORT), no)
+CLFLAGS += --report estimate
+CLLDFLAGS += --report system
+endif
+
+#Generates profile summary report
+ifeq ($(PROFILE), yes)
+LDCLFLAGS += --profile_kernel data:all:all:all
+endif
+
+#Generates debug summary report
+ifeq ($(DEBUG), yes)
+CLFLAGS += --dk protocol:all:all:all
+endif

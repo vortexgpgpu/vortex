@@ -20,7 +20,7 @@ if { $::argc != 5 } {
     exit
 }
 
-set xoname  [lindex $::argv 0]
+set xoname    [lindex $::argv 0]
 set krnl_name [lindex $::argv 1]
 set target    [lindex $::argv 2]
 set xpfm_path [lindex $::argv 3]
@@ -34,4 +34,4 @@ if {[file exists "${xoname}"]} {
     file delete -force "${xoname}"
 }
 
-package_xo -ctrl_protocol user_managed -xo_path ${xoname} -kernel_name krnl_vadd_rtl -ip_directory ./packaged_kernel_${suffix}
+package_xo -ctrl_protocol user_managed -xo_path ${xoname} -kernel_name vortex_afu -ip_directory ./packaged_kernel_${suffix}

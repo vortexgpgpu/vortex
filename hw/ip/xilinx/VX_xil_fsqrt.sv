@@ -1,9 +1,9 @@
 `include "VX_fpu_define.vh"
 
-module VX_xil_fdiv #(
+module VX_xil_fsqrt #( 
     parameter NUM_LANES = 1,
     parameter TAGW = 1,
-    parameter LATENCY = 28 
+    parameter LATENCY = 28  
 ) (
     input wire clk,
     input wire reset,   
@@ -12,11 +12,10 @@ module VX_xil_fdiv #(
     input wire  valid_in,
 
     input wire [TAGW-1:0] tag_in,
-
-    input wire [`INST_FRM_BITS-1:0] frm,
     
+    input wire [`INST_FRM_BITS-1:0] frm,
+
     input wire [NUM_LANES-1:0][31:0]  dataa,
-    input wire [NUM_LANES-1:0][31:0]  datab,
     output wire [NUM_LANES-1:0][31:0] result,  
 
     output wire has_fflags,
@@ -31,30 +30,23 @@ module VX_xil_fdiv #(
     wire enable = ~stall;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        wire [3:0] tuser;
-        wire tvalid_in;
+        wire [0:0] tuser;       
 
-        `RESET_RELAY (fdiv_reset, reset);
-
-        assign tvalid_in = enable && valid_in;
-
-        xil_fdiv fdiv (
+        xil_fsqrt fsqrt (
             .aclk                 (clk),
-            .aresetn              (~fdiv_reset),
-            .s_axis_a_tvalid      (tvalid_in),
-            .s_axis_a_tdata       (a),
-            .s_axis_b_tvalid      (tvalid_in),
-            .s_axis_b_tdata       (b),
-            .m_axis_result_tvalid (valid_out),
+            .aclken               (enable),
+            .s_axis_a_tvalid      (1'b1),
+            .s_axis_a_tdata       (dataa[i]),
+            `UNUSED_PIN (m_axis_result_tvalid),
             .m_axis_result_tdata  (result[i]),
-            .m_axis_result_tuser  (tuser[i])
+            .m_axis_result_tuser  (tuser)
         );
 
         assign fflags[i].NX = 1'b0;
-        assign fflags[i].UF = tuser[0];
-        assign fflags[i].OF = tuser[1];
-        assign fflags[i].DZ = tuser[3];
-        assign fflags[i].NV = tuser[2];
+        assign fflags[i].UF = 1'b0;
+        assign fflags[i].OF = 1'b0;
+        assign fflags[i].DZ = 1'b0;
+        assign fflags[i].NV = tuser[0];
     end
 
     VX_shift_register #(
@@ -72,6 +64,6 @@ module VX_xil_fdiv #(
     assign ready_in = enable;
 
     `UNUSED_VAR (frm)
-    assign has_fflags = 1;
+    assign has_fflags = 0;
 
 endmodule

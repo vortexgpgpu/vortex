@@ -122,7 +122,7 @@ wire [`VX_MEM_DATA_WIDTH-1:0]   vx_mem_rsp_data;
 wire [`VX_MEM_TAG_WIDTH-1:0]    vx_mem_rsp_tag;
 wire vx_mem_rsp_ready;
 
-reg  vx_start;
+reg  vx_reset;
 wire vx_busy;
 
 // CMD variables //////////////////////////////////////////////////////////////
@@ -299,7 +299,7 @@ end
 wire cmd_mem_rd_done;
 reg  cmd_mem_wr_done;
 wire cmd_run_done;
-reg  vx_started;
+reg  vx_running;
 
 reg [$clog2(`RESET_DELAY+1)-1:0] vx_reset_ctr;
 always @(posedge clk) begin
@@ -316,8 +316,8 @@ wire [CMD_TYPE_WIDTH-1:0] cmd_type = is_mmio_wr_cmd ? CMD_TYPE_WIDTH'(cp2af_sRxP
 always @(posedge clk) begin
   if (reset) begin
     state      <= STATE_IDLE;
-    vx_started <= 0;
-    vx_start   <= 0;    
+    vx_running <= 0;
+    vx_reset   <= 0;    
   end else begin
     case (state)
       STATE_IDLE: begin             
@@ -344,7 +344,7 @@ always @(posedge clk) begin
           `ifdef DBG_TRACE_AFU
             `TRACE(2, ("%d: STATE RUN\n", $time));
           `endif
-            vx_start <= 1;            
+            vx_reset <= 1;            
             state <= STATE_RUN;                    
           end
           default: begin
@@ -380,9 +380,9 @@ always @(posedge clk) begin
 
       STATE_RUN: begin 
         // vortex reset cycles
-        if (vx_started) begin
+        if (vx_running) begin
           if (cmd_run_done) begin
-            vx_started <= 0;
+            vx_running <= 0;
             state <= STATE_IDLE;
           `ifdef DBG_TRACE_AFU
             `TRACE(2, ("%d: STATE IDLE\n", $time));
@@ -390,8 +390,8 @@ always @(posedge clk) begin
           end
         end else begin
           if (vx_reset_ctr == (`RESET_DELAY-1)) begin
-            vx_started <= 1;
-            vx_start   <= 0;
+            vx_running <= 1;
+            vx_reset   <= 0;
           end  
         end        
       end
@@ -479,7 +479,7 @@ wire vx_mem_is_cout;
 wire vx_mem_req_valid_qual;
 wire vx_mem_req_ready_qual;
 
-assign vx_mem_req_valid_qual = vx_mem_req_valid && ~vx_mem_is_cout && vx_started;
+assign vx_mem_req_valid_qual = vx_mem_req_valid && ~vx_mem_is_cout && vx_running;
 
 VX_mem_adapter #(
   .SRC_DATA_WIDTH (`VX_MEM_DATA_WIDTH),
@@ -885,7 +885,7 @@ Vortex vortex (
   `SCOPE_BIND_afu_vortex
 
   .clk            (clk),
-  .reset          (reset || vx_start),
+  .reset          (reset || vx_reset),
 
   // Memory request 
   .mem_req_valid  (vx_mem_req_valid),
@@ -932,7 +932,7 @@ assign vx_mem_req_ready = vx_mem_is_cout ? ~cout_q_full : vx_mem_req_ready_qual;
 wire [`VX_MEM_BYTEEN_WIDTH-1:0][7:0] vx_mem_req_data_m = vx_mem_req_data;
 wire [7:0] cout_char = vx_mem_req_data_m[cout_tid];
 
-wire cout_q_push = vx_mem_req_valid && vx_mem_is_cout && vx_started && ~cout_q_full;
+wire cout_q_push = vx_mem_req_valid && vx_mem_is_cout && vx_running && ~cout_q_full;
 
 wire cout_q_pop = cp2af_sRxPort.c0.mmioRdValid 
                && (mmio_hdr.address == MMIO_STATUS)

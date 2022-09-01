@@ -21,9 +21,10 @@ set path_to_hdl_ip  "../../../ip/xilinx/alveo"
 set path_to_packaged "./packaged_kernel_${suffix}"
 set path_to_tmp_project "./tmp_kernel_pack_${suffix}"
 
-create_project -force kernel_pack $path_to_tmp_project 
-add_files -fileset sources_1 -verbose [glob $path_to_hdl_vx $path_to_hdl_afu $path_to_hdl_ip]
-set_property verilog_define {SYNTHESIS=1 NDEBUG=1} [get_filesets sources_1]
+create_project -force kernel_pack $path_to_tmp_project
+
+add_files -verbose [glob globals.vh $path_to_hdl_vx $path_to_hdl_afu $path_to_hdl_ip]
+
 update_compile_order -fileset sources_1
 update_compile_order -fileset sim_1
 ipx::package_project -root_dir $path_to_packaged -vendor xilinx.com -library RTLKernel -taxonomy /KernelIP -import_files -set_current false
@@ -104,27 +105,9 @@ set reg      [::ipx::add_register "IP_ISR" $addr_block]
   set_property address_offset 0x00C $reg
   set_property size           32    $reg
 
-set reg      [::ipx::add_register -quiet "a" $addr_block]
+set reg      [::ipx::add_register -quiet "DCR" $addr_block]
   set_property address_offset 0x010 $reg
   set_property size           [expr {8*8}]   $reg
-  set regparam [::ipx::add_register_parameter -quiet {ASSOCIATED_BUSIF} $reg] 
-  set_property value m_axi_gmem $regparam 
-
-set reg      [::ipx::add_register -quiet "b" $addr_block]
-  set_property address_offset 0x01C $reg
-  set_property size           [expr {8*8}]   $reg
-  set regparam [::ipx::add_register_parameter -quiet {ASSOCIATED_BUSIF} $reg] 
-  set_property value m_axi_gmem $regparam 
-
-set reg      [::ipx::add_register -quiet "c" $addr_block]
-  set_property address_offset 0x028 $reg
-  set_property size           [expr {8*8}]   $reg
-  set regparam [::ipx::add_register_parameter -quiet {ASSOCIATED_BUSIF} $reg] 
-  set_property value m_axi_gmem $regparam 
-
-set reg      [::ipx::add_register -quiet "length_r" $addr_block]
-  set_property address_offset 0x034 $reg
-  set_property size           [expr {4*8}]   $reg
 
 set_property slave_memory_map_ref "s_axi_control" [::ipx::get_bus_interfaces -of $core "s_axi_control"]
 

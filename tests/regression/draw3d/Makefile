@@ -14,8 +14,9 @@ OPTS ?=
 
 VX_CLANG_FLAGS = --sysroot=${RISCV_TOOLCHAIN_PATH}/riscv32-unknown-elf
 VX_CLANG_FLAGS += -Xclang -target-feature -Xclang +vortex
-VX_CLANG_FLAGS += -Wl,-L$(RISCV_TOOLCHAIN_PATH)/lib/gcc/riscv32-unknown-elf/9.2.0 -I$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/include/c++/9.2.0/riscv32-unknown-elf -I$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/include/c++/9.2.0
+VX_CLANG_FLAGS += -I$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/include/c++/9.2.0/riscv32-unknown-elf -I$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/include/c++/9.2.0
 VX_CLANG_FLAGS += --rtlib=libgcc
+VX_CLANG_FLAGS += -Wl,-L$(RISCV_TOOLCHAIN_PATH)/lib/gcc/riscv32-unknown-elf/9.2.0
 
 VX_CC  = $(LLVM_PREFIX)/bin/clang
 VX_CXX = $(LLVM_PREFIX)/bin/clang++ $(VX_CLANG_FLAGS)

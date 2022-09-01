@@ -202,7 +202,7 @@ module Vortex (
     VX_cache_wrap #(
         .INSTANCE_ID    ("l3cache"),
         .CACHE_SIZE     (`L3_CACHE_SIZE),
-        .LINE_SIZE      (L3_LINE_SIZE),
+        .LINE_SIZE      (`L3_LINE_SIZE),
         .NUM_BANKS      (`L3_NUM_BANKS),
         .NUM_WAYS       (`L3_NUM_WAYS),
         .NUM_PORTS      (`L3_NUM_PORTS),
