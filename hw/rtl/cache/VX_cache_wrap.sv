@@ -39,18 +39,18 @@ module VX_cache_wrap #(
     // core request tag size
     parameter TAG_WIDTH             = UUID_WIDTH + 1,
 
-    // Core response output register
-    parameter CORE_OUT_REG          = 0,
-
-    // Memory request output register
-    parameter MEM_OUT_REG           = 0,
-
     // enable bypass for non-cacheable addresses
     parameter NC_TAG_BIT            = 0,
     parameter NC_ENABLE             = 0,
 
     // Force bypass for all requests
-    parameter PASSTHRU              = 0
+    parameter PASSTHRU              = 0,
+
+    // Core response output register
+    parameter CORE_OUT_REG          = 0,
+
+    // Memory request output register
+    parameter MEM_OUT_REG           = 0
  ) (
     
     input wire clk,

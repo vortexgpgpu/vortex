@@ -45,7 +45,13 @@ module VX_cache_cluster #(
 
     // enable bypass for non-cacheable addresses
     parameter NC_TAG_BIT            = 0,
-    parameter NC_ENABLE             = 0
+    parameter NC_ENABLE             = 0,
+
+    // Core response output register
+    parameter CORE_OUT_REG          = 0,
+
+    // Memory request output register
+    parameter MEM_OUT_REG           = 0
  ) (    
     input wire clk,
     input wire reset,
@@ -115,7 +121,7 @@ module VX_cache_cluster #(
         .TAG_SEL_IDX  (TAG_SEL_IDX),
         .ARBITER      ("R"),
         .BUFFERED_REQ ((NUM_INPUTS != NUM_CACHES) ? 2 : 0),
-        .BUFFERED_RSP ((NUM_INPUTS != NUM_CACHES) ? 2 : 0)
+        .BUFFERED_RSP ((NUM_INPUTS != NUM_CACHES) ? ((CORE_OUT_REG + 1) / 2) : 0)
     ) cache_arb (
         .clk        (clk),
         .reset      (cache_arb_reset),
@@ -164,8 +170,8 @@ module VX_cache_cluster #(
             .WRITE_ENABLE (WRITE_ENABLE),
             .UUID_WIDTH   (UUID_WIDTH),
             .TAG_WIDTH    (ARB_TAG_WIDTH),
-            .CORE_OUT_REG (3),
-            .MEM_OUT_REG  (2),
+            .CORE_OUT_REG ((NUM_INPUTS != NUM_CACHES) ? 2 : CORE_OUT_REG),
+            .MEM_OUT_REG  ((NUM_CACHES > 1) ? 2 : MEM_OUT_REG),
             .NC_ENABLE    (NC_ENABLE),
             .PASSTHRU     (PASSTHRU)
         ) cache_wrap (
@@ -191,7 +197,7 @@ module VX_cache_cluster #(
         .TAG_WIDTH    (MEM_TAG_WIDTH),
         .TAG_SEL_IDX  (1), // Skip 0 for NC flag
         .ARBITER      ("R"),
-        .BUFFERED_REQ ((NUM_CACHES > 1) ? 2 : 0),
+        .BUFFERED_REQ ((NUM_CACHES > 1) ? ((MEM_OUT_REG + 1) / 2) : 0),
         .BUFFERED_RSP ((NUM_CACHES > 1) ? 2 : 0)
     ) mem_arb (
         .clk        (clk),
@@ -252,6 +258,12 @@ module VX_cache_cluster_top #(
     // enable bypass for non-cacheable addresses
     parameter NC_TAG_BIT            = 0,
     parameter NC_ENABLE             = 1,
+
+    // Core response output register
+    parameter CORE_OUT_REG          = 3,
+
+    // Memory request output register
+    parameter MEM_OUT_REG           = 3,
 
     parameter NUM_CACHES = `UP(NUM_UNITS),
     parameter PASSTHRU   = (NUM_UNITS == 0),
@@ -370,7 +382,9 @@ module VX_cache_cluster_top #(
         .UUID_WIDTH     (UUID_WIDTH),
         .WRITE_ENABLE   (WRITE_ENABLE),
         .NC_TAG_BIT     (NC_TAG_BIT),
-        .NC_ENABLE      (NC_ENABLE)
+        .NC_ENABLE      (NC_ENABLE),
+        .CORE_OUT_REG   (CORE_OUT_REG),
+        .MEM_OUT_REG    (MEM_OUT_REG)
     ) cache (
     `ifdef PERF_ENABLE
         .perf_cache_if  (perf_icache_if),

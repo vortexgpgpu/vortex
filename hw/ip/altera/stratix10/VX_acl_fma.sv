@@ -60,11 +60,9 @@ module VX_acl_fma #(
             end    
         end
 
-        `RESET_RELAY (fma_reset, reset);
-
         acl_fmadd fmadd (
             .clk    (clk),
-            .areset (fma_reset),
+            .areset (1'b0),
             .en     (enable),
             .a      (a),
             .b      (b),
