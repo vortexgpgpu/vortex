@@ -4,7 +4,7 @@ if { $::argc != 1 } {
     exit
 }
 
-set ip_dir  [lindex $::argv 0]
+set ip_dir [lindex $::argv 0]
 
 # IP folder does not exist. Create IP folder
 file mkdir ${ip_dir}

@@ -67,9 +67,9 @@ ECHO = @echo
 BUILD_DIR = $(PREFIX)_$(PLATFORM)_$(TARGET)
 BIN_DIR = $(BUILD_DIR)/bin
 
-XO_CONTAINER = $(BUILD_DIR)/vortex_afu.xo
+XO_CONTAINER = $(BIN_DIR)/vortex_afu.xo
 
-XCLBIN_CONTAINER = $(BIN_DIR)vortex_afu.xclbin
+XCLBIN_CONTAINER = $(BIN_DIR)/vortex_afu.xclbin
 
 # Kernel compiler global settings
 VPP_CFLAGS += -t $(TARGET) --platform $(PLATFORM) --save-temps
@@ -99,7 +99,7 @@ $(BIN_DIR)/emconfig.json:
 	emconfigutil --platform $(PLATFORM) --od $(BIN_DIR)
 
 clean:
-	-$(RMDIR) $(BUILD_DIR)
+	-$(RMDIR) $(BUILD_DIR) .Xil *.log
 
 # RTL Kernel only supports Hardware and Hardware Emulation.
 ifneq ($(TARGET),$(findstring $(TARGET), hw hw_emu))
