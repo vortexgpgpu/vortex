@@ -64,6 +64,9 @@ run-vlsim: $(PROJECT) kernel.bin
 run-rtlsim: $(PROJECT) kernel.bin   
 	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
+run-xrt: $(PROJECT) kernel.bin   
+	XCL_EMULATION_MODE=hw_emu XRT_DEVICE_INDEX=0 XRT_XCLBIN_PATH=../../../hw/syn/xilinx/xrt/build_dir.hw_emu.xilinx_u280_xdma_201920_3/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/xrt:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
 

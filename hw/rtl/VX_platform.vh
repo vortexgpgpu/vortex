@@ -1,7 +1,7 @@
 `ifndef VX_PLATFORM_VH
 `define VX_PLATFORM_VH
 
-`ifndef SIMULATION
+`ifndef NOGLOBALS
 `include "globals.vh"
 `endif
 

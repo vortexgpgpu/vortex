@@ -1,33 +1,67 @@
-#
-# Copyright (C) 2019-2021 Xilinx, Inc
-#
-# Licensed under the Apache License, Version 2.0 (the "License"). You may
-# not use this file except in compliance with the License. A copy of the
-# License is located at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-# License for the specific language governing permissions and limitations
-# under the License.
-#
+if { $::argc != 2 } {
+    puts "ERROR: Program \"$::argv0\" requires 2 arguments!\n"
+    puts "Usage: $::argv0 <krnl_name> <build_dir>\n"
+    exit
+}
 
-set path_to_hdl_vx  "../../../rtl"
-set path_to_hdl_afu "../../../afu/xrt"
-set path_to_hdl_ip  "../../../ip/xilinx/alveo"
+set krnl_name [lindex $::argv 0]
+set build_dir [lindex $::argv 1]
 
-set path_to_packaged "./packaged_kernel_${suffix}"
-set path_to_tmp_project "./tmp_kernel_pack_${suffix}"
+set script_path [ file dirname [ file normalize [ info script ] ] ]
+
+set path_to_packaged "${build_dir}/packaged_kernel"
+set path_to_tmp_project "${build_dir}/tmp_project"
+
+source "${script_path}/parse_vcs_list.tcl"
+set vlist [parse_vcs_list "${vcs_file}"]
+
+set vsources_list  [lindex $vlist 0]
+set vincludes_list [lindex $vlist 1]
+set vdefines_list  [lindex $vlist 2]
+
+#puts ${vsources_list}
+#puts ${vdefines_list}
+
+# dump defines into globals.vh
+set fh [open "${build_dir}/globals.vh" w]
+foreach def $vdefines_list {
+    set fields [split $def "="]
+    set len [llength $fields]    
+    puts -nonewline $fh "`define "
+    if {$len > 1} {
+        puts -nonewline $fh [lindex $fields 0]
+        puts -nonewline $fh " "
+        puts $fh [lindex $fields 1]
+    } else {
+        puts $fh [lindex $fields 0]
+    }
+}
+close $fh
 
 create_project -force kernel_pack $path_to_tmp_project
 
-add_files -verbose [glob globals.vh $path_to_hdl_vx $path_to_hdl_afu $path_to_hdl_ip]
+add_files -norecurse ${vsources_list}
+
+set_property include_dirs ${vincludes_list} [current_fileset]
+set_property include_dirs ${build_dir} [current_fileset]
+#set_property verilog_define ${vdefines_list} [current_fileset]
+
+set obj [get_filesets sources_1]
+set files [list \
+ [file normalize "${build_dir}/ip/xil_fdiv/xil_fdiv.xci"] \
+ [file normalize "${build_dir}/ip/xil_fma/xil_fma.xci"] \
+ [file normalize "${build_dir}/ip/xil_fsqrt/xil_fsqrt.xci"] \
+]
+add_files -verbose -norecurse -fileset $obj $files
+
+set obj [get_filesets sources_1]
+set_property -verbose -name "top" -value ${krnl_name} -objects $obj
 
 update_compile_order -fileset sources_1
 update_compile_order -fileset sim_1
+
 ipx::package_project -root_dir $path_to_packaged -vendor xilinx.com -library RTLKernel -taxonomy /KernelIP -import_files -set_current false
+
 ipx::unload_core $path_to_packaged/component.xml
 ipx::edit_ip_in_project -upgrade true -name tmp_edit_project -directory $path_to_packaged $path_to_packaged/component.xml
 
@@ -105,8 +139,14 @@ set reg      [::ipx::add_register "IP_ISR" $addr_block]
   set_property address_offset 0x00C $reg
   set_property size           32    $reg
 
-set reg      [::ipx::add_register -quiet "DCR" $addr_block]
+set reg      [::ipx::add_register -quiet "MEM" $addr_block]
   set_property address_offset 0x010 $reg
+  set_property size           [expr {8*8}]   $reg
+  set regparam [::ipx::add_register_parameter -quiet {ASSOCIATED_BUSIF} $reg] 
+  set_property value m_axi_gmem $regparam 
+
+set reg      [::ipx::add_register -quiet "DCR" $addr_block]
+  set_property address_offset 0x01C $reg
   set_property size           [expr {8*8}]   $reg
 
 set_property slave_memory_map_ref "s_axi_control" [::ipx::get_bus_interfaces -of $core "s_axi_control"]

@@ -207,7 +207,7 @@ FPU_CORE=FPU_FPNEW ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
 AXI_BUS=1 ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo
 
 # adjust l1 block size to match l2
-CONFIGS="-DL1_BLOCK_SIZE=64" ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=io_addr --args="-n1"
+CONFIGS="-DL1_LINE_SIZE=64" ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=io_addr --args="-n1"
 
 # test cache banking
 CONFIGS="-DSMEM_NUM_BANKS=4 -DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemm

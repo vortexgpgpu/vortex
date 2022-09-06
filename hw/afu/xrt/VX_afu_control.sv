@@ -75,7 +75,7 @@ module VX_afu_control #(
         ADDR_ISR            = 6'h0c,
         ADDR_MEM_0          = 6'h10,
         ADDR_MEM_1          = 6'h14,
-        ADDR_MEM_CTRL       = 6'h18
+        ADDR_MEM_CTRL       = 6'h18,
         ADDR_DCR_0          = 6'h1C,
         ADDR_DCR_1          = 6'h20,
         ADDR_DCR_CTRL       = 6'h24;

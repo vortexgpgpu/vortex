@@ -35,7 +35,7 @@ Cluster::Cluster(uint32_t cluster_id, uint32_t cores_per_cluster, ProcessorImpl*
   icaches_ = CacheCluster::Create(sname, cores_per_cluster, NUM_ICACHES, CacheSim::Config{
     !ICACHE_ENABLED,
     log2ceil(ICACHE_SIZE),  // C
-    log2ceil(L1_BLOCK_SIZE),// B
+    log2ceil(L1_LINE_SIZE),// B
     log2ceil(sizeof(uint32_t)), // W
     log2ceil(ICACHE_NUM_WAYS),// A
     32,                     // address bits    
@@ -56,7 +56,7 @@ Cluster::Cluster(uint32_t cluster_id, uint32_t cores_per_cluster, ProcessorImpl*
   dcaches_ = CacheCluster::Create(sname, cores_per_cluster, NUM_DCACHES, CacheSim::Config{
     !DCACHE_ENABLED,
     log2ceil(DCACHE_SIZE),  // C
-    log2ceil(L1_BLOCK_SIZE),// B
+    log2ceil(L1_LINE_SIZE),// B
     log2ceil(sizeof(Word)), // W
     log2ceil(DCACHE_NUM_WAYS),// A
     32,                     // address bits    
@@ -77,7 +77,7 @@ Cluster::Cluster(uint32_t cluster_id, uint32_t cores_per_cluster, ProcessorImpl*
   tcaches_ = CacheCluster::Create(sname, NUM_TEX_UNITS, NUM_TCACHES, CacheSim::Config{
     !TCACHE_ENABLED,
     log2ceil(TCACHE_SIZE),  // C
-    log2ceil(L1_BLOCK_SIZE),// B
+    log2ceil(L1_LINE_SIZE),// B
     log2ceil(sizeof(uint32_t)), // W
     log2ceil(TCACHE_NUM_WAYS),// A
     32,                     // address bits    

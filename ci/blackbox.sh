@@ -110,6 +110,9 @@ case $DRIVER in
     simx)
         DRIVER_PATH=$VORTEX_HOME/runtime/simx
         ;;
+    xrt)
+        DRIVER_PATH=$VORTEX_HOME/runtime/xrt
+        ;;
     *)
         echo "invalid driver: $DRIVER"
         exit -1

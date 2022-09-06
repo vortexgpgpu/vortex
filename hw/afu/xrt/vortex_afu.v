@@ -74,9 +74,7 @@ module vortex_afu #(
   	output wire                                    interrupt 
 );
 
-    `STATIC_ASSERT((C_M_AXI_GMEM_ID_WIDTH == `VX_MEM_TAG_WIDTH), ("invalid memory tag size: current=%0d, expected=%0d", C_M_AXI_GMEM_ID_WIDTH, `VX_MEM_TAG_WIDTH))
-
-	// Register and invert reset signal.
+    // Register and invert reset signal.
 	reg reset;
 	always @(posedge ap_clk) begin
 		reset <= ~ap_rst_n;

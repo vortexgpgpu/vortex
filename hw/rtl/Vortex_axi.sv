@@ -71,6 +71,8 @@ module Vortex_axi #(
     // Status
     output wire                         busy
 );
+    `STATIC_ASSERT((AXI_TID_WIDTH == `VX_MEM_TAG_WIDTH), ("invalid memory tag size: current=%0d, expected=%0d", AXI_TID_WIDTH, `VX_MEM_TAG_WIDTH))
+
     wire                            mem_req_valid;
     wire                            mem_req_rw; 
     wire [`VX_MEM_BYTEEN_WIDTH-1:0] mem_req_byteen;

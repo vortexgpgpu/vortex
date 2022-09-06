@@ -10,14 +10,37 @@
 #include "experimental/xrt_device.h"
 #include "experimental/xrt_kernel.h"
 #include "experimental/xrt_xclbin.h"
+#include "experimental/xrt_error.h"
 
 #define RAM_PAGE_SIZE 4096
 
 #define DEFAULT_DEVICE_INDEX 0
 
-#define DEFAULT_XCLBIN_PATH "vortex_kernel.xclbin"
+#define DEFAULT_XCLBIN_PATH "vortex_afu.xclbin"
 
-#define KERNEL_NAME "vortex_kernel"
+#define KERNEL_NAME "vortex_afu"
+
+#define CHECK_HANDLE(handle, _expr)                     \
+    do {                                                \
+        handle = _expr;                                 \
+        if (handle !== 0)                               \
+            break;                                      \
+        printf("[VXDRV] Error: '%s' returned NULL!\n", #_expr); \
+        return -1;                                      \
+    } while (false)
+
+#define CHECK_XERR(_expr)                               \
+    do {                                                \
+        xrtErrorCode err = _expr;                       \
+        if (err == 0)                                   \
+            break;                                      \
+        size_t len = 0;                                 \
+        xrtErrorGetString(xrtDevice, err, nullptr, 0, &len); \
+        std::vector<char> buf(len);                     \
+        xrtErrorGetString(xrtDevice, err, buf.data(), buf.size(), nullptr); \
+        printf("[VXDRV] Error: '%s' returned %d, %s!\n", #_expr, (int)err, buf.data()); \
+        return -1;                                      \
+    } while (false)
 
 using namespace vortex;
 
@@ -25,19 +48,16 @@ using namespace vortex;
 
 class vx_device {
 public:
-    vx_device(xrtDeviceHandle xrtdevice_, 
-              xrtXclbinHandle xclbin_,
-              xrtKernelHandle xrtkernel_)
-        : xrtdevice(xrtdevice_)
-        , xclbin(xclbin_)
-        , xrtkernel(xrtkernel_)
+    vx_device(xrtDeviceHandle device, 
+              xrtKernelHandle kernel)
+        : xrtDevice(device)
+        , xrtKernel(kernel)
     {}
     
     ~vx_device() {}
 
-    xrtDeviceHandle xrtdevice;
-    xrtXclbinHandle xclbin;
-    xrtKernelHandle xrtkernel;
+    xrtDeviceHandle xrtDevice;
+    xrtKernelHandle xrtKernel;
 
     DeviceConfig dcrs;
     unsigned version;
@@ -51,20 +71,11 @@ public:
 
 class vx_buffer {
 public:
-    vx_buffer(vx_device& vx_device, size_t size) : bo(device, size, mem_used.get_index()) 
-    {
-
-    }
+    vx_buffer(xrtBufferHandle buffer) : xrtBuffer(buffer) {}
     
     ~vx_buffer() {}
 
-    xrt::bo bo;
-
-    uint64_t wsid;
-    void* host_ptr;
-    uint64_t io_addr;
-    vx_device_h hdevice;
-    uint64_t size;
+    xrtBufferHandle xrtBuffer;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -113,6 +124,8 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
 }
 
 extern int vx_dev_open(vx_device_h* hdevice) {
+    int err;
+
     if (nullptr == hdevice)
         return -1;
 
@@ -127,33 +140,65 @@ extern int vx_dev_open(vx_device_h* hdevice) {
         xlbin_path_s = DEFAULT_XCLBIN_PATH;
     }   
 
-    xrtDeviceHandle xrtdevice;
-    xrtXclbinHandle xclbin;
-    xrtKernelHandle xrtkernel;
+    const char* emul_mode_s = getenv("XCL_EMULATION_MODE");
+    if (emul_mode_s != nullptr) {
+        printf("XCL_EMULATION_MODE=%s\n", emul_mode_s);
+    }
 
-    xrtdevice = xrtDeviceOpen(device_index);
-    if (!xrtdevice)
+    xrtDeviceHandle xrtDevice;
+    xrtKernelHandle xrtKernel;
+
+    xrtDevice = xrtDeviceOpen(device_index);
+    if (nullptr == xrtDevice)
         return -1;
 
-    xclbin = xrtXclbinAllocFilename(xlbin_path_s);
-    if (!xclbin) {
-        xrtDeviceClose(xrtdevice);
+    printf("part1\n");
+
+    err = xrtDeviceLoadXclbinFile(xrtDevice, xlbin_path_s);
+    if (err != 0) {        
+        xrtDeviceClose(xrtDevice);
         return -1;
     }
 
-    xrtDeviceLoadXclbinHandle(xrtdevice, xclbin);
+    printf("part2\n");
 
     xuid_t uuid;
-    xrtXclbinGetUUID(xclbin, uuid);
-
-    xrtkernel = xrtPLKernelOpen(xrtdevice, uuid, KERNEL_NAME);
-    if (!xrtkernel) {
+    err = xrtDeviceGetXclbinUUID(xrtDevice, uuid);
+    if (err != 0) {        
+        xrtDeviceClose(xrtDevice);
         return -1;
     }
 
-    auto device = new vx_device(xrtdevice, xclbin, xrtKernelHandle);
-    if (nullptr == device)        
-        return -1;    
+    printf("part3\n");
+
+    xrtKernel = xrtPLKernelOpen(xrtDevice, uuid, KERNEL_NAME);
+    if (nullptr == xrtKernel) {
+        xrtDeviceClose(xrtDevice);
+        return -1;
+    }
+
+    auto device = new vx_device(xrtDevice, xrtKernel);
+    if (nullptr == device) {
+        xrtKernelClose(xrtKernel);
+        xrtDeviceClose(xrtDevice);
+        return -1;
+    }
+
+    auto xrtBuffer2 = xrtBOAlloc(xrtDevice, 0x100000, 0, 1); 
+    if (nullptr == xrtBuffer2) {
+        return -1;
+    }
+    auto phyaddr2 = xrtBOAddress(xrtBuffer2);
+
+    // 32 banks * 256 MB
+    auto xrtBuffer1 = xrtBOAlloc(xrtDevice, 0x100000 * 256, 0, 0); 
+    if (nullptr == xrtBuffer1) {
+        return -1;
+    
+    }
+    auto phyaddr1 = xrtBOAddress(xrtBuffer1);
+
+    
         
     dcr_initialize(device);
 
@@ -172,11 +217,9 @@ extern int vx_dev_close(vx_device_h hdevice) {
 
     auto device = (vx_device*)hdevice;
 
-    xrtXclbinFreeHandle(device->xclbin);
-
-    xrtKernelClose(device->xrtkernel);
+    xrtKernelClose(device->xrtKernel);
  
-    xrtDeviceClose(device->xrtdevice);
+    xrtDeviceClose(device->xrtDevice);
 
     delete device;
 
@@ -189,7 +232,7 @@ extern int vx_mem_alloc(vx_device_h hdevice, uint64_t size, uint64_t* dev_maddr)
 
     auto device = (vx_device*)hdevice;
 
-    device_handle = xrtBOAlloc(device, size, XRT_BO_FLAGS_NONE, (xrtMemoryGroup) xrtKernelArgGroupId(kernel, 4)));
+    auto handle = xrtBOAlloc(device, size, XRT_BO_FLAGS_NONE, (xrtMemoryGroup) xrtKernelArgGroupId(device->xrtKernel, 4));
 
     return 0;
 }
@@ -209,7 +252,7 @@ extern int vx_buf_alloc(vx_device_h hdevice, uint64_t size, vx_buffer_h* hbuffer
 
     auto device = (vx_device*)hdevice;
 
-    auto handle = xrtBOAlloc(device, size, XRT_BO_FLAGS_NONE, (xrtMemoryGroup) xrtKernelArgGroupId(kernel, 4)));
+    auto handle = xrtBOAlloc(device, size, XRT_BO_FLAGS_NONE, (xrtMemoryGroup) xrtKernelArgGroupId(device->xrtKernel, 4));
 
     auto buffer = new vx_buffer(handle);
 
@@ -220,11 +263,11 @@ extern int vx_buf_alloc(vx_device_h hdevice, uint64_t size, vx_buffer_h* hbuffer
 
 extern void* vx_host_ptr(vx_buffer_h hbuffer) {
     if (nullptr == hbuffer)
-        return -1;
+        return nullptr;
 
     auto buffer = (vx_buffer*)hbuffer;
 
-    return reinterpret_cast<void*>(xrtBOMap(buffer->xrtbo));
+    return reinterpret_cast<void*>(xrtBOMap(buffer->xrtBuffer));
 }
 
 extern int vx_buf_free(vx_buffer_h hbuffer) {
@@ -233,20 +276,20 @@ extern int vx_buf_free(vx_buffer_h hbuffer) {
 
     auto buffer = (vx_buffer*)hbuffer;
 
-    xrtBOFree(buffer->xrtbo);
+    xrtBOFree(buffer->xrtBuffer);
 
     return 0;
 }
 
 extern int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size, uint64_t src_offset) {
-    rtBOWrite(device_handle, host_ptr, size, device_offset);
-    xrtBOSync(device_handle, XCL_BO_SYNC_BO_TO_DEVICE, size, device_offset);
+    //rtBOWrite(device_handle, host_ptr, size, device_offset);
+    //xrtBOSync(device_handle, XCL_BO_SYNC_BO_TO_DEVICE, size, device_offset);
     return 0;
 }
 
 extern int vx_copy_from_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size, uint64_t dest_offset) {
-    rtBOWrite(device_handle, host_ptr, size, device_offset);
-    xrtBOSync(device_handle, XCL_BO_SYNC_BO_TO_DEVICE, size, device_offset);
+    //rtBOWrite(device_handle, host_ptr, size, device_offset);
+    //xrtBOSync(device_handle, XCL_BO_SYNC_BO_TO_DEVICE, size, device_offset);
     return 0;
 }
 
@@ -256,7 +299,7 @@ extern int vx_start(vx_device_h hdevice) {
 
     auto device = (vx_device*)hdevice;
 
-    auto run = xrtKernelRun(kernel, s0, s1, s2, s3, axi00 != NULL ? axi00 : dummy_buffers[0], axi01 != NULL ? axi01 : dummy_buffers[1]);
+    //auto run = xrtKernelRun(device->xrtKernel, s0, s1, s2, s3, axi00 != nullptr ? axi00 : dummy_buffers[0], axi01 != nullptr ? axi01 : dummy_buffers[1]);
 
     return 0;
 }
@@ -267,15 +310,15 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
 
     auto device = (vx_device*)hdevice;
 
-    while (true) { 
-        res = xrtRunWait(run);
+    /*while (true) { 
+        auto res = xrtRunWait(run);
         if (res != ERT_CMD_STATE_COMPLETED)
             printf("%s: error: %llu\n", __FUNCTION__, res);
         else
             break;
     }
 
-    xrtRunClose(run);
+    xrtRunClose(run);*/
 
     return 0;
 }
@@ -286,7 +329,7 @@ extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint64_t value) {
 
     auto device = (vx_device*)hdevice;
 
-    xrtKernelWriteRegister(device->xrtkernel, addr, value);
+    //xrtKernelWriteRegister(device->xrtKernel, addr, value);
     
     return 0;
 }
