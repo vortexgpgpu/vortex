@@ -8,6 +8,15 @@
 #include <VX_types.h>
 #include <assert.h>
 
+#define RT_CHECK(_expr, _cleanup)                               \
+   do {                                                         \
+     int _ret = _expr;                                          \
+     if (0 == _ret)                                             \
+       break;                                                   \
+     printf("Error: '%s' returned %d!\n", #_expr, (int)_ret);   \
+     _cleanup                                                   \
+   } while (false)
+
 uint64_t aligned_size(uint64_t size, uint64_t alignment) {        
     assert(0 == (alignment & (alignment - 1)));
     return (size + alignment - 1) & ~(alignment - 1);
@@ -84,14 +93,15 @@ extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint6
   uint32_t buffer_transfer_size = 65536; // 64 KB
   uint64_t kernel_base_addr;
   err = vx_dev_caps(device, VX_CAPS_KERNEL_BASE_ADDR, &kernel_base_addr);
-  if (err != 0)
+  if (err != 0) {
     return -1;
-
+  }
   // allocate device buffer
   vx_buffer_h buffer;
   err = vx_buf_alloc(device, buffer_transfer_size, &buffer);
-  if (err != 0)
+  if (err != 0) {
     return -1; 
+  }
 
   // get buffer address
   auto buf_ptr = (uint8_t*)vx_host_ptr(buffer);
@@ -105,9 +115,9 @@ extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint6
     auto chunk_size = std::min<uint64_t>(buffer_transfer_size, size - offset);
     std::memcpy(buf_ptr, (uint8_t*)content + offset, chunk_size);
 
-    /*printf("***  Upload Kernel to 0x%0x: data=", kernel_base_addr + offset);
+    /*printf("***  Upload Kernel to 0x%0lx: data=", kernel_base_addr + offset);
     for (int i = 0, n = ((chunk_size+7)/8); i < n; ++i) {
-      printf("%08x", ((uint64_t*)((uint8_t*)content + offset))[n-1-i]);
+      printf("%08lx", ((uint64_t*)((uint8_t*)content + offset))[n-1-i]);
     }
     printf("\n");*/
 
@@ -116,6 +126,7 @@ extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint6
       vx_buf_free(buffer);
       return err;
     }
+
     offset += chunk_size;
   }
 
@@ -154,27 +165,44 @@ void DeviceConfig::write(uint32_t addr, uint64_t value) {
 }
 
 uint64_t DeviceConfig::read(uint32_t addr) const {
+  if (0 == data_.count(addr)) {
+    printf("Error: DeviceConfig::read(%d) failed\n", addr);
+  }
   return data_.at(addr);
 }
 
-void dcr_initialize(vx_device_h device) {
-  vx_dcr_write(device, DCR_BASE_STARTUP_ADDR, STARTUP_ADDR);
-  vx_dcr_write(device, DCR_BASE_MPM_CLASS, 0);
+int dcr_initialize(vx_device_h device) {
+  RT_CHECK(vx_dcr_write(device, DCR_BASE_STARTUP_ADDR, STARTUP_ADDR), {
+    return -1;
+  });
+
+  RT_CHECK(vx_dcr_write(device, DCR_BASE_MPM_CLASS, 0), {
+    return -1;
+  });
 
   for (int i = 0; i < DCR_RASTER_STATE_COUNT; ++i) {
-    vx_dcr_write(device, DCR_RASTER_STATE_BEGIN + i, 0);
+    RT_CHECK(vx_dcr_write(device, DCR_RASTER_STATE_BEGIN + i, 0), {
+      return -1;
+    });
   }
 
   for (int i = 0; i < DCR_ROP_STATE_COUNT; ++i) {
-    vx_dcr_write(device, DCR_ROP_STATE_BEGIN + i, 0);
+    RT_CHECK(vx_dcr_write(device, DCR_ROP_STATE_BEGIN + i, 0), {
+      return -1;
+    });
   }
 
   for (int i = 0; i < TEX_STAGE_COUNT; ++i) {
-    vx_dcr_write(device, DCR_TEX_STAGE + i, 0);
+    RT_CHECK(vx_dcr_write(device, DCR_TEX_STAGE + i, 0), {
+      return -1;
+    });
     for (int j = 1; j < DCR_TEX_STATE_COUNT; ++j) {
-      vx_dcr_write(device, DCR_TEX_STATE_BEGIN + j, 0);
+      RT_CHECK(vx_dcr_write(device, DCR_TEX_STATE_BEGIN + j, 0), {
+        return -1;
+      });
     }
   }
+  return 0;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -17,6 +17,9 @@ RTL_DIR = ../../../rtl
 AFU_DIR = ../../../afu/xrt
 IP_DIR  = ../../../ip/xilinx
 
+BUILD_DIR = $(PREFIX)_$(PLATFORM)_$(TARGET)
+BIN_DIR = $(BUILD_DIR)/bin
+
 # Control RTL debug tracing states
 DBG_TRACE_FLAGS += -DDBG_TRACE_CORE_PIPELINE  
 DBG_TRACE_FLAGS += -DDBG_TRACE_CORE_ICACHE
@@ -41,7 +44,7 @@ RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR
 RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
 
 CONFIGS += -DEXT_GFX_ENABLE
-CONFIGS += -DSYNTHESIS -DVIVADO -DNDEBUG -DMEM_BLOCK_SIZE=16
+CONFIGS += -DSYNTHESIS -DVIVADO -DNDEBUG
 
 # Debugigng
 ifdef DEBUG
@@ -64,9 +67,6 @@ RMDIR = rm -rf
 
 ECHO = @echo
 
-BUILD_DIR = $(PREFIX)_$(PLATFORM)_$(TARGET)
-BIN_DIR = $(BUILD_DIR)/bin
-
 XO_CONTAINER = $(BIN_DIR)/vortex_afu.xo
 
 XCLBIN_CONTAINER = $(BIN_DIR)/vortex_afu.xclbin
@@ -85,9 +85,9 @@ $(BUILD_DIR)/sources.txt:
 	mkdir -p $(BUILD_DIR)
 	./scripts/gen_sources.sh $(RTL_INCLUDE) $(CONFIGS) > $(BUILD_DIR)/sources.txt
 
-$(XO_CONTAINER): $(BUILD_DIR)/sources.txt
+$(XO_CONTAINER): $(BUILD_DIR)/sources.txt ./kernel.xml
 	mkdir -p $(BUILD_DIR)
-	$(VIVADO) -log $(BUILD_DIR)/vivado.log -journal $(BUILD_DIR)/vivado.jou -tempDir $(BUILD_DIR) -mode batch -source scripts/gen_xo.tcl -tclargs $(XO_CONTAINER) vortex_afu $(BUILD_DIR)/sources.txt $(BUILD_DIR)
+	$(VIVADO) -log $(BUILD_DIR)/vivado.log -journal $(BUILD_DIR)/vivado.jou -tempDir $(BUILD_DIR) -mode batch -source scripts/gen_xo.tcl -tclargs $(XO_CONTAINER) vortex_afu $(BUILD_DIR)/sources.txt ./kernel.xml $(BUILD_DIR)
 
 $(XCLBIN_CONTAINER): $(XO_CONTAINER)
 	mkdir -p $(BIN_DIR)

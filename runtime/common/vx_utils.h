@@ -12,7 +12,7 @@ private:
      std::unordered_map<uint32_t, uint64_t> data_;
 };
 
-void dcr_initialize(vx_device_h device);
+int dcr_initialize(vx_device_h device);
 
 uint64_t aligned_size(uint64_t size, uint64_t alignment);
 

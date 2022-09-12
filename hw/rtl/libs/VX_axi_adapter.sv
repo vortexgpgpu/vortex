@@ -24,9 +24,11 @@ module VX_axi_adapter #(
     output wire [TAG_WIDTH-1:0]     mem_rsp_tag,
     output wire                     mem_req_ready,
 
-    // AXI write request address channel    
-    output wire [TAG_WIDTH-1:0]     m_axi_awid,
+    // AXI write request address channel  
+    output wire                     m_axi_awvalid,
+    input wire                      m_axi_awready,
     output wire [ADDR_WIDTH-1:0]    m_axi_awaddr,
+    output wire [TAG_WIDTH-1:0]     m_axi_awid,
     output wire [7:0]               m_axi_awlen,
     output wire [2:0]               m_axi_awsize,
     output wire [1:0]               m_axi_awburst,
@@ -35,25 +37,25 @@ module VX_axi_adapter #(
     output wire [2:0]               m_axi_awprot,        
     output wire [3:0]               m_axi_awqos,
     output wire [3:0]               m_axi_awregion,
-    output wire                     m_axi_awvalid,
-    input wire                      m_axi_awready,
 
-    // AXI write request data channel     
-    output wire [DATA_WIDTH-1:0]    m_axi_wdata,
-    output wire [DATA_WIDTH/8-1:0]  m_axi_wstrb,    
-    output wire                     m_axi_wlast,  
+    // AXI write request data channel   
     output wire                     m_axi_wvalid, 
-    input wire                      m_axi_wready,
+    input wire                      m_axi_wready,  
+    output wire [DATA_WIDTH-1:0]    m_axi_wdata,
+    output wire [DATA_WIDTH/8-1:0]  m_axi_wstrb,
+    output wire                     m_axi_wlast,
 
     // AXI write response channel
-    input wire [TAG_WIDTH-1:0]      m_axi_bid,
-    input wire [1:0]                m_axi_bresp,  
     input wire                      m_axi_bvalid,
     output wire                     m_axi_bready,
+    input wire [TAG_WIDTH-1:0]      m_axi_bid,
+    input wire [1:0]                m_axi_bresp,
     
     // AXI read address channel
-    output wire [TAG_WIDTH-1:0]     m_axi_arid,
+    output wire                     m_axi_arvalid,
+    input wire                      m_axi_arready,
     output wire [ADDR_WIDTH-1:0]    m_axi_araddr,
+    output wire [TAG_WIDTH-1:0]     m_axi_arid,
     output wire [7:0]               m_axi_arlen,
     output wire [2:0]               m_axi_arsize,
     output wire [1:0]               m_axi_arburst,    
@@ -62,16 +64,14 @@ module VX_axi_adapter #(
     output wire [2:0]               m_axi_arprot,        
     output wire [3:0]               m_axi_arqos, 
     output wire [3:0]               m_axi_arregion,
-    output wire                     m_axi_arvalid,
-    input wire                      m_axi_arready,
     
     // AXI read response channel
-    input wire [TAG_WIDTH-1:0]      m_axi_rid,
-    input wire [DATA_WIDTH-1:0]     m_axi_rdata,  
-    input wire [1:0]                m_axi_rresp,
-    input wire                      m_axi_rlast,
     input wire                      m_axi_rvalid,
-    output wire                     m_axi_rready
+    output wire                     m_axi_rready,
+    input wire [DATA_WIDTH-1:0]     m_axi_rdata,
+    input wire [TAG_WIDTH-1:0]      m_axi_rid,
+    input wire [1:0]                m_axi_rresp,
+    input wire                      m_axi_rlast
 );    
     localparam AXSIZE = $clog2(DATA_WIDTH/8);
 

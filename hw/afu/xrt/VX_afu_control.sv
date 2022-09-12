@@ -57,12 +57,18 @@ module VX_afu_control #(
     //        bit 0  - Channel 0 (ap_done)
     //        bit 1  - Channel 1 (ap_ready)
     //        others - reserved
-    // 0x10 : Low 32-bit Data signal of mem_addr
-    // 0x14 : High 32-bit Data signal of mem_addr
-    // 0x18 : Control signal of mem_addr
-    // 0x1C : Low 32-bit Data signal of dcr
-    // 0x20 : High 32-bit Data signal of dcr
-    // 0x24 : Control signal of dcr
+    // 0x10 : Low 32-bit Data signal of DEV_CAPS
+    // 0x14 : High 32-bit Data signal of DEV_CAPS
+    // 0x18 : Control signal of DEV_CAPS
+    // 0x1C : Low 32-bit Data signal of ISA_CAPS
+    // 0x20 : High 32-bit Data signal of ISA_CAPS
+    // 0x24 : Control signal of ISA_CAPS
+    // 0x28 : Low 32-bit Data signal of DCR
+    // 0x2C : High 32-bit Data signal of DCR
+    // 0x30 : Control signal of DCR
+    // 0x34 : Low 32-bit Data signal of MEM
+    // 0x38 : High 32-bit Data signal of MEM
+    // 0x3C : Control signal of MEM
     // (SC = Self Clear, COR = Clear on Read, TOW = Toggle on Write, COH = Clear on Handshake)
 
     // Parameter
@@ -72,13 +78,23 @@ module VX_afu_control #(
         ADDR_AP_CTRL        = 6'h00,
         ADDR_GIE            = 6'h04,
         ADDR_IER            = 6'h08,
-        ADDR_ISR            = 6'h0c,
-        ADDR_MEM_0          = 6'h10,
-        ADDR_MEM_1          = 6'h14,
-        ADDR_MEM_CTRL       = 6'h18,
-        ADDR_DCR_0          = 6'h1C,
-        ADDR_DCR_1          = 6'h20,
-        ADDR_DCR_CTRL       = 6'h24;
+        ADDR_ISR            = 6'h0C,
+
+        ADDR_DEV_0          = 6'h10,
+        ADDR_DEV_1          = 6'h14,
+        ADDR_DEV_CTRL       = 6'h18,
+        
+        ADDR_ISA_0          = 6'h1C,
+        ADDR_ISA_1          = 6'h20,
+        ADDR_ISA_CTRL       = 6'h24,
+        
+        ADDR_DCR_0          = 6'h28,
+        ADDR_DCR_1          = 6'h2C,
+        ADDR_DCR_CTRL       = 6'h30,
+        
+        ADDR_MEM_0          = 6'h34,
+        ADDR_MEM_1          = 6'h38,
+        ADDR_MEM_CTRL       = 6'h3C;
 
     localparam
         WSTATE_IDLE         = 2'd0,
@@ -114,6 +130,9 @@ module VX_afu_control #(
     reg  [63:0]                   int_mem = 64'b0;
     reg  [31:0]                   int_dcra = 32'b0;
     reg  [31:0]                   int_dcrv = 32'b0;
+
+    wire [63:0] dev_caps = {16'(`NUM_THREADS), 16'(`NUM_WARPS), 16'(`NUM_CORES * `NUM_CLUSTERS), 16'(`IMPLEMENTATION_ID)};
+    wire [63:0] isa_caps = {32'(`MISA_EXT), 2'($clog2(`XLEN)-4), 30'(`MISA_STD)};
 
     // AXI Write FSM
     assign s_axi_awready = (wstate == WSTATE_IDLE);
@@ -219,11 +238,17 @@ module VX_afu_control #(
                     ADDR_ISR: begin
                         rdata <= int_isr;
                     end
-                    ADDR_DCR_0: begin
-                        rdata <= int_dcra;
+                    ADDR_DEV_0: begin
+                        rdata <= dev_caps[31:0];
                     end
-                    ADDR_DCR_1: begin
-                        rdata <= int_dcrv;
+                    ADDR_DEV_1: begin
+                        rdata <= dev_caps[63:32];
+                    end
+                    ADDR_ISA_0: begin
+                        rdata <= isa_caps[31:0];
+                    end
+                    ADDR_ISA_1: begin
+                        rdata <= isa_caps[63:32];
                     end
                 endcase
             end
@@ -314,26 +339,6 @@ module VX_afu_control #(
         end
     end
 
-    // int_mem[31:0]
-    always @(posedge clk) begin
-        if (reset)
-            int_mem[31:0] <= 0;
-        else if (clk_en) begin
-            if (wd_hs && waddr == ADDR_MEM_0)
-                int_mem[31:0] <= (s_axi_wdata & wmask) | (int_mem[31:0] & ~wmask);
-        end
-    end
-
-     // int_mem[63:32]
-    always @(posedge clk) begin
-        if (reset)
-            int_mem[63:32] <= 0;
-        else if (clk_en) begin
-            if (wd_hs && waddr == ADDR_MEM_1)
-                int_mem[63:32] <= (s_axi_wdata & wmask) | (int_mem[63:32] & ~wmask);
-        end
-    end
-
     // int_dcra
     always @(posedge clk) begin
         if (reset)
@@ -351,6 +356,26 @@ module VX_afu_control #(
         else if (clk_en) begin
             if (wd_hs && waddr == ADDR_DCR_1)
                 int_dcrv <= (s_axi_wdata & wmask) | (int_dcrv & ~wmask);
+        end
+    end
+
+    // int_mem[31:0]
+    always @(posedge clk) begin
+        if (reset)
+            int_mem[31:0] <= 0;
+        else if (clk_en) begin
+            if (wd_hs && waddr == ADDR_MEM_0)
+                int_mem[31:0] <= (s_axi_wdata & wmask) | (int_mem[31:0] & ~wmask);
+        end
+    end
+
+     // int_mem[63:32]
+    always @(posedge clk) begin
+        if (reset)
+            int_mem[63:32] <= 0;
+        else if (clk_en) begin
+            if (wd_hs && waddr == ADDR_MEM_1)
+                int_mem[63:32] <= (s_axi_wdata & wmask) | (int_mem[63:32] & ~wmask);
         end
     end
 

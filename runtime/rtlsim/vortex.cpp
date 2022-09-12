@@ -225,13 +225,21 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     if (nullptr == hdevice)
         return  -1;
 
-    *hdevice = new vx_device();
+    auto device = new vx_device();
+    if (device == nullptr)
+        return -1;
 
-    dcr_initialize(*hdevice);
+    int err = dcr_initialize(device);
+    if (err != 0) {
+        delete device;
+        return err;
+    }
 
 #ifdef DUMP_PERF_STATS
     perf_add_device(*hdevice);
-#endif   
+#endif
+
+    *hdevice = device;
 
     return 0;
 }

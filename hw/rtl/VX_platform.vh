@@ -55,21 +55,27 @@
                        . x () \
                        /* verilator lint_on PINCONNECTEMPTY */
 
+`define STATIC_ASSERT(cond, msg) \
+    generate                     \
+        if (!(cond)) $error msg; \
+    endgenerate
+
+`ifdef SYNTHESIS
+`define ERROR(msg) 
+`define ASSERT(cond, msg) 
+`define RUNTIME_ASSERT(cond, msg)
+`else
 `define ERROR(msg) \
     $error msg
 
 `define ASSERT(cond, msg) \
     assert(cond) else $error msg
 
-`define STATIC_ASSERT(cond, msg) \
-    generate                     \
-        if (!(cond)) $error msg; \
-    endgenerate
-
 `define RUNTIME_ASSERT(cond, msg)     \
     always @(posedge clk) begin       \
         assert(cond) else $error msg; \
     end
+`endif
 
 `ifdef VERILATOR
 `define TRACE(level, args) dpi_trace(level, $sformatf args)
@@ -164,5 +170,40 @@
         .data_in  (in),     \
         .data_out (out)     \
     )
+
+`define REPEAT(n,f,s)   `_REPEAT_``n(f,s)
+`define _REPEAT_0(f,s)
+`define _REPEAT_1(f,s)  `f(0)
+`define _REPEAT_2(f,s)  `f(1)  `s `_REPEAT_1(f,s)
+`define _REPEAT_3(f,s)  `f(2)  `s `_REPEAT_2(f,s)
+`define _REPEAT_4(f,s)  `f(3)  `s `_REPEAT_3(f,s)
+`define _REPEAT_5(f,s)  `f(4)  `s `_REPEAT_4(f,s)
+`define _REPEAT_6(f,s)  `f(5)  `s `_REPEAT_5(f,s)
+`define _REPEAT_7(f,s)  `f(6)  `s `_REPEAT_6(f,s)
+`define _REPEAT_8(f,s)  `f(7)  `s `_REPEAT_7(f,s)
+`define _REPEAT_9(f,s)  `f(8)  `s `_REPEAT_8(f,s)
+`define _REPEAT_10(f,s) `f(9)  `s `_REPEAT_9(f,s)
+`define _REPEAT_11(f,s) `f(10) `s `_REPEAT_10(f,s)
+`define _REPEAT_12(f,s) `f(11) `s `_REPEAT_11(f,s)
+`define _REPEAT_13(f,s) `f(12) `s `_REPEAT_12(f,s)
+`define _REPEAT_14(f,s) `f(13) `s `_REPEAT_13(f,s)
+`define _REPEAT_15(f,s) `f(14) `s `_REPEAT_14(f,s)
+`define _REPEAT_16(f,s) `f(15) `s `_REPEAT_15(f,s)
+`define _REPEAT_17(f,s) `f(16) `s `_REPEAT_16(f,s)
+`define _REPEAT_18(f,s) `f(17) `s `_REPEAT_17(f,s)
+`define _REPEAT_19(f,s) `f(18) `s `_REPEAT_18(f,s)
+`define _REPEAT_20(f,s) `f(19) `s `_REPEAT_19(f,s)
+`define _REPEAT_21(f,s) `f(20) `s `_REPEAT_20(f,s)
+`define _REPEAT_22(f,s) `f(21) `s `_REPEAT_21(f,s)
+`define _REPEAT_23(f,s) `f(22) `s `_REPEAT_22(f,s)
+`define _REPEAT_24(f,s) `f(23) `s `_REPEAT_23(f,s)
+`define _REPEAT_25(f,s) `f(24) `s `_REPEAT_24(f,s)
+`define _REPEAT_26(f,s) `f(25) `s `_REPEAT_25(f,s)
+`define _REPEAT_27(f,s) `f(26) `s `_REPEAT_26(f,s)
+`define _REPEAT_28(f,s) `f(27) `s `_REPEAT_27(f,s)
+`define _REPEAT_29(f,s) `f(28) `s `_REPEAT_28(f,s)
+`define _REPEAT_30(f,s) `f(29) `s `_REPEAT_29(f,s)
+`define _REPEAT_31(f,s) `f(30) `s `_REPEAT_30(f,s)
+`define _REPEAT_32(f,s) `f(31) `s `_REPEAT_31(f,s)
 
 `endif

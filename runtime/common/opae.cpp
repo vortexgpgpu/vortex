@@ -243,7 +243,11 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     }
 #endif
 
-    dcr_initialize(device);
+    int err = dcr_initialize(device);
+    if (err != 0) {
+        delete device;
+        return err;
+    }
 
 #ifdef DUMP_PERF_STATS
     perf_add_device(device);
