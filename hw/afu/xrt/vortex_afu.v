@@ -46,7 +46,7 @@
 module vortex_afu #(
 	parameter C_S_AXI_CONTROL_ADDR_WIDTH = 6,
 	parameter C_S_AXI_CONTROL_DATA_WIDTH = 32,
-	parameter C_M_AXI_GMEM_ID_WIDTH      = 14,
+	parameter C_M_AXI_GMEM_ID_WIDTH      = 12,
 	parameter C_M_AXI_GMEM_ADDR_WIDTH    = 64,
 	parameter C_M_AXI_GMEM_DATA_WIDTH    = `VX_MEM_DATA_WIDTH
 ) (
