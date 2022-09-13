@@ -121,15 +121,15 @@ module VX_afu_control #(
     // internal registers
     wire                          int_ap_idle;
     wire                          int_ap_ready;
-    reg                           int_ap_done = 1'b0;
-    reg                           int_ap_start = 1'b0;
-    reg                           int_auto_restart = 1'b0;
-    reg                           int_gie = 2'b0;
-    reg  [1:0]                    int_ier = 2'b0;
-    reg  [1:0]                    int_isr = 2'b0;
-    reg  [63:0]                   int_mem = 64'b0;
-    reg  [31:0]                   int_dcra = 32'b0;
-    reg  [31:0]                   int_dcrv = 32'b0;
+    reg                           int_ap_done = 0;
+    reg                           int_ap_start = 0;
+    reg                           int_auto_restart = 0;
+    reg                           int_gie = 0;
+    reg  [1:0]                    int_ier = 0;
+    reg  [1:0]                    int_isr = 0;
+    reg  [63:0]                   int_mem = 0;
+    reg  [31:0]                   int_dcra = 0;
+    reg  [31:0]                   int_dcrv = 0;
 
     wire [63:0] dev_caps = {16'(`NUM_THREADS), 16'(`NUM_WARPS), 16'(`NUM_CORES * `NUM_CLUSTERS), 16'(`IMPLEMENTATION_ID)};
     wire [63:0] isa_caps = {32'(`MISA_EXT), 2'($clog2(`XLEN)-4), 30'(`MISA_STD)};
@@ -220,7 +220,7 @@ module VX_afu_control #(
     always @(posedge clk) begin
         if (clk_en) begin
             if (ar_hs) begin
-                rdata <= 1'b0;
+                rdata <= '0;
                 case (raddr)
                     ADDR_AP_CTRL: begin
                         rdata[0] <= int_ap_start;
@@ -230,13 +230,13 @@ module VX_afu_control #(
                         rdata[7] <= int_auto_restart;
                     end
                     ADDR_GIE: begin
-                        rdata <= int_gie;
+                        rdata <= 32'(int_gie);
                     end
                     ADDR_IER: begin
-                        rdata <= int_ier;
+                        rdata <= 32'(int_ier);
                     end
                     ADDR_ISR: begin
-                        rdata <= int_isr;
+                        rdata <= 32'(int_isr);
                     end
                     ADDR_DEV_0: begin
                         rdata <= dev_caps[31:0];
@@ -250,6 +250,7 @@ module VX_afu_control #(
                     ADDR_ISA_1: begin
                         rdata <= isa_caps[63:32];
                     end
+                    default:;
                 endcase
             end
         end
@@ -264,10 +265,10 @@ module VX_afu_control #(
     // int_ap_start
     always @(posedge clk) begin
         if (reset)
-            int_ap_start <= 1'b0;
+            int_ap_start <= 0;
         else if (clk_en) begin
             if (wd_hs && waddr == ADDR_AP_CTRL && s_axi_wstrb[0] && s_axi_wdata[0])
-                int_ap_start <= 1'b1;
+                int_ap_start <= 1;
             else if (int_ap_ready)
                 int_ap_start <= int_auto_restart; // clear on handshake/auto restart
         end
@@ -276,10 +277,10 @@ module VX_afu_control #(
     // int_ap_done
     always @(posedge clk) begin
         if (reset)
-            int_ap_done <= 1'b0;
+            int_ap_done <= 0;
         else if (clk_en) begin
             if (ap_done)
-                int_ap_done <= 1'b1;
+                int_ap_done <= 1;
             else if (ar_hs && raddr == ADDR_AP_CTRL)
                 int_ap_done <= 1'b0; // clear on read
         end
@@ -288,7 +289,7 @@ module VX_afu_control #(
     // int_auto_restart
     always @(posedge clk) begin
         if (reset)
-            int_auto_restart <= 1'b0;
+            int_auto_restart <= 0;
         else if (clk_en) begin
             if (wd_hs && waddr == ADDR_AP_CTRL && s_axi_wstrb[0])
                 int_auto_restart <= s_axi_wdata[7];
@@ -298,7 +299,7 @@ module VX_afu_control #(
     // int_gie
     always @(posedge clk) begin
         if (reset)
-            int_gie <= 1'b0;
+            int_gie <= 0;
         else if (clk_en) begin
             if (wd_hs && waddr == ADDR_GIE && s_axi_wstrb[0])
                 int_gie <= s_axi_wdata[0];
@@ -308,7 +309,7 @@ module VX_afu_control #(
     // int_ier
     always @(posedge clk) begin
         if (reset)
-            int_ier <= 1'b0;
+            int_ier <= 0;
         else if (clk_en) begin
             if (wd_hs && waddr == ADDR_IER && s_axi_wstrb[0])
                 int_ier <= s_axi_wdata[1:0];
@@ -318,7 +319,7 @@ module VX_afu_control #(
     // int_isr[0]
     always @(posedge clk) begin
         if (reset)
-            int_isr[0] <= 1'b0;
+            int_isr[0] <= 0;
         else if (clk_en) begin
             if (int_ier[0] & ap_done)
                 int_isr[0] <= 1'b1;
@@ -330,7 +331,7 @@ module VX_afu_control #(
     // int_isr[1]
     always @(posedge clk) begin
         if (reset)
-            int_isr[1] <= 1'b0;
+            int_isr[1] <= 0;
         else if (clk_en) begin
             if (int_ier[1] & ap_ready)
                 int_isr[1] <= 1'b1;
@@ -400,7 +401,7 @@ module VX_afu_control #(
     end
 
     assign dcr_wr_valid = dcr_wr_valid_r;
-    assign dcr_wr_addr  = int_dcra;
-    assign dcr_wr_data  = int_dcrv; 
+    assign dcr_wr_addr  = `VX_DCR_ADDR_WIDTH'(int_dcra);
+    assign dcr_wr_data  = `VX_DCR_DATA_WIDTH'(int_dcrv);
 
 endmodule

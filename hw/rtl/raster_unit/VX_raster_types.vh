@@ -4,11 +4,8 @@
 `include "VX_define.vh"
 
 `define RASTER_DCR_DATA_BITS    32
-
 `define RASTER_DATA_BITS        32
-`define RASTER_STRIDE_BITS      16
 `define RASTER_TILE_BITS        16
-`define RASTER_PID_BITS         16
 
 package VX_raster_types;
 

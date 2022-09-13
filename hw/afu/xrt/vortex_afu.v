@@ -48,11 +48,11 @@ module vortex_afu #(
 	parameter C_S_AXI_CONTROL_DATA_WIDTH = 32,
 	parameter C_M_AXI_GMEM_ID_WIDTH      = 14,
 	parameter C_M_AXI_GMEM_ADDR_WIDTH    = 64,
-	parameter C_M_AXI_GMEM_DATA_WIDTH    = 512
+	parameter C_M_AXI_GMEM_DATA_WIDTH    = `VX_MEM_DATA_WIDTH
 ) (
 	// System signals
-	input wire ap_clk,
-	input wire ap_rst_n,
+	input wire 									ap_clk,
+	input wire 									ap_rst_n,
 
 	//`REPEAT (4, GEN_AXI_MEM, SEP),
 	
@@ -95,28 +95,28 @@ module vortex_afu #(
 	input  wire                                 m_axi_mem_bvalid,
 	output wire                                 m_axi_mem_bready,
 	input  wire [1:0]                           m_axi_mem_bresp,
-	input  wire [C_M_AXI_GMEM_ID_WIDTH - 1:0]   m_axi_mem_bid,
+	input  wire [C_M_AXI_GMEM_ID_WIDTH - 1:0]	m_axi_mem_bid,
 
 	// AXI4-Lite control interface
-	input  wire                                    s_axi_ctrl_awvalid,
-	output wire                                    s_axi_ctrl_awready,
-	input  wire [C_S_AXI_CONTROL_ADDR_WIDTH-1:0]   s_axi_ctrl_awaddr,
-	input  wire                                    s_axi_ctrl_wvalid,
-	output wire                                    s_axi_ctrl_wready,
-	input  wire [C_S_AXI_CONTROL_DATA_WIDTH-1:0]   s_axi_ctrl_wdata,
+	input  wire                                 s_axi_ctrl_awvalid,
+	output wire                                 s_axi_ctrl_awready,
+	input  wire [C_S_AXI_CONTROL_ADDR_WIDTH-1:0] s_axi_ctrl_awaddr,
+	input  wire                                	s_axi_ctrl_wvalid,
+	output wire                                 s_axi_ctrl_wready,
+	input  wire [C_S_AXI_CONTROL_DATA_WIDTH-1:0] s_axi_ctrl_wdata,
 	input  wire [C_S_AXI_CONTROL_DATA_WIDTH/8-1:0] s_axi_ctrl_wstrb,
-	input  wire                                    s_axi_ctrl_arvalid,
-	output wire                                    s_axi_ctrl_arready,
-	input  wire [C_S_AXI_CONTROL_ADDR_WIDTH-1:0]   s_axi_ctrl_araddr,
-	output wire                                    s_axi_ctrl_rvalid,
-	input  wire                                    s_axi_ctrl_rready,
-	output wire [C_S_AXI_CONTROL_DATA_WIDTH-1:0]   s_axi_ctrl_rdata,
-	output wire [1:0]                              s_axi_ctrl_rresp,
-	output wire                                    s_axi_ctrl_bvalid,
-	input  wire                                    s_axi_ctrl_bready,
-	output wire [1:0]                              s_axi_ctrl_bresp,
+	input  wire                                	s_axi_ctrl_arvalid,
+	output wire                                 s_axi_ctrl_arready,
+	input  wire [C_S_AXI_CONTROL_ADDR_WIDTH-1:0] s_axi_ctrl_araddr,
+	output wire                               	s_axi_ctrl_rvalid,
+	input  wire                                 s_axi_ctrl_rready,
+	output wire [C_S_AXI_CONTROL_DATA_WIDTH-1:0] s_axi_ctrl_rdata,
+	output wire [1:0]                          	s_axi_ctrl_rresp,
+	output wire                                 s_axi_ctrl_bvalid,
+	input  wire                                 s_axi_ctrl_bready,
+	output wire [1:0]                           s_axi_ctrl_bresp,
 	
-  	output wire                                    interrupt 
+  	output wire                                 interrupt
 );
 
     // Register and invert reset signal.
@@ -214,9 +214,26 @@ module vortex_afu #(
 	assign m_axi_mem_wvalid  = m_axi_mem_wvalid_unqual  && vx_running;
 	assign m_axi_mem_arvalid = m_axi_mem_arvalid_unqual && vx_running;
 
+	wire [`VX_MEM_ADDR_WIDTH-1:0] m_axi_mem_awaddr_unqual;
+	wire [`VX_MEM_ADDR_WIDTH-1:0] m_axi_mem_araddr_unqual;
+
+	reg [C_M_AXI_GMEM_ADDR_WIDTH-1:0] m_axi_mem_awaddr_r;
+	reg [C_M_AXI_GMEM_ADDR_WIDTH-1:0] m_axi_mem_araddr_r;
+
+	always @(*) begin
+		m_axi_mem_awaddr_r = 0;
+		m_axi_mem_awaddr_r[`VX_MEM_ADDR_WIDTH-1:0] = m_axi_mem_awaddr_unqual;
+
+		m_axi_mem_araddr_r = 0;
+		m_axi_mem_araddr_r[`VX_MEM_ADDR_WIDTH-1:0] = m_axi_mem_araddr_unqual;
+	end
+
+	assign m_axi_mem_awaddr = m_axi_mem_awaddr_r;
+	assign m_axi_mem_araddr = m_axi_mem_araddr_r;
+
 	Vortex_axi #(
 		.AXI_DATA_WIDTH (C_M_AXI_GMEM_DATA_WIDTH),
-		.AXI_ADDR_WIDTH (C_M_AXI_GMEM_ADDR_WIDTH),
+		.AXI_ADDR_WIDTH (`VX_MEM_ADDR_WIDTH),
 		.AXI_TID_WIDTH  (C_M_AXI_GMEM_ID_WIDTH)
 	) vortex_axi (
 		.clk			(ap_clk),
@@ -224,7 +241,7 @@ module vortex_afu #(
 		
 		.m_axi_awvalid	(m_axi_mem_awvalid_unqual),
 		.m_axi_awready	(m_axi_mem_awready),
-		.m_axi_awaddr	(m_axi_mem_awaddr),
+		.m_axi_awaddr	(m_axi_mem_awaddr_unqual),
 		.m_axi_awid		(m_axi_mem_awid),
 		.m_axi_awlen	(m_axi_mem_awlen),
 		.m_axi_awsize	(m_axi_mem_awsize),
@@ -248,7 +265,7 @@ module vortex_afu #(
 
 		.m_axi_arvalid	(m_axi_mem_arvalid_unqual),
 		.m_axi_arready	(m_axi_mem_arready),
-		.m_axi_araddr	(m_axi_mem_araddr),
+		.m_axi_araddr	(m_axi_mem_araddr_unqual),
 		.m_axi_arid		(m_axi_mem_arid),
 		.m_axi_arlen	(m_axi_mem_arlen),
 		.m_axi_arsize	(m_axi_mem_arsize),

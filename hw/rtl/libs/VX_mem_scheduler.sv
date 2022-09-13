@@ -75,7 +75,6 @@ module VX_mem_scheduler #(
     wire [NUM_BANKS-1:0][BYTEENW-1:0] mem_req_byteen_s;
     wire [NUM_BANKS-1:0][ADDR_WIDTH-1:0] mem_req_addr_s;
     wire [NUM_BANKS-1:0][DATA_WIDTH-1:0] mem_req_data_s;
-    wire [NUM_BANKS-1:0][MEM_TAGW-1:0]mem_req_tag_s;
     wire [NUM_BANKS-1:0]            mem_req_ready_s;
 
     wire                            mem_rsp_valid_s;
@@ -271,24 +270,27 @@ module VX_mem_scheduler #(
         assign req_sent_all  = req_sent_batch;
     end
 
-    assign mem_req_valid_s = {NUM_BANKS{~reqq_empty}} & mem_req_mask_s & ~batch_sent_mask;
-
-    if (UUID_WIDTH != 0) begin
-        if (NUM_BATCHES > 1) begin
-            assign mem_req_tag_s = {NUM_BANKS{{reqq_uuid, req_batch_idx, reqq_tag}}};
-        end else begin
-            assign mem_req_tag_s = {NUM_BANKS{{reqq_uuid, reqq_tag}}};
-        end
-    end else begin
-        `UNUSED_VAR (reqq_uuid)
-        if (NUM_BATCHES > 1) begin
-            assign mem_req_tag_s = {NUM_BANKS{{req_batch_idx, reqq_tag}}};
-        end else begin
-            assign mem_req_tag_s = {NUM_BANKS{reqq_tag}};
-        end
-    end
-
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
+
+        assign mem_req_valid_s[i] = ~reqq_empty && mem_req_mask_s[i] && ~batch_sent_mask[i];
+        
+        wire [MEM_TAGW-1:0] mem_req_tag_s;
+        
+        if (UUID_WIDTH != 0) begin
+            if (NUM_BATCHES > 1) begin
+                assign mem_req_tag_s = {reqq_uuid, req_batch_idx, reqq_tag};
+            end else begin
+                assign mem_req_tag_s = {reqq_uuid, reqq_tag};
+            end
+        end else begin
+            `UNUSED_VAR (reqq_uuid)
+            if (NUM_BATCHES > 1) begin
+                assign mem_req_tag_s = {req_batch_idx, reqq_tag};
+            end else begin
+                assign mem_req_tag_s = reqq_tag;
+            end
+        end
+
         VX_generic_buffer #(
             .DATAW   (1 + BYTEENW + ADDR_WIDTH + DATA_WIDTH + MEM_TAGW),
             .SKID    (MEM_OUT_REG >> 1),
@@ -298,7 +300,7 @@ module VX_mem_scheduler #(
             .reset     (reset),
             .valid_in  (mem_req_valid_s[i]),
             .ready_in  (mem_req_ready_s[i]),
-            .data_in   ({mem_req_rw_s[i], mem_req_byteen_s[i], mem_req_addr_s[i], mem_req_data_s[i], mem_req_tag_s[i]}),
+            .data_in   ({mem_req_rw_s[i], mem_req_byteen_s[i], mem_req_addr_s[i], mem_req_data_s[i], mem_req_tag_s}),
             .data_out  ({mem_req_rw[i],   mem_req_byteen[i],   mem_req_addr[i],   mem_req_data[i],   mem_req_tag[i]}),
             .valid_out (mem_req_valid[i]),
             .ready_out (mem_req_ready[i])
