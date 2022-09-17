@@ -4,6 +4,7 @@
 #include <VX_config.h>
 #include <VX_types.h>
 #include <vx_malloc.h>
+#include <stdarg.h> 
 #include <util.h>
 
 // XRT includes
@@ -27,7 +28,8 @@
 
 #define RAM_PAGE_SIZE 4096
 
-#define BANK_SIZE (0x100000 * 256)
+// 256 MB
+#define BANK_SIZE 0x10000000
 
 #define NUM_BANKS 16
 
@@ -38,9 +40,9 @@
 #define KERNEL_NAME "vortex_afu"
 
 #ifndef NDEBUG
-#define DBGPRINT(format, ...) printf("[VXDRV] " #format "\n", ##__VA_ARGS__)
+#define DBGPRINT(format, ...) do { printf("[VXDRV] " format "", ##__VA_ARGS__); } while (0)
 #else
-#define DBGPRINT(x)
+#define DBGPRINT(x) ((void)0)
 #endif
 
 #define CHECK_HANDLE(handle, _expr, _cleanup)   \
@@ -111,7 +113,7 @@ public:
         uint32_t index  = dev_addr / BANK_SIZE;
         uint32_t offset = dev_addr % BANK_SIZE;
         if (index > NUM_BANKS) {
-            fprintf(stderr, "[VXDRV] Error: address out of range: %ld\n", dev_addr);
+            fprintf(stderr, "[VXDRV] Error: address out of range: 0x%lx\n", dev_addr);
             return -1;
         }
         *pBuf = xrtBuffers[index];
@@ -238,6 +240,7 @@ extern int vx_dev_open(vx_device_h* hdevice) {
 
     for (int i = 0; i < NUM_BANKS; ++i) {
         CHECK_HANDLE(xrtBuffer, xrtBOAlloc(xrtDevice, BANK_SIZE, 0, i), {
+            printf("*** bank_index=%d\n", i);
             delete device;
             return -1;
         });
@@ -387,6 +390,8 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size
     CHECK_XERR(xrtBOSync(xrtBuffer, XCL_BO_SYNC_BO_TO_DEVICE, asize, bo_offset), {
         return -1;
     });
+
+    DBGPRINT("COPY_TO_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld\n", dev_maddr, (uintptr_t)host_ptr, size);
     
     return 0;
 }
@@ -426,6 +431,8 @@ extern int vx_copy_from_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t si
     CHECK_XERR(xrtBORead(xrtBuffer, host_ptr, size, bo_offset), {
         return -1;
     });
+
+    DBGPRINT("COPY_FROM_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld\n", dev_maddr, (uintptr_t)host_ptr, size);
     
     return 0;
 }
@@ -498,6 +505,7 @@ extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint64_t value) {
     });
 
     // save the value
+    DBGPRINT("DCR addr=0x%x, value=0x%lx\n", addr, value);
     device->dcrs.write(addr, value);
     
     return 0;

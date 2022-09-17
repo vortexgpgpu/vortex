@@ -12,7 +12,7 @@ module VX_reset_relay #(
     if (MAX_FANOUT >= 0 && N > MAX_FANOUT) begin
         localparam F = `UP(MAX_FANOUT);
         localparam R = N / F;
-        `PRESERVE_REG `DISABLE_BRAM reg [R-1:0] reset_r;
+        `PRESERVE_REG reg [R-1:0] reset_r;
         always @(posedge clk) begin
             reset_r <= {R{reset}};
         end

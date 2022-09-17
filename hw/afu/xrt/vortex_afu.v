@@ -141,20 +141,13 @@ module vortex_afu #(
 	reg vx_running;
 
 	always @(posedge ap_clk) begin
-		if (~vx_running && vx_reset == 0 && ap_start) begin
-			vx_reset_ctr <= 0;
-		end else begin
-			vx_reset_ctr <= vx_reset_ctr + 1;
-		end
-	end
-
-	always @(posedge ap_clk) begin
 		if (reset) begin
 			vx_reset   <= 0;
 			vx_running <= 0;
 		end else begin			
 			if (vx_running) begin
 				if (~vx_busy) begin
+					`TRACE(2, ("%d: AFU: End execution\n", $time));
 					vx_running <= 0;
 				end
 			end else begin
@@ -162,10 +155,20 @@ module vortex_afu #(
 					vx_reset <= 1;
 				end
 				if (vx_reset_ctr == (`RESET_DELAY-1)) begin
+					`TRACE(2, ("%d: AFU: Begin execution\n", $time));
 					vx_running <= 1;
 					vx_reset   <= 0;
 				end
 			end
+		end
+	end
+
+	always @(posedge ap_clk) begin
+		if (~vx_running && vx_reset == 0 && ap_start) begin
+			`TRACE(2, ("%d: AFU: Begin reset\n", $time));
+			vx_reset_ctr <= 0;
+		end else begin
+			vx_reset_ctr <= vx_reset_ctr + 1;
 		end
 	end
 
@@ -210,30 +213,12 @@ module vortex_afu #(
 	wire m_axi_mem_wvalid_unqual;
 	wire m_axi_mem_arvalid_unqual;
 
-	assign m_axi_mem_awvalid = m_axi_mem_awvalid_unqual && vx_running;
-	assign m_axi_mem_wvalid  = m_axi_mem_wvalid_unqual  && vx_running;
-	assign m_axi_mem_arvalid = m_axi_mem_arvalid_unqual && vx_running;
-
-	wire [`VX_MEM_ADDR_WIDTH-1:0] m_axi_mem_awaddr_unqual;
-	wire [`VX_MEM_ADDR_WIDTH-1:0] m_axi_mem_araddr_unqual;
-
-	reg [C_M_AXI_GMEM_ADDR_WIDTH-1:0] m_axi_mem_awaddr_r;
-	reg [C_M_AXI_GMEM_ADDR_WIDTH-1:0] m_axi_mem_araddr_r;
-
-	always @(*) begin
-		m_axi_mem_awaddr_r = 0;
-		m_axi_mem_awaddr_r[`VX_MEM_ADDR_WIDTH-1:0] = m_axi_mem_awaddr_unqual;
-
-		m_axi_mem_araddr_r = 0;
-		m_axi_mem_araddr_r[`VX_MEM_ADDR_WIDTH-1:0] = m_axi_mem_araddr_unqual;
-	end
-
-	assign m_axi_mem_awaddr = m_axi_mem_awaddr_r;
-	assign m_axi_mem_araddr = m_axi_mem_araddr_r;
+	wire [`XLEN-1:0] m_axi_mem_awaddr_unqual;
+	wire [`XLEN-1:0] m_axi_mem_araddr_unqual;
 
 	Vortex_axi #(
 		.AXI_DATA_WIDTH (C_M_AXI_GMEM_DATA_WIDTH),
-		.AXI_ADDR_WIDTH (`VX_MEM_ADDR_WIDTH),
+		.AXI_ADDR_WIDTH (`XLEN),
 		.AXI_TID_WIDTH  (C_M_AXI_GMEM_ID_WIDTH)
 	) vortex_axi (
 		.clk			(ap_clk),
@@ -289,5 +274,68 @@ module vortex_afu #(
 
 		.busy			(vx_busy)
 	);
+
+	assign m_axi_mem_awvalid = m_axi_mem_awvalid_unqual && vx_running;
+	assign m_axi_mem_wvalid  = m_axi_mem_wvalid_unqual  && vx_running;
+	assign m_axi_mem_arvalid = m_axi_mem_arvalid_unqual && vx_running;
+
+	reg [C_M_AXI_GMEM_ADDR_WIDTH-1:0] m_axi_mem_awaddr_r;
+	reg [C_M_AXI_GMEM_ADDR_WIDTH-1:0] m_axi_mem_araddr_r;
+
+	// convert to byte-addressable memory
+	always @(*) begin
+		m_axi_mem_awaddr_r = 0;
+		m_axi_mem_awaddr_r[`XLEN-1:0] = m_axi_mem_awaddr_unqual;
+
+		m_axi_mem_araddr_r = 0;
+		m_axi_mem_araddr_r[`XLEN-1:0] = m_axi_mem_araddr_unqual;
+	end
+
+	assign m_axi_mem_awaddr = m_axi_mem_awaddr_r;
+	assign m_axi_mem_araddr = m_axi_mem_araddr_r;
+
+`ifdef SIMULATION
+`ifndef VERILATOR
+	// disable assertions until full reset
+	reg [$clog2(`RESET_DELAY+1)-1:0] assert_delay_ctr;
+	reg assert_enabled;
+	initial begin
+		$assertoff(0, vortex_afu.vortex_axi);  
+	end	
+	always @(posedge ap_clk) begin
+		if (reset) begin
+			assert_delay_ctr <= 0;
+			assert_enabled   <= 0;
+		end else begin			
+			if (~assert_enabled) begin
+				if (assert_delay_ctr == (`RESET_DELAY-1)) begin
+					assert_enabled <= 1;
+					$asserton(0, vortex_afu.vortex_axi); // enable assertions
+					`TRACE(2, ("%d: AFU: Enable Assertions\n", $time));
+				end else begin
+					assert_delay_ctr <= assert_delay_ctr + 1;
+				end
+			end
+		end
+	end
+`endif
+`endif
+
+`ifdef DBG_TRACE_AFU
+    always @(posedge ap_clk) begin
+		if (m_axi_mem_awvalid && m_axi_mem_awready) begin
+			`TRACE(2, ("%d: AFU Wr Req: addr=0x%0h, tag=0x%0h\n", $time, m_axi_mem_awaddr, m_axi_mem_awid));                
+		end
+		if (m_axi_mem_wvalid && m_axi_mem_wready) begin
+			`TRACE(2, ("%d: AFU Wr Req: data=0x%0h\n", $time, m_axi_mem_wdata));                
+		end
+		if (m_axi_mem_arvalid && m_axi_mem_arready) begin   
+			`TRACE(2, ("%d: AFU Rd Req: addr=0x%0h, tag=0x%0h\n", $time, m_axi_mem_araddr, m_axi_mem_arid));
+		end
+		if (m_axi_mem_rvalid && m_axi_mem_rready) begin
+			`TRACE(2, ("%d: AVS Rd Rsp: data=0x%0h, tag=0x%0h\n", $time, m_axi_mem_rdata, m_axi_mem_rid));
+		end
+  	end
+`endif
 	
 endmodule

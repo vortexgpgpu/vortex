@@ -2,9 +2,10 @@
 
 `TRACING_OFF
 module VX_axi_adapter #(
-    parameter DATA_WIDTH = 512, 
-    parameter ADDR_WIDTH = (32 - $clog2(DATA_WIDTH/8)),            
-    parameter TAG_WIDTH  = 8
+    parameter DATA_WIDTH     = 512, 
+    parameter ADDR_WIDTH     = 32,
+    parameter TAG_WIDTH      = 8,
+    parameter AVS_ADDR_WIDTH = (ADDR_WIDTH - $clog2(DATA_WIDTH/8))
 ) (
     input  wire                     clk,
     input  wire                     reset,
@@ -13,7 +14,7 @@ module VX_axi_adapter #(
     input wire                      mem_req_valid,
     input wire                      mem_req_rw,
     input wire [DATA_WIDTH/8-1:0]   mem_req_byteen,
-    input wire [ADDR_WIDTH-1:0]     mem_req_addr,
+    input wire [AVS_ADDR_WIDTH-1:0] mem_req_addr,
     input wire [DATA_WIDTH-1:0]     mem_req_data,
     input wire [TAG_WIDTH-1:0]      mem_req_tag,
 
@@ -72,10 +73,8 @@ module VX_axi_adapter #(
     input wire [TAG_WIDTH-1:0]      m_axi_rid,
     input wire [1:0]                m_axi_rresp,
     input wire                      m_axi_rlast
-);    
+);  
     localparam AXSIZE = $clog2(DATA_WIDTH/8);
-
-    //`UNUSED_VAR ()
 
     reg awvalid_ack;
     reg wvalid_ack;

@@ -60,11 +60,6 @@
         if (!(cond)) $error msg; \
     endgenerate
 
-`ifdef SYNTHESIS
-`define ERROR(msg) 
-`define ASSERT(cond, msg) 
-`define RUNTIME_ASSERT(cond, msg)
-`else
 `define ERROR(msg) \
     $error msg
 
@@ -75,7 +70,6 @@
     always @(posedge clk) begin       \
         assert(cond) else $error msg; \
     end
-`endif
 
 `ifdef VERILATOR
 `define TRACE(level, args) dpi_trace(level, $sformatf args)
@@ -93,6 +87,11 @@
 `define NO_RW_RAM_CHECK (* altera_attribute = "-name add_pass_through_logic_to_inferred_rams off" *)
 `define DISABLE_BRAM    (* ramstyle = "logic" *)
 `define PRESERVE_REG    (* preserve *)
+`elsif VIVADO
+`define USE_FAST_BRAM   (* ram_style = "distributed" *)
+`define NO_RW_RAM_CHECK (* rw_addr_collision = "no" *)
+`define DISABLE_BRAM    (* ram_style = "registers" *)
+`define PRESERVE_REG    (* keep = "true" *)
 `else
 `define USE_FAST_BRAM
 `define NO_RW_RAM_CHECK

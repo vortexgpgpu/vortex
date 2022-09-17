@@ -46,18 +46,6 @@ RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
 #CONFIGS += -DEXT_GFX_ENABLE
 CONFIGS += -DSYNTHESIS -DVIVADO
 
-# Debugigng
-ifdef DEBUG
-	CONFIGS += $(DBG_FLAGS)
-else    
-	CONFIGS += -DNDEBUG
-endif
-
-# Enable perf counters
-ifdef PERF
-	CONFIGS += -DPERF_ENABLE
-endif
-
 VIVADO = $(XILINX_VIVADO)/bin/vivado
 
 VPP = $(XILINX_VITIS)/bin/v++
@@ -72,9 +60,36 @@ XO_CONTAINER = $(BIN_DIR)/vortex_afu.xo
 XCLBIN_CONTAINER = $(BIN_DIR)/vortex_afu.xclbin
 
 # Kernel compiler global settings
-VPP_CFLAGS += -t $(TARGET) --platform $(PLATFORM) --save-temps
-VPP_CFLAGS += --temp_dir $(BUILD_DIR) --log_dir $(BUILD_DIR) --report_dir $(BUILD_DIR)
-VPP_LDFLAGS +=
+VPP_FLAGS += -l -t $(TARGET) --platform $(PLATFORM) --save-temps
+VPP_FLAGS += --temp_dir $(BUILD_DIR) --log_dir $(BUILD_DIR) --report_dir $(BUILD_DIR)
+VPP_FLAGS += --kernel_frequency 250
+VPP_FLAGS += --config vitis.ini
+
+# Enable perf counters
+ifdef PERF
+	CONFIGS += -DPERF_ENABLE
+endif
+
+ifdef REPORT
+#'estimate' for estimate report generation
+VPP_FLAGS += --report estimate
+endif
+
+ifdef PROFILE
+# Generates profile summary report
+#VPP_FLAGS += --profile_kernel data:all:all:all
+#VPP_FLAGS += --profile_kernel stall:all:all:all
+endif
+
+# Debugigng
+ifdef DEBUG
+	ifeq ($(TARGET), hw_emu)
+		CONFIGS += -DSIMULATION $(DBG_FLAGS)
+		VPP_FLAGS += -g --vivado.prop fileset.sim_1.xsim.elaborate.debug_level=all
+	endif
+else    
+	CONFIGS += -DNDEBUG
+endif
 
 .PHONY: all clean gen-sources emconfig
 
@@ -91,7 +106,7 @@ $(XO_CONTAINER): $(BUILD_DIR)/sources.txt ./kernel.xml
 
 $(XCLBIN_CONTAINER): $(XO_CONTAINER)
 	mkdir -p $(BIN_DIR)
-	$(VPP) $(VPP_CFLAGS) $(VPP_LDFLAGS) -lo $(XCLBIN_CONTAINER) $(XO_CONTAINER)
+	$(VPP) $(VPP_FLAGS) -o $(XCLBIN_CONTAINER) $(XO_CONTAINER)
 
 emconfig: $(BIN_DIR)/emconfig.json
 $(BIN_DIR)/emconfig.json:
@@ -113,26 +128,4 @@ ifndef PLATFORM
 endif
 ifndef XILINX_VITIS
 	$(error XILINX_VITIS variable is not set, please set correctly and rerun)
-endif
-
-# Enable profiling if needed
-REPORT := no
-PROFILE := no
-DEBUG := no
-
-#'estimate' for estimate report generation
-#'system' for system report generation
-ifneq ($(REPORT), no)
-VPP_CFLAGS += --report estimate
-endif
-
-# Generates profile summary report
-ifeq ($(PROFILE), yes)
-VPP_CFLAGS += --profile_kernel data:all:all:all
-endif
-
-# Generates debug summary report
-ifeq ($(DEBUG), yes)
-VPP_CFLAGS += --dk protocol:all:all:all
-VPP_CFLAGS += --dk list_ports
 endif

@@ -41,7 +41,7 @@ module VX_fpu_fpga #(
     wire [NUM_FPC-1:0] per_core_ready_in;
     wire [NUM_FPC-1:0][NUM_LANES-1:0][31:0] per_core_result;
     wire [NUM_FPC-1:0][TAGW-1:0] per_core_tag_out;
-    reg [NUM_FPC-1:0] per_core_ready_out;
+    wire [NUM_FPC-1:0] per_core_ready_out;
     wire [NUM_FPC-1:0] per_core_valid_out;
     
     wire [NUM_FPC-1:0] per_core_has_fflags;  

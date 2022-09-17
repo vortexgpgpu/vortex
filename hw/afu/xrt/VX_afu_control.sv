@@ -119,17 +119,14 @@ module VX_afu_control #(
     wire [ADDR_BITS-1:0]          raddr;
 
     // internal registers
-    wire                          int_ap_idle;
-    wire                          int_ap_ready;
-    reg                           int_ap_done = 0;
-    reg                           int_ap_start = 0;
-    reg                           int_auto_restart = 0;
-    reg                           int_gie = 0;
-    reg  [1:0]                    int_ier = 0;
-    reg  [1:0]                    int_isr = 0;
-    reg  [63:0]                   int_mem = 0;
-    reg  [31:0]                   int_dcra = 0;
-    reg  [31:0]                   int_dcrv = 0;
+    reg                           ap_start_r = 0;
+    reg                           auto_restart_r = 0;
+    reg                           gie_r = 0;
+    reg  [1:0]                    ier_r = 0;
+    reg  [1:0]                    isr_r = 0;
+    reg  [63:0]                   mem_r = 0;
+    reg  [31:0]                   dcra_r = 0;
+    reg  [31:0]                   dcrv_r = 0;
 
     wire [63:0] dev_caps = {16'(`NUM_THREADS), 16'(`NUM_WARPS), 16'(`NUM_CORES * `NUM_CLUSTERS), 16'(`IMPLEMENTATION_ID)};
     wire [63:0] isa_caps = {32'(`MISA_EXT), 2'($clog2(`XLEN)-4), 30'(`MISA_STD)};
@@ -223,20 +220,20 @@ module VX_afu_control #(
                 rdata <= '0;
                 case (raddr)
                     ADDR_AP_CTRL: begin
-                        rdata[0] <= int_ap_start;
-                        rdata[1] <= int_ap_done;
-                        rdata[2] <= int_ap_idle;
-                        rdata[3] <= int_ap_ready;
-                        rdata[7] <= int_auto_restart;
+                        rdata[0] <= ap_start_r;
+                        rdata[1] <= ap_done;
+                        rdata[2] <= ap_idle;
+                        rdata[3] <= ap_ready;
+                        rdata[7] <= auto_restart_r;
                     end
                     ADDR_GIE: begin
-                        rdata <= 32'(int_gie);
+                        rdata <= 32'(gie_r);
                     end
                     ADDR_IER: begin
-                        rdata <= 32'(int_ier);
+                        rdata <= 32'(ier_r);
                     end
                     ADDR_ISR: begin
-                        rdata <= 32'(int_isr);
+                        rdata <= 32'(isr_r);
                     end
                     ADDR_DEV_0: begin
                         rdata <= dev_caps[31:0];
@@ -256,152 +253,126 @@ module VX_afu_control #(
         end
     end
 
-    // Register logic
-    assign interrupt    = int_gie & (| int_isr);
-    assign ap_start     = int_ap_start;
-    assign int_ap_idle  = ap_idle;
-    assign int_ap_ready = ap_ready;
-
-    // int_ap_start
+    // ap_start_r
     always @(posedge clk) begin
         if (reset)
-            int_ap_start <= 0;
+            ap_start_r <= 0;
         else if (clk_en) begin
             if (wd_hs && waddr == ADDR_AP_CTRL && s_axi_wstrb[0] && s_axi_wdata[0])
-                int_ap_start <= 1;
-            else if (int_ap_ready)
-                int_ap_start <= int_auto_restart; // clear on handshake/auto restart
+                ap_start_r <= 1;
+            else if (ap_ready)
+                ap_start_r <= auto_restart_r; // clear on handshake/auto restart
         end
     end
 
-    // int_ap_done
+    // auto_restart_r
     always @(posedge clk) begin
         if (reset)
-            int_ap_done <= 0;
-        else if (clk_en) begin
-            if (ap_done)
-                int_ap_done <= 1;
-            else if (ar_hs && raddr == ADDR_AP_CTRL)
-                int_ap_done <= 1'b0; // clear on read
-        end
-    end
-
-    // int_auto_restart
-    always @(posedge clk) begin
-        if (reset)
-            int_auto_restart <= 0;
+            auto_restart_r <= 0;
         else if (clk_en) begin
             if (wd_hs && waddr == ADDR_AP_CTRL && s_axi_wstrb[0])
-                int_auto_restart <= s_axi_wdata[7];
+                auto_restart_r <= s_axi_wdata[7];
         end
     end
 
-    // int_gie
+    // gie_r
     always @(posedge clk) begin
         if (reset)
-            int_gie <= 0;
+            gie_r <= 0;
         else if (clk_en) begin
             if (wd_hs && waddr == ADDR_GIE && s_axi_wstrb[0])
-                int_gie <= s_axi_wdata[0];
+                gie_r <= s_axi_wdata[0];
         end
     end
 
-    // int_ier
+    // ier_r
     always @(posedge clk) begin
         if (reset)
-            int_ier <= 0;
+            ier_r <= 0;
         else if (clk_en) begin
             if (wd_hs && waddr == ADDR_IER && s_axi_wstrb[0])
-                int_ier <= s_axi_wdata[1:0];
+                ier_r <= s_axi_wdata[1:0];
         end
     end
 
-    // int_isr[0]
+    // isr_r[0]
     always @(posedge clk) begin
         if (reset)
-            int_isr[0] <= 0;
+            isr_r[0] <= 0;
         else if (clk_en) begin
-            if (int_ier[0] & ap_done)
-                int_isr[0] <= 1'b1;
+            if (ier_r[0] & ap_done)
+                isr_r[0] <= 1'b1;
             else if (wd_hs && waddr == ADDR_ISR && s_axi_wstrb[0])
-                int_isr[0] <= int_isr[0] ^ s_axi_wdata[0]; // toggle on write
+                isr_r[0] <= isr_r[0] ^ s_axi_wdata[0]; // toggle on write
         end
     end
 
-    // int_isr[1]
+    // isr_r[1]
     always @(posedge clk) begin
         if (reset)
-            int_isr[1] <= 0;
+            isr_r[1] <= 0;
         else if (clk_en) begin
-            if (int_ier[1] & ap_ready)
-                int_isr[1] <= 1'b1;
+            if (ier_r[1] & ap_ready)
+                isr_r[1] <= 1'b1;
             else if (wd_hs && waddr == ADDR_ISR && s_axi_wstrb[0])
-                int_isr[1] <= int_isr[1] ^ s_axi_wdata[1]; // toggle on write
+                isr_r[1] <= isr_r[1] ^ s_axi_wdata[1]; // toggle on write
         end
     end
 
-    // int_dcra
+    // dcra_r
     always @(posedge clk) begin
         if (reset)
-            int_dcra <= 0;
+            dcra_r <= 0;
         else if (clk_en) begin
             if (wd_hs && waddr == ADDR_DCR_0)
-                int_dcra <= (s_axi_wdata & wmask) | (int_dcra & ~wmask);
+                dcra_r <= (s_axi_wdata & wmask) | (dcra_r & ~wmask);
         end
     end
 
-    // int_dcrv
+    // dcrv_r
     always @(posedge clk) begin
         if (reset)
-            int_dcrv <= 0;
+            dcrv_r <= 0;
         else if (clk_en) begin
             if (wd_hs && waddr == ADDR_DCR_1)
-                int_dcrv <= (s_axi_wdata & wmask) | (int_dcrv & ~wmask);
+                dcrv_r <= (s_axi_wdata & wmask) | (dcrv_r & ~wmask);
         end
     end
 
-    // int_mem[31:0]
+    // mem_r[31:0]
     always @(posedge clk) begin
         if (reset)
-            int_mem[31:0] <= 0;
+            mem_r[31:0] <= 0;
         else if (clk_en) begin
             if (wd_hs && waddr == ADDR_MEM_0)
-                int_mem[31:0] <= (s_axi_wdata & wmask) | (int_mem[31:0] & ~wmask);
+                mem_r[31:0] <= (s_axi_wdata & wmask) | (mem_r[31:0] & ~wmask);
         end
     end
 
-     // int_mem[63:32]
+     // mem_r[63:32]
     always @(posedge clk) begin
         if (reset)
-            int_mem[63:32] <= 0;
+            mem_r[63:32] <= 0;
         else if (clk_en) begin
             if (wd_hs && waddr == ADDR_MEM_1)
-                int_mem[63:32] <= (s_axi_wdata & wmask) | (int_mem[63:32] & ~wmask);
+                mem_r[63:32] <= (s_axi_wdata & wmask) | (mem_r[63:32] & ~wmask);
         end
     end
-
-    reg [31:0] dcrv_wmask;
-    wire [31:0] dcrv_wmask_n = dcrv_wmask | wmask;
-    wire dcrv_wmask_full = (dcrv_wmask_n == {32{1'b1}});
 
     reg dcr_wr_valid_r;
     always @(posedge clk) begin
         if (reset) begin
             dcr_wr_valid_r <= 0;
-            dcrv_wmask     <= 0;
         end else begin
-            if (wd_hs && waddr == ADDR_DCR_1) begin
-                if (dcrv_wmask_full)
-                    dcrv_wmask <= 0;
-                else
-                    dcrv_wmask <= dcrv_wmask_n;
-            end
-            dcr_wr_valid_r <= dcrv_wmask_full;
+            dcr_wr_valid_r <= (wd_hs && waddr == ADDR_DCR_1);
         end
     end
 
+    assign ap_start  = ap_start_r;
+    assign interrupt = gie_r & (| isr_r);    
+
     assign dcr_wr_valid = dcr_wr_valid_r;
-    assign dcr_wr_addr  = `VX_DCR_ADDR_WIDTH'(int_dcra);
-    assign dcr_wr_data  = `VX_DCR_DATA_WIDTH'(int_dcrv);
+    assign dcr_wr_addr  = `VX_DCR_ADDR_WIDTH'(dcra_r);
+    assign dcr_wr_data  = `VX_DCR_DATA_WIDTH'(dcrv_r);
 
 endmodule

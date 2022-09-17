@@ -1,5 +1,10 @@
 XLEN ?= 32
 
+XRT_SYN_DIR  := ../../../hw/syn/xilinx/xrt
+XRT_TARGET   := hw_emu
+XRT_PLATFORM := xilinx_u280_xdma_201920_3
+XRT_BUILD_DIR = ${XRT_SYN_DIR}/build_${XRT_PLATFORM}_${XRT_TARGET}/bin
+
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 VORTEX_RT_PATH ?= $(realpath ../../../runtime)
 VORTEX_KN_PATH ?= $(realpath ../../../kernel)
@@ -65,6 +70,9 @@ run-vlsim: $(PROJECT) kernel.bin
 
 run-rtlsim: $(PROJECT) kernel.bin   
 	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+
+run-xrt: $(PROJECT) kernel.bin   
+	XCL_EMULATION_MODE=${XRT_TARGET} XRT_INI_PATH=${XRT_SYN_DIR}/xrt.ini EMCONFIG_PATH=${XRT_BUILD_DIR} XRT_DEVICE_INDEX=0 XRT_XCLBIN_PATH=${XRT_BUILD_DIR}/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/xrt:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)	
 
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;

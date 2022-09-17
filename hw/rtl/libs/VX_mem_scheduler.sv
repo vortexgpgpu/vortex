@@ -495,42 +495,42 @@ module VX_mem_scheduler #(
     wire [NUM_BANKS-1:0] mem_req_fire_s = mem_req_valid_s & mem_req_ready_s;
     always @(posedge clk) begin
         if (req_valid && req_ready) begin            
-            dpi_trace(1, "%d: %s-req: rw=%b, mask=%b, byteen=", $time, INSTANCE_ID, req_rw, req_mask);
+            `TRACE(1, ("%d: %s-req: rw=%b, mask=%b, byteen=", $time, INSTANCE_ID, req_rw, req_mask));
             `TRACE_ARRAY1D(1, req_byteen, NUM_REQS);
-            dpi_trace(1, ", addr=");
+            `TRACE(1, (", addr="));
             `TRACE_ARRAY1D(1, req_addr, NUM_REQS);
-            dpi_trace(1, ", data=");
+            `TRACE(1, (", data="));
             `TRACE_ARRAY1D(1, req_data, NUM_REQS);
-            dpi_trace(1, ", tag=0x%0h (#%0d)\n", req_tag, req_dbg_uuid);
+            `TRACE(1, (", tag=0x%0h (#%0d)\n", req_tag, req_dbg_uuid));
         end
         if (rsp_valid && rsp_ready) begin
-            dpi_trace(1, "%d: %s-rsp: mask=%b, data=", $time, INSTANCE_ID, rsp_mask);
-             `TRACE_ARRAY1D(1, rsp_data, NUM_REQS);
-            dpi_trace(1, ", tag=0x%0h (#%0d)\n", rsp_tag, rsp_dbg_uuid);
+            `TRACE(1, ("%d: %s-rsp: mask=%b, data=", $time, INSTANCE_ID, rsp_mask));
+            `TRACE_ARRAY1D(1, rsp_data, NUM_REQS);
+            `TRACE(1, (", tag=0x%0h (#%0d)\n", rsp_tag, rsp_dbg_uuid));
         end
         if (| mem_req_fire_s) begin
             if (| mem_req_rw_s) begin
-                dpi_trace(1, "%d: %s-mem-wr: valid=%b, byteen=", $time, INSTANCE_ID, mem_req_fire_s);
+                `TRACE(1, ("%d: %s-mem-wr: valid=%b, byteen=", $time, INSTANCE_ID, mem_req_fire_s));
                 `TRACE_ARRAY1D(1, mem_req_byteen_s, NUM_BANKS);
-                dpi_trace(1, ", addr=");
+                `TRACE(1, (", addr="));
                 `TRACE_ARRAY1D(1, mem_req_addr_s, NUM_BANKS);
-                dpi_trace(1, ", data=");
+                `TRACE(1, (", data="));
                 `TRACE_ARRAY1D(1, mem_req_data_s, NUM_BANKS);
-                dpi_trace(1, ", tag=");
+                `TRACE(1, (", tag="));
                 `TRACE_ARRAY1D(1, ibuf_waddr, NUM_BANKS);
-                dpi_trace(1, ", batch=%0d (#%0d)\n", req_batch_idx, mem_req_dbg_uuid);
+                `TRACE(1, (", batch=%0d (#%0d)\n", req_batch_idx, mem_req_dbg_uuid));
             end else begin
-                dpi_trace(1, "%d: %s-mem-rd: valid=%b, addr=", $time, INSTANCE_ID, mem_req_fire_s);
+                `TRACE(1, ("%d: %s-mem-rd: valid=%b, addr=", $time, INSTANCE_ID, mem_req_fire_s));
                 `TRACE_ARRAY1D(1, mem_req_addr_s, NUM_BANKS);
-                dpi_trace(1, ", tag=");
+                `TRACE(1, (", tag="));
                 `TRACE_ARRAY1D(1, ibuf_waddr, NUM_BANKS);
-                dpi_trace(1, ", batch=%0d (#%0d)\n", req_batch_idx, mem_req_dbg_uuid);
+                `TRACE(1, (", batch=%0d (#%0d)\n", req_batch_idx, mem_req_dbg_uuid));
             end
         end 
         if (mem_rsp_fire) begin
-            dpi_trace(1, "%d: %s-mem-rsp: mask=%b, data=", $time, INSTANCE_ID, mem_rsp_mask_s);                
+            `TRACE(1, ("%d: %s-mem-rsp: mask=%b, data=", $time, INSTANCE_ID, mem_rsp_mask_s));                
             `TRACE_ARRAY1D(1, mem_rsp_data_s, NUM_BANKS);
-            dpi_trace(1, ", tag=0x%0h, batch=%0d (#%0d)\n", ibuf_raddr, rsp_batch_idx, mem_rsp_dbg_uuid);
+            `TRACE(1, (", tag=0x%0h, batch=%0d (#%0d)\n", ibuf_raddr, rsp_batch_idx, mem_rsp_dbg_uuid));
         end
     end
 `endif

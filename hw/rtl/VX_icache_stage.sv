@@ -77,7 +77,7 @@ module VX_icache_stage #(
         );
     end
 
-    `RUNTIME_ASSERT((!ifetch_req_if.valid || ifetch_req_if.PC >= `STARTUP_ADDR), 
+    `RUNTIME_ASSERT((!ifetch_req_if.valid || ifetch_req_if.PC != 0), 
         ("%t: *** invalid PC=0x%0h, wid=%0d, tmask=%b (#%0d)", $time, ifetch_req_if.PC, ifetch_req_if.wid, ifetch_req_if.tmask, ifetch_req_if.uuid))
 
     // Icache Request

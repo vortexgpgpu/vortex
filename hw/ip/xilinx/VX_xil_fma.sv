@@ -82,15 +82,15 @@ module VX_xil_fma #(
     end
     
     VX_shift_register #(
-        .DATAW  (TAGW),
+        .DATAW  (1 + TAGW),
         .DEPTH  (LATENCY),
         .RESETW (1)
     ) shift_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
-        .data_in  (tag_in),
-        .data_out (tag_out)
+        .data_in  ({valid_in,  tag_in}),
+        .data_out ({valid_out, tag_out})
     );
 
     assign ready_in = enable;
