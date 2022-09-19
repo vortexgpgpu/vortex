@@ -11,14 +11,15 @@ endif
 
 TARGET := hw
 PLATFORM :=
+
 PREFIX := build
 
-RTL_DIR = ../../../rtl
-AFU_DIR = ../../../afu/xrt
-IP_DIR  = ../../../ip/xilinx
+RTL_DIR = ../../../../rtl
+AFU_DIR = ../../../../afu/xrt
+IP_DIR  = ../../../../ip/xilinx
 
 BUILD_DIR = $(PREFIX)_$(PLATFORM)_$(TARGET)
-BIN_DIR = $(BUILD_DIR)/bin
+BIN_DIR   = $(BUILD_DIR)/bin
 
 # Control RTL debug tracing states
 DBG_TRACE_FLAGS += -DDBG_TRACE_CORE_PIPELINE  
@@ -43,7 +44,9 @@ ROP_INCLUDE = -I$(RTL_DIR)/rop_unit
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(IP_DIR)
 RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
 
-#CONFIGS += -DEXT_GFX_ENABLE
+CONFIGS += -DEXT_GFX_ENABLE
+#CONFIGS += -DNUM_WARPS=2 -DNUM_THREADS=2 -DEXT_F_DISABLE -DSM_DISABLE -DL1_DISABLE
+
 CONFIGS += -DSYNTHESIS -DVIVADO
 
 VIVADO = $(XILINX_VIVADO)/bin/vivado
@@ -59,36 +62,41 @@ XO_CONTAINER = $(BIN_DIR)/vortex_afu.xo
 
 XCLBIN_CONTAINER = $(BIN_DIR)/vortex_afu.xclbin
 
+NCPUS := $(shell grep -c ^processor /proc/cpuinfo)
+JOBS := $(shell expr $(NCPUS) - 1)
+
 # Kernel compiler global settings
-VPP_FLAGS += -l -t $(TARGET) --platform $(PLATFORM) --save-temps
-VPP_FLAGS += --temp_dir $(BUILD_DIR) --log_dir $(BUILD_DIR) --report_dir $(BUILD_DIR)
-VPP_FLAGS += --kernel_frequency 250
-VPP_FLAGS += --config vitis.ini
+VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps
+VPP_FLAGS += --vivado.synth.jobs $(JOBS) --vivado.impl.jobs $(JOBS)
+#VPP_FLAGS += --kernel_frequency 250
+VPP_FLAGS += --connectivity.sp vortex_afu_1.m_axi_mem:HBM[0:15]
+VPP_FLAGS += --report estimate
+VPP_FLAGS += --config ../vitis.ini
 
 # Enable perf counters
 ifdef PERF
 	CONFIGS += -DPERF_ENABLE
 endif
 
-ifdef REPORT
-#'estimate' for estimate report generation
-VPP_FLAGS += --report estimate
-endif
-
-ifdef PROFILE
 # Generates profile summary report
-#VPP_FLAGS += --profile_kernel data:all:all:all
-#VPP_FLAGS += --profile_kernel stall:all:all:all
+ifdef PROFILE
+	VPP_FLAGS += --profile_kernel data:all:all:all
+	VPP_FLAGS += --profile_kernel stall:all:all:all
 endif
 
 # Debugigng
 ifdef DEBUG
-	ifeq ($(TARGET), hw_emu)
+	VPP_FLAGS += -g --debug.protocol all
+	ifeq ($(TARGET), hw)
+		VPP_FLAGS += --debug.chipscope vortex_afu_1		
+		CONFIGS += -DCHIPSCOPE
+	else
 		CONFIGS += -DSIMULATION $(DBG_FLAGS)
-		VPP_FLAGS += -g --vivado.prop fileset.sim_1.xsim.elaborate.debug_level=all
+		VPP_FLAGS += --vivado.prop fileset.sim_1.xsim.elaborate.debug_level=all
 	endif
 else    
 	CONFIGS += -DNDEBUG
+	VPP_FLAGS += --optimize 3
 endif
 
 .PHONY: all clean gen-sources emconfig
@@ -97,24 +105,20 @@ all: check-devices $(XCLBIN_CONTAINER) emconfig
 
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt:
-	mkdir -p $(BUILD_DIR)
-	./scripts/gen_sources.sh $(RTL_INCLUDE) $(CONFIGS) > $(BUILD_DIR)/sources.txt
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); ../scripts/gen_sources.sh $(RTL_INCLUDE) $(CONFIGS) > sources.txt
 
 $(XO_CONTAINER): $(BUILD_DIR)/sources.txt ./kernel.xml
-	mkdir -p $(BUILD_DIR)
-	$(VIVADO) -log $(BUILD_DIR)/vivado.log -journal $(BUILD_DIR)/vivado.jou -tempDir $(BUILD_DIR) -mode batch -source scripts/gen_xo.tcl -tclargs $(XO_CONTAINER) vortex_afu $(BUILD_DIR)/sources.txt ./kernel.xml $(BUILD_DIR)
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	rm -rf xo; $(VIVADO) -mode batch -source ../scripts/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt ../kernel.xml ../$(BUILD_DIR)
 
 $(XCLBIN_CONTAINER): $(XO_CONTAINER)
-	mkdir -p $(BIN_DIR)
-	$(VPP) $(VPP_FLAGS) -o $(XCLBIN_CONTAINER) $(XO_CONTAINER)
+	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); $(VPP) $(VPP_FLAGS) -o ../$(XCLBIN_CONTAINER) ../$(XO_CONTAINER)
 
 emconfig: $(BIN_DIR)/emconfig.json
 $(BIN_DIR)/emconfig.json:
-	mkdir -p $(BIN_DIR)
-	emconfigutil --platform $(PLATFORM) --od $(BIN_DIR)
+	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); emconfigutil --platform $(PLATFORM) --od ../$(BIN_DIR)
 
 clean:
-	-$(RMDIR) $(BUILD_DIR) .Xil *.log
+	$(RMDIR) $(BUILD_DIR)
 
 # RTL Kernel only supports Hardware and Hardware Emulation.
 ifneq ($(TARGET),$(findstring $(TARGET), hw hw_emu))

@@ -9,8 +9,8 @@ set build_dir [lindex $::argv 1]
 
 set script_path [ file dirname [ file normalize [ info script ] ] ]
 
-set path_to_packaged "${build_dir}/packaged_kernel"
-set path_to_tmp_project "${build_dir}/tmp_project"
+set path_to_packaged "${build_dir}/xo/packaged_kernel"
+set path_to_tmp_project "${build_dir}/xo/project"
 
 source "${script_path}/parse_vcs_list.tcl"
 set vlist [parse_vcs_list "${vcs_file}"]
@@ -23,17 +23,23 @@ set vdefines_list  [lindex $vlist 2]
 #puts ${vdefines_list}
 
 # dump defines into globals.vh
+set chipscope 0
 set fh [open "${build_dir}/globals.vh" w]
 foreach def $vdefines_list {
     set fields [split $def "="]
-    set len [llength $fields]    
+    set len [llength $fields]
+    set name [lindex $fields 0]
     puts -nonewline $fh "`define "
     if {$len > 1} {
-        puts -nonewline $fh [lindex $fields 0]
+        set value [lindex $fields 1]
+        puts -nonewline $fh $name
         puts -nonewline $fh " "
-        puts $fh [lindex $fields 1]
+        puts $fh $value
     } else {
-        puts $fh [lindex $fields 0]
+        puts $fh $name
+        if { $name == "CHIPSCOPE" } {
+            set chipscope 1
+        }
     }
 }
 close $fh
@@ -57,6 +63,14 @@ set_property include_dirs ${vincludes_list} [current_fileset]
 set obj [get_filesets sources_1]
 set_property -verbose -name "top" -value ${krnl_name} -objects $obj
 
+if { $chipscope == 1 } {
+    # hw debugging
+    create_ip -name ila -vendor xilinx.com -library ip -version 6.2 -module_name ila_0
+    set_property -dict [list CONFIG.C_NUM_OF_PROBES {3}] [get_ips ila_0]
+    generate_target {instantiation_template} [get_files ila_0.xci]
+    set_property generate_synth_checkpoint false [get_files ila_0.xci]
+}
+
 update_compile_order -fileset sources_1
 update_compile_order -fileset sim_1
 ipx::package_project -root_dir $path_to_packaged -vendor xilinx.com -library RTLKernel -taxonomy /KernelIP -import_files -set_current false
@@ -69,9 +83,6 @@ set_property core_revision 2 $core
 foreach up [ipx::get_user_parameters] {
   ipx::remove_user_parameter [get_property NAME $up] $core
 }
-set_property sdx_kernel true $core
-set_property sdx_kernel_type rtl $core
-ipx::create_xgui_files $core
 
 ipx::associate_bus_interfaces -busif s_axi_ctrl -clock ap_clk $core
 ipx::associate_bus_interfaces -busif m_axi_mem -clock ap_clk $core
@@ -81,8 +92,12 @@ ipx::associate_bus_interfaces -busif m_axi_mem -clock ap_clk $core
 #ipx::associate_bus_interfaces -busif m_axi_mem3 -clock ap_clk $core
 
 set_property xpm_libraries {XPM_CDC XPM_MEMORY XPM_FIFO} $core
+set_property sdx_kernel true $core
+set_property sdx_kernel_type rtl $core
 set_property supported_families { } $core
 set_property auto_family_support_level level_2 $core
+ipx::create_xgui_files $core
 ipx::update_checksums $core
+ipx::check_integrity -kernel $core
 ipx::save_core $core
 close_project -delete

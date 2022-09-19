@@ -24,4 +24,4 @@ set argv [list ${krnl_name} ${build_dir}]
 set argc 2
 source ${script_path}/package_kernel.tcl
 
-package_xo -xo_path ${xoname} -kernel_name ${krnl_name} -ip_directory "${build_dir}/packaged_kernel" -kernel_xml ${krnl_xml}
+package_xo -xo_path ${xoname} -kernel_name ${krnl_name} -ip_directory "${build_dir}/xo/packaged_kernel" -kernel_xml ${krnl_xml}

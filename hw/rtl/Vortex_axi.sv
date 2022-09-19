@@ -71,7 +71,7 @@ module Vortex_axi #(
     // Status
     output wire                         busy
 );
-    `STATIC_ASSERT((AXI_TID_WIDTH == `VX_MEM_TAG_WIDTH), ("invalid memory tag size: current=%0d, expected=%0d", AXI_TID_WIDTH, `VX_MEM_TAG_WIDTH))
+    `STATIC_ASSERT((AXI_TID_WIDTH >= `VX_MEM_TAG_WIDTH), ("invalid memory tag size: current=%0d, expected=%0d", AXI_TID_WIDTH, `VX_MEM_TAG_WIDTH))
 
     wire                            mem_req_valid;
     wire                            mem_req_rw; 
@@ -86,10 +86,24 @@ module Vortex_axi #(
     wire [`VX_MEM_TAG_WIDTH-1:0]    mem_rsp_tag;
     wire                            mem_rsp_ready;
 
+    wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_awid_unqual;
+    assign m_axi_awid = AXI_TID_WIDTH'(m_axi_awid_unqual);
+
+    wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_bid_unqual;
+    assign m_axi_bid_unqual = m_axi_bid[`VX_MEM_TAG_WIDTH-1:0];
+    `UNUSED_VAR (m_axi_bid)
+
+    wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_arid_unqual;
+    assign m_axi_arid = AXI_TID_WIDTH'(m_axi_arid_unqual);
+
+    wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_rid_unqual;
+    assign m_axi_rid_unqual = m_axi_rid [`VX_MEM_TAG_WIDTH-1:0];    
+    `UNUSED_VAR (m_axi_rid)
+
     VX_axi_adapter #(
         .DATA_WIDTH (AXI_DATA_WIDTH), 
         .ADDR_WIDTH (AXI_ADDR_WIDTH),
-        .TAG_WIDTH  (AXI_TID_WIDTH)
+        .TAG_WIDTH  (`VX_MEM_TAG_WIDTH)
     ) axi_adapter (
         .clk            (clk),
         .reset          (reset),
@@ -110,7 +124,7 @@ module Vortex_axi #(
         .m_axi_awvalid  (m_axi_awvalid),
         .m_axi_awready  (m_axi_awready),
         .m_axi_awaddr   (m_axi_awaddr),
-        .m_axi_awid     (m_axi_awid),
+        .m_axi_awid     (m_axi_awid_unqual),
         .m_axi_awlen    (m_axi_awlen),
         .m_axi_awsize   (m_axi_awsize),
         .m_axi_awburst  (m_axi_awburst),  
@@ -128,13 +142,13 @@ module Vortex_axi #(
         
         .m_axi_bvalid   (m_axi_bvalid),
         .m_axi_bready   (m_axi_bready),
-        .m_axi_bid      (m_axi_bid),
+        .m_axi_bid      (m_axi_bid_unqual),
         .m_axi_bresp    (m_axi_bresp),
         
         .m_axi_arvalid  (m_axi_arvalid),
         .m_axi_arready  (m_axi_arready),
         .m_axi_araddr   (m_axi_araddr),
-        .m_axi_arid     (m_axi_arid),        
+        .m_axi_arid     (m_axi_arid_unqual),        
         .m_axi_arlen    (m_axi_arlen),
         .m_axi_arsize   (m_axi_arsize),
         .m_axi_arburst  (m_axi_arburst), 
@@ -147,7 +161,7 @@ module Vortex_axi #(
         .m_axi_rvalid   (m_axi_rvalid),
         .m_axi_rready   (m_axi_rready),
         .m_axi_rdata    (m_axi_rdata),        
-        .m_axi_rid      (m_axi_rid),
+        .m_axi_rid      (m_axi_rid_unqual),
         .m_axi_rresp    (m_axi_rresp),
         .m_axi_rlast    (m_axi_rlast)
     );

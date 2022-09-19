@@ -46,8 +46,8 @@
 module vortex_afu #(
 	parameter C_S_AXI_CONTROL_ADDR_WIDTH = 6,
 	parameter C_S_AXI_CONTROL_DATA_WIDTH = 32,
-	parameter C_M_AXI_GMEM_ID_WIDTH      = 12,
-	parameter C_M_AXI_GMEM_ADDR_WIDTH    = 64,
+	parameter C_M_AXI_GMEM_ID_WIDTH      = 16,
+	parameter C_M_AXI_GMEM_ADDR_WIDTH    = 32,
 	parameter C_M_AXI_GMEM_DATA_WIDTH    = `VX_MEM_DATA_WIDTH
 ) (
 	// System signals
@@ -55,6 +55,7 @@ module vortex_afu #(
 	input wire 									ap_rst_n,
 
 	//`REPEAT (4, GEN_AXI_MEM, SEP),
+	//`GEN_AXI_MEM (0),
 	
 	// AXI4 memory interface 
 	output wire                                 m_axi_mem_awvalid,
@@ -154,7 +155,7 @@ module vortex_afu #(
 				if (vx_reset == 0 && ap_start) begin
 					vx_reset <= 1;
 				end
-				if (vx_reset_ctr == (`RESET_DELAY-1)) begin
+				if (vx_reset == 1 && vx_reset_ctr == (`RESET_DELAY-1)) begin
 					`TRACE(2, ("%d: AFU: Begin execution\n", $time));
 					vx_running <= 1;
 					vx_reset   <= 0;
@@ -165,7 +166,6 @@ module vortex_afu #(
 
 	always @(posedge ap_clk) begin
 		if (~vx_running && vx_reset == 0 && ap_start) begin
-			`TRACE(2, ("%d: AFU: Begin reset\n", $time));
 			vx_reset_ctr <= 0;
 		end else begin
 			vx_reset_ctr <= vx_reset_ctr + 1;
@@ -311,7 +311,6 @@ module vortex_afu #(
 				if (assert_delay_ctr == (`RESET_DELAY-1)) begin
 					assert_enabled <= 1;
 					$asserton(0, vortex_afu.vortex_axi); // enable assertions
-					`TRACE(2, ("%d: AFU: Enable Assertions\n", $time));
 				end else begin
 					assert_delay_ctr <= assert_delay_ctr + 1;
 				end
