@@ -6,7 +6,7 @@ module VX_stream_arb #(
     parameter NUM_OUTPUTS    = 1,
     parameter NUM_LANES      = 1,
     parameter DATAW          = 1,
-    parameter string ARBITER = "P",
+    parameter `STRING_TYPE ARBITER = "P",
     parameter LOCK_ENABLE    = 1,
     parameter MAX_FANOUT     = 8,
     parameter BUFFERED       = 0    

@@ -5,7 +5,7 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_qe #(
-    parameter string INSTANCE_ID = "",
+    parameter `STRING_TYPE INSTANCE_ID = "",
     parameter NUM_QUADS = 4
 ) (
     input wire clk,

@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_cache_wrap #(
-    parameter string INSTANCE_ID    = "",
+    parameter `STRING_TYPE INSTANCE_ID    = "",
 
     // Number of Word requests per cycle
     parameter NUM_REQS              = 4,

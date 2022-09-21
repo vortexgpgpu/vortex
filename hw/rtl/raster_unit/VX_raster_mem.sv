@@ -7,7 +7,7 @@
 //  3. Store primitive data in an elastic buffer
 
 module VX_raster_mem #(
-    parameter string INSTANCE_ID = "",
+    parameter `STRING_TYPE INSTANCE_ID = "",
     parameter TILE_LOGSIZE  = 5,
     parameter QUEUE_SIZE    = 8
 ) (

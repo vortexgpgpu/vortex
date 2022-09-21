@@ -87,16 +87,19 @@
 `define NO_RW_RAM_CHECK (* altera_attribute = "-name add_pass_through_logic_to_inferred_rams off" *)
 `define DISABLE_BRAM    (* ramstyle = "logic" *)
 `define PRESERVE_REG    (* preserve *)
+`define STRING_TYPE     string
 `elsif VIVADO
 `define USE_FAST_BRAM   (* ram_style = "distributed" *)
 `define NO_RW_RAM_CHECK (* rw_addr_collision = "no" *)
 `define DISABLE_BRAM    (* ram_style = "registers" *)
 `define PRESERVE_REG    (* keep = "true" *)
+`define STRING_TYPE
 `else
 `define USE_FAST_BRAM
 `define NO_RW_RAM_CHECK
 `define DISABLE_BRAM
 `define PRESERVE_REG
+`define STRING_TYPE     string
 `endif
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -4,7 +4,7 @@
 module VX_generic_arbiter #(
     parameter NUM_REQS     = 1,
     parameter LOCK_ENABLE  = 0,
-    parameter string TYPE  = "P",
+    parameter `STRING_TYPE TYPE  = "P",
     parameter LOG_NUM_REQS = `LOG2UP(NUM_REQS)
 ) (
     input  wire                     clk,

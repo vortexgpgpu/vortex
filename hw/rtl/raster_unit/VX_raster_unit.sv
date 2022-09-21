@@ -1,7 +1,7 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_unit #(
-    parameter string INSTANCE_ID = "",
+    parameter `STRING_TYPE INSTANCE_ID = "",
     parameter INSTANCE_IDX    = 0,
     parameter NUM_INSTANCES   = 1, 
     parameter NUM_PES         = 1,  // number of processing elements
@@ -331,7 +331,7 @@ endmodule
 ///////////////////////////////////////////////////////////////////////////////
 
 module VX_raster_unit_top #(
-    parameter string INSTANCE_ID = "",
+    parameter `STRING_TYPE INSTANCE_ID = "",
     parameter INSTANCE_IDX    = 0,
     parameter NUM_INSTANCES   = 1, 
     parameter NUM_PES         = 1,  // number of processing elements

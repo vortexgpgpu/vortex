@@ -1,7 +1,7 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_dcr #(
-    parameter string INSTANCE_ID = "",
+    parameter `STRING_TYPE INSTANCE_ID = "",
     parameter INSTANCE_IDX  = 0,
     parameter NUM_INSTANCES = 1
 ) (

@@ -6,7 +6,7 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_be #(
-    parameter string INSTANCE_ID = "",
+    parameter `STRING_TYPE INSTANCE_ID = "",
     parameter BLOCK_LOGSIZE   = 5,
     parameter OUTPUT_QUADS    = 2,
     parameter QUAD_FIFO_DEPTH = 4    
