@@ -1,7 +1,7 @@
 RTL_DIR = ../../../../../rtl
 AFU_DIR = ../../../../../afu/opae
 THIRD_PARTY_DIR = ../../../../../../third_party
-IP_CACHE_DIR = ../../ip_cache/$(DEVICE_FAMILY)
+IP_CACHE_DIR = ../../../ip_cache/$(DEVICE_FAMILY)
 IP_DIR = ../../../../../ip/altera;$(IP_CACHE_DIR)
 
 ifeq ($(DEVICE_FAMILY), stratix10)
@@ -29,7 +29,7 @@ all: ip_gen $(PROJECT).sta.rpt $(PROJECT).pow.rpt
 
 ip_gen: $(IP_CACHE_DIR)/ip_gen.log
 $(IP_CACHE_DIR)/ip_gen.log:
-	../../ip_gen.sh
+	../../../ip_gen.sh
 
 syn: $(PROJECT).syn.rpt
 
