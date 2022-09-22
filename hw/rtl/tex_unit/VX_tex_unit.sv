@@ -379,8 +379,7 @@ module VX_tex_unit_top #(
         .reset        (reset),
     `ifdef PERF_ENABLE
         .perf_tex_if  (perf_tex_if),
-    `endif 
-        .dcr_write_if (tex_dcr_write_if),
+    `endif
         .dcr_write_if (dcr_write_if),
         .tex_req_if   (tex_req_if),
         .tex_rsp_if   (tex_rsp_if),

@@ -1,4 +1,4 @@
-`include "VX_define.vh"
+`include "VX_platform.vh"
 
 `TRACING_OFF
 module VX_mem_rsp_sel #(

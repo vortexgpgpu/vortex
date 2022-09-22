@@ -8,6 +8,7 @@ module VX_mem_scheduler #(
     parameter ADDR_WIDTH    = 32,
     parameter DATA_WIDTH    = 32,
     parameter TAG_WIDTH     = 32,
+    parameter MEM_TAG_ID    = 0,
     parameter UUID_WIDTH    = 0,
     parameter QUEUE_SIZE    = 16,
     parameter RSP_PARTIAL   = 0,
@@ -18,7 +19,7 @@ module VX_mem_scheduler #(
     parameter NUM_BATCHES  = (NUM_REQS + NUM_BANKS - 1) / NUM_BANKS,
     parameter QUEUE_ADDRW  = `CLOG2(QUEUE_SIZE),
     parameter BATCH_SEL_BITS = `CLOG2(NUM_BATCHES),
-    parameter MEM_TAGW     = UUID_WIDTH + QUEUE_ADDRW + BATCH_SEL_BITS
+    parameter MEM_TAGW     = MEM_TAG_ID + QUEUE_ADDRW + BATCH_SEL_BITS
 ) (
     input wire clk,
     input wire reset,
@@ -63,8 +64,10 @@ module VX_mem_scheduler #(
     localparam BATCH_DATAW = NUM_BANKS * (1 + BYTEENW + ADDR_WIDTH + DATA_WIDTH);
     localparam REQ_SIZEW = $clog2(NUM_REQS + 1);
     localparam BANK_SIZEW = $clog2(NUM_BANKS + 1);
-    localparam TAG_ONLY_WIDTH = TAG_WIDTH - UUID_WIDTH;
+    localparam TAG_ONLY_WIDTH = TAG_WIDTH - MEM_TAG_ID;
+    localparam STALL_TIMEOUT = 10000000;
 
+    `STATIC_ASSERT ((MEM_TAG_ID >= UUID_WIDTH), ("invalid parameter"))
     `STATIC_ASSERT (DATA_WIDTH == 8 * (DATA_WIDTH / 8), ("invalid parameter"))
     `STATIC_ASSERT ((0 == RSP_PARTIAL) || (1 == RSP_PARTIAL), ("invalid parameter"))
     `RUNTIME_ASSERT ((~req_valid || req_mask != 0), ("invalid request mask"));
@@ -94,7 +97,7 @@ module VX_mem_scheduler #(
     wire [NUM_REQS-1:0][ADDR_WIDTH-1:0] reqq_addr;
     wire [NUM_REQS-1:0][DATA_WIDTH-1:0] reqq_data;
     wire [QUEUE_ADDRW-1:0]          reqq_tag;
-    wire [`UP(UUID_WIDTH)-1:0]      reqq_uuid;
+    wire [`UP(MEM_TAG_ID)-1:0]      reqq_mtid;
 
     wire                            ibuf_push;
     wire                            ibuf_pop;
@@ -117,15 +120,15 @@ module VX_mem_scheduler #(
     assign reqq_push = req_valid && req_ready;
     assign reqq_pop  = ~reqq_empty && req_sent_all;
     
-    wire [`UP(UUID_WIDTH)-1:0] req_uuid;
-    if (UUID_WIDTH != 0) begin
-        assign req_uuid = req_tag[TAG_WIDTH-1 -: UUID_WIDTH];
+    wire [`UP(MEM_TAG_ID)-1:0] req_mtid;
+    if (MEM_TAG_ID != 0) begin
+        assign req_mtid = req_tag[TAG_WIDTH-1 -: MEM_TAG_ID];
     end else begin
-        assign req_uuid = 0;
+        assign req_mtid = 0;
     end
 
     VX_fifo_queue #(
-        .DATAW   (1 + NUM_REQS * (1 + BYTEENW + ADDR_WIDTH + DATA_WIDTH) + `UP(UUID_WIDTH) + QUEUE_ADDRW),
+        .DATAW   (1 + NUM_REQS * (1 + BYTEENW + ADDR_WIDTH + DATA_WIDTH) + `UP(MEM_TAG_ID) + QUEUE_ADDRW),
         .SIZE	 (QUEUE_SIZE),
         .OUT_REG (1)
     ) req_queue (
@@ -133,8 +136,8 @@ module VX_mem_scheduler #(
         .reset      (reset),
         .push       (reqq_push),
         .pop        (reqq_pop),
-        .data_in    ({req_rw,  req_mask,  req_byteen,  req_addr,  req_data,  req_uuid,  ibuf_waddr}),
-        .data_out   ({reqq_rw, reqq_mask, reqq_byteen, reqq_addr, reqq_data, reqq_uuid, reqq_tag}),
+        .data_in    ({req_rw,  req_mask,  req_byteen,  req_addr,  req_data,  req_mtid,  ibuf_waddr}),
+        .data_out   ({reqq_rw, reqq_mask, reqq_byteen, reqq_addr, reqq_data, reqq_mtid, reqq_tag}),
         .full       (reqq_full),
         .empty      (reqq_empty),
         `UNUSED_PIN (alm_full),
@@ -276,14 +279,14 @@ module VX_mem_scheduler #(
         
         wire [MEM_TAGW-1:0] mem_req_tag_s;
         
-        if (UUID_WIDTH != 0) begin
+        if (MEM_TAG_ID != 0) begin
             if (NUM_BATCHES > 1) begin
-                assign mem_req_tag_s = {reqq_uuid, req_batch_idx, reqq_tag};
+                assign mem_req_tag_s = {reqq_mtid, req_batch_idx, reqq_tag};
             end else begin
-                assign mem_req_tag_s = {reqq_uuid, reqq_tag};
+                assign mem_req_tag_s = {reqq_mtid, reqq_tag};
             end
         end else begin
-            `UNUSED_VAR (reqq_uuid)
+            `UNUSED_VAR (reqq_mtid)
             if (NUM_BATCHES > 1) begin
                 assign mem_req_tag_s = {req_batch_idx, reqq_tag};
             end else begin
@@ -318,7 +321,7 @@ module VX_mem_scheduler #(
         .NUM_REQS     (NUM_BANKS),
         .DATA_WIDTH   (DATA_WIDTH),
         .TAG_WIDTH    (MEM_TAGW),
-        .TAG_SEL_BITS (MEM_TAGW - UUID_WIDTH),
+        .TAG_SEL_BITS (MEM_TAGW - MEM_TAG_ID),
         .OUT_REG      (3)
     ) mem_rsp_sel (
         .clk           (clk),
@@ -414,8 +417,8 @@ module VX_mem_scheduler #(
         end
     end
 
-    if (UUID_WIDTH != 0) begin
-        assign crsp_tag = {mem_rsp_tag_s[MEM_TAGW-1 -: UUID_WIDTH], ibuf_dout};
+    if (MEM_TAG_ID != 0) begin
+        assign crsp_tag = {mem_rsp_tag_s[MEM_TAGW-1 -: MEM_TAG_ID], ibuf_dout};
     end else begin
         assign crsp_tag = ibuf_dout;
     end
@@ -438,16 +441,16 @@ module VX_mem_scheduler #(
     );  
 
 `ifdef SIMULATION
-    wire [`UP(`UUID_BITS)-1:0] req_dbg_uuid;
-    wire [`UP(`UUID_BITS)-1:0] rsp_dbg_uuid;
-    wire [`UP(`UUID_BITS)-1:0] mem_req_dbg_uuid;
-    wire [`UP(`UUID_BITS)-1:0] mem_rsp_dbg_uuid;
+    wire [`UP(UUID_WIDTH)-1:0] req_dbg_uuid;
+    wire [`UP(UUID_WIDTH)-1:0] rsp_dbg_uuid;
+    wire [`UP(UUID_WIDTH)-1:0] mem_req_dbg_uuid;
+    wire [`UP(UUID_WIDTH)-1:0] mem_rsp_dbg_uuid;
 
     if (UUID_WIDTH != 0) begin
-        assign req_dbg_uuid = req_tag[TAG_WIDTH-1 -: `UP(`UUID_BITS)];
-        assign rsp_dbg_uuid = rsp_tag[TAG_WIDTH-1 -: `UP(`UUID_BITS)];
-        assign mem_req_dbg_uuid = reqq_uuid[UUID_WIDTH-1 -: `UP(`UUID_BITS)];
-        assign mem_rsp_dbg_uuid = mem_rsp_tag_s[MEM_TAGW-1 -: `UP(`UUID_BITS)];
+        assign req_dbg_uuid = req_tag[TAG_WIDTH-1 -: UUID_WIDTH];
+        assign rsp_dbg_uuid = rsp_tag[TAG_WIDTH-1 -: UUID_WIDTH];
+        assign mem_req_dbg_uuid = reqq_mtid[MEM_TAG_ID-1 -: UUID_WIDTH];
+        assign mem_rsp_dbg_uuid = mem_rsp_tag_s[MEM_TAGW-1 -: UUID_WIDTH];
     end else begin
         assign req_dbg_uuid = 0;
         assign rsp_dbg_uuid = 0;
@@ -460,7 +463,7 @@ module VX_mem_scheduler #(
     `UNUSED_VAR (mem_req_dbg_uuid)
     `UNUSED_VAR (mem_rsp_dbg_uuid)
 
-    reg [(`UP(`UUID_BITS) + TAG_ONLY_WIDTH + 64)-1:0] pending_reqs [QUEUE_SIZE-1:0];
+    reg [(`UP(UUID_WIDTH) + TAG_ONLY_WIDTH + 64)-1:0] pending_reqs [QUEUE_SIZE-1:0];
     reg [QUEUE_SIZE-1:0] pending_req_valids;
 
     always @(posedge clk) begin
@@ -481,9 +484,9 @@ module VX_mem_scheduler #(
 
         for (integer i = 0; i < QUEUE_SIZE; ++i) begin
             if (pending_req_valids[i]) begin
-                `ASSERT(($time - pending_reqs[i][0 +: 64]) < `STALL_TIMEOUT,
+                `ASSERT(($time - pending_reqs[i][0 +: 64]) < STALL_TIMEOUT,
                     ("%t: *** %s response timeout: remaining=%0d, tag=0x%0h (#%0d)", 
-                        $time, INSTANCE_ID, rsp_rem_size[i], pending_reqs[i][64 +: TAG_ONLY_WIDTH], pending_reqs[i][64+TAG_ONLY_WIDTH +: `UP(`UUID_BITS)]));
+                        $time, INSTANCE_ID, rsp_rem_size[i], pending_reqs[i][64 +: TAG_ONLY_WIDTH], pending_reqs[i][64+TAG_ONLY_WIDTH +: `UP(UUID_WIDTH)]));
             end
         end
     end

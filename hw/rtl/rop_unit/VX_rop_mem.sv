@@ -41,7 +41,8 @@ module VX_rop_mem #(
     input wire                                      rsp_ready    
 );
 
-    localparam NUM_REQS = ROP_MEM_REQS;
+    localparam UUID_WIDTH = `UP(`UUID_BITS);
+    localparam NUM_REQS   = ROP_MEM_REQS;
 
     wire                        mreq_valid, mreq_valid_r;
     wire                        mreq_rw, mreq_rw_r;
@@ -185,7 +186,8 @@ module VX_rop_mem #(
         .ADDR_WIDTH   (OCACHE_ADDR_WIDTH),
         .DATA_WIDTH   (32),
         .TAG_WIDTH    (TAG_WIDTH),
-        .UUID_WIDTH   (`UP(`UUID_BITS)),
+        .MEM_TAG_ID   (UUID_WIDTH),
+        .UUID_WIDTH   (UUID_WIDTH),
         .QUEUE_SIZE   (`ROP_MEM_QUEUE_SIZE),
         .CORE_OUT_REG (3)
     ) mem_scheduler (

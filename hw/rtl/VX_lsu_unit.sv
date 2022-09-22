@@ -185,7 +185,8 @@ module VX_lsu_unit #(
         .DATA_WIDTH  (32),
         .QUEUE_SIZE  (`LSUQ_SIZE),
         .TAG_WIDTH   (TAG_WIDTH),
-        .UUID_WIDTH  (UUID_WIDTH + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS)),
+        .MEM_TAG_ID  (UUID_WIDTH + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS)),
+        .UUID_WIDTH  (UUID_WIDTH),
         .RSP_PARTIAL (1),
         .MEM_OUT_REG (3)
     ) mem_scheduler (
