@@ -65,17 +65,15 @@ module VX_csr_unit #(
     reg                        csr_rd_enable;
     wire                       csr_wr_enable;    
 
-    reg csr_access_pending;    
     `UNUSED_VAR (gpu_pending)
-    always @(*) begin
-        csr_access_pending = 0;
+    wire csr_access_pending = (0    
     `ifdef EXT_GFX_ENABLE
-        csr_access_pending |= gpu_pending;
+        || gpu_pending
     `endif
     `ifdef EXT_F_ENABLE
-        csr_access_pending |= fpu_pending;
-    `endif 
-    end
+        || fpu_pending
+    `endif
+        );
 
     wire csr_req_valid = csr_req_if.valid && ~csr_access_pending;  
     wire csr_req_ready;
