@@ -42,7 +42,7 @@
 #ifndef NDEBUG
 #define DBGPRINT(format, ...) do { printf("[VXDRV] " format "", ##__VA_ARGS__); } while (0)
 #else
-#define DBGPRINT(x) ((void)0)
+#define DBGPRINT(format, ...) ((void)0)
 #endif
 
 #define CHECK_HANDLE(handle, _expr, _cleanup)   \
