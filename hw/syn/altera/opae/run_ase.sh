@@ -7,7 +7,7 @@ BUILD_DIR=$1
 PROGRAM=$(basename "$2")
 PROGRAM_DIR=`dirname $2`
 
-VORTEX_RT_PATH=$SCRIPT_DIR/../../../runtime
+VORTEX_RT_PATH=$SCRIPT_DIR/../../../../runtime
 
 # Export ASE_WORKDIR variable
 export ASE_WORKDIR=$SCRIPT_DIR/$BUILD_DIR/work
