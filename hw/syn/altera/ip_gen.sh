@@ -31,6 +31,6 @@ echo Generating IP cores for $FBITS
     #$CMD -name acl_utof FXPToFP 32 0 0 $EXP_BITS $MAN_BITS
 } > ip_gen.log 2>&1
 
-cp $QUARTUS_HOME/dspba/backend/Libraries/sv/base/dspba_library_ver.sv .
+cp $QUARTUS_HOME/dspba/backend/Libraries/sv/base/dspba_library_ver.sv dspba_delay_ver.sv
 
 popd
