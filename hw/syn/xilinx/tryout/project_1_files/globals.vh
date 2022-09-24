@@ -1,5 +1,5 @@
-`ifndef VORTEX_AXI_WRAPPER_VS
-`define VORTEX_AXI_WRAPPER_VS
+`ifndef GLOBALS_VH
+`define GLOBALS_VH
 
 `define SYNTHESIS
 `define NDEBUG

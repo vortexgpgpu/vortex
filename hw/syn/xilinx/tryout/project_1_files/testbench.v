@@ -1,3 +1,5 @@
+`include "VX_define.vh"
+
 `timescale 1ns / 1ps
 
 module testbench;

@@ -171,16 +171,7 @@ if {[string equal [get_filesets -quiet sources_1] ""]} {
 
 # add source files
 set obj [get_filesets sources_1]
-add_files -verbose -fileset $obj [glob $path_to_hdl_vx $path_to_hdl_ip]
-set files [list \
- [file normalize "$origin_dir/project_1_files/Vortex_axi_wrapper.v" ] \
- [file normalize "$origin_dir/project_1_files/Vortex_axi_wrapper.vh" ] \
-]
-add_files -verbose -norecurse -fileset $obj $files
-
-set file "Vortex_axi_wrapper.vh"
-set file_obj [get_files -of_objects [get_filesets sources_1] [list "*$file"]]
-set_property -name "is_global_include" -value "1" -objects $file_obj
+add_files -verbose -fileset $obj [ glob $path_to_hdl_vx $path_to_hdl_ip $origin_dir/project_1_files ]
 
 # Set 'sources_1' fileset properties
 set obj [get_filesets sources_1]
