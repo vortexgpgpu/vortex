@@ -13,6 +13,9 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+`ifdef VERILATOR
+`define TRACING_ON      /* verilator tracing_on */
+`define TRACING_OFF     /* verilator tracing_off */
 `ifndef NDEBUG
     `define DEBUG_BLOCK(x) /* verilator lint_off UNUSED */ \
                            x \
@@ -54,6 +57,24 @@
 `define UNUSED_PIN(x)  /* verilator lint_off PINCONNECTEMPTY */ \
                        . x () \
                        /* verilator lint_on PINCONNECTEMPTY */
+`define TRACE(level, args) dpi_trace(level, $sformatf args)
+`else
+`define TRACING_ON
+`define TRACING_OFF
+`ifndef NDEBUG
+    `define DEBUG_BLOCK(x) x
+`else
+    `define DEBUG_BLOCK(x)
+`endif
+`define IGNORE_UNUSED_BEGIN
+`define IGNORE_UNUSED_END
+`define IGNORE_WARNINGS_BEGIN
+`define IGNORE_WARNINGS_END
+`define UNUSED_PARAM(x)
+`define UNUSED_VAR(x)
+`define UNUSED_PIN(x) . x ()
+`define TRACE(level, args) $write args
+`endif
 
 `define STATIC_ASSERT(cond, msg) \
     generate                     \
@@ -71,15 +92,6 @@
         assert(cond) else $error msg; \
     end
 
-`ifdef VERILATOR
-`define TRACE(level, args) dpi_trace(level, $sformatf args)
-`else
-`define TRACE(level, args) $write args
-`endif
-
-`define TRACING_ON  /* verilator tracing_on */
-`define TRACING_OFF /* verilator tracing_off */
-
 ///////////////////////////////////////////////////////////////////////////////
 
 `ifdef QUARTUS
@@ -89,10 +101,14 @@
 `define PRESERVE_REG    (* preserve *)
 `define STRING_TYPE     string
 `elsif VIVADO
-`define USE_FAST_BRAM   (* ram_style = "distributed" *)
-`define NO_RW_RAM_CHECK (* rw_addr_collision = "no" *)
-`define DISABLE_BRAM    (* ram_style = "registers" *)
-`define PRESERVE_REG    (* keep = "true" *)
+//`define USE_FAST_BRAM   (* ram_style = "distributed" *)
+//`define NO_RW_RAM_CHECK (* rw_addr_collision = "no" *)
+//`define DISABLE_BRAM    (* ram_style = "registers" *)
+//`define PRESERVE_REG    (* keep = "true" *)
+`define USE_FAST_BRAM
+`define NO_RW_RAM_CHECK
+`define DISABLE_BRAM
+`define PRESERVE_REG
 `define STRING_TYPE
 `else
 `define USE_FAST_BRAM

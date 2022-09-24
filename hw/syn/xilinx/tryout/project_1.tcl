@@ -421,6 +421,10 @@ if { $bCheckIPs == 1 } {
   set_property -dict [ list \
    CONFIG.POLARITY {ACTIVE_HIGH} \
  ] $vx_reset
+ 
+  set dcr_wr_valid [ create_bd_port -dir I dcr_wr_valid ]
+  set dcr_wr_addr [ create_bd_port -dir I -from 11 -to 0 dcr_wr_addr ]
+  set dcr_wr_data [ create_bd_port -dir I -from 31 -to 0 dcr_wr_data ]
 
   # Create instance: Vortex_axi_wrapper_0, and set properties
   set block_name Vortex_axi_wrapper
@@ -468,7 +472,7 @@ if { $bCheckIPs == 1 } {
  ] $axi_bram_ctrl_0_bram
 
   # Create interface connections
-  connect_bd_intf_net -intf_net Vortex_axi_wrapper_0_m_axi [get_bd_intf_pins Vortex_axi_wrapper_0/m_axi] [get_bd_intf_pins axi_bram_ctrl_0/S_AXI]
+  connect_bd_intf_net -intf_net Vortex_axi_wrapper_0_m_axi_mem [get_bd_intf_pins Vortex_axi_wrapper_0/m_axi_mem] [get_bd_intf_pins axi_bram_ctrl_0/S_AXI]
   connect_bd_intf_net -intf_net axi_bram_ctrl_0_BRAM_PORTA [get_bd_intf_pins axi_bram_ctrl_0/BRAM_PORTA] [get_bd_intf_pins axi_bram_ctrl_0_bram/BRAM_PORTA]
   connect_bd_intf_net -intf_net axi_bram_ctrl_0_BRAM_PORTB [get_bd_intf_pins axi_bram_ctrl_0/BRAM_PORTB] [get_bd_intf_pins axi_bram_ctrl_0_bram/BRAM_PORTB]
 
@@ -477,9 +481,12 @@ if { $bCheckIPs == 1 } {
   connect_bd_net -net clk_wiz_clk_out1 [get_bd_ports clk_100MHz] [get_bd_pins Vortex_axi_wrapper_0/clk] [get_bd_pins axi_bram_ctrl_0/s_axi_aclk]
   connect_bd_net -net resetn_1 [get_bd_ports resetn] [get_bd_pins axi_bram_ctrl_0/s_axi_aresetn]
   connect_bd_net -net vx_reset_1 [get_bd_ports vx_reset] [get_bd_pins Vortex_axi_wrapper_0/reset]
+  connect_bd_net -net dcr_wr_valid_1 [get_bd_ports dcr_wr_valid] [get_bd_pins Vortex_axi_wrapper_0/dcr_wr_valid]
+  connect_bd_net -net dcr_wr_addr_1 [get_bd_ports dcr_wr_addr] [get_bd_pins Vortex_axi_wrapper_0/dcr_wr_addr]
+  connect_bd_net -net dcr_wr_data_1 [get_bd_ports dcr_wr_data] [get_bd_pins Vortex_axi_wrapper_0/dcr_wr_data]
 
   # Create address segments
-  assign_bd_address -offset 0x00000000 -range 0x00100000 -target_address_space [get_bd_addr_spaces Vortex_axi_wrapper_0/m_axi] [get_bd_addr_segs axi_bram_ctrl_0/S_AXI/Mem0] -force
+  assign_bd_address -offset 0x00000000 -range 0x00100000 -target_address_space [get_bd_addr_spaces Vortex_axi_wrapper_0/m_axi_mem] [get_bd_addr_segs axi_bram_ctrl_0/S_AXI/Mem0] -force
 
   # Perform GUI Layout
   regenerate_bd_layout -layout_string {
@@ -489,22 +496,28 @@ if { $bCheckIPs == 1 } {
    "ExpandedHierarchyInLayout":"",
    "guistr":"# # String gsaved with Nlview 7.0r4  2019-12-20 bk=1.5203 VDI=41 GEI=36 GUI=JA:10.0 TLS
 #  -string -flagsOSRD
-preplace port vx_busy -pg 1 -lvl 4 -x 830 -y 160 -defaultsOSRD
-preplace port clk_100MHz -pg 1 -lvl 0 -x 0 -y 60 -defaultsOSRD
-preplace port resetn -pg 1 -lvl 0 -x 0 -y 150 -defaultsOSRD
-preplace port vx_reset -pg 1 -lvl 0 -x 0 -y 80 -defaultsOSRD
-preplace inst axi_bram_ctrl_0 -pg 1 -lvl 2 -x 400 -y 80 -defaultsOSRD
-preplace inst Vortex_axi_wrapper_0 -pg 1 -lvl 1 -x 130 -y 70 -defaultsOSRD
-preplace inst axi_bram_ctrl_0_bram -pg 1 -lvl 3 -x 680 -y 80 -defaultsOSRD
-preplace netloc Vortex_axi_wrapper_0_busy 1 1 3 240J 160 NJ 160 NJ
-preplace netloc vx_reset_1 1 0 1 NJ 80
-preplace netloc clk_wiz_clk_out1 1 0 2 20 140 250J
-preplace netloc resetn_1 1 0 2 NJ 150 260J
-preplace netloc axi_bram_ctrl_0_BRAM_PORTA 1 2 1 N 70
-preplace netloc axi_bram_ctrl_0_BRAM_PORTB 1 2 1 N 90
-preplace netloc Vortex_axi_wrapper_0_m_axi 1 1 1 N 60
-levelinfo -pg 1 0 130 400 680 830
-pagesize -pg 1 -db -bbox -sgen -140 0 940 180
+preplace port clk_100MHz -pg 1 -lvl 0 -x 0 -y 40 -defaultsOSRD
+preplace port resetn -pg 1 -lvl 0 -x 0 -y 20 -defaultsOSRD
+preplace port vx_busy -pg 1 -lvl 4 -x 950 -y 220 -defaultsOSRD
+preplace port vx_reset -pg 1 -lvl 0 -x 0 -y 110 -defaultsOSRD
+preplace port dcr_wr_valid -pg 1 -lvl 0 -x 0 -y 130 -defaultsOSRD
+preplace portBus dcr_wr_addr -pg 1 -lvl 0 -x 0 -y 150 -defaultsOSRD
+preplace portBus dcr_wr_data -pg 1 -lvl 0 -x 0 -y 170 -defaultsOSRD
+preplace inst Vortex_axi_wrapper_0 -pg 1 -lvl 1 -x 190 -y 130 -defaultsOSRD
+preplace inst axi_bram_ctrl_0 -pg 1 -lvl 2 -x 520 -y 140 -defaultsOSRD
+preplace inst axi_bram_ctrl_0_bram -pg 1 -lvl 3 -x 800 -y 140 -defaultsOSRD
+preplace netloc Vortex_axi_wrapper_0_busy 1 1 3 360J 220 NJ 220 NJ
+preplace netloc clk_wiz_clk_out1 1 0 2 20 30 370
+preplace netloc resetn_1 1 0 2 NJ 20 380J
+preplace netloc vx_reset_1 1 0 1 NJ 110
+preplace netloc dcr_wr_valid_1 1 0 1 NJ 130
+preplace netloc dcr_wr_addr_1 1 0 1 NJ 150
+preplace netloc dcr_wr_data_1 1 0 1 NJ 170
+preplace netloc axi_bram_ctrl_0_BRAM_PORTB 1 2 1 N 150
+preplace netloc axi_bram_ctrl_0_BRAM_PORTA 1 2 1 N 130
+preplace netloc Vortex_axi_wrapper_0_m_axi_mem 1 1 1 N 120
+levelinfo -pg 1 0 190 520 800 950
+pagesize -pg 1 -db -bbox -sgen -180 0 1060 240
 "
 }
 
