@@ -57,7 +57,7 @@ module VX_warp_sched #(
     wire                    schedule_ready;
     wire                    warp_scheduled;
 
-    reg [`PERF_CTR_BITS-1:0]    cycles;
+    reg [`PERF_CTR_BITS-1:0] cycles;
 
     reg [`NUM_WARPS-1:0][UUID_WIDTH-1:0] issued_instrs;
     wire [UUID_WIDTH-1:0] instr_uuid;

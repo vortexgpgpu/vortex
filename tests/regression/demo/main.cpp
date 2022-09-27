@@ -1,4 +1,5 @@
 #include <iostream>
+#include <limits>
 #include <unistd.h>
 #include <string.h>
 #include <vortex.h>
@@ -62,9 +63,17 @@ void cleanup() {
   }
 }
 
+void wait_for_enter(const std::string &msg) {
+    std::cout << msg << std::endl;
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
+
 int run_test(const kernel_arg_t& kernel_arg,
              uint32_t buf_size, 
              uint32_t num_points) {
+
+  //wait_for_enter("\nPress ENTER to continue after setting up ILA trigger...");
+              
   // start device
   std::cout << "start device" << std::endl;
   RT_CHECK(vx_start(device));

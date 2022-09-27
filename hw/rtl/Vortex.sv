@@ -48,16 +48,6 @@ module Vortex (
     output wire                             busy
 );
 
-`ifdef CHIPSCOPE
-    // ILA monitoring combinatorial adder
-    ila_0 i_ila_0 (
-        .clk    (ap_clk),              
-        .probe0 (mem_req_valid && mem_req_ready),
-        .probe1 (mem_rsp_valid && mem_rsp_ready),
-        .probe2 (dcr_wr_valid)
-    );
-`endif
-
 `ifdef PERF_ENABLE
     VX_perf_memsys_if perf_memsys_if[`NUM_CLUSTERS]();
     VX_perf_memsys_if perf_memsys_total_if();    

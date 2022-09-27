@@ -81,16 +81,24 @@
         if (!(cond)) $error msg; \
     endgenerate
 
-`define ERROR(msg) \
-    $error msg
+`ifdef SIMULATION
+    `define ERROR(msg) \
+        $error msg
 
-`define ASSERT(cond, msg) \
-    assert(cond) else $error msg
+    `define ASSERT(cond, msg) \
+        assert(cond) else $error msg
 
-`define RUNTIME_ASSERT(cond, msg)     \
-    always @(posedge clk) begin       \
-        assert(cond) else $error msg; \
-    end
+    `define RUNTIME_ASSERT(cond, msg)     \
+        always @(posedge clk) begin       \
+            assert(cond) else $error msg; \
+        end
+`else
+    `define ERROR(msg)                  //
+    `define ASSERT(cond, msg)           //
+    `define RUNTIME_ASSERT(cond, msg)
+`endif
+
+
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -98,23 +106,19 @@
 `define USE_FAST_BRAM   (* ramstyle = "MLAB, no_rw_check" *)
 `define NO_RW_RAM_CHECK (* altera_attribute = "-name add_pass_through_logic_to_inferred_rams off" *)
 `define DISABLE_BRAM    (* ramstyle = "logic" *)
-`define PRESERVE_REG    (* preserve *)
+`define PRESERVE_NET    (* preserve *)
 `define STRING_TYPE     string
 `elsif VIVADO
-//`define USE_FAST_BRAM   (* ram_style = "distributed" *)
-//`define NO_RW_RAM_CHECK (* rw_addr_collision = "no" *)
-//`define DISABLE_BRAM    (* ram_style = "registers" *)
-//`define PRESERVE_REG    (* keep = "true" *)
-`define USE_FAST_BRAM
-`define NO_RW_RAM_CHECK
-`define DISABLE_BRAM
-`define PRESERVE_REG
+`define USE_FAST_BRAM   (* ram_style = "distributed" *)
+`define NO_RW_RAM_CHECK (* rw_addr_collision = "no" *)
+`define DISABLE_BRAM    (* ram_style = "registers" *)
+`define PRESERVE_NET    (* keep = "true" *)
 `define STRING_TYPE
 `else
 `define USE_FAST_BRAM
 `define NO_RW_RAM_CHECK
 `define DISABLE_BRAM
-`define PRESERVE_REG
+`define PRESERVE_NET
 `define STRING_TYPE     string
 `endif
 

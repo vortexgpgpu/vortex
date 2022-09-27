@@ -155,6 +155,14 @@ module VX_issue #(
                         $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.rd, ibuffer_if.wb, 
                         in_use_regs[0], in_use_regs[1], in_use_regs[2], in_use_regs[3], ~dispatch_if.ready, ibuffer_if.uuid));
 
+`ifdef CHIPSCOPE
+    ila_issue ila_issue_inst (
+        .clk    (clk),
+        .probe0 ({dispatch_if.valid, dispatch_if.ready, dispatch_if.PC, dispatch_if.tmask, dispatch_if.wid, dispatch_if.ex_type, dispatch_if.op_type, dispatch_if.uuid}),
+        .probe1 ({writeback_if.valid, writeback_if.PC, writeback_if.tmask, writeback_if.wid, writeback_if.uuid})
+    );
+`endif
+
     `SCOPE_ASSIGN (issue_fire,        ibuffer_if.valid && ibuffer_if.ready);
     `SCOPE_ASSIGN (issue_uuid,        ibuffer_if.uuid);
     `SCOPE_ASSIGN (issue_tmask,       ibuffer_if.tmask);

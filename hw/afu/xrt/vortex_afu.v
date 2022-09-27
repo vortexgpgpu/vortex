@@ -46,7 +46,11 @@
 module vortex_afu #(
 	parameter C_S_AXI_CONTROL_ADDR_WIDTH = 6,
 	parameter C_S_AXI_CONTROL_DATA_WIDTH = 32,
+`ifdef CHIPSCOPE
+	parameter C_M_AXI_GMEM_ID_WIDTH      = 32,
+`else
 	parameter C_M_AXI_GMEM_ID_WIDTH      = 16,
+`endif
 	parameter C_M_AXI_GMEM_ADDR_WIDTH    = 32,
 	parameter C_M_AXI_GMEM_DATA_WIDTH    = `VX_MEM_DATA_WIDTH
 ) (
@@ -293,6 +297,78 @@ module vortex_afu #(
 
 	assign m_axi_mem_awaddr = m_axi_mem_awaddr_r;
 	assign m_axi_mem_araddr = m_axi_mem_araddr_r;
+
+`ifdef CHIPSCOPE
+    ila_afu ila_afu_inst (
+        .clk    (ap_clk),
+        .probe0 ({m_axi_mem_awvalid,
+				m_axi_mem_awready,
+				m_axi_mem_awaddr,
+				m_axi_mem_awid,
+				m_axi_mem_awlen,
+				m_axi_mem_awsize,
+				m_axi_mem_awburst,
+				m_axi_mem_awlock,
+				m_axi_mem_awcache,
+				m_axi_mem_awprot,
+				m_axi_mem_awqos,
+				m_axi_mem_awregion}),
+        .probe1 ({m_axi_mem_wvalid,
+				m_axi_mem_wready,
+				m_axi_mem_wdata,
+				m_axi_mem_wstrb,
+				m_axi_mem_wlast}),
+        .probe2 ({m_axi_mem_arvalid,
+				m_axi_mem_arready,
+				m_axi_mem_araddr,
+				m_axi_mem_arid,
+				m_axi_mem_arlen,
+				m_axi_mem_arsize,
+				m_axi_mem_arburst,
+				m_axi_mem_arlock,
+				m_axi_mem_arcache,
+				m_axi_mem_arprot,
+				m_axi_mem_arqos,
+				m_axi_mem_arregion}),
+        .probe3 ({m_axi_mem_rvalid,
+				m_axi_mem_rready,
+				m_axi_mem_rdata,
+				m_axi_mem_rlast,
+				m_axi_mem_rid,
+				m_axi_mem_rresp}),
+        .probe4 ({m_axi_mem_bvalid,
+				m_axi_mem_bready,
+				m_axi_mem_bresp,
+				m_axi_mem_bid}),
+		.probe5 ({s_axi_ctrl_awvalid,
+				s_axi_ctrl_awready,
+				s_axi_ctrl_awaddr,
+				s_axi_ctrl_wvalid,
+				s_axi_ctrl_wready,
+				s_axi_ctrl_wdata,
+				s_axi_ctrl_wstrb,
+				s_axi_ctrl_arvalid,
+				s_axi_ctrl_arready,
+				s_axi_ctrl_araddr,
+				s_axi_ctrl_rvalid,
+				s_axi_ctrl_rready,
+				s_axi_ctrl_rdata,
+				s_axi_ctrl_rresp,
+				s_axi_ctrl_bvalid,
+				s_axi_ctrl_bready,
+				s_axi_ctrl_bresp}),
+		.probe6 ({ap_start,
+                ap_done,
+				ap_ready,
+				ap_idle,
+				interrupt}),
+		.probe7 ({vx_reset, 
+				vx_busy,
+				dcr_wr_valid, 
+				dcr_wr_addr, 
+				dcr_wr_data})
+    );
+`endif
 
 `ifdef SIMULATION
 `ifndef VERILATOR

@@ -65,10 +65,29 @@ set_property -verbose -name "top" -value ${krnl_name} -objects $obj
 
 if { $chipscope == 1 } {
     # hw debugging
-    create_ip -name ila -vendor xilinx.com -library ip -version 6.2 -module_name ila_0
-    set_property -dict [list CONFIG.C_NUM_OF_PROBES {3}] [get_ips ila_0]
-    generate_target {instantiation_template} [get_files ila_0.xci]
-    set_property generate_synth_checkpoint false [get_files ila_0.xci]
+    create_ip -name ila -vendor xilinx.com -library ip -version 6.2 -module_name ila_afu
+    set_property -dict [list CONFIG.C_NUM_OF_PROBES {8} \
+                             CONFIG.C_DATA_DEPTH {8192} \
+                             CONFIG.C_PROBE0_WIDTH {128} \
+                             CONFIG.C_PROBE1_WIDTH {576} \
+                             CONFIG.C_PROBE2_WIDTH {128} \
+                             CONFIG.C_PROBE3_WIDTH {576} \
+                             CONFIG.C_PROBE4_WIDTH {32} \
+                             CONFIG.C_PROBE5_WIDTH {128} \
+                             CONFIG.C_PROBE6_WIDTH {5} \
+                             CONFIG.C_PROBE7_WIDTH {64} \
+                        ] [get_ips ila_afu]
+    generate_target {instantiation_template} [get_files ila_afu.xci]
+    set_property generate_synth_checkpoint false [get_files ila_afu.xci]
+
+    create_ip -name ila -vendor xilinx.com -library ip -version 6.2 -module_name ila_issue
+    set_property -dict [list CONFIG.C_NUM_OF_PROBES {2} \
+                             CONFIG.C_DATA_DEPTH {8192} \
+                             CONFIG.C_PROBE0_WIDTH {92} \
+                             CONFIG.C_PROBE0_WIDTH {92} \
+                        ] [get_ips ila_issue]
+    generate_target {instantiation_template} [get_files ila_issue.xci]
+    set_property generate_synth_checkpoint false [get_files ila_issue.xci]
 }
 
 update_compile_order -fileset sources_1

@@ -1,16 +1,20 @@
 `include "VX_define.vh"
 
-`timescale 1ns / 1ps
+`timescale 10ns / 1ns
+
+`define CYCLE_TIME  2
 
 module testbench;
-    // Inpput signals
     reg clk;
     reg resetn;
+    reg [63:0] cycles;
+
     reg vx_reset;
     wire vx_busy;
     reg dcr_wr_valid;
     reg [11:0] dcr_wr_addr;
     reg [31:0] dcr_wr_data;
+
 
     design_1_wrapper UUD(
         .clk_100MHz     (clk),
@@ -22,29 +26,48 @@ module testbench;
         .vx_busy        (vx_busy)
     );
 
-    // clock signal creation
-    always begin
-        clk = 1'b0;
-        #1;
-        clk = 1'b1;
-        #1;
-    end
+    always #(`CYCLE_TIME/2) 
+        clk = ~clk;
     
     initial begin
-        #2;
-        resetn          = 1'b0;
-        vx_reset        = 1'b1;
-        dcr_wr_valid    = 1'b0;
-        #2;
-        resetn          = 1'b1;
-        #2;
-        dcr_wr_valid    = 1'b1;
-        dcr_wr_addr     = `DCR_BASE_STARTUP_ADDR;
-        dcr_wr_data     = `STARTUP_ADDR;
-        #2;
-        dcr_wr_valid    = 1'b0;
-        #20;
-        vx_reset        = 1'b0;
+        clk = 1'b0;
+        resetn = 1'b0;
+        #8 resetn = 1'b1;
+    end
+
+    
+    always @(posedge clk) begin
+        if (~resetn) begin
+            cycles <= 0;
+        end else begin
+            cycles <= cycles + 1;
+        end
+    end
+
+    always @(posedge clk) begin
+        if (~resetn) begin
+            vx_reset     <= 1;
+            dcr_wr_valid <= 0;
+            dcr_wr_addr  <= 0;
+            dcr_wr_data  <= 0;
+        end else begin
+            case (cycles)
+            0:  begin
+                dcr_wr_valid <= 1;
+                dcr_wr_addr  <= `DCR_BASE_STARTUP_ADDR;
+                dcr_wr_data  <= `STARTUP_ADDR;                    
+            end
+            2: begin
+                dcr_wr_valid <= 0;
+                dcr_wr_addr  <= 0;
+                dcr_wr_data  <= 0;
+            end
+            `RESET_DELAY: begin
+                vx_reset <= 0;
+            end
+            default:;
+            endcase
+        end
     end
     
     always @(posedge clk) begin
