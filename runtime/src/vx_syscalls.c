@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <vx_intrinsics.h>
 #include <vx_print.h>
+#include <string.h>
  
 int _close(int file) { return -1; }
  
@@ -22,18 +23,36 @@ caddr_t _sbrk(int incr) {
 }
  
 int _write(int file, char *ptr, int len) {
-    int i; 
-    for (i = 0; i < len; ++i) {
-        vx_putchar(*ptr++);
-    }
-    return len;
- }
+  int i; 
+  for (i = 0; i < len; ++i) {
+    vx_putchar(*ptr++);
+  }
+  return len;
+}
 
- int _kill(int pid, int sig) { return -1; }
+int _kill(int pid, int sig) { return -1; }
 
- int _getpid() {
-     return vx_warp_gid();
- }
+int _getpid() {
+  return vx_warp_gid();
+}
+
+void __init_tls(void) {  
+  extern char __tdata_start[];
+  extern char __tbss_offset[];
+  extern char __tdata_size[];
+  extern char __tbss_size[];
+
+  // activate all threads
+  vx_tmc(-1);
+
+  // TLS memory initialization
+  register char *__thread_self __asm__ ("tp");
+  memcpy(__thread_self, __tdata_start, (size_t)__tdata_size);
+  memset(__thread_self + (size_t)__tbss_offset, 0, (size_t)__tbss_size);
+
+  // back to single thread execution
+  vx_tmc(0 == vx_warp_id());
+}
 
  #ifdef HAVE_INITFINI_ARRAY
 
@@ -48,9 +67,7 @@ extern void _init (void);
 #endif
 
 /* Iterate over all the init routines.  */
-void
-__libc_init_array (void)
-{
+void __libc_init_array (void) {
   size_t count;
   size_t i;
 
@@ -77,9 +94,7 @@ extern void _fini (void);
 #endif
 
 /* Run all the cleanup routines.  */
-void
-__libc_fini_array (void)
-{
+void __libc_fini_array (void) {
   size_t count;
   size_t i;
   
