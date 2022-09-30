@@ -10,7 +10,9 @@ addons:
         - build-essential
         - valgrind
         - verilator
-        - yosys
+        - yosys        
+        - libpng-dev
+        - libboost-serialization-dev
 
 install:
   # Set environments
