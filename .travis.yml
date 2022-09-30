@@ -16,6 +16,7 @@ addons:
 
 install:
   # Set environments
+  - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/x86_64-linux-gnu
   - export RISCV_TOOLCHAIN_PATH=/opt/riscv-gnu-toolchain
   - export VERILATOR_ROOT=/opt/verilator
   - export PATH=$VERILATOR_ROOT/bin:$PATH
