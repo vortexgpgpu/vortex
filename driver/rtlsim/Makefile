@@ -35,9 +35,9 @@ PROJECT = libvortex.so
 all: $(PROJECT)
 	
 $(PROJECT): $(SRCS)
-	DESTDIR=../../driver/rtlsim $(MAKE) -C $(RTLSIM_DIR) ../../driver/rtlsim/librtlsim.so
+	RTLSIM_DESTDIR=../../driver/rtlsim $(MAKE) -C $(RTLSIM_DIR) ../../driver/rtlsim/librtlsim.so
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $(PROJECT)
 
 clean:
-	DESTDIR=../../driver/rtlsim $(MAKE) -C $(RTLSIM_DIR) clean
+	RTLSIM_DESTDIR=../../driver/rtlsim $(MAKE) -C $(RTLSIM_DIR) clean
 	rm -rf $(PROJECT) *.o

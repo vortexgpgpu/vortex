@@ -52,9 +52,9 @@ scope-defs.h: $(SCRIPT_DIR)/scope.json
 scope: scope-defs.h
 
 $(PROJECT): $(SRCS) $(SCOPE_H)
-	DESTDIR=../../driver/vlsim $(MAKE) -C $(VLSIM_DIR) ../../driver/vlsim/libopae-c-vlsim.so
+	VLSIM_DESTDIR=../../driver/vlsim $(MAKE) -C $(VLSIM_DIR) ../../driver/vlsim/libopae-c-vlsim.so
 	$(CXX) $(CXXFLAGS) -DUSE_VLSIM $(SRCS) $(LDFLAGS) -o $(PROJECT)
 
 clean:
-	DESTDIR=../../driver/vlsim $(MAKE) -C $(VLSIM_DIR) clean
+	VLSIM_DESTDIR=../../driver/vlsim $(MAKE) -C $(VLSIM_DIR) clean
 	rm -rf libopae-c-vlsim.so $(PROJECT) *.o scope-defs.h

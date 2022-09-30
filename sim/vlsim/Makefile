@@ -1,4 +1,4 @@
-DESTDIR ?= .
+VLSIM_DESTDIR ?= .
 RTL_DIR = ../../hw/rtl
 DPI_DIR = ../../hw/dpi
 SCRIPT_DIR = ../../hw/scripts
@@ -94,8 +94,8 @@ all: $(PROJECT)
 vortex_afu.h : $(RTL_DIR)/afu/vortex_afu.vh
 	$(SCRIPT_DIR)/gen_config.py -i $(RTL_DIR)/afu/vortex_afu.vh -o vortex_afu.h
 
-$(DESTDIR)/$(PROJECT): $(SRCS) vortex_afu.h
-	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(DESTDIR)/$(PROJECT)
+$(VLSIM_DESTDIR)/$(PROJECT): $(SRCS) vortex_afu.h
+	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(VLSIM_DESTDIR)/$(PROJECT)
 
 clean:
-	rm -rf obj_dir $(DESTDIR)/$(PROJECT)
+	rm -rf obj_dir $(VLSIM_DESTDIR)/$(PROJECT)

@@ -1,4 +1,4 @@
-DESTDIR ?= .
+RTLSIM_DESTDIR ?= .
 RTL_DIR = ../../hw/rtl
 DPI_DIR = ../../hw/dpi
 THIRD_PARTY_DIR = ../../third_party
@@ -84,11 +84,11 @@ PROJECT = rtlsim
 
 all: $(PROJECT)
 
-$(DESTDIR)/$(PROJECT): $(SRCS) main.cpp
+$(RTLSIM_DESTDIR)/$(PROJECT): $(SRCS) main.cpp
 	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$@
 	
-$(DESTDIR)/lib$(PROJECT).so: $(SRCS)
+$(RTLSIM_DESTDIR)/lib$(PROJECT).so: $(SRCS)
 	verilator --build $(VL_FLAGS) $^ -CFLAGS '$(CXXFLAGS)' -LDFLAGS '-shared $(LDFLAGS)' -o ../$@
 
 clean:
-	rm -rf obj_dir $(DESTDIR)/$(PROJECT) $(DESTDIR)/lib$(PROJECT).so
+	rm -rf obj_dir $(RTLSIM_DESTDIR)/$(PROJECT) $(RTLSIM_DESTDIR)/lib$(PROJECT).so
