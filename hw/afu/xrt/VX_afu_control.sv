@@ -27,6 +27,7 @@ module VX_afu_control #(
     output wire                         s_axi_rvalid,
     input  wire                         s_axi_rready,    
     
+    output wire                         ap_reset,
     output wire                         ap_start,
     input  wire                         ap_done,
     input  wire                         ap_ready,
@@ -106,27 +107,28 @@ module VX_afu_control #(
         RSTATE_DATA         = 2'd1;    
 
     // Local signal
-    reg  [1:0]                    wstate = WSTATE_IDLE;
+    reg  [1:0]                    wstate;
     reg  [1:0]                    wstate_n;
     reg  [ADDR_BITS-1:0]          waddr;
     wire [31:0]                   wmask;
     wire                          aw_hs;    // write address handshake
     wire                          wd_hs;    // write data handshake
-    reg  [1:0]                    rstate = RSTATE_IDLE;
+    reg  [1:0]                    rstate;
     reg  [1:0]                    rstate_n;
     reg  [31:0]                   rdata;
     wire                          ar_hs;    // read address handshake
     wire [ADDR_BITS-1:0]          raddr;
 
     // internal registers
-    reg                           ap_start_r = 0;
-    reg                           auto_restart_r = 0;
-    reg                           gie_r = 0;
-    reg  [1:0]                    ier_r = 0;
-    reg  [1:0]                    isr_r = 0;
-    reg  [63:0]                   mem_r = 0;
-    reg  [31:0]                   dcra_r = 0;
-    reg  [31:0]                   dcrv_r = 0;
+    reg                           ap_reset_r;
+    reg                           ap_start_r;
+    reg                           auto_restart_r;
+    reg                           gie_r;
+    reg  [1:0]                    ier_r;
+    reg  [1:0]                    isr_r;
+    reg  [63:0]                   mem_r;
+    reg  [31:0]                   dcra_r;
+    reg  [31:0]                   dcrv_r;
 
     wire [63:0] dev_caps = {16'(`NUM_THREADS), 16'(`NUM_WARPS), 16'(`NUM_CORES * `NUM_CLUSTERS), 16'(`IMPLEMENTATION_ID)};
     wire [63:0] isa_caps = {32'(`MISA_EXT), 2'($clog2(`XLEN)-4), 30'(`MISA_STD)};
@@ -174,8 +176,9 @@ module VX_afu_control #(
     // waddr
     always @(posedge clk) begin
         if (clk_en) begin
-            if (aw_hs)
+            if (aw_hs) begin
                 waddr <= s_axi_awaddr[ADDR_BITS-1:0];
+            end
         end
     end
 
@@ -253,6 +256,17 @@ module VX_afu_control #(
         end
     end
 
+    // ap_reset_r
+    always @(posedge clk) begin
+        if (reset) begin
+            ap_reset_r <= 0;
+        end else begin            
+            if (dcr_wr_valid && dcr_wr_addr == 0) begin
+                ap_reset_r <= 1;
+            end
+        end
+    end
+
     // ap_start_r
     always @(posedge clk) begin
         if (reset)
@@ -261,7 +275,7 @@ module VX_afu_control #(
             if (wd_hs && waddr == ADDR_AP_CTRL && s_axi_wstrb[0] && s_axi_wdata[0])
                 ap_start_r <= 1;
             else if (ap_ready)
-                ap_start_r <= auto_restart_r; // clear on handshake/auto restart
+                ap_start_r <= auto_restart_r;
         end
     end
 
@@ -368,11 +382,12 @@ module VX_afu_control #(
         end
     end
 
+    assign ap_reset  = ap_reset_r;
     assign ap_start  = ap_start_r;
     assign interrupt = gie_r & (| isr_r);    
 
     assign dcr_wr_valid = dcr_wr_valid_r;
     assign dcr_wr_addr  = `VX_DCR_ADDR_WIDTH'(dcra_r);
-    assign dcr_wr_data  = `VX_DCR_DATA_WIDTH'(dcrv_r);
+    assign dcr_wr_data  = `VX_DCR_DATA_WIDTH'(dcrv_r);    
 
 endmodule

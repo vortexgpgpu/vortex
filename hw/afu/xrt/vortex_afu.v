@@ -124,52 +124,58 @@ module vortex_afu #(
   	output wire                                 interrupt
 );
 
-    // Register and invert reset signal.
-	reg reset;
-	always @(posedge ap_clk) begin
-		reset <= ~ap_rst_n;
-	end
+    wire reset = ~ap_rst_n;
 
-	reg  vx_reset;
+	reg vx_running;
 	wire vx_busy;
 
 	wire                          dcr_wr_valid;
     wire [`VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr;
     wire [`VX_DCR_DATA_WIDTH-1:0] dcr_wr_data;
 	
-    wire ap_start;
+    wire ap_reset;
+	wire ap_start;
 	wire ap_idle  = ~vx_busy;
 	wire ap_done  = ap_idle;
-	wire ap_ready = ap_idle;
+	wire ap_ready = 1'b1;
 
 	reg [$clog2(`RESET_DELAY+1)-1:0] vx_reset_ctr;
-	reg vx_running;
+	reg vx_reset_wait;
+	reg vx_busy_wait;
 
 	always @(posedge ap_clk) begin
-		if (reset) begin
-			vx_reset   <= 0;
-			vx_running <= 0;
+		if (reset || ap_reset) begin
+			vx_reset_wait <= 0;
+			vx_busy_wait  <= 0;
+			vx_running    <= 0;
 		end else begin			
 			if (vx_running) begin
-				if (~vx_busy) begin
-					`TRACE(2, ("%d: AFU: End execution\n", $time));
-					vx_running <= 0;
+				if (vx_busy_wait) begin
+					if (vx_busy) begin
+						vx_busy_wait <= 0;
+					end
+				end else begin
+					if (~vx_busy) begin
+						`TRACE(2, ("%d: AFU: End execution\n", $time));
+						vx_running <= 0;
+					end
 				end
 			end else begin
-				if (vx_reset == 0 && ap_start) begin
-					vx_reset <= 1;
+				if (vx_reset_wait == 0 && ap_start) begin
+					vx_reset_wait <= 1;
 				end
-				if (vx_reset == 1 && vx_reset_ctr == (`RESET_DELAY-1)) begin
+				if (vx_reset_wait == 1 && vx_reset_ctr == (`RESET_DELAY-1)) begin
 					`TRACE(2, ("%d: AFU: Begin execution\n", $time));
-					vx_running <= 1;
-					vx_reset   <= 0;
+					vx_running    <= 1;
+					vx_reset_wait <= 0;
+					vx_busy_wait  <= 1;
 				end
 			end
 		end
 	end
 
 	always @(posedge ap_clk) begin
-		if (~vx_running && vx_reset == 0 && ap_start) begin
+		if (vx_reset_wait == 0) begin
 			vx_reset_ctr <= 0;
 		end else begin
 			vx_reset_ctr <= vx_reset_ctr + 1;
@@ -181,7 +187,7 @@ module vortex_afu #(
 		.AXI_DATA_WIDTH (C_S_AXI_CONTROL_DATA_WIDTH)
 	) afu_control (
 		.clk       		(ap_clk),
-		.reset     		(reset),	
+		.reset     		(reset || ap_reset),	
 		.clk_en         (1'b1),
 		
 		.s_axi_awvalid  (s_axi_ctrl_awvalid),
@@ -202,7 +208,8 @@ module vortex_afu #(
 		.s_axi_bready   (s_axi_ctrl_bready),
 		.s_axi_bresp    (s_axi_ctrl_bresp),
 
-		.ap_start  		(ap_start),		
+		.ap_reset  		(ap_reset),
+		.ap_start  		(ap_start),
 		.ap_done     	(ap_done),
 		.ap_ready     	(ap_ready),
 		.ap_idle     	(ap_idle),
@@ -213,10 +220,6 @@ module vortex_afu #(
 		.dcr_wr_data	(dcr_wr_data)		
 	);
 
-	wire m_axi_mem_awvalid_unqual;
-	wire m_axi_mem_wvalid_unqual;
-	wire m_axi_mem_arvalid_unqual;
-
 	wire [`XLEN-1:0] m_axi_mem_awaddr_unqual;
 	wire [`XLEN-1:0] m_axi_mem_araddr_unqual;
 
@@ -226,9 +229,9 @@ module vortex_afu #(
 		.AXI_TID_WIDTH  (C_M_AXI_GMEM_ID_WIDTH)
 	) vortex_axi (
 		.clk			(ap_clk),
-		.reset			(reset || vx_reset),
+		.reset			(reset || ap_reset || ~vx_running),
 		
-		.m_axi_awvalid	(m_axi_mem_awvalid_unqual),
+		.m_axi_awvalid	(m_axi_mem_awvalid),
 		.m_axi_awready	(m_axi_mem_awready),
 		.m_axi_awaddr	(m_axi_mem_awaddr_unqual),
 		.m_axi_awid		(m_axi_mem_awid),
@@ -241,7 +244,7 @@ module vortex_afu #(
 		.m_axi_awqos	(m_axi_mem_awqos),		  
         .m_axi_awregion (m_axi_mem_awregion),
 
-		.m_axi_wvalid	(m_axi_mem_wvalid_unqual),
+		.m_axi_wvalid	(m_axi_mem_wvalid),
 		.m_axi_wready	(m_axi_mem_wready),
 		.m_axi_wdata	(m_axi_mem_wdata),
 		.m_axi_wstrb	(m_axi_mem_wstrb),
@@ -252,7 +255,7 @@ module vortex_afu #(
 		.m_axi_bid		(m_axi_mem_bid),
 		.m_axi_bresp	(m_axi_mem_bresp),		
 
-		.m_axi_arvalid	(m_axi_mem_arvalid_unqual),
+		.m_axi_arvalid	(m_axi_mem_arvalid),
 		.m_axi_arready	(m_axi_mem_arready),
 		.m_axi_araddr	(m_axi_mem_araddr_unqual),
 		.m_axi_arid		(m_axi_mem_arid),
@@ -279,10 +282,6 @@ module vortex_afu #(
 		.busy			(vx_busy)
 	);
 
-	assign m_axi_mem_awvalid = m_axi_mem_awvalid_unqual && vx_running;
-	assign m_axi_mem_wvalid  = m_axi_mem_wvalid_unqual  && vx_running;
-	assign m_axi_mem_arvalid = m_axi_mem_arvalid_unqual && vx_running;
-
 	reg [C_M_AXI_GMEM_ADDR_WIDTH-1:0] m_axi_mem_awaddr_r;
 	reg [C_M_AXI_GMEM_ADDR_WIDTH-1:0] m_axi_mem_araddr_r;
 
@@ -301,68 +300,22 @@ module vortex_afu #(
 `ifdef CHIPSCOPE
     ila_afu ila_afu_inst (
         .clk    (ap_clk),
-        .probe0 ({m_axi_mem_awvalid,
-				m_axi_mem_awready,
-				m_axi_mem_awaddr,
-				m_axi_mem_awid,
-				m_axi_mem_awlen,
-				m_axi_mem_awsize,
-				m_axi_mem_awburst,
-				m_axi_mem_awlock,
-				m_axi_mem_awcache,
-				m_axi_mem_awprot,
-				m_axi_mem_awqos,
-				m_axi_mem_awregion}),
-        .probe1 ({m_axi_mem_wvalid,
-				m_axi_mem_wready,
-				m_axi_mem_wdata,
-				m_axi_mem_wstrb,
-				m_axi_mem_wlast}),
-        .probe2 ({m_axi_mem_arvalid,
+        .probe0 ({m_axi_mem_arvalid,
 				m_axi_mem_arready,
 				m_axi_mem_araddr,
 				m_axi_mem_arid,
-				m_axi_mem_arlen,
-				m_axi_mem_arsize,
-				m_axi_mem_arburst,
-				m_axi_mem_arlock,
-				m_axi_mem_arcache,
-				m_axi_mem_arprot,
-				m_axi_mem_arqos,
-				m_axi_mem_arregion}),
-        .probe3 ({m_axi_mem_rvalid,
+                m_axi_mem_rvalid,
 				m_axi_mem_rready,
 				m_axi_mem_rdata,
-				m_axi_mem_rlast,
-				m_axi_mem_rid,
-				m_axi_mem_rresp}),
-        .probe4 ({m_axi_mem_bvalid,
-				m_axi_mem_bready,
-				m_axi_mem_bresp,
-				m_axi_mem_bid}),
-		.probe5 ({s_axi_ctrl_awvalid,
-				s_axi_ctrl_awready,
-				s_axi_ctrl_awaddr,
-				s_axi_ctrl_wvalid,
-				s_axi_ctrl_wready,
-				s_axi_ctrl_wdata,
-				s_axi_ctrl_wstrb,
-				s_axi_ctrl_arvalid,
-				s_axi_ctrl_arready,
-				s_axi_ctrl_araddr,
-				s_axi_ctrl_rvalid,
-				s_axi_ctrl_rready,
-				s_axi_ctrl_rdata,
-				s_axi_ctrl_rresp,
-				s_axi_ctrl_bvalid,
-				s_axi_ctrl_bready,
-				s_axi_ctrl_bresp}),
-		.probe6 ({ap_start,
+				m_axi_mem_rid}),
+		.probe1 ({ap_start,
                 ap_done,
 				ap_ready,
 				ap_idle,
 				interrupt}),
-		.probe7 ({vx_reset, 
+		.probe2 ({vx_running,
+				vx_reset_wait,
+				vx_busy_wait,
 				vx_busy,
 				dcr_wr_valid, 
 				dcr_wr_addr, 

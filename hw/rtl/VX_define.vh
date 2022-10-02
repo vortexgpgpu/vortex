@@ -450,7 +450,7 @@
     if (enable) begin \
         always @(posedge clk) begin \
             if (reset) begin \
-                __busy <= 1'b1; \
+                __busy <= 1'b0; \
             end else begin \
                 __busy <= src; \
             end \

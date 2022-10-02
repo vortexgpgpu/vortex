@@ -88,7 +88,6 @@ module VX_decode  #(
                     3'h5: op_type = (func7[5]) ? `INST_OP_BITS'(`INST_ALU_SRA) : `INST_OP_BITS'(`INST_ALU_SRL);
                     3'h6: op_type = `INST_OP_BITS'(`INST_ALU_OR);
                     3'h7: op_type = `INST_OP_BITS'(`INST_ALU_AND);
-                    default:;
                 endcase
                 use_rd  = 1;
                 use_imm = 1;
