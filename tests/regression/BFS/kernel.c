@@ -6,7 +6,7 @@
 typedef void (*PFN_Kernel)(int task_id, kernel_arg_t* arg);
 
 void kernel_1(int __DIVERGENT__ task_id, kernel_arg_t* arg) {
-        int tid = task_id;
+	int tid = vx_thread_id();
 	//Get all needed args 
         Node* node_ptr = (Node*)arg->graphnodes_addr;
 				int32_t* graphedges_ptr = (int32_t*)arg->graphedges_addr;
@@ -15,16 +15,17 @@ void kernel_1(int __DIVERGENT__ task_id, kernel_arg_t* arg) {
 				int32_t* graphvisited_ptr = (int32_t*)arg->graphvisited_addr;
 				int32_t* cost_ptr = (int32_t*)arg->gcost_addr;
         uint32_t num_points = arg->no_of_nodes;
-				
+	
 if( tid<num_points && graphmask_ptr[tid])
 {
 		graphmask_ptr[tid]=0;
-		for(int i=node_ptr[tid].starting; i<(node_ptr[tid].no_of_edges + node_ptr[tid].starting); i++)
+		for(int i=node_ptr[tid].starting; i<(node_ptr[tid].no_of_edges + node_ptr[tid].starting);++i)
 		{
 					int id = graphedges_ptr[i];
 					if(!graphvisited_ptr[id])
 				{
-						cost_ptr[id]=cost_ptr[tid]+1;
+					        cost_ptr[id]=cost_ptr[tid]+1;
+						//cost_ptr[tid] = id;
 						upgraphmask_ptr[id]=1;
 				}
 		}
@@ -33,7 +34,7 @@ if( tid<num_points && graphmask_ptr[tid])
 
 
 void kernel_2(int __DIVERGENT__ task_id, kernel_arg_t* arg) {
-  int tid = task_id;
+int tid = vx_thread_id();
   //Get all needed args
   int32_t* graphmask_ptr = (int32_t*)arg->graphmask_addr;
 	int32_t* upgraphmask_ptr = (int32_t*)arg->graphupmask_addr;
