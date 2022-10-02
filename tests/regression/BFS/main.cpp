@@ -18,7 +18,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 const char* kernel_file = "kernel.bin";
-uint32_t count = 0;
+//uint32_t count = 0;
 
 Node* h_graph_nodes;
 int* h_graph_edges;
@@ -220,7 +220,7 @@ do {
       buf_ptr_upload[i] = h_graph_nodes[i];
     }
 }
-RT_CHECK(vx_copy_to_dev(graphnodes_buf, kernel_arg.graphnodes_addr, graphnodes_bufsz, 0));
+	RT_CHECK(vx_copy_to_dev(graphnodes_buf, kernel_arg.graphnodes_addr, graphnodes_bufsz, 0));
 
 {
 	auto buf_ptr_upload = (int32_t*)vx_host_ptr(graphmask_buf);
@@ -230,7 +230,7 @@ RT_CHECK(vx_copy_to_dev(graphnodes_buf, kernel_arg.graphnodes_addr, graphnodes_b
 }
 	RT_CHECK(vx_copy_to_dev(graphmask_buf, kernel_arg.graphmask_addr, graphmask_bufsz, 0));
 
-{
+    {
 	auto buf_ptr_upload = (int32_t*)vx_host_ptr(upgraphmask_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr_upload[i] = h_updating_graph_mask[i];
@@ -246,7 +246,7 @@ RT_CHECK(vx_copy_to_dev(graphnodes_buf, kernel_arg.graphnodes_addr, graphnodes_b
 }
 	RT_CHECK(vx_copy_to_dev(graphvisited_buf, kernel_arg.graphvisited_addr, graphvisited_bufsz, 0));
 
-{
+    {
 	auto buf_ptr_upload = (int32_t*)vx_host_ptr(graphedges_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr_upload[i] = h_graph_edges[i];
@@ -256,14 +256,13 @@ RT_CHECK(vx_copy_to_dev(graphnodes_buf, kernel_arg.graphnodes_addr, graphnodes_b
 
 //I. 9. Initialize destination buffer
 {
-	auto buf_ptr_cost = (int32_t*)vx_host_ptr(cost_buf);
+    auto buf_ptr_cost = (int32_t*)vx_host_ptr(cost_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr_cost[i] = h_cost[i];
     }
 }
 RT_CHECK(vx_copy_to_dev(cost_buf, kernel_arg.gcost_addr, cost_bufsz, 0));
 for (uint32_t i = 0; i < no_of_nodes; ++i) {
-      
       //int cur = buf_ptr[i];
       //h_cost[i] = cur;
       std::cout << "init cost at index " <<i<<" is "<<h_cost[i]<<" on iter "<<iter<<std::endl;
