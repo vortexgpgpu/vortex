@@ -18,7 +18,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 const char* kernel_file = "kernel.bin";
-//uint32_t count = 0;
+uint32_t count = 0;
 
 Node* h_graph_nodes;
 int* h_graph_edges;
@@ -30,14 +30,7 @@ int no_of_nodes;
 
 vx_device_h device = nullptr;
 vx_buffer_h arg_buf = nullptr;
-vx_buffer_h graphnodes_buf = nullptr;
-vx_buffer_h graphmask_buf = nullptr;
-vx_buffer_h upgraphmask_buf = nullptr;
-vx_buffer_h graphvisited_buf = nullptr;
-vx_buffer_h graphedges_buf = nullptr;
-vx_buffer_h cost_buf = nullptr;
-vx_buffer_h hover_buf = nullptr;
-
+vx_buffer_h common_buf = nullptr;
 
 kernel_arg_t kernel_arg;
 
@@ -73,11 +66,11 @@ int main(void) {
 //1. Allocate and initialize host memory
 	int edge_list_size;
 	Node *h_graph_nodes;
-	char *h_graph_mask, *h_updating_graph_mask, *h_graph_visited;
+	int *h_graph_mask, *h_updating_graph_mask, *h_graph_visited;
 	h_graph_nodes = (Node*) malloc(sizeof(Node)*no_of_nodes);
-	h_graph_mask = (char*) malloc(sizeof(char)*no_of_nodes);
-	h_updating_graph_mask = (char*) malloc(sizeof(char)*no_of_nodes);
-	h_graph_visited = (char*) malloc(sizeof(char)*no_of_nodes);
+	h_graph_mask = (int*) malloc(sizeof(int)*no_of_nodes);
+	h_updating_graph_mask = (int*) malloc(sizeof(int)*no_of_nodes);
+	h_graph_visited = (int*) malloc(sizeof(int)*no_of_nodes);
         int start, edgeno;
         // initalize the memory
         for(int i = 0; i < no_of_nodes; i++) {
@@ -104,7 +97,7 @@ int main(void) {
         }
         if(fp)
             fclose(fp);
-         // allocate mem for the result on host side
+    // Allocate mem for the result on host side
 		int	*h_cost = (int*) malloc(sizeof(int)*no_of_nodes);
         int *h_cost_ref = (int*)malloc(sizeof(int)*no_of_nodes);
         for(int i=0; i<no_of_nodes; i++) {
@@ -121,14 +114,10 @@ int main(void) {
   //3. Declare buffer sizes
   uint32_t num_points = no_of_nodes;
   uint32_t graphnodes_bufsz = sizeof(Node)*no_of_nodes;
-  uint32_t graphmask_bufsz =  sizeof(char)*no_of_nodes; 
-  uint32_t upgraphmask_bufsz =  sizeof(char)*no_of_nodes; 
-  uint32_t graphvisited_bufsz =  sizeof(char)*no_of_nodes;
-  uint32_t graphedges_bufsz =  sizeof(int)*no_of_nodes; 
-  uint32_t cost_bufsz =  sizeof(int)*no_of_nodes; 
+  uint32_t common_bufsz =  sizeof(int)*no_of_nodes; 
   uint32_t hover_bufsz =  sizeof(int); 
   std::cout << "number of points: " << num_points << std::endl;
-  std::cout << "buffer size: " << cost_bufsz << " bytes" << std::endl;
+  std::cout << "buffer size: " << common_bufsz << " bytes" << std::endl;
 
   //4. upload program
   std::cout << "upload program" << std::endl;  
@@ -140,19 +129,19 @@ int main(void) {
   RT_CHECK(vx_mem_alloc(device, graphnodes_bufsz, &value));
   kernel_arg.graphnodes_addr = value;
   
-  RT_CHECK(vx_mem_alloc(device, graphmask_bufsz, &value));
+  RT_CHECK(vx_mem_alloc(device, common_bufsz, &value));
   kernel_arg.graphmask_addr = value;
 
-  RT_CHECK(vx_mem_alloc(device, upgraphmask_bufsz, &value));
+  RT_CHECK(vx_mem_alloc(device, common_bufsz, &value));
   kernel_arg.graphupmask_addr = value;
   
-  RT_CHECK(vx_mem_alloc(device, graphvisited_bufsz, &value));
+  RT_CHECK(vx_mem_alloc(device, common_bufsz, &value));
   kernel_arg.graphvisited_addr = value;
 
-  RT_CHECK(vx_mem_alloc(device, graphedges_bufsz, &value));
+  RT_CHECK(vx_mem_alloc(device, common_bufsz, &value));
   kernel_arg.graphedges_addr = value;
 
-  RT_CHECK(vx_mem_alloc(device, cost_bufsz, &value));
+  RT_CHECK(vx_mem_alloc(device, common_bufsz, &value));
   kernel_arg.gcost_addr = value;
 
   RT_CHECK(vx_mem_alloc(device, hover_bufsz, &value));
@@ -164,47 +153,22 @@ int main(void) {
   
 int iter = 0;
 int h_over = 0; //0=False, 1=True
-  //I. 6. allocate shared memory  
+  //6. allocate shared memory  
   std::cout << "allocate shared memory" << std::endl;
+  uint32_t shared_bufsz = std::max<uint32_t>(graphnodes_bufsz, common_bufsz);
   RT_CHECK(vx_buf_alloc(device, sizeof(kernel_arg_t), &arg_buf));
-  RT_CHECK(vx_buf_alloc(device, graphnodes_bufsz, &graphnodes_buf));
-  RT_CHECK(vx_buf_alloc(device, graphmask_bufsz, &graphmask_buf));
-  RT_CHECK(vx_buf_alloc(device, upgraphmask_bufsz, &upgraphmask_buf));
-  RT_CHECK(vx_buf_alloc(device, graphvisited_bufsz, &graphvisited_buf));
-  RT_CHECK(vx_buf_alloc(device, graphedges_bufsz, &graphedges_buf));
-  RT_CHECK(vx_buf_alloc(device, cost_bufsz, &cost_buf));
-  RT_CHECK(vx_buf_alloc(device, hover_bufsz, &hover_buf));
-
-//I. 9. Initialize destination buffer
-/*
-{
-	auto buf_ptr_cost = (int32_t*)vx_host_ptr(cost_buf);
-    for (uint32_t i = 0; i < num_points; ++i) {
-      buf_ptr_cost[i] = h_cost[i];
-    }
-}
-RT_CHECK(vx_copy_to_dev(cost_buf, kernel_arg.gcost_addr, cost_bufsz, 0));*/
+  RT_CHECK(vx_buf_alloc(device, shared_bufsz, &common_buf));
 
 do {
 	h_over = 0;
-  //I. 6. allocate shared memory 
-/*  std::cout << "allocate shared memory" << std::endl;
-  RT_CHECK(vx_buf_alloc(device, sizeof(kernel_arg_t), &arg_buf));
-  RT_CHECK(vx_buf_alloc(device, graphnodes_bufsz, &graphnodes_buf));
-  RT_CHECK(vx_buf_alloc(device, graphmask_bufsz, &graphmask_buf));
-  RT_CHECK(vx_buf_alloc(device, upgraphmask_bufsz, &upgraphmask_buf));
-  RT_CHECK(vx_buf_alloc(device, graphvisited_bufsz, &graphvisited_buf));
-  RT_CHECK(vx_buf_alloc(device, graphedges_bufsz, &graphedges_buf));
-  RT_CHECK(vx_buf_alloc(device, cost_bufsz, &cost_buf));
-  RT_CHECK(vx_buf_alloc(device, hover_bufsz, &hover_buf));*/
 
 //I. 7. upload kernel 1 arguments 
 	kernel_arg.testid = 0;
 	{
-	auto buf_ptr_upload = (int*)vx_host_ptr(hover_buf);
+	auto buf_ptr_upload = (int*)vx_host_ptr(common_buf);
       buf_ptr_upload[0] = h_over;
-    }
-   RT_CHECK(vx_copy_to_dev(hover_buf, kernel_arg.hover_addr, hover_bufsz, 0));  
+  }
+   RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.hover_addr, hover_bufsz, 0));  
   
   std::cout << "upload kernel argument" << std::endl;
   {
@@ -215,59 +179,56 @@ do {
 
 //I. 8. upload source buffers
 {
-	auto buf_ptr_upload = (Node*)vx_host_ptr(graphnodes_buf);
+	auto buf_ptr_upload = (Node*)vx_host_ptr(common_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr_upload[i] = h_graph_nodes[i];
     }
 }
-	RT_CHECK(vx_copy_to_dev(graphnodes_buf, kernel_arg.graphnodes_addr, graphnodes_bufsz, 0));
+RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.graphnodes_addr, graphnodes_bufsz, 0));
 
 {
-	auto buf_ptr_upload = (int32_t*)vx_host_ptr(graphmask_buf);
+	auto buf_ptr_upload = (int32_t*)vx_host_ptr(common_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr_upload[i] = h_graph_mask[i];
     }
 }
-	RT_CHECK(vx_copy_to_dev(graphmask_buf, kernel_arg.graphmask_addr, graphmask_bufsz, 0));
+	RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.graphmask_addr, common_bufsz, 0));
 
-    {
-	auto buf_ptr_upload = (int32_t*)vx_host_ptr(upgraphmask_buf);
+{
+	auto buf_ptr_upload = (int32_t*)vx_host_ptr(common_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr_upload[i] = h_updating_graph_mask[i];
     }
 }
-	RT_CHECK(vx_copy_to_dev(upgraphmask_buf, kernel_arg.graphupmask_addr, upgraphmask_bufsz, 0));
+	RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.graphupmask_addr, common_bufsz, 0));
 	
 {
-	auto buf_ptr_upload = (int32_t*)vx_host_ptr(graphvisited_buf);
+	auto buf_ptr_upload = (int32_t*)vx_host_ptr(common_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr_upload[i] = h_graph_visited[i];
     }
 }
-	RT_CHECK(vx_copy_to_dev(graphvisited_buf, kernel_arg.graphvisited_addr, graphvisited_bufsz, 0));
+	RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.graphvisited_addr, common_bufsz, 0));
 
-    {
-	auto buf_ptr_upload = (int32_t*)vx_host_ptr(graphedges_buf);
+{
+	auto buf_ptr_upload = (int32_t*)vx_host_ptr(common_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr_upload[i] = h_graph_edges[i];
     }
 }
-	RT_CHECK(vx_copy_to_dev(graphedges_buf, kernel_arg.graphedges_addr,graphedges_bufsz, 0));
+	RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.graphedges_addr,common_bufsz, 0));
 
 //I. 9. Initialize destination buffer
 {
-    auto buf_ptr_cost = (int32_t*)vx_host_ptr(cost_buf);
+	auto buf_ptr_cost = (int32_t*)vx_host_ptr(common_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr_cost[i] = h_cost[i];
     }
 }
-RT_CHECK(vx_copy_to_dev(cost_buf, kernel_arg.gcost_addr, cost_bufsz, 0));
+RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.gcost_addr, common_bufsz, 0));
 for (uint32_t i = 0; i < no_of_nodes; ++i) {
-      //int cur = buf_ptr[i];
-      //h_cost[i] = cur;
       std::cout << "init cost at index " <<i<<" is "<<h_cost[i]<<" on iter "<<iter<<std::endl;
     }
-
 
 //I. 10. Start device
 	std::cout << "start device" << std::endl;
@@ -277,46 +238,45 @@ for (uint32_t i = 0; i < no_of_nodes; ++i) {
     std::cout << "wait for completion" << std::endl;
     RT_CHECK(vx_ready_wait(device, MAX_TIMEOUT));
 //I. 12. Download destination buffer for masks
-    std::cout << "download destination buffer" << std::endl;
-    RT_CHECK(vx_copy_from_dev(graphmask_buf, kernel_arg.graphmask_addr, graphmask_bufsz, 0));
-    RT_CHECK(vx_copy_from_dev(upgraphmask_buf, kernel_arg.graphupmask_addr, upgraphmask_bufsz, 0));
-    RT_CHECK(vx_copy_from_dev(graphvisited_buf, kernel_arg.graphvisited_addr, graphvisited_bufsz, 0));
 //I. 13. Copy results to host arrays
-{
-auto buf_ptr1 = (int32_t*)vx_host_ptr(graphmask_buf);
-auto buf_ptr2 = (int32_t*)vx_host_ptr(upgraphmask_buf);
-auto buf_ptr3 = (int32_t*)vx_host_ptr(graphvisited_buf);
-for (uint32_t i = 0; i < no_of_nodes; ++i) {   
-      h_graph_mask[i] = buf_ptr1[i];
-      h_updating_graph_mask[i] = buf_ptr2[i];
-      h_graph_visited[i] = buf_ptr3[i];
+    std::cout << "download destination buffer" << std::endl;
+    RT_CHECK(vx_copy_from_dev(common_buf, kernel_arg.graphmask_addr, common_bufsz, 0));
+    {
+    auto buf_ptr1 = (int32_t*)vx_host_ptr(common_buf);
+    for (uint32_t i = 0; i < no_of_nodes; ++i) {   
+        h_graph_mask[i] = buf_ptr1[i];
+      //h_updating_graph_mask[i] = buf_ptr2[i];
+      //h_graph_visited[i] = buf_ptr3[i];
     }
 }
+    RT_CHECK(vx_copy_from_dev(common_buf, kernel_arg.graphupmask_addr, common_bufsz, 0));
+    {
+auto buf_ptr1 = (int32_t*)vx_host_ptr(common_buf);
+for (uint32_t i = 0; i < no_of_nodes; ++i) {   
+      h_updating_graph_mask[i] = buf_ptr1[i];
+      //h_graph_visited[i] = buf_ptr3[i];
+    }
+}
+    RT_CHECK(vx_copy_from_dev(common_buf, kernel_arg.graphvisited_addr, common_bufsz, 0));
+    {
+auto buf_ptr1 = (int32_t*)vx_host_ptr(common_buf);
+for (uint32_t i = 0; i < no_of_nodes; ++i) {   
+      h_graph_visited[i] = buf_ptr1[i];
+    }
+}
+
 //I. 12. download destination buffer - cost
 //    std::cout << "download destination buffer" << std::endl;
-RT_CHECK(vx_copy_from_dev(cost_buf, kernel_arg.gcost_addr, cost_bufsz, 0));
+RT_CHECK(vx_copy_from_dev(common_buf, kernel_arg.gcost_addr, common_bufsz, 0));
 //I. 13. Copy results
 {
-auto buf_ptr = (int32_t*)vx_host_ptr(cost_buf);
+auto buf_ptr = (int32_t*)vx_host_ptr(common_buf);
 for (uint32_t i = 0; i < no_of_nodes; ++i) {
-      
-      int cur = buf_ptr[i];
-      h_cost[i] = cur;
-      std::cout << "cost at index " <<i<<" is "<<cur<<" on iter "<<iter<<std::endl;
+      h_cost[i] =  buf_ptr[i];
+      std::cout << "cost at index " <<i<<" is "<<h_cost[i]<<" on iter "<<iter<<std::endl;
     }
 }
 /*************** KERNEL 2 *************/
-
-//II. 6. allocate shared memory  
- /* std::cout << "allocate shared memory" << std::endl;
-  RT_CHECK(vx_buf_alloc(device, sizeof(kernel_arg_t), &arg_buf));
-  RT_CHECK(vx_buf_alloc(device, graphnodes_bufsz, &graphnodes_buf));
-  RT_CHECK(vx_buf_alloc(device, graphmask_bufsz, &graphmask_buf));
-  RT_CHECK(vx_buf_alloc(device, upgraphmask_bufsz, &upgraphmask_buf));
-  RT_CHECK(vx_buf_alloc(device, graphvisited_bufsz, &graphvisited_buf));
-  RT_CHECK(vx_buf_alloc(device, graphedges_bufsz, &graphedges_buf));
-  //RT_CHECK(vx_buf_alloc(device, cost_bufsz, &cost_buf));
-  RT_CHECK(vx_buf_alloc(device, hover_bufsz, &hover_buf));*/
    
   //II. 7. upload kernel argument
   kernel_arg.testid = 1;
@@ -326,53 +286,53 @@ for (uint32_t i = 0; i < no_of_nodes; ++i) {
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
     RT_CHECK(vx_copy_to_dev(arg_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
   }
-// Upload h_over
+/* Upload h_over
 {
 	auto buf_ptr_upload = (int*)vx_host_ptr(hover_buf);
       buf_ptr_upload[0] = h_over;
 }
-RT_CHECK(vx_copy_to_dev(hover_buf, kernel_arg.hover_addr, hover_bufsz, 0));   
+RT_CHECK(vx_copy_to_dev(hover_buf, kernel_arg.hover_addr, hover_bufsz, 0)); */  
 //II. 8. upload source buffers
 
 	{
-	auto buf_ptr_upload = (Node*)vx_host_ptr(graphnodes_buf);
+	auto buf_ptr_upload = (Node*)vx_host_ptr(common_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr_upload[i] = h_graph_nodes[i];
     }
 }
-RT_CHECK(vx_copy_to_dev(graphnodes_buf, kernel_arg.graphnodes_addr, graphnodes_bufsz, 0));
+RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.graphnodes_addr, shared_bufsz, 0));
 
 {
-	auto buf_ptr_upload = (int32_t*)vx_host_ptr(graphmask_buf);
+	auto buf_ptr_upload = (int32_t*)vx_host_ptr(common_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr_upload[i] = h_graph_mask[i];
     }
 }
-	RT_CHECK(vx_copy_to_dev(graphmask_buf, kernel_arg.graphmask_addr, graphmask_bufsz, 0));
+	RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.graphmask_addr, common_bufsz, 0));
 
 {
-	auto buf_ptr_upload = (int32_t*)vx_host_ptr(upgraphmask_buf);
+	auto buf_ptr_upload = (int32_t*)vx_host_ptr(common_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr_upload[i] = h_updating_graph_mask[i];
     }
 }
-	RT_CHECK(vx_copy_to_dev(upgraphmask_buf, kernel_arg.graphupmask_addr, upgraphmask_bufsz, 0));
+	RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.graphupmask_addr, common_bufsz, 0));
 	
 {
-	auto buf_ptr_upload = (int32_t*)vx_host_ptr(graphvisited_buf);
+	auto buf_ptr_upload = (int32_t*)vx_host_ptr(common_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr_upload[i] = h_graph_visited[i];
     }
 }
-	RT_CHECK(vx_copy_to_dev(graphvisited_buf, kernel_arg.graphvisited_addr, graphvisited_bufsz, 0));
+	RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.graphvisited_addr, common_bufsz, 0));
 
 {
-	auto buf_ptr_upload = (int32_t*)vx_host_ptr(graphedges_buf);
+	auto buf_ptr_upload = (int32_t*)vx_host_ptr(common_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr_upload[i] = h_graph_edges[i];
     }
 }
-	RT_CHECK(vx_copy_to_dev(graphedges_buf, kernel_arg.graphedges_addr,graphedges_bufsz, 0));
+	RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.graphedges_addr,common_bufsz, 0));
 	
 //II. 9. Initialize destination buffer
 /*{
@@ -391,40 +351,46 @@ RT_CHECK(vx_copy_to_dev(graphnodes_buf, kernel_arg.graphnodes_addr, graphnodes_b
     std::cout << "wait for completion" << std::endl;
     RT_CHECK(vx_ready_wait(device, MAX_TIMEOUT));
 //II. 12. Download destination buffer for masks
-    std::cout << "download destination buffer" << std::endl;
-    RT_CHECK(vx_copy_from_dev(graphmask_buf, kernel_arg.graphmask_addr, graphmask_bufsz, 0));
-    RT_CHECK(vx_copy_from_dev(upgraphmask_buf, kernel_arg.graphupmask_addr, upgraphmask_bufsz, 0));
-    RT_CHECK(vx_copy_from_dev(graphvisited_buf, kernel_arg.graphvisited_addr, graphvisited_bufsz, 0));
 //II. 13. Copy results to host arrays
-{
-auto buf_ptr1 = (int32_t*)vx_host_ptr(graphmask_buf);
-auto buf_ptr2 = (int32_t*)vx_host_ptr(upgraphmask_buf);
-auto buf_ptr3 = (int32_t*)vx_host_ptr(graphvisited_buf);
-for (uint32_t i = 0; i < no_of_nodes; ++i) {   
-      h_graph_mask[i] = buf_ptr1[i];
-      h_updating_graph_mask[i] = buf_ptr2[i];
-      h_graph_visited[i] = buf_ptr3[i];
+    std::cout << "download destination buffer" << std::endl;
+    RT_CHECK(vx_copy_from_dev(common_buf, kernel_arg.graphmask_addr, common_bufsz, 0));
+    {
+    auto buf_ptr1 = (int32_t*)vx_host_ptr(common_buf);
+    for (uint32_t i = 0; i < no_of_nodes; ++i) {   
+        h_graph_mask[i] = buf_ptr1[i];
     }
 }
+    RT_CHECK(vx_copy_from_dev(common_buf, kernel_arg.graphupmask_addr, common_bufsz, 0));
+    {
+auto buf_ptr1 = (int32_t*)vx_host_ptr(common_buf);
+for (uint32_t i = 0; i < no_of_nodes; ++i) {   
+      h_updating_graph_mask[i] = buf_ptr1[i];
+    }
+}
+    RT_CHECK(vx_copy_from_dev(common_buf, kernel_arg.graphvisited_addr, common_bufsz, 0));
+    {
+auto buf_ptr1 = (int32_t*)vx_host_ptr(common_buf);
+for (uint32_t i = 0; i < no_of_nodes; ++i) {   
+      h_graph_visited[i] = buf_ptr1[i];
+    }
+}
+
 /*************** KERNEL 2 *************/
-RT_CHECK(vx_copy_from_dev(hover_buf, kernel_arg.hover_addr, hover_bufsz, 0));
+RT_CHECK(vx_copy_from_dev(common_buf, kernel_arg.hover_addr, hover_bufsz, 0));
    {
-    auto buf_ptr = (int32_t*)vx_host_ptr(hover_buf);     
+    auto buf_ptr = (int32_t*)vx_host_ptr(common_buf);     
     h_over = buf_ptr[0]; 
     std::cout << "HOVER IS " <<h_over<<std::endl;
     }
 iter++;
-//if (iter>4)
-//	break;
-
 }while(h_over);
 
 //12. download destination buffer
     std::cout << "download destination buffer" << std::endl;
-    RT_CHECK(vx_copy_from_dev(cost_buf, kernel_arg.gcost_addr, cost_bufsz, 0));
+    RT_CHECK(vx_copy_from_dev(common_buf, kernel_arg.gcost_addr, common_bufsz, 0));
 
 //13. Printing results
-auto buf_ptr = (int32_t*)vx_host_ptr(cost_buf);
+auto buf_ptr = (int32_t*)vx_host_ptr(common_buf);
 for (uint32_t i = 0; i < no_of_nodes; ++i) {
       int cur = buf_ptr[i];
       std::cout << "array index [" <<i<<"]is "<<cur<<std::endl;
