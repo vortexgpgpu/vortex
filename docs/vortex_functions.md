@@ -7,7 +7,7 @@ Vortex codes can be written either in OpenCL or C using Vortex-specific function
 - `vx_dev_open()` - Open or start device connection 
 - `vx_upload_kernel_file()` - Upload kernel programs
 - `vx_mem_alloc()` - Allocate device side memory. Returns the start address of location which is passed in as a kernel argument later. 
-- `vx_buf_alloc()` - Allocates "shared" memory. This is essentially the canvas/space that enables host <-> device transfer. 
+- `vx_buf_alloc()` - Allocates "shared" memory. This is essentially the canvas/space that enables the host <-> device transfer. 
 - `vx_copy_to_dev()` - Copy host variables to device side using the address returned earlier by vx_mem_alloc()
 - `vx_start()` and `vx_ready_wait()` - For kernel invocation
 - `vx_copy_from_dev()` - Copy from device to host side
