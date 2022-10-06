@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<root versionMajor="1" versionMinor="9">
+  <kernel name="krnl_vadd_rtl" language="ip" vlnv="xilinx.com:RTLKernel:krnl_vadd_rtl:1.0" attributes="" preferredWorkGroupSizeMultiple="0" workGroupSize="1" hwControlProtocol="ap_ctrl_hs">
+    <ports>
+      <port name="m_axi_mem" mode="master" range="0xFFFFFFFFFFFFFFFF" dataWidth="32" portType="addressable" base="0x0"/>
+      <port name="s_axi_ctrl" mode="slave" range="0x1000" dataWidth="32" portType="addressable" base="0x0"/>
+    </ports>
+    <args>
+      <arg id="0" name="a" addressQualifier="1" port="m_axi_mem" size="0x8" offset="0x010" type="void*" hostOffset="0x0" hostSize="0x8"/>
+      <arg id="1" name="b" addressQualifier="1" port="m_axi_mem" size="0x8" offset="0x01C" type="void*" hostOffset="0x0" hostSize="0x8"/>
+      <arg id="2" name="c" addressQualifier="1" port="m_axi_mem" size="0x8" offset="0x028" type="void*" hostOffset="0x0" hostSize="0x8"/>      
+      <arg id="3" name="length_r" addressQualifier="0" port="s_axi_ctrl" size="0x4" offset="0x034" type="uint" hostOffset="0x0" hostSize="0x4"/>
+    </args>
+  </kernel>
+</root>
+
