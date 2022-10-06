@@ -245,8 +245,6 @@ for (uint32_t i = 0; i < no_of_nodes; ++i) {
     auto buf_ptr1 = (int32_t*)vx_host_ptr(common_buf);
     for (uint32_t i = 0; i < no_of_nodes; ++i) {   
         h_graph_mask[i] = buf_ptr1[i];
-      //h_updating_graph_mask[i] = buf_ptr2[i];
-      //h_graph_visited[i] = buf_ptr3[i];
     }
 }
     RT_CHECK(vx_copy_from_dev(common_buf, kernel_arg.graphupmask_addr, common_bufsz, 0));
@@ -254,7 +252,6 @@ for (uint32_t i = 0; i < no_of_nodes; ++i) {
 auto buf_ptr1 = (int32_t*)vx_host_ptr(common_buf);
 for (uint32_t i = 0; i < no_of_nodes; ++i) {   
       h_updating_graph_mask[i] = buf_ptr1[i];
-      //h_graph_visited[i] = buf_ptr3[i];
     }
 }
     RT_CHECK(vx_copy_from_dev(common_buf, kernel_arg.graphvisited_addr, common_bufsz, 0));
@@ -286,22 +283,13 @@ for (uint32_t i = 0; i < no_of_nodes; ++i) {
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
     RT_CHECK(vx_copy_to_dev(arg_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
   }
-/* Upload h_over
+// Upload h_over
 {
-	auto buf_ptr_upload = (int*)vx_host_ptr(hover_buf);
+	auto buf_ptr_upload = (int*)vx_host_ptr(common_buf);
       buf_ptr_upload[0] = h_over;
 }
-RT_CHECK(vx_copy_to_dev(hover_buf, kernel_arg.hover_addr, hover_bufsz, 0)); */  
+RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.hover_addr, hover_bufsz, 0)); 
 //II. 8. upload source buffers
-
-	{
-	auto buf_ptr_upload = (Node*)vx_host_ptr(common_buf);
-    for (uint32_t i = 0; i < num_points; ++i) {
-      buf_ptr_upload[i] = h_graph_nodes[i];
-    }
-}
-RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.graphnodes_addr, shared_bufsz, 0));
-
 {
 	auto buf_ptr_upload = (int32_t*)vx_host_ptr(common_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
@@ -326,23 +314,6 @@ RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.graphnodes_addr, shared_bufsz, 0)
 }
 	RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.graphvisited_addr, common_bufsz, 0));
 
-{
-	auto buf_ptr_upload = (int32_t*)vx_host_ptr(common_buf);
-    for (uint32_t i = 0; i < num_points; ++i) {
-      buf_ptr_upload[i] = h_graph_edges[i];
-    }
-}
-	RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.graphedges_addr,common_bufsz, 0));
-	
-//II. 9. Initialize destination buffer
-/*{
-	auto buf_ptr_cost = (int32_t*)vx_host_ptr(cost_buf);
-    for (uint32_t i = 0; i < num_points; ++i) {
-      buf_ptr_cost[i] = h_cost[i];
-    }
-}
-	RT_CHECK(vx_copy_to_dev(cost_buf, kernel_arg.gcost_addr, cost_bufsz, 0));*/
-
 //II. 10. Start device
 	std::cout << "start device" << std::endl;
 	RT_CHECK(vx_start(device));
@@ -351,7 +322,6 @@ RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.graphnodes_addr, shared_bufsz, 0)
     std::cout << "wait for completion" << std::endl;
     RT_CHECK(vx_ready_wait(device, MAX_TIMEOUT));
 //II. 12. Download destination buffer for masks
-//II. 13. Copy results to host arrays
     std::cout << "download destination buffer" << std::endl;
     RT_CHECK(vx_copy_from_dev(common_buf, kernel_arg.graphmask_addr, common_bufsz, 0));
     {
@@ -365,6 +335,7 @@ RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.graphnodes_addr, shared_bufsz, 0)
 auto buf_ptr1 = (int32_t*)vx_host_ptr(common_buf);
 for (uint32_t i = 0; i < no_of_nodes; ++i) {   
       h_updating_graph_mask[i] = buf_ptr1[i];
+std::cout << "hup mask II at index " <<i<<" is "<<h_updating_graph_mask[i]<<" on iter "<<iter<<std::endl;
     }
 }
     RT_CHECK(vx_copy_from_dev(common_buf, kernel_arg.graphvisited_addr, common_bufsz, 0));
@@ -391,7 +362,7 @@ iter++;
 
 //13. Printing results
 auto buf_ptr = (int32_t*)vx_host_ptr(common_buf);
-for (uint32_t i = 0; i < no_of_nodes; ++i) {
+for (uint32_t i = 0; i < 4; i++) {
       int cur = buf_ptr[i];
       std::cout << "array index [" <<i<<"]is "<<cur<<std::endl;
     }
