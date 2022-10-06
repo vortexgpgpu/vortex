@@ -15,7 +15,8 @@ Vortex codes can be written either in OpenCL or C using Vortex-specific function
 ## General flow 
 
   ```C
-  //1. Allocate and initialize host memory      
+  //1. Allocate and initialize host memory
+  
   //2. open device connection
   vx_device_h device = nullptr;
   vx_dev_open(&device);
@@ -42,12 +43,13 @@ Vortex codes can be written either in OpenCL or C using Vortex-specific function
   vx_copy_to_dev(Shared_buf, kernel_arg.variable2, BufferSize, 0);  
 
   //10. Start device
-	vx_start(device);
+  vx_start(device);
 
   //11. Wait for completion
   vx_ready_wait(device, MAX_TIMEOUT);
   
-  //12. Download destination buffer for masks
+  //12. Download destination buffer if necessary
+  
   //13. Copy results to host arrays, print if necessary
     vx_copy_from_dev(Shared_buf, kernel_arg.variable2, BufferSize, 0);
     {
@@ -57,5 +59,6 @@ Vortex codes can be written either in OpenCL or C using Vortex-specific function
         std::cout << "Result index [" <<i<<"]is "<<hostvariable2[i]<<std::endl;
       }
     }
+    
 
 ```
