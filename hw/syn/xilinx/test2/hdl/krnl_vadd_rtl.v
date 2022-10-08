@@ -30,7 +30,7 @@ module krnl_vadd_rtl #(
   parameter integer  C_S_AXI_CTRL_DATA_WIDTH = 32,
   parameter integer  C_S_AXI_CTRL_ADDR_WIDTH = 6,
   parameter integer  C_M_AXI_MEM_ID_WIDTH    = 1,
-  parameter integer  C_M_AXI_MEM_ADDR_WIDTH  = 64,
+  parameter integer  C_M_AXI_MEM_ADDR_WIDTH  = 32,
   parameter integer  C_M_AXI_MEM_DATA_WIDTH  = 32
 )
 (
@@ -51,11 +51,18 @@ module krnl_vadd_rtl #(
   output wire [2:0]                           m_axi_mem_awprot,
   output wire [3:0]                           m_axi_mem_awqos,
   output wire [3:0]                           m_axi_mem_awregion,
+
   output wire                                 m_axi_mem_wvalid,
   input  wire                                 m_axi_mem_wready,
   output wire [C_M_AXI_MEM_DATA_WIDTH-1:0]    m_axi_mem_wdata,
   output wire [C_M_AXI_MEM_DATA_WIDTH/8-1:0]  m_axi_mem_wstrb,
   output wire                                 m_axi_mem_wlast,
+  
+  input  wire                                 m_axi_mem_bvalid,
+  output wire                                 m_axi_mem_bready,  
+  input  wire [C_M_AXI_MEM_ID_WIDTH - 1:0]    m_axi_mem_bid,
+  input  wire [1:0]                           m_axi_mem_bresp,
+
   output wire                                 m_axi_mem_arvalid,
   input  wire                                 m_axi_mem_arready,
   output wire [C_M_AXI_MEM_ADDR_WIDTH-1:0]    m_axi_mem_araddr,
@@ -68,16 +75,13 @@ module krnl_vadd_rtl #(
   output wire [2:0]                           m_axi_mem_arprot,
   output wire [3:0]                           m_axi_mem_arqos,
   output wire [3:0]                           m_axi_mem_arregion,
+  
   input  wire                                 m_axi_mem_rvalid,
   output wire                                 m_axi_mem_rready,
   input  wire [C_M_AXI_MEM_DATA_WIDTH - 1:0]  m_axi_mem_rdata,
   input  wire                                 m_axi_mem_rlast,
   input  wire [C_M_AXI_MEM_ID_WIDTH - 1:0]    m_axi_mem_rid,
   input  wire [1:0]                           m_axi_mem_rresp,
-  input  wire                                 m_axi_mem_bvalid,
-  output wire                                 m_axi_mem_bready,
-  input  wire [1:0]                           m_axi_mem_bresp,
-  input  wire [C_M_AXI_MEM_ID_WIDTH - 1:0]    m_axi_mem_bid,
 
   // AXI4-Lite slave interface
   input  wire                                 s_axi_ctrl_awvalid,
@@ -97,6 +101,7 @@ module krnl_vadd_rtl #(
   output wire                                 s_axi_ctrl_bvalid,
   input  wire                                 s_axi_ctrl_bready,
   output wire [1:0]                           s_axi_ctrl_bresp,
+  
   output wire                                 interrupt 
 );
 

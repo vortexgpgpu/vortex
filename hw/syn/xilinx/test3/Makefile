@@ -14,8 +14,8 @@ PLATFORM ?=
 
 PREFIX ?= build
 
+AFU_DIR = ../hdl
 RTL_DIR = ../../../../rtl
-AFU_DIR = ../../../../afu/xrt
 IP_DIR  = ../../../../ip/xilinx
 
 BUILD_DIR = $(PREFIX)_$(PLATFORM)_$(TARGET)
@@ -45,7 +45,7 @@ RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR
 RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
 
 #CONFIGS += -DEXT_GFX_ENABLE
-CONFIGS += -DNUM_WARPS=2 -DNUM_THREADS=2 -DEXT_F_DISABLE -DL1_DISABLE
+CONFIGS += -DNUM_WARPS=2 -DNUM_THREADS=2 -DEXT_F_DISABLE -DL1_DISABLE -DMEM_BLOCK_SIZE=64
 
 CONFIGS += -DSYNTHESIS -DVIVADO
 
@@ -61,6 +61,8 @@ ECHO = @echo
 XO_CONTAINER = $(BIN_DIR)/vortex_afu.xo
 
 XCLBIN_CONTAINER = $(BIN_DIR)/vortex_afu.xclbin
+
+EMCONFIG = $(BIN_DIR)/emconfig.json
 
 NCPUS := $(shell grep -c ^processor /proc/cpuinfo)
 JOBS := $(shell expr $(NCPUS) - 1)
@@ -98,14 +100,21 @@ else
 	VPP_FLAGS += --optimize 3
 endif
 
+# Host
+EXECUTABLE = ./xrt_test
+CMD_ARGS = -x $(XCLBIN_CONTAINER)
+CXXFLAGS += -std=c++14 -g -O0 -fmessage-length=0 -I$(XILINX_XRT)/include -I$(XILINX_VIVADO)/include -Wall -I../src
+LDFLAGS  += -L$(XILINX_XRT)/lib -pthread -lOpenCL -luuid -lxrt_coreutil
+HOST_SRCS += ./src/host.cpp ./src/cmdlineparser.cpp ./src/logger.cpp
+
 # RTL Kernel only supports Hardware and Hardware Emulation.
 ifneq ($(TARGET),$(findstring $(TARGET), hw hw_emu))
 	$(warning WARNING:Application supports only hw hw_emu TARGET. Please use the target for running the application)
 endif
 
-.PHONY: all clean gen-sources emconfig check-devices
+.PHONY: all run host clean gen-sources emconfig check-devices
 
-all: check-devices $(XCLBIN_CONTAINER) emconfig
+all: check-devices $(XCLBIN_CONTAINER) emconfig host
 
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt:
@@ -117,12 +126,23 @@ $(XO_CONTAINER): $(BUILD_DIR)/sources.txt ./kernel.xml
 $(XCLBIN_CONTAINER): $(XO_CONTAINER)
 	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); $(VPP) $(VPP_FLAGS) -o ../$(XCLBIN_CONTAINER) ../$(XO_CONTAINER)
 
-emconfig: $(BIN_DIR)/emconfig.json
-$(BIN_DIR)/emconfig.json:
+emconfig: $(EMCONFIG)
+$(EMCONFIG):
 	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); emconfigutil --platform $(PLATFORM) --od ../$(BIN_DIR)
 
+host: $(EXECUTABLE)
+$(EXECUTABLE): $(HOST_SRCS)
+	g++ $^ $(CXXFLAGS) $(LDFLAGS) -o $@
+
+run: $(EXECUTABLE) $(XCLBIN_CONTAINER) $(EMCONFIG)
+ifeq ($(TARGET),$(filter $(TARGET),sw_emu hw_emu))
+	EMCONFIG_PATH=$(BIN_DIR) XCL_EMULATION_MODE=$(TARGET) $(EXECUTABLE) $(CMD_ARGS)
+else
+	EMCONFIG_PATH=$(BIN_DIR) $(EXECUTABLE) $(CMD_ARGS)
+endif
+
 clean:
-	$(RMDIR) $(BUILD_DIR)
+	$(RMDIR) $(BUILD_DIR) $(EXECUTABLE)
 
 # Check the devices avaiable
 check-devices:

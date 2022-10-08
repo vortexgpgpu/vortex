@@ -30,13 +30,14 @@ module krnl_vadd_rtl_int #(
   parameter integer  C_S_AXI_CTRL_DATA_WIDTH = 32,
   parameter integer  C_S_AXI_CTRL_ADDR_WIDTH = 6,
   parameter integer  C_M_AXI_MEM_ID_WIDTH = 1,
-  parameter integer  C_M_AXI_MEM_ADDR_WIDTH = 64,
+  parameter integer  C_M_AXI_MEM_ADDR_WIDTH = 32,
   parameter integer  C_M_AXI_MEM_DATA_WIDTH = 32
 )
 (
   // System signals
   input  wire  ap_clk,
   input  wire  ap_rst_n,
+
   // AXI4 master interface 
   output wire                                 m_axi_mem_awvalid,
   input  wire                                 m_axi_mem_awready,
@@ -44,18 +45,24 @@ module krnl_vadd_rtl_int #(
   output wire [C_M_AXI_MEM_ID_WIDTH - 1:0]    m_axi_mem_awid,
   output wire [7:0]                           m_axi_mem_awlen,
   output wire [2:0]                           m_axi_mem_awsize,
-  // Tie-off AXI4 transaction options that are not being used.
   output wire [1:0]                           m_axi_mem_awburst,
   output wire [1:0]                           m_axi_mem_awlock,
   output wire [3:0]                           m_axi_mem_awcache,
   output wire [2:0]                           m_axi_mem_awprot,
   output wire [3:0]                           m_axi_mem_awqos,
   output wire [3:0]                           m_axi_mem_awregion,
+
   output wire                                 m_axi_mem_wvalid,
   input  wire                                 m_axi_mem_wready,
   output wire [C_M_AXI_MEM_DATA_WIDTH-1:0]    m_axi_mem_wdata,
   output wire [C_M_AXI_MEM_DATA_WIDTH/8-1:0]  m_axi_mem_wstrb,
   output wire                                 m_axi_mem_wlast,
+  
+  input  wire                                 m_axi_mem_bvalid,
+  output wire                                 m_axi_mem_bready,
+  input  wire [1:0]                           m_axi_mem_bresp,
+  input  wire [C_M_AXI_MEM_ID_WIDTH - 1:0]    m_axi_mem_bid,
+  
   output wire                                 m_axi_mem_arvalid,
   input  wire                                 m_axi_mem_arready,
   output wire [C_M_AXI_MEM_ADDR_WIDTH-1:0]    m_axi_mem_araddr,
@@ -68,16 +75,13 @@ module krnl_vadd_rtl_int #(
   output wire [2:0]                           m_axi_mem_arprot,
   output wire [3:0]                           m_axi_mem_arqos,
   output wire [3:0]                           m_axi_mem_arregion,
+  
   input  wire                                 m_axi_mem_rvalid,
   output wire                                 m_axi_mem_rready,
   input  wire [C_M_AXI_MEM_DATA_WIDTH - 1:0]  m_axi_mem_rdata,
   input  wire                                 m_axi_mem_rlast,
   input  wire [C_M_AXI_MEM_ID_WIDTH - 1:0]    m_axi_mem_rid,
   input  wire [1:0]                           m_axi_mem_rresp,
-  input  wire                                 m_axi_mem_bvalid,
-  output wire                                 m_axi_mem_bready,
-  input  wire [1:0]                           m_axi_mem_bresp,
-  input  wire [C_M_AXI_MEM_ID_WIDTH - 1:0]    m_axi_mem_bid,
 
   // AXI4-Lite slave interface
   input  wire                                 s_axi_ctrl_awvalid,
@@ -150,13 +154,13 @@ logic [C_M_AXI_MEM_DATA_WIDTH-1:0] wr_fifo_tdata;
 assign m_axi_mem_awid     = {C_M_AXI_MEM_ID_WIDTH{1'b0}};
 assign m_axi_mem_awburst  = 2'b01;
 assign m_axi_mem_awlock   = 2'b00;
-assign m_axi_mem_awcache  = 4'b0011;
+assign m_axi_mem_awcache  = 4'b0000;
 assign m_axi_mem_awprot   = 3'b000;
 assign m_axi_mem_awqos    = 4'b0000;
 assign m_axi_mem_awregion = 4'b0000;
 assign m_axi_mem_arburst  = 2'b01;
 assign m_axi_mem_arlock   = 2'b00;
-assign m_axi_mem_arcache  = 4'b0011;
+assign m_axi_mem_arcache  = 4'b0000;
 assign m_axi_mem_arprot   = 3'b000;
 assign m_axi_mem_arqos    = 4'b0000;
 assign m_axi_mem_arregion = 4'b0000;

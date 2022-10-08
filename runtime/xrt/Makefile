@@ -1,4 +1,4 @@
-CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
+CXXFLAGS += -std=c++14 -Wall -Wextra -Wfatal-errors
 
 CXXFLAGS += -I../include -I../common -I../../hw -I$(XILINX_XRT)/include -I../../sim/common
 

@@ -77,11 +77,16 @@ endif
 # Host
 EXECUTABLE = ./xrt_test
 CMD_ARGS = -x $(XCLBIN_CONTAINER)
-CXXFLAGS += -std=c++1y -g -O0 -fmessage-length=0 -I$(XILINX_XRT)/include -I$(XILINX_VIVADO)/include -Wall -I../src
-LDFLAGS  += -L$(XILINX_XRT)/lib -pthread -lOpenCL -lrt -lstdc++ -luuid -lxrt_coreutil
+CXXFLAGS += -std=c++14 -g -O0 -fmessage-length=0 -I$(XILINX_XRT)/include -I$(XILINX_VIVADO)/include -Wall -I../src
+LDFLAGS  += -L$(XILINX_XRT)/lib -pthread -lOpenCL -luuid -lxrt_coreutil
 HOST_SRCS += ./src/host.cpp ./src/cmdlineparser.cpp ./src/logger.cpp
 
-.PHONY: all clean gen-sources emconfig
+# RTL Kernel only supports Hardware and Hardware Emulation.
+ifneq ($(TARGET),$(findstring $(TARGET), hw hw_emu))
+	$(warning WARNING:Application supports only hw hw_emu TARGET. Please use the target for running the application)
+endif
+
+.PHONY: all run host clean gen-sources emconfig check-devices
 
 all: check-devices $(XCLBIN_CONTAINER) emconfig host
 
@@ -90,7 +95,7 @@ $(BUILD_DIR)/sources.txt:
 	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); ../scripts/gen_sources.sh $(RTL_INCLUDE) $(CONFIGS) > sources.txt
 
 $(XO_CONTAINER): $(BUILD_DIR)/sources.txt ./kernel.xml
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	rm -rf xo; $(VIVADO) -mode batch -source ../scripts/gen_xo.tcl -tclargs ../$(XO_CONTAINER) krnl_vadd_rtl sources.txt ../kernel.xml ../$(BUILD_DIR)
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	$(VIVADO) -mode batch -source ../scripts/gen_xo.tcl -tclargs ../$(XO_CONTAINER) krnl_vadd_rtl sources.txt ../kernel.xml ../$(BUILD_DIR)
 
 $(XCLBIN_CONTAINER): $(XO_CONTAINER)
 	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); $(VPP) $(VPP_FLAGS) -o ../$(XCLBIN_CONTAINER) ../$(XO_CONTAINER)
@@ -112,11 +117,6 @@ endif
 
 clean:
 	$(RMDIR) $(BUILD_DIR) $(EXECUTABLE)
-
-# RTL Kernel only supports Hardware and Hardware Emulation.
-ifneq ($(TARGET),$(findstring $(TARGET), hw hw_emu))
-	$(warning WARNING:Application supports only hw hw_emu TARGET. Please use the target for running the application)
-endif
 
 # Check the devices avaiable
 check-devices:

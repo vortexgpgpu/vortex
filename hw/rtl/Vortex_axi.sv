@@ -7,7 +7,7 @@ import VX_gpu_types::*;
 
 module Vortex_axi #(
     parameter AXI_DATA_WIDTH = `VX_MEM_DATA_WIDTH, 
-    parameter AXI_ADDR_WIDTH = 32,
+    parameter AXI_ADDR_WIDTH = `XLEN,
     parameter AXI_TID_WIDTH  = `VX_MEM_TAG_WIDTH
 )(
     // Clock
@@ -58,10 +58,10 @@ module Vortex_axi #(
     // AXI read response channel
     input wire                          m_axi_rvalid,
     output wire                         m_axi_rready,
-    input wire [AXI_DATA_WIDTH-1:0]     m_axi_rdata,    
+    input wire [AXI_DATA_WIDTH-1:0]     m_axi_rdata,
+    input wire                          m_axi_rlast,
     input wire [AXI_TID_WIDTH-1:0]      m_axi_rid,
     input wire [1:0]                    m_axi_rresp,
-    input wire                          m_axi_rlast,
     
     // DCR write request
     input  wire                         dcr_wr_valid,
@@ -71,8 +71,10 @@ module Vortex_axi #(
     // Status
     output wire                         busy
 );
+    `STATIC_ASSERT((AXI_DATA_WIDTH == `VX_MEM_DATA_WIDTH), ("invalid memory data size: current=%0d, expected=%0d", AXI_DATA_WIDTH, `VX_MEM_DATA_WIDTH))
+    `STATIC_ASSERT((AXI_ADDR_WIDTH >= `XLEN), ("invalid memory address size: current=%0d, expected=%0d", AXI_ADDR_WIDTH, `VX_MEM_ADDR_WIDTH))
     `STATIC_ASSERT((AXI_TID_WIDTH >= `VX_MEM_TAG_WIDTH), ("invalid memory tag size: current=%0d, expected=%0d", AXI_TID_WIDTH, `VX_MEM_TAG_WIDTH))
-
+    
     wire                            mem_req_valid;
     wire                            mem_req_rw; 
     wire [`VX_MEM_BYTEEN_WIDTH-1:0] mem_req_byteen;
@@ -86,23 +88,27 @@ module Vortex_axi #(
     wire [`VX_MEM_TAG_WIDTH-1:0]    mem_rsp_tag;
     wire                            mem_rsp_ready;
 
+    wire [`XLEN-1:0] m_axi_awaddr_unqual;
+    wire [`XLEN-1:0] m_axi_araddr_unqual;
+
     wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_awid_unqual;
-    assign m_axi_awid = AXI_TID_WIDTH'(m_axi_awid_unqual);
-
-    wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_bid_unqual;
-    assign m_axi_bid_unqual = m_axi_bid[`VX_MEM_TAG_WIDTH-1:0];
-    `UNUSED_VAR (m_axi_bid)
-
     wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_arid_unqual;
+    
+    wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_bid_unqual;    
+    wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_rid_unqual;
+
+    assign m_axi_awaddr = `XLEN'(m_axi_awaddr_unqual);
+	assign m_axi_araddr = `XLEN'(m_axi_araddr_unqual);
+    
+    assign m_axi_awid = AXI_TID_WIDTH'(m_axi_awid_unqual);
     assign m_axi_arid = AXI_TID_WIDTH'(m_axi_arid_unqual);
 
-    wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_rid_unqual;
-    assign m_axi_rid_unqual = m_axi_rid [`VX_MEM_TAG_WIDTH-1:0];    
-    `UNUSED_VAR (m_axi_rid)
+    assign m_axi_rid_unqual = `VX_MEM_TAG_WIDTH'(m_axi_rid);
+    assign m_axi_bid_unqual = `VX_MEM_TAG_WIDTH'(m_axi_bid);
 
     VX_axi_adapter #(
-        .DATA_WIDTH (AXI_DATA_WIDTH), 
-        .ADDR_WIDTH (AXI_ADDR_WIDTH),
+        .DATA_WIDTH (`VX_MEM_DATA_WIDTH), 
+        .ADDR_WIDTH (`XLEN),
         .TAG_WIDTH  (`VX_MEM_TAG_WIDTH)
     ) axi_adapter (
         .clk            (clk),
@@ -123,7 +129,7 @@ module Vortex_axi #(
                 
         .m_axi_awvalid  (m_axi_awvalid),
         .m_axi_awready  (m_axi_awready),
-        .m_axi_awaddr   (m_axi_awaddr),
+        .m_axi_awaddr   (m_axi_awaddr_unqual),
         .m_axi_awid     (m_axi_awid_unqual),
         .m_axi_awlen    (m_axi_awlen),
         .m_axi_awsize   (m_axi_awsize),
@@ -147,7 +153,7 @@ module Vortex_axi #(
         
         .m_axi_arvalid  (m_axi_arvalid),
         .m_axi_arready  (m_axi_arready),
-        .m_axi_araddr   (m_axi_araddr),
+        .m_axi_araddr   (m_axi_araddr_unqual),
         .m_axi_arid     (m_axi_arid_unqual),        
         .m_axi_arlen    (m_axi_arlen),
         .m_axi_arsize   (m_axi_arsize),
@@ -161,9 +167,9 @@ module Vortex_axi #(
         .m_axi_rvalid   (m_axi_rvalid),
         .m_axi_rready   (m_axi_rready),
         .m_axi_rdata    (m_axi_rdata),        
+        .m_axi_rlast    (m_axi_rlast) ,       
         .m_axi_rid      (m_axi_rid_unqual),
-        .m_axi_rresp    (m_axi_rresp),
-        .m_axi_rlast    (m_axi_rlast)
+        .m_axi_rresp    (m_axi_rresp)
     );
     
     Vortex vortex (

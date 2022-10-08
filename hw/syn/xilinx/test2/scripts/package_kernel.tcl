@@ -51,9 +51,6 @@ add_files -norecurse ${vsources_list}
 set obj [get_filesets sources_1]
 set files [list \
  [file normalize "${build_dir}/globals.vh"] \
- [file normalize "${build_dir}/ip/xil_fdiv/xil_fdiv.xci"] \
- [file normalize "${build_dir}/ip/xil_fma/xil_fma.xci"] \
- [file normalize "${build_dir}/ip/xil_fsqrt/xil_fsqrt.xci"] \
 ]
 add_files -verbose -norecurse -fileset $obj $files
 
