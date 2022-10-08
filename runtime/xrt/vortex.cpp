@@ -28,14 +28,14 @@
 #define CTL_AP_RESET    (1<<4)
 #define CTL_AP_RESTART  (1<<7)
 
-#define CPP_API
+//#define CPP_API
 
 #define RAM_PAGE_SIZE 4096
 
 // 256 MB
 #define BANK_SIZE 0x10000000
 
-#define NUM_BANKS 1
+#define NUM_BANKS 16
 
 #define DEFAULT_DEVICE_INDEX 0
 

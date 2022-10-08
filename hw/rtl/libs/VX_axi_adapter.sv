@@ -102,7 +102,7 @@ module VX_axi_adapter #(
     assign m_axi_awid       = mem_req_tag;
     assign m_axi_awlen      = 8'b00000000;    
     assign m_axi_awsize     = 3'(AXSIZE);
-    assign m_axi_awburst    = 2'b01;    
+    assign m_axi_awburst    = 2'b00;    
     assign m_axi_awlock     = 2'b00;    
     assign m_axi_awcache    = 4'b0000;
     assign m_axi_awprot     = 3'b000;    
@@ -128,7 +128,7 @@ module VX_axi_adapter #(
     assign m_axi_arid       = mem_req_tag;
     assign m_axi_arlen      = 8'b00000000;
     assign m_axi_arsize     = 3'(AXSIZE);
-    assign m_axi_arburst    = 2'b01;  
+    assign m_axi_arburst    = 2'b00;  
     assign m_axi_arlock     = 2'b00;    
     assign m_axi_arcache    = 4'b0000;
     assign m_axi_arprot     = 3'b000;
