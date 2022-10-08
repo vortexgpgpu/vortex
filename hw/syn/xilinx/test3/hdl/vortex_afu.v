@@ -12,8 +12,8 @@ module vortex_afu #(
 	  parameter C_M_AXI_MEM_DATA_WIDTH  = `VX_MEM_DATA_WIDTH
 ) (
     // System signals
-    input wire ap_clk,
-    input wire ap_rst_n,
+    input wire 									ap_clk,
+    input wire 									ap_rst_n,
 
     // AXI4 master interface 
     output wire                                 m_axi_mem_awvalid,
@@ -21,8 +21,8 @@ module vortex_afu #(
     output wire [C_M_AXI_MEM_ADDR_WIDTH-1:0]    m_axi_mem_awaddr,
     output wire [C_M_AXI_MEM_ID_WIDTH - 1:0]    m_axi_mem_awid,
     output wire [7:0]                           m_axi_mem_awlen,
-    output wire [2:0]                           m_axi_mem_awsize,
-    output wire [1:0]                           m_axi_mem_awburst,
+    //output wire [2:0]                           m_axi_mem_awsize,
+    //output wire [1:0]                           m_axi_mem_awburst,
     //output wire [1:0]                           m_axi_mem_awlock,
     //output wire [3:0]                           m_axi_mem_awcache,
     //output wire [2:0]                           m_axi_mem_awprot,
@@ -36,17 +36,17 @@ module vortex_afu #(
     output wire                                 m_axi_mem_wlast,
     
 	input  wire                                 m_axi_mem_bvalid,
-    output wire                                 m_axi_mem_bready,
-    input  wire [1:0]                           m_axi_mem_bresp,
+    output wire                                 m_axi_mem_bready,    
     input  wire [C_M_AXI_MEM_ID_WIDTH - 1:0]    m_axi_mem_bid,
+	//input  wire [1:0]                           m_axi_mem_bresp,
 
     output wire                                 m_axi_mem_arvalid,
     input  wire                                 m_axi_mem_arready,
     output wire [C_M_AXI_MEM_ADDR_WIDTH-1:0]    m_axi_mem_araddr,
     output wire [C_M_AXI_MEM_ID_WIDTH-1:0]      m_axi_mem_arid,
     output wire [7:0]                           m_axi_mem_arlen,
-    output wire [2:0]                           m_axi_mem_arsize,
-    output wire [1:0]                           m_axi_mem_arburst,
+    //output wire [2:0]                           m_axi_mem_arsize,
+    //output wire [1:0]                           m_axi_mem_arburst,
     //output wire [1:0]                           m_axi_mem_arlock,
     //output wire [3:0]                           m_axi_mem_arcache,
     //output wire [2:0]                           m_axi_mem_arprot,
@@ -58,7 +58,7 @@ module vortex_afu #(
     input  wire [C_M_AXI_MEM_DATA_WIDTH - 1:0]  m_axi_mem_rdata,
     input  wire                                 m_axi_mem_rlast,
     input  wire [C_M_AXI_MEM_ID_WIDTH - 1:0]    m_axi_mem_rid,
-    input  wire [1:0]                           m_axi_mem_rresp,
+    //input  wire [1:0]                           m_axi_mem_rresp,
 
     // AXI4-Lite slave interface
     input  wire                                 s_axi_ctrl_awvalid,
@@ -91,13 +91,14 @@ module vortex_afu #(
 	) inst (
 		.ap_clk             (ap_clk),
 		.ap_rst_n           (ap_rst_n),
+		
 		.m_axi_mem_awvalid	(m_axi_mem_awvalid),
 		.m_axi_mem_awready	(m_axi_mem_awready),
 		.m_axi_mem_awaddr   (m_axi_mem_awaddr),
 		.m_axi_mem_awid     (m_axi_mem_awid),
 		.m_axi_mem_awlen    (m_axi_mem_awlen),
-		.m_axi_mem_awsize   (m_axi_mem_awsize),
-		.m_axi_mem_awburst  (m_axi_mem_awburst),
+		//.m_axi_mem_awsize   (m_axi_mem_awsize),
+		//.m_axi_mem_awburst  (m_axi_mem_awburst),
 		//.m_axi_mem_awlock   (m_axi_mem_awlock),
 		//.m_axi_mem_awcache  (m_axi_mem_awcache),
 		//.m_axi_mem_awprot   (m_axi_mem_awprot),
@@ -113,15 +114,15 @@ module vortex_afu #(
 		.m_axi_mem_bvalid   (m_axi_mem_bvalid),
 		.m_axi_mem_bready   (m_axi_mem_bready),
 		.m_axi_mem_bid      (m_axi_mem_bid),
-		.m_axi_mem_bresp    (m_axi_mem_bresp),
+		//.m_axi_mem_bresp    (m_axi_mem_bresp),
 		
 		.m_axi_mem_arvalid  (m_axi_mem_arvalid),
 		.m_axi_mem_arready  (m_axi_mem_arready),
 		.m_axi_mem_araddr   (m_axi_mem_araddr),
 		.m_axi_mem_arid     (m_axi_mem_arid),
 		.m_axi_mem_arlen    (m_axi_mem_arlen),
-		.m_axi_mem_arsize   (m_axi_mem_arsize),
-		.m_axi_mem_arburst  (m_axi_mem_arburst),
+		//.m_axi_mem_arsize   (m_axi_mem_arsize),
+		//.m_axi_mem_arburst  (m_axi_mem_arburst),
 		//.m_axi_mem_arlock   (m_axi_mem_arlock),
 		//.m_axi_mem_arcache  (m_axi_mem_arcache),
 		//.m_axi_mem_arprot   (m_axi_mem_arprot),
@@ -133,7 +134,7 @@ module vortex_afu #(
 		.m_axi_mem_rdata    (m_axi_mem_rdata),
 		.m_axi_mem_rlast    (m_axi_mem_rlast),
 		.m_axi_mem_rid      (m_axi_mem_rid),		
-		.m_axi_mem_rresp    (m_axi_mem_rresp),
+		//.m_axi_mem_rresp    (m_axi_mem_rresp),
 		
 		.s_axi_ctrl_awvalid (s_axi_ctrl_awvalid),
 		.s_axi_ctrl_awready (s_axi_ctrl_awready),

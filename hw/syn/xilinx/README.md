@@ -2,8 +2,8 @@
 
 vivado -mode batch -source scripts/gen_ip.tcl -tclargs ip/xilinx_u280_xdma_201920_3
 
-make all TARGET=hw PLATFORM=xilinx_u280_xdma_201920_3 PROFILE=1 DEBUG=1 > build_hw.log 2>&1
-make all TARGET=hw_emu PLATFORM=xilinx_u280_xdma_201920_3 PROFILE=1 DEBUG=1 > build_hw_emu.log 2>&1
+make all TARGET=hw PLATFORM=xilinx_u280_xdma_201920_3 PROFILE=1 DEBUG=1 > build_u280_hw.log 2>&1
+make all TARGET=hw_emu PLATFORM=xilinx_u280_xdma_201920_3 PROFILE=1 DEBUG=1 > build_u280_hw_emu.log 2>&1
 
 make all TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_201920_3 DEBUG=1 > build_u50_hw.log 2>&1
 make all TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_201920_3 DEBUG=1 > build_u50_hw_emu.log 2>&1
