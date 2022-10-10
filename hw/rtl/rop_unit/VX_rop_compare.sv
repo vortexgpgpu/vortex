@@ -9,24 +9,28 @@ module VX_rop_compare #(
     input wire [DATAW-1:0] b,
 
     // Outputs
-    output reg result
+    output wire result
 );
     wire [DATAW:0] sub = (a - b);
     wire equal = (0 == sub);
     wire less  = sub[DATAW];
 
+    reg result_r;
+
     always @(*) begin
         case (func)
-            `ROP_DEPTH_FUNC_NEVER    : result = 0;
-            `ROP_DEPTH_FUNC_LESS     : result = less;
-            `ROP_DEPTH_FUNC_EQUAL    : result = equal;
-            `ROP_DEPTH_FUNC_LEQUAL   : result = less || equal;
-            `ROP_DEPTH_FUNC_GREATER  : result = ~(less || equal);
-            `ROP_DEPTH_FUNC_NOTEQUAL : result = ~equal;
-            `ROP_DEPTH_FUNC_GEQUAL   : result = ~less;
-            `ROP_DEPTH_FUNC_ALWAYS   : result = 1;
-            default                  : result = 'x;
+            `ROP_DEPTH_FUNC_NEVER    : result_r = 0;
+            `ROP_DEPTH_FUNC_LESS     : result_r = less;
+            `ROP_DEPTH_FUNC_EQUAL    : result_r = equal;
+            `ROP_DEPTH_FUNC_LEQUAL   : result_r = less || equal;
+            `ROP_DEPTH_FUNC_GREATER  : result_r = ~(less || equal);
+            `ROP_DEPTH_FUNC_NOTEQUAL : result_r = ~equal;
+            `ROP_DEPTH_FUNC_GEQUAL   : result_r = ~less;
+            `ROP_DEPTH_FUNC_ALWAYS   : result_r = 1;
+            default                  : result_r = 'x;
         endcase        
     end
+
+    assign result = result_r;
 
 endmodule

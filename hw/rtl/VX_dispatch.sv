@@ -145,15 +145,15 @@ module VX_dispatch (
     // can take next request?
     reg ready_r;
     always @(*) begin
-        case (dispatch_if.ex_type) 
-        `EX_ALU: ready_r = alu_req_ready;
+        case (dispatch_if.ex_type)
         `EX_LSU: ready_r = lsu_req_ready;
         `EX_CSR: ready_r = csr_req_ready;
     `ifdef EXT_F_ENABLE
         `EX_FPU: ready_r = fpu_req_ready;
     `endif
         `EX_GPU: ready_r = gpu_req_ready;
-        default: ready_r = 1'b1; // ignore NOPs
+        //`EX_ALU,
+        default: ready_r = alu_req_ready;
         endcase
     end
     assign dispatch_if.ready = ready_r;

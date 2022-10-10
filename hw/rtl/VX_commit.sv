@@ -19,11 +19,12 @@ module VX_commit #(
     // outputs
     VX_writeback_if.master  writeback_if,
     VX_cmt_to_csr_if.master cmt_to_csr_if,
+    VX_cmt_to_fetch_if.master cmt_to_fetch_if,
 
     // simulation helper signals
-    output reg [`NUM_REGS-1:0][31:0] sim_wb_value
+    output wire [`NUM_REGS-1:0][31:0] sim_wb_value
 );
-    localparam NUM_RSPS = 5 + `EXT_F_ENABLED;
+    localparam NUM_RSPS = `NUM_EX_UNITS;
     localparam COMMIT_SIZEW = $clog2(NUM_RSPS * `NUM_THREADS + 1);
 
     // CSRs update
@@ -65,7 +66,7 @@ module VX_commit #(
     VX_pipe_register #(
         .DATAW  (1 + COMMIT_SIZEW),
         .DEPTH  (`NUM_THREADS > 2),
-        .RESETW (0)
+        .RESETW (1)
     ) commit_size_reg (
         .clk      (clk),
         .reset    (reset),
@@ -85,8 +86,49 @@ module VX_commit #(
             end
         end
     end
-
+    
     assign cmt_to_csr_if.instret = instret;
+
+    // Committed instructions
+
+    wire final_commit_fire = (alu_commit_fire && alu_commit_if.eop)
+                          || (ld_commit_fire && ld_commit_if.eop)
+                          || (st_commit_fire && st_commit_if.eop)
+                          || (csr_commit_fire && csr_commit_if.eop)
+                        `ifdef EXT_F_ENABLE
+                          || (fpu_commit_fire && fpu_commit_if.eop)
+                        `endif
+                          || (gpu_commit_fire && gpu_commit_if.eop);
+
+    wire [NUM_RSPS-1:0] final_commit_tmask = {
+        (alu_commit_fire && alu_commit_if.eop),
+        (ld_commit_fire && ld_commit_if.eop),
+        (st_commit_fire && st_commit_if.eop),
+        (csr_commit_fire && csr_commit_if.eop),
+    `ifdef EXT_F_ENABLE
+        (fpu_commit_fire && fpu_commit_if.eop),
+    `endif
+        (gpu_commit_fire && gpu_commit_if.eop)
+    };
+
+    reg [`EX_UNITS_BITS-1:0] final_commit_size, final_commit_size_r;
+    reg final_commit_fire_r;
+
+    `POP_COUNT(final_commit_size, final_commit_tmask);
+
+    VX_pipe_register #(
+        .DATAW  (1 + `EX_UNITS_BITS),
+        .RESETW (1)
+    ) final_commit_size_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  ({final_commit_fire,   final_commit_size}),
+        .data_out ({final_commit_fire_r, final_commit_size_r})
+    );
+
+    assign cmt_to_fetch_if.valid = final_commit_fire_r;
+    assign cmt_to_fetch_if.committed = final_commit_size_r;
 
     // Writeback
 

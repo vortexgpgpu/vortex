@@ -55,7 +55,6 @@ inline std::ostream &operator<<(std::ostream &os, const RegType& clss) {
 ///////////////////////////////////////////////////////////////////////////////
 
 enum class ExeType {
-  NOP,
   ALU,
   LSU,
   CSR,
@@ -66,7 +65,6 @@ enum class ExeType {
 
 inline std::ostream &operator<<(std::ostream &os, const ExeType& type) {
   switch (type) {
-  case ExeType::NOP: os << "NOP"; break;
   case ExeType::ALU: os << "ALU"; break;
   case ExeType::LSU: os << "LSU"; break;
   case ExeType::CSR: os << "CSR"; break;

@@ -20,7 +20,6 @@ struct InstTableEntry_t {
 };
 
 static const std::unordered_map<Opcode, struct InstTableEntry_t> sc_instTable = {
-  {Opcode::NOP,        {false, InstType::N_TYPE}},
   {Opcode::R_INST,     {false, InstType::R_TYPE}},
   {Opcode::L_INST,     {false, InstType::I_TYPE}},
   {Opcode::I_INST,     {false, InstType::I_TYPE}},
@@ -92,7 +91,6 @@ static const char* op_string(const Instr &instr) {
   auto imm    = instr.getImm();
 
   switch (opcode) {
-  case Opcode::NOP:        return "NOP";
   case Opcode::LUI_INST:   return "LUI";
   case Opcode::AUIPC_INST: return "AUIPC";
   case Opcode::R_INST:
@@ -456,9 +454,6 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
   }
 
   switch (iType) {
-  case InstType::N_TYPE:
-    break;
-
   case InstType::R_TYPE:
     if (op == Opcode::FCI) {
       switch (func7) {      

@@ -31,6 +31,9 @@ module VX_fetch #(
     // csr interface
     VX_fetch_to_csr_if.master fetch_to_csr_if,
 
+    // commit interface
+    VX_cmt_to_fetch_if.slave cmt_to_fetch_if,
+
     // Status
     output wire             busy
 );
@@ -55,6 +58,8 @@ module VX_fetch #(
         .ifetch_req_if    (ifetch_req_if),
 
         .fetch_to_csr_if  (fetch_to_csr_if),
+
+        .cmt_to_fetch_if  (cmt_to_fetch_if),
 
         .busy             (busy)
     ); 

@@ -11,18 +11,6 @@
 
 using namespace vortex;
 
-NopUnit::NopUnit(const SimContext& ctx, Core* core) : ExeUnit(ctx, core, "NOP") {}
-    
-void NopUnit::tick() {
-    if (Input.empty()) 
-        return;
-    auto trace = Input.front();
-    Output.send(trace, 1);
-    Input.pop();
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
 LsuUnit::LsuUnit(const SimContext& ctx, Core* core) 
     : ExeUnit(ctx, core, "LSU")
     , pending_rd_reqs_(LSUQ_SIZE)

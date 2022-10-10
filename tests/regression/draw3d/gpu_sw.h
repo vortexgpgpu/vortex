@@ -442,7 +442,7 @@ inline fixed16_t evalEdgeFunction(const vec3_fx_t& e, uint32_t x, uint32_t y) {
 
 // Calculate the edge extents for square corners
 inline  fixed16_t calcEdgeExtents(const vec3_fx_t& e) {
-  fixed16_t fxZero(0);
+  auto fxZero = fixed16_t::make(0x0);
   vec2_fx_t corners[4] = {{fxZero, fxZero},  // 00
                           {e.x,    fxZero},  // 10
                           {fxZero, e.y},     // 01
@@ -479,7 +479,7 @@ private:
                   fixed16_t e0, 
                   fixed16_t e1, 
                   fixed16_t e2) {
-    fixed16_t fxZero(0);
+    auto fxZero = fixed16_t::make(0x0);
     uint32_t mask = 0;
     vec3_fx_t bcoords[4];
 
@@ -527,7 +527,7 @@ private:
                    fixed16_t e0, 
                    fixed16_t e1, 
                    fixed16_t e2) {
-    fixed16_t fxZero(0);
+    auto fxZero = fixed16_t::make(0x0);
 
     uint32_t block_x_idx = x >> block_logsize_;
     uint32_t block_y_idx = y >> block_logsize_;
@@ -602,7 +602,7 @@ private:
                   fixed16_t e0, 
                   fixed16_t e1, 
                   fixed16_t e2) {
-    fixed16_t fxZero(0);
+    auto fxZero = fixed16_t::make(0x0);
     // check if tile overlap triangle    
     if ((e0 + (primitive.extents[0] << subTileLogSize)) < fxZero 
      || (e1 + (primitive.extents[1] << subTileLogSize)) < fxZero

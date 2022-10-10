@@ -7,7 +7,7 @@ namespace vortex {
 class Warp;
 
 enum Opcode {   
-  NOP       = 0,    
+  NONE      = 0,    
   R_INST    = 0x33,
   L_INST    = 0x3,
   I_INST    = 0x13,
@@ -39,8 +39,7 @@ enum Opcode {
   I_INST_W  = 0x1b,
 };
 
-enum InstType { 
-  N_TYPE, 
+enum InstType {
   R_TYPE, 
   I_TYPE, 
   S_TYPE, 
@@ -54,7 +53,7 @@ enum InstType {
 class Instr {
 public:
   Instr() 
-    : opcode_(Opcode::NOP)
+    : opcode_(Opcode::NONE)
     , num_rsrcs_(0)
     , has_imm_(false)
     , rdest_type_(RegType::None)

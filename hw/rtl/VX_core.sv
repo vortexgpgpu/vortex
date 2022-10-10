@@ -83,6 +83,7 @@ module VX_core #(
     output wire             busy
 );
     VX_fetch_to_csr_if  fetch_to_csr_if();
+    VX_cmt_to_fetch_if  cmt_to_fetch_if();
     VX_cmt_to_csr_if    cmt_to_csr_if();
     VX_decode_if        decode_if();
     VX_branch_ctl_if    branch_ctl_if();
@@ -142,6 +143,7 @@ module VX_core #(
         .branch_ctl_if  (branch_ctl_if),
         .ifetch_rsp_if  (ifetch_rsp_if),
         .fetch_to_csr_if(fetch_to_csr_if),
+        .cmt_to_fetch_if(cmt_to_fetch_if),
         .busy           (busy)
     );
 
@@ -266,6 +268,8 @@ module VX_core #(
         
         .writeback_if   (writeback_if),
         .cmt_to_csr_if  (cmt_to_csr_if),
+
+        .cmt_to_fetch_if(cmt_to_fetch_if),
 
         .sim_wb_value   (sim_wb_value)
     );

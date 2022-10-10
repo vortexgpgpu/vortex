@@ -35,15 +35,6 @@ protected:
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class NopUnit : public ExeUnit {
-public:
-    NopUnit(const SimContext& ctx, Core*);
-    
-    void tick();
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
 class LsuUnit : public ExeUnit {
 private:    
     struct pending_req_t {

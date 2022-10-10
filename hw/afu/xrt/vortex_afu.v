@@ -84,7 +84,7 @@ module vortex_afu #(
 	input  wire                                 m_axi_mem_bvalid,
     output wire                                 m_axi_mem_bready,    
     input  wire [C_M_AXI_MEM_ID_WIDTH - 1:0]    m_axi_mem_bid,
-	//input  wire [1:0]                           m_axi_mem_bresp,
+	input  wire [1:0]                           m_axi_mem_bresp,
 
     output wire                                 m_axi_mem_arvalid,
     input  wire                                 m_axi_mem_arready,
@@ -104,7 +104,7 @@ module vortex_afu #(
     input  wire [C_M_AXI_MEM_DATA_WIDTH - 1:0]  m_axi_mem_rdata,
     input  wire                                 m_axi_mem_rlast,
     input  wire [C_M_AXI_MEM_ID_WIDTH - 1:0]    m_axi_mem_rid,
-    //input  wire [1:0]                           m_axi_mem_rresp,
+    input  wire [1:0]                           m_axi_mem_rresp,
 
     // AXI4-Lite slave interface
     input  wire                                 s_axi_ctrl_awvalid,
@@ -160,7 +160,7 @@ module vortex_afu #(
 		.m_axi_mem_bvalid   (m_axi_mem_bvalid),
 		.m_axi_mem_bready   (m_axi_mem_bready),
 		.m_axi_mem_bid      (m_axi_mem_bid),
-		//.m_axi_mem_bresp    (m_axi_mem_bresp),
+		.m_axi_mem_bresp    (m_axi_mem_bresp),
 		
 		.m_axi_mem_arvalid  (m_axi_mem_arvalid),
 		.m_axi_mem_arready  (m_axi_mem_arready),
@@ -180,7 +180,7 @@ module vortex_afu #(
 		.m_axi_mem_rdata    (m_axi_mem_rdata),
 		.m_axi_mem_rlast    (m_axi_mem_rlast),
 		.m_axi_mem_rid      (m_axi_mem_rid),		
-		//.m_axi_mem_rresp    (m_axi_mem_rresp),
+		.m_axi_mem_rresp    (m_axi_mem_rresp),
 		
 		.s_axi_ctrl_awvalid (s_axi_ctrl_awvalid),
 		.s_axi_ctrl_awready (s_axi_ctrl_awready),

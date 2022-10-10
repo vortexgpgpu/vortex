@@ -13,7 +13,7 @@ task trace_ex_type (
         `EX_CSR: `TRACE(level, ("CSR"));
         `EX_FPU: `TRACE(level, ("FPU"));
         `EX_GPU: `TRACE(level, ("GPU"));
-        default: `TRACE(level, ("NOP"));
+        default: `TRACE(level, ("?"));
     endcase  
 endtask
 

@@ -100,10 +100,10 @@ module VX_rop_ds #(
         VX_rop_stencil_op #(
             .DATAW (`ROP_STENCIL_BITS)
         ) rop_stencil_op (
-            .stencil_op     (stencil_op),
-            .stencil_ref    (dcrs.stencil_ref[face_s[i]]),
-            .stencil_val    (stencil_val_s[i]),
-            .stencil_result (stencil_result[i])
+            .op     (stencil_op),
+            .sref   (dcrs.stencil_ref[face_s[i]]),
+            .val    (stencil_val_s[i]),
+            .result (stencil_result[i])
         );
     end
 

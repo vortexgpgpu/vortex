@@ -24,6 +24,8 @@ module VX_warp_sched #(
 
     VX_fetch_to_csr_if.master fetch_to_csr_if,
 
+    VX_cmt_to_fetch_if.slave cmt_to_fetch_if,
+
     // Status
     output wire             busy
 );
@@ -55,12 +57,13 @@ module VX_warp_sched #(
     wire [31:0]             schedule_pc;
     wire                    schedule_valid;
     wire                    schedule_ready;
-    wire                    warp_scheduled;
 
     reg [`PERF_CTR_BITS-1:0] cycles;
 
     reg [`NUM_WARPS-1:0][UUID_WIDTH-1:0] issued_instrs;
     wire [UUID_WIDTH-1:0] instr_uuid;
+
+    wire schedule_fire = schedule_valid && schedule_ready;
 
     wire ifetch_req_fire = ifetch_req_if.valid && ifetch_req_if.ready;
 
@@ -136,7 +139,7 @@ module VX_warp_sched #(
                 stalled_warps[branch_ctl_if.wid] <= 0;
             end
 
-            if (warp_scheduled) begin
+            if (schedule_fire) begin
                 // stall the warp until decode stage
                 stalled_warps[schedule_wid] <= 1;
 
@@ -246,9 +249,7 @@ module VX_warp_sched #(
                                    (use_wspawn[i] ? wspawn_pc : warp_pcs[i])};
     end
 
-    assign {schedule_tmask, schedule_pc} = schedule_data[schedule_wid];
-
-    assign warp_scheduled = schedule_valid && schedule_ready;
+    assign {schedule_tmask, schedule_pc} = schedule_data[schedule_wid];    
 
 `ifdef SIMULATION
     assign instr_uuid = (issued_instrs[schedule_wid] * `NUM_WARPS * `NUM_CORES * `NUM_CLUSTERS)
@@ -272,7 +273,19 @@ module VX_warp_sched #(
         .ready_out (ifetch_req_if.ready)
     );
 
-    `BUFFER_BUSY ((active_warps != 0), 1);
+    reg [7:0] pending_instrs;
+
+    always @(posedge clk) begin
+		if (reset) begin
+			pending_instrs <= 0;
+		end else begin
+			pending_instrs <= pending_instrs 
+                            + 8'(schedule_fire) 
+                            - ({8{cmt_to_fetch_if.valid}} & 8'(cmt_to_fetch_if.committed));
+		end
+	end
+
+    `BUFFER_BUSY ((active_warps != 0 || pending_instrs != 0), 1);
           
     reg [31:0] timeout_ctr;
     reg timeout_enable;
@@ -293,7 +306,7 @@ module VX_warp_sched #(
     end
     `RUNTIME_ASSERT(timeout_ctr < `STALL_TIMEOUT, ("%t: *** core%0d-scheduler-timeout: stalled_warps=%b", $time, CORE_ID, stalled_warps));
 
-    `SCOPE_ASSIGN (wsched_scheduled,      warp_scheduled);
+    `SCOPE_ASSIGN (wsched_scheduled,      schedule_fire);
     `SCOPE_ASSIGN (wsched_schedule_uuid,  instr_uuid);
     `SCOPE_ASSIGN (wsched_active_warps,   active_warps);
     `SCOPE_ASSIGN (wsched_stalled_warps,  stalled_warps);

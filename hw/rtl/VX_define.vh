@@ -41,14 +41,16 @@
 `define UUID_BITS       0
 `endif
 
+`define NUM_EX_UNITS    (5 + `EXT_F_ENABLED)
+`define EX_UNITS_BITS   `CLOG2(`NUM_EX_UNITS+1)
+
 ///////////////////////////////////////////////////////////////////////////////
 
-`define EX_NOP          3'h0
-`define EX_ALU          3'h1
-`define EX_LSU          3'h2
-`define EX_CSR          3'h3
-`define EX_FPU          3'h4
-`define EX_GPU          3'h5
+`define EX_ALU          3'h0
+`define EX_LSU          3'h1
+`define EX_CSR          3'h2
+`define EX_FPU          3'h3
+`define EX_GPU          3'h4
 `define EX_BITS         3
 
 ///////////////////////////////////////////////////////////////////////////////

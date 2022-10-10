@@ -53,7 +53,6 @@ Core::Core(const SimContext& ctx,
   }
 
   // register execute units
-  exe_units_.at((int)ExeType::NOP) = SimPlatform::instance().create_object<NopUnit>(this);
   exe_units_.at((int)ExeType::ALU) = SimPlatform::instance().create_object<AluUnit>(this);
   exe_units_.at((int)ExeType::LSU) = SimPlatform::instance().create_object<LsuUnit>(this);
   exe_units_.at((int)ExeType::CSR) = SimPlatform::instance().create_object<CsrUnit>(this);

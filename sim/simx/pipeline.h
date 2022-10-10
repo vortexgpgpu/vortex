@@ -78,7 +78,7 @@ public:
     , rdest(0)
     , rdest_type(RegType::None)
     , wb(false)
-    , exe_type(ExeType::NOP)
+    , exe_type(ExeType::ALU)
     , unit_type(0)
     , data(nullptr)
     , fetch_stall(false)

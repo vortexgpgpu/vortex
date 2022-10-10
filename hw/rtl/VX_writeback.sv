@@ -19,7 +19,7 @@ module VX_writeback #(
     VX_writeback_if.master writeback_if,
 
     // simulation helper signals
-    output reg [`NUM_REGS-1:0][31:0] sim_wb_value
+    output wire [`NUM_REGS-1:0][31:0] sim_wb_value
 );
     `UNUSED_PARAM (CORE_ID)
 
@@ -84,10 +84,12 @@ module VX_writeback #(
     assign ld_commit_if.ready  = wb_ld_ready_in  || ~ld_commit_if.wb;
     
     // simulation helper signal to get RISC-V tests Pass/Fail status
+    reg [`NUM_REGS-1:0][31:0] sim_wb_value_r;
     always @(posedge clk) begin
         if (writeback_if.valid && writeback_if.ready) begin
-            sim_wb_value[writeback_if.rd] <= writeback_if.data[0];
+            sim_wb_value_r[writeback_if.rd] <= writeback_if.data[0];
         end
     end
+    assign sim_wb_value = sim_wb_value_r;
 
 endmodule

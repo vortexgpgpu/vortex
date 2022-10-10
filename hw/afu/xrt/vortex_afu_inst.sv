@@ -84,7 +84,12 @@ module vortex_afu_inst #(
 
 	wire reset = ~ap_rst_n;
 
+	reg [$clog2(`RESET_DELAY+1)-1:0] vx_reset_ctr;
+	reg [15:0] vx_pending_writes;
+	reg vx_reset_wait;
+	reg vx_busy_wait;
 	reg vx_running;
+	
 	wire vx_busy;
 
 	wire                          dcr_wr_valid;
@@ -93,13 +98,9 @@ module vortex_afu_inst #(
 
 	wire ap_reset;
 	wire ap_start;
-	wire ap_idle  = ~vx_busy;
-	wire ap_done  = ap_idle;
+	wire ap_idle  = ~vx_running;
+	wire ap_done  = ~(vx_reset_wait || vx_running || vx_pending_writes != 0);
 	wire ap_ready = 1'b1;
-
-	reg [$clog2(`RESET_DELAY+1)-1:0] vx_reset_ctr;
-	reg vx_reset_wait;
-	reg vx_busy_wait;
 
 	always @(posedge ap_clk) begin
 		if (reset || ap_reset) begin
@@ -109,6 +110,7 @@ module vortex_afu_inst #(
 		end else begin			
 			if (vx_running) begin
 				if (vx_busy_wait) begin
+					// wait until processor goes busy be checking for completion
 					if (vx_busy) begin
 						vx_busy_wait <= 0;
 					end
@@ -129,6 +131,20 @@ module vortex_afu_inst #(
 					vx_busy_wait  <= 1;
 				end
 			end
+		end
+	end
+
+	wire m_axi_mem_wfire = m_axi_mem_wvalid && m_axi_mem_wready;
+	wire m_axi_mem_bfire = m_axi_mem_bvalid && m_axi_mem_bready;
+
+	always @(posedge ap_clk) begin
+		if (reset || ap_reset) begin
+			vx_pending_writes <= 0;
+		end else begin
+			if (m_axi_mem_wfire && ~m_axi_mem_bfire)
+				vx_pending_writes <= vx_pending_writes + 1;
+			if (~m_axi_mem_wfire && m_axi_mem_bfire)
+				vx_pending_writes <= vx_pending_writes - 1;
 		end
 	end
 
@@ -241,14 +257,26 @@ module vortex_afu_inst #(
     ila_afu ila_afu_inst (
       .clk    (ap_clk),
       .probe0 ({
-        	m_axi_mem_arvalid,
+        	m_axi_mem_awvalid,
+			m_axi_mem_awready,
+			m_axi_mem_awaddr,
+			m_axi_mem_awid,
+
+			m_axi_mem_wvalid,
+			m_axi_mem_wready,
+			
+			m_axi_mem_arvalid,
 			m_axi_mem_arready,
 			m_axi_mem_araddr,
 			m_axi_mem_arid,
-        	m_axi_mem_rvalid,
+        	
+			m_axi_mem_rvalid,
 			m_axi_mem_rready,
-			m_axi_mem_rdata,
-			m_axi_mem_rid
+			m_axi_mem_rid,
+
+			m_axi_mem_bvalid,
+			m_axi_mem_bready,
+			m_axi_mem_bid
 		}),
 		.probe1 ({
         	ap_start,
@@ -258,10 +286,11 @@ module vortex_afu_inst #(
 			interrupt
 		}),
 		.probe2 ({
-        	vx_running,
+        	vx_pending_writes,			
 			vx_reset_wait,
 			vx_busy_wait,
 			vx_busy,
+			vx_running,
 			dcr_wr_valid, 
 			dcr_wr_addr, 
 			dcr_wr_data

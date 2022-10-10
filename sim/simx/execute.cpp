@@ -171,8 +171,6 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   bool rd_write = false;
   
   switch (opcode) {
-  case NOP:
-    break;
   // RV32I: LUI
   case LUI_INST: {
     trace->exe_type = ExeType::ALU;

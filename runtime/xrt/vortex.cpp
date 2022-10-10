@@ -56,22 +56,9 @@
         _cleanup                                \
     }
 
-#define CHECK_XERR(_expr, _cleanup)             \
-    do {                                        \
-        xrtErrorCode err = _expr;               \
-        if (err == 0)                           \
-            break;                              \
-        size_t len = 0;                         \
-        xrtErrorGetString(xrtDevice, err, nullptr, 0, &len); \
-        std::vector<char> buf(len);             \
-        xrtErrorGetString(xrtDevice, err, buf.data(), buf.size(), nullptr); \
-        printf("[VXDRV] Error: '%s' returned %d, %s!\n", #_expr, (int)err, buf.data()); \
-        _cleanup                                \
-    } while (false)
-
 #define CHECK_ERR(_expr, _cleanup)              \
     do {                                        \
-        xrtErrorCode err = _expr;               \
+        auto err = _expr;                       \
         if (err == 0)                           \
             break;                              \
         printf("[VXDRV] Error: '%s' returned %d!\n", #_expr, (int)err); \
@@ -80,7 +67,27 @@
 
 using namespace vortex;
 
-void wait_for_enter(const std::string &msg) {
+static void dump_xrt_error(xrtDeviceHandle xrtDevice, xrtErrorCode err) {
+    size_t len = 0;                        
+    xrtErrorGetString(xrtDevice, err, nullptr, 0, &len);
+    std::vector<char> buf(len);             
+    xrtErrorGetString(xrtDevice, err, buf.data(), buf.size(), nullptr);
+    printf("[VXDRV] detail: %s!\n", buf.data());
+}
+
+static int get_bank_info(uint64_t dev_addr, uint32_t* pIdx, uint32_t* pOff) {
+    uint32_t index  = dev_addr / BANK_SIZE;
+    uint32_t offset = dev_addr % BANK_SIZE;
+    if (index > NUM_BANKS) {
+        fprintf(stderr, "[VXDRV] Error: address out of range: 0x%lx\n", dev_addr);
+        return -1;
+    }
+    *pIdx = index;
+    *pOff = offset;
+    return 0;
+}
+
+static void wait_for_enter(const std::string &msg) {
     std::cout << msg << std::endl;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 }
@@ -101,18 +108,6 @@ public:
             4096,            
             CACHE_BLOCK_SIZE)
     {}
-
-    int findBO(uint64_t dev_addr, xrt::bo* pBuf, uint32_t* pOff) {
-        uint32_t index  = dev_addr / BANK_SIZE;
-        uint32_t offset = dev_addr % BANK_SIZE;
-        if (index > NUM_BANKS) {
-            fprintf(stderr, "[VXDRV] Error: address out of range: 0x%lx\n", dev_addr);
-            return -1;
-        }
-        *pBuf = xrtBuffers[index];
-        *pOff = offset;
-        return 0;
-    }
 
 #else
 
@@ -143,18 +138,6 @@ public:
         if (this->xrtDevice) {
             xrtDeviceClose(this->xrtDevice);
         }
-    }
-
-    int findBO(uint64_t dev_addr, xrtBufferHandle* pBuf, uint32_t* pOff) {
-        uint32_t index  = dev_addr / BANK_SIZE;
-        uint32_t offset = dev_addr % BANK_SIZE;
-        if (index > NUM_BANKS) {
-            fprintf(stderr, "[VXDRV] Error: address out of range: 0x%lx\n", dev_addr);
-            return -1;
-        }
-        *pBuf = xrtBuffers[index];
-        *pOff = offset;
-        return 0;
     }
 
 #endif
@@ -270,10 +253,6 @@ extern int vx_dev_open(vx_device_h* hdevice) {
         return -1;
     });
 
-    for (int i = 0; i < NUM_BANKS; ++i) {
-        device->xrtBuffers[i] = xrt::bo(xrtDevice, BANK_SIZE, xrt::bo::flags::normal, i);
-    }
-
     xrtIp.write_register(MMIO_CTL_ADDR, CTL_AP_RESET);
 
     *(uint32_t*)&device->dev_caps = xrtIp.read_register(MMIO_DEV_ADDR);
@@ -282,19 +261,25 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     *(uint32_t*)&device->isa_caps = xrtIp.read_register(MMIO_ISA_ADDR);
     *((uint32_t*)&device->isa_caps + 1)= xrtIp.read_register(MMIO_ISA_ADDR + 4);
 
+    for (int i = 0; i < NUM_BANKS; ++i) {
+        device->xrtBuffers[i] = xrt::bo(xrtDevice, BANK_SIZE, xrt::bo::flags::normal, i);
+    }
+
 #else
 
     CHECK_HANDLE(xrtDevice, xrtDeviceOpen(device_index), { 
         return -1; 
     });
 
-    CHECK_XERR(xrtDeviceLoadXclbinFile(xrtDevice, xlbin_path_s), {
+    CHECK_ERR(xrtDeviceLoadXclbinFile(xrtDevice, xlbin_path_s), {
+        dump_xrt_error(xrtDevice, err);
         xrtDeviceClose(xrtDevice);
         return -1;
     });
 
     xuid_t uuid;
-    CHECK_XERR(xrtDeviceGetXclbinUUID(xrtDevice, uuid), {
+    CHECK_ERR(xrtDeviceGetXclbinUUID(xrtDevice, uuid), {
+        dump_xrt_error(xrtDevice, err);
         xrtDeviceClose(xrtDevice);
         return -1;
     });
@@ -319,26 +304,31 @@ extern int vx_dev_open(vx_device_h* hdevice) {
         device->xrtBuffers[i] = xrtBuffer;
     }
 
-    CHECK_XERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_CTL_ADDR, CTL_AP_RESET), {
+    CHECK_ERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_CTL_ADDR, CTL_AP_RESET), {
+        dump_xrt_error(xrtDevice, err);
         return -1;
     });
 
-    CHECK_XERR(xrtKernelReadRegister(device->xrtKernel, MMIO_DEV_ADDR, (uint32_t*)&device->dev_caps), {
+    CHECK_ERR(xrtKernelReadRegister(device->xrtKernel, MMIO_DEV_ADDR, (uint32_t*)&device->dev_caps), {
+        dump_xrt_error(xrtDevice, err);
         delete device;
         return -1;
     });
     
-    CHECK_XERR(xrtKernelReadRegister(device->xrtKernel, MMIO_DEV_ADDR + 4, (uint32_t*)&device->dev_caps + 1), {
+    CHECK_ERR(xrtKernelReadRegister(device->xrtKernel, MMIO_DEV_ADDR + 4, (uint32_t*)&device->dev_caps + 1), {
+        dump_xrt_error(xrtDevice, err);
         delete device;
         return -1;
     });
 
-    CHECK_XERR(xrtKernelReadRegister(device->xrtKernel, MMIO_ISA_ADDR, (uint32_t*)&device->isa_caps), {
+    CHECK_ERR(xrtKernelReadRegister(device->xrtKernel, MMIO_ISA_ADDR, (uint32_t*)&device->isa_caps), {
+        dump_xrt_error(xrtDevice, err);
         delete device;
         return -1;
     });
 
-    CHECK_XERR(xrtKernelReadRegister(device->xrtKernel, MMIO_ISA_ADDR + 4, (uint32_t*)&device->isa_caps + 1), {
+    CHECK_ERR(xrtKernelReadRegister(device->xrtKernel, MMIO_ISA_ADDR + 4, (uint32_t*)&device->isa_caps + 1), {
+        dump_xrt_error(xrtDevice, err);
         delete device;
         return -1;
     });
@@ -369,6 +359,8 @@ extern int vx_dev_close(vx_device_h hdevice) {
 
     delete device;
 
+    DBGPRINT("vx_dev_close(%p)\n", hdevice);
+
     return 0;
 }
 
@@ -378,8 +370,10 @@ extern int vx_mem_alloc(vx_device_h hdevice, uint64_t size, uint64_t* dev_maddr)
     || 0 == size)
         return -1;
 
+    uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
+
     auto device = ((vx_device*)hdevice);
-    return device->mem_allocator.allocate(size, dev_maddr);
+    return device->mem_allocator.allocate(asize, dev_maddr);
 }
 
 int vx_mem_free(vx_device_h hdevice, uint64_t dev_maddr) {
@@ -427,6 +421,8 @@ extern int vx_buf_free(vx_buffer_h hbuffer) {
 
     delete buffer;
 
+    DBGPRINT("vx_buf_free(%p)\n", hbuffer);
+
     return 0;
 }
 
@@ -454,36 +450,35 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size
     if (dev_maddr + asize > dev_mem_size)
         return -1;
         
+    uint32_t bo_index;
     uint32_t bo_offset;
 
+    CHECK_ERR(get_bank_info(dev_maddr, &bo_index, &bo_offset), {
+        return -1;
+    });
+
+    auto xrtBuffer = device->xrtBuffers[bo_index];
+
 #ifdef CPP_API
-
-    xrt::bo xrtBuffer;
-
-    device->findBO(dev_maddr, &xrtBuffer, &bo_offset);    
+    
     xrtBuffer.write(host_ptr, asize, bo_offset);
     xrtBuffer.sync(XCL_BO_SYNC_BO_TO_DEVICE, asize, bo_offset);
 
 #else
 
-    auto xrtDevice = device->xrtDevice;
-    xrtBufferHandle xrtBuffer;
-    
-    CHECK_ERR(device->findBO(dev_maddr, &xrtBuffer, &bo_offset), {
-        return -1;
-    });
-
-    CHECK_XERR(xrtBOWrite(xrtBuffer, host_ptr, asize, bo_offset), {
+    CHECK_ERR(xrtBOWrite(xrtBuffer, host_ptr, asize, bo_offset), {
+        dump_xrt_error(device->xrtDevice, err);
         return -1;
     });
     
-    CHECK_XERR(xrtBOSync(xrtBuffer, XCL_BO_SYNC_BO_TO_DEVICE, asize, bo_offset), {
+    CHECK_ERR(xrtBOSync(xrtBuffer, XCL_BO_SYNC_BO_TO_DEVICE, asize, bo_offset), {
+        dump_xrt_error(device->xrtDevice, err);
         return -1;
     });
  
 #endif
 
-    DBGPRINT("COPY_TO_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld\n", dev_maddr, (uintptr_t)host_ptr, size);
+    DBGPRINT("COPY_TO_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld, offset=0x%x\n", dev_maddr, (uintptr_t)host_ptr, size, bo_offset);
     
     return 0;
 }
@@ -509,36 +504,35 @@ extern int vx_copy_from_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t si
     if (dev_maddr + asize > dev_mem_size)
         return -1;
 
+    uint32_t bo_index;
     uint32_t bo_offset;
+
+    CHECK_ERR(get_bank_info(dev_maddr, &bo_index, &bo_offset), {
+        return -1;
+    });
+
+    auto xrtBuffer = device->xrtBuffers[bo_index];
 
 #ifdef CPP_API
 
-    xrt::bo xrtBuffer;
-
-    device->findBO(dev_maddr, &xrtBuffer, &bo_offset);    
     xrtBuffer.sync(XCL_BO_SYNC_BO_FROM_DEVICE, asize, bo_offset);
     xrtBuffer.read(host_ptr, asize, bo_offset);
 
- #else
-
-    auto xrtDevice = device->xrtDevice;
-    xrtBufferHandle xrtBuffer;
-
-    CHECK_ERR(device->findBO(dev_maddr, &xrtBuffer, &bo_offset), {
-        return -1;
-    });
+#else
     
-    CHECK_XERR(xrtBOSync(xrtBuffer, XCL_BO_SYNC_BO_FROM_DEVICE, size, bo_offset), {
+    CHECK_ERR(xrtBOSync(xrtBuffer, XCL_BO_SYNC_BO_FROM_DEVICE, asize, bo_offset), {
+        dump_xrt_error(device->xrtDevice, err);
         return -1;
     });
 
-    CHECK_XERR(xrtBORead(xrtBuffer, host_ptr, size, bo_offset), {
+    CHECK_ERR(xrtBORead(xrtBuffer, host_ptr, asize, bo_offset), {
+        dump_xrt_error(device->xrtDevice, err);
         return -1;
     });
    
 #endif
 
-    DBGPRINT("COPY_FROM_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld\n", dev_maddr, (uintptr_t)host_ptr, size);
+    DBGPRINT("COPY_FROM_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld, offset=0x%x\n", dev_maddr, (uintptr_t)host_ptr, asize, bo_offset);
     
     return 0;
 }
@@ -549,14 +543,16 @@ extern int vx_start(vx_device_h hdevice) {
 
     auto device = (vx_device*)hdevice;
 
+    wait_for_enter("\nPress ENTER to continue after setting up ILA trigger...");
+
 #ifdef CPP_API
 
     device->xrtIp.write_register(MMIO_CTL_ADDR, CTL_AP_START);
 
 #else
 
-    auto xrtDevice = device->xrtDevice;
-    CHECK_XERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_CTL_ADDR, CTL_AP_START), {
+    CHECK_ERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_CTL_ADDR, CTL_AP_START), {
+        dump_xrt_error(device->xrtDevice, err);
         return -1;
     });
 
@@ -593,8 +589,8 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
 
     #else       
 
-        auto xrtDevice = device->xrtDevice;
-        CHECK_XERR(xrtKernelReadRegister(device->xrtKernel, MMIO_CTL_ADDR, &status), {
+        CHECK_ERR(xrtKernelReadRegister(device->xrtKernel, MMIO_CTL_ADDR, &status), {
+            dump_xrt_error(device->xrtDevice, err);
             return -1;
         });
     
@@ -625,12 +621,13 @@ extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint64_t value) {
 
 #else
    
-    auto xrtDevice = device->xrtDevice;
-    CHECK_XERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_DCR_ADDR, addr), {
+    CHECK_ERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_DCR_ADDR, addr), {
+        dump_xrt_error(device->xrtDevice, err);
         return -1;
     });
 
-    CHECK_XERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_DCR_ADDR + 4, value), {
+    CHECK_ERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_DCR_ADDR + 4, value), {
+        dump_xrt_error(device->xrtDevice, err);
         return -1;
     });
  

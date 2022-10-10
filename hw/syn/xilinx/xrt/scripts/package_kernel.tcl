@@ -69,7 +69,7 @@ if { $chipscope == 1 } {
     set_property -dict [list CONFIG.C_ADV_TRIGGER {true} \
                              CONFIG.C_NUM_OF_PROBES {3} \
                              CONFIG.C_DATA_DEPTH {8192} \
-                             CONFIG.C_PROBE0_WIDTH {584} \
+                             CONFIG.C_PROBE0_WIDTH {256} \
                              CONFIG.C_PROBE1_WIDTH {16} \
                              CONFIG.C_PROBE2_WIDTH {64} \
                         ] [get_ips ila_afu]
