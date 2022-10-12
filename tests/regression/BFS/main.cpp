@@ -138,7 +138,7 @@ int main(void) {
   RT_CHECK(vx_mem_alloc(device, common_bufsz, &value));
   kernel_arg.graphvisited_addr = value;
 
-  RT_CHECK(vx_mem_alloc(device, common_bufsz, &value));
+  RT_CHECK(vx_mem_alloc(device, edgelist_bufsz, &value));
   kernel_arg.graphedges_addr = value;
 
   RT_CHECK(vx_mem_alloc(device, common_bufsz, &value));
