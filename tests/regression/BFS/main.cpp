@@ -213,11 +213,11 @@ RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.graphnodes_addr, graphnodes_bufsz
 
 {
 	auto buf_ptr_upload = (int32_t*)vx_host_ptr(common_buf);
-    for (uint32_t i = 0; i < num_points; ++i) {
+    for (uint32_t i = 0; i < edge_list_size; ++i) {
       buf_ptr_upload[i] = h_graph_edges[i];
     }
 }
-	RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.graphedges_addr,common_bufsz, 0));
+	RT_CHECK(vx_copy_to_dev(common_buf, kernel_arg.graphedges_addr, edgelist_bufsz, 0));
 
 //I. 9. Initialize destination buffer
 {
