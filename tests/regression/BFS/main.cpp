@@ -155,7 +155,8 @@ int iter = 0;
 int h_over = 0; //0=False, 1=True
   //6. allocate shared memory  
   std::cout << "allocate shared memory" << std::endl;
-  uint32_t shared_bufsz = std::max<uint32_t>(graphnodes_bufsz, common_bufsz);
+  uint32_t temp_bufsz = std::max<uint32_t>(graphnodes_bufsz, common_bufsz);
+  uint32_t shared_bufsz = std::max<uint32_t>(temp_bufsz, edgelist_bufsz);
   RT_CHECK(vx_buf_alloc(device, sizeof(kernel_arg_t), &arg_buf));
   RT_CHECK(vx_buf_alloc(device, shared_bufsz, &common_buf));
 
