@@ -10,10 +10,13 @@ addons:
         - build-essential
         - valgrind
         - verilator
-        - yosys
+        - yosys        
+        - libpng-dev
+        - libboost-serialization-dev
+        - libstdc++6
 
 install:
-  # Set environments
+  # Set environments  
   - export RISCV_TOOLCHAIN_PATH=/opt/riscv-gnu-toolchain
   - export VERILATOR_ROOT=/opt/verilator
   - export PATH=$VERILATOR_ROOT/bin:$PATH

@@ -1,7 +1,7 @@
 [![Build Status](https://travis-ci.com/vortexgpgpu/vortex.svg?branch=master)](https://travis-ci.com/vortexgpgpu/vortex)
 [![codecov](https://codecov.io/gh/vortexgpgpu/vortex/branch/master/graph/badge.svg)](https://codecov.io/gh/vortexgpgpu/vortex)
 
-# Vortex RISC-V GPGPU
+# Vortex OpenGPU
 
 Vortex is a full-system RISCV-based GPGPU processor.
 
