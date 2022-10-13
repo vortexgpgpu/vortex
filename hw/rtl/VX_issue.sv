@@ -153,13 +153,13 @@ module VX_issue #(
     `RUNTIME_ASSERT(timeout_ctr < `STALL_TIMEOUT,
                     ("%t: *** core%0d-issue-timeout: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d, wb=%0d, inuse=%b%b%b%b, dispatch=%b (#%0d)",
                         $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.rd, ibuffer_if.wb, 
-                        in_use_regs[0], in_use_regs[1], in_use_regs[2], in_use_regs[3], ~dispatch_if.ready, ibuffer_if.uuid));
+                        in_use_regs[0], in_use_regs[1], in_use_regs[2], in_use_regs[3], ~dispatch_if.ready, ibuffer_if.uuid));    
 
-`ifdef CHIPSCOPE
+`ifdef CHIPSCOPE    
     ila_issue ila_issue_inst (
         .clk    (clk),
-        .probe0 ({dispatch_if.valid, dispatch_if.ready, dispatch_if.PC, dispatch_if.tmask, dispatch_if.wid, dispatch_if.ex_type, dispatch_if.op_type, dispatch_if.uuid}),
-        .probe1 ({writeback_if.valid, writeback_if.PC, writeback_if.tmask, writeback_if.wid, writeback_if.uuid})
+        .probe0 ({ibuffer_if.uuid, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.wid, ibuffer_if.ex_type, ibuffer_if.op_type, ibuffer_if.ready, ibuffer_if.valid, in_use_regs, scoreboard_if.ready, dispatch_if.ready, ibuffer_if.ready, ibuffer_if.valid}),
+        .probe1 ({writeback_if.uuid, writeback_if.PC, writeback_if.tmask, writeback_if.wid, writeback_if.eop, writeback_if.valid})
     );
 `endif
 

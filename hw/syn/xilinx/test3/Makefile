@@ -14,8 +14,8 @@ PLATFORM ?=
 
 PREFIX ?= build
 
-AFU_DIR = ../hdl
 RTL_DIR = ../../../../rtl
+AFU_DIR = ../../../../afu/xrt
 IP_DIR  = ../../../../ip/xilinx
 
 BUILD_DIR = $(PREFIX)_$(PLATFORM)_$(TARGET)
@@ -45,7 +45,7 @@ RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR
 RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
 
 #CONFIGS += -DEXT_GFX_ENABLE
-CONFIGS += -DNUM_WARPS=1 -DNUM_THREADS=1 -DEXT_M_DISABLE -DEXT_F_DISABLE -DL1_DISABLE
+CONFIGS += -DNUM_WARPS=1 -DNUM_THREADS=1 -DEXT_F_DISABLE
 
 CONFIGS += -DSYNTHESIS -DVIVADO
 
@@ -104,7 +104,7 @@ endif
 EXECUTABLE = ./test
 CMD_ARGS = -x $(XCLBIN_CONTAINER)
 CXXFLAGS += -std=c++14 -g -O0 -fmessage-length=0 -I$(XILINX_XRT)/include -I$(XILINX_VIVADO)/include -Wall -I../src
-LDFLAGS  += -L$(XILINX_XRT)/lib -pthread -lOpenCL -luuid -lxrt_coreutil
+LDFLAGS  += -L$(XILINX_XRT)/lib -pthread -luuid -lxrt_coreutil
 HOST_SRCS += ./src/host.cpp ./src/cmdlineparser.cpp ./src/logger.cpp
 
 # RTL Kernel only supports Hardware and Hardware Emulation.
@@ -134,7 +134,7 @@ host: $(EXECUTABLE)
 $(EXECUTABLE): $(HOST_SRCS)
 	g++ $^ $(CXXFLAGS) $(LDFLAGS) -o $@
 
-run: $(EXECUTABLE) $(XCLBIN_CONTAINER) $(EMCONFIG)
+run: $(EXECUTABLE)
 ifeq ($(TARGET),$(filter $(TARGET),sw_emu hw_emu))
 	EMCONFIG_PATH=$(BIN_DIR) XCL_EMULATION_MODE=$(TARGET) $(EXECUTABLE) $(CMD_ARGS)
 else

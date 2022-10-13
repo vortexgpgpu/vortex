@@ -115,11 +115,11 @@ $(BUILD_DIR)_fpga_$(NUM_CORES)c/build/dcp.qpf:
 
 # build
 
-build-ase: gen-sources-ase setup-ase	
+build-ase: ip_gen gen-sources-ase setup-ase	
 	make -C $(BUILD_DIR)_ase_$(NUM_CORES)c
 	cp $(IP_CACHE_DIR)/*.hex $(BUILD_DIR)_ase_$(NUM_CORES)c/work	
 
-build-fpga: gen-sources-fpga setup-fpga
+build-fpga: ip_gen gen-sources-fpga setup-fpga
 	cd $(BUILD_DIR)_fpga_$(NUM_CORES)c && $(RUN_SYNTH)
 
 # cleanup

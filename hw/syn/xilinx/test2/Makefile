@@ -78,7 +78,7 @@ endif
 EXECUTABLE = ./test
 CMD_ARGS = -x $(XCLBIN_CONTAINER)
 CXXFLAGS += -std=c++14 -g -O0 -fmessage-length=0 -I$(XILINX_XRT)/include -I$(XILINX_VIVADO)/include -Wall -I../src
-LDFLAGS  += -L$(XILINX_XRT)/lib -pthread -lOpenCL -luuid -lxrt_coreutil
+LDFLAGS  += -L$(XILINX_XRT)/lib -pthread -luuid -lxrt_coreutil
 HOST_SRCS += ./src/host.cpp ./src/cmdlineparser.cpp ./src/logger.cpp
 
 # RTL Kernel only supports Hardware and Hardware Emulation.

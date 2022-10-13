@@ -17,6 +17,7 @@
 #include "cmdlineparser.h"
 #include <iostream>
 #include <cstring>
+#include <unordered_map>
 
 // XRT includes
 #include "experimental/xrt_bo.h"
@@ -34,25 +35,48 @@
 #define IP_START    0x1
 #define IP_IDLE     0x4
 
-#define DATA_SIZE   16
+#define NUM_ITEMS   1
 
 #define BANK_SIZE   0x10000000
 #define NUM_BANKS   16
 
-uint64_t ba_addr = 0x80000000;
-uint64_t bb_addr = 0x40000000;
-uint64_t bc_addr = 0x10000000;
+uint64_t ba_addr = 0x10;
+uint64_t bb_addr = 0x20;
+uint64_t bc_addr = 0x00;
 
-void BufferInfo(uint64_t addr, int* pIdx, int* pOff) {
-    int index  = addr / BANK_SIZE;
-    int offset = addr % BANK_SIZE;
+static int get_bank_info(uint64_t dev_addr, uint32_t* pIdx, uint32_t* pOff) {
+    uint32_t index  = dev_addr / BANK_SIZE;
+    uint32_t offset = dev_addr % BANK_SIZE;
     if (index > NUM_BANKS) {
-        fprintf(stderr, "[VXDRV] Error: address out of range: 0x%lx\n", addr);
-        exit(-1);
+        fprintf(stderr, "[VXDRV] Error: address out of range: 0x%lx\n", dev_addr);
+        return -1;
     }
     *pIdx = index;
     *pOff = offset;
+    return 0;
 }
+
+class ResourceManager {
+public:
+    xrt::bo get_buffer(xrt::device& device, uint32_t bank_id) {
+        auto it = xrtBuffers_.find(bank_id);
+        if (it != xrtBuffers_.end()) {            
+            return it->second;
+        } else {
+            xrt::bo xrtBuffer(device, BANK_SIZE, xrt::bo::flags::normal, bank_id);
+            xrtBuffers_.insert({bank_id, xrtBuffer});
+            return xrtBuffer;
+        }
+    }
+
+private:
+    struct buf_cnt_t {
+        xrt::bo  xrtBuffer;
+        uint32_t count;
+    };
+
+    std::unordered_map<uint32_t, xrt::bo> xrtBuffers_;
+};
 
 int main(int argc, char** argv) {
     // Command Line Parser
@@ -73,6 +97,8 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
+    ResourceManager res_mgr;
+
     std::cout << "Open the device" << device_index << std::endl;
     auto device = xrt::device(device_index);
 
@@ -82,30 +108,24 @@ int main(int argc, char** argv) {
     std::cout << "Load the kernel ip" << std::endl;
     auto ip = xrt::ip(device, uuid, "krnl_vadd_rtl");
 
-    size_t vector_size_bytes = sizeof(int) * DATA_SIZE;
+    size_t vector_size_bytes = sizeof(int) * NUM_ITEMS;
 
-    std::cout << "Allocate resource buffers..." << std::endl;
-    xrt::bo buffers[NUM_BANKS];
-    for (int i = 0; i < NUM_BANKS; ++i) {
-        buffers[i] = xrt::bo(device, BANK_SIZE, xrt::bo::flags::normal, i);
-    }
+    uint32_t ba_idx, bb_idx, bc_idx;
+    uint32_t ba_offset, bb_offset, bc_offset;
 
-    int ba_idx, bb_idx, bc_idx;
-    int ba_offset, bb_offset, bc_offset;
+    get_bank_info(ba_addr, &ba_idx, &ba_offset);
+    get_bank_info(bb_addr, &bb_idx, &bb_offset);
+    get_bank_info(bc_addr, &bc_idx, &bc_offset);
 
-    BufferInfo(ba_addr, &ba_idx, &ba_offset);
-    BufferInfo(bb_addr, &bb_idx, &bb_offset);
-    BufferInfo(bc_addr, &bc_idx, &bc_offset);
-
-    auto ba = buffers[ba_idx];
-    auto bb = buffers[bb_idx];
-    auto bc = buffers[bc_idx];
+    auto ba = res_mgr.get_buffer(device, ba_idx);
+    auto bb = res_mgr.get_buffer(device, bb_idx);
+    auto bc = res_mgr.get_buffer(device, bc_idx);
 
     // upload source buffers  
     std::cout << "Writing the input data..." << std::endl;  
     
-    std::vector<int> src_buf(DATA_SIZE), dst_buf(DATA_SIZE), ref_buf(DATA_SIZE);
-    for (int i = 0; i < DATA_SIZE; ++i) {
+    std::vector<int> src_buf(NUM_ITEMS), dst_buf(NUM_ITEMS), ref_buf(NUM_ITEMS);
+    for (int i = 0; i < NUM_ITEMS; ++i) {
         src_buf[i] = i;
         dst_buf[i] = 0xdeadbeef;
         ref_buf[i] = i + i;
@@ -117,6 +137,9 @@ int main(int argc, char** argv) {
     bb.write(src_buf.data(), vector_size_bytes, bb_offset);
     bb.sync(XCL_BO_SYNC_BO_TO_DEVICE, vector_size_bytes, bb_offset);
 
+    bc.write(dst_buf.data(), vector_size_bytes, bc_offset);
+    bc.sync(XCL_BO_SYNC_BO_TO_DEVICE, vector_size_bytes, bc_offset);
+
     std::cout << "Setting IP registers..." << std::endl;
     ip.write_register(CSR_A, ba_addr);
     ip.write_register(CSR_A + 4, ba_addr >> 32);
@@ -124,7 +147,7 @@ int main(int argc, char** argv) {
     ip.write_register(CSR_B + 4, bb_addr >> 32);
     ip.write_register(CSR_C, bc_addr);
     ip.write_register(CSR_C + 4, bc_addr >> 32);
-    ip.write_register(CSR_L, DATA_SIZE);
+    ip.write_register(CSR_L, NUM_ITEMS);
 
     // Start execution
 
@@ -150,7 +173,7 @@ int main(int argc, char** argv) {
     // Validate our results
     std::cout << "Validating results..." << std::endl;
     int errors = 0;
-    for (int i = 0; i < DATA_SIZE; ++i) {
+    for (int i = 0; i < NUM_ITEMS; ++i) {
         if (dst_buf[i] != ref_buf[i]) {
             std::cout << "*** missmatch: (" << i << ") actual=" << dst_buf[i] << ", expected=" << ref_buf[i] << std::endl;
             ++errors;

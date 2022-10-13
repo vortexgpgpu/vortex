@@ -352,6 +352,14 @@ module VX_lsu_unit #(
         .ready_out (ld_commit_if.ready)
     );
 
+`ifdef CHIPSCOPE   
+    ila_lsu ila_lsu_inst (
+        .clk    (clk),
+        .probe0 ({mem_req_data[0], lsu_req_if.uuid, mem_req_byteen, full_addr, lsu_req_if.wb, mem_req_ready, mem_req_valid}),
+        .probe1 ({rsp_data[0], rsp_uuid, mem_rsp_ready, mem_rsp_valid})
+    );
+`endif
+
     // scope registration
     `SCOPE_ASSIGN (dcache_req_fire,  mem_req_fire);
     `SCOPE_ASSIGN (dcache_req_uuid,  lsu_req_if.uuid);

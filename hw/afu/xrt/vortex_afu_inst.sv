@@ -256,44 +256,19 @@ module vortex_afu_inst #(
 `ifdef CHIPSCOPE
     ila_afu ila_afu_inst (
       .clk    (ap_clk),
-      .probe0 ({
-        	m_axi_mem_awvalid,
-			m_axi_mem_awready,
-			m_axi_mem_awaddr,
-			m_axi_mem_awid,
-
-			m_axi_mem_wvalid,
-			m_axi_mem_wready,
-			
-			m_axi_mem_arvalid,
-			m_axi_mem_arready,
-			m_axi_mem_araddr,
-			m_axi_mem_arid,
-        	
-			m_axi_mem_rvalid,
-			m_axi_mem_rready,
-			m_axi_mem_rid,
-
-			m_axi_mem_bvalid,
-			m_axi_mem_bready,
-			m_axi_mem_bid
-		}),
-		.probe1 ({
+		.probe0 ({
         	ap_start,
         	ap_done,
 			ap_ready,
 			ap_idle,
 			interrupt
 		}),
-		.probe2 ({
+		.probe1 ({
         	vx_pending_writes,			
 			vx_reset_wait,
 			vx_busy_wait,
 			vx_busy,
-			vx_running,
-			dcr_wr_valid, 
-			dcr_wr_addr, 
-			dcr_wr_data
+			vx_running
 		})
     );
 `endif
