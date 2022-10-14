@@ -74,30 +74,38 @@ module VX_axi_adapter #(
     input wire [TAG_WIDTH-1:0]      m_axi_rid,
     input wire [1:0]                m_axi_rresp
 );  
-    localparam AXSIZE = $clog2(DATA_WIDTH/8);
+    localparam AXSIZE = $clog2(DATA_WIDTH/8);    
 
-    reg awvalid_ack;
-    reg wvalid_ack;
+    wire mem_req_fire  = mem_req_valid && mem_req_ready;
+    wire m_axi_aw_fire = m_axi_awvalid && m_axi_awready;
+    wire m_axi_w_fire  = m_axi_wvalid && m_axi_wready;
 
-    wire mem_req_fire = mem_req_valid && mem_req_ready;
-
+    reg m_axi_aw_ack;
+    reg m_axi_w_ack;
+    
     always @(posedge clk) begin
 		if (reset) begin
-			awvalid_ack <= 0;
-            wvalid_ack  <= 0;
+			m_axi_aw_ack <= 0;
+            m_axi_w_ack  <= 0;
 		end else begin			
             if (mem_req_fire) begin
-                awvalid_ack <= 0;
-                wvalid_ack  <= 0;
+                m_axi_aw_ack <= 0;
+                m_axi_w_ack  <= 0;
             end else begin
-                awvalid_ack <= m_axi_awvalid && m_axi_awready;
-                wvalid_ack  <= m_axi_wvalid && m_axi_wready;
+                if (m_axi_aw_fire)
+                    m_axi_aw_ack <= 1;
+                if (m_axi_w_fire)
+                    m_axi_w_ack <= 1;
             end
 		end
 	end
 
+    // Vortex request ack	
+    wire axi_write_ready = (m_axi_awready || m_axi_aw_ack) && (m_axi_wready || m_axi_w_ack);
+    assign mem_req_ready = mem_req_rw ? axi_write_ready : m_axi_arready;
+
     // AXI write request address channel        
-    assign m_axi_awvalid    = mem_req_valid && mem_req_rw && ~awvalid_ack;    
+    assign m_axi_awvalid    = mem_req_valid && mem_req_rw && ~m_axi_aw_ack;    
     assign m_axi_awaddr     = ADDR_WIDTH'(mem_req_addr) << AXSIZE;
     assign m_axi_awid       = mem_req_tag;
     assign m_axi_awlen      = 8'b00000000;    
@@ -110,7 +118,7 @@ module VX_axi_adapter #(
     assign m_axi_awregion   = 4'b0000;
 
     // AXI write request data channel        
-    assign m_axi_wvalid     = mem_req_valid && mem_req_rw && ~wvalid_ack;
+    assign m_axi_wvalid     = mem_req_valid && mem_req_rw && ~m_axi_w_ack;
     assign m_axi_wdata      = mem_req_data;
     assign m_axi_wstrb      = mem_req_byteen;
     assign m_axi_wlast      = 1'b1;
@@ -143,10 +151,6 @@ module VX_axi_adapter #(
     assign m_axi_rready     = mem_rsp_ready;
     `RUNTIME_ASSERT(~m_axi_rvalid || m_axi_rlast == 1, ("%t: *** AXI response error", $time));
     `RUNTIME_ASSERT(~m_axi_rvalid || m_axi_rresp == 0, ("%t: *** AXI response error", $time));
-
-    // Vortex request ack	
-    wire axi_write_ready = (m_axi_awready || awvalid_ack) && (m_axi_wready || wvalid_ack);
-    assign mem_req_ready = mem_req_rw ? axi_write_ready : m_axi_arready;
 
 endmodule
 `TRACING_ON
