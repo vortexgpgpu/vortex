@@ -363,9 +363,9 @@ module VX_rr_arbiter #(
     
     end else if (MODEL == 1) begin
     
-    `IGNORE_WARNINGS_BEGIN
+    `IGNORE_UNOPTFLAT_BEGIN
         wire [NUM_REQS-1:0] mask_higher_pri_regs, unmask_higher_pri_regs;
-    `IGNORE_WARNINGS_END
+    `IGNORE_UNOPTFLAT_END
         wire [NUM_REQS-1:0] grant_masked, grant_unmasked;
 
         reg [NUM_REQS-1:0] pointer_reg;

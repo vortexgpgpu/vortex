@@ -289,14 +289,14 @@ module VX_lsu_unit #(
     wire [UUID_WIDTH-1:0] rsp_uuid;
     wire [`NUM_THREADS-1:0][`CACHE_ADDR_TYPE_BITS-1:0] rsp_addr_type;
     wire [NW_WIDTH-1:0] rsp_wid;
-    wire [`NUM_THREADS-1:0] rsp_tmask;
+    wire [`NUM_THREADS-1:0] rsp_tmask_uq;
     wire [31:0] rsp_pc;
     wire [`NR_BITS-1:0] rsp_rd;
     wire [`INST_LSU_BITS-1:0] rsp_op_type;
     wire [`NUM_THREADS-1:0][REQ_ASHIFT-1:0] rsp_align;
     wire rsp_is_dup;
 
-    assign {rsp_uuid, rsp_addr_type, rsp_wid, rsp_tmask, rsp_pc, rsp_rd, rsp_op_type, rsp_align, rsp_is_dup} = mem_rsp_tag;
+    assign {rsp_uuid, rsp_addr_type, rsp_wid, rsp_tmask_uq, rsp_pc, rsp_rd, rsp_op_type, rsp_align, rsp_is_dup} = mem_rsp_tag;
     `UNUSED_VAR (rsp_addr_type)
     `UNUSED_VAR (rsp_op_type)
     
@@ -316,7 +316,7 @@ module VX_lsu_unit #(
     // load response formatting
 
     reg [`NUM_THREADS-1:0][31:0] rsp_data;
-    wire [`NUM_THREADS-1:0] rsp_tmask_qual;
+    wire [`NUM_THREADS-1:0] rsp_tmask;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         wire [31:0] rsp_data32 = (i == 0 || rsp_is_dup) ? mem_rsp_data[0] : mem_rsp_data[i];
@@ -335,7 +335,7 @@ module VX_lsu_unit #(
         end        
     end   
 
-    assign rsp_tmask_qual = rsp_is_dup ? rsp_tmask : mem_rsp_mask;
+    assign rsp_tmask = rsp_is_dup ? rsp_tmask_uq : mem_rsp_mask;
 
     // send load commit
 
@@ -346,7 +346,7 @@ module VX_lsu_unit #(
         .reset     (reset),
         .valid_in  (mem_rsp_valid),
         .ready_in  (mem_rsp_ready),
-        .data_in   ({rsp_uuid,          rsp_wid,          rsp_tmask_qual,     rsp_pc,          rsp_rd,          1'b1,            rsp_data,          mem_rsp_eop}),
+        .data_in   ({rsp_uuid,          rsp_wid,          rsp_tmask,          rsp_pc,          rsp_rd,          1'b1,            rsp_data,          mem_rsp_eop}),
         .data_out  ({ld_commit_if.uuid, ld_commit_if.wid, ld_commit_if.tmask, ld_commit_if.PC, ld_commit_if.rd, ld_commit_if.wb, ld_commit_if.data, ld_commit_if.eop}),
         .valid_out (ld_commit_if.valid),
         .ready_out (ld_commit_if.ready)
@@ -355,8 +355,8 @@ module VX_lsu_unit #(
 `ifdef CHIPSCOPE   
     ila_lsu ila_lsu_inst (
         .clk    (clk),
-        .probe0 ({mem_req_data[0], lsu_req_if.uuid, mem_req_byteen, full_addr, lsu_req_if.wb, mem_req_ready, mem_req_valid}),
-        .probe1 ({rsp_data[0], rsp_uuid, mem_rsp_ready, mem_rsp_valid})
+        .probe0 ({mem_req_data[0], lsu_req_if.uuid, mem_req_byteen, full_addr, mem_req_rw, mem_req_ready, mem_req_valid}),
+        .probe1 ({rsp_data[0], rsp_uuid, mem_rsp_eop, rsp_pc, rsp_rd, rsp_tmask, rsp_wid, mem_rsp_ready, mem_rsp_valid})
     );
 `endif
 
@@ -364,7 +364,7 @@ module VX_lsu_unit #(
     `SCOPE_ASSIGN (dcache_req_fire,  mem_req_fire);
     `SCOPE_ASSIGN (dcache_req_uuid,  lsu_req_if.uuid);
     `SCOPE_ASSIGN (dcache_req_addr,  full_addr);
-    `SCOPE_ASSIGN (dcache_req_rw,    ~lsu_req_if.wb);
+    `SCOPE_ASSIGN (dcache_req_rw,    mem_req_rw);
     `SCOPE_ASSIGN (dcache_req_byteen, mem_req_byteen);
     `SCOPE_ASSIGN (dcache_req_data,  mem_req_data);
     `SCOPE_ASSIGN (dcache_rsp_fire,  mem_rsp_fire);

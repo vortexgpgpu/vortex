@@ -9,9 +9,9 @@ module VX_reduce #(
     input wire [N-1:0][DATAW-1:0] data_in,
     output wire [DATAW-1:0]       data_out
 );
-`IGNORE_WARNINGS_BEGIN
+`IGNORE_UNOPTFLAT_BEGIN
     wire [N-1:0][DATAW-1:0] tmp;
-`IGNORE_WARNINGS_END
+`IGNORE_UNOPTFLAT_END
 
     assign tmp[0] = data_in[0];
 

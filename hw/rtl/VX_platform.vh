@@ -24,6 +24,10 @@
     `define DEBUG_BLOCK(x)
 `endif
 
+`define IGNORE_UNOPTFLAT_BEGIN /* verilator lint_off UNOPTFLAT */
+
+`define IGNORE_UNOPTFLAT_END  /* verilator lint_off UNOPTFLAT */
+
 `define IGNORE_UNUSED_BEGIN   /* verilator lint_off UNUSED */
 
 `define IGNORE_UNUSED_END     /* verilator lint_on UNUSED */
@@ -66,6 +70,8 @@
 `else
     `define DEBUG_BLOCK(x)
 `endif
+`define IGNORE_UNOPTFLAT_BEGIN
+`define IGNORE_UNOPTFLAT_END
 `define IGNORE_UNUSED_BEGIN
 `define IGNORE_UNUSED_END
 `define IGNORE_WARNINGS_BEGIN

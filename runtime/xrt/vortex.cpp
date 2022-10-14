@@ -674,8 +674,8 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
     
     #endif
 
-        bool is_idle = (status & CTL_AP_IDLE) == CTL_AP_IDLE;
-        if (is_idle || 0 == timeout) {            
+        bool is_done = (status & CTL_AP_DONE) == CTL_AP_DONE;
+        if (is_done || 0 == timeout) {            
             break;
         }
 

@@ -12,11 +12,11 @@ module VX_scan #(
     input  wire [N-1:0] data_in,
     output wire [N-1:0] data_out
 );
-`IGNORE_WARNINGS_BEGIN
-
     localparam LOGN = $clog2(N);
 
+`IGNORE_UNOPTFLAT_BEGIN
     wire [LOGN:0][N-1:0] t;   
+`IGNORE_UNOPTFLAT_END
 
     // reverses bits
     if (REVERSE != 0) begin
@@ -59,6 +59,5 @@ module VX_scan #(
         end        
     end
 
-`IGNORE_WARNINGS_END
 endmodule
 `TRACING_ON

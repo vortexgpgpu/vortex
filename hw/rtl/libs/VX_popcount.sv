@@ -13,8 +13,7 @@ module VX_popcount #(
 
 `ifndef SYNTHESIS
     assign data_out = $countones(data_in);
-`else
-`ifdef QUARTUS
+`elsif QUARTUS
     assign data_out = $countones(data_in);
 `else
     if (N == 1) begin
@@ -22,28 +21,38 @@ module VX_popcount #(
         assign data_out = data_in;
 
     end else if (MODEL == 1) begin
-    `IGNORE_WARNINGS_BEGIN
-        localparam PN    = 1 << $clog2(N);
-        localparam LOGPN = $clog2(PN);
-        
-        wire [M-1:0] tmp [0:PN-1] [0:PN-1];
-        
-        for (genvar i = 0; i < N; ++i) begin        
-            assign tmp[0][i] = data_in[i];
-        end
 
-        for (genvar i = N; i < PN; ++i) begin        
-            assign tmp[0][i] = '0;
-        end
+        localparam PN = 1 << $clog2(N);
+        localparam LOGPN = $clog2(PN);
+
+    `IGNORE_UNOPTFLAT_BEGIN
+        wire [M-1:0] tmp [LOGPN-1:0][PN-1:0];
+    `IGNORE_UNOPTFLAT_END
 
         for (genvar j = 0; j < LOGPN; ++j) begin
-            for (genvar i = 0; i < (1 << (LOGPN-j-1)); ++i) begin
-                assign tmp[j+1][i] = tmp[j][i*2] + tmp[j][i*2+1];
+            localparam D = j + 1;
+            localparam Q = (D < LOGPN) ? (D + 1) : M;
+            for (genvar i = 0; i < (1 << (LOGPN-j-1)); ++i) begin                
+                localparam l = i * 2;
+                localparam r = i * 2 + 1;
+                wire [Q-1:0] res;
+                if (j == 0) begin
+                    if (r < N) begin
+                        assign res = data_in[l] + data_in[r];
+                    end else if (l < N) begin
+                        assign res = 2'(data_in[l]);
+                    end else begin
+                        assign res = 2'b0;
+                    end
+                end else begin
+                    assign res = D'(tmp[j-1][l]) + D'(tmp[j-1][r]);
+                end
+                assign tmp[j][i] = M'(res);
             end
         end
 
-        assign data_out = tmp[LOGPN][0];
-    `IGNORE_WARNINGS_END
+        assign data_out = tmp[LOGPN-1][0];
+    
     end else begin
 
         reg [M-1:0] cnt_r;
@@ -51,16 +60,13 @@ module VX_popcount #(
         always @(*) begin
             cnt_r = '0;
             for (integer i = 0; i < N; ++i) begin
-            `IGNORE_WARNINGS_BEGIN
-                cnt_r = cnt_r + data_in[i];
-            `IGNORE_WARNINGS_END
+                cnt_r = cnt_r + M'(data_in[i]);
             end
         end
 
         assign data_out = cnt_r;
     
     end
-`endif
 `endif
 
 endmodule

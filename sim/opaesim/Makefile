@@ -94,7 +94,7 @@ VL_FLAGS += -DIDIV_DPI
 FPU_CORE ?= FPU_DPI
 VL_FLAGS += -D$(FPU_CORE)
 
-PROJECT = libopae-c-vlsim.so
+PROJECT = libopae-c-sim.so
 
 all: $(PROJECT)
 
