@@ -43,11 +43,11 @@
 #define BANK_SIZE   0x10000000
 #define NUM_BANKS   16
 
-uint32_t count = 1;
-uint32_t args_addr = 0x7ffff000;
+uint32_t count       = 16;
+uint32_t args_addr   = 0x7ffff000;
 uint32_t kernel_addr = 0x80000000;
-uint32_t src_addr = 0x20000000;
-uint32_t dst_addr = 0x10000000;
+uint32_t src_addr    = 0x20000000;
+uint32_t dst_addr    = 0x10000000;
 
 uint32_t kernel_bin [] = {
 	0x008000ef, // jal	ra,80000008 <main>
@@ -214,16 +214,16 @@ int main(int argc, char** argv) {
     // Wait until the IP is DONE
 
     uint32_t axi_ctrl = 0;
-    while ((axi_ctrl & CTL_AP_IDLE) != CTL_AP_IDLE) {
+    while ((axi_ctrl & CTL_AP_DONE) != CTL_AP_DONE) {
         axi_ctrl = ip.read_register(MMIO_CTL_ADDR);
     }
 
     std::cout << "IP Done!" << std::endl;
 
     // check output
+    uint32_t errors = 0;
     std::cout << "Download destination buffer (bank=" << dst_idx << ", offset=" << dst_offset << ")..." << std::endl;
     dst_bo.sync(XCL_BO_SYNC_BO_FROM_DEVICE, dst_size, dst_offset);
-    uint32_t errors = 0;
     {
         auto dst_map = reinterpret_cast<uint32_t*>(dst_bo.map<uint8_t*>() + dst_offset);        
         for (uint32_t i = 0; i < count; ++i) {
