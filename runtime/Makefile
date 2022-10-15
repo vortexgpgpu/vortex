@@ -1,33 +1,25 @@
-all: stub rtlsim simx vlsim
+all: stub rtlsim simx opae
 
 stub:
 	$(MAKE) -C stub
 
-fpga:
-	$(MAKE) -C fpga
-
-xrt:
-	$(MAKE) -C xrt
-
-asesim:
-	$(MAKE) -C asesim
-
-vlsim:
-	$(MAKE) -C vlsim
+simx:
+	$(MAKE) -C simx
 
 rtlsim:
 	$(MAKE) -C rtlsim
 
-simx:
-	$(MAKE) -C simx
+opae:
+	$(MAKE) -C opae
+
+xrt:
+	$(MAKE) -C xrt
 
 clean:
 	$(MAKE) clean -C stub
-	$(MAKE) clean -C fpga
-	$(MAKE) clean -C xrt
-	$(MAKE) clean -C asesim
-	$(MAKE) clean -C vlsim
-	$(MAKE) clean -C rtlsim
 	$(MAKE) clean -C simx
+	$(MAKE) clean -C rtlsim
+	$(MAKE) clean -C opae
+	$(MAKE) clean -C xrt
 
-.PHONY: all stub fpga xrt asesim vlsim rtlsim simx clean
+.PHONY: all stub simx rtlsim opae xrt clean
