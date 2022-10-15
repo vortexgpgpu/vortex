@@ -48,11 +48,12 @@ else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
+OPAE_API_PATHS=../../../sim/opaesim/libopae-c-sim.so
+ifeq ($(TARGET), fpga)
+	OPAE_API_PATHS=
+endif
 ifeq ($(TARGET), asesim)
 	OPAE_API_PATHS=libopae-c-ase.so
-endif
-ifeq ($(TARGET), opaesim)
-	OPAE_API_PATHS=/nethome/btine3/dev/vortex-gfx/sim/opaesim/libopae-c-sim.so
 endif
 
 all: $(PROJECT) kernel.bin kernel.dump

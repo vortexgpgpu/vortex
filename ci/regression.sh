@@ -25,7 +25,7 @@ make -C tests/regression run-rtlsim
 
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx   --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png"
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png"
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=vlsim  --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png"
+CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=opae  --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png"
 
 echo "smoke tests done!"
 }
@@ -41,8 +41,8 @@ echo "begin coverage tests..."
 
 make -C tests/kernel run-rtlsim
 make -C tests/riscv/isa run-rtlsim
-make -C tests/regression run-vlsim
-make -C tests/opencl run-vlsim
+make -C tests/regression run-opae
+make -C tests/opencl run-opae
 make -C tests/kernel run-simx
 make -C tests/riscv/isa run-simx
 make -C tests/regression run-simx
@@ -55,7 +55,7 @@ tex()
 {
 echo "begin texture tests..."
 
-CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=vlsim --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g0.png -g0"
+CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=opae --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g0.png -g0"
 CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g0.png -g0"
 CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g0.png -g0"
 CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g1.png -g1" --perf=1
@@ -161,11 +161,11 @@ debug()
 {
 echo "begin debugging tests..."
 
-./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --perf=1 --app=demo --args="-n1"
+./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --perf=1 --app=demo --args="-n1"
 ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --perf=1 --app=demo --args="-n1"
-./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --debug=1 --app=demo --args="-n1"
+./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --debug=1 --app=demo --args="-n1"
 ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --debug=1 --app=demo --args="-n1"
-./ci/blackbox.sh --driver=vlsim --cores=1 --scope --app=basic --args="-t0 -n1"
+./ci/blackbox.sh --driver=opae --cores=1 --scope --app=basic --args="-t0 -n1"
 
 echo "debugging tests done!"
 }
@@ -225,13 +225,13 @@ CONFIGS="-DL2_NUM_PORTS=2 -DDCACHE_NUM_PORTS=2" ./ci/blackbox.sh --driver=rtlsim
 CONFIGS="-DL2_NUM_PORTS=2 -DDCACHE_NUM_PORTS=2" ./ci/blackbox.sh --driver=simx --cores=2 --l2cache --app=sgemm
 
 # test 128-bit MEM block
-CONFIGS=-DMEM_BLOCK_SIZE=16 ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
+CONFIGS=-DMEM_BLOCK_SIZE=16 ./ci/blackbox.sh --driver=opae --cores=1 --app=demo
 
 # test single-bank DRAM
-CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_BANKS=1" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
+CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_BANKS=1" ./ci/blackbox.sh --driver=opae --cores=1 --app=demo
 
 # test 27-bit DRAM address
-CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=27" ./ci/blackbox.sh --driver=vlsim --cores=1 --app=demo
+CONFIGS="-DPLATFORM_PARAM_LOCAL_MEMORY_ADDR_WIDTH=27" ./ci/blackbox.sh --driver=opae --cores=1 --app=demo
 
 echo "configuration tests done!"
 }
@@ -241,14 +241,14 @@ stress0()
 echo "begin stress0 tests..."
 
 # test verilator reset values
-CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --l3cache --app=sgemm
-CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --l3cache --app=sgemm
-FPU_CORE=FPU_DEFAULT CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
-FPU_CORE=FPU_DEFAULT CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
-CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr
-CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=vlsim --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr
-CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=vlsim --app=printf
-CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=vlsim --app=printf
+CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=sgemm
+CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=sgemm
+FPU_CORE=FPU_DEFAULT CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
+FPU_CORE=FPU_DEFAULT CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
+CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr
+CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr
+CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=opae --app=printf
+CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --app=printf
 
 echo "stress0 tests done!"
 }

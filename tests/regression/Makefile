@@ -50,22 +50,22 @@ run-rtlsim:
 #   $(MAKE) -C rop run-rtlsim
 #   $(MAKE) -C imadd run-rtlsim
 
-run-vlsim:
-	$(MAKE) -C basic run-vlsim
-	$(MAKE) -C demo run-vlsim
-	$(MAKE) -C dogfood run-vlsim
-	$(MAKE) -C mstress run-vlsim
-	$(MAKE) -C io_addr run-vlsim
-	$(MAKE) -C printf run-vlsim
-	$(MAKE) -C diverge run-vlsim
-	$(MAKE) -C sort run-vlsim
-	$(MAKE) -C fence run-vlsim
-	$(MAKE) -C no_mf_ext run-vlsim
-	$(MAKE) -C no_smem run-vlsim
-#	$(MAKE) -C draw3d run-vlsim
-#	$(MAKE) -C raster run-vlsim
-#	$(MAKE) -C rop run-vlsim
-#	$(MAKE) -C imadd run-vlsim
+run-opae:
+	$(MAKE) -C basic run-opae
+	$(MAKE) -C demo run-opae
+	$(MAKE) -C dogfood run-opae
+	$(MAKE) -C mstress run-opae
+	$(MAKE) -C io_addr run-opae
+	$(MAKE) -C printf run-opae
+	$(MAKE) -C diverge run-opae
+	$(MAKE) -C sort run-opae
+	$(MAKE) -C fence run-opae
+	$(MAKE) -C no_mf_ext run-opae
+	$(MAKE) -C no_smem run-opae
+#	$(MAKE) -C draw3d run-opae
+#	$(MAKE) -C raster run-opae
+#	$(MAKE) -C rop run-opae
+#	$(MAKE) -C imadd run-opae
 
 clean:
 	$(MAKE) -C basic clean

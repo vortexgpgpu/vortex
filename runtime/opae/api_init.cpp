@@ -24,7 +24,7 @@ int api_init(opae_api_funcs_t* opae_api_funcs) {
         return -1;
 
     const char* api_path_s = getenv("OPAE_API_PATHS");
-    if (api_path_s == nullptr) {
+    if (api_path_s == nullptr || api_path_s[0] == '\0') {
         api_path_s = DEFAULT_OPAE_API_PATHS;
     }
 
