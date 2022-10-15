@@ -36,7 +36,7 @@
 `ifdef SIMULATION
 `define UUID_BITS       44
 `elsif CHIPSCOPE 
-`define UUID_BITS       16
+`define UUID_BITS       12
 `else
 `define UUID_BITS       0
 `endif

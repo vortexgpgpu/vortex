@@ -355,8 +355,10 @@ module VX_lsu_unit #(
 `ifdef CHIPSCOPE   
     ila_lsu ila_lsu_inst (
         .clk    (clk),
-        .probe0 ({mem_req_data[0], lsu_req_if.uuid, mem_req_byteen, full_addr, mem_req_rw, mem_req_ready, mem_req_valid}),
-        .probe1 ({rsp_data[0], rsp_uuid, mem_rsp_eop, rsp_pc, rsp_rd, rsp_tmask, rsp_wid, mem_rsp_ready, mem_rsp_valid})
+        .probe0 ({mem_req_data[0], lsu_req_if.uuid, lsu_req_if.wid, lsu_req_if.PC, mem_req_mask, full_addr[0], mem_req_byteen, mem_req_rw, mem_req_ready, mem_req_valid}),
+        .probe1 ({rsp_data[0], rsp_uuid, mem_rsp_eop, rsp_pc, rsp_rd, rsp_tmask, rsp_wid, mem_rsp_ready, mem_rsp_valid}),
+        .probe2 ({cache_req_if.data, cache_req_if.tag, cache_req_if.byteen, cache_req_if.addr, cache_req_if.rw, cache_req_if.ready, cache_req_if.valid}),
+        .probe3 ({cache_rsp_if.data, cache_rsp_if.tag, cache_rsp_if.ready, cache_rsp_if.valid})
     );
 `endif
 

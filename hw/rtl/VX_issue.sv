@@ -158,8 +158,8 @@ module VX_issue #(
 `ifdef CHIPSCOPE    
     ila_issue ila_issue_inst (
         .clk    (clk),
-        .probe0 ({ibuffer_if.uuid, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.wid, ibuffer_if.ex_type, ibuffer_if.op_type, ibuffer_if.ready, ibuffer_if.valid, in_use_regs, scoreboard_if.ready, dispatch_if.ready, ibuffer_if.ready, ibuffer_if.valid}),
-        .probe1 ({writeback_if.uuid, writeback_if.PC, writeback_if.tmask, writeback_if.wid, writeback_if.eop, writeback_if.valid})
+        .probe0 ({ibuffer_if.uuid, ibuffer_if.rs3[0], ibuffer_if.rs2[0], ibuffer_if.rs1[0], ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.wid, ibuffer_if.ex_type, ibuffer_if.op_type, ibuffer_if.ready, ibuffer_if.valid, in_use_regs, scoreboard_if.ready, dispatch_if.ready, ibuffer_if.ready, ibuffer_if.valid}),
+        .probe1 ({writeback_if.uuid, writeback_if.data[0], writeback_if.PC, writeback_if.tmask, writeback_if.wid, writeback_if.eop, writeback_if.valid})
     );
 `endif
 
