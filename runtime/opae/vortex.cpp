@@ -1,8 +1,10 @@
-#include <stdint.h>
+#include "common.h"
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
 #include <cstdlib>
+#include <cstring>
+#include <uuid/uuid.h>
 #include <unistd.h>
 #include <assert.h>
 #include <cmath>
@@ -10,33 +12,13 @@
 #include <unordered_map>
 #include <list>
 
-#if defined(USE_FPGA) || defined(USE_ASE) 
-#include <opae/fpga.h>
-#include <uuid/uuid.h>
-#elif defined(USE_VLSIM)
-#include <fpga.h>
-#endif
-
-#include "vx_utils.h"
-#include "vx_malloc.h"
-#include <vortex.h>
 #include <VX_config.h>
 #include <VX_types.h>
 #include "vortex_afu.h"
 
 #ifdef SCOPE
-#include "vx_scope.h"
+#include "scope.h"
 #endif
-
-#define CHECK_RES(_expr)                                \
-   do {                                                 \
-     fpga_result res = _expr;                           \
-     if (res == FPGA_OK)                                \
-       break;                                           \
-     printf("[VXDRV] Error: '%s' returned %d, %s!\n",   \
-            #_expr, (int)res, fpgaErrStr(res));         \
-     return -1;                                         \
-   } while (false)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -57,45 +39,11 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class vx_device {
-public:
-    vx_device() 
-        : mem_allocator(
-            ALLOC_BASE_ADDR, 
-            ALLOC_BASE_ADDR + LOCAL_MEM_SIZE,
-            4096,            
-            CACHE_BLOCK_SIZE)
-    {}
-    
-    ~vx_device() {}
-
-    fpga_handle fpga;
-    vortex::MemoryAllocator mem_allocator;    
-    DeviceConfig dcrs;
-    unsigned version;
-    unsigned num_cores;
-    unsigned num_warps;
-    unsigned num_threads;
-    uint64_t isa_caps;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-typedef struct vx_buffer_ {
-    uint64_t wsid;
-    void* host_ptr;
-    uint64_t io_addr;
-    vx_device_h hdevice;
-    uint64_t size;
-} vx_buffer_t;
-
-///////////////////////////////////////////////////////////////////////////////
-
 extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
     if (nullptr == hdevice)
         return -1;
 
-    vx_device *device = ((vx_device*)hdevice);
+    auto device = ((vx_device*)hdevice);
 
     switch (caps_id) {
     case VX_CAPS_VERSION:
@@ -138,91 +86,92 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     if (nullptr == hdevice)
         return  -1;
 
-    fpga_handle accel_handle;    
-    vx_device* device;   
+    vx_device* device;
 
-#ifndef USE_VLSIM
-    fpga_result res;    
+    fpga_handle accel_handle;
     fpga_token accel_token;
-    fpga_properties filter = nullptr;    
+    fpga_properties filter;    
     fpga_guid guid; 
+
     uint32_t num_matches;
+
+    opae_api_funcs_t api;
+    memset(&api, 0, sizeof(opae_api_funcs_t));
+    if (api_init(&api) !=0) {
+        return -1;
+    }
     
     // Set up a filter that will search for an accelerator
-    CHECK_RES(fpgaGetProperties(nullptr, &filter));
-    res = fpgaPropertiesSetObjectType(filter, FPGA_ACCELERATOR);
-    if (res != FPGA_OK) {
-        fprintf(stderr, "[VXDRV] Error: fpgaGetProperties() returned %d, %s!\n", (int)res, fpgaErrStr(res));
-        fpgaDestroyProperties(&filter);
+    CHECK_ERR(api.fpgaGetProperties(nullptr, &filter), {
         return -1;
-    }
+    });
+    
+    CHECK_ERR(api.fpgaPropertiesSetObjectType(filter, FPGA_ACCELERATOR), {
+        api.fpgaDestroyProperties(&filter);
+        return -1;
+    });
 
     // Add the desired UUID to the filter
-    uuid_parse(AFU_ACCEL_UUID, guid);
-    res = fpgaPropertiesSetGUID(filter, guid);
-    if (res != FPGA_OK) {
-        fprintf(stderr, "[VXDRV] Error: fpgaPropertiesSetGUID() returned %d, %s!\n", (int)res, fpgaErrStr(res));
-        fpgaDestroyProperties(&filter);
+    uuid_parse(AFU_ACCEL_UUID, guid);    
+    CHECK_ERR(api.fpgaPropertiesSetGUID(filter, guid), {        
+        api.fpgaDestroyProperties(&filter);
         return -1;
-    }
+    });
 
     // Do the search across the available FPGA contexts
-    num_matches = 1;
-    res = fpgaEnumerate(&filter, 1, &accel_token, 1, &num_matches);
-    if (res != FPGA_OK) {
-        fprintf(stderr, "[VXDRV] Error: fpgaEnumerate() returned %d, %s!\n", (int)res, fpgaErrStr(res));
-        fpgaDestroyProperties(&filter);
+    CHECK_ERR(api.fpgaEnumerate(&filter, 1, &accel_token, 1, &num_matches), {
+        api.fpgaDestroyProperties(&filter);
         return -1;
-    }
+    });
 
     // Not needed anymore
-    fpgaDestroyProperties(&filter);
+    CHECK_ERR(api.fpgaDestroyProperties(&filter), {
+        api.fpgaDestroyToken(&accel_token);
+        return -1;
+    });
 
     if (num_matches < 1) {
         fprintf(stderr, "[VXDRV] Error: accelerator %s not found!\n", AFU_ACCEL_UUID);
-        fpgaDestroyToken(&accel_token);
+        api.fpgaDestroyToken(&accel_token);
         return -1;
     }
 
     // Open accelerator
-    res = fpgaOpen(accel_token, &accel_handle, 0);
-    if (res != FPGA_OK) {
-        fprintf(stderr, "[VXDRV] Error: fpgaOpen() returned %d, %s!\n", (int)res, fpgaErrStr(res));
-        fpgaDestroyToken(&accel_token);
+    CHECK_ERR(api.fpgaOpen(accel_token, &accel_handle, 0), {
+        api.fpgaDestroyToken(&accel_token);
         return -1;
-    }
+    });
 
     // Done with token
-    fpgaDestroyToken(&accel_token);
-#else
-    // Open accelerator
-    CHECK_RES(fpgaOpen(NULL, &accel_handle, 0));
-#endif
+    CHECK_ERR(api.fpgaDestroyToken(&accel_token), {
+        api.fpgaClose(accel_handle);
+        return -1;
+    });
 
     // allocate device object
     device = new vx_device();
     if (nullptr == device) {
-        fpgaClose(accel_handle);
+        api.fpgaClose(accel_handle);
         return -1;
     }
 
-    device->fpga = accel_handle;
-    
+    device->api = api;
+    device->fpga = accel_handle;    
+
     {   
         // Load ISA CAPS
-        int ret = fpgaReadMMIO64(device->fpga, 0, MMIO_ISA_CAPS, &device->isa_caps);        
-        if (ret != FPGA_OK) {
-            fpgaClose(accel_handle);
-            return ret;
-        }
+        CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_ISA_CAPS, &device->isa_caps), {
+            api.fpgaClose(accel_handle);
+            return -1;
+        });
 
         // Load device CAPS
         uint64_t dev_caps;
-        ret = fpgaReadMMIO64(device->fpga, 0, MMIO_DEV_CAPS, &dev_caps);        
-        if (ret != FPGA_OK) {
-            fpgaClose(accel_handle);
-            return ret;
-        }
+        CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_DEV_CAPS, &dev_caps), {
+            api.fpgaClose(accel_handle);
+            return -1;
+        });
+
         device->version     = (dev_caps >> 0)  & 0xffff;
         device->num_cores   = (dev_caps >> 16) & 0xffff;
         device->num_warps   = (dev_caps >> 32) & 0xffff;
@@ -235,9 +184,9 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     
 #ifdef SCOPE
     {
-        int ret = vx_scope_start(accel_handle, 0, -1);
+        int ret = vx_scope_start(device, 0, -1);
         if (ret != 0) {
-            fpgaClose(accel_handle);
+            api.fpgaClose(accel_handle);
             return ret;
         }
     }
@@ -262,17 +211,18 @@ extern int vx_dev_close(vx_device_h hdevice) {
     if (nullptr == hdevice)
         return -1;
 
-    vx_device *device = ((vx_device*)hdevice);
+    auto device = ((vx_device*)hdevice);
+    auto api = device->api;
 
 #ifdef SCOPE
-    vx_scope_stop(device->fpga);
+    vx_scope_stop(hdevice);
 #endif
 
 #ifdef DUMP_PERF_STATS
     perf_remove_device(hdevice);
 #endif
 
-    fpgaClose(device->fpga);
+    api.fpgaClose(device->fpga);
 
     delete device;
 
@@ -285,7 +235,7 @@ extern int vx_mem_alloc(vx_device_h hdevice, uint64_t size, uint64_t* dev_maddr)
      || 0 == size)
         return -1;
 
-    vx_device *device = ((vx_device*)hdevice);
+    auto device = ((vx_device*)hdevice);
     return device->mem_allocator.allocate(size, dev_maddr);
 }
 
@@ -293,12 +243,11 @@ extern int vx_mem_free(vx_device_h hdevice, uint64_t dev_maddr) {
     if (nullptr == hdevice)
         return -1;
 
-    vx_device *device = ((vx_device*)hdevice);
+    auto device = ((vx_device*)hdevice);
     return device->mem_allocator.release(dev_maddr);
 }
 
 extern int vx_buf_alloc(vx_device_h hdevice, uint64_t size, vx_buffer_h* hbuffer) {
-    fpga_result res;
     void* host_ptr;
     uint64_t wsid;
     uint64_t io_addr;
@@ -309,26 +258,25 @@ extern int vx_buf_alloc(vx_device_h hdevice, uint64_t size, vx_buffer_h* hbuffer
      || nullptr == hbuffer)
         return -1;
 
-    vx_device *device = ((vx_device*)hdevice);
+    auto device = ((vx_device*)hdevice);
+    auto api = device->api;
 
     size_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
 
-    res = fpgaPrepareBuffer(device->fpga, asize, &host_ptr, &wsid, 0);
-    if (FPGA_OK != res) {
+    CHECK_ERR(api.fpgaPrepareBuffer(device->fpga, asize, &host_ptr, &wsid, 0), {
         return -1;
-    }
+    });
 
     // Get the physical address of the buffer in the accelerator
-    res = fpgaGetIOAddress(device->fpga, wsid, &io_addr);
-    if (FPGA_OK != res) {
-        fpgaReleaseBuffer(device->fpga, wsid);
+    CHECK_ERR(api.fpgaGetIOAddress(device->fpga, wsid, &io_addr), {
+        api.fpgaReleaseBuffer(device->fpga, wsid);
         return -1;
-    }
+    });
 
     // allocate buffer object
     buffer = (vx_buffer_t*)malloc(sizeof(vx_buffer_t));
     if (nullptr == buffer) {
-        fpgaReleaseBuffer(device->fpga, wsid);
+        api.fpgaReleaseBuffer(device->fpga, wsid);
         return -1;
     }
 
@@ -347,7 +295,7 @@ extern void* vx_host_ptr(vx_buffer_h hbuffer) {
     if (nullptr == hbuffer)
         return nullptr;
 
-    vx_buffer_t* buffer = ((vx_buffer_t*)hbuffer);
+    auto buffer = ((vx_buffer_t*)hbuffer);
     return buffer->host_ptr;
 }
 
@@ -355,10 +303,11 @@ extern int vx_buf_free(vx_buffer_h hbuffer) {
     if (nullptr == hbuffer)
         return -1;
 
-    vx_buffer_t* buffer = ((vx_buffer_t*)hbuffer);
-    vx_device *device = ((vx_device*)buffer->hdevice);
+    auto buffer = ((vx_buffer_t*)hbuffer);
+    auto device = ((vx_device*)buffer->hdevice);
+    auto api = device->api;
 
-    fpgaReleaseBuffer(device->fpga, buffer->wsid);
+    api.fpgaReleaseBuffer(device->fpga, buffer->wsid);
 
     free(buffer);
 
@@ -371,24 +320,22 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
 
     std::unordered_map<uint32_t, std::stringstream> print_bufs;
     
-    vx_device *device = ((vx_device*)hdevice);
+    auto device = ((vx_device*)hdevice);
+    auto api = device->api;
 
     struct timespec sleep_time; 
 
-#if defined(USE_ASE)
-    sleep_time.tv_sec = 1;
-    sleep_time.tv_nsec = 0;
-#else
     sleep_time.tv_sec = 0;
     sleep_time.tv_nsec = 1000000;
-#endif
 
     // to milliseconds
     uint64_t sleep_time_ms = (sleep_time.tv_sec * 1000) + (sleep_time.tv_nsec / 1000000);
     
     for (;;) {
         uint64_t status;
-        CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_STATUS, &status));
+        CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_STATUS, &status), {
+            return -1; 
+        });
 
         // check for console data
         uint32_t cout_data = status >> STATUS_STATE_BITS;
@@ -403,7 +350,9 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
                     std::cout << std::dec << "#" << cout_tid << ": " << ss_buf.str() << std::flush;
                     ss_buf.str("");
                 }
-                CHECK_RES(fpgaReadMMIO64(device->fpga, 0, MMIO_STATUS, &status));
+                CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_STATUS, &status), {
+                    return -1; 
+                });
                 cout_data = status >> STATUS_STATE_BITS;
             } while (cout_data & 0x1);
         }
@@ -435,8 +384,9 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size
      || 0 >= size)
         return -1;
 
-    vx_buffer_t *buffer = ((vx_buffer_t*)hbuffer);
-    vx_device *device = ((vx_device*)buffer->hdevice);
+    auto buffer = ((vx_buffer_t*)hbuffer);
+    auto device = ((vx_device*)buffer->hdevice);
+    auto api = device->api;
 
     uint64_t dev_mem_size = LOCAL_MEM_SIZE; 
     uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
@@ -459,10 +409,18 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size
 
     auto ls_shift = (int)std::log2(CACHE_BLOCK_SIZE);
 
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG0, (buffer->io_addr + src_offset) >> ls_shift));
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG1, dev_maddr >> ls_shift));
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG2, asize >> ls_shift));   
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_MEM_WRITE));
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG0, (buffer->io_addr + src_offset) >> ls_shift), {
+        return -1; 
+    });    
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG1, dev_maddr >> ls_shift), {
+        return -1; 
+    });
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG2, asize >> ls_shift), {
+        return -1; 
+    });
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_MEM_WRITE), {
+        return -1; 
+    });
 
     // Wait for the write operation to finish
     if (vx_ready_wait(buffer->hdevice, MAX_TIMEOUT) != 0)
@@ -476,8 +434,9 @@ extern int vx_copy_from_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t si
      || 0 >= size)
         return -1;
 
-    vx_buffer_t *buffer = ((vx_buffer_t*)hbuffer);
-    vx_device *device = ((vx_device*)buffer->hdevice);
+    auto buffer = ((vx_buffer_t*)hbuffer);
+    auto device = ((vx_device*)buffer->hdevice);
+    auto api = device->api;
 
     uint64_t dev_mem_size = LOCAL_MEM_SIZE;  
     uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
@@ -500,10 +459,18 @@ extern int vx_copy_from_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t si
 
     auto ls_shift = (int)std::log2(CACHE_BLOCK_SIZE);
 
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG0, (buffer->io_addr + dest_offset) >> ls_shift));
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG1, dev_maddr >> ls_shift));    
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG2, asize >> ls_shift));   
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_MEM_READ));
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG0, (buffer->io_addr + dest_offset) >> ls_shift), {
+        return -1; 
+    });
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG1, dev_maddr >> ls_shift), {
+        return -1; 
+    });
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG2, asize >> ls_shift), {
+        return -1; 
+    });
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_MEM_READ), {
+        return -1; 
+    });
 
     // Wait for the write operation to finish
     if (vx_ready_wait(buffer->hdevice, MAX_TIMEOUT) != 0)
@@ -516,14 +483,17 @@ extern int vx_start(vx_device_h hdevice) {
     if (nullptr == hdevice)
         return -1;   
 
-    vx_device *device = ((vx_device*)hdevice);
+    auto device = ((vx_device*)hdevice);
+    auto api = device->api;
 
     // Ensure ready for new command
     if (vx_ready_wait(hdevice, MAX_TIMEOUT) != 0)
         return -1;    
   
     // start execution    
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_RUN));
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_RUN), {
+        return -1; 
+    });
 
     return 0;
 }
@@ -532,16 +502,23 @@ extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint64_t value) {
     if (nullptr == hdevice)
         return -1;
 
-    vx_device *device = ((vx_device*)hdevice);
+    auto device = ((vx_device*)hdevice);
+    auto api = device->api;
 
     // Ensure ready for new command
     if (vx_ready_wait(hdevice, -1) != 0)
         return -1;    
   
     // write DCR value
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG0, addr));
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG1, value));
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_DCR_WRITE));
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG0, addr), {
+        return -1; 
+    });
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_ARG1, value), {
+        return -1; 
+    });
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_DCR_WRITE), {
+        return -1; 
+    });
 
     // save the value
     device->dcrs.write(addr, value);

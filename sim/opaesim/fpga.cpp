@@ -8,10 +8,49 @@
 #include "fpga.h"
 #include "opae_sim.h"
 #include <VX_config.h>
+#include <util.h>
 
 using namespace vortex;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+extern fpga_result fpgaGetProperties(fpga_token token, fpga_properties *prop) {  
+  __unused (token, prop);
+  return FPGA_OK;
+}
+
+extern fpga_result fpgaPropertiesSetObjectType(fpga_properties prop, fpga_objtype objtype) {  
+  __unused (prop, objtype);
+  return FPGA_OK;  
+}
+
+extern fpga_result fpgaPropertiesSetGUID(fpga_properties prop, fpga_guid guid) {  
+  __unused (prop, guid);
+  return FPGA_OK;  
+}
+
+extern fpga_result fpgaDestroyProperties(fpga_properties *prop) {
+  __unused (prop);  
+  return FPGA_OK;  
+}
+
+extern fpga_result fpgaEnumerate(const fpga_properties *filters, uint32_t num_filters, fpga_token *tokens, uint32_t max_tokens, uint32_t *num_matches) {  
+  __unused (filters, num_filters, num_filters, tokens, max_tokens);
+  if (num_matches) {
+    *num_matches = 1;
+  }
+  return FPGA_OK;  
+}
+
+extern fpga_result fpgaDestroyToken(fpga_token *token) {  
+  __unused (token);
+  return FPGA_OK;  
+}
+
 extern fpga_result fpgaOpen(fpga_token token, fpga_handle *handle, int flags) {
+  __unused (token);
   if (NULL == handle || flags != 0)
     return FPGA_INVALID_PARAM;
   auto sim = new opae_sim();    
@@ -84,3 +123,7 @@ extern fpga_result fpgaReadMMIO64(fpga_handle handle, uint32_t mmio_num, uint64_
 extern const char *fpgaErrStr(fpga_result e) {
   return "";
 }
+
+#ifdef __cplusplus
+}
+#endif

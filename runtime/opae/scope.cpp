@@ -1,4 +1,5 @@
-#include "vx_scope.h"
+#include "common.h"
+#include "scope.h"
 #include <iostream>
 #include <fstream>
 #include <thread>
@@ -10,19 +11,9 @@
 #include <mutex>
 #include <VX_config.h>
 #include <vortex_afu.h>
-#include <scope-defs.h>
+#include "scope-defs.h"
 
 #define FRAME_FLUSH_SIZE 100
-
-#define CHECK_RES(_expr)                            \
-   do {                                             \
-     fpga_result res = _expr;                       \
-     if (res == FPGA_OK)                            \
-       break;                                       \
-     printf("OPAE Error: '%s' returned %d, %s!\n",  \
-            #_expr, (int)res, fpgaErrStr(res));     \
-     return -1;                                     \
-   } while (false)
 
 #define MMIO_SCOPE_READ     (AFU_IMAGE_MMIO_SCOPE_READ * 4)
 #define MMIO_SCOPE_WRITE    (AFU_IMAGE_MMIO_SCOPE_WRITE * 4)
@@ -49,10 +40,12 @@ static constexpr int fwidth = calcFrameWidth();
 static std::thread g_timeout_thread;
 static std::mutex g_timeout_mutex;
 
-static void timeout_callback(fpga_handle fpga) {
+static void timeout_callback(vx_device_h hdevice) {
+    auto device = ((vx_device*)hdevice);
+    auto api = device->api;
     std::this_thread::sleep_for(std::chrono::seconds{HANG_TIMEOUT});
-    vx_scope_stop(fpga);
-    fpgaClose(fpga);
+    vx_scope_stop(hdevice);
+    api.fpgaClose(device->fpga);
     exit(0);
 }
 #endif
@@ -94,42 +87,54 @@ void dump_module(std::ofstream& ofs, int parent) {
     }
 }
 
-int vx_scope_start(fpga_handle hfpga, uint64_t start_time, uint64_t stop_time) {    
-    if (nullptr == hfpga)
-        return -1;  
+int vx_scope_start(vx_device_h hdevice, uint64_t start_time, uint64_t stop_time) {    
+    if (nullptr == hdevice)
+        return -1;
+
+    auto device = ((vx_device*)hdevice);
+    auto api = device->api;  
     
     if (stop_time != uint64_t(-1)) {
         // set stop time
         uint64_t cmd_stop = ((stop_time << 3) | CMD_SET_STOP);
-        CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, cmd_stop));
+        CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, cmd_stop), {
+            return -1;
+        });
         std::cout << "scope stop time: " << std::dec << stop_time << "s" << std::endl;
     }
     
     // start recording
     uint64_t cmd_delay = ((start_time << 3) | CMD_SET_START);
-    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, cmd_delay));
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, cmd_delay), {
+        return -1;
+    });
     std::cout << "scope start time: " << std::dec << start_time << "s" << std::endl;
 
 #ifdef HANG_TIMEOUT
-    g_timeout_thread = std::thread(timeout_callback, hfpga);
+    g_timeout_thread = std::thread(timeout_callback, device);
     g_timeout_thread.detach();
 #endif
 
     return 0;
 }
 
-int vx_scope_stop(fpga_handle hfpga) {    
+int vx_scope_stop(vx_device_h hdevice) {    
 #ifdef HANG_TIMEOUT
     if (!g_timeout_mutex.try_lock())
         return 0;
 #endif
 
-    if (nullptr == hfpga)
+    if (nullptr == hdevice)
         return -1;
+
+    auto device = ((vx_device*)hdevice);
+    auto api = device->api;
 
     // forced stop
     uint64_t cmd_stop = ((0 << 3) | CMD_SET_STOP);
-    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, cmd_stop));
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, cmd_stop), {
+        return -1;
+    });
 
     std::cout << "scope trace dump begin..." << std::endl;
 
@@ -152,17 +157,25 @@ int vx_scope_stop(fpga_handle hfpga) {
     int signal_offset = 0; 
 
     // wait for recording to terminate
-    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, CMD_GET_VALID));
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, CMD_GET_VALID), {
+        return -1;
+    });
     do {        
-        CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_SCOPE_READ, &data_valid));        
+        CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_SCOPE_READ, &data_valid), {
+            return -1;
+        });
         if (data_valid)
             break;
         std::this_thread::sleep_for(std::chrono::seconds(1));
     } while (true);
 
     // get frame width
-    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, CMD_GET_WIDTH));
-    CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_SCOPE_READ, &frame_width));
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, CMD_GET_WIDTH), {
+        return -1;
+    });
+    CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_SCOPE_READ, &frame_width), {
+        return -1;
+    });
     std::cout << "scope::frame_width=" << std::dec << frame_width << std::endl;  
 
     if (fwidth != (int)frame_width) {   
@@ -171,19 +184,31 @@ int vx_scope_stop(fpga_handle hfpga) {
     }
 
     // get max frames
-    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, CMD_GET_COUNT));
-    CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_SCOPE_READ, &max_frames));
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, CMD_GET_COUNT), {
+        return -1;
+    });
+    CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_SCOPE_READ, &max_frames), {
+        return -1;
+    });
     std::cout << "scope::max_frames=" << std::dec << max_frames << std::endl;    
 
     // get offset    
-    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, CMD_GET_OFFSET));    
-    CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_SCOPE_READ, &offset));
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, CMD_GET_OFFSET), {
+        return -1;
+    });
+    CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_SCOPE_READ, &offset), {
+        return -1;
+    });
 
     // get data
-    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, CMD_GET_DATA));
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, CMD_GET_DATA), {
+        return -1;
+    });
 
     // print clock header
-    CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_SCOPE_READ, &delta));
+    CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_SCOPE_READ, &delta), {
+        return -1;
+    });
     timestamp = print_clock(ofs, offset + delta + 2, timestamp);
     signal_id = num_taps;
 
@@ -192,15 +217,23 @@ int vx_scope_stop(fpga_handle hfpga) {
     do {
         if (frame_no == (max_frames-1)) {
             // verify last frame is valid
-            CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, CMD_GET_VALID));
-            CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_SCOPE_READ, &data_valid));  
+            CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, CMD_GET_VALID), {
+                return -1;
+            });
+            CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_SCOPE_READ, &data_valid), {
+                return -1;
+            });
             assert(data_valid == 1);
-            CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, CMD_GET_DATA));
+            CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, CMD_GET_DATA), {
+                return -1;
+            });
         }
 
         // read next data words
         uint64_t word;
-        CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_SCOPE_READ, &word));
+        CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_SCOPE_READ, &word), {
+            return -1;
+        });
         
         do {          
             int signal_width = scope_taps[signal_id-1].width;
@@ -225,7 +258,9 @@ int vx_scope_stop(fpga_handle hfpga) {
 
                 if (frame_no != max_frames) {    
                     // print clock header
-                    CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_SCOPE_READ, &delta));
+                    CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_SCOPE_READ, &delta), {
+                        return -1;
+                    });
                     timestamp = print_clock(ofs, delta + 1, timestamp);            
                     signal_id = num_taps;
                     if (0 == (frame_no % FRAME_FLUSH_SIZE)) {
@@ -242,8 +277,12 @@ int vx_scope_stop(fpga_handle hfpga) {
     std::cout << "scope trace dump done! - " << (timestamp/2) << " cycles" << std::endl;
 
     // verify data not valid
-    CHECK_RES(fpgaWriteMMIO64(hfpga, 0, MMIO_SCOPE_WRITE, CMD_GET_VALID));
-    CHECK_RES(fpgaReadMMIO64(hfpga, 0, MMIO_SCOPE_READ, &data_valid));  
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, CMD_GET_VALID), {
+        return -1;
+    });
+    CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_SCOPE_READ, &data_valid), {
+        return -1;
+    });
     assert(data_valid == 0);
 
     return 0;

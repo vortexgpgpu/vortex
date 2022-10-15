@@ -1,4 +1,4 @@
-VLSIM_DIR = ../../sim/vlsim
+OPAESIM_DIR = ../../sim/opaesim
 
 RTL_DIR=../../hw/rtl
 
@@ -6,7 +6,7 @@ SCRIPT_DIR=../../hw/scripts
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
 
-CXXFLAGS += -I. -I../include -I../../hw -I$(VLSIM_DIR)
+CXXFLAGS += -I. -I../include -I../common/ -I../../hw -I$(OPAESIM_DIR)
 
 # Position independent code
 CXXFLAGS += -fPIC
@@ -17,10 +17,9 @@ CXXFLAGS += $(CONFIGS)
 # Dump perf stats
 CXXFLAGS += -DDUMP_PERF_STATS
 
-LDFLAGS += -shared -pthread
-LDFLAGS += -L. -lopae-c-vlsim
+LDFLAGS += -shared -luuid -ldl -pthread
 
-SRCS = ../common/opae.cpp ../common/vx_utils.cpp
+SRCS = vortex.cpp api_init.cpp ../common/vx_utils.cpp
 
 # Debugigng
 ifdef DEBUG
@@ -32,7 +31,7 @@ endif
 # Enable scope analyzer
 ifdef SCOPE
 	CXXFLAGS += -DSCOPE	
-	SRCS += ../common/vx_scope.cpp
+	SRCS += scope.cpp
 	SCOPE_H = scope-defs.h 
 endif
 
@@ -46,15 +45,13 @@ PROJECT = libvortex.so
 all: $(PROJECT)
 
 scope-defs.h: $(SCRIPT_DIR)/scope.json
-	$(SCRIPT_DIR)/scope.py -DSIMULATION $(CONFIGS) -cc scope-defs.h -vl $(RTL_DIR)/scope-defs.vh $(SCRIPT_DIR)/scope.json
+	$(SCRIPT_DIR)/scope.py $(CONFIGS) -D NOGLOBALS -cc scope-defs.h -vl $(RTL_DIR)/scope-defs.vh $(SCRIPT_DIR)/scope.json
 
 # generate scope data
 scope: scope-defs.h
 
 $(PROJECT): $(SRCS) $(SCOPE_H)
-	DESTDIR=../../runtime/vlsim $(MAKE) -C $(VLSIM_DIR) ../../runtime/vlsim/libopae-c-vlsim.so
-	$(CXX) $(CXXFLAGS) -DUSE_VLSIM $(SRCS) $(LDFLAGS) -o $(PROJECT)
+	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $(PROJECT)
 
 clean:
-	DESTDIR=../../runtime/vlsim $(MAKE) -C $(VLSIM_DIR) clean
-	rm -rf libopae-c-vlsim.so $(PROJECT) *.o scope-defs.h
+	rm -rf $(PROJECT) *.o scope-defs.h

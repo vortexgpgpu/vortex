@@ -1,7 +1,7 @@
 #ifndef __FPGA_H__
 #define __FPGA_H__
 
-#include <stdio.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,28 +21,21 @@ typedef enum {
 	FPGA_RECONF_ERROR    /**< Error while reconfiguring FPGA */
 } fpga_result;
 
+typedef enum { 
+	FPGA_DEVICE = 0,
+	FPGA_ACCELERATOR
+} fpga_objtype;
+
 typedef void *fpga_handle;
 
 typedef void *fpga_token;
 
-fpga_result fpgaOpen(fpga_token token, fpga_handle *handle, int flags);
+typedef void *fpga_properties;
 
-fpga_result fpgaClose(fpga_handle handle);
-
-fpga_result fpgaPrepareBuffer(fpga_handle handle, uint64_t len, void **buf_addr, uint64_t *wsid, int flags);
-
-fpga_result fpgaReleaseBuffer(fpga_handle handle, uint64_t wsid);
-
-fpga_result fpgaGetIOAddress(fpga_handle handle, uint64_t wsid, uint64_t *ioaddr);
-
-fpga_result fpgaWriteMMIO64(fpga_handle handle, uint32_t mmio_num, uint64_t offset, uint64_t value);
-
-fpga_result fpgaReadMMIO64(fpga_handle handle, uint32_t mmio_num, uint64_t offset, uint64_t *value);
-
-const char *fpgaErrStr(fpga_result e);
+typedef uint8_t fpga_guid[16];
 
 #ifdef __cplusplus
-} // extern "C"
-#endif // __cplusplus
+}
+#endif
 
 #endif // __FPGA_H__

@@ -12,7 +12,7 @@ CXXFLAGS += -I../$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I../$(THIRD_PARTY_DIR)
 
 LDFLAGS += -shared ../$(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
-LDFLAGS += -L../$(THIRD_PARTY_DIR)/ramulator -lramulator
+LDFLAGS += -L../$(THIRD_PARTY_DIR)/ramulator -lramulator -pthread
 
 # control RTL debug tracing states
 DBG_TRACE_FLAGS += -DDBG_TRACE_CORE_PIPELINE  

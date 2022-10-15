@@ -48,6 +48,13 @@ else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
+ifeq ($(TARGET), asesim)
+	OPAE_API_PATHS=libopae-c-ase.so
+endif
+ifeq ($(TARGET), opaesim)
+	OPAE_API_PATHS=/nethome/btine3/dev/vortex-gfx/sim/opaesim/libopae-c-sim.so
+endif
+
 all: $(PROJECT) kernel.bin kernel.dump
  
 kernel.dump: kernel.elf
@@ -65,14 +72,8 @@ $(PROJECT): $(SRCS)
 run-simx: $(PROJECT) kernel.bin   
 	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 	
-run-fpga: $(PROJECT) kernel.bin   
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/fpga:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
-
-run-asesim: $(PROJECT) kernel.bin   
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/asesim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
-	
-run-vlsim: $(PROJECT) kernel.bin   
-	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/vlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+run-opae: $(PROJECT) kernel.bin   
+	OPAE_API_PATHS=$(OPAE_API_PATHS) LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/opae:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
 run-rtlsim: $(PROJECT) kernel.bin   
 	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)

@@ -161,9 +161,9 @@ def add_macro(name, args, value):
             print(args[i], end='')
         print(")=" + value)
     else:
-        print("*** token: " + name + "=" + value)
+        print("*** token: " + name + "=" + value)    
     '''
-
+    
 def find_macro(name):
     for macro in macros:
         if macro[0] == name:
@@ -278,7 +278,7 @@ def expand_text(text, params):
     return None
 
 def parse_include(filename, nesting):    
-    print("*** parsing: " + filename + "...")        
+    print("*** parsing: " + filename + "...")      
     if nesting > 99:
         raise Exception("include recursion!")    
     #print("*** parsing '" + filename + "'...")    
@@ -311,7 +311,7 @@ def parse_include(filename, nesting):
             taken = find_macro(cond) is not None
             if key == 'ifndef':
                 taken = not taken
-            elif key == '"elsif':
+            elif key == 'elsif':
                 br_stack.pop()
             br_stack.append(taken)
             #print("*** " + key + "(" + cond + ") => " + str(taken))
@@ -353,6 +353,7 @@ def parse_include(filename, nesting):
             value = m.group(3)
             add_macro(name, args, value.strip())
             continue
+    print("*** exiting: " + filename + "...")
 
 def parse_includes(includes):
     # change current directory to include directory
@@ -666,8 +667,7 @@ def gen_vl_header(file, modules, taps):
 
 def gen_cc_header(file, taps):
 
-    header = '''
-#pragma once
+    header = '''#pragma once
 
 struct scope_module_t {
     const char* name;

@@ -9,7 +9,7 @@ show_usage()
 SCRIPT_DIR=$(dirname "$0")
 VORTEX_HOME=$SCRIPT_DIR/..
 
-DRIVER=vlsim
+DRIVER=simx
 APP=sgemm
 CLUSTERS=1
 CORES=1
@@ -95,20 +95,14 @@ esac
 done
 
 case $DRIVER in
+    simx)
+        DRIVER_PATH=$VORTEX_HOME/runtime/simx
+        ;;
     rtlsim)
         DRIVER_PATH=$VORTEX_HOME/runtime/rtlsim
         ;;
-    vlsim)
-        DRIVER_PATH=$VORTEX_HOME/runtime/vlsim
-        ;;
-    asesim)
-        DRIVER_PATH=$VORTEX_HOME/runtime/asesim
-        ;;
-    fpga)
-        DRIVER_PATH=$VORTEX_HOME/runtime/fpga
-        ;; 
-    simx)
-        DRIVER_PATH=$VORTEX_HOME/runtime/simx
+    opae)
+        DRIVER_PATH=$VORTEX_HOME/runtime/opae
         ;;
     xrt)
         DRIVER_PATH=$VORTEX_HOME/runtime/xrt
