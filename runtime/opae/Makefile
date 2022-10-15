@@ -1,3 +1,5 @@
+TARGET ?= opaesim
+
 OPAESIM_DIR = ../../sim/opaesim
 
 RTL_DIR=../../hw/rtl
@@ -51,13 +53,13 @@ scope-defs.h: $(SCRIPT_DIR)/scope.json
 scope: scope-defs.h
 
 $(PROJECT): $(SRCS) $(SCOPE_H)
-	ifeq ($(TARGET), opaesim)
-		$(MAKE) -C $(OPAESIM_DIR)
-	endif
+ifeq ($(TARGET), opaesim)
+	$(MAKE) -C $(OPAESIM_DIR)
+endif
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $(PROJECT)
 
 clean:
 	rm -rf $(PROJECT) *.o scope-defs.h
-	ifeq ($(TARGET), opaesim)
-		$(MAKE) -C $(OPAESIM_DIR) clean
-	endif
+ifeq ($(TARGET), opaesim)
+	$(MAKE) -C $(OPAESIM_DIR) clean
+endif
