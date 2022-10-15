@@ -48,12 +48,14 @@ else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
-OPAE_API_PATHS=../../../sim/opaesim/libopae-c-sim.so
 ifeq ($(TARGET), fpga)
-	OPAE_API_PATHS=
-endif
+	OPAE_API_PATHS ?= $(OPAE_SDK_ROOT)/lib64/libopae-c.so
+else
 ifeq ($(TARGET), asesim)
-	OPAE_API_PATHS=libopae-c-ase.so
+	OPAE_API_PATHS ?= $(OPAE_SDK_ROOT)/lib64/libopae-c-ase.so
+else
+	OPAE_API_PATHS ?= ../../../sim/opaesim/libopae-c-sim.so
+endif
 endif
 
 all: $(PROJECT) kernel.bin kernel.dump
