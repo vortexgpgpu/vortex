@@ -2,6 +2,6 @@ PROJECT = nearn
 
 SRCS = main.cc clutils.cpp utils.cpp
 
-OPTS ?= -n64
+OPTS ?= filelist.txt
 
 include ../common.mk

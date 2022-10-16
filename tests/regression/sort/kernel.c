@@ -3,6 +3,10 @@
 #include <vx_spawn.h>
 #include "common.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void kernel_body(int __DIVERGENT__ task_id, kernel_arg_t* arg) {
 	uint32_t num_points = arg->num_points;
 	int32_t* src_ptr = (int32_t*)arg->src_addr;
@@ -22,3 +26,7 @@ void main() {
 	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
 	vx_spawn_tasks(arg->num_points, (vx_spawn_tasks_cb)kernel_body, arg);
 }
+
+#ifdef __cplusplus
+}
+#endif
