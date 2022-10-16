@@ -126,8 +126,8 @@ module vortex_afu_inst #(
 				end
 				if (vx_reset_wait == 1 && vx_reset_ctr == (`RESET_DELAY-1)) begin
 					`TRACE(2, ("%d: AFU: Begin execution\n", $time));
-					vx_running    <= 1;
 					vx_reset_wait <= 0;
+					vx_running    <= 1;					
 					vx_busy_wait  <= 1;
 				end
 			end
@@ -149,10 +149,10 @@ module vortex_afu_inst #(
 	end
 
 	always @(posedge ap_clk) begin
-		if (vx_reset_wait == 0) begin
-			vx_reset_ctr <= 0;
+		if (vx_reset_wait) begin
+			vx_reset_ctr <= vx_reset_ctr + 1;			
 		end else begin
-			vx_reset_ctr <= vx_reset_ctr + 1;
+			vx_reset_ctr <= 0;
 		end
 	end
 

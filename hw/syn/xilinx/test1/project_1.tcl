@@ -137,7 +137,6 @@ set_property -name "simulator.ies_install_dir" -value "" -objects $obj
 set_property -name "simulator.modelsim_gcc_install_dir" -value "" -objects $obj
 set_property -name "simulator.modelsim_install_dir" -value "" -objects $obj
 set_property -name "simulator.questa_gcc_install_dir" -value "" -objects $obj
-set_property -name "simulator.questa_install_dir" -value "" -objects $obj
 set_property -name "simulator.riviera_gcc_install_dir" -value "" -objects $obj
 set_property -name "simulator.riviera_install_dir" -value "" -objects $obj
 set_property -name "simulator.vcs_gcc_install_dir" -value "" -objects $obj
@@ -441,7 +440,7 @@ if { $bCheckIPs == 1 } {
    CONFIG.Assume_Synchronous_Clk {true} \
    CONFIG.Byte_Size {8} \
    CONFIG.Load_Init_File {true} \
-   CONFIG.Coe_File {/nethome/btine3/dev/vortex-gfx/hw/syn/xilinx/tryout/project_1_files/fibonacci.bin.coe} \
+   CONFIG.Coe_File {/nethome/btine3/dev/vortex-gfx/hw/syn/xilinx/test1/project_1_files/kernel.bin.coe} \
    CONFIG.EN_SAFETY_CKT {true} \
    CONFIG.Enable_32bit_Address {true} \
    CONFIG.Fill_Remaining_Memory_Locations {false} \
@@ -685,6 +684,9 @@ set_property -name "steps.synth_design.args.more options" -value "" -objects $ob
 
 # set the current synth run
 current_run -synthesis [get_runs synth_1]
+
+# preserve signal names
+set_property STEPS.SYNTH_DESIGN.ARGS.FLATTEN_HIERARCHY none [get_runs synth_1]
 
 # Create 'impl_1' run (if not found)
 if {[string equal [get_runs -quiet impl_1] ""]} {
