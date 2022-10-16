@@ -4,6 +4,10 @@
 #include <vx_intrinsics.h>
 #include <vx_print.h>
 #include <string.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
  
 int _close(int file) { return -1; }
  
@@ -105,5 +109,9 @@ void __libc_fini_array (void) {
 #ifdef HAVE_INIT_FINI
   _fini ();
 #endif
+}
+#endif
+
+#ifdef __cplusplus
 }
 #endif
