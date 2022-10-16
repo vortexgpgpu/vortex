@@ -147,7 +147,7 @@ int main( int argc, const char** argv)
     cqCommandQueue = clCreateCommandQueue(cxGPUContext, device, 0, &ciErrNum);
     //oclCheckError(ciErrNum, CL_SUCCESS);
 
-    source_path = shrFindFilePath("oclReduction_kernel.cl", argv[0]);
+    source_path = shrFindFilePath("kernel.cl", argv[0]);
 
     bool bSuccess = false;
     switch (datatype)

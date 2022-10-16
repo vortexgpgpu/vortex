@@ -79,7 +79,7 @@ if { $chipscope == 1 } {
     create_ip -name ila -vendor xilinx.com -library ip -version 6.2 -module_name ila_fetch
     set_property -dict [list CONFIG.C_ADV_TRIGGER {true} \
                              CONFIG.C_EN_STRG_QUAL {1} \
-                             CONFIG.C_DATA_DEPTH {8192} \
+                             CONFIG.C_DATA_DEPTH {4096} \
                              CONFIG.C_NUM_OF_PROBES {5} \
                              CONFIG.C_PROBE0_WIDTH {128} \
                              CONFIG.C_PROBE1_WIDTH {128} \
@@ -93,9 +93,9 @@ if { $chipscope == 1 } {
     create_ip -name ila -vendor xilinx.com -library ip -version 6.2 -module_name ila_issue
     set_property -dict [list CONFIG.C_ADV_TRIGGER {true} \
                              CONFIG.C_EN_STRG_QUAL {1} \
-                             CONFIG.C_DATA_DEPTH {8192} \
+                             CONFIG.C_DATA_DEPTH {4096} \
                              CONFIG.C_NUM_OF_PROBES {2} \
-                             CONFIG.C_PROBE0_WIDTH {128} \
+                             CONFIG.C_PROBE0_WIDTH {256} \
                              CONFIG.C_PROBE1_WIDTH {128} \
                         ] [get_ips ila_issue]
     generate_target {instantiation_template} [get_files ila_issue.xci]
@@ -105,9 +105,11 @@ if { $chipscope == 1 } {
     set_property -dict [list CONFIG.C_ADV_TRIGGER {true} \
                              CONFIG.C_EN_STRG_QUAL {1} \
                              CONFIG.C_DATA_DEPTH {4096} \
-                             CONFIG.C_NUM_OF_PROBES {2} \
-                             CONFIG.C_PROBE0_WIDTH {128} \
+                             CONFIG.C_NUM_OF_PROBES {4} \
+                             CONFIG.C_PROBE0_WIDTH {256} \
                              CONFIG.C_PROBE1_WIDTH {128} \
+                             CONFIG.C_PROBE2_WIDTH {288} \
+                             CONFIG.C_PROBE3_WIDTH {256} \
                         ] [get_ips ila_lsu]
     generate_target {instantiation_template} [get_files ila_lsu.xci]
     set_property generate_synth_checkpoint false [get_files ila_lsu.xci]

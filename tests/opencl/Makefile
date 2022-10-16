@@ -31,16 +31,16 @@ run-rtlsim:
 	$(MAKE) -C psort run-rtlsim
 	$(MAKE) -C DotProduct run-rtlsim
 
-run-vlsim:
-	$(MAKE) -C vecadd run-vlsim
-	$(MAKE) -C sgemm run-vlsim
-	$(MAKE) -C saxpy run-vlsim
-	$(MAKE) -C sfilter run-vlsim
-	$(MAKE) -C nearn run-vlsim
-	$(MAKE) -C guassian run-vlsim
-	$(MAKE) -C oclprintf run-vlsim
-	$(MAKE) -C psort run-vlsim
-	$(MAKE) -C DotProduct run-vlsim
+run-opae:
+	$(MAKE) -C vecadd run-opae
+	$(MAKE) -C sgemm run-opae
+	$(MAKE) -C saxpy run-opae
+	$(MAKE) -C sfilter run-opae
+	$(MAKE) -C nearn run-opae
+	$(MAKE) -C guassian run-opae
+	$(MAKE) -C oclprintf run-opae
+	$(MAKE) -C psort run-opae
+	$(MAKE) -C DotProduct run-opae
 
 clean:
 	$(MAKE) -C vecadd clean

@@ -96,7 +96,7 @@ char* cSourceCL = NULL;                             // Buffer to hold source for
 const char* cExecutableName = NULL;
 
 // demo config vars
-const char* cSourceFile = "VectorHypot.cl";         // OpenCL computation kernel source code
+const char* cSourceFile = "kernel.cl";         // OpenCL computation kernel source code
 float* Golden = NULL;                               // temp buffer to hold golden results for cross check    
 bool bNoPrompt = false;                             // Command line switch to skip exit prompt
 bool bQATest = false;                               // Command line switch to test
