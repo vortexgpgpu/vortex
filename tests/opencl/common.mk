@@ -23,7 +23,7 @@ CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
 
 CXXFLAGS += -Wno-deprecated-declarations -Wno-unused-parameter -Wno-narrowing
 
-CXXFLAGS += -I$(VORTEX_RT_PATH)/include
+CXXFLAGS += -I$(POCL_RT_PATH)/include
 
 LDFLAGS += -L$(POCL_RT_PATH)/lib -L$(VORTEX_RT_PATH)/stub -lOpenCL -lvortex
 
@@ -61,7 +61,7 @@ run-rtlsim: $(PROJECT) kernel.pocl
 run-opae: $(PROJECT) kernel.pocl
 	OPAE_API_PATHS=$(OPAE_API_PATHS) LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/opae:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
-run-xrt: $(PROJECT) kernel.bin
+run-xrt: $(PROJECT) kernel.pocl
 ifeq ($(TARGET), hw)
 	XRT_INI_PATH=${XRT_SYN_DIR}/xrt.ini EMCONFIG_PATH=${XRT_BUILD_DIR} XRT_DEVICE_INDEX=0 XRT_XCLBIN_PATH=${XRT_BUILD_DIR}/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/xrt:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 else
