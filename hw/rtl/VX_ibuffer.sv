@@ -85,7 +85,7 @@ module VX_ibuffer #(
                     if (used_r == ADDRW'(ALM_EMPTY+1))
                         alm_empty_r <= 1;
                 end
-                used_r <= used_r + ADDRW'($signed(2'(push) - 2'(pop)));
+                used_r <= $signed(used_r) + ADDRW'($signed(2'(push) - 2'(pop)));                
             end 
 
             if (push && going_empty) begin                                                       

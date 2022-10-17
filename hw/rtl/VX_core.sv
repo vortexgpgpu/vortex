@@ -315,8 +315,8 @@ module VX_core #(
             perf_icache_pending_reads <= 0;
             perf_dcache_pending_reads <= 0;
         end else begin
-            perf_icache_pending_reads <= perf_icache_pending_reads + `PERF_CTR_BITS'($signed(perf_icache_pending_read_cycle));
-            perf_dcache_pending_reads <= perf_dcache_pending_reads + `PERF_CTR_BITS'($signed(perf_dcache_pending_read_cycle));
+            perf_icache_pending_reads <= $signed(perf_icache_pending_reads) + `PERF_CTR_BITS'($signed(perf_icache_pending_read_cycle));
+            perf_dcache_pending_reads <= $signed(perf_dcache_pending_reads) + `PERF_CTR_BITS'($signed(perf_dcache_pending_read_cycle));
         end
     end
     

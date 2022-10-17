@@ -28,7 +28,7 @@ module VX_pending_size #(
             `ASSERT(~(incr && ~decr) || ~full, ("runtime error: incrementing full counter"));
             `ASSERT(~(decr && ~incr) || ~empty, ("runtime error: decrementing empty counter"));
             if (incr) begin
-                if (!decr) begin
+                if (~decr) begin
                     empty_r <= 0;
                     if (used_r == ADDRW'(SIZE-1))
                         full_r <= 1;
@@ -38,7 +38,7 @@ module VX_pending_size #(
                 if (used_r == ADDRW'(1))
                     empty_r <= 1;                
             end
-            used_r <= used_r + ADDRW'($signed(2'(incr && !decr) - 2'(decr && !incr)));
+            used_r <= $signed(used_r) + ADDRW'($signed(2'(incr) - 2'(decr)));
         end
     end
 

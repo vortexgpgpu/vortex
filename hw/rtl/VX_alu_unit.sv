@@ -56,7 +56,7 @@ module VX_alu_unit #(
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin    
         wire [32:0] shr_in1 = {alu_signed & alu_in1[i][31], alu_in1[i]};
-        assign shr_result[i] = 32'($signed(shr_in1) >>> alu_in2_imm[i][4:0]);
+        assign shr_result[i] = 32'($signed(shr_in1) >>> $signed(alu_in2_imm[i][4:0]));
     end        
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin 

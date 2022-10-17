@@ -276,9 +276,9 @@ module Vortex (
         if (reset) begin
             perf_mem_pending_reads <= 0;
         end else begin
-            perf_mem_pending_reads <= perf_mem_pending_reads + 
+            perf_mem_pending_reads <= $signed(perf_mem_pending_reads) + 
                 `PERF_CTR_BITS'($signed(2'((mem_req_if.valid && mem_req_if.ready && !mem_req_if.rw) && !(mem_rsp_if.valid && mem_rsp_if.ready)) - 
-                    2'((mem_rsp_if.valid && mem_rsp_if.ready) && !(mem_req_if.valid && mem_req_if.ready && !mem_req_if.rw))));
+                                        2'((mem_rsp_if.valid && mem_rsp_if.ready) && !(mem_req_if.valid && mem_req_if.ready && !mem_req_if.rw))));
         end
     end
     

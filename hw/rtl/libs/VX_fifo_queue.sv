@@ -41,10 +41,10 @@ module VX_fifo_queue #(
                 head_r <= 0;
                 size_r <= 0;                    
             end else begin
-                `ASSERT(!push || !full, ("runtime error: incrementing full queue"));
-                `ASSERT(!pop || !empty, ("runtime error: decrementing full queue"));
+                `ASSERT(~push || ~full, ("runtime error: incrementing full queue"));
+                `ASSERT(~pop || ~empty, ("runtime error: decrementing full queue"));
                 if (push) begin
-                    if (!pop) begin
+                    if (~pop) begin
                         size_r <= 1;
                     end
                 end else if (pop) begin
@@ -68,6 +68,7 @@ module VX_fifo_queue #(
         reg empty_r, alm_empty_r;
         reg full_r, alm_full_r;
         reg [ADDRW-1:0] used_r;
+        wire [ADDRW-1:0] used_n;
 
         always @(posedge clk) begin
             if (reset) begin
@@ -75,12 +76,12 @@ module VX_fifo_queue #(
                 alm_empty_r <= 1;    
                 full_r      <= 0;        
                 alm_full_r  <= 0;
-                used_r      <= 0;
+                used_r      <= '0;
             end else begin
                 `ASSERT(~(push && ~pop) || ~full, ("runtime error: incrementing full queue"));
                 `ASSERT(~(pop && ~push) || ~empty, ("runtime error: decrementing empty queue"));
                 if (push) begin
-                    if (!pop) begin
+                    if (~pop) begin
                         empty_r <= 0;
                         if (used_r == ADDRW'(ALM_EMPTY))
                             alm_empty_r <= 0;
@@ -90,24 +91,21 @@ module VX_fifo_queue #(
                             alm_full_r <= 1;
                     end
                 end else if (pop) begin
-                    full_r <= 0;        
+                    full_r <= 0;
                     if (used_r == ADDRW'(ALM_FULL))
                         alm_full_r <= 0;            
                     if (used_r == ADDRW'(1))
                         empty_r <= 1;
                     if (used_r == ADDRW'(ALM_EMPTY+1))
                         alm_empty_r <= 1;
-                end
-                if (SIZE > 2) begin        
-                    used_r <= used_r + ADDRW'($signed(2'(push) - 2'(pop)));
-                end else begin 
-                    // (SIZE == 2);
-                    used_r[0] <= used_r[0] ^ (push ^ pop);
                 end                
+                used_r <= used_n;  
             end                   
         end
 
         if (SIZE == 2) begin
+
+            assign used_n = used_r ^ (push ^ pop);
 
             if (0 == OUT_REG) begin 
 
@@ -143,6 +141,8 @@ module VX_fifo_queue #(
             end
         
         end else begin
+            
+            assign used_n = $signed(used_r) + ADDRW'($signed(2'(push) - 2'(pop)));
 
             if (0 == OUT_REG) begin          
 
