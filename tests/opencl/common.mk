@@ -35,12 +35,12 @@ else
 endif
 
 ifeq ($(TARGET), fpga)
-	OPAE_API_PATHS ?= $(OPAE_SDK_ROOT)/lib64/libopae-c.so
+	OPAE_DRV_PATHS ?= $(OPAE_SDK_ROOT)/lib64/libopae-c.so
 else
 ifeq ($(TARGET), asesim)
-	OPAE_API_PATHS ?= $(OPAE_SDK_ROOT)/lib64/libopae-c-ase.so
+	OPAE_DRV_PATHS ?= $(OPAE_SDK_ROOT)/lib64/libopae-c-ase.so
 else
-	OPAE_API_PATHS ?= ../../../sim/opaesim/libopae-c-sim.so
+	OPAE_DRV_PATHS ?= ../../../sim/opaesim/libopae-c-sim.so
 endif
 endif
 
@@ -59,7 +59,7 @@ run-rtlsim: $(PROJECT) kernel.pocl
 	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
 run-opae: $(PROJECT) kernel.pocl
-	OPAE_API_PATHS=$(OPAE_API_PATHS) LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/opae:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+	OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/opae:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
 run-xrt: $(PROJECT) kernel.pocl
 ifeq ($(TARGET), hw)

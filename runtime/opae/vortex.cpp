@@ -95,9 +95,9 @@ extern int vx_dev_open(vx_device_h* hdevice) {
 
     uint32_t num_matches;
 
-    opae_api_funcs_t api;
-    memset(&api, 0, sizeof(opae_api_funcs_t));
-    if (api_init(&api) !=0) {
+    opae_drv_api_t api;
+    memset(&api, 0, sizeof(opae_drv_api_t));
+    if (drv_init(&api) !=0) {
         return -1;
     }
     
@@ -202,7 +202,7 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     perf_add_device(device);
 #endif    
 
-    *hdevice = device;
+    *hdevice = device;    
 
     return 0;
 }
@@ -225,6 +225,8 @@ extern int vx_dev_close(vx_device_h hdevice) {
     api.fpgaClose(device->fpga);
 
     delete device;
+
+    drv_close();
 
     return 0;
 }
