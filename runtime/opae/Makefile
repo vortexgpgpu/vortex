@@ -21,7 +21,7 @@ CXXFLAGS += -DDUMP_PERF_STATS
 
 LDFLAGS += -shared -luuid -ldl -pthread
 
-SRCS = vortex.cpp api_init.cpp ../common/vx_utils.cpp
+SRCS = vortex.cpp driver.cpp ../common/vx_utils.cpp
 
 # Debugigng
 ifdef DEBUG
