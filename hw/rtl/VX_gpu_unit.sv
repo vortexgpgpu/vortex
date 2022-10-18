@@ -292,34 +292,6 @@ module VX_gpu_unit #(
 
     // response arbitration
 
-    wire [RSP_ARB_SIZE-1:0] rsp_valid_in;
-    wire [RSP_ARB_SIZE-1:0][RSP_ARB_DATAW-1:0] rsp_data_in;
-    wire [RSP_ARB_SIZE-1:0] rsp_ready_in;
-
-`ifdef EXT_IMADD_ENABLE
-    assign rsp_valid_in[RSP_ARB_SIZE-5] = imadd_valid_out;
-    assign rsp_data_in[RSP_ARB_SIZE-5]  = {imadd_uuid_out, imadd_wid_out, imadd_tmask_out, imadd_PC_out, imadd_rd_out, 1'b1, RSP_DATAW'(imadd_data_out), 1'b1, 1'b0};
-    assign imadd_ready_out = rsp_ready_in[RSP_ARB_SIZE-5];
-`endif
-`ifdef EXT_ROP_ENABLE
-    assign rsp_valid_in[RSP_ARB_SIZE-4] = rop_commit_if.valid;
-    assign rsp_data_in[RSP_ARB_SIZE-4]  = {rop_commit_if.uuid, rop_commit_if.wid, rop_commit_if.tmask, rop_commit_if.PC, rop_commit_if.rd, rop_commit_if.wb, RSP_DATAW'(rop_commit_if.data), rop_commit_if.eop, 1'b0};
-    assign rop_commit_if.ready = rsp_ready_in[RSP_ARB_SIZE-4];
-`endif
-`ifdef EXT_RASTER_ENABLE
-    assign rsp_valid_in[RSP_ARB_SIZE-3] = raster_commit_if.valid;
-    assign rsp_data_in[RSP_ARB_SIZE-3]  = {raster_commit_if.uuid, raster_commit_if.wid, raster_commit_if.tmask, raster_commit_if.PC, raster_commit_if.rd, raster_commit_if.wb, RSP_DATAW'(raster_commit_if.data), raster_commit_if.eop, 1'b0};
-    assign raster_commit_if.ready = rsp_ready_in[RSP_ARB_SIZE-3];
-`endif
-`ifdef EXT_TEX_ENABLE
-    assign rsp_valid_in[RSP_ARB_SIZE-2] = tex_commit_if.valid;
-    assign rsp_data_in[RSP_ARB_SIZE-2]  = {tex_commit_if.uuid, tex_commit_if.wid, tex_commit_if.tmask, tex_commit_if.PC, tex_commit_if.rd, tex_commit_if.wb, RSP_DATAW'(tex_commit_if.data), tex_commit_if.eop, 1'b0};
-    assign tex_commit_if.ready = rsp_ready_in[RSP_ARB_SIZE-2];
-`endif
-    assign rsp_valid_in[RSP_ARB_SIZE-1] = wctl_rsp_valid;
-    assign rsp_data_in[RSP_ARB_SIZE-1]  = {gpu_req_if.uuid, gpu_req_if.wid, gpu_req_if.tmask, gpu_req_if.PC, `NR_BITS'(0), 1'b0, RSP_DATAW'(wctl_rsp_data), 1'b1, ~is_join};
-    assign wctl_rsp_ready = rsp_ready_in[RSP_ARB_SIZE-1];
-
     VX_stream_arb #(
         .NUM_INPUTS (RSP_ARB_SIZE),
         .DATAW      (RSP_ARB_DATAW),
@@ -327,10 +299,52 @@ module VX_gpu_unit #(
         .BUFFERED   (1)
     ) rsp_arb (
         .clk       (clk),
-        .reset     (reset),
-        .valid_in  (rsp_valid_in),
-        .ready_in  (rsp_ready_in),
-        .data_in   (rsp_data_in),
+        .reset     (reset),        
+        .valid_in  ({
+            wctl_rsp_valid
+        `ifdef EXT_TEX_ENABLE
+          , tex_commit_if.valid
+        `endif
+        `ifdef EXT_RASTER_ENABLE
+          , raster_commit_if.valid
+        `endif
+        `ifdef EXT_ROP_ENABLE
+          , rop_commit_if.valid
+        `endif
+        `ifdef EXT_IMADD_ENABLE
+          , imadd_valid_out
+        `endif
+        }),
+        .ready_in ({
+            wctl_rsp_ready
+        `ifdef EXT_TEX_ENABLE
+          , tex_commit_if.ready
+        `endif
+        `ifdef EXT_RASTER_ENABLE
+          , raster_commit_if.ready
+        `endif
+        `ifdef EXT_ROP_ENABLE
+          , rop_commit_if.ready
+        `endif
+        `ifdef EXT_IMADD_ENABLE
+          , imadd_ready_out
+        `endif
+        }),
+        .data_in ({
+            {gpu_req_if.uuid, gpu_req_if.wid, gpu_req_if.tmask, gpu_req_if.PC, `NR_BITS'(0), 1'b0, RSP_DATAW'(wctl_rsp_data), 1'b1, ~is_join}
+        `ifdef EXT_TEX_ENABLE
+          , {tex_commit_if.uuid, tex_commit_if.wid, tex_commit_if.tmask, tex_commit_if.PC, tex_commit_if.rd, tex_commit_if.wb, RSP_DATAW'(tex_commit_if.data), tex_commit_if.eop, 1'b0}
+        `endif
+        `ifdef EXT_RASTER_ENABLE
+          , {raster_commit_if.uuid, raster_commit_if.wid, raster_commit_if.tmask, raster_commit_if.PC, raster_commit_if.rd, raster_commit_if.wb, RSP_DATAW'(raster_commit_if.data), raster_commit_if.eop, 1'b0}
+        `endif
+        `ifdef EXT_ROP_ENABLE
+          , {rop_commit_if.uuid, rop_commit_if.wid, rop_commit_if.tmask, rop_commit_if.PC, rop_commit_if.rd, rop_commit_if.wb, RSP_DATAW'(rop_commit_if.data), rop_commit_if.eop, 1'b0}
+        `endif
+        `ifdef EXT_IMADD_ENABLE
+          , {imadd_uuid_out, imadd_wid_out, imadd_tmask_out, imadd_PC_out, imadd_rd_out, 1'b1, RSP_DATAW'(imadd_data_out), 1'b1, 1'b0}
+        `endif
+        }),
         .data_out  ({gpu_commit_if.uuid, gpu_commit_if.wid, gpu_commit_if.tmask, gpu_commit_if.PC, gpu_commit_if.rd, gpu_commit_if.wb, rsp_data, gpu_commit_if.eop, rsp_is_wctl}),
         .valid_out (gpu_commit_if.valid),
         .ready_out (gpu_commit_if.ready)
