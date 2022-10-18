@@ -296,9 +296,9 @@ module VX_raster_mem #(
     wire [`RASTER_DATA_BITS-1:0] prim_mem_offset;
 
     VX_multiplier #(
-        .WIDTHA  (`RASTER_DATA_BITS),
-        .WIDTHB  (`RASTER_STRIDE_BITS),
-        .WIDTHP  (`RASTER_DATA_BITS),
+        .A_WIDTH (`RASTER_DATA_BITS),
+        .B_WIDTH (`RASTER_STRIDE_BITS),
+        .R_WIDTH (`RASTER_DATA_BITS),
         .SIGNED  (0),
         .LATENCY (`LATENCY_IMUL)
     ) multiplier (

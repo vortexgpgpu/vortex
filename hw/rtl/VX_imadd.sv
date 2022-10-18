@@ -41,9 +41,9 @@ module VX_imadd #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         VX_multiplier #(
-            .WIDTHA  (DATA_WIDTH),
-            .WIDTHB  (DATA_WIDTH),
-            .WIDTHP  (PROD_WIDTH),
+            .A_WIDTH (DATA_WIDTH),
+            .B_WIDTH (DATA_WIDTH),
+            .R_WIDTH (PROD_WIDTH),
             .SIGNED  (SIGNED),
             .LATENCY (`LATENCY_IMUL)
         ) multiplier (

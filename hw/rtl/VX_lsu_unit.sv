@@ -138,13 +138,14 @@ module VX_lsu_unit #(
     // data formatting
     
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+        wire [REQ_ASHIFT-1:0] req_align_X1 = {req_align[i][1], 1'b1};
         always @(*) begin
             mem_req_byteen[i] = {4{lsu_req_if.wb}};
             case (`INST_LSU_WSIZE(lsu_req_if.op_type))
                 0: mem_req_byteen[i][req_align[i]] = 1;
                 1: begin
                     mem_req_byteen[i][req_align[i]] = 1;
-                    mem_req_byteen[i][{req_align[i][1], 1'b1}] = 1;
+                    mem_req_byteen[i][req_align_X1] = 1;
                 end
                 default : mem_req_byteen[i] = {4{1'b1}};
             endcase

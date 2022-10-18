@@ -110,9 +110,9 @@ module VX_raster_unit #(
         .extents (mem_extents)
     );
 
-    VX_raster_edge_function #(
+    VX_raster_edge #(
         .LATENCY (EDGE_FUNC_LATENCY)
-    ) raster_edge_function (
+    ) raster_edge (
         .clk    (clk),
         .reset  (reset),
         .enable (~edge_func_stall),

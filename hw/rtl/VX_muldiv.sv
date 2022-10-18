@@ -91,9 +91,9 @@ module VX_muldiv (
     `IGNORE_UNUSED_END
 
         VX_multiplier #(
-            .WIDTHA  (33),
-            .WIDTHB  (33),
-            .WIDTHP  (66),
+            .A_WIDTH (33),
+            .B_WIDTH (33),
+            .R_WIDTH (66),
             .SIGNED  (1),
             .LATENCY (`LATENCY_IMUL)
         ) multiplier (

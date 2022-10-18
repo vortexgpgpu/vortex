@@ -114,10 +114,10 @@ static int get_bank_info(uint64_t dev_addr, uint32_t* pIdx, uint32_t* pOff) {
     return 0;
 }
 
-static void wait_for_enter(const std::string &msg) {
+/*static void wait_for_enter(const std::string &msg) {
     std::cout << msg << std::endl;
     std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-}
+}*/
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -621,7 +621,7 @@ extern int vx_start(vx_device_h hdevice) {
 
     auto device = (vx_device*)hdevice;
 
-    wait_for_enter("\nPress ENTER to continue after setting up ILA trigger...");
+    //wait_for_enter("\nPress ENTER to continue after setting up ILA trigger...");
 
 #ifdef CPP_API
 

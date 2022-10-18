@@ -45,7 +45,10 @@ RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR
 RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
 
 #CONFIGS += -DEXT_GFX_ENABLE
-CONFIGS += -DNUM_WARPS=2 -DNUM_THREADS=2 -DEXT_F_DISABLE
+#CONFIGS += -DNUM_WARPS=2 -DNUM_THREADS=2 -DEXT_F_DISABLE -DL1_DISABLE
+#CONFIGS += -DNUM_WARPS=2 -DNUM_THREADS=2 -DEXT_F_DISABLE
+#CONFIGS += -DNUM_WARPS=2 -DNUM_THREADS=2
+#CONFIGS += -DNUM_CORES=4
 
 CONFIGS += -DSYNTHESIS -DVIVADO
 
@@ -69,7 +72,7 @@ JOBS := $(shell expr $(NCPUS) - 1)
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
 VPP_FLAGS += --vivado.synth.jobs $(JOBS) --vivado.impl.jobs $(JOBS)
 VPP_FLAGS += --connectivity.sp vortex_afu_1.m_axi_mem:HBM[0:15]
-VPP_FLAGS += --report estimate
+VPP_FLAGS += --report 2
 VPP_FLAGS += --config ../vitis.ini
 
 # Enable perf counters
@@ -121,8 +124,10 @@ emconfig: $(BIN_DIR)/emconfig.json
 $(BIN_DIR)/emconfig.json:
 	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); emconfigutil --platform $(PLATFORM) --od ../$(BIN_DIR)
 
-chipscope: 
+hw_server:
 	debug_hw --xvc_pcie /dev/xfpga/xvc_pub.u2305.0 --hw_server &
+
+chipscope:	
 	debug_hw --vivado --host localhost --ltx_file $(BUILD_DIR)/_x/link/vivado/vpl/prj/prj.runs/impl_1/debug_nets.ltx &
 
 clean:

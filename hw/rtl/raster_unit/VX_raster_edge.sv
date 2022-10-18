@@ -2,7 +2,7 @@
 
 `include "VX_raster_define.vh"
 
-module VX_raster_edge_function #(
+module VX_raster_edge #(
     parameter LATENCY = 3
 ) (
     input wire clk,
@@ -29,9 +29,9 @@ module VX_raster_edge_function #(
 
     for (genvar i = 0; i < 3; ++i) begin
         VX_multiplier #(
-            .WIDTHA  (`RASTER_DATA_BITS),
-            .WIDTHB  (`RASTER_DIM_BITS),
-            .WIDTHP  (PROD_WIDTH),
+            .A_WIDTH (`RASTER_DATA_BITS),
+            .B_WIDTH (`RASTER_DIM_BITS),
+            .R_WIDTH (PROD_WIDTH),
             .SIGNED  (1),
             .LATENCY (`LATENCY_IMUL)
         ) x_multiplier (
@@ -43,9 +43,9 @@ module VX_raster_edge_function #(
         );
 
         VX_multiplier #(
-            .WIDTHA  (`RASTER_DATA_BITS),
-            .WIDTHB  (`RASTER_DIM_BITS),
-            .WIDTHP  (PROD_WIDTH),
+            .A_WIDTH (`RASTER_DATA_BITS),
+            .B_WIDTH (`RASTER_DIM_BITS),
+            .R_WIDTH (PROD_WIDTH),
             .SIGNED  (1),
             .LATENCY (`LATENCY_IMUL)
         ) y_multiplier (

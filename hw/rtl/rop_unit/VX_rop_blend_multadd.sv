@@ -2,9 +2,9 @@
 
 `define MULT8(clk, en, dst, src1, src2) \
     VX_multiplier #(              \
-        .WIDTHA  (8),             \
-        .WIDTHB  (8),             \
-        .WIDTHP  (16),            \
+        .A_WIDTH (8),             \
+        .B_WIDTH (8),             \
+        .R_WIDTH (16),            \
         .LATENCY (`LATENCY_IMUL)  \
     ) __``dst (                   \
         .clk    (clk),            \

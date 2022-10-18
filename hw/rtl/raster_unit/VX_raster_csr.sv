@@ -18,7 +18,8 @@ module VX_raster_csr #(
 );
     `UNUSED_VAR (reset)
 
-    localparam NW_WIDTH = `UP(`NW_BITS);
+    localparam NW_WIDTH      = `UP(`NW_BITS);
+    localparam NUM_CSRS_BITS = `CLOG2(`CSR_RASTER_COUNT);
 
     raster_csrs_t [`NUM_THREADS-1:0] wdata;
     raster_csrs_t [`NUM_THREADS-1:0] rdata;
@@ -43,12 +44,12 @@ module VX_raster_csr #(
     end
 
     // CSRs write
-
-    assign wren  = {`NUM_THREADS{write_enable}} & write_tmask;
+    
     assign waddr = write_wid;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign wdata[i].pos_mask = {write_data[i].pos_y, write_data[i].pos_x, write_data[i].mask}; 
+        assign wren[i]           = write_enable && write_tmask[i];
+        assign wdata[i].pos_mask = {write_data[i].pos_y, write_data[i].pos_x, write_data[i].mask};
         assign wdata[i].bcoords  = write_data[i].bcoords;
     end
     
@@ -56,9 +57,11 @@ module VX_raster_csr #(
 
     assign raddr = raster_csr_if.read_wid;
 
+    wire [NUM_CSRS_BITS-1:0] csr_addr = raster_csr_if.read_addr[NUM_CSRS_BITS-1:0];
+
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        wire [`CSR_RASTER_COUNT-1:0][31:0] read_data = rdata[i];
-        assign raster_csr_if.read_data[i] = read_data[raster_csr_if.read_addr[`CLOG2(`CSR_RASTER_COUNT)-1:0]];
+        wire [`CSR_RASTER_COUNT-1:0][31:0] indexable_rdata = rdata[i];
+        assign raster_csr_if.read_data[i] = indexable_rdata[csr_addr];
     end
 
     `UNUSED_VAR (write_uuid)

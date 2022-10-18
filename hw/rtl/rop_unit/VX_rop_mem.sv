@@ -75,9 +75,9 @@ module VX_rop_mem #(
         wire [31:0] m_y_pitch, baddr_s;
 
         VX_multiplier #(
-            .WIDTHA  (`ROP_DIM_BITS),
-            .WIDTHB  (`ROP_PITCH_BITS),
-            .WIDTHP  (32),
+            .A_WIDTH (`ROP_DIM_BITS),
+            .B_WIDTH (`ROP_PITCH_BITS),
+            .R_WIDTH (32),
             .LATENCY (`LATENCY_IMUL)
         ) multiplier (
             .clk    (clk),
@@ -114,9 +114,9 @@ module VX_rop_mem #(
         wire [31:0] m_y_pitch, baddr_s;
 
         VX_multiplier #(
-            .WIDTHA  (`ROP_DIM_BITS),
-            .WIDTHB  (`ROP_PITCH_BITS),
-            .WIDTHP  (32),
+            .A_WIDTH (`ROP_DIM_BITS),
+            .B_WIDTH (`ROP_PITCH_BITS),
+            .R_WIDTH (32),
             .LATENCY (`LATENCY_IMUL)
         ) multiplier (
             .clk    (clk),
