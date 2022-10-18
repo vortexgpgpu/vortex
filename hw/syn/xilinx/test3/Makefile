@@ -71,7 +71,7 @@ JOBS := $(shell expr $(NCPUS) - 1)
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
 VPP_FLAGS += --vivado.synth.jobs $(JOBS) --vivado.impl.jobs $(JOBS)
 VPP_FLAGS += --connectivity.sp vortex_afu_1.m_axi_mem:HBM[0:15]
-VPP_FLAGS += --report estimate
+VPP_FLAGS += --report 2
 VPP_FLAGS += --config ../vitis.ini
 
 # Enable perf counters

@@ -6,6 +6,7 @@
 `define VIVADO
 
 `define EXT_F_DISABLE
+//`define EXT_GFX_ENABLE
 
 `define STARTUP_ADDR    32'h80000
 `define IO_BASE_ADDR    32'hFF000

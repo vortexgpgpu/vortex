@@ -166,9 +166,13 @@ public:
   #endif
 
     // start device
-    this->reset();
-
+    device_->reset = 0;
     running_ = true;
+
+    // wait for busy to go Hi
+    while (!device_->busy) {
+      this->tick();
+    }    
 
     // execute program
     while (device_->busy) {
@@ -181,6 +185,9 @@ public:
 
     // wait 5 cycles to flush the pipeline
     this->wait(5);
+
+    // reset
+    this->reset();
 
     return exitcode;
   }
@@ -215,15 +222,6 @@ private:
     this->reset_dcr_bus();
 
     device_->reset = 1;
-
-    for (int i = 0; i < RESET_DELAY; ++i) {
-      device_->clk = 0;
-      this->eval();
-      device_->clk = 1;
-      this->eval();
-    }  
-
-    device_->reset = 0;
 
     for (int i = 0; i < RESET_DELAY; ++i) {
       device_->clk = 0;
