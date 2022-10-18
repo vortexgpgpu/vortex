@@ -126,6 +126,9 @@ public:
 
     // reset the device
     this->reset();
+    
+    // Turn on assertion after reset
+    Verilated::assertOn(true);
   }
 
   ~Impl() {
@@ -165,16 +168,16 @@ public:
     std::cout << std::dec << timestamp << ": [sim] run()" << std::endl;
   #endif
 
-    // start device
-    device_->reset = 0;
+    // start execution
     running_ = true;
+    device_->reset = 0;
 
-    // wait for busy to go Hi
+    // wait on device to go busy
     while (!device_->busy) {
       this->tick();
-    }    
+    }
 
-    // execute program
+    // wait on device to go idle
     while (device_->busy) {
       if (get_ebreak()) {
         exitcode = get_last_wb_value(3);
@@ -182,12 +185,11 @@ public:
       }
       this->tick();
     }
-
-    // wait 5 cycles to flush the pipeline
-    this->wait(5);
-
-    // reset
+    
+    // reset device
     this->reset();
+
+    this->cout_flush();
 
     return exitcode;
   }
@@ -229,11 +231,6 @@ private:
       device_->clk = 1;
       this->eval();
     }
-    
-    // Turn on assertion after reset
-    Verilated::assertOn(true);
-
-    this->cout_flush();
   }
 
   void tick() {
