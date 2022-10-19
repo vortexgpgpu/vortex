@@ -45,7 +45,8 @@ static bool g_timeout_enabled = false;
 
 static void timeout_callback(vx_device_h hdevice) {
     std::unique_lock<std::mutex> lock(g_timeout_mutex);
-    if (!g_timeout_cv.wait_for(lock, HANG_TIMEOUT, []{ return ~g_timeout_enabled; })) {
+    auto status = g_timeout_cv.wait_for(lock, std::chrono::milliseconds(HANG_TIMEOUT));
+    if (status == std::cv_status::timeout) {
         std::cerr << "Scope timed out!" << std::endl;
         g_timeout_enabled = false;
         auto device = ((vx_device*)hdevice);
@@ -53,7 +54,9 @@ static void timeout_callback(vx_device_h hdevice) {
         vx_scope_stop(hdevice);
         api.fpgaClose(device->fpga);
         exit(-1);
-    }    
+    }  else {
+        std::cerr << "Scope shutdown!" << std::endl;
+    } 
 }
 #endif
 
@@ -121,7 +124,6 @@ int vx_scope_start(vx_device_h hdevice, uint64_t start_time, uint64_t stop_time)
     // starting timeout thread
     g_timeout_enabled = true;
     g_timeout_thread = std::thread(timeout_callback, device);
-    g_timeout_thread.detach();
 #endif
 
     return 0;
