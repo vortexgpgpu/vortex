@@ -150,10 +150,6 @@ module VX_raster_be #(
         assign batch_valid[i] = (| fifo_mask_in[i]);
     end
 
-    assign batch_sent_n = batch_sent | (fifo_push ? fifo_arb_onehot : OUTPUT_BATCHES'(0));
-
-    wire batch_sent_all = (batch_sent_n == batch_valid);
-
     VX_priority_arbiter #(
         .NUM_REQS (OUTPUT_BATCHES)
     ) fifo_arbiter (
@@ -165,6 +161,10 @@ module VX_raster_be #(
         .grant_onehot (fifo_arb_onehot),
         `UNUSED_PIN   (grant_valid)
     );
+
+    assign batch_sent_n = batch_sent | ({OUTPUT_BATCHES{fifo_push}} & fifo_arb_onehot);
+
+    wire batch_sent_all = (batch_sent_n == batch_valid);
 
     always @(posedge clk) begin
         if (reset) begin
@@ -184,6 +184,8 @@ module VX_raster_be #(
 
     wire fifo_valid_in = (| fifo_mask_in[fifo_arb_index]);
 
+    wire [FIFO_DATA_WIDTH-1:0] fifo_data_in = fifo_stamp_in[fifo_arb_index];
+
     assign fifo_push = fifo_valid_in && ~fifo_full;
 
     assign fifo_pop = valid_out && ready_out;
@@ -196,8 +198,8 @@ module VX_raster_be #(
         .reset      (reset),
         .push       (fifo_push),
         .pop        (fifo_pop),
-        .data_in    ({fifo_stamp_in[fifo_arb_index]}),
-        .data_out   ({stamps_out}),
+        .data_in    (fifo_data_in),
+        .data_out   (stamps_out),
         .full       (fifo_full),
         .empty      (fifo_empty),
         `UNUSED_PIN (alm_full),
