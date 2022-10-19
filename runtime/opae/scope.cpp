@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <chrono>
 #include <thread>
+#include <condition_variable>
 #include <mutex>
 #include <VX_config.h>
 #include <vortex_afu.h>
@@ -38,15 +39,21 @@ static constexpr int fwidth = calcFrameWidth();
 
 #ifdef HANG_TIMEOUT
 static std::thread g_timeout_thread;
-static std::mutex g_timeout_mutex;
+static std::mutex  g_timeout_mutex;
+static std::condition_variable g_timeout_cv;
+static bool g_timeout_enabled = false;
 
 static void timeout_callback(vx_device_h hdevice) {
-    auto device = ((vx_device*)hdevice);
-    auto api = device->api;
-    std::this_thread::sleep_for(std::chrono::seconds{HANG_TIMEOUT});
-    vx_scope_stop(hdevice);
-    api.fpgaClose(device->fpga);
-    exit(0);
+    std::unique_lock<std::mutex> lock(g_timeout_mutex);
+    if (!g_timeout_cv.wait_for(lock, HANG_TIMEOUT, []{ return ~g_timeout_enabled; })) {
+        std::cerr << "Scope timed out!" << std::endl;
+        g_timeout_enabled = false;
+        auto device = ((vx_device*)hdevice);
+        auto api = device->api;        
+        vx_scope_stop(hdevice);
+        api.fpgaClose(device->fpga);
+        exit(-1);
+    }    
 }
 #endif
 
@@ -111,6 +118,8 @@ int vx_scope_start(vx_device_h hdevice, uint64_t start_time, uint64_t stop_time)
     std::cout << "scope start time: " << std::dec << start_time << "s" << std::endl;
 
 #ifdef HANG_TIMEOUT
+    // starting timeout thread
+    g_timeout_enabled = true;
     g_timeout_thread = std::thread(timeout_callback, device);
     g_timeout_thread.detach();
 #endif
@@ -120,8 +129,12 @@ int vx_scope_start(vx_device_h hdevice, uint64_t start_time, uint64_t stop_time)
 
 int vx_scope_stop(vx_device_h hdevice) {    
 #ifdef HANG_TIMEOUT
-    if (!g_timeout_mutex.try_lock())
-        return 0;
+    if (g_timeout_enabled) {
+        // shutting down timeout thread
+        g_timeout_enabled = false;
+        g_timeout_cv.notify_all();
+        g_timeout_thread.join();
+    }    
 #endif
 
     if (nullptr == hdevice)
