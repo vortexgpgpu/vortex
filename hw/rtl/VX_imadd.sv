@@ -75,7 +75,7 @@ module VX_imadd #(
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         wire [DATA_WIDTH-1:0] shift_result;
         if (SIGNED != 0) begin
-            assign shift_result = DATA_WIDTH'($signed(mul_result[i]) >> $signed(shift_m));
+            assign shift_result = DATA_WIDTH'($signed(mul_result[i]) >>> $signed(shift_m));
         end else begin
             assign shift_result = DATA_WIDTH'(mul_result[i] >> shift_m);
         end

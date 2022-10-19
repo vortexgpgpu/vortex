@@ -77,6 +77,11 @@ module Vortex (
     assign mem_rsp_if.tag   = mem_rsp_tag;
     assign mem_rsp_ready = mem_rsp_if.ready;
 
+    wire mem_req_fire = mem_req_valid && mem_req_ready;
+    wire mem_rsp_fire = mem_rsp_valid && mem_rsp_ready;
+    `UNUSED_VAR (mem_req_fire)
+    `UNUSED_VAR (mem_rsp_fire)
+
 `ifdef EXT_TEX_ENABLE
 `ifdef PERF_ENABLE    
     VX_tex_perf_if      perf_tex_if[`NUM_CLUSTERS]();
@@ -277,8 +282,7 @@ module Vortex (
             perf_mem_pending_reads <= 0;
         end else begin
             perf_mem_pending_reads <= $signed(perf_mem_pending_reads) + 
-                `PERF_CTR_BITS'($signed(2'((mem_req_if.valid && mem_req_if.ready && !mem_req_if.rw) && !(mem_rsp_if.valid && mem_rsp_if.ready)) - 
-                                        2'((mem_rsp_if.valid && mem_rsp_if.ready) && !(mem_req_if.valid && mem_req_if.ready && !mem_req_if.rw))));
+                `PERF_CTR_BITS'($signed(2'(mem_req_fire && ~mem_req_if.rw) - 2'(mem_rsp_fire)));
         end
     end
     
@@ -292,10 +296,10 @@ module Vortex (
             perf_mem_writes <= 0;
             perf_mem_lat    <= 0;
         end else begin  
-            if (mem_req_if.valid && mem_req_if.ready && !mem_req_if.rw) begin
+            if (mem_req_fire && ~mem_req_if.rw) begin
                 perf_mem_reads <= perf_mem_reads + `PERF_CTR_BITS'(1);
             end
-            if (mem_req_if.valid && mem_req_if.ready && mem_req_if.rw) begin
+            if (mem_req_fire && mem_req_if.rw) begin
                 perf_mem_writes <= perf_mem_writes + `PERF_CTR_BITS'(1);
             end      
             perf_mem_lat <= perf_mem_lat + perf_mem_pending_reads;
@@ -309,21 +313,21 @@ module Vortex (
 `endif
 
     `SCOPE_ASSIGN (reset, reset);
-    `SCOPE_ASSIGN (mem_req_fire, mem_req_valid && mem_req_ready);
+    `SCOPE_ASSIGN (mem_req_fire, mem_req_fire);
     `SCOPE_ASSIGN (mem_req_addr, `TO_FULL_ADDR(mem_req_addr));
     `SCOPE_ASSIGN (mem_req_rw,   mem_req_rw);
-    `SCOPE_ASSIGN (mem_rsp_fire, mem_rsp_valid && mem_rsp_ready);
+    `SCOPE_ASSIGN (mem_rsp_fire, mem_rsp_fire);
     `SCOPE_ASSIGN (busy, busy);
 
 `ifdef DBG_TRACE_CORE_MEM
     always @(posedge clk) begin
-        if (mem_req_valid && mem_req_ready) begin
+        if (mem_req_fire) begin
             if (mem_req_rw)
                 `TRACE(1, ("%d: MEM Wr Req: addr=0x%0h, tag=0x%0h, byteen=0x%0h data=0x%0h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen, mem_req_data));
             else
                 `TRACE(1, ("%d: MEM Rd Req: addr=0x%0h, tag=0x%0h, byteen=0x%0h\n", $time, `TO_FULL_ADDR(mem_req_addr), mem_req_tag, mem_req_byteen));
         end
-        if (mem_rsp_valid && mem_rsp_ready) begin
+        if (mem_rsp_fire) begin
             `TRACE(1, ("%d: MEM Rsp: tag=0x%0h, data=0x%0h\n", $time, mem_rsp_tag, mem_rsp_data));
         end
     end
