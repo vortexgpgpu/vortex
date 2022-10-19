@@ -1,3 +1,6 @@
+# Create the folder ahead of time so people won't get confused
+mkdir -p $HOME/vortex-workspace
+
 export DESTDIR=$HOME/vortex-workspace
 
 # I don't know where the OPAE driver is installed
