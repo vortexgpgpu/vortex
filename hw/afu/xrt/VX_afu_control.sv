@@ -139,12 +139,9 @@ module VX_afu_control #(
     assign s_axi_wready  = (wstate == WSTATE_DATA);
     assign s_axi_bresp   = 2'b00;  // OKAY
     assign s_axi_bvalid  = (wstate == WSTATE_RESP);
+    assign wmask         = {{8{s_axi_wstrb[3]}}, {8{s_axi_wstrb[2]}}, {8{s_axi_wstrb[1]}}, {8{s_axi_wstrb[0]}}};
     assign aw_hs         = s_axi_awvalid && s_axi_awready;
     assign wd_hs         = s_axi_wvalid && s_axi_wready;
-
-    for (genvar i = 0; i < 4; ++i) begin
-        assign wmask[i] = {8{s_axi_wstrb[i]}};
-    end
 
     // wstate
     always @(posedge clk) begin
