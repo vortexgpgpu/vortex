@@ -3,7 +3,7 @@
 #include <vortex.h>
 
 #if defined(USE_FPGA)
-#define HANG_TIMEOUT (1 * 60 * 1000)
+#define HANG_TIMEOUT (5 * 60 * 1000)
 #else
 #define HANG_TIMEOUT (30 * 60 * 1000)
 #endif
