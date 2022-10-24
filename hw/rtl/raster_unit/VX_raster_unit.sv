@@ -267,9 +267,9 @@ module VX_raster_unit #(
     `ASSIGN_VX_RASTER_REQ_IF (raster_req_if, raster_req_tmp_if[0]);
 
 `ifdef CHIPSCOPE
-    ila_raster ila_lsu_raster (
+    ila_raster ila_raster_inst (
         .clk    (clk),
-        .probe0 ({pe_empty_out, no_pe_input, cache_rsp_if.valid, cache_rsp_if.ready,cache_req_if.addr, cache_req_if.valid, cache_req_if.ready}),
+        .probe0 ({pe_empty_out, no_pe_input, cache_rsp_if.data, cache_rsp_if.ready, cache_rsp_if.valid, cache_req_if.addr, cache_req_if.valid, cache_req_if.ready}),
         .probe1 ({no_pending_pe_input, mem_unit_busy, mem_unit_ready, mem_unit_start, mem_unit_valid, raster_req_if.empty, raster_req_if.valid, raster_req_if.ready})
     );
 `endif

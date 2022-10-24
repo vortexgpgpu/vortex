@@ -85,7 +85,7 @@ module VX_mem_scheduler #(
     wire [NUM_BANKS-1:0][DATA_WIDTH-1:0] mem_rsp_data_s;
     wire [MEM_TAGW-1:0]             mem_rsp_tag_s;
     wire                            mem_rsp_ready_s;
-    wire                            mem_rsp_fire;
+    wire                            mem_rsp_fire_s;
 
     wire                            reqq_push;
     wire                            reqq_pop;
@@ -111,6 +111,7 @@ module VX_mem_scheduler #(
     wire [NUM_REQS-1:0]             crsp_mask;
     wire [NUM_REQS-1:0][DATA_WIDTH-1:0] crsp_data;
     wire [TAG_WIDTH-1:0]            crsp_tag;
+    wire                            crsp_eop;
     wire                            crsp_ready;
 
     // Request queue //////////////////////////////////////////////////////////
@@ -185,8 +186,6 @@ module VX_mem_scheduler #(
     );
 
     `UNUSED_VAR (ibuf_empty)
-
-    assign rsp_eop = ibuf_pop;
 
     // Handle memory requests /////////////////////////////////////////////////
 
@@ -340,7 +339,7 @@ module VX_mem_scheduler #(
         .rsp_ready_out (mem_rsp_ready_s)
     );
 
-    wire [REQ_CNTW-1:0] reqq_cnt;
+    wire [REQ_CNTW-1:0]  reqq_cnt;
     wire [NUM_BANKS-1:0] mem_rsp_mask_x;
     `POP_COUNT(reqq_cnt, reqq_mask);
 
@@ -349,7 +348,7 @@ module VX_mem_scheduler #(
         `POP_COUNT(mem_rsp_cnt, mem_rsp_mask_s);
         assign mem_rsp_mask_x = mem_rsp_mask_s;
     end else begin
-        assign mem_rsp_cnt   = 1'b1;
+        assign mem_rsp_cnt    = 1'b1;
         assign mem_rsp_mask_x = 1'b1;
         `UNUSED_VAR (mem_rsp_mask_s)
     end
@@ -368,12 +367,12 @@ module VX_mem_scheduler #(
         if (~reqq_empty && ~reqq_rw && req_batch_idx == 0 && batch_sent_mask == 0) begin
             rsp_rem_cnt[reqq_tag] <= reqq_cnt;
         end
-        if (mem_rsp_fire) begin
+        if (mem_rsp_fire_s) begin
             rsp_rem_cnt[ibuf_raddr] <= rsp_rem_cnt_n;
         end
     end
 
-    assign mem_rsp_fire = mem_rsp_valid_s && mem_rsp_ready_s;
+    assign mem_rsp_fire_s = mem_rsp_valid_s && mem_rsp_ready_s;
 
     if (RSP_PARTIAL == 1) begin
 
@@ -403,7 +402,7 @@ module VX_mem_scheduler #(
             if (ibuf_push) begin
                 rsp_orig_mask[ibuf_waddr] <= req_mask;
             end
-            if (mem_rsp_fire) begin
+            if (mem_rsp_fire_s) begin
                 rsp_store[ibuf_raddr] <= rsp_store_n;
             end
         end
@@ -426,10 +425,12 @@ module VX_mem_scheduler #(
         assign crsp_tag = ibuf_dout;
     end
 
+    assign crsp_eop = ibuf_pop;
+
     // Send response to caller
 
     VX_generic_buffer #(
-        .DATAW   (NUM_REQS + (NUM_REQS * DATA_WIDTH) + TAG_WIDTH),
+        .DATAW   (NUM_REQS + 1 + (NUM_REQS * DATA_WIDTH) + TAG_WIDTH),
         .SKID    (CORE_OUT_REG >> 1),
         .OUT_REG (CORE_OUT_REG & 1)
     ) rsp_buf (
@@ -437,21 +438,27 @@ module VX_mem_scheduler #(
         .reset     (reset),
         .valid_in  (crsp_valid),  
         .ready_in  (crsp_ready),
-        .data_in   ({crsp_mask, crsp_data, crsp_tag}),
-        .data_out  ({rsp_mask,  rsp_data,  rsp_tag}),        
+        .data_in   ({crsp_mask, crsp_eop, crsp_data, crsp_tag}),
+        .data_out  ({rsp_mask,  rsp_eop,  rsp_data,  rsp_tag}),        
         .valid_out (rsp_valid),        
         .ready_out (rsp_ready)
-    ); 
+    );
 
-`ifdef CHIPSCOPE    
+`ifdef CHIPSCOPE
+if (INSTANCE_ID == "cluster0-raster0-memsched") begin
     wire [ADDR_WIDTH-1:0] mem_req_addr_s_0 = mem_req_addr_s[0];
     wire [ADDR_WIDTH-1:0] reqq_addr_0 = reqq_addr[0];
+    wire [DATA_WIDTH-1:0] mem_rsp_data_s_0 = mem_rsp_data_s[0];
+    wire [DATA_WIDTH-1:0] crsp_data_0 = crsp_data[0];
     ila_msched ila_msched_inst (
         .clk    (clk),
-        .probe0 ({req_batch_idx, batch_sent_all, batch_sent_mask, mem_req_tag_s, mem_req_mask_b, mem_req_addr_s_0, mem_req_mask_s, mem_req_ready_s, mem_req_valid_s}),
-        .probe1 ({ibuf_full, ibuf_empty, ibuf_pop, ibuf_push, reqq_tag, reqq_addr_0, reqq_mask, reqq_size, reqq_full, reqq_empty, reqq_pop, reqq_push})
+        .probe0 ({ibuf_full, ibuf_empty, ibuf_pop, ibuf_push, reqq_tag, reqq_addr_0, reqq_mask, reqq_size, reqq_full, reqq_empty, reqq_pop, reqq_push}),
+        .probe1 ({req_batch_idx, batch_sent_all, batch_sent_mask, mem_req_tag_s, mem_req_mask_b, mem_req_addr_s_0, mem_req_mask_s, mem_req_ready_s, mem_req_valid_s}),        
+        .probe2 ({rsp_batch_idx, rsp_rem_cnt_n, mem_rsp_data_s_0, mem_rsp_tag_s, mem_rsp_mask_s, mem_rsp_ready_s, mem_rsp_valid_s}),
+        .probe3 ({crsp_data_0, crsp_tag, crsp_eop, crsp_mask, crsp_ready, crsp_valid})
     );
-`endif 
+end
+`endif
 
 `ifdef SIMULATION
     wire [`UP(UUID_WIDTH)-1:0] req_dbg_uuid;
@@ -543,7 +550,7 @@ module VX_mem_scheduler #(
                 `TRACE(1, (", batch=%0d (#%0d)\n", req_batch_idx, mem_req_dbg_uuid));
             end
         end 
-        if (mem_rsp_fire) begin
+        if (mem_rsp_fire_s) begin
             `TRACE(1, ("%d: %s-mem-rsp: mask=%b, data=", $time, INSTANCE_ID, mem_rsp_mask_s));                
             `TRACE_ARRAY1D(1, mem_rsp_data_s, NUM_BANKS);
             `TRACE(1, (", tag=0x%0h, batch=%0d (#%0d)\n", ibuf_raddr, rsp_batch_idx, mem_rsp_dbg_uuid));
