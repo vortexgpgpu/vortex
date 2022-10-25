@@ -139,7 +139,7 @@ emconfig: $(BIN_DIR)/emconfig.json
 $(BIN_DIR)/emconfig.json:
 	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); emconfigutil --platform $(PLATFORM) --od ../$(BIN_DIR)
 
-hw_server:
+hwserver:
 	debug_hw --xvc_pcie /dev/xfpga/xvc_pub.u2305.0 --hw_server &
 
 chipscope:	

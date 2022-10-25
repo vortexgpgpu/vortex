@@ -60,17 +60,18 @@ module VX_raster_unit #(
     wire [`RASTER_PID_BITS-1:0] mem_pid;
     
     // Memory unit status
-    reg mem_unit_start;
+    reg mem_unit_running;
     wire mem_unit_busy;
     wire mem_unit_valid;    
     wire mem_unit_ready;
 
     `RESET_RELAY (mem_reset, reset);
 
-    // Start execution    
+    // Generate start pulse
     always @(posedge clk) begin
-        mem_unit_start <= mem_reset;
+        mem_unit_running <= ~mem_reset;
     end
+    wire mem_unit_start = ~mem_reset && ~mem_unit_running;
 
     // Memory unit
     VX_raster_mem #(
@@ -264,6 +265,14 @@ module VX_raster_unit #(
     );
 
     `ASSIGN_VX_RASTER_REQ_IF (raster_req_if, raster_req_tmp_if[0]);
+
+`ifdef CHIPSCOPE
+    ila_raster ila_raster_inst (
+        .clk    (clk),
+        .probe0 ({pe_empty_out, no_pe_input, cache_rsp_if.data, cache_rsp_if.ready, cache_rsp_if.valid, cache_req_if.addr, cache_req_if.valid, cache_req_if.ready}),
+        .probe1 ({no_pending_pe_input, mem_unit_busy, mem_unit_ready, mem_unit_start, mem_unit_valid, raster_req_if.empty, raster_req_if.valid, raster_req_if.ready})
+    );
+`endif
 
 `ifdef PERF_ENABLE
     wire [$clog2(RCACHE_NUM_REQS+1)-1:0] perf_mem_req_per_cycle;

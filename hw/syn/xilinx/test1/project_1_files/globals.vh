@@ -7,6 +7,7 @@
 
 `define EXT_F_DISABLE
 //`define EXT_GFX_ENABLE
+//`define NUM_CORES 4
 
 `define STARTUP_ADDR    32'h80000
 `define IO_BASE_ADDR    32'hFF000
@@ -14,3 +15,4 @@
 `define IO_COUT_ADDR    (32'hFFFFF - `MEM_BLOCK_SIZE + 1)
 
 `endif
+
