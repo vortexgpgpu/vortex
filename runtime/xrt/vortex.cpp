@@ -334,6 +334,26 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     auto uuid = xrtDevice.load_xclbin(xlbin_path_s);
     auto xrtKernel = xrt::ip(xrtDevice, uuid, KERNEL_NAME);
 
+    std::cout << "Device" << device_index << " : " << device.get_info<xrt::info::device::name>() << std::endl;
+    std::cout << "  bdf      : " << device.get_info<xrt::info::device::bdf>() << std::endl;
+    std::cout << "  kdma     : " << device.get_info<xrt::info::device::kdma>() << std::endl;
+    std::cout << "  max_freq : " << device.get_info<xrt::info::device::max_clock_frequency_mhz>() << std::endl;
+    std::cout << "  mem      : " << device.get_info<xrt::info::device::mem>() << std::endl;
+    std::cout << "  thermal  : " << device.get_info<xrt::info::device::thermal>() << std::endl;
+    std::cout << "  m2m      : " << std::boolalpha << device.get_info<xrt::info::device::m2m>() << std::dec << std::endl;
+    std::cout << "  nodma    : " << std::boolalpha << device.get_info<xrt::info::device::nodma>() << std::dec << std::endl;
+
+    std::cout << "Memory info:\n";
+    auto xclbin = xrt::xclbin(xlbin_path_s);
+    for (auto& mem : xclbin.get_mems()) {        
+        std::cout << "  tag :" << mem.get_tag() << std::endl;
+        std::cout << "  base_address :" << mem.get_base_address() << std::endl;
+        std::cout << "  size_kb :" << mem.get_size_kb() << std::endl;
+        std::cout << "  type :" << mem.get_type() << std::endl;
+        std::cout << "  index :" << mem.get_index() << std::endl;
+        std::cout << "  used :" << mem.get_used() << std::endl;
+    }
+
     CHECK_HANDLE(device, new vx_device(xrtDevice, xrtKernel), {
         return -1;
     });

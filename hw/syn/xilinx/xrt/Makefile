@@ -18,7 +18,13 @@ RTL_DIR = ../../../../rtl
 AFU_DIR = ../../../../afu/xrt
 IP_DIR  = ../../../../ip/xilinx
 
-BUILD_DIR = $(PREFIX)_$(PLATFORM)_$(TARGET)
+PLATFORM_TO_XSA = $(strip $(patsubst %.xpfm, % , $(shell basename $(PLATFORM))))
+XSA := $(call PLATFORM_TO_XSA, $(PLATFORM))
+
+DEV_ARCH := $(shell platforminfo -p $(PLATFORM) | grep 'FPGA Family' | sed 's/.*://' | sed '/ai_engine/d' | sed 's/^[[:space:]]*//')
+CPU_TYPE := $(shell platforminfo -p $(PLATFORM) | grep 'CPU Type' | sed 's/.*://' | sed '/ai_engine/d' | sed 's/^[[:space:]]*//')
+
+BUILD_DIR = $(PREFIX)_$(XSA)_$(TARGET)
 BIN_DIR   = $(BUILD_DIR)/bin
 
 # Control RTL debug tracing states
@@ -45,7 +51,7 @@ RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR
 RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
 
 #CONFIGS += -DEXT_GFX_ENABLE
-#CONFIGS += -DNUM_WARPS=2 -DNUM_THREADS=2 -DEXT_F_DISABLE -DL1_DISABLE
+CONFIGS += -DNUM_WARPS=2 -DNUM_THREADS=2 -DEXT_F_DISABLE -DL1_DISABLE
 #CONFIGS += -DNUM_WARPS=2 -DNUM_THREADS=2 -DEXT_F_DISABLE
 #CONFIGS += -DNUM_WARPS=2 -DNUM_THREADS=2
 #CONFIGS += -DNUM_CORES=4
@@ -71,7 +77,16 @@ JOBS := $(shell expr $(NCPUS) - 1)
 # Kernel compiler global settings
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
 VPP_FLAGS += --vivado.synth.jobs $(JOBS) --vivado.impl.jobs $(JOBS)
+
+ifeq ($(DEV_ARCH), zynquplus)
+# ztnq
+else ifeq ($(DEV_ARCH), versal)
+# versal
+else
+# alveo
 VPP_FLAGS += --connectivity.sp vortex_afu_1.m_axi_mem:HBM[0:15]
+endif
+
 VPP_FLAGS += --report_level 2
 VPP_FLAGS += --config ../vitis.ini
 
@@ -108,7 +123,7 @@ endif
 
 .PHONY: all clean gen-sources emconfig check-devices
 
-all: check-devices $(XCLBIN_CONTAINER) emconfig
+all: check-devices emconfig $(XCLBIN_CONTAINER)
 
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt:
