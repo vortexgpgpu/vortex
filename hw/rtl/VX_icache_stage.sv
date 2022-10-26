@@ -128,12 +128,14 @@ module VX_icache_stage #(
     `SCOPE_ASSIGN (icache_rsp_data, icache_rsp_if.data);
 
 `ifdef DBG_TRACE_CORE_ICACHE
+    wire ifetch_req_fire = ifetch_req_if.valid && ifetch_req_if.ready;
+    wire ifetch_rsp_fire = ifetch_rsp_if.valid && ifetch_rsp_if.ready;
     always @(posedge clk) begin
-        if (icache_req_fire) begin
-            `TRACE(1, ("%d: I$%0d req: wid=%0d, PC=0x%0h (#%0d)\n", $time, CORE_ID, ifetch_req_if.wid, ifetch_req_if.PC, ifetch_req_if.uuid));
+        if (ifetch_req_fire) begin
+            `TRACE(1, ("%d: I$%0d req: wid=%0d, PC=0x%0h, tmask=%b (#%0d)\n", $time, CORE_ID, ifetch_req_if.wid, ifetch_req_if.PC, ifetch_req_if.tmask, ifetch_req_if.uuid));
         end
-        if (ifetch_rsp_if.valid && ifetch_rsp_if.ready) begin
-            `TRACE(1, ("%d: I$%0d rsp: wid=%0d, PC=0x%0h, data=0x%0h (#%0d)\n", $time, CORE_ID, ifetch_rsp_if.wid, ifetch_rsp_if.PC, ifetch_rsp_if.data, ifetch_rsp_if.uuid));
+        if (ifetch_rsp_fire) begin
+            `TRACE(1, ("%d: I$%0d rsp: wid=%0d, PC=0x%0h, tmask=%b, data=0x%0h (#%0d)\n", $time, CORE_ID, ifetch_rsp_if.wid, ifetch_rsp_if.PC, ifetch_rsp_if.tmask, ifetch_rsp_if.data, ifetch_rsp_if.uuid));
         end
     end
 `endif
