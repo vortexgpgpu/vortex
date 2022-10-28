@@ -1,4 +1,5 @@
 #!/bin/sh
+
 ps -A | grep xrcserver | awk '{print $1}' | xargs kill -9 $1
 ps -A | grep loader | awk '{print $1}' | xargs kill -9 $1
 ps -A | grep vpl | awk '{print $1}' | xargs kill -9 $1
