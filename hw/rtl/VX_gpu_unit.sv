@@ -136,7 +136,7 @@ module VX_gpu_unit #(
     wire wctl_rsp_ready;
     wire wctl_req_ready = wctl_rsp_ready;
 
-    assign rsp_arb_valid_in[RSP_ARB_IDX_GPU] = wctl_req_valid;
+    assign rsp_arb_valid_in[RSP_ARB_IDX_GPU] = wctl_rsp_valid;
     assign rsp_arb_data_in[RSP_ARB_IDX_GPU] = {gpu_req_if.uuid, gpu_req_if.wid, gpu_req_if.tmask, gpu_req_if.PC, `NR_BITS'(0), 1'b0, RSP_DATAW'(wctl_rsp_data), 1'b1, ~is_join};
     assign wctl_rsp_ready = rsp_arb_ready_in[RSP_ARB_IDX_GPU];
 

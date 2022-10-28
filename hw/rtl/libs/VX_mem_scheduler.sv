@@ -414,9 +414,10 @@ module VX_mem_scheduler #(
 
         assign crsp_mask = rsp_orig_mask[ibuf_raddr];
 
-        for (genvar i = 0; i < NUM_BATCHES; ++i) begin
-            localparam SIZE = ((i + 1) * NUM_BANKS > NUM_REQS) ? REM_BATCH_SIZE : NUM_BANKS;
-            assign crsp_data[i * NUM_BANKS +: SIZE] = rsp_store_n[i][SIZE-1:0];
+        for (genvar r = 0; r < NUM_REQS; ++r) begin
+            localparam i = r / NUM_BANKS;
+            localparam j = r % NUM_BANKS;
+            assign crsp_data[r] = rsp_store_n[i][j];
         end
     end
 
@@ -445,8 +446,8 @@ module VX_mem_scheduler #(
         .ready_out (rsp_ready)
     );
 
-`ifdef CHIPSCOPE
-if (INSTANCE_ID == "cluster0-raster0-memsched") begin
+`ifdef CHIPSCOPE_MSCHED
+//if (INSTANCE_ID == "cluster0-raster0-memsched") begin
     wire [ADDR_WIDTH-1:0] mem_req_addr_s_0 = mem_req_addr_s[0];
     wire [ADDR_WIDTH-1:0] reqq_addr_0 = reqq_addr[0];
     wire [DATA_WIDTH-1:0] mem_rsp_data_s_0 = mem_rsp_data_s[0];
@@ -458,7 +459,7 @@ if (INSTANCE_ID == "cluster0-raster0-memsched") begin
         .probe2 ({rsp_batch_idx, rsp_rem_cnt_n, mem_rsp_data_s_0, mem_rsp_tag_s, mem_rsp_mask_s, mem_rsp_ready_s, mem_rsp_valid_s}),
         .probe3 ({crsp_data_0, crsp_tag, crsp_eop, crsp_mask, crsp_ready, crsp_valid})
     );
-end
+//end
 `endif
 
 `ifdef SIMULATION

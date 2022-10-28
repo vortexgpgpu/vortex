@@ -3,11 +3,7 @@
 module vortex_afu_inst #( 
 	  parameter C_S_AXI_CTRL_ADDR_WIDTH = 6,
 	  parameter C_S_AXI_CTRL_DATA_WIDTH	= 32,
-`ifdef CHIPSCOPE
-	  parameter C_M_AXI_MEM_ID_WIDTH    = 32,
-`else
 	  parameter C_M_AXI_MEM_ID_WIDTH    = 16,
-`endif
 	  parameter C_M_AXI_MEM_ADDR_WIDTH  = 32,
 	  parameter C_M_AXI_MEM_DATA_WIDTH  = 512
 ) (
@@ -253,7 +249,7 @@ module vortex_afu_inst #(
 		.busy			(vx_busy)
 	);	
 
-`ifdef CHIPSCOPE
+`ifdef CHIPSCOPE_AFU
     ila_afu ila_afu_inst (
       .clk    (ap_clk),
 		.probe0 ({

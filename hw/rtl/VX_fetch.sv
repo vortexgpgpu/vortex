@@ -79,7 +79,7 @@ module VX_fetch #(
         .ifetch_rsp_if  (ifetch_rsp_if)   
     );
 
-`ifdef CHIPSCOPE
+`ifdef CHIPSCOPE_FETCH
     ila_fetch ila_fetch_inst (
         .clk    (clk),
         .probe0 ({reset, ifetch_req_if.uuid, ifetch_req_if.wid, ifetch_req_if.tmask, ifetch_req_if.PC, ifetch_req_if.ready, ifetch_req_if.valid}),        

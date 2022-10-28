@@ -155,7 +155,7 @@ module VX_issue #(
                         $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.rd, ibuffer_if.wb, 
                         in_use_regs[0], in_use_regs[1], in_use_regs[2], in_use_regs[3], ~dispatch_if.ready, ibuffer_if.uuid));    
 
-`ifdef CHIPSCOPE
+`ifdef CHIPSCOPE_ISSUE
     wire [`NR_BITS-1:0] ibuffer_rs1 = ibuffer_if.rs1[0];
     wire [`NR_BITS-1:0] ibuffer_rs2 = ibuffer_if.rs2[0];
     wire [`NR_BITS-1:0] ibuffer_rs3 = ibuffer_if.rs3[0];

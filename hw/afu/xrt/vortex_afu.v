@@ -46,10 +46,10 @@
 module vortex_afu #(
 	parameter C_S_AXI_CTRL_ADDR_WIDTH 	= 6,
 	parameter C_S_AXI_CTRL_DATA_WIDTH	= 32,
-`ifdef CHIPSCOPE
-	parameter C_M_AXI_MEM_ID_WIDTH 		= 32,
+`ifdef NDEBUG
+	parameter C_M_AXI_MEM_ID_WIDTH 		= 16,
 `else
-	parameter C_M_AXI_MEM_ID_WIDTH      = 16,
+	parameter C_M_AXI_MEM_ID_WIDTH      = 32,
 `endif
 	parameter C_M_AXI_MEM_ADDR_WIDTH    = 32,
 	parameter C_M_AXI_MEM_DATA_WIDTH    = `VX_MEM_DATA_WIDTH
