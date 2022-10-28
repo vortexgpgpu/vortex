@@ -243,31 +243,31 @@ module VX_mem_scheduler #(
     end
     
     if (NUM_BATCHES > 1) begin
-        reg [`UP(BATCH_SEL_BITS)-1:0] req_batch_idx_r;
+        reg [BATCH_SEL_BITS-1:0] req_batch_idx_r;
         always @(posedge clk) begin
             if (reset) begin
                 req_batch_idx_r <= 0;
             end else begin
                 if (~reqq_empty && batch_sent_all) begin
                     if (req_sent_all 
-                    || (req_batch_idx_r == `UP(BATCH_SEL_BITS)'(NUM_BATCHES-1))) begin
+                    || (req_batch_idx_r == BATCH_SEL_BITS'(NUM_BATCHES-1))) begin
                         req_batch_idx_r <= 0;
                     end else begin
-                        req_batch_idx_r <= req_batch_idx_r + `UP(BATCH_SEL_BITS)'(1);
+                        req_batch_idx_r <= req_batch_idx_r + BATCH_SEL_BITS'(1);
                     end
                 end
             end
         end
 
         wire [NUM_REQS-1:0] req_sent_mask;
-        for (genvar i = 0; i < NUM_REQS; ++i) begin
-            localparam batch_idx = i / NUM_BANKS;
-            localparam bank_idx  = i % NUM_BANKS;
-            wire req_sent_curr = (req_batch_idx == BATCH_SEL_BITS'(batch_idx)) && batch_sent_mask_n[bank_idx];
-            assign req_sent_mask[i] = ((batch_idx < (NUM_BATCHES-1)) && (req_batch_idx > BATCH_SEL_BITS'(batch_idx))) 
-                                    | (reqq_mask[i] && req_sent_curr) 
-                                    | ~reqq_mask[i];
+        for (genvar r = 0; r < NUM_REQS; ++r) begin
+            localparam i = r / NUM_BANKS;
+            localparam j = r % NUM_BANKS;
+            wire curr_req_sent = (req_batch_idx == BATCH_SEL_BITS'(i)) && batch_sent_mask_n[j];
+            assign req_sent_mask[r] = ((i < (NUM_BATCHES-1)) && (req_batch_idx > BATCH_SEL_BITS'(i))) 
+                                   || (~reqq_mask[r] || curr_req_sent);
         end
+
         assign req_batch_idx = req_batch_idx_r;
         assign req_sent_all  = (& req_sent_mask);    
     end else begin
@@ -341,9 +341,10 @@ module VX_mem_scheduler #(
 
     wire [REQ_CNTW-1:0]  reqq_cnt;
     wire [NUM_BANKS-1:0] mem_rsp_mask_x;
-    `POP_COUNT(reqq_cnt, reqq_mask);
-
     wire [BANK_CNTW-1:0] mem_rsp_cnt;
+
+    `POP_COUNT(reqq_cnt, reqq_mask);
+    
     if (NUM_BANKS > 1) begin
         `POP_COUNT(mem_rsp_cnt, mem_rsp_mask_s);
         assign mem_rsp_mask_x = mem_rsp_mask_s;
@@ -388,10 +389,10 @@ module VX_mem_scheduler #(
     
     end else begin
 
-        reg [NUM_BATCHES-1:0][NUM_BANKS-1:0][DATA_WIDTH-1:0] rsp_store [QUEUE_SIZE-1:0];
+        reg [NUM_BATCHES-1:0][NUM_BANKS-1:0][DATA_WIDTH-1:0] rsp_store [QUEUE_SIZE-1:0];        
         wire [NUM_BATCHES-1:0][NUM_BANKS-1:0][DATA_WIDTH-1:0] rsp_store_n;
         reg [NUM_REQS-1:0] rsp_orig_mask [QUEUE_SIZE-1:0];
-
+        
         for (genvar i = 0; i < NUM_BATCHES; ++i) begin
             for (genvar j = 0; j < NUM_BANKS; ++j) begin
                 assign rsp_store_n[i][j] = (i == rsp_batch_idx && mem_rsp_mask_x[j]) ? mem_rsp_data_s[j] : rsp_store[ibuf_raddr][i][j];
@@ -413,9 +414,10 @@ module VX_mem_scheduler #(
 
         assign crsp_mask = rsp_orig_mask[ibuf_raddr];
 
-        for (genvar i = 0; i < NUM_BATCHES; ++i) begin
-            localparam SIZE = ((i + 1) * NUM_BANKS > NUM_REQS) ? REM_BATCH_SIZE : NUM_BANKS;
-            assign crsp_data[i * NUM_BANKS +: SIZE] = rsp_store_n[i][SIZE-1:0];
+        for (genvar r = 0; r < NUM_REQS; ++r) begin
+            localparam i = r / NUM_BANKS;
+            localparam j = r % NUM_BANKS;
+            assign crsp_data[r] = rsp_store_n[i][j];
         end
     end
 
@@ -444,8 +446,8 @@ module VX_mem_scheduler #(
         .ready_out (rsp_ready)
     );
 
-`ifdef CHIPSCOPE
-if (INSTANCE_ID == "cluster0-raster0-memsched") begin
+`ifdef CHIPSCOPE_MSCHED
+//if (INSTANCE_ID == "cluster0-raster0-memsched") begin
     wire [ADDR_WIDTH-1:0] mem_req_addr_s_0 = mem_req_addr_s[0];
     wire [ADDR_WIDTH-1:0] reqq_addr_0 = reqq_addr[0];
     wire [DATA_WIDTH-1:0] mem_rsp_data_s_0 = mem_rsp_data_s[0];
@@ -457,7 +459,7 @@ if (INSTANCE_ID == "cluster0-raster0-memsched") begin
         .probe2 ({rsp_batch_idx, rsp_rem_cnt_n, mem_rsp_data_s_0, mem_rsp_tag_s, mem_rsp_mask_s, mem_rsp_ready_s, mem_rsp_valid_s}),
         .probe3 ({crsp_data_0, crsp_tag, crsp_eop, crsp_mask, crsp_ready, crsp_valid})
     );
-end
+//end
 `endif
 
 `ifdef SIMULATION

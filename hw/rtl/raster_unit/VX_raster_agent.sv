@@ -67,8 +67,8 @@ module VX_raster_agent #(
         .ready_out (raster_commit_if.ready)
     );
 
-    assign raster_commit_if.wb   = 1'b1;
-    assign raster_commit_if.eop  = 1'b1;
+    assign raster_commit_if.wb  = 1'b1;
+    assign raster_commit_if.eop = 1'b1;
 
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin

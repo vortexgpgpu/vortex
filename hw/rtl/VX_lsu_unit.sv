@@ -353,7 +353,7 @@ module VX_lsu_unit #(
         .ready_out (ld_commit_if.ready)
     );
 
-`ifdef CHIPSCOPE  
+`ifdef CHIPSCOPE_LSU
     wire [31:0] full_addr_0 = full_addr[0];
     wire [31:0] mem_req_data_0 = mem_req_data[0];
     wire [31:0] rsp_data_0 = rsp_data[0];

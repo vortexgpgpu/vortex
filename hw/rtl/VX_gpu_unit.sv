@@ -52,6 +52,16 @@ module VX_gpu_unit #(
     localparam RSP_ARB_DATAW = UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + RSP_DATAW + 1 + 1;
     localparam RSP_ARB_SIZE  = 1 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED + `EXT_IMADD_ENABLED;
 
+    localparam RSP_ARB_IDX_GPU    = 0;
+    localparam RSP_ARB_IDX_RASTER = RSP_ARB_IDX_GPU + 1;
+    localparam RSP_ARB_IDX_ROP    = RSP_ARB_IDX_RASTER + `EXT_RASTER_ENABLED;    
+    localparam RSP_ARB_IDX_TEX    = RSP_ARB_IDX_ROP + `EXT_ROP_ENABLED;    
+    localparam RSP_ARB_IDX_IMADD  = RSP_ARB_IDX_TEX + `EXT_TEX_ENABLED;
+
+    wire [RSP_ARB_SIZE-1:0] rsp_arb_valid_in;
+    wire [RSP_ARB_SIZE-1:0] rsp_arb_ready_in;
+    wire [RSP_ARB_SIZE-1:0][RSP_ARB_DATAW-1:0] rsp_arb_data_in;
+
     wire [RSP_DATAW-1:0] rsp_data;
     wire                 rsp_is_wctl;
 
@@ -126,12 +136,17 @@ module VX_gpu_unit #(
     wire wctl_rsp_ready;
     wire wctl_req_ready = wctl_rsp_ready;
 
+    assign rsp_arb_valid_in[RSP_ARB_IDX_GPU] = wctl_rsp_valid;
+    assign rsp_arb_data_in[RSP_ARB_IDX_GPU] = {gpu_req_if.uuid, gpu_req_if.wid, gpu_req_if.tmask, gpu_req_if.PC, `NR_BITS'(0), 1'b0, RSP_DATAW'(wctl_rsp_data), 1'b1, ~is_join};
+    assign wctl_rsp_ready = rsp_arb_ready_in[RSP_ARB_IDX_GPU];
+
     `UNUSED_VAR (gpu_req_if.op_mod)
     `UNUSED_VAR (gpu_req_if.rs3_data)
     `UNUSED_VAR (gpu_req_if.wb)
     `UNUSED_VAR (gpu_req_if.rd)
     
 `ifdef EXT_TEX_ENABLE
+
     VX_tex_agent_if tex_agent_if();
     VX_commit_if    tex_commit_if();
 
@@ -161,7 +176,12 @@ module VX_gpu_unit #(
         .tex_commit_if (tex_commit_if),
         .tex_req_if    (tex_req_if),
         .tex_rsp_if    (tex_rsp_if)
-    );        
+    );     
+
+    assign rsp_arb_valid_in[RSP_ARB_IDX_TEX] = tex_commit_if.valid;
+    assign rsp_arb_data_in[RSP_ARB_IDX_TEX] = {tex_commit_if.uuid, tex_commit_if.wid, tex_commit_if.tmask, tex_commit_if.PC, tex_commit_if.rd, tex_commit_if.wb, RSP_DATAW'(tex_commit_if.data), tex_commit_if.eop, 1'b0};
+    assign tex_commit_if.ready = rsp_arb_ready_in[RSP_ARB_IDX_TEX];
+
 `endif
 
 `ifdef EXT_RASTER_ENABLE
@@ -187,7 +207,12 @@ module VX_gpu_unit #(
         .raster_req_if    (raster_req_if),
         .raster_agent_if  (raster_agent_if),        
         .raster_commit_if (raster_commit_if)        
-    );        
+    );
+
+    assign rsp_arb_valid_in[RSP_ARB_IDX_RASTER] = raster_commit_if.valid;
+    assign rsp_arb_data_in[RSP_ARB_IDX_RASTER] = {raster_commit_if.uuid, raster_commit_if.wid, raster_commit_if.tmask, raster_commit_if.PC, raster_commit_if.rd, raster_commit_if.wb, RSP_DATAW'(raster_commit_if.data), raster_commit_if.eop, 1'b0};
+    assign raster_commit_if.ready = rsp_arb_ready_in[RSP_ARB_IDX_RASTER];
+
 `endif
 
 `ifdef EXT_ROP_ENABLE
@@ -220,7 +245,12 @@ module VX_gpu_unit #(
         .rop_agent_if  (rop_agent_if),
         .rop_commit_if (rop_commit_if),
         .rop_req_if    (rop_req_if)        
-    );        
+    );
+
+    assign rsp_arb_valid_in[RSP_ARB_IDX_ROP] = rop_commit_if.valid;
+    assign rsp_arb_data_in[RSP_ARB_IDX_ROP] = {rop_commit_if.uuid, rop_commit_if.wid, rop_commit_if.tmask, rop_commit_if.PC, rop_commit_if.rd, rop_commit_if.wb, RSP_DATAW'(rop_commit_if.data), rop_commit_if.eop, 1'b0};
+    assign rop_commit_if.ready = rsp_arb_ready_in[RSP_ARB_IDX_ROP];
+
 `endif
 
 `ifdef EXT_IMADD_ENABLE    
@@ -267,6 +297,10 @@ module VX_gpu_unit #(
         .ready_out  (imadd_ready_out)
     );
 
+    assign rsp_arb_valid_in[RSP_ARB_IDX_IMADD] = imadd_valid_out;
+    assign rsp_arb_data_in[RSP_ARB_IDX_IMADD] = {imadd_uuid_out, imadd_wid_out, imadd_tmask_out, imadd_PC_out, imadd_rd_out, 1'b1, RSP_DATAW'(imadd_data_out), 1'b1, 1'b0};
+    assign imadd_ready_out = rsp_arb_ready_in[RSP_ARB_IDX_IMADD];
+
 `endif
 
     // can accept new request?
@@ -300,51 +334,9 @@ module VX_gpu_unit #(
     ) rsp_arb (
         .clk       (clk),
         .reset     (reset),        
-        .valid_in  ({
-            wctl_rsp_valid
-        `ifdef EXT_TEX_ENABLE
-          , tex_commit_if.valid
-        `endif
-        `ifdef EXT_RASTER_ENABLE
-          , raster_commit_if.valid
-        `endif
-        `ifdef EXT_ROP_ENABLE
-          , rop_commit_if.valid
-        `endif
-        `ifdef EXT_IMADD_ENABLE
-          , imadd_valid_out
-        `endif
-        }),
-        .ready_in ({
-            wctl_rsp_ready
-        `ifdef EXT_TEX_ENABLE
-          , tex_commit_if.ready
-        `endif
-        `ifdef EXT_RASTER_ENABLE
-          , raster_commit_if.ready
-        `endif
-        `ifdef EXT_ROP_ENABLE
-          , rop_commit_if.ready
-        `endif
-        `ifdef EXT_IMADD_ENABLE
-          , imadd_ready_out
-        `endif
-        }),
-        .data_in ({
-            {gpu_req_if.uuid, gpu_req_if.wid, gpu_req_if.tmask, gpu_req_if.PC, `NR_BITS'(0), 1'b0, RSP_DATAW'(wctl_rsp_data), 1'b1, ~is_join}
-        `ifdef EXT_TEX_ENABLE
-          , {tex_commit_if.uuid, tex_commit_if.wid, tex_commit_if.tmask, tex_commit_if.PC, tex_commit_if.rd, tex_commit_if.wb, RSP_DATAW'(tex_commit_if.data), tex_commit_if.eop, 1'b0}
-        `endif
-        `ifdef EXT_RASTER_ENABLE
-          , {raster_commit_if.uuid, raster_commit_if.wid, raster_commit_if.tmask, raster_commit_if.PC, raster_commit_if.rd, raster_commit_if.wb, RSP_DATAW'(raster_commit_if.data), raster_commit_if.eop, 1'b0}
-        `endif
-        `ifdef EXT_ROP_ENABLE
-          , {rop_commit_if.uuid, rop_commit_if.wid, rop_commit_if.tmask, rop_commit_if.PC, rop_commit_if.rd, rop_commit_if.wb, RSP_DATAW'(rop_commit_if.data), rop_commit_if.eop, 1'b0}
-        `endif
-        `ifdef EXT_IMADD_ENABLE
-          , {imadd_uuid_out, imadd_wid_out, imadd_tmask_out, imadd_PC_out, imadd_rd_out, 1'b1, RSP_DATAW'(imadd_data_out), 1'b1, 1'b0}
-        `endif
-        }),
+        .valid_in  (rsp_arb_valid_in),
+        .ready_in  (rsp_arb_ready_in),
+        .data_in   (rsp_arb_data_in),
         .data_out  ({gpu_commit_if.uuid, gpu_commit_if.wid, gpu_commit_if.tmask, gpu_commit_if.PC, gpu_commit_if.rd, gpu_commit_if.wb, rsp_data, gpu_commit_if.eop, rsp_is_wctl}),
         .valid_out (gpu_commit_if.valid),
         .ready_out (gpu_commit_if.ready)
