@@ -27,3 +27,5 @@ debug_hw --vivado --host localhost --ltx_file ./build_xilinx_u50_gen3x16_xdma_20
 make chipscope TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_201920_3
 
 xbutil validate --device 0000:09:00.1 --verbose
+
+vitis_analyzer build_xilinx_u50_gen3x16_xdma_201920_3_hw_4c/bin/vortex_afu.xclbin.link_summary
