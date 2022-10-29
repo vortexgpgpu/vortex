@@ -47,11 +47,6 @@
 
 #define RAM_PAGE_SIZE 4096
 
-// 256 MB
-#define BANK_SIZE 0x10000000
-
-#define NUM_BANKS 16
-
 #define DEFAULT_DEVICE_INDEX 0
 
 #define DEFAULT_XCLBIN_PATH "vortex_afu.xclbin"
@@ -94,25 +89,17 @@ static void dump_xrt_error(xrtDeviceHandle xrtDevice, xrtErrorCode err) {
 
 #endif
 
-static int get_bank_info(uint64_t dev_addr, uint32_t* pIdx, uint32_t* pOff) {
-    uint32_t index  = dev_addr / BANK_SIZE;
-    uint32_t offset = dev_addr % BANK_SIZE;
-    
-    if (index > NUM_BANKS) {
-        fprintf(stderr, "[VXDRV] Error: address out of range: 0x%lx\n", dev_addr);
-        return -1;
-    }
-    
-    if (pIdx) {
-        *pIdx = index;
-    }
+struct platform_info_t {
+    const char* prefix_name;
+    uint32_t    num_banks;
+    uint64_t    bank_size;
+};
 
-    if (pOff) {
-        *pOff = offset;
-    }
-    
-    return 0;
-}
+static platform_info_t g_platforms [] = {
+    {"xilinx_u50",  32, 0x10000000},
+    {"xilinx_u200", 32, 0x10000000},
+    {"xilinx_u280", 32, 0x10000000},
+};
 
 /*static void wait_for_enter(const std::string &msg) {
     std::cout << msg << std::endl;
@@ -124,9 +111,11 @@ static int get_bank_info(uint64_t dev_addr, uint32_t* pIdx, uint32_t* pOff) {
 class vx_device {
 public: 
 
-    vx_device(xrt_device_t& device, xrt_kernel_t& kernel)
+    vx_device(xrt_device_t& device, xrt_kernel_t& kernel, uint32_t num_banks, uint64_t bank_size)
         : xrtDevice(device)
         , xrtKernel(kernel)
+        , num_banks_(num_banks)
+        , bank_size_(bank_size)
         , mem_allocator_(
             ALLOC_BASE_ADDR, 
             ALLOC_BASE_ADDR + LOCAL_MEM_SIZE,
@@ -161,7 +150,7 @@ public:
 
         uint32_t bank_id;
 
-        CHECK_ERR(get_bank_info(addr, &bank_id, nullptr), {
+        CHECK_ERR(this->get_bank_info(addr, &bank_id, nullptr), {
             return -1;
         });
 
@@ -178,7 +167,7 @@ public:
         
         uint32_t bank_id;
 
-        CHECK_ERR(get_bank_info(dev_maddr, &bank_id, nullptr), {
+        CHECK_ERR(this->get_bank_info(dev_maddr, &bank_id, nullptr), {
             return -1;
         });
 
@@ -215,9 +204,9 @@ public:
         } else {
             printf("allocating bank%d...\n", bank_id);
         #ifdef CPP_API
-            xrt::bo xrtBuffer(xrtDevice, BANK_SIZE, xrt::bo::flags::normal, bank_id);
+            xrt::bo xrtBuffer(xrtDevice, bank_size_, xrt::bo::flags::normal, bank_id);
         #else
-            CHECK_HANDLE(xrtBuffer, xrtBOAlloc(xrtDevice, BANK_SIZE, XRT_BO_FLAGS_NONE, bank_id), {
+            CHECK_HANDLE(xrtBuffer, xrtBOAlloc(xrtDevice, bank_size_, XRT_BO_FLAGS_NONE, bank_id), {
                 return -1;
             });
         #endif
@@ -227,6 +216,28 @@ public:
             }
         }
         return 0;        
+    }    
+
+    int get_bank_info(uint64_t addr, uint32_t* pIdx, uint64_t* pOff) {
+        uint32_t index  = addr / bank_size_;
+        uint64_t offset = addr % bank_size_;
+
+        printf("get_bank_info(addr=0x%lx, bank=%d, offset=0x%lx\n", addr, index, offset);
+        
+        if (index > num_banks_) {
+            fprintf(stderr, "[VXDRV] Error: address out of range: 0x%lx\n", addr);
+            return -1;
+        }
+        
+        if (pIdx) {
+            *pIdx = index;
+        }
+
+        if (pOff) {
+            *pOff = offset;
+        }
+        
+        return 0;
     }
 
     xrt_device_t xrtDevice;
@@ -236,6 +247,9 @@ public:
         xrt_buffer_t xrtBuffer;
         uint32_t count;
     };
+
+    uint32_t num_banks_;
+    uint64_t bank_size_;
 
     DeviceConfig dcrs;
     uint64_t dev_caps;
@@ -334,27 +348,51 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     auto uuid = xrtDevice.load_xclbin(xlbin_path_s);
     auto xrtKernel = xrt::ip(xrtDevice, uuid, KERNEL_NAME);
 
-    std::cout << "Device" << device_index << " : " << device.get_info<xrt::info::device::name>() << std::endl;
-    std::cout << "  bdf      : " << device.get_info<xrt::info::device::bdf>() << std::endl;
-    std::cout << "  kdma     : " << device.get_info<xrt::info::device::kdma>() << std::endl;
-    std::cout << "  max_freq : " << device.get_info<xrt::info::device::max_clock_frequency_mhz>() << std::endl;
-    std::cout << "  mem      : " << device.get_info<xrt::info::device::mem>() << std::endl;
-    std::cout << "  thermal  : " << device.get_info<xrt::info::device::thermal>() << std::endl;
-    std::cout << "  m2m      : " << std::boolalpha << device.get_info<xrt::info::device::m2m>() << std::dec << std::endl;
-    std::cout << "  nodma    : " << std::boolalpha << device.get_info<xrt::info::device::nodma>() << std::dec << std::endl;
+    uint32_t num_banks = 0;
+    uint64_t bank_size = 0;
 
-    std::cout << "Memory info:\n";
-    auto xclbin = xrt::xclbin(xlbin_path_s);
-    for (auto& mem : xclbin.get_mems()) {        
-        std::cout << "  tag :" << mem.get_tag() << std::endl;
-        std::cout << "  base_address :" << mem.get_base_address() << std::endl;
-        std::cout << "  size_kb :" << mem.get_size_kb() << std::endl;
-        std::cout << "  type :" << mem.get_type() << std::endl;
-        std::cout << "  index :" << mem.get_index() << std::endl;
-        std::cout << "  used :" << mem.get_used() << std::endl;
+    // check if platform is supported
+    const auto& device_name = xrtDevice.get_info<xrt::info::device::name>();
+    for (size_t i = 0; i < (sizeof(g_platforms)/sizeof(platform_info_t)); ++i) {
+        auto& platform = g_platforms[i];
+        if (device_name.rfind(platform.prefix_name, 0) == 0) {
+            num_banks = platform.num_banks;
+            bank_size = platform.bank_size;
+            break;
+        }
+    }
+    if (num_banks == 0) {
+        fprintf(stderr, "[VXDRV] Error: platform not supported: %s\n", device_name.c_str());
+        return -1;
     }
 
-    CHECK_HANDLE(device, new vx_device(xrtDevice, xrtKernel), {
+    /*
+    std::cout << "Device" << device_index << " : " << xrtDevice.get_info<xrt::info::device::name>() << std::endl;
+    std::cout << "  platform : " << std::boolalpha << xrtDevice.get_info<xrt::info::device::platform>() << std::dec << std::endl;
+    std::cout << "  bdf      : " << xrtDevice.get_info<xrt::info::device::bdf>() << std::endl;
+    std::cout << "  kdma     : " << xrtDevice.get_info<xrt::info::device::kdma>() << std::endl;
+    std::cout << "  max_freq : " << xrtDevice.get_info<xrt::info::device::max_clock_frequency_mhz>() << std::endl;
+    std::cout << "  memory   : " << xrtDevice.get_info<xrt::info::device::memory>() << std::endl;
+    std::cout << "  thermal  : " << xrtDevice.get_info<xrt::info::device::thermal>() << std::endl;
+    std::cout << "  m2m      : " << std::boolalpha << xrtDevice.get_info<xrt::info::device::m2m>() << std::dec << std::endl;
+    std::cout << "  nodma    : " << std::boolalpha << xrtDevice.get_info<xrt::info::device::nodma>() << std::dec << std::endl;
+    */
+        
+    /*
+    std::cout << "Memory info :" << std::endl;
+    auto xclbin = xrt::xclbin(xlbin_path_s);
+    const auto& mem_banks = xclbin.get_mems();
+    for (const auto& mem_bank : mem_banks) {
+        std::cout << "  index : " << mem_bank.get_index() << std::endl;
+        std::cout << "  tag : " << mem_bank.get_tag() << std::endl;
+        std::cout << "  type : " << (int)mem_bank.get_type() << std::endl;
+        std::cout << "  base_address : 0x" << std::hex << mem_bank.get_base_address()<< std::endl;
+        std::cout << "  size_kb : 0x" << (mem_bank.get_size_kb() * 1000) << std::dec << std::endl;
+        std::cout << "  used :" << mem_bank.get_used() << std::endl;
+        ++num_banks;
+    }*/
+    
+    CHECK_HANDLE(device, new vx_device(xrtDevice, xrtKernel, num_banks, bank_size), {
         return -1;
     });
 
@@ -544,8 +582,8 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size
         return -1;
         
     uint32_t bo_index;
-    uint32_t bo_offset;
-    CHECK_ERR(get_bank_info(dev_maddr, &bo_index, &bo_offset), {
+    uint64_t bo_offset;
+    CHECK_ERR(device->get_bank_info(dev_maddr, &bo_index, &bo_offset), {
         return -1;
     });
 
@@ -601,8 +639,8 @@ extern int vx_copy_from_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t si
         return -1;
 
     uint32_t bo_index;
-    uint32_t bo_offset;
-    CHECK_ERR(get_bank_info(dev_maddr, &bo_index, &bo_offset), {
+    uint64_t bo_offset;
+    CHECK_ERR(device->get_bank_info(dev_maddr, &bo_index, &bo_offset), {
         return -1;
     });   
 
