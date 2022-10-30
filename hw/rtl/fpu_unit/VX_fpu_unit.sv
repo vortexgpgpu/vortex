@@ -15,7 +15,9 @@ module VX_fpu_unit #(
 
     VX_fpu_req_if.slave fpu_req_if,
     VX_fpu_rsp_if.master fpu_rsp_if
-); 
+);
+    `UNUSED_SPARAM (INSTANCE_ID)
+
 `ifdef FPU_DPI
 
     VX_fpu_dpi #(

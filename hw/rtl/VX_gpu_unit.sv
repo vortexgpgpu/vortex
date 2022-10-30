@@ -57,6 +57,10 @@ module VX_gpu_unit #(
     localparam RSP_ARB_IDX_ROP    = RSP_ARB_IDX_RASTER + `EXT_RASTER_ENABLED;    
     localparam RSP_ARB_IDX_TEX    = RSP_ARB_IDX_ROP + `EXT_ROP_ENABLED;    
     localparam RSP_ARB_IDX_IMADD  = RSP_ARB_IDX_TEX + `EXT_TEX_ENABLED;
+    `UNUSED_PARAM (RSP_ARB_IDX_RASTER)
+    `UNUSED_PARAM (RSP_ARB_IDX_ROP)
+    `UNUSED_PARAM (RSP_ARB_IDX_TEX)
+    `UNUSED_PARAM (RSP_ARB_IDX_IMADD)
 
     wire [RSP_ARB_SIZE-1:0] rsp_arb_valid_in;
     wire [RSP_ARB_SIZE-1:0] rsp_arb_ready_in;

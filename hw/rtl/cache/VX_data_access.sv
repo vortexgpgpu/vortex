@@ -42,6 +42,7 @@ module VX_data_access #(
 
     output wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] read_data
 );
+    `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (BANK_ID)
     `UNUSED_PARAM (WORD_SIZE)
     `UNUSED_VAR (reset)

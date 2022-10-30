@@ -24,7 +24,8 @@ module VX_tex_unit #(
     // Outputs
     VX_tex_rsp_if.master    tex_rsp_if
 );
-
+    `UNUSED_SPARAM (INSTANCE_ID)
+    
     localparam BLEND_FRAC_W = (2 * NUM_LANES * `TEX_BLEND_FRAC);  
 
     // DCRs

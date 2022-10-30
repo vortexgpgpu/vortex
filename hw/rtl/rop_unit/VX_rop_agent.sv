@@ -14,6 +14,7 @@ module VX_rop_agent #(
     VX_commit_if.master   rop_commit_if,
     VX_rop_req_if.master  rop_req_if
 );
+    `UNUSED_PARAM (CORE_ID)
     
     localparam UUID_WIDTH = `UP(`UUID_BITS);
     localparam NW_WIDTH   = `UP(`NW_BITS);
