@@ -25,7 +25,7 @@ module VX_priority_encoder #(
     if (N == 1) begin
 
         assign onehot    = reversed;
-        assign index     = 0;
+        assign index     = '0;
         assign valid_out = reversed;
 
     end else if (N == 2) begin
@@ -100,7 +100,7 @@ module VX_priority_encoder #(
             for (integer i = N-1; i >= 0; --i) begin
                 if (reversed[i]) begin
                     index_r     = LN'(i);
-                    onehot_r    = 0;
+                    onehot_r    = '0;
                     onehot_r[i] = 1'b1;
                 end
             end

@@ -172,7 +172,7 @@ initial begin
 end
 always @(posedge clk) begin
   if (reset) begin
-    assert_delay_ctr <= 0;
+    assert_delay_ctr <= '0;
   end else begin
     assert_delay_ctr <= assert_delay_ctr + $bits(assert_delay_ctr)'(1);
     if (assert_delay_ctr == (`RESET_DELAY-1)) begin
@@ -186,7 +186,7 @@ end
 always @(posedge clk) begin
   if (reset) begin
     mmio_tx.mmioRdValid <= 0;
-    mmio_tx.hdr         <= 0;
+    mmio_tx.hdr         <= '0;
   end else begin
     mmio_tx.mmioRdValid <= cp2af_sRxPort.c0.mmioRdValid; 
     mmio_tx.hdr.tid     <= mmio_hdr.tid;    
@@ -305,7 +305,7 @@ always @(posedge clk) begin
   if (state == STATE_RUN) begin
     vx_reset_ctr <= vx_reset_ctr + $bits(vx_reset_ctr)'(1);
   end else begin
-    vx_reset_ctr <= 0;
+    vx_reset_ctr <= '0;
   end
 end
 
@@ -690,9 +690,9 @@ always @(posedge clk) begin
   if ((STATE_IDLE == state) 
    && (CMD_MEM_WRITE == cmd_type)) begin
     cci_rd_req_addr    <= cmd_io_addr;
-    cci_rd_req_ctr     <= 0;
-    cci_rd_rsp_ctr     <= 0;
-    cci_mem_wr_req_ctr <= 0;
+    cci_rd_req_ctr     <= '0;
+    cci_rd_rsp_ctr     <= '0;
+    cci_mem_wr_req_ctr <= '0;
     cci_mem_wr_req_addr_base <= cmd_mem_addr;
     cmd_mem_wr_done     <= 0;
   end
@@ -754,7 +754,7 @@ VX_fifo_queue #(
   reg [CCI_RD_WINDOW_SIZE-1:0] dbg_cci_rd_rsp_mask;
   always @(posedge clk) begin
     if (reset) begin
-      dbg_cci_rd_rsp_mask <= 0;
+      dbg_cci_rd_rsp_mask <= '0;
     end else begin
       if (cci_rd_rsp_fire) begin      
         if (cci_rd_rsp_ctr == 0) begin
@@ -832,7 +832,7 @@ always @(posedge clk) begin
     
   if ((STATE_IDLE == state) 
   &&  (CMD_MEM_READ == cmd_type)) begin
-    cci_mem_rd_req_ctr  <= 0;
+    cci_mem_rd_req_ctr  <= '0;
     cci_mem_rd_req_addr <= cmd_mem_addr;
     cci_mem_rd_req_done <= 0;
     cci_wr_req_ctr      <= cmd_data_size;

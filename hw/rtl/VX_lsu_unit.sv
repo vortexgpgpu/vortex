@@ -308,10 +308,10 @@ module VX_lsu_unit #(
     assign st_commit_if.wid   = lsu_req_if.wid;
     assign st_commit_if.tmask = lsu_req_if.tmask;
     assign st_commit_if.PC    = lsu_req_if.PC;
-    assign st_commit_if.rd    = 0;
+    assign st_commit_if.rd    = 'x;
     assign st_commit_if.wb    = 0;
-    assign st_commit_if.eop   = 1'b1;
-    assign st_commit_if.data  = 0;
+    assign st_commit_if.eop   = 'x;
+    assign st_commit_if.data  = 'x;
     `UNUSED_VAR (st_commit_if.ready) // stall-free
 
     // load response formatting

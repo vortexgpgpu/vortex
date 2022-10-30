@@ -337,7 +337,7 @@ module VX_cache_wrap #(
         `UNUSED_VAR (core_req_byteen_b)
         `UNUSED_VAR (core_req_data_b)
         `UNUSED_VAR (core_req_tag_b)
-        assign core_req_ready_b = 0;
+        assign core_req_ready_b = '0;
 
         assign core_rsp_valid_b = '0;
         assign core_rsp_data_b  = 'x;
@@ -489,8 +489,8 @@ module VX_cache_wrap #(
         assign mem_req_uuid = mem_req_if.tag[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
         assign mem_rsp_uuid = mem_rsp_if.tag[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
     end else begin
-        assign mem_req_uuid = 0;
-        assign mem_rsp_uuid = 0;
+        assign mem_req_uuid = '0;
+        assign mem_rsp_uuid = '0;
     end
 
     wire mem_req_fire = mem_req_if.valid && mem_req_if.ready;

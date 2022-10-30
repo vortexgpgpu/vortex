@@ -186,7 +186,7 @@ module VX_nc_bypass #(
         wire [WSEL_BITS-1:0] req_wsel = core_req_addr_in_sel[WSEL_BITS-1:0];
 
         always @(*) begin
-            mem_req_byteen_in_r = 0;
+            mem_req_byteen_in_r = '0;
             mem_req_byteen_in_r[req_wsel] = core_req_byteen_in_sel;
 
             mem_req_data_in_r = 'x;
@@ -285,7 +285,7 @@ module VX_nc_bypass #(
     
     reg [NUM_REQS-1:0] rsp_nc_valid_r;
     always @(*) begin
-        rsp_nc_valid_r = 0;
+        rsp_nc_valid_r = '0;
         rsp_nc_valid_r[rsp_idx] = is_mem_rsp_nc;
     end
 

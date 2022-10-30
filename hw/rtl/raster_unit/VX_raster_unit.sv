@@ -290,7 +290,7 @@ module VX_raster_unit #(
 
     always @(posedge clk) begin
         if (reset) begin
-            perf_pending_reads <= 0;
+            perf_pending_reads <= '0;
         end else begin
             perf_pending_reads <= $signed(perf_pending_reads) + `PERF_CTR_BITS'($signed(perf_pending_reads_cycle));
         end
@@ -304,9 +304,9 @@ module VX_raster_unit #(
 
     always @(posedge clk) begin
         if (reset) begin
-            perf_mem_reads    <= 0;
-            perf_mem_latency  <= 0;
-            perf_stall_cycles <= 0;
+            perf_mem_reads    <= '0;
+            perf_mem_latency  <= '0;
+            perf_stall_cycles <= '0;
         end else begin
             perf_mem_reads    <= perf_mem_reads + `PERF_CTR_BITS'(perf_mem_req_per_cycle);
             perf_mem_latency  <= perf_mem_latency + `PERF_CTR_BITS'(perf_pending_reads);

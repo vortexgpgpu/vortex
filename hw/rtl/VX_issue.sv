@@ -136,7 +136,7 @@ module VX_issue #(
     reg [31:0] timeout_ctr;
     always @(posedge clk) begin
         if (reset) begin
-            timeout_ctr <= 0;
+            timeout_ctr <= '0;
         end else begin        
             if (ibuffer_if.valid && ~ibuffer_if.ready) begin
             `ifdef DBG_TRACE_CORE_PIPELINE
@@ -146,7 +146,7 @@ module VX_issue #(
             `endif
                 timeout_ctr <= timeout_ctr + 1;
             end else if (ibuffer_if.valid && ibuffer_if.ready) begin
-                timeout_ctr <= 0;
+                timeout_ctr <= '0;
             end
         end
     end
@@ -205,14 +205,14 @@ module VX_issue #(
 
     always @(posedge clk) begin
         if (reset) begin
-            perf_ibf_stalls <= 0;
-            perf_scb_stalls <= 0;
-            perf_alu_stalls <= 0;
-            perf_lsu_stalls <= 0;
-            perf_csr_stalls <= 0;
-            perf_gpu_stalls <= 0;
+            perf_ibf_stalls <= '0;
+            perf_scb_stalls <= '0;
+            perf_alu_stalls <= '0;
+            perf_lsu_stalls <= '0;
+            perf_csr_stalls <= '0;
+            perf_gpu_stalls <= '0;
         `ifdef EXT_F_ENABLE
-            perf_fpu_stalls <= 0;
+            perf_fpu_stalls <= '0;
         `endif
         end else begin
             if (decode_if.valid && ~decode_if.ready) begin

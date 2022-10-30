@@ -135,7 +135,7 @@ module vortex_afu_inst #(
 
 	always @(posedge ap_clk) begin
 		if (reset || ap_reset) begin
-			vx_pending_writes <= 0;
+			vx_pending_writes <= '0;
 		end else begin
 			if (m_axi_mem_wfire && ~m_axi_mem_bfire)
 				vx_pending_writes <= vx_pending_writes + 1;
@@ -148,7 +148,7 @@ module vortex_afu_inst #(
 		if (vx_reset_wait) begin
 			vx_reset_ctr <= vx_reset_ctr + 1;			
 		end else begin
-			vx_reset_ctr <= 0;
+			vx_reset_ctr <= '0;
 		end
 	end
 
@@ -279,7 +279,7 @@ module vortex_afu_inst #(
 	end	
 	always @(posedge ap_clk) begin
 		if (reset) begin
-			assert_delay_ctr <= 0;
+			assert_delay_ctr <= '0;
 			assert_enabled   <= 0;
 		end else begin			
 			if (~assert_enabled) begin

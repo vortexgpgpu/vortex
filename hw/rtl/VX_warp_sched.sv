@@ -256,7 +256,7 @@ module VX_warp_sched #(
                       + (`NUM_WARPS * CORE_ID)
                       + `UUID_BITS'(schedule_wid);
 `else
-    assign instr_uuid = 0;
+    assign instr_uuid = '0;
 `endif
 
     VX_generic_buffer #( 
@@ -277,7 +277,7 @@ module VX_warp_sched #(
 
     always @(posedge clk) begin
 		if (reset) begin
-			pending_instrs <= 0;
+			pending_instrs <= '0;
 		end else begin
 			pending_instrs <= pending_instrs 
                             + 8'(schedule_fire) 
@@ -291,7 +291,7 @@ module VX_warp_sched #(
     reg timeout_enable;
     always @(posedge clk) begin
         if (reset) begin
-            timeout_ctr    <= 0;
+            timeout_ctr    <= '0;
             timeout_enable <= 0;
         end else begin
             if (wrelease_if.valid) begin
@@ -300,7 +300,7 @@ module VX_warp_sched #(
             if (timeout_enable && active_warps !=0 && active_warps == stalled_warps) begin
                 timeout_ctr <= timeout_ctr + 1;
             end else if (active_warps == 0 || active_warps != stalled_warps) begin
-                timeout_ctr <= 0;
+                timeout_ctr <= '0;
             end
         end
     end

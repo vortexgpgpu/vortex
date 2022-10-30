@@ -22,7 +22,7 @@ module VX_cyclic_arbiter #(
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)      
         
-        assign grant_index  = 0;
+        assign grant_index  = '0;
         assign grant_onehot = requests;
         assign grant_valid  = requests[0];
 
@@ -34,10 +34,10 @@ module VX_cyclic_arbiter #(
 
         always @(posedge clk) begin
             if (reset) begin
-                grant_index_r <= 0;
+                grant_index_r <= '0;
             end else begin                
                 if (!IS_POW2 && grant_index_r == LOG_NUM_REQS'(NUM_REQS-1)) begin
-                    grant_index_r <= 0;
+                    grant_index_r <= '0;
                 end else begin
                     grant_index_r <= grant_index_r + LOG_NUM_REQS'(1);
                 end

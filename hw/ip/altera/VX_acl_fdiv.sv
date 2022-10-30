@@ -57,6 +57,6 @@ module VX_acl_fdiv #(
 
     `UNUSED_VAR (frm)
     assign has_fflags = 0;
-    assign fflags = 0;
+    assign fflags = '0;
 
 endmodule

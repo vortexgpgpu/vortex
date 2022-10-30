@@ -105,7 +105,7 @@ module VX_raster_te #(
                     tile_edge_eval[0]   <= edges_in[0][2];
                     tile_edge_eval[1]   <= edges_in[1][2];
                     tile_edge_eval[2]   <= edges_in[2][2];
-                    tile_level          <= 0;
+                    tile_level          <= '0;
                 end
             end
         end

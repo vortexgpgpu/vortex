@@ -60,7 +60,7 @@ module VX_ibuffer #(
 
         always @(posedge clk) begin
             if (reset) begin            
-                used_r      <= 0;
+                used_r      <= '0;
                 full_r      <= 0; 
                 alm_full_r  <= 0;
                 empty_r     <= 1; 
@@ -162,7 +162,7 @@ module VX_ibuffer #(
         if (reset)  begin            
             valid_table <= '0;
             deq_valid   <= 0;  
-            num_warps   <= 0;
+            num_warps   <= '0;
         end else begin
             valid_table <= valid_table_n;            
             deq_valid   <= deq_valid_n;            

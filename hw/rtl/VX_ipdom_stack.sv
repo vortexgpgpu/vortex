@@ -26,8 +26,8 @@ module VX_ipdom_stack #(
 
     always @(posedge clk) begin
         if (reset) begin   
-            rd_ptr <= 0;
-            wr_ptr <= 0;
+            rd_ptr <= '0;
+            wr_ptr <= '0;
         end else begin
             if (push) begin
                 rd_ptr <= wr_ptr;

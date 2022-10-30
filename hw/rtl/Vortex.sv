@@ -267,19 +267,19 @@ module Vortex (
     assign perf_memsys_total_if.l3cache_bank_stalls = perf_l3cache_if.bank_stalls;
     assign perf_memsys_total_if.l3cache_mshr_stalls = perf_l3cache_if.mshr_stalls;
 `else
-    assign perf_memsys_total_if.l3cache_reads       = 0;
-    assign perf_memsys_total_if.l3cache_writes      = 0;
-    assign perf_memsys_total_if.l3cache_read_misses = 0;
-    assign perf_memsys_total_if.l3cache_write_misses= 0;
-    assign perf_memsys_total_if.l3cache_bank_stalls = 0;
-    assign perf_memsys_total_if.l3cache_mshr_stalls = 0;
+    assign perf_memsys_total_if.l3cache_reads       = '0;
+    assign perf_memsys_total_if.l3cache_writes      = '0;
+    assign perf_memsys_total_if.l3cache_read_misses = '0;
+    assign perf_memsys_total_if.l3cache_write_misses= '0;
+    assign perf_memsys_total_if.l3cache_bank_stalls = '0;
+    assign perf_memsys_total_if.l3cache_mshr_stalls = '0;
 `endif
 
     reg [`PERF_CTR_BITS-1:0] perf_mem_pending_reads;
 
     always @(posedge clk) begin
         if (reset) begin
-            perf_mem_pending_reads <= 0;
+            perf_mem_pending_reads <= '0;
         end else begin
             perf_mem_pending_reads <= $signed(perf_mem_pending_reads) + 
                 `PERF_CTR_BITS'($signed(2'(mem_req_fire && ~mem_req_if.rw) - 2'(mem_rsp_fire)));
@@ -292,9 +292,9 @@ module Vortex (
 
     always @(posedge clk) begin
         if (reset) begin       
-            perf_mem_reads  <= 0;
-            perf_mem_writes <= 0;
-            perf_mem_lat    <= 0;
+            perf_mem_reads  <= '0;
+            perf_mem_writes <= '0;
+            perf_mem_lat    <= '0;
         end else begin  
             if (mem_req_fire && ~mem_req_if.rw) begin
                 perf_mem_reads <= perf_mem_reads + `PERF_CTR_BITS'(1);

@@ -168,11 +168,11 @@ module VX_raster_be #(
 
     always @(posedge clk) begin
         if (reset) begin
-            batch_sent <= 0;
+            batch_sent <= '0;
         end else begin
             if (fifo_push) begin
                 if (batch_sent_all) begin
-                    batch_sent <= 0;
+                    batch_sent <= '0;
                 end else begin
                     batch_sent <= batch_sent_n;
                 end

@@ -547,9 +547,9 @@ module VX_mem_unit # (
     assign perf_memsys_if.smem_writes        = perf_smem_if.writes;
     assign perf_memsys_if.smem_bank_stalls   = perf_smem_if.bank_stalls;    
 `else
-    assign perf_memsys_if.smem_reads         = 0;
-    assign perf_memsys_if.smem_writes        = 0;
-    assign perf_memsys_if.smem_bank_stalls   = 0;
+    assign perf_memsys_if.smem_reads         = '0;
+    assign perf_memsys_if.smem_writes        = '0;
+    assign perf_memsys_if.smem_bank_stalls   = '0;
 `endif
 
 `ifdef L2_ENABLE
@@ -560,24 +560,24 @@ module VX_mem_unit # (
     assign perf_memsys_if.l2cache_bank_stalls = perf_l2cache_if.bank_stalls;
     assign perf_memsys_if.l2cache_mshr_stalls = perf_l2cache_if.mshr_stalls;
 `else
-    assign perf_memsys_if.l2cache_reads       = 0;
-    assign perf_memsys_if.l2cache_writes      = 0;
-    assign perf_memsys_if.l2cache_read_misses = 0;
-    assign perf_memsys_if.l2cache_write_misses= 0;
-    assign perf_memsys_if.l2cache_bank_stalls = 0;
-    assign perf_memsys_if.l2cache_mshr_stalls = 0;
+    assign perf_memsys_if.l2cache_reads       = '0;
+    assign perf_memsys_if.l2cache_writes      = '0;
+    assign perf_memsys_if.l2cache_read_misses = '0;
+    assign perf_memsys_if.l2cache_write_misses= '0;
+    assign perf_memsys_if.l2cache_bank_stalls = '0;
+    assign perf_memsys_if.l2cache_mshr_stalls = '0;
 `endif
     
-    assign perf_memsys_if.l3cache_reads       = 0;
-    assign perf_memsys_if.l3cache_writes      = 0;
-    assign perf_memsys_if.l3cache_read_misses = 0;
-    assign perf_memsys_if.l3cache_write_misses= 0;
-    assign perf_memsys_if.l3cache_bank_stalls = 0;
-    assign perf_memsys_if.l3cache_mshr_stalls = 0;
+    assign perf_memsys_if.l3cache_reads       = '0;
+    assign perf_memsys_if.l3cache_writes      = '0;
+    assign perf_memsys_if.l3cache_read_misses = '0;
+    assign perf_memsys_if.l3cache_write_misses= '0;
+    assign perf_memsys_if.l3cache_bank_stalls = '0;
+    assign perf_memsys_if.l3cache_mshr_stalls = '0;
 
-    assign perf_memsys_if.mem_reads   = 0;       
-    assign perf_memsys_if.mem_writes  = 0;
-    assign perf_memsys_if.mem_latency = 0;
+    assign perf_memsys_if.mem_reads   = '0;       
+    assign perf_memsys_if.mem_writes  = '0;
+    assign perf_memsys_if.mem_latency = '0;
     
 `endif
     

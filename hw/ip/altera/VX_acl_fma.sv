@@ -50,7 +50,7 @@ module VX_acl_fma #(
                     // MUL
                     a = dataa[i];
                     b = datab[i];
-                    c = 0;
+                    c = '0;
                 end else begin
                     // ADD/SUB
                     a = 32'h3f800000; // 1.0f
@@ -87,6 +87,6 @@ module VX_acl_fma #(
 
     `UNUSED_VAR (frm)
     assign has_fflags = 0;
-    assign fflags = 0;
+    assign fflags = '0;
 
 endmodule

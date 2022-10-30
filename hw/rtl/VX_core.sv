@@ -312,8 +312,8 @@ module VX_core #(
 
     always @(posedge clk) begin
         if (reset) begin
-            perf_icache_pending_reads <= 0;
-            perf_dcache_pending_reads <= 0;
+            perf_icache_pending_reads <= '0;
+            perf_dcache_pending_reads <= '0;
         end else begin
             perf_icache_pending_reads <= $signed(perf_icache_pending_reads) + `PERF_CTR_BITS'($signed(perf_icache_pending_read_cycle));
             perf_dcache_pending_reads <= $signed(perf_dcache_pending_reads) + `PERF_CTR_BITS'($signed(perf_dcache_pending_read_cycle));
@@ -325,11 +325,11 @@ module VX_core #(
 
     always @(posedge clk) begin
         if (reset) begin
-            perf_ifetches   <= 0;
-            perf_loads      <= 0;
-            perf_stores     <= 0;
-            perf_icache_lat <= 0;
-            perf_dcache_lat <= 0;
+            perf_ifetches   <= '0;
+            perf_loads      <= '0;
+            perf_stores     <= '0;
+            perf_icache_lat <= '0;
+            perf_dcache_lat <= '0;
         end else begin
             perf_ifetches   <= perf_ifetches   + `PERF_CTR_BITS'(perf_icache_req_per_cycle);
             perf_loads      <= perf_loads      + `PERF_CTR_BITS'(perf_dcache_rd_req_per_cycle);

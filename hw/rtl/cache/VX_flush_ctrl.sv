@@ -21,7 +21,7 @@ module VX_flush_ctrl #(
     always @(posedge clk) begin
         if (reset) begin
             flush_enable <= 1;
-            flush_ctr    <= 0;
+            flush_ctr    <= '0;
         end else begin
             if (flush_enable) begin
                 if (flush_ctr == ((2 ** `LINE_SEL_BITS)-1)) begin

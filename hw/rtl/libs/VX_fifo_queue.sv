@@ -38,8 +38,8 @@ module VX_fifo_queue #(
 
         always @(posedge clk) begin
             if (reset) begin
-                head_r <= 0;
-                size_r <= 0;                    
+                head_r <= '0;
+                size_r <= '0;                    
             end else begin
                 `ASSERT(~push || ~full, ("runtime error: incrementing full queue"));
                 `ASSERT(~pop || ~empty, ("runtime error: decrementing full queue"));
@@ -48,7 +48,7 @@ module VX_fifo_queue #(
                         size_r <= 1;
                     end
                 end else if (pop) begin
-                    size_r <= 0;
+                    size_r <= '0;
                 end
                 if (push) begin 
                     head_r <= data_in;
@@ -151,8 +151,8 @@ module VX_fifo_queue #(
                 
                 always @(posedge clk) begin
                     if (reset) begin
-                        rd_ptr_r <= 0;
-                        wr_ptr_r <= 0;
+                        rd_ptr_r <= '0;
+                        wr_ptr_r <= '0;
                     end else begin
                         wr_ptr_r <= wr_ptr_r + ADDRW'(push);
                         rd_ptr_r <= rd_ptr_r + ADDRW'(pop);
@@ -183,8 +183,8 @@ module VX_fifo_queue #(
 
                 always @(posedge clk) begin
                     if (reset) begin  
-                        wr_ptr_r   <= 0;
-                        rd_ptr_r   <= 0;
+                        wr_ptr_r   <= '0;
+                        rd_ptr_r   <= '0;
                         rd_ptr_n_r <= 1;
                     end else begin
                         if (push) begin             

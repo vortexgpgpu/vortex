@@ -36,9 +36,9 @@ module VX_index_queue #(
     
     always @(posedge clk) begin
         if (reset) begin
-            rd_ptr <= 0;
-            wr_ptr <= 0;
-            valid  <= 0;     
+            rd_ptr <= '0;
+            wr_ptr <= '0;
+            valid  <= '0;     
         end else begin
             if (enqueue)  begin
                 valid[wr_a] <= 1;

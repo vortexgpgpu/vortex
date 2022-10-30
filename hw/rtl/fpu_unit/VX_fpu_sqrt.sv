@@ -110,7 +110,7 @@ module VX_fpu_sqrt #(
 
     `UNUSED_VAR (frm)
     assign has_fflags = 0;
-    assign fflags = 0;
+    assign fflags = '0;
 
 `endif
 

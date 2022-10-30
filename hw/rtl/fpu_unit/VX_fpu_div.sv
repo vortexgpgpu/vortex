@@ -113,7 +113,7 @@ module VX_fpu_div #(
 
     `UNUSED_VAR (frm)
     assign has_fflags = 0;
-    assign fflags = 0;
+    assign fflags = '0;
 
 `endif
 

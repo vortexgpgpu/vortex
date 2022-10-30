@@ -62,13 +62,13 @@ module VX_decode  #(
     
     always @(*) begin
 
-        ex_type   = 0;
+        ex_type   = '0;
         op_type   = 'x;
-        op_mod    = 0;
-        rd_r      = 0;
-        rs1_r     = 0;
-        rs2_r     = 0;
-        rs3_r     = 0;
+        op_mod    = '0;
+        rd_r      = '0;
+        rs1_r     = '0;
+        rs2_r     = '0;
+        rs3_r     = '0;
         imm       = 'x;
         use_imm   = 0;
         use_PC    = 0;
@@ -138,7 +138,6 @@ module VX_decode  #(
                 use_imm = 1;
                 imm     = {upper_imm, 12'(0)};
                 `USED_IREG (rd);
-                rs1_r   = 0;
             end
             `INST_AUIPC: begin 
                 ex_type = `EX_ALU;

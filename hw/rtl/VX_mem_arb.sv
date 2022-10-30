@@ -81,7 +81,7 @@ module VX_mem_arb #(
     if (NUM_REQS > 1) begin
         assign rsp_sel = rsp_out_if.tag[TAG_SEL_IDX +: LOG_NUM_REQS];
     end else begin
-        assign rsp_sel = 0;
+        assign rsp_sel = '0;
     end
 
     wire [TAG_WIDTH-1:0] rsp_tag_out;

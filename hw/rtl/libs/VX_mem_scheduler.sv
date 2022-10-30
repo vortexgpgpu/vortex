@@ -125,7 +125,7 @@ module VX_mem_scheduler #(
     if (MEM_TAG_ID != 0) begin
         assign req_mtid = req_tag[TAG_WIDTH-1 -: MEM_TAG_ID];
     end else begin
-        assign req_mtid = 0;
+        assign req_mtid = '0;
     end
 
     wire [$clog2(QUEUE_SIZE+1)-1:0] reqq_size;
@@ -246,12 +246,12 @@ module VX_mem_scheduler #(
         reg [BATCH_SEL_BITS-1:0] req_batch_idx_r;
         always @(posedge clk) begin
             if (reset) begin
-                req_batch_idx_r <= 0;
+                req_batch_idx_r <= '0;
             end else begin
                 if (~reqq_empty && batch_sent_all) begin
                     if (req_sent_all 
                     || (req_batch_idx_r == BATCH_SEL_BITS'(NUM_BATCHES-1))) begin
-                        req_batch_idx_r <= 0;
+                        req_batch_idx_r <= '0;
                     end else begin
                         req_batch_idx_r <= req_batch_idx_r + BATCH_SEL_BITS'(1);
                     end
@@ -271,7 +271,7 @@ module VX_mem_scheduler #(
         assign req_batch_idx = req_batch_idx_r;
         assign req_sent_all  = (& req_sent_mask);    
     end else begin
-        assign req_batch_idx = 0;
+        assign req_batch_idx = '0;
         assign req_sent_all  = batch_sent_all;
     end
 
@@ -357,7 +357,7 @@ module VX_mem_scheduler #(
     if (NUM_BATCHES > 1) begin
         assign rsp_batch_idx = mem_rsp_tag_s[QUEUE_ADDRW +: BATCH_SEL_BITS];
     end else begin
-        assign rsp_batch_idx = 0;
+        assign rsp_batch_idx = '0;
     end
 
     assign rsp_rem_cnt_n = rsp_rem_cnt[ibuf_raddr] - REQ_CNTW'(mem_rsp_cnt);
@@ -474,10 +474,10 @@ module VX_mem_scheduler #(
         assign mem_req_dbg_uuid = reqq_mtid[MEM_TAG_ID-1 -: UUID_WIDTH];
         assign mem_rsp_dbg_uuid = mem_rsp_tag_s[MEM_TAGW-1 -: UUID_WIDTH];
     end else begin
-        assign req_dbg_uuid = 0;
-        assign rsp_dbg_uuid = 0;
-        assign mem_req_dbg_uuid = 0;
-        assign mem_rsp_dbg_uuid = 0;
+        assign req_dbg_uuid = '0;
+        assign rsp_dbg_uuid = '0;
+        assign mem_req_dbg_uuid = '0;
+        assign mem_rsp_dbg_uuid = '0;
     end
     
     `UNUSED_VAR (req_dbg_uuid)

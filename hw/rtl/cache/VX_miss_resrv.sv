@@ -152,7 +152,7 @@ module VX_miss_resrv #(
 
     always @(posedge clk) begin
         if (reset) begin
-            valid_table    <= 0;
+            valid_table    <= '0;
             allocate_rdy_r <= 0;
             dequeue_val_r  <= 0;
         end else begin
