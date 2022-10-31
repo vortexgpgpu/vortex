@@ -26,10 +26,10 @@ module VX_onehot_encoder #(
 
     end else if (MODEL == 1) begin    
         localparam M = 1 << LN;   
-    `IGNORE_WARNINGS_BEGIN 
+    `IGNORE_UNOPTFLAT_BEGIN 
         wire [LN-1:0][M-1:0] addr;
         wire [LN:0][M-1:0] v;
-    `IGNORE_WARNINGS_END
+    `IGNORE_UNOPTFLAT_END
     
         // base case, also handle padding for non-power of two inputs
         assign v[0] = REVERSE ? (M'(data_in) << (M - N)) : M'(data_in);
@@ -40,11 +40,10 @@ module VX_onehot_encoder #(
             localparam SW = lvl;
         
             for (genvar s = 0; s < SN; ++s) begin
-                wire [1:0] vs = {
-                    v[lvl-1][s*SI+(SI>>1)],
-                    v[lvl-1][s*SI]
-                };
-            
+            `IGNORE_UNOPTFLAT_BEGIN
+                wire [1:0] vs = {v[lvl-1][s*SI+(SI>>1)], v[lvl-1][s*SI]};
+            `IGNORE_UNOPTFLAT_END
+                        
                 assign v[lvl][s*SI] = (| vs);
 
                 if (lvl == 1) begin
