@@ -340,16 +340,16 @@ module VX_cache_wrap #(
         assign core_req_ready_b = '0;
 
         assign core_rsp_valid_b = '0;
-        assign core_rsp_data_b  = 'x;
-        assign core_rsp_tag_b   = 'x;
+        assign core_rsp_data_b  = '0;
+        assign core_rsp_tag_b   = '0;
         `UNUSED_VAR (core_rsp_ready_b)
 
         assign mem_req_valid_b  = 0;
-        assign mem_req_addr_b   = 'x;
-        assign mem_req_rw_b     = 'x;
-        assign mem_req_byteen_b = 'x;
-        assign mem_req_data_b   = 'x;
-        assign mem_req_tag_b    = 'x;
+        assign mem_req_addr_b   = '0;
+        assign mem_req_rw_b     = '0;
+        assign mem_req_byteen_b = '0;
+        assign mem_req_data_b   = '0;
+        assign mem_req_tag_b    = '0;
         `UNUSED_VAR (mem_req_ready_b)
 
         `UNUSED_VAR (mem_rsp_valid_b)
@@ -358,14 +358,14 @@ module VX_cache_wrap #(
         assign mem_rsp_ready_b = 0;
 
     `ifdef PERF_ENABLE
-        assign perf_cache_if.reads        = 'x;
-        assign perf_cache_if.writes       = 'x;
-        assign perf_cache_if.read_misses  = 'x;
-        assign perf_cache_if.write_misses = 'x;
-        assign perf_cache_if.bank_stalls  = 'x;
-        assign perf_cache_if.mshr_stalls  = 'x;
-        assign perf_cache_if.mem_stalls   = 'x;
-        assign perf_cache_if.crsp_stalls  = 'x;
+        assign perf_cache_if.reads        = '0;
+        assign perf_cache_if.writes       = '0;
+        assign perf_cache_if.read_misses  = '0;
+        assign perf_cache_if.write_misses = '0;
+        assign perf_cache_if.bank_stalls  = '0;
+        assign perf_cache_if.mshr_stalls  = '0;
+        assign perf_cache_if.mem_stalls   = '0;
+        assign perf_cache_if.crsp_stalls  = '0;
     `endif
 
     end else begin

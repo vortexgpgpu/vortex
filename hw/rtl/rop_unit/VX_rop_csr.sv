@@ -31,7 +31,7 @@ module VX_rop_csr #(
         end
     end
 
-    assign rop_csr_if.read_data = 'x;
+    assign rop_csr_if.read_data = '0;
 
     assign rop_csrs = reg_csrs;
 

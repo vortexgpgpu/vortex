@@ -166,7 +166,7 @@ module VX_shared_mem #(
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         assign per_bank_rsp_valid[i] = per_bank_req_valid[i] && ~per_bank_req_rw[i];
-        assign per_bank_rsp_pmask[i] = 'x;
+        assign per_bank_rsp_pmask[i] = '0;
         assign per_bank_rsp_tag[i]   = per_bank_req_tag[i];
         assign per_bank_rsp_idx[i]   = per_bank_req_idx[i];
         assign per_bank_req_ready[i] = per_bank_req_rw[i] || per_bank_rsp_ready[i];

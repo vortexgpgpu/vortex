@@ -208,10 +208,10 @@ module VX_mem_scheduler #(
                 assign mem_req_data_b[i][j]   = reqq_data[r];
             end else begin
                 assign mem_req_mask_b[i][j]   = 0;
-                assign mem_req_rw_b[i][j]     = 'x;
-                assign mem_req_byteen_b[i][j] = 'x;
-                assign mem_req_addr_b[i][j]   = 'x;
-                assign mem_req_data_b[i][j]   = 'x;
+                assign mem_req_rw_b[i][j]     = '0;
+                assign mem_req_byteen_b[i][j] = '0;
+                assign mem_req_addr_b[i][j]   = '0;
+                assign mem_req_data_b[i][j]   = '0;
             end
         end
     end

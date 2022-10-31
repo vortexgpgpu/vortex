@@ -39,7 +39,7 @@ module VX_stream_switch #(
                     assign data_in_r[i][j]  = data_in[ii];
                 end else begin
                     assign valid_in_r[i][j] = 0;
-                    assign data_in_r[i][j]  = 'x;
+                    assign data_in_r[i][j]  = '0;
                 end
             end
         end        

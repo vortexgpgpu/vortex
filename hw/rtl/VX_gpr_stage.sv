@@ -96,7 +96,7 @@ module VX_gpr_stage #(
     end
 `else    
     `UNUSED_VAR (gpr_req_if.rs3)    
-    assign gpr_rsp_if.rs3_data = 'x;
+    assign gpr_rsp_if.rs3_data = '0;
 `endif
     
     assign writeback_if.ready = 1'b1;

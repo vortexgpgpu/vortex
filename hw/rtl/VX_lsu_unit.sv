@@ -265,7 +265,7 @@ module VX_lsu_unit #(
                     assign cache_req_type_b[j] = cache_req_type[k];
                     assign cache_rsp_type[k] = cache_rsp_type_b[j];
                 end else begin
-                    assign cache_req_type_b[j] = 'x;
+                    assign cache_req_type_b[j] = '0;
                     `UNUSED_VAR (cache_rsp_type_b[j])
                 end
             end
@@ -281,7 +281,7 @@ module VX_lsu_unit #(
             for (genvar j = 0; j < DCACHE_NUM_REQS; ++j) begin
                 if (i != j) begin
                     `UNUSED_VAR (cache_req_type[j])
-                    assign cache_rsp_type[j] = 'x;
+                    assign cache_rsp_type[j] = '0;
                 end
             end
         end
@@ -308,10 +308,10 @@ module VX_lsu_unit #(
     assign st_commit_if.wid   = lsu_req_if.wid;
     assign st_commit_if.tmask = lsu_req_if.tmask;
     assign st_commit_if.PC    = lsu_req_if.PC;
-    assign st_commit_if.rd    = 'x;
+    assign st_commit_if.rd    = '0;
     assign st_commit_if.wb    = 0;
-    assign st_commit_if.eop   = 'x;
-    assign st_commit_if.data  = 'x;
+    assign st_commit_if.eop   = 1;
+    assign st_commit_if.data  = '0;
     `UNUSED_VAR (st_commit_if.ready) // stall-free
 
     // load response formatting

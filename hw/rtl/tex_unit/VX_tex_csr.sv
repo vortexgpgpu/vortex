@@ -30,7 +30,7 @@ module VX_tex_csr #(
         end
     end
 
-    assign tex_csr_if.read_data = 'x;
+    assign tex_csr_if.read_data = '0;
 
     assign tex_csrs = reg_csrs;
 

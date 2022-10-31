@@ -540,7 +540,7 @@ module VX_cache #(
         
         assign mem_req_rw_s     = 0;
         assign mem_req_byteen_s = {LINE_SIZE{1'b1}};
-        assign mem_req_data_s   = 'x;
+        assign mem_req_data_s   = '0;
     end
 
 `ifdef PERF_ENABLE
