@@ -61,7 +61,6 @@ module VX_mem_scheduler #(
   );
 
     localparam REM_BATCH_SIZE = NUM_REQS % NUM_BANKS;
-    localparam BATCH_DATAW = NUM_BANKS * (1 + BYTEENW + ADDR_WIDTH + DATA_WIDTH);
     localparam REQ_CNTW = $clog2(NUM_REQS + 1);
     localparam BANK_CNTW = $clog2(NUM_BANKS + 1);
     localparam TAG_ONLY_WIDTH = TAG_WIDTH - MEM_TAG_ID;

@@ -48,6 +48,8 @@ module VX_shared_mem #(
     output wire [NUM_REQS-1:0][TAG_WIDTH-1:0]   rsp_tag,
     input  wire [NUM_REQS-1:0]                  rsp_ready
 );
+    `UNUSED_SPARAM (INSTANCE_ID)
+    `UNUSED_PARAM (UUID_WIDTH)
 
     localparam WORD_WIDTH      = WORD_SIZE * 8;
     localparam REQ_SEL_BITS    = `CLOG2(NUM_REQS);

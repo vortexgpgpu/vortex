@@ -33,12 +33,12 @@ module VX_tag_access #(
     output wire [NUM_WAYS-1:0]          way_sel,
     output wire                         tag_match
 );
-
+    `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (BANK_ID)
     `UNUSED_VAR (reset)
     `UNUSED_VAR (lookup)
 
-    localparam TAG_WIDTH = `TAG_SEL_BITS + 1;
+    localparam TAG_WIDTH = 1 + `TAG_SEL_BITS;
 
     wire [NUM_WAYS-1:0] tag_matches;
     wire [`LINE_SEL_BITS-1:0] line_addr = addr[`LINE_SEL_BITS-1:0];
@@ -68,7 +68,7 @@ module VX_tag_access #(
         wire read_valid;
 
         VX_sp_ram #(
-            .DATAW (1 + `TAG_SEL_BITS),
+            .DATAW (TAG_WIDTH),
             .SIZE  (`LINES_PER_BANK),
             .NO_RWCHECK (1)
         ) tag_store (

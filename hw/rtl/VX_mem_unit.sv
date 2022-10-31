@@ -150,7 +150,6 @@ module VX_mem_unit # (
         .UUID_WIDTH     (`UUID_BITS),
         .WRITE_ENABLE   (1),        
         .NC_ENABLE      (1),
-        .NC_TAG_BIT     (0),
         .CORE_OUT_REG   (`SM_ENABLED ? 2 : 3),
         .MEM_OUT_REG    (3)
     ) dcache (

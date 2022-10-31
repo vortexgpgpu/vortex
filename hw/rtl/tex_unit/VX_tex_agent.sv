@@ -15,6 +15,7 @@ module VX_tex_agent #(
     VX_tex_req_if.master    tex_req_if,
     VX_commit_if.master     tex_commit_if
 );
+    `UNUSED_PARAM (CORE_ID)
 
     localparam UUID_WIDTH = `UP(`UUID_BITS);
     localparam NW_WIDTH   = `UP(`NW_BITS);

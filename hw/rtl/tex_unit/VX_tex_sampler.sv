@@ -22,7 +22,8 @@ module VX_tex_sampler #(
     output wire [REQ_INFOW-1:0]         rsp_info,    
     input wire                          rsp_ready
 );   
-
+    `UNUSED_SPARAM (INSTANCE_ID)
+    
     wire valid_s0, valid_s1;
     wire [REQ_INFOW-1:0] req_info_s0, req_info_s1;
     wire [NUM_LANES-1:0][31:0] texel_ul, texel_uh;

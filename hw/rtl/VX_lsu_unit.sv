@@ -31,6 +31,7 @@ module VX_lsu_unit #(
     localparam MEM_ADDRW  = 32 - MEM_ASHIFT;
     localparam REQ_ASHIFT = `CLOG2(DCACHE_WORD_SIZE);
 
+`ifdef SM_ENABLE
     localparam STACK_SIZE_W = `STACK_SIZE >> MEM_ASHIFT;
     localparam STACK_ADDR_W = `CLOG2(STACK_SIZE_W);
     localparam SMEM_LOCAL_SIZE_W = `SMEM_LOCAL_SIZE >> MEM_ASHIFT;
@@ -38,6 +39,7 @@ module VX_lsu_unit #(
     localparam TOTAL_STACK_SIZE = `STACK_SIZE * `NUM_THREADS * `NUM_WARPS * `NUM_CORES;
     localparam STACK_START_W = MEM_ADDRW'(`STACK_BASE_ADDR >> MEM_ASHIFT);
     localparam STACK_END_W = MEM_ADDRW'((`STACK_BASE_ADDR - TOTAL_STACK_SIZE) >> MEM_ASHIFT);
+`endif
 
     //                     uuid,        addr_type,                               wid,       PC,  tmask,         rd,        op_type,         align,                        is_dup
     localparam TAG_WIDTH = UUID_WIDTH + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + NW_WIDTH + 32 + `NUM_THREADS + `NR_BITS + `INST_LSU_BITS + (`NUM_THREADS * REQ_ASHIFT) + 1;

@@ -12,6 +12,7 @@ module VX_tex_csr #(
     // Output
     output tex_csrs_t tex_csrs
 );
+    `UNUSED_PARAM (CORE_ID)
 
     // CSR registers
 

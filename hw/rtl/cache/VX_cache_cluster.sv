@@ -44,7 +44,6 @@ module VX_cache_cluster #(
     parameter TAG_WIDTH             = UUID_WIDTH + 1,
 
     // enable bypass for non-cacheable addresses
-    parameter NC_TAG_BIT            = 0,
     parameter NC_ENABLE             = 0,
 
     // Core response output register
@@ -256,7 +255,6 @@ module VX_cache_cluster_top #(
     parameter TAG_WIDTH             = 16,
 
     // enable bypass for non-cacheable addresses
-    parameter NC_TAG_BIT            = 0,
     parameter NC_ENABLE             = 1,
 
     // Core response output register
@@ -381,8 +379,6 @@ module VX_cache_cluster_top #(
         .TAG_WIDTH      (TAG_WIDTH),
         .UUID_WIDTH     (UUID_WIDTH),
         .WRITE_ENABLE   (WRITE_ENABLE),
-        .NC_TAG_BIT     (NC_TAG_BIT),
-        .NC_ENABLE      (NC_ENABLE),
         .CORE_OUT_REG   (CORE_OUT_REG),
         .MEM_OUT_REG    (MEM_OUT_REG)
     ) cache (

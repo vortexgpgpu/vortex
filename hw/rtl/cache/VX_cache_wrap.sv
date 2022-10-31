@@ -79,7 +79,6 @@ module VX_cache_wrap #(
     `STATIC_ASSERT(NUM_PORTS <= NUM_REQS, ("invalid parameter"))
     `STATIC_ASSERT(NUM_PORTS <= `WORDS_PER_LINE, ("invalid parameter"))
 
-    localparam WORD_SEL_BITS    = `UP(`WORD_SEL_BITS);
     localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE);    
     localparam CORE_TAG_X_WIDTH = TAG_WIDTH - NC_ENABLE;
     localparam MEM_TAG_X_WIDTH  = MSHR_ADDR_WIDTH + `BANK_SEL_BITS;
@@ -90,9 +89,6 @@ module VX_cache_wrap #(
 
     localparam NC_BYPASS = (NC_ENABLE || PASSTHRU);
     localparam DIRECT_PASSTHRU = PASSTHRU && (`WORD_SEL_BITS == 0) && (NUM_REQS == 1);
-
-    localparam CORE_REQ_BUF_ENABLE = (1 != NUM_BANKS) || (1 != NUM_REQS);
-    localparam MEM_REQ_BUF_ENABLE  = (1 != NUM_BANKS);
 
     wire [NUM_REQS-1:0]                     core_req_valid;
     wire [NUM_REQS-1:0]                     core_req_rw;

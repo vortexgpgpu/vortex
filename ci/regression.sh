@@ -267,6 +267,8 @@ usage()
     echo "usage: regression [-smoke] [-unittest] [-coverage] [-tex] [-rop] [-raster] [-graphics] [-cluster] [-debug] [-config] [-stress[#n]] [-all] [-h|--help]"
 }
 
+start=$SECONDS
+
 while [ "$1" != "" ]; do
     case $1 in
         -smoke ) smoke
@@ -316,3 +318,8 @@ while [ "$1" != "" ]; do
     esac
     shift
 done
+
+echo "Regression completed!"
+
+duration=$(( SECONDS - start ))
+awk -v t=$duration 'BEGIN{t=int(t*1000); printf "Elapsed Time: %d:%02d:%02d\n", t/3600000, t/60000%60, t/1000%60}'

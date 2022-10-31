@@ -27,6 +27,8 @@ module VX_rop_blend #(
     // Output values
     output rgba_t [NUM_LANES-1:0] color_out
 );
+    `UNUSED_SPARAM (INSTANCE_ID)
+
     localparam LATENCY = `LATENCY_IMUL + 1;
 
     `UNUSED_VAR (dcrs)

@@ -12,6 +12,7 @@ module VX_rop_dcr #(
     // Output
     output rop_dcrs_t       rop_dcrs
 );
+    `UNUSED_SPARAM (INSTANCE_ID)
 
     `UNUSED_VAR (reset)
 

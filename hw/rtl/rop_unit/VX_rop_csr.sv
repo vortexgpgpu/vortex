@@ -12,6 +12,7 @@ module VX_rop_csr #(
     // Output
     output rop_csrs_t rop_csrs
 );
+    `UNUSED_PARAM (CORE_ID)
 
     // CSR registers
 
