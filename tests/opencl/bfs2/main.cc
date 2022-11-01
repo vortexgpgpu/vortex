@@ -136,146 +136,7 @@ void run_bfs_cpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size, \
         k++;
     } while(stop);
 }
-//----------------------------------------------------------
-//--breadth first search on GPUs
-//----------------------------------------------------------
-/*void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size, \
-                 int *h_graph_edges, char *h_graph_mask, char *h_updating_graph_mask, \
-                 char *h_graph_visited, int *h_cost)
-throw(std::string)
-{
 
-    //int number_elements = height*width;
-    char h_over;
-    cl_mem d_graph_nodes, d_graph_edges, d_graph_mask, d_updating_graph_mask, \
-    d_graph_visited, d_cost, d_over;
-    try {
-        _clInit();
-
-        //--1 transfer data from host to device
-        d_graph_nodes = _clMalloc(no_of_nodes*sizeof(Node), h_graph_nodes);
-        d_graph_edges = _clMalloc(edge_list_size*sizeof(int), h_graph_edges);
-        d_graph_mask = _clMallocRW(no_of_nodes*sizeof(char), h_graph_mask);
-        d_updating_graph_mask = _clMallocRW(no_of_nodes*sizeof(char), h_updating_graph_mask);
-        d_graph_visited = _clMallocRW(no_of_nodes*sizeof(char), h_graph_visited);
-
-        d_cost = _clMallocRW(no_of_nodes*sizeof(int), h_cost);
-        d_over = _clMallocRW(sizeof(char), &h_over);
-
-        _clMemcpyH2D(d_graph_nodes, no_of_nodes*sizeof(Node), h_graph_nodes);
-        _clMemcpyH2D(d_graph_edges, edge_list_size*sizeof(int), h_graph_edges);
-        _clMemcpyH2D(d_graph_mask, no_of_nodes*sizeof(char), h_graph_mask);
-        _clMemcpyH2D(d_updating_graph_mask, no_of_nodes*sizeof(char), h_updating_graph_mask);
-        _clMemcpyH2D(d_graph_visited, no_of_nodes*sizeof(char), h_graph_visited);
-        _clMemcpyH2D(d_cost, no_of_nodes*sizeof(int), h_cost);
-
-        //--2 invoke kernel
-#ifdef	PROFILING
-        timer kernel_timer;
-        double kernel_time = 0.0;
-        kernel_timer.reset();
-        kernel_timer.start();
-#endif
-        do {
-            h_over = false;
-            _clMemcpyH2D(d_over, sizeof(char), &h_over);
-
-            //--kernel 0
-            int kernel_id = 0;
-            int kernel_idx = 0;
-            _clSetArgs(kernel_id, kernel_idx++, d_graph_nodes);
-            _clSetArgs(kernel_id, kernel_idx++, d_graph_edges);
-            _clSetArgs(kernel_id, kernel_idx++, d_graph_mask);
-            _clSetArgs(kernel_id, kernel_idx++, d_updating_graph_mask);
-            _clSetArgs(kernel_id, kernel_idx++, d_graph_visited);
-            _clSetArgs(kernel_id, kernel_idx++, d_cost);
-            _clSetArgs(kernel_id, kernel_idx++, &no_of_nodes, sizeof(int));
-
-            //int work_items = no_of_nodes;
-            _clInvokeKernel(kernel_id, no_of_nodes, work_group_size);
-
-            //--kernel 1
-            kernel_id = 1;
-            kernel_idx = 0;
-            _clSetArgs(kernel_id, kernel_idx++, d_graph_mask);
-            _clSetArgs(kernel_id, kernel_idx++, d_updating_graph_mask);
-            _clSetArgs(kernel_id, kernel_idx++, d_graph_visited);
-            _clSetArgs(kernel_id, kernel_idx++, d_over);
-            _clSetArgs(kernel_id, kernel_idx++, &no_of_nodes, sizeof(int));
-
-            //work_items = no_of_nodes;
-            _clInvokeKernel(kernel_id, no_of_nodes, work_group_size);
-
-            _clMemcpyD2H(d_over,sizeof(char), &h_over);
-        } while(h_over);
-
-        _clFinish();
-#ifdef	PROFILING
-        kernel_timer.stop();
-        kernel_time = kernel_timer.getTimeInSeconds();
-#endif
-
-        //--3 transfer data from device to host
-        _clMemcpyD2H(d_cost,no_of_nodes*sizeof(int), h_cost);
-
-#ifdef  TIMING
-        gettimeofday(&tv_close_start, NULL);
-#endif
-        //--statistics
-#ifdef	PROFILING
-        std::cout<<"kernel time(s):"<<kernel_time<<std::endl;
-#endif
-        //--4 release cl resources.
-        _clFree(d_graph_nodes);
-        _clFree(d_graph_edges);
-        _clFree(d_graph_mask);
-        _clFree(d_updating_graph_mask);
-        _clFree(d_graph_visited);
-        _clFree(d_cost);
-        _clFree(d_over);
-        _clRelease();
-    } catch(std::string msg) {
-        _clFree(d_graph_nodes);
-        _clFree(d_graph_edges);
-        _clFree(d_graph_mask);
-        _clFree(d_updating_graph_mask);
-        _clFree(d_graph_visited);
-        _clFree(d_cost);
-        _clFree(d_over);
-        _clRelease();
-        std::string e_str = "in run_transpose_gpu -> ";
-        e_str += msg;
-        throw(e_str);
-    }
-#ifdef  TIMING
-        gettimeofday(&tv_close_end, NULL);
-        tvsub(&tv_close_end, &tv_close_start, &tv);
-        close_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
-        tvsub(&tv_close_end, &tv_total_start, &tv);
-        total_time = tv.tv_sec * 1000.0 + (float) tv.tv_usec / 1000.0;
-
-        printf("Init: %f\n", init_time);
-        printf("MemAlloc: %f\n", mem_alloc_time);
-        printf("HtoD: %f\n", h2d_time);
-        printf("Exec: %f\n", kernel_time);
-        printf("DtoH: %f\n", d2h_time);
-        printf("Close: %f\n", close_time);
-        printf("Total: %f\n", total_time);
-#endif
-
-    return ;
-}
-void Usage(int argc, char**argv)
-{
-
-    fprintf(stderr,"Usage: %s <input_file> [-p platform] [-d device] [-t gpu(0)/cpu(1)]\n", argv[0]);
-
-}*/
-//----------------------------------------------------------
-//--cambine:	main function
-//--author:		created by Jianbin Fang
-//--date:		25/01/2011
-//----------------------------------------------------------
 int main(int argc, char * argv[])
 {
     int no_of_nodes;
@@ -469,8 +330,8 @@ status = clEnqueueWriteBuffer(cmd_queue, d_over,
  printf("11 b a. Set args kernel 1 \n");
 
 	//11. b. b. Invoke kernel 1
-	status = clEnqueueNDRangeKernel(cmd_queue, kernel1, 1, NULL,                       global_work_size, local_work_size, 0, 0, &myEvent);	
-    if(status != CL_SUCCESS) { fprintf(stderr, "ERROR: kernel1 (%d)\n", status); return -1; }
+status = clEnqueueNDRangeKernel(cmd_queue, kernel1, 1, NULL, global_work_size, local_work_size, 0, 0, &myEvent);	
+if(status != CL_SUCCESS) { fprintf(stderr, "ERROR: kernel1 (%d)\n", status); return -1; }
  printf("11 b b. Invoke kernel 1 \n");
 clGetEventProfilingInfo(myEvent, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &startTime, NULL);
 clGetEventProfilingInfo(myEvent, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &endTime, NULL);
@@ -524,11 +385,7 @@ if(d_cost!= NULL) clReleaseMemObject(d_cost);
 if(d_over!= NULL) clReleaseMemObject(d_over);
  shutdown();
        
-        //---------------------------------------------------------
-        //--gpu entry
-        /*run_bfs_gpu(no_of_nodes,h_graph_nodes,edge_list_size,h_graph_edges, h_graph_mask, h_updating_graph_mask, h_graph_visited, h_cost);*/
-        //---------------------------------------------------------
-        //--cpu entry
+        //--CPU 
  printf("cpu \n");
 
         // initalize the memory again
@@ -543,7 +400,7 @@ if(d_over!= NULL) clReleaseMemObject(d_over);
         h_graph_visited[source]=true;
         run_bfs_cpu(no_of_nodes,h_graph_nodes,edge_list_size,h_graph_edges, h_graph_mask, h_updating_graph_mask, h_graph_visited, h_cost_ref);
         //---------------------------------------------------------
-        //--result varification
+        //--result verification
         compare_results<int>(h_cost_ref, h_cost, no_of_nodes);
         //release host memory
         free(h_graph_nodes);
