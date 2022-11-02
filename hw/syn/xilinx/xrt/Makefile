@@ -119,7 +119,7 @@ ifdef DEBUG
 	endif
 else    
 	CONFIGS += -DNDEBUG
-	VPP_FLAGS += --optimize 3
+#   VPP_FLAGS += --optimize 3
 endif
 
 # RTL Kernel only supports Hardware and Hardware Emulation.
