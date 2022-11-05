@@ -1,9 +1,10 @@
+`ifdef FPU_FPNEW
+
 `include "VX_fpu_define.vh"
 `include "cf_math_pkg.sv"
 `include "fpnew_pkg.sv"
 `include "defs_div_sqrt_mvp.sv"
 
-`TRACING_OFF
 module VX_fpu_fpnew #(      
     parameter NUM_LANES = 1,
     parameter TAGW      = 1,
@@ -206,5 +207,6 @@ module VX_fpu_fpnew #(
     assign valid_out = fpu_valid_out;    
     assign fpu_ready_out = ready_out;
 
-endmodule 
-`TRACING_ON
+endmodule
+
+`endif

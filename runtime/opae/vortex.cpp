@@ -10,6 +10,7 @@
 #include <cmath>
 #include <sstream>
 #include <unordered_map>
+#include <algorithm>
 #include <list>
 
 #include <VX_config.h>
@@ -112,7 +113,9 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     });
 
     // Add the desired UUID to the filter
-    uuid_parse(AFU_ACCEL_UUID, guid);    
+    std::string s_uuid(AFU_ACCEL_UUID);
+    std::replace(s_uuid.begin(), s_uuid.end(), '_', '-');
+    uuid_parse(s_uuid.c_str(), guid);    
     CHECK_ERR(api.fpgaPropertiesSetGUID(filter, guid), {        
         api.fpgaDestroyProperties(&filter);
         return -1;

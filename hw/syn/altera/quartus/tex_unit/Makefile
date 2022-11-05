@@ -4,5 +4,5 @@ SRC_FILE = VX_tex_unit.sv
 
 include ../../common.mk
 
-TEX_INCLUDE = $(RTL_DIR)/tex_unit
-RTL_INCLUDE = $(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces;$(RTL_DIR)/cache;$(IP_DIR);$(FPU_INCLUDE);$(TEX_INCLUDE)
+TEX_INCLUDE = -I$(RTL_DIR)/tex_unit
+RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache $(FPU_INCLUDE) $(TEX_INCLUDE)

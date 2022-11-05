@@ -2,7 +2,7 @@ RTL_DIR = ../../../../../rtl
 AFU_DIR = ../../../../../afu/opae
 THIRD_PARTY_DIR = ../../../../../../third_party
 IP_CACHE_DIR = ../../../ip_cache/$(DEVICE_FAMILY)
-IP_DIR = ../../../../../ip/altera;$(IP_CACHE_DIR)
+SCRIPT_DIR = ../../../../../scripts
 
 ifeq ($(DEVICE_FAMILY), stratix10)
     FAMILY = "Stratix 10"
@@ -25,11 +25,12 @@ STA_ARGS = --parallel --do_report_timing
 POW_ARGS = --no_input_file --default_input_io_toggle_rate=60% --default_toggle_rate=20% --use_vectorless_estimation=off
 
 # Build targets
-all: ip_gen $(PROJECT).sta.rpt $(PROJECT).pow.rpt
+all: gen-sources $(PROJECT).sta.rpt $(PROJECT).pow.rpt
 
-ip_gen: $(IP_CACHE_DIR)/ip_gen.log
-$(IP_CACHE_DIR)/ip_gen.log:
-	../../../ip_gen.sh
+gen-sources: src
+src:
+	mkdir -p src
+	$(SCRIPT_DIR)/gen_sources.sh $(RTL_INCLUDE) -Fsrc
 
 syn: $(PROJECT).syn.rpt
 
@@ -46,7 +47,7 @@ smart: smart.log
 # Target implementations
 STAMP = echo done >
 
-$(PROJECT).syn.rpt: smart.log syn.chg $(SOURCE_FILES) 
+$(PROJECT).syn.rpt: smart.log syn.chg
 	quartus_syn $(SYN_ARGS) $(PROJECT)
 	$(STAMP) fit.chg
 
@@ -69,8 +70,8 @@ smart.log: $(PROJECT_FILES)
 	quartus_sh --determine_smart_action $(PROJECT) > smart.log
 
 # Project initialization
-$(PROJECT_FILES):
-	quartus_sh -t ../../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../../project.sdc -inc "$(RTL_INCLUDE)" $(CONFIGS)
+$(PROJECT_FILES): gen-sources
+	quartus_sh -t ../../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../../project.sdc -inc "src" $(CONFIGS)
 	
 syn.chg:
 	$(STAMP) syn.chg

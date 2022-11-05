@@ -31,107 +31,11 @@ module VX_fpu_fma #(
     input wire  ready_out,
     output wire valid_out
 );
-
-`ifdef QUARTUS
-    
-    VX_acl_fma #(
-        .NUM_LANES  (NUM_LANES),
-        .TAGW       (TAGW)
-    ) fp_fma (
-        .clk        (clk), 
-        .reset      (reset),   
-        .valid_in   (valid_in),
-        .ready_in   (ready_in),
-        .tag_in     (tag_in),
-        .frm        (frm),
-        .do_madd    (do_madd),
-        .do_sub     (do_sub),
-        .do_neg     (do_neg),
-        .dataa      (dataa), 
-        .datab      (datab),
-        .datac      (datac),
-        .has_fflags (has_fflags),
-        .fflags     (fflags),   
-        .result     (result),
-        .tag_out    (tag_out),
-        .valid_out  (valid_out),
-        .ready_out  (ready_out)
-    );
-
-`elsif VIVADO
-
-    VX_xil_fma #(
-        .NUM_LANES  (NUM_LANES),
-        .TAGW       (TAGW)
-    ) fp_fma (
-        .clk        (clk), 
-        .reset      (reset),   
-        .valid_in   (valid_in),
-        .ready_in   (ready_in),
-        .tag_in     (tag_in),
-        .frm        (frm),
-        .do_madd    (do_madd),
-        .do_sub     (do_sub),
-        .do_neg     (do_neg),
-        .dataa      (dataa), 
-        .datab      (datab),
-        .datac      (datac),
-        .has_fflags (has_fflags),
-        .fflags     (fflags),   
-        .result     (result),
-        .tag_out    (tag_out),
-        .valid_out  (valid_out),
-        .ready_out  (ready_out)
-    );
-
-`else
+    `UNUSED_VAR (frm)
 
     wire stall = ~ready_out && valid_out;
     wire enable = ~stall;
 
-    for (genvar i = 0; i < NUM_LANES; ++i) begin       
-        reg [31:0] a, b, c;
-        reg [31:0] r;
-        fflags_t f;
-
-        always @(*) begin
-            if (do_madd) begin
-                // MADD/MSUB/NMADD/NMSUB
-                a = do_neg ? {~dataa[i][31], dataa[i][30:0]} : dataa[i];                    
-                b = datab[i];
-                c = (do_neg ^ do_sub) ? {~datac[i][31], datac[i][30:0]} : datac[i];
-            end else begin
-                if (do_neg) begin
-                    // MUL
-                    a = dataa[i];
-                    b = datab[i];
-                    c = '0;
-                end else begin
-                    // ADD/SUB
-                    a = 32'h3f800000; // 1.0f
-                    b = dataa[i];
-                    c = do_sub ? {~datab[i][31], datab[i][30:0]} : datab[i];
-                end
-            end    
-        end
-
-        always @(*) begin        
-            dpi_fmadd (enable && valid_in, a, b, c, frm, r, f);
-        end
-        `UNUSED_VAR (f)
-
-        VX_shift_register #(
-            .DATAW  (32),
-            .DEPTH  (`LATENCY_FMA)
-        ) shift_req_dpi (
-            .clk      (clk),
-            `UNUSED_PIN (reset),
-            .enable   (enable),
-            .data_in  (r),
-            .data_out (result[i])
-        );
-    end
-    
     VX_shift_register #(
         .DATAW  (1 + TAGW),
         .DEPTH  (`LATENCY_FMA),
@@ -146,7 +50,92 @@ module VX_fpu_fma #(
 
     assign ready_in = enable;
 
-    `UNUSED_VAR (frm)
+    reg [NUM_LANES-1:0][31:0] a, b, c;
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
+        always @(*) begin
+            if (do_madd) begin
+                // MADD / MSUB / NMADD / NMSUB
+                a[i] = do_neg ? {~dataa[i][31], dataa[i][30:0]} : dataa[i];                    
+                b[i] = datab[i];
+                c[i] = (do_neg ^ do_sub) ? {~datac[i][31], datac[i][30:0]} : datac[i];
+            end else begin
+                if (do_neg) begin
+                    // MUL
+                    a[i] = dataa[i];
+                    b[i] = datab[i];
+                    c[i] = '0;
+                end else begin
+                    // ADD / SUB
+                    a[i] = 32'h3f800000; // 1.0f
+                    b[i] = dataa[i];
+                    c[i] = do_sub ? {~datab[i][31], datab[i][30:0]} : datab[i];
+                end
+            end    
+        end
+    end
+
+`ifdef QUARTUS
+    
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
+        acl_fmadd fmadd (
+            .clk    (clk),
+            .areset (1'b0),
+            .en     (enable),
+            .a      (a[i]),
+            .b      (b[i]),
+            .c      (c[i]),
+            .q      (result[i])
+        );
+    end
+
+`elsif VIVADO
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
+        xil_fma fma (
+            .aclk                (clk),
+            .aclken              (enable),
+            .s_axis_a_tvalid     (1'b1),
+            .s_axis_a_tdata      (a[i]),
+            .s_axis_b_tvalid     (1'b1),
+            .s_axis_b_tdata      (b[i]),
+            .s_axis_c_tvalid     (1'b1),
+            .s_axis_c_tdata      (c[i]),
+            `UNUSED_PIN (m_axis_result_tvalid),
+            .m_axis_result_tdata (result[i]),
+            .m_axis_result_tuser (tuser)
+        );
+
+        assign fflags[i].NX = 1'b0;
+        assign fflags[i].UF = tuser[0];
+        assign fflags[i].OF = tuser[1];
+        assign fflags[i].DZ = 1'b0;
+        assign fflags[i].NV = tuser[2];
+    end
+
+`else
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
+        reg [31:0] r;
+        fflags_t f;
+        `UNUSED_VAR (f)
+
+        always @(*) begin        
+            dpi_fmadd (enable && valid_in, a[i], b[i], c[i], frm, r, f);
+        end        
+
+        VX_shift_register #(
+            .DATAW  (32),
+            .DEPTH  (`LATENCY_FMA)
+        ) shift_req_dpi (
+            .clk      (clk),
+            `UNUSED_PIN (reset),
+            .enable   (enable),
+            .data_in  (r),
+            .data_out (result[i])
+        );
+    end
+
     assign has_fflags = 0;
     assign fflags = '0;
 
