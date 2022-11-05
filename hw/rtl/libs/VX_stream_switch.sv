@@ -6,7 +6,6 @@ module VX_stream_switch #(
     parameter NUM_OUTPUTS   = 1,
     parameter NUM_LANES     = 1,
     parameter DATAW         = 1,
-    parameter LOCK_ENABLE   = 1,
     parameter BUFFERED      = 0,
     parameter NUM_REQS      = (NUM_INPUTS > NUM_OUTPUTS) ? ((NUM_INPUTS + NUM_OUTPUTS - 1) / NUM_OUTPUTS) : ((NUM_OUTPUTS + NUM_INPUTS - 1) / NUM_INPUTS),
     parameter SEL_COUNT     = `MIN(NUM_INPUTS, NUM_OUTPUTS),
@@ -39,7 +38,7 @@ module VX_stream_switch #(
                     assign data_in_r[i][j]  = data_in[ii];
                 end else begin
                     assign valid_in_r[i][j] = 0;
-                    assign data_in_r[i][j]  = 'x;
+                    assign data_in_r[i][j]  = '0;
                 end
             end
         end        
@@ -133,7 +132,6 @@ module VX_stream_switch #(
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
             for (genvar j = 0; j < NUM_LANES; ++j) begin
-                localparam ii = i * NUM_LANES + j;
                 VX_skid_buffer #(
                     .DATAW    (DATAW),
                     .PASSTHRU (BUFFERED == 0),

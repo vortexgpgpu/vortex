@@ -16,6 +16,6 @@ CONFIGS += -set "L2_ENABLE"
 #CONFIGS += -set "SM_DISABLE"
 #CONFIGS += -set "RCACHE_DISABLE" -set "OCACHE_DISABLE" -set "TCACHE_DISABLE"
 
-FPU_INCLUDE = $(RTL_DIR)/fpu_unit;$(THIRD_PARTY_DIR)/fpnew/src;$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl;$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include;$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src
-TEX_INCLUDE = $(RTL_DIR)/tex_unit;$(RTL_DIR)/raster_unit;$(RTL_DIR)/rop_unit
-RTL_INCLUDE = $(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces;$(RTL_DIR)/cache;$(AFU_DIR);$(AFU_DIR)/ccip;$(IP_DIR);$(FPU_INCLUDE);$(TEX_INCLUDE)
+FPU_INCLUDE = -I$(RTL_DIR)/fpu_unit -I$(THIRD_PARTY_DIR)/fpnew/src -I$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src
+TEX_INCLUDE = -I$(RTL_DIR)/tex_unit -I$(RTL_DIR)/raster_unit -I$(RTL_DIR)/rop_unit
+RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(AFU_DIR)/ccip -I$(IP_CACHE_DIR) $(FPU_INCLUDE) $(TEX_INCLUDE)

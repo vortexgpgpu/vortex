@@ -40,8 +40,6 @@ set_global_assignment -name VERILOG_MACRO SYNTHESIS
 set_global_assignment -name VERILOG_MACRO NOGLOBALS
 set_global_assignment -name MESSAGE_DISABLE 16818
 set_global_assignment -name TIMEQUEST_DO_REPORT_TIMING ON
-set_global_assignment -name TIMEQUEST_MULTICORNER_ANALYSIS ON
-set_global_assignment -name SYNTH_TIMING_DRIVEN_SYNTHESIS ON
 
 set_global_assignment -name SEED 1
 

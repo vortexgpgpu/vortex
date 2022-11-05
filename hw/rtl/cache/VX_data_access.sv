@@ -42,6 +42,7 @@ module VX_data_access #(
 
     output wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] read_data
 );
+    `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (BANK_ID)
     `UNUSED_PARAM (WORD_SIZE)
     `UNUSED_VAR (reset)
@@ -62,7 +63,7 @@ module VX_data_access #(
             if (NUM_PORTS > 1) begin
                 always @(*) begin
                     wdata_r = 'x;
-                    wren_r  = 0;
+                    wren_r  = '0;
                     for (integer i = 0; i < NUM_PORTS; ++i) begin
                         if (pmask[i]) begin
                             wdata_r[wsel[i]] = write_data[i];
@@ -74,7 +75,7 @@ module VX_data_access #(
                 `UNUSED_VAR (pmask)
                 always @(*) begin                
                     wdata_r = {`WORDS_PER_LINE{write_data}};
-                    wren_r  = 0;
+                    wren_r  = '0;
                     wren_r[wsel] = byteen;
                 end
             end

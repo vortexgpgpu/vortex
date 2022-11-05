@@ -319,7 +319,6 @@ module VX_stream_arb #(
 
             for (genvar i = 0; i < NUM_REQS; ++i) begin
                 for (genvar j = 0; j < NUM_LANES; ++j) begin
-                    localparam ii = i * NUM_LANES + j;
                     VX_skid_buffer #(
                         .DATAW    (DATAW),
                         .PASSTHRU (BUFFERED == 0),
@@ -344,7 +343,6 @@ module VX_stream_arb #(
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
             for (genvar j = 0; j < NUM_LANES; ++j) begin
-                localparam ii = i * NUM_LANES + j;
                 VX_skid_buffer #(
                     .DATAW    (DATAW),
                     .PASSTHRU (BUFFERED == 0),

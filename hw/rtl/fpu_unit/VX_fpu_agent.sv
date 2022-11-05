@@ -21,6 +21,8 @@ module VX_fpu_agent #(
     input wire              csr_pending,
     output wire             req_pending
 );
+    `UNUSED_PARAM (CORE_ID)
+    
     localparam UUID_WIDTH = `UP(`UUID_BITS);
     localparam NW_WIDTH   = `UP(`NW_BITS);
     

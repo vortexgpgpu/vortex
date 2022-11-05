@@ -16,7 +16,6 @@ PREFIX ?= build
 
 RTL_DIR = ../../../../rtl
 AFU_DIR = ../../../../afu/xrt
-IP_DIR  = ../../../../ip/xilinx
 
 BUILD_DIR = $(PREFIX)_$(PLATFORM)_$(TARGET)
 BIN_DIR   = $(BUILD_DIR)/bin
@@ -41,7 +40,7 @@ FPU_INCLUDE = -I$(RTL_DIR)/fpu_unit
 TEX_INCLUDE = -I$(RTL_DIR)/tex_unit
 RASTER_INCLUDE = -I$(RTL_DIR)/raster_unit
 ROP_INCLUDE = -I$(RTL_DIR)/rop_unit
-RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(IP_DIR)
+RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache -I$(AFU_DIR)
 RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
 
 #CONFIGS += -DEXT_GFX_ENABLE

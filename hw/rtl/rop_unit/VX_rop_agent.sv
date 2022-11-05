@@ -14,6 +14,7 @@ module VX_rop_agent #(
     VX_commit_if.master   rop_commit_if,
     VX_rop_req_if.master  rop_req_if
 );
+    `UNUSED_PARAM (CORE_ID)
     
     localparam UUID_WIDTH = `UP(`UUID_BITS);
     localparam NW_WIDTH   = `UP(`NW_BITS);
@@ -74,10 +75,10 @@ module VX_rop_agent #(
         .ready_out (rop_commit_if.ready)
     );
 
-    assign rop_commit_if.data = 'x;
-    assign rop_commit_if.rd   = 'x;
+    assign rop_commit_if.data = '0;
+    assign rop_commit_if.rd   = '0;
     assign rop_commit_if.wb   = 0;
-    assign rop_commit_if.eop  = 1'b1;
+    assign rop_commit_if.eop  = 1;
 
 `ifdef DBG_TRACE_ROP
     always @(posedge clk) begin

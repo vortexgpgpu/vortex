@@ -14,9 +14,11 @@ module VX_raster_dcr #(
     // Output
     output raster_dcrs_t    raster_dcrs
 );
-    localparam LOG2_NUM_INSTANCES = `CLOG2(NUM_INSTANCES);
+    `UNUSED_SPARAM (INSTANCE_ID)
 
     `UNUSED_VAR (reset)
+
+    localparam LOG2_NUM_INSTANCES = `CLOG2(NUM_INSTANCES);    
 
     // DCR registers
     raster_dcrs_t dcrs;

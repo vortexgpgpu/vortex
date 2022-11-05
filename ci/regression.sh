@@ -246,7 +246,7 @@ CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --cores=2 --c
 FPU_CORE=FPU_DEFAULT CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
 FPU_CORE=FPU_DEFAULT CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
 CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr
-CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr
+CONFIGS="-DVERILATOR_RESET_VALUE=1 -DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png"
 CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=opae --app=printf
 CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --app=printf
 
@@ -266,6 +266,8 @@ usage()
 {
     echo "usage: regression [-smoke] [-unittest] [-coverage] [-tex] [-rop] [-raster] [-graphics] [-cluster] [-debug] [-config] [-stress[#n]] [-all] [-h|--help]"
 }
+
+start=$SECONDS
 
 while [ "$1" != "" ]; do
     case $1 in
@@ -316,3 +318,8 @@ while [ "$1" != "" ]; do
     esac
     shift
 done
+
+echo "Regression completed!"
+
+duration=$(( SECONDS - start ))
+awk -v t=$duration 'BEGIN{t=int(t*1000); printf "Elapsed Time: %d:%02d:%02d\n", t/3600000, t/60000%60, t/1000%60}'

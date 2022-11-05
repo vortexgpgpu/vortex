@@ -79,7 +79,7 @@ module VX_commit #(
 
     always @(posedge clk) begin
        if (reset) begin
-            instret <= 0;
+            instret <= '0;
         end else begin
             if (commit_fire_r) begin
                 instret <= instret + `PERF_CTR_BITS'(commit_size_r);

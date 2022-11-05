@@ -21,7 +21,7 @@ module VX_pending_size #(
 
     always @(posedge clk) begin
         if (reset) begin          
-            used_r  <= 0;
+            used_r  <= '0;
             empty_r <= 1;
             full_r  <= 0;
         end else begin            

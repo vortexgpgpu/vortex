@@ -12,6 +12,7 @@ module VX_rop_csr #(
     // Output
     output rop_csrs_t rop_csrs
 );
+    `UNUSED_PARAM (CORE_ID)
 
     // CSR registers
 
@@ -31,7 +32,7 @@ module VX_rop_csr #(
         end
     end
 
-    assign rop_csr_if.read_data = 'x;
+    assign rop_csr_if.read_data = '0;
 
     assign rop_csrs = reg_csrs;
 

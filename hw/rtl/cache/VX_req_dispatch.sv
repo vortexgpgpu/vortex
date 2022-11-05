@@ -68,7 +68,7 @@ module VX_req_dispatch #(
         if (WORDS_PER_LINE > 1) begin
             assign core_req_wsel[i] = core_req_addr[i][0 +: WORD_SEL_BITS];
         end else begin
-            assign core_req_wsel[i] = 0;
+            assign core_req_wsel[i] = '0;
         end
         assign core_req_line_addr[i] = core_req_addr[i][(BANK_SEL_BITS + WORD_SEL_BITS) +: LINE_ADDR_WIDTH];
     end
@@ -119,8 +119,8 @@ module VX_req_dispatch #(
             end
 
             always @(*) begin
-                per_bank_core_req_valid_r = 0;
-                per_bank_core_req_pmask_r = 0;
+                per_bank_core_req_valid_r = '0;
+                per_bank_core_req_pmask_r = '0;
                 per_bank_core_req_rw_r    = 'x;
                 per_bank_core_req_addr_r  = 'x;
                 per_bank_core_req_wsel_r  = 'x;
@@ -151,7 +151,7 @@ module VX_req_dispatch #(
         end else begin
 
             always @(*) begin
-                per_bank_core_req_valid_r = 0;
+                per_bank_core_req_valid_r = '0;
                 per_bank_core_req_rw_r    = 'x;
                 per_bank_core_req_addr_r  = 'x;
                 per_bank_core_req_wsel_r  = 'x;
@@ -216,7 +216,7 @@ module VX_req_dispatch #(
         assign per_bank_core_req_byteen = core_req_byteen;
         assign per_bank_core_req_data   = core_req_data;
         assign per_bank_core_req_tag    = core_req_tag;
-        assign per_bank_core_req_idx    = 0;
+        assign per_bank_core_req_idx    = '0;
         assign core_req_ready           = per_bank_core_req_ready;
 
     end
@@ -225,7 +225,7 @@ module VX_req_dispatch #(
     reg [NUM_REQS-1:0] core_req_sel_r;
 
     always @(*) begin
-        core_req_sel_r = 0;
+        core_req_sel_r = '0;
         for (integer i = 0; i < NUM_REQS; ++i) begin
             if (core_req_valid[i]) begin
                 core_req_sel_r[i] = per_bank_core_req_ready[core_req_bid[i]];
@@ -241,7 +241,7 @@ module VX_req_dispatch #(
 
     always @(posedge clk) begin
         if (reset) begin
-            bank_stalls_r <= 0;
+            bank_stalls_r <= '0;
         end else begin
             bank_stalls_r <= bank_stalls_r + `PERF_CTR_BITS'(bank_stall_cnt);
         end

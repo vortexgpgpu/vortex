@@ -20,6 +20,6 @@ CONFIGS += -set "NUM_CORES=2"
 
 CONFIGS += -set "L2_ENABLE"
 
-FPU_INCLUDE = $(RTL_DIR)/fpu_unit;$(THIRD_PARTY_DIR)/fpnew/src;$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl;$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include;$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src
-GFX_INCLUDE = $(RTL_DIR)/tex_unit;$(RTL_DIR)/raster_unit;$(RTL_DIR)/rop_unit
-RTL_INCLUDE = $(RTL_DIR);$(RTL_DIR)/libs;$(RTL_DIR)/interfaces;$(RTL_DIR)/cache;$(IP_DIR);$(FPU_INCLUDE);$(GFX_INCLUDE)
+FPU_INCLUDE = -I$(RTL_DIR)/fpu_unit -I$(THIRD_PARTY_DIR)/fpnew/src -I$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src
+GFX_INCLUDE = -I$(RTL_DIR)/tex_unit -I$(RTL_DIR)/raster_unit -I$(RTL_DIR)/rop_unit
+RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache -I$(IP_CACHE_DIR) $(FPU_INCLUDE) $(GFX_INCLUDE)

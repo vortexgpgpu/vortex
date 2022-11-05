@@ -48,6 +48,8 @@ module VX_shared_mem #(
     output wire [NUM_REQS-1:0][TAG_WIDTH-1:0]   rsp_tag,
     input  wire [NUM_REQS-1:0]                  rsp_ready
 );
+    `UNUSED_SPARAM (INSTANCE_ID)
+    `UNUSED_PARAM (UUID_WIDTH)
 
     localparam WORD_WIDTH      = WORD_SIZE * 8;
     localparam REQ_SEL_BITS    = `CLOG2(NUM_REQS);
@@ -166,7 +168,7 @@ module VX_shared_mem #(
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         assign per_bank_rsp_valid[i] = per_bank_req_valid[i] && ~per_bank_req_rw[i];
-        assign per_bank_rsp_pmask[i] = 'x;
+        assign per_bank_rsp_pmask[i] = '0;
         assign per_bank_rsp_tag[i]   = per_bank_req_tag[i];
         assign per_bank_rsp_idx[i]   = per_bank_req_idx[i];
         assign per_bank_req_ready[i] = per_bank_req_rw[i] || per_bank_rsp_ready[i];
@@ -235,9 +237,9 @@ module VX_shared_mem #(
 
     always @(posedge clk) begin
         if (reset) begin
-            perf_reads  <= 0;
-            perf_writes <= 0;
-            perf_crsp_stalls <= 0;
+            perf_reads       <= '0;
+            perf_writes      <= '0;
+            perf_crsp_stalls <= '0;
         end else begin
             perf_reads  <= perf_reads  + `PERF_CTR_BITS'(perf_reads_per_cycle);
             perf_writes <= perf_writes + `PERF_CTR_BITS'(perf_writes_per_cycle);
@@ -264,8 +266,8 @@ module VX_shared_mem #(
             assign req_uuid_st0[i] = per_bank_req_tag_unqual[i][TAG_WIDTH-1 -: UUID_WIDTH];
             assign req_uuid_st1[i] = per_bank_req_tag[i][TAG_WIDTH-1 -: UUID_WIDTH];
         end else begin
-            assign req_uuid_st0[i] = 0;
-            assign req_uuid_st1[i] = 0;
+            assign req_uuid_st0[i] = '0;
+            assign req_uuid_st1[i] = '0;
         end
     end
 

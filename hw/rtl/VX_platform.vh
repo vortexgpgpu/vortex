@@ -56,6 +56,10 @@
                          localparam  __``x = x; \
                          /* verilator lint_on UNUSED */
 
+`define UNUSED_SPARAM(x) /* verilator lint_off UNUSED */ \
+                         localparam `STRING_TYPE __``x = x; \
+                         /* verilator lint_on UNUSED */
+
 `define UNUSED_VAR(x) always @(x) begin end
 
 `define UNUSED_PIN(x)  /* verilator lint_off PINCONNECTEMPTY */ \
@@ -77,6 +81,7 @@
 `define IGNORE_WARNINGS_BEGIN
 `define IGNORE_WARNINGS_END
 `define UNUSED_PARAM(x)
+`define UNUSED_SPARAM(x)
 `define UNUSED_VAR(x)
 `define UNUSED_PIN(x) . x ()
 `define TRACE(level, args) $write args

@@ -190,7 +190,7 @@ module VX_fpu_cvt #(
             // Default assignment
             final_exp       = input_exp_s1[i] + INT_EXP_WIDTH'(EXP_BIAS); // take exponent as is, only look at lower bits
             preshift_mant   = {input_mant_s1[i], 33'b0};  // Place mantissa to the left of the shifter
-            denorm_shamt    = 0;      // right of mantissa
+            denorm_shamt    = '0;      // right of mantissa
             of_before_round = 1'b0;
 
             // Handle INT casts
@@ -202,11 +202,11 @@ module VX_fpu_cvt #(
                     of_before_round = 1'b1;
                 end else if ($signed(input_exp_s1[i]) < $signed(-MAN_BITS-EXP_BIAS)) begin
                     // Limit the shift to retain sticky bits
-                    final_exp     = 0; // denormal result
+                    final_exp     = '0; // denormal result
                     denorm_shamt  = (2 + MAN_BITS); // to sticky                
                 end else if ($signed(input_exp_s1[i]) < $signed(1-EXP_BIAS)) begin
                     // Denormalize underflowing values
-                    final_exp     = 0; // denormal result
+                    final_exp     = '0; // denormal result
                     denorm_shamt  = SHAMT_BITS'(1-EXP_BIAS - input_exp_s1[i]); // adjust right shifting               
                 end
             end else begin                                
@@ -374,7 +374,7 @@ module VX_fpu_cvt #(
          // Assemble result according to destination format
         always @(*) begin
             if (input_sign_s3[i] && !fp_clss_s3[i].is_nan) begin
-                int_special_result[i][30:0] = 0;               // alone yields 2**(31)-1
+                int_special_result[i][30:0] = '0;              // alone yields 2**(31)-1
                 int_special_result[i][31]   = ~unsigned_s3;    // for unsigned casts yields 2**31
             end else begin
                 int_special_result[i][30:0] = 2**(31) - 1;     // alone yields 2**(31)-1

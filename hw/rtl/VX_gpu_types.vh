@@ -35,6 +35,8 @@ typedef struct packed {
     logic [7:0]             mpm_class;
 } base_dcrs_t;
 
+/* verilator lint_off UNUSED */
+
 ////////////////////////// Icache Parameters //////////////////////////////////
 
 // Word size in bytes
@@ -257,6 +259,8 @@ localparam L3_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`L3_MSHR_SIZE, `L3_NUM
 `else
 localparam L3_MEM_TAG_WIDTH     = `CACHE_NC_BYPASS_TAG_WIDTH(L3_NUM_REQS, `L3_LINE_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH);
 `endif
+
+/* verilator lint_on UNUSED */
 
 endpackage
 

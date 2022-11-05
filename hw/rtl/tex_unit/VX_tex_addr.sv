@@ -35,6 +35,7 @@ module VX_tex_addr #(
     output wire [REQ_INFOW-1:0]         rsp_info,  
     input wire                          rsp_ready
 );
+    `UNUSED_SPARAM (INSTANCE_ID)
 
     localparam SHIFT_BITS = $clog2(`TEX_FXD_FRAC+1);
     localparam PITCH_BITS = `MAX(`TEX_LOD_BITS, `TEX_LGSTRIDE_BITS) + 1;

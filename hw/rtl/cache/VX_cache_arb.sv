@@ -132,7 +132,7 @@ module VX_cache_arb #(
                 if (NUM_INPUTS > 1) begin
                     assign rsp_sel_in[j] = rsp_out_if[j].tag[i][TAG_SEL_IDX +: LOG_NUM_REQS];
                 end else begin
-                    assign rsp_sel_in[j] = 0;
+                    assign rsp_sel_in[j] = '0;
                 end
             end        
 

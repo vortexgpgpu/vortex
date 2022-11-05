@@ -512,7 +512,7 @@ module VX_cache #(
             reg [`LINE_WIDTH-1:0] mem_req_data_r;
 
             always @(*) begin
-                mem_req_byteen_r = 0;
+                mem_req_byteen_r = '0;
                 mem_req_data_r   = 'x;
                 for (integer i = 0; i < NUM_PORTS; ++i) begin
                     if ((1 == NUM_PORTS) || mem_req_pmask_p[i]) begin
@@ -540,7 +540,7 @@ module VX_cache #(
         
         assign mem_req_rw_s     = 0;
         assign mem_req_byteen_s = {LINE_SIZE{1'b1}};
-        assign mem_req_data_s   = 'x;
+        assign mem_req_data_s   = '0;
     end
 
 `ifdef PERF_ENABLE
@@ -582,13 +582,13 @@ module VX_cache #(
 
     always @(posedge clk) begin
         if (reset) begin
-            perf_core_reads   <= 0;
-            perf_core_writes  <= 0;
-            perf_read_misses  <= 0;
-            perf_write_misses <= 0;
-            perf_mshr_stalls  <= 0;
-            perf_mem_stalls   <= 0;
-            perf_crsp_stalls  <= 0;
+            perf_core_reads   <= '0;
+            perf_core_writes  <= '0;
+            perf_read_misses  <= '0;
+            perf_write_misses <= '0;
+            perf_mshr_stalls  <= '0;
+            perf_mem_stalls   <= '0;
+            perf_crsp_stalls  <= '0;
         end else begin
             perf_core_reads   <= perf_core_reads   + `PERF_CTR_BITS'(perf_core_reads_per_cycle);
             perf_core_writes  <= perf_core_writes  + `PERF_CTR_BITS'(perf_core_writes_per_cycle);

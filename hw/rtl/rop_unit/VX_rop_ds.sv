@@ -31,6 +31,8 @@ module VX_rop_ds #(
     output wire [NUM_LANES-1:0][`ROP_STENCIL_BITS-1:0]  stencil_out,
     output wire [NUM_LANES-1:0]                         pass_out
 ); 
+    `UNUSED_SPARAM (INSTANCE_ID)
+
     `UNUSED_VAR (dcrs)
 
     wire stall = ~ready_out && valid_out;

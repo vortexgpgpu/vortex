@@ -79,7 +79,6 @@ module VX_cache_wrap #(
     `STATIC_ASSERT(NUM_PORTS <= NUM_REQS, ("invalid parameter"))
     `STATIC_ASSERT(NUM_PORTS <= `WORDS_PER_LINE, ("invalid parameter"))
 
-    localparam WORD_SEL_BITS    = `UP(`WORD_SEL_BITS);
     localparam MSHR_ADDR_WIDTH  = `LOG2UP(MSHR_SIZE);    
     localparam CORE_TAG_X_WIDTH = TAG_WIDTH - NC_ENABLE;
     localparam MEM_TAG_X_WIDTH  = MSHR_ADDR_WIDTH + `BANK_SEL_BITS;
@@ -90,9 +89,6 @@ module VX_cache_wrap #(
 
     localparam NC_BYPASS = (NC_ENABLE || PASSTHRU);
     localparam DIRECT_PASSTHRU = PASSTHRU && (`WORD_SEL_BITS == 0) && (NUM_REQS == 1);
-
-    localparam CORE_REQ_BUF_ENABLE = (1 != NUM_BANKS) || (1 != NUM_REQS);
-    localparam MEM_REQ_BUF_ENABLE  = (1 != NUM_BANKS);
 
     wire [NUM_REQS-1:0]                     core_req_valid;
     wire [NUM_REQS-1:0]                     core_req_rw;
@@ -337,19 +333,19 @@ module VX_cache_wrap #(
         `UNUSED_VAR (core_req_byteen_b)
         `UNUSED_VAR (core_req_data_b)
         `UNUSED_VAR (core_req_tag_b)
-        assign core_req_ready_b = 0;
+        assign core_req_ready_b = '0;
 
         assign core_rsp_valid_b = '0;
-        assign core_rsp_data_b  = 'x;
-        assign core_rsp_tag_b   = 'x;
+        assign core_rsp_data_b  = '0;
+        assign core_rsp_tag_b   = '0;
         `UNUSED_VAR (core_rsp_ready_b)
 
         assign mem_req_valid_b  = 0;
-        assign mem_req_addr_b   = 'x;
-        assign mem_req_rw_b     = 'x;
-        assign mem_req_byteen_b = 'x;
-        assign mem_req_data_b   = 'x;
-        assign mem_req_tag_b    = 'x;
+        assign mem_req_addr_b   = '0;
+        assign mem_req_rw_b     = '0;
+        assign mem_req_byteen_b = '0;
+        assign mem_req_data_b   = '0;
+        assign mem_req_tag_b    = '0;
         `UNUSED_VAR (mem_req_ready_b)
 
         `UNUSED_VAR (mem_rsp_valid_b)
@@ -358,14 +354,14 @@ module VX_cache_wrap #(
         assign mem_rsp_ready_b = 0;
 
     `ifdef PERF_ENABLE
-        assign perf_cache_if.reads        = 'x;
-        assign perf_cache_if.writes       = 'x;
-        assign perf_cache_if.read_misses  = 'x;
-        assign perf_cache_if.write_misses = 'x;
-        assign perf_cache_if.bank_stalls  = 'x;
-        assign perf_cache_if.mshr_stalls  = 'x;
-        assign perf_cache_if.mem_stalls   = 'x;
-        assign perf_cache_if.crsp_stalls  = 'x;
+        assign perf_cache_if.reads        = '0;
+        assign perf_cache_if.writes       = '0;
+        assign perf_cache_if.read_misses  = '0;
+        assign perf_cache_if.write_misses = '0;
+        assign perf_cache_if.bank_stalls  = '0;
+        assign perf_cache_if.mshr_stalls  = '0;
+        assign perf_cache_if.mem_stalls   = '0;
+        assign perf_cache_if.crsp_stalls  = '0;
     `endif
 
     end else begin
@@ -489,8 +485,8 @@ module VX_cache_wrap #(
         assign mem_req_uuid = mem_req_if.tag[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
         assign mem_rsp_uuid = mem_rsp_if.tag[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
     end else begin
-        assign mem_req_uuid = 0;
-        assign mem_rsp_uuid = 0;
+        assign mem_req_uuid = '0;
+        assign mem_rsp_uuid = '0;
     end
 
     wire mem_req_fire = mem_req_if.valid && mem_req_if.ready;

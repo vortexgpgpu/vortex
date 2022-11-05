@@ -21,7 +21,7 @@ module VX_priority_arbiter #(
 
     if (NUM_REQS == 1)  begin        
         
-        assign grant_index  = 0;
+        assign grant_index  = '0;
         assign grant_onehot = requests;
         assign grant_valid  = requests[0];
 

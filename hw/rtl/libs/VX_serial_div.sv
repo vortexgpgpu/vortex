@@ -59,7 +59,7 @@ module VX_serial_div #(
     
     always @(posedge clk) begin
         if (reset) begin
-            cntr   <= 0;
+            cntr   <= '0;
             loaded <= 0;
         end else begin
             if (push) begin                

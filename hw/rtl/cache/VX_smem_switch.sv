@@ -54,7 +54,7 @@ module VX_smem_switch #(
         if (NUM_REQS > 1) begin
             assign req_sel_in = req_in_if.tag[i][TAG_SEL_IDX +: LOG_NUM_REQS];
         end else begin
-            assign req_sel_in = 0;
+            assign req_sel_in = '0;
         end
 
         assign req_data_in = {req_tag_in, req_in_if.addr[i], req_in_if.rw[i], req_in_if.byteen[i], req_in_if.data[i]};

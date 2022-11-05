@@ -1,14 +1,15 @@
 DEVICE_FAMILY ?= arria10
 PREFIX ?= build
+TARGET ?= fpga
 NUM_CORES ?= 1
+SCRIPT_DIR = ../../../scripts
 RTL_DIR = ../../../rtl
 DPI_DIR = ../../../dpi
 AFU_DIR = ../../../afu/opae
-IP_DIR  = ../../../ip/altera
 
 IP_CACHE_DIR = ../ip_cache/$(DEVICE_FAMILY)
 
-BUILD_DIR = $(PREFIX)_$(DEVICE_FAMILY)
+BUILD_DIR = $(PREFIX)_$(DEVICE_FAMILY)_$(TARGET)_$(NUM_CORES)c
 
 ifeq ($(shell which qsub-synth),)
 	RUN_SYNTH=$(OPAE_PLATFORM_ROOT)/bin/run.sh > build.log 2>&1 &
@@ -54,22 +55,25 @@ ifeq ($(DEVICE_FAMILY), arria10)
     CONFIGS += -DALTERA_A10
 endif
 
-CONFIG1  := -DNUM_CLUSTERS=1 -DNUM_CORES=1 $(CONFIGS)
-CONFIG2  := -DNUM_CLUSTERS=1 -DNUM_CORES=2 $(CONFIGS)
-CONFIG4  := -DNUM_CLUSTERS=1 -DNUM_CORES=4  -DL2_ENABLE $(CONFIGS)
-CONFIG8  := -DNUM_CLUSTERS=1 -DNUM_CORES=8  -DL2_ENABLE $(CONFIGS)
-CONFIG16 := -DNUM_CLUSTERS=1 -DNUM_CORES=16 -DL2_ENABLE $(CONFIGS)
-CONFIG32 := -DNUM_CLUSTERS=2 -DNUM_CORES=16 -DL2_ENABLE $(CONFIGS)
-CONFIG64 := -DNUM_CLUSTERS=4 -DNUM_CORES=16 -DL2_ENABLE $(CONFIGS)
+CONFIGS1  := -DNUM_CLUSTERS=1 -DNUM_CORES=1 $(CONFIGS)
+CONFIGS2  := -DNUM_CLUSTERS=1 -DNUM_CORES=2 $(CONFIGS)
+CONFIGS4  := -DNUM_CLUSTERS=1 -DNUM_CORES=4  -DL2_ENABLE $(CONFIGS)
+CONFIGS8  := -DNUM_CLUSTERS=1 -DNUM_CORES=8  -DL2_ENABLE $(CONFIGS)
+CONFIGS16 := -DNUM_CLUSTERS=1 -DNUM_CORES=16 -DL2_ENABLE $(CONFIGS)
+CONFIGS32 := -DNUM_CLUSTERS=2 -DNUM_CORES=16 -DL2_ENABLE $(CONFIGS)
+CONFIGS64 := -DNUM_CLUSTERS=4 -DNUM_CORES=16 -DL2_ENABLE $(CONFIGS)
 
 FPU_INCLUDE = -I$(RTL_DIR)/fpu_unit
 TEX_INCLUDE = -I$(RTL_DIR)/tex_unit
 RASTER_INCLUDE = -I$(RTL_DIR)/raster_unit
 ROP_INCLUDE = -I$(RTL_DIR)/rop_unit
-RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(IP_DIR) -I$(IP_CACHE_DIR)
+RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(IP_CACHE_DIR)
 RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
 
 CFLAGS += $(RTL_INCLUDE)
+
+CFLAGS += -DSYNTHESIS
+CFLAGS += -DQUARTUS
 
 # Debugigng
 ifdef DEBUG
@@ -88,44 +92,43 @@ ifdef PERF
 	CFLAGS += -DPERF_ENABLE
 endif
 
-all: swconfig ip_gen
+all: swconfig ip-gen gen-sources setup build
 
-ip_gen: $(IP_CACHE_DIR)/ip_gen.log
-$(IP_CACHE_DIR)/ip_gen.log:
-	../ip_gen.sh
+ip-gen: $(IP_CACHE_DIR)/ip-gen.log
+$(IP_CACHE_DIR)/ip-gen.log:
+	../ip_gen.sh $(IP_CACHE_DIR)
 
 # AFU info from JSON file, including AFU UUID
 swconfig: vortex_afu.h
 vortex_afu.h: vortex_afu.json
 	afu_json_mgr json-info --afu-json=$^ --c-hdr=$@
 
-gen-sources-ase:
-	./gen_sources.sh $(CFLAGS) $(CONFIG$(NUM_CORES)) -DSIMULATION > sources.txt
+gen-sources:
+	mkdir -p $(BUILD_DIR)/src
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) $(CONFIGS$(NUM_CORES)) -F$(BUILD_DIR)/src -Osources.txt
+	rm -rf $(BUILD_DIR)
 
-gen-sources-fpga:
-	./gen_sources.sh $(CFLAGS) $(CONFIG$(NUM_CORES)) > sources.txt
-
-setup-ase: $(BUILD_DIR)_ase_$(NUM_CORES)c/Makefile
-$(BUILD_DIR)_ase_$(NUM_CORES)c/Makefile:
-	afu_sim_setup -s setup.cfg $(BUILD_DIR)_ase_$(NUM_CORES)c
-
-setup-fpga: $(BUILD_DIR)_fpga_$(NUM_CORES)c/build/dcp.qpf
-$(BUILD_DIR)_fpga_$(NUM_CORES)c/build/dcp.qpf:
-	afu_synth_setup -s setup.cfg $(BUILD_DIR)_fpga_$(NUM_CORES)c
+setup: gen-sources
+ifeq ($(TARGET), ase)
+	afu_sim_setup -s setup.cfg $(BUILD_DIR)
+	mkdir -p $(BUILD_DIR)/src
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) $(CONFIGS$(NUM_CORES)) -DSIMULATION -G$(BUILD_DIR)/src/globals.vh -F$(BUILD_DIR)/src
+else
+	afu_synth_setup -s setup.cfg $(BUILD_DIR)
+	mkdir -p $(BUILD_DIR)/src
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) $(CONFIGS$(NUM_CORES)) -G$(BUILD_DIR)/src/globals.vh -F$(BUILD_DIR)/src
+endif	
 
 # build
 
-build-ase: ip_gen gen-sources-ase setup-ase	
-	make -C $(BUILD_DIR)_ase_$(NUM_CORES)c
-	cp $(IP_CACHE_DIR)/*.hex $(BUILD_DIR)_ase_$(NUM_CORES)c/work	
-
-build-fpga: ip_gen gen-sources-fpga setup-fpga
-	cd $(BUILD_DIR)_fpga_$(NUM_CORES)c && $(RUN_SYNTH)
+build: ip-gen setup
+ifeq ($(TARGET), ase)
+	make -C $(BUILD_DIR) > $(BUILD_DIR)/build.log 2>&1 &
+else
+	cd $(BUILD_DIR) && $(RUN_SYNTH)
+endif
 
 # cleanup
 
-clean-ase:  
-	rm -rf vortex_afu.h $(BUILD_DIR)_ase_$(NUM_CORES)c
-
-clean-fpga: 
-	rm -rf vortex_afu.h $(BUILD_DIR)_fpga_$(NUM_CORES)c
+clean:  
+	rm -rf vortex_afu.h $(BUILD_DIR)

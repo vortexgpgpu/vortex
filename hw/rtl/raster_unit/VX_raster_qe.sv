@@ -36,6 +36,8 @@ module VX_raster_qe #(
     output wire [NUM_QUADS-1:0][`RASTER_DIM_BITS-1:0]   y_loc_out,    
     output wire [NUM_QUADS-1:0][2:0][3:0][`RASTER_DATA_BITS-1:0] bcoords_out
 );
+    `UNUSED_SPARAM (INSTANCE_ID)
+
     `UNUSED_VAR (dcrs)
 
     wire [NUM_QUADS-1:0] valid;

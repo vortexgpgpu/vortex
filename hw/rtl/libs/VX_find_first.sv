@@ -28,7 +28,7 @@ module VX_find_first #(
     
     for (genvar i = TL+N; i < TN; ++i) begin
         assign s_n[i] = 0;
-        assign d_n[i] = 'x;
+        assign d_n[i] = '0;
     end
 
     for (genvar j = 0; j < LOGN; ++j) begin

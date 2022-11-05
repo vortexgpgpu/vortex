@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BUILD_DIR=ip_cache/$DEVICE_FAMILY
+BUILD_DIR=$1
 
 EXP_BITS=8
 MAN_BITS=23

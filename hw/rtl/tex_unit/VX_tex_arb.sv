@@ -122,7 +122,7 @@ module VX_tex_arb #(
             if (NUM_INPUTS > 1) begin
                 assign rsp_sel_in[i] = rsp_out_if[i].tag[TAG_SEL_IDX +: LOG_NUM_REQS];
             end else begin
-                assign rsp_sel_in[i] = 0;
+                assign rsp_sel_in[i] = '0;
             end            
         end
 

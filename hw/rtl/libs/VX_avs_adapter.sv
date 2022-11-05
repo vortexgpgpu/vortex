@@ -56,7 +56,7 @@ module VX_avs_adapter #(
     if (NUM_BANKS > 1) begin
         assign req_bank_sel = mem_req_addr[BANK_ADDRW-1:0];        
     end else begin
-        assign req_bank_sel = 0;
+        assign req_bank_sel = '0;
     end
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin        

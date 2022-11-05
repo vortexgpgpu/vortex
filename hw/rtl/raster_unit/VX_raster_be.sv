@@ -130,7 +130,7 @@ module VX_raster_be #(
             assign fifo_stamp_in[b][q].bcoords = qe_bcoords[i];
         end else begin
             assign fifo_mask_in[b][q]  = 0;
-            assign fifo_stamp_in[b][q] = 'x;
+            assign fifo_stamp_in[b][q] = '0;
         end
     end
 
@@ -168,11 +168,11 @@ module VX_raster_be #(
 
     always @(posedge clk) begin
         if (reset) begin
-            batch_sent <= 0;
+            batch_sent <= '0;
         end else begin
             if (fifo_push) begin
                 if (batch_sent_all) begin
-                    batch_sent <= 0;
+                    batch_sent <= '0;
                 end else begin
                     batch_sent <= batch_sent_n;
                 end

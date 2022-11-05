@@ -26,76 +26,10 @@ module VX_fpu_div #(
     input wire  ready_out,
     output wire valid_out
 );
-
-`ifdef QUARTUS
-    
-    VX_acl_fdiv #(
-        .NUM_LANES  (NUM_LANES),
-        .TAGW       (TAGW)
-    ) fp_div (
-        .clk        (clk),
-        .reset      (reset),
-        .valid_in   (valid_in),
-        .ready_in   (ready_in),
-        .tag_in     (tag_in),
-        .frm        (frm),
-        .dataa      (dataa),
-        .datab      (datab),
-        .has_fflags (has_fflags),
-        .fflags     (fflags),
-        .result     (result),
-        .tag_out    (tag_out),
-        .valid_out  (valid_out),
-        .ready_out  (ready_out)
-    );
-
-`elsif VIVADO
-
-    VX_xil_fdiv #(
-        .NUM_LANES  (NUM_LANES),
-        .TAGW       (TAGW)
-    ) fp_div (
-        .clk        (clk),
-        .reset      (reset),
-        .valid_in   (valid_in),
-        .ready_in   (ready_in),
-        .tag_in     (tag_in),
-        .frm        (frm),
-        .dataa      (dataa), 
-        .datab      (datab),
-        .has_fflags (has_fflags),
-        .fflags     (fflags),
-        .result     (result),
-        .tag_out    (tag_out),
-        .valid_out  (valid_out),
-        .ready_out  (ready_out)
-    );
-
-`else
+    `UNUSED_VAR (frm)
 
     wire stall  = ~ready_out && valid_out;
     wire enable = ~stall;
-
-    for (genvar i = 0; i < NUM_LANES; ++i) begin       
-        reg [31:0] r;
-        fflags_t f;
-
-        always @(*) begin        
-            dpi_fdiv (enable && valid_in, dataa[i], datab[i], frm, r, f);
-        end
-        `UNUSED_VAR (f)
-
-        VX_shift_register #(
-            .DATAW  (32),
-            .DEPTH  (`LATENCY_FDIV)
-        ) shift_req_dpi (
-            .clk      (clk),
-            `UNUSED_PIN (reset),
-            .enable   (enable),
-            .data_in  (r),
-            .data_out (result[i])
-        );
-    end
 
     VX_shift_register #(
         .DATAW  (1 + TAGW),
@@ -111,9 +45,74 @@ module VX_fpu_div #(
 
     assign ready_in = enable;
 
-    `UNUSED_VAR (frm)
+`ifdef QUARTUS
+    
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
+        acl_fdiv fdiv (
+            .clk    (clk),
+            .areset (1'b0),
+            .en     (enable),
+            .a      (dataa[i]),
+            .b      (datab[i]),
+            .q      (result[i])
+        );
+    end    
+    
     assign has_fflags = 0;
-    assign fflags = 0;
+    assign fflags = '0;
+
+`elsif VIVADO
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
+        wire [3:0] tuser;
+
+        xil_fdiv fdiv (
+            .aclk                (clk),
+            .aclken              (enable),
+            .s_axis_a_tvalid     (1'b1),
+            .s_axis_a_tdata      (dataa[i]),
+            .s_axis_b_tvalid     (1'b1),
+            .s_axis_b_tdata      (datab[i]),
+            `UNUSED_PIN (m_axis_result_tvalid),
+            .m_axis_result_tdata (result[i]),
+            .m_axis_result_tuser (tuser)
+        );
+
+        assign fflags[i].NX = 1'b0;
+        assign fflags[i].UF = tuser[0];
+        assign fflags[i].OF = tuser[1];
+        assign fflags[i].DZ = tuser[3];
+        assign fflags[i].NV = tuser[2];
+    end
+
+     assign has_fflags = 1;
+
+`else    
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin       
+        reg [31:0] r;
+        
+        fflags_t f;
+        `UNUSED_VAR (f)
+
+        always @(*) begin        
+            dpi_fdiv (enable && valid_in, dataa[i], datab[i], frm, r, f);
+        end
+
+        VX_shift_register #(
+            .DATAW  (32),
+            .DEPTH  (`LATENCY_FDIV)
+        ) shift_req_dpi (
+            .clk      (clk),
+            `UNUSED_PIN (reset),
+            .enable   (enable),
+            .data_in  (r),
+            .data_out (result[i])
+        );
+    end
+
+    assign has_fflags = 0;
+    assign fflags = '0;
 
 `endif
 

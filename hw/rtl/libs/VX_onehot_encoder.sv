@@ -24,15 +24,15 @@ module VX_onehot_encoder #(
         assign data_out  = data_in[!REVERSE];
         assign valid_out = (| data_in);
 
-    end else if (MODEL == 1) begin
-    `IGNORE_WARNINGS_BEGIN
-        localparam M = 1 << LN;    
-        wire [LN:0][M-1:0] addr;
+    end else if (MODEL == 1) begin    
+        localparam M = 1 << LN;   
+    `IGNORE_UNOPTFLAT_BEGIN 
+        wire [LN-1:0][M-1:0] addr;
         wire [LN:0][M-1:0] v;
+    `IGNORE_UNOPTFLAT_END
     
         // base case, also handle padding for non-power of two inputs
         assign v[0] = REVERSE ? (M'(data_in) << (M - N)) : M'(data_in);
-        assign addr[0] = 'x;
     
         for (genvar lvl = 1; lvl < (LN+1); ++lvl) begin
             localparam SN = 1 << (LN - lvl);
@@ -40,27 +40,26 @@ module VX_onehot_encoder #(
             localparam SW = lvl;
         
             for (genvar s = 0; s < SN; ++s) begin
-                wire [1:0] vs = {
-                    v[lvl-1][s*SI+(SI>>1)],
-                    v[lvl-1][s*SI]
-                };
-            
+            `IGNORE_UNOPTFLAT_BEGIN
+                wire [1:0] vs = {v[lvl-1][s*SI+(SI>>1)], v[lvl-1][s*SI]};
+            `IGNORE_UNOPTFLAT_END
+                        
                 assign v[lvl][s*SI] = (| vs);
 
                 if (lvl == 1) begin
-                    assign addr[lvl][s*SI +: SW] = vs[!REVERSE]; 
+                    assign addr[lvl-1][s*SI +: SW] = vs[!REVERSE]; 
                 end else begin
-                    assign addr[lvl][s*SI +: SW] = { 
+                    assign addr[lvl-1][s*SI +: SW] = { 
                         vs[!REVERSE],
-                        addr[lvl-1][s*SI +: SW-1] | addr[lvl-1][s*SI+(SI>>1) +: SW-1]
+                        addr[lvl-2][s*SI +: SW-1] | addr[lvl-2][s*SI+(SI>>1) +: SW-1]
                     };
                 end        
             end  
         end	
     
-        assign data_out = addr[LN][LN-1:0];
+        assign data_out = addr[LN-1][LN-1:0];
         assign valid_out = v[LN][0];
-    `IGNORE_WARNINGS_END
+
     end else if (MODEL == 2 && REVERSE == 0) begin 
 
         for (genvar j = 0; j < LN; ++j) begin

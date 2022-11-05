@@ -14,7 +14,7 @@ module VX_lzc #(
 
         `UNUSED_PARAM (REVERSE)
 
-        assign data_out  = 0;
+        assign data_out  = '0;
         assign valid_out = data_in;
 
     end else begin

@@ -117,8 +117,8 @@ module VX_mem_adapter #(
 
         always @(posedge clk) begin
             if (reset) begin
-                req_ctr <= 0;
-                rsp_ctr <= 0;
+                req_ctr <= '0;
+                rsp_ctr <= '0;
             end else begin
                 if (mem_req_out_fire) begin
                     req_ctr <= req_ctr + 1;

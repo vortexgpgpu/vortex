@@ -31,6 +31,7 @@ module VX_lsu_unit #(
     localparam MEM_ADDRW  = 32 - MEM_ASHIFT;
     localparam REQ_ASHIFT = `CLOG2(DCACHE_WORD_SIZE);
 
+`ifdef SM_ENABLE
     localparam STACK_SIZE_W = `STACK_SIZE >> MEM_ASHIFT;
     localparam STACK_ADDR_W = `CLOG2(STACK_SIZE_W);
     localparam SMEM_LOCAL_SIZE_W = `SMEM_LOCAL_SIZE >> MEM_ASHIFT;
@@ -38,6 +39,7 @@ module VX_lsu_unit #(
     localparam TOTAL_STACK_SIZE = `STACK_SIZE * `NUM_THREADS * `NUM_WARPS * `NUM_CORES;
     localparam STACK_START_W = MEM_ADDRW'(`STACK_BASE_ADDR >> MEM_ASHIFT);
     localparam STACK_END_W = MEM_ADDRW'((`STACK_BASE_ADDR - TOTAL_STACK_SIZE) >> MEM_ASHIFT);
+`endif
 
     //                     uuid,        addr_type,                               wid,       PC,  tmask,         rd,        op_type,         align,                        is_dup
     localparam TAG_WIDTH = UUID_WIDTH + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + NW_WIDTH + 32 + `NUM_THREADS + `NR_BITS + `INST_LSU_BITS + (`NUM_THREADS * REQ_ASHIFT) + 1;
@@ -265,7 +267,7 @@ module VX_lsu_unit #(
                     assign cache_req_type_b[j] = cache_req_type[k];
                     assign cache_rsp_type[k] = cache_rsp_type_b[j];
                 end else begin
-                    assign cache_req_type_b[j] = 'x;
+                    assign cache_req_type_b[j] = '0;
                     `UNUSED_VAR (cache_rsp_type_b[j])
                 end
             end
@@ -281,7 +283,7 @@ module VX_lsu_unit #(
             for (genvar j = 0; j < DCACHE_NUM_REQS; ++j) begin
                 if (i != j) begin
                     `UNUSED_VAR (cache_req_type[j])
-                    assign cache_rsp_type[j] = 'x;
+                    assign cache_rsp_type[j] = '0;
                 end
             end
         end
@@ -308,10 +310,10 @@ module VX_lsu_unit #(
     assign st_commit_if.wid   = lsu_req_if.wid;
     assign st_commit_if.tmask = lsu_req_if.tmask;
     assign st_commit_if.PC    = lsu_req_if.PC;
-    assign st_commit_if.rd    = 0;
+    assign st_commit_if.rd    = '0;
     assign st_commit_if.wb    = 0;
-    assign st_commit_if.eop   = 1'b1;
-    assign st_commit_if.data  = 0;
+    assign st_commit_if.eop   = 1;
+    assign st_commit_if.data  = '0;
     `UNUSED_VAR (st_commit_if.ready) // stall-free
 
     // load response formatting

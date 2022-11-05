@@ -32,6 +32,8 @@ module VX_raster_te #(
     output wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_out,
     input wire                          ready_out
 );
+    `UNUSED_SPARAM (INSTANCE_ID)
+
     localparam LEVEL_BITS      = (TILE_LOGSIZE - BLOCK_LOGSIZE) + 1;
     localparam TILE_FIFO_DEPTH = 1 << (2 * (TILE_LOGSIZE - BLOCK_LOGSIZE));
     localparam FIFO_DATA_WIDTH = 2 * `RASTER_DIM_BITS + 3 * `RASTER_DATA_BITS + LEVEL_BITS;
@@ -105,7 +107,7 @@ module VX_raster_te #(
                     tile_edge_eval[0]   <= edges_in[0][2];
                     tile_edge_eval[1]   <= edges_in[1][2];
                     tile_edge_eval[2]   <= edges_in[2][2];
-                    tile_level          <= 0;
+                    tile_level          <= '0;
                 end
             end
         end

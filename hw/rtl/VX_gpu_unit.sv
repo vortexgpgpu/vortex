@@ -57,6 +57,10 @@ module VX_gpu_unit #(
     localparam RSP_ARB_IDX_ROP    = RSP_ARB_IDX_RASTER + `EXT_RASTER_ENABLED;    
     localparam RSP_ARB_IDX_TEX    = RSP_ARB_IDX_ROP + `EXT_ROP_ENABLED;    
     localparam RSP_ARB_IDX_IMADD  = RSP_ARB_IDX_TEX + `EXT_TEX_ENABLED;
+    `UNUSED_PARAM (RSP_ARB_IDX_RASTER)
+    `UNUSED_PARAM (RSP_ARB_IDX_ROP)
+    `UNUSED_PARAM (RSP_ARB_IDX_TEX)
+    `UNUSED_PARAM (RSP_ARB_IDX_IMADD)
 
     wire [RSP_ARB_SIZE-1:0] rsp_arb_valid_in;
     wire [RSP_ARB_SIZE-1:0] rsp_arb_ready_in;
@@ -379,7 +383,7 @@ module VX_gpu_unit #(
     reg [`PERF_CTR_BITS-1:0] perf_tex_stalls;
     always @(posedge clk) begin
         if (reset) begin
-            perf_tex_stalls <= 0;
+            perf_tex_stalls <= '0;
         end else begin
             perf_tex_stalls <= perf_tex_stalls + `PERF_CTR_BITS'(tex_agent_if.valid && ~tex_agent_if.ready);
         end
@@ -390,7 +394,7 @@ module VX_gpu_unit #(
     reg [`PERF_CTR_BITS-1:0] perf_raster_stalls;
     always @(posedge clk) begin
         if (reset) begin
-            perf_raster_stalls <= 0;
+            perf_raster_stalls <= '0;
         end else begin
             perf_raster_stalls <= perf_raster_stalls + `PERF_CTR_BITS'(raster_agent_if.valid && ~raster_agent_if.ready);
         end
@@ -401,7 +405,7 @@ module VX_gpu_unit #(
     reg [`PERF_CTR_BITS-1:0] perf_rop_stalls;
     always @(posedge clk) begin
         if (reset) begin
-            perf_rop_stalls <= 0;
+            perf_rop_stalls <= '0;
         end else begin
             perf_rop_stalls <= perf_rop_stalls + `PERF_CTR_BITS'(rop_agent_if.valid && ~rop_agent_if.ready);
         end
@@ -412,7 +416,7 @@ module VX_gpu_unit #(
     reg [`PERF_CTR_BITS-1:0] perf_imadd_stalls;
     always @(posedge clk) begin
         if (reset) begin
-            perf_imadd_stalls <= 0;
+            perf_imadd_stalls <= '0;
         end else begin
             perf_imadd_stalls <= perf_imadd_stalls + `PERF_CTR_BITS'(imadd_valid_in && ~imadd_ready_in);
         end
@@ -422,7 +426,7 @@ module VX_gpu_unit #(
     reg [`PERF_CTR_BITS-1:0] perf_wctl_stalls;
     always @(posedge clk) begin
         if (reset) begin
-            perf_wctl_stalls <= 0;
+            perf_wctl_stalls <= '0;
         end else begin
             perf_wctl_stalls <= perf_wctl_stalls + `PERF_CTR_BITS'(wctl_req_valid && ~wctl_req_ready);
         end

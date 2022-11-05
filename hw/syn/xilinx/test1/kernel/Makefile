@@ -28,7 +28,7 @@ $(PROJECT).bin: $(PROJECT).elf
 	$(CP) -O binary $(PROJECT).elf $(PROJECT).bin
 
 $(PROJECT).bin.coe: $(PROJECT).bin
-	$(BIN2COE_PATH)/bin2coe $(PROJECT).bin --in $(PROJECT).bin --offset=8192 --depth=16384 --word=64
+	$(BIN2COE_PATH)/bin2coe $(PROJECT).bin --out=$(PROJECT).bin.coe --binary=$(PROJECT).bin --data=$(PROJECT).dat --binaddr=8192 --depth=16384 --wordsize=64
 
 $(PROJECT).elf: $(SRCS)
 	$(CC) $(CFLAGS) $(SRCS) $(LDFLAGS) -o $(PROJECT).elf

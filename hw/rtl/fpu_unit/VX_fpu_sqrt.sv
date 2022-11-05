@@ -24,64 +24,73 @@ module VX_fpu_sqrt #(
 
     input wire  ready_out,
     output wire valid_out
-);    
+);
 
-`ifdef QUARTUS
+    `UNUSED_VAR (frm)
     
-    VX_acl_fsqrt #(
-        .NUM_LANES  (NUM_LANES),
-        .TAGW       (TAGW)
-    ) fp_sqrt (
-        .clk        (clk), 
-        .reset      (reset),   
-        .valid_in   (valid_in),
-        .ready_in   (ready_in),
-        .tag_in     (tag_in),
-        .frm        (frm),  
-        .dataa      (dataa),
-        .has_fflags (has_fflags),
-        .fflags     (fflags),   
-        .result     (result),
-        .tag_out    (tag_out),
-        .valid_out  (valid_out),
-        .ready_out  (ready_out)
-    );
-
-`elsif VIVADO
-
-    VX_xil_fsqrt #(
-        .NUM_LANES  (NUM_LANES),
-        .TAGW       (TAGW)
-    ) fp_sqrt (
-        .clk        (clk), 
-        .reset      (reset),   
-        .valid_in   (valid_in),
-        .ready_in   (ready_in),
-        .tag_in     (tag_in),
-        .frm        (frm),  
-        .dataa      (dataa),
-        .has_fflags (has_fflags),
-        .fflags     (fflags),   
-        .result     (result),
-        .tag_out    (tag_out),
-        .valid_out  (valid_out),
-        .ready_out  (ready_out)
-    );
-
-`else
-
     wire stall = ~ready_out && valid_out;
     wire enable = ~stall;
 
+    VX_shift_register #(
+        .DATAW  (1 + TAGW),
+        .DEPTH  (`LATENCY_FSQRT),
+        .RESETW (1)
+    ) shift_reg (
+        .clk(clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  ({valid_in,  tag_in}),
+        .data_out ({valid_out, tag_out})
+    );
+
+    assign ready_in = enable;    
+
+`ifdef QUARTUS
+    
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
+        acl_fsqrt fsqrt (
+            .clk    (clk),
+            .areset (1'b0),
+            .en     (enable),
+            .a      (dataa[i]),
+            .q      (result[i])
+        );
+    end
+
+`elsif VIVADO
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
+        wire [0:0] tuser;       
+
+        xil_fsqrt fsqrt (
+            .aclk                (clk),
+            .aclken              (enable),
+            .s_axis_a_tvalid     (1'b1),
+            .s_axis_a_tdata      (dataa[i]),
+            `UNUSED_PIN (m_axis_result_tvalid),
+            .m_axis_result_tdata (result[i]),
+            .m_axis_result_tuser (tuser)
+        );
+
+        assign fflags[i].NX = 1'b0;
+        assign fflags[i].UF = 1'b0;
+        assign fflags[i].OF = 1'b0;
+        assign fflags[i].DZ = 1'b0;
+        assign fflags[i].NV = tuser[0];
+    end
+
+`else
+
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         reg [31:0] r;
+
         fflags_t f;
+        `UNUSED_VAR (f)
 
         always @(*) begin        
             dpi_fsqrt (enable && valid_in, dataa[i], frm, r, f);
         end
-        `UNUSED_VAR (f)
-
+        
         VX_shift_register #(
             .DATAW  (32),
             .DEPTH  (`LATENCY_FSQRT)
@@ -94,23 +103,8 @@ module VX_fpu_sqrt #(
         );
     end
 
-    VX_shift_register #(
-        .DATAW  (1 + TAGW),
-        .DEPTH  (`LATENCY_FSQRT),
-        .RESETW (1)
-    ) shift_reg (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (enable),
-        .data_in  ({valid_in,  tag_in}),
-        .data_out ({valid_out, tag_out})
-    );
-
-    assign ready_in = enable;
-
-    `UNUSED_VAR (frm)
     assign has_fflags = 0;
-    assign fflags = 0;
+    assign fflags = '0;
 
 `endif
 

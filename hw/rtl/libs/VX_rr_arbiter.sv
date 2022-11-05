@@ -21,7 +21,7 @@ module VX_rr_arbiter #(
         `UNUSED_VAR (reset)
         `UNUSED_VAR (unlock)
         
-        assign grant_index  = 0;
+        assign grant_index  = '0;
         assign grant_onehot = requests;
         assign grant_valid  = requests[0];
 

@@ -12,6 +12,7 @@ module VX_tex_csr #(
     // Output
     output tex_csrs_t tex_csrs
 );
+    `UNUSED_PARAM (CORE_ID)
 
     // CSR registers
 
@@ -30,7 +31,7 @@ module VX_tex_csr #(
         end
     end
 
-    assign tex_csr_if.read_data = 'x;
+    assign tex_csr_if.read_data = '0;
 
     assign tex_csrs = reg_csrs;
 

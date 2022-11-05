@@ -14,6 +14,7 @@ module VX_raster_agent #(
     VX_commit_if.master    raster_commit_if,
     VX_gpu_csr_if.slave    raster_csr_if    
 );
+    `UNUSED_PARAM (CORE_ID)
 
     localparam UUID_WIDTH = `UP(`UUID_BITS);
     localparam NW_WIDTH   = `UP(`NW_BITS);

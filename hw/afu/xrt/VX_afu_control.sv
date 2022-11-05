@@ -301,7 +301,7 @@ module VX_afu_control #(
     // ier_r
     always @(posedge clk) begin
         if (reset)
-            ier_r <= 0;
+            ier_r <= '0;
         else if (clk_en) begin
             if (wd_hs && waddr == ADDR_IER && s_axi_wstrb[0])
                 ier_r <= s_axi_wdata[1:0];
@@ -335,7 +335,7 @@ module VX_afu_control #(
     // dcra_r
     always @(posedge clk) begin
         if (reset)
-            dcra_r <= 0;
+            dcra_r <= '0;
         else if (clk_en) begin
             if (wd_hs && waddr == ADDR_DCR_0)
                 dcra_r <= (s_axi_wdata & wmask) | (dcra_r & ~wmask);
@@ -345,7 +345,7 @@ module VX_afu_control #(
     // dcrv_r
     always @(posedge clk) begin
         if (reset)
-            dcrv_r <= 0;
+            dcrv_r <= '0;
         else if (clk_en) begin
             if (wd_hs && waddr == ADDR_DCR_1)
                 dcrv_r <= (s_axi_wdata & wmask) | (dcrv_r & ~wmask);
@@ -355,7 +355,7 @@ module VX_afu_control #(
     // mem_r[31:0]
     always @(posedge clk) begin
         if (reset)
-            mem_r[31:0] <= 0;
+            mem_r[31:0] <= '0;
         else if (clk_en) begin
             if (wd_hs && waddr == ADDR_MEM_0)
                 mem_r[31:0] <= (s_axi_wdata & wmask) | (mem_r[31:0] & ~wmask);
@@ -365,7 +365,7 @@ module VX_afu_control #(
     // mem_r[63:32]
     always @(posedge clk) begin
         if (reset)
-            mem_r[63:32] <= 0;
+            mem_r[63:32] <= '0;
         else if (clk_en) begin
             if (wd_hs && waddr == ADDR_MEM_1)
                 mem_r[63:32] <= (s_axi_wdata & wmask) | (mem_r[63:32] & ~wmask);

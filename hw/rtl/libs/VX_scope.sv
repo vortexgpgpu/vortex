@@ -62,23 +62,23 @@ module VX_scope #(
     always @(posedge clk) begin
         if (reset) begin
             get_cmd         <= $bits(get_cmd)'(CMD_GET_VALID);
-            raddr           <= 0;
-            waddr           <= 0;
+            raddr           <= '0;
+            waddr           <= '0;
             waddr_end       <= $bits(waddr)'(SIZE-1);
             cmd_start       <= 0;
             started         <= 0;
             start_wait      <= 0;
             recording       <= 0;
-            delay_val       <= 0;
-            delay_cntr      <= 0;
-            delta           <= 0;
+            delay_val       <= '0;
+            delay_cntr      <= '0;
+            delta           <= '0;
             delta_flush     <= 0;
-            prev_trigger_id <= 0;
-            read_offset     <= 0;
-            read_delta      <= 0;
+            prev_trigger_id <= '0;
+            read_offset     <= '0;
+            read_delta      <= '0;
             data_valid      <= 0;
-            timestamp       <= 0;
-            start_time      <= 0;
+            timestamp       <= '0;
+            start_time      <= '0;
         end else begin
 
             timestamp <= timestamp + 1;
@@ -113,8 +113,8 @@ module VX_scope #(
                 if (0 == delay_val) begin
                     start_wait  <= 0;
                     recording   <= 1;
-                    delta       <= 0;
-                    delay_cntr  <= 0;
+                    delta       <= '0;
+                    delay_cntr  <= '0;
                     start_time  <= timestamp;
                 `ifdef DBG_TRACE_SCOPE
                     `TRACE(2, ("%d: *** scope: recording start - start_time=%0d\n", $time, timestamp));
@@ -130,7 +130,7 @@ module VX_scope #(
                 if (1 == delay_cntr) begin
                     start_wait <= 0;
                     recording  <= 1;
-                    delta      <= 0;
+                    delta      <= '0;
                     start_time <= timestamp;
                 `ifdef DBG_TRACE_SCOPE
                     `TRACE(2, ("%d: *** scope: recording start - start_time=%0d\n", $time, timestamp));
@@ -146,7 +146,7 @@ module VX_scope #(
                         delta_store[waddr] <= delta;
                         data_store[waddr]  <= data_in;
                         waddr       <= waddr + $bits(waddr)'(1);
-                        delta       <= 0;
+                        delta       <= '0;
                         delta_flush <= 0;
                     end else begin
                         delta       <= delta + DELTAW'(1);
@@ -154,7 +154,7 @@ module VX_scope #(
                     end
                     prev_trigger_id <= trigger_id;
                 end else begin
-                    delta_store[waddr] <= 0;
+                    delta_store[waddr] <= '0;
                     data_store[waddr]  <= data_in;
                     waddr <= waddr + 1;
                 end
@@ -175,14 +175,14 @@ module VX_scope #(
              && (get_cmd == GET_DATA)
              && data_valid)  begin
                 if (read_delta) begin
-                    read_delta <= 0;
+                    read_delta <= '0;
                 end else begin
                     if (DATAW > BUSW) begin
                         if (read_offset < $bits(read_offset)'(DATAW-BUSW)) begin
                             read_offset <= read_offset + $bits(read_offset)'(BUSW);
                         end else begin
                             raddr       <= raddr + $bits(raddr)'(1);
-                            read_offset <= 0;
+                            read_offset <= '0;
                             read_delta  <= 1;
                             if (raddr == waddr) begin
                                 data_valid <= 0;
@@ -208,7 +208,7 @@ module VX_scope #(
                     data_store[waddr]  <= data_in;
                 end
             end else begin
-                delta_store[waddr] <= 0;
+                delta_store[waddr] <= '0;
                 data_store[waddr]  <= data_in;
             end
         end
@@ -223,7 +223,7 @@ module VX_scope #(
         /* verilator lint_off WIDTH */
             GET_DATA  : bus_out_r = read_delta ? BUSW'(delta_store[raddr]) : BUSW'(data_store[raddr] >> read_offset);
         /* verilator lint_on WIDTH */
-            default   : bus_out_r = 0;
+            default   : bus_out_r = '0;
         endcase
     end
 
