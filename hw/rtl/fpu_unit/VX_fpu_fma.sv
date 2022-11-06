@@ -92,6 +92,8 @@ module VX_fpu_fma #(
 `elsif VIVADO
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
+        wire [2:0] tuser;
+        
         xil_fma fma (
             .aclk                (clk),
             .aclken              (enable),

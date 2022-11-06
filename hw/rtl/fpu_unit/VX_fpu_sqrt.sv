@@ -60,7 +60,7 @@ module VX_fpu_sqrt #(
 `elsif VIVADO
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        wire [0:0] tuser;       
+        wire tuser;       
 
         xil_fsqrt fsqrt (
             .aclk                (clk),
@@ -76,7 +76,7 @@ module VX_fpu_sqrt #(
         assign fflags[i].UF = 1'b0;
         assign fflags[i].OF = 1'b0;
         assign fflags[i].DZ = 1'b0;
-        assign fflags[i].NV = tuser[0];
+        assign fflags[i].NV = tuser;
     end
 
 `else

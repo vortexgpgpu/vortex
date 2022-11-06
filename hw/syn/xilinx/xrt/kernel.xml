@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <root versionMajor="1" versionMinor="6">
   <kernel name="vortex_afu" language="ip_c" vlnv="xilinx.com:RTLKernel:vortex_afu:1.0" attributes="" preferredWorkGroupSizeMultiple="0" workGroupSize="1" interrupt="true" hwControlProtocol="user_managed">
-    <ports>      
+    <ports>  
       <port name="s_axi_ctrl" mode="slave"  range="0x1000"     dataWidth="32"  portType="addressable" base="0x0"/>
-      <port name="m_axi_mem"  mode="master" range="0xFFFFFFFF" dataWidth="512" portType="addressable" base="0x0"/>
+      <port name="m_axi_mem"  mode="master" range="0xFFFFFFFFFFFFFFFF" dataWidth="512" portType="addressable" base="0x0"/>
     </ports>
     <args>
       <arg id="0" name="DEV" addressQualifier="0" port="s_axi_ctrl" size="0x8" offset="0x010" type="uint" hostOffset="0x0" hostSize="0x8"/>

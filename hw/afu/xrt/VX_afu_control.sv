@@ -34,6 +34,8 @@ module VX_afu_control #(
     input  wire                         ap_idle,  
     output wire                         interrupt,
 
+    output wire [63:0]                  mem_base,
+
     output wire                         dcr_wr_valid,
     output wire [`VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr,
     output wire [`VX_DCR_DATA_WIDTH-1:0] dcr_wr_data
@@ -383,6 +385,8 @@ module VX_afu_control #(
     assign ap_reset  = ap_reset_r;
     assign ap_start  = ap_start_r;
     assign interrupt = gie_r & (| isr_r);
+
+    assign mem_base  = mem_r;
 
     assign dcr_wr_valid = dcr_wr_valid_r;
     assign dcr_wr_addr  = `VX_DCR_ADDR_WIDTH'(dcra_r);

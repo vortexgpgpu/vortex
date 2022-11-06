@@ -8,6 +8,7 @@
 #include <util.h>
 #include <limits>
 #include <unordered_map>
+#include <nlohmann_json.hpp>
 
 // XRT includes
 #include "experimental/xrt_bo.h"
@@ -23,6 +24,7 @@
 #define MMIO_DEV_ADDR   0x10
 #define MMIO_ISA_ADDR   0x1C
 #define MMIO_DCR_ADDR   0x28
+#define MMIO_MEM_ADDR   0x34
 
 #define CTL_AP_START    (1<<0)
 #define CTL_AP_DONE     (1<<1)
@@ -96,9 +98,10 @@ struct platform_info_t {
 };
 
 static platform_info_t g_platforms [] = {
-    {"xilinx_u50",  32, 0x10000000},
-    {"xilinx_u200", 32, 0x10000000},
-    {"xilinx_u280", 32, 0x10000000},
+    {"xilinx_u50",     32, 0x10000000},
+    {"xilinx_u200",    32, 0x10000000},
+    {"xilinx_u280",    32, 0x10000000},
+    {"xilinx_vck5000", 1,  0x200000000},
 };
 
 /*static void wait_for_enter(const std::string &msg) {
@@ -347,6 +350,44 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     auto xrtDevice = xrt::device(device_index);
     auto uuid = xrtDevice.load_xclbin(xlbin_path_s);
     auto xrtKernel = xrt::ip(xrtDevice, uuid, KERNEL_NAME);
+    auto xclbin = xrt::xclbin(xlbin_path_s);
+
+    /*{
+        auto mem_json = nlohmann::json::parse(xrtDevice.get_info<xrt::info::device::memory>());
+        for (auto& mem : mem_json["board"]["memory"]["memories"]) {
+            
+        }
+    }*/
+
+    uint64_t mem_base = 0;
+    for (const auto& mem_bank : xclbin.get_mems()) {
+        if (mem_bank.get_used()) {
+            mem_base = mem_bank.get_base_address();
+            break;
+        }
+    }
+
+    {
+        std::cout << "Device" << device_index << " : " << xrtDevice.get_info<xrt::info::device::name>() << std::endl;
+        //std::cout << "  platform : " << std::boolalpha << xrtDevice.get_info<xrt::info::device::platform>() << std::dec << std::endl;
+        std::cout << "  bdf      : " << xrtDevice.get_info<xrt::info::device::bdf>() << std::endl;
+        std::cout << "  kdma     : " << xrtDevice.get_info<xrt::info::device::kdma>() << std::endl;
+        std::cout << "  max_freq : " << xrtDevice.get_info<xrt::info::device::max_clock_frequency_mhz>() << std::endl;
+        //std::cout << "  memory   : " << xrtDevice.get_info<xrt::info::device::memory>() << std::endl;
+        //std::cout << "  thermal  : " << xrtDevice.get_info<xrt::info::device::thermal>() << std::endl;
+        std::cout << "  m2m      : " << std::boolalpha << xrtDevice.get_info<xrt::info::device::m2m>() << std::dec << std::endl;
+        std::cout << "  nodma    : " << std::boolalpha << xrtDevice.get_info<xrt::info::device::nodma>() << std::dec << std::endl;
+                
+        std::cout << "Memory info :" << std::endl;        
+        for (const auto& mem_bank : xclbin.get_mems()) {
+            std::cout << "  index : " << mem_bank.get_index() << std::endl;
+            std::cout << "  tag : " << mem_bank.get_tag() << std::endl;
+            std::cout << "  type : " << (int)mem_bank.get_type() << std::endl;
+            std::cout << "  base_address : 0x" << std::hex << mem_bank.get_base_address() << std::endl;
+            std::cout << "  size : 0x" << (mem_bank.get_size_kb() * 1000) << std::dec << std::endl;
+            std::cout << "  used :" << mem_bank.get_used() << std::endl;
+        }
+    }
 
     uint32_t num_banks = 0;
     uint64_t bank_size = 0;
@@ -361,42 +402,20 @@ extern int vx_dev_open(vx_device_h* hdevice) {
             break;
         }
     }
+
     if (num_banks == 0) {
         fprintf(stderr, "[VXDRV] Error: platform not supported: %s\n", device_name.c_str());
         return -1;
     }
 
-    /*
-    std::cout << "Device" << device_index << " : " << xrtDevice.get_info<xrt::info::device::name>() << std::endl;
-    std::cout << "  platform : " << std::boolalpha << xrtDevice.get_info<xrt::info::device::platform>() << std::dec << std::endl;
-    std::cout << "  bdf      : " << xrtDevice.get_info<xrt::info::device::bdf>() << std::endl;
-    std::cout << "  kdma     : " << xrtDevice.get_info<xrt::info::device::kdma>() << std::endl;
-    std::cout << "  max_freq : " << xrtDevice.get_info<xrt::info::device::max_clock_frequency_mhz>() << std::endl;
-    std::cout << "  memory   : " << xrtDevice.get_info<xrt::info::device::memory>() << std::endl;
-    std::cout << "  thermal  : " << xrtDevice.get_info<xrt::info::device::thermal>() << std::endl;
-    std::cout << "  m2m      : " << std::boolalpha << xrtDevice.get_info<xrt::info::device::m2m>() << std::dec << std::endl;
-    std::cout << "  nodma    : " << std::boolalpha << xrtDevice.get_info<xrt::info::device::nodma>() << std::dec << std::endl;
-    */
-        
-    /*
-    std::cout << "Memory info :" << std::endl;
-    auto xclbin = xrt::xclbin(xlbin_path_s);
-    const auto& mem_banks = xclbin.get_mems();
-    for (const auto& mem_bank : mem_banks) {
-        std::cout << "  index : " << mem_bank.get_index() << std::endl;
-        std::cout << "  tag : " << mem_bank.get_tag() << std::endl;
-        std::cout << "  type : " << (int)mem_bank.get_type() << std::endl;
-        std::cout << "  base_address : 0x" << std::hex << mem_bank.get_base_address()<< std::endl;
-        std::cout << "  size_kb : 0x" << (mem_bank.get_size_kb() * 1000) << std::dec << std::endl;
-        std::cout << "  used :" << mem_bank.get_used() << std::endl;
-        ++num_banks;
-    }*/
-    
     CHECK_HANDLE(device, new vx_device(xrtDevice, xrtKernel, num_banks, bank_size), {
         return -1;
     });
 
     xrtKernel.write_register(MMIO_CTL_ADDR, CTL_AP_RESET);
+
+    xrtKernel.write_register(MMIO_MEM_ADDR, mem_base & 0xffffffff);
+    xrtKernel.write_register(MMIO_MEM_ADDR + 4, (mem_base >> 32) & 0xffffffff);
 
     auto dev_caps_lo = xrtKernel.read_register(MMIO_DEV_ADDR);
     auto dev_caps_hi = xrtKernel.read_register(MMIO_DEV_ADDR + 4);
