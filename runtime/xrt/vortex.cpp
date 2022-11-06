@@ -33,6 +33,20 @@
 #define CTL_AP_RESET    (1<<4)
 #define CTL_AP_RESTART  (1<<7)
 
+struct platform_info_t {
+    const char* prefix_name;
+    uint32_t    num_banks;
+    uint64_t    mem_base;
+    uint64_t    bank_size;
+};
+
+static const platform_info_t g_platforms [] = {
+    {"xilinx_u50",     32, 0x0, 0x10000000},
+    {"xilinx_u200",    32, 0x0, 0x10000000},
+    {"xilinx_u280",    32, 0x0, 0x10000000},
+    {"xilinx_vck5000", 1,  0xC000000000, 0x200000000},
+};
+
 #ifdef CPP_API
 
     typedef xrt::device xrt_device_t;
@@ -91,18 +105,16 @@ static void dump_xrt_error(xrtDeviceHandle xrtDevice, xrtErrorCode err) {
 
 #endif
 
-struct platform_info_t {
-    const char* prefix_name;
-    uint32_t    num_banks;
-    uint64_t    bank_size;
-};
-
-static platform_info_t g_platforms [] = {
-    {"xilinx_u50",     32, 0x10000000},
-    {"xilinx_u200",    32, 0x10000000},
-    {"xilinx_u280",    32, 0x10000000},
-    {"xilinx_vck5000", 1,  0x200000000},
-};
+static int get_platform_info(const std::string& device_name, platform_info_t* platform_info) {    
+    for (size_t i = 0; i < (sizeof(g_platforms)/sizeof(platform_info_t)); ++i) {
+        auto& platform = g_platforms[i];
+        if (device_name.rfind(platform.prefix_name, 0) == 0) {
+            *platform_info = platform;;
+            return 0;
+        }
+    }    
+    return -1;
+}
 
 /*static void wait_for_enter(const std::string &msg) {
     std::cout << msg << std::endl;
@@ -343,7 +355,7 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     const char* xlbin_path_s = getenv("XRT_XCLBIN_PATH");
     if (xlbin_path_s == nullptr) {
         xlbin_path_s = DEFAULT_XCLBIN_PATH;
-    }
+    }   
 
 #ifdef CPP_API
 
@@ -352,29 +364,40 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     auto xrtKernel = xrt::ip(xrtDevice, uuid, KERNEL_NAME);
     auto xclbin = xrt::xclbin(xlbin_path_s);
 
+    auto device_name = xrtDevice.get_info<xrt::info::device::name>();
+
     /*{
+        uint32_t num_banks = 0;
+        uint64_t bank_size = 0;
+        uint64_t mem_base  = 0;
+
         auto mem_json = nlohmann::json::parse(xrtDevice.get_info<xrt::info::device::memory>());
-        for (auto& mem : mem_json["board"]["memory"]["memories"]) {
-            
+        if (!mem_json.is_null()) {
+            uint32_t index = 0;
+            for (auto& mem : mem_json["board"]["memory"]["memories"]) {            
+                auto enabled = mem["enabled"].get<std::string>();
+                if (enabled == "true") {                
+                    if (index == 0) {      
+                        mem_base = std::stoull(mem["base_address"].get<std::string>(), nullptr, 16);
+                        bank_size = std::stoull(mem["range_bytes"].get<std::string>(), nullptr, 16);
+                    }
+                    ++index;
+                }
+            }
+            num_banks = index;
         }
+
+        fprintf(stderr, "[VXDRV] memory description: base=0x%lx, size=0x%lx, count=%d\n", mem_base, bank_size, num_banks);
     }*/
 
-    uint64_t mem_base = 0;
-    for (const auto& mem_bank : xclbin.get_mems()) {
-        if (mem_bank.get_used()) {
-            mem_base = mem_bank.get_base_address();
-            break;
-        }
-    }
-
-    {
+    /*{
         std::cout << "Device" << device_index << " : " << xrtDevice.get_info<xrt::info::device::name>() << std::endl;
-        //std::cout << "  platform : " << std::boolalpha << xrtDevice.get_info<xrt::info::device::platform>() << std::dec << std::endl;
+        std::cout << "  platform : " << std::boolalpha << xrtDevice.get_info<xrt::info::device::platform>() << std::dec << std::endl;
         std::cout << "  bdf      : " << xrtDevice.get_info<xrt::info::device::bdf>() << std::endl;
         std::cout << "  kdma     : " << xrtDevice.get_info<xrt::info::device::kdma>() << std::endl;
         std::cout << "  max_freq : " << xrtDevice.get_info<xrt::info::device::max_clock_frequency_mhz>() << std::endl;
-        //std::cout << "  memory   : " << xrtDevice.get_info<xrt::info::device::memory>() << std::endl;
-        //std::cout << "  thermal  : " << xrtDevice.get_info<xrt::info::device::thermal>() << std::endl;
+        std::cout << "  memory   : " << xrtDevice.get_info<xrt::info::device::memory>() << std::endl;
+        std::cout << "  thermal  : " << xrtDevice.get_info<xrt::info::device::thermal>() << std::endl;
         std::cout << "  m2m      : " << std::boolalpha << xrtDevice.get_info<xrt::info::device::m2m>() << std::dec << std::endl;
         std::cout << "  nodma    : " << std::boolalpha << xrtDevice.get_info<xrt::info::device::nodma>() << std::dec << std::endl;
                 
@@ -387,35 +410,23 @@ extern int vx_dev_open(vx_device_h* hdevice) {
             std::cout << "  size : 0x" << (mem_bank.get_size_kb() * 1000) << std::dec << std::endl;
             std::cout << "  used :" << mem_bank.get_used() << std::endl;
         }
-    }
+    }*/    
 
-    uint32_t num_banks = 0;
-    uint64_t bank_size = 0;
-
-    // check if platform is supported
-    const auto& device_name = xrtDevice.get_info<xrt::info::device::name>();
-    for (size_t i = 0; i < (sizeof(g_platforms)/sizeof(platform_info_t)); ++i) {
-        auto& platform = g_platforms[i];
-        if (device_name.rfind(platform.prefix_name, 0) == 0) {
-            num_banks = platform.num_banks;
-            bank_size = platform.bank_size;
-            break;
-        }
-    }
-
-    if (num_banks == 0) {
+    // get platform info
+    platform_info_t platform_info;    
+    CHECK_ERR(get_platform_info(device_name, &platform_info), {
         fprintf(stderr, "[VXDRV] Error: platform not supported: %s\n", device_name.c_str());
         return -1;
-    }
+    });
 
-    CHECK_HANDLE(device, new vx_device(xrtDevice, xrtKernel, num_banks, bank_size), {
+    CHECK_HANDLE(device, new vx_device(xrtDevice, xrtKernel, platform_info.num_banks, platform_info.bank_size), {
         return -1;
     });
 
     xrtKernel.write_register(MMIO_CTL_ADDR, CTL_AP_RESET);
 
-    xrtKernel.write_register(MMIO_MEM_ADDR, mem_base & 0xffffffff);
-    xrtKernel.write_register(MMIO_MEM_ADDR + 4, (mem_base >> 32) & 0xffffffff);
+    xrtKernel.write_register(MMIO_MEM_ADDR, platform_info.mem_base & 0xffffffff);
+    xrtKernel.write_register(MMIO_MEM_ADDR + 4, (platform_info.mem_base >> 32) & 0xffffffff);
 
     auto dev_caps_lo = xrtKernel.read_register(MMIO_DEV_ADDR);
     auto dev_caps_hi = xrtKernel.read_register(MMIO_DEV_ADDR + 4);
@@ -450,13 +461,35 @@ extern int vx_dev_open(vx_device_h* hdevice) {
         return -1;
     });
 
-    CHECK_HANDLE(device, new vx_device(xrtDevice, xrtKernel), {
+    int device_name_size;
+    xrtXclbinGetXSAName(xrtDevice, nullptr, 0, &device_name_size);
+    std::vector<char> device_name(device_name_size);
+    xrtXclbinGetXSAName(xrtDevice, device_name.data(), device_name_size, nullptr);
+
+    // get platform info
+    platform_info_t platform_info;
+    CHECK_ERR(get_platform_info(device_name.data(), &platform_info), {
+        fprintf(stderr, "[VXDRV] Error: platform not supported: %s\n", device_name.data());
+        return -1;
+    });
+
+    CHECK_HANDLE(device, new vx_device(xrtDevice, xrtKernel, platform_info.num_banks, platform_info.bank_size), {
         xrtKernelClose(xrtKernel);
         xrtDeviceClose(xrtDevice);
         return -1;
     });
 
     CHECK_ERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_CTL_ADDR, CTL_AP_RESET), {
+        dump_xrt_error(xrtDevice, err);
+        return -1;
+    });
+
+    CHECK_ERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_MEM_ADDR, platform_info.mem_base & 0xffffffff), {
+        dump_xrt_error(xrtDevice, err);
+        return -1;
+    });
+
+    CHECK_ERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_MEM_ADDR + 4, (platform_info.mem_base >> 32) & 0xffffffff), {
         dump_xrt_error(xrtDevice, err);
         return -1;
     });
