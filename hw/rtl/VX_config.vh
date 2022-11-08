@@ -262,19 +262,33 @@
 `endif
 
 `ifndef LATENCY_FMA
+`ifdef FPU_FPNEW
+`define LATENCY_FSQRT 4
+`elsif VIVADO
+`define LATENCY_FMA 16    
+`else
 `define LATENCY_FMA 4
+`endif
 `endif
 
 `ifndef LATENCY_FDIV
+`ifdef FPU_FPNEW
+`define LATENCY_FDIV 16
+`elsif VIVADO
+`define LATENCY_FDIV 28
+`else
 `define LATENCY_FDIV 15
+`endif
 `endif
 
 `ifndef LATENCY_FSQRT
+`ifdef FPU_FPNEW
+`define LATENCY_FSQRT 16
+`elsif VIVADO
+`define LATENCY_FSQRT 28
+`else
 `define LATENCY_FSQRT 10
 `endif
-
-`ifndef LATENCY_FDIVSQRT
-`define LATENCY_FDIVSQRT 32
 `endif
 
 `ifndef LATENCY_FCVT

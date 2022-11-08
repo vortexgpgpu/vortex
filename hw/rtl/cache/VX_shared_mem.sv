@@ -241,8 +241,8 @@ module VX_shared_mem #(
             perf_writes      <= '0;
             perf_crsp_stalls <= '0;
         end else begin
-            perf_reads  <= perf_reads  + `PERF_CTR_BITS'(perf_reads_per_cycle);
-            perf_writes <= perf_writes + `PERF_CTR_BITS'(perf_writes_per_cycle);
+            perf_reads       <= perf_reads  + `PERF_CTR_BITS'(perf_reads_per_cycle);
+            perf_writes      <= perf_writes + `PERF_CTR_BITS'(perf_writes_per_cycle);
             perf_crsp_stalls <= perf_crsp_stalls + `PERF_CTR_BITS'(perf_crsp_stall_per_cycle);
         end
     end

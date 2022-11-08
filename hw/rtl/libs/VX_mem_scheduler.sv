@@ -402,19 +402,12 @@ module VX_mem_scheduler #(
         reg [NUM_BATCHES-1:0][NUM_BANKS-1:0][DATA_WIDTH-1:0] rsp_store_n;
         reg [NUM_REQS-1:0] rsp_orig_mask [QUEUE_SIZE-1:0];
 
-        if (NUM_BANKS > 1) begin
-            always @(*) begin
-                rsp_store_n = rsp_store[ibuf_raddr];            
-                for (integer i = 0; i < NUM_BANKS; ++i) begin
-                    if (mem_rsp_mask_s[i]) begin
-                        rsp_store_n[rsp_batch_idx][i] = mem_rsp_data_s[i];
-                    end
+        always @(*) begin
+            rsp_store_n = rsp_store[ibuf_raddr];            
+            for (integer i = 0; i < NUM_BANKS; ++i) begin
+                if ((NUM_BANKS == 1) || mem_rsp_mask_s[i]) begin
+                    rsp_store_n[rsp_batch_idx][i] = mem_rsp_data_s[i];
                 end
-            end
-        end else begin
-            always @(*) begin
-                rsp_store_n = rsp_store[ibuf_raddr];            
-                rsp_store_n[rsp_batch_idx] = mem_rsp_data_s;
             end
         end        
         

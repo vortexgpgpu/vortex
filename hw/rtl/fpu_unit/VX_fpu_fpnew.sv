@@ -58,7 +58,7 @@ module VX_fpu_fpnew #(
 
     localparam fpnew_pkg::fpu_implementation_t FPU_IMPLEMENTATION = '{
       PipeRegs:'{'{`LATENCY_FMA, 0, 0, 0, 0},   // ADDMUL
-                 '{default: `LATENCY_FDIVSQRT}, // DIVSQRT
+                 '{default: (`LATENCY_FDIV + LATENCY_FSQRT)}, // DIVSQRT
                  '{default: `LATENCY_FNCP},     // NONCOMP
                  '{default: `LATENCY_FCVT}},    // CONV
       UnitTypes:'{'{default: UNIT_FMULADD},     // ADDMUL
