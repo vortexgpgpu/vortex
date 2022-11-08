@@ -124,6 +124,27 @@ inline void vx_prefetch(unsigned addr) {
     asm volatile (".insn s 0x6b, 5, x0, 0(%0)" :: "r"(addr) );
 }
 
+// Vector add
+// TO_CHECK: instr type? S?
+// TO_CHECK: using input/output params
+// TO_CHECK: use of labels and jump statement
+// TO_CHECK: Opcodes of vector instructions
+inline void vx_vec_vvaddint32(unsigned n, unsigned a, unsigned b, unsigned c) {
+    asm volatile ("vvaddint32: vsetvli t0, %[n], e32\n\t"
+                  "vle32.v v0, (%[a])\n\t"
+                  "sub %[n], %[n], t0\n\t"
+                  "slli t0, t0, 2\n\t"
+                  "add %[a], %[a], t0\n\t"
+                  "vle32.v v1, (%[b])\n\t"
+                  "add %[b], %[b], t0\n\t"
+                  "vadd.vv v2, v0, v1\n\t"
+                  "vse32.v v2, (%[c])\n\t"
+                  "add %[c], %[c], t0\n\t"
+                  "bnez %[n], vvaddint32\n\t"
+                  "ret"
+                  : [c] "=r"(c), [a] "+r"(a), [b] "+r"(b), [n] "+r"(n):);
+}
+
 // Return active warp's thread id 
 inline int vx_thread_id() {
     int result;
