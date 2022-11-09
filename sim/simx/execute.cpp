@@ -158,6 +158,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         }
         DPN(2, "}" << std::endl);
         break;
+      case RegType::Vector: //arv: data decoded later 
+        DPN(2, type);
+        break;
       default: 
         std::abort();
         break;
@@ -721,7 +724,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           std::abort();      
         }
       }
-    } else {
+    } else { //arv: vector load
       auto &vd = vreg_file_.at(rdest);
       switch (instr.getVlsWidth()) {
       case 6: {
@@ -774,7 +777,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           std::abort();
         }
       }
-    } else {
+    } else { //arv: vector store
       for (uint32_t i = 0; i < vl_; i++) {
         uint64_t mem_addr = rsdata[i][0].i + (i * vtype_.vsew / 8);        
         switch (instr.getVlsWidth()) {
@@ -784,7 +787,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           core_->dcache_write(&mem_data, mem_addr, 4);
           DP(4, "STORE MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data);
           break;
-        } 
+        }
         default:
           std::abort();
         }          
@@ -1457,7 +1460,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     switch (func3) {
     case 0: // vector-vector
       switch (func6) {
-      case 0: {
+      case 0: { //arv: add
         auto& vr1 = vreg_file_.at(rsrc0);
         auto& vr2 = vreg_file_.at(rsrc1);
         auto& vd = vreg_file_.at(rdest);
@@ -2279,18 +2282,18 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     } break;
     case 7: {
       vtype_.vill  = 0;
-      vtype_.vediv = instr.getVediv();
+      //vtype_.vediv = instr.getVediv();
       vtype_.vsew  = instr.getVsew();
       vtype_.vlmul = instr.getVlmul();
 
-      DP(3, "lmul:" << vtype_.vlmul << " sew:" << vtype_.vsew  << " ediv: " << vtype_.vediv << "rsrc_" << rsdata[0][0].i << "VLMAX" << VLMAX);
+      DP(3, "lmul:" << vtype_.vlmul << " sew:" << vtype_.vsew  << /*" ediv: " << vtype_.vediv << */"rsrc_" << rsdata[0][0].i << "VLMAX" << VLMAX);
 
       auto s0 = rsdata[0][0].i;
       if (s0 <= VLMAX) {
         vl_ = s0;
-      } else if (s0 < (2 * VLMAX)) {
+      } else if (s0 < (2 * VLMAX)) { //arv: check - why this logic?
         vl_ = (uint32_t)ceil((s0 * 1.0) / 2.0);
-      } else if (s0 >= (2 * VLMAX)) {
+      } else if (s0 >= (2 * VLMAX)) { //arv: check - why this logic?
         vl_ = VLMAX;
       }        
       rddata[0].i = vl_;
@@ -2337,6 +2340,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       }
       DPN(2, "}" << std::endl);
       trace->used_fregs[rdest] = 1;
+      break;
+    case RegType::Vector: //arv: dest reg for vectors written earlier in program
+      DPN(2, type);
       break;
     default:
       std::abort();

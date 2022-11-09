@@ -222,17 +222,17 @@ static const char* op_string(const Instr &instr) {
   case Opcode::FENCE: return "FENCE";
   case Opcode::FL: 
     switch (func3) {
-      case 0x1: return "VL";
       case 0x2: return "FLW";
       case 0x3: return "FLD";
+      case 0x6: return "VL";
       default: 
         std::abort();
     }
   case Opcode::FS: 
     switch (func3) {
-      case 0x1: return "VS";
       case 0x2: return "FSW";
       case 0x3: return "FSD";
+      case 0x6: return "VS";
       default: 
         std::abort();
     }
@@ -584,41 +584,41 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
       instr->setDestVReg(rd);
       instr->setSrcVReg(rs1);
       instr->setFunc3(func3);
-      if (func3 == 7) {
+      if (func3 == 7) { 
         instr->setImm(!(code >> shift_vset));
-        if (instr->getImm()) {
+        if (instr->getImm()) { //arv: vsetvli
           auto immed = (code >> shift_rs2) & mask_v_imm;
           instr->setImm(immed);
-          instr->setVlmul(immed & 0x3);
-          instr->setVediv((immed >> 4) & 0x3);
-          instr->setVsew((immed >> 2) & 0x3);
-        } else {
+          instr->setVlmul(immed & 0x7);
+          //arv: instr->setVediv((immed >> 4) & 0x3);
+          instr->setVsew((immed >> 3) & 0x7);
+        } else { //arv: vsetvl(check)
           instr->setSrcVReg(rs2);
         }
-      } else {
+      } else { //arv: vector arithmetic
         instr->setSrcVReg(rs2);
         instr->setVmask((code >> shift_func7) & 0x1);
         instr->setFunc6(func6);
       }
     } break;
 
-    case Opcode::FL:
+    case Opcode::FL: //arv: vector load
       instr->setDestVReg(rd);
       instr->setSrcVReg(rs1);
       instr->setVlsWidth(func3);
       instr->setSrcVReg(rs2);
-      instr->setVmask(code >> shift_func7);
-      instr->setVmop((code >> shift_vmop) & mask_func3);
+      instr->setVmask((code >> shift_func7) & 0x1);
+      instr->setVmop((code >> shift_vmop) & 0x3);
       instr->setVnf((code >> shift_vnf) & mask_func3);
       break;
 
-    case Opcode::FS:
+    case Opcode::FS: //arv: vector store
       instr->setVs3(rd);
       instr->setSrcVReg(rs1);
       instr->setVlsWidth(func3);
       instr->setSrcVReg(rs2);
-      instr->setVmask(code >> shift_func7);
-      instr->setVmop((code >> shift_vmop) & mask_func3);
+      instr->setVmask((code >> shift_func7) & 0x1);
+      instr->setVmop((code >> shift_vmop) & 0x3);
       instr->setVnf((code >> shift_vnf) & mask_func3);
       break;
 
