@@ -14,12 +14,12 @@ module VX_scoreboard  #(
     wire reserve_reg = ibuffer_if.valid && ibuffer_if.ready && ibuffer_if.wb;
 
     wire release_reg = writeback_if.valid && writeback_if.ready && writeback_if.eop;
-    
+
     always @(*) begin
         inuse_regs_n = inuse_regs;
         if (reserve_reg) begin
-            inuse_regs_n[ibuffer_if.wid][ibuffer_if.rd] = 1;                
-        end       
+            inuse_regs_n[ibuffer_if.wid][ibuffer_if.rd] = 1;
+        end
         if (release_reg) begin
             inuse_regs_n[writeback_if.wid][writeback_if.rd] = 0;
         end
@@ -32,7 +32,7 @@ module VX_scoreboard  #(
             inuse_regs <= inuse_regs_n;
         end
     end
-    
+
     reg deq_inuse_rd, deq_inuse_rs1, deq_inuse_rs2, deq_inuse_rs3;
 
     always @(posedge clk) begin
@@ -44,15 +44,15 @@ module VX_scoreboard  #(
 
     assign writeback_if.ready = 1'b1;
 
-    assign ibuffer_if.ready = ~(deq_inuse_rd 
-                             | deq_inuse_rs1 
-                             | deq_inuse_rs2 
+    assign ibuffer_if.ready = ~(deq_inuse_rd
+                             | deq_inuse_rs1
+                             | deq_inuse_rs2
                              | deq_inuse_rs3);
 
     `UNUSED_VAR (writeback_if.PC)
 
-    reg [31:0] deadlock_ctr;
-    wire [31:0] deadlock_timeout = 10000 * (1 ** (`L2_ENABLE + `L3_ENABLE));
+    reg [`ADDR_WIDTH - 1:0] deadlock_ctr;
+    wire [`ADDR_WIDTH - 1:0] deadlock_timeout = 10000 * (1 ** (`L2_ENABLE + `L3_ENABLE));
 
     always @(posedge clk) begin
         if (reset) begin
@@ -60,8 +60,8 @@ module VX_scoreboard  #(
         end else begin
         `ifdef DBG_TRACE_CORE_PIPELINE
             if (ibuffer_if.valid && ~ibuffer_if.ready) begin
-                dpi_trace("%d: *** core%0d-stall: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b (#%0d)\n", 
-                    $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.rd, ibuffer_if.wb, 
+                dpi_trace("%d: *** core%0d-stall: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b (#%0d)\n",
+                    $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.rd, ibuffer_if.wb,
                     deq_inuse_rd, deq_inuse_rs1, deq_inuse_rs2, deq_inuse_rs3, ibuffer_if.uuid);
             end
         `endif
@@ -70,11 +70,11 @@ module VX_scoreboard  #(
                     ("%t: *** core%0d: invalid writeback register: wid=%0d, PC=%0h, rd=%0d (#%0d)",
                                 $time, CORE_ID, writeback_if.wid, writeback_if.PC, writeback_if.rd,writeback_if.uuid));
             end
-            if (ibuffer_if.valid && ~ibuffer_if.ready) begin            
+            if (ibuffer_if.valid && ~ibuffer_if.ready) begin
                 deadlock_ctr <= deadlock_ctr + 1;
                 `ASSERT(deadlock_ctr < deadlock_timeout,
                     ("%t: *** core%0d-deadlock: wid=%0d, PC=%0h, rd=%0d, wb=%0d, inuse=%b%b%b%b (#%0d)",
-                        $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.rd, ibuffer_if.wb, 
+                        $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.rd, ibuffer_if.wb,
                         deq_inuse_rd, deq_inuse_rs1, deq_inuse_rs2, deq_inuse_rs3, ibuffer_if.uuid));
             end else if (ibuffer_if.valid && ibuffer_if.ready) begin
                 deadlock_ctr <= 0;

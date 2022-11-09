@@ -7,15 +7,15 @@ interface VX_ifetch_rsp_if ();
 
     wire                    valid;
     wire [`UUID_BITS-1:0]   uuid;
-    wire [`NUM_THREADS-1:0] tmask;    
+    wire [`NUM_THREADS-1:0] tmask;
     wire [`NW_BITS-1:0]     wid;
-    wire [31:0]             PC;
-    wire [31:0]             data;
+    wire [`ADDR_WIDTH - 1:0]             PC;
+    wire [`ADDR_WIDTH - 1:0]             data;
     wire                    ready;
 
     modport master (
         output valid,
-        output uuid, 
+        output uuid,
         output tmask,
         output wid,
         output PC,

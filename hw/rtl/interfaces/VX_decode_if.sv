@@ -5,18 +5,18 @@
 
 interface VX_decode_if ();
 
-    wire                    valid;    
+    wire                    valid;
     wire [`UUID_BITS-1:0]   uuid;
     wire [`NW_BITS-1:0]     wid;
     wire [`NUM_THREADS-1:0] tmask;
-    wire [31:0]             PC;
-    wire [`EX_BITS-1:0]     ex_type;    
-    wire [`INST_OP_BITS-1:0] op_type; 
-    wire [`INST_MOD_BITS-1:0] op_mod;    
+    wire [`ADDR_WIDTH - 1:0]             PC;
+    wire [`EX_BITS-1:0]     ex_type;
+    wire [`INST_OP_BITS-1:0] op_type;
+    wire [`INST_MOD_BITS-1:0] op_mod;
     wire                    wb;
     wire                    use_PC;
     wire                    use_imm;
-    wire [31:0]             imm;
+    wire [`ADDR_WIDTH - 1:0]             imm;
     wire [`NR_BITS-1:0]     rd;
     wire [`NR_BITS-1:0]     rs1;
     wire [`NR_BITS-1:0]     rs2;
@@ -29,9 +29,9 @@ interface VX_decode_if ();
         output wid,
         output tmask,
         output PC,
-        output ex_type,  
+        output ex_type,
         output op_type,
-        output op_mod,   
+        output op_mod,
         output wb,
         output use_PC,
         output use_imm,
@@ -49,9 +49,9 @@ interface VX_decode_if ();
         input  wid,
         input  tmask,
         input  PC,
-        input  ex_type,  
+        input  ex_type,
         input  op_type,
-        input  op_mod,   
+        input  op_mod,
         input  wb,
         input  use_PC,
         input  use_imm,

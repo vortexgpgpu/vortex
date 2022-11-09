@@ -1,0 +1,4 @@
+main.o: main.cpp \
+ /nethome/rmundada3/assignment1/vortex/driver/include/vortex.h \
+ /nethome/rmundada3/assignment1/vortex/runtime/../hw/VX_config.h \
+ testcases.h common.h

@@ -36,6 +36,8 @@
 
 `define UUID_BITS       44
 
+`define ADDR_WIDTH      32
+
 ///////////////////////////////////////////////////////////////////////////////
 
 `define EX_NOP          3'h0
@@ -62,10 +64,10 @@
 
 `define INST_FL         7'b0000111 // float load instruction
 `define INST_FS         7'b0100111 // float store  instruction
-`define INST_FMADD      7'b1000011  
+`define INST_FMADD      7'b1000011
 `define INST_FMSUB      7'b1000111
 `define INST_FNMSUB     7'b1001011
-`define INST_FNMADD     7'b1001111 
+`define INST_FNMADD     7'b1001111
 `define INST_FCI        7'b1010011 // float common instructions
 
 `define INST_GPGPU      7'b1101011
@@ -112,8 +114,8 @@
 
 `define INST_BR_EQ           4'b0000
 `define INST_BR_NE           4'b0010
-`define INST_BR_LTU          4'b0100 
-`define INST_BR_GEU          4'b0110 
+`define INST_BR_LTU          4'b0100
+`define INST_BR_GEU          4'b0110
 `define INST_BR_LT           4'b0101
 `define INST_BR_GE           4'b0111
 `define INST_BR_JAL          4'b1000
@@ -146,12 +148,12 @@
 `define INST_FMT_BU          3'b100
 `define INST_FMT_HU          3'b101
 
-`define INST_LSU_LB          4'b0000 
+`define INST_LSU_LB          4'b0000
 `define INST_LSU_LH          4'b0001
 `define INST_LSU_LW          4'b0010
 `define INST_LSU_LBU         4'b0100
 `define INST_LSU_LHU         4'b0101
-`define INST_LSU_SB          4'b1000 
+`define INST_LSU_SB          4'b1000
 `define INST_LSU_SH          4'b1001
 `define INST_LSU_SW          4'b1010
 `define INST_LSU_BITS        4
@@ -171,26 +173,26 @@
 `define INST_CSR_OTHER       2'h0
 `define INST_CSR_BITS        2
 
-`define INST_FPU_ADD         4'h0 
-`define INST_FPU_SUB         4'h4 
-`define INST_FPU_MUL         4'h8 
+`define INST_FPU_ADD         4'h0
+`define INST_FPU_SUB         4'h4
+`define INST_FPU_MUL         4'h8
 `define INST_FPU_DIV         4'hC
 `define INST_FPU_CVTWS       4'h1  // FCVT.W.S
 `define INST_FPU_CVTWUS      4'h5  // FCVT.WU.S
 `define INST_FPU_CVTSW       4'h9  // FCVT.S.W
 `define INST_FPU_CVTSWU      4'hD  // FCVT.S.WU
 `define INST_FPU_SQRT        4'h2
-`define INST_FPU_CLASS       4'h6  
+`define INST_FPU_CLASS       4'h6
 `define INST_FPU_CMP         4'hA
-`define INST_FPU_MISC        4'hE  // SGNJ, SGNJN, SGNJX, FMIN, FMAX, MVXW, MVWX 
-`define INST_FPU_MADD        4'h3 
-`define INST_FPU_MSUB        4'h7   
-`define INST_FPU_NMSUB       4'hB   
+`define INST_FPU_MISC        4'hE  // SGNJ, SGNJN, SGNJX, FMIN, FMAX, MVXW, MVWX
+`define INST_FPU_MADD        4'h3
+`define INST_FPU_MSUB        4'h7
+`define INST_FPU_NMSUB       4'hB
 `define INST_FPU_NMADD       4'hF
 `define INST_FPU_BITS        4
 
 `define INST_GPU_TMC         4'h0
-`define INST_GPU_WSPAWN      4'h1 
+`define INST_GPU_WSPAWN      4'h1
 `define INST_GPU_SPLIT       4'h2
 `define INST_GPU_JOIN        4'h3
 `define INST_GPU_BAR         4'h4
@@ -261,7 +263,7 @@
 // Block size in bytes
 `define ICACHE_LINE_SIZE        `L1_BLOCK_SIZE
 
-// TAG sharing enable       
+// TAG sharing enable
 `define ICACHE_CORE_TAG_ID_BITS `NW_BITS
 
 // Core request tag bits
@@ -293,12 +295,12 @@
 `define LSU_TAG_ID_BITS         `MAX(`LSUQ_ADDR_BITS, 2)
 `define LSU_TEX_DCACHE_TAG_BITS (`UUID_BITS + `LSU_TAG_ID_BITS + `CACHE_ADDR_TYPE_BITS)
 `define DCACHE_CORE_TAG_ID_BITS (`LSU_TAG_ID_BITS + `CACHE_ADDR_TYPE_BITS + `TEX_TAG_BIT)
-`else 
+`else
 `define LSU_TAG_ID_BITS         `LSUQ_ADDR_BITS
 `define DCACHE_CORE_TAG_ID_BITS (`LSU_TAG_ID_BITS + `CACHE_ADDR_TYPE_BITS)
 `endif
 `define DCACHE_CORE_TAG_WIDTH   (`UUID_BITS + `DCACHE_CORE_TAG_ID_BITS)
- 
+
 // Memory request data bits
 `define DCACHE_MEM_DATA_WIDTH   (`DCACHE_LINE_SIZE * 8)
 
@@ -399,11 +401,11 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define VX_MEM_BYTEEN_WIDTH     `L3_MEM_BYTEEN_WIDTH   
+`define VX_MEM_BYTEEN_WIDTH     `L3_MEM_BYTEEN_WIDTH
 `define VX_MEM_ADDR_WIDTH       `L3_MEM_ADDR_WIDTH
 `define VX_MEM_DATA_WIDTH       `L3_MEM_DATA_WIDTH
 `define VX_MEM_TAG_WIDTH        `L3_MEM_TAG_WIDTH
-`define VX_CORE_TAG_WIDTH       `L3_CORE_TAG_WIDTH 
+`define VX_CORE_TAG_WIDTH       `L3_CORE_TAG_WIDTH
 `define VX_CSR_ID_WIDTH         `LOG2UP(`NUM_CLUSTERS * `NUM_CORES)
 
 `define TO_FULL_ADDR(x)         {x, (32-$bits(x))'(0)}
