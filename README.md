@@ -43,7 +43,7 @@ Vortex is a full-system RISCV-based GPGPU processor.
     $ sudo apt-get install git
 ### Install Vortex codebase
     $ git clone --recursive https://github.com/vortexgpgpu/vortex.git
-    $ cd Vortex
+    $ cd vortex
 ### Install prebuilt toolchain
     $ ./ci/toolchain_install.sh -all
 ### Build Vortex sources
