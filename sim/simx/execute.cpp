@@ -159,8 +159,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         DPN(2, "}" << std::endl);
         break;
       case RegType::Vector: //arv: data decoded later 
-        if((opcode == VSET) && (func3 == 0x7))
-          rsdata[0][0].i = ireg_file_.at(0)[reg];
+        if (((opcode == VSET) && (func3 == 0x7)) || (((opcode == FL) || (opcode == FS)) && (func3 == 0x6)))
+          rsdata[0][i].i = ireg_file_.at(0)[reg];
         DPN(2, type);
         break;
       default: 
@@ -731,7 +731,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       switch (instr.getVlsWidth()) {
       case 6: {
         for (uint32_t i = 0; i < vl_; i++) {
-          Word mem_addr = ((rsdata[i][0].i) & 0xFFFFFFFC) + (i * vtype_.vsew / 8);
+          Word mem_addr = ((rsdata[0][0].i) & 0xFFFFFFFC) + (i * vtype_.vsew / 8);
           Word mem_data = 0;
           core_->dcache_read(&mem_data, mem_addr, 4);
           Word *result_ptr = (Word *)(vd.data() + i);
@@ -782,11 +782,12 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       }
     } else { //arv: vector store
       for (uint32_t i = 0; i < vl_; i++) {
-        uint64_t mem_addr = rsdata[i][0].i + (i * vtype_.vsew / 8);        
+        uint64_t mem_addr = rsdata[0][0].i + (i * vtype_.vsew / 8);        
         switch (instr.getVlsWidth()) {
         case 6: {
-          // store word and unit strided (not checking for unit stride)          
-          uint32_t mem_data = *(uint32_t *)(vreg_file_.at(instr.getVs3()).data() + i);
+          // store word and unit strided (not checking for unit stride)
+          auto& vr = vreg_file_.at(instr.getVs3());
+          uint32_t mem_data  = *(unsigned char *)(vr.data() + i); //arv: check - why unsigned char?
           core_->dcache_write(&mem_data, mem_addr, 4);
           trace->mem_addrs.at(0).push_back({mem_addr, 4});
           DP(4, "STORE MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data);
