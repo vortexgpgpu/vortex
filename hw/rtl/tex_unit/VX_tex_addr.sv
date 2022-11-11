@@ -3,15 +3,15 @@
 module VX_tex_addr #(
     parameter `STRING_TYPE INSTANCE_ID = "",
     parameter REQ_INFOW = 1,
-    parameter NUM_LANES  = 1
+    parameter NUM_LANES = 1
 ) (
     input wire clk,
     input wire reset,
 
     // inputs
 
-    input wire                           req_valid,    
-    input wire [NUM_LANES-1:0]           req_mask,
+    input wire                          req_valid,    
+    input wire [NUM_LANES-1:0]          req_mask,
     input wire [1:0][NUM_LANES-1:0][`TEX_FXD_BITS-1:0] req_coords,    
     input wire [`TEX_FORMAT_BITS-1:0]   req_format,
     input wire [`TEX_FILTER_BITS-1:0]   req_filter,
@@ -68,7 +68,7 @@ module VX_tex_addr #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         for (genvar j = 0; j < 2; ++j) begin
-            wire [`TEX_FXD_FRAC-1:0] delta    = `TEX_FXD_FRAC'((SCALED_DIM'(`TEX_FXD_HALF) << req_miplevel[i]) >> req_logdims[j]);
+            wire [`TEX_FXD_FRAC-1:0] delta = `TEX_FXD_FRAC'((SCALED_DIM'(`TEX_FXD_HALF) << req_miplevel[i]) >> req_logdims[j]);
             wire [`TEX_FXD_BITS-1:0] coord_lo = req_filter ? (req_coords[j][i] - `TEX_FXD_BITS'(delta)) : req_coords[j][i];
             wire [`TEX_FXD_BITS-1:0] coord_hi = req_filter ? (req_coords[j][i] + `TEX_FXD_BITS'(delta)) : req_coords[j][i];
 
@@ -86,6 +86,9 @@ module VX_tex_addr #(
 
             assign dim_shift[i][j] = SHIFT_BITS'(`TEX_FXD_FRAC - `TEX_BLEND_FRAC) - (req_logdims[j] - req_miplevel[i]);
         end
+    end
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign log_pitch[i] = PITCH_BITS'(req_logdims[0] - req_miplevel[i]) + PITCH_BITS'(log_stride);        
         assign mip_addr[i]  = req_baseaddr + `TEX_ADDR_BITS'(req_mipoff[i]);
     end
@@ -122,11 +125,12 @@ module VX_tex_addr #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign offset_u_lo[i] = OFFSET_U_W'(scaled_lo[i][0][`TEX_BLEND_FRAC +: `TEX_DIM_BITS]) << log_stride_s0;
-        assign offset_u_hi[i] = OFFSET_U_W'(scaled_hi[i][0][`TEX_BLEND_FRAC +: `TEX_DIM_BITS]) << log_stride_s0;
-        
+        assign offset_u_hi[i] = OFFSET_U_W'(scaled_hi[i][0][`TEX_BLEND_FRAC +: `TEX_DIM_BITS]) << log_stride_s0;        
         assign offset_v_lo[i] = OFFSET_V_W'(scaled_lo[i][1][`TEX_BLEND_FRAC +: `TEX_DIM_BITS]) << log_pitch_s0[i];
         assign offset_v_hi[i] = OFFSET_V_W'(scaled_hi[i][1][`TEX_BLEND_FRAC +: `TEX_DIM_BITS]) << log_pitch_s0[i];
+    end
 
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
         assign addr[i][0] = 32'(offset_v_lo[i]) + 32'(offset_u_lo[i]);
         assign addr[i][1] = 32'(offset_v_lo[i]) + 32'(offset_u_hi[i]);
         assign addr[i][2] = 32'(offset_v_hi[i]) + 32'(offset_u_lo[i]);
