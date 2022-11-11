@@ -1,4 +1,4 @@
-p`ifndef VX_SCOPE
+`ifndef VX_SCOPE
 `define VX_SCOPE
 
 `ifdef SCOPE

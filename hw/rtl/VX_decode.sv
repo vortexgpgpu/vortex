@@ -199,6 +199,49 @@ module VX_decode  #(
                 ex_type = `EX_LSU;
                 op_mod  = `INST_MOD_BITS'(1);
             end
+
+            // 64bit
+            `INST_R_64: begin
+                ex_type = `EX_ALU;
+            `ifdef EXT_F_ENABLE
+                if (!func7[0]) begin
+                    // RV64I
+                    case (func3)
+                        3'h0: op_type = func7[5] ? `INST_OP_BITS'(`INST_ALU_SUBW) : `INST_OP_BITS'(`INST_ALU_ADDW);
+                        3'h1: op_type = `INST_OP_BITS'(`INST_ALU_SLLW);
+                        3'h5: op_type = func7[5] ? `INST_OP_BITS'(`INST_ALU_SRAW) : `INST_OP_BITS'(`INST_ALU_SRLW);
+                        default:;
+                    endcase
+                end else begin
+                    // RV64M
+                    case (func3)
+                        3'h0: op_type = `INST_OP_BITS'(`INST_MUL_MULW);
+                        3'h4: op_type = `INST_OP_BITS'(`INST_MUL_DIVW);
+                        3'h5: op_type = `INST_OP_BITS'(`INST_MUL_DIVUW);
+                        3'h6: op_type = `INST_OP_BITS'(`INST_MUL_REMW);
+                        3'h7: op_type = `INST_OP_BITS'(`INST_MUL_REMUW);
+                        default:;
+                    endcase
+                end
+                op_mod = 2; // what should be the value here? (We are assuming that its an ALU execute)
+            `endif
+            end
+            `INST_I_64: begin
+                ex_type = `EX_ALU;
+                // same op_type can be used for ADDI, SLLI, SRAI and SRLI as r-type
+                case (func3)
+                    3'h0: op_type = `INST_OP_BITS'(`INST_ALU_ADDW);
+                    3'h1: op_type = `INST_OP_BITS'(`INST_ALU_SLLW);
+                    3'h5: op_type = (func7[5]) ? `INST_OP_BITS'(`INST_ALU_SRAW) : `INST_OP_BITS'(`INST_ALU_SRLW);
+                    default:;
+                endcase
+                use_rd  = 1;
+                use_imm = 1;
+                imm     = {{20{alu_imm[11]}}, alu_imm};
+                `USED_IREG (rd);
+                `USED_IREG (rs1);
+            end
+
             `INST_SYS : begin
                 if (func3[1:0] != 0) begin
                     ex_type = `EX_CSR;
@@ -232,7 +275,28 @@ module VX_decode  #(
                 end
             end
         `ifdef EXT_F_ENABLE
-            `INST_FL,
+
+            // 64bit
+            `INST_FL: begin
+                case (func3)
+                    3'h1: op_type = `INST_OP_BITS'(`INST_LSU_VL);
+                    3'h2: op_type = `INST_OP_BITS'(`INST_LSU_FLW);
+                    3'h3: op_type = `INST_OP_BITS'(`INST_LSU_FLD);
+                    default:;
+                endcase
+                ex_type = `EX_LSU;
+                op_type = `INST_OP_BITS'({1'b0, func3});
+                use_rd  = 1;
+                imm     = {{20{u_12[11]}}, u_12};
+            `ifdef EXT_F_ENABLE
+                if (opcode[2]) begin
+                    `USED_FREG (rd);
+                end else
+            `endif
+                `USED_IREG (rd);
+                `USED_IREG (rs1);
+            end
+
         `endif
             `INST_L: begin
                 ex_type = `EX_LSU;
@@ -248,7 +312,28 @@ module VX_decode  #(
                 `USED_IREG (rs1);
             end
         `ifdef EXT_F_ENABLE
-            `INST_FS,
+
+            // 64bit
+            // (Are we supposed to implement floating point?)
+            `INST_FS: begin
+                case (func3)
+                    3'h1: op_type = `INST_OP_BITS'(`INST_LSU_VS);
+                    3'h2: op_type = `INST_OP_BITS'(`INST_LSU_FSW);
+                    3'h3: op_type = `INST_OP_BITS'(`INST_LSU_FSD);
+                    default:;
+                endcase
+                ex_type = `EX_LSU;
+                op_type = `INST_OP_BITS'({1'b1, func3});
+                imm     = {{20{s_imm[11]}}, s_imm};
+                `USED_IREG (rs1);
+            `ifdef EXT_F_ENABLE
+                if (opcode[2]) begin
+                    `USED_FREG (rs2);
+                end else
+            `endif
+                `USED_IREG (rs2);
+            end
+
         `endif
             `INST_S: begin
                 ex_type = `EX_LSU;
