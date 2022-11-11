@@ -12,19 +12,11 @@
 
 int main()
 {
-    int n = 4; //SIZE
+    int n = 7; //SIZE
 
-    int a[4] = {0,1,2,3};
-    int b[4] = {0,1,2,3};
-    int c[4] = {0,0,0,0}; 
-
-    // Initialize values for array members.  
-    for (int i = 0; i < n; ++i)
-    {
-       a[i] = i * 2 + 0;
-       b[i] = i * 2 + 1;
-       c[i] = 0;
-    }
+    int a[7] = {0,1,2,3,4,5,6};
+    int b[7] = {0,1,2,3,4,5,6};
+    int c[7] = {0,0,0,0,0,0,0};
 
     vx_vec_vvaddint32(n, (unsigned int)a, (unsigned int)b, (unsigned int)c);
 

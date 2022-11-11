@@ -141,8 +141,7 @@ inline void vx_vec_vvaddint32(unsigned n, unsigned a, unsigned b, unsigned c) {
                   "vse32.v v2, (%[c])\n\t"
                   "add %[c], %[c], t0\n\t"
                   "bnez %[n], vvaddint32\n\t"
-                  "ret"
-                  : [c] "=r"(c), [a] "+r"(a), [b] "+r"(b), [n] "+r"(n):);
+                  : [c] "+r"(c), [a] "+r"(a), [b] "+r"(b), [n] "+r"(n):);
 }
 
 // Return active warp's thread id 
