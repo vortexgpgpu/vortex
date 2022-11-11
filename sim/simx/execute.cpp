@@ -159,6 +159,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         DPN(2, "}" << std::endl);
         break;
       case RegType::Vector: //arv: data decoded later 
+        if((opcode == VSET) && (func3 == 0x7))
+          rsdata[0][0].i = ireg_file_.at(0)[reg];
         DPN(2, type);
         break;
       default: 
@@ -734,6 +736,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           core_->dcache_read(&mem_data, mem_addr, 4);
           Word *result_ptr = (Word *)(vd.data() + i);
           *result_ptr = mem_data;
+          trace->mem_addrs.at(0).push_back({mem_addr, 4});
           DP(4, "LOAD MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data);        
         }
         break;
@@ -785,6 +788,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           // store word and unit strided (not checking for unit stride)          
           uint32_t mem_data = *(uint32_t *)(vreg_file_.at(instr.getVs3()).data() + i);
           core_->dcache_write(&mem_data, mem_addr, 4);
+          trace->mem_addrs.at(0).push_back({mem_addr, 4});
           DP(4, "STORE MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data);
           break;
         }
@@ -2297,6 +2301,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         vl_ = VLMAX;
       }        
       rddata[0].i = vl_;
+      rd_write = true;
     } break;
     default:
       std::abort();
@@ -2342,6 +2347,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       trace->used_fregs[rdest] = 1;
       break;
     case RegType::Vector: //arv: dest reg for vectors written earlier in program
+      if ((opcode == VSET) && (func3 == 0x7))
+      {
+        ireg_file_.at(0)[rdest] = rddata[0].i;
+        trace->used_iregs[rdest] = 1;
+      }
       DPN(2, type);
       break;
     default:

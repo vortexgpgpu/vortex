@@ -605,7 +605,8 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
     case Opcode::FL: //arv: vector load
       instr->setDestVReg(rd);
       instr->setSrcVReg(rs1);
-      instr->setVlsWidth(func3);
+      instr->setFunc3(func3);
+      instr->setVlsWidth(func3); //arv: check
       instr->setSrcVReg(rs2);
       instr->setVmask((code >> shift_func7) & 0x1);
       instr->setVmop((code >> shift_vmop) & 0x3);
@@ -615,7 +616,8 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
     case Opcode::FS: //arv: vector store
       instr->setVs3(rd);
       instr->setSrcVReg(rs1);
-      instr->setVlsWidth(func3);
+      instr->setFunc3(func3);
+      instr->setVlsWidth(func3); //arv: check
       instr->setSrcVReg(rs2);
       instr->setVmask((code >> shift_func7) & 0x1);
       instr->setVmop((code >> shift_vmop) & 0x3);
