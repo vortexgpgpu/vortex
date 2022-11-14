@@ -12,27 +12,30 @@
 
 int main()
 {
-    int n = 7; //SIZE
+    const int n = 4; // SIZE
 
-    int a[7] = {0,1,2,3,4,5,6};
-    int b[7] = {0,1,2,3,4,5,6};
-    int c[7] = {0,0,0,0,0,0,0};
+    // int a[7] = {0, 1, 2, 3, 4, 5, 200};
+    // int b[7] = {0, 1, 2, 3, 4, 5, 200};
+    // int c[7] = {0, 0, 0, 0, 0, 0, 0};
+
+    int a[n] = {1, 150, 200, 4};
+    int b[n] = {1, 152, 200, 3};
+    int c[n] = {0, 0, 0, 0};
 
     vx_vec_vvaddint32(n, (unsigned int)a, (unsigned int)b, (unsigned int)c);
 
     vx_printf("Start of program\n");
 
-    for(int i = 0; i < n; ++i) 
+    for (int i = 0; i < n; ++i)
     {
-        if(c[i] != (a[i]+b[i])) 
+        if (c[i] != (a[i] + b[i]))
         {
-           vx_printf("\n<vddint32> FAILED at <index: %d>! \n", i);
-           return 1;
+            vx_printf("\n<vddint32> FAILED at <index: %d> <value: %d>! \n", i, c[i]);
+            return 1;
         }
     }
 
     vx_printf("\nPASSED.......................... <vddint32> \n");
 
     return 0;
-
 }
