@@ -10,3 +10,4 @@ runtime/libvortexrt.a
 sim/rtlsim/rtlsim
 sim/simx/simx
 sim/vlsim/vortex_afu.h
+third_party/*/**

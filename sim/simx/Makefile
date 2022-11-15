@@ -22,11 +22,12 @@ VPATH := $(sort $(dir $(SRCS)))
 #$(info OBJS is $(OBJS))
 #$(info VPATH is $(VPATH))
 
+DEBUG = 1
 # Debugigng
 ifdef DEBUG
 	CXXFLAGS += -g -O0 -DDEBUG_LEVEL=$(DEBUG)
 else    
-	CXXFLAGS += -O2 -DNDEBUG
+	CXXFLAGS += -O2 -DNDEBUG 
 endif
 
 # XLEN parameterization
