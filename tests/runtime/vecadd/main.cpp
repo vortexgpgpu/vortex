@@ -22,7 +22,7 @@ int main()
     int b[n] = {20, 0, 1, 152, 200, 3, 1, 152, 200, 3};
     int c[n] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-    vx_vec_vvaddint32(n, (unsigned int)a, (unsigned int)b, (unsigned int)c);
+    vx_vec_vvaddint32(n, a, b, c);
 
     vx_printf("Start of program\n");
 
