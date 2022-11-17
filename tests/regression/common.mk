@@ -4,7 +4,7 @@ TARGET   ?= hw_emu
 PLATFORM ?= xilinx_u280_xdma_201920_3
 
 XRT_SYN_DIR  ?= ../../../hw/syn/xilinx/xrt
-XRT_BUILD_DIR = ${XRT_SYN_DIR}/build_${PLATFORM}_${TARGET}/bin
+XRT_BUILD_DIR = $(XRT_SYN_DIR)/build_$(PLATFORM)_$(TARGET)/bin
 
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 
@@ -13,8 +13,8 @@ VORTEX_KN_PATH ?= $(realpath ../../../kernel)
 
 LLVM_PREFIX ?= /opt/llvm-riscv
 
-LLVM_CFLAGS += --sysroot=${RISCV_TOOLCHAIN_PATH}/riscv32-unknown-elf
-LLVM_CFLAGS += --gcc-toolchain=${RISCV_TOOLCHAIN_PATH}
+LLVM_CFLAGS += --sysroot=$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf
+LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex
 #LLVM_CFLAGS += -I$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/include/c++/9.2.0/riscv32-unknown-elf 
 #LLVM_CFLAGS += -I$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/include/c++/9.2.0
@@ -85,9 +85,9 @@ run-rtlsim: $(PROJECT) kernel.bin
 
 run-xrt: $(PROJECT) kernel.bin
 ifeq ($(TARGET), hw)
-	XRT_INI_PATH=${XRT_SYN_DIR}/xrt.ini EMCONFIG_PATH=${XRT_BUILD_DIR} XRT_DEVICE_INDEX=0 XRT_XCLBIN_PATH=${XRT_BUILD_DIR}/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_PATH)/xrt:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+	XRT_INI_PATH=$(XRT_SYN_DIR)/xrt.ini EMCONFIG_PATH=$(XRT_BUILD_DIR) XRT_DEVICE_INDEX=0 XRT_XCLBIN_PATH=$(XRT_BUILD_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_PATH)/xrt:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 else
-	XCL_EMULATION_MODE=${TARGET} XRT_INI_PATH=${XRT_SYN_DIR}/xrt.ini EMCONFIG_PATH=${XRT_BUILD_DIR} XRT_DEVICE_INDEX=0 XRT_XCLBIN_PATH=${XRT_BUILD_DIR}/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_PATH)/xrt:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)	
+	XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(XRT_SYN_DIR)/xrt.ini EMCONFIG_PATH=$(XRT_BUILD_DIR) XRT_DEVICE_INDEX=0 XRT_XCLBIN_PATH=$(XRT_BUILD_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_PATH)/xrt:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)	
 endif
 
 .depend: $(SRCS)
