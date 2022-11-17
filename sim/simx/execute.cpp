@@ -963,9 +963,6 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
         {
           // store word and unit strided (not checking for unit stride)
           auto &vr = vreg_file_.at(instr.getVs3());
-          // uint32_t mem_data = *(unsigned char *)(vr.data() + i); // arv: unsigned char size = Byte size
-
-          // vk TODO: temp fix for 32 bit, will not work for larger since it may not fit in dcache, insert loop
           uint32_t mem_data = 0;
           int n = (vtype_.vsew / 8);
 
@@ -2672,11 +2669,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
             uint16_t second = *(uint16_t *)(vr2.data() + i);
             uint16_t result = (first * second);
             DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(uint16_t *)(vd.data() + i) = result;
+            *(uint16_t *)(vd.data() + i * 2) = result;
           }
           for (uint32_t i = vl_; i < VLMAX; i++)
           {
-            *(uint16_t *)(vd.data() + i) = 0;
+            *(uint16_t *)(vd.data() + i * 2) = 0;
           }
         }
         else if (vtype_.vsew == 32)
@@ -2687,11 +2684,11 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
             uint32_t second = *(uint32_t *)(vr2.data() + i);
             uint32_t result = (first * second);
             DP(3, "Comparing " << first << " + " << second << " = " << result);
-            *(uint32_t *)(vd.data() + i) = result;
+            *(uint32_t *)(vd.data() + i * 4) = result;
           }
           for (uint32_t i = vl_; i < VLMAX; i++)
           {
-            *(uint32_t *)(vd.data() + i) = 0;
+            *(uint32_t *)(vd.data() + i * 4) = 0;
           }
         }
       }
