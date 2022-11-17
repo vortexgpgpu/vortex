@@ -3,7 +3,7 @@
 #include <vx_spawn.h>
 #include "common.h"
 
-void main() {
+int main() {
 	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
 
 	uint32_t size    = arg->size;
@@ -13,4 +13,6 @@ void main() {
 	for (uint32_t i = 0; i < size; ++i) {
 		dst_ptr[i] = src_ptr[i];
 	}
+
+	return 0;
 }

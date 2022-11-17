@@ -1,5 +1,4 @@
-#ifndef RVFLOATS_H
-#define RVFLOATS_H
+#pragma once
 
 #include <cstdint>
 
@@ -77,6 +76,4 @@ uint64_t rv_ftod(uint32_t a);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

@@ -3,17 +3,13 @@
 
 #define KERNEL_ARG_DEV_MEM_ADDR 0x40
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 typedef struct {
   uint32_t count;
   uint32_t src_addr;
   uint32_t dst_addr;  
 } kernel_arg_t;
 
-void main() {
+int main() {
 	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
 	uint32_t count   = arg->count;
 	int32_t* src_ptr = (int32_t*)arg->src_addr;
@@ -24,8 +20,6 @@ void main() {
 	for (uint32_t i = 0; i < count; ++i) {
 		dst_ptr[offset + i] = src_ptr[offset + i];
 	}
+	
+	return 0;
 }
-
-#ifdef __cplusplus
-}
-#endif

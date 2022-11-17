@@ -1,5 +1,5 @@
-#ifndef VX_INTRINSICS_H
-#define VX_INTRINSICS_H
+#ifndef __VX_INTRINSICS_H__
+#define __VX_INTRINSICS_H__
 
 #include <VX_config.h>
 #include <VX_types.h>
@@ -343,4 +343,4 @@ inline void vx_fence() {
 }
 #endif
 
-#endif
+#endif // __VX_INTRINSICS_H__

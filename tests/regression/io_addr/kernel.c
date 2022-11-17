@@ -12,7 +12,8 @@ void kernel_body(int task_id, kernel_arg_t* arg) {
 	dst_ptr[task_id] = *addr_ptr;
 }
 
-void main() {
+int main() {
 	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
 	vx_spawn_tasks(arg->num_points, (vx_spawn_tasks_cb)kernel_body, arg);
+	return 0;
 }

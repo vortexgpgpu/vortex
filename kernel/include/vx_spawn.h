@@ -1,5 +1,5 @@
-#ifndef VX_API_H
-#define VX_API_H
+#ifndef __VX_SPAWN_H__
+#define __VX_SPAWN_H__
 
 #include <stdint.h>
 #include <stdio.h>
@@ -40,4 +40,4 @@ void vx_serial(vx_serial_cb callback, void * arg);
 }
 #endif
 
-#endif
+#endif // __VX_SPAWN_H__

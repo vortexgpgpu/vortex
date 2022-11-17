@@ -29,8 +29,8 @@
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifndef _TINYPRINTF_H_
-#define _TINYPRINTF_H_
+#ifndef __TINYPRINTF_H__
+#define __TINYPRINTF_H__
 
 #include <stdarg.h>
 #include <stddef.h>
@@ -83,4 +83,4 @@ int tiny_vprintf(const char* format, va_list va);
 }
 #endif
 
-#endif  // _TINYPRINTF_H_
+#endif  // __TINYPRINTF_H__

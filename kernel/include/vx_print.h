@@ -1,5 +1,5 @@
-#ifndef VX_PRINT_H
-#define VX_PRINT_H
+#ifndef __VX_PRINT_H__
+#define __VX_PRINT_H__
 
 #include <stdarg.h>
 
@@ -18,4 +18,4 @@ void vx_putfloat(float value, int precision);
 }
 #endif
 
-#endif
+#endif // __VX_PRINT_H__

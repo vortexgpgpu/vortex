@@ -10,7 +10,8 @@ void kernel_body(int task_id, kernel_arg_t* arg) {
 	vx_printf("task=%d, value=%c\n", task_id, value);
 }
 
-void main() {
+int main() {
 	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
 	vx_spawn_tasks(arg->num_points, (vx_spawn_tasks_cb)kernel_body, arg);
+	return 0;
 }

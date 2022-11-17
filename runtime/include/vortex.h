@@ -1,5 +1,5 @@
-#ifndef __VX_DRIVER_H__
-#define __VX_DRIVER_H__
+#ifndef __VX_VORTEX_H__
+#define __VX_VORTEX_H__
 
 #include <stddef.h>
 #include <stdint.h>
@@ -104,4 +104,4 @@ int vx_buf_release(vx_buffer_h hbuffer);
 }
 #endif
 
-#endif // __VX_DRIVER_H__
+#endif // __VX_VORTEX_H__

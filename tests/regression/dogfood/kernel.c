@@ -328,7 +328,8 @@ static const PFN_Kernel sc_tests[] = {
 	kernel_utof,
 };
 
-void main() {
+int main() {
 	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
 	vx_spawn_tasks(arg->num_tasks, (vx_spawn_tasks_cb)sc_tests[arg->testid], arg);
+	return 0;
 }

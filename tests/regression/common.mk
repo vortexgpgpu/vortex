@@ -16,21 +16,23 @@ LLVM_PREFIX ?= /opt/llvm-riscv
 LLVM_CFLAGS += --sysroot=${RISCV_TOOLCHAIN_PATH}/riscv32-unknown-elf
 LLVM_CFLAGS += --gcc-toolchain=${RISCV_TOOLCHAIN_PATH}
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex
-LLVM_CFLAGS += -I$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/include/c++/9.2.0/riscv32-unknown-elf -I$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/include/c++/9.2.0
-LLVM_CFLAGS += --rtlib=libgcc
-LLVM_CFLAGS += -Wl,-L$(RISCV_TOOLCHAIN_PATH)/lib/gcc/riscv32-unknown-elf/9.2.0
+#LLVM_CFLAGS += -I$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/include/c++/9.2.0/riscv32-unknown-elf 
+#LLVM_CFLAGS += -I$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/include/c++/9.2.0
+#LLVM_CFLAGS += -Wl,-L$(RISCV_TOOLCHAIN_PATH)/lib/gcc/riscv32-unknown-elf/9.2.0
+#LLVM_CFLAGS += --rtlib=libgcc
 
-#VX_CC  = $(LLVM_PREFIX)/bin/clang $(LLVM_CFLAGS)
-#VX_CXX = $(LLVM_PREFIX)/bin/clang++ -std=c++17 $(LLVM_CFLAGS)
-#VX_DP  = $(LLVM_PREFIX)/bin/llvm-objdump
-#VX_CP  = $(LLVM_PREFIX)/bin/llvm-objcopy
+VX_CC  = $(LLVM_PREFIX)/bin/clang $(LLVM_CFLAGS)
+VX_CXX = $(LLVM_PREFIX)/bin/clang++ $(LLVM_CFLAGS)
+VX_DP  = $(LLVM_PREFIX)/bin/llvm-objdump
+VX_CP  = $(LLVM_PREFIX)/bin/llvm-objcopy
 
-VX_CC  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
-VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++
-VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
-VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
+#VX_CC  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
+#VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++
+#VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
+#VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
 
-VX_CFLAGS += -std=c++17 -v -march=rv32imf -mabi=ilp32f -O3 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
+VX_CFLAGS += -v -O3 -std=c++17 -march=rv32imf -mabi=ilp32f
+VX_CFLAGS += -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
 VX_CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw
 
 VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections $(VORTEX_KN_PATH)/libvortexrt.a
