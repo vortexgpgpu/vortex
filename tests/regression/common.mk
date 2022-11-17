@@ -23,7 +23,7 @@ LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex
 
 VX_CC  = $(LLVM_PREFIX)/bin/clang $(LLVM_CFLAGS)
 VX_CXX = $(LLVM_PREFIX)/bin/clang++ $(LLVM_CFLAGS)
-VX_DP  = $(LLVM_PREFIX)/bin/llvm-objdump
+VX_DP  = $(LLVM_PREFIX)/bin/llvm-objdump -mattr=+m,+f,+vortex
 VX_CP  = $(LLVM_PREFIX)/bin/llvm-objcopy
 
 #VX_CC  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
