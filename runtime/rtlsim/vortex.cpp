@@ -236,7 +236,7 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     }
 
 #ifdef DUMP_PERF_STATS
-    perf_add_device(*hdevice);
+    perf_add_device(device);
 #endif
 
     *hdevice = device;

@@ -77,7 +77,7 @@ clean:
 	rm -rf $(PROJECT) *.o .depend
 
 clean-all: clean
-	rm -rf *.elf *.bin *.dump
+	rm -rf *.elf *.bin *.dump *.pocl
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend

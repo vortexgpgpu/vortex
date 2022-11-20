@@ -3,28 +3,16 @@
 # exit when any command fails
 set -e
 
-# ensure build
-make -s
-
 # clear POCL cache
 rm -rf ~/.cache/pocl
 
-# rebuild runtime library
-make -C runtime clean
-make -C runtime
+# force rebuild test kernels
+make -C tests clean-all
 
-# rebuild kernel library
-make -C kernel clean
-make -C kernel
+# ensure build
+make -s
 
-# rebuild kernel tests
-make -C tests/kernel clean
-make -C tests/kernel
-
-# rebuild regression tests
-make -C tests/regression clean-all
-make -C tests/regression
-
-# rebuild opencl tests
-make -C tests/opencl clean-all
-make -C tests/opencl
+# run tests
+make -C tests/kernel run-simx
+make -C tests/regression run-simx
+make -C tests/opencl run-simx
