@@ -45,7 +45,7 @@ llvm()
 {
     case $OS in
     "centos/7") parts=$(eval echo {a..g}) ;;
-    *)          parts=$(eval echo {a..t}) ;;
+    *)          parts=$(eval echo {a..b}) ;;
     esac
     echo $parts
     rm -f llvm-riscv2.tar.bz2.parta*
