@@ -33,8 +33,8 @@ void kernel_1(int __DIVERGENT__ task_id, kernel_arg_t* arg) {
 					upgraphmask_ptr[local_count]=id; //add the neighbour to active list
 					local_count = local_count+1;
 					//vx_barrier(0, arg->NW);
+					//count[0] = count[0]+1;
 					//count[0] = local_count+1;
-					//local_count = local_count+1;
 					//cost_ptr[id] = local_count;
 					hover[0]=1;
 					graphvisited_ptr[id]=1;
