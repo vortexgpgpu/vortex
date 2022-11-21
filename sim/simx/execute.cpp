@@ -189,7 +189,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
         DPN(2, "}" << std::endl);
         break;
       case RegType::Vector: // arv: data decoded later
-        if (((opcode == VSET) && (func3 == 0x7)) || (((opcode == FL) || (opcode == FS)) && (func3 == 0x6)))
+        if (((opcode == VSET) && ((func3 == 0x7) || (func3 == 0x4))) || (((opcode == FL) || (opcode == FS)) && (func3 == 0x6)))
           rsdata[0][i].i = ireg_file_.at(0)[reg]; // vk: simd, only 1 thread, stores int src args used in vreg cfg instrs like vsetvli
         DPN(2, type);
         break;
@@ -1778,8 +1778,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
     case 0: // OPIVV vector-vector
       switch (func6)
       {
-      case 0:
-      { // arv: add
+      case 0: // arv: add
+      { 
         auto &vr1 = vreg_file_.at(rsrc0);
         auto &vr2 = vreg_file_.at(rsrc1);
         auto &vd = vreg_file_.at(rdest);
@@ -1804,12 +1804,12 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
         {
           for (uint32_t i = 0; i < vl_; i++)
           {
-            uint16_t emask = *(uint16_t *)(mask.data() + i);
+            uint16_t emask = *(uint16_t *)(mask.data() + i*2);
             uint16_t value = emask & 0x1;
             if (vmask || (!vmask && value))
             {
-              uint16_t first = *(uint16_t *)(vr1.data() + i);
-              uint16_t second = *(uint16_t *)(vr2.data() + i);
+              uint16_t first = *(uint16_t *)(vr1.data() + i*2);
+              uint16_t second = *(uint16_t *)(vr2.data() + i*2);
               uint16_t result = first + second;
               DP(3, "Adding " << first << " + " << second << " = " << result);
               *(uint16_t *)(vd.data() + i * 2) = result;
@@ -1820,7 +1820,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
         {
           for (uint32_t i = 0; i < vl_; i++)
           {
-            uint32_t emask = *(uint32_t *)(mask.data() + i);
+            uint32_t emask = *(uint32_t *)(mask.data() + i*4);
             uint32_t value = emask & 0x1;
             if (vmask || (!vmask && value))
             {
@@ -1829,6 +1829,62 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
               uint32_t result = first + second;
               DP(3, "Adding " << first << " + " << second << " = " << result);
               *(uint32_t *)(vd.data() + i * 4) = result;
+            }
+          }
+        }
+      }
+      break;
+      case 5: //arv: vmin
+      {
+        auto &vr1 = vreg_file_.at(rsrc0);
+        auto &vr2 = vreg_file_.at(rsrc1);
+        auto &vd = vreg_file_.at(rdest);
+        auto &mask = vreg_file_.at(0); // vk: v0 is mask reg
+        if (vtype_.vsew == 8)
+        {
+          for (uint32_t i = 0; i < vl_; i++)
+          {
+            uint8_t emask = *(uint8_t *)(mask.data() + i);
+            uint8_t value = emask & 0x1;
+            if (vmask || (!vmask && value)) // vk: vmask == 1 (unmasked), else take mask value from v0
+            { //arv: using signed int(int32_t instead of uint32_t) as vmin.vv is signed minimum
+              int8_t first = *(int8_t *)(vr1.data() + i); 
+              int8_t second = *(int8_t *)(vr2.data() + i);
+              int8_t result = (first < second) ? first : second;
+              DP(3, "VMIN of " << first << " , " << second << " = " << result);
+              *(int8_t *)(vd.data() + i) = result;
+            }
+          }
+        }
+        else if (vtype_.vsew == 16)
+        {
+          for (uint32_t i = 0; i < vl_; i++)
+          { 
+            uint16_t emask = *(uint16_t *)(mask.data() + i*2);
+            uint16_t value = emask & 0x1;
+            if (vmask || (!vmask && value))
+            { //arv: using signed int(int32_t instead of uint32_t) as vmin.vv is signed minimum
+              int16_t first = *(uint16_t *)(vr1.data() + i*2);
+              int16_t second = *(uint16_t *)(vr2.data() + i*2);
+              int16_t result = (first < second) ? first : second;
+              DP(3, "Adding " << first << " + " << second << " = " << result);
+              *(int16_t *)(vd.data() + i*2) = result;
+            }
+          }
+        }
+        else if (vtype_.vsew == 32)
+        {
+          for (uint32_t i = 0; i < vl_; i++)
+          {
+            uint32_t emask = *(uint32_t *)(mask.data() + i*4);
+            uint32_t value = emask & 0x1;
+            if (vmask || (!vmask && value))
+            { //arv: using signed int(int32_t instead of uint32_t) as vmin.vv is signed minimum
+              int32_t first = *(uint32_t *)(vr1.data() + i*4);
+              int32_t second = *(uint32_t *)(vr2.data() + i*4);
+              int32_t result = (first < second) ? first : second;
+              DP(3, "Adding " << first << " + " << second << " = " << result);
+              *(int32_t *)(vd.data() + i*4) = result;
             }
           }
         }
@@ -2665,8 +2721,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
         {
           for (uint32_t i = 0; i < vl_; i++)
           {
-            uint16_t first = *(uint16_t *)(vr1.data() + i);
-            uint16_t second = *(uint16_t *)(vr2.data() + i);
+            uint16_t first = *(uint16_t *)(vr1.data() + i*2);
+            uint16_t second = *(uint16_t *)(vr2.data() + i*2);
             uint16_t result = (first * second);
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint16_t *)(vd.data() + i * 2) = result;
@@ -2680,8 +2736,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
         {
           for (uint32_t i = 0; i < vl_; i++)
           {
-            uint32_t first = *(uint32_t *)(vr1.data() + i);
-            uint32_t second = *(uint32_t *)(vr2.data() + i);
+            uint32_t first = *(uint32_t *)(vr1.data() + i*4);
+            uint32_t second = *(uint32_t *)(vr2.data() + i*4);
             uint32_t result = (first * second);
             DP(3, "Comparing " << first << " + " << second << " = " << result);
             *(uint32_t *)(vd.data() + i * 4) = result;
@@ -2746,6 +2802,160 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
         }
       }
       break;
+      }
+    }
+    break;
+    case 4: //arv: OPIVX vector-scalar
+    {
+      switch(func6)
+      {
+        case 14: //0b001110 - vslide1up
+        {
+          auto &vr2 = vreg_file_.at(rsrc1);
+          auto &vd = vreg_file_.at(rdest);
+          auto &mask = vreg_file_.at(0); // vk: v0 is mask reg
+          if (vtype_.vsew == 8)
+          {
+            for (uint32_t i = 0; i < vl_; i++)
+            {
+              uint8_t emask = *(uint8_t *)(mask.data() + i);
+              uint8_t value = emask & 0x1;
+              if (vmask || (!vmask && value)) // vk: vmask == 1 (unmasked), else take mask value from v0
+              {
+                if (i != 0)
+                {
+                  uint8_t second = *(uint8_t *)(vr2.data() + i - 1);
+                  DP(3, "vslide1up : " << second);
+                  *(uint8_t *)(vd.data() + i) = second;
+                }
+                else
+                {
+                  uint8_t first = (uint8_t)(rsdata[0][0].i);
+                  *(uint8_t *)(vd.data() + i) = first;
+                }
+              }
+            }
+          }
+          else if (vtype_.vsew == 16)
+          {
+            for (uint32_t i = 0; i < vl_; i++)
+            {
+              uint16_t emask = *(uint16_t *)(mask.data() + i*2);
+              uint16_t value = emask & 0x1;
+              if (vmask || (!vmask && value)) // vk: vmask == 1 (unmasked), else take mask value from v0
+              {
+                if (i != 0)
+                {
+                  uint16_t second = *(uint16_t *)(vr2.data() + (i-1)*2);
+                  DP(3, "vslide1up : " << second);
+                  *(uint16_t *)(vd.data() + i*2) = second;
+                }
+                else
+                {
+                  uint16_t first = (uint16_t)(rsdata[0][0].i);
+                  *(uint16_t *)(vd.data() + i*2) = first;
+                }
+              }
+            }
+          }
+          else if (vtype_.vsew == 32)
+          {
+            for (uint32_t i = 0; i < vl_; i++)
+            {
+              uint32_t emask = *(uint32_t *)(mask.data() + i*4);
+              uint32_t value = emask & 0x1;
+              if (vmask || (!vmask && value)) // vk: vmask == 1 (unmasked), else take mask value from v0
+              {
+                if (i != 0)
+                {
+                  uint32_t second = *(uint32_t *)(vr2.data() + (i-1)*4);
+                  DP(3, "vslide1up : " << second);
+                  *(uint32_t *)(vd.data() + i*4) = second;
+                }
+                else
+                {
+                  uint32_t first = (uint32_t)(rsdata[0][0].i);
+                  *(uint32_t *)(vd.data() + i*4) = first;
+                }
+              }
+            }
+          }
+        }
+        break;
+        case 15: //0b001111 - vslide1down
+        {
+          auto &vr2 = vreg_file_.at(rsrc1);
+          auto &vd = vreg_file_.at(rdest);
+          auto &mask = vreg_file_.at(0); // vk: v0 is mask reg
+          if (vtype_.vsew == 8)
+          {
+            for (uint32_t i = 0; i < vl_; i++)
+            {
+              uint8_t emask = *(uint8_t *)(mask.data() + i);
+              uint8_t value = emask & 0x1;
+              if (vmask || (!vmask && value)) // vk: vmask == 1 (unmasked), else take mask value from v0
+              {
+                if (i != (vl_-1))
+                {
+                  uint8_t second = *(uint8_t *)(vr2.data() + i + 1);
+                  DP(3, "vslide1down : " << second);
+                  *(uint8_t *)(vd.data() + i) = second;
+                }
+                else
+                {
+                  uint8_t first = (uint8_t)(rsdata[0][0].i);
+                  *(uint8_t *)(vd.data() + i) = first;
+                }
+              }
+            }
+          }
+          else if (vtype_.vsew == 16)
+          {
+            for (uint32_t i = 0; i < vl_; i++)
+            {
+              uint16_t emask = *(uint16_t *)(mask.data() + i*2);
+              uint16_t value = emask & 0x1;
+              if (vmask || (!vmask && value)) // vk: vmask == 1 (unmasked), else take mask value from v0
+              {
+                if (i != (vl_-1))
+                {
+                  uint16_t second = *(uint16_t *)(vr2.data() + (i+1)*2);
+                  DP(3, "vslide1down : " << second);
+                  *(uint16_t *)(vd.data() + i*2) = second;
+                }
+                else
+                {
+                  uint16_t first = (uint16_t)(rsdata[0][0].i);
+                  *(uint16_t *)(vd.data() + i*2) = first;
+                }
+              }
+            }
+          }
+          else if (vtype_.vsew == 32)
+          {
+            for (uint32_t i = 0; i < vl_; i++)
+            {
+              uint32_t emask = *(uint32_t *)(mask.data() + i*4);
+              uint32_t value = emask & 0x1;
+              if (vmask || (!vmask && value)) // vk: vmask == 1 (unmasked), else take mask value from v0
+              {
+                if (i != (vl_-1))
+                {
+                  uint32_t second = *(uint32_t *)(vr2.data() + (i+1)*4);
+                  DP(3, "vslide1down : " << second);
+                  *(uint32_t *)(vd.data() + i*4) = second;
+                }
+                else
+                {
+                  uint32_t first = (uint32_t)(rsdata[0][0].i);
+                  *(uint32_t *)(vd.data() + i*4) = first;
+                }
+              }
+            }
+          }
+        }
+        break;
+        default: std::abort();
       }
     }
     break;
