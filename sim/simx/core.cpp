@@ -466,6 +466,10 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
     return (fcsrs_.at(wid) >> 5);
   case CSR_FCSR:
     return fcsrs_.at(wid);
+  case CSR_VL:                //arv - vector length register(new vector extension reg)
+    return csrs_.at(CSR_VL);
+  case CSR_VLENB:             //arv - VLEN in bytes(VLEN/8)(new vector extension reg)
+    return arch_.vsize();
   case CSR_WTID:
     // Warp threadID
     return tid;

@@ -2879,6 +2879,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
       {
         vl_ = VLMAX;
       }
+      core_->set_csr(CSR_VLENB, vl_, 0, id_); //arv: thread_id is 0 for SIMD(only one thread) 
       rddata[0].i = vl_;
       rd_write = true;
     }

@@ -222,6 +222,10 @@
 `define CSR_MIMPID      12'hF13
 `define CSR_MHARTID     12'hF14
 
+// Vector Extension CSRs
+`define CSR_VL          12'hC20
+`define CSR_VLENB       12'hC22
+
 // User SIMT CSRs
 `define CSR_WTID        12'hCC0
 `define CSR_LTID        12'hCC1

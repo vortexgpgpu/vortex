@@ -5,9 +5,5 @@
 *.depend
 *.so
 *.log
-hw/VX_config.h
-runtime/libvortexrt.a
-sim/rtlsim/rtlsim
-sim/simx/simx
+*.temp
 sim/vlsim/vortex_afu.h
-third_party/*/**
