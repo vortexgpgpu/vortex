@@ -31,20 +31,20 @@ void kernel_1(int __DIVERGENT__ task_id, kernel_arg_t* arg) {
 				 if(!graphvisited_ptr[id]){
 				        cost_ptr[id] = cost_ptr[index]+1; //add the cost
 					upgraphmask_ptr[local_count]=id; //add the neighbour to active list
-					//local_count = local_count+1;
-					 vx_barrier(0, arg->NW);
-					count[0] = local_count+1;
 					local_count = local_count+1;
+					//vx_barrier(0, arg->NW);
+					//count[0] = local_count+1;
+					//local_count = local_count+1;
 					//cost_ptr[id] = local_count;
-					//hover[0]=1;
+					hover[0]=1;
 					graphvisited_ptr[id]=1;
 			          }
 		         }
 	        }
 
-//count[0] = (int)local_count;
-//count1[0] = (int)local_count;
-cost_ptr[0] = count[0];
+count[0] = (int)local_count;
+count1[0] = (int)local_count;
+//cost_ptr[0] = count[0];
 }
 
 static const PFN_Kernel sc_tests[] = {
