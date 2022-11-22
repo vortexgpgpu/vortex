@@ -15,8 +15,8 @@ module testbench();
   wire empty;
 
   VX_fifo_queue #(
-    .DATAW(4), 
-    .SIZE(4)
+    .DATAW (4), 
+    .DEPTH (4)
   ) dut (
     .clk(clk), 
     .reset(reset), 

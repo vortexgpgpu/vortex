@@ -1337,6 +1337,10 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 2: {
         // SPLIT    
+        if (ipdom_stack_.size() > arch_.ipdom_size()) {
+          std::cout << "IPDOM stack is full! (size=" << ipdom_stack_.size() << "\n";
+          std::abort();
+        }
         trace->exe_type = ExeType::GPU;
         trace->gpu_type = GpuType::SPLIT;
         trace->used_iregs.set(rsrc0);
@@ -1348,8 +1352,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           }
 
           DomStackEntry e(tmask, nextPC);
-          dom_stack_.push(tmask_);
-          dom_stack_.push(e);
+          ipdom_stack_.push(tmask_);
+          ipdom_stack_.push(e);
           for (uint32_t t = 0, n = e.tmask.size(); t < n; ++t) {
             tmask_.set(t, !e.tmask.test(t) && tmask_.test(t));
           }
@@ -1364,33 +1368,37 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           DP(3, "*** Unanimous pred");
           DomStackEntry e(tmask_);
           e.unanimous = true;
-          dom_stack_.push(e);
+          ipdom_stack_.push(e);
         }        
       } break;
       case 3: {
         // JOIN
+        if (ipdom_stack_.empty()) {
+          std::cout << "IPDOM stack is empty!\n";
+          std::abort();
+        }
         trace->exe_type = ExeType::GPU;
         trace->gpu_type = GpuType::JOIN;        
         trace->fetch_stall = true;        
-        if (!dom_stack_.empty() && dom_stack_.top().unanimous) {
-          DP(3, "*** Uninimous branch at join");
-          tmask_ = dom_stack_.top().tmask;
+        if (!ipdom_stack_.empty() && ipdom_stack_.top().unanimous) {
+          DP(3, "*** Unanimous branch at join");
+          tmask_ = ipdom_stack_.top().tmask;
           active_ = tmask_.any();
-          dom_stack_.pop();
+          ipdom_stack_.pop();
         } else {
-          if (!dom_stack_.top().fallThrough) {
-            nextPC = dom_stack_.top().PC;
+          if (!ipdom_stack_.top().fallThrough) {
+            nextPC = ipdom_stack_.top().PC;
             DP(3, "*** Join: next PC: " << std::hex << nextPC << std::dec);
           }
 
-          tmask_ = dom_stack_.top().tmask;
+          tmask_ = ipdom_stack_.top().tmask;
           active_ = tmask_.any();
 
           DPH(3, "*** Join: New TM=");
           for (uint32_t t = 0; t < num_threads; ++t) DPN(3, tmask_.test(num_threads-t-1));
           DPN(3, "\n");
 
-          dom_stack_.pop();
+          ipdom_stack_.pop();
         }        
       } break;
       case 4: {

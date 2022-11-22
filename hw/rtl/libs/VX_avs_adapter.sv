@@ -79,7 +79,7 @@ module VX_avs_adapter #(
         
         VX_fifo_queue #(
             .DATAW (REQ_TAG_WIDTH),
-            .SIZE  (RD_QUEUE_SIZE)
+            .DEPTH (RD_QUEUE_SIZE)
         ) rd_req_queue (
             .clk      (clk),
             .reset    (reset),
@@ -150,7 +150,7 @@ module VX_avs_adapter #(
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         VX_fifo_queue #(
             .DATAW (DATA_WIDTH),
-            .SIZE  (RD_QUEUE_SIZE)
+            .DEPTH (RD_QUEUE_SIZE)
         ) rd_rsp_queue (
             .clk      (clk),
             .reset    (reset),

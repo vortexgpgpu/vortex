@@ -733,7 +733,7 @@ end
 
 VX_fifo_queue #(
   .DATAW   (CCI_RD_QUEUE_DATAW),
-  .SIZE    (CCI_RD_QUEUE_SIZE),
+  .DEPTH  (CCI_RD_QUEUE_SIZE),
   .OUT_REG (1)
 ) cci_rd_req_queue (
   .clk      (clk),
@@ -943,7 +943,7 @@ wire cout_q_pop = cp2af_sRxPort.c0.mmioRdValid
 
 VX_fifo_queue #(
   .DATAW (COUT_QUEUE_DATAW),
-  .SIZE  (COUT_QUEUE_SIZE)
+  .DEPTH (COUT_QUEUE_SIZE)
 ) cout_queue (
   .clk      (clk),
   .reset    (reset),

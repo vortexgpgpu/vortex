@@ -192,7 +192,7 @@ module VX_raster_be #(
 
     VX_fifo_queue #(
         .DATAW (FIFO_DATA_WIDTH),
-        .SIZE  (QUAD_FIFO_DEPTH)
+        .DEPTH (QUAD_FIFO_DEPTH)
     ) fifo_queue (
         .clk        (clk),
         .reset      (reset),

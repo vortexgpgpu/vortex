@@ -19,6 +19,7 @@ private:
   uint16_t num_regs_;
   uint16_t num_csrs_;
   uint16_t num_barriers_;
+  uint16_t ipdom_size_;
   
 public:
   Arch(uint16_t num_cores, 
@@ -32,6 +33,7 @@ public:
     , num_regs_(32)
     , num_csrs_(4096)
     , num_barriers_(NUM_BARRIERS)
+    , ipdom_size_(1 << (log2ceil(num_threads) + 1))
   {}
 
   uint16_t wsize() const { 
@@ -52,6 +54,10 @@ public:
 
   uint16_t num_barriers() const {
     return num_barriers_;
+  }
+
+  uint16_t ipdom_size() const {
+    return ipdom_size_;
   }
 
   uint16_t num_threads() const {

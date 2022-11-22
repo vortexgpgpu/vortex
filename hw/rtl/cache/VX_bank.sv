@@ -479,7 +479,7 @@ module VX_bank #(
 
     VX_fifo_queue #(
         .DATAW    (1 + `LINE_ADDR_WIDTH + MSHR_ADDR_WIDTH + NUM_PORTS * (1 + WORD_SIZE + WORD_SEL_WIDTH + `WORD_WIDTH)), 
-        .SIZE     (MREQ_SIZE),
+        .DEPTH    (MREQ_SIZE),
         .ALM_FULL (MREQ_SIZE-2),
         .OUT_REG  (MEM_OUT_REG)
     ) mem_req_queue (

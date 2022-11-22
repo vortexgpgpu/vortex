@@ -3,12 +3,12 @@
 `TRACING_OFF
 module VX_fifo_queue #(
     parameter DATAW     = 1,
-    parameter SIZE      = 2,
-    parameter ALM_FULL  = (SIZE - 1),
+    parameter DEPTH     = 2,
+    parameter ALM_FULL  = (DEPTH - 1),
     parameter ALM_EMPTY = 1,
     parameter OUT_REG   = 0,
     parameter LUTRAM    = 1,
-    parameter SIZEW     = $clog2(SIZE+1)
+    parameter SIZEW     = $clog2(DEPTH+1)
 ) ( 
     input  wire             clk,
     input  wire             reset,    
@@ -23,15 +23,15 @@ module VX_fifo_queue #(
     output wire [SIZEW-1:0] size
 ); 
     
-    localparam ADDRW = $clog2(SIZE);    
+    localparam ADDRW = $clog2(DEPTH);    
 
     `STATIC_ASSERT(ALM_FULL > 0, ("alm_full must be greater than 0!"))
-    `STATIC_ASSERT(ALM_FULL < SIZE, ("alm_full must be smaller than size!"))
+    `STATIC_ASSERT(ALM_FULL < DEPTH, ("alm_full must be smaller than size!"))
     `STATIC_ASSERT(ALM_EMPTY > 0, ("alm_empty must be greater than 0!"))
-    `STATIC_ASSERT(ALM_EMPTY < SIZE, ("alm_empty must be smaller than size!"))
-    `STATIC_ASSERT(`ISPOW2(SIZE), ("size must be a power of 2!"))
+    `STATIC_ASSERT(ALM_EMPTY < DEPTH, ("alm_empty must be smaller than size!"))
+    `STATIC_ASSERT(`ISPOW2(DEPTH), ("size must be a power of 2!"))
     
-    if (SIZE == 1) begin
+    if (DEPTH == 1) begin
 
         reg [DATAW-1:0] head_r;
         reg size_r;
@@ -41,8 +41,8 @@ module VX_fifo_queue #(
                 head_r <= '0;
                 size_r <= '0;                    
             end else begin
-                `ASSERT(~push || ~full, ("runtime error: incrementing full queue"));
-                `ASSERT(~pop || ~empty, ("runtime error: decrementing full queue"));
+                `ASSERT(~push || ~full, ("runtime error: writing to a full queue"));
+                `ASSERT(~pop || ~empty, ("runtime error: reading an empty queue"));
                 if (push) begin
                     if (~pop) begin
                         size_r <= 1;
@@ -85,7 +85,7 @@ module VX_fifo_queue #(
                         empty_r <= 0;
                         if (used_r == ADDRW'(ALM_EMPTY))
                             alm_empty_r <= 0;
-                        if (used_r == ADDRW'(SIZE-1))
+                        if (used_r == ADDRW'(DEPTH-1))
                             full_r <= 1;
                         if (used_r == ADDRW'(ALM_FULL-1))
                             alm_full_r <= 1;
@@ -103,7 +103,7 @@ module VX_fifo_queue #(
             end                   
         end
 
-        if (SIZE == 2) begin
+        if (DEPTH == 2) begin
 
             assign used_n = used_r ^ (push ^ pop);
 
@@ -161,7 +161,7 @@ module VX_fifo_queue #(
 
                 VX_dp_ram #(
                     .DATAW   (DATAW),
-                    .SIZE    (SIZE),
+                    .SIZE    (DEPTH),
                     .OUT_REG (0),
                     .LUTRAM  (LUTRAM)
                 ) dp_ram (
@@ -192,9 +192,9 @@ module VX_fifo_queue #(
                         end
                         if (pop) begin
                             rd_ptr_r <= rd_ptr_n_r;                       
-                            if (SIZE > 2) begin    
+                            if (DEPTH > 2) begin    
                                 rd_ptr_n_r <= rd_ptr_r + ADDRW'(2);
-                            end else begin // (SIZE == 2);
+                            end else begin // (DEPTH == 2);
                                 rd_ptr_n_r <= ~rd_ptr_n_r;                            
                             end
                         end
@@ -203,7 +203,7 @@ module VX_fifo_queue #(
 
                 VX_dp_ram #(
                     .DATAW   (DATAW),
-                    .SIZE    (SIZE),
+                    .SIZE    (DEPTH),
                     .OUT_REG (0),
                     .LUTRAM  (LUTRAM)
                 ) dp_ram (

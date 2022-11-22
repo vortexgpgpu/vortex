@@ -54,7 +54,7 @@ module VX_elastic_buffer #(
 
         VX_fifo_queue #(
             .DATAW   (DATAW),
-            .SIZE    (SIZE),
+            .DEPTH   (SIZE),
             .OUT_REG (OUT_REG),
             .LUTRAM  (LUTRAM)
         ) queue (

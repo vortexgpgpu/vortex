@@ -135,7 +135,7 @@ module VX_mem_scheduler #(
 
     VX_fifo_queue #(
         .DATAW   (1 + NUM_REQS * (1 + BYTEENW + ADDR_WIDTH + DATA_WIDTH) + MEM_TAG_WIDTH + QUEUE_ADDRW),
-        .SIZE	 (QUEUE_SIZE),
+        .DEPTH	 (QUEUE_SIZE),
         .OUT_REG (1)
     ) req_queue (
         .clk        (clk),

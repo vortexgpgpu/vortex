@@ -161,7 +161,7 @@ module VX_raster_te #(
 
         VX_fifo_queue #(
             .DATAW	 (FIFO_DATA_WIDTH),
-            .SIZE    (TILE_FIFO_DEPTH),
+            .DEPTH   (TILE_FIFO_DEPTH),
             .OUT_REG (1)
         ) fifo_queue (
             .clk        (clk),
