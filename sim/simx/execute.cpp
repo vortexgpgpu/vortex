@@ -1337,8 +1337,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } break;
       case 2: {
         // SPLIT    
-        if (ipdom_stack_.size() > arch_.ipdom_size()) {
-          std::cout << "IPDOM stack is full! (size=" << ipdom_stack_.size() << "\n";
+        if (ipdom_stack_.size() == arch_.ipdom_size()) {
+          std::cout << "IPDOM stack is full! (size=" << ipdom_stack_.size() << ")\n" << std::flush;
           std::abort();
         }
         trace->exe_type = ExeType::GPU;
@@ -1374,7 +1374,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       case 3: {
         // JOIN
         if (ipdom_stack_.empty()) {
-          std::cout << "IPDOM stack is empty!\n";
+          std::cout << "IPDOM stack is empty!\n" << std::flush;
           std::abort();
         }
         trace->exe_type = ExeType::GPU;
