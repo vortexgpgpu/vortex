@@ -1,27 +1,27 @@
 `include "VX_fpu_define.vh"
 
-module VX_fp_fma #( 
+module VX_fp_fma #(
     parameter TAGW = 1,
     parameter LANES = 1
 ) (
     input wire clk,
-    input wire reset,   
+    input wire reset,
 
     output wire ready_in,
     input wire  valid_in,
 
     input wire [TAGW-1:0] tag_in,
-    
+
     input wire [`INST_FRM_BITS-1:0] frm,
 
     input wire  do_madd,
     input wire  do_sub,
     input wire  do_neg,
 
-    input wire [LANES-1:0][31:0]  dataa,
-    input wire [LANES-1:0][31:0]  datab,
-    input wire [LANES-1:0][31:0]  datac,
-    output wire [LANES-1:0][31:0] result,  
+    input wire [LANES-1:0][`ADDR_WIDTH - 1:0]  dataa,
+    input wire [LANES-1:0][`ADDR_WIDTH - 1:0]  datab,
+    input wire [LANES-1:0][`ADDR_WIDTH - 1:0]  datac,
+    output wire [LANES-1:0][`ADDR_WIDTH - 1:0] result,
 
     output wire has_fflags,
     output fflags_t [LANES-1:0] fflags,
@@ -35,15 +35,15 @@ module VX_fp_fma #(
     wire stall = ~ready_out && valid_out;
     wire enable = ~stall;
 
-    for (genvar i = 0; i < LANES; i++) begin       
-        reg [31:0] a, b, c;
+    for (genvar i = 0; i < LANES; i++) begin
+        reg [`ADDR_WIDTH - 1:0] a, b, c;
 
         always @(*) begin
             if (do_madd) begin
                 // MADD/MSUB/NMADD/NMSUB
-                a = do_neg ? {~dataa[i][31], dataa[i][30:0]} : dataa[i];                    
+                a = do_neg ? {~dataa[i][`ADDR_WIDTH - 1], dataa[i][30:0]} : dataa[i];
                 b = datab[i];
-                c = (do_neg ^ do_sub) ? {~datac[i][31], datac[i][30:0]} : datac[i];
+                c = (do_neg ^ do_sub) ? {~datac[i][`ADDR_WIDTH - 1], datac[i][30:0]} : datac[i];
             end else begin
                 if (do_neg) begin
                     // MUL
@@ -54,22 +54,22 @@ module VX_fp_fma #(
                     // ADD/SUB
                     a = 32'h3f800000; // 1.0f
                     b = dataa[i];
-                    c = do_sub ? {~datab[i][31], datab[i][30:0]} : datab[i];
+                    c = do_sub ? {~datab[i][`ADDR_WIDTH - 1], datab[i][30:0]} : datab[i];
                 end
-            end    
+            end
         end
 
     `ifdef VERILATOR
-        reg [31:0] r;
+        reg [`ADDR_WIDTH - 1:0] r;
         fflags_t f;
 
-        always @(*) begin        
+        always @(*) begin
             dpi_fmadd (enable && valid_in, a, b, c, frm, r, f);
         end
         `UNUSED_VAR (f)
 
         VX_shift_register #(
-            .DATAW  (32),
+            .DATAW  (`ADDR_WIDTH),
             .DEPTH  (`LATENCY_FMA),
             .RESETW (1)
         ) shift_req_dpi (
@@ -93,7 +93,7 @@ module VX_fp_fma #(
         );
     `endif
     end
-    
+
     VX_shift_register #(
         .DATAW  (1 + TAGW),
         .DEPTH  (`LATENCY_FMA),

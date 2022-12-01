@@ -3,7 +3,7 @@
 `include "defs_div_sqrt_mvp.sv"
 
 `TRACING_OFF
-module VX_fpu_fpnew #(      
+module VX_fpu_fpnew #(
     parameter TAGW     = 1,
     parameter FMULADD  = 1,
     parameter FDIVSQRT = 1,
@@ -17,14 +17,14 @@ module VX_fpu_fpnew #(
     output wire ready_in,
 
     input wire [TAGW-1:0] tag_in,
-    
+
     input wire [`INST_FPU_BITS-1:0] op_type,
     input wire [`INST_MOD_BITS-1:0] frm,
 
-    input wire [`NUM_THREADS-1:0][31:0]  dataa,
-    input wire [`NUM_THREADS-1:0][31:0]  datab,
-    input wire [`NUM_THREADS-1:0][31:0]  datac,
-    output wire [`NUM_THREADS-1:0][31:0] result, 
+    input wire [`NUM_THREADS-1:0][`ADDR_WIDTH - 1:0]  dataa,
+    input wire [`NUM_THREADS-1:0][`ADDR_WIDTH - 1:0]  datab,
+    input wire [`NUM_THREADS-1:0][`ADDR_WIDTH - 1:0]  datac,
+    output wire [`NUM_THREADS-1:0][`ADDR_WIDTH - 1:0] result,
 
     output wire has_fflags,
     output fflags_t [`NUM_THREADS-1:0] fflags,
@@ -33,7 +33,7 @@ module VX_fpu_fpnew #(
 
     input wire  ready_out,
     output wire valid_out
-);  
+);
     localparam UNIT_FMULADD  = FMULADD  ? fpnew_pkg::PARALLEL : fpnew_pkg::DISABLED;
     localparam UNIT_FDIVSQRT = FDIVSQRT ? fpnew_pkg::MERGED   : fpnew_pkg::DISABLED;
     localparam UNIT_FNONCOMP = FNONCOMP ? fpnew_pkg::PARALLEL : fpnew_pkg::DISABLED;
@@ -64,19 +64,19 @@ module VX_fpu_fpnew #(
                   '{default: UNIT_FCONV}},      // CONV
       PipeConfig: fpnew_pkg::DISTRIBUTED
     };
-    
-    wire fpu_ready_in, fpu_valid_in;    
+
+    wire fpu_ready_in, fpu_valid_in;
     wire fpu_ready_out, fpu_valid_out;
 
     reg [TAGW-1:0] fpu_tag_in, fpu_tag_out;
-    
-    reg [2:0][`NUM_THREADS-1:0][31:0] fpu_operands;   
-    
+
+    reg [2:0][`NUM_THREADS-1:0][`ADDR_WIDTH - 1:0] fpu_operands;
+
     wire [FMTF_BITS-1:0] fpu_src_fmt = fpnew_pkg::FP32;
     wire [FMTF_BITS-1:0] fpu_dst_fmt = fpnew_pkg::FP32;
     wire [FMTI_BITS-1:0] fpu_int_fmt = fpnew_pkg::INT32;
 
-    wire [`NUM_THREADS-1:0][31:0] fpu_result;
+    wire [`NUM_THREADS-1:0][`ADDR_WIDTH - 1:0] fpu_result;
     fpnew_pkg::status_t [`NUM_THREADS-1:0] fpu_status;
 
     reg [FOP_BITS-1:0] fpu_op;
@@ -86,8 +86,8 @@ module VX_fpu_fpnew #(
 
     always @(*) begin
         fpu_op          = fpnew_pkg::SGNJ;
-        fpu_rnd         = frm;  
-        fpu_op_mod      = 0;        
+        fpu_rnd         = frm;
+        fpu_op_mod      = 0;
         fpu_has_fflags  = 1;
         fpu_operands[0] = dataa;
         fpu_operands[1] = datab;
@@ -99,17 +99,17 @@ module VX_fpu_fpnew #(
                     fpu_operands[1] = dataa;
                     fpu_operands[2] = datab;
                 end
-            `INST_FPU_SUB: begin 
-                    fpu_op = fpnew_pkg::ADD; 
+            `INST_FPU_SUB: begin
+                    fpu_op = fpnew_pkg::ADD;
                     fpu_operands[1] = dataa;
                     fpu_operands[2] = datab;
-                    fpu_op_mod = 1; 
+                    fpu_op_mod = 1;
                 end
             `INST_FPU_MUL:   begin fpu_op = fpnew_pkg::MUL; end
             `INST_FPU_DIV:   begin fpu_op = fpnew_pkg::DIV; end
             `INST_FPU_SQRT:  begin fpu_op = fpnew_pkg::SQRT; end
             `INST_FPU_MADD:  begin fpu_op = fpnew_pkg::FMADD; end
-            `INST_FPU_MSUB:  begin fpu_op = fpnew_pkg::FMADD;  fpu_op_mod = 1; end            
+            `INST_FPU_MSUB:  begin fpu_op = fpnew_pkg::FMADD;  fpu_op_mod = 1; end
             `INST_FPU_NMADD: begin fpu_op = fpnew_pkg::FNMSUB; fpu_op_mod = 1; end
             `INST_FPU_NMSUB: begin fpu_op = fpnew_pkg::FNMSUB; end
             `INST_FPU_CVTWS: begin fpu_op = fpnew_pkg::F2I; end
@@ -124,17 +124,17 @@ module VX_fpu_fpnew #(
                       1: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `INST_FRM_RTZ; fpu_has_fflags = 0; end
                       2: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `INST_FRM_RDN; fpu_has_fflags = 0; end
                       3: begin fpu_op = fpnew_pkg::MINMAX; fpu_rnd = `INST_FRM_RNE; end
-                      4: begin fpu_op = fpnew_pkg::MINMAX; fpu_rnd = `INST_FRM_RTZ; end    
+                      4: begin fpu_op = fpnew_pkg::MINMAX; fpu_rnd = `INST_FRM_RTZ; end
                 default: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `INST_FRM_RUP; fpu_has_fflags = 0; end
-                endcase    
+                endcase
             end
             default:;
         endcase
-    end  
-    
+    end
+
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         if (0 == i) begin
-            fpnew_top #( 
+            fpnew_top #(
                 .Features       (FPU_FEATURES),
                 .Implementation (FPU_IMPLEMENTATION),
                 .TagType        (logic[TAGW+1+1-1:0])
@@ -161,7 +161,7 @@ module VX_fpu_fpnew #(
                 `UNUSED_PIN (busy_o)
             );
         end else begin
-            fpnew_top #( 
+            fpnew_top #(
                 .Features       (FPU_FEATURES),
                 .Implementation (FPU_IMPLEMENTATION),
                 .TagType        (logic)
@@ -193,16 +193,16 @@ module VX_fpu_fpnew #(
     assign fpu_valid_in = valid_in;
     assign ready_in = fpu_ready_in;
 
-    assign fpu_tag_in = tag_in;    
+    assign fpu_tag_in = tag_in;
     assign tag_out = fpu_tag_out;
 
     assign result = fpu_result;
-    
-    assign has_fflags = fpu_has_fflags_out;   
+
+    assign has_fflags = fpu_has_fflags_out;
     assign fflags = fpu_status;
 
-    assign valid_out = fpu_valid_out;    
+    assign valid_out = fpu_valid_out;
     assign fpu_ready_out = ready_out;
 
-endmodule 
+endmodule
 `TRACING_ON

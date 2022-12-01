@@ -15,7 +15,7 @@ module VX_dispatch (
 `ifdef EXT_F_ENABLE
     VX_fpu_req_if.master    fpu_req_if,
 `endif
-    VX_gpu_req_if.master    gpu_req_if    
+    VX_gpu_req_if.master    gpu_req_if
 );
     wire [`NT_BITS-1:0] tid;
     wire alu_req_ready;
@@ -34,15 +34,15 @@ module VX_dispatch (
         `UNUSED_PIN (valid_o)
     );
 
-    wire [31:0] next_PC = ibuffer_if.PC + 4;
+    wire [`ADDR_WIDTH - 1:0] next_PC = ibuffer_if.PC + 4;
 
     // ALU unit
 
     wire alu_req_valid = ibuffer_if.valid && (ibuffer_if.ex_type == `EX_ALU);
     wire [`INST_ALU_BITS-1:0] alu_op_type = `INST_ALU_BITS'(ibuffer_if.op_type);
-    
+
     VX_skid_buffer #(
-        .DATAW   (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + 32 + `INST_ALU_BITS + `INST_MOD_BITS + 32 + 1 + 1 + `NR_BITS + 1 + `NT_BITS + (2 * `NUM_THREADS * 32)),
+        .DATAW   (`UUID_BITS + `NW_BITS + `NUM_THREADS + `ADDR_WIDTH + `ADDR_WIDTH + `INST_ALU_BITS + `INST_MOD_BITS + `ADDR_WIDTH + 1 + 1 + `NR_BITS + 1 + `NT_BITS + (2 * `NUM_THREADS * `ADDR_WIDTH)),
         .OUT_REG (1)
     ) alu_buffer (
         .clk       (clk),
@@ -63,7 +63,7 @@ module VX_dispatch (
     wire lsu_is_prefetch = `INST_LSU_IS_PREFETCH(ibuffer_if.op_mod);
 
     VX_skid_buffer #(
-        .DATAW   (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `INST_LSU_BITS + 1 + 32 + `NR_BITS + 1 + (2 * `NUM_THREADS * 32) + 1),
+        .DATAW   (`UUID_BITS + `NW_BITS + `NUM_THREADS + `ADDR_WIDTH + `INST_LSU_BITS + 1 + `ADDR_WIDTH + `NR_BITS + 1 + (2 * `NUM_THREADS * `ADDR_WIDTH) + 1),
         .OUT_REG (1)
     ) lsu_buffer (
         .clk       (clk),
@@ -82,10 +82,10 @@ module VX_dispatch (
     wire [`INST_CSR_BITS-1:0] csr_op_type = `INST_CSR_BITS'(ibuffer_if.op_type);
     wire [`CSR_ADDR_BITS-1:0] csr_addr = ibuffer_if.imm[`CSR_ADDR_BITS-1:0];
     wire [`NRI_BITS-1:0] csr_imm = ibuffer_if.imm[`CSR_ADDR_BITS +: `NRI_BITS];
-    wire [31:0] csr_rs1_data = gpr_rsp_if.rs1_data[tid];
+    wire [`ADDR_WIDTH - 1:0] csr_rs1_data = gpr_rsp_if.rs1_data[tid];
 
     VX_skid_buffer #(
-        .DATAW   (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `INST_CSR_BITS + `CSR_ADDR_BITS + `NR_BITS + 1 + 1 + `NRI_BITS + 32),
+        .DATAW   (`UUID_BITS + `NW_BITS + `NUM_THREADS + `ADDR_WIDTH + `INST_CSR_BITS + `CSR_ADDR_BITS + `NR_BITS + 1 + 1 + `NRI_BITS + `ADDR_WIDTH),
         .OUT_REG (1)
     ) csr_buffer (
         .clk       (clk),
@@ -103,9 +103,9 @@ module VX_dispatch (
 `ifdef EXT_F_ENABLE
     wire fpu_req_valid = ibuffer_if.valid && (ibuffer_if.ex_type == `EX_FPU);
     wire [`INST_FPU_BITS-1:0] fpu_op_type = `INST_FPU_BITS'(ibuffer_if.op_type);
-        
+
     VX_skid_buffer #(
-        .DATAW   (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `INST_FPU_BITS + `INST_MOD_BITS + `NR_BITS + 1 + (3 * `NUM_THREADS * 32)),
+        .DATAW   (`UUID_BITS + `NW_BITS + `NUM_THREADS + `ADDR_WIDTH + `INST_FPU_BITS + `INST_MOD_BITS + `NR_BITS + 1 + (3 * `NUM_THREADS * `ADDR_WIDTH)),
         .OUT_REG (1)
     ) fpu_buffer (
         .clk       (clk),
@@ -127,7 +127,7 @@ module VX_dispatch (
     wire [`INST_GPU_BITS-1:0] gpu_op_type = `INST_GPU_BITS'(ibuffer_if.op_type);
 
     VX_skid_buffer #(
-        .DATAW   (`UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + 32 + `INST_GPU_BITS + `INST_MOD_BITS + `NR_BITS + 1 + `NT_BITS  + (3 * `NUM_THREADS * 32)),
+        .DATAW   (`UUID_BITS + `NW_BITS + `NUM_THREADS + `ADDR_WIDTH + `ADDR_WIDTH + `INST_GPU_BITS + `INST_MOD_BITS + `NR_BITS + 1 + `NT_BITS  + (3 * `NUM_THREADS * `ADDR_WIDTH)),
         .OUT_REG (1)
     ) gpu_buffer (
         .clk       (clk),
@@ -138,12 +138,12 @@ module VX_dispatch (
         .data_out  ({gpu_req_if.uuid, gpu_req_if.wid, gpu_req_if.tmask, gpu_req_if.PC, gpu_req_if.next_PC, gpu_req_if.op_type, gpu_req_if.op_mod, gpu_req_if.rd, gpu_req_if.wb, gpu_req_if.tid, gpu_req_if.rs1_data, gpu_req_if.rs2_data, gpu_req_if.rs3_data}),
         .valid_out (gpu_req_if.valid),
         .ready_out (gpu_req_if.ready)
-    ); 
+    );
 
     // can take next request?
     reg ready_r;
     always @(*) begin
-        case (ibuffer_if.ex_type) 
+        case (ibuffer_if.ex_type)
         `EX_ALU: ready_r = alu_req_ready;
         `EX_LSU: ready_r = lsu_req_ready;
         `EX_CSR: ready_r = csr_req_ready;
@@ -155,5 +155,5 @@ module VX_dispatch (
         endcase
     end
     assign ibuffer_if.ready = ready_r;
-    
+
 endmodule

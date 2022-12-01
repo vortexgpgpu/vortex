@@ -1,11 +1,11 @@
 `include "VX_fpu_define.vh"
 
-module VX_fp_div #( 
+module VX_fp_div #(
     parameter TAGW = 1,
     parameter LANES = 1
 ) (
     input wire clk,
-    input wire reset,   
+    input wire reset,
 
     output wire ready_in,
     input wire  valid_in,
@@ -13,10 +13,10 @@ module VX_fp_div #(
     input wire [TAGW-1:0] tag_in,
 
     input wire [`INST_FRM_BITS-1:0] frm,
-    
-    input wire [LANES-1:0][31:0]  dataa,
-    input wire [LANES-1:0][31:0]  datab,
-    output wire [LANES-1:0][31:0] result,  
+
+    input wire [LANES-1:0][`ADDR_WIDTH - 1:0]  dataa,
+    input wire [LANES-1:0][`ADDR_WIDTH - 1:0]  datab,
+    output wire [LANES-1:0][`ADDR_WIDTH - 1:0] result,
 
     output wire has_fflags,
     output fflags_t [LANES-1:0] fflags,
@@ -25,22 +25,22 @@ module VX_fp_div #(
 
     input wire  ready_out,
     output wire valid_out
-);    
+);
     wire stall = ~ready_out && valid_out;
     wire enable = ~stall;
 
-    for (genvar i = 0; i < LANES; i++) begin        
+    for (genvar i = 0; i < LANES; i++) begin
     `ifdef VERILATOR
-        reg [31:0] r;
+        reg [`ADDR_WIDTH - 1:0] r;
         fflags_t f;
 
-        always @(*) begin        
+        always @(*) begin
             dpi_fdiv (enable && valid_in, dataa[i], datab[i], frm, r, f);
         end
         `UNUSED_VAR (f)
 
         VX_shift_register #(
-            .DATAW  (32),
+            .DATAW  (`ADDR_WIDTH),
             .DEPTH  (`LATENCY_FDIV),
             .RESETW (1)
         ) shift_req_dpi (

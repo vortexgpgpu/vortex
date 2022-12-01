@@ -1,4 +1,5 @@
 `include "VX_platform.vh"
+`include "VX_define.vh"
 
 `TRACING_OFF
 module VX_serial_div #(
@@ -20,7 +21,7 @@ module VX_serial_div #(
     input wire [TAGW-1:0] tag_in,
 
     output wire [LANES-1:0][WIDTHQ-1:0] quotient,
-    output wire [LANES-1:0][WIDTHR-1:0] remainder,    
+    output wire [LANES-1:0][WIDTHR-1:0] remainder,
     input wire ready_out,
     output wire valid_out,
     output wire [TAGW-1:0] tag_out
@@ -41,7 +42,7 @@ module VX_serial_div #(
     reg is_busy;
 
     reg [TAGW-1:0] tag_r;
-    
+
     wire done = ~(| cntr);
 
     wire push = valid_in && ready_in;
@@ -54,15 +55,15 @@ module VX_serial_div #(
         assign denom_qual[i] = negate_denom ? -$signed(denom[i]) : denom[i];
         assign sub_result[i] = working[i][WIDTHN + MIN_ND : WIDTHN] - denom_r[i];
     end
-    
+
     always @(posedge clk) begin
         if (reset) begin
             cntr    <= 0;
             is_busy <= 0;
         end else begin
-            if (push) begin                
+            if (push) begin
                 cntr <= WIDTHN;
-                is_busy <= 1;                
+                is_busy <= 1;
             end else if (!done) begin
                 cntr <= cntr - CNTRW'(1);
             end
@@ -75,11 +76,11 @@ module VX_serial_div #(
             for (integer i = 0; i < LANES; ++i) begin
                 working[i]  <= {{WIDTHD{1'b0}}, numer_qual[i], 1'b0};
                 denom_r[i]  <= denom_qual[i];
-                inv_quot[i] <= (denom[i] != 0) && signed_mode && (numer[i][31] ^ denom[i][31]);
-                inv_rem[i]  <= signed_mode && numer[i][31];
+                inv_quot[i] <= (denom[i] != 0) && signed_mode && (numer[i][`ADDR_WIDTH - 1] ^ denom[i][`ADDR_WIDTH - 1]);
+                inv_rem[i]  <= signed_mode && numer[i][`ADDR_WIDTH - 1];
             end
-            tag_r <= tag_in;           
-        end else if (!done) begin                    
+            tag_r <= tag_in;
+        end else if (!done) begin
             for (integer i = 0; i < LANES; ++i) begin
                 working[i] <= sub_result[i][WIDTHD] ? {working[i][WIDTHN+MIN_ND-1:0], 1'b0} :
                                 {sub_result[i][WIDTHD-1:0], working[i][WIDTHN-1:0], 1'b1};
@@ -93,8 +94,8 @@ module VX_serial_div #(
         assign quotient[i]  = inv_quot[i] ? -$signed(q) : q;
         assign remainder[i] = inv_rem[i] ? -$signed(r) : r;
     end
-    
-    assign ready_in  = !is_busy;    
+
+    assign ready_in  = !is_busy;
     assign tag_out   = tag_r;
     assign valid_out = is_busy && done;
 

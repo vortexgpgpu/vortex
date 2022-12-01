@@ -18,7 +18,7 @@ module VX_csr_unit #(
     VX_fetch_to_csr_if.slave    fetch_to_csr_if,
     VX_csr_req_if.slave         csr_req_if,
     VX_commit_if.master         csr_commit_if,
-    
+
 `ifdef EXT_F_ENABLE
     VX_fpu_to_csr_if.slave      fpu_to_csr_if,
     input wire[`NUM_WARPS-1:0]  fpu_pending,
@@ -29,16 +29,16 @@ module VX_csr_unit #(
 
     output wire[`NUM_WARPS-1:0] pending,
     input wire                  busy
-);    
+);
     wire csr_we_s1;
-    wire [`CSR_ADDR_BITS-1:0] csr_addr_s1;    
-    wire [31:0] csr_read_data;
-    wire [31:0] csr_read_data_s1;
-    wire [31:0] csr_updated_data_s1;  
+    wire [`CSR_ADDR_BITS-1:0] csr_addr_s1;
+    wire [`ADDR_WIDTH - 1:0] csr_read_data;
+    wire [`ADDR_WIDTH - 1:0] csr_read_data_s1;
+    wire [`ADDR_WIDTH - 1:0] csr_updated_data_s1;
 
     wire write_enable = csr_commit_if.valid && csr_we_s1;
 
-    wire [31:0] csr_req_data = csr_req_if.use_imm ? 32'(csr_req_if.imm) : csr_req_if.rs1_data;
+    wire [`ADDR_WIDTH - 1:0] csr_req_data = csr_req_if.use_imm ? 32'(csr_req_if.imm) : csr_req_if.rs1_data;
 
     VX_csr_data #(
         .CORE_ID(CORE_ID)
@@ -55,7 +55,7 @@ module VX_csr_unit #(
         .cmt_to_csr_if  (cmt_to_csr_if),
         .fetch_to_csr_if(fetch_to_csr_if),
     `ifdef EXT_F_ENABLE
-        .fpu_to_csr_if  (fpu_to_csr_if), 
+        .fpu_to_csr_if  (fpu_to_csr_if),
     `endif
     `ifdef EXT_TEX_ENABLE
         .tex_csr_if     (tex_csr_if),
@@ -63,26 +63,26 @@ module VX_csr_unit #(
         .read_enable    (csr_req_if.valid),
         .read_uuid      (csr_req_if.uuid),
         .read_addr      (csr_req_if.addr),
-        .read_wid       (csr_req_if.wid),      
+        .read_wid       (csr_req_if.wid),
         .read_data      (csr_read_data),
-        .write_enable   (write_enable),        
+        .write_enable   (write_enable),
         .write_uuid     (csr_commit_if.uuid),
-        .write_addr     (csr_addr_s1), 
+        .write_addr     (csr_addr_s1),
         .write_wid      (csr_commit_if.wid),
         .write_data     (csr_updated_data_s1),
         .busy           (busy)
-    );    
+    );
 
     wire write_hazard = (csr_addr_s1 == csr_req_if.addr)
-                     && (csr_commit_if.wid == csr_req_if.wid) 
+                     && (csr_commit_if.wid == csr_req_if.wid)
                      && csr_commit_if.valid;
 
-    wire [31:0] csr_read_data_qual = write_hazard ? csr_updated_data_s1 : csr_read_data; 
+    wire [`ADDR_WIDTH - 1:0] csr_read_data_qual = write_hazard ? csr_updated_data_s1 : csr_read_data;
 
-    reg [31:0] csr_updated_data;
-    reg csr_we_s0_unqual; 
-    
-    always @(*) begin        
+    reg [`ADDR_WIDTH - 1:0] csr_updated_data;
+    reg csr_we_s0_unqual;
+
+    always @(*) begin
         csr_we_s0_unqual = (csr_req_data != 0);
         case (csr_req_if.op_type)
             `INST_CSR_RW: begin
@@ -101,16 +101,16 @@ module VX_csr_unit #(
 
 `ifdef EXT_F_ENABLE
     wire stall_in = fpu_pending[csr_req_if.wid];
-`else 
+`else
     wire stall_in = 0;
 `endif
 
-    wire csr_req_valid = csr_req_if.valid && !stall_in;  
+    wire csr_req_valid = csr_req_if.valid && !stall_in;
 
     wire stall_out = ~csr_commit_if.ready && csr_commit_if.valid;
 
     VX_pipe_register #(
-        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + 32 + 32),
+        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + `ADDR_WIDTH + `NR_BITS + 1 + 1 + `CSR_ADDR_BITS + `ADDR_WIDTH + `ADDR_WIDTH),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
@@ -121,11 +121,11 @@ module VX_csr_unit #(
     );
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        assign csr_commit_if.data[i] = (csr_addr_s1 == `CSR_WTID) ? i : 
-                                         (csr_addr_s1 == `CSR_LTID 
-                                       || csr_addr_s1 == `CSR_GTID) ? (csr_read_data_s1 * `NUM_THREADS + i) : 
+        assign csr_commit_if.data[i] = (csr_addr_s1 == `CSR_WTID) ? i :
+                                         (csr_addr_s1 == `CSR_LTID
+                                       || csr_addr_s1 == `CSR_GTID) ? (csr_read_data_s1 * `NUM_THREADS + i) :
                                                                       csr_read_data_s1;
-    end         
+    end
 
     assign csr_commit_if.eop = 1'b1;
 
@@ -140,7 +140,7 @@ module VX_csr_unit #(
         end else begin
             if (csr_commit_if.valid && csr_commit_if.ready) begin
                  pending_r[csr_commit_if.wid] <= 0;
-            end          
+            end
             if (csr_req_if.valid && csr_req_if.ready) begin
                  pending_r[csr_req_if.wid] <= 1;
             end
