@@ -318,7 +318,9 @@ static const char *op_string(const Instr &instr)
     case 0x3:
       return "FLD";
     case 0x6:
-      return "VL";
+      return "VL32";
+    case 0x7:
+      return "VL64";
     default:
       std::abort();
     }
@@ -330,7 +332,9 @@ static const char *op_string(const Instr &instr)
     case 0x3:
       return "FSD";
     case 0x6:
-      return "VS";
+      return "VS32";
+    case 0x7:
+      return "VS64";
     default:
       std::abort();
     }
@@ -799,26 +803,36 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const
     case Opcode::VSET:
     {
       instr->setDestVReg(rd);
-      instr->setSrcVReg(rs1);
       instr->setFunc3(func3);
       if (func3 == 7)
       {
-        instr->setImm(!(code >> shift_vset));
-        if (instr->getImm())
+        //instr->setImm(!(code >> shift_vset));
+        if (!(code >> shift_vset))
         { // arv: vsetvli
+          instr->setSrcVReg(rs1);
           auto immed = (code >> shift_rs2) & mask_v_imm;
           instr->setImm(immed);
           instr->setVlmul(immed & 0x7);
           // arv: instr->setVediv((immed >> 4) & 0x3);
           instr->setVsew((immed >> 3) & 0x7);
         }
+        else if ((code >> 30) & 0x1)
+        { //arv: vsetivli
+          auto immed = (code >> shift_rs2) & 1023;
+          instr->setImm(immed);
+          instr->setVlmul(immed & 0x7);
+          instr->setVsew((immed >> 3) & 0x7);
+          instr->setUimm(rs1);
+        }
         else
         { // arv: vsetvl(check)
+          instr->setSrcVReg(rs1);
           instr->setSrcVReg(rs2);
         }
       }
       else
       { // arv: vector arithmetic
+        instr->setSrcVReg(rs1);
         instr->setSrcVReg(rs2);
         instr->setVmask((code >> shift_func7) & 0x1); // vk: 25th bit is vmask
         instr->setFunc6(func6);

@@ -189,8 +189,10 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
         DPN(2, "}" << std::endl);
         break;
       case RegType::Vector: // arv: data decoded later
-        if (((opcode == VSET) && ((func3 == 0x7) || (func3 == 0x6))) || (((opcode == FL) || (opcode == FS)) && (func3 == 0x6)))
+        if (((opcode == VSET) && ((func3 == 0x7) || (func3 == 0x6))) || (((opcode == FL) || (opcode == FS)) && ((func3 == 0x6) || (func3 == 0x7))))
           rsdata[0][i].i = ireg_file_.at(0)[reg]; // vk: simd, only 1 thread, stores int src args used in vreg cfg instrs like vsetvli
+        else if ((opcode == VSET) && (func3 == 0x5) && (func6 == 0x17) && (i == 0))
+          rsdata[0][i].f = freg_file_.at(0)[reg]; //arv: simd, only 1 thread, stores float src args used in vfmv.v.f, vfmerge.vfm
         DPN(2, type);
         break;
       default:
@@ -895,7 +897,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
       auto &vd = vreg_file_.at(rdest);
       switch (instr.getVlsWidth())
       {
-      case 6:
+      case 6: //vector - 32 bit element(vle32)
       {
         for (uint32_t i = 0; i < vl_; i++)
         {
@@ -907,8 +909,22 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
           trace->mem_addrs.at(0).push_back({mem_addr, 4});
           DP(4, "LOAD MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data);
         }
-        break;
       }
+      break;
+      case 7: //vector - 64 bit element(vle64)
+      {
+        for (uint32_t i = 0; i < vl_; i++)
+        {
+          Word mem_addr = ((rsdata[0][0].i) & 0xFFFFFFFC) + (i * vtype_.vsew / 8);
+          DWord mem_data = 0;
+          core_->dcache_read(&mem_data, mem_addr, 8);
+          DWord *result_ptr = (DWord *)(vd.data() + (i * vtype_.vsew / 8));
+          *result_ptr = mem_data;
+          trace->mem_addrs.at(0).push_back({mem_addr, 8});
+          DP(4, "LOAD MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data);
+        }
+      }
+      break;
       default:
         std::abort();
       }
@@ -959,25 +975,42 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
         uint64_t mem_addr = rsdata[0][0].i + (i * vtype_.vsew / 8);
         switch (instr.getVlsWidth())
         {
-        case 6:
-        {
-          // store word and unit strided (not checking for unit stride)
-          auto &vr = vreg_file_.at(instr.getVs3());
-          uint32_t mem_data = 0;
-          int n = (vtype_.vsew / 8);
-
-          for (int j = 0; j < n; j++)
+          case 6: //arv: vse32(vector 32 bit store)
           {
-            mem_data += (*(Byte *)(vr.data() + j + (i * vtype_.vsew / 8))) * (1 << (j * 8));
-          }
+            // store word and unit strided (not checking for unit stride)
+            auto &vr = vreg_file_.at(instr.getVs3());
+            uint32_t mem_data = 0;
+            int n = (vtype_.vsew / 8);
 
-          core_->dcache_write(&mem_data, mem_addr, 4);
-          trace->mem_addrs.at(0).push_back({mem_addr, 4});
-          DP(4, "STORE MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data);
+            for (int j = 0; j < n; j++)
+            {
+              mem_data += (*(Byte *)(vr.data() + j + (i * vtype_.vsew / 8))) * (1 << (j * 8));
+            }
+
+            core_->dcache_write(&mem_data, mem_addr, 4);
+            trace->mem_addrs.at(0).push_back({mem_addr, 4});
+            DP(4, "STORE MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data);
+          }
           break;
-        }
-        default:
-          std::abort();
+          case 7: //arv: vse64(vector 64 bit store)
+          {
+            // store word and unit strided (not checking for unit stride)
+            auto &vr = vreg_file_.at(instr.getVs3());
+            uint64_t mem_data = 0;
+            int n = (vtype_.vsew / 8);
+
+            for (int j = 0; j < n; j++)
+            {
+              mem_data += (*(Byte *)(vr.data() + j + (i * vtype_.vsew / 8))) * (1 << (j * 8));
+            }
+
+            core_->dcache_write(&mem_data, mem_addr, 8);
+            trace->mem_addrs.at(0).push_back({mem_addr, 8});
+            DP(4, "STORE MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data);
+          }
+          break;
+          default:
+            std::abort();
         }
       }
     }
@@ -1783,7 +1816,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
     case 0: // OPIVV vector-vector
       switch (func6)
       {
-      case 0: // arv: add
+      case 0: // arv: vadd
       { 
         auto &vr1 = vreg_file_.at(rsrc0);
         auto &vr2 = vreg_file_.at(rsrc1);
@@ -2225,6 +2258,96 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
       break;
       }
       break;
+    case 1: //arv: OPFVV(vector-vector floating point)
+    {
+      switch (func6)
+      {
+        case 0: //arv: vfadd
+        {
+          auto &vr1 = vreg_file_.at(rsrc0);
+          auto &vr2 = vreg_file_.at(rsrc1);
+          auto &vd = vreg_file_.at(rdest);
+          auto &mask = vreg_file_.at(0); // vk: v0 is mask reg
+          if (vtype_.vsew == 32)
+          {
+            for (uint32_t i = 0; i < vl_; i++)
+            {
+              uint32_t emask = *(uint32_t *)(mask.data() + i*4);
+              uint32_t value = emask & 0x1;
+              if (vmask || (!vmask && value))
+              {
+                float first = *(float *)(vr1.data() + i * 4);
+                float second = *(float *)(vr2.data() + i * 4);
+                float result = first + second;
+                DP(3, "Multiply and accumulate " << first << " + " << second << " = " << result);
+                *(uint32_t *)(vd.data() + i * 4) = result;
+              }
+            }
+          }
+          else if (vtype_.vsew == 64)
+          {
+            for (uint32_t i = 0; i < vl_; i++)
+            {
+              uint64_t emask = *(uint64_t *)(mask.data() + i*8);
+              uint64_t value = emask & 0x1;
+              if (vmask || (!vmask && value))
+              {
+                double first = *(double *)(vr1.data() + i * 8);
+                double second = *(double *)(vr2.data() + i * 8);
+                double result = first + second;
+                DP(3, "Multiply and accumulate " << first << " + " << second << " = " << result);
+                *(uint64_t *)(vd.data() + i * 4) = result;
+              }
+            }
+          }
+        }
+        break;
+        case 44: //arv: vfmacc 0x2c(0b101100)
+        {
+          auto &vr1 = vreg_file_.at(rsrc0);
+          auto &vr2 = vreg_file_.at(rsrc1);
+          auto &vd = vreg_file_.at(rdest);
+          auto &mask = vreg_file_.at(0); // vk: v0 is mask reg
+          if (vtype_.vsew == 32)
+          {
+            for (uint32_t i = 0; i < vl_; i++)
+            {
+              uint32_t emask = *(uint32_t *)(mask.data() + i*4);
+              uint32_t value = emask & 0x1;
+              if (vmask || (!vmask && value))
+              {
+                float first = *(float *)(vr1.data() + i * 4);
+                float second = *(float *)(vr2.data() + i * 4);
+                float curr = *(float *)(vd.data() + i * 4);
+                float result = curr + (first * second);
+                DP(3, "Multiply and accumulate " << first << " + " << second << " = " << result);
+                *(float *)(vd.data() + i * 4) = result;
+              }
+            }
+          }
+          else if (vtype_.vsew == 64)
+          {
+            for (uint32_t i = 0; i < vl_; i++)
+            {
+              uint64_t emask = *(uint64_t *)(mask.data() + i*8);
+              uint64_t value = emask & 0x1;
+              if (vmask || (!vmask && value))
+              {
+                double first = *(double *)(vr1.data() + i * 8);
+                double second = *(double *)(vr2.data() + i * 8);
+                double curr = *(double *)(vd.data() + i * 8);
+                double result = curr + (first * second);
+                DP(3, "Multiply and accumulate " << first << " + " << second << " = " << result);
+                *(double *)(vd.data() + i * 8) = result;
+              }
+            }
+          }
+        }
+        break;
+        default: std::abort();
+      }
+    }
+    break;
     case 2: // OPMVV vector-vector
     {
       switch (func6)
@@ -2810,7 +2933,51 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
       }
     }
     break;
-    case 6: // OPMVX vector-scalar
+    case 5: //arv: OPFVF(vector-scalar, FP f register rs1)
+    {
+      switch (func6)
+      {
+        case 23: //arv: 0x17(0b010111)
+        {
+          if (vmask == 1) //arv: vfmv.v.f (if vmask == 0, then instr is vfmerge)
+          {
+            auto &vd = vreg_file_.at(rdest);
+            auto &mask = vreg_file_.at(0); // vk: v0 is mask reg
+            if (vtype_.vsew == 32)
+            {
+              for (uint32_t i = 0; i < vl_; i++)
+              {
+                uint32_t emask = *(uint32_t *)(mask.data() + i*4);
+                uint32_t value = emask & 0x1;
+                if (vmask || (!vmask && value)) // vk: vmask == 1 (unmasked), else take mask value from v0
+                {
+                  DP(3, "vfmv.v.f : " << (uint32_t)(rsdata[0][0].f));
+                  *(uint32_t *)(vd.data() + i*4) = (uint32_t)(rsdata[0][0].f);
+                }
+              }
+            }
+            else if (vtype_.vsew == 64)
+            {
+              for (uint32_t i = 0; i < vl_; i++)
+              {
+                FWord emask = *(FWord *)(mask.data() + i*8);
+                FWord value = emask & 0x1;
+                if (vmask || (!vmask && value)) // vk: vmask == 1 (unmasked), else take mask value from v0
+                {
+                  DP(3, "vfmv.v.f : " << rsdata[0][0].f);
+                  *(FWord *)(vd.data() + i*8) = rsdata[0][0].f;
+                }
+              }
+            }
+          }
+        }
+        break;
+        default: std::abort();
+      }
+
+    }
+    break;
+    case 6: // OPMVX(vector-scalar, GPR x register rs1)
     {
       switch (func6)
       {
@@ -3072,7 +3239,13 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
 
       DP(3, "lmul:" << vtype_.vlmul << " sew:" << vtype_.vsew << /*" ediv: " << vtype_.vediv << */ "rsrc_" << rsdata[0][0].i << "VLMAX" << VLMAX);
 
-      auto s0 = rsdata[0][0].i;
+      uint32_t s0;
+
+      if (instr.hasUimm()) //vsetivli
+        s0 = instr.getUimm();
+      else //vsetvli               
+        s0 = rsdata[0][0].i;
+
       // vk: s0 is the AVL value: https://github.com/riscv/riscv-v-spec/blob/master/v-spec.adoc#62-avl-encoding
       // below logic description: https://github.com/riscv/riscv-v-spec/blob/master/v-spec.adoc#63-constraints-on-setting-vl
       if (s0 <= VLMAX)
