@@ -984,7 +984,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
 
             for (int j = 0; j < n; j++)
             {
-              mem_data += (*(Byte *)(vr.data() + j + (i * vtype_.vsew / 8))) * (1 << (j * 8));
+              mem_data += (*(Byte *)(vr.data() + j + (i * vtype_.vsew / 8))) * ((uint32_t)1 << (j * 8));
             }
 
             core_->dcache_write(&mem_data, mem_addr, 4);
@@ -1001,7 +1001,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
 
             for (int j = 0; j < n; j++)
             {
-              mem_data += (*(Byte *)(vr.data() + j + (i * vtype_.vsew / 8))) * (1 << (j * 8));
+              mem_data += (*(Byte *)(vr.data() + j + (i * vtype_.vsew / 8))) * ((uint64_t)1 << (j * 8));
             }
 
             core_->dcache_write(&mem_data, mem_addr, 8);
