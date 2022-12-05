@@ -2280,7 +2280,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
                 float second = *(float *)(vr2.data() + i * 4);
                 float result = first + second;
                 DP(3, "Multiply and accumulate " << first << " + " << second << " = " << result);
-                *(uint32_t *)(vd.data() + i * 4) = result;
+                *(float *)(vd.data() + i * 4) = result;
               }
             }
           }
@@ -2296,7 +2296,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
                 double second = *(double *)(vr2.data() + i * 8);
                 double result = first + second;
                 DP(3, "Multiply and accumulate " << first << " + " << second << " = " << result);
-                *(uint64_t *)(vd.data() + i * 4) = result;
+                *(double *)(vd.data() + i * 8) = result;
               }
             }
           }
@@ -3260,9 +3260,12 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace)
       {
         vl_ = VLMAX;
       }
-      core_->set_csr(CSR_VLENB, vl_, 0, id_); //arv: thread_id is 0 for SIMD(only one thread) 
-      rddata[0].i = vl_;
-      rd_write = true;
+      core_->set_csr(CSR_VLENB, vl_, 0, id_); //arv: thread_id is 0 for SIMD(only one thread)
+      if(rdest != 0)
+      {
+        rddata[0].i = vl_;
+        rd_write = true;
+      }
     }
     break;
     default:

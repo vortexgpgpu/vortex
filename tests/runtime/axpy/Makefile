@@ -10,7 +10,7 @@ CP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)objcopy
 
 SIM_DIR=../../../sim
 
-CFLAGS += -march=rv32imfv -mabi=ilp32f -flax-vector-conversions
+CFLAGS += -march=rv32imfv -mabi=ilp32f -flax-vector-conversions -fno-inline-small-functions
 
 CFLAGS += -O3 -Wstack-usage=1024 -mcmodel=medany -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
 CFLAGS += -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw

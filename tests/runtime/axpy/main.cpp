@@ -8,6 +8,8 @@
 #include "vector_defines.h"
 #endif
 
+const long n = 2;
+
 /*************************************************************************
 *GET_TIME
 *returns a long int representing the time
@@ -27,8 +29,9 @@ float elapsed_time(long long start_time, long long end_time) {
 }*/
 /*************************************************************************/
 #ifdef USE_RISCV_VECTOR
-void axpy_intrinsics(double a, double *dx, double *dy, int n)
+void axpy_intrinsics(double a, double *dx, double *dy)
 {
+
   int i;
 
   // long gvl = __builtin_epi_vsetvl(n, __epi_e64, __epi_m1);
@@ -43,6 +46,8 @@ void axpy_intrinsics(double a, double *dx, double *dy, int n)
     _MMR_f64 v_dx = _MM_LOAD_f64(&dx[i], gvl);
     _MMR_f64 v_dy = _MM_LOAD_f64(&dy[i], gvl);
     _MMR_f64 v_res = _MM_MACC_f64(v_dy, v_a, v_dx, gvl);
+    //arv:debug _MMR_f64 v_res_i = _MM_ADD_f64(v_dy, v_dx, gvl);
+    //arv:debug _MMR_f64 v_res = _MM_ADD_f64(v_res_i, v_a, gvl);
     _MM_STORE_f64(&dy[i], v_res, gvl);
 	
     i += gvl;
@@ -53,7 +58,7 @@ void axpy_intrinsics(double a, double *dx, double *dy, int n)
 #endif
 
 // Ref version
-void axpy_ref(double a, double *dx, double *dy, int n)
+void axpy_ref(double a, double *dx, double *dy)
 {
    int i;
    for (i=0; i<n; i++) {
@@ -61,7 +66,7 @@ void axpy_ref(double a, double *dx, double *dy, int n)
    }
 }
 
-void init_vector(double *pv, long n, double value)
+void init_vector(double *pv, double value)
 {
    for (int i=0; i<n; i++) pv[i]= value;
 //   int gvl = __builtin_epi_vsetvl(n, __epi_e64, __epi_m1);
@@ -73,7 +78,7 @@ void init_vector(double *pv, long n, double value)
 //   }
 }
 
-void capture_ref_result(double *y, double* y_ref, int n)
+void capture_ref_result(double *y, double* y_ref)
 {
    int i;
    //printf ("\nReference result: ");
@@ -84,12 +89,12 @@ void capture_ref_result(double *y, double* y_ref, int n)
    //printf ("\n\n");
 }
 
-void test_result(double *y, double *y_ref, long nrows)
+void test_result(double *y, double *y_ref)
 {
-   long row;
+   int row;
    int nerrs=0;
    // Compute with the result to keep the compiler for marking the code as dead
-   for (row=0; row<nrows; row++)
+   for (row=0; row<n; row++)
    {
       double error = y[row] - y_ref[row];
       if(error < 0)
@@ -97,7 +102,7 @@ void test_result(double *y, double *y_ref, long nrows)
       if (error > 0.0000001) 
       {
          nerrs++;
-         vx_printf("y[%ld]=%.16f != y_ref[%ld]=%.16f  INCORRECT RESULT !!!! \n ", row, y[row], row, y_ref[row]);
+         vx_printf("y[%ld]=%.16f != y_ref[%ld]=%.16f  INCORRECT RESULT !!!! \n", row, y[row], row, y_ref[row]);
          if (nerrs == 100) break;
       }
    }
@@ -113,7 +118,8 @@ int main(/*arv int argc, char *argv[]*/)
     //arv start = get_time();
 
     double a = 1.0;
-    const long n = 2;
+
+    vx_printf("n = %d\n", n);
 
     /*arv if (argc == 2)
 	    n = 1024*atol(argv[1]); // input argument: vector size in Ks
@@ -127,34 +133,35 @@ int main(/*arv int argc, char *argv[]*/)
     double *dy_ref = (double*)malloc(n*sizeof(double));*/
     double dx[n], dy[n], dy_ref[n];
 
-    init_vector(dx, n, 1.0);
-    init_vector(dy, n, 2.0);
+    init_vector(dx, 1.0);
+    init_vector(dy, 2.0);
     
     //arv end = get_time();
     //arv printf("init_vector time: %f\n", elapsed_time(start, end));
 
     vx_printf("doing reference axpy\n");
     //arv start = get_time();
-    axpy_ref(a, dx, dy, n);
+    axpy_ref(a, dx, dy);
 
     //arv end = get_time();
     //arv printf("axpy_reference time: %f\n", elapsed_time(start, end));
 
-    capture_ref_result(dy, dy_ref, n);
+    capture_ref_result(dy, dy_ref);
     
-    init_vector(dx, n, 1.0);
-    init_vector(dy, n, 2.0);
+    init_vector(dx, 1.0);
+    init_vector(dy, 2.0);
 
     vx_printf ("doing vector axpy\n");
+
     //arv start = get_time();
     #ifdef USE_RISCV_VECTOR
-    axpy_intrinsics(a, dx, dy, n);
+    axpy_intrinsics(a, dx, dy);
     #endif
     //arv end = get_time();
     //arv printf("axpy_intrinsics time: %f\n", elapsed_time(start, end));
-    
+
     vx_printf ("done\n");
-    test_result(dy, dy_ref, n);
+    test_result(dy, dy_ref);
 
    //arv free(dx); free(dy); free(dy_ref);
    return 0;
