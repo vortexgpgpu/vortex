@@ -63,6 +63,7 @@ localparam AFU_ID_H           = 16'h0004;      // AFU ID Higher
 localparam CMD_MEM_READ       = `AFU_IMAGE_CMD_MEM_READ;
 localparam CMD_MEM_WRITE      = `AFU_IMAGE_CMD_MEM_WRITE;
 localparam CMD_RUN            = `AFU_IMAGE_CMD_RUN;
+localparam CMD_ENQ            = `AFU_IMAGE_CMD_ENQ;
 
 localparam MMIO_CMD_TYPE      = `AFU_IMAGE_MMIO_CMD_TYPE; 
 localparam MMIO_IO_ADDR       = `AFU_IMAGE_MMIO_IO_ADDR;
@@ -87,7 +88,8 @@ localparam STATE_IDLE         = 0;
 localparam STATE_WRITE        = 1;
 localparam STATE_READ         = 2;
 localparam STATE_START        = 3;
-localparam STATE_MAX_VALUE    = 4;
+localparam STATE_ENQ          = 4;
+localparam STATE_MAX_VALUE    = 5;
 localparam STATE_WIDTH        = $clog2(STATE_MAX_VALUE);
 
 `ifdef SCOPE
@@ -153,7 +155,11 @@ wire [COUT_QUEUE_DATAW-1:0] cout_q_dout;
 wire cout_q_full, cout_q_empty;
 
 wire [2:0] cmd_type = (cp2af_sRxPort.c0.mmioWrValid 
-                    && (MMIO_CMD_TYPE == mmio_hdr.address)) ? 3'(cp2af_sRxPort.c0.data) : 3'h0;
+                    && (MMIO_CMD_TYPE == mmio_hdr.address)) ? 3'(cp2af_sRxPort.c0.data) : 
+                    packet_empty ? 3'h0 : 
+                    pkt_pair_valid ? first_pkt_done ? 3'(pkt_pair[511:448]) :
+                    3'(pkt_pair[255:192]): 
+                    3'(cur_buf[255:192]);
 
 // disable assertions until full reset
 `ifndef VERILATOR
@@ -182,11 +188,30 @@ always @(posedge clk) begin
     mmio_tx.hdr.tid     <= mmio_hdr.tid;    
   end
 
+  // serve command buffer
+  if (pkt_pair_valid) begin 
+    cmd_io_addr <= first_pkt_done ? t_ccip_clAddr'(pkt_pair[319:256]) : t_ccip_clAddr'(pkt_pair[63:0]);
+    cmd_mem_addr <=  first_pkt_done ? $bits(cmd_mem_addr)'(pkt_pair[383:320]) : $bits(cmd_mem_addr)'(pkt_pair[127:64]);
+    cmd_data_size <=  first_pkt_done ? $bits(cmd_data_size)'(pkt_pair[447:384]) : $bits(cmd_data_size)'(pkt_pair[191:128]);
+  end else if (!packet_empty && !cmd_buf_done) begin 
+    cmd_io_addr <= t_ccip_clAddr'(cur_buf[63:0]) + {16'b0, cmd_buf_ctr} + 1;
+    cmd_mem_addr <= $bits(cmd_mem_addr)'(cur_buf[127:64]);
+    cmd_data_size <= 1;
+
+    //dpi_trace("pair valid=%0h packet empty=%0h header data size=%0h cmd buf ctr=%0h\n", pkt_pair_valid, packet_empty, $bits(cmd_data_size)'(cur_buf[191:128]), cmd_buf_ctr);
+
+    if (($bits(cmd_data_size)'(cur_buf[191:128]) == cmd_buf_ctr)) begin 
+      //dpi_trace("command buffer done with pair valid=%0h packet empty=%0h\n", pkt_pair_valid, packet_empty);
+      packet_pop <= 1;
+      cmd_buf_done <= 1;
+    end
+  end 
+  
   // serve MMIO write request
   if (cp2af_sRxPort.c0.mmioWrValid) begin
     case (mmio_hdr.address)
       MMIO_IO_ADDR: begin
-        cmd_io_addr <= t_ccip_clAddr'(cp2af_sRxPort.c0.data);
+        cmd_io_addr <=  t_ccip_clAddr'(cp2af_sRxPort.c0.data);
       `ifdef DBG_TRACE_AFU 
         dpi_trace("%d: MMIO_IO_ADDR: addr=%0h, data=0x%0h\n", $time, mmio_hdr.address, t_ccip_clAddr'(cp2af_sRxPort.c0.data));
       `endif
@@ -217,7 +242,7 @@ always @(posedge clk) begin
     `endif
       default: begin
         `ifdef DBG_TRACE_AFU
-          dpi_trace("%d: Unknown MMIO Wr: addr=%0h, data=%0h\n", $time, mmio_hdr.address, $bits(cmd_data_size)'(cp2af_sRxPort.c0.data));
+          dpi_trace("%d: Unknown MMIO Wr: addr=%0h, data=%0h, cmd_io_addr=%0h, cmd_mem_addr=%0h\n", $time, mmio_hdr.address, $bits(cmd_data_size)'(cp2af_sRxPort.c0.data), cmd_io_addr, cmd_mem_addr);
         `endif
       end
     endcase
@@ -278,6 +303,7 @@ end
 wire cmd_read_done;
 reg  cmd_write_done;
 wire cmd_run_done;
+reg  cmd_enq_done;
 reg  vx_started;
 
 reg [$clog2(`RESET_DELAY+1)-1:0] vx_reset_ctr;
@@ -304,10 +330,13 @@ always @(posedge clk) begin
           `endif
             state <= STATE_READ;   
           end 
-          CMD_MEM_WRITE: begin      
+          CMD_MEM_WRITE: begin   
           `ifdef DBG_TRACE_AFU
-            dpi_trace("%d: STATE WRITE: ia=%0h addr=%0h size=%0d\n", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size);
+            dpi_trace("%d: STATE WRITE: ia=%0h addr=%0h size=%0d current state=%0h rd req fire=%0h\n", $time, cmd_io_addr, cmd_mem_addr, cmd_data_size, state, cci_rd_req_fire);
           `endif
+            if (pkt_pair_valid == 1) begin 
+              sub_pkt_busy <= 1;
+            end
             state <= STATE_WRITE;
           end
           CMD_RUN: begin        
@@ -317,8 +346,13 @@ always @(posedge clk) begin
             vx_reset <= 1;            
             state <= STATE_START;                    
           end
-          default: begin
-            state <= state;
+          CMD_ENQ: begin        
+          `ifdef DBG_TRACE_AFU
+            dpi_trace("%d: STATE ENQUEUE\n", $time);
+          `endif
+            cmd_buf_done <= 0;
+            cmd_buf_ctr <= 0;
+            state <= STATE_ENQ;                    
           end
         endcase
       end      
@@ -336,7 +370,7 @@ always @(posedge clk) begin
         if (cmd_write_done) begin
           state <= STATE_IDLE;
         `ifdef DBG_TRACE_AFU
-          dpi_trace("%d: STATE IDLE\n", $time);
+          dpi_trace("%d: STATE IDLE with cmd_write_done=%0h and rd req fire=%0h\n", $time, cmd_write_done, cci_rd_req_fire);
         `endif
         end
       end
@@ -357,6 +391,15 @@ always @(posedge clk) begin
             vx_reset   <= 0;
           end  
         end        
+      end
+
+      STATE_ENQ: begin
+        if (cmd_enq_done) begin
+          state <= STATE_IDLE;
+        `ifdef DBG_TRACE_AFU
+          dpi_trace("%d: STATE IDLE\n", $time);
+        `endif
+        end
       end
 
       default: begin
@@ -601,6 +644,58 @@ VX_avs_wrapper #(
   .avs_readdatavalid(avs_readdatavalid)
 );
 
+// Packet FIFO Queue ////////////////////////////////////////////////////////////
+
+bit packet_push;
+reg packet_pop;
+`IGNORE_UNUSED_BEGIN
+bit packet_empty;
+`IGNORE_UNUSED_END
+assign packet_push = (STATE_ENQ == state) && cci_rd_rsp_fire;
+
+`IGNORE_UNUSED_BEGIN
+reg [511:0] cur_buf;
+wire [CCI_ADDR_WIDTH-1:0] buff_size;
+assign buff_size = $bits(cmd_data_size)'(cur_buf[191:128]);
+`IGNORE_UNUSED_END
+
+`IGNORE_UNUSED_BEGIN
+reg [511:0] pkt_pair; // packets are 256 bits, so two are pulled at a time via 512 bit CCI-P  
+reg  first_pkt_done; // is the first packet in pkt_pair done?
+reg  pkt_pair_valid; // is the packet pair in pkt_pair valid? or does a new one need to be pulled?
+reg  cmd_buf_done; // has the entire command buffer been pulled?
+reg [CCI_ADDR_WIDTH-1:0] cmd_buf_ctr; 
+reg  sub_pkt_busy;
+`IGNORE_UNUSED_END
+
+VX_fifo_queue #(
+  .DATAW   (512),
+  .SIZE    (8),
+  .OUT_REG (1)
+) buffer_packet_queue (
+  .clk      (clk),
+  .reset    (cci_rdq_reset),
+  .push     (packet_push),
+  .pop      (packet_pop),
+  .data_in  (cp2af_sRxPort.c0.data),
+  .empty    (packet_empty), 
+  .data_out (cur_buf),
+  `UNUSED_PIN (full),
+  `UNUSED_PIN (alm_empty),
+  `UNUSED_PIN (alm_full),
+  `UNUSED_PIN (size)
+);
+
+always @(posedge clk) begin 
+  if (packet_push) begin
+    pkt_pair_valid <= 0;
+    cmd_enq_done <= 1;
+  end 
+  if (packet_pop) begin 
+    packet_pop <= 0;
+  end
+end
+
 // CCI-P Read Request ///////////////////////////////////////////////////////////
 
 reg [CCI_ADDR_WIDTH-1:0] cci_mem_wr_req_ctr;
@@ -636,7 +731,7 @@ wire cci_rd_rsp_fire = cp2af_sRxPort.c0.rspValid
 assign cci_rd_req_tag = CCI_RD_QUEUE_TAGW'(cci_rd_req_ctr);
 assign cci_rd_rsp_tag = CCI_RD_QUEUE_TAGW'(cp2af_sRxPort.c0.hdr.mdata);
 
-assign cci_rdq_push = cci_rd_rsp_fire;
+assign cci_rdq_push = cci_rd_rsp_fire && !state[2]; // don't push to cci read queue if rd_rsp was header packet for packet queue
 assign cci_rdq_pop  = cci_mem_wr_req_fire;
 assign cci_rdq_din  = {cp2af_sRxPort.c0.data, cci_mem_wr_req_addr_base + CCI_ADDR_WIDTH'(cci_rd_rsp_tag)};
 
@@ -657,7 +752,7 @@ VX_pending_size #(
 
 assign cci_rd_req_ctr_next = cci_rd_req_ctr + CCI_ADDR_WIDTH'(cci_rd_req_fire ? 1 : 0);
 
-assign cci_rd_req_fire = cci_rd_req_valid && !(cci_rd_req_wait || cci_pending_reads_full);
+assign cci_rd_req_fire = cci_rd_req_valid && !(cci_rd_req_wait || cci_pending_reads_full) && !(state == STATE_IDLE);
 
 assign cci_mem_wr_req_valid = !cci_rdq_empty;
 
@@ -674,8 +769,9 @@ always @(posedge clk) begin
       cci_rd_req_valid <= (cmd_data_size != 0);
       cci_rd_req_wait  <= 0;
     end
-
-    cci_rd_req_valid <= (STATE_WRITE == state)                       
+    
+    //dpi_trace("%d: ctr next=%h data size=%h\n", $time, cci_rd_req_ctr_next, cmd_data_size);
+    cci_rd_req_valid <= (STATE_WRITE == state || STATE_ENQ == state)                       
                      && (cci_rd_req_ctr_next != cmd_data_size)
                      && !cp2af_sRxPort.c0TxAlmFull;    
 
@@ -690,6 +786,7 @@ always @(posedge clk) begin
 
   if ((STATE_IDLE == state) 
   &&  (CMD_MEM_WRITE == cmd_type)) begin
+    //dpi_trace("updating cci_rd_req_addr=%0h\n", cmd_io_addr);
     cci_rd_req_addr    <= cmd_io_addr;
     cci_rd_req_ctr     <= 0;
     cci_rd_rsp_ctr     <= 0;
@@ -698,11 +795,21 @@ always @(posedge clk) begin
     cmd_write_done     <= 0;
   end
 
+  if ((STATE_IDLE == state) 
+  &&  (CMD_ENQ == cmd_type)) begin
+    cci_rd_req_addr    <= cmd_io_addr;
+    cci_rd_req_ctr     <= 0;
+    cci_rd_rsp_ctr     <= 0;
+    cci_mem_wr_req_ctr <= 0;
+    cci_mem_wr_req_addr_base <= cmd_mem_addr;
+    cmd_enq_done     <= 0;
+  end
+
   if (cci_rd_req_fire) begin  
     cci_rd_req_addr <= cci_rd_req_addr + 1;
     cci_rd_req_ctr  <= cci_rd_req_ctr + 1;
   `ifdef DBG_TRACE_AFU
-    dpi_trace("%d: CCI Rd Req: addr=%0h, tag=%0h, rem=%0d, pending=%0d\n", $time, cci_rd_req_addr, cci_rd_req_tag, (cmd_data_size - cci_rd_req_ctr - 1), cci_pending_reads);
+    dpi_trace("%d: CCI Rd Req: addr=%0h, tag=%0h, rem=%0d, pending=%0d, cmd_write_done=%0h, state=%0h\n", $time, cci_rd_req_addr, cci_rd_req_tag, (cmd_data_size - cci_rd_req_ctr - 1), cci_pending_reads, cmd_write_done, state);
   `endif
   end
 
@@ -710,6 +817,13 @@ always @(posedge clk) begin
     cci_rd_rsp_ctr <= cci_rd_rsp_ctr + CCI_RD_QUEUE_TAGW'(1);
     if (CCI_RD_QUEUE_TAGW'(cci_rd_rsp_ctr) == CCI_RD_QUEUE_TAGW'(CCI_RD_WINDOW_SIZE-1)) begin
       cci_mem_wr_req_addr_base <= cci_mem_wr_req_addr_base + CCI_ADDR_WIDTH'(CCI_RD_WINDOW_SIZE);
+    end
+    if (!pkt_pair_valid & !packet_empty) begin 
+      `ifdef DBG_TRACE_AFU
+        dpi_trace("%d: new packet pair: %0h\n", $time, cp2af_sRxPort.c0.data);
+      `endif
+      pkt_pair <= cp2af_sRxPort.c0.data;
+      pkt_pair_valid <= 1;
     end
   `ifdef DBG_TRACE_AFU
     dpi_trace("%d: CCI Rd Rsp: idx=%0d, ctr=%0d, data=%0h\n", $time, cci_rd_rsp_tag, cci_rd_rsp_ctr, cp2af_sRxPort.c0.data);
@@ -725,7 +839,18 @@ always @(posedge clk) begin
   if (cci_mem_wr_req_fire) begin    
     cci_mem_wr_req_ctr <= cci_mem_wr_req_ctr + CCI_ADDR_WIDTH'(1);
     if (cci_mem_wr_req_ctr == (cmd_data_size-1)) begin
+      if (first_pkt_done) begin 
+        pkt_pair <= 0;
+        pkt_pair_valid <= 0;
+        first_pkt_done <= 0;
+        sub_pkt_busy <= 0;
+        cmd_buf_ctr <= cmd_buf_ctr + 1;
+        //dpi_trace("buffer counter=%0h\n", cmd_buf_ctr);
+      end else if (sub_pkt_busy) begin 
+        first_pkt_done <= 1;
+      end
       cmd_write_done <= 1;
+      //dpi_trace("%d: cmd write done\n", $time);
     end
   end
 end
@@ -872,7 +997,7 @@ end
 
 //--
 
-assign cci_mem_req_rw    = state[0]; // STATE_WRITE=00, STATE_WRITE=01
+assign cci_mem_req_rw    = state[0]; // STATE_READ=00, STATE_WRITE=01
 assign cci_mem_req_valid = cci_mem_req_rw ? cci_mem_wr_req_valid : cci_mem_rd_req_valid;
 assign cci_mem_req_addr  = cci_mem_req_rw ? cci_mem_wr_req_addr : cci_mem_rd_req_addr;
 assign cci_mem_req_data  = cci_rdq_dout[CCI_RD_QUEUE_DATAW-1:CCI_ADDR_WIDTH];

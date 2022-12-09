@@ -5,6 +5,57 @@
 #include <vortex.h>
 #include <VX_config.h>
 #include <assert.h>
+#include <cmath>
+
+typedef struct vx_buffer_ {
+    uint64_t wsid;
+    void* host_ptr;
+    uint64_t io_addr;
+    vx_device_h hdevice;
+    uint64_t size;
+} vx_buffer_t;
+
+bool cmdbuffer::createHeaderPacket(cmdbuffer *cmdBuf, bool barrier) { // header packet is size of 2 subpackets
+  subpacket headerPacket;
+  auto ls_shift = (int)std::log2(CACHE_BLOCK_SIZE);
+  vx_buffer_t *buffer = ((vx_buffer_t*)cmdBuf->buffer);
+
+
+  headerPacket.mmio_io_addr = (buffer->io_addr)>> ls_shift;
+  headerPacket.mmio_mem_addr = 3000; // not relevant for header because we are writing to HWQ
+  headerPacket.mmio_data_size = 2; // (aligned_size(1, CACHE_BLOCK_SIZE) >> ls_shift);
+  headerPacket.mmio_cmd_type = 2; // mmio_cmd_type = CMD_BUF_ENQ
+
+  appendToCmdBuffer(headerPacket);
+
+  // second half of header packet (see subpacket_ in vortex.h)
+  headerPacket.mmio_io_addr = barrier;
+  headerPacket.mmio_mem_addr = 0;
+  headerPacket.mmio_data_size = 0;
+  headerPacket.mmio_cmd_type = 2;
+
+  appendToCmdBuffer(headerPacket);
+
+  return 0;
+}
+
+bool cmdbuffer::appendToCmdBuffer(subpacket subpkt) {
+    fifo.push_back(subpkt);
+    bufferCount++;
+    
+    return 0;
+}
+
+void cmdbuffer::displayCmdBuffer() {
+  std::cout << "displaying command buffer contents" << std::endl;
+  for (uint64_t i = 0 ; i < fifo.size() ; i++) {
+    std::cout << "subpacket " << i << " has contents: ";
+    std::cout << "mmio_cmd_type: " << fifo.at(i).mmio_cmd_type << " ; ";
+    std::cout << "mmio_io_addr: " << fifo.at(i).mmio_io_addr  << " ; ";
+    std::cout << "mmio_mem_addr: " << fifo.at(i).mmio_mem_addr  << " ; ";
+    std::cout << "mmio_data_size: " << fifo.at(i).mmio_data_size  << std::endl;
+  }
+}
 
 uint64_t aligned_size(uint64_t size, uint64_t alignment) {        
     assert(0 == (alignment & (alignment - 1)));
@@ -16,7 +67,7 @@ bool is_aligned(uint64_t addr, uint64_t alignment) {
     return 0 == (addr & (alignment - 1));
 }
 
-extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint64_t size) {
+extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint64_t size, cmdbuffer* cmdBuf) {
   int err = 0;
 
   if (NULL == content || 0 == size)
@@ -52,6 +103,7 @@ extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint6
     }
     printf("\n");*/
 
+    vx_new_copy_to_dev(buffer, kernel_base_addr + offset, chunk_size, 0, cmdBuf, 2);
     err = vx_copy_to_dev(buffer, kernel_base_addr + offset, chunk_size, 0);
     if (err != 0) {
       vx_buf_free(buffer);
@@ -65,7 +117,7 @@ extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint6
   return 0;
 }
 
-extern int vx_upload_kernel_file(vx_device_h device, const char* filename) {
+extern int vx_upload_kernel_file(vx_device_h device, const char* filename, cmdbuffer* cmdBuf) {
   std::ifstream ifs(filename);
   if (!ifs) {
     std::cout << "error: " << filename << " not found" << std::endl;
@@ -80,7 +132,7 @@ extern int vx_upload_kernel_file(vx_device_h device, const char* filename) {
   ifs.read(content, size);
 
   // upload
-  int err = vx_upload_kernel_bytes(device, content, size);
+  int err = vx_upload_kernel_bytes(device, content, size, cmdBuf);
 
   // release buffer
   delete[] content;

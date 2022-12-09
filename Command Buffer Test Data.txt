@@ -1,0 +1,7 @@
+Demo with command buffer:
+PERF: instrs=10328, cycles=8568, IPC=1.205415
+PERF: instrs=10328, cycles=8516, IPC=1.212776
+PERF: instrs=10328, cycles=8303, IPC=1.243888
+
+
+Demo without command buffer:

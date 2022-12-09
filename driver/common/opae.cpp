@@ -9,6 +9,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <list>
+#include <string.h>
 
 #if defined(USE_FPGA) || defined(USE_ASE) 
 #include <opae/fpga.h>
@@ -42,6 +43,7 @@
 #define CMD_MEM_READ        AFU_IMAGE_CMD_MEM_READ
 #define CMD_MEM_WRITE       AFU_IMAGE_CMD_MEM_WRITE
 #define CMD_RUN             AFU_IMAGE_CMD_RUN
+#define CMD_ENQ             AFU_IMAGE_CMD_ENQ
 
 #define MMIO_CMD_TYPE       (AFU_IMAGE_MMIO_CMD_TYPE * 4)
 #define MMIO_IO_ADDR        (AFU_IMAGE_MMIO_IO_ADDR * 4)
@@ -432,6 +434,64 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
         nanosleep(&sleep_time, nullptr);
         timeout -= sleep_time_ms;
     };
+
+    return 0;
+}
+
+extern cmdbuffer* vx_create_command_buffer(uint64_t buf_size) {
+    cmdbuffer *cmdBuf = new cmdbuffer(buf_size);
+    
+    return cmdBuf;
+}
+
+extern int vx_new_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size, uint64_t src_offset, cmdbuffer *cmdBuf, uint64_t cmd_type) {
+    if (nullptr == hbuffer 
+     || 0 >= size)
+        return -1;
+
+    vx_buffer_t *buffer = ((vx_buffer_t*)hbuffer);
+
+    uint64_t dev_mem_size = LOCAL_MEM_SIZE; 
+    uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
+
+    // check alignment
+    if (!is_aligned(dev_maddr, CACHE_BLOCK_SIZE))
+        return -1;
+    if (!is_aligned(buffer->io_addr + src_offset, CACHE_BLOCK_SIZE))
+        return -1;
+
+    // bound checking
+    if (src_offset + asize > buffer->size)
+        return -1;
+    if (dev_maddr + asize > dev_mem_size)
+        return -1;
+
+    auto ls_shift = (int)std::log2(CACHE_BLOCK_SIZE);
+
+    subpacket pkt;
+    pkt.mmio_io_addr = (buffer->io_addr + src_offset) >> ls_shift;
+    pkt.mmio_mem_addr = dev_maddr >> ls_shift;
+    pkt.mmio_data_size = asize >> ls_shift;
+    pkt.mmio_cmd_type = cmd_type;
+    cmdBuf->appendToCmdBuffer(pkt);
+
+    cmdBuf->displayCmdBuffer();
+
+    return 0;
+}
+
+extern int vx_flush(cmdbuffer *cmdBuf) {
+    auto ls_shift = (int)std::log2(CACHE_BLOCK_SIZE);
+    vx_buffer_t *buffer = ((vx_buffer_t*)cmdBuf->buffer);
+    auto buf_ptr = (int*)vx_host_ptr(cmdBuf->buffer);
+    memcpy(buf_ptr, &cmdBuf->fifo.at(0), ((cmdBuf->bufferCount) * 32));
+    vx_device *device = ((vx_device*)buffer->hdevice);
+    std::cout << "flush to io_addr: " <<  ((uint64_t)buffer->io_addr >> ls_shift) << std::endl;
+
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_IO_ADDR, (buffer->io_addr) >> ls_shift));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_MEM_ADDR, 0));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_DATA_SIZE, 1));   
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_ENQ));
 
     return 0;
 }

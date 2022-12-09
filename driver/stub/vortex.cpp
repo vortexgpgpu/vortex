@@ -32,6 +32,18 @@ extern int vx_buf_free(vx_buffer_h /*hbuffer*/) {
     return -1;
 }
 
+extern cmdbuffer* vx_create_command_buffer(uint64_t /*buf_size*/) {
+    return nullptr;
+}
+
+extern int vx_new_copy_to_dev(vx_buffer_h /*hbuffer*/, uint64_t /*dev_maddr*/, uint64_t /*size*/, uint64_t /*src_offset*/, cmdbuffer* /*cmdBuf*/, uint64_t /*cmd_type*/) {
+    return -1;
+}
+
+extern int vx_flush(cmdbuffer* /*cmdBuf*/) {
+    return -1;
+}
+
 extern int vx_copy_to_dev(vx_buffer_h /*hbuffer*/, uint64_t /*dev_maddr*/, uint64_t /*size*/, uint64_t /*src_offset*/) {
     return -1;
 }
