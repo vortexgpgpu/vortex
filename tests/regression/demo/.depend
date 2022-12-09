@@ -1,2 +1,0 @@
-main.o: main.cpp /mnt/c/Users/waust/vortex/driver/include/vortex.h \
- common.h
