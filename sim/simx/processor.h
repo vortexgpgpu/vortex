@@ -1,4 +1,5 @@
 #pragma once
+#include <stdint.h>
 
 namespace vortex {
 
@@ -14,9 +15,13 @@ public:
 
   int run();
 
+  uint32_t get_satp();//added
+  void set_satp(uint32_t satp);//added
 private:
   class Impl;
   Impl* impl_;
+
+  uint32_t satp;//added
 };
 
 }
