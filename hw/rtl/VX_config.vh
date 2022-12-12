@@ -1,6 +1,22 @@
 `ifndef VX_CONFIG
 `define VX_CONFIG
 
+`ifndef VM_ADDR_MODE
+`define VM_ADDR_MODE SV32
+`endif
+
+`ifndef PTE_SIZE
+`define PTE_SIZE 4
+`endif
+
+`ifndef TLB_SIZE
+`define TLB_SIZE 32
+`endif
+
+`ifndef SUPER_PAGING
+`define SUPER_PAGING true
+`endif
+
 `ifndef XLEN
 `define XLEN 32
 `endif

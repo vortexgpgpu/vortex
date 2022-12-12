@@ -5,6 +5,7 @@
 #include <iostream>
 #include <future>
 #include <chrono>
+#include <bitset>
 
 #include <vortex.h>
 #include <vx_utils.h>
@@ -19,7 +20,14 @@
 #include <mem.h>
 #include <constants.h>
 
-
+uint64_t bits(uint64_t addr, uint8_t s_idx, uint8_t e_idx)
+{
+    return (addr >> s_idx) & ((1 << (e_idx - s_idx + 1)) - 1);
+}
+bool bit(uint64_t addr, uint8_t idx)
+{
+    return (addr) & (1 << idx);
+}
 using namespace vortex;
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -73,8 +81,9 @@ public:
             RAM_PAGE_SIZE,
             CACHE_BLOCK_SIZE) 
     {
-        // attach memory module
         processor_.attach_ram(&ram_);
+        //Sets more
+        set_processor_satp(VM_ADDR_MODE);
     }
 
     ~vx_device() {
@@ -82,9 +91,38 @@ public:
             future_.wait();
         }
     }    
+    
+    int map_local_mem(uint64_t size, uint64_t dev_maddr) 
+    {
+        if (get_mode() == VA_MODE::BARE)
+            return 0;
+
+        uint32_t ppn = dev_maddr >> 12;
+        uint32_t vpn = ppn;
+
+        //dev_maddr can be of size greater than a page, but we have to map and update
+        //page tables on a page table granularity. So divide the allocation into pages.
+        for (ppn = (dev_maddr) >> 12; ppn < ((dev_maddr) >> 12) + (size/RAM_PAGE_SIZE) + 1; ppn++)
+        {
+            //Currently a 1-1 mapping is used, this can be changed here to support different
+            //mapping schemes
+            vpn = ppn;
+
+            //If ppn to vpn mapping doesnt exist.
+            if (addr_mapping.find(vpn) == addr_mapping.end())
+            {
+                //Create mapping.
+                update_page_table(ppn, vpn);
+                addr_mapping[vpn] = ppn;
+            }
+        }
+        return 0;
+    }
 
     int alloc_local_mem(uint64_t size, uint64_t* dev_maddr) {
-        return mem_allocator_.allocate(size, dev_maddr);
+        int err = mem_allocator_.allocate(size, dev_maddr);
+        map_local_mem(size, *dev_maddr);
+        return err;
     }
 
     int free_local_mem(uint64_t dev_maddr) {
@@ -96,13 +134,13 @@ public:
         if (dest_addr + asize > LOCAL_MEM_SIZE)
             return -1;
 
-        ram_.write((const uint8_t*)src + src_offset, dest_addr, asize);
-        
-        /*printf("VXDRV: upload %d bytes to 0x%x\n", size, dest_addr);
-        for (int i = 0; i < size; i += 4) {
-            printf("mem-write: 0x%x <- 0x%x\n", dest_addr + i, *(uint32_t*)((uint8_t*)src + src_offset + i));
-        }*/
-        
+        if (dest_addr >= STARTUP_ADDR)
+            map_local_mem(asize,dest_addr);
+        else if (dest_addr >= 0x7fff0000)
+        {
+            map_local_mem(asize,dest_addr);
+        }
+        ram_.write((const uint8_t*)src + src_offset, dest_addr, asize);        
         return 0;
     }
 
@@ -148,14 +186,152 @@ public:
                 break;
         }
         return 0;
-    } 
+    }
 
+    void set_processor_satp(VA_MODE mode)
+    {
+        uint32_t satp;
+        if (mode == VA_MODE::BARE)
+            satp = 0;
+        else if (mode == VA_MODE::SV32)
+        {
+            satp = (alloc_page_table() >> 10) | 0x80000000;
+        }
+        processor_.set_satp(satp);
+    }
+
+    uint32_t get_ptbr()
+    {        
+
+        return processor_.get_satp() & 0x003fffff;
+    }
+
+    VA_MODE get_mode()
+    {
+        return processor_.get_satp() & 0x80000000 ? VA_MODE::SV32 : VA_MODE::BARE;
+    }  
+
+    void update_page_table(uint32_t pAddr, uint32_t vAddr) {
+        //Updating page table with the following mapping of (vAddr) to (pAddr).
+        uint32_t ppn_0, ppn_1, pte_addr, pte_bytes;
+        uint32_t vpn_1 = bits(vAddr, 10, 19);
+        uint32_t vpn_0 = bits(vAddr, 0, 9);
+
+        //Read first level PTE.
+        pte_addr = (get_ptbr() << 12) + (vpn_1 * PTE_SIZE);
+        pte_bytes = read_pte(pte_addr);        
+
+
+        if ( bit(pte_bytes, 0) )
+        {
+            //If valid bit set, proceed to next level using new ppn form PTE.
+            ppn_1 = (pte_bytes >> 10);
+        }
+        else
+        {
+            //If valid bit not set, allocate a second level page table
+            // in device memory and store ppn in PTE. Set rwx = 000 in PTE
+            //to indicate this is a pointer to the next level of the page table.
+            ppn_1 = (alloc_page_table() >> 12);
+            pte_bytes = ( (ppn_1 << 10) | 0b0000000001) ;
+            write_pte(pte_addr, pte_bytes);
+        }
+
+        //Read second level PTE.
+        pte_addr = (ppn_1 << 12) + (vpn_0 * PTE_SIZE);
+        pte_bytes = read_pte(pte_addr);        
+    
+        if ( bit(pte_bytes, 0) )
+        {
+            //If valid bit is set, then the page is already allocated.
+            //Should not reach this point, a sanity check.
+        }
+        else
+        {
+            //If valid bit not set, write ppn of pAddr in PTE. Set rwx = 111 in PTE
+            //to indicate this is a leaf PTE and has the stated permissions.
+            pte_bytes = ( (pAddr << 10) | 0b0000001111) ;
+            write_pte(pte_addr, pte_bytes);
+
+            //If super paging is enabled.
+            if (SUPER_PAGING)
+            {
+                //Check if this second level Page Table can be promoted to a super page. Brute force 
+                //method is used to iterate over all PTE entries of the table and check if they have 
+                //their valid bit set.
+                bool superpage = true;
+                for(int i = 0; i < 1024; i++)
+                {
+                    pte_addr = (ppn_1 << 12) + (i * PTE_SIZE);
+                    pte_bytes = read_pte(pte_addr); 
+                  
+                    if (!bit(pte_bytes, 0))
+                    {
+                        superpage = false;
+                        break;
+                    }
+                }
+                if (superpage)
+                {
+                    //This can be promoted to a super page. Set root PTE to the first PTE of the 
+                    //second level. This is because the first PTE of the second level already has the
+                    //correct PPN1, PPN0 set to zero and correct access bits.
+                    pte_addr = (ppn_1 << 12);
+                    pte_bytes = read_pte(pte_addr);
+                    pte_addr = (get_ptbr() << 12) + (vpn_1 * PTE_SIZE);
+                    write_pte(pte_addr, pte_bytes);
+                }
+            }
+        }
+    }
+
+    uint32_t alloc_page_table() {
+        uint64_t addr;
+        mem_allocator_.allocate(RAM_PAGE_SIZE, &addr);
+        init_page_table(addr);
+        return addr;
+    }
+
+
+    void init_page_table(uint32_t addr) {
+        uint64_t asize = aligned_size(RAM_PAGE_SIZE, CACHE_BLOCK_SIZE);
+        uint8_t *src = new uint8_t[RAM_PAGE_SIZE];
+        for (uint32_t i = 0; i < RAM_PAGE_SIZE; ++i) {
+            src[i] = (0x00000000 >> ((i & 0x3) * 8)) & 0xff;
+        }
+        ram_.write((const uint8_t*)src, addr, asize);
+    }
+
+    void read_page_table(uint32_t addr) {
+        uint8_t *dest = new uint8_t[RAM_PAGE_SIZE];
+        download(dest,  addr,  RAM_PAGE_SIZE, 0);
+        printf("VXDRV: download %d bytes from 0x%x\n", RAM_PAGE_SIZE, addr);
+        for (int i = 0; i < RAM_PAGE_SIZE; i += 4) {
+            printf("mem-read: 0x%x -> 0x%x\n", addr + i, *(uint32_t*)((uint8_t*)dest + i));
+        }
+    }
+
+    void write_pte(uint32_t addr, uint32_t value = 0xbaadf00d) {
+        uint8_t *src = new uint8_t[PTE_SIZE];
+        for (uint32_t i = 0; i < PTE_SIZE; ++i) {
+            src[i] = (value >> ((i & 0x3) * 8)) & 0xff;
+        }
+        ram_.write((const uint8_t*)src, addr, PTE_SIZE);
+    }
+
+    uint32_t read_pte(uint32_t addr) {
+        uint8_t *dest = new uint8_t[PTE_SIZE];
+        ram_.read((uint8_t*)dest, addr, PTE_SIZE);
+        return *(uint32_t*)((uint8_t*)dest);
+    }
+    
 private:
     ArchDef arch_;
     RAM ram_;
     Processor processor_;
     MemoryAllocator mem_allocator_;       
     std::future<void> future_;
+    std::unordered_map<uint32_t, uint32_t> addr_mapping;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -355,3 +531,4 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
 
     return device->wait(timeout);
 }
+

@@ -157,6 +157,13 @@ public:
 
     return exitcode;
   }
+
+  //Added
+  void set_core_satp(uint32_t satp) {
+    for (auto core : cores_) {
+      core->set_csr(CSR_SATP,satp,0,0);
+    }
+  }
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -176,3 +183,14 @@ void Processor::attach_ram(RAM* mem) {
 int Processor::run() {
   return impl_->run();
 }
+
+  //Added
+  uint32_t Processor::get_satp() {
+    return this->satp;
+  }
+
+  //Added
+  void Processor::set_satp(uint32_t satp) {
+    this->satp = satp;
+    impl_->set_core_satp(satp);
+  }

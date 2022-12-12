@@ -20,7 +20,7 @@ Core::Core(const SimContext& ctx, const ArchDef &arch, uint32_t id)
     , id_(id)
     , arch_(arch)
     , decoder_(arch)
-    , mmu_(0, arch.wsize(), true)
+    , mmu_(0, arch.wsize())
     , smem_(RAM_PAGE_SIZE)
     , tex_units_(NUM_TEX_UNITS, this)
     , warps_(arch.num_warps())
@@ -401,7 +401,15 @@ WarpMask Core::barrier(uint32_t bar_id, uint32_t count, uint32_t warp_id) {
 }
 
 void Core::icache_read(void *data, uint64_t addr, uint32_t size) {
-  mmu_.read(data, addr, size, 0);
+  try  
+  {
+    mmu_.read(data, addr, size, ACCESS_TYPE::FETCH);
+  }
+  catch (Page_Fault_Exception& page_fault)  
+  {
+    std::cout<<page_fault.what()<<std::endl;
+    throw;
+  }
 }
 
 void Core::dcache_read(void *data, uint64_t addr, uint32_t size) {  
@@ -409,8 +417,16 @@ void Core::dcache_read(void *data, uint64_t addr, uint32_t size) {
   if (type == AddrType::Shared) {
     addr &= (SMEM_SIZE-1);
     smem_.read(data, addr, size);
-  } else {  
-    mmu_.read(data, addr, size, 0);
+  } else {
+      try  
+      {
+        mmu_.read(data, addr, size, ACCESS_TYPE::LOAD);
+      }
+      catch (Page_Fault_Exception& page_fault)  
+      {
+        std::cout<<page_fault.what()<<std::endl;
+        throw;
+      }  
   }
 }
 
@@ -424,7 +440,15 @@ void Core::dcache_write(const void* data, uint64_t addr, uint32_t size) {
       addr &= (SMEM_SIZE-1);
       smem_.write(data, addr, size);
     } else {
-      mmu_.write(data, addr, size, 0);
+      try  
+      {
+        mmu_.write(data, addr, size, ACCESS_TYPE::STORE);
+      }
+      catch (Page_Fault_Exception& page_fault)  
+      {
+        std::cout<<page_fault.what()<<std::endl;
+        throw;
+      }  
     }
   }
 }
@@ -449,6 +473,7 @@ void Core::writeToStdOut(const void* data, uint64_t addr, uint32_t size) {
 uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   switch (addr) {
   case CSR_SATP:
+    return csrs_.at(addr);
   case CSR_PMPCFG0:
   case CSR_PMPADDR0:
   case CSR_MSTATUS:
@@ -665,6 +690,8 @@ void Core::set_csr(uint32_t addr, uint32_t value, uint32_t /*tid*/, uint32_t wid
 #endif
   {
     csrs_.at(addr) = value;
+    if (addr == CSR_SATP)
+      this->mmu_.set_satp(value);
   }
 }
 
