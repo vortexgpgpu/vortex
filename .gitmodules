@@ -7,6 +7,8 @@
 [submodule "third_party/cocogfx"]
 	path = third_party/cocogfx
 	url = https://github.com/gtcasl/cocogfx.git
+	ignore = dirty
 [submodule "third_party/ramulator"]
 	path = third_party/ramulator
 	url = https://github.com/CMU-SAFARI/ramulator.git
+	ignore = dirty

@@ -55,6 +55,7 @@ public:
     : opcode_(Opcode::NOP)
     , num_rsrcs_(0)
     , has_imm_(false)
+    , has_uimm_(false)
     , rdest_type_(RegType::None)
     , rdest_(0)
     , func2_(0)
@@ -75,6 +76,7 @@ public:
   void setFunc3(uint32_t func3) { func3_ = func3; }
   void setFunc7(uint32_t func7) { func7_ = func7; }
   void setImm(uint32_t imm) { has_imm_ = true; imm_ = imm; }
+  void setUimm(uint32_t uimm) { has_uimm_ = true; uimm_ = uimm; }
   void setVlsWidth(uint32_t width) { vlsWidth_ = width; }
   void setVmop(uint32_t mop) { vMop_ = mop; }
   void setVnf(uint32_t nf) { vNf_ = nf; }
@@ -96,7 +98,9 @@ public:
   uint32_t getRDest() const { return rdest_; }  
   RegType getRDType() const { return rdest_type_; }  
   bool hasImm() const { return has_imm_; }
+  bool hasUimm() const { return has_uimm_; }
   uint32_t getImm() const { return imm_; }
+  uint32_t getUimm() const { return uimm_; }
   uint32_t getVlsWidth() const { return vlsWidth_; }
   uint32_t getVmop() const { return vMop_; }
   uint32_t getvNf() const { return vNf_; }
@@ -114,9 +118,9 @@ private:
 
   Opcode opcode_;
   uint32_t num_rsrcs_;
-  bool has_imm_;
+  bool has_imm_, has_uimm_;
   RegType rdest_type_;
-  uint32_t imm_;
+  uint32_t imm_, uimm_;
   RegType rsrc_type_[MAX_REG_SOURCES];
   uint32_t rsrc_[MAX_REG_SOURCES];  
   uint32_t rdest_;
