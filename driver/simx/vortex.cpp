@@ -90,6 +90,8 @@ public:
         if (future_.valid()) {
             future_.wait();
         }
+
+        free_page_tables();
     }    
     
     int map_local_mem(uint64_t size, uint64_t dev_maddr) 
@@ -211,9 +213,29 @@ public:
         return processor_.get_satp() & 0x80000000 ? VA_MODE::SV32 : VA_MODE::BARE;
     }  
 
+    void free_page_tables()
+    {
+        uint32_t ppn_1, pte_addr, pte_bytes;
+
+        //Read first level PTE.
+        for(int i = 0; i < 1024; i++)
+        {
+            pte_addr = (get_ptbr() << 12) + (i * PTE_SIZE);
+            pte_bytes = read_pte(pte_addr); 
+          
+            if (bit(pte_bytes, 0) & !( bit(pte_bytes, 1) & bit(pte_bytes, 2) & bit(pte_bytes, 3) ))
+            {
+                ppn_1 = (pte_bytes >> 10);
+                free_local_mem(ppn_1 << 12);
+            }
+        }
+        free_local_mem(get_ptbr() << 12);
+    }
+
+
     void update_page_table(uint32_t pAddr, uint32_t vAddr) {
         //Updating page table with the following mapping of (vAddr) to (pAddr).
-        uint32_t ppn_0, ppn_1, pte_addr, pte_bytes;
+        uint32_t ppn_1, pte_addr, pte_bytes;
         uint32_t vpn_1 = bits(vAddr, 10, 19);
         uint32_t vpn_0 = bits(vAddr, 0, 9);
 
@@ -280,6 +302,8 @@ public:
                     pte_bytes = read_pte(pte_addr);
                     pte_addr = (get_ptbr() << 12) + (vpn_1 * PTE_SIZE);
                     write_pte(pte_addr, pte_bytes);
+                    //free second level page table
+                    free_local_mem(ppn_1 << 12);
                 }
             }
         }
