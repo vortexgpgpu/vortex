@@ -196,7 +196,7 @@ std::pair<bool, uint64_t> MemoryUnit::tlbLookup(uint64_t vAddr, ACCESS_TYPE type
 
 void MemoryUnit::read(void *data, uint64_t addr, uint64_t size, ACCESS_TYPE type ) {
   uint64_t pAddr;
-  if (this->mode == VA_MODE::BARE) {
+  if ( (this->mode == VA_MODE::BARE) | (addr >= IO_BASE_ADDR) | ( (!SM_ENABLE) && (addr >= (SMEM_BASE_ADDR - SMEM_SIZE) &&  addr < SMEM_BASE_ADDR) ) ) {
     pAddr = addr;
   } else {
      pAddr = vAddr_to_pAddr(addr, type);
@@ -206,7 +206,7 @@ void MemoryUnit::read(void *data, uint64_t addr, uint64_t size, ACCESS_TYPE type
 
 void MemoryUnit::write(const void *data, uint64_t addr, uint64_t size, ACCESS_TYPE type) {
   uint64_t pAddr;
-  if ( (this->mode == VA_MODE::BARE) | (addr >= IO_BASE_ADDR) ) {
+  if ( (this->mode == VA_MODE::BARE) | (addr >= IO_BASE_ADDR) | ( (!SM_ENABLE) && (addr >= (SMEM_BASE_ADDR - SMEM_SIZE) &&  addr < SMEM_BASE_ADDR) ) ) {
     pAddr = addr;
   } else {
     pAddr = vAddr_to_pAddr(addr, type);
@@ -435,9 +435,9 @@ std::pair<uint64_t, uint8_t> MemoryUnit::page_table_walk(uint64_t vAddr_bits, AC
       PTE_SV32_t pte(pte_bytes);
       
       //Check if it has invalid flag bits.
-      if ( (pte.v == 0) | ( (pte.r == 0) & (pte.w == 1) ) )
+      if ( (pte.v == 0) )//| ( (pte.r == 0) & (pte.w == 1) ) )
       {
-        throw Page_Fault_Exception("Page Fault : Attempted to access invalid entry.");
+        throw Page_Fault_Exception("Page Fault: Attempted to access invalid entry.");
       }
 
       if ( (pte.r == 0) & (pte.w == 0) & (pte.x == 0))
