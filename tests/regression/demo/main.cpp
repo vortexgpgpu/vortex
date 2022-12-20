@@ -71,8 +71,10 @@ int run_test(const kernel_arg_t& kernel_arg,
              uint32_t num_points, cmdbuffer* cmdBuf) {
 
   vx_flush(cmdBuf);
+  
   // start device
   std::cout << "start device" << std::endl;
+  vx_new_start(device, cmdBuf);
   RT_CHECK(vx_start(device));
 
   // wait for completion
@@ -173,7 +175,7 @@ int main(int argc, char *argv[]) {
     auto buf_ptr = (int*)vx_host_ptr(staging_buf);
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
     vx_new_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0, cmdBuf, 2); // append to command buffer
-    //RT_CHECK(vx_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
+    RT_CHECK(vx_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
   }
 
   // upload source buffer0
@@ -185,7 +187,7 @@ int main(int argc, char *argv[]) {
   }
   std::cout << "upload source buffer0" << std::endl;   
   vx_new_copy_to_dev(buf1, kernel_arg.src0_addr, buf_size, 0, cmdBuf, 2); // append to command buffer   
-  //RT_CHECK(vx_copy_to_dev(buf1, kernel_arg.src0_addr, buf_size, 0));
+  RT_CHECK(vx_copy_to_dev(buf1, kernel_arg.src0_addr, buf_size, 0));
 
   // upload source buffer1
   {
@@ -196,7 +198,7 @@ int main(int argc, char *argv[]) {
   }
   std::cout << "upload source buffer1" << std::endl;    
   vx_new_copy_to_dev(buf2, kernel_arg.src1_addr, buf_size, 0, cmdBuf, 2);  
-  //RT_CHECK(vx_copy_to_dev(buf2, kernel_arg.src1_addr, buf_size, 0));
+  RT_CHECK(vx_copy_to_dev(buf2, kernel_arg.src1_addr, buf_size, 0));
 
   // clear destination buffer
   {
@@ -207,7 +209,7 @@ int main(int argc, char *argv[]) {
   }
   std::cout << "clear destination buffer" << std::endl;
   vx_new_copy_to_dev(buf3, kernel_arg.dst_addr, buf_size, 0, cmdBuf, 2);   
-  //RT_CHECK(vx_copy_to_dev(buf3, kernel_arg.dst_addr, buf_size, 0));
+  RT_CHECK(vx_copy_to_dev(buf3, kernel_arg.dst_addr, buf_size, 0));
 
   //vx_flush(cmdBuf);
 

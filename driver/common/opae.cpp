@@ -578,16 +578,27 @@ extern int vx_copy_from_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t si
     return 0;
 }
 
+extern int vx_new_start(vx_device_h hdevice, cmdbuffer *cmdBuf) {
+    if (nullptr == hdevice)
+        return -1;    
+  
+    subpacket pkt;
+    pkt.mmio_cmd_type = 3;
+    cmdBuf->appendToCmdBuffer(pkt);
+
+    cmdBuf->displayCmdBuffer();
+
+    return 0;
+}
+
 extern int vx_start(vx_device_h hdevice) {
     if (nullptr == hdevice)
         return -1;   
 
     vx_device *device = ((vx_device*)hdevice);
-
     // Ensure ready for new command
     if (vx_ready_wait(hdevice, MAX_TIMEOUT) != 0)
         return -1;    
-  
     // start execution    
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_RUN));
 

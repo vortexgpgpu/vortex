@@ -95,6 +95,9 @@ int vx_flush(cmdbuffer *cmdBuf);
 // Copy bytes from device local memory to buffer
 int vx_copy_from_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size, uint64_t dst_offset);
 
+// Command Buffer version of vx_start
+int vx_new_start(vx_device_h hdevice, cmdbuffer *cmdBuf);
+
 // Start device execution
 int vx_start(vx_device_h hdevice);
 

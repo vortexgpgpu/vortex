@@ -27,7 +27,7 @@ module VX_fifo_queue #(
 
     always @(posedge clk) begin 
         if (push & SIZE == 8) begin 
-            //dpi_trace("pushing to packet queue this data: %0h\n", data_in);
+            dpi_trace("pushing to packet queue this data: %0h\n", data_in);
         end
     end
     

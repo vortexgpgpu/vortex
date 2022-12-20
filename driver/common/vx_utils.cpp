@@ -23,7 +23,7 @@ bool cmdbuffer::createHeaderPacket(cmdbuffer *cmdBuf, bool barrier) { // header 
 
   headerPacket.mmio_io_addr = (buffer->io_addr)>> ls_shift;
   headerPacket.mmio_mem_addr = 3000; // not relevant for header because we are writing to HWQ
-  headerPacket.mmio_data_size = 2; // (aligned_size(1, CACHE_BLOCK_SIZE) >> ls_shift);
+  headerPacket.mmio_data_size = -2; // (aligned_size(1, CACHE_BLOCK_SIZE) >> ls_shift);
   headerPacket.mmio_cmd_type = 2; // mmio_cmd_type = CMD_BUF_ENQ
 
   appendToCmdBuffer(headerPacket);
@@ -41,6 +41,7 @@ bool cmdbuffer::createHeaderPacket(cmdbuffer *cmdBuf, bool barrier) { // header 
 
 bool cmdbuffer::appendToCmdBuffer(subpacket subpkt) {
     fifo.push_back(subpkt);
+    fifo.at(0).mmio_data_size++;
     bufferCount++;
     
     return 0;
@@ -104,7 +105,7 @@ extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint6
     printf("\n");*/
 
     vx_new_copy_to_dev(buffer, kernel_base_addr + offset, chunk_size, 0, cmdBuf, 2);
-    err = vx_copy_to_dev(buffer, kernel_base_addr + offset, chunk_size, 0);
+    err = 0; // vx_copy_to_dev(buffer, kernel_base_addr + offset, chunk_size, 0);
     if (err != 0) {
       vx_buf_free(buffer);
       return err;
