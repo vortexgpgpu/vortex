@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <vortex.h>
+#include <bits/stdc++.h>
 #include "common.h"
 
 #define RT_CHECK(_expr)                                         \
@@ -69,22 +70,23 @@ void cleanup() {
 int run_test(const kernel_arg_t& kernel_arg,
              uint32_t buf_size, 
              uint32_t num_points, cmdbuffer* cmdBuf) {
-
-  vx_flush(cmdBuf);
   
   // start device
   std::cout << "start device" << std::endl;
   vx_new_start(device, cmdBuf);
-  RT_CHECK(vx_start(device));
+  //RT_CHECK(vx_start(device));
 
   // wait for completion
   std::cout << "wait for completion" << std::endl;
-  RT_CHECK(vx_ready_wait(device, MAX_TIMEOUT));
+  //RT_CHECK(vx_ready_wait(device, MAX_TIMEOUT));
 
   // download destination buffer
   std::cout << "download destination buffer" << std::endl;
   vx_new_copy_to_dev(buf3, kernel_arg.dst_addr, buf_size, 0, cmdBuf, 1);
+  vx_flush(cmdBuf);
   RT_CHECK(vx_copy_from_dev(buf3, kernel_arg.dst_addr, buf_size, 0));
+
+  sleep(1); // temporary sleep because results are checked before they are available otherwise
 
   // verify result
   std::cout << "verify result" << std::endl;  
@@ -111,6 +113,8 @@ int run_test(const kernel_arg_t& kernel_arg,
 }
 
 int main(int argc, char *argv[]) {
+  clock_t start, end;
+  start = clock();
   size_t value; 
   
   // parse command arguments
@@ -175,7 +179,7 @@ int main(int argc, char *argv[]) {
     auto buf_ptr = (int*)vx_host_ptr(staging_buf);
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
     vx_new_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0, cmdBuf, 2); // append to command buffer
-    RT_CHECK(vx_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
+    //RT_CHECK(vx_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
   }
 
   // upload source buffer0
@@ -187,7 +191,7 @@ int main(int argc, char *argv[]) {
   }
   std::cout << "upload source buffer0" << std::endl;   
   vx_new_copy_to_dev(buf1, kernel_arg.src0_addr, buf_size, 0, cmdBuf, 2); // append to command buffer   
-  RT_CHECK(vx_copy_to_dev(buf1, kernel_arg.src0_addr, buf_size, 0));
+  //RT_CHECK(vx_copy_to_dev(buf1, kernel_arg.src0_addr, buf_size, 0));
 
   // upload source buffer1
   {
@@ -198,7 +202,7 @@ int main(int argc, char *argv[]) {
   }
   std::cout << "upload source buffer1" << std::endl;    
   vx_new_copy_to_dev(buf2, kernel_arg.src1_addr, buf_size, 0, cmdBuf, 2);  
-  RT_CHECK(vx_copy_to_dev(buf2, kernel_arg.src1_addr, buf_size, 0));
+  //RT_CHECK(vx_copy_to_dev(buf2, kernel_arg.src1_addr, buf_size, 0));
 
   // clear destination buffer
   {
@@ -209,9 +213,7 @@ int main(int argc, char *argv[]) {
   }
   std::cout << "clear destination buffer" << std::endl;
   vx_new_copy_to_dev(buf3, kernel_arg.dst_addr, buf_size, 0, cmdBuf, 2);   
-  RT_CHECK(vx_copy_to_dev(buf3, kernel_arg.dst_addr, buf_size, 0));
-
-  //vx_flush(cmdBuf);
+  //RT_CHECK(vx_copy_to_dev(buf3, kernel_arg.dst_addr, buf_size, 0));
 
   // run tests
   std::cout << "run tests" << std::endl;
@@ -223,5 +225,10 @@ int main(int argc, char *argv[]) {
 
   std::cout << "PASSED!" << std::endl;
 
+  end = clock();
+  double time_taken = double(end - start) / double(CLOCKS_PER_SEC);
+  std::cout << "Time taken by program is : " << std::fixed 
+        << time_taken << std::setprecision(5);
+  std::cout << " sec " << std::endl;
   return 0;
 }

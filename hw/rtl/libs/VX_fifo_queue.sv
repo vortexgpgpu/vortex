@@ -24,12 +24,6 @@ module VX_fifo_queue #(
     output wire [SIZEW-1:0] size
 ); 
     `STATIC_ASSERT(`ISPOW2(SIZE), ("must be 0 or power of 2!"))
-
-    always @(posedge clk) begin 
-        if (push & SIZE == 8) begin 
-            dpi_trace("pushing to packet queue this data: %0h\n", data_in);
-        end
-    end
     
     if (SIZE == 1) begin
 

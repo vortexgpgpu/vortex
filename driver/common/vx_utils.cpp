@@ -21,7 +21,7 @@ bool cmdbuffer::createHeaderPacket(cmdbuffer *cmdBuf, bool barrier) { // header 
   vx_buffer_t *buffer = ((vx_buffer_t*)cmdBuf->buffer);
 
 
-  headerPacket.mmio_io_addr = (buffer->io_addr)>> ls_shift;
+  headerPacket.mmio_io_addr = (buffer->io_addr) >> ls_shift;
   headerPacket.mmio_mem_addr = 3000; // not relevant for header because we are writing to HWQ
   headerPacket.mmio_data_size = -2; // (aligned_size(1, CACHE_BLOCK_SIZE) >> ls_shift);
   headerPacket.mmio_cmd_type = 2; // mmio_cmd_type = CMD_BUF_ENQ
@@ -52,6 +52,10 @@ void cmdbuffer::displayCmdBuffer() {
   for (uint64_t i = 0 ; i < fifo.size() ; i++) {
     std::cout << "subpacket " << i << " has contents: ";
     std::cout << "mmio_cmd_type: " << fifo.at(i).mmio_cmd_type << " ; ";
+    if (fifo.at(i).mmio_cmd_type == 3) {
+      std::cout << std::endl;
+      continue;
+    }
     std::cout << "mmio_io_addr: " << fifo.at(i).mmio_io_addr  << " ; ";
     std::cout << "mmio_mem_addr: " << fifo.at(i).mmio_mem_addr  << " ; ";
     std::cout << "mmio_data_size: " << fifo.at(i).mmio_data_size  << std::endl;
@@ -98,14 +102,16 @@ extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint6
     auto chunk_size = std::min<uint64_t>(buffer_transfer_size, size - offset);
     std::memcpy(buf_ptr, (uint8_t*)content + offset, chunk_size);
 
-    /*printf("***  Upload Kernel to 0x%0x: data=", kernel_base_addr + offset);
+    /*
+    printf("***  Upload Kernel to 0x%0x: data=", kernel_base_addr + offset);
     for (int i = 0, n = ((chunk_size+7)/8); i < n; ++i) {
       printf("%08x", ((uint64_t*)((uint8_t*)content + offset))[n-1-i]);
     }
-    printf("\n");*/
+    printf("\n");
+    */
 
     vx_new_copy_to_dev(buffer, kernel_base_addr + offset, chunk_size, 0, cmdBuf, 2);
-    err = 0; // vx_copy_to_dev(buffer, kernel_base_addr + offset, chunk_size, 0);
+    err = 0; //vx_copy_to_dev(buffer, kernel_base_addr + offset, chunk_size, 0);
     if (err != 0) {
       vx_buf_free(buffer);
       return err;
@@ -113,7 +119,7 @@ extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint6
     offset += chunk_size;
   }
 
-  vx_buf_free(buffer);
+  //vx_buf_free(buffer);
 
   return 0;
 }
