@@ -70,7 +70,7 @@ module VX_alu_unit #(
         always @(*) begin
             case (alu_op_class)
                 2'b00: alu_result[i] = add_result[i];               // ADD, LUI, AUIPC
-                2'b01: alu_result[i] = {(`ADDR_WIDTH - 1){1'b0}, sub_result[i][`ADDR_WIDTH]};  // SLTU, SLT
+                2'b01: alu_result[i] = {31'b0, sub_result[i][`ADDR_WIDTH]};  // SLTU, SLT
                 2'b10: alu_result[i] = is_sub ? sub_result[i][`ADDR_WIDTH - 1:0] // SUB
                                               : shr_result[i];      // SRL, SRA
                 // 2'b11,
