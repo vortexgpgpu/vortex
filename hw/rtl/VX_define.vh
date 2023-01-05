@@ -73,7 +73,11 @@
 `define INST_GPGPU      7'b1101011
 `define INST_GPU        7'b1011011
 
-`define INST_TEX       7'b0101011
+`define INST_TEX        7'b0101011
+
+// 64bit
+`define INST_R_64       7'b0111011 // 64bit register instructions
+`define INST_I_64       7'b0011011 // 64bit immediate instructions
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -112,6 +116,14 @@
 `define INST_ALU_IS_BR(x)    x[0]
 `define INST_ALU_IS_MUL(x)   x[1]
 
+// 64bit
+// RV64I
+`define INST_ALU_SUBW        4'b1011
+`define INST_ALU_ADDW        4'b0000
+`define INST_ALU_SLLW        4'b1111
+`define INST_ALU_SRAW        4'b1001
+`define INST_ALU_SRLW        4'b1000
+
 `define INST_BR_EQ           4'b0000
 `define INST_BR_NE           4'b0010
 `define INST_BR_LTU          4'b0100
@@ -142,6 +154,14 @@
 `define INST_MUL_BITS        3
 `define INST_MUL_IS_DIV(x)   x[2]
 
+// 64bit
+// RV64M
+`define INST_MUL_MULW        3'h0
+`define INST_MUL_DIVW        3'h4
+`define INST_MUL_DIVUW       3'h5
+`define INST_MUL_REMW        3'h6
+`define INST_MUL_REMUW       3'h7
+
 `define INST_FMT_B           3'b000
 `define INST_FMT_H           3'b001
 `define INST_FMT_W           3'b010
@@ -162,6 +182,14 @@
 `define INST_LSU_IS_MEM(x)   (3'h0 == x)
 `define INST_LSU_IS_FENCE(x) (3'h1 == x)
 `define INST_LSU_IS_PREFETCH(x) (3'h2 == x)
+
+// 64bit
+`define INST_LSU_VL          4'b1011 // Vector Load
+`define INST_LSU_FLW         4'b0010 // Float Load Word (same op_type as LW)
+`define INST_LSU_FLD         4'b1100 // Float Load Doubleword
+`define INST_LSU_VS          4'b1101 // Vector Store
+`define INST_LSU_FSW         4'b1010 // Float Store Word (same op_type as SW)
+`define INST_LSU_FSD         4'b1110 // Float Store Doubleword
 
 `define INST_FENCE_BITS      1
 `define INST_FENCE_D         1'h0
