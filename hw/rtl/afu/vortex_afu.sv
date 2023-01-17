@@ -333,6 +333,11 @@ always @(posedge clk) begin
   if (packet_pop) begin 
     packet_pop <= 0;
   end
+  
+  if (cmd_buf_done) begin
+    cmd_chunk_ctr <= 0;
+    cmd_buf_ctr <= 0;
+  end
 
   if (buf_cmd_type != 0) begin
     buf_cmd_type <= 0;
@@ -351,11 +356,21 @@ always @(posedge clk) begin
       buf_cmd_type <= first_cmd_done ? 3'(cmd_pair[511:448]) : 3'(cmd_pair[255:192]);
       
       if (($bits(cmd_data_size)'(cur_buf[191:128]) == cmd_buf_ctr)) begin 
+        `ifdef DBG_TRACE_AFU
+          dpi_trace("%d: command buffer done\n", $time);
+        `endif
         packet_pop <= 1;
         cmd_buf_done <= 1;
         buf_cmd_type <= 0;
+        cmd_buf_ctr <= 0;
+        cmd_chunk_ctr <= 0;
+        cmd_pair_busy <= 0;
+        cmd_pair_valid <= 0;
       end
     end else if (!cmd_buf_done) begin // for pulling a pair of commands to execute (AFU will execute the pair, then come back to this, until buffer is done)
+      `ifdef DBG_TRACE_AFU  
+        dpi_trace("cmd chunk ctr = %d\n", cmd_chunk_ctr);
+      `endif
       buf_cmd_io_addr <= t_ccip_clAddr'(cur_buf[63:0]) + {16'b0, cmd_chunk_ctr} + 1;
       buf_cmd_mem_addr <= 0;
       buf_cmd_data_size <= 1;
@@ -366,6 +381,9 @@ always @(posedge clk) begin
 
     // for iterating through commands
     if (cmd_pair_valid) begin 
+      `ifdef DBG_TRACE_AFU
+        dpi_trace("%d: cmd pair valid = %d, cmd pair busy = %d, first cmd done = %d\n", $time, cmd_pair_valid, cmd_pair_busy, first_cmd_done);
+        `endif
       if (first_cmd_done) begin 
         cmd_pair <= 0;
         cmd_pair_valid <= 0;
@@ -413,7 +431,7 @@ always @(posedge clk) begin
     vx_reset   <= 0;    
   end else begin
     case (state)
-      STATE_IDLE: begin             
+      STATE_IDLE: begin    
         case (cmd_type)
           CMD_MEM_READ: begin     
           `ifdef DBG_TRACE_AFU
@@ -787,7 +805,7 @@ VX_pending_size #(
 ) cci_rd_pending_size (
     .clk   (clk),
     .reset (reset),
-    .incr  (cci_rd_req_fire),
+    .incr  (cci_rdq_push), // .incr  (cci_rd_req_fire),
     .decr  (cci_rdq_pop),
     .full  (cci_pending_reads_full),
     .size  (cci_pending_reads),
@@ -805,6 +823,9 @@ assign cci_mem_wr_req_addr = cci_rdq_dout[CCI_ADDR_WIDTH-1:0];
 
 // Send read requests to CCI
 always @(posedge clk) begin
+  `ifdef DBG_TRACE_AFU
+    //dpi_trace("%d: cci_rd_req_fire=%0d, cci_rd_req_valid=%0d, cci_rd_req_wait=%0d, cci_pending_reads_full=%0d\n", $time, cci_rd_req_fire, cci_rd_req_valid, cci_rd_req_wait, cci_pending_reads_full);
+  `endif
   if (reset) begin
     cci_rd_req_valid <= 0;
     cci_rd_req_wait  <= 0;

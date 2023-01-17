@@ -481,14 +481,15 @@ extern int vx_new_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t 
 }
 
 extern int vx_flush(cmdbuffer *cmdBuf) {
+    uint64_t io_addr = cmdBuf->fifo.at(0).mmio_io_addr;
     auto ls_shift = (int)std::log2(CACHE_BLOCK_SIZE);
     vx_buffer_t *buffer = ((vx_buffer_t*)cmdBuf->buffer);
     auto buf_ptr = (int*)vx_host_ptr(cmdBuf->buffer);
     memcpy(buf_ptr, &cmdBuf->fifo.at(0), ((cmdBuf->bufferCount) * 32));
     vx_device *device = ((vx_device*)buffer->hdevice);
-    std::cout << "flush to io_addr: " <<  ((uint64_t)buffer->io_addr >> ls_shift) << std::endl;
+    std::cout << "flush to io_addr: " <<  io_addr << std::endl;
 
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_IO_ADDR, (buffer->io_addr) >> ls_shift));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_IO_ADDR, io_addr));
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_MEM_ADDR, 0));
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_DATA_SIZE, 1));   
     CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_ENQ));

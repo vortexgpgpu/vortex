@@ -22,7 +22,12 @@ int test = -1;
 uint32_t count = 0;
 
 vx_device_h device = nullptr;
+cmdbuffer *cmdBuf = nullptr;
+cmdbuffer *cmdBuf1 = nullptr;
 vx_buffer_h staging_buf = nullptr;
+vx_buffer_h buf1 = nullptr;
+vx_buffer_h buf2 = nullptr;
+vx_buffer_h buf3 = nullptr;
 kernel_arg_t kernel_arg;
 
 static void show_usage() {
@@ -93,6 +98,7 @@ int run_memcopy_test(uint32_t dev_addr, uint64_t value, int num_blocks) {
   // write source buffer to local memory
   std::cout << "write source buffer to local memory" << std::endl;
   auto t0 = std::chrono::high_resolution_clock::now();
+  //vx_new_copy_to_dev(staging_buf, dev_addr, 64 * num_blocks, 0, cmdBuf1, 2);
   RT_CHECK(vx_copy_to_dev(staging_buf, dev_addr, 64 * num_blocks, 0));
   auto t1 = std::chrono::high_resolution_clock::now();
 
@@ -104,8 +110,10 @@ int run_memcopy_test(uint32_t dev_addr, uint64_t value, int num_blocks) {
   // read destination buffer from local memory
   std::cout << "read destination buffer from local memory" << std::endl;
   auto t2 = std::chrono::high_resolution_clock::now();
+  //vx_new_copy_to_dev(staging_buf, dev_addr, 64 * num_blocks, 0, cmdBuf1, 1);
   RT_CHECK(vx_copy_from_dev(staging_buf, dev_addr, 64 * num_blocks, 0));
   auto t3 = std::chrono::high_resolution_clock::now();
+
 
   // verify result
   std::cout << "verify result" << std::endl;
@@ -147,44 +155,49 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
   
   // update source buffer
   {
-    auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
+    auto buf_ptr = (int32_t*)vx_host_ptr(buf1);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr[i] = i;
     }
   }
   std::cout << "upload source buffer" << std::endl;
   auto t0 = std::chrono::high_resolution_clock::now();
-  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src_addr, buf_size, 0));
+  vx_new_copy_to_dev(buf1, kernel_arg.src_addr, buf_size, 0, cmdBuf, 2);
+  //RT_CHECK(vx_copy_to_dev(buf1, kernel_arg.src_addr, buf_size, 0));
   auto t1 = std::chrono::high_resolution_clock::now();
 
   // clear destination buffer
   {
-    auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
+    auto buf_ptr = (int32_t*)vx_host_ptr(buf2);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr[i] = 0xdeadbeef;
     }
   }  
   std::cout << "clear destination buffer" << std::endl;
-  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_addr, buf_size, 0));
+  vx_new_copy_to_dev(buf2, kernel_arg.dst_addr, buf_size, 0, cmdBuf, 2);
+  //RT_CHECK(vx_copy_to_dev(buf1, kernel_arg.dst_addr, buf_size, 0));
 
   // start device
   std::cout << "start execution" << std::endl;
   auto t2 = std::chrono::high_resolution_clock::now();
-  RT_CHECK(vx_start(device));
-  RT_CHECK(vx_ready_wait(device, MAX_TIMEOUT));
+  vx_new_start(device, cmdBuf);
+  //RT_CHECK(vx_start(device));
+  //RT_CHECK(vx_ready_wait(device, MAX_TIMEOUT));
   auto t3 = std::chrono::high_resolution_clock::now();
 
   // read destination buffer from local memory
   std::cout << "read destination buffer from local memory" << std::endl;
   auto t4 = std::chrono::high_resolution_clock::now();
-  RT_CHECK(vx_copy_from_dev(staging_buf, kernel_arg.dst_addr, buf_size, 0));
+  vx_new_copy_to_dev(buf2, kernel_arg.dst_addr, buf_size, 0, cmdBuf, 1);
+  vx_flush(cmdBuf);
+  RT_CHECK(vx_copy_from_dev(buf2, kernel_arg.dst_addr, buf_size, 0));
   auto t5 = std::chrono::high_resolution_clock::now();
-
+  
   
   // verify result
   std::cout << "verify result" << std::endl;
   for (uint32_t i = 0; i < num_points; ++i) {
-    int32_t curr = ((int32_t*)vx_host_ptr(staging_buf))[i];
+    int32_t curr = ((int32_t*)vx_host_ptr(buf2))[i];
     int32_t ref = i;
     if (curr != ref) {
       std::cout << "error at result #" << std::dec << i
@@ -253,6 +266,13 @@ int main(int argc, char *argv[]) {
   std::cout << "allocate shared memory" << std::endl;
   uint32_t alloc_size = std::max<uint32_t>(buf_size, sizeof(kernel_arg_t));
   RT_CHECK(vx_buf_alloc(device, alloc_size, &staging_buf));
+  RT_CHECK(vx_buf_alloc(device, alloc_size, &buf1));
+  RT_CHECK(vx_buf_alloc(device, alloc_size, &buf2));
+  RT_CHECK(vx_buf_alloc(device, alloc_size, &buf3));
+
+  cmdBuf = vx_create_command_buffer(8);
+  RT_CHECK(vx_buf_alloc(device, buf_size, &cmdBuf->buffer));
+  cmdBuf->createHeaderPacket(cmdBuf, 0);
 
   // run tests  
   if (0 == test || -1 == test) {
@@ -263,14 +283,15 @@ int main(int argc, char *argv[]) {
   if (1 == test || -1 == test) {
     // upload program
     std::cout << "upload program" << std::endl;  
-    RT_CHECK(vx_upload_kernel_file(device, kernel_file));
+    RT_CHECK(vx_upload_kernel_file(device, kernel_file, cmdBuf));
 
     // upload kernel argument
     std::cout << "upload kernel argument" << std::endl;
     {
       auto buf_ptr = (void*)vx_host_ptr(staging_buf);
       memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
-      RT_CHECK(vx_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
+      vx_new_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0, cmdBuf, 2); // append to command buffer
+      //RT_CHECK(vx_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
     }
 
     std::cout << "run kernel test" << std::endl;

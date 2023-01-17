@@ -5,3 +5,7 @@ PERF: instrs=10328, cycles=8303, IPC=1.243888
 
 
 Demo without command buffer:
+
+regression/basic:
+with command buffer - 145ms, 38953 cycles
+without improvement - 150ms, 116325 cycles

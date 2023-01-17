@@ -16,23 +16,24 @@ typedef struct vx_buffer_ {
 } vx_buffer_t;
 
 bool cmdbuffer::createHeaderPacket(cmdbuffer *cmdBuf, bool barrier) { // header packet is size of 2 subpackets
-  subpacket headerPacket;
   auto ls_shift = (int)std::log2(CACHE_BLOCK_SIZE);
-  vx_buffer_t *buffer = ((vx_buffer_t*)cmdBuf->buffer);
-
-
-  headerPacket.mmio_io_addr = (buffer->io_addr) >> ls_shift;
-  headerPacket.mmio_mem_addr = 3000; // not relevant for header because we are writing to HWQ
-  headerPacket.mmio_data_size = -2; // (aligned_size(1, CACHE_BLOCK_SIZE) >> ls_shift);
-  headerPacket.mmio_cmd_type = 2; // mmio_cmd_type = CMD_BUF_ENQ
+  vx_buffer_t *buffert = ((vx_buffer_t*)buffer);
+  subpacket headerPacket = {
+    (buffert->io_addr) >> ls_shift,
+    3000,
+    (uint64_t)-2,
+    2
+  };
 
   appendToCmdBuffer(headerPacket);
 
   // second half of header packet (see subpacket_ in vortex.h)
-  headerPacket.mmio_io_addr = barrier;
-  headerPacket.mmio_mem_addr = 0;
-  headerPacket.mmio_data_size = 0;
-  headerPacket.mmio_cmd_type = 2;
+  headerPacket = {
+    barrier,
+    0,
+    0,
+    2
+  };
 
   appendToCmdBuffer(headerPacket);
 
@@ -111,7 +112,7 @@ extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint6
     */
 
     vx_new_copy_to_dev(buffer, kernel_base_addr + offset, chunk_size, 0, cmdBuf, 2);
-    err = 0; //vx_copy_to_dev(buffer, kernel_base_addr + offset, chunk_size, 0);
+    err = 0; // vx_copy_to_dev(buffer, kernel_base_addr + offset, chunk_size, 0);
     if (err != 0) {
       vx_buf_free(buffer);
       return err;

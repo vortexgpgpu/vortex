@@ -86,13 +86,18 @@ int run_test(const kernel_arg_t& kernel_arg,
   vx_flush(cmdBuf);
   RT_CHECK(vx_copy_from_dev(buf3, kernel_arg.dst_addr, buf_size, 0));
 
-  sleep(1); // temporary sleep because results are checked before they are available otherwise
-
   // verify result
   std::cout << "verify result" << std::endl;  
   {
     int errors = 0;
     auto buf_ptr = (int32_t*)vx_host_ptr(buf3);
+    
+    while (buf_ptr[0] == 0xdeadbeef)
+    {
+      printf("bruh");
+      continue;
+    }
+    
     for (uint32_t i = 0; i < num_points; ++i) {
       int ref = i + i; 
       int cur = buf_ptr[i];
@@ -115,6 +120,7 @@ int run_test(const kernel_arg_t& kernel_arg,
 int main(int argc, char *argv[]) {
   clock_t start, end;
   start = clock();
+
   size_t value; 
   
   // parse command arguments
@@ -139,6 +145,12 @@ int main(int argc, char *argv[]) {
 
   std::cout << "number of points: " << num_points << std::endl;
   std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
+
+  /*
+  cmdBuff = vx_create_buffer(8, device);
+  printf("HOWDY\n");
+  bool test = cmdBuff->createHeaderPacket();
+  */
 
   cmdBuf = vx_create_command_buffer(8);
   RT_CHECK(vx_buf_alloc(device, buf_size, &cmdBuf->buffer));
