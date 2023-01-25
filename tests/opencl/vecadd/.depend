@@ -1,7 +1,0 @@
-main.o: main.cc /opt/pocl/runtime/include/CL/opencl.h \
- /opt/pocl/runtime/include/CL/cl.h \
- /opt/pocl/runtime/include/CL/cl_version.h \
- /opt/pocl/runtime/include/CL/cl_platform.h \
- /opt/pocl/runtime/include/CL/cl_gl.h \
- /opt/pocl/runtime/include/CL/cl_gl_ext.h \
- /opt/pocl/runtime/include/CL/cl_ext.h
