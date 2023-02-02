@@ -5,6 +5,10 @@
 #include <stack>
 #include "types.h"
 
+
+#define SIZE 2
+#define SIZE_SQ  SIZE*SIZE
+
 namespace vortex {
 
 class Core;
@@ -105,6 +109,12 @@ private:
   std::vector<std::vector<Word>> ireg_file_;
   std::vector<std::vector<FWord>> freg_file_;
   std::vector<std::vector<Byte>> vreg_file_;
+
+  //tensorcore registers
+  std::vector<std::vector<Word>> tcore_ireg_a;
+  std::vector<std::vector<Word>> tcore_ireg_b;
+  std::vector<std::vector<Word>> tcore_ireg_c; //accumulator
+  
   std::stack<DomStackEntry> dom_stack_;
 
   struct vtype vtype_;

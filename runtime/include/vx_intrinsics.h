@@ -198,6 +198,26 @@ inline void vx_fence() {
     asm volatile ("fence iorw, iorw");
 }
 
+inline void ml(unsigned dest, unsigned addr) {
+    asm volatile (".insn s 0x7b, 0, x0, %0(%1)" :: "i"(dest), "r"(addr));
+}
+
+inline void ms(unsigned addr) {
+    asm volatile (".insn s 0x7b, 1, x0, 0(%0)" :: "r"(addr));
+}
+
+inline void mm() {
+    asm volatile (".insn s 0x7b, 2, x0, 0(x0)");
+}
+//inline void vx_prefetch(unsigned addr) {
+//    asm volatile (".insn s 0x6b, 5, x0, 0(%0)" :: "r"(addr) );
+//}
+//inline void vx_barrier(unsigned barried_id, unsigned num_warps) {
+//    asm volatile (".insn s 0x6b, 4, %1, 0(%0)" :: "r"(barried_id), "r"(num_warps));
+//}
+
+
+
 #define __if(b) vx_split(b); \
                 if (b) 
 

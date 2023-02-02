@@ -1,7 +1,7 @@
 #pragma once
 
 #ifndef DEBUG_LEVEL
-#define DEBUG_LEVEL 3
+#define DEBUG_LEVEL 4
 #endif
 
 #define DEBUG_HEADER << "DEBUG "
@@ -10,7 +10,7 @@
 #define TRACE_HEADER << "TRACE "
 //#define TRACE_HEADER << "DEBUG " << __FILE__ << ':' << std::dec << __LINE__ << ": "
 
-#ifndef NDEBUG
+#ifdef NDEBUG
 
 #include <iostream>
 #include <iomanip>

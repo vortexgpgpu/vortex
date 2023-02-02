@@ -42,6 +42,7 @@ static const std::unordered_map<Opcode, struct InstTableEntry_t> sc_instTable = 
   {Opcode::VSET,       {false, InstType::V_TYPE}}, 
   {Opcode::GPGPU,      {false, InstType::R_TYPE}},
   {Opcode::GPU,        {false, InstType::R4_TYPE}},
+  {Opcode::TCU,        {false, InstType::S_TYPE}},
   {Opcode::R_INST_W,   {false, InstType::R_TYPE}},
   {Opcode::I_INST_W,   {false, InstType::I_TYPE}},
 };
@@ -368,6 +369,14 @@ static const char* op_string(const Instr &instr) {
     default:
       std::abort();
     }
+  case Opcode::TCU:
+    switch(func3){
+      case 0: return "ML";
+      case 1: return "MS";
+      case 2: return "MM";
+      default:
+        std::abort();
+    }
   default:
     std::abort();
   }
@@ -430,7 +439,7 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
 
   auto op_it = sc_instTable.find(op);
   if (op_it == sc_instTable.end()) {
-    std::cout << std::hex << "Error: invalid opcode: 0x" << op << std::endl;
+    std::cout << std::hex << "Error: asdada invalid opcode: 0x" << op << std::endl;
     return nullptr;
   }
 
@@ -546,8 +555,10 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
     }
     instr->setFunc3(func3);
     auto imm = (func7 << width_reg) | rd;
-    instr->setImm(sext(imm, width_i_imm));
-  } break;
+    instr->setImm(sext(imm, width_i_imm)); 
+    if (op == Opcode::TCU)
+      std::cout << "TCUDEBUG: immediate val: " << imm << ", address in reg# " << rs1  << ", zero: " << rs2 << std::endl;
+  } break; 
 
   case InstType::B_TYPE: {
     instr->setSrcReg(rs1, RegType::Integer);

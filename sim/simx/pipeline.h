@@ -32,6 +32,9 @@ struct pipeline_trace_t {
   RegMask     used_iregs;
   RegMask     used_fregs;
   RegMask     used_vregs;
+  RegMask     used_tcore_iregs_a;
+  RegMask     used_tcore_iregs_b;
+  RegMask     used_tcore_iregs_c;
 
   //- 
   ExeType     exe_type; 

@@ -124,6 +124,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
 
   std::vector<reg_data_t[3]> rsdata(num_threads);
   std::vector<reg_data_t> rddata(num_threads);
+  std::vector<reg_data_t[SIZE_SQ]> rddata_arr(num_threads);
 
   auto num_rsrcs = instr.getNRSrc();
   if (num_rsrcs) {              
@@ -1451,6 +1452,141 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       std::abort();
     }
   } break;
+  case TCU: {
+    switch (func3) {
+      case 0: { //Matrix Load
+        trace->exe_type = ExeType::LSU;    
+        trace->lsu.type = LsuType::LOAD;
+        trace->used_iregs.set(rsrc0);
+        trace->used_iregs.set(rsrc1);
+        uint32_t mem_bytes = 1 << (2 & 0x3);
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t))
+            continue;
+          uint64_t mem_addr = rsdata[t][0].i ;         
+          
+          uint64_t mem_addr_arr[SIZE][SIZE];
+          uint64_t base_addr = rsdata[t][0].i ;
+         
+          //get the memory addresses
+          for(int i = 0; i < SIZE; i++){
+            for(int j = 0; j < SIZE; j++){
+              mem_addr_arr[i][j] = base_addr + ((SIZE*i) + j)*4;
+            }
+          }
+
+          uint64_t mem_data = 0;
+          
+          uint64_t mem_data_arr[SIZE][SIZE];
+          
+          //core_->dcache_read(&mem_data, mem_addr, mem_bytes);
+
+          //load memory addresses
+          
+          for(int i = 0; i < SIZE; i++){
+            for(int j = 0; j < SIZE; j++){
+              uint64_t* temp_ref = &mem_data_arr[i][j];
+              //core_->dcache_read(mem_data_arr[i][j], mem_addr_arr[i][j], mem_bytes);
+              core_->dcache_read(temp_ref, mem_addr_arr[i][j], mem_bytes);
+              DP(4, "TCU LOAD MEM: ADDRESS=0x" << std::hex << mem_addr_arr[i][j] << ", DATA=0x" << mem_data_arr[i][j]);
+            }
+          }
+          trace->mem_addrs.at(t).push_back({mem_addr, mem_bytes});        
+          DP(4, "TCU LOAD MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data);
+          //load 32 bit data into rdata. Now what?
+          // RV32I: LW
+          rddata[t].i = sext((Word)mem_data, 32);
+
+          //put into rddata_arr[]
+          for(int i = 0; i < SIZE; i++){
+            for(int j = 0; j < SIZE; j++){
+              rddata_arr[t][SIZE*i + j].i = sext((Word)mem_data_arr[i][j], 32);
+            }
+          }
+        }
+        rd_write = true;
+      } break;
+      case 1: { //Matrix Store
+        trace->exe_type = ExeType::LSU;    
+        trace->lsu.type = LsuType::STORE;
+        trace->used_iregs.set(rsrc0);
+        trace->used_iregs.set(rsrc1);
+        DP(4, "TCU STORE MEM: ADDRESS=0x");// << std::hex << mem_addr << ", DATA=0x" << mem_data);
+
+        uint32_t mem_bytes = 1 << (2 & 0x3);
+        uint64_t mask = ((uint64_t(1) << (8 * mem_bytes))-1);
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t))
+            continue;
+          uint64_t mem_addr = rsdata[t][0].i;
+          uint64_t base_addr = rsdata[t][0].i;
+          uint64_t mem_data = tcore_ireg_c[t][0];
+          uint64_t mem_addr_arr[SIZE][SIZE];
+          uint64_t mem_data_arr[SIZE][SIZE];
+
+          //memory addr array
+          for(int i = 0; i < SIZE; i++){
+            for(int j = 0; j < SIZE; j++){
+              mem_addr_arr[i][j] = base_addr + ((SIZE*i) + j)*4;
+            }
+          }
+
+          //data array from tcore reg c
+          for(int i = 0; i < SIZE; i++){
+            for(int j = 0; j < SIZE; j++){
+              mem_data_arr[i][j] = tcore_ireg_c.at(t)[i*SIZE + j];
+              //tcore_ireg_a.at(t)[i] = rddata_arr[t].i;
+            }
+          }
+
+          if (mem_bytes < 8) {
+            mem_data &= mask;
+          }
+          trace->mem_addrs.at(t).push_back({mem_addr, mem_bytes});        
+          DP(4, "STORE MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data);
+          //core_->dcache_write(&mem_data, mem_addr, mem_bytes);  
+          for(int i = 0; i < SIZE; i++){
+            for(int j = 0; j < SIZE; j++){
+              uint64_t* temp_ref = &mem_data_arr[i][j];
+              core_->dcache_write(temp_ref, mem_addr_arr[i][j], mem_bytes);  
+              DP(4, "TCU STORE MEM: ADDRESS=0x" << std::hex << mem_addr_arr[i][j] << ", DATA=0x" << mem_data_arr[i][j]);
+            }
+          }
+        }
+      } break;
+      case 2: { //Matrix Multiply
+        DP(4, "TCU MULTIPLY MAT");// << std::hex << mem_addr << ", DATA=0x" << mem_data);
+        trace->exe_type = ExeType::ALU;    
+        trace->alu.type = AluType::ARITH;    
+        trace->used_tcore_iregs_a.set(rsrc0);
+        trace->used_tcore_iregs_b.set(rsrc0);
+        for (uint32_t t = 0; t < num_threads; ++t) {
+          if (!tmask_.test(t))
+            continue;
+          //tcore_ireg_c.at(t)[0] = tcore_ireg_a.at(t)[0] * tcore_ireg_b.at(t)[0] + tcore_ireg_a.at(t)[1] * tcore_ireg_b.at(t)[2];
+          //tcore_ireg_c.at(t)[1] = tcore_ireg_a.at(t)[0] * tcore_ireg_b.at(t)[1] + tcore_ireg_a.at(t)[1] * tcore_ireg_b.at(t)[3];
+          //tcore_ireg_c.at(t)[2] = tcore_ireg_a.at(t)[2] * tcore_ireg_b.at(t)[0] + tcore_ireg_a.at(t)[3] * tcore_ireg_b.at(t)[2];
+          //tcore_ireg_c.at(t)[3] = tcore_ireg_a.at(t)[2] * tcore_ireg_b.at(t)[1] + tcore_ireg_a.at(t)[3] * tcore_ireg_b.at(t)[3];
+          for (int i = 0; i < SIZE; i++) { //ROW-1
+            for (int j = 0; j < SIZE; j++) { //COL-2
+              int sum = 0;
+              for (int k = 0; k < SIZE; k++){ //COL-1
+                sum = sum + tcore_ireg_a.at(t)[i * SIZE + k] * tcore_ireg_b.at(t)[k * SIZE + j]; //sum = [i * col1 + k] * [k * col2 + j]
+              }
+              tcore_ireg_c.at(t)[i * SIZE + j] = sum; //[i * col2 + j] = sum
+            }
+          }
+          for (int i = 0; i < SIZE_SQ; i++){
+            trace->used_tcore_iregs_c[i] = 1;
+            std::cout << "TCU MM: Multiplication result: " << std::hex << tcore_ireg_c.at(t)[i] << std::endl;
+          }
+        }
+        rd_write = true;
+      }break;
+      default:
+        std::abort();
+    }
+  } break;
   case VSET: {
     uint32_t VLEN = core_->arch().vsize() * 8;
     uint32_t VLMAX = (instr.getVlmul() * VLEN) / instr.getVsew();
@@ -2307,40 +2443,81 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->wb = true;
     DPH(2, "Dest Reg: ");
     auto type = instr.getRDType();    
-    switch (type) {
-    case RegType::Integer:      
-      if (rdest) {    
-        DPN(2, type << std::dec << rdest << "={");    
-        for (uint32_t t = 0; t < num_threads; ++t) {
-          if (t) DPN(2, ", ");
-          if (!tmask_.test(t)) {
-            DPN(2, "-");
-            continue;            
-          }
-          ireg_file_.at(t)[rdest] = rddata[t].i;
-          DPN(2, "0x" << std::hex << rddata[t].i);         
-        }
-        DPN(2, "}" << std::endl);
-        trace->used_iregs[rdest] = 1;
-      }
-      break;
-    case RegType::Float:
-      DPN(2, type << std::dec << rdest << "={");
+    if(opcode == Opcode::TCU){ //tensor core
+      //iterate over threads
+      //put in tensor core reg.
+      std::cout << "TCU if condition" << std::endl;
+      DPN(2, type << std::dec << immsrc << "={"); //FIX   
+      
       for (uint32_t t = 0; t < num_threads; ++t) {
         if (t) DPN(2, ", ");
         if (!tmask_.test(t)) {
           DPN(2, "-");
           continue;            
         }
-        freg_file_.at(t)[rdest] = rddata[t].f;        
-        DPN(2, "0x" << std::hex << rddata[t].f);         
+        //check immediate value
+        if(immsrc == 0){ // 0 => A; Load A
+          //iterate over all regs in A
+          for (int i = 0; i < SIZE_SQ; i++){
+            tcore_ireg_a.at(t)[i] = rddata_arr[t][i].i;
+            trace->used_tcore_iregs_a[i] = 1;
+          }
+        }
+        else if(immsrc == 1){ // 0 => B; Load B
+          //iterate over all regs in B
+          for (int i = 0; i < SIZE_SQ; i++){
+            tcore_ireg_b.at(t)[i] = rddata_arr[t][i].i;
+            trace->used_tcore_iregs_b[i] = 1;
+          }
+        }
+        /*
+        else if(){ // Mul A x B
+          for (int i = 0; i < SIZE_SQ; i++){
+            tcore_ireg_c.at(t)[i] = rddata[t].i;
+            trace->used_tcore_iregs_b[i] = 1;
+          }
+        }
+        */
+        DPN(2, "0x" << std::hex << rddata[t].i);         
       }
       DPN(2, "}" << std::endl);
-      trace->used_fregs[rdest] = 1;
-      break;
-    default:
-      std::abort();
-      break;
+    }
+    else{
+      switch (type) {
+        case RegType::Integer:      
+          if (rdest) {    
+            DPN(2, type << std::dec << rdest << "={");    
+            for (uint32_t t = 0; t < num_threads; ++t) {
+              if (t) DPN(2, ", ");
+              if (!tmask_.test(t)) {
+                DPN(2, "-");
+                continue;            
+              }
+              ireg_file_.at(t)[rdest] = rddata[t].i;
+              DPN(2, "0x" << std::hex << rddata[t].i);         
+            }
+            DPN(2, "}" << std::endl);
+            trace->used_iregs[rdest] = 1;
+          }
+          break;
+        case RegType::Float:
+          DPN(2, type << std::dec << rdest << "={");
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (t) DPN(2, ", ");
+            if (!tmask_.test(t)) {
+              DPN(2, "-");
+              continue;            
+            }
+            freg_file_.at(t)[rdest] = rddata[t].f;        
+            DPN(2, "0x" << std::hex << rddata[t].f);         
+          }
+          DPN(2, "}" << std::endl);
+          trace->used_fregs[rdest] = 1;
+          break;
+        default:
+          std::abort();
+          break;
+      }
     }
   }
 

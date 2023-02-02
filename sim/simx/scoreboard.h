@@ -16,6 +16,9 @@ private:
     std::vector<RegMask> in_use_iregs_;
     std::vector<RegMask> in_use_fregs_;
     std::vector<RegMask> in_use_vregs_;
+    std::vector<RegMask> in_use_tcore_iregs_a;
+    std::vector<RegMask> in_use_tcore_iregs_b;
+    std::vector<RegMask> in_use_tcore_iregs_c;
     std::unordered_map<uint32_t, uint64_t> owners_; 
 
 public:    
@@ -23,6 +26,9 @@ public:
         : in_use_iregs_(arch.num_warps())
         , in_use_fregs_(arch.num_warps())
         , in_use_vregs_(arch.num_warps())
+        , in_use_tcore_iregs_a(arch.num_warps())
+        , in_use_tcore_iregs_b(arch.num_warps())
+        , in_use_tcore_iregs_c(arch.num_warps())
     {
         this->clear();
     }
@@ -32,6 +38,9 @@ public:
             in_use_iregs_.at(i).reset();
             in_use_fregs_.at(i).reset();
             in_use_vregs_.at(i).reset();
+            in_use_tcore_iregs_a.at(i).reset();
+            in_use_tcore_iregs_b.at(i).reset();
+            in_use_tcore_iregs_c.at(i).reset();
         }
         owners_.clear();
     }

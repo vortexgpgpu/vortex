@@ -32,6 +32,8 @@ enum Opcode {
   // GPGPU Extension
   GPGPU     = 0x6b,
   GPU       = 0x5b,
+  // tensorcore Extension
+  TCU       = 0x7b,
   // RV64 Standard Extensions
   R_INST_W  = 0x3b,
   I_INST_W  = 0x1b,

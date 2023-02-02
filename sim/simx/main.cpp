@@ -76,6 +76,7 @@ int main(int argc, char **argv) {
     // attach memory module
     processor.attach_ram(&ram);   
 
+    //std::cout << "Test msg" << " Num of cores: " << num_cores << ". Num of warps: " << num_warps << ". Num of threads: " << num_threads << std::endl;
     // run simulation
     exitcode = processor.run();
 

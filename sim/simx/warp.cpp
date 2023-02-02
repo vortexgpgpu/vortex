@@ -16,6 +16,9 @@ Warp::Warp(Core *core, uint32_t id)
     , ireg_file_(core->arch().num_threads(), std::vector<Word>(core->arch().num_regs()))
     , freg_file_(core->arch().num_threads(), std::vector<FWord>(core->arch().num_regs()))
     , vreg_file_(core->arch().num_threads(), std::vector<Byte>(core->arch().vsize()))
+    , tcore_ireg_a(core->arch().num_threads(), std::vector<Word>(core->arch().num_regs()))
+    , tcore_ireg_b(core->arch().num_threads(), std::vector<Word>(core->arch().num_regs()))
+    , tcore_ireg_c(core->arch().num_threads(), std::vector<Word>(core->arch().num_regs()))
 {
   this->clear();
 }
@@ -34,6 +37,30 @@ void Warp::clear() {
     for (auto& reg : vreg_file_.at(i)) {
       reg = 0;
     }
+    /*
+    for (auto& reg : treg_file_.at(i)) {
+      reg = 0;
+    }
+    */
+   
+    for (auto& reg : tcore_ireg_a.at(i)) {
+      reg = 0;
+    }
+    for (auto& reg : tcore_ireg_b.at(i)) {
+      reg = 0;
+    }
+    for (auto& reg : tcore_ireg_c.at(i)) {
+      reg = 0;
+    }
+    
+    //clear the tensorcore regs
+    //for (int j = 0; j < SIZE_SQ; j++){
+    //  //for (int j = 0; j < 2; j++){
+    //    tcore_ireg_a[j] = 0;
+    //    tcore_ireg_b[j] = 0;
+    //    tcore_ireg_c[j] = 0;
+    //  //}
+    //}
   }
 }
 

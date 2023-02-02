@@ -181,11 +181,17 @@ void Core::cout_flush() {
 }
 
 void Core::tick() {
+  //std::cout << "coreid=" << id_ << " Start tick. Before commit" << std::endl;
   this->commit();
+  //std::cout << "coreid=" << id_ << " After Commit. Before execute" << std::endl;
   this->execute();
+  //std::cout << "coreid=" << id_ << " After execute. Before decode" << std::endl;
   this->decode();
+  //std::cout << "coreid=" << id_ << " After decode. Before fetch" << std::endl;
   this->fetch();
+  //std::cout << "coreid=" << id_ << " After fetch. Before schedule" << std::endl;
   this->schedule();
+  //std::cout << "coreid=" << id_ << " After schedule" << std::endl;
 
   // update perf counter  
   perf_stats_.mem_latency += perf_mem_pending_reads_;
