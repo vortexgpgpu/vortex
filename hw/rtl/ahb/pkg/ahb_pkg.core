@@ -1,0 +1,21 @@
+CAPI=2:
+name: socet:bus-components:ahb_pkg:0.0.1
+description: AMBA5 AHB Interface
+
+filesets:
+    rtl:
+        files:
+            - ahb_pkg.sv
+        file_type: systemVerilogSource
+
+targets:
+    default: &default
+        filesets:
+            - rtl
+        toplevel: pkg 
+        # No parameters?
+    
+    lint:
+        <<: *default
+        description: Linting
+        default_tool: veriblelint

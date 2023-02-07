@@ -1,0 +1,67 @@
+CAPI=2:
+name: socet:bus-components:ahb_manager:0.0.1
+description: Parameterizable APB Requester (AMBA 5)
+
+filesets:
+    rtl:
+        depend:
+            - "socet:bus-components:bus_protocol_if"
+            - "socet:bus-components:ahb_pkg"
+            - "socet:bus-components:ahb_if"
+        files:
+            - src/ahb_manager.sv
+        file_type: systemVerilogSource
+
+
+    tb:
+        depend:
+            - "socet:bus-components:ahb_pkg"
+            - "socet:bus-components:bus_protocol_if"
+            - "socet:bus-components:ahb_if"
+            - "socet:bus-components:simple_memory"
+            - "socet:bus-components:ahb_subordinate"
+        files:
+            - tb/tb_ahb_manager.sv
+            - "tool_verilator? (tb/tb_ahb_manager.cc)"
+        file_type: systemVerilogSource
+
+targets:
+    default: &default
+        filesets:
+            - rtl
+        toplevel: ahb_subordinate
+
+
+    sim:
+        <<: *default
+        filesets_append:
+            - tb
+        description: Simulate w/TB
+        default_tool: xcelium
+        toplevel: tb_ahb_manager
+        tools:
+            xcelium:
+                xrun_options:
+                    - +xmtimescale+1ns/100ps
+            verilator:
+                verilator_options:
+                    - --trace
+                    - --trace-fst
+                    - --trace-structs
+                    - --timing
+                    - -Wno-lint
+                make_options:
+                    - -j `nproc`
+
+
+    lint:
+        filesets:
+            - rtl
+            - tb
+        description: Linting
+        default_tool: veriblelint
+        toplevel: tb_ahb_manager
+        tools:
+            veriblelint:
+                verible_lint_args: ['--autofix=inplace-interactive', '--rules_config_search']
+

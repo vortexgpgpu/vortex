@@ -1,0 +1,51 @@
+CAPI=2:
+name: socet:bus-components:ahb_subordinate:0.0.1
+description: Parameterizable AHB Subordinate (AMBA 5)
+
+filesets:
+    rtl:
+        depend:
+            - "socet:bus-components:bus_protocol_if"
+            - "socet:bus-components:ahb_if"
+        files:
+            - src/ahb_subordinate.sv
+        file_type: systemVerilogSource
+
+
+    tb:
+        depend:
+            - "socet:bus-components:simple_memory"
+        files:
+            - tb/ahb_subordinate_tb.sv
+        file_type: systemVerilogSource
+
+targets:
+    default: &default
+        filesets:
+            - rtl
+        toplevel: ahb_subordinate
+
+
+    sim:
+        <<: *default
+        filesets_append:
+            - tb
+        description: Simulate w/TB
+        default_tool: xcelium
+        toplevel: ahb_subordinate_tb 
+        tools:
+            xcelium:
+                xrun_options:
+                    - +xmtimescale+1ns/100ps
+
+    lint:
+        filesets:
+            - rtl
+            - tb
+        description: Linting
+        default_tool: veriblelint
+        toplevel: ahb_subordinate_tb
+        tools:
+            veriblelint:
+                verible_lint_args: ['--autofix=inplace-interactive', '--rules_config_search']
+

@@ -1,0 +1,78 @@
+CAPI=2:
+
+name: socet:bus-components:ahb_simple_interconnect:0.1.0
+description: APB Decode/Multiplexing for single-requester
+
+filesets:
+    rtl:
+        depend:
+            - "socet:bus-components:ahb_if"
+        files:
+            - src/ahb_simple_interconnect.sv
+        file_type: systemVerilogSource
+
+    tb:
+        depend:
+            - "socet:bus-components:bus_protocol_if"
+            - "socet:bus-components:ahb_if"
+            - "socet:bus-components:ahb_mux"
+            - "socet:bus-components:ahb_subordinate"
+            - "socet:bus-components:ahb_manager"
+            - "socet:bus-components:simple_memory"
+        files:
+            - tb/tb_ahb_bus_system.sv
+            - "tool_verilator? (tb/tb_ahb_bus_system.cc)" : {file_type: cppSource}
+        file_type: systemVerilogSource
+
+    lint_files:
+        files:
+            - src/ahb_simple_interconnect.sv
+        file_type: systemVerilogSource
+
+targets:
+    default: &default
+        filesets:
+            - rtl
+        toplevel: ahb_simple_interconnect
+
+
+    sim:
+        <<: *default
+        description: Simulate w/TB
+        default_tool: verilator
+        toplevel: tb_ahb_bus_system
+        filesets_append:
+            - tb
+        tools:
+            verilator:
+                verilator_options:
+                    - --trace
+                    - --trace-fst
+                    - --trace-structs
+                    - --timing
+                    - -Wno-lint
+
+    lint:
+        filesets:
+            - lint_files
+        description: Linting
+        default_tool: veriblelint
+        toplevel: ahb_simple_interconnect
+        tools:
+            veriblelint:
+                verible_lint_args: ['--autofix=inplace-interactive', '--rules_config_search']
+    
+    format:
+        filesets:
+            - lint_files
+        description: Linting
+        default_tool: veribleformat
+        toplevel: ahb_simple_interconnect
+        tools:
+            veribleformat:
+                verible_format_args: ['--indentation_spaces=4', '--inplace']
+
+parameters:
+    SYNTHESIS:
+        datatype: bool
+        paramtype: vlogdefine

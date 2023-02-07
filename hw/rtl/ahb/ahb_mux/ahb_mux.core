@@ -1,0 +1,86 @@
+CAPI=2:
+
+name: socet:bus-components:ahb_mux:0.0.1
+description: APB Decode/Multiplexing for single-requester
+
+filesets:
+    rtl:
+        depend:
+            - "socet:bus-components:ahb_if"
+            - "socet:bus-components:ahb_pkg"
+        files:
+            - src/ahb_mux_pkg.sv
+            - src/aphase_cache.sv
+            - src/arbiter.sv
+            - src/ahb_mux.sv
+        file_type: systemVerilogSource
+
+    tb:
+        depend:
+            - "socet:bus-components:ahb_if"
+            - "socet:bus-components:ahb_subordinate"
+            - "socet:bus-components:simple_memory"
+        files:
+            - tb/tb_ahbl_bus_mux.sv
+        file_type: systemVerilogSource
+
+    tb_verilator:
+        files:
+            - tb/ahb_mux_wrapper.sv : { file_type: cppSource }
+        file_type: systemVerilogSource
+
+    lint_files:
+        files:
+            - src/ahb_mux_pkg.sv
+            - src/aphase_cache.sv
+            - src/arbiter.sv
+            - src/ahb_mux.sv
+        file_type: systemVerilogSource
+
+targets:
+    default: &default
+        filesets:
+            - rtl
+        toplevel: ahb_mux
+
+
+    sim:
+        <<: *default
+        description: Simulate w/TB
+        default_tool: verilator
+        toplevel:
+            - "!tool_verilator? (tb_ahbl_bus_mux)"
+            - "tool_verilator? (ahb_mux_wrapper)"
+        filesets_append:
+            - "!tool_verilator? (tb)"
+            - "tool_verilator? (tb_verilator)"
+
+    lint:
+        filesets:
+            - lint_files
+        description: Linting
+        default_tool: veriblelint
+        toplevel: ahb_mux
+        tools:
+            veriblelint:
+                verible_lint_args: ['--autofix=inplace-interactive', '--rules_config_search']
+    
+    format:
+        filesets:
+            - lint_files
+        description: Linting
+        default_tool: veribleformat
+        toplevel: ahb_mux
+        tools:
+            veribleformat:
+                verible_format_args: ['--indentation_spaces=4', '--inplace']
+
+parameters:
+    MM:
+        datatype: int
+        description: Number of requesters upstream 
+        paramtype: vlogparam
+
+    SYNTHESIS:
+        datatype: bool
+        paramtype: vlogdefine

@@ -1,0 +1,26 @@
+CAPI=2:
+name: socet:bus-components:ahb_if:0.0.1
+description: AMBA5 AHB Interface
+
+filesets:
+    rtl:
+        files:
+            - ahb_if.sv
+        file_type: systemVerilogSource
+
+targets:
+    default: &default
+        filesets:
+            - rtl
+        toplevel: ahb_if
+        # No parameters?
+    
+    sim:
+        <<: *default
+        description: Simulate
+        default_tool: xcelium
+
+    lint:
+        <<: *default
+        description: Linting
+        default_tool: veriblelint
