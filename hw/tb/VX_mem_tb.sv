@@ -353,5 +353,3 @@ program test
     end
 
 endprogram
-
-endprogram
