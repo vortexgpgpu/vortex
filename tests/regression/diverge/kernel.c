@@ -5,7 +5,7 @@
 
 // Parallel Selection sort
 
-void kernel_body(int task_id, kernel_arg_t* arg) {
+void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	int32_t* src_ptr = (int32_t*)arg->src_addr;
 	int32_t* dst_ptr = (int32_t*)arg->dst_addr;
 

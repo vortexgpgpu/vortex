@@ -3,7 +3,7 @@
 #include <vx_spawn.h>
 #include "common.h"
 
-void kernel_body(int task_id, kernel_arg_t* arg) {
+void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count    = arg->task_size;
 	int32_t* src0_ptr = (int32_t*)arg->src0_addr;
 	int32_t* src1_ptr = (int32_t*)arg->src1_addr;

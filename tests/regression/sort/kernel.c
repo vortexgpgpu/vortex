@@ -3,7 +3,7 @@
 #include <vx_spawn.h>
 #include "common.h"
 
-void kernel_body(int __DIVERGENT__ task_id, kernel_arg_t* arg) {
+void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t num_points = arg->num_points;
 	int32_t* src_ptr = (int32_t*)arg->src_addr;
 	int32_t* dst_ptr = (int32_t*)arg->dst_addr;

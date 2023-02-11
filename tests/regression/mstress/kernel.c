@@ -3,7 +3,7 @@
 #include <vx_spawn.h>
 #include "common.h"
 
-void kernel_body(int task_id, kernel_arg_t* arg) {
+void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t stride    = arg->stride;
 	uint32_t* addr_ptr = (uint32_t*)arg->src0_addr;
 	float* src_ptr     = (float*)arg->src1_addr;	

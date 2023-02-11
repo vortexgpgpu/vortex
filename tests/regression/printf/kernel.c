@@ -4,7 +4,7 @@
 #include <vx_spawn.h>
 #include "common.h"
 
-void kernel_body(int task_id, kernel_arg_t* arg) {
+void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	int* src_ptr = (int*)arg->src_addr;
 	char value = 'A' + src_ptr[task_id];
 	vx_printf("task=%d, value=%c\n", task_id, value);

@@ -4,14 +4,14 @@
 #include <vx_spawn.h>
 #include "common.h"
 
-typedef void (*PFN_Kernel)(int task_id, kernel_arg_t* arg);
+typedef void (*PFN_Kernel)(int task_id, kernel_arg_t* __UNIFORM__ arg);
 
 inline float __ieee754_sqrtf (float x) {
   asm ("fsqrt.s %0, %1" : "=f" (x) : "f" (x));
   return x;
 }
 
-void kernel_iadd(int task_id, kernel_arg_t* arg) {
+void kernel_iadd(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count    = arg->task_size;
 	int32_t* src0_ptr = (int32_t*)arg->src0_addr;
 	int32_t* src1_ptr = (int32_t*)arg->src1_addr;
@@ -26,7 +26,7 @@ void kernel_iadd(int task_id, kernel_arg_t* arg) {
 	}
 }
 
-void kernel_imul(int task_id, kernel_arg_t* arg) {
+void kernel_imul(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count    = arg->task_size;
 	int32_t* src0_ptr = (int32_t*)arg->src0_addr;
 	int32_t* src1_ptr = (int32_t*)arg->src1_addr;
@@ -41,7 +41,7 @@ void kernel_imul(int task_id, kernel_arg_t* arg) {
 	}
 }
 
-void kernel_idiv(int task_id, kernel_arg_t* arg) {
+void kernel_idiv(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count    = arg->task_size;
 	int32_t* src0_ptr = (int32_t*)arg->src0_addr;
 	int32_t* src1_ptr = (int32_t*)arg->src1_addr;
@@ -56,7 +56,7 @@ void kernel_idiv(int task_id, kernel_arg_t* arg) {
 	}
 }
 
-void kernel_idiv_mul(int task_id, kernel_arg_t* arg) {
+void kernel_idiv_mul(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count    = arg->task_size;
 	int32_t* src0_ptr = (int32_t*)arg->src0_addr;
 	int32_t* src1_ptr = (int32_t*)arg->src1_addr;
@@ -73,7 +73,7 @@ void kernel_idiv_mul(int task_id, kernel_arg_t* arg) {
 	}
 }
 
-void kernel_fadd(int task_id, kernel_arg_t* arg) {
+void kernel_fadd(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count  = arg->task_size;
 	float* src0_ptr = (float*)arg->src0_addr;
 	float* src1_ptr = (float*)arg->src1_addr;
@@ -88,7 +88,7 @@ void kernel_fadd(int task_id, kernel_arg_t* arg) {
 	}
 }
 
-void kernel_fsub(int task_id, kernel_arg_t* arg) {
+void kernel_fsub(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count  = arg->task_size;
 	float* src0_ptr = (float*)arg->src0_addr;
 	float* src1_ptr = (float*)arg->src1_addr;
@@ -103,7 +103,7 @@ void kernel_fsub(int task_id, kernel_arg_t* arg) {
 	}
 }
 
-void kernel_fmul(int task_id, kernel_arg_t* arg) {
+void kernel_fmul(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count  = arg->task_size;
 	float* src0_ptr = (float*)arg->src0_addr;
 	float* src1_ptr = (float*)arg->src1_addr;
@@ -118,7 +118,7 @@ void kernel_fmul(int task_id, kernel_arg_t* arg) {
 	}
 }
 
-void kernel_fmadd(int task_id, kernel_arg_t* arg) {
+void kernel_fmadd(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count  = arg->task_size;
 	float* src0_ptr = (float*)arg->src0_addr;
 	float* src1_ptr = (float*)arg->src1_addr;
@@ -133,7 +133,7 @@ void kernel_fmadd(int task_id, kernel_arg_t* arg) {
 	}
 }
 
-void kernel_fmsub(int task_id, kernel_arg_t* arg) {
+void kernel_fmsub(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count  = arg->task_size;
 	float* src0_ptr = (float*)arg->src0_addr;
 	float* src1_ptr = (float*)arg->src1_addr;
@@ -148,7 +148,7 @@ void kernel_fmsub(int task_id, kernel_arg_t* arg) {
 	}
 }
 
-void kernel_fnmadd(int task_id, kernel_arg_t* arg) {
+void kernel_fnmadd(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count  = arg->task_size;
 	float* src0_ptr = (float*)arg->src0_addr;
 	float* src1_ptr = (float*)arg->src1_addr;
@@ -163,7 +163,7 @@ void kernel_fnmadd(int task_id, kernel_arg_t* arg) {
 	}
 }
 
-void kernel_fnmsub(int task_id, kernel_arg_t* arg) {
+void kernel_fnmsub(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count  = arg->task_size;
 	float* src0_ptr = (float*)arg->src0_addr;
 	float* src1_ptr = (float*)arg->src1_addr;
@@ -178,7 +178,7 @@ void kernel_fnmsub(int task_id, kernel_arg_t* arg) {
 	}
 }
 
-void kernel_fnmadd_madd(int task_id, kernel_arg_t* arg) {
+void kernel_fnmadd_madd(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count  = arg->task_size;
 	float* src0_ptr = (float*)arg->src0_addr;
 	float* src1_ptr = (float*)arg->src1_addr;
@@ -195,7 +195,7 @@ void kernel_fnmadd_madd(int task_id, kernel_arg_t* arg) {
 	}
 }
 
-void kernel_fdiv(int task_id, kernel_arg_t* arg) {
+void kernel_fdiv(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count  = arg->task_size;
 	float* src0_ptr = (float*)arg->src0_addr;
 	float* src1_ptr = (float*)arg->src1_addr;
@@ -210,7 +210,7 @@ void kernel_fdiv(int task_id, kernel_arg_t* arg) {
 	}
 }
 
-void kernel_fdiv2(int task_id, kernel_arg_t* arg) {
+void kernel_fdiv2(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count  = arg->task_size;
 	float* src0_ptr = (float*)arg->src0_addr;
 	float* src1_ptr = (float*)arg->src1_addr;
@@ -227,7 +227,7 @@ void kernel_fdiv2(int task_id, kernel_arg_t* arg) {
 	}
 }
 
-void kernel_fsqrt(int task_id, kernel_arg_t* arg) {
+void kernel_fsqrt(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count  = arg->task_size;
 	float* src0_ptr = (float*)arg->src0_addr;
 	float* src1_ptr = (float*)arg->src1_addr;
@@ -242,7 +242,7 @@ void kernel_fsqrt(int task_id, kernel_arg_t* arg) {
 	}
 }
 
-void kernel_ftoi(int task_id, kernel_arg_t* arg) {
+void kernel_ftoi(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count  = arg->task_size;
 	float* src0_ptr = (float*)arg->src0_addr;
 	float* src1_ptr = (float*)arg->src1_addr;
@@ -258,7 +258,7 @@ void kernel_ftoi(int task_id, kernel_arg_t* arg) {
 	}
 }
 
-void kernel_ftou(int task_id, kernel_arg_t* arg) {
+void kernel_ftou(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count  = arg->task_size;
 	float* src0_ptr = (float*)arg->src0_addr;
 	float* src1_ptr = (float*)arg->src1_addr;
@@ -274,7 +274,7 @@ void kernel_ftou(int task_id, kernel_arg_t* arg) {
 	}
 }
 
-void kernel_itof(int task_id, kernel_arg_t* arg) {
+void kernel_itof(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count  = arg->task_size;
 	int32_t* src0_ptr = (int32_t*)arg->src0_addr;
 	int32_t* src1_ptr = (int32_t*)arg->src1_addr;
@@ -290,7 +290,7 @@ void kernel_itof(int task_id, kernel_arg_t* arg) {
 	}
 }
 
-void kernel_utof(int task_id, kernel_arg_t* arg) {
+void kernel_utof(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t count  = arg->task_size;
 	int32_t* src0_ptr = (int32_t*)arg->src0_addr;
 	int32_t* src1_ptr = (int32_t*)arg->src1_addr;

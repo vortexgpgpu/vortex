@@ -135,8 +135,8 @@ using fixeduv_t = cocogfx::TFixed<TEX_FXD_FRAC>;
 	OUTPUT_i(2, mask, x, y, face, color, depth, func)  \
 	OUTPUT_i(3, mask, x, y, face, color, depth, func)
 
-void shader_function_hw(int task_id, kernel_arg_t* kernel_arg) {
-	auto prim_ptr = (rast_prim_t*)kernel_arg->prim_addr;
+void shader_function_hw(int task_id, kernel_arg_t* __UNIFORM__  arg) {
+	auto prim_ptr = (rast_prim_t*)arg->prim_addr;
 	fixed24_t z[4], r[4], g[4], b[4], a[4], u[4], v[4];
 	fixed24_t dx[4], dy[4];
 	cocogfx::ColorARGB tex_color[4], out_color[4];
@@ -154,23 +154,23 @@ void shader_function_hw(int task_id, kernel_arg_t* kernel_arg) {
 
 		GRADIENTS
 
-		if (kernel_arg->sw_interp) {
-			if (kernel_arg->depth_enabled) {
+		if (arg->sw_interp) {
+			if (arg->depth_enabled) {
 				INTERPOLATE_SW(z, attribs.z);
 			}
 
-			if (kernel_arg->color_enabled) {
+			if (arg->color_enabled) {
 				INTERPOLATE_SW(r, attribs.r);
 				INTERPOLATE_SW(g, attribs.g);
 				INTERPOLATE_SW(b, attribs.b);
 				INTERPOLATE_SW(a, attribs.a);
 			}
 			
-			if (kernel_arg->tex_enabled) {
+			if (arg->tex_enabled) {
 				INTERPOLATE_SW(u, attribs.u);
 				INTERPOLATE_SW(v, attribs.v);
 				TEXTURING(tex_color, u, v);			
-				if (kernel_arg->tex_modulate) {
+				if (arg->tex_modulate) {
 					MODULATE(out_color, r, g, b, a, tex_color);
 				} else {
 					REPLACE(out_color, tex_color);
@@ -179,22 +179,22 @@ void shader_function_hw(int task_id, kernel_arg_t* kernel_arg) {
 				TO_RGBA(out_color, r, g, b, a);
 			}
 		} else {
-			if (kernel_arg->depth_enabled) {
+			if (arg->depth_enabled) {
 				INTERPOLATE(z, attribs.z);
 			}
 
-			if (kernel_arg->color_enabled) {
+			if (arg->color_enabled) {
 				INTERPOLATE(r, attribs.r);
 				INTERPOLATE(g, attribs.g);
 				INTERPOLATE(b, attribs.b);
 				INTERPOLATE(a, attribs.a);
 			}
 			
-			if (kernel_arg->tex_enabled) {
+			if (arg->tex_enabled) {
 				INTERPOLATE(u, attribs.u);
 				INTERPOLATE(v, attribs.v);
 				TEXTURING(tex_color, u, v);			
-				if (kernel_arg->tex_modulate) {
+				if (arg->tex_modulate) {
 					MODULATE(out_color, r, g, b, a, tex_color);
 				} else {
 					REPLACE(out_color, tex_color);
@@ -204,21 +204,21 @@ void shader_function_hw(int task_id, kernel_arg_t* kernel_arg) {
 			}
 		}
 
-		if (kernel_arg->sw_rop) {
-			OUTPUT(0, out_color, z, kernel_arg->gpu_sw->rop);
+		if (arg->sw_rop) {
+			OUTPUT(0, out_color, z, arg->gpu_sw->rop);
 		} else {
 			OUTPUT(0, out_color, z, vx_rop);
 		}
 	}
 }
 
-void shader_function_sw_rast_cb(kernel_arg_t* kernel_arg, 
+void shader_function_sw_rast_cb(kernel_arg_t* arg, 
 							    uint32_t  x,
 						     	uint32_t  y,
 							    uint32_t  mask,
 							    const vec3_fx_t* bcoords,
 							    uint32_t  pid) {
-	auto prim_ptr = (rast_prim_t*)kernel_arg->prim_addr;
+	auto prim_ptr = (rast_prim_t*)arg->prim_addr;
 	fixed24_t z[4], r[4], g[4], b[4], a[4], u[4], v[4];
 	fixed24_t dx[4], dy[4];
 	cocogfx::ColorARGB tex_color[4], out_color[4];
@@ -230,23 +230,23 @@ void shader_function_sw_rast_cb(kernel_arg_t* kernel_arg,
 
 	GRADIENTS_SW
 
-	if (kernel_arg->sw_interp) {
-		if (kernel_arg->depth_enabled) {
+	if (arg->sw_interp) {
+		if (arg->depth_enabled) {
 			INTERPOLATE_SW(z, attribs.z);
 		}
 
-		if (kernel_arg->color_enabled) {
+		if (arg->color_enabled) {
 			INTERPOLATE_SW(r, attribs.r);
 			INTERPOLATE_SW(g, attribs.g);
 			INTERPOLATE_SW(b, attribs.b);
 			INTERPOLATE_SW(a, attribs.a);
 		}
 		
-		if (kernel_arg->tex_enabled) {
+		if (arg->tex_enabled) {
 			INTERPOLATE_SW(u, attribs.u);
 			INTERPOLATE_SW(v, attribs.v);
 			TEXTURING(tex_color, u, v);			
-			if (kernel_arg->tex_modulate) {
+			if (arg->tex_modulate) {
 				MODULATE(out_color, r, g, b, a, tex_color);
 			} else {
 				REPLACE(out_color, tex_color);
@@ -255,22 +255,22 @@ void shader_function_sw_rast_cb(kernel_arg_t* kernel_arg,
 			TO_RGBA(out_color, r, g, b, a);
 		}
 	} else {
-		if (kernel_arg->depth_enabled) {
+		if (arg->depth_enabled) {
 			INTERPOLATE(z, attribs.z);
 		}
 
-		if (kernel_arg->color_enabled) {
+		if (arg->color_enabled) {
 			INTERPOLATE(r, attribs.r);
 			INTERPOLATE(g, attribs.g);
 			INTERPOLATE(b, attribs.b);
 			INTERPOLATE(a, attribs.a);
 		}
 		
-		if (kernel_arg->tex_enabled) {
+		if (arg->tex_enabled) {
 			INTERPOLATE(u, attribs.u);
 			INTERPOLATE(v, attribs.v);
 			TEXTURING(tex_color, u, v);			
-			if (kernel_arg->tex_modulate) {
+			if (arg->tex_modulate) {
 				MODULATE(out_color, r, g, b, a, tex_color);
 			} else {
 				REPLACE(out_color, tex_color);
@@ -280,15 +280,15 @@ void shader_function_sw_rast_cb(kernel_arg_t* kernel_arg,
 		}
 	}
 
-	if (kernel_arg->sw_rop) {
-		OUTPUT_SW(0, out_color, z, kernel_arg->gpu_sw->rop);
+	if (arg->sw_rop) {
+		OUTPUT_SW(0, out_color, z, arg->gpu_sw->rop);
 	} else {
 		OUTPUT_SW(0, out_color, z, vx_rop);
 	}
 }
 
-void shader_function_sw(int task_id, kernel_arg_t* kernel_arg) {
-	kernel_arg->gpu_sw->rasterize(task_id);
+void shader_function_sw(int task_id, kernel_arg_t* __UNIFORM__ arg) {
+	arg->gpu_sw->rasterize(task_id);
 }
 
 int main() {	

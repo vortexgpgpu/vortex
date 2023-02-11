@@ -193,7 +193,7 @@ typedef struct {
 int st_buffer_src[ST_BUF_SZ];
 int st_buffer_dst[ST_BUF_SZ];
 
-void st_kernel(int task_id, const st_args_t * arg) {
+void st_kernel(int task_id, const st_args_t * __UNIFORM__ arg) {
   	arg->dst[task_id] = arg->src[task_id];
 }
 

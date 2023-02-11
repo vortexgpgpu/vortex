@@ -10,7 +10,7 @@ typedef struct {
 	float alpha;
 } tile_arg_t;
 
-void kernel_body(int task_id, tile_arg_t* arg) {
+void kernel_body(int task_id, tile_arg_t* __UNIFORM__ arg) {
 	auto state = arg->state;	
 	
 	auto y_start = task_id * arg->tile_height;

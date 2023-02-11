@@ -59,7 +59,7 @@
 	if (mask & (1 << i)) {				  \
 		auto pos_x = (x << 1) + (i & 1);  \
 		auto pos_y = (y << 1) + (i >> 1); \
-		auto dst_ptr = reinterpret_cast<uint32_t*>(kernel_arg->cbuf_addr + pos_x * kernel_arg->cbuf_stride + pos_y * kernel_arg->cbuf_pitch); \
+		auto dst_ptr = reinterpret_cast<uint32_t*>(arg->cbuf_addr + pos_x * arg->cbuf_stride + pos_y * arg->cbuf_pitch); \
 		*dst_ptr = color[i].value; \
 	}
 
@@ -73,8 +73,8 @@
 	OUTPUT_i(2, mask, x, y, color) \
 	OUTPUT_i(3, mask, x, y, color)
 
-void shader_function(int task_id, kernel_arg_t* kernel_arg) {
-	auto prim_ptr = (rast_prim_t*)kernel_arg->prim_addr;
+void shader_function(int task_id, kernel_arg_t* __UNIFORM__ arg) {
+	auto prim_ptr = (rast_prim_t*)arg->prim_addr;
 	fixed24_t r[4], g[4], b[4], a[4];
 	fixed24_t dx[4], dy[4];
 	cocogfx::ColorARGB out_color[4];
