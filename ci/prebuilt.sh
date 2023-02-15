@@ -23,7 +23,7 @@ riscv()
 llvm() 
 {
     echo "prebuilt llvm-vortex..."
-    tar -C $SRCDIR -cvjf llvm-vortex.tar.bz2 llvm-riscv
+    tar -C $SRCDIR -cvjf llvm-vortex.tar.bz2 llvm-vortex
     split -b 50M llvm-vortex.tar.bz2 "llvm-vortex.tar.bz2.part"    
     mv llvm-vortex.tar.bz2.part* $DESTDIR/llvm-vortex/$OS_DIR
     rm llvm-vortex.tar.bz2
