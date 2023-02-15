@@ -88,9 +88,9 @@ case $i in
         exit 0
         ;;
     *)
-    show_usage   
-    exit -1       
-    ;;
+        show_usage   
+        exit -1       
+        ;;
 esac
 done
 
@@ -147,7 +147,7 @@ export PERF_CLASS=$PERF_CLASS
 status=0
 
 # ensure config update
-make -C hw config
+make -C $VORTEX_HOME/hw config
 
 # ensure the stub driver is present
 make -C $VORTEX_HOME/runtime/stub
