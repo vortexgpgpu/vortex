@@ -107,10 +107,7 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
                  uint32_t height,
                  float near,
                  float far,
-                 uint32_t tileSize) {
-
-  uint32_t tileLogSize = log2ceil(tileSize);
-
+                 uint32_t tileLogSize) {
   std::map<std::pair<uint16_t, uint16_t>, std::vector<uint32_t>> tiles;
 
   std::vector<rast_prim_t> rast_prims;

@@ -21,4 +21,4 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
                  uint32_t height,
                  float near,
                  float far,
-                 uint32_t tileSize);
+                 uint32_t tileLogSize);

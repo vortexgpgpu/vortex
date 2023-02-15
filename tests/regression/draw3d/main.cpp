@@ -60,16 +60,16 @@ uint64_t primbuf_addr = -1;
 
 kernel_arg_t kernel_arg;
 
-uint32_t tile_size = 1 << RASTER_TILE_LOGSIZE;
+uint32_t tileLogSize = RASTER_TILE_LOGSIZE;
 
 static void show_usage() {
    std::cout << "Vortex 3D Rendering Test." << std::endl;
-   std::cout << "Usage: [-t trace] [-o output] [-r reference] [-w width] [-h height] [-x s/w rast] [-y s/w rop] [-z s/w interp]" << std::endl;
+   std::cout << "Usage: [-t trace] [-o output] [-r reference] [-w width] [-h height] [-x s/w rast] [-y s/w rop] [-z s/w interp] [-k tilelogsize]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "t:i:o:r:w:h:t:xyz?")) != -1) {
+  while ((c = getopt(argc, argv, "t:i:o:r:w:h:t:k:xyz?")) != -1) {
     switch (c) {
     case 't':
       trace_file = optarg;
@@ -91,6 +91,9 @@ static void parse_args(int argc, char **argv) {
       break;
     case 'y':
       sw_rop = true;
+      break;
+    case 'k':
+      tileLogSize = std::atoi(optarg);
       break;
     case 'z':
       sw_interp = true;
@@ -148,7 +151,7 @@ int render(const CGLTrace& trace) {
     std::vector<uint8_t> primbuf;
     
     // Perform tile binning
-    auto num_tiles = Binning(tilebuf, primbuf, drawcall.vertices, drawcall.primitives, dst_width, dst_height, drawcall.viewport.near, drawcall.viewport.far, tile_size);
+    auto num_tiles = Binning(tilebuf, primbuf, drawcall.vertices, drawcall.primitives, dst_width, dst_height, drawcall.viewport.near, drawcall.viewport.far, tileLogSize);
     std::cout << "Binning allocated " << std::dec << num_tiles << " tiles with " << (primbuf.size() / sizeof(rast_prim_t)) << " total primitives." << std::endl;
     if (0 == num_tiles)
       continue;
