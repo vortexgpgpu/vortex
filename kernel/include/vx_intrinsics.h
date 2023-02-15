@@ -4,6 +4,14 @@
 #include <VX_config.h>
 #include <VX_types.h>
 
+#if defined(__clang__)
+#define __UNIFORM__   __attribute__((annotate("vortex.uniform")))
+#define __DIVERGENT__ __attribute__((annotate("vortex.divergent")))
+#else
+#define __UNIFORM__
+#define __DIVERGENT__
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -336,8 +344,6 @@ inline void vx_fence() {
 #define __else else
 
 #define __endif vx_join();
-
-#define __DIVERGENT__ __attribute__((annotate("divergent")))
 
 #ifdef __cplusplus
 }

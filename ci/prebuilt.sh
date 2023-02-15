@@ -22,11 +22,11 @@ riscv()
 
 llvm() 
 {
-    echo "prebuilt llvm-riscv2..."
-    tar -C $SRCDIR -cvjf llvm-riscv2.tar.bz2 llvm-riscv
-    split -b 50M llvm-riscv2.tar.bz2 "llvm-riscv2.tar.bz2.part"    
-    mv llvm-riscv2.tar.bz2.part* $DESTDIR/llvm-riscv/$OS_DIR
-    rm llvm-riscv2.tar.bz2
+    echo "prebuilt llvm-vortex..."
+    tar -C $SRCDIR -cvjf llvm-vortex.tar.bz2 llvm-riscv
+    split -b 50M llvm-vortex.tar.bz2 "llvm-vortex.tar.bz2.part"    
+    mv llvm-vortex.tar.bz2.part* $DESTDIR/llvm-vortex/$OS_DIR
+    rm llvm-vortex.tar.bz2
 }
 
 pocl() 

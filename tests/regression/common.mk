@@ -11,7 +11,7 @@ RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 VORTEX_RT_PATH ?= $(realpath ../../../runtime)
 VORTEX_KN_PATH ?= $(realpath ../../../kernel)
 
-LLVM_PREFIX ?= /opt/llvm-riscv
+LLVM_VORTEX ?= /opt/llvm-vortex
 
 LLVM_CFLAGS += --sysroot=$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
@@ -21,10 +21,10 @@ LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex
 #LLVM_CFLAGS += -Wl,-L$(RISCV_TOOLCHAIN_PATH)/lib/gcc/riscv32-unknown-elf/9.2.0
 #LLVM_CFLAGS += --rtlib=libgcc
 
-VX_CC  = $(LLVM_PREFIX)/bin/clang $(LLVM_CFLAGS)
-VX_CXX = $(LLVM_PREFIX)/bin/clang++ $(LLVM_CFLAGS)
-VX_DP  = $(LLVM_PREFIX)/bin/llvm-objdump -mattr=+m,+f,+vortex
-VX_CP  = $(LLVM_PREFIX)/bin/llvm-objcopy
+VX_CC  = $(LLVM_VORTEX)/bin/clang $(LLVM_CFLAGS)
+VX_CXX = $(LLVM_VORTEX)/bin/clang++ $(LLVM_CFLAGS)
+VX_DP  = $(LLVM_VORTEX)/bin/llvm-objdump
+VX_CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 
 #VX_CC  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
 #VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++

@@ -6,7 +6,7 @@ PLATFORM ?= xilinx_u280_xdma_201920_3
 XRT_SYN_DIR  ?= ../../../hw/syn/xilinx/xrt
 XRT_BUILD_DIR = $(XRT_SYN_DIR)/build_$(PLATFORM)_$(TARGET)/bin
 
-LLVM_PREFIX ?= /opt/llvm-riscv
+LLVM_VORTEX ?= /opt/llvm-vortex
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf
 POCL_CC_PATH ?= /opt/pocl/compiler
@@ -22,9 +22,7 @@ K_CFLAGS   += -I$(VORTEX_KN_PATH)/include
 K_LDFLAGS  += -Wl,-Bstatic,-T$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections $(VORTEX_KN_PATH)/libvortexrt.a -lm
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
-
 CXXFLAGS += -Wno-deprecated-declarations -Wno-unused-parameter -Wno-narrowing
-
 CXXFLAGS += -I$(POCL_RT_PATH)/include
 
 LDFLAGS += -L$(POCL_RT_PATH)/lib -L$(VORTEX_RT_PATH)/stub -lOpenCL -lvortex
@@ -49,7 +47,7 @@ endif
 all: $(PROJECT) kernel.pocl
  
 kernel.pocl: kernel.cl
-	LLVM_PREFIX=$(LLVM_PREFIX) POCL_DEBUG=all LD_LIBRARY_PATH=$(LLVM_PREFIX)/lib:$(POCL_CC_PATH)/lib $(POCL_CC_PATH)/bin/poclcc -LLCFLAGS "$(K_LLCFLAGS)" -CFLAGS "$(K_CFLAGS)" -LDFLAGS "$(K_LDFLAGS)" -o kernel.pocl kernel.cl
+	LLVM_PREFIX=$(LLVM_VORTEX) POCL_DEBUG=all LD_LIBRARY_PATH=$(LLVM_VORTEX)/lib:$(POCL_CC_PATH)/lib $(POCL_CC_PATH)/bin/poclcc -LLCFLAGS "$(K_LLCFLAGS)" -CFLAGS "$(K_CFLAGS)" -LDFLAGS "$(K_LDFLAGS)" -o kernel.pocl kernel.cl
  
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@

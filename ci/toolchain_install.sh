@@ -48,16 +48,16 @@ llvm()
     *)          parts=$(eval echo {a..b}) ;;
     esac
     echo $parts
-    rm -f llvm-riscv2.tar.bz2.parta*
+    rm -f llvm-vortex.tar.bz2.parta*
     for x in $parts
     do
-        wget $REPOSITORY/llvm-riscv/$OS/llvm-riscv2.tar.bz2.parta$x
+        wget $REPOSITORY/llvm-vortex/$OS/llvm-vortex.tar.bz2.parta$x
     done
-    cat llvm-riscv2.tar.bz2.parta* > llvm-riscv2.tar.bz2
-    tar -xvf llvm-riscv2.tar.bz2
-    rm -f llvm-riscv2.tar.bz2*
-    cp -r llvm-riscv $DESTDIR
-    rm -rf llvm-riscv
+    cat llvm-vortex.tar.bz2.parta* > llvm-vortex.tar.bz2
+    tar -xvf llvm-vortex.tar.bz2
+    rm -f llvm-vortex.tar.bz2*
+    cp -r llvm-vortex $DESTDIR
+    rm -rf llvm-vortex
 }
 
 pocl()
