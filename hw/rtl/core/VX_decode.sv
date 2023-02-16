@@ -1,4 +1,5 @@
 `include "VX_define.vh"
+`include "VX_config.vh"
 `ifndef NDEBUG
 `include "VX_trace_info.vh"
 `endif
@@ -36,7 +37,7 @@ module VX_decode  #(
     reg [`INST_OP_BITS-1:0] op_type; 
     reg [`INST_MOD_BITS-1:0] op_mod;
     reg [`NR_BITS-1:0]  rd_r, rs1_r, rs2_r, rs3_r;
-    reg [31:0]          imm;    
+    reg [`XLEN-1:0]          imm;    
     reg use_rd, use_PC, use_imm;
     reg is_join, is_wstall;
 
@@ -59,7 +60,7 @@ module VX_decode  #(
     wire [20:0] jal_imm   = {instr[31], instr[19:12], instr[20], instr[30:21], 1'b0};
 
     `UNUSED_VAR (rs3)
-    
+
     always @(*) begin
 
         ex_type   = '0;
@@ -91,7 +92,7 @@ module VX_decode  #(
                 endcase
                 use_rd  = 1;
                 use_imm = 1;
-                imm     = {{20{alu_imm[11]}}, alu_imm};
+                imm     = {{(`XLEN-12){alu_imm[11]}}, alu_imm};
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
             end
@@ -131,12 +132,41 @@ module VX_decode  #(
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
             end
+            `INST_I_W: begin
+                // ADDIW, SLLIW, SRLIW, SRAIW
+                ex_type = `EX_ALU;
+                case (func3)
+                    3'h0: op_type = `INST_OP_BITS'(`INST_ALU_ADD_W);
+                    3'h1: op_type = `INST_OP_BITS'(`INST_ALU_SLL_W);
+                    3'h5: op_type = (func7[5]) ? `INST_OP_BITS'(`INST_ALU_SRA_W) : `INST_OP_BITS'(`INST_ALU_SRL_W);
+                    default:;
+                endcase
+                use_rd  = 1;
+                use_imm = 1;
+                imm     = {{(`XLEN-12){alu_imm[11]}}, alu_imm};
+                `USED_IREG (rd);
+                `USED_IREG (rs1);
+            end
+            `INST_R_W: begin
+                // ADDW, SUBW, SLLW, SRLW, SRAW
+                ex_type = `EX_ALU;
+                case (func3)
+                    3'h0: op_type = (func7[5]) ? `INST_OP_BITS'(`INST_ALU_SUB_W) : `INST_OP_BITS'(`INST_ALU_ADD_W);
+                    3'h1: op_type = `INST_OP_BITS'(`INST_ALU_SLL_W);
+                    3'h5: op_type = (func7[5]) ? `INST_OP_BITS'(`INST_ALU_SRA_W) : `INST_OP_BITS'(`INST_ALU_SRL_W);
+                    default:;
+                endcase
+                use_rd = 1;
+                `USED_IREG (rd);
+                `USED_IREG (rs1);
+                `USED_IREG (rs2);
+            end
             `INST_LUI: begin 
                 ex_type = `EX_ALU;
                 op_type = `INST_OP_BITS'(`INST_ALU_LUI);
                 use_rd  = 1;
                 use_imm = 1;
-                imm     = {upper_imm, 12'(0)};
+                imm     = {{`XLEN-31{upper_imm[19]}}, upper_imm[18:0], 12'(0)};
                 `USED_IREG (rd);
             end
             `INST_AUIPC: begin 
@@ -145,7 +175,7 @@ module VX_decode  #(
                 use_rd  = 1;
                 use_imm = 1;
                 use_PC  = 1;
-                imm     = {upper_imm, 12'(0)};
+                imm     = {{`XLEN-31{upper_imm[19]}}, upper_imm[18:0], 12'(0)};
                 `USED_IREG (rd);
             end
             `INST_JAL: begin 
@@ -156,7 +186,7 @@ module VX_decode  #(
                 use_imm = 1;
                 use_PC  = 1;
                 is_wstall = 1;
-                imm     = {{11{jal_imm[20]}}, jal_imm};
+                imm     = {{(`XLEN-21){jal_imm[20]}}, jal_imm};
                 `USED_IREG (rd);
             end
             `INST_JALR: begin 
@@ -166,7 +196,7 @@ module VX_decode  #(
                 use_rd  = 1;
                 use_imm = 1;
                 is_wstall = 1;
-                imm     = {{20{u_12[11]}}, u_12};
+                imm     = {{(`XLEN-12){u_12[11]}}, u_12};
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
             end
@@ -185,7 +215,7 @@ module VX_decode  #(
                 use_imm = 1;
                 use_PC  = 1;
                 is_wstall = 1;
-                imm     = {{19{b_imm[12]}}, b_imm};
+                imm     = {{(`XLEN-13){b_imm[12]}}, b_imm};
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
             end
@@ -221,7 +251,7 @@ module VX_decode  #(
                     use_imm = 1;
                     use_PC  = 1;
                     is_wstall = 1;
-                    imm     = 32'd4;
+                    imm     = `XLEN'd4;
                     `USED_IREG (rd);
                 end
             end
@@ -232,7 +262,7 @@ module VX_decode  #(
                 ex_type = `EX_LSU;
                 op_type = `INST_OP_BITS'({1'b0, func3});
                 use_rd  = 1;
-                imm     = {{20{u_12[11]}}, u_12};
+                imm     = {{(`XLEN-12){u_12[11]}}, u_12};
             `ifdef EXT_F_ENABLE
                 if (opcode[2]) begin
                     `USED_FREG (rd);
@@ -247,7 +277,7 @@ module VX_decode  #(
             `INST_S: begin 
                 ex_type = `EX_LSU;
                 op_type = `INST_OP_BITS'({1'b1, func3});
-                imm     = {{20{s_imm[11]}}, s_imm};
+                imm     = {{(`XLEN-12){s_imm[11]}}, s_imm};
                 `USED_IREG (rs1);
             `ifdef EXT_F_ENABLE
                 if (opcode[2]) begin

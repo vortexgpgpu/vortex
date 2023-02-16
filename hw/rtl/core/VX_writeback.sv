@@ -19,12 +19,12 @@ module VX_writeback #(
     VX_writeback_if.master writeback_if,
 
     // simulation helper signals
-    output wire [`NUM_REGS-1:0][31:0] sim_wb_value
+    output wire [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value
 );
     `UNUSED_PARAM (CORE_ID)
 
     localparam NW_WIDTH = `UP(`NW_BITS);
-    localparam DATAW    = NW_WIDTH + 32 + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * 32) + 1;
+    localparam DATAW    = NW_WIDTH + 32 + `NUM_THREADS + `NR_BITS + (`NUM_THREADS * `XLEN) + 1;
     localparam NUM_RSPS = 4 + `EXT_F_ENABLED;
 
 `ifdef EXT_F_ENABLE
@@ -61,7 +61,7 @@ module VX_writeback #(
             wb_alu_ready_in,
             wb_ld_ready_in
         }),
-        .data_in   ({                                  
+        .data_in   ({
         `ifdef EXT_F_ENABLE
             {fpu_commit_if.wid, fpu_commit_if.PC, fpu_commit_if.tmask, fpu_commit_if.rd, fpu_commit_if.data, fpu_commit_if.eop},
         `endif     
@@ -84,7 +84,7 @@ module VX_writeback #(
     assign ld_commit_if.ready  = wb_ld_ready_in  || ~ld_commit_if.wb;
     
     // simulation helper signal to get RISC-V tests Pass/Fail status
-    reg [`NUM_REGS-1:0][31:0] sim_wb_value_r;
+    reg [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value_r;
     always @(posedge clk) begin
         if (writeback_if.valid && writeback_if.ready) begin
             sim_wb_value_r[writeback_if.rd] <= writeback_if.data[0];

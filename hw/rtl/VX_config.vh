@@ -19,9 +19,18 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// comment out the top or bottom two lines to switch between 64 and 32 bit mode
 `ifndef XLEN
-`define XLEN 32
+`define XLEN 64
+`define MODE_64_BIT 1
+// `define XLEN 32
+// `define MODE_32_BIT 1
 `endif
+
+// Disable MULDIV, FPU, and TEX units since irrelevant to RV64I instructions
+`define EXT_M_DISABLE 1
+`define EXT_F_DISABLE 1
+`define EXT_TEX_DISABLE 1
 
 `ifndef NUM_CLUSTERS
 `define NUM_CLUSTERS 1

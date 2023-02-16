@@ -1,5 +1,6 @@
 `include "VX_define.vh"
 `include "VX_gpu_types.vh"
+`include "VX_config.vh"
 
 `IGNORE_WARNINGS_BEGIN
 import VX_gpu_types::*;
@@ -28,7 +29,7 @@ module VX_lsu_unit #(
     localparam NW_WIDTH   = `UP(`NW_BITS);
 
     localparam MEM_ASHIFT = `CLOG2(`MEM_BLOCK_SIZE);    
-    localparam MEM_ADDRW  = 32 - MEM_ASHIFT;
+    localparam MEM_ADDRW  = `XLEN - MEM_ASHIFT;
     localparam REQ_ASHIFT = `CLOG2(DCACHE_WORD_SIZE);
 
 `ifdef SM_ENABLE
@@ -37,8 +38,8 @@ module VX_lsu_unit #(
     localparam SMEM_LOCAL_SIZE_W = `SMEM_LOCAL_SIZE >> MEM_ASHIFT;
 
     localparam TOTAL_STACK_SIZE = `STACK_SIZE * `NUM_THREADS * `NUM_WARPS * `NUM_CORES;
-    localparam STACK_START_W = MEM_ADDRW'(`STACK_BASE_ADDR >> MEM_ASHIFT);
-    localparam STACK_END_W = MEM_ADDRW'((`STACK_BASE_ADDR - TOTAL_STACK_SIZE) >> MEM_ASHIFT);
+    localparam STACK_START_W = MEM_ADDRW'(`XLEN'(`STACK_BASE_ADDR) >> MEM_ASHIFT);
+    localparam STACK_END_W = MEM_ADDRW'((`XLEN'(`STACK_BASE_ADDR) - TOTAL_STACK_SIZE) >> MEM_ASHIFT);
 `endif
 
     //                     uuid,        addr_type,                               wid,       PC,  tmask,         rd,        op_type,         align,                        is_dup
@@ -54,9 +55,9 @@ module VX_lsu_unit #(
 
     // full address calculation
 
-    wire [`NUM_THREADS-1:0][31:0] full_addr;    
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] full_addr;    
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign full_addr[i] = lsu_req_if.base_addr[i] + lsu_req_if.offset;
+        assign full_addr[i] = lsu_req_if.base_addr[i][`XLEN-1:0] + lsu_req_if.offset;
     end
 
     // detect duplicate addresses
@@ -77,7 +78,7 @@ module VX_lsu_unit #(
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         wire [MEM_ADDRW-1:0] full_addr_b = full_addr[i][MEM_ASHIFT +: MEM_ADDRW];
         // is non-cacheable address
-        wire is_addr_nc = (full_addr_b >= MEM_ADDRW'(`IO_BASE_ADDR >> MEM_ASHIFT));
+        wire is_addr_nc = (full_addr_b >= MEM_ADDRW'(`XLEN'(`IO_BASE_ADDR) >> MEM_ASHIFT));
     `ifdef SM_ENABLE
         // is stack address
         wire is_stack_addr = (full_addr_b >= STACK_END_W) && (full_addr_b < STACK_START_W);
@@ -106,15 +107,15 @@ module VX_lsu_unit #(
     wire                           mem_req_valid;
     wire [`NUM_THREADS-1:0]        mem_req_mask;
     wire                           mem_req_rw;  
-    wire [`NUM_THREADS-1:0][29:0]  mem_req_addr;
-    reg  [`NUM_THREADS-1:0][3:0]   mem_req_byteen;
-    reg  [`NUM_THREADS-1:0][31:0]  mem_req_data;
+    wire [`NUM_THREADS-1:0][`XLEN-3:0]  mem_req_addr;
+    reg  [`NUM_THREADS-1:0][DCACHE_WORD_SIZE-1:0]   mem_req_byteen;
+    reg  [`NUM_THREADS-1:0][`XLEN-1:0]  mem_req_data;
     wire [TAG_WIDTH-1:0]           mem_req_tag;
     wire                           mem_req_ready;
 
     wire                           mem_rsp_valid;
     wire [`NUM_THREADS-1:0]        mem_rsp_mask;
-    wire [`NUM_THREADS-1:0][31:0]  mem_rsp_data;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0]  mem_rsp_data;
     wire [TAG_WIDTH-1:0]           mem_rsp_tag;
     wire                           mem_rsp_eop;
     wire                           mem_rsp_ready;
@@ -133,32 +134,51 @@ module VX_lsu_unit #(
     wire [`NUM_THREADS-1:0][REQ_ASHIFT-1:0] req_align;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin  
-        assign req_align[i]    = full_addr[i][1:0];
-        assign mem_req_addr[i] = full_addr[i][31:2];
+        assign req_align[i]    = full_addr[i][REQ_ASHIFT-1:0];
+        assign mem_req_addr[i] = full_addr[i][`XLEN-1:REQ_ASHIFT];
     end
 
     // data formatting
     
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        wire [REQ_ASHIFT-1:0] req_align_X1 = {req_align[i][1], 1'b1};
+        wire [REQ_ASHIFT-1:0] req_align_X1;
+        `ifdef MODE_32_BIT
+        assign req_align_X1 = {req_align[i][1], 1'b1};
+        `endif
+        `ifdef MODE_64_BIT
+        // TODO: VARUN TO CHECK
+        assign req_align_X1 = {req_align[i][1:0]};
+        `endif
         always @(*) begin
-            mem_req_byteen[i] = {4{lsu_req_if.wb}};
+            mem_req_byteen[i] = {DCACHE_WORD_SIZE{lsu_req_if.wb}};
             case (`INST_LSU_WSIZE(lsu_req_if.op_type))
                 0: mem_req_byteen[i][req_align[i]] = 1;
-                1: begin
+                1: begin // half (16 bit)
                     mem_req_byteen[i][req_align[i]] = 1;
                     mem_req_byteen[i][req_align_X1] = 1;
                 end
-                default : mem_req_byteen[i] = {4{1'b1}};
+                2: begin // word (32 bit)
+                    mem_req_byteen[i][req_align[i]] = 1;
+                    mem_req_byteen[i][req_align_X1] = 1;
+                    mem_req_byteen[i][req_align_X1+1] = 1;
+                    mem_req_byteen[i][req_align_X1+2] = 1;
+                end
+                default : mem_req_byteen[i] = {DCACHE_WORD_SIZE{1'b1}}; // double (64 bit)
             endcase
         end
 
         always @(*) begin
             mem_req_data[i] = lsu_req_if.store_data[i];
             case (req_align[i])
-                1: mem_req_data[i][31:8]  = lsu_req_if.store_data[i][23:0];
-                2: mem_req_data[i][31:16] = lsu_req_if.store_data[i][15:0];
-                3: mem_req_data[i][31:24] = lsu_req_if.store_data[i][7:0];
+                1: mem_req_data[`XLEN-1:8]  = lsu_req_if.store_data[i][`XLEN-9:0];
+                2: mem_req_data[`XLEN-1:16] = lsu_req_if.store_data[i][`XLEN-17:0];
+                3: mem_req_data[`XLEN-1:24] = lsu_req_if.store_data[i][`XLEN-25:0];
+                `ifdef MODE_64_BIT
+                4: mem_req_data[`XLEN-1:32] = lsu_req_if.store_data[i][`XLEN-33:0];
+                5: mem_req_data[`XLEN-1:40] = lsu_req_if.store_data[i][`XLEN-41:0];
+                6: mem_req_data[`XLEN-1:48] = lsu_req_if.store_data[i][`XLEN-49:0];
+                7: mem_req_data[`XLEN-1:56] = lsu_req_if.store_data[i][`XLEN-57:0];
+                `endif
                 default:;
             endcase
         end
@@ -321,19 +341,28 @@ module VX_lsu_unit #(
     reg [`NUM_THREADS-1:0][31:0] rsp_data;
     wire [`NUM_THREADS-1:0] rsp_tmask;
 
-    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        wire [31:0] rsp_data32 = (i == 0 || rsp_is_dup) ? mem_rsp_data[0] : mem_rsp_data[i];
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin     // TODO: HOW TF DO I DO THE MEMORY response???
+        `ifdef MODE_64_BIT
+        wire [63:0] rsp_data64 = (i == 0 || rsp_is_dup) ? mem_rsp_data[0] : mem_rsp_data[i]; // ONLY VALID ON XLEN == 64
+        wire [31:0] rsp_data32 = rsp_align[i][2] ? mem_rsp_data[0][63:32] : mem_rsp_data[i][31:0];
+        `else
+        wire [31:0] rsp_data32 = (i == 0 || rsp_is_dup) ? mem_rsp_data[0] : mem_rsp_data[i]; // ONLY VALID ON XLEN == 32
+        `endif
         wire [15:0] rsp_data16 = rsp_align[i][1] ? rsp_data32[31:16] : rsp_data32[15:0];
         wire [7:0]  rsp_data8  = rsp_align[i][0] ? rsp_data16[15:8] : rsp_data16[7:0];
 
         always @(*) begin
             case (`INST_LSU_FMT(rsp_op_type))
-            `INST_FMT_B:  rsp_data[i] = 32'(signed'(rsp_data8));
-            `INST_FMT_H:  rsp_data[i] = 32'(signed'(rsp_data16));
-            `INST_FMT_BU: rsp_data[i] = 32'(unsigned'(rsp_data8));
-            `INST_FMT_HU: rsp_data[i] = 32'(unsigned'(rsp_data16));
-            `INST_FMT_W:  rsp_data[i] = rsp_data32;
-            default:      rsp_data[i] = 'x;
+            `INST_FMT_B:  rsp_data[i] = `XLEN'(signed'(rsp_data8));
+            `INST_FMT_H:  rsp_data[i] = `XLEN'(signed'(rsp_data16));
+            `INST_FMT_BU: rsp_data[i] = `XLEN'(unsigned'(rsp_data8));
+            `INST_FMT_HU: rsp_data[i] = `XLEN'(unsigned'(rsp_data16));
+            `INST_FMT_W:  rsp_data[i] = `XLEN'(signed'(rsp_data32));
+            `ifdef MODE_64_BIT // new instructions for unsigned 32 and 64 bit load modes
+            `INST_FMT_WU: rsp_data[i] = `XLEN'(unsigned'(rsp_data32));
+            `INST_FMT_D: rsp_data[i] = `XLEN'(signed'(rsp_data64));
+            `endif
+            default: rsp_data[i] = 'x;
             endcase
         end        
     end   
@@ -343,7 +372,7 @@ module VX_lsu_unit #(
     // send load commit
 
     VX_skid_buffer #(
-        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1)
+        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * `XLEN) + 1)
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),

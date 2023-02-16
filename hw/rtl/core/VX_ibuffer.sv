@@ -19,7 +19,7 @@ module VX_ibuffer #(
     localparam ALM_FULL  = SIZE - 1;
     localparam ALM_EMPTY = 1;
     
-    localparam DATAW   = `UP(`UUID_BITS) + `NUM_THREADS + 32 + `EX_BITS + `INST_OP_BITS + `INST_FRM_BITS + 1 + (`NR_BITS * 4) + 32 + 1 + 1;
+    localparam DATAW   = `UP(`UUID_BITS) + `NUM_THREADS + 32 + `EX_BITS + `INST_OP_BITS + `INST_FRM_BITS + 1 + (`NR_BITS * 4) + `XLEN + 1 + 1;
     localparam ADDRW   = $clog2(SIZE);
     localparam NWARPSW = $clog2(`NUM_WARPS+1);
 
