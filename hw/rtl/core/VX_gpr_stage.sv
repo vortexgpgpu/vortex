@@ -43,7 +43,7 @@ module VX_gpr_stage #(
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         VX_dp_ram #(
-            .DATAW       (32),
+            .DATAW       (`XLEN),
             .SIZE        (RAM_SIZE),
             .INIT_ENABLE (1),
             .INIT_VALUE  (0)
@@ -58,7 +58,7 @@ module VX_gpr_stage #(
         );
 
         VX_dp_ram #(
-            .DATAW       (32),
+            .DATAW       (`XLEN),
             .SIZE        (RAM_SIZE),
             .INIT_ENABLE (1),
             .INIT_VALUE  (0)
@@ -83,7 +83,7 @@ module VX_gpr_stage #(
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         VX_dp_ram #(
-            .DATAW       (32),
+            .DATAW       (`XLEN),
             .SIZE        (RAM_SIZE),
             .INIT_ENABLE (1),
             .INIT_VALUE  (0)

@@ -1,10 +1,11 @@
 `include "VX_define.vh"
+`include "VX_config.vh"
 
 interface VX_gpr_rsp_if ();  
     
-    wire [`NUM_THREADS-1:0][31:0] rs1_data;
-    wire [`NUM_THREADS-1:0][31:0] rs2_data;
-    wire [`NUM_THREADS-1:0][31:0] rs3_data;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] rs1_data;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] rs2_data;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] rs3_data;
 
     modport master (
         output rs1_data,

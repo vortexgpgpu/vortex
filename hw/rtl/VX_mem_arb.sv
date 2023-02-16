@@ -4,7 +4,7 @@ module VX_mem_arb #(
     parameter NUM_REQS       = 1, 
     parameter DATA_WIDTH     = 1,
     parameter DATA_SIZE      = (DATA_WIDTH / 8),
-    parameter ADDR_WIDTH     = (32 - `CLOG2(DATA_SIZE)),
+    parameter ADDR_WIDTH     = (`XLEN - `CLOG2(DATA_SIZE)),
     parameter TAG_WIDTH      = 1,    
     parameter TAG_SEL_IDX    = 0,
     parameter BUFFERED_REQ   = 0,

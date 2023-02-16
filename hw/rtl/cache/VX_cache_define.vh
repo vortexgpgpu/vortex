@@ -19,8 +19,8 @@
 `define LINES_PER_BANK          (`BANK_SIZE / (LINE_SIZE * NUM_WAYS))
 `define WORDS_PER_LINE          (LINE_SIZE / WORD_SIZE)
 
-`define WORD_ADDR_WIDTH         (32-`CLOG2(WORD_SIZE))
-`define MEM_ADDR_WIDTH          (32-`CLOG2(LINE_SIZE))
+`define WORD_ADDR_WIDTH         (`XLEN-`CLOG2(WORD_SIZE))
+`define MEM_ADDR_WIDTH          (`XLEN-`CLOG2(LINE_SIZE))
 `define LINE_ADDR_WIDTH         (`MEM_ADDR_WIDTH-`CLOG2(NUM_BANKS))
 
 // Word select

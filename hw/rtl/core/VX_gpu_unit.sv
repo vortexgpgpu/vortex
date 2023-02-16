@@ -46,7 +46,7 @@ module VX_gpu_unit #(
     localparam UUID_WIDTH    = `UP(`UUID_BITS);
     localparam NW_WIDTH      = `UP(`NW_BITS);
     localparam WCTL_DATAW    = `GPU_TMC_BITS + `GPU_WSPAWN_BITS + `GPU_SPLIT_BITS + `GPU_BARRIER_BITS;
-    localparam RSP_DATAW     = `MAX(`NUM_THREADS * 32, WCTL_DATAW);
+    localparam RSP_DATAW  = `MAX(`NUM_THREADS * `XLEN, WCTL_DATAW);
     localparam RSP_ARB_DATAW = UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + RSP_DATAW + 1 + 1;
     localparam RSP_ARB_SIZE  = 1 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED + `EXT_IMADD_ENABLED;
 
@@ -87,8 +87,8 @@ module VX_gpu_unit #(
     wire is_bar    = (gpu_req_if.op_type == `INST_GPU_BAR);
     wire is_pred   = (gpu_req_if.op_type == `INST_GPU_PRED);
 
-    wire [31:0] rs1_data = gpu_req_if.rs1_data[gpu_req_if.tid];
-    wire [31:0] rs2_data = gpu_req_if.rs2_data[gpu_req_if.tid];
+    wire [`XLEN-1:0] rs1_data = gpu_req_if.rs1_data[gpu_req_if.tid];
+    wire [`XLEN-1:0] rs2_data = gpu_req_if.rs2_data[gpu_req_if.tid];
     
     wire [`NUM_THREADS-1:0] taken_tmask;
     wire [`NUM_THREADS-1:0] not_taken_tmask;
@@ -108,7 +108,7 @@ module VX_gpu_unit #(
 
     // wspawn
 
-    wire [31:0] wspawn_pc = rs2_data;
+    wire [31:0] wspawn_pc = rs2_data[31:0];
     wire [`NUM_WARPS-1:0] wspawn_wmask;
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin
         assign wspawn_wmask[i] = (i < rs1_data);
@@ -344,7 +344,7 @@ module VX_gpu_unit #(
         .ready_out (gpu_commit_if.ready)
     );
 
-    assign gpu_commit_if.data = rsp_data[(`NUM_THREADS * 32)-1:0];
+    assign gpu_commit_if.data = rsp_data[(`NUM_THREADS * `XLEN)-1:0];
 
     // warp control reponse
      

@@ -58,12 +58,12 @@ module VX_csr_unit #(
     localparam NW_WIDTH   = `UP(`NW_BITS);
 
     
-    reg [`NUM_THREADS-1:0][31:0] csr_read_data;
-    reg [31:0]                 csr_write_data;
-    wire [31:0]                csr_read_data_ro, csr_read_data_rw;
-    wire [31:0]                csr_req_data;
-    reg                        csr_rd_enable;
-    wire                       csr_wr_enable;    
+    reg [`NUM_THREADS-1:0][31:0]      csr_read_data;
+    reg [31:0]                        csr_write_data;
+    wire [31:0]                       csr_read_data_ro, csr_read_data_rw;
+    wire [31:0]                       csr_req_data;
+    reg                               csr_rd_enable;
+    wire                              csr_wr_enable;    
 
     `UNUSED_VAR (gpu_pending)
     wire csr_access_pending = (0    
@@ -177,14 +177,14 @@ module VX_csr_unit #(
         .read_wid       (csr_req_if.wid),    
         .read_tmask     (csr_req_if.tmask),    
         .read_addr      (csr_req_if.addr),
-        .read_data_ro   (csr_read_data_ro),
-        .read_data_rw   (csr_read_data_rw),
+        .read_data_ro   (csr_read_data_ro[31:0]),
+        .read_data_rw   (csr_read_data_rw[31:0]),
 
         .write_enable   (csr_req_valid && csr_wr_enable),       
         .write_uuid     (csr_req_if.uuid),
         .write_wid      (csr_req_if.wid),
         .write_addr     (csr_req_if.addr),        
-        .write_data     (csr_write_data)
+        .write_data     (csr_write_data[31:0])
     );
 
     // CSR read
@@ -194,14 +194,14 @@ module VX_csr_unit #(
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign wtid[i] = 32'(i);
         assign ltid[i] = (32'(csr_req_if.wid) << `NT_BITS) + i;
-        assign gtid[i] = 32'((CORE_ID << (`NW_BITS + `NT_BITS)) + (32'(csr_req_if.wid) << `NT_BITS) + i);
+        assign gtid[i] = 32'((32'(CORE_ID) << (`NW_BITS + `NT_BITS)) + (32'(csr_req_if.wid) << `NT_BITS) + i);
     end  
 
     always @(*) begin
         csr_rd_enable = 0;
     `ifdef EXT_RASTER_ENABLE
         if (raster_addr_enable) begin
-            csr_read_data = raster_csr_if.read_data;
+            csr_read_data = `XLEN'(raster_csr_if.read_data);
         end else
     `endif
         case (csr_req_if.addr)
@@ -241,6 +241,10 @@ module VX_csr_unit #(
     end
 
     // send response
+    wire [`NUM_THREADS-1:0][31:0]   csr_commit_data;
+    for(genvar i = 0; i < `NUM_THREADS; ++i) begin
+        assign csr_commit_if.data[i] = `XLEN'(csr_commit_data[i]);
+    end
 
     VX_skid_buffer #(
         .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + `NUM_THREADS * 32)
@@ -250,7 +254,7 @@ module VX_csr_unit #(
         .valid_in  (csr_req_valid),
         .ready_in  (csr_req_ready),
         .data_in   ({csr_req_if.uuid,    csr_req_if.wid,    csr_req_if.tmask,    csr_req_if.PC,    csr_req_if.rd,    csr_req_if.wb,    csr_read_data}),
-        .data_out  ({csr_commit_if.uuid, csr_commit_if.wid, csr_commit_if.tmask, csr_commit_if.PC, csr_commit_if.rd, csr_commit_if.wb, csr_commit_if.data}),
+        .data_out  ({csr_commit_if.uuid, csr_commit_if.wid, csr_commit_if.tmask, csr_commit_if.PC, csr_commit_if.rd, csr_commit_if.wb, csr_commit_data}),
         .valid_out (csr_commit_if.valid),
         .ready_out (csr_commit_if.ready)
     );

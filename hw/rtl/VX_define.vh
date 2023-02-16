@@ -65,6 +65,10 @@
 `define INST_FENCE      7'b0001111 // Fence instructions
 `define INST_SYS        7'b1110011 // system instructions
 
+// RV64I instruction specific opcodes (for any W instruction)
+`define INST_I_W        7'b0011011 // W type immediate instructions
+`define INST_R_W        7'b0111011 // W type register instructions
+
 `define INST_FL         7'b0000111 // float load instruction
 `define INST_FS         7'b0100111 // float store  instruction
 `define INST_FMADD      7'b1000011  
@@ -91,25 +95,31 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define INST_OP_BITS    4
+`define INST_OP_BITS    5
 `define INST_MOD_BITS   3
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define INST_ALU_ADD         4'b0000
-`define INST_ALU_LUI         4'b0010
-`define INST_ALU_AUIPC       4'b0011
-`define INST_ALU_SLTU        4'b0100
-`define INST_ALU_SLT         4'b0101
-`define INST_ALU_SRL         4'b1000
-`define INST_ALU_SRA         4'b1001
-`define INST_ALU_SUB         4'b1011
-`define INST_ALU_AND         4'b1100
-`define INST_ALU_OR          4'b1101
-`define INST_ALU_XOR         4'b1110
-`define INST_ALU_SLL         4'b1111
-`define INST_ALU_OTHER       4'b0111
-`define INST_ALU_BITS        4
+`define INST_ALU_ADD         5'b00000
+`define INST_ALU_LUI         5'b00010
+`define INST_ALU_AUIPC       5'b00011
+`define INST_ALU_SLTU        5'b00100
+`define INST_ALU_SLT         5'b00101
+`define INST_ALU_SRL         5'b01000
+`define INST_ALU_SRA         5'b01001
+`define INST_ALU_SUB         5'b01011
+`define INST_ALU_AND         5'b01100
+`define INST_ALU_OR          5'b01101
+`define INST_ALU_XOR         5'b01110
+`define INST_ALU_SLL         5'b01111
+`define INST_ALU_OTHER       5'b00111
+// RV64I instruction versions
+`define INST_ALU_ADD_W       5'b10000
+`define INST_ALU_SUB_W       5'b11011
+`define INST_ALU_SLL_W       5'b11111
+`define INST_ALU_SRL_W       5'b11000
+`define INST_ALU_SRA_W       5'b11001
+`define INST_ALU_BITS        5
 `define INST_ALU_OP(x)       x[`INST_ALU_BITS-1:0]
 `define INST_ALU_OP_CLASS(x) x[3:2]
 `define INST_ALU_SIGNED(x)   x[0]
@@ -151,15 +161,20 @@
 `define INST_FMT_W           3'b010
 `define INST_FMT_BU          3'b100
 `define INST_FMT_HU          3'b101
+`define INST_FMT_WU          3'b110
+`define INST_FMT_D           3'b011
 
 `define INST_LSU_LB          4'b0000 
 `define INST_LSU_LH          4'b0001
 `define INST_LSU_LW          4'b0010
+`define INST_LSU_LD          4'b0011 // new for RV64I LD
 `define INST_LSU_LBU         4'b0100
 `define INST_LSU_LHU         4'b0101
+`define INST_LSU_LWU         4'b0110 // new for RV64I LWU
 `define INST_LSU_SB          4'b1000 
 `define INST_LSU_SH          4'b1001
 `define INST_LSU_SW          4'b1010
+`define INST_LSU_SD          4'b1011 // new for RV64I SD
 `define INST_LSU_BITS        4
 `define INST_LSU_FMT(x)      x[2:0]
 `define INST_LSU_WSIZE(x)    x[1:0]
@@ -287,13 +302,13 @@
 `endif
 
 `define VX_MEM_BYTEEN_WIDTH     `L3_LINE_SIZE   
-`define VX_MEM_ADDR_WIDTH       (32 - `CLOG2(`L3_LINE_SIZE))
+`define VX_MEM_ADDR_WIDTH       (`XLEN - `CLOG2(`L3_LINE_SIZE))
 `define VX_MEM_DATA_WIDTH       (`L3_LINE_SIZE * 8)
 `define VX_MEM_TAG_WIDTH        L3_MEM_TAG_WIDTH
 `define VX_DCR_ADDR_WIDTH       `DCR_ADDR_BITS
-`define VX_DCR_DATA_WIDTH       32
+`define VX_DCR_DATA_WIDTH       `XLEN
 
-`define TO_FULL_ADDR(x)         {x, (32-$bits(x))'(0)}
+`define TO_FULL_ADDR(x)         {x, (`XLEN-$bits(x))'(0)}
 
 ///////////////////////////////////////////////////////////////////////////////
 

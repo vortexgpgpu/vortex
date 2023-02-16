@@ -14,7 +14,7 @@ module VX_shared_mem #(
     // Address width
     parameter ADDR_WIDTH        = 22,
     // Size of a word in bytes
-    parameter WORD_SIZE         = 4,
+    parameter WORD_SIZE         = `XLEN/8,
 
     // Request debug identifier
     parameter UUID_WIDTH        = 0,

@@ -48,7 +48,7 @@ module VX_mem_unit # (
     VX_mem_req_if.master    mem_req_if,
     VX_mem_rsp_if.slave     mem_rsp_if
 );
-    
+
 `ifdef PERF_ENABLE
     VX_perf_cache_if perf_icache_if();
     VX_perf_cache_if perf_dcache_if();
@@ -187,7 +187,7 @@ module VX_mem_unit # (
         VX_smem_switch #(
             .NUM_REQS     (2),
             .NUM_LANES    (DCACHE_NUM_REQS),
-            .DATA_SIZE    (4),            
+            .DATA_SIZE    (DCACHE_WORD_SIZE),
             .TAG_WIDTH    (DCACHE_ARB_TAG_WIDTH),
             .TAG_SEL_IDX  (0),
             .ARBITER      ("P"),
