@@ -19,16 +19,16 @@ module VX_alu_unit #(
 
     localparam UUID_WIDTH     = `UP(`UUID_BITS);
     localparam NW_WIDTH       = `UP(`NW_BITS);
-    localparam RSP_ARB_DATAW  = UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + `NUM_THREADS * 32;
+    localparam RSP_ARB_DATAW  = UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + `NUM_THREADS * `XLEN;
     localparam RSP_ARB_SIZE   = 1 + `EXT_M_ENABLED;
     localparam SHIFT_IMM_BITS = `CLOG2(`XLEN) - 1;
 
 
-    reg [`NUM_THREADS-1:0][31:0] alu_result;
-    reg [`NUM_THREADS-1:0][31:0] add_result;
-    reg [`NUM_THREADS-1:0][32:0] sub_result; // 33 or 65 bits to keep the overflow bit for branch calculations
-    reg [`NUM_THREADS-1:0][31:0] shr_result;
-    reg [`NUM_THREADS-1:0][31:0] msc_result;
+    reg [`NUM_THREADS-1:0][`XLEN-1:0] alu_result;
+    reg [`NUM_THREADS-1:0][`XLEN-1:0] add_result;
+    reg [`NUM_THREADS-1:0][`XLEN:0] sub_result; // 33 or 65 bits to keep the overflow bit for branch calculations
+    reg [`NUM_THREADS-1:0][`XLEN-1:0] shr_result;
+    reg [`NUM_THREADS-1:0][`XLEN-1:0] msc_result;
 
     wire ready_in;    
 
@@ -155,7 +155,7 @@ module VX_alu_unit #(
     end
 
     wire [`INST_BR_BITS-1:0] br_op_r;
-    wire [31:0] br_dest_r;
+    wire [`XLEN-1:0] br_dest_r;
     wire is_less_r;
     wire is_equal_r;
     wire is_br_op_r;
@@ -181,7 +181,7 @@ module VX_alu_unit #(
     assign branch_ctl_if.valid = alu_valid_out && alu_ready_out && is_br_op_r;
     assign branch_ctl_if.taken = ((br_less ? is_less_r : is_equal_r) ^ br_neg) | br_static;
     assign branch_ctl_if.wid   = alu_wid;
-    assign branch_ctl_if.dest  = br_dest_r[31:0];
+    assign branch_ctl_if.dest  = br_dest_r[`XLEN-1:0];
 
 `ifdef EXT_M_ENABLE
 

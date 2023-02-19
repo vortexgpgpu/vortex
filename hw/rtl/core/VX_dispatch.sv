@@ -76,7 +76,7 @@ module VX_dispatch (
     end
 
     VX_skid_buffer #(
-        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `INST_LSU_BITS + 1 + 32 + `NR_BITS + 1 + `NUM_THREADS*32 + `NUM_THREADS*`XLEN),
+        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `INST_LSU_BITS + 1 + `XLEN + `NR_BITS + 1 + `NUM_THREADS*`XLEN + `NUM_THREADS*`XLEN),
         .OUT_REG (1)
     ) lsu_buffer (
         .clk       (clk),
@@ -143,7 +143,7 @@ module VX_dispatch (
     wire [`INST_GPU_BITS-1:0] gpu_op_type = `INST_GPU_BITS'(dispatch_if.op_type);
 
     VX_skid_buffer #(
-        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + 32 + `INST_GPU_BITS + `INST_MOD_BITS + `NR_BITS + 1 + `UP(`NT_BITS)  + (3 * `NUM_THREADS * 32)),
+        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + 32 + `INST_GPU_BITS + `INST_MOD_BITS + `NR_BITS + 1 + `UP(`NT_BITS)  + (3 * `NUM_THREADS * `XLEN)),
         .OUT_REG (1)
     ) gpu_buffer (
         .clk       (clk),

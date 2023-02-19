@@ -1,9 +1,10 @@
 `include "VX_define.vh"
+`include "VX_config.vh"
 
 interface VX_mem_req_if #(
     parameter DATA_WIDTH = 1,
     parameter DATA_SIZE  = DATA_WIDTH / 8,
-    parameter ADDR_WIDTH = 32 - `CLOG2(DATA_SIZE),
+    parameter ADDR_WIDTH = `XLEN - `CLOG2(DATA_SIZE),
     parameter TAG_WIDTH  = 1    
 ) ();
 

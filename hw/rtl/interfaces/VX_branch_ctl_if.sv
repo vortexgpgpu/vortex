@@ -5,7 +5,7 @@ interface VX_branch_ctl_if ();
     wire                    valid;    
     wire [`UP(`NW_BITS)-1:0] wid;    
     wire                    taken;
-    wire [`XLEN-1:0]             dest;
+    wire [`XLEN-1:0]        dest;
 
     modport master (
         output valid,    

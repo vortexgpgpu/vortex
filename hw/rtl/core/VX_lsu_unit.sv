@@ -43,7 +43,7 @@ module VX_lsu_unit #(
 `endif
 
     //                     uuid,        addr_type,                               wid,       PC,  tmask,         rd,        op_type,         align,                        is_dup
-    localparam TAG_WIDTH = UUID_WIDTH + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + NW_WIDTH + 32 + `NUM_THREADS + `NR_BITS + `INST_LSU_BITS + (`NUM_THREADS * REQ_ASHIFT) + 1;
+    localparam TAG_WIDTH = UUID_WIDTH + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + NW_WIDTH + 32 + `NUM_THREADS + `NR_BITS + `INST_LSU_BITS + (`NUM_THREADS * (REQ_ASHIFT)) + 1;
 
     `STATIC_ASSERT(0 == (`IO_BASE_ADDR % MEM_ASHIFT), ("invalid parameter"))
     `STATIC_ASSERT(0 == (`STACK_BASE_ADDR % MEM_ASHIFT), ("invalid parameter"))    
@@ -170,14 +170,14 @@ module VX_lsu_unit #(
         always @(*) begin
             mem_req_data[i] = lsu_req_if.store_data[i];
             case (req_align[i])
-                1: mem_req_data[`XLEN-1:8]  = lsu_req_if.store_data[i][`XLEN-9:0];
-                2: mem_req_data[`XLEN-1:16] = lsu_req_if.store_data[i][`XLEN-17:0];
-                3: mem_req_data[`XLEN-1:24] = lsu_req_if.store_data[i][`XLEN-25:0];
+                1: mem_req_data[i][`XLEN-1:8]  = lsu_req_if.store_data[i][`XLEN-9:0];
+                2: mem_req_data[i][`XLEN-1:16] = lsu_req_if.store_data[i][`XLEN-17:0];
+                3: mem_req_data[i][`XLEN-1:24] = lsu_req_if.store_data[i][`XLEN-25:0];
                 `ifdef MODE_64_BIT
-                4: mem_req_data[`XLEN-1:32] = lsu_req_if.store_data[i][`XLEN-33:0];
-                5: mem_req_data[`XLEN-1:40] = lsu_req_if.store_data[i][`XLEN-41:0];
-                6: mem_req_data[`XLEN-1:48] = lsu_req_if.store_data[i][`XLEN-49:0];
-                7: mem_req_data[`XLEN-1:56] = lsu_req_if.store_data[i][`XLEN-57:0];
+                4: mem_req_data[i][`XLEN-1:32] = lsu_req_if.store_data[i][`XLEN-33:0];
+                5: mem_req_data[i][`XLEN-1:40] = lsu_req_if.store_data[i][`XLEN-41:0];
+                6: mem_req_data[i][`XLEN-1:48] = lsu_req_if.store_data[i][`XLEN-49:0];
+                7: mem_req_data[i][`XLEN-1:56] = lsu_req_if.store_data[i][`XLEN-57:0];
                 `endif
                 default:;
             endcase
@@ -205,7 +205,7 @@ module VX_lsu_unit #(
         .NUM_REQS    (LSU_MEM_REQS), 
         .NUM_BANKS   (DCACHE_NUM_REQS),
         .ADDR_WIDTH  (DCACHE_ADDR_WIDTH),
-        .DATA_WIDTH  (32),
+        .DATA_WIDTH  (`XLEN),
         .QUEUE_SIZE  (`LSUQ_SIZE),
         .TAG_WIDTH   (TAG_WIDTH),
         .MEM_TAG_ID  (UUID_WIDTH + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS)),
@@ -338,7 +338,7 @@ module VX_lsu_unit #(
 
     // load response formatting
 
-    reg [`NUM_THREADS-1:0][31:0] rsp_data;
+    reg [`NUM_THREADS-1:0][`XLEN-1:0] rsp_data;
     wire [`NUM_THREADS-1:0] rsp_tmask;
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin     // TODO: HOW TF DO I DO THE MEMORY response???
