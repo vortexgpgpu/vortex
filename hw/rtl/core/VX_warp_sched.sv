@@ -40,7 +40,7 @@ module VX_warp_sched #(
     reg [`NUM_WARPS-1:0] stalled_warps;  // asserted when a branch/gpgpu instructions are issued
     
     reg [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks;
-    reg [`NUM_WARPS-1:0][31:0] warp_pcs;
+    reg [`NUM_WARPS-1:0][`XLEN-1:0] warp_pcs;
 
     // barriers
     reg [`NUM_BARRIERS-1:0][`NUM_WARPS-1:0] barrier_masks; // warps waiting on barrier

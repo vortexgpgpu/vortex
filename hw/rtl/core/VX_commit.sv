@@ -1,4 +1,5 @@
 `include "VX_define.vh"
+`include "VX_config.vh"
 
 module VX_commit #(
     parameter CORE_ID = 0
@@ -22,7 +23,7 @@ module VX_commit #(
     VX_cmt_to_fetch_if.master cmt_to_fetch_if,
 
     // simulation helper signals
-    output wire [`NUM_REGS-1:0][31:0] sim_wb_value
+    output wire [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value
 );
     localparam NUM_RSPS = `NUM_EX_UNITS;
     localparam COMMIT_SIZEW = $clog2(NUM_RSPS * `NUM_THREADS + 1);

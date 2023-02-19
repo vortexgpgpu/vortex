@@ -41,7 +41,7 @@ typedef struct packed {
 
 // Word size in bytes
 localparam ICACHE_WORD_SIZE	    = 4;
-localparam ICACHE_ADDR_WIDTH	= (32 - `CLOG2(ICACHE_WORD_SIZE));
+localparam ICACHE_ADDR_WIDTH	= (`XLEN - `CLOG2(ICACHE_WORD_SIZE));
 
 // Block size in bytes
 localparam ICACHE_LINE_SIZE	    = `L1_LINE_SIZE;
@@ -69,8 +69,8 @@ localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_TAG_WIDTH(ICACHE_NUM_REQ
 ////////////////////////// Dcache Parameters //////////////////////////////////
 
 // Word size in bytes
-localparam DCACHE_WORD_SIZE	    = 4;
-localparam DCACHE_ADDR_WIDTH	= (32 - `CLOG2(DCACHE_WORD_SIZE));
+localparam DCACHE_WORD_SIZE	    = 8;
+localparam DCACHE_ADDR_WIDTH	= (`XLEN - `CLOG2(DCACHE_WORD_SIZE));
 
 // Block size in bytes
 localparam DCACHE_LINE_SIZE 	= `L1_LINE_SIZE;

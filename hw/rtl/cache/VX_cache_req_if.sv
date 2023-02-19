@@ -1,10 +1,11 @@
 `include "VX_cache_define.vh"
+`include "VX_config.vh"
 
 interface VX_cache_req_if #(
     parameter NUM_REQS   = 1,
     parameter WORD_SIZE  = 1,
     parameter TAG_WIDTH  = 1,    
-    parameter ADDR_WIDTH = 32 - `CLOG2(WORD_SIZE),
+    parameter ADDR_WIDTH = `XLEN - `CLOG2(WORD_SIZE),
     parameter DATA_WIDTH = WORD_SIZE * 8
 ) ();
 

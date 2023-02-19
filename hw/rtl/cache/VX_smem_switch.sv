@@ -25,7 +25,7 @@ module VX_smem_switch #(
     // output response
     VX_cache_rsp_if.slave   rsp_out_if [NUM_REQS]    
 );  
-    localparam ADDR_WIDTH    = (32-`CLOG2(DATA_SIZE));
+    localparam ADDR_WIDTH    = (`XLEN-`CLOG2(DATA_SIZE));
     localparam DATA_WIDTH    = (8 * DATA_SIZE);
     localparam LOG_NUM_REQS  = `CLOG2(NUM_REQS);
     localparam TAG_OUT_WIDTH = TAG_WIDTH - LOG_NUM_REQS;

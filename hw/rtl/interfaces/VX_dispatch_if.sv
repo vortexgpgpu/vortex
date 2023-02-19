@@ -13,7 +13,7 @@ interface VX_dispatch_if ();
     wire                        wb;
     wire                        use_PC;
     wire                        use_imm;
-    wire [31:0]                 imm;
+    wire [`XLEN-1:0]            imm;
     wire [`NR_BITS-1:0]         rd;
 
     wire                        ready;

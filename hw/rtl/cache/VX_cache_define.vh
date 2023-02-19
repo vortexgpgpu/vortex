@@ -55,8 +55,8 @@
 
 `define MEM_TAG_TO_BANK_ID(x)   x[MSHR_ADDR_WIDTH +: `BANK_SEL_BITS]
 
-`define LINE_TO_BYTE_ADDR(x, i) {x, (32-$bits(x))'(i << (32-$bits(x)-`BANK_SEL_BITS))}
+`define LINE_TO_BYTE_ADDR(x, i) {x, (`XLEN-$bits(x))'(i << (`XLEN-$bits(x)-`BANK_SEL_BITS))}
 
-`define TO_FULL_ADDR(x)         {x, (32-$bits(x))'(0)}
+`define TO_FULL_ADDR(x)         {x, (`XLEN-$bits(x))'(0)}
 
 `endif // VX_CACHE_DEFINE_VH
