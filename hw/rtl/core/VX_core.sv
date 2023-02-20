@@ -445,7 +445,7 @@ module VX_core_top #(
 
     // simulation helper signals
     output wire                             sim_ebreak,
-    output wire [`NUM_REGS-1:0][31:0]       sim_wb_value,
+    output wire [`NUM_REGS-1:0][`XLEN-1:0]       sim_wb_value,
 
     // Status
     output wire                             busy

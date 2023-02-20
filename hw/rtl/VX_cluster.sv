@@ -66,7 +66,7 @@ module VX_cluster #(
 
     // simulation helper signals
     output wire                 sim_ebreak,
-    output wire [`NUM_REGS-1:0][31:0] sim_wb_value,
+    output wire [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value,
 
     // Status
     output wire                 busy
@@ -449,7 +449,7 @@ module VX_cluster #(
     ///////////////////////////////////////////////////////////////////////////
 
     wire [`NUM_SOCKETS-1:0] per_socket_sim_ebreak;
-    wire [`NUM_SOCKETS-1:0][`NUM_REGS-1:0][31:0] per_socket_sim_wb_value;
+    wire [`NUM_SOCKETS-1:0][`NUM_REGS-1:0][`XLEN-1:0] per_socket_sim_wb_value;
     assign sim_ebreak = per_socket_sim_ebreak[0];
     assign sim_wb_value = per_socket_sim_wb_value[0];
     `UNUSED_VAR (per_socket_sim_ebreak)

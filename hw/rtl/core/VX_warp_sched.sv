@@ -98,7 +98,7 @@ module VX_warp_sched #(
             // join handling
             if (join_if.valid) begin
                 if (join_else) begin
-                    warp_pcs[join_if.wid] <= join_pc;
+                    warp_pcs[join_if.wid] <= `XLEN'(join_pc);
                 end
                 thread_masks[join_if.wid] <= join_tmask;
             end
@@ -151,7 +151,7 @@ module VX_warp_sched #(
             end
 
             if (ifetch_req_fire) begin
-                warp_pcs[ifetch_req_if.wid] <= ifetch_req_if.PC + 4;
+                warp_pcs[ifetch_req_if.wid] <= `XLEN'(ifetch_req_if.PC + 32'(4));
             end
 
             if (wrelease_if.valid) begin
@@ -241,13 +241,13 @@ module VX_warp_sched #(
         .valid_out (schedule_valid)
     );
 
-    wire [`NUM_WARPS-1:0][(`NUM_THREADS + 32)-1:0] schedule_data;
+    wire [`NUM_WARPS-1:0][(`NUM_THREADS + `XLEN)-1:0] schedule_data;
     for (genvar i = 0; i < `NUM_WARPS; ++i) begin
         assign schedule_data[i] = {(use_wspawn[i] ? `NUM_THREADS'(1) : thread_masks[i]),
-                                   (use_wspawn[i] ? wspawn_pc : warp_pcs[i])};
+                                   (use_wspawn[i] ? `XLEN'(wspawn_pc) : warp_pcs[i])};
     end
 
-    assign {schedule_tmask, schedule_pc} = schedule_data[schedule_wid];    
+    assign {schedule_tmask, schedule_pc} = {schedule_data[schedule_wid][(`NUM_THREADS + `XLEN)-1:(`NUM_THREADS + `XLEN)-4], schedule_data[schedule_wid][(`NUM_THREADS + 32)-5:0]};
 
 `ifndef NDEBUG
     assign instr_uuid = UUID_WIDTH'(issued_instrs[schedule_wid] * `NUM_WARPS * `NUM_CORES * `NUM_CLUSTERS)

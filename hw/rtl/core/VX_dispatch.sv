@@ -67,12 +67,12 @@ module VX_dispatch (
     wire lsu_is_fence = `INST_LSU_IS_FENCE(dispatch_if.op_mod);
 
     // USED TO TRUNCATE IMMEDIATE and RS1 TO 32 BITS
-    wire [31:0] trunc_ibuffer_imm = ibuffer_if.imm[31:0];
-    wire [`NUM_THREADS-1:0][31:0] trunc_rs1;
+    wire [`XLEN-1:0] trunc_ibuffer_imm = ibuffer_if.imm[`XLEN-1:0];
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] trunc_rs1;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         // These values are used for PC calculations, so should stay as 32 bits
-        assign trunc_rs1[i] = gpr_rsp_if.rs1_data[i][31:0];
+        assign trunc_rs1[i] = gpr_rsp_if.rs1_data[i][`XLEN-1:0];
     end
 
     VX_skid_buffer #(
@@ -97,8 +97,8 @@ module VX_dispatch (
     wire [`NRI_BITS-1:0] csr_imm = dispatch_if.imm[`CSR_ADDR_BITS +: `NRI_BITS];
 
     // USED TO TRUNCATE CSRs TO 32 BITS. I DONT KNOW IF THIS IS CORRECT???
-
-    wire [31:0] csr_rs1_data = gpr_rsp_if.rs1_data[tid][31:0]; // CSR stays 32 bits
+    // Commenting this to fix a warning because this csr_rs1_data signal is not being used anywhere else. -Jaswanth
+    // wire [31:0] csr_rs1_data = gpr_rsp_if.rs1_data[tid][31:0]; // CSR stays 32 bits
 
     VX_skid_buffer #(
         .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `INST_CSR_BITS + `CSR_ADDR_BITS + `NR_BITS + 1 + 1 + `NRI_BITS + `UP(`NT_BITS) + (`NUM_THREADS * `XLEN)),

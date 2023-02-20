@@ -1,5 +1,6 @@
 `include "VX_define.vh"
 `include "VX_gpu_types.vh"
+`include "VX_config.vh"
 
 `IGNORE_WARNINGS_BEGIN
 import VX_gpu_types::*;
@@ -58,12 +59,12 @@ module VX_csr_unit #(
     localparam NW_WIDTH   = `UP(`NW_BITS);
 
     
-    reg [`NUM_THREADS-1:0][31:0]      csr_read_data;
-    reg [31:0]                        csr_write_data;
-    wire [31:0]                       csr_read_data_ro, csr_read_data_rw;
-    wire [31:0]                       csr_req_data;
-    reg                               csr_rd_enable;
-    wire                              csr_wr_enable;    
+    reg [`NUM_THREADS-1:0][`XLEN-1:0]      csr_read_data;
+    reg  [`XLEN-1:0]                       csr_write_data;
+    wire [`XLEN-1:0]                       csr_read_data_ro, csr_read_data_rw;
+    wire [`XLEN-1:0]                       csr_req_data;
+    reg                                    csr_rd_enable;
+    wire                                   csr_wr_enable;    
 
     `UNUSED_VAR (gpu_pending)
     wire csr_access_pending = (0    
@@ -217,7 +218,7 @@ module VX_csr_unit #(
 
     // CSR write
 
-    assign csr_req_data = csr_req_if.use_imm ? 32'(csr_req_if.imm) : csr_req_if.rs1_data[csr_req_if.tid];
+    assign csr_req_data = csr_req_if.use_imm ? `XLEN'(csr_req_if.imm) : csr_req_if.rs1_data[csr_req_if.tid];
 
     assign csr_wr_enable = (csr_write_enable || (csr_req_data != 0))
                 `ifdef EXT_ROP_ENABLE
