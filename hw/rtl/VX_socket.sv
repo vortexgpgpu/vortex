@@ -58,7 +58,7 @@ module VX_socket #(
 
     // simulation helper signals
     output wire             sim_ebreak,
-    output wire [`NUM_REGS-1:0][31:0] sim_wb_value,
+    output wire [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value,
 
     // Status
     output wire             busy
@@ -307,7 +307,7 @@ module VX_socket #(
     ///////////////////////////////////////////////////////////////////////////
 
     wire [`SOCKET_SIZE-1:0] per_core_sim_ebreak;
-    wire [`SOCKET_SIZE-1:0][`NUM_REGS-1:0][31:0] per_core_sim_wb_value;
+    wire [`SOCKET_SIZE-1:0][`NUM_REGS-1:0][`XLEN-1:0] per_core_sim_wb_value;
     assign sim_ebreak = per_core_sim_ebreak[0];
     assign sim_wb_value = per_core_sim_wb_value[0];
     `UNUSED_VAR (per_core_sim_ebreak)

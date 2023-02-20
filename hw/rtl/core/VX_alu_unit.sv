@@ -129,7 +129,7 @@ module VX_alu_unit #(
     wire is_jal = is_br_op && (br_op == `INST_BR_JAL || br_op == `INST_BR_JALR);
     wire [`NUM_THREADS-1:0][31:0] alu_jal_result = is_jal ? {`NUM_THREADS{alu_req_if.next_PC}} : trunc_alu_result; 
 
-    wire [31:0] br_dest    = add_result[alu_req_if.tid][31:0];
+    wire [`XLEN-1:0] br_dest    = add_result[alu_req_if.tid][`XLEN-1:0];
     wire [32:0] cmp_result = sub_result[alu_req_if.tid][32:0];
     
     wire is_less  = cmp_result[32];
@@ -163,7 +163,7 @@ module VX_alu_unit #(
     assign alu_ready_in = alu_ready_out || ~alu_valid_out;
 
     VX_pipe_register #(
-        .DATAW  (1 + UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `INST_BR_BITS + 1 + 1 + 32),
+        .DATAW  (1 + UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `INST_BR_BITS + 1 + 1 + `XLEN),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),

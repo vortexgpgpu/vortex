@@ -116,9 +116,9 @@ module Vortex (
 `endif
 
     wire sim_ebreak /* verilator public */;
-    wire [`NUM_REGS-1:0][31:0] sim_wb_value /* verilator public */;    
+    wire [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value /* verilator public */;    
     wire [`NUM_CLUSTERS-1:0] per_cluster_sim_ebreak;
-    wire [`NUM_CLUSTERS-1:0][`NUM_REGS-1:0][31:0] per_cluster_sim_wb_value;
+    wire [`NUM_CLUSTERS-1:0][`NUM_REGS-1:0][`XLEN-1:0] per_cluster_sim_wb_value;
     assign sim_ebreak = per_cluster_sim_ebreak[0];
     assign sim_wb_value = per_cluster_sim_wb_value[0];
     `UNUSED_VAR (per_cluster_sim_ebreak)
