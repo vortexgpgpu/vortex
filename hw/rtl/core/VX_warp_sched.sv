@@ -151,7 +151,7 @@ module VX_warp_sched #(
             end
 
             if (ifetch_req_fire) begin
-                warp_pcs[ifetch_req_if.wid] <= `XLEN'(ifetch_req_if.PC + 32'(4));
+                warp_pcs[ifetch_req_if.wid] <= `XLEN'(`XLEN'(ifetch_req_if.PC) + 4);
             end
 
             if (wrelease_if.valid) begin

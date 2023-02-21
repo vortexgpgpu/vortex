@@ -190,12 +190,12 @@ module VX_csr_unit #(
 
     // CSR read
 
-    wire [`NUM_THREADS-1:0][31:0] wtid, ltid, gtid;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] wtid, ltid, gtid;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign wtid[i] = 32'(i);
-        assign ltid[i] = (32'(csr_req_if.wid) << `NT_BITS) + i;
-        assign gtid[i] = 32'((32'(CORE_ID) << (`NW_BITS + `NT_BITS)) + (32'(csr_req_if.wid) << `NT_BITS) + i);
+        assign wtid[i] = `XLEN'(i);
+        assign ltid[i] = (`XLEN'(csr_req_if.wid) << `NT_BITS) + i;
+        assign gtid[i] = `XLEN'((`XLEN'(CORE_ID) << (`NW_BITS + `NT_BITS)) + (`XLEN'(csr_req_if.wid) << `NT_BITS) + i);
     end  
 
     always @(*) begin
@@ -242,13 +242,13 @@ module VX_csr_unit #(
     end
 
     // send response
-    wire [`NUM_THREADS-1:0][31:0]   csr_commit_data;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0]   csr_commit_data;
     for(genvar i = 0; i < `NUM_THREADS; ++i) begin
         assign csr_commit_if.data[i] = `XLEN'(csr_commit_data[i]);
     end
 
     VX_skid_buffer #(
-        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + `NUM_THREADS * 32)
+        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + `NUM_THREADS * `XLEN)
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),
