@@ -107,7 +107,7 @@ module VX_lsu_unit #(
     wire                           mem_req_valid;
     wire [`NUM_THREADS-1:0]        mem_req_mask;
     wire                           mem_req_rw;  
-    wire [`NUM_THREADS-1:0][`XLEN-3:0]  mem_req_addr;
+    wire [`NUM_THREADS-1:0][`XLEN-REQ_ASHIFT-1:0]  mem_req_addr;
     reg  [`NUM_THREADS-1:0][DCACHE_WORD_SIZE-1:0]   mem_req_byteen;
     reg  [`NUM_THREADS-1:0][`XLEN-1:0]  mem_req_data;
     wire [TAG_WIDTH-1:0]           mem_req_tag;
