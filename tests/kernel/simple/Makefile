@@ -25,7 +25,7 @@ endif
 CFLAGS += -O3 -mcmodel=medany -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
 CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw
 
-LDFLAGS += -lm -Wl,-Bstatic,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections $(VORTEX_KN_PATH)/libvortexrt.a
+LDFLAGS += -lm -Wl,-Bstatic,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections,--strip-all $(VORTEX_KN_PATH)/libvortexrt.a
 
 PROJECT = simple
 

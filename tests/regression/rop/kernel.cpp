@@ -3,6 +3,7 @@
 #include <vx_spawn.h>
 #include <vx_print.h>
 #include <algorithm>
+#include <math.h>
 
 typedef struct {
   	kernel_arg_t* state;

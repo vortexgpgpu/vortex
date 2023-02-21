@@ -35,7 +35,7 @@ VX_CFLAGS += -v -O3 -std=c++17 -march=rv32imf -mabi=ilp32f
 VX_CFLAGS += -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
 VX_CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw
 
-VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections $(VORTEX_KN_PATH)/libvortexrt.a
+VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections,--strip-all $(VORTEX_KN_PATH)/libvortexrt.a
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors
 

@@ -140,9 +140,11 @@ int render(const kernel_arg_t& kernel_arg,
   } 
 
   // save output image
-  std::cout << "save output image" << std::endl;  
-  //DumpImage(dst_pixels, width, height, 4);  
-  RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, dst_pixels.data(), width, height, width * 4));
+  if (strcmp (output_file, "null") != 0) {
+    std::cout << "save output image" << std::endl;  
+    //DumpImage(dst_pixels, width, height, 4);  
+    RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, dst_pixels.data(), width, height, width * 4));
+  }
 
   return 0;
 }
@@ -292,7 +294,7 @@ int main(int argc, char *argv[]) {
   std::cout << "cleanup" << std::endl;  
   cleanup();
 
-  if (reference_file) {
+  if (strcmp (output_file, "null") != 0 && reference_file) {
     auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8);
     if (0 == errors) {
       std::cout << "PASSED!" << std::endl;

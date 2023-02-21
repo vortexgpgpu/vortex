@@ -211,9 +211,8 @@ int render(uint32_t num_tasks) {
   }
 
   // save output image
-  std::cout << "save output image" << std::endl;
-  {
-    // save image upside down
+  if (strcmp (output_file, "null") != 0) {
+    std::cout << "save output image" << std::endl;
     auto bits = dst_pixels.data() + (dst_height-1) * cbuf_pitch;
     RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, bits, dst_width, dst_height, -cbuf_pitch));
   }
@@ -305,7 +304,7 @@ int main(int argc, char *argv[]) {
   std::cout << "cleanup" << std::endl;  
   cleanup();  
 
-  if (reference_file) {
+  if (strcmp (output_file, "null") != 0 && reference_file) {
     auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8);
     if (0 == errors) {
       std::cout << "PASSED!" << std::endl;

@@ -30,7 +30,8 @@ task trace_raster_state (
         `DCR_RASTER_TILE_COUNT:  `TRACE(level, ("TILE_COUNT"));
         `DCR_RASTER_PBUF_ADDR:   `TRACE(level, ("PBUF_ADDR"));
         `DCR_RASTER_PBUF_STRIDE: `TRACE(level, ("PBUF_STRIDE"));
-        `DCR_RASTER_DST_SIZE:    `TRACE(level, ("DST_SIZE"));
+        `DCR_RASTER_SCISSOR_X:   `TRACE(level, ("SCISSOR_X"));
+        `DCR_RASTER_SCISSOR_Y:   `TRACE(level, ("SCISSOR_Y"));
         default:                 `TRACE(level, ("?"));
     endcase  
 endtask

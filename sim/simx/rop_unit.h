@@ -3,6 +3,7 @@
 #include <simobject.h>
 #include <VX_types.h>
 #include "pipeline.h"
+#include "graphics.h"
 #include "types.h"
 
 namespace vortex {
@@ -41,21 +42,7 @@ public:
     uint32_t uuid;
   };
 
-  class DCRS {
-  private:
-    std::array<uint32_t, DCR_ROP_STATE_COUNT> states_;
-
-  public:
-    uint32_t read(uint32_t addr) const {
-      uint32_t state = DCR_ROP_STATE(addr);
-      return states_.at(state);
-    }
-
-    void write(uint32_t addr, uint32_t value) {
-      uint32_t state = DCR_ROP_STATE(addr);
-      states_.at(state) = value;
-    }
-  };
+  using DCRS = graphics::RopDCRS;
 
   std::vector<SimPort<MemReq>> MemReqs;
   std::vector<SimPort<MemRsp>> MemRsps;

@@ -1,9 +1,7 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_dcr #(
-    parameter `STRING_TYPE INSTANCE_ID = "",
-    parameter INSTANCE_IDX  = 0,
-    parameter NUM_INSTANCES = 1
+    parameter `STRING_TYPE INSTANCE_ID = ""
 ) (
     input wire clk,
     input wire reset,
@@ -16,16 +14,10 @@ module VX_raster_dcr #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
-    `UNUSED_VAR (reset)
-
-    localparam LOG2_NUM_INSTANCES = `CLOG2(NUM_INSTANCES);    
+    `UNUSED_VAR (reset)  
 
     // DCR registers
     raster_dcrs_t dcrs;
-
-    wire [`RASTER_DIM_BITS-1:0] dst_width   = dcr_write_if.data[0 +: `RASTER_DIM_BITS];
-    wire [`RASTER_DIM_BITS-1:0] dst_height  = dcr_write_if.data[16 +: `RASTER_DIM_BITS];
-    wire [`RASTER_DIM_BITS-1:0] tile_height = dst_height >> LOG2_NUM_INSTANCES;
 
     // DCRs write
     always @(posedge clk) begin
@@ -43,10 +35,13 @@ module VX_raster_dcr #(
                 `DCR_RASTER_PBUF_STRIDE: begin 
                     dcrs.pbuf_stride <= dcr_write_if.data[`RASTER_STRIDE_BITS-1:0];
                 end
-               `DCR_RASTER_DST_SIZE: begin 
-                    dcrs.dst_xmax <= dst_width;
-                    dcrs.dst_ymin <= `RASTER_DIM_BITS'(INSTANCE_IDX * tile_height);
-                    dcrs.dst_ymax <= (INSTANCE_IDX < (NUM_INSTANCES-1)) ? `RASTER_DIM_BITS'((INSTANCE_IDX + 1) * tile_height) : dst_height;
+               `DCR_RASTER_SCISSOR_X: begin 
+                    dcrs.dst_xmin <= dcr_write_if.data[0 +: `RASTER_DIM_BITS];
+                    dcrs.dst_xmax <= dcr_write_if.data[16 +: `RASTER_DIM_BITS];
+                end
+                `DCR_RASTER_SCISSOR_Y: begin 
+                    dcrs.dst_ymin <= dcr_write_if.data[0 +: `RASTER_DIM_BITS];
+                    dcrs.dst_ymax <= dcr_write_if.data[16 +: `RASTER_DIM_BITS];
                 end
             endcase
         end

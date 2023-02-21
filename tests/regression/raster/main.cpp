@@ -1,15 +1,17 @@
 #include <iostream>
 #include <vector>
 #include <unistd.h>
-#include <string.h>
+#include <cstring>
 #include <chrono>
 #include <cmath>
 #include <array>
 #include <assert.h>
 #include <vortex.h>
+#include <graphics.h>
+#include <gfxutil.h>
+#include <VX_config.h>
+#include <algorithm>
 #include "common.h"
-#include "utils.h"
-#include <cocogfx/include/cgltrace.hpp>
 #include <cocogfx/include/imageutil.hpp>
 
 using namespace cocogfx;
@@ -113,7 +115,7 @@ int render(const CGLTrace& trace) {
     std::vector<uint8_t> primbuf;
     
     // Perform tile binning
-    auto num_tiles = Binning(tilebuf, primbuf, drawcall.vertices, drawcall.primitives, dst_width, dst_height, drawcall.viewport.near, drawcall.viewport.far, tileLogSize);
+    auto num_tiles = graphics::Binning(tilebuf, primbuf, drawcall.vertices, drawcall.primitives, dst_width, dst_height, drawcall.viewport.near, drawcall.viewport.far, tileLogSize);
     std::cout << "Binning allocated " << std::dec << num_tiles << " tiles with " << primbuf.size() << " total primitives." << std::endl;
     if (0 == num_tiles)
       continue;
@@ -164,14 +166,15 @@ int render(const CGLTrace& trace) {
     vx_buf_free(staging_buf);
     staging_buf = nullptr;
 
-    uint32_t primbuf_stride = sizeof(rast_prim_t);
+    uint32_t primbuf_stride = sizeof(graphics::rast_prim_t);
 
     // configure raster units
     vx_dcr_write(device, DCR_RASTER_TBUF_ADDR,   tilebuf_addr);
     vx_dcr_write(device, DCR_RASTER_TILE_COUNT,  num_tiles);
     vx_dcr_write(device, DCR_RASTER_PBUF_ADDR,   primbuf_addr);
-    vx_dcr_write(device, DCR_RASTER_PBUF_STRIDE, primbuf_stride);
-    vx_dcr_write(device, DCR_RASTER_DST_SIZE, (dst_height << 16) | dst_width);
+    vx_dcr_write(device, DCR_RASTER_PBUF_STRIDE, primbuf_stride);    
+    vx_dcr_write(device, DCR_RASTER_SCISSOR_X, (dst_width << 16) | 0);
+    vx_dcr_write(device, DCR_RASTER_SCISSOR_Y, (dst_height << 16) | 0);
 
     auto time_start = std::chrono::high_resolution_clock::now();
 

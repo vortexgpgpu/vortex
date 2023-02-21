@@ -1,9 +1,9 @@
-#include <cstdint>
-#include <vector>
-#include <bitmanip.h>
-#include <cocogfx/include/format.hpp>
-#include <cocogfx/include/blitter.hpp>
+#pragma once
+
 #include <cocogfx/include/cgltrace.hpp>
+#include <cocogfx/include/format.hpp>
+
+namespace graphics {
 
 uint32_t toVXFormat(cocogfx::ePixelFormat format);
 
@@ -22,3 +22,5 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
                  float near,
                  float far,
                  uint32_t tileLogSize);
+
+} // namespace graphics

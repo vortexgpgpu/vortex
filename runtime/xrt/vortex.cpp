@@ -531,7 +531,7 @@ extern int vx_dev_open(vx_device_h* hdevice) {
 
     *hdevice = device;
 
-    DBGPRINT("[VXDRV] device creation complete!\n");
+    DBGPRINT("device creation complete!\n");
 
     return 0;
 }
@@ -544,7 +544,7 @@ extern int vx_dev_close(vx_device_h hdevice) {
 
     delete device;
 
-    DBGPRINT("vx_dev_close(%p)\n", hdevice);
+    DBGPRINT("device destroyed!\n");
 
     return 0;
 }
@@ -603,8 +603,6 @@ extern int vx_buf_free(vx_buffer_h hbuffer) {
     auto buffer = (vx_buffer*)hbuffer;
 
     delete buffer;
-
-    DBGPRINT("vx_buf_free(%p)\n", hbuffer);
 
     return 0;
 }
@@ -744,7 +742,9 @@ extern int vx_start(vx_device_h hdevice) {
         return -1;
     });
 
-#endif
+#endif    
+    
+    DBGPRINT("START");
 
     return 0;
 }
@@ -822,7 +822,7 @@ extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint64_t value) {
 #endif
 
     // save the value
-    DBGPRINT("DCR addr=0x%x, value=0x%lx\n", addr, value);
+    DBGPRINT("DCR_WRITE: addr=0x%x, value=0x%lx\n", addr, value);
     device->dcrs.write(addr, value);
     
     return 0;

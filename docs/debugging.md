@@ -1,4 +1,12 @@
-# Debugging Vortex Hardware
+# Debugging Vortex GPU
+
+## Testing changes to the RTL or simulator GPU driver.
+
+The Blackbox utility script will not pick up your chnages if the h/w configuration is the same as during teh last run.
+To force the utility to build the driver, you need pass the --rebuild=1 option when running tests. 
+Using --rebuild=0 will prevent the rebuild even if the h/w configuration is different from last run.
+
+    $ ./ci/blackbox.sh --driver=simx --app=demo --rebuild=1
 
 ## SimX Debugging
 

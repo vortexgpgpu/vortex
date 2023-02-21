@@ -1,15 +1,17 @@
 #include <iostream>
 #include <vector>
 #include <unistd.h>
-#include <string.h>
+#include <cstring>
 #include <chrono>
 #include <cmath>
 #include <array>
 #include <assert.h>
 #include <vortex.h>
+#include <graphics.h>
+#include <gfxutil.h>
+#include <bitmanip.h>
 #include "common.h"
-#include "utils.h"
-#include <cocogfx/include/cgltrace.hpp>
+#include <cocogfx/include/blitter.hpp>
 #include <cocogfx/include/imageutil.hpp>
 
 using namespace cocogfx;
@@ -34,6 +36,7 @@ const char* reference_file = nullptr;
 bool sw_rast = false;
 bool sw_rop = false;
 bool sw_interp = false;
+bool empty_shader = false;
 
 uint32_t clear_color = 0x00000000;
 uint32_t clear_depth = 0xFFFFFFFF;
@@ -64,12 +67,12 @@ uint32_t tileLogSize = RASTER_TILE_LOGSIZE;
 
 static void show_usage() {
    std::cout << "Vortex 3D Rendering Test." << std::endl;
-   std::cout << "Usage: [-t trace] [-o output] [-r reference] [-w width] [-h height] [-x s/w rast] [-y s/w rop] [-z s/w interp] [-k tilelogsize]" << std::endl;
+   std::cout << "Usage: [-t trace] [-o output] [-r reference] [-w width] [-h height] [-e empty] [-x s/w rast] [-y s/w rop] [-z s/w interp] [-k tilelogsize]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "t:i:o:r:w:h:t:k:xyz?")) != -1) {
+  while ((c = getopt(argc, argv, "t:i:o:r:w:h:t:k:xyze?")) != -1) {
     switch (c) {
     case 't':
       trace_file = optarg;
@@ -86,17 +89,20 @@ static void parse_args(int argc, char **argv) {
     case 'h':
       dst_height = std::atoi(optarg);
       break;
+    case 'e':
+      empty_shader = true;
+      break;
     case 'x':
       sw_rast = true;
       break;
     case 'y':
       sw_rop = true;
       break;
-    case 'k':
-      tileLogSize = std::atoi(optarg);
-      break;
     case 'z':
       sw_interp = true;
+      break;
+    case 'k':
+      tileLogSize = std::atoi(optarg);
       break;
     case '?': {
       show_usage();
@@ -123,17 +129,27 @@ void cleanup() {
   }
 }
 
-#define RASTER_DCR_WRITE(addr, value)  \
-  vx_dcr_write(device, addr,   value); \
-  raster_dcrs.write(addr, value)
+#ifdef SW_ENABLE
+  #define RASTER_DCR_WRITE(addr, value)  \
+    vx_dcr_write(device, addr, value); \
+    raster_dcrs.write(addr, value)
 
-#define ROP_DCR_WRITE(addr, value)  \
-  vx_dcr_write(device, addr,   value); \
-  rop_dcrs.write(addr, value)
+  #define ROP_DCR_WRITE(addr, value)  \
+    vx_dcr_write(device, addr, value); \
+    rop_dcrs.write(addr, value)
+#else
+  #define RASTER_DCR_WRITE(addr, value)  \
+    vx_dcr_write(device, addr, value)
+
+  #define ROP_DCR_WRITE(addr, value)  \
+    vx_dcr_write(device, addr, value)
+#endif
 
 int render(const CGLTrace& trace) {
-  RasterDCRS raster_dcrs;
-  RopDCRS    rop_dcrs;
+#ifdef SW_ENABLE
+  graphics::RasterDCRS raster_dcrs;
+  graphics::RopDCRS    rop_dcrs;
+#endif
   
   std::cout << "render" << std::endl;
   auto time_begin = std::chrono::high_resolution_clock::now();
@@ -151,8 +167,8 @@ int render(const CGLTrace& trace) {
     std::vector<uint8_t> primbuf;
     
     // Perform tile binning
-    auto num_tiles = Binning(tilebuf, primbuf, drawcall.vertices, drawcall.primitives, dst_width, dst_height, drawcall.viewport.near, drawcall.viewport.far, tileLogSize);
-    std::cout << "Binning allocated " << std::dec << num_tiles << " tiles with " << (primbuf.size() / sizeof(rast_prim_t)) << " total primitives." << std::endl;
+    auto num_tiles = graphics::Binning(tilebuf, primbuf, drawcall.vertices, drawcall.primitives, dst_width, dst_height, drawcall.viewport.near, drawcall.viewport.far, tileLogSize);
+    std::cout << "Binning allocated " << std::dec << num_tiles << " tiles with " << (primbuf.size() / sizeof(graphics::rast_prim_t)) << " total primitives." << std::endl;
     if (0 == num_tiles)
       continue;
 
@@ -186,14 +202,15 @@ int render(const CGLTrace& trace) {
     vx_buf_free(staging_buf);
     staging_buf = nullptr;
 
-    uint32_t primbuf_stride = sizeof(rast_prim_t);
+    uint32_t primbuf_stride = sizeof(graphics::rast_prim_t);
 
     // configure raster units
     RASTER_DCR_WRITE(DCR_RASTER_TBUF_ADDR,   tilebuf_addr);
     RASTER_DCR_WRITE(DCR_RASTER_TILE_COUNT,  num_tiles);
     RASTER_DCR_WRITE(DCR_RASTER_PBUF_ADDR,   primbuf_addr);
     RASTER_DCR_WRITE(DCR_RASTER_PBUF_STRIDE, primbuf_stride);
-    RASTER_DCR_WRITE(DCR_RASTER_DST_SIZE, (dst_height << 16) | dst_width);
+    RASTER_DCR_WRITE(DCR_RASTER_SCISSOR_X, (dst_width << 16) | 0);
+    RASTER_DCR_WRITE(DCR_RASTER_SCISSOR_Y, (dst_height << 16) | 0);
 
     // configure rop color buffer
     ROP_DCR_WRITE(DCR_ROP_CBUF_ADDR,  cbuf_addr);
@@ -208,7 +225,7 @@ int render(const CGLTrace& trace) {
 
     if (states.depth_test) {    
       // configure rop depth states
-      auto depth_func = toVXCompare(states.depth_func);
+      auto depth_func = graphics::toVXCompare(states.depth_func);
       ROP_DCR_WRITE(DCR_ROP_DEPTH_FUNC, depth_func);
       ROP_DCR_WRITE(DCR_ROP_DEPTH_WRITEMASK, states.depth_writemask);
     } else {
@@ -218,10 +235,10 @@ int render(const CGLTrace& trace) {
 
     if (states.stencil_test) {
       // configure rop stencil states
-      auto stencil_func  = toVXCompare(states.stencil_func);
-      auto stencil_zpass = toVXStencilOp(states.stencil_zpass);
-      auto stencil_zfail = toVXStencilOp(states.stencil_zfail);
-      auto stencil_fail  = toVXStencilOp(states.stencil_fail);
+      auto stencil_func  = graphics::toVXCompare(states.stencil_func);
+      auto stencil_zpass = graphics::toVXStencilOp(states.stencil_zpass);
+      auto stencil_zfail = graphics::toVXStencilOp(states.stencil_zfail);
+      auto stencil_fail  = graphics::toVXStencilOp(states.stencil_fail);
       ROP_DCR_WRITE(DCR_ROP_STENCIL_FUNC, stencil_func);
       ROP_DCR_WRITE(DCR_ROP_STENCIL_ZPASS, stencil_zpass);
       ROP_DCR_WRITE(DCR_ROP_STENCIL_ZPASS, stencil_zfail);
@@ -241,8 +258,8 @@ int render(const CGLTrace& trace) {
 
     if (states.blend_enabled) {
       // configure rop blend states
-      auto blend_src = toVXBlendFunc(states.blend_src);
-      auto blend_dst = toVXBlendFunc(states.blend_dst);
+      auto blend_src = graphics::toVXBlendFunc(states.blend_src);
+      auto blend_dst = graphics::toVXBlendFunc(states.blend_dst);
       ROP_DCR_WRITE(DCR_ROP_BLEND_MODE, (ROP_BLEND_MODE_ADD << 16)   // DST
                                       | (ROP_BLEND_MODE_ADD << 0));  // SRC
       ROP_DCR_WRITE(DCR_ROP_BLEND_FUNC, (blend_dst << 24)            // DST_A
@@ -274,7 +291,7 @@ int render(const CGLTrace& trace) {
       uint32_t tex_logwidth = log2ceil(texture.width);
       uint32_t tex_logheight = log2ceil(texture.height);
 
-      int tex_format = toVXFormat(texture.format);
+      int tex_format = graphics::toVXFormat(texture.format);
 
       int tex_filter = (states.texture_magfilter != CGLTrace::FILTER_NEAREST) 
                     || (states.texture_magfilter != CGLTrace::FILTER_NEAREST);
@@ -313,15 +330,16 @@ int render(const CGLTrace& trace) {
 
     // upload kernel argument
     std::cout << "upload kernel argument" << std::endl;
-    {
+    {      
       kernel_arg.depth_enabled = states.depth_test;
       kernel_arg.color_enabled = states.color_enabled;
       kernel_arg.tex_enabled   = states.texture_enabled;
       kernel_arg.tex_modulate  = (states.texture_enabled && states.texture_envmode == CGLTrace::ENVMODE_MODULATE);
       kernel_arg.prim_addr     = primbuf_addr;
+    #ifdef SW_ENABLE 
       kernel_arg.raster_dcrs   = raster_dcrs;
       kernel_arg.rop_dcrs      = rop_dcrs;
-
+    #endif
       if (kernel_arg.tex_modulate && !kernel_arg.color_enabled)
         kernel_arg.tex_modulate = false;
       if (kernel_arg.tex_enabled && kernel_arg.color_enabled && !kernel_arg.tex_modulate)
@@ -381,9 +399,8 @@ int render(const CGLTrace& trace) {
   printf("Total elapsed time: %lg ms, instrs=%ld, cycles=%ld, IPC=%f\n", elapsed, instrs, cycles, IPC);
 
   // save output image
-  std::cout << "save output image" << std::endl;
-  {
-    // save image upside down
+  if (strcmp (output_file, "null") != 0) {
+    std::cout << "save output image" << std::endl;      
     auto bits = dst_pixels.data() + (dst_height-1) * cbuf_pitch;
     RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, bits, dst_width, dst_height, -cbuf_pitch));
   }
@@ -493,6 +510,7 @@ int main(int argc, char *argv[]) {
 
   // update kernel arguments
   kernel_arg.log_num_tasks = log2ceil(num_tasks);
+  kernel_arg.empty_shader  = empty_shader;
   kernel_arg.sw_rast       = sw_rast;
   kernel_arg.sw_rop        = sw_rop;
   kernel_arg.sw_interp     = sw_interp;
@@ -515,7 +533,7 @@ int main(int argc, char *argv[]) {
   std::cout << "cleanup" << std::endl;  
   cleanup();  
 
-  if (reference_file) {
+  if (strcmp (output_file, "null") != 0 && reference_file) {
     auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8, 2);
     if (0 == errors) {
       std::cout << "PASSED!" << std::endl;

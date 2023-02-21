@@ -5,7 +5,10 @@
 #include <cocogfx/include/fixed.hpp>
 #include <cocogfx/include/math.hpp>
 #include "types.h"
+#include "graphics.h"
 #include "pipeline.h"
+
+#define FIXEDPOINT_RASTERIZER
 
 namespace vortex {
 
@@ -13,44 +16,6 @@ class RAM;
 
 class RasterUnit : public SimObject<RasterUnit> {
 public:
-  using fixed16_t = cocogfx::TFixed<16>;
-  using vec3_fx_t = cocogfx::TVector3<fixed16_t>;
-
-  struct Stamp {
-    uint32_t  x;
-    uint32_t  y;  
-    uint32_t  mask;
-    std::array<vec3_fx_t, 4> bcoords; // barycentric coordinates        
-    uint32_t  pid;
-
-    Stamp* next_;
-    Stamp* prev_;
-
-    Stamp(uint32_t x, uint32_t y, uint32_t mask, const std::array<vec3_fx_t, 4>& bcoords, uint32_t  pid) 
-      : x(x)
-      , y(y)
-      , mask(mask)
-      , bcoords(bcoords)
-      , pid(pid)
-      , next_(nullptr)
-      , prev_(nullptr) 
-    {}
-
-    void* operator new(size_t /*size*/) {
-      return allocator().allocate();
-    }
-
-    void operator delete(void* ptr) {
-      allocator().deallocate(ptr);
-    }
-
-  private:
-
-    static MemoryPool<Stamp>& allocator() {
-      static MemoryPool<Stamp> instance(1024);
-      return instance;
-    }
-  };
 
   struct Config {
     uint32_t tile_logsize;
@@ -76,21 +41,7 @@ public:
     }
   };
   
-  class DCRS {
-  private:
-    std::array<uint32_t, DCR_RASTER_STATE_COUNT> states_;
-
-  public:
-    uint32_t read(uint32_t addr) const {
-      uint32_t state = DCR_RASTER_STATE(addr);
-      return states_.at(state);
-    }
-
-    void write(uint32_t addr, uint32_t value) {
-      uint32_t state = DCR_RASTER_STATE(addr);
-      states_.at(state) = value;
-    }
-  };
+  using DCRS = graphics::RasterDCRS;
   
   SimPort<MemReq> MemReqs;
   SimPort<MemRsp> MemRsps;

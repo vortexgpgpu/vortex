@@ -3,7 +3,7 @@
 show_usage()
 {
     echo "Vortex BlackBox Test Driver v1.0"
-    echo "Usage: [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--perf=#class] [--help]]"
+    echo "Usage: [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--perf=#class] [--rebuild=0|1] [--help]]"
 }
 
 SCRIPT_DIR=$(dirname "$0")
@@ -22,7 +22,7 @@ DEBUG_LEVEL=0
 SCOPE=0
 HAS_ARGS=0
 PERF_CLASS=0
-REBUILD=1
+REBUILD=2
 
 for i in "$@"
 do
@@ -128,17 +128,19 @@ CONFIGS="-DNUM_CLUSTERS=$CLUSTERS -DNUM_CORES=$CORES -DNUM_WARPS=$WARPS -DNUM_TH
 
 echo "CONFIGS=$CONFIGS"
 
-BLACKBOX_CACHE=blackbox.$DRIVER.cache
-
-if [ -f "$BLACKBOX_CACHE" ]
-then 
-    LAST_CONFIGS=`cat $BLACKBOX_CACHE`
-fi
-
-if [ "$CONFIGS+$DEBUG+$SCOPE" != "$LAST_CONFIGS" ] && [ $REBUILD != 0 ];
+if [ $REBUILD -ne 0 ] 
 then
-    make -C $DRIVER_PATH clean
-    echo "$CONFIGS+$DEBUG+$SCOPE" > $BLACKBOX_CACHE
+    BLACKBOX_CACHE=blackbox.$DRIVER.cache    
+    if [ -f "$BLACKBOX_CACHE" ]
+    then 
+        LAST_CONFIGS=`cat $BLACKBOX_CACHE`
+    fi
+
+    if [ $REBUILD -eq 1 ] || [ "$CONFIGS+$DEBUG+$SCOPE" != "$LAST_CONFIGS" ];
+    then
+        make -C $DRIVER_PATH clean
+        echo "$CONFIGS+$DEBUG+$SCOPE" > $BLACKBOX_CACHE
+    fi
 fi
 
 # export performance monitor class identifier

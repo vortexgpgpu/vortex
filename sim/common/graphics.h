@@ -1,0 +1,245 @@
+#pragma once
+
+#include <cstdint>
+#include <array>
+#include <cocogfx/include/fixed.hpp>
+#include <cocogfx/include/math.hpp>
+#include <VX_types.h>
+
+#define FIXEDPOINT_RASTERIZER
+
+namespace graphics {
+
+using fixed16_t = cocogfx::TFixed<16>;
+using fixed24_t = cocogfx::TFixed<24>;
+
+#ifdef FIXEDPOINT_RASTERIZER
+using FloatE = fixed16_t;
+using FloatA = fixed24_t;
+#else
+using FloatE = float;
+using FloatA = float;
+#endif
+
+using vec2e_t = cocogfx::TVector2<FloatE>;
+using vec3e_t = cocogfx::TVector3<FloatE>;
+
+typedef struct {
+  FloatA x;
+  FloatA y;
+  FloatA z;
+} rast_attrib_t;
+
+typedef struct {
+  rast_attrib_t z;
+  rast_attrib_t r;
+  rast_attrib_t g;
+  rast_attrib_t b;
+  rast_attrib_t a;
+  rast_attrib_t u;
+  rast_attrib_t v;
+} rast_attribs_t;
+
+typedef struct {  
+  uint32_t left;
+  uint32_t right;
+  uint32_t top;
+  uint32_t bottom;
+} rast_bbox_t;
+
+typedef struct {
+  std::array<vec3e_t, 3> edges;
+  rast_attribs_t attribs;
+} rast_prim_t;
+
+typedef struct {
+  uint16_t tile_x;
+  uint16_t tile_y;
+  uint16_t pids_offset;
+  uint16_t pids_count;
+} rast_tile_header_t;
+
+///////////////////////////////////////////////////////////////////////////////
+
+class RasterDCRS {
+public:
+  RasterDCRS() {
+    this->clear();
+  }
+
+  void clear() {
+    for (auto& state : states_) {
+      state = 0;
+    }
+  }
+
+  uint32_t read(uint32_t addr) const {
+    uint32_t state = DCR_RASTER_STATE(addr);
+    return states_[state];
+  }
+
+  void write(uint32_t addr, uint32_t value) {
+    uint32_t state = DCR_RASTER_STATE(addr);
+    states_[state] = value;
+  }
+
+private:
+  uint32_t states_[DCR_RASTER_STATE_COUNT];
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+class RopDCRS {
+public:
+  RopDCRS() {
+    this->clear();
+  }
+
+  void clear() {
+    for (auto& state : states_) {
+      state = 0;
+    }
+  }
+
+  uint32_t read(uint32_t addr) const {
+    uint32_t state = DCR_ROP_STATE(addr);
+    return states_[state];
+  }
+
+  void write(uint32_t addr, uint32_t value) {
+    uint32_t state = DCR_ROP_STATE(addr);
+    states_[state] = value;
+  }
+
+private:
+  uint32_t states_[DCR_ROP_STATE_COUNT];
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+class DepthTencil {
+public:
+  DepthTencil();
+  ~DepthTencil();
+
+  void configure(const RopDCRS& dcrs);
+
+  bool test(uint32_t is_backface, 
+            uint32_t depth, 
+            uint32_t depthstencil_val, 
+            uint32_t* depthstencil_result);
+
+  bool depth_enabled() const {
+    return depth_enabled_;
+  }
+
+  bool stencil_enabled(bool is_backface) const {
+    return is_backface ? stencil_back_enabled_ : stencil_front_enabled_;
+  }
+
+protected:
+
+  uint32_t depth_func_;
+  uint32_t stencil_front_func_;
+  uint32_t stencil_front_zpass_;
+  uint32_t stencil_front_zfail_;
+  uint32_t stencil_front_fail_;
+  uint32_t stencil_front_mask_;
+  uint32_t stencil_front_ref_;
+  uint32_t stencil_back_func_;
+  uint32_t stencil_back_zpass_;
+  uint32_t stencil_back_zfail_;
+  uint32_t stencil_back_fail_;
+  uint32_t stencil_back_mask_;
+  uint32_t stencil_back_ref_;
+  
+  bool depth_enabled_;
+  bool stencil_front_enabled_;
+  bool stencil_back_enabled_;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+class Blender {
+public:
+  Blender();
+  ~Blender();
+
+  void configure(const RopDCRS& dcrs);
+
+  uint32_t blend(uint32_t srcColor, uint32_t dstColor);
+
+  bool enabled() const {
+    return enabled_;
+  }
+
+protected:
+
+  uint32_t blend_mode_rgb_;
+  uint32_t blend_mode_a_;
+  uint32_t blend_src_rgb_;
+  uint32_t blend_src_a_;
+  uint32_t blend_dst_rgb_;
+  uint32_t blend_dst_a_;
+  uint32_t blend_const_;
+  uint32_t logic_op_;
+  
+  bool enabled_;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+class Rasterizer {
+public:
+  typedef void (*ShaderCB)(
+    uint32_t  pos_mask,
+    const std::array<vec3e_t, 4>& bcoords,
+    uint32_t  pid,
+    void*     cb_arg
+  );
+
+  Rasterizer(const ShaderCB& shader_cb,
+             void* cb_arg,
+             uint32_t tile_logsize, 
+             uint32_t block_logsize);
+  ~Rasterizer();
+
+  void configure(const RasterDCRS& dcrs);
+
+protected:
+
+  struct delta_t {
+    vec3e_t dx;
+    vec3e_t dy;
+    vec3e_t extents;
+  };
+
+  void renderPrimitive(uint32_t x, 
+                       uint32_t y, 
+                       uint32_t pid, 
+                       const std::array<vec3e_t, 3>& edges);
+
+  void renderTile(uint32_t subTileLogSize,   
+                  uint32_t x, 
+                  uint32_t y, 
+                  uint32_t id,
+                  const vec3e_t& edges, 
+                  const delta_t& delta);
+
+  void renderQuad(uint32_t x, 
+                  uint32_t y, 
+                  uint32_t id,
+                  const vec3e_t& edges, 
+                  const delta_t& delta);
+
+  ShaderCB shader_cb_;
+  void*    cb_arg_;
+  uint32_t tile_logsize_;
+  uint32_t block_logsize_;
+  uint32_t scissor_left_;  
+  uint32_t scissor_top_; 
+  uint32_t scissor_right_; 
+  uint32_t scissor_bottom_;
+};
+
+} // namespace graphics

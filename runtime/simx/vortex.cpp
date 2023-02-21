@@ -20,6 +20,11 @@
 #include <mem.h>
 #include <constants.h>
 
+#ifndef NDEBUG
+#define DBGPRINT(format, ...) do { printf("[VXDRV] " format "", ##__VA_ARGS__); } while (0)
+#else
+#define DBGPRINT(format, ...) ((void)0)
+#endif
 
 using namespace vortex;
 
@@ -103,9 +108,9 @@ public:
 
         ram_.write((const uint8_t*)src + src_offset, dest_addr, asize);
         
-        /*printf("VXDRV: upload %d bytes to 0x%x\n", size, dest_addr);
+        /*BGPRINT("upload %d bytes to 0x%x\n", size, dest_addr);
         for (int i = 0; i < size; i += 4) {
-            printf("mem-write: 0x%x <- 0x%x\n", dest_addr + i, *(uint32_t*)((uint8_t*)src + src_offset + i));
+            DBGPRINT("  0x%x <- 0x%x\n", dest_addr + i, *(uint32_t*)((uint8_t*)src + src_offset + i));
         }*/
         
         return 0;
@@ -118,9 +123,9 @@ public:
 
         ram_.read((uint8_t*)dest + dest_offset, src_addr, asize);
         
-        /*printf("VXDRV: download %d bytes from 0x%x\n", size, src_addr);
+        /*DBGPRINT("download %d bytes from 0x%x\n", size, src_addr);
         for (int i = 0; i < size; i += 4) {
-            printf("mem-read: 0x%x -> 0x%x\n", src_addr + i, *(uint32_t*)((uint8_t*)dest + dest_offset + i));
+            DBGPRINT("  0x%x -> 0x%x\n", src_addr + i, *(uint32_t*)((uint8_t*)dest + dest_offset + i));
         }*/
         
         return 0;
@@ -199,6 +204,8 @@ extern int vx_dev_open(vx_device_h* hdevice) {
 
     *hdevice = device;
 
+    DBGPRINT("device creation complete!\n");
+
     return 0;
 }
 
@@ -213,6 +220,8 @@ extern int vx_dev_close(vx_device_h hdevice) {
 #endif
 
     delete device;
+
+    DBGPRINT("device destroyed!\n");
 
     return 0;
 }
@@ -327,25 +336,32 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size
     if (size + src_offset > buffer->size())
         return -1;
 
+    DBGPRINT("COPY_TO_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld, src_offset=%ld\n", 
+        dev_maddr, (uintptr_t)buffer->data(), size, src_offset);
+
     return buffer->device()->upload(buffer->data(), dev_maddr, size, src_offset);
 }
 
 extern int vx_copy_from_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size, uint64_t dest_offset) {
-     if (nullptr == hbuffer 
+    if (nullptr == hbuffer 
       || 0 >= size)
         return -1;
 
     auto buffer = (vx_buffer*)hbuffer;
-
     if (size + dest_offset > buffer->size())
-        return -1;    
+        return -1;
+
+    DBGPRINT("COPY_FROM_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld, dest_offset=0x%lx\n", 
+        dev_maddr, (uintptr_t)buffer->data(), size, dest_offset); 
 
     return buffer->device()->download(buffer->data(), dev_maddr, size, dest_offset);
 }
 
 extern int vx_start(vx_device_h hdevice) {
     if (nullptr == hdevice)
-        return -1;
+        return -1;    
+    
+    DBGPRINT("START");
 
     vx_device *device = ((vx_device*)hdevice);
 
@@ -369,7 +385,9 @@ extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint64_t value) {
 
     // Ensure ready for new command
     if (vx_ready_wait(hdevice, -1) != 0)
-        return -1;    
+        return -1;
+
+    DBGPRINT("DCR_WRITE: addr=0x%x, value=0x%lx\n", addr, value);
   
     return device->write_dcr(addr, value);
 }
