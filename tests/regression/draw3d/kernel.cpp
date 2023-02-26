@@ -351,7 +351,7 @@ void shader_function_empty(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 			return;		
 	#ifdef SW_ENABLE	
 		if (arg->sw_rop) {
-			OUTPUT_HW(0, out_color, 0x0, g_gpu_sw.rop);
+			OUTPUT_HW(0, color, depth, g_gpu_sw.rop);
 		} else 
 	#endif	
 		{
