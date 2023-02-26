@@ -139,16 +139,7 @@ module VX_lsu_unit #(
     end
 
     // data formatting
-    // wire[`NUM_THREADS-1:0][REQ_ASHIFT-1:0] req_align_X1;
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        
-        // `ifdef MODE_32_BIT
-        // assign req_align_X1[i] = {req_align[i][1], 1'b1};
-        // `endif
-        // `ifdef MODE_64_BIT
-        // TODO: VARUN TO CHECK
-        // assign req_align_X1[i] = {req_align[i][1:0], 1'b1};
-        // `endif
         always @(*) begin
             mem_req_byteen[i] = {DCACHE_WORD_SIZE{lsu_req_if.wb}};
             case (`INST_LSU_WSIZE(lsu_req_if.op_type))
