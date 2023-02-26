@@ -147,7 +147,7 @@ module VX_lsu_unit #(
         `endif
         `ifdef MODE_64_BIT
         // TODO: VARUN TO CHECK
-        assign req_align_X1 = {req_align[i][1:0]};
+        assign req_align_X1 = {1'b0, req_align[i][1:0]};
         `endif
         always @(*) begin
             mem_req_byteen[i] = {DCACHE_WORD_SIZE{lsu_req_if.wb}};

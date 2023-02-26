@@ -178,14 +178,14 @@ module VX_csr_unit #(
         .read_wid       (csr_req_if.wid),    
         .read_tmask     (csr_req_if.tmask),    
         .read_addr      (csr_req_if.addr),
-        .read_data_ro   (csr_read_data_ro[31:0]),
-        .read_data_rw   (csr_read_data_rw[31:0]),
+        .read_data_ro   (csr_read_data_ro[`XLEN-1:0]),
+        .read_data_rw   (csr_read_data_rw[`XLEN-1:0]),
 
         .write_enable   (csr_req_valid && csr_wr_enable),       
         .write_uuid     (csr_req_if.uuid),
         .write_wid      (csr_req_if.wid),
         .write_addr     (csr_req_if.addr),        
-        .write_data     (csr_write_data[31:0])
+        .write_data     (csr_write_data[`XLEN-1:0])
     );
 
     // CSR read

@@ -968,7 +968,10 @@ module vortex_afu #(
         `UNUSED_PIN (valid_out)
     );
 
-    assign vx_mem_is_cout = (vx_mem_req_addr == `VX_MEM_ADDR_WIDTH'(`IO_COUT_ADDR >> (32 - `VX_MEM_ADDR_WIDTH)));
+    wire [31:0] io_cout_addr = `IO_COUT_ADDR;
+    wire [`VX_MEM_ADDR_WIDTH-1:0] io_cout_addr_b = `VX_MEM_ADDR_WIDTH'(io_cout_addr) >> `CLOG2(`MEM_BLOCK_SIZE);
+
+    assign vx_mem_is_cout = (vx_mem_req_addr == io_cout_addr_b);
 
     assign vx_mem_req_ready = vx_mem_is_cout ? ~cout_q_full : vx_mem_req_ready_qual;
 
