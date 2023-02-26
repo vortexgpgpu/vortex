@@ -98,7 +98,8 @@
 `endif
 
 `ifndef IO_COUT_ADDR
-`define IO_COUT_ADDR (32'hFFFFFFFF - `MEM_BLOCK_SIZE + 1)
+// `define IO_COUT_ADDR (`XLEN'(32'hFFFFFFFF) - `MEM_BLOCK_SIZE + 1)
+`define IO_COUT_ADDR (64'hFFFFFFFF - `MEM_BLOCK_SIZE + 1)
 `endif
 
 `ifndef IO_COUT_SIZE

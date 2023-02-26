@@ -1,4 +1,5 @@
 `include "VX_platform.vh"
+`include "VX_config.vh"
 
 `TRACING_OFF
 module VX_mem_adapter #(
@@ -170,7 +171,7 @@ module VX_mem_adapter #(
         `UNUSED_VAR (clk)
         `UNUSED_VAR (reset)        
         
-        if (DST_ADDR_WIDTH < SRC_ADDR_WIDTH) begin
+        if (`XLEN'(DST_ADDR_WIDTH) < `XLEN'(SRC_ADDR_WIDTH)) begin
             `UNUSED_VAR (mem_req_addr_in)
             assign mem_req_addr_out_w = mem_req_addr_in[DST_ADDR_WIDTH-1:0];
         end else if (DST_ADDR_WIDTH > SRC_ADDR_WIDTH) begin
