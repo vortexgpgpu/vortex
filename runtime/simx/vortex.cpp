@@ -108,9 +108,9 @@ public:
 
         ram_.write((const uint8_t*)src + src_offset, dest_addr, asize);
         
-        /*BGPRINT("upload %d bytes to 0x%x\n", size, dest_addr);
-        for (int i = 0; i < size; i += 4) {
-            DBGPRINT("  0x%x <- 0x%x\n", dest_addr + i, *(uint32_t*)((uint8_t*)src + src_offset + i));
+        /*DBGPRINT("upload %ld bytes to 0x%lx\n", size, dest_addr);
+        for (uint64_t i = 0; i < size && i < 1024; i += 4) {
+            DBGPRINT("  0x%lx <- 0x%x\n", dest_addr + i, *(uint32_t*)((uint8_t*)src + src_offset + i));
         }*/
         
         return 0;
@@ -123,9 +123,9 @@ public:
 
         ram_.read((uint8_t*)dest + dest_offset, src_addr, asize);
         
-        /*DBGPRINT("download %d bytes from 0x%x\n", size, src_addr);
-        for (int i = 0; i < size; i += 4) {
-            DBGPRINT("  0x%x -> 0x%x\n", src_addr + i, *(uint32_t*)((uint8_t*)dest + dest_offset + i));
+        /*DBGPRINT("download %ld bytes from 0x%lx\n", size, src_addr);
+        for (uint64_t i = 0; i < size && i < 1024; i += 4) {
+            DBGPRINT("  0x%lx -> 0x%x\n", src_addr + i, *(uint32_t*)((uint8_t*)dest + dest_offset + i));
         }*/
         
         return 0;
@@ -361,7 +361,7 @@ extern int vx_start(vx_device_h hdevice) {
     if (nullptr == hdevice)
         return -1;    
     
-    DBGPRINT("START");
+    DBGPRINT("START\n");
 
     vx_device *device = ((vx_device*)hdevice);
 

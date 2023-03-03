@@ -622,6 +622,8 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
   }
 #endif
 
+  fflush(stream);
+
   // release allocated resources
   vx_buf_free(staging_buf);
 

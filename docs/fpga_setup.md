@@ -17,20 +17,13 @@ OPAE Build
 ------------------
 
 The FPGA has to following configuration options:
-- 1 core fpga (fpga-1c)
-- 2 cores fpga (fpga-2c)
-- 4 cores fpga (fpga-4c)
-- 8 cores fpga (fpga-8c)
-- 16 cores fpga (fpga-16c)
-- 32 cores fpga (fpga-32c)
-- 64 cores fpga (fpga-64c)
+- DEVICE_FAMILY=arria10 | stratix10
+- NUM_CORES=#n
 
 Command line:
 
     $ cd hw/syn/opae
-    $ make fpga-<num-of-cores>c
-
-Example: `make fpga-4c`
+    $ NUM_CORES=4 make build
 
 A new folder (ex: `build_fpga_4c`) will be created and the build will start and take ~30-480 min to complete.
 
@@ -45,7 +38,7 @@ The hardware configuration file `/hw/rtl/VX_config.vh` defines all the hardware 
 
 You configure the syntesis build from the command line:
 
-    $ CONFIGS="-DPERF_ENABLE -DNUM_THREADS=8" make fpga-4c
+    $ CONFIGS="-DPERF_ENABLE -DNUM_THREADS=8" make build
 
 OPAE Build Progress
 -------------------
@@ -58,12 +51,9 @@ Check if the build is still running by looking for quartus_sh, quartus_syn, or q
 
     $ ps -u <username>
 
-
 If the build fails and you need to restart it, clean up the build folder using the following command:
 
-    $ make clean-fpga-<num-of-cores>c
-
-Example: `make clean-fpga-4c`
+    $ make clean
 
 The file `vortex_afu.gbs` should exist when the build is done:
 
