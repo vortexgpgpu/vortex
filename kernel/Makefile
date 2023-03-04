@@ -18,15 +18,15 @@ LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex -mllvm -vortex-branch-div
 #LLVM_CFLAGS += -Wl,-L$(RISCV_TOOLCHAIN_PATH)/lib/gcc/riscv32-unknown-elf/9.2.0
 #LLVM_CFLAGS += --rtlib=libgcc
 
-CC  = $(LLVM_VORTEX)/bin/clang $(LLVM_CFLAGS)
-CXX = $(LLVM_VORTEX)/bin/clang++ $(LLVM_CFLAGS)
-DP  = $(LLVM_VORTEX)/bin/llvm-objdump
-CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
+#CC  = $(LLVM_VORTEX)/bin/clang $(LLVM_CFLAGS)
+#CXX = $(LLVM_VORTEX)/bin/clang++ $(LLVM_CFLAGS)
+#DP  = $(LLVM_VORTEX)/bin/llvm-objdump
+#CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 
-#CC = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)gcc
-#AR = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)gcc-ar
-#DP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)objdump
-#CP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)objcopy
+CC = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)gcc
+AR = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)gcc-ar
+DP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)objdump
+CP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)objcopy
 
 ifeq ($(XLEN),32)
 CFLAGS += -march=rv32imf -mabi=ilp32f
