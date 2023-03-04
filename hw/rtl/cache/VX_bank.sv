@@ -94,9 +94,9 @@ module VX_bank #(
     input wire [`LINE_WIDTH-1:0]        mem_rsp_data,
     output wire                         mem_rsp_ready,
 
-    // flush
-    input wire                          flush_enable,
-    input wire [`LINE_SEL_BITS-1:0]     flush_addr
+    // initialization
+    input wire                          init_enable,
+    input wire [`LINE_SEL_BITS-1:0]     init_addr
 );
 
 `IGNORE_UNUSED_BEGIN
@@ -159,7 +159,7 @@ module VX_bank #(
     wire                            is_fill_st0, is_fill_st1;
     wire                            is_mshr_st0, is_mshr_st1;    
     wire                            is_hit_st0, is_hit_st1;
-    wire                            is_flush_st0;
+    wire                            is_init_st0;
     wire                            mshr_pending_st0, mshr_pending_st1;
 
     wire rdw_hazard_st0;
@@ -168,13 +168,13 @@ module VX_bank #(
     wire pipe_stall = crsq_stall || rdw_hazard_st1;
 
     // determine which input to select in priority order 
-    wire mshr_grant  = ~flush_enable;
+    wire mshr_grant  = ~init_enable;
     wire mshr_enable = mshr_grant && mshr_deq_valid; 
 
-    wire mrsq_grant  = ~flush_enable && ~mshr_enable;
+    wire mrsq_grant  = ~init_enable && ~mshr_enable;
     wire mrsq_enable = mrsq_grant && mem_rsp_valid;
 
-    wire creq_grant  = ~flush_enable && ~mshr_enable && ~mrsq_enable;
+    wire creq_grant  = ~init_enable && ~mshr_enable && ~mrsq_enable;
     wire creq_enable = creq_grant && creq_valid;
 
     assign mshr_deq_ready = mshr_grant
@@ -189,7 +189,7 @@ module VX_bank #(
                      && ~mshr_alm_full
                      && ~pipe_stall;
 
-    wire flush_fire    = flush_enable;
+    wire init_fire     = init_enable;
     wire mshr_deq_fire = mshr_deq_valid && mshr_deq_ready;
     wire mem_rsp_fire  = mem_rsp_valid && mem_rsp_ready;
     wire creq_fire     = creq_valid && creq_ready;
@@ -212,13 +212,13 @@ module VX_bank #(
         .reset    (reset),
         .enable   (~pipe_stall),
         .data_in  ({
-            flush_fire || mshr_deq_fire || mem_rsp_fire || creq_fire,
-            flush_enable,
+            init_fire || mshr_deq_fire || mem_rsp_fire || creq_fire,
+            init_enable,
             mshr_enable,
             mrsq_enable,
             creq_enable && ~creq_rw,
             creq_enable && creq_rw,
-            flush_enable ? `LINE_ADDR_WIDTH'(flush_addr) : (mshr_deq_valid ? mshr_deq_addr : (mem_rsp_valid ? mem_rsp_addr : creq_addr)),
+            init_enable ? `LINE_ADDR_WIDTH'(init_addr) : (mshr_deq_valid ? mshr_deq_addr : (mem_rsp_valid ? mem_rsp_addr : creq_addr)),
             wdata_sel,
             mshr_deq_valid ? mshr_wsel : creq_wsel,
             creq_byteen,
@@ -227,7 +227,7 @@ module VX_bank #(
             mshr_deq_valid ? mshr_tag : creq_tag,
             mshr_deq_id
         }),
-        .data_out ({valid_st0, is_flush_st0, is_mshr_st0, is_fill_st0, is_read_st0, is_write_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_idx_st0, pmask_st0, tag_st0, mshr_id_st0})
+        .data_out ({valid_st0, is_init_st0, is_mshr_st0, is_fill_st0, is_read_st0, is_write_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_idx_st0, pmask_st0, tag_st0, mshr_id_st0})
     );
 
     `ASSIGN_REQ_UUID (req_uuid_st0, tag_st0[0])
@@ -235,8 +235,8 @@ module VX_bank #(
     wire do_read_st0   = valid_st0 && is_read_st0;
     wire do_mshr_st0   = valid_st0 && is_mshr_st0;
     wire do_fill_st0   = valid_st0 && is_fill_st0;
-    wire do_flush_st0  = valid_st0 && is_flush_st0;
-    wire do_lookup_st0 = valid_st0 && ~(is_fill_st0 || is_flush_st0);
+    wire do_init_st0   = valid_st0 && is_init_st0;
+    wire do_lookup_st0 = valid_st0 && ~(is_fill_st0 || is_init_st0);
 
     wire tag_match_st0;
 
@@ -265,7 +265,7 @@ module VX_bank #(
         .lookup     (do_lookup_st0),
         .addr       (addr_st0),        
         .fill       (do_fill_st0),
-        .flush      (do_flush_st0),
+        .init       (do_init_st0),
         .way_sel    (way_sel_st0),
         .tag_match  (tag_match_st0)
     );
@@ -515,8 +515,8 @@ module VX_bank #(
         if (pipeline_stall) begin
             `TRACE(3, ("%d: *** %s:%0d stall: crsq=%b, mreq=%b, mshr=%b\n", $time, INSTANCE_ID, BANK_ID, crsq_stall, mreq_alm_full, mshr_alm_full));
         end
-        if (flush_enable) begin
-            `TRACE(2, ("%d: %s:%0d flush: addr=0x%0h\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(flush_addr, BANK_ID)));
+        if (init_enable) begin
+            `TRACE(2, ("%d: %s:%0d init: addr=0x%0h\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(init_addr, BANK_ID)));
         end
         if (mem_rsp_fire) begin
             `TRACE(2, ("%d: %s:%0d fill-rsp: addr=0x%0h, id=%0d, data=0x%0h\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(mem_rsp_addr, BANK_ID), mem_rsp_id, mem_rsp_data));

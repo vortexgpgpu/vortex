@@ -180,21 +180,21 @@ module VX_cache #(
 
     ///////////////////////////////////////////////////////////////////////
 
-    wire [`LINE_SEL_BITS-1:0] flush_addr;
-    wire                      flush_enable;
+    wire [`LINE_SEL_BITS-1:0] init_addr;
+    wire                      init_enable;
 
-    `RESET_RELAY (flush_reset, reset);
+    `RESET_RELAY (init_reset, reset);
 
-    VX_flush_ctrl #( 
+    VX_init_ctrl #( 
         .CACHE_SIZE (CACHE_SIZE),
         .LINE_SIZE  (LINE_SIZE),        
         .NUM_BANKS  (NUM_BANKS),
         .NUM_WAYS   (NUM_WAYS)
-    ) flush_ctrl (
+    ) init_ctrl (
         .clk       (clk),
-        .reset     (flush_reset),
-        .addr_out  (flush_addr),
-        .valid_out (flush_enable)
+        .reset     (init_reset),
+        .addr_out  (init_addr),
+        .valid_out (init_enable)
     );
 
     ///////////////////////////////////////////////////////////////////////
@@ -421,9 +421,9 @@ module VX_cache #(
             .mem_rsp_data       (curr_bank_mem_rsp_data),
             .mem_rsp_ready      (curr_bank_mem_rsp_ready),
 
-            // flush    
-            .flush_enable       (flush_enable),
-            .flush_addr         (flush_addr)
+            // initialization    
+            .init_enable        (init_enable),
+            .init_addr          (init_addr)
         );
     end   
 

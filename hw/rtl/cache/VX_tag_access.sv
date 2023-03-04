@@ -1,20 +1,20 @@
 `include "VX_cache_define.vh"
 
 module VX_tag_access #(
-    parameter `STRING_TYPE INSTANCE_ID= "",
-    parameter BANK_ID           = 0,
+    parameter `STRING_TYPE INSTANCE_ID = "",
+    parameter BANK_ID       = 0,
     // Size of cache in bytes
-    parameter CACHE_SIZE        = 1, 
+    parameter CACHE_SIZE    = 1, 
     // Size of line inside a bank in bytes
-    parameter LINE_SIZE         = 1, 
+    parameter LINE_SIZE     = 1, 
     // Number of banks
-    parameter NUM_BANKS         = 1, 
+    parameter NUM_BANKS     = 1, 
     // Number of associative ways
-    parameter NUM_WAYS          = 1, 
+    parameter NUM_WAYS      = 1, 
     // Size of a word in bytes
-    parameter WORD_SIZE         = 1, 
+    parameter WORD_SIZE     = 1, 
     // Request debug identifier
-    parameter UUID_WIDTH        = 0
+    parameter UUID_WIDTH    = 0
 ) (
     input wire                          clk,
     input wire                          reset,
@@ -29,7 +29,7 @@ module VX_tag_access #(
     input wire                          lookup,
     input wire [`LINE_ADDR_WIDTH-1:0]   addr,
     input wire                          fill,    
-    input wire                          flush,
+    input wire                          init,
     output wire [NUM_WAYS-1:0]          way_sel,
     output wire                         tag_match
 );
@@ -40,10 +40,10 @@ module VX_tag_access #(
 
     localparam TAG_WIDTH = 1 + `TAG_SEL_BITS;
 
-    wire [NUM_WAYS-1:0] tag_matches;
+    wire [NUM_WAYS-1:0]       tag_matches;
     wire [`LINE_SEL_BITS-1:0] line_addr = addr[`LINE_SEL_BITS-1:0];
     wire [`TAG_SEL_BITS-1:0]  line_tag = `LINE_TAG_ADDR(addr);    
-    wire [NUM_WAYS-1:0] fill_way;
+    wire [NUM_WAYS-1:0]       fill_way;
 
     if (NUM_WAYS > 1)  begin
         reg [NUM_WAYS-1:0] repl_way;
@@ -74,8 +74,8 @@ module VX_tag_access #(
         ) tag_store (
             .clk   (clk),                 
             .addr  (line_addr),   
-            .wren  (fill_way[i] || flush),
-            .wdata ({~flush,     line_tag}), 
+            .wren  (fill_way[i] || init),
+            .wdata ({~init, line_tag}), 
             .rdata ({read_valid, read_tag})
         );
         
@@ -93,8 +93,8 @@ module VX_tag_access #(
         if (fill && ~stall) begin
             `TRACE(3, ("%d: %s:%0d tag-fill: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, line_tag));
         end
-        if (flush) begin
-            `TRACE(3, ("%d: %s:%0d tag-flush: addr=0x%0h, blk_addr=%0d\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr));
+        if (init) begin
+            `TRACE(3, ("%d: %s:%0d tag-init: addr=0x%0h, blk_addr=%0d\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr));
         end
         if (lookup && ~stall) begin
             if (tag_match) begin
