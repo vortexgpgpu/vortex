@@ -46,7 +46,7 @@ pipeline_trace_t* Warp::eval() {
   
   DPH(1, "Fetch: cid=" << core_->id() << ", wid=" << warp_id_ << ", tmask=");
   for (uint32_t i = 0, n = arch_.num_threads(); i < n; ++i)
-    DPN(1, tmask_.test(n-i-1));
+    DPN(1, tmask_.test(i));
   DPN(1, ", PC=0x" << std::hex << PC_ << " (#" << std::dec << uuid << ")" << std::endl);
 
   /* Fetch and decode. */    

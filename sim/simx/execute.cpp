@@ -1320,7 +1320,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         }
         DPH(3, "*** New TMC: ");
         for (uint32_t i = 0; i < num_threads; ++i)
-          DPN(3, tmask_.test(num_threads-i-1));
+          DPN(3, tmask_.test(i));
         DPN(3, std::endl);
 
         active_ = tmask_.any();
@@ -1360,9 +1360,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           active_ = tmask_.any();
 
           DPH(3, "*** Split: New TM=");
-          for (uint32_t t = 0; t < num_threads; ++t) DPN(3, tmask_.test(num_threads-t-1));
+          for (uint32_t t = 0; t < num_threads; ++t) DPN(3, tmask_.test(t));
           DPN(3, ", Pushed TM=");
-          for (uint32_t t = 0; t < num_threads; ++t) DPN(3, e.tmask.test(num_threads-t-1));
+          for (uint32_t t = 0; t < num_threads; ++t) DPN(3, e.tmask.test(t));
           DPN(3, ", PC=0x" << std::hex << e.PC << "\n");
         } else {
           DP(3, "*** Unanimous pred");
@@ -1395,7 +1395,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           active_ = tmask_.any();
 
           DPH(3, "*** Join: New TM=");
-          for (uint32_t t = 0; t < num_threads; ++t) DPN(3, tmask_.test(num_threads-t-1));
+          for (uint32_t t = 0; t < num_threads; ++t) DPN(3, tmask_.test(t));
           DPN(3, "\n");
 
           ipdom_stack_.pop();
