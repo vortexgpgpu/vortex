@@ -19,7 +19,7 @@ K_LLCFLAGS += -O3 -march=riscv32 -target-abi=ilp32f -mcpu=generic-rv32 -mattr=+m
 K_CFLAGS   += -v -Os --sysroot=$(SYSROOT) --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH) -march=rv32imf -mabi=ilp32f -Xclang -target-feature -Xclang +vortex
 K_CFLAGS   += -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
 K_CFLAGS   += -I$(VORTEX_KN_PATH)/include
-K_LDFLAGS  += -Wl,-Bstatic,-T$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections,--strip-all $(VORTEX_KN_PATH)/libvortexrt.a -lm
+K_LDFLAGS  += -Wl,-Bstatic,-T$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld -Wl,--gc-sections $(VORTEX_KN_PATH)/libvortexrt.a -lm
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
 CXXFLAGS += -Wno-deprecated-declarations -Wno-unused-parameter -Wno-narrowing
