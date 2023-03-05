@@ -163,33 +163,33 @@ int main(int argc, char *argv[]) {
 
   // upload source buffer0
   {
+    std::cout << "upload source buffer0" << std::endl;
     auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr[i] = i-1;
     }
+    RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src0_addr, buf_size, 0));
   }
-  std::cout << "upload source buffer0" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src0_addr, buf_size, 0));
 
   // upload source buffer1
   {
+    std::cout << "upload source buffer1" << std::endl;
     auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr[i] = i+1;
-    }
+    }   
+    RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src1_addr, buf_size, 0));
   }
-  std::cout << "upload source buffer1" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src1_addr, buf_size, 0));
 
   // clear destination buffer
   {
+    std::cout << "clear destination buffer" << std::endl;      
     auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr[i] = 0xdeadbeef;
-    }
+    }  
+    RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_addr, buf_size, 0));  
   }
-  std::cout << "clear destination buffer" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_addr, buf_size, 0));  
 
   // run tests
   std::cout << "run tests" << std::endl;

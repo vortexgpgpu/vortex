@@ -485,9 +485,9 @@ int main(int argc, char *argv[]) {
   uint32_t alloc_size = std::max(zbuf_size, cbuf_size);
   RT_CHECK(vx_buf_alloc(device, alloc_size, &staging_buf));
   
-  // clear depth buffer
-  std::cout << "clear depth buffer" << std::endl;      
+  // clear depth buffer  
   {    
+    std::cout << "clear depth buffer" << std::endl;      
     auto buf_ptr = (uint32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < (zbuf_size/4); ++i) {
       buf_ptr[i] = clear_depth;
@@ -495,9 +495,9 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_copy_to_dev(staging_buf, zbuf_addr, zbuf_size, 0));  
   }
 
-  // clear destination buffer
-  std::cout << "clear destination buffer" << std::endl;      
+  // clear destination buffer      
   {    
+    std::cout << "clear destination buffer" << std::endl;
     auto buf_ptr = (uint32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < (cbuf_size/4); ++i) {
       buf_ptr[i] = clear_color;

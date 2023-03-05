@@ -147,25 +147,25 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
   
   // update source buffer
   {
+    std::cout << "upload source buffer" << std::endl;
     auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr[i] = i;
     }
-  }
-  std::cout << "upload source buffer" << std::endl;
+  }  
   auto t0 = std::chrono::high_resolution_clock::now();
   RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src_addr, buf_size, 0));
   auto t1 = std::chrono::high_resolution_clock::now();
 
   // clear destination buffer
   {
+    std::cout << "clear destination buffer" << std::endl;
     auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr[i] = 0xdeadbeef;
     }
-  }  
-  std::cout << "clear destination buffer" << std::endl;
-  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_addr, buf_size, 0));
+    RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_addr, buf_size, 0));
+  }
 
   // start device
   std::cout << "start execution" << std::endl;

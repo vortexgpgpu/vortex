@@ -257,13 +257,15 @@ int main(int argc, char *argv[]) {
   std::cout << "cbuf_addr=0x" << std::hex << cbuf_addr << std::endl;
 
   // allocate staging buffer  
-  std::cout << "allocate staging buffer" << std::endl;    
-  uint32_t alloc_size = cbuf_size;
-  RT_CHECK(vx_buf_alloc(device, alloc_size, &staging_buf));
+  {
+    std::cout << "allocate staging buffer" << std::endl;    
+    uint32_t alloc_size = cbuf_size;
+    RT_CHECK(vx_buf_alloc(device, alloc_size, &staging_buf));
+  }
   
-  // clear destination buffer
-  std::cout << "clear destination buffer" << std::endl;      
+  // clear destination buffer  
   {    
+    std::cout << "clear destination buffer" << std::endl;      
     auto buf_ptr = (uint32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < (cbuf_size/4); ++i) {
       buf_ptr[i] = clear_color;

@@ -116,9 +116,9 @@ int main(int argc, char *argv[]) {
   uint32_t alloc_size = std::max<uint32_t>(buf_size, sizeof(kernel_arg_t));
   RT_CHECK(vx_buf_alloc(device, alloc_size, &staging_buf));
   
-  // upload kernel argument
-  std::cout << "upload kernel argument" << std::endl;
+  // upload kernel argument  
   {
+    std::cout << "upload kernel argument" << std::endl;
     auto buf_ptr = (void*)vx_host_ptr(staging_buf);
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
     RT_CHECK(vx_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
@@ -126,13 +126,13 @@ int main(int argc, char *argv[]) {
 
   // upload source buffer0
   {
-    auto buf_ptr = (int*)vx_host_ptr(staging_buf);
+    std::cout << "upload source buffer" << std::endl;
+    auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr[i] = i;
-    }
+    }    
+    RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src_addr, buf_size, 0));  
   }
-  std::cout << "upload source buffer" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src_addr, buf_size, 0));  
 
   // run tests
   std::cout << "run tests" << std::endl;

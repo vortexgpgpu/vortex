@@ -218,23 +218,21 @@ int main(int argc, char *argv[]) {
 
   // upload source buffer
   {
-    auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
-    for (uint32_t i = 0; i < num_points; ++i) {
-      buf_ptr[i] = src_data.at(i);
-    }
+    std::cout << "upload source buffer" << std::endl;
+    auto buf_ptr = vx_host_ptr(staging_buf);
+    memcpy(buf_ptr, src_data.data(), num_points * sizeof(int32_t));          
+    RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src_addr, src_buf_size, 0));
   }
-  std::cout << "upload source buffer" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src_addr, src_buf_size, 0));
 
   // clear destination buffer
   {
+    std::cout << "clear destination buffer" << std::endl;
     auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < num_points; ++i) {
       buf_ptr[i] = 0xdeadbeef;
-    }
+    }          
+    RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_addr, dst_buf_size, 0));  
   }
-  std::cout << "clear destination buffer" << std::endl;      
-  RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_addr, dst_buf_size, 0));  
 
   // run tests
   std::cout << "run tests" << std::endl;

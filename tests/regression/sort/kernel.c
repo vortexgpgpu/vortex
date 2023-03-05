@@ -5,14 +5,14 @@
 
 void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	uint32_t num_points = arg->num_points;
-	int32_t* src_ptr = (int32_t*)arg->src_addr;
-	int32_t* dst_ptr = (int32_t*)arg->dst_addr;
+	TYPE* src_ptr = (TYPE*)arg->src_addr;
+	TYPE* dst_ptr = (TYPE*)arg->dst_addr;
 
-	int32_t ref_value = src_ptr[task_id];
+	TYPE ref_value = src_ptr[task_id];
 
 	uint32_t pos = 0;
 	for (uint32_t i = 0; i < num_points; ++i) {
-		int32_t cur_value = src_ptr[i];		
+		TYPE cur_value = src_ptr[i];		
 		pos += (cur_value < ref_value) || ((cur_value == ref_value) && (i < task_id));
 	}
 	dst_ptr[pos] = ref_value;

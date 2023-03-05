@@ -130,14 +130,13 @@ int render(const kernel_arg_t& kernel_arg,
   printf("Elapsed time: %lg ms\n", elapsed);
 
   // download destination buffer
-  std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(staging_buf, kernel_arg.dst_addr, buf_size, 0));
-
   std::vector<uint8_t> dst_pixels(buf_size);
-  auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
-  for (uint32_t i = 0; i < buf_size; ++i) {
-    dst_pixels[i] = buf_ptr[i];
-  } 
+  {
+    std::cout << "download destination buffer" << std::endl;
+    RT_CHECK(vx_copy_from_dev(staging_buf, kernel_arg.dst_addr, buf_size, 0));    
+    auto buf_ptr = vx_host_ptr(staging_buf);
+    memcpy(dst_pixels.data(), buf_ptr, buf_size);
+  }
 
   // save output image
   if (strcmp (output_file, "null") != 0) {
@@ -254,19 +253,17 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
   }
 
-  // upload source buffer
-  std::cout << "upload source buffer" << std::endl;      
-  {    
-    auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
-    for (uint32_t i = 0; i < src_bufsize; ++i) {
-      buf_ptr[i] = src_pixels[i];
-    }      
+  // upload source buffer  
+  {
+    std::cout << "upload source buffer" << std::endl;          
+    auto buf_ptr = vx_host_ptr(staging_buf);
+    memcpy(buf_ptr, src_pixels.data(), src_bufsize);
     RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src_addr, src_bufsize, 0));
   }
 
-  // clear destination buffer
-  std::cout << "clear destination buffer" << std::endl;      
+  // clear destination buffer  
   {    
+    std::cout << "clear destination buffer" << std::endl;      
     auto buf_ptr = (uint32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < (dst_bufsize/4); ++i) {
       buf_ptr[i] = 0xdeadbeef;
