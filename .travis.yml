@@ -21,7 +21,7 @@ install:
   - DESTDIR=$TOOLDIR ./ci/toolchain_install.sh -all
   # Set environments
   - export RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain
-  - export LLVM_VORTEX=$TOOLDIR/llvm_vortex
+  - export LLVM_VORTEX=$TOOLDIR/llvm-vortex
   - export VERILATOR_ROOT=$TOOLDIR/verilator
   - export PATH=$VERILATOR_ROOT/bin:$PATH  
   # build project
