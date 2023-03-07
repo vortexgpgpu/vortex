@@ -18,9 +18,8 @@ The directory/file layout of the Vortex codebase is as followed:
 - `driver`: host drivers repository
   - `include`: Vortex driver public headers
   - `stub`: Vortex stub driver library
-  - `fpga`: software driver that uses Intel OPAE FPGA
-  - `asesim`: software driver that uses Intel ASE simulator
-  - `vlsim`: software driver that uses vlsim simulator
+  - `opae`: software driver that uses Intel OPAE API with optional environment TARGET=asesim|opaesim|fpga
+  - `xrt`: software driver that uses Xilinx XRT API with optional environment TARGET=sw_emu|hw_emu|hw
   - `rtlsim`: software driver that uses rtlsim simulator
   - `simx`: software driver that uses simX simulator
 - `runtime`: kernel runtime software
@@ -28,7 +27,7 @@ The directory/file layout of the Vortex codebase is as followed:
   - `linker`: linker file for compiling kernels
   - `src`: runtime implementation
 - `sim`: 
-  - `vlsim`: AFU RTL simulator
+  - `opaesim`: Intel OPAE AFU RTL simulator
   - `rtlsim`: processor RTL simulator
   - `simX`: cycle approximate simulator for vortex
 - `tests`: tests repository.

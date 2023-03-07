@@ -22,8 +22,8 @@ riscv()
     done
     cat riscv-gnu-toolchain.tar.bz2.parta* > riscv-gnu-toolchain.tar.bz2
     tar -xvf riscv-gnu-toolchain.tar.bz2
-    rm -f riscv-gnu-toolchain.tar.bz2*
     cp -r riscv-gnu-toolchain $DESTDIR
+    rm -f riscv-gnu-toolchain.tar.bz2*    
     rm -rf riscv-gnu-toolchain
 }
 
@@ -36,8 +36,8 @@ riscv64()
     done
     cat riscv64-gnu-toolchain.tar.bz2.parta* > riscv64-gnu-toolchain.tar.bz2
     tar -xvf riscv64-gnu-toolchain.tar.bz2
-    rm -f riscv64-gnu-toolchain.tar.bz2*
     cp -r riscv64-gnu-toolchain $DESTDIR
+    rm -f riscv64-gnu-toolchain.tar.bz2*    
     rm -rf riscv64-gnu-toolchain
 }
 
@@ -55,8 +55,8 @@ llvm()
     done
     cat llvm-vortex.tar.bz2.parta* > llvm-vortex.tar.bz2
     tar -xvf llvm-vortex.tar.bz2
-    rm -f llvm-vortex.tar.bz2*
     cp -r llvm-vortex $DESTDIR
+    rm -f llvm-vortex.tar.bz2*    
     rm -rf llvm-vortex
 }
 
@@ -73,8 +73,8 @@ verilator()
 {
     wget $REPOSITORY/verilator/$OS/verilator2.tar.bz2
     tar -xvf verilator2.tar.bz2
-    rm -f verilator2.tar.bz2
     cp -r verilator $DESTDIR
+    rm -f verilator2.tar.bz2    
     rm -rf verilator
 }
 

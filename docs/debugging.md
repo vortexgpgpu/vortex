@@ -27,8 +27,8 @@ To debug the processor RTL, you need to use VLSIM or RTLSIM driver. VLSIM simula
 
 The recommended method to enable debugging is to pass the `--debug` flag to `blackbox` tool when running a program.
 
-    // Running demo program on vlsim in debug mode
-    $ ./ci/blackbox.sh --driver=vlsim --app=demo --debug=1
+    // Running demo program on the opae simulator in debug mode
+    $ TARGET=opaesim ./ci/blackbox.sh --driver=opae --app=demo --debug=1
 
     // Running demo program on rtlsim in debug mode
     $ ./ci/blackbox.sh --driver=rtlsim --app=demo --debug=1

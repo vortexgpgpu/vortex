@@ -26,7 +26,7 @@ def execute(command):
         if output == '' and process.poll() is not None:
             break
         if output:
-            print(">>> " + output.rstrip())
+            print(">>> " + str(output.rstrip()))
             process.stdout.flush()
     return process.returncode
 
