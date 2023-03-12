@@ -105,6 +105,10 @@ static void parse_args(int argc, char **argv) {
       exit(-1);
     }
   }
+  if (strcmp (output_file, "null") == 0 && reference_file) {
+    std::cout << "Error: the output file is missing for reference validation!" << std::endl;
+    exit(1);
+  }
 }
 
 void cleanup() {
@@ -304,7 +308,7 @@ int main(int argc, char *argv[]) {
   std::cout << "cleanup" << std::endl;  
   cleanup();  
 
-  if (strcmp (output_file, "null") != 0 && reference_file) {
+  if (reference_file) {
     auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8);
     if (0 == errors) {
       std::cout << "PASSED!" << std::endl;

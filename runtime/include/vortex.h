@@ -42,7 +42,7 @@ typedef void* vx_buffer_h;
 #define VX_ISA_EXT_ROP            (1ull << 34)
 #define VX_ISA_EXT_IMADD          (1ull << 35)
 
-#define MAX_TIMEOUT               (60*60*1000)   // 1hr 
+#define MAX_TIMEOUT               (24*60*60*1000)   // 24hr 
 
 // open the device and connect to it
 int vx_dev_open(vx_device_h* hdevice);

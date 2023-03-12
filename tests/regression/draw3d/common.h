@@ -1,7 +1,7 @@
 #ifndef _COMMON_H_
 #define _COMMON_H_
 
-//#define SW_ENABLE
+#define SW_ENABLE
 
 #include <stdint.h>
 #include <VX_config.h>

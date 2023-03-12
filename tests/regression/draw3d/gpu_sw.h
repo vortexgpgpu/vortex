@@ -1,8 +1,6 @@
 #pragma once
 
 #include "common.h"
-//#include <cocogfx/include/color.hpp>
-//#include <algorithm>
 #include <vx_intrinsics.h>
 
 using fixed16_t = cocogfx::TFixed<16>;

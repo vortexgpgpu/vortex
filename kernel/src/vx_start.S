@@ -11,7 +11,7 @@ _start:
   la a1, init_regs
   .insn r 0x0b, 1, 0, x0, a0, a1  # wspawn a0, a1
   jal init_regs
-  # return back to single thread execution
+  # back to single thread execution
   li a0, 1
   .insn r 0x0b, 0, 0, x0, a0, x0  # tmc a0
   
@@ -20,7 +20,7 @@ _start:
   la a1, __init_tls
   .insn r 0x0b, 1, 0, x0, a0, a1  # wspawn a0, a1
   call __init_tls
-  # return back to single thread execution
+  # back to single thread execution
   li a0, 1
   .insn r 0x0b, 0, 0, x0, a0, x0  # tmc a0
   
@@ -31,14 +31,12 @@ _start:
   li      a1, 0
   call    memset
 
-  # Initialize trap vector
+  # initialize trap vector
   # a t0, trap_entry
   # csrw mtvec, t0
 
   # register global termination functions
   la      a0, __libc_fini_array   
-
-  # to be called upon exit
   call    atexit                  
 
   # run global initialization functions
