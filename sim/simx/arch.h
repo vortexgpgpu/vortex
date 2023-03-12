@@ -33,7 +33,7 @@ public:
     , num_regs_(32)
     , num_csrs_(4096)
     , num_barriers_(NUM_BARRIERS)
-    , ipdom_size_(1 << (log2ceil(num_threads) + 1))
+    , ipdom_size_(IPDOM_STACK_SIZE)
   {}
 
   uint16_t wsize() const { 

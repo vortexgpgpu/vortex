@@ -307,6 +307,11 @@
 `define LSUQ_SIZE `MAX(2, `NUM_WARPS * 2)
 `endif
 
+// Size of divergence Stack
+`ifndef IPDOM_STACK_SIZE
+`define IPDOM_STACK_SIZE 32
+`endif
+
 // Floating-Point Units ///////////////////////////////////////////////////////
 
 // Number of FPU units

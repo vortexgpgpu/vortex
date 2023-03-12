@@ -211,7 +211,7 @@ module VX_warp_sched #(
 
         VX_ipdom_stack #(
             .WIDTH (32+`NUM_THREADS), 
-            .DEPTH (2 ** (`NT_BITS+1))
+            .DEPTH (`IPDOM_STACK_SIZE)
         ) ipdom_stack (
             .clk   (clk),
             .reset (ipdom_stack_reset),
