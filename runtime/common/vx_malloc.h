@@ -74,8 +74,8 @@ public:
 
         // Remove the block from the free lists
         assert(freeBlock->size >= size);
-        currPage->RemoveFreeMBlock(freeBlock);
-        currPage->RemoveFreeSBlock(freeBlock);
+        currPage->RemoveFreeMList(freeBlock);
+        currPage->RemoveFreeSList(freeBlock);
 
         // If the free block we have found is larger than what we are looking for,
         // we may be able to split our free block in two.
@@ -89,12 +89,12 @@ public:
             auto newBlock = new block_t(nextAddr, extraBytes);
 
             // Add the new block to the free lists
-            currPage->InsertFreeMBlock(newBlock);
-            currPage->InsertFreeSBlock(newBlock);
+            currPage->InsertFreeMList(newBlock);
+            currPage->InsertFreeSList(newBlock);
         }
 
         // Insert the free block into the used list
-        currPage->InsertUsedBlock(freeBlock);
+        currPage->InsertUsedList(freeBlock);
 
         // Return the free block address
         *addr = freeBlock->addr;
@@ -131,13 +131,13 @@ public:
             return -1;
         }
 
+        auto size = usedBlock->size;
+
         // Remove the block from the used list
-        currPage->RemoveUsedBlock(usedBlock);
+        currPage->RemoveUsedList(usedBlock);
 
         // Insert the block into the free M-list.
-        currPage->InsertFreeMBlock(usedBlock);
-
-        auto size = usedBlock->size;
+        currPage->InsertFreeMList(usedBlock);
 
         // Check if we can merge adjacent free blocks from the left.        
         if (usedBlock->prevFreeM) {
@@ -147,14 +147,14 @@ public:
                 auto prevBlock = usedBlock->prevFreeM;
 
                 // Merge the blocks to the left
-                prevBlock->size += size;
+                prevBlock->size += usedBlock->size;
                 prevBlock->nextFreeM = usedBlock->nextFreeM;
                 if (prevBlock->nextFreeM) {
                     prevBlock->nextFreeM->prevFreeM = prevBlock;
                 }
 
                 // Detach previous block from the free S-list since size increased
-                currPage->RemoveFreeSBlock(prevBlock);
+                currPage->RemoveFreeSList(prevBlock);
 
                 // reset usedBlock
                 delete usedBlock;
@@ -165,7 +165,7 @@ public:
         // Check if we can merge adjacent free blocks from the right.
         if (usedBlock->nextFreeM) {
             // Calculate the next allocation start address
-            auto nextAddr = usedBlock->addr + size;
+            auto nextAddr = usedBlock->addr + usedBlock->size;
             if (usedBlock->nextFreeM->addr == nextAddr) {
                 auto nextBlock = usedBlock->nextFreeM;
 
@@ -177,13 +177,13 @@ public:
                 }
 
                 // Delete next block
-                currPage->RemoveFreeSBlock(nextBlock);
+                currPage->RemoveFreeSList(nextBlock);
                 delete nextBlock;
             }
         }
 
         // Insert the block into the free S-list.
-        currPage->InsertFreeSBlock(usedBlock);
+        currPage->InsertFreeSList(usedBlock);
 
         // Check if we can free empty pages
         if (nullptr == currPage->usedList) {
@@ -256,7 +256,7 @@ private:
             freeSList = freeMList = new block_t(addr, size);
         }
 
-        void InsertUsedBlock(block_t* block) {
+        void InsertUsedList(block_t* block) {
             block->nextUsed = usedList;
             if (usedList) {
                 usedList->prevUsed = block;
@@ -264,7 +264,7 @@ private:
             usedList = block;
         }
 
-        void RemoveUsedBlock(block_t* block) {
+        void RemoveUsedList(block_t* block) {
             if (block->prevUsed) {
                 block->prevUsed->nextUsed = block->nextUsed;
             } else {
@@ -277,7 +277,7 @@ private:
             block->prevUsed = nullptr;
         }
 
-        void InsertFreeMBlock(block_t* block) {
+        void InsertFreeMList(block_t* block) {
             block_t* currBlock = freeMList;
             block_t* prevBlock = nullptr;
             while (currBlock && (currBlock->addr < block->addr)) {
@@ -296,7 +296,7 @@ private:
             }    
         }
 
-        void RemoveFreeMBlock(block_t* block) {
+        void RemoveFreeMList(block_t* block) {
             if (block->prevFreeM) {
                 block->prevFreeM->nextFreeM = block->nextFreeM;
             } else {
@@ -309,7 +309,7 @@ private:
             block->prevFreeM = nullptr;
         }
 
-        void InsertFreeSBlock(block_t* block) {
+        void InsertFreeSList(block_t* block) {
             block_t* currBlock = this->freeSList;
             block_t* prevBlock = nullptr;
             while (currBlock && (currBlock->size > block->size)) {
@@ -328,7 +328,7 @@ private:
             }
         }
 
-        void RemoveFreeSBlock(block_t* block) {
+        void RemoveFreeSList(block_t* block) {
             if (block->prevFreeS) {
                 block->prevFreeS->nextFreeS = block->nextFreeS;
             } else {

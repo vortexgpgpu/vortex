@@ -24,7 +24,8 @@ def execute(command):
     while True:
         output = process.stdout.readline()
         if output:
-            print(">>> " + str(output.rstrip()))
+            line = output.decode('ascii').rstrip()
+            print(">>> " + line)
             process.stdout.flush()
         ret = process.poll()
         if ret is not None:
