@@ -28,19 +28,16 @@ class cmdbuffer {
     uint64_t maxBufferSize;
 public:
     uint64_t bufferCount;
-    vx_buffer_h buffer; // alternative option to fifo (need to choose)
-    vector<subpacket> fifo; // choose between vector of subpackets or vx_buffer_h type
-    cmdbuffer(int bufSize) {
-        bufferCount = 0;
-        maxBufferSize = bufSize;
-        buffer = nullptr;
-    }
+    vx_buffer_h buffer;
+    vector<subpacket> fifo; 
+    vx_buffer_h done_flag;
+    cmdbuffer(int bufSize, vx_device_h device);
     ~cmdbuffer() {}
     
-    bool createHeaderPacket(cmdbuffer *cmdBuf, bool barrier);
+    bool createHeaderPacket(bool barrier);
     bool appendToCmdBuffer(subpacket subpkt);
     void displayCmdBuffer();
-    vector<subpacket> flushCmdBuffer();
+    bool flushCmdBuffer();
     void resetCmdBuffer();
 };
 
@@ -81,7 +78,7 @@ int vx_mem_alloc(vx_device_h hdevice, uint64_t size, uint64_t* dev_maddr);
 int vx_mem_free(vx_device_h hdevice, uint64_t dev_maddr);
 
 // Create and allocate command buffer
-cmdbuffer* vx_create_command_buffer(uint64_t buf_size);
+cmdbuffer* vx_create_command_buffer(uint64_t buf_size, vx_device_h device);
 
 // Copy bytes from buffer to device local memory
 int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size, uint64_t src_offset);
@@ -91,6 +88,9 @@ int vx_new_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size, u
 
 // Flush command buffer contents to Vortex
 int vx_flush(cmdbuffer *cmdBuf);
+
+// Wait for command buffer to finish
+int cmdbuffer_wait(cmdbuffer *cmdBuf);
 
 // Copy bytes from device local memory to buffer
 int vx_copy_from_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size, uint64_t dst_offset);

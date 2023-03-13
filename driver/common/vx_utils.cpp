@@ -6,6 +6,7 @@
 #include <VX_config.h>
 #include <assert.h>
 #include <cmath>
+#include <unistd.h>
 
 typedef struct vx_buffer_ {
     uint64_t wsid;
@@ -15,7 +16,14 @@ typedef struct vx_buffer_ {
     uint64_t size;
 } vx_buffer_t;
 
-bool cmdbuffer::createHeaderPacket(cmdbuffer *cmdBuf, bool barrier) { // header packet is size of 2 subpackets
+
+cmdbuffer::cmdbuffer(int bufSize, vx_device_h device) {
+  vx_buf_alloc(device, 4096, &buffer);
+  bufferCount = 0;
+  maxBufferSize = bufSize;
+}
+
+bool cmdbuffer::createHeaderPacket(bool barrier) { // header packet is size of 2 subpackets
   auto ls_shift = (int)std::log2(CACHE_BLOCK_SIZE);
   vx_buffer_t *buffert = ((vx_buffer_t*)buffer);
   subpacket headerPacket = {
@@ -41,25 +49,25 @@ bool cmdbuffer::createHeaderPacket(cmdbuffer *cmdBuf, bool barrier) { // header 
 }
 
 bool cmdbuffer::appendToCmdBuffer(subpacket subpkt) {
-    fifo.push_back(subpkt);
-    fifo.at(0).mmio_data_size++;
-    bufferCount++;
-    
-    return 0;
+  fifo.push_back(subpkt);
+  fifo.at(0).mmio_data_size++;
+  bufferCount++;
+  
+  return 0;
 }
 
 void cmdbuffer::displayCmdBuffer() {
   std::cout << "displaying command buffer contents" << std::endl;
   for (uint64_t i = 0 ; i < fifo.size() ; i++) {
     std::cout << "subpacket " << i << " has contents: ";
-    std::cout << "mmio_cmd_type: " << fifo.at(i).mmio_cmd_type << " ; ";
+    std::cout << "mmio_cmd_type: " << std::hex << fifo.at(i).mmio_cmd_type << " ; ";
     if (fifo.at(i).mmio_cmd_type == 3) {
       std::cout << std::endl;
       continue;
     }
-    std::cout << "mmio_io_addr: " << fifo.at(i).mmio_io_addr  << " ; ";
-    std::cout << "mmio_mem_addr: " << fifo.at(i).mmio_mem_addr  << " ; ";
-    std::cout << "mmio_data_size: " << fifo.at(i).mmio_data_size  << std::endl;
+    std::cout << "mmio_io_addr: " << std::hex << fifo.at(i).mmio_io_addr  << " ; ";
+    std::cout << "mmio_mem_addr: " << std::hex << fifo.at(i).mmio_mem_addr  << " ; ";
+    std::cout << "mmio_data_size: " << std::hex << fifo.at(i).mmio_data_size  << std::endl;
   }
 }
 
@@ -132,12 +140,15 @@ extern int vx_upload_kernel_file(vx_device_h device, const char* filename, cmdbu
     return -1;
   }
 
+  std::cout << "howdy" << std::endl;
   // read file content
   ifs.seekg(0, ifs.end);
   auto size = ifs.tellg();
   auto content = new char [size];   
   ifs.seekg(0, ifs.beg);
   ifs.read(content, size);
+
+  std::cout << "howdy" << std::endl;
 
   // upload
   int err = vx_upload_kernel_bytes(device, content, size, cmdBuf);

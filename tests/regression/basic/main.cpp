@@ -190,7 +190,8 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
   auto t4 = std::chrono::high_resolution_clock::now();
   vx_new_copy_to_dev(buf2, kernel_arg.dst_addr, buf_size, 0, cmdBuf, 1);
   vx_flush(cmdBuf);
-  RT_CHECK(vx_copy_from_dev(buf2, kernel_arg.dst_addr, buf_size, 0));
+  //RT_CHECK(vx_copy_from_dev(buf2, kernel_arg.dst_addr, buf_size, 0));
+  cmdbuffer_wait(cmdBuf);
   auto t5 = std::chrono::high_resolution_clock::now();
   
   
@@ -262,6 +263,10 @@ int main(int argc, char *argv[]) {
   std::cout << "dev_src=" << std::hex << kernel_arg.src_addr << std::endl;
   std::cout << "dev_dst=" << std::hex << kernel_arg.dst_addr << std::endl;
 
+  cmdBuf = vx_create_command_buffer(8, device);
+  RT_CHECK(vx_buf_alloc(device, buf_size, &cmdBuf->buffer));
+  cmdBuf->createHeaderPacket(0);
+
   // allocate shared memory  
   std::cout << "allocate shared memory" << std::endl;
   uint32_t alloc_size = std::max<uint32_t>(buf_size, sizeof(kernel_arg_t));
@@ -269,10 +274,8 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_buf_alloc(device, alloc_size, &buf1));
   RT_CHECK(vx_buf_alloc(device, alloc_size, &buf2));
   RT_CHECK(vx_buf_alloc(device, alloc_size, &buf3));
+  RT_CHECK(vx_buf_alloc(device, alloc_size, &cmdBuf->done_flag));
 
-  cmdBuf = vx_create_command_buffer(8);
-  RT_CHECK(vx_buf_alloc(device, buf_size, &cmdBuf->buffer));
-  cmdBuf->createHeaderPacket(cmdBuf, 0);
 
   // run tests  
   if (0 == test || -1 == test) {

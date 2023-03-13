@@ -70,6 +70,10 @@ localparam MMIO_IO_ADDR       = `AFU_IMAGE_MMIO_IO_ADDR;
 localparam MMIO_MEM_ADDR      = `AFU_IMAGE_MMIO_MEM_ADDR;
 localparam MMIO_DATA_SIZE     = `AFU_IMAGE_MMIO_DATA_SIZE;
 localparam MMIO_STATUS        = `AFU_IMAGE_MMIO_STATUS;
+localparam MMIO_HEADER1       = 26;
+localparam MMIO_HEADER2       = 28;
+localparam MMIO_HEADER3       = 30;
+localparam MMIO_HEADER4       = 32;
 
 localparam COUT_TID_WIDTH    = $clog2(`IO_COUT_SIZE); 
 localparam COUT_QUEUE_DATAW  = COUT_TID_WIDTH + 8;
@@ -210,6 +214,31 @@ always @(posedge clk) begin
         dpi_trace("%d: MMIO_CMD_TYPE: addr=%0h, data=%0d\n", $time, mmio_hdr.address, $bits(cmd_type)'(cp2af_sRxPort.c0.data));
       `endif
       end
+      MMIO_HEADER1: begin
+        header1 <= 64'(cp2af_sRxPort.c0.data);
+      `ifdef DBG_TRACE_AFU
+        dpi_trace("%d: MMIO_HEADER1: addr=%0h, data=0x%0h\n", $time, mmio_hdr.address, 64'(cp2af_sRxPort.c0.data));
+      `endif
+      end
+      MMIO_HEADER2: begin
+        header2 <= 64'(cp2af_sRxPort.c0.data);
+      `ifdef DBG_TRACE_AFU
+        dpi_trace("%d: MMIO_HEADER2: addr=%0h, data=0x%0h\n", $time, mmio_hdr.address, 64'(cp2af_sRxPort.c0.data));
+      `endif
+      end
+      MMIO_HEADER3: begin
+        header3 <= 64'(cp2af_sRxPort.c0.data);
+      `ifdef DBG_TRACE_AFU
+        dpi_trace("%d: MMIO_HEADER3: addr=%0h, data=0x%0h\n", $time, mmio_hdr.address, 64'(cp2af_sRxPort.c0.data));
+      `endif
+      end
+      MMIO_HEADER4: begin
+        header4 <= 64'(cp2af_sRxPort.c0.data);
+        packet_push <= 1;
+      `ifdef DBG_TRACE_AFU
+        dpi_trace("%d: MMIO_HEADER4: addr=%0h, data=0x%0h\n", $time, mmio_hdr.address, 64'(cp2af_sRxPort.c0.data));
+      `endif
+      end
     `ifdef SCOPE
       MMIO_SCOPE_WRITE: begin
       `ifdef DBG_TRACE_AFU
@@ -284,10 +313,15 @@ reg [CCI_ADDR_WIDTH-1:0]  buf_cmd_mem_addr;
 reg [CCI_ADDR_WIDTH-1:0]  buf_cmd_data_size;
 reg [2:0]                 buf_cmd_type = 0;
 
-bit packet_push;
+reg [63:0] header1;
+reg [63:0] header2;
+reg [63:0] header3;
+reg [63:0] header4;
+
+reg packet_push;
 reg packet_pop;
 bit packet_q_empty;
-assign packet_push = (STATE_ENQ == state) && cci_rd_rsp_fire;
+//assign packet_push = (STATE_ENQ == state) && cci_rd_rsp_fire;
 
 reg [511:0] cur_buf;
 
@@ -295,7 +329,7 @@ reg [511:0] cmd_pair = 0; // packets are 256 bits, so two are pulled at a time v
 wire  first_cmd_done; // is the first packet in cmd_pair done?
 assign first_cmd_done = (state == STATE_IDLE) && cmd_pair_busy;
 reg  cmd_pair_valid = 0; // is the packet pair in cmd_pair valid? or does a new one need to be pulled?
-reg  cmd_buf_done; // has the entire command buffer been pulled?
+reg  cmd_buf_done = 0; // has the entire command buffer been pulled?
 reg [CCI_ADDR_WIDTH-1:0] cmd_buf_ctr; 
 reg [CCI_ADDR_WIDTH-1:0] cmd_chunk_ctr = 0;
 reg  cmd_pair_busy = 0;
@@ -312,7 +346,7 @@ VX_fifo_queue #(
   .reset    (reset),
   .push     (packet_push),
   .pop      (packet_pop),
-  .data_in  (cp2af_sRxPort.c0.data),
+  .data_in  ({256'b0, header4, header3, header2, header1}),
   .empty    (packet_q_empty), 
   .data_out (cur_buf),
   `UNUSED_PIN (full),
@@ -326,9 +360,11 @@ always @(posedge clk) begin
     cmd_buf_ctr <= 0;
   end
   if (packet_push) begin
-    cmd_pair_valid <= 0;
-    cmd_buf_done <= 0;
-    cmd_enq_done <= 1;
+    `ifdef DBG_TRACE_AFU  
+      dpi_trace("%d: pushing this to packet queue: %0h\n", $time, {256'b0, header4, header3, header2, header1});
+    `endif
+    packet_push <= 0;
+    //cmd_enq_done <= 1;
   end 
   if (packet_pop) begin 
     packet_pop <= 0;
@@ -337,6 +373,7 @@ always @(posedge clk) begin
   if (cmd_buf_done) begin
     cmd_chunk_ctr <= 0;
     cmd_buf_ctr <= 0;
+    cmd_buf_done <= 0;
   end
 
   if (buf_cmd_type != 0) begin

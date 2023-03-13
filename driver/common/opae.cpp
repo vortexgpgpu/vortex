@@ -51,6 +51,10 @@
 #define MMIO_DATA_SIZE      (AFU_IMAGE_MMIO_DATA_SIZE * 4)
 #define MMIO_DEV_CAPS       (AFU_IMAGE_MMIO_DEV_CAPS * 4)
 #define MMIO_STATUS         (AFU_IMAGE_MMIO_STATUS * 4)
+#define MMIO_HEADER1        (AFU_IMAGE_HEADER1 * 4)
+#define MMIO_HEADER2        (AFU_IMAGE_HEADER2 * 4)
+#define MMIO_HEADER3        (AFU_IMAGE_HEADER3 * 4)
+#define MMIO_HEADER4        (AFU_IMAGE_HEADER4 * 4)
 
 #define STATUS_STATE_BITS   8
 
@@ -270,6 +274,7 @@ extern int vx_dev_close(vx_device_h hdevice) {
         return -1;
 
     vx_device *device = ((vx_device*)hdevice);
+    
 
 #ifdef SCOPE
     vx_scope_stop(device->fpga);
@@ -367,7 +372,7 @@ extern int vx_buf_free(vx_buffer_h hbuffer) {
     vx_device *device = ((vx_device*)buffer->hdevice);
 
     fpgaReleaseBuffer(device->fpga, buffer->wsid);
-
+ 
     free(buffer);
 
     return 0;
@@ -438,8 +443,8 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
     return 0;
 }
 
-extern cmdbuffer* vx_create_command_buffer(uint64_t buf_size) {
-    cmdbuffer *cmdBuf = new cmdbuffer(buf_size);
+extern cmdbuffer* vx_create_command_buffer(uint64_t buf_size, vx_device_h device) {
+    cmdbuffer *cmdBuf = new cmdbuffer(buf_size, device);
     
     return cmdBuf;
 }
@@ -475,24 +480,33 @@ extern int vx_new_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t 
     pkt.mmio_cmd_type = cmd_type;
     cmdBuf->appendToCmdBuffer(pkt);
 
-    cmdBuf->displayCmdBuffer();
-
     return 0;
 }
 
 extern int vx_flush(cmdbuffer *cmdBuf) {
+    vx_new_copy_to_dev(cmdBuf->done_flag, 0, 1, 0, cmdBuf, 1); // append command to tell AFU to set done flag when buffer finished
     uint64_t io_addr = cmdBuf->fifo.at(0).mmio_io_addr;
-    auto ls_shift = (int)std::log2(CACHE_BLOCK_SIZE);
     vx_buffer_t *buffer = ((vx_buffer_t*)cmdBuf->buffer);
-    auto buf_ptr = (int*)vx_host_ptr(cmdBuf->buffer);
-    memcpy(buf_ptr, &cmdBuf->fifo.at(0), ((cmdBuf->bufferCount) * 32));
     vx_device *device = ((vx_device*)buffer->hdevice);
-    std::cout << "flush to io_addr: " <<  io_addr << std::endl;
+    auto buf_ptr = (int*)vx_host_ptr(cmdBuf->buffer);
+    memcpy(buf_ptr, &cmdBuf->fifo.at(0), ((cmdBuf->bufferCount) * 32)); // this line is zero'ing out buffer->device for regression/dogfood somehow
+    std::cout << "flush to io_addr: " << std::hex << io_addr << std::endl;
 
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_IO_ADDR, io_addr));
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_MEM_ADDR, 0));
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_DATA_SIZE, 1));   
-    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_CMD_TYPE, CMD_ENQ));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_HEADER1, io_addr));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_HEADER2, cmdBuf->fifo.at(0).mmio_mem_addr));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_HEADER3, cmdBuf->fifo.at(0).mmio_data_size));
+    CHECK_RES(fpgaWriteMMIO64(device->fpga, 0, MMIO_HEADER4, cmdBuf->fifo.at(0).mmio_cmd_type));
+
+    return 0;
+}
+
+extern int cmdbuffer_wait(cmdbuffer *cmdBuf) {
+    ((float*)vx_host_ptr(cmdBuf->done_flag))[0] = 0xdeadbeef;
+    auto done_old = 0xdeadbeef;
+
+    while (((float*)vx_host_ptr(cmdBuf->done_flag))[0] == done_old) {
+        continue;
+    }
 
     return 0;
 }
@@ -586,8 +600,6 @@ extern int vx_new_start(vx_device_h hdevice, cmdbuffer *cmdBuf) {
     subpacket pkt;
     pkt.mmio_cmd_type = 3;
     cmdBuf->appendToCmdBuffer(pkt);
-
-    cmdBuf->displayCmdBuffer();
 
     return 0;
 }

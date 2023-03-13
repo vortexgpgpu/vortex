@@ -135,7 +135,7 @@ int run_test(const kernel_arg_t& kernel_arg,
   std::cout << "download destination buffer" << std::endl;
   vx_new_copy_to_dev(staging_buf, kernel_arg.dst_addr, buf_size, 0, cmdBuf, 1); 
   vx_flush(cmdBuf);
-  RT_CHECK(vx_copy_from_dev(staging_buf, kernel_arg.dst_addr, buf_size, 0));
+  cmdbuffer_wait(cmdBuf);
 
   // verify result
   std::cout << "verify result" << std::endl;  
@@ -191,9 +191,9 @@ int main(int argc, char *argv[]) {
   std::cout << "number of points: " << num_points << std::endl;
   std::cout << "buffer size: " << dst_buf_size << " bytes" << std::endl;
 
-  cmdBuf = vx_create_command_buffer(8);
-  RT_CHECK(vx_buf_alloc(device, 4096, &cmdBuf->buffer));
-  cmdBuf->createHeaderPacket(cmdBuf, 0);
+  cmdBuf = vx_create_command_buffer(16, device);
+  RT_CHECK(vx_buf_alloc(device, 64000, &cmdBuf->buffer));
+  cmdBuf->createHeaderPacket(0);
 
   // upload program
   std::cout << "upload program" << std::endl;  
@@ -220,6 +220,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_buf_alloc(device, staging_buf_size, &staging_buf));
   RT_CHECK(vx_buf_alloc(device, staging_buf_size, &buf1));
   RT_CHECK(vx_buf_alloc(device, staging_buf_size, &buf2));
+  RT_CHECK(vx_buf_alloc(device, staging_buf_size, &cmdBuf->done_flag));
   
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;

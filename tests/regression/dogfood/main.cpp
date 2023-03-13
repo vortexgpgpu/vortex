@@ -6,6 +6,7 @@
 #include <VX_config.h>
 #include "testcases.h"
 #include "common.h"
+#include <bits/stdc++.h>
 
 #define RT_CHECK(_expr)                                         \
    do {                                                         \
@@ -152,6 +153,9 @@ void cleanup() {
 }
 
 int main(int argc, char *argv[]) {
+  clock_t start, end;
+  start = clock();
+
   int exitcode = 0;
   size_t value;
   
@@ -184,9 +188,9 @@ int main(int argc, char *argv[]) {
   std::cout << "number of points: " << num_points << std::endl;
   std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
 
-  cmdBuf = vx_create_command_buffer(8);
+  cmdBuf = vx_create_command_buffer(16, device);
   RT_CHECK(vx_buf_alloc(device, buf_size, &cmdBuf->buffer));
-  cmdBuf->createHeaderPacket(cmdBuf, 0);
+  cmdBuf->createHeaderPacket(0);
 
   // upload program
   std::cout << "upload kernel" << std::endl;  
@@ -201,6 +205,7 @@ int main(int argc, char *argv[]) {
   kernel_arg.src1_addr = value;
   RT_CHECK(vx_mem_alloc(device, buf_size, &value));
   kernel_arg.dst_addr = value;
+  
 
   kernel_arg.num_tasks = num_tasks;
   kernel_arg.task_size = count;
@@ -215,6 +220,8 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_buf_alloc(device, buf_size, &src1_buf));
   RT_CHECK(vx_buf_alloc(device, buf_size, &src2_buf));
   RT_CHECK(vx_buf_alloc(device, buf_size, &dst_buf));
+  RT_CHECK(vx_buf_alloc(device, buf_size, &cmdBuf->done_flag));
+
 
   for (int t = testid_s; t <= testid_e; ++t) { 
     auto name = testMngr.get_name(t);
@@ -264,10 +271,13 @@ int main(int argc, char *argv[]) {
     std::cout << "download destination buffer" << std::endl;
     vx_new_copy_to_dev(dst_buf, kernel_arg.dst_addr, buf_size, 0, cmdBuf, 1);
     vx_flush(cmdBuf);
+
     //RT_CHECK(vx_copy_from_dev(dst_buf, kernel_arg.dst_addr, buf_size, 0));
-
-    sleep(3);
-
+    
+    
+    cmdbuffer_wait(cmdBuf);
+    
+    
     // verify destination
     std::cout << "verify test result" << std::endl;
     int errors = test->verify(num_points, 
@@ -295,5 +305,11 @@ int main(int argc, char *argv[]) {
   std::cout << "cleanup" << std::endl;  
   cleanup();
 
+  end = clock();
+  double time_taken = double(end - start) / double(CLOCKS_PER_SEC);
+  std::cout << "Time taken by program is : " << std::fixed 
+        << time_taken << std::setprecision(5);
+  std::cout << " sec " << std::endl;
+  
   return exitcode;
 }
