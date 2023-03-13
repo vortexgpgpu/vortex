@@ -65,9 +65,6 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
     case VX_CAPS_LOCAL_MEM_SIZE:
         *value = LOCAL_MEM_SIZE;
         break;
-    case VX_CAPS_ALLOC_BASE_ADDR:
-        *value = ALLOC_BASE_ADDR;
-        break;
     case VX_CAPS_KERNEL_BASE_ADDR:
         *value = device->dcrs.read(DCR_BASE_STARTUP_ADDR);
         break;
@@ -250,6 +247,20 @@ extern int vx_mem_free(vx_device_h hdevice, uint64_t dev_maddr) {
 
     auto device = ((vx_device*)hdevice);
     return device->mem_allocator.release(dev_maddr);
+}
+
+extern int vx_mem_info(vx_device_h hdevice, uint64_t* mem_free, uint64_t* mem_total) {
+    if (nullptr == hdevice)
+        return -1;
+
+    auto device = ((vx_device*)hdevice);
+    if (mem_free) {
+        *mem_free = (ALLOC_MAX_ADDR - ALLOC_BASE_ADDR) - device->mem_allocator.allocated();
+    }
+    if (mem_total) {
+        *mem_total = (ALLOC_MAX_ADDR - ALLOC_BASE_ADDR);
+    }
+    return 0;
 }
 
 extern int vx_buf_alloc(vx_device_h hdevice, uint64_t size, vx_buffer_h* hbuffer) {

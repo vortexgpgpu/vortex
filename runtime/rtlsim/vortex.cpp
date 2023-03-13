@@ -69,7 +69,7 @@ public:
         : ram_(RAM_PAGE_SIZE)
         , mem_allocator_(
             ALLOC_BASE_ADDR,
-            ALLOC_BASE_ADDR + LOCAL_MEM_SIZE,
+            ALLOC_MAX_ADDR,
             RAM_PAGE_SIZE,
             CACHE_BLOCK_SIZE) 
     {
@@ -82,12 +82,16 @@ public:
         }
     }
 
-    int alloc_local_mem(uint64_t size, uint64_t* dev_maddr) {
+    int mem_alloc(uint64_t size, uint64_t* dev_maddr) {
         return mem_allocator_.allocate(size, dev_maddr);
     }
 
-    int free_local_mem(uint64_t dev_maddr) {
+    int mem_free(uint64_t dev_maddr) {
         return mem_allocator_.release(dev_maddr);
+    }
+
+    uint64_t mem_used() const {
+        return mem_allocator_.allocated();
     }
 
     int upload(const void* src, uint64_t dest_addr, uint64_t size, uint64_t src_offset) {
@@ -203,9 +207,6 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
     case VX_CAPS_LOCAL_MEM_SIZE:
         *value = LOCAL_MEM_SIZE;
         break;
-    case VX_CAPS_ALLOC_BASE_ADDR:
-        *value = ALLOC_BASE_ADDR;
-        break;
     case VX_CAPS_KERNEL_BASE_ADDR:
          *value = device->read_dcr(DCR_BASE_STARTUP_ADDR);
         break;    
@@ -266,7 +267,7 @@ extern int vx_mem_alloc(vx_device_h hdevice, uint64_t size, uint64_t* dev_maddr)
         return -1;
 
     vx_device *device = ((vx_device*)hdevice);
-    return device->alloc_local_mem(size, dev_maddr);
+    return device->mem_alloc(size, dev_maddr);
 }
 
 extern int vx_mem_free(vx_device_h hdevice, uint64_t dev_maddr) {
@@ -274,7 +275,21 @@ extern int vx_mem_free(vx_device_h hdevice, uint64_t dev_maddr) {
         return -1;
 
     vx_device *device = ((vx_device*)hdevice);
-    return device->free_local_mem(dev_maddr);
+    return device->mem_free(dev_maddr);
+}
+
+extern int vx_mem_info(vx_device_h hdevice, uint64_t* mem_free, uint64_t* mem_total) {
+    if (nullptr == hdevice)
+        return -1;
+
+    auto device = ((vx_device*)hdevice);
+    if (mem_free) {
+        *mem_free = (ALLOC_MAX_ADDR - ALLOC_BASE_ADDR) - device->mem_used();
+    }
+    if (mem_total) {
+        *mem_total = (ALLOC_MAX_ADDR - ALLOC_BASE_ADDR);
+    }
+    return 0;
 }
 
 extern int vx_buf_alloc(vx_device_h hdevice, uint64_t size, vx_buffer_h* hbuffer) {

@@ -28,7 +28,7 @@ public:
     vx_device() 
         : mem_allocator(
             ALLOC_BASE_ADDR, 
-            ALLOC_BASE_ADDR + LOCAL_MEM_SIZE,
+            ALLOC_MAX_ADDR,
             4096,            
             CACHE_BLOCK_SIZE)
     {}

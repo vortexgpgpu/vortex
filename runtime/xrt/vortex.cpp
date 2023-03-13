@@ -133,7 +133,7 @@ public:
         , bank_size_(bank_size)
         , mem_allocator_(
             ALLOC_BASE_ADDR, 
-            ALLOC_BASE_ADDR + LOCAL_MEM_SIZE,
+            ALLOC_MAX_ADDR,
             4096,            
             CACHE_BLOCK_SIZE)
     {}
@@ -205,6 +205,10 @@ public:
         }   
 
         return 0;
+    }
+
+    uint64_t mem_used() const {
+        return mem_allocator_.allocated();
     }
 
     int get_buffer(uint32_t bank_id, xrt_buffer_t* pBuf) {
@@ -323,9 +327,6 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
         break;
     case VX_CAPS_LOCAL_MEM_SIZE:
         *value = LOCAL_MEM_SIZE;
-        break;
-    case VX_CAPS_ALLOC_BASE_ADDR:
-        *value = ALLOC_BASE_ADDR;
         break;
     case VX_CAPS_KERNEL_BASE_ADDR:
         *value = device->dcrs.read(DCR_BASE_STARTUP_ADDR);
@@ -559,12 +560,26 @@ extern int vx_mem_alloc(vx_device_h hdevice, uint64_t size, uint64_t* dev_maddr)
     return device->mem_alloc(size, dev_maddr);
 }
 
-int vx_mem_free(vx_device_h hdevice, uint64_t dev_maddr) {
+extern int vx_mem_free(vx_device_h hdevice, uint64_t dev_maddr) {
     if (nullptr == hdevice)
         return -1;
 
     auto device = (vx_device*)hdevice;
     return device->mem_free(dev_maddr);
+}
+
+extern int vx_mem_info(vx_device_h hdevice, uint64_t* mem_free, uint64_t* mem_total) {
+    if (nullptr == hdevice)
+        return -1;
+
+    auto device = (vx_device*)hdevice;
+    if (mem_free) {
+        *mem_free = (ALLOC_MAX_ADDR - ALLOC_BASE_ADDR) - device->mem_used();
+    }
+    if (mem_total) {
+        *mem_total = (ALLOC_MAX_ADDR - ALLOC_BASE_ADDR);
+    }
+    return 0;
 }
 
 extern int vx_buf_alloc(vx_device_h hdevice, uint64_t size, vx_buffer_h* hbuffer) {

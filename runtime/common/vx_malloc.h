@@ -18,6 +18,7 @@ public:
         , pageAlign_(pageAlign)
         , blockAlign_(blockAlign)
         , pages_(nullptr)
+        , allocated_(0)
     {}
 
     ~MemoryAllocator() {
@@ -98,6 +99,9 @@ public:
         // Return the free block address
         *addr = freeBlock->addr;
 
+        // Update allocated size
+        allocated_ += size;
+
         return 0;
     }
 
@@ -133,6 +137,8 @@ public:
         // Insert the block into the free M-list.
         currPage->InsertFreeMBlock(usedBlock);
 
+        auto size = usedBlock->size;
+
         // Check if we can merge adjacent free blocks from the left.        
         if (usedBlock->prevFreeM) {
             // Calculate the previous address
@@ -141,7 +147,7 @@ public:
                 auto prevBlock = usedBlock->prevFreeM;
 
                 // Merge the blocks to the left
-                prevBlock->size += usedBlock->size;
+                prevBlock->size += size;
                 prevBlock->nextFreeM = usedBlock->nextFreeM;
                 if (prevBlock->nextFreeM) {
                     prevBlock->nextFreeM->prevFreeM = prevBlock;
@@ -159,7 +165,7 @@ public:
         // Check if we can merge adjacent free blocks from the right.
         if (usedBlock->nextFreeM) {
             // Calculate the next allocation start address
-            auto nextAddr = usedBlock->addr + usedBlock->size;
+            auto nextAddr = usedBlock->addr + size;
             if (usedBlock->nextFreeM->addr == nextAddr) {
                 auto nextBlock = usedBlock->nextFreeM;
 
@@ -188,7 +194,14 @@ public:
 
         }
 
-        return 0;
+        // update allocated size
+        allocated_ -= size;
+
+        return size;
+    }
+
+    uint64_t allocated() const {
+        return allocated_;
     }
 
 private:
@@ -406,8 +419,9 @@ private:
     uint64_t nextAddress_;
     uint64_t maxAddress_;
     uint32_t pageAlign_;    
-    uint32_t blockAlign_;
-    page_t* pages_;    
+    uint32_t blockAlign_;    
+    page_t*  pages_;
+    uint64_t allocated_;
 };
 
 } // namespace vortex

@@ -24,4 +24,5 @@ void perf_remove_device(vx_device_h device);
 
 #define CACHE_BLOCK_SIZE    64
 #define ALLOC_BASE_ADDR     CACHE_BLOCK_SIZE
-#define LOCAL_MEM_SIZE      4294967296     // 4 GB 
+#define ALLOC_MAX_ADDR      0x080000000  // 2 GB 
+#define LOCAL_MEM_SIZE      0x100000000  // 4 GB 

@@ -16,8 +16,13 @@ extern int vx_mem_alloc(vx_device_h /*hdevice*/, uint64_t /*size*/, uint64_t* /*
     return -1;
 }
 
-int vx_mem_free(vx_device_h /*hdevice*/, uint64_t /*dev_maddr*/) {
+extern int vx_mem_free(vx_device_h /*hdevice*/, uint64_t /*dev_maddr*/) {
     return -1;
+}
+
+// get device memory info
+extern int vx_mem_info(vx_device_h /*hdevice*/, uint64_t* /*mem_free*/, uint64_t* /*mem_total*/) {
+    return 0;
 }
 
 extern int vx_buf_alloc(vx_device_h /*hdevice*/, uint64_t /*size*/, vx_buffer_h* /*hbuffer*/) {

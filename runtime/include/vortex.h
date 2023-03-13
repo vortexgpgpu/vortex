@@ -20,9 +20,8 @@ typedef void* vx_buffer_h;
 #define VX_CAPS_MAX_THREADS       0x3
 #define VX_CAPS_CACHE_LINE_SIZE   0x4
 #define VX_CAPS_LOCAL_MEM_SIZE    0x5
-#define VX_CAPS_ALLOC_BASE_ADDR   0x6
-#define VX_CAPS_KERNEL_BASE_ADDR  0x7
-#define VX_CAPS_ISA_FLAGS         0x8
+#define VX_CAPS_KERNEL_BASE_ADDR  0x6
+#define VX_CAPS_ISA_FLAGS         0x7
 
 // device isa flags
 #define VX_ISA_STD_A              (1ull << 0)
@@ -67,6 +66,9 @@ int vx_mem_alloc(vx_device_h hdevice, uint64_t size, uint64_t* dev_maddr);
 
 // release device memory
 int vx_mem_free(vx_device_h hdevice, uint64_t dev_maddr);
+
+// get device memory info
+int vx_mem_info(vx_device_h hdevice, uint64_t* mem_free, uint64_t* mem_total);
 
 // Copy bytes from buffer to device local memory
 int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size, uint64_t src_offset);
