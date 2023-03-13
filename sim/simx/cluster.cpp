@@ -2,7 +2,11 @@
 
 using namespace vortex;
 
-Cluster::Cluster(uint32_t cluster_id, uint32_t cores_per_cluster, ProcessorImpl* processor, const Arch &arch, const DCRS &dcrs) 
+Cluster::Cluster(uint32_t cluster_id, 
+                 uint32_t cores_per_cluster, 
+                 ProcessorImpl* processor, 
+                 const Arch &arch, const 
+                 DCRS &dcrs) 
   : cluster_id_(cluster_id)
   , cores_(cores_per_cluster)
   , raster_units_(NUM_RASTER_UNITS)
@@ -138,15 +142,12 @@ Cluster::Cluster(uint32_t cluster_id, uint32_t cores_per_cluster, ProcessorImpl*
 
   ///////////////////////////////////////////////////////////////////////////
 
-  uint32_t cores_per_raster = cores_per_cluster / NUM_RASTER_UNITS;
-  uint32_t cores_per_rop = cores_per_cluster / NUM_ROP_UNITS;
-  uint32_t cores_per_tex = cores_per_cluster / NUM_TEX_UNITS;
-
   // create raster units    
   for (uint32_t i = 0; i < NUM_RASTER_UNITS; ++i) {
     snprintf(sname, 100, "cluster%d-raster_unit%d", cluster_id, i);
     uint32_t raster_idx = cluster_id * NUM_RASTER_UNITS + i;      
-    raster_units_.at(i) = RasterUnit::Create(sname, raster_idx, cores_per_raster, arch, dcrs.raster_dcrs, RasterUnit::Config{
+    uint32_t raster_count = NUM_CLUSTERS * NUM_RASTER_UNITS;     
+    raster_units_.at(i) = RasterUnit::Create(sname, raster_idx, raster_count, arch, dcrs.raster_dcrs, RasterUnit::Config{
       RASTER_TILE_LOGSIZE, 
       RASTER_BLOCK_LOGSIZE
     });
@@ -157,7 +158,7 @@ Cluster::Cluster(uint32_t cluster_id, uint32_t cores_per_cluster, ProcessorImpl*
   // create rop units
   for (uint32_t i = 0; i < NUM_ROP_UNITS; ++i) {
     snprintf(sname, 100, "cluster%d-rop_unit%d", cluster_id, i);      
-    rop_units_.at(i) = RopUnit::Create(sname, cores_per_rop, arch, dcrs.rop_dcrs);
+    rop_units_.at(i) = RopUnit::Create(sname, arch, dcrs.rop_dcrs);
     for (uint32_t j = 0; j < arch.num_threads(); ++j) {
       rop_units_.at(i)->MemReqs.at(j).bind(&ocaches_->CoreReqPorts.at(i).at(j));
       ocaches_->CoreRspPorts.at(i).at(j).bind(&rop_units_.at(i)->MemRsps.at(j));
@@ -167,7 +168,7 @@ Cluster::Cluster(uint32_t cluster_id, uint32_t cores_per_cluster, ProcessorImpl*
   // create tex units
   for (uint32_t i = 0; i < NUM_TEX_UNITS; ++i) {
     snprintf(sname, 100, "cluster%d-tex_unit%d", cluster_id, i);      
-    tex_units_.at(i) = TexUnit::Create(sname, cores_per_tex, arch, dcrs.tex_dcrs, TexUnit::Config{
+    tex_units_.at(i) = TexUnit::Create(sname, arch, dcrs.tex_dcrs, TexUnit::Config{
       2, // address latency
       6, // sampler latency
     });      
@@ -191,11 +192,29 @@ Cluster::Cluster(uint32_t cluster_id, uint32_t cores_per_cluster, ProcessorImpl*
     });
   }
 
-  // create cores
-  for (uint32_t i = 0; i < cores_per_cluster; ++i) {
-    uint32_t raster_idx = i / cores_per_raster;
-    uint32_t rop_idx    = i / cores_per_rop;
-    uint32_t tex_idx    = i / cores_per_tex;
+  // create cores 
+
+  for (uint32_t raster_idx = 0, rop_idx = 0, tex_idx = 0, 
+                i = 0; i < cores_per_cluster; ++i) {  
+    auto per_core_raster_units = std::max<uint32_t>((NUM_RASTER_UNITS + cores_per_cluster - 1 - i) / cores_per_cluster, 1);
+    auto per_core_rop_units = std::max<uint32_t>((NUM_ROP_UNITS + cores_per_cluster - 1 - i) / cores_per_cluster, 1);
+    auto per_core_tex_units = std::max<uint32_t>((NUM_TEX_UNITS + cores_per_cluster - 1 - i) / cores_per_cluster, 1);
+
+    std::vector<RasterUnit::Ptr> raster_units(per_core_raster_units);
+    std::vector<RopUnit::Ptr> rop_units(per_core_rop_units);
+    std::vector<TexUnit::Ptr> tex_units(per_core_tex_units);
+
+    for (uint32_t j = 0; j < per_core_raster_units; ++j) {
+      raster_units.at(j) = raster_units_.at(raster_idx++ % NUM_RASTER_UNITS);
+    }
+
+    for (uint32_t j = 0; j < per_core_rop_units; ++j) {
+      rop_units.at(j) = rop_units_.at(rop_idx++ % NUM_ROP_UNITS);
+    }
+
+    for (uint32_t j = 0; j < per_core_tex_units; ++j) {
+      tex_units.at(j) = tex_units_.at(tex_idx++ % NUM_TEX_UNITS);
+    }
 
     uint32_t core_id = cluster_id * cores_per_cluster + i;
 
@@ -204,9 +223,9 @@ Cluster::Cluster(uint32_t cluster_id, uint32_t cores_per_cluster, ProcessorImpl*
                                 arch, 
                                 dcrs, 
                                 sharedmems_.at(i), 
-                                raster_units_.at(raster_idx), 
-                                rop_units_.at(rop_idx), 
-                                tex_units_.at(tex_idx));
+                                raster_units, 
+                                rop_units, 
+                                tex_units);
 
     cores_.at(i)->icache_req_ports.at(0).bind(&icaches_->CoreReqPorts.at(i).at(0));
     icaches_->CoreRspPorts.at(i).at(0).bind(&cores_.at(i)->icache_rsp_ports.at(0));      

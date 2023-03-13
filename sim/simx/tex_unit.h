@@ -18,6 +18,7 @@ public:
     struct TraceData : public ITraceData {
         using Ptr = std::shared_ptr<TraceData>;
         std::vector<std::vector<mem_addr_size_t>> mem_addrs;
+        uint32_t tex_idx;
     };
 
     class DCRS {
@@ -75,8 +76,7 @@ public:
     SimPort<pipeline_trace_t*> Output;
 
     TexUnit(const SimContext& ctx,
-            const char* name, 
-            uint32_t cores_per_unit,
+            const char* name,
             const Arch &arch, 
             const DCRS& dcrs,      
             const Config& config);
@@ -89,7 +89,9 @@ public:
 
     void attach_ram(RAM* mem);
 
-    uint32_t read(uint32_t stage, int32_t u, int32_t v, uint32_t lod, TraceData::Ptr trace_data);
+    uint32_t read(uint32_t cid, uint32_t wid, uint32_t tid,
+                  uint32_t stage, int32_t u, int32_t v, uint32_t lod, 
+                  const CSRs& csrs, TraceData::Ptr trace_data);
 
     const PerfStats& perf_stats() const;
 

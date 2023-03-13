@@ -40,6 +40,7 @@ public:
     std::vector<mem_addr_size_t> mem_wr_addrs;
     uint32_t cid;
     uint32_t uuid;
+    uint32_t rop_idx;
   };
 
   using DCRS = graphics::RopDCRS;
@@ -51,8 +52,7 @@ public:
   SimPort<pipeline_trace_t*> Output;
 
   RopUnit(const SimContext& ctx, 
-          const char* name,  
-          uint32_t cores_per_unit,
+          const char* name,
           const Arch &arch, 
           const DCRS& dcrs);    
 
@@ -63,12 +63,10 @@ public:
   void tick();
 
   void attach_ram(RAM* mem);
-  
-  uint32_t csr_read(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t addr);
-  
-  void csr_write(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value);
 
-  void write(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, RopUnit::TraceData::Ptr trace_data);
+  void write(uint32_t cid, uint32_t wid, uint32_t tid, 
+             uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, 
+             const CSRs& csrs, RopUnit::TraceData::Ptr trace_data);
 
   const PerfStats& perf_stats() const;
 

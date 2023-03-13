@@ -20,9 +20,9 @@ Core::Core(const SimContext& ctx,
            const Arch &arch, 
            const DCRS &dcrs,
            SharedMem::Ptr  sharedmem,
-           RasterUnit::Ptr raster_unit,
-           RopUnit::Ptr rop_unit,
-           TexUnit::Ptr tex_unit)
+           std::vector<RasterUnit::Ptr>& raster_units,
+           std::vector<RopUnit::Ptr>& rop_units,
+           std::vector<TexUnit::Ptr>& tex_units)
     : SimObject(ctx, "core")
     , icache_req_ports(1, this)
     , icache_rsp_ports(1, this)
@@ -38,16 +38,24 @@ Core::Core(const SimContext& ctx,
     , fcsrs_(arch.num_warps(), 0)
     , ibuffers_(arch.num_warps(), IBUF_SIZE)
     , scoreboard_(arch_) 
-    , exe_units_((int)ExeType::MAX)
-    , tex_unit_(tex_unit)
-    , raster_unit_(raster_unit)
-    , rop_unit_(rop_unit)
+    , exe_units_((int)ExeType::MAX)    
+    , raster_units_(raster_units)
+    , rop_units_(rop_units)
+    , tex_units_(tex_units)
     , sharedmem_(sharedmem)
     , fetch_latch_("fetch")
     , decode_latch_("decode")
     , pending_icache_(arch_.num_warps())
+    , csrs_(arch.num_warps())
     , cluster_(cluster)
+    , raster_idx_(0)
+    , rop_idx_(0)
+    , tex_idx_(0)
 {  
+  for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
+    csrs_.at(i).resize(arch.num_threads());
+  }
+
   for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
     warps_.at(i) = std::make_shared<Warp>(this, i);
   }
@@ -77,7 +85,17 @@ void Core::reset() {
     exe_unit->reset();
   }
 
-  tex_unit_->reset();
+  for (auto& raster_unit : raster_units_) {
+    raster_unit->reset();
+  }
+
+  for (auto& rop_unit : rop_units_) {
+    rop_unit->reset();
+  }
+
+  for (auto& tex_unit : tex_units_) {
+    tex_unit->reset();
+  }
   
   for ( auto& barrier : barriers_) {
     barrier.reset();
@@ -644,15 +662,9 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   #ifdef EXT_RASTER_ENABLE
     if (addr >= CSR_RASTER_BEGIN
      && addr < CSR_RASTER_END) {
-      return raster_unit_->csr_read(core_id_, wid, tid, addr);
+      return csrs_.at(wid).at(tid).at(addr);
     } else
   #endif
-  #ifdef EXT_ROP_ENABLE
-    if (addr >= CSR_ROP_BEGIN
-     && addr < CSR_ROP_END) {
-      return rop_unit_->csr_read(core_id_, wid, tid, addr);
-    } else
-  #endif  
     {
       std::cout << std::hex << "Error: invalid CSR read addr=0x" << addr << std::endl;
       std::abort();
@@ -684,16 +696,16 @@ void Core::set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid) {
   case CSR_PMPADDR0:
     break;
   default:
-  #ifdef EXT_RASTER_ENABLE
-    if (addr >= CSR_RASTER_BEGIN
-     && addr < CSR_RASTER_END) {
-      raster_unit_->csr_write(core_id_, wid, tid, addr, value);
-    } else
-  #endif
   #ifdef EXT_ROP_ENABLE
     if (addr >= CSR_ROP_BEGIN
      && addr < CSR_ROP_END) {
-      rop_unit_->csr_write(core_id_, wid, tid, addr, value);
+      csrs_.at(wid).at(tid)[addr] = value;
+    } else
+  #endif
+  #ifdef EXT_TEX_ENABLE
+    if (addr >= CSR_TEX_BEGIN
+     && addr < CSR_TEX_END) {
+      csrs_.at(wid).at(tid)[addr] = value;
     } else
   #endif
     {

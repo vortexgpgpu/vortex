@@ -250,15 +250,20 @@ void FpuUnit::tick() {
 
 GpuUnit::GpuUnit(const SimContext& ctx, Core* core) 
     : ExeUnit(ctx, core, "GPU")   
-    , tex_unit_(core->tex_unit_)
-    , raster_unit_(core->raster_unit_)
-    , rop_unit_(core->rop_unit_)
-    , pending_rsps_{
-        &core->tex_unit_->Output,
-        &core->raster_unit_->Output,
-        &core->rop_unit_->Output
+    , raster_units_(core->raster_units_)    
+    , rop_units_(core->rop_units_)
+    , tex_units_(core->tex_units_)
+{
+    for (auto& raster_unit : raster_units_) {
+        pending_rsps_.push_back(&raster_unit->Output);
     }
-{}
+    for (auto& rop_unit : rop_units_) {
+        pending_rsps_.push_back(&rop_unit->Output);
+    }
+    for (auto& tex_unit : tex_units_) {
+        pending_rsps_.push_back(&tex_unit->Output);
+    }
+}
     
 void GpuUnit::tick() {
     // handle pending reponses
@@ -303,15 +308,18 @@ void GpuUnit::tick() {
         else
             core_->active_warps_.reset(trace->wid);
     }   break;
-    case GpuType::TEX:
-        tex_unit_->Input.send(trace, 1);
-        break;
-    case GpuType::RASTER:
-        raster_unit_->Input.send(trace, 1);
-        break;
-    case GpuType::ROP:
-        rop_unit_->Input.send(trace, 1);
-        break;    
+    case GpuType::RASTER: {
+        auto trace_data = std::dynamic_pointer_cast<RasterUnit::TraceData>(trace->data);
+        raster_units_.at(trace_data->raster_idx)->Input.send(trace, 1);
+    }   break;
+    case GpuType::ROP: {
+        auto trace_data = std::dynamic_pointer_cast<RopUnit::TraceData>(trace->data);
+        rop_units_.at(trace_data->rop_idx)->Input.send(trace, 1);
+    }   break;    
+    case GpuType::TEX: {
+        auto trace_data = std::dynamic_pointer_cast<TexUnit::TraceData>(trace->data);
+        tex_units_.at(trace_data->tex_idx)->Input.send(trace, 1);
+    }   break;
     case GpuType::CMOV:
         Output.send(trace, 3);
         break;

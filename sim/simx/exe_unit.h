@@ -86,10 +86,10 @@ public:
 
 class GpuUnit : public ExeUnit {
 private:    
-  TexUnit::Ptr    tex_unit_;
-  RasterUnit::Ptr raster_unit_;
-  RopUnit::Ptr    rop_unit_;
-  const std::vector<SimPort<pipeline_trace_t*>*> pending_rsps_;
+  std::vector<RasterUnit::Ptr> raster_units_;  
+  std::vector<RopUnit::Ptr>    rop_units_;
+  std::vector<TexUnit::Ptr>    tex_units_;
+  std::vector<SimPort<pipeline_trace_t*>*> pending_rsps_;
 
 public:
     GpuUnit(const SimContext& ctx, Core*);

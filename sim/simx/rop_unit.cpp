@@ -141,23 +141,9 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 
 class RopUnit::Impl {
-private:
-  struct pending_req_t {
-    TraceData::Ptr data;
-    uint32_t count;
-  };
-
-  RopUnit*      simobject_;    
-  const Arch&   arch_;    
-  const DCRS&   dcrs_;
-  PerfStats     perf_stats_;
-  RenderOutput  render_output_;
-  HashTable<pending_req_t> pending_reqs_;
-  uint64_t      last_pop_time_;
-
 public:
+
   Impl(RopUnit* simobject,   
-       uint32_t cores_per_unit,   
        const Arch &arch,
        const DCRS& dcrs) 
     : simobject_(simobject)
@@ -165,7 +151,6 @@ public:
     , dcrs_(dcrs)
     , pending_reqs_(ROP_MEM_QUEUE_SIZE)
   {
-    __unused (cores_per_unit);
     this->reset();
   }
 
@@ -250,35 +235,42 @@ public:
     simobject_->Input.pop();
   }
 
-  void attach_ram(RAM* mem) {
-    render_output_.attach_ram(mem);
-  }
-
-  uint32_t csr_read(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t addr) {
-    __unused (cid, wid, tid, addr);
-    return 0;
-  }
-
-  void csr_write(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value) {
-    __unused (cid, wid, tid, addr, value);
-  }   
-
-  void write(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, RopUnit::TraceData::Ptr trace_data) {      
-    __unused (cid, wid, tid);    
+  void write(uint32_t cid, uint32_t wid, uint32_t tid, 
+             uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, 
+             const CSRs& csrs, RopUnit::TraceData::Ptr trace_data) {
+    __unused (cid, wid, tid, csrs);    
     DT(2, "rop-write: cid=" << std::dec << cid << ", wid=" << wid << ", tid=" << tid << ", x=" << x << ", y=" << y << ", backface=" << is_backface << ", color=0x" << std::hex << color << ", depth=0x" << depth);
     render_output_.write(x, y, is_backface, color, depth, trace_data);    
+  }
+
+  void attach_ram(RAM* mem) {
+    render_output_.attach_ram(mem);
   }
 
   const PerfStats& perf_stats() const { 
     return perf_stats_; 
   }
+
+private:
+
+  struct pending_req_t {
+    TraceData::Ptr data;
+    uint32_t count;
+  };
+
+  RopUnit*      simobject_;    
+  const Arch&   arch_;    
+  const DCRS&   dcrs_;
+  PerfStats     perf_stats_;
+  RenderOutput  render_output_;
+  HashTable<pending_req_t> pending_reqs_;
+  uint64_t      last_pop_time_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
 RopUnit::RopUnit(const SimContext& ctx, 
-                 const char* name,          
-                 uint32_t cores_per_unit,             
+                 const char* name,        
                  const Arch &arch, 
                  const DCRS& dcrs) 
   : SimObject<RopUnit>(ctx, name)
@@ -286,7 +278,7 @@ RopUnit::RopUnit(const SimContext& ctx,
   , MemRsps(arch.num_threads(), this)
   , Input(this)
   , Output(this)
-  , impl_(new Impl(this, cores_per_unit, arch, dcrs)) 
+  , impl_(new Impl(this, arch, dcrs)) 
 {}
 
 RopUnit::~RopUnit() {
@@ -305,16 +297,10 @@ void RopUnit::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
 }
 
-uint32_t RopUnit::csr_read(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t addr) {
-  return impl_->csr_read(cid, wid, tid, addr);
-}
-
-void RopUnit::csr_write(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value) {
-  impl_->csr_write(cid, wid, tid, addr, value);
-}
-
-void RopUnit::write(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, RopUnit::TraceData::Ptr trace_data) {
-  impl_->write(cid, wid, tid, x, y, is_backface, color, depth, trace_data);
+void RopUnit::write(uint32_t cid, uint32_t wid, uint32_t tid, 
+                    uint32_t x, uint32_t y, bool is_backface, uint32_t color, uint32_t depth, 
+                    const CSRs& csrs, RopUnit::TraceData::Ptr trace_data) {
+  impl_->write(cid, wid, tid, x, y, is_backface, color, depth, csrs, trace_data);
 }
 
 const RopUnit::PerfStats& RopUnit::perf_stats() const {

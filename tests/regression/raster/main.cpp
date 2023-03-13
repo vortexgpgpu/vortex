@@ -45,9 +45,9 @@ uint32_t cbuf_size;
 vx_device_h device = nullptr;
 vx_buffer_h staging_buf = nullptr;
 
-uint64_t cbuf_addr    = -1;
-uint64_t tilebuf_addr = -1;
-uint64_t primbuf_addr = -1;
+uint64_t cbuf_addr    = 0;
+uint64_t tilebuf_addr = 0;
+uint64_t primbuf_addr = 0;
 
 bool use_sw = false;
 
@@ -105,9 +105,9 @@ void cleanup() {
     vx_buf_free(staging_buf);
   }
   if (device) {     
-    if (cbuf_addr != -1ull) vx_mem_free(device, cbuf_addr);
-    if (tilebuf_addr != -1ull) vx_mem_free(device, tilebuf_addr);
-    if (primbuf_addr != -1ull) vx_mem_free(device, primbuf_addr);
+    if (cbuf_addr != 0) vx_mem_free(device, cbuf_addr);
+    if (tilebuf_addr != 0) vx_mem_free(device, tilebuf_addr);
+    if (primbuf_addr != 0) vx_mem_free(device, primbuf_addr);
     vx_dev_close(device);
   }
 }
@@ -125,8 +125,8 @@ int render(const CGLTrace& trace) {
       continue;
 
     // allocate tile memory
-    if (tilebuf_addr != -1ull) vx_mem_free(device, tilebuf_addr); 
-    if (primbuf_addr != -1ull) vx_mem_free(device, primbuf_addr); 
+    if (tilebuf_addr != 0) vx_mem_free(device, tilebuf_addr); 
+    if (primbuf_addr != 0) vx_mem_free(device, primbuf_addr); 
     RT_CHECK(vx_mem_alloc(device, tilebuf.size(), &tilebuf_addr));
     RT_CHECK(vx_mem_alloc(device, primbuf.size(), &primbuf_addr));
     std::cout << "tilebuf_addr=0x" << std::hex << tilebuf_addr << std::endl;

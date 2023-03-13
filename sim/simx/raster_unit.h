@@ -40,9 +40,14 @@ public:
       return *this;
     }
   };
+
+  struct TraceData : public ITraceData {
+    using Ptr = std::shared_ptr<TraceData>;
+    uint32_t raster_idx;
+  };
   
   using DCRS = graphics::RasterDCRS;
-  
+
   SimPort<MemReq> MemReqs;
   SimPort<MemRsp> MemRsps;
 
@@ -51,8 +56,8 @@ public:
   
   RasterUnit(const SimContext& ctx, 
             const char* name,
-            uint32_t index,
-            uint32_t cores_per_unit,
+            uint32_t raster_index,
+            uint32_t raster_count,
             const Arch &arch, 
             const DCRS& dcrs,            
             const Config& config);    
@@ -65,13 +70,9 @@ public:
 
   uint32_t id() const;
 
-  void attach_ram(RAM* mem); 
+  void attach_ram(RAM* mem);
 
-  uint32_t csr_read(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t addr);
-
-  void csr_write(uint32_t cid, uint32_t wid, uint32_t tid, uint32_t addr, uint32_t value);
-
-  uint32_t fetch(uint32_t cid, uint32_t wid, uint32_t tid);
+  uint32_t fetch(uint32_t cid, uint32_t wid, uint32_t tid, CSRs& csrs);
 
   const PerfStats& perf_stats() const;
 

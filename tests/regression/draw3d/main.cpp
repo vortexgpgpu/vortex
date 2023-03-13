@@ -55,11 +55,11 @@ uint32_t cbuf_size;
 vx_device_h device = nullptr;
 vx_buffer_h staging_buf = nullptr;
 
-uint64_t zbuf_addr = -1;
-uint64_t cbuf_addr = -1;
-uint64_t texbuf_addr = -1;
-uint64_t tilebuf_addr = -1;
-uint64_t primbuf_addr = -1;
+uint64_t zbuf_addr = 0;
+uint64_t cbuf_addr = 0;
+uint64_t texbuf_addr = 0;
+uint64_t tilebuf_addr = 0;
+uint64_t primbuf_addr = 0;
 
 kernel_arg_t kernel_arg;
 
@@ -124,11 +124,11 @@ void cleanup() {
     vx_buf_free(staging_buf);
   }
   if (device) {     
-    if (zbuf_addr != -1ull) vx_mem_free(device, zbuf_addr);
-    if (cbuf_addr != -1ull) vx_mem_free(device, cbuf_addr);
-    if (texbuf_addr != -1ull) vx_mem_free(device, texbuf_addr);
-    if (tilebuf_addr != -1ull) vx_mem_free(device, tilebuf_addr);
-    if (primbuf_addr != -1ull) vx_mem_free(device, primbuf_addr);
+    if (zbuf_addr != 0) vx_mem_free(device, zbuf_addr);
+    if (cbuf_addr != 0) vx_mem_free(device, cbuf_addr);
+    if (texbuf_addr != 0) vx_mem_free(device, texbuf_addr);
+    if (tilebuf_addr != 0) vx_mem_free(device, tilebuf_addr);
+    if (primbuf_addr != 0) vx_mem_free(device, primbuf_addr);
     vx_dev_close(device);
   }
 }
@@ -177,8 +177,8 @@ int render(const CGLTrace& trace) {
       continue;
 
     // allocate tile memory
-    if (tilebuf_addr != -1ull) vx_mem_free(device, tilebuf_addr); 
-    if (primbuf_addr != -1ull) vx_mem_free(device, primbuf_addr); 
+    if (tilebuf_addr != 0) vx_mem_free(device, tilebuf_addr); 
+    if (primbuf_addr != 0) vx_mem_free(device, primbuf_addr); 
     RT_CHECK(vx_mem_alloc(device, tilebuf.size(), &tilebuf_addr));
     RT_CHECK(vx_mem_alloc(device, primbuf.size(), &primbuf_addr));
     std::cout << "tilebuf_addr=0x" << std::hex << tilebuf_addr << std::endl;
@@ -304,7 +304,7 @@ int render(const CGLTrace& trace) {
       int tex_wrapV = (states.texture_addressU == CGLTrace::ADDRESS_WRAP);
 
       // allocate texture memory
-      if (texbuf_addr != -1ull) vx_mem_free(device, texbuf_addr); 
+      if (texbuf_addr != 0) vx_mem_free(device, texbuf_addr); 
       RT_CHECK(vx_mem_alloc(device, texbuf.size(), &texbuf_addr));
       std::cout << "texbuf_addr=0x" << std::hex << texbuf_addr << std::endl;
 

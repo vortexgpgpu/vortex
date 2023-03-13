@@ -1419,12 +1419,22 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       case 0: { // RASTER
         trace->exe_type = ExeType::GPU; 
         trace->gpu_type = GpuType::RASTER;
-        for (uint32_t t = 0; t < num_threads; ++t) {
-          if (!tmask_.test(t))
-            continue;        
-          auto result = core_->raster_unit_->fetch(core_->id(), warp_id_, t);
-          rddata[t].i = result;
+        auto trace_data = std::make_shared<RasterUnit::TraceData>();
+        trace->data = trace_data;        
+        for (uint32_t ri = 0, rn = core_->raster_units_.size(); ri < rn; ++ri) {
+          trace_data->raster_idx = core_->raster_idx();
+          bool has_stamps = false;
+          for (uint32_t t = 0; t < num_threads; ++t) {
+            if (!tmask_.test(t))
+              continue;          
+            auto result = core_->raster_units_.at(trace_data->raster_idx)->fetch(core_->id(), warp_id_, t, core_->csrs_[warp_id_][t]);          
+            rddata[t].i = result;
+            has_stamps = (result != 0);
+          }
+          if (has_stamps)
+            break;
         }
+
         rd_write = true;
       } break;
       default:
@@ -1445,6 +1455,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       trace->used_iregs.set(rsrc2);
       auto trace_data = std::make_shared<TexUnit::TraceData>();
       trace->data = trace_data;
+      trace_data->tex_idx = core_->tex_idx();
       for (uint32_t t = 0; t < num_threads; ++t) {
         if (!tmask_.test(t))
           continue;        
@@ -1452,7 +1463,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto v     = rsdata[t][1].i;
         auto lod   = rsdata[t][2].i;
         auto stage = func2;
-        auto color = core_->tex_unit_->read(stage, u, v, lod, trace_data);
+        auto color = core_->tex_units_.at(trace_data->tex_idx)->read(core_->id(), warp_id_, t, stage, u, v, lod, core_->csrs_[warp_id_][t], trace_data);
         rddata[t].i = color;
       }
       rd_write = true;
@@ -1480,6 +1491,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         trace->used_iregs.set(rsrc2);
         auto trace_data = std::make_shared<RopUnit::TraceData>();
         trace->data = trace_data;
+        trace_data->rop_idx = core_->rop_idx();
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (!tmask_.test(t))
             continue;
@@ -1489,7 +1501,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           auto f = (pos_face >> 0)  & 0x1;
           auto x = (pos_face >> 1)  & 0x7fff;
           auto y = (pos_face >> 16) & 0x7fff;
-          core_->rop_unit_->write(core_->id(), warp_id_, t, x, y, f, color, depth, trace_data);
+          core_->rop_units_.at(trace_data->rop_idx)->write(core_->id(), warp_id_, t, x, y, f, color, depth, core_->csrs_[warp_id_][t], trace_data);
         }
       } break;
       default:

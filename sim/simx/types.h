@@ -33,6 +33,8 @@ typedef std::bitset<32> RegMask;
 typedef std::bitset<32> ThreadMask;
 typedef std::bitset<32> WarpMask;
 
+typedef std::unordered_map<uint32_t, uint32_t> CSRs;
+
 ///////////////////////////////////////////////////////////////////////////////
 
 enum class RegType {

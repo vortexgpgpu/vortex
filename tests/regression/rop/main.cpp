@@ -51,8 +51,8 @@ uint32_t cbuf_size;
 
 vx_device_h device = nullptr;
 vx_buffer_h staging_buf = nullptr;
-uint64_t zbuf_addr = -1;
-uint64_t cbuf_addr = -1;
+uint64_t zbuf_addr = 0;
+uint64_t cbuf_addr = 0;
 bool use_sw = false;
 
 kernel_arg_t kernel_arg;
@@ -116,8 +116,8 @@ void cleanup() {
     vx_buf_free(staging_buf);
   }
   if (device) {     
-    if (zbuf_addr != -1ull) vx_mem_free(device, zbuf_addr);
-    if (cbuf_addr != -1ull) vx_mem_free(device, cbuf_addr);
+    if (zbuf_addr != 0) vx_mem_free(device, zbuf_addr);
+    if (cbuf_addr != 0) vx_mem_free(device, cbuf_addr);
     vx_dev_close(device);
   }
 }

@@ -82,9 +82,9 @@ public:
        const Arch &arch, 
        const DCRS &dcrs,
        SharedMem::Ptr  sharedmem,
-       RasterUnit::Ptr raster_unit,
-       RopUnit::Ptr rop_unit,
-       TexUnit::Ptr tex_unit);
+       std::vector<RasterUnit::Ptr>& raster_units,
+       std::vector<RopUnit::Ptr>& rop_units,
+       std::vector<TexUnit::Ptr>& tex_units);
 
   ~Core();
 
@@ -134,6 +134,24 @@ public:
 
   bool check_exit() const;
 
+  uint32_t raster_idx() {
+    auto ret = raster_idx_++;
+    raster_idx_ %= raster_units_.size();
+    return ret;
+  }
+
+  uint32_t rop_idx() {
+    auto ret = rop_idx_++;
+    rop_idx_ %= rop_units_.size();
+    return ret;
+  }
+
+  uint32_t tex_idx() {
+    auto ret = tex_idx_++;
+    tex_idx_ %= tex_units_.size();
+    return ret;
+  }
+
 private:
 
   void schedule();
@@ -158,10 +176,10 @@ private:
   std::vector<Byte> fcsrs_;
   std::vector<IBuffer> ibuffers_;
   Scoreboard scoreboard_;
-  std::vector<ExeUnit::Ptr> exe_units_;
-  TexUnit::Ptr    tex_unit_;
-  RasterUnit::Ptr raster_unit_;
-  RopUnit::Ptr    rop_unit_;
+  std::vector<ExeUnit::Ptr>    exe_units_;  
+  std::vector<RasterUnit::Ptr> raster_units_;
+  std::vector<RopUnit::Ptr>    rop_units_;
+  std::vector<TexUnit::Ptr>    tex_units_;
   SharedMem::Ptr  sharedmem_;
 
   PipelineLatch fetch_latch_;
@@ -178,10 +196,16 @@ private:
   uint64_t pending_ifetches_;
 
   std::unordered_map<int, std::stringstream> print_bufs_;
+
+  std::vector<std::vector<CSRs>> csrs_;
   
   PerfStats perf_stats_;
   
   Cluster* cluster_;
+
+  uint32_t raster_idx_;
+  uint32_t rop_idx_;
+  uint32_t tex_idx_;
 
   friend class Warp;
   friend class LsuUnit;
