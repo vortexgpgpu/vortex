@@ -119,7 +119,7 @@ module VX_raster_mem #(
     wire [`RASTER_DCR_DATA_BITS-1:0] start_tbuf_addr = dcrs.tbuf_addr + (INSTANCE_IDX * TILE_HEADER_SIZE);
 
     // calculate address of primitive ids
-    assign pids_addr = next_tbuf_addr + (`RASTER_DCR_DATA_BITS'(th_pids_offset) << 2);
+    assign pids_addr = (mem_req_addr[1] + 4) + (`RASTER_DCR_DATA_BITS'(th_pids_offset) << 2);
     
     // scheduler FSM
     always @(posedge clk) begin
@@ -144,7 +144,7 @@ module VX_raster_mem #(
                 mem_req_mask    <= 9'b11;
                 mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_TILE);
                 // update tile counters
-                next_tbuf_addr  <= start_tbuf_addr + TILE_HEADER_SIZE;
+                next_tbuf_addr  <= start_tbuf_addr + (NUM_INSTANCES * TILE_HEADER_SIZE);
                 curr_num_tiles  <= start_tile_count;
             end
             STATE_TILE: begin
