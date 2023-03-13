@@ -43,26 +43,26 @@ module VX_alu_unit #(
     wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in1 = alu_req_if.rs1_data;
     wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in2 = alu_req_if.rs2_data;
 
-    wire [`NUM_THREADS-1:0][31:0] trunc_alu_in1, trunc_alu_result;
+    wire [`NUM_THREADS-1:0][31:0] trunc_alu_in1;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         // PC operations should only be for 32 bits
         assign trunc_alu_in1[i] = alu_in1[i][31:0];
-        assign trunc_alu_result[i] = alu_result[i][31:0];
+        // assign trunc_alu_result[i] = alu_result[i][`XLEN-1:0];
     end
 
     // PC operations should only be for 32 bits
-    wire [`NUM_THREADS-1:0][31:0] alu_in1_PC   = alu_req_if.use_PC ? {`NUM_THREADS{alu_req_if.PC}} : trunc_alu_in1;
-    wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in2_imm  = alu_req_if.use_imm ? {`NUM_THREADS{alu_req_if.imm}} : alu_in2;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_A  = alu_req_if.use_PC ? {`NUM_THREADS{`XLEN'(alu_req_if.PC)}} : alu_in1;
+    wire [`NUM_THREADS-1:0][31:0] alu_A_trunc = alu_req_if.use_PC ? {`NUM_THREADS{alu_req_if.PC}} : trunc_alu_in1;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_B  = alu_req_if.use_imm ? {`NUM_THREADS{alu_req_if.imm}} : alu_in2;
     wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in2_less = (alu_req_if.use_imm && ~is_br_op) ? {`NUM_THREADS{alu_req_if.imm}} : alu_in2;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        wire [`XLEN-1:0] temp_add_result = {{`XLEN-32{1'b0}}, alu_in1_PC[i]} + alu_in2_imm[i];
         always @(*) begin
             case(alu_op)
-                `INST_ALU_ADD: add_result[i] = temp_add_result;
-                `INST_ALU_LUI, `INST_ALU_AUIPC, `INST_ALU_ADD_W: add_result[i] = `XLEN'($signed(temp_add_result[31:0])); //{{`XLEN-32{add_result[31]}}, temp_add_result[31:0]}; 
-                default: add_result[i] = temp_add_result;
+                `INST_ALU_ADD, `INST_ALU_AUIPC, `INST_ALU_LUI: add_result[i] = alu_A[i] + alu_B[i];
+                `INST_ALU_ADD_W: add_result[i] = `XLEN'($signed(alu_A_trunc[i] + alu_B[i][31:0]));
+                default: add_result[i] = alu_A[i] + alu_B[i];
             endcase
         end
     end
@@ -83,8 +83,8 @@ module VX_alu_unit #(
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin    
         wire [`XLEN:0] shr_in1 = {alu_signed & alu_in1[i][`XLEN-1], alu_in1[i]};
-        wire [`XLEN-1:0] temp_shr_result = `XLEN'($signed(shr_in1) >>> alu_in2_imm[i][SHIFT_IMM_BITS:0]);
-        wire [31:0] temp_shr_result_w = 32'($signed(shr_in1) >>> alu_in2_imm[i][4:0]);
+        wire [`XLEN-1:0] temp_shr_result = `XLEN'($signed(shr_in1) >>> alu_B[i][SHIFT_IMM_BITS:0]);
+        wire [31:0] temp_shr_result_w = 32'($signed(shr_in1) >>> alu_B[i][4:0]);
 
         always @(*) begin
             case(alu_op)
@@ -97,14 +97,14 @@ module VX_alu_unit #(
     end
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        wire [31:0] temp_shift_result = alu_in1[i][31:0] << alu_in2_imm[i][4:0]; // only used for SLLW
+        wire [31:0] temp_shift_result = alu_in1[i][31:0] << alu_B[i][4:0]; // only used for SLLW
         always @(*) begin
             case (alu_op)
-                `INST_ALU_AND: msc_result[i] = alu_in1[i] & alu_in2_imm[i];
-                `INST_ALU_OR:  msc_result[i] = alu_in1[i] | alu_in2_imm[i];
-                `INST_ALU_XOR: msc_result[i] = alu_in1[i] ^ alu_in2_imm[i];
-                // `INST_ALU_SLL: msc_result[i] = alu_in1[i] << alu_in2_imm[i][4:0];
-                `INST_ALU_SLL: msc_result[i] = alu_in1[i] << alu_in2_imm[i][SHIFT_IMM_BITS:0]; // TODO: CHANGED: adjust this to shift using 6 bits for 64 bit
+                `INST_ALU_AND: msc_result[i] = alu_in1[i] & alu_B[i];
+                `INST_ALU_OR:  msc_result[i] = alu_in1[i] | alu_B[i];
+                `INST_ALU_XOR: msc_result[i] = alu_in1[i] ^ alu_B[i];
+                // `INST_ALU_SLL: msc_result[i] = alu_in1[i] << alu_B[i][4:0];
+                `INST_ALU_SLL: msc_result[i] = alu_in1[i] << alu_B[i][SHIFT_IMM_BITS:0]; // TODO: CHANGED: adjust this to shift using 6 bits for 64 bit
                 `INST_ALU_SLL_W: msc_result[i] = `XLEN'($signed(temp_shift_result[31:0])); // TODO: CHANGED: adjust this to shift using 6 bits for 32 signed bit 
                 default:       msc_result[i] = 'x;
             endcase
@@ -127,7 +127,7 @@ module VX_alu_unit #(
     // branch
     
     wire is_jal = is_br_op && (br_op == `INST_BR_JAL || br_op == `INST_BR_JALR);
-    wire [`NUM_THREADS-1:0][31:0] alu_jal_result = is_jal ? {`NUM_THREADS{alu_req_if.next_PC}} : trunc_alu_result; 
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_jal_result = is_jal ? {`NUM_THREADS{`XLEN'(alu_req_if.next_PC)}} : alu_result; 
 
     wire [`XLEN-1:0] br_dest    = add_result[alu_req_if.tid][`XLEN-1:0];
     wire [32:0] cmp_result = sub_result[alu_req_if.tid][32:0];
@@ -147,11 +147,11 @@ module VX_alu_unit #(
     wire [31:0]                   alu_PC;
     wire [`NR_BITS-1:0]           alu_rd;   
     wire                          alu_wb; 
-    wire [`NUM_THREADS-1:0][31:0] alu_data;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_data;
 
     wire [`NUM_THREADS-1:0][`XLEN-1:0] full_alu_data;
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign full_alu_data[i] = {{`XLEN-31{alu_data[i][31]}},alu_data[i][30:0]};
+        assign full_alu_data[i] =alu_data[i];
     end
 
     wire [`INST_BR_BITS-1:0] br_op_r;
@@ -163,7 +163,7 @@ module VX_alu_unit #(
     assign alu_ready_in = alu_ready_out || ~alu_valid_out;
 
     VX_pipe_register #(
-        .DATAW  (1 + UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `INST_BR_BITS + 1 + 1 + `XLEN),
+        .DATAW  (1 + UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * `XLEN) + 1 + `INST_BR_BITS + 1 + 1 + `XLEN),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),

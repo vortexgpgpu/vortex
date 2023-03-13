@@ -28,8 +28,8 @@
 `endif
 
 // Disable MULDIV, FPU, and TEX units since irrelevant to RV64I instructions
-`define EXT_M_DISABLE 1
-`define EXT_F_DISABLE 1
+// `define EXT_M_DISABLE 1
+//`define EXT_F_DISABLE 1
 `define EXT_TEX_DISABLE 1
 
 `ifndef NUM_CLUSTERS
