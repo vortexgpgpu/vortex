@@ -1,3 +1,9 @@
+// Rasterizer Processing Element
+// Functionality: Receive a tile.
+// 1. Perform tile to blocks generation.
+// 2. Perform blocks to quas generation.
+// 3. Return overlapped quads.
+
 `include "VX_raster_define.vh"
 
 module VX_raster_pe #(

@@ -1,7 +1,8 @@
-// Tile evaluator
-// Functionality: Receives a tile
-//     1. Recursive descend sub-tiles that overlap primitive
-//     2. Stop when tile size matches block
+// Rasterizer Tile Evaluator
+// Functionality: Receive a tile.
+// 1. Recursive descend sub-tiles that overlap primitive.
+// 2. Stop recursion when a tile reaches block size.
+// 3. Return overlapped blocks.
 
 `include "VX_raster_define.vh"
 

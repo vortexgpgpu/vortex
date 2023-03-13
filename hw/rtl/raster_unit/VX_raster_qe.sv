@@ -1,6 +1,7 @@
-// Quad evaluator
-// Functionality: Receives a 2x2 quads
-//      check whether primitive overlaps each quad
+// Rasterizer Quad Evaluator:
+// Functionality: Receive 2x2 quads.
+// 1. Check whether primitive overlaps each quad.
+// 2. Return overlapped quads.
 
 `include "VX_raster_define.vh"
 

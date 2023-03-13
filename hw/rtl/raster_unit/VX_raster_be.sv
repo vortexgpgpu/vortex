@@ -1,7 +1,7 @@
-// Block evaluator
-// Functionality: Receives a block of NxN quads
-//     1. Breaks it into quads and runs quad evaluators on it
-//     2. Stores the result in quad queues
+// Block Evaluator
+// Functionality: Receive a block of NxN quads.
+// 1. Breaks it into quads and perform quad evaluation.
+// 2. Return overlapped quads.
 
 `include "VX_raster_define.vh"
 

@@ -1,10 +1,10 @@
 `include "VX_raster_define.vh"
 
-// Memory interface for the rasterization unit.
-// Performs the following:
-//  1. Break the request in tile and primitive fetch requests
-//  2. Form an FSM to keep a track of the return value types
-//  3. Store primitive data in an elastic buffer
+// Rasterizer Memory Unit
+// Functionality:
+//  1. Send memory request to fetch tile header.
+//  2. Send memory request to fetch all primitives overlapping the tile.
+//  3. Return the primitives with associated tile.
 
 module VX_raster_mem #(
     parameter `STRING_TYPE INSTANCE_ID = "",
@@ -47,7 +47,6 @@ module VX_raster_mem #(
     localparam STATE_IDLE       = 2'b00;
     localparam STATE_TILE       = 2'b01;
     localparam STATE_PRIM       = 2'b10;
-    localparam STATE_DONE       = 2'b11;
     
     localparam FETCH_FLAG_TILE  = 2'b00;
     localparam FETCH_FLAG_PID   = 2'b01;
@@ -116,10 +115,10 @@ module VX_raster_mem #(
     wire [15:0] th_pids_count  = mem_rsp_data[1][16 +: 16];
 
     // calculate tile start info
-    wire [`RASTER_TILE_BITS-1:0] start_tile_count = (dcrs.tile_count - `RASTER_TILE_BITS'(INSTANCE_IDX + NUM_INSTANCES - 1)) >> LOG2_NUM_INSTANCES;
+    wire [`RASTER_TILE_BITS-1:0] start_tile_count = (dcrs.tile_count + `RASTER_TILE_BITS'(NUM_INSTANCES - 1 - INSTANCE_IDX)) >> LOG2_NUM_INSTANCES;
     wire [`RASTER_DCR_DATA_BITS-1:0] start_tbuf_addr = dcrs.tbuf_addr + (INSTANCE_IDX * TILE_HEADER_SIZE);
 
-    // calculate primitive ids address    
+    // calculate address of primitive ids
     assign pids_addr = next_tbuf_addr + (`RASTER_DCR_DATA_BITS'(th_pids_offset) << 2);
     
     // scheduler FSM
@@ -135,18 +134,18 @@ module VX_raster_mem #(
 
             case (state)
             STATE_IDLE: begin
-                if (start) begin
-                    // fetch the next tile header
-                    state           <= (start_tile_count != 0) ? STATE_TILE : STATE_DONE;
-                    mem_req_valid   <= 1;
-                    mem_req_addr[0] <= start_tbuf_addr;
-                    mem_req_addr[1] <= start_tbuf_addr + 4;
-                    mem_req_mask    <= 9'b11;
-                    mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_TILE);
-                    // set tile counters
-                    next_tbuf_addr  <= start_tbuf_addr + TILE_HEADER_SIZE;
-                    curr_num_tiles  <= start_tile_count;
+                // fetch the next tile header
+                if (start && (start_tile_count != 0)) begin
+                    state <= STATE_TILE;
                 end
+                mem_req_valid   <= 1;
+                mem_req_addr[0] <= start_tbuf_addr;
+                mem_req_addr[1] <= start_tbuf_addr + 4;
+                mem_req_mask    <= 9'b11;
+                mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_TILE);
+                // update tile counters
+                next_tbuf_addr  <= start_tbuf_addr + TILE_HEADER_SIZE;
+                curr_num_tiles  <= start_tile_count;
             end
             STATE_TILE: begin
                 if (mem_rsp_valid) begin
