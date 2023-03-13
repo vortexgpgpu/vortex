@@ -111,8 +111,8 @@ void dpi_imul(bool enable, int a, int b, bool is_signed_a, bool is_signed_b, int
   if (!enable)
     return;
     
-  uint64_t first  = *(uint32_t*)&a;
-  uint64_t second = *(uint32_t*)&b;
+  uint64_t first  = *(long int*)&a;
+  uint64_t second = *(long int*)&b;
     
   if (is_signed_a && (first & 0x80000000)) {
     first |= 0xFFFFFFFF00000000;
@@ -158,27 +158,6 @@ void dpi_imul(bool enable, INT_LEN a, INT_LEN b, bool is_signed_a, bool is_signe
   uint64_t second = *(INT_LEN*)&b;
 
   umul64wide (a, b, (uint64_t *)resulth, (uint64_t *)resultl);
-    
-  //if (a < 0LL) *resulth -= b;
-  //if (b < 0LL) *resultl -= a;  
-  dpi_trace(1, "MUL - %lld %lld %lld %lld\n", a, b, *resulth, *resultl);
-  /*if (is_signed_a && (first & 0x80000000)) {
-    first |= 0xFFFFFFFF00000000;
-  }
-
-  if (is_signed_b && (second & 0x80000000)) {
-    second |= 0xFFFFFFFF00000000;
-  }
-
-  uint64_t result;
-  if (is_signed_a || is_signed_b) {
-    result = (int64_t)first * (int64_t)second;
-  } else {
-    result = first * second;
-  }    
-    
-  *resultl = result & 0xFFFFFFFF;
-  *resulth = (result >> 32) & 0xFFFFFFFF;*/
 }
 #endif
 
@@ -187,8 +166,8 @@ void dpi_idiv(bool enable, int a, int b, bool is_signed, int* quotient, int* rem
   if (!enable)
     return;
 
-  uint32_t dividen = *(uint32_t*)&a;
-  uint32_t divisor = *(uint32_t*)&b;
+  uint32_t dividen = *(long int*)&a;
+  uint32_t divisor = *(long int*)&b;
 
   if (is_signed) {
     if (b == 0) {
@@ -239,7 +218,6 @@ void dpi_idiv(bool enable, INT_LEN a, INT_LEN b, bool is_signed, INT_LEN* quotie
       *remainder = dividen % divisor;
     }
   }
-    dpi_trace(1, "DIV - %d %lld %lld %lld %lld %lld %lld\n",is_signed , a, b, dividen, divisor, *quotient, *remainder);
 }
 #endif
 
