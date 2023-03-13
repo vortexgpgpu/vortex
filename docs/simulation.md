@@ -10,7 +10,7 @@ SimX is a C++ cycle-level in-house simulator developed for Vortex. The relevant 
 
 ### FGPA Simulation
 
-The current target FPGA for simulation is the Arria10 Intel Accelerator Card v1.0. The guide to build the fpga with specific configurations is located [here.](https://github.com/vortexgpgpu/vortex-dev/blob/master/doc/FPGA_Startup_Guide.md)
+The current target FPGA for simulation is the Arria10 Intel Accelerator Card v1.0. The guide to build the fpga with specific configurations is located [here.](fpga_setup.md)
 
 ### How to Test
 

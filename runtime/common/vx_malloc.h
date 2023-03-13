@@ -197,7 +197,7 @@ public:
         // update allocated size
         allocated_ -= size;
 
-        return size;
+        return 0;
     }
 
     uint64_t allocated() const {
