@@ -121,7 +121,7 @@ module VX_dispatch (
     wire [`INST_FPU_BITS-1:0] fpu_op_type = `INST_FPU_BITS'(dispatch_if.op_type);
         
     VX_skid_buffer #(
-        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `INST_FPU_BITS + `INST_MOD_BITS + `NR_BITS + (3 * `NUM_THREADS * 32)),
+        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `INST_FPU_BITS + `INST_MOD_BITS + `NR_BITS + (3 * `NUM_THREADS * `XLEN)),
         .OUT_REG (1)
     ) fpu_buffer (
         .clk       (clk),

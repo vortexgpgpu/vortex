@@ -9,9 +9,9 @@ interface VX_fpu_agent_if ();
     wire [31:0]                     PC;
     wire [`INST_FPU_BITS-1:0]       op_type;
     wire [`INST_MOD_BITS-1:0]       op_mod;
-    wire [`NUM_THREADS-1:0][31:0]   rs1_data;
-    wire [`NUM_THREADS-1:0][31:0]   rs2_data;
-    wire [`NUM_THREADS-1:0][31:0]   rs3_data;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] rs1_data;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] rs2_data;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] rs3_data;
     wire [`NR_BITS-1:0]             rd;   
     wire                            ready;
 

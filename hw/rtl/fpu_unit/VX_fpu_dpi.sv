@@ -16,10 +16,10 @@ module VX_fpu_dpi #(
     input wire [`INST_FPU_BITS-1:0] op_type,
     input wire [`INST_MOD_BITS-1:0] frm,
 
-    input wire [NUM_LANES-1:0][31:0]  dataa,
-    input wire [NUM_LANES-1:0][31:0]  datab,
-    input wire [NUM_LANES-1:0][31:0]  datac,
-    output wire [NUM_LANES-1:0][31:0] result, 
+    input wire [NUM_LANES-1:0][`XLEN-1:0]  dataa,
+    input wire [NUM_LANES-1:0][`XLEN-1:0]  datab,
+    input wire [NUM_LANES-1:0][`XLEN-1:0]  datac,
+    output wire [NUM_LANES-1:0][`XLEN-1:0] result, 
 
     output wire has_fflags,
     output wire [NUM_LANES-1:0][`FP_FLAGS_BITS-1:0] fflags,
@@ -37,10 +37,10 @@ module VX_fpu_dpi #(
     localparam NUM_FPC  = 5;
     localparam FPC_BITS = `LOG2UP(NUM_FPC);
 
-    localparam RSP_ARB_DATAW = (NUM_LANES * 32) + 1 + (NUM_LANES * $bits(fflags_t)) + TAGW;
+    localparam RSP_ARB_DATAW = (NUM_LANES * `XLEN) + 1 + (NUM_LANES * $bits(fflags_t)) + TAGW;
     
     wire [NUM_FPC-1:0] per_core_ready_in;
-    wire [NUM_FPC-1:0][NUM_LANES-1:0][31:0] per_core_result;
+    wire [NUM_FPC-1:0][NUM_LANES-1:0][`XLEN-1:0] per_core_result;
     wire [NUM_FPC-1:0][TAGW-1:0] per_core_tag_out;
     reg [NUM_FPC-1:0] per_core_ready_out;
     wire [NUM_FPC-1:0] per_core_valid_out;
@@ -109,14 +109,14 @@ module VX_fpu_dpi #(
     generate 
     begin : fma
         
-        wire [NUM_LANES-1:0][31:0] result_fma;
-        wire [NUM_LANES-1:0][31:0] result_fadd;
-        wire [NUM_LANES-1:0][31:0] result_fsub;
-        wire [NUM_LANES-1:0][31:0] result_fmul;
-        wire [NUM_LANES-1:0][31:0] result_fmadd;
-        wire [NUM_LANES-1:0][31:0] result_fmsub;
-        wire [NUM_LANES-1:0][31:0] result_fnmadd;
-        wire [NUM_LANES-1:0][31:0] result_fnmsub;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_fma;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_fadd;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_fsub;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_fmul;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_fmadd;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_fmsub;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_fnmadd;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_fnmsub;
         
         fflags_t [NUM_LANES-1:0] fflags_fma;
         fflags_t [NUM_LANES-1:0] fflags_fadd;
@@ -163,7 +163,7 @@ module VX_fpu_dpi #(
                                         0;                
 
         VX_shift_register #(
-            .DATAW  (1 + TAGW + NUM_LANES * (32 + $bits(fflags_t))),
+            .DATAW  (1 + TAGW + NUM_LANES * (`XLEN + $bits(fflags_t))),
             .DEPTH  (`LATENCY_FMA),
             .RESETW (1)
         ) shift_reg (
@@ -183,7 +183,7 @@ module VX_fpu_dpi #(
     generate 
     begin : fdiv
 
-        wire [NUM_LANES-1:0][31:0] result_fdiv;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_fdiv;
         fflags_t [NUM_LANES-1:0] fflags_fdiv;
 
         wire fdiv_valid = (valid_in && core_select == FPU_DIV);
@@ -198,7 +198,7 @@ module VX_fpu_dpi #(
         end
 
         VX_shift_register #(
-            .DATAW  (1 + TAGW + NUM_LANES * (32 + $bits(fflags_t))),
+            .DATAW  (1 + TAGW + NUM_LANES * (`XLEN + $bits(fflags_t))),
             .DEPTH  (`LATENCY_FDIV),
             .RESETW (1)
         ) shift_reg (
@@ -218,7 +218,7 @@ module VX_fpu_dpi #(
     generate 
     begin : fsqrt
 
-        wire [NUM_LANES-1:0][31:0] result_fsqrt;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_fsqrt;
         fflags_t [NUM_LANES-1:0] fflags_fsqrt;
 
         wire fsqrt_valid = (valid_in && core_select == FPU_SQRT);
@@ -233,7 +233,7 @@ module VX_fpu_dpi #(
         end
 
         VX_shift_register #(
-            .DATAW  (1 + TAGW + NUM_LANES * (32 + $bits(fflags_t))),
+            .DATAW  (1 + TAGW + NUM_LANES * (`XLEN + $bits(fflags_t))),
             .DEPTH  (`LATENCY_FSQRT),
             .RESETW (1)
         ) shift_reg (
@@ -253,11 +253,11 @@ module VX_fpu_dpi #(
     generate
     begin : fcvt
 
-        wire [NUM_LANES-1:0][31:0] result_fcvt;
-        wire [NUM_LANES-1:0][31:0] result_itof;
-        wire [NUM_LANES-1:0][31:0] result_utof;
-        wire [NUM_LANES-1:0][31:0] result_ftoi;
-        wire [NUM_LANES-1:0][31:0] result_ftou;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_fcvt;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_itof;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_utof;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_ftoi;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_ftou;
         
         fflags_t [NUM_LANES-1:0] fflags_fcvt;
         fflags_t [NUM_LANES-1:0] fflags_itof;
@@ -292,7 +292,7 @@ module VX_fpu_dpi #(
                                        0;
 
         VX_shift_register #(
-            .DATAW  (1 + TAGW + NUM_LANES * (32 + $bits(fflags_t))),
+            .DATAW  (1 + TAGW + NUM_LANES * (`XLEN + $bits(fflags_t))),
             .DEPTH  (`LATENCY_FCVT),
             .RESETW (1)
         ) shift_reg (
@@ -312,17 +312,17 @@ module VX_fpu_dpi #(
     generate 
     begin : fncp
 
-        wire [NUM_LANES-1:0][31:0] result_fncp;
-        wire [NUM_LANES-1:0][31:0] result_fclss;
-        wire [NUM_LANES-1:0][31:0] result_flt;
-        wire [NUM_LANES-1:0][31:0] result_fle;
-        wire [NUM_LANES-1:0][31:0] result_feq;
-        wire [NUM_LANES-1:0][31:0] result_fmin;
-        wire [NUM_LANES-1:0][31:0] result_fmax;
-        wire [NUM_LANES-1:0][31:0] result_fsgnj;
-        wire [NUM_LANES-1:0][31:0] result_fsgnjn;
-        wire [NUM_LANES-1:0][31:0] result_fsgnjx;
-        reg [NUM_LANES-1:0][31:0] result_fmv;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_fncp;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_fclss;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_flt;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_fle;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_feq;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_fmin;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_fmax;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_fsgnj;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_fsgnjn;
+        wire [NUM_LANES-1:0][`XLEN-1:0] result_fsgnjx;
+        reg  [NUM_LANES-1:0][`XLEN-1:0] result_fmv;
 
         fflags_t [NUM_LANES-1:0] fflags_fncp;
         fflags_t [NUM_LANES-1:0] fflags_flt;
@@ -372,7 +372,7 @@ module VX_fpu_dpi #(
                                        0;
 
         VX_shift_register #(
-            .DATAW  (1 + TAGW + 1 + NUM_LANES * (32 + $bits(fflags_t))),
+            .DATAW  (1 + TAGW + 1 + NUM_LANES * (`XLEN + $bits(fflags_t))),
             .DEPTH  (`LATENCY_FNCP),
             .RESETW (1)
         ) shift_reg (

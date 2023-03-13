@@ -9,9 +9,9 @@ interface VX_fpu_req_if #(
     wire                         valid;
     wire [`INST_FPU_BITS-1:0]    op_type;
     wire [`INST_FRM_BITS-1:0]    frm;
-    wire [NUM_LANES-1:0][31:0]   dataa;
-    wire [NUM_LANES-1:0][31:0]   datab;
-    wire [NUM_LANES-1:0][31:0]   datac;
+    wire [NUM_LANES-1:0][`XLEN-1:0] dataa;
+    wire [NUM_LANES-1:0][`XLEN-1:0] datab;
+    wire [NUM_LANES-1:0][`XLEN-1:0] datac;
     wire [TAG_WIDTH-1:0]         tag; 
     wire                         ready;
 

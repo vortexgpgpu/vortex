@@ -13,8 +13,8 @@
 #endif
 
 extern "C" {
-  void dpi_imul(bool enable, int a, int b, bool is_signed_a, bool is_signed_b, int* resultl, int* resulth);
-  void dpi_idiv(bool enable, int a, int b, bool is_signed, int* quotient, int* remainder);
+  void dpi_imul(bool enable, long int a, long int b, bool is_signed_a, bool is_signed_b, long int* resultl, long int* resulth);
+  void dpi_idiv(bool enable, long int a, long int b, bool is_signed, long int* quotient, long int* remainder);
 
   int dpi_register();
   void dpi_assert(int inst, bool cond, int delay);
@@ -99,12 +99,12 @@ void dpi_assert(int inst, bool cond, int delay) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void dpi_imul(bool enable, int a, int b, bool is_signed_a, bool is_signed_b, int* resultl, int* resulth) {
+void dpi_imul(bool enable, long int a, long int b, bool is_signed_a, bool is_signed_b, long int* resultl, long int* resulth) {
   if (!enable)
     return;
     
-  uint64_t first  = *(uint32_t*)&a;
-  uint64_t second = *(uint32_t*)&b;
+  uint64_t first  = *(long int*)&a;
+  uint64_t second = *(long int*)&b;
     
   if (is_signed_a && (first & 0x80000000)) {
     first |= 0xFFFFFFFF00000000;
@@ -125,12 +125,12 @@ void dpi_imul(bool enable, int a, int b, bool is_signed_a, bool is_signed_b, int
   *resulth = (result >> 32) & 0xFFFFFFFF;
 }
 
-void dpi_idiv(bool enable, int a, int b, bool is_signed, int* quotient, int* remainder) {
+void dpi_idiv(bool enable, long int a, long int b, bool is_signed, long int* quotient, long int* remainder) {
   if (!enable)
     return;
 
-  uint32_t dividen = *(uint32_t*)&a;
-  uint32_t divisor = *(uint32_t*)&b;
+  uint32_t dividen = *(long int*)&a;
+  uint32_t divisor = *(long int*)&b;
 
   if (is_signed) {
     if (b == 0) {

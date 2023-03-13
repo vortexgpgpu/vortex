@@ -11,7 +11,7 @@ interface VX_fpu_rsp_if #(
 ) ();
 
     wire                        valid;
-    wire [NUM_LANES-1:0][31:0]  result; 
+    wire [NUM_LANES-1:0][`XLEN-1:0] result; 
     fflags_t [NUM_LANES-1:0]    fflags;
     wire                        has_fflags;       
     wire [TAG_WIDTH-1:0]        tag;    
