@@ -67,7 +67,7 @@ FPU_INCLUDE = -I$(RTL_DIR)/fpu_unit
 TEX_INCLUDE = -I$(RTL_DIR)/tex_unit
 RASTER_INCLUDE = -I$(RTL_DIR)/raster_unit
 ROP_INCLUDE = -I$(RTL_DIR)/rop_unit
-RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(IP_CACHE_DIR)
+RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(IP_CACHE_DIR)
 RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
 
 CFLAGS += $(RTL_INCLUDE)
