@@ -175,24 +175,24 @@ static cocogfx::ColorARGB DoBlendMode(uint32_t mode,
     std::abort();
   case ROP_BLEND_MODE_ADD:
     return cocogfx::ColorARGB(
-      cocogfx::Add8(cocogfx::Mul8(src.a, s.a), cocogfx::Mul8(dst.a, d.a)),
-      cocogfx::Add8(cocogfx::Mul8(src.r, s.r), cocogfx::Mul8(dst.r, d.r)),
-      cocogfx::Add8(cocogfx::Mul8(src.g, s.g), cocogfx::Mul8(dst.g, d.g)),
-      cocogfx::Add8(cocogfx::Mul8(src.b, s.b), cocogfx::Mul8(dst.b, d.b))
+      cocogfx::Div255(std::min<int>(src.a * s.a + dst.a * d.a, 255 * 255)),
+      cocogfx::Div255(std::min<int>(src.r * s.r + dst.r * d.r, 255 * 255)),
+      cocogfx::Div255(std::min<int>(src.g * s.g + dst.g * d.g, 255 * 255)),
+      cocogfx::Div255(std::min<int>(src.b * s.b + dst.b * d.b, 255 * 255))
     );
   case ROP_BLEND_MODE_SUB:
     return cocogfx::ColorARGB(
-      cocogfx::Sub8(cocogfx::Mul8(src.a, s.a), cocogfx::Mul8(dst.a, d.a)),
-      cocogfx::Sub8(cocogfx::Mul8(src.r, s.r), cocogfx::Mul8(dst.r, d.r)),
-      cocogfx::Sub8(cocogfx::Mul8(src.g, s.g), cocogfx::Mul8(dst.g, d.g)),
-      cocogfx::Sub8(cocogfx::Mul8(src.b, s.b), cocogfx::Mul8(dst.b, d.b))
+      cocogfx::Div255(std::max<int>(src.a * s.a - dst.a * d.a, 0x0)),
+      cocogfx::Div255(std::max<int>(src.r * s.r - dst.r * d.r, 0x0)),
+      cocogfx::Div255(std::max<int>(src.g * s.g - dst.g * d.g, 0x0)),
+      cocogfx::Div255(std::max<int>(src.b * s.b - dst.b * d.b, 0x0))
     );
   case ROP_BLEND_MODE_REV_SUB:
     return cocogfx::ColorARGB(
-      cocogfx::Sub8(cocogfx::Mul8(dst.a, d.a), cocogfx::Mul8(src.a, s.a)),
-      cocogfx::Sub8(cocogfx::Mul8(dst.r, d.r), cocogfx::Mul8(src.r, s.r)),
-      cocogfx::Sub8(cocogfx::Mul8(dst.g, d.g), cocogfx::Mul8(src.g, s.g)),
-      cocogfx::Sub8(cocogfx::Mul8(dst.b, d.b), cocogfx::Mul8(src.b, s.b))
+      cocogfx::Div255(std::max<int>(dst.a * d.a - src.a * s.a, 0x0)),
+      cocogfx::Div255(std::max<int>(dst.r * d.r - src.r * s.r, 0x0)),
+      cocogfx::Div255(std::max<int>(dst.g * d.g - src.g * s.g, 0x0)),
+      cocogfx::Div255(std::max<int>(dst.b * d.b - src.b * s.b, 0x0))
     );
   case ROP_BLEND_MODE_MIN:
     return cocogfx::ColorARGB(

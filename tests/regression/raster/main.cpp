@@ -129,8 +129,8 @@ int render(const CGLTrace& trace) {
     if (primbuf_addr != 0) vx_mem_free(device, primbuf_addr); 
     RT_CHECK(vx_mem_alloc(device, tilebuf.size(), &tilebuf_addr));
     RT_CHECK(vx_mem_alloc(device, primbuf.size(), &primbuf_addr));
-    std::cout << "tilebuf_addr=0x" << std::hex << tilebuf_addr << std::endl;
-    std::cout << "primbuf_addr=0x" << std::hex << primbuf_addr << std::endl;
+    std::cout << "tilebuf_addr=0x" << std::hex << tilebuf_addr << std::dec << std::endl;
+    std::cout << "primbuf_addr=0x" << std::hex << primbuf_addr << std::dec << std::endl;
 
     uint32_t alloc_size = std::max({tilebuf.size(), primbuf.size(), sizeof(kernel_arg_t)});
     RT_CHECK(vx_buf_alloc(device, alloc_size, &staging_buf));
@@ -257,7 +257,7 @@ int main(int argc, char *argv[]) {
   // allocate device memory  
   RT_CHECK(vx_mem_alloc(device, cbuf_size, &cbuf_addr));
 
-  std::cout << "cbuf_addr=0x" << std::hex << cbuf_addr << std::endl;
+  std::cout << "cbuf_addr=0x" << std::hex << cbuf_addr << std::dec << std::endl;
 
   // allocate staging buffer  
   {
@@ -301,7 +301,7 @@ int main(int argc, char *argv[]) {
     if (0 == errors) {
       std::cout << "PASSED!" << std::endl;
     } else {
-      std::cout << "FAILED!" << std::endl;
+      std::cout << "FAILED! " << errors << " errors." << std::endl;
       return errors;
     }
   } 

@@ -18,7 +18,6 @@ class GpuSW;
 typedef struct {
   uint32_t log_num_tasks;   
 
-  bool empty_shader;
   bool depth_enabled;
   bool color_enabled;
   bool tex_enabled; 

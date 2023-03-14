@@ -219,8 +219,8 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_alloc(device, src_bufsize, &src_addr));
   RT_CHECK(vx_mem_alloc(device, dst_bufsize, &dst_addr));
 
-  std::cout << "src_addr=0x" << std::hex << src_addr << std::endl;
-  std::cout << "dst_addr=0x" << std::hex << dst_addr << std::endl;
+  std::cout << "src_addr=0x" << std::hex << src_addr << std::dec << std::endl;
+  std::cout << "dst_addr=0x" << std::hex << dst_addr << std::dec << std::endl;
 
   // allocate staging buffer  
   std::cout << "allocate staging buffer" << std::endl;    
@@ -300,7 +300,7 @@ int main(int argc, char *argv[]) {
     if (0 == errors) {
       std::cout << "PASSED!" << std::endl;
     } else {
-      std::cout << "FAILED!" << std::endl;
+      std::cout << "FAILED! " << errors << " errors." << std::endl;
       return errors;
     }
   } 

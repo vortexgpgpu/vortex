@@ -363,8 +363,7 @@ void shader_function_empty(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 int main() {	
 	auto __UNIFORM__ arg = reinterpret_cast<kernel_arg_t*>(KERNEL_ARG_DEV_MEM_ADDR);
 
-	auto callback = arg->empty_shader ? (vx_spawn_tasks_cb)shader_function_empty : 
-	                                    (vx_spawn_tasks_cb)shader_function_hw;
+	auto callback = (vx_spawn_tasks_cb)shader_function_hw;
 
 #ifdef SW_ENABLE
 	g_gpu_sw.configure(arg);

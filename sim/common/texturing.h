@@ -102,22 +102,24 @@ inline uint32_t Pack8888(uint32_t lo, uint32_t hi) {
 }
 
 inline uint32_t Lerp8888(uint32_t a, uint32_t b, uint32_t f) {
-  return (a + (((b - a) * f) >> 8)) & 0x00ff00ff;
+  uint32_t p = a * (0xff - f) + b * f;
+  uint32_t q = (p >> 8) & 0x00ff00ff;
+  return ((p + q) >> 8) & 0x00ff00ff;
 }
 
 template <uint32_t F, typename T = int32_t>
 void TexAddressLinear(TFixed<F,T> fu, 
                       TFixed<F,T> fv, 
-                      uint32_t log_width,
-                      uint32_t log_height,
-                      int wrapu,
-                      int wrapv,
-                      uint32_t* addr00,
-                      uint32_t* addr01,
-                      uint32_t* addr10,
-                      uint32_t* addr11,
-                      uint32_t* alpha,
-                      uint32_t* beta
+                      uint32_t    log_width,
+                      uint32_t    log_height,
+                      int         wrapu,
+                      int         wrapv,
+                      uint32_t*   addr00,
+                      uint32_t*   addr01,
+                      uint32_t*   addr10,
+                      uint32_t*   addr11,
+                      uint32_t*   alpha,
+                      uint32_t*   beta
 ) {
   auto delta_x = TFixed<F,T>::make(TFixed<F,T>::HALF >> log_width);
   auto delta_y = TFixed<F,T>::make(TFixed<F,T>::HALF >> log_height);
@@ -143,8 +145,8 @@ void TexAddressLinear(TFixed<F,T> fu,
   *addr10 = x0 + (y1 << log_width);
   *addr11 = x1 + (y1 << log_width);
 
-  *alpha  = x0s & 0xff;
-  *beta   = y0s & 0xff;
+  *alpha = x0s & 0xff;
+  *beta  = y0s & 0xff;
 
   //printf("*** fu=0x%x, fv=0x%x, u0=0x%x, u1=0x%x, v0=0x%x, v1=0x%x, x0=0x%x, x1=0x%x, y0=0x%x, y1=0x%x, addr00=0x%x, addr01=0x%x, addr10=0x%x, addr11=0x%x\n", fu.data(), fv.data(), u0, u1, v0, v1, x0, x1, y0, y1, *addr00, *addr01, *addr10, *addr11);
 }
@@ -152,11 +154,11 @@ void TexAddressLinear(TFixed<F,T> fu,
 template <uint32_t F, typename T = int32_t>
 void TexAddressPoint(TFixed<F,T> fu, 
                      TFixed<F,T> fv, 
-                     uint32_t log_width,
-                     uint32_t log_height,
-                     int wrapu,
-                     int wrapv,
-                     uint32_t* addr
+                     uint32_t    log_width,
+                     uint32_t    log_height,
+                     int         wrapu,
+                     int         wrapv,
+                     uint32_t*   addr
 ) {
   uint32_t u = Clamp(fu, wrapu);
   uint32_t v = Clamp(fv, wrapv);

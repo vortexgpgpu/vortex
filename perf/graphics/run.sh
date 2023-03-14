@@ -73,7 +73,7 @@ rcache()
     do
         echo -e "\n###############################################################################\n" >> $LOG_FILE
         echo -e "$TEST mode=$mode" >> $LOG_FILE
-        CONFIGS="-DEXT_GFX_ENABLE $mode" ${VORTEX_HOME}/ci/blackbox.sh --driver=${DRIVER} --cores=${CORES} --threads=1 --app=draw3d --args="-onull -tvase.cgltrace -e -w${WIDTH} -h${HEIGHT}" --perf=4 >> $LOG_FILE
+        CONFIGS="-DEXT_GFX_ENABLE $mode" ${VORTEX_HOME}/ci/blackbox.sh --driver=${DRIVER} --cores=${CORES} --threads=1 --app=draw3d --args="-onull -tvase.cgltrace -w${WIDTH} -h${HEIGHT}" --perf=4 >> $LOG_FILE
     done
 }
 
@@ -89,7 +89,7 @@ ocache()
     do
         echo -e "\n###############################################################################\n" >> $LOG_FILE
         echo -e "$TEST mode=$mode" >> $LOG_FILE
-        CONFIGS="-DEXT_GFX_ENABLE $mode" ${VORTEX_HOME}/ci/blackbox.sh --driver=${DRIVER} --cores=${CORES} --threads=1 --app=draw3d --args="-onull -tcarnival.cgltrace -e -w${WIDTH} -h${HEIGHT}" --perf=5 >> $LOG_FILE
+        CONFIGS="-DEXT_GFX_ENABLE $mode" ${VORTEX_HOME}/ci/blackbox.sh --driver=${DRIVER} --cores=${CORES} --threads=1 --app=draw3d --args="-onull -tcarnival.cgltrace -w${WIDTH} -h${HEIGHT}" --perf=5 >> $LOG_FILE
     done
 }
 

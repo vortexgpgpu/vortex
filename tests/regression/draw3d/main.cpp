@@ -36,10 +36,12 @@ const char* reference_file = nullptr;
 bool sw_rast = false;
 bool sw_rop = false;
 bool sw_interp = false;
-bool empty_shader = false;
+
+uint32_t start_draw = 0;
+uint32_t end_draw = -1;
 
 uint32_t clear_color = 0x00000000;
-uint32_t clear_depth = 0xFFFFFFFF;
+uint32_t clear_depth = 0xffffffff;
 
 uint32_t dst_width  = 128;
 uint32_t dst_height = 128;
@@ -67,15 +69,21 @@ uint32_t tileLogSize = RASTER_TILE_LOGSIZE;
 
 static void show_usage() {
    std::cout << "Vortex 3D Rendering Test." << std::endl;
-   std::cout << "Usage: [-t trace] [-o output] [-r reference] [-w width] [-h height] [-e empty] [-x s/w rast] [-y s/w rop] [-z s/w interp] [-k tilelogsize]" << std::endl;
+   std::cout << "Usage: [-t trace] [-s startdraw] [-e enddraw] [-o output] [-r reference] [-w width] [-h height] [-e empty] [-x s/w rast] [-y s/w rop] [-z s/w interp] [-k tilelogsize]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "t:i:o:r:w:h:t:k:xyze?")) != -1) {
+  while ((c = getopt(argc, argv, "t:s:e:i:o:r:w:h:t:k:xyz?")) != -1) {
     switch (c) {
     case 't':
       trace_file = optarg;
+      break;
+    case 's':    
+      start_draw = std::atoi(optarg);
+      break;
+    case 'e':    
+      end_draw = std::atoi(optarg);
       break;
     case 'o':
       output_file = optarg;
@@ -88,9 +96,6 @@ static void parse_args(int argc, char **argv) {
       break;
     case 'h':
       dst_height = std::atoi(optarg);
-      break;
-    case 'e':
-      empty_shader = true;
       break;
     case 'x':
       sw_rast = true;
@@ -158,13 +163,15 @@ int render(const CGLTrace& trace) {
   std::cout << "render" << std::endl;
   auto time_begin = std::chrono::high_resolution_clock::now();
 
-  uint32_t draw_idx = 0; 
-
   uint64_t instrs = 0;
   uint64_t cycles = 0;
 
   // render each draw call
-  for (auto& drawcall : trace.drawcalls) {
+  for (uint32_t d = 0, nd = trace.drawcalls.size(); d < nd; ++d) {
+    if (d < start_draw || d > end_draw)
+      continue;
+
+    auto& drawcall = trace.drawcalls.at(d);
     auto& states = drawcall.states;
 
     std::vector<uint8_t> tilebuf;
@@ -181,8 +188,8 @@ int render(const CGLTrace& trace) {
     if (primbuf_addr != 0) vx_mem_free(device, primbuf_addr); 
     RT_CHECK(vx_mem_alloc(device, tilebuf.size(), &tilebuf_addr));
     RT_CHECK(vx_mem_alloc(device, primbuf.size(), &primbuf_addr));
-    std::cout << "tilebuf_addr=0x" << std::hex << tilebuf_addr << std::endl;
-    std::cout << "primbuf_addr=0x" << std::hex << primbuf_addr << std::endl;
+    std::cout << "tilebuf_addr=0x" << std::hex << tilebuf_addr << std::dec << std::endl;
+    std::cout << "primbuf_addr=0x" << std::hex << primbuf_addr << std::dec << std::endl;
 
     uint32_t alloc_size = std::max({tilebuf.size(), primbuf.size()});
     RT_CHECK(vx_buf_alloc(device, alloc_size, &staging_buf));
@@ -306,7 +313,7 @@ int render(const CGLTrace& trace) {
       // allocate texture memory
       if (texbuf_addr != 0) vx_mem_free(device, texbuf_addr); 
       RT_CHECK(vx_mem_alloc(device, texbuf.size(), &texbuf_addr));
-      std::cout << "texbuf_addr=0x" << std::hex << texbuf_addr << std::endl;
+      std::cout << "texbuf_addr=0x" << std::hex << texbuf_addr << std::dec << std::endl;
 
       // upload texture data
       std::cout << "upload texture buffer" << std::endl;      
@@ -371,7 +378,7 @@ int render(const CGLTrace& trace) {
     double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
     printf("Elapsed time: %lg ms\n", elapsed);
 
-    if (draw_idx < trace.drawcalls.size()-1) {
+    if (d < trace.drawcalls.size()-1) {
       vx_dump_perf(device, stdout);      
     }
 
@@ -381,8 +388,6 @@ int render(const CGLTrace& trace) {
     RT_CHECK(vx_perf_counter(device, CSR_MINSTRET, -1, &instrs_));
     cycles += cycles_;
     instrs += instrs_;
-
-    ++draw_idx;
   }
 
   // download destination buffer
@@ -481,8 +486,8 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_alloc(device, zbuf_size, &zbuf_addr));
   RT_CHECK(vx_mem_alloc(device, cbuf_size, &cbuf_addr));
 
-  std::cout << "zbuf_addr=0x" << std::hex << zbuf_addr << std::endl;
-  std::cout << "cbuf_addr=0x" << std::hex << cbuf_addr << std::endl;
+  std::cout << "zbuf_addr=0x" << std::hex << zbuf_addr << std::dec << std::endl;
+  std::cout << "cbuf_addr=0x" << std::hex << cbuf_addr << std::dec << std::endl;
 
   // allocate staging buffer  
   std::cout << "allocate staging buffer" << std::endl;    
@@ -514,7 +519,6 @@ int main(int argc, char *argv[]) {
 
   // update kernel arguments
   kernel_arg.log_num_tasks = log2ceil(num_tasks);
-  kernel_arg.empty_shader  = empty_shader;
   kernel_arg.sw_rast       = sw_rast;
   kernel_arg.sw_rop        = sw_rop;
   kernel_arg.sw_interp     = sw_interp;
@@ -538,11 +542,11 @@ int main(int argc, char *argv[]) {
   cleanup();  
 
   if (reference_file) {
-    auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8, 2);
+    auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8, 0);
     if (0 == errors) {
       std::cout << "PASSED!" << std::endl;
     } else {
-      std::cout << "FAILED!" << std::endl;
+      std::cout << "FAILED! " << errors << " errors." << std::endl;
       return errors;
     }
   }  
