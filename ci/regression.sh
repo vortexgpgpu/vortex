@@ -55,13 +55,13 @@ tex()
 {
 echo "begin texture tests..."
 
-CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=opae --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g0.png -g0"
-CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g0.png -g0"
-CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g0.png -g0"
-CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g1.png -g1" --perf=1
-CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g1.png -g1" --perf=1
-CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -orsoccer_result.png -rsoccer_ref_g2.png -g2"
-CONFIGS="-DEXT_TEX_ENABLE=1" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -orsoccer_result.png -rsoccer_ref_g2.png -g2"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=opae --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g0.png -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g0.png -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g0.png -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g1.png -g1" --perf=1
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g1.png -g1" --perf=1
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -orsoccer_result.png -rsoccer_ref_g2.png -g2"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -orsoccer_result.png -rsoccer_ref_g2.png -g2"
 
 CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g1.png -g1" --perf=2
 CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim  --app=tex --args="-isoccer.png -osoccer_result.png -rsoccer_ref_g1.png -g1" --perf=2
