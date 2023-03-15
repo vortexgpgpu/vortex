@@ -120,7 +120,7 @@ elif [ -d "$VORTEX_HOME/tests/regression/$APP" ];
 then
     APP_PATH=$VORTEX_HOME/tests/regression/$APP
 else
-    echo "Application folder found: $APP"
+    echo "Application folder not found: $APP"
     exit -1
 fi
 
