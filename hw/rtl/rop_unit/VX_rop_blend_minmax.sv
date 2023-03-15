@@ -3,8 +3,10 @@
 module VX_rop_blend_minmax #(
     parameter LATENCY = 1
 ) (
-    input clk,
-    input enable,
+    input wire clk,
+    input wire reset,
+
+    input wire enable,
 
     input rgba_t src_color,
     input rgba_t dst_color,
@@ -12,6 +14,8 @@ module VX_rop_blend_minmax #(
     output rgba_t min_out,
     output rgba_t max_out
 );
+
+    `UNUSED_VAR (reset)
 
     rgba_t tmp_min;
     rgba_t tmp_max;

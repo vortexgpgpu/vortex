@@ -3,8 +3,10 @@
 module VX_rop_logic_op #(
     parameter LATENCY = 1
 ) (
-    input clk,
-    input enable,
+    input wire clk,
+    input wire reset,
+
+    input wire enable,
 
     input wire [`ROP_LOGIC_OP_BITS-1:0] op,
     input wire [31:0] src_color,
@@ -13,6 +15,8 @@ module VX_rop_logic_op #(
     output wire [31:0] color_out
 );
 
+    `UNUSED_VAR (reset)
+    
     reg [31:0] tmp_color;
 
     always @(*) begin

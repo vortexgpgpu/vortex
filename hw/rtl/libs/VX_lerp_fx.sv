@@ -11,12 +11,9 @@ module VX_lerp_fx #(
     output wire [N-1:0] out
 );
 
-    wire [F:0]     one  = {1'b1, {F{1'b0}}};
-    wire [F+1:0]   sub  = one - (F+1)'(frac);
-    wire [(N+F):0] prod = in1 * sub + in2 * frac;
-    `UNUSED_VAR (prod)
-
-    assign out = prod [F +: N];
+    wire [F-1:0] sub = F'(-1) - frac;
+    wire [N+F:0] tmp = in1 * sub + in2 * frac;
+    assign out = N'((tmp + (tmp >> F)) >> F);
 
 endmodule
 `TRACING_ON

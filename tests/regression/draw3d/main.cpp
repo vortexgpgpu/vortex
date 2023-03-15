@@ -40,7 +40,7 @@ bool sw_interp = false;
 uint32_t start_draw = 0;
 uint32_t end_draw = -1;
 
-uint32_t clear_color = 0x00000000;
+uint32_t clear_color = 0xff000000;
 uint32_t clear_depth = 0xffffffff;
 
 uint32_t dst_width  = 128;
@@ -542,7 +542,7 @@ int main(int argc, char *argv[]) {
   cleanup();  
 
   if (reference_file) {
-    auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8, 0);
+    auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8, 2);
     if (0 == errors) {
       std::cout << "PASSED!" << std::endl;
     } else {

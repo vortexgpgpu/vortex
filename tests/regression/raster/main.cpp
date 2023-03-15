@@ -33,7 +33,7 @@ const char* trace_file  = "triangle.cgltrace";
 const char* output_file = "output.png";
 const char* reference_file  = nullptr;
 
-uint32_t clear_color = 0x00000000;
+uint32_t clear_color = 0xff000000;
 
 uint32_t dst_width  = 128;
 uint32_t dst_height = 128;
