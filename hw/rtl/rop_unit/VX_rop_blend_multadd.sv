@@ -102,9 +102,9 @@ module VX_rop_blend_multadd #(
     always @(*) begin
         case (mode_rgb)
             `ROP_BLEND_MODE_ADD: begin
-                clamp_r = (sum_r > 17'hFE01) ? 16'hFE01 : sum_r[15:0];
-                clamp_g = (sum_g > 17'hFE01) ? 16'hFE01 : sum_g[15:0];
-                clamp_b = (sum_b > 17'hFE01) ? 16'hFE01 : sum_b[15:0];
+                clamp_r = (sum_r > 17'hFF00) ? 16'hFF00 : sum_r[15:0];
+                clamp_g = (sum_g > 17'hFF00) ? 16'hFF00 : sum_g[15:0];
+                clamp_b = (sum_b > 17'hFF00) ? 16'hFF00 : sum_b[15:0];
             end
             `ROP_BLEND_MODE_SUB,
             `ROP_BLEND_MODE_REV_SUB: begin
@@ -120,7 +120,7 @@ module VX_rop_blend_multadd #(
         endcase
         case (mode_a)
             `ROP_BLEND_MODE_ADD: begin
-                clamp_a = (sum_a > 17'hFE01) ? 16'hFE01 : sum_a[15:0];
+                clamp_a = (sum_a > 17'hFF00) ? 16'hFF00 : sum_a[15:0];
             end
             `ROP_BLEND_MODE_SUB,
             `ROP_BLEND_MODE_REV_SUB: begin
@@ -134,7 +134,7 @@ module VX_rop_blend_multadd #(
 
     rgba_t result;
 
-    // divide by 255
+    // divide by 255    
     assign result.r = 8'((clamp_r + (clamp_r >> 8)) >> 8);
     assign result.g = 8'((clamp_g + (clamp_g >> 8)) >> 8);
     assign result.b = 8'((clamp_b + (clamp_b >> 8)) >> 8);
