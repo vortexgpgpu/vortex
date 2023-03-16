@@ -130,10 +130,10 @@ module VX_alu_unit #(
     wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_jal_result = is_jal ? {`NUM_THREADS{`XLEN'(alu_req_if.next_PC)}} : alu_result; 
 
     wire [`XLEN-1:0] br_dest    = add_result[alu_req_if.tid][`XLEN-1:0];
-    wire [32:0] cmp_result = sub_result[alu_req_if.tid][32:0];
+    wire [`XLEN:0] cmp_result = sub_result[alu_req_if.tid][`XLEN:0];
     
-    wire is_less  = cmp_result[32];
-    wire is_equal = ~(| cmp_result[31:0]);        
+    wire is_less  = cmp_result[`XLEN];
+    wire is_equal = ~(| cmp_result[`XLEN-1:0]);        
 
     // output
 
