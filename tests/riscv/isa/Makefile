@@ -1,4 +1,4 @@
-XLEN ?= 32
+XLEN ?= 64
 
 SIM_DIR=../../../sim
 
@@ -44,7 +44,12 @@ run-simx-64: run-simx-32imfd run-simx-64imfd
 
 run-simx: run-simx-$(XLEN)
 
-run-rtlsim:
+run-rtlsim-32:
 	$(foreach test, $(TESTS_32I) $(TESTS_32M) $(TESTS_32F), $(SIM_DIR)/rtlsim/rtlsim -r $(test) || exit;)
+
+run-rtlsim-64:
+	$(foreach test, $(TESTS_64I) $(TESTS_64M) $(TESTS_64F), $(SIM_DIR)/rtlsim/rtlsim -r $(test) || exit;)
+
+run-rtlsim: run-rtlsim-$(XLEN)
 
 clean:
