@@ -59,6 +59,11 @@
                 `INST_ALU_AND:   `TRACE(level, ("AND")); \
                 `INST_ALU_LUI:   `TRACE(level, ("LUI")); \
                 `INST_ALU_AUIPC: `TRACE(level, ("AUIPC")); \
+                `INST_ALU_ADD_W: `TRACE(level, ("ADD_W")); \
+                `INST_ALU_SUB_W: `TRACE(level, ("SUB_W")); \
+                `INST_ALU_SLL_W: `TRACE(level, ("SLL_W")); \
+                `INST_ALU_SRL_W: `TRACE(level, ("SRL_W")); \
+                `INST_ALU_SRA_W: `TRACE(level, ("SRA_W")); \
                 default:         `TRACE(level, ("?")); \
             endcase \
         end \
