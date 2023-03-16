@@ -175,10 +175,10 @@ static cocogfx::ColorARGB DoBlendMode(uint32_t mode,
     std::abort();
   case ROP_BLEND_MODE_ADD:
     return cocogfx::ColorARGB(
-      cocogfx::Div255(std::min<int>(src.a * s.a + dst.a * d.a, 255 * 255)),
-      cocogfx::Div255(std::min<int>(src.r * s.r + dst.r * d.r, 255 * 255)),
-      cocogfx::Div255(std::min<int>(src.g * s.g + dst.g * d.g, 255 * 255)),
-      cocogfx::Div255(std::min<int>(src.b * s.b + dst.b * d.b, 255 * 255))
+      cocogfx::Div255(std::min<int>(src.a * s.a + dst.a * d.a, 0xFF00)),
+      cocogfx::Div255(std::min<int>(src.r * s.r + dst.r * d.r, 0xFF00)),
+      cocogfx::Div255(std::min<int>(src.g * s.g + dst.g * d.g, 0xFF00)),
+      cocogfx::Div255(std::min<int>(src.b * s.b + dst.b * d.b, 0xFF00))
     );
   case ROP_BLEND_MODE_SUB:
     return cocogfx::ColorARGB(
