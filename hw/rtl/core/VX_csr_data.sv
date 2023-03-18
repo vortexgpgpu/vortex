@@ -120,8 +120,8 @@ module VX_csr_data #(
         read_addr_valid_r = 1;
         case (read_addr)
         `ifdef EXT_F_ENABLE
-            `CSR_FFLAGS     : read_data_rw_r = `XLEN'(fcsr[read_wid][`FFLAGS_BITS-1:0]);
-            `CSR_FRM        : read_data_rw_r = `XLEN'(fcsr[read_wid][`INST_FRM_BITS+`FFLAGS_BITS-1:`FFLAGS_BITS]);
+            `CSR_FFLAGS     : read_data_rw_r = `XLEN'(fcsr[read_wid][`FP_FLAGS_BITS-1:0]);
+            `CSR_FRM        : read_data_rw_r = `XLEN'(fcsr[read_wid][`INST_FRM_BITS+`FP_FLAGS_BITS-1:`FP_FLAGS_BITS]);
             `CSR_FCSR       : read_data_rw_r = `XLEN'(fcsr[read_wid]);
         `endif    
             `CSR_LWID       : read_data_ro_r = `XLEN'(read_wid);

@@ -30,7 +30,7 @@ module VX_fpu_arb #(
     localparam NUM_REQS      = 1 << LOG_NUM_REQS;
     localparam TAG_OUT_WIDTH = TAG_WIDTH + LOG_NUM_REQS;
     localparam REQ_DATAW     = TAG_OUT_WIDTH + `INST_FPU_BITS + `INST_FRM_BITS + NUM_LANES * 3 * `XLEN;
-    localparam RSP_DATAW     = TAG_WIDTH + NUM_LANES * (`XLEN + `FFLAGS_BITS) + 1;
+    localparam RSP_DATAW     = TAG_WIDTH + NUM_LANES * (`XLEN + `FP_FLAGS_BITS) + 1;
     
     ///////////////////////////////////////////////////////////////////////
 
