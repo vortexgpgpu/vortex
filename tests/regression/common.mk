@@ -36,6 +36,7 @@ VX_CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 VX_CFLAGS += -v -O3 -std=c++17 -march=rv32imf -mabi=ilp32f
 VX_CFLAGS += -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
 VX_CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw
+VX_CFLAGS += -DLLVM_VORTEX
 
 VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld $(VORTEX_KN_PATH)/libvortexrt.a
 

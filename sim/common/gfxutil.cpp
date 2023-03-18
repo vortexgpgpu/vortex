@@ -17,7 +17,7 @@ using rectf_t = TRect<float>;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static bool EdgeEquation(std::array<vec3f_t, 3>& edges, 
+static bool EdgeEquation(vec3f_t edges[3], 
                          const vec4f_t& v0, 
                          const vec4f_t& v1, 
                          const vec4f_t& v2) {
@@ -61,7 +61,7 @@ static bool EdgeEquation(std::array<vec3f_t, 3>& edges,
 
 #ifdef FIXEDPOINT_RASTERIZER
 
-static void EdgeToFixed(std::array<vec3e_t, 3>& out, const std::array<vec3f_t, 3>& in) {
+static void EdgeToFixed(vec3e_t out[3], vec3f_t in[3]) {
   // Normalize the matrix
   auto maxVal = std::max({std::abs(in[0].x), std::abs(in[1].x), std::abs(in[2].x),
                           std::abs(in[0].y), std::abs(in[1].y), std::abs(in[2].y)});
@@ -124,7 +124,7 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
     POS_TO_V4D (p1, v1.pos);
     POS_TO_V4D (p2, v2.pos);
 
-    std::array<vec3f_t, 3> edges;
+    vec3f_t edges[3];
     rast_bbox_t bbox;
     vec4f_t ps0, ps1, ps2;
 

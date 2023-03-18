@@ -8,21 +8,19 @@ using vec2_fx_t = cocogfx::TVector2<fixed16_t>;
 using vec3_fx_t = cocogfx::TVector3<fixed16_t>;
 
 void shader_function_sw_rast_cb(uint32_t  pos_mask,
-                                const std::array<graphics::vec3e_t, 4>& bcoords, 
+                                graphics::vec3e_t bcoords[4],
                                 uint32_t  pid,
                                 void* arg);
 
 class Rasterizer : graphics::Rasterizer {
 public:
 
-  Rasterizer() 
-    : graphics::Rasterizer(
-        shader_function_sw_rast_cb, 
-        nullptr,
-        RASTER_TILE_LOGSIZE,
-        RASTER_BLOCK_LOGSIZE
-      )
-  {}
+  Rasterizer() : graphics::Rasterizer(
+    shader_function_sw_rast_cb, 
+    nullptr,
+    RASTER_TILE_LOGSIZE,
+    RASTER_BLOCK_LOGSIZE
+  ) {}
 
   void configure(const graphics::RasterDCRS& dcrs, uint32_t log_num_tasks) {    
     graphics::Rasterizer::configure(dcrs);    
@@ -51,7 +49,7 @@ public:
         auto prim_buf = reinterpret_cast<graphics::FloatE*>(pbuf_baseaddr_ + pid * pbuf_stride_);        
 
         // get primitive edges        
-        std::array<graphics::vec3e_t, 3> edges;        
+        graphics::vec3e_t edges[3];
         for (int i = 0; i < 3; ++i) {
           edges[i].x = *prim_buf++;
           edges[i].y = *prim_buf++;
@@ -132,12 +130,12 @@ private:
             uint32_t* color) {
     if (depth_enable || stencil_enable) {
       uint32_t zbuf_addr = zbuf_baseaddr_ + y * zbuf_pitch_ + x * 4;
-      *depthstencil = *reinterpret_cast<uint32_t*>(zbuf_addr);
+      *depthstencil = *reinterpret_cast<const uint32_t*>(zbuf_addr);
     }
 
     if (color_write_ && (color_read_ || blend_enable)) {
       uint32_t cbuf_addr = cbuf_baseaddr_ + y * cbuf_pitch_ + x * 4;
-      *color = *reinterpret_cast<uint32_t*>(cbuf_addr);
+      *color = *reinterpret_cast<const uint32_t*>(cbuf_addr);
     }
   }
 
@@ -159,7 +157,6 @@ private:
       uint32_t zbuf_addr = zbuf_baseaddr_ + y * zbuf_pitch_ + x * 4;        
       *reinterpret_cast<uint32_t*>(zbuf_addr) = write_value;
     }
-
     if (color_write_ && ds_passed) {   
       uint32_t write_value = (dst_color & ~cbuf_writemask_) | (color & cbuf_writemask_);
       uint32_t cbuf_addr = cbuf_baseaddr_ + y * cbuf_pitch_ + x * 4;
@@ -185,12 +182,50 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
+class TextureSampler : public graphics::TextureSampler {
+public:
+  TextureSampler() : graphics::TextureSampler(
+    memory_cb,
+    nullptr
+  ) {}
+  
+  ~TextureSampler() {}
+
+private:
+  static void memory_cb(uint32_t* out,
+                        const uint32_t* addr,    
+                        uint32_t stride,
+                        uint32_t size,
+                        void* /*cb_arg*/) {
+    switch (stride) {
+    case 4:
+      for (uint32_t i = 0; i < size; ++i) {
+        out[i] = *reinterpret_cast<const uint32_t*>(addr[i]);
+      }    
+      break;
+    case 2:
+      for (uint32_t i = 0; i < size; ++i) {
+        out[i] = *reinterpret_cast<const uint16_t*>(addr[i]);
+      }    
+      break;
+    case 1:
+      for (uint32_t i = 0; i < size; ++i) {
+        out[i] = *reinterpret_cast<const uint8_t*>(addr[i]);
+      }    
+      break;
+    }
+  }
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 class GpuSW {
 public:
 
   void configure(kernel_arg_t* __UNIFORM__ kernel_arg) {
     rasterizer_.configure(kernel_arg->raster_dcrs, kernel_arg->log_num_tasks);
     renderOutput_.configure(kernel_arg->rop_dcrs);
+    sampler_.configure(kernel_arg->tex_dcrs);
     kernel_arg_ = kernel_arg;
   }
 
@@ -206,8 +241,13 @@ public:
     renderOutput_.write(x, y, is_backface, color, depth);
   }
 
+  uint32_t tex(uint32_t stage, int32_t u, int32_t v, uint32_t lod) const {
+    return sampler_.read(stage, u, v, lod);
+  }
+
 private:  
-  Rasterizer    rasterizer_;
-  RenderOutput  renderOutput_;
-  kernel_arg_t* kernel_arg_;
+  Rasterizer     rasterizer_;
+  RenderOutput   renderOutput_;
+  TextureSampler sampler_;
+  kernel_arg_t*  kernel_arg_;
 };
