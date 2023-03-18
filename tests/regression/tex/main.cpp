@@ -36,9 +36,11 @@ int format  = TEX_FORMAT_A8R8G8B8;
 ePixelFormat eformat = FORMAT_A8R8G8B8;
 bool use_sw = false;
 
+uint64_t dst_addr = 0;
+uint64_t src_addr = 0;
+
 vx_device_h device = nullptr;
 vx_buffer_h staging_buf = nullptr;
-kernel_arg_t kernel_arg;
 
 static void show_usage() {
    std::cout << "Vortex Texture Test." << std::endl;
@@ -108,17 +110,22 @@ void cleanup() {
   if (staging_buf) {
     vx_buf_free(staging_buf);
   }
+  if (src_addr) {
+    vx_mem_free(device, src_addr);
+  }
+  if (dst_addr) {
+    vx_mem_free(device, dst_addr);
+  }
   if (device) {
-    vx_mem_free(device, kernel_arg.src_addr);
-    vx_mem_free(device, kernel_arg.dst_addr);
     vx_dev_close(device);
   }
 }
 
-int render(const kernel_arg_t& kernel_arg, 
-           uint32_t buf_size,
-           uint32_t width,
-           uint32_t height) {
+#define TEX_DCR_WRITE(addr, value)  \
+  vx_dcr_write(device, addr, value); \
+  kernel_arg.dcrs.write(addr, value)
+
+int render(uint32_t buf_size, uint32_t width, uint32_t height) {
   auto time_start = std::chrono::high_resolution_clock::now();
 
   // start device
@@ -137,7 +144,7 @@ int render(const kernel_arg_t& kernel_arg,
   std::vector<uint8_t> dst_pixels(buf_size);
   {
     std::cout << "download destination buffer" << std::endl;
-    RT_CHECK(vx_copy_from_dev(staging_buf, kernel_arg.dst_addr, buf_size, 0));    
+    RT_CHECK(vx_copy_from_dev(staging_buf, dst_addr, buf_size, 0));    
     auto buf_ptr = vx_host_ptr(staging_buf);
     memcpy(dst_pixels.data(), buf_ptr, buf_size);
   }
@@ -214,8 +221,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_upload_kernel_file(device, kernel_file));
 
   // allocate device memory
-  std::cout << "allocate device memory" << std::endl;  
-  uint64_t src_addr, dst_addr;
+  std::cout << "allocate device memory" << std::endl;
   RT_CHECK(vx_mem_alloc(device, src_bufsize, &src_addr));
   RT_CHECK(vx_mem_alloc(device, dst_bufsize, &dst_addr));
 
@@ -227,42 +233,13 @@ int main(int argc, char *argv[]) {
   uint32_t alloc_size = std::max<uint32_t>(sizeof(kernel_arg_t), 
                             std::max<uint32_t>(src_bufsize, dst_bufsize));
   RT_CHECK(vx_buf_alloc(device, alloc_size, &staging_buf));
-  
-  // upload kernel argument
-  std::cout << "upload kernel argument" << std::endl;
-  {
-    kernel_arg.use_sw     = use_sw;
-    kernel_arg.num_tasks  = std::min<uint32_t>(num_tasks, dst_height);
-    kernel_arg.format     = format;
-    kernel_arg.filter     = filter;
-    kernel_arg.wrapu      = wrap;
-    kernel_arg.wrapv      = wrap;    
-    
-    kernel_arg.src_addr      = src_addr;
-    kernel_arg.src_logwidth  = src_logwidth;
-    kernel_arg.src_logheight = src_logheight;
-    for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
-      assert(i < TEX_LOD_MAX);
-      kernel_arg.mip_offs[i] = mip_offsets.at(i); 
-    }
-
-    kernel_arg.dst_width  = dst_width;
-    kernel_arg.dst_height = dst_height;
-    kernel_arg.dst_stride = dst_bpp;
-    kernel_arg.dst_pitch  = dst_bpp * dst_width;    
-    kernel_arg.dst_addr   = dst_addr;
-
-    auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
-    memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
-    RT_CHECK(vx_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
-  }
 
   // upload source buffer  
   {
     std::cout << "upload source buffer" << std::endl;          
     auto buf_ptr = vx_host_ptr(staging_buf);
     memcpy(buf_ptr, src_pixels.data(), src_bufsize);
-    RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src_addr, src_bufsize, 0));
+    RT_CHECK(vx_copy_to_dev(staging_buf, src_addr, src_bufsize, 0));
   }
 
   // clear destination buffer  
@@ -272,24 +249,42 @@ int main(int argc, char *argv[]) {
     for (uint32_t i = 0; i < (dst_bufsize/4); ++i) {
       buf_ptr[i] = 0xdeadbeef;
     }    
-    RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.dst_addr, dst_bufsize, 0));  
+    RT_CHECK(vx_copy_to_dev(staging_buf, dst_addr, dst_bufsize, 0));  
   }
 
+  kernel_arg_t kernel_arg;
+
+  kernel_arg.use_sw     = use_sw;
+  kernel_arg.num_tasks  = std::min<uint32_t>(num_tasks, dst_height);
+  kernel_arg.dst_width  = dst_width;
+  kernel_arg.dst_height = dst_height;
+  kernel_arg.dst_stride = dst_bpp;
+  kernel_arg.dst_pitch  = dst_bpp * dst_width;    
+  kernel_arg.dst_addr   = dst_addr;
+
 	// configure texture units
-	vx_dcr_write(device, DCR_TEX_STAGE,   0);
-	vx_dcr_write(device, DCR_TEX_LOGDIM,  (src_logheight << 16) | src_logwidth);	
-	vx_dcr_write(device, DCR_TEX_FORMAT,  format);
-	vx_dcr_write(device, DCR_TEX_WRAP,    (wrap << 16) | wrap);
-	vx_dcr_write(device, DCR_TEX_FILTER,  (filter ? TEX_FILTER_BILINEAR : TEX_FILTER_POINT));
-	vx_dcr_write(device, DCR_TEX_ADDR,    src_addr);
+	TEX_DCR_WRITE(DCR_TEX_STAGE,   0);
+	TEX_DCR_WRITE(DCR_TEX_LOGDIM,  (src_logheight << 16) | src_logwidth);	
+	TEX_DCR_WRITE(DCR_TEX_FORMAT,  format);
+	TEX_DCR_WRITE(DCR_TEX_WRAP,    (wrap << 16) | wrap);
+	TEX_DCR_WRITE(DCR_TEX_FILTER,  (filter ? TEX_FILTER_BILINEAR : TEX_FILTER_POINT));
+	TEX_DCR_WRITE(DCR_TEX_ADDR,    src_addr);
 	for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
     assert(i < TEX_LOD_MAX);
-		vx_dcr_write(device, DCR_TEX_MIPOFF(i), mip_offsets.at(i));
+		TEX_DCR_WRITE(DCR_TEX_MIPOFF(i), mip_offsets.at(i));
 	};
+  
+  // upload kernel argument
+  std::cout << "upload kernel argument" << std::endl;
+  {
+    auto buf_ptr = (uint8_t*)vx_host_ptr(staging_buf);
+    memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
+    RT_CHECK(vx_copy_to_dev(staging_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
+  }
 
   // render
   std::cout << "render" << std::endl;
-  RT_CHECK(render(kernel_arg, dst_bufsize, dst_width, dst_height));
+  RT_CHECK(render(dst_bufsize, dst_width, dst_height));
 
   // cleanup
   std::cout << "cleanup" << std::endl;  
