@@ -6,7 +6,7 @@
 
 #ifdef SW_ENABLE
 #include "gpu_sw.h"
-GpuSW g_gpu_sw;
+static GpuSW g_gpu_sw;
 #endif
 
 using namespace graphics;
@@ -29,18 +29,18 @@ using fixeduv_t = cocogfx::TFixed<TEX_FXD_FRAC>;
 	auto F0 = static_cast<float>(*reinterpret_cast<const FloatA*>(&f0)); \
 	auto F1 = static_cast<float>(*reinterpret_cast<const FloatA*>(&f1)); \
 	auto F2 = static_cast<float>(*reinterpret_cast<const FloatA*>(&f2)); \
-	auto r  = 1.0f / (F0 + F1 + F2);    \
-    dx[i] = FloatA(r * F0); 			\
-    dy[i] = FloatA(r * F1); 			\
+	auto r  = 1.0f / (F0 + F1 + F2); \
+    dx[i] = FloatA(r * F0); \
+    dy[i] = FloatA(r * F1); \
 }
 
 #define GRADIENTS_SW_i(i) { \
 	auto F0 = static_cast<float>(*reinterpret_cast<const FloatA*>(&bcoords[i].x)); \
 	auto F1 = static_cast<float>(*reinterpret_cast<const FloatA*>(&bcoords[i].y)); \
 	auto F2 = static_cast<float>(*reinterpret_cast<const FloatA*>(&bcoords[i].z)); \
-	auto r  = 1.0f / (F0 + F1 + F2);    \
-    dx[i] = FloatA(r * F0); 			\
-    dy[i] = FloatA(r * F1); 			\
+	auto r  = 1.0f / (F0 + F1 + F2); \
+    dx[i] = FloatA(r * F0); \
+    dy[i] = FloatA(r * F1); \
 }
 
 #ifdef FIXEDPOINT_RASTERIZER
@@ -70,10 +70,10 @@ using fixeduv_t = cocogfx::TFixed<TEX_FXD_FRAC>;
 	dst[i].a = static_cast<uint8_t>((src_a[i].data() * 255) >> fixed24_t::FRAC)
 
 #define OUTPUT_i(i, mask, x, y, face, color, depth, func) \
-	if (mask & (1 << i)) {							\
-		auto pos_x = (x << 1) + (i & 1);			\
-		auto pos_y = (y << 1) + (i >> 1);			\
-		auto pos_z = depth[i].data();               \
+	if (mask & (1 << i)) { \
+		auto pos_x = (x << 1) + (i & 1); \
+		auto pos_y = (y << 1) + (i >> 1); \
+		auto pos_z = depth[i].data(); \
 		func(pos_x, pos_y, face, color[i].value, pos_z); \
 	}
 
@@ -100,9 +100,9 @@ using fixeduv_t = cocogfx::TFixed<TEX_FXD_FRAC>;
 	dst[i].a = static_cast<uint8_t>(src_a[i] * 255)
 
 #define OUTPUT_i(i, mask, x, y, face, color, depth, func) \
-	if (mask & (1 << i)) {							\
-		auto pos_x = (x << 1) + (i & 1);			\
-		auto pos_y = (y << 1) + (i >> 1);			\
+	if (mask & (1 << i)) { \
+		auto pos_x = (x << 1) + (i & 1); \
+		auto pos_y = (y << 1) + (i >> 1); \
 		auto pos_z = static_cast<uint32_t>(depth[i] * 65336); \
 		func(pos_x, pos_y, face, color[i].value, pos_z); \
 	}
@@ -157,24 +157,14 @@ using fixeduv_t = cocogfx::TFixed<TEX_FXD_FRAC>;
 	TO_RGBA_i(2, dst, src_r, src_g, src_b, src_a); \
 	TO_RGBA_i(3, dst, src_r, src_g, src_b, src_a)
 
-#define TEXTURING(dst, u, v) \
-	dst[0] = vx_tex(0, fixeduv_t(u[0]).data(), fixeduv_t(v[0]).data(), 0); \
-	dst[1] = vx_tex(0, fixeduv_t(u[1]).data(), fixeduv_t(v[1]).data(), 0); \
-	dst[2] = vx_tex(0, fixeduv_t(u[2]).data(), fixeduv_t(v[2]).data(), 0); \
-	dst[3] = vx_tex(0, fixeduv_t(u[3]).data(), fixeduv_t(v[3]).data(), 0)
+#define TEXTURING(dst, u, v, func) \
+	dst[0] = func(0, fixeduv_t(u[0]).data(), fixeduv_t(v[0]).data(), 0); \
+	dst[1] = func(0, fixeduv_t(u[1]).data(), fixeduv_t(v[1]).data(), 0); \
+	dst[2] = func(0, fixeduv_t(u[2]).data(), fixeduv_t(v[2]).data(), 0); \
+	dst[3] = func(0, fixeduv_t(u[3]).data(), fixeduv_t(v[3]).data(), 0)
 
-#define OUTPUT_HW(face, color, depth, func) \
-	auto __DIVERGENT__ pos_mask = csr_read(CSR_RASTER_POS_MASK);  \
-	auto mask = (pos_mask >> 0) & 0xf;			                  \
-	auto x    = (pos_mask >> 4) & ((1 << (RASTER_DIM_BITS-1))-1); \
-	auto y    = (pos_mask >> (4 + (RASTER_DIM_BITS-1))) & ((1 << (RASTER_DIM_BITS-1))-1); \
-	OUTPUT_i(0, mask, x, y, face, color, depth, func) \
-	OUTPUT_i(1, mask, x, y, face, color, depth, func) \
-	OUTPUT_i(2, mask, x, y, face, color, depth, func) \
-	OUTPUT_i(3, mask, x, y, face, color, depth, func)
-
-#define OUTPUT_SW(face, color, depth, func) \
-	auto mask = (pos_mask >> 0) & 0xf;		\
+#define OUTPUT(pos_mask, face, color, depth, func) \
+	auto mask = (pos_mask >> 0) & 0xf; \
 	auto x    = (pos_mask >> 4) & ((1 << (RASTER_DIM_BITS-1))-1); \
 	auto y    = (pos_mask >> (4 + (RASTER_DIM_BITS-1))) & ((1 << (RASTER_DIM_BITS-1))-1); \
 	OUTPUT_i(0, mask, x, y, face, color, depth, func) \
@@ -206,25 +196,15 @@ void shader_function_hw(int task_id, kernel_arg_t* __UNIFORM__  arg) {
 			if (arg->depth_enabled) {
 				INTERPOLATE_SW(z, attribs.z);
 			}
-
 			if (arg->color_enabled) {
 				INTERPOLATE_SW(r, attribs.r);
 				INTERPOLATE_SW(g, attribs.g);
 				INTERPOLATE_SW(b, attribs.b);
 				INTERPOLATE_SW(a, attribs.a);
-			}
-			
+			}			
 			if (arg->tex_enabled) {
 				INTERPOLATE_SW(u, attribs.u);
 				INTERPOLATE_SW(v, attribs.v);
-				TEXTURING(tex_color, u, v);			
-				if (arg->tex_modulate) {
-					MODULATE(out_color, r, g, b, a, tex_color);
-				} else {
-					REPLACE(out_color, tex_color);
-				}
-			} else {
-				TO_RGBA(out_color, r, g, b, a);
 			}
 		} else 
 	#endif	
@@ -232,40 +212,51 @@ void shader_function_hw(int task_id, kernel_arg_t* __UNIFORM__  arg) {
 			if (arg->depth_enabled) {
 				INTERPOLATE_HW(z, attribs.z);
 			}
-
 			if (arg->color_enabled) {
 				INTERPOLATE_HW(r, attribs.r);
 				INTERPOLATE_HW(g, attribs.g);
 				INTERPOLATE_HW(b, attribs.b);
 				INTERPOLATE_HW(a, attribs.a);
-			}
-			
+			}			
 			if (arg->tex_enabled) {
 				INTERPOLATE_HW(u, attribs.u);
-				INTERPOLATE_HW(v, attribs.v);
-				TEXTURING(tex_color, u, v);			
-				if (arg->tex_modulate) {
-					MODULATE(out_color, r, g, b, a, tex_color);
-				} else {
-					REPLACE(out_color, tex_color);
-				}
-			} else {
-				TO_RGBA(out_color, r, g, b, a);
+				INTERPOLATE_HW(v, attribs.v);				
 			}
 		}
-	#ifdef SW_ENABLE	
+
+		if (arg->tex_enabled) {
+		#ifdef SW_ENABLE
+			if (arg->sw_tex) { 
+				TEXTURING(tex_color, u, v, g_gpu_sw.tex);
+			} else 
+		#endif	
+			{
+				TEXTURING(tex_color, u, v, vx_tex);
+			}
+			if (arg->tex_modulate) {
+				MODULATE(out_color, r, g, b, a, tex_color);
+			} else {
+				REPLACE(out_color, tex_color);
+			}
+		} else {
+			TO_RGBA(out_color, r, g, b, a);
+		}
+
+		auto pos_mask = csr_read(CSR_RASTER_POS_MASK);
+	#ifdef SW_ENABLE
 		if (arg->sw_rop) {
-			OUTPUT_HW(0, out_color, z, g_gpu_sw.rop);
+			OUTPUT(pos_mask, 0, out_color, z, g_gpu_sw.rop);
 		} else 
 	#endif	
 		{
-			OUTPUT_HW(0, out_color, z, vx_rop);
+			OUTPUT(pos_mask, 0, out_color, z, vx_rop);
 		}
 	}
 }
+
 #ifdef SW_ENABLE
 void shader_function_sw_rast_cb(uint32_t  pos_mask,
-							    const std::array<vec3e_t, 4>& bcoords,
+							    graphics::vec3e_t bcoords[4],
 							    uint32_t  pid,
 								void* /*cb_arg*/) {
 	auto __UNIFORM__ arg = g_gpu_sw.kernel_arg();
@@ -284,56 +275,51 @@ void shader_function_sw_rast_cb(uint32_t  pos_mask,
 		if (arg->depth_enabled) {
 			INTERPOLATE_SW(z, attribs.z);
 		}
-
 		if (arg->color_enabled) {
 			INTERPOLATE_SW(r, attribs.r);
 			INTERPOLATE_SW(g, attribs.g);
 			INTERPOLATE_SW(b, attribs.b);
 			INTERPOLATE_SW(a, attribs.a);
-		}
-		
+		}		
 		if (arg->tex_enabled) {
 			INTERPOLATE_SW(u, attribs.u);
 			INTERPOLATE_SW(v, attribs.v);
-			TEXTURING(tex_color, u, v);			
-			if (arg->tex_modulate) {
-				MODULATE(out_color, r, g, b, a, tex_color);
-			} else {
-				REPLACE(out_color, tex_color);
-			}
-		} else {
-			TO_RGBA(out_color, r, g, b, a);
 		}
 	} else {
 		if (arg->depth_enabled) {
 			INTERPOLATE_HW(z, attribs.z);
 		}
-
 		if (arg->color_enabled) {
 			INTERPOLATE_HW(r, attribs.r);
 			INTERPOLATE_HW(g, attribs.g);
 			INTERPOLATE_HW(b, attribs.b);
 			INTERPOLATE_HW(a, attribs.a);
-		}
-		
+		}		
 		if (arg->tex_enabled) {
 			INTERPOLATE_HW(u, attribs.u);
 			INTERPOLATE_HW(v, attribs.v);
-			TEXTURING(tex_color, u, v);			
-			if (arg->tex_modulate) {
-				MODULATE(out_color, r, g, b, a, tex_color);
-			} else {
-				REPLACE(out_color, tex_color);
-			}
-		} else {
-			TO_RGBA(out_color, r, g, b, a);
 		}
 	}
 
-	if (arg->sw_rop) {
-		OUTPUT_SW(0, out_color, z, g_gpu_sw.rop);
+	if (arg->tex_enabled) {
+		if (arg->sw_tex) { 
+			TEXTURING(tex_color, u, v, g_gpu_sw.tex);
+		} else {
+			TEXTURING(tex_color, u, v, vx_tex);
+		}
+		if (arg->tex_modulate) {
+			MODULATE(out_color, r, g, b, a, tex_color);
+		} else {
+			REPLACE(out_color, tex_color);
+		}
 	} else {
-		OUTPUT_SW(0, out_color, z, vx_rop);
+		TO_RGBA(out_color, r, g, b, a);
+	}
+
+	if (arg->sw_rop) {
+		OUTPUT(pos_mask, 0, out_color, z, g_gpu_sw.rop);
+	} else {
+		OUTPUT(pos_mask, 0, out_color, z, vx_rop);
 	}
 }
 
@@ -341,24 +327,6 @@ void shader_function_sw(int task_id, kernel_arg_t* /*__UNIFORM__ arg*/) {
 	g_gpu_sw.render(task_id);
 }
 #endif
-
-void shader_function_empty(int task_id, kernel_arg_t* __UNIFORM__ arg) {
-	const cocogfx::ColorARGB color[4] = {0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff};
-	const FloatA depth[4] = {FloatA{0}, FloatA{0}, FloatA{0}, FloatA{0}};
-	for (;;) {
-		auto __DIVERGENT__ status = vx_rast();
-		if (0 == (status & 0x1))
-			return;		
-	#ifdef SW_ENABLE	
-		if (arg->sw_rop) {
-			OUTPUT_HW(0, color, depth, g_gpu_sw.rop);
-		} else 
-	#endif	
-		{
-			OUTPUT_HW(0, color, depth, vx_rop);
-		}
-	}
-}
 
 int main() {	
 	auto __UNIFORM__ arg = reinterpret_cast<kernel_arg_t*>(KERNEL_ARG_DEV_MEM_ADDR);

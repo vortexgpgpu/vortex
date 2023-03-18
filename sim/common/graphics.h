@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <array>
 #include <cocogfx/include/fixed.hpp>
 #include <cocogfx/include/math.hpp>
 #include <VX_types.h>
@@ -48,7 +47,7 @@ typedef struct {
 } rast_bbox_t;
 
 typedef struct {
-  std::array<vec3e_t, 3> edges;
+  vec3e_t edges[3];
   rast_attribs_t attribs;
 } rast_prim_t;
 
@@ -58,6 +57,21 @@ typedef struct {
   uint16_t pids_offset;
   uint16_t pids_count;
 } rast_tile_header_t;
+
+inline void Unpack8888(uint32_t texel, uint32_t* lo, uint32_t* hi) {
+  *lo = texel & 0x00ff00ff;
+  *hi = (texel >> 8) & 0x00ff00ff;
+}
+
+inline uint32_t Pack8888(uint32_t lo, uint32_t hi) {
+  return (hi << 8) | lo;
+}
+
+inline uint32_t Lerp8888(uint32_t a, uint32_t b, uint32_t f) {
+  uint32_t p = a * (0xff - f) + b * f;
+  uint32_t q = (p >> 8) & 0x00ff00ff;
+  return ((p + q) >> 8) & 0x00ff00ff;
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -73,13 +87,15 @@ public:
     }
   }
 
-  uint32_t read(uint32_t addr) const {
+  uint32_t read(uint32_t addr) const {    
     uint32_t state = DCR_RASTER_STATE(addr);
+    assert(state < DCR_RASTER_STATE_COUNT);
     return states_[state];
   }
 
-  void write(uint32_t addr, uint32_t value) {
+  void write(uint32_t addr, uint32_t value) {    
     uint32_t state = DCR_RASTER_STATE(addr);
+    assert(state < DCR_RASTER_STATE_COUNT);
     states_[state] = value;
   }
 
@@ -101,18 +117,80 @@ public:
     }
   }
 
-  uint32_t read(uint32_t addr) const {
+  uint32_t read(uint32_t addr) const {    
     uint32_t state = DCR_ROP_STATE(addr);
+    assert(state < DCR_ROP_STATE_COUNT);
     return states_[state];
   }
 
-  void write(uint32_t addr, uint32_t value) {
+  void write(uint32_t addr, uint32_t value) {    
     uint32_t state = DCR_ROP_STATE(addr);
+    assert(state < DCR_ROP_STATE_COUNT);
     states_[state] = value;
   }
 
 private:
   uint32_t states_[DCR_ROP_STATE_COUNT];
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+class TexDCRS {
+public:
+  uint32_t read(uint32_t stage, uint32_t addr) const {
+    uint32_t state = DCR_TEX_STATE(addr-1);
+    assert(stage < TEX_STAGE_COUNT);
+    assert(state < DCR_TEX_STATE_COUNT);
+    return states_[stage][state];
+  }
+
+  uint32_t read(uint32_t addr) const {
+    if (addr == DCR_TEX_STAGE)
+      return stage_;
+    uint32_t state = DCR_TEX_STATE(addr-1);
+    assert(state < DCR_TEX_STATE_COUNT);
+    return states_[stage_][state];
+  }
+
+  void write(uint32_t addr, uint32_t value) {
+    if (addr == DCR_TEX_STAGE) {
+      assert(value < TEX_STAGE_COUNT);
+      stage_ = value;
+      return;
+    }
+    uint32_t state = DCR_TEX_STATE(addr-1);
+    assert(state < DCR_TEX_STATE_COUNT);
+    states_[stage_][state] = value;
+  }
+
+private:
+  uint32_t states_[TEX_STAGE_COUNT][DCR_TEX_STATE_COUNT-1];
+  uint32_t stage_;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+class TextureSampler {
+public:
+  typedef void (*MemoryCB)(
+    uint32_t* out,
+    const uint32_t* addr,    
+    uint32_t stride,
+    uint32_t size,
+    void* cb_arg
+  );
+
+  TextureSampler(const MemoryCB& mem_cb, void* cb_arg);
+  ~TextureSampler();
+
+  void configure(const TexDCRS& dcrs);
+
+  uint32_t read(uint32_t stage, int32_t u, int32_t v, uint32_t lod) const;
+
+protected:
+  MemoryCB mem_cb_;
+  void*    cb_arg_;
+  TexDCRS  dcrs_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -183,7 +261,7 @@ protected:
   uint32_t blend_dst_a_;
   uint32_t blend_const_;
   uint32_t logic_op_;
-  
+
   bool enabled_;
 };
 
@@ -193,7 +271,7 @@ class Rasterizer {
 public:
   typedef void (*ShaderCB)(
     uint32_t  pos_mask,
-    const std::array<vec3e_t, 4>& bcoords,
+    vec3e_t   bcoords[4],
     uint32_t  pid,
     void*     cb_arg
   );
@@ -216,8 +294,8 @@ protected:
 
   void renderPrimitive(uint32_t x, 
                        uint32_t y, 
-                       uint32_t pid, 
-                       const std::array<vec3e_t, 3>& edges);
+                       uint32_t pid,
+                       vec3e_t edges[4]);
 
   void renderTile(uint32_t subTileLogSize,   
                   uint32_t x, 

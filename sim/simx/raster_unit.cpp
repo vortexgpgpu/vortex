@@ -40,9 +40,9 @@ public:
     Stamp* next_;    
     Stamp* prev_;
 
-    Stamp(uint32_t pos_mask, const std::array<graphics::vec3e_t, 4>& bcoords, uint32_t  pid) 
+    Stamp(uint32_t pos_mask, graphics::vec3e_t bcoords[4], uint32_t  pid) 
       : pos_mask(pos_mask)
-      , bcoords(bcoords)
+      , bcoords({bcoords[0], bcoords[1], bcoords[2], bcoords[3]})
       , pid(pid)
       , next_(nullptr)
       , prev_(nullptr) 
@@ -171,7 +171,7 @@ private:
     //printf("*** raster%d-primitive: tile=%d/%d, prim=%d/%d, pid=%d, tx=%d, ty=%d\n", raster_index_, cur_tile_, num_tiles_, cur_prim_, pids_count_, pid_, x, y);
 
     // get primitive edges
-    std::array<graphics::vec3e_t, 3> edges;
+    graphics::vec3e_t edges[3];
     auto pbuf_addr = pbuf_baseaddr_ + pid_ * pbuf_stride_;
     for (int i = 0; i < 3; ++i) {
       mem_->read(&edges[i].x, pbuf_addr, 4);
@@ -215,7 +215,7 @@ private:
     }
   }
 
-  void enqueue_stamp(uint32_t pos_mask, const std::array<graphics::vec3e_t, 4>& bcoords, uint32_t pid) {
+  void enqueue_stamp(uint32_t pos_mask, graphics::vec3e_t bcoords[4], uint32_t pid) {
     auto stamp = new Stamp(pos_mask, bcoords, pid);
     stamp->next_ = stamps_tail_;
     stamp->prev_ = nullptr;
@@ -242,7 +242,7 @@ private:
 
   static void shaderFunctionCB(    
     uint32_t  pos_mask,
-    const std::array<graphics::vec3e_t, 4>& bcoords,
+    graphics::vec3e_t bcoords[4],
     uint32_t  pid,
     void*     cb_arg) {
     reinterpret_cast<Rasterizer*>(cb_arg)->enqueue_stamp(pos_mask, bcoords, pid);

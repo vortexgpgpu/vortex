@@ -3,6 +3,7 @@
 #include <simobject.h>
 #include <VX_types.h>
 #include "pipeline.h"
+#include "graphics.h"
 
 namespace vortex {
 
@@ -19,37 +20,15 @@ public:
         using Ptr = std::shared_ptr<TraceData>;
         std::vector<std::vector<mem_addr_size_t>> mem_addrs;
         uint32_t tex_idx;
+        TraceData(uint32_t num_threads) : mem_addrs(num_threads) {
+            for (uint32_t i = 0; i < num_threads; ++i) {
+                mem_addrs.at(i).reserve(4);
+            }
+        }
     };
 
-    class DCRS {
-    private:
-        std::array<std::array<uint32_t, (DCR_TEX_STATE_COUNT-1)>, TEX_STAGE_COUNT> states_;
-        uint32_t stage_;
+    using DCRS = graphics::TexDCRS;
 
-    public:
-        uint32_t read(uint32_t stage, uint32_t addr) const {
-            uint32_t state = DCR_TEX_STATE(addr-1);
-            return states_.at(stage).at(state);
-        }
-
-        uint32_t read(uint32_t addr) const {
-            if (addr == DCR_TEX_STAGE) {
-                return stage_;
-            }
-            uint32_t state = DCR_TEX_STATE(addr-1);
-            return states_.at(stage_).at(state);
-        }
-    
-        void write(uint32_t addr, uint32_t value) {
-            if (addr == DCR_TEX_STAGE) {
-                stage_ = value;
-                return;
-            }
-            uint32_t state = DCR_TEX_STATE(addr-1);
-            states_.at(stage_).at(state) = value;
-        }
-    };
-    
     struct PerfStats {
         uint64_t stalls;
         uint64_t reads;

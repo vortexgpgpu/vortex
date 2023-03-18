@@ -22,6 +22,7 @@ typedef struct {
   bool color_enabled;
   bool tex_enabled; 
   bool tex_modulate;
+  bool sw_tex;
   bool sw_rast;
   bool sw_rop;
   bool sw_interp;
@@ -42,6 +43,7 @@ typedef struct {
 #ifdef SW_ENABLE
   graphics::RasterDCRS raster_dcrs;
   graphics::RopDCRS    rop_dcrs;
+  graphics::TexDCRS    tex_dcrs;
 #endif
 } kernel_arg_t;
 
