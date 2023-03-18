@@ -129,7 +129,7 @@ private:
     uint32_t size) {
     for (uint32_t i = 0; i < size; ++i) {
       mem_->read(&out[i], addr[i], stride);
-      mem_addrs_->emplace_back(addr[i], stride);
+      mem_addrs_->push_back({addr[i], stride});
     }
   }
 
