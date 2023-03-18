@@ -13,7 +13,7 @@ typedef struct packed {
     logic is_nan;
     logic is_quiet;
     logic is_signaling;    
-} fp_class_t;
+} fclass_t;
 
 typedef struct packed {
     logic NV; // 4-Invalid
@@ -25,7 +25,7 @@ typedef struct packed {
 
 endpackage
 
-`define FP_CLASS_BITS   $bits(VX_fpu_types::fp_class_t)
-`define FFLAGS_BITS     $bits(VX_fpu_types::fflags_t)
+`define FP_CLASS_BITS   $bits(VX_fpu_types::fclass_t)
+`define FP_FLAGS_BITS   $bits(VX_fpu_types::fflags_t)
 
 `endif
