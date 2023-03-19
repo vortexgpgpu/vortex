@@ -270,9 +270,10 @@ echo "begin stress1 tests..."
 echo "stress1 tests done!"
 }
 
-usage()
+show_usage()
 {
-    echo "usage: regression [-smoke] [-unittest] [-coverage] [-tex] [-rop] [-raster] [-graphics] [-cluster] [-debug] [-config] [-stress[#n]] [-all] [-h|--help]"
+    echo "Vortex Regression Test" 
+    echo "Usage: $0 [-smoke] [-unittest] [-coverage] [-tex] [-rop] [-raster] [-graphics] [-cluster] [-debug] [-config] [-stress[#n]] [-all] [-h|--help]"
 }
 
 start=$SECONDS
@@ -318,10 +319,10 @@ while [ "$1" != "" ]; do
                stress0
                stress1
                 ;;
-        -h | --help ) usage
+        -h | --help ) show_usage
                       exit
                 ;;
-        * )           usage
+        * )           show_usage
                       exit 1
     esac
     shift

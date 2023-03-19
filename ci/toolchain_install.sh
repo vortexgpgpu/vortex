@@ -78,9 +78,10 @@ verilator()
     rm -rf verilator
 }
 
-usage()
+show_usage()
 {
-    echo "usage: toolchain_install [[-riscv] [-riscv64] [-llvm] [-pocl] [-verilator] [-all] [-h|--help]]"
+    echo "Install Pre-built Vortex Toolchain"
+    echo "Usage: $0 [[-riscv] [-riscv64] [-llvm] [-pocl] [-verilator] [-all] [-h|--help]]"
 }
 
 while [ "$1" != "" ]; do
@@ -101,10 +102,10 @@ while [ "$1" != "" ]; do
                pocl
                verilator
                ;;
-        -h | --help ) usage
+        -h | --help ) show_usage
                       exit
                       ;;
-        * )           usage
+        * )           show_usage
                       exit 1
     esac
     shift
