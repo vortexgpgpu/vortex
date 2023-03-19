@@ -3,6 +3,15 @@
 # exit when any command fails
 set -e
 
+# clear runtime
+make -C runtime clean
+
+# clear blackbox cache
+rm -f blackbox.*.cache
+
+# ensure build
+make -s
+
 graphics()
 {
 echo "begin graphics data generation..."
