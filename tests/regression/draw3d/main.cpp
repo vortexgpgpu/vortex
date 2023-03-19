@@ -545,7 +545,7 @@ int main(int argc, char *argv[]) {
   cleanup();  
 
   if (reference_file) {
-    auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8);
+    auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8, 1);
     if (0 == errors) {
       std::cout << "PASSED!" << std::endl;
     } else {
