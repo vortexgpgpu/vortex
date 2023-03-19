@@ -201,7 +201,9 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
     #ifdef FIXEDPOINT_RASTERIZER 
       EdgeToFixed(rast_prim.edges, edges);
     #else
-      rast_prim.edges = edges;
+      rast_prim.edges[0] = edges[0];
+      rast_prim.edges[1] = edges[1];
+      rast_prim.edges[2] = edges[2];
     #endif
          
       ATTRIBUTE_DELTA (rast_prim.attribs.z, ps0.z, ps1.z, ps2.z);

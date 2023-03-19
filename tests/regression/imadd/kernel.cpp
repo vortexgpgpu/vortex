@@ -5,11 +5,8 @@
 #include "common.h"
 
 inline int32_t vx_imadd_sw(int32_t a, int32_t b, int32_t c, int32_t s) {
-	int64_t x = a;
-	int64_t y = b;
-	int64_t p = (x * y) >> (s << 3);
-	int32_t r = p;
-	return r + c;
+	int32_t p = ((int64_t)a * (int64_t)b) >> (s << 3);
+	return p + c;
 }
 
 void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {

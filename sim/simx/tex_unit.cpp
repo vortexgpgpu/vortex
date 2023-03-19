@@ -1,6 +1,5 @@
 #include "tex_unit.h"
 #include "mem.h"
-#include <texturing.h>
 #include <VX_config.h>
 
 using namespace vortex;

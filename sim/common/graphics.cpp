@@ -5,6 +5,7 @@
 
 #ifdef LLVM_VORTEX
 #include <vx_print.h>
+#include <vx_intrinsics.h>
 #else
 #include <stdio.h>
 #define vx_printf printf
@@ -20,8 +21,8 @@ static FloatE fxZero(0);
 namespace {
 
 template <uint32_t F, typename T = int32_t>
-T TextureClamp(TFixed<F,T> fx, int mode) {
-  switch (mode) {
+T TextureClamp(TFixed<F,T> fx, uint32_t wrap) {
+  switch (wrap) {
   case TEX_WRAP_CLAMP:  return (fx.data() < 0) ? 0 : ((fx.data() > TFixed<F,T>::MASK) ? TFixed<F,T>::MASK : fx.data());
   case TEX_WRAP_REPEAT: return (fx.data() & TFixed<F,T>::MASK);
   case TEX_WRAP_MIRROR: return (bit_get(fx.data(), TFixed<F,T>::FRAC) ? ~fx.data() : fx.data());
@@ -31,7 +32,7 @@ T TextureClamp(TFixed<F,T> fx, int mode) {
   }
 }
 
-inline uint32_t FormatStride(int format) {
+inline uint32_t FormatStride(uint32_t format) {
   switch (format) {
   case TEX_FORMAT_A8R8G8B8: 
     return 4;
@@ -49,7 +50,7 @@ inline uint32_t FormatStride(int format) {
   }
 }
 
-inline void Unpack8888(int format, uint32_t texel, uint32_t* lo, uint32_t* hi) {
+inline void Unpack8888(uint32_t format, uint32_t texel, uint32_t* lo, uint32_t* hi) {
   uint32_t r, g, b, a;
   switch (format) {
   case TEX_FORMAT_A8R8G8B8:    
@@ -106,8 +107,8 @@ void TexAddressLinear(TFixed<F,T> fu,
                       TFixed<F,T> fv, 
                       uint32_t    log_width,
                       uint32_t    log_height,
-                      int         wrapu,
-                      int         wrapv,
+                      uint32_t    wrapu,
+                      uint32_t    wrapv,
                       uint32_t*   addr00,
                       uint32_t*   addr01,
                       uint32_t*   addr10,
@@ -118,10 +119,10 @@ void TexAddressLinear(TFixed<F,T> fu,
   auto delta_x = TFixed<F,T>::make(TFixed<F,T>::HALF >> log_width);
   auto delta_y = TFixed<F,T>::make(TFixed<F,T>::HALF >> log_height);
 
-  uint32_t u0 = TextureClamp(fu - delta_x, wrapu);    
-  uint32_t u1 = TextureClamp(fu + delta_x, wrapu);
-  uint32_t v0 = TextureClamp(fv - delta_y, wrapv);     
-  uint32_t v1 = TextureClamp(fv + delta_y, wrapv);
+  uint32_t u0 = TextureWrap(fu - delta_x, wrapu);    
+  uint32_t u1 = TextureWrap(fu + delta_x, wrapu);
+  uint32_t v0 = TextureWrap(fv - delta_y, wrapv);     
+  uint32_t v1 = TextureWrap(fv + delta_y, wrapv);
 
   uint32_t shift_u = (TFixed<F,T>::FRAC - log_width);
   uint32_t shift_v = (TFixed<F,T>::FRAC - log_height);
@@ -154,8 +155,8 @@ void TexAddressPoint(TFixed<F,T> fu,
                      int         wrapv,
                      uint32_t*   addr
 ) {
-  uint32_t u = TextureClamp(fu, wrapu);
-  uint32_t v = TextureClamp(fv, wrapv);
+  uint32_t u = TextureWrap(fu, wrapu);
+  uint32_t v = TextureWrap(fv, wrapv);
   
   uint32_t x = u >> (TFixed<F,T>::FRAC - log_width);
   uint32_t y = v >> (TFixed<F,T>::FRAC - log_height);
@@ -545,7 +546,7 @@ void DepthTencil::configure(const RopDCRS& dcrs) {
 bool DepthTencil::test(uint32_t is_backface, 
                        uint32_t depth, 
                        uint32_t depthstencil_val, 
-                       uint32_t* depthstencil_result) {
+                       uint32_t* depthstencil_result) const {
   auto depth_val   = depthstencil_val & ROP_DEPTH_MASK;
   auto stencil_val = depthstencil_val >> ROP_DEPTH_BITS;
   auto depth_ref   = depth & ROP_DEPTH_MASK;
@@ -600,7 +601,7 @@ void Blender::configure(const RopDCRS& dcrs) {
                    && (blend_dst_a_    == ROP_BLEND_FUNC_ZERO));
 }
 
-uint32_t Blender::blend(uint32_t srcColor, uint32_t dstColor) {
+uint32_t Blender::blend(uint32_t srcColor, uint32_t dstColor) const {
   ColorARGB src(srcColor);
   ColorARGB dst(dstColor);
   ColorARGB cst(blend_const_);
@@ -622,7 +623,7 @@ inline FloatE EvalEdgeFunction(const vec3e_t& e, int x, int y) {
   return (e.x * x) + (e.y * y) + e.z;
 }
 
-inline FloatE CalcEdgeExtents(const vec3e_t& e) {
+FloatE CalcEdgeExtents(const vec3e_t& e) {
   return (e.y >= fxZero) ? ((e.x >= fxZero) ? (e.x + e.y) : e.y) : 
                            ((e.x >= fxZero) ? e.x : fxZero);
 }
@@ -696,7 +697,7 @@ void Rasterizer::configure(const RasterDCRS& dcrs) {
 void Rasterizer::renderPrimitive(uint32_t x, 
                                  uint32_t y, 
                                  uint32_t pid, 
-                                 vec3e_t edges[3]) {
+                                 vec3e_t edges[3]) const {
   /*printf("*** raster-edges={{0x%x, 0x%x, 0x%x}, {0x%x, 0x%x, 0x%x}, {0x%x, 0x%x, 0x%x}}\n", 
     edges[0].x.data(), edges[0].y.data(), edges[0].z.data(),
     edges[1].x.data(), edges[1].y.data(), edges[1].z.data(),
@@ -733,7 +734,7 @@ void Rasterizer::renderTile(uint32_t tileLogSize,
                             uint32_t y, 
                             uint32_t pid,
                             const vec3e_t& edges, 
-                            const delta_t& delta) {
+                            const delta_t& delta) const {
   // check if tile overlap triangle    
   if ((edges.x + ShiftLeft(delta.extents.x, tileLogSize)) < fxZero 
    || (edges.y + ShiftLeft(delta.extents.y, tileLogSize)) < fxZero
@@ -791,30 +792,30 @@ void Rasterizer::renderQuad(uint32_t x,
                             uint32_t y, 
                             uint32_t pid,
                             const vec3e_t& edges, 
-                            const delta_t& delta) {
+                            const delta_t& delta) const {
   // check if quad overlap triangle    
   if ((edges.x + ShiftLeft(delta.extents.x, 1)) < fxZero 
    || (edges.y + ShiftLeft(delta.extents.y, 1)) < fxZero
    || (edges.z + ShiftLeft(delta.extents.z, 1)) < fxZero)
     return;
 
-  uint32_t mask = 0;
   vec3e_t bcoords[4];
+  uint32_t mask = 0;  
 
   #define PREPARE_QUAD(i, j) { \
-      auto ee0 = edges.x + (delta.dx.x * i) + (delta.dy.x * j); \
-      auto ee1 = edges.y + (delta.dx.y * i) + (delta.dy.y * j); \
-      auto ee2 = edges.z + (delta.dx.z * i) + (delta.dy.z * j); \
-      bool coverage_test = (ee0 >= fxZero && ee1 >= fxZero && ee2 >= fxZero); \
-      bool scissor_test = ((x+i) >= scissor_left_     \
-                        && (x+i) <  scissor_right_    \
-                        && (y+j) >= scissor_top_      \
-                        && (y+j) <  scissor_bottom_); \
-      uint32_t f = j * 2 + i;                         \
-      mask |= ((coverage_test && scissor_test) << f); \
-      bcoords[f].x = ee0;                             \
-      bcoords[f].y = ee1;                             \
-      bcoords[f].z = ee2;                             \
+    auto ee0 = edges.x + (delta.dx.x * i) + (delta.dy.x * j); \
+    auto ee1 = edges.y + (delta.dx.y * i) + (delta.dy.y * j); \
+    auto ee2 = edges.z + (delta.dx.z * i) + (delta.dy.z * j); \
+    bool coverage_test = (ee0 >= fxZero && ee1 >= fxZero && ee2 >= fxZero); \
+    bool scissor_test = ((x+i) >= scissor_left_     \
+                      && (x+i) <  scissor_right_    \
+                      && (y+j) >= scissor_top_      \
+                      && (y+j) <  scissor_bottom_); \
+    uint32_t p = j * 2 + i;                         \
+    mask |= (coverage_test && scissor_test) ? (1 << p) : 0; \
+    bcoords[p].x = ee0;                             \
+    bcoords[p].y = ee1;                             \
+    bcoords[p].z = ee2;                             \
   }
 
   PREPARE_QUAD(0, 0)

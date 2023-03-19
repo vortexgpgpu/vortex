@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <algorithm>
 #include <assert.h>
 
 constexpr uint32_t count_leading_zeros(uint32_t value) {
