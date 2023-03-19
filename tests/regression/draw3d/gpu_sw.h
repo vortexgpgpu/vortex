@@ -46,15 +46,14 @@ public:
       while (pids_count--) {
         // read next primitive index from tile buffer
         uint32_t pid = *pid_buf++;
-        auto prim_buf = reinterpret_cast<graphics::FloatE*>(pbuf_baseaddr_ + pid * pbuf_stride_);        
-
-        // get primitive edges        
-        graphics::vec3e_t edges[3];
-        for (int i = 0; i < 3; ++i) {
-          edges[i].x = *prim_buf++;
-          edges[i].y = *prim_buf++;
-          edges[i].z = *prim_buf++;
-        }
+        
+        // get primitive edges
+        auto prim_buf = reinterpret_cast<graphics::FloatE*>(pbuf_baseaddr_ + pid * pbuf_stride_);
+        graphics::vec3e_t edges[3] = {
+          {prim_buf[0], prim_buf[1], prim_buf[2]},
+          {prim_buf[3], prim_buf[4], prim_buf[5]},
+          {prim_buf[6], prim_buf[7], prim_buf[8]}
+        };
 
         // Render the primitive
         this->renderPrimitive(x, y, pid, edges);
@@ -98,10 +97,14 @@ public:
     color_write_ = (cbuf_writemask != 0x0);
   }
 
-  void write(unsigned x, unsigned y, unsigned is_backface, unsigned color, unsigned depth) const {
+  void write(unsigned x, 
+             unsigned y, 
+             unsigned __UNIFORM__ is_backface, 
+             unsigned color, 
+             unsigned depth) const {
     auto __UNIFORM__ blend_enabled = blender_.enabled();
     auto __UNIFORM__ depth_enabled = depthStencil_.depth_enabled();
-    auto stencil_enabled = depthStencil_.stencil_enabled(is_backface);    
+    auto __UNIFORM__ stencil_enabled = depthStencil_.stencil_enabled(is_backface);    
 
     uint32_t depthstencil;    
     uint32_t dst_depthstencil;
@@ -121,9 +124,9 @@ public:
 
 private:
 
-  void read(bool depth_enable,
-            bool stencil_enable, 
-            bool blend_enable,
+  void read(bool __UNIFORM__ depth_enable,
+            bool __UNIFORM__ stencil_enable, 
+            bool __UNIFORM__ blend_enable,
             uint32_t x, 
             uint32_t y,
             uint32_t* depthstencil,
@@ -139,10 +142,10 @@ private:
     }
   }
 
-  void write(bool depth_enable,
-             bool stencil_enable, 
+  void write(bool __UNIFORM__ depth_enable,
+             bool __UNIFORM__ stencil_enable, 
              bool ds_passed,
-             bool is_backface,
+             bool __UNIFORM__ is_backface,
              uint32_t dst_depthstencil,
              uint32_t dst_color,
              uint32_t x, 
@@ -194,8 +197,8 @@ public:
 private:
   static void memory_cb(uint32_t* out,
                         const uint32_t* addr,    
-                        uint32_t stride,
-                        uint32_t size,
+                        uint32_t __UNIFORM__ stride,
+                        uint32_t __UNIFORM__ size,
                         void* /*cb_arg*/) {
     switch (stride) {
     case 4:
