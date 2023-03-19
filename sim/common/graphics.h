@@ -188,9 +188,9 @@ public:
   uint32_t read(uint32_t stage, int32_t u, int32_t v, uint32_t lod) const;
 
 protected:
-  MemoryCB mem_cb_;
-  void*    cb_arg_;
   TexDCRS  dcrs_;
+  MemoryCB mem_cb_;
+  void*    cb_arg_;  
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -205,7 +205,7 @@ public:
   bool test(uint32_t is_backface, 
             uint32_t depth, 
             uint32_t depthstencil_val, 
-            uint32_t* depthstencil_result);
+            uint32_t* depthstencil_result) const;
 
   bool depth_enabled() const {
     return depth_enabled_;
@@ -245,7 +245,7 @@ public:
 
   void configure(const RopDCRS& dcrs);
 
-  uint32_t blend(uint32_t srcColor, uint32_t dstColor);
+  uint32_t blend(uint32_t srcColor, uint32_t dstColor) const;
 
   bool enabled() const {
     return enabled_;
@@ -284,6 +284,11 @@ public:
 
   void configure(const RasterDCRS& dcrs);
 
+  void renderPrimitive(uint32_t x, 
+                       uint32_t y, 
+                       uint32_t pid,
+                       vec3e_t edges[4]) const;
+
 protected:
 
   struct delta_t {
@@ -292,23 +297,18 @@ protected:
     vec3e_t extents;
   };
 
-  void renderPrimitive(uint32_t x, 
-                       uint32_t y, 
-                       uint32_t pid,
-                       vec3e_t edges[4]);
-
   void renderTile(uint32_t subTileLogSize,   
                   uint32_t x, 
                   uint32_t y, 
                   uint32_t id,
                   const vec3e_t& edges, 
-                  const delta_t& delta);
+                  const delta_t& delta) const;
 
   void renderQuad(uint32_t x, 
                   uint32_t y, 
                   uint32_t id,
                   const vec3e_t& edges, 
-                  const delta_t& delta);
+                  const delta_t& delta) const; 
 
   ShaderCB shader_cb_;
   void*    cb_arg_;

@@ -31,7 +31,7 @@ public:
     log_num_tasks_ = log_num_tasks;
   }
 
-  void render(uint32_t task_id) {  
+  void render(uint32_t task_id) const {  
     uint32_t num_tasks = 1 << log_num_tasks_;
     auto tile_buffer = reinterpret_cast<const graphics::rast_tile_header_t*>(tbuf_baseaddr_);
 
@@ -98,7 +98,7 @@ public:
     color_write_ = (cbuf_writemask != 0x0);
   }
 
-  void write(unsigned x, unsigned y, unsigned is_backface, unsigned color, unsigned depth) {
+  void write(unsigned x, unsigned y, unsigned is_backface, unsigned color, unsigned depth) const {
     auto __UNIFORM__ blend_enabled = blender_.enabled();
     auto __UNIFORM__ depth_enabled = depthStencil_.depth_enabled();
     auto stencil_enabled = depthStencil_.stencil_enabled(is_backface);    
@@ -127,7 +127,7 @@ private:
             uint32_t x, 
             uint32_t y,
             uint32_t* depthstencil,
-            uint32_t* color) {
+            uint32_t* color) const {
     if (depth_enable || stencil_enable) {
       uint32_t zbuf_addr = zbuf_baseaddr_ + y * zbuf_pitch_ + x * 4;
       *depthstencil = *reinterpret_cast<const uint32_t*>(zbuf_addr);
@@ -148,7 +148,7 @@ private:
              uint32_t x, 
              uint32_t y, 
              uint32_t depthstencil, 
-             uint32_t color) {
+             uint32_t color) const {
     auto stencil_writemask = is_backface ? stencil_back_writemask_ : stencil_front_writemask_;
     auto ds_writeMask = ((depth_enable && ds_passed && depth_writemask_) ? ROP_DEPTH_MASK : 0) 
                       | (stencil_enable ? (stencil_writemask << ROP_DEPTH_BITS) : 0);
@@ -233,11 +233,11 @@ public:
     return kernel_arg_;
   }
 
-  void render(unsigned task_id) {
+  void render(unsigned task_id) const {
     rasterizer_.render(task_id);
   }
 
-  void rop(unsigned x, unsigned y, unsigned is_backface, unsigned color, unsigned depth) {
+  void rop(unsigned x, unsigned y, unsigned is_backface, unsigned color, unsigned depth) const {
     renderOutput_.write(x, y, is_backface, color, depth);
   }
 
