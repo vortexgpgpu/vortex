@@ -21,7 +21,7 @@ static FloatE fxZero(0);
 namespace {
 
 template <uint32_t F, typename T = int32_t>
-T TextureClamp(TFixed<F,T> fx, uint32_t wrap) {
+T TextureWrap(TFixed<F,T> fx, uint32_t wrap) {
   switch (wrap) {
   case TEX_WRAP_CLAMP:  return (fx.data() < 0) ? 0 : ((fx.data() > TFixed<F,T>::MASK) ? TFixed<F,T>::MASK : fx.data());
   case TEX_WRAP_REPEAT: return (fx.data() & TFixed<F,T>::MASK);
