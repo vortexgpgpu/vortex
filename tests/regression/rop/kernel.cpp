@@ -37,7 +37,7 @@ int main() {
 	g_tileinfo.tile_height = (arg->dst_height + arg->num_tasks - 1) / arg->num_tasks;
 	g_tileinfo.alpha = 255.0f / g_tileinfo.tile_height;
 	
-	vx_spawn_tasks(arg->num_tasks, (vx_spawn_tasks_cb)kernel_body, &arg);
+	vx_spawn_tasks(arg->num_tasks, (vx_spawn_tasks_cb)kernel_body, arg);
 	/*for (uint32_t t = 0; t < arg->num_tasks; ++t) {		
 		kernel_body(t, &targ);
 	}*/
