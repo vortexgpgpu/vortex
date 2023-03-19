@@ -64,19 +64,20 @@ CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-
 echo "end graphics data generation..."
 }
 
-usage()
+show_usage()
 {
-    echo "usage: gen-test-data [[-graphics] [-h|--help]]"
+    echo "Generate Test Data"
+    echo "Usage: $0 [[-graphics] [-h|--help]]"
 }
 
 while [ "$1" != "" ]; do
     case $1 in
         -graphics ) graphics
                 ;;
-        -h | --help ) usage
+        -h | --help ) show_usage
                       exit
                       ;;
-        * )           usage
+        * )           show_usage
                       exit 1
     esac
     shift

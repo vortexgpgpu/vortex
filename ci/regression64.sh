@@ -162,9 +162,10 @@ stress1()
     echo "stress1 tests done!"
 }
 
-usage()
+show_usage()
 {
-    echo "usage: regression [-coverage] [-all] [-h|--help]"
+    echo "Vortex 64-bit Regression Test"
+    echo "Usage: $0 [-coverage] [-all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
@@ -199,10 +200,10 @@ while [ "$1" != "" ]; do
                 ;;
         -all ) coverage
                 ;;
-        -h | --help ) usage
+        -h | --help ) show_usage
                       exit
                 ;;
-        * )           usage
+        * )           show_usage
                       exit 1
     esac
     shift

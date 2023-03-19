@@ -43,9 +43,10 @@ verilator()
     mv verilator2.tar.bz2 $DESTDIR/verilator/$OS_DIR
 }
 
-usage()
+show_usage()
 {
-    echo "usage: prebuilt [[-riscv] [-llvm] [-pocl] [-verilator] [-all] [-h|--help]]"
+    echo "Setup Pre-built Vortex Toolchain"
+    echo "Usage: $0 [[-riscv] [-llvm] [-pocl] [-verilator] [-all] [-h|--help]]"
 }
 
 while [ "$1" != "" ]; do
@@ -63,10 +64,10 @@ while [ "$1" != "" ]; do
                pocl
                verilator
                ;;
-        -h | --help ) usage
+        -h | --help ) show_usage
                       exit
                       ;;
-        * )           usage
+        * )           show_usage
                       exit 1
     esac
     shift
