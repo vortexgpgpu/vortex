@@ -169,12 +169,13 @@ inline int32_t imadd_sw(int32_t a, int32_t b, int32_t c, int32_t s) {
 	OUTPUT_i(3, mask, x, y, face, color, depth, func)
 
 void shader_function_hw(int task_id, kernel_arg_t* __UNIFORM__  arg) {
-	auto prim_ptr = (rast_prim_t*)arg->prim_addr;
 	FloatA z[4], r[4], g[4], b[4], a[4], u[4], v[4];
 	FloatA dx[4], dy[4];
 	cocogfx::ColorARGB tex_color[4], out_color[4];
 
 	DEFAULTS;
+
+	auto prim_ptr = (rast_prim_t*)arg->prim_addr;
 
 	for (;;) {
 		auto __DIVERGENT__ status = vx_rast();
@@ -251,9 +252,9 @@ void shader_function_hw(int task_id, kernel_arg_t* __UNIFORM__  arg) {
 }
 
 #ifdef SW_ENABLE
-void shader_function_sw_rast_cb(uint32_t  pos_mask,
+void shader_function_sw_rast_cb(uint32_t pos_mask,
 							    graphics::vec3e_t bcoords[4],
-							    uint32_t  pid,
+							    uint32_t pid,
 								void* /*cb_arg*/) {
 	FloatA z[4], r[4], g[4], b[4], a[4], u[4], v[4];
 	FloatA dx[4], dy[4];

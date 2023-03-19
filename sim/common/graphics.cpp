@@ -9,6 +9,7 @@
 #else
 #include <stdio.h>
 #define vx_printf printf
+#define __UNIFORM__
 #endif
 
 using namespace cocogfx;
@@ -21,7 +22,7 @@ static FloatE fxZero(0);
 namespace {
 
 template <uint32_t F, typename T = int32_t>
-T TextureWrap(TFixed<F,T> fx, uint32_t wrap) {
+T TextureWrap(TFixed<F,T> fx, uint32_t __UNIFORM__ wrap) {
   switch (wrap) {
   case TEX_WRAP_CLAMP:  return (fx.data() < 0) ? 0 : ((fx.data() > TFixed<F,T>::MASK) ? TFixed<F,T>::MASK : fx.data());
   case TEX_WRAP_REPEAT: return (fx.data() & TFixed<F,T>::MASK);
@@ -32,7 +33,7 @@ T TextureWrap(TFixed<F,T> fx, uint32_t wrap) {
   }
 }
 
-inline uint32_t FormatStride(uint32_t format) {
+inline uint32_t FormatStride(uint32_t __UNIFORM__ format) {
   switch (format) {
   case TEX_FORMAT_A8R8G8B8: 
     return 4;
@@ -50,7 +51,7 @@ inline uint32_t FormatStride(uint32_t format) {
   }
 }
 
-inline void Unpack8888(uint32_t format, uint32_t texel, uint32_t* lo, uint32_t* hi) {
+inline void Unpack8888(uint32_t __UNIFORM__ format, uint32_t texel, uint32_t* lo, uint32_t* hi) {
   uint32_t r, g, b, a;
   switch (format) {
   case TEX_FORMAT_A8R8G8B8:    
@@ -167,7 +168,7 @@ void TexAddressPoint(TFixed<F,T> fu,
 }
 
 inline uint32_t TexFilterLinear(
-  int format,
+  uint32_t format,
   uint32_t texel00,  
   uint32_t texel01,
   uint32_t texel10,
@@ -233,11 +234,11 @@ void TextureSampler::configure(const TexDCRS& dcrs) {
 
 uint32_t TextureSampler::read(uint32_t stage, int32_t u, int32_t v, uint32_t lod) const {
   auto mip_off    = dcrs_.read(stage, DCR_TEX_MIPOFF(lod));
-  auto base_addr  = dcrs_.read(stage, DCR_TEX_ADDR);
-  auto logdim     = dcrs_.read(stage, DCR_TEX_LOGDIM);      
-  auto format     = dcrs_.read(stage, DCR_TEX_FORMAT);    
-  auto filter     = dcrs_.read(stage, DCR_TEX_FILTER);    
-  auto wrap       = dcrs_.read(stage, DCR_TEX_WRAP);
+  auto __UNIFORM__ base_addr = dcrs_.read(stage, DCR_TEX_ADDR);
+  auto __UNIFORM__ logdim    = dcrs_.read(stage, DCR_TEX_LOGDIM);      
+  auto __UNIFORM__ format    = dcrs_.read(stage, DCR_TEX_FORMAT);    
+  auto __UNIFORM__ filter    = dcrs_.read(stage, DCR_TEX_FILTER);    
+  auto __UNIFORM__ wrap      = dcrs_.read(stage, DCR_TEX_WRAP);
   
   base_addr += mip_off;
 
@@ -299,7 +300,7 @@ uint32_t TextureSampler::read(uint32_t stage, int32_t u, int32_t v, uint32_t lod
 
 namespace {
 
-bool DoCompare(uint32_t func, uint32_t a, uint32_t b) {
+bool DoCompare(uint32_t __UNIFORM__ func, uint32_t a, uint32_t b) {
   switch (func) {
   default:
     assert(false);
@@ -322,7 +323,7 @@ bool DoCompare(uint32_t func, uint32_t a, uint32_t b) {
   }
 }
 
-uint32_t DoStencilOp(uint32_t op, uint32_t ref, uint32_t val) {
+uint32_t DoStencilOp(uint32_t __UNIFORM__ op, uint32_t ref, uint32_t val) {
   switch (op) {
   default:
     assert(false);
@@ -345,7 +346,7 @@ uint32_t DoStencilOp(uint32_t op, uint32_t ref, uint32_t val) {
   }
 }
 
-uint32_t DoLogicOp(uint32_t op, uint32_t src, uint32_t dst) {
+uint32_t DoLogicOp(uint32_t __UNIFORM__ op, uint32_t src, uint32_t dst) {
   switch (op) {
   default:
     assert(false);
@@ -384,7 +385,7 @@ uint32_t DoLogicOp(uint32_t op, uint32_t src, uint32_t dst) {
   }
 }
 
-ColorARGB DoBlendFunc(uint32_t func, 
+ColorARGB DoBlendFunc(uint32_t __UNIFORM__ func, 
                       ColorARGB src, 
                       ColorARGB dst,
                       ColorARGB cst) {
@@ -456,7 +457,7 @@ ColorARGB DoBlendFunc(uint32_t func,
   }
 }
 
-ColorARGB DoBlendMode(uint32_t mode, 
+ColorARGB DoBlendMode(uint32_t __UNIFORM__ mode, 
                       uint32_t logic_op,
                       ColorARGB src, 
                       ColorARGB dst,
@@ -543,7 +544,7 @@ void DepthTencil::configure(const RopDCRS& dcrs) {
                           && (stencil_back_zfail_ == ROP_STENCIL_OP_KEEP));
 }
 
-bool DepthTencil::test(uint32_t is_backface, 
+bool DepthTencil::test(uint32_t __UNIFORM__ is_backface, 
                        uint32_t depth, 
                        uint32_t depthstencil_val, 
                        uint32_t* depthstencil_result) const {
@@ -703,20 +704,13 @@ void Rasterizer::renderPrimitive(uint32_t x,
     edges[1].x.data(), edges[1].y.data(), edges[1].z.data(),
     edges[2].x.data(), edges[2].y.data(), edges[2].z.data());*/
 
-  delta_t delta;
-  
-  delta.dx.x = edges[0].x;
-  delta.dx.y = edges[1].x;
-  delta.dx.z = edges[2].x;
-
-  delta.dy.x = edges[0].y;
-  delta.dy.y = edges[1].y;
-  delta.dy.z = edges[2].y;
-
-  // Evaluate edge equation tile extends
-  delta.extents.x = CalcEdgeExtents(edges[0]);
-  delta.extents.y = CalcEdgeExtents(edges[1]);
-  delta.extents.z = CalcEdgeExtents(edges[2]);
+  delta_t delta{
+    {edges[0].x, edges[1].x, edges[2].x},
+    {edges[0].y, edges[1].y, edges[2].y},
+    {CalcEdgeExtents(edges[0]), 
+     CalcEdgeExtents(edges[1]), 
+     CalcEdgeExtents(edges[2])}
+  };
 
   // Evaluate edge equation start values
   vec3e_t value{
@@ -759,7 +753,6 @@ void Rasterizer::renderTile(uint32_t tileLogSize,
       };
       this->renderTile(tileLogSize, sx, y, pid, sedges, delta);
     }
-
     {
       // draw bottom-left subtile
       int sy = y + subTileSize;
@@ -770,8 +763,6 @@ void Rasterizer::renderTile(uint32_t tileLogSize,
       };
       this->renderTile(tileLogSize, x, sy, pid, sedges, delta);
     }
-
-    // draw bottom-right subtile
     {
       // draw bottom-right subtile
       int sx = x + subTileSize;
@@ -806,16 +797,14 @@ void Rasterizer::renderQuad(uint32_t x,
     auto ee0 = edges.x + (delta.dx.x * i) + (delta.dy.x * j); \
     auto ee1 = edges.y + (delta.dx.y * i) + (delta.dy.y * j); \
     auto ee2 = edges.z + (delta.dx.z * i) + (delta.dy.z * j); \
-    bool coverage_test = (ee0 >= fxZero && ee1 >= fxZero && ee2 >= fxZero); \
-    bool scissor_test = ((x+i) >= scissor_left_     \
-                      && (x+i) <  scissor_right_    \
-                      && (y+j) >= scissor_top_      \
-                      && (y+j) <  scissor_bottom_); \
-    uint32_t p = j * 2 + i;                         \
-    mask |= (coverage_test && scissor_test) ? (1 << p) : 0; \
-    bcoords[p].x = ee0;                             \
-    bcoords[p].y = ee1;                             \
-    bcoords[p].z = ee2;                             \
+    bool coverage = (ee0 >= fxZero && ee1 >= fxZero && ee2 >= fxZero \
+                  && (x+i) >= scissor_left_ && (x+i) < scissor_right_ \
+                  && (y+j) >= scissor_top_  && (y+j) < scissor_bottom_); \
+    uint32_t p = j * 2 + i;   \
+    mask |= (coverage << p);  \
+    bcoords[p].x = ee0;       \
+    bcoords[p].y = ee1;       \
+    bcoords[p].z = ee2;       \
   }
 
   PREPARE_QUAD(0, 0)
