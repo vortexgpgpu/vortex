@@ -168,41 +168,41 @@ module VX_fpu_ncomp #(
     end
 
     // Comparison    
-    reg [NUM_LANES-1:0][31:0] fcmp_res;     // result of comparison
-    fflags_t [NUM_LANES-1:0]  fcmp_fflags;  // comparison fflags
+    reg [NUM_LANES-1:0][31:0] fcmp_res;  // result of comparison
+    reg [NUM_LANES-1:0] fcmp_fflags_NV;  // comparison fflags
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         always @(*) begin
             case (frm_s0)
-                `INST_FRM_RNE: begin // LE
-                    fcmp_fflags[i] = 5'h0;
+                `INST_FRM_RNE: begin // LE                    
                     if (a_fclass_s0[i].is_nan || b_fclass_s0[i].is_nan) begin
                         fcmp_res[i]       = 32'h0;
-                        fcmp_fflags[i].NV = 1'b1;
+                        fcmp_fflags_NV[i] = 1'b1;
                     end else begin
                         fcmp_res[i] = {31'h0, (a_smaller_s0[i] | ab_equal_s0[i])};
+                        fcmp_fflags_NV[i] = 1'b0;
                     end
                 end
                 `INST_FRM_RTZ: begin // LS
-                    fcmp_fflags[i] = 5'h0;
                     if (a_fclass_s0[i].is_nan || b_fclass_s0[i].is_nan) begin
                         fcmp_res[i]       = 32'h0;
-                        fcmp_fflags[i].NV = 1'b1;
+                        fcmp_fflags_NV[i] = 1'b1;
                     end else begin
                         fcmp_res[i] = {31'h0, (a_smaller_s0[i] & ~ab_equal_s0[i])};
+                        fcmp_fflags_NV[i] = 1'b0;
                     end                    
                 end
                 `INST_FRM_RDN: begin // EQ
-                    fcmp_fflags[i] = 5'h0;
                     if (a_fclass_s0[i].is_nan || b_fclass_s0[i].is_nan) begin
                         fcmp_res[i]       = 32'h0;
-                        fcmp_fflags[i].NV = a_fclass_s0[i].is_signaling | b_fclass_s0[i].is_signaling; 
+                        fcmp_fflags_NV[i] = a_fclass_s0[i].is_signaling | b_fclass_s0[i].is_signaling; 
                     end else begin
                         fcmp_res[i] = {31'h0, ab_equal_s0[i]};
+                        fcmp_fflags_NV[i] = 1'b0;
                     end
                 end
                 default: begin
-                    fcmp_res[i]    = 'x;
-                    fcmp_fflags[i] = 'x;                        
+                    fcmp_res[i]       = 'x;
+                    fcmp_fflags_NV[i] = 'x;                        
                 end
             endcase
         end
@@ -211,35 +211,34 @@ module VX_fpu_ncomp #(
     // outputs
 
     reg [NUM_LANES-1:0][31:0] tmp_result;
-    fflags_t [NUM_LANES-1:0] tmp_fflags;
+    reg [NUM_LANES-1:0] tmp_fflags_NV;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         always @(*) begin
             case (op_type_s0)
                 `INST_FPU_CLASS: begin
                     tmp_result[i] = fclass_mask[i];
-                    tmp_fflags[i] = 'x;
+                    tmp_fflags_NV[i] = 'x;
                 end   
                 `INST_FPU_CMP: begin 
                     tmp_result[i] = fcmp_res[i];
-                    tmp_fflags[i] = fcmp_fflags[i];
+                    tmp_fflags_NV[i] = fcmp_fflags_NV[i];
                 end      
                 //`FPU_MISC:
                 default: begin
                     case (frm_s0)
                         0,1,2: begin
                             tmp_result[i] = fsgnj_res[i];
-                            tmp_fflags[i] = 'x;
+                            tmp_fflags_NV[i] = 'x;
                         end
                         3,4: begin
                             tmp_result[i] = fminmax_res[i];
-                            tmp_fflags[i] = 0;
-                            tmp_fflags[i].NV = a_fclass_s0[i].is_signaling | b_fclass_s0[i].is_signaling;
+                            tmp_fflags_NV[i].NV = a_fclass_s0[i].is_signaling | b_fclass_s0[i].is_signaling;
                         end
                         //5,6,7: MOVE
                         default: begin
                             tmp_result[i] = dataa_s0[i];
-                            tmp_fflags[i] = 'x;
+                            tmp_fflags_NV[i] = 'x;
                         end
                     endcase
                 end    
@@ -254,17 +253,20 @@ module VX_fpu_ncomp #(
 
     assign stall = ~ready_out && valid_out;
 
+    wire fflags_NV;
+
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + (NUM_LANES * 32) + 1 + (NUM_LANES * `FP_FLAGS_BITS)),
+        .DATAW  (1 + TAGW + (NUM_LANES * 32) + 1 + (NUM_LANES * 1)),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall),
-        .data_in  ({valid_in_s0, tag_in_s0, tmp_result, has_fflags_s0, tmp_fflags}),
-        .data_out ({valid_out,   tag_out,   result,     has_fflags,    fflags})
+        .data_in  ({valid_in_s0, tag_in_s0, tmp_result, has_fflags_s0, tmp_fflags_NV}),
+        .data_out ({valid_out,   tag_out,   result,     has_fflags,    fflags_NV})
     );
 
     assign ready_in = ~stall;
+    assign fflags = {fflags_NV, 4'b0};
 
 endmodule

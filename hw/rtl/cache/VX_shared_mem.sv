@@ -155,7 +155,7 @@ module VX_shared_mem #(
         VX_sp_ram #(
             .DATAW      (WORD_WIDTH),
             .SIZE       (WORDS_PER_BANK),
-            .BYTEENW    (WORD_SIZE),
+            .WRENW      (WORD_SIZE),
             .NO_RWCHECK (1)
         ) data_store (
             .clk   (clk),

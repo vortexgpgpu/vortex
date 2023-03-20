@@ -337,7 +337,7 @@ int render(const CGLTrace& trace) {
       TEX_DCR_WRITE(DCR_TEX_LOGDIM, (tex_logheight << 16) | tex_logwidth);	
       TEX_DCR_WRITE(DCR_TEX_FORMAT, tex_format);
       TEX_DCR_WRITE(DCR_TEX_WRAP,   (tex_wrapV << 16) | tex_wrapU);
-      TEX_DCR_WRITE(DCR_TEX_FILTER, tex_filter);
+      TEX_DCR_WRITE(DCR_TEX_FILTER, tex_filter ? TEX_FILTER_BILINEAR : TEX_FILTER_POINT);
       TEX_DCR_WRITE(DCR_TEX_ADDR,   texbuf_addr);
       for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
         assert(i < TEX_LOD_MAX);
@@ -545,7 +545,7 @@ int main(int argc, char *argv[]) {
   cleanup();  
 
   if (reference_file) {
-    auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8, 1);
+    auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8);
     if (0 == errors) {
       std::cout << "PASSED!" << std::endl;
     } else {

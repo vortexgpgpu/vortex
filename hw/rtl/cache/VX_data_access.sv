@@ -102,7 +102,7 @@ module VX_data_access #(
         VX_sp_ram #(
             .DATAW      (`LINE_WIDTH),
             .SIZE       (`LINES_PER_BANK),
-            .BYTEENW    (BYTEENW),
+            .WRENW      (BYTEENW),
             .NO_RWCHECK (1)
         ) data_store (
             .clk   (clk),

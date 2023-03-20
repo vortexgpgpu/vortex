@@ -138,7 +138,7 @@ module VX_fpu_fma #(
         );
     end
 
-    assign has_fflags = 0;
+    assign has_fflags = 1'b0;
     assign fflags = '0;
 
 `endif
