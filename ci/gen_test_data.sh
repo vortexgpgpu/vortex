@@ -32,6 +32,14 @@ CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-ipa
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-ipalette64.png -opalette64_ref_g1.png -g1"
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-ipalette64.png -opalette64_ref_g2.png -g2"
 
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-itoad.png -otoad_ref_f0.png -f0 -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-itoad.png -otoad_ref_f1.png -f1 -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-itoad.png -otoad_ref_f2.png -f2 -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-itoad.png -otoad_ref_f3.png -f3 -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-itoad.png -otoad_ref_f4.png -f4 -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-itoad.png -otoad_ref_f5.png -f5 -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-itoad.png -otoad_ref_f6.png -f6 -g0"
+
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=rop --args="-owhitebox_128.png -w128 -h128"
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=rop --args="-owhitebox_64.png -w64 -h64"
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=rop --args="-owhitebox_32.png -w32 -h32"

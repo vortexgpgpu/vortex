@@ -68,28 +68,28 @@ inline void Unpack8888(uint32_t format, uint32_t texel, uint32_t* lo, uint32_t* 
     a = texel >> 24;
     break;
   case TEX_FORMAT_R5G6B5: 
-    r = ((texel >> 8) & 0xf8) | ((texel >> 13) & 0x7);
-    g = ((texel >> 3) & 0xfc) | ((texel >> 9) & 0x3);
-    b = ((texel & 0x1f) << 3) | ((texel & 0x1c) >> 2);    
+    r = ((texel >> 8) & 0xf8) | ((texel >> 13) & 0x07);
+    g = ((texel >> 3) & 0xfc) | ((texel >> 9) & 0x03);
+    b = ((texel << 3) & 0xf8) | ((texel >> 2) & 0x07); 
     a = 0xff;
     break;
   case TEX_FORMAT_A1R5G5B5:         
-    r = ((texel >> 7) & 0xf8) | ((texel >> 12) & 0x7);
-    g = ((texel >> 2) & 0xf8) | ((texel >> 7) & 0x7);
-    b = ((texel & 0x1f) << 3) | ((texel & 0x1c) >> 2);
-    a = 0xff * (texel >> 15);
+    r = ((texel >> 7) & 0xf8) | ((texel >> 12) & 0x07);
+    g = ((texel >> 2) & 0xf8) | ((texel >> 7)  & 0x07);
+    b = ((texel << 3) & 0xf8) | ((texel >> 2)  & 0x07);
+    a = (((int32_t)texel << 16) >> 31) & 0xff;
     break;
   case TEX_FORMAT_A4R4G4B4:   
-    r = ((texel >> 4) & 0xf0) | ((texel >> 8) & 0x0f);
-    g = ((texel & 0xf0) >> 0) | ((texel & 0xf0) >> 4);
-    b = ((texel & 0x0f) << 4) | ((texel & 0x0f) >> 0);
-    a = ((texel >> 8) & 0xf0) | (texel >> 12);
+    r = ((texel >> 4) & 0xf0) | ((texel >> 8)  & 0x0f);
+    g = ((texel >> 0) & 0xf0) | ((texel >> 4)  & 0x0f);
+    b = ((texel << 4) & 0xf0) | ((texel >> 0)  & 0x0f);
+    a = ((texel >> 8) & 0xf0) | ((texel >> 12) & 0x0f);
     break;
   case TEX_FORMAT_A8L8:
     r = texel & 0xff;
     g = r;
     b = r;
-    a = texel >> 8;
+    a = (texel >> 8) & 0xff;
     break;
   case TEX_FORMAT_L8:
     r = texel & 0xff;
