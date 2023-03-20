@@ -72,11 +72,14 @@ CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tskybox.cgltrace -oskybox_ref_32.png -w32 -h32"
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tvase.cgltrace -ovase_ref_128.png -w128 -h128"
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tvase.cgltrace -ovase_ref_32.png -w32 -h32"
-
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-ttekkaman.cgltrace -otekkaman_ref_128.png -w128 -h128"
+CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-ttekkaman.cgltrace -otekkaman_ref_32.png -w32 -h32"
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tbox.cgltrace -obox_ref_128.png -w128 -h128"
+CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tbox.cgltrace -obox_ref_32.png -w32 -h32"
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tcarnival.cgltrace -ocarnival_ref_128.png -w128 -h128"
+CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tcarnival.cgltrace -ocarnival_ref_32.png -w32 -h32"
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tscene.cgltrace -oscene_ref_128.png -w128 -h128"
+CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tscene.cgltrace -oscene_ref_32.png -w32 -h32"
 
 echo "end graphics data generation..."
 }

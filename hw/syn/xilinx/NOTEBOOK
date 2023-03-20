@@ -1,37 +1,46 @@
 ## Xilinx Build and Ecosystem Setup
 
+# check installed FPGAs
 platforminfo -l
 
-vivado -mode batch -source scripts/gen_ip.tcl -tclargs ip/xilinx_u50_gen3x16_xdma_201920_3
+# check FPGA status
+xbutil validate --device 0000:09:00.1 --verbose
 
-make all TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_201920_3 DEBUG=1 > build_u50_hw.log 2>&1 &
-make all TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_201920_3 DEBUG=1 > build_u50_hw_emu.log 2>&1 &
+# generate FPU IPs
+vivado -mode batch -source scripts/gen_ip.tcl -tclargs ip/xilinx_u50_gen3x16_xdma_5_202210_1
 
-make all TARGET=hw PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 > build_vck5k_hw.log 2>&1 &
-make all TARGET=hw_emu PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 > build_vck5k_hw_emu.log 2>&1 &
+# build FPGA
+PREFIX=build make all TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 DEBUG=1 > build_u50_hw_emu.log 2>&1 &
+PREFIX=build make all TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 > build_u50_hw.log 2>&1 &
 
-xsim --gui xilinx_u50_gen3x16_xdma_201920_3-0-vortex_afu.wdb &
+PREFIX=build make all TARGET=hw_emu PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 DEBUG=1 > build_vck5k_hw_emu.log 2>&1 &
+PREFIX=build make all TARGET=hw PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 > build_vck5k_hw.log 2>&1 &
 
-HW synthesis log
-build_xilinx_u50_gen3x16_xdma_201920_3_hw/_x/logs/link/syn/pfm_dynamic_vortex_afu_1_0_synth_1_runme.log
+CONFIGS="-DEXT_GFX_ENABLE -DNUM_CORES=2" PREFIX=build_gfx make all TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 > build_u50_hw_emu_gfx.log 2>&1 &
+CONFIGS="-DEXT_GFX_ENABLE -DNUM_CORES=2" PREFIX=build_gfx make all TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 > build_u50_hw_gfx.log 2>&1 &
 
-Running:
-TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_201920_3 ./ci/blackbox.sh --driver=xrt --app=demo
-TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_201920_3 ./ci/blackbox.sh --driver=xrt --app=demo
+# debug hw_emu using xsim
+xsim --gui xilinx_u50_gen3x16_xdma_5_202210_1-0-vortex_afu.wdb &
 
-TARGET=hw PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 ./ci/blackbox.sh --driver=xrt --app=demo
-TARGET=hw_emu PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 ./ci/blackbox.sh --driver=xrt --app=demo
-
-ILA debugging:
-platforminfo --json="hardwarePlatform.extensions.chipscope_debug" xilinx_u50_gen3x16_xdma_201920_3
+# debug hw using ILA
+platforminfo --json="hardwarePlatform.extensions.chipscope_debug" xilinx_u50_gen3x16_xdma_5_202210_1
 ls /dev/xfpga/xvc_pub*
 ls /dev/xvc_pub*
 debug_hw --xvc_pcie /dev/xfpga/xvc_pub.u2305.0 --hw_server
 debug_hw --xvc_pcie /dev/xvc_pub.u0 --hw_server
-debug_hw --vivado --host localhost --ltx_file ./build_xilinx_u50_gen3x16_xdma_201920_3_hw/_x/link/vivado/vpl/prj/prj.runs/impl_1/debug_nets.ltx &
+debug_hw --vivado --host localhost --ltx_file ./build_xilinx_u50_gen3x16_xdma_5_202210_1_hw/_x/link/vivado/vpl/prj/prj.runs/impl_1/debug_nets.ltx &
+make chipscope TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1
 
-make chipscope TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_201920_3
+# analyze build report
+vitis_analyzer build_xilinx_u50_gen3x16_xdma_5_202210_1_hw_4c/bin/vortex_afu.xclbin.link_summary
 
-xbutil validate --device 0000:09:00.1 --verbose
+# running test
+TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 ./ci/blackbox.sh --driver=xrt --app=demo
+TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 ./ci/blackbox.sh --driver=xrt --app=demo
+TARGET=hw PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 ./ci/blackbox.sh --driver=xrt --app=demo
+TARGET=hw_emu PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 ./ci/blackbox.sh --driver=xrt --app=demo
 
-vitis_analyzer build_xilinx_u50_gen3x16_xdma_201920_3_hw_4c/bin/vortex_afu.xclbin.link_summary
+# build report logs
+<build_dir>/bin/vortex_afu.xclbin.info
+<build_dir>/_x/reports/link/syn/ulp_vortex_afu_1_0_synth_1_ulp_vortex_afu_1_0_utilization_synth.rpt
+<build_dir>/_x/logs/link/syn/ulp_vortex_afu_1_0_synth_1_runme.log
