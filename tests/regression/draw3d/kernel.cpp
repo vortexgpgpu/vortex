@@ -320,7 +320,7 @@ void shader_function_sw_rast_cb(uint32_t pos_mask,
 	}
 }
 
-void shader_function_sw(int task_id, kernel_arg_t* /*__UNIFORM__ arg*/) {
+void shader_function_sw(int task_id, kernel_arg_t* /*arg*/) {
 	g_gpu_sw.render(task_id);
 }
 #endif
