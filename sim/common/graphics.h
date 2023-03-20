@@ -68,7 +68,7 @@ inline uint32_t Pack8888(uint32_t lo, uint32_t hi) {
 }
 
 inline uint32_t Lerp8888(uint32_t a, uint32_t b, uint32_t f) {
-  uint32_t p = a * (0xff - f) + b * f;
+  uint32_t p = a * (0xff - f) + b * f + 0x00800080;
   uint32_t q = (p >> 8) & 0x00ff00ff;
   return ((p + q) >> 8) & 0x00ff00ff;
 }

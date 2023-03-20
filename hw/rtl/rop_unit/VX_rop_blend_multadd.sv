@@ -60,19 +60,19 @@ module VX_rop_blend_multadd #(
     always @(*) begin
         case (mode_rgb)
             `ROP_BLEND_MODE_ADD: begin
-                sum_r = prod_src_r + prod_dst_r;
-                sum_g = prod_src_g + prod_dst_g;
-                sum_b = prod_src_b + prod_dst_b;
+                sum_r = prod_src_r + prod_dst_r + 16'hff;
+                sum_g = prod_src_g + prod_dst_g + 16'hff;
+                sum_b = prod_src_b + prod_dst_b + 16'hff;
             end
             `ROP_BLEND_MODE_SUB: begin
-                sum_r = prod_src_r - prod_dst_r;
-                sum_g = prod_src_g - prod_dst_g;
-                sum_b = prod_src_b - prod_dst_b; 
+                sum_r = prod_src_r - prod_dst_r + 16'hff;
+                sum_g = prod_src_g - prod_dst_g + 16'hff;
+                sum_b = prod_src_b - prod_dst_b + 16'hff; 
             end
             `ROP_BLEND_MODE_REV_SUB: begin
-                sum_r = prod_dst_r - prod_src_r;
-                sum_g = prod_dst_g - prod_src_g;
-                sum_b = prod_dst_b - prod_src_b;
+                sum_r = prod_dst_r - prod_src_r + 16'hff;
+                sum_g = prod_dst_g - prod_src_g + 16'hff;
+                sum_b = prod_dst_b - prod_src_b + 16'hff;
             end
             default: begin
                 sum_r = 'x;
@@ -82,13 +82,13 @@ module VX_rop_blend_multadd #(
         endcase
         case (mode_a)
             `ROP_BLEND_MODE_ADD: begin
-                sum_a = prod_src_a + prod_dst_a;
+                sum_a = prod_src_a + prod_dst_a + 16'hff;
             end
             `ROP_BLEND_MODE_SUB: begin
-                sum_a = prod_src_a - prod_dst_a;
+                sum_a = prod_src_a - prod_dst_a + 16'hff;
             end
             `ROP_BLEND_MODE_REV_SUB: begin
-                sum_a = prod_dst_a - prod_src_a;
+                sum_a = prod_dst_a - prod_src_a + 16'hff;
             end
             default: begin
                 sum_a = 'x;
@@ -98,7 +98,7 @@ module VX_rop_blend_multadd #(
 
     reg [15:0] clamp_r, clamp_g, clamp_b, clamp_a;
 
-    // clamp to (0, 255 * 255)
+    // clamp to (0, 255 * 256)
     always @(*) begin
         case (mode_rgb)
             `ROP_BLEND_MODE_ADD: begin

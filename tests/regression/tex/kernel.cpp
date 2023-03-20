@@ -16,8 +16,8 @@ typedef struct {
 
 static void memory_cb(uint32_t* out,
                       const uint32_t* addr,    
-                      uint32_t __UNIFORM__ stride,
-                      uint32_t __UNIFORM__ size,
+                      uint32_t stride,
+                      uint32_t size,
                       void* /*cb_arg*/) {
   switch (stride) {
   case 4:

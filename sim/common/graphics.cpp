@@ -5,11 +5,9 @@
 
 #ifdef LLVM_VORTEX
 #include <vx_print.h>
-#include <vx_intrinsics.h>
 #else
 #include <stdio.h>
 #define vx_printf printf
-#define __UNIFORM__
 #endif
 
 using namespace cocogfx;
@@ -21,20 +19,30 @@ static FloatE fxZero(0);
 
 namespace {
 
-template <uint32_t F, typename T = int32_t>
-T TextureWrap(TFixed<F,T> fx, uint32_t __UNIFORM__ wrap) {
+template <uint32_t F>
+int32_t TextureWrap(TFixed<F> fx, uint32_t wrap) {
+  int32_t ret;
   switch (wrap) {
-  case TEX_WRAP_CLAMP:  return (fx.data() < 0) ? 0 : ((fx.data() > TFixed<F,T>::MASK) ? TFixed<F,T>::MASK : fx.data());
-  case TEX_WRAP_REPEAT: return (fx.data() & TFixed<F,T>::MASK);
-  case TEX_WRAP_MIRROR: return (bit_get(fx.data(), TFixed<F,T>::FRAC) ? ~fx.data() : fx.data());
   default: 
     assert(false);
-    return 0;    
+  case TEX_WRAP_CLAMP:
+    ret = fx.data() & -(fx.data() >= 0);
+    ret |= ((TFixed<F>::MASK - ret) >> 31);
+    break;
+  case TEX_WRAP_REPEAT: 
+    ret = fx.data();
+    break;
+  case TEX_WRAP_MIRROR:
+    ret = fx.data() ^ ((fx.data() << (31-F)) >> 31);
+    break;
   }
+  return ret & TFixed<F>::MASK;
 }
 
-inline uint32_t FormatStride(uint32_t __UNIFORM__ format) {
+inline uint32_t FormatStride(uint32_t format) {
   switch (format) {
+  default: 
+    assert(false);
   case TEX_FORMAT_A8R8G8B8: 
     return 4;
   case TEX_FORMAT_R5G6B5:
@@ -45,15 +53,14 @@ inline uint32_t FormatStride(uint32_t __UNIFORM__ format) {
   case TEX_FORMAT_L8:
   case TEX_FORMAT_A8:
     return 1;
-  default: 
-    assert(false);
-    return 0;
   }
 }
 
-inline void Unpack8888(uint32_t __UNIFORM__ format, uint32_t texel, uint32_t* lo, uint32_t* hi) {
+inline void Unpack8888(uint32_t format, uint32_t texel, uint32_t* lo, uint32_t* hi) {
   uint32_t r, g, b, a;
   switch (format) {
+  default: 
+    assert(false);
   case TEX_FORMAT_A8R8G8B8:    
     r = (texel >> 16) & 0xff;
     g = (texel >> 8) & 0xff;
@@ -95,9 +102,7 @@ inline void Unpack8888(uint32_t __UNIFORM__ format, uint32_t texel, uint32_t* lo
     g = 0xff;
     b = 0xff;
     a = texel & 0xff;
-    break;
-  default: 
-    assert(false);
+    break;  
   } 
   *lo = (r << 16) + b;
   *hi = (a << 16) + g;
@@ -233,12 +238,12 @@ void TextureSampler::configure(const TexDCRS& dcrs) {
 }
 
 uint32_t TextureSampler::read(uint32_t stage, int32_t u, int32_t v, uint32_t lod) const {
-  auto mip_off    = dcrs_.read(stage, DCR_TEX_MIPOFF(lod));
-  auto __UNIFORM__ base_addr = dcrs_.read(stage, DCR_TEX_ADDR);
-  auto __UNIFORM__ logdim    = dcrs_.read(stage, DCR_TEX_LOGDIM);      
-  auto __UNIFORM__ format    = dcrs_.read(stage, DCR_TEX_FORMAT);    
-  auto __UNIFORM__ filter    = dcrs_.read(stage, DCR_TEX_FILTER);    
-  auto __UNIFORM__ wrap      = dcrs_.read(stage, DCR_TEX_WRAP);
+  auto mip_off   = dcrs_.read(stage, DCR_TEX_MIPOFF(lod));
+  auto base_addr = dcrs_.read(stage, DCR_TEX_ADDR);
+  auto logdim    = dcrs_.read(stage, DCR_TEX_LOGDIM);      
+  auto format    = dcrs_.read(stage, DCR_TEX_FORMAT);    
+  auto filter    = dcrs_.read(stage, DCR_TEX_FILTER);    
+  auto wrap      = dcrs_.read(stage, DCR_TEX_WRAP);
   
   base_addr += mip_off;
 
@@ -254,6 +259,8 @@ uint32_t TextureSampler::read(uint32_t stage, int32_t u, int32_t v, uint32_t lod
   auto xv = TFixed<TEX_FXD_FRAC>::make(v);
 
   switch (filter) {
+  default:
+    assert(false);
   case TEX_FILTER_BILINEAR: {
     // addressing
     uint32_t offset00, offset01, offset10, offset11;
@@ -290,9 +297,6 @@ uint32_t TextureSampler::read(uint32_t stage, int32_t u, int32_t v, uint32_t lod
     auto color = TexFilterPoint(format, texel);
     return color;
   }
-  default:
-    assert(false);
-    return 0;
   }
 }
 
@@ -300,7 +304,7 @@ uint32_t TextureSampler::read(uint32_t stage, int32_t u, int32_t v, uint32_t lod
 
 namespace {
 
-bool DoCompare(uint32_t __UNIFORM__ func, uint32_t a, uint32_t b) {
+bool DoCompare(uint32_t func, uint32_t a, uint32_t b) {
   switch (func) {
   default:
     assert(false);
@@ -323,7 +327,7 @@ bool DoCompare(uint32_t __UNIFORM__ func, uint32_t a, uint32_t b) {
   }
 }
 
-uint32_t DoStencilOp(uint32_t __UNIFORM__ op, uint32_t ref, uint32_t val) {
+uint32_t DoStencilOp(uint32_t op, uint32_t ref, uint32_t val) {
   switch (op) {
   default:
     assert(false);
@@ -346,7 +350,7 @@ uint32_t DoStencilOp(uint32_t __UNIFORM__ op, uint32_t ref, uint32_t val) {
   }
 }
 
-uint32_t DoLogicOp(uint32_t __UNIFORM__ op, uint32_t src, uint32_t dst) {
+uint32_t DoLogicOp(uint32_t op, uint32_t src, uint32_t dst) {
   switch (op) {
   default:
     assert(false);
@@ -385,7 +389,7 @@ uint32_t DoLogicOp(uint32_t __UNIFORM__ op, uint32_t src, uint32_t dst) {
   }
 }
 
-ColorARGB DoBlendFunc(uint32_t __UNIFORM__ func, 
+ColorARGB DoBlendFunc(uint32_t func, 
                       ColorARGB src, 
                       ColorARGB dst,
                       ColorARGB cst) {
@@ -457,7 +461,7 @@ ColorARGB DoBlendFunc(uint32_t __UNIFORM__ func,
   }
 }
 
-ColorARGB DoBlendMode(uint32_t __UNIFORM__ mode, 
+ColorARGB DoBlendMode(uint32_t mode, 
                       uint32_t logic_op,
                       ColorARGB src, 
                       ColorARGB dst,
@@ -468,24 +472,24 @@ ColorARGB DoBlendMode(uint32_t __UNIFORM__ mode,
     assert(false);
   case ROP_BLEND_MODE_ADD:
     return ColorARGB(
-      Div255(std::min<int>(src.a * s.a + dst.a * d.a, 0xFF00)),
-      Div255(std::min<int>(src.r * s.r + dst.r * d.r, 0xFF00)),
-      Div255(std::min<int>(src.g * s.g + dst.g * d.g, 0xFF00)),
-      Div255(std::min<int>(src.b * s.b + dst.b * d.b, 0xFF00))
+      Div255(std::min<int>(src.a * s.a + dst.a * d.a + 0x80, 0xFF00)),
+      Div255(std::min<int>(src.r * s.r + dst.r * d.r + 0x80, 0xFF00)),
+      Div255(std::min<int>(src.g * s.g + dst.g * d.g + 0x80, 0xFF00)),
+      Div255(std::min<int>(src.b * s.b + dst.b * d.b + 0x80, 0xFF00))
     );
   case ROP_BLEND_MODE_SUB:
     return ColorARGB(
-      Div255(std::max<int>(src.a * s.a - dst.a * d.a, 0x0)),
-      Div255(std::max<int>(src.r * s.r - dst.r * d.r, 0x0)),
-      Div255(std::max<int>(src.g * s.g - dst.g * d.g, 0x0)),
-      Div255(std::max<int>(src.b * s.b - dst.b * d.b, 0x0))
+      Div255(std::max<int>(src.a * s.a - dst.a * d.a + 0x80, 0x0)),
+      Div255(std::max<int>(src.r * s.r - dst.r * d.r + 0x80, 0x0)),
+      Div255(std::max<int>(src.g * s.g - dst.g * d.g + 0x80, 0x0)),
+      Div255(std::max<int>(src.b * s.b - dst.b * d.b + 0x80, 0x0))
     );
   case ROP_BLEND_MODE_REV_SUB:
     return ColorARGB(
-      Div255(std::max<int>(dst.a * d.a - src.a * s.a, 0x0)),
-      Div255(std::max<int>(dst.r * d.r - src.r * s.r, 0x0)),
-      Div255(std::max<int>(dst.g * d.g - src.g * s.g, 0x0)),
-      Div255(std::max<int>(dst.b * d.b - src.b * s.b, 0x0))
+      Div255(std::max<int>(dst.a * d.a - src.a * s.a + 0x80, 0x0)),
+      Div255(std::max<int>(dst.r * d.r - src.r * s.r + 0x80, 0x0)),
+      Div255(std::max<int>(dst.g * d.g - src.g * s.g + 0x80, 0x0)),
+      Div255(std::max<int>(dst.b * d.b - src.b * s.b + 0x80, 0x0))
     );
   case ROP_BLEND_MODE_MIN:
     return ColorARGB(
@@ -544,7 +548,7 @@ void DepthTencil::configure(const RopDCRS& dcrs) {
                           && (stencil_back_zfail_ == ROP_STENCIL_OP_KEEP));
 }
 
-bool DepthTencil::test(uint32_t __UNIFORM__ is_backface, 
+bool DepthTencil::test(uint32_t is_backface, 
                        uint32_t depth, 
                        uint32_t depthstencil_val, 
                        uint32_t* depthstencil_result) const {

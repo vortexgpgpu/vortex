@@ -99,12 +99,12 @@ public:
 
   void write(unsigned x, 
              unsigned y, 
-             unsigned __UNIFORM__ is_backface, 
+             unsigned is_backface, 
              unsigned color, 
              unsigned depth) const {
-    auto __UNIFORM__ blend_enabled = blender_.enabled();
-    auto __UNIFORM__ depth_enabled = depthStencil_.depth_enabled();
-    auto __UNIFORM__ stencil_enabled = depthStencil_.stencil_enabled(is_backface);    
+    auto blend_enabled = blender_.enabled();
+    auto depth_enabled = depthStencil_.depth_enabled();
+    auto stencil_enabled = depthStencil_.stencil_enabled(is_backface);    
 
     uint32_t depthstencil;    
     uint32_t dst_depthstencil;
@@ -124,9 +124,9 @@ public:
 
 private:
 
-  void read(bool __UNIFORM__ depth_enable,
-            bool __UNIFORM__ stencil_enable, 
-            bool __UNIFORM__ blend_enable,
+  void read(bool depth_enable,
+            bool stencil_enable, 
+            bool blend_enable,
             uint32_t x, 
             uint32_t y,
             uint32_t* depthstencil,
@@ -142,10 +142,10 @@ private:
     }
   }
 
-  void write(bool __UNIFORM__ depth_enable,
-             bool __UNIFORM__ stencil_enable, 
+  void write(bool depth_enable,
+             bool stencil_enable, 
              bool ds_passed,
-             bool __UNIFORM__ is_backface,
+             bool is_backface,
              uint32_t dst_depthstencil,
              uint32_t dst_color,
              uint32_t x, 
@@ -197,8 +197,8 @@ public:
 private:
   static void memory_cb(uint32_t* out,
                         const uint32_t* addr,    
-                        uint32_t __UNIFORM__ stride,
-                        uint32_t __UNIFORM__ size,
+                        uint32_t stride,
+                        uint32_t size,
                         void* /*cb_arg*/) {
     switch (stride) {
     case 4:
