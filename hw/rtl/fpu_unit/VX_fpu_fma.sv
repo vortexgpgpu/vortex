@@ -108,7 +108,7 @@ module VX_fpu_fma #(
             .m_axis_result_tuser (tuser)
         );
                         // NV,     DZ,   OF,       UF,       NX
-        assign fflags = {tuser[2], 1'b0, tuser[1], tuser[0], 1'b0};
+        assign fflags[i] = {tuser[2], 1'b0, tuser[1], tuser[0], 1'b0};
     end
 
 `else
