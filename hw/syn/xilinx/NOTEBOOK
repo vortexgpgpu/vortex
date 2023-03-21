@@ -39,8 +39,11 @@ TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 ./ci/blackbox.sh --driver=
 TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 ./ci/blackbox.sh --driver=xrt --app=demo
 TARGET=hw PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 ./ci/blackbox.sh --driver=xrt --app=demo
 TARGET=hw_emu PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 ./ci/blackbox.sh --driver=xrt --app=demo
+FPGA_BIN_DIR=<bin_dir> TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 ./ci/blackbox.sh --driver=xrt --app=demo
+FPGA_BIN_DIR=<bin_dir> TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 ./ci/blackbox.sh --driver=xrt --app=demo
 
 # build report logs
 <build_dir>/bin/vortex_afu.xclbin.info
 <build_dir>/_x/reports/link/syn/ulp_vortex_afu_1_0_synth_1_ulp_vortex_afu_1_0_utilization_synth.rpt
 <build_dir>/_x/logs/link/syn/ulp_vortex_afu_1_0_synth_1_runme.log
+<build_dir>/_x/reports/link/imp/impl_1_hw_bb_locked_timing_summary_routed.rpt
