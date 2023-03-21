@@ -145,7 +145,7 @@ module VX_popcount #(
     
         reg [17:0] t_in;
         wire [8:0] t1_out;
-        wire [4:0] t2_out;
+        wire [5:0] t2_out;
         always @(*) begin
             t_in = '0;
             t_in[N-1:0] = data_in;
@@ -155,8 +155,8 @@ module VX_popcount #(
         VX_popcount63 pc63c(t_in[17:12], t1_out[8:6]);
         VX_popcount32 pc32a({t1_out[0], t1_out[3], t1_out[6]}, t2_out[1:0]);
         VX_popcount32 pc32b({t1_out[1], t1_out[4], t1_out[7]}, t2_out[3:2]);
-        VX_popcount32 pc32c({t1_out[2], t1_out[5], t1_out[8]}, t2_out[4:3]);
-        assign data_out = {2'b0,t2_out[1:0]} + {1'b0,t2_out[3:2],1'b0} + {t2_out[4:3],2'b0};
+        VX_popcount32 pc32c({t1_out[2], t1_out[5], t1_out[8]}, t2_out[5:4]);
+        assign data_out = {2'b0,t2_out[1:0]} + {1'b0,t2_out[3:2],1'b0} + {t2_out[5:4],2'b0};
 
     end else if (MODEL == 1) begin
 
@@ -164,7 +164,7 @@ module VX_popcount #(
         localparam LOGPN = $clog2(PN);
 
     `IGNORE_UNOPTFLAT_BEGIN
-        wire [M-1:0] tmp [LOGPN-1:0][PN-1:0];
+        wire [M-1:0] tmp [LOGPN-1:0][PN-1:0];    
     `IGNORE_UNOPTFLAT_END
 
         for (genvar j = 0; j < LOGPN; ++j) begin
@@ -173,8 +173,8 @@ module VX_popcount #(
             for (genvar i = 0; i < (1 << (LOGPN-j-1)); ++i) begin                
                 localparam l = i * 2;
                 localparam r = i * 2 + 1;
-                wire [Q-1:0] res;
-                if (j == 0) begin
+                wire [Q-1:0] res;                
+                if (j == 0) begin                    
                     if (r < N) begin
                         assign res = data_in[l] + data_in[r];
                     end else if (l < N) begin

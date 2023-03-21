@@ -78,7 +78,7 @@ module VX_fpu_div #(
             .m_axis_result_tuser (tuser)
         );
                         // NV,     DZ,       OF,       UF,       NX
-        assign fflags = {tuser[2], tuser[3], tuser[1], tuser[0], 1'b0};
+        assign fflags[i] = {tuser[2], tuser[3], tuser[1], tuser[0], 1'b0};
     end
 
      assign has_fflags = 1;
