@@ -18,7 +18,7 @@ module VX_fpu_sqrt #(
     output wire [NUM_LANES-1:0][31:0] result,  
 
     output wire has_fflags,
-    output fflags_t [NUM_LANES-1:0] fflags,
+    output wire [NUM_LANES-1:0][`FP_FLAGS_BITS-1:0] fflags,
 
     output wire [TAGW-1:0] tag_out,
 
@@ -71,12 +71,8 @@ module VX_fpu_sqrt #(
             .m_axis_result_tdata (result[i]),
             .m_axis_result_tuser (tuser)
         );
-
-        assign fflags[i].NX = 1'b0;
-        assign fflags[i].UF = 1'b0;
-        assign fflags[i].OF = 1'b0;
-        assign fflags[i].DZ = 1'b0;
-        assign fflags[i].NV = tuser;
+                        // NV,  DZ,   OF,   UF,   NX
+        assign fflags = {tuser, 1'b0, 1'b0, 1'b0, 1'b0};
     end
 
 `else
