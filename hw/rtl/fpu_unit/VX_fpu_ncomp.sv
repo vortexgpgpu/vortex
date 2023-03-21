@@ -23,7 +23,7 @@ module VX_fpu_ncomp #(
     output wire [NUM_LANES-1:0][31:0] result, 
 
     output wire has_fflags,
-    output fflags_t [NUM_LANES-1:0] fflags,
+    output wire [NUM_LANES-1:0][`FP_FLAGS_BITS-1:0] fflags,
 
     output wire [TAGW-1:0] tag_out,
 
@@ -269,7 +269,8 @@ module VX_fpu_ncomp #(
     assign ready_in = ~stall;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        assign fflags[i] = {fflags_NV[i], 4'b0};
+                           // NV,         DZ,   OF,   UF,   NX
+        assign fflags[i] = {fflags_NV[i], 1'b0, 1'b0, 1'b0, 1'b0};
     end
 
 endmodule
