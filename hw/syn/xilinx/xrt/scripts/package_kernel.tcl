@@ -20,6 +20,7 @@ set vincludes_list [lindex $vlist 1]
 set vdefines_list  [lindex $vlist 2]
 
 #puts ${vsources_list}
+#puts ${vincludes_list}
 #puts ${vdefines_list}
 
 # dump defines into globals.vh
@@ -153,7 +154,7 @@ foreach up [ipx::get_user_parameters] {
 }
 
 ipx::associate_bus_interfaces -busif s_axi_ctrl -clock ap_clk $core
-ipx::associate_bus_interfaces -busif m_axi_mem  -clock ap_clk $core
+ipx::associate_bus_interfaces -busif m0_axi_mem  -clock ap_clk $core
 
 set_property xpm_libraries {XPM_CDC XPM_MEMORY XPM_FIFO} $core
 set_property sdx_kernel true $core

@@ -14,6 +14,8 @@ PLATFORM ?=
 
 PREFIX ?= build
 
+MAX_JOBS ?= 8
+
 RTL_DIR = ../../../../rtl
 AFU_DIR = ../../../../afu/xrt
 
@@ -77,7 +79,7 @@ XO_CONTAINER = $(BIN_DIR)/vortex_afu.xo
 XCLBIN_CONTAINER = $(BIN_DIR)/vortex_afu.xclbin
 
 NCPUS := $(shell grep -c ^processor /proc/cpuinfo)
-JOBS := $(shell expr $(NCPUS) - 1)
+JOBS ?= $(shell echo $$(( $(NCPUS) > $(MAX_JOBS) ? $(MAX_JOBS) : $(NCPUS) )))
 
 # Kernel compiler global settings
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
@@ -89,7 +91,7 @@ else ifeq ($(DEV_ARCH), versal)
 # versal
 else
 # alveo
-VPP_FLAGS += --connectivity.sp vortex_afu_1.m_axi_mem:HBM[0:15]
+VPP_FLAGS += --connectivity.sp vortex_afu_1.m0_axi_mem:HBM[0:15]
 endif
 
 VPP_FLAGS += --report_level 2
@@ -118,7 +120,7 @@ ifdef DEBUG
 	endif
 else    
 	CONFIGS += -DNDEBUG
-#   VPP_FLAGS += --optimize 3
+    VPP_FLAGS += --optimize 3
 endif
 
 # RTL Kernel only supports Hardware and Hardware Emulation.
