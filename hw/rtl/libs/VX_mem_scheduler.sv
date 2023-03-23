@@ -415,7 +415,7 @@ module VX_mem_scheduler #(
             if (ibuf_push) begin
                 rsp_orig_mask[ibuf_waddr] <= req_mask;
             end
-            if (mem_rsp_fire_s) begin
+            if (mem_rsp_valid_s) begin
                 rsp_store[ibuf_raddr] <= rsp_store_n;
             end
         end

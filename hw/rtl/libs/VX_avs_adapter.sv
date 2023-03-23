@@ -6,7 +6,7 @@ module VX_avs_adapter #(
     parameter ADDR_WIDTH    = 1,    
     parameter BURST_WIDTH   = 1,
     parameter NUM_BANKS     = 1, 
-    parameter REQ_TAG_WIDTH = 1,
+    parameter TAG_WIDTH     = 1,
     parameter RD_QUEUE_SIZE = 1,
     parameter BUFFERED_REQ  = 0,
     parameter BUFFERED_RSP  = 0
@@ -20,13 +20,13 @@ module VX_avs_adapter #(
     input  wire [DATA_WIDTH/8-1:0]  mem_req_byteen,    
     input  wire [ADDR_WIDTH-1:0]    mem_req_addr,
     input  wire [DATA_WIDTH-1:0]    mem_req_data,
-    input  wire [REQ_TAG_WIDTH-1:0] mem_req_tag,
+    input  wire [TAG_WIDTH-1:0]     mem_req_tag,
     output wire                     mem_req_ready,
 
     // Memory response    
     output wire                     mem_rsp_valid,        
     output wire [DATA_WIDTH-1:0]    mem_rsp_data,
-    output wire [REQ_TAG_WIDTH-1:0] mem_rsp_tag,
+    output wire [TAG_WIDTH-1:0]     mem_rsp_tag,
     input  wire                     mem_rsp_ready,
 
     // AVS bus
@@ -47,7 +47,7 @@ module VX_avs_adapter #(
     // Requests handling //////////////////////////////////////////////////////
     
     wire [NUM_BANKS-1:0] req_queue_push, req_queue_pop;
-    wire [NUM_BANKS-1:0][REQ_TAG_WIDTH-1:0] req_queue_tag_out;
+    wire [NUM_BANKS-1:0][TAG_WIDTH-1:0] req_queue_tag_out;
     wire [NUM_BANKS-1:0] req_queue_going_full;
     wire [NUM_BANKS-1:0][RD_QUEUE_ADDR_WIDTH-1:0] req_queue_size;
     wire [BANK_ADDRW-1:0] req_bank_sel;
@@ -78,7 +78,7 @@ module VX_avs_adapter #(
         `UNUSED_VAR (req_queue_size)
         
         VX_fifo_queue #(
-            .DATAW (REQ_TAG_WIDTH),
+            .DATAW (TAG_WIDTH),
             .DEPTH (RD_QUEUE_SIZE)
         ) rd_req_queue (
             .clk      (clk),
@@ -141,7 +141,7 @@ module VX_avs_adapter #(
     // Responses handling /////////////////////////////////////////////////////
 
     wire [NUM_BANKS-1:0] rsp_arb_valid_in;
-    wire [NUM_BANKS-1:0][DATA_WIDTH+REQ_TAG_WIDTH-1:0] rsp_arb_data_in;
+    wire [NUM_BANKS-1:0][DATA_WIDTH+TAG_WIDTH-1:0] rsp_arb_data_in;
     wire [NUM_BANKS-1:0] rsp_arb_ready_in;
 
     wire [NUM_BANKS-1:0][DATA_WIDTH-1:0] rsp_queue_data_out;
@@ -174,7 +174,7 @@ module VX_avs_adapter #(
 
     VX_stream_arb #(
         .NUM_INPUTS (NUM_BANKS),
-        .DATAW      (DATA_WIDTH + REQ_TAG_WIDTH),
+        .DATAW      (DATA_WIDTH + TAG_WIDTH),
         .ARBITER    ("R"),
         .BUFFERED   (BUFFERED_RSP)
     ) rsp_arb (
