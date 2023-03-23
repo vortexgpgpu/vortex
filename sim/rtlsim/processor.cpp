@@ -287,30 +287,30 @@ private:
 #ifdef AXI_BUS
 
   void reset_axi_bus() {    
-    device_->m_axi_wready  = 0;
-    device_->m_axi_awready = 0;
-    device_->m_axi_arready = 0;  
-    device_->m_axi_rvalid  = 0;
-    device_->m_axi_bvalid  = 0;
+    device_->m_axi_wready[0]  = 0;
+    device_->m_axi_awready[0] = 0;
+    device_->m_axi_arready[0] = 0;  
+    device_->m_axi_rvalid[0]  = 0;
+    device_->m_axi_bvalid[0]  = 0;
   }
     
   void eval_axi_bus(bool clk) {
     if (!clk) {
-      mem_rd_rsp_ready_ = device_->m_axi_rready;
-      mem_wr_rsp_ready_ = device_->m_axi_bready;
+      mem_rd_rsp_ready_ = device_->m_axi_rready[0];
+      mem_wr_rsp_ready_ = device_->m_axi_bready[0];
       return;
     }
 
     if (ram_ == nullptr) {
-      device_->m_axi_wready  = 0;
-      device_->m_axi_awready = 0;
-      device_->m_axi_arready = 0;  
+      device_->m_axi_wready[0]  = 0;
+      device_->m_axi_awready[0] = 0;
+      device_->m_axi_arready[0] = 0;  
       return;
     }
 
     // process memory responses
     if (mem_rd_rsp_active_
-    && device_->m_axi_rvalid && mem_rd_rsp_ready_) {
+    && device_->m_axi_rvalid[0] && mem_rd_rsp_ready_) {
       mem_rd_rsp_active_ = false;
     }    
     if (!mem_rd_rsp_active_) {      
@@ -326,22 +326,22 @@ private:
           }
           printf("\n");
         */      
-        device_->m_axi_rvalid = 1;
-        device_->m_axi_rid    = mem_rsp->tag;   
-        device_->m_axi_rresp  = 0;
-        device_->m_axi_rlast  = 1;
-        memcpy((uint8_t*)device_->m_axi_rdata, mem_rsp->block.data(), MEM_BLOCK_SIZE);
+        device_->m_axi_rvalid[0] = 1;
+        device_->m_axi_rid[0]    = mem_rsp->tag;   
+        device_->m_axi_rresp[0]  = 0;
+        device_->m_axi_rlast[0]  = 1;
+        memcpy(device_->m_axi_rdata[0].data(), mem_rsp->block.data(), MEM_BLOCK_SIZE);
         pending_mem_reqs_.erase(mem_rsp_it);
         mem_rd_rsp_active_ = true;
         delete mem_rsp;
       } else {
-        device_->m_axi_rvalid = 0;
+        device_->m_axi_rvalid[0] = 0;
       }
     }
 
     // send memory write response  
     if (mem_wr_rsp_active_
-    && device_->m_axi_bvalid && mem_wr_rsp_ready_) {
+    && device_->m_axi_bvalid[0] && mem_wr_rsp_ready_) {
       mem_wr_rsp_active_ = false;
     }
     if (!mem_wr_rsp_active_) {
@@ -353,26 +353,26 @@ private:
         /*
           printf("%0ld: [sim] MEM Wr Rsp: bank=%d, addr=%0lx\n", timestamp, last_mem_rsp_bank_, mem_rsp->addr);        
         */
-        device_->m_axi_bvalid = 1;      
-        device_->m_axi_bid    = mem_rsp->tag;
-        device_->m_axi_bresp  = 0;
+        device_->m_axi_bvalid[0] = 1;      
+        device_->m_axi_bid[0]    = mem_rsp->tag;
+        device_->m_axi_bresp[0]  = 0;
         pending_mem_reqs_.erase(mem_rsp_it);        
         mem_wr_rsp_active_ = true;
         delete mem_rsp;
       } else {
-        device_->m_axi_bvalid = 0;
+        device_->m_axi_bvalid[0] = 0;
       }      
     }
 
     // select the memory bank
-    uint32_t req_addr = device_->m_axi_wvalid ? device_->m_axi_awaddr : device_->m_axi_araddr;
+    uint32_t req_addr = device_->m_axi_wvalid[0] ? device_->m_axi_awaddr[0] : device_->m_axi_araddr[0];
     
     // process memory requests
-    if ((device_->m_axi_wvalid || device_->m_axi_arvalid) && running_) {
-      if (device_->m_axi_wvalid) {        
-        uint64_t byteen = device_->m_axi_wstrb;
-        unsigned base_addr = device_->m_axi_awaddr;
-        uint8_t* data = (uint8_t*)(device_->m_axi_wdata);
+    if ((device_->m_axi_wvalid[0] || device_->m_axi_arvalid[0]) && running_) {
+      if (device_->m_axi_wvalid[0]) {        
+        uint64_t byteen = device_->m_axi_wstrb[0];
+        unsigned base_addr = device_->m_axi_awaddr[0];
+        uint8_t* data = (uint8_t*)device_->m_axi_wdata[0].data();
 
         // check console output
         if (base_addr >= IO_COUT_ADDR 
@@ -403,15 +403,15 @@ private:
           }  
 
           auto mem_req = new mem_req_t();
-          mem_req->tag   = device_->m_axi_awid;
-          mem_req->addr  = device_->m_axi_awaddr;        
+          mem_req->tag   = device_->m_axi_awid[0];
+          mem_req->addr  = device_->m_axi_awaddr[0];        
           mem_req->write = true;
           mem_req->ready = true;
           pending_mem_reqs_.emplace_back(mem_req);
 
           // send dram request
           ramulator::Request dram_req( 
-            device_->m_axi_awaddr,
+            device_->m_axi_awaddr[0],
             ramulator::Request::Type::WRITE,
             0
           );
@@ -420,16 +420,16 @@ private:
       } else {
         // process reads
         auto mem_req = new mem_req_t();
-        mem_req->tag  = device_->m_axi_arid;   
-        mem_req->addr = device_->m_axi_araddr;
-        ram_->read(mem_req->block.data(), device_->m_axi_araddr, MEM_BLOCK_SIZE);
+        mem_req->tag  = device_->m_axi_arid[0];
+        mem_req->addr = device_->m_axi_araddr[0];
+        ram_->read(mem_req->block.data(), device_->m_axi_araddr[0], MEM_BLOCK_SIZE);
         mem_req->write = false;
         mem_req->ready = false;
         pending_mem_reqs_.emplace_back(mem_req);
 
         // send dram request
         ramulator::Request dram_req( 
-          device_->m_axi_araddr,
+          device_->m_axi_araddr[0],
           ramulator::Request::Type::READ,
           std::bind([&](ramulator::Request& dram_req, mem_req_t* mem_req) {
               mem_req->ready = true;
@@ -440,9 +440,9 @@ private:
       } 
     } 
 
-    device_->m_axi_wready  = running_;
-    device_->m_axi_awready = running_;
-    device_->m_axi_arready = running_;     
+    device_->m_axi_wready[0]  = running_;
+    device_->m_axi_awready[0] = running_;
+    device_->m_axi_arready[0] = running_;     
   }
 
 #else
