@@ -10,10 +10,16 @@ xbutil validate --device 0000:09:00.1 --verbose
 vivado -mode batch -source scripts/gen_ip.tcl -tclargs ip/xilinx_u50_gen3x16_xdma_5_202210_1
 
 # build FPGA
-PREFIX=build make all TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 DEBUG=1 > build_u50_hw_emu.log 2>&1 &
+PREFIX=build make all TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 > build_u50_hw_emu.log 2>&1 &
 PREFIX=build make all TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 > build_u50_hw.log 2>&1 &
 
-PREFIX=build make all TARGET=hw_emu PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 DEBUG=1 > build_vck5k_hw_emu.log 2>&1 &
+PREFIX=build_gfx_2c CONFIGS="-DEXT_GFX_ENABLE -DNUM_CORES=2" make all TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 > build_u50_hw_emu_gfx_2c.log 2>&1 &
+PREFIX=build_gfx_2c CONFIGS="-DEXT_GFX_ENABLE -DNUM_CORES=2" make all TARGET=hw PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 > build_u50_hw_gfx_2c.log 2>&1 &
+
+PREFIX=build make all TARGET=hw_emu PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 > build_u280_hw_emu.log 2>&1 &
+PREFIX=build make all TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 > build_u280_hw.log 2>&1 &
+
+PREFIX=build make all TARGET=hw_emu PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 > build_vck5k_hw_emu.log 2>&1 &
 PREFIX=build make all TARGET=hw PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 > build_vck5k_hw.log 2>&1 &
 
 CONFIGS="-DEXT_GFX_ENABLE -DNUM_CORES=2" PREFIX=build_gfx make all TARGET=hw_emu PLATFORM=xilinx_u50_gen3x16_xdma_5_202210_1 > build_u50_hw_emu_gfx.log 2>&1 &

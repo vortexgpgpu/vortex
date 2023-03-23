@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_afu_control #(
+module VX_afu_ctrl #(
     parameter AXI_ADDR_WIDTH = 6,
     parameter AXI_DATA_WIDTH = 32
 ) (

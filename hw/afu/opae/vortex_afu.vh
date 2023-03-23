@@ -1,5 +1,5 @@
-`ifndef __VORTEX_AFU__
-`define __VORTEX_AFU__
+`ifndef VORTEX_AFU_VH
+`define VORTEX_AFU_VH
 
 `include "ccip_if_pkg.sv"
 
