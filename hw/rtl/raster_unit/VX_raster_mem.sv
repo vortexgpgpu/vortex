@@ -346,7 +346,7 @@ module VX_raster_mem #(
     VX_elastic_buffer #(
         .DATAW   (PRIM_DATA_WIDTH), 
         .SIZE    (QUEUE_SIZE),
-        .OUT_REG (QUEUE_SIZE > 2)
+        .OUT_REG (1)
     ) buf_out (
         .clk        (clk),
         .reset      (reset),

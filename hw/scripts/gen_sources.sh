@@ -57,9 +57,9 @@ then
         # dump macros into global header
         for value in ${macros[@]}; do
             arrNV=(${value//=/ })
-            if [ ${#arrNV[@]} > 1 ];
+            if (( ${#arrNV[@]} > 1 ));
             then
-                echo "\`define ${arrNV[0]} ${arrNV[1]}"            
+                echo "\`define ${arrNV[0]} ${arrNV[1]}"
             else
                 echo "\`define $value"
             fi        

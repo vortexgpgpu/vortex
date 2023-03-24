@@ -13,25 +13,34 @@ module VX_shift_register #(
     input wire [DATAW-1:0]             data_in,
     output wire [NTAPS-1:0][DATAW-1:0] data_out
 );
-    localparam TOTAL_DEPTH = NTAPS * DEPTH;
+    if (DEPTH != 0) begin
+        localparam TOTAL_DEPTH = NTAPS * DEPTH;
 
-    reg [TOTAL_DEPTH-1:0][DATAW-1:0] entries;
+        reg [TOTAL_DEPTH-1:0][DATAW-1:0] entries;
 
-    always @(posedge clk) begin
-        for (integer i = 0; i < DATAW; ++i) begin
-            if ((i >= (DATAW-RESETW)) && reset) begin
-                for (integer j = 0; j < TOTAL_DEPTH; ++j)
-                    entries[j][i] <= 0;
-            end else if (enable) begin          
-                for (integer j = 1; j < TOTAL_DEPTH; ++j)
-                    entries[j-1][i] <= entries[j][i];
-                entries[TOTAL_DEPTH-1][i] <= data_in[i];
+        always @(posedge clk) begin
+            for (integer i = 0; i < DATAW; ++i) begin
+                if ((i >= (DATAW-RESETW)) && reset) begin
+                    for (integer j = 0; j < TOTAL_DEPTH; ++j)
+                        entries[j][i] <= 0;
+                end else if (enable) begin          
+                    for (integer j = 1; j < TOTAL_DEPTH; ++j)
+                        entries[j-1][i] <= entries[j][i];
+                    entries[TOTAL_DEPTH-1][i] <= data_in[i];
+                end
             end
         end
-    end
 
-    for (genvar i = 0; i < NTAPS; ++i) begin
-        assign data_out[i] = entries[i*DEPTH];
+        for (genvar i = 0; i < NTAPS; ++i) begin
+            assign data_out[i] = entries[i*DEPTH];
+        end
+    end else begin
+        `UNUSED_VAR (clk)
+        `UNUSED_VAR (reset)
+        `UNUSED_VAR (enable)
+        for (genvar i = 0; i < NTAPS; ++i) begin
+            assign data_out[i] = data_in;
+        end
     end
 
 endmodule
