@@ -34,8 +34,7 @@ module VX_generic_buffer #(
 
             VX_pipe_register #(
                 .DATAW	(1 + DATAW),
-                .RESETW (1),
-                .DEPTH  (1)
+                .RESETW (1)
             ) pipe_reg (
                 .clk      (clk),
                 .reset    (reset),

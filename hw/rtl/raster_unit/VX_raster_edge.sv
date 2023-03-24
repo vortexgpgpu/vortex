@@ -62,7 +62,7 @@ module VX_raster_edge #(
     VX_shift_register #(
         .DATAW (3 * `RASTER_DATA_BITS),
         .DEPTH (LATENCY)
-    ) shift_reg (
+    ) shift_reg1 (
         .clk      (clk),
         `UNUSED_PIN (reset),
         .enable   (enable),
@@ -76,12 +76,12 @@ module VX_raster_edge #(
         assign result_s[i] = sum[`RASTER_DATA_BITS-1:0];
     end
 
-    VX_pipe_register #(
+    VX_shift_register #(
         .DATAW (3 * `RASTER_DATA_BITS),
         .DEPTH (LATENCY - `LATENCY_IMUL)
-    ) pipe_reg (
+    ) shift_reg2 (
         .clk      (clk),
-        .reset    (reset),
+        `UNUSED_PIN (reset),
         .enable   (enable),
         .data_in  (result_s),
         .data_out (result)
