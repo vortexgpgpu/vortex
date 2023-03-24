@@ -13,7 +13,7 @@ module VX_tex_lerp (
     `UNUSED_VAR (reset)
     
     reg [15:0] p1, p2;
-    reg [16:0] sum;
+    reg [15:0] sum;
     reg [7:0]  res;
 
     wire [7:0] sub = (8'hff - frac);
@@ -22,7 +22,7 @@ module VX_tex_lerp (
         if (enable) begin
             p1  <= in1 * sub;
             p2  <= in2 * frac;
-            sum <= p1 + p2 + 17'h80;
+            sum <= p1 + p2 + 16'h80;
             res <= 8'((sum + (sum >> 8)) >> 8);
         end
     end

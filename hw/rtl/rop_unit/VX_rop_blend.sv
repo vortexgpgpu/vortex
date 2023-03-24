@@ -29,7 +29,7 @@ module VX_rop_blend #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
-    localparam LATENCY = `LATENCY_IMUL + 2;
+    localparam LATENCY = 3;
 
     `UNUSED_VAR (dcrs)
 

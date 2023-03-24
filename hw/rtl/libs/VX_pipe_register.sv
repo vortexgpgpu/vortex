@@ -3,7 +3,7 @@
 `TRACING_OFF
 module VX_pipe_register #( 
     parameter DATAW  = 1, 
-    parameter RESETW = DATAW, 
+    parameter RESETW = 0, 
     parameter DEPTH  = 1
 ) (
     input wire              clk,
@@ -64,8 +64,7 @@ module VX_pipe_register #(
         for (genvar i = 1; i <= DEPTH; ++i) begin
             VX_pipe_register #(
                 .DATAW  (DATAW),
-                .RESETW (RESETW),
-                .DEPTH  (1)
+                .RESETW (RESETW)
             ) pipe_reg (
                 .clk      (clk),
                 .reset    (reset),
