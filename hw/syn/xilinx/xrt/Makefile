@@ -18,6 +18,7 @@ MAX_JOBS ?= 8
 
 RTL_DIR = ../../../../rtl
 AFU_DIR = ../../../../afu/xrt
+SCRIPT_DIR = ../../../../scripts
 
 PLATFORM_TO_XSA = $(strip $(patsubst %.xpfm, % , $(shell basename $(PLATFORM))))
 XSA := $(call PLATFORM_TO_XSA, $(PLATFORM))
@@ -134,7 +135,11 @@ all: check-devices emconfig $(XCLBIN_CONTAINER)
 
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt:
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); ../scripts/gen_sources.sh $(RTL_INCLUDE) $(CONFIGS) > sources.txt
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh $(RTL_INCLUDE) $(CONFIGS) -EVX_fpu_fpnew.sv -Evortex_afu.v -EVX_afu_wrap.sv -Osources.txt
+	cd $(BUILD_DIR); verilator -E -DNOGLOBALS $(RTL_INCLUDE) $(CONFIGS) $(AFU_DIR)/VX_afu_wrap.sv | sed '/^`line /d' > VX_afu_wrap.sv
+	cd $(BUILD_DIR); verilator -E -DNOGLOBALS $(RTL_INCLUDE) $(CONFIGS) $(AFU_DIR)/vortex_afu.v | sed '/^`line /d' > vortex_afu.v
+	echo "$(PWD)/$(BUILD_DIR)/VX_afu_wrap.sv" >> $(BUILD_DIR)/sources.txt
+	echo "$(PWD)/$(BUILD_DIR)/vortex_afu.v" >> $(BUILD_DIR)/sources.txt
 
 $(XO_CONTAINER): $(BUILD_DIR)/sources.txt ./kernel.xml
 	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	$(VIVADO) -mode batch -source ../scripts/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt ../kernel.xml ../$(BUILD_DIR)

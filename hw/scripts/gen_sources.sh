@@ -2,20 +2,46 @@
 
 macros=()
 includes=()
+excludes=()
+
 output_file=""
 global_file=""
 dest_folder=""
 
+function absolute_path() {
+    if [ -d "$1" ]; then
+        (cd "$1"; pwd)
+    elif [ -f "$1" ]; then
+        if [[ $1 = /* ]]; then
+            echo "$1"
+        elif [[ $1 == */* ]]; then
+            echo "$(cd "${1%/*}"; pwd)/${1##*/}"
+        else
+            echo "$(pwd)/$1"
+        fi
+    fi
+}
+
+function check_not_excluded() {
+    for fe in ${excludes[@]}; do
+        if [[ $1 =~ $fe ]]; then
+            return 1
+        fi
+    done
+    return 0
+}
+
 # parse command arguments
-while getopts D:I:O:G:F:h flag
+while getopts D:I:E:O:G:F:h flag
 do
   case "${flag}" in
     D) macros+=( ${OPTARG} );;
     I) includes+=( ${OPTARG} );;
+    E) excludes+=( ${OPTARG} );;
     O) output_file=( ${OPTARG} );;
     G) global_file=( ${OPTARG} );;
     F) dest_folder=( ${OPTARG} );;
-    h) echo "Usage: [-D macro] [-I include] [-O output_file] [-F destination_folder] [-G global_header] [-h help]"
+    h) echo "Usage: [-D macro] [-I include] [-E exclude] [-O output_file] [-F destination_folder] [-G global_header] [-h help]"
        exit 0
     ;;
   \?)
@@ -46,7 +72,9 @@ then
     # copy source files
     for dir in ${includes[@]}; do
         for file in $(find $dir -maxdepth 1 -name '*.v' -o -name '*.sv' -o -name '*.vh' -o -name '*.svh' -o -name '*.hex' -type f); do
-            cp $file $dest_folder
+            if check_not_excluded $file; then
+                cp $(absolute_path $file) $dest_folder
+            fi
         done
     done
 fi
@@ -72,7 +100,9 @@ then
             # dump source files
             for dir in ${includes[@]}; do
                 for file in $(find $dir -maxdepth 1 -name '*.v' -o -name '*.sv' -type f); do
-                    echo $file
+                    if check_not_excluded $file; then
+                        echo $(absolute_path $file)
+                    fi
                 done
             done
         else
@@ -81,7 +111,9 @@ then
 
             # dump source files
             for file in $(find $dest_folder -maxdepth 1 -name '*.v' -o -name '*.sv' -type f); do
-                echo $file
+                if check_not_excluded $file; then
+                    echo $(absolute_path $file)
+                fi
             done
         fi
     } > $output_file

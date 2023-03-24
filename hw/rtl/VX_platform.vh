@@ -239,4 +239,7 @@
 `define _REPEAT_31(f,s) `f(30) `s `_REPEAT_30(f,s)
 `define _REPEAT_32(f,s) `f(31) `s `_REPEAT_31(f,s)
 
+`define REPEAT_COMMA ,
+`define REPEAT_SEMICOLON ;
+
 `endif
