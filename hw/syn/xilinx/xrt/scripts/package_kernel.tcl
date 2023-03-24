@@ -154,7 +154,7 @@ foreach up [ipx::get_user_parameters] {
 }
 
 ipx::associate_bus_interfaces -busif s_axi_ctrl -clock ap_clk $core
-ipx::associate_bus_interfaces -busif m0_axi_mem  -clock ap_clk $core
+ipx::associate_bus_interfaces -busif m0_axi_mem -clock ap_clk $core
 
 set_property xpm_libraries {XPM_CDC XPM_MEMORY XPM_FIFO} $core
 set_property sdx_kernel true $core

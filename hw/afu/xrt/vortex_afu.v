@@ -1,32 +1,19 @@
 `include "VX_define.vh"
 `include "vortex_afu.vh"
 
-`ifndef M_AXI_MEM_NUM_BANKS
-`define M_AXI_MEM_NUM_BANKS 1
-`endif
-
-`ifndef M_AXI_MEM_ID_WIDTH
-`ifdef NDEBUG
-`define M_AXI_MEM_ID_WIDTH 20
-`else
-`define M_AXI_MEM_ID_WIDTH 32
-`endif
-`endif
-
 module vortex_afu #(
 	parameter C_S_AXI_CTRL_ADDR_WIDTH = 6,
 	parameter C_S_AXI_CTRL_DATA_WIDTH = 32,
 	parameter C_M_AXI_MEM_ID_WIDTH 	  = `M_AXI_MEM_ID_WIDTH,
 	parameter C_M_AXI_MEM_ADDR_WIDTH  = 64,
-	parameter C_M_AXI_MEM_DATA_WIDTH  = `VX_MEM_DATA_WIDTH,
-    parameter C_M_AXI_MEM_NUM_BANKS   = `M_AXI_MEM_NUM_BANKS
+	parameter C_M_AXI_MEM_DATA_WIDTH  = `VX_MEM_DATA_WIDTH    
 ) (
 	// System signals
 	input wire 									ap_clk,
 	input wire 									ap_rst_n,
 	
 	// AXI4 master interface
-	`GEN_AXI_MEM(0),
+	`REPEAT (`M_AXI_MEM_NUM_BANKS, GEN_AXI_MEM, REPEAT_COMMA),
 
     // AXI4-Lite slave interface
     input  wire                                 s_axi_ctrl_awvalid,
@@ -60,7 +47,7 @@ module vortex_afu #(
 		.ap_clk             (ap_clk),
 		.ap_rst_n           (ap_rst_n),
 
-		`AXI_MEM_ARGS(0),
+		`REPEAT (`M_AXI_MEM_NUM_BANKS, AXI_MEM_ARGS, REPEAT_COMMA),
 		
 		.s_axi_ctrl_awvalid (s_axi_ctrl_awvalid),
 		.s_axi_ctrl_awready (s_axi_ctrl_awready),

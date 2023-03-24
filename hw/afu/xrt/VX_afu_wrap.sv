@@ -6,15 +6,14 @@ module VX_afu_wrap #(
 	  parameter C_S_AXI_CTRL_DATA_WIDTH	= 32,
 	  parameter C_M_AXI_MEM_ID_WIDTH    = 16,
 	  parameter C_M_AXI_MEM_ADDR_WIDTH  = 32,
-	  parameter C_M_AXI_MEM_DATA_WIDTH  = 512,
-      parameter C_M_AXI_MEM_NUM_BANKS   = 1
+	  parameter C_M_AXI_MEM_DATA_WIDTH  = 512
 ) (
     // System signals
     input wire ap_clk,
     input wire ap_rst_n,
 
     // AXI4 master interface
-	`GEN_AXI_MEM(0),
+	`REPEAT (`M_AXI_MEM_NUM_BANKS, GEN_AXI_MEM, REPEAT_COMMA),
 
     // AXI4-Lite slave interface
     input  wire                                 s_axi_ctrl_awvalid,
@@ -37,6 +36,8 @@ module VX_afu_wrap #(
     
     output wire                                 interrupt 
 );
+	localparam C_M_AXI_MEM_NUM_BANKS = `M_AXI_MEM_NUM_BANKS;
+
 	wire                                 m_axi_mem_awvalid_a [C_M_AXI_MEM_NUM_BANKS];
     wire                                 m_axi_mem_awready_a [C_M_AXI_MEM_NUM_BANKS];
     wire [C_M_AXI_MEM_ADDR_WIDTH-1:0]    m_axi_mem_awaddr_a [C_M_AXI_MEM_NUM_BANKS];
@@ -64,7 +65,7 @@ module VX_afu_wrap #(
     wire [1:0]                           m_axi_mem_rresp_a [C_M_AXI_MEM_NUM_BANKS];
 
 	// convert memory interface to array
-	`AXI_MEM_TO_ARRAY(0);
+	`REPEAT (`M_AXI_MEM_NUM_BANKS, AXI_MEM_TO_ARRAY, REPEAT_SEMICOLON);
 
 	wire reset = ~ap_rst_n;
 
