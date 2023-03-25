@@ -72,9 +72,10 @@ module VX_tag_access #(
             .SIZE  (`LINES_PER_BANK),
             .NO_RWCHECK (1)
         ) tag_store (
-            .clk   (clk),                 
-            .addr  (line_addr),   
-            .wren  (fill_way[i] || init),
+            .clk   (clk), 
+            .write (fill_way[i] || init),
+            `UNUSED_PIN (wren),                
+            .addr  (line_addr),
             .wdata ({~init, line_tag}), 
             .rdata ({read_valid, read_tag})
         );

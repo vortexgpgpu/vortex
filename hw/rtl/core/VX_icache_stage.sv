@@ -52,7 +52,8 @@ module VX_icache_stage #(
         .LUTRAM (1)
     ) tag_store (
         .clk   (clk),        
-        .wren  (icache_req_fire),
+        .write (icache_req_fire),        
+        `UNUSED_PIN (wren),
         .waddr (req_tag),
         .wdata ({ifetch_req_if.PC, ifetch_req_if.tmask}),
         .raddr (rsp_tag),

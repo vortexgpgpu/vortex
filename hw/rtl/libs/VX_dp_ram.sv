@@ -4,7 +4,7 @@
 module VX_dp_ram #(
     parameter DATAW       = 1,
     parameter SIZE        = 1,
-    parameter WRENW     = 1,
+    parameter WRENW       = 1,
     parameter OUT_REG     = 0,
     parameter NO_RWCHECK  = 0,
     parameter LUTRAM      = 0,    
@@ -14,6 +14,7 @@ module VX_dp_ram #(
     parameter ADDRW       = `LOG2UP(SIZE)
 ) ( 
     input wire               clk,
+    input wire               write,
     input wire [WRENW-1:0]   wren,
     input wire [ADDRW-1:0]   waddr,        
     input wire [DATAW-1:0]   wdata,
@@ -34,103 +35,133 @@ module VX_dp_ram #(
         end                                        \
     end
 
-`ifdef QUARTUS
-    if (LUTRAM != 0) begin
-        if (OUT_REG != 0) begin        
-            reg [DATAW-1:0] rdata_r;
-            if (WRENW > 1) begin
+`ifdef SYNTHESIS
+    if (WRENW > 1) begin
+    `ifdef QUARTUS
+        if (LUTRAM != 0) begin
+            if (OUT_REG != 0) begin        
+                reg [DATAW-1:0] rdata_r;
                 `USE_FAST_BRAM reg [WRENW-1:0][WSELW-1:0] ram [SIZE-1:0];
                 `RAM_INITIALIZATION
                 always @(posedge clk) begin
-                    for (integer i = 0; i < WRENW; ++i) begin
-                        if (wren[i])
-                            ram[waddr][i] <= wdata[i * WSELW +: WSELW];
-                    end
-                    rdata_r <= ram[raddr];
-                end
-            end else begin
-                `USE_FAST_BRAM reg [DATAW-1:0] ram [SIZE-1:0];
-                `RAM_INITIALIZATION
-                always @(posedge clk) begin
-                    if (wren)
-                        ram[waddr] <= wdata;
-                    rdata_r <= ram[raddr];
-                end
-            end
-            assign rdata = rdata_r;
-        end else begin
-            if (WRENW > 1) begin
-                `USE_FAST_BRAM reg [WRENW-1:0][WSELW-1:0] ram [SIZE-1:0];
-                `RAM_INITIALIZATION
-                always @(posedge clk) begin
-                    for (integer i = 0; i < WRENW; ++i) begin
-                        if (wren[i])
-                            ram[waddr][i] <= wdata[i * WSELW +: WSELW];
-                    end
-                end
-                assign rdata = ram[raddr];
-            end else begin
-                `USE_FAST_BRAM reg [DATAW-1:0] ram [SIZE-1:0];
-                `RAM_INITIALIZATION
-                always @(posedge clk) begin
-                    if (wren)
-                        ram[waddr] <= wdata;
-                end
-                assign rdata = ram[raddr];
-            end         
-        end
-    end else begin
-        if (OUT_REG != 0) begin
-            reg [DATAW-1:0] rdata_r;
-            if (WRENW > 1) begin
-                reg [WRENW-1:0][WSELW-1:0] ram [SIZE-1:0];
-                `RAM_INITIALIZATION
-                always @(posedge clk) begin
-                    for (integer i = 0; i < WRENW; ++i) begin
-                        if (wren[i])
-                            ram[waddr][i] <= wdata[i * WSELW +: WSELW];
-                    end
-                    rdata_r <= ram[raddr];
-                end
-            end else begin
-                reg [DATAW-1:0] ram [SIZE-1:0];
-                `RAM_INITIALIZATION
-                always @(posedge clk) begin
-                    if (wren)
-                        ram[waddr] <= wdata;
-                    rdata_r <= ram[raddr];
-                end
-            end
-            assign rdata = rdata_r;
-        end else begin
-            if (NO_RWCHECK != 0) begin
-                if (WRENW > 1) begin
-                    `NO_RW_RAM_CHECK reg [WRENW-1:0][WSELW-1:0] ram [SIZE-1:0];
-                    `RAM_INITIALIZATION
-                    always @(posedge clk) begin
+                    if (write) begin
                         for (integer i = 0; i < WRENW; ++i) begin
                             if (wren[i])
                                 ram[waddr][i] <= wdata[i * WSELW +: WSELW];
                         end
                     end
-                    assign rdata = ram[raddr];
-                end else begin
-                    `NO_RW_RAM_CHECK reg [DATAW-1:0] ram [SIZE-1:0];
-                    `RAM_INITIALIZATION
-                    always @(posedge clk) begin
-                        if (wren)
-                            ram[waddr] <= wdata;
-                    end
-                    assign rdata = ram[raddr];
+                    rdata_r <= ram[raddr];
                 end
+                assign rdata = rdata_r;
             end else begin
-                if (WRENW > 1) begin
-                    reg [WRENW-1:0][WSELW-1:0] ram [SIZE-1:0];
-                    `RAM_INITIALIZATION
-                    always @(posedge clk) begin
+                `USE_FAST_BRAM reg [WRENW-1:0][WSELW-1:0] ram [SIZE-1:0];
+                `RAM_INITIALIZATION
+                always @(posedge clk) begin
+                    if (write) begin
                         for (integer i = 0; i < WRENW; ++i) begin
                             if (wren[i])
                                 ram[waddr][i] <= wdata[i * WSELW +: WSELW];
+                        end
+                    end
+                end
+                assign rdata = ram[raddr];
+            end
+        end else begin
+            if (OUT_REG != 0) begin
+                reg [DATAW-1:0] rdata_r;
+                reg [WRENW-1:0][WSELW-1:0] ram [SIZE-1:0];
+                `RAM_INITIALIZATION
+                always @(posedge clk) begin
+                    if (write) begin
+                        for (integer i = 0; i < WRENW; ++i) begin
+                            if (wren[i])
+                                ram[waddr][i] <= wdata[i * WSELW +: WSELW];
+                        end
+                    end
+                    rdata_r <= ram[raddr];
+                end
+                assign rdata = rdata_r;
+            end else begin
+                if (NO_RWCHECK != 0) begin
+                    `NO_RW_RAM_CHECK reg [WRENW-1:0][WSELW-1:0] ram [SIZE-1:0];
+                    `RAM_INITIALIZATION
+                    always @(posedge clk) begin
+                        if (write) begin
+                            for (integer i = 0; i < WRENW; ++i) begin
+                                if (wren[i])
+                                    ram[waddr][i] <= wdata[i * WSELW +: WSELW];
+                            end
+                        end
+                    end
+                    assign rdata = ram[raddr];
+                end else begin
+                    reg [WRENW-1:0][WSELW-1:0] ram [SIZE-1:0];
+                    `RAM_INITIALIZATION
+                    always @(posedge clk) begin
+                        if (write) begin
+                            for (integer i = 0; i < WRENW; ++i) begin
+                                if (wren[i])
+                                    ram[waddr][i] <= wdata[i * WSELW +: WSELW];
+                            end
+                        end
+                    end
+                    assign rdata = ram[raddr];
+                end
+            end
+        end
+    `else
+        // default synthesis
+        if (LUTRAM != 0) begin
+            `USE_FAST_BRAM reg [DATAW-1:0] ram [SIZE-1:0];
+            `RAM_INITIALIZATION
+            if (OUT_REG != 0) begin            
+                reg [DATAW-1:0] rdata_r;
+                always @(posedge clk) begin
+                    if (write) begin
+                        for (integer i = 0; i < WRENW; ++i) begin
+                            if (wren[i])
+                                ram[waddr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW];
+                        end
+                    end
+                    rdata_r <= ram[raddr];
+                end
+                assign rdata = rdata_r;
+            end else begin
+                always @(posedge clk) begin
+                    if (write) begin
+                        for (integer i = 0; i < WRENW; ++i) begin
+                            if (wren[i])
+                                ram[waddr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW];
+                        end
+                    end
+                end
+                assign rdata = ram[raddr];
+            end
+        end else begin
+            if (OUT_REG != 0) begin
+                reg [DATAW-1:0] ram [SIZE-1:0];
+                reg [DATAW-1:0] rdata_r;
+                `RAM_INITIALIZATION
+                always @(posedge clk) begin
+                    if (write) begin
+                        for (integer i = 0; i < WRENW; ++i) begin
+                            if (wren[i])
+                                ram[waddr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW];
+                        end
+                    end
+                    rdata_r <= ram[raddr];
+                end
+                assign rdata = rdata_r;
+            end else begin
+                if (NO_RWCHECK != 0) begin
+                    `NO_RW_RAM_CHECK reg [DATAW-1:0] ram [SIZE-1:0];
+                    `RAM_INITIALIZATION
+                    always @(posedge clk) begin
+                        if (write) begin
+                            for (integer i = 0; i < WRENW; ++i) begin
+                                if (wren[i])
+                                    ram[waddr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW];
+                            end
                         end
                     end
                     assign rdata = ram[raddr];
@@ -138,83 +169,87 @@ module VX_dp_ram #(
                     reg [DATAW-1:0] ram [SIZE-1:0];
                     `RAM_INITIALIZATION
                     always @(posedge clk) begin
-                        if (wren)
-                            ram[waddr] <= wdata;
+                        if (write) begin
+                            for (integer i = 0; i < WRENW; ++i) begin
+                                if (wren[i])
+                                    ram[waddr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW];
+                            end
+                        end
                     end
                     assign rdata = ram[raddr];
-                end                
-            end
-        end
-    end
-`elsif VIVADO
-    if (LUTRAM != 0) begin
-        `USE_FAST_BRAM reg [DATAW-1:0] ram [SIZE-1:0];
-        `RAM_INITIALIZATION
-        if (OUT_REG != 0) begin            
-            reg [DATAW-1:0] rdata_r;
-            always @(posedge clk) begin
-                for (integer i = 0; i < WRENW; ++i) begin
-                    if (wren[i])
-                        ram[waddr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW];
-                end
-                rdata_r <= ram[raddr];
-            end
-            assign rdata = rdata_r;
-        end else begin
-            always @(posedge clk) begin
-                for (integer i = 0; i < WRENW; ++i) begin
-                    if (wren[i])
-                        ram[waddr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW];
                 end
             end
-            assign rdata = ram[raddr];
         end
+    `endif
     end else begin
-        if (OUT_REG != 0) begin
-            reg [DATAW-1:0] ram [SIZE-1:0];
-            reg [DATAW-1:0] rdata_r;
+        // (WRENW == 1)
+        if (LUTRAM != 0) begin
+            `USE_FAST_BRAM reg [DATAW-1:0] ram [SIZE-1:0];
             `RAM_INITIALIZATION
-            always @(posedge clk) begin
-                for (integer i = 0; i < WRENW; ++i) begin
-                    if (wren[i])
-                        ram[waddr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW];
-                end
-                rdata_r <= ram[raddr];
-            end
-            assign rdata = rdata_r;
-        end else begin
-            if (NO_RWCHECK != 0) begin
-                `NO_RW_RAM_CHECK reg [DATAW-1:0] ram [SIZE-1:0];
-                `RAM_INITIALIZATION
+            if (OUT_REG != 0) begin            
+                reg [DATAW-1:0] rdata_r;
                 always @(posedge clk) begin
-                    for (integer i = 0; i < WRENW; ++i) begin
-                        if (wren[i])
-                            ram[waddr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW];
+                    if (write) begin
+                        ram[waddr] <= wdata;
                     end
+                    rdata_r <= ram[raddr];
                 end
-                assign rdata = ram[raddr];
+                assign rdata = rdata_r;
             end else begin
-                reg [DATAW-1:0] ram [SIZE-1:0];
-                `RAM_INITIALIZATION
                 always @(posedge clk) begin
-                    for (integer i = 0; i < WRENW; ++i) begin
-                        if (wren[i])
-                            ram[waddr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW];
+                    if (write) begin
+                        ram[waddr] <= wdata;
                     end
                 end
                 assign rdata = ram[raddr];
+            end
+        end else begin
+            if (OUT_REG != 0) begin
+                reg [DATAW-1:0] ram [SIZE-1:0];
+                reg [DATAW-1:0] rdata_r;
+                `RAM_INITIALIZATION
+                always @(posedge clk) begin
+                    if (write) begin
+                        ram[waddr] <= wdata;
+                    end
+                    rdata_r <= ram[raddr];
+                end
+                assign rdata = rdata_r;
+            end else begin
+                if (NO_RWCHECK != 0) begin
+                    `NO_RW_RAM_CHECK reg [DATAW-1:0] ram [SIZE-1:0];
+                    `RAM_INITIALIZATION
+                    always @(posedge clk) begin
+                        if (write) begin
+                            ram[waddr] <= wdata;
+                        end
+                    end
+                    assign rdata = ram[raddr];
+                end else begin
+                    reg [DATAW-1:0] ram [SIZE-1:0];
+                    `RAM_INITIALIZATION
+                    always @(posedge clk) begin
+                        if (write) begin
+                            ram[waddr] <= wdata;
+                        end
+                    end
+                    assign rdata = ram[raddr];
+                end
             end
         end
-    end
+    end    
 `else
+    // RAM emulation
     reg [DATAW-1:0] ram [SIZE-1:0];
     `RAM_INITIALIZATION
     if (OUT_REG != 0) begin        
         reg [DATAW-1:0] rdata_r;        
         always @(posedge clk) begin
-            for (integer i = 0; i < WRENW; ++i) begin
-                if (wren[i])
-                    ram[waddr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW];
+            if (write) begin
+                for (integer i = 0; i < WRENW; ++i) begin
+                    if ((WRENW == 1) || wren[i])
+                        ram[waddr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW];
+                end
             end
             rdata_r <= ram[raddr];
         end
@@ -224,9 +259,11 @@ module VX_dp_ram #(
         reg [ADDRW-1:0] prev_waddr;
         reg prev_write;
         always @(posedge clk) begin
-            for (integer i = 0; i < WRENW; ++i) begin
-                if (wren[i])
-                    ram[waddr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW];
+            if (write) begin
+                for (integer i = 0; i < WRENW; ++i) begin
+                    if ((WRENW == 1) || wren[i])
+                        ram[waddr][i * WSELW +: WSELW] <= wdata[i * WSELW +: WSELW];
+                end
             end
             prev_write <= (| wren);
             prev_data  <= ram[waddr];

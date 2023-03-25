@@ -181,10 +181,11 @@ module VX_miss_resrv #(
         .LUTRAM (1)
     ) entries (
         .clk   (clk),
-        .waddr (allocate_id_r),                                
-        .raddr (dequeue_id_r),
-        .wren  (allocate_valid),
+        .write (allocate_valid),
+        `UNUSED_PIN (wren),               
+        .waddr (allocate_id_r),     
         .wdata (allocate_data),
+        .raddr (dequeue_id_r),
         .rdata (dequeue_data)
     );
 
