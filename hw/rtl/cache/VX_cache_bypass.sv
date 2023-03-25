@@ -1,6 +1,6 @@
 `include "VX_platform.vh"
 
-module VX_nc_bypass #(
+module VX_cache_bypass #(
     parameter NUM_REQS          = 1,
     parameter NC_TAG_BIT        = 0,
 

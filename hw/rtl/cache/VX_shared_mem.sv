@@ -68,7 +68,7 @@ module VX_shared_mem #(
     wire [NUM_BANKS-1:0][`UP(REQ_SEL_BITS)-1:0] per_bank_req_idx_unqual;
     wire [NUM_BANKS-1:0]                    per_bank_req_ready_unqual;
     
-    VX_req_dispatch #(
+    VX_cache_req_dispatch #(
         .LINE_SIZE  (WORD_SIZE),
         .WORD_SIZE  (WORD_SIZE),
         .ADDR_WIDTH (ADDR_WIDTH),
@@ -178,7 +178,7 @@ module VX_shared_mem #(
     wire [NUM_REQS-1:0][TAG_WIDTH-1:0]  rsp_tag_s;
     wire [NUM_REQS-1:0]                 rsp_ready_s;
 
-    VX_rsp_merge #(
+    VX_cache_rsp_merge #(
         .NUM_REQS  (NUM_REQS),
         .NUM_BANKS (NUM_BANKS),
         .NUM_PORTS (1),

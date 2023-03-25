@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-module VX_rsp_merge #(
+module VX_cache_rsp_merge #(
     // Number of Word requests per cycle
     parameter NUM_REQS      = 1, 
     // Number of banks
