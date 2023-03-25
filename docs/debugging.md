@@ -40,7 +40,7 @@ A debug trace `run.log` is generated in the current directory during the program
 Debugging the FPGA directly may be necessary to investigate runtime bugs that the RTL simulation cannot catch. We have implemented an in-house scope analyzer for Vortex that works when the FPGA is running. To enable the FPGA scope analyzer, the FPGA bitstream should be built using `SCOPE=1` flag
 
     & cd /hw/syn/opae
-    $ CONFIGS=-DSCOPE=1 make fpga-4c
+    $ CONFIGS="-DSCOPE=1" TARGET=fpga make
 
 When running the program on the FPGA, you need to pass the `--scope` flag to the `blackbox` tool.
 

@@ -22,10 +22,11 @@ The FPGA has to following configuration options:
 
 Command line:
 
-    $ cd hw/syn/opae
-    $ NUM_CORES=4 make build
+    $ cd hw/syn/altera/opae
+    $ PREFIX=test1 TARGET=fpga NUM_CORES=4 make
 
-A new folder (ex: `build_fpga_4c`) will be created and the build will start and take ~30-480 min to complete.
+A new folder (ex: `test1_xxx_4c`) will be created and the build will start and take ~30-480 min to complete.
+Setting TARGET=ase will build the project for simulation using Intel ASE.
 
 
 OPAE Build Configuration
@@ -38,14 +39,14 @@ The hardware configuration file `/hw/rtl/VX_config.vh` defines all the hardware 
 
 You configure the syntesis build from the command line:
 
-    $ CONFIGS="-DPERF_ENABLE -DNUM_THREADS=8" make build
+    $ CONFIGS="-DPERF_ENABLE -DNUM_THREADS=8" make
 
 OPAE Build Progress
 -------------------
 
 You could check the last 10 lines in the build log for possible errors until build completion.
 
-    $ tail -n 10 ./build_fpga_<num-of-cores>c/build.log
+    $ tail -n 10 <build_dir>/build.log
 
 Check if the build is still running by looking for quartus_sh, quartus_syn, or quartus_fit programs.
 
@@ -57,13 +58,13 @@ If the build fails and you need to restart it, clean up the build folder using t
 
 The file `vortex_afu.gbs` should exist when the build is done:
 
-    $ ls -lsa ./build_fpga_<num-of-cores>c/vortex_afu.gbs
+    $ ls -lsa <build_dir>/vortex_afu.gbs
 
 
 Signing the bitstream and Programming the FPGA
 ----------------------------------------------
 
-    $ cd ./build_fpga_<num-of-cores>c
+    $ cd <build_dir>
     $ PACSign PR -t UPDATE -H openssl_manager -i vortex_afu.gbs -o vortex_afu_unsigned_ssl.gbs
     $ fpgasupdate vortex_afu_unsigned_ssl.gbs
 

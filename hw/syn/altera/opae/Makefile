@@ -61,6 +61,10 @@ CFLAGS += $(RTL_INCLUDE)
 CFLAGS += -DSYNTHESIS
 CFLAGS += -DQUARTUS
 
+ifeq ($(TARGET), ase)
+	CFLAGS += -DSIMULATION
+endif
+
 # Debugigng
 ifdef DEBUG
 	CFLAGS += $(DBG_FLAGS)
@@ -78,34 +82,24 @@ ifdef PERF
 	CFLAGS += -DPERF_ENABLE
 endif
 
-all: swconfig ip-gen gen-sources setup build
+all: swconfig ip-gen setup build
 
 ip-gen: $(IP_CACHE_DIR)/ip-gen.log
 $(IP_CACHE_DIR)/ip-gen.log:
 	../ip_gen.sh $(IP_CACHE_DIR)
 
-# AFU info from JSON file, including AFU UUID
 swconfig: vortex_afu.h
 vortex_afu.h: vortex_afu.json
 	afu_json_mgr json-info --afu-json=$^ --c-hdr=$@
 
 setup:
 	mkdir -p $(BUILD_DIR)/src
-ifeq ($(TARGET), ase)
-	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) $(CONFIGS_SEL) -DSIMULATION -G$(BUILD_DIR)/src/globals.vh -F$(BUILD_DIR)/src -Osources.txt
-	rm -rf $(BUILD_DIR)
-	afu_sim_setup -s setup.cfg $(BUILD_DIR)
-	mkdir -p $(BUILD_DIR)/src
-	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) $(CONFIGS_SEL) -DSIMULATION -G$(BUILD_DIR)/src/globals.vh -F$(BUILD_DIR)/src
-else
 	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) $(CONFIGS_SEL) -G$(BUILD_DIR)/src/globals.vh -F$(BUILD_DIR)/src -Osources.txt
-	rm -rf $(BUILD_DIR)
-	afu_synth_setup -s setup.cfg $(BUILD_DIR)
-	mkdir -p $(BUILD_DIR)/src
-	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) $(CONFIGS_SEL) -G$(BUILD_DIR)/src/globals.vh -F$(BUILD_DIR)/src
+ifeq ($(TARGET), ase)
+	afu_sim_setup -f -s setup.cfg $(BUILD_DIR)
+else
+	afu_synth_setup -f -s setup.cfg $(BUILD_DIR)
 endif
-
-# build
 
 build: ip-gen setup
 ifeq ($(TARGET), ase)
@@ -113,8 +107,6 @@ ifeq ($(TARGET), ase)
 else
 	cd $(BUILD_DIR) && $(RUN_SYNTH)
 endif
-
-# cleanup
 
 clean:  
 	rm -rf vortex_afu.h $(BUILD_DIR)
