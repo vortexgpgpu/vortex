@@ -1,6 +1,6 @@
 `include "VX_cache_define.vh"
 
-module VX_miss_resrv #(
+module VX_cache_mshr #(
     parameter `STRING_TYPE INSTANCE_ID= "",
     parameter BANK_ID           = 0, 
     

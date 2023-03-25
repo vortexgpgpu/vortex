@@ -1,6 +1,6 @@
 `include "VX_cache_define.vh"
 
-module VX_init_ctrl #(
+module VX_cache_init #(
     // Size of cache in bytes
     parameter CACHE_SIZE    = 16384, 
     // Size of line inside a bank in bytes

@@ -197,7 +197,7 @@ module VX_cache_wrap #(
        
         `RESET_RELAY (nc_bypass_reset, reset);
 
-        VX_nc_bypass #(
+        VX_cache_bypass #(
             .NUM_REQS          (NUM_REQS),
             .NC_TAG_BIT        (NC_TAG_BIT),
 
@@ -214,7 +214,7 @@ module VX_cache_wrap #(
             .MEM_TAG_OUT_WIDTH (MEM_TAG_WIDTH),
 
             .UUID_WIDTH        (UUID_WIDTH)
-        ) nc_bypass (
+        ) cache_bypass (
             .clk                (clk),
             .reset              (nc_bypass_reset),
 

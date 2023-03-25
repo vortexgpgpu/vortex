@@ -40,9 +40,9 @@ VX.cache.v is the top module of the cache verilog code located in the `/hw/rtl/c
 - Core Response Merge
   - Cache accesses one line at a time. As a result, each request may not come back in the same response. This module tries to recombine the responses by thread ID. 
 
-### VX_bank.v
+### VX_cache_bank.v
 
-VX_bank.v is the verilog code that handles cache bank functionality and is located in the `/hw/rtl/cache` directory.
+VX_cache_bank.v is the verilog code that handles cache bank functionality and is located in the `/hw/rtl/cache` directory.
 
 ![Image of Vortex Cache Bank](./assets/img/vortex_bank.png)
 

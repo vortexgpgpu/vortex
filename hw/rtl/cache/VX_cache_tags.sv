@@ -1,6 +1,6 @@
 `include "VX_cache_define.vh"
 
-module VX_tag_access #(
+module VX_cache_tags #(
     parameter `STRING_TYPE INSTANCE_ID = "",
     parameter BANK_ID       = 0,
     // Size of cache in bytes

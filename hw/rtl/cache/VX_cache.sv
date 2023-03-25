@@ -185,12 +185,12 @@ module VX_cache #(
 
     `RESET_RELAY (init_reset, reset);
 
-    VX_init_ctrl #( 
+    VX_cache_init #( 
         .CACHE_SIZE (CACHE_SIZE),
         .LINE_SIZE  (LINE_SIZE),        
         .NUM_BANKS  (NUM_BANKS),
         .NUM_WAYS   (NUM_WAYS)
-    ) init_ctrl (
+    ) cache_init (
         .clk       (clk),
         .reset     (init_reset),
         .addr_out  (init_addr),
@@ -237,7 +237,7 @@ module VX_cache #(
 
     // Core request dispatch
 
-    VX_req_dispatch #(
+    VX_cache_req_dispatch #(
         .LINE_SIZE  (LINE_SIZE),
         .WORD_SIZE  (WORD_SIZE),
         .ADDR_WIDTH (`WORD_ADDR_WIDTH),
@@ -355,7 +355,7 @@ module VX_cache #(
 
         `RESET_RELAY (bank_reset, reset);
         
-        VX_bank #(                
+        VX_cache_bank #(                
             .BANK_ID      (i),
             .INSTANCE_ID  (INSTANCE_ID),
             .CACHE_SIZE   (CACHE_SIZE),
@@ -429,7 +429,7 @@ module VX_cache #(
 
     // Core responce merge
 
-    VX_rsp_merge #(
+    VX_cache_rsp_merge #(
         .NUM_REQS  (NUM_REQS),
         .NUM_BANKS (NUM_BANKS),
         .NUM_PORTS (NUM_PORTS),

@@ -1,6 +1,6 @@
 `include "VX_cache_define.vh"
 
-module VX_bank #(
+module VX_cache_bank #(
     parameter `STRING_TYPE INSTANCE_ID= "",
     parameter BANK_ID           = 0,
 
@@ -244,7 +244,7 @@ module VX_bank #(
     wire [NUM_WAYS-1:0] way_sel_st0;
     wire [NUM_WAYS-1:0] way_sel_st1;
 
-    VX_tag_access #(
+    VX_cache_tags #(
         .INSTANCE_ID(INSTANCE_ID),
         .BANK_ID    (BANK_ID),        
         .CACHE_SIZE (CACHE_SIZE),
@@ -253,7 +253,7 @@ module VX_bank #(
         .NUM_WAYS   (NUM_WAYS),
         .WORD_SIZE  (WORD_SIZE),   
         .UUID_WIDTH (UUID_WIDTH)
-    ) tag_access (
+    ) cache_tags (
         .clk        (clk),
         .reset      (reset),
 
@@ -314,7 +314,7 @@ module VX_bank #(
     wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] creq_data_st1 = wdata_st1[0 +: NUM_PORTS * `WORD_WIDTH];
     `UNUSED_VAR (wdata_st1)
     
-    VX_data_access #(
+    VX_cache_data #(
         .INSTANCE_ID  (INSTANCE_ID),
         .BANK_ID      (BANK_ID),        
         .CACHE_SIZE   (CACHE_SIZE),
@@ -325,7 +325,7 @@ module VX_bank #(
         .WORD_SIZE    (WORD_SIZE),
         .WRITE_ENABLE (WRITE_ENABLE),
         .UUID_WIDTH   (UUID_WIDTH)
-     ) data_access (
+    ) cache_data (
         .clk        (clk),
         .reset      (reset),
 
@@ -366,7 +366,7 @@ module VX_bank #(
 
     `RESET_RELAY (miss_resrv_reset, reset);
 
-    VX_miss_resrv #(
+    VX_cache_mshr #(
         .INSTANCE_ID (INSTANCE_ID),
         .BANK_ID     (BANK_ID),        
         .LINE_SIZE   (LINE_SIZE),
@@ -377,7 +377,7 @@ module VX_bank #(
         .MSHR_SIZE   (MSHR_SIZE),
         .UUID_WIDTH  (UUID_WIDTH),
         .TAG_WIDTH   (TAG_WIDTH)
-    ) miss_resrv (
+    ) cache_mshr (
         .clk            (clk),
         .reset          (miss_resrv_reset),
 
