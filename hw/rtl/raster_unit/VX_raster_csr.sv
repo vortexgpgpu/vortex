@@ -25,7 +25,7 @@ module VX_raster_csr #(
 
     raster_csrs_t [`NUM_THREADS-1:0] wdata;
     raster_csrs_t [`NUM_THREADS-1:0] rdata;
-    wire [`NUM_THREADS-1:0]          wren;
+    wire [`NUM_THREADS-1:0]          write;
     wire [NW_WIDTH-1:0]              waddr;
     wire [NW_WIDTH-1:0]              raddr;
 
@@ -37,7 +37,8 @@ module VX_raster_csr #(
             .LUTRAM (1)
         ) stamp_store (
             .clk   (clk),
-            .wren  (wren[i]),
+            .write  (write[i]),            
+            `UNUSED_PIN (wren),               
             .waddr (waddr),
             .wdata (wdata[i]),
             .raddr (raddr),
@@ -50,7 +51,7 @@ module VX_raster_csr #(
     assign waddr = write_wid;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign wren[i]           = write_enable && write_tmask[i];
+        assign write[i]          = write_enable && write_tmask[i];
         assign wdata[i].pos_mask = {write_data[i].pos_y, write_data[i].pos_x, write_data[i].mask};
         assign wdata[i].bcoords  = write_data[i].bcoords;
     end

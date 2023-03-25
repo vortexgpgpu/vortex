@@ -58,7 +58,8 @@ module VX_ipdom_stack #(
         .LUTRAM (1)
     ) store (
         .clk   (clk),
-        .wren  (push),
+        .write (push),        
+        `UNUSED_PIN (wren),               
         .waddr (wr_ptr),
         .wdata ({q2, q1}),
         .raddr (rd_ptr),

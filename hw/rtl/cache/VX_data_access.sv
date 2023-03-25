@@ -79,13 +79,13 @@ module VX_data_access #(
                     wren_r[wsel] = byteen;
                 end
             end
-            assign wdata = write ? wdata_r : fill_data;
-            assign wren  = write ? wren_r : {BYTEENW{fill}};
+            assign wdata = fill ? fill_data : wdata_r;
+            assign wren  = fill ? {BYTEENW{fill}} : wren_r;
         end else begin
             `UNUSED_VAR (wsel)
             `UNUSED_VAR (pmask)
-            assign wdata = write ? write_data : fill_data;
-            assign wren  = write ? byteen : {BYTEENW{fill}};
+            assign wdata = fill ? fill_data : write_data;
+            assign wren  = fill ? {BYTEENW{fill}} : byteen;
         end
     end else begin
         `UNUSED_VAR (write)
@@ -106,8 +106,9 @@ module VX_data_access #(
             .NO_RWCHECK (1)
         ) data_store (
             .clk   (clk),
+            .write ((write || fill) && (way_sel == `WAY_SEL_BITS'(i))),
+            .wren  (wren),
             .addr  (line_addr),
-            .wren  (wren & {BYTEENW{way_sel == `WAY_SEL_BITS'(i)}}),
             .wdata (wdata),
             .rdata (per_way_rdata[i]) 
         );

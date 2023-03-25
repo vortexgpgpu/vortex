@@ -74,7 +74,8 @@ module VX_index_buffer #(
         .LUTRAM (LUTRAM)
     ) data_table (
         .clk   (clk), 
-        .wren  (acquire_slot),
+        .write (acquire_slot),        
+        `UNUSED_PIN (wren),
         .waddr (write_addr_r),
         .wdata (write_data),
         .raddr (read_addr),

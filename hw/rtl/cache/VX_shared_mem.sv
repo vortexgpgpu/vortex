@@ -150,8 +150,6 @@ module VX_shared_mem #(
 
     // Generate memory banks
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
-        wire [WORD_SIZE-1:0] wren = {WORD_SIZE{per_bank_req_valid[i] && per_bank_req_rw[i]}} 
-                                  & per_bank_req_byteen[i];
         VX_sp_ram #(
             .DATAW      (WORD_WIDTH),
             .SIZE       (WORDS_PER_BANK),
@@ -159,7 +157,8 @@ module VX_shared_mem #(
             .NO_RWCHECK (1)
         ) data_store (
             .clk   (clk),
-            .wren  (wren),
+            .write (per_bank_req_valid[i] && per_bank_req_rw[i]),
+            .wren  (per_bank_req_byteen[i]),
             .addr  (per_bank_req_addr[i]),            
             .wdata (per_bank_req_data[i]),
             .rdata (per_bank_rsp_data[i])

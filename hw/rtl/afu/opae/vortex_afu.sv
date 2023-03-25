@@ -749,7 +749,6 @@ VX_fifo_queue #(
   `UNUSED_PIN (size)
 );
 
-`ifdef VERILATOR
 `DEBUG_BLOCK(
   reg [CCI_RD_WINDOW_SIZE-1:0] dbg_cci_rd_rsp_mask;
   always @(posedge clk) begin
@@ -767,7 +766,6 @@ VX_fifo_queue #(
     end
   end
 )
-`endif
 
 // CCI-P Write Request //////////////////////////////////////////////////////////
 
