@@ -3,7 +3,8 @@
     "include_paths":[
         "../dpi",
         "../rtl",
-        "../rtl/afu",        
+        "../rtl/afu/opae",
+        "../rtl/core", 
         "../rtl/cache",        
         "../rtl/fpu_unit",
         "../rtl/interfaces",

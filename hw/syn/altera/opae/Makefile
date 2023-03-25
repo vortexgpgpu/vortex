@@ -5,7 +5,7 @@ NUM_CORES ?= 1
 SCRIPT_DIR = ../../../scripts
 RTL_DIR = ../../../rtl
 DPI_DIR = ../../../dpi
-AFU_DIR = ../../../afu/opae
+AFU_DIR = $(RTL_DIR)/afu/opae
 
 IP_CACHE_DIR = ../ip_cache/$(DEVICE_FAMILY)
 

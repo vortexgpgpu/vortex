@@ -23,7 +23,7 @@ A debug trace `run.log` is generated in the current directory during the program
 
 ## RTL Debugging
 
-To debug the processor RTL, you need to use VLSIM or RTLSIM driver. VLSIM simulates the full processor including the AFU command processor (using `/rtl/afu/vortex_afu.sv` as top module). RTLSIM simulates the Vortex processor only (using `/rtl/Vortex.v` as top module).
+To debug the processor RTL, you need to use VLSIM or RTLSIM driver. VLSIM simulates the full processor including the AFU command processor (using `/rtl/afu/opae/vortex_afu.sv` as top module). RTLSIM simulates the Vortex processor only (using `/rtl/Vortex.v` as top module).
 
 The recommended method to enable debugging is to pass the `--debug` flag to `blackbox` tool when running a program.
 

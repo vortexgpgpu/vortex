@@ -17,7 +17,7 @@ PREFIX ?= build
 MAX_JOBS ?= 8
 
 RTL_DIR = ../../../../rtl
-AFU_DIR = ../../../../afu/xrt
+AFU_DIR = $(RTL_DIR)/afu/xrt
 SCRIPT_DIR = ../../../../scripts
 
 PLATFORM_TO_XSA = $(strip $(patsubst %.xpfm, % , $(shell basename $(PLATFORM))))
