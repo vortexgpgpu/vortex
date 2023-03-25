@@ -38,7 +38,7 @@ module VX_data_access #(
     input wire [NUM_PORTS-1:0][WORD_SIZE-1:0] byteen,
     input wire [`WORDS_PER_LINE-1:0][`WORD_WIDTH-1:0] fill_data,
     input wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] write_data,
-    input wire [`WAY_SEL_BITS-1:0]      way_sel,
+    input wire [NUM_WAYS-1:0]           way_sel,
 
     output wire [NUM_PORTS-1:0][`WORD_WIDTH-1:0] read_data
 );
@@ -106,7 +106,7 @@ module VX_data_access #(
             .NO_RWCHECK (1)
         ) data_store (
             .clk   (clk),
-            .write ((write || fill) && (way_sel == `WAY_SEL_BITS'(i))),
+            .write ((write || fill) && way_sel[i]),
             .wren  (wren),
             .addr  (line_addr),
             .wdata (wdata),
@@ -114,7 +114,7 @@ module VX_data_access #(
         );
     end
    
-    VX_mux #(
+    VX_onehot_mux #(
         .DATAW (`WORDS_PER_LINE * `WORD_WIDTH),
         .N     (NUM_WAYS)
     ) rdata_select (
