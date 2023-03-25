@@ -1,5 +1,5 @@
 RTL_DIR = ../../../../../rtl
-AFU_DIR = ../../../../../afu/opae
+AFU_DIR = $(RTL_DIR)/afu/opae
 THIRD_PARTY_DIR = ../../../../../../third_party
 IP_CACHE_DIR = ../../../ip_cache/$(DEVICE_FAMILY)
 SCRIPT_DIR = ../../../../../scripts
