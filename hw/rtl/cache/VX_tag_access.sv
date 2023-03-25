@@ -30,7 +30,7 @@ module VX_tag_access #(
     input wire [`LINE_ADDR_WIDTH-1:0]   addr,
     input wire                          fill,    
     input wire                          init,
-    output wire [NUM_WAYS-1:0]          way_sel,
+    output wire [`WAY_SEL_BITS-1:0]     way_sel,
     output wire                         tag_match
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -86,19 +86,25 @@ module VX_tag_access #(
     assign tag_match = (| tag_matches);
 
     // return the selected way
-    assign way_sel = fill_way | tag_matches;
-    
+    VX_onehot_encoder #(
+        .N (NUM_WAYS)
+    ) way_encoder (
+        .data_in  (fill_way | tag_matches),
+        .data_out (way_sel),
+        `UNUSED_PIN (valid_out)
+    );
+
 `ifdef DBG_TRACE_CACHE_TAG
     always @(posedge clk) begin
         if (fill && ~stall) begin
-            `TRACE(3, ("%d: %s:%0d tag-fill: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, line_tag));
+            `TRACE(3, ("%d: %s:%0d tag-fill: addr=0x%0h, way=%0d, blk_addr=%0d, tag_id=0x%0h\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, line_tag));
         end
         if (init) begin
             `TRACE(3, ("%d: %s:%0d tag-init: addr=0x%0h, blk_addr=%0d\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr));
         end
         if (lookup && ~stall) begin
             if (tag_match) begin
-                `TRACE(3, ("%d: %s:%0d tag-hit: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, line_tag, req_uuid));
+                `TRACE(3, ("%d: %s:%0d tag-hit: addr=0x%0h, way=%0d, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), way_sel, line_addr, line_tag, req_uuid));
             end else begin
                 `TRACE(3, ("%d: %s:%0d tag-miss: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `LINE_TO_BYTE_ADDR(addr, BANK_ID), line_addr, line_tag, req_uuid));
             end
