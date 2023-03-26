@@ -94,11 +94,20 @@ void cleanup() {
 }
 
 int main(int argc, char *argv[]) {
-  int exitcode = 0;
-  size_t value;
-  
   // parse command arguments
   parse_args(argc, argv);
+
+  // open device connection
+  std::cout << "open device connection" << std::endl;  
+  RT_CHECK(vx_dev_open(&device));
+
+  uint64_t isa_flags;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
+  if (0 == (isa_flags & (VX_ISA_EXT_IMADD))) {
+    std::cout << "IMADD extensions not supported!" << std::endl;
+    cleanup();
+    return -1;
+  }  
 
   if (count == 0) {
     count = 1;
@@ -108,18 +117,6 @@ int main(int argc, char *argv[]) {
 
   std::cout << "workitem size: " << count << std::endl;
   std::cout << "using kernel: " << kernel_file << std::endl;
-
-  // open device connection
-  std::cout << "open device connection" << std::endl;  
-  RT_CHECK(vx_dev_open(&device));
-  
-  uint64_t isa_flags;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
-  if (0 == (isa_flags & (VX_ISA_EXT_IMADD))) {
-    std::cout << "raster or rop extensions not supported!" << std::endl;
-    cleanup();
-    return -1;
-  }
 
   uint64_t max_cores, max_warps, max_threads;
   RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_CORES, &max_cores));
@@ -138,8 +135,9 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_upload_kernel_file(device, kernel_file));
 
   // allocate device memory
-  std::cout << "allocate device memory" << std::endl;  
+  std::cout << "allocate device memory" << std::endl; 
 
+  size_t value;
   RT_CHECK(vx_mem_alloc(device, buf_size, &value));
   kernel_arg.src0_addr = value;
   RT_CHECK(vx_mem_alloc(device, buf_size, &value));
@@ -238,6 +236,8 @@ int main(int argc, char *argv[]) {
     }
   }
   
+  int exitcode = 0;
+
   if (errors != 0) {
     std::cout << "found " << std::dec << errors << " errors!" << std::endl;
     std::cout << "Test FAILED!" << std::endl << std::flush;
