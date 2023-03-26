@@ -11,6 +11,7 @@ endif
 
 TARGET ?= hw
 PLATFORM ?=
+NUM_CORES ?= 1
 
 PREFIX ?= build
 
@@ -57,12 +58,6 @@ RASTER_INCLUDE = -I$(RTL_DIR)/raster_unit
 ROP_INCLUDE = -I$(RTL_DIR)/rop_unit
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/cache -I$(AFU_DIR)
 RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
-
-#CONFIGS += -DEXT_GFX_ENABLE
-#CONFIGS += -DNUM_WARPS=2 -DNUM_THREADS=2 -DEXT_F_DISABLE -DL1_DISABLE
-#CONFIGS += -DNUM_WARPS=2 -DNUM_THREADS=2 -DEXT_F_DISABLE
-#CONFIGS += -DNUM_WARPS=2 -DNUM_THREADS=2
-#CONFIGS += -DNUM_CORES=4
 
 CONFIGS += -DSYNTHESIS -DVIVADO
 
@@ -129,15 +124,24 @@ ifneq ($(TARGET),$(findstring $(TARGET), hw hw_emu))
 	$(warning WARNING:Application supports only hw hw_emu TARGET. Please use the target for running the application)
 endif
 
+CONFIGS_1   := -DNUM_CLUSTERS=1 -DNUM_CORES=1 $(CONFIGS)
+CONFIGS_2   := -DNUM_CLUSTERS=1 -DNUM_CORES=2 $(CONFIGS)
+CONFIGS_4   := -DNUM_CLUSTERS=1 -DNUM_CORES=4  -DL2_ENABLE $(CONFIGS)
+CONFIGS_8   := -DNUM_CLUSTERS=1 -DNUM_CORES=8  -DL2_ENABLE $(CONFIGS)
+CONFIGS_16  := -DNUM_CLUSTERS=1 -DNUM_CORES=16 -DL2_ENABLE $(CONFIGS)
+CONFIGS_32  := -DNUM_CLUSTERS=2 -DNUM_CORES=16 -DL2_ENABLE $(CONFIGS)
+CONFIGS_64  := -DNUM_CLUSTERS=4 -DNUM_CORES=16 -DL2_ENABLE $(CONFIGS)
+CONFIGS_SEL := $(CONFIGS_$(NUM_CORES))
+
 .PHONY: all clean gen-sources emconfig check-devices
 
 all: check-devices emconfig $(XCLBIN_CONTAINER)
 
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt:
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh $(RTL_INCLUDE) $(CONFIGS) -EVX_fpu_fpnew.sv -Evortex_afu.v -EVX_afu_wrap.sv -Osources.txt
-	cd $(BUILD_DIR); verilator -E -DNOGLOBALS $(RTL_INCLUDE) $(CONFIGS) $(AFU_DIR)/VX_afu_wrap.sv | sed '/^`line /d' > VX_afu_wrap.sv
-	cd $(BUILD_DIR); verilator -E -DNOGLOBALS $(RTL_INCLUDE) $(CONFIGS) $(AFU_DIR)/vortex_afu.v | sed '/^`line /d' > vortex_afu.v
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh $(RTL_INCLUDE) $(CONFIGS_SEL) -EVX_fpu_fpnew.sv -Evortex_afu.v -EVX_afu_wrap.sv -Osources.txt
+	cd $(BUILD_DIR); verilator -E -DNOGLOBALS $(RTL_INCLUDE) $(CONFIGS_SEL) $(AFU_DIR)/VX_afu_wrap.sv | sed '/^`line /d' > VX_afu_wrap.sv
+	cd $(BUILD_DIR); verilator -E -DNOGLOBALS $(RTL_INCLUDE) $(CONFIGS_SEL) $(AFU_DIR)/vortex_afu.v | sed '/^`line /d' > vortex_afu.v
 	echo "$(PWD)/$(BUILD_DIR)/VX_afu_wrap.sv" >> $(BUILD_DIR)/sources.txt
 	echo "$(PWD)/$(BUILD_DIR)/vortex_afu.v" >> $(BUILD_DIR)/sources.txt
 
