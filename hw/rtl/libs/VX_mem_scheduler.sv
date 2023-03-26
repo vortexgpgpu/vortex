@@ -398,15 +398,15 @@ module VX_mem_scheduler #(
 
     end else begin
 
-        reg [NUM_BATCHES-1:0][NUM_BANKS-1:0][DATA_WIDTH-1:0] rsp_store [QUEUE_SIZE-1:0];        
-        reg [NUM_BATCHES-1:0][NUM_BANKS-1:0][DATA_WIDTH-1:0] rsp_store_n;
+        reg [NUM_BATCHES*NUM_BANKS*DATA_WIDTH-1:0] rsp_store [QUEUE_SIZE-1:0];        
+        reg [NUM_BATCHES*NUM_BANKS*DATA_WIDTH-1:0] rsp_store_n;
         reg [NUM_REQS-1:0] rsp_orig_mask [QUEUE_SIZE-1:0];
 
         always @(*) begin
             rsp_store_n = rsp_store[ibuf_raddr];            
             for (integer i = 0; i < NUM_BANKS; ++i) begin
                 if ((NUM_BANKS == 1) || mem_rsp_mask_s[i]) begin
-                    rsp_store_n[rsp_batch_idx][i] = mem_rsp_data_s[i];
+                    rsp_store_n[(rsp_batch_idx * NUM_BANKS + i) * DATA_WIDTH +: DATA_WIDTH] = mem_rsp_data_s[i];
                 end
             end
         end        
@@ -429,7 +429,7 @@ module VX_mem_scheduler #(
         for (genvar r = 0; r < NUM_REQS; ++r) begin
             localparam i = r / NUM_BANKS;
             localparam j = r % NUM_BANKS;
-            assign crsp_data[r] = rsp_store_n[i][j];
+            assign crsp_data[r] = rsp_store_n[(i * NUM_BANKS + j) * DATA_WIDTH +: DATA_WIDTH];
         end
     end
 
