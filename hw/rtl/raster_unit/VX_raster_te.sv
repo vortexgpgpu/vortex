@@ -142,7 +142,7 @@ module VX_raster_te #(
     VX_pipe_register #(
         .DATAW  (1 + 1 + 4 * (2 * `RASTER_DIM_BITS + 3 * `RASTER_DATA_BITS) + LEVEL_BITS + 2 * `RASTER_DIM_BITS + 3 * `RASTER_DATA_BITS + LEVEL_BITS),
         .RESETW (1)
-    ) te_pipe_reg_1 (
+    ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),

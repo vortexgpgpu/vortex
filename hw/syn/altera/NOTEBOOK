@@ -92,5 +92,8 @@ tar -cvjf trace.vcd.tar.bz2 build_arria10_ase_1c/work/run.log build_arria10_ase_
 tar -zxvf vortex.vcd.tar.gz
 tar -xvf vortex.vcd.tar.bz2
 
+# running graphics benchmarks
+TARGET=fpga ./ci/blackbox.sh --driver=opae --app=draw3d --args="-w512 -h512 -tvase.cgltrace"
+
 # quick off synthesis
 make core

@@ -376,7 +376,7 @@ private:
 
         // check console output
         if (base_addr >= IO_COUT_ADDR 
-         && base_addr < (IO_COUT_ADDR + IO_COUT_SIZE)) {          
+         && base_addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {          
           for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
             if ((byteen >> i) & 0x1) {            
               auto& ss_buf = print_bufs_[i];
@@ -501,7 +501,7 @@ private:
 
         // check console output
         if (byte_addr >= IO_COUT_ADDR 
-         && byte_addr < (IO_COUT_ADDR + IO_COUT_SIZE)) {          
+         && byte_addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {    
           for (int i = 0; i < IO_COUT_SIZE; i++) {
             if ((byteen >> i) & 0x1) {            
               auto& ss_buf = print_bufs_[i];
@@ -534,7 +534,7 @@ private:
             0
           );
           dram_queue_.push(dram_req);
-        }
+        }         
       } else {
         // process reads
         auto mem_req = new mem_req_t();

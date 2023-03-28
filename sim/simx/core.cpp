@@ -390,7 +390,7 @@ void Core::dcache_read(void *data, uint64_t addr, uint32_t size) {
 void Core::dcache_write(const void* data, uint64_t addr, uint32_t size) {  
   auto type = this->get_addr_type(addr);
   if (addr >= IO_COUT_ADDR 
-   && addr <= (IO_COUT_ADDR + IO_COUT_SIZE - 1)) {
+   && addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {
      this->writeToStdOut(data, addr, size);
   } else {
     if (type == AddrType::Shared) {
