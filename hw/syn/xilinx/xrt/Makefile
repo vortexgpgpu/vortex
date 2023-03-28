@@ -139,11 +139,7 @@ all: check-devices emconfig $(XCLBIN_CONTAINER)
 
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt:
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh $(RTL_INCLUDE) $(CONFIGS_SEL) -EVX_fpu_fpnew.sv -Evortex_afu.v -EVX_afu_wrap.sv -Osources.txt
-	cd $(BUILD_DIR); verilator -E -DNOGLOBALS $(RTL_INCLUDE) $(CONFIGS_SEL) $(AFU_DIR)/VX_afu_wrap.sv | sed '/^`line /d' > VX_afu_wrap.sv
-	cd $(BUILD_DIR); verilator -E -DNOGLOBALS $(RTL_INCLUDE) $(CONFIGS_SEL) $(AFU_DIR)/vortex_afu.v | sed '/^`line /d' > vortex_afu.v
-	echo "$(PWD)/$(BUILD_DIR)/VX_afu_wrap.sv" >> $(BUILD_DIR)/sources.txt
-	echo "$(PWD)/$(BUILD_DIR)/vortex_afu.v" >> $(BUILD_DIR)/sources.txt
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh $(RTL_INCLUDE) $(CONFIGS_SEL) -DNOGLOBALS -EVX_fpu_fpnew.sv -Fsrc -P -Osources.txt
 
 $(XO_CONTAINER): $(BUILD_DIR)/sources.txt ./kernel.xml
 	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	$(VIVADO) -mode batch -source ../scripts/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt ../kernel.xml ../$(BUILD_DIR)
