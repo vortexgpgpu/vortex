@@ -50,7 +50,7 @@ module VX_tex_csr #(
     always @(posedge clk) begin
         if (tex_csr_if.write_enable) begin
             `TRACE(1, ("%d: core%0d-tex-csr-write: wid=%0d, tmask=%b, state=", $time, CORE_ID, tex_csr_if.write_wid, tex_csr_if.write_tmask));
-            trace_tex_csr(1, tex_csr_if.write_addr);
+            `TRACE_TEX_CSR(1, tex_csr_if.write_addr);
             `TRACE(1, (", data="));
             `TRACE_ARRAY1D(1, tex_csr_if.write_data, `NUM_THREADS);
             `TRACE(1, (" (#%0d)\n", tex_csr_if.write_uuid));

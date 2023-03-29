@@ -39,7 +39,7 @@ module VX_dcr_data (
     always @(posedge clk) begin
         if (dcr_write_if.valid) begin
             `TRACE(1, ("%d: base-dcr: state=", $time));
-            trace_base_dcr(1, dcr_write_if.addr);
+            `TRACE_BASE_DCR(1, dcr_write_if.addr);
             `TRACE(1, (", data=0x%0h\n", dcr_write_if.data));
         end
     end
