@@ -393,7 +393,6 @@ extern int vx_dev_open(vx_device_h* hdevice) {
 
     /*{
         std::cout << "Device" << device_index << " : " << xrtDevice.get_info<xrt::info::device::name>() << std::endl;
-        std::cout << "  platform : " << std::boolalpha << xrtDevice.get_info<xrt::info::device::platform>() << std::dec << std::endl;
         std::cout << "  bdf      : " << xrtDevice.get_info<xrt::info::device::bdf>() << std::endl;
         std::cout << "  kdma     : " << xrtDevice.get_info<xrt::info::device::kdma>() << std::endl;
         std::cout << "  max_freq : " << xrtDevice.get_info<xrt::info::device::max_clock_frequency_mhz>() << std::endl;
@@ -677,7 +676,7 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size
  
 #endif
 
-    DBGPRINT("COPY_TO_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld, bank=%d, offset=0x%x\n", dev_maddr, (uintptr_t)host_ptr, size, bo_index, bo_offset);
+    DBGPRINT("COPY_TO_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld, bank=%d, offset=0x%lx\n", dev_maddr, (uintptr_t)host_ptr, size, bo_index, bo_offset);
     
     return 0;
 }
@@ -733,7 +732,7 @@ extern int vx_copy_from_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t si
    
 #endif
 
-    DBGPRINT("COPY_FROM_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld, bank=%d, offset=0x%x\n", dev_maddr, (uintptr_t)host_ptr, asize, bo_index, bo_offset);
+    DBGPRINT("COPY_FROM_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld, bank=%d, offset=0x%lx\n", dev_maddr, (uintptr_t)host_ptr, asize, bo_index, bo_offset);
     
     return 0;
 }
