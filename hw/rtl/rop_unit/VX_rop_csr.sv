@@ -51,7 +51,7 @@ module VX_rop_csr #(
     always @(posedge clk) begin
         if (rop_csr_if.write_enable) begin
             `TRACE(1, ("%d: core%0d-rop-csr-write: wid=%0d, tmask=%b, state=", $time, CORE_ID, rop_csr_if.write_wid, rop_csr_if.write_tmask));
-            trace_rop_csr(1, rop_csr_if.write_addr);
+            `TRACE_ROP_CSR(1, rop_csr_if.write_addr);
             `TRACE(1, (", data="));
             `TRACE_ARRAY1D(1, rop_csr_if.write_data, `NUM_THREADS);
             `TRACE(1, (" (#%0d)\n", rop_csr_if.write_uuid));
