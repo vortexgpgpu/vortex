@@ -54,7 +54,8 @@ module VX_decode  #(
     wire [4:0] rs3 = instr[31:27];
 
     wire [19:0] upper_imm = {func7, rs2, rs1, func3};
-    wire [11:0] alu_imm   = (func3[0] && ~func3[1]) ? {7'b0, rs2} : u_12;
+    // wire [11:0] alu_imm   = (func3 == 3'b001) ? {{7{1'b0}}, instr[25:20]} : ((func3[0] && ~func3[1]) ? {{7{1'b0}}, rs2} : u_12);
+    wire [11:0] alu_imm   = (func3 == 3'b001) ? {{6{1'b0}}, instr[25:20]} : ((func3[0] && ~func3[1]) ? {{7{1'b0}}, rs2} : u_12);
     wire [11:0] s_imm     = {func7, rd};
     wire [12:0] b_imm     = {instr[31], instr[7], instr[30:25], instr[11:8], 1'b0};
     wire [20:0] jal_imm   = {instr[31], instr[19:12], instr[20], instr[30:21], 1'b0};
