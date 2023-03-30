@@ -38,7 +38,7 @@ module VX_alu_unit #(
     wire [`INST_BR_BITS-1:0]   br_op = `INST_BR_BITS'(alu_req_if.op_type);
     wire                  alu_signed = `INST_ALU_SIGNED(alu_op);   
     wire [1:0]          alu_op_class = `INST_ALU_OP_CLASS(alu_op); 
-    wire                      is_sub = (alu_op == `INST_ALU_SUB);
+    wire                      is_sub = (alu_op == `INST_ALU_SUB || alu_op == `INST_ALU_SUB_W);
 
     wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in1 = alu_req_if.rs1_data;
     wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in2 = alu_req_if.rs2_data;
