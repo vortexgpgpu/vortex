@@ -1,0 +1,155 @@
+rv32ud-p-fadd.hex ✅
+rv32ud-p-fclass.hex ✅
+rv32ud-p-fcmp.hex ✅
+rv32ud-p-fcvt.hex ✅
+rv32ud-p-fcvt_w.hex ✅
+rv32ud-p-fdiv.hex ✅
+rv32ud-p-fmadd.hex ✅
+rv32ud-p-fmin.hex ✅
+rv32ud-p-ldst.hex ✅
+rv32ud-p-recoding.hex ✅
+rv32uf-p-fadd.hex ✅
+rv32uf-p-fclass.hex ✅
+rv32uf-p-fcmp.hex ✅
+rv32uf-p-fcvt.hex ✅
+rv32uf-p-fcvt_w.hex ✅
+rv32uf-p-fdiv.hex ✅
+rv32uf-p-fmadd.hex ✅
+rv32uf-p-fmin.hex ✅
+rv32uf-p-ldst.hex ✅
+rv32uf-p-move.hex ✅
+rv32uf-p-recoding.hex ✅
+rv32ui-p-add.hex ✅
+rv32ui-p-addi.hex ✅
+rv32ui-p-and.hex ✅
+rv32ui-p-andi.hex ✅
+rv32ui-p-auipc.hex ✅
+rv32ui-p-beq.hex ✅
+rv32ui-p-bge.hex ✅
+rv32ui-p-bgeu.hex ✅
+rv32ui-p-blt.hex ✅
+rv32ui-p-bltu.hex ✅
+rv32ui-p-bne.hex ✅
+rv32ui-p-fence_i.hex ✅
+rv32ui-p-jal.hex ✅
+rv32ui-p-jalr.hex ✅
+rv32ui-p-lb.hex ✅
+rv32ui-p-lbu.hex ✅
+rv32ui-p-lh.hex ✅
+rv32ui-p-lhu.hex ✅
+rv32ui-p-lui.hex ✅
+rv32ui-p-lw.hex ✅
+rv32ui-p-or.hex ✅
+rv32ui-p-ori.hex ✅
+rv32ui-p-sb.hex ✅
+rv32ui-p-sh.hex ✅
+rv32ui-p-simple.hex ✅
+rv32ui-p-sll.hex ✅
+rv32ui-p-slli.hex ✅
+rv32ui-p-slt.hex ✅
+rv32ui-p-slti.hex ✅
+rv32ui-p-sltiu.hex ✅
+rv32ui-p-sltu.hex ✅
+rv32ui-p-sra.hex ✅
+rv32ui-p-srai.hex ✅
+rv32ui-p-srl.hex ✅
+rv32ui-p-srli.hex ✅
+rv32ui-p-sub.hex ✅
+rv32ui-p-sw.hex ✅
+rv32ui-p-xor.hex ✅
+rv32ui-p-xori.hex ✅
+rv32um-p-div.hex ✅
+rv32um-p-divu.hex ✅
+rv32um-p-mul.hex ✅
+rv32um-p-mulh.hex ✅
+rv32um-p-mulhsu.hex ✅
+rv32um-p-mulhu.hex ✅
+rv32um-p-rem.hex ✅
+rv32um-p-remu.hex ✅
+rv64ud-p-fadd.hex ❌
+rv64ud-p-fclass.hex ❌
+rv64ud-p-fcmp.hex ❌
+rv64ud-p-fcvt.hex ❌
+rv64ud-p-fcvt_w.hex ❌
+rv64ud-p-fdiv.hex ❌
+rv64ud-p-fmadd.hex ❌
+rv64ud-p-fmin.hex ❌
+rv64ud-p-ldst.hex ❌ exitcode=13
+rv64ud-p-move.hex ❌
+rv64ud-p-recoding.hex ❌
+rv64ud-p-structural.hex ❌
+rv64uf-p-fadd.hex ❌ exitcode=7
+rv64uf-p-fclass.hex ✅
+rv64uf-p-fcmp.hex ✅
+rv64uf-p-fcvt.hex ❌ exitcode=7
+rv64uf-p-fcvt_w.hex ❌ exitcode=5
+rv64uf-p-fdiv.hex ❌ exitcode=7
+rv64uf-p-fmadd.hex ❌ exitcode=9
+rv64uf-p-fmin.hex ❌ exitcode=7
+rv64uf-p-ldst.hex ❌ exitcode=5
+rv64uf-p-move.hex ❌ exitcode=23
+rv64uf-p-recoding.hex ✅
+rv64ui-p-add.hex ✅
+rv64ui-p-addi.hex ✅
+rv64ui-p-addiw.hex ✅
+rv64ui-p-addw.hex ✅
+rv64ui-p-and.hex ✅
+rv64ui-p-andi.hex ✅
+rv64ui-p-auipc.hex ✅
+rv64ui-p-beq.hex ✅
+rv64ui-p-bge.hex ✅
+rv64ui-p-bgeu.hex ✅
+rv64ui-p-blt.hex ✅
+rv64ui-p-bltu.hex ✅
+rv64ui-p-bne.hex ✅
+rv64ui-p-fence_i.hex ❌ exitcode=5
+rv64ui-p-jal.hex ✅
+rv64ui-p-jalr.hex ✅
+rv64ui-p-lb.hex ✅
+rv64ui-p-lbu.hex ✅
+rv64ui-p-ld.hex ✅
+rv64ui-p-lh.hex ✅
+rv64ui-p-lhu.hex ✅
+rv64ui-p-lui.hex ✅
+rv64ui-p-lw.hex ✅
+rv64ui-p-lwu.hex ✅
+rv64ui-p-or.hex ✅
+rv64ui-p-ori.hex ✅
+rv64ui-p-sb.hex ✅
+rv64ui-p-sd.hex ✅
+rv64ui-p-sh.hex ❌ exitcode=7
+rv64ui-p-simple.hex ✅
+rv64ui-p-sll.hex ✅
+rv64ui-p-slli.hex ✅
+rv64ui-p-slliw.hex ✅
+rv64ui-p-sllw.hex ✅
+rv64ui-p-slt.hex ✅
+rv64ui-p-slti.hex ✅
+rv64ui-p-sltiu.hex ✅
+rv64ui-p-sltu.hex ✅
+rv64ui-p-sra.hex ✅
+rv64ui-p-srai.hex ✅
+rv64ui-p-sraiw.hex ❌ exitcode=5
+rv64ui-p-sraw.hex ❌ exitcode=5
+rv64ui-p-srl.hex ✅
+rv64ui-p-srli.hex ✅
+rv64ui-p-srliw.hex ❌ exitcode=7
+rv64ui-p-srlw.hex ❌ exitcode=7
+rv64ui-p-sub.hex ✅
+rv64ui-p-subw.hex ✅
+rv64ui-p-sw.hex ❌ exitcode=7
+rv64ui-p-xor.hex ✅
+rv64ui-p-xori.hex ✅
+rv64um-p-div.hex ✅
+rv64um-p-divu.hex ✅
+rv64um-p-divuw.hex ❌ exitcode=5
+rv64um-p-divw.hex ❌ exitcode=5
+rv64um-p-mul.hex ❌ exitcode=15
+rv64um-p-mulh.hex ❌ exitcode=15
+rv64um-p-mulhsu.hex ❌ exitcode=15
+rv64um-p-mulhu.hex ❌ exitcode=15
+rv64um-p-mulw.hex ❌ exitcode=7
+rv64um-p-rem.hex ✅
+rv64um-p-remu.hex ✅
+rv64um-p-remuw.hex ❌ exitcode=5
+rv64um-p-remw.hex ❌ exitcode=5
