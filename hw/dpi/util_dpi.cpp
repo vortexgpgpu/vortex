@@ -99,14 +99,38 @@ void dpi_assert(int inst, bool cond, int delay) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+void umul64wide (uint64_t a, uint64_t b, uint64_t *hi, uint64_t *lo)
+{
+    uint64_t a_lo = (uint64_t)(uint32_t)a;
+    uint64_t a_hi = a >> 32;
+    uint64_t b_lo = (uint64_t)(uint32_t)b;
+    uint64_t b_hi = b >> 32;
+
+    uint64_t p0 = a_lo * b_lo;
+    uint64_t p1 = a_lo * b_hi;
+    uint64_t p2 = a_hi * b_lo;
+    uint64_t p3 = a_hi * b_hi;
+
+    uint32_t cy = (uint32_t)(((p0 >> 32) + (uint32_t)p1 + (uint32_t)p2) >> 32);
+
+    *lo = p0 + (p1 << 32) + (p2 << 32);
+    *hi = p3 + (p1 >> 32) + (p2 >> 32) + cy;
+}
+
+
 void dpi_imul(bool enable, long int a, long int b, bool is_signed_a, bool is_signed_b, long int* resultl, long int* resulth) {
   if (!enable)
     return;
     
   uint64_t first  = *(long int*)&a;
   uint64_t second = *(long int*)&b;
+
+  umul64wide (a, b, (uint64_t *)resulth, (uint64_t *)resultl);
     
-  if (is_signed_a && (first & 0x80000000)) {
+  //if (a < 0LL) *resulth -= b;
+  //if (b < 0LL) *resultl -= a;  
+  dpi_trace(1, "MUL - %lld %lld %lld %lld\n", a, b, *resulth, *resultl);
+  /*if (is_signed_a && (first & 0x80000000)) {
     first |= 0xFFFFFFFF00000000;
   }
 
@@ -122,7 +146,7 @@ void dpi_imul(bool enable, long int a, long int b, bool is_signed_a, bool is_sig
   }    
     
   *resultl = result & 0xFFFFFFFF;
-  *resulth = (result >> 32) & 0xFFFFFFFF;
+  *resulth = (result >> 32) & 0xFFFFFFFF;*/
 }
 
 void dpi_idiv(bool enable, long int a, long int b, bool is_signed, long int* quotient, long int* remainder) {
