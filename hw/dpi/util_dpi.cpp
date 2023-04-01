@@ -129,19 +129,19 @@ void dpi_idiv(bool enable, long int a, long int b, bool is_signed, long int* quo
   if (!enable)
     return;
 
-  uint32_t dividen = *(long int*)&a;
-  uint32_t divisor = *(long int*)&b;
+  uint64_t dividen = *(long int*)&a;
+  uint64_t divisor = *(long int*)&b;
 
   if (is_signed) {
     if (b == 0) {
       *quotient  = -1;
       *remainder = dividen;
-    } else if (dividen == 0x80000000 && divisor == 0xffffffff) {
+    } else if (dividen == 0x8000000000000000 && divisor == 0xffffffffffffffff) {
       *remainder = 0;
       *quotient  = dividen;
     } else { 
-      *quotient  = (int32_t)dividen / (int32_t)divisor;
-      *remainder = (int32_t)dividen % (int32_t)divisor;      
+      *quotient  = (int64_t)dividen / (int64_t)divisor;
+      *remainder = (int64_t)dividen % (int64_t)divisor;      
     }
   } else {    
     if (b == 0) {
