@@ -49,9 +49,10 @@ module VX_muldiv (
     wire mul_valid_in = valid_in && !is_div_op;    
     wire mul_ready_in = ~stall_out || ~mul_valid_out;
 
-    wire is_mulh_in      = (alu_op != `INST_MUL_MUL);
+    wire is_mulh_in      = (alu_op != `INST_MUL_MUL) && (alu_op != `INST_MUL_MULW);
     wire is_signed_mul_a = (alu_op != `INST_MUL_MULHU);
     wire is_signed_mul_b = (alu_op != `INST_MUL_MULHU && alu_op != `INST_MUL_MULHSU);
+    wire is_mulw         = (alu_op == `INST_MUL_MULW);
 
 `ifdef IMUL_DPI
 
@@ -61,10 +62,12 @@ module VX_muldiv (
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         wire [`XLEN-1:0] mul_resultl, mul_resulth;
+        wire [`XLEN-1:0] alu_in1_dpi = is_mulw ? (alu_in1[i] & 64'hFFFFFFFF) : alu_in1[i]; 
+        wire [`XLEN-1:0] alu_in2_dpi = is_mulw ? (alu_in2[i] & 64'hFFFFFFFF) : alu_in2[i]; 
         always @(*) begin        
-            dpi_imul (mul_fire_in, alu_in1[i], alu_in2[i], is_signed_mul_a, is_signed_mul_b, mul_resultl, mul_resulth);
+            dpi_imul (mul_fire_in, alu_in1_dpi, alu_in2_dpi, is_signed_mul_a, is_signed_mul_b, mul_resultl, mul_resulth);
         end
-        assign mul_result_tmp[i] = is_mulh_in ? mul_resulth : mul_resultl;
+        assign mul_result_tmp[i] = is_mulh_in ? mul_resulth : (is_mulw ? `XLEN'($signed(mul_resultl[31:0])) : mul_resultl);
     end
 
     VX_shift_register #(
@@ -82,7 +85,7 @@ module VX_muldiv (
 `else      
     
     wire is_mulh_out;
-
+    //TODO handle mulw when not using DPI
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         wire [`XLEN:0] mul_in1 = {is_signed_mul_a && alu_in1[i][`XLEN-1], alu_in1[i]};
         wire [`XLEN:0] mul_in2 = {is_signed_mul_b && alu_in2[i][`XLEN-1], alu_in2[i]};
@@ -132,24 +135,29 @@ module VX_muldiv (
     wire div_wb_out;
 
     wire is_rem_op_in  = (alu_op == `INST_MUL_REM) || (alu_op == `INST_MUL_REMU);
-    wire is_signed_div = (alu_op == `INST_MUL_DIV) || (alu_op == `INST_MUL_REM);     
+    wire is_signed_div = (alu_op == `INST_MUL_DIV) || (alu_op == `INST_MUL_REM) || (alu_op == `INST_MUL_DIVW);     
     wire div_valid_in  = valid_in && is_div_op; 
     wire div_ready_out = ~stall_out && ~mul_valid_out; // arbitration prioritizes MUL  
     wire div_ready_in;
     wire div_valid_out;
+
+    wire is_divw         = (alu_op == `INST_MUL_DIVW);
+    wire is_divuw        = (alu_op == `INST_MUL_DIVUW);
 
 `ifdef IDIV_DPI    
 
     wire [`NUM_THREADS-1:0][`XLEN-1:0] div_result_tmp;
 
     wire div_fire_in = div_valid_in && div_ready_in;
-    
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         wire [`XLEN-1:0] div_quotient, div_remainder;
+        wire [`XLEN-1:0] alu_in1_dpi = is_divuw ? (alu_in1[i] & 64'hFFFFFFFF) : (is_divw ? `XLEN'($signed(alu_in1[i][31:0])): alu_in1[i]);
+        wire [`XLEN-1:0] alu_in2_dpi = is_divuw ? (alu_in2[i] & 64'hFFFFFFFF) : (is_divw ? `XLEN'($signed(alu_in2[i][31:0])): alu_in2[i]);
         always @(*) begin        
-            dpi_idiv (div_fire_in, alu_in1[i], alu_in2[i], is_signed_div, div_quotient, div_remainder);
+            dpi_idiv (div_fire_in, alu_in1_dpi, alu_in2_dpi, is_signed_div, div_quotient, div_remainder);
         end
-        assign div_result_tmp[i] = is_rem_op_in ? div_remainder : div_quotient;
+        wire [`XLEN-1:0] div_quotient_out = (is_divuw | is_divw) ? `XLEN'($signed(div_quotient[31:0])) : div_quotient;
+        assign div_result_tmp[i] = is_rem_op_in ? div_remainder : div_quotient_out;
     end
 
     VX_shift_register #(

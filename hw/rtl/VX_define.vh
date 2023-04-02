@@ -145,16 +145,23 @@
 `define INST_BR_LESS(x)      x[2]
 `define INST_BR_STATIC(x)    x[3]
 
-`define INST_MUL_MUL         3'h0
-`define INST_MUL_MULH        3'h1
-`define INST_MUL_MULHSU      3'h2
-`define INST_MUL_MULHU       3'h3
-`define INST_MUL_DIV         3'h4
-`define INST_MUL_DIVU        3'h5
-`define INST_MUL_REM         3'h6
-`define INST_MUL_REMU        3'h7
-`define INST_MUL_BITS        3
+`define INST_MUL_MUL         4'h0
+`define INST_MUL_MULH        4'h1
+`define INST_MUL_MULHSU      4'h2
+`define INST_MUL_MULHU       4'h3
+`define INST_MUL_DIV         4'h4
+`define INST_MUL_DIVU        4'h5
+`define INST_MUL_REM         4'h6
+`define INST_MUL_REMU        4'h7
+`define INST_MUL_BITS        4
 `define INST_MUL_IS_DIV(x)   x[2]
+
+// RV64M instruction versions
+`define INST_MUL_MULW        4'b1000
+`define INST_MUL_DIVW        4'b1100
+`define INST_MUL_DIVUW       4'b1101
+`define INST_MUL_REMW        4'b1110
+`define INST_MUL_REMUW       4'b1111
 
 `define INST_FMT_B           3'b000
 `define INST_FMT_H           3'b001

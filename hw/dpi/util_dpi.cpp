@@ -176,6 +176,7 @@ void dpi_idiv(bool enable, long int a, long int b, bool is_signed, long int* quo
       *remainder = dividen % divisor;
     }
   }
+    dpi_trace(1, "DIV - %d %lld %lld %lld %lld %lld %lld\n",is_signed , a, b, dividen, divisor, *quotient, *remainder);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
