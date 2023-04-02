@@ -110,9 +110,9 @@ ifdef DEBUG
 	ifeq ($(TARGET), hw)
 		VPP_FLAGS += --debug.chipscope vortex_afu_1
 		CONFIGS += -DCHIPSCOPE $(CHIPSCOPE_FLAGS)
-	else
-		CONFIGS += -DSIMULATION $(DBG_TRACE_FLAGS)
+	else		
 		VPP_FLAGS += --vivado.prop fileset.sim_1.xsim.elaborate.debug_level=all
+		CONFIGS += -DSIMULATION $(DBG_TRACE_FLAGS)
 	endif
 else    
 	CONFIGS += -DNDEBUG

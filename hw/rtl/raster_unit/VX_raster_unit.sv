@@ -205,9 +205,9 @@ module VX_raster_unit #(
 
     // Generate all PEs
     for (genvar i = 0; i < NUM_PES; ++i) begin
-        wire [`RASTER_DIM_BITS-1:0]       pe_x_loc_in;
-        wire [`RASTER_DIM_BITS-1:0]       pe_y_loc_in;
-        wire [`RASTER_PID_BITS-1:0]       pe_pid_in;
+        wire [`RASTER_DIM_BITS-1:0] pe_x_loc_in;
+        wire [`RASTER_DIM_BITS-1:0] pe_y_loc_in;
+        wire [`RASTER_PID_BITS-1:0] pe_pid_in;
         wire [2:0][2:0][`RASTER_DATA_BITS-1:0] pe_edges_in;
         wire [2:0][`RASTER_DATA_BITS-1:0] pe_extents_in;
 
