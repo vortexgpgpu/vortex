@@ -151,12 +151,26 @@ module VX_decode  #(
             `INST_R_W: begin
                 // ADDW, SUBW, SLLW, SRLW, SRAW
                 ex_type = `EX_ALU;
-                case (func3)
-                    3'h0: op_type = (func7[5]) ? `INST_OP_BITS'(`INST_ALU_SUB_W) : `INST_OP_BITS'(`INST_ALU_ADD_W);
-                    3'h1: op_type = `INST_OP_BITS'(`INST_ALU_SLL_W);
-                    3'h5: op_type = (func7[5]) ? `INST_OP_BITS'(`INST_ALU_SRA_W) : `INST_OP_BITS'(`INST_ALU_SRL_W);
-                    default:;
-                endcase
+                    ex_type = `EX_ALU;
+                `ifdef EXT_M_ENABLE
+                    if (func7[0]) begin
+                        case (func3)
+                            3'h0: op_type = `INST_OP_BITS'(`INST_MUL_MULW);
+                            3'h4: op_type = `INST_OP_BITS'(`INST_MUL_DIVW);
+                            3'h5: op_type = `INST_OP_BITS'(`INST_MUL_DIVUW);
+                            3'h6: op_type = `INST_OP_BITS'(`INST_MUL_REMW);
+                            3'h7: op_type = `INST_OP_BITS'(`INST_MUL_REMUW);
+                            default:; 
+                        endcase
+                        op_mod = 2;
+                    end else 
+                `endif
+                    case (func3)
+                        3'h0: op_type = (func7[5]) ? `INST_OP_BITS'(`INST_ALU_SUB_W) : `INST_OP_BITS'(`INST_ALU_ADD_W);
+                        3'h1: op_type = `INST_OP_BITS'(`INST_ALU_SLL_W);
+                        3'h5: op_type = (func7[5]) ? `INST_OP_BITS'(`INST_ALU_SRA_W) : `INST_OP_BITS'(`INST_ALU_SRL_W);
+                        default:;
+                    endcase
                 use_rd = 1;
                 `USED_IREG (rd);
                 `USED_IREG (rs1);

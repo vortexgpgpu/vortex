@@ -142,13 +142,13 @@ rv64ui-p-xor.hex ✅
 rv64ui-p-xori.hex ✅
 rv64um-p-div.hex ✅
 rv64um-p-divu.hex ✅
-rv64um-p-divuw.hex ❌ exitcode=5
-rv64um-p-divw.hex ❌ exitcode=5
-rv64um-p-mul.hex ❌ exitcode=15
+rv64um-p-divuw.hex ✅
+rv64um-p-divw.hex ✅
+rv64um-p-mul.hex ✅
 rv64um-p-mulh.hex ❌ exitcode=15
 rv64um-p-mulhsu.hex ❌ exitcode=15
-rv64um-p-mulhu.hex ❌ exitcode=15
-rv64um-p-mulw.hex ❌ exitcode=7
+rv64um-p-mulhu.hex ✅
+rv64um-p-mulw.hex ✅
 rv64um-p-rem.hex ✅
 rv64um-p-remu.hex ✅
 rv64um-p-remuw.hex ❌ exitcode=5
