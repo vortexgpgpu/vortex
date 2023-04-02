@@ -43,6 +43,9 @@
                 `INST_MUL_DIVU:  `TRACE(level, ("DIVU")); \
                 `INST_MUL_REM:   `TRACE(level, ("REM")); \
                 `INST_MUL_REMU:  `TRACE(level, ("REMU")); \
+                `INST_MUL_MULW:  `TRACE(level, ("MULW")); \
+                `INST_MUL_DIVW:  `TRACE(level, ("DIVW")); \
+                `INST_MUL_DIVUW:  `TRACE(level, ("DIVUW")); \
                 default:         `TRACE(level, ("?")); \
             endcase \
         end else begin \

@@ -218,6 +218,7 @@ void dpi_idiv(bool enable, INT_LEN a, INT_LEN b, bool is_signed, INT_LEN* quotie
       *remainder = dividen % divisor;
     }
   }
+    dpi_trace(1, "DIV - %d %lld %lld %lld %lld %lld %lld\n",is_signed , a, b, dividen, divisor, *quotient, *remainder);
 }
 #endif
 
