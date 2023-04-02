@@ -95,7 +95,7 @@ module VX_raster_csr #(
     always @(posedge clk) begin
         if (raster_csr_if.read_enable) begin
             `TRACE(1, ("%d: core%0d-raster-csr-read: wid=%0d, tmask=%b, state=", $time, CORE_ID, raster_csr_if.read_wid, raster_csr_if.read_tmask));
-            trace_raster_csr(1, raster_csr_if.read_addr);
+            `TRACE_RASTER_CSR(1, raster_csr_if.read_addr);
             `TRACE(1, (", data="));
             `TRACE_ARRAY1D(1, raster_csr_if.read_data, `NUM_THREADS);
             `TRACE(1, (" (#%0d)\n", raster_csr_if.read_uuid));

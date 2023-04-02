@@ -10,29 +10,21 @@ import VX_gpu_types::*;
 import VX_tex_types::*;
 `IGNORE_WARNINGS_END
 
-task trace_tex_dcr (
-    input int                  level,
-    input [`DCR_ADDR_BITS-1:0] addr
-);
-    case (addr)
-        `DCR_TEX_ADDR:      `TRACE(level, ("ADDR"));
-        `DCR_TEX_LOGDIM:    `TRACE(level, ("LOGDIM"));
-        `DCR_TEX_FORMAT:    `TRACE(level, ("FORMAT"));
-        `DCR_TEX_FILTER:    `TRACE(level, ("FILTER"));
-        `DCR_TEX_WRAP:      `TRACE(level, ("WRAP"));
-        //`DCR_TEX_MIPOFF
-        default:            `TRACE(level, ("MIPOFF"));
-    endcase  
-endtask
+`define TRACE_TEX_DCR(level, addr) \
+    case (addr) \
+        `DCR_TEX_ADDR:      `TRACE(level, ("ADDR")); \
+        `DCR_TEX_LOGDIM:    `TRACE(level, ("LOGDIM")); \
+        `DCR_TEX_FORMAT:    `TRACE(level, ("FORMAT")); \
+        `DCR_TEX_FILTER:    `TRACE(level, ("FILTER")); \
+        `DCR_TEX_WRAP:      `TRACE(level, ("WRAP")); \
+        //`DCR_TEX_MIPOFF \
+        default:            `TRACE(level, ("MIPOFF")); \
+    endcase
 
-task trace_tex_csr (
-    input int                  level,
-    input [`CSR_ADDR_BITS-1:0] addr
-);
-    case (addr)
-        default:         `TRACE(level, ("?"));
-    endcase  
-endtask
+`define TRACE_TEX_CSR(level, addr) \
+    case (addr) \
+        default: `TRACE(level, ("?")); \
+    endcase
 
 `define PERF_TEX_ADD(dst, src, count) \
     `REDUCE_ADD (dst, src, mem_reads, `PERF_CTR_BITS, count); \

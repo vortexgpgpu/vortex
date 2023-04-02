@@ -23,27 +23,15 @@ set vdefines_list  [lindex $vlist 2]
 #puts ${vincludes_list}
 #puts ${vdefines_list}
 
-# dump defines into globals.vh
+# find if chipscope is enabled
 set chipscope 0
-set fh [open "${build_dir}/globals.vh" w]
 foreach def $vdefines_list {
     set fields [split $def "="]
-    set len [llength $fields]
     set name [lindex $fields 0]
-    puts -nonewline $fh "`define "
-    if {$len > 1} {
-        set value [lindex $fields 1]
-        puts -nonewline $fh $name
-        puts -nonewline $fh " "
-        puts $fh $value
-    } else {
-        puts $fh $name
-        if { $name == "CHIPSCOPE" } {
-            set chipscope 1
-        }
+    if { $name == "CHIPSCOPE" } {
+        set chipscope 1
     }
 }
-close $fh
 
 create_project -force kernel_pack $path_to_tmp_project
 
@@ -51,7 +39,6 @@ add_files -norecurse ${vsources_list}
 
 set obj [get_filesets sources_1]
 set files [list \
- [file normalize "${build_dir}/globals.vh"] \
  [file normalize "${build_dir}/ip/xil_fdiv/xil_fdiv.xci"] \
  [file normalize "${build_dir}/ip/xil_fma/xil_fma.xci"] \
  [file normalize "${build_dir}/ip/xil_fsqrt/xil_fsqrt.xci"] \
