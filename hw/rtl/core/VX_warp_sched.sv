@@ -251,10 +251,10 @@ module VX_warp_sched #(
 
     assign {schedule_tmask, schedule_pc} = schedule_data[schedule_wid];    
 
-`ifdef SIMULATION
+`ifndef NDEBUG
     assign instr_uuid = (issued_instrs[schedule_wid] * `NUM_WARPS * `NUM_CORES * `NUM_CLUSTERS)
-                      + (`NUM_WARPS * CORE_ID)
-                      + `UUID_BITS'(schedule_wid);
+                      + UUID_WIDTH'(`NUM_WARPS * CORE_ID)
+                      + UUID_WIDTH'(schedule_wid);
 `else
     assign instr_uuid = '0;
 `endif

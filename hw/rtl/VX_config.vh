@@ -824,4 +824,4 @@
 `define L3_NUM_WAYS 4
 `endif
 
-`endif
+`endif // VX_CONFIG_VH

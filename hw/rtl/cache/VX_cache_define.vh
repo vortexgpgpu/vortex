@@ -66,4 +66,4 @@
 
 `define TO_FULL_ADDR(x)         {x, (32-$bits(x))'(0)}
 
-`endif
+`endif // VX_CACHE_DEFINE_VH

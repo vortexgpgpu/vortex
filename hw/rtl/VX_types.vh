@@ -425,4 +425,4 @@
 `define DCR_ROP_STATE(addr)         ((addr) - `DCR_ROP_STATE_BEGIN)
 `define DCR_ROP_STATE_COUNT         (`DCR_ROP_STATE_END-`DCR_ROP_STATE_BEGIN)
 
-`endif
+`endif // VX_TYPES_VH

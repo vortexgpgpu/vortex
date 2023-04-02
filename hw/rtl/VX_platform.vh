@@ -244,4 +244,4 @@
 `define REPEAT_COMMA ,
 `define REPEAT_SEMICOLON ;
 
-`endif
+`endif // VX_PLATFORM_VH

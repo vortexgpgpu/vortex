@@ -28,4 +28,4 @@ endpackage
 `define FP_CLASS_BITS   $bits(VX_fpu_types::fclass_t)
 `define FP_FLAGS_BITS   $bits(VX_fpu_types::fflags_t)
 
-`endif
+`endif // VX_FPU_TYPES_VH

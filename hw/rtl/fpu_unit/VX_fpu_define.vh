@@ -13,4 +13,4 @@
 import VX_fpu_types::*;
 `IGNORE_WARNINGS_END
 
-`endif
+`endif // VX_FPU_DEFINE_VH

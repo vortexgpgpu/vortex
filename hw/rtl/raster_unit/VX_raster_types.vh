@@ -35,4 +35,4 @@ typedef struct packed {
 
 endpackage
 
-`endif
+`endif // VX_RASTER_TYPES_VH

@@ -33,10 +33,12 @@
 
 `define PERF_CTR_BITS   44
 
-`ifdef SIMULATION
+`ifndef NDEBUG
+`ifdef VIVADO
+`define UUID_BITS       19
+`else
 `define UUID_BITS       44
-`elsif CHIPSCOPE 
-`define UUID_BITS       12
+`endif
 `else
 `define UUID_BITS       0
 `endif
@@ -472,4 +474,4 @@
     `REDUCE_ADD (dst, src, mem_stalls, `PERF_CTR_BITS, count); \
     `REDUCE_ADD (dst, src, crsp_stalls, `PERF_CTR_BITS, count)
 
-`endif
+`endif // VX_DEFINE_VH

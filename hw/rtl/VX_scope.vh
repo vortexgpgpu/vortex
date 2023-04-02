@@ -96,4 +96,5 @@
 `define SCOPE_ASSIGN(d,s)
 
 `endif
-`endif
+
+`endif // VX_SCOPE_VH
