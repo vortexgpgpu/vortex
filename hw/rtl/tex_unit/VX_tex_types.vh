@@ -37,4 +37,4 @@ typedef struct packed {
 
 endpackage
 
-`endif
+`endif // VX_TEX_TYPES_VH

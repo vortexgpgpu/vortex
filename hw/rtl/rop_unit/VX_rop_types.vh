@@ -56,4 +56,4 @@ typedef struct packed {
 
 endpackage
 
-`endif
+`endif // VX_ROP_TYPES_VH

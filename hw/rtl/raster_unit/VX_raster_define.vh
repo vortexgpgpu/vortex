@@ -63,4 +63,4 @@ endtask
     `REDUCE_ADD (dst, src, mem_latency, `PERF_CTR_BITS, count); \
     `REDUCE_ADD (dst, src, stall_cycles, `PERF_CTR_BITS, count)
 
-`endif
+`endif // VX_RASTER_DEFINE_VH

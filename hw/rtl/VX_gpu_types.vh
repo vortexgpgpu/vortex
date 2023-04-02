@@ -269,4 +269,4 @@ endpackage
 `define GPU_SPLIT_BITS      $bits(VX_gpu_types::gpu_split_t)
 `define GPU_BARRIER_BITS    $bits(VX_gpu_types::gpu_barrier_t)
 
-`endif
+`endif // VX_GPU_TYPES_VH

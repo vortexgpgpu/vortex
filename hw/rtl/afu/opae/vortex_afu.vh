@@ -45,4 +45,4 @@
 `define AFU_IMAGE_POWER 0
 `define AFU_TOP_IFC "ccip_std_afu_avalon_mm"
 
-`endif
+`endif // VORTEX_AFU_VH

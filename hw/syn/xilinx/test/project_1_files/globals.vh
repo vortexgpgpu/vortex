@@ -14,5 +14,5 @@
 `define IO_ADDR_SIZE    (32'hFFFFF - `IO_BASE_ADDR + 1)
 `define IO_COUT_ADDR    (32'hFFFFF - `MEM_BLOCK_SIZE + 1)
 
-`endif
+`endif // GLOBALS_VH
 

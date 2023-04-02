@@ -1,12 +1,8 @@
-`include "VX_platform.vh"
-`ifdef NOPAE
-`IGNORE_WARNINGS_BEGIN
-`include "vortex_afu.vh"
-`IGNORE_WARNINGS_END
-`else
+`ifndef NOPAE
 `include "afu_json_info.vh"
+`else
+`include "vortex_afu.vh"
 `endif
-
 `include "VX_define.vh"
 `include "VX_gpu_types.vh"
 

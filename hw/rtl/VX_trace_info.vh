@@ -169,4 +169,4 @@ task trace_base_dcr (
     endcase  
 endtask
 
-`endif
+`endif // VX_TRACE_INFO_VH
