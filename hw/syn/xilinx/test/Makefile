@@ -1,14 +1,42 @@
-
 VIVADO = $(XILINX_VIVADO)/bin/vivado
 
-all: create_project
+RTL_DIR = ../../../rtl
+AFU_DIR = $(RTL_DIR)/afu/xrt
+SCRIPT_DIR = ../../../scripts
 
-create_project: project_1
-project_1: project_1.tcl
-	$(VIVADO) -mode batch -source project_1.tcl
+# include paths
+FPU_INCLUDE = -I$(RTL_DIR)/fpu_unit
+TEX_INCLUDE = -I$(RTL_DIR)/tex_unit
+RASTER_INCLUDE = -I$(RTL_DIR)/raster_unit
+ROP_INCLUDE = -I$(RTL_DIR)/rop_unit
+RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/cache
+RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
+RTL_INCLUDE += -Iproject_1_files
 
-run:
-	$(VIVADO) project_1/project_1.xpr &
+# compilation flags
+CFLAGS += -DSYNTHESIS -DVIVADO -DNOGLOBALS 
+CFLAGS += $(CONFIGS)
+CFLAGS += $(RTL_INCLUDE)
+
+COE_FILE := $(realpath project_1_files)/kernel.bin.coe
+ESCAPED_COE_FILE := $(shell echo "$(COE_FILE)" | sed -e 's/[\/&]/\\&/g')
+
+all: build
+
+gen-sources: project_1/sources.txt
+project_1/sources.txt:
+	mkdir -p project_1
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -P -EVX_fpu_fpnew.sv -Fproject_1/src -Oproject_1/sources.txt
+
+project.tcl: project.tcl.in
+	sed -e 's/%COE_FILE%/$(ESCAPED_COE_FILE)/g' < $< > $@
+
+build: project_1/vortex.xpr
+project_1/vortex.xpr: project_1/sources.txt project.tcl
+	$(VIVADO) -mode batch -source project.tcl -tclargs project_1/sources.txt project_1_files $(SCRIPT_DIR)
+
+run: project_1/vortex.xpr
+	$(VIVADO) project_1/vortex.xpr &
 
 clean:
-	rm -rf project_1
+	rm -rf project_1 project.tcl
