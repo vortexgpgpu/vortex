@@ -1,18 +1,18 @@
-if { $::argc != 2 } {
-    puts "ERROR: Program \"$::argv0\" requires 2 arguments!\n"
-    puts "Usage: $::argv0 <krnl_name> <build_dir>\n"
+if { $::argc != 4 } {
+    puts "ERROR: Program \"$::argv0\" requires 4 arguments!\n"
+    puts "Usage: $::argv0 <krnl_name> <vcs_file> <tool_dir> <build_dir>\n"
     exit
 }
 
 set krnl_name [lindex $::argv 0]
-set build_dir [lindex $::argv 1]
-
-set script_path [ file dirname [ file normalize [ info script ] ] ]
+set vcs_file  [lindex $::argv 1]
+set tool_dir  [lindex $::argv 2]
+set build_dir [lindex $::argv 3]
 
 set path_to_packaged "${build_dir}/xo/packaged_kernel"
 set path_to_tmp_project "${build_dir}/xo/project"
 
-source "${script_path}/parse_vcs_list.tcl"
+source "${tool_dir}/parse_vcs_list.tcl"
 set vlist [parse_vcs_list "${vcs_file}"]
 
 set vsources_list  [lindex $vlist 0]

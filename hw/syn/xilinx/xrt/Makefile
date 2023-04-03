@@ -21,6 +21,15 @@ RTL_DIR = ../../../../rtl
 AFU_DIR = $(RTL_DIR)/afu/xrt
 SCRIPT_DIR = ../../../../scripts
 
+VIVADO = $(XILINX_VIVADO)/bin/vivado
+VPP = $(XILINX_VITIS)/bin/v++
+CP = cp -rf
+RMDIR = rm -rf
+ECHO = @echo
+
+NCPUS := $(shell grep -c ^processor /proc/cpuinfo)
+JOBS ?= $(shell echo $$(( $(NCPUS) > $(MAX_JOBS) ? $(MAX_JOBS) : $(NCPUS) )))
+
 PLATFORM_TO_XSA = $(strip $(patsubst %.xpfm, % , $(shell basename $(PLATFORM))))
 XSA := $(call PLATFORM_TO_XSA, $(PLATFORM))
 
@@ -29,6 +38,9 @@ CPU_TYPE := $(shell platforminfo -p $(PLATFORM) | grep 'CPU Type' | sed 's/.*://
 
 BUILD_DIR = $(PREFIX)_$(XSA)_$(TARGET)
 BIN_DIR   = $(BUILD_DIR)/bin
+
+XO_CONTAINER = $(BIN_DIR)/vortex_afu.xo
+XCLBIN_CONTAINER = $(BIN_DIR)/vortex_afu.xclbin
 
 # Control RTL debug tracing states
 DBG_TRACE_FLAGS += -DDBG_TRACE_CORE_PIPELINE  
@@ -52,6 +64,17 @@ CHIPSCOPE_FLAGS += -DCHIPSCOPE_LSU
 CHIPSCOPE_FLAGS += -DCHIPSCOPE_RASTER
 CHIPSCOPE_FLAGS += -DCHIPSCOPE_MSCHED
 
+# cluster configuration
+CONFIGS_1c  := -DNUM_CLUSTERS=1 -DNUM_CORES=1
+CONFIGS_2c  := -DNUM_CLUSTERS=1 -DNUM_CORES=2
+CONFIGS_4c  := -DNUM_CLUSTERS=1 -DNUM_CORES=4  -DL2_ENABLE
+CONFIGS_8c	:= -DNUM_CLUSTERS=1 -DNUM_CORES=8  -DL2_ENABLE
+CONFIGS_16c	:= -DNUM_CLUSTERS=1 -DNUM_CORES=16 -DL2_ENABLE
+CONFIGS_32c := -DNUM_CLUSTERS=2 -DNUM_CORES=16 -DL2_ENABLE
+CONFIGS_64c := -DNUM_CLUSTERS=4 -DNUM_CORES=16 -DL2_ENABLE
+CONFIGS += $(CONFIGS_$(NUM_CORES)c)
+
+# include paths
 FPU_INCLUDE = -I$(RTL_DIR)/fpu_unit
 TEX_INCLUDE = -I$(RTL_DIR)/tex_unit
 RASTER_INCLUDE = -I$(RTL_DIR)/raster_unit
@@ -59,23 +82,10 @@ ROP_INCLUDE = -I$(RTL_DIR)/rop_unit
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/cache -I$(AFU_DIR)
 RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
 
-CONFIGS += -DSYNTHESIS -DVIVADO
-
-VIVADO = $(XILINX_VIVADO)/bin/vivado
-
-VPP = $(XILINX_VITIS)/bin/v++
-
-CP = cp -rf
-RMDIR = rm -rf
-
-ECHO = @echo
-
-XO_CONTAINER = $(BIN_DIR)/vortex_afu.xo
-
-XCLBIN_CONTAINER = $(BIN_DIR)/vortex_afu.xclbin
-
-NCPUS := $(shell grep -c ^processor /proc/cpuinfo)
-JOBS ?= $(shell echo $$(( $(NCPUS) > $(MAX_JOBS) ? $(MAX_JOBS) : $(NCPUS) )))
+# compilation flags
+CFLAGS += -DSYNTHESIS -DVIVADO -DNOGLOBALS
+CFLAGS += $(CONFIGS)
+CFLAGS += $(RTL_INCLUDE)
 
 # Kernel compiler global settings
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
@@ -95,7 +105,7 @@ VPP_FLAGS += --config ../vitis.ini
 
 # Enable perf counters
 ifdef PERF
-	CONFIGS += -DPERF_ENABLE
+	CFLAGS += -DPERF_ENABLE
 endif
 
 # Generates profile summary report
@@ -109,14 +119,14 @@ ifdef DEBUG
 	VPP_FLAGS += -g --optimize 0 --debug.protocol all
 	ifeq ($(TARGET), hw)
 		VPP_FLAGS += --debug.chipscope vortex_afu_1
-		CONFIGS += -DCHIPSCOPE $(CHIPSCOPE_FLAGS)
+		CFLAGS += -DCHIPSCOPE $(CHIPSCOPE_FLAGS)
 	else		
 		VPP_FLAGS += --vivado.prop fileset.sim_1.xsim.elaborate.debug_level=all
-		CONFIGS += -DSIMULATION $(DBG_TRACE_FLAGS)
+		CFLAGS += -DSIMULATION $(DBG_TRACE_FLAGS)
 	endif
 else    
-	CONFIGS += -DNDEBUG
-    VPP_FLAGS += --optimize 3
+	VPP_FLAGS += --optimize 3
+	CFLAGS += -DNDEBUG
 endif
 
 # RTL Kernel only supports Hardware and Hardware Emulation.
@@ -124,25 +134,16 @@ ifneq ($(TARGET),$(findstring $(TARGET), hw hw_emu))
 	$(warning WARNING:Application supports only hw hw_emu TARGET. Please use the target for running the application)
 endif
 
-CONFIGS_1   := -DNUM_CLUSTERS=1 -DNUM_CORES=1 $(CONFIGS)
-CONFIGS_2   := -DNUM_CLUSTERS=1 -DNUM_CORES=2 $(CONFIGS)
-CONFIGS_4   := -DNUM_CLUSTERS=1 -DNUM_CORES=4  -DL2_ENABLE $(CONFIGS)
-CONFIGS_8   := -DNUM_CLUSTERS=1 -DNUM_CORES=8  -DL2_ENABLE $(CONFIGS)
-CONFIGS_16  := -DNUM_CLUSTERS=1 -DNUM_CORES=16 -DL2_ENABLE $(CONFIGS)
-CONFIGS_32  := -DNUM_CLUSTERS=2 -DNUM_CORES=16 -DL2_ENABLE $(CONFIGS)
-CONFIGS_64  := -DNUM_CLUSTERS=4 -DNUM_CORES=16 -DL2_ENABLE $(CONFIGS)
-CONFIGS_SEL := $(CONFIGS_$(NUM_CORES))
-
 .PHONY: all clean gen-sources emconfig check-devices
 
 all: check-devices emconfig $(XCLBIN_CONTAINER)
 
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt:
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh $(RTL_INCLUDE) $(CONFIGS_SEL) -DNOGLOBALS -EVX_fpu_fpnew.sv -Fsrc -P -Osources.txt
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -EVX_fpu_fpnew.sv -Fsrc -P -Osources.txt
 
 $(XO_CONTAINER): $(BUILD_DIR)/sources.txt ./kernel.xml
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	$(VIVADO) -mode batch -source ../scripts/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt ../kernel.xml ../$(BUILD_DIR)
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	$(VIVADO) -mode batch -source ../scripts/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt ../kernel.xml $(SCRIPT_DIR) ../$(BUILD_DIR)
 
 $(XCLBIN_CONTAINER): $(XO_CONTAINER)
 	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); $(VPP) $(VPP_FLAGS) -o ../$(XCLBIN_CONTAINER) ../$(XO_CONTAINER)
