@@ -195,7 +195,13 @@ module VX_cache_bank #(
     wire creq_fire     = creq_valid && creq_ready;
 
     wire [TAG_WIDTH-1:0] mshr_creq_tag = mshr_enable ? mshr_tag[0] : creq_tag[0];
-    `ASSIGN_REQ_UUID (req_uuid_sel, mshr_creq_tag)
+    
+    if (UUID_WIDTH != 0) begin
+        assign req_uuid_sel = mshr_creq_tag[TAG_WIDTH-1 -: UUID_WIDTH];
+    end else begin
+        assign req_uuid_sel = 0;
+    end
+
     `UNUSED_VAR (mshr_creq_tag)
 
     wire [`LINE_WIDTH-1:0] wdata_sel;    
@@ -230,7 +236,11 @@ module VX_cache_bank #(
         .data_out ({valid_st0, is_init_st0, is_mshr_st0, is_fill_st0, is_read_st0, is_write_st0, addr_st0, wdata_st0, wsel_st0, byteen_st0, req_idx_st0, pmask_st0, tag_st0, mshr_id_st0})
     );
 
-    `ASSIGN_REQ_UUID (req_uuid_st0, tag_st0[0])
+    if (UUID_WIDTH != 0) begin
+        assign req_uuid_st0 = tag_st0[0][TAG_WIDTH-1 -: UUID_WIDTH];
+    end else begin
+        assign req_uuid_st0 = 0;
+    end
 
     wire do_read_st0   = valid_st0 && is_read_st0;
     wire do_mshr_st0   = valid_st0 && is_mshr_st0;
@@ -289,7 +299,11 @@ module VX_cache_bank #(
         .data_out ({valid_st1, is_mshr_st1, is_fill_st1, is_read_st1, is_write_st1, is_hit_st1, way_sel_st1, addr_st1, wdata_st1, wsel_st1, byteen_st1, req_idx_st1, pmask_st1, tag_st1, mshr_id_st1,   mshr_pending_st1})
     );
 
-    `ASSIGN_REQ_UUID (req_uuid_st1, tag_st1[0])
+    if (UUID_WIDTH != 0) begin
+        assign req_uuid_st1 = tag_st1[0][TAG_WIDTH-1 -: UUID_WIDTH];
+    end else begin
+        assign req_uuid_st1 = 0;
+    end
 
     wire do_read_st1  = valid_st1 && is_read_st1;
     wire do_write_st1 = valid_st1 && is_write_st1;

@@ -459,8 +459,13 @@ module VX_cache_wrap #(
         wire [`UP(UUID_WIDTH)-1:0] core_req_uuid;
         wire [`UP(UUID_WIDTH)-1:0] core_rsp_uuid;
 
-        `ASSIGN_REQ_UUID (core_req_uuid, core_req_if[i].tag)
-        `ASSIGN_REQ_UUID (core_rsp_uuid, core_rsp_if[i].tag)
+        if (UUID_WIDTH != 0) begin
+            assign core_req_uuid = core_req_if[i].tag[TAG_WIDTH-1 -: UUID_WIDTH];
+            assign core_rsp_uuid = core_rsp_if[i].tag[TAG_WIDTH-1 -: UUID_WIDTH];
+        end else begin
+            assign core_req_uuid = 0;
+            assign core_rsp_uuid = 0;
+        end
 
         wire core_req_fire = core_req_if[i].valid && core_req_if[i].ready;
         wire core_rsp_fire = core_rsp_if[i].valid && core_rsp_if[i].ready;
@@ -481,7 +486,7 @@ module VX_cache_wrap #(
     wire [`UP(UUID_WIDTH)-1:0] mem_req_uuid;
     wire [`UP(UUID_WIDTH)-1:0] mem_rsp_uuid;
 
-    if ((UUID_WIDTH != 0) && (NC_ENABLE || PASSTHRU)) begin
+    if ((UUID_WIDTH != 0) && (NC_BYPASS != 0)) begin
         assign mem_req_uuid = mem_req_if.tag[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
         assign mem_rsp_uuid = mem_rsp_if.tag[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
     end else begin
