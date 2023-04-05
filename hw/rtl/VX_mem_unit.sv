@@ -56,7 +56,7 @@ module VX_mem_unit # (
     VX_perf_cache_if perf_l2cache_if();
 `endif   
 
-    /////////////////////////////// I-Cache ///////////////////////////////////
+/////////////////////////////// I-Cache ///////////////////////////////////
 
     VX_mem_req_if #(
         .DATA_WIDTH (ICACHE_MEM_DATA_WIDTH),
@@ -103,7 +103,7 @@ module VX_mem_unit # (
         .mem_rsp_if     (icache_mem_rsp_if)
     );
 
-    /////////////////////////////// D-Cache ///////////////////////////////////
+/////////////////////////////// D-Cache ///////////////////////////////////
 
     VX_mem_req_if #(
         .DATA_WIDTH (DCACHE_MEM_DATA_WIDTH),
@@ -165,7 +165,7 @@ module VX_mem_unit # (
         .mem_rsp_if     (dcache_mem_rsp_if)
     );
 
-    ////////////////////////////// Shared Memory //////////////////////////////
+////////////////////////////// Shared Memory //////////////////////////////
 
 `ifdef SM_ENABLE
 
@@ -274,7 +274,7 @@ module VX_mem_unit # (
 
 `endif
 
-    /////////////////////////////// T-Cache ///////////////////////////////////
+/////////////////////////////// T-Cache ///////////////////////////////////
 
 `ifdef EXT_TEX_ENABLE    
 
@@ -327,7 +327,7 @@ module VX_mem_unit # (
 
 `endif
 
-    /////////////////////////////// O-Cache ///////////////////////////////////
+/////////////////////////////// O-Cache ///////////////////////////////////
 
 `ifdef EXT_ROP_ENABLE    
 
@@ -381,7 +381,7 @@ module VX_mem_unit # (
 
 `endif
 
-    /////////////////////////////// R-Cache ///////////////////////////////////
+/////////////////////////////// R-Cache ///////////////////////////////////
 
 `ifdef EXT_RASTER_ENABLE
 
@@ -434,7 +434,7 @@ module VX_mem_unit # (
 
 `endif
 
-    /////////////////////////////// L2-Cache //////////////////////////////////
+/////////////////////////////// L2-Cache //////////////////////////////////
 
     VX_mem_req_if #(
         .DATA_WIDTH (L2_WORD_SIZE * 8),
@@ -455,40 +455,25 @@ module VX_mem_unit # (
     `UNUSED_PARAM (R_MEM_ARB_IDX)
     `UNUSED_PARAM (O_MEM_ARB_IDX)
 
-    `ASSIGN_VX_MEM_REQ_IF_XTAG (l2_mem_req_if[I_MEM_ARB_IDX], icache_mem_req_if);
-    assign l2_mem_req_if[I_MEM_ARB_IDX].tag = L1_MEM_TAG_WIDTH'(icache_mem_req_if.tag);
+    `ASSIGN_VX_MEM_REQ_IF_X (l2_mem_req_if[I_MEM_ARB_IDX], icache_mem_req_if, L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH);
+    `ASSIGN_VX_MEM_RSP_IF_X (icache_mem_rsp_if, l2_mem_rsp_if[I_MEM_ARB_IDX], ICACHE_MEM_TAG_WIDTH, L1_MEM_TAG_WIDTH);
 
-    `ASSIGN_VX_MEM_RSP_IF_XTAG (icache_mem_rsp_if, l2_mem_rsp_if[I_MEM_ARB_IDX]);
-    assign icache_mem_rsp_if.tag = ICACHE_MEM_TAG_WIDTH'(l2_mem_rsp_if[I_MEM_ARB_IDX].tag);
-
-    `ASSIGN_VX_MEM_REQ_IF_XTAG (l2_mem_req_if[D_MEM_ARB_IDX], dcache_mem_req_if);
-    assign l2_mem_req_if[D_MEM_ARB_IDX].tag = L1_MEM_TAG_WIDTH'(dcache_mem_req_if.tag);
-
-    `ASSIGN_VX_MEM_RSP_IF_XTAG (dcache_mem_rsp_if, l2_mem_rsp_if[D_MEM_ARB_IDX]);
-    assign dcache_mem_rsp_if.tag = DCACHE_MEM_TAG_WIDTH'(l2_mem_rsp_if[D_MEM_ARB_IDX].tag);
+    `ASSIGN_VX_MEM_REQ_IF_X (l2_mem_req_if[D_MEM_ARB_IDX], dcache_mem_req_if, L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH);
+    `ASSIGN_VX_MEM_RSP_IF_X (dcache_mem_rsp_if, l2_mem_rsp_if[D_MEM_ARB_IDX], DCACHE_MEM_TAG_WIDTH, L1_MEM_TAG_WIDTH);
 
 `ifdef EXT_TEX_ENABLE
-    `ASSIGN_VX_MEM_REQ_IF_XTAG (l2_mem_req_if[T_MEM_ARB_IDX], tcache_mem_req_if);
-    assign l2_mem_req_if[T_MEM_ARB_IDX].tag = L1_MEM_TAG_WIDTH'(tcache_mem_req_if.tag);
-
-    `ASSIGN_VX_MEM_RSP_IF_XTAG (tcache_mem_rsp_if, l2_mem_rsp_if[T_MEM_ARB_IDX]);
-    assign tcache_mem_rsp_if.tag = TCACHE_MEM_TAG_WIDTH'(l2_mem_rsp_if[T_MEM_ARB_IDX].tag);
+    `ASSIGN_VX_MEM_REQ_IF_X (l2_mem_req_if[T_MEM_ARB_IDX], tcache_mem_req_if, L1_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH);
+    `ASSIGN_VX_MEM_RSP_IF_X (tcache_mem_rsp_if, l2_mem_rsp_if[T_MEM_ARB_IDX], TCACHE_MEM_TAG_WIDTH, L1_MEM_TAG_WIDTH);
 `endif
 
 `ifdef EXT_RASTER_ENABLE
-    `ASSIGN_VX_MEM_REQ_IF_XTAG (l2_mem_req_if[R_MEM_ARB_IDX], rcache_mem_req_if);
-    assign l2_mem_req_if[R_MEM_ARB_IDX].tag = L1_MEM_TAG_WIDTH'(rcache_mem_req_if.tag);
-
-    `ASSIGN_VX_MEM_RSP_IF_XTAG (rcache_mem_rsp_if, l2_mem_rsp_if[R_MEM_ARB_IDX]);
-    assign rcache_mem_rsp_if.tag = RCACHE_MEM_TAG_WIDTH'(l2_mem_rsp_if[R_MEM_ARB_IDX].tag);
+    `ASSIGN_VX_MEM_REQ_IF_X (l2_mem_req_if[R_MEM_ARB_IDX], rcache_mem_req_if, L1_MEM_TAG_WIDTH, RCACHE_MEM_TAG_WIDTH);
+    `ASSIGN_VX_MEM_RSP_IF_X (rcache_mem_rsp_if, l2_mem_rsp_if[R_MEM_ARB_IDX], RCACHE_MEM_TAG_WIDTH, L1_MEM_TAG_WIDTH);
 `endif
 
 `ifdef EXT_ROP_ENABLE
-    `ASSIGN_VX_MEM_REQ_IF_XTAG (l2_mem_req_if[O_MEM_ARB_IDX], ocache_mem_req_if);
-    assign l2_mem_req_if[O_MEM_ARB_IDX].tag = L1_MEM_TAG_WIDTH'(ocache_mem_req_if.tag);
-
-    `ASSIGN_VX_MEM_RSP_IF_XTAG (ocache_mem_rsp_if, l2_mem_rsp_if[O_MEM_ARB_IDX]);
-    assign ocache_mem_rsp_if.tag = OCACHE_MEM_TAG_WIDTH'(l2_mem_rsp_if[O_MEM_ARB_IDX].tag);
+    `ASSIGN_VX_MEM_REQ_IF_X (l2_mem_req_if[O_MEM_ARB_IDX], ocache_mem_req_if, L1_MEM_TAG_WIDTH, OCACHE_MEM_TAG_WIDTH);
+    `ASSIGN_VX_MEM_RSP_IF_X (ocache_mem_rsp_if, l2_mem_rsp_if[O_MEM_ARB_IDX], OCACHE_MEM_TAG_WIDTH, L1_MEM_TAG_WIDTH);
 `endif
 
     `RESET_RELAY (l2_reset, reset);

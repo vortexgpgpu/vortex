@@ -60,7 +60,7 @@ localparam ICACHE_NUM_REQS	    = 1;
 localparam ICACHE_NUM_BANKS	    = 1;
 
 // Memory request data bits
-localparam ICACHE_MEM_DATA_WIDTH= (ICACHE_LINE_SIZE * 8);
+localparam ICACHE_MEM_DATA_WIDTH = (ICACHE_LINE_SIZE * 8);
 
 // Memory request tag bits
 `ifdef ICACHE_ENABLE
@@ -86,7 +86,7 @@ localparam LSU_MEM_REQS	        = `NUM_THREADS;
 
 // Batch select bits
 localparam DCACHE_NUM_BATCHES	= ((LSU_MEM_REQS + DCACHE_NUM_REQS - 1) / DCACHE_NUM_REQS);
-localparam DCACHE_BATCH_SEL_BITS= `CLOG2(DCACHE_NUM_BATCHES);
+localparam DCACHE_BATCH_SEL_BITS = `CLOG2(DCACHE_NUM_BATCHES);
 
 // Core request tag Id bits
 localparam LSUQ_TAG_BITS	    = (`CLOG2(`LSUQ_SIZE) + DCACHE_BATCH_SEL_BITS);
@@ -97,10 +97,10 @@ localparam DCACHE_TAG_WIDTH	    = (`UP(`UUID_BITS) + DCACHE_TAG_ID_BITS);
 localparam DCACHE_ARB_TAG_WIDTH	= (DCACHE_TAG_WIDTH + `CLOG2(`SOCKET_SIZE));
  
 // Memory request data bits
-localparam DCACHE_MEM_DATA_WIDTH= (DCACHE_LINE_SIZE * 8);
+localparam DCACHE_MEM_DATA_WIDTH = (DCACHE_LINE_SIZE * 8);
 
 // Memory request tag bits
-localparam DCACHE_NOSM_TAG_WIDTH= (DCACHE_ARB_TAG_WIDTH - `SM_ENABLED);
+localparam DCACHE_NOSM_TAG_WIDTH = (DCACHE_ARB_TAG_WIDTH - `SM_ENABLED);
 `ifdef DCACHE_ENABLE
 localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_NC_MEM_TAG_WIDTH(`DCACHE_MSHR_SIZE, `DCACHE_NUM_BANKS, DCACHE_NUM_REQS, DCACHE_LINE_SIZE, DCACHE_WORD_SIZE, DCACHE_NOSM_TAG_WIDTH, `NUM_SOCKETS, `NUM_DCACHES);
 `else
@@ -123,7 +123,7 @@ localparam TCACHE_NUM_REQS	    = `TCACHE_NUM_BANKS;
 localparam TEX_MEM_REQS	        = (4 * `NUM_THREADS);
 
 // Batch select bits
-localparam TCACHE_BATCH_SEL_BITS=`ARB_SEL_BITS(TEX_MEM_REQS, TCACHE_NUM_REQS);
+localparam TCACHE_BATCH_SEL_BITS =`ARB_SEL_BITS(TEX_MEM_REQS, TCACHE_NUM_REQS);
 
 // Core request tag Id bits       
 localparam TCACHE_TAG_ID_BITS	= (`CLOG2(`TEX_MEM_QUEUE_SIZE) + TCACHE_BATCH_SEL_BITS);
@@ -132,7 +132,7 @@ localparam TCACHE_TAG_ID_BITS	= (`CLOG2(`TEX_MEM_QUEUE_SIZE) + TCACHE_BATCH_SEL_
 localparam TCACHE_TAG_WIDTH	    = (`UP(`UUID_BITS) + TCACHE_TAG_ID_BITS);
 
 // Memory request data bits
-localparam TCACHE_MEM_DATA_WIDTH= (TCACHE_LINE_SIZE * 8);
+localparam TCACHE_MEM_DATA_WIDTH = (TCACHE_LINE_SIZE * 8);
 
 // Memory request tag bits
 `ifdef TCACHE_ENABLE
@@ -157,7 +157,7 @@ localparam RCACHE_NUM_REQS	    = `RCACHE_NUM_BANKS;
 localparam RASTER_MEM_REQS	    = 9;
 
 // Batch select bits
-localparam RCACHE_BATCH_SEL_BITS= `ARB_SEL_BITS(RASTER_MEM_REQS, RCACHE_NUM_REQS);
+localparam RCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(RASTER_MEM_REQS, RCACHE_NUM_REQS);
 
 // Core request tag Id bits       
 localparam RCACHE_TAG_ID_BITS	= (`CLOG2(`RASTER_MEM_QUEUE_SIZE) + RCACHE_BATCH_SEL_BITS);
@@ -191,7 +191,7 @@ localparam OCACHE_NUM_REQS	    = `OCACHE_NUM_BANKS;
 localparam ROP_MEM_REQS	        = (2 * `NUM_THREADS);
 
 // Batch select bits
-localparam OCACHE_BATCH_SEL_BITS= `ARB_SEL_BITS(ROP_MEM_REQS, OCACHE_NUM_REQS);
+localparam OCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(ROP_MEM_REQS, OCACHE_NUM_REQS);
 
 // Core request tag Id bits       
 localparam OCACHE_TAG_ID_BITS	= (`CLOG2(`ROP_MEM_QUEUE_SIZE) + OCACHE_BATCH_SEL_BITS);
@@ -200,11 +200,11 @@ localparam OCACHE_TAG_ID_BITS	= (`CLOG2(`ROP_MEM_QUEUE_SIZE) + OCACHE_BATCH_SEL_
 localparam OCACHE_TAG_WIDTH	    = (`UP(`UUID_BITS) + OCACHE_TAG_ID_BITS);
 
 // Memory request data bits
-localparam OCACHE_MEM_DATA_WIDTH= (OCACHE_LINE_SIZE * 8);
+localparam OCACHE_MEM_DATA_WIDTH = (OCACHE_LINE_SIZE * 8);
 
 // Memory request tag bits
 `ifdef OCACHE_ENABLE
-localparam OCACHE_MEM_TAG_WIDTH= `CACHE_CLUSTER_MEM_TAG_WIDTH(`OCACHE_MSHR_SIZE, `OCACHE_NUM_BANKS, `NUM_OCACHES);
+localparam OCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_MEM_TAG_WIDTH(`OCACHE_MSHR_SIZE, `OCACHE_NUM_BANKS, `NUM_OCACHES);
 `else
 localparam OCACHE_MEM_TAG_WIDTH	= `CACHE_CLUSTER_BYPASS_TAG_WIDTH(OCACHE_NUM_REQS, OCACHE_LINE_SIZE, OCACHE_WORD_SIZE, OCACHE_TAG_WIDTH, `NUM_ROP_UNITS, `NUM_OCACHES);
 `endif
@@ -212,9 +212,9 @@ localparam OCACHE_MEM_TAG_WIDTH	= `CACHE_CLUSTER_BYPASS_TAG_WIDTH(OCACHE_NUM_REQ
 /////////////////////////////// L1 Parameters /////////////////////////////////
 
 localparam L1_MEM_TAG_WIDTH     =  `MAX(`MAX(`MAX(`MAX(ICACHE_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH),
-                                    (`TCACHE_ENABLED ? TCACHE_MEM_TAG_WIDTH : 0)),
-                                    (`RCACHE_ENABLED ? RCACHE_MEM_TAG_WIDTH : 0)),
-                                    (`OCACHE_ENABLED ? OCACHE_MEM_TAG_WIDTH : 0));
+                                    (`EXT_TEX_ENABLED ? TCACHE_MEM_TAG_WIDTH : 0)),
+                                    (`EXT_RASTER_ENABLED ? RCACHE_MEM_TAG_WIDTH : 0)),
+                                    (`EXT_ROP_ENABLED ? OCACHE_MEM_TAG_WIDTH : 0));
 
 localparam NUM_L1_OUTPUTS       = (2 + `EXT_TEX_ENABLED + `EXT_RASTER_ENABLED + `EXT_ROP_ENABLED);
 
