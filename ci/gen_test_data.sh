@@ -3,6 +3,15 @@
 # exit when any command fails
 set -e
 
+# clear runtime
+make -C runtime clean
+
+# clear blackbox cache
+rm -f blackbox.*.cache
+
+# ensure build
+make -s
+
 graphics()
 {
 echo "begin graphics data generation..."
@@ -22,6 +31,14 @@ CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-ipa
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-ipalette64.png -opalette64_ref_g0.png -g0"
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-ipalette64.png -opalette64_ref_g1.png -g1"
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-ipalette64.png -opalette64_ref_g2.png -g2"
+
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-itoad.png -otoad_ref_f0.png -f0 -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-itoad.png -otoad_ref_f1.png -f1 -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-itoad.png -otoad_ref_f2.png -f2 -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-itoad.png -otoad_ref_f3.png -f3 -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-itoad.png -otoad_ref_f4.png -f4 -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-itoad.png -otoad_ref_f5.png -f5 -g0"
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-itoad.png -otoad_ref_f6.png -f6 -g0"
 
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=rop --args="-owhitebox_128.png -w128 -h128"
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=rop --args="-owhitebox_64.png -w64 -h64"
@@ -55,28 +72,32 @@ CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tskybox.cgltrace -oskybox_ref_32.png -w32 -h32"
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tvase.cgltrace -ovase_ref_128.png -w128 -h128"
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tvase.cgltrace -ovase_ref_32.png -w32 -h32"
-
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-ttekkaman.cgltrace -otekkaman_ref_128.png -w128 -h128"
+CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-ttekkaman.cgltrace -otekkaman_ref_32.png -w32 -h32"
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tbox.cgltrace -obox_ref_128.png -w128 -h128"
+CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tbox.cgltrace -obox_ref_32.png -w32 -h32"
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tcarnival.cgltrace -ocarnival_ref_128.png -w128 -h128"
+CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tcarnival.cgltrace -ocarnival_ref_32.png -w32 -h32"
 CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tscene.cgltrace -oscene_ref_128.png -w128 -h128"
+CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tscene.cgltrace -oscene_ref_32.png -w32 -h32"
 
 echo "end graphics data generation..."
 }
 
-usage()
+show_usage()
 {
-    echo "usage: gen-test-data [[-graphics] [-h|--help]]"
+    echo "Generate Test Data"
+    echo "Usage: $0 [[-graphics] [-h|--help]]"
 }
 
 while [ "$1" != "" ]; do
     case $1 in
         -graphics ) graphics
                 ;;
-        -h | --help ) usage
+        -h | --help ) show_usage
                       exit
                       ;;
-        * )           usage
+        * )           show_usage
                       exit 1
     esac
     shift

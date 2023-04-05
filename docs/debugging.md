@@ -23,7 +23,7 @@ A debug trace `run.log` is generated in the current directory during the program
 
 ## RTL Debugging
 
-To debug the processor RTL, you need to use VLSIM or RTLSIM driver. VLSIM simulates the full processor including the AFU command processor (using `/rtl/afu/vortex_afu.sv` as top module). RTLSIM simulates the Vortex processor only (using `/rtl/Vortex.v` as top module).
+To debug the processor RTL, you need to use VLSIM or RTLSIM driver. VLSIM simulates the full processor including the AFU command processor (using `/rtl/afu/opae/vortex_afu.sv` as top module). RTLSIM simulates the Vortex processor only (using `/rtl/Vortex.v` as top module).
 
 The recommended method to enable debugging is to pass the `--debug` flag to `blackbox` tool when running a program.
 
@@ -40,7 +40,7 @@ A debug trace `run.log` is generated in the current directory during the program
 Debugging the FPGA directly may be necessary to investigate runtime bugs that the RTL simulation cannot catch. We have implemented an in-house scope analyzer for Vortex that works when the FPGA is running. To enable the FPGA scope analyzer, the FPGA bitstream should be built using `SCOPE=1` flag
 
     & cd /hw/syn/opae
-    $ CONFIGS=-DSCOPE=1 make fpga-4c
+    $ CONFIGS="-DSCOPE=1" TARGET=fpga make
 
 When running the program on the FPGA, you need to pass the `--scope` flag to the `blackbox` tool.
 

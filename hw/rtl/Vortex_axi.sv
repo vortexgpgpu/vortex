@@ -8,60 +8,61 @@ import VX_gpu_types::*;
 module Vortex_axi #(
     parameter AXI_DATA_WIDTH = `VX_MEM_DATA_WIDTH, 
     parameter AXI_ADDR_WIDTH = `XLEN,
-    parameter AXI_TID_WIDTH  = `VX_MEM_TAG_WIDTH
+    parameter AXI_TID_WIDTH  = `VX_MEM_TAG_WIDTH,
+    parameter AXI_NUM_BANKS  = 1
 )(
     // Clock
     input  wire                         clk,
     input  wire                         reset,
 
     // AXI write request address channel    
-    output wire                         m_axi_awvalid,
-    input wire                          m_axi_awready,
-    output wire [AXI_ADDR_WIDTH-1:0]    m_axi_awaddr,
-    output wire [AXI_TID_WIDTH-1:0]     m_axi_awid,
-    output wire [7:0]                   m_axi_awlen,
-    output wire [2:0]                   m_axi_awsize,
-    output wire [1:0]                   m_axi_awburst,  
-    output wire [1:0]                   m_axi_awlock,    
-    output wire [3:0]                   m_axi_awcache,
-    output wire [2:0]                   m_axi_awprot,        
-    output wire [3:0]                   m_axi_awqos,
-    output wire [3:0]                   m_axi_awregion,
+    output wire                         m_axi_awvalid [AXI_NUM_BANKS],
+    input wire                          m_axi_awready [AXI_NUM_BANKS],
+    output wire [AXI_ADDR_WIDTH-1:0]    m_axi_awaddr [AXI_NUM_BANKS],
+    output wire [AXI_TID_WIDTH-1:0]     m_axi_awid [AXI_NUM_BANKS],
+    output wire [7:0]                   m_axi_awlen [AXI_NUM_BANKS],
+    output wire [2:0]                   m_axi_awsize [AXI_NUM_BANKS],
+    output wire [1:0]                   m_axi_awburst [AXI_NUM_BANKS],
+    output wire [1:0]                   m_axi_awlock [AXI_NUM_BANKS],
+    output wire [3:0]                   m_axi_awcache [AXI_NUM_BANKS],
+    output wire [2:0]                   m_axi_awprot [AXI_NUM_BANKS],
+    output wire [3:0]                   m_axi_awqos [AXI_NUM_BANKS],
+    output wire [3:0]                   m_axi_awregion [AXI_NUM_BANKS],
 
     // AXI write request data channel     
-    output wire                         m_axi_wvalid, 
-    input wire                          m_axi_wready,
-    output wire [AXI_DATA_WIDTH-1:0]    m_axi_wdata,
-    output wire [AXI_DATA_WIDTH/8-1:0]  m_axi_wstrb,    
-    output wire                         m_axi_wlast,  
+    output wire                         m_axi_wvalid [AXI_NUM_BANKS], 
+    input wire                          m_axi_wready [AXI_NUM_BANKS],
+    output wire [AXI_DATA_WIDTH-1:0]    m_axi_wdata [AXI_NUM_BANKS],
+    output wire [AXI_DATA_WIDTH/8-1:0]  m_axi_wstrb [AXI_NUM_BANKS],    
+    output wire                         m_axi_wlast [AXI_NUM_BANKS],  
 
     // AXI write response channel
-    input wire                          m_axi_bvalid,
-    output wire                         m_axi_bready,
-    input wire [AXI_TID_WIDTH-1:0]      m_axi_bid,
-    input wire [1:0]                    m_axi_bresp,
+    input wire                          m_axi_bvalid [AXI_NUM_BANKS],
+    output wire                         m_axi_bready [AXI_NUM_BANKS],
+    input wire [AXI_TID_WIDTH-1:0]      m_axi_bid [AXI_NUM_BANKS],
+    input wire [1:0]                    m_axi_bresp [AXI_NUM_BANKS],
     
     // AXI read request channel
-    output wire                         m_axi_arvalid,
-    input wire                          m_axi_arready,
-    output wire [AXI_ADDR_WIDTH-1:0]    m_axi_araddr,
-    output wire [AXI_TID_WIDTH-1:0]     m_axi_arid,
-    output wire [7:0]                   m_axi_arlen,
-    output wire [2:0]                   m_axi_arsize,
-    output wire [1:0]                   m_axi_arburst,            
-    output wire [1:0]                   m_axi_arlock,    
-    output wire [3:0]                   m_axi_arcache,
-    output wire [2:0]                   m_axi_arprot,        
-    output wire [3:0]                   m_axi_arqos, 
-    output wire [3:0]                   m_axi_arregion,
+    output wire                         m_axi_arvalid [AXI_NUM_BANKS],
+    input wire                          m_axi_arready [AXI_NUM_BANKS],
+    output wire [AXI_ADDR_WIDTH-1:0]    m_axi_araddr [AXI_NUM_BANKS],
+    output wire [AXI_TID_WIDTH-1:0]     m_axi_arid [AXI_NUM_BANKS],
+    output wire [7:0]                   m_axi_arlen [AXI_NUM_BANKS],
+    output wire [2:0]                   m_axi_arsize [AXI_NUM_BANKS],
+    output wire [1:0]                   m_axi_arburst [AXI_NUM_BANKS],            
+    output wire [1:0]                   m_axi_arlock [AXI_NUM_BANKS],    
+    output wire [3:0]                   m_axi_arcache [AXI_NUM_BANKS],
+    output wire [2:0]                   m_axi_arprot [AXI_NUM_BANKS],        
+    output wire [3:0]                   m_axi_arqos [AXI_NUM_BANKS], 
+    output wire [3:0]                   m_axi_arregion [AXI_NUM_BANKS],
     
     // AXI read response channel
-    input wire                          m_axi_rvalid,
-    output wire                         m_axi_rready,
-    input wire [AXI_DATA_WIDTH-1:0]     m_axi_rdata,
-    input wire                          m_axi_rlast,
-    input wire [AXI_TID_WIDTH-1:0]      m_axi_rid,
-    input wire [1:0]                    m_axi_rresp,
+    input wire                          m_axi_rvalid [AXI_NUM_BANKS],
+    output wire                         m_axi_rready [AXI_NUM_BANKS],
+    input wire [AXI_DATA_WIDTH-1:0]     m_axi_rdata [AXI_NUM_BANKS],
+    input wire                          m_axi_rlast [AXI_NUM_BANKS],
+    input wire [AXI_TID_WIDTH-1:0]      m_axi_rid [AXI_NUM_BANKS],
+    input wire [1:0]                    m_axi_rresp [AXI_NUM_BANKS],
     
     // DCR write request
     input  wire                         dcr_wr_valid,
@@ -87,29 +88,33 @@ module Vortex_axi #(
     wire [`VX_MEM_DATA_WIDTH-1:0]   mem_rsp_data;
     wire [`VX_MEM_TAG_WIDTH-1:0]    mem_rsp_tag;
     wire                            mem_rsp_ready;
-
-    wire [`XLEN-1:0] m_axi_awaddr_unqual;
-    wire [`XLEN-1:0] m_axi_araddr_unqual;
-
-    wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_awid_unqual;
-    wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_arid_unqual;
     
-    wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_bid_unqual;    
-    wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_rid_unqual;
+    wire [`XLEN-1:0] m_axi_awaddr_unqual [AXI_NUM_BANKS];
+    wire [`XLEN-1:0] m_axi_araddr_unqual [AXI_NUM_BANKS];
 
-    assign m_axi_awaddr = `XLEN'(m_axi_awaddr_unqual);
-	assign m_axi_araddr = `XLEN'(m_axi_araddr_unqual);
+    wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_awid_unqual [AXI_NUM_BANKS];
+    wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_arid_unqual [AXI_NUM_BANKS];
     
-    assign m_axi_awid = AXI_TID_WIDTH'(m_axi_awid_unqual);
-    assign m_axi_arid = AXI_TID_WIDTH'(m_axi_arid_unqual);
+    wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_bid_unqual [AXI_NUM_BANKS];
+    wire [`VX_MEM_TAG_WIDTH-1:0] m_axi_rid_unqual [AXI_NUM_BANKS];
 
-    assign m_axi_rid_unqual = `VX_MEM_TAG_WIDTH'(m_axi_rid);
-    assign m_axi_bid_unqual = `VX_MEM_TAG_WIDTH'(m_axi_bid);
+    for (genvar i = 0; i < AXI_NUM_BANKS; ++i) begin
+        assign m_axi_awaddr[i] = `XLEN'(m_axi_awaddr_unqual[i]);
+        assign m_axi_araddr[i] = `XLEN'(m_axi_araddr_unqual[i]);
+        
+        assign m_axi_awid[i] = AXI_TID_WIDTH'(m_axi_awid_unqual[i]);
+        assign m_axi_arid[i] = AXI_TID_WIDTH'(m_axi_arid_unqual[i]);
+
+        assign m_axi_rid_unqual[i] = `VX_MEM_TAG_WIDTH'(m_axi_rid[i]);
+        assign m_axi_bid_unqual[i] = `VX_MEM_TAG_WIDTH'(m_axi_bid[i]);
+    end
 
     VX_axi_adapter #(
         .DATA_WIDTH (`VX_MEM_DATA_WIDTH), 
         .ADDR_WIDTH (`XLEN),
-        .TAG_WIDTH  (`VX_MEM_TAG_WIDTH)
+        .TAG_WIDTH  (`VX_MEM_TAG_WIDTH),
+        .NUM_BANKS  (AXI_NUM_BANKS),
+        .BUFFERED_RSP ((AXI_NUM_BANKS > 1) ? 1 : 0)
     ) axi_adapter (
         .clk            (clk),
         .reset          (reset),

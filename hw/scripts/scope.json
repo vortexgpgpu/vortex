@@ -3,7 +3,8 @@
     "include_paths":[
         "../dpi",
         "../rtl",
-        "../rtl/afu",        
+        "../rtl/afu/opae",
+        "../rtl/core", 
         "../rtl/cache",        
         "../rtl/fpu_unit",
         "../rtl/interfaces",
@@ -85,10 +86,10 @@
         },
         "VX_cache": {
             "submodules": {
-                "bank": {"type":"VX_bank", "count":"NUM_BANKS"}
+                "bank": {"type":"VX_cache_bank", "count":"NUM_BANKS"}
             }
         },
-        "VX_bank": {}
+        "VX_cache_bank": {}
     },
     "taps": {     
         "afu": {                                     

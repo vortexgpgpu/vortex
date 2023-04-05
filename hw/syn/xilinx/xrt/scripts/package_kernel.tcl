@@ -1,18 +1,18 @@
-if { $::argc != 2 } {
-    puts "ERROR: Program \"$::argv0\" requires 2 arguments!\n"
-    puts "Usage: $::argv0 <krnl_name> <build_dir>\n"
+if { $::argc != 4 } {
+    puts "ERROR: Program \"$::argv0\" requires 4 arguments!\n"
+    puts "Usage: $::argv0 <krnl_name> <vcs_file> <tool_dir> <build_dir>\n"
     exit
 }
 
 set krnl_name [lindex $::argv 0]
-set build_dir [lindex $::argv 1]
-
-set script_path [ file dirname [ file normalize [ info script ] ] ]
+set vcs_file  [lindex $::argv 1]
+set tool_dir  [lindex $::argv 2]
+set build_dir [lindex $::argv 3]
 
 set path_to_packaged "${build_dir}/xo/packaged_kernel"
 set path_to_tmp_project "${build_dir}/xo/project"
 
-source "${script_path}/parse_vcs_list.tcl"
+source "${tool_dir}/parse_vcs_list.tcl"
 set vlist [parse_vcs_list "${vcs_file}"]
 
 set vsources_list  [lindex $vlist 0]
@@ -20,29 +20,18 @@ set vincludes_list [lindex $vlist 1]
 set vdefines_list  [lindex $vlist 2]
 
 #puts ${vsources_list}
+#puts ${vincludes_list}
 #puts ${vdefines_list}
 
-# dump defines into globals.vh
+# find if chipscope is enabled
 set chipscope 0
-set fh [open "${build_dir}/globals.vh" w]
 foreach def $vdefines_list {
     set fields [split $def "="]
-    set len [llength $fields]
     set name [lindex $fields 0]
-    puts -nonewline $fh "`define "
-    if {$len > 1} {
-        set value [lindex $fields 1]
-        puts -nonewline $fh $name
-        puts -nonewline $fh " "
-        puts $fh $value
-    } else {
-        puts $fh $name
-        if { $name == "CHIPSCOPE" } {
-            set chipscope 1
-        }
+    if { $name == "CHIPSCOPE" } {
+        set chipscope 1
     }
 }
-close $fh
 
 create_project -force kernel_pack $path_to_tmp_project
 
@@ -50,7 +39,6 @@ add_files -norecurse ${vsources_list}
 
 set obj [get_filesets sources_1]
 set files [list \
- [file normalize "${build_dir}/globals.vh"] \
  [file normalize "${build_dir}/ip/xil_fdiv/xil_fdiv.xci"] \
  [file normalize "${build_dir}/ip/xil_fma/xil_fma.xci"] \
  [file normalize "${build_dir}/ip/xil_fsqrt/xil_fsqrt.xci"] \
@@ -153,7 +141,7 @@ foreach up [ipx::get_user_parameters] {
 }
 
 ipx::associate_bus_interfaces -busif s_axi_ctrl -clock ap_clk $core
-ipx::associate_bus_interfaces -busif m_axi_mem  -clock ap_clk $core
+ipx::associate_bus_interfaces -busif m0_axi_mem -clock ap_clk $core
 
 set_property xpm_libraries {XPM_CDC XPM_MEMORY XPM_FIFO} $core
 set_property sdx_kernel true $core

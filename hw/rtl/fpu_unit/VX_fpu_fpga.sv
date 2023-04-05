@@ -21,7 +21,7 @@ module VX_fpu_fpga #(
     output wire [NUM_LANES-1:0][31:0] result, 
 
     output wire has_fflags,
-    output fflags_t [NUM_LANES-1:0] fflags,
+    output wire [NUM_LANES-1:0][`FP_FLAGS_BITS-1:0] fflags,
 
     output wire [TAGW-1:0] tag_out,
 

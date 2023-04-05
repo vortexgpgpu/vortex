@@ -59,7 +59,7 @@ module VX_tex_unit #(
     wire                                        req_ready;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        assign sel_miplevel[i]  = tex_req_if.lod[i][`TEX_LOD_BITS-1:0];
+        assign sel_miplevel[i] = tex_req_if.lod[i][`TEX_LOD_BITS-1:0];
         assign sel_mipoff[i] = tex_dcrs.mipoff[sel_miplevel[i]];
     end
 
@@ -279,7 +279,7 @@ endmodule
 module VX_tex_unit_top #(  
     parameter `STRING_TYPE INSTANCE_ID = "",
     parameter NUM_LANES = `NUM_THREADS,
-    parameter TAG_WIDTH = 8
+    parameter TAG_WIDTH = `TEX_REQ_TAG_WIDTH
 ) (
     input wire                              clk,
     input wire                              reset,    
@@ -290,15 +290,15 @@ module VX_tex_unit_top #(
 
     input  wire                             tex_req_valid,
     input  wire [NUM_LANES-1:0]             tex_req_mask,
-    input  wire [1:0][NUM_LANES-1:0][31:0] tex_req_coords,
+    input  wire [1:0][NUM_LANES-1:0][31:0]  tex_req_coords,
     input  wire [NUM_LANES-1:0][`TEX_LOD_BITS-1:0] tex_req_lod,
     input  wire [`TEX_STAGE_BITS-1:0]       tex_req_stage,
-    input  wire [`TEX_REQ_TAG_WIDTH-1:0]    tex_req_tag,  
+    input  wire [TAG_WIDTH-1:0]             tex_req_tag,  
     output wire                             tex_req_ready,
 
     output wire                             tex_rsp_valid,
     output wire [NUM_LANES-1:0][31:0]       tex_rsp_texels,
-    output wire [`TEX_REQ_TAG_WIDTH-1:0]    tex_rsp_tag, 
+    output wire [TAG_WIDTH-1:0]             tex_rsp_tag, 
     input  wire                             tex_rsp_ready,
 
     output wire [TCACHE_NUM_REQS-1:0]       cache_req_valid,
@@ -325,12 +325,12 @@ module VX_tex_unit_top #(
 
     VX_tex_req_if #(
         .NUM_LANES (NUM_LANES),
-        .TAG_WIDTH (`TEX_REQ_TAG_WIDTH)
+        .TAG_WIDTH (TAG_WIDTH)
     ) tex_req_if();
 
     VX_tex_rsp_if #(
         .NUM_LANES (NUM_LANES),
-        .TAG_WIDTH (`TEX_REQ_TAG_WIDTH)
+        .TAG_WIDTH (TAG_WIDTH)
     ) tex_rsp_if();
 
     assign tex_req_if.valid = tex_req_valid;

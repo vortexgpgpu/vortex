@@ -1452,7 +1452,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       trace->used_iregs.set(rsrc0);
       trace->used_iregs.set(rsrc1);
       trace->used_iregs.set(rsrc2);
-      auto trace_data = std::make_shared<TexUnit::TraceData>();
+      auto trace_data = std::make_shared<TexUnit::TraceData>(num_threads);
       trace->data = trace_data;
       trace_data->tex_idx = core_->tex_idx();
       for (uint32_t t = 0; t < num_threads; ++t) {

@@ -1,6 +1,5 @@
 #include "tex_unit.h"
 #include "mem.h"
-#include <texturing.h>
 #include <VX_config.h>
 
 using namespace vortex;
@@ -13,6 +12,7 @@ public:
     : simobject_(simobject)
     , config_(config)
     , dcrs_(dcrs)
+    , sampler_(memoryCB, this)
     , mem_(nullptr)
     , num_threads_(arch.num_threads())
     , pending_reqs_(TEX_MEM_QUEUE_SIZE)
@@ -23,6 +23,7 @@ public:
   ~Impl() {}
 
   void clear() {
+    sampler_.configure(dcrs_);
     pending_reqs_.clear();
   }
 
@@ -75,26 +76,28 @@ public:
     for (auto& mem_addr : trace_data->mem_addrs) {
         addr_count += mem_addr.size();
     }
+    if (addr_count != 0) {
+      auto tag = pending_reqs_.allocate({trace, addr_count});
+      for (uint32_t t = 0; t < num_threads_; ++t) {
+          if (!trace->tmask.test(t))
+              continue;
 
-    auto tag = pending_reqs_.allocate({trace, addr_count});
-
-    for (uint32_t t = 0; t < num_threads_; ++t) {
-        if (!trace->tmask.test(t))
-            continue;
-
-        auto& tcache_req_port = simobject_->MemReqs.at(t);
-        for (auto& mem_addr : trace_data->mem_addrs.at(t)) {
-            MemReq mem_req;
-            mem_req.addr  = mem_addr.addr;
-            mem_req.write = (trace->lsu_type == LsuType::STORE);
-            mem_req.tag   = tag;
-            mem_req.cid   = trace->cid;
-            mem_req.uuid  = trace->uuid;
-            tcache_req_port.send(mem_req, config_.address_latency);
-            DT(3, simobject_->name() << "-tex-req: addr=" << std::hex << mem_addr.addr << ", tag=" << tag 
-                << ", tid=" << t << ", "<< trace);
-            ++perf_stats_.reads;
-        }
+          auto& tcache_req_port = simobject_->MemReqs.at(t);
+          for (auto& mem_addr : trace_data->mem_addrs.at(t)) {
+              MemReq mem_req;
+              mem_req.addr  = mem_addr.addr;
+              mem_req.write = (trace->lsu_type == LsuType::STORE);
+              mem_req.tag   = tag;
+              mem_req.cid   = trace->cid;
+              mem_req.uuid  = trace->uuid;
+              tcache_req_port.send(mem_req, config_.address_latency);
+              DT(3, simobject_->name() << "-tex-req: addr=" << std::hex << mem_addr.addr << ", tag=" << tag 
+                  << ", tid=" << t << ", "<< trace);
+              ++perf_stats_.reads;
+          }
+      }
+    } else {
+      simobject_->Output.send(trace, 1);
     }
 
     simobject_->Input.pop();
@@ -103,78 +106,9 @@ public:
   uint32_t read(uint32_t cid, uint32_t wid, uint32_t tid,
                 uint32_t stage, int32_t u, int32_t v, uint32_t lod, 
                 const CSRs& csrs, TraceData::Ptr trace_data) {  
-    __unused (cid, wid, tid, csrs);
-          
-    auto mip_off    = dcrs_.read(stage, DCR_TEX_MIPOFF(lod));
-    auto base_addr  = dcrs_.read(stage, DCR_TEX_ADDR);
-    auto logdim     = dcrs_.read(stage, DCR_TEX_LOGDIM);      
-    auto format     = dcrs_.read(stage, DCR_TEX_FORMAT);    
-    auto filter     = dcrs_.read(stage, DCR_TEX_FILTER);    
-    auto wrap       = dcrs_.read(stage, DCR_TEX_WRAP);
-
-    base_addr += mip_off;
-
-    auto log_width  = std::max<int32_t>((logdim & 0xffff) - lod, 0);
-    auto log_height = std::max<int32_t>((logdim >> 16) - lod, 0);
-    
-    auto wrapu = wrap & 0xffff;
-    auto wrapv = wrap >> 16;     
-
-    auto stride = Stride(format);
-
-    auto xu = TFixed<TEX_FXD_FRAC>::make(u);
-    auto xv = TFixed<TEX_FXD_FRAC>::make(v);
-    
-    switch (filter) {
-    case TEX_FILTER_BILINEAR: {
-      // addressing
-      uint32_t offset00, offset01, offset10, offset11;
-      uint32_t alpha, beta;
-      TexAddressLinear(xu, xv, log_width, log_height, wrapu, wrapv, 
-        &offset00, &offset01, &offset10, &offset11, &alpha, &beta);
-
-      uint32_t addr00 = base_addr + offset00 * stride;
-      uint32_t addr01 = base_addr + offset01 * stride;
-      uint32_t addr10 = base_addr + offset10 * stride;
-      uint32_t addr11 = base_addr + offset11 * stride;
-
-      // memory lookup
-      uint32_t texel00(0), texel01(0), texel10(0), texel11(0);
-      mem_->read(&texel00, addr00, stride);
-      mem_->read(&texel01, addr01, stride);
-      mem_->read(&texel10, addr10, stride);
-      mem_->read(&texel11, addr11, stride);
-
-      trace_data->mem_addrs.push_back({{addr00, stride}, 
-                                        {addr01, stride}, 
-                                        {addr10, stride}, 
-                                        {addr11, stride}});
-
-      // filtering
-      auto color = TexFilterLinear(
-        format, texel00, texel01, texel10, texel11, alpha, beta);
-      return color;
-    }
-    case TEX_FILTER_POINT: {
-      // addressing
-      uint32_t offset;
-      TexAddressPoint(xu, xv, log_width, log_height, wrapu, wrapv, &offset);
-      
-      uint32_t addr = base_addr + offset * stride;
-
-      // memory lookup
-      uint32_t texel(0);
-      mem_->read(&texel, addr, stride);
-      trace_data->mem_addrs.push_back({{addr, stride}});
-
-      // filtering
-      auto color = TexFilterPoint(format, texel);
-      return color;
-    }
-    default:
-      std::abort();
-      return 0;
-    }
+    __unused (cid, wid, csrs);
+    mem_addrs_ = &trace_data->mem_addrs.at(tid);
+    return sampler_.read(stage, u, v, lod);
   }
 
   void attach_ram(RAM* mem) {
@@ -187,6 +121,26 @@ public:
 
 private:
 
+  void texture_read(
+    uint32_t* out,
+    const uint32_t* addr,    
+    uint32_t stride,
+    uint32_t size) {
+    for (uint32_t i = 0; i < size; ++i) {
+      mem_->read(&out[i], addr[i], stride);
+      mem_addrs_->push_back({addr[i], stride});
+    }
+  }
+
+  static void memoryCB(    
+    uint32_t* out,
+    const uint32_t* addr,    
+    uint32_t stride,
+    uint32_t size,
+    void* cb_arg) {
+    reinterpret_cast<Impl*>(cb_arg)->texture_read(out, addr, stride, size);
+  }
+
   struct pending_req_t {
     pipeline_trace_t* trace;
     uint32_t count;
@@ -195,7 +149,9 @@ private:
   TexUnit* simobject_;
   Config config_;
   const DCRS& dcrs_;    
-  RAM*  mem_;
+  graphics::TextureSampler sampler_;
+  std::vector<mem_addr_size_t>* mem_addrs_;
+  RAM* mem_;
   uint32_t num_threads_;
   HashTable<pending_req_t> pending_reqs_;
   PerfStats perf_stats_;

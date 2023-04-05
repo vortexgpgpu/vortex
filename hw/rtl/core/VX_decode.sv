@@ -53,7 +53,7 @@ module VX_decode  #(
     wire [4:0] rs3 = instr[31:27];
 
     wire [19:0] upper_imm = {func7, rs2, rs1, func3};
-    wire [11:0] alu_imm   = (func3[0] && ~func3[1]) ? {{7{1'b0}}, rs2} : u_12;
+    wire [11:0] alu_imm   = (func3[0] && ~func3[1]) ? {7'b0, rs2} : u_12;
     wire [11:0] s_imm     = {func7, rd};
     wire [12:0] b_imm     = {instr[31], instr[7], instr[30:25], instr[11:8], 1'b0};
     wire [20:0] jal_imm   = {instr[31], instr[19:12], instr[20], instr[30:21], 1'b0};
@@ -488,9 +488,9 @@ module VX_decode  #(
     always @(posedge clk) begin
         if (decode_if.valid && decode_if.ready) begin
             `TRACE(1, ("%d: core%0d-decode: wid=%0d, PC=0x%0h, ex=", $time, CORE_ID, decode_if.wid, decode_if.PC));
-            trace_ex_type(1, decode_if.ex_type);
+            `TRACE_EX_TYPE(1, decode_if.ex_type);
             `TRACE(1, (", op="));
-            trace_ex_op(1, decode_if.ex_type, decode_if.op_type, decode_if.op_mod);
+            `TRACE_EX_OP(1, decode_if.ex_type, decode_if.op_type, decode_if.op_mod);
             `TRACE(1, (", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1=%0d, rs2=%0d, rs3=%0d, imm=0x%0h, use_pc=%b, use_imm=%b (#%0d)\n",
                 decode_if.op_mod, decode_if.tmask, decode_if.wb, decode_if.rd, decode_if.rs1, decode_if.rs2, decode_if.rs3, decode_if.imm, decode_if.use_PC, decode_if.use_imm, decode_if.uuid));
         end

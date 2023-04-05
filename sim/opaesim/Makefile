@@ -1,7 +1,7 @@
 DESTDIR ?= .
 RTL_DIR = ../../hw/rtl
 DPI_DIR = ../../hw/dpi
-AFU_DIR = ../../hw/afu/opae
+AFU_DIR = $(RTL_DIR)/afu/opae
 SCRIPT_DIR = ../../hw/scripts
 THIRD_PARTY_DIR = ../../third_party
 

@@ -45,13 +45,6 @@
 
 `define LINE_TAG_ADDR(x)        x[`LINE_ADDR_WIDTH-1 : `LINE_SEL_BITS]
 
-`define ASSIGN_REQ_UUID(dst, tag) \
-    if (UUID_WIDTH != 0) begin \
-        assign dst = tag[TAG_WIDTH-1 -: UUID_WIDTH]; \
-    end else begin \
-        assign dst = 0; \
-    end
-
 ///////////////////////////////////////////////////////////////////////////////
 
 `define LINE_TO_MEM_ADDR(x, i)  {x, `BANK_SEL_BITS'(i)}
@@ -66,4 +59,4 @@
 
 `define TO_FULL_ADDR(x)         {x, (32-$bits(x))'(0)}
 
-`endif
+`endif // VX_CACHE_DEFINE_VH

@@ -193,7 +193,7 @@ int dcr_initialize(vx_device_h device) {
   }
 
   for (int i = 0; i < TEX_STAGE_COUNT; ++i) {
-    RT_CHECK(vx_dcr_write(device, DCR_TEX_STAGE + i, 0), {
+    RT_CHECK(vx_dcr_write(device, DCR_TEX_STAGE, i), {
       return -1;
     });
     for (int j = 1; j < DCR_TEX_STATE_COUNT; ++j) {

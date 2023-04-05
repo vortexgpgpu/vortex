@@ -2,7 +2,7 @@ PROJECT = tex
 
 OPTS ?=
 
-VX_CFLAGS += -DENABLE_SW -I$(VORTEX_KN_PATH)/../sim/common -I$(VORTEX_KN_PATH)/../third_party
+VX_CFLAGS += -I$(VORTEX_KN_PATH)/../sim/common -I$(VORTEX_KN_PATH)/../third_party
 
 CXXFLAGS += -I$(VORTEX_KN_PATH)/../sim/common -I$(VORTEX_KN_PATH)/../third_party
 
@@ -10,6 +10,6 @@ LDFLAGS += -L/homes/tinebp/tools/boost/lib $(VORTEX_KN_PATH)/../third_party/coco
 
 SRCS = main.cpp
 
-VX_SRCS = kernel.cpp
+VX_SRCS = kernel.cpp $(VORTEX_KN_PATH)/../sim/common/graphics.cpp
 
 include ../common.mk

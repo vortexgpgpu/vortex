@@ -23,9 +23,9 @@ module VX_gpr_stage #(
     // ensure r0 never gets written, which can happen before the reset
     wire write_enable = writeback_if.valid && (writeback_if.rd != 0);
     
-    wire [`NUM_THREADS-1:0] wren;
+    wire [`NUM_THREADS-1:0] write;
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign wren[i] = write_enable && writeback_if.tmask[i];
+        assign write[i] = write_enable && writeback_if.tmask[i];
     end
 
     wire [RAM_ADDRW-1:0] waddr, raddr1, raddr2;
@@ -49,7 +49,8 @@ module VX_gpr_stage #(
             .INIT_VALUE  (0)
         ) dp_ram1 (
             .clk   (clk),
-            .wren  (wren[i]),
+            .write (write[i]),            
+            `UNUSED_PIN (wren),               
             .waddr (waddr),
             .wdata (writeback_if.data[i]),
             .raddr (raddr1),
@@ -63,7 +64,8 @@ module VX_gpr_stage #(
             .INIT_VALUE  (0)
         ) dp_ram2 (
             .clk   (clk),
-            .wren  (wren[i]),
+            .write (write[i]),            
+            `UNUSED_PIN (wren),               
             .waddr (waddr),
             .wdata (writeback_if.data[i]),
             .raddr (raddr2),
@@ -87,7 +89,8 @@ module VX_gpr_stage #(
             .INIT_VALUE  (0)
         ) dp_ram3 (
             .clk   (clk),
-            .wren  (wren[i]),
+            .write (write[i]),            
+            `UNUSED_PIN (wren),               
             .waddr (waddr),
             .wdata (writeback_if.data[i]),
             .raddr (raddr3),

@@ -33,10 +33,12 @@
 
 `define PERF_CTR_BITS   44
 
-`ifdef SIMULATION
+`ifndef NDEBUG
+`ifdef VIVADO
+`define UUID_BITS       19
+`else
 `define UUID_BITS       44
-`elsif CHIPSCOPE 
-`define UUID_BITS       12
+`endif
 `else
 `define UUID_BITS       0
 `endif
@@ -314,17 +316,23 @@
     assign dst.tag    = src.tag;    \
     assign src.ready  = dst.ready
 
-`define ASSIGN_VX_MEM_REQ_IF_XTAG(dst, src) \
+`define ASSIGN_VX_MEM_REQ_IF_X(dst, src, TD, TS) \
     assign dst.valid  = src.valid;  \
     assign dst.rw     = src.rw;     \
     assign dst.byteen = src.byteen; \
     assign dst.addr   = src.addr;   \
     assign dst.data   = src.data;   \
+    if (TD != TS) \
+        assign dst.tag = {src.tag, {(TD-TS){1'b0}}}; \
+    else \
+        assign dst.tag = src.tag; \
     assign src.ready  = dst.ready
 
-`define ASSIGN_VX_MEM_RSP_IF_XTAG(dst, src) \
+
+`define ASSIGN_VX_MEM_RSP_IF_X(dst, src, TD, TS) \
     assign dst.valid  = src.valid;  \
     assign dst.data   = src.data;   \
+    assign dst.tag    = src.tag[TS-1 -: TD]; \
     assign src.ready  = dst.ready
 
 `define ASSIGN_VX_CACHE_REQ_IF(dst, src) \
@@ -472,4 +480,4 @@
     `REDUCE_ADD (dst, src, mem_stalls, `PERF_CTR_BITS, count); \
     `REDUCE_ADD (dst, src, crsp_stalls, `PERF_CTR_BITS, count)
 
-`endif
+`endif // VX_DEFINE_VH

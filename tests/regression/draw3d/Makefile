@@ -2,7 +2,7 @@ PROJECT = draw3d
 
 OPTS ?=
 
-VX_CFLAGS += -DENABLE_SW -I$(VORTEX_KN_PATH)/../sim/common -I$(VORTEX_KN_PATH)/../third_party
+VX_CFLAGS += -I$(VORTEX_KN_PATH)/../sim/common -I$(VORTEX_KN_PATH)/../third_party
 
 CXXFLAGS += -I$(VORTEX_KN_PATH)/../sim/common -I$(VORTEX_KN_PATH)/../third_party
 

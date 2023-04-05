@@ -21,7 +21,7 @@ module VX_rop_logic_op #(
 
     always @(*) begin
         case (op)
-            `ROP_LOGIC_OP_CLEAR:         tmp_color = 32'b0;
+            `ROP_LOGIC_OP_CLEAR:         tmp_color = {32{1'b0}};
             `ROP_LOGIC_OP_AND:           tmp_color = src_color & dst_color;
             `ROP_LOGIC_OP_AND_REVERSE:   tmp_color = src_color & (~dst_color);
             `ROP_LOGIC_OP_COPY:          tmp_color = src_color;

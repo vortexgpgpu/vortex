@@ -13,6 +13,26 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+`ifdef SYNTHESIS
+`define TRACING_ON
+`define TRACING_OFF
+`ifndef NDEBUG
+    `define DEBUG_BLOCK(x) x
+`else
+    `define DEBUG_BLOCK(x)
+`endif
+`define IGNORE_UNOPTFLAT_BEGIN
+`define IGNORE_UNOPTFLAT_END
+`define IGNORE_UNUSED_BEGIN
+`define IGNORE_UNUSED_END
+`define IGNORE_WARNINGS_BEGIN
+`define IGNORE_WARNINGS_END
+`define UNUSED_PARAM(x)
+`define UNUSED_SPARAM(x)
+`define UNUSED_VAR(x)
+`define UNUSED_PIN(x) . x ()
+`define TRACE(level, args) $write args
+`else
 `ifdef VERILATOR
 `define TRACING_ON      /* verilator tracing_on */
 `define TRACING_OFF     /* verilator tracing_off */
@@ -66,25 +86,7 @@
                        . x () \
                        /* verilator lint_on PINCONNECTEMPTY */
 `define TRACE(level, args) dpi_trace(level, $sformatf args)
-`else
-`define TRACING_ON
-`define TRACING_OFF
-`ifndef NDEBUG
-    `define DEBUG_BLOCK(x) x
-`else
-    `define DEBUG_BLOCK(x)
 `endif
-`define IGNORE_UNOPTFLAT_BEGIN
-`define IGNORE_UNOPTFLAT_END
-`define IGNORE_UNUSED_BEGIN
-`define IGNORE_UNUSED_END
-`define IGNORE_WARNINGS_BEGIN
-`define IGNORE_WARNINGS_END
-`define UNUSED_PARAM(x)
-`define UNUSED_SPARAM(x)
-`define UNUSED_VAR(x)
-`define UNUSED_PIN(x) . x ()
-`define TRACE(level, args) $write args
 `endif
 
 `define STATIC_ASSERT(cond, msg) \
@@ -239,4 +241,7 @@
 `define _REPEAT_31(f,s) `f(30) `s `_REPEAT_30(f,s)
 `define _REPEAT_32(f,s) `f(31) `s `_REPEAT_31(f,s)
 
-`endif
+`define REPEAT_COMMA ,
+`define REPEAT_SEMICOLON ;
+
+`endif // VX_PLATFORM_VH

@@ -8,8 +8,8 @@ module VX_mem_scheduler #(
     parameter ADDR_WIDTH   = 32,
     parameter DATA_WIDTH   = 32,
     parameter TAG_WIDTH    = 32,
-    parameter MEM_TAG_ID   = 0,
-    parameter UUID_WIDTH   = 0,
+    parameter MEM_TAG_ID   = 0, // upper section of the tag sent to the memory interface
+    parameter UUID_WIDTH   = 0, // upper section of the mem_tag_id containing the UUID
     parameter QUEUE_SIZE   = 16,
     parameter RSP_PARTIAL  = 0,
     parameter CORE_OUT_REG = 0,
@@ -398,15 +398,15 @@ module VX_mem_scheduler #(
 
     end else begin
 
-        reg [NUM_BATCHES-1:0][NUM_BANKS-1:0][DATA_WIDTH-1:0] rsp_store [QUEUE_SIZE-1:0];        
-        reg [NUM_BATCHES-1:0][NUM_BANKS-1:0][DATA_WIDTH-1:0] rsp_store_n;
+        reg [NUM_BATCHES*NUM_BANKS*DATA_WIDTH-1:0] rsp_store [QUEUE_SIZE-1:0];        
+        reg [NUM_BATCHES*NUM_BANKS*DATA_WIDTH-1:0] rsp_store_n;
         reg [NUM_REQS-1:0] rsp_orig_mask [QUEUE_SIZE-1:0];
 
         always @(*) begin
             rsp_store_n = rsp_store[ibuf_raddr];            
             for (integer i = 0; i < NUM_BANKS; ++i) begin
                 if ((NUM_BANKS == 1) || mem_rsp_mask_s[i]) begin
-                    rsp_store_n[rsp_batch_idx][i] = mem_rsp_data_s[i];
+                    rsp_store_n[(rsp_batch_idx * NUM_BANKS + i) * DATA_WIDTH +: DATA_WIDTH] = mem_rsp_data_s[i];
                 end
             end
         end        
@@ -415,7 +415,7 @@ module VX_mem_scheduler #(
             if (ibuf_push) begin
                 rsp_orig_mask[ibuf_waddr] <= req_mask;
             end
-            if (mem_rsp_fire_s) begin
+            if (mem_rsp_valid_s) begin
                 rsp_store[ibuf_raddr] <= rsp_store_n;
             end
         end
@@ -429,7 +429,7 @@ module VX_mem_scheduler #(
         for (genvar r = 0; r < NUM_REQS; ++r) begin
             localparam i = r / NUM_BANKS;
             localparam j = r % NUM_BANKS;
-            assign crsp_data[r] = rsp_store_n[i][j];
+            assign crsp_data[r] = rsp_store_n[(i * NUM_BANKS + j) * DATA_WIDTH +: DATA_WIDTH];
         end
     end
 

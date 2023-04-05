@@ -33,6 +33,7 @@ const char* trace_file  = "triangle.cgltrace";
 const char* output_file = "output.png";
 const char* reference_file = nullptr;
 
+bool sw_tex = false;
 bool sw_rast = false;
 bool sw_rop = false;
 bool sw_interp = false;
@@ -74,7 +75,7 @@ static void show_usage() {
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "t:s:e:i:o:r:w:h:t:k:xyz?")) != -1) {
+  while ((c = getopt(argc, argv, "t:s:e:i:o:r:w:h:t:k:uxyz?")) != -1) {
     switch (c) {
     case 't':
       trace_file = optarg;
@@ -96,6 +97,9 @@ static void parse_args(int argc, char **argv) {
       break;
     case 'h':
       dst_height = std::atoi(optarg);
+      break;
+    case 'u':
+      sw_tex = true;
       break;
     case 'x':
       sw_rast = true;
@@ -141,25 +145,27 @@ void cleanup() {
 #ifdef SW_ENABLE
   #define RASTER_DCR_WRITE(addr, value)  \
     vx_dcr_write(device, addr, value); \
-    raster_dcrs.write(addr, value)
+    kernel_arg.raster_dcrs.write(addr, value)
 
   #define ROP_DCR_WRITE(addr, value)  \
     vx_dcr_write(device, addr, value); \
-    rop_dcrs.write(addr, value)
+    kernel_arg.rop_dcrs.write(addr, value)
+
+  #define TEX_DCR_WRITE(addr, value)  \
+    vx_dcr_write(device, addr, value); \
+    kernel_arg.tex_dcrs.write(addr, value)
 #else
   #define RASTER_DCR_WRITE(addr, value)  \
     vx_dcr_write(device, addr, value)
 
   #define ROP_DCR_WRITE(addr, value)  \
     vx_dcr_write(device, addr, value)
+
+  #define TEX_DCR_WRITE(addr, value)  \
+    vx_dcr_write(device, addr, value)
 #endif
 
-int render(const CGLTrace& trace) {
-#ifdef SW_ENABLE
-  graphics::RasterDCRS raster_dcrs;
-  graphics::RopDCRS    rop_dcrs;
-#endif
-  
+int render(const CGLTrace& trace) {  
   std::cout << "render" << std::endl;
   auto time_begin = std::chrono::high_resolution_clock::now();
 
@@ -327,15 +333,15 @@ int render(const CGLTrace& trace) {
       }
 
       // configure texture units
-      vx_dcr_write(device, DCR_TEX_STAGE,  0);
-      vx_dcr_write(device, DCR_TEX_LOGDIM, (tex_logheight << 16) | tex_logwidth);	
-      vx_dcr_write(device, DCR_TEX_FORMAT, tex_format);
-      vx_dcr_write(device, DCR_TEX_WRAP,   (tex_wrapV << 16) | tex_wrapU);
-      vx_dcr_write(device, DCR_TEX_FILTER, tex_filter);
-      vx_dcr_write(device, DCR_TEX_ADDR,   texbuf_addr);
+      TEX_DCR_WRITE(DCR_TEX_STAGE,  0);
+      TEX_DCR_WRITE(DCR_TEX_LOGDIM, (tex_logheight << 16) | tex_logwidth);	
+      TEX_DCR_WRITE(DCR_TEX_FORMAT, tex_format);
+      TEX_DCR_WRITE(DCR_TEX_WRAP,   (tex_wrapV << 16) | tex_wrapU);
+      TEX_DCR_WRITE(DCR_TEX_FILTER, tex_filter ? TEX_FILTER_BILINEAR : TEX_FILTER_POINT);
+      TEX_DCR_WRITE(DCR_TEX_ADDR,   texbuf_addr);
       for (uint32_t i = 0; i < mip_offsets.size(); ++i) {
         assert(i < TEX_LOD_MAX);
-        vx_dcr_write(device, DCR_TEX_MIPOFF(i), mip_offsets.at(i));
+        TEX_DCR_WRITE(DCR_TEX_MIPOFF(i), mip_offsets.at(i));
       };
     }   
 
@@ -347,10 +353,6 @@ int render(const CGLTrace& trace) {
       kernel_arg.tex_enabled   = states.texture_enabled;
       kernel_arg.tex_modulate  = (states.texture_enabled && states.texture_envmode == CGLTrace::ENVMODE_MODULATE);
       kernel_arg.prim_addr     = primbuf_addr;
-    #ifdef SW_ENABLE 
-      kernel_arg.raster_dcrs   = raster_dcrs;
-      kernel_arg.rop_dcrs      = rop_dcrs;
-    #endif
       if (kernel_arg.tex_modulate && !kernel_arg.color_enabled)
         kernel_arg.tex_modulate = false;
       if (kernel_arg.tex_enabled && kernel_arg.color_enabled && !kernel_arg.tex_modulate)
@@ -519,6 +521,7 @@ int main(int argc, char *argv[]) {
 
   // update kernel arguments
   kernel_arg.log_num_tasks = log2ceil(num_tasks);
+  kernel_arg.sw_tex        = sw_tex;
   kernel_arg.sw_rast       = sw_rast;
   kernel_arg.sw_rop        = sw_rop;
   kernel_arg.sw_interp     = sw_interp;
@@ -542,7 +545,7 @@ int main(int argc, char *argv[]) {
   cleanup();  
 
   if (reference_file) {
-    auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8, 2);
+    auto errors = CompareImages(output_file, reference_file, FORMAT_A8R8G8B8);
     if (0 == errors) {
       std::cout << "PASSED!" << std::endl;
     } else {

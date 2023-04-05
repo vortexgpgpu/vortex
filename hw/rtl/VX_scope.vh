@@ -55,7 +55,7 @@
 
 `define SCOPE_BIND_VX_core_issue
 
-`define SCOPE_IO_VX_bank
+`define SCOPE_IO_VX_cache_bank
 
 `define SCOPE_IO_VX_cache
 
@@ -96,4 +96,5 @@
 `define SCOPE_ASSIGN(d,s)
 
 `endif
-`endif
+
+`endif // VX_SCOPE_VH

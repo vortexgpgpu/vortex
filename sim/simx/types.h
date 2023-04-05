@@ -44,8 +44,8 @@ enum class RegType {
   Vector
 };
 
-inline std::ostream &operator<<(std::ostream &os, const RegType& clss) {
-  switch (clss) {
+inline std::ostream &operator<<(std::ostream &os, const RegType& type) {
+  switch (type) {
   case RegType::None: break;
   case RegType::Integer: os << "x"; break;  
   case RegType::Float:   os << "f"; break;

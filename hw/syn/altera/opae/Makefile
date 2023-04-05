@@ -5,7 +5,7 @@ NUM_CORES ?= 1
 SCRIPT_DIR = ../../../scripts
 RTL_DIR = ../../../rtl
 DPI_DIR = ../../../dpi
-AFU_DIR = ../../../afu/opae
+AFU_DIR = $(RTL_DIR)/afu/opae
 
 IP_CACHE_DIR = ../ip_cache/$(DEVICE_FAMILY)
 
@@ -33,21 +33,6 @@ DBG_TRACE_FLAGS += -DDBG_TRACE_ROP
 
 DBG_FLAGS += $(DBG_TRACE_FLAGS)
 
-CONFIGS += -DEXT_GFX_ENABLE
-
-#CONFIGS += -DNUM_ROP_UNITS=2
-#CONFIGS += -DNUM_TEX_UNITS=4
-#CONFIGS += -DNUM_RASTER_UNITS=2
-#CONFIGS += -DTCACHE_NUM_BANKS=1
-#CONFIGS += -DOCACHE_NUM_BANKS=1
-#CONFIGS += -DOCACHE_NUM_BANKS=1
-
-#CONFIGS += -DL1_DISABLE
-#CONFIGS += -DSM_DISABLE
-#CONFIGS += -DRCACHE_DISABLE
-#CONFIGS += -DOCACHE_DISABLE
-#CONFIGS += -DTCACHE_DISABLE
-
 ifeq ($(DEVICE_FAMILY), stratix10)
     CONFIGS += -DALTERA_S10
 endif
@@ -55,14 +40,17 @@ ifeq ($(DEVICE_FAMILY), arria10)
     CONFIGS += -DALTERA_A10
 endif
 
-CONFIGS1  := -DNUM_CLUSTERS=1 -DNUM_CORES=1 $(CONFIGS)
-CONFIGS2  := -DNUM_CLUSTERS=1 -DNUM_CORES=2 $(CONFIGS)
-CONFIGS4  := -DNUM_CLUSTERS=1 -DNUM_CORES=4  -DL2_ENABLE $(CONFIGS)
-CONFIGS8  := -DNUM_CLUSTERS=1 -DNUM_CORES=8  -DL2_ENABLE $(CONFIGS)
-CONFIGS16 := -DNUM_CLUSTERS=1 -DNUM_CORES=16 -DL2_ENABLE $(CONFIGS)
-CONFIGS32 := -DNUM_CLUSTERS=2 -DNUM_CORES=16 -DL2_ENABLE $(CONFIGS)
-CONFIGS64 := -DNUM_CLUSTERS=4 -DNUM_CORES=16 -DL2_ENABLE $(CONFIGS)
+# cluster configuration
+CONFIGS_1c  := -DNUM_CLUSTERS=1 -DNUM_CORES=1
+CONFIGS_2c  := -DNUM_CLUSTERS=1 -DNUM_CORES=2
+CONFIGS_4c  := -DNUM_CLUSTERS=1 -DNUM_CORES=4  -DL2_ENABLE
+CONFIGS_8c	:= -DNUM_CLUSTERS=1 -DNUM_CORES=8  -DL2_ENABLE
+CONFIGS_16c	:= -DNUM_CLUSTERS=1 -DNUM_CORES=16 -DL2_ENABLE
+CONFIGS_32c := -DNUM_CLUSTERS=2 -DNUM_CORES=16 -DL2_ENABLE
+CONFIGS_64c := -DNUM_CLUSTERS=4 -DNUM_CORES=16 -DL2_ENABLE
+CONFIGS += $(CONFIGS_$(NUM_CORES)c)
 
+# include paths
 FPU_INCLUDE = -I$(RTL_DIR)/fpu_unit
 TEX_INCLUDE = -I$(RTL_DIR)/tex_unit
 RASTER_INCLUDE = -I$(RTL_DIR)/raster_unit
@@ -70,10 +58,14 @@ ROP_INCLUDE = -I$(RTL_DIR)/rop_unit
 RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(IP_CACHE_DIR)
 RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
 
+# compilation flags
+CFLAGS += -DSYNTHESIS -DQUARTUS -DNOGLOBALS 
+CFLAGS += $(CONFIGS)
 CFLAGS += $(RTL_INCLUDE)
 
-CFLAGS += -DSYNTHESIS
-CFLAGS += -DQUARTUS
+ifeq ($(TARGET), ase)
+	CFLAGS += -DSIMULATION
+endif
 
 # Debugigng
 ifdef DEBUG
@@ -92,34 +84,24 @@ ifdef PERF
 	CFLAGS += -DPERF_ENABLE
 endif
 
-all: swconfig ip-gen gen-sources setup build
+all: swconfig ip-gen setup build
 
 ip-gen: $(IP_CACHE_DIR)/ip-gen.log
 $(IP_CACHE_DIR)/ip-gen.log:
 	../ip_gen.sh $(IP_CACHE_DIR)
 
-# AFU info from JSON file, including AFU UUID
 swconfig: vortex_afu.h
 vortex_afu.h: vortex_afu.json
 	afu_json_mgr json-info --afu-json=$^ --c-hdr=$@
 
-gen-sources:
+setup:
 	mkdir -p $(BUILD_DIR)/src
-	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) $(CONFIGS$(NUM_CORES)) -F$(BUILD_DIR)/src -Osources.txt
-	rm -rf $(BUILD_DIR)
-
-setup: gen-sources
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -F$(BUILD_DIR)/src -P -Osources.txt
 ifeq ($(TARGET), ase)
-	afu_sim_setup -s setup.cfg $(BUILD_DIR)
-	mkdir -p $(BUILD_DIR)/src
-	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) $(CONFIGS$(NUM_CORES)) -DSIMULATION -G$(BUILD_DIR)/src/globals.vh -F$(BUILD_DIR)/src
+	afu_sim_setup -f -s setup.cfg $(BUILD_DIR)
 else
-	afu_synth_setup -s setup.cfg $(BUILD_DIR)
-	mkdir -p $(BUILD_DIR)/src
-	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) $(CONFIGS$(NUM_CORES)) -G$(BUILD_DIR)/src/globals.vh -F$(BUILD_DIR)/src
-endif	
-
-# build
+	afu_synth_setup -f -s setup.cfg $(BUILD_DIR)
+endif
 
 build: ip-gen setup
 ifeq ($(TARGET), ase)
@@ -127,8 +109,6 @@ ifeq ($(TARGET), ase)
 else
 	cd $(BUILD_DIR) && $(RUN_SYNTH)
 endif
-
-# cleanup
 
 clean:  
 	rm -rf vortex_afu.h $(BUILD_DIR)

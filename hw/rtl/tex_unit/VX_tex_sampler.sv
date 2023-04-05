@@ -27,10 +27,8 @@ module VX_tex_sampler #(
     wire valid_s0, valid_s1;
     wire [REQ_INFOW-1:0] req_info_s0, req_info_s1;
     wire [NUM_LANES-1:0][31:0] texel_ul, texel_uh;
-    wire [NUM_LANES-1:0][31:0] texel_ul_s1, texel_uh_s1;
     wire [NUM_LANES-1:0][1:0][`TEX_BLEND_FRAC-1:0] req_blends_s0;
-    wire [NUM_LANES-1:0][`TEX_BLEND_FRAC-1:0] blend_v, blend_v_s1;
-    wire [NUM_LANES-1:0][31:0] texel_v;
+    wire [NUM_LANES-1:0][`TEX_BLEND_FRAC-1:0] blend_v_s0, blend_v_s1;
     wire [NUM_LANES-1:0][3:0][31:0] fmt_texels, fmt_texels_s0;
 
     wire stall_out;
@@ -58,67 +56,69 @@ module VX_tex_sampler #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         for (genvar j = 0; j < 4; ++j) begin
-            VX_lerp_fx #(
-                .N (8),
-                .F (`TEX_BLEND_FRAC)
-            ) tex_lerp_ul (
+            VX_tex_lerp tex_lerp_ul (
+                .clk  (clk),
+                .reset(reset),
+                .enable(~stall_out),
                 .in1  (fmt_texels_s0[i][0][j*8 +: 8]),
                 .in2  (fmt_texels_s0[i][1][j*8 +: 8]),
                 .frac (req_blends_s0[i][0]),
                 .out  (texel_ul[i][j*8 +: 8])
-            );
-                
-            VX_lerp_fx #(
-                .N (8),
-                .F (`TEX_BLEND_FRAC)
-            ) tex_lerp_uh (
+            );                
+            VX_tex_lerp tex_lerp_uh (
+                .clk  (clk),
+                .reset(reset),
+                .enable(~stall_out),
                 .in1  (fmt_texels_s0[i][2][j*8 +: 8]),
                 .in2  (fmt_texels_s0[i][3][j*8 +: 8]),
                 .frac (req_blends_s0[i][0]),
                 .out  (texel_uh[i][j*8 +: 8])
             );
-        end
-        assign blend_v[i] = req_blends_s0[i][1];
+        end        
     end
 
-    VX_pipe_register #(
-        .DATAW  (1 + REQ_INFOW + (NUM_LANES * `TEX_BLEND_FRAC) + (2 * NUM_LANES * 32)),
+    for (genvar i = 0; i < NUM_LANES; ++i) begin
+        assign blend_v_s0[i] = req_blends_s0[i][1];
+    end
+
+    VX_shift_register #(
+        .DATAW  (1 + REQ_INFOW + (NUM_LANES * `TEX_BLEND_FRAC)),
         .DEPTH  (3),
         .RESETW (1)
-    ) pipe_reg1 (
+    ) shift_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({valid_s0, req_info_s0, blend_v,    texel_ul,    texel_uh}),
-        .data_out ({valid_s1, req_info_s1, blend_v_s1, texel_ul_s1, texel_uh_s1})
+        .data_in  ({valid_s0, req_info_s0, blend_v_s0}),
+        .data_out ({valid_s1, req_info_s1, blend_v_s1})
     );
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         for (genvar j = 0; j < 4; ++j) begin
-            VX_lerp_fx #(
-                .N (8),
-                .F (`TEX_BLEND_FRAC)
-            ) tex_lerp_v (
-                .in1  (texel_ul_s1[i][j*8 +: 8]),
-                .in2  (texel_uh_s1[i][j*8 +: 8]),
+            VX_tex_lerp tex_lerp_v (
+                .clk  (clk),
+                .reset(reset),
+                .enable(~stall_out),
+                .in1  (texel_ul[i][j*8 +: 8]),
+                .in2  (texel_uh[i][j*8 +: 8]),
                 .frac (blend_v_s1[i]),
-                .out  (texel_v[i][j*8 +: 8])
+                .out  (rsp_data[i][j*8 +: 8])
             );
         end
     end
 
     assign stall_out = rsp_valid && ~rsp_ready;
     
-    VX_pipe_register #(
-        .DATAW  (1 + REQ_INFOW + (NUM_LANES * 32)),
-        .DEPTH  (2),
+    VX_shift_register #(
+        .DATAW  (1 + REQ_INFOW),
+        .DEPTH  (3),
         .RESETW (1)
-    ) pipe_reg2 (
+    ) shift_reg2 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({valid_s1,  req_info_s1, texel_v}),
-        .data_out ({rsp_valid, rsp_info,    rsp_data})
+        .data_in  ({valid_s1,  req_info_s1}),
+        .data_out ({rsp_valid, rsp_info})
     );
 
     // can accept new request?

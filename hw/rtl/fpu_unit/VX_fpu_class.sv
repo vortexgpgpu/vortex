@@ -7,7 +7,7 @@ module VX_fpu_class # (
 ) (
     input  [EXP_BITS-1:0] exp_i,
     input  [MAN_BITS-1:0] man_i,
-    output fp_class_t     clss_o
+    output fclass_t       clss_o
 );
     wire is_normal    = (exp_i != '0) && (exp_i != '1);
     wire is_zero      = (exp_i == '0) && (man_i == '0);

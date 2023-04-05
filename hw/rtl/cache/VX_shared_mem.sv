@@ -68,7 +68,7 @@ module VX_shared_mem #(
     wire [NUM_BANKS-1:0][`UP(REQ_SEL_BITS)-1:0] per_bank_req_idx_unqual;
     wire [NUM_BANKS-1:0]                    per_bank_req_ready_unqual;
     
-    VX_req_dispatch #(
+    VX_cache_req_dispatch #(
         .LINE_SIZE  (WORD_SIZE),
         .WORD_SIZE  (WORD_SIZE),
         .ADDR_WIDTH (ADDR_WIDTH),
@@ -150,16 +150,15 @@ module VX_shared_mem #(
 
     // Generate memory banks
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
-        wire [WORD_SIZE-1:0] wren = {WORD_SIZE{per_bank_req_valid[i] && per_bank_req_rw[i]}} 
-                                  & per_bank_req_byteen[i];
         VX_sp_ram #(
             .DATAW      (WORD_WIDTH),
             .SIZE       (WORDS_PER_BANK),
-            .BYTEENW    (WORD_SIZE),
+            .WRENW      (WORD_SIZE),
             .NO_RWCHECK (1)
         ) data_store (
             .clk   (clk),
-            .wren  (wren),
+            .write (per_bank_req_valid[i] && per_bank_req_rw[i]),
+            .wren  (per_bank_req_byteen[i]),
             .addr  (per_bank_req_addr[i]),            
             .wdata (per_bank_req_data[i]),
             .rdata (per_bank_rsp_data[i])
@@ -179,7 +178,7 @@ module VX_shared_mem #(
     wire [NUM_REQS-1:0][TAG_WIDTH-1:0]  rsp_tag_s;
     wire [NUM_REQS-1:0]                 rsp_ready_s;
 
-    VX_rsp_merge #(
+    VX_cache_rsp_merge #(
         .NUM_REQS  (NUM_REQS),
         .NUM_BANKS (NUM_BANKS),
         .NUM_PORTS (1),
