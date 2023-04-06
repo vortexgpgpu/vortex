@@ -37,7 +37,6 @@ set_global_assignment -name VERILOG_INPUT_VERSION SYSTEMVERILOG_2009
 set_global_assignment -name ADD_PASS_THROUGH_LOGIC_TO_INFERRED_RAMS ON
 set_global_assignment -name VERILOG_MACRO QUARTUS
 set_global_assignment -name VERILOG_MACRO SYNTHESIS
-set_global_assignment -name VERILOG_MACRO NOGLOBALS
 set_global_assignment -name MESSAGE_DISABLE 16818
 set_global_assignment -name TIMEQUEST_DO_REPORT_TIMING ON
 

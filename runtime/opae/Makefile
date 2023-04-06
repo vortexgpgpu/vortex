@@ -28,13 +28,15 @@ ifdef DEBUG
 	CXXFLAGS += -g -O0
 else    
 	CXXFLAGS += -O2 -DNDEBUG
+	SCOPE_FLAGS += -D NDEBUG
 endif
 
 # Enable scope analyzer
 ifdef SCOPE
 	CXXFLAGS += -DSCOPE	
 	SRCS += scope.cpp
-	SCOPE_H = scope-defs.h 
+	SCOPE_H = scope-defs.h	 
+	SCOPE_FLAGS += -D SCOPE
 endif
 
 # Enable perf counters
@@ -47,7 +49,7 @@ PROJECT = libvortex.so
 all: $(PROJECT)
 
 scope-defs.h: $(SCRIPT_DIR)/scope.json
-	$(SCRIPT_DIR)/scope.py $(CONFIGS) -D NOGLOBALS -D SIMULATION -cc scope-defs.h -vl $(RTL_DIR)/scope-defs.vh $(SCRIPT_DIR)/scope.json
+	$(SCRIPT_DIR)/scope.py $(CONFIGS) $(SCOPE_FLAGS) -cc scope-defs.h -vl $(RTL_DIR)/scope-defs.vh $(SCRIPT_DIR)/scope.json
 
 # generate scope data
 scope: scope-defs.h
@@ -59,7 +61,7 @@ endif
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $(PROJECT)
 
 clean:
-	rm -rf $(PROJECT) *.o scope-defs.h
+	rm -rf $(PROJECT) *.o scope-defs.h $(RTL_DIR)/scope-defs.vh
 ifeq ($(TARGET), opaesim)
 	$(MAKE) -C $(OPAESIM_DIR) clean
 endif

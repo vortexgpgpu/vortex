@@ -11,8 +11,8 @@
         "../rtl/libs"        
     ],
     "includes":[
-        "../rtl/VX_config.vh",
         "../rtl/VX_platform.vh",
+        "../rtl/VX_config.vh",
         "../rtl/VX_define.vh",
         "../rtl/VX_gpu_types.vh",
         "../rtl/fpu_unit/VX_fpu_types.vh",
