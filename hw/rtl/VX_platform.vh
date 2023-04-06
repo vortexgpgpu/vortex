@@ -1,10 +1,6 @@
 `ifndef VX_PLATFORM_VH
 `define VX_PLATFORM_VH
 
-`ifndef NOGLOBALS
-`include "globals.vh"
-`endif
-
 `ifndef SYNTHESIS
 `include "util_dpi.vh"
 `endif
