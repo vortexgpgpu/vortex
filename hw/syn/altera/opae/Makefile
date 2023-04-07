@@ -96,7 +96,7 @@ vortex_afu.h: vortex_afu.json
 
 setup:
 	mkdir -p $(BUILD_DIR)/src
-	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -F$(BUILD_DIR)/src -P -Osources.txt
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -F$(BUILD_DIR)/src -Osources.txt
 ifeq ($(TARGET), ase)
 	afu_sim_setup -f -s setup.cfg $(BUILD_DIR)
 else

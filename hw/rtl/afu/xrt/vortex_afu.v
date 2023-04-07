@@ -1,4 +1,3 @@
-`include "VX_define.vh"
 `include "vortex_afu.vh"
 
 module vortex_afu #(
