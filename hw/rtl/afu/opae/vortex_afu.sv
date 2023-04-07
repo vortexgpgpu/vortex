@@ -1,4 +1,14 @@
+`include "VX_platform.vh"
+`ifdef NOPAE
+`IGNORE_WARNINGS_BEGIN
 `include "vortex_afu.vh"
+`IGNORE_WARNINGS_END
+`else
+`include "afu_json_info.vh"
+`endif
+
+`include "VX_define.vh"
+`include "VX_gpu_types.vh"
 
 /* verilator lint_off IMPORTSTAR */ 
 import ccip_if_pkg::*;
