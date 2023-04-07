@@ -1,9 +1,8 @@
 `ifndef VORTEX_AFU_VH
 `define VORTEX_AFU_VH
 
-`ifndef NOPAE
-`include "afu_json_info.vh"
-`else
+`include "ccip_if_pkg.sv"
+
 `define PLATFORM_PROVIDES_LOCAL_MEMORY
 
 `ifndef PLATFORM_PARAM_LOCAL_MEMORY_BANKS
@@ -21,6 +20,8 @@
 `ifndef PLATFORM_PARAM_LOCAL_MEMORY_BURST_CNT_WIDTH
 `define PLATFORM_PARAM_LOCAL_MEMORY_BURST_CNT_WIDTH 4
 `endif
+
+`include "local_mem_cfg_pkg.sv"
 
 `define AFU_ACCEL_NAME "vortex_afu"
 `define AFU_ACCEL_UUID 128'h35f9452b_25c2_434c_93d5_6f8c60db361c
@@ -43,10 +44,5 @@
 
 `define AFU_IMAGE_POWER 0
 `define AFU_TOP_IFC "ccip_std_afu_avalon_mm"
-
-`endif // NOPAE
-
-`include "VX_define.vh"
-`include "VX_gpu_types.vh"
 
 `endif // VORTEX_AFU_VH
