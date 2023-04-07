@@ -1,10 +1,4 @@
-`ifndef NOPAE
-`include "afu_json_info.vh"
-`else
 `include "vortex_afu.vh"
-`endif
-`include "VX_define.vh"
-`include "VX_gpu_types.vh"
 
 /* verilator lint_off IMPORTSTAR */ 
 import ccip_if_pkg::*;

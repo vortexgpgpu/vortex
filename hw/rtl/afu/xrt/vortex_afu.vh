@@ -94,4 +94,6 @@
 	assign m_axi_mem_bresp_a[i] = m``i``_axi_mem_bresp; \
 	assign m_axi_mem_bid_a[i] = m``i``_axi_mem_bid
 
+`include "VX_define.vh"
+
 `endif // VORTEX_AFU_VH

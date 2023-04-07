@@ -13,7 +13,10 @@ ifeq ($(DEVICE_FAMILY), arria10)
 	DEVICE = 10AX115N3F40E2SG
 endif
 
-CONFIGS += -set "NDEBUG"
+CONFIGS += -DNDEBUG
+CONFIGS += -DQUARTUS
+CONFIGS += -DSYNTHESIS
+CONFIGS += -DNOGLOBALS
 
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
@@ -30,7 +33,7 @@ all: gen-sources $(PROJECT).sta.rpt $(PROJECT).pow.rpt
 gen-sources: src
 src:
 	mkdir -p src
-	$(SCRIPT_DIR)/gen_sources.sh $(RTL_INCLUDE) -Fsrc
+	$(SCRIPT_DIR)/gen_sources.sh $(CONFIGS) $(RTL_INCLUDE) -P -Fsrc
 
 syn: $(PROJECT).syn.rpt
 
@@ -71,7 +74,7 @@ smart.log: $(PROJECT_FILES)
 
 # Project initialization
 $(PROJECT_FILES): gen-sources
-	quartus_sh -t ../../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../../project.sdc -inc "src" $(CONFIGS)
+	quartus_sh -t ../../project.tcl -project $(PROJECT) -family $(FAMILY) -device $(DEVICE) -top $(TOP_LEVEL_ENTITY) -src "$(SRC_FILE)" -sdc ../../project.sdc -inc "src"
 	
 syn.chg:
 	$(STAMP) syn.chg

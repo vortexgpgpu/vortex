@@ -1,4 +1,4 @@
-`include "VX_define.vh"
+`include "vortex_afu.vh"
 
 module VX_afu_ctrl #(
     parameter AXI_ADDR_WIDTH = 6,
