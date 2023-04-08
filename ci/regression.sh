@@ -66,13 +66,13 @@ CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-i
 CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -rsoccer_ref_g0.png -g0"
 CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -rsoccer_ref_g0.png -g0"
 CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -rsoccer_ref_g0.png -g0"
-CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -rsoccer_ref_g1.png -g1" --perf=1
-CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -rsoccer_ref_g1.png -g1" --perf=1
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -rsoccer_ref_g1.png -g1" --perf=3
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -rsoccer_ref_g1.png -g1" --perf=3
 CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -rsoccer_ref_g2.png -g2"
 CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -rsoccer_ref_g2.png -g2"
 
-CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -rsoccer_ref_g1.png -g1" --perf=2
-CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -rsoccer_ref_g1.png -g1" --perf=2
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=simx --app=tex --args="-isoccer.png -rsoccer_ref_g1.png -g1" --perf=3
+CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -rsoccer_ref_g1.png -g1" --perf=3
 CONFIGS="-DEXT_TEX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=tex --args="-isoccer.png -rsoccer_ref_g1.png -g1 -z"
 CONFIGS="-DEXT_TEX_ENABLE -DTCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim  --app=tex --args="-isoccer.png -rsoccer_ref_g1.png -g1"
 CONFIGS="-DEXT_TEX_ENABLE -DNUM_TEX_UNITS=2 -DL1_DISABLE -DSM_DISABLE -DTCACHE_DISABLE" ./ci/blackbox.sh --driver=simx  --app=tex --args="-isoccer.png -rsoccer_ref_g1.png" --cores=4 --warps=1 --threads=2
@@ -89,10 +89,10 @@ rop()
 {
 echo "begin render output tests..."
 
-CONFIGS="-DEXT_ROP_ENABLE" ./ci/blackbox.sh --driver=simx --app=rop --args="-rwhitebox_128.png" --perf=4
-CONFIGS="-DEXT_ROP_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png" --perf=4
+CONFIGS="-DEXT_ROP_ENABLE" ./ci/blackbox.sh --driver=simx --app=rop --args="-rwhitebox_128.png" --perf=5
+CONFIGS="-DEXT_ROP_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png" --perf=5
 CONFIGS="-DEXT_ROP_ENABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png"
-CONFIGS="-DEXT_ROP_ENABLE -DOCACHE_NUM_BANKS=8" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png" --perf=4
+CONFIGS="-DEXT_ROP_ENABLE -DOCACHE_NUM_BANKS=8" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png" --perf=5
 CONFIGS="-DEXT_ROP_ENABLE -DNUM_ROP_UNITS=2 -DL1_DISABLE -DSM_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=simx --app=rop --args="-rwhitebox_128.png" --cores=4 --warps=1 --threads=2
 CONFIGS="-DEXT_ROP_ENABLE -DNUM_ROP_UNITS=2 -DL1_DISABLE -DSM_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png" --cores=1 --warps=1 --threads=2
 CONFIGS="-DEXT_ROP_ENABLE -DNUM_ROP_UNITS=1 -DL1_DISABLE -DSM_DISABLE -DOCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=rop --args="-rwhitebox_128.png" --cores=2 --warps=1 --threads=2
@@ -107,10 +107,10 @@ raster()
 {
 echo "begin rasterizer tests..."
 
-CONFIGS="-DEXT_RASTER_ENABLE" ./ci/blackbox.sh --driver=simx --app=raster --args="-ttriangle.cgltrace -rtriangle_ref_128.png" --perf=3
-CONFIGS="-DEXT_RASTER_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=raster --args="-ttriangle.cgltrace -rtriangle_ref_128.png" --perf=3
+CONFIGS="-DEXT_RASTER_ENABLE" ./ci/blackbox.sh --driver=simx --app=raster --args="-ttriangle.cgltrace -rtriangle_ref_128.png" --perf=4
+CONFIGS="-DEXT_RASTER_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=raster --args="-ttriangle.cgltrace -rtriangle_ref_128.png" --perf=4
 CONFIGS="-DEXT_RASTER_ENABLE -DRCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=raster --args="-ttriangle.cgltrace -rtriangle_ref_128.png"
-CONFIGS="-DEXT_RASTER_ENABLE -DRCACHE_NUM_BANKS=4" ./ci/blackbox.sh --driver=rtlsim --app=raster --args="-ttriangle.cgltrace -rtriangle_ref_128.png" --perf=3
+CONFIGS="-DEXT_RASTER_ENABLE -DRCACHE_NUM_BANKS=4" ./ci/blackbox.sh --driver=rtlsim --app=raster --args="-ttriangle.cgltrace -rtriangle_ref_128.png" --perf=4
 CONFIGS="-DEXT_RASTER_ENABLE -DRASTER_NUM_PES=2 -DL1_DISABLE -DSM_DISABLE -DRCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=raster --args="-ttriangle.cgltrace -rtriangle_ref_128.png"
 CONFIGS="-DEXT_RASTER_ENABLE -DRASTER_TILE_LOGSIZE=4" ./ci/blackbox.sh --driver=simx --app=raster --args="-k4 -ttriangle.cgltrace -rtriangle_ref_128.png"
 CONFIGS="-DEXT_RASTER_ENABLE -DRASTER_TILE_LOGSIZE=6" ./ci/blackbox.sh --driver=simx --app=raster --args="-k6 -ttriangle.cgltrace -rtriangle_ref_128.png"

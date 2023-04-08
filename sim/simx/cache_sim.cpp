@@ -11,8 +11,8 @@ using namespace vortex;
 
 struct params_t {
     uint32_t sets_per_bank;
-    uint32_t blocks_per_set;    
-    uint32_t words_per_block;
+    uint32_t lines_per_set;    
+    uint32_t words_per_line;
     uint32_t log2_num_inputs;
 
     uint32_t word_select_addr_start;
@@ -38,11 +38,11 @@ struct params_t {
 
         this->log2_num_inputs = log2ceil(config.num_inputs);
 
-        this->words_per_block = 1 << offset_bits;
-        this->blocks_per_set  = 1 << config.A;
+        this->words_per_line = 1 << offset_bits;
+        this->lines_per_set  = 1 << config.A;
         this->sets_per_bank   = 1 << index_bits;
 
-        assert(config.ports_per_bank <= this->words_per_block);
+        assert(config.ports_per_bank <= this->words_per_line);
                 
         // Word select
         this->word_select_addr_start = config.W;
@@ -94,59 +94,82 @@ struct params_t {
     }
 };
 
-struct block_t {
-    bool     valid;
-    bool     dirty;        
+struct line_t {  
     uint64_t tag;
     uint32_t lru_ctr;
+    bool     valid;
+    bool     dirty;
+
+    void clear() {
+        valid = false;
+        dirty = false;
+    }
 };
 
 struct set_t {
-    std::vector<block_t> blocks;    
-    set_t(uint32_t size) : blocks(size) {}
+    std::vector<line_t> lines;
+
+    set_t(uint32_t num_ways) 
+        : lines(num_ways) 
+    {}
 
     void clear() {
-        for (auto& block : blocks) {
-            block.valid = false;
+        for (auto& line : lines) {
+            line.clear();
         }
     }
 };
 
 struct bank_req_port_t {
-    bool     valid;    
     uint32_t req_id;
     uint64_t req_tag;
+    bool     valid;
+
+    void clear() {
+        valid = false;   
+    }
 };
 
 struct bank_req_t {
-    bool valid;
-    bool write;
-    bool mshr_replay;
+
+    enum ReqType {
+        None   = 0,
+        Fill   = 1,
+        Replay = 2,        
+        Core   = 3
+    };
+
+    std::vector<bank_req_port_t> ports;
     uint64_t tag;
     uint32_t set_id;
     uint32_t cid;
     uint64_t uuid;
-    std::vector<bank_req_port_t> ports;
+    ReqType  type;
+    bool     write;
 
-    bank_req_t(uint32_t size) 
-        : valid(false)
-        , write(false)
-        , mshr_replay(false)
-        , tag(0)
-        , set_id(0)
-        , cid(0)
-        , uuid(0)
-        , ports(size)
+    bank_req_t(uint32_t num_ports)
+        : ports(num_ports) 
     {}
+
+    void clear() {
+        for (auto& port : ports) {
+            port.clear();
+        }
+        type = ReqType::None;
+    }
 };
 
-struct mshr_entry_t : public bank_req_t {
-    uint32_t block_id;
+struct mshr_entry_t {
+    bank_req_t bank_req;
+    uint32_t   line_id;
 
-    mshr_entry_t(uint32_t size = 0) 
-        : bank_req_t(size) 
-        , block_id(0)
+    mshr_entry_t(uint32_t num_ports) 
+        : bank_req(num_ports) 
     {}
+
+    void clear() {
+        bank_req.clear();
+    }
 };
 
 class MSHR {
@@ -155,8 +178,8 @@ private:
     uint32_t size_;
 
 public:    
-    MSHR(uint32_t size)
-        : entries_(size)
+    MSHR(uint32_t size, uint32_t num_ports)
+        : entries_(size, num_ports)
         , size_(0) 
     {}
 
@@ -168,26 +191,23 @@ public:
         return (size_ == entries_.size());
     }
 
-    int lookup(const bank_req_t& bank_req) {
-         for (uint32_t i = 0, n = entries_.size(); i < n; ++i) {
-            auto& entry = entries_.at(i);
-            if (entry.valid 
-             && entry.set_id == bank_req.set_id 
-             && entry.tag == bank_req.tag) {
-                return i;
+    bool lookup(const bank_req_t& bank_req) {
+         for (auto& entry : entries_) {;
+            if (entry.bank_req.type != bank_req_t::None
+             && entry.bank_req.set_id == bank_req.set_id 
+             && entry.bank_req.tag == bank_req.tag) {
+                return true;
             }
         }
-        return -1;
+        return false;
     }
 
-    int allocate(const bank_req_t& bank_req, uint32_t block_id) {
+    int allocate(const bank_req_t& bank_req, uint32_t line_id) {
         for (uint32_t i = 0, n = entries_.size(); i < n; ++i) {
             auto& entry = entries_.at(i);
-            if (!entry.valid) {
-                *(bank_req_t*)&entry = bank_req;
-                entry.valid = true;
-                entry.mshr_replay = false;
-                entry.block_id = block_id;  
+            if (entry.bank_req.type == bank_req_t::None) {
+                entry.bank_req = bank_req;
+                entry.line_id = line_id;  
                 ++size_;              
                 return i;
             }
@@ -197,13 +217,13 @@ public:
 
     mshr_entry_t& replay(uint32_t id) {
         auto& root_entry = entries_.at(id);
-        assert(root_entry.valid);
-        // make all related mshr entries for replay
+        assert(root_entry.bank_req.type == bank_req_t::Core);
+        // mark all related mshr entries for replay
         for (auto& entry : entries_) {
-            if (entry.valid 
-             && entry.set_id == root_entry.set_id 
-             && entry.tag == root_entry.tag) {
-                entry.mshr_replay = true;
+            if (entry.bank_req.type == bank_req_t::Core 
+             && entry.bank_req.set_id == root_entry.bank_req.set_id 
+             && entry.bank_req.tag == root_entry.bank_req.tag) {
+                entry.bank_req.type = bank_req_t::Replay;
             }
         }
         return root_entry;
@@ -211,9 +231,9 @@ public:
 
     bool pop(bank_req_t* out) {
         for (auto& entry : entries_) {
-            if (entry.valid && entry.mshr_replay) {
-                *out = entry;
-                entry.valid = false;
+            if (entry.bank_req.type == bank_req_t::Replay) {
+                *out = entry.bank_req;
+                entry.bank_req.type = bank_req_t::None;
                 --size_;
                 return true;
             }
@@ -223,29 +243,27 @@ public:
 
     void clear() {
         for (auto& entry : entries_) {
-            if (entry.valid && entry.mshr_replay) {
-                entry.valid = false;
-            }
+            entry.clear();
         }
         size_ = 0;
     }
 };
 
 struct bank_t {
-    std::vector<set_t>  sets;    
-    MSHR                mshr;
+    std::vector<set_t> sets;    
+    MSHR               mshr;
 
     bank_t(const CacheSim::Config& config, 
            const params_t& params) 
-        : sets(params.sets_per_bank, params.blocks_per_set)
-        , mshr(config.mshr_size)
+        : sets(params.sets_per_bank, params.lines_per_set)
+        , mshr(config.mshr_size, config.ports_per_bank)
     {}
 
-    void clear() {
-        mshr.clear();
+    void clear() {        
         for (auto& set : sets) {
             set.clear();
         }
+        mshr.clear();
     }
 };
 
@@ -261,7 +279,8 @@ private:
     Switch<MemReq, MemRsp>::Ptr bypass_switch_;
     std::vector<SimPort<MemReq>> mem_req_ports_;
     std::vector<SimPort<MemRsp>> mem_rsp_ports_;
-    uint32_t flush_cycles_;
+    std::vector<bank_req_t> pipeline_reqs_;
+    uint32_t init_cycles_;
     PerfStats perf_stats_;
     uint64_t pending_read_reqs_;
     uint64_t pending_write_reqs_;
@@ -275,6 +294,7 @@ public:
         , banks_(config.num_banks, {config, params_})
         , mem_req_ports_(config.num_banks, simobject)
         , mem_rsp_ports_(config.num_banks, simobject)
+        , pipeline_reqs_(config.num_banks, config.ports_per_bank)
     {
         char sname[100];
         snprintf(sname, 100, "%s-bypass-arb", simobject->name().c_str());
@@ -308,8 +328,8 @@ public:
             bypass_switch_->RspIn.at(0).bind(&mem_rsp_ports_.at(0));
         }
 
-        // calculate tag flush cycles
-        flush_cycles_ = params_.sets_per_bank * params_.blocks_per_set;
+        // calculate cache initialization cycles
+        init_cycles_ = params_.sets_per_bank * params_.lines_per_set;
     }
 
     void reset() {
@@ -320,74 +340,72 @@ public:
             bank.clear();
         }
         perf_stats_ = PerfStats();
-        pending_read_reqs_ = 0;
+        pending_read_reqs_  = 0;
         pending_write_reqs_ = 0;
-        pending_fill_reqs_ = 0;
+        pending_fill_reqs_  = 0;
     }
 
     void tick() {
         if (config_.bypass)
             return;
 
-        // wait on flush cycles
-        if (flush_cycles_ != 0) {
-            --flush_cycles_;
+        // wait on cache initialization cycles
+        if (init_cycles_ != 0) {
+            --init_cycles_;
             return;
         }
 
-        // per-bank pipeline request
-        std::vector<bank_req_t> pipeline_reqs(config_.num_banks, config_.ports_per_bank);
-
-        // calculate memory latency
-        perf_stats_.mem_latency += pending_fill_reqs_;
-
-        // handle bypasss responses
-        auto& bypass_port = bypass_switch_->RspIn.at(1);            
-        if (!bypass_port.empty()) {
-            auto& mem_rsp = bypass_port.front();
-            uint32_t req_id = mem_rsp.tag & ((1 << params_.log2_num_inputs)-1);                
-            uint64_t tag = mem_rsp.tag >> params_.log2_num_inputs;
-            MemRsp core_rsp{tag, mem_rsp.cid, mem_rsp.uuid};
-            simobject_->CoreRspPorts.at(req_id).send(core_rsp, config_.latency);
-            DT(3, simobject_->name() << "-core-" << core_rsp);
-            bypass_port.pop();
-        }        
-
-        // handle MSHR replay
-        for (uint32_t bank_id = 0, n = config_.num_banks; bank_id < n; ++bank_id) {
-            auto& bank = banks_.at(bank_id);
-            auto& pipeline_req = pipeline_reqs.at(bank_id);
-            bank.mshr.pop(&pipeline_req);
-        }       
-
-        // handle memory fills
-        std::vector<bool> pending_fill_req(config_.num_banks, false);
-        for (uint32_t bank_id = 0, n = config_.num_banks; bank_id < n; ++bank_id) {
-            auto& mem_rsp_port = mem_rsp_ports_.at(bank_id);
-            if (!mem_rsp_port.empty()) {
-                auto& mem_rsp = mem_rsp_port.front();
-                DT(3, simobject_->name() << "-dram-" << mem_rsp);
-                this->processMemoryFill(bank_id, mem_rsp.tag);                
-                pending_fill_req.at(bank_id) = true;
-                mem_rsp_port.pop();
+        // handle cache bypasss responses
+        {
+            auto& bypass_port = bypass_switch_->RspIn.at(1);            
+            if (!bypass_port.empty()) {
+                auto& mem_rsp = bypass_port.front();
+                this->processBypassResponse(mem_rsp);
+                bypass_port.pop();
             }
         }
-        
-        // handle incoming core requests
+
+        // initialize pipeline request
+        for (auto& pipeline_req : pipeline_reqs_) {
+            pipeline_req.clear();
+        }
+
+        // schedule MSHR replay
+        for (uint32_t bank_id = 0, n = config_.num_banks; bank_id < n; ++bank_id) {
+            auto& bank = banks_.at(bank_id);
+            auto& pipeline_req = pipeline_reqs_.at(bank_id);
+            bank.mshr.pop(&pipeline_req);
+        }
+
+        // schedule memory fill
+        for (uint32_t bank_id = 0, n = config_.num_banks; bank_id < n; ++bank_id) {
+            auto& mem_rsp_port = mem_rsp_ports_.at(bank_id);
+            if (mem_rsp_port.empty())
+                continue;
+
+            auto& pipeline_req = pipeline_reqs_.at(bank_id);
+            if (pipeline_req.type != bank_req_t::None)
+                continue;
+
+            auto& mem_rsp = mem_rsp_port.front();            
+            DT(3, simobject_->name() << "-dram-" << mem_rsp);
+            pipeline_req.type = bank_req_t::Fill;
+            pipeline_req.tag = mem_rsp.tag;
+            mem_rsp_port.pop();
+        }
+
+        // schedule core requests        
         for (uint32_t req_id = 0, n = config_.num_inputs; req_id < n; ++req_id) {
-            auto& core_req_port = simobject_->CoreReqPorts.at(req_id);            
+            auto& core_req_port = simobject_->CoreReqPorts.at(req_id);
             if (core_req_port.empty())
                 continue;
 
             auto& core_req = core_req_port.front();
 
             // check cache bypassing
-            if (core_req.addr_type == AddrType::IO) {
-                DT(3, simobject_->name() << "-core-" << core_req);
-
+            if (core_req.type == AddrType::IO) {
                 // send bypass request
                 this->processBypassRequest(core_req, req_id);
-
                 // remove request
                 core_req_port.pop();
                 continue;
@@ -397,43 +415,20 @@ public:
             auto set_id  = params_.addr_set_id(core_req.addr);
             auto tag     = params_.addr_tag(core_req.addr);
             auto port_id = req_id % config_.ports_per_bank;
-            
-            // create bank request
-            bank_req_t bank_req(config_.ports_per_bank);
-            bank_req.valid = true;
-            bank_req.write = core_req.write;
-            bank_req.mshr_replay = false;
-            bank_req.tag = tag;            
-            bank_req.set_id = set_id;       
-            bank_req.cid = core_req.cid;
-            bank_req.uuid = core_req.uuid;
-            bank_req.ports.at(port_id) = {true, req_id, core_req.tag};
 
-            auto& bank = banks_.at(bank_id);            
-            auto& pipeline_req = pipeline_reqs.at(bank_id);
+            auto& bank = banks_.at(bank_id);
+            auto& pipeline_req = pipeline_reqs_.at(bank_id);
 
-            // check pending MSHR replay
-            if (pipeline_req.valid 
-             && pipeline_req.mshr_replay) {
-                 // stall
-                continue;
-            }    
-
-            // check pending fill request
-            if (pending_fill_req.at(bank_id)) {
-                // stall
-                continue;
-            }
-            
-            // check MSHR capacity if read or writeback
+            // check MSHR capacity
             if ((!core_req.write || !config_.write_through)
              && bank.mshr.full()) {
                 ++perf_stats_.mshr_stalls;
+                ++perf_stats_.bank_stalls;
                 continue;
-            }    
+            }            
 
             // check bank conflicts
-            if (pipeline_req.valid) {
+            if (pipeline_req.type == bank_req_t::Core) {
                 // check port conflict
                 if (pipeline_req.write != core_req.write
                  || pipeline_req.set_id != set_id
@@ -442,11 +437,23 @@ public:
                     ++perf_stats_.bank_stalls;
                     continue;
                 }
-                // update pending request infos
-                pipeline_req.ports.at(port_id) = bank_req.ports.at(port_id);
-            } else {
+                // extend request ports
+                pipeline_req.ports.at(port_id) = bank_req_port_t{req_id, core_req.tag, true};
+            } else if (pipeline_req.type == bank_req_t::None) {
                 // schedule new request
-                pipeline_req = bank_req;
+                bank_req_t bank_req(config_.ports_per_bank);
+                bank_req.ports.at(port_id) = bank_req_port_t{req_id, core_req.tag, true};
+                bank_req.tag   = tag;            
+                bank_req.set_id = set_id;       
+                bank_req.cid   = core_req.cid;
+                bank_req.uuid  = core_req.uuid;
+                bank_req.type  = bank_req_t::Core;
+                bank_req.write = core_req.write;
+                pipeline_req   = bank_req;
+            } else {
+                // bank in use
+                ++perf_stats_.bank_stalls;
+                continue;
             }
 
             if (core_req.write)
@@ -461,7 +468,7 @@ public:
         }
     
         // process active request        
-        this->processBankRequest(pipeline_reqs);
+        this->processBankRequests();
     } 
 
     const PerfStats& perf_stats() const {
@@ -470,7 +477,17 @@ public:
 
 private:
     
+    void processBypassResponse(const MemRsp& mem_rsp) {
+        uint32_t req_id = mem_rsp.tag & ((1 << params_.log2_num_inputs)-1);                
+        uint64_t tag = mem_rsp.tag >> params_.log2_num_inputs;
+        MemRsp core_rsp{tag, mem_rsp.cid, mem_rsp.uuid};
+        simobject_->CoreRspPorts.at(req_id).send(core_rsp, config_.latency);
+        DT(3, simobject_->name() << "-core-" << core_rsp);
+    }
+
     void processBypassRequest(const MemReq& core_req, uint32_t req_id) {
+        DT(3, simobject_->name() << "-core-" << core_req);
+
         {
             MemReq mem_req(core_req);
             mem_req.tag = (core_req.tag << params_.log2_num_inputs) + req_id;
@@ -485,27 +502,25 @@ private:
         }
     }
 
-    void processMemoryFill(uint32_t bank_id, uint32_t mshr_id) {
-        // update block
-        auto& bank  = banks_.at(bank_id);
-        auto& entry = bank.mshr.replay(mshr_id);
-        auto& set   = bank.sets.at(entry.set_id);
-        auto& block = set.blocks.at(entry.block_id);
-        block.valid = true;
-        block.tag   = entry.tag;
-        --pending_fill_reqs_;
-    }
-
-    void processBankRequest(const std::vector<bank_req_t>& pipeline_reqs) {
+    void processBankRequests() {
         for (uint32_t bank_id = 0, n = config_.num_banks; bank_id < n; ++bank_id) {
-            auto& pipeline_req = pipeline_reqs.at(bank_id);
-            if (!pipeline_req.valid)
-                continue;
-
             auto& bank = banks_.at(bank_id);
-            auto& set = bank.sets.at(pipeline_req.set_id);
-
-            if (pipeline_req.mshr_replay) {
+            auto pipeline_req = pipeline_reqs_.at(bank_id);
+            
+            switch (pipeline_req.type) {
+            case bank_req_t::None:
+                break;
+            case bank_req_t::Fill: {
+                // update cache line
+                auto& bank  = banks_.at(bank_id);
+                auto& entry = bank.mshr.replay(pipeline_req.tag);
+                auto& set   = bank.sets.at(entry.bank_req.set_id);
+                auto& line  = set.lines.at(entry.line_id);
+                line.valid  = true;
+                line.tag    = entry.bank_req.tag;
+                --pending_fill_reqs_;
+            } break;
+            case bank_req_t::Replay: {
                 // send core response
                 if (!pipeline_req.write || config_.write_reponse) {
                     for (auto& info : pipeline_req.ports) {
@@ -516,30 +531,32 @@ private:
                         DT(3, simobject_->name() << "-core-" << core_rsp);         
                     }
                 }
-            } else {        
+            } break;
+            case bank_req_t::Core: {        
                 bool hit = false;
-                bool found_free_block = false;            
-                uint32_t hit_block_id = 0;
-                uint32_t repl_block_id = 0;            
+                bool found_free_line = false;            
+                uint32_t hit_line_id = 0;
+                uint32_t repl_line_id = 0;            
                 uint32_t max_cnt = 0;
-                
-                for (uint32_t i = 0, n = set.blocks.size(); i < n; ++i) {
-                    auto& block = set.blocks.at(i);
-                    if (block.valid) {
-                        if (block.tag == pipeline_req.tag) {
-                            block.lru_ctr = 0;                        
-                            hit_block_id = i;
+
+                auto& set = bank.sets.at(pipeline_req.set_id);                
+                for (uint32_t i = 0, n = set.lines.size(); i < n; ++i) {
+                    auto& line = set.lines.at(i);
+                    if (line.valid) {
+                        if (line.tag == pipeline_req.tag) {
+                            line.lru_ctr = 0;                        
+                            hit_line_id = i;
                             hit = true;
                         } else {
-                            ++block.lru_ctr;
+                            ++line.lru_ctr;
                         }
-                        if (max_cnt < block.lru_ctr) {
-                            max_cnt = block.lru_ctr;
-                            repl_block_id = i;
+                        if (max_cnt < line.lru_ctr) {
+                            max_cnt = line.lru_ctr;
+                            repl_line_id = i;
                         }
                     } else {                    
-                        found_free_block = true;
-                        repl_block_id = i;
+                        found_free_line = true;
+                        repl_line_id = i;
                     }
                 }
 
@@ -549,19 +566,19 @@ private:
                     //                
                     if (pipeline_req.write) {
                         // handle write hit
-                        auto& hit_block = set.blocks.at(hit_block_id);
+                        auto& hit_line = set.lines.at(hit_line_id);
                         if (config_.write_through) {
                             // forward write request to memory
                             MemReq mem_req;
-                            mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, hit_block.tag);
+                            mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, hit_line.tag);
                             mem_req.write = true;
                             mem_req.cid = pipeline_req.cid;
                             mem_req.uuid = pipeline_req.uuid;
                             mem_req_ports_.at(bank_id).send(mem_req, 1);
                             DT(3, simobject_->name() << "-dram-" << mem_req);
                         } else {
-                            // mark block as dirty
-                            hit_block.dirty = true;
+                            // mark line as dirty
+                            hit_line.dirty = true;
                         }
                     }
                     // send core response
@@ -583,12 +600,12 @@ private:
                     else
                         ++perf_stats_.read_misses;
 
-                    if (!found_free_block && !config_.write_through) {
-                        // write back dirty block
-                        auto& repl_block = set.blocks.at(repl_block_id);
-                        if (repl_block.dirty) {                       
+                    if (!found_free_line && !config_.write_through) {
+                        // write back dirty line
+                        auto& repl_line = set.lines.at(repl_line_id);
+                        if (repl_line.dirty) {                       
                             MemReq mem_req;
-                            mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, repl_block.tag);
+                            mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, repl_line.tag);
                             mem_req.write = true;
                             mem_req.cid = pipeline_req.cid;
                             mem_req_ports_.at(bank_id).send(mem_req, 1);
@@ -620,13 +637,13 @@ private:
                         }
                     } else {
                         // MSHR lookup
-                        int pending = bank.mshr.lookup(pipeline_req);
+                        auto mshr_pending = bank.mshr.lookup(pipeline_req);
 
                         // allocate MSHR
-                        int mshr_id = bank.mshr.allocate(pipeline_req, repl_block_id);
+                        auto mshr_id = bank.mshr.allocate(pipeline_req, repl_line_id);
                         
                         // send fill request
-                        if (pending == -1) {
+                        if (!mshr_pending) {
                             MemReq mem_req;
                             mem_req.addr  = params_.mem_addr(bank_id, pipeline_req.set_id, pipeline_req.tag);
                             mem_req.write = false;
@@ -639,8 +656,11 @@ private:
                         }
                     }
                 }
+            } break;
             }
         }
+        // calculate memory latency
+        perf_stats_.mem_latency += pending_fill_reqs_;
     }
 };
 

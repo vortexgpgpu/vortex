@@ -284,7 +284,7 @@ private:
   #endif
   }
 
-  void eval() {  
+  void eval() {
     device_->eval();
   #ifdef VCD_OUTPUT
     if (sim_trace_enabled()) {
