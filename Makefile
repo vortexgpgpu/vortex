@@ -20,3 +20,9 @@ clean-all:
 	$(MAKE) -C kernel clean
 	$(MAKE) -C runtime clean
 	$(MAKE) -C tests clean-all
+
+crtlsim:
+	$(MAKE) -C sim clean
+
+brtlsim:
+	$(MAKE) -C sim

@@ -4,17 +4,25 @@
 #include <vector>
 #include <mutex>
 #include <iostream>
+
 #include "svdpi.h"
 #include "verilated_vpi.h"
 #include "VX_config.h"
+
+#ifndef MODE_64_BIT
+#define INT_LEN int
+#else
+#define INT_LEN long int
+#endif
 
 #ifndef DEBUG_LEVEL
 #define DEBUG_LEVEL 3
 #endif
 
+
 extern "C" {
-  void dpi_imul(bool enable, long int a, long int b, bool is_signed_a, bool is_signed_b, long int* resultl, long int* resulth);
-  void dpi_idiv(bool enable, long int a, long int b, bool is_signed, long int* quotient, long int* remainder);
+  void dpi_imul(bool enable, INT_LEN a, INT_LEN b, bool is_signed_a, bool is_signed_b, INT_LEN* resultl, INT_LEN* resulth);
+  void dpi_idiv(bool enable, INT_LEN a, INT_LEN b, bool is_signed, INT_LEN* quotient, INT_LEN* remainder);
 
   int dpi_register();
   void dpi_assert(int inst, bool cond, int delay);
@@ -98,7 +106,33 @@ void dpi_assert(int inst, bool cond, int delay) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+#ifndef MODE_64_BIT
+void dpi_imul(bool enable, int a, int b, bool is_signed_a, bool is_signed_b, int* resultl, int* resulth) {
+  if (!enable)
+    return;
+    
+  uint64_t first  = *(uint32_t*)&a;
+  uint64_t second = *(uint32_t*)&b;
+    
+  if (is_signed_a && (first & 0x80000000)) {
+    first |= 0xFFFFFFFF00000000;
+  }
 
+  if (is_signed_b && (second & 0x80000000)) {
+    second |= 0xFFFFFFFF00000000;
+  }
+
+  uint64_t result;
+  if (is_signed_a || is_signed_b) {
+    result = (int64_t)first * (int64_t)second;
+  } else {
+    result = first * second;
+  }    
+    
+  *resultl = result & 0xFFFFFFFF;
+  *resulth = (result >> 32) & 0xFFFFFFFF;
+}
+#else
 void umul64wide (uint64_t a, uint64_t b, uint64_t *hi, uint64_t *lo)
 {
     uint64_t a_lo = (uint64_t)(uint32_t)a;
@@ -116,14 +150,12 @@ void umul64wide (uint64_t a, uint64_t b, uint64_t *hi, uint64_t *lo)
     *lo = p0 + (p1 << 32) + (p2 << 32);
     *hi = p3 + (p1 >> 32) + (p2 >> 32) + cy;
 }
-
-
-void dpi_imul(bool enable, long int a, long int b, bool is_signed_a, bool is_signed_b, long int* resultl, long int* resulth) {
+void dpi_imul(bool enable, INT_LEN a, INT_LEN b, bool is_signed_a, bool is_signed_b, INT_LEN* resultl, INT_LEN* resulth) {
   if (!enable)
     return;
     
-  uint64_t first  = *(long int*)&a;
-  uint64_t second = *(long int*)&b;
+  uint64_t first  = *(INT_LEN*)&a;
+  uint64_t second = *(INT_LEN*)&b;
 
   umul64wide (a, b, (uint64_t *)resulth, (uint64_t *)resultl);
     
@@ -148,13 +180,44 @@ void dpi_imul(bool enable, long int a, long int b, bool is_signed_a, bool is_sig
   *resultl = result & 0xFFFFFFFF;
   *resulth = (result >> 32) & 0xFFFFFFFF;*/
 }
+#endif
 
-void dpi_idiv(bool enable, long int a, long int b, bool is_signed, long int* quotient, long int* remainder) {
+#ifdef MODE_32_BIT
+void dpi_idiv(bool enable, int a, int b, bool is_signed, int* quotient, int* remainder) {
   if (!enable)
     return;
 
-  uint64_t dividen = *(long int*)&a;
-  uint64_t divisor = *(long int*)&b;
+  uint32_t dividen = *(uint32_t*)&a;
+  uint32_t divisor = *(uint32_t*)&b;
+
+  if (is_signed) {
+    if (b == 0) {
+      *quotient  = -1;
+      *remainder = dividen;
+    } else if (dividen == 0x80000000 && divisor == 0xffffffff) {
+      *remainder = 0;
+      *quotient  = dividen;
+    } else { 
+      *quotient  = (int32_t)dividen / (int32_t)divisor;
+      *remainder = (int32_t)dividen % (int32_t)divisor;      
+    }
+  } else {    
+    if (b == 0) {
+      *quotient  = -1;
+      *remainder = dividen;
+    } else {
+      *quotient  = dividen / divisor;
+      *remainder = dividen % divisor;
+    }
+  }
+}
+#else
+void dpi_idiv(bool enable, INT_LEN a, INT_LEN b, bool is_signed, INT_LEN* quotient, INT_LEN* remainder) {
+  if (!enable)
+    return;
+
+  uint64_t dividen = *(INT_LEN*)&a;
+  uint64_t divisor = *(INT_LEN*)&b;
 
   if (is_signed) {
     if (b == 0) {
@@ -178,6 +241,7 @@ void dpi_idiv(bool enable, long int a, long int b, bool is_signed, long int* quo
   }
     dpi_trace(1, "DIV - %d %lld %lld %lld %lld %lld %lld\n",is_signed , a, b, dividen, divisor, *quotient, *remainder);
 }
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 

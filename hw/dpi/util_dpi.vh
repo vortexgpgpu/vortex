@@ -1,8 +1,15 @@
+`include "VX_config.vh"
 `ifndef UTIL_DPI
 `define UTIL_DPI
 
-import "DPI-C" function void dpi_imul(input logic enable, input longint a, input longint b, input logic is_signed_a, input logic is_signed_b, output longint resultl, output longint resulth);
-import "DPI-C" function void dpi_idiv(input logic enable, input longint a, input longint b, input logic is_signed, output longint quotient, output longint remainder);
+`ifdef MODE_32_BIT
+`define INT_LEN int
+`else
+`define INT_LEN longint
+`endif
+
+import "DPI-C" function void dpi_imul(input logic enable, input `INT_LEN a, input `INT_LEN b, input logic is_signed_a, input logic is_signed_b, output `INT_LEN resultl, output `INT_LEN resulth);
+import "DPI-C" function void dpi_idiv(input logic enable, input `INT_LEN a, input `INT_LEN b, input logic is_signed, output `INT_LEN quotient, output `INT_LEN remainder);
 
 import "DPI-C" function int dpi_register();
 import "DPI-C" function void dpi_assert(int inst, input logic cond, input int delay);

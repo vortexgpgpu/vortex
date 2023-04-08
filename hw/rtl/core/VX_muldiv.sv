@@ -62,9 +62,9 @@ module VX_muldiv (
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         wire [`XLEN-1:0] mul_resultl, mul_resulth;
-        wire [`XLEN-1:0] alu_in1_dpi = is_mulw ? (alu_in1[i] & 64'hFFFFFFFF) : alu_in1[i]; 
-        wire [`XLEN-1:0] alu_in2_dpi = is_mulw ? (alu_in2[i] & 64'hFFFFFFFF) : alu_in2[i]; 
-        always @(*) begin        
+        wire [`XLEN-1:0] alu_in1_dpi = is_mulw ? (alu_in1[i] & `XLEN'hFFFFFFFF) : alu_in1[i]; 
+        wire [`XLEN-1:0] alu_in2_dpi = is_mulw ? (alu_in2[i] & `XLEN'hFFFFFFFF) : alu_in2[i]; 
+        always @(*) begin   
             dpi_imul (mul_fire_in, alu_in1_dpi, alu_in2_dpi, is_signed_mul_a, is_signed_mul_b, mul_resultl, mul_resulth);
         end
         assign mul_result_tmp[i] = is_mulh_in ? mul_resulth : (is_mulw ? `XLEN'($signed(mul_resultl[31:0])) : mul_resultl);
@@ -151,9 +151,9 @@ module VX_muldiv (
     wire div_fire_in = div_valid_in && div_ready_in;
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         wire [`XLEN-1:0] div_quotient, div_remainder;
-        wire [`XLEN-1:0] alu_in1_dpi = is_divuw ? (alu_in1[i] & 64'hFFFFFFFF) : (is_divw ? `XLEN'($signed(alu_in1[i][31:0])): alu_in1[i]);
-        wire [`XLEN-1:0] alu_in2_dpi = is_divuw ? (alu_in2[i] & 64'hFFFFFFFF) : (is_divw ? `XLEN'($signed(alu_in2[i][31:0])): alu_in2[i]);
-        always @(*) begin        
+        wire [`XLEN-1:0] alu_in1_dpi = is_divuw ? (alu_in1[i] & `XLEN'hFFFFFFFF) : (is_divw ? `XLEN'($signed(alu_in1[i][31:0])): alu_in1[i]);
+        wire [`XLEN-1:0] alu_in2_dpi = is_divuw ? (alu_in2[i] & `XLEN'hFFFFFFFF) : (is_divw ? `XLEN'($signed(alu_in2[i][31:0])): alu_in2[i]);
+        always @(*) begin  
             dpi_idiv (div_fire_in, alu_in1_dpi, alu_in2_dpi, is_signed_div, div_quotient, div_remainder);
         end
         wire [`XLEN-1:0] div_quotient_out = (is_divuw | is_divw) ? `XLEN'($signed(div_quotient[31:0])) : div_quotient;
