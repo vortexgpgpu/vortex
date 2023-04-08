@@ -15,7 +15,7 @@
 
 #include <VX_config.h>
 #include <VX_types.h>
-#include "vortex_afu.h"
+#include <vortex_afu.h>
 
 #ifdef SCOPE
 #include "scope.h"
