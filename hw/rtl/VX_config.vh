@@ -425,6 +425,11 @@
 `define ICACHE_SIZE 16384
 `endif
 
+// Number of banks
+`ifndef ICACHE_NUM_BANKS
+`define ICACHE_NUM_BANKS 1
+`endif
+
 // Core Request Queue Size
 `ifndef ICACHE_CREQ_SIZE
 `define ICACHE_CREQ_SIZE 0

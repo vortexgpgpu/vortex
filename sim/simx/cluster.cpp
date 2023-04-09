@@ -36,7 +36,7 @@ Cluster::Cluster(uint32_t cluster_id,
   });
 
   snprintf(sname, 100, "cluster%d-icaches", cluster_id);
-  icaches_ = CacheCluster::Create(sname, cores_per_cluster, NUM_ICACHES, CacheSim::Config{
+  icaches_ = CacheCluster::Create(sname, cores_per_cluster, NUM_ICACHES, 1, CacheSim::Config{
     !ICACHE_ENABLED,
     log2ceil(ICACHE_SIZE),  // C
     log2ceil(L1_LINE_SIZE),// B
@@ -45,7 +45,7 @@ Cluster::Cluster(uint32_t cluster_id,
     32,                     // address bits    
     1,                      // number of banks
     1,                      // number of ports
-    1,                      // number of requests
+    1,                      // number of inputs
     true,                   // write-through
     false,                  // write response
     0,                      // victim size
@@ -57,7 +57,7 @@ Cluster::Cluster(uint32_t cluster_id,
   l2cache_->CoreRspPorts.at(0).bind(&icaches_->MemRspPort);
 
   snprintf(sname, 100, "cluster%d-dcaches", cluster_id);
-  dcaches_ = CacheCluster::Create(sname, cores_per_cluster, NUM_DCACHES, CacheSim::Config{
+  dcaches_ = CacheCluster::Create(sname, cores_per_cluster, NUM_DCACHES, arch.num_threads(), CacheSim::Config{
     !DCACHE_ENABLED,
     log2ceil(DCACHE_SIZE),  // C
     log2ceil(L1_LINE_SIZE),// B
@@ -66,7 +66,7 @@ Cluster::Cluster(uint32_t cluster_id,
     32,                     // address bits    
     DCACHE_NUM_BANKS,       // number of banks
     DCACHE_NUM_PORTS,       // number of ports
-    (uint8_t)arch.num_threads(), // number of requests
+    DCACHE_NUM_BANKS,       // number of inputs
     true,                   // write-through
     false,                  // write response
     0,                      // victim size
@@ -78,7 +78,7 @@ Cluster::Cluster(uint32_t cluster_id,
   l2cache_->CoreRspPorts.at(1).bind(&dcaches_->MemRspPort);
   
   snprintf(sname, 100, "cluster%d-tcaches", cluster_id);
-  tcaches_ = CacheCluster::Create(sname, NUM_TEX_UNITS, NUM_TCACHES, CacheSim::Config{
+  tcaches_ = CacheCluster::Create(sname, NUM_TEX_UNITS, NUM_TCACHES, arch.num_threads(), CacheSim::Config{
     !TCACHE_ENABLED,
     log2ceil(TCACHE_SIZE),  // C
     log2ceil(L1_LINE_SIZE),// B
@@ -87,7 +87,7 @@ Cluster::Cluster(uint32_t cluster_id,
     32,                     // address bits    
     TCACHE_NUM_BANKS,       // number of banks
     TCACHE_NUM_PORTS,       // number of ports
-    (uint8_t)arch.num_threads(), // number of requests
+    TCACHE_NUM_BANKS,       // number of inputs
     false,                  // write-through
     false,                  // write response
     0,                      // victim size
@@ -99,7 +99,7 @@ Cluster::Cluster(uint32_t cluster_id,
   l2cache_->CoreRspPorts.at(2).bind(&tcaches_->MemRspPort);
 
   snprintf(sname, 100, "cluster%d-ocaches", cluster_id);
-  ocaches_ = CacheCluster::Create(sname, NUM_ROP_UNITS, NUM_OCACHES, CacheSim::Config{
+  ocaches_ = CacheCluster::Create(sname, NUM_ROP_UNITS, NUM_OCACHES, arch.num_threads(), CacheSim::Config{
     !OCACHE_ENABLED,
     log2ceil(OCACHE_SIZE),  // C
     log2ceil(MEM_BLOCK_SIZE), // B
@@ -108,7 +108,7 @@ Cluster::Cluster(uint32_t cluster_id,
     32,                     // address bits    
     OCACHE_NUM_BANKS,       // number of banks
     OCACHE_NUM_PORTS,       // number of ports
-    (uint8_t)arch.num_threads(), // number of requests
+    OCACHE_NUM_BANKS,       // number of inputs
     false,                  // write-through
     false,                  // write response
     0,                      // victim size
@@ -120,7 +120,7 @@ Cluster::Cluster(uint32_t cluster_id,
   l2cache_->CoreRspPorts.at(3).bind(&ocaches_->MemRspPort);
 
   snprintf(sname, 100, "cluster%d-rcaches", cluster_id);
-  rcaches_ = CacheCluster::Create(sname, NUM_RASTER_UNITS, NUM_RCACHES, CacheSim::Config{
+  rcaches_ = CacheCluster::Create(sname, NUM_RASTER_UNITS, NUM_RCACHES, 1, CacheSim::Config{
     !RCACHE_ENABLED,
     log2ceil(RCACHE_SIZE),  // C
     log2ceil(MEM_BLOCK_SIZE), // B
@@ -129,7 +129,7 @@ Cluster::Cluster(uint32_t cluster_id,
     32,                     // address bits    
     RCACHE_NUM_BANKS,       // number of banks
     RCACHE_NUM_PORTS,       // number of ports
-    1,                      // number of requests 
+    RCACHE_NUM_BANKS,       // number of inputs 
     false,                  // write-through
     false,                  // write response
     0,                      // victim size
