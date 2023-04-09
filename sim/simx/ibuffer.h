@@ -6,10 +6,6 @@
 namespace vortex {
 
 class IBuffer {
-private:
-    std::queue<pipeline_trace_t*> entries_;
-    uint32_t capacity_;
-
 public:    
     IBuffer(uint32_t size) 
         : capacity_(size)
@@ -39,6 +35,10 @@ public:
         std::queue<pipeline_trace_t*> empty;
         std::swap(entries_, empty );
     }
+
+private:
+    std::queue<pipeline_trace_t*> entries_;
+    uint32_t capacity_;
 };
 
 }

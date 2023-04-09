@@ -8,9 +8,6 @@
 namespace vortex {
 
 class BaseDCRS {
-private:    
-    std::array<uint32_t, DCR_BASE_STATE_COUNT> states_;
-
 public:
     uint32_t read(uint32_t addr) const {
         uint32_t state = DCR_BASE_STATE(addr);
@@ -21,6 +18,9 @@ public:
         uint32_t state = DCR_BASE_STATE(addr);
         states_.at(state) = value;
     }
+
+private:    
+    std::array<uint32_t, DCR_BASE_STATE_COUNT> states_;
 };
 
 class DCRS {

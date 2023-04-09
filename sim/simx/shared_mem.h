@@ -53,6 +53,7 @@ public:
   const PerfStats& perf_stats() const;
 
 protected:
+
   class Impl;
   Impl* impl_;
 };

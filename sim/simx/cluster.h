@@ -16,21 +16,6 @@ namespace vortex {
 class ProcessorImpl;
 
 class Cluster {
-private:
-  uint32_t                     cluster_id_;  
-  std::vector<Core::Ptr>       cores_;
-  std::vector<RasterUnit::Ptr> raster_units_;
-  std::vector<RopUnit::Ptr>    rop_units_;
-  std::vector<TexUnit::Ptr>    tex_units_;
-  CacheSim::Ptr                l2cache_;
-  CacheCluster::Ptr            icaches_;
-  CacheCluster::Ptr            dcaches_;
-  std::vector<SharedMem::Ptr>  sharedmems_;
-  CacheCluster::Ptr            tcaches_;
-  CacheCluster::Ptr            ocaches_;
-  CacheCluster::Ptr            rcaches_;
-  ProcessorImpl*               processor_;
-
 public:
   struct PerfStats {
     RasterUnit::PerfStats raster_unit;
@@ -74,6 +59,21 @@ public:
   ProcessorImpl* processor() const;
 
   Cluster::PerfStats perf_stats() const;
+  
+private:
+  uint32_t                     cluster_id_;  
+  std::vector<Core::Ptr>       cores_;
+  std::vector<RasterUnit::Ptr> raster_units_;
+  std::vector<RopUnit::Ptr>    rop_units_;
+  std::vector<TexUnit::Ptr>    tex_units_;
+  CacheSim::Ptr                l2cache_;
+  CacheCluster::Ptr            icaches_;
+  CacheCluster::Ptr            dcaches_;
+  std::vector<SharedMem::Ptr>  sharedmems_;
+  CacheCluster::Ptr            tcaches_;
+  CacheCluster::Ptr            ocaches_;
+  CacheCluster::Ptr            rcaches_;
+  ProcessorImpl*               processor_;
 };
 
 } // namespace vortex

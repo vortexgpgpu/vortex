@@ -36,6 +36,13 @@ protected:
 ///////////////////////////////////////////////////////////////////////////////
 
 class LsuUnit : public ExeUnit {
+public:
+    LsuUnit(const SimContext& ctx, Core*);
+
+    void reset();
+
+    void tick();
+
 private:    
     struct pending_req_t {
       pipeline_trace_t* trace;
@@ -46,13 +53,6 @@ private:
     pipeline_trace_t* fence_state_;
     uint64_t pending_loads_;
     bool fence_lock_;
-
-public:
-    LsuUnit(const SimContext& ctx, Core*);
-
-    void reset();
-
-    void tick();
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -85,16 +85,16 @@ public:
 ///////////////////////////////////////////////////////////////////////////////
 
 class GpuUnit : public ExeUnit {
+public:
+    GpuUnit(const SimContext& ctx, Core*);
+    
+    void tick();
+
 private:    
   std::vector<RasterUnit::Ptr> raster_units_;  
   std::vector<RopUnit::Ptr>    rop_units_;
   std::vector<TexUnit::Ptr>    tex_units_;
   std::vector<SimPort<pipeline_trace_t*>*> pending_rsps_;
-
-public:
-    GpuUnit(const SimContext& ctx, Core*);
-    
-    void tick();
 };
 
 }

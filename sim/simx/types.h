@@ -209,26 +209,26 @@ inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
 ///////////////////////////////////////////////////////////////////////////////
 
 struct MemReq {
-    uint64_t addr;
-    bool write;
-    AddrType type;
-    uint32_t tag;
-    uint32_t cid;    
-    uint64_t uuid;
+  uint64_t addr;
+  bool write;
+  AddrType type;
+  uint32_t tag;
+  uint32_t cid;    
+  uint64_t uuid;
 
-    MemReq(uint64_t _addr = 0, 
-           bool _write = false,
-           AddrType _type = AddrType::Global,
-           uint64_t _tag = 0, 
-           uint32_t _cid = 0,
-           uint64_t _uuid = 0
-    )   : addr(_addr)
-        , write(_write)
-        , type(_type)
-        , tag(_tag)
-        , cid(_cid)
-        , uuid(_uuid)
-    {}
+  MemReq(uint64_t _addr = 0, 
+          bool _write = false,
+          AddrType _type = AddrType::Global,
+          uint64_t _tag = 0, 
+          uint32_t _cid = 0,
+          uint64_t _uuid = 0
+  ) : addr(_addr)
+    , write(_write)
+    , type(_type)
+    , tag(_tag)
+    , cid(_cid)
+    , uuid(_uuid)
+  {}
 };
 
 inline std::ostream &operator<<(std::ostream &os, const MemReq& req) {
@@ -242,14 +242,15 @@ inline std::ostream &operator<<(std::ostream &os, const MemReq& req) {
 ///////////////////////////////////////////////////////////////////////////////
 
 struct MemRsp {
-    uint64_t tag;    
-    uint32_t cid;
-    uint64_t uuid;
-    MemRsp(uint64_t _tag = 0, uint32_t _cid = 0, uint64_t _uuid = 0)
-      : tag (_tag) 
-      , cid(_cid)
-      , uuid(_uuid)
-    {}
+  uint64_t tag;    
+  uint32_t cid;
+  uint64_t uuid;
+  
+  MemRsp(uint64_t _tag = 0, uint32_t _cid = 0, uint64_t _uuid = 0)
+    : tag (_tag) 
+    , cid(_cid)
+    , uuid(_uuid)
+  {}
 };
 
 inline std::ostream &operator<<(std::ostream &os, const MemRsp& rsp) {
@@ -262,10 +263,6 @@ inline std::ostream &operator<<(std::ostream &os, const MemRsp& rsp) {
 
 template <typename T>
 class HashTable {
-private:
-  std::vector<std::pair<bool, T>> entries_;
-  uint32_t size_;
-
 public:    
   HashTable(uint32_t capacity)
     : entries_(capacity)
@@ -328,18 +325,16 @@ public:
     }
     size_ = 0;
   }
+
+private:
+  std::vector<std::pair<bool, T>> entries_;
+  uint32_t size_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename Req, typename Rsp>
 class Switch : public SimObject<Switch<Req, Rsp>> {
-private:
-  ArbiterType type_;
-  uint32_t delay_;  
-  std::vector<uint32_t> cursors_;
-  uint32_t lg_num_reqs_;
-
 public:
   std::vector<SimPort<Req>>  ReqIn;
   std::vector<SimPort<Rsp>>  RspIn;
@@ -356,14 +351,14 @@ public:
     uint32_t delay = 1
   ) 
     : SimObject<Switch<Req, Rsp>>(ctx, name)    
-    , type_(type)
-    , delay_(delay)
-    , cursors_(num_outputs, 0)
-    , lg_num_reqs_(log2ceil(num_inputs / num_outputs))    
     , ReqIn(num_inputs,   this)
     , RspIn(num_inputs,   this)
     , ReqOut(num_outputs, this)    
     , RspOut(num_outputs, this)
+    , type_(type)
+    , delay_(delay)
+    , cursors_(num_outputs, 0)
+    , lg_num_reqs_(log2ceil(num_inputs / num_outputs))
   {
     assert(delay != 0);    
     assert(num_inputs <= 32);
@@ -386,7 +381,6 @@ public:
   }
 
   void tick() {
-
     uint32_t I = ReqIn.size();
     uint32_t O = ReqOut.size();
     uint32_t R = 1 << lg_num_reqs_;
@@ -438,14 +432,17 @@ public:
       cursors_.at(index) = grant + 1;
     }
   }
+
+private:
+  ArbiterType type_;
+  uint32_t delay_;  
+  std::vector<uint32_t> cursors_;
+  uint32_t lg_num_reqs_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
 class SMemDemux : public SimObject<SMemDemux> {
-private:
-  uint32_t delay_;
-
 public:
   SimPort<MemReq>  ReqIn;
   SimPort<MemRsp>  RspIn;
@@ -461,18 +458,16 @@ public:
     const char* name, 
     uint32_t delay = 1
   ) : SimObject<SMemDemux>(ctx, name)    
-    , delay_(delay)
     , ReqIn(this)
     , RspIn(this)
     , ReqSm(this)
     , RspSm(this)
     , ReqDc(this)
     , RspDc(this)
+    , delay_(delay)
   {}
 
-  void reset() {
-    //--
-  }
+  void reset() {}
 
   void tick() {
     // process incomming requests  
@@ -501,6 +496,9 @@ public:
       RspDc.pop();
     }
   }
+
+private:
+  uint32_t delay_;
 };
 
 }

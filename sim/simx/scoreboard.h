@@ -6,19 +6,14 @@
 namespace vortex {
 
 class Scoreboard {
-private:
+public:
+
     struct reg_use_t {
         RegType  type;
         uint32_t reg;        
         uint64_t owner;
     };
-
-    std::vector<RegMask> in_use_iregs_;
-    std::vector<RegMask> in_use_fregs_;
-    std::vector<RegMask> in_use_vregs_;
-    std::unordered_map<uint32_t, uint64_t> owners_; 
-
-public:    
+        
     Scoreboard(const Arch &arch) 
         : in_use_iregs_(arch.num_warps())
         , in_use_fregs_(arch.num_warps())
@@ -123,6 +118,13 @@ public:
         uint32_t tag = (state->rdest << 16) | (state->wid << 4) | (int)state->rdest_type;
         owners_.erase(tag);
     }
+
+private:
+
+    std::vector<RegMask> in_use_iregs_;
+    std::vector<RegMask> in_use_fregs_;
+    std::vector<RegMask> in_use_vregs_;
+    std::unordered_map<uint32_t, uint64_t> owners_;
 };
 
 }
