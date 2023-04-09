@@ -38,7 +38,7 @@ public:
         auto trace = entry.trace;
         DT(3, simobject_->name() << "-tex-rsp: tag=" << mem_rsp.tag << ", tid=" << t << ", " << *trace);  
         assert(entry.count);
-        --entry.count; // track remaining blocks 
+        --entry.count; // track remaining addresses 
         if (0 == entry.count) {
             simobject_->Output.send(trace, config_.sampler_latency);
             pending_reqs_.release(mem_rsp.tag);
@@ -55,18 +55,17 @@ public:
     if (simobject_->Input.empty())
         return;
 
-    perf_stats_.stalls += simobject_->Input.stalled();
-
     auto trace = simobject_->Input.front();
 
     // check pending queue capacity    
     if (pending_reqs_.full()) {
-        if (!trace->suspend()) {
+        if (!trace->log_once(true)) {
             DT(3, "*** " << simobject_->name() << "-tex-queue-stall: " << *trace);
         }
+        ++perf_stats_.stalls;
         return;
     } else {
-        trace->resume();
+        trace->log_once(false);
     }
 
     // send memory request

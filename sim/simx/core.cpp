@@ -217,13 +217,13 @@ void Core::decode() {
   // check ibuffer capacity
   auto& ibuffer = ibuffers_.at(trace->wid);
   if (ibuffer.full()) {
-    if (!trace->suspend()) {
+    if (!trace->log_once(true)) {
       DT(3, "*** ibuffer-stall: " << *trace);
     }
     ++perf_stats_.ibuf_stalls;
     return;
   } else {
-    trace->resume();
+    trace->log_once(false);
   }
   
   // release warp
@@ -256,7 +256,7 @@ void Core::execute() {
 
     // check scoreboard
     if (scoreboard_.in_use(trace)) {
-      if (!trace->suspend()) {
+      if (!trace->log_once(true)) {
         DTH(3, "*** scoreboard-stall: dependents={");
         auto uses = scoreboard_.get_uses(trace);
         for (uint32_t i = 0, n = uses.size(); i < n; ++i) {
@@ -270,7 +270,7 @@ void Core::execute() {
       ++perf_stats_.scrb_stalls;
       continue;
     } else {
-      trace->resume();
+      trace->log_once(false);
     }
 
     // update scoreboard
@@ -417,7 +417,6 @@ void Core::writeToStdOut(const void* data, uint64_t addr, uint32_t size) {
 }
 
 uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
-  auto proc_perf = cluster_->processor()->perf_stats();
   switch (addr) {
   case CSR_SATP:
   case CSR_PMPCFG0:
@@ -517,6 +516,7 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
        }
       } break; 
       case DCR_MPM_CLASS_MEM: {
+        auto proc_perf = cluster_->processor()->perf_stats();
         switch (addr) {
         case CSR_MPM_ICACHE_READS:    return proc_perf.clusters.icache.reads & 0xffffffff; 
         case CSR_MPM_ICACHE_READS_H:  return proc_perf.clusters.icache.reads >> 32; 
@@ -578,6 +578,7 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         }
       } break;
       case DCR_MPM_CLASS_TEX: {
+        auto proc_perf = cluster_->processor()->perf_stats();
         switch (addr) {
         case CSR_MPM_TEX_READS:   return proc_perf.clusters.tex_unit.reads & 0xffffffff;
         case CSR_MPM_TEX_READS_H: return proc_perf.clusters.tex_unit.reads >> 32;
@@ -600,6 +601,7 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         }
       } break;
       case DCR_MPM_CLASS_RASTER: {
+        auto proc_perf = cluster_->processor()->perf_stats();
         switch (addr) {        
         case CSR_MPM_RASTER_READS:   return proc_perf.clusters.raster_unit.reads & 0xffffffff;
         case CSR_MPM_RASTER_READS_H: return proc_perf.clusters.raster_unit.reads >> 32;
@@ -624,6 +626,7 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
         }
       } break;
       case DCR_MPM_CLASS_ROP: {
+        auto proc_perf = cluster_->processor()->perf_stats();
         switch (addr) { 
         case CSR_MPM_ROP_READS:   return proc_perf.clusters.rop_unit.reads & 0xffffffff;
         case CSR_MPM_ROP_READS_H: return proc_perf.clusters.rop_unit.reads >> 32;

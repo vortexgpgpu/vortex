@@ -1427,7 +1427,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           for (uint32_t t = 0; t < num_threads; ++t) {
             if (!tmask_.test(t))
               continue;          
-            auto result = core_->raster_units_.at(trace_data->raster_idx)->fetch(core_->id(), warp_id_, t, core_->csrs_[warp_id_][t]);          
+            auto result = core_->raster_units_.at(trace_data->raster_idx)->fetch(
+              core_->id(), warp_id_, t, core_->csrs_[warp_id_][t]);          
             rddata[t].i = result;
             has_stamps |= (result != 0);
           }
@@ -1462,7 +1463,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         auto v     = rsdata[t][1].i;
         auto lod   = rsdata[t][2].i;
         auto stage = func2;
-        auto color = core_->tex_units_.at(trace_data->tex_idx)->read(core_->id(), warp_id_, t, stage, u, v, lod, core_->csrs_[warp_id_][t], trace_data);
+        auto color = core_->tex_units_.at(trace_data->tex_idx)->read(
+          core_->id(), warp_id_, t, stage, u, v, lod, core_->csrs_[warp_id_][t], trace_data);
         rddata[t].i = color;
       }
       rd_write = true;
@@ -1500,7 +1502,8 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           auto f = (pos_face >> 0)  & 0x1;
           auto x = (pos_face >> 1)  & 0x7fff;
           auto y = (pos_face >> 16) & 0x7fff;
-          core_->rop_units_.at(trace_data->rop_idx)->write(core_->id(), warp_id_, t, x, y, f, color, depth, core_->csrs_[warp_id_][t], trace_data);
+          core_->rop_units_.at(trace_data->rop_idx)->write(
+            core_->id(), warp_id_, t, x, y, f, color, depth, core_->csrs_[warp_id_][t], trace_data);
         }
       } break;
       default:

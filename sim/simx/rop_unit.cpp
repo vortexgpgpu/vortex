@@ -53,7 +53,8 @@ public:
     uint32_t dst_depthstencil;
     uint32_t dst_color;    
 
-    this->read(depth_enabled, stencil_enabled, blend_enabled, x, y, &dst_depthstencil, &dst_color, trace_data);
+    this->read(depth_enabled, stencil_enabled, blend_enabled, 
+               x, y, &dst_depthstencil, &dst_color, trace_data);
     
     auto ds_passed = !(depth_enabled || stencil_enabled)
                   || depthStencil_.test(is_backface, depth, dst_depthstencil, &depthstencil);
@@ -62,7 +63,8 @@ public:
       color = blender_.blend(color, dst_color);
     }
     
-    this->write(depth_enabled, stencil_enabled, ds_passed, is_backface, dst_depthstencil, dst_color, x, y, depthstencil, color, trace_data);
+    this->write(depth_enabled, stencil_enabled, ds_passed, is_backface, 
+                dst_depthstencil, dst_color, x, y, depthstencil, color, trace_data);
   }
 
 private:
@@ -78,13 +80,12 @@ private:
     if (depth_enable || stencil_enable) {
       uint32_t zbuf_addr = zbuf_baseaddr_ + y * zbuf_pitch_ + x * 4;
       mem_->read(depthstencil, zbuf_addr, 4);     
-      trace_data->mem_rd_addrs.push_back({zbuf_addr, 4});
+      trace_data->mem_rd_addrs.push_back(zbuf_addr);
     }
-
     if (color_write_ && (color_read_ || blend_enable)) {
       uint32_t cbuf_addr = cbuf_baseaddr_ + y * cbuf_pitch_ + x * 4;
       mem_->read(color, cbuf_addr, 4);
-      trace_data->mem_rd_addrs.push_back({cbuf_addr, 4});
+      trace_data->mem_rd_addrs.push_back(cbuf_addr);
     }
   }
 
@@ -99,7 +100,6 @@ private:
              uint32_t depthstencil, 
              uint32_t color, 
              RopUnit::TraceData::Ptr trace_data) {
-
     auto stencil_writemask = is_backface ? stencil_back_writemask_ : stencil_front_writemask_;
     auto ds_writeMask = ((depth_enable && ds_passed && depth_writemask_) ? ROP_DEPTH_MASK : 0) 
                       | (stencil_enable ? (stencil_writemask << ROP_DEPTH_BITS) : 0);
@@ -107,7 +107,7 @@ private:
       uint32_t write_value = (dst_depthstencil & ~ds_writeMask) | (depthstencil & ds_writeMask);
       uint32_t zbuf_addr = zbuf_baseaddr_ + y * zbuf_pitch_ + x * 4;        
       mem_->write(&write_value, zbuf_addr, 4);
-      trace_data->mem_wr_addrs.push_back({zbuf_addr, 4});
+      trace_data->mem_wr_addrs.push_back(zbuf_addr);
       DT(3, "rop-depthstencil: x=" << std::dec << x << ", y=" << y << ", depthstencil=0x" << std::hex << write_value);
     }
 
@@ -115,7 +115,7 @@ private:
       uint32_t write_value = (dst_color & ~cbuf_writemask_) | (color & cbuf_writemask_);
       uint32_t cbuf_addr = cbuf_baseaddr_ + y * cbuf_pitch_ + x * 4;
       mem_->write(&write_value, cbuf_addr, 4);
-      trace_data->mem_wr_addrs.push_back({cbuf_addr, 4});
+      trace_data->mem_wr_addrs.push_back(cbuf_addr);
       DT(3, "rop-color: x=" << std::dec << x << ", y=" << y << ", color=0x" << std::hex << write_value);
     }
   }
@@ -168,25 +168,24 @@ public:
         continue;
       auto& mem_rsp = port.front();
       auto& entry = pending_reqs_.at(mem_rsp.tag);
-      assert(entry.count);
-      --entry.count; // track remaining blocks 
+      assert(entry.count != 0);
+      --entry.count; // track remaining addresses 
       if (0 == entry.count) {
-        auto& mem_wr_addrs = entry.data->mem_wr_addrs;
-        for (uint32_t i = 0, n = mem_wr_addrs.size(); i < n; ++i) {
-          uint32_t j = i % simobject_->MemReqs.size();
+        for (uint32_t i = 0, n = entry.data->mem_wr_addrs.size(); i < n; ++i) {
           MemReq mem_req;
-          mem_req.addr  = mem_wr_addrs.at(i).addr;
+          mem_req.addr  = entry.data->mem_wr_addrs.at(i);
           mem_req.write = true;
-          mem_req.tag   = 0;
+          mem_req.tag   = mem_rsp.tag;
           mem_req.cid   = mem_rsp.cid;
           mem_req.uuid  = mem_rsp.uuid;
-          simobject_->MemReqs.at(j).send(mem_req, 2);
+          uint32_t port = i % simobject_->MemReqs.size();
+          simobject_->MemReqs.at(port).send(mem_req, 2);
           ++perf_stats_.writes;
         }
         pending_reqs_.release(mem_rsp.tag);
-      }   
+      }
       port.pop();
-    }    
+    }
 
     for (int i = 0, n = pending_reqs_.size(); i < n; ++i) {
       if (pending_reqs_.contains(i))
@@ -196,39 +195,50 @@ public:
     // check input trace
     if (simobject_->Input.empty())
       return;
-      
-    perf_stats_.stalls += simobject_->Input.stalled();
-    auto trace = simobject_->Input.front();    
-    auto data  = std::dynamic_pointer_cast<RopUnit::TraceData>(trace->data);
-    data->cid  = trace->cid;
-    data->uuid = trace->uuid;
-    if (!data->mem_rd_addrs.empty()) {
-      if (pending_reqs_.full())
+
+    auto trace = simobject_->Input.front();
+
+    // check pending queue capacity    
+    if (pending_reqs_.full()) {
+        if (!trace->log_once(true)) {
+            DT(3, "*** " << simobject_->name() << "-rop-queue-stall: " << *trace);
+        }
+        ++perf_stats_.stalls;
         return;
-      auto tag = pending_reqs_.allocate({data, (uint32_t)data->mem_rd_addrs.size()});
-      for (uint32_t i = 0, n = data->mem_rd_addrs.size(); i < n; ++i) {
-        uint32_t j = i % simobject_->MemReqs.size();
-        MemReq mem_req;
-        mem_req.addr  = data->mem_rd_addrs.at(i).addr;
-        mem_req.write = false;
-        mem_req.tag   = tag;
-        mem_req.cid   = data->cid;
-        mem_req.uuid  = data->uuid;
-        simobject_->MemReqs.at(j).send(mem_req, 1);
-        ++perf_stats_.reads;
-      }
     } else {
+        trace->log_once(false);
+    }      
+ 
+    auto data = std::dynamic_pointer_cast<RopUnit::TraceData>(trace->data);
+    auto tag = pending_reqs_.allocate({data, (uint32_t)data->mem_rd_addrs.size()});
+
+    // schedule read requests first
+    for (uint32_t i = 0, n = data->mem_rd_addrs.size(); i < n; ++i) {
+      MemReq mem_req;
+      mem_req.addr  = data->mem_rd_addrs.at(i);
+      mem_req.write = false;
+      mem_req.tag   = tag;
+      mem_req.cid   = trace->cid;
+      mem_req.uuid  = trace->uuid;
+      uint32_t port = i % simobject_->MemReqs.size();
+      simobject_->MemReqs.at(port).send(mem_req, 2);
+      ++perf_stats_.reads;
+    }
+
+    if (data->mem_rd_addrs.empty()) {
+      // schedule write-only requests
       for (uint32_t i = 0, n = data->mem_wr_addrs.size(); i < n; ++i) {
-        uint32_t j = i % simobject_->MemReqs.size();
         MemReq mem_req;
-        mem_req.addr  = data->mem_wr_addrs.at(i).addr;
+        mem_req.addr  = data->mem_wr_addrs.at(i);
         mem_req.write = true;
-        mem_req.tag   = 0;
-        mem_req.cid   = data->cid;
-        mem_req.uuid  = data->uuid;
-        simobject_->MemReqs.at(j).send(mem_req, 1);
+        mem_req.tag   = tag;
+        mem_req.cid   = trace->cid;
+        mem_req.uuid  = trace->uuid;
+        uint32_t port = i % simobject_->MemReqs.size();
+        simobject_->MemReqs.at(port).send(mem_req, 2);
         ++perf_stats_.writes;
       }
+      pending_reqs_.release(tag);
     }
 
     simobject_->Output.send(trace, 1);

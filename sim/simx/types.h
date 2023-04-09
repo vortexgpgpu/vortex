@@ -211,20 +211,20 @@ inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
 struct MemReq {
     uint64_t addr;
     bool write;
-    AddrType addr_type;
+    AddrType type;
     uint32_t tag;
     uint32_t cid;    
     uint64_t uuid;
 
     MemReq(uint64_t _addr = 0, 
            bool _write = false,
-           AddrType _addr_type = AddrType::Global,
+           AddrType _type = AddrType::Global,
            uint64_t _tag = 0, 
            uint32_t _cid = 0,
            uint64_t _uuid = 0
     )   : addr(_addr)
         , write(_write)
-        , addr_type(_addr_type)
+        , type(_type)
         , tag(_tag)
         , cid(_cid)
         , uuid(_uuid)
@@ -233,7 +233,7 @@ struct MemReq {
 
 inline std::ostream &operator<<(std::ostream &os, const MemReq& req) {
   os << "mem-" << (req.write ? "wr" : "rd") << ": ";
-  os << "addr=" << std::hex << req.addr << ", type=" << req.addr_type;
+  os << "addr=" << std::hex << req.addr << ", type=" << req.type;
   os << std::dec << ", tag=" << req.tag << ", cid=" << req.cid;
   os << " (#" << std::dec << req.uuid << ")";
   return os;
@@ -479,7 +479,7 @@ public:
     if (!ReqIn.empty()) {
       auto& req = ReqIn.front();
       DT(4, this->name() << "-" << req);
-      if (req.addr_type == AddrType::Shared) {
+      if (req.type == AddrType::Shared) {
         ReqSm.send(req, delay_);
       } else {
         ReqDc.send(req, delay_);
