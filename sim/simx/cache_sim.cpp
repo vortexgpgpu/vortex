@@ -539,7 +539,9 @@ private:
                 uint32_t repl_line_id = 0;            
                 uint32_t max_cnt = 0;
 
-                auto& set = bank.sets.at(pipeline_req.set_id);                
+                auto& set = bank.sets.at(pipeline_req.set_id);
+
+                // tag lookup                
                 for (uint32_t i = 0, n = set.lines.size(); i < n; ++i) {
                     auto& line = set.lines.at(i);
                     if (line.valid) {

@@ -88,7 +88,7 @@ Cluster::Cluster(uint32_t cluster_id,
     TCACHE_NUM_BANKS,       // number of banks
     TCACHE_NUM_PORTS,       // number of ports
     TCACHE_NUM_BANKS,       // number of inputs
-    false,                  // write-through
+    true,                   // write-through
     false,                  // write response
     0,                      // victim size
     TCACHE_MSHR_SIZE,       // mshr
@@ -109,7 +109,7 @@ Cluster::Cluster(uint32_t cluster_id,
     OCACHE_NUM_BANKS,       // number of banks
     OCACHE_NUM_PORTS,       // number of ports
     OCACHE_NUM_BANKS,       // number of inputs
-    false,                  // write-through
+    true,                   // write-through
     false,                  // write response
     0,                      // victim size
     OCACHE_MSHR_SIZE,       // mshr
@@ -130,7 +130,7 @@ Cluster::Cluster(uint32_t cluster_id,
     RCACHE_NUM_BANKS,       // number of banks
     RCACHE_NUM_PORTS,       // number of ports
     RCACHE_NUM_BANKS,       // number of inputs 
-    false,                  // write-through
+    true,                   // write-through
     false,                  // write response
     0,                      // victim size
     RCACHE_MSHR_SIZE,       // mshr
