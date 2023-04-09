@@ -66,10 +66,6 @@ public:
 
   bool fetch_stall;
 
-private:
-  bool log_once_;
-
-public:
   pipeline_trace_t(uint64_t uuid) 
     : uuid(uuid)
     , cid(0)
@@ -92,6 +88,9 @@ public:
     log_once_ = enable;
     return old;
   }
+
+private:
+  bool log_once_;
 };
 
 inline std::ostream &operator<<(std::ostream &os, const pipeline_trace_t& state) {
@@ -106,10 +105,6 @@ inline std::ostream &operator<<(std::ostream &os, const pipeline_trace_t& state)
 }
 
 class PipelineLatch {
-protected:
-  const char* name_;
-  std::queue<pipeline_trace_t*> queue_;
-
 public:
   PipelineLatch(const char* name = nullptr) 
     : name_(name) 
@@ -139,6 +134,10 @@ public:
     std::queue<pipeline_trace_t*> empty;
     std::swap(queue_, empty );
   }
+
+protected:
+  const char* name_;
+  std::queue<pipeline_trace_t*> queue_;
 };
 
 }

@@ -5,22 +5,23 @@
 namespace vortex {
 
 class CacheCluster : public SimObject<CacheCluster> {
-private:
-    std::vector<CacheSim::Ptr> caches_;
-
 public:
     std::vector<std::vector<SimPort<MemReq>>> CoreReqPorts;
     std::vector<std::vector<SimPort<MemRsp>>> CoreRspPorts;
     SimPort<MemReq> MemReqPort;
     SimPort<MemRsp> MemRspPort;
 
-    CacheCluster(const SimContext& ctx, const char* name, uint32_t num_inputs, uint32_t num_caches, const CacheSim::Config& config) 
-        : SimObject(ctx, name)
-        , caches_(MAX(num_caches, 0x1))
+    CacheCluster(const SimContext& ctx, 
+                 const char* name, 
+                 uint32_t num_inputs, 
+                 uint32_t num_caches, 
+                 const CacheSim::Config& config) 
+        : SimObject(ctx, name)        
         , CoreReqPorts(num_inputs, std::vector<SimPort<MemReq>>(config.num_inputs, this))
         , CoreRspPorts(num_inputs, std::vector<SimPort<MemRsp>>(config.num_inputs, this))
         , MemReqPort(this)
-        , MemRspPort(this) {
+        , MemRspPort(this)
+        , caches_(MAX(num_caches, 0x1)) {
 
         CacheSim::Config config2(config);
         if (0 == num_caches) {
@@ -62,17 +63,11 @@ public:
         this->MemRspPort.bind(&cache_arb->RspOut.at(0));
     }
 
-    ~CacheCluster() {
-        //--
-    }
+    ~CacheCluster() {}
 
-    void reset() {
-        //--
-    }
+    void reset() {}
     
-    void tick() {
-        //--
-    }
+    void tick() {}
 
     CacheSim::PerfStats perf_stats() const {
         CacheSim::PerfStats perf;
@@ -81,6 +76,9 @@ public:
         }   
         return perf;
     }
+    
+private:
+    std::vector<CacheSim::Ptr> caches_;
 };
 
 }

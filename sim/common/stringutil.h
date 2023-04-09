@@ -4,10 +4,6 @@
 #include  <iomanip>
 
 class ByteStream : public std::istream {
-private:
-  const void *buf_;
-  std::size_t size_;
-
 public:
   ByteStream(const void *buf, std::size_t size) : buf_(buf), size_(size) {}
 
@@ -24,24 +20,13 @@ public:
     os.flags(oldflags);
     return os;
   }
+
+private:
+  const void *buf_;
+  std::size_t size_;
 };
 
 class IndentStream : public std::streambuf {
-private:
-  std::streambuf* dest_;
-  bool            isBeginLine_;
-  std::string     indent_;
-  std::ostream*   owner_;
-
-protected:
-  virtual int overflow(int ch) {
-    if (isBeginLine_ && ch != '\n') {
-      dest_->sputn(indent_.data(), indent_.size());
-    }
-    isBeginLine_ = ch == '\n';
-    return dest_->sputc(ch);
-  }
-
 public:
   explicit IndentStream(std::streambuf* dest, int indent = 4)
     : dest_(dest)
@@ -62,4 +47,19 @@ public:
     if (owner_)
         owner_->rdbuf(dest_);
   }
+
+protected:
+  virtual int overflow(int ch) {
+    if (isBeginLine_ && ch != '\n') {
+      dest_->sputn(indent_.data(), indent_.size());
+    }
+    isBeginLine_ = ch == '\n';
+    return dest_->sputc(ch);
+  }
+
+private:
+  std::streambuf* dest_;
+  bool            isBeginLine_;
+  std::string     indent_;
+  std::ostream*   owner_;
 };
