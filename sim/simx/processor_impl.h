@@ -16,12 +16,14 @@ private:
   CacheSim::Ptr l3cache_;
   uint64_t perf_mem_reads_;
   uint64_t perf_mem_writes_;
-  uint64_t perf_mem_pending_reads_;   
-
-  void clear_perf_counters() {
+  uint64_t perf_mem_latency_;
+  uint64_t perf_mem_pending_reads_;  
+  
+  void clear_perf_counters() {    
     perf_mem_reads_ = 0;
     perf_mem_writes_ = 0;
-    perf_mem_pending_reads_ = 0;   
+    perf_mem_latency_ = 0;
+    perf_mem_pending_reads_ = 0;
   }
 
 public:

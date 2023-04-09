@@ -341,7 +341,7 @@ public:
       auto& mem_rsp = simobject_->MemRsps.front();
       auto& entry = pending_reqs_.at(mem_rsp.tag);
       assert(entry.count);
-      --entry.count; // track remaining blocks 
+      --entry.count; // track remaining addresses 
       if (0 == entry.count) {
         switch (mem_trace_state_) {
         case e_mem_trace_state::header: {
@@ -377,7 +377,7 @@ public:
         perf_stats_.latency += pending_reqs_.at(i).count;
     }
 
-    perf_stats_.stalls += simobject_->Output.stalled();
+    perf_stats_.stalls += (SimPlatform::instance().cycles() > simobject_->Output.arrival_time());
 
     if (mem_traces.empty())
       return;
@@ -421,7 +421,7 @@ public:
       mem_req.tag   = tag;
       mem_req.cid   = 0;
       mem_req.uuid  = 0;
-      simobject_->MemReqs.send(mem_req, 1);
+      simobject_->MemReqs.send(mem_req, 2);
       ++perf_stats_.reads;
     }
   }

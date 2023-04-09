@@ -93,7 +93,11 @@ public:
     tx_cb_ = callback;
   }
 
-  bool stalled() const;
+  uint64_t arrival_time() const {
+    if (queue_.empty())
+      return 0;
+    return queue_.front().cycles;
+  }
 
 protected:
   struct timed_pkt_t {
@@ -398,13 +402,4 @@ void SimPort<Pkt>::send(const Pkt& pkt, uint64_t delay) const {
   } else {
     SimPlatform::instance().schedule(this, pkt, delay);
   } 
-}
-
-template <typename Pkt>
-bool SimPort<Pkt>::stalled() const {
-  if (queue_.empty())
-    return false;
-  auto arrival_time = queue_.front().cycles;
-  auto curr_time = SimPlatform::instance().cycles();
-  return (curr_time > arrival_time);
 }

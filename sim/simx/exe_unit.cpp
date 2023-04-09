@@ -39,7 +39,7 @@ void LsuUnit::tick() {
         DT(3, "dcache-rsp: tag=" << mem_rsp.tag << ", type=" << trace->lsu_type 
             << ", tid=" << t << ", " << *trace);  
         assert(entry.count);
-        --entry.count; // track remaining blocks 
+        --entry.count; // track remaining addresses 
         if (0 == entry.count) {
             Output.send(trace, 1);
             pending_rd_reqs_.release(mem_rsp.tag);
@@ -59,7 +59,7 @@ void LsuUnit::tick() {
         DT(3, "smem-rsp: tag=" << mem_rsp.tag << ", type=" << trace->lsu_type 
             << ", tid=" << t << ", " << *trace);  
         assert(entry.count);
-        --entry.count; // track remaining blocks 
+        --entry.count; // track remaining addresses 
         if (0 == entry.count) {
             Output.send(trace, 1);
             pending_rd_reqs_.release(mem_rsp.tag);
@@ -97,12 +97,12 @@ void LsuUnit::tick() {
 
     // check pending queue capacity    
     if (pending_rd_reqs_.full()) {
-        if (!trace->suspend()) {
-            DT(3, "*** lsu-queue-stall: " << *trace);
+        if (!trace->log_once(true)) {
+            DT(3, "*** " << this->name() << "-lsu-queue-stall: " << *trace);
         }
         return;
     } else {
-        trace->resume();
+        trace->log_once(false);
     }
     
     bool is_write = (trace->lsu_type == LsuType::STORE);
@@ -142,18 +142,17 @@ void LsuUnit::tick() {
         MemReq mem_req;
         mem_req.addr  = mem_addr.addr;
         mem_req.write = is_write;
-        mem_req.addr_type = type; 
+        mem_req.type  = type; 
         mem_req.tag   = tag;
         mem_req.cid   = trace->cid;
         mem_req.uuid  = trace->uuid;        
              
         dcache_req_port.send(mem_req, 2);
         DT(3, "dcache-req: addr=" << std::hex << mem_req.addr << ", tag=" << tag 
-            << ", lsu_type=" << trace->lsu_type << ", tid=" << t << ", addr_type=" << mem_req.addr_type << ", " << *trace);
+            << ", lsu_type=" << trace->lsu_type << ", tid=" << t << ", addr_type=" << mem_req.type << ", " << *trace);
 
         ++pending_loads_;
-        ++core_->perf_stats_.loads;
-        
+        ++core_->perf_stats_.loads;        
         if (is_dup)
             break;
     }
@@ -162,7 +161,6 @@ void LsuUnit::tick() {
     if (is_write) {
         pending_rd_reqs_.release(tag);
         Output.send(trace, 1);
-
         ++core_->perf_stats_.stores;
     }
 

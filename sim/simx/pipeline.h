@@ -67,7 +67,7 @@ public:
   bool fetch_stall;
 
 private:
-  bool stalled_;
+  bool log_once_;
 
 public:
   pipeline_trace_t(uint64_t uuid) 
@@ -82,19 +82,15 @@ public:
     , unit_type(0)
     , data(nullptr)
     , fetch_stall(false)
-    , stalled_(false) 
+    , log_once_(false) 
   {}
   
   ~pipeline_trace_t() {}
 
-  bool suspend() {
-    bool old = stalled_;
-    stalled_ = true;
+  bool log_once(bool enable) {
+    bool old = log_once_;
+    log_once_ = enable;
     return old;
-  }
-
-  void resume() {
-    stalled_ = false;
   }
 };
 

@@ -86,6 +86,7 @@ int ProcessorImpl::run() {
         break;
       }
     }
+    perf_mem_latency_ += perf_mem_pending_reads_;
   } while (running);
 
   return exitcode;
@@ -99,7 +100,7 @@ ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {
   ProcessorImpl::PerfStats perf;
   perf.mem_reads   = perf_mem_reads_;
   perf.mem_writes  = perf_mem_writes_;
-  perf.mem_latency = perf_mem_pending_reads_;
+  perf.mem_latency = perf_mem_latency_;
   perf.l3cache     = l3cache_->perf_stats();
   for (auto cluster : clusters_) {
     perf.clusters += cluster->perf_stats();
