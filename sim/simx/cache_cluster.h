@@ -13,12 +13,13 @@ public:
 
     CacheCluster(const SimContext& ctx, 
                  const char* name, 
-                 uint32_t num_inputs, 
+                 uint32_t num_units, 
                  uint32_t num_caches, 
+                 uint32_t request_size,
                  const CacheSim::Config& config) 
         : SimObject(ctx, name)        
-        , CoreReqPorts(num_inputs, std::vector<SimPort<MemReq>>(config.num_inputs, this))
-        , CoreRspPorts(num_inputs, std::vector<SimPort<MemRsp>>(config.num_inputs, this))
+        , CoreReqPorts(num_units, std::vector<SimPort<MemReq>>(request_size, this))
+        , CoreRspPorts(num_units, std::vector<SimPort<MemRsp>>(request_size, this))
         , MemReqPort(this)
         , MemRspPort(this)
         , caches_(MAX(num_caches, 0x1)) {
@@ -31,15 +32,23 @@ public:
 
         char sname[100];
         
-        std::vector<Switch<MemReq, MemRsp>::Ptr> mem_arbs(config.num_inputs);   
+        std::vector<Switch<MemReq, MemRsp>::Ptr> unit_arbs(num_units);
+        for (uint32_t u = 0; u < num_units; ++u) {
+            snprintf(sname, 100, "%s-unit-arb-%d", name, u);
+            unit_arbs.at(u) = Switch<MemReq, MemRsp>::Create(sname, ArbiterType::RoundRobin, request_size, config.num_inputs);
+            for (uint32_t i = 0; i < request_size; ++i) {
+                this->CoreReqPorts.at(u).at(i).bind(&unit_arbs.at(u)->ReqIn.at(i));
+                unit_arbs.at(u)->RspIn.at(i).bind(&this->CoreRspPorts.at(u).at(i));
+            }
+        }
 
+        std::vector<Switch<MemReq, MemRsp>::Ptr> mem_arbs(config.num_inputs);
         for (uint32_t i = 0; i < config.num_inputs; ++i) {
-            snprintf(sname, 100, "%s-mem-arb%d", name, i);
-            mem_arbs.at(i) = Switch<MemReq, MemRsp>::Create(sname, ArbiterType::RoundRobin, num_inputs, num_caches);
-
-            for (uint32_t j = 0; j < num_inputs; ++j) {
-                this->CoreReqPorts.at(j).at(i).bind(&mem_arbs.at(i)->ReqIn.at(j));
-                mem_arbs.at(i)->RspIn.at(j).bind(&this->CoreRspPorts.at(j).at(i));
+            snprintf(sname, 100, "%s-mem-arb-%d", name, i);
+            mem_arbs.at(i) = Switch<MemReq, MemRsp>::Create(sname, ArbiterType::RoundRobin, num_units, num_caches);
+            for (uint32_t u = 0; u < num_units; ++u) {              
+                unit_arbs.at(u)->ReqOut.at(i).bind(&mem_arbs.at(i)->ReqIn.at(u));
+                mem_arbs.at(i)->RspIn.at(u).bind(&unit_arbs.at(u)->RspOut.at(i));
             }            
         }
 

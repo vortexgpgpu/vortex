@@ -77,7 +77,7 @@ module VX_mem_unit # (
         .TAG_SEL_IDX    (0),
         .CACHE_SIZE     (`ICACHE_SIZE),
         .LINE_SIZE      (ICACHE_LINE_SIZE),
-        .NUM_BANKS      (ICACHE_NUM_BANKS),
+        .NUM_BANKS      (`ICACHE_NUM_BANKS),
         .NUM_WAYS       (`ICACHE_NUM_WAYS),
         .WORD_SIZE      (ICACHE_WORD_SIZE),
         .NUM_REQS       (ICACHE_NUM_REQS),
