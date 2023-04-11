@@ -111,7 +111,7 @@ module VX_cluster #(
             .INSTANCE_ID     ($sformatf("cluster%0d-raster%0d", CLUSTER_ID, i)),
             .INSTANCE_IDX    (CLUSTER_ID * `NUM_RASTER_UNITS + i),
             .NUM_INSTANCES   (`NUM_CLUSTERS * `NUM_RASTER_UNITS),
-            .NUM_PES         (`RASTER_NUM_PES),
+            .NUM_SLICES      (`RASTER_NUM_SLICES),
             .TILE_LOGSIZE    (`RASTER_TILE_LOGSIZE),
             .BLOCK_LOGSIZE   (`RASTER_BLOCK_LOGSIZE),
             .MEM_FIFO_DEPTH  (`RASTER_MEM_FIFO_DEPTH),
