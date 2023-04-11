@@ -119,9 +119,9 @@ module VX_stream_arb #(
             localparam NUM_REQS     = NUM_INPUTS;
             localparam LOG_NUM_REQS = `CLOG2(NUM_REQS);
 
-            wire [NUM_LANES-1:0]            valid_out_r;
-            wire [NUM_LANES-1:0][DATAW-1:0] data_out_r;
-            wire [NUM_LANES-1:0]            ready_out_r;
+            wire [NUM_LANES-1:0]            valid_in_r;
+            wire [NUM_LANES-1:0][DATAW-1:0] data_in_r;
+            wire [NUM_LANES-1:0]            ready_in_r;
         
             wire [NUM_REQS-1:0]     arb_requests;
             wire                    arb_valid;
@@ -149,17 +149,16 @@ module VX_stream_arb #(
 
             if (NUM_LANES > 1) begin
                 `UNUSED_VAR (arb_valid)
-                assign valid_out_r = valid_in[arb_index];
-                assign arb_unlock  = | (valid_out_r & ready_out_r);
+                assign valid_in_r = valid_in[arb_index];
             end else begin            
-                assign valid_out_r = arb_valid;
-                assign arb_unlock  = valid_out_r & ready_out_r;
+                assign valid_in_r = arb_valid;
             end
 
-            assign data_out_r = data_in[arb_index];
+            assign data_in_r  = data_in[arb_index];
+            assign arb_unlock = | (valid_in_r & ready_in_r);
 
             for (genvar i = 0; i < NUM_REQS; ++i) begin
-                assign ready_in[i] = ready_out_r & {NUM_LANES{arb_onehot[i]}};
+                assign ready_in[i] = ready_in_r & {NUM_LANES{arb_onehot[i]}};
             end
 
             `RESET_RELAY_EX (out_buf_reset, reset, 1, (NUM_LANES > MAX_FANOUT) ? 0 : -1);
@@ -172,9 +171,9 @@ module VX_stream_arb #(
                 ) out_buf (
                     .clk       (clk),
                     .reset     (out_buf_reset),
-                    .valid_in  (valid_out_r[i]),
-                    .data_in   (data_out_r[i]),
-                    .ready_in  (ready_out_r[i]),
+                    .valid_in  (valid_in_r[i]),
+                    .data_in   (data_in_r[i]),
+                    .ready_in  (ready_in_r[i]),
                     .valid_out (valid_out[0][i]),
                     .data_out  (data_out[0][i]),
                     .ready_out (ready_out[0][i])
@@ -279,7 +278,7 @@ module VX_stream_arb #(
             localparam NUM_REQS     = NUM_OUTPUTS;
             localparam LOG_NUM_REQS = `CLOG2(NUM_REQS);
     
-            wire [NUM_REQS-1:0][NUM_LANES-1:0] ready_out_r;        
+            wire [NUM_REQS-1:0][NUM_LANES-1:0] ready_in_r;        
         
             wire [NUM_REQS-1:0]     arb_requests;
             wire                    arb_valid;
@@ -288,7 +287,7 @@ module VX_stream_arb #(
             wire                    arb_unlock;
 
             for (genvar i = 0; i < NUM_REQS; ++i) begin
-                assign arb_requests[i] = (| ready_out_r[i]);
+                assign arb_requests[i] = (| ready_in_r[i]);
             end
 
             VX_generic_arbiter #(
@@ -307,13 +306,12 @@ module VX_stream_arb #(
 
             if (NUM_LANES > 1) begin
                 `UNUSED_VAR (arb_valid)
-                assign ready_in   = ready_out_r[arb_index];
-                assign arb_unlock = | (valid_in & ready_in);
+                assign ready_in = ready_in_r[arb_index];
             end else begin
                 `UNUSED_VAR (arb_index)
-                assign ready_in   = arb_valid;
-                assign arb_unlock = valid_in & ready_in;
+                assign ready_in = arb_valid;
             end
+            assign arb_unlock = | (valid_in & ready_in);
 
             `RESET_RELAY_EX (out_buf_reset, reset, 1, ((NUM_REQS * NUM_LANES) > MAX_FANOUT) ? 0 : -1);
 
@@ -327,7 +325,7 @@ module VX_stream_arb #(
                         .clk       (clk),
                         .reset     (out_buf_reset),
                         .valid_in  (valid_in[0][j] && arb_onehot[i]),
-                        .ready_in  (ready_out_r[i][j]),
+                        .ready_in  (ready_in_r[i][j]),
                         .data_in   (data_in[0][j]),                      
                         .data_out  (data_out[i][j]),
                         .valid_out (valid_out[i][j]),
