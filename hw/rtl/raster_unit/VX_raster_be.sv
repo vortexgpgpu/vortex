@@ -18,8 +18,6 @@ module VX_raster_be #(
     // Device configurations
     raster_dcrs_t dcrs,
 
-    output wire                         empty,
-
     input wire                          valid_in, 
     input wire [`RASTER_DIM_BITS-1:0]   xloc_in,
     input wire [`RASTER_DIM_BITS-1:0]   yloc_in,
@@ -29,12 +27,12 @@ module VX_raster_be #(
     input wire [`RASTER_DIM_BITS-1:0]   ymax_in,
     input wire [`RASTER_PID_BITS-1:0]   pid_in,
     input wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_in,
-    output wire                         ready_in,
-    
+    output wire                         ready_in,    
     
      // Outputs
     output wire                         valid_out,
     output raster_stamp_t [OUTPUT_QUADS-1:0] stamps_out,
+    output wire                         busy_out,
     input  wire                         ready_out
 );
 
@@ -76,8 +74,8 @@ module VX_raster_be #(
         .data_out ({valid_r,  pid_r,  quad_xloc_r, quad_yloc_r, quad_edges_r})
     );
 
-    wire qe_empty;
-    wire [PER_BLOCK_QUADS-1:0]  qe_valid;    
+    wire qe_valid;
+    wire [PER_BLOCK_QUADS-1:0]  qe_overlap;    
     wire [`RASTER_PID_BITS-1:0] qe_pid;
     wire [PER_BLOCK_QUADS-1:0][3:0] qe_mask;
     wire [PER_BLOCK_QUADS-1:0][`RASTER_DIM_BITS-1:0] qe_xloc;
@@ -92,9 +90,7 @@ module VX_raster_be #(
         .reset      (reset),
 
         .dcrs       (dcrs),
-
-        .empty      (qe_empty),
-        
+                        
         .enable     (~stall),
 
         .valid_in   (valid_r),
@@ -108,6 +104,7 @@ module VX_raster_be #(
         .edges_in   (quad_edges_r),
 
         .valid_out  (qe_valid),
+        .overlap_out(qe_overlap),
         .pid_out    (qe_pid),
         .mask_out   (qe_mask),
         .xloc_out   (qe_xloc),
@@ -124,7 +121,7 @@ module VX_raster_be #(
         localparam q = i % OUTPUT_QUADS;
         localparam b = i / OUTPUT_QUADS;
         if (i < PER_BLOCK_QUADS) begin
-            assign fifo_mask_in [b][q]         = qe_valid[i];
+            assign fifo_mask_in [b][q]         = qe_overlap[i];
             assign fifo_stamp_in[b][q].pos_x   = qe_xloc[i][`RASTER_DIM_BITS-1:1];
             assign fifo_stamp_in[b][q].pos_y   = qe_yloc[i][`RASTER_DIM_BITS-1:1];
             assign fifo_stamp_in[b][q].mask    = qe_mask[i];
@@ -149,7 +146,7 @@ module VX_raster_be #(
     wire fifo_full, fifo_empty;
     
     for (genvar i = 0; i < OUTPUT_BATCHES; ++i) begin
-        assign batch_valid[i] = (| fifo_mask_in[i]);
+        assign batch_valid[i] = qe_valid && (| fifo_mask_in[i]);
     end
 
     VX_priority_arbiter #(
@@ -184,7 +181,7 @@ module VX_raster_be #(
 
     // fifo queue
 
-    wire fifo_valid_in = (| fifo_mask_in[fifo_arb_index]);
+    wire fifo_valid_in = qe_valid && (| fifo_mask_in[fifo_arb_index]);
 
     wire [FIFO_DATA_WIDTH-1:0] fifo_data_in = fifo_stamp_in[fifo_arb_index];
 
@@ -215,9 +212,9 @@ module VX_raster_be #(
 
     assign ready_in = ~stall;
 
-    assign empty = ~valid_r 
-                && qe_empty
-                && fifo_empty;
+    assign busy_out = valid_r 
+                   || qe_valid
+                   || valid_out;
 
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin

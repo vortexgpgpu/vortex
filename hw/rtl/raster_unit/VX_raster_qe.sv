@@ -15,10 +15,8 @@ module VX_raster_qe #(
     // Device configurations
     raster_dcrs_t dcrs,
 
-    output wire                                         empty,
+    input wire                                          enable,
 
-    input wire                                          enable,   
-    
     // Inputs    
     input wire                                          valid_in,
     input wire [`RASTER_PID_BITS-1:0]                   pid_in,
@@ -31,8 +29,9 @@ module VX_raster_qe #(
     input wire [NUM_QUADS-1:0][2:0][2:0][`RASTER_DATA_BITS-1:0] edges_in,
 
     // Outputs
-    output wire [NUM_QUADS-1:0]                         valid_out,
-    output wire [`RASTER_PID_BITS-1:0]                  pid_out,    
+    output wire                                         valid_out,
+    output wire [NUM_QUADS-1:0]                         overlap_out,
+    output wire [`RASTER_PID_BITS-1:0]                  pid_out,
     output wire [NUM_QUADS-1:0][3:0]                    mask_out,    
     output wire [NUM_QUADS-1:0][`RASTER_DIM_BITS-1:0]   xloc_out,
     output wire [NUM_QUADS-1:0][`RASTER_DIM_BITS-1:0]   yloc_out,    
@@ -42,9 +41,9 @@ module VX_raster_qe #(
 
     `UNUSED_VAR (dcrs)
 
-    wire [NUM_QUADS-1:0] valid;
+    wire [NUM_QUADS-1:0] overlap;
     wire [NUM_QUADS-1:0][2:0][3:0][`RASTER_DATA_BITS-1:0] edge_eval;
-    wire [NUM_QUADS-1:0][3:0] overlap;
+    wire [NUM_QUADS-1:0][3:0] overlap_mask;
 
      // Check if primitive overlaps current quad
     for (genvar q = 0; q < NUM_QUADS; ++q) begin        
@@ -55,28 +54,28 @@ module VX_raster_qe #(
                 end    
                 wire [`RASTER_DIM_BITS-1:0] quad_x = xloc_in[q] | i;
                 wire [`RASTER_DIM_BITS-1:0] quad_y = yloc_in[q] | j;
-                assign overlap[q][2 * j + i] = ~(edge_eval[q][0][2 * j + i][`RASTER_DATA_BITS-1] 
-                                              || edge_eval[q][1][2 * j + i][`RASTER_DATA_BITS-1] 
-                                              || edge_eval[q][2][2 * j + i][`RASTER_DATA_BITS-1])
-                                           && (quad_x >= xmin_in)
-                                           && (quad_x <  xmax_in)
-                                           && (quad_y >= ymin_in)
-                                           && (quad_y <  ymax_in);
+                assign overlap_mask[q][2 * j + i] = ~(edge_eval[q][0][2 * j + i][`RASTER_DATA_BITS-1] 
+                                                   || edge_eval[q][1][2 * j + i][`RASTER_DATA_BITS-1] 
+                                                   || edge_eval[q][2][2 * j + i][`RASTER_DATA_BITS-1])
+                                                  && (quad_x >= xmin_in)
+                                                  && (quad_x <  xmax_in)
+                                                  && (quad_y >= ymin_in)
+                                                  && (quad_y <  ymax_in);
             end
         end
 
-        assign valid[q] = valid_in && (| overlap[q]);
+        assign overlap[q] = (| overlap_mask[q]);
     end
 
     VX_pipe_register #(
         .DATAW  (1 + NUM_QUADS + `RASTER_PID_BITS + NUM_QUADS * (4 + 2 * `RASTER_DIM_BITS + 4 * 3 * `RASTER_DATA_BITS)),
-        .RESETW (1 + NUM_QUADS)
+        .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
-        .data_in  ({~valid_in, valid,     pid_in,  overlap,  xloc_in,  yloc_in,  edge_eval}),
-        .data_out ({empty,     valid_out, pid_out, mask_out, xloc_out, yloc_out, bcoords_out})
+        .data_in  ({valid_in,  overlap,     pid_in,  overlap_mask, xloc_in,  yloc_in,  edge_eval}),
+        .data_out ({valid_out, overlap_out, pid_out, mask_out,     xloc_out, yloc_out, bcoords_out})
     );
 
 endmodule
