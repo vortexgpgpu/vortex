@@ -21,12 +21,12 @@ module VX_raster_slice #(
 
     // Inputs
     input wire                                      valid_in,
-    input wire [`RASTER_DIM_BITS-1:0]               x_loc_in,
-    input wire [`RASTER_DIM_BITS-1:0]               y_loc_in,
-    input wire [`RASTER_DIM_BITS-1:0]               x_min_in,
-    input wire [`RASTER_DIM_BITS-1:0]               x_max_in,  
-    input wire [`RASTER_DIM_BITS-1:0]               y_min_in,  
-    input wire [`RASTER_DIM_BITS-1:0]               y_max_in,
+    input wire [`RASTER_DIM_BITS-1:0]               xloc_in,
+    input wire [`RASTER_DIM_BITS-1:0]               yloc_in,
+    input wire [`RASTER_DIM_BITS-1:0]               xmin_in,
+    input wire [`RASTER_DIM_BITS-1:0]               xmax_in,  
+    input wire [`RASTER_DIM_BITS-1:0]               ymin_in,  
+    input wire [`RASTER_DIM_BITS-1:0]               ymax_in,
     input wire [`RASTER_PID_BITS-1:0]               pid_in,
     input wire [2:0][2:0][`RASTER_DATA_BITS-1:0]    edges_in,    
     input wire [2:0][`RASTER_DATA_BITS-1:0]         extents_in,    
@@ -47,8 +47,8 @@ module VX_raster_slice #(
     wire be_empty;
 
     wire                        block_valid;
-    wire [`RASTER_DIM_BITS-1:0] block_x_loc;
-    wire [`RASTER_DIM_BITS-1:0] block_y_loc;
+    wire [`RASTER_DIM_BITS-1:0] block_xloc;
+    wire [`RASTER_DIM_BITS-1:0] block_yloc;
     wire [`RASTER_PID_BITS-1:0] block_pid;
     wire [2:0][2:0][`RASTER_DATA_BITS-1:0] block_edges;
     wire                        block_ready;
@@ -64,24 +64,24 @@ module VX_raster_slice #(
         .empty      (te_empty),
         
         .valid_in   (valid_in),
-        .x_loc_in   (x_loc_in),
-        .y_loc_in   (y_loc_in),
+        .xloc_in    (xloc_in),
+        .yloc_in    (yloc_in),
         .pid_in     (pid_in),
         .edges_in   (edges_in),
         .extents_in (extents_in),
         .ready_in   (ready_in),
 
         .valid_out  (block_valid),
-        .x_loc_out  (block_x_loc),
-        .y_loc_out  (block_y_loc),
+        .xloc_out   (block_xloc),
+        .yloc_out   (block_yloc),
         .pid_out    (block_pid),
         .edges_out  (block_edges),  
         .ready_out  (block_ready)
     );
 
     wire                        block_valid_b;
-    wire [`RASTER_DIM_BITS-1:0] block_x_loc_b;
-    wire [`RASTER_DIM_BITS-1:0] block_y_loc_b;
+    wire [`RASTER_DIM_BITS-1:0] block_xloc_b;
+    wire [`RASTER_DIM_BITS-1:0] block_yloc_b;
     wire [`RASTER_PID_BITS-1:0] block_pid_b;
     wire [2:0][2:0][`RASTER_DATA_BITS-1:0] block_edges_b;
     wire                        block_ready_b;
@@ -94,8 +94,8 @@ module VX_raster_slice #(
         .reset      (reset),
         .valid_in   (block_valid),
         .ready_in   (block_ready),
-        .data_in    ({block_x_loc,   block_y_loc,   block_pid,   block_edges}),
-        .data_out   ({block_x_loc_b, block_y_loc_b, block_pid_b, block_edges_b}),
+        .data_in    ({block_xloc,   block_yloc,   block_pid,   block_edges}),
+        .data_out   ({block_xloc_b, block_yloc_b, block_pid_b, block_edges_b}),
         .valid_out  (block_valid_b),
         .ready_out  (block_ready_b)
     );
@@ -114,12 +114,12 @@ module VX_raster_slice #(
         .empty      (be_empty),
 
         .valid_in   (block_valid_b),
-        .x_loc_in   (block_x_loc_b),
-        .y_loc_in   (block_y_loc_b),
-        .x_min_in   (x_min_in),
-        .x_max_in   (x_max_in),
-        .y_min_in   (y_min_in), 
-        .y_max_in   (y_max_in),
+        .xloc_in    (block_xloc_b),
+        .yloc_in    (block_yloc_b),
+        .xmin_in    (xmin_in),
+        .xmax_in    (xmax_in),
+        .ymin_in    (ymin_in), 
+        .ymax_in    (ymax_in),
         .pid_in     (block_pid_b),
         .edges_in   (block_edges_b),
         .ready_in   (block_ready_b),

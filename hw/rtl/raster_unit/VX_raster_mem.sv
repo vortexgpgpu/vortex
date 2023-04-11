@@ -30,8 +30,8 @@ module VX_raster_mem #(
     // Outputs
     output wire                         valid_out,
     output wire [`RASTER_PID_BITS-1:0]  pid_out,
-    output wire [`RASTER_DIM_BITS-1:0]  x_loc_out,
-    output wire [`RASTER_DIM_BITS-1:0]  y_loc_out,
+    output wire [`RASTER_DIM_BITS-1:0]  xloc_out,
+    output wire [`RASTER_DIM_BITS-1:0]  yloc_out,
     output wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_out,    
     input wire                          ready_out
 );
@@ -54,7 +54,7 @@ module VX_raster_mem #(
 
     localparam TILE_HEADER_SIZE = 8;
     
-    // A primitive data contains (x_loc, y_loc, pid, edges)
+    // A primitive data contains (xloc, yloc, pid, edges)
     localparam PRIM_DATA_WIDTH = 2 * `RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS + `RASTER_PID_BITS;
 
     // Storage to cycle through all primitives and tiles
@@ -63,8 +63,8 @@ module VX_raster_mem #(
     reg [`RASTER_PID_BITS-1:0]      curr_pid_reqs;
     reg [`RASTER_PID_BITS-1:0]      curr_pid_rsps;
     reg [`RASTER_TILE_BITS-1:0]     curr_num_tiles;
-    reg [`RASTER_DIM_BITS-1:0]      curr_x_loc;
-    reg [`RASTER_DIM_BITS-1:0]      curr_y_loc;
+    reg [`RASTER_DIM_BITS-1:0]      curr_xloc;
+    reg [`RASTER_DIM_BITS-1:0]      curr_yloc;
 
     // Output buffer
     wire buf_in_valid;
@@ -151,8 +151,8 @@ module VX_raster_mem #(
                 if (mem_rsp_valid) begin
                     // handle tile header response
                     state           <= STATE_PRIM;
-                    curr_x_loc      <= `RASTER_DIM_BITS'(th_tile_pos_x << TILE_LOGSIZE);
-                    curr_y_loc      <= `RASTER_DIM_BITS'(th_tile_pos_y << TILE_LOGSIZE);                    
+                    curr_xloc       <= `RASTER_DIM_BITS'(th_tile_pos_x << TILE_LOGSIZE);
+                    curr_yloc       <= `RASTER_DIM_BITS'(th_tile_pos_y << TILE_LOGSIZE);                    
                     // fetch next primitive pid
                     mem_req_valid   <= 1;   
                     mem_req_addr[0] <= pids_addr;
@@ -352,8 +352,8 @@ module VX_raster_mem #(
         .reset      (reset),
         .valid_in   (buf_in_valid),
         .ready_in   (buf_in_ready),
-        .data_in    ({curr_x_loc, curr_y_loc, mem_rsp_data, mem_rsp_tag[FETCH_FLAG_BITS +: `RASTER_PID_BITS]}),                
-        .data_out   ({x_loc_out,  y_loc_out,  edges_out,    pid_out}),
+        .data_in    ({curr_xloc, curr_yloc, mem_rsp_data, mem_rsp_tag[FETCH_FLAG_BITS +: `RASTER_PID_BITS]}),                
+        .data_out   ({xloc_out,  yloc_out,  edges_out,    pid_out}),
         .valid_out  (valid_out),
         .ready_out  (ready_out)
     );
@@ -365,7 +365,7 @@ module VX_raster_mem #(
     always @(posedge clk) begin
         if (valid_out && ready_out) begin
             `TRACE(2, ("%d: %s-mem-out: x=%0d, y=%0d, pid=%0d, edge={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
-                $time, INSTANCE_ID, x_loc_out, y_loc_out, pid_out,
+                $time, INSTANCE_ID, xloc_out, yloc_out, pid_out,
                 edges_out[0][0], edges_out[0][1], edges_out[0][2],
                 edges_out[1][0], edges_out[1][1], edges_out[1][2],
                 edges_out[2][0], edges_out[2][1], edges_out[2][2]));
