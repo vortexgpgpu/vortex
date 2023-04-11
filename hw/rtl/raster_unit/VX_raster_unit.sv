@@ -169,29 +169,24 @@ module VX_raster_unit #(
         .ready_out  (slice_arb_ready_out)
     );
 
-    // track pending pe inputs 
+    // track pending tile data 
+    // this is needed to determine when rasterization has completed
 
-    wire no_pending_slice_input;    
-
+    wire no_pending_tiledata;
     wire mem_unit_fire = mem_unit_valid && mem_unit_ready;
-
-    wire slice_input_fire = | (slice_arb_valid_out & slice_arb_ready_out);
+    wire slice_arb_fire_out = | (slice_arb_valid_out & slice_arb_ready_out);
 
     VX_pending_size #( 
-        .SIZE (EDGE_FUNC_LATENCY + 2)
+        .SIZE (EDGE_FUNC_LATENCY + 2 * NUM_SLICES)
     ) pending_slice_inputs (
         .clk   (clk),
         .reset (reset),
         .incr  (mem_unit_fire),
-        .decr  (slice_input_fire),
-        .empty (no_pending_slice_input),
+        .decr  (slice_arb_fire_out),
+        .empty (no_pending_tiledata),
         `UNUSED_PIN (size),
         `UNUSED_PIN (full)
     );
-
-    wire no_slice_input = ~mem_unit_busy 
-                       && ~mem_unit_valid
-                       && no_pending_slice_input;
 
     VX_raster_req_if #(
         .NUM_LANES (OUTPUT_QUADS)
@@ -201,9 +196,9 @@ module VX_raster_unit #(
         .NUM_LANES (OUTPUT_QUADS)
     ) raster_req_tmp_if[1]();
 
-    wire [NUM_SLICES-1:0] slice_empty_out;
+    wire [NUM_SLICES-1:0] slice_busy_out;
 
-    // Generate all PEs
+    // Generate all slices
     for (genvar i = 0; i < NUM_SLICES; ++i) begin
         wire slice_valid_in;
         wire [`RASTER_DIM_BITS-1:0] slice_xloc_in;
@@ -247,12 +242,19 @@ module VX_raster_unit #(
 
             .valid_out  (slice_valid_out),
             .stamps_out (slice_raster_req_if[i].stamps),
-            .empty_out  (slice_empty_out[i]),
+            .busy_out   (slice_busy_out[i]),
             .ready_out  (slice_raster_req_if[i].ready)
         );
 
-        assign slice_raster_req_if[i].empty = (& slice_empty_out) && no_slice_input;
-        assign slice_raster_req_if[i].valid = slice_valid_out || slice_raster_req_if[i].empty;        
+        assign slice_raster_req_if[i].empty = ~mem_unit_start
+                                           && ~mem_unit_busy 
+                                           && ~mem_unit_valid 
+                                           && no_pending_tiledata
+                                           && ~slice_valid_in
+                                           && ~(| slice_busy_out);
+
+        assign slice_raster_req_if[i].valid = slice_valid_out 
+                                           || slice_raster_req_if[i].empty;        
     end
 
     `RESET_RELAY (raster_arb_reset, reset);
@@ -275,7 +277,7 @@ module VX_raster_unit #(
     ila_raster ila_raster_inst (
         .clk    (clk),
         .probe0 ({cache_rsp_if.data, cache_rsp_if.tag, cache_rsp_if.ready, cache_rsp_if.valid, cache_req_if.tag, cache_req_if.addr, cache_req_if.rw, cache_req_if.valid, cache_req_if.ready}),
-        .probe1 ({slice_empty_out, no_slice_input, no_pending_slice_input, mem_unit_busy, mem_unit_ready, mem_unit_start, mem_unit_valid, raster_req_if.empty, raster_req_if.valid, raster_req_if.ready})
+        .probe1 ({slice_busy_out, no_pending_tiledata, mem_unit_busy, mem_unit_ready, mem_unit_start, mem_unit_valid, raster_req_if.empty, raster_req_if.valid, raster_req_if.ready})
     );
 `endif
 
@@ -330,7 +332,7 @@ module VX_raster_unit #(
             for (integer i = 0; i < OUTPUT_QUADS; ++i) begin
                 `TRACE(1, ("%d: %s-out[%0d]: empty=%b, x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
                     $time, INSTANCE_ID, i, raster_req_if.empty,
-                    raster_req_if.stamps[i].pos_x,  raster_req_if.stamps[i].pos_y, raster_req_if.stamps[i].mask, raster_req_if.stamps[i].pid,
+                    raster_req_if.stamps[i].pos_x, raster_req_if.stamps[i].pos_y, raster_req_if.stamps[i].mask, raster_req_if.stamps[i].pid,
                     raster_req_if.stamps[i].bcoords[0][0], raster_req_if.stamps[i].bcoords[1][0], raster_req_if.stamps[i].bcoords[2][0], 
                     raster_req_if.stamps[i].bcoords[0][1], raster_req_if.stamps[i].bcoords[1][1], raster_req_if.stamps[i].bcoords[2][1], 
                     raster_req_if.stamps[i].bcoords[0][2], raster_req_if.stamps[i].bcoords[1][2], raster_req_if.stamps[i].bcoords[2][2], 
@@ -395,7 +397,7 @@ module VX_raster_unit_top #(
 
     assign raster_req_valid = raster_req_if.valid;
     assign raster_req_stamps = raster_req_if.stamps;
-    assign raster_req_if.empty=raster_req_empty;
+    assign raster_req_if.empty = raster_req_empty;
     assign raster_req_if.ready = raster_req_ready;
 
     VX_cache_req_if #(

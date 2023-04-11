@@ -14,8 +14,6 @@ module VX_raster_te #(
     input wire clk,
     input wire reset,
 
-    output wire                         empty,
-
     // Inputs
     input wire                          valid_in,
     input wire [`RASTER_DIM_BITS-1:0]   xloc_in,
@@ -207,8 +205,6 @@ module VX_raster_te #(
     assign yloc_out  = tile_yloc_r;
     assign pid_out   = tile_pid;    
     `EDGE_UPDATE (edges_out, tile_edges, tile_edge_eval_r);
-
-    assign empty = ready_in && ~valid_out;
 
     `UNUSED_VAR (tile_level_r)
 

@@ -34,8 +34,8 @@ module VX_raster_slice #(
 
     // Outputs
     output wire                                     valid_out,
-    output raster_stamp_t [OUTPUT_QUADS-1:0]        stamps_out, 
-    output wire                                     empty_out,
+    output raster_stamp_t [OUTPUT_QUADS-1:0]        stamps_out,
+    output wire                                     busy_out,
     input  wire                                     ready_out
 );
     localparam NUM_QUADS_DIM   = 1 << (BLOCK_LOGSIZE - 1);
@@ -43,8 +43,7 @@ module VX_raster_slice #(
     localparam OUTPUT_BATCHES  = (PER_BLOCK_QUADS + OUTPUT_QUADS - 1) / OUTPUT_QUADS;
     localparam BLOCK_BUF_SIZE  = 2 * OUTPUT_BATCHES;
 
-    wire te_empty;
-    wire be_empty;
+    wire be_busy;
 
     wire                        block_valid;
     wire [`RASTER_DIM_BITS-1:0] block_xloc;
@@ -60,8 +59,6 @@ module VX_raster_slice #(
     ) tile_evaluator (
         .clk        (clk),
         .reset      (reset),
-
-        .empty      (te_empty),
         
         .valid_in   (valid_in),
         .xloc_in    (xloc_in),
@@ -111,8 +108,6 @@ module VX_raster_slice #(
         
         .dcrs       (dcrs),
 
-        .empty      (be_empty),
-
         .valid_in   (block_valid_b),
         .xloc_in    (block_xloc_b),
         .yloc_in    (block_yloc_b),
@@ -126,11 +121,13 @@ module VX_raster_slice #(
         
         .valid_out  (valid_out),
         .stamps_out (stamps_out),
+        .busy_out   (be_busy),
         .ready_out  (ready_out)
     );
 
-    assign empty_out = te_empty
-                    && ~block_valid_b 
-                    && be_empty;
+    assign busy_out = ~ready_in 
+                   || block_valid
+                   || block_valid_b 
+                   || be_busy;
 
 endmodule
