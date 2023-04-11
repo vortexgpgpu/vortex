@@ -1,9 +1,9 @@
 `include "VX_define.vh"
 
-module Vortex_axi_wrapper #(
+module Vortex_top #(
 	parameter C_M_AXI_GMEM_DATA_WIDTH = 512,
 	parameter C_M_AXI_GMEM_ADDR_WIDTH = 32,
-	parameter C_M_AXI_GMEM_ID_WIDTH   = 16
+	parameter C_M_AXI_GMEM_ID_WIDTH   = 32
 ) (
 	input wire                                  clk,
 	input wire                                  reset,
