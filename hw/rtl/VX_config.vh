@@ -353,9 +353,9 @@
 `define RASTER_MEM_QUEUE_SIZE 4
 `endif
 
-// RASTER number of PEs
-`ifndef RASTER_NUM_PES    
-`define RASTER_NUM_PES 1
+// RASTER number of slices
+`ifndef RASTER_NUM_SLICES    
+`define RASTER_NUM_SLICES 1
 `endif
 
 // RASTER tile size
