@@ -28,7 +28,7 @@ ROP_INCLUDE = -I$(RTL_DIR)/rop_unit
 RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/cache -I$(RTL_DIR)/simulate $(FPU_INCLUDE) -I$(DPI_DIR)/..
 RTL_INCLUDE += $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
 
-TOP = VX_raster_pe
+TOP = VX_raster_slice
 TESTBENCH = testbench.cpp
 SRCS = $(TESTBENCH) $(DPI_DIR)/util_dpi.cpp
 
