@@ -9,8 +9,8 @@ module VX_raster_edge #(
     input wire reset,
 
     input wire                        enable,
-    input wire [`RASTER_DIM_BITS-1:0] x_loc,
-    input wire [`RASTER_DIM_BITS-1:0] y_loc,
+    input wire [`RASTER_DIM_BITS-1:0] xloc,
+    input wire [`RASTER_DIM_BITS-1:0] yloc,
     input wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges,
 
     output wire [2:0][`RASTER_DATA_BITS-1:0] result
@@ -38,7 +38,7 @@ module VX_raster_edge #(
             .clk    (clk),
             .enable (enable),
             .dataa  (edges[i][0]),
-            .datab  (x_loc),
+            .datab  (xloc),
             .result (prod_x[i])
         );
 
@@ -52,7 +52,7 @@ module VX_raster_edge #(
             .clk    (clk),
             .enable (enable),
             .dataa  (edges[i][1]),
-            .datab  (y_loc),
+            .datab  (yloc),
             .result (prod_y[i])
         );
 

@@ -31,7 +31,7 @@ module VX_raster_unit #(
 );
     localparam EDGE_FUNC_LATENCY = `LATENCY_IMUL;
 
-    // A primitive data contains (x_loc, y_loc, pid, edges, extents)
+    // A primitive data contains (xloc, yloc, pid, edges, extents)
     localparam PRIM_DATA_WIDTH = 2 * `RASTER_DIM_BITS + `RASTER_PID_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS;
 
     `STATIC_ASSERT(TILE_LOGSIZE > BLOCK_LOGSIZE, ("invalid parameter"))
@@ -52,8 +52,8 @@ module VX_raster_unit #(
     ///////////////////////////////////////////////////////////////////////////
 
     // Output from the request
-    wire [`RASTER_DIM_BITS-1:0] mem_x_loc;
-    wire [`RASTER_DIM_BITS-1:0] mem_y_loc;
+    wire [`RASTER_DIM_BITS-1:0] mem_xloc;
+    wire [`RASTER_DIM_BITS-1:0] mem_yloc;
     wire [2:0][2:0][`RASTER_DATA_BITS-1:0] mem_edges;
     wire [`RASTER_PID_BITS-1:0] mem_pid;
     
@@ -91,8 +91,8 @@ module VX_raster_unit #(
         .cache_rsp_if (cache_rsp_if), 
 
         .valid_out    (mem_unit_valid),
-        .x_loc_out    (mem_x_loc),
-        .y_loc_out    (mem_y_loc),
+        .xloc_out     (mem_xloc),
+        .yloc_out     (mem_yloc),
         .edges_out    (mem_edges),
         .pid_out      (mem_pid),
         .ready_out    (mem_unit_ready)
@@ -117,19 +117,19 @@ module VX_raster_unit #(
         .clk    (clk),
         .reset  (reset),
         .enable (~edge_func_stall),
-        .x_loc  (mem_x_loc),
-        .y_loc  (mem_y_loc),
+        .xloc   (mem_xloc),
+        .yloc   (mem_yloc),
         .edges  (mem_edges),
         .result (edge_eval)
     );
 
-    wire                         slice_valid;    
-    wire [`RASTER_DIM_BITS-1:0]  slice_x_loc;
-    wire [`RASTER_DIM_BITS-1:0]  slice_y_loc;
-    wire [`RASTER_PID_BITS-1:0]  slice_pid;
-    wire [2:0][2:0][`RASTER_DATA_BITS-1:0] slice_edges, slice_edges_e;
-    wire [2:0][`RASTER_DATA_BITS-1:0] slice_extents;
-    wire                         slice_ready;
+    wire                        slice_arb_valid_in;  
+    wire [`RASTER_DIM_BITS-1:0] slice_arb_xloc;
+    wire [`RASTER_DIM_BITS-1:0] slice_arb_yloc;
+    wire [`RASTER_PID_BITS-1:0] slice_arb_pid;
+    wire [2:0][2:0][`RASTER_DATA_BITS-1:0] slice_arb_edges, slice_arb_edges_e;
+    wire [2:0][`RASTER_DATA_BITS-1:0] slice_arb_extents;
+    wire                        slice_arb_ready_in;
 
     VX_shift_register #(
         .DATAW  (1 + 2 * `RASTER_DIM_BITS + `RASTER_PID_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS),
@@ -139,19 +139,19 @@ module VX_raster_unit #(
         .clk      (clk),
         .reset    (reset),
         .enable   (~edge_func_stall),
-        .data_in  ({mem_unit_valid, mem_x_loc,   mem_y_loc,   mem_pid,   mem_edges,   mem_extents}),
-        .data_out ({slice_valid,    slice_x_loc, slice_y_loc, slice_pid, slice_edges, slice_extents})
+        .data_in  ({mem_unit_valid,     mem_xloc,       mem_yloc,       mem_pid,       mem_edges,       mem_extents}),
+        .data_out ({slice_arb_valid_in, slice_arb_xloc, slice_arb_yloc, slice_arb_pid, slice_arb_edges, slice_arb_extents})
     );
 
-    `EDGE_UPDATE (slice_edges_e, slice_edges, edge_eval);
+    `EDGE_UPDATE (slice_arb_edges_e, slice_arb_edges, edge_eval);
 
-    assign edge_func_stall = slice_valid && ~slice_ready;
+    assign edge_func_stall = slice_arb_valid_in && ~slice_arb_ready_in;
 
     assign mem_unit_ready = ~edge_func_stall;
 
-    wire [NUM_SLICES-1:0] slice_valid_in;    
-    wire [NUM_SLICES-1:0][PRIM_DATA_WIDTH-1:0] slice_data_in;
-    wire [NUM_SLICES-1:0] slice_ready_in;
+    wire [NUM_SLICES-1:0] slice_arb_valid_out;    
+    wire [NUM_SLICES-1:0][PRIM_DATA_WIDTH-1:0] slice_arb_data_out;
+    wire [NUM_SLICES-1:0] slice_arb_ready_out;
 
     VX_stream_arb #(
         .NUM_OUTPUTS (NUM_SLICES),
@@ -161,12 +161,12 @@ module VX_raster_unit #(
     ) slice_req_arb (
         .clk        (clk),
         .reset      (reset),
-        .valid_in   (slice_valid),
-        .ready_in   (slice_ready),
-        .data_in    ({slice_x_loc, slice_y_loc, slice_pid, slice_edges_e, slice_extents}),
-        .data_out   (slice_data_in),        
-        .valid_out  (slice_valid_in),        
-        .ready_out  (slice_ready_in)
+        .valid_in   (slice_arb_valid_in),
+        .ready_in   (slice_arb_ready_in),
+        .data_in    ({slice_arb_xloc, slice_arb_yloc, slice_arb_pid, slice_arb_edges_e, slice_arb_extents}),
+        .data_out   (slice_arb_data_out),        
+        .valid_out  (slice_arb_valid_out),        
+        .ready_out  (slice_arb_ready_out)
     );
 
     // track pending pe inputs 
@@ -175,7 +175,7 @@ module VX_raster_unit #(
 
     wire mem_unit_fire = mem_unit_valid && mem_unit_ready;
 
-    wire slice_input_fire = | (slice_valid_in & slice_ready_in);
+    wire slice_input_fire = | (slice_arb_valid_out & slice_arb_ready_out);
 
     VX_pending_size #( 
         .SIZE (EDGE_FUNC_LATENCY + 2)
@@ -205,15 +205,19 @@ module VX_raster_unit #(
 
     // Generate all PEs
     for (genvar i = 0; i < NUM_SLICES; ++i) begin
-        wire [`RASTER_DIM_BITS-1:0] slice_x_loc_in;
-        wire [`RASTER_DIM_BITS-1:0] slice_y_loc_in;
+        wire slice_valid_in;
+        wire [`RASTER_DIM_BITS-1:0] slice_xloc_in;
+        wire [`RASTER_DIM_BITS-1:0] slice_yloc_in;
         wire [`RASTER_PID_BITS-1:0] slice_pid_in;
         wire [2:0][2:0][`RASTER_DATA_BITS-1:0] slice_edges_in;
         wire [2:0][`RASTER_DATA_BITS-1:0] slice_extents_in;
+        wire slice_ready_in;
 
         wire slice_valid_out;        
 
-        assign {slice_x_loc_in, slice_y_loc_in, slice_pid_in, slice_edges_in, slice_extents_in} = slice_data_in[i];
+        assign slice_valid_in = slice_arb_valid_out[i];
+        assign {slice_xloc_in, slice_yloc_in, slice_pid_in, slice_edges_in, slice_extents_in} = slice_arb_data_out[i];
+        assign slice_arb_ready_out[i] = slice_ready_in;
 
         `RESET_RELAY (slice_reset, reset);
 
@@ -229,17 +233,17 @@ module VX_raster_unit #(
 
             .dcrs       (raster_dcrs),
 
-            .valid_in   (slice_valid_in[i]),
-            .x_loc_in   (slice_x_loc_in),
-            .y_loc_in   (slice_y_loc_in),
-            .x_min_in   (raster_dcrs.dst_xmin),
-            .x_max_in   (raster_dcrs.dst_xmax),  
-            .y_min_in   (raster_dcrs.dst_ymin),          
-            .y_max_in   (raster_dcrs.dst_ymax),
+            .valid_in   (slice_valid_in),
+            .xloc_in    (slice_xloc_in),
+            .yloc_in    (slice_yloc_in),
+            .xmin_in    (raster_dcrs.dst_xmin),
+            .xmax_in    (raster_dcrs.dst_xmax),
+            .ymin_in    (raster_dcrs.dst_ymin),
+            .ymax_in    (raster_dcrs.dst_ymax),
             .edges_in   (slice_edges_in),
             .pid_in     (slice_pid_in),
             .extents_in (slice_extents_in),
-            .ready_in   (slice_ready_in[i]),
+            .ready_in   (slice_ready_in),
 
             .valid_out  (slice_valid_out),
             .stamps_out (slice_raster_req_if[i].stamps),
