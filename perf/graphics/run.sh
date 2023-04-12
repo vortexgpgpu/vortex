@@ -3,7 +3,7 @@
 # exit when any command fails
 set -e
 
-TEST=raster
+TEST=perf
 WIDTH=256
 HEIGHT=256
 DRIVER=simx
@@ -13,7 +13,7 @@ SCRIPT_DIR=$(dirname "$0")
 VORTEX_HOME=${SCRIPT_DIR}/../..
 LOG_DIR=${SCRIPT_DIR}
 
-raster()
+perf()
 {
     SUFFIX=${TEST}_${DRIVER}_${CORES}c_${WIDTH}x${HEIGHT}
     LOG_FILE=${LOG_DIR}/${SUFFIX}.log
@@ -29,22 +29,6 @@ raster()
     done
 }
 
-rastertile() 
-{
-    SUFFIX=${TEST}_${DRIVER}_${CORES}c_${WIDTH}x${HEIGHT}
-    LOG_FILE=${LOG_DIR}/${SUFFIX}.log
-        
-    declare -a modes=(3 4 5 6 7)
-
-    echo > $LOG_FILE # clear log
-    for mode in "${modes[@]}"
-    do
-        echo -e "\n###############################################################################\n" >> $LOG_FILE
-        echo -e "$TEST mode=$mode" >> $LOG_FILE
-        CONFIGS="-DEXT_GFX_ENABLE -DRASTER_TILE_LOGSIZE=$mode" ${VORTEX_HOME}/ci/blackbox.sh --driver=${DRIVER} --cores=${CORES} --app=draw3d --args="-onull -k$mode -tcarnival.cgltrace -w${WIDTH} -h${HEIGHT}" >> $LOG_FILE
-    done
-}
-
 gpusw()
 {
     SUFFIX=${TEST}_${DRIVER}_${CORES}c_${WIDTH}x${HEIGHT}
@@ -57,39 +41,23 @@ gpusw()
     do
         echo -e "\n###############################################################################\n" >> $LOG_FILE
         echo -e "$TEST mode=$mode" >> $LOG_FILE
-        CONFIGS="-DEXT_GFX_ENABLE" ${VORTEX_HOME}/ci/blackbox.sh --driver=${DRIVER} --cores=${CORES} --threads=1 --app=draw3d --args="-onull -tcarnival.cgltrace -w${WIDTH} -h${HEIGHT} ${mode}" >> $LOG_FILE
+        CONFIGS="-DEXT_GFX_ENABLE" ${VORTEX_HOME}/ci/blackbox.sh --driver=${DRIVER} --cores=${CORES} --app=draw3d --args="-onull -tvase.cgltrace -w${WIDTH} -h${HEIGHT} ${mode}" >> $LOG_FILE
     done
 }
 
-rcache()
+rtile() 
 {
     SUFFIX=${TEST}_${DRIVER}_${CORES}c_${WIDTH}x${HEIGHT}
     LOG_FILE=${LOG_DIR}/${SUFFIX}.log
         
-    declare -a modes=("" "-DRCACHE_DISABLE")
+    declare -a modes=(3 4 5 6 7)
 
     echo > $LOG_FILE # clear log
     for mode in "${modes[@]}"
     do
         echo -e "\n###############################################################################\n" >> $LOG_FILE
         echo -e "$TEST mode=$mode" >> $LOG_FILE
-        CONFIGS="-DEXT_GFX_ENABLE $mode" ${VORTEX_HOME}/ci/blackbox.sh --driver=${DRIVER} --cores=${CORES} --threads=1 --app=draw3d --args="-onull -tvase.cgltrace -w${WIDTH} -h${HEIGHT}" --perf=4 >> $LOG_FILE
-    done
-}
-
-ocache()
-{
-    SUFFIX=${TEST}_${DRIVER}_${CORES}c_${WIDTH}x${HEIGHT}
-    LOG_FILE=${LOG_DIR}/${SUFFIX}.log
-        
-    declare -a modes=("" "-DOCACHE_DISABLE")
-
-    echo > $LOG_FILE # clear log
-    for mode in "${modes[@]}"
-    do
-        echo -e "\n###############################################################################\n" >> $LOG_FILE
-        echo -e "$TEST mode=$mode" >> $LOG_FILE
-        CONFIGS="-DEXT_GFX_ENABLE $mode" ${VORTEX_HOME}/ci/blackbox.sh --driver=${DRIVER} --cores=${CORES} --threads=1 --app=draw3d --args="-onull -tcarnival.cgltrace -w${WIDTH} -h${HEIGHT}" --perf=5 >> $LOG_FILE
+        CONFIGS="-DEXT_GFX_ENABLE -DRASTER_TILE_LOGSIZE=$mode" ${VORTEX_HOME}/ci/blackbox.sh --driver=${DRIVER} --cores=${CORES} --app=draw3d --args="-onull -k$mode -tvase.cgltrace -w${WIDTH} -h${HEIGHT}" >> $LOG_FILE
     done
 }
 
@@ -105,7 +73,7 @@ rslice()
     do
         echo -e "\n###############################################################################\n" >> $LOG_FILE
         echo -e "$TEST mode=$mode" >> $LOG_FILE
-        CONFIGS="-DEXT_GFX_ENABLE -DRASTER_NUM_SLICES=$mode" ${VORTEX_HOME}/ci/blackbox.sh --driver=${DRIVER} --cores=${CORES} --threads=1 --app=draw3d --args="-onull -tvase.cgltrace -e -w${WIDTH} -h${HEIGHT}" --perf=4 >> $LOG_FILE
+        CONFIGS="-DEXT_GFX_ENABLE -DRASTER_NUM_SLICES=$mode" ${VORTEX_HOME}/ci/blackbox.sh --driver=${DRIVER} --cores=${CORES} --app=draw3d --args="-onull -tvase.cgltrace -w${WIDTH} -h${HEIGHT}" --perf=4 >> $LOG_FILE
     done
 }
 
@@ -121,14 +89,78 @@ oslice()
     do        
         echo -e "\n###############################################################################\n" >> $LOG_FILE
         echo -e "$TEST mode=$mode" >> $LOG_FILE
-        CONFIGS="-DEXT_GFX_ENABLE -DNUM_ROP_UNITS=$mode" ${VORTEX_HOME}/ci/blackbox.sh --driver=${DRIVER} --cores=${CORES} --threads=1 --app=draw3d --args="-onull -tcarnival.cgltrace -e -w${WIDTH} -h${HEIGHT}" --perf=5 >> $LOG_FILE
+        CONFIGS="-DEXT_GFX_ENABLE -DNUM_ROP_UNITS=$mode" ${VORTEX_HOME}/ci/blackbox.sh --driver=${DRIVER} --cores=${CORES} --app=draw3d --args="-onull -tvase.cgltrace -w${WIDTH} -h${HEIGHT}" --perf=5 >> $LOG_FILE
+    done
+}
+
+tslice()
+{
+    SUFFIX=${TEST}_${DRIVER}_${CORES}c_${WIDTH}x${HEIGHT}
+    LOG_FILE=${LOG_DIR}/${SUFFIX}.log
+        
+    declare -a modes=(1 2 4)
+
+    echo > $LOG_FILE # clear log
+    for mode in "${modes[@]}"
+    do
+        echo -e "\n###############################################################################\n" >> $LOG_FILE
+        echo -e "$TEST mode=$mode" >> $LOG_FILE
+        CONFIGS="-DEXT_GFX_ENABLE -DNUM_TEX_UNITS=$mode" ${VORTEX_HOME}/ci/blackbox.sh --driver=${DRIVER} --cores=${CORES} --app=draw3d --args="-onull -tvase.cgltrace -w${WIDTH} -h${HEIGHT}" --perf=3 >> $LOG_FILE
+    done
+}
+
+rcache()
+{
+    SUFFIX=${TEST}_${DRIVER}_${CORES}c_${WIDTH}x${HEIGHT}
+    LOG_FILE=${LOG_DIR}/${SUFFIX}.log
+        
+    declare -a modes=("" "-DRCACHE_DISABLE")
+
+    echo > $LOG_FILE # clear log
+    for mode in "${modes[@]}"
+    do
+        echo -e "\n###############################################################################\n" >> $LOG_FILE
+        echo -e "$TEST mode=$mode" >> $LOG_FILE
+        CONFIGS="-DEXT_GFX_ENABLE $mode" ${VORTEX_HOME}/ci/blackbox.sh --driver=${DRIVER} --cores=${CORES} --app=draw3d --args="-onull -tvase.cgltrace -w${WIDTH} -h${HEIGHT}" --perf=4 >> $LOG_FILE
+    done
+}
+
+ocache()
+{
+    SUFFIX=${TEST}_${DRIVER}_${CORES}c_${WIDTH}x${HEIGHT}
+    LOG_FILE=${LOG_DIR}/${SUFFIX}.log
+        
+    declare -a modes=("" "-DOCACHE_DISABLE")
+
+    echo > $LOG_FILE # clear log
+    for mode in "${modes[@]}"
+    do
+        echo -e "\n###############################################################################\n" >> $LOG_FILE
+        echo -e "$TEST mode=$mode" >> $LOG_FILE
+        CONFIGS="-DEXT_GFX_ENABLE $mode" ${VORTEX_HOME}/ci/blackbox.sh --driver=${DRIVER} --cores=${CORES} --app=draw3d --args="-onull -tvase.cgltrace -w${WIDTH} -h${HEIGHT}" --perf=5 >> $LOG_FILE
+    done
+}
+
+tcache()
+{
+    SUFFIX=${TEST}_${DRIVER}_${CORES}c_${WIDTH}x${HEIGHT}
+    LOG_FILE=${LOG_DIR}/${SUFFIX}.log
+        
+    declare -a modes=("" "-DTCACHE_DISABLE")
+
+    echo > $LOG_FILE # clear log
+    for mode in "${modes[@]}"
+    do
+        echo -e "\n###############################################################################\n" >> $LOG_FILE
+        echo -e "$TEST mode=$mode" >> $LOG_FILE
+        CONFIGS="-DEXT_GFX_ENABLE $mode" ${VORTEX_HOME}/ci/blackbox.sh --driver=${DRIVER} --cores=${CORES} --app=draw3d --args="-onull -tvase.cgltrace -w${WIDTH} -h${HEIGHT}" --perf=3 >> $LOG_FILE
     done
 }
 
 show_usage()
 {
     echo "Vortex Graphics Perf Test"
-    echo "Usage: [--driver=#n] [--cores=#n] [--width=#n] [--height=#n] [--test=raster|rastertile|gpusw|rcache|ocache|rslice|oslice] [--help]"
+    echo "Usage: [--driver=#n] [--cores=#n] [--width=#n] [--height=#n] [--test=perf|gpusw|rtile|rcache|ocache|tcache|rslice|oslice|tslice] [--help]"
 }
 
 for i in "$@"
@@ -165,32 +197,23 @@ case $i in
 esac
 done
 
+# clear blackbox cache
+rm -f blackbox.*.cache
+
 echo "begin $TEST tests"
 
 case $TEST in
-    raster)
+    perf)
         CORES=1
-        raster
+        perf
         CORES=2
-        raster
+        perf
         CORES=4
-        raster
+        perf
         CORES=8
-        raster
+        perf
         CORES=16
-        raster
-        ;;
-    rastertile)
-        CORES=1
-        rastertile
-        CORES=2
-        rastertile
-        CORES=4
-        rastertile
-        CORES=8
-        rastertile
-        CORES=16
-        rastertile
+        perf
         ;;
     gpusw)
         CORES=1
@@ -204,14 +227,18 @@ case $TEST in
         CORES=16
         gpusw
         ;;
+    rtile)
+        CORES=1
+        rtile
+        CORES=4
+        rtile
+        CORES=16
+        rtile
+        ;;
     rcache)
         CORES=1
         rcache
-        CORES=2
-        rcache
         CORES=4
-        rcache
-        CORES=8
         rcache
         CORES=16
         rcache
@@ -219,14 +246,18 @@ case $TEST in
     ocache)
         CORES=1
         ocache
-        CORES=2
-        ocache
         CORES=4
-        ocache
-        CORES=8
         ocache
         CORES=16
         ocache
+        ;;
+    tcache)
+        CORES=1
+        tcache
+        CORES=4
+        tcache
+        CORES=16
+        tcache
         ;;
     rslice)
         CORES=1
@@ -237,12 +268,20 @@ case $TEST in
         rslice
         ;;
     oslice)
-        CORES=4
+        CORES=1
         oslice
-        CORES=8
+        CORES=4
         oslice
         CORES=16
         oslice
+        ;;
+    tslice)
+        CORES=1
+        tslice
+        CORES=4
+        tslice
+        CORES=16
+        tslice
         ;;
     *)
         echo "invalid test: $TEST"
