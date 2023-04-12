@@ -201,6 +201,8 @@ module VX_raster_unit #(
         .NUM_LANES (OUTPUT_QUADS)
     ) raster_req_tmp_if[1]();
 
+    wire [NUM_SLICES-1:0] slice_busy_out;
+
     // Generate all slices
     for (genvar i = 0; i < NUM_SLICES; ++i) begin
         wire slice_valid_in;
@@ -212,7 +214,6 @@ module VX_raster_unit #(
         wire slice_ready_in;
 
         wire slice_valid_out;
-        wire slice_busy_out;
 
         assign slice_valid_in = slice_arb_valid_out[i];
         assign {slice_xloc_in, slice_yloc_in, slice_pid_in, slice_edges_in, slice_extents_in} = slice_arb_data_out[i];
@@ -246,14 +247,14 @@ module VX_raster_unit #(
 
             .valid_out  (slice_valid_out),
             .stamps_out (slice_raster_req_if[i].stamps),
-            .busy_out   (slice_busy_out),
+            .busy_out   (slice_busy_out[i]),
             .ready_out  (slice_raster_req_if[i].ready)
         );
 
         assign slice_raster_req_if[i].done = running
                                           && ~has_pending_inputs
                                           && ~slice_valid_in
-                                          && ~slice_busy_out
+                                          && ~(| slice_busy_out)
                                           && ~slice_valid_out;
 
         assign slice_raster_req_if[i].valid = slice_valid_out 
