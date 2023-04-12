@@ -201,11 +201,12 @@ module VX_raster_unit #(
         .NUM_LANES (OUTPUT_QUADS)
     ) raster_req_tmp_if[1]();
 
+    wire [NUM_SLICES-1:0] slice_valid_in;
     wire [NUM_SLICES-1:0] slice_busy_out;
+    wire [NUM_SLICES-1:0] slice_valid_out;
 
     // Generate all slices
     for (genvar i = 0; i < NUM_SLICES; ++i) begin
-        wire slice_valid_in;
         wire [`RASTER_DIM_BITS-1:0] slice_xloc_in;
         wire [`RASTER_DIM_BITS-1:0] slice_yloc_in;
         wire [`RASTER_PID_BITS-1:0] slice_pid_in;
@@ -213,9 +214,7 @@ module VX_raster_unit #(
         wire [2:0][`RASTER_DATA_BITS-1:0] slice_extents_in;
         wire slice_ready_in;
 
-        wire slice_valid_out;
-
-        assign slice_valid_in = slice_arb_valid_out[i];
+        assign slice_valid_in[i] = slice_arb_valid_out[i];
         assign {slice_xloc_in, slice_yloc_in, slice_pid_in, slice_edges_in, slice_extents_in} = slice_arb_data_out[i];
         assign slice_arb_ready_out[i] = slice_ready_in;
 
@@ -233,7 +232,7 @@ module VX_raster_unit #(
 
             .dcrs       (raster_dcrs),
 
-            .valid_in   (slice_valid_in),
+            .valid_in   (slice_valid_in[i]),
             .xloc_in    (slice_xloc_in),
             .yloc_in    (slice_yloc_in),
             .xmin_in    (raster_dcrs.dst_xmin),
@@ -245,7 +244,7 @@ module VX_raster_unit #(
             .extents_in (slice_extents_in),
             .ready_in   (slice_ready_in),
 
-            .valid_out  (slice_valid_out),
+            .valid_out  (slice_valid_out[i]),
             .stamps_out (slice_raster_req_if[i].stamps),
             .busy_out   (slice_busy_out[i]),
             .ready_out  (slice_raster_req_if[i].ready)
@@ -253,11 +252,11 @@ module VX_raster_unit #(
 
         assign slice_raster_req_if[i].done = running
                                           && ~has_pending_inputs
-                                          && ~slice_valid_in
+                                          && ~(| slice_valid_in)
                                           && ~(| slice_busy_out)
-                                          && ~slice_valid_out;
+                                          && ~(| slice_valid_out);
 
-        assign slice_raster_req_if[i].valid = slice_valid_out 
+        assign slice_raster_req_if[i].valid = slice_valid_out[i] 
                                            || slice_raster_req_if[i].done;
     end
 
