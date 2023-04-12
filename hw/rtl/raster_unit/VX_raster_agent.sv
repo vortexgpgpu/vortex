@@ -52,7 +52,7 @@ module VX_raster_agent #(
     wire [`NUM_THREADS-1:0][31:0] response_data;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign response_data[i] = {31'(raster_req_if.stamps[i].pid), !raster_req_if.empty};
+        assign response_data[i] = {31'(raster_req_if.stamps[i].pid), ~raster_req_if.done};
     end
 
     VX_skid_buffer #(
@@ -75,9 +75,9 @@ module VX_raster_agent #(
     always @(posedge clk) begin
         if (raster_agent_if.valid && raster_agent_if.ready) begin
             for (integer i = 0; i < `NUM_THREADS; ++i) begin
-                `TRACE(1, ("%d: core%0d-raster-stamp[%0d]: wid=%0d, PC=0x%0h, tmask=%b, empty=%b, x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}} (#%0d)\n", 
+                `TRACE(1, ("%d: core%0d-raster-stamp[%0d]: wid=%0d, PC=0x%0h, tmask=%b, done=%b, x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}} (#%0d)\n", 
                     $time, CORE_ID, i, raster_agent_if.wid, raster_agent_if.PC, raster_agent_if.tmask,
-                    raster_req_if.empty,
+                    raster_req_if.done,
                     raster_req_if.stamps[i].pos_x,  raster_req_if.stamps[i].pos_y, raster_req_if.stamps[i].mask, raster_req_if.stamps[i].pid,
                     raster_req_if.stamps[i].bcoords[0][0], raster_req_if.stamps[i].bcoords[1][0], raster_req_if.stamps[i].bcoords[2][0], 
                     raster_req_if.stamps[i].bcoords[0][1], raster_req_if.stamps[i].bcoords[1][1], raster_req_if.stamps[i].bcoords[2][1], 

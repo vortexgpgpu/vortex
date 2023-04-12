@@ -58,7 +58,7 @@ module VX_raster_unit #(
     wire [`RASTER_PID_BITS-1:0] mem_pid;
     
     // Memory unit status
-    reg mem_unit_running;
+    reg running;
     wire mem_unit_busy;
     wire mem_unit_valid;    
     wire mem_unit_ready;
@@ -67,9 +67,9 @@ module VX_raster_unit #(
 
     // Generate start pulse
     always @(posedge clk) begin
-        mem_unit_running <= ~mem_reset;
+        running <= ~mem_reset;
     end
-    wire mem_unit_start = ~mem_reset && ~mem_unit_running;
+    wire mem_unit_start = ~mem_reset && ~running;
 
     // Memory unit
     VX_raster_mem #(
@@ -188,6 +188,11 @@ module VX_raster_unit #(
         `UNUSED_PIN (full)
     );
 
+    wire has_pending_inputs = mem_unit_start
+                           || mem_unit_busy 
+                           || mem_unit_valid 
+                           || ~no_pending_tiledata;
+
     VX_raster_req_if #(
         .NUM_LANES (OUTPUT_QUADS)
     ) slice_raster_req_if[NUM_SLICES]();
@@ -195,8 +200,6 @@ module VX_raster_unit #(
     VX_raster_req_if #(
         .NUM_LANES (OUTPUT_QUADS)
     ) raster_req_tmp_if[1]();
-
-    wire [NUM_SLICES-1:0] slice_busy_out;
 
     // Generate all slices
     for (genvar i = 0; i < NUM_SLICES; ++i) begin
@@ -208,7 +211,8 @@ module VX_raster_unit #(
         wire [2:0][`RASTER_DATA_BITS-1:0] slice_extents_in;
         wire slice_ready_in;
 
-        wire slice_valid_out;        
+        wire slice_valid_out;
+        wire slice_busy_out;
 
         assign slice_valid_in = slice_arb_valid_out[i];
         assign {slice_xloc_in, slice_yloc_in, slice_pid_in, slice_edges_in, slice_extents_in} = slice_arb_data_out[i];
@@ -242,19 +246,18 @@ module VX_raster_unit #(
 
             .valid_out  (slice_valid_out),
             .stamps_out (slice_raster_req_if[i].stamps),
-            .busy_out   (slice_busy_out[i]),
+            .busy_out   (slice_busy_out),
             .ready_out  (slice_raster_req_if[i].ready)
         );
 
-        assign slice_raster_req_if[i].empty = ~mem_unit_start
-                                           && ~mem_unit_busy 
-                                           && ~mem_unit_valid 
-                                           && no_pending_tiledata
-                                           && ~slice_valid_in
-                                           && ~(| slice_busy_out);
+        assign slice_raster_req_if[i].done = running
+                                          && ~has_pending_inputs
+                                          && ~slice_valid_in
+                                          && ~slice_busy_out
+                                          && ~slice_valid_out;
 
         assign slice_raster_req_if[i].valid = slice_valid_out 
-                                           || slice_raster_req_if[i].empty;        
+                                           || slice_raster_req_if[i].done;
     end
 
     `RESET_RELAY (raster_arb_reset, reset);
@@ -277,7 +280,7 @@ module VX_raster_unit #(
     ila_raster ila_raster_inst (
         .clk    (clk),
         .probe0 ({cache_rsp_if.data, cache_rsp_if.tag, cache_rsp_if.ready, cache_rsp_if.valid, cache_req_if.tag, cache_req_if.addr, cache_req_if.rw, cache_req_if.valid, cache_req_if.ready}),
-        .probe1 ({slice_busy_out, no_pending_tiledata, mem_unit_busy, mem_unit_ready, mem_unit_start, mem_unit_valid, raster_req_if.empty, raster_req_if.valid, raster_req_if.ready})
+        .probe1 ({no_pending_tiledata, mem_unit_busy, mem_unit_ready, mem_unit_start, mem_unit_valid, raster_req_if.done, raster_req_if.valid, raster_req_if.ready})
     );
 `endif
 
@@ -303,7 +306,7 @@ module VX_raster_unit #(
         end
     end
 
-    wire perf_stall_cycle = raster_req_if.valid && ~raster_req_if.ready && ~raster_req_if.empty;
+    wire perf_stall_cycle = raster_req_if.valid && ~raster_req_if.ready && ~raster_req_if.done;
 
     reg [`PERF_CTR_BITS-1:0] perf_mem_reads;
     reg [`PERF_CTR_BITS-1:0] perf_mem_latency;
@@ -330,8 +333,8 @@ module VX_raster_unit #(
     always @(posedge clk) begin
         if (raster_req_if.valid && raster_req_if.ready) begin
             for (integer i = 0; i < OUTPUT_QUADS; ++i) begin
-                `TRACE(1, ("%d: %s-out[%0d]: empty=%b, x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
-                    $time, INSTANCE_ID, i, raster_req_if.empty,
+                `TRACE(1, ("%d: %s-out[%0d]: done=%b, x=%0d, y=%0d, mask=%0d, pid=%0d, bcoords={{0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}, {0x%0h, 0x%0h, 0x%0h}}\n",
+                    $time, INSTANCE_ID, i, raster_req_if.done,
                     raster_req_if.stamps[i].pos_x, raster_req_if.stamps[i].pos_y, raster_req_if.stamps[i].mask, raster_req_if.stamps[i].pid,
                     raster_req_if.stamps[i].bcoords[0][0], raster_req_if.stamps[i].bcoords[1][0], raster_req_if.stamps[i].bcoords[2][0], 
                     raster_req_if.stamps[i].bcoords[0][1], raster_req_if.stamps[i].bcoords[1][1], raster_req_if.stamps[i].bcoords[2][1], 
@@ -366,7 +369,7 @@ module VX_raster_unit_top #(
 
     output wire                             raster_req_valid,  
     output raster_stamp_t [OUTPUT_QUADS-1:0] raster_req_stamps,
-    output wire                             raster_req_empty,    
+    output wire                             raster_req_done,    
     input wire                              raster_req_ready,
 
     output wire [RCACHE_NUM_REQS-1:0]       cache_req_valid,
@@ -397,7 +400,7 @@ module VX_raster_unit_top #(
 
     assign raster_req_valid = raster_req_if.valid;
     assign raster_req_stamps = raster_req_if.stamps;
-    assign raster_req_if.empty = raster_req_empty;
+    assign raster_req_if.done = raster_req_done;
     assign raster_req_if.ready = raster_req_ready;
 
     VX_cache_req_if #(

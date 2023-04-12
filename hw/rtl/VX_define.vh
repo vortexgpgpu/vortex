@@ -403,7 +403,7 @@
 `define ASSIGN_VX_RASTER_REQ_IF(dst, src) \
     assign dst.valid = src.valid; \
     assign dst.stamps = src.stamps; \
-    assign dst.empty = src.empty; \
+    assign dst.done = src.done; \
     assign src.ready = dst.ready
 
 `define ASSIGN_VX_ROP_REQ_IF(dst, src) \
