@@ -212,9 +212,7 @@ module VX_raster_be #(
 
     assign ready_in = ~stall;
 
-    assign busy_out = valid_r 
-                   || qe_valid
-                   || valid_out;
+    assign busy_out = valid_r || qe_valid;
 
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin

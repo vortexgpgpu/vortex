@@ -26,15 +26,15 @@ module VX_raster_arb #(
     wire [NUM_OUTPUTS-1:0][REQ_DATAW-1:0] req_data_out;
     wire [NUM_OUTPUTS-1:0]                req_ready_out;
 
-    wire [NUM_INPUTS-1:0] empty_mask;
+    wire [NUM_INPUTS-1:0] done_mask;
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin
-        assign empty_mask[i] = req_in_if[i].empty;
+        assign done_mask[i] = req_in_if[i].done;
     end
-    wire empty_all = (& empty_mask);
+    wire done_all = (& done_mask);
 
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin
-        assign req_valid_in[i] = req_in_if[i].valid || empty_all;
-        assign req_data_in[i]  = {req_in_if[i].stamps, empty_all};
+        assign req_valid_in[i] = req_in_if[i].valid;
+        assign req_data_in[i]  = {req_in_if[i].stamps, done_all};
         assign req_in_if[i].ready = req_ready_in[i];
     end
 
@@ -58,7 +58,7 @@ module VX_raster_arb #(
     
     for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
         assign req_out_if[i].valid = req_valid_out[i];
-        assign {req_out_if[i].stamps, req_out_if[i].empty} = req_data_out[i];
+        assign {req_out_if[i].stamps, req_out_if[i].done} = req_data_out[i];
         assign req_ready_out[i] = req_out_if[i].ready;
     end
 
