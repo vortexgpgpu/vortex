@@ -30,6 +30,7 @@ module VX_raster_unit #(
     VX_raster_req_if.master raster_req_if
 );
     localparam EDGE_FUNC_LATENCY = `LATENCY_IMUL;
+    localparam SLICES_BITS = $clog2(NUM_SLICES+1);
 
     // A primitive data contains (xloc, yloc, pid, edges, extents)
     localparam PRIM_DATA_WIDTH = 2 * `RASTER_DIM_BITS + `RASTER_PID_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS;
@@ -174,15 +175,19 @@ module VX_raster_unit #(
 
     wire no_pending_tiledata;
     wire mem_unit_fire = mem_unit_valid && mem_unit_ready;
-    wire slice_arb_fire_out = | (slice_arb_valid_out & slice_arb_ready_out);
+    wire [NUM_SLICES-1:0] slice_arb_fire_out = slice_arb_valid_out & slice_arb_ready_out;
+    wire [SLICES_BITS-1:0] slice_arb_fire_out_cnt;
+    
+    `POP_COUNT(slice_arb_fire_out_cnt, slice_arb_fire_out);
 
     VX_pending_size #( 
-        .SIZE (EDGE_FUNC_LATENCY + 2 * NUM_SLICES)
+        .SIZE  (EDGE_FUNC_LATENCY + 2 * NUM_SLICES),
+        .DECRW (SLICES_BITS)
     ) pending_slice_inputs (
         .clk   (clk),
         .reset (reset),
         .incr  (mem_unit_fire),
-        .decr  (slice_arb_fire_out),
+        .decr  (slice_arb_fire_out_cnt),
         .empty (no_pending_tiledata),
         `UNUSED_PIN (size),
         `UNUSED_PIN (full)
