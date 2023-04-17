@@ -94,14 +94,13 @@ swconfig: vortex_afu.h
 vortex_afu.h: vortex_afu.json
 	afu_json_mgr json-info --afu-json=$^ --c-hdr=$@
 
-setup:
-	mkdir -p $(BUILD_DIR)/src
-	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -F$(BUILD_DIR)/src -Osources.txt
+setup:	
 ifeq ($(TARGET), ase)
-	afu_sim_setup -f -s setup.cfg $(BUILD_DIR)
+	afu_sim_setup -s setup.cfg $(BUILD_DIR)
 else
-	afu_synth_setup -f -s setup.cfg $(BUILD_DIR)
+	afu_synth_setup -s setup.cfg $(BUILD_DIR)
 endif
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -F$(BUILD_DIR)/src -Osources.txt
 
 build: ip-gen setup
 ifeq ($(TARGET), ase)

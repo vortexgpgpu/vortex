@@ -9,7 +9,13 @@
 #include <vector>
 #include <sstream>
 
-#define DEFAULT_OPAE_DRV_PATHS "/usr/lib64/opae/libopae-c.so,/usr/lib/opae/libopae-c.so,libopae-c.so"
+#ifdef OPAESIM
+#define DEFAULT_OPAE_DRV_PATHS "libopae-c-sim.so"
+#elif ASESIM
+#define DEFAULT_OPAE_DRV_PATHS "libopae-c-ase.so"
+#else
+#define DEFAULT_OPAE_DRV_PATHS "libopae-c.so"
+#endif
 
 #define SET_API(func) \
 	opae_drv_funcs->func = (pfn_##func)dlsym(dl_handle, #func); \
