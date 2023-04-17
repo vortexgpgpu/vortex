@@ -24,7 +24,7 @@
 `include "local_mem_cfg_pkg.sv"
 
 `define AFU_ACCEL_NAME "vortex_afu"
-`define AFU_ACCEL_UUID 128'h35f9452b_25c2_434c_93d5_6f8c60db361c
+`define AFU_ACCEL_UUID 128'h35F9452B_25C2_434C_93D5_6F8C60DB361C
 
 `define AFU_IMAGE_CMD_MEM_READ 1
 `define AFU_IMAGE_CMD_MEM_WRITE 2

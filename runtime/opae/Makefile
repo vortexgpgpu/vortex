@@ -4,11 +4,19 @@ OPAESIM_DIR = ../../sim/opaesim
 
 RTL_DIR=../../hw/rtl
 
+SYN_DIR=../../hw/syn/altera/opae
+
 SCRIPT_DIR=../../hw/scripts
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
 
-CXXFLAGS += -I. -I../include -I../common/ -I../../hw -I$(OPAESIM_DIR)
+CXXFLAGS += -I. -I../include -I../common/ -I../../hw
+
+ifeq ($(TARGET), opaesim)
+	CXXFLAGS += -I$(OPAESIM_DIR)
+else
+	CXXFLAGS += -I$(SYN_DIR)
+endif
 
 # Position independent code
 CXXFLAGS += -fPIC
@@ -22,6 +30,17 @@ CXXFLAGS += -DDUMP_PERF_STATS
 LDFLAGS += -shared -luuid -ldl -pthread
 
 SRCS = vortex.cpp driver.cpp ../common/vx_utils.cpp
+
+# set up target types
+ifeq ($(TARGET), opaesim)
+	CXXFLAGS += -DOPAESIM
+else
+	ifeq ($(TARGET), asesim)
+		CXXFLAGS += -DASESIM
+	else
+		CXXFLAGS += -DFPGA
+	endif
+endif
 
 # Debugigng
 ifdef DEBUG

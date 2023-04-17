@@ -3,15 +3,6 @@ This script is also present at ~/dev/runVortex
 
 ## To configure quartus and opae. Run this after logging in.
 source /export/fpga/bin/setup-fpga-env fpga-pac-a10
-#########################
-## Vortex Run commands ##
-#########################
-
-#
-## Synthesis
-#
-
-cd /driver/hw/opae
 
 # Configure a Quartus build area
 afu_synth_setup -s sources.txt build_fpga
@@ -20,7 +11,7 @@ afu_synth_setup -s sources.txt build_fpga
 cd build_fpga && qsub-synth
 
 # check last 10 lines in build log for possible errors
-tail -n 10 ./build_fpga_1c/build.log
+tail -n 10 ./build_arria10_fpga_1c/build.log
 
 # Check if the job is submitted to the queue and running. Status should be R 
 qstat | grep <user>
@@ -59,11 +50,12 @@ source /export/fpga/bin/setup-fpga-env fpga-pac-a10
 # Acquire a sever node for running ASE simulations
 qsub-sim
 
-# build ASE driver
-make -C driver asesim
+# build ASE runtime
+TARGET=asesim make -C runtime
 
-# build ASE hw
-make ase-1c
+# build ASE hw image
+PREFIX=build_gfx NUM_CORES=1 CONFIGS="-DEXT_GFX_ENABLE -DEXT_F_DISABLE -DL1_DISABLE -DSM_DISABLE -DTCACHE_DISABLE -DRCACHE_DISABLE -DOCACHE_DISABLE -DNUM_WARPS=2 -DNUM_THREADS=2" TARGET=ase make
+PREFIX=build_gfx NUM_CORES=1 CONFIGS="-DEXT_RASTER_ENABLE -DEXT_F_DISABLE -DL1_DISABLE -DSM_DISABLE -DRCACHE_DISABLE -DNUM_WARPS=2 -DNUM_THREADS=2" TARGET=ase make
 
 # ASE tests
 ./run_ase.sh build_arria10_ase_1c ../../../../tests/regression/basic/basic -n1 -t0
@@ -73,6 +65,7 @@ make ase-1c
 ./run_ase.sh build_arria10_ase_1c ../../../../tests/regression/dogfood/dogfood -n16
 ./run_ase.sh build_arria10_ase_1c ../../../../tests/opencl/vecadd/vecadd
 ./run_ase.sh build_arria10_ase_1c ../../../../tests/opencl/sgemm/sgemm -n4
+./run_ase.sh build_arria10_ase_1c ../../../../tests/regression/raster/raster -w8 -h8
 ./run_ase.sh build_arria10_ase_1c ../../../../tests/regression/draw3d/draw3d -w8 -h8
 
 # modify "vsim_run.tcl" to dump VCD trace
@@ -91,6 +84,9 @@ tar -cvjf trace.vcd.tar.bz2 build_arria10_ase_1c/work/run.log build_arria10_ase_
 # decompress log trace
 tar -zxvf vortex.vcd.tar.gz
 tar -xvf vortex.vcd.tar.bz2
+
+# building FPGA images
+PREFIX=build_gfx NUM_CORES=1 CONFIGS="-DEXT_GFX_ENABLE" TARGET=fpga make
 
 # running graphics benchmarks
 TARGET=fpga ./ci/blackbox.sh --driver=opae --app=draw3d --args="-w512 -h512 -tvase.cgltrace"
