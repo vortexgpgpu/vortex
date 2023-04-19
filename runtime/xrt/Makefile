@@ -7,7 +7,7 @@ CXXFLAGS += -fPIC
 LDFLAGS += -shared -pthread
 LDFLAGS += -L$(XILINX_XRT)/lib -luuid -lxrt_coreutil
 
-SRCS = vortex.cpp ../common/vx_utils.cpp ../../sim/common/util.cpp
+SRCS = vortex.cpp ../common/utils.cpp ../../sim/common/util.cpp
 
 PROJECT = libvortex.so
 

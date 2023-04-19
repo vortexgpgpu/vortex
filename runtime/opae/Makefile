@@ -29,7 +29,7 @@ CXXFLAGS += -DDUMP_PERF_STATS
 
 LDFLAGS += -shared -luuid -ldl -pthread
 
-SRCS = vortex.cpp driver.cpp ../common/vx_utils.cpp
+SRCS = vortex.cpp driver.cpp ../common/utils.cpp
 
 # set up target types
 ifeq ($(TARGET), opaesim)
@@ -53,7 +53,7 @@ endif
 # Enable scope analyzer
 ifdef SCOPE
 	CXXFLAGS += -DSCOPE	
-	SRCS += scope.cpp
+	SRCS += ../common/scope.cpp
 	SCOPE_H = scope-defs.h	 
 	SCOPE_FLAGS += -D SCOPE
 endif

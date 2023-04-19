@@ -22,10 +22,10 @@
 #define CMD_GET_VALID   0 
 #define CMD_GET_DATA    1 
 #define CMD_GET_WIDTH   2
-#define CMD_GET_COUNT   3 
-#define CMD_SET_START   4
-#define CMD_SET_STOP    5
-#define CMD_GET_OFFSET  6
+#define CMD_GET_COUNT   3
+#define CMD_GET_START   4 
+#define CMD_SET_START   5
+#define CMD_SET_STOP    6
 
 static constexpr int num_modules = sizeof(scope_modules) / sizeof(scope_module_t);
 
@@ -208,7 +208,7 @@ int vx_scope_stop(vx_device_h hdevice) {
     std::cout << "scope::max_frames=" << std::dec << max_frames << std::endl;    
 
     // get offset    
-    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, CMD_GET_OFFSET), {
+    CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, CMD_GET_START), {
         return -1;
     });
     CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_SCOPE_READ, &offset), {

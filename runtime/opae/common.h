@@ -1,8 +1,8 @@
 #pragma once
 
 #include <vortex.h>
-#include <vx_utils.h>
-#include <vx_malloc.h>
+#include <utils.h>
+#include <malloc.h>
 #include "driver.h"
 
 #define CHECK_HANDLE(handle, _expr, _cleanup)   \
