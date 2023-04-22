@@ -139,29 +139,29 @@ module VX_lsu_unit #(
     end
 
     // data formatting
-    wire[`NUM_THREADS-1:0][REQ_ASHIFT-1:0] req_align_X1;
+    // wire[`NUM_THREADS-1:0][REQ_ASHIFT-1:0] req_align_X1;
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         
-        `ifdef MODE_32_BIT
-        assign req_align_X1[i] = {req_align[i][1], 1'b1};
-        `endif
-        `ifdef MODE_64_BIT
+        // `ifdef MODE_32_BIT
+        // assign req_align_X1[i] = {req_align[i][1], 1'b1};
+        // `endif
+        // `ifdef MODE_64_BIT
         // TODO: VARUN TO CHECK
-        assign req_align_X1[i] = {req_align[i][1:0], 1'b1};
-        `endif
+        // assign req_align_X1[i] = {req_align[i][1:0], 1'b1};
+        // `endif
         always @(*) begin
             mem_req_byteen[i] = {DCACHE_WORD_SIZE{lsu_req_if.wb}};
             case (`INST_LSU_WSIZE(lsu_req_if.op_type))
                 0: mem_req_byteen[i][req_align[i]] = 1;
                 1: begin // half (16 bit)
                     mem_req_byteen[i][req_align[i]] = 1;
-                    mem_req_byteen[i][req_align_X1[i]] = 1;
+                    mem_req_byteen[i][req_align[i]+1] = 1;
                 end
                 2: begin // word (32 bit)
                     mem_req_byteen[i][req_align[i]] = 1;
-                    mem_req_byteen[i][req_align_X1[i]] = 1;
-                    mem_req_byteen[i][req_align_X1[i]+1] = 1;
-                    mem_req_byteen[i][req_align_X1[i]+2] = 1;
+                    mem_req_byteen[i][req_align[i]+1] = 1;
+                    mem_req_byteen[i][req_align[i]+2] = 1;
+                    mem_req_byteen[i][req_align[i]+3] = 1;
                 end
                 default : mem_req_byteen[i] = {DCACHE_WORD_SIZE{1'b1}}; // double (64 bit)
             endcase
