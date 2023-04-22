@@ -85,12 +85,13 @@ module VX_alu_unit #(
         wire [`XLEN:0] shr_in1 = {alu_signed & alu_in1[i][`XLEN-1], alu_in1[i]};
         wire [`XLEN-1:0] temp_shr_result = `XLEN'($signed(shr_in1) >>> alu_B[i][SHIFT_IMM_BITS:0]);
         wire [31:0] temp_shr_result_w = 32'($signed(shr_in1[31:0]) >>> alu_B[i][4:0]);
+        wire [31:0] temp_shra_result_w = 32'((shr_in1[31:0]) >>> alu_B[i][4:0]);
 
         always @(*) begin
             case(alu_op)
                 `INST_ALU_SRA, `INST_ALU_SRL: shr_result[i] = temp_shr_result;
                 `INST_ALU_SRA_W: shr_result[i] = `XLEN'($signed(temp_shr_result_w[31:0])); // is this needed or is it already 0 extended?
-                `INST_ALU_SRL_W: shr_result[i] = `XLEN'($signed(temp_shr_result_w[31:0]));
+                `INST_ALU_SRL_W: shr_result[i] = `XLEN'($signed(temp_shra_result_w[31:0]));
                 default: shr_result[i] = temp_shr_result;
             endcase
         end
