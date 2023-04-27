@@ -6,7 +6,7 @@ import VX_fpu_types::*;
 `IGNORE_WARNINGS_END
 
 module VX_fpu_unit #(  
-    parameter `STRING_TYPE INSTANCE_ID = "",
+    parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES = 1,
     parameter TAG_WIDTH = 1
 ) (

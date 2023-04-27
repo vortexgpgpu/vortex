@@ -7,7 +7,7 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_te #(
-    parameter `STRING_TYPE INSTANCE_ID = "",
+    parameter `STRING INSTANCE_ID = "",
     parameter TILE_LOGSIZE  = 5,
     parameter BLOCK_LOGSIZE = 2  
 ) (

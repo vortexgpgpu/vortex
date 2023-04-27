@@ -1,7 +1,7 @@
 `include "VX_cache_define.vh"
 
 module VX_cache_cluster #(
-    parameter `STRING_TYPE INSTANCE_ID    = "",
+    parameter `STRING INSTANCE_ID    = "",
 
     parameter NUM_UNITS             = 1,
     parameter NUM_INPUTS            = 1,
@@ -212,7 +212,7 @@ endmodule
 ///////////////////////////////////////////////////////////////////////////////
 
 module VX_cache_cluster_top #(
-    parameter `STRING_TYPE INSTANCE_ID    = "",
+    parameter `STRING INSTANCE_ID    = "",
 
     parameter NUM_UNITS             = 8,
     parameter NUM_INPUTS            = 2,

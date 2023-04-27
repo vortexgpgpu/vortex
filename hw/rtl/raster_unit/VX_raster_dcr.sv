@@ -1,7 +1,7 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_dcr #(
-    parameter `STRING_TYPE INSTANCE_ID = ""
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire clk,
     input wire reset,

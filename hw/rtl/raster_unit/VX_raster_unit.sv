@@ -1,7 +1,7 @@
 `include "VX_raster_define.vh"
 
 module VX_raster_unit #(
-    parameter `STRING_TYPE INSTANCE_ID = "",
+    parameter `STRING INSTANCE_ID = "",
     parameter INSTANCE_IDX    = 0,
     parameter NUM_INSTANCES   = 1, 
     parameter NUM_SLICES      = 1,  // number of slices
@@ -351,7 +351,7 @@ endmodule
 ///////////////////////////////////////////////////////////////////////////////
 
 module VX_raster_unit_top #(
-    parameter `STRING_TYPE INSTANCE_ID = "",
+    parameter `STRING INSTANCE_ID = "",
     parameter INSTANCE_IDX    = 0,
     parameter NUM_INSTANCES   = 1, 
     parameter NUM_SLICES      = 1,  // number of slices

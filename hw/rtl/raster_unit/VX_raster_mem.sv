@@ -7,7 +7,7 @@
 //  3. Return the primitives with associated tile.
 
 module VX_raster_mem #(
-    parameter `STRING_TYPE INSTANCE_ID = "",
+    parameter `STRING INSTANCE_ID = "",
     parameter INSTANCE_IDX  = 0,
     parameter NUM_INSTANCES = 1, 
     parameter TILE_LOGSIZE  = 5,
