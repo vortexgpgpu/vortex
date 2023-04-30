@@ -82,11 +82,6 @@ ROP_INCLUDE = -I$(RTL_DIR)/rop_unit
 RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/cache -I$(AFU_DIR)
 RTL_INCLUDE += $(FPU_INCLUDE) $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
 
-# compilation flags
-CFLAGS += -DSYNTHESIS -DVIVADO
-CFLAGS += $(CONFIGS)
-CFLAGS += $(RTL_INCLUDE)
-
 # Kernel compiler global settings
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
 VPP_FLAGS += --vivado.synth.jobs $(JOBS) --vivado.impl.jobs $(JOBS)
@@ -116,7 +111,7 @@ endif
 
 # Debugigng
 ifdef DEBUG
-	VPP_FLAGS += -g --optimize 0 --debug.protocol all
+	VPP_FLAGS += -g --debug.protocol all
 	ifeq ($(TARGET), hw)
 		VPP_FLAGS += --debug.chipscope vortex_afu_1
 		CFLAGS += -DCHIPSCOPE $(CHIPSCOPE_FLAGS)
@@ -128,6 +123,11 @@ else
 	VPP_FLAGS += --optimize 3
 	CFLAGS += -DNDEBUG
 endif
+
+# compilation flags
+CFLAGS += -DSYNTHESIS -DVIVADO
+CFLAGS += $(CONFIGS)
+CFLAGS += $(RTL_INCLUDE)
 
 # RTL Kernel only supports Hardware and Hardware Emulation.
 ifneq ($(TARGET),$(findstring $(TARGET), hw hw_emu))
