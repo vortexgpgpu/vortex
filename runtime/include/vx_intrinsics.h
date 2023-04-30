@@ -197,6 +197,26 @@ inline int vx_num_cores() {
 inline void vx_fence() {
     asm volatile ("fence iorw, iorw");
 }
+	
+inline uint32_t __intrin_rotr(uint32_t word, uint32_t n) {
+    uint32_t ret;
+    asm volatile (
+        ".insn r 0x33, 5, 0x30, %[ret], %[word], %[n]\n"
+        : [ret] "=r" (ret)
+        : [word] "r" (word), [n] "r" (n)
+		);
+    return ret;
+}
+
+inline uint32_t __intrin_rotr_imm(uint32_t word, int32_t n) {
+    uint32_t ret;
+    asm volatile (
+        ".insn i 0x13, 5, %[ret], %[word], %[n]\n"
+        : [ret] "=r" (ret)
+        : [word] "r" (word), [n] "i" ((0x30 << 5) | (n & 0x1f))
+		);
+    return ret;
+}
 
 #define __if(b) vx_split(b); \
                 if (b) 
