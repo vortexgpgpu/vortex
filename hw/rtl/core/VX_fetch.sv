@@ -8,7 +8,7 @@ import VX_gpu_types::*;
 module VX_fetch #(
     parameter CORE_ID = 0
 ) (
-    `SCOPE_IO_VX_fetch
+    `SCOPE_IO_DECL
 
     input wire clk,
     input wire reset,
@@ -40,34 +40,36 @@ module VX_fetch #(
 
     VX_ifetch_req_if  ifetch_req_if();
 
+    `SCOPE_IO_SWITCH (2)
+
     VX_warp_sched #(
         .CORE_ID(CORE_ID)
     ) warp_sched (
-        `SCOPE_BIND_VX_fetch_warp_sched
+        `SCOPE_IO_BIND  (0)
 
-        .clk              (clk),
-        .reset            (reset),   
+        .clk            (clk),
+        .reset          (reset),   
 
-        .base_dcrs        (base_dcrs),  
+        .base_dcrs      (base_dcrs),  
 
-        .warp_ctl_if      (warp_ctl_if),
-        .wrelease_if      (wrelease_if),
-        .join_if          (join_if),
-        .branch_ctl_if    (branch_ctl_if),
+        .warp_ctl_if    (warp_ctl_if),
+        .wrelease_if    (wrelease_if),
+        .join_if        (join_if),
+        .branch_ctl_if  (branch_ctl_if),
 
-        .ifetch_req_if    (ifetch_req_if),
+        .ifetch_req_if  (ifetch_req_if),
 
-        .fetch_to_csr_if  (fetch_to_csr_if),
+        .fetch_to_csr_if(fetch_to_csr_if),
 
-        .cmt_to_fetch_if  (cmt_to_fetch_if),
+        .cmt_to_fetch_if(cmt_to_fetch_if),
 
-        .busy             (busy)
+        .busy           (busy)
     ); 
 
     VX_icache_stage #(
         .CORE_ID(CORE_ID)
     ) icache_stage (
-        `SCOPE_BIND_VX_fetch_icache_stage
+        `SCOPE_IO_BIND  (1)
 
         .clk            (clk),
         .reset          (reset),

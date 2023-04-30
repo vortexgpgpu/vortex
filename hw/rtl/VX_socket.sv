@@ -8,7 +8,7 @@ import VX_gpu_types::*;
 module VX_socket #( 
     parameter SOCKET_ID = 0
 ) (        
-    `SCOPE_IO_VX_socket
+    `SCOPE_IO_DECL
     
     // Clock
     input wire              clk,
@@ -317,6 +317,8 @@ module VX_socket #(
 
     `BUFFER_DCR_WRITE_IF (core_dcr_write_if, dcr_write_if, (`SOCKET_SIZE > 1));
 
+    `SCOPE_IO_SWITCH (`SOCKET_SIZE)
+
     // Generate all cores
     for (genvar i = 0; i < `SOCKET_SIZE; ++i) begin
 
@@ -325,7 +327,7 @@ module VX_socket #(
         VX_core #(
             .CORE_ID ((SOCKET_ID * `SOCKET_SIZE) + i)
         ) core (
-            `SCOPE_BIND_VX_socket_core(i)
+            `SCOPE_IO_BIND  (i)
 
             .clk            (clk),
             .reset          (core_reset),

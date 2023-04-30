@@ -8,7 +8,7 @@ import VX_gpu_types::*;
 module VX_execute #(
     parameter CORE_ID = 0
 ) (
-    `SCOPE_IO_VX_execute
+    `SCOPE_IO_DECL
 
     input wire clk, 
     input wire reset,    
@@ -120,10 +120,12 @@ module VX_execute #(
         .alu_commit_if  (alu_commit_if)
     );
 
+    `SCOPE_IO_SWITCH (2)
+
     VX_lsu_unit #(
         .CORE_ID(CORE_ID)
     ) lsu_unit (
-        `SCOPE_BIND_VX_execute_lsu_unit
+        `SCOPE_IO_BIND  (0)
         .clk            (clk),
         .reset          (lsu_reset),
         .cache_req_if   (dcache_req_if),
@@ -207,7 +209,7 @@ module VX_execute #(
     VX_gpu_unit #(
         .CORE_ID(CORE_ID)
     ) gpu_unit (
-        `SCOPE_BIND_VX_execute_gpu_unit
+        `SCOPE_IO_BIND  (1)
         .clk            (clk),
         .reset          (gpu_reset),    
         .gpu_req_if     (gpu_req_if),

@@ -8,7 +8,7 @@ import VX_gpu_types::*;
 module VX_icache_stage #(
     parameter CORE_ID = 0
 ) (
-    `SCOPE_IO_VX_icache_stage
+    `SCOPE_IO_DECL
 
     input  wire             clk,
     input  wire             reset,
@@ -120,13 +120,23 @@ module VX_icache_stage #(
     // Can accept new response?
     assign icache_rsp_if.ready = ifetch_rsp_if.ready;
 
-    `SCOPE_ASSIGN (icache_req_fire, icache_req_fire);
-    `SCOPE_ASSIGN (icache_req_uuid, ifetch_req_if.uuid);
-    `SCOPE_ASSIGN (icache_req_addr, ifetch_req_if.PC);
-
-    `SCOPE_ASSIGN (icache_rsp_fire, icache_rsp_if.valid && icache_rsp_if.ready);
-    `SCOPE_ASSIGN (icache_rsp_uuid, rsp_uuid);
-    `SCOPE_ASSIGN (icache_rsp_data, icache_rsp_if.data);
+`ifdef SCOPE
+    wire icache_rsp_fire = icache_rsp_if.valid && icache_rsp_if.ready;
+    VX_scope_tap #(
+        .SCOPE_ID (3),
+        .TRIGGERW (2),
+        .PROBEW   (UUID_WIDTH+32+UUID_WIDTH+32)
+    ) scope_tap (
+        .clk(clk),
+        .reset(scope_reset),
+        .start(1'b0),
+        .stop(1'b0),
+        .triggers({icache_rsp_fire, icache_req_fire}),
+        .probes({ifetch_req_if.uuid, ifetch_req_if.PC, rsp_uuid, icache_rsp_if.data}),
+        .bus_in(scope_bus_in),
+        .bus_out(scope_bus_out)
+    );
+`endif
 
 `ifdef DBG_TRACE_CORE_ICACHE
     wire ifetch_req_fire = ifetch_req_if.valid && ifetch_req_if.ready;

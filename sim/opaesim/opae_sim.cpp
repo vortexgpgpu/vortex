@@ -63,6 +63,8 @@
 
 #define RAM_PAGE_SIZE 4096
 
+#define CPU_GPU_LATENCY 200
+
 using namespace vortex;
 
 static uint64_t timestamp = 0;
@@ -193,6 +195,11 @@ public:
   void read_mmio64(uint32_t mmio_num, uint64_t offset, uint64_t *value) {
     std::lock_guard<std::mutex> guard(mutex_);
 
+    // simulate CPU-GPU latency
+    for (uint32_t i = 0; i < CPU_GPU_LATENCY; ++i) 
+      this->tick();
+
+    // simulate mmio request
     device_->vcp2af_sRxPort_c0_mmioRdValid = 1;
     device_->vcp2af_sRxPort_c0_ReqMmioHdr_address = offset / 4;
     device_->vcp2af_sRxPort_c0_ReqMmioHdr_length = 1;
@@ -205,7 +212,12 @@ public:
 
   void write_mmio64(uint32_t mmio_num, uint64_t offset, uint64_t value) {
     std::lock_guard<std::mutex> guard(mutex_);
+
+    // simulate CPU-GPU latency
+    for (uint32_t i = 0; i < CPU_GPU_LATENCY; ++i) 
+      this->tick();
     
+    // simulate mmio request
     device_->vcp2af_sRxPort_c0_mmioWrValid = 1;  
     device_->vcp2af_sRxPort_c0_ReqMmioHdr_address = offset / 4;
     device_->vcp2af_sRxPort_c0_ReqMmioHdr_length = 1;

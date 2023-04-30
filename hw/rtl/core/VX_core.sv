@@ -27,7 +27,7 @@ import VX_fpu_types::*;
 module VX_core #( 
     parameter CORE_ID = 0
 ) (        
-    `SCOPE_IO_VX_core
+    `SCOPE_IO_DECL
     
     // Clock
     input wire              clk,
@@ -128,10 +128,12 @@ module VX_core #(
         .base_dcrs  (base_dcrs)
     );
 
+    `SCOPE_IO_SWITCH (3)
+
     VX_fetch #(
         .CORE_ID(CORE_ID)
     ) fetch (
-        `SCOPE_BIND_VX_core_fetch
+        `SCOPE_IO_BIND  (0)
         .clk            (clk),
         .reset          (fetch_reset),
         .base_dcrs      (base_dcrs),
@@ -161,7 +163,7 @@ module VX_core #(
     VX_issue #(
         .CORE_ID(CORE_ID)
     ) issue (
-        `SCOPE_BIND_VX_core_issue
+        `SCOPE_IO_BIND  (1)
 
         .clk            (clk),
         .reset          (issue_reset),
@@ -185,7 +187,7 @@ module VX_core #(
     VX_execute #(
         .CORE_ID(CORE_ID)
     ) execute (
-        `SCOPE_BIND_VX_core_execute
+        `SCOPE_IO_BIND  (2)
         
         .clk            (clk),
         .reset          (execute_reset),

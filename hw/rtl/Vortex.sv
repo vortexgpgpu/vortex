@@ -18,7 +18,7 @@ import VX_gpu_types::*;
 `IGNORE_WARNINGS_END
 
 module Vortex (
-    `SCOPE_IO_Vortex
+    `SCOPE_IO_DECL
 
     // Clock
     input  wire                             clk,
@@ -141,6 +141,8 @@ module Vortex (
 
     wire [`NUM_CLUSTERS-1:0] per_cluster_busy;
 
+    `SCOPE_IO_SWITCH (`NUM_CLUSTERS+1)
+
     // Generate all clusters
     for (genvar i = 0; i < `NUM_CLUSTERS; ++i) begin
 
@@ -151,7 +153,7 @@ module Vortex (
         VX_cluster #(
             .CLUSTER_ID (i)
         ) cluster (
-            `SCOPE_BIND_Vortex_cluster(i)
+            `SCOPE_IO_BIND      (i)
 
             .clk                (clk),
             .reset              (cluster_reset),
@@ -312,12 +314,22 @@ module Vortex (
     
 `endif
 
-    `SCOPE_ASSIGN (reset, reset);
-    `SCOPE_ASSIGN (mem_req_fire, mem_req_fire);
-    `SCOPE_ASSIGN (mem_req_addr, `TO_FULL_ADDR(mem_req_addr));
-    `SCOPE_ASSIGN (mem_req_rw,   mem_req_rw);
-    `SCOPE_ASSIGN (mem_rsp_fire, mem_rsp_fire);
-    `SCOPE_ASSIGN (busy, busy);
+`ifdef SCOPE
+    VX_scope_tap #(
+        .SCOPE_ID (1),
+        .TRIGGERW (2),
+        .PROBEW   (`VX_MEM_ADDR_WIDTH+1+1)
+    ) scope_tap (
+        .clk(clk),
+        .reset(scope_reset_w[`NUM_CLUSTERS]),
+        .start(1'b0),
+        .stop(1'b0),
+        .triggers({mem_req_fire, mem_rsp_fire}),
+        .probes({mem_req_addr, mem_req_rw, busy}),
+        .bus_in(scope_bus_in_w[`NUM_CLUSTERS]),
+        .bus_out(scope_bus_out_w[`NUM_CLUSTERS])
+    );
+`endif
 
 `ifdef DBG_TRACE_CORE_MEM
     always @(posedge clk) begin
