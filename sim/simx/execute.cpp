@@ -325,7 +325,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           rddata[t].i = rsdata[t][0].i ^ rsdata[t][1].i;
           break;
         }
-        case 5: {
+        /*case 5: {
           Word shamt_mask = ((Word)1 << log2up(XLEN)) - 1;
           Word shamt = rsdata[t][1].i & shamt_mask;
           if (func7) {
@@ -336,7 +336,23 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
             rddata[t].i = Word(rsdata[t][0].i) >> shamt;
           }
           break;
-        }
+        }*/
+        case 5:
+         // if (func7) {
+         //   rddata = WordI(rsdata[0]) >> WordI(rsdata[1]);
+         // } 
+         if (func7 == 0x30) {
+          // RORI
+          if (immsrc < 0) {
+            rddata = (rsdata[0] << -immsrc) | (rsdata[0] >> (32 + immsrc));
+          } else {
+            rddata = (rsdata[0] >> immsrc) | (rsdata[0] << (32 - immsrc));
+          }
+        } else if (func7) {
+            rddata = Word(rsdata[0]) >> Word(rsdata[1]);
+          }
+          break;
+
         case 6: {
           // RV32I: OR
           rddata[t].i = rsdata[t][0].i | rsdata[t][1].i;
