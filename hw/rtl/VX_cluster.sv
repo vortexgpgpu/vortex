@@ -20,7 +20,7 @@ import VX_gpu_types::*;
 module VX_cluster #(
     parameter CLUSTER_ID = 0
 ) ( 
-    `SCOPE_IO_VX_cluster
+    `SCOPE_IO_DECL
 
     // Clock
     input  wire                 clk,
@@ -459,6 +459,8 @@ module VX_cluster #(
 
     `BUFFER_DCR_WRITE_IF (socket_dcr_write_if, socket_dcr_write_tmp_if, (`NUM_SOCKETS > 1));
 
+    `SCOPE_IO_SWITCH (`NUM_SOCKETS);
+
     // Generate all sockets
     for (genvar i = 0; i < `NUM_SOCKETS; ++i) begin
 
@@ -467,7 +469,7 @@ module VX_cluster #(
         VX_socket #(
             .SOCKET_ID ((CLUSTER_ID * `NUM_SOCKETS) + i)
         ) socket (
-            `SCOPE_BIND_VX_cluster_socket(i)
+            `SCOPE_IO_BIND  (i)
 
             .clk            (clk),
             .reset          (socket_reset),

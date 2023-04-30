@@ -156,6 +156,7 @@ make -C $VORTEX_HOME/runtime/stub
 
 if [ $DEBUG -ne 0 ]
 then    
+    # driver initialization
     if [ $SCOPE -eq 1 ]
     then
         echo "running: DEBUG=$DEBUG_LEVEL SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH"
@@ -165,6 +166,7 @@ then
         DEBUG=$DEBUG_LEVEL CONFIGS="$CONFIGS" make -C $DRIVER_PATH
     fi    
     
+    # running application
     if [ $HAS_ARGS -eq 1 ]
     then
         echo "running: OPTS=$ARGS make -C $APP_PATH run-$DRIVER > run.log 2>&1"
@@ -181,7 +183,7 @@ then
         mv -f $APP_PATH/trace.vcd .
     fi
 else
-    echo "driver initialization..."
+    # driver initialization
     if [ $SCOPE -eq 1 ]
     then
         echo "running: SCOPE=1 CONFIGS="$CONFIGS" make -C $DRIVER_PATH"
@@ -191,7 +193,7 @@ else
         CONFIGS="$CONFIGS" make -C $DRIVER_PATH
     fi
     
-    echo "running application..."
+    # running application
     if [ $HAS_ARGS -eq 1 ]
     then
         echo "running: OPTS=$ARGS make -C $APP_PATH run-$DRIVER"

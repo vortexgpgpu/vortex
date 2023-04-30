@@ -38,8 +38,7 @@ translation_rules = [
     (re.compile(r"\d+'d(\d+)"), r'\1'),
     (re.compile(r"\d+'b([01]+)"), r'0b\1'),
     (re.compile(r"128'h([\da-fA-F_]+)"), r'"\1"'),
-    (re.compile(r"\d+'h([\da-fA-F]+)"), r'0x\1')   
-    
+    (re.compile(r"\d+'h([\da-fA-F]+)"), r'0x\1')    
 ]
 
 with open(args.output, 'w') as f:

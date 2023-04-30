@@ -212,7 +212,7 @@ extern int vx_dev_close(vx_device_h hdevice) {
         return -1;
 
     auto device = ((vx_device*)hdevice);
-    auto api = device->api;
+    auto& api = device->api;
 
 #ifdef SCOPE
     vx_scope_stop(hdevice);
@@ -275,7 +275,7 @@ extern int vx_buf_alloc(vx_device_h hdevice, uint64_t size, vx_buffer_h* hbuffer
         return -1;
 
     auto device = ((vx_device*)hdevice);
-    auto api = device->api;
+    auto& api = device->api;
 
     size_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
 
@@ -321,7 +321,7 @@ extern int vx_buf_free(vx_buffer_h hbuffer) {
 
     auto buffer = ((vx_buffer_t*)hbuffer);
     auto device = ((vx_device*)buffer->hdevice);
-    auto api = device->api;
+    auto& api = device->api;
 
     api.fpgaReleaseBuffer(device->fpga, buffer->wsid);
 
@@ -337,7 +337,7 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
     std::unordered_map<uint32_t, std::stringstream> print_bufs;
     
     auto device = ((vx_device*)hdevice);
-    auto api = device->api;
+    auto& api = device->api;
 
     struct timespec sleep_time; 
 
@@ -402,7 +402,7 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size
 
     auto buffer = ((vx_buffer_t*)hbuffer);
     auto device = ((vx_device*)buffer->hdevice);
-    auto api = device->api;
+    auto& api = device->api;
 
     uint64_t dev_mem_size = LOCAL_MEM_SIZE; 
     uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
@@ -452,7 +452,7 @@ extern int vx_copy_from_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t si
 
     auto buffer = ((vx_buffer_t*)hbuffer);
     auto device = ((vx_device*)buffer->hdevice);
-    auto api = device->api;
+    auto& api = device->api;
 
     uint64_t dev_mem_size = LOCAL_MEM_SIZE;  
     uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
@@ -500,7 +500,7 @@ extern int vx_start(vx_device_h hdevice) {
         return -1;   
 
     auto device = ((vx_device*)hdevice);
-    auto api = device->api;
+    auto& api = device->api;
 
     // Ensure ready for new command
     if (vx_ready_wait(hdevice, MAX_TIMEOUT) != 0)
@@ -519,7 +519,7 @@ extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint64_t value) {
         return -1;
 
     auto device = ((vx_device*)hdevice);
-    auto api = device->api;
+    auto& api = device->api;
 
     // Ensure ready for new command
     if (vx_ready_wait(hdevice, -1) != 0)

@@ -6,7 +6,7 @@
 module VX_issue #(
     parameter CORE_ID = 0
 ) (
-    `SCOPE_IO_VX_issue
+    `SCOPE_IO_DECL
 
     input wire      clk,
     input wire      reset,
@@ -26,7 +26,6 @@ module VX_issue #(
 `endif
     VX_gpu_req_if.master    gpu_req_if
 );
-
     VX_ibuffer_if       ibuffer_if();    
     VX_gpr_req_if       gpr_req_if();
     VX_gpr_rsp_if       gpr_rsp_if();
@@ -132,6 +131,8 @@ module VX_issue #(
     `endif
         .gpu_req_if (gpu_req_if)
     );
+
+    wire ibuffer_if_fire = ibuffer_if.valid && ibuffer_if.ready;
     
     reg [31:0] timeout_ctr;
     always @(posedge clk) begin
@@ -145,7 +146,7 @@ module VX_issue #(
                     in_use_regs[0], in_use_regs[1], in_use_regs[2], in_use_regs[3], ~dispatch_if.ready, ibuffer_if.uuid));
             `endif
                 timeout_ctr <= timeout_ctr + 1;
-            end else if (ibuffer_if.valid && ibuffer_if.ready) begin
+            end else if (ibuffer_if_fire) begin
                 timeout_ctr <= '0;
             end
         end
@@ -166,31 +167,55 @@ module VX_issue #(
     );
 `endif
 
-    `SCOPE_ASSIGN (issue_fire,        ibuffer_if.valid && ibuffer_if.ready);
-    `SCOPE_ASSIGN (issue_uuid,        ibuffer_if.uuid);
-    `SCOPE_ASSIGN (issue_tmask,       ibuffer_if.tmask);
-    `SCOPE_ASSIGN (issue_ex_type,     ibuffer_if.ex_type);
-    `SCOPE_ASSIGN (issue_op_type,     ibuffer_if.op_type);
-    `SCOPE_ASSIGN (issue_op_mod,      ibuffer_if.op_mod);
-    `SCOPE_ASSIGN (issue_wb,          ibuffer_if.wb);
-    `SCOPE_ASSIGN (issue_rd,          ibuffer_if.rd);
-    `SCOPE_ASSIGN (issue_rs1,         ibuffer_if.rs1);
-    `SCOPE_ASSIGN (issue_rs2,         ibuffer_if.rs2);
-    `SCOPE_ASSIGN (issue_rs3,         ibuffer_if.rs3);
-    `SCOPE_ASSIGN (issue_imm,         ibuffer_if.imm);
-    `SCOPE_ASSIGN (issue_use_pc,      ibuffer_if.use_PC);
-    `SCOPE_ASSIGN (issue_use_imm,     ibuffer_if.use_imm);
-    `SCOPE_ASSIGN (scoreboard_delay,  !scoreboard_if.ready); 
-    `SCOPE_ASSIGN (dispatch_delay,    !dispatch_if.ready);    
-    `SCOPE_ASSIGN (gpr_rs1,           gpr_rsp_if.rs1_data);
-    `SCOPE_ASSIGN (gpr_rs2,           gpr_rsp_if.rs2_data);
-    `SCOPE_ASSIGN (gpr_rs3,           gpr_rsp_if.rs3_data);
-    `SCOPE_ASSIGN (writeback_valid,   writeback_if.valid);
-    `SCOPE_ASSIGN (writeback_uuid,    writeback_if.uuid);
-    `SCOPE_ASSIGN (writeback_tmask,   writeback_if.tmask);
-    `SCOPE_ASSIGN (writeback_rd,      writeback_if.rd);
-    `SCOPE_ASSIGN (writeback_data,    writeback_if.data);
-    `SCOPE_ASSIGN (writeback_eop,     writeback_if.eop);
+`ifdef SCOPE
+    localparam UUID_WIDTH = `UP(`UUID_BITS);
+    wire scoreboard_if_not_ready = ~scoreboard_if.ready; 
+    wire dispatch_if_not_ready = ~dispatch_if.ready;
+    wire writeback_if_valid = writeback_if.valid;
+    VX_scope_tap #(
+        .SCOPE_ID (4),
+        .TRIGGERW (4),
+        .PROBEW   (UUID_WIDTH + `NUM_THREADS + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS +
+           1 + (`NR_BITS * 4) + 32 + 1 + 1 + (`NUM_THREADS * 3 * 32) +
+           UUID_WIDTH + `NUM_THREADS + `NR_BITS + (`NUM_THREADS*32) + 1)
+    ) scope_tap (
+        .clk(clk),
+        .reset(scope_reset),
+        .start(1'b0),
+        .stop(1'b0),
+        .triggers({
+            ibuffer_if_fire, 
+            scoreboard_if_not_ready, 
+            dispatch_if_not_ready, 
+            writeback_if_valid
+        }),
+        .probes({
+            ibuffer_if.uuid,
+            ibuffer_if.tmask,
+            ibuffer_if.ex_type,
+            ibuffer_if.op_type,
+            ibuffer_if.op_mod,
+            ibuffer_if.wb,
+            ibuffer_if.rd,
+            ibuffer_if.rs1,
+            ibuffer_if.rs2,
+            ibuffer_if.rs3,
+            ibuffer_if.imm,
+            ibuffer_if.use_PC,
+            ibuffer_if.use_imm,
+            gpr_rsp_if.rs1_data,
+            gpr_rsp_if.rs2_data,
+            gpr_rsp_if.rs3_data,
+            writeback_if.uuid,
+            writeback_if.tmask,
+            writeback_if.rd,
+            writeback_if.data,
+            writeback_if.eop
+        }),
+        .bus_in(scope_bus_in),
+        .bus_out(scope_bus_out)
+    );
+`endif
 
 `ifdef PERF_ENABLE
     reg [`PERF_CTR_BITS-1:0] perf_ibf_stalls;

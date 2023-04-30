@@ -10,7 +10,7 @@ CXXFLAGS += -DDUMP_PERF_STATS
 LDFLAGS += -shared -pthread
 LDFLAGS += -L. -lsimx
 
-SRCS = vortex.cpp ../common/vx_utils.cpp
+SRCS = vortex.cpp ../common/utils.cpp
 
 # Debugigng
 ifdef DEBUG

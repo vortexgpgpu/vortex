@@ -7,8 +7,8 @@
 #include <chrono>
 
 #include <vortex.h>
-#include <vx_utils.h>
-#include <vx_malloc.h>
+#include <utils.h>
+#include <malloc.h>
 
 #include <VX_config.h>
 #include <VX_types.h>

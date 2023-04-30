@@ -4,11 +4,19 @@ OPAESIM_DIR = ../../sim/opaesim
 
 RTL_DIR=../../hw/rtl
 
+SYN_DIR=../../hw/syn/altera/opae
+
 SCRIPT_DIR=../../hw/scripts
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
 
-CXXFLAGS += -I. -I../include -I../common/ -I../../hw -I$(OPAESIM_DIR)
+CXXFLAGS += -I. -I../include -I../common/ -I../../hw
+
+ifeq ($(TARGET), opaesim)
+	CXXFLAGS += -I$(OPAESIM_DIR)
+else
+	CXXFLAGS += -I$(SYN_DIR)
+endif
 
 # Position independent code
 CXXFLAGS += -fPIC
@@ -21,22 +29,32 @@ CXXFLAGS += -DDUMP_PERF_STATS
 
 LDFLAGS += -shared -luuid -ldl -pthread
 
-SRCS = vortex.cpp driver.cpp ../common/vx_utils.cpp
+SRCS = vortex.cpp driver.cpp ../common/utils.cpp
+
+# set up target types
+ifeq ($(TARGET), opaesim)
+	CXXFLAGS += -DOPAESIM
+	OPAESIM = libopae-c-sim.so
+else
+	ifeq ($(TARGET), asesim)
+		CXXFLAGS += -DASESIM
+	else
+		CXXFLAGS += -DFPGA
+	endif
+endif
 
 # Debugigng
 ifdef DEBUG
 	CXXFLAGS += -g -O0
 else    
 	CXXFLAGS += -O2 -DNDEBUG
-	SCOPE_FLAGS += -D NDEBUG
 endif
 
 # Enable scope analyzer
 ifdef SCOPE
 	CXXFLAGS += -DSCOPE	
-	SRCS += scope.cpp
-	SCOPE_H = scope-defs.h	 
-	SCOPE_FLAGS += -D SCOPE
+	SRCS += ../common/scope.cpp
+	SCOPE_JSON = scope.json
 endif
 
 # Enable perf counters
@@ -48,20 +66,18 @@ PROJECT = libvortex.so
 
 all: $(PROJECT)
 
-scope-defs.h: $(SCRIPT_DIR)/scope.json
-	$(SCRIPT_DIR)/scope.py $(CONFIGS) $(SCOPE_FLAGS) -cc scope-defs.h -vl $(RTL_DIR)/scope-defs.vh $(SCRIPT_DIR)/scope.json
+vortex.xml:
+	DESTDIR=../../runtime/opae $(MAKE) -C $(OPAESIM_DIR) ../../runtime/opae/vortex.xml
 
-# generate scope data
-scope: scope-defs.h
+scope.json: vortex.xml
+	$(SCRIPT_DIR)/scope.py vortex.xml -o scope.json
 
-$(PROJECT): $(SRCS) $(SCOPE_H)
-ifeq ($(TARGET), opaesim)
-	$(MAKE) -C $(OPAESIM_DIR)
-endif
+libopae-c-sim.so:
+	DESTDIR=../../runtime/opae $(MAKE) -C $(OPAESIM_DIR) ../../runtime/opae/libopae-c-sim.so
+
+$(PROJECT): $(SRCS) $(OPAESIM) $(SCOPE_JSON)
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $(PROJECT)
 
 clean:
-	rm -rf $(PROJECT) *.o scope-defs.h $(RTL_DIR)/scope-defs.vh
-ifeq ($(TARGET), opaesim)
-	$(MAKE) -C $(OPAESIM_DIR) clean
-endif
+	DESTDIR=../../runtime/opae $(MAKE) -C $(OPAESIM_DIR) clean
+	rm -rf $(PROJECT) vortex.xml scope.json

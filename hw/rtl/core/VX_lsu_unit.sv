@@ -8,7 +8,7 @@ import VX_gpu_types::*;
 module VX_lsu_unit #(
     parameter CORE_ID = 0
 ) (    
-    `SCOPE_IO_VX_lsu_unit
+    `SCOPE_IO_DECL
 
     input wire              clk,
     input wire              reset,
@@ -368,16 +368,22 @@ module VX_lsu_unit #(
     );
 `endif
 
-    // scope registration
-    `SCOPE_ASSIGN (dcache_req_fire,  mem_req_fire);
-    `SCOPE_ASSIGN (dcache_req_uuid,  lsu_req_if.uuid);
-    `SCOPE_ASSIGN (dcache_req_addr,  full_addr);
-    `SCOPE_ASSIGN (dcache_req_rw,    mem_req_rw);
-    `SCOPE_ASSIGN (dcache_req_byteen, mem_req_byteen);
-    `SCOPE_ASSIGN (dcache_req_data,  mem_req_data);
-    `SCOPE_ASSIGN (dcache_rsp_fire,  mem_rsp_fire);
-    `SCOPE_ASSIGN (dcache_rsp_uuid,  rsp_uuid);
-    `SCOPE_ASSIGN (dcache_rsp_data,  rsp_data);
+`ifdef SCOPE
+    VX_scope_tap #(
+        .SCOPE_ID (5),
+        .TRIGGERW (2),
+        .PROBEW   (UUID_WIDTH+`NUM_THREADS*(32+4+32)+1+UUID_WIDTH+`NUM_THREADS*32)
+    ) scope_tap (
+        .clk(clk),
+        .reset(scope_reset),
+        .start(1'b0),
+        .stop(1'b0),
+        .triggers({mem_req_fire, mem_rsp_fire}),
+        .probes({lsu_req_if.uuid, full_addr, mem_req_rw, mem_req_byteen, mem_req_data, rsp_uuid, rsp_data}),
+        .bus_in(scope_bus_in),
+        .bus_out(scope_bus_out)
+    );
+`endif
     
 `ifdef DBG_TRACE_CORE_DCACHE
     always @(posedge clk) begin    
