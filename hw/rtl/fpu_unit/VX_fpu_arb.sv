@@ -8,7 +8,7 @@ module VX_fpu_arb #(
     parameter TAG_SEL_IDX    = 0,
     parameter BUFFERED_REQ   = 0,
     parameter BUFFERED_RSP   = 0,
-    parameter `STRING_TYPE ARBITER = "R"
+    parameter `STRING ARBITER = "R"
 ) (
     input wire              clk,
     input wire              reset,

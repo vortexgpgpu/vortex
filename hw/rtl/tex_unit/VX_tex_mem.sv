@@ -1,7 +1,7 @@
 `include "VX_tex_define.vh"
 
 module VX_tex_mem #(
-    parameter `STRING_TYPE INSTANCE_ID = "",
+    parameter `STRING INSTANCE_ID = "",
     parameter REQ_INFOW = 1,
     parameter NUM_LANES  = 1
 ) (    

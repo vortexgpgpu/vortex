@@ -1,7 +1,7 @@
 `include "VX_tex_define.vh"
 
 module VX_tex_unit #(  
-    parameter `STRING_TYPE INSTANCE_ID = "",
+    parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES = 1,
     parameter TAG_WIDTH = 1
 ) (
@@ -277,7 +277,7 @@ endmodule
 ///////////////////////////////////////////////////////////////////////////////
 
 module VX_tex_unit_top #(  
-    parameter `STRING_TYPE INSTANCE_ID = "",
+    parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES = `NUM_THREADS,
     parameter TAG_WIDTH = `TEX_REQ_TAG_WIDTH
 ) (

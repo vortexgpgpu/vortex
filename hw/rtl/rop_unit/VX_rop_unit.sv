@@ -1,7 +1,7 @@
 `include "VX_rop_define.vh"
 
 module VX_rop_unit #(
-    parameter `STRING_TYPE INSTANCE_ID = "",
+    parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES = 4
 ) (
     input wire clk,
@@ -381,7 +381,7 @@ endmodule
 ///////////////////////////////////////////////////////////////////////////////
 
 module VX_rop_unit_top #(
-    parameter `STRING_TYPE INSTANCE_ID = "",
+    parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES = `NUM_THREADS
 ) (
     input wire                              clk,

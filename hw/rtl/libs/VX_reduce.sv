@@ -4,7 +4,7 @@
 module VX_reduce #(    
     parameter DATAW     = 1,
     parameter N         = 1,
-    parameter `STRING_TYPE OP = "+"
+    parameter `STRING OP = "+"
 ) (
     input wire [N-1:0][DATAW-1:0] data_in,
     output wire [DATAW-1:0]       data_out

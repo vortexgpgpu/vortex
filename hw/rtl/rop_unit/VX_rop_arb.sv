@@ -5,7 +5,7 @@ module VX_rop_arb #(
     parameter NUM_OUTPUTS    = 1,
     parameter NUM_LANES      = 1,
     parameter BUFFERED       = 0,
-    parameter `STRING_TYPE ARBITER = "R"
+    parameter `STRING ARBITER = "R"
 ) (
     input wire              clk,
     input wire              reset,

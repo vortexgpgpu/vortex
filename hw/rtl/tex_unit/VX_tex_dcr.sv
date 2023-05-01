@@ -1,7 +1,7 @@
 `include "VX_tex_define.vh"
 
 module VX_tex_dcr #(
-    parameter `STRING_TYPE INSTANCE_ID = "",
+    parameter `STRING INSTANCE_ID = "",
     parameter NUM_STAGES = 1
 ) (
     input wire clk,

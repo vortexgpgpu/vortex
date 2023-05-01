@@ -2,7 +2,7 @@
 
 `TRACING_OFF
 module VX_mem_scheduler #(
-    parameter `STRING_TYPE INSTANCE_ID = "",
+    parameter `STRING INSTANCE_ID = "",
     parameter NUM_REQS     = 4,
     parameter NUM_BANKS    = 4,
     parameter ADDR_WIDTH   = 32,

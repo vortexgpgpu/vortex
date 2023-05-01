@@ -1,7 +1,7 @@
 `include "VX_rop_define.vh"
 
 module VX_rop_dcr #(
-    parameter `STRING_TYPE INSTANCE_ID = ""
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire clk,
     input wire reset,
