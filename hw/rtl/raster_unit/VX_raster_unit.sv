@@ -11,6 +11,9 @@ module VX_raster_unit #(
     parameter QUAD_FIFO_DEPTH = 4,  // quad queue size
     parameter OUTPUT_QUADS    = 4   // number of output quads    
 ) (
+    `SCOPE_IO_DECL
+
+    // Clock
     input wire clk,
     input wire reset,
 
@@ -281,12 +284,52 @@ module VX_raster_unit #(
 
     `ASSIGN_VX_RASTER_REQ_IF (raster_req_if, raster_req_tmp_if[0]);
 
-`ifdef CHIPSCOPE_RASTER
-    ila_raster ila_raster_inst (
-        .clk    (clk),
-        .probe0 ({cache_rsp_if.data, cache_rsp_if.tag, cache_rsp_if.ready, cache_rsp_if.valid, cache_req_if.tag, cache_req_if.addr, cache_req_if.rw, cache_req_if.valid, cache_req_if.ready}),
-        .probe1 ({no_pending_tiledata, mem_unit_busy, mem_unit_ready, mem_unit_start, mem_unit_valid, raster_req_if.done, raster_req_if.valid, raster_req_if.ready})
-    );
+`ifdef DBG_SCOPE_RASTER
+    if (INSTANCE_ID == "cluster0-raster0") begin
+    `ifdef SCOPE
+        wire cache_req_fire = cache_req_if.valid && cache_req_if.ready;
+        wire cache_rsp_fire = cache_rsp_if.valid && cache_rsp_if.ready;
+        wire raster_req_fire = raster_req_if.valid && raster_req_if.ready;
+        VX_scope_tap #(
+            .SCOPE_ID (4),
+            .TRIGGERW (9),
+            .PROBEW   (76)
+        ) scope_tap (
+            .clk(clk),
+            .reset(scope_reset),
+            .start(1'b0),
+            .stop(1'b0),
+            .triggers({
+                reset,
+                cache_req_fire,
+                cache_rsp_fire,
+                raster_req_fire,
+                mem_unit_busy,
+                mem_unit_ready,
+                mem_unit_start,
+                mem_unit_valid,
+                raster_req_if.done
+            }),
+            .probes({
+                cache_rsp_if.data,
+                cache_rsp_if.tag,
+                cache_req_if.tag,
+                cache_req_if.addr,
+                cache_req_if.rw,
+                no_pending_tiledata
+            }),
+            .bus_in(scope_bus_in),
+            .bus_out(scope_bus_out)
+        );
+    `endif
+    `ifdef CHIPSCOPE
+        ila_raster ila_raster_inst (
+            .clk    (clk),
+            .probe0 ({cache_rsp_if.data, cache_rsp_if.tag, cache_rsp_if.ready, cache_rsp_if.valid, cache_req_if.tag, cache_req_if.addr, cache_req_if.rw, cache_req_if.valid, cache_req_if.ready}),
+            .probe1 ({no_pending_tiledata, mem_unit_busy, mem_unit_ready, mem_unit_start, mem_unit_valid, raster_req_if.done, raster_req_if.valid, raster_req_if.ready})
+        );
+    `endif
+    end
 `endif
 
 `ifdef PERF_ENABLE
@@ -444,6 +487,7 @@ module VX_raster_unit_top #(
         .QUAD_FIFO_DEPTH (QUAD_FIFO_DEPTH),
         .OUTPUT_QUADS    (OUTPUT_QUADS)
     ) raster_unit (
+        `SCOPE_IO_BIND (0)
         .clk           (clk),
         .reset         (reset),
     `ifdef PERF_ENABLE

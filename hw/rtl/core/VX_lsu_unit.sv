@@ -355,36 +355,41 @@ module VX_lsu_unit #(
         .ready_out (ld_commit_if.ready)
     );
 
-`ifdef CHIPSCOPE_LSU
-    wire [31:0] full_addr_0 = full_addr[0];
-    wire [31:0] mem_req_data_0 = mem_req_data[0];
-    wire [31:0] rsp_data_0 = rsp_data[0];
-    ila_lsu ila_lsu_inst (
-        .clk    (clk),
-        .probe0 ({mem_req_data_0, lsu_req_if.uuid, lsu_req_if.wid, lsu_req_if.PC, mem_req_mask, full_addr_0, mem_req_byteen, mem_req_rw, mem_req_ready, mem_req_valid}),
-        .probe1 ({rsp_data_0, rsp_uuid, mem_rsp_eop, rsp_pc, rsp_rd, rsp_tmask, rsp_wid, mem_rsp_ready, mem_rsp_valid}),
-        .probe2 ({cache_req_if.data, cache_req_if.tag, cache_req_if.byteen, cache_req_if.addr, cache_req_if.rw, cache_req_if.ready, cache_req_if.valid}),
-        .probe3 ({cache_rsp_if.data, cache_rsp_if.tag, cache_rsp_if.ready, cache_rsp_if.valid})
-    );
+`ifdef DBG_SCOPE_LSU
+    if (CORE_ID == 0) begin
+    `ifdef SCOPE
+        VX_scope_tap #(
+            .SCOPE_ID (3),
+            .TRIGGERW (3),
+            .PROBEW   (UUID_WIDTH+`NUM_THREADS*(32+4+32)+1+UUID_WIDTH+`NUM_THREADS*32)
+        ) scope_tap (
+            .clk(clk),
+            .reset(scope_reset),
+            .start(1'b0),
+            .stop(1'b0),
+            .triggers({reset, mem_req_fire, mem_rsp_fire}),
+            .probes({lsu_req_if.uuid, full_addr, mem_req_rw, mem_req_byteen, mem_req_data, rsp_uuid, rsp_data}),
+            .bus_in(scope_bus_in),
+            .bus_out(scope_bus_out)
+        );
+    `endif
+    `ifdef CHIPSCOPE    
+        wire [31:0] full_addr_0 = full_addr[0];
+        wire [31:0] mem_req_data_0 = mem_req_data[0];
+        wire [31:0] rsp_data_0 = rsp_data[0];
+        ila_lsu ila_lsu_inst (
+            .clk    (clk),
+            .probe0 ({mem_req_data_0, lsu_req_if.uuid, lsu_req_if.wid, lsu_req_if.PC, mem_req_mask, full_addr_0, mem_req_byteen, mem_req_rw, mem_req_ready, mem_req_valid}),
+            .probe1 ({rsp_data_0, rsp_uuid, mem_rsp_eop, rsp_pc, rsp_rd, rsp_tmask, rsp_wid, mem_rsp_ready, mem_rsp_valid}),
+            .probe2 ({cache_req_if.data, cache_req_if.tag, cache_req_if.byteen, cache_req_if.addr, cache_req_if.rw, cache_req_if.ready, cache_req_if.valid}),
+            .probe3 ({cache_rsp_if.data, cache_rsp_if.tag, cache_rsp_if.ready, cache_rsp_if.valid})
+        );
+    `endif
+    end
+`else
+    `SCOPE_IO_UNUSED()
 `endif
-
-`ifdef SCOPE
-    VX_scope_tap #(
-        .SCOPE_ID (5),
-        .TRIGGERW (2),
-        .PROBEW   (UUID_WIDTH+`NUM_THREADS*(32+4+32)+1+UUID_WIDTH+`NUM_THREADS*32)
-    ) scope_tap (
-        .clk(clk),
-        .reset(scope_reset),
-        .start(1'b0),
-        .stop(1'b0),
-        .triggers({mem_req_fire, mem_rsp_fire}),
-        .probes({lsu_req_if.uuid, full_addr, mem_req_rw, mem_req_byteen, mem_req_data, rsp_uuid, rsp_data}),
-        .bus_in(scope_bus_in),
-        .bus_out(scope_bus_out)
-    );
-`endif
-    
+  
 `ifdef DBG_TRACE_CORE_DCACHE
     always @(posedge clk) begin    
         if (lsu_req_if.valid && fence_wait) begin

@@ -92,6 +92,11 @@ module VX_afu_wrap #(
 	wire ap_done  = ~(state == STATE_RUN || vx_pending_writes != 0);
 	wire ap_ready = 1'b1;
 
+`ifdef SCOPE
+
+
+`endif
+
 	always @(posedge ap_clk) begin
 		if (reset || ap_reset) begin
 			state <= STATE_IDLE;
@@ -219,12 +224,16 @@ module VX_afu_wrap #(
 		assign m_axi_mem_araddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_araddr_w[i]) + C_M_AXI_MEM_ADDR_WIDTH'(mem_base);
 	end
 
+	`SCOPE_IO_SWITCH (2)
+
 	Vortex_axi #(
 		.AXI_DATA_WIDTH (C_M_AXI_MEM_DATA_WIDTH),
 		.AXI_ADDR_WIDTH (`XLEN),
 		.AXI_TID_WIDTH  (C_M_AXI_MEM_ID_WIDTH),
 		.AXI_NUM_BANKS  (C_M_AXI_MEM_NUM_BANKS)
 	) vortex_axi (
+		`SCOPE_IO_BIND  (1)
+
 		.clk			(ap_clk),
 		.reset			(reset || ap_reset || ~vx_running),
 		
@@ -277,15 +286,48 @@ module VX_afu_wrap #(
 		.dcr_wr_data	(dcr_wr_data),
 
 		.busy			(vx_busy)
-	);	
+	);
 
-`ifdef CHIPSCOPE_AFU
+    // SCOPE //////////////////////////////////////////////////////////////////////
+
+`ifdef DBG_SCOPE_AFU
+`ifdef SCOPE
+	`define TRIGGERS { \
+		reset, \
+		ap_start, \
+		ap_done, \
+		ap_idle, \
+		interrupt, \
+		vx_busy_wait, \
+		vx_busy, \
+		vx_running \
+	}
+
+	`define PROBES { \
+		vx_pending_writes \
+	}
+
+    VX_scope_tap #(
+        .SCOPE_ID (0),
+        .TRIGGERW ($bits(`TRIGGERS)),
+        .PROBEW   ($bits(`PROBES))
+    ) scope_tap (
+        .clk(clk),
+        .reset(scope_reset_w[0]),
+        .start(1'b0),
+        .stop(1'b0),
+        .triggers(`TRIGGERS),
+        .probes(`PROBES),
+        .bus_in(scope_bus_in_w[0]),
+        .bus_out(scope_bus_out_w[0])
+    );
+`endif
+`ifdef CHIPSCOPE
     ila_afu ila_afu_inst (
-      .clk    (ap_clk),
+      	.clk (ap_clk),
 		.probe0 ({
         	ap_start,
         	ap_done,
-			ap_ready,
 			ap_idle,
 			interrupt
 		}),
@@ -296,6 +338,9 @@ module VX_afu_wrap #(
 			vx_running
 		})
     );
+`endif
+`else
+    `SCOPE_IO_UNUSED_W(0)
 `endif
 
 `ifdef SIMULATION

@@ -53,7 +53,7 @@ set_property -verbose -name "top" -value ${krnl_name} -objects $obj
 
 if { $chipscope == 1 } {
     # hw debugging
-    create_ip -name ila -vendor xilinx.com -library ip -version 6.2 -module_name ila_afu
+    create_ip -name axis_ila -vendor xilinx.com -library ip -version 1.1 -module_name ila_afu
     set_property -dict [list CONFIG.C_ADV_TRIGGER {true} \
                              CONFIG.C_EN_STRG_QUAL {1} \
                              CONFIG.C_DATA_DEPTH {4096} \
@@ -64,7 +64,7 @@ if { $chipscope == 1 } {
     generate_target {instantiation_template} [get_files ila_afu.xci]
     set_property generate_synth_checkpoint false [get_files ila_afu.xci]
 
-    create_ip -name ila -vendor xilinx.com -library ip -version 6.2 -module_name ila_fetch
+    create_ip -name axis_ila -vendor xilinx.com -library ip -version 1.1 -module_name ila_fetch
     set_property -dict [list CONFIG.C_ADV_TRIGGER {true} \
                              CONFIG.C_EN_STRG_QUAL {1} \
                              CONFIG.C_DATA_DEPTH {4096} \
@@ -78,7 +78,7 @@ if { $chipscope == 1 } {
     generate_target {instantiation_template} [get_files ila_fetch.xci]
     set_property generate_synth_checkpoint false [get_files ila_fetch.xci]
 
-    create_ip -name ila -vendor xilinx.com -library ip -version 6.2 -module_name ila_issue
+    create_ip -name axis_ila -vendor xilinx.com -library ip -version 1.1 -module_name ila_issue
     set_property -dict [list CONFIG.C_ADV_TRIGGER {true} \
                              CONFIG.C_EN_STRG_QUAL {1} \
                              CONFIG.C_DATA_DEPTH {4096} \
@@ -89,7 +89,7 @@ if { $chipscope == 1 } {
     generate_target {instantiation_template} [get_files ila_issue.xci]
     set_property generate_synth_checkpoint false [get_files ila_issue.xci]
 
-    create_ip -name ila -vendor xilinx.com -library ip -version 6.2 -module_name ila_lsu
+    create_ip -name axis_ila -vendor xilinx.com -library ip -version 1.1 -module_name ila_lsu
     set_property -dict [list CONFIG.C_ADV_TRIGGER {true} \
                              CONFIG.C_EN_STRG_QUAL {1} \
                              CONFIG.C_DATA_DEPTH {4096} \
@@ -102,7 +102,7 @@ if { $chipscope == 1 } {
     generate_target {instantiation_template} [get_files ila_lsu.xci]
     set_property generate_synth_checkpoint false [get_files ila_lsu.xci]
 
-    create_ip -name ila -vendor xilinx.com -library ip -version 6.2 -module_name ila_msched
+    create_ip -name axis_ila -vendor xilinx.com -library ip -version 1.1 -module_name ila_msched
     set_property -dict [list CONFIG.C_ADV_TRIGGER {true} \
                              CONFIG.C_EN_STRG_QUAL {1} \
                              CONFIG.C_DATA_DEPTH {4096} \
@@ -115,7 +115,7 @@ if { $chipscope == 1 } {
     generate_target {instantiation_template} [get_files ila_msched.xci]
     set_property generate_synth_checkpoint false [get_files ila_msched.xci]
 
-    create_ip -name ila -vendor xilinx.com -library ip -version 6.2 -module_name ila_raster
+    create_ip -name axis_ila -vendor xilinx.com -library ip -version 1.1 -module_name ila_raster
     set_property -dict [list CONFIG.C_ADV_TRIGGER {true} \
                              CONFIG.C_EN_STRG_QUAL {1} \
                              CONFIG.C_DATA_DEPTH {4096} \

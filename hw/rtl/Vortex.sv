@@ -141,7 +141,7 @@ module Vortex (
 
     wire [`NUM_CLUSTERS-1:0] per_cluster_busy;
 
-    `SCOPE_IO_SWITCH (`NUM_CLUSTERS+1)
+    `SCOPE_IO_SWITCH (`NUM_CLUSTERS)
 
     // Generate all clusters
     for (genvar i = 0; i < `NUM_CLUSTERS; ++i) begin
@@ -312,23 +312,6 @@ module Vortex (
     assign perf_memsys_total_if.mem_writes  = perf_mem_writes;
     assign perf_memsys_total_if.mem_latency = perf_mem_lat;
     
-`endif
-
-`ifdef SCOPE
-    VX_scope_tap #(
-        .SCOPE_ID (1),
-        .TRIGGERW (2),
-        .PROBEW   (`VX_MEM_ADDR_WIDTH+1+1)
-    ) scope_tap (
-        .clk(clk),
-        .reset(scope_reset_w[`NUM_CLUSTERS]),
-        .start(1'b0),
-        .stop(1'b0),
-        .triggers({mem_req_fire, mem_rsp_fire}),
-        .probes({mem_req_addr, mem_req_rw, busy}),
-        .bus_in(scope_bus_in_w[`NUM_CLUSTERS]),
-        .bus_out(scope_bus_out_w[`NUM_CLUSTERS])
-    );
 `endif
 
 `ifdef DBG_TRACE_CORE_MEM

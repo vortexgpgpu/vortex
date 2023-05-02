@@ -40,13 +40,9 @@ module VX_fetch #(
 
     VX_ifetch_req_if  ifetch_req_if();
 
-    `SCOPE_IO_SWITCH (2)
-
     VX_warp_sched #(
         .CORE_ID(CORE_ID)
     ) warp_sched (
-        `SCOPE_IO_BIND  (0)
-
         .clk            (clk),
         .reset          (reset),   
 
@@ -69,8 +65,6 @@ module VX_fetch #(
     VX_icache_stage #(
         .CORE_ID(CORE_ID)
     ) icache_stage (
-        `SCOPE_IO_BIND  (1)
-
         .clk            (clk),
         .reset          (reset),
         
@@ -81,15 +75,55 @@ module VX_fetch #(
         .ifetch_rsp_if  (ifetch_rsp_if)   
     );
 
-`ifdef CHIPSCOPE_FETCH
-    ila_fetch ila_fetch_inst (
-        .clk    (clk),
-        .probe0 ({reset, ifetch_req_if.uuid, ifetch_req_if.wid, ifetch_req_if.tmask, ifetch_req_if.PC, ifetch_req_if.ready, ifetch_req_if.valid}),        
-        .probe1 ({icache_req_if.tag, icache_req_if.byteen, icache_req_if.addr, icache_req_if.ready, icache_req_if.valid}),
-        .probe2 ({icache_rsp_if.data, icache_rsp_if.tag, icache_rsp_if.ready, icache_rsp_if.valid}),
-        .probe3 ({join_if.wid, join_if.valid, warp_ctl_if.barrier, warp_ctl_if.split, warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.wid, warp_ctl_if.valid}),
-        .probe4 ({branch_ctl_if.dest, branch_ctl_if.taken, branch_ctl_if.wid, branch_ctl_if.valid})
-    );
+`ifdef DBG_SCOPE_FETCH
+    if (CORE_ID == 0) begin
+    `ifdef SCOPE
+        localparam UUID_WIDTH = `UP(`UUID_BITS);
+        wire ifetch_req_fire = ifetch_req_if.valid && ifetch_req_if.ready;
+        wire icache_req_fire = icache_req_if.valid && icache_req_if.ready;
+        wire icache_rsp_fire = icache_rsp_if.valid && icache_rsp_if.ready;
+        VX_scope_tap #(
+            .SCOPE_ID (1),
+            .TRIGGERW (7),
+            .PROBEW   (3*UUID_WIDTH + 236)
+        ) scope_tap (
+            .clk(clk),
+            .reset(scope_reset),
+            .start(1'b0),
+            .stop(1'b0),
+            .triggers({
+                reset,
+                ifetch_req_fire,
+                icache_req_fire,
+                icache_rsp_fire,
+                warp_ctl_if.valid,
+                branch_ctl_if.valid,
+                join_if.valid
+            }),
+            .probes({
+                ifetch_req_if.uuid, ifetch_req_if.wid, ifetch_req_if.tmask, ifetch_req_if.PC,
+                icache_req_if.tag, icache_req_if.byteen, icache_req_if.addr,
+                icache_rsp_if.data, icache_rsp_if.tag,
+                join_if.wid, warp_ctl_if.barrier, warp_ctl_if.split, warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.wid,
+                branch_ctl_if.dest, branch_ctl_if.taken, branch_ctl_if.wid
+            }),
+            .bus_in(scope_bus_in),
+            .bus_out(scope_bus_out)
+        );
+    `endif
+    `ifdef CHIPSCOPE
+        ila_fetch ila_fetch_inst (
+            .clk    (clk),
+            .probe0 ({reset, ifetch_req_if.uuid, ifetch_req_if.wid, ifetch_req_if.tmask, ifetch_req_if.PC, ifetch_req_if.ready, ifetch_req_if.valid}),        
+            .probe1 ({icache_req_if.tag, icache_req_if.byteen, icache_req_if.addr, icache_req_if.ready, icache_req_if.valid}),
+            .probe2 ({icache_rsp_if.data, icache_rsp_if.tag, icache_rsp_if.ready, icache_rsp_if.valid}),
+            .probe3 ({join_if.wid, join_if.valid, warp_ctl_if.barrier, warp_ctl_if.split, warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.wid, warp_ctl_if.valid}),
+            .probe4 ({branch_ctl_if.dest, branch_ctl_if.taken, branch_ctl_if.wid, branch_ctl_if.valid})
+        );
+    `endif
+    end
+`else
+    `SCOPE_IO_UNUSED()
 `endif
 
 endmodule

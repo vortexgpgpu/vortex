@@ -1001,8 +1001,8 @@ module vortex_afu #(
 
     // SCOPE //////////////////////////////////////////////////////////////////////
 
+`ifdef DBG_SCOPE_AFU
 `ifdef SCOPE
-
     wire mem_req_fire = mem_req_if.valid && mem_req_if.ready;
     wire mem_rsp_fire = mem_rsp_if.valid && mem_rsp_if.ready;
     wire avs_write_fire = avs_write[0] && ~avs_waitrequest[0];
@@ -1011,52 +1011,34 @@ module vortex_afu #(
 
     VX_scope_tap #(
         .SCOPE_ID (0),
-        .TRIGGERW (22),
-        .PROBEW   ($bits({
-            cmd_type,
-            state,
-            mmio_hdr.address,
-            mmio_hdr.length,
-            cp2af_sRxPort.c0.hdr.mdata,
-            af2cp_sTxPort.c0.hdr.address,
-            af2cp_sTxPort.c0.hdr.mdata,
-            af2cp_sTxPort.c1.hdr.address,
-            avs_address[0],
-            avs_byteenable[0],
-            avs_burstcount[0],
-            cci_mem_rd_req_ctr,
-            cci_mem_wr_req_ctr,
-            cci_rd_req_ctr,
-            cci_rd_rsp_ctr,
-            cci_wr_req_ctr,
-            mem_req_if_addr
-        }))
+        .TRIGGERW (23),
+        .PROBEW   (367)
     ) scope_tap (
         .clk(clk),
         .reset(scope_reset_w[0]),
         .start(1'b0),
         .stop(1'b0),
-        .triggers({
-            mem_req_fire,
-            mem_rsp_fire,            
-            avs_write_fire,
-            avs_read_fire,
-            avs_waitrequest[0],
-            avs_readdatavalid[0],
-            cp2af_sRxPort.c0.mmioRdValid,
-            cp2af_sRxPort.c0.mmioWrValid,
-            cp2af_sRxPort.c0.rspValid,
-            cp2af_sRxPort.c1.rspValid,            
-            af2cp_sTxPort.c0.valid,
-            af2cp_sTxPort.c1.valid,
-            cp2af_sRxPort.c0TxAlmFull,
-            cp2af_sRxPort.c1TxAlmFull,
-            af2cp_sTxPort.c2.mmioRdValid,
-            cci_wr_req_fire,
-            cci_wr_rsp_fire,
-            cci_rd_req_fire,
+        .triggers({reset,
+            mem_req_fire, 
+            mem_rsp_fire, 
+            avs_write_fire, 
+            avs_read_fire, 
+            avs_waitrequest[0], 
+            avs_readdatavalid[0], 
+            cp2af_sRxPort.c0.mmioRdValid, 
+            cp2af_sRxPort.c0.mmioWrValid, 
+            cp2af_sRxPort.c0.rspValid, 
+            cp2af_sRxPort.c1.rspValid, 
+            af2cp_sTxPort.c0.valid, 
+            af2cp_sTxPort.c1.valid, 
+            cp2af_sRxPort.c0TxAlmFull, 
+            cp2af_sRxPort.c1TxAlmFull, 
+            af2cp_sTxPort.c2.mmioRdValid, 
+            cci_wr_req_fire, 
+            cci_wr_rsp_fire, 
+            cci_rd_req_fire, 
             cci_rd_rsp_fire,
-            cci_pending_reads_full,
+            cci_pending_reads_full, 
             cci_pending_writes_empty,
             cci_pending_writes_full
         }),
@@ -1082,6 +1064,9 @@ module vortex_afu #(
         .bus_in(scope_bus_in_w[0]),
         .bus_out(scope_bus_out_w[0])
     );
+`endif
+`else
+    `SCOPE_IO_UNUSED_W(0)
 `endif
 
     ///////////////////////////////////////////////////////////////////////////////

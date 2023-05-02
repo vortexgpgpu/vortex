@@ -7,9 +7,7 @@ import VX_gpu_types::*;
 
 module VX_warp_sched #(
     parameter CORE_ID = 0
-) (
-    `SCOPE_IO_DECL
-    
+) (    
     input wire              clk,
     input wire              reset,
 
@@ -305,22 +303,5 @@ module VX_warp_sched #(
         end
     end
     `RUNTIME_ASSERT(timeout_ctr < `STALL_TIMEOUT, ("%t: *** core%0d-scheduler-timeout: stalled_warps=%b", $time, CORE_ID, stalled_warps));
-
-`ifdef SCOPE
-    VX_scope_tap #(
-        .SCOPE_ID (2),
-        .TRIGGERW (1),
-        .PROBEW   (UUID_WIDTH+`NUM_WARPS+`NUM_WARPS+NW_WIDTH+`NUM_THREADS+32)
-    ) scope_tap (
-        .clk(clk),
-        .reset(scope_reset),
-        .start(1'b0),
-        .stop(1'b0),
-        .triggers({schedule_fire}),
-        .probes({instr_uuid, active_warps, stalled_warps, schedule_wid, schedule_tmask, schedule_pc}),
-        .bus_in(scope_bus_in),
-        .bus_out(scope_bus_out)
-    );
-`endif
 
 endmodule

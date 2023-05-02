@@ -9,6 +9,12 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+`ifdef VIVADO
+`define STRING
+`else
+`define STRING string
+`endif
+
 `ifdef SYNTHESIS
 `define TRACING_ON
 `define TRACING_OFF
@@ -75,7 +81,7 @@
                          /* verilator lint_on UNUSED */
 
 `define UNUSED_SPARAM(x) /* verilator lint_off UNUSED */ \
-                         localparam `STRING_TYPE __``x = x; \
+                         localparam `STRING __``x = x; \
                          /* verilator lint_on UNUSED */
 
 `define UNUSED_VAR(x) always @(x) begin end
@@ -109,8 +115,6 @@
     `define RUNTIME_ASSERT(cond, msg)
 `endif
 
-
-
 ///////////////////////////////////////////////////////////////////////////////
 
 `ifdef QUARTUS
@@ -118,19 +122,16 @@
 `define NO_RW_RAM_CHECK (* altera_attribute = "-name add_pass_through_logic_to_inferred_rams off" *)
 `define DISABLE_BRAM    (* ramstyle = "logic" *)
 `define PRESERVE_NET    (* preserve *)
-`define STRING          string
 `elsif VIVADO
 `define USE_FAST_BRAM   (* ram_style = "distributed" *)
 `define NO_RW_RAM_CHECK (* rw_addr_collision = "no" *)
 `define DISABLE_BRAM    (* ram_style = "registers" *)
 `define PRESERVE_NET    (* keep = "true" *)
-`define STRING
 `else
 `define USE_FAST_BRAM
 `define NO_RW_RAM_CHECK
 `define DISABLE_BRAM
 `define PRESERVE_NET
-`define STRING          string
 `endif
 
 ///////////////////////////////////////////////////////////////////////////////

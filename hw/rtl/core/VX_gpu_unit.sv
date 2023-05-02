@@ -7,9 +7,7 @@ import VX_gpu_types::*;
 
 module VX_gpu_unit #(
     parameter CORE_ID = 0
-) (
-    `SCOPE_IO_DECL
-    
+) (    
     input wire              clk,
     input wire              reset,
 
@@ -353,29 +351,6 @@ module VX_gpu_unit #(
     assign warp_ctl_if.valid = gpu_commit_if.valid && gpu_commit_if.ready && rsp_is_wctl;
     assign warp_ctl_if.wid   = gpu_commit_if.wid;    
     assign {warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.split, warp_ctl_if.barrier} = rsp_data[WCTL_DATAW-1:0];
-
-`ifdef SCOPE
-    VX_scope_tap #(
-        .SCOPE_ID (6),
-        .TRIGGERW (5),
-        .PROBEW   (UUID_WIDTH)
-    ) scope_tap (
-        .clk(clk),
-        .reset(scope_reset),
-        .start(1'b0),
-        .stop(1'b0),
-        .triggers({
-            warp_ctl_if.valid, 
-            warp_ctl_if.tmc.valid, 
-            warp_ctl_if.wspawn.valid, 
-            warp_ctl_if.split.valid, 
-            warp_ctl_if.barrier.valid
-        }),
-        .probes({gpu_commit_if.uuid}),
-        .bus_in(scope_bus_in),
-        .bus_out(scope_bus_out)
-    );
-`endif
 
     // pending request
 

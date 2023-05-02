@@ -458,8 +458,9 @@ module VX_mem_scheduler #(
         .ready_out (rsp_ready)
     );
 
-`ifdef CHIPSCOPE_MSCHED
+`ifdef DBG_SCOPE_MSCHED
 if (INSTANCE_ID == "cluster0-raster0-memsched") begin
+`ifdef CHIPSCOPE
     wire [ADDR_WIDTH-1:0] mem_req_addr_s_0 = mem_req_addr_s[0];    
     wire [DATA_WIDTH-1:0] mem_rsp_data_s_0 = mem_rsp_data_s[0];
     wire [ADDR_WIDTH-1:0] reqq_addr_0 = reqq_addr[0];
@@ -471,6 +472,7 @@ if (INSTANCE_ID == "cluster0-raster0-memsched") begin
         .probe2 ({rsp_batch_idx, rsp_rem_cnt_n, mem_rsp_data_s_0, mem_rsp_tag_s, mem_rsp_mask_s, mem_rsp_ready_s, mem_rsp_valid_s}),
         .probe3 ({crsp_data_0, crsp_tag, crsp_eop, crsp_mask, crsp_ready, crsp_valid})
     );
+`endif
 end
 `endif
 

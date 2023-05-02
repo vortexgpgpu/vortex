@@ -175,6 +175,7 @@
     `define EXT_F_ENABLED   1
 `else
     `define EXT_F_ENABLED   0
+    `define NUM_FPU_UNITS 0
 `endif
 
 `ifdef EXT_M_ENABLE
@@ -187,24 +188,27 @@
     `define EXT_TEX_ENABLED 1
 `else
     `define EXT_TEX_ENABLED 0
+    `define NUM_TEX_UNITS 0
 `endif
 
 `ifdef EXT_RASTER_ENABLE
     `define EXT_RASTER_ENABLED 1
 `else
     `define EXT_RASTER_ENABLED 0
+    `define NUM_RASTER_UNITS 0
 `endif
 
 `ifdef EXT_ROP_ENABLE
     `define EXT_ROP_ENABLED 1
 `else
     `define EXT_ROP_ENABLED 0
+    `define NUM_ROP_UNITS 0
 `endif
 
 `ifdef EXT_IMADD_ENABLE
     `define EXT_IMADD_ENABLED 1
 `else
-    `define EXT_IMADD_ENABLED 0
+    `define EXT_IMADD_ENABLED 0    
 `endif
 
 `define ISA_X_ENABLED  ( `EXT_TEX_ENABLED       \

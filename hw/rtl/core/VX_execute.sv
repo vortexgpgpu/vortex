@@ -120,7 +120,7 @@ module VX_execute #(
         .alu_commit_if  (alu_commit_if)
     );
 
-    `SCOPE_IO_SWITCH (2)
+    `SCOPE_IO_SWITCH (1)
 
     VX_lsu_unit #(
         .CORE_ID(CORE_ID)
@@ -209,7 +209,6 @@ module VX_execute #(
     VX_gpu_unit #(
         .CORE_ID(CORE_ID)
     ) gpu_unit (
-        `SCOPE_IO_BIND  (1)
         .clk            (clk),
         .reset          (gpu_reset),    
         .gpu_req_if     (gpu_req_if),

@@ -156,65 +156,68 @@ module VX_issue #(
                         $time, CORE_ID, ibuffer_if.wid, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.rd, ibuffer_if.wb, 
                         in_use_regs[0], in_use_regs[1], in_use_regs[2], in_use_regs[3], ~dispatch_if.ready, ibuffer_if.uuid));    
 
-`ifdef CHIPSCOPE_ISSUE
-    wire [`NR_BITS-1:0] ibuffer_rs1 = ibuffer_if.rs1[0];
-    wire [`NR_BITS-1:0] ibuffer_rs2 = ibuffer_if.rs2[0];
-    wire [`NR_BITS-1:0] ibuffer_rs3 = ibuffer_if.rs3[0];
-    ila_issue ila_issue_inst (
-        .clk    (clk),
-        .probe0 ({ibuffer_if.uuid, ibuffer_rs3, ibuffer_rs2, ibuffer_rs1, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.wid, ibuffer_if.ex_type, ibuffer_if.op_type, ibuffer_if.ready, ibuffer_if.valid, in_use_regs, scoreboard_if.ready, dispatch_if.ready, ibuffer_if.ready, ibuffer_if.valid}),
-        .probe1 ({writeback_if.uuid, writeback_if.data[0], writeback_if.PC, writeback_if.tmask, writeback_if.wid, writeback_if.eop, writeback_if.valid})
-    );
-`endif
-
-`ifdef SCOPE
-    localparam UUID_WIDTH = `UP(`UUID_BITS);
-    wire scoreboard_if_not_ready = ~scoreboard_if.ready; 
-    wire dispatch_if_not_ready = ~dispatch_if.ready;
-    wire writeback_if_valid = writeback_if.valid;
-    VX_scope_tap #(
-        .SCOPE_ID (4),
-        .TRIGGERW (4),
-        .PROBEW   (UUID_WIDTH + `NUM_THREADS + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS +
-           1 + (`NR_BITS * 4) + 32 + 1 + 1 + (`NUM_THREADS * 3 * 32) +
-           UUID_WIDTH + `NUM_THREADS + `NR_BITS + (`NUM_THREADS*32) + 1)
-    ) scope_tap (
-        .clk(clk),
-        .reset(scope_reset),
-        .start(1'b0),
-        .stop(1'b0),
-        .triggers({
-            ibuffer_if_fire, 
-            scoreboard_if_not_ready, 
-            dispatch_if_not_ready, 
-            writeback_if_valid
-        }),
-        .probes({
-            ibuffer_if.uuid,
-            ibuffer_if.tmask,
-            ibuffer_if.ex_type,
-            ibuffer_if.op_type,
-            ibuffer_if.op_mod,
-            ibuffer_if.wb,
-            ibuffer_if.rd,
-            ibuffer_if.rs1,
-            ibuffer_if.rs2,
-            ibuffer_if.rs3,
-            ibuffer_if.imm,
-            ibuffer_if.use_PC,
-            ibuffer_if.use_imm,
-            gpr_rsp_if.rs1_data,
-            gpr_rsp_if.rs2_data,
-            gpr_rsp_if.rs3_data,
-            writeback_if.uuid,
-            writeback_if.tmask,
-            writeback_if.rd,
-            writeback_if.data,
-            writeback_if.eop
-        }),
-        .bus_in(scope_bus_in),
-        .bus_out(scope_bus_out)
-    );
+`ifdef DBG_SCOPE_ISSUE
+    if (CORE_ID == 0) begin
+    `ifdef SCOPE
+        localparam UUID_WIDTH = `UP(`UUID_BITS);
+        wire scoreboard_if_not_ready = ~scoreboard_if.ready; 
+        wire dispatch_if_not_ready = ~dispatch_if.ready;
+        wire writeback_if_valid = writeback_if.valid;
+        VX_scope_tap #(
+            .SCOPE_ID (2),
+            .TRIGGERW (5),
+            .PROBEW   (UUID_WIDTH + `NUM_THREADS + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS +
+            1 + (`NR_BITS * 4) + 32 + 1 + 1 + (`NUM_THREADS * 3 * 32) +
+            UUID_WIDTH + `NUM_THREADS + `NR_BITS + (`NUM_THREADS*32) + 1)
+        ) scope_tap (
+            .clk(clk),
+            .reset(scope_reset),
+            .start(1'b0),
+            .stop(1'b0),
+            .triggers({
+                reset, 
+                ibuffer_if_fire, 
+                scoreboard_if_not_ready, 
+                dispatch_if_not_ready, 
+                writeback_if_valid
+            }),
+            .probes({
+                ibuffer_if.uuid,
+                ibuffer_if.tmask,
+                ibuffer_if.ex_type,
+                ibuffer_if.op_type,
+                ibuffer_if.op_mod,
+                ibuffer_if.wb,
+                ibuffer_if.rd,
+                ibuffer_if.rs1,
+                ibuffer_if.rs2,
+                ibuffer_if.rs3,
+                ibuffer_if.imm,
+                ibuffer_if.use_PC,
+                ibuffer_if.use_imm,
+                gpr_rsp_if.rs1_data,
+                gpr_rsp_if.rs2_data,
+                gpr_rsp_if.rs3_data,
+                writeback_if.uuid,
+                writeback_if.tmask,
+                writeback_if.rd,
+                writeback_if.data,
+                writeback_if.eop
+            }),
+            .bus_in(scope_bus_in),
+            .bus_out(scope_bus_out)
+        );
+    `endif        
+    `ifdef CHIPSCOPE
+        ila_issue ila_issue_inst (
+            .clk    (clk),
+            .probe0 ({ibuffer_if.uuid, ibuffer.rs3, ibuffer.rs2, ibuffer.rs1, ibuffer_if.PC, ibuffer_if.tmask, ibuffer_if.wid, ibuffer_if.ex_type, ibuffer_if.op_type, ibuffer_if.ready, ibuffer_if.valid, in_use_regs, scoreboard_if.ready, dispatch_if.ready, ibuffer_if.ready, ibuffer_if.valid}),
+            .probe1 ({writeback_if.uuid, writeback_if.data[0], writeback_if.PC, writeback_if.tmask, writeback_if.wid, writeback_if.eop, writeback_if.valid})
+        );
+    `endif
+    end
+`else
+    `SCOPE_IO_UNUSED()
 `endif
 
 `ifdef PERF_ENABLE

@@ -11,6 +11,8 @@ module Vortex_axi #(
     parameter AXI_TID_WIDTH  = `VX_MEM_TAG_WIDTH,
     parameter AXI_NUM_BANKS  = 1
 )(
+    `SCOPE_IO_DECL
+
     // Clock
     input  wire                         clk,
     input  wire                         reset,
@@ -176,8 +178,12 @@ module Vortex_axi #(
         .m_axi_rid      (m_axi_rid_unqual),
         .m_axi_rresp    (m_axi_rresp)
     );
+
+    `SCOPE_IO_SWITCH (1)
     
     Vortex vortex (
+        `SCOPE_IO_BIND  (0)
+
         .clk            (clk),
         .reset          (reset),
 

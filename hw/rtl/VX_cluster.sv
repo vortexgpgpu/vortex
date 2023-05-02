@@ -71,6 +71,7 @@ module VX_cluster #(
     // Status
     output wire                 busy
 );
+    `SCOPE_IO_SWITCH (`NUM_RASTER_UNITS+`NUM_SOCKETS);
 
 `ifdef EXT_RASTER_ENABLE
 
@@ -118,6 +119,7 @@ module VX_cluster #(
             .QUAD_FIFO_DEPTH (`RASTER_QUAD_FIFO_DEPTH),
             .OUTPUT_QUADS    (`NUM_THREADS)
         ) raster_unit (
+            `SCOPE_IO_BIND (i)
             .clk           (clk),
             .reset         (raster_reset),
         `ifdef PERF_ENABLE
@@ -147,8 +149,7 @@ module VX_cluster #(
         .reset      (raster_arb_reset),
         .req_in_if  (raster_req_if),
         .req_out_if (per_socket_raster_req_if)
-    );    
-
+    );   
 `endif
 
 `ifdef EXT_ROP_ENABLE
@@ -459,8 +460,6 @@ module VX_cluster #(
 
     `BUFFER_DCR_WRITE_IF (socket_dcr_write_if, socket_dcr_write_tmp_if, (`NUM_SOCKETS > 1));
 
-    `SCOPE_IO_SWITCH (`NUM_SOCKETS);
-
     // Generate all sockets
     for (genvar i = 0; i < `NUM_SOCKETS; ++i) begin
 
@@ -469,7 +468,7 @@ module VX_cluster #(
         VX_socket #(
             .SOCKET_ID ((CLUSTER_ID * `NUM_SOCKETS) + i)
         ) socket (
-            `SCOPE_IO_BIND  (i)
+            `SCOPE_IO_BIND  (`NUM_RASTER_UNITS+i)
 
             .clk            (clk),
             .reset          (socket_reset),
