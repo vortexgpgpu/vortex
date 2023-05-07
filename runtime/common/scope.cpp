@@ -1,5 +1,6 @@
-#include "common.h"
 #include "scope.h"
+#include <VX_config.h>
+#include <nlohmann_json.hpp>
 #include <iostream>
 #include <fstream>
 #include <thread>
@@ -13,14 +14,11 @@
 #include <mutex>
 #include <unordered_set>
 #include <sstream>
-#include <VX_config.h>
-#include <vortex_afu.h>
-#include <nlohmann_json.hpp>
 
 #define FRAME_FLUSH_SIZE 100
 
-#define MMIO_SCOPE_READ     (AFU_IMAGE_MMIO_SCOPE_READ * 4)
-#define MMIO_SCOPE_WRITE    (AFU_IMAGE_MMIO_SCOPE_WRITE * 4)
+#define MMIO_SCOPE_READ  (AFU_IMAGE_MMIO_SCOPE_READ * 4)
+#define MMIO_SCOPE_WRITE (AFU_IMAGE_MMIO_SCOPE_WRITE * 4)
 
 #define CMD_GET_WIDTH   0
 #define CMD_GET_COUNT   1
@@ -28,6 +26,15 @@
 #define CMD_GET_DATA    3
 #define CMD_SET_START   4
 #define CMD_SET_STOP    5
+
+#define CHECK_ERR(_expr)    \
+    do {                    \
+        int err = _expr;    \
+        if (err == 0)       \
+            break;          \
+        printf("[SCOPE] Error: '%s' returned %d!\n", #_expr, err); \
+        return err;         \
+    } while (false)
 
 struct tap_signal_t {
     uint32_t id;  
@@ -45,30 +52,9 @@ struct tap_t {
     std::vector<tap_signal_t> signals;
 };
 
+static scope_callback_t g_callback;
+
 using json = nlohmann::json;
-
-#ifdef HANG_TIMEOUT
-static std::thread g_timeout_thread;
-static std::mutex  g_timeout_mutex;
-static std::condition_variable g_timeout_cv;
-static bool g_timeout_enabled = false;
-
-static void timeout_callback(vx_device_h hdevice) {
-    std::unique_lock<std::mutex> lock(g_timeout_mutex);
-    auto status = g_timeout_cv.wait_for(lock, std::chrono::milliseconds(HANG_TIMEOUT));
-    if (status == std::cv_status::timeout) {
-        std::cerr << "Scope timed out!" << std::endl;
-        g_timeout_enabled = false;
-        auto device = ((vx_device*)hdevice);
-        auto& api = device->api;        
-        vx_scope_stop(hdevice);
-        api.fpgaClose(device->fpga);
-        exit(-1);
-    }  else {
-        std::cerr << "Scope shutdown!" << std::endl;
-    } 
-}
-#endif
 
 static uint64_t dump_clock(std::ofstream& ofs, uint64_t delta, uint64_t timestamp) {
     while (delta != 0) {
@@ -162,9 +148,7 @@ static tap_t* find_nearest_tap(std::vector<tap_t>& taps) {
     return nearest;
 }
 
-static void dump_tap(std::ofstream& ofs, tap_t* tap, vx_device* device) {    
-    auto& api = device->api;
-    
+static int dump_tap(std::ofstream& ofs, tap_t* tap, vx_device_h hdevice) {
     uint32_t signal_offset = 0;   
     uint32_t frame_offset = 0;
     uint64_t word;
@@ -176,12 +160,8 @@ static void dump_tap(std::ofstream& ofs, tap_t* tap, vx_device* device) {
     do {
         // read data
         uint64_t cmd_data = (tap->id << 3) | CMD_GET_DATA;
-        CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, cmd_data), {
-            return;
-        });        
-        CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_SCOPE_READ, &word), {
-            return;
-        });        
+        CHECK_ERR(g_callback.registerWrite(hdevice, cmd_data));        
+        CHECK_ERR(g_callback.registerRead(hdevice, &word));        
         do {            
             uint32_t word_offset = frame_offset % 64;
             signal_data[signal_width - signal_offset - 1] = ((word >> word_offset) & 0x1) ? '1' : '0';
@@ -195,12 +175,8 @@ static void dump_tap(std::ofstream& ofs, tap_t* tap, vx_device* device) {
                     ++tap->cur_frame;
                     if (tap->cur_frame != tap->frames) {
                         // read next delta
-                        CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, cmd_data), {
-                            return;
-                        });      
-                        CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_SCOPE_READ, &word), {
-                            return;
-                        });
+                        CHECK_ERR(g_callback.registerWrite(hdevice, cmd_data));      
+                        CHECK_ERR(g_callback.registerRead(hdevice, &word));
                         tap->ticks += word;                        
                 
                         if (0 == (tap->cur_frame % FRAME_FLUSH_SIZE)) {
@@ -216,10 +192,11 @@ static void dump_tap(std::ofstream& ofs, tap_t* tap, vx_device* device) {
             }
         } while ((frame_offset % 64) != 0);
     } while (frame_offset != tap->width);
+    return 0;
 }
 
-int vx_scope_start(vx_device_h hdevice, uint64_t start_time, uint64_t stop_time) {    
-    if (nullptr == hdevice)
+int vx_scope_start(scope_callback_t* callback, vx_device_h hdevice, uint64_t start_time, uint64_t stop_time) {    
+    if (nullptr == hdevice || nullptr == callback)
         return -1;
 
     const char* json_path = getenv("SCOPE_JSON_PATH");
@@ -230,8 +207,7 @@ int vx_scope_start(vx_device_h hdevice, uint64_t start_time, uint64_t stop_time)
     if (json_obj.is_null())
         return -1;
 
-    auto device = ((vx_device*)hdevice);
-    auto& api = device->api;    
+    g_callback = *callback;   
 
     // validate scope manifest
     for (auto& tap : json_obj["taps"]) {
@@ -239,13 +215,9 @@ int vx_scope_start(vx_device_h hdevice, uint64_t start_time, uint64_t stop_time)
         auto width = tap["width"].get<uint32_t>();
         
         uint64_t cmd_width = (id << 3) | CMD_GET_WIDTH;
-        CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, cmd_width), {
-            return -1;
-        });
+        CHECK_ERR(g_callback.registerWrite(hdevice, cmd_width));
         uint64_t dev_width;
-        CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_SCOPE_READ, &dev_width), {
-            return -1;
-        });
+        CHECK_ERR(g_callback.registerRead(hdevice, &dev_width));
         if (width != dev_width) {
             std::cerr << "Invalid scope with! id=" << id << ", actual=" << dev_width << ", expected=" << width << std::endl;
             return 1;
@@ -258,9 +230,7 @@ int vx_scope_start(vx_device_h hdevice, uint64_t start_time, uint64_t stop_time)
         for (auto& tap : json_obj["taps"]) {
             auto id = tap["id"].get<uint32_t>();
             uint64_t cmd_stop = (stop_time << 11) | (id << 3) | CMD_SET_STOP;
-            CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, cmd_stop), {
-                return -1;
-            });
+            CHECK_ERR(g_callback.registerWrite(hdevice, cmd_stop));
         }        
     }
 
@@ -270,36 +240,16 @@ int vx_scope_start(vx_device_h hdevice, uint64_t start_time, uint64_t stop_time)
         for (auto& tap : json_obj["taps"]) {
             auto id = tap["id"].get<uint32_t>();
             uint64_t cmd_start = (start_time << 11) | (id << 3) | CMD_SET_START;
-            CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, cmd_start), {
-                return -1;
-            });
+            CHECK_ERR(g_callback.registerWrite(hdevice, cmd_start));
         }        
     }
-
-#ifdef HANG_TIMEOUT
-    // starting timeout thread
-    g_timeout_enabled = true;
-    g_timeout_thread = std::thread(timeout_callback, device);
-#endif
 
     return 0;
 }
 
-int vx_scope_stop(vx_device_h hdevice) {  
-#ifdef HANG_TIMEOUT
-    if (g_timeout_enabled) {
-        // shutting down timeout thread
-        g_timeout_enabled = false;
-        g_timeout_cv.notify_all();
-        g_timeout_thread.join();
-    }    
-#endif
-
+int vx_scope_stop(vx_device_h hdevice) {
     if (nullptr == hdevice)
         return -1;
-
-    auto device = (vx_device*)hdevice;
-    auto& api = device->api;
 
     std::vector<tap_t> taps;
 
@@ -335,9 +285,7 @@ int vx_scope_stop(vx_device_h hdevice) {
     // stop recording
     for (auto& tap : taps) {
         uint64_t cmd_stop = (0 << 11) | (tap.id << 3) | CMD_SET_STOP;
-        CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, cmd_stop), {
-            return -1;
-        });
+        CHECK_ERR(g_callback.registerWrite(hdevice, cmd_stop));
     }
 
     std::cout << "scope trace dump begin..." << std::endl;
@@ -352,30 +300,18 @@ int vx_scope_stop(vx_device_h hdevice) {
 
         // get count
         uint64_t cmd_count = (tap.id << 3) | CMD_GET_COUNT;
-        CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, cmd_count), {
-            return -1;
-        });
-        CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_SCOPE_READ, &count), {
-            return -1;
-        });   
+        CHECK_ERR(g_callback.registerWrite(hdevice, cmd_count));
+        CHECK_ERR(g_callback.registerRead(hdevice, &count));   
 
         // get start    
         uint64_t cmd_start = (tap.id << 3) | CMD_GET_START;
-        CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, cmd_start), {
-            return -1;
-        });
-        CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_SCOPE_READ, &start), {
-            return -1;
-        });
+        CHECK_ERR(g_callback.registerWrite(hdevice, cmd_start));
+        CHECK_ERR(g_callback.registerRead(hdevice, &start));
 
         // get data
         uint64_t cmd_data = (tap.id << 3) | CMD_GET_DATA;
-        CHECK_ERR(api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, cmd_data), {
-            return -1;
-        });
-        CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_SCOPE_READ, &delta), {
-            return -1;
-        });
+        CHECK_ERR(g_callback.registerWrite(hdevice, cmd_data));
+        CHECK_ERR(g_callback.registerRead(hdevice, &delta));
 
         tap.frames = count;
         tap.ticks = start + delta;
@@ -393,7 +329,7 @@ int vx_scope_stop(vx_device_h hdevice) {
         // advance clock
         timestamp = dump_clock(ofs, tap->ticks + 1, timestamp);        
         // dump tap
-        dump_tap(ofs, tap, device);
+        CHECK_ERR(dump_tap(ofs, tap, hdevice));
     };
 
     std::cout << "scope trace dump done! - " << (timestamp/2) << " cycles" << std::endl;

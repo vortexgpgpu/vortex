@@ -53,7 +53,6 @@ RTL_INCLUDE += -I$(AFU_DIR) -I$(AFU_DIR)/ccip
 
 TOP = vortex_afu_shim
 
-VL_FLAGS = --cc $(TOP) --top-module $(TOP)
 VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic
 VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
 VL_FLAGS += --x-initial unique --x-assign unique
@@ -83,6 +82,7 @@ endif
 ifdef SCOPE
 	VL_FLAGS += -DSCOPE
 	CXXFLAGS += -DSCOPE
+	SCOPE_JSON = $(DESTDIR)/scope.json
 endif
 
 # Enable perf counters
@@ -107,14 +107,17 @@ PROJECT = libopae-c-sim.so
 
 all: $(PROJECT)
 
-vortex_afu.h : $(AFU_DIR)/vortex_afu.vh
-	$(SCRIPT_DIR)/gen_config.py -i $(AFU_DIR)/vortex_afu.vh -o vortex_afu.h
+$(DESTDIR)/vortex.xml:
+	verilator --xml-only $(TOP) -O0 $(VL_FLAGS) --xml-output $(DESTDIR)/vortex.xml
 
-$(DESTDIR)/$(PROJECT): $(SRCS) vortex_afu.h
-	verilator --build --exe -O3 $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(DESTDIR)/$(PROJECT)
+$(DESTDIR)/scope.json: $(DESTDIR)/vortex.xml
+	$(SCRIPT_DIR)/scope.py $(DESTDIR)/vortex.xml -o $(DESTDIR)/scope.json
 
-$(DESTDIR)/vortex.xml: $(DESTDIR)/$(PROJECT)
-	verilator --xml-only -O0 $(VL_FLAGS) --xml-output $(DESTDIR)/vortex.xml
+$(DESTDIR)/vortex_afu.h : $(AFU_DIR)/vortex_afu.vh
+	$(SCRIPT_DIR)/gen_config.py -i $(AFU_DIR)/vortex_afu.vh -o $(DESTDIR)/vortex_afu.h
+
+$(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/vortex_afu.h $(SCOPE_JSON)
+	verilator --build --exe --cc $(TOP) --top-module $(TOP) -O3 $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -o ../$(DESTDIR)/$(PROJECT)
 
 clean:
-	rm -rf obj_dir $(DESTDIR)/$(PROJECT)
+	rm -rf obj_dir $(DESTDIR)/vortex.xml $(DESTDIR)/scope.json $(DESTDIR)/vortex_afu.h $(DESTDIR)/$(PROJECT)

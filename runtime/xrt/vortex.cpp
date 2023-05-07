@@ -7,7 +7,10 @@
 #include <util.h>
 #include <limits>
 #include <unordered_map>
-#include <nlohmann_json.hpp>
+
+#ifdef SCOPE
+#include "scope.h"
+#endif
 
 // XRT includes
 #include "experimental/xrt_bo.h"
@@ -17,13 +20,12 @@
 #include "experimental/xrt_xclbin.h"
 #include "experimental/xrt_error.h"
 
-#define CPP_API
-
 #define MMIO_CTL_ADDR   0x00
 #define MMIO_DEV_ADDR   0x10
 #define MMIO_ISA_ADDR   0x1C
 #define MMIO_DCR_ADDR   0x28
 #define MMIO_MEM_ADDR   0x34
+#define MMIO_SCP_ADDR   0x40
 
 #define CTL_AP_START    (1<<0)
 #define CTL_AP_DONE     (1<<1)
@@ -517,6 +519,55 @@ extern int vx_dev_open(vx_device_h* hdevice) {
         return -1;
     });
 
+#endif 
+
+#ifdef SCOPE
+    {
+        scope_callback_t callback;
+        callback.registerWrite = [](vx_device_h hdevice, uint64_t value)->int { 
+            auto device = (vx_device*)hdevice;
+            uint32_t value_lo = (uint32_t)(value);
+            uint32_t value_hi = (uint32_t)(value >> 32);
+        #ifdef CPP_API
+            device->xrtKernel.write_register(MMIO_SCP_ADDR, value_lo);
+            device->xrtKernel.write_register(MMIO_SCP_ADDR + 4, value_hi);
+        #else        
+            CHECK_ERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_SCP_ADDR, value_lo), {
+                dump_xrt_error(device->xrtDevice, err);
+                return -1;
+            });
+            CHECK_ERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_SCP_ADDR + 4, value_hi), {
+                dump_xrt_error(device->xrtDevice, err);
+                return -1;
+            });        
+        #endif
+            return 0;
+        };
+        callback.registerRead = [](vx_device_h hdevice, uint64_t* value)->int {
+            auto device = (vx_device*)hdevice;
+            uint32_t value_lo, value_hi;
+        #ifdef CPP_API
+            device->xrtKernel.read_register(MMIO_SCP_ADDR, &value_lo);
+            device->xrtKernel.read_register(MMIO_SCP_ADDR + 4, &value_hi);
+        #else        
+            CHECK_ERR(xrtKernelReadRegister(device->xrtKernel, MMIO_SCP_ADDR, &value_lo), {
+                dump_xrt_error(device->xrtDevice, err);
+                return -1;
+            });
+            CHECK_ERR(xrtKernelReadRegister(device->xrtKernel, MMIO_SCP_ADDR + 4, &value_hi), {
+                dump_xrt_error(device->xrtDevice, err);
+                return -1;
+            });
+        #endif
+            *value = (((uint64_t)value_hi) << 32) | value_lo;
+            return 0;
+        };
+        int ret = vx_scope_start(&callback, device, 0, -1);
+        if (ret != 0) {
+            delete device;
+            return ret;
+        }
+    }
 #endif
         
     CHECK_ERR(dcr_initialize(device), {
@@ -526,7 +577,7 @@ extern int vx_dev_open(vx_device_h* hdevice) {
 
 #ifdef DUMP_PERF_STATS
     perf_add_device(device);
-#endif 
+#endif
 
     *hdevice = device;
 
@@ -539,7 +590,11 @@ extern int vx_dev_close(vx_device_h hdevice) {
     if (nullptr == hdevice)
         return -1;
 
-    auto device = (vx_device*)hdevice;    
+#ifdef SCOPE
+    vx_scope_stop(hdevice);
+#endif
+
+    auto device = (vx_device*)hdevice;
 
     delete device;
 

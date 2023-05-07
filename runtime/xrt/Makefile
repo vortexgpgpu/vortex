@@ -18,9 +18,15 @@ else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
+# Enable scope logic analyzer
+ifdef SCOPE
+	CXXFLAGS += -DSCOPE	
+	SRCS += ../common/scope.cpp
+endif
+
 all: $(PROJECT)
 
-$(PROJECT): $(SRCS) 
+$(PROJECT): $(SRCS) $(SCOPE_JSON)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 clean:

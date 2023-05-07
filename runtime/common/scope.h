@@ -2,12 +2,21 @@
 
 #include <vortex.h>
 
-#if defined(USE_FPGA)
-#define HANG_TIMEOUT (5 * 60 * 1000)
-#else
-#define HANG_TIMEOUT (30 * 60 * 1000)
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-int vx_scope_start(vx_device_h hdevice, uint64_t start_time = 0, uint64_t stop_time = -1);
+typedef int (*pfn_registerWrite)(vx_device_h hdevice, uint64_t value);
+typedef int (*pfn_registerRead)(vx_device_h hdevice, uint64_t *value);
 
+struct scope_callback_t {
+	pfn_registerWrite registerWrite;
+	pfn_registerRead  registerRead;
+};
+
+int vx_scope_start(scope_callback_t* callback, vx_device_h hdevice, uint64_t start_time, uint64_t stop_time);
 int vx_scope_stop(vx_device_h hdevice);
+
+#ifdef __cplusplus
+}
+#endif

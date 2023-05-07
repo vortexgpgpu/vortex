@@ -475,7 +475,14 @@ module VX_raster_unit_top #(
     assign cache_rsp_if.tag = cache_rsp_tag;
     assign cache_rsp_if.data = cache_rsp_data;
     assign cache_rsp_ready = cache_rsp_if.ready;
-    
+
+`ifdef SCOPE
+    wire [0:0] scope_reset_w = 1'b0; 
+    wire [0:0] scope_bus_in_w = 1'b0; 
+    wire [0:0] scope_bus_out_w;
+    `UNUSED_VAR (scope_bus_out_w)
+`endif
+
     VX_raster_unit #( 
         .INSTANCE_ID     (INSTANCE_ID),
         .INSTANCE_IDX    (INSTANCE_IDX),

@@ -586,10 +586,17 @@ module VX_core_top #(
     assign rop_req_if.ready = rop_req_ready;
 `endif
 
+`ifdef SCOPE
+    wire [0:0] scope_reset_w = 1'b0; 
+    wire [0:0] scope_bus_in_w = 1'b0; 
+    wire [0:0] scope_bus_out_w;
+    `UNUSED_VAR (scope_bus_out_w)
+`endif
+
     VX_core #(
         .CORE_ID (0)
     ) core (
-
+        `SCOPE_IO_BIND (0)
         .clk            (clk),
         .reset          (reset),
         

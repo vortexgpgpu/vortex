@@ -10,7 +10,6 @@ extern "C" {
 #endif
 
 typedef void* vx_device_h;
-
 typedef void* vx_buffer_h;
 
 // device caps ids

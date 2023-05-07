@@ -8,8 +8,9 @@
     <args>
       <arg id="0" name="DEV" addressQualifier="0" port="s_axi_ctrl" size="0x8" offset="0x010" type="uint" hostOffset="0x0" hostSize="0x8"/>
       <arg id="1" name="ISA" addressQualifier="0" port="s_axi_ctrl" size="0x8" offset="0x01C" type="uint" hostOffset="0x0" hostSize="0x8"/>      
-      <arg id="2" name="DCR" addressQualifier="0" port="s_axi_ctrl" size="0x8" offset="0x028" type="uint" hostOffset="0x0" hostSize="0x8"/>
-      <arg id="3" name="MEM" addressQualifier="1" port="m0_axi_mem"  size="0x8" offset="0x034" type="void*" hostOffset="0x0" hostSize="0x8"/>
+      <arg id="2" name="DCR" addressQualifier="0" port="s_axi_ctrl" size="0x8" offset="0x028" type="uint" hostOffset="0x0" hostSize="0x8"/>      
+      <arg id="3" name="MEM" addressQualifier="1" port="m0_axi_mem" size="0x8" offset="0x034" type="void*" hostOffset="0x0" hostSize="0x8"/>
+      <arg id="4" name="SCP" addressQualifier="0" port="s_axi_ctrl" size="0x8" offset="0x040" type="uint" hostOffset="0x0" hostSize="0x8"/>
     </args>
   </kernel>
 </root>

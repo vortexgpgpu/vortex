@@ -35,6 +35,8 @@
 #define MMIO_STATUS         (AFU_IMAGE_MMIO_STATUS   * 4)
 #define MMIO_DEV_CAPS       (AFU_IMAGE_MMIO_DEV_CAPS * 4)
 #define MMIO_ISA_CAPS       (AFU_IMAGE_MMIO_ISA_CAPS * 4)
+#define MMIO_SCOPE_READ     (AFU_IMAGE_MMIO_SCOPE_READ * 4)
+#define MMIO_SCOPE_WRITE    (AFU_IMAGE_MMIO_SCOPE_WRITE * 4)
 
 #define STATUS_STATE_BITS   8
 
@@ -184,7 +186,16 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     
 #ifdef SCOPE
     {
-        int ret = vx_scope_start(device, 0, -1);
+        scope_callback_t callback;
+        callback.registerWrite = [](vx_device_h hdevice, uint64_t value)->int { 
+            auto device = (vx_device*)hdevice;
+            return device->api.fpgaWriteMMIO64(device->fpga, 0, MMIO_SCOPE_WRITE, value);
+        };
+        callback.registerRead = [](vx_device_h hdevice, uint64_t* value)->int {
+            auto device = (vx_device*)hdevice;
+            return device->api.fpgaReadMMIO64(device->fpga, 0, MMIO_SCOPE_READ, value);
+        };
+        int ret = vx_scope_start(&callback, device, 0, -1);
         if (ret != 0) {
             api.fpgaClose(accel_handle);
             return ret;

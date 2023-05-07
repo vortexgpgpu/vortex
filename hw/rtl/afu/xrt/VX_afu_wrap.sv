@@ -69,6 +69,7 @@ module VX_afu_wrap #(
 	// convert memory interface to array
 	`REPEAT (`M_AXI_MEM_NUM_BANKS, AXI_MEM_TO_ARRAY, REPEAT_SEMICOLON);
 
+	wire clk = ap_clk;
 	wire reset = ~ap_rst_n;
 
 	reg [$clog2(`RESET_DELAY+1)-1:0] vx_reset_ctr;
@@ -84,7 +85,7 @@ module VX_afu_wrap #(
 	wire [`VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr;
 	wire [`VX_DCR_DATA_WIDTH-1:0] dcr_wr_data;
 
-	wire state;
+	reg state;
 
 	wire ap_reset;
 	wire ap_start;
@@ -93,8 +94,9 @@ module VX_afu_wrap #(
 	wire ap_ready = 1'b1;
 
 `ifdef SCOPE
-
-
+	wire scope_bus_in;
+	wire scope_bus_out;
+  	wire scope_reset = reset; 
 `endif
 
 	always @(posedge ap_clk) begin
@@ -207,13 +209,18 @@ module VX_afu_wrap #(
 		.ap_done     	(ap_done),
 		.ap_ready       (ap_ready),
 		.ap_idle     	(ap_idle),
-		.interrupt 		(interrupt),	
+		.interrupt 		(interrupt),
+
+	`ifdef SCOPE
+		.scope_bus_in   (scope_bus_out),	
+		.scope_bus_out  (scope_bus_in),
+	`endif	
 
 		.mem_base       (mem_base),
 
 		.dcr_wr_valid	(dcr_wr_valid),
 		.dcr_wr_addr	(dcr_wr_addr),
-		.dcr_wr_data	(dcr_wr_data)		
+		.dcr_wr_data	(dcr_wr_data)
 	);
 
 	wire [`XLEN-1:0] m_axi_mem_awaddr_w [C_M_AXI_MEM_NUM_BANKS];

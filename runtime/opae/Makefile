@@ -50,11 +50,10 @@ else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
-# Enable scope analyzer
+# Enable scope logic analyzer
 ifdef SCOPE
 	CXXFLAGS += -DSCOPE	
 	SRCS += ../common/scope.cpp
-	SCOPE_JSON = scope.json
 endif
 
 # Enable perf counters
@@ -66,18 +65,12 @@ PROJECT = libvortex.so
 
 all: $(PROJECT)
 
-vortex.xml:
-	DESTDIR=../../runtime/opae $(MAKE) -C $(OPAESIM_DIR) ../../runtime/opae/vortex.xml
-
-scope.json: vortex.xml
-	$(SCRIPT_DIR)/scope.py vortex.xml -o scope.json
-
 libopae-c-sim.so:
 	DESTDIR=../../runtime/opae $(MAKE) -C $(OPAESIM_DIR) ../../runtime/opae/libopae-c-sim.so
 
-$(PROJECT): $(SRCS) $(OPAESIM) $(SCOPE_JSON)
+$(PROJECT): $(SRCS) $(OPAESIM)
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $(PROJECT)
 
 clean:
 	DESTDIR=../../runtime/opae $(MAKE) -C $(OPAESIM_DIR) clean
-	rm -rf $(PROJECT) vortex.xml scope.json
+	rm -rf $(PROJECT)

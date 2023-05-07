@@ -19,6 +19,7 @@ MAX_JOBS ?= 8
 
 RTL_DIR = ../../../../rtl
 AFU_DIR = $(RTL_DIR)/afu/xrt
+DPI_DIR = ../../../../dpi
 SCRIPT_DIR = ../../../../scripts
 
 VIVADO = $(XILINX_VIVADO)/bin/vivado
@@ -116,6 +117,7 @@ ifdef DEBUG
 		VPP_FLAGS += --debug.chipscope vortex_afu_1
 		#CFLAGS += -DCHIPSCOPE $(DBG_SCOPE_FLAGS)
 		CFLAGS += -DSCOPE $(DBG_SCOPE_FLAGS)
+		SCOPE_JSON += $(BUILD_DIR)/scope.json
 	else		
 		VPP_FLAGS += --vivado.prop fileset.sim_1.xsim.elaborate.debug_level=all
 		CFLAGS += -DSIMULATION $(DBG_TRACE_FLAGS)
@@ -130,12 +132,15 @@ CFLAGS += -DSYNTHESIS -DVIVADO
 CFLAGS += $(CONFIGS)
 CFLAGS += $(RTL_INCLUDE)
 
+# ast dump flags
+XML_CFLAGS = $(filter-out -DSYNTHESIS -DVIVADO, $(CFLAGS)) -I$(DPI_DIR)
+
 # RTL Kernel only supports Hardware and Hardware Emulation.
 ifneq ($(TARGET),$(findstring $(TARGET), hw hw_emu))
 	$(warning WARNING:Application supports only hw hw_emu TARGET. Please use the target for running the application)
 endif
 
-.PHONY: all clean gen-sources emconfig check-devices
+.PHONY: all clean gen-sources gen-ast emconfig check-devices
 
 all: check-devices emconfig $(XCLBIN_CONTAINER)
 
@@ -143,10 +148,18 @@ gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt:
 	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -EVX_fpu_fpnew.sv -Fsrc -P -Osources.txt
 
+gen-ast: $(BUILD_DIR)/vortex.xml
+$(BUILD_DIR)/vortex.xml:	
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); verilator --xml-only -O0 -DNDEBUG $(XML_CFLAGS) vortex_afu.v --xml-output vortex.xml
+
+scope-json: $(BUILD_DIR)/scope.json
+$(BUILD_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/scope.py vortex.xml -o scope.json
+
 $(XO_CONTAINER): $(BUILD_DIR)/sources.txt ./kernel.xml
 	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	$(VIVADO) -mode batch -source ../scripts/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt ../kernel.xml $(SCRIPT_DIR) ../$(BUILD_DIR)
 
-$(XCLBIN_CONTAINER): $(XO_CONTAINER)
+$(XCLBIN_CONTAINER): $(XO_CONTAINER) $(SCOPE_JSON)
 	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); $(VPP) $(VPP_FLAGS) -o ../$(XCLBIN_CONTAINER) ../$(XO_CONTAINER)
 
 emconfig: $(BIN_DIR)/emconfig.json
