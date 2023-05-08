@@ -19,13 +19,13 @@ module VX_axi_adapter #(
     input wire [AVS_ADDR_WIDTH-1:0] mem_req_addr,
     input wire [DATA_WIDTH-1:0]     mem_req_data,
     input wire [TAG_WIDTH-1:0]      mem_req_tag,
+    output wire                     mem_req_ready,
 
-    // Vortex response
-    input wire                      mem_rsp_ready,
+    // Vortex response    
     output wire                     mem_rsp_valid,        
     output wire [DATA_WIDTH-1:0]    mem_rsp_data,
     output wire [TAG_WIDTH-1:0]     mem_rsp_tag,
-    output wire                     mem_req_ready,
+    input wire                      mem_rsp_ready,
 
     // AXI write request address channel  
     output wire                     m_axi_awvalid [NUM_BANKS],
@@ -130,7 +130,7 @@ module VX_axi_adapter #(
     // AXI write request address channel  
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         assign m_axi_awvalid[i] = mem_req_valid && mem_req_rw && (req_bank_sel == i) && ~m_axi_aw_ack[i];
-        assign m_axi_awaddr[i]  = ADDR_WIDTH'(mem_req_addr) << AXSIZE;
+        assign m_axi_awaddr[i]  = (ADDR_WIDTH'(mem_req_addr) >> BANK_ADDRW) << AXSIZE;
         assign m_axi_awid[i]    = mem_req_tag;
         assign m_axi_awlen[i]   = 8'b00000000;    
         assign m_axi_awsize[i]  = 3'(AXSIZE);
@@ -162,7 +162,7 @@ module VX_axi_adapter #(
     // AXI read request channel
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         assign m_axi_arvalid[i] = mem_req_valid && ~mem_req_rw && (req_bank_sel == i);    
-        assign m_axi_araddr[i]  = ADDR_WIDTH'(mem_req_addr) << AXSIZE;
+        assign m_axi_araddr[i]  = (ADDR_WIDTH'(mem_req_addr) >> BANK_ADDRW) << AXSIZE;
         assign m_axi_arid[i]    = mem_req_tag;
         assign m_axi_arlen[i]   = 8'b00000000;
         assign m_axi_arsize[i]  = 3'(AXSIZE);

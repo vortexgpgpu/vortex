@@ -34,11 +34,7 @@
 `define PERF_CTR_BITS   44
 
 `ifndef NDEBUG
-`ifdef VIVADO
-`define UUID_BITS       19
-`else
 `define UUID_BITS       44
-`endif
 `else
 `define UUID_BITS       0
 `endif

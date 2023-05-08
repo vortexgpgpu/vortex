@@ -1,7 +1,7 @@
 `include "vortex_afu.vh"
 
 module vortex_afu #(
-	parameter C_S_AXI_CTRL_ADDR_WIDTH = 6,
+	parameter C_S_AXI_CTRL_ADDR_WIDTH = 8,
 	parameter C_S_AXI_CTRL_DATA_WIDTH = 32,
 	parameter C_M_AXI_MEM_ID_WIDTH 	  = `M_AXI_MEM_ID_WIDTH,
 	parameter C_M_AXI_MEM_ADDR_WIDTH  = 64,

@@ -122,7 +122,7 @@ ifdef DEBUG
 		VPP_FLAGS += --vivado.prop fileset.sim_1.xsim.elaborate.debug_level=all
 		CFLAGS += -DSIMULATION $(DBG_TRACE_FLAGS)
 	endif
-else    
+else
 	VPP_FLAGS += --optimize 3
 	CFLAGS += -DNDEBUG
 endif
@@ -150,7 +150,7 @@ $(BUILD_DIR)/sources.txt:
 
 gen-ast: $(BUILD_DIR)/vortex.xml
 $(BUILD_DIR)/vortex.xml:	
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); verilator --xml-only -O0 -DNDEBUG $(XML_CFLAGS) vortex_afu.v --xml-output vortex.xml
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); verilator --xml-only -O0 $(XML_CFLAGS) vortex_afu.v --xml-output vortex.xml
 
 scope-json: $(BUILD_DIR)/scope.json
 $(BUILD_DIR)/scope.json: $(BUILD_DIR)/vortex.xml

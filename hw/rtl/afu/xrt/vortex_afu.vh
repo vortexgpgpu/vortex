@@ -6,18 +6,14 @@
 `endif
 
 `ifndef M_AXI_MEM_ID_WIDTH
-`ifdef NDEBUG
-`define M_AXI_MEM_ID_WIDTH 20
-`else
 `define M_AXI_MEM_ID_WIDTH 32
-`endif
 `endif
 
 `define GEN_AXI_MEM(i) \
 	output wire                                 m``i``_axi_mem_awvalid, \
 	input  wire                                 m``i``_axi_mem_awready, \
 	output wire [C_M_AXI_MEM_ADDR_WIDTH-1:0] 	m``i``_axi_mem_awaddr, \
-	output wire [C_M_AXI_MEM_ID_WIDTH - 1:0]   	m``i``_axi_mem_awid, \
+	output wire [C_M_AXI_MEM_ID_WIDTH-1:0]   	m``i``_axi_mem_awid, \
 	output wire [7:0]                           m``i``_axi_mem_awlen, \
 	output wire                                 m``i``_axi_mem_wvalid, \
 	input  wire                                 m``i``_axi_mem_wready, \
@@ -31,14 +27,14 @@
 	output wire [7:0]                           m``i``_axi_mem_arlen, \
 	input  wire                                 m``i``_axi_mem_rvalid, \
 	output wire                                 m``i``_axi_mem_rready, \
-	input  wire [C_M_AXI_MEM_DATA_WIDTH - 1:0] 	m``i``_axi_mem_rdata, \
+	input  wire [C_M_AXI_MEM_DATA_WIDTH-1:0] 	m``i``_axi_mem_rdata, \
 	input  wire                                 m``i``_axi_mem_rlast, \
-	input  wire [C_M_AXI_MEM_ID_WIDTH - 1:0]   	m``i``_axi_mem_rid, \
+	input  wire [C_M_AXI_MEM_ID_WIDTH-1:0]   	m``i``_axi_mem_rid, \
 	input  wire [1:0]                           m``i``_axi_mem_rresp, \
 	input  wire                                 m``i``_axi_mem_bvalid, \
 	output wire                                 m``i``_axi_mem_bready, \
 	input  wire [1:0]                           m``i``_axi_mem_bresp, \
-	input  wire [C_M_AXI_MEM_ID_WIDTH - 1:0]   	m``i``_axi_mem_bid
+	input  wire [C_M_AXI_MEM_ID_WIDTH-1:0]   	m``i``_axi_mem_bid
 
 `define AXI_MEM_ARGS(i) \
     .m``i``_axi_mem_awvalid(m``i``_axi_mem_awvalid), \

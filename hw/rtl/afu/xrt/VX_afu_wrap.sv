@@ -1,7 +1,7 @@
 `include "vortex_afu.vh"
 
 module VX_afu_wrap #( 
-	  parameter C_S_AXI_CTRL_ADDR_WIDTH = 6,
+	  parameter C_S_AXI_CTRL_ADDR_WIDTH = 8,
 	  parameter C_S_AXI_CTRL_DATA_WIDTH	= 32,
 	  parameter C_M_AXI_MEM_ID_WIDTH    = 16,
 	  parameter C_M_AXI_MEM_ADDR_WIDTH  = 32,
@@ -43,7 +43,7 @@ module VX_afu_wrap #(
 	wire                                 m_axi_mem_awvalid_a [C_M_AXI_MEM_NUM_BANKS];
     wire                                 m_axi_mem_awready_a [C_M_AXI_MEM_NUM_BANKS];
     wire [C_M_AXI_MEM_ADDR_WIDTH-1:0]    m_axi_mem_awaddr_a [C_M_AXI_MEM_NUM_BANKS];
-    wire [C_M_AXI_MEM_ID_WIDTH - 1:0]    m_axi_mem_awid_a [C_M_AXI_MEM_NUM_BANKS];
+    wire [C_M_AXI_MEM_ID_WIDTH-1:0]      m_axi_mem_awid_a [C_M_AXI_MEM_NUM_BANKS];
     wire [7:0]                           m_axi_mem_awlen_a [C_M_AXI_MEM_NUM_BANKS];
     wire                                 m_axi_mem_wvalid_a [C_M_AXI_MEM_NUM_BANKS];
     wire                                 m_axi_mem_wready_a [C_M_AXI_MEM_NUM_BANKS];
@@ -52,7 +52,7 @@ module VX_afu_wrap #(
     wire                                 m_axi_mem_wlast_a [C_M_AXI_MEM_NUM_BANKS];	
     wire                                 m_axi_mem_bvalid_a [C_M_AXI_MEM_NUM_BANKS];
     wire                                 m_axi_mem_bready_a [C_M_AXI_MEM_NUM_BANKS];
-    wire [C_M_AXI_MEM_ID_WIDTH - 1:0]    m_axi_mem_bid_a [C_M_AXI_MEM_NUM_BANKS];
+    wire [C_M_AXI_MEM_ID_WIDTH-1:0]      m_axi_mem_bid_a [C_M_AXI_MEM_NUM_BANKS];
     wire [1:0]                           m_axi_mem_bresp_a [C_M_AXI_MEM_NUM_BANKS];
     wire                                 m_axi_mem_arvalid_a [C_M_AXI_MEM_NUM_BANKS];
     wire                                 m_axi_mem_arready_a [C_M_AXI_MEM_NUM_BANKS];
@@ -61,9 +61,9 @@ module VX_afu_wrap #(
     wire [7:0]                           m_axi_mem_arlen_a [C_M_AXI_MEM_NUM_BANKS];
     wire                                 m_axi_mem_rvalid_a [C_M_AXI_MEM_NUM_BANKS];
     wire                                 m_axi_mem_rready_a [C_M_AXI_MEM_NUM_BANKS];
-    wire [C_M_AXI_MEM_DATA_WIDTH - 1:0]  m_axi_mem_rdata_a [C_M_AXI_MEM_NUM_BANKS];
+    wire [C_M_AXI_MEM_DATA_WIDTH-1:0]    m_axi_mem_rdata_a [C_M_AXI_MEM_NUM_BANKS];
     wire                                 m_axi_mem_rlast_a [C_M_AXI_MEM_NUM_BANKS];
-    wire [C_M_AXI_MEM_ID_WIDTH - 1:0]    m_axi_mem_rid_a [C_M_AXI_MEM_NUM_BANKS];
+    wire [C_M_AXI_MEM_ID_WIDTH-1:0]      m_axi_mem_rid_a [C_M_AXI_MEM_NUM_BANKS];
     wire [1:0]                           m_axi_mem_rresp_a [C_M_AXI_MEM_NUM_BANKS];
 
 	// convert memory interface to array
@@ -380,13 +380,13 @@ module VX_afu_wrap #(
     always @(posedge ap_clk) begin
 		for (integer i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin
 			if (m_axi_mem_awvalid_a[i] && m_axi_mem_awready_a[i]) begin
-				`TRACE(2, ("%d: AFU Wr Req: addr=0x%0h, tag=0x%0h\n", $time, m_axi_mem_awaddr_a[i], m_axi_mem_awid_a[i]));                
+				`TRACE(2, ("%d: AFU Wr Req: addr=0x%0h, tag=0x%0h\n", $time, m_axi_mem_awaddr_w[i], m_axi_mem_awid_a[i]));                
 			end
 			if (m_axi_mem_wvalid_a[i] && m_axi_mem_wready_a[i]) begin
 				`TRACE(2, ("%d: AFU Wr Req: data=0x%0h\n", $time, m_axi_mem_wdata_a[i]));                
 			end
 			if (m_axi_mem_arvalid_a[i] && m_axi_mem_arready_a[i]) begin   
-				`TRACE(2, ("%d: AFU Rd Req: addr=0x%0h, tag=0x%0h\n", $time, m_axi_mem_araddr_a[i], m_axi_mem_arid_a[i]));
+				`TRACE(2, ("%d: AFU Rd Req: addr=0x%0h, tag=0x%0h\n", $time, m_axi_mem_araddr_w[i], m_axi_mem_arid_a[i]));
 			end
 			if (m_axi_mem_rvalid_a[i] && m_axi_mem_rready_a[i]) begin
 				`TRACE(2, ("%d: AVS Rd Rsp: data=0x%0h, tag=0x%0h\n", $time, m_axi_mem_rdata_a[i], m_axi_mem_rid_a[i]));

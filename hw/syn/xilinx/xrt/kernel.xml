@@ -2,15 +2,15 @@
 <root versionMajor="1" versionMinor="6">
   <kernel name="vortex_afu" language="ip_c" vlnv="xilinx.com:RTLKernel:vortex_afu:1.0" attributes="" preferredWorkGroupSizeMultiple="0" workGroupSize="1" interrupt="true" hwControlProtocol="user_managed">
     <ports>  
-      <port name="s_axi_ctrl" mode="slave"  range="0x1000" dataWidth="32"  portType="addressable" base="0x0"/>
-      <port name="m0_axi_mem"  mode="master" range="0xFFFFFFFFFFFFFFFF" dataWidth="512" portType="addressable" base="0x0"/>
+      <port name="s_axi_ctrl"   mode="slave"  range="0x1000" dataWidth="32"  portType="addressable" base="0x0"/>
+      <port name="m0_axi_mem"   mode="master" range="0xFFFFFFFFFFFFFFFF" dataWidth="512" portType="addressable" base="0x0"/>      
     </ports>
     <args>
-      <arg id="0" name="DEV" addressQualifier="0" port="s_axi_ctrl" size="0x8" offset="0x010" type="uint" hostOffset="0x0" hostSize="0x8"/>
-      <arg id="1" name="ISA" addressQualifier="0" port="s_axi_ctrl" size="0x8" offset="0x01C" type="uint" hostOffset="0x0" hostSize="0x8"/>      
-      <arg id="2" name="DCR" addressQualifier="0" port="s_axi_ctrl" size="0x8" offset="0x028" type="uint" hostOffset="0x0" hostSize="0x8"/>      
-      <arg id="3" name="MEM" addressQualifier="1" port="m0_axi_mem" size="0x8" offset="0x034" type="void*" hostOffset="0x0" hostSize="0x8"/>
-      <arg id="4" name="SCP" addressQualifier="0" port="s_axi_ctrl" size="0x8" offset="0x040" type="uint" hostOffset="0x0" hostSize="0x8"/>
+      <arg id="0" name="DEV" addressQualifier="0" port="s_axi_ctrl"  size="0x8" offset="0x10" type="uint" hostOffset="0x0" hostSize="0x8"/>
+      <arg id="1" name="ISA" addressQualifier="0" port="s_axi_ctrl"  size="0x8" offset="0x1C" type="uint" hostOffset="0x0" hostSize="0x8"/>      
+      <arg id="2" name="DCR" addressQualifier="0" port="s_axi_ctrl"  size="0x8" offset="0x28" type="uint" hostOffset="0x0" hostSize="0x8"/>      
+      <arg id="3" name="SCP" addressQualifier="0" port="s_axi_ctrl"  size="0x8" offset="0x34" type="uint" hostOffset="0x0" hostSize="0x8"/>
+      <arg id="4" name="MEM" addressQualifier="1" port="m0_axi_mem" size="0x8" offset="0x40" type="void*" hostOffset="0x0" hostSize="0x8"/>
     </args>
   </kernel>
 </root>

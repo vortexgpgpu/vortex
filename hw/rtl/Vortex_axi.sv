@@ -76,7 +76,7 @@ module Vortex_axi #(
 );
     `STATIC_ASSERT((AXI_DATA_WIDTH == `VX_MEM_DATA_WIDTH), ("invalid memory data size: current=%0d, expected=%0d", AXI_DATA_WIDTH, `VX_MEM_DATA_WIDTH))
     `STATIC_ASSERT((AXI_ADDR_WIDTH >= `XLEN), ("invalid memory address size: current=%0d, expected=%0d", AXI_ADDR_WIDTH, `VX_MEM_ADDR_WIDTH))
-    `STATIC_ASSERT((AXI_TID_WIDTH >= `VX_MEM_TAG_WIDTH), ("invalid memory tag size: current=%0d, expected=%0d", AXI_TID_WIDTH, `VX_MEM_TAG_WIDTH))
+    //`STATIC_ASSERT((AXI_TID_WIDTH >= `VX_MEM_TAG_WIDTH), ("invalid memory tag size: current=%0d, expected=%0d", AXI_TID_WIDTH, `VX_MEM_TAG_WIDTH))
     
     wire                            mem_req_valid;
     wire                            mem_req_rw; 

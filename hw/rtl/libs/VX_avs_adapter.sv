@@ -123,7 +123,7 @@ module VX_avs_adapter #(
 
         assign avs_read[i]       = valid_out && ~rw_out;
         assign avs_write[i]      = valid_out && rw_out;
-        assign avs_address[i]    = addr_out;
+        assign avs_address[i]    = (addr_out >> BANK_ADDRW);
         assign avs_byteenable[i] = byteen_out;
         assign avs_writedata[i]  = data_out;
         assign avs_burstcount[i] = BURST_WIDTH'(1);
