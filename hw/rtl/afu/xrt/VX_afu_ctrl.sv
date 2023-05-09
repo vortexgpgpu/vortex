@@ -171,7 +171,7 @@ module VX_afu_ctrl #(
             if (s_axi_w_fire && waddr == ADDR_SCP_0) begin
                 scope_bus_wdata[31:0] <= (s_axi_wdata & wmask) | (scope_bus_wdata[31:0] & ~wmask);
             end
-            if (s_axi_w_fire && waddr == ADDR_SPC_1) begin
+            if (s_axi_w_fire && waddr == ADDR_SCP_1) begin
                 scope_bus_wdata[63:32] <= (s_axi_wdata & wmask) | (scope_bus_wdata[63:32] & ~wmask);           
                 cmd_scope_writing <= 1;
                 scope_bus_out_r   <= 1;    
