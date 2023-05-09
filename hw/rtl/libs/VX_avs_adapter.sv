@@ -43,6 +43,7 @@ module VX_avs_adapter #(
     localparam DATA_SIZE = DATA_WIDTH/8;
     localparam RD_QUEUE_ADDR_WIDTH = $clog2(RD_QUEUE_SIZE+1);
     localparam BANK_ADDRW = `LOG2UP(NUM_BANKS);
+    localparam LOG2_NUM_BANKS = $clog2(NUM_BANKS);
 
     // Requests handling //////////////////////////////////////////////////////
     
@@ -123,7 +124,7 @@ module VX_avs_adapter #(
 
         assign avs_read[i]       = valid_out && ~rw_out;
         assign avs_write[i]      = valid_out && rw_out;
-        assign avs_address[i]    = (addr_out >> BANK_ADDRW);
+        assign avs_address[i]    = (addr_out >> LOG2_NUM_BANKS);
         assign avs_byteenable[i] = byteen_out;
         assign avs_writedata[i]  = data_out;
         assign avs_burstcount[i] = BURST_WIDTH'(1);

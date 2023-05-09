@@ -20,12 +20,15 @@
 #include "experimental/xrt_xclbin.h"
 #include "experimental/xrt_error.h"
 
+#define CPP_API
+//#define BANK_INTERLEAVE
+
 #define MMIO_CTL_ADDR   0x00
 #define MMIO_DEV_ADDR   0x10
 #define MMIO_ISA_ADDR   0x1C
 #define MMIO_DCR_ADDR   0x28
-#define MMIO_MEM_ADDR   0x34
-#define MMIO_SCP_ADDR   0x40
+#define MMIO_SCP_ADDR   0x34
+#define MMIO_MEM_ADDR   0x40
 
 #define CTL_AP_START    (1<<0)
 #define CTL_AP_DONE     (1<<1)
@@ -36,16 +39,16 @@
 
 struct platform_info_t {
     const char* prefix_name;
-    uint32_t    num_banks;
+    uint8_t     lg2_num_banks;    
+    uint8_t     lg2_bank_size;
     uint64_t    mem_base;
-    uint64_t    bank_size;
 };
 
 static const platform_info_t g_platforms [] = {
-    {"xilinx_u50",     32, 0x0, 0x10000000},
-    {"xilinx_u200",    32, 0x0, 0x10000000},
-    {"xilinx_u280",    32, 0x0, 0x10000000},
-    {"xilinx_vck5000", 1,  0xC000000000, 0x200000000},
+    {"xilinx_u50",     4, 0x1C, 0x0},
+    {"xilinx_u200",    4, 0x1C, 0x0},
+    {"xilinx_u280",    4, 0x1C, 0x0},
+    {"xilinx_vck5000", 0, 0x21, 0xC000000000},
 };
 
 #ifdef CPP_API
@@ -110,7 +113,7 @@ static int get_platform_info(const std::string& device_name, platform_info_t* pl
     for (size_t i = 0; i < (sizeof(g_platforms)/sizeof(platform_info_t)); ++i) {
         auto& platform = g_platforms[i];
         if (device_name.rfind(platform.prefix_name, 0) == 0) {
-            *platform_info = platform;;
+            *platform_info = platform;
             return 0;
         }
     }    
@@ -124,164 +127,7 @@ static int get_platform_info(const std::string& device_name, platform_info_t* pl
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class vx_device {
-public: 
-
-    vx_device(xrt_device_t& device, xrt_kernel_t& kernel, uint32_t num_banks, uint64_t bank_size)
-        : xrtDevice(device)
-        , xrtKernel(kernel)
-        , num_banks_(num_banks)
-        , bank_size_(bank_size)
-        , mem_allocator_(
-            ALLOC_BASE_ADDR, 
-            ALLOC_MAX_ADDR,
-            4096,            
-            CACHE_BLOCK_SIZE)
-    {}
-
-#ifndef CPP_API
-    
-    ~vx_device() {
-        for (auto it : xrtBuffers_) {
-            xrtBOFree(it.second.xrtBuffer);
-        }
-        if (this->xrtKernel) {
-            xrtKernelClose(this->xrtKernel); 
-        }
-        if (this->xrtDevice) {
-            xrtDeviceClose(this->xrtDevice);
-        }
-    }
-
-#endif
-
-    int mem_alloc(uint64_t size, uint64_t* dev_maddr) {
-        uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
-
-        uint64_t addr;
-
-        CHECK_ERR(mem_allocator_.allocate(asize, &addr), {
-            return -1;
-        });
-
-        uint32_t bank_id;
-
-        CHECK_ERR(this->get_bank_info(addr, &bank_id, nullptr), {
-            return -1;
-        });
-
-        CHECK_ERR(get_buffer(bank_id, nullptr), {
-            return -1;
-        });
-
-        *dev_maddr = addr;
-
-        return 0;
-    }
-
-    int mem_free(uint64_t dev_maddr) {
-        
-        uint32_t bank_id;
-
-        CHECK_ERR(this->get_bank_info(dev_maddr, &bank_id, nullptr), {
-            return -1;
-        });
-
-        auto it = xrtBuffers_.find(bank_id);
-        if (it != xrtBuffers_.end()) {
-            auto count = --it->second.count;            
-            if (0 == count) {               
-                printf("freeing bank%d...\n", bank_id); 
-            #ifndef CPP_API
-                xrtBOFree(it->second.xrtBuffer);
-            #endif
-                xrtBuffers_.erase(it);
-            }
-            CHECK_ERR(mem_allocator_.release(dev_maddr), {
-                return -1;
-            });
-        } else {
-            fprintf(stderr, "[VXDRV] Error: invalid device memory address: 0x%lx\n", dev_maddr);
-            return -1;
-        }   
-
-        return 0;
-    }
-
-    uint64_t mem_used() const {
-        return mem_allocator_.allocated();
-    }
-
-    int get_buffer(uint32_t bank_id, xrt_buffer_t* pBuf) {
-        auto it = xrtBuffers_.find(bank_id);
-        if (it != xrtBuffers_.end()) {            
-            if (pBuf) {
-                *pBuf = it->second.xrtBuffer;
-            } else {
-                printf("reusing bank%d...\n", bank_id);
-                ++it->second.count;
-            }
-        } else {
-            printf("allocating bank%d...\n", bank_id);
-        #ifdef CPP_API
-            xrt::bo xrtBuffer(xrtDevice, bank_size_, xrt::bo::flags::normal, bank_id);
-        #else
-            CHECK_HANDLE(xrtBuffer, xrtBOAlloc(xrtDevice, bank_size_, XRT_BO_FLAGS_NONE, bank_id), {
-                return -1;
-            });
-        #endif
-            xrtBuffers_.insert({bank_id, {xrtBuffer, 1}});
-            if (pBuf) {
-                *pBuf = xrtBuffer;
-            }
-        }
-        return 0;        
-    }    
-
-    int get_bank_info(uint64_t addr, uint32_t* pIdx, uint64_t* pOff) {
-        uint32_t index  = addr / bank_size_;
-        uint64_t offset = addr % bank_size_;
-
-        printf("get_bank_info(addr=0x%lx, bank=%d, offset=0x%lx\n", addr, index, offset);
-        
-        if (index > num_banks_) {
-            fprintf(stderr, "[VXDRV] Error: address out of range: 0x%lx\n", addr);
-            return -1;
-        }
-        
-        if (pIdx) {
-            *pIdx = index;
-        }
-
-        if (pOff) {
-            *pOff = offset;
-        }
-        
-        return 0;
-    }
-
-    xrt_device_t xrtDevice;
-    xrt_kernel_t xrtKernel;
-
-    struct buf_cnt_t {
-        xrt_buffer_t xrtBuffer;
-        uint32_t count;
-    };
-
-    uint32_t num_banks_;
-    uint64_t bank_size_;
-
-    DeviceConfig dcrs;
-    uint64_t dev_caps;
-    uint64_t isa_caps;
-
-private:
-
-    std::unordered_map<uint32_t, buf_cnt_t> xrtBuffers_;
-    vortex::MemoryAllocator mem_allocator_;
-};
-
-///////////////////////////////////////////////////////////////////////////////
+class vx_device;
 
 class vx_buffer {
 public:
@@ -300,6 +146,337 @@ public:
     vx_device* device;
     uint8_t* host_ptr;
     uint64_t size;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+class vx_device {
+public: 
+
+    vx_device(xrt_device_t& device, xrt_kernel_t& kernel, const platform_info_t& platform)
+        : xrtDevice_(device)
+        , xrtKernel_(kernel)
+        , platform_(platform)
+        , mem_allocator_(
+            ALLOC_BASE_ADDR, 
+            ALLOC_MAX_ADDR,
+            RAM_PAGE_SIZE,            
+            CACHE_BLOCK_SIZE)
+    {}
+
+#ifndef CPP_API
+    
+    ~vx_device() {
+        for (auto& entry : xrtBuffers_) {
+        #ifdef BANK_INTERLEAVE
+            xrtBOFree(entry);
+        #else
+            xrtBOFree(entry.second.xrtBuffer);
+        #endif
+        }
+        if (xrtKernel_) {
+            xrtKernelClose(xrtKernel_); 
+        }
+        if (xrtDevice_) {
+            xrtDeviceClose(xrtDevice_);
+        }
+    }
+
+#endif
+
+    int init() {
+        CHECK_ERR(this->write_register(MMIO_CTL_ADDR, CTL_AP_RESET), {
+            return -1;
+        });
+
+        CHECK_ERR(this->write_register(MMIO_MEM_ADDR, platform_.mem_base & 0xffffffff), {
+            return -1;
+        });
+
+        CHECK_ERR(this->write_register(MMIO_MEM_ADDR + 4, (platform_.mem_base >> 32) & 0xffffffff), {
+            return -1;
+        });
+
+        CHECK_ERR(this->read_register(MMIO_DEV_ADDR, (uint32_t*)&this->dev_caps), {
+            return -1;
+        });
+        
+        CHECK_ERR(this->read_register(MMIO_DEV_ADDR + 4, (uint32_t*)&this->dev_caps + 1), {
+            return -1;
+        });
+
+        CHECK_ERR(this->read_register(MMIO_ISA_ADDR, (uint32_t*)&this->isa_caps), {
+            return -1;
+        });
+
+        CHECK_ERR(this->read_register(MMIO_ISA_ADDR + 4, (uint32_t*)&this->isa_caps + 1), {
+            return -1;
+        });
+
+    #ifdef BANK_INTERLEAVE
+        uint32_t num_banks = 1 << platform_.lg2_num_banks;
+        uint64_t bank_size = 1ull << platform_.lg2_bank_size;
+        xrtBuffers_.reserve(num_banks);
+        for (uint32_t i = 0; i < num_banks; ++i) {            
+        #ifdef CPP_API
+            xrtBuffers_.emplace_back(xrtDevice_, bank_size, xrt::bo::flags::normal, i);
+        #else
+            CHECK_HANDLE(xrtBuffer, xrtBOAlloc(xrtDevice_, bank_size, XRT_BO_FLAGS_NONE, i), {
+                return -1;
+            });
+            xrtBuffers_.push_back(xrtBuffer);
+        #endif            
+            printf("*** allocated bank%u/%u, size=%lu\n", i, num_banks, bank_size);
+        }
+    #endif
+
+        return 0;
+    }
+
+    int mem_alloc(uint64_t size, uint64_t* dev_maddr) {
+        uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
+        uint64_t addr;
+        CHECK_ERR(mem_allocator_.allocate(asize, &addr), {
+            return -1;
+        });
+    #ifndef BANK_INTERLEAVE
+        uint32_t bank_id;
+        CHECK_ERR(this->get_bank_info(addr, &bank_id, nullptr), {
+            return -1;
+        });
+        CHECK_ERR(get_buffer(bank_id, nullptr), {
+            return -1;
+        });
+    #endif
+        *dev_maddr = addr;
+        return 0;
+    }
+
+    int mem_free(uint64_t dev_maddr) {                        
+        CHECK_ERR(mem_allocator_.release(dev_maddr), {
+            return -1;
+        });    
+    #ifdef BANK_INTERLEAVE
+        if (0 == mem_allocator_.allocated()) {
+        #ifndef CPP_API
+            for (auto& entry : xrtBuffers_) {
+                xrtBOFree(entry);
+            }
+        #endif
+            xrtBuffers_.clear();
+        }
+    #else
+        uint32_t bank_id;
+        CHECK_ERR(this->get_bank_info(dev_maddr, &bank_id, nullptr), {
+            return -1;
+        });
+        auto it = xrtBuffers_.find(bank_id);
+        if (it != xrtBuffers_.end()) {
+            auto count = --it->second.count;            
+            if (0 == count) {               
+                printf("freeing bank%d...\n", bank_id); 
+            #ifndef CPP_API
+                xrtBOFree(it->second.xrtBuffer);
+            #endif
+                xrtBuffers_.erase(it);
+            }
+        } else {
+            fprintf(stderr, "[VXDRV] Error: invalid device memory address: 0x%lx\n", dev_maddr);
+            return -1;
+        }
+    #endif
+        return 0;
+    }
+
+    int write_register(uint32_t addr, uint32_t value) {
+    #ifdef CPP_API
+        xrtKernel_.write_register(addr, value);
+    #else        
+        CHECK_ERR(xrtKernelWriteRegister(xrtKernel_, addr, value), {
+            dump_xrt_error(xrtDevice_, err);
+            return -1;
+        }); 
+    #endif
+        DBGPRINT("*** write_register: addr=0x%x, value=0x%x\n", addr, value);
+        return 0;
+    }
+
+    int read_register(uint32_t addr, uint32_t* value) {
+    #ifdef CPP_API
+        *value = xrtKernel_.read_register(addr);
+    #else        
+        CHECK_ERR(xrtKernelReadRegister(xrtKernel_, addr, value), {
+            dump_xrt_error(xrtDevice_, err);
+            return -1;
+        });
+    #endif
+        DBGPRINT("*** read_register: addr=0x%x, value=0x%x\n", addr, *value);
+        return 0;
+    }
+
+    int copy_to_dev(void* host_ptr, uint64_t dev_maddr, uint64_t asize) {    
+        for (uint64_t end = dev_maddr + asize; dev_maddr < end; dev_maddr += CACHE_BLOCK_SIZE) {      
+        #ifdef BANK_INTERLEAVE
+            asize = CACHE_BLOCK_SIZE;
+        #else
+            end = 0;
+        #endif
+            uint32_t bo_index;
+            uint64_t bo_offset;
+            CHECK_ERR(this->get_bank_info(dev_maddr, &bo_index, &bo_offset), {
+                return -1;
+            });
+            xrt_buffer_t xrtBuffer;
+            CHECK_ERR(this->get_buffer(bo_index, &xrtBuffer), {
+                return -1;
+            });
+        #ifdef CPP_API        
+            xrtBuffer.write(host_ptr, asize, bo_offset);
+            xrtBuffer.sync(XCL_BO_SYNC_BO_TO_DEVICE, asize, bo_offset);
+        #else
+            CHECK_ERR(xrtBOWrite(xrtBuffer, host_ptr, asize, bo_offset), {
+                dump_xrt_error(xrtDevice_, err);
+                return -1;
+            });        
+            CHECK_ERR(xrtBOSync(xrtBuffer, XCL_BO_SYNC_BO_TO_DEVICE, asize, bo_offset), {
+                dump_xrt_error(xrtDevice_, err);
+                return -1;
+            });    
+        #endif
+        }
+        return 0;
+    }
+
+    int copy_from_dev(void* host_ptr, uint64_t dev_maddr, uint64_t asize) {
+        for (uint64_t end = dev_maddr + asize; dev_maddr < end; dev_maddr += CACHE_BLOCK_SIZE) {      
+        #ifdef BANK_INTERLEAVE
+            asize = CACHE_BLOCK_SIZE;
+        #else
+            end = 0;
+        #endif
+            uint32_t bo_index;
+            uint64_t bo_offset;
+            CHECK_ERR(this->get_bank_info(dev_maddr, &bo_index, &bo_offset), {
+                return -1;
+            });
+            xrt_buffer_t xrtBuffer;
+            CHECK_ERR(this->get_buffer(bo_index, &xrtBuffer), {
+                return -1;
+            });
+        #ifdef CPP_API
+            xrtBuffer.sync(XCL_BO_SYNC_BO_FROM_DEVICE, asize, bo_offset);
+            xrtBuffer.read(host_ptr, asize, bo_offset);
+        #else        
+            CHECK_ERR(xrtBOSync(xrtBuffer, XCL_BO_SYNC_BO_FROM_DEVICE, asize, bo_offset), {
+                dump_xrt_error(xrtDevice_, err);
+                return -1;
+            });
+            CHECK_ERR(xrtBORead(xrtBuffer, host_ptr, asize, bo_offset), {
+                dump_xrt_error(xrtDevice_, err);
+                return -1;
+            });         
+        #endif
+        }
+        return 0;
+    }
+
+    uint64_t mem_used() const {
+        return mem_allocator_.allocated();
+    }    
+
+    DeviceConfig dcrs;
+    uint64_t dev_caps;
+    uint64_t isa_caps;
+
+private:
+
+    xrt_device_t xrtDevice_;
+    xrt_kernel_t xrtKernel_;
+    const platform_info_t platform_;    
+    vortex::MemoryAllocator mem_allocator_;
+
+#ifdef BANK_INTERLEAVE
+
+    std::vector<xrt_buffer_t> xrtBuffers_;
+
+    int get_bank_info(uint64_t addr, uint32_t* pIdx, uint64_t* pOff) {
+        uint32_t num_banks = 1 << platform_.lg2_num_banks;
+        uint64_t block_addr = addr / CACHE_BLOCK_SIZE;
+        uint32_t index = block_addr & (num_banks-1);        
+        uint64_t offset = (block_addr >> platform_.lg2_num_banks) * CACHE_BLOCK_SIZE;
+        if (pIdx) {
+            *pIdx = index;
+        }
+        if (pOff) {
+            *pOff = offset;
+        }
+        printf("get_bank_info(addr=0x%lx, bank=%d, offset=0x%lx\n", addr, index, offset);
+        return 0;
+    }
+
+    int get_buffer(uint32_t bank_id, xrt_buffer_t* pBuf) {
+        if (pBuf) {
+            *pBuf = xrtBuffers_.at(bank_id);
+        }
+        return 0;        
+    }    
+
+#else
+    
+    struct buf_cnt_t {
+        xrt_buffer_t xrtBuffer;
+        uint32_t count;
+    };
+
+    std::unordered_map<uint32_t, buf_cnt_t> xrtBuffers_;
+
+    int get_bank_info(uint64_t addr, uint32_t* pIdx, uint64_t* pOff) {
+        uint32_t num_banks = 1 << platform_.lg2_num_banks;
+        uint64_t bank_size = 1ull << platform_.lg2_bank_size;
+        uint32_t index = addr >> platform_.lg2_bank_size;
+        uint64_t offset = addr & (bank_size-1);
+        if (index > num_banks) {
+            fprintf(stderr, "[VXDRV] Error: address out of range: 0x%lx\n", addr);
+            return -1;
+        }        
+        if (pIdx) {
+            *pIdx = index;
+        }
+        if (pOff) {
+            *pOff = offset;
+        }        
+        printf("get_bank_info(addr=0x%lx, bank=%d, offset=0x%lx\n", addr, index, offset);
+        return 0;
+    }
+
+    int get_buffer(uint32_t bank_id, xrt_buffer_t* pBuf) {
+        auto it = xrtBuffers_.find(bank_id);
+        if (it != xrtBuffers_.end()) {            
+            if (pBuf) {
+                *pBuf = it->second.xrtBuffer;
+            } else {
+                printf("reusing bank%d...\n", bank_id);
+                ++it->second.count;
+            }
+        } else {
+            printf("allocating bank%d...\n", bank_id);
+            uint64_t bank_size = 1ull << platform_.lg2_bank_size;
+        #ifdef CPP_API
+            xrt::bo xrtBuffer(xrtDevice_, bank_size, xrt::bo::flags::normal, bank_id);
+        #else
+            CHECK_HANDLE(xrtBuffer, xrtBOAlloc(xrtDevice_, bank_size, XRT_BO_FLAGS_NONE, bank_id), {
+                return -1;
+            });
+        #endif
+            xrtBuffers_.insert({bank_id, {xrtBuffer, 1}});
+            if (pBuf) {
+                *pBuf = xrtBuffer;
+            }
+        }
+        return 0;        
+    }    
+
+#endif   
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -420,23 +597,9 @@ extern int vx_dev_open(vx_device_h* hdevice) {
         return -1;
     });
 
-    CHECK_HANDLE(device, new vx_device(xrtDevice, xrtKernel, platform_info.num_banks, platform_info.bank_size), {
+    CHECK_HANDLE(device, new vx_device(xrtDevice, xrtKernel, platform_info), {
         return -1;
     });
-
-    xrtKernel.write_register(MMIO_CTL_ADDR, CTL_AP_RESET);
-
-    xrtKernel.write_register(MMIO_MEM_ADDR, platform_info.mem_base & 0xffffffff);
-    xrtKernel.write_register(MMIO_MEM_ADDR + 4, (platform_info.mem_base >> 32) & 0xffffffff);
-
-    auto dev_caps_lo = xrtKernel.read_register(MMIO_DEV_ADDR);
-    auto dev_caps_hi = xrtKernel.read_register(MMIO_DEV_ADDR + 4);
-
-    auto isa_caps_lo = xrtKernel.read_register(MMIO_ISA_ADDR);
-    auto isa_caps_hi = xrtKernel.read_register(MMIO_ISA_ADDR + 4);
-
-    device->dev_caps = (uint64_t(dev_caps_hi) << 32) | dev_caps_lo;
-    device->isa_caps = (uint64_t(isa_caps_hi) << 32) | isa_caps_lo;
 
 #else
 
@@ -474,52 +637,18 @@ extern int vx_dev_open(vx_device_h* hdevice) {
         return -1;
     });
 
-    CHECK_HANDLE(device, new vx_device(xrtDevice, xrtKernel, platform_info.num_banks, platform_info.bank_size), {
+    CHECK_HANDLE(device, new vx_device(xrtDevice, xrtKernel, platform_info), {
         xrtKernelClose(xrtKernel);
         xrtDeviceClose(xrtDevice);
         return -1;
     });
 
-    CHECK_ERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_CTL_ADDR, CTL_AP_RESET), {
-        dump_xrt_error(xrtDevice, err);
-        return -1;
-    });
+#endif    
 
-    CHECK_ERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_MEM_ADDR, platform_info.mem_base & 0xffffffff), {
-        dump_xrt_error(xrtDevice, err);
+    // initialize device
+    CHECK_ERR(device->init(), {
         return -1;
     });
-
-    CHECK_ERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_MEM_ADDR + 4, (platform_info.mem_base >> 32) & 0xffffffff), {
-        dump_xrt_error(xrtDevice, err);
-        return -1;
-    });
-
-    CHECK_ERR(xrtKernelReadRegister(device->xrtKernel, MMIO_DEV_ADDR, (uint32_t*)&device->dev_caps), {
-        dump_xrt_error(xrtDevice, err);
-        delete device;
-        return -1;
-    });
-    
-    CHECK_ERR(xrtKernelReadRegister(device->xrtKernel, MMIO_DEV_ADDR + 4, (uint32_t*)&device->dev_caps + 1), {
-        dump_xrt_error(xrtDevice, err);
-        delete device;
-        return -1;
-    });
-
-    CHECK_ERR(xrtKernelReadRegister(device->xrtKernel, MMIO_ISA_ADDR, (uint32_t*)&device->isa_caps), {
-        dump_xrt_error(xrtDevice, err);
-        delete device;
-        return -1;
-    });
-
-    CHECK_ERR(xrtKernelReadRegister(device->xrtKernel, MMIO_ISA_ADDR + 4, (uint32_t*)&device->isa_caps + 1), {
-        dump_xrt_error(xrtDevice, err);
-        delete device;
-        return -1;
-    });
-
-#endif 
 
 #ifdef SCOPE
     {
@@ -528,37 +657,23 @@ extern int vx_dev_open(vx_device_h* hdevice) {
             auto device = (vx_device*)hdevice;
             uint32_t value_lo = (uint32_t)(value);
             uint32_t value_hi = (uint32_t)(value >> 32);
-        #ifdef CPP_API
-            device->xrtKernel.write_register(MMIO_SCP_ADDR, value_lo);
-            device->xrtKernel.write_register(MMIO_SCP_ADDR + 4, value_hi);
-        #else        
-            CHECK_ERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_SCP_ADDR, value_lo), {
-                dump_xrt_error(device->xrtDevice, err);
+            CHECK_ERR(device->write_register(MMIO_SCP_ADDR, value_lo), {
                 return -1;
             });
-            CHECK_ERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_SCP_ADDR + 4, value_hi), {
-                dump_xrt_error(device->xrtDevice, err);
+            CHECK_ERR(device->write_register(MMIO_SCP_ADDR + 4, value_hi), {
                 return -1;
-            });        
-        #endif
+            });
             return 0;
         };
         callback.registerRead = [](vx_device_h hdevice, uint64_t* value)->int {
             auto device = (vx_device*)hdevice;
             uint32_t value_lo, value_hi;
-        #ifdef CPP_API
-            device->xrtKernel.read_register(MMIO_SCP_ADDR, &value_lo);
-            device->xrtKernel.read_register(MMIO_SCP_ADDR + 4, &value_hi);
-        #else        
-            CHECK_ERR(xrtKernelReadRegister(device->xrtKernel, MMIO_SCP_ADDR, &value_lo), {
-                dump_xrt_error(device->xrtDevice, err);
+            CHECK_ERR(device->read_register(MMIO_SCP_ADDR, &value_lo), {
                 return -1;
             });
-            CHECK_ERR(xrtKernelReadRegister(device->xrtKernel, MMIO_SCP_ADDR + 4, &value_hi), {
-                dump_xrt_error(device->xrtDevice, err);
+            CHECK_ERR(device->read_register(MMIO_SCP_ADDR + 4, &value_hi), {
                 return -1;
             });
-        #endif
             *value = (((uint64_t)value_hi) << 32) | value_lo;
             return 0;
         };
@@ -678,13 +793,8 @@ extern int vx_buf_free(vx_buffer_h hbuffer) {
 extern int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size, uint64_t src_offset) {
     if (nullptr == hbuffer)
         return -1;
-
-    uint64_t dev_mem_size = LOCAL_MEM_SIZE; 
-    int64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
-
+    
     auto buffer = (vx_buffer*)hbuffer;
-    auto device = buffer->device;
-
     auto host_ptr = buffer->host_ptr + src_offset;
 
     // check alignment
@@ -693,55 +803,28 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size
     if (!is_aligned((uintptr_t)host_ptr, CACHE_BLOCK_SIZE))
         return -1;
 
+    uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
+    uint64_t dev_mem_size = LOCAL_MEM_SIZE; 
+
     // bound checking
     if (src_offset + asize > buffer->size)
         return -1;
     if (dev_maddr + asize > dev_mem_size)
         return -1;
-        
-    uint32_t bo_index;
-    uint64_t bo_offset;
-    CHECK_ERR(device->get_bank_info(dev_maddr, &bo_index, &bo_offset), {
+
+    auto device = buffer->device;
+
+    CHECK_ERR(device->copy_to_dev(host_ptr, dev_maddr, asize), {
         return -1;
     });
 
-    xrt_buffer_t xrtBuffer;
-    CHECK_ERR(device->get_buffer(bo_index, &xrtBuffer), {
-        return -1;
-    });
-    
-
-#ifdef CPP_API
-    
-    xrtBuffer.write(host_ptr, asize, bo_offset);
-    xrtBuffer.sync(XCL_BO_SYNC_BO_TO_DEVICE, asize, bo_offset);
-
-#else
-
-    CHECK_ERR(xrtBOWrite(xrtBuffer, host_ptr, asize, bo_offset), {
-        dump_xrt_error(device->xrtDevice, err);
-        return -1;
-    });
-    
-    CHECK_ERR(xrtBOSync(xrtBuffer, XCL_BO_SYNC_BO_TO_DEVICE, asize, bo_offset), {
-        dump_xrt_error(device->xrtDevice, err);
-        return -1;
-    });
- 
-#endif
-
-    DBGPRINT("COPY_TO_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld, bank=%d, offset=0x%lx\n", dev_maddr, (uintptr_t)host_ptr, size, bo_index, bo_offset);
+    DBGPRINT("COPY_TO_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld\n", dev_maddr, (uintptr_t)host_ptr, size);
     
     return 0;
 }
 
 extern int vx_copy_from_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size, uint64_t dest_offset) {
     auto buffer = (vx_buffer*)hbuffer;
-    auto device = buffer->device;
-    
-    uint64_t dev_mem_size = LOCAL_MEM_SIZE;  
-    int64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
-
     auto host_ptr = buffer->host_ptr + dest_offset;
 
     // check alignment
@@ -750,43 +833,22 @@ extern int vx_copy_from_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t si
     if (!is_aligned((uintptr_t)host_ptr, CACHE_BLOCK_SIZE))
         return -1; 
 
+    uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
+    uint64_t dev_mem_size = LOCAL_MEM_SIZE;    
+
     // bound checking
     if (dest_offset + asize > buffer->size)
         return -1;
     if (dev_maddr + asize > dev_mem_size)
         return -1;
 
-    uint32_t bo_index;
-    uint64_t bo_offset;
-    CHECK_ERR(device->get_bank_info(dev_maddr, &bo_index, &bo_offset), {
-        return -1;
-    });   
+    auto device = buffer->device;
 
-    xrt_buffer_t xrtBuffer;
-    CHECK_ERR(device->get_buffer(bo_index, &xrtBuffer), {
+    CHECK_ERR(device->copy_from_dev(host_ptr, dev_maddr, asize), {
         return -1;
     });
 
-#ifdef CPP_API
-
-    xrtBuffer.sync(XCL_BO_SYNC_BO_FROM_DEVICE, asize, bo_offset);
-    xrtBuffer.read(host_ptr, asize, bo_offset);
-
-#else
-    
-    CHECK_ERR(xrtBOSync(xrtBuffer, XCL_BO_SYNC_BO_FROM_DEVICE, asize, bo_offset), {
-        dump_xrt_error(device->xrtDevice, err);
-        return -1;
-    });
-
-    CHECK_ERR(xrtBORead(xrtBuffer, host_ptr, asize, bo_offset), {
-        dump_xrt_error(device->xrtDevice, err);
-        return -1;
-    });
-   
-#endif
-
-    DBGPRINT("COPY_FROM_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld, bank=%d, offset=0x%lx\n", dev_maddr, (uintptr_t)host_ptr, asize, bo_index, bo_offset);
+    DBGPRINT("COPY_FROM_DEV: dev_addr=0x%lx, host_addr=0x%lx, size=%ld\n", dev_maddr, (uintptr_t)host_ptr, asize);
     
     return 0;
 }
@@ -799,20 +861,11 @@ extern int vx_start(vx_device_h hdevice) {
 
     //wait_for_enter("\nPress ENTER to continue after setting up ILA trigger...");
 
-#ifdef CPP_API
-
-    device->xrtKernel.write_register(MMIO_CTL_ADDR, CTL_AP_START);
-
-#else
-
-    CHECK_ERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_CTL_ADDR, CTL_AP_START), {
-        dump_xrt_error(device->xrtDevice, err);
+    CHECK_ERR(device->write_register(MMIO_CTL_ADDR, CTL_AP_START), {
         return -1;
     });
-
-#endif    
     
-    DBGPRINT("START");
+    DBGPRINT("START\n");
 
     return 0;
 }
@@ -838,25 +891,13 @@ extern int vx_ready_wait(vx_device_h hdevice, uint64_t timeout) {
     
     for (;;) {
         uint32_t status = 0;
-
-    #ifdef CPP_API
-
-        status = device->xrtKernel.read_register(MMIO_CTL_ADDR);
-
-    #else       
-
-        CHECK_ERR(xrtKernelReadRegister(device->xrtKernel, MMIO_CTL_ADDR, &status), {
-            dump_xrt_error(device->xrtDevice, err);
+        CHECK_ERR(device->read_register(MMIO_CTL_ADDR, &status), {
             return -1;
         });
-    
-    #endif
-
         bool is_done = (status & CTL_AP_DONE) == CTL_AP_DONE;
         if (is_done || 0 == timeout) {            
             break;
         }
-
         nanosleep(&sleep_time, nullptr);
         timeout -= sleep_time_ms;
     };
@@ -869,25 +910,14 @@ extern int vx_dcr_write(vx_device_h hdevice, uint32_t addr, uint64_t value) {
         return -1;
 
     auto device = (vx_device*)hdevice;
-
-#ifdef CPP_API
-
-    device->xrtKernel.write_register(MMIO_DCR_ADDR, addr);
-    device->xrtKernel.write_register(MMIO_DCR_ADDR + 4, value);
-
-#else
    
-    CHECK_ERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_DCR_ADDR, addr), {
-        dump_xrt_error(device->xrtDevice, err);
+    CHECK_ERR(device->write_register(MMIO_DCR_ADDR, addr), {
         return -1;
     });
 
-    CHECK_ERR(xrtKernelWriteRegister(device->xrtKernel, MMIO_DCR_ADDR + 4, value), {
-        dump_xrt_error(device->xrtDevice, err);
+    CHECK_ERR(device->write_register(MMIO_DCR_ADDR + 4, value), {
         return -1;
     });
- 
-#endif
 
     // save the value
     DBGPRINT("DCR_WRITE: addr=0x%x, value=0x%lx\n", addr, value);

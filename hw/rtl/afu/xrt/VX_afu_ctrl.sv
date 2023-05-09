@@ -247,6 +247,7 @@ module VX_afu_ctrl #(
             dcra_r <= '0;
             dcrv_r <= '0;
             dcr_wr_valid_r <= 0;
+            mem_r <= '0;
         end else if (clk_en) begin
             if (ap_ready)
                 ap_start_r <= auto_restart_r;

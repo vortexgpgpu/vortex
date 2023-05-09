@@ -93,7 +93,7 @@ else ifeq ($(DEV_ARCH), versal)
 # versal
 else
 # alveo
-VPP_FLAGS += --connectivity.sp vortex_afu_1.m0_axi_mem:HBM[0:15]
+VPP_FLAGS += --connectivity.sp vortex_afu_1.m_axi_mem_0:HBM[0:15]
 endif
 
 VPP_FLAGS += --report_level 2
@@ -156,8 +156,8 @@ scope-json: $(BUILD_DIR)/scope.json
 $(BUILD_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
 	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/scope.py vortex.xml -o scope.json
 
-$(XO_CONTAINER): $(BUILD_DIR)/sources.txt ./kernel.xml
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	$(VIVADO) -mode batch -source ../scripts/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt ../kernel.xml $(SCRIPT_DIR) ../$(BUILD_DIR)
+$(XO_CONTAINER): $(BUILD_DIR)/sources.txt
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	$(VIVADO) -mode batch -source ../scripts/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt $(SCRIPT_DIR) ../$(BUILD_DIR)
 
 $(XCLBIN_CONTAINER): $(XO_CONTAINER) $(SCOPE_JSON)
 	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); $(VPP) $(VPP_FLAGS) -o ../$(XCLBIN_CONTAINER) ../$(XO_CONTAINER)

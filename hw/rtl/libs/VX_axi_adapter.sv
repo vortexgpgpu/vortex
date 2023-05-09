@@ -77,7 +77,8 @@ module VX_axi_adapter #(
     input wire [1:0]                m_axi_rresp [NUM_BANKS]
 );  
     localparam AXSIZE = $clog2(DATA_WIDTH/8);
-    localparam BANK_ADDRW = `LOG2UP(NUM_BANKS);
+    localparam BANK_ADDRW = `LOG2UP(NUM_BANKS);    
+    localparam LOG2_NUM_BANKS = $clog2(NUM_BANKS);
 
     wire [BANK_ADDRW-1:0] req_bank_sel;
 
@@ -130,7 +131,7 @@ module VX_axi_adapter #(
     // AXI write request address channel  
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         assign m_axi_awvalid[i] = mem_req_valid && mem_req_rw && (req_bank_sel == i) && ~m_axi_aw_ack[i];
-        assign m_axi_awaddr[i]  = (ADDR_WIDTH'(mem_req_addr) >> BANK_ADDRW) << AXSIZE;
+        assign m_axi_awaddr[i]  = (ADDR_WIDTH'(mem_req_addr) >> LOG2_NUM_BANKS) << AXSIZE;
         assign m_axi_awid[i]    = mem_req_tag;
         assign m_axi_awlen[i]   = 8'b00000000;    
         assign m_axi_awsize[i]  = 3'(AXSIZE);
@@ -162,7 +163,7 @@ module VX_axi_adapter #(
     // AXI read request channel
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         assign m_axi_arvalid[i] = mem_req_valid && ~mem_req_rw && (req_bank_sel == i);    
-        assign m_axi_araddr[i]  = (ADDR_WIDTH'(mem_req_addr) >> BANK_ADDRW) << AXSIZE;
+        assign m_axi_araddr[i]  = (ADDR_WIDTH'(mem_req_addr) >> LOG2_NUM_BANKS) << AXSIZE;
         assign m_axi_arid[i]    = mem_req_tag;
         assign m_axi_arlen[i]   = 8'b00000000;
         assign m_axi_arsize[i]  = 3'(AXSIZE);
