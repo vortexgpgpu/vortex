@@ -53,14 +53,21 @@ else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
+ifeq ($(TARGET), opaesim)
+	SCOPE_JSON_PATH ?= $(VORTEX_RT_PATH)/opae/scope.json
+else
+	SCOPE_JSON_PATH ?= $(FPGA_BIN_DIR)/scope.json
+endif
+
 ifeq ($(TARGET), fpga)
 	OPAE_DRV_PATHS ?= libopae-c.so
 else
 ifeq ($(TARGET), asesim)
-	OPAE_DRV_PATHS ?= libopae-c-ase.so	
+	OPAE_DRV_PATHS ?= libopae-c-ase.so
 else
+ifeq ($(TARGET), opaesim)
 	OPAE_DRV_PATHS ?= libopae-c-sim.so
-	SCOPE_JSON_PATH ?= $(VORTEX_RT_PATH)/opae/scope.json
+endif	
 endif
 endif
 

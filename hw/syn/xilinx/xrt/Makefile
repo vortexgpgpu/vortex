@@ -110,17 +110,21 @@ ifdef PROFILE
 	VPP_FLAGS += --profile_kernel stall:all:all:all
 endif
 
+ifeq ($(TARGET), hw_emu)
+	CFLAGS += -DSIMULATION
+endif
+
 # Debugigng
 ifdef DEBUG
 	VPP_FLAGS += -g --debug.protocol all
 	ifeq ($(TARGET), hw)
-		VPP_FLAGS += --debug.chipscope vortex_afu_1
-		#CFLAGS += -DCHIPSCOPE $(DBG_SCOPE_FLAGS)
-		CFLAGS += -DSCOPE $(DBG_SCOPE_FLAGS)
-		SCOPE_JSON += $(BUILD_DIR)/scope.json
+		CFLAGS += -DNDEBUG -DSCOPE $(DBG_SCOPE_FLAGS)
+		SCOPE_JSON += $(BUILD_DIR)/scope.json		
+		#CFLAGS += -DNDEBUG -DCHIPSCOPE $(DBG_SCOPE_FLAGS)
+		#VPP_FLAGS += --debug.chipscope vortex_afu_1
 	else		
 		VPP_FLAGS += --vivado.prop fileset.sim_1.xsim.elaborate.debug_level=all
-		CFLAGS += -DSIMULATION $(DBG_TRACE_FLAGS)
+		CFLAGS += $(DBG_TRACE_FLAGS)
 	endif
 else
 	VPP_FLAGS += --optimize 3
@@ -133,7 +137,7 @@ CFLAGS += $(CONFIGS)
 CFLAGS += $(RTL_INCLUDE)
 
 # ast dump flags
-XML_CFLAGS = $(filter-out -DSYNTHESIS -DVIVADO, $(CFLAGS)) -I$(DPI_DIR) -DNDEBUG
+XML_CFLAGS = $(filter-out -DSYNTHESIS -DVIVADO, $(CFLAGS)) -I$(DPI_DIR)
 
 # RTL Kernel only supports Hardware and Hardware Emulation.
 ifneq ($(TARGET),$(findstring $(TARGET), hw hw_emu))

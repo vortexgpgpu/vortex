@@ -1,5 +1,4 @@
-use the following step to build vortex and run it on fpga on intel cloud server using OPAE. 
-This script is also present at ~/dev/runVortex
+## Altera synthesis Notebook
 
 ## To configure quartus and opae. Run this after logging in.
 source /export/fpga/bin/setup-fpga-env fpga-pac-a10
@@ -54,8 +53,8 @@ qsub-sim
 TARGET=asesim make -C runtime
 
 # build ASE hw image
-PREFIX=build_gfx NUM_CORES=1 CONFIGS="-DEXT_GFX_ENABLE -DEXT_F_DISABLE -DL1_DISABLE -DSM_DISABLE -DTCACHE_DISABLE -DRCACHE_DISABLE -DOCACHE_DISABLE -DNUM_WARPS=2 -DNUM_THREADS=2" TARGET=ase make
-PREFIX=build_gfx NUM_CORES=1 CONFIGS="-DEXT_RASTER_ENABLE -DEXT_F_DISABLE -DL1_DISABLE -DSM_DISABLE -DRCACHE_DISABLE -DNUM_WARPS=2 -DNUM_THREADS=2" TARGET=ase make
+PREFIX=build_gfx NUM_CORES=1 CONFIGS="-DEXT_GFX_ENABLE -DEXT_F_DISABLE -DL1_DISABLE -DSM_DISABLE -DTCACHE_DISABLE -DRCACHE_DISABLE -DOCACHE_DISABLE -DNUM_WARPS=2 -DNUM_THREADS=2" TARGET=asesim make
+PREFIX=build_gfx NUM_CORES=1 CONFIGS="-DEXT_RASTER_ENABLE -DEXT_F_DISABLE -DL1_DISABLE -DSM_DISABLE -DRCACHE_DISABLE -DNUM_WARPS=2 -DNUM_THREADS=2" TARGET=asesim make
 
 # ASE tests
 ./run_ase.sh build_arria10_ase_1c ../../../../tests/regression/basic/basic -n1 -t0

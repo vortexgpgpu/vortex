@@ -39,8 +39,6 @@ DBG_SCOPE_FLAGS += -DDBG_SCOPE_LSU
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_RASTER
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_MSCHED
 
-DBG_FLAGS += $(DBG_TRACE_FLAGS) $(DBG_SCOPE_FLAGS)
-
 ifeq ($(DEVICE_FAMILY), stratix10)
     CONFIGS += -DALTERA_S10
 endif
@@ -71,13 +69,18 @@ CFLAGS += -DSYNTHESIS -DQUARTUS
 CFLAGS += $(CONFIGS)
 CFLAGS += $(RTL_INCLUDE)
 
-ifeq ($(TARGET), ase)
+ifneq ($(TARGET), fpga)
 	CFLAGS += -DSIMULATION
 endif
 
 # Debugigng
 ifdef DEBUG
-	CFLAGS += $(DBG_FLAGS)
+	ifeq ($(TARGET), fpga)
+		CFLAGS += -DNDEBUG -DSCOPE $(DBG_SCOPE_FLAGS)
+		SCOPE_JSON += $(BUILD_DIR)/scope.json
+	else
+		CFLAGS += $(DBG_TRACE_FLAGS)
+	endif
 else    
 	CFLAGS += -DNDEBUG
 endif
@@ -92,6 +95,9 @@ ifdef PERF
 	CFLAGS += -DPERF_ENABLE
 endif
 
+# ast dump flags
+XML_CFLAGS = $(filter-out -DSYNTHESIS -DQUARTUS, $(CFLAGS)) -I$(AFU_DIR)/ccip -I$(DPI_DIR) -DNOPAE
+
 all: swconfig ip-gen setup build
 
 ip-gen: $(IP_CACHE_DIR)/ip-gen.log
@@ -103,19 +109,27 @@ vortex_afu.h: vortex_afu.json
 	afu_json_mgr json-info --afu-json=$^ --c-hdr=$@
 
 setup:	
-ifeq ($(TARGET), ase)
+ifeq ($(TARGET), asesim)
 	afu_sim_setup -s setup.cfg $(BUILD_DIR)
 else
 	afu_synth_setup -s setup.cfg $(BUILD_DIR)
 endif
 	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -F$(BUILD_DIR)/src -Osources.txt
 
-build: ip-gen setup
-ifeq ($(TARGET), ase)
+build: ip-gen setup  $(SCOPE_JSON)
+ifeq ($(TARGET), asesim)
 	make -C $(BUILD_DIR) > $(BUILD_DIR)/build.log 2>&1 &
 else
 	cd $(BUILD_DIR) && $(RUN_SYNTH)
 endif
+
+gen-ast: $(BUILD_DIR)/vortex.xml
+$(BUILD_DIR)/vortex.xml: setup
+	verilator --xml-only -O0 $(XML_CFLAGS) vortex_afu.sv --xml-output $(BUILD_DIR)/vortex.xml
+
+scope-json: $(BUILD_DIR)/scope.json
+$(BUILD_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
+	$(SCRIPT_DIR)/scope.py $(BUILD_DIR)/vortex.xml -o $(BUILD_DIR)/scope.json
 
 clean:  
 	rm -rf vortex_afu.h $(BUILD_DIR)

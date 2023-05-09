@@ -1,4 +1,4 @@
-## Xilinx Build and Ecosystem Setup
+## Xilinx synthesis Notebook
 
 # check installed FPGAs
 platforminfo -l

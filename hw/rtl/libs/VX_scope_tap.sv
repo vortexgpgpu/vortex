@@ -68,6 +68,7 @@ module VX_scope_tap #(
     reg [CTRL_STATE_BITS-1:0] ctrl_state;
     reg [GET_TYPE_BITS-1:0] get_type;
         
+    reg [TX_DATA_BITS-1:0] ser_tx_ctr;
     reg [DATA_BITS-1:0] read_offset;
     reg [ADDRW-1:0] raddr;
     reg read_data;
@@ -190,7 +191,6 @@ module VX_scope_tap #(
     wire [TX_DATAW-1:0] ser_buf_in_n = {ser_buf_in[TX_DATAW-2:0], bus_in};
     `UNUSED_VAR (ser_buf_in)
 
-    reg [TX_DATA_BITS-1:0] ser_tx_ctr;    
     wire [CMD_TYPE_BITS-1:0] cmd_type = ser_buf_in[CMD_TYPE_BITS-1:0];
     wire [SCOPE_IDW-1:0] cmd_scope_id = ser_buf_in_n[CMD_TYPE_BITS +: SCOPE_IDW];
     wire [TX_DATAW-CMD_TYPE_BITS-SCOPE_IDW-1:0] cmd_data = ser_buf_in[TX_DATAW-1:CMD_TYPE_BITS+SCOPE_IDW];
