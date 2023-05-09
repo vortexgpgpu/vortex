@@ -47,7 +47,7 @@ struct tap_t {
     uint32_t width;    
     uint32_t frames;    
     uint32_t cur_frame;
-    uint64_t ticks;
+    uint64_t cycle_time;
     std::string path;
     std::vector<tap_signal_t> signals;
 };
@@ -55,17 +55,6 @@ struct tap_t {
 static scope_callback_t g_callback;
 
 using json = nlohmann::json;
-
-static uint64_t dump_clock(std::ofstream& ofs, uint64_t delta, uint64_t timestamp) {
-    while (delta != 0) {
-        ofs << '#' << timestamp++ << std::endl;
-        ofs << "b0 0" << std::endl;
-        ofs << '#' << timestamp++ << std::endl;
-        ofs << "b1 0" << std::endl;
-        --delta;
-    }
-    return timestamp;
-}
 
 static std::vector<std::string> split(const std::string &s, char delimiter) {
     std::vector<std::string> tokens;
@@ -139,13 +128,24 @@ static tap_t* find_nearest_tap(std::vector<tap_t>& taps) {
         if (tap.cur_frame == tap.frames)
             continue;
         if (nearest != nullptr) {
-            if (tap.ticks < nearest->ticks)
+            if (tap.cycle_time < nearest->cycle_time)
                 nearest = &tap;                
         } else {
             nearest = &tap;
         }
     }
     return nearest;
+}
+
+static uint64_t advance_time(std::ofstream& ofs, uint64_t next_time, uint64_t cur_time) {
+    while (cur_time < next_time) {
+        ofs << '#' << (cur_time * 2 + 0) << std::endl;
+        ofs << "b0 0" << std::endl;
+        ofs << '#' << (cur_time * 2 + 1) << std::endl;
+        ofs << "b1 0" << std::endl;
+        ++cur_time;
+    }
+    return cur_time;
 }
 
 static int dump_tap(std::ofstream& ofs, tap_t* tap, vx_device_h hdevice) {
@@ -177,11 +177,10 @@ static int dump_tap(std::ofstream& ofs, tap_t* tap, vx_device_h hdevice) {
                         // read next delta
                         CHECK_ERR(g_callback.registerWrite(hdevice, cmd_data));      
                         CHECK_ERR(g_callback.registerRead(hdevice, &word));
-                        tap->ticks += word;                        
-                
+                        tap->cycle_time += 1 + word;
                         if (0 == (tap->cur_frame % FRAME_FLUSH_SIZE)) {
                             ofs << std::flush;
-                            std::cout << std::dec << "[SCOPE] flush tap #" << tap->id << ": "<< tap->cur_frame << "/" << tap->frames << " frames" << std::endl;
+                            std::cout << std::dec << "[SCOPE] flush tap #" << tap->id << ": "<< tap->cur_frame << "/" << tap->frames << " frames, next_time=" << tap->cycle_time << std::endl;
                         }
                     }
                     break; 
@@ -192,6 +191,7 @@ static int dump_tap(std::ofstream& ofs, tap_t* tap, vx_device_h hdevice) {
             }
         } while ((frame_offset % 64) != 0);
     } while (frame_offset != tap->width);
+
     return 0;
 }
 
@@ -271,7 +271,7 @@ int vx_scope_stop(vx_device_h hdevice) {
             _tap.id    = tap["id"].get<uint32_t>();
             _tap.width = tap["width"].get<uint32_t>();
             _tap.path  = tap["path"].get<std::string>();
-            _tap.ticks = 0;
+            _tap.cycle_time = 0;
             _tap.frames = 0;
             _tap.cur_frame = 0;            
 
@@ -318,12 +318,16 @@ int vx_scope_stop(vx_device_h hdevice) {
         CHECK_ERR(g_callback.registerRead(hdevice, &delta));
 
         tap.frames = count;
-        tap.ticks = start + delta;
+        tap.cycle_time = 1 + start + delta;
 
-        std::cout << std::dec << "[SCOPE] tap #" << tap.id << ": width=" << tap.width << ", num_frames=" << tap.frames << ", start_time=" << tap.ticks << ", path=" << tap.path << std::endl;
+        std::cout << std::dec << "[SCOPE] tap #" << tap.id 
+                              << ": width=" << tap.width 
+                              << ", num_frames=" << tap.frames 
+                              << ", start_time=" << tap.cycle_time 
+                              << ", path=" << tap.path << std::endl;
     }  
 
-    uint64_t timestamp = 0;
+    uint64_t cur_time = 0;
 
     while (true) {
         // find the nearest tap
@@ -331,12 +335,13 @@ int vx_scope_stop(vx_device_h hdevice) {
         if (tap == nullptr)
             break;
         // advance clock
-        timestamp = dump_clock(ofs, tap->ticks + 1, timestamp);        
+        printf("*** dump tap: id=%d, start_time=%ld, cur_time=%ld\n", tap->id, tap->cycle_time, cur_time);
+        cur_time = advance_time(ofs, tap->cycle_time, cur_time);        
         // dump tap
         CHECK_ERR(dump_tap(ofs, tap, hdevice));
     };
 
-    std::cout << "[SCOPE] trace dump done! - " << (timestamp/2) << " cycles" << std::endl;
+    std::cout << "[SCOPE] trace dump done! - " << (cur_time/2) << " cycles" << std::endl;
 
     return 0;
 }

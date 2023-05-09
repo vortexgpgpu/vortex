@@ -1009,16 +1009,24 @@ module vortex_afu #(
     wire avs_read_fire = avs_read[0] && ~avs_waitrequest[0];
     wire [$bits(t_local_mem_addr)-1:0] mem_req_if_addr = mem_req_if.addr;
 
+    reg [STATE_WIDTH-1:0] state_prev;
+    always @(posedge clk) begin
+        state_prev <= state;
+    end
+    wire state_changed = (state != state_prev);
+
     VX_scope_tap #(
         .SCOPE_ID (0),
-        .TRIGGERW (23),
+        .TRIGGERW (24),
         .PROBEW   (367)
     ) scope_tap (
         .clk(clk),
         .reset(scope_reset_w[0]),
         .start(1'b0),
         .stop(1'b0),
-        .triggers({reset,
+        .triggers({
+            reset,
+            state_changed,
             mem_req_fire, 
             mem_rsp_fire, 
             avs_write_fire, 
