@@ -32,7 +32,7 @@
         int err = _expr;    \
         if (err == 0)       \
             break;          \
-        printf("[SCOPE] Error: '%s' returned %d!\n", #_expr, err); \
+        printf("[SCOPE] error: '%s' returned %d!\n", #_expr, err); \
         return err;         \
     } while (false)
 
@@ -181,7 +181,7 @@ static int dump_tap(std::ofstream& ofs, tap_t* tap, vx_device_h hdevice) {
                 
                         if (0 == (tap->cur_frame % FRAME_FLUSH_SIZE)) {
                             ofs << std::flush;
-                            std::cout << std::dec << "*** scope #" << tap->id << ": "<< tap->cur_frame << "/" << tap->frames << " frames" << std::endl;
+                            std::cout << std::dec << "[SCOPE] flush tap #" << tap->id << ": "<< tap->cur_frame << "/" << tap->frames << " frames" << std::endl;
                         }
                     }
                     break; 
@@ -201,11 +201,15 @@ int vx_scope_start(scope_callback_t* callback, vx_device_h hdevice, uint64_t sta
 
     const char* json_path = getenv("SCOPE_JSON_PATH");
     std::ifstream ifs(json_path);
-    if (!ifs)
+    if (!ifs) {
+        std::cerr << "[SCOPE] error: cannot open scope manifest file: " << json_path << std::endl;
         return -1;
+    }
     auto json_obj = json::parse(ifs);
-    if (json_obj.is_null())
+    if (json_obj.is_null()) {
+        std::cerr << "[SCOPE] error: invalid scope manifest file: " << json_path << std::endl;
         return -1;
+    }
 
     g_callback = *callback;   
 
@@ -219,14 +223,14 @@ int vx_scope_start(scope_callback_t* callback, vx_device_h hdevice, uint64_t sta
         uint64_t dev_width;
         CHECK_ERR(g_callback.registerRead(hdevice, &dev_width));
         if (width != dev_width) {
-            std::cerr << "Invalid scope with! id=" << id << ", actual=" << dev_width << ", expected=" << width << std::endl;
+            std::cerr << "[SCOPE] error: invalid tap #" << id << " width, actual=" << dev_width << ", expected=" << width << std::endl;
             return 1;
         }
     }
 
     // set stop time
     if (stop_time != uint64_t(-1)) {
-        std::cout << "scope stop time: " << std::dec << stop_time << "s" << std::endl;
+        std::cout << "[SCOPE] stop time: " << std::dec << stop_time << "s" << std::endl;
         for (auto& tap : json_obj["taps"]) {
             auto id = tap["id"].get<uint32_t>();
             uint64_t cmd_stop = (stop_time << 11) | (id << 3) | CMD_SET_STOP;
@@ -236,7 +240,7 @@ int vx_scope_start(scope_callback_t* callback, vx_device_h hdevice, uint64_t sta
 
     // start recording
     if (start_time != uint64_t(-1)) {  
-        std::cout << "scope start time: " << std::dec << start_time << "s" << std::endl;
+        std::cout << "[SCOPE] start time: " << std::dec << start_time << "s" << std::endl;
         for (auto& tap : json_obj["taps"]) {
             auto id = tap["id"].get<uint32_t>();
             uint64_t cmd_start = (start_time << 11) | (id << 3) | CMD_SET_START;
@@ -288,7 +292,7 @@ int vx_scope_stop(vx_device_h hdevice) {
         CHECK_ERR(g_callback.registerWrite(hdevice, cmd_stop));
     }
 
-    std::cout << "scope trace dump begin..." << std::endl;
+    std::cout << "[SCOPE] trace dump begin..." << std::endl;
 
     std::ofstream ofs("scope.vcd");
 
@@ -316,7 +320,7 @@ int vx_scope_stop(vx_device_h hdevice) {
         tap.frames = count;
         tap.ticks = start + delta;
 
-        std::cout << std::dec << "scope #" << tap.id << ": width=" << tap.width << ", num_frames=" << tap.frames << ", start_time=" << tap.ticks << ", path=" << tap.path << std::endl;
+        std::cout << std::dec << "[SCOPE] tap #" << tap.id << ": width=" << tap.width << ", num_frames=" << tap.frames << ", start_time=" << tap.ticks << ", path=" << tap.path << std::endl;
     }  
 
     uint64_t timestamp = 0;
@@ -332,7 +336,7 @@ int vx_scope_stop(vx_device_h hdevice) {
         CHECK_ERR(dump_tap(ofs, tap, hdevice));
     };
 
-    std::cout << "scope trace dump done! - " << (timestamp/2) << " cycles" << std::endl;
+    std::cout << "[SCOPE] trace dump done! - " << (timestamp/2) << " cycles" << std::endl;
 
     return 0;
 }

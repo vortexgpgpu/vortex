@@ -57,10 +57,10 @@ ifeq ($(TARGET), fpga)
 	OPAE_DRV_PATHS ?= libopae-c.so
 else
 ifeq ($(TARGET), asesim)
-	OPAE_DRV_PATHS ?= libopae-c-ase.so
-	SCOPE_JSON_PATH ?= $(VORTEX_RT_PATH)/opae/scope.json
+	OPAE_DRV_PATHS ?= libopae-c-ase.so	
 else
 	OPAE_DRV_PATHS ?= libopae-c-sim.so
+	SCOPE_JSON_PATH ?= $(VORTEX_RT_PATH)/opae/scope.json
 endif
 endif
 

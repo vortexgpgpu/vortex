@@ -41,6 +41,7 @@ ifeq ($(TARGET), asesim)
 	OPAE_DRV_PATHS ?= libopae-c-ase.so
 else
 	OPAE_DRV_PATHS ?= libopae-c-sim.so
+	SCOPE_JSON_PATH ?= $(VORTEX_RT_PATH)/opae/scope.json
 endif
 endif
 
@@ -59,7 +60,7 @@ run-rtlsim: $(PROJECT) kernel.pocl
 	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
 run-opae: $(PROJECT) kernel.pocl
-	OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) SCOPE_JSON_PATH=$(VORTEX_RT_PATH)/opae/scope.json LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/opae:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+	OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) SCOPE_JSON_PATH=$(SCOPE_JSON_PATH) LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_RT_PATH)/opae:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
 run-xrt: $(PROJECT) kernel.pocl
 ifeq ($(TARGET), hw)
