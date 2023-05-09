@@ -44,6 +44,7 @@ module VX_avs_adapter #(
     localparam RD_QUEUE_ADDR_WIDTH = $clog2(RD_QUEUE_SIZE+1);
     localparam BANK_ADDRW = `LOG2UP(NUM_BANKS);
     localparam LOG2_NUM_BANKS = $clog2(NUM_BANKS);
+    localparam BANK_OFFSETW = ADDR_WIDTH - LOG2_NUM_BANKS;
 
     // Requests handling //////////////////////////////////////////////////////
     
@@ -52,6 +53,7 @@ module VX_avs_adapter #(
     wire [NUM_BANKS-1:0] req_queue_going_full;
     wire [NUM_BANKS-1:0][RD_QUEUE_ADDR_WIDTH-1:0] req_queue_size;
     wire [BANK_ADDRW-1:0] req_bank_sel;
+    wire [BANK_OFFSETW-1:0] req_bank_off;
     wire [NUM_BANKS-1:0] bank_req_ready;
 
     if (NUM_BANKS > 1) begin
@@ -59,6 +61,8 @@ module VX_avs_adapter #(
     end else begin
         assign req_bank_sel = '0;
     end
+
+    assign req_bank_off = mem_req_addr[ADDR_WIDTH-1:LOG2_NUM_BANKS];
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin        
         assign req_queue_push[i] = mem_req_valid && ~mem_req_rw && bank_req_ready[i] && (req_bank_sel == i);
@@ -100,15 +104,15 @@ module VX_avs_adapter #(
         wire                  valid_out;
         wire                  rw_out;
         wire [DATA_SIZE-1:0]  byteen_out;
-        wire [ADDR_WIDTH-1:0] addr_out;
+        wire [BANK_OFFSETW-1:0] addr_out;
         wire [DATA_WIDTH-1:0] data_out;
         wire                  ready_out;
 
         wire valid_out_w = mem_req_valid && ~req_queue_going_full[i] && (req_bank_sel == i);
         wire ready_out_w;
-        
+
         VX_skid_buffer #(
-            .DATAW    (1 + DATA_SIZE + ADDR_WIDTH + DATA_WIDTH),
+            .DATAW    (1 + DATA_SIZE + BANK_OFFSETW + DATA_WIDTH),
             .PASSTHRU (BUFFERED_REQ == 0),
             .OUT_REG  (BUFFERED_REQ > 1)
         ) req_out_buf (
@@ -116,7 +120,7 @@ module VX_avs_adapter #(
             .reset     (reset),
             .valid_in  (valid_out_w),
             .ready_in  (ready_out_w),
-            .data_in   ({mem_req_rw, mem_req_byteen, mem_req_addr, mem_req_data}),
+            .data_in   ({mem_req_rw, mem_req_byteen, req_bank_off, mem_req_data}),
             .data_out  ({rw_out,     byteen_out,     addr_out,     data_out}),
             .valid_out (valid_out),
             .ready_out (ready_out)
@@ -124,7 +128,7 @@ module VX_avs_adapter #(
 
         assign avs_read[i]       = valid_out && ~rw_out;
         assign avs_write[i]      = valid_out && rw_out;
-        assign avs_address[i]    = (addr_out >> LOG2_NUM_BANKS);
+        assign avs_address[i]    = ADDR_WIDTH'(addr_out);
         assign avs_byteenable[i] = byteen_out;
         assign avs_writedata[i]  = data_out;
         assign avs_burstcount[i] = BURST_WIDTH'(1);

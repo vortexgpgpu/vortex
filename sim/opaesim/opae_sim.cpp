@@ -403,7 +403,7 @@ private:
 
       // process memory requests
       assert(!device_->avs_read[b] || !device_->avs_write[b]);
-      unsigned byte_addr = device_->avs_address[b] * MEM_BLOCK_SIZE;
+      unsigned byte_addr = (device_->avs_address[b] * MEMORY_BANKS + b) * MEM_BLOCK_SIZE;
       if (device_->avs_write[b]) {           
         uint64_t byteen = device_->avs_byteenable[b];        
         uint8_t* data = (uint8_t*)(device_->avs_writedata[b].data());
@@ -426,8 +426,7 @@ private:
           0
         );
         dram_queue_.push(dram_req);
-      }
-
+      } else
       if (device_->avs_read[b]) {
         auto mem_req = new mem_rd_req_t();
         mem_req->addr = device_->avs_address[b];
@@ -498,7 +497,7 @@ private:
 
   std::mutex mutex_;
 
-  RAM *ram_;
+  RAM* ram_;
 
   ramulator::Gem5Wrapper* dram_;
 

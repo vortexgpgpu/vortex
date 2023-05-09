@@ -1075,13 +1075,13 @@ module vortex_afu #(
     always @(posedge clk) begin
         for (integer i = 0; i < NUM_LOCAL_MEM_BANKS; ++i) begin
             if (avs_write[i] && ~avs_waitrequest[i]) begin
-                `TRACE(2, ("%d: AVS Wr Req: addr=0x%0h, byteen=0x%0h, burst=0x%0h, data=0x%0h\n", $time, `TO_FULL_ADDR(avs_address[i]), avs_byteenable[i], avs_burstcount[i], avs_writedata[i]));                
+                `TRACE(2, ("%d: AVS Wr Req [%0d]: addr=0x%0h, byteen=0x%0h, burst=0x%0h, data=0x%0h\n", $time, i, `TO_FULL_ADDR(avs_address[i]), avs_byteenable[i], avs_burstcount[i], avs_writedata[i]));
             end
             if (avs_read[i] && ~avs_waitrequest[i]) begin   
-                `TRACE(2, ("%d: AVS Rd Req: addr=0x%0h, byteen=0x%0h,  burst=0x%0h\n", $time, `TO_FULL_ADDR(avs_address[i]), avs_byteenable[i], avs_burstcount[i]));
+                `TRACE(2, ("%d: AVS Rd Req [%0d]: addr=0x%0h, byteen=0x%0h,  burst=0x%0h\n", $time, i, `TO_FULL_ADDR(avs_address[i]), avs_byteenable[i], avs_burstcount[i]));
             end 
             if (avs_readdatavalid[i]) begin
-                `TRACE(2, ("%d: AVS Rd Rsp: data=0x%0h\n", $time, avs_readdata[i]));
+                `TRACE(2, ("%d: AVS Rd Rsp [%0d]: data=0x%0h\n", $time, i, avs_readdata[i]));
             end
         end
     end
