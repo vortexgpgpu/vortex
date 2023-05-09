@@ -79,7 +79,7 @@ module VX_afu_wrap #(
 	
 	wire vx_busy;
 
-	wire [63:0] mem_base;        
+	wire [63:0] mem_base [C_M_AXI_MEM_NUM_BANKS];        
 
 	wire                          dcr_wr_valid;
 	wire [`VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr;
@@ -180,7 +180,8 @@ module VX_afu_wrap #(
 
 	VX_afu_ctrl #(
 		.AXI_ADDR_WIDTH (C_S_AXI_CTRL_ADDR_WIDTH),
-		.AXI_DATA_WIDTH (C_S_AXI_CTRL_DATA_WIDTH)
+		.AXI_DATA_WIDTH (C_S_AXI_CTRL_DATA_WIDTH),
+		.AXI_NUM_BANKS  (C_M_AXI_MEM_NUM_BANKS)
 	) afu_ctrl (
 		.clk       		(ap_clk),
 		.reset     		(reset || ap_reset),	
@@ -227,8 +228,8 @@ module VX_afu_wrap #(
 	wire [`XLEN-1:0] m_axi_mem_araddr_w [C_M_AXI_MEM_NUM_BANKS];
 
 	for (genvar i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin
-		assign m_axi_mem_awaddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_awaddr_w[i]) + C_M_AXI_MEM_ADDR_WIDTH'(mem_base);
-		assign m_axi_mem_araddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_araddr_w[i]) + C_M_AXI_MEM_ADDR_WIDTH'(mem_base);
+		assign m_axi_mem_awaddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_awaddr_w[i]) + C_M_AXI_MEM_ADDR_WIDTH'(mem_base[i]);
+		assign m_axi_mem_araddr_a[i] = C_M_AXI_MEM_ADDR_WIDTH'(m_axi_mem_araddr_w[i]) + C_M_AXI_MEM_ADDR_WIDTH'(mem_base[i]);
 	end
 
 	`SCOPE_IO_SWITCH (2)
@@ -380,16 +381,16 @@ module VX_afu_wrap #(
     always @(posedge ap_clk) begin
 		for (integer i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin
 			if (m_axi_mem_awvalid_a[i] && m_axi_mem_awready_a[i]) begin
-				`TRACE(2, ("%d: AFU Wr Req: addr=0x%0h, tag=0x%0h\n", $time, m_axi_mem_awaddr_w[i], m_axi_mem_awid_a[i]));                
+				`TRACE(2, ("%d: AFU Wr Req [%0d]: addr=0x%0h, tag=0x%0h\n", $time, i, m_axi_mem_awaddr_a[i], m_axi_mem_awid_a[i]));                
 			end
 			if (m_axi_mem_wvalid_a[i] && m_axi_mem_wready_a[i]) begin
-				`TRACE(2, ("%d: AFU Wr Req: data=0x%0h\n", $time, m_axi_mem_wdata_a[i]));                
+				`TRACE(2, ("%d: AFU Wr Req [%0d]: data=0x%0h\n", $time, i, m_axi_mem_wdata_a[i]));                
 			end
 			if (m_axi_mem_arvalid_a[i] && m_axi_mem_arready_a[i]) begin   
-				`TRACE(2, ("%d: AFU Rd Req: addr=0x%0h, tag=0x%0h\n", $time, m_axi_mem_araddr_w[i], m_axi_mem_arid_a[i]));
+				`TRACE(2, ("%d: AFU Rd Req [%0d]: addr=0x%0h, tag=0x%0h\n", $time, i, m_axi_mem_araddr_a[i], m_axi_mem_arid_a[i]));
 			end
 			if (m_axi_mem_rvalid_a[i] && m_axi_mem_rready_a[i]) begin
-				`TRACE(2, ("%d: AVS Rd Rsp: data=0x%0h, tag=0x%0h\n", $time, m_axi_mem_rdata_a[i], m_axi_mem_rid_a[i]));
+				`TRACE(2, ("%d: AVS Rd Rsp [%0d]: data=0x%0h, tag=0x%0h\n", $time, i, m_axi_mem_rdata_a[i], m_axi_mem_rid_a[i]));
 			end
 		end
   	end

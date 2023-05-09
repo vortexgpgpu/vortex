@@ -236,7 +236,7 @@ set reg [::ipx::add_register -quiet "SCP" $addr_block]
 
 for {set i 0} {$i < 1} {incr i} {
     set reg [::ipx::add_register -quiet "MEM_$i" $addr_block]
-    set_property address_offset 0x040 $reg
+    set_property address_offset [expr {0x040 + $i * 12}] $reg
     set_property size           [expr {8*8}]   $reg
     set regparam [::ipx::add_register_parameter -quiet {ASSOCIATED_BUSIF} $reg] 
     set_property value m_axi_mem_$i $regparam

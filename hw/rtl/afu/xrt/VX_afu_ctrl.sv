@@ -2,7 +2,8 @@
 
 module VX_afu_ctrl #(
     parameter AXI_ADDR_WIDTH = 8,
-    parameter AXI_DATA_WIDTH = 32
+    parameter AXI_DATA_WIDTH = 32,
+    parameter AXI_NUM_BANKS  = 1
 ) (
     // axi4 lite slave signals
     input  wire                         clk,
@@ -43,7 +44,7 @@ module VX_afu_ctrl #(
     output wire                         scope_bus_out,
 `endif
 
-    output wire [63:0]                  mem_base,
+    output wire [63:0]                  mem_base [AXI_NUM_BANKS],
 
     output wire                         dcr_wr_valid,
     output wire [`VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr,
@@ -146,7 +147,7 @@ module VX_afu_ctrl #(
     reg         gie_r;
     reg [1:0]   ier_r;
     reg [1:0]   isr_r;
-    reg [63:0]  mem_r;
+    reg [63:0]  mem_r [AXI_NUM_BANKS];
     reg [31:0]  dcra_r;
     reg [31:0]  dcrv_r;
     reg         dcr_wr_valid_r;   
@@ -241,16 +242,22 @@ module VX_afu_ctrl #(
             ap_start_r <= 0;
             ap_reset_r <= 0;
             auto_restart_r <= 0;
+            
             gie_r <= 0;
             ier_r <= '0;
             isr_r <= '0;
+
             dcra_r <= '0;
             dcrv_r <= '0;
             dcr_wr_valid_r <= 0;
-            mem_r <= '0;
+
+            for (integer i = 0; i < AXI_NUM_BANKS; ++i) begin
+                mem_r[i] <= '0;
+            end
         end else if (clk_en) begin
             if (ap_ready)
                 ap_start_r <= auto_restart_r;
+
             dcr_wr_valid_r <= 0;
 
             if (s_axi_w_fire) begin
@@ -284,13 +291,16 @@ module VX_afu_ctrl #(
                     dcrv_r <= (s_axi_wdata & wmask) | (dcrv_r & ~wmask);
                     dcr_wr_valid_r <= 1;
                 end
-                ADDR_MEM_0: begin
-                    mem_r[31:0] <= (s_axi_wdata & wmask) | (mem_r[31:0] & ~wmask);
+                default: begin
+                    for (integer i = 0; i < AXI_NUM_BANKS; ++i) begin
+                        if (waddr == (ADDR_MEM_0 + i * 12)) begin
+                            mem_r[i][31:0] <= (s_axi_wdata & wmask) | (mem_r[i][31:0] & ~wmask);
+                        end
+                        if (waddr == (ADDR_MEM_1 + i * 12)) begin
+                            mem_r[i][63:32] <= (s_axi_wdata & wmask) | (mem_r[i][63:32] & ~wmask);
+                        end
+                    end
                 end
-                ADDR_MEM_1: begin
-                    mem_r[63:32] <= (s_axi_wdata & wmask) | (mem_r[63:32] & ~wmask);
-                end
-                default:;
                 endcase
                 
                 if (ier_r[0] & ap_done)
