@@ -71,7 +71,11 @@ module VX_cluster #(
     // Status
     output wire                 busy
 );
-    `SCOPE_IO_SWITCH (`NUM_RASTER_UNITS+`NUM_SOCKETS);
+
+`ifdef SCOPE
+    localparam scope_raster_units = `EXT_RASTER_ENABLED ? `NUM_RASTER_UNITS : 0;
+    `SCOPE_IO_SWITCH (scope_raster_units + `NUM_SOCKETS);
+`endif
 
 `ifdef EXT_RASTER_ENABLE
 
@@ -468,7 +472,7 @@ module VX_cluster #(
         VX_socket #(
             .SOCKET_ID ((CLUSTER_ID * `NUM_SOCKETS) + i)
         ) socket (
-            `SCOPE_IO_BIND  (`NUM_RASTER_UNITS+i)
+            `SCOPE_IO_BIND  (scope_raster_units+i)
 
             .clk            (clk),
             .reset          (socket_reset),
