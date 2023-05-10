@@ -6,7 +6,7 @@ module VX_scope_tap #(
     parameter SCOPE_IDW = 8,    // scope identifier width
     parameter TRIGGERW  = 0,    // trigger signals width
     parameter PROBEW    = 0,    // probe signal width
-    parameter SIZE      = 16,   // trace buffer size
+    parameter SIZE      = 256,  // trace buffer size
     parameter IDLE_CTRW = 16    // idle time between triggers counter width
 ) ( 
     input wire clk,

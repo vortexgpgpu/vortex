@@ -335,7 +335,6 @@ int vx_scope_stop(vx_device_h hdevice) {
         if (tap == nullptr)
             break;
         // advance clock
-        printf("*** dump tap: id=%d, start_time=%ld, cur_time=%ld\n", tap->id, tap->cycle_time, cur_time);
         cur_time = advance_time(ofs, tap->cycle_time, cur_time);        
         // dump tap
         CHECK_ERR(dump_tap(ofs, tap, hdevice));

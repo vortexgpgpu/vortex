@@ -1,15 +1,15 @@
 XLEN ?= 32
 
-TARGET   ?= hw_emu
-PLATFORM ?= xilinx_u280_xdma_201920_3
+TARGET ?= opaesim
 
 XRT_SYN_DIR  ?= ../../../hw/syn/xilinx/xrt
-FPGA_BIN_DIR ?= $(XRT_SYN_DIR)/build_$(PLATFORM)_$(TARGET)/bin
 
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 
 VORTEX_RT_PATH ?= $(realpath ../../../runtime)
 VORTEX_KN_PATH ?= $(realpath ../../../kernel)
+
+FPGA_BIN_DIR ?= $(VORTEX_RT_PATH)/opae
 
 LLVM_VORTEX ?= /opt/llvm-vortex
 
@@ -53,12 +53,6 @@ else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
-ifeq ($(TARGET), opaesim)
-	SCOPE_JSON_PATH ?= $(VORTEX_RT_PATH)/opae/scope.json
-else
-	SCOPE_JSON_PATH ?= $(FPGA_BIN_DIR)/scope.json
-endif
-
 ifeq ($(TARGET), fpga)
 	OPAE_DRV_PATHS ?= libopae-c.so
 else
@@ -89,14 +83,14 @@ run-simx: $(PROJECT) kernel.bin
 	LD_LIBRARY_PATH=$(VORTEX_RT_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 	
 run-opae: $(PROJECT) kernel.bin   
-	OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) SCOPE_JSON_PATH=$(SCOPE_JSON_PATH) LD_LIBRARY_PATH=$(HOME)/dev/netlist-paths/release/install/lib:$(VORTEX_RT_PATH)/opae:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(HOME)/dev/netlist-paths/release/install/lib:$(VORTEX_RT_PATH)/opae:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
 run-rtlsim: $(PROJECT) kernel.bin   
 	LD_LIBRARY_PATH=$(VORTEX_RT_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 
 run-xrt: $(PROJECT) kernel.bin
 ifeq ($(TARGET), hw)
-	XRT_INI_PATH=$(XRT_SYN_DIR)/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=0 XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_PATH)/xrt:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XRT_INI_PATH=$(XRT_SYN_DIR)/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=0 XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_PATH)/xrt:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
 else
 	XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(XRT_SYN_DIR)/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=0 XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_PATH)/xrt:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)	
 endif
