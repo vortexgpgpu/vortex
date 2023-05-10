@@ -189,13 +189,23 @@ public:
             return -1;
         });
 
-        CHECK_ERR(this->write_register(MMIO_MEM_ADDR, platform_.mem_base & 0xffffffff), {
-            return -1;
-        });
+        uint32_t num_banks = 1 << platform_.lg2_num_banks;
+        uint64_t bank_size = 1ull << platform_.lg2_bank_size;
 
-        CHECK_ERR(this->write_register(MMIO_MEM_ADDR + 4, (platform_.mem_base >> 32) & 0xffffffff), {
-            return -1;
-        });
+        for (uint32_t i = 0; i < num_banks; ++i) {
+            uint32_t reg_addr = MMIO_MEM_ADDR + (i * 12);
+            uint64_t reg_value = platform_.mem_base + i * bank_size;
+            CHECK_ERR(this->write_register(reg_addr, reg_value & 0xffffffff), {
+                return -1;
+            });
+
+            CHECK_ERR(this->write_register(reg_addr + 4, (reg_value >> 32) & 0xffffffff), {
+                return -1;
+            });
+        #ifndef BANK_INTERLEAVE
+            break;
+        #endif
+        }
 
         CHECK_ERR(this->read_register(MMIO_DEV_ADDR, (uint32_t*)&this->dev_caps), {
             return -1;
@@ -214,8 +224,6 @@ public:
         });
 
     #ifdef BANK_INTERLEAVE
-        uint32_t num_banks = 1 << platform_.lg2_num_banks;
-        uint64_t bank_size = 1ull << platform_.lg2_bank_size;
         xrtBuffers_.reserve(num_banks);
         for (uint32_t i = 0; i < num_banks; ++i) {            
         #ifdef CPP_API
@@ -314,8 +322,10 @@ public:
         return 0;
     }
 
-    int copy_to_dev(void* host_ptr, uint64_t dev_maddr, uint64_t asize) {    
-        for (uint64_t end = dev_maddr + asize; dev_maddr < end; dev_maddr += CACHE_BLOCK_SIZE) {      
+    int copy_to_dev(uint8_t* host_ptr, uint64_t dev_maddr, uint64_t asize) {    
+        for (uint64_t end = dev_maddr + asize; dev_maddr < end; 
+                dev_maddr += CACHE_BLOCK_SIZE, 
+                host_ptr += CACHE_BLOCK_SIZE) {      
         #ifdef BANK_INTERLEAVE
             asize = CACHE_BLOCK_SIZE;
         #else
@@ -347,8 +357,10 @@ public:
         return 0;
     }
 
-    int copy_from_dev(void* host_ptr, uint64_t dev_maddr, uint64_t asize) {
-        for (uint64_t end = dev_maddr + asize; dev_maddr < end; dev_maddr += CACHE_BLOCK_SIZE) {      
+    int copy_from_dev(uint8_t* host_ptr, uint64_t dev_maddr, uint64_t asize) {
+        for (uint64_t end = dev_maddr + asize; dev_maddr < end; 
+                dev_maddr += CACHE_BLOCK_SIZE, 
+                host_ptr += CACHE_BLOCK_SIZE) {      
         #ifdef BANK_INTERLEAVE
             asize = CACHE_BLOCK_SIZE;
         #else
