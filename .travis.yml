@@ -55,7 +55,7 @@ jobs:
       script: cp -r ../build32 ../build32_opencl && cd ../build32_opencl && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -coverage    
     - stage: test
       name: graphics
-     script: cp -r ../build32 ../build32_graphics && cd ../build32_graphics && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -graphics
+      script: cp -r ../build32 ../build32_graphics && cd ../build32_graphics && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -graphics
     - stage: test
       name: tex
       script: cp -r ../build32 ../build32_tex && cd ../build32_tex && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -tex
