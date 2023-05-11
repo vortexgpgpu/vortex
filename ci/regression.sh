@@ -6,43 +6,42 @@ set -e
 # clear blackbox cache
 rm -f blackbox.*.cache
 
-smoke() 
-{
-echo "begin smoke tests..."
-
-make -C tests/riscv/isa run-simx
-make -C tests/riscv/isa run-rtlsim
-make -C tests/kernel run-simx
-make -C tests/kernel run-rtlsim
-make -C tests/regression run-simx
-make -C tests/regression run-rtlsim
-
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=simx --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png"
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png"
-CONFIGS="-DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=opae  --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png"
-
-echo "smoke tests done!"
-}
-
 unittest() 
 {
 make -C tests/unittest run
 }
 
-coverage() 
+isa() 
 {
-echo "begin coverage tests..."
+echo "begin isa tests..."
 
-make -C tests/kernel run-rtlsim
-make -C tests/riscv/isa run-rtlsim
-make -C tests/regression run-opae
-make -C tests/opencl run-opae
-make -C tests/kernel run-simx
 make -C tests/riscv/isa run-simx
-make -C tests/regression run-simx
-make -C tests/opencl run-simx
+make -C tests/riscv/isa run-rtlsim
 
-echo "coverage tests done!"
+echo "isa tests done!"
+}
+
+regression() 
+{
+echo "begin regression tests..."
+
+make -C tests/kernel run-simx
+make -C tests/kernel run-rtlsim
+
+make -C tests/regression run-simx
+make -C tests/regression run-rtlsim
+
+echo "regression tests done!"
+}
+
+opencl() 
+{
+echo "begin opencl tests..."
+
+make -C tests/opencl run-simx
+make -C tests/opencl run-rtlsim
+
+echo "opencl tests done!"
 }
 
 tex()
@@ -276,18 +275,20 @@ echo "stress1 tests done!"
 show_usage()
 {
     echo "Vortex Regression Test" 
-    echo "Usage: $0 [-smoke] [-unittest] [-coverage] [-tex] [-rop] [-raster] [-graphics] [-cluster] [-debug] [-config] [-stress[#n]] [-all] [-h|--help]"
+    echo "Usage: $0 [-unittest] [-isa] [-regression] [-opencl] [-tex] [-rop] [-raster] [-graphics] [-cluster] [-debug] [-config] [-stress[#n]] [-all] [-h|--help]"
 }
 
 start=$SECONDS
 
 while [ "$1" != "" ]; do
     case $1 in
-        -smoke ) smoke
-                ;;
         -unittest ) unittest
                 ;;
-        -coverage ) coverage
+        -isa ) isa
+                ;;
+        -regression ) regression
+                ;;
+        -opencl ) opencl
                 ;;
         -tex ) tex
                 ;;
@@ -310,12 +311,14 @@ while [ "$1" != "" ]; do
         -stress ) stress0
                   stress1
                 ;;
-        -all ) unittest
-               coverage
+        -all ) unittest               
+               isa
+               regression
+               opencl
+               graphics
                tex
                rop
-               raster
-               graphics
+               raster               
                cluster
                debug
                config

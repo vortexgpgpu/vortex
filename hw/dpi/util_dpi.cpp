@@ -9,10 +9,12 @@
 #include "verilated_vpi.h"
 #include "VX_config.h"
 
-#ifndef MODE_64_BIT
-#define INT_LEN int
+#ifdef XLEN_32
+#define INT_TYPE int32_t
+#define UINT_TYPE uint32_t
 #else
-#define INT_LEN long int
+#define INT_TYPE int64_t
+#define UINT_TYPE uint64_t
 #endif
 
 #ifndef DEBUG_LEVEL
@@ -21,8 +23,8 @@
 
 
 extern "C" {
-  void dpi_imul(bool enable, INT_LEN a, INT_LEN b, bool is_signed_a, bool is_signed_b, INT_LEN* resultl, INT_LEN* resulth);
-  void dpi_idiv(bool enable, INT_LEN a, INT_LEN b, bool is_signed, INT_LEN* quotient, INT_LEN* remainder);
+  void dpi_imul(bool enable, INT_TYPE a, INT_TYPE b, bool is_signed_a, bool is_signed_b, INT_TYPE* resultl, INT_TYPE* resulth);
+  void dpi_idiv(bool enable, INT_TYPE a, INT_TYPE b, bool is_signed, INT_TYPE* quotient, INT_TYPE* remainder);
 
   int dpi_register();
   void dpi_assert(int inst, bool cond, int delay);
@@ -106,13 +108,13 @@ void dpi_assert(int inst, bool cond, int delay) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-#ifndef MODE_64_BIT
+#ifdef XLEN_32
 void dpi_imul(bool enable, int a, int b, bool is_signed_a, bool is_signed_b, int* resultl, int* resulth) {
   if (!enable)
     return;
     
-  uint64_t first  = *(long int*)&a;
-  uint64_t second = *(long int*)&b;
+  uint64_t first  = *(uint32_t*)&a;
+  uint64_t second = *(uint32_t*)&b;
     
   if (is_signed_a && (first & 0x80000000)) {
     first |= 0xFFFFFFFF00000000;
@@ -133,52 +135,46 @@ void dpi_imul(bool enable, int a, int b, bool is_signed_a, bool is_signed_b, int
   *resulth = (result >> 32) & 0xFFFFFFFF;
 }
 #else
-void umul64wide (uint64_t a, uint64_t b, uint64_t *hi, uint64_t *lo)
-{
-    uint64_t a_lo = (uint64_t)(uint32_t)a;
-    uint64_t a_hi = a >> 32;
-    uint64_t b_lo = (uint64_t)(uint32_t)b;
-    uint64_t b_hi = b >> 32;
-
-    uint64_t p0 = a_lo * b_lo;
-    uint64_t p1 = a_lo * b_hi;
-    uint64_t p2 = a_hi * b_lo;
-    uint64_t p3 = a_hi * b_hi;
-
-    uint32_t cy = (uint32_t)(((p0 >> 32) + (uint32_t)p1 + (uint32_t)p2) >> 32);
-
-    *lo = p0 + (p1 << 32) + (p2 << 32);
-    *hi = p3 + (p1 >> 32) + (p2 >> 32) + cy;
-}
-void dpi_imul(bool enable, INT_LEN a, INT_LEN b, bool is_signed_a, bool is_signed_b, INT_LEN* resultl, INT_LEN* resulth) {
+void dpi_imul(bool enable, INT_TYPE a, INT_TYPE b, bool is_signed_a, bool is_signed_b, INT_TYPE* resultl, INT_TYPE* resulth) {
   if (!enable)
     return;
-    
-  uint64_t first  = *(INT_LEN*)&a;
-  uint64_t second = *(INT_LEN*)&b;
 
-  umul64wide (a, b, (uint64_t *)resulth, (uint64_t *)resultl);
+  uint64_t a_lo = (uint64_t)(uint32_t)a;
+  uint64_t a_hi = a >> 32;
+  uint64_t b_lo = (uint64_t)(uint32_t)b;
+  uint64_t b_hi = b >> 32;
+
+  uint64_t p0 = a_lo * b_lo;
+  uint64_t p1 = a_lo * b_hi;
+  uint64_t p2 = a_hi * b_lo;
+  uint64_t p3 = a_hi * b_hi;
+
+  uint32_t cy = (uint32_t)(((p0 >> 32) + (uint32_t)p1 + (uint32_t)p2) >> 32);
+
+  *resultl = p0 + (p1 << 32) + (p2 << 32);
+  *resulth = p3 + (p1 >> 32) + (p2 >> 32) + cy;
 }
 #endif
 
-#ifdef MODE_32_BIT
-void dpi_idiv(bool enable, int a, int b, bool is_signed, int* quotient, int* remainder) {
+void dpi_idiv(bool enable, INT_TYPE a, INT_TYPE b, bool is_signed, INT_TYPE* quotient, INT_TYPE* remainder) {
   if (!enable)
     return;
 
-  uint32_t dividen = *(long int*)&a;
-  uint32_t divisor = *(long int*)&b;
+  UINT_TYPE dividen = a;
+  UINT_TYPE divisor = b;
+
+  auto inf_neg = UINT_TYPE(1) << (XLEN-1); 
 
   if (is_signed) {
     if (b == 0) {
       *quotient  = -1;
       *remainder = dividen;
-    } else if (dividen == 0x80000000 && divisor == 0xffffffff) {
+    } else if (dividen == inf_neg && divisor == -1) {
       *remainder = 0;
       *quotient  = dividen;
     } else { 
-      *quotient  = (int32_t)dividen / (int32_t)divisor;
-      *remainder = (int32_t)dividen % (int32_t)divisor;      
+      *quotient  = (UINT_TYPE)dividen / (UINT_TYPE)divisor;
+      *remainder = (UINT_TYPE)dividen % (UINT_TYPE)divisor;      
     }
   } else {    
     if (b == 0) {
@@ -190,37 +186,6 @@ void dpi_idiv(bool enable, int a, int b, bool is_signed, int* quotient, int* rem
     }
   }
 }
-#else
-void dpi_idiv(bool enable, INT_LEN a, INT_LEN b, bool is_signed, INT_LEN* quotient, INT_LEN* remainder) {
-  if (!enable)
-    return;
-
-  uint64_t dividen = *(INT_LEN*)&a;
-  uint64_t divisor = *(INT_LEN*)&b;
-
-  if (is_signed) {
-    if (b == 0) {
-      *quotient  = -1;
-      *remainder = dividen;
-    } else if (dividen == 0x8000000000000000 && divisor == 0xffffffffffffffff) {
-      *remainder = 0;
-      *quotient  = dividen;
-    } else { 
-      *quotient  = (int64_t)dividen / (int64_t)divisor;
-      *remainder = (int64_t)dividen % (int64_t)divisor;      
-    }
-  } else {    
-    if (b == 0) {
-      *quotient  = -1;
-      *remainder = dividen;
-    } else {
-      *quotient  = dividen / divisor;
-      *remainder = dividen % divisor;
-    }
-  }
-    dpi_trace(1, "DIV - %d %lld %lld %lld %lld %lld %lld\n",is_signed , a, b, dividen, divisor, *quotient, *remainder);
-}
-#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 

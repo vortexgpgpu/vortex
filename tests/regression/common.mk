@@ -1,10 +1,17 @@
-XLEN ?= 32
+XLEN ?= 64
 
 TARGET ?= opaesim
 
 XRT_SYN_DIR  ?= ../../../hw/syn/xilinx/xrt
 
+ifeq ($(XLEN),64)
+RISCV_TOOLCHAIN_PATH ?= /opt/riscv64-gnu-toolchain
+else
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
+endif
+
+RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf-
+RISCV_SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/$(RISCV_PREFIX)
 
 VORTEX_RT_PATH ?= $(realpath ../../../runtime)
 VORTEX_KN_PATH ?= $(realpath ../../../kernel)
@@ -13,14 +20,14 @@ FPGA_BIN_DIR ?= $(VORTEX_RT_PATH)/opae
 
 LLVM_VORTEX ?= /opt/llvm-vortex
 
-LLVM_CFLAGS += --sysroot=$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf
+LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex 
 #LLVM_CFLAGS += -mllvm -vortex-branch-divergence=2 
 #LLVM_CFLAGS += -mllvm -print-after-all 
-#LLVM_CFLAGS += -I$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/include/c++/9.2.0/riscv32-unknown-elf 
-#LLVM_CFLAGS += -I$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/include/c++/9.2.0
-#LLVM_CFLAGS += -Wl,-L$(RISCV_TOOLCHAIN_PATH)/lib/gcc/riscv32-unknown-elf/9.2.0
+#LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0/$(RISCV_PREFIX) 
+#LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0
+#LLVM_CFLAGS += -Wl,-L$(RISCV_TOOLCHAIN_PATH)/lib/gcc/$(RISCV_PREFIX)/9.2.0
 #LLVM_CFLAGS += --rtlib=libgcc
 
 VX_CC  = $(LLVM_VORTEX)/bin/clang $(LLVM_CFLAGS)
@@ -28,10 +35,10 @@ VX_CXX = $(LLVM_VORTEX)/bin/clang++ $(LLVM_CFLAGS)
 VX_DP  = $(LLVM_VORTEX)/bin/llvm-objdump -arch=riscv32 -mcpu=generic-rv32 -mattr=+m,+f -mattr=+vortex
 VX_CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 
-#VX_CC  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
-#VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-g++
-#VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
-#VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
+#VX_CC  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc
+#VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-g++
+#VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
+#VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
 VX_CFLAGS += -v -O3 -std=c++17 -march=rv32imf -mabi=ilp32f
 VX_CFLAGS += -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections

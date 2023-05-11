@@ -25,8 +25,7 @@ translation_rules = [
     # preprocessor directives
     (re.compile(r'`include\s+.*$'), r''),
     (re.compile(r'`ifdef'), r'#ifdef'),
-    (re.compile(r'`ifndef'), r'#ifndef'),    
-    (re.compile(r'`elif'), r'#elif'),
+    (re.compile(r'`ifndef'), r'#ifndef'),
     (re.compile(r'`else'), r'#else'),
     (re.compile(r'`define'), r'#define'),    
     (re.compile(r'`endif'), r'#endif'),

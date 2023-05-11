@@ -1,3 +1,4 @@
+XLEN ?= 64
 DESTDIR ?= .
 RTL_DIR = ../../hw/rtl
 DPI_DIR = ../../hw/dpi
@@ -8,6 +9,7 @@ CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I../../../hw -I../../common
 CXXFLAGS += -I../$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I../$(THIRD_PARTY_DIR)
+CXXFLAGS += -DXLEN_$(XLEN)
 
 LDFLAGS += ../$(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 LDFLAGS += -L../$(THIRD_PARTY_DIR)/ramulator -lramulator
@@ -54,6 +56,7 @@ VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += -DSIMULATION
 VL_FLAGS += verilator.vlt
 VL_FLAGS += $(RTL_INCLUDE)
+VL_FLAGS += -DXLEN_$(XLEN)
 
 VL_FLAGS += $(CONFIGS)
 CXXFLAGS += $(CONFIGS)

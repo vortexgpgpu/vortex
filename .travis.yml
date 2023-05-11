@@ -20,14 +20,14 @@ install:
   - mkdir -p $TOOLDIR
   - DESTDIR=$TOOLDIR ./ci/toolchain_install.sh -all
   # Set environments
-  - export RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain
   - export LLVM_VORTEX=$TOOLDIR/llvm-vortex
   - export VERILATOR_ROOT=$TOOLDIR/verilator
   - export PATH=$VERILATOR_ROOT/bin:$PATH  
   - export POCL_CC_PATH=$TOOLDIR/pocl/compiler
   - export POCL_RT_PATH=$TOOLDIR/pocl/runtime
   # build project
-  - make -s
+  - cp -r $PWD ../build_32 && cd ../build_32 && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain make -s
+  - cp -r $PWD ../build_64 && cd ../build_64 && XLEN=64 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv64-gnu-toolchain make -s
 
 # stages ordering
 stages:
@@ -36,48 +36,54 @@ stages:
 jobs:     
   include:
     - stage: test
-      name: coverage
-      script: cp -r $PWD ../build_coverage && cd ../build_coverage && ./ci/travis_run.py ./ci/regression.sh -coverage
+      name: unittest
+      script: cp -r ../build32 ../build32_unittest && cd ../build32_unittest && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -unittest
     - stage: test
-      name: coverage64
-      script: cp -r $PWD ../build_coverage64 && cd ../build_coverage64 && ./ci/travis_run.py ./ci/regression64.sh -coverage
+      name: isa
+      script: cp -r ../build32 ../build32_isa && cd ../build32_isa && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -coverage
     - stage: test
-      name: tex
-      script: cp -r $PWD ../build_tex && cd ../build_tex && ./ci/travis_run.py ./ci/regression.sh -tex
+      name: isa64
+      script: cp -r ../build64 ../build64_isa && cd ../build64_isa && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv64-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -coverage
     - stage: test
-      name: rop
-      script: cp -r $PWD ../build_rop && cd ../build_rop && ./ci/travis_run.py ./ci/regression.sh -rop
+      name: regression
+      script: cp -r ../build32 ../build32_regression && cd ../build32_regression && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -coverage
     - stage: test
-      name: raster
-      script: cp -r $PWD ../build_raster && cd ../build_raster && ./ci/travis_run.py ./ci/regression.sh -raster
+      name: regression64
+      script: cp -r ../build64 ../build64_regression && cd ../build64_regression && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv64-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -coverage
+    - stage: test
+      name: opencl
+      script: cp -r ../build32 ../build32_opencl && cd ../build32_opencl && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -coverage    
     - stage: test
       name: graphics
-      script: cp -r $PWD ../build_graphics && cd ../build_graphics && ./ci/travis_run.py ./ci/regression.sh -graphics
-    - stage: test
-      name: cluster
-      script: cp -r $PWD ../build_cluster && cd ../build_cluster && ./ci/travis_run.py ./ci/regression.sh -cluster    
-    - stage: test
-      name: config
-      script: cp -r $PWD ../build_config && cd ../build_config && ./ci/travis_run.py ./ci/regression.sh -config
-    - stage: test
-      name: debug
-      script: cp -r $PWD ../build_debug && cd ../build_debug && ./ci/travis_run.py ./ci/regression.sh -debug
-    - stage: test
-      name: stress0
-      script: cp -r $PWD ../build_stress0 && cd ../build_stress0 && ./ci/travis_run.py ./ci/regression.sh -stress0
-    - stage: test
-      name: stress1
-      script: cp -r $PWD ../build_stress1 && cd ../build_stress1 && ./ci/travis_run.py ./ci/regression.sh -stress1
-    - stage: test
-      name: compiler
-      script: cp -r $PWD ../build_compiler && cd ../build_compiler && ./ci/travis_run.py ./ci/test_compiler.sh
+     script: cp -r ../build32 ../build32_graphics && cd ../build32_graphics && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -graphics
     - stage: test
       name: tex
-      script: cp -r $PWD ../build_tex && cd ../build_tex && ./ci/travis_run.py ./ci/regression.sh -tex
+      script: cp -r ../build32 ../build32_tex && cd ../build32_tex && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -tex
     - stage: test
-      name: unittest
-      script: cp -r $PWD ../build_unittest && cd ../build_unittest && ./ci/travis_run.py ./ci/regression.sh -unittest
-  
+      name: rop
+      script: cp -r ../build32 ../build32_rop && cd ../build32_rop && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -rop
+    - stage: test
+      name: raster
+      script: cp -r ../build32 ../build32_raster && cd ../build32_raster && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -raster
+    - stage: test
+      name: cluster
+      script: cp -r ../build32 ../build32_cluster && cd ../build32_cluster && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -cluster    
+    - stage: test
+      name: config
+      script: cp -r ../build32 ../build32_config && cd ../build32_config && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -config
+    - stage: test
+      name: debug
+      script: cp -r ../build32 ../build32_debug && cd ../build32_debug && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -debug
+    - stage: test
+      name: stress0
+      script: cp -r ../build32 ../build32_stress0 && cd ../build32_stress0 && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -stress0
+    - stage: test
+      name: stress1
+      script: cp -r ../build32 ../build32_stress1 && cd ../build32_stress1 && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -stress1
+    - stage: test
+      name: compiler
+      script: cp -r ../build32 ../build32_compiler && cd ../build32_compiler && ./ci/travis_run.py ./ci/test_compiler.sh
+            
 after_success:
   # Gather code coverage
   - lcov --directory runtime --capture --output-file runtime.cov # capture trace  

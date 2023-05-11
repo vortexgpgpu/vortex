@@ -1,13 +1,28 @@
+XLEN ?= 64
+
+ifeq ($(XLEN),64)
+RISCV_TOOLCHAIN_PATH ?= /opt/riscv64-gnu-toolchain
+else
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
+endif
+
+RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf-
+
 VORTEX_RT_PATH ?= $(realpath ../../../../../kernel)
 BIN2COE_PATH ?= ../../../../../../bin2coe
 
-CC = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc
-AR = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-gcc-ar
-DP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objdump
-CP = $(RISCV_TOOLCHAIN_PATH)/bin/riscv32-unknown-elf-objcopy
+CC = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc
+AR = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc-ar
+DP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
+CP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
-CFLAGS += -march=rv32imf -mabi=ilp32f -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
+ifeq ($(XLEN),32)
+CFLAGS += -march=rv32imf -mabi=ilp32f
+else
+CFLAGS += -march=rv64imfd -mabi=lp64d
+endif
+
+CFLAGS += -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
 CFLAGS += -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw
 
 LDFLAGS += -lm -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link32.ld

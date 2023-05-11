@@ -164,12 +164,12 @@ module VX_lsu_unit #(
                 1: mem_req_data[i][`XLEN-1:8]  = lsu_req_if.store_data[i][`XLEN-9:0];
                 2: mem_req_data[i][`XLEN-1:16] = lsu_req_if.store_data[i][`XLEN-17:0];
                 3: mem_req_data[i][`XLEN-1:24] = lsu_req_if.store_data[i][`XLEN-25:0];
-                `ifdef MODE_64_BIT
+            `ifdef XLEN_64
                 4: mem_req_data[i][`XLEN-1:32] = lsu_req_if.store_data[i][`XLEN-33:0];
                 5: mem_req_data[i][`XLEN-1:40] = lsu_req_if.store_data[i][`XLEN-41:0];
                 6: mem_req_data[i][`XLEN-1:48] = lsu_req_if.store_data[i][`XLEN-49:0];
                 7: mem_req_data[i][`XLEN-1:56] = lsu_req_if.store_data[i][`XLEN-57:0];
-                `endif
+            `endif
                 default:;
             endcase
         end
@@ -332,13 +332,13 @@ module VX_lsu_unit #(
     reg [`NUM_THREADS-1:0][`XLEN-1:0] rsp_data;
     wire [`NUM_THREADS-1:0] rsp_tmask;
 
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin     // TODO: HOW TF DO I DO THE MEMORY response???
-        `ifdef MODE_64_BIT
-        wire [63:0] rsp_data64 = (i == 0 || rsp_is_dup) ? mem_rsp_data[0] : mem_rsp_data[i]; // ONLY VALID ON XLEN == 64
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+    `ifdef XLEN_64
+        wire [63:0] rsp_data64 = (i == 0 || rsp_is_dup) ? mem_rsp_data[0] : mem_rsp_data[i];
         wire [31:0] rsp_data32 = rsp_align[i][2] ? mem_rsp_data[0][63:32] : mem_rsp_data[i][31:0];
-        `else
-        wire [31:0] rsp_data32 = (i == 0 || rsp_is_dup) ? mem_rsp_data[0] : mem_rsp_data[i]; // ONLY VALID ON XLEN == 32
-        `endif
+    `else
+        wire [31:0] rsp_data32 = (i == 0 || rsp_is_dup) ? mem_rsp_data[0] : mem_rsp_data[i];
+    `endif        
         wire [15:0] rsp_data16 = rsp_align[i][1] ? rsp_data32[31:16] : rsp_data32[15:0];
         wire [7:0]  rsp_data8  = rsp_align[i][0] ? rsp_data16[15:8] : rsp_data16[7:0];
 
@@ -349,10 +349,10 @@ module VX_lsu_unit #(
             `INST_FMT_BU: rsp_data[i] = `XLEN'(unsigned'(rsp_data8));
             `INST_FMT_HU: rsp_data[i] = `XLEN'(unsigned'(rsp_data16));
             `INST_FMT_W:  rsp_data[i] = `XLEN'(signed'(rsp_data32));
-            `ifdef MODE_64_BIT // new instructions for unsigned 32 and 64 bit load modes
+        `ifdef XLEN_64
             `INST_FMT_WU: rsp_data[i] = `XLEN'(unsigned'(rsp_data32));
-            `INST_FMT_D: rsp_data[i] = `XLEN'(signed'(rsp_data64));
-            `endif
+            `INST_FMT_D:  rsp_data[i] = `XLEN'(signed'(rsp_data64));
+        `endif
             default: rsp_data[i] = 'x;
             endcase
         end        

@@ -1,3 +1,4 @@
+XLEN ?= 64
 DESTDIR ?= .
 RTL_DIR = ../hw/rtl
 THIRD_PARTY_DIR = ../../third_party
@@ -7,6 +8,7 @@ CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I. -I../common -I../../hw
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)
+CXXFLAGS += -DXLEN_$(XLEN)
 CXXFLAGS += $(CONFIGS)
 
 LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a 
@@ -22,11 +24,6 @@ ifdef DEBUG
 	CXXFLAGS += -g -O0 -DDEBUG_LEVEL=$(DEBUG)
 else    
 	CXXFLAGS += -O2 -DNDEBUG
-endif
-
-# XLEN parameterization
-ifdef XLEN
-	CXXFLAGS += -DXLEN=$(XLEN)
 endif
 
 PROJECT = simx

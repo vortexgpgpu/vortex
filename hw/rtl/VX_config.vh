@@ -19,19 +19,23 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// comment out the top or bottom two lines to switch between 64 and 32 bit mode
-// 64 bit by default. If you want 32 bit, compile with XLEN=32
-`ifndef XLEN
-`define XLEN 64
-`define MODE_64_BIT 1
-`else
-`define MODE_`XLEN_BIT 1
+// 64 bit by default. If you want 32 bit, compile with -DXLEN32
+`ifndef XLEN_64
+`ifndef XLEN_32
+`define XLEN_64
+`endif
 `endif
 
-// Disable MULDIV, FPU, and TEX units since irrelevant to RV64I instructions
-// `define EXT_M_DISABLE 1
-//`define EXT_F_DISABLE 1
-`define EXT_TEX_DISABLE 1
+`ifdef XLEN_64
+`define XLEN 64
+// disable unsupported extensions
+`define EXT_M_DISABLE 1
+`define EXT_F_DISABLE 1
+`else
+`ifdef XLEN_32
+`define XLEN 32
+`endif
+`endif
 
 `ifndef NUM_CLUSTERS
 `define NUM_CLUSTERS 1

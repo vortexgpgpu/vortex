@@ -52,7 +52,7 @@ Vortex is a full-system RISCV-based GPGPU processor.
     $ DESTDIR=$TOOLDIR ./ci/toolchain_install.sh -all
     $ export VORTEX_HOME=$TOOLDIR/vortex-gfx
     $ export LLVM_VORTEX=$TOOLDIR/llvm-vortex
-    $ export RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain
+    $ export RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv64-gnu-toolchain
     $ export VERILATOR_ROOT=$TOOLDIR/verilator
     $ export PATH=$VERILATOR_ROOT/bin:$PATH 
 ### Build Vortex sources

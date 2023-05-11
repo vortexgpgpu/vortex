@@ -1,21 +1,22 @@
-XLEN ?= 32
+XLEN ?= 64
 
-ifeq ($(XLEN),32)
-RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
-else
+ifeq ($(XLEN),64)
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv64-gnu-toolchain
+else
+RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 endif
 
 RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf-
+RISCV_SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/$(RISCV_PREFIX)
 
 LLVM_VORTEX ?= /opt/llvm-vortex
 
-LLVM_CFLAGS += --sysroot=$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf
+LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex -mllvm -vortex-branch-divergence=0
-#LLVM_CFLAGS += -I$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/include/c++/9.2.0/riscv32-unknown-elf 
-#LLVM_CFLAGS += -I$(RISCV_TOOLCHAIN_PATH)/riscv32-unknown-elf/include/c++/9.2.0
-#LLVM_CFLAGS += -Wl,-L$(RISCV_TOOLCHAIN_PATH)/lib/gcc/riscv32-unknown-elf/9.2.0
+#LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0/$(RISCV_PREFIX) 
+#LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0
+#LLVM_CFLAGS += -Wl,-L$(RISCV_TOOLCHAIN_PATH)/lib/gcc/$(RISCV_PREFIX)/9.2.0
 #LLVM_CFLAGS += --rtlib=libgcc
 
 #CC  = $(LLVM_VORTEX)/bin/clang $(LLVM_CFLAGS)
