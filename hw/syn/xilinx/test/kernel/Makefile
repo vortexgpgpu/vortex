@@ -6,7 +6,7 @@ else
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 endif
 
-RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf-
+RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf
 
 VORTEX_RT_PATH ?= $(realpath ../../../../../kernel)
 BIN2COE_PATH ?= ../../../../../../bin2coe

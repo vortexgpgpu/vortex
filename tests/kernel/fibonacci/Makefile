@@ -6,7 +6,7 @@ else
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 endif
 
-RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf-
+RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf
 VORTEX_KN_PATH ?= $(realpath ../../../kernel)
 
 CC = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)gcc
