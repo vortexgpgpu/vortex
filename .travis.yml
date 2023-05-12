@@ -26,8 +26,8 @@ install:
   - export POCL_CC_PATH=$TOOLDIR/pocl/compiler
   - export POCL_RT_PATH=$TOOLDIR/pocl/runtime
   # build project
-  - cp -r $PWD ../build_32 && cd ../build_32 && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain make -s
-  - cp -r $PWD ../build_64 && cd ../build_64 && XLEN=64 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv64-gnu-toolchain make -s
+  - cp -r $PWD ../build32 && cd ../build32 && XLEN=32 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv-gnu-toolchain make -s
+  - cp -r $PWD ../build64 && cd ../build64 && XLEN=64 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv64-gnu-toolchain make -s
 
 # stages ordering
 stages:
