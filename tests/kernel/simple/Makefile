@@ -1,4 +1,4 @@
-XLEN ?= 64
+XLEN ?= 32
 
 ifeq ($(XLEN),64)
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv64-gnu-toolchain
@@ -7,6 +7,7 @@ RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 endif
 
 RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf
+
 VORTEX_KN_PATH ?= $(realpath ../../../kernel)
 
 CC = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc
@@ -16,10 +17,10 @@ CP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
 SIM_DIR=../../../sim
 
-ifeq ($(XLEN),32)
-CFLAGS += -march=rv32imf -mabi=ilp32f
+ifeq ($(XLEN),64)
+CFLAGS += -march=rv64imafd -mabi=lp64d
 else
-CFLAGS += -march=rv64imfd -mabi=lp64d
+CFLAGS += -march=rv32imaf -mabi=ilp32f
 endif
 
 CFLAGS += -O3 -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections

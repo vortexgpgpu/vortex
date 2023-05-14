@@ -9,12 +9,12 @@
 #include "verilated_vpi.h"
 #include "VX_config.h"
 
-#ifdef XLEN_32
-#define INT_TYPE int32_t
-#define API_CALL(x) rv_ ## x ## _s
-#else
+#ifdef XLEN_64
 #define INT_TYPE int64_t
 #define API_CALL(x) rv_ ## x ## _d
+#else
+#define INT_TYPE int32_t
+#define API_CALL(x) rv_ ## x ## _s
 #endif
 
 extern "C" {

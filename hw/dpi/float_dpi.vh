@@ -3,10 +3,10 @@
 
 `include "VX_config.vh"
 
-`ifdef XLEN_32
-`define INT_TYPE int
-`else
+`ifdef XLEN_64
 `define INT_TYPE longint
+`else
+`define INT_TYPE int
 `endif
 
 import "DPI-C" function void dpi_fadd(input logic enable, input `INT_TYPE a, input `INT_TYPE b, input bit[2:0] frm, output `INT_TYPE result, output bit[4:0] fflags);

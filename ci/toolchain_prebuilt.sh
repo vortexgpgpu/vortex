@@ -20,6 +20,15 @@ riscv()
     rm riscv-gnu-toolchain.tar.bz2
 }
 
+riscv64() 
+{
+    echo "prebuilt riscv64-gnu-toolchain..."
+    tar -C $SRCDIR -cvjf riscv64-gnu-toolchain.tar.bz2 riscv64-gnu-toolchain
+    split -b 50M riscv64-gnu-toolchain.tar.bz2 "riscv64-gnu-toolchain.tar.bz2.part"    
+    mv riscv64-gnu-toolchain.tar.bz2.part* $DESTDIR/riscv64-gnu-toolchain/$OS_DIR
+    rm riscv64-gnu-toolchain.tar.bz2
+}
+
 llvm() 
 {
     echo "prebuilt llvm-vortex..."
@@ -57,9 +66,12 @@ while [ "$1" != "" ]; do
                      ;;
         -riscv ) riscv
                  ;;
+        -riscv64 ) riscv64
+                 ;;
         -llvm ) llvm
                 ;;
         -all ) riscv
+               riscv64
                llvm
                pocl
                verilator

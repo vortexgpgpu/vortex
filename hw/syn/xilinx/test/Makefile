@@ -24,8 +24,6 @@ CFLAGS += -DEXT_F_DISABLE
 # update memory layout for 2MB RAM
 CFLAGS += -DSTARTUP_ADDR=32'h80000
 CFLAGS += -DIO_BASE_ADDR=32'hFF000
-CFLAGS += -DIO_ADDR_SIZE=(32'hFFFFF-`IO_BASE_ADDR+1)
-CFLAGS += -DIO_COUT_ADDR=(32'hFFFFF-`MEM_BLOCK_SIZE+1)
 
 COE_FILE := $(realpath project_1_files)/kernel.bin.coe
 ESCAPED_COE_FILE := $(shell echo "$(COE_FILE)" | sed -e 's/[\/&]/\\&/g')

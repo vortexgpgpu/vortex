@@ -1,4 +1,4 @@
-XLEN ?= 64
+XLEN ?= 32
 
 SIM_DIR=../../../sim
 

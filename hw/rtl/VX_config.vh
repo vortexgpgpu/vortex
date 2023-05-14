@@ -90,6 +90,18 @@
 `endif
 `endif
 
+`ifdef XLEN_64
+
+`ifndef STARTUP_ADDR
+`define STARTUP_ADDR 64'h180000000
+`endif
+
+`ifndef IO_BASE_ADDR
+`define IO_BASE_ADDR 64'h1FF000000
+`endif
+
+`else
+
 `ifndef STARTUP_ADDR
 `define STARTUP_ADDR 32'h80000000
 `endif
@@ -98,12 +110,10 @@
 `define IO_BASE_ADDR 32'hFF000000
 `endif
 
-`ifndef IO_ADDR_SIZE
-`define IO_ADDR_SIZE (32'hFFFFFFFF - `IO_BASE_ADDR + 1)
 `endif
 
 `ifndef IO_COUT_ADDR
-`define IO_COUT_ADDR (32'hFFFFFFFF - `MEM_BLOCK_SIZE + 1)
+`define IO_COUT_ADDR `IO_BASE_ADDR
 `endif
 
 `ifndef IO_COUT_SIZE
@@ -111,7 +121,7 @@
 `endif
 
 `ifndef IO_CSR_ADDR
-`define IO_CSR_ADDR `IO_BASE_ADDR
+`define IO_CSR_ADDR (`IO_COUT_ADDR + `MEM_BLOCK_SIZE)
 `endif
 
 `ifndef STACK_BASE_ADDR

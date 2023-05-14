@@ -1,4 +1,4 @@
-XLEN ?= 64
+XLEN ?= 32
 
 TARGET ?= opaesim
 
@@ -22,7 +22,7 @@ LLVM_VORTEX ?= /opt/llvm-vortex
 
 LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
-LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex 
+LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex
 #LLVM_CFLAGS += -mllvm -vortex-branch-divergence=2 
 #LLVM_CFLAGS += -mllvm -print-after-all 
 #LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0/$(RISCV_PREFIX) 
@@ -40,8 +40,14 @@ VX_CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 #VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
 #VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
-VX_CFLAGS += -v -O3 -std=c++17 -march=rv32imf -mabi=ilp32f
-VX_CFLAGS += -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
+ifeq ($(XLEN),64)
+VX_CFLAGS += -march=rv64imafd -mabi=lp64d
+else
+VX_CFLAGS += -march=rv32imaf -mabi=ilp32f
+endif
+
+VX_CFLAGS += -v -O3 -std=c++17
+VX_CFLAGS += -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
 VX_CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw
 VX_CFLAGS += -DLLVM_VORTEX
 

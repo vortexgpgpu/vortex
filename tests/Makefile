@@ -7,7 +7,9 @@ regression:
 	$(MAKE) -C regression
 
 opencl:
+ifeq ($(XLEN),32)
 	$(MAKE) -C opencl
+endif
 
 riscv:
 	$(MAKE) -C riscv

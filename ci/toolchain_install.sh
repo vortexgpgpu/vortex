@@ -13,7 +13,7 @@ riscv()
 {
     case $OS in
     "centos/7") parts=$(eval echo {a..h}) ;;
-    *)          parts=$(eval echo {a..o}) ;;
+    *)          parts=$(eval echo {a..j}) ;;
     esac
     rm -f riscv-gnu-toolchain.tar.bz2.parta*
     for x in $parts
@@ -29,10 +29,14 @@ riscv()
 
 riscv64()
 {
+    case $OS in
+    "centos/7") parts=$(eval echo {a..h}) ;;
+    *)          parts=$(eval echo {a..j}) ;;
+    esac
     rm -f riscv64-gnu-toolchain.tar.bz2.parta*
-    for x in {a..j} 
+    for x in $parts
     do
-        wget $REPOSITORY/riscv64-gnu-toolchain/$OS/riscv64-gnu-toolchain.tar.bz2.parta$x
+        wget $REPOSITORY/riscv-gnu-toolchain/$OS/riscv-gnu-toolchain.tar.bz2.parta$x
     done
     cat riscv64-gnu-toolchain.tar.bz2.parta* > riscv64-gnu-toolchain.tar.bz2
     tar -xvf riscv64-gnu-toolchain.tar.bz2

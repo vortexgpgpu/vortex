@@ -3,10 +3,10 @@
 
 `include "VX_config.vh"
 
-`ifdef XLEN_32
-`define INT_TYPE int
-`else
+`ifdef XLEN_64
 `define INT_TYPE longint
+`else
+`define INT_TYPE int
 `endif
 
 import "DPI-C" function void dpi_imul(input logic enable, input `INT_TYPE a, input `INT_TYPE b, input logic is_signed_a, input logic is_signed_b, output `INT_TYPE resultl, output `INT_TYPE resulth);

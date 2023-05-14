@@ -1,4 +1,4 @@
-XLEN ?= 64
+XLEN ?= 32
 DESTDIR ?= .
 RTL_DIR = ../../hw/rtl
 DPI_DIR = ../../hw/dpi

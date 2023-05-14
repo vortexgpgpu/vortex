@@ -9,12 +9,12 @@
 #include "verilated_vpi.h"
 #include "VX_config.h"
 
-#ifdef XLEN_32
-#define INT_TYPE int32_t
-#define UINT_TYPE uint32_t
-#else
+#ifdef XLEN_64
 #define INT_TYPE int64_t
 #define UINT_TYPE uint64_t
+#else
+#define INT_TYPE int32_t
+#define UINT_TYPE uint32_t
 #endif
 
 #ifndef DEBUG_LEVEL
@@ -108,7 +108,27 @@ void dpi_assert(int inst, bool cond, int delay) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-#ifdef XLEN_32
+#ifdef XLEN_64
+void dpi_imul(bool enable, INT_TYPE a, INT_TYPE b, bool is_signed_a, bool is_signed_b, INT_TYPE* resultl, INT_TYPE* resulth) {
+  if (!enable)
+    return;
+
+  uint64_t a_lo = (uint64_t)(uint32_t)a;
+  uint64_t a_hi = a >> 32;
+  uint64_t b_lo = (uint64_t)(uint32_t)b;
+  uint64_t b_hi = b >> 32;
+
+  uint64_t p0 = a_lo * b_lo;
+  uint64_t p1 = a_lo * b_hi;
+  uint64_t p2 = a_hi * b_lo;
+  uint64_t p3 = a_hi * b_hi;
+
+  uint32_t cy = (uint32_t)(((p0 >> 32) + (uint32_t)p1 + (uint32_t)p2) >> 32);
+
+  *resultl = p0 + (p1 << 32) + (p2 << 32);
+  *resulth = p3 + (p1 >> 32) + (p2 >> 32) + cy;
+}
+#else
 void dpi_imul(bool enable, int a, int b, bool is_signed_a, bool is_signed_b, int* resultl, int* resulth) {
   if (!enable)
     return;
@@ -133,26 +153,6 @@ void dpi_imul(bool enable, int a, int b, bool is_signed_a, bool is_signed_b, int
     
   *resultl = result & 0xFFFFFFFF;
   *resulth = (result >> 32) & 0xFFFFFFFF;
-}
-#else
-void dpi_imul(bool enable, INT_TYPE a, INT_TYPE b, bool is_signed_a, bool is_signed_b, INT_TYPE* resultl, INT_TYPE* resulth) {
-  if (!enable)
-    return;
-
-  uint64_t a_lo = (uint64_t)(uint32_t)a;
-  uint64_t a_hi = a >> 32;
-  uint64_t b_lo = (uint64_t)(uint32_t)b;
-  uint64_t b_hi = b >> 32;
-
-  uint64_t p0 = a_lo * b_lo;
-  uint64_t p1 = a_lo * b_hi;
-  uint64_t p2 = a_hi * b_lo;
-  uint64_t p3 = a_hi * b_hi;
-
-  uint32_t cy = (uint32_t)(((p0 >> 32) + (uint32_t)p1 + (uint32_t)p2) >> 32);
-
-  *resultl = p0 + (p1 << 32) + (p2 << 32);
-  *resulth = p3 + (p1 >> 32) + (p2 >> 32) + cy;
 }
 #endif
 

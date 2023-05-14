@@ -7,7 +7,7 @@ Vortex is a full-system RISCV-based GPGPU processor.
 
 ## Specifications
 
-- Support RISC-V RV32IMF ISA
+- Support RISC-V RV32IMAF & RV64IMAFD ISAs
 - Performance: 
     - 1024 total threads running at 250 MHz
     - 128 Gflops of compute bandwidth
