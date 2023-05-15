@@ -37,20 +37,20 @@ llvm()
 {
     for x in {a..b} 
     do
-        wget $REPOSITORY/llvm-riscv/ubuntu/bionic/llvm-riscv.tar.bz2.parta$x
+        wget $REPOSITORY/llvm-vortex/ubuntu/bionic/llvm-vortex1.tar.bz2.parta$x
     done
-    cat llvm-riscv.tar.bz2.parta* > llvm-riscv.tar.bz2
-    tar -xvf llvm-riscv.tar.bz2
-    rm -f llvm-riscv.tar.bz2*
+    cat llvm-vortex1.tar.bz2.parta* > llvm-vortex1.tar.bz2
+    tar -xvf llvm-vortex1.tar.bz2
+    rm -f llvm-vortex1.tar.bz2*
     cp -r llvm-riscv $DESTDIR
     rm -rf llvm-riscv
 }
 
 pocl()
 {
-    wget $REPOSITORY/pocl/ubuntu/bionic/pocl.tar.bz2
-    tar -xvf pocl.tar.bz2
-    rm -f pocl.tar.bz2
+    wget $REPOSITORY/pocl/ubuntu/bionic/pocl1.tar.bz2
+    tar -xvf pocl1.tar.bz2
+    rm -f pocl1.tar.bz2
     cp -r pocl $DESTDIR
     rm -rf pocl
 }

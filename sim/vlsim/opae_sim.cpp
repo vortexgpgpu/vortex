@@ -399,7 +399,7 @@ private:
       unsigned byte_addr = device_->avs_address[b] * MEM_BLOCK_SIZE;
       if (device_->avs_write[b]) {           
         uint64_t byteen = device_->avs_byteenable[b];        
-        uint8_t* data = (uint8_t*)(device_->avs_writedata[b]);
+        uint8_t* data = (uint8_t*)device_->avs_writedata[b].data();
         for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
           if ((byteen >> i) & 0x1) {            
             (*ram_)[byte_addr + i] = data[i];

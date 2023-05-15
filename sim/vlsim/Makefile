@@ -41,7 +41,7 @@ TOP = vortex_afu_shim
 
 VL_FLAGS = --exe --cc $(TOP) --top-module $(TOP)
 VL_FLAGS += -O2 --language 1800-2009 --assert -Wall -Wpedantic
-VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
+VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO -Wno-EOFNEWLINE
 VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
 VL_FLAGS += $(RTL_INCLUDE)

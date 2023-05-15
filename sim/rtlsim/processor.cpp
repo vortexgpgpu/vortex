@@ -462,7 +462,7 @@ private:
           }
           printf("\n");
         */
-        memcpy((uint8_t*)device_->mem_rsp_data, mem_req->block.data(), MEM_BLOCK_SIZE);
+        memcpy(device_->mem_rsp_data.data(), mem_req->block.data(), MEM_BLOCK_SIZE);
         device_->mem_rsp_tag = mem_req->tag;   
         pending_mem_reqs_.erase(mem_rsp_it);
         mem_rd_rsp_active_ = true;
@@ -478,7 +478,7 @@ private:
       if (device_->mem_req_rw) {        
         // process writes
         uint64_t byteen = device_->mem_req_byteen;        
-        uint8_t* data = (uint8_t*)(device_->mem_req_data);
+        uint8_t* data = (uint8_t*)device_->mem_req_data.data();
 
         // check console output
         if (byte_addr >= IO_COUT_ADDR 
