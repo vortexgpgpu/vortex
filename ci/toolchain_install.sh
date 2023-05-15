@@ -9,7 +9,7 @@ DESTDIR="${DESTDIR:=/opt}"
 
 riscv()
 {
-    for x in {a..o} 
+    for x in {a..j} 
     do
         wget $REPOSITORY/riscv-gnu-toolchain/ubuntu/bionic/riscv-gnu-toolchain.tar.bz2.parta$x
     done
