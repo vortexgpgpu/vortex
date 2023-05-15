@@ -23,12 +23,14 @@ def execute(command):
     process = subprocess.Popen(command, stdout=subprocess.PIPE)
     while True:
         output = process.stdout.readline()
-        if output == '' and process.poll() is not None:
-            break
         if output:
-            print output.strip()
-            sys.stdout.flush()
-    return process.returncode
+            line = output.decode('ascii').rstrip()
+            print(">>> " + line)
+            process.stdout.flush()
+        ret = process.poll()
+        if ret is not None:
+            return ret        
+    return -1
 
 def main(argv):
 
