@@ -23,17 +23,17 @@ riscv()
 llvm() 
 {
     echo "prebuilt llvm-riscv..."
-    tar -C $SRCDIR -cvjf llvm-riscv.tar.bz2 llvm-riscv
-    split -b 50M llvm-riscv.tar.bz2 "llvm-riscv.tar.bz2.part"    
-    mv llvm-riscv.tar.bz2.part* $DESTDIR/llvm-riscv/$OS_DIR
-    rm llvm-riscv.tar.bz2
+    tar -C $SRCDIR -cvjf llvm-vortex1.tar.bz2 llvm-riscv
+    split -b 50M llvm-vortex1.tar.bz2 "llvm-vortex1.tar.bz2.part"    
+    mv llvm-vortex1.tar.bz2.part* $DESTDIR/llvm-vortex/$OS_DIR
+    rm llvm-vortex1.tar.bz2
 }
 
 pocl() 
 {
     echo "prebuilt pocl..."
-    tar -C $SRCDIR -cvjf pocl.tar.bz2 pocl
-    mv pocl.tar.bz2 $DESTDIR/pocl/$OS_DIR
+    tar -C $SRCDIR -cvjf pocl1.tar.bz2 pocl
+    mv pocl1.tar.bz2 $DESTDIR/pocl/$OS_DIR
 }
 
 verilator() 
