@@ -93,6 +93,7 @@ module VX_core_req_bank_sel #(
             
             always @(*) begin
                 per_bank_line_addr_r = 'x;
+                per_bank_rw_r = 'x;
                 for (integer i = NUM_REQS-1; i >= 0; --i) begin                                    
                     if (core_req_valid[i]) begin
                         per_bank_line_addr_r[core_req_bid[i]] = core_req_line_addr[i];
