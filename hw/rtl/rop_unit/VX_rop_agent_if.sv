@@ -7,7 +7,7 @@ interface VX_rop_agent_if ();
     wire [`UP(`UUID_BITS)-1:0]                  uuid;
     wire [`UP(`NW_BITS)-1:0]                    wid;
     wire [`NUM_THREADS-1:0]                     tmask;    
-    wire [31:0]                                 PC;
+    wire [`XLEN-1:0]                            PC;
 
     wire [`NUM_THREADS-1:0][`ROP_DIM_BITS-1:0]  pos_x;
     wire [`NUM_THREADS-1:0][`ROP_DIM_BITS-1:0]  pos_y;

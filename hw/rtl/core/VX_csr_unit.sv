@@ -248,7 +248,7 @@ module VX_csr_unit #(
     end
 
     VX_skid_buffer #(
-        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + `NUM_THREADS * `XLEN)
+        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS + 1 + `NUM_THREADS * `XLEN)
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),

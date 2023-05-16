@@ -135,11 +135,11 @@ module VX_csr_data #(
             `CSR_NW         : read_data_ro_r = `XLEN'd`NUM_WARPS;
             `CSR_NC         : read_data_ro_r = `XLEN'(`NUM_CORES * `NUM_CLUSTERS);
             
-            `CSR_MCYCLE     : read_data_ro_r = `XLEN'(fetch_to_csr_if.cycles[31:0]); // TODO: 64b_extensions Check if range of cycles also needs to be increased.
+            `CSR_MCYCLE     : read_data_ro_r = `XLEN'(fetch_to_csr_if.cycles[31:0]);
             `CSR_MCYCLE_H   : read_data_ro_r = `XLEN'(fetch_to_csr_if.cycles[`PERF_CTR_BITS-1:32]);
             `CSR_MPM_RESERVED : read_data_ro_r = 'x;
             `CSR_MPM_RESERVED_H : read_data_ro_r = 'x;  
-            `CSR_MINSTRET   : read_data_ro_r = `XLEN'(cmt_to_csr_if.instret[31:0]); // TODO: 64b_extensions Check if range of cycles also needs to be increased.
+            `CSR_MINSTRET   : read_data_ro_r = `XLEN'(cmt_to_csr_if.instret[31:0]);
             `CSR_MINSTRET_H : read_data_ro_r = `XLEN'(cmt_to_csr_if.instret[`PERF_CTR_BITS-1:32]);       
             
             `CSR_SATP       : read_data_ro_r = `XLEN'(csr_satp);

@@ -194,7 +194,7 @@ public:
     return exitcode;
   }
 
-  void write_dcr(uint32_t addr, uint64_t value) {
+  void write_dcr(uint32_t addr, uint32_t value) {
     device_->dcr_wr_valid = 1;
     device_->dcr_wr_addr  = addr;
     device_->dcr_wr_data  = value;
@@ -656,6 +656,6 @@ int Processor::run() {
   return impl_->run();
 }
 
-void Processor::write_dcr(uint32_t addr, uint64_t value) {
+void Processor::write_dcr(uint32_t addr, uint32_t value) {
   return impl_->write_dcr(addr, value);
 }

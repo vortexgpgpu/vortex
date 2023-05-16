@@ -2,7 +2,7 @@
 
 using namespace vortex;
 
-void DCRS::write(uint32_t addr, uint64_t value) {     
+void DCRS::write(uint32_t addr, uint32_t value) {     
   if (addr >= DCR_BASE_STATE_BEGIN
    && addr < DCR_BASE_STATE_END) {
       base_dcrs.write(addr, value);

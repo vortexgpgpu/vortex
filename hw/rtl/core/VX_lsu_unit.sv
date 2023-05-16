@@ -42,11 +42,11 @@ module VX_lsu_unit #(
     localparam STACK_END_W = MEM_ADDRW'((`XLEN'(`STACK_BASE_ADDR) - TOTAL_STACK_SIZE) >> MEM_ASHIFT);
 `endif
 
-    //                     uuid,        addr_type,                               wid,       PC,  tmask,         rd,        op_type,         align,                        is_dup
-    localparam TAG_WIDTH = UUID_WIDTH + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + NW_WIDTH + 32 + `NUM_THREADS + `NR_BITS + `INST_LSU_BITS + (`NUM_THREADS * (REQ_ASHIFT)) + 1;
+    //                     uuid,        addr_type,                               wid,       PC,     tmask,         rd,        op_type,         align,                        is_dup
+    localparam TAG_WIDTH = UUID_WIDTH + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + NW_WIDTH + `XLEN + `NUM_THREADS + `NR_BITS + `INST_LSU_BITS + (`NUM_THREADS * (REQ_ASHIFT)) + 1;
 
-    `STATIC_ASSERT(0 == (`IO_BASE_ADDR % MEM_ASHIFT), ("invalid parameter"))
-    `STATIC_ASSERT(0 == (`STACK_BASE_ADDR % MEM_ASHIFT), ("invalid parameter"))    
+    `STATIC_ASSERT(0 == (`IO_BASE_ADDR % `MEM_BLOCK_SIZE), ("invalid parameter"))
+    `STATIC_ASSERT(0 == (`STACK_BASE_ADDR % `MEM_BLOCK_SIZE), ("invalid parameter"))    
     `STATIC_ASSERT(`SMEM_LOCAL_SIZE == `MEM_BLOCK_SIZE * (`SMEM_LOCAL_SIZE / `MEM_BLOCK_SIZE), ("invalid parameter"))
     `STATIC_ASSERT(`STACK_SIZE == `MEM_BLOCK_SIZE * (`STACK_SIZE / `MEM_BLOCK_SIZE), ("invalid parameter"))
     `STATIC_ASSERT(`SMEM_LOCAL_SIZE >= `MEM_BLOCK_SIZE, ("invalid parameter"))
@@ -304,7 +304,7 @@ module VX_lsu_unit #(
     wire [`NUM_THREADS-1:0][`CACHE_ADDR_TYPE_BITS-1:0] rsp_addr_type;
     wire [NW_WIDTH-1:0] rsp_wid;
     wire [`NUM_THREADS-1:0] rsp_tmask_uq;
-    wire [31:0] rsp_pc;
+    wire [`XLEN-1:0] rsp_pc;
     wire [`NR_BITS-1:0] rsp_rd;
     wire [`INST_LSU_BITS-1:0] rsp_op_type;
     wire [`NUM_THREADS-1:0][REQ_ASHIFT-1:0] rsp_align;
@@ -363,7 +363,7 @@ module VX_lsu_unit #(
     // send load commit
 
     VX_skid_buffer #(
-        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * `XLEN) + 1)
+        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS + 1 + (`NUM_THREADS * `XLEN) + 1)
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),
@@ -381,7 +381,7 @@ module VX_lsu_unit #(
         VX_scope_tap #(
             .SCOPE_ID (3),
             .TRIGGERW (3),
-            .PROBEW   (UUID_WIDTH+`NUM_THREADS*(32+4+32)+1+UUID_WIDTH+`NUM_THREADS*32)
+            .PROBEW   (UUID_WIDTH+`NUM_THREADS*(`XLEN+4+`XLEN)+1+UUID_WIDTH+`NUM_THREADS*`XLEN)
         ) scope_tap (
             .clk(clk),
             .reset(scope_reset),

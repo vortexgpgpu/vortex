@@ -16,7 +16,7 @@ public:
 
   int run();
 
-  void write_dcr(uint32_t addr, uint64_t value);
+  void write_dcr(uint32_t addr, uint32_t value);
 
 private:
 

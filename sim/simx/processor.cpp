@@ -92,7 +92,7 @@ int ProcessorImpl::run() {
   return exitcode;
 }
 
-void ProcessorImpl::write_dcr(uint32_t addr, uint64_t value) {
+void ProcessorImpl::write_dcr(uint32_t addr, uint32_t value) {
   dcrs_.write(addr, value);
 }
 
@@ -126,6 +126,6 @@ int Processor::run() {
   return impl_->run();
 }
 
-void Processor::write_dcr(uint32_t addr, uint64_t value) {
+void Processor::write_dcr(uint32_t addr, uint32_t value) {
   return impl_->write_dcr(addr, value);
 }

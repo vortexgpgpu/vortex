@@ -41,19 +41,19 @@ jobs:
       script: cp -r ../build32 ../build32_unittest && cd ../build32_unittest && ./ci/travis_run.py ./ci/regression.sh -unittest
     - stage: test
       name: isa
-      script: cp -r ../build32 ../build32_isa && cd ../build32_isa && ./ci/travis_run.py ./ci/regression.sh -coverage
+      script: cp -r ../build32 ../build32_isa && cd ../build32_isa && ./ci/travis_run.py ./ci/regression.sh -isa
     - stage: test
       name: isa64
-      script: cp -r ../build64 ../build64_isa && cd ../build64_isa && XLEN=64 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv64-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -coverage
+      script: cp -r ../build64 ../build64_isa && cd ../build64_isa && XLEN=64 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv64-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -isa
     - stage: test
       name: regression
-      script: cp -r ../build32 ../build32_regression && cd ../build32_regression && ./ci/travis_run.py ./ci/regression.sh -coverage
+      script: cp -r ../build32 ../build32_regression && cd ../build32_regression && ./ci/travis_run.py ./ci/regression.sh -regression
     - stage: test
       name: regression64
-      script: cp -r ../build64 ../build64_regression && cd ../build64_regression && XLEN=64 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv64-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -coverage
+      script: cp -r ../build64 ../build64_regression && cd ../build64_regression && XLEN=64 RISCV_TOOLCHAIN_PATH=$TOOLDIR/riscv64-gnu-toolchain ./ci/travis_run.py ./ci/regression.sh -regression
     - stage: test
       name: opencl
-      script: cp -r ../build32 ../build32_opencl && cd ../build32_opencl && ./ci/travis_run.py ./ci/regression.sh -coverage    
+      script: cp -r ../build32 ../build32_opencl && cd ../build32_opencl && ./ci/travis_run.py ./ci/regression.sh -opencl    
     - stage: test
       name: graphics
       script: cp -r ../build32 ../build32_graphics && cd ../build32_graphics && ./ci/travis_run.py ./ci/regression.sh -graphics

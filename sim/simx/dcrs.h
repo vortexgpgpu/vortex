@@ -25,7 +25,7 @@ private:
 
 class DCRS {
 public:
-    void write(uint32_t addr, uint64_t value);
+    void write(uint32_t addr, uint32_t value);
     
     BaseDCRS         base_dcrs;
     TexUnit::DCRS    tex_dcrs;

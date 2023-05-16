@@ -167,8 +167,8 @@ module VX_issue #(
             .SCOPE_ID (2),
             .TRIGGERW (5),
             .PROBEW   (UUID_WIDTH + `NUM_THREADS + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS +
-            1 + (`NR_BITS * 4) + 32 + 1 + 1 + (`NUM_THREADS * 3 * 32) +
-            UUID_WIDTH + `NUM_THREADS + `NR_BITS + (`NUM_THREADS*32) + 1)
+                1 + (`NR_BITS * 4) + `XLEN + 1 + 1 + (`NUM_THREADS * 3 * `XLEN) +
+                UUID_WIDTH + `NUM_THREADS + `NR_BITS + (`NUM_THREADS*`XLEN) + 1)
         ) scope_tap (
             .clk(clk),
             .reset(scope_reset),

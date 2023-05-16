@@ -6,7 +6,7 @@ interface VX_ifetch_req_if ();
     wire [`UP(`UUID_BITS)-1:0]  uuid;
     wire [`NUM_THREADS-1:0]     tmask;    
     wire [`UP(`NW_BITS)-1:0]    wid;
-    wire [31:0]                 PC;
+    wire [`XLEN-1:0]            PC;
     wire                        ready;
 
     modport master (

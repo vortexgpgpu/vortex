@@ -107,11 +107,10 @@ void MemoryUnit::ADecoder::write(const void *data, uint64_t addr, uint64_t size)
 
 ///////////////////////////////////////////////////////////////////////////////
 
-MemoryUnit::MemoryUnit(uint64_t pageSize, uint64_t addrBytes, bool disableVm)
+MemoryUnit::MemoryUnit(uint64_t pageSize)
   : pageSize_(pageSize)
-  , addrBytes_(addrBytes)
-  , disableVM_(disableVm) {
-  if (!disableVm) {
+  , enableVM_(pageSize != 0) {
+  if (pageSize != 0) {
     tlb_[0] = TLBEntry(0, 077);
   }
 }
@@ -135,24 +134,24 @@ MemoryUnit::TLBEntry MemoryUnit::tlbLookup(uint64_t vAddr, uint32_t flagMask) {
 
 void MemoryUnit::read(void *data, uint64_t addr, uint64_t size, bool sup) {
   uint64_t pAddr;
-  if (disableVM_) {
-    pAddr = addr;
-  } else {
+  if (enableVM_) {
     uint32_t flagMask = sup ? 8 : 1;
     TLBEntry t = this->tlbLookup(addr, flagMask);
     pAddr = t.pfn * pageSize_ + addr % pageSize_;
+  } else {
+    pAddr = addr;    
   }
   return decoder_.read(data, pAddr, size);
 }
 
 void MemoryUnit::write(const void *data, uint64_t addr, uint64_t size, bool sup) {
   uint64_t pAddr;
-  if (disableVM_) {
-    pAddr = addr;
-  } else {
+  if (enableVM_) {
     uint32_t flagMask = sup ? 16 : 2;
     TLBEntry t = tlbLookup(addr, flagMask);
-    pAddr = t.pfn * pageSize_ + addr % pageSize_;
+    pAddr = t.pfn * pageSize_ + addr % pageSize_;    
+  } else {
+    pAddr = addr;
   }
   decoder_.write(data, pAddr, size);
 }

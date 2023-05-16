@@ -160,11 +160,11 @@ extern int vx_upload_kernel_file(vx_device_h device, const char* filename) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void DeviceConfig::write(uint32_t addr, uint64_t value) {
+void DeviceConfig::write(uint32_t addr, uint32_t value) {
   data_[addr] = value;
 }
 
-uint64_t DeviceConfig::read(uint32_t addr) const {
+uint32_t DeviceConfig::read(uint32_t addr) const {
   if (0 == data_.count(addr)) {
     printf("Error: DeviceConfig::read(%d) failed\n", addr);
   }
@@ -172,7 +172,12 @@ uint64_t DeviceConfig::read(uint32_t addr) const {
 }
 
 int dcr_initialize(vx_device_h device) {
-  RT_CHECK(vx_dcr_write(device, DCR_BASE_STARTUP_ADDR, STARTUP_ADDR), {
+  const uint64_t startup_addr(STARTUP_ADDR);
+  RT_CHECK(vx_dcr_write(device, DCR_BASE_STARTUP_ADDR0, startup_addr & 0xffffffff), {
+    return -1;
+  });
+
+  RT_CHECK(vx_dcr_write(device, DCR_BASE_STARTUP_ADDR1, startup_addr >> 32), {
     return -1;
   });
 

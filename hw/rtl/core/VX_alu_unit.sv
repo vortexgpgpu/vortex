@@ -19,10 +19,9 @@ module VX_alu_unit #(
 
     localparam UUID_WIDTH     = `UP(`UUID_BITS);
     localparam NW_WIDTH       = `UP(`NW_BITS);
-    localparam RSP_ARB_DATAW  = UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + `NUM_THREADS * `XLEN;
+    localparam RSP_ARB_DATAW  = UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS + 1 + `NUM_THREADS * `XLEN;
     localparam RSP_ARB_SIZE   = 1 + `EXT_M_ENABLED;
     localparam SHIFT_IMM_BITS = `CLOG2(`XLEN) - 1;
-
 
     reg [`NUM_THREADS-1:0][`XLEN-1:0] alu_result;
     reg [`NUM_THREADS-1:0][`XLEN-1:0] add_result;
@@ -43,17 +42,8 @@ module VX_alu_unit #(
     wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in1 = alu_req_if.rs1_data;
     wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in2 = alu_req_if.rs2_data;
 
-    wire [`NUM_THREADS-1:0][31:0] trunc_alu_in1;
-
-    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        // PC operations should only be for 32 bits
-        assign trunc_alu_in1[i] = alu_in1[i][31:0];
-        // assign trunc_alu_result[i] = alu_result[i][`XLEN-1:0];
-    end
-
     // PC operations should only be for 32 bits
-    wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_A  = alu_req_if.use_PC ? {`NUM_THREADS{`XLEN'(alu_req_if.PC)}} : alu_in1;
-    wire [`NUM_THREADS-1:0][31:0] alu_A_trunc = alu_req_if.use_PC ? {`NUM_THREADS{alu_req_if.PC}} : trunc_alu_in1;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_A  = alu_req_if.use_PC ? {`NUM_THREADS{alu_req_if.PC}} : alu_in1;
     wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_B  = alu_req_if.use_imm ? {`NUM_THREADS{alu_req_if.imm}} : alu_in2;
     wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in2_less = (alu_req_if.use_imm && ~is_br_op) ? {`NUM_THREADS{alu_req_if.imm}} : alu_in2;
 
@@ -61,7 +51,7 @@ module VX_alu_unit #(
         always @(*) begin
             case(alu_op)
                 `INST_ALU_ADD, `INST_ALU_AUIPC, `INST_ALU_LUI: add_result[i] = alu_A[i] + alu_B[i];
-                `INST_ALU_ADD_W: add_result[i] = `XLEN'($signed(alu_A_trunc[i] + alu_B[i][31:0]));
+                `INST_ALU_ADD_W: add_result[i] = `XLEN'($signed(alu_in1[i][31:0] + alu_B[i][31:0]));
                 default: add_result[i] = alu_A[i] + alu_B[i];
             endcase
         end
@@ -104,9 +94,8 @@ module VX_alu_unit #(
                 `INST_ALU_AND: msc_result[i] = alu_in1[i] & alu_B[i];
                 `INST_ALU_OR:  msc_result[i] = alu_in1[i] | alu_B[i];
                 `INST_ALU_XOR: msc_result[i] = alu_in1[i] ^ alu_B[i];
-                // `INST_ALU_SLL: msc_result[i] = alu_in1[i] << alu_B[i][4:0];
-                `INST_ALU_SLL: msc_result[i] = alu_in1[i] << alu_B[i][SHIFT_IMM_BITS:0]; // TODO: CHANGED: adjust this to shift using 6 bits for 64 bit
-                `INST_ALU_SLL_W: msc_result[i] = `XLEN'($signed(temp_shift_result[31:0])); // TODO: CHANGED: adjust this to shift using 6 bits for 32 signed bit 
+                `INST_ALU_SLL: msc_result[i] = alu_in1[i] << alu_B[i][SHIFT_IMM_BITS:0];
+                `INST_ALU_SLL_W: msc_result[i] = `XLEN'($signed(temp_shift_result[31:0]));
                 default:       msc_result[i] = 'x;
             endcase
         end
@@ -145,7 +134,7 @@ module VX_alu_unit #(
     wire [UUID_WIDTH-1:0]         alu_uuid;
     wire [NW_WIDTH-1:0]           alu_wid;
     wire [`NUM_THREADS-1:0]       alu_tmask;
-    wire [31:0]                   alu_PC;
+    wire [`XLEN-1:0]              alu_PC;
     wire [`NR_BITS-1:0]           alu_rd;   
     wire                          alu_wb; 
     wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_data;
@@ -164,7 +153,7 @@ module VX_alu_unit #(
     assign alu_ready_in = alu_ready_out || ~alu_valid_out;
 
     VX_pipe_register #(
-        .DATAW  (1 + UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * `XLEN) + 1 + `INST_BR_BITS + 1 + 1 + `XLEN),
+        .DATAW  (1 + UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS + 1 + (`NUM_THREADS * `XLEN) + 1 + `INST_BR_BITS + 1 + 1 + `XLEN),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
@@ -193,7 +182,7 @@ module VX_alu_unit #(
     wire [UUID_WIDTH-1:0]         mul_uuid;
     wire [NW_WIDTH-1:0]           mul_wid;
     wire [`NUM_THREADS-1:0]       mul_tmask;
-    wire [31:0]                   mul_PC;
+    wire [`XLEN-1:0]              mul_PC;
     wire [`NR_BITS-1:0]           mul_rd;
     wire                          mul_wb;
     wire [`NUM_THREADS-1:0][`XLEN-1:0] mul_data;

@@ -41,11 +41,11 @@ module VX_icache_stage #(
     
     assign {rsp_uuid, rsp_tag} = icache_rsp_if.tag;
 
-    wire [31:0] rsp_PC;
+    wire [`XLEN-1:0] rsp_PC;
     wire [`NUM_THREADS-1:0] rsp_tmask;
 
     VX_dp_ram #(
-        .DATAW  (32 + `NUM_THREADS),
+        .DATAW  (`XLEN + `NUM_THREADS),
         .SIZE   (`NUM_WARPS),
         .LUTRAM (1)
     ) tag_store (

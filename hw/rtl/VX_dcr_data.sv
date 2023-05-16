@@ -26,8 +26,11 @@ module VX_dcr_data (
     always @(posedge clk) begin
        if (dcr_write_if.valid) begin
             case (dcr_write_if.addr)
-            `DCR_BASE_STARTUP_ADDR : dcrs.startup_addr <= dcr_write_if.data[`XLEN-1:0];
-            `DCR_BASE_MPM_CLASS    : dcrs.mpm_class    <= dcr_write_if.data[7:0];
+            `DCR_BASE_STARTUP_ADDR0 : dcrs.startup_addr[31:0] <= dcr_write_if.data;
+        `ifdef XLEN_64
+            `DCR_BASE_STARTUP_ADDR1 : dcrs.startup_addr[63:32] <= dcr_write_if.data;
+        `endif
+            `DCR_BASE_MPM_CLASS     : dcrs.mpm_class <= dcr_write_if.data[7:0];
             default:;
             endcase
         end

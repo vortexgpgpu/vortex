@@ -13,7 +13,7 @@ typedef struct packed {
 typedef struct packed {
     logic                   valid;
     logic [`NUM_WARPS-1:0]  wmask;
-    logic [31:0]            pc;
+    logic [`XLEN-1:0]       pc;
 } gpu_wspawn_t;
 
 typedef struct packed {
@@ -21,7 +21,7 @@ typedef struct packed {
     logic                   diverged;
     logic [`NUM_THREADS-1:0] then_tmask;
     logic [`NUM_THREADS-1:0] else_tmask;
-    logic [31:0]            pc;
+    logic [`XLEN-1:0]       pc;
 } gpu_split_t;
 
 typedef struct packed {
@@ -69,7 +69,7 @@ localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_TAG_WIDTH(ICACHE_NUM_REQ
 ////////////////////////// Dcache Parameters //////////////////////////////////
 
 // Word size in bytes
-localparam DCACHE_WORD_SIZE	    = (`XLEN/8);
+localparam DCACHE_WORD_SIZE	    = (`XLEN / 8);
 localparam DCACHE_ADDR_WIDTH	= (`XLEN - `CLOG2(DCACHE_WORD_SIZE));
 
 // Block size in bytes
@@ -108,7 +108,7 @@ localparam DCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_NC_BYPASS_TAG_WIDTH(DCACHE_NUM_
 
 // Word size in bytes
 localparam TCACHE_WORD_SIZE	    = 4;
-localparam TCACHE_ADDR_WIDTH	= (32 - `CLOG2(TCACHE_WORD_SIZE));
+localparam TCACHE_ADDR_WIDTH	= (`XLEN - `CLOG2(TCACHE_WORD_SIZE));
 
 // Block size in bytes
 localparam TCACHE_LINE_SIZE	    = `L1_LINE_SIZE;
@@ -142,7 +142,7 @@ localparam TCACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_TAG_WIDTH(TCACHE_NUM_REQ
 
 // Word size in bytes
 localparam RCACHE_WORD_SIZE	    = 4;
-localparam RCACHE_ADDR_WIDTH	= (32 - `CLOG2(RCACHE_WORD_SIZE));
+localparam RCACHE_ADDR_WIDTH	= (`XLEN - `CLOG2(RCACHE_WORD_SIZE));
 
 // Block size in bytes
 localparam RCACHE_LINE_SIZE	    = `L1_LINE_SIZE;
@@ -176,7 +176,7 @@ localparam RCACHE_MEM_TAG_WIDTH	= `CACHE_CLUSTER_BYPASS_TAG_WIDTH(RCACHE_NUM_REQ
 
 // Word size in bytes
 localparam OCACHE_WORD_SIZE	    = 4;
-localparam OCACHE_ADDR_WIDTH	= (32 - `CLOG2(OCACHE_WORD_SIZE));
+localparam OCACHE_ADDR_WIDTH	= (`XLEN - `CLOG2(OCACHE_WORD_SIZE));
 
 // Block size in bytes
 localparam OCACHE_LINE_SIZE	    = `L1_LINE_SIZE;

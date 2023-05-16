@@ -19,10 +19,10 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// 64 bit by default. If you want 32 bit, compile with -DXLEN32
-`ifndef XLEN_64
+// 32 bit as default.
 `ifndef XLEN_32
-`define XLEN_64
+`ifndef XLEN_64
+`define XLEN_32
 `endif
 `endif
 

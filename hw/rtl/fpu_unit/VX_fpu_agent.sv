@@ -28,11 +28,11 @@ module VX_fpu_agent #(
     
     // Store request info
 
-    wire [UUID_WIDTH-1:0] rsp_uuid;
-    wire [NW_WIDTH-1:0]   rsp_wid;
-    wire [`NUM_THREADS-1:0]    rsp_tmask;
-    wire [31:0]                rsp_PC;
-    wire [`NR_BITS-1:0]        rsp_rd;
+    wire [UUID_WIDTH-1:0]   rsp_uuid;
+    wire [NW_WIDTH-1:0]     rsp_wid;
+    wire [`NUM_THREADS-1:0] rsp_tmask;
+    wire [`XLEN-1:0]        rsp_PC;
+    wire [`NR_BITS-1:0]     rsp_rd;
 
     wire [`FPU_REQ_TAG_WIDTH-1:0] req_tag, rsp_tag;    
     wire mdata_full;
@@ -43,7 +43,7 @@ module VX_fpu_agent #(
     assign rsp_tag = fpu_rsp_if.tag;
 
     VX_index_buffer #(
-        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS),
+        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS),
         .SIZE    (`FPU_REQ_QUEUE_SIZE)
     ) tag_store  (
         .clk          (clk),
@@ -109,7 +109,7 @@ module VX_fpu_agent #(
     // commit
 
     VX_skid_buffer #(
-        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + (`NUM_THREADS * `XLEN))
+        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS + (`NUM_THREADS * `XLEN))
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),

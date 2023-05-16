@@ -6,7 +6,7 @@ interface VX_writeback_if ();
     wire [`UP(`UUID_BITS)-1:0]      uuid;
     wire [`NUM_THREADS-1:0]         tmask;
     wire [`UP(`NW_BITS)-1:0]        wid; 
-    wire [31:0]                     PC;
+    wire [`XLEN-1:0]                PC;
     wire [`NR_BITS-1:0]             rd;
     wire [`NUM_THREADS-1:0][`XLEN-1:0]   data;
     wire                            eop;    

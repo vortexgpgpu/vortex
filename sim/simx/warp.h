@@ -68,11 +68,11 @@ public:
     return warp_id_;
   }
 
-  uint32_t getPC() const {
+  Word getPC() const {
     return PC_;
   }
 
-  void setPC(uint32_t PC) {
+  void setPC(Word PC) {
     PC_ = PC;
   }
 

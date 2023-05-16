@@ -41,7 +41,7 @@ module vortex_afu #(
 
     localparam CCI_DATA_WIDTH     = $bits(t_ccip_clData);
     localparam CCI_DATA_SIZE      = CCI_DATA_WIDTH / 8;
-    localparam CCI_ADDR_WIDTH     = 32 - $clog2(CCI_DATA_SIZE);
+    localparam CCI_ADDR_WIDTH     = $bits(t_ccip_clAddr);
 
     localparam AVS_RD_QUEUE_SIZE  = 32;
     localparam _VX_MEM_TAG_WIDTH  = `VX_MEM_TAG_WIDTH;
@@ -964,8 +964,7 @@ module vortex_afu #(
         `UNUSED_PIN (valid_out)
     );
 
-    wire [31:0] io_cout_addr = `IO_COUT_ADDR;
-    wire [`VX_MEM_ADDR_WIDTH-1:0] io_cout_addr_b = `VX_MEM_ADDR_WIDTH'(`XLEN'(io_cout_addr) >> `CLOG2(`MEM_BLOCK_SIZE));
+    wire [`VX_MEM_ADDR_WIDTH-1:0] io_cout_addr_b = `VX_MEM_ADDR_WIDTH'(`IO_COUT_ADDR >> `CLOG2(`MEM_BLOCK_SIZE));
 
     assign vx_mem_is_cout = (vx_mem_req_addr == io_cout_addr_b);
 

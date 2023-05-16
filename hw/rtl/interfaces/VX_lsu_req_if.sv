@@ -6,7 +6,7 @@ interface VX_lsu_req_if ();
     wire [`UP(`UUID_BITS)-1:0]      uuid; 
     wire [`UP(`NW_BITS)-1:0]        wid;
     wire [`NUM_THREADS-1:0]         tmask;    
-    wire [31:0]                     PC;
+    wire [`XLEN-1:0]                PC;
     wire [`INST_LSU_BITS-1:0]       op_type;
     wire                            is_fence;
     wire [`NUM_THREADS-1:0][`XLEN-1:0]   store_data;

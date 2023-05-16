@@ -392,21 +392,21 @@ module VX_core_top #(
     output wire [ICACHE_NUM_REQS-1:0]       icache_rsp_ready,
 
 `ifdef EXT_F_ENABLE
-    output wire                             fpu_req_valid,
-    output wire [`INST_FPU_BITS-1:0]        fpu_req_op_type,
-    output wire [`INST_FRM_BITS-1:0]        fpu_req_frm,
-    output wire [`NUM_THREADS-1:0][31:0]    fpu_req_dataa,
-    output wire [`NUM_THREADS-1:0][31:0]    fpu_req_datab,
-    output wire [`NUM_THREADS-1:0][31:0]    fpu_req_datac,
-    output wire [`FPU_REQ_TAG_WIDTH-1:0]    fpu_req_tag, 
-    input wire                              fpu_req_ready,
+    output wire                                 fpu_req_valid,
+    output wire [`INST_FPU_BITS-1:0]            fpu_req_op_type,
+    output wire [`INST_FRM_BITS-1:0]            fpu_req_frm,
+    output wire [`NUM_THREADS-1:0][`XLEN-1:0]   fpu_req_dataa,
+    output wire [`NUM_THREADS-1:0][`XLEN-1:0]   fpu_req_datab,
+    output wire [`NUM_THREADS-1:0][`XLEN-1:0]   fpu_req_datac,
+    output wire [`FPU_REQ_TAG_WIDTH-1:0]        fpu_req_tag, 
+    input wire                                  fpu_req_ready,
 
-    input wire                              fpu_rsp_valid,
-    input wire [`NUM_THREADS-1:0][31:0]     fpu_rsp_result, 
-    input fflags_t [`NUM_THREADS-1:0]       fpu_rsp_fflags,
-    input wire                              fpu_rsp_has_fflags,
-    input wire [`FPU_REQ_TAG_WIDTH-1:0]     fpu_rsp_tag,  
-    output wire                             fpu_rsp_ready,
+    input wire                                  fpu_rsp_valid,
+    input wire [`NUM_THREADS-1:0][`XLEN-1:0]    fpu_rsp_result, 
+    input fflags_t [`NUM_THREADS-1:0]           fpu_rsp_fflags,
+    input wire                                  fpu_rsp_has_fflags,
+    input wire [`FPU_REQ_TAG_WIDTH-1:0]         fpu_rsp_tag,  
+    output wire                                 fpu_rsp_ready,
 `endif
 
 `ifdef EXT_TEX_ENABLE

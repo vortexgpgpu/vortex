@@ -125,7 +125,7 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
         *value = LOCAL_MEM_SIZE;
         break;
     case VX_CAPS_KERNEL_BASE_ADDR:
-        *value = device->dcrs.read(DCR_BASE_STARTUP_ADDR);
+        *value = device->dcrs.read(DCR_BASE_STARTUP_ADDR0);
         break;
     case VX_CAPS_ISA_FLAGS:
         *value = device->isa_caps;

@@ -6,10 +6,10 @@
 
 class DeviceConfig {
 public:    
-    void write(uint32_t addr, uint64_t value);
-    uint64_t read(uint32_t addr) const;
+    void write(uint32_t addr, uint32_t value);
+    uint32_t read(uint32_t addr) const;
 private:
-     std::unordered_map<uint32_t, uint64_t> data_;
+     std::unordered_map<uint32_t, uint32_t> data_;
 };
 
 int dcr_initialize(vx_device_h device);

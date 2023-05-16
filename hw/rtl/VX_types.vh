@@ -7,9 +7,10 @@
 `define DCR_BITS                    12
 
 `define DCR_BASE_STATE_BEGIN        12'h001
-`define DCR_BASE_STARTUP_ADDR       12'h001
-`define DCR_BASE_MPM_CLASS          12'h002
-`define DCR_BASE_STATE_END          12'h003
+`define DCR_BASE_STARTUP_ADDR0      12'h001
+`define DCR_BASE_STARTUP_ADDR1      12'h002
+`define DCR_BASE_MPM_CLASS          12'h003
+`define DCR_BASE_STATE_END          12'h004
 
 `define DCR_BASE_STATE(addr)        ((addr) - `DCR_BASE_STATE_BEGIN)
 `define DCR_BASE_STATE_COUNT        (`DCR_BASE_STATE_END-`DCR_BASE_STATE_BEGIN)
@@ -308,7 +309,6 @@
 
 // Raster Units ///////////////////////////////////////////////////////////////
 
-`define RASTER_ADDR_BITS            32
 `define RASTER_DIM_BITS             15
 `define RASTER_STRIDE_BITS          16
 `define RASTER_PID_BITS             16

@@ -116,7 +116,7 @@ public:
   
   void set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid);
 
-  WarpMask wspawn(uint32_t num_warps, uint32_t nextPC);
+  WarpMask wspawn(uint32_t num_warps, Word nextPC);
   
   WarpMask barrier(uint32_t bar_id, uint32_t count, uint32_t warp_id);
 

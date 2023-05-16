@@ -78,7 +78,7 @@ module VX_fpu_sqrt #(
 `else
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        reg [31:0] r;
+        reg [`XLEN-1:0] r;
 
         fflags_t f;
         `UNUSED_VAR (f)
@@ -88,7 +88,7 @@ module VX_fpu_sqrt #(
         end
         
         VX_shift_register #(
-            .DATAW  (32),
+            .DATAW  (`XLEN),
             .DEPTH  (`LATENCY_FSQRT)
         ) shift_req_dpi (
             .clk      (clk),

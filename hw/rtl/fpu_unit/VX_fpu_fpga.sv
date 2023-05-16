@@ -36,7 +36,7 @@ module VX_fpu_fpga #(
     localparam NUM_FPC  = 5;
     localparam FPC_BITS = `LOG2UP(NUM_FPC);
 
-    localparam RSP_ARB_DATAW = (NUM_LANES * 32) + 1 + (NUM_LANES * $bits(fflags_t)) + TAGW;
+    localparam RSP_ARB_DATAW = (NUM_LANES * `XLEN) + 1 + (NUM_LANES * $bits(fflags_t)) + TAGW;
     
     wire [NUM_FPC-1:0] per_core_ready_in;
     wire [NUM_FPC-1:0][NUM_LANES-1:0][31:0] per_core_result;

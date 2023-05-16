@@ -60,7 +60,10 @@ int main(int argc, char **argv) {
 	processor.attach_ram(&ram);
 
 	// setup base DCRs
-	processor.write_dcr(DCR_BASE_STARTUP_ADDR, STARTUP_ADDR);
+	processor.write_dcr(DCR_BASE_STARTUP_ADDR0, STARTUP_ADDR & 0xffffffff);
+#if XLEN == 64
+    processor.write_dcr(DCR_BASE_STARTUP_ADDR1, STARTUP_ADDR >> 32);
+#endif
 	processor.write_dcr(DCR_BASE_MPM_CLASS, 0);
 
 	// run simulation

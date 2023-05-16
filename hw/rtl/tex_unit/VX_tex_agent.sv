@@ -45,7 +45,7 @@ module VX_tex_agent #(
     wire [UUID_WIDTH-1:0]   rsp_uuid;
     wire [NW_WIDTH-1:0]     rsp_wid;
     wire [`NUM_THREADS-1:0] rsp_tmask;
-    wire [31:0]             rsp_PC;
+    wire [`XLEN-1:0]        rsp_PC;
     wire [`NR_BITS-1:0]     rsp_rd;
  
     wire [REQ_QUEUE_BITS-1:0] mdata_waddr, mdata_raddr;

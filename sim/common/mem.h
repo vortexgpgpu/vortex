@@ -68,7 +68,7 @@ public:
     bool notFound;
   };
 
-  MemoryUnit(uint64_t pageSize, uint64_t addrBytes, bool disableVm = false);
+  MemoryUnit(uint64_t pageSize = 0);
 
   void attach(MemDevice &m, uint64_t start, uint64_t end);
 
@@ -123,9 +123,8 @@ private:
 
   std::unordered_map<uint64_t, TLBEntry> tlb_;
   uint64_t pageSize_;
-  uint64_t addrBytes_;
   ADecoder decoder_;  
-  bool disableVM_;
+  bool enableVM_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

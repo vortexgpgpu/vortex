@@ -150,9 +150,10 @@
 
 `define TRACE_BASE_DCR(level, addr) \
     case (addr) \
-        `DCR_BASE_STARTUP_ADDR: `TRACE(level, ("STARTUP_ADDR")); \
-        `DCR_BASE_MPM_CLASS:    `TRACE(level, ("MPM_CLASS")); \
-        default:                `TRACE(level, ("?")); \
+        `DCR_BASE_STARTUP_ADDR0: `TRACE(level, ("STARTUP_ADDR0")); \
+        `DCR_BASE_STARTUP_ADDR1: `TRACE(level, ("STARTUP_ADDR1")); \
+        `DCR_BASE_MPM_CLASS:     `TRACE(level, ("MPM_CLASS")); \
+        default:                 `TRACE(level, ("?")); \
     endcase
 
 `endif // VX_TRACE_INFO_VH

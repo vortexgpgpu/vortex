@@ -338,13 +338,6 @@ inline void vx_fence() {
     asm volatile ("fence iorw, iorw");
 }
 
-#define __if(b) vx_split(b); \
-                if (b) 
-
-#define __else else
-
-#define __endif vx_join();
-
 #ifdef __cplusplus
 }
 #endif

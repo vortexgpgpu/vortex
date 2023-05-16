@@ -9,7 +9,7 @@ module VX_muldiv (
     input wire [`UP(`UUID_BITS)-1:0]    uuid_in,
     input wire [`UP(`NW_BITS)-1:0]      wid_in,
     input wire [`NUM_THREADS-1:0]       tmask_in,
-    input wire [31:0]                   PC_in,
+    input wire [`XLEN-1:0]              PC_in,
     input wire [`NR_BITS-1:0]           rd_in,
     input wire                          wb_in,
     input wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in1, 
@@ -19,7 +19,7 @@ module VX_muldiv (
     output wire [`UP(`UUID_BITS)-1:0]    uuid_out,
     output wire [`UP(`NW_BITS)-1:0]      wid_out,
     output wire [`NUM_THREADS-1:0]       tmask_out,
-    output wire [31:0]                   PC_out,
+    output wire [`XLEN-1:0]              PC_out,
     output wire [`NR_BITS-1:0]           rd_out,
     output wire                          wb_out,
     output wire [`NUM_THREADS-1:0][`XLEN-1:0] data_out,
@@ -39,7 +39,7 @@ module VX_muldiv (
     wire [UUID_WIDTH-1:0] mul_uuid_out;
     wire [NW_WIDTH-1:0] mul_wid_out;
     wire [`NUM_THREADS-1:0] mul_tmask_out;
-    wire [31:0] mul_PC_out;
+    wire [`XLEN-1:0] mul_PC_out;
     wire [`NR_BITS-1:0] mul_rd_out;
     wire mul_wb_out;
 
@@ -71,7 +71,7 @@ module VX_muldiv (
     end
 
     VX_shift_register #(
-        .DATAW  (1 + UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * `XLEN)),
+        .DATAW  (1 + UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS + 1 + (`NUM_THREADS * `XLEN)),
         .DEPTH  (`LATENCY_IMUL),
         .RESETW (1)
     ) mul_shift_reg (
@@ -85,7 +85,6 @@ module VX_muldiv (
 `else      
     
     wire is_mulh_out;
-    //TODO handle mulw when not using DPI
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         wire [`XLEN:0] mul_in1 = {is_signed_mul_a && alu_in1[i][`XLEN-1], alu_in1[i]};
         wire [`XLEN:0] mul_in2 = {is_signed_mul_b && alu_in2[i][`XLEN-1], alu_in2[i]};
@@ -111,7 +110,7 @@ module VX_muldiv (
     end
 
     VX_shift_register #(
-        .DATAW  (1 + UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + 1),
+        .DATAW  (1 + UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS + 1 + 1),
         .DEPTH  (`LATENCY_IMUL),
         .RESETW (1)
     ) mul_shift_reg (
@@ -130,7 +129,7 @@ module VX_muldiv (
     wire [UUID_WIDTH-1:0] div_uuid_out;
     wire [NW_WIDTH-1:0] div_wid_out;
     wire [`NUM_THREADS-1:0] div_tmask_out;
-    wire [31:0] div_PC_out;
+    wire [`XLEN-1:0] div_PC_out;
     wire [`NR_BITS-1:0] div_rd_out;
     wire div_wb_out;
 
@@ -161,7 +160,7 @@ module VX_muldiv (
     end
 
     VX_shift_register #(
-        .DATAW  (1 + UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * `XLEN)),
+        .DATAW  (1 + UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS + 1 + (`NUM_THREADS * `XLEN)),
         .DEPTH  (`LATENCY_IMUL),
         .RESETW (1)
     ) div_shift_reg (
@@ -180,12 +179,12 @@ module VX_muldiv (
     wire is_rem_op_out;
 
     VX_serial_div #(
-        .WIDTHN (32),
-        .WIDTHD (32),
-        .WIDTHQ (32),
-        .WIDTHR (32),
+        .WIDTHN (`XLEN),
+        .WIDTHD (`XLEN),
+        .WIDTHQ (`XLEN),
+        .WIDTHR (`XLEN),
         .LANES  (`NUM_THREADS),
-        .TAGW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + 1)
+        .TAGW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS + 1 + 1)
     ) divide (
         .clk       (clk),
         .reset     (reset),
@@ -213,10 +212,10 @@ module VX_muldiv (
     ///////////////////////////////////////////////////////////////////////////
 
     wire                    rsp_valid = mul_valid_out || div_valid_out;  
-    wire [UUID_WIDTH-1:0]   rsp_uuid = mul_valid_out ? mul_uuid_out : div_uuid_out;
-    wire [NW_WIDTH-1:0]     rsp_wid  = mul_valid_out ? mul_wid_out : div_wid_out;
+    wire [UUID_WIDTH-1:0]   rsp_uuid  = mul_valid_out ? mul_uuid_out : div_uuid_out;
+    wire [NW_WIDTH-1:0]     rsp_wid   = mul_valid_out ? mul_wid_out : div_wid_out;
     wire [`NUM_THREADS-1:0] rsp_tmask = mul_valid_out ? mul_tmask_out : div_tmask_out;
-    wire [31:0]             rsp_PC    = mul_valid_out ? mul_PC_out : div_PC_out;
+    wire [`XLEN-1:0]        rsp_PC    = mul_valid_out ? mul_PC_out : div_PC_out;
     wire [`NR_BITS-1:0]     rsp_rd    = mul_valid_out ? mul_rd_out : div_rd_out;
     wire                    rsp_wb    = mul_valid_out ? mul_wb_out : div_wb_out;
     wire [`NUM_THREADS-1:0][`XLEN-1:0] rsp_data = mul_valid_out ? mul_result : div_result;
@@ -224,7 +223,7 @@ module VX_muldiv (
     assign stall_out = ~ready_out && valid_out;
 
     VX_pipe_register #(
-        .DATAW  (1 + UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * `XLEN)),
+        .DATAW  (1 + UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS + 1 + (`NUM_THREADS * `XLEN)),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),

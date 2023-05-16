@@ -173,8 +173,8 @@ void dpi_idiv(bool enable, INT_TYPE a, INT_TYPE b, bool is_signed, INT_TYPE* quo
       *remainder = 0;
       *quotient  = dividen;
     } else { 
-      *quotient  = (UINT_TYPE)dividen / (UINT_TYPE)divisor;
-      *remainder = (UINT_TYPE)dividen % (UINT_TYPE)divisor;      
+      *quotient  = (INT_TYPE)dividen / (INT_TYPE)divisor;
+      *remainder = (INT_TYPE)dividen % (INT_TYPE)divisor;      
     }
   } else {    
     if (b == 0) {

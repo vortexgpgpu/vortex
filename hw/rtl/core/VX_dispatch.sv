@@ -39,7 +39,7 @@ module VX_dispatch (
         `UNUSED_PIN (valid_out)
     );
 
-    wire [31:0] next_PC = dispatch_if.PC + 4;
+    wire [`XLEN-1:0] next_PC = dispatch_if.PC + 4;
 
     // ALU unit
 
@@ -47,7 +47,7 @@ module VX_dispatch (
     wire [`INST_ALU_BITS-1:0] alu_op_type = `INST_ALU_BITS'(dispatch_if.op_type);
     
     VX_skid_buffer #(
-        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + 32 + `INST_ALU_BITS + `INST_MOD_BITS + `XLEN + 1 + 1 + `NR_BITS + 1 + `UP(`NT_BITS) + (2 * `NUM_THREADS * `XLEN)),
+        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `XLEN + `INST_ALU_BITS + `INST_MOD_BITS + `XLEN + 1 + 1 + `NR_BITS + 1 + `UP(`NT_BITS) + (2 * `NUM_THREADS * `XLEN)),
         .OUT_REG (1)
     ) alu_buffer (
         .clk       (clk),
@@ -76,7 +76,7 @@ module VX_dispatch (
     end
 
     VX_skid_buffer #(
-        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `INST_LSU_BITS + 1 + `XLEN + `NR_BITS + 1 + `NUM_THREADS*`XLEN + `NUM_THREADS*`XLEN),
+        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `INST_LSU_BITS + 1 + `XLEN + `NR_BITS + 1 + `NUM_THREADS*`XLEN + `NUM_THREADS*`XLEN),
         .OUT_REG (1)
     ) lsu_buffer (
         .clk       (clk),
@@ -101,7 +101,7 @@ module VX_dispatch (
     // wire [31:0] csr_rs1_data = gpr_rsp_if.rs1_data[tid][31:0]; // CSR stays 32 bits
 
     VX_skid_buffer #(
-        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `INST_CSR_BITS + `CSR_ADDR_BITS + `NR_BITS + 1 + 1 + `NRI_BITS + `UP(`NT_BITS) + (`NUM_THREADS * `XLEN)),
+        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `INST_CSR_BITS + `CSR_ADDR_BITS + `NR_BITS + 1 + 1 + `NRI_BITS + `UP(`NT_BITS) + (`NUM_THREADS * `XLEN)),
         .OUT_REG (1)
     ) csr_buffer (
         .clk       (clk),
@@ -121,7 +121,7 @@ module VX_dispatch (
     wire [`INST_FPU_BITS-1:0] fpu_op_type = `INST_FPU_BITS'(dispatch_if.op_type);
         
     VX_skid_buffer #(
-        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + `INST_FPU_BITS + `INST_MOD_BITS + `NR_BITS + (3 * `NUM_THREADS * `XLEN)),
+        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `INST_FPU_BITS + `INST_MOD_BITS + `NR_BITS + (3 * `NUM_THREADS * `XLEN)),
         .OUT_REG (1)
     ) fpu_buffer (
         .clk       (clk),
@@ -143,7 +143,7 @@ module VX_dispatch (
     wire [`INST_GPU_BITS-1:0] gpu_op_type = `INST_GPU_BITS'(dispatch_if.op_type);
 
     VX_skid_buffer #(
-        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + 32 + 32 + `INST_GPU_BITS + `INST_MOD_BITS + `NR_BITS + 1 + `UP(`NT_BITS)  + (3 * `NUM_THREADS * `XLEN)),
+        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `XLEN + `INST_GPU_BITS + `INST_MOD_BITS + `NR_BITS + 1 + `UP(`NT_BITS)  + (3 * `NUM_THREADS * `XLEN)),
         .OUT_REG (1)
     ) gpu_buffer (
         .clk       (clk),

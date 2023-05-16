@@ -12,33 +12,33 @@ void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 	int value = src_ptr[task_id];
 
 	// none taken
-	__if (task_id >= 0x7fffffff) {
+	if (task_id >= 0x7fffffff) {
 		value = 0;
-	}__else {
+	} else {
 		value += 2;
-	}__endif	
+	}	
 	
 	// diverge
-	__if (task_id > 1) {
-		__if (task_id > 2) {
+	if (task_id > 1) {
+		if (task_id > 2) {
 			value += 6;
-		}__else {
+		} else {
 			value += 5;
-		}__endif
-	}__else {
-		__if (task_id > 0) {
+		}
+	} else {
+		if (task_id > 0) {
 			value += 4;
-		}__else {
+		} else {
 			value += 3;
-		}__endif
-	}__endif
+		}
+	}
 
 	// all taken
-	__if (task_id >= 0) {
+	if (task_id >= 0) {
 		value += 7;
-	}__else {
+	} else {
 		value = 0;
-	}__endif
+	}
 
 	dst_ptr[task_id] = value;
 }

@@ -108,7 +108,7 @@ static bool checkBoxedCmpArgs(Word* out, uint64_t a, uint64_t b, uint32_t* fflag
 void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   assert(tmask_.any());
 
-  auto nextPC = PC_ + arch_.wsize();
+  auto nextPC = PC_ + 4;
 
   auto func2  = instr.getFunc2();
   auto func3  = instr.getFunc3();
@@ -598,42 +598,42 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       case 0: {
         // RV32I: BEQ
         if (rsdata[t][0].i == rsdata[t][1].i) {
-          nextPC = uint32_t(PC_ + immsrc);
+          nextPC = PC_ + immsrc;
         }
         break;
       }
       case 1: {
         // RV32I: BNE
         if (rsdata[t][0].i != rsdata[t][1].i) {
-          nextPC = uint32_t(PC_ + immsrc);
+          nextPC = PC_ + immsrc;
         }
         break;
       }
       case 4: {
         // RV32I: BLT
         if (rsdata[t][0].i < rsdata[t][1].i) {
-          nextPC = uint32_t(PC_ + immsrc);
+          nextPC = PC_ + immsrc;
         }
         break;
       }
       case 5: {
         // RV32I: BGE
         if (rsdata[t][0].i >= rsdata[t][1].i) {
-          nextPC = uint32_t(PC_ + immsrc);
+          nextPC = PC_ + immsrc;
         }
         break;
       }
       case 6: {
         // RV32I: BLTU
         if (rsdata[t][0].u < rsdata[t][1].u) {
-          nextPC = uint32_t(PC_ + immsrc);
+          nextPC = PC_ + immsrc;
         }
         break;
       }
       case 7: {
         // RV32I: BGEU
         if (rsdata[t][0].u >= rsdata[t][1].u) {
-          nextPC = uint32_t(PC_ + immsrc);
+          nextPC = PC_ + immsrc;
         }
         break;
       }
@@ -653,7 +653,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       if (!tmask_.test(t))
         continue;
       rddata[t].i = nextPC;
-      nextPC = uint32_t(PC_ + immsrc);  
+      nextPC = PC_ + immsrc;
       trace->fetch_stall = true;
       break; // runonce
     }
@@ -669,7 +669,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       if (!tmask_.test(t))
         continue;
       rddata[t].i = nextPC;
-      nextPC = uint32_t(rsdata[t][0].i + immsrc);
+      nextPC = rsdata[t][0].i + immsrc;
       trace->fetch_stall = true;
       break; // runOnce
     }
@@ -2420,7 +2420,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     }
   }
 
-  PC_ += arch_.wsize();
+  PC_ += 4;
   if (PC_ != nextPC) {
     DP(3, "*** Next PC: " << std::hex << nextPC << std::dec);
     PC_ = nextPC;

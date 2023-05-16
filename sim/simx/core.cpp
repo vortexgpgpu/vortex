@@ -32,7 +32,6 @@ Core::Core(const SimContext& ctx,
     , arch_(arch)
     , dcrs_(dcrs)
     , decoder_(arch)
-    , mmu_(0, arch.wsize(), true)
     , warps_(arch.num_warps())
     , barriers_(arch.num_barriers(), 0)
     , fcsrs_(arch.num_warps(), 0)
@@ -319,7 +318,7 @@ void Core::commit() {
   }
 }
 
-WarpMask Core::wspawn(uint32_t num_warps, uint32_t nextPC) {
+WarpMask Core::wspawn(uint32_t num_warps, Word nextPC) {
   WarpMask ret(1);
   uint32_t active_warps = std::min<uint32_t>(num_warps, arch_.num_warps());
   DP(3, "*** Activate " << (active_warps-1) << " warps at PC: " << std::hex << nextPC);

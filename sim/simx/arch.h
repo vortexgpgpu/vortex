@@ -14,7 +14,6 @@ private:
   uint16_t num_cores_;
   uint16_t num_warps_;
   uint16_t num_threads_;
-  uint16_t wsize_;
   uint16_t vsize_;
   uint16_t num_regs_;
   uint16_t num_csrs_;
@@ -28,17 +27,12 @@ public:
     : num_cores_(num_cores)
     , num_warps_(num_warps)
     , num_threads_(num_threads)
-    , wsize_(4)
     , vsize_(16)
     , num_regs_(32)
     , num_csrs_(4096)
     , num_barriers_(NUM_BARRIERS)
     , ipdom_size_(IPDOM_STACK_SIZE)
   {}
-
-  uint16_t wsize() const { 
-    return wsize_; 
-  }
 
   uint16_t vsize() const { 
     return vsize_; 

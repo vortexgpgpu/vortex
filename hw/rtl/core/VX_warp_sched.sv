@@ -33,7 +33,7 @@ module VX_warp_sched #(
     localparam NW_WIDTH   = `UP(`NW_BITS);
 
     wire                    join_else;
-    wire [31:0]             join_pc;
+    wire [`XLEN-1:0]        join_pc;
     wire [`NUM_THREADS-1:0] join_tmask;
 
     reg [`NUM_WARPS-1:0] active_warps, active_warps_n;   // real active warps (updated when a warp is activated or disabled)
@@ -47,12 +47,12 @@ module VX_warp_sched #(
     wire reached_barrier_limit; // the expected number of warps reached the barrier
     
     // wspawn
-    reg [31:0]              wspawn_pc;
+    reg [`XLEN-1:0]         wspawn_pc;
     reg [`NUM_WARPS-1:0]    use_wspawn;   
 
     wire [NW_WIDTH-1:0]     schedule_wid;
     wire [`NUM_THREADS-1:0] schedule_tmask;
-    wire [31:0]             schedule_pc;
+    wire [`XLEN-1:0]        schedule_pc;
     wire                    schedule_valid;
     wire                    schedule_ready;
 
@@ -189,7 +189,7 @@ module VX_warp_sched #(
 
     // split/join stack management    
 
-    wire [(32+`NUM_THREADS)-1:0] ipdom_data [`NUM_WARPS-1:0]; 
+    wire [(`XLEN+`NUM_THREADS)-1:0] ipdom_data [`NUM_WARPS-1:0]; 
     wire ipdom_index [`NUM_WARPS-1:0];
 
     `RESET_RELAY (ipdom_stack_reset, reset);
@@ -204,11 +204,11 @@ module VX_warp_sched #(
         wire [`NUM_THREADS-1:0] else_tmask = warp_ctl_if.split.else_tmask;
         wire [`NUM_THREADS-1:0] orig_tmask = thread_masks[warp_ctl_if.wid];
 
-        wire [(32+`NUM_THREADS)-1:0] q_else = {warp_ctl_if.split.pc, else_tmask};
-        wire [(32+`NUM_THREADS)-1:0] q_end  = {32'b0,                orig_tmask};
+        wire [(`XLEN+`NUM_THREADS)-1:0] q_else = {warp_ctl_if.split.pc, else_tmask};
+        wire [(`XLEN+`NUM_THREADS)-1:0] q_end  = {`XLEN'(0),            orig_tmask};
 
         VX_ipdom_stack #(
-            .WIDTH (32+`NUM_THREADS), 
+            .WIDTH (`XLEN+`NUM_THREADS), 
             .DEPTH (`IPDOM_STACK_SIZE)
         ) ipdom_stack (
             .clk   (clk),
@@ -247,7 +247,10 @@ module VX_warp_sched #(
                                    (use_wspawn[i] ? `XLEN'(wspawn_pc) : warp_pcs[i])};
     end
 
-    assign {schedule_tmask, schedule_pc} = {schedule_data[schedule_wid][(`NUM_THREADS + `XLEN)-1:(`NUM_THREADS + `XLEN)-4], schedule_data[schedule_wid][(`NUM_THREADS + 32)-5:0]};
+    assign {schedule_tmask, schedule_pc} = {
+        schedule_data[schedule_wid][(`NUM_THREADS + `XLEN)-1:(`NUM_THREADS + `XLEN)-4], 
+        schedule_data[schedule_wid][(`NUM_THREADS + `XLEN)-5:0]
+    };
 
 `ifndef NDEBUG
     assign instr_uuid = UUID_WIDTH'(issued_instrs[schedule_wid] * `NUM_WARPS * `NUM_CORES * `NUM_CLUSTERS)
@@ -258,7 +261,7 @@ module VX_warp_sched #(
 `endif
 
     VX_generic_buffer #( 
-        .DATAW   (UUID_WIDTH + `NUM_THREADS + 32 + NW_WIDTH),
+        .DATAW   (UUID_WIDTH + `NUM_THREADS + `XLEN + NW_WIDTH),
         .OUT_REG (1)
     ) pipe_reg (
         .clk      (clk),
