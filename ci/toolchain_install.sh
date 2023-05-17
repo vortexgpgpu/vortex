@@ -66,19 +66,19 @@ llvm()
 
 pocl()
 {
-    wget $REPOSITORY/pocl/$OS/pocl2.tar.bz2
-    tar -xvf pocl2.tar.bz2
-    rm -f pocl2.tar.bz2
+    wget $REPOSITORY/pocl/$OS/pocl.tar.bz2
+    tar -xvf pocl.tar.bz2
+    rm -f pocl.tar.bz2
     cp -r pocl $DESTDIR
     rm -rf pocl
 }
 
 verilator()
 {
-    wget $REPOSITORY/verilator/$OS/verilator2.tar.bz2
-    tar -xvf verilator2.tar.bz2
+    wget $REPOSITORY/verilator/$OS/verilator.tar.bz2
+    tar -xvf verilator.tar.bz2
     cp -r verilator $DESTDIR
-    rm -f verilator2.tar.bz2    
+    rm -f verilator.tar.bz2    
     rm -rf verilator
 }
 

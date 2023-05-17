@@ -40,16 +40,16 @@ llvm()
 
 pocl() 
 {
-    echo "prebuilt pocl2..."
-    tar -C $SRCDIR -cvjf pocl2.tar.bz2 pocl
-    mv pocl2.tar.bz2 $DESTDIR/pocl/$OS_DIR
+    echo "prebuilt pocl..."
+    tar -C $SRCDIR -cvjf pocl.tar.bz2 pocl
+    mv pocl.tar.bz2 $DESTDIR/pocl/$OS_DIR
 }
 
 verilator() 
 {
-    echo "prebuilt verilator2..."
-    tar -C $SRCDIR -cvjf verilator2.tar.bz2 verilator
-    mv verilator2.tar.bz2 $DESTDIR/verilator/$OS_DIR
+    echo "prebuilt verilator..."
+    tar -C $SRCDIR -cvjf verilator.tar.bz2 verilator
+    mv verilator.tar.bz2 $DESTDIR/verilator/$OS_DIR
 }
 
 show_usage()
