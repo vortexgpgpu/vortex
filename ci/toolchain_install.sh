@@ -36,7 +36,7 @@ riscv64()
     rm -f riscv64-gnu-toolchain.tar.bz2.parta*
     for x in $parts
     do
-        wget $REPOSITORY/riscv-gnu-toolchain/$OS/riscv-gnu-toolchain.tar.bz2.parta$x
+        wget $REPOSITORY/riscv64-gnu-toolchain/$OS/riscv64-gnu-toolchain.tar.bz2.parta$x
     done
     cat riscv64-gnu-toolchain.tar.bz2.parta* > riscv64-gnu-toolchain.tar.bz2
     tar -xvf riscv64-gnu-toolchain.tar.bz2
