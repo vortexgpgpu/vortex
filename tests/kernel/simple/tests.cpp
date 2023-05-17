@@ -5,6 +5,11 @@
 #include <vx_print.h>
 #include <vx_spawn.h>
 
+#define __if(b) vx_split(b); \
+                if (b) 
+#define __else else
+#define __endif vx_join();
+
 int __attribute__ ((noinline)) check_error(const int* buffer, int offset, int size) {
 	int errors = 0;
 	for (int i = offset; i < size; i++)	{
@@ -145,7 +150,7 @@ int test_wsapwn() {
 
 int dvg_buffer[4];
 
-void __attribute__ ((noinline)) do_divergence() {
+void __attribute__ ((noinline, optimize("O0"))) do_divergence() {
 
 	unsigned tid = vx_thread_id();
 
