@@ -49,7 +49,7 @@ llvm()
 {
     case $OS in
     "centos/7") parts=$(eval echo {a..g}) ;;
-    *)          parts=$(eval echo {a..b}) ;;
+    *)          parts=$(eval echo {a..g}) ;;
     esac
     echo $parts
     rm -f llvm-vortex.tar.bz2.parta*
