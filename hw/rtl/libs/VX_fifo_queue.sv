@@ -194,7 +194,7 @@ module VX_fifo_queue #(
                         end
                     end
                 end
-
+                
                 VX_dp_ram #(
                     .DATAW   (DATAW),
                     .SIZE    (SIZE),

@@ -32,12 +32,32 @@ extern int vx_buf_free(vx_buffer_h /*hbuffer*/) {
     return -1;
 }
 
+extern cmdbuffer* vx_create_command_buffer(uint64_t /*buf_size*/, vx_device_h /*device*/) {
+    return nullptr;
+}
+
+extern int vx_new_copy_to_dev(vx_buffer_h /*hbuffer*/, uint64_t /*dev_maddr*/, uint64_t /*size*/, uint64_t /*src_offset*/, cmdbuffer* /*cmdBuf*/, uint64_t /*cmd_type*/) {
+    return -1;
+}
+
+extern int vx_flush(cmdbuffer* /*cmdBuf*/) {
+    return -1;
+}
+
+extern int cmdbuffer_wait(cmdbuffer* /*cmdBuf*/) {
+    return -1;
+}
+
 extern int vx_copy_to_dev(vx_buffer_h /*hbuffer*/, uint64_t /*dev_maddr*/, uint64_t /*size*/, uint64_t /*src_offset*/) {
     return -1;
 }
 
 extern int vx_copy_from_dev(vx_buffer_h /*hbuffer*/, uint64_t /*dev_maddr*/, uint64_t /*size*/, uint64_t /*dest_offset*/) {
      return -1;
+}
+
+extern int vx_new_start(vx_device_h /*hdevice*/, cmdbuffer* /*cmdBuf*/) {
+    return -1;
 }
 
 extern int vx_start(vx_device_h /*hdevice*/) {

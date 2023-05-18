@@ -6,6 +6,7 @@
 #include <VX_config.h>
 #include "testcases.h"
 #include "common.h"
+#include <bits/stdc++.h>
 
 #define RT_CHECK(_expr)                                         \
    do {                                                         \
@@ -82,6 +83,7 @@ int testid_s = 0;
 int testid_e = (testMngr.size() - 1);
 bool stop_on_error = true;
 
+cmdbuffer* cmdBuf = nullptr;
 vx_device_h device   = nullptr;
 vx_buffer_h arg_buf  = nullptr;
 vx_buffer_h src1_buf = nullptr;
@@ -151,6 +153,9 @@ void cleanup() {
 }
 
 int main(int argc, char *argv[]) {
+  clock_t start, end;
+  start = clock();
+
   int exitcode = 0;
   size_t value;
   
@@ -183,9 +188,13 @@ int main(int argc, char *argv[]) {
   std::cout << "number of points: " << num_points << std::endl;
   std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
 
+  cmdBuf = vx_create_command_buffer(16, device);
+  RT_CHECK(vx_buf_alloc(device, buf_size, &cmdBuf->buffer));
+  cmdBuf->createHeaderPacket(0);
+
   // upload program
   std::cout << "upload kernel" << std::endl;  
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file));
+  RT_CHECK(vx_upload_kernel_file(device, kernel_file, cmdBuf));
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;  
@@ -196,6 +205,7 @@ int main(int argc, char *argv[]) {
   kernel_arg.src1_addr = value;
   RT_CHECK(vx_mem_alloc(device, buf_size, &value));
   kernel_arg.dst_addr = value;
+  
 
   kernel_arg.num_tasks = num_tasks;
   kernel_arg.task_size = count;
@@ -210,6 +220,8 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_buf_alloc(device, buf_size, &src1_buf));
   RT_CHECK(vx_buf_alloc(device, buf_size, &src2_buf));
   RT_CHECK(vx_buf_alloc(device, buf_size, &dst_buf));
+  RT_CHECK(vx_buf_alloc(device, buf_size, &cmdBuf->done_flag));
+
 
   for (int t = testid_s; t <= testid_e; ++t) { 
     auto name = testMngr.get_name(t);
@@ -221,7 +233,8 @@ int main(int argc, char *argv[]) {
     std::cout << "upload kernel argument" << std::endl;
     kernel_arg.testid = t;
     memcpy((void*)vx_host_ptr(arg_buf), &kernel_arg, sizeof(kernel_arg_t));
-    RT_CHECK(vx_copy_to_dev(arg_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
+    vx_new_copy_to_dev(arg_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0, cmdBuf, 2); 
+    //RT_CHECK(vx_copy_to_dev(arg_buf, KERNEL_ARG_DEV_MEM_ADDR, sizeof(kernel_arg_t), 0));
 
     // get test arguments
     std::cout << "get test arguments" << std::endl;
@@ -229,31 +242,42 @@ int main(int argc, char *argv[]) {
     
     // upload source buffer0
     std::cout << "upload source buffer0" << std::endl;      
-    RT_CHECK(vx_copy_to_dev(src1_buf, kernel_arg.src0_addr, buf_size, 0));
+    vx_new_copy_to_dev(src1_buf, kernel_arg.src0_addr, buf_size, 0, cmdBuf, 2);
+    //RT_CHECK(vx_copy_to_dev(src1_buf, kernel_arg.src0_addr, buf_size, 0));
     
     // upload source buffer1
-    std::cout << "upload source buffer1" << std::endl;      
-    RT_CHECK(vx_copy_to_dev(src2_buf, kernel_arg.src1_addr, buf_size, 0));
+    std::cout << "upload source buffer1" << std::endl;   
+    vx_new_copy_to_dev(src2_buf, kernel_arg.src1_addr, buf_size, 0, cmdBuf, 2);   
+    //RT_CHECK(vx_copy_to_dev(src2_buf, kernel_arg.src1_addr, buf_size, 0));
 
     // clear destination buffer    
     std::cout << "clear destination buffer" << std::endl;     
     for (int i = 0; i < num_points; ++i) {
       ((uint32_t*)vx_host_ptr(dst_buf))[i] = 0xdeadbeef;
     }         
-    RT_CHECK(vx_copy_to_dev(dst_buf, kernel_arg.dst_addr, buf_size, 0));
+    vx_new_copy_to_dev(dst_buf, kernel_arg.dst_addr, buf_size, 0, cmdBuf, 2);
+    //RT_CHECK(vx_copy_to_dev(dst_buf, kernel_arg.dst_addr, buf_size, 0));
 
     // start device
     std::cout << "start device" << std::endl;
-    RT_CHECK(vx_start(device));
+    vx_new_start(device, cmdBuf);
+    //RT_CHECK(vx_start(device));
 
     // wait for completion
     std::cout << "wait for completion" << std::endl;
-    RT_CHECK(vx_ready_wait(device, MAX_TIMEOUT));
+    //RT_CHECK(vx_ready_wait(device, MAX_TIMEOUT));
 
     // download destination buffer
     std::cout << "download destination buffer" << std::endl;
-    RT_CHECK(vx_copy_from_dev(dst_buf, kernel_arg.dst_addr, buf_size, 0));
+    vx_new_copy_to_dev(dst_buf, kernel_arg.dst_addr, buf_size, 0, cmdBuf, 1);
+    vx_flush(cmdBuf);
 
+    //RT_CHECK(vx_copy_from_dev(dst_buf, kernel_arg.dst_addr, buf_size, 0));
+    
+    
+    cmdbuffer_wait(cmdBuf);
+    
+    
     // verify destination
     std::cout << "verify test result" << std::endl;
     int errors = test->verify(num_points, 
@@ -264,6 +288,7 @@ int main(int argc, char *argv[]) {
       std::cout << "found " << std::dec << errors << " errors!" << std::endl;
       std::cout << "Test" << t << "-" << name << " FAILED!" << std::endl << std::flush;
       if (stop_on_error) {
+        std::cout << "cleanup on failure" << std::endl;
         cleanup();
         exit(1);  
       }
@@ -271,11 +296,20 @@ int main(int argc, char *argv[]) {
     } else {
       std::cout << "Test" << t << "-" << name << " PASSED!" << std::endl << std::flush;
     }
+
+    cmdBuf->fifo.erase(cmdBuf->fifo.begin() + 2, cmdBuf->fifo.end());
+    cmdBuf->fifo.at(0).mmio_data_size = 0;
   } 
 
   // cleanup
   std::cout << "cleanup" << std::endl;  
   cleanup();
 
+  end = clock();
+  double time_taken = double(end - start) / double(CLOCKS_PER_SEC);
+  std::cout << "Time taken by program is : " << std::fixed 
+        << time_taken << std::setprecision(5);
+  std::cout << " sec " << std::endl;
+  
   return exitcode;
 }

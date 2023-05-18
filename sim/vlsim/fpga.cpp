@@ -22,9 +22,10 @@ extern fpga_result fpgaOpen(fpga_token token, fpga_handle *handle, int flags) {
 extern fpga_result fpgaClose(fpga_handle handle) {
   if (NULL == handle)
     return FPGA_INVALID_PARAM;
-
   auto sim = reinterpret_cast<opae_sim*>(handle);
-  delete sim;
+  
+  //delete sim; //  !! DOUBLE FREE OR CORRUPTION PROBLEM HERE FOR SOME UNKNOWN REASON !! (caused by the vx_copy_from_dev() in vx_flush() somehow)
+
   
   return FPGA_OK;
 }

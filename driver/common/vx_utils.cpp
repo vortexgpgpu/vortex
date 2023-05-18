@@ -5,6 +5,71 @@
 #include <vortex.h>
 #include <VX_config.h>
 #include <assert.h>
+#include <cmath>
+#include <unistd.h>
+
+typedef struct vx_buffer_ {
+    uint64_t wsid;
+    void* host_ptr;
+    uint64_t io_addr;
+    vx_device_h hdevice;
+    uint64_t size;
+} vx_buffer_t;
+
+
+cmdbuffer::cmdbuffer(int bufSize, vx_device_h device) {
+  vx_buf_alloc(device, 4096, &buffer);
+  bufferCount = 0;
+  maxBufferSize = bufSize;
+}
+
+bool cmdbuffer::createHeaderPacket(bool barrier) { // header packet is size of 2 subpackets
+  auto ls_shift = (int)std::log2(CACHE_BLOCK_SIZE);
+  vx_buffer_t *buffert = ((vx_buffer_t*)buffer);
+  subpacket headerPacket = {
+    (buffert->io_addr) >> ls_shift,
+    3000,
+    (uint64_t)-2,
+    2
+  };
+
+  appendToCmdBuffer(headerPacket);
+
+  // second half of header packet (see subpacket_ in vortex.h)
+  headerPacket = {
+    barrier,
+    0,
+    0,
+    2
+  };
+
+  appendToCmdBuffer(headerPacket);
+
+  return 0;
+}
+
+bool cmdbuffer::appendToCmdBuffer(subpacket subpkt) {
+  fifo.push_back(subpkt);
+  fifo.at(0).mmio_data_size++;
+  bufferCount++;
+  
+  return 0;
+}
+
+void cmdbuffer::displayCmdBuffer() {
+  std::cout << "displaying command buffer contents" << std::endl;
+  for (uint64_t i = 0 ; i < fifo.size() ; i++) {
+    std::cout << "subpacket " << i << " has contents: ";
+    std::cout << "mmio_cmd_type: " << std::hex << fifo.at(i).mmio_cmd_type << " ; ";
+    if (fifo.at(i).mmio_cmd_type == 3) {
+      std::cout << std::endl;
+      continue;
+    }
+    std::cout << "mmio_io_addr: " << std::hex << fifo.at(i).mmio_io_addr  << " ; ";
+    std::cout << "mmio_mem_addr: " << std::hex << fifo.at(i).mmio_mem_addr  << " ; ";
+    std::cout << "mmio_data_size: " << std::hex << fifo.at(i).mmio_data_size  << std::endl;
+  }
+}
 
 uint64_t aligned_size(uint64_t size, uint64_t alignment) {        
     assert(0 == (alignment & (alignment - 1)));
@@ -16,7 +81,7 @@ bool is_aligned(uint64_t addr, uint64_t alignment) {
     return 0 == (addr & (alignment - 1));
 }
 
-extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint64_t size) {
+extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint64_t size, cmdbuffer* cmdBuf) {
   int err = 0;
 
   if (NULL == content || 0 == size)
@@ -46,13 +111,16 @@ extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint6
     auto chunk_size = std::min<uint64_t>(buffer_transfer_size, size - offset);
     std::memcpy(buf_ptr, (uint8_t*)content + offset, chunk_size);
 
-    /*printf("***  Upload Kernel to 0x%0x: data=", kernel_base_addr + offset);
+    /*
+    printf("***  Upload Kernel to 0x%0x: data=", kernel_base_addr + offset);
     for (int i = 0, n = ((chunk_size+7)/8); i < n; ++i) {
       printf("%08x", ((uint64_t*)((uint8_t*)content + offset))[n-1-i]);
     }
-    printf("\n");*/
+    printf("\n");
+    */
 
-    err = vx_copy_to_dev(buffer, kernel_base_addr + offset, chunk_size, 0);
+    vx_new_copy_to_dev(buffer, kernel_base_addr + offset, chunk_size, 0, cmdBuf, 2);
+    err = 0; // vx_copy_to_dev(buffer, kernel_base_addr + offset, chunk_size, 0);
     if (err != 0) {
       vx_buf_free(buffer);
       return err;
@@ -60,18 +128,19 @@ extern int vx_upload_kernel_bytes(vx_device_h device, const void* content, uint6
     offset += chunk_size;
   }
 
-  vx_buf_free(buffer);
+  //vx_buf_free(buffer);
 
   return 0;
 }
 
-extern int vx_upload_kernel_file(vx_device_h device, const char* filename) {
+extern int vx_upload_kernel_file(vx_device_h device, const char* filename, cmdbuffer* cmdBuf) {
   std::ifstream ifs(filename);
   if (!ifs) {
     std::cout << "error: " << filename << " not found" << std::endl;
     return -1;
   }
 
+  std::cout << "howdy" << std::endl;
   // read file content
   ifs.seekg(0, ifs.end);
   auto size = ifs.tellg();
@@ -79,8 +148,10 @@ extern int vx_upload_kernel_file(vx_device_h device, const char* filename) {
   ifs.seekg(0, ifs.beg);
   ifs.read(content, size);
 
+  std::cout << "howdy" << std::endl;
+
   // upload
-  int err = vx_upload_kernel_bytes(device, content, size);
+  int err = vx_upload_kernel_bytes(device, content, size, cmdBuf);
 
   // release buffer
   delete[] content;

@@ -19,7 +19,7 @@ int main()
     int *a = (int*)malloc(sizeof(int) * n); 
     int *b = (int*)malloc(sizeof(int) * n); 
     int *c = (int*)malloc(sizeof(int) * n); 
-
+    
     // Initialize values for array members.  
     for (int i = 0; i < n; ++i) {
        a[i] = i * 2 + 0;
