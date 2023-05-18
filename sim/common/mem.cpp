@@ -20,8 +20,9 @@ RamMemDevice::RamMemDevice(const char *filename, uint32_t wordSize)
     contents_.push_back(input.get());
   } while (input);
 
-  while (contents_.size() & (wordSize-1))
+  while (contents_.size() & (wordSize-1)) {
     contents_.push_back(0x00);
+  }
 }
 
 RamMemDevice::RamMemDevice(uint64_t size, uint32_t wordSize)
@@ -29,7 +30,7 @@ RamMemDevice::RamMemDevice(uint64_t size, uint32_t wordSize)
   , wordSize_(wordSize)
 {}
 
-void RamMemDevice::read(void *data, uint64_t addr, uint64_t size) {
+void RamMemDevice::read(void* data, uint64_t addr, uint64_t size) {
   auto addr_end = addr + size;
   if ((addr & (wordSize_-1))
    || (addr_end & (wordSize_-1)) 
@@ -44,7 +45,7 @@ void RamMemDevice::read(void *data, uint64_t addr, uint64_t size) {
   }
 }
 
-void RamMemDevice::write(const void *data, uint64_t addr, uint64_t size) {
+void RamMemDevice::write(const void* data, uint64_t addr, uint64_t size) {
   auto addr_end = addr + size;
   if ((addr & (wordSize_-1))
    || (addr_end & (wordSize_-1)) 
@@ -68,26 +69,26 @@ void RomMemDevice::write(const void* /*data*/, uint64_t /*addr*/, uint64_t /*siz
 
 ///////////////////////////////////////////////////////////////////////////////
 
-bool MemoryUnit::ADecoder::lookup(uint64_t a, uint32_t wordSize, mem_accessor_t* ma) {
-  uint64_t e = a + (wordSize - 1);
-  assert(e >= a);
+bool MemoryUnit::ADecoder::lookup(uint64_t addr, uint32_t wordSize, mem_accessor_t* ma) {
+  uint64_t end = addr + (wordSize - 1);
+  assert(end >= addr);
   for (auto iter = entries_.rbegin(), iterE = entries_.rend(); iter != iterE; ++iter) {
-    if (a >= iter->start && e <= iter->end) {
+    if (addr >= iter->start && end <= iter->end) {
       ma->md   = iter->md;
-      ma->addr = a - iter->start;
+      ma->addr = addr - iter->start;
       return true;
     }
   }
   return false;
 }
 
-void MemoryUnit::ADecoder::map(uint64_t a, uint64_t e, MemDevice &m) {
-  assert(e >= a);
-  entry_t entry{&m, a, e};
+void MemoryUnit::ADecoder::map(uint64_t start, uint64_t end, MemDevice &md) {
+  assert(end >= start);
+  entry_t entry{&md, start, end};
   entries_.emplace_back(entry);
 }
 
-void MemoryUnit::ADecoder::read(void *data, uint64_t addr, uint64_t size) {
+void MemoryUnit::ADecoder::read(void* data, uint64_t addr, uint64_t size) {
   mem_accessor_t ma;
   if (!this->lookup(addr, size, &ma)) {
     std::cout << "lookup of 0x" << std::hex << addr << " failed.\n";
@@ -96,7 +97,7 @@ void MemoryUnit::ADecoder::read(void *data, uint64_t addr, uint64_t size) {
   ma.md->read(data, ma.addr, size);
 }
 
-void MemoryUnit::ADecoder::write(const void *data, uint64_t addr, uint64_t size) {
+void MemoryUnit::ADecoder::write(const void* data, uint64_t addr, uint64_t size) {
   mem_accessor_t ma;
   if (!this->lookup(addr, size, &ma)) {
     std::cout << "lookup of 0x" << std::hex << addr << " failed.\n";
@@ -132,7 +133,7 @@ MemoryUnit::TLBEntry MemoryUnit::tlbLookup(uint64_t vAddr, uint32_t flagMask) {
   }
 }
 
-void MemoryUnit::read(void *data, uint64_t addr, uint64_t size, bool sup) {
+void MemoryUnit::read(void* data, uint64_t addr, uint64_t size, bool sup) {
   uint64_t pAddr;
   if (enableVM_) {
     uint32_t flagMask = sup ? 8 : 1;
@@ -144,7 +145,7 @@ void MemoryUnit::read(void *data, uint64_t addr, uint64_t size, bool sup) {
   return decoder_.read(data, pAddr, size);
 }
 
-void MemoryUnit::write(const void *data, uint64_t addr, uint64_t size, bool sup) {
+void MemoryUnit::write(const void* data, uint64_t addr, uint64_t size, bool sup) {
   uint64_t pAddr;
   if (enableVM_) {
     uint32_t flagMask = sup ? 16 : 2;
@@ -169,7 +170,6 @@ void MemoryUnit::tlbRm(uint64_t va) {
 
 RAM::RAM(uint32_t page_size, uint64_t capacity) 
   : capacity_(capacity)
-  , size_(0)
   , page_bits_(log2ceil(page_size))
   , last_page_(nullptr)
   , last_page_index_(0) {    
@@ -223,14 +223,14 @@ uint8_t *RAM::get(uint64_t address) const {
   return page + page_offset;
 }
 
-void RAM::read(void *data, uint64_t addr, uint64_t size) {
+void RAM::read(void* data, uint64_t addr, uint64_t size) {
   uint8_t* d = (uint8_t*)data;
   for (uint64_t i = 0; i < size; i++) {
     d[i] = *this->get(addr + i);
   }
 }
 
-void RAM::write(const void *data, uint64_t addr, uint64_t size) {
+void RAM::write(const void* data, uint64_t addr, uint64_t size) {
   const uint8_t* d = (const uint8_t*)data;
   for (uint64_t i = 0; i < size; i++) {
     *this->get(addr + i) = d[i];

@@ -273,7 +273,7 @@ bool Cluster::running() const {
   return false;
 }
 
-bool Cluster::getIRegValue(int* value, int reg) const {
+bool Cluster::getIRegValue(Word* value, int reg) const {
   for (auto& core : cores_) {
     if (core->check_exit()) {
       *value = core->getIRegValue(reg);

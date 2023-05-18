@@ -73,7 +73,7 @@ int ProcessorImpl::run() {
   SimPlatform::instance().reset();
   this->clear_perf_counters();
   bool running;
-  int exitcode = 0;
+  Word exitcode = 0;
   do {
     SimPlatform::instance().tick();
     running = false;

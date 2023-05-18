@@ -13,13 +13,13 @@
 namespace vortex {
 
 typedef uint8_t Byte;
-#if XLEN == 32
+#if (XLEN == 32)
 typedef uint32_t Word;
 typedef int32_t  WordI;
 typedef uint64_t DWord;
 typedef int64_t  DWordI;
 typedef uint32_t FWord;
-#elif XLEN == 64
+#elif (XLEN == 64)
 typedef uint64_t Word;
 typedef int64_t  WordI;
 typedef __uint128_t DWord;

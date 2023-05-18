@@ -74,7 +74,14 @@ init_regs:
   .option pop
   
   # set stack pointer register
+#if (XLEN == 64)
+  li a0, (STACK_BASE_ADDR >> 32)        # load upper 32 bits stack base address
+  slli a0, a0, 32                       # shift left 32 bits
+  li sp, (STACK_BASE_ADDR & 0xffffffff) # load lower 32 bits stack base address
+  or sp, sp, a0                         # combine upper and lower bits
+#else
   li sp, STACK_BASE_ADDR # load stack base address
+#endif
   csrr a0, CSR_GTID      # get global thread id
   sll  a1, a0, STACK_LOG2_SIZE
   sub  sp, sp, a1

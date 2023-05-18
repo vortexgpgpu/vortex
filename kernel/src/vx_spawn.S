@@ -1,15 +1,25 @@
+#include <VX_config.h>
 #include <VX_types.h>
 
 .type vx_serial, @function
 .global vx_serial
 vx_serial: 
     addi sp, sp, -24
+#if (XLEN == 64)
+    sd   ra, 40(sp)
+    sd   s4, 32(sp)
+    sd   s3, 24(sp)
+    sd   s2, 16(sp)
+    sd   s1, 8(sp)
+    sd   s0, 0(sp)
+#else
     sw   ra, 20(sp)
     sw   s4, 16(sp)
     sw   s3, 12(sp)
     sw   s2, 8(sp)
     sw   s1, 4(sp)
     sw   s0, 0(sp)
+#endif
     mv   s4, a0                 # s4 <- callback
     mv   s3, a1                 # s3 <- arg
     csrr s2, CSR_NT             # s2 <- NT
@@ -26,12 +36,21 @@ label_join:
     .insn r 0x0b, 3, 0, x0, x0, x0  # join
     addi s0, s0, 1              # index++
     blt	 s0, s2, label_loop     # loop back
+#if (XLEN == 64)
+    ld   ra, 40(sp)
+    ld   s4, 32(sp)
+    ld   s3, 24(sp)
+    ld   s2, 16(sp)
+    ld   s1, 8(sp)
+    ld   s0, 0(sp)
+#else
     lw   ra, 20(sp)
     lw   s4, 16(sp)
     lw   s3, 12(sp)
     lw   s2, 8(sp)
     lw   s1, 4(sp)
     lw   s0, 0(sp)
+#endif
     addi sp, sp, 24
 
     ret

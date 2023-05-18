@@ -37,6 +37,7 @@ endif
 
 CFLAGS += -O3 -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
 CFLAGS += -I./include -I../hw
+CFLAGS += -DXLEN_$(XLEN)
 
 PROJECT = libvortexrt
 

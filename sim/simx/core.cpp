@@ -123,7 +123,11 @@ void Core::reset() {
 
 void Core::attach_ram(RAM* ram) {
   // bind RAM to memory unit
-  mmu_.attach(*ram, 0, 0xFFFFFFFF);    
+#if (XLEN == 64)
+  mmu_.attach(*ram, 0, 0xFFFFFFFFFFFFFFFF);
+#else
+  mmu_.attach(*ram, 0, 0xFFFFFFFF);
+#endif
 }
 
 void Core::cout_flush() {

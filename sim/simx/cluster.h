@@ -52,7 +52,7 @@ public:
 
   bool running() const;
 
-  bool getIRegValue(int* value, int reg) const;
+  bool getIRegValue(Word* value, int reg) const;
 
   void bind(SimPort<MemReq>* mem_req_port, SimPort<MemRsp>* mem_rsp_port);
 

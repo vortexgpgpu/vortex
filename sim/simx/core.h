@@ -108,7 +108,7 @@ public:
     return dcrs_;
   }
 
-  uint32_t getIRegValue(int reg) const {
+  Word getIRegValue(int reg) const {
     return warps_.at(0)->getIRegValue(reg);
   }
 

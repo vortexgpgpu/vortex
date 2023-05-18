@@ -87,7 +87,7 @@ public:
     return 0;
   }
 
-  uint32_t getIRegValue(uint32_t reg) const {
+  Word getIRegValue(uint32_t reg) const {
     return ireg_file_.at(0).at(reg);
   }
 
