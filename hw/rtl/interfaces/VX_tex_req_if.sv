@@ -5,18 +5,18 @@
 
 interface VX_tex_req_if ();
 
-    wire                            valid;      
+    wire                            valid;
     wire [`UUID_BITS-1:0]           uuid;
     wire [`NW_BITS-1:0]             wid;
-    wire [`NUM_THREADS-1:0]         tmask;    
-    wire [31:0]                     PC;    
-    wire [`NR_BITS-1:0]             rd;    
+    wire [`NUM_THREADS-1:0]         tmask;
+    wire [`ADDR_WIDTH - 1:0]                     PC;
+    wire [`NR_BITS-1:0]             rd;
     wire                            wb;
 
     wire [`NTEX_BITS-1:0]           unit;
-    wire [1:0][`NUM_THREADS-1:0][31:0] coords;
-    wire [`NUM_THREADS-1:0][31:0]   lod;
-    
+    wire [1:0][`NUM_THREADS-1:0][`ADDR_WIDTH - 1:0] coords;
+    wire [`NUM_THREADS-1:0][`ADDR_WIDTH - 1:0]   lod;
+
     wire                            ready;
 
     modport master (
@@ -49,6 +49,3 @@ interface VX_tex_req_if ();
 
 endinterface
 `endif
-
-
- 

@@ -5,90 +5,90 @@ module VX_alu_unit #(
 ) (
     input wire              clk,
     input wire              reset,
-    
+
     // Inputs
     VX_alu_req_if.slave     alu_req_if,
 
     // Outputs
     VX_branch_ctl_if.master branch_ctl_if,
-    VX_commit_if.master     alu_commit_if    
-);   
+    VX_commit_if.master     alu_commit_if
+);
 
     `UNUSED_PARAM (CORE_ID)
-    
-    reg [`NUM_THREADS-1:0][31:0]  alu_result;    
-    wire [`NUM_THREADS-1:0][31:0] add_result;   
-    wire [`NUM_THREADS-1:0][32:0] sub_result;
-    wire [`NUM_THREADS-1:0][31:0] shr_result;
-    reg [`NUM_THREADS-1:0][31:0]  msc_result;
 
-    wire ready_in;    
+    reg [`NUM_THREADS-1:0][`ADDR_WIDTH - 1:0]  alu_result;
+    wire [`NUM_THREADS-1:0][`ADDR_WIDTH - 1:0] add_result;
+    wire [`NUM_THREADS-1:0][`ADDR_WIDTH:0] sub_result;
+    wire [`NUM_THREADS-1:0][`ADDR_WIDTH - 1:0] shr_result;
+    reg [`NUM_THREADS-1:0][`ADDR_WIDTH - 1:0]  msc_result;
+
+    wire ready_in;
 
     `UNUSED_VAR (alu_req_if.op_mod)
     wire                    is_br_op = `INST_ALU_IS_BR(alu_req_if.op_mod);
     wire [`INST_ALU_BITS-1:0] alu_op = `INST_ALU_BITS'(alu_req_if.op_type);
     wire [`INST_BR_BITS-1:0]   br_op = `INST_BR_BITS'(alu_req_if.op_type);
-    wire                  alu_signed = `INST_ALU_SIGNED(alu_op);   
-    wire [1:0]          alu_op_class = `INST_ALU_OP_CLASS(alu_op); 
+    wire                  alu_signed = `INST_ALU_SIGNED(alu_op);
+    wire [1:0]          alu_op_class = `INST_ALU_OP_CLASS(alu_op);
     wire                      is_sub = (alu_op == `INST_ALU_SUB);
 
-    wire [`NUM_THREADS-1:0][31:0] alu_in1 = alu_req_if.rs1_data;
-    wire [`NUM_THREADS-1:0][31:0] alu_in2 = alu_req_if.rs2_data;
+    wire [`NUM_THREADS-1:0][`ADDR_WIDTH - 1:0] alu_in1 = alu_req_if.rs1_data;
+    wire [`NUM_THREADS-1:0][`ADDR_WIDTH - 1:0] alu_in2 = alu_req_if.rs2_data;
 
-    wire [`NUM_THREADS-1:0][31:0] alu_in1_PC   = alu_req_if.use_PC ? {`NUM_THREADS{alu_req_if.PC}} : alu_in1;
-    wire [`NUM_THREADS-1:0][31:0] alu_in2_imm  = alu_req_if.use_imm ? {`NUM_THREADS{alu_req_if.imm}} : alu_in2;
-    wire [`NUM_THREADS-1:0][31:0] alu_in2_less = (alu_req_if.use_imm && ~is_br_op) ? {`NUM_THREADS{alu_req_if.imm}} : alu_in2;
+    wire [`NUM_THREADS-1:0][`ADDR_WIDTH - 1:0] alu_in1_PC   = alu_req_if.use_PC ? {`NUM_THREADS{alu_req_if.PC}} : alu_in1;
+    wire [`NUM_THREADS-1:0][`ADDR_WIDTH - 1:0] alu_in2_imm  = alu_req_if.use_imm ? {`NUM_THREADS{alu_req_if.imm}} : alu_in2;
+    wire [`NUM_THREADS-1:0][`ADDR_WIDTH - 1:0] alu_in2_less = (alu_req_if.use_imm && ~is_br_op) ? {`NUM_THREADS{alu_req_if.imm}} : alu_in2;
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         assign add_result[i] = alu_in1_PC[i] + alu_in2_imm[i];
     end
 
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
-        wire [32:0] sub_in1 = {alu_signed & alu_in1[i][31], alu_in1[i]};
-        wire [32:0] sub_in2 = {alu_signed & alu_in2_less[i][31], alu_in2_less[i]};
+        wire [`ADDR_WIDTH:0] sub_in1 = {alu_signed & alu_in1[i][`ADDR_WIDTH - 1], alu_in1[i]};
+        wire [`ADDR_WIDTH:0] sub_in2 = {alu_signed & alu_in2_less[i][`ADDR_WIDTH - 1], alu_in2_less[i]};
         assign sub_result[i] = sub_in1 - sub_in2;
     end
 
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin    
-        wire [32:0] shr_in1 = {alu_signed & alu_in1[i][31], alu_in1[i]};
-        assign shr_result[i] = 32'($signed(shr_in1) >>> alu_in2_imm[i][4:0]);
-    end        
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
+        wire [`ADDR_WIDTH:0] shr_in1 = {alu_signed & alu_in1[i][`ADDR_WIDTH - 1], alu_in1[i]};
+        assign shr_result[i] = `ADDR_WIDTH'($signed(shr_in1) >>> alu_in2_imm[i][4:0]);
+    end
 
-    for (genvar i = 0; i < `NUM_THREADS; i++) begin 
+    for (genvar i = 0; i < `NUM_THREADS; i++) begin
         always @(*) begin
             case (alu_op)
                 `INST_ALU_AND: msc_result[i] = alu_in1[i] & alu_in2_imm[i];
                 `INST_ALU_OR:  msc_result[i] = alu_in1[i] | alu_in2_imm[i];
-                `INST_ALU_XOR: msc_result[i] = alu_in1[i] ^ alu_in2_imm[i];                
+                `INST_ALU_XOR: msc_result[i] = alu_in1[i] ^ alu_in2_imm[i];
                 //`INST_ALU_SLL,
                 default:  msc_result[i] = alu_in1[i] << alu_in2_imm[i][4:0];
             endcase
         end
     end
-            
+
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
         always @(*) begin
-            case (alu_op_class)                        
-                2'b00: alu_result[i] = add_result[i];               // ADD, LUI, AUIPC 
-                2'b01: alu_result[i] = {31'b0, sub_result[i][32]};  // SLTU, SLT
-                2'b10: alu_result[i] = is_sub ? sub_result[i][31:0] // SUB
+            case (alu_op_class)
+                2'b00: alu_result[i] = add_result[i];               // ADD, LUI, AUIPC
+                2'b01: alu_result[i] = {(`ADDR_WIDTH - 1){1'b0}, sub_result[i][`ADDR_WIDTH]};  // SLTU, SLT
+                2'b10: alu_result[i] = is_sub ? sub_result[i][`ADDR_WIDTH - 1:0] // SUB
                                               : shr_result[i];      // SRL, SRA
                 // 2'b11,
                 default: alu_result[i] = msc_result[i];             // AND, OR, XOR, SLL
             endcase
-        end       
+        end
     end
 
     // branch
-    
-    wire is_jal = is_br_op && (br_op == `INST_BR_JAL || br_op == `INST_BR_JALR);
-    wire [`NUM_THREADS-1:0][31:0] alu_jal_result = is_jal ? {`NUM_THREADS{alu_req_if.next_PC}} : alu_result; 
 
-    wire [31:0] br_dest    = add_result[alu_req_if.tid]; 
-    wire [32:0] cmp_result = sub_result[alu_req_if.tid];   
-    
-    wire is_less  = cmp_result[32];
-    wire is_equal = ~(| cmp_result[31:0]);        
+    wire is_jal = is_br_op && (br_op == `INST_BR_JAL || br_op == `INST_BR_JALR);
+    wire [`NUM_THREADS-1:0][`ADDR_WIDTH - 1:0] alu_jal_result = is_jal ? {`NUM_THREADS{alu_req_if.next_PC}} : alu_result;
+
+    wire [`ADDR_WIDTH - 1:0] br_dest    = add_result[alu_req_if.tid];
+    wire [`ADDR_WIDTH:0] cmp_result = sub_result[alu_req_if.tid];
+
+    wire is_less  = cmp_result[`ADDR_WIDTH];
+    wire is_equal = ~(| cmp_result[`ADDR_WIDTH - 1:0]);
 
     // output
 
@@ -99,13 +99,13 @@ module VX_alu_unit #(
     wire [`UUID_BITS-1:0]         alu_uuid;
     wire [`NW_BITS-1:0]           alu_wid;
     wire [`NUM_THREADS-1:0]       alu_tmask;
-    wire [31:0]                   alu_PC;
-    wire [`NR_BITS-1:0]           alu_rd;   
-    wire                          alu_wb; 
-    wire [`NUM_THREADS-1:0][31:0] alu_data;
+    wire [`ADDR_WIDTH - 1:0]                   alu_PC;
+    wire [`NR_BITS-1:0]           alu_rd;
+    wire                          alu_wb;
+    wire [`NUM_THREADS-1:0][`ADDR_WIDTH - 1:0] alu_data;
 
     wire [`INST_BR_BITS-1:0] br_op_r;
-    wire [31:0] br_dest_r;
+    wire [`ADDR_WIDTH - 1:0] br_dest_r;
     wire is_less_r;
     wire is_equal_r;
     wire is_br_op_r;
@@ -113,7 +113,7 @@ module VX_alu_unit #(
     assign alu_ready_in = alu_ready_out || ~alu_valid_out;
 
     VX_pipe_register #(
-        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + 32 + `NR_BITS + 1 + (`NUM_THREADS * 32) + 1 + `INST_BR_BITS + 1 + 1 + 32),
+        .DATAW  (1 + `UUID_BITS + `NW_BITS + `NUM_THREADS + `ADDR_WIDTH + `NR_BITS + 1 + (`NUM_THREADS * `ADDR_WIDTH) + 1 + `INST_BR_BITS + 1 + 1 + `ADDR_WIDTH),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
@@ -137,22 +137,22 @@ module VX_alu_unit #(
 
     wire                          mul_valid_in;
     wire                          mul_ready_in;
-    wire                          mul_valid_out;    
+    wire                          mul_valid_out;
     wire                          mul_ready_out;
     wire [`UUID_BITS-1:0]         mul_uuid;
     wire [`NW_BITS-1:0]           mul_wid;
     wire [`NUM_THREADS-1:0]       mul_tmask;
-    wire [31:0]                   mul_PC;
+    wire [`ADDR_WIDTH - 1:0]                   mul_PC;
     wire [`NR_BITS-1:0]           mul_rd;
     wire                          mul_wb;
-    wire [`NUM_THREADS-1:0][31:0] mul_data;
+    wire [`NUM_THREADS-1:0][`ADDR_WIDTH - 1:0] mul_data;
 
     wire [`INST_MUL_BITS-1:0] mul_op = `INST_MUL_BITS'(alu_req_if.op_type);
 
     VX_muldiv muldiv (
         .clk        (clk),
         .reset      (reset),
-        
+
         // Inputs
         .alu_op     (mul_op),
         .uuid_in    (alu_req_if.uuid),
@@ -161,7 +161,7 @@ module VX_alu_unit #(
         .PC_in      (alu_req_if.PC),
         .rd_in      (alu_req_if.rd),
         .wb_in      (alu_req_if.wb),
-        .alu_in1    (alu_req_if.rs1_data), 
+        .alu_in1    (alu_req_if.rs1_data),
         .alu_in2    (alu_req_if.rs2_data),
 
         // Outputs
@@ -199,7 +199,7 @@ module VX_alu_unit #(
     assign alu_ready_out = alu_commit_if.ready;
     assign mul_ready_out = alu_commit_if.ready & ~alu_valid_out; // ALU takes priority
 
-`else 
+`else
 
     assign ready_in = alu_ready_in;
 
@@ -209,8 +209,8 @@ module VX_alu_unit #(
     assign alu_commit_if.uuid  = alu_uuid;
     assign alu_commit_if.wid   = alu_wid;
     assign alu_commit_if.tmask = alu_tmask;
-    assign alu_commit_if.PC    = alu_PC; 
-    assign alu_commit_if.rd    = alu_rd;    
+    assign alu_commit_if.PC    = alu_PC;
+    assign alu_commit_if.rd    = alu_rd;
     assign alu_commit_if.wb    = alu_wb;
     assign alu_commit_if.data  = alu_data;
 
@@ -226,7 +226,7 @@ module VX_alu_unit #(
 `ifdef DBG_TRACE_CORE_PIPELINE
     always @(posedge clk) begin
         if (branch_ctl_if.valid) begin
-            dpi_trace("%d: core%0d-branch: wid=%0d, PC=%0h, taken=%b, dest=%0h (#%0d)\n", 
+            dpi_trace("%d: core%0d-branch: wid=%0d, PC=%0h, taken=%b, dest=%0h (#%0d)\n",
                 $time, CORE_ID, branch_ctl_if.wid, alu_commit_if.PC, branch_ctl_if.taken, branch_ctl_if.dest, alu_uuid);
         end
     end
