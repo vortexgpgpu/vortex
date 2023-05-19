@@ -202,7 +202,7 @@ module VX_csr_unit #(
         csr_rd_enable = 0;
     `ifdef EXT_RASTER_ENABLE
         if (raster_addr_enable) begin
-            csr_read_data = `XLEN'(raster_csr_if.read_data);
+            csr_read_data = raster_csr_if.read_data;
         end else
     `endif
         case (csr_req_if.addr)
