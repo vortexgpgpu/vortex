@@ -75,10 +75,10 @@ init_regs:
   
   # set stack pointer register
 #if (XLEN == 64)
-  li a0, (STACK_BASE_ADDR >> 32)        # load upper 32 bits stack base address
-  slli a0, a0, 32                       # shift left 32 bits
-  li sp, (STACK_BASE_ADDR & 0xffffffff) # load lower 32 bits stack base address
-  or sp, sp, a0                         # combine upper and lower bits
+  li a0, (STACK_BASE_ADDR >> 32)
+  slli a0, a0, 32
+  li sp, (STACK_BASE_ADDR & 0xffffffff)
+  or sp, sp, a0
 #else
   li sp, STACK_BASE_ADDR # load stack base address
 #endif

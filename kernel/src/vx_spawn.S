@@ -3,9 +3,9 @@
 
 .type vx_serial, @function
 .global vx_serial
-vx_serial: 
-    addi sp, sp, -24
+vx_serial:    
 #if (XLEN == 64)
+    addi sp, sp, -48
     sd   ra, 40(sp)
     sd   s4, 32(sp)
     sd   s3, 24(sp)
@@ -13,6 +13,7 @@ vx_serial:
     sd   s1, 8(sp)
     sd   s0, 0(sp)
 #else
+    addi sp, sp, -24
     sw   ra, 20(sp)
     sw   s4, 16(sp)
     sw   s3, 12(sp)
@@ -43,6 +44,7 @@ label_join:
     ld   s2, 16(sp)
     ld   s1, 8(sp)
     ld   s0, 0(sp)
+    addi sp, sp, 48
 #else
     lw   ra, 20(sp)
     lw   s4, 16(sp)
@@ -50,8 +52,7 @@ label_join:
     lw   s2, 8(sp)
     lw   s1, 4(sp)
     lw   s0, 0(sp)
-#endif
     addi sp, sp, 24
-
+#endif    
     ret
     

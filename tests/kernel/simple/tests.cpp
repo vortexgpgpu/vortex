@@ -150,7 +150,7 @@ int test_wsapwn() {
 
 int dvg_buffer[4];
 
-void __attribute__ ((noinline, optimize("O0"))) do_divergence() {
+void __attribute__ ((noinline)) do_divergence() {
 
 	unsigned tid = vx_thread_id();
 
