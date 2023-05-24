@@ -13,6 +13,7 @@ addons:
         - libpng-dev
         - libboost-serialization-dev
         - libstdc++6
+        - hwloc
 
 install:  
   # Install toolchain
