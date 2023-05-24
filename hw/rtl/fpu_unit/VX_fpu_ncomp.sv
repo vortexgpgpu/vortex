@@ -173,8 +173,7 @@ module VX_fpu_ncomp #(
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         always @(*) begin
             case (frm_s0)
-                `INST_FRM_RNE: begin // LE
-                    fcmp_fflags[i] = 5'h0;
+                `INST_FRM_RNE: begin // LE                    
                     if (a_fclass_s0[i].is_nan || b_fclass_s0[i].is_nan) begin
                         fcmp_res[i]       = 32'h0;
                         fcmp_fflags_NV[i] = 1'b1;
@@ -184,7 +183,6 @@ module VX_fpu_ncomp #(
                     end
                 end
                 `INST_FRM_RTZ: begin // LS
-                    fcmp_fflags[i] = 5'h0;
                     if (a_fclass_s0[i].is_nan || b_fclass_s0[i].is_nan) begin
                         fcmp_res[i]       = 32'h0;
                         fcmp_fflags_NV[i] = 1'b1;
@@ -194,10 +192,9 @@ module VX_fpu_ncomp #(
                     end                    
                 end
                 `INST_FRM_RDN: begin // EQ
-                    fcmp_fflags[i] = 5'h0;
                     if (a_fclass_s0[i].is_nan || b_fclass_s0[i].is_nan) begin
                         fcmp_res[i]       = 32'h0;
-                        fcmp_fflags[i].NV = a_fclass_s0[i].is_signaling | b_fclass_s0[i].is_signaling; 
+                        fcmp_fflags_NV[i] = a_fclass_s0[i].is_signaling | b_fclass_s0[i].is_signaling; 
                     end else begin
                         fcmp_res[i] = {31'h0, ab_equal_s0[i]};
                         fcmp_fflags_NV[i] = 1'b0;
@@ -236,8 +233,7 @@ module VX_fpu_ncomp #(
                         end
                         3,4: begin
                             tmp_result[i] = fminmax_res[i];
-                            tmp_fflags[i] = 0;
-                            tmp_fflags[i].NV = a_fclass_s0[i].is_signaling | b_fclass_s0[i].is_signaling;
+                            tmp_fflags_NV[i] = a_fclass_s0[i].is_signaling | b_fclass_s0[i].is_signaling;
                         end
                         //5,6,7: MOVE
                         default: begin
@@ -260,7 +256,7 @@ module VX_fpu_ncomp #(
     wire [NUM_LANES-1:0] fflags_NV;
 
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + (NUM_LANES * 32) + 1 + (NUM_LANES * `FP_FLAGS_BITS)),
+        .DATAW  (1 + TAGW + (NUM_LANES * 32) + 1 + (NUM_LANES * 1)),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),

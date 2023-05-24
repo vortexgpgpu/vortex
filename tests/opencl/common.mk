@@ -23,8 +23,8 @@ FPGA_BIN_DIR ?= $(VORTEX_RT_PATH)/opae
 
 LLVM_VORTEX ?= /opt/llvm-vortex
 
-K_LLCFLAGS += -O3 -march=riscv32 -target-abi=ilp32f -mcpu=generic-rv32 -mattr=+m,+f,+vortex -float-abi=hard -code-model=small
-K_CFLAGS   += -v -Os --sysroot=$(RISCV_SYSROOT) --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH) -march=rv32imaf -mabi=ilp32f -Xclang -target-feature -Xclang +vortex
+K_LLCFLAGS += -O3 -march=riscv32 -target-abi=ilp32f -mcpu=generic-rv32 -mattr=+m,+f,+vortex -float-abi=hard 
+K_CFLAGS   += -v -O3 --sysroot=$(RISCV_SYSROOT) --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH) -march=rv32imaf -mabi=ilp32f -Xclang -target-feature -Xclang +vortex
 K_CFLAGS   += -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
 K_CFLAGS   += -I$(VORTEX_KN_PATH)/include
 K_LDFLAGS  += -Wl,-Bstatic,--gc-sections,-T$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld $(VORTEX_KN_PATH)/libvortexrt.a -lm

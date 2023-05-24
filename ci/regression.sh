@@ -208,10 +208,10 @@ CONFIGS="-DNUM_DCACHES=2 -DNUM_ICACHES=2" ./ci/blackbox.sh --driver=rtlsim --app
 CONFIGS="-DNUM_FPU_UNITS=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm --cores=8 --warps=1 --threads=2
 
 # using Default FPU core
-FPU_CORE=FPU_DEFAULT ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
+CONFIGS="-DDISABLE_DPI" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
 
 # using FPNEW FPU core
-FPU_CORE=FPU_FPNEW ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
+CONFIGS="-DDISABLE_DPI -DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
 
 # using AXI bus
 AXI_BUS=1 ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo
@@ -253,8 +253,8 @@ echo "begin stress0 tests..."
 # test verilator reset values
 CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=sgemm
 CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=sgemm
-FPU_CORE=FPU_DEFAULT CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
-FPU_CORE=FPU_DEFAULT CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
+CONFIGS="-DDISABLE_DPI -DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
+CONFIGS="-DDISABLE_DPI -DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
 CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=io_addr
 CONFIGS="-DVERILATOR_RESET_VALUE=1 -DEXT_GFX_ENABLE" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=draw3d --args="-tbox.cgltrace -rbox_ref_128.png"
 CONFIGS="-DVERILATOR_RESET_VALUE=0" ./ci/blackbox.sh --driver=opae --app=printf

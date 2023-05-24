@@ -139,6 +139,14 @@
 `define STALL_TIMEOUT (100000 * (1 ** (`L2_ENABLED + `L3_ENABLED)))
 `endif
 
+`ifndef SYNTHESIS
+`ifndef DISABLE_DPI
+    `define IMUL_DPI
+    `define IDIV_DPI
+    `define FPU_DPI
+`endif
+`endif
+
 `ifndef DEBUG_LEVEL
 `define DEBUG_LEVEL 3
 `endif
@@ -287,6 +295,7 @@
 
 `ifndef LATENCY_FMA
 `ifdef FPU_FPNEW
+`define LATENCY_FMA 4
 `define LATENCY_FSQRT 4
 `elsif VIVADO
 `define LATENCY_FMA 16    
