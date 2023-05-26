@@ -56,6 +56,14 @@
 #define VERILATOR_RESET_VALUE 2
 #endif
 
+#if (XLEN == 32)
+typedef uint32_t Word;
+#elif (XLEN == 64)
+typedef uint64_t Word;
+#else
+#error unsupported XLEN
+#endif
+
 #define VL_WDATA_GETW(lwp, i, n, w) \
   VL_SEL_IWII(0, n * w, 0, 0, lwp, i * w, w)
 
@@ -180,7 +188,7 @@ public:
     // wait on device to go idle
     while (device_->busy) {
       if (get_ebreak()) {
-        exitcode = get_last_wb_value(3);
+        exitcode = (int)get_last_wb_value(3);
         break;  
       }
       this->tick();
@@ -371,11 +379,11 @@ private:
     if ((device_->m_axi_wvalid[0] || device_->m_axi_arvalid[0]) && running_) {
       if (device_->m_axi_wvalid[0]) {        
         uint64_t byteen = device_->m_axi_wstrb[0];
-        unsigned base_addr = device_->m_axi_awaddr[0];
+        uint64_t base_addr = device_->m_axi_awaddr[0];
         uint8_t* data = (uint8_t*)device_->m_axi_wdata[0].data();
 
         // check console output
-        if (base_addr >= IO_COUT_ADDR 
+        if (base_addr >= uint64_t(IO_COUT_ADDR)
          && base_addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {          
           for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
             if ((byteen >> i) & 0x1) {            
@@ -493,14 +501,14 @@ private:
 
     // process memory requests    
     if (device_->mem_req_valid && running_) {
-      uint32_t byte_addr = (device_->mem_req_addr * MEM_BLOCK_SIZE);
+      uint64_t byte_addr = (device_->mem_req_addr * MEM_BLOCK_SIZE);
       if (device_->mem_req_rw) {        
         // process writes
         uint64_t byteen = device_->mem_req_byteen;        
         uint8_t* data = (uint8_t*)(device_->mem_req_data.data());
 
         // check console output
-        if (byte_addr >= IO_COUT_ADDR 
+        if (byte_addr >= uint64_t(IO_COUT_ADDR)
          && byte_addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {    
           for (int i = 0; i < IO_COUT_SIZE; i++) {
             if ((byteen >> i) & 0x1) {            
@@ -592,11 +600,11 @@ private:
   #endif
   }
 
-  int get_last_wb_value(int reg) const {
+  uint64_t get_last_wb_value(int reg) const {
   #ifdef AXI_BUS
-    return (int)device_->Vortex_axi->vortex->sim_wb_value[reg];
+    return ((Word*)device_->Vortex_axi->vortex->sim_wb_value.data())[reg];
   #else
-    return (int)device_->Vortex->sim_wb_value[reg];
+    return ((Word*)device_->Vortex->sim_wb_value.data())[reg];
   #endif
   }
 

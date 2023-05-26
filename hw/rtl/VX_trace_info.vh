@@ -33,42 +33,56 @@
                 `INST_BR_MRET:  `TRACE(level, ("MRET")); \
                 default:        `TRACE(level, ("?")); \
             endcase \
-        end else if (`INST_ALU_IS_MUL(op_mod)) begin \
-            case (`INST_MUL_BITS'(op_type)) \
-                `INST_MUL_MUL:   `TRACE(level, ("MUL")); \
-                `INST_MUL_MULH:  `TRACE(level, ("MULH")); \
-                `INST_MUL_MULHSU:`TRACE(level, ("MULHSU")); \
-                `INST_MUL_MULHU: `TRACE(level, ("MULHU")); \
-                `INST_MUL_DIV:   `TRACE(level, ("DIV")); \
-                `INST_MUL_DIVU:  `TRACE(level, ("DIVU")); \
-                `INST_MUL_REM:   `TRACE(level, ("REM")); \
-                `INST_MUL_REMU:  `TRACE(level, ("REMU")); \
-                `INST_MUL_MULW:  `TRACE(level, ("MULW")); \
-                `INST_MUL_DIVW:  `TRACE(level, ("DIVW")); \
-                `INST_MUL_DIVUW:  `TRACE(level, ("DIVUW")); \
-                default:         `TRACE(level, ("?")); \
-            endcase \
+        end else if (`INST_ALU_IS_M(op_mod)) begin \
+            if (`INST_ALU_IS_W(op_mod)) begin \
+                case (`INST_M_BITS'(op_type)) \
+                    `INST_M_MUL:  `TRACE(level, ("MULW")); \
+                    `INST_M_DIV:  `TRACE(level, ("DIVW")); \
+                    `INST_M_DIVU: `TRACE(level, ("DIVUW")); \
+                    `INST_M_REM:  `TRACE(level, ("REMW")); \
+                    `INST_M_REMU: `TRACE(level, ("REMUW")); \
+                    default:      `TRACE(level, ("?")); \
+                endcase \
+            end else begin \
+                case (`INST_M_BITS'(op_type)) \
+                    `INST_M_MUL:   `TRACE(level, ("MUL")); \
+                    `INST_M_MULH:  `TRACE(level, ("MULH")); \
+                    `INST_M_MULHSU:`TRACE(level, ("MULHSU")); \
+                    `INST_M_MULHU: `TRACE(level, ("MULHU")); \
+                    `INST_M_DIV:   `TRACE(level, ("DIV")); \
+                    `INST_M_DIVU:  `TRACE(level, ("DIVU")); \
+                    `INST_M_REM:   `TRACE(level, ("REM")); \
+                    `INST_M_REMU:  `TRACE(level, ("REMU")); \
+                    default:       `TRACE(level, ("?")); \
+                endcase \
+            end \
         end else begin \
-            case (`INST_ALU_BITS'(op_type)) \
-                `INST_ALU_ADD:   `TRACE(level, ("ADD")); \
-                `INST_ALU_SUB:   `TRACE(level, ("SUB")); \
-                `INST_ALU_SLL:   `TRACE(level, ("SLL")); \
-                `INST_ALU_SRL:   `TRACE(level, ("SRL")); \
-                `INST_ALU_SRA:   `TRACE(level, ("SRA")); \
-                `INST_ALU_SLT:   `TRACE(level, ("SLT")); \
-                `INST_ALU_SLTU:  `TRACE(level, ("SLTU")); \
-                `INST_ALU_XOR:   `TRACE(level, ("XOR")); \
-                `INST_ALU_OR:    `TRACE(level, ("OR")); \
-                `INST_ALU_AND:   `TRACE(level, ("AND")); \
-                `INST_ALU_LUI:   `TRACE(level, ("LUI")); \
-                `INST_ALU_AUIPC: `TRACE(level, ("AUIPC")); \
-                `INST_ALU_ADD_W: `TRACE(level, ("ADD_W")); \
-                `INST_ALU_SUB_W: `TRACE(level, ("SUB_W")); \
-                `INST_ALU_SLL_W: `TRACE(level, ("SLL_W")); \
-                `INST_ALU_SRL_W: `TRACE(level, ("SRL_W")); \
-                `INST_ALU_SRA_W: `TRACE(level, ("SRA_W")); \
-                default:         `TRACE(level, ("?")); \
-            endcase \
+            if (`INST_ALU_IS_W(op_mod)) begin \
+                case (`INST_ALU_BITS'(op_type)) \
+                    `INST_ALU_ADD: `TRACE(level, ("ADD_W")); \
+                    `INST_ALU_SUB: `TRACE(level, ("SUB_W")); \
+                    `INST_ALU_SLL: `TRACE(level, ("SLL_W")); \
+                    `INST_ALU_SRL: `TRACE(level, ("SRL_W")); \
+                    `INST_ALU_SRA: `TRACE(level, ("SRA_W")); \
+                    default:       `TRACE(level, ("?")); \
+                endcase \
+            end else begin \
+                case (`INST_ALU_BITS'(op_type)) \
+                    `INST_ALU_ADD:   `TRACE(level, ("ADD")); \
+                    `INST_ALU_SUB:   `TRACE(level, ("SUB")); \
+                    `INST_ALU_SLL:   `TRACE(level, ("SLL")); \
+                    `INST_ALU_SRL:   `TRACE(level, ("SRL")); \
+                    `INST_ALU_SRA:   `TRACE(level, ("SRA")); \
+                    `INST_ALU_SLT:   `TRACE(level, ("SLT")); \
+                    `INST_ALU_SLTU:  `TRACE(level, ("SLTU")); \
+                    `INST_ALU_XOR:   `TRACE(level, ("XOR")); \
+                    `INST_ALU_OR:    `TRACE(level, ("OR")); \
+                    `INST_ALU_AND:   `TRACE(level, ("AND")); \
+                    `INST_ALU_LUI:   `TRACE(level, ("LUI")); \
+                    `INST_ALU_AUIPC: `TRACE(level, ("AUIPC")); \
+                    default:         `TRACE(level, ("?")); \
+                endcase \
+            end \
         end \
     end \
     `EX_LSU: begin \
@@ -77,11 +91,14 @@
                 `INST_LSU_LB: `TRACE(level, ("LB")); \
                 `INST_LSU_LH: `TRACE(level, ("LH")); \
                 `INST_LSU_LW: `TRACE(level, ("LW")); \
+                `INST_LSU_LD: `TRACE(level, ("LD")); \
                 `INST_LSU_LBU:`TRACE(level, ("LBU")); \
                 `INST_LSU_LHU:`TRACE(level, ("LHU")); \
+                `INST_LSU_LWU:`TRACE(level, ("LWU")); \
                 `INST_LSU_SB: `TRACE(level, ("SB")); \
                 `INST_LSU_SH: `TRACE(level, ("SH")); \
                 `INST_LSU_SW: `TRACE(level, ("SW")); \
+                `INST_LSU_SD: `TRACE(level, ("SD")); \
                 default:      `TRACE(level, ("?")); \
             endcase \
         end else if (op_mod == 1) begin \

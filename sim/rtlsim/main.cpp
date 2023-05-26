@@ -46,7 +46,6 @@ static void parse_args(int argc, char **argv) {
 int main(int argc, char **argv) {
 
 	int exitcode = 0;
-	bool failed = false;
 	
 	parse_args(argc, argv);
 
@@ -85,20 +84,19 @@ int main(int argc, char **argv) {
 		if (riscv_test) {
 			if (1 == exitcode) {
 				std::cout << "Passed" << std::endl;
+				exitcode = 0;
 			} else {
-				std::cout << "Failed: exitcode=" << exitcode << std::endl;
-				failed = true;
+				std::cout << "Failed" << std::endl;
+				exitcode = 1;
+				break;
 			}
 		} else {
 			if (exitcode != 0) {
 				std::cout << "*** error: exitcode=" << exitcode << std::endl;
-				failed = true;
+				break;
 			}
-		}	
-		
-		if (failed)
-			break;
+		}
 	}
 
-	return failed ? exitcode : 0;
+	return exitcode;
 }

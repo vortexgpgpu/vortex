@@ -37,8 +37,8 @@ module VX_fpu_agent #(
     wire [`FPU_REQ_TAG_WIDTH-1:0] req_tag, rsp_tag;    
     wire mdata_full;
 
-    wire mdata_push = fpu_agent_if.valid && fpu_agent_if.ready;
-    wire mdata_pop  = fpu_rsp_if.valid && fpu_rsp_if.ready;
+    wire fpu_agent_fire = fpu_agent_if.valid && fpu_agent_if.ready;
+    wire fpu_rsp_fire = fpu_rsp_if.valid && fpu_rsp_if.ready;
 
     assign rsp_tag = fpu_rsp_if.tag;
 
@@ -48,13 +48,13 @@ module VX_fpu_agent #(
     ) tag_store  (
         .clk          (clk),
         .reset        (reset),
-        .acquire_slot (mdata_push),       
+        .acquire_slot (fpu_agent_fire),       
         .write_addr   (req_tag),                
         .read_addr    (rsp_tag),
         .release_addr (rsp_tag),        
         .write_data   ({fpu_agent_if.uuid, fpu_agent_if.wid, fpu_agent_if.tmask, fpu_agent_if.PC, fpu_agent_if.rd}),                    
         .read_data    ({rsp_uuid,          rsp_wid,          rsp_tmask,          rsp_PC,          rsp_rd}), 
-        .release_slot (mdata_pop),     
+        .release_slot (fpu_rsp_fire),     
         .full         (mdata_full),
         `UNUSED_PIN (empty)
     );
@@ -102,7 +102,7 @@ module VX_fpu_agent #(
         end
     end
     
-    assign fpu_to_csr_if.write_enable = fpu_rsp_if.valid && fpu_rsp_if.ready && fpu_rsp_if.has_fflags;
+    assign fpu_to_csr_if.write_enable = fpu_rsp_fire && fpu_rsp_if.has_fflags;
     assign fpu_to_csr_if.write_wid    = rsp_wid;     
     assign fpu_to_csr_if.write_fflags = rsp_fflags;
 
@@ -126,15 +126,17 @@ module VX_fpu_agent #(
 
     // pending request
 
+    wire fpu_commit_fire = fpu_commit_if.valid && fpu_commit_if.ready;
+
     reg req_pending_r;
     always @(posedge clk) begin
         if (reset) begin
             req_pending_r <= 0;
         end else begin                      
-            if (fpu_agent_if.valid && fpu_agent_if.ready) begin
+            if (fpu_agent_fire) begin
                  req_pending_r <= 1;
             end
-            if (fpu_commit_if.valid && fpu_commit_if.ready) begin
+            if (fpu_commit_fire) begin
                  req_pending_r <= 0;
             end
         end

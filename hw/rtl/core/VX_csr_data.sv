@@ -10,8 +10,8 @@ import VX_fpu_types::*;
 module VX_csr_data #(
     parameter CORE_ID = 0
 ) (
-    input wire clk,
-    input wire reset,
+    input wire                          clk,
+    input wire                          reset,
 
     input base_dcrs_t                   base_dcrs,
 
@@ -93,7 +93,8 @@ module VX_csr_data #(
                 `CSR_FCSR:     fcsr[write_wid] <= write_data[`FP_FLAGS_BITS+`INST_FRM_BITS-1:0];
             `endif
                 `CSR_SATP:     csr_satp     <= write_data;
-                `CSR_MSTATUS:  csr_mstatus  <= write_data;
+                `CSR_MSTATUS,
+                `CSR_MNSTATUS: csr_mstatus  <= write_data;
                 `CSR_MEDELEG:  csr_medeleg  <= write_data;
                 `CSR_MIDELEG:  csr_mideleg  <= write_data;
                 `CSR_MIE:      csr_mie      <= write_data;
@@ -144,7 +145,8 @@ module VX_csr_data #(
             
             `CSR_SATP       : read_data_ro_r = `XLEN'(csr_satp);
             
-            `CSR_MSTATUS    : read_data_ro_r = `XLEN'(csr_mstatus);
+            `CSR_MSTATUS,
+            `CSR_MNSTATUS   : read_data_ro_r = `XLEN'(csr_mstatus);
             `CSR_MISA       : read_data_ro_r = (((`XLEN'($clog2(`XLEN))-4) << (`XLEN-2)) | `MISA_STD);
             `CSR_MEDELEG    : read_data_ro_r = `XLEN'(csr_medeleg);
             `CSR_MIDELEG    : read_data_ro_r = `XLEN'(csr_mideleg);

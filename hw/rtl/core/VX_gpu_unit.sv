@@ -347,8 +347,11 @@ module VX_gpu_unit #(
     assign gpu_commit_if.data = rsp_data[(`NUM_THREADS * `XLEN)-1:0];
 
     // warp control reponse
-     
-    assign warp_ctl_if.valid = gpu_commit_if.valid && gpu_commit_if.ready && rsp_is_wctl;
+
+    wire gpu_req_fire = gpu_req_if.valid && gpu_req_if.ready;
+    wire gpu_commit_fire = gpu_commit_if.valid && gpu_commit_if.ready;
+         
+    assign warp_ctl_if.valid = gpu_commit_fire && rsp_is_wctl;
     assign warp_ctl_if.wid   = gpu_commit_if.wid;    
     assign {warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.split, warp_ctl_if.barrier} = rsp_data[WCTL_DATAW-1:0];
 
@@ -359,10 +362,10 @@ module VX_gpu_unit #(
         if (reset) begin
             req_pending_r <= 0;
         end else begin                      
-            if (gpu_req_if.valid && gpu_req_if.ready) begin
+            if (gpu_req_fire) begin
                  req_pending_r <= 1;
             end
-            if (gpu_commit_if.valid && gpu_commit_if.ready) begin
+            if (gpu_commit_fire) begin
                  req_pending_r <= 0;
             end
         end

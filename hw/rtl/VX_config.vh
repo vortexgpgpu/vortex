@@ -29,7 +29,6 @@
 `ifdef XLEN_64
 `define XLEN 64
 // disable unsupported extensions
-`define EXT_M_DISABLE 1
 `define EXT_F_DISABLE 1
 `else
 `ifdef XLEN_32
@@ -140,7 +139,7 @@
 `endif
 
 `ifndef SYNTHESIS
-`ifndef DISABLE_DPI
+`ifdef ENABLE_DPI
     `define IMUL_DPI
     `define IDIV_DPI
     `define FPU_DPI

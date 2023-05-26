@@ -10,8 +10,8 @@ module VX_execute #(
 ) (
     `SCOPE_IO_DECL
 
-    input wire clk, 
-    input wire reset,    
+    input wire              clk, 
+    input wire              reset,    
 
     input base_dcrs_t       base_dcrs,
 

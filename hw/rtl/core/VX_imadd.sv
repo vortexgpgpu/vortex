@@ -8,8 +8,8 @@ module VX_imadd #(
     parameter SIGNED     = 0,
     parameter SHIFT_WIDTH = `LOG2UP(MAX_SHIFT+1)
 ) (
-    input wire clk,
-    input wire reset,
+    input wire                          clk,
+    input wire                          reset,
     
     // Inputs
     input wire                          valid_in,

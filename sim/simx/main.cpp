@@ -94,6 +94,7 @@ int main(int argc, char **argv) {
       exitcode = 0;
     } else {
       std::cout << "Failed." << std::endl;
+      exitcode = 1;
     }
   } else {
     if (exitcode != 0) {

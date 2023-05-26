@@ -8,8 +8,8 @@ module VX_issue #(
 ) (
     `SCOPE_IO_DECL
 
-    input wire      clk,
-    input wire      reset,
+    input wire              clk,
+    input wire              reset,
 
 `ifdef PERF_ENABLE
     VX_perf_pipeline_if.issue perf_issue_if,

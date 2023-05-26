@@ -11,7 +11,7 @@ module VX_lsu_unit #(
 ) (    
     `SCOPE_IO_DECL
 
-   input wire              clk,
+   input wire               clk,
     input wire              reset,
 
    // Dcache interface
@@ -143,20 +143,31 @@ module VX_lsu_unit #(
         always @(*) begin
             mem_req_byteen[i] = {DCACHE_WORD_SIZE{lsu_req_if.wb}};
             case (`INST_LSU_WSIZE(lsu_req_if.op_type))
-                0: mem_req_byteen[i][req_align[i]] = 1;
-                1: begin // half (16 bit)
+                0: begin // 8-bit   
                     mem_req_byteen[i][req_align[i]] = 1;
-                    mem_req_byteen[i][req_align[i]+1] = 1;
                 end
-                2: begin // word (32 bit)
-                    mem_req_byteen[i][req_align[i]] = 1;
-                    mem_req_byteen[i][req_align[i]+1] = 1;
-                    mem_req_byteen[i][req_align[i]+2] = 1;
-                    mem_req_byteen[i][req_align[i]+3] = 1;
+                1: begin // 16 bit
+                    mem_req_byteen[i][{req_align[i][REQ_ASHIFT-1:1], 1'b0}] = 1;
+                    mem_req_byteen[i][{req_align[i][REQ_ASHIFT-1:1], 1'b1}] = 1;
                 end
-                default : mem_req_byteen[i] = {DCACHE_WORD_SIZE{1'b1}}; // double (64 bit)
+            `ifdef XLEN_64
+                2: begin // 32 bit
+                    mem_req_byteen[i][{req_align[i][REQ_ASHIFT-1:2], 2'b00}] = 1;
+                    mem_req_byteen[i][{req_align[i][REQ_ASHIFT-1:2], 2'b01}] = 1;
+                    mem_req_byteen[i][{req_align[i][REQ_ASHIFT-1:2], 2'b10}] = 1;
+                    mem_req_byteen[i][{req_align[i][REQ_ASHIFT-1:2], 2'b11}] = 1;
+                end
+            `endif
+                default : mem_req_byteen[i] = {DCACHE_WORD_SIZE{1'b1}};
             endcase
         end
+
+        /*wire lsu_req_fire = lsu_req_if.valid && lsu_req_if.ready;
+        // TODO: memory misalignment not supported!
+        `RUNTIME_ASSERT(~(lsu_req_fire && `INST_LSU_WSIZE(lsu_req_if.op_type) == 1 && req_align[i][0] != 0), ("misaligned memory access!"));
+    `ifdef XLEN_64
+        `RUNTIME_ASSERT(~(lsu_req_fire && `INST_LSU_WSIZE(lsu_req_if.op_type) == 2 && req_align[i][1:0] != 0), ("misaligned memory access!"));
+    `endif*/
 
         always @(*) begin
             mem_req_data[i] = lsu_req_if.store_data[i];

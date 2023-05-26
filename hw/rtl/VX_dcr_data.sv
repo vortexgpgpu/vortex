@@ -9,8 +9,8 @@ import VX_gpu_types::*;
 `IGNORE_WARNINGS_END
 
 module VX_dcr_data (
-    input wire clk,
-    input wire reset,
+    input wire              clk,
+    input wire              reset,
 
     // Inputs
     VX_dcr_write_if.slave   dcr_write_if,

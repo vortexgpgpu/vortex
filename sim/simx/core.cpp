@@ -392,7 +392,7 @@ void Core::dcache_read(void *data, uint64_t addr, uint32_t size) {
 
 void Core::dcache_write(const void* data, uint64_t addr, uint32_t size) {  
   auto type = this->get_addr_type(addr);
-  if (addr >= IO_COUT_ADDR 
+  if (addr >= uint64_t(IO_COUT_ADDR)
    && addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {
      this->writeToStdOut(data, addr, size);
   } else {
@@ -431,6 +431,7 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
   case CSR_MIE:
   case CSR_MTVEC:
   case CSR_MEPC:
+  case CSR_MNSTATUS:
     return 0;
 
   case CSR_FFLAGS:
@@ -700,6 +701,7 @@ void Core::set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid) {
   case CSR_MEPC:
   case CSR_PMPCFG0:
   case CSR_PMPADDR0:
+  case CSR_MNSTATUS:
     break;
   default:
   #ifdef EXT_ROP_ENABLE

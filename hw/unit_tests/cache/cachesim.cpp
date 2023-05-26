@@ -235,7 +235,7 @@ void CacheSim::eval_mem_bus() {
     if (cache_->mem_req_valid) {
       if (cache_->mem_req_rw) { //write = 1
         uint64_t byteen = cache_->mem_req_byteen;
-        unsigned base_addr = (cache_->mem_req_addr * MEM_BLOCK_SIZE);
+        uint64_t base_addr = (cache_->mem_req_addr * MEM_BLOCK_SIZE);
         uint8_t* data = (uint8_t*)(cache_->mem_req_data);
         for (int i = 0; i < MEM_BLOCK_SIZE; i++) {
           if ((byteen >> i) & 0x1) {            

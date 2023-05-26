@@ -31,7 +31,7 @@ PROJECT = simx
 all: $(DESTDIR)/$(PROJECT)
 	
 $(DESTDIR)/$(PROJECT): $(SRCS) main.cpp
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+	$(CXX) $(CXXFLAGS) -DSTARTUP_ADDR=0x80000000 $^ $(LDFLAGS) -o $@
 
 $(DESTDIR)/lib$(PROJECT).so: $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ -shared $(LDFLAGS) -o $@

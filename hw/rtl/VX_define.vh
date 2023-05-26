@@ -95,36 +95,32 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define INST_OP_BITS    5
+`define INST_OP_BITS    4
 `define INST_MOD_BITS   3
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define INST_ALU_ADD         5'b00000
-`define INST_ALU_LUI         5'b00010
-`define INST_ALU_AUIPC       5'b00011
-`define INST_ALU_SLTU        5'b00100
-`define INST_ALU_SLT         5'b00101
-`define INST_ALU_SRL         5'b01000
-`define INST_ALU_SRA         5'b01001
-`define INST_ALU_SUB         5'b01011
-`define INST_ALU_AND         5'b01100
-`define INST_ALU_OR          5'b01101
-`define INST_ALU_XOR         5'b01110
-`define INST_ALU_SLL         5'b01111
-`define INST_ALU_OTHER       5'b00111
-// RV64I instruction versions
-`define INST_ALU_ADD_W       5'b10000
-`define INST_ALU_SUB_W       5'b11011
-`define INST_ALU_SLL_W       5'b11111
-`define INST_ALU_SRL_W       5'b11000
-`define INST_ALU_SRA_W       5'b11001
-`define INST_ALU_BITS        5
+`define INST_ALU_ADD         4'b0000
+`define INST_ALU_LUI         4'b0010
+`define INST_ALU_AUIPC       4'b0011
+`define INST_ALU_SLTU        4'b0100
+`define INST_ALU_SLT         4'b0101
+`define INST_ALU_SRL         4'b1000
+`define INST_ALU_SRA         4'b1001
+`define INST_ALU_SUB         4'b1011
+`define INST_ALU_AND         4'b1100
+`define INST_ALU_OR          4'b1101
+`define INST_ALU_XOR         4'b1110
+`define INST_ALU_SLL         4'b1111
+`define INST_ALU_OTHER       4'b0111
+`define INST_ALU_BITS        4
 `define INST_ALU_OP(x)       x[`INST_ALU_BITS-1:0]
-`define INST_ALU_OP_CLASS(x) x[3:2]
-`define INST_ALU_SIGNED(x)   x[0]
-`define INST_ALU_IS_BR(x)    x[0]
-`define INST_ALU_IS_MUL(x)   x[1]
+`define INST_ALU_CLASS(op)   op[3:2]
+`define INST_ALU_SIGNED(op)  op[0]
+`define INST_ALU_IS_SUB(op)  (op[3:0] == 4'b1011)
+`define INST_ALU_IS_BR(mod)  mod[0]
+`define INST_ALU_IS_M(mod)   mod[1]
+`define INST_ALU_IS_W(mod)   mod[2]
 
 `define INST_BR_EQ           4'b0000
 `define INST_BR_NE           4'b0010
@@ -145,23 +141,20 @@
 `define INST_BR_LESS(x)      x[2]
 `define INST_BR_STATIC(x)    x[3]
 
-`define INST_MUL_MUL         4'h0
-`define INST_MUL_MULH        4'h1
-`define INST_MUL_MULHSU      4'h2
-`define INST_MUL_MULHU       4'h3
-`define INST_MUL_DIV         4'h4
-`define INST_MUL_DIVU        4'h5
-`define INST_MUL_REM         4'h6
-`define INST_MUL_REMU        4'h7
-`define INST_MUL_BITS        4
-`define INST_MUL_IS_DIV(x)   x[2]
-
-// RV64M instruction versions
-`define INST_MUL_MULW        4'b1000
-`define INST_MUL_DIVW        4'b1100
-`define INST_MUL_DIVUW       4'b1101
-`define INST_MUL_REMW        4'b1110
-`define INST_MUL_REMUW       4'b1111
+`define INST_M_MUL          3'b000
+`define INST_M_MULHU        3'b001
+`define INST_M_MULH         3'b010
+`define INST_M_MULHSU       3'b011
+`define INST_M_DIV          3'b100
+`define INST_M_DIVU         3'b101
+`define INST_M_REM          3'b110
+`define INST_M_REMU         3'b111
+`define INST_M_BITS         3
+`define INST_M_IS_MULX(op)  (~op[2])
+`define INST_M_IS_MULH(op)  (op[1:0] != 0)
+`define INST_M_SIGNED_A(op) (op[1:0] != 1)
+`define INST_M_IS_REM(op)   op[1]
+`define INST_M_SIGNED(op)   (~op[0])
 
 `define INST_FMT_B           3'b000
 `define INST_FMT_H           3'b001

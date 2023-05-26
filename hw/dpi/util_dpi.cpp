@@ -23,8 +23,8 @@
 
 
 extern "C" {
-  void dpi_imul(bool enable, INT_TYPE a, INT_TYPE b, bool is_signed_a, bool is_signed_b, INT_TYPE* resultl, INT_TYPE* resulth);
-  void dpi_idiv(bool enable, INT_TYPE a, INT_TYPE b, bool is_signed, INT_TYPE* quotient, INT_TYPE* remainder);
+  void dpi_imul(bool enable, bool is_signed_a, bool is_signed_b, INT_TYPE a, INT_TYPE b, INT_TYPE* resultl, INT_TYPE* resulth);
+  void dpi_idiv(bool enable, bool is_signed, INT_TYPE a, INT_TYPE b, INT_TYPE* quotient, INT_TYPE* remainder);
 
   int dpi_register();
   void dpi_assert(int inst, bool cond, int delay);
@@ -108,11 +108,11 @@ void dpi_assert(int inst, bool cond, int delay) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-#ifdef XLEN_64
-void dpi_imul(bool enable, INT_TYPE a, INT_TYPE b, bool is_signed_a, bool is_signed_b, INT_TYPE* resultl, INT_TYPE* resulth) {
+
+void dpi_imul(bool enable, bool is_signed_a, bool is_signed_b, INT_TYPE a, INT_TYPE b, INT_TYPE* resultl, INT_TYPE* resulth) {
   if (!enable)
     return;
-
+#ifdef XLEN_64  
   uint64_t a_lo = (uint64_t)(uint32_t)a;
   uint64_t a_hi = a >> 32;
   uint64_t b_lo = (uint64_t)(uint32_t)b;
@@ -127,12 +127,7 @@ void dpi_imul(bool enable, INT_TYPE a, INT_TYPE b, bool is_signed_a, bool is_sig
 
   *resultl = p0 + (p1 << 32) + (p2 << 32);
   *resulth = p3 + (p1 >> 32) + (p2 >> 32) + cy;
-}
 #else
-void dpi_imul(bool enable, int a, int b, bool is_signed_a, bool is_signed_b, int* resultl, int* resulth) {
-  if (!enable)
-    return;
-    
   uint64_t first  = *(uint32_t*)&a;
   uint64_t second = *(uint32_t*)&b;
     
@@ -153,10 +148,10 @@ void dpi_imul(bool enable, int a, int b, bool is_signed_a, bool is_signed_b, int
     
   *resultl = result & 0xFFFFFFFF;
   *resulth = (result >> 32) & 0xFFFFFFFF;
-}
 #endif
+}
 
-void dpi_idiv(bool enable, INT_TYPE a, INT_TYPE b, bool is_signed, INT_TYPE* quotient, INT_TYPE* remainder) {
+void dpi_idiv(bool enable, bool is_signed, INT_TYPE a, INT_TYPE b, INT_TYPE* quotient, INT_TYPE* remainder) {
   if (!enable)
     return;
 

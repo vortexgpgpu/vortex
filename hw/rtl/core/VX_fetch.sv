@@ -10,14 +10,14 @@ module VX_fetch #(
 ) (
     `SCOPE_IO_DECL
 
-    input wire clk,
-    input wire reset,
+    input wire              clk,
+    input wire              reset,
 
-    input base_dcrs_t      base_dcrs,
+    input base_dcrs_t       base_dcrs,
 
     // Icache interface
-    VX_cache_req_if.master icache_req_if,
-    VX_cache_rsp_if.slave  icache_rsp_if,
+    VX_cache_req_if.master  icache_req_if,
+    VX_cache_rsp_if.slave   icache_rsp_if,
 
     // inputs
     VX_wrelease_if.slave    wrelease_if,
