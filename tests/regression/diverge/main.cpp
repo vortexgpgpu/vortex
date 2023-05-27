@@ -154,9 +154,7 @@ int run_test(const kernel_arg_t& kernel_arg,
   return 0;
 }
 
-int main(int argc, char *argv[]) {
-  size_t value; 
-  
+int main(int argc, char *argv[]) {  
   // parse command arguments
   parse_args(argc, argv);
 
@@ -190,11 +188,8 @@ int main(int argc, char *argv[]) {
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;  
-
-  RT_CHECK(vx_mem_alloc(device, src_buf_size, &value));
-  kernel_arg.src_addr = value;
-  RT_CHECK(vx_mem_alloc(device, dst_buf_size, &value));
-  kernel_arg.dst_addr = value;
+  RT_CHECK(vx_mem_alloc(device, src_buf_size, &kernel_arg.src_addr));
+  RT_CHECK(vx_mem_alloc(device, dst_buf_size, &kernel_arg.dst_addr));
 
   kernel_arg.num_points = num_points;
 

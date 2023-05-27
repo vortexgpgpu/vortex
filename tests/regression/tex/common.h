@@ -15,7 +15,7 @@ typedef struct {
   uint32_t  dst_height;
   uint8_t   dst_stride;  
   uint32_t  dst_pitch;
-  uint32_t  dst_addr;
+  uint64_t  dst_addr;
   uint8_t   filter;
   graphics::TexDCRS dcrs; 
 } kernel_arg_t;

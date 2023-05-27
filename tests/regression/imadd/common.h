@@ -8,11 +8,11 @@
 typedef struct {
   uint32_t num_tasks;  
   uint32_t task_size;  
-  uint32_t src0_addr;
-  uint32_t src1_addr;
-  uint32_t src2_addr;
-  uint32_t src3_addr;
-  uint32_t dst_addr;
+  uint64_t src0_addr;
+  uint64_t src1_addr;
+  uint64_t src2_addr;
+  uint64_t src3_addr;
+  uint64_t dst_addr;
   bool     use_sw;
 } kernel_arg_t;
 

@@ -23,9 +23,11 @@
 const char* kernel_file = "kernel.bin";
 uint32_t count = 0;
 
-size_t usr_test_mem;
+static uint64_t io_base_addr = IO_CSR_ADDR + IO_CSR_SIZE;
 
-std::vector<uint32_t> src_data;
+uint64_t usr_test_mem;
+
+std::vector<uint64_t> src_addrs;
 std::vector<int32_t> ref_data;
 
 vx_device_h device = nullptr;
@@ -71,8 +73,8 @@ void cleanup() {
   }
 }
 
-void gen_input_data(uint32_t num_points) {
-  src_data.resize(num_points);
+void gen_src_addrs(uint32_t num_points) {
+  src_addrs.resize(num_points);
 
   uint32_t u = 0, k = 0;
   for (uint32_t i = 0; i < num_points; ++i) {
@@ -81,9 +83,9 @@ void gen_input_data(uint32_t num_points) {
       ++u;
     }
     uint32_t j = i % NUM_ADDRS;    
-    uint32_t v = ((j == k) ? usr_test_mem : IO_BASE_ADDR) + j * sizeof(uint32_t);
-    src_data[i] = v;
-    std::cout << std::dec << i << "," << k << ": value=0x" << std::hex << v << std::endl;
+    uint64_t a = ((j == k) ? usr_test_mem : io_base_addr) + j * sizeof(uint32_t);    
+    std::cout << std::dec << i << "," << k << ": value=0x" << std::hex << a << std::endl;
+    src_addrs[i] = a;
   }
 }
 
@@ -91,7 +93,7 @@ void gen_ref_data(uint32_t num_points) {
   ref_data.resize(num_points);
 
   for (uint32_t i = 0; i < num_points; ++i) {
-    uint32_t j = i % NUM_ADDRS;
+    int32_t j = i % NUM_ADDRS;
     ref_data[i] = j * j;
   }
 }
@@ -136,7 +138,7 @@ int run_test(const kernel_arg_t& kernel_arg,
 }
 
 int main(int argc, char *argv[]) {
-  size_t value;
+  uint64_t value;
   
   // parse command arguments
   parse_args(argc, argv);
@@ -153,19 +155,18 @@ int main(int argc, char *argv[]) {
 
   uint32_t num_points = count;
 
-  RT_CHECK(vx_mem_alloc(device, NUM_ADDRS * sizeof(uint32_t), &usr_test_mem));
+  RT_CHECK(vx_mem_alloc(device, NUM_ADDRS * sizeof(int32_t), &usr_test_mem));
 
   // generate input data
-  gen_input_data(num_points);
+  gen_src_addrs(num_points);
 
   // generate reference data
   gen_ref_data(num_points);
 
-  uint32_t src_buf_size = src_data.size() * sizeof(int32_t);  
-  uint32_t dst_buf_size = src_data.size() * sizeof(int32_t);
+  uint32_t src_buf_size = num_points * sizeof(uint64_t);  
+  uint32_t dst_buf_size = num_points * sizeof(int32_t);
 
-  std::cout << "number of points: " << num_points << std::endl;
-  std::cout << "buffer size: " << dst_buf_size << " bytes" << std::endl;
+  std::cout << "number of points: " << std::dec << num_points << std::endl;
 
   // upload program
   std::cout << "upload program" << std::endl;  
@@ -178,7 +179,6 @@ int main(int argc, char *argv[]) {
   kernel_arg.src_addr = value;
   RT_CHECK(vx_mem_alloc(device, dst_buf_size, &value));
   kernel_arg.dst_addr = value;
-
   kernel_arg.num_points = num_points;
 
   std::cout << "dev_src=" << std::hex << kernel_arg.src_addr << std::endl;
@@ -186,7 +186,7 @@ int main(int argc, char *argv[]) {
   
   // allocate staging buffer  
   std::cout << "allocate staging buffer" << std::endl;    
-  uint32_t staging_buf_size = std::max<uint32_t>(NUM_ADDRS * sizeof(uint32_t),
+  uint32_t staging_buf_size = std::max<uint32_t>(NUM_ADDRS * sizeof(uint64_t),
                                 std::max<uint32_t>(src_buf_size,
                                   std::max<uint32_t>(dst_buf_size, 
                                     sizeof(kernel_arg_t))));
@@ -205,17 +205,17 @@ int main(int argc, char *argv[]) {
     std::cout << "upload test address data" << std::endl;
     auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < NUM_ADDRS; ++i) {
-      buf_ptr[i] = i * i;
+      buf_ptr[i] = ref_data.at(i);
     }
-    RT_CHECK(vx_copy_to_dev(staging_buf, 0xFF000000,   NUM_ADDRS * sizeof(uint32_t), 0));
-    RT_CHECK(vx_copy_to_dev(staging_buf, usr_test_mem, NUM_ADDRS * sizeof(uint32_t), 0));
+    RT_CHECK(vx_copy_to_dev(staging_buf, io_base_addr, NUM_ADDRS * sizeof(int32_t), 0));
+    RT_CHECK(vx_copy_to_dev(staging_buf, usr_test_mem, NUM_ADDRS * sizeof(int32_t), 0));
   }
 
   // upload source buffer
   {
     std::cout << "upload source buffer" << std::endl;      
-    auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
-    memcpy(buf_ptr, src_data.data(), num_points * sizeof(int32_t));
+    auto buf_ptr = (uint64_t*)vx_host_ptr(staging_buf);
+    memcpy(buf_ptr, src_addrs.data(), src_buf_size);
     RT_CHECK(vx_copy_to_dev(staging_buf, kernel_arg.src_addr, src_buf_size, 0));
   }
 

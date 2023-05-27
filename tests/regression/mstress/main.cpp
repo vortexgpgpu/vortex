@@ -181,9 +181,7 @@ int run_test(const kernel_arg_t& kernel_arg,
   return 0;
 }
 
-int main(int argc, char *argv[]) {
-  size_t value;
-  
+int main(int argc, char *argv[]) {  
   // parse command arguments
   parse_args(argc, argv);
 
@@ -220,14 +218,10 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_upload_kernel_file(device, kernel_file));
 
   // allocate device memory
-  std::cout << "allocate device memory" << std::endl;  
-
-  RT_CHECK(vx_mem_alloc(device, addr_buf_size, &value));
-  kernel_arg.src0_addr = value;
-  RT_CHECK(vx_mem_alloc(device, src_buf_size, &value));
-  kernel_arg.src1_addr = value;
-  RT_CHECK(vx_mem_alloc(device, dst_buf_size, &value));
-  kernel_arg.dst_addr = value;
+  std::cout << "allocate device memory" << std::endl;
+  RT_CHECK(vx_mem_alloc(device, addr_buf_size, &kernel_arg.src0_addr));
+  RT_CHECK(vx_mem_alloc(device, src_buf_size, &kernel_arg.src1_addr));
+  RT_CHECK(vx_mem_alloc(device, dst_buf_size, &kernel_arg.dst_addr));
 
   kernel_arg.num_tasks = num_tasks;
   kernel_arg.stride = count;

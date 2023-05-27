@@ -2,7 +2,7 @@ PROJECT = basic
 
 SRCS = main.cpp
 
-VX_SRCS = kernel.c ../../../kernel/src/vx_perf.c start.S
+VX_SRCS = kernel.cpp ../../../kernel/src/vx_perf.c start.S
 
 OPTS ?= -n256
 

@@ -543,7 +543,7 @@ end
             `TRACE(1, (", tag=0x%0h (#%0d)\n", req_tag, req_dbg_uuid));
         end
         if (rsp_valid && rsp_ready) begin
-            `TRACE(1, ("%d: %s-rsp: mask=%b, data=", $time, INSTANCE_ID, rsp_mask));
+            `TRACE(1, ("%d: %s-rsp: mask=%b, eop=%b, data=", $time, INSTANCE_ID, rsp_mask, rsp_eop));
             `TRACE_ARRAY1D(1, rsp_data, NUM_REQS);
             `TRACE(1, (", tag=0x%0h (#%0d)\n", rsp_tag, rsp_dbg_uuid));
         end

@@ -5,7 +5,7 @@
 
 typedef struct {
   uint32_t num_points;
-  uint32_t src_addr;
+  uint64_t src_addr;
 } kernel_arg_t;
 
 #endif

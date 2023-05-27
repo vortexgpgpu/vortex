@@ -48,6 +48,8 @@ module VX_fpu_fpnew #(
 
     localparam FPU_DPATHW = 32'd32;
 
+    localparam LATENCY_FDIVSQRT = `MAX(`LATENCY_FDIV, `LATENCY_FSQRT);
+
     localparam fpnew_pkg::fpu_features_t FPU_FEATURES = '{
         Width:         FPU_DPATHW,
         EnableVectors: 1'b0,
@@ -58,7 +60,7 @@ module VX_fpu_fpnew #(
 
     localparam fpnew_pkg::fpu_implementation_t FPU_IMPLEMENTATION = '{
       PipeRegs:'{'{`LATENCY_FMA, 0, 0, 0, 0},   // ADDMUL
-                 '{default: (`LATENCY_FDIV + LATENCY_FSQRT)}, // DIVSQRT
+                 '{default: unsigned'(LATENCY_FDIVSQRT)}, // DIVSQRT
                  '{default: `LATENCY_FNCP},     // NONCOMP
                  '{default: `LATENCY_FCVT}},    // CONV
       UnitTypes:'{'{default: UNIT_FMULADD},     // ADDMUL

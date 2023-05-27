@@ -95,8 +95,8 @@
 `define STARTUP_ADDR 64'h180000000
 `endif
 
-`ifndef IO_BASE_ADDR
-`define IO_BASE_ADDR 64'h1FF000000
+`ifndef STACK_BASE_ADDR
+`define STACK_BASE_ADDR 64'h1FF000000
 `endif
 
 `else
@@ -105,27 +105,25 @@
 `define STARTUP_ADDR 32'h80000000
 `endif
 
-`ifndef IO_BASE_ADDR
-`define IO_BASE_ADDR 32'hFF000000
+`ifndef STACK_BASE_ADDR
+`define STACK_BASE_ADDR 32'hFF000000
 `endif
 
+`endif
+
+`ifndef IO_BASE_ADDR
+`define IO_BASE_ADDR `STACK_BASE_ADDR
 `endif
 
 `ifndef IO_COUT_ADDR
 `define IO_COUT_ADDR `IO_BASE_ADDR
 `endif
-
-`ifndef IO_COUT_SIZE
 `define IO_COUT_SIZE `MEM_BLOCK_SIZE
-`endif
 
 `ifndef IO_CSR_ADDR
-`define IO_CSR_ADDR (`IO_COUT_ADDR + `MEM_BLOCK_SIZE)
+`define IO_CSR_ADDR (`IO_COUT_ADDR + `IO_COUT_SIZE)
 `endif
-
-`ifndef STACK_BASE_ADDR
-`define STACK_BASE_ADDR `IO_BASE_ADDR
-`endif
+`define IO_CSR_SIZE (4 * 64 * `NUM_CORES * `NUM_CLUSTERS)
 
 `ifndef STACK_LOG2_SIZE
 `define STACK_LOG2_SIZE 13
@@ -140,9 +138,12 @@
 
 `ifndef SYNTHESIS
 `ifdef ENABLE_DPI
-    `define IMUL_DPI
-    `define IDIV_DPI
-    `define FPU_DPI
+`define IMUL_DPI
+`define IDIV_DPI
+`define FPU_DPI
+`endif
+`ifndef FPU_DPI
+`define FPU_FPNEW
 `endif
 `endif
 
@@ -296,30 +297,36 @@
 `ifdef FPU_FPNEW
 `define LATENCY_FMA 4
 `define LATENCY_FSQRT 4
-`elsif VIVADO
+`else
+`ifdef VIVADO
 `define LATENCY_FMA 16    
 `else
 `define LATENCY_FMA 4
+`endif
 `endif
 `endif
 
 `ifndef LATENCY_FDIV
 `ifdef FPU_FPNEW
 `define LATENCY_FDIV 16
-`elsif VIVADO
+`else
+`ifdef VIVADO
 `define LATENCY_FDIV 28
 `else
 `define LATENCY_FDIV 15
+`endif
 `endif
 `endif
 
 `ifndef LATENCY_FSQRT
 `ifdef FPU_FPNEW
 `define LATENCY_FSQRT 16
-`elsif VIVADO
+`else
+`ifdef VIVADO
 `define LATENCY_FSQRT 28
 `else
 `define LATENCY_FSQRT 10
+`endif
 `endif
 `endif
 

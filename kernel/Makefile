@@ -35,7 +35,7 @@ else
 CFLAGS += -march=rv32imaf -mabi=ilp32f
 endif
 
-CFLAGS += -O3 -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
+CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
 CFLAGS += -I./include -I../hw
 CFLAGS += -DXLEN_$(XLEN)
 

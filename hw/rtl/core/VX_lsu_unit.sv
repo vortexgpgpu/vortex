@@ -162,12 +162,12 @@ module VX_lsu_unit #(
             endcase
         end
 
-        /*wire lsu_req_fire = lsu_req_if.valid && lsu_req_if.ready;
+        wire lsu_req_fire = lsu_req_if.valid && lsu_req_if.ready;
         // TODO: memory misalignment not supported!
         `RUNTIME_ASSERT(~(lsu_req_fire && `INST_LSU_WSIZE(lsu_req_if.op_type) == 1 && req_align[i][0] != 0), ("misaligned memory access!"));
     `ifdef XLEN_64
         `RUNTIME_ASSERT(~(lsu_req_fire && `INST_LSU_WSIZE(lsu_req_if.op_type) == 2 && req_align[i][1:0] != 0), ("misaligned memory access!"));
-    `endif*/
+    `endif
 
         always @(*) begin
             mem_req_data[i] = lsu_req_if.store_data[i];
@@ -444,8 +444,8 @@ module VX_lsu_unit #(
             end
         end
         if (mem_rsp_fire) begin
-            `TRACE(1, ("%d: D$%0d Rsp: wid=%0d, PC=0x%0h, tmask=%b, tag=0x%0h, rd=%0d, data=",
-                $time, CORE_ID, rsp_wid, rsp_pc, mem_rsp_mask, mem_rsp_tag, rsp_rd));
+            `TRACE(1, ("%d: D$%0d Rsp: wid=%0d, PC=0x%0h, tmask=%b, tag=0x%0h, rd=%0d, eop=%b, data=",
+                $time, CORE_ID, rsp_wid, rsp_pc, mem_rsp_mask, mem_rsp_tag, rsp_rd, mem_rsp_eop));
             `TRACE_ARRAY1D(1, mem_rsp_data, `NUM_THREADS);
             `TRACE(1, (", is_dup=%b (#%0d)\n", rsp_is_dup, rsp_uuid));
         end

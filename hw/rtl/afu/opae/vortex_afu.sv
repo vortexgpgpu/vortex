@@ -1016,7 +1016,7 @@ module vortex_afu #(
     VX_scope_tap #(
         .SCOPE_ID (0),
         .TRIGGERW (24),
-        .PROBEW   (367)
+        .PROBEW   (431)
     ) scope_tap (
         .clk(clk),
         .reset(scope_reset_w[0]),

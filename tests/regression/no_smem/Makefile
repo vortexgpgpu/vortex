@@ -2,7 +2,7 @@ PROJECT = no_smem
 
 OPTS ?= -n8
 
-VX_SRCS = kernel.c $(VORTEX_KN_PATH)/src/vx_perf.c $(VORTEX_KN_PATH)/src/vx_syscalls.c $(VORTEX_KN_PATH)/src/vx_print.S $(VORTEX_KN_PATH)/src/vx_start.S
+VX_SRCS = kernel.cpp $(VORTEX_KN_PATH)/src/vx_perf.c $(VORTEX_KN_PATH)/src/vx_syscalls.c $(VORTEX_KN_PATH)/src/vx_print.S $(VORTEX_KN_PATH)/src/vx_start.S
 
 SRCS = main.cpp
 

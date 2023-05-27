@@ -74,20 +74,6 @@ module VX_decode  #(
         endcase
     end
 
-    reg [`INST_M_BITS-1:0] m_type;
-    always @(*) begin
-        case (func3)
-            3'h0: m_type = `INST_M_MUL;
-            3'h1: m_type = `INST_M_MULH;
-            3'h2: m_type = `INST_M_MULHSU;
-            3'h3: m_type = `INST_M_MULHU;
-            3'h4: m_type = `INST_M_DIV;
-            3'h5: m_type = `INST_M_DIVU;
-            3'h6: m_type = `INST_M_REM;
-            3'h7: m_type = `INST_M_REMU;
-        endcase
-    end
-
     reg [`INST_BR_BITS-1:0] b_type;
     always @(*) begin
         case (func3)
@@ -112,6 +98,22 @@ module VX_decode  #(
             default: s_type = 'x;
         endcase
     end
+
+`ifdef EXT_M_ENABLE
+    reg [`INST_M_BITS-1:0] m_type;
+    always @(*) begin
+        case (func3)
+            3'h0: m_type = `INST_M_MUL;
+            3'h1: m_type = `INST_M_MULH;
+            3'h2: m_type = `INST_M_MULHSU;
+            3'h3: m_type = `INST_M_MULHU;
+            3'h4: m_type = `INST_M_DIV;
+            3'h5: m_type = `INST_M_DIVU;
+            3'h6: m_type = `INST_M_REM;
+            3'h7: m_type = `INST_M_REMU;
+        endcase
+    end
+`endif
 
     `UNUSED_VAR (rs3)
 

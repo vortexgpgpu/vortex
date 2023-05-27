@@ -11,11 +11,11 @@ typedef struct {
   uint32_t dst_width;
   uint32_t dst_height;
 
-  uint32_t cbuf_addr;  
+  uint64_t cbuf_addr;  
   uint8_t  cbuf_stride;  
   uint32_t cbuf_pitch;  
 
-  uint32_t prim_addr;
+  uint64_t prim_addr;
   bool     use_sw;
 } kernel_arg_t;
 

@@ -2,7 +2,7 @@ PROJECT = sort
 
 SRCS = main.cpp
 
-VX_SRCS = kernel.c
+VX_SRCS = kernel.cpp
 
 OPTS ?= -n16
 

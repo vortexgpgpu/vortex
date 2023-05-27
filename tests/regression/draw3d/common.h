@@ -30,15 +30,15 @@ typedef struct {
   uint32_t dst_width;
   uint32_t dst_height;
 
-  uint32_t cbuf_addr;  
+  uint64_t cbuf_addr;  
   uint8_t  cbuf_stride;  
   uint32_t cbuf_pitch;    
 
-  uint32_t zbuf_addr;  
+  uint64_t zbuf_addr;  
   uint8_t  zbuf_stride;  
   uint32_t zbuf_pitch; 
 
-  uint32_t prim_addr;
+  uint64_t prim_addr;
 
 #ifdef SW_ENABLE
   graphics::RasterDCRS raster_dcrs;

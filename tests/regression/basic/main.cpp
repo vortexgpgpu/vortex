@@ -215,9 +215,6 @@ int run_kernel_test(const kernel_arg_t& kernel_arg,
 }
 
 int main(int argc, char *argv[]) {
-
-  size_t value; 
-  
   // parse command arguments
   parse_args(argc, argv);
 
@@ -239,10 +236,9 @@ int main(int argc, char *argv[]) {
   std::cout << "buffer size: " << buf_size << " bytes" << std::endl;
 
   // allocate device memory
-  RT_CHECK(vx_mem_alloc(device, buf_size, &value));
-  kernel_arg.src_addr = value;
-  RT_CHECK(vx_mem_alloc(device, buf_size, &value));
-  kernel_arg.dst_addr = value;
+  std::cout << "allocate device memory" << std::endl;
+  RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.src_addr));
+  RT_CHECK(vx_mem_alloc(device, buf_size, &kernel_arg.dst_addr));
 
   kernel_arg.count = num_points;
 
