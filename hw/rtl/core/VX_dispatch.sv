@@ -66,15 +66,6 @@ module VX_dispatch (
     wire [`INST_LSU_BITS-1:0] lsu_op_type = `INST_LSU_BITS'(dispatch_if.op_type);
     wire lsu_is_fence = `INST_LSU_IS_FENCE(dispatch_if.op_mod);
 
-    // USED TO TRUNCATE IMMEDIATE and RS1 TO 32 BITS
-    wire [`XLEN-1:0] trunc_ibuffer_imm = ibuffer_if.imm[`XLEN-1:0];
-    wire [`NUM_THREADS-1:0][`XLEN-1:0] trunc_rs1;
-
-    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        // These values are used for PC calculations, so should stay as 32 bits
-        assign trunc_rs1[i] = gpr_rsp_if.rs1_data[i][`XLEN-1:0];
-    end
-
     VX_skid_buffer #(
         .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `INST_LSU_BITS + 1 + `XLEN + `NR_BITS + 1 + `NUM_THREADS*`XLEN + `NUM_THREADS*`XLEN),
         .OUT_REG (1)
@@ -83,7 +74,7 @@ module VX_dispatch (
         .reset     (reset),
         .valid_in  (lsu_req_valid),
         .ready_in  (lsu_req_ready),
-        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, lsu_op_type,        lsu_is_fence,        trunc_ibuffer_imm,  dispatch_if.rd, dispatch_if.wb, trunc_rs1,             gpr_rsp_if.rs2_data}),
+        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, lsu_op_type,        lsu_is_fence,        ibuffer_if.imm,     dispatch_if.rd, dispatch_if.wb, gpr_rsp_if.rs1_data,  gpr_rsp_if.rs2_data}),
         .data_out  ({lsu_req_if.uuid,  lsu_req_if.wid,  lsu_req_if.tmask,  lsu_req_if.PC,  lsu_req_if.op_type, lsu_req_if.is_fence, lsu_req_if.offset,  lsu_req_if.rd,  lsu_req_if.wb,  lsu_req_if.base_addr, lsu_req_if.store_data}),
         .valid_out (lsu_req_if.valid),
         .ready_out (lsu_req_if.ready)
@@ -95,10 +86,6 @@ module VX_dispatch (
     wire [`INST_CSR_BITS-1:0] csr_op_type = `INST_CSR_BITS'(dispatch_if.op_type);
     wire [`CSR_ADDR_BITS-1:0] csr_addr = dispatch_if.imm[`CSR_ADDR_BITS-1:0];
     wire [`NRI_BITS-1:0] csr_imm = dispatch_if.imm[`CSR_ADDR_BITS +: `NRI_BITS];
-
-    // USED TO TRUNCATE CSRs TO 32 BITS. I DONT KNOW IF THIS IS CORRECT???
-    // Commenting this to fix a warning because this csr_rs1_data signal is not being used anywhere else. -Jaswanth
-    // wire [31:0] csr_rs1_data = gpr_rsp_if.rs1_data[tid][31:0]; // CSR stays 32 bits
 
     VX_skid_buffer #(
         .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `INST_CSR_BITS + `CSR_ADDR_BITS + `NR_BITS + 1 + 1 + `NRI_BITS + `UP(`NT_BITS) + (`NUM_THREADS * `XLEN)),

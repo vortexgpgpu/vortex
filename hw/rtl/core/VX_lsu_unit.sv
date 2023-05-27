@@ -107,15 +107,15 @@ module VX_lsu_unit #(
     wire                           mem_req_valid;
     wire [`NUM_THREADS-1:0]        mem_req_mask;
     wire                           mem_req_rw;  
-    wire [`NUM_THREADS-1:0][`XLEN-REQ_ASHIFT-1:0]  mem_req_addr;
-    reg  [`NUM_THREADS-1:0][DCACHE_WORD_SIZE-1:0]   mem_req_byteen;
-    reg  [`NUM_THREADS-1:0][`XLEN-1:0]  mem_req_data;
+    wire [`NUM_THREADS-1:0][`XLEN-REQ_ASHIFT-1:0] mem_req_addr;
+    reg  [`NUM_THREADS-1:0][DCACHE_WORD_SIZE-1:0] mem_req_byteen;
+    reg  [`NUM_THREADS-1:0][`XLEN-1:0] mem_req_data;
     wire [TAG_WIDTH-1:0]           mem_req_tag;
     wire                           mem_req_ready;
 
     wire                           mem_rsp_valid;
     wire [`NUM_THREADS-1:0]        mem_rsp_mask;
-    wire [`NUM_THREADS-1:0][`XLEN-1:0]  mem_rsp_data;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] mem_rsp_data;
     wire [TAG_WIDTH-1:0]           mem_rsp_tag;
     wire                           mem_rsp_eop;
     wire                           mem_rsp_ready;
@@ -134,7 +134,7 @@ module VX_lsu_unit #(
     wire [`NUM_THREADS-1:0][REQ_ASHIFT-1:0] req_align;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin  
-        assign req_align[i]    = full_addr[i][REQ_ASHIFT-1:0];
+        assign req_align[i] = full_addr[i][REQ_ASHIFT-1:0];
         assign mem_req_addr[i] = full_addr[i][`XLEN-1:REQ_ASHIFT];
     end
 
@@ -162,12 +162,10 @@ module VX_lsu_unit #(
             endcase
         end
 
-        wire lsu_req_fire = lsu_req_if.valid && lsu_req_if.ready;
-        // TODO: memory misalignment not supported!
-        `RUNTIME_ASSERT(~(lsu_req_fire && `INST_LSU_WSIZE(lsu_req_if.op_type) == 1 && req_align[i][0] != 0), ("misaligned memory access!"));
-    `ifdef XLEN_64
-        `RUNTIME_ASSERT(~(lsu_req_fire && `INST_LSU_WSIZE(lsu_req_if.op_type) == 2 && req_align[i][1:0] != 0), ("misaligned memory access!"));
-    `endif
+        // memory misalignment not supported!
+        wire lsu_req_fire = lsu_req_if.valid && lsu_req_if.ready;        
+        `RUNTIME_ASSERT((~lsu_req_fire || ~lsu_req_if.tmask[i] || lsu_req_if.is_fence || (full_addr[i] % (1 << `INST_LSU_WSIZE(lsu_req_if.op_type))) == 0), 
+            ("misaligned memory access, PC=0x%0h, addr=0x%0h, wsize=%0d!", lsu_req_if.PC, full_addr[i], `INST_LSU_WSIZE(lsu_req_if.op_type)));
 
         always @(*) begin
             mem_req_data[i] = lsu_req_if.store_data[i];

@@ -2,7 +2,7 @@ XLEN ?= 32
 
 TARGET ?= opaesim
 
-XRT_SYN_DIR  ?= ../../../hw/syn/xilinx/xrt
+XRT_SYN_DIR ?= ../../../hw/syn/xilinx/xrt
 
 ifeq ($(XLEN),64)
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv64-gnu-toolchain
@@ -54,7 +54,6 @@ VX_CFLAGS += -DLLVM_VORTEX
 VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld $(VORTEX_KN_PATH)/libvortexrt.a
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors
-
 CXXFLAGS += -I$(VORTEX_RT_PATH)/include -I$(VORTEX_KN_PATH)/../hw
 
 LDFLAGS += -L$(VORTEX_RT_PATH)/stub -lvortex

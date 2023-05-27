@@ -114,7 +114,6 @@
 `define INST_ALU_SLL         4'b1111
 `define INST_ALU_OTHER       4'b0111
 `define INST_ALU_BITS        4
-`define INST_ALU_OP(x)       x[`INST_ALU_BITS-1:0]
 `define INST_ALU_CLASS(op)   op[3:2]
 `define INST_ALU_SIGNED(op)  op[0]
 `define INST_ALU_IS_SUB(op)  (op[3:0] == 4'b1011)
@@ -137,9 +136,9 @@
 `define INST_BR_MRET         4'b1110
 `define INST_BR_OTHER        4'b1111
 `define INST_BR_BITS         4
-`define INST_BR_NEG(x)       x[1]
-`define INST_BR_LESS(x)      x[2]
-`define INST_BR_STATIC(x)    x[3]
+`define INST_BR_NEG(op)      op[1]
+`define INST_BR_LESS(op)     op[2]
+`define INST_BR_STATIC(op)   op[3]
 
 `define INST_M_MUL          3'b000
 `define INST_M_MULHU        3'b001
@@ -176,10 +175,9 @@
 `define INST_LSU_SW          4'b1010
 `define INST_LSU_SD          4'b1011 // new for RV64I SD
 `define INST_LSU_BITS        4
-`define INST_LSU_FMT(x)      x[2:0]
-`define INST_LSU_WSIZE(x)    x[1:0]
-`define INST_LSU_IS_MEM(x)   (3'h0 == x)
-`define INST_LSU_IS_FENCE(x) (3'h1 == x)
+`define INST_LSU_FMT(op)     op[2:0]
+`define INST_LSU_WSIZE(op)   op[1:0]
+`define INST_LSU_IS_FENCE(mod) (mod == 1)
 
 `define INST_FENCE_BITS      1
 `define INST_FENCE_D         1'h0
