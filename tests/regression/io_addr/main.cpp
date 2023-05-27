@@ -205,7 +205,7 @@ int main(int argc, char *argv[]) {
     std::cout << "upload test address data" << std::endl;
     auto buf_ptr = (int32_t*)vx_host_ptr(staging_buf);
     for (uint32_t i = 0; i < NUM_ADDRS; ++i) {
-      buf_ptr[i] = ref_data.at(i);
+      buf_ptr[i] = i * i;
     }
     RT_CHECK(vx_copy_to_dev(staging_buf, io_base_addr, NUM_ADDRS * sizeof(int32_t), 0));
     RT_CHECK(vx_copy_to_dev(staging_buf, usr_test_mem, NUM_ADDRS * sizeof(int32_t), 0));
