@@ -110,7 +110,8 @@ void MemoryUnit::ADecoder::write(const void* data, uint64_t addr, uint64_t size)
 
 MemoryUnit::MemoryUnit(uint64_t pageSize)
   : pageSize_(pageSize)
-  , enableVM_(pageSize != 0) {
+  , enableVM_(pageSize != 0)
+  , amo_reservation_({0x0, false}) {
   if (pageSize != 0) {
     tlb_[0] = TLBEntry(0, 077);
   }
@@ -133,30 +134,38 @@ MemoryUnit::TLBEntry MemoryUnit::tlbLookup(uint64_t vAddr, uint32_t flagMask) {
   }
 }
 
-void MemoryUnit::read(void* data, uint64_t addr, uint64_t size, bool sup) {
+uint64_t MemoryUnit::toPhyAddr(uint64_t addr, uint32_t flagMask) {
   uint64_t pAddr;
   if (enableVM_) {
-    uint32_t flagMask = sup ? 8 : 1;
     TLBEntry t = this->tlbLookup(addr, flagMask);
     pAddr = t.pfn * pageSize_ + addr % pageSize_;
   } else {
     pAddr = addr;    
   }
+  return pAddr;
+}
+
+void MemoryUnit::read(void* data, uint64_t addr, uint64_t size, bool sup) {
+  uint64_t pAddr = this->toPhyAddr(addr, sup ? 8 : 1);
   return decoder_.read(data, pAddr, size);
 }
 
 void MemoryUnit::write(const void* data, uint64_t addr, uint64_t size, bool sup) {
-  uint64_t pAddr;
-  if (enableVM_) {
-    uint32_t flagMask = sup ? 16 : 2;
-    TLBEntry t = tlbLookup(addr, flagMask);
-    pAddr = t.pfn * pageSize_ + addr % pageSize_;    
-  } else {
-    pAddr = addr;
-  }
+  uint64_t pAddr = this->toPhyAddr(addr, sup ? 16 : 1);
   decoder_.write(data, pAddr, size);
+  amo_reservation_.valid = false;
 }
 
+void MemoryUnit::amo_reserve(uint64_t addr) {
+  uint64_t pAddr = this->toPhyAddr(addr, 1);
+  amo_reservation_.addr = pAddr;
+  amo_reservation_.valid = true;
+}
+
+bool MemoryUnit::amo_check(uint64_t addr) {
+  uint64_t pAddr = this->toPhyAddr(addr, 1);
+  return amo_reservation_.valid && (amo_reservation_.addr == pAddr);
+}
 void MemoryUnit::tlbAdd(uint64_t virt, uint64_t phys, uint32_t flags) {
   tlb_[virt / pageSize_] = TLBEntry(phys / pageSize_, flags);
 }
@@ -241,6 +250,7 @@ void RAM::loadBinImage(const char* filename, uint64_t destination) {
   std::ifstream ifs(filename);
   if (!ifs) {
     std::cout << "error: " << filename << " not found" << std::endl;
+    std::abort();
   }
 
   ifs.seekg(0, ifs.end);
@@ -273,6 +283,7 @@ void RAM::loadHexImage(const char* filename) {
   std::ifstream ifs(filename);
   if (!ifs) {
     std::cout << "error: " << filename << " not found" << std::endl;
+    std::abort();
   }
 
   ifs.seekg(0, ifs.end);

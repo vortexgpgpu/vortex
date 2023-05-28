@@ -14,35 +14,31 @@
 
 using namespace vortex;
 
-struct InstTableEntry_t {
-  bool controlFlow;
-  InstType iType;
-};
-
-static const std::unordered_map<Opcode, struct InstTableEntry_t> sc_instTable = {
-  {Opcode::R_INST,     {false, InstType::R_TYPE}},
-  {Opcode::L_INST,     {false, InstType::I_TYPE}},
-  {Opcode::I_INST,     {false, InstType::I_TYPE}},
-  {Opcode::S_INST,     {false, InstType::S_TYPE}},
-  {Opcode::B_INST,     {true , InstType::B_TYPE}},
-  {Opcode::LUI_INST,   {false, InstType::U_TYPE}},
-  {Opcode::AUIPC_INST, {false, InstType::U_TYPE}},
-  {Opcode::JAL_INST,   {true , InstType::J_TYPE}},
-  {Opcode::JALR_INST,  {true , InstType::I_TYPE}},
-  {Opcode::SYS_INST,   {true , InstType::I_TYPE}},
-  {Opcode::FENCE,      {true , InstType::I_TYPE}},
-  {Opcode::FL,         {false, InstType::I_TYPE}},
-  {Opcode::FS,         {false, InstType::S_TYPE}},
-  {Opcode::FCI,        {false, InstType::R_TYPE}}, 
-  {Opcode::FMADD,      {false, InstType::R4_TYPE}},
-  {Opcode::FMSUB,      {false, InstType::R4_TYPE}},
-  {Opcode::FMNMADD,    {false, InstType::R4_TYPE}},
-  {Opcode::FMNMSUB,    {false, InstType::R4_TYPE}},  
-  {Opcode::VSET,       {false, InstType::V_TYPE}},
-  {Opcode::EXT1,       {false, InstType::R_TYPE}},
-  {Opcode::EXT2,       {false, InstType::R4_TYPE}},
-  {Opcode::R_INST_W,   {false, InstType::R_TYPE}},
-  {Opcode::I_INST_W,   {false, InstType::I_TYPE}},
+static const std::unordered_map<Opcode, InstType> sc_instTable = {
+  {Opcode::R_INST,     InstType::R_TYPE},
+  {Opcode::L_INST,     InstType::I_TYPE},
+  {Opcode::I_INST,     InstType::I_TYPE},
+  {Opcode::S_INST,     InstType::S_TYPE},
+  {Opcode::B_INST,     InstType::B_TYPE},
+  {Opcode::LUI_INST,   InstType::U_TYPE},
+  {Opcode::AUIPC_INST, InstType::U_TYPE},
+  {Opcode::JAL_INST,   InstType::J_TYPE},
+  {Opcode::JALR_INST,  InstType::I_TYPE},
+  {Opcode::SYS_INST,   InstType::I_TYPE},
+  {Opcode::FENCE,      InstType::I_TYPE},
+  {Opcode::AMO,        InstType::R_TYPE},
+  {Opcode::FL,         InstType::I_TYPE},
+  {Opcode::FS,         InstType::S_TYPE},
+  {Opcode::FCI,        InstType::R_TYPE}, 
+  {Opcode::FMADD,      InstType::R4_TYPE},
+  {Opcode::FMSUB,      InstType::R4_TYPE},
+  {Opcode::FMNMADD,    InstType::R4_TYPE},
+  {Opcode::FMNMSUB,    InstType::R4_TYPE},  
+  {Opcode::VSET,       InstType::V_TYPE},
+  {Opcode::EXT1,       InstType::R_TYPE},
+  {Opcode::EXT2,       InstType::R4_TYPE},
+  {Opcode::R_INST_W,   InstType::R_TYPE},
+  {Opcode::I_INST_W,   InstType::I_TYPE},
 };
 
 enum Constants {
@@ -50,6 +46,7 @@ enum Constants {
   width_reg   = 5,
   width_func2 = 2,
   width_func3 = 3,
+  width_func5 = 5,
   width_func6 = 6,
   width_func7 = 7,
   width_mop   = 3,
@@ -57,6 +54,8 @@ enum Constants {
   width_i_imm = 12,
   width_j_imm = 20,
   width_v_imm = 11,
+  width_aq    = 1,
+  width_rl    = 1,
 
   shift_opcode= 0,
   shift_rd    = width_opcode,
@@ -64,6 +63,7 @@ enum Constants {
   shift_rs1   = shift_func3 + width_func3,
   shift_rs2   = shift_rs1 + width_reg,
   shift_func2 = shift_rs2 + width_reg,
+  shift_func5 = shift_rs2 + width_reg + width_rl + width_aq,
   shift_func7 = shift_rs2 + width_reg,
   shift_rs3   = shift_func7 + width_func2,
   shift_vmop  = shift_func7 + width_vmask,
@@ -71,21 +71,23 @@ enum Constants {
   shift_func6 = shift_func7 + width_vmask,
   shift_vset  = shift_func7 + width_func6,
 
-  mask_opcode = (1<<width_opcode)-1,  
-  mask_reg    = (1<<width_reg)-1,
-  mask_func2  = (1<<width_func2)-1,
-  mask_func3  = (1<<width_func3)-1,
-  mask_func6  = (1<<width_func6)-1,
-  mask_func7  = (1<<width_func7)-1,
-  mask_i_imm  = (1<<width_i_imm)-1,
-  mask_j_imm  = (1<<width_j_imm)-1,
-  mask_v_imm  = (1<<width_v_imm)-1,
+  mask_opcode = (1 << width_opcode) - 1,  
+  mask_reg    = (1 << width_reg)   - 1,
+  mask_func2  = (1 << width_func2) - 1,
+  mask_func3  = (1 << width_func3) - 1,
+  mask_func5  = (1 << width_func5) - 1,
+  mask_func6  = (1 << width_func6) - 1,
+  mask_func7  = (1 << width_func7) - 1,
+  mask_i_imm  = (1 << width_i_imm) - 1,
+  mask_j_imm  = (1 << width_j_imm) - 1,
+  mask_v_imm  = (1 << width_v_imm) - 1,
 };
 
 static const char* op_string(const Instr &instr) {
   auto opcode = instr.getOpcode();
   auto func2  = instr.getFunc2();
   auto func3  = instr.getFunc3();
+  auto func5  = instr.getFunc5();
   auto func7  = instr.getFunc7();
   auto rs2    = instr.getRSrc(1);
   auto imm    = instr.getImm();
@@ -231,6 +233,43 @@ static const char* op_string(const Instr &instr) {
       case 0x1: return "VS";
       case 0x2: return "FSW";
       case 0x3: return "FSD";
+      default: 
+        std::abort();
+    }
+  case Opcode::AMO: 
+    switch (func3) {
+      case 0x2:
+        switch (func5) {
+        case 0x00: return "AMOADD.W";
+        case 0x01: return "AMOSWAP.W";
+        case 0x02: return "LR.W";
+        case 0x03: return "SC.W";
+        case 0x04: return "AMOXOR.W";
+        case 0x08: return "AMOOR.W";
+        case 0x0c: return "AMOAND.W";
+        case 0x10: return "AMOMIN.W";
+        case 0x14: return "AMOMAX.W";
+        case 0x18: return "AMOMINU.W";
+        case 0x1c: return "AMOMAXU.W";
+        default:
+          std::abort();
+        }
+      case 0x3:
+        switch (func5) {
+        case 0x00: return "AMOADD.D";
+        case 0x01: return "AMOSWAP.D";
+        case 0x02: return "LR.D";
+        case 0x03: return "SC.D";
+        case 0x04: return "AMOXOR.D";
+        case 0x08: return "AMOOR.D";
+        case 0x0c: return "AMOAND.D";
+        case 0x10: return "AMOMIN.D";
+        case 0x14: return "AMOMAX.D";
+        case 0x18: return "AMOMINU.D";
+        case 0x1c: return "AMOMAXU.D";
+        default:
+          std::abort();
+        }
       default: 
         std::abort();
     }
@@ -432,6 +471,7 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
 
   auto func2 = (code >> shift_func2) & mask_func2;
   auto func3 = (code >> shift_func3) & mask_func3;
+  auto func5 = (code >> shift_func5) & mask_func5;
   auto func6 = (code >> shift_func6) & mask_func6;
   auto func7 = (code >> shift_func7) & mask_func7;
 
@@ -446,7 +486,7 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
     return nullptr;
   }
 
-  auto iType = op_it->second.iType;
+  auto iType = op_it->second;
   if (op == Opcode::FL || op == Opcode::FS) { 
     if (func3 != 0x2 && func3 != 0x3) {
       iType = InstType::V_TYPE;
@@ -497,6 +537,7 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
       instr->setSrcReg(rs2, RegType::Integer);
     }
     instr->setFunc3(func3);
+    instr->setFunc5(func5);
     instr->setFunc7(func7);
     break;
 

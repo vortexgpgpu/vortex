@@ -402,8 +402,22 @@ void Core::dcache_write(const void* data, uint64_t addr, uint32_t size) {
       mmu_.write(data, addr, size, 0);
     }
   }
+  DPH(2, "Mem Write: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << " (size=" << size << ", type=" << type << ")" << std::endl);  
+}
 
-  DPH(2, "Mem Write: addr=0x" << std::hex << addr << ", data=0x" << ByteStream(data, size) << " (size=" << size << ", type=" << type << ")" << std::endl);
+void Core::dcache_amo_reserve(uint64_t addr) {
+  auto type = this->get_addr_type(addr);
+  if (type == AddrType::Global) {
+    mmu_.amo_reserve(addr);
+  }
+}
+
+bool Core::dcache_amo_check(uint64_t addr) {
+  auto type = this->get_addr_type(addr);
+  if (type == AddrType::Global) {
+    return mmu_.amo_check(addr);
+  }
+  return false;
 }
 
 void Core::writeToStdOut(const void* data, uint64_t addr, uint32_t size) {

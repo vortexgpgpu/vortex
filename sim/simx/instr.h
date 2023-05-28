@@ -19,6 +19,7 @@ enum Opcode {
   JALR_INST = 0x67,
   SYS_INST  = 0x73,
   FENCE     = 0x0f,
+  AMO       = 0x2f,
   // F Extension
   FL        = 0x7,
   FS        = 0x27,
@@ -26,17 +27,17 @@ enum Opcode {
   FMADD     = 0x43,
   FMSUB     = 0x47,
   FMNMSUB   = 0x4b,
-  FMNMADD   = 0x4f,
+  FMNMADD   = 0x4f,  
+  // RV64 Standard Extension
+  R_INST_W  = 0x3b,
+  I_INST_W  = 0x1b,
   // Vector Extension  
   VSET      = 0x57,
   // Custom Extensions
   EXT1      = 0x0b,
   EXT2      = 0x2b,
   EXT3      = 0x5b,
-  EXT4      = 0x7b,
-  // RV64 Standard Extensions
-  R_INST_W  = 0x3b,
-  I_INST_W  = 0x1b,
+  EXT4      = 0x7b
 };
 
 enum InstType {
@@ -60,6 +61,7 @@ public:
     , rdest_(0)
     , func2_(0)
     , func3_(0)
+    , func5_(0)
     , func6_(0)
     , func7_(0)
     , vmask_(0)
@@ -83,6 +85,7 @@ public:
   void setSrcVReg(uint32_t srcReg) { rsrc_type_[num_rsrcs_] = RegType::Vector; rsrc_[num_rsrcs_++] = srcReg;  }
   void setFunc2(uint32_t func2) { func2_ = func2; }
   void setFunc3(uint32_t func3) { func3_ = func3; }
+  void setFunc5(uint32_t func5) { func5_ = func5; }
   void setFunc7(uint32_t func7) { func7_ = func7; }
   void setImm(uint32_t imm) { has_imm_ = true; imm_ = imm; }
   void setVlsWidth(uint32_t width) { vlsWidth_ = width; }
@@ -95,17 +98,18 @@ public:
   void setVediv(uint32_t ediv) { vediv_ = 1 << ediv; }
   void setFunc6(uint32_t func6) { func6_ = func6; }
 
-  Opcode getOpcode() const { return opcode_; }
+  Opcode   getOpcode() const { return opcode_; }
   uint32_t getFunc2() const { return func2_; }
   uint32_t getFunc3() const { return func3_; }
+  uint32_t getFunc5() const { return func5_; }
   uint32_t getFunc6() const { return func6_; }
   uint32_t getFunc7() const { return func7_; }
   uint32_t getNRSrc() const { return num_rsrcs_; }
   uint32_t getRSrc(uint32_t i) const { return rsrc_[i]; }
-  RegType getRSType(uint32_t i) const { return rsrc_type_[i]; }
+  RegType  getRSType(uint32_t i) const { return rsrc_type_[i]; }
   uint32_t getRDest() const { return rdest_; }  
-  RegType getRDType() const { return rdest_type_; }  
-  bool hasImm() const { return has_imm_; }
+  RegType  getRDType() const { return rdest_type_; }  
+  bool     hasImm() const { return has_imm_; }
   uint32_t getImm() const { return imm_; }
   uint32_t getVlsWidth() const { return vlsWidth_; }
   uint32_t getVmop() const { return vMop_; }
@@ -132,6 +136,7 @@ private:
   uint32_t rdest_;
   uint32_t func2_;
   uint32_t func3_;
+  uint32_t func5_;
   uint32_t func6_;
   uint32_t func7_;
 

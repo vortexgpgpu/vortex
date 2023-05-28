@@ -78,3 +78,11 @@ T sext(const T& word, uint32_t width) {
   T mask((static_cast<T>(1) << width) - 1);
   return ((word >> (width - 1)) & 0x1) ? (word | ~mask) : word;
 }
+
+template <typename T = uint32_t>
+T zext(const T& word, uint32_t width) {
+  assert(width > 1);
+  assert(width <= (sizeof(T) * 8));
+  T mask((static_cast<T>(1) << width) - 1);
+  return word & mask;
+}

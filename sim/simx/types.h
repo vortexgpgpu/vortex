@@ -18,13 +18,13 @@ typedef uint32_t Word;
 typedef int32_t  WordI;
 typedef uint64_t DWord;
 typedef int64_t  DWordI;
-typedef uint32_t FWord;
+typedef uint32_t WordF;
 #elif (XLEN == 64)
 typedef uint64_t Word;
 typedef int64_t  WordI;
 typedef __uint128_t DWord;
 typedef __int128_t DWordI;
-typedef uint64_t FWord;
+typedef uint64_t WordF;
 #else
 #error unsupported XLEN
 #endif

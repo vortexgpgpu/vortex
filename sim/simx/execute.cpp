@@ -19,9 +19,13 @@ using namespace vortex;
 union reg_data_t {
   Word     u;
   WordI    i;
-  uint64_t u64;
-  FWord    f;
-  uint64_t _;
+  WordF    f;
+  float    f32;
+  double   f64;
+  uint32_t u32;
+  uint64_t u64; 
+  int32_t  i32;
+  int64_t  i64;
 };
 
 static bool HasDivergentThreads(const ThreadMask &thread_mask,                                
@@ -112,6 +116,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
 
   auto func2  = instr.getFunc2();
   auto func3  = instr.getFunc3();
+  auto func5  = instr.getFunc5();
   auto func6  = instr.getFunc6();
   auto func7  = instr.getFunc7();
 
@@ -686,30 +691,27 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     if ((opcode == L_INST )
      || (opcode == FL && func3 == 2)
      || (opcode == FL && func3 == 3)) {
-      uint32_t mem_bytes = 1 << (func3 & 0x3);
+      uint32_t data_bytes = 1 << (func3 & 0x3);
+      uint32_t data_width = 8 * data_bytes;
       for (uint32_t t = 0; t < num_threads; ++t) {
         if (!tmask_.test(t))
           continue;
         uint64_t mem_addr = rsdata[t][0].i + immsrc;         
-        uint64_t mem_data = 0;
-        core_->dcache_read(&mem_data, mem_addr, mem_bytes);
-        trace_data->mem_addrs.at(t) = {mem_addr, mem_bytes};
+        uint64_t read_data = 0;
+        core_->dcache_read(&read_data, mem_addr, data_bytes);
+        trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
         switch (func3) {
-        case 0:
-          // RV32I: LB
-          rddata[t].i = sext((Word)mem_data, 8);
-          break;
-        case 1:
-          // RV32I: LH
-          rddata[t].i = sext((Word)mem_data, 16);
+        case 0: // RV32I: LB
+        case 1: // RV32I: LH
+          rddata[t].i = sext((Word)read_data, data_width);
           break;
         case 2:
           if (opcode == L_INST) {
             // RV32I: LW
-            rddata[t].i = sext((Word)mem_data, 32);
+            rddata[t].i = sext((Word)read_data, data_width);
           } else {
             // RV32F: FLW
-            rddata[t].u64 = nan_box((uint32_t)mem_data);
+            rddata[t].u64 = nan_box((uint32_t)read_data);
           }
           break;
         case 3: // RV64I: LD
@@ -717,7 +719,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         case 4: // RV32I: LBU
         case 5: // RV32I: LHU
         case 6: // RV64I: LWU
-          rddata[t]._ = mem_data;
+          rddata[t].u64 = read_data;
           break;
         default:
           std::abort();      
@@ -754,23 +756,19 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     if ((opcode == S_INST)
      || (opcode == FS && func3 == 2)
      || (opcode == FS && func3 == 3)) {
-      uint32_t mem_bytes = 1 << (func3 & 0x3);
-      uint64_t mask = ((uint64_t(1) << (8 * mem_bytes))-1);
+      uint32_t data_bytes = 1 << (func3 & 0x3);
       for (uint32_t t = 0; t < num_threads; ++t) {
         if (!tmask_.test(t))
           continue;
         uint64_t mem_addr = rsdata[t][0].i + immsrc;
-        uint64_t mem_data = rsdata[t][1]._;
-        if (mem_bytes < 8) {
-          mem_data &= mask;
-        }
-        trace_data->mem_addrs.at(t) = {mem_addr, mem_bytes};
+        uint64_t write_data = rsdata[t][1].u64;
+        trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
         switch (func3) {
         case 0:
         case 1:
         case 2:
         case 3:
-          core_->dcache_write(&mem_data, mem_addr, mem_bytes);  
+          core_->dcache_write(&write_data, mem_addr, data_bytes);  
           break;
         default:
           std::abort();
@@ -791,6 +789,79 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         }          
       }
     }
+    break;
+  }
+  case AMO: {
+    trace->exe_type = ExeType::LSU;    
+    trace->lsu_type = LsuType::LOAD;
+    trace->used_iregs.set(rsrc0);
+    trace->used_iregs.set(rsrc1);
+    auto trace_data = std::make_shared<LsuTraceData>(num_threads);
+    trace->data = trace_data;
+    uint32_t data_bytes = 1 << (func3 & 0x3);
+    uint32_t data_width = 8 * data_bytes;
+    for (uint32_t t = 0; t < num_threads; ++t) {
+      if (!tmask_.test(t))
+        continue;
+      uint64_t mem_addr = rsdata[t][0].u;
+      trace_data->mem_addrs.at(t) = {mem_addr, data_bytes};
+      if (func5 == 0x02) { // LR
+        uint64_t read_data = 0;
+        core_->dcache_read(&read_data, mem_addr, data_bytes);        
+        core_->dcache_amo_reserve(mem_addr);
+        rddata[t].i = sext((Word)read_data, data_width);
+      } else 
+      if (func5 == 0x03) { // SC
+        if (core_->dcache_amo_check(mem_addr)) {
+          core_->dcache_write(&rsdata[t][1].u64, mem_addr, data_bytes);
+          rddata[t].i = 0;
+        } else {
+          rddata[t].i = 1;
+        }
+      } else {      
+        uint64_t read_data = 0;
+        core_->dcache_read(&read_data, mem_addr, data_bytes);
+        auto read_data_i = sext((WordI)read_data, data_width);
+        auto read_data_u = zext((Word)read_data, data_width);
+        auto rs1_data_i  = sext((WordI)rsdata[t][1].u64, data_width);
+        auto rs1_data_u  = zext((Word)rsdata[t][1].u64, data_width);
+        uint64_t result;
+        switch (func5) {
+        case 0x00:  // AMOADD
+          result = read_data_i + rs1_data_i;
+          break;
+        case 0x01:  // AMOSWAP
+          result = rs1_data_u;
+          break;
+        case 0x04:  // AMOXOR
+          result = read_data_u ^ rs1_data_u;
+          break;
+        case 0x08:  // AMOOR
+          result = read_data_u | rs1_data_u;
+          break;
+        case 0x0c:  // AMOAND
+          result = read_data_u & rs1_data_u;
+          break;
+        case 0x10:  // AMOMIN
+          result = std::min(read_data_i, rs1_data_i);
+          break;
+        case 0x14:  // AMOMAX
+          result = std::max(read_data_i, rs1_data_i);
+          break;
+        case 0x18:  // AMOMINU
+          result = std::min(read_data_u, rs1_data_u);
+          break;
+        case 0x1c:  // AMOMAXU
+          result = std::max(read_data_u, rs1_data_u);
+          break;
+        default:
+          std::abort();
+        }
+        core_->dcache_write(&result, mem_addr, data_bytes);
+        rddata[t].i = read_data_i;
+      }
+    }
+    rd_write = true;
     break;
   }
   case SYS_INST: {
@@ -888,7 +959,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
     trace->exe_type = ExeType::LSU;    
     trace->lsu_type = LsuType::FENCE;
     break;
-  }   
+  }
   case FCI: {       
     trace->exe_type = ExeType::FPU;     
     for (uint32_t t = 0; t < num_threads; ++t) {
@@ -2398,6 +2469,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         }
         DPN(2, "}" << std::endl);
         trace->used_iregs[rdest] = 1;
+        assert(rdest != 0);
       }
       break;
     case RegType::Float:

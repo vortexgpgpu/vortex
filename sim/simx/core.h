@@ -128,6 +128,10 @@ public:
 
   void dcache_write(const void* data, uint64_t addr, uint32_t size);
 
+  void dcache_amo_reserve(uint64_t addr);
+
+  bool dcache_amo_check(uint64_t addr);
+
   void trigger_ecall();
 
   void trigger_ebreak();
