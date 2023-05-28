@@ -26,10 +26,10 @@ TESTS_64D := $(wildcard rv64ud-p-*.hex)
 all:
 
 run-simx-32imfd:
-	$(foreach test, $(TESTS_32I) $(TESTS_32M) $(TESTS_32F) $(TESTS_32D) $(TESTS_32A), $(SIM_DIR)/simx/simx -r -c 1 -i $(test) || exit;)
+	$(foreach test, $(TESTS_32I) $(TESTS_32M) $(TESTS_32F) $(TESTS_32D) $(TESTS_32A), $(SIM_DIR)/simx/simx -r $(test) || exit;)
 
 run-simx-64imfd:
-	$(foreach test, $(TESTS_64I) $(TESTS_64M) $(TESTS_64F) $(TESTS_64D) $(TESTS_64A), $(SIM_DIR)/simx/simx -r -c 1 -i $(test) || exit;)
+	$(foreach test, $(TESTS_64I) $(TESTS_64M) $(TESTS_64F) $(TESTS_64D) $(TESTS_64A), $(SIM_DIR)/simx/simx -r $(test) || exit;)
 
 run-simx-32: run-simx-32imfd
 

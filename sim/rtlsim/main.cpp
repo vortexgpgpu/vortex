@@ -2,7 +2,6 @@
 #include <fstream>
 #include <iomanip>
 #include <unistd.h>
-#include <unistd.h>
 #include <util.h>
 #include <mem.h>
 #include <VX_config.h>
@@ -14,11 +13,11 @@
 using namespace vortex;
 
 static void show_usage() {
-   std::cout << "Usage: [-r] [-h: help] programs.." << std::endl;
+   std::cout << "Usage: [-r: riscv-test] [-h: help] <program>" << std::endl;
 }
 
 bool riscv_test = false;
-std::vector<const char*> programs;
+const char* program = nullptr;
 
 static void parse_args(int argc, char **argv) {
   	int c;
@@ -36,18 +35,21 @@ static void parse_args(int argc, char **argv) {
       		show_usage();
       		exit(-1);
     	}
-  	}	
+	}
 
-	for (int i = optind; i < argc; ++i) {
-		programs.push_back(argv[i]);	
+	if (optind < argc) {
+		program = argv[optind];
+		std::cout << "Running " << program << "..." << std::endl;
+	} else {
+		show_usage();
+      	exit(-1);
 	}
 }
 
 int main(int argc, char **argv) {
-
 	int exitcode = 0;
 	
-	parse_args(argc, argv);
+	parse_args(argc, argv);	
 
 	// create memory module
 	vortex::RAM ram(RAM_PAGE_SIZE);
@@ -63,12 +65,10 @@ int main(int argc, char **argv) {
 #if (XLEN == 64)
     processor.write_dcr(DCR_BASE_STARTUP_ADDR1, STARTUP_ADDR >> 32);
 #endif
-	processor.write_dcr(DCR_BASE_MPM_CLASS, 0);
+	processor.write_dcr(DCR_BASE_MPM_CLASS, 0);	
 
-	// run simulation
-	for (auto program : programs) {
-		std::cout << "Running " << program << "..." << std::endl;		
-
+	// load program
+	{		
 		std::string program_ext(fileExtension(program));
 		if (program_ext == "bin") {
 			ram.loadBinImage(program, STARTUP_ADDR);
@@ -78,23 +78,22 @@ int main(int argc, char **argv) {
 			std::cout << "*** error: only *.bin or *.hex images supported." << std::endl;
 			return -1;
 		}
+	}
 
-		exitcode = processor.run();
-		
-		if (riscv_test) {
-			if (1 == exitcode) {
-				std::cout << "Passed" << std::endl;
-				exitcode = 0;
-			} else {
-				std::cout << "Failed" << std::endl;
-				exitcode = 1;
-				break;
-			}
+	// run simulation
+	exitcode = processor.run();
+	
+	if (riscv_test) {
+		if (1 == exitcode) {
+			std::cout << "Passed" << std::endl;
+			exitcode = 0;
 		} else {
-			if (exitcode != 0) {
-				std::cout << "*** error: exitcode=" << exitcode << std::endl;
-				break;
-			}
+			std::cout << "Failed" << std::endl;
+			exitcode = 1;
+		}
+	} else {
+		if (exitcode != 0) {
+			std::cout << "*** error: exitcode=" << exitcode << std::endl;
 		}
 	}
 

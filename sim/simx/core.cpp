@@ -115,8 +115,7 @@ void Core::reset() {
   stalled_warps_.reset();
   issued_instrs_ = 0;
   committed_instrs_ = 0;
-  ecall_ = false;
-  ebreak_ = false;
+  exited_ = false;
   perf_stats_ = PerfStats();
   pending_ifetches_ = 0;
 }
@@ -146,7 +145,8 @@ void Core::tick() {
   this->fetch();
   this->schedule();
 
-  DPN(2, std::flush);
+  ++perf_stats_.cycles;
+  DPN(2, std::flush);  
 }
 
 void Core::schedule() {
@@ -454,48 +454,34 @@ uint32_t Core::get_csr(uint32_t addr, uint32_t tid, uint32_t wid) {
     return (fcsrs_.at(wid) >> 5);
   case CSR_FCSR:
     return fcsrs_.at(wid);
-  case CSR_WTID:
-    // Warp threadID
+  case CSR_WTID: // Warp threadID
     return tid;
-  case CSR_LTID:
-    // Core threadID
+  case CSR_LTID: // Core threadID
     return tid + (wid * arch_.num_threads());
-  case CSR_GTID:
-    // Processor threadID
+  case CSR_GTID: // Processor threadID
     return (core_id_ * arch_.num_warps() + wid) * arch_.num_threads() + tid;
-  case CSR_LWID:
-    // Core warpID
+  case CSR_LWID: // Core warpID
     return wid;
-  case CSR_GWID:
-    // Processor warpID        
+  case CSR_GWID: // Processor warpID        
     return core_id_ * arch_.num_warps() + wid;
-  case CSR_GCID:
-    // Processor coreID
+  case CSR_GCID: // Processor coreID
     return core_id_;
-  case CSR_TMASK:
-    // Processor coreID
+  case CSR_TMASK: // Processor coreID
     return warps_.at(wid)->getTmask();
-  case CSR_NT:
-    // Number of threads per warp
+  case CSR_NT: // Number of threads per warp
     return arch_.num_threads();
-  case CSR_NW:
-    // Number of warps per core
+  case CSR_NW: // Number of warps per core
     return arch_.num_warps();
-  case CSR_NC:
-    // Number of cores
+  case CSR_NC: // Number of cores
     return arch_.num_cores();
-  case CSR_MINSTRET:
-    // NumInsts
+  case CSR_MCYCLE: // NumCycles
+    return perf_stats_.cycles & 0xffffffff;
+  case CSR_MCYCLE_H: // NumCycles
+    return (uint32_t)(perf_stats_.cycles >> 32);
+  case CSR_MINSTRET: // NumInsts
     return perf_stats_.instrs & 0xffffffff;
-  case CSR_MINSTRET_H:
-    // NumInsts
+  case CSR_MINSTRET_H: // NumInsts
     return (uint32_t)(perf_stats_.instrs >> 32);
-  case CSR_MCYCLE:
-    // NumCycles
-    return (uint32_t)SimPlatform::instance().cycles();
-  case CSR_MCYCLE_H:
-    // NumCycles
-    return (uint32_t)(SimPlatform::instance().cycles() >> 32);
   default:
     if ((addr >= CSR_MPM_BASE && addr < (CSR_MPM_BASE + 32))
      || (addr >= CSR_MPM_BASE_H && addr < (CSR_MPM_BASE_H + 32))) {
@@ -738,18 +724,23 @@ void Core::set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid) {
 }
 
 void Core::trigger_ecall() {
-  ecall_ = true;
+  active_warps_.reset();
+  exited_ = true;
 }
 
 void Core::trigger_ebreak() {
-  ebreak_ = true;
+  active_warps_.reset();
+  exited_ = true;
 }
 
-bool Core::check_exit() const {
-  return ebreak_ || ecall_;
+bool Core::check_exit(Word* exitcode, int reg) const {
+  if (exited_) {
+    *exitcode = warps_.at(0)->getIRegValue(reg);
+    return true;
+  }
+  return false;
 }
 
 bool Core::running() const {
-  bool is_running = (committed_instrs_ != issued_instrs_);
-  return is_running;
+  return (committed_instrs_ != issued_instrs_);
 }

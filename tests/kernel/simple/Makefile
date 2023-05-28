@@ -47,7 +47,7 @@ run-rtlsim: $(PROJECT).bin
 	$(SIM_DIR)/rtlsim/rtlsim $(PROJECT).bin
 
 run-simx: $(PROJECT).bin
-	$(SIM_DIR)/simx/simx -c 1 -i $(PROJECT).bin
+	$(SIM_DIR)/simx/simx $(PROJECT).bin
 
 .depend: $(SRCS)
 	$(CC) $(CFLAGS) -MM $^ > .depend;

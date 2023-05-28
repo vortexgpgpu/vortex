@@ -72,22 +72,23 @@ void ProcessorImpl::attach_ram(RAM* ram) {
 int ProcessorImpl::run() {
   SimPlatform::instance().reset();
   this->clear_perf_counters();
-  bool running;
+  bool done;
   Word exitcode = 0;
   do {
     SimPlatform::instance().tick();
-    running = false;
+    done = true;
     for (auto cluster : clusters_) {
       if (cluster->running()) {
-        running = true;
-      }
-      if (cluster->getIRegValue(&exitcode, 3)) {
-        running = false;
-        break;
+        Word ec;   
+        if (cluster->check_exit(&ec, 3)) {
+          exitcode |= ec;
+        } else {
+          done = false;
+        }
       }
     }
     perf_mem_latency_ += perf_mem_pending_reads_;
-  } while (running);
+  } while (!done);
 
   return exitcode;
 }

@@ -4,52 +4,71 @@
 #include <sstream>
 #include <fstream>
 #include <stdlib.h>
+#include <unistd.h>
 #include <sys/stat.h>
 #include "processor.h"
-#include "arch.h"
 #include "mem.h"
 #include "constants.h"
 #include <util.h>
-#include "args.h"
 #include "core.h"
 
 using namespace vortex;
 
+static void show_usage() {
+   std::cout << "Usage: [-c <cores>] [-w <warps>] [-t <threads>] [-r: riscv-test] [-s: stats] [-h: help] <program>" << std::endl;
+}
+
+uint32_t num_cores = NUM_CORES * NUM_CLUSTERS;
+uint32_t num_warps = NUM_WARPS;
+uint32_t num_threads = NUM_THREADS;
+bool showStats = false;;
+bool riscv_test = false;
+const char* program = nullptr;
+
+static void parse_args(int argc, char **argv) {
+  	int c;
+  	while ((c = getopt(argc, argv, "c:w:t:rsh?")) != -1) {
+    	switch (c) {
+		  case 'c':
+        num_cores = atoi(optarg);
+        break;
+      case 'w':
+        num_warps = atoi(optarg);
+        break;
+      case 't':
+        num_threads = atoi(optarg);
+        break;
+      case 'r':
+        riscv_test = true;
+        break;
+      case 's':
+        showStats = true;
+        break;
+    	case 'h':
+    	case '?':
+      		show_usage();
+      		exit(0);
+    		break;
+    	default:
+      		show_usage();
+      		exit(-1);
+    	}
+	}
+
+	if (optind < argc) {
+		program = argv[optind];
+    std::cout << "Running " << program << "..." << std::endl;
+	} else {
+		show_usage();
+    exit(-1);
+	}
+}
+
 int main(int argc, char **argv) {
   int exitcode = 0;
 
-  std::string imgFileName;
-  int num_cores(NUM_CORES * NUM_CLUSTERS);
-  int num_warps(NUM_WARPS);
-  int num_threads(NUM_THREADS);  
-  bool showHelp(false);
-  bool showStats(false);
-  bool riscv_test(false);
+  parse_args(argc, argv);
 
-  // parse the command line arguments
-  CommandLineArgFlag fh("-h", "--help", "show command line options", showHelp);
-  CommandLineArgSetter<std::string> fi("-i", "--image", "program binary", imgFileName);
-  CommandLineArgSetter<int> fc("-c", "--cores", "number of cores", num_cores);
-  CommandLineArgSetter<int> fw("-w", "--warps", "number  of warps", num_warps);
-  CommandLineArgSetter<int> ft("-t", "--threads", "number of threads", num_threads);
-  CommandLineArgFlag fr("-r", "--riscv", "enable riscv tests", riscv_test);
-  CommandLineArgFlag fs("-s", "--stats", "show stats", showStats);
-
-  CommandLineArg::readArgs(argc - 1, argv + 1);
-
-  if (showHelp || imgFileName.empty()) {
-    std::cout << "Vortex Cycle-Level Simulator:\n"
-                 "  -i, --image <filename> program binary\n"
-                 "  -c, --cores <num> number of cores\n"
-                 "  -w, --warps <num> number of warps\n"
-                 "  -t, --threads <num> number of threads\n"
-                 "  -r, --riscv check riscv test exitcode\n"
-                 "  -s, --stats Print stats on exit.\n";
-    return 0;
-  }
-
-  std::cout << "Running " << imgFileName << "..." << std::endl;
-  
   {
     // create processor configuation
     Arch arch(num_cores, num_warps, num_threads);
@@ -57,24 +76,11 @@ int main(int argc, char **argv) {
     // create memory module
     RAM ram(RAM_PAGE_SIZE);
 
-    // load program
-    {
-      std::string program_ext(fileExtension(imgFileName.c_str()));
-      if (program_ext == "bin") {
-        ram.loadBinImage(imgFileName.c_str(), STARTUP_ADDR);
-      } else if (program_ext == "hex") {
-        ram.loadHexImage(imgFileName.c_str());
-      } else {
-        std::cout << "*** error: only *.bin or *.hex images supported." << std::endl;
-        return -1;
-      }
-    }
-
     // create processor
     Processor processor(arch);
   
     // attach memory module
-    processor.attach_ram(&ram);
+    processor.attach_ram(&ram); 
 
 	  // setup base DCRs
     processor.write_dcr(DCR_BASE_STARTUP_ADDR0, STARTUP_ADDR & 0xffffffff);
@@ -83,9 +89,21 @@ int main(int argc, char **argv) {
   #endif
 	  processor.write_dcr(DCR_BASE_MPM_CLASS, 0);
 
+    // load program
+    {      
+      std::string program_ext(fileExtension(program));
+      if (program_ext == "bin") {
+        ram.loadBinImage(program, STARTUP_ADDR);
+      } else if (program_ext == "hex") {
+        ram.loadHexImage(program);
+      } else {
+        std::cout << "*** error: only *.bin or *.hex images supported." << std::endl;
+        return -1;
+      }
+    }
+
     // run simulation
     exitcode = processor.run();
-
   } 
 
   if (riscv_test) {

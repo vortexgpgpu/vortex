@@ -273,14 +273,19 @@ bool Cluster::running() const {
   return false;
 }
 
-bool Cluster::getIRegValue(Word* value, int reg) const {
+bool Cluster::check_exit(Word* exitcode, int reg) const {
+  bool done = true;
+  Word exitcode_ = 0;
   for (auto& core : cores_) {
-    if (core->check_exit()) {
-      *value = core->getIRegValue(reg);
-      return true;
+    Word ec;
+    if (core->check_exit(&ec, reg)) {
+      exitcode_ |= ec;
+    } else {
+      done = false;
     }
   }
-  return false;
+  *exitcode = exitcode_;
+  return done;
 }
 
 void Cluster::bind(SimPort<MemReq>* mem_req_port, SimPort<MemRsp>* mem_rsp_port) {    

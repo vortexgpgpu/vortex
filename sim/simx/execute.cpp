@@ -821,9 +821,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } else {      
         uint64_t read_data = 0;
         core_->dcache_read(&read_data, mem_addr, data_bytes);
-        auto read_data_i = sext((WordI)read_data, data_width);
-        auto read_data_u = zext((Word)read_data, data_width);
+        auto read_data_i = sext((WordI)read_data, data_width);        
         auto rs1_data_i  = sext((WordI)rsdata[t][1].u64, data_width);
+        auto read_data_u = zext((Word)read_data, data_width);
         auto rs1_data_u  = zext((Word)rsdata[t][1].u64, data_width);
         uint64_t result;
         switch (func5) {
@@ -905,7 +905,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         case 2: {
           // RV32I: CSRRS
           rddata[t].i = csr_value;
-          if (rsdata[t][0].i) {
+          if (rsdata[t][0].i != 0) {
             core_->set_csr(csr_addr, csr_value | rsdata[t][0].i, t, warp_id_);
           }
           trace->used_iregs.set(rsrc0);
@@ -915,7 +915,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         case 3: {
           // RV32I: CSRRC
           rddata[t].i = csr_value;
-          if (rsdata[t][0].i) {
+          if (rsdata[t][0].i != 0) {
             core_->set_csr(csr_addr, csr_value & ~rsdata[t][0].i, t, warp_id_);
           }
           trace->used_iregs.set(rsrc0);
@@ -932,7 +932,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         case 6: {
           // RV32I: CSRRSI;
           rddata[t].i = csr_value;
-          if (rsrc0) {
+          if (rsrc0 != 0) {
             core_->set_csr(csr_addr, csr_value | rsrc0, t, warp_id_);
           }
           rd_write = true;
@@ -941,7 +941,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         case 7: {
           // RV32I: CSRRCI
           rddata[t].i = csr_value;
-          if (rsrc0) {
+          if (rsrc0 != 0) {
             core_->set_csr(csr_addr, csr_value & ~rsrc0, t, warp_id_);
           }
           rd_write = true;

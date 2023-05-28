@@ -33,6 +33,7 @@ class Cluster;
 class Core : public SimObject<Core> {
 public:
   struct PerfStats {
+    uint64_t cycles;
     uint64_t instrs;
     uint64_t ibuf_stalls;
     uint64_t scrb_stalls;
@@ -51,7 +52,8 @@ public:
     uint64_t load_latency;
 
     PerfStats() 
-      : instrs(0)
+      : cycles(0)
+      , instrs(0)
       , ibuf_stalls(0)
       , scrb_stalls(0)
       , alu_stalls(0)
@@ -108,10 +110,6 @@ public:
     return dcrs_;
   }
 
-  Word getIRegValue(int reg) const {
-    return warps_.at(0)->getIRegValue(reg);
-  }
-
   uint32_t get_csr(uint32_t addr, uint32_t tid, uint32_t wid);
   
   void set_csr(uint32_t addr, uint32_t value, uint32_t tid, uint32_t wid);
@@ -136,7 +134,7 @@ public:
 
   void trigger_ebreak();
 
-  bool check_exit() const;
+  bool check_exit(Word* exitcode, int reg) const;
 
   uint32_t raster_idx() {
     auto ret = raster_idx_++;
@@ -193,9 +191,8 @@ private:
   WarpMask active_warps_;
   WarpMask stalled_warps_;
   uint64_t issued_instrs_;
-  uint64_t committed_instrs_;  
-  bool ecall_;
-  bool ebreak_;
+  uint64_t committed_instrs_;
+  bool exited_;
 
   uint64_t pending_ifetches_;
 
