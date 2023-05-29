@@ -151,10 +151,9 @@ module VX_shared_mem #(
     // Generate memory banks
     for (genvar i = 0; i < NUM_BANKS; ++i) begin
         VX_sp_ram #(
-            .DATAW      (WORD_WIDTH),
-            .SIZE       (WORDS_PER_BANK),
-            .WRENW      (WORD_SIZE),
-            .NO_RWCHECK (1)
+            .DATAW (WORD_WIDTH),
+            .SIZE  (WORDS_PER_BANK),
+            .WRENW (WORD_SIZE)
         ) data_store (
             .clk   (clk),
             .write (per_bank_req_valid[i] && per_bank_req_rw[i]),
