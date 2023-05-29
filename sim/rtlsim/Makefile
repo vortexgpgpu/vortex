@@ -31,10 +31,10 @@ DBG_TRACE_FLAGS += -DDBG_TRACE_ROP
 
 DBG_FLAGS += -DDEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
 
-FPU_INCLUDE = -I$(RTL_DIR)/fpu_unit -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src -I$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/fpnew/src
-TEX_INCLUDE = -I$(RTL_DIR)/tex_unit
-RASTER_INCLUDE = -I$(RTL_DIR)/raster_unit
-ROP_INCLUDE = -I$(RTL_DIR)/rop_unit
+FPU_INCLUDE = -I$(RTL_DIR)/fpu -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src -I$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/fpnew/src
+TEX_INCLUDE = -I$(RTL_DIR)/tex
+RASTER_INCLUDE = -I$(RTL_DIR)/raster
+ROP_INCLUDE = -I$(RTL_DIR)/rop
 RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/cache -I$(RTL_DIR)/simulate $(FPU_INCLUDE)
 RTL_INCLUDE += $(TEX_INCLUDE) $(RASTER_INCLUDE) $(ROP_INCLUDE)
 

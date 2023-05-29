@@ -6,10 +6,10 @@ The directory/file layout of the Vortex codebase is as followed:
   - `rtl`: hardware rtl sources    
     - `core`: core pipeline
     - `cache`: cache subsystem
-    - `fpu_unit`: floating point unit
-    - `raster_unit`: graphics rasterizer unit
-    - `rop_unit`: graphics render output unit
-    - `tex_unit`: graphics texture sampling unit
+    - `fpu`: floating point unit
+    - `raster`: graphics rasterizer unit
+    - `rop`: graphics render output unit
+    - `tex`: graphics texture sampling unit
     - `interfaces`: interfaces for inter-module communication
     - `libs`: general-purpose RTL modules    
   - `syn`: synthesis directory
@@ -19,14 +19,14 @@ The directory/file layout of the Vortex codebase is as followed:
     - `modelsim`: Modelsim synthesis scripts
     - `yosys`: Yosys synthesis scripts
   - `unit_tests`: unit tests for some hardware components
-- `runtime`: host runtime software API
+- `runtime`: host runtime software APIs
   - `include`: Vortex driver public headers
   - `stub`: Vortex stub driver library
   - `opae`: software driver that uses Intel OPAE API with device targets=fpga|asesim|opaesim
   - `xrt`: software driver that uses Xilinx XRT API with device targets=hw|hw_emu|sw_emu
   - `rtlsim`: software driver that uses rtlsim simulator
   - `simx`: software driver that uses simX simulator
-- `kernel`: GPU kernel software API
+- `kernel`: GPU kernel software APIs
   - `include`: Vortex runtime public headers
   - `linker`: linker file for compiling kernels
   - `src`: runtime implementation
@@ -35,9 +35,9 @@ The directory/file layout of the Vortex codebase is as followed:
   - `rtlsim`: processor RTL simulator
   - `simX`: cycle approximate simulator for vortex
 - `tests`: tests repository.
+  - `riscv`: RISC-V conformance tests
   - `kernel`: kernel tests
-  - `regression`: regression tests
-  - `riscv`: RISC-V standard tests
+  - `regression`: regression tests  
   - `opencl`: opencl benchmarks and tests
 - `ci`: continuous integration scripts
 - `miscs`: miscellaneous resources.

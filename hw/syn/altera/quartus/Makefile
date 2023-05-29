@@ -4,7 +4,7 @@ BUILD_DIR=$(PREFIX)_$(DEVICE_FAMILY)
 
 IP_CACHE_DIR=../ip_cache/$(DEVICE_FAMILY)
 
-.PHONY: dogfood unittest pipeline smem cache fpu_unit tex_unit raster_unit rop_unit core vortex vortex-gfx top top-gfx texunit test
+.PHONY: dogfood unittest pipeline smem cache fpu tex raster rop core vortex vortex-gfx top top-gfx test
 
 ip-gen: $(IP_CACHE_DIR)/ip_gen.log
 $(IP_CACHE_DIR)/ip_gen.log:
@@ -35,25 +35,25 @@ cache:
 	cp cache/Makefile cache/$(BUILD_DIR)
 	$(MAKE) -C cache/$(BUILD_DIR) clean && $(MAKE) -C cache/$(BUILD_DIR) > cache/$(BUILD_DIR)/build.log 2>&1 &
 
-fpu-unit: ip-gen
-	mkdir -p fpu_unit/$(BUILD_DIR)
-	cp fpu_unit/Makefile fpu_unit/$(BUILD_DIR)
-	$(MAKE) -C fpu_unit/$(BUILD_DIR) clean && $(MAKE) -C fpu_unit/$(BUILD_DIR) > fpu_unit/$(BUILD_DIR)/build.log 2>&1 &
+fpu: ip-gen
+	mkdir -p fpu/$(BUILD_DIR)
+	cp fpu/Makefile fpu/$(BUILD_DIR)
+	$(MAKE) -C fpu/$(BUILD_DIR) clean && $(MAKE) -C fpu/$(BUILD_DIR) > fpu/$(BUILD_DIR)/build.log 2>&1 &
 
-tex-unit:
-	mkdir -p tex_unit/$(BUILD_DIR)
-	cp tex_unit/Makefile tex_unit/$(BUILD_DIR)
-	$(MAKE) -C tex_unit/$(BUILD_DIR) clean && $(MAKE) -C tex_unit/$(BUILD_DIR) > tex_unit/$(BUILD_DIR)/build.log 2>&1 &
+tex:
+	mkdir -p tex/$(BUILD_DIR)
+	cp tex/Makefile tex/$(BUILD_DIR)
+	$(MAKE) -C tex/$(BUILD_DIR) clean && $(MAKE) -C tex/$(BUILD_DIR) > tex/$(BUILD_DIR)/build.log 2>&1 &
 
-rop-unit:
-	mkdir -p rop_unit/$(BUILD_DIR)
-	cp rop_unit/Makefile rop_unit/$(BUILD_DIR)
-	$(MAKE) -C rop_unit/$(BUILD_DIR) clean && $(MAKE) -C rop_unit/$(BUILD_DIR) > rop_unit/$(BUILD_DIR)/build.log 2>&1 &
+rop:
+	mkdir -p rop/$(BUILD_DIR)
+	cp rop/Makefile rop/$(BUILD_DIR)
+	$(MAKE) -C rop/$(BUILD_DIR) clean && $(MAKE) -C rop/$(BUILD_DIR) > rop/$(BUILD_DIR)/build.log 2>&1 &
 
-raster-unit:
-	mkdir -p raster_unit/$(BUILD_DIR)
-	cp raster_unit/Makefile raster_unit/$(BUILD_DIR)
-	$(MAKE) -C raster_unit/$(BUILD_DIR) clean && $(MAKE) -C raster_unit/$(BUILD_DIR) > raster_unit/$(BUILD_DIR)/build.log 2>&1 &
+raster:
+	mkdir -p raster/$(BUILD_DIR)
+	cp raster/Makefile raster/$(BUILD_DIR)
+	$(MAKE) -C raster/$(BUILD_DIR) clean && $(MAKE) -C raster/$(BUILD_DIR) > raster/$(BUILD_DIR)/build.log 2>&1 &
 
 core:
 	mkdir -p core/$(BUILD_DIR)
@@ -79,11 +79,6 @@ top-gfx: ip-gen
 	mkdir -p top-gfx/$(BUILD_DIR)
 	cp top-gfx/Makefile top-gfx/$(BUILD_DIR)
 	$(MAKE) -C top-gfx/$(BUILD_DIR) clean && $(MAKE) -C top-gfx/$(BUILD_DIR) > top-gfx/$(BUILD_DIR)/build.log 2>&1 &
-
-texunit:
-	mkdir -p texunit/$(BUILD_DIR)
-	cp texunit/Makefile texunit/$(BUILD_DIR)
-	$(MAKE) -C texunit/$(BUILD_DIR) clean && $(MAKE) -C texunit/$(BUILD_DIR) > texunit/$(BUILD_DIR)/build.log 2>&1 &
 
 test: ip-gen
 	mkdir -p test/$(BUILD_DIR)
