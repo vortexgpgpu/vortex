@@ -286,16 +286,8 @@ void GpuUnit::tick() {
     bool release_warp = trace->fetch_stall;
 
     switch  (gpu_type) {
-    case GpuType::TMC: {
-        Output.send(trace, 1);
-        auto trace_data = std::dynamic_pointer_cast<GPUTraceData>(trace->data);
-        core_->active_warps_.set(trace->wid, trace_data->active_warps.test(trace->wid));
-    }   break;
-    case GpuType::WSPAWN: {
-        Output.send(trace, 1);
-        auto trace_data = std::dynamic_pointer_cast<GPUTraceData>(trace->data);
-        core_->active_warps_ = trace_data->active_warps;
-    }   break;
+    case GpuType::TMC: 
+    case GpuType::WSPAWN:
     case GpuType::SPLIT:
     case GpuType::JOIN:
         Output.send(trace, 1);
@@ -303,7 +295,7 @@ void GpuUnit::tick() {
     case GpuType::BAR: {
         Output.send(trace, 1);
         auto trace_data = std::dynamic_pointer_cast<GPUTraceData>(trace->data);
-        core_->barrier(trace_data->bar_id, trace_data->bar_count, trace->wid);
+        core_->barrier(trace_data->bar.id, trace_data->bar.count, trace->wid);
         release_warp = false;
     }   break;
     case GpuType::RASTER: {

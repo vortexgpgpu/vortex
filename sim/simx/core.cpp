@@ -304,17 +304,15 @@ void Core::commit() {
   }
 }
 
-WarpMask Core::wspawn(uint32_t num_warps, Word nextPC) {
-  WarpMask ret(1);
+void Core::wspawn(uint32_t num_warps, Word nextPC) {
   uint32_t active_warps = std::min<uint32_t>(num_warps, arch_.num_warps());
   DP(3, "*** Activate " << (active_warps-1) << " warps at PC: " << std::hex << nextPC);
   for (uint32_t i = 1; i < active_warps; ++i) {
     auto warp = warps_.at(i);
     warp->setPC(nextPC);
     warp->setTmask(0, true);
-    ret.set(i); 
+    active_warps_.set(i);
   }
-  return ret;
 }
 
 void Core::barrier(uint32_t bar_id, uint32_t count, uint32_t warp_id) {

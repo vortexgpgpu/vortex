@@ -1394,9 +1394,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           DPN(3, tmask_.test(i));
         DPN(3, std::endl);
 
-        WarpMask active_warps(0);
-        active_warps.set(warp_id_, tmask_.any());
-        trace->data = std::make_shared<GPUTraceData>(active_warps);
+        if (!tmask_.any()) {
+          core_->active_warps_.reset(warp_id_);
+        }
       } break;
       case 1: {
         // WSPAWN
@@ -1405,7 +1405,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
         trace->fetch_stall = true;
-        trace->data = std::make_shared<GPUTraceData>(core_->wspawn(rsdata.at(ts)[0].i, rsdata.at(ts)[1].i));
+        core_->wspawn(rsdata.at(ts)[0].i, rsdata.at(ts)[1].i);
       } break;
       case 2: {
         // SPLIT    
