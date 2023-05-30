@@ -90,13 +90,15 @@ public:
 
   ~Core();
 
+  void reset();
+
+  void tick();
+
   void attach_ram(RAM* ram);
 
   bool running() const;
 
-  void reset();
-
-  void tick();
+  void resume();
 
   uint32_t id() const {
     return core_id_;
@@ -116,7 +118,7 @@ public:
 
   WarpMask wspawn(uint32_t num_warps, Word nextPC);
   
-  WarpMask barrier(uint32_t bar_id, uint32_t count, uint32_t warp_id);
+  void barrier(uint32_t bar_id, uint32_t count, uint32_t warp_id);
 
   AddrType get_addr_type(uint64_t addr);
 
@@ -136,23 +138,11 @@ public:
 
   bool check_exit(Word* exitcode, int reg) const;
 
-  uint32_t raster_idx() {
-    auto ret = raster_idx_++;
-    raster_idx_ %= raster_units_.size();
-    return ret;
-  }
+  uint32_t raster_idx();
 
-  uint32_t rop_idx() {
-    auto ret = rop_idx_++;
-    rop_idx_ %= rop_units_.size();
-    return ret;
-  }
+  uint32_t rop_idx();
 
-  uint32_t tex_idx() {
-    auto ret = tex_idx_++;
-    tex_idx_ %= tex_units_.size();
-    return ret;
-  }
+  uint32_t tex_idx();
 
 private:
 

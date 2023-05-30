@@ -1394,8 +1394,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           DPN(3, tmask_.test(i));
         DPN(3, std::endl);
 
-        active_ = tmask_.any();
-        trace->data = std::make_shared<GPUTraceData>(active_ << warp_id_);
+        WarpMask active_warps(0);
+        active_warps.set(warp_id_, tmask_.any());
+        trace->data = std::make_shared<GPUTraceData>(active_warps);
       } break;
       case 1: {
         // WSPAWN
@@ -1428,7 +1429,6 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           for (uint32_t t = 0, n = e.tmask.size(); t < n; ++t) {
             tmask_.set(t, !e.tmask.test(t) && tmask_.test(t));
           }
-          active_ = tmask_.any();
 
           DPH(3, "*** Split: New TM=");
           for (uint32_t t = 0; t < num_threads; ++t) DPN(3, tmask_.test(t));
@@ -1454,7 +1454,6 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         if (!ipdom_stack_.empty() && ipdom_stack_.top().unanimous) {
           DP(3, "*** Unanimous branch at join");
           tmask_ = ipdom_stack_.top().tmask;
-          active_ = tmask_.any();
           ipdom_stack_.pop();
         } else {
           if (!ipdom_stack_.top().fallThrough) {
@@ -1463,7 +1462,6 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           }
 
           tmask_ = ipdom_stack_.top().tmask;
-          active_ = tmask_.any();
 
           DPH(3, "*** Join: New TM=");
           for (uint32_t t = 0; t < num_threads; ++t) DPN(3, tmask_.test(t));
@@ -1479,7 +1477,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         trace->used_iregs.set(rsrc0);
         trace->used_iregs.set(rsrc1);
         trace->fetch_stall = true;
-        trace->data = std::make_shared<GPUTraceData>(core_->barrier(rsdata[ts][0].i, rsdata[ts][1].i, warp_id_));
+        trace->data = std::make_shared<GPUTraceData>(rsdata[ts][0].i, rsdata[ts][1].i);
       } break;
       default:
         std::abort();

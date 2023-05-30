@@ -3,7 +3,6 @@
 #include <unistd.h>
 #include <string.h>
 #include <vortex.h>
-#include <VX_config.h>
 #include "testcases.h"
 #include "common.h"
 
@@ -22,27 +21,25 @@
 class TestMngr {
 public:
   TestMngr() {
-    this->add_test("iadd", new Test_IADD());
-    this->add_test("imul", new Test_IMUL());
-    this->add_test("idiv", new Test_IDIV());
-    this->add_test("idiv-mul", new Test_IDIV_MUL());
-  #ifdef EXT_F_ENABLE
-    this->add_test("fadd", new Test_FADD());
-    this->add_test("fsub", new Test_FSUB());
-    this->add_test("fmul", new Test_FMUL());
-    this->add_test("fmadd", new Test_FMADD());
-    this->add_test("fmsub", new Test_FMSUB());
-    this->add_test("fnmadd", new Test_FNMADD());
-    this->add_test("fnmsub", new Test_FNMSUB());
-    this->add_test("fnmadd-madd", new Test_FNMADD_MADD());
-    this->add_test("fdiv", new Test_FDIV());
-    this->add_test("fdiv2", new Test_FDIV2());
-    this->add_test("fsqrt", new Test_FSQRT());
-    this->add_test("ftoi", new Test_FTOI());
-    this->add_test("ftou", new Test_FTOU());
-    this->add_test("itof", new Test_ITOF());
-    this->add_test("utof", new Test_UTOF());
-  #endif
+    this->add_test(new Test_IADD());
+    this->add_test(new Test_IMUL());
+    this->add_test(new Test_IDIV());
+    this->add_test(new Test_IDIV_MUL());
+    this->add_test(new Test_FADD());
+    this->add_test(new Test_FSUB());
+    this->add_test(new Test_FMUL());
+    this->add_test(new Test_FMADD());
+    this->add_test(new Test_FMSUB());
+    this->add_test(new Test_FNMADD());
+    this->add_test(new Test_FNMSUB());
+    this->add_test(new Test_FNMADD_MADD());
+    this->add_test(new Test_FDIV());
+    this->add_test(new Test_FDIV2());
+    this->add_test(new Test_FSQRT());
+    this->add_test(new Test_FTOI());
+    this->add_test(new Test_FTOU());
+    this->add_test(new Test_ITOF());
+    this->add_test(new Test_UTOF());
   }
 
   ~TestMngr() {
@@ -51,16 +48,15 @@ public:
     }
   }
 
-  const std::string& get_name(int testid) const {
-    return _names.at(testid);
+  const char* get_name(int testid) const {
+    return _tests.at(testid)->name();
   }
 
   ITestCase* get_test(int testid) const {
     return _tests.at(testid);
   }
 
-  void add_test(const char* name, ITestCase* test) {
-    _names.push_back(name);
+  void add_test(ITestCase* test) {
     _tests.push_back(test);
   }
 
@@ -69,7 +65,6 @@ public:
   }  
 
 private:
-  std::vector<std::string> _names;
   std::vector<ITestCase*> _tests;
 };
 

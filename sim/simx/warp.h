@@ -44,25 +44,7 @@ class Warp {
 public:
   Warp(Core *core, uint32_t warp_id);
 
-  void clear();
-  
-  bool active() const {
-    return active_;
-  }
-
-  void suspend() {
-    active_ = false;
-  }
-
-  void activate() {
-    active_ = true;
-  }
-
-  std::size_t getActiveThreads() const {
-    if (active_)
-      return tmask_.count();
-    return 0;
-  }
+  void reset();
 
   uint32_t id() const {
     return warp_id_;
@@ -78,13 +60,10 @@ public:
 
   void setTmask(size_t index, bool value) {
     tmask_.set(index, value);
-    active_ = tmask_.any();
   }
 
-  uint32_t getTmask() const {
-    if (active_)
-      return tmask_.to_ulong();
-    return 0;
+  uint64_t getTmask() const {
+    return tmask_.to_ulong();
   }
 
   Word getIRegValue(uint32_t reg) const {
@@ -104,7 +83,6 @@ private:
   uint32_t warp_id_;
   const Arch& arch_;
   Core *core_;
-  bool active_;
   uint64_t issued_instrs_;
   
   Word PC_;

@@ -15,7 +15,7 @@ namespace vortex {
 
 class ProcessorImpl;
 
-class Cluster {
+class Cluster : public SimObject<Cluster> {
 public:
   struct PerfStats {
     RasterUnit::PerfStats raster_unit;
@@ -44,9 +44,21 @@ public:
     }
   };
 
-  Cluster(uint32_t cluster_id, uint32_t cores_per_cluster, ProcessorImpl* processor, const Arch &arch, const DCRS &dcrs);
+  SimPort<MemReq> mem_req_port;
+  SimPort<MemRsp> mem_rsp_port;
+
+  Cluster(const SimContext& ctx, 
+          uint32_t cluster_id, 
+          uint32_t num_cores, 
+          ProcessorImpl* processor, 
+          const Arch &arch, 
+          const DCRS &dcrs);
 
   ~Cluster();
+
+  void reset();
+
+  void tick();
 
   void attach_ram(RAM* ram);
 
@@ -54,11 +66,13 @@ public:
 
   bool check_exit(Word* exitcode, int reg) const;
 
-  void bind(SimPort<MemReq>* mem_req_port, SimPort<MemRsp>* mem_rsp_port);
-
   ProcessorImpl* processor() const;
 
   Cluster::PerfStats perf_stats() const;
+
+  auto& core(uint32_t index) {
+    return cores_.at(index);
+  }
   
 private:
   uint32_t                     cluster_id_;  

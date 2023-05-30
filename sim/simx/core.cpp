@@ -75,7 +75,7 @@ Core::~Core() {
 
 void Core::reset() {
   for (auto& warp : warps_) {
-    warp->clear();
+    warp->reset();
   }
   warps_.at(0)->setTmask(0, true);
   active_warps_ = 1;
@@ -118,24 +118,6 @@ void Core::reset() {
   exited_ = false;
   perf_stats_ = PerfStats();
   pending_ifetches_ = 0;
-}
-
-void Core::attach_ram(RAM* ram) {
-  // bind RAM to memory unit
-#if (XLEN == 64)
-  mmu_.attach(*ram, 0, 0xFFFFFFFFFFFFFFFF);
-#else
-  mmu_.attach(*ram, 0, 0xFFFFFFFF);
-#endif
-}
-
-void Core::cout_flush() {
-  for (auto& buf : print_bufs_) {
-    auto str = buf.second.str();
-    if (!str.empty()) {
-      std::cout << "#" << buf.first << ": " << str << std::endl;
-    }
-  }
 }
 
 void Core::tick() {
@@ -335,24 +317,32 @@ WarpMask Core::wspawn(uint32_t num_warps, Word nextPC) {
   return ret;
 }
 
-WarpMask Core::barrier(uint32_t bar_id, uint32_t count, uint32_t warp_id) {
-  WarpMask ret(0);
-  auto& barrier = barriers_.at(bar_id);
+void Core::barrier(uint32_t bar_id, uint32_t count, uint32_t warp_id) {
+  uint32_t bar_idx = bar_id & 0x7fffffff;
+  bool is_global = (bar_id >> 31);
+
+  auto& barrier = barriers_.at(bar_idx);
   barrier.set(warp_id);
-  if (barrier.count() < (size_t)count) {
-    warps_.at(warp_id)->suspend();
-    DP(3, "*** Suspend warp #" << warp_id << " at barrier #" << bar_id);
-    return ret;
-  }
-  for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
-    if (barrier.test(i)) {
-      DP(3, "*** Resume warp #" << i << " at barrier #" << bar_id);
-      warps_.at(i)->activate();
-      ret.set(i);
+  DP(3, "*** Suspend warp #" << warp_id << " at barrier #" << bar_idx);
+
+  if (is_global) {
+    // global barrier handling
+    if (barrier.count() == active_warps_.count()) {
+      cluster_->processor()->barrier(bar_idx, count, core_id_);
+    }    
+  } else {    
+    // local barrier handling
+    if (barrier.count() == (size_t)count) {
+      // resume suspended warps
+      for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
+        if (barrier.test(i)) {
+          DP(3, "*** Resume warp #" << i << " at barrier #" << bar_idx);
+          stalled_warps_.reset(i);
+        }
+      }
+      barrier.reset();
     }
   }
-  barrier.reset();
-  return ret;
 }
 
 void Core::icache_read(void *data, uint64_t addr, uint32_t size) {
@@ -430,6 +420,15 @@ void Core::writeToStdOut(const void* data, uint64_t addr, uint32_t size) {
   if (c == '\n') {
     std::cout << std::dec << "#" << tid << ": " << ss_buf.str() << std::flush;
     ss_buf.str("");
+  }
+}
+
+void Core::cout_flush() {
+  for (auto& buf : print_bufs_) {
+    auto str = buf.second.str();
+    if (!str.empty()) {
+      std::cout << "#" << buf.first << ": " << str << std::endl;
+    }
   }
 }
 
@@ -743,4 +742,35 @@ bool Core::check_exit(Word* exitcode, int reg) const {
 
 bool Core::running() const {
   return (committed_instrs_ != issued_instrs_);
+}
+
+void Core::resume() {
+  stalled_warps_.reset();
+}
+
+void Core::attach_ram(RAM* ram) {
+  // bind RAM to memory unit
+#if (XLEN == 64)
+  mmu_.attach(*ram, 0, 0xFFFFFFFFFFFFFFFF);
+#else
+  mmu_.attach(*ram, 0, 0xFFFFFFFF);
+#endif
+}
+
+uint32_t Core::raster_idx() {
+  auto ret = raster_idx_++;
+  raster_idx_ %= raster_units_.size();
+  return ret;
+}
+
+uint32_t Core::rop_idx() {
+  auto ret = rop_idx_++;
+  rop_idx_ %= rop_units_.size();
+  return ret;
+}
+
+uint32_t Core::tex_idx() {
+  auto ret = tex_idx_++;
+  tex_idx_ %= tex_units_.size();
+  return ret;
 }

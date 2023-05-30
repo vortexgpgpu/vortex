@@ -29,9 +29,15 @@ typedef uint64_t WordF;
 #error unsupported XLEN
 #endif
 
-typedef std::bitset<32> RegMask;
-typedef std::bitset<32> ThreadMask;
-typedef std::bitset<32> WarpMask;
+#define MAX_NUM_CORES   1024
+#define MAX_NUM_THREADS 32
+#define MAX_NUM_WARPS   32
+#define MAX_NUM_REGS    32
+
+typedef std::bitset<MAX_NUM_CORES>   CoreMask;
+typedef std::bitset<MAX_NUM_REGS>    RegMask;
+typedef std::bitset<MAX_NUM_THREADS> ThreadMask;
+typedef std::bitset<MAX_NUM_WARPS>   WarpMask;
 
 typedef std::unordered_map<uint32_t, uint32_t> CSRs;
 

@@ -25,8 +25,15 @@ struct LsuTraceData : public ITraceData {
 
 struct GPUTraceData : public ITraceData {
   using Ptr = std::shared_ptr<GPUTraceData>;
-  const WarpMask active_warps;
+  union {
+    const WarpMask active_warps;
+    struct {
+      uint32_t bar_id;
+      uint32_t bar_count;
+    };
+  };
   GPUTraceData(const WarpMask& active_warps) : active_warps(active_warps) {}
+  GPUTraceData(uint32_t bar_id, uint32_t bar_count) : bar_id(bar_id), bar_count(bar_count) {}
 };
 
 struct pipeline_trace_t {

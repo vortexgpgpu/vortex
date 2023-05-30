@@ -18,11 +18,10 @@ Warp::Warp(Core *core, uint32_t warp_id)
     , freg_file_(core->arch().num_threads(), std::vector<uint64_t>(core->arch().num_regs()))
     , vreg_file_(core->arch().num_threads(), std::vector<Byte>(core->arch().vsize()))
 {
-  this->clear();
+  this->reset();
 }
 
-void Warp::clear() {
-  active_ = false;
+void Warp::reset() {
   PC_ = core_->dcrs().base_dcrs.read(DCR_BASE_STARTUP_ADDR0);
   #if (XLEN == 64)
     PC_ = (uint64_t(core_->dcrs().base_dcrs.read(DCR_BASE_STARTUP_ADDR1)) << 32) | PC_;

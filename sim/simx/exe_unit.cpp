@@ -177,6 +177,7 @@ void AluUnit::tick() {
     if (Input.empty())
         return;
     auto trace = Input.front();    
+    bool release_warp = trace->fetch_stall;
     switch (trace->alu_type) {
     case AluType::ARITH:        
     case AluType::BRANCH:
@@ -191,7 +192,7 @@ void AluUnit::tick() {
         std::abort();
     }
     DT(3, "pipeline-execute: op=" << trace->alu_type << ", " << *trace);
-    if (trace->fetch_stall) {
+    if (release_warp) {
         core_->stalled_warps_.reset(trace->wid);
     }
     auto time = Input.pop();
@@ -282,6 +283,7 @@ void GpuUnit::tick() {
     auto trace = Input.front();
 
     auto gpu_type = trace->gpu_type;
+    bool release_warp = trace->fetch_stall;
 
     switch  (gpu_type) {
     case GpuType::TMC: {
@@ -301,10 +303,8 @@ void GpuUnit::tick() {
     case GpuType::BAR: {
         Output.send(trace, 1);
         auto trace_data = std::dynamic_pointer_cast<GPUTraceData>(trace->data);
-        if (trace_data->active_warps != 0) 
-            core_->active_warps_ |= trace_data->active_warps;
-        else
-            core_->active_warps_.reset(trace->wid);
+        core_->barrier(trace_data->bar_id, trace_data->bar_count, trace->wid);
+        release_warp = false;
     }   break;
     case GpuType::RASTER: {
         auto trace_data = std::dynamic_pointer_cast<RasterUnit::TraceData>(trace->data);
@@ -329,15 +329,26 @@ void GpuUnit::tick() {
     }
 
     DT(3, "pipeline-execute: op=" << trace->gpu_type << ", " << *trace);
-    if (trace->fetch_stall)  {
+    if (release_warp)  {
         core_->stalled_warps_.reset(trace->wid);
     }
 
     auto time = Input.pop();
     auto stalls = (SimPlatform::instance().cycles() - time);
-    
-    if (gpu_type == GpuType::TEX) core_->perf_stats_.tex_issue_stalls += stalls;
-    if (gpu_type == GpuType::ROP) core_->perf_stats_.rop_issue_stalls += stalls;
-    if (gpu_type == GpuType::RASTER) core_->perf_stats_.raster_issue_stalls += stalls;
+
     core_->perf_stats_.gpu_stalls += stalls;
+
+    switch (gpu_type) {
+    case GpuType::TEX:
+        core_->perf_stats_.tex_issue_stalls += stalls;
+        break;
+    case GpuType::ROP:
+        core_->perf_stats_.rop_issue_stalls += stalls;
+        break;
+    case GpuType::RASTER:
+        core_->perf_stats_.raster_issue_stalls += stalls;
+        break;
+    default:        
+        break;
+    }    
 }

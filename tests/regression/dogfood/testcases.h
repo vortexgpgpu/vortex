@@ -49,15 +49,23 @@ inline bool almost_equal(float a, float b) {
 
 class ITestCase {
 public:
-  ITestCase() {}
+  ITestCase(const char* name) : name_(name) {}
   virtual ~ITestCase() {}
+
+  const char* name() const {
+    return name_;
+  }
 
   virtual void setup(int n, void* src1, void* src2)  = 0;  
   virtual int verify(int n, void* dst, const void* src1, const void* src2) = 0;
+
+private:
+  const char* const name_;  
 };
 
 class Test_IADD : public ITestCase {
 public:
+  Test_IADD() : ITestCase("iadd") {}
 
   void setup(int n, void* src1, void* src2) override {
     auto a = (int32_t*)src1;
@@ -86,6 +94,7 @@ public:
 
 class Test_IMUL : public ITestCase {
 public:
+  Test_IMUL() : ITestCase("imul") {}
 
   void setup(int n, void* src1, void* src2) override {
     auto a = (int32_t*)src1;
@@ -114,6 +123,7 @@ public:
 
 class Test_IDIV : public ITestCase {
 public:
+  Test_IDIV() : ITestCase("idiv") {}
 
   void setup(int n, void* src1, void* src2) override {
     auto a = (int32_t*)src1;
@@ -142,6 +152,7 @@ public:
 
 class Test_IDIV_MUL : public ITestCase {
 public:
+  Test_IDIV_MUL() : ITestCase("idiv-mul") {}
 
   void setup(int n, void* src1, void* src2) override {
     auto a = (int32_t*)src1;
@@ -172,6 +183,7 @@ public:
 
 class Test_FADD : public ITestCase {
 public:
+  Test_FADD() : ITestCase("fadd") {}
 
   void setup(int n, void* src1, void* src2) override {
     auto a = (float*)src1;
@@ -200,6 +212,7 @@ public:
 
 class Test_FSUB : public ITestCase {
 public:
+  Test_FSUB() : ITestCase("fsub") {}
 
   void setup(int n, void* src1, void* src2) override {
     auto a = (float*)src1;
@@ -228,6 +241,7 @@ public:
 
 class Test_FMUL : public ITestCase {
 public:
+  Test_FMUL() : ITestCase("fmul") {}
 
   void setup(int n, void* src1, void* src2) override {
     auto a = (float*)src1;
@@ -256,6 +270,7 @@ public:
 
 class Test_FMADD : public ITestCase {
 public:
+  Test_FMADD() : ITestCase("fmadd") {}
 
   void setup(int n, void* src1, void* src2) override {
     auto a = (float*)src1;
@@ -284,6 +299,7 @@ public:
 
 class Test_FMSUB : public ITestCase {
 public:
+  Test_FMSUB() : ITestCase("fmsub") {}
 
   void setup(int n, void* src1, void* src2) override {
     auto a = (float*)src1;
@@ -312,6 +328,7 @@ public:
 
 class Test_FNMADD : public ITestCase {
 public:
+  Test_FNMADD() : ITestCase("fnmadd") {}
 
   void setup(int n, void* src1, void* src2) override {
     auto a = (float*)src1;
@@ -340,6 +357,7 @@ public:
 
 class Test_FNMSUB : public ITestCase {
 public:
+  Test_FNMSUB() : ITestCase("fnmsub") {}
 
   void setup(int n, void* src1, void* src2) override {
     auto a = (float*)src1;
@@ -368,6 +386,7 @@ public:
 
 class Test_FNMADD_MADD : public ITestCase {
 public:
+  Test_FNMADD_MADD() : ITestCase("fnmadd-madd") {}
 
   void setup(int n, void* src1, void* src2) override {
     auto a = (float*)src1;
@@ -398,6 +417,7 @@ public:
 
 class Test_FDIV : public ITestCase {
 public:
+  Test_FDIV() : ITestCase("fdiv") {}
 
   void setup(int n, void* src1, void* src2) override {
     auto a = (float*)src1;
@@ -426,6 +446,7 @@ public:
 
 class Test_FDIV2 : public ITestCase {
 public:
+  Test_FDIV2() : ITestCase("fdiv2") {}
 
   void setup(int n, void* src1, void* src2) override {
     auto a = (float*)src1;
@@ -456,6 +477,7 @@ public:
 
 class Test_FSQRT : public ITestCase {
 public:
+  Test_FSQRT() : ITestCase("fsqrt") {}
 
   void setup(int n, void* src1, void* src2) override {
     auto a = (float*)src1;
@@ -485,6 +507,7 @@ public:
 
 class Test_FTOI : public ITestCase {
 public:
+  Test_FTOI() : ITestCase("ftoi") {}
 
   void setup(int n, void* src1, void* src2) override {
     auto a = (float*)src1;
@@ -514,6 +537,7 @@ public:
 
 class Test_FTOU : public ITestCase {
 public:
+  Test_FTOU() : ITestCase("ftou") {}
 
   void setup(int n, void* src1, void* src2) override {
     auto a = (float*)src1;
@@ -543,6 +567,7 @@ public:
 
 class Test_ITOF : public ITestCase {
 public:
+  Test_ITOF() : ITestCase("itof") {}
 
   void setup(int n, void* src1, void* src2) override {
     auto a = (int32_t*)src1;
@@ -572,6 +597,7 @@ public:
 
 class Test_UTOF : public ITestCase {
 public:
+  Test_UTOF() : ITestCase("utof") {}
 
   void setup(int n, void* src1, void* src2) override {
     auto a = (uint32_t*)src1;

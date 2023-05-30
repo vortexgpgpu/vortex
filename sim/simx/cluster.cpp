@@ -2,17 +2,21 @@
 
 using namespace vortex;
 
-Cluster::Cluster(uint32_t cluster_id, 
-                 uint32_t cores_per_cluster, 
+Cluster::Cluster(const SimContext& ctx, 
+                 uint32_t cluster_id, 
+                 uint32_t num_cores, 
                  ProcessorImpl* processor, 
                  const Arch &arch, const 
                  DCRS &dcrs) 
-  : cluster_id_(cluster_id)
-  , cores_(cores_per_cluster)
+  : SimObject(ctx, "cluster")
+  , mem_req_port(this)
+  , mem_rsp_port(this)
+  , cluster_id_(cluster_id)
+  , cores_(num_cores)
   , raster_units_(NUM_RASTER_UNITS)
   , rop_units_(NUM_ROP_UNITS)
   , tex_units_(NUM_TEX_UNITS)
-  , sharedmems_(cores_per_cluster)
+  , sharedmems_(num_cores)
   , processor_(processor)
 {
   char sname[100];
@@ -20,11 +24,11 @@ Cluster::Cluster(uint32_t cluster_id,
   snprintf(sname, 100, "cluster%d-l2cache", cluster_id);
   l2cache_ = CacheSim::Create(sname, CacheSim::Config{
     !L2_ENABLED,
-    log2ceil(L2_CACHE_SIZE),  // C
+    log2ceil(L2_CACHE_SIZE), // C
     log2ceil(MEM_BLOCK_SIZE), // B
     log2ceil(L2_NUM_WAYS),  // W
     0,                      // A
-    32,                     // address bits  
+    XLEN,                   // address bits  
     L2_NUM_BANKS,           // number of banks
     L2_NUM_PORTS,           // number of ports
     5,                      // request size 
@@ -35,14 +39,17 @@ Cluster::Cluster(uint32_t cluster_id,
     2,                      // pipeline latency
   });
 
+  l2cache_->MemReqPort.bind(&this->mem_req_port);
+  this->mem_rsp_port.bind(&l2cache_->MemRspPort);
+
   snprintf(sname, 100, "cluster%d-icaches", cluster_id);
-  icaches_ = CacheCluster::Create(sname, cores_per_cluster, NUM_ICACHES, 1, CacheSim::Config{
+  icaches_ = CacheCluster::Create(sname, num_cores, NUM_ICACHES, 1, CacheSim::Config{
     !ICACHE_ENABLED,
     log2ceil(ICACHE_SIZE),  // C
-    log2ceil(L1_LINE_SIZE),// B
+    log2ceil(L1_LINE_SIZE), // B
     log2ceil(sizeof(uint32_t)), // W
     log2ceil(ICACHE_NUM_WAYS),// A
-    32,                     // address bits    
+    XLEN,                   // address bits    
     1,                      // number of banks
     1,                      // number of ports
     1,                      // number of inputs
@@ -57,13 +64,13 @@ Cluster::Cluster(uint32_t cluster_id,
   l2cache_->CoreRspPorts.at(0).bind(&icaches_->MemRspPort);
 
   snprintf(sname, 100, "cluster%d-dcaches", cluster_id);
-  dcaches_ = CacheCluster::Create(sname, cores_per_cluster, NUM_DCACHES, arch.num_threads(), CacheSim::Config{
+  dcaches_ = CacheCluster::Create(sname, num_cores, NUM_DCACHES, arch.num_threads(), CacheSim::Config{
     !DCACHE_ENABLED,
     log2ceil(DCACHE_SIZE),  // C
-    log2ceil(L1_LINE_SIZE),// B
+    log2ceil(L1_LINE_SIZE), // B
     log2ceil(sizeof(Word)), // W
     log2ceil(DCACHE_NUM_WAYS),// A
-    32,                     // address bits    
+    XLEN,                   // address bits    
     DCACHE_NUM_BANKS,       // number of banks
     DCACHE_NUM_PORTS,       // number of ports
     DCACHE_NUM_BANKS,       // number of inputs
@@ -81,10 +88,10 @@ Cluster::Cluster(uint32_t cluster_id,
   tcaches_ = CacheCluster::Create(sname, NUM_TEX_UNITS, NUM_TCACHES, arch.num_threads(), CacheSim::Config{
     !TCACHE_ENABLED,
     log2ceil(TCACHE_SIZE),  // C
-    log2ceil(L1_LINE_SIZE),// B
+    log2ceil(L1_LINE_SIZE), // B
     log2ceil(sizeof(uint32_t)), // W
     log2ceil(TCACHE_NUM_WAYS),// A
-    32,                     // address bits    
+    XLEN,                   // address bits    
     TCACHE_NUM_BANKS,       // number of banks
     TCACHE_NUM_PORTS,       // number of ports
     TCACHE_NUM_BANKS,       // number of inputs
@@ -105,7 +112,7 @@ Cluster::Cluster(uint32_t cluster_id,
     log2ceil(MEM_BLOCK_SIZE), // B
     log2ceil(sizeof(uint32_t)), // W
     log2ceil(OCACHE_NUM_WAYS), // A 
-    32,                     // address bits    
+    XLEN,                   // address bits    
     OCACHE_NUM_BANKS,       // number of banks
     OCACHE_NUM_PORTS,       // number of ports
     OCACHE_NUM_BANKS,       // number of inputs
@@ -126,7 +133,7 @@ Cluster::Cluster(uint32_t cluster_id,
     log2ceil(MEM_BLOCK_SIZE), // B
     log2ceil(sizeof(uint32_t)), // W
     log2ceil(RCACHE_NUM_WAYS), // A
-    32,                     // address bits    
+    XLEN,                   // address bits    
     RCACHE_NUM_BANKS,       // number of banks
     RCACHE_NUM_PORTS,       // number of ports
     RCACHE_NUM_BANKS,       // number of inputs 
@@ -179,7 +186,7 @@ Cluster::Cluster(uint32_t cluster_id,
   }
 
   // create shared memory blocks
-  for (uint32_t i = 0; i < cores_per_cluster; ++i) {
+  for (uint32_t i = 0; i < num_cores; ++i) {
     snprintf(sname, 100, "cluster%d-shared_mem%d", cluster_id, i);
     sharedmems_.at(i) = SharedMem::Create(sname, SharedMem::Config{
       uint32_t(SMEM_LOCAL_SIZE) * arch.num_warps() * arch.num_threads(),
@@ -195,10 +202,10 @@ Cluster::Cluster(uint32_t cluster_id,
   // create cores 
 
   for (uint32_t raster_idx = 0, rop_idx = 0, tex_idx = 0, 
-                i = 0; i < cores_per_cluster; ++i) {  
-    auto per_core_raster_units = std::max<uint32_t>((NUM_RASTER_UNITS + cores_per_cluster - 1 - i) / cores_per_cluster, 1);
-    auto per_core_rop_units = std::max<uint32_t>((NUM_ROP_UNITS + cores_per_cluster - 1 - i) / cores_per_cluster, 1);
-    auto per_core_tex_units = std::max<uint32_t>((NUM_TEX_UNITS + cores_per_cluster - 1 - i) / cores_per_cluster, 1);
+                i = 0; i < num_cores; ++i) {  
+    auto per_core_raster_units = std::max<uint32_t>((NUM_RASTER_UNITS + num_cores - 1 - i) / num_cores, 1);
+    auto per_core_rop_units = std::max<uint32_t>((NUM_ROP_UNITS + num_cores - 1 - i) / num_cores, 1);
+    auto per_core_tex_units = std::max<uint32_t>((NUM_TEX_UNITS + num_cores - 1 - i) / num_cores, 1);
 
     std::vector<RasterUnit::Ptr> raster_units(per_core_raster_units);
     std::vector<RopUnit::Ptr> rop_units(per_core_rop_units);
@@ -216,7 +223,7 @@ Cluster::Cluster(uint32_t cluster_id,
       tex_units.at(j) = tex_units_.at(tex_idx++ % NUM_TEX_UNITS);
     }
 
-    uint32_t core_id = cluster_id * cores_per_cluster + i;
+    uint32_t core_id = cluster_id * num_cores + i;
 
     cores_.at(i) = Core::Create(core_id, 
                                 this, 
@@ -247,6 +254,14 @@ Cluster::Cluster(uint32_t cluster_id,
 }
 
 Cluster::~Cluster() {
+  //--
+}
+
+void Cluster::reset() {
+  //--
+}
+
+void Cluster::tick() {
   //--
 }
 
@@ -286,11 +301,6 @@ bool Cluster::check_exit(Word* exitcode, int reg) const {
   }
   *exitcode = exitcode_;
   return done;
-}
-
-void Cluster::bind(SimPort<MemReq>* mem_req_port, SimPort<MemRsp>* mem_rsp_port) {    
-    l2cache_->MemReqPort.bind(mem_req_port);
-    mem_rsp_port->bind(&l2cache_->MemRspPort);
 }
 
 ProcessorImpl* Cluster::processor() const {
