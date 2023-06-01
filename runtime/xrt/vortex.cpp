@@ -503,13 +503,13 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
     case VX_CAPS_VERSION:
         *value = (device->dev_caps >> 0) & 0xffff;
         break;
-    case VX_CAPS_MAX_CORES:
+    case VX_CAPS_NUM_CORES:
         *value = (device->dev_caps >> 16) & 0xffff;
         break;
-    case VX_CAPS_MAX_WARPS:
+    case VX_CAPS_NUM_WARPS:
         *value = (device->dev_caps >> 32) & 0xffff;
         break;
-    case VX_CAPS_MAX_THREADS:
+    case VX_CAPS_NUM_THREADS:
         *value = (device->dev_caps >> 48) & 0xffff;
         break;
     case VX_CAPS_CACHE_LINE_SIZE:

@@ -192,13 +192,13 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
     case VX_CAPS_VERSION:
         *value = IMPLEMENTATION_ID;
         break;
-    case VX_CAPS_MAX_CORES:
+    case VX_CAPS_NUM_CORES:
         *value = NUM_CORES * NUM_CLUSTERS;        
         break;
-    case VX_CAPS_MAX_WARPS:
+    case VX_CAPS_NUM_WARPS:
         *value = NUM_WARPS;
         break;
-    case VX_CAPS_MAX_THREADS:
+    case VX_CAPS_NUM_THREADS:
         *value = NUM_THREADS;
         break;
     case VX_CAPS_CACHE_LINE_SIZE:

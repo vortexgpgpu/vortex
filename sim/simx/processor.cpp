@@ -6,6 +6,7 @@ using namespace vortex;
 ProcessorImpl::ProcessorImpl(const Arch& arch) 
   : arch_(arch)
   , clusters_(NUM_CLUSTERS)
+  , barriers_(arch.num_barriers(), 0)
 {
   SimPlatform::instance().initialize();
 

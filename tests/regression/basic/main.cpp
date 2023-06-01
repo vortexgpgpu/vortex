@@ -226,8 +226,8 @@ int main(int argc, char *argv[]) {
   std::cout << "open device connection" << std::endl;
   RT_CHECK(vx_dev_open(&device));
   
-  uint64_t max_cores;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_CORES, &max_cores));
+  uint64_t num_cores;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores));
   uint32_t num_points = count;
   uint32_t num_blocks = (num_points * sizeof(int32_t) + 63) / 64;
   uint32_t buf_size   = num_blocks * 64;

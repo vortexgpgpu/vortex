@@ -242,12 +242,12 @@ int main(int argc, char *argv[]) {
 
   std::cout << "using color=" << std::hex << color << ", depth=" << depth << std::endl;
 
-  uint64_t max_cores, max_warps, max_threads;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_CORES, &max_cores));
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_WARPS, &max_warps));
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_THREADS, &max_threads));  
+  uint64_t num_cores, num_warps, num_threads;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores));
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_WARPS, &num_warps));
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads));  
 
-  uint32_t num_tasks = max_cores * max_warps * max_threads;
+  uint32_t num_tasks = num_cores * num_warps * num_threads;
 
   std::cout << "number of tasks: " << std::dec << num_tasks << std::endl;
 

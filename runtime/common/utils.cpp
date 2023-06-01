@@ -315,7 +315,7 @@ extern int vx_dump_perf(vx_device_h device, FILE* stream) {
 #endif
 
   uint64_t num_cores;
-  ret = vx_dev_caps(device, VX_CAPS_MAX_CORES, &num_cores);
+  ret = vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores);
   if (ret != 0)
     return ret;
 
@@ -639,7 +639,7 @@ extern int vx_perf_counter(vx_device_h device, int counter, int core_id, uint64_
   int ret = 0;
 
   uint64_t num_cores;
-  ret = vx_dev_caps(device, VX_CAPS_MAX_CORES, &num_cores);
+  ret = vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores);
   if (ret != 0)
     return ret;
 

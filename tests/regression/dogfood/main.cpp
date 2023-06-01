@@ -1,80 +1,21 @@
 #include <iostream>
 #include <vector>
+#include <unordered_set>
 #include <unistd.h>
 #include <string.h>
 #include <vortex.h>
 #include "testcases.h"
 #include "common.h"
 
-#define RT_CHECK(_expr)                                         \
-   do {                                                         \
-     int _ret = _expr;                                          \
-     if (0 == _ret)                                             \
-       break;                                                   \
-     printf("Error: '%s' returned %d!\n", #_expr, (int)_ret);   \
-	 cleanup();			                                              \
-     exit(-1);                                                  \
-   } while (false)
-
 ///////////////////////////////////////////////////////////////////////////////
 
-class TestMngr {
-public:
-  TestMngr() {
-    this->add_test(new Test_IADD());
-    this->add_test(new Test_IMUL());
-    this->add_test(new Test_IDIV());
-    this->add_test(new Test_IDIV_MUL());
-    this->add_test(new Test_FADD());
-    this->add_test(new Test_FSUB());
-    this->add_test(new Test_FMUL());
-    this->add_test(new Test_FMADD());
-    this->add_test(new Test_FMSUB());
-    this->add_test(new Test_FNMADD());
-    this->add_test(new Test_FNMSUB());
-    this->add_test(new Test_FNMADD_MADD());
-    this->add_test(new Test_FDIV());
-    this->add_test(new Test_FDIV2());
-    this->add_test(new Test_FSQRT());
-    this->add_test(new Test_FTOI());
-    this->add_test(new Test_FTOU());
-    this->add_test(new Test_ITOF());
-    this->add_test(new Test_UTOF());
-  }
-
-  ~TestMngr() {
-    for (size_t i = 0; i < _tests.size(); ++i) {
-      delete _tests[i];
-    }
-  }
-
-  const char* get_name(int testid) const {
-    return _tests.at(testid)->name();
-  }
-
-  ITestCase* get_test(int testid) const {
-    return _tests.at(testid);
-  }
-
-  void add_test(ITestCase* test) {
-    _tests.push_back(test);
-  }
-
-  size_t size() const {
-    return _tests.size();
-  }  
-
-private:
-  std::vector<ITestCase*> _tests;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-TestMngr testMngr;
+TestSuite* testSuite = nullptr;
 const char* kernel_file = "kernel.bin";
 int count    = 0;
+std::unordered_set<int> included;
+std::unordered_set<int> excluded;
 int testid_s = 0;
-int testid_e = (testMngr.size() - 1);
+int testid_e = 0;
 bool stop_on_error = true;
 
 vx_device_h device   = nullptr;
@@ -86,7 +27,8 @@ kernel_arg_t kernel_arg;
 
 static void show_usage() {
    std::cout << "Vortex Test." << std::endl;
-   std::cout << "Usage: [-t:testid] [-s:testid] [-e:testid] [-k: kernel] [-n words] [-c] [-h: help]" << std::endl;
+   std::cout << "Usage: [-t<testid>: selected test] [-s<testid>: start test] [-e<testid>: end test] [-x<testid>: excluded tests]" << std::endl;
+   std::cout << "       [-k<kernel>] [-n<words>] [-c] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
@@ -97,8 +39,10 @@ static void parse_args(int argc, char **argv) {
       count = atoi(optarg);
       break;
     case 't':
-      testid_s = atoi(optarg);
-      testid_e = atoi(optarg);
+      included.insert(atoi(optarg));
+      break;
+    case 'x':
+      excluded.insert(atoi(optarg));
       break;
     case 's':
       testid_s = atoi(optarg);
@@ -125,6 +69,9 @@ static void parse_args(int argc, char **argv) {
 }
 
 void cleanup() {  
+  if (testSuite) {
+    delete testSuite;
+  }
   if (arg_buf) {
     vx_buf_free(arg_buf);
   }
@@ -165,12 +112,12 @@ int main(int argc, char *argv[]) {
   std::cout << "open device connection" << std::endl;  
   RT_CHECK(vx_dev_open(&device));
 
-  uint64_t max_cores, max_warps, max_threads;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_CORES, &max_cores));
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_WARPS, &max_warps));
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_MAX_THREADS, &max_threads));
+  uint64_t num_cores, num_warps, num_threads;
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores));
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_WARPS, &num_warps));
+  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &num_threads));
 
-  int num_tasks  = max_cores * max_warps * max_threads;
+  int num_tasks = num_cores * num_warps * num_threads;
   int num_points = count * num_tasks;
   size_t buf_size = num_points * sizeof(uint32_t);
   
@@ -201,9 +148,23 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_buf_alloc(device, buf_size, &src2_buf));
   RT_CHECK(vx_buf_alloc(device, buf_size, &dst_buf));
 
+  // allocate test suite
+  testSuite = new TestSuite(device);
+  if (testid_e == 0) {
+    testid_e = (testSuite->size() - 1);
+  }
+  // execute tests
   for (int t = testid_s; t <= testid_e; ++t) { 
-    auto name = testMngr.get_name(t);
-    auto test = testMngr.get_test(t);
+    if (!included.empty()) {
+      if (included.count(t) == 0)
+        continue;
+    }
+    if (!excluded.empty()) {
+      if (excluded.count(t) != 0)
+        continue;
+    }
+    auto test = testSuite->get_test(t);
+    auto name = test->name();
 
     std::cout << "Test" << t << ": " << name << std::endl;
 
@@ -215,14 +176,14 @@ int main(int argc, char *argv[]) {
 
     // get test arguments
     std::cout << "get test arguments" << std::endl;
-    test->setup(num_points, (void*)vx_host_ptr(src1_buf), (void*)vx_host_ptr(src2_buf));
+    RT_CHECK(test->setup(num_points, (void*)vx_host_ptr(src1_buf), (void*)vx_host_ptr(src2_buf)));
     
     // upload source buffer0
     std::cout << "upload source buffer0" << std::endl;      
     RT_CHECK(vx_copy_to_dev(src1_buf, kernel_arg.src0_addr, buf_size, 0));
     
     // upload source buffer1
-    std::cout << "upload source buffer1" << std::endl;      
+    std::cout << "upload source buffer1" << std::endl;   
     RT_CHECK(vx_copy_to_dev(src2_buf, kernel_arg.src1_addr, buf_size, 0));
 
     // clear destination buffer    

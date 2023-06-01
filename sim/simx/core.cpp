@@ -328,7 +328,7 @@ void Core::barrier(uint32_t bar_id, uint32_t count, uint32_t warp_id) {
     if (barrier.count() == active_warps_.count()) {
       cluster_->processor()->barrier(bar_idx, count, core_id_);
     }    
-  } else {    
+  } else {
     // local barrier handling
     if (barrier.count() == (size_t)count) {
       // resume suspended warps
