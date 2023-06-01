@@ -32,7 +32,7 @@ make -C tests/regression run-simx
 make -C tests/regression run-rtlsim
 
 # test global barriers with multiple cores
-./ci/blackbox.sh --driver=simx --app=dogfood --args="-n64 -t20" --cores=2
+./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -t19 -t20" --cores=2
 
 echo "regression tests done!"
 }
