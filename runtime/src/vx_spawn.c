@@ -189,10 +189,11 @@ static void __attribute__ ((noinline)) spawn_kernel_all_stub() {
 static void __attribute__ ((noinline)) spawn_kernel_rem_stub() {
   int core_id = vx_core_id(); 
   int tid = vx_thread_gid();
+  int NT  = vx_num_threads();
 
   wspawn_kernel_args_t* p_wspawn_args = (wspawn_kernel_args_t*)g_wspawn_args[core_id];
 
-  int wg_id = p_wspawn_args->offset + tid;
+  int wg_id = p_wspawn_args->offset + tid%NT + core_id*NT;
 
   int X = p_wspawn_args->ctx->num_groups[0];
   int Y = p_wspawn_args->ctx->num_groups[1];
@@ -296,7 +297,7 @@ void vx_spawn_kernel(context_t * ctx, vx_spawn_kernel_cb callback, void * arg) {
 
   //--    
   if (rT != 0) {
-    wspawn_args.offset = wgs_per_core0 - rT;
+    wspawn_args.offset = wgs_per_core*core_id + nW*NT - core_id*NT;
     int tmask = (1 << rT) - 1;
     spawn_kernel_rem_cb(tmask);
   }
