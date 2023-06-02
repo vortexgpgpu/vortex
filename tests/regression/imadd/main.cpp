@@ -30,7 +30,7 @@ vx_buffer_h src3_buf = nullptr;
 vx_buffer_h src4_buf = nullptr;
 vx_buffer_h dst_buf  = nullptr;
 bool use_sw = false;
-kernel_arg_t kernel_arg;
+kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
    std::cout << "Vortex Test." << std::endl;

@@ -8,7 +8,7 @@ THIRD_PARTY_DIR = ../../third_party
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
-CXXFLAGS += -I.. -I../../../hw -I../../common
+CXXFLAGS += -I.. -I../../../hw -I../../common -I$(abspath $(DESTDIR))
 CXXFLAGS += -I../$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I../$(THIRD_PARTY_DIR)
 CXXFLAGS += -DXLEN_$(XLEN)

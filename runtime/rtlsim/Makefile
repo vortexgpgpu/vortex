@@ -1,8 +1,10 @@
+XLEN ?= 32
+
 RTLSIM_DIR = ../../sim/rtlsim
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
-
 CXXFLAGS += -I../include -I../common -I../../hw -I$(RTLSIM_DIR) -I$(RTLSIM_DIR)/../common
+CXXFLAGS += -DXLEN_$(XLEN)
 
 # Position independent code
 CXXFLAGS += -fPIC

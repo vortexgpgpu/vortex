@@ -55,7 +55,7 @@ uint64_t zbuf_addr = 0;
 uint64_t cbuf_addr = 0;
 bool use_sw = false;
 
-kernel_arg_t kernel_arg;
+kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
    std::cout << "Vortex Render Output Test." << std::endl;

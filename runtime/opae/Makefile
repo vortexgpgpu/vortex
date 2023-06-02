@@ -1,3 +1,5 @@
+XLEN ?= 32
+
 TARGET ?= opaesim
 
 OPAESIM_DIR = ../../sim/opaesim
@@ -9,8 +11,8 @@ SYN_DIR=../../hw/syn/altera/opae
 SCRIPT_DIR=../../hw/scripts
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
-
 CXXFLAGS += -I. -I../include -I../common/ -I../../hw
+CXXFLAGS += -DXLEN_$(XLEN)
 
 ifeq ($(TARGET), opaesim)
 	CXXFLAGS += -I$(OPAESIM_DIR)

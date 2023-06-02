@@ -64,7 +64,7 @@ uint64_t texbuf_addr = 0;
 uint64_t tilebuf_addr = 0;
 uint64_t primbuf_addr = 0;
 
-kernel_arg_t kernel_arg;
+kernel_arg_t kernel_arg = {};
 
 uint32_t tileLogSize = RASTER_TILE_LOGSIZE;
 

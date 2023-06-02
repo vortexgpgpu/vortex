@@ -9,7 +9,7 @@
 
 XLEN ?= 32
 
-SIM_DIR=../../../sim
+SIM_DIR = ../../../sim
 
 TESTS_32I := $(filter-out rv32ui-p-ma_data.hex rv32ui-p-fence_i.hex, $(wildcard rv32ui-p-*.hex))
 TESTS_32M := $(wildcard rv32um-p-*.hex)

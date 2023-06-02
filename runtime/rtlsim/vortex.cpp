@@ -275,6 +275,9 @@ extern int vx_mem_free(vx_device_h hdevice, uint64_t dev_maddr) {
     if (nullptr == hdevice)
         return -1;
 
+    if (0 == dev_maddr)
+        return 0;
+
     vx_device *device = ((vx_device*)hdevice);
     return device->mem_free(dev_maddr);
 }

@@ -23,7 +23,7 @@ vx_buffer_h arg_buf  = nullptr;
 vx_buffer_h src1_buf = nullptr;
 vx_buffer_h src2_buf = nullptr;
 vx_buffer_h dst_buf  = nullptr;
-kernel_arg_t kernel_arg;
+kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
    std::cout << "Vortex Test." << std::endl;
@@ -33,7 +33,7 @@ static void show_usage() {
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "n:t:s:e:k:ch?")) != -1) {
+  while ((c = getopt(argc, argv, "n:t:x:s:e:k:ch?")) != -1) {
     switch (c) {
     case 'n':
       count = atoi(optarg);

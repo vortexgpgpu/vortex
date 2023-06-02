@@ -144,26 +144,12 @@ ifneq ($(TARGET),$(findstring $(TARGET), hw hw_emu))
 	$(warning WARNING:Application supports only hw hw_emu TARGET. Please use the target for running the application)
 endif
 
-<<<<<<< HEAD
 .PHONY: all clean gen-sources gen-ast emconfig check-devices
-=======
-CONFIGS_1   := -DNUM_CLUSTERS=1 -DNUM_CORES=1 $(CONFIGS)
-CONFIGS_2   := -DNUM_CLUSTERS=1 -DNUM_CORES=2 $(CONFIGS)
-CONFIGS_4   := -DNUM_CLUSTERS=1 -DNUM_CORES=4  -DL2_ENABLE $(CONFIGS)
-CONFIGS_8   := -DNUM_CLUSTERS=1 -DNUM_CORES=8  -DL2_ENABLE $(CONFIGS)
-CONFIGS_16  := -DNUM_CLUSTERS=1 -DNUM_CORES=16 -DL2_ENABLE $(CONFIGS)
-CONFIGS_32  := -DNUM_CLUSTERS=2 -DNUM_CORES=16 -DL2_ENABLE $(CONFIGS)
-CONFIGS_64  := -DNUM_CLUSTERS=4 -DNUM_CORES=16 -DL2_ENABLE $(CONFIGS)
-CONFIGS_SEL := $(CONFIGS_$(NUM_CORES))
-
-.PHONY: all clean gen-sources emconfig check-devices
->>>>>>> minor update
 
 all: check-devices emconfig $(XCLBIN_CONTAINER)
 
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt:
-<<<<<<< HEAD
 	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -EVX_fpu_fpnew.sv -Fsrc -P -Osources.txt
 
 gen-ast: $(BUILD_DIR)/vortex.xml
@@ -173,13 +159,6 @@ $(BUILD_DIR)/vortex.xml:
 scope-json: $(BUILD_DIR)/scope.json
 $(BUILD_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
 	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/scope.py vortex.xml -o scope.json
-=======
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh $(RTL_INCLUDE) $(CONFIGS_SEL) -EVX_fpu_fpnew.sv -Evortex_afu.v -EVX_afu_wrap.sv -Osources.txt
-	cd $(BUILD_DIR); verilator -E -DNOGLOBALS $(RTL_INCLUDE) $(CONFIGS_SEL) $(AFU_DIR)/VX_afu_wrap.sv | sed '/^`line /d' > VX_afu_wrap.sv
-	cd $(BUILD_DIR); verilator -E -DNOGLOBALS $(RTL_INCLUDE) $(CONFIGS_SEL) $(AFU_DIR)/vortex_afu.v | sed '/^`line /d' > vortex_afu.v
-	echo "$(PWD)/$(BUILD_DIR)/VX_afu_wrap.sv" >> $(BUILD_DIR)/sources.txt
-	echo "$(PWD)/$(BUILD_DIR)/vortex_afu.v" >> $(BUILD_DIR)/sources.txt
->>>>>>> minor update
 
 $(XO_CONTAINER): $(BUILD_DIR)/sources.txt
 	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR);	$(VIVADO) -mode batch -source ../scripts/gen_xo.tcl -tclargs ../$(XO_CONTAINER) vortex_afu sources.txt $(SCRIPT_DIR) ../$(BUILD_DIR)

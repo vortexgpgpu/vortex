@@ -2,8 +2,10 @@ XLEN ?= 32
 
 ifeq ($(XLEN),64)
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv64-gnu-toolchain
+CFLAGS += -march=rv64imafd -mabi=lp64d
 else
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
+CFLAGS += -march=rv32imaf -mabi=ilp32f
 endif
 
 RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf
@@ -16,16 +18,10 @@ AR = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc-ar
 DP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
 CP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
-ifeq ($(XLEN),64)
-CFLAGS += -march=rv64imafd -mabi=lp64d
-else
-CFLAGS += -march=rv32imaf -mabi=ilp32f
-endif
-
 CFLAGS += -O3 -Wstack-usage=1024 -ffreestanding -nostartfiles -fdata-sections -ffunction-sections
 CFLAGS += -I$(VORTEX_RT_PATH)/include -I$(VORTEX_RT_PATH)/../hw
 
-LDFLAGS += -lm -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link32.ld
+LDFLAGS += -lm -Wl,-Bstatic,-T,$(VORTEX_RT_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=0x80000000
 
 PROJECT = kernel
 

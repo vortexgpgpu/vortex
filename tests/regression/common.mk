@@ -6,8 +6,12 @@ XRT_SYN_DIR ?= ../../../hw/syn/xilinx/xrt
 
 ifeq ($(XLEN),64)
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv64-gnu-toolchain
+VX_CFLAGS += -march=rv64imafd -mabi=lp64d
+STARTUP_ADDR = 0x180000000
 else
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
+VX_CFLAGS += -march=rv32imaf -mabi=ilp32f
+STARTUP_ADDR = 0x180000000
 endif
 
 RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf
@@ -40,18 +44,12 @@ VX_CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 #VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
 #VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
-ifeq ($(XLEN),64)
-VX_CFLAGS += -march=rv64imafd -mabi=lp64d
-else
-VX_CFLAGS += -march=rv32imaf -mabi=ilp32f
-endif
-
 VX_CFLAGS += -v -O3 -std=c++17
 VX_CFLAGS += -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
 VX_CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw
 VX_CFLAGS += -DLLVM_VORTEX
 
-VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld $(VORTEX_KN_PATH)/libvortexrt.a
+VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/libvortexrt.a
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors
 CXXFLAGS += -I$(VORTEX_RT_PATH)/include -I$(VORTEX_KN_PATH)/../hw

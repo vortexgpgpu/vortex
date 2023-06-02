@@ -58,6 +58,7 @@ public:
     , num_rsrcs_(0)
     , has_imm_(false)
     , rdest_type_(RegType::None)
+    , imm_(0)
     , rdest_(0)
     , func2_(0)
     , func3_(0)

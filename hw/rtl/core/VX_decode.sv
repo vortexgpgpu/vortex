@@ -33,11 +33,11 @@ module VX_decode  #(
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
     
-    reg [`EX_BITS-1:0]  ex_type;    
+    reg [`EX_BITS-1:0] ex_type;    
     reg [`INST_OP_BITS-1:0] op_type; 
     reg [`INST_MOD_BITS-1:0] op_mod;
     reg [`NR_BITS-1:0]  rd_r, rs1_r, rs2_r, rs3_r;
-    reg [`XLEN-1:0]          imm;    
+    reg [`XLEN-1:0] imm;    
     reg use_rd, use_PC, use_imm;
     reg is_join, is_wstall;
 
@@ -54,7 +54,6 @@ module VX_decode  #(
     wire [4:0] rs3 = instr[31:27];
 
     wire [19:0] upper_imm = {func7, rs2, rs1, func3};
-    // wire [11:0] alu_imm   = (func3 == 3'b001) ? {{7{1'b0}}, instr[25:20]} : ((func3[0] && ~func3[1]) ? {{7{1'b0}}, rs2} : u_12);
     wire [11:0] alu_imm   = (func3 == 3'b001) ? {{6{1'b0}}, instr[25:20]} : ((func3[0] && ~func3[1]) ? {{7{1'b0}}, rs2} : u_12);
     wire [11:0] s_imm     = {func7, rd};
     wire [12:0] b_imm     = {instr[31], instr[7], instr[30:25], instr[11:8], 1'b0};
@@ -497,7 +496,7 @@ module VX_decode  #(
     `UNUSED_VAR (func2)
 
     // disable write to integer register r0
-    wire wb = use_rd && (| rd_r);
+    wire wb = use_rd && (rd_r != 0);
 
     assign decode_if.valid     = ifetch_rsp_if.valid;
     assign decode_if.uuid      = ifetch_rsp_if.uuid;

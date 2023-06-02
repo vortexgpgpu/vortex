@@ -127,7 +127,7 @@ public:
 
         // found the corresponding block?
         if (nullptr == usedBlock) {
-            printf("error: invalid address to release\n");
+            printf("error: invalid address to release: 0x%lx\n", addr);
             return -1;
         }
 

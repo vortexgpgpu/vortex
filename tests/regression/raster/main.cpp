@@ -51,7 +51,7 @@ uint64_t primbuf_addr = 0;
 
 bool use_sw = false;
 
-kernel_arg_t kernel_arg;
+kernel_arg_t kernel_arg = {};
 
 uint32_t tileLogSize = RASTER_TILE_LOGSIZE;
 

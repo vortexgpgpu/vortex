@@ -1,11 +1,13 @@
+XLEN ?= 32
+
 SIMX_DIR = ../../sim/simx
 
 CXXFLAGS += -std=c++11 -Wall -Wextra -Wfatal-errors
-
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
 CXXFLAGS += -I../include -I../common -I../../hw -I$(SIMX_DIR) -I$(SIMX_DIR)/../common
 CXXFLAGS += $(CONFIGS)
 CXXFLAGS += -DDUMP_PERF_STATS
+CXXFLAGS += -DXLEN_$(XLEN)
 
 LDFLAGS += -shared -pthread
 LDFLAGS += -L. -lsimx

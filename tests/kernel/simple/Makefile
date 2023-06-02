@@ -2,8 +2,10 @@ XLEN ?= 32
 
 ifeq ($(XLEN),64)
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv64-gnu-toolchain
+CFLAGS += -march=rv64imafd -mabi=lp64d
 else
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
+CFLAGS += -march=rv32imaf -mabi=ilp32f
 endif
 
 RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf
@@ -15,18 +17,12 @@ AR = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc-ar
 DP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
 CP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
-SIM_DIR=../../../sim
-
-ifeq ($(XLEN),64)
-CFLAGS += -march=rv64imafd -mabi=lp64d
-else
-CFLAGS += -march=rv32imaf -mabi=ilp32f
-endif
+SIM_DIR = ../../../sim
 
 CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
 CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw
 
-LDFLAGS += -lm -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld $(VORTEX_KN_PATH)/libvortexrt.a
+LDFLAGS += -lm -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=0x80000000 $(VORTEX_KN_PATH)/libvortexrt.a
 
 PROJECT = simple
 

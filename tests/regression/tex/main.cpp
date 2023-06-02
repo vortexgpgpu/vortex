@@ -252,7 +252,7 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_copy_to_dev(staging_buf, dst_addr, dst_bufsize, 0));  
   }
 
-  kernel_arg_t kernel_arg;
+  kernel_arg_t kernel_arg = {};
 
   kernel_arg.use_sw     = use_sw;
   kernel_arg.num_tasks  = std::min<uint32_t>(num_tasks, dst_height);

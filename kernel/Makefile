@@ -2,8 +2,10 @@ XLEN ?= 32
 
 ifeq ($(XLEN),64)
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv64-gnu-toolchain
+CFLAGS += -march=rv64imafd -mabi=lp64d
 else
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
+CFLAGS += -march=rv32imaf -mabi=ilp32f
 endif
 
 RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf
@@ -28,12 +30,6 @@ CC = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc
 AR = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc-ar
 DP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
 CP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
-
-ifeq ($(XLEN),64)
-CFLAGS += -march=rv64imafd -mabi=lp64d
-else
-CFLAGS += -march=rv32imaf -mabi=ilp32f
-endif
 
 CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
 CFLAGS += -I./include -I../hw

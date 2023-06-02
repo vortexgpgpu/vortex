@@ -4,8 +4,6 @@
 #include <list>
 #include <cstring>
 #include <vortex.h>
-#include <VX_config.h>
-#include <VX_types.h>
 #include <assert.h>
 
 #define RT_CHECK(_expr, _cleanup)                               \

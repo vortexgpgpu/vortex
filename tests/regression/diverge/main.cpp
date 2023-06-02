@@ -25,7 +25,7 @@ std::vector<int> ref_data;
 
 vx_device_h device = nullptr;
 vx_buffer_h staging_buf = nullptr;
-kernel_arg_t kernel_arg;
+kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
    std::cout << "Vortex Test." << std::endl;

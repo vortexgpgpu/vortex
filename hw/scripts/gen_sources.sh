@@ -82,7 +82,7 @@ if [ "$dest_folder" != "" ]; then
         for file in $(find $dir -maxdepth 1 -name '*.v' -o -name '*.sv' -o -name '*.vh' -o -name '*.svh' -o -name '*.hex' -type f); do
             if check_not_excluded $file; then
                 if [ $prepropressor != 0 ]; then
-                    verilator $defines_str $includes_str --E $(absolute_path $file) | sed '/^`line /d' > $dest_folder/$(basename -- $file)
+                    verilator $defines_str $includes_str -E -P $(absolute_path $file) > $dest_folder/$(basename -- $file)
                 else
                     cp $(absolute_path $file) $dest_folder
                 fi
