@@ -46,18 +46,25 @@ module VX_decode  #(
     wire [1:0] func2  = instr[26:25];
     wire [2:0] func3  = instr[14:12];
     wire [6:0] func7  = instr[31:25];
-    wire [11:0] u_12  = instr[31:20]; 
+    wire [11:0] u_12  = instr[31:20];
 
     wire [4:0] rd  = instr[11:7];
     wire [4:0] rs1 = instr[19:15];
     wire [4:0] rs2 = instr[24:20];
     wire [4:0] rs3 = instr[31:27];
 
-    wire [19:0] upper_imm = {func7, rs2, rs1, func3};
-    wire [11:0] alu_imm   = (func3 == 3'b001) ? {{6{1'b0}}, instr[25:20]} : ((func3[0] && ~func3[1]) ? {{7{1'b0}}, rs2} : u_12);
-    wire [11:0] s_imm     = {func7, rd};
-    wire [12:0] b_imm     = {instr[31], instr[7], instr[30:25], instr[11:8], 1'b0};
-    wire [20:0] jal_imm   = {instr[31], instr[19:12], instr[20], instr[30:21], 1'b0};
+    wire is_itype_sh = func3[0] && ~func3[1];
+
+    wire [19:0] ui_imm  = instr[31:12];
+`ifdef XLEN_64
+    wire [11:0] i_imm   = is_itype_sh ? {6'b0, instr[25:20]} : u_12;
+    wire [11:0] iw_imm  = is_itype_sh ? {7'b0, instr[24:20]} : u_12;
+`else
+    wire [11:0] i_imm   = is_itype_sh ? {7'b0, instr[24:20]} : u_12;
+`endif    
+    wire [11:0] s_imm   = {func7, rd};
+    wire [12:0] b_imm   = {instr[31], instr[7], instr[30:25], instr[11:8], 1'b0};
+    wire [20:0] jal_imm = {instr[31], instr[19:12], instr[20], instr[30:21], 1'b0};
 
     reg [`INST_ALU_BITS-1:0] r_type;
     always @(*) begin
@@ -138,7 +145,7 @@ module VX_decode  #(
                 op_type = `INST_OP_BITS'(r_type);
                 use_rd  = 1;
                 use_imm = 1;
-                imm     = {{(`XLEN-12){alu_imm[11]}}, alu_imm};
+                imm     = {{(`XLEN-12){i_imm[11]}}, i_imm};
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
             end
@@ -166,7 +173,7 @@ module VX_decode  #(
                 op_mod[2] = 1;
                 use_rd  = 1;
                 use_imm = 1;
-                imm     = {{(`XLEN-12){alu_imm[11]}}, alu_imm};
+                imm     = {{(`XLEN-12){iw_imm[11]}}, iw_imm};
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
             end
@@ -195,7 +202,7 @@ module VX_decode  #(
                 op_type = `INST_OP_BITS'(`INST_ALU_LUI);
                 use_rd  = 1;
                 use_imm = 1;
-                imm     = {{`XLEN-31{upper_imm[19]}}, upper_imm[18:0], 12'(0)};
+                imm     = {{`XLEN-31{ui_imm[19]}}, ui_imm[18:0], 12'(0)};
                 `USED_IREG (rd);
             end
             `INST_AUIPC: begin 
@@ -204,7 +211,7 @@ module VX_decode  #(
                 use_rd  = 1;
                 use_imm = 1;
                 use_PC  = 1;
-                imm     = {{`XLEN-31{upper_imm[19]}}, upper_imm[18:0], 12'(0)};
+                imm     = {{`XLEN-31{ui_imm[19]}}, ui_imm[18:0], 12'(0)};
                 `USED_IREG (rd);
             end
             `INST_JAL: begin 

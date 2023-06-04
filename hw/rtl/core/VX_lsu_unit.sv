@@ -344,7 +344,8 @@ module VX_lsu_unit #(
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
     `ifdef XLEN_64
         wire [63:0] rsp_data64 = (i == 0 || rsp_is_dup) ? mem_rsp_data[0] : mem_rsp_data[i];
-        wire [31:0] rsp_data32 = rsp_align[i][2] ? mem_rsp_data[0][63:32] : mem_rsp_data[i][31:0];
+        wire [31:0] rsp_data32 = (i == 0 || rsp_is_dup) ? (rsp_align[0][2] ? mem_rsp_data[0][63:32] : mem_rsp_data[0][31:0]) :
+                                                          (rsp_align[i][2] ? mem_rsp_data[i][63:32] : mem_rsp_data[i][31:0]);
     `else
         wire [31:0] rsp_data32 = (i == 0 || rsp_is_dup) ? mem_rsp_data[0] : mem_rsp_data[i];
     `endif        
