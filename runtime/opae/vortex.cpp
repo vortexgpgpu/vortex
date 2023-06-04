@@ -85,6 +85,7 @@ public:
     unsigned num_warps;
     unsigned num_threads;
     uint64_t isa_caps;
+    uint64_t mem_size;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -122,7 +123,7 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
         *value = CACHE_BLOCK_SIZE;
         break;
     case VX_CAPS_LOCAL_MEM_SIZE:
-        *value = LOCAL_MEM_SIZE;
+        *value = device->mem_size;
         break;
     case VX_CAPS_KERNEL_BASE_ADDR:
         *value = device->dcrs.read(DCR_BASE_STARTUP_ADDR0);
@@ -218,6 +219,12 @@ extern int vx_dev_open(vx_device_h* hdevice) {
     device->fpga = accel_handle;
 
     {   
+        // retrieve FPGA local memory size
+        CHECK_ERR(api.fpgaPropertiesGetLocalMemorySize(filter, &device->mem_size), {
+            api.fpgaClose(accel_handle);
+            return -1;
+        });
+
         // Load ISA CAPS
         CHECK_ERR(api.fpgaReadMMIO64(device->fpga, 0, MMIO_ISA_CAPS, &device->isa_caps), {
             api.fpgaClose(accel_handle);
@@ -475,7 +482,6 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size
     auto device = ((vx_device*)buffer->hdevice);
     auto& api = device->api;
 
-    uint64_t dev_mem_size = LOCAL_MEM_SIZE; 
     uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
 
     // check alignment
@@ -487,7 +493,7 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size
     // bound checking
     if (src_offset + asize > buffer->size)
         return -1;
-    if (dev_maddr + asize > dev_mem_size)
+    if (dev_maddr + asize > device->mem_size)
         return -1;
 
     // Ensure ready for new command
@@ -525,7 +531,6 @@ extern int vx_copy_from_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t si
     auto device = ((vx_device*)buffer->hdevice);
     auto& api = device->api;
 
-    uint64_t dev_mem_size = LOCAL_MEM_SIZE;  
     uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
 
     // check alignment
@@ -537,7 +542,7 @@ extern int vx_copy_from_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t si
     // bound checking
     if (dest_offset + asize > buffer->size)
         return -1;
-    if (dev_maddr + asize > dev_mem_size)
+    if (dev_maddr + asize > device->mem_size)
         return -1;
 
     // Ensure ready for new command

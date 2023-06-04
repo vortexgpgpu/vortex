@@ -61,9 +61,10 @@ int main(int argc, char **argv) {
 	processor.attach_ram(&ram);
 
 	// setup base DCRs
-	processor.write_dcr(DCR_BASE_STARTUP_ADDR0, STARTUP_ADDR & 0xffffffff);
+	const uint64_t startup_addr(STARTUP_ADDR);
+	processor.write_dcr(DCR_BASE_STARTUP_ADDR0, startup_addr & 0xffffffff);
 #if (XLEN == 64)
-    processor.write_dcr(DCR_BASE_STARTUP_ADDR1, STARTUP_ADDR >> 32);
+    processor.write_dcr(DCR_BASE_STARTUP_ADDR1, startup_addr >> 32);
 #endif
 	processor.write_dcr(DCR_BASE_MPM_CLASS, 0);	
 
@@ -71,7 +72,7 @@ int main(int argc, char **argv) {
 	{		
 		std::string program_ext(fileExtension(program));
 		if (program_ext == "bin") {
-			ram.loadBinImage(program, STARTUP_ADDR);
+			ram.loadBinImage(program, startup_addr);
 		} else if (program_ext == "hex") {
 			ram.loadHexImage(program);
 		} else {

@@ -60,8 +60,9 @@ int drv_init(opae_drv_api_t* opae_drv_funcs) {
 	SET_API (fpgaPropertiesSetObjectType);
 	SET_API (fpgaPropertiesSetGUID);
 	SET_API (fpgaDestroyProperties);
-	SET_API (fpgaEnumerate);
-	SET_API (fpgaDestroyToken);
+    SET_API (fpgaDestroyToken);
+    SET_API (fpgaPropertiesGetLocalMemorySize);
+	SET_API (fpgaEnumerate);	
 	SET_API (fpgaOpen);
 	SET_API (fpgaClose);
 	SET_API (fpgaPrepareBuffer);

@@ -49,6 +49,18 @@ extern fpga_result fpgaDestroyToken(fpga_token *token) {
   return FPGA_OK;  
 }
 
+extern fpga_result fpgaPropertiesGetLocalMemorySize(const fpga_properties *filters, uint64_t* lms) {  
+  __unused (filters);
+  if (lms) {
+  #if (XLEN == 64)
+    *lms = 0x200000000; // 8 GB
+  #else
+    *lms = 0x100000000; // 4 GB
+  #endif
+  }
+  return FPGA_OK;  
+}
+
 extern fpga_result fpgaOpen(fpga_token token, fpga_handle *handle, int flags) {
   __unused (token);
   if (NULL == handle || flags != 0)

@@ -516,7 +516,7 @@ extern int vx_dev_caps(vx_device_h hdevice, uint32_t caps_id, uint64_t *value) {
         *value = CACHE_BLOCK_SIZE;
         break;
     case VX_CAPS_LOCAL_MEM_SIZE:
-        *value = LOCAL_MEM_SIZE;
+        *value = device->mem_size;
         break;
     case VX_CAPS_KERNEL_BASE_ADDR:
         *value = (uint64_t(device->read_dcr(DCR_BASE_STARTUP_ADDR1)) << 32) | 
@@ -820,12 +820,11 @@ extern int vx_copy_to_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t size
         return -1;
 
     uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
-    uint64_t dev_mem_size = LOCAL_MEM_SIZE; 
 
     // bound checking
     if (src_offset + asize > buffer->size)
         return -1;
-    if (dev_maddr + asize > dev_mem_size)
+    if (dev_maddr + asize > device->mem_size)
         return -1;
 
     auto device = buffer->device;
@@ -850,12 +849,11 @@ extern int vx_copy_from_dev(vx_buffer_h hbuffer, uint64_t dev_maddr, uint64_t si
         return -1; 
 
     uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
-    uint64_t dev_mem_size = LOCAL_MEM_SIZE;    
 
     // bound checking
     if (dest_offset + asize > buffer->size)
         return -1;
-    if (dev_maddr + asize > dev_mem_size)
+    if (dev_maddr + asize > device->mem_size)
         return -1;
 
     auto device = buffer->device;

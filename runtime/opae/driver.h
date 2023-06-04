@@ -13,6 +13,7 @@ typedef fpga_result (*pfn_fpgaPropertiesSetGUID)(fpga_properties prop, fpga_guid
 typedef fpga_result (*pfn_fpgaDestroyProperties)(fpga_properties *prop);
 typedef fpga_result (*pfn_fpgaEnumerate)(const fpga_properties *filters, uint32_t num_filters, fpga_token *tokens, uint32_t max_tokens, uint32_t *num_matches);
 typedef fpga_result (*pfn_fpgaDestroyToken)(fpga_token *token);
+typedef fpga_result (*pfn_fpgaPropertiesGetLocalMemorySize)(fpga_properties prop, uint64_t *lms);
 
 typedef fpga_result (*pfn_fpgaOpen)(fpga_token token, fpga_handle *handle, int flags);
 typedef fpga_result (*pfn_fpgaClose)(fpga_handle handle);
@@ -30,6 +31,7 @@ struct opae_drv_api_t {
 	pfn_fpgaDestroyProperties fpgaDestroyProperties;
 	pfn_fpgaEnumerate 		fpgaEnumerate;
 	pfn_fpgaDestroyToken 	fpgaDestroyToken;
+	pfn_fpgaPropertiesGetLocalMemorySize fpgaPropertiesGetLocalMemorySize;
 
 	pfn_fpgaOpen 			fpgaOpen;
 	pfn_fpgaClose 			fpgaClose;

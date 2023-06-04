@@ -82,7 +82,7 @@ module VX_icache_stage #(
     // Icache Request
     
     assign icache_req_valid = ifetch_req_if.valid && ~pending_ibuf_full[ifetch_req_if.wid];
-    assign icache_req_addr  = ICACHE_ADDR_WIDTH'(ifetch_req_if.PC[31:2]);
+    assign icache_req_addr  = ifetch_req_if.PC[`XLEN-1:2];
     assign icache_req_tag   = {ifetch_req_if.uuid, req_tag};
     assign ifetch_req_if.ready = icache_req_ready && ~pending_ibuf_full[ifetch_req_if.wid];
 
