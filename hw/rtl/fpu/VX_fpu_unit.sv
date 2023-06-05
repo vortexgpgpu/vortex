@@ -29,7 +29,7 @@ module VX_fpu_unit #(
 
         .valid_in   (fpu_req_if.valid),
         .op_type    (fpu_req_if.op_type),
-        .frm        (fpu_req_if.frm),
+        .op_mod     (fpu_req_if.op_mod),
         .dataa      (fpu_req_if.dataa),
         .datab      (fpu_req_if.datab),
         .datac      (fpu_req_if.datac),
@@ -42,16 +42,12 @@ module VX_fpu_unit #(
         .fflags     (fpu_rsp_if.fflags),
         .tag_out    (fpu_rsp_if.tag),
         .ready_out  (fpu_rsp_if.ready)     
-    );
+    );   
 
 `elsif FPU_FPNEW
 
     VX_fpu_fpnew #(
         .NUM_LANES  (NUM_LANES),
-        .FMULADD    (1),
-        .FDIVSQRT   (1),
-        .FNONCOMP   (1),
-        .FCONV      (1),
         .TAGW       (TAG_WIDTH)
     ) fpu_fpnew (
         .clk        (clk),
@@ -59,7 +55,7 @@ module VX_fpu_unit #(
 
         .valid_in   (fpu_req_if.valid),
         .op_type    (fpu_req_if.op_type),
-        .frm        (fpu_req_if.frm),
+        .op_mod     (fpu_req_if.op_mod),
         .dataa      (fpu_req_if.dataa),
         .datab      (fpu_req_if.datab),
         .datac      (fpu_req_if.datac),         
@@ -72,20 +68,20 @@ module VX_fpu_unit #(
         .fflags     (fpu_rsp_if.fflags),
         .tag_out    (fpu_rsp_if.tag),        
         .ready_out  (fpu_rsp_if.ready)        
-    );   
+    );
 
-`else
+`elsif FPU_DSP
 
-    VX_fpu_fpga #(
+    VX_fpu_dsp #(
         .NUM_LANES  (NUM_LANES),
         .TAGW       (TAG_WIDTH)
-    ) fpu_fpga (
+    ) fpu_dsp (
         .clk        (clk),
         .reset      (reset),   
 
         .valid_in   (fpu_req_if.valid),
         .op_type    (fpu_req_if.op_type),
-        .frm        (fpu_req_if.frm),
+        .op_mod     (fpu_req_if.op_mod),
         .dataa      (fpu_req_if.dataa),
         .datab      (fpu_req_if.datab),
         .datac      (fpu_req_if.datac),        

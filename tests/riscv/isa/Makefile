@@ -25,27 +25,27 @@ TESTS_64D := $(wildcard rv64ud-p-*.hex)
 
 all:
 
-run-simx-32imfd:
+run-simx-32imafd:
 	$(foreach test, $(TESTS_32I) $(TESTS_32M) $(TESTS_32F) $(TESTS_32D) $(TESTS_32A), $(SIM_DIR)/simx/simx -r $(test) || exit;)
 
-run-simx-64imfd:
+run-simx-64imafd:
 	$(foreach test, $(TESTS_64I) $(TESTS_64M) $(TESTS_64F) $(TESTS_64D) $(TESTS_64A), $(SIM_DIR)/simx/simx -r $(test) || exit;)
 
-run-simx-32: run-simx-32imfd
+run-simx-32: run-simx-32imafd
 
-run-simx-64: run-simx-32imfd run-simx-64imfd
+run-simx-64: run-simx-32imafd run-simx-64imafd
 
 run-simx: run-simx-$(XLEN)
 
 run-rtlsim-32imf:
 	$(foreach test, $(TESTS_32I) $(TESTS_32M) $(TESTS_32F), $(SIM_DIR)/rtlsim/rtlsim -r $(test) || exit;)
 
-run-rtlsim-64im:
-	$(foreach test, $(TESTS_64I) $(TESTS_64M), $(SIM_DIR)/rtlsim/rtlsim -r $(test) || exit;)
+run-rtlsim-64imf:
+	$(foreach test, $(TESTS_64I) $(TESTS_64M) $(TESTS_64F), $(SIM_DIR)/rtlsim/rtlsim -r $(test) || exit;)
 
 run-rtlsim-32: run-rtlsim-32imf
 
-run-rtlsim-64: run-rtlsim-32imf run-rtlsim-64im
+run-rtlsim-64: run-rtlsim-32imf run-rtlsim-64imf
 
 run-rtlsim: run-rtlsim-$(XLEN)
 

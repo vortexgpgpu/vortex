@@ -60,9 +60,10 @@ module VX_fpu_agent #(
     );
 
     // resolve dynamic FRM from CSR   
-    wire [`INST_FRM_BITS-1:0] req_frm;
+    wire [`INST_MOD_BITS-1:0] req_op_mod;
     assign fpu_to_csr_if.read_wid = fpu_agent_if.wid;    
-    assign req_frm = (fpu_agent_if.op_mod == `INST_FRM_DYN) ? fpu_to_csr_if.read_frm : fpu_agent_if.op_mod;
+    assign req_op_mod = (fpu_agent_if.op_type != `INST_FPU_NCP 
+                      && fpu_agent_if.op_mod[2:0] == `INST_FRM_DYN) ? {1'b0, fpu_to_csr_if.read_frm} : fpu_agent_if.op_mod;
 
     // submit FPU request
 
@@ -73,15 +74,15 @@ module VX_fpu_agent #(
     assign fpu_agent_if.ready = ready_in && mdata_and_csr_ready;    
 
     VX_skid_buffer #(
-        .DATAW   (`INST_FPU_BITS + `INST_FRM_BITS + `NUM_THREADS * 3 * `XLEN + `FPU_REQ_TAG_WIDTH),
+        .DATAW   (`INST_FPU_BITS + `INST_MOD_BITS + `NUM_THREADS * 3 * `XLEN + `FPU_REQ_TAG_WIDTH),
         .OUT_REG (1)
     ) req_sbuf (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (valid_in),
         .ready_in  (ready_in),
-        .data_in   ({fpu_agent_if.op_type, req_frm,        fpu_agent_if.rs1_data, fpu_agent_if.rs2_data, fpu_agent_if.rs3_data, req_tag}),
-        .data_out  ({fpu_req_if.op_type,   fpu_req_if.frm, fpu_req_if.dataa,      fpu_req_if.datab,      fpu_req_if.datac,      fpu_req_if.tag}),
+        .data_in   ({fpu_agent_if.op_type, req_op_mod,        fpu_agent_if.rs1_data, fpu_agent_if.rs2_data, fpu_agent_if.rs3_data, req_tag}),
+        .data_out  ({fpu_req_if.op_type,   fpu_req_if.op_mod, fpu_req_if.dataa,      fpu_req_if.datab,      fpu_req_if.datac,      fpu_req_if.tag}),
         .valid_out (fpu_req_if.valid),
         .ready_out (fpu_req_if.ready)
     );

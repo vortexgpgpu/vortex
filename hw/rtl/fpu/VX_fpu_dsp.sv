@@ -1,6 +1,6 @@
 `include "VX_fpu_define.vh"
 
-module VX_fpu_fpga #(
+module VX_fpu_dsp #(
     parameter NUM_LANES = 4, 
     parameter TAGW      = 4
 ) (
@@ -13,7 +13,7 @@ module VX_fpu_fpga #(
     input wire [TAGW-1:0] tag_in,
     
     input wire [`INST_FPU_BITS-1:0] op_type,
-    input wire [`INST_MOD_BITS-1:0] frm,
+    input wire [`INST_MOD_BITS-1:0] op_mod,
 
     input wire [NUM_LANES-1:0][31:0]  dataa,
     input wire [NUM_LANES-1:0][31:0]  datab,
@@ -50,6 +50,8 @@ module VX_fpu_fpga #(
     reg [FPC_BITS-1:0] core_select;
     reg do_madd, do_sub, do_neg, is_itof, is_signed;
 
+    wire [`INST_FRM_BITS-1:0] frm = `INST_FRM_BITS'(op_mod);
+
     always @(*) begin
         do_madd   = 0;
         do_sub    = 0;        
@@ -66,10 +68,10 @@ module VX_fpu_fpga #(
             `INST_FPU_NMSUB:  begin core_select = FPU_FMA; do_madd = 1; do_sub = 1; do_neg = 1; end
             `INST_FPU_DIV:    begin core_select = FPU_DIV; end
             `INST_FPU_SQRT:   begin core_select = FPU_SQRT; end
-            `INST_FPU_CVTWS:  begin core_select = FPU_CVT; is_signed = 1; end
-            `INST_FPU_CVTWUS: begin core_select = FPU_CVT; end
-            `INST_FPU_CVTSW:  begin core_select = FPU_CVT; is_itof = 1; is_signed = 1; end
-            `INST_FPU_CVTSWU: begin core_select = FPU_CVT; is_itof = 1; end
+            `INST_FPU_CVTWX:  begin core_select = FPU_CVT; is_signed = 1; end
+            `INST_FPU_CVTWUX: begin core_select = FPU_CVT; end
+            `INST_FPU_CVTXW:  begin core_select = FPU_CVT; is_itof = 1; is_signed = 1; end
+            `INST_FPU_CVTXWU: begin core_select = FPU_CVT; is_itof = 1; end
             default:          begin core_select = FPU_NCP; end
         endcase
     end
@@ -172,9 +174,8 @@ module VX_fpu_fpga #(
         .reset      (ncp_reset),   
         .valid_in   (valid_in && (core_select == FPU_NCP)),
         .ready_in   (per_core_ready_in[FPU_NCP]),        
-        .tag_in     (tag_in),        
-        .op_type    (op_type),
-        .frm        (frm),
+        .tag_in     (tag_in),
+        .op_mod     (op_mod),
         .dataa      (dataa),
         .datab      (datab),        
         .result     (per_core_result[FPU_NCP]), 

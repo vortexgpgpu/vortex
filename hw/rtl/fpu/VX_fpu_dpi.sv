@@ -14,7 +14,7 @@ module VX_fpu_dpi #(
     input wire [TAGW-1:0] tag_in,
     
     input wire [`INST_FPU_BITS-1:0] op_type,
-    input wire [`INST_MOD_BITS-1:0] frm,
+    input wire [`INST_MOD_BITS-1:0] op_mod,
 
     input wire [NUM_LANES-1:0][`XLEN-1:0]  dataa,
     input wire [NUM_LANES-1:0][`XLEN-1:0]  datab,
@@ -52,7 +52,8 @@ module VX_fpu_dpi #(
 
     reg is_fadd, is_fsub, is_fmul, is_fmadd, is_fmsub, is_fnmadd, is_fnmsub;
     reg is_itof, is_utof, is_ftoi, is_ftou;
-    reg is_fclss, is_flt, is_fle, is_feq, is_fmin, is_fmax, is_fsgnj, is_fsgnjn, is_fsgnjx;
+
+    wire [`INST_FRM_BITS-1:0] frm = `INST_FRM_BITS'(op_mod);
 
     always @(*) begin
         is_fadd   = 0;
@@ -66,15 +67,6 @@ module VX_fpu_dpi #(
         is_utof   = 0;
         is_ftoi   = 0;
         is_ftou   = 0;
-        is_fclss  = 0;
-        is_flt    = 0;
-        is_fle    = 0;
-        is_feq    = 0;
-        is_fmin   = 0;
-        is_fmax   = 0;
-        is_fsgnj  = 0;
-        is_fsgnjn = 0;
-        is_fsgnjx = 0;
 
         case (op_type)
             `INST_FPU_ADD:   begin core_select = FPU_FMA; is_fadd = 1; end
@@ -86,23 +78,11 @@ module VX_fpu_dpi #(
             `INST_FPU_NMSUB: begin core_select = FPU_FMA; is_fnmsub = 1; end
             `INST_FPU_DIV:   begin core_select = FPU_DIV; end
             `INST_FPU_SQRT:  begin core_select = FPU_SQRT; end
-            `INST_FPU_CVTWS: begin core_select = FPU_CVT; is_ftoi = 1; end
-            `INST_FPU_CVTWUS:begin core_select = FPU_CVT; is_ftou = 1; end
-            `INST_FPU_CVTSW: begin core_select = FPU_CVT; is_itof = 1; end
-            `INST_FPU_CVTSWU:begin core_select = FPU_CVT; is_utof = 1; end
-            `INST_FPU_CLASS: begin core_select = FPU_NCP; is_fclss = 1; end  
-            `INST_FPU_CMP:   begin core_select = FPU_NCP; 
-                            is_fle = (frm == 0); 
-                            is_flt = (frm == 1); 
-                            is_feq = (frm == 2); 
-                         end  
-            default:   begin core_select = FPU_NCP; 
-                            is_fsgnj  = (frm == 0);
-                            is_fsgnjn = (frm == 1);
-                            is_fsgnjx = (frm == 2);
-                            is_fmin   = (frm == 3);
-                            is_fmax   = (frm == 4);
-                        end
+            `INST_FPU_CVTWX: begin core_select = FPU_CVT; is_ftoi = 1; end
+            `INST_FPU_CVTWUX:begin core_select = FPU_CVT; is_ftou = 1; end
+            `INST_FPU_CVTXW: begin core_select = FPU_CVT; is_itof = 1; end
+            `INST_FPU_CVTXWU:begin core_select = FPU_CVT; is_utof = 1; end
+            default:         begin core_select = FPU_NCP; end
         endcase
     end
 
@@ -312,7 +292,7 @@ module VX_fpu_dpi #(
     generate 
     begin : fncp
 
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_fncp;
+        reg [NUM_LANES-1:0][`XLEN-1:0] result_fncp;
         wire [NUM_LANES-1:0][`XLEN-1:0] result_fclss;
         wire [NUM_LANES-1:0][`XLEN-1:0] result_flt;
         wire [NUM_LANES-1:0][`XLEN-1:0] result_fle;
@@ -351,25 +331,25 @@ module VX_fpu_dpi #(
             end
         end
 
-        assign result_fncp = is_fclss  ? result_fclss :
-                             is_flt    ? result_flt :
-                             is_fle    ? result_fle :
-                             is_feq    ? result_feq :
-                             is_fmin   ? result_fmin :
-                             is_fmax   ? result_fmax :
-                             is_fsgnj  ? result_fsgnj :
-                             is_fsgnjn ? result_fsgnjn :
-                             is_fsgnjx ? result_fsgnjx :
-                                         result_fmv;
+        always (*) begin
+            result_fncp = 'x;
+            fflags_fncp = 'x;
+            case (op_mod)
+            0:  begin result_fncp = result_fsgnj; end
+            1:  begin result_fncp = result_fsgnjn; end
+            2:  begin result_fncp = result_fsgnjx; end
+            3:  begin result_fncp = result_fclss; end
+            4:  begin result_fncp = result_fmv; end
+            5:  begin result_fncp = result_fmv; end
+            6:  begin result_fncp = result_fmin; fflags_fncp = fflags_fmin; end
+            7:  begin result_fncp = result_fmax; fflags_fncp = fflags_fmax; end
+            8:  begin result_fncp = result_fle;  fflags_fncp = fflags_fle; end
+            9:  begin result_fncp = result_flt;  fflags_fncp = fflags_flt; end
+            10: begin result_fncp = result_feq;  fflags_fncp = fflags_feq; end
+            endcase
+        end
 
-        wire has_fflags_fncp = (is_flt || is_fle || is_feq || is_fmin || is_fmax);
-
-        assign fflags_fncp = is_flt  ? fflags_flt :
-                             is_fle  ? fflags_fle :
-                             is_feq  ? fflags_feq :
-                             is_fmin ? fflags_fmin :
-                             is_fmax ? fflags_fmax : 
-                                       0;
+        wire has_fflags_fncp = (op_mod >= 6);
 
         VX_shift_register #(
             .DATAW  (1 + TAGW + 1 + NUM_LANES * (`XLEN + $bits(fflags_t))),

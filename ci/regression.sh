@@ -210,13 +210,19 @@ CONFIGS="-DNUM_DCACHES=2 -DNUM_ICACHES=2" ./ci/blackbox.sh --driver=rtlsim --app
 # multiple FPUs per cluster
 CONFIGS="-DNUM_FPU_UNITS=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm --cores=8 --warps=1 --threads=2
 
-# using FPNEW FPU core
-CONFIGS="-DDISABLE_DPI -DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
+# test FPNEW FPU core
+CONFIGS="-DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
 
-# using DPI modules
+# test DSP FPU core
+CONFIGS="-DFPU_DSP" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
+
+# test DPI FPU core
+CONFIGS="-DFPU_DPI" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
+
+# test DPI modules
 CONFIGS="-DENABLE_DPI" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
 
-# using AXI bus
+# test AXI bus
 AXI_BUS=1 ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo
 
 # adjust l1 block size to match l2

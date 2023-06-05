@@ -1,4 +1,4 @@
-PROJECT = VX_fpu_fpga
+PROJECT = VX_fpu_dsp
 TOP_LEVEL_ENTITY = $(PROJECT)
 SRC_FILE = $(PROJECT).sv
 

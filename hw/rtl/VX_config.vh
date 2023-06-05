@@ -19,21 +19,34 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// 32 bit as default.
+// 32 bit XLEN as default.
 `ifndef XLEN_32
 `ifndef XLEN_64
 `define XLEN_32
 `endif
 `endif
 
+// 32 bit FLEN as default.
+`ifndef FLEN_32
+`ifndef FLEN_64
+`define FLEN_32
+`endif
+`endif
+
 `ifdef XLEN_64
 `define XLEN 64
-// disable unsupported extensions
-`define EXT_F_DISABLE 1
-`else
+`endif
+
 `ifdef XLEN_32
 `define XLEN 32
 `endif
+
+`ifdef FLEN_64
+`define FLEN 64
+`endif
+
+`ifdef FLEN_32
+`define FLEN 32
 `endif
 
 `ifndef NUM_CLUSTERS
@@ -136,14 +149,23 @@
 `define STALL_TIMEOUT (100000 * (1 ** (`L2_ENABLED + `L3_ENABLED)))
 `endif
 
-`ifndef SYNTHESIS
 `ifdef ENABLE_DPI
 `define IMUL_DPI
 `define IDIV_DPI
 `define FPU_DPI
 `endif
-`ifndef FPU_DPI
+
+`ifdef SYNTHESIS
+`ifndef FPU_DSP
+`ifndef FPU_FPNEW
 `define FPU_FPNEW
+`endif
+`endif
+`else
+`ifndef FPU_DPI
+`ifndef FPU_FPNEW
+`define FPU_FPNEW
+`endif
 `endif
 `endif
 
@@ -294,38 +316,52 @@
 `endif
 
 `ifndef LATENCY_FMA
+`ifdef FPU_DPI
+`define LATENCY_FMA 4    
+`endif
 `ifdef FPU_FPNEW
+`define LATENCY_FMA 4    
+`endif
+`ifdef FPU_DSP
+`ifdef QUARTUS
 `define LATENCY_FMA 4
-`define LATENCY_FSQRT 4
-`else
+`endif
 `ifdef VIVADO
 `define LATENCY_FMA 16    
-`else
-`define LATENCY_FMA 4
 `endif
 `endif
 `endif
 
 `ifndef LATENCY_FDIV
+`ifdef FPU_DPI
+`define LATENCY_FDIV 15    
+`endif
 `ifdef FPU_FPNEW
-`define LATENCY_FDIV 16
-`else
-`ifdef VIVADO
-`define LATENCY_FDIV 28
-`else
+`define LATENCY_FDIV 16    
+`endif
+`ifdef FPU_DSP
+`ifdef QUARTUS
 `define LATENCY_FDIV 15
+`endif
+`ifdef VIVADO
+`define LATENCY_FDIV 28    
 `endif
 `endif
 `endif
 
 `ifndef LATENCY_FSQRT
+`ifdef FPU_DPI
+`define LATENCY_FSQRT 10    
+`endif
 `ifdef FPU_FPNEW
-`define LATENCY_FSQRT 16
-`else
-`ifdef VIVADO
-`define LATENCY_FSQRT 28
-`else
+`define LATENCY_FSQRT 16    
+`endif
+`ifdef FPU_DSP
+`ifdef QUARTUS
 `define LATENCY_FSQRT 10
+`endif
+`ifdef VIVADO
+`define LATENCY_FSQRT 28    
 `endif
 `endif
 `endif

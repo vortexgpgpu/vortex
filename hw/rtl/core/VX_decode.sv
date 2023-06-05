@@ -45,6 +45,7 @@ module VX_decode  #(
     wire [6:0] opcode = instr[6:0];  
     wire [1:0] func2  = instr[26:25];
     wire [2:0] func3  = instr[14:12];
+    wire [4:0] func5  = instr[31:27];
     wire [6:0] func7  = instr[31:25];
     wire [11:0] u_12  = instr[31:20];
 
@@ -313,8 +314,8 @@ module VX_decode  #(
             `INST_FNMSUB,
             `INST_FNMADD: begin 
                 ex_type = `EX_FPU;
-                op_type = `INST_OP_BITS'(opcode[3:0]);
-                op_mod  = func3;
+                op_type = `INST_OP_BITS'({2'b10, opcode[3:2]});
+                op_mod  = `INST_MOD_BITS'(func3);
                 use_rd  = 1;
                 `USED_FREG (rd);              
                 `USED_FREG (rs1);
@@ -323,71 +324,80 @@ module VX_decode  #(
             end
             `INST_FCI: begin 
                 ex_type = `EX_FPU;
-                op_mod  = func3;
+                op_mod  = `INST_MOD_BITS'(func3);
                 use_rd  = 1;                
-                case (func7)
-                    7'h00, // FADD
-                    7'h04, // FSUB
-                    7'h08, // FMUL
-                    7'h0C: begin // FDIV
-                        op_type = `INST_OP_BITS'(func7[3:0]);
+                case (func5)
+                    5'b00000, // FADD
+                    5'b00001, // FSUB
+                    5'b00010, // FMUL
+                    5'b00011: begin // FDIV
+                        op_type = `INST_OP_BITS'(func5[1:0]);
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
                         `USED_FREG (rs2);
                     end
-                    7'h2C: begin
+                    5'b00100: begin
+                        // NCP: FSGNJ=0, FSGNJN=1, FSGNJX=2
+                        op_type = `INST_OP_BITS'(`INST_FPU_NCP);
+                        op_mod  = `INST_MOD_BITS'(func3[1:0]);
+                        `USED_FREG (rd);
+                        `USED_FREG (rs1);
+                        `USED_FREG (rs2);
+                    end
+                    5'b00101: begin
+                        // NCP: FMIN=6, FMAX=7
+                        op_type = `INST_OP_BITS'(`INST_FPU_NCP);
+                        op_mod  = func3[0] ? 7 : 6;
+                        `USED_FREG (rd);
+                        `USED_FREG (rs1);
+                        `USED_FREG (rs2);
+                    end    
+                    5'b01011: begin                        
                         op_type = `INST_OP_BITS'(`INST_FPU_SQRT);
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
-                    end
-                    7'h50: begin
-                        op_type = `INST_OP_BITS'(`INST_FPU_CMP);
+                    end   
+                    5'b10100: begin
+                        // NCP: FLE=8, FLT=9, FEQ=10
+                        op_type = `INST_OP_BITS'(`INST_FPU_NCP);                                     
+                        op_mod  = {2'b10, func3[1:0]};
                         `USED_IREG (rd);
                         `USED_FREG (rs1);
                         `USED_FREG (rs2);
-                    end
-                    7'h60: begin
-                        op_type = (instr[20]) ? `INST_OP_BITS'(`INST_FPU_CVTWUS) : `INST_OP_BITS'(`INST_FPU_CVTWS);
+                    end             
+                    5'b11000: begin
+                        op_type = (rs2[0]) ? `INST_OP_BITS'(`INST_FPU_CVTWUX) : `INST_OP_BITS'(`INST_FPU_CVTWX);
+                    `ifdef XLEN_64
+                        op_mod[3] = rs2[1];
+                    `endif
                         `USED_IREG (rd);
                         `USED_FREG (rs1);
                     end
-                    7'h68: begin
-                        op_type = (instr[20]) ? `INST_OP_BITS'(`INST_FPU_CVTSWU) : `INST_OP_BITS'(`INST_FPU_CVTSW);
+                    5'b11010: begin
+                        op_type = (rs2[0]) ? `INST_OP_BITS'(`INST_FPU_CVTXWU) : `INST_OP_BITS'(`INST_FPU_CVTXW);
+                    `ifdef XLEN_64
+                        op_mod[3] = rs2[1];
+                    `endif
                         `USED_FREG (rd);
                         `USED_IREG (rs1);
                     end
-                    7'h10: begin
-                        // FSGNJ=0, FSGNJN=1, FSGNJX=2
-                        op_type = `INST_OP_BITS'(`INST_FPU_MISC);
-                        op_mod  = {1'b0, func3[1:0]};
-                        `USED_FREG (rd);
-                        `USED_FREG (rs1);
-                        `USED_FREG (rs2);
-                    end
-                    7'h14: begin
-                        // FMIN=3, FMAX=4
-                        op_type = `INST_OP_BITS'(`INST_FPU_MISC);
-                        op_mod  = func3[0] ? 4 : 3;
-                        `USED_FREG (rd);
-                        `USED_FREG (rs1);
-                        `USED_FREG (rs2);
-                    end
-                    7'h70: begin 
+                    5'b11100: begin 
                         if (func3[0]) begin
-                            // FCLASS
-                            op_type = `INST_OP_BITS'(`INST_FPU_CLASS);                                     
+                            // NCP: FCLASS=3
+                            op_type = `INST_OP_BITS'(`INST_FPU_NCP);                                     
+                            op_mod  = 3;
                         end else begin
-                            // FMV.X.W=5
-                            op_type = `INST_OP_BITS'(`INST_FPU_MISC);
-                            op_mod  = 5;
+                            // NCP: FMV.X.W=4
+                            op_type = `INST_OP_BITS'(`INST_FPU_NCP);
+                            op_mod  = 4;
                         end
                         `USED_IREG (rd);
                         `USED_FREG (rs1);                                           
                     end 
-                    7'h78: begin 
-                        // FMV.W.X=6
-                        op_type = `INST_OP_BITS'(`INST_FPU_MISC); 
-                        op_mod  = 6;
+                    5'b11110: begin 
+                        // NCP: FMV.W.X=5
+                        op_type = `INST_OP_BITS'(`INST_FPU_NCP); 
+                        op_mod  = 5;
                         `USED_FREG (rd);
                         `USED_IREG (rs1);
                     end

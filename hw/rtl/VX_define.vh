@@ -96,7 +96,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 `define INST_OP_BITS    4
-`define INST_MOD_BITS   3
+`define INST_MOD_BITS   4
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -140,20 +140,20 @@
 `define INST_BR_LESS(op)     op[2]
 `define INST_BR_STATIC(op)   op[3]
 
-`define INST_M_MUL          3'b000
-`define INST_M_MULHU        3'b001
-`define INST_M_MULH         3'b010
-`define INST_M_MULHSU       3'b011
-`define INST_M_DIV          3'b100
-`define INST_M_DIVU         3'b101
-`define INST_M_REM          3'b110
-`define INST_M_REMU         3'b111
-`define INST_M_BITS         3
-`define INST_M_IS_MULX(op)  (~op[2])
-`define INST_M_IS_MULH(op)  (op[1:0] != 0)
-`define INST_M_SIGNED_A(op) (op[1:0] != 1)
-`define INST_M_IS_REM(op)   op[1]
-`define INST_M_SIGNED(op)   (~op[0])
+`define INST_M_MUL           3'b000
+`define INST_M_MULHU         3'b001
+`define INST_M_MULH          3'b010
+`define INST_M_MULHSU        3'b011
+`define INST_M_DIV           3'b100
+`define INST_M_DIVU          3'b101
+`define INST_M_REM           3'b110
+`define INST_M_REMU          3'b111
+`define INST_M_BITS          3
+`define INST_M_IS_MULX(op)   (~op[2])
+`define INST_M_IS_MULH(op)   (op[1:0] != 0)
+`define INST_M_SIGNED_A(op)  (op[1:0] != 1)
+`define INST_M_IS_REM(op)    op[1]
+`define INST_M_SIGNED(op)    (~op[0])
 
 `define INST_FMT_B           3'b000
 `define INST_FMT_H           3'b001
@@ -177,7 +177,7 @@
 `define INST_LSU_BITS        4
 `define INST_LSU_FMT(op)     op[2:0]
 `define INST_LSU_WSIZE(op)   op[1:0]
-`define INST_LSU_IS_FENCE(mod) (mod == 1)
+`define INST_LSU_IS_FENCE(mod) (mod[0])
 
 `define INST_FENCE_BITS      1
 `define INST_FENCE_D         1'h0
@@ -189,22 +189,24 @@
 `define INST_CSR_OTHER       2'h0
 `define INST_CSR_BITS        2
 
-`define INST_FPU_ADD         4'h0 
-`define INST_FPU_SUB         4'h4 
-`define INST_FPU_MUL         4'h8 
-`define INST_FPU_DIV         4'hC
-`define INST_FPU_CVTWS       4'h1  // FCVT.W.S
-`define INST_FPU_CVTWUS      4'h5  // FCVT.WU.S
-`define INST_FPU_CVTSW       4'h9  // FCVT.S.W
-`define INST_FPU_CVTSWU      4'hD  // FCVT.S.WU
-`define INST_FPU_SQRT        4'h2
-`define INST_FPU_CLASS       4'h6  
-`define INST_FPU_CMP         4'hA
-`define INST_FPU_MISC        4'hE  // SGNJ, SGNJN, SGNJX, FMIN, FMAX, MVXW, MVWX 
-`define INST_FPU_MADD        4'h3 
-`define INST_FPU_MSUB        4'h7   
-`define INST_FPU_NMSUB       4'hB   
-`define INST_FPU_NMADD       4'hF
+`define INST_FPU_ADD         4'b0000 
+`define INST_FPU_SUB         4'b0001 
+`define INST_FPU_MUL         4'b0010 
+`define INST_FPU_DIV         4'b0011
+`define INST_FPU_SQRT        4'b0100
+// UNUSED                    4'b0101
+// UNUSED                    4'b0110
+`define INST_FPU_NCP         4'b0111  // SGNJ, SGNJN, SGNJX, CLASS, MVXW, MVWX, FMIN, FMAX, LE, LT, EQ
+`define INST_FPU_CVTWX       4'b1000  // FCVT.W.X
+`define INST_FPU_CVTWUX      4'b1001  // FCVT.WU.X
+`define INST_FPU_CVTXW       4'b1010  // FCVT.X.W
+`define INST_FPU_CVTXWU      4'b1011  // FCVT.X.WU
+`define INST_FPU_MADD        4'b1100 
+`define INST_FPU_MSUB        4'b1101   
+`define INST_FPU_NMSUB       4'b1110   
+`define INST_FPU_NMADD       4'b1111
+`define INST_FPU_IS_W(mod)   (mod[4])
+
 `define INST_FPU_BITS        4
 
 `define INST_GPU_TMC         4'h0
@@ -423,7 +425,7 @@
 `define ASSIGN_VX_FPU_REQ_IF(dst, src) \
     assign dst.valid = src.valid; \
     assign dst.op_type= src.op_type; \
-    assign dst.frm   = src.frm; \
+    assign dst.op_mod = src.op_mod; \
     assign dst.dataa = src.dataa; \
     assign dst.datab = src.datab; \
     assign dst.datac = src.datac; \

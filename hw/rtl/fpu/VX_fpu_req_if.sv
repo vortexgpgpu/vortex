@@ -8,7 +8,7 @@ interface VX_fpu_req_if #(
 
     wire                         valid;
     wire [`INST_FPU_BITS-1:0]    op_type;
-    wire [`INST_FRM_BITS-1:0]    frm;
+    wire [`INST_MOD_BITS-1:0]    op_mod;
     wire [NUM_LANES-1:0][`XLEN-1:0] dataa;
     wire [NUM_LANES-1:0][`XLEN-1:0] datab;
     wire [NUM_LANES-1:0][`XLEN-1:0] datac;
@@ -18,7 +18,7 @@ interface VX_fpu_req_if #(
     modport master (
         output valid,
         output op_type,
-        output frm,
+        output op_mod,
         output dataa,
         output datab,
         output datac,
@@ -29,7 +29,7 @@ interface VX_fpu_req_if #(
     modport slave (
         input  valid,
         input  op_type,
-        input  frm,
+        input  op_mod,
         input  dataa,
         input  datab,
         input  datac,

@@ -83,7 +83,7 @@ module VX_gpr_stage #(
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         VX_dp_ram #(
-            .DATAW       (`XLEN),
+            .DATAW       (`FLEN),
             .SIZE        (RAM_SIZE),
             .INIT_ENABLE (1),
             .INIT_VALUE  (0)
@@ -92,9 +92,9 @@ module VX_gpr_stage #(
             .write (write[i]),            
             `UNUSED_PIN (wren),               
             .waddr (waddr),
-            .wdata (writeback_if.data[i]),
+            .wdata (writeback_if.data[i][`FLEN-1:0]),
             .raddr (raddr3),
-            .rdata (gpr_rsp_if.rs3_data[i])
+            .rdata (gpr_rsp_if.rs3_data[i][`FLEN-1:0])
         );
     end
 `else    

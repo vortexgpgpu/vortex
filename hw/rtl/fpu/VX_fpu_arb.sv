@@ -29,7 +29,7 @@ module VX_fpu_arb #(
     localparam LOG_NUM_REQS  = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
     localparam NUM_REQS      = 1 << LOG_NUM_REQS;
     localparam TAG_OUT_WIDTH = TAG_WIDTH + LOG_NUM_REQS;
-    localparam REQ_DATAW     = TAG_OUT_WIDTH + `INST_FPU_BITS + `INST_FRM_BITS + NUM_LANES * 3 * `XLEN;
+    localparam REQ_DATAW     = TAG_OUT_WIDTH + `INST_FPU_BITS + `INST_MOD_BITS + NUM_LANES * 3 * `XLEN;
     localparam RSP_DATAW     = TAG_WIDTH + NUM_LANES * (`XLEN + `FP_FLAGS_BITS) + 1;
     
     ///////////////////////////////////////////////////////////////////////
@@ -59,9 +59,9 @@ module VX_fpu_arb #(
                 .sel_in   (LOG_NUM_REQS'(r)),
                 .data_out (req_tag_in)
             );
-            assign req_data_in[i] = {req_tag_in, req_in_if[i].op_type, req_in_if[i].frm, req_in_if[i].dataa, req_in_if[i].datab, req_in_if[i].datac};
+            assign req_data_in[i] = {req_tag_in, req_in_if[i].op_type, req_in_if[i].op_mod, req_in_if[i].dataa, req_in_if[i].datab, req_in_if[i].datac};
         end else begin
-            assign req_data_in[i] = {req_in_if[i].tag, req_in_if[i].op_type, req_in_if[i].frm, req_in_if[i].dataa, req_in_if[i].datab, req_in_if[i].datac};
+            assign req_data_in[i] = {req_in_if[i].tag, req_in_if[i].op_type, req_in_if[i].op_mod, req_in_if[i].dataa, req_in_if[i].datab, req_in_if[i].datac};
         end
     end
 
@@ -85,7 +85,7 @@ module VX_fpu_arb #(
     
     for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
         assign req_out_if[i].valid = req_valid_out[i];
-        assign {req_out_if[i].tag, req_out_if[i].op_type, req_out_if[i].frm, req_out_if[i].dataa, req_out_if[i].datab, req_out_if[i].datac} = req_data_out[i];
+        assign {req_out_if[i].tag, req_out_if[i].op_type, req_out_if[i].op_mod, req_out_if[i].dataa, req_out_if[i].datab, req_out_if[i].datac} = req_data_out[i];
         assign req_ready_out[i] = req_out_if[i].ready;
     end
 

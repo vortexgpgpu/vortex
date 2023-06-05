@@ -127,13 +127,11 @@
             `INST_FPU_MADD:  `TRACE(level, ("MADD")); \
             `INST_FPU_NMSUB: `TRACE(level, ("NMSUB")); \
             `INST_FPU_NMADD: `TRACE(level, ("NMADD")); \
-            `INST_FPU_CVTWS: `TRACE(level, ("CVTWS")); \
-            `INST_FPU_CVTWUS:`TRACE(level, ("CVTWUS")); \
-            `INST_FPU_CVTSW: `TRACE(level, ("CVTSW")); \
-            `INST_FPU_CVTSWU:`TRACE(level, ("CVTSWU")); \
-            `INST_FPU_CLASS: `TRACE(level, ("CLASS")); \
-            `INST_FPU_CMP:   `TRACE(level, ("CMP")); \
-            `INST_FPU_MISC: begin \
+            `INST_FPU_CVTWX: `TRACE(level, ("CVT.W.X")); \
+            `INST_FPU_CVTWUX:`TRACE(level, ("CVT.WU.X")); \
+            `INST_FPU_CVTXW: `TRACE(level, ("CVT.X.W")); \
+            `INST_FPU_CVTXWU:`TRACE(level, ("CVT.X.WU")); \
+            `INST_FPU_NCP: begin \
                 case (op_mod) \
                     0: `TRACE(level, ("SGNJ")); \
                     1: `TRACE(level, ("SGNJN")); \
@@ -142,6 +140,10 @@
                     4: `TRACE(level, ("MAX")); \
                     5: `TRACE(level, ("MVXW")); \
                     6: `TRACE(level, ("MVWX")); \
+                    7: `TRACE(level, ("CLASS")); \
+                    8: `TRACE(level, ("FLE")); \
+                    9: `TRACE(level, ("FLT")); \
+                   10: `TRACE(level, ("FEQ")); \
                 endcase \
             end \
             default:   `TRACE(level, ("?")); \
