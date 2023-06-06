@@ -11,7 +11,7 @@ STARTUP_ADDR = 0x180000000
 else
 RISCV_TOOLCHAIN_PATH ?= /opt/riscv-gnu-toolchain
 VX_CFLAGS += -march=rv32imaf -mabi=ilp32f
-STARTUP_ADDR = 0x180000000
+STARTUP_ADDR = 0x80000000
 endif
 
 RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf
