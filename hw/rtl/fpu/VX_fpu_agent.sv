@@ -63,7 +63,8 @@ module VX_fpu_agent #(
     wire [`INST_MOD_BITS-1:0] req_op_mod;
     assign fpu_to_csr_if.read_wid = fpu_agent_if.wid;    
     assign req_op_mod = (fpu_agent_if.op_type != `INST_FPU_NCP 
-                      && fpu_agent_if.op_mod[2:0] == `INST_FRM_DYN) ? {1'b0, fpu_to_csr_if.read_frm} : fpu_agent_if.op_mod;
+                      && fpu_agent_if.op_mod[2:0] == `INST_FRM_DYN) ? {fpu_agent_if.op_mod[`INST_MOD_BITS-1:`INST_FRM_BITS], fpu_to_csr_if.read_frm} : 
+                                                                      fpu_agent_if.op_mod;
 
     // submit FPU request
 

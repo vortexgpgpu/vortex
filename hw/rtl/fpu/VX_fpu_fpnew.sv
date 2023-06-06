@@ -33,20 +33,23 @@ module VX_fpu_fpnew #(
     input wire  ready_out,
     output wire valid_out
 );  
-    localparam FOP_BITS  = fpnew_pkg::OP_BITS;
-    localparam FMTF_BITS = fpnew_pkg::FP_FORMAT_BITS;
-    localparam FMTI_BITS = fpnew_pkg::INT_FORMAT_BITS;
-
     localparam LATENCY_FDIVSQRT = `MAX(`LATENCY_FDIV, `LATENCY_FSQRT);
+
+`ifdef XLEN_64
+`ifdef FLEN_32
+    `define ISA_RV64F
+`endif
+`endif
 
     localparam fpnew_pkg::fpu_features_t FPU_FEATURES = '{
         Width:         `XLEN,
         EnableVectors: 1'b0,
-        EnableNanBox:  1'b1,
-        FpFmtMask:     5'b10000,
+        EnableNanBox:  1'b0,        
     `ifdef XLEN_64
+        FpFmtMask:     5'b11000,
         IntFmtMask:    4'b0011
     `else
+        FpFmtMask:     5'b10000,
         IntFmtMask:    4'b0010
     `endif
     };
@@ -73,11 +76,11 @@ module VX_fpu_fpnew #(
     wire [NUM_LANES-1:0][`XLEN-1:0] fpu_result;
     fpnew_pkg::status_t [NUM_LANES-1:0] fpu_status;
 
-    reg [FOP_BITS-1:0] fpu_op;
+    reg [fpnew_pkg::OP_BITS-1:0] fpu_op;
     reg [`INST_FRM_BITS-1:0] fpu_rnd;
     reg fpu_op_mod;
     reg fpu_has_fflags, fpu_has_fflags_out;
-    reg [FMTF_BITS-1:0] fpu_src_fmt, fpu_dst_fmt, fpu_int_fmt;
+    reg [fpnew_pkg::FP_FORMAT_BITS-1:0] fpu_src_fmt, fpu_dst_fmt, fpu_int_fmt;
 
     wire is_fp_w = op_mod[3];
 
@@ -118,19 +121,26 @@ module VX_fpu_fpnew #(
             `INST_FPU_CVTXWU:begin fpu_op = fpnew_pkg::I2F; fpu_op_mod = 1; end
             `INST_FPU_NCP:  begin
                 case (op_mod)
-                      0: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `INST_FRM_RNE; fpu_has_fflags = 0; end // FSGNJ
-                      1: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `INST_FRM_RTZ; fpu_has_fflags = 0; end // FSGNJN
-                      2: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `INST_FRM_RDN; fpu_has_fflags = 0; end // FSGNJX
+                      0,1,2: begin fpu_op = fpnew_pkg::SGNJ; fpu_rnd = {1'b0, op_mod[1:0]}; fpu_has_fflags = 0; end // FSGNJ
                       3: begin fpu_op = fpnew_pkg::CLASSIFY; fpu_has_fflags = 0; end //  CLASS                     
-                      4: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `INST_FRM_RUP; fpu_op_mod = 1; fpu_has_fflags = 0; end // FMV.X.W
-                      5: begin fpu_op = fpnew_pkg::SGNJ;   fpu_rnd = `INST_FRM_RUP; fpu_has_fflags = 0; end // FMV.W.X
-                      6: begin fpu_op = fpnew_pkg::MINMAX; fpu_rnd = `INST_FRM_RNE; end // MIN
-                      7: begin fpu_op = fpnew_pkg::MINMAX; fpu_rnd = `INST_FRM_RTZ; end // MAX
-                default: begin fpu_op = fpnew_pkg::CMP;    fpu_has_fflags = 0; end // CMP (8,9,10)
+                      4: begin fpu_op = fpnew_pkg::SGNJ; fpu_rnd = 3'b011; fpu_op_mod = 1; fpu_has_fflags = 0; end // FMV.X.W
+                      5: begin fpu_op = fpnew_pkg::SGNJ; fpu_rnd = 3'b011; fpu_has_fflags = 0; end // FMV.W.X
+                      6: begin fpu_op = fpnew_pkg::MINMAX; fpu_rnd = 3'b000; end // MIN
+                      7: begin fpu_op = fpnew_pkg::MINMAX; fpu_rnd = 3'b001; end // MAX
+                default: begin fpu_op = fpnew_pkg::CMP; fpu_rnd = {1'b0, op_mod[1:0]}; end // CMP (8,9,10)
                 endcase    
             end
             default:;
-        endcase
+        endcase        
+
+    `ifdef ISA_RV64F
+        // apply nan-boxing to floating-point operands
+        if (op_type != `INST_FPU_CVTXW && op_type != `INST_FPU_CVTXWU) begin
+            fpu_operands[0] |= 64'hffffffff00000000;
+        end
+        fpu_operands[1] |= 64'hffffffff00000000;
+        fpu_operands[2] |= 64'hffffffff00000000;
+    `endif
     end  
     
     for (genvar i = 0; i < NUM_LANES; ++i) begin

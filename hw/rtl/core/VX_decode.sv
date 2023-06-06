@@ -314,7 +314,7 @@ module VX_decode  #(
             `INST_FNMSUB,
             `INST_FNMADD: begin 
                 ex_type = `EX_FPU;
-                op_type = `INST_OP_BITS'({2'b10, opcode[3:2]});
+                op_type = `INST_OP_BITS'({2'b11, opcode[3:2]});
                 op_mod  = `INST_MOD_BITS'(func3);
                 use_rd  = 1;
                 `USED_FREG (rd);              

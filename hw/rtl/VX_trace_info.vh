@@ -136,11 +136,11 @@
                     0: `TRACE(level, ("SGNJ")); \
                     1: `TRACE(level, ("SGNJN")); \
                     2: `TRACE(level, ("SGNJX")); \
-                    3: `TRACE(level, ("MIN")); \
-                    4: `TRACE(level, ("MAX")); \
-                    5: `TRACE(level, ("MVXW")); \
-                    6: `TRACE(level, ("MVWX")); \
-                    7: `TRACE(level, ("CLASS")); \
+                    3: `TRACE(level, ("CLASS")); \
+                    4: `TRACE(level, ("FMV.X.W")); \
+                    5: `TRACE(level, ("FMV.W.X")); \
+                    6: `TRACE(level, ("MIN")); \
+                    7: `TRACE(level, ("MAX")); \
                     8: `TRACE(level, ("FLE")); \
                     9: `TRACE(level, ("FLT")); \
                    10: `TRACE(level, ("FEQ")); \
