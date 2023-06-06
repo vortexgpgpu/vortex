@@ -166,8 +166,10 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         }
         DPN(2, "}" << std::endl);
         break;
-      default: 
-        std::abort();
+      case RegType::Vector:
+        // TODO:
+        break;
+      case RegType::None:
         break;
       }      
     }

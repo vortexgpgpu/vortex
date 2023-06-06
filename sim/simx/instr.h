@@ -80,10 +80,20 @@ public:
   }
 
   void setOpcode(Opcode opcode)  { opcode_ = opcode; }
-  void setDestReg(uint32_t destReg, RegType type) { rdest_type_ = type; rdest_ = destReg; }
-  void setSrcReg(uint32_t srcReg, RegType type) { rsrc_type_[num_rsrcs_] = type; rsrc_[num_rsrcs_++] = srcReg; }
-  void setDestVReg(uint32_t destReg) { rdest_type_ = RegType::Vector; rdest_ = destReg; }
-  void setSrcVReg(uint32_t srcReg) { rsrc_type_[num_rsrcs_] = RegType::Vector; rsrc_[num_rsrcs_++] = srcReg;  }
+  void setDestReg(uint32_t destReg, RegType type) { 
+    rdest_type_ = type; 
+    rdest_ = destReg; 
+  }
+  void addSrcReg(uint32_t srcReg, RegType type) { 
+    rsrc_type_[num_rsrcs_] = type; 
+    rsrc_[num_rsrcs_] = srcReg; 
+    ++num_rsrcs_;
+  }
+  void setSrcReg(uint32_t index, uint32_t srcReg, RegType type) { 
+    rsrc_type_[index] = type; 
+    rsrc_[index] = srcReg; 
+    num_rsrcs_ = std::max<uint32_t>(num_rsrcs_, index+1); 
+  }
   void setFunc2(uint32_t func2) { func2_ = func2; }
   void setFunc3(uint32_t func3) { func3_ = func3; }
   void setFunc5(uint32_t func5) { func5_ = func5; }

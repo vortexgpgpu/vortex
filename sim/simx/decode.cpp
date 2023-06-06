@@ -447,12 +447,19 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
     }
     uint32_t i = 0;
     for (; i < instr.getNRSrc(); ++i) {    
+      if (instr.getRSType(i) == RegType::None)
+        continue;
       if (i) os << ", ";
       os << instr.getRSType(i) << std::dec << instr.getRSrc(i);
-    }    
+    }
     if (instr.hasImm()) {
       if (i) os << ", ";
       os << "imm=0x" << std::hex << instr.getImm();
+    }
+    if (opcode == Opcode::SYS_INST && func3 >= 5) {
+      // CSRs with immediate values
+      if (i) os << ", ";
+      os << "imm=0x" << std::hex << instr.getRSrc(0);
     }
     if (opcode == EXT2 && func3 == 0) {
       os << ", stage=" << std::dec << func2;
@@ -500,39 +507,41 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
       case 0x50: // FLE.S, FLT.S, FEQ.S
       case 0x51: // FLE.D, FLT.D, FEQ.D
         instr->setDestReg(rd, RegType::Integer);
-        instr->setSrcReg(rs1, RegType::Float);
-        instr->setSrcReg(rs2, RegType::Float);
+        instr->addSrcReg(rs1, RegType::Float);
+        instr->addSrcReg(rs2, RegType::Float);
         break;
       case 0x60: // FCVT.W.D, FCVT.WU.D, FCVT.L.D, FCVT.LU.D
       case 0x61: // FCVT.WU.S, FCVT.W.S, FCVT.L.S, FCVT.LU.S
         instr->setDestReg(rd, RegType::Integer);
-        instr->setSrcReg(rs1, RegType::Float);
+        instr->addSrcReg(rs1, RegType::Float);
+        instr->addSrcReg(rs2, RegType::None);
         break;
       case 0x68: // FCVT.S.W, FCVT.S.WU, FCVT.S.L, FCVT.S.LU
       case 0x69: // FCVT.D.W, FCVT.D.WU, FCVT.D.L, FCVT.D.LU
         instr->setDestReg(rd, RegType::Float);
-        instr->setSrcReg(rs1, RegType::Integer);
+        instr->addSrcReg(rs1, RegType::Integer);
+        instr->addSrcReg(rs2, RegType::None);
         break;
       case 0x70: // FCLASS.S, FMV.X.W
       case 0x71: // FCLASS.D, FMV.X.D        
         instr->setDestReg(rd, RegType::Integer);
-        instr->setSrcReg(rs1, RegType::Float);
+        instr->addSrcReg(rs1, RegType::Float);
         break;
       case 0x78: // FMV.W.X
       case 0x79: // FMV.D.X        
         instr->setDestReg(rd, RegType::Float);
-        instr->setSrcReg(rs1, RegType::Integer);
+        instr->addSrcReg(rs1, RegType::Integer);
         break;
       default:
         instr->setDestReg(rd, RegType::Float);
-        instr->setSrcReg(rs1, RegType::Float);
-        instr->setSrcReg(rs2, RegType::Float);        
+        instr->addSrcReg(rs1, RegType::Float);
+        instr->addSrcReg(rs2, RegType::Float);        
         break;
       }
     } else {
       instr->setDestReg(rd, RegType::Integer);
-      instr->setSrcReg(rs1, RegType::Integer);
-      instr->setSrcReg(rs2, RegType::Integer);
+      instr->addSrcReg(rs1, RegType::Integer);
+      instr->addSrcReg(rs2, RegType::Integer);
     }
     instr->setFunc3(func3);
     instr->setFunc5(func5);
@@ -540,7 +549,7 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
     break;
 
   case InstType::I_TYPE: {
-    instr->setSrcReg(rs1, RegType::Integer);
+    instr->addSrcReg(rs1, RegType::Integer);
     if (op == Opcode::FL) {
       instr->setDestReg(rd, RegType::Float);      
     } else {
@@ -553,6 +562,10 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
       if (func3 != 0) {
         // RV32I: CSR*
         instr->setDestReg(rd, RegType::Integer);
+        if (func3 >= 5) {
+          // rs1 holds zimm
+          instr->setSrcReg(0, rs1, RegType::None);
+        }
       }
       // uint12
       instr->setImm(code >> shift_rs2);
@@ -586,11 +599,11 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
     }
   } break;
   case InstType::S_TYPE: {    
-    instr->setSrcReg(rs1, RegType::Integer);
+    instr->addSrcReg(rs1, RegType::Integer);
     if (op == Opcode::FS) {
-      instr->setSrcReg(rs2, RegType::Float);
+      instr->addSrcReg(rs2, RegType::Float);
     } else {
-      instr->setSrcReg(rs2, RegType::Integer);
+      instr->addSrcReg(rs2, RegType::Integer);
     }
     instr->setFunc3(func3);
     auto imm = (func7 << width_reg) | rd;
@@ -598,8 +611,8 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
   } break;
 
   case InstType::B_TYPE: {
-    instr->setSrcReg(rs1, RegType::Integer);
-    instr->setSrcReg(rs2, RegType::Integer);
+    instr->addSrcReg(rs1, RegType::Integer);
+    instr->addSrcReg(rs2, RegType::Integer);
     instr->setFunc3(func3);
     auto bit_11   = rd & 0x1;
     auto bits_4_1 = rd >> 1;
@@ -629,8 +642,8 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
   case InstType::V_TYPE:
     switch (op) {
     case Opcode::VSET: {
-      instr->setDestVReg(rd);
-      instr->setSrcVReg(rs1);
+      instr->setDestReg(rd, RegType::Vector);
+      instr->addSrcReg(rs1, RegType::Vector);
       instr->setFunc3(func3);
       if (func3 == 7) {
         instr->setImm(!(code >> shift_vset));
@@ -641,20 +654,20 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
           instr->setVediv((immed >> 4) & 0x3);
           instr->setVsew((immed >> 2) & 0x3);
         } else {
-          instr->setSrcVReg(rs2);
+          instr->addSrcReg(rs2, RegType::Vector);
         }
       } else {
-        instr->setSrcVReg(rs2);
+        instr->addSrcReg(rs2, RegType::Vector);
         instr->setVmask((code >> shift_func7) & 0x1);
         instr->setFunc6(func6);
       }
     } break;
 
     case Opcode::FL:
-      instr->setDestVReg(rd);
-      instr->setSrcVReg(rs1);
+      instr->setDestReg(rd, RegType::Vector);
+      instr->addSrcReg(rs1, RegType::Vector);
       instr->setVlsWidth(func3);
-      instr->setSrcVReg(rs2);
+      instr->addSrcReg(rs2, RegType::Vector);
       instr->setVmask(code >> shift_func7);
       instr->setVmop((code >> shift_vmop) & mask_func3);
       instr->setVnf((code >> shift_vnf) & mask_func3);
@@ -662,9 +675,9 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
 
     case Opcode::FS:
       instr->setVs3(rd);
-      instr->setSrcVReg(rs1);
+      instr->addSrcReg(rs1, RegType::Vector);
       instr->setVlsWidth(func3);
-      instr->setSrcVReg(rs2);
+      instr->addSrcReg(rs2, RegType::Vector);
       instr->setVmask(code >> shift_func7);
       instr->setVmop((code >> shift_vmop) & mask_func3);
       instr->setVnf((code >> shift_vnf) & mask_func3);
@@ -677,14 +690,14 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
   case R4_TYPE:
     if (op == Opcode::EXT2) {
       instr->setDestReg(rd, RegType::Integer);
-      instr->setSrcReg(rs1, RegType::Integer);
-      instr->setSrcReg(rs2, RegType::Integer);
-      instr->setSrcReg(rs3, RegType::Integer);
+      instr->addSrcReg(rs1, RegType::Integer);
+      instr->addSrcReg(rs2, RegType::Integer);
+      instr->addSrcReg(rs3, RegType::Integer);
     } else {
       instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(rs1, RegType::Float);
-      instr->setSrcReg(rs2, RegType::Float);
-      instr->setSrcReg(rs3, RegType::Float);
+      instr->addSrcReg(rs1, RegType::Float);
+      instr->addSrcReg(rs2, RegType::Float);
+      instr->addSrcReg(rs3, RegType::Float);
     }
     instr->setFunc2(func2);
     instr->setFunc3(func3);
