@@ -3,9 +3,10 @@ VIVADO = $(XILINX_VIVADO)/bin/vivado
 RTL_DIR = ../../../rtl
 AFU_DIR = $(RTL_DIR)/afu/xrt
 SCRIPT_DIR = ../../../scripts
+THIRD_PARTY_DIR = ../../../../third_party
 
 # include paths
-FPU_INCLUDE = -I$(RTL_DIR)/fpu
+FPU_INCLUDE = -I$(RTL_DIR)/fpu -J$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -J$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src -J$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/fpnew/src
 TEX_INCLUDE = -I$(RTL_DIR)/tex
 RASTER_INCLUDE = -I$(RTL_DIR)/raster
 ROP_INCLUDE = -I$(RTL_DIR)/rop
@@ -33,7 +34,7 @@ all: build
 gen-sources: project_1/sources.txt
 project_1/sources.txt:
 	mkdir -p project_1
-	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -P -EVX_fpu_fpnew.sv -Fproject_1/src -Oproject_1/sources.txt
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -P -Cproject_1/src -Oproject_1/sources.txt
 
 project.tcl: project.tcl.in
 	sed -e 's/%COE_FILE%/$(ESCAPED_COE_FILE)/g' < $< > $@

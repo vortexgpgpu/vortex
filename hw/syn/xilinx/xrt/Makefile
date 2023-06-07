@@ -21,6 +21,7 @@ RTL_DIR = ../../../../rtl
 AFU_DIR = $(RTL_DIR)/afu/xrt
 DPI_DIR = ../../../../dpi
 SCRIPT_DIR = ../../../../scripts
+THIRD_PARTY_DIR = ../../../../../third_party
 
 VIVADO = $(XILINX_VIVADO)/bin/vivado
 VPP = $(XILINX_VITIS)/bin/v++
@@ -76,7 +77,7 @@ CONFIGS_64c := -DNUM_CLUSTERS=4 -DNUM_CORES=16 -DL2_ENABLE
 CONFIGS += $(CONFIGS_$(NUM_CORES)c)
 
 # include paths
-FPU_INCLUDE = -I$(RTL_DIR)/fpu
+FPU_INCLUDE = -I$(RTL_DIR)/fpu -J$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -J$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src -J$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/fpnew/src
 TEX_INCLUDE = -I$(RTL_DIR)/tex
 RASTER_INCLUDE = -I$(RTL_DIR)/raster
 ROP_INCLUDE = -I$(RTL_DIR)/rop
@@ -150,7 +151,7 @@ all: check-devices emconfig $(XCLBIN_CONTAINER)
 
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt:
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -EVX_fpu_fpnew.sv -Fsrc -P -Osources.txt
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -Csrc -P -Osources.txt
 
 gen-ast: $(BUILD_DIR)/vortex.xml
 $(BUILD_DIR)/vortex.xml:	

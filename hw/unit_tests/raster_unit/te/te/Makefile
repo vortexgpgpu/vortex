@@ -3,6 +3,7 @@ DEBUG ?= 1
 
 RTL_DIR = ../../../../rtl
 DPI_DIR = ../../../../dpi
+THIRD_PARTY_DIR = ../../../../../third_party
 
 # control RTL debug tracing states
 DBG_TRACE_FLAGS += -DDBG_TRACE_CORE_PIPELINE  
@@ -21,7 +22,7 @@ DBG_TRACE_FLAGS += -DDBG_TRACE_ROP
 
 DBG_FLAGS += $(DBG_TRACE_FLAGS) -DVCD_OUTPUT
 
-FPU_INCLUDE = -I$(RTL_DIR)/fpu -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src -I$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/fpnew/src
+FPU_INCLUDE = -I$(RTL_DIR)/fpu
 TEX_INCLUDE = -I$(RTL_DIR)/tex
 RASTER_INCLUDE = -I$(RTL_DIR)/raster -I$(RTL_DIR)/raster/tile_evaluator
 ROP_INCLUDE = -I$(RTL_DIR)/rop

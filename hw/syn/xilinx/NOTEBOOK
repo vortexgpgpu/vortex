@@ -30,8 +30,9 @@ PREFIX=build_gfx_dbg_1c DEBUG=3 NUM_CORES=1 TARGET=hw PLATFORM=xilinx_u280_gen3x
 PREFIX=build_dbg_1c DEBUG=3 NUM_CORES=1 TARGET=hw_emu PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 make > build_u280_hw_emu_dbg_1c.log 2>&1 &
 PREFIX=build_dbg_1c DEBUG=3 NUM_CORES=1 TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 make > build_u280_hw_dbg_1c.log 2>&1 &
 PREFIX=build_base_1c NUM_CORES=1 TARGET=hw_emu PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 make > build_u280_hw_emu_base_1c.log 2>&1 &
-PREFIX=build_base_8c NUM_CORES=8 TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 make > build_u280_hw_base_8c.log 2>&1 &
-PREFIX=build_gfx_8c NUM_CORES=8 TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 CONFIGS="-DEXT_GFX_ENABLE" make > build_u280_hw_gfx_8c.log 2>&1 &
+PREFIX=build_base_1c NUM_CORES=1 TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 make > build_u280_hw_base_1c.log 2>&1 &
+PREFIX=build_gfx_1c NUM_CORES=1 TARGET=hw_emu PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 CONFIGS="-DEXT_GFX_ENABLE" make > build_u280_hw_emu_gfx_1c.log 2>&1 &
+PREFIX=build_gfx_1c NUM_CORES=1 TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 CONFIGS="-DEXT_GFX_ENABLE" make > build_u280_hw_gfx_1c.log 2>&1 &
 
 PREFIX=build TARGET=hw_emu PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 make > build_vck5k_hw_emu.log 2>&1 &
 PREFIX=build TARGET=hw_emu PLATFORM=xilinx_vck5000_gen3x16_xdma_1_202120_1 make > build_vck5k_hw.log 2>&1 &
