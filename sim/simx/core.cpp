@@ -321,12 +321,13 @@ void Core::barrier(uint32_t bar_id, uint32_t count, uint32_t warp_id) {
 
   auto& barrier = barriers_.at(bar_idx);
   barrier.set(warp_id);
-  DP(3, "*** Suspend warp #" << warp_id << " at barrier #" << bar_idx);
+  DP(3, "*** Suspend core #" << core_id_ << ", warp #" << warp_id << " at barrier #" << bar_idx);
 
   if (is_global) {
     // global barrier handling
     if (barrier.count() == active_warps_.count()) {
       cluster_->processor()->barrier(bar_idx, count, core_id_);
+      barrier.reset();
     }    
   } else {
     // local barrier handling
@@ -334,7 +335,7 @@ void Core::barrier(uint32_t bar_id, uint32_t count, uint32_t warp_id) {
       // resume suspended warps
       for (uint32_t i = 0; i < arch_.num_warps(); ++i) {
         if (barrier.test(i)) {
-          DP(3, "*** Resume warp #" << i << " at barrier #" << bar_idx);
+          DP(3, "*** Resume core #" << core_id_ << ", warp #" << i << " at barrier #" << bar_idx);
           stalled_warps_.reset(i);
         }
       }
