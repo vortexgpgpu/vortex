@@ -54,6 +54,10 @@ module VX_decode  #(
     wire [4:0] rs2 = instr[24:20];
     wire [4:0] rs3 = instr[31:27];
 
+    `UNUSED_VAR (func2)
+    `UNUSED_VAR (func5)
+    `UNUSED_VAR (rs3)
+
     wire is_itype_sh = func3[0] && ~func3[1];
 
     wire [19:0] ui_imm  = instr[31:12];
@@ -121,8 +125,6 @@ module VX_decode  #(
         endcase
     end
 `endif
-
-    `UNUSED_VAR (rs3)
 
     always @(*) begin
 
@@ -509,8 +511,6 @@ module VX_decode  #(
             default:;
         endcase
     end
-
-    `UNUSED_VAR (func2)
 
     // disable write to integer register r0
     wire wb = use_rd && (rd_r != 0);

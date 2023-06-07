@@ -1,5 +1,3 @@
-`ifdef FPU_FPNEW
-
 `include "VX_fpu_define.vh"
 `include "cf_math_pkg.sv"
 `include "fpnew_pkg.sv"
@@ -216,5 +214,3 @@ module VX_fpu_fpnew #(
     assign fpu_ready_out = ready_out;
 
 endmodule
-
-`endif

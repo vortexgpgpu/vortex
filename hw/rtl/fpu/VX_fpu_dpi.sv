@@ -331,7 +331,7 @@ module VX_fpu_dpi #(
             end
         end
 
-        always (*) begin
+        always @(*) begin
             result_fncp = 'x;
             fflags_fncp = 'x;
             case (op_mod)

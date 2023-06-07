@@ -3,6 +3,7 @@ AFU_DIR = $(RTL_DIR)/afu/opae
 THIRD_PARTY_DIR = ../../../../../../third_party
 IP_CACHE_DIR = ../../../ip_cache/$(DEVICE_FAMILY)
 SCRIPT_DIR = ../../../../../scripts
+THIRD_PARTY_DIR = ../../../../../../third_party
 
 ifeq ($(DEVICE_FAMILY), stratix10)
     FAMILY = "Stratix 10"
@@ -33,7 +34,7 @@ all: gen-sources $(PROJECT).sta.rpt $(PROJECT).pow.rpt
 gen-sources: src
 src:
 	mkdir -p src
-	$(SCRIPT_DIR)/gen_sources.sh $(CONFIGS) $(RTL_INCLUDE) -P -Fsrc
+	$(SCRIPT_DIR)/gen_sources.sh $(CONFIGS) $(RTL_INCLUDE) -P -Csrc
 
 syn: $(PROJECT).syn.rpt
 
