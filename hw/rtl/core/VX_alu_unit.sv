@@ -38,10 +38,10 @@ module VX_alu_unit #(
     wire is_alu_w = 0;
 `endif
 
-    wire                    is_br_op = `INST_ALU_IS_BR(alu_req_if.op_mod);
-    wire                   is_sub_op = `INST_ALU_IS_SUB(alu_op);
     wire [`INST_ALU_BITS-1:0] alu_op = `INST_ALU_BITS'(alu_req_if.op_type);
     wire [`INST_BR_BITS-1:0]   br_op = `INST_BR_BITS'(alu_req_if.op_type);
+     wire                    is_br_op = `INST_ALU_IS_BR(alu_req_if.op_mod);
+    wire                   is_sub_op = `INST_ALU_IS_SUB(alu_op);
     wire                  alu_signed = `INST_ALU_SIGNED(alu_op);   
     wire [1:0]          alu_op_class = `INST_ALU_CLASS(alu_op);
     
