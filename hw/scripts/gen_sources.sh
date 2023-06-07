@@ -2,7 +2,6 @@
 
 defines=()
 includes=()
-externs=()
 
 output_file=""
 global_file=""
@@ -36,12 +35,11 @@ do
     I) includes+=( ${OPTARG} )
        includes_str+="-I${OPTARG} "
        ;;
-    J) externs+=( ${OPTARG} );;
     O) output_file=( ${OPTARG} );;
     G) global_file=( ${OPTARG} );;
     C) copy_folder=( ${OPTARG} );;
     P) prepropressor=1;;
-    h) echo "Usage: [-D<macro>] [-I<include-path>] [-J<extern-path>] [-O<output-file>] [-C<dest-folder>: copy to] [-G<global_header>] [-P: macro prepropressing] [-h help]"
+    h) echo "Usage: [-D<macro>] [-I<include-path>] [-O<output-file>] [-C<dest-folder>: copy to] [-G<global_header>] [-P: macro prepropressing] [-h help]"
        exit 0
     ;;
   \?)
@@ -94,9 +92,6 @@ if [ "$output_file" != "" ]; then
             for dir in ${includes[@]}; do
                 echo "+incdir+$dir"
             done
-            for dir in ${externs[@]}; do
-                echo "+incdir+$dir"
-            done
 
             # dump source files
             for dir in ${includes[@]}; do
@@ -104,28 +99,13 @@ if [ "$output_file" != "" ]; then
                     echo $(absolute_path $file)
                 done
             done
-            for dir in ${externs[@]}; do
-                for file in $(find $dir -maxdepth 1 -name '*.v' -o -name '*.sv' -type f); do
-                    echo $(absolute_path $file)
-                done
-            done
-
-            externs
         else
             # dump include directories
             echo "+incdir+$copy_folder"
-            for dir in ${externs[@]}; do
-                echo "+incdir+$dir"
-            done
 
             # dump source files
             for file in $(find $copy_folder -maxdepth 1 -name '*.v' -o -name '*.sv' -type f); do
                 echo $(absolute_path $file)
-            done
-            for dir in ${externs[@]}; do
-                for file in $(find $dir -maxdepth 1 -name '*.v' -o -name '*.sv' -type f); do
-                    echo $(absolute_path $file)
-                done
             done
         fi
     } > $output_file
