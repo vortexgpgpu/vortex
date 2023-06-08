@@ -1,5 +1,4 @@
 `include "VX_define.vh"
-`include "VX_config.vh"
 
 module VX_alu_unit #(
     parameter CORE_ID = 0

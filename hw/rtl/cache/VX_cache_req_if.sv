@@ -1,5 +1,4 @@
 `include "VX_cache_define.vh"
-`include "VX_config.vh"
 
 interface VX_cache_req_if #(
     parameter NUM_REQS   = 1,

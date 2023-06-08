@@ -1,5 +1,4 @@
 `include "VX_define.vh"
-`include "VX_config.vh"
 
 module VX_dispatch (
     input wire              clk,
@@ -74,7 +73,7 @@ module VX_dispatch (
         .reset     (reset),
         .valid_in  (lsu_req_valid),
         .ready_in  (lsu_req_ready),
-        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, lsu_op_type,        lsu_is_fence,        ibuffer_if.imm,     dispatch_if.rd, dispatch_if.wb, gpr_rsp_if.rs1_data,  gpr_rsp_if.rs2_data}),
+        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, lsu_op_type,        lsu_is_fence,        dispatch_if.imm,    dispatch_if.rd, dispatch_if.wb, gpr_rsp_if.rs1_data,  gpr_rsp_if.rs2_data}),
         .data_out  ({lsu_req_if.uuid,  lsu_req_if.wid,  lsu_req_if.tmask,  lsu_req_if.PC,  lsu_req_if.op_type, lsu_req_if.is_fence, lsu_req_if.offset,  lsu_req_if.rd,  lsu_req_if.wb,  lsu_req_if.base_addr, lsu_req_if.store_data}),
         .valid_out (lsu_req_if.valid),
         .ready_out (lsu_req_if.ready)

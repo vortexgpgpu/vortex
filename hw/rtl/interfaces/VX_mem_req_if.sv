@@ -1,5 +1,4 @@
 `include "VX_define.vh"
-`include "VX_config.vh"
 
 interface VX_mem_req_if #(
     parameter DATA_WIDTH = 1,

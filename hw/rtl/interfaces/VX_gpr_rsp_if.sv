@@ -1,5 +1,4 @@
 `include "VX_define.vh"
-`include "VX_config.vh"
 
 interface VX_gpr_rsp_if ();  
     

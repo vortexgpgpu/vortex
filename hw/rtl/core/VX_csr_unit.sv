@@ -1,6 +1,5 @@
 `include "VX_define.vh"
 `include "VX_gpu_types.vh"
-`include "VX_config.vh"
 
 `IGNORE_WARNINGS_BEGIN
 import VX_gpu_types::*;

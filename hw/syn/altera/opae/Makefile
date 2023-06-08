@@ -58,7 +58,7 @@ CONFIGS_64c := -DNUM_CLUSTERS=4 -DNUM_CORES=16 -DL2_ENABLE
 CONFIGS += $(CONFIGS_$(NUM_CORES)c)
 
 # include paths
-FPU_INCLUDE = -I$(RTL_DIR)/fpu -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src -I$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/fpnew/src
+FPU_INCLUDE = -I$(RTL_DIR)/fpu -J$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -J$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src -J$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/fpnew/src
 TEX_INCLUDE = -I$(RTL_DIR)/tex
 RASTER_INCLUDE = -I$(RTL_DIR)/raster
 ROP_INCLUDE = -I$(RTL_DIR)/rop
@@ -109,19 +109,32 @@ swconfig: vortex_afu.h
 vortex_afu.h: vortex_afu.json
 	afu_json_mgr json-info --afu-json=$^ --c-hdr=$@
 
-setup:	
-ifeq ($(TARGET), asesim)
-	afu_sim_setup -s setup.cfg $(BUILD_DIR)
-else
-	afu_synth_setup -s setup.cfg $(BUILD_DIR)
-endif
-	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -C$(BUILD_DIR)/src -Osources.txt
+$(BUILD_DIR)/setup.cfg:
+	mkdir -p $(BUILD_DIR); cp setup.cfg $(BUILD_DIR)/setup.cfg
 
-build: ip-gen setup  $(SCOPE_JSON)
+$(BUILD_DIR)/vortex_afu.qsf:
+	mkdir -p $(BUILD_DIR); cp vortex_afu.qsf $(BUILD_DIR)/vortex_afu.qsf
+
+$(BUILD_DIR)/vortex_afu.json:
+	mkdir -p $(BUILD_DIR); cp vortex_afu.json $(BUILD_DIR)/vortex_afu.json
+
+sources: $(BUILD_DIR)/sources.txt
+$(BUILD_DIR)/sources.txt:
+	mkdir -p $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -C$(BUILD_DIR)/src -O$(BUILD_DIR)/sources.txt
+
+setup: $(BUILD_DIR)/synth
+$(BUILD_DIR)/synth: $(BUILD_DIR)/sources.txt $(BUILD_DIR)/setup.cfg $(BUILD_DIR)/vortex_afu.qsf $(BUILD_DIR)/vortex_afu.json
 ifeq ($(TARGET), asesim)
-	make -C $(BUILD_DIR) > $(BUILD_DIR)/build.log 2>&1 &
+	afu_sim_setup -s $(BUILD_DIR)/setup.cfg $(BUILD_DIR)/synth
 else
-	cd $(BUILD_DIR) && $(RUN_SYNTH)
+	afu_synth_setup -s $(BUILD_DIR)/setup.cfg $(BUILD_DIR)/synth
+endif	
+
+build: ip-gen setup $(SCOPE_JSON)
+ifeq ($(TARGET), asesim)
+	make -C $(BUILD_DIR)/synth > $(BUILD_DIR)/synth/build.log 2>&1 &
+else
+	cd $(BUILD_DIR)/synth && $(RUN_SYNTH)
 endif
 
 gen-ast: $(BUILD_DIR)/vortex.xml

@@ -1,5 +1,4 @@
 `include "VX_define.vh"
-`include "VX_config.vh"
 `ifndef NDEBUG
 `include "VX_trace_info.vh"
 `endif

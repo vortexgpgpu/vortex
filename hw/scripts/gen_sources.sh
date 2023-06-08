@@ -2,6 +2,7 @@
 
 defines=()
 includes=()
+externs=()
 
 output_file=""
 global_file=""
@@ -10,20 +11,6 @@ prepropressor=0
 
 defines_str=""
 includes_str=""
-
-function absolute_path() {
-    if [ -d "$1" ]; then
-        (cd "$1"; pwd)
-    elif [ -f "$1" ]; then
-        if [[ $1 = /* ]]; then
-            echo "$1"
-        elif [[ $1 == */* ]]; then
-            echo "$(cd "${1%/*}"; pwd)/${1##*/}"
-        else
-            echo "$(pwd)/$1"
-        fi
-    fi
-}
 
 # parse command arguments
 while getopts D:I:J:O:G:C:Ph flag
@@ -35,11 +22,14 @@ do
     I) includes+=( ${OPTARG} )
        includes_str+="-I${OPTARG} "
        ;;
+    J) externs+=( ${OPTARG} )
+       includes_str+="-I${OPTARG} "
+       ;;
     O) output_file=( ${OPTARG} );;
     G) global_file=( ${OPTARG} );;
     C) copy_folder=( ${OPTARG} );;
     P) prepropressor=1;;
-    h) echo "Usage: [-D<macro>] [-I<include-path>] [-O<output-file>] [-C<dest-folder>: copy to] [-G<global_header>] [-P: macro prepropressing] [-h help]"
+    h) echo "Usage: [-D<macro>] [-I<include-path>] [-J<external-path>] [-O<output-file>] [-C<dest-folder>: copy to] [-G<global_header>] [-P: macro prepropressing] [-h help]"
        exit 0
     ;;
   \?)
@@ -65,14 +55,14 @@ if [ "$global_file" != "" ]; then
 fi
 
 if [ "$copy_folder" != "" ]; then
-    # copy source files
-    mkdir -p $copy_folder
+    # copy source files   
+    mkdir -p $copy_folder 
     for dir in ${includes[@]}; do
-        for file in $(find $dir -maxdepth 1 -name '*.v' -o -name '*.sv' -o -name '*.vh' -o -name '*.svh' -o -name '*.hex' -type f); do            
+        find "$dir" -maxdepth 1 -type f | while read -r file; do
             if [ $prepropressor != 0 ]; then
-                verilator $defines_str $includes_str -E -P $(absolute_path $file) > $copy_folder/$(basename -- $file)
+                verilator $defines_str $includes_str -E -P $file > $copy_folder/$(basename -- $file)
             else
-                cp $(absolute_path $file) $copy_folder
+                cp $file $copy_folder
             fi
         done
     done
@@ -87,25 +77,29 @@ if [ "$output_file" != "" ]; then
             done
         fi
 
-        if [ "$copy_folder" == "" ]; then
+        for dir in ${externs[@]}; do
+            echo "+incdir+$(realpath $dir)"
+        done
+
+        for dir in ${externs[@]}; do
+            find "$(realpath $dir)" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) -print
+        done
+
+        if [ "$copy_folder" != "" ]; then
             # dump include directories
-            for dir in ${includes[@]}; do
-                echo "+incdir+$dir"
-            done
+            echo "+incdir+$(realpath $copy_folder)"
 
             # dump source files
-            for dir in ${includes[@]}; do
-                for file in $(find $dir -maxdepth 1 -name '*.v' -o -name '*.sv' -type f); do
-                    echo $(absolute_path $file)
-                done
-            done
+            find "$(realpath $copy_folder)" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) -print     
         else
             # dump include directories
-            echo "+incdir+$copy_folder"
-
+            for dir in ${includes[@]}; do
+                echo "+incdir+$(realpath $dir)"
+            done
+            
             # dump source files
-            for file in $(find $copy_folder -maxdepth 1 -name '*.v' -o -name '*.sv' -type f); do
-                echo $(absolute_path $file)
+            for dir in ${includes[@]}; do
+                find "$(realpath $dir)" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) -print
             done
         fi
     } > $output_file
