@@ -33,8 +33,8 @@ make -C tests/regression run-rtlsim
 
 # test global barriers with multiple cores
 make -C runtime/simx clean
-CONFIGS="-DNUM_CORES=2" make -C runtime/simx
-OPTS="-n1" make -C tests/regression/dogfood run-simx
+CONFIGS="-DNUM_CORES=2" DEBUG=3 make -C runtime/simx
+OPTS="-n1 -t19" make -C tests/regression/dogfood run-simx
 
 echo "regression tests done!"
 }
