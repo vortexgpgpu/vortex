@@ -57,7 +57,7 @@ pipeline_trace_t* Warp::eval() {
   core_->icache_read(&instr_code, PC_, sizeof(uint32_t));
   auto instr = core_->decoder_.decode(instr_code);
   if (!instr) {
-    std::cout << std::hex << "Error: invalid instruction 0x" << instr_code << ", at PC=" << PC_ << std::endl;
+    std::cout << std::hex << "Error: invalid instruction 0x" << instr_code << ", at PC=" << PC_ << " (#" << std::dec << uuid << ")" << std::endl;
     std::abort();
   }  
 
