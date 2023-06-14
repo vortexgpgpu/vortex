@@ -44,6 +44,12 @@ module VX_lsu_unit #(
     //                     uuid,        addr_type,                               wid,       PC,     tmask,         rd,        op_type,         align,                        is_dup
     localparam TAG_WIDTH = UUID_WIDTH + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + NW_WIDTH + `XLEN + `NUM_THREADS + `NR_BITS + `INST_LSU_BITS + (`NUM_THREADS * (REQ_ASHIFT)) + 1;
 
+`ifdef EXT_F_ENABLE
+`ifdef FLEN_64
+    `define ISA_RV64D
+`endif
+`endif
+
     `STATIC_ASSERT(0 == (`IO_BASE_ADDR % `MEM_BLOCK_SIZE), ("invalid parameter"))
     `STATIC_ASSERT(0 == (`STACK_BASE_ADDR % `MEM_BLOCK_SIZE), ("invalid parameter"))    
     `STATIC_ASSERT(`SMEM_LOCAL_SIZE == `MEM_BLOCK_SIZE * (`SMEM_LOCAL_SIZE / `MEM_BLOCK_SIZE), ("invalid parameter"))
@@ -96,7 +102,8 @@ module VX_lsu_unit #(
     wire lsu_valid, lsu_ready;
 
     // fence: stall the pipeline until all pending requests are sent
-    wire fence_wait = lsu_req_if.is_fence && ~mem_req_empty;
+    wire is_fence = `INST_LSU_IS_FENCE(lsu_req_if.op_type);
+    wire fence_wait = is_fence && ~mem_req_empty;
     
     assign lsu_valid = lsu_req_if.valid && ~fence_wait;
     assign lsu_req_if.ready = lsu_ready && ~fence_wait;
@@ -163,7 +170,7 @@ module VX_lsu_unit #(
 
         // memory misalignment not supported!
         wire lsu_req_fire = lsu_req_if.valid && lsu_req_if.ready;        
-        `RUNTIME_ASSERT((~lsu_req_fire || ~lsu_req_if.tmask[i] || lsu_req_if.is_fence || (full_addr[i] % (1 << `INST_LSU_WSIZE(lsu_req_if.op_type))) == 0), 
+        `RUNTIME_ASSERT((~lsu_req_fire || ~lsu_req_if.tmask[i] || is_fence || (full_addr[i] % (1 << `INST_LSU_WSIZE(lsu_req_if.op_type))) == 0), 
             ("misaligned memory access, PC=0x%0h, addr=0x%0h, wsize=%0d!", lsu_req_if.PC, full_addr[i], `INST_LSU_WSIZE(lsu_req_if.op_type)));
 
         always @(*) begin
@@ -340,6 +347,10 @@ module VX_lsu_unit #(
     reg [`NUM_THREADS-1:0][`XLEN-1:0] rsp_data;
     wire [`NUM_THREADS-1:0] rsp_tmask;
 
+`ifdef ISA_RV64D
+    wire rsp_is_float = rsp_rd[5];
+`endif
+
     for (genvar i = 0; i < `NUM_THREADS; i++) begin
     `ifdef XLEN_64
         wire [63:0] rsp_data64 = (i == 0 || rsp_is_dup) ? mem_rsp_data[0] : mem_rsp_data[i];
@@ -357,7 +368,12 @@ module VX_lsu_unit #(
             `INST_FMT_H:  rsp_data[i] = `XLEN'(signed'(rsp_data16));
             `INST_FMT_BU: rsp_data[i] = `XLEN'(unsigned'(rsp_data8));
             `INST_FMT_HU: rsp_data[i] = `XLEN'(unsigned'(rsp_data16));
+        `ifdef ISA_RV64D
+            // apply nan-boxing to flw outputs
+            `INST_FMT_W:  rsp_data[i] = rsp_is_float ? (`XLEN'(rsp_data32) | 64'hffffffff00000000) : `XLEN'(signed'(rsp_data32));
+        `else
             `INST_FMT_W:  rsp_data[i] = `XLEN'(signed'(rsp_data32));
+        `endif
         `ifdef XLEN_64
             `INST_FMT_WU: rsp_data[i] = `XLEN'(unsigned'(rsp_data32));
             `INST_FMT_D:  rsp_data[i] = `XLEN'(signed'(rsp_data64));

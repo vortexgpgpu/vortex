@@ -1,7 +1,16 @@
 `include "VX_fpu_define.vh"
+
+`ifdef FPU_FPNEW
+
 `include "cf_math_pkg.sv"
 `include "fpnew_pkg.sv"
 `include "defs_div_sqrt_mvp.sv"
+
+`ifdef XLEN_64
+`ifdef FLEN_32
+    `define ISA_RV64F
+`endif
+`endif
 
 module VX_fpu_fpnew #(      
     parameter NUM_LANES = 1,
@@ -16,7 +25,8 @@ module VX_fpu_fpnew #(
     input wire [TAGW-1:0] tag_in,
     
     input wire [`INST_FPU_BITS-1:0] op_type,
-    input wire [`INST_MOD_BITS-1:0] op_mod,
+    input wire [`INST_FMT_BITS-1:0] fmt,
+    input wire [`INST_FRM_BITS-1:0] frm,
 
     input wire [NUM_LANES-1:0][`XLEN-1:0]  dataa,
     input wire [NUM_LANES-1:0][`XLEN-1:0]  datab,
@@ -33,16 +43,10 @@ module VX_fpu_fpnew #(
 );  
     localparam LATENCY_FDIVSQRT = `MAX(`LATENCY_FDIV, `LATENCY_FSQRT);
 
-`ifdef XLEN_64
-`ifdef FLEN_32
-    `define ISA_RV64F
-`endif
-`endif
-
     localparam fpnew_pkg::fpu_features_t FPU_FEATURES = '{
         Width:         `XLEN,
         EnableVectors: 1'b0,
-        EnableNanBox:  1'b0,        
+        EnableNanBox:  1'b1,        
     `ifdef XLEN_64
         FpFmtMask:     5'b11000,
         IntFmtMask:    4'b0011
@@ -80,64 +84,78 @@ module VX_fpu_fpnew #(
     reg fpu_has_fflags, fpu_has_fflags_out;
     reg [fpnew_pkg::FP_FORMAT_BITS-1:0] fpu_src_fmt, fpu_dst_fmt, fpu_int_fmt;
 
-    wire is_fp_w = op_mod[3];
-
     always @(*) begin
-        fpu_op          = fpnew_pkg::SGNJ;
-        fpu_rnd         = `INST_FRM_BITS'(op_mod);  
+        fpu_op          = 'x;
+        fpu_rnd         = frm;  
         fpu_op_mod      = 0;        
         fpu_has_fflags  = 1;
         fpu_operands[0] = dataa;
         fpu_operands[1] = datab;
         fpu_operands[2] = datac;    
-        fpu_src_fmt     = fpnew_pkg::FP32;
         fpu_dst_fmt     = fpnew_pkg::FP32;
-        fpu_int_fmt     = is_fp_w ? fpnew_pkg::INT64 : fpnew_pkg::INT32;
+        fpu_int_fmt     = fpnew_pkg::INT32;
+
+    `ifdef FLEN_64
+        if (fmt[0]) begin
+            fpu_dst_fmt = fpnew_pkg::FP64;
+        end
+    `endif
+
+    `ifdef XLEN_64
+        if (fmt[1]) begin
+            fpu_int_fmt = fpnew_pkg::INT64;
+        end
+    `endif
+
+        fpu_src_fmt = fpu_dst_fmt;
         
         case (op_type)
             `INST_FPU_ADD: begin
-                    fpu_op = fpnew_pkg::ADD;
-                    fpu_operands[1] = dataa;
-                    fpu_operands[2] = datab;
-                end
+                fpu_op = fpnew_pkg::ADD;
+                fpu_operands[1] = dataa;
+                fpu_operands[2] = datab;
+            end
             `INST_FPU_SUB: begin 
-                    fpu_op = fpnew_pkg::ADD; 
-                    fpu_operands[1] = dataa;
-                    fpu_operands[2] = datab;
-                    fpu_op_mod = 1; 
-                end
+                fpu_op = fpnew_pkg::ADD; 
+                fpu_operands[1] = dataa;
+                fpu_operands[2] = datab;
+                fpu_op_mod = 1; 
+            end
             `INST_FPU_MUL:   begin fpu_op = fpnew_pkg::MUL; end
             `INST_FPU_DIV:   begin fpu_op = fpnew_pkg::DIV; end
             `INST_FPU_SQRT:  begin fpu_op = fpnew_pkg::SQRT; end
             `INST_FPU_MADD:  begin fpu_op = fpnew_pkg::FMADD; end
-            `INST_FPU_MSUB:  begin fpu_op = fpnew_pkg::FMADD;  fpu_op_mod = 1; end            
+            `INST_FPU_MSUB:  begin fpu_op = fpnew_pkg::FMADD; fpu_op_mod = 1; end            
             `INST_FPU_NMADD: begin fpu_op = fpnew_pkg::FNMSUB; fpu_op_mod = 1; end
             `INST_FPU_NMSUB: begin fpu_op = fpnew_pkg::FNMSUB; end
-            `INST_FPU_CVTWX: begin fpu_op = fpnew_pkg::F2I; end
-            `INST_FPU_CVTWUX:begin fpu_op = fpnew_pkg::F2I; fpu_op_mod = 1; end
-            `INST_FPU_CVTXW: begin fpu_op = fpnew_pkg::I2F; end
-            `INST_FPU_CVTXWU:begin fpu_op = fpnew_pkg::I2F; fpu_op_mod = 1; end
-            `INST_FPU_NCP:  begin
-                case (op_mod)
-                      0,1,2: begin fpu_op = fpnew_pkg::SGNJ; fpu_rnd = {1'b0, op_mod[1:0]}; fpu_has_fflags = 0; end // FSGNJ
-                      3: begin fpu_op = fpnew_pkg::CLASSIFY; fpu_has_fflags = 0; end //  CLASS                     
-                      4: begin fpu_op = fpnew_pkg::SGNJ; fpu_rnd = 3'b011; fpu_op_mod = 1; fpu_has_fflags = 0; end // FMV.X.W
-                      5: begin fpu_op = fpnew_pkg::SGNJ; fpu_rnd = 3'b011; fpu_has_fflags = 0; end // FMV.W.X
-                      6: begin fpu_op = fpnew_pkg::MINMAX; fpu_rnd = 3'b000; end // MIN
-                      7: begin fpu_op = fpnew_pkg::MINMAX; fpu_rnd = 3'b001; end // MAX
-                default: begin fpu_op = fpnew_pkg::CMP; fpu_rnd = {1'b0, op_mod[1:0]}; end // CMP (8,9,10)
+        `ifdef FLEN_64
+            `INST_FPU_F2F: begin fpu_op = fpnew_pkg::F2F; fpu_src_fmt = fmt[0] ? fpnew_pkg::FP32 : fpnew_pkg::FP64; end
+        `endif
+            `INST_FPU_F2I,
+            `INST_FPU_F2U: begin fpu_op = fpnew_pkg::F2I; fpu_op_mod = op_type[0]; end
+            `INST_FPU_I2F,
+            `INST_FPU_U2F: begin fpu_op = fpnew_pkg::I2F; fpu_op_mod = op_type[0]; end
+            `INST_FPU_CMP: begin fpu_op = fpnew_pkg::CMP; end
+            `INST_FPU_MISC:begin
+                case (frm)
+                    0,1,2: begin fpu_op = fpnew_pkg::SGNJ; fpu_rnd = {1'b0, frm[1:0]}; fpu_has_fflags = 0; end // FSGNJ
+                    3:     begin fpu_op = fpnew_pkg::CLASSIFY; fpu_has_fflags = 0; end // CLASS                     
+                    4,5:   begin fpu_op = fpnew_pkg::SGNJ; fpu_rnd = 3'b011; fpu_op_mod = ~frm[0]; fpu_has_fflags = 0; end // FMV.X.W, FMV.W.X
+                    6,7:   begin fpu_op = fpnew_pkg::MINMAX; fpu_rnd = {2'b00, frm[0]}; end // MIN, MAX
                 endcase    
             end
             default:;
-        endcase        
+        endcase
 
     `ifdef ISA_RV64F
         // apply nan-boxing to floating-point operands
-        if (op_type != `INST_FPU_CVTXW && op_type != `INST_FPU_CVTXWU) begin
-            fpu_operands[0] |= 64'hffffffff00000000;
+        for (integer i = 0; i < NUM_LANES; ++i) begin                    
+            if (op_type != `INST_FPU_I2F && op_type != `INST_FPU_U2F) begin
+                fpu_operands[0][i] |= 64'hffffffff00000000;
+            end
+            fpu_operands[1][i] |= 64'hffffffff00000000;
+            fpu_operands[2][i] |= 64'hffffffff00000000;        
         end
-        fpu_operands[1] |= 64'hffffffff00000000;
-        fpu_operands[2] |= 64'hffffffff00000000;
     `endif
     end  
     
@@ -214,3 +232,4 @@ module VX_fpu_fpnew #(
     assign fpu_ready_out = ready_out;
 
 endmodule
+`endif

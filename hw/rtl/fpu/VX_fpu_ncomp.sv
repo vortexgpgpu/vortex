@@ -14,8 +14,9 @@ module VX_fpu_ncomp #(
     input wire  valid_in,
 
     input wire [TAGW-1:0] tag_in,
-    
-    input wire [`INST_MOD_BITS-1:0] op_mod,
+
+    input wire [`INST_FPU_BITS-1:0] op_type,
+    input wire [`INST_FRM_BITS-1:0] frm,
 
     input wire [NUM_LANES-1:0][31:0]  dataa,
     input wire [NUM_LANES-1:0][31:0]  datab,
@@ -85,7 +86,7 @@ module VX_fpu_ncomp #(
 
     wire                        valid_in_s0;
     wire [TAGW-1:0]             tag_in_s0;
-    wire [`INST_MOD_BITS-1:0]   op_mod_s0;
+    wire [4:0]                  op_mod_s0;
     wire [NUM_LANES-1:0][31:0]  dataa_s0, datab_s0;
     wire [NUM_LANES-1:0]        a_sign_s0, b_sign_s0;
     wire [NUM_LANES-1:0][7:0]   a_exponent_s0;
@@ -95,8 +96,10 @@ module VX_fpu_ncomp #(
 
     wire stall;
 
+    wire [4:0] op_mod = {(op_type == INST_FPU_CMP), frm};
+
     VX_pipe_register #(
-        .DATAW  (1 + TAGW + `INST_MOD_BITS + NUM_LANES * (2 * 32 + 1 + 1 + 8 + 23 + 2 * $bits(fclass_t) + 1 + 1)),
+        .DATAW  (1 + TAGW + 4 + NUM_LANES * (2 * 32 + 1 + 1 + 8 + 23 + 2 * $bits(fclass_t) + 1 + 1)),
         .RESETW (1),
         .DEPTH  (0)
     ) pipe_reg0 (
@@ -208,12 +211,12 @@ module VX_fpu_ncomp #(
     reg [NUM_LANES-1:0] tmp_fflags_NV;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        always @(*) begin 
-            case (op_mod_s0)
+        always @(*) begin
+            case (op_mod_s0[2:0])
                 0,1,2: begin
-                    // SGNJ
-                    tmp_result[i] = fsgnj_res[i];
-                    tmp_fflags_NV[i] = 'x;
+                    // SGNJ, CMP
+                    tmp_result[i] = op_mod_s0[3] ? fcmp_res[i] : fsgnj_res[i];
+                    tmp_fflags_NV[i] = fcmp_fflags_NV[i];
                 end
                 3: begin
                     // CLASS
@@ -229,17 +232,12 @@ module VX_fpu_ncomp #(
                     // MIN/MAX
                     tmp_result[i] = fminmax_res[i];
                     tmp_fflags_NV[i] = a_fclass_s0[i].is_signaling | b_fclass_s0[i].is_signaling;
-                end                
-            default: begin
-                    // CMP (8, 9, 10)
-                    tmp_result[i] = fcmp_res[i];
-                    tmp_fflags_NV[i] = fcmp_fflags_NV[i];
                 end
             endcase
         end
     end
 
-    wire has_fflags_s0 = (op_mod_s0 >= 6);
+    wire has_fflags_s0 = (op_mod_s0[2:0] >= 6) || op_mod_s0[3];
 
     assign stall = ~ready_out && valid_out;
 

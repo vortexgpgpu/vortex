@@ -96,7 +96,8 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 `define INST_OP_BITS    4
-`define INST_MOD_BITS   4
+`define INST_MOD_BITS   3
+`define INST_FMT_BITS   2
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -116,7 +117,7 @@
 `define INST_ALU_BITS        4
 `define INST_ALU_CLASS(op)   op[3:2]
 `define INST_ALU_SIGNED(op)  op[0]
-`define INST_ALU_IS_SUB(op)  (op[3:0] == 4'b1011)
+`define INST_ALU_IS_SUB(op)  op[1]
 `define INST_ALU_IS_BR(mod)  mod[0]
 `define INST_ALU_IS_M(mod)   mod[1]
 `define INST_ALU_IS_W(mod)   mod[2]
@@ -158,10 +159,10 @@
 `define INST_FMT_B           3'b000
 `define INST_FMT_H           3'b001
 `define INST_FMT_W           3'b010
+`define INST_FMT_D           3'b011
 `define INST_FMT_BU          3'b100
 `define INST_FMT_HU          3'b101
 `define INST_FMT_WU          3'b110
-`define INST_FMT_D           3'b011
 
 `define INST_LSU_LB          4'b0000 
 `define INST_LSU_LH          4'b0001
@@ -174,10 +175,11 @@
 `define INST_LSU_SH          4'b1001
 `define INST_LSU_SW          4'b1010
 `define INST_LSU_SD          4'b1011 // new for RV64I SD
+`define INST_LSU_FENCE       4'b1111
 `define INST_LSU_BITS        4
 `define INST_LSU_FMT(op)     op[2:0]
 `define INST_LSU_WSIZE(op)   op[1:0]
-`define INST_LSU_IS_FENCE(mod) (mod[0])
+`define INST_LSU_IS_FENCE(op) (op[3:2] == 3)
 
 `define INST_FENCE_BITS      1
 `define INST_FENCE_D         1'h0
@@ -194,13 +196,13 @@
 `define INST_FPU_MUL         4'b0010 
 `define INST_FPU_DIV         4'b0011
 `define INST_FPU_SQRT        4'b0100
-// UNUSED                    4'b0101
-// UNUSED                    4'b0110
-`define INST_FPU_NCP         4'b0111  // SGNJ, SGNJN, SGNJX, CLASS, MVXW, MVWX, FMIN, FMAX, LE, LT, EQ
-`define INST_FPU_CVTWX       4'b1000  // FCVT.W.X
-`define INST_FPU_CVTWUX      4'b1001  // FCVT.WU.X
-`define INST_FPU_CVTXW       4'b1010  // FCVT.X.W
-`define INST_FPU_CVTXWU      4'b1011  // FCVT.X.WU
+`define INST_FPU_CMP         4'b0101
+`define INST_FPU_F2F         4'b0110
+`define INST_FPU_MISC        4'b0111  // SGNJ, SGNJN, SGNJX, CLASS, MVXW, MVWX, FMIN, FMAX
+`define INST_FPU_F2I         4'b1000
+`define INST_FPU_F2U         4'b1001
+`define INST_FPU_I2F         4'b1010
+`define INST_FPU_U2F         4'b1011
 `define INST_FPU_MADD        4'b1100 
 `define INST_FPU_MSUB        4'b1101   
 `define INST_FPU_NMSUB       4'b1110   
@@ -425,7 +427,8 @@
 `define ASSIGN_VX_FPU_REQ_IF(dst, src) \
     assign dst.valid = src.valid; \
     assign dst.op_type= src.op_type; \
-    assign dst.op_mod = src.op_mod; \
+    assign dst.fmt   = src.fmt; \
+    assign dst.frm   = src.frm; \
     assign dst.dataa = src.dataa; \
     assign dst.datab = src.datab; \
     assign dst.datac = src.datac; \

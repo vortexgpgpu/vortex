@@ -6,19 +6,21 @@ interface VX_fpu_req_if #(
     parameter TAG_WIDTH = 1
 ) ();
 
-    wire                         valid;
-    wire [`INST_FPU_BITS-1:0]    op_type;
-    wire [`INST_MOD_BITS-1:0]    op_mod;
+    wire                        valid;
+    wire [`INST_FPU_BITS-1:0]   op_type;
+    wire [`INST_FMT_BITS-1:0]   fmt;
+    wire [`INST_FRM_BITS-1:0]   frm;
     wire [NUM_LANES-1:0][`XLEN-1:0] dataa;
     wire [NUM_LANES-1:0][`XLEN-1:0] datab;
     wire [NUM_LANES-1:0][`XLEN-1:0] datac;
-    wire [TAG_WIDTH-1:0]         tag; 
-    wire                         ready;
+    wire [TAG_WIDTH-1:0]        tag; 
+    wire                        ready;
 
     modport master (
         output valid,
         output op_type,
-        output op_mod,
+        output fmt,
+        output frm,
         output dataa,
         output datab,
         output datac,
@@ -29,7 +31,8 @@ interface VX_fpu_req_if #(
     modport slave (
         input  valid,
         input  op_type,
-        input  op_mod,
+        input  fmt,
+        input  frm,
         input  dataa,
         input  datab,
         input  datac,

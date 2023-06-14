@@ -215,7 +215,7 @@ module VX_cache_cluster_top #(
     parameter `STRING INSTANCE_ID    = "",
 
     parameter NUM_UNITS             = 8,
-    parameter NUM_INPUTS            = 2,
+    parameter NUM_INPUTS            = 16,
     parameter TAG_SEL_IDX           = 0,
 
     // Number of Word requests per cycle

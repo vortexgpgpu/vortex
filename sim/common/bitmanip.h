@@ -76,7 +76,7 @@ T sext(const T& word, uint32_t width) {
   if (width == (sizeof(T) * 8)) 
     return word;
   T mask((static_cast<T>(1) << width) - 1);
-  return ((word >> (width - 1)) & 0x1) ? (word | ~mask) : word;
+  return ((word >> (width - 1)) & 0x1) ? (word | ~mask) : (word & mask);
 }
 
 template <typename T = uint32_t>

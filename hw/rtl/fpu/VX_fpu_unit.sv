@@ -29,7 +29,8 @@ module VX_fpu_unit #(
 
         .valid_in   (fpu_req_if.valid),
         .op_type    (fpu_req_if.op_type),
-        .op_mod     (fpu_req_if.op_mod),
+        .fmt        (fpu_req_if.fmt),
+        .frm        (fpu_req_if.frm),
         .dataa      (fpu_req_if.dataa),
         .datab      (fpu_req_if.datab),
         .datac      (fpu_req_if.datac),
@@ -55,7 +56,8 @@ module VX_fpu_unit #(
 
         .valid_in   (fpu_req_if.valid),
         .op_type    (fpu_req_if.op_type),
-        .op_mod     (fpu_req_if.op_mod),
+        .fmt        (fpu_req_if.fmt),
+        .frm        (fpu_req_if.frm),
         .dataa      (fpu_req_if.dataa),
         .datab      (fpu_req_if.datab),
         .datac      (fpu_req_if.datac),         
@@ -81,7 +83,8 @@ module VX_fpu_unit #(
 
         .valid_in   (fpu_req_if.valid),
         .op_type    (fpu_req_if.op_type),
-        .op_mod     (fpu_req_if.op_mod),
+        .fmt        (fpu_req_if.fmt),
+        .frm        (fpu_req_if.frm),
         .dataa      (fpu_req_if.dataa),
         .datab      (fpu_req_if.datab),
         .datac      (fpu_req_if.datac),        

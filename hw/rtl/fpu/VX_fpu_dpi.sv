@@ -1,5 +1,12 @@
-`ifndef SYNTHESIS
 `include "VX_fpu_define.vh"
+
+`ifdef FPU_DPI
+
+`ifdef XLEN_64
+`ifdef FLEN_32
+    `define ISA_RV64F
+`endif
+`endif
 
 module VX_fpu_dpi #( 
     parameter NUM_LANES = 1,
@@ -14,7 +21,8 @@ module VX_fpu_dpi #(
     input wire [TAGW-1:0] tag_in,
     
     input wire [`INST_FPU_BITS-1:0] op_type,
-    input wire [`INST_MOD_BITS-1:0] op_mod,
+    input wire [`INST_FMT_BITS-1:0] fmt,
+    input wire [`INST_FRM_BITS-1:0] frm,
 
     input wire [NUM_LANES-1:0][`XLEN-1:0]  dataa,
     input wire [NUM_LANES-1:0][`XLEN-1:0]  datab,
@@ -42,7 +50,7 @@ module VX_fpu_dpi #(
     wire [NUM_FPC-1:0] per_core_ready_in;
     wire [NUM_FPC-1:0][NUM_LANES-1:0][`XLEN-1:0] per_core_result;
     wire [NUM_FPC-1:0][TAGW-1:0] per_core_tag_out;
-    reg [NUM_FPC-1:0] per_core_ready_out;
+    reg  [NUM_FPC-1:0] per_core_ready_out;
     wire [NUM_FPC-1:0] per_core_valid_out;
     
     wire [NUM_FPC-1:0] per_core_has_fflags;  
@@ -51,9 +59,28 @@ module VX_fpu_dpi #(
     reg [FPC_BITS-1:0] core_select;
 
     reg is_fadd, is_fsub, is_fmul, is_fmadd, is_fmsub, is_fnmadd, is_fnmsub;
-    reg is_itof, is_utof, is_ftoi, is_ftou;
+    reg is_fcmp, is_itof, is_utof, is_ftoi, is_ftou, is_f2f;    
+    reg dst_fmt, int_fmt;
 
-    wire [`INST_FRM_BITS-1:0] frm = `INST_FRM_BITS'(op_mod);
+    reg [NUM_LANES-1:0][63:0] operands [3];
+    
+    always @(*) begin
+        for (integer i = 0; i < NUM_LANES; ++i) begin
+            operands[0][i] = 64'(dataa[i]);
+            operands[1][i] = 64'(datab[i]);
+            operands[2][i] = 64'(datac[i]);
+        `ifdef ISA_RV64F
+            // apply nan-boxing to floating-point operands
+            if (op_type != `INST_FPU_I2F && op_type != `INST_FPU_U2F) begin
+                operands[0][i] |= 64'hffffffff00000000;
+            end
+            operands[1][i] |= 64'hffffffff00000000;
+            operands[2][i] |= 64'hffffffff00000000;
+        `endif
+        end
+    end
+
+    `UNUSED_VAR (fmt)
 
     always @(*) begin
         is_fadd   = 0;
@@ -63,10 +90,23 @@ module VX_fpu_dpi #(
         is_fmsub  = 0;
         is_fnmadd = 0;           
         is_fnmsub = 0;        
+        is_fcmp   = 0;
         is_itof   = 0;
         is_utof   = 0;
         is_ftoi   = 0;
         is_ftou   = 0;
+        is_f2f    = 0;
+        
+        dst_fmt   = 0;
+        int_fmt   = 0;
+        
+    `ifdef FLEN_64
+        dst_fmt = fmt[0];
+    `endif
+
+    `ifdef XLEN_64
+        int_fmt = fmt[1];
+    `endif
 
         case (op_type)
             `INST_FPU_ADD:   begin core_select = FPU_FMA; is_fadd = 1; end
@@ -78,10 +118,12 @@ module VX_fpu_dpi #(
             `INST_FPU_NMSUB: begin core_select = FPU_FMA; is_fnmsub = 1; end
             `INST_FPU_DIV:   begin core_select = FPU_DIV; end
             `INST_FPU_SQRT:  begin core_select = FPU_SQRT; end
-            `INST_FPU_CVTWX: begin core_select = FPU_CVT; is_ftoi = 1; end
-            `INST_FPU_CVTWUX:begin core_select = FPU_CVT; is_ftou = 1; end
-            `INST_FPU_CVTXW: begin core_select = FPU_CVT; is_itof = 1; end
-            `INST_FPU_CVTXWU:begin core_select = FPU_CVT; is_utof = 1; end
+            `INST_FPU_CMP:   begin core_select = FPU_NCP; is_fcmp = 1; end            
+            `INST_FPU_F2I:   begin core_select = FPU_CVT; is_ftoi = 1; end
+            `INST_FPU_F2U:   begin core_select = FPU_CVT; is_ftou = 1; end
+            `INST_FPU_I2F:   begin core_select = FPU_CVT; is_itof = 1; end
+            `INST_FPU_U2F:   begin core_select = FPU_CVT; is_utof = 1; end
+            `INST_FPU_F2F:   begin core_select = FPU_CVT; is_f2f  = 1; end            
             default:         begin core_select = FPU_NCP; end
         endcase
     end
@@ -89,14 +131,14 @@ module VX_fpu_dpi #(
     generate 
     begin : fma
         
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_fma;
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_fadd;
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_fsub;
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_fmul;
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_fmadd;
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_fmsub;
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_fnmadd;
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_fnmsub;
+        reg [NUM_LANES-1:0][`XLEN-1:0] result_fma;
+        wire [NUM_LANES-1:0][63:0] result_fadd;
+        wire [NUM_LANES-1:0][63:0] result_fsub;
+        wire [NUM_LANES-1:0][63:0] result_fmul;
+        wire [NUM_LANES-1:0][63:0] result_fmadd;
+        wire [NUM_LANES-1:0][63:0] result_fmsub;
+        wire [NUM_LANES-1:0][63:0] result_fnmadd;
+        wire [NUM_LANES-1:0][63:0] result_fnmsub;
         
         fflags_t [NUM_LANES-1:0] fflags_fma;
         fflags_t [NUM_LANES-1:0] fflags_fadd;
@@ -109,38 +151,37 @@ module VX_fpu_dpi #(
 
         wire fma_valid = (valid_in && core_select == FPU_FMA);
         wire fma_ready = per_core_ready_out[FPU_FMA] || ~per_core_valid_out[FPU_FMA];
-
-        wire fma_fire = fma_valid && fma_ready;
+        wire fma_fire  = fma_valid && fma_ready;
 
         always @(*) begin        
             for (integer i = 0; i < NUM_LANES; ++i) begin
-                dpi_fadd   (fma_fire, dataa[i], datab[i], frm, result_fadd[i], fflags_fadd[i]);
-                dpi_fsub   (fma_fire, dataa[i], datab[i], frm, result_fsub[i], fflags_fsub[i]);
-                dpi_fmul   (fma_fire, dataa[i], datab[i], frm, result_fmul[i], fflags_fmul[i]);
-                dpi_fmadd  (fma_fire, dataa[i], datab[i], datac[i], frm, result_fmadd[i], fflags_fmadd[i]);
-                dpi_fmsub  (fma_fire, dataa[i], datab[i], datac[i], frm, result_fmsub[i], fflags_fmsub[i]);
-                dpi_fnmadd (fma_fire, dataa[i], datab[i], datac[i], frm, result_fnmadd[i], fflags_fnmadd[i]);
-                dpi_fnmsub (fma_fire, dataa[i], datab[i], datac[i], frm, result_fnmsub[i], fflags_fnmsub[i]);
+                dpi_fadd   (fma_fire, int'(dst_fmt), operands[0][i], operands[1][i], frm, result_fadd[i], fflags_fadd[i]);
+                dpi_fsub   (fma_fire, int'(dst_fmt), operands[0][i], operands[1][i], frm, result_fsub[i], fflags_fsub[i]);
+                dpi_fmul   (fma_fire, int'(dst_fmt), operands[0][i], operands[1][i], frm, result_fmul[i], fflags_fmul[i]);
+                dpi_fmadd  (fma_fire, int'(dst_fmt), operands[0][i], operands[1][i], operands[2][i], frm, result_fmadd[i], fflags_fmadd[i]);
+                dpi_fmsub  (fma_fire, int'(dst_fmt), operands[0][i], operands[1][i], operands[2][i], frm, result_fmsub[i], fflags_fmsub[i]);
+                dpi_fnmadd (fma_fire, int'(dst_fmt), operands[0][i], operands[1][i], operands[2][i], frm, result_fnmadd[i], fflags_fnmadd[i]);
+                dpi_fnmsub (fma_fire, int'(dst_fmt), operands[0][i], operands[1][i], operands[2][i], frm, result_fnmsub[i], fflags_fnmsub[i]);
+
+                result_fma[i] = is_fadd   ? result_fadd[i][`XLEN-1:0] :
+                                is_fsub   ? result_fsub[i][`XLEN-1:0] :
+                                is_fmul   ? result_fmul[i][`XLEN-1:0] :
+                                is_fmadd  ? result_fmadd[i][`XLEN-1:0] :               
+                                is_fmsub  ? result_fmsub[i][`XLEN-1:0] :
+                                is_fnmadd ? result_fnmadd[i][`XLEN-1:0] :               
+                                is_fnmsub ? result_fnmsub[i][`XLEN-1:0] :
+                                            '0;
+
+                fflags_fma[i] = is_fadd   ? fflags_fadd[i] :
+                                is_fsub   ? fflags_fsub[i] :
+                                is_fmul   ? fflags_fmul[i] :
+                                is_fmadd  ? fflags_fmadd[i] :               
+                                is_fmsub  ? fflags_fmsub[i] :
+                                is_fnmadd ? fflags_fnmadd[i] :               
+                                is_fnmsub ? fflags_fnmsub[i] : 
+                                            '0;                
             end
-        end
-
-        assign result_fma = is_fadd   ? result_fadd :
-                            is_fsub   ? result_fsub :
-                            is_fmul   ? result_fmul :
-                            is_fmadd  ? result_fmadd :               
-                            is_fmsub  ? result_fmsub :
-                            is_fnmadd ? result_fnmadd :               
-                            is_fnmsub ? result_fnmsub :
-                                        0;
-
-        assign fflags_fma = is_fadd   ? fflags_fadd :
-                            is_fsub   ? fflags_fsub :
-                            is_fmul   ? fflags_fmul :
-                            is_fmadd  ? fflags_fmadd :               
-                            is_fmsub  ? fflags_fmsub :
-                            is_fnmadd ? fflags_fnmadd :               
-                            is_fnmsub ? fflags_fnmsub : 
-                                        0;                
+        end        
 
         VX_shift_register #(
             .DATAW  (1 + TAGW + NUM_LANES * (`XLEN + $bits(fflags_t))),
@@ -163,17 +204,18 @@ module VX_fpu_dpi #(
     generate 
     begin : fdiv
 
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_fdiv;
+        reg [NUM_LANES-1:0][`XLEN-1:0] result_fdiv_r;
+        wire [NUM_LANES-1:0][63:0] result_fdiv;
         fflags_t [NUM_LANES-1:0] fflags_fdiv;
 
         wire fdiv_valid = (valid_in && core_select == FPU_DIV);
         wire fdiv_ready = per_core_ready_out[FPU_DIV] || ~per_core_valid_out[FPU_DIV];
-
-        wire fdiv_fire = fdiv_valid && fdiv_ready;
+        wire fdiv_fire  = fdiv_valid && fdiv_ready;
         
         always @(*) begin        
-            for (integer i = 0; i < NUM_LANES; ++i) begin
-                dpi_fdiv (fdiv_fire, dataa[i], datab[i], frm, result_fdiv[i], fflags_fdiv[i]);
+            for (integer i = 0; i < NUM_LANES; ++i) begin                
+                dpi_fdiv (fdiv_fire, int'(dst_fmt), operands[0][i], operands[1][i], frm, result_fdiv[i], fflags_fdiv[i]);
+                result_fdiv_r[i] = result_fdiv[i][`XLEN-1:0];
             end
         end
 
@@ -185,7 +227,7 @@ module VX_fpu_dpi #(
             .clk      (clk),
             .reset    (reset),
             .enable   (fdiv_ready),
-            .data_in  ({fdiv_valid,                  tag_in,                    result_fdiv,              fflags_fdiv}),
+            .data_in  ({fdiv_valid,                  tag_in,                    result_fdiv_r,            fflags_fdiv}),
             .data_out ({per_core_valid_out[FPU_DIV], per_core_tag_out[FPU_DIV], per_core_result[FPU_DIV], per_core_fflags[FPU_DIV]})
         );
 
@@ -198,17 +240,18 @@ module VX_fpu_dpi #(
     generate 
     begin : fsqrt
 
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_fsqrt;
+        reg [NUM_LANES-1:0][`XLEN-1:0] result_fsqrt_r;
+        wire [NUM_LANES-1:0][63:0] result_fsqrt;
         fflags_t [NUM_LANES-1:0] fflags_fsqrt;
 
         wire fsqrt_valid = (valid_in && core_select == FPU_SQRT);
-        wire fsqrt_ready = per_core_ready_out[FPU_SQRT] || ~per_core_valid_out[FPU_SQRT];
-                
-        wire fsqrt_fire = fsqrt_valid && fsqrt_ready;
+        wire fsqrt_ready = per_core_ready_out[FPU_SQRT] || ~per_core_valid_out[FPU_SQRT];                
+        wire fsqrt_fire  = fsqrt_valid && fsqrt_ready;
         
         always @(*) begin        
             for (integer i = 0; i < NUM_LANES; ++i) begin
-                dpi_fsqrt (fsqrt_fire, dataa[i], frm, result_fsqrt[i], fflags_fsqrt[i]);
+                dpi_fsqrt (fsqrt_fire, int'(dst_fmt), operands[0][i], frm, result_fsqrt[i], fflags_fsqrt[i]);
+                result_fsqrt_r[i] = result_fsqrt[i][`XLEN-1:0];
             end
         end
 
@@ -220,7 +263,7 @@ module VX_fpu_dpi #(
             .clk      (clk),
             .reset    (reset),
             .enable   (fsqrt_ready),
-            .data_in  ({fsqrt_valid,                  tag_in,                     result_fsqrt,              fflags_fsqrt}),
+            .data_in  ({fsqrt_valid,                  tag_in,                     result_fsqrt_r,            fflags_fsqrt}),
             .data_out ({per_core_valid_out[FPU_SQRT], per_core_tag_out[FPU_SQRT], per_core_result[FPU_SQRT], per_core_fflags[FPU_SQRT]})
         );
 
@@ -233,11 +276,12 @@ module VX_fpu_dpi #(
     generate
     begin : fcvt
 
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_fcvt;
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_itof;
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_utof;
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_ftoi;
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_ftou;
+        reg [NUM_LANES-1:0][`XLEN-1:0] result_fcvt;
+        wire [NUM_LANES-1:0][63:0] result_itof;
+        wire [NUM_LANES-1:0][63:0] result_utof;
+        wire [NUM_LANES-1:0][63:0] result_ftoi;
+        wire [NUM_LANES-1:0][63:0] result_ftou;
+        wire [NUM_LANES-1:0][63:0] result_f2f;
         
         fflags_t [NUM_LANES-1:0] fflags_fcvt;
         fflags_t [NUM_LANES-1:0] fflags_itof;
@@ -247,29 +291,30 @@ module VX_fpu_dpi #(
 
         wire fcvt_valid = (valid_in && core_select == FPU_CVT);
         wire fcvt_ready = per_core_ready_out[FPU_CVT] || ~per_core_valid_out[FPU_CVT];
-
-        wire fcvt_fire = fcvt_valid && fcvt_ready;
+        wire fcvt_fire  = fcvt_valid && fcvt_ready;
                 
         always @(*) begin        
             for (integer i = 0; i < NUM_LANES; ++i) begin
-                dpi_itof (fcvt_fire, dataa[i], frm, result_itof[i], fflags_itof[i]);
-                dpi_utof (fcvt_fire, dataa[i], frm, result_utof[i], fflags_utof[i]);
-                dpi_ftoi (fcvt_fire, dataa[i], frm, result_ftoi[i], fflags_ftoi[i]);
-                dpi_ftou (fcvt_fire, dataa[i], frm, result_ftou[i], fflags_ftou[i]);
+                dpi_itof (fcvt_fire, int'(dst_fmt), int'(int_fmt), operands[0][i], frm, result_itof[i], fflags_itof[i]);
+                dpi_utof (fcvt_fire, int'(dst_fmt), int'(int_fmt), operands[0][i], frm, result_utof[i], fflags_utof[i]);
+                dpi_ftoi (fcvt_fire, int'(int_fmt), int'(dst_fmt), operands[0][i], frm, result_ftoi[i], fflags_ftoi[i]);
+                dpi_ftou (fcvt_fire, int'(int_fmt), int'(dst_fmt), operands[0][i], frm, result_ftou[i], fflags_ftou[i]);
+                dpi_f2f  (fcvt_fire, int'(dst_fmt), operands[0][i], result_f2f[i]);                
+
+                result_fcvt[i] = is_itof ? result_itof[i][`XLEN-1:0] :
+                                is_utof ? result_utof[i][`XLEN-1:0] :
+                                is_ftoi ? result_ftoi[i][`XLEN-1:0] :
+                                is_ftou ? result_ftou[i][`XLEN-1:0] : 
+                                is_f2f  ? result_f2f[i][`XLEN-1:0] : 
+                                        '0;
+
+                fflags_fcvt[i] = is_itof ? fflags_itof[i] :
+                                is_utof ? fflags_utof[i] :
+                                is_ftoi ? fflags_ftoi[i] :
+                                is_ftou ? fflags_ftou[i] :
+                                       '0;
             end
         end
-
-        assign result_fcvt = is_itof ? result_itof :
-                             is_utof ? result_utof :
-                             is_ftoi ? result_ftoi :
-                             is_ftou ? result_ftou : 
-                                       0;
-
-        assign fflags_fcvt = is_itof ? fflags_itof :
-                             is_utof ? fflags_utof :
-                             is_ftoi ? fflags_ftoi :
-                             is_ftou ? fflags_ftou : 
-                                       0;
 
         VX_shift_register #(
             .DATAW  (1 + TAGW + NUM_LANES * (`XLEN + $bits(fflags_t))),
@@ -292,17 +337,18 @@ module VX_fpu_dpi #(
     generate 
     begin : fncp
 
-        reg [NUM_LANES-1:0][`XLEN-1:0] result_fncp;
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_fclss;
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_flt;
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_fle;
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_feq;
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_fmin;
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_fmax;
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_fsgnj;
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_fsgnjn;
-        wire [NUM_LANES-1:0][`XLEN-1:0] result_fsgnjx;
-        reg  [NUM_LANES-1:0][`XLEN-1:0] result_fmv;
+        reg [NUM_LANES-1:0][`XLEN-1:0]  result_fncp;
+        wire [NUM_LANES-1:0][63:0] result_fclss;
+        wire [NUM_LANES-1:0][63:0] result_flt;
+        wire [NUM_LANES-1:0][63:0] result_fle;
+        wire [NUM_LANES-1:0][63:0] result_feq;
+        wire [NUM_LANES-1:0][63:0] result_fmin;
+        wire [NUM_LANES-1:0][63:0] result_fmax;
+        wire [NUM_LANES-1:0][63:0] result_fsgnj;
+        wire [NUM_LANES-1:0][63:0] result_fsgnjn;
+        wire [NUM_LANES-1:0][63:0] result_fsgnjx;
+        reg [NUM_LANES-1:0][63:0] result_fmvx;
+        reg [NUM_LANES-1:0][63:0] result_fmvf;
 
         fflags_t [NUM_LANES-1:0] fflags_fncp;
         fflags_t [NUM_LANES-1:0] fflags_flt;
@@ -313,43 +359,42 @@ module VX_fpu_dpi #(
 
         wire fncp_valid = (valid_in && core_select == FPU_NCP);
         wire fncp_ready = per_core_ready_out[FPU_NCP] || ~per_core_valid_out[FPU_NCP];
-
-        wire fncp_fire = fncp_valid && fncp_ready;
+        wire fncp_fire  = fncp_valid && fncp_ready;
                 
         always @(*) begin        
             for (integer i = 0; i < NUM_LANES; ++i) begin
-                dpi_fclss  (fncp_fire, dataa[i], result_fclss[i]);
-                dpi_flt    (fncp_fire, dataa[i], datab[i], result_flt[i], fflags_flt[i]);
-                dpi_fle    (fncp_fire, dataa[i], datab[i], result_fle[i], fflags_fle[i]);
-                dpi_feq    (fncp_fire, dataa[i], datab[i], result_feq[i], fflags_feq[i]);
-                dpi_fmin   (fncp_fire, dataa[i], datab[i], result_fmin[i], fflags_fmin[i]);
-                dpi_fmax   (fncp_fire, dataa[i], datab[i], result_fmax[i], fflags_fmax[i]);            
-                dpi_fsgnj  (fncp_fire, dataa[i], datab[i], result_fsgnj[i]);
-                dpi_fsgnjn (fncp_fire, dataa[i], datab[i], result_fsgnjn[i]);
-                dpi_fsgnjx (fncp_fire, dataa[i], datab[i], result_fsgnjx[i]);
-                result_fmv[i] = dataa[i];
+                dpi_fclss  (fncp_fire, int'(dst_fmt), operands[0][i], result_fclss[i]);
+                dpi_fle    (fncp_fire, int'(dst_fmt), operands[0][i], operands[1][i], result_fle[i], fflags_fle[i]);
+                dpi_flt    (fncp_fire, int'(dst_fmt), operands[0][i], operands[1][i], result_flt[i], fflags_flt[i]);                
+                dpi_feq    (fncp_fire, int'(dst_fmt), operands[0][i], operands[1][i], result_feq[i], fflags_feq[i]);
+                dpi_fmin   (fncp_fire, int'(dst_fmt), operands[0][i], operands[1][i], result_fmin[i], fflags_fmin[i]);
+                dpi_fmax   (fncp_fire, int'(dst_fmt), operands[0][i], operands[1][i], result_fmax[i], fflags_fmax[i]);            
+                dpi_fsgnj  (fncp_fire, int'(dst_fmt), operands[0][i], operands[1][i], result_fsgnj[i]);
+                dpi_fsgnjn (fncp_fire, int'(dst_fmt), operands[0][i], operands[1][i], result_fsgnjn[i]);
+                dpi_fsgnjx (fncp_fire, int'(dst_fmt), operands[0][i], operands[1][i], result_fsgnjx[i]);
+                result_fmvx[i] = dst_fmt ? operands[0][i] : 64'($signed(operands[0][i][31:0]));      // sign-extension
+                result_fmvf[i] = dst_fmt ? operands[0][i] : (operands[0][i] | 64'hffffffff00000000); // nan-boxing
             end
         end
 
         always @(*) begin
             result_fncp = 'x;
             fflags_fncp = 'x;
-            case (op_mod)
-            0:  begin result_fncp = result_fsgnj; end
-            1:  begin result_fncp = result_fsgnjn; end
-            2:  begin result_fncp = result_fsgnjx; end
-            3:  begin result_fncp = result_fclss; end
-            4:  begin result_fncp = result_fmv; end
-            5:  begin result_fncp = result_fmv; end
-            6:  begin result_fncp = result_fmin; fflags_fncp = fflags_fmin; end
-            7:  begin result_fncp = result_fmax; fflags_fncp = fflags_fmax; end
-            8:  begin result_fncp = result_fle;  fflags_fncp = fflags_fle; end
-            9:  begin result_fncp = result_flt;  fflags_fncp = fflags_flt; end
-            10: begin result_fncp = result_feq;  fflags_fncp = fflags_feq; end
-            endcase
+            for (integer i = 0; i < NUM_LANES; ++i) begin
+                case (frm)
+                0:  begin result_fncp[i] = is_fcmp ? result_fle[i][`XLEN-1:0] : result_fsgnj[i][`XLEN-1:0];  fflags_fncp[i] = fflags_fle[i]; end
+                1:  begin result_fncp[i] = is_fcmp ? result_flt[i][`XLEN-1:0] : result_fsgnjn[i][`XLEN-1:0]; fflags_fncp[i] = fflags_flt[i]; end
+                2:  begin result_fncp[i] = is_fcmp ? result_feq[i][`XLEN-1:0] : result_fsgnjx[i][`XLEN-1:0]; fflags_fncp[i] = fflags_feq[i]; end
+                3:  begin result_fncp[i] = result_fclss[i][`XLEN-1:0]; end
+                4:  begin result_fncp[i] = result_fmvx[i][`XLEN-1:0]; end
+                5:  begin result_fncp[i] = result_fmvf[i][`XLEN-1:0]; end
+                6:  begin result_fncp[i] = result_fmin[i][`XLEN-1:0]; fflags_fncp[i] = fflags_fmin[i]; end
+                7:  begin result_fncp[i] = result_fmax[i][`XLEN-1:0]; fflags_fncp[i] = fflags_fmax[i]; end
+                endcase
+            end
         end
 
-        wire has_fflags_fncp = (op_mod >= 6);
+        wire has_fflags_fncp = (frm >= 6) || is_fcmp;
 
         VX_shift_register #(
             .DATAW  (1 + TAGW + 1 + NUM_LANES * (`XLEN + $bits(fflags_t))),

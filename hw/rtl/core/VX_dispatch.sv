@@ -63,18 +63,17 @@ module VX_dispatch (
 
     wire lsu_req_valid = dispatch_if.valid && (dispatch_if.ex_type == `EX_LSU);
     wire [`INST_LSU_BITS-1:0] lsu_op_type = `INST_LSU_BITS'(dispatch_if.op_type);
-    wire lsu_is_fence = `INST_LSU_IS_FENCE(dispatch_if.op_mod);
 
     VX_skid_buffer #(
-        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `INST_LSU_BITS + 1 + `XLEN + `NR_BITS + 1 + `NUM_THREADS*`XLEN + `NUM_THREADS*`XLEN),
+        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `INST_LSU_BITS + `XLEN + `NR_BITS + 1 + `NUM_THREADS*`XLEN + `NUM_THREADS*`XLEN),
         .OUT_REG (1)
     ) lsu_buffer (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (lsu_req_valid),
         .ready_in  (lsu_req_ready),
-        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, lsu_op_type,        lsu_is_fence,        dispatch_if.imm,    dispatch_if.rd, dispatch_if.wb, gpr_rsp_if.rs1_data,  gpr_rsp_if.rs2_data}),
-        .data_out  ({lsu_req_if.uuid,  lsu_req_if.wid,  lsu_req_if.tmask,  lsu_req_if.PC,  lsu_req_if.op_type, lsu_req_if.is_fence, lsu_req_if.offset,  lsu_req_if.rd,  lsu_req_if.wb,  lsu_req_if.base_addr, lsu_req_if.store_data}),
+        .data_in   ({dispatch_if.uuid, dispatch_if.wid, dispatch_if.tmask, dispatch_if.PC, lsu_op_type,        dispatch_if.imm,    dispatch_if.rd, dispatch_if.wb, gpr_rsp_if.rs1_data,  gpr_rsp_if.rs2_data}),
+        .data_out  ({lsu_req_if.uuid,  lsu_req_if.wid,  lsu_req_if.tmask,  lsu_req_if.PC,  lsu_req_if.op_type, lsu_req_if.offset,  lsu_req_if.rd,  lsu_req_if.wb,  lsu_req_if.base_addr, lsu_req_if.store_data}),
         .valid_out (lsu_req_if.valid),
         .ready_out (lsu_req_if.ready)
     );
@@ -105,17 +104,19 @@ module VX_dispatch (
 `ifdef EXT_F_ENABLE
     wire fpu_req_valid = dispatch_if.valid && (dispatch_if.ex_type == `EX_FPU);
     wire [`INST_FPU_BITS-1:0] fpu_op_type = `INST_FPU_BITS'(dispatch_if.op_type);
+    wire [`INST_FMT_BITS-1:0] fpu_fmt = dispatch_if.imm[`INST_FMT_BITS-1:0];
+    wire [`INST_FRM_BITS-1:0] fpu_frm = dispatch_if.op_mod[`INST_FRM_BITS-1:0];
         
     VX_skid_buffer #(
-        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `INST_FPU_BITS + `INST_MOD_BITS + `NR_BITS + (3 * `NUM_THREADS * `XLEN)),
+        .DATAW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `INST_FPU_BITS + `INST_FMT_BITS + `INST_FRM_BITS + `NR_BITS + (3 * `NUM_THREADS * `XLEN)),
         .OUT_REG (1)
     ) fpu_buffer (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (fpu_req_valid),
         .ready_in  (fpu_req_ready),
-        .data_in   ({dispatch_if.uuid,   dispatch_if.wid,   dispatch_if.tmask,   dispatch_if.PC,   fpu_op_type,          dispatch_if.op_mod,   dispatch_if.rd,   gpr_rsp_if.rs1_data,   gpr_rsp_if.rs2_data,   gpr_rsp_if.rs3_data}),
-        .data_out  ({fpu_agent_if.uuid,  fpu_agent_if.wid,  fpu_agent_if.tmask,  fpu_agent_if.PC,  fpu_agent_if.op_type, fpu_agent_if.op_mod,  fpu_agent_if.rd,  fpu_agent_if.rs1_data, fpu_agent_if.rs2_data, fpu_agent_if.rs3_data}),
+        .data_in   ({dispatch_if.uuid,   dispatch_if.wid,   dispatch_if.tmask,   dispatch_if.PC,   fpu_op_type,          fpu_fmt,          fpu_frm,          dispatch_if.rd,  gpr_rsp_if.rs1_data,   gpr_rsp_if.rs2_data,   gpr_rsp_if.rs3_data}),
+        .data_out  ({fpu_agent_if.uuid,  fpu_agent_if.wid,  fpu_agent_if.tmask,  fpu_agent_if.PC,  fpu_agent_if.op_type, fpu_agent_if.fmt, fpu_agent_if.frm, fpu_agent_if.rd, fpu_agent_if.rs1_data, fpu_agent_if.rs2_data, fpu_agent_if.rs3_data}),
         .valid_out (fpu_agent_if.valid),
         .ready_out (fpu_agent_if.ready)
     );

@@ -33,6 +33,7 @@
 `define UNUSED_SPARAM(x)
 `define UNUSED_VAR(x)
 `define UNUSED_PIN(x) . x ()
+`define UNUSED_ARG(x) x
 `define TRACE(level, args) $write args
 `else
 `ifdef VERILATOR
@@ -86,9 +87,12 @@
 
 `define UNUSED_VAR(x) always @(x) begin end
 
-`define UNUSED_PIN(x)  /* verilator lint_off PINCONNECTEMPTY */ \
-                       . x () \
-                       /* verilator lint_on PINCONNECTEMPTY */
+`define UNUSED_PIN(x)   /* verilator lint_off PINCONNECTEMPTY */ \
+                        . x () \
+                        /* verilator lint_on PINCONNECTEMPTY */
+`define UNUSED_ARG(x)   /* verilator lint_off UNUSED */ \
+                        x \
+                        /* verilator lint_on UNUSED */
 `define TRACE(level, args) dpi_trace(level, $sformatf args)
 `endif
 `endif

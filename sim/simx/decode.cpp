@@ -369,9 +369,9 @@ static const char* op_string(const Instr &instr) {
       default:
         std::abort();
       }
-    case 0x70: return func3 ? "FCLASS.S" : "FMV.X.W";
+    case 0x70: return func3 ? "FCLASS.S" : "FMV.X.S";
     case 0x71: return func3 ? "FCLASS.D" : "FMV.X.D";
-    case 0x78: return "FMV.W.X";
+    case 0x78: return "FMV.S.X";
     case 0x79: return "FMV.D.X";
     default:
       std::abort();
@@ -522,12 +522,12 @@ std::shared_ptr<Instr> Decoder::decode(uint32_t code) const {
         instr->addSrcReg(rs1, RegType::Integer);
         instr->addSrcReg(rs2, RegType::None);
         break;
-      case 0x70: // FCLASS.S, FMV.X.W
+      case 0x70: // FCLASS.S, FMV.X.S
       case 0x71: // FCLASS.D, FMV.X.D        
         instr->setDestReg(rd, RegType::Integer);
         instr->addSrcReg(rs1, RegType::Float);
         break;
-      case 0x78: // FMV.W.X
+      case 0x78: // FMV.S.X
       case 0x79: // FMV.D.X        
         instr->setDestReg(rd, RegType::Float);
         instr->addSrcReg(rs1, RegType::Integer);

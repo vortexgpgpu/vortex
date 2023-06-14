@@ -55,7 +55,7 @@ inline uint32_t get_fpu_rm(uint32_t func3, Core* core, uint32_t tid, uint32_t wi
   return (func3 == 0x7) ? core->get_csr(CSR_FRM, tid, wid) : func3;
 }
 
-static void update_fcrs(uint32_t fflags, Core* core, uint32_t tid, uint32_t wid) {
+inline void update_fcrs(uint32_t fflags, Core* core, uint32_t tid, uint32_t wid) {
   if (fflags) {
     core->set_csr(CSR_FCSR, core->get_csr(CSR_FCSR, tid, wid) | fflags, tid, wid);
     core->set_csr(CSR_FFLAGS, core->get_csr(CSR_FFLAGS, tid, wid) | fflags, tid, wid);
@@ -71,42 +71,10 @@ inline bool is_nan_boxed(uint64_t value) {
   return (uint32_t(value >> 32) == 0xffffffff);
 }
 
-static bool checkBoxedArgs(uint64_t* out, uint64_t a, uint64_t b, uint32_t* fflags) {  
-  bool xa = is_nan_boxed(a);
-  bool xb = is_nan_boxed(b);  
-  if (xa && xb)
-    return true;
-  if (xa) {
-    // a is NaN boxed but b isn't
-    *out = nan_box((uint32_t)a);
-  } else if (xb) {
-    // b is NaN boxed but a isn't
-    *out = nan_box(0xffc00000);
-  } else {
-    // Both a and b aren't NaN boxed
-    *out = nan_box(0x7fc00000);
-  }
-  *fflags = 0;
-  return false;
-}
-
-static bool checkBoxedArgs(uint64_t* out, uint64_t a, uint32_t* fflags) {  
-  bool xa = is_nan_boxed(a);
-  if (xa)
-    return true;
-  *out = nan_box(0x7fc00000);
-  *fflags = 0;
-  return false;
-}
-
-static bool checkBoxedCmpArgs(Word* out, uint64_t a, uint64_t b, uint32_t* fflags) {  
-  bool xa = is_nan_boxed(a);
-  bool xb = is_nan_boxed(b);  
-  if (xa && xb)
-    return true;
-  *out = 0;
-  *fflags = 0;
-  return false;
+inline int64_t check_boxing(int64_t a) {  
+  if (is_nan_boxed(a))
+    return a;
+  return nan_box(0x7fc00000); // NaN
 }
 
 void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
@@ -135,13 +103,12 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
 
   auto num_rsrcs = instr.getNRSrc();
   if (num_rsrcs) {              
-    for (uint32_t i = 0; i < num_rsrcs; ++i) {    
-      DPH(2, "Src" << std::dec << i << " Reg: ");
+    for (uint32_t i = 0; i < num_rsrcs; ++i) {          
       auto type = instr.getRSType(i);
       auto reg = instr.getRSrc(i);        
       switch (type) {
       case RegType::Integer: 
-        DPN(2, type << std::dec << reg << "={");
+        DPH(2, "Src" << std::dec << i << " Reg: " << type << std::dec << reg << "={");
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (t) DPN(2, ", ");
           if (!tmask_.test(t)) {
@@ -154,7 +121,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         DPN(2, "}" << std::endl);
         break;
       case RegType::Float: 
-        DPN(2, type << std::dec << reg << "={");
+        DPH(2, "Src" << std::dec << i << " Reg: " << type << std::dec << reg << "={");
         for (uint32_t t = 0; t < num_threads; ++t) {
           if (t) DPN(2, ", ");
           if (!tmask_.test(t)) {
@@ -971,9 +938,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       uint32_t fflags = 0;
       switch (func7) {
       case 0x00: { // RV32F: FADD.S
-        if (checkBoxedArgs(&rddata[t].u64, rsdata[t][0].u64, rsdata[t][1].u64, &fflags)) {
-          rddata[t].u64 = nan_box(rv_fadd_s(rsdata[t][0].u64, rsdata[t][1].u64, frm, &fflags));
-        }
+        rddata[t].u64 = nan_box(rv_fadd_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64), frm, &fflags));
         trace->fpu_type = FpuType::FMA;
         trace->used_fregs.set(rsrc0);
         trace->used_fregs.set(rsrc1);
@@ -987,9 +952,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         break;
       }
       case 0x04: { // RV32F: FSUB.S
-        if (checkBoxedArgs(&rddata[t].u64, rsdata[t][0].u64, rsdata[t][1].u64, &fflags)) {
-          rddata[t].u64 = nan_box(rv_fsub_s(rsdata[t][0].u64, rsdata[t][1].u64, frm, &fflags));
-        }
+        rddata[t].u64 = nan_box(rv_fsub_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64), frm, &fflags));
         trace->fpu_type = FpuType::FMA;
         trace->used_fregs.set(rsrc0);
         trace->used_fregs.set(rsrc1);
@@ -1003,9 +966,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         break;
       }
       case 0x08: { // RV32F: FMUL.S
-        if (checkBoxedArgs(&rddata[t].u64, rsdata[t][0].u64, rsdata[t][1].u64, &fflags)) {
-          rddata[t].u64 = nan_box(rv_fmul_s(rsdata[t][0].u64, rsdata[t][1].u64, frm, &fflags));
-        }
+        rddata[t].u64 = nan_box(rv_fmul_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64), frm, &fflags));
         trace->fpu_type = FpuType::FMA;
         trace->used_fregs.set(rsrc0);
         trace->used_fregs.set(rsrc1);
@@ -1019,9 +980,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         break;
       }
       case 0x0c: { // RV32F: FDIV.S
-        if (checkBoxedArgs(&rddata[t].u64, rsdata[t][0].u64, rsdata[t][1].u64, &fflags)) {
-          rddata[t].u64 = nan_box(rv_fdiv_s(rsdata[t][0].u64, rsdata[t][1].u64, frm, &fflags));
-        }
+        rddata[t].u64 = nan_box(rv_fdiv_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64), frm, &fflags));
         trace->fpu_type = FpuType::FDIV;
         trace->used_fregs.set(rsrc0);
         trace->used_fregs.set(rsrc1);
@@ -1035,18 +994,16 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         break;
       }
       case 0x10: {
-        if (checkBoxedArgs(&rddata[t].u64, rsdata[t][0].u64, rsdata[t][1].u64, &fflags)) {
-          switch (func3) {            
-          case 0: // RV32F: FSGNJ.S
-            rddata[t].u64 = nan_box(rv_fsgnj_s(rsdata[t][0].u64, rsdata[t][1].u64));
-            break;          
-          case 1: // RV32F: FSGNJN.S
-            rddata[t].u64 = nan_box(rv_fsgnjn_s(rsdata[t][0].u64, rsdata[t][1].u64));
-            break;          
-          case 2: // RV32F: FSGNJX.S
-            rddata[t].u64 = nan_box(rv_fsgnjx_s(rsdata[t][0].u64, rsdata[t][1].u64));
-            break;
-          }
+        switch (func3) {            
+        case 0: // RV32F: FSGNJ.S
+          rddata[t].u64 = nan_box(rv_fsgnj_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64)));
+          break;          
+        case 1: // RV32F: FSGNJN.S
+          rddata[t].u64 = nan_box(rv_fsgnjn_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64)));
+          break;          
+        case 2: // RV32F: FSGNJX.S
+          rddata[t].u64 = nan_box(rv_fsgnjx_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64)));
+          break;
         }
         trace->fpu_type = FpuType::FNCP;
         trace->used_fregs.set(rsrc0);
@@ -1071,14 +1028,12 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         break;
       }
       case 0x14: {   
-        if (checkBoxedArgs(&rddata[t].u64, rsdata[t][0].u64, rsdata[t][1].u64, &fflags)) {         
-          if (func3) {
-            // RV32F: FMAX.S
-            rddata[t].u64 = nan_box(rv_fmax_s(rsdata[t][0].u64, rsdata[t][1].u64, &fflags));
-          } else {
-            // RV32F: FMIN.S
-            rddata[t].u64 = nan_box(rv_fmin_s(rsdata[t][0].u64, rsdata[t][1].u64, &fflags));
-          }
+        if (func3) {
+          // RV32F: FMAX.S
+          rddata[t].u64 = nan_box(rv_fmax_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64), &fflags));
+        } else {
+          // RV32F: FMIN.S
+          rddata[t].u64 = nan_box(rv_fmin_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64), &fflags));
         }
         trace->fpu_type = FpuType::FNCP;
         trace->used_fregs.set(rsrc0);
@@ -1108,16 +1063,14 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       }
       case 0x21: {
         // RV32D: FCVT.D.S
-        rddata[t].u64 = rv_ftod(rsdata[t][0].u64);
+        rddata[t].u64 = rv_ftod(check_boxing(rsdata[t][0].u64));
         trace->fpu_type = FpuType::FNCP;
         trace->used_fregs.set(rsrc0);
         trace->used_fregs.set(rsrc1);        
         break;
       }
       case 0x2c: { // RV32F: FSQRT.S
-        if (checkBoxedArgs(&rddata[t].u64, rsdata[t][0].u64, &fflags)) {
-          rddata[t].u64 = nan_box(rv_fsqrt_s(rsdata[t][0].u64, frm, &fflags));
-        }
+        rddata[t].u64 = nan_box(rv_fsqrt_s(check_boxing(rsdata[t][0].u64), frm, &fflags));
         trace->fpu_type = FpuType::FSQRT;
         trace->used_fregs.set(rsrc0);
         break;
@@ -1129,21 +1082,19 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         break;  
       }     
       case 0x50: {      
-        if (checkBoxedCmpArgs(&rddata[t].u, rsdata[t][0].u64, rsdata[t][1].u64, &fflags)) {     
-          switch (func3) {              
-          case 0:
-            // RV32F: FLE.S
-            rddata[t].i = rv_fle_s(rsdata[t][0].u64, rsdata[t][1].u64, &fflags);    
-            break;              
-          case 1:
-            // RV32F: FLT.S
-            rddata[t].i = rv_flt_s(rsdata[t][0].u64, rsdata[t][1].u64, &fflags);
-            break;              
-          case 2:
-            // RV32F: FEQ.S
-            rddata[t].i = rv_feq_s(rsdata[t][0].u64, rsdata[t][1].u64, &fflags);
-            break;
-          }
+        switch (func3) {              
+        case 0:
+          // RV32F: FLE.S
+          rddata[t].i = rv_fle_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64), &fflags);    
+          break;              
+        case 1:
+          // RV32F: FLT.S
+          rddata[t].i = rv_flt_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64), &fflags);
+          break;              
+        case 2:
+          // RV32F: FEQ.S
+          rddata[t].i = rv_feq_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64), &fflags);
+          break;
         } 
         trace->fpu_type = FpuType::FNCP;
         trace->used_fregs.set(rsrc0);
@@ -1174,19 +1125,19 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         switch (rsrc1) {
         case 0: 
           // RV32F: FCVT.W.S
-          rddata[t].i = sext((uint64_t)rv_ftoi_s(rsdata[t][0].u64, frm, &fflags), 32);
+          rddata[t].i = sext((uint64_t)rv_ftoi_s(check_boxing(rsdata[t][0].u64), frm, &fflags), 32);
           break;
         case 1:
           // RV32F: FCVT.WU.S
-          rddata[t].i = sext((uint64_t)rv_ftou_s(rsdata[t][0].u64, frm, &fflags), 32);
+          rddata[t].i = sext((uint64_t)rv_ftou_s(check_boxing(rsdata[t][0].u64), frm, &fflags), 32);
           break;
         case 2:
           // RV64F: FCVT.L.S
-          rddata[t].i = rv_ftol_s(rsdata[t][0].u64, frm, &fflags);
+          rddata[t].i = rv_ftol_s(check_boxing(rsdata[t][0].u64), frm, &fflags);
           break;
         case 3:
           // RV64F: FCVT.LU.S
-          rddata[t].i = rv_ftolu_s(rsdata[t][0].u64, frm, &fflags);
+          rddata[t].i = rv_ftolu_s(check_boxing(rsdata[t][0].u64), frm, &fflags);
           break;
         }
         trace->fpu_type = FpuType::FCVT;
@@ -1265,9 +1216,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       case 0x70: {     
         if (func3) {
           // RV32F: FCLASS.S
-          rddata[t].i = rv_fclss_s(rsdata[t][0].u64);
+          rddata[t].i = rv_fclss_s(check_boxing(rsdata[t][0].u64));
         } else {          
-          // RV32F: FMV.X.W
+          // RV32F: FMV.X.S
           uint32_t result = (uint32_t)rsdata[t][0].u64;
           rddata[t].i = sext((uint64_t)result, 32);
         }        
@@ -1287,7 +1238,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         trace->used_fregs.set(rsrc0);
         break;
       }
-      case 0x78: { // RV32F: FMV.W.X
+      case 0x78: { // RV32F: FMV.S.X
         rddata[t].u64 = nan_box((uint32_t)rsdata[t][0].i);
         trace->fpu_type = FpuType::FNCP;
         trace->used_iregs.set(rsrc0);
@@ -1325,7 +1276,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           rddata[t].u64 = rv_fmadd_d(rsdata[t][0].u64, rsdata[t][1].u64, rsdata[t][2].u64, frm, &fflags);
         else
           // RV32F: FMADD.S
-          rddata[t].u64 = nan_box(rv_fmadd_s(rsdata[t][0].u64, rsdata[t][1].u64, rsdata[t][2].u64, frm, &fflags));
+          rddata[t].u64 = nan_box(rv_fmadd_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64), check_boxing(rsdata[t][2].u64), frm, &fflags));
         break;
       case FMSUB:
         if (func2)
@@ -1333,7 +1284,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           rddata[t].u64 = rv_fmsub_d(rsdata[t][0].u64, rsdata[t][1].u64, rsdata[t][2].u64, frm, &fflags);
         else 
           // RV32F: FMSUB.S
-          rddata[t].u64 = nan_box(rv_fmsub_s(rsdata[t][0].u64, rsdata[t][1].u64, rsdata[t][2].u64, frm, &fflags));
+          rddata[t].u64 = nan_box(rv_fmsub_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64), check_boxing(rsdata[t][2].u64), frm, &fflags));
         break;
       case FMNMADD:
         if (func2)
@@ -1341,7 +1292,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           rddata[t].u64 = rv_fnmadd_d(rsdata[t][0].u64, rsdata[t][1].u64, rsdata[t][2].u64, frm, &fflags);
         else
           // RV32F: FNMADD.S
-          rddata[t].u64 = nan_box(rv_fnmadd_s(rsdata[t][0].u64, rsdata[t][1].u64, rsdata[t][2].u64, frm, &fflags));
+          rddata[t].u64 = nan_box(rv_fnmadd_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64), check_boxing(rsdata[t][2].u64), frm, &fflags));
         break; 
       case FMNMSUB:
         if (func2)
@@ -1349,7 +1300,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           rddata[t].u64 = rv_fnmsub_d(rsdata[t][0].u64, rsdata[t][1].u64, rsdata[t][2].u64, frm, &fflags);
         else
           // RV32F: FNMSUB.S
-          rddata[t].u64 = nan_box(rv_fnmsub_s(rsdata[t][0].u64, rsdata[t][1].u64, rsdata[t][2].u64, frm, &fflags));
+          rddata[t].u64 = nan_box(rv_fnmsub_s(check_boxing(rsdata[t][0].u64), check_boxing(rsdata[t][1].u64), check_boxing(rsdata[t][2].u64), frm, &fflags));
         break;
       default:
         break;

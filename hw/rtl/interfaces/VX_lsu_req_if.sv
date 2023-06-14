@@ -8,7 +8,6 @@ interface VX_lsu_req_if ();
     wire [`NUM_THREADS-1:0]         tmask;    
     wire [`XLEN-1:0]                PC;
     wire [`INST_LSU_BITS-1:0]       op_type;
-    wire                            is_fence;
     wire [`NUM_THREADS-1:0][`XLEN-1:0] store_data;
     wire [`NUM_THREADS-1:0][`XLEN-1:0] base_addr;    
     wire [`XLEN-1:0]                offset;
@@ -23,7 +22,6 @@ interface VX_lsu_req_if ();
         output tmask,
         output PC,
         output op_type,
-        output is_fence,
         output store_data,
         output base_addr,   
         output offset,
@@ -39,7 +37,6 @@ interface VX_lsu_req_if ();
         input  tmask,
         input  PC,
         input  op_type,
-        input  is_fence,
         input  store_data,
         input  base_addr,   
         input  offset,

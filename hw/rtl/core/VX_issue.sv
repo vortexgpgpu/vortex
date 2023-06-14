@@ -279,9 +279,9 @@ module VX_issue #(
     always @(posedge clk) begin
         if (dispatch_if.valid && dispatch_if.ready) begin
             `TRACE(1, ("%d: core%0d-issue: wid=%0d, PC=0x%0h, ex=", $time, CORE_ID, dispatch_if.wid, dispatch_if.PC));
-            `TRACE_EX_TYPE(1, dispatch_if.ex_type);
+            trace_ex_type(1, dispatch_if.ex_type);
             `TRACE(1, (", op="));
-            `TRACE_EX_OP(1, dispatch_if.ex_type, dispatch_if.op_type, dispatch_if.op_mod);
+            trace_ex_op(1, dispatch_if.ex_type, dispatch_if.op_type, dispatch_if.op_mod, dispatch_if.imm);
             `TRACE(1, (", mod=%0d, tmask=%b, wb=%b, rd=%0d, rs1_data=",  dispatch_if.op_mod, dispatch_if.tmask, dispatch_if.wb, dispatch_if.rd));
             `TRACE_ARRAY1D(1, gpr_rsp_if.rs1_data, `NUM_THREADS);
             `TRACE(1, (", rs2_data="));

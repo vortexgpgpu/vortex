@@ -1,5 +1,7 @@
 `include "VX_fpu_define.vh"
 
+`ifdef FPU_DSP
+
 module VX_fpu_dsp #(
     parameter NUM_LANES = 4, 
     parameter TAGW      = 4
@@ -13,12 +15,13 @@ module VX_fpu_dsp #(
     input wire [TAGW-1:0] tag_in,
     
     input wire [`INST_FPU_BITS-1:0] op_type,
-    input wire [`INST_MOD_BITS-1:0] op_mod,
+    input wire [`INST_FMT_BITS-1:0] fmt,
+    input wire [`INST_FRM_BITS-1:0] frm,
 
-    input wire [NUM_LANES-1:0][31:0]  dataa,
-    input wire [NUM_LANES-1:0][31:0]  datab,
-    input wire [NUM_LANES-1:0][31:0]  datac,
-    output wire [NUM_LANES-1:0][31:0] result, 
+    input wire [NUM_LANES-1:0][`XLEN-1:0]  dataa,
+    input wire [NUM_LANES-1:0][`XLEN-1:0]  datab,
+    input wire [NUM_LANES-1:0][`XLEN-1:0]  datac,
+    output wire [NUM_LANES-1:0][`XLEN-1:0] result, 
 
     output wire has_fflags,
     output wire [NUM_LANES-1:0][`FP_FLAGS_BITS-1:0] fflags,
@@ -50,7 +53,7 @@ module VX_fpu_dsp #(
     reg [FPC_BITS-1:0] core_select;
     reg do_madd, do_sub, do_neg, is_itof, is_signed;
 
-    wire [`INST_FRM_BITS-1:0] frm = `INST_FRM_BITS'(op_mod);
+    wire [`INST_FRM_BITS-1:0] frm = `INST_FRM_BITS'(frm);
 
     always @(*) begin
         do_madd   = 0;
@@ -68,10 +71,10 @@ module VX_fpu_dsp #(
             `INST_FPU_NMSUB:  begin core_select = FPU_FMA; do_madd = 1; do_sub = 1; do_neg = 1; end
             `INST_FPU_DIV:    begin core_select = FPU_DIV; end
             `INST_FPU_SQRT:   begin core_select = FPU_SQRT; end
-            `INST_FPU_CVTWX:  begin core_select = FPU_CVT; is_signed = 1; end
-            `INST_FPU_CVTWUX: begin core_select = FPU_CVT; end
-            `INST_FPU_CVTXW:  begin core_select = FPU_CVT; is_itof = 1; is_signed = 1; end
-            `INST_FPU_CVTXWU: begin core_select = FPU_CVT; is_itof = 1; end
+            `INST_FPU_F2I:    begin core_select = FPU_CVT; is_signed = 1; end
+            `INST_FPU_F2U:    begin core_select = FPU_CVT; end
+            `INST_FPU_I2F:    begin core_select = FPU_CVT; is_itof = 1; is_signed = 1; end
+            `INST_FPU_U2F:    begin core_select = FPU_CVT; is_itof = 1; end
             default:          begin core_select = FPU_NCP; end
         endcase
     end
@@ -175,7 +178,8 @@ module VX_fpu_dsp #(
         .valid_in   (valid_in && (core_select == FPU_NCP)),
         .ready_in   (per_core_ready_in[FPU_NCP]),        
         .tag_in     (tag_in),
-        .op_mod     (op_mod),
+        .op_type    (op_type),
+        .frm        (frm),
         .dataa      (dataa),
         .datab      (datab),        
         .result     (per_core_result[FPU_NCP]), 
@@ -214,3 +218,4 @@ module VX_fpu_dsp #(
     assign ready_in = per_core_ready_in[core_select];
 
 endmodule
+`endif 

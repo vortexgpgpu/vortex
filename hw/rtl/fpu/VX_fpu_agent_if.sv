@@ -8,7 +8,8 @@ interface VX_fpu_agent_if ();
     wire [`NUM_THREADS-1:0]         tmask;
     wire [`XLEN-1:0]                PC;
     wire [`INST_FPU_BITS-1:0]       op_type;
-    wire [`INST_MOD_BITS-1:0]       op_mod;
+    wire [`INST_FMT_BITS-1:0]       fmt;
+    wire [`INST_FRM_BITS-1:0]       frm;
     wire [`NUM_THREADS-1:0][`XLEN-1:0] rs1_data;
     wire [`NUM_THREADS-1:0][`XLEN-1:0] rs2_data;
     wire [`NUM_THREADS-1:0][`XLEN-1:0] rs3_data;
@@ -22,7 +23,8 @@ interface VX_fpu_agent_if ();
         output tmask,
         output PC,
         output op_type,
-        output op_mod,
+        output fmt,
+        output frm,
         output rs1_data,
         output rs2_data,
         output rs3_data,
@@ -37,7 +39,8 @@ interface VX_fpu_agent_if ();
         input  tmask,
         input  PC,
         input  op_type,
-        input  op_mod,
+        input  fmt,
+        input  frm,
         input  rs1_data,
         input  rs2_data,
         input  rs3_data,

@@ -31,6 +31,25 @@ make -C tests/kernel run-rtlsim
 make -C tests/regression run-simx
 make -C tests/regression run-rtlsim
 
+make -C sim/rtlsim clean
+CONFIGS="-DFPU_DPI" make -C sim/rtlsim
+make -C tests/riscv/isa run-rtlsim
+
+if [ "$XLEN" -eq "64" ] 
+then
+        make -C sim/rtlsim clean
+        CONFIGS="-DFLEN_64 -DFPU_FPNEW" make -C sim/rtlsim
+        make -C tests/riscv/isa run-rtlsim-64d
+
+        make -C sim/rtlsim clean
+        CONFIGS="-DFLEN_64 -DFPU_DPI" make -C sim/rtlsim
+        make -C tests/riscv/isa run-rtlsim-64d
+else
+        make -C sim/rtlsim clean
+        CONFIGS="-DFPU_DSP" make -C sim/rtlsim
+        make -C tests/riscv/isa run-rtlsim
+fi
+
 # test global barriers with multiple cores
 ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -t19 -t20" --cores=2
 
