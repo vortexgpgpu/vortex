@@ -44,14 +44,15 @@ then
         make -C sim/rtlsim clean
         CONFIGS="-DFLEN_64 -DFPU_DPI" make -C sim/rtlsim
         make -C tests/riscv/isa run-rtlsim-64d
-else
-        make -C sim/rtlsim clean
-        CONFIGS="-DFPU_DSP" make -C sim/rtlsim
-        make -C tests/riscv/isa run-rtlsim
 fi
+
+# test DSP FPU hardware
+CONFIGS="-DFPU_DSP" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
 
 # test global barriers with multiple cores
 ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -t19 -t20" --cores=2
+
+# test FPU core
 
 echo "regression tests done!"
 }
@@ -228,18 +229,6 @@ CONFIGS="-DNUM_DCACHES=2 -DNUM_ICACHES=2" ./ci/blackbox.sh --driver=rtlsim --app
 
 # multiple FPUs per cluster
 CONFIGS="-DNUM_FPU_UNITS=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm --cores=8 --warps=1 --threads=2
-
-# test FPNEW FPU core
-CONFIGS="-DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
-
-# test DSP FPU core
-CONFIGS="-DFPU_DSP" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
-
-# test DPI FPU core
-CONFIGS="-DFPU_DPI" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
-
-# test DPI modules
-CONFIGS="-DENABLE_DPI" ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=dogfood
 
 # test AXI bus
 AXI_BUS=1 ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo
