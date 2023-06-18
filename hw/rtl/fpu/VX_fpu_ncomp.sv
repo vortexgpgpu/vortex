@@ -86,7 +86,7 @@ module VX_fpu_ncomp #(
 
     wire                        valid_in_s0;
     wire [TAGW-1:0]             tag_in_s0;
-    wire [4:0]                  op_mod_s0;
+    wire [3:0]                  op_mod_s0;
     wire [NUM_LANES-1:0][31:0]  dataa_s0, datab_s0;
     wire [NUM_LANES-1:0]        a_sign_s0, b_sign_s0;
     wire [NUM_LANES-1:0][7:0]   a_exponent_s0;
@@ -96,7 +96,7 @@ module VX_fpu_ncomp #(
 
     wire stall;
 
-    wire [4:0] op_mod = {(op_type == INST_FPU_CMP), frm};
+    wire [3:0] op_mod = {(op_type == `INST_FPU_CMP), frm};
 
     VX_pipe_register #(
         .DATAW  (1 + TAGW + 4 + NUM_LANES * (2 * 32 + 1 + 1 + 8 + 23 + 2 * $bits(fclass_t) + 1 + 1)),
@@ -169,7 +169,7 @@ module VX_fpu_ncomp #(
     reg [NUM_LANES-1:0] fcmp_fflags_NV;  // comparison fflags
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         always @(*) begin
-            case (op_mod_s0[1:0])
+            case (op_mod_s0[2:0])
                 `INST_FRM_RNE: begin // LE                    
                     if (a_fclass_s0[i].is_nan || b_fclass_s0[i].is_nan) begin
                         fcmp_res[i]       = 32'h0;

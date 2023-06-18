@@ -41,22 +41,21 @@ extern "C" {
 }
 
 inline uint64_t nan_box(uint32_t value) {
-  uint64_t mask = 0xffffffff00000000;
-  return value | mask;
+  return value | 0xffffffff00000000;
 }
 
-inline bool is_nan_boxed(uint64_t value) {
-#if (XLEN == 64)
+inline bool is_nan_boxed(uint64_t value) {  
   return (uint32_t(value >> 32) == 0xffffffff);
-#else
-  return true;
-#endif
 }
 
 inline int64_t check_boxing(int64_t a) {  
-  if (is_nan_boxed(a))
-    return a;
-  return nan_box(0x7fc00000); // NaN
+#if (FLEN == 64)
+  // this check is only needed when both single and double precisions are enabled
+  if (!is_nan_boxed(a)) {
+    return nan_box(0x7fc00000); // NaN
+  }
+#endif
+  return a;
 }
 
 void dpi_fadd(bool enable, int dst_fmt, int64_t a, int64_t b, const svBitVecVal* frm, int64_t* result, svBitVecVal* fflags) {

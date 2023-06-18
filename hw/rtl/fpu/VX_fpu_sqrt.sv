@@ -57,6 +57,9 @@ module VX_fpu_sqrt #(
         );
     end
 
+    assign has_fflags = 0;
+    assign fflags = 'x;
+
 `elsif VIVADO
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
@@ -66,41 +69,42 @@ module VX_fpu_sqrt #(
             .aclk                (clk),
             .aclken              (enable),
             .s_axis_a_tvalid     (1'b1),
-            .s_axis_a_tdata      (dataa[i]),
+            .s_axis_a_tdata      (dataa[i][31:0]),
             `UNUSED_PIN (m_axis_result_tvalid),
-            .m_axis_result_tdata (result[i]),
+            .m_axis_result_tdata (result[i][31:0]),
             .m_axis_result_tuser (tuser)
         );
                         // NV,  DZ,   OF,   UF,   NX
         assign fflags[i] = {tuser, 1'b0, 1'b0, 1'b0, 1'b0};
     end
 
+    assign has_fflags = 1;
+
 `else
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        reg [`XLEN-1:0] r;
+        reg [63:0] r;
+        `UNUSED_VAR (r)
 
         fflags_t f;
-        `UNUSED_VAR (f)
 
         always @(*) begin        
-            dpi_fsqrt (enable && valid_in, dataa[i], frm, r, f);
+            dpi_fsqrt (enable && valid_in, int'(0), 64'(dataa[i]), frm, r, f);
         end
         
         VX_shift_register #(
-            .DATAW  (`XLEN),
+            .DATAW  (32 + $bits(fflags_t)),
             .DEPTH  (`LATENCY_FSQRT)
         ) shift_req_dpi (
             .clk      (clk),
             `UNUSED_PIN (reset),
             .enable   (enable),
-            .data_in  (r),
-            .data_out (result[i])
+            .data_in  ({r[31:0],   f}),
+            .data_out ({result[i], fflags[i]})
         );
     end
 
-    assign has_fflags = 1'b0;
-    assign fflags = '0;
+    assign has_fflags = 1;
 
 `endif
 

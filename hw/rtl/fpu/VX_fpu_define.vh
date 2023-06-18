@@ -13,4 +13,10 @@
 import VX_fpu_types::*;
 `IGNORE_WARNINGS_END
 
+`ifdef XLEN_64
+`ifdef FLEN_32
+    `define FPU_RV64_F
+`endif
+`endif
+
 `endif // VX_FPU_DEFINE_VH

@@ -2,12 +2,6 @@
 
 `ifdef FPU_DPI
 
-`ifdef XLEN_64
-`ifdef FLEN_32
-    `define ISA_RV64F
-`endif
-`endif
-
 module VX_fpu_dpi #( 
     parameter NUM_LANES = 1,
     parameter TAGW      = 1
@@ -69,14 +63,6 @@ module VX_fpu_dpi #(
             operands[0][i] = 64'(dataa[i]);
             operands[1][i] = 64'(datab[i]);
             operands[2][i] = 64'(datac[i]);
-        `ifdef ISA_RV64F
-            // apply nan-boxing to floating-point operands
-            if (op_type != `INST_FPU_I2F && op_type != `INST_FPU_U2F) begin
-                operands[0][i] |= 64'hffffffff00000000;
-            end
-            operands[1][i] |= 64'hffffffff00000000;
-            operands[2][i] |= 64'hffffffff00000000;
-        `endif
         end
     end
 
@@ -118,7 +104,7 @@ module VX_fpu_dpi #(
             `INST_FPU_NMSUB: begin core_select = FPU_FMA; is_fnmsub = 1; end
             `INST_FPU_DIV:   begin core_select = FPU_DIV; end
             `INST_FPU_SQRT:  begin core_select = FPU_SQRT; end
-            `INST_FPU_CMP:   begin core_select = FPU_NCP; is_fcmp = 1; end            
+            `INST_FPU_CMP:   begin core_select = FPU_NCP; is_fcmp = 1; end
             `INST_FPU_F2I:   begin core_select = FPU_CVT; is_ftoi = 1; end
             `INST_FPU_F2U:   begin core_select = FPU_CVT; is_ftou = 1; end
             `INST_FPU_I2F:   begin core_select = FPU_CVT; is_itof = 1; end

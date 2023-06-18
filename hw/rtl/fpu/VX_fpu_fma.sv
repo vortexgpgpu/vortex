@@ -88,6 +88,9 @@ module VX_fpu_fma #(
             .q      (result[i])
         );
     end
+    
+    assign has_fflags = 0;
+    assign fflags = 'x
 
 `elsif VIVADO
 
@@ -111,31 +114,33 @@ module VX_fpu_fma #(
         assign fflags[i] = {tuser[2], 1'b0, tuser[1], tuser[0], 1'b0};
     end
 
+    assign has_fflags = 1;
+
 `else
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        reg [`XLEN-1:0] r;
+        reg [63:0] r;
+        `UNUSED_VAR (r)
+
         fflags_t f;
-        `UNUSED_VAR (f)
 
         always @(*) begin        
-            dpi_fmadd (enable && valid_in, a[i], b[i], c[i], frm, r, f);
+            dpi_fmadd (enable && valid_in, int'(0), 64'(a[i]), 64'(b[i]), 64'(c[i]), frm, r, f);
         end        
 
         VX_shift_register #(
-            .DATAW  (`XLEN),
+            .DATAW  (32 + $bits(fflags_t)),
             .DEPTH  (`LATENCY_FMA)
         ) shift_req_dpi (
             .clk      (clk),
             `UNUSED_PIN (reset),
             .enable   (enable),
-            .data_in  (r),
-            .data_out (result[i])
+            .data_in  ({r[31:0],   f}),
+            .data_out ({result[i], fflags[i]})
         );
     end
 
-    assign has_fflags = 1'b0;
-    assign fflags = '0;
+    assign has_fflags = 1;
 
 `endif
 

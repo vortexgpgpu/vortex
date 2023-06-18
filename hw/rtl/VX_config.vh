@@ -155,14 +155,8 @@
 `define FPU_DPI
 `endif
 
-`ifdef SYNTHESIS
-`ifndef FPU_DSP
-`ifndef FPU_FPNEW
-`define FPU_FPNEW
-`endif
-`endif
-`else
 `ifndef FPU_DPI
+`ifndef FPU_DSP
 `ifndef FPU_FPNEW
 `define FPU_FPNEW
 `endif
@@ -329,6 +323,9 @@
 `ifdef VIVADO
 `define LATENCY_FMA 16    
 `endif
+`ifndef LATENCY_FMA
+`define LATENCY_FMA 4    
+`endif
 `endif
 `endif
 
@@ -346,6 +343,9 @@
 `ifdef VIVADO
 `define LATENCY_FDIV 28    
 `endif
+`ifndef LATENCY_FDIV
+`define LATENCY_FDIV 16
+`endif
 `endif
 `endif
 
@@ -362,6 +362,9 @@
 `endif
 `ifdef VIVADO
 `define LATENCY_FSQRT 28    
+`endif
+`ifndef LATENCY_FSQRT
+`define LATENCY_FSQRT 16    
 `endif
 `endif
 `endif

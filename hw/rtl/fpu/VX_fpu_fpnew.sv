@@ -6,12 +6,6 @@
 `include "fpnew_pkg.sv"
 `include "defs_div_sqrt_mvp.sv"
 
-`ifdef XLEN_64
-`ifdef FLEN_32
-    `define ISA_RV64F
-`endif
-`endif
-
 module VX_fpu_fpnew #(      
     parameter NUM_LANES = 1,
     parameter TAGW      = 1
@@ -147,7 +141,7 @@ module VX_fpu_fpnew #(
             default:;
         endcase
 
-    `ifdef ISA_RV64F
+    `ifdef FPU_RV64_F
         // apply nan-boxing to floating-point operands
         for (integer i = 0; i < NUM_LANES; ++i) begin                    
             if (op_type != `INST_FPU_I2F && op_type != `INST_FPU_U2F) begin
