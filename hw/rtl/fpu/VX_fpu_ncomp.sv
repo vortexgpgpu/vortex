@@ -78,8 +78,9 @@ module VX_fpu_ncomp #(
             .clss_o (b_fclass[i])
         );
 
-        assign a_smaller[i] = $signed(dataa[i]) < $signed(datab[i]);
-        assign ab_equal[i]  = (dataa[i] == datab[i]) | (a_fclass[i].is_zero & b_fclass[i].is_zero);
+        assign a_smaller[i] = (dataa[i] < datab[i]) ^ (a_sign[i] || b_sign[i]);
+        assign ab_equal[i]  = (dataa[i] == datab[i]) 
+                           || (a_fclass[i].is_zero && b_fclass[i].is_zero); // +0 == -0
     end  
 
     // Pipeline stage0
@@ -111,95 +112,95 @@ module VX_fpu_ncomp #(
     ); 
 
     // FCLASS
-    reg [NUM_LANES-1:0][31:0] fclass_mask;  // generate a 10-bit mask for integer reg
+    reg [NUM_LANES-1:0][31:0] fclass_mask_s0;  // generate a 10-bit mask for integer reg
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         always @(*) begin 
             if (a_fclass_s0[i].is_normal) begin
-                fclass_mask[i] = a_sign_s0[i] ? NEG_NORM : POS_NORM;
+                fclass_mask_s0[i] = a_sign_s0[i] ? NEG_NORM : POS_NORM;
             end 
             else if (a_fclass_s0[i].is_inf) begin
-                fclass_mask[i] = a_sign_s0[i] ? NEG_INF : POS_INF;
+                fclass_mask_s0[i] = a_sign_s0[i] ? NEG_INF : POS_INF;
             end 
             else if (a_fclass_s0[i].is_zero) begin
-                fclass_mask[i] = a_sign_s0[i] ? NEG_ZERO : POS_ZERO;
+                fclass_mask_s0[i] = a_sign_s0[i] ? NEG_ZERO : POS_ZERO;
             end 
             else if (a_fclass_s0[i].is_subnormal) begin
-                fclass_mask[i] = a_sign_s0[i] ? NEG_SUBNORM : POS_SUBNORM;
+                fclass_mask_s0[i] = a_sign_s0[i] ? NEG_SUBNORM : POS_SUBNORM;
             end 
             else if (a_fclass_s0[i].is_nan) begin
-                fclass_mask[i] = {22'h0, a_fclass_s0[i].is_quiet, a_fclass_s0[i].is_signaling, 8'h0};
+                fclass_mask_s0[i] = {22'h0, a_fclass_s0[i].is_quiet, a_fclass_s0[i].is_signaling, 8'h0};
             end 
             else begin                     
-                fclass_mask[i] = QUT_NAN;
+                fclass_mask_s0[i] = QUT_NAN;
             end
         end
     end
 
     // Min/Max    
-    reg [NUM_LANES-1:0][31:0] fminmax_res;
+    reg [NUM_LANES-1:0][31:0] fminmax_res_s0;
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         always @(*) begin
             if (a_fclass_s0[i].is_nan && b_fclass_s0[i].is_nan)
-                fminmax_res[i] = {1'b0, 8'hff, 1'b1, 22'd0}; // canonical qNaN
+                fminmax_res_s0[i] = {1'b0, 8'hff, 1'b1, 22'd0}; // canonical qNaN
             else if (a_fclass_s0[i].is_nan) 
-                fminmax_res[i] = datab_s0[i];
+                fminmax_res_s0[i] = datab_s0[i];
             else if (b_fclass_s0[i].is_nan) 
-                fminmax_res[i] = dataa_s0[i];
+                fminmax_res_s0[i] = dataa_s0[i];
             else begin 
-                fminmax_res[i] = op_mod_s0[0] ? (a_smaller_s0[i] ? dataa_s0[i] : datab_s0[i]): // FMIN
-                                                (a_smaller_s0[i] ? datab_s0[i] : dataa_s0[i]); // FMAX
+                // FMIN, FMAX
+                fminmax_res_s0[i] = (op_mod_s0[0] ^ a_smaller_s0[i]) ? dataa_s0[i] : datab_s0[i];
             end
         end
     end
 
     // Sign injection    
-    reg [NUM_LANES-1:0][31:0] fsgnj_res;    // result of sign injection
+    reg [NUM_LANES-1:0][31:0] fsgnj_res_s0;    // result of sign injection
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         always @(*) begin
             case (op_mod_s0[1:0])
-                0: fsgnj_res[i] = { b_sign_s0[i], a_exponent_s0[i], a_mantissa_s0[i]};
-                1: fsgnj_res[i] = {~b_sign_s0[i], a_exponent_s0[i], a_mantissa_s0[i]};
-          default: fsgnj_res[i] = { a_sign_s0[i] ^ b_sign_s0[i], a_exponent_s0[i], a_mantissa_s0[i]};
+                0: fsgnj_res_s0[i] = { b_sign_s0[i], a_exponent_s0[i], a_mantissa_s0[i]};
+                1: fsgnj_res_s0[i] = {~b_sign_s0[i], a_exponent_s0[i], a_mantissa_s0[i]};
+          default: fsgnj_res_s0[i] = { a_sign_s0[i] ^ b_sign_s0[i], a_exponent_s0[i], a_mantissa_s0[i]};
             endcase
         end
     end
 
     // Comparison    
-    reg [NUM_LANES-1:0][31:0] fcmp_res;  // result of comparison
-    reg [NUM_LANES-1:0] fcmp_fflags_NV;  // comparison fflags
+    reg [NUM_LANES-1:0] fcmp_res_s0;        // result of comparison
+    reg [NUM_LANES-1:0] fcmp_fflags_NV_s0;  // comparison fflags
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         always @(*) begin
-            case (op_mod_s0[2:0])
-                `INST_FRM_RNE: begin // LE                    
+            case (op_mod_s0[1:0])
+                0: begin // LE                    
                     if (a_fclass_s0[i].is_nan || b_fclass_s0[i].is_nan) begin
-                        fcmp_res[i]       = 32'h0;
-                        fcmp_fflags_NV[i] = 1'b1;
+                        fcmp_res_s0[i]       = 0;
+                        fcmp_fflags_NV_s0[i] = 1;
                     end else begin
-                        fcmp_res[i] = {31'h0, (a_smaller_s0[i] | ab_equal_s0[i])};
-                        fcmp_fflags_NV[i] = 1'b0;
+                        fcmp_res_s0[i]       = (a_smaller_s0[i] | ab_equal_s0[i]);
+                        fcmp_fflags_NV_s0[i] = 0;
                     end
                 end
-                `INST_FRM_RTZ: begin // LS
+                1: begin // LT
                     if (a_fclass_s0[i].is_nan || b_fclass_s0[i].is_nan) begin
-                        fcmp_res[i]       = 32'h0;
-                        fcmp_fflags_NV[i] = 1'b1;
+                        fcmp_res_s0[i]       = 0;
+                        fcmp_fflags_NV_s0[i] = 1;
                     end else begin
-                        fcmp_res[i] = {31'h0, (a_smaller_s0[i] & ~ab_equal_s0[i])};
-                        fcmp_fflags_NV[i] = 1'b0;
+                        fcmp_res_s0[i]       = (a_smaller_s0[i] & ~ab_equal_s0[i]);
+                        fcmp_fflags_NV_s0[i] = 0;
                     end                    
                 end
-                `INST_FRM_RDN: begin // EQ
+                2: begin // EQ
                     if (a_fclass_s0[i].is_nan || b_fclass_s0[i].is_nan) begin
-                        fcmp_res[i]       = 32'h0;
-                        fcmp_fflags_NV[i] = a_fclass_s0[i].is_signaling | b_fclass_s0[i].is_signaling; 
+                        fcmp_res_s0[i]       = 0;
+                        fcmp_fflags_NV_s0[i] = a_fclass_s0[i].is_signaling | b_fclass_s0[i].is_signaling; 
                     end else begin
-                        fcmp_res[i] = {31'h0, ab_equal_s0[i]};
-                        fcmp_fflags_NV[i] = 1'b0;
+                        fcmp_res_s0[i]       = ab_equal_s0[i];
+                        fcmp_fflags_NV_s0[i] = 0;
                     end
                 end
                 default: begin
-                    fcmp_res[i]       = 'x;
-                    fcmp_fflags_NV[i] = 'x;                        
+                    fcmp_res_s0[i]       = 'x;
+                    fcmp_fflags_NV_s0[i] = 'x;                        
                 end
             endcase
         end
@@ -207,36 +208,37 @@ module VX_fpu_ncomp #(
 
     // outputs
 
-    reg [NUM_LANES-1:0][31:0] tmp_result;
-    reg [NUM_LANES-1:0] tmp_fflags_NV;
+    reg [NUM_LANES-1:0][31:0] result_s0;
+    reg [NUM_LANES-1:0] fflags_NV_s0;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
         always @(*) begin
             case (op_mod_s0[2:0])
                 0,1,2: begin
                     // SGNJ, CMP
-                    tmp_result[i] = op_mod_s0[3] ? fcmp_res[i] : fsgnj_res[i];
-                    tmp_fflags_NV[i] = fcmp_fflags_NV[i];
+                    result_s0[i] = op_mod_s0[3] ? 32'(fcmp_res_s0[i]) : fsgnj_res_s0[i];
+                    fflags_NV_s0[i] = fcmp_fflags_NV_s0[i];
                 end
                 3: begin
                     // CLASS
-                    tmp_result[i] = fclass_mask[i];
-                    tmp_fflags_NV[i] = 'x;
+                    result_s0[i] = fclass_mask_s0[i];
+                    fflags_NV_s0[i] = 'x;
                 end
                 4,5: begin
                     // FMV
-                    tmp_result[i] = dataa_s0[i];
-                    tmp_fflags_NV[i] = 'x;
+                    result_s0[i] = dataa_s0[i];
+                    fflags_NV_s0[i] = 'x;
                 end                
                 6,7: begin
                     // MIN/MAX
-                    tmp_result[i] = fminmax_res[i];
-                    tmp_fflags_NV[i] = a_fclass_s0[i].is_signaling | b_fclass_s0[i].is_signaling;
+                    result_s0[i] = fminmax_res_s0[i];
+                    fflags_NV_s0[i] = a_fclass_s0[i].is_signaling | b_fclass_s0[i].is_signaling;
                 end
             endcase
         end
     end
 
+    // only MIN/MAX and CMP return status flags
     wire has_fflags_s0 = (op_mod_s0[2:0] >= 6) || op_mod_s0[3];
 
     assign stall = ~ready_out && valid_out;
@@ -250,8 +252,8 @@ module VX_fpu_ncomp #(
         .clk      (clk),
         .reset    (reset),
         .enable   (!stall),
-        .data_in  ({valid_in_s0, tag_in_s0, tmp_result, has_fflags_s0, tmp_fflags_NV}),
-        .data_out ({valid_out,   tag_out,   result,     has_fflags,    fflags_NV})
+        .data_in  ({valid_in_s0, tag_in_s0, result_s0, has_fflags_s0, fflags_NV_s0}),
+        .data_out ({valid_out,   tag_out,   result,    has_fflags,    fflags_NV})
     );
 
     assign ready_in = ~stall;

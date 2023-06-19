@@ -74,7 +74,7 @@ module VX_fpu_sqrt #(
             .m_axis_result_tdata (result[i][31:0]),
             .m_axis_result_tuser (tuser)
         );
-                        // NV,  DZ,   OF,   UF,   NX
+                           // NV,  DZ,   OF,   UF,   NX
         assign fflags[i] = {tuser, 1'b0, 1'b0, 1'b0, 1'b0};
     end
 
