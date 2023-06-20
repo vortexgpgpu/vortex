@@ -58,12 +58,12 @@ module VX_csr_unit #(
     localparam NW_WIDTH   = `UP(`NW_BITS);
 
     
-    reg [`NUM_THREADS-1:0][`XLEN-1:0]      csr_read_data;
-    reg  [`XLEN-1:0]                       csr_write_data;
-    wire [`XLEN-1:0]                       csr_read_data_ro, csr_read_data_rw;
-    wire [`XLEN-1:0]                       csr_req_data;
-    reg                                    csr_rd_enable;
-    wire                                   csr_wr_enable;    
+    reg [`NUM_THREADS-1:0][31:0] csr_read_data;
+    reg  [31:0]                 csr_write_data;
+    wire [31:0]                 csr_read_data_ro, csr_read_data_rw;
+    wire [31:0]                 csr_req_data;
+    reg                         csr_rd_enable;
+    wire                        csr_wr_enable;
 
     `UNUSED_VAR (gpu_pending)
     wire csr_access_pending = (0    
@@ -177,24 +177,24 @@ module VX_csr_unit #(
         .read_wid       (csr_req_if.wid),    
         .read_tmask     (csr_req_if.tmask),    
         .read_addr      (csr_req_if.addr),
-        .read_data_ro   (csr_read_data_ro[`XLEN-1:0]),
-        .read_data_rw   (csr_read_data_rw[`XLEN-1:0]),
+        .read_data_ro   (csr_read_data_ro[31:0]),
+        .read_data_rw   (csr_read_data_rw[31:0]),
 
         .write_enable   (csr_req_valid && csr_wr_enable),       
         .write_uuid     (csr_req_if.uuid),
         .write_wid      (csr_req_if.wid),
         .write_addr     (csr_req_if.addr),        
-        .write_data     (csr_write_data[`XLEN-1:0])
+        .write_data     (csr_write_data[31:0])
     );
 
     // CSR read
 
-    wire [`NUM_THREADS-1:0][`XLEN-1:0] wtid, ltid, gtid;
+    wire [`NUM_THREADS-1:0][31:0] wtid, ltid, gtid;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign wtid[i] = `XLEN'(i);
-        assign ltid[i] = (`XLEN'(csr_req_if.wid) << `NT_BITS) + i;
-        assign gtid[i] = `XLEN'((`XLEN'(CORE_ID) << (`NW_BITS + `NT_BITS)) + (`XLEN'(csr_req_if.wid) << `NT_BITS) + i);
+        assign wtid[i] = 32'(i);
+        assign ltid[i] = (32'(csr_req_if.wid) << `NT_BITS) + i;
+        assign gtid[i] = 32'((CORE_ID << (`NW_BITS + `NT_BITS)) + (32'(csr_req_if.wid) << `NT_BITS) + i);
     end  
 
     always @(*) begin
@@ -217,7 +217,7 @@ module VX_csr_unit #(
 
     // CSR write
 
-    assign csr_req_data = csr_req_if.use_imm ? `XLEN'(csr_req_if.imm) : csr_req_if.rs1_data[csr_req_if.tid];
+    assign csr_req_data = csr_req_if.use_imm ? 32'(csr_req_if.imm) : csr_req_if.rs1_data[csr_req_if.tid];
 
     assign csr_wr_enable = (csr_write_enable || (csr_req_data != 0))
                 `ifdef EXT_ROP_ENABLE
@@ -241,13 +241,10 @@ module VX_csr_unit #(
     end
 
     // send response
-    wire [`NUM_THREADS-1:0][`XLEN-1:0]   csr_commit_data;
-    for(genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign csr_commit_if.data[i] = `XLEN'(csr_commit_data[i]);
-    end
+    wire [`NUM_THREADS-1:0][31:0] csr_commit_data;
 
     VX_skid_buffer #(
-        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS + 1 + `NUM_THREADS * `XLEN)
+        .DATAW (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS + 1 + `NUM_THREADS * 32)
     ) rsp_sbuf (
         .clk       (clk),
         .reset     (reset),
@@ -258,8 +255,12 @@ module VX_csr_unit #(
         .valid_out (csr_commit_if.valid),
         .ready_out (csr_commit_if.ready)
     );
+    
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+        assign csr_commit_if.data[i] = `XLEN'(csr_commit_data[i]);
+    end
 
-    assign csr_commit_if.eop = 1'b1;    
+    assign csr_commit_if.eop = 1'b1;
 
     // pending request
     reg req_pending_r;

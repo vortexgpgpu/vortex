@@ -22,20 +22,27 @@ module VX_alu_unit #(
     localparam RSP_ARB_SIZE   = 1 + `EXT_M_ENABLED;
     localparam SHIFT_IMM_BITS = `CLOG2(`XLEN);
 
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] add_result;
+    wire [`NUM_THREADS-1:0][`XLEN:0]   sub_result; // +1 bit for branch compare
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] shr_result;
+    reg  [`NUM_THREADS-1:0][`XLEN-1:0] msc_result;
+    
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] add_result_w;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] sub_result_w;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] shr_result_w;
+    reg  [`NUM_THREADS-1:0][`XLEN-1:0] msc_result_w;
+
     reg [`NUM_THREADS-1:0][`XLEN-1:0] alu_result;
-    reg [`NUM_THREADS-1:0][`XLEN-1:0] add_result;
-    reg [`NUM_THREADS-1:0][`XLEN:0]   sub_result; // +1 bit for branch compare
-    reg [`NUM_THREADS-1:0][`XLEN-1:0] shr_result;
-    reg [`NUM_THREADS-1:0][`XLEN-1:0] msc_result;
 
-    wire ready_in;    
+    wire ready_in;
 
-    `UNUSED_VAR (alu_req_if.op_mod)
 `ifdef XLEN_64
     wire is_alu_w = `INST_ALU_IS_W(alu_req_if.op_mod);
 `else
     wire is_alu_w = 0;
 `endif
+
+    `UNUSED_VAR (alu_req_if.op_mod)
 
     wire [`INST_ALU_BITS-1:0] alu_op = `INST_ALU_BITS'(alu_req_if.op_type);
     wire [`INST_BR_BITS-1:0]   br_op = `INST_BR_BITS'(alu_req_if.op_type);
@@ -52,46 +59,49 @@ module VX_alu_unit #(
     wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_in2_br  = (alu_req_if.use_imm && ~is_br_op) ? {`NUM_THREADS{alu_req_if.imm}} : alu_in2;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign add_result[i] = is_alu_w ? `XLEN'($signed(alu_in1[i][31:0] + alu_in2_imm[i][31:0])) : 
-                                          (alu_in1_PC[i] + alu_in2_imm[i]);
+        assign add_result[i] = alu_in1_PC[i] + alu_in2_imm[i];
+        assign add_result_w[i] = `XLEN'($signed(alu_in1[i][31:0] + alu_in2_imm[i][31:0]));
     end
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         wire [`XLEN:0] sub_in1 = {alu_signed & alu_in1[i][`XLEN-1], alu_in1[i]};
         wire [`XLEN:0] sub_in2 = {alu_signed & alu_in2_br[i][`XLEN-1], alu_in2_br[i]};
-        assign sub_result[i] = is_alu_w ? {1'b0, `XLEN'($signed(alu_in1[i][31:0] - alu_in2_imm[i][31:0]))} : 
-                                          (sub_in1 - sub_in2);
+        assign sub_result[i] = sub_in1 - sub_in2;
+        assign sub_result_w[i] = `XLEN'($signed(alu_in1[i][31:0] - alu_in2_imm[i][31:0]));
     end
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin    
-        wire [`XLEN:0] shr_in1 = {alu_signed && alu_in1[i][`XLEN-1], alu_in1[i]};
-        wire [32:0] shr_in1_w  = {alu_signed && alu_in1[i][31], alu_in1[i][31:0]};
-        wire [31:0] shr_res_w  = 32'($signed(shr_in1_w) >>> alu_in2_imm[i][4:0]);
-        assign shr_result[i] = is_alu_w ? `XLEN'($signed(shr_res_w)) :
-                                          `XLEN'($signed(shr_in1) >>> alu_in2_imm[i][SHIFT_IMM_BITS-1:0]);
+        wire [`XLEN:0] shr_in1 = {alu_signed && alu_in1[i][`XLEN-1], alu_in1[i]};        
+        assign shr_result[i] = `XLEN'($signed(shr_in1) >>> alu_in2_imm[i][SHIFT_IMM_BITS-1:0]);
+        wire [32:0] shr_in1_w = {alu_signed && alu_in1[i][31], alu_in1[i][31:0]};
+        wire [31:0] shr_res_w = 32'($signed(shr_in1_w) >>> alu_in2_imm[i][4:0]);
+        assign shr_result_w[i] = `XLEN'($signed(shr_res_w));
     end
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         always @(*) begin
-            case (alu_op)
-                `INST_ALU_AND: msc_result[i] = alu_in1[i] & alu_in2_imm[i];
-                `INST_ALU_OR:  msc_result[i] = alu_in1[i] | alu_in2_imm[i];
-                `INST_ALU_XOR: msc_result[i] = alu_in1[i] ^ alu_in2_imm[i];
-                `INST_ALU_SLL: msc_result[i] = is_alu_w ? `XLEN'($signed(alu_in1[i][31:0] << alu_in2_imm[i][4:0])) : 
-                                                          (alu_in1[i] << alu_in2_imm[i][SHIFT_IMM_BITS-1:0]);
-                default: msc_result[i] = 'x;
+            case (alu_op[1:0])
+                2'b00: msc_result[i] = alu_in1[i] & alu_in2_imm[i]; // AND
+                2'b01: msc_result[i] = alu_in1[i] | alu_in2_imm[i]; // OR
+                2'b10: msc_result[i] = alu_in1[i] ^ alu_in2_imm[i]; // XOR
+                2'b11: msc_result[i] = alu_in1[i] << alu_in2_imm[i][SHIFT_IMM_BITS-1:0]; // SLL
             endcase
         end
+        assign msc_result_w[i] = `XLEN'($signed(alu_in1[i][31:0] << alu_in2_imm[i][4:0]));
     end
             
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+        wire [`XLEN-1:0] slt_sub_result = is_sub_op ? sub_result[i][`XLEN-1:0] : `XLEN'(sub_result[i][`XLEN]);
         always @(*) begin
-            case (alu_op_class)                        
-                2'b00: alu_result[i] = add_result[i];                           // ADD, LUI, AUIPC, ADDIW, ADDW
-                2'b01: alu_result[i] = {{`XLEN-1{1'b0}}, sub_result[i][`XLEN]}; // SLTU, SLT
-                2'b10: alu_result[i] = is_sub_op ? sub_result[i][`XLEN-1:0]     // SUB, SUBW
-                                                 : shr_result[i];               // SRL, SRA, SRLI, SRAI, SRLW, SRAW, SRLIW, SRAIW
-                default: alu_result[i] = msc_result[i];                         // AND, OR, XOR, SLL, SLLI, SLLIW, SLLW
+            case ({is_alu_w, alu_op_class})                        
+                3'b000: alu_result[i] = add_result[i];      // ADD, LUI, AUIPC
+                3'b001: alu_result[i] = slt_sub_result;     // SUB, SLTU, SLT
+                3'b010: alu_result[i] = shr_result[i];      // SRL, SRA, SRLI, SRAI
+                3'b011: alu_result[i] = msc_result[i];      // AND, OR, XOR, SLL, SLLI
+                3'b100: alu_result[i] = add_result_w[i];    // ADDIW, ADDW
+                3'b101: alu_result[i] = sub_result_w[i];    // SUBW
+                3'b110: alu_result[i] = shr_result_w[i];    // SRLW, SRAW, SRLIW, SRAIW
+                3'b111: alu_result[i] = msc_result_w[i];    // SLLW
             endcase
         end       
     end
@@ -120,11 +130,6 @@ module VX_alu_unit #(
     wire [`NR_BITS-1:0]     alu_rd;   
     wire                    alu_wb; 
     wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_data;
-
-    wire [`NUM_THREADS-1:0][`XLEN-1:0] full_alu_data;
-    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
-        assign full_alu_data[i] =alu_data[i];
-    end
 
     wire [`INST_BR_BITS-1:0] br_op_r;
     wire [`XLEN-1:0] br_dest_r;
@@ -157,16 +162,16 @@ module VX_alu_unit #(
 
 `ifdef EXT_M_ENABLE
 
-    wire                          muldiv_valid_in;
-    wire                          muldiv_ready_in;
-    wire                          muldiv_valid_out;    
-    wire                          muldiv_ready_out;
-    wire [UUID_WIDTH-1:0]         muldiv_uuid;
-    wire [NW_WIDTH-1:0]           muldiv_wid;
-    wire [`NUM_THREADS-1:0]       muldiv_tmask;
-    wire [`XLEN-1:0]              muldiv_PC;
-    wire [`NR_BITS-1:0]           muldiv_rd;
-    wire                          muldiv_wb;
+    wire                    muldiv_valid_in;
+    wire                    muldiv_ready_in;
+    wire                    muldiv_valid_out;    
+    wire                    muldiv_ready_out;
+    wire [UUID_WIDTH-1:0]   muldiv_uuid;
+    wire [NW_WIDTH-1:0]     muldiv_wid;
+    wire [`NUM_THREADS-1:0] muldiv_tmask;
+    wire [`XLEN-1:0]        muldiv_PC;
+    wire [`NR_BITS-1:0]     muldiv_rd;
+    wire                    muldiv_wb;
     wire [`NUM_THREADS-1:0][`XLEN-1:0] muldiv_data;
 
     wire [`INST_M_BITS-1:0] muldiv_op = `INST_M_BITS'(alu_req_if.op_type);
@@ -239,7 +244,7 @@ module VX_alu_unit #(
         `endif
         }),
         .data_in   ({
-            {alu_uuid, alu_wid, alu_tmask, alu_PC, alu_rd, alu_wb, full_alu_data}
+            {alu_uuid, alu_wid, alu_tmask, alu_PC, alu_rd, alu_wb, alu_data}
         `ifdef EXT_M_ENABLE
             , {muldiv_uuid, muldiv_wid, muldiv_tmask, muldiv_PC, muldiv_rd, muldiv_wb, muldiv_data}
         `endif

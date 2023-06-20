@@ -75,6 +75,7 @@ CONFIGS_16c	:= -DNUM_CLUSTERS=1 -DNUM_CORES=16 -DL2_ENABLE
 CONFIGS_32c := -DNUM_CLUSTERS=2 -DNUM_CORES=16 -DL2_ENABLE
 CONFIGS_64c := -DNUM_CLUSTERS=4 -DNUM_CORES=16 -DL2_ENABLE
 CONFIGS += $(CONFIGS_$(NUM_CORES)c)
+CONFIGS += -DFPU_DSP
 
 # include paths
 FPU_INCLUDE = -I$(RTL_DIR)/fpu -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/include -I$(THIRD_PARTY_DIR)/fpnew/src/common_cells/src -I$(THIRD_PARTY_DIR)/fpnew/src/fpu_div_sqrt_mvp/hdl -I$(THIRD_PARTY_DIR)/fpnew/src
@@ -133,7 +134,7 @@ else
 endif
 
 # compilation flags
-CFLAGS += -DSYNTHESIS -DVIVADO -DFPU_DSP
+CFLAGS += -DSYNTHESIS -DVIVADO
 CFLAGS += $(CONFIGS)
 CFLAGS += $(RTL_INCLUDE)
 

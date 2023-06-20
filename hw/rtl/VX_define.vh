@@ -106,9 +106,9 @@
 `define INST_ALU_AUIPC       4'b0011
 `define INST_ALU_SLTU        4'b0100
 `define INST_ALU_SLT         4'b0101
+`define INST_ALU_SUB         4'b0111
 `define INST_ALU_SRL         4'b1000
 `define INST_ALU_SRA         4'b1001
-`define INST_ALU_SUB         4'b1011
 `define INST_ALU_AND         4'b1100
 `define INST_ALU_OR          4'b1101
 `define INST_ALU_XOR         4'b1110
