@@ -428,7 +428,7 @@ module VX_core_top #(
 `ifdef EXT_RASTER_ENABLE
     input wire                              raster_req_valid,  
     input raster_stamp_t [`NUM_THREADS-1:0] raster_req_stamps,
-    input wire                              raster_req_empty,    
+    input wire                              raster_req_done,    
     output wire                             raster_req_ready,
 `endif
 
@@ -568,7 +568,7 @@ module VX_core_top #(
 
     assign raster_req_if.valid = raster_req_valid;  
     assign raster_req_if.stamps = raster_req_stamps;
-    assign raster_req_if.empty=raster_req_empty;
+    assign raster_req_if.done = raster_req_done;
     assign raster_req_ready = raster_req_if.ready;
 `endif
 

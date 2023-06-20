@@ -250,7 +250,7 @@ CONFIGS="-DENABLE_DPI -DNUM_FPU_UNITS=2" ./ci/blackbox.sh --driver=rtlsim --app=
 CONFIGS="-DENABLE_DPI" AXI_BUS=1 ./ci/blackbox.sh --driver=rtlsim --cores=1 --app=demo
 
 # adjust l1 block size to match l2
-CONFIGS="-DENABLE_DPI DL1_LINE_SIZE=64" ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=io_addr --args="-n1"
+CONFIGS="-DENABLE_DPI -DL1_LINE_SIZE=64" ./ci/blackbox.sh --driver=rtlsim --cores=2 --l2cache --app=io_addr --args="-n1"
 
 # test cache banking
 CONFIGS="-DENABLE_DPI -DSMEM_NUM_BANKS=4 -DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemm

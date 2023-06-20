@@ -1,6 +1,6 @@
 `include "VX_platform.vh"
 
-//`TRACING_OFF
+`TRACING_OFF
 module VX_scope_tap #(     
     parameter SCOPE_ID  = 0,    // scope identifier
     parameter SCOPE_IDW = 8,    // scope identifier width
@@ -297,4 +297,4 @@ module VX_scope_tap #(
     assign bus_out = bus_out_r;
 
 endmodule
-//`TRACING_ON
+`TRACING_ON

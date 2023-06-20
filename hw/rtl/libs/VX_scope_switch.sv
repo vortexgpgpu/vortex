@@ -1,6 +1,6 @@
 `include "VX_platform.vh"
 
-//`TRACING_OFF
+`TRACING_OFF
 module VX_scope_switch #(     
     parameter N = 0
 ) ( 
@@ -47,4 +47,4 @@ module VX_scope_switch #(
     end
 
 endmodule
-//`TRACING_ON
+`TRACING_ON

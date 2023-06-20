@@ -6,19 +6,16 @@ module VX_serial_div #(
     parameter WIDTHD = 1,
     parameter WIDTHQ = 1,
     parameter WIDTHR = 1,
-    parameter LANES  = 1,
-    parameter TAGW   = 1
+    parameter LANES  = 1
 ) (
     input wire                      clk,
     input wire                      reset,
 
     input wire                      valid_in,
     output wire                     ready_in,
-    input wire [TAGW-1:0]           tag_in,
         
     input wire                      ready_out,
     output wire                     valid_out,
-    output wire [TAGW-1:0]          tag_out,
 
     input wire                      is_signed,
     input wire [LANES-1:0][WIDTHN-1:0] numer,
@@ -28,7 +25,7 @@ module VX_serial_div #(
     output wire [LANES-1:0][WIDTHR-1:0] remainder
 );
     localparam MIN_ND = (WIDTHN < WIDTHD) ? WIDTHN : WIDTHD;
-    localparam CNTRW = $clog2(WIDTHN+1);
+    localparam CNTRW = $clog2(WIDTHN);
 
     reg [LANES-1:0][WIDTHN + MIN_ND:0] working;
     reg [LANES-1:0][WIDTHD-1:0] denom_r;
@@ -40,12 +37,7 @@ module VX_serial_div #(
     reg [LANES-1:0] inv_quot, inv_rem;
 
     reg [CNTRW-1:0] cntr;
-    reg loaded;
-
-    reg [TAGW-1:0] tag_r;
-
-    wire push = valid_in && ready_in;
-    wire pop = valid_out && ready_out;
+    reg busy, done;
 
     for (genvar i = 0; i < LANES; ++i) begin
         wire negate_numer = is_signed && numer[i][WIDTHN-1];
@@ -54,51 +46,52 @@ module VX_serial_div #(
         assign denom_qual[i] = negate_denom ? -$signed(denom[i]) : denom[i];
         assign sub_result[i] = working[i][WIDTHN + MIN_ND : WIDTHN] - denom_r[i];
     end
-    
-    wire busy = (cntr != 0);
+
+    wire push = valid_in && ready_in;
+    wire pop = valid_out && ready_out;
     
     always @(posedge clk) begin
         if (reset) begin
-            cntr   <= '0;
-            loaded <= 0;
+            busy  <= 0;
+            done  <= 0;
         end else begin
-            if (push) begin                
-                cntr   <= WIDTHN;
-                loaded <= 1;
-            end else if (busy) begin
-                cntr <= cntr - CNTRW'(1);
+            if (push) begin
+                busy <= 1;
             end
-            if (pop) begin
-                loaded <= 0;
+            if (busy && cntr == 0) begin
+                busy <= 0;
+                done <= 1;
+            end
+            if (pop) begin                
+                done <= 0;
             end
         end
-
+        cntr <= cntr - CNTRW'(1);
         if (push) begin
-            for (integer i = 0; i < LANES; ++i) begin
-                working[i]  <= {{WIDTHD{1'b0}}, numer_qual[i], 1'b0};
-                denom_r[i]  <= denom_qual[i];
-                inv_quot[i] <= (denom[i] != 0) && is_signed && (numer[i][31] ^ denom[i][31]);
-                inv_rem[i]  <= is_signed && numer[i][31];
-            end
-            tag_r <= tag_in;
-        end else if (busy) begin                    
-            for (integer i = 0; i < LANES; ++i) begin
-                working[i] <= sub_result[i][WIDTHD] ? {working[i][WIDTHN+MIN_ND-1:0], 1'b0} :
-                                {sub_result[i][WIDTHD-1:0], working[i][WIDTHN-1:0], 1'b1};
-            end
+            cntr <= CNTRW'(WIDTHN-1);
         end
     end
 
     for (genvar i = 0; i < LANES; ++i) begin
+        always @(posedge clk) begin
+            if (push) begin
+                working[i]  <= {{WIDTHD{1'b0}}, numer_qual[i], 1'b0};
+                denom_r[i]  <= denom_qual[i];
+                inv_quot[i] <= (denom[i] != 0) && is_signed && (numer[i][31] ^ denom[i][31]);
+                inv_rem[i]  <= is_signed && numer[i][31];
+            end else if (busy) begin                    
+                working[i]  <= sub_result[i][WIDTHD] ? {working[i][WIDTHN+MIN_ND-1:0], 1'b0} :
+                                                       {sub_result[i][WIDTHD-1:0], working[i][WIDTHN-1:0], 1'b1};
+            end
+        end
         wire [WIDTHQ-1:0] q = working[i][WIDTHQ-1:0];
         wire [WIDTHR-1:0] r = working[i][WIDTHN+WIDTHR:WIDTHN+1];
         assign quotient[i]  = inv_quot[i] ? -$signed(q) : q;
         assign remainder[i] = inv_rem[i] ? -$signed(r) : r;
     end
     
-    assign ready_in  = ~loaded;
-    assign tag_out   = tag_r;
-    assign valid_out = loaded && ~busy;
+    assign ready_in  = ~busy && ~done;
+    assign valid_out = done;
 
 endmodule
 `TRACING_ON

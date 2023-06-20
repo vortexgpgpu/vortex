@@ -33,6 +33,7 @@ module VX_muldiv (
 );
     localparam UUID_WIDTH = `UP(`UUID_BITS);
     localparam NW_WIDTH   = `UP(`NW_BITS);
+    localparam TAGW = UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS + 1;
 
     `UNUSED_VAR (alu_op)
     `UNUSED_VAR (op_mod)
@@ -57,8 +58,7 @@ module VX_muldiv (
 
     wire mul_valid_out;
     wire mul_valid_in = valid_in && is_mulx_op;    
-    wire mul_ready_in = ~stall_out || ~mul_valid_out;
-
+    
     wire is_mulh_in      = `INST_M_IS_MULH(alu_op);
     wire is_signed_mul_a = `INST_M_SIGNED_A(alu_op);
     wire is_signed_mul_b = is_signed_op;
@@ -67,6 +67,7 @@ module VX_muldiv (
 
     wire [`NUM_THREADS-1:0][`XLEN-1:0] mul_result_tmp;  
 
+    wire mul_ready_in = ~stall_out || ~mul_valid_out;
     wire mul_fire_in = mul_valid_in && mul_ready_in;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
@@ -97,14 +98,54 @@ module VX_muldiv (
     wire is_mulh_out;
     wire is_mul_w_out;
 
+`ifdef XLEN_64
+
+    wire [`NUM_THREADS-1:0][`XLEN:0] mul_in1;
+    wire [`NUM_THREADS-1:0][`XLEN:0] mul_in2;
+
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+        assign mul_in1[i] = is_alu_w ? {{(`XLEN-31){alu_in1[i][31]}}, alu_in1[i][31:0]} : {is_signed_mul_a && alu_in1[i][`XLEN-1], alu_in1[i]};
+        assign mul_in2[i] = is_alu_w ? {{(`XLEN-31){alu_in2[i][31]}}, alu_in2[i][31:0]} : {is_signed_mul_b && alu_in2[i][`XLEN-1], alu_in2[i]};
+    end
+
+    wire mul_ready_in;
+    wire mul_ready_out = ~stall_out;
+
+    VX_serial_mul #(
+        .A_WIDTH (`XLEN+1),
+        .LANES   (`NUM_THREADS),
+        .SIGNED  (1)
+    ) multiplier (
+        .clk       (clk),
+        .reset     (reset),            
+        .valid_in  (mul_valid_in),
+        .ready_in  (mul_ready_in),        
+        .valid_out (mul_valid_out),
+        .ready_out (mul_ready_out),
+        .dataa     (mul_in1),
+        .datab     (mul_in2),
+        .result    (mul_result_tmp)
+    );
+
+    reg [TAGW+2-1:0] mul_tag_r;
+    always @(posedge clk) begin
+        if (mul_valid_in && mul_ready_in) begin
+            mul_tag_r <= {uuid_in, wid_in, tmask_in, PC_in, rd_in, wb_in, is_mulh_in, is_alu_w};
+        end
+    end
+    
+    assign {mul_uuid_out, mul_wid_out, mul_tmask_out,  mul_PC_out, mul_rd_out, mul_wb_out, is_mulh_out, is_mul_w_out} = mul_tag_r;
+
+`else
+
+    wire mul_ready_in = ~stall_out || ~mul_valid_out;
+
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
         wire [`XLEN:0] mul_in1 = is_alu_w ? {{(`XLEN-31){alu_in1[i][31]}}, alu_in1[i][31:0]} : {is_signed_mul_a && alu_in1[i][`XLEN-1], alu_in1[i]};
         wire [`XLEN:0] mul_in2 = is_alu_w ? {{(`XLEN-31){alu_in2[i][31]}}, alu_in2[i][31:0]} : {is_signed_mul_b && alu_in2[i][`XLEN-1], alu_in2[i]};
     
         VX_multiplier #(
             .A_WIDTH (`XLEN+1),
-            .B_WIDTH (`XLEN+1),
-            .R_WIDTH (2*(`XLEN+1)),
             .SIGNED  (1),
             .LATENCY (`LATENCY_IMUL)
         ) multiplier (
@@ -117,7 +158,7 @@ module VX_muldiv (
     end
 
     VX_shift_register #(
-        .DATAW  (1 + UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS + 1 + 1 + 1),
+        .DATAW  (1 + TAGW + 1 + 1),
         .DEPTH  (`LATENCY_IMUL),
         .RESETW (1)
     ) mul_shift_reg (
@@ -127,6 +168,8 @@ module VX_muldiv (
         .data_in  ({mul_valid_in,  uuid_in,      wid_in,      tmask_in,       PC_in,      rd_in,      wb_in,      is_mulh_in,  is_alu_w}),
         .data_out ({mul_valid_out, mul_uuid_out, mul_wid_out, mul_tmask_out,  mul_PC_out, mul_rd_out, mul_wb_out, is_mulh_out, is_mul_w_out})
     );
+
+`endif
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
     `ifdef XLEN_64
@@ -181,7 +224,7 @@ module VX_muldiv (
     end
 
     VX_shift_register #(
-        .DATAW  (1 + UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS + 1 + (`NUM_THREADS * `XLEN)),
+        .DATAW  (1 + TAGW + (`NUM_THREADS * `XLEN)),
         .DEPTH  (`LATENCY_IMUL),
         .RESETW (1)
     ) div_shift_reg (
@@ -205,19 +248,16 @@ module VX_muldiv (
         .WIDTHD (`XLEN),
         .WIDTHQ (`XLEN),
         .WIDTHR (`XLEN),
-        .LANES  (`NUM_THREADS),
-        .TAGW   (UUID_WIDTH + NW_WIDTH + `NUM_THREADS + `XLEN + `NR_BITS + 1 + 1 + 1)
+        .LANES  (`NUM_THREADS)
     ) divide (
         .clk       (clk),
         .reset     (reset),
         
         .valid_in  (div_valid_in),
         .ready_in  (div_ready_in),
-        .tag_in    ({uuid_in, wid_in, tmask_in, PC_in, rd_in, wb_in, is_rem_op, is_alu_w}),
 
-        .ready_out (div_ready_out),
         .valid_out (div_valid_out),
-        .tag_out   ({div_uuid_out, div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, is_rem_op_out, is_div_w_out}),
+        .ready_out (div_ready_out),
 
         .is_signed (is_signed_op),        
         .numer     (div_in1),
@@ -226,6 +266,15 @@ module VX_muldiv (
         .quotient  (div_quotient),
         .remainder (div_remainder)        
     );
+
+    reg [TAGW+2-1:0] div_tag_r;
+    always @(posedge clk) begin
+        if (div_valid_in && div_ready_in) begin
+            div_tag_r <= {uuid_in, wid_in, tmask_in, PC_in, rd_in, wb_in, is_rem_op, is_alu_w};
+        end
+    end
+    
+    assign {div_uuid_out, div_wid_out, div_tmask_out, div_PC_out, div_rd_out, div_wb_out, is_rem_op_out, is_div_w_out} = div_tag_r;
 
     for (genvar i = 0; i < `NUM_THREADS; ++i) begin
     `ifdef XLEN_64
@@ -236,6 +285,7 @@ module VX_muldiv (
         `UNUSED_VAR (is_div_w_out)
     `endif
     end
+
 `endif
 
     ///////////////////////////////////////////////////////////////////////////
