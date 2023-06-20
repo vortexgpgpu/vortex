@@ -107,15 +107,18 @@ module VX_alu_unit #(
     end
 
     // branch
-    
-    wire is_jal = is_br_op && (br_op == `INST_BR_JAL || br_op == `INST_BR_JALR);
-    wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_jal_result = is_jal ? {`NUM_THREADS{`XLEN'(alu_req_if.next_PC)}} : alu_result; 
 
     wire [`XLEN-1:0] br_dest  = add_result[alu_req_if.tid][`XLEN-1:0];
     wire [`XLEN:0] cmp_result = sub_result[alu_req_if.tid][`XLEN:0];
     
     wire is_less  = cmp_result[`XLEN];
-    wire is_equal = ~(| cmp_result[`XLEN-1:0]);        
+    wire is_equal = ~(| cmp_result[`XLEN-1:0]);
+    wire is_br_static = `INST_BR_STATIC(br_op);
+    
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] alu_jal_result;
+    for (genvar i = 0; i < `NUM_THREADS; ++i) begin
+        assign alu_jal_result[i] = (is_br_op && is_br_static) ? alu_req_if.next_PC : alu_result[i]; 
+    end   
 
     // output
 
@@ -151,12 +154,12 @@ module VX_alu_unit #(
     );
 
     `UNUSED_VAR (br_op_r)
-    wire br_neg    = `INST_BR_NEG(br_op_r);
-    wire br_less   = `INST_BR_LESS(br_op_r);
-    wire br_static = `INST_BR_STATIC(br_op_r);
+    wire is_br_neg_r    = `INST_BR_NEG(br_op_r);
+    wire is_br_less_r   = `INST_BR_LESS(br_op_r);
+    wire is_br_static_r = `INST_BR_STATIC(br_op_r);
 
     assign branch_ctl_if.valid = alu_valid_out && alu_ready_out && is_br_op_r;
-    assign branch_ctl_if.taken = ((br_less ? is_less_r : is_equal_r) ^ br_neg) | br_static;
+    assign branch_ctl_if.taken = ((is_br_less_r ? is_less_r : is_equal_r) ^ is_br_neg_r) | is_br_static_r;
     assign branch_ctl_if.wid   = alu_wid;
     assign branch_ctl_if.dest  = br_dest_r[`XLEN-1:0];
 

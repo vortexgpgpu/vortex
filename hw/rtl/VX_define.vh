@@ -150,11 +150,11 @@
 `define INST_M_REM           3'b110
 `define INST_M_REMU          3'b111
 `define INST_M_BITS          3
+`define INST_M_SIGNED(op)    (~op[0])
 `define INST_M_IS_MULX(op)   (~op[2])
 `define INST_M_IS_MULH(op)   (op[1:0] != 0)
 `define INST_M_SIGNED_A(op)  (op[1:0] != 1)
 `define INST_M_IS_REM(op)    op[1]
-`define INST_M_SIGNED(op)    (~op[0])
 
 `define INST_FMT_B           3'b000
 `define INST_FMT_H           3'b001
