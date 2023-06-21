@@ -67,7 +67,7 @@ module VX_socket #(
     output wire             busy
 );
 
-    VX_gbar_if per_core_gbar_if[`NUM_CORES]();
+    VX_gbar_if per_core_gbar_if[`SOCKET_SIZE]();
 
     `RESET_RELAY (gbar_arb_reset, reset);
 
