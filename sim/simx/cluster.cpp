@@ -12,7 +12,8 @@ Cluster::Cluster(const SimContext& ctx,
   , mem_req_port(this)
   , mem_rsp_port(this)
   , cluster_id_(cluster_id)
-  , cores_(num_cores)
+  , cores_(num_cores)  
+  , barriers_(arch.num_barriers(), 0)
   , raster_units_(NUM_RASTER_UNITS)
   , rop_units_(NUM_ROP_UNITS)
   , tex_units_(NUM_TEX_UNITS)
@@ -20,7 +21,6 @@ Cluster::Cluster(const SimContext& ctx,
   , processor_(processor)
 {
   char sname[100];
-
   snprintf(sname, 100, "cluster%d-l2cache", cluster_id);
   l2cache_ = CacheSim::Create(sname, CacheSim::Config{
     !L2_ENABLED,
@@ -257,8 +257,10 @@ Cluster::~Cluster() {
   //--
 }
 
-void Cluster::reset() {
-  //--
+void Cluster::reset() {  
+  for (auto& barrier : barriers_) {
+    barrier.reset();
+  }
 }
 
 void Cluster::tick() {
@@ -301,6 +303,26 @@ bool Cluster::check_exit(Word* exitcode, int reg) const {
   }
   *exitcode = exitcode_;
   return done;
+}
+
+void Cluster::barrier(uint32_t bar_id, uint32_t count, uint32_t core_id) {
+  auto& barrier = barriers_.at(bar_id);
+
+  uint32_t local_core_id = core_id % cores_.size();
+  barrier.set(local_core_id);
+
+  DP(3, "*** Suspend core #" << core_id << " at barrier #" << bar_id);
+
+  if (barrier.count() == (size_t)count) {
+      // resume all suspended cores
+      for (uint32_t i = 0; i < cores_.size(); ++i) {
+        if (barrier.test(i)) {
+          DP(3, "*** Resume core #" << i << " at barrier #" << bar_id);
+          cores_.at(i)->resume();
+        }
+      }
+      barrier.reset();
+    }
 }
 
 ProcessorImpl* Cluster::processor() const {

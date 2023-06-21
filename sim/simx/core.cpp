@@ -326,7 +326,7 @@ void Core::barrier(uint32_t bar_id, uint32_t count, uint32_t warp_id) {
   if (is_global) {
     // global barrier handling
     if (barrier.count() == active_warps_.count()) {
-      cluster_->processor()->barrier(bar_idx, count, core_id_);
+      cluster_->barrier(bar_idx, count, core_id_);
       barrier.reset();
     }    
   } else {

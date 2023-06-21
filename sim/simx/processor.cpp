@@ -6,7 +6,6 @@ using namespace vortex;
 ProcessorImpl::ProcessorImpl(const Arch& arch) 
   : arch_(arch)
   , clusters_(NUM_CLUSTERS)
-  , barriers_(arch.num_barriers(), 0)
 {
   SimPlatform::instance().initialize();
 
@@ -100,33 +99,10 @@ int ProcessorImpl::run() {
 }
  
 void ProcessorImpl::reset() {
-  for (auto& barrier : barriers_) {
-    barrier.reset();
-  }
   perf_mem_reads_ = 0;
   perf_mem_writes_ = 0;
   perf_mem_latency_ = 0;
   perf_mem_pending_reads_ = 0;
-}
-
-void ProcessorImpl::barrier(uint32_t bar_id, uint32_t count, uint32_t core_id) {
-  auto& barrier = barriers_.at(bar_id);
-  barrier.set(core_id);
-  DP(3, "*** Suspend core #" << core_id << " at barrier #" << bar_id);
-
-  if (barrier.count() == (size_t)count) {
-      // resume suspended cores
-      uint32_t cores_per_cluster = arch_.num_cores() / NUM_CLUSTERS;
-      for (uint32_t i = 0; i < arch_.num_cores(); ++i) {
-        if (barrier.test(i)) {
-          DP(3, "*** Resume core #" << i << " at barrier #" << bar_id);
-          uint32_t core_idx = i % cores_per_cluster;
-          uint32_t cluster_idx = i / cores_per_cluster;
-          clusters_.at(cluster_idx)->core(core_idx)->resume();
-        }
-      }
-      barrier.reset();
-    }
 }
 
 void ProcessorImpl::write_dcr(uint32_t addr, uint32_t value) {

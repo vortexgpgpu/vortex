@@ -31,8 +31,6 @@ public:
 
   int run();
 
-  void barrier(uint32_t bar_id, uint32_t count, uint32_t core_id);
-
   void write_dcr(uint32_t addr, uint32_t value);
 
   ProcessorImpl::PerfStats perf_stats() const;
@@ -46,7 +44,6 @@ private:
   DCRS dcrs_;
   MemSim::Ptr   memsim_;
   CacheSim::Ptr l3cache_;
-  std::vector<CoreMask> barriers_;
   uint64_t perf_mem_reads_;
   uint64_t perf_mem_writes_;
   uint64_t perf_mem_latency_;

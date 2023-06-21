@@ -64,19 +64,18 @@ public:
 
   bool running() const;
 
-  bool check_exit(Word* exitcode, int reg) const;
+  bool check_exit(Word* exitcode, int reg) const;  
+
+  void barrier(uint32_t bar_id, uint32_t count, uint32_t core_id);
 
   ProcessorImpl* processor() const;
 
   Cluster::PerfStats perf_stats() const;
-
-  auto& core(uint32_t index) {
-    return cores_.at(index);
-  }
   
 private:
   uint32_t                     cluster_id_;  
-  std::vector<Core::Ptr>       cores_;
+  std::vector<Core::Ptr>       cores_;  
+  std::vector<CoreMask>        barriers_;
   std::vector<RasterUnit::Ptr> raster_units_;
   std::vector<RopUnit::Ptr>    rop_units_;
   std::vector<TexUnit::Ptr>    tex_units_;

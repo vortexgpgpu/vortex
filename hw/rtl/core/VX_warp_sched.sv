@@ -215,7 +215,7 @@ module VX_warp_sched #(
     assign gbar_if.req_valid   = gbar_req_valid;
     assign gbar_if.req_id      = gbar_req_id;
     assign gbar_if.req_size_m1 = gbar_req_size_m1;
-    assign gbar_if.req_core_id = NC_WIDTH'(CORE_ID);
+    assign gbar_if.req_core_id = NC_WIDTH'(CORE_ID % `NUM_CORES);
 
     // split/join stack management    
 
