@@ -27,7 +27,8 @@ typedef struct packed {
 typedef struct packed {
     logic                   valid;
     logic [`NB_BITS-1:0]    id;
-    logic [`UP(`NW_BITS)-1:0] size_m1;
+    logic                   is_global;
+    logic [`MAX(`UP(`NW_BITS), `UP(`NC_BITS))-1:0] size_m1;
 } gpu_barrier_t;
 
 typedef struct packed {

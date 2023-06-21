@@ -23,10 +23,11 @@ module VX_fetch #(
     VX_wrelease_if.slave    wrelease_if,
     VX_join_if.slave        join_if,
     VX_branch_ctl_if.slave  branch_ctl_if,
-    VX_warp_ctl_if.slave    warp_ctl_if,
-
+    VX_warp_ctl_if.slave    warp_ctl_if,    
+    
     // outputs
     VX_ifetch_rsp_if.master ifetch_rsp_if,
+    VX_gbar_if.master       gbar_if,
 
     // csr interface
     VX_fetch_to_csr_if.master fetch_to_csr_if,
@@ -54,6 +55,7 @@ module VX_fetch #(
         .branch_ctl_if  (branch_ctl_if),
 
         .ifetch_req_if  (ifetch_req_if),
+        .gbar_if        (gbar_if),
 
         .fetch_to_csr_if(fetch_to_csr_if),
 

@@ -75,6 +75,8 @@ module VX_core #(
     VX_rop_req_if.master    rop_req_if,
 `endif
 
+    VX_gbar_if.master       gbar_if,
+
     // simulation helper signals
     output wire             sim_ebreak,
     output wire [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value,
@@ -142,6 +144,7 @@ module VX_core #(
         .wrelease_if    (wrelease_if),
         .join_if        (join_if),        
         .warp_ctl_if    (warp_ctl_if),
+        .gbar_if        (gbar_if),
         .branch_ctl_if  (branch_ctl_if),
         .ifetch_rsp_if  (ifetch_rsp_if),
         .fetch_to_csr_if(fetch_to_csr_if),

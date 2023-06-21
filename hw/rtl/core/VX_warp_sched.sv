@@ -19,6 +19,7 @@ module VX_warp_sched #(
     VX_branch_ctl_if.slave  branch_ctl_if,
 
     VX_ifetch_req_if.master ifetch_req_if,
+    VX_gbar_if.master       gbar_if,
 
     VX_fetch_to_csr_if.master fetch_to_csr_if,
 
@@ -30,21 +31,27 @@ module VX_warp_sched #(
     `UNUSED_PARAM (CORE_ID)
 
     localparam UUID_WIDTH = `UP(`UUID_BITS);
+    localparam NC_WIDTH   = `UP(`NC_BITS);
     localparam NW_WIDTH   = `UP(`NW_BITS);
 
     wire                    join_else;
     wire [`XLEN-1:0]        join_pc;
     wire [`NUM_THREADS-1:0] join_tmask;
 
-    reg [`NUM_WARPS-1:0] active_warps, active_warps_n;   // real active warps (updated when a warp is activated or disabled)
-    reg [`NUM_WARPS-1:0] stalled_warps;  // asserted when a branch/gpgpu instructions are issued
+    reg [`NUM_WARPS-1:0] active_warps, active_warps_n; // updated when a warp is activated or disabled
+    reg [`NUM_WARPS-1:0] stalled_warps;  // set when branch/gpgpu instructions are issued
     
     reg [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks;
     reg [`NUM_WARPS-1:0][`XLEN-1:0] warp_pcs;
 
     // barriers
-    reg [`NUM_BARRIERS-1:0][`NUM_WARPS-1:0] barrier_masks; // warps waiting on barrier
-    wire reached_barrier_limit; // the expected number of warps reached the barrier
+    reg [`NUM_BARRIERS-1:0][`NUM_WARPS-1:0] barrier_masks;
+    wire [$clog2(`NUM_WARPS+1)-1:0] active_barrier_count;
+    wire [`NUM_WARPS-1:0] curr_barrier_mask;
+    reg [`NUM_WARPS-1:0] curr_barrier_mask_n;
+    reg gbar_req_valid;
+    reg [`NB_BITS-1:0] gbar_req_id;
+    reg [NC_WIDTH-1:0] gbar_req_size_m1;
     
     // wspawn
     reg [`XLEN-1:0]         wspawn_pc;
@@ -74,7 +81,7 @@ module VX_warp_sched #(
         end
         if (warp_ctl_if.valid && warp_ctl_if.tmc.valid) begin
             active_warps_n[warp_ctl_if.wid] = tmc_active;
-        end        
+        end
     end
 
     `UNUSED_VAR (base_dcrs)
@@ -82,6 +89,7 @@ module VX_warp_sched #(
     always @(posedge clk) begin
         if (reset) begin
             barrier_masks   <= '0;
+            gbar_req_valid  <= 0;
             use_wspawn      <= '0;
             stalled_warps   <= '0;
             warp_pcs        <= '0;
@@ -108,20 +116,34 @@ module VX_warp_sched #(
                 wspawn_pc  <= warp_ctl_if.wspawn.pc;
             end
 
+            // barrier handling
             if (warp_ctl_if.valid && warp_ctl_if.barrier.valid) begin
                 stalled_warps[warp_ctl_if.wid] <= 0;
-                if (reached_barrier_limit) begin
+                if (warp_ctl_if.barrier.is_global 
+                 && (curr_barrier_mask_n == active_warps)) begin
+                    gbar_req_valid <= 1;
+                    gbar_req_id <= warp_ctl_if.barrier.id;
+                    gbar_req_size_m1 <= warp_ctl_if.barrier.size_m1[NC_WIDTH-1:0];
+                    barrier_masks[warp_ctl_if.barrier.id][warp_ctl_if.wid] <= 1;
+                end else
+                if (~warp_ctl_if.barrier.is_global 
+                 && (active_barrier_count[NW_WIDTH-1:0] == warp_ctl_if.barrier.size_m1[NW_WIDTH-1:0])) begin
                     barrier_masks[warp_ctl_if.barrier.id] <= '0;
                 end else begin
                     barrier_masks[warp_ctl_if.barrier.id][warp_ctl_if.wid] <= 1;
                 end
-            end 
+            end
+            if (gbar_if.rsp_valid && (gbar_req_id == gbar_if.rsp_id)) begin
+                barrier_masks[gbar_if.rsp_id] <= '0;
+            end
             
+            // TMC handling
             if (warp_ctl_if.valid && warp_ctl_if.tmc.valid) begin
                 thread_masks[warp_ctl_if.wid]  <= warp_ctl_if.tmc.tmask;
                 stalled_warps[warp_ctl_if.wid] <= 0;
             end 
             
+            // split handling
             if (warp_ctl_if.valid && warp_ctl_if.split.valid) begin
                 stalled_warps[warp_ctl_if.wid] <= 0;
                 if (warp_ctl_if.split.diverged) begin
@@ -129,7 +151,7 @@ module VX_warp_sched #(
                 end
             end
 
-            // Branch
+            // Branch handling
             if (branch_ctl_if.valid) begin
                 if (branch_ctl_if.taken) begin
                     warp_pcs[branch_ctl_if.wid] <= branch_ctl_if.dest;
@@ -164,28 +186,36 @@ module VX_warp_sched #(
 
             active_warps <= active_warps_n;
         end
+
+        if (gbar_if.req_valid && gbar_if.req_ready) begin
+            gbar_req_valid <= 0;
+        end 
     end
 
     // export cycles counter
     assign fetch_to_csr_if.cycles = cycles;
 
-    // calculate active barrier status
+    // barrier handling
 
-`IGNORE_UNUSED_BEGIN
-    wire [$clog2(`NUM_WARPS+1)-1:0] active_barrier_count;
-`IGNORE_UNUSED_END
-    wire [`NUM_WARPS-1:0] barrier_mask = barrier_masks[warp_ctl_if.barrier.id];
-    `POP_COUNT(active_barrier_count, barrier_mask);
-
-    assign reached_barrier_limit = (active_barrier_count[NW_WIDTH-1:0] == warp_ctl_if.barrier.size_m1);
+    assign curr_barrier_mask = barrier_masks[warp_ctl_if.barrier.id];
+    `POP_COUNT(active_barrier_count, curr_barrier_mask);
+    `UNUSED_VAR (active_barrier_count)
 
     reg [`NUM_WARPS-1:0] barrier_stalls;
     always @(*) begin
+        curr_barrier_mask_n = curr_barrier_mask;        
+        curr_barrier_mask_n[warp_ctl_if.wid] = 1;
+
         barrier_stalls = barrier_masks[0];
         for (integer i = 1; i < `NUM_BARRIERS; ++i) begin
             barrier_stalls |= barrier_masks[i];
         end
     end
+
+    assign gbar_if.req_valid   = gbar_req_valid;
+    assign gbar_if.req_id      = gbar_req_id;
+    assign gbar_if.req_size_m1 = gbar_req_size_m1;
+    assign gbar_if.req_core_id = NC_WIDTH'(CORE_ID);
 
     // split/join stack management    
 

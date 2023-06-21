@@ -323,6 +323,9 @@ void kernel_bar(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 		barrier_stall += src0_ptr[0] * src0_ptr[i];
 	}
 
+	// memory fence
+	vx_fence();
+
 	// local barrier
 	vx_barrier(0, num_warps);
 	
@@ -350,6 +353,9 @@ void kernel_gbar(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 			barrier_stall += src0_ptr[0] * src0_ptr[i + j];
 		}
 	}
+
+	// memory fence
+	vx_fence();
 
 	// global barrier
 	vx_barrier(0x80000000, num_cores);

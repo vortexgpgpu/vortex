@@ -128,10 +128,9 @@ module vortex_afu #(
 
     // MMIO controller ////////////////////////////////////////////////////////////
 
-    `IGNORE_UNUSED_BEGIN
     t_ccip_c0_ReqMmioHdr mmio_hdr;
-    `IGNORE_UNUSED_END
     assign mmio_hdr = t_ccip_c0_ReqMmioHdr'(cp2af_sRxPort.c0.hdr);
+    `UNUSED_VAR (mmio_hdr)
 
     `STATIC_ASSERT(($bits(t_ccip_c0_ReqMmioHdr)-$bits(mmio_hdr.address)) == 12, ("Oops!"))
 

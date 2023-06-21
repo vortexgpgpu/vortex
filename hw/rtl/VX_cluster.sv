@@ -77,6 +77,28 @@ module VX_cluster #(
     `SCOPE_IO_SWITCH (scope_raster_units + `NUM_SOCKETS);
 `endif
 
+    VX_gbar_if per_socket_gbar_if[`NUM_SOCKETS]();
+    VX_gbar_if gbar_if();
+
+    `RESET_RELAY (gbar_reset, reset);
+
+    VX_gbar_arb #(
+        .NUM_REQS (`NUM_SOCKETS)
+    ) gbar_arb (
+        .clk        (clk),
+        .reset      (gbar_reset),
+        .req_in_if  (per_socket_gbar_if),
+        .req_out_if (gbar_if)
+    );
+
+    VX_gbar_unit #(
+        .INSTANCE_ID ($sformatf("gbar%0d", CLUSTER_ID))
+    ) gbar_unit (
+        .clk     (clk),
+        .reset   (gbar_reset),
+        .gbar_if (gbar_if)
+    );
+
 `ifdef EXT_RASTER_ENABLE
 
 `ifdef PERF_ENABLE
@@ -518,6 +540,8 @@ module VX_cluster #(
         `endif
             .rop_req_if     (per_socket_rop_req_if[i]),
         `endif
+
+            .gbar_if        (per_socket_gbar_if[i]),
 
             .sim_ebreak     (per_socket_sim_ebreak[i]),
             .sim_wb_value   (per_socket_sim_wb_value[i]),

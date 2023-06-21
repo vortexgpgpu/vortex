@@ -64,6 +64,7 @@ CONFIGS="-DFPU_DSP" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
 
 # test global barriers with multiple cores
 ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -t19 -t20" --cores=2
+./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-n1 -t19 -t20" --cores=2
 
 # test FPU core
 
