@@ -400,7 +400,7 @@ module VX_core_top #(
 
 `ifdef EXT_F_ENABLE
     output wire                                 fpu_req_valid,
-    output wire [`INST_FPU_BITS-1:0]            fpu_req_op_type,
+    output wire [`INST_FPU_BITS-1:0]            fpu_req_type,
     output wire [`INST_FMT_BITS-1:0]            fpu_req_fmt,
     output wire [`INST_FRM_BITS-1:0]            fpu_req_frm,
     output wire [`NUM_THREADS-1:0][`XLEN-1:0]   fpu_req_dataa,
@@ -528,7 +528,7 @@ module VX_core_top #(
     ) fpu_bus_if();
 
     assign fpu_req_valid = fpu_bus_if.req_valid;
-    assign fpu_req_op_type = fpu_bus_if.req_op_type;
+    assign fpu_req_type  = fpu_bus_if.req_type;
     assign fpu_req_fmt   = fpu_bus_if.req_fmt;
     assign fpu_req_frm   = fpu_bus_if.req_frm;
     assign fpu_req_dataa = fpu_bus_if.req_dataa;

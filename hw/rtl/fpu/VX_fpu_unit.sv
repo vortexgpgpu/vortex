@@ -54,7 +54,7 @@ module VX_fpu_unit #(
         .reset      (reset),   
 
         .valid_in   (fpu_bus_if.req_valid),
-        .op_type    (fpu_bus_if.req_op_type),
+        .op_type    (fpu_bus_if.req_type),
         .fmt        (fpu_bus_if.req_fmt),
         .frm        (fpu_bus_if.req_frm),
         .dataa      (fpu_bus_if.req_dataa),
@@ -81,7 +81,7 @@ module VX_fpu_unit #(
         .reset      (reset),   
 
         .valid_in   (fpu_bus_if.req_valid),
-        .op_type    (fpu_bus_if.req_op_type),
+        .op_type    (fpu_bus_if.req_type),
         .fmt        (fpu_bus_if.req_fmt),
         .frm        (fpu_bus_if.req_frm),
         .dataa      (fpu_bus_if.req_dataa),
