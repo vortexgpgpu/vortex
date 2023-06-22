@@ -16,8 +16,7 @@ module VX_execute #(
     input base_dcrs_t       base_dcrs,
 
     // Dcache interface
-    VX_cache_req_if.master  dcache_req_if,
-    VX_cache_rsp_if.slave   dcache_rsp_if,
+    VX_cache_bus_if.master  dcache_bus_if,
 
     // commit interface
     VX_cmt_to_csr_if.slave  cmt_to_csr_if,
@@ -128,8 +127,7 @@ module VX_execute #(
         `SCOPE_IO_BIND  (0)
         .clk            (clk),
         .reset          (lsu_reset),
-        .cache_req_if   (dcache_req_if),
-        .cache_rsp_if   (dcache_rsp_if),
+        .cache_bus_if   (dcache_bus_if),
         .lsu_req_if     (lsu_req_if),
         .ld_commit_if   (ld_commit_if),
         .st_commit_if   (st_commit_if)

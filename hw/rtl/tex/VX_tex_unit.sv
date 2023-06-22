@@ -14,8 +14,7 @@ module VX_tex_unit #(
 `endif
 
     // Memory interface
-    VX_cache_req_if.master  cache_req_if,
-    VX_cache_rsp_if.slave   cache_rsp_if,
+    VX_cache_bus_if.master  cache_bus_if,
 
     // Inputs
     VX_dcr_write_if.slave   dcr_write_if,
@@ -143,8 +142,7 @@ module VX_tex_unit #(
         .reset     (mem_reset),
 
         // memory interface
-        .cache_req_if (cache_req_if),
-        .cache_rsp_if (cache_rsp_if),
+        .cache_bus_if (cache_bus_if),
 
         // inputs
         .req_valid (mem_req_valid),
@@ -214,8 +212,8 @@ module VX_tex_unit #(
     wire [$clog2(TCACHE_NUM_REQS+1)-1:0] perf_mem_rsp_per_cycle;
     wire [$clog2(TCACHE_NUM_REQS+1)+1-1:0] perf_pending_reads_cycle;
 
-    wire [TCACHE_NUM_REQS-1:0] perf_mem_req_fire = cache_req_if.valid & cache_req_if.ready;
-    wire [TCACHE_NUM_REQS-1:0] perf_mem_rsp_fire = cache_rsp_if.valid & cache_rsp_if.ready;
+    wire [TCACHE_NUM_REQS-1:0] perf_mem_req_fire = cache_bus_if.req_valid & cache_bus_if.req_ready;
+    wire [TCACHE_NUM_REQS-1:0] perf_mem_rsp_fire = cache_bus_if.rsp_valid & cache_bus_if.rsp_ready;
 
     `POP_COUNT(perf_mem_req_per_cycle, perf_mem_req_fire);
     `POP_COUNT(perf_mem_rsp_per_cycle, perf_mem_rsp_fire);
@@ -346,30 +344,24 @@ module VX_tex_unit_top #(
     assign tex_rsp_tag = tex_rsp_if.tag; 
     assign tex_rsp_if.ready = tex_rsp_ready;
 
-    VX_cache_req_if #(
+    VX_cache_bus_if #(
         .NUM_REQS  (TCACHE_NUM_REQS), 
         .WORD_SIZE (TCACHE_WORD_SIZE), 
         .TAG_WIDTH (TCACHE_TAG_WIDTH)
-    ) cache_req_if();
+    ) cache_bus_if();
 
-    VX_cache_rsp_if #(
-        .NUM_REQS  (TCACHE_NUM_REQS), 
-        .WORD_SIZE (TCACHE_WORD_SIZE), 
-        .TAG_WIDTH (TCACHE_TAG_WIDTH)
-    ) cache_rsp_if();
+    assign cache_req_valid = cache_bus_if.req_valid;
+    assign cache_req_rw = cache_bus_if.req_rw;
+    assign cache_req_byteen = cache_bus_if.req_byteen;
+    assign cache_req_addr = cache_bus_if.req_addr;
+    assign cache_req_data = cache_bus_if.req_data;
+    assign cache_req_tag = cache_bus_if.req_tag;
+    assign cache_bus_if.req_ready = cache_req_ready;
 
-    assign cache_req_valid = cache_req_if.valid;
-    assign cache_req_rw = cache_req_if.rw;
-    assign cache_req_byteen = cache_req_if.byteen;
-    assign cache_req_addr = cache_req_if.addr;
-    assign cache_req_data = cache_req_if.data;
-    assign cache_req_tag = cache_req_if.tag;
-    assign cache_req_if.ready = cache_req_ready;
-
-    assign cache_rsp_if.valid = cache_rsp_valid;
-    assign cache_rsp_if.tag = cache_rsp_tag;
-    assign cache_rsp_if.data = cache_rsp_data;
-    assign cache_rsp_ready = cache_rsp_if.ready;
+    assign cache_bus_if.rsp_valid = cache_rsp_valid;
+    assign cache_bus_if.rsp_tag = cache_rsp_tag;
+    assign cache_bus_if.rsp_data = cache_rsp_data;
+    assign cache_rsp_ready = cache_bus_if.rsp_ready;
 
     VX_tex_unit #(
         .INSTANCE_ID (INSTANCE_ID),
@@ -384,8 +376,7 @@ module VX_tex_unit_top #(
         .dcr_write_if (dcr_write_if),
         .tex_req_if   (tex_req_if),
         .tex_rsp_if   (tex_rsp_if),
-        .cache_req_if (cache_req_if),
-        .cache_rsp_if (cache_rsp_if)
+        .cache_bus_if (cache_bus_if)
     );
 
 endmodule

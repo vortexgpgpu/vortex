@@ -20,8 +20,7 @@ module VX_raster_mem #(
     raster_dcrs_t                       dcrs,
 
     // Memory interface
-    VX_cache_req_if.master              cache_req_if,
-    VX_cache_rsp_if.slave               cache_rsp_if,
+    VX_cache_bus_if.master              cache_bus_if,
 
     // Inputs
     input wire                          start,
@@ -296,19 +295,19 @@ module VX_raster_mem #(
         .rsp_ready      (mem_rsp_ready),
 
         // Memory request
-        .mem_req_valid  (cache_req_if.valid),
-        .mem_req_rw     (cache_req_if.rw),
-        .mem_req_byteen (cache_req_if.byteen),
-        .mem_req_addr   (cache_req_if.addr),
-        .mem_req_data   (cache_req_if.data),
-        .mem_req_tag    (cache_req_if.tag),
-        .mem_req_ready  (cache_req_if.ready),
+        .mem_req_valid  (cache_bus_if.req_valid),
+        .mem_req_rw     (cache_bus_if.req_rw),
+        .mem_req_byteen (cache_bus_if.req_byteen),
+        .mem_req_addr   (cache_bus_if.req_addr),
+        .mem_req_data   (cache_bus_if.req_data),
+        .mem_req_tag    (cache_bus_if.req_tag),
+        .mem_req_ready  (cache_bus_if.req_ready),
 
         // Memory response
-        .mem_rsp_valid  (cache_rsp_if.valid),
-        .mem_rsp_data   (cache_rsp_if.data),
-        .mem_rsp_tag    (cache_rsp_if.tag),
-        .mem_rsp_ready  (cache_rsp_if.ready)
+        .mem_rsp_valid  (cache_bus_if.rsp_valid),
+        .mem_rsp_data   (cache_bus_if.rsp_data),
+        .mem_rsp_tag    (cache_bus_if.rsp_tag),
+        .mem_rsp_ready  (cache_bus_if.rsp_ready)
     );
 
     wire [`RASTER_DATA_BITS-1:0] prim_mem_offset;

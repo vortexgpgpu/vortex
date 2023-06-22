@@ -39,11 +39,9 @@ module VX_core #(
 
     VX_dcr_write_if.slave   dcr_write_if,
 
-    VX_cache_req_if.master  dcache_req_if,
-    VX_cache_rsp_if.slave   dcache_rsp_if,
+    VX_cache_bus_if.master  dcache_bus_if,
 
-    VX_cache_req_if.master  icache_req_if,
-    VX_cache_rsp_if.slave   icache_rsp_if,    
+    VX_cache_bus_if.master  icache_bus_if,    
 
 `ifdef EXT_F_ENABLE
     VX_fpu_req_if.master    fpu_req_if,
@@ -139,8 +137,7 @@ module VX_core #(
         .clk            (clk),
         .reset          (fetch_reset),
         .base_dcrs      (base_dcrs),
-        .icache_req_if  (icache_req_if),
-        .icache_rsp_if  (icache_rsp_if), 
+        .icache_bus_if  (icache_bus_if), 
         .wrelease_if    (wrelease_if),
         .join_if        (join_if),        
         .warp_ctl_if    (warp_ctl_if),
@@ -202,8 +199,7 @@ module VX_core #(
         .perf_pipeline_if(perf_pipeline_if),
     `endif 
 
-        .dcache_req_if  (dcache_req_if),
-        .dcache_rsp_if  (dcache_rsp_if),
+        .dcache_bus_if  (dcache_bus_if),
     
     `ifdef EXT_F_ENABLE
         .fpu_agent_if   (fpu_agent_if),
@@ -298,12 +294,12 @@ module VX_core #(
     reg  [`PERF_CTR_BITS-1:0] perf_loads;
     reg  [`PERF_CTR_BITS-1:0] perf_stores;
 
-    wire [ICACHE_NUM_REQS-1:0] perf_icache_req_fire = icache_req_if.valid & icache_req_if.ready;
-    wire [ICACHE_NUM_REQS-1:0] perf_icache_rsp_fire = icache_rsp_if.valid & icache_rsp_if.ready;
+    wire [ICACHE_NUM_REQS-1:0] perf_icache_req_fire = icache_bus_if.req_valid & icache_bus_if.req_ready;
+    wire [ICACHE_NUM_REQS-1:0] perf_icache_rsp_fire = icache_bus_if.rsp_valid & icache_bus_if.rsp_ready;
 
-    wire [DCACHE_NUM_REQS-1:0] perf_dcache_rd_req_fire = dcache_req_if.valid & ~dcache_req_if.rw & dcache_req_if.ready;
-    wire [DCACHE_NUM_REQS-1:0] perf_dcache_wr_req_fire = dcache_req_if.valid & dcache_req_if.rw & dcache_req_if.ready;
-    wire [DCACHE_NUM_REQS-1:0] perf_dcache_rsp_fire = dcache_rsp_if.valid & dcache_rsp_if.ready;
+    wire [DCACHE_NUM_REQS-1:0] perf_dcache_rd_req_fire = dcache_bus_if.req_valid & ~dcache_bus_if.req_rw & dcache_bus_if.req_ready;
+    wire [DCACHE_NUM_REQS-1:0] perf_dcache_wr_req_fire = dcache_bus_if.req_valid & dcache_bus_if.req_rw & dcache_bus_if.req_ready;
+    wire [DCACHE_NUM_REQS-1:0] perf_dcache_rsp_fire = dcache_bus_if.rsp_valid & dcache_bus_if.rsp_ready;
 
     `POP_COUNT(perf_icache_req_per_cycle, perf_icache_req_fire);
     `POP_COUNT(perf_dcache_rd_req_per_cycle, perf_dcache_rd_req_fire);
@@ -479,55 +475,43 @@ module VX_core_top #(
     assign dcr_write_if.addr = dcr_write_addr;
     assign dcr_write_if.data = dcr_write_data;
 
-    VX_cache_req_if #(
+    VX_cache_bus_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_TAG_WIDTH)
-    ) dcache_req_if();
+    ) dcache_bus_if();
 
-    VX_cache_rsp_if #(
-        .NUM_REQS  (DCACHE_NUM_REQS), 
-        .WORD_SIZE (DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (DCACHE_TAG_WIDTH)
-    ) dcache_rsp_if();
+    assign dcache_req_valid = dcache_bus_if.req_valid;
+    assign dcache_req_rw = dcache_bus_if.req_rw;
+    assign dcache_req_byteen = dcache_bus_if.req_byteen;
+    assign dcache_req_addr = dcache_bus_if.req_addr;
+    assign dcache_req_data = dcache_bus_if.req_data;
+    assign dcache_req_tag = dcache_bus_if.req_tag;
+    assign dcache_bus_if.req_ready = dcache_req_ready;
 
-    assign dcache_req_valid = dcache_req_if.valid;
-    assign dcache_req_rw = dcache_req_if.rw;
-    assign dcache_req_byteen = dcache_req_if.byteen;
-    assign dcache_req_addr = dcache_req_if.addr;
-    assign dcache_req_data = dcache_req_if.data;
-    assign dcache_req_tag = dcache_req_if.tag;
-    assign dcache_req_if.ready = dcache_req_ready;
+    assign dcache_bus_if.rsp_valid = dcache_rsp_valid;
+    assign dcache_bus_if.rsp_tag = dcache_rsp_tag;
+    assign dcache_bus_if.rsp_data = dcache_rsp_data;
+    assign dcache_rsp_ready = dcache_bus_if.rsp_ready;
 
-    assign dcache_rsp_if.valid = dcache_rsp_valid;
-    assign dcache_rsp_if.tag = dcache_rsp_tag;
-    assign dcache_rsp_if.data = dcache_rsp_data;
-    assign dcache_rsp_ready = dcache_rsp_if.ready;
-
-    VX_cache_req_if #(
+    VX_cache_bus_if #(
         .NUM_REQS  (ICACHE_NUM_REQS), 
         .WORD_SIZE (ICACHE_WORD_SIZE), 
         .TAG_WIDTH (ICACHE_TAG_WIDTH)
-    ) icache_req_if();
+    ) icache_bus_if();
 
-    VX_cache_rsp_if #(
-        .NUM_REQS  (ICACHE_NUM_REQS), 
-        .WORD_SIZE (ICACHE_WORD_SIZE), 
-        .TAG_WIDTH (ICACHE_TAG_WIDTH)
-    ) icache_rsp_if();
+    assign icache_req_valid = icache_bus_if.req_valid;
+    assign icache_req_rw = icache_bus_if.req_rw;
+    assign icache_req_byteen = icache_bus_if.req_byteen;
+    assign icache_req_addr = icache_bus_if.req_addr;
+    assign icache_req_data = icache_bus_if.req_data;
+    assign icache_req_tag = icache_bus_if.req_tag;
+    assign icache_bus_if.req_ready = icache_req_ready;
 
-    assign icache_req_valid = icache_req_if.valid;
-    assign icache_req_rw = icache_req_if.rw;
-    assign icache_req_byteen = icache_req_if.byteen;
-    assign icache_req_addr = icache_req_if.addr;
-    assign icache_req_data = icache_req_if.data;
-    assign icache_req_tag = icache_req_if.tag;
-    assign icache_req_if.ready = icache_req_ready;
-
-    assign icache_rsp_if.valid = icache_rsp_valid;
-    assign icache_rsp_if.tag = icache_rsp_tag;
-    assign icache_rsp_if.data = icache_rsp_data;
-    assign icache_rsp_ready = icache_rsp_if.ready;
+    assign icache_bus_if.rsp_valid = icache_rsp_valid;
+    assign icache_bus_if.rsp_tag = icache_rsp_tag;
+    assign icache_bus_if.rsp_data = icache_rsp_data;
+    assign icache_rsp_ready = icache_bus_if.rsp_ready;
 
 `ifdef EXT_F_ENABLE
     VX_fpu_req_if #(
@@ -626,11 +610,9 @@ module VX_core_top #(
         
         .dcr_write_if   (dcr_write_if),
 
-        .dcache_req_if  (dcache_req_if),
-        .dcache_rsp_if  (dcache_rsp_if),
+        .dcache_bus_if  (dcache_bus_if),
 
-        .icache_req_if  (icache_req_if),
-        .icache_rsp_if  (icache_rsp_if),
+        .icache_bus_if  (icache_bus_if),
 
     `ifdef EXT_F_ENABLE
         .fpu_req_if     (fpu_req_if),

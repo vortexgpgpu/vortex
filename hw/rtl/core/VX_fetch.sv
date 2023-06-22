@@ -16,8 +16,7 @@ module VX_fetch #(
     input base_dcrs_t       base_dcrs,
 
     // Icache interface
-    VX_cache_req_if.master  icache_req_if,
-    VX_cache_rsp_if.slave   icache_rsp_if,
+    VX_cache_bus_if.master  icache_bus_if,
 
     // inputs
     VX_wrelease_if.slave    wrelease_if,
@@ -70,8 +69,7 @@ module VX_fetch #(
         .clk            (clk),
         .reset          (reset),
         
-        .icache_req_if  (icache_req_if),
-        .icache_rsp_if  (icache_rsp_if),        
+        .icache_bus_if  (icache_bus_if), 
 
         .ifetch_req_if  (ifetch_req_if),
         .ifetch_rsp_if  (ifetch_rsp_if)   
@@ -82,8 +80,8 @@ module VX_fetch #(
     `ifdef SCOPE
         localparam UUID_WIDTH = `UP(`UUID_BITS);
         wire ifetch_req_fire = ifetch_req_if.valid && ifetch_req_if.ready;
-        wire icache_req_fire = icache_req_if.valid && icache_req_if.ready;
-        wire icache_rsp_fire = icache_rsp_if.valid && icache_rsp_if.ready;
+        wire icache_req_fire = icache_bus_if.req_valid && icache_bus_if.req_ready;
+        wire icache_rsp_fire = icache_bus_if.rsp_valid && icache_bus_if.rsp_ready;
         VX_scope_tap #(
             .SCOPE_ID (1),
             .TRIGGERW (7),
@@ -104,8 +102,8 @@ module VX_fetch #(
             }),
             .probes({
                 ifetch_req_if.uuid, ifetch_req_if.wid, ifetch_req_if.tmask, ifetch_req_if.PC,
-                icache_req_if.tag, icache_req_if.byteen, icache_req_if.addr,
-                icache_rsp_if.data, icache_rsp_if.tag,
+                icache_bus_if.req_tag, icache_bus_if.req_byteen, icache_bus_if.req_addr,
+                icache_bus_if.rsp_data, icache_bus_if.rsp_tag,
                 join_if.wid, warp_ctl_if.barrier, warp_ctl_if.split, warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.wid,
                 branch_ctl_if.dest, branch_ctl_if.taken, branch_ctl_if.wid
             }),
@@ -117,8 +115,8 @@ module VX_fetch #(
         ila_fetch ila_fetch_inst (
             .clk    (clk),
             .probe0 ({reset, ifetch_req_if.uuid, ifetch_req_if.wid, ifetch_req_if.tmask, ifetch_req_if.PC, ifetch_req_if.ready, ifetch_req_if.valid}),        
-            .probe1 ({icache_req_if.tag, icache_req_if.byteen, icache_req_if.addr, icache_req_if.ready, icache_req_if.valid}),
-            .probe2 ({icache_rsp_if.data, icache_rsp_if.tag, icache_rsp_if.ready, icache_rsp_if.valid}),
+            .probe1 ({icache_bus_if.req_tag, icache_bus_if.req_byteen, icache_bus_if.req_addr, icache_bus_if.req_ready, icache_bus_if.req_valid}),
+            .probe2 ({icache_bus_if.rsp_data, icache_bus_if.rsp_tag, icache_bus_if.rsp_ready, icache_bus_if.rsp_valid}),
             .probe3 ({join_if.wid, join_if.valid, warp_ctl_if.barrier, warp_ctl_if.split, warp_ctl_if.tmc, warp_ctl_if.wspawn, warp_ctl_if.wid, warp_ctl_if.valid}),
             .probe4 ({branch_ctl_if.dest, branch_ctl_if.taken, branch_ctl_if.wid, branch_ctl_if.valid})
         );

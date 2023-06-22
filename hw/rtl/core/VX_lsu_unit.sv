@@ -14,8 +14,7 @@ module VX_lsu_unit #(
     input wire              reset,
 
    // Dcache interface
-    VX_cache_req_if.master  cache_req_if,
-    VX_cache_rsp_if.slave   cache_rsp_if,
+    VX_cache_bus_if.master  cache_bus_if,
 
     // inputs
     VX_lsu_req_if.slave     lsu_req_if,
@@ -192,17 +191,11 @@ module VX_lsu_unit #(
 
     assign mem_req_tag = {lsu_req_if.uuid, lsu_addr_type, lsu_req_if.wid, lsu_req_if.tmask, lsu_req_if.PC, lsu_req_if.rd, lsu_req_if.op_type, req_align, lsu_is_dup};
 
-     VX_cache_req_if #(
+     VX_cache_bus_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (UUID_WIDTH + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + LSUQ_TAG_BITS)
-    ) cache_req_tmp_if();
-
-    VX_cache_rsp_if #(
-        .NUM_REQS  (DCACHE_NUM_REQS), 
-        .WORD_SIZE (DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (UUID_WIDTH + (`NUM_THREADS * `CACHE_ADDR_TYPE_BITS) + LSUQ_TAG_BITS)
-    ) cache_rsp_tmp_if();
+    ) cache_bus_tmp_if();
 
     `RESET_RELAY (mem_scheduler_reset, reset);
 
@@ -243,19 +236,19 @@ module VX_lsu_unit #(
         .rsp_ready      (mem_rsp_ready),
 
         // Memory request
-        .mem_req_valid  (cache_req_tmp_if.valid),
-        .mem_req_rw     (cache_req_tmp_if.rw),
-        .mem_req_byteen (cache_req_tmp_if.byteen),
-        .mem_req_addr   (cache_req_tmp_if.addr),
-        .mem_req_data   (cache_req_tmp_if.data),
-        .mem_req_tag    (cache_req_tmp_if.tag),
-        .mem_req_ready  (cache_req_tmp_if.ready),
+        .mem_req_valid  (cache_bus_tmp_if.req_valid),
+        .mem_req_rw     (cache_bus_tmp_if.req_rw),
+        .mem_req_byteen (cache_bus_tmp_if.req_byteen),
+        .mem_req_addr   (cache_bus_tmp_if.req_addr),
+        .mem_req_data   (cache_bus_tmp_if.req_data),
+        .mem_req_tag    (cache_bus_tmp_if.req_tag),
+        .mem_req_ready  (cache_bus_tmp_if.req_ready),
 
         // Memory response
-        .mem_rsp_valid  (cache_rsp_tmp_if.valid),
-        .mem_rsp_data   (cache_rsp_tmp_if.data),
-        .mem_rsp_tag    (cache_rsp_tmp_if.tag),
-        .mem_rsp_ready  (cache_rsp_tmp_if.ready)
+        .mem_rsp_valid  (cache_bus_tmp_if.rsp_valid),
+        .mem_rsp_data   (cache_bus_tmp_if.rsp_data),
+        .mem_rsp_tag    (cache_bus_tmp_if.rsp_tag),
+        .mem_rsp_ready  (cache_bus_tmp_if.rsp_ready)
     );    
 
     wire mem_req_fire = mem_req_valid && mem_req_ready;
@@ -265,8 +258,7 @@ module VX_lsu_unit #(
 
     // cache tag formatting:  <uuid, tag, type>
 
-    `ASSIGN_VX_CACHE_REQ_IF_XTAG (cache_req_if, cache_req_tmp_if);
-    `ASSIGN_VX_CACHE_RSP_IF_XTAG (cache_rsp_tmp_if, cache_rsp_if);
+    `ASSIGN_VX_CACHE_BUS_IF_XTAG (cache_bus_if, cache_bus_tmp_if);
     
     for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
         wire [UUID_WIDTH-1:0]                              cache_req_uuid, cache_rsp_uuid;
@@ -279,13 +271,13 @@ module VX_lsu_unit #(
             wire [`CACHE_ADDR_TYPE_BITS-1:0] cache_req_type_bi, cache_rsp_type_bi;
             wire [DCACHE_BATCH_SEL_BITS-1:0] cache_req_bid, cache_rsp_bid;
 
-            assign {cache_req_uuid, cache_req_type, cache_req_bid, cache_req_tag} = cache_req_tmp_if.tag[i];
+            assign {cache_req_uuid, cache_req_type, cache_req_bid, cache_req_tag} = cache_bus_tmp_if.req_tag[i];
             assign cache_req_type_bi = cache_req_type_b[cache_req_bid];
-            assign cache_req_if.tag[i] = {cache_req_uuid, cache_req_bid, cache_req_tag, cache_req_type_bi};
+            assign cache_bus_if.req_tag[i] = {cache_req_uuid, cache_req_bid, cache_req_tag, cache_req_type_bi};
 
-            assign {cache_rsp_uuid, cache_rsp_bid, cache_rsp_tag, cache_rsp_type_bi} = cache_rsp_if.tag[i];
+            assign {cache_rsp_uuid, cache_rsp_bid, cache_rsp_tag, cache_rsp_type_bi} = cache_bus_if.rsp_tag[i];
             assign cache_rsp_type_b = {DCACHE_NUM_BATCHES{cache_rsp_type_bi}};
-            assign cache_rsp_tmp_if.tag[i] = {cache_rsp_uuid, cache_rsp_type, cache_rsp_bid, cache_rsp_tag};
+            assign cache_bus_tmp_if.rsp_tag[i] = {cache_rsp_uuid, cache_rsp_type, cache_rsp_bid, cache_rsp_tag};
 
             for (genvar j = 0; j < DCACHE_NUM_BATCHES; ++j) begin
                 localparam k = j * DCACHE_NUM_REQS + i;                
@@ -300,11 +292,11 @@ module VX_lsu_unit #(
 
         end else begin
             
-            assign {cache_req_uuid, cache_req_type, cache_req_tag} = cache_req_tmp_if.tag[i];
-            assign cache_req_if.tag[i] = {cache_req_uuid, cache_req_tag, cache_req_type[i]};
+            assign {cache_req_uuid, cache_req_type, cache_req_tag} = cache_bus_tmp_if.req_tag[i];
+            assign cache_bus_if.req_tag[i] = {cache_req_uuid, cache_req_tag, cache_req_type[i]};
 
-            assign {cache_rsp_uuid, cache_rsp_tag, cache_rsp_type[i]} = cache_rsp_if.tag[i];
-            assign cache_rsp_tmp_if.tag[i] = {cache_rsp_uuid, cache_rsp_type, cache_rsp_tag};        
+            assign {cache_rsp_uuid, cache_rsp_tag, cache_rsp_type[i]} = cache_bus_if.rsp_tag[i];
+            assign cache_bus_tmp_if.rsp_tag[i] = {cache_rsp_uuid, cache_rsp_type, cache_rsp_tag};        
 
             for (genvar j = 0; j < DCACHE_NUM_REQS; ++j) begin
                 if (i != j) begin
@@ -426,8 +418,8 @@ module VX_lsu_unit #(
             .clk    (clk),
             .probe0 ({mem_req_data_0, lsu_req_if.uuid, lsu_req_if.wid, lsu_req_if.PC, mem_req_mask, full_addr_0, mem_req_byteen, mem_req_rw, mem_req_ready, mem_req_valid}),
             .probe1 ({rsp_data_0, rsp_uuid, mem_rsp_eop, rsp_pc, rsp_rd, rsp_tmask, rsp_wid, mem_rsp_ready, mem_rsp_valid}),
-            .probe2 ({cache_req_if.data, cache_req_if.tag, cache_req_if.byteen, cache_req_if.addr, cache_req_if.rw, cache_req_if.ready, cache_req_if.valid}),
-            .probe3 ({cache_rsp_if.data, cache_rsp_if.tag, cache_rsp_if.ready, cache_rsp_if.valid})
+            .probe2 ({cache_bus_if.req_data, cache_bus_if.req_tag, cache_bus_if.req_byteen, cache_bus_if.req_addr, cache_bus_if.req_rw, cache_bus_if.req_ready, cache_bus_if.req_valid}),
+            .probe3 ({cache_bus_if.rsp_data, cache_bus_if.rsp_tag, cache_bus_if.rsp_ready, cache_bus_if.rsp_valid})
         );
     `endif
     end

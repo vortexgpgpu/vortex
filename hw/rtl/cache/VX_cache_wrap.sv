@@ -61,17 +61,8 @@ module VX_cache_wrap #(
     VX_perf_cache_if.master perf_cache_if,
 `endif
 
-    // Core request
-    VX_mem_req_if.slave     core_req_if [NUM_REQS],
-
-    // Core response
-    VX_mem_rsp_if.master    core_rsp_if [NUM_REQS],
-
-    // Memory request
-    VX_mem_req_if.master    mem_req_if,
-    
-    // Memory response
-    VX_mem_rsp_if.slave     mem_rsp_if
+    VX_mem_bus_if.slave     core_bus_if [NUM_REQS],
+    VX_mem_bus_if.master    mem_bus_if
 );
 
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid parameter"))    
@@ -99,13 +90,13 @@ module VX_cache_wrap #(
     wire [NUM_REQS-1:0]                     core_req_ready;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign core_req_valid[i]    = core_req_if[i].valid;
-        assign core_req_rw[i]       = core_req_if[i].rw;
-        assign core_req_addr[i]     = core_req_if[i].addr;
-        assign core_req_byteen[i]   = core_req_if[i].byteen;
-        assign core_req_data[i]     = core_req_if[i].data;
-        assign core_req_tag[i]      = core_req_if[i].tag;
-        assign core_req_if[i].ready = core_req_ready[i];
+        assign core_req_valid[i]    = core_bus_if[i].req_valid;
+        assign core_req_rw[i]       = core_bus_if[i].req_rw;
+        assign core_req_addr[i]     = core_bus_if[i].req_addr;
+        assign core_req_byteen[i]   = core_bus_if[i].req_byteen;
+        assign core_req_data[i]     = core_bus_if[i].req_data;
+        assign core_req_tag[i]      = core_bus_if[i].req_tag;
+        assign core_bus_if[i].req_ready = core_req_ready[i];
     end
 
     ///////////////////////////////////////////////////////////////////////////
@@ -129,9 +120,9 @@ module VX_cache_wrap #(
             .valid_in  (core_rsp_valid_s[i]),
             .ready_in  (core_rsp_ready_s[i]),
             .data_in   ({core_rsp_data_s[i], core_rsp_tag_s[i]}),
-            .data_out  ({core_rsp_if[i].data, core_rsp_if[i].tag}), 
-            .valid_out (core_rsp_if[i].valid),
-            .ready_out (core_rsp_if[i].ready)
+            .data_out  ({core_bus_if[i].rsp_data, core_bus_if[i].rsp_tag}), 
+            .valid_out (core_bus_if[i].rsp_valid),
+            .ready_out (core_bus_if[i].rsp_ready)
         );
     end
 
@@ -156,9 +147,9 @@ module VX_cache_wrap #(
         .valid_in  (mem_req_valid_s),        
         .ready_in  (mem_req_ready_s),      
         .data_in   ({mem_req_rw_s,  mem_req_byteen_s,  mem_req_addr_s,  mem_req_data_s,  mem_req_tag_s}),
-        .data_out  ({mem_req_if.rw, mem_req_if.byteen, mem_req_if.addr, mem_req_if.data, mem_req_if.tag}),        
-        .valid_out (mem_req_if.valid),        
-        .ready_out (mem_req_if.ready)
+        .data_out  ({mem_bus_if.req_rw, mem_bus_if.req_byteen, mem_bus_if.req_addr, mem_bus_if.req_data, mem_bus_if.req_tag}),        
+        .valid_out (mem_bus_if.req_valid),        
+        .ready_out (mem_bus_if.req_ready)
     );
 
     ///////////////////////////////////////////////////////////////////////////
@@ -267,10 +258,10 @@ module VX_cache_wrap #(
             .mem_req_ready_out  (mem_req_ready_s),
 
             // Memory response in
-            .mem_rsp_valid_in   (mem_rsp_if.valid),        
-            .mem_rsp_data_in    (mem_rsp_if.data),
-            .mem_rsp_tag_in     (mem_rsp_if.tag),
-            .mem_rsp_ready_in   (mem_rsp_if.ready),
+            .mem_rsp_valid_in   (mem_bus_if.rsp_valid),        
+            .mem_rsp_data_in    (mem_bus_if.rsp_data),
+            .mem_rsp_tag_in     (mem_bus_if.rsp_tag),
+            .mem_rsp_ready_in   (mem_bus_if.rsp_ready),
 
             // Memory response out
             .mem_rsp_valid_out  (mem_rsp_valid_b),        
@@ -310,9 +301,9 @@ module VX_cache_wrap #(
             .data_out (mem_req_tag_s)
         );
 
-        assign mem_rsp_valid_b  = mem_rsp_if.valid;
-        assign mem_rsp_data_b   = mem_rsp_if.data;
-        assign mem_rsp_if.ready = mem_rsp_ready_b;
+        assign mem_rsp_valid_b  = mem_bus_if.rsp_valid;
+        assign mem_rsp_data_b   = mem_bus_if.rsp_data;
+        assign mem_bus_if.rsp_ready = mem_rsp_ready_b;
 
         // Remove NC flag from the memory response tag
 
@@ -320,7 +311,7 @@ module VX_cache_wrap #(
             .N   (MEM_TAG_WIDTH),
             .POS (NC_TAG_BIT)
         ) mem_rsp_tag_remove (
-            .data_in  (mem_rsp_if.tag),
+            .data_in  (mem_bus_if.rsp_tag),
             .data_out (mem_rsp_tag_b)
         );
     end 
@@ -366,55 +357,45 @@ module VX_cache_wrap #(
 
     end else begin
 
-        VX_mem_req_if #(
+        VX_mem_bus_if #(
             .DATA_WIDTH (`WORD_WIDTH),
             .TAG_WIDTH  (CORE_TAG_X_WIDTH)
-        ) core_req_wrap_if[NUM_REQS]();
-        
-        VX_mem_rsp_if #(
-            .DATA_WIDTH (`WORD_WIDTH),
-            .TAG_WIDTH  (CORE_TAG_X_WIDTH)
-        ) core_rsp_wrap_if[NUM_REQS]();
+        ) core_bus_wrap_if[NUM_REQS]();
 
-        VX_mem_req_if #(
+        VX_mem_bus_if #(
             .DATA_WIDTH (`LINE_WIDTH), 
             .TAG_WIDTH  (MEM_TAG_X_WIDTH)
-        ) mem_req_wrap_if();
-
-        VX_mem_rsp_if #(
-            .DATA_WIDTH (`LINE_WIDTH), 
-            .TAG_WIDTH  (MEM_TAG_X_WIDTH)
-        ) mem_rsp_wrap_if();
+        ) mem_bus_wrap_if();
 
         for (genvar i = 0; i < NUM_REQS; ++i) begin
-            assign core_req_wrap_if[i].valid  = core_req_valid_b[i];
-            assign core_req_wrap_if[i].rw     = core_req_rw_b[i];
-            assign core_req_wrap_if[i].addr   = core_req_addr_b[i];
-            assign core_req_wrap_if[i].byteen = core_req_byteen_b[i];
-            assign core_req_wrap_if[i].data   = core_req_data_b[i];
-            assign core_req_wrap_if[i].tag    = core_req_tag_b[i];
-            assign core_req_ready_b[i] = core_req_wrap_if[i].ready;
+            assign core_bus_wrap_if[i].req_valid  = core_req_valid_b[i];
+            assign core_bus_wrap_if[i].req_rw     = core_req_rw_b[i];
+            assign core_bus_wrap_if[i].req_addr   = core_req_addr_b[i];
+            assign core_bus_wrap_if[i].req_byteen = core_req_byteen_b[i];
+            assign core_bus_wrap_if[i].req_data   = core_req_data_b[i];
+            assign core_bus_wrap_if[i].req_tag    = core_req_tag_b[i];
+            assign core_req_ready_b[i] = core_bus_wrap_if[i].req_ready;
         end
 
         for (genvar i = 0; i < NUM_REQS; ++i) begin
-            assign core_rsp_valid_b[i] = core_rsp_wrap_if[i].valid;
-            assign core_rsp_data_b[i]  = core_rsp_wrap_if[i].data;
-            assign core_rsp_tag_b[i]   = core_rsp_wrap_if[i].tag;
-            assign core_rsp_wrap_if[i].ready = core_rsp_ready_b[i];
+            assign core_rsp_valid_b[i] = core_bus_wrap_if[i].rsp_valid;
+            assign core_rsp_data_b[i]  = core_bus_wrap_if[i].rsp_data;
+            assign core_rsp_tag_b[i]   = core_bus_wrap_if[i].rsp_tag;
+            assign core_bus_wrap_if[i].rsp_ready = core_rsp_ready_b[i];
         end
 
-        assign mem_req_valid_b  = mem_req_wrap_if.valid;
-        assign mem_req_addr_b   = mem_req_wrap_if.addr;
-        assign mem_req_rw_b     = mem_req_wrap_if.rw;
-        assign mem_req_byteen_b = mem_req_wrap_if.byteen;
-        assign mem_req_data_b   = mem_req_wrap_if.data;
-        assign mem_req_tag_b    = mem_req_wrap_if.tag;
-        assign mem_req_wrap_if.ready = mem_req_ready_b;
+        assign mem_req_valid_b  = mem_bus_wrap_if.req_valid;
+        assign mem_req_addr_b   = mem_bus_wrap_if.req_addr;
+        assign mem_req_rw_b     = mem_bus_wrap_if.req_rw;
+        assign mem_req_byteen_b = mem_bus_wrap_if.req_byteen;
+        assign mem_req_data_b   = mem_bus_wrap_if.req_data;
+        assign mem_req_tag_b    = mem_bus_wrap_if.req_tag;
+        assign mem_bus_wrap_if.req_ready = mem_req_ready_b;
 
-        assign mem_rsp_wrap_if.valid = mem_rsp_valid_b;
-        assign mem_rsp_wrap_if.data  = mem_rsp_data_b;
-        assign mem_rsp_wrap_if.tag   = mem_rsp_tag_b;
-        assign mem_rsp_ready_b = mem_rsp_wrap_if.ready;
+        assign mem_bus_wrap_if.rsp_valid = mem_rsp_valid_b;
+        assign mem_bus_wrap_if.rsp_data  = mem_rsp_data_b;
+        assign mem_bus_wrap_if.rsp_tag   = mem_rsp_tag_b;
+        assign mem_rsp_ready_b = mem_bus_wrap_if.rsp_ready;
 
         `RESET_RELAY (cache_reset, reset);
 
@@ -445,10 +426,8 @@ module VX_cache_wrap #(
             .perf_cache_if  (perf_cache_if),
         `endif
 
-            .core_req_if    (core_req_wrap_if),
-            .core_rsp_if    (core_rsp_wrap_if),
-            .mem_req_if     (mem_req_wrap_if),
-            .mem_rsp_if     (mem_rsp_wrap_if)
+            .core_bus_if    (core_bus_wrap_if),
+            .mem_bus_if     (mem_bus_wrap_if)
         );
         
     end
@@ -460,25 +439,25 @@ module VX_cache_wrap #(
         wire [`UP(UUID_WIDTH)-1:0] core_rsp_uuid;
 
         if (UUID_WIDTH != 0) begin
-            assign core_req_uuid = core_req_if[i].tag[TAG_WIDTH-1 -: UUID_WIDTH];
-            assign core_rsp_uuid = core_rsp_if[i].tag[TAG_WIDTH-1 -: UUID_WIDTH];
+            assign core_req_uuid = core_bus_if[i].req_tag[TAG_WIDTH-1 -: UUID_WIDTH];
+            assign core_rsp_uuid = core_bus_if[i].rsp_tag[TAG_WIDTH-1 -: UUID_WIDTH];
         end else begin
             assign core_req_uuid = 0;
             assign core_rsp_uuid = 0;
         end
 
-        wire core_req_fire = core_req_if[i].valid && core_req_if[i].ready;
-        wire core_rsp_fire = core_rsp_if[i].valid && core_rsp_if[i].ready;
+        wire core_req_fire = core_bus_if[i].req_valid && core_bus_if[i].req_ready;
+        wire core_rsp_fire = core_bus_if[i].rsp_valid && core_bus_if[i].rsp_ready;
 
         always @(posedge clk) begin
             if (core_req_fire) begin
-                if (core_req_if[i].rw)
-                    `TRACE(1, ("%d: %s core-wr-req: tid=%0d, addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, i, `TO_FULL_ADDR(core_req_if[i].addr), core_req_if[i].tag, core_req_if[i].byteen, core_req_if[i].data, core_req_uuid));
+                if (core_bus_if[i].req_rw)
+                    `TRACE(1, ("%d: %s core-wr-req: tid=%0d, addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, i, `TO_FULL_ADDR(core_bus_if[i].req_addr), core_bus_if[i].req_tag, core_bus_if[i].req_byteen, core_bus_if[i].req_data, core_req_uuid));
                 else
-                    `TRACE(1, ("%d: %s core-rd-req: tid=%0d, addr=0x%0h, tag=0x%0h (#%0d)\n", $time, INSTANCE_ID, i, `TO_FULL_ADDR(core_req_if[i].addr), core_req_if[i].tag, core_req_uuid));
+                    `TRACE(1, ("%d: %s core-rd-req: tid=%0d, addr=0x%0h, tag=0x%0h (#%0d)\n", $time, INSTANCE_ID, i, `TO_FULL_ADDR(core_bus_if[i].req_addr), core_bus_if[i].req_tag, core_req_uuid));
             end
             if (core_rsp_fire) begin
-                `TRACE(1, ("%d: %s core-rd-rsp: tid=%0d, tag=0x%0h, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, i, core_rsp_if[i].tag, core_rsp_if[i].data, core_rsp_uuid));
+                `TRACE(1, ("%d: %s core-rd-rsp: tid=%0d, tag=0x%0h, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, i, core_bus_if[i].rsp_tag, core_bus_if[i].rsp_data, core_rsp_uuid));
             end        
         end
     end   
@@ -487,25 +466,25 @@ module VX_cache_wrap #(
     wire [`UP(UUID_WIDTH)-1:0] mem_rsp_uuid;
 
     if ((UUID_WIDTH != 0) && (NC_BYPASS != 0)) begin
-        assign mem_req_uuid = mem_req_if.tag[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
-        assign mem_rsp_uuid = mem_rsp_if.tag[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
+        assign mem_req_uuid = mem_bus_if.req_tag[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
+        assign mem_rsp_uuid = mem_bus_if.rsp_tag[MEM_TAG_WIDTH-1 -: UUID_WIDTH];
     end else begin
         assign mem_req_uuid = '0;
         assign mem_rsp_uuid = '0;
     end
 
-    wire mem_req_fire = mem_req_if.valid && mem_req_if.ready;
-    wire mem_rsp_fire = mem_rsp_if.valid && mem_rsp_if.ready;
+    wire mem_req_fire = mem_bus_if.req_valid && mem_bus_if.req_ready;
+    wire mem_rsp_fire = mem_bus_if.rsp_valid && mem_bus_if.rsp_ready;
 
     always @(posedge clk) begin
         if (mem_req_fire) begin
-            if (mem_req_if.rw)
-                `TRACE(1, ("%d: %s mem-wr-req: addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, `TO_FULL_ADDR(mem_req_if.addr), mem_req_if.tag, mem_req_if.byteen, mem_req_if.data, mem_req_uuid));
+            if (mem_bus_if.req_rw)
+                `TRACE(1, ("%d: %s mem-wr-req: addr=0x%0h, tag=0x%0h, byteen=%b, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, `TO_FULL_ADDR(mem_bus_if.req_addr), mem_bus_if.req_tag, mem_bus_if.req_byteen, mem_bus_if.req_data, mem_req_uuid));
             else
-                `TRACE(1, ("%d: %s mem-rd-req: addr=0x%0h, tag=0x%0h (#%0d)\n", $time, INSTANCE_ID, `TO_FULL_ADDR(mem_req_if.addr), mem_req_if.tag, mem_req_uuid));
+                `TRACE(1, ("%d: %s mem-rd-req: addr=0x%0h, tag=0x%0h (#%0d)\n", $time, INSTANCE_ID, `TO_FULL_ADDR(mem_bus_if.req_addr), mem_bus_if.req_tag, mem_req_uuid));
         end
         if (mem_rsp_fire) begin
-            `TRACE(1, ("%d: %s mem-rd-rsp: tag=0x%0h, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, mem_rsp_if.tag, mem_rsp_if.data, mem_rsp_uuid));
+            `TRACE(1, ("%d: %s mem-rd-rsp: tag=0x%0h, data=0x%0h (#%0d)\n", $time, INSTANCE_ID, mem_bus_if.rsp_tag, mem_bus_if.rsp_data, mem_rsp_uuid));
         end
     end    
 `endif

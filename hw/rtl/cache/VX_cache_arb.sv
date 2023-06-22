@@ -13,18 +13,9 @@ module VX_cache_arb #(
 ) (
     input wire              clk,
     input wire              reset,
-
-    // input requests        
-    VX_cache_req_if.slave   req_in_if [NUM_INPUTS],
-
-    // input responses
-    VX_cache_rsp_if.master  rsp_in_if [NUM_INPUTS],
     
-    // output request
-    VX_cache_req_if.master  req_out_if [NUM_OUTPUTS],
-
-    // output response
-    VX_cache_rsp_if.slave   rsp_out_if [NUM_OUTPUTS]
+    VX_cache_bus_if.slave   bus_in_if [NUM_INPUTS],
+    VX_cache_bus_if.master  bus_out_if [NUM_OUTPUTS]
 );     
 
     localparam ADDR_WIDTH    = (`XLEN-`CLOG2(DATA_SIZE));
@@ -48,8 +39,8 @@ module VX_cache_arb #(
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin
         for (genvar j = 0; j < NUM_LANES; ++j) begin
 
-            assign req_valid_in[i][j] = req_in_if[i].valid[j];
-            assign req_in_if[i].ready[j] = req_ready_in[i][j];
+            assign req_valid_in[i][j] = bus_in_if[i].req_valid[j];
+            assign bus_in_if[i].req_ready[j] = req_ready_in[i][j];
 
             if (NUM_INPUTS > NUM_OUTPUTS) begin
                 wire [TAG_OUT_WIDTH-1:0] req_tag_in;
@@ -59,13 +50,13 @@ module VX_cache_arb #(
                     .S   (LOG_NUM_REQS),
                     .POS (TAG_SEL_IDX)
                 ) bits_insert (
-                    .data_in  (req_in_if[i].tag[j]),
+                    .data_in  (bus_in_if[i].req_tag[j]),
                     .sel_in   (LOG_NUM_REQS'(r)),
                     .data_out (req_tag_in)
                 );
-                assign req_data_in[i][j] = {req_tag_in, req_in_if[i].addr[j], req_in_if[i].rw[j], req_in_if[i].byteen[j], req_in_if[i].data[j]};
+                assign req_data_in[i][j] = {req_tag_in, bus_in_if[i].req_addr[j], bus_in_if[i].req_rw[j], bus_in_if[i].req_byteen[j], bus_in_if[i].req_data[j]};
             end else begin
-                assign req_data_in[i][j] = {req_in_if[i].tag[j], req_in_if[i].addr[j], req_in_if[i].rw[j], req_in_if[i].byteen[j], req_in_if[i].data[j]};
+                assign req_data_in[i][j] = {bus_in_if[i].req_tag[j], bus_in_if[i].req_addr[j], bus_in_if[i].req_rw[j], bus_in_if[i].req_byteen[j], bus_in_if[i].req_data[j]};
             end            
         end
     end
@@ -91,9 +82,9 @@ module VX_cache_arb #(
 
     for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin
         for (genvar j = 0; j < NUM_LANES; ++j) begin
-            assign req_out_if[i].valid[j] = req_valid_out[i][j];
-            assign {req_out_if[i].tag[j], req_out_if[i].addr[j], req_out_if[i].rw[j], req_out_if[i].byteen[j], req_out_if[i].data[j]} = req_data_out[i][j];
-            assign req_ready_out[i][j] = req_out_if[i].ready[j];
+            assign bus_out_if[i].req_valid[j] = req_valid_out[i][j];
+            assign {bus_out_if[i].req_tag[j], bus_out_if[i].req_addr[j], bus_out_if[i].req_rw[j], bus_out_if[i].req_byteen[j], bus_out_if[i].req_data[j]} = req_data_out[i][j];
+            assign req_ready_out[i][j] = bus_out_if[i].req_ready[j];
         end
     end
 
@@ -121,16 +112,16 @@ module VX_cache_arb #(
                     .S   (LOG_NUM_REQS),
                     .POS (TAG_SEL_IDX)
                 ) bits_remove (
-                    .data_in  (rsp_out_if[j].tag[i]),
+                    .data_in  (bus_out_if[j].rsp_tag[i]),
                     .data_out (rsp_tag_out)
                 );
 
-                assign rsp_valid_in[j] = rsp_out_if[j].valid[i];
-                assign rsp_data_in[j] = {rsp_tag_out, rsp_out_if[j].data[i]};
-                assign rsp_out_if[j].ready[i] = rsp_ready_in[j];
+                assign rsp_valid_in[j] = bus_out_if[j].rsp_valid[i];
+                assign rsp_data_in[j] = {rsp_tag_out, bus_out_if[j].rsp_data[i]};
+                assign bus_out_if[j].rsp_ready[i] = rsp_ready_in[j];
 
                 if (NUM_INPUTS > 1) begin
-                    assign rsp_sel_in[j] = rsp_out_if[j].tag[i][TAG_SEL_IDX +: LOG_NUM_REQS];
+                    assign rsp_sel_in[j] = bus_out_if[j].rsp_tag[i][TAG_SEL_IDX +: LOG_NUM_REQS];
                 end else begin
                     assign rsp_sel_in[j] = '0;
                 end
@@ -157,9 +148,9 @@ module VX_cache_arb #(
         end else begin
             
             for (genvar j = 0; j < NUM_OUTPUTS; ++j) begin
-                assign rsp_valid_in[j] = rsp_out_if[j].valid[i];
-                assign rsp_data_in[j] = {rsp_out_if[j].tag[i], rsp_out_if[j].data[i]};
-                assign rsp_out_if[j].ready[i] = rsp_ready_in[j];
+                assign rsp_valid_in[j] = bus_out_if[j].rsp_valid[i];
+                assign rsp_data_in[j] = {bus_out_if[j].rsp_tag[i], bus_out_if[j].rsp_data[i]};
+                assign bus_out_if[j].rsp_ready[i] = rsp_ready_in[j];
             end
 
             VX_stream_arb #(            
@@ -183,9 +174,9 @@ module VX_cache_arb #(
         end
         
         for (genvar j = 0; j < NUM_INPUTS; ++j) begin
-            assign rsp_in_if[j].valid[i] = rsp_valid_out[j];
-            assign {rsp_in_if[j].tag[i], rsp_in_if[j].data[i]} = rsp_data_out[j];
-            assign rsp_ready_out[j] = rsp_in_if[j].ready[i];
+            assign bus_in_if[j].rsp_valid[i] = rsp_valid_out[j];
+            assign {bus_in_if[j].rsp_tag[i], bus_in_if[j].rsp_data[i]} = rsp_data_out[j];
+            assign rsp_ready_out[j] = bus_in_if[j].rsp_ready[i];
         end
     end    
 

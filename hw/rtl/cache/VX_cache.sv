@@ -53,17 +53,8 @@ module VX_cache #(
     input wire clk,
     input wire reset,
 
-    // Core request
-    VX_mem_req_if.slave     core_req_if [NUM_REQS],
-
-    // Core response
-    VX_mem_rsp_if.master    core_rsp_if [NUM_REQS],
-
-    // Memory request
-    VX_mem_req_if.master    mem_req_if,
-    
-    // Memory response
-    VX_mem_rsp_if.slave     mem_rsp_if
+    VX_mem_bus_if.slave     core_bus_if [NUM_REQS],
+    VX_mem_bus_if.master    mem_bus_if
 );
 
     `STATIC_ASSERT(NUM_BANKS <= NUM_REQS, ("invalid parameter"))    
@@ -93,13 +84,13 @@ module VX_cache #(
     wire [NUM_REQS-1:0]                     core_req_ready;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign core_req_valid[i]    = core_req_if[i].valid;
-        assign core_req_rw[i]       = core_req_if[i].rw;
-        assign core_req_addr[i]     = core_req_if[i].addr;
-        assign core_req_byteen[i]   = core_req_if[i].byteen;
-        assign core_req_data[i]     = core_req_if[i].data;
-        assign core_req_tag[i]      = core_req_if[i].tag;
-        assign core_req_if[i].ready = core_req_ready[i];
+        assign core_req_valid[i]  = core_bus_if[i].req_valid;
+        assign core_req_rw[i]     = core_bus_if[i].req_rw;
+        assign core_req_addr[i]   = core_bus_if[i].req_addr;
+        assign core_req_byteen[i] = core_bus_if[i].req_byteen;
+        assign core_req_data[i]   = core_bus_if[i].req_data;
+        assign core_req_tag[i]    = core_bus_if[i].req_tag;
+        assign core_bus_if[i].req_ready = core_req_ready[i];
     end
 
     ///////////////////////////////////////////////////////////////////////////
@@ -123,9 +114,9 @@ module VX_cache #(
             .valid_in  (core_rsp_valid_s[i]),
             .ready_in  (core_rsp_ready_s[i]),
             .data_in   ({core_rsp_data_s[i],  core_rsp_tag_s[i]}),
-            .data_out  ({core_rsp_if[i].data, core_rsp_if[i].tag}), 
-            .valid_out (core_rsp_if[i].valid),
-            .ready_out (core_rsp_if[i].ready)
+            .data_out  ({core_bus_if[i].rsp_data, core_bus_if[i].rsp_tag}), 
+            .valid_out (core_bus_if[i].rsp_valid),
+            .ready_out (core_bus_if[i].rsp_ready)
         );
     end
 
@@ -150,9 +141,9 @@ module VX_cache #(
         .valid_in  (mem_req_valid_s),        
         .ready_in  (mem_req_ready_s),      
         .data_in   ({mem_req_rw_s,  mem_req_byteen_s,  mem_req_addr_s,  mem_req_data_s,  mem_req_tag_s}),
-        .data_out  ({mem_req_if.rw, mem_req_if.byteen, mem_req_if.addr, mem_req_if.data, mem_req_if.tag}),        
-        .valid_out (mem_req_if.valid),        
-        .ready_out (mem_req_if.ready)
+        .data_out  ({mem_bus_if.req_rw, mem_bus_if.req_byteen, mem_bus_if.req_addr, mem_bus_if.req_data, mem_bus_if.req_tag}),        
+        .valid_out (mem_bus_if.req_valid),        
+        .ready_out (mem_bus_if.req_ready)
     );
 
     ///////////////////////////////////////////////////////////////////////////
@@ -170,9 +161,9 @@ module VX_cache #(
     ) mem_rsp_queue (
         .clk        (clk),
         .reset      (reset),
-        .valid_in   (mem_rsp_if.valid),
-        .ready_in   (mem_rsp_if.ready),
-        .data_in    ({mem_rsp_if.tag, mem_rsp_if.data}),                
+        .valid_in   (mem_bus_if.rsp_valid),
+        .ready_in   (mem_bus_if.rsp_ready),
+        .data_in    ({mem_bus_if.rsp_tag, mem_bus_if.rsp_data}),                
         .data_out   ({mem_rsp_tag_s,  mem_rsp_data_s}),        
         .valid_out  (mem_rsp_valid_s),
         .ready_out  (mem_rsp_ready_s)
@@ -565,12 +556,12 @@ module VX_cache #(
     
     wire [NUM_REQS-1:0] perf_crsp_stall_per_req;
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign perf_crsp_stall_per_req[i] = core_rsp_if[i].valid && ~core_rsp_if[i].ready;
+        assign perf_crsp_stall_per_req[i] = core_bus_if[i].rsp_valid && ~core_bus_if[i].rsp_ready;
     end
 
     `POP_COUNT(perf_crsp_stall_per_cycle, perf_crsp_stall_per_req);
 
-    wire perf_mem_stall_per_cycle = mem_req_if.valid && ~mem_req_if.ready;
+    wire perf_mem_stall_per_cycle = mem_bus_if.req_valid && ~mem_bus_if.req_ready;
 
     reg [`PERF_CTR_BITS-1:0] perf_core_reads;
     reg [`PERF_CTR_BITS-1:0] perf_core_writes;

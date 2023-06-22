@@ -14,17 +14,8 @@ module VX_mem_arb #(
     input wire              clk,
     input wire              reset,
 
-    // input requests        
-    VX_mem_req_if.slave     req_in_if [NUM_REQS],
-
-    // input responses
-    VX_mem_rsp_if.master    rsp_in_if [NUM_REQS],
-    
-    // output request
-    VX_mem_req_if.master    req_out_if,
-
-    // output response
-    VX_mem_rsp_if.slave     rsp_out_if
+    VX_mem_bus_if.slave     bus_in_if [NUM_REQS],    
+    VX_mem_bus_if.master    bus_out_if
 );   
     
     localparam LOG_NUM_REQS  = `CLOG2(NUM_REQS);
@@ -44,14 +35,14 @@ module VX_mem_arb #(
             .S   (LOG_NUM_REQS),
             .POS (TAG_SEL_IDX)
         ) bits_insert (
-            .data_in  (req_in_if[i].tag),
+            .data_in  (bus_in_if[i].req_tag),
             .sel_in   (`UP(LOG_NUM_REQS)'(i)),
             .data_out (req_tag_in)
         );
 
-        assign req_valid_in[i] = req_in_if[i].valid;
-        assign req_data_in[i] = {req_tag_in, req_in_if[i].addr, req_in_if[i].rw, req_in_if[i].byteen, req_in_if[i].data};
-        assign req_in_if[i].ready = req_ready_in[i];
+        assign req_valid_in[i] = bus_in_if[i].req_valid;
+        assign req_data_in[i] = {req_tag_in, bus_in_if[i].req_addr, bus_in_if[i].req_rw, bus_in_if[i].req_byteen, bus_in_if[i].req_data};
+        assign bus_in_if[i].req_ready = req_ready_in[i];
     end        
 
     VX_stream_arb #(            
@@ -66,9 +57,9 @@ module VX_mem_arb #(
         .valid_in  (req_valid_in),
         .ready_in  (req_ready_in),
         .data_in   (req_data_in),                
-        .data_out  ({req_out_if.tag, req_out_if.addr, req_out_if.rw, req_out_if.byteen, req_out_if.data}),
-        .valid_out (req_out_if.valid),
-        .ready_out (req_out_if.ready)
+        .data_out  ({bus_out_if.req_tag, bus_out_if.req_addr, bus_out_if.req_rw, bus_out_if.req_byteen, bus_out_if.req_data}),
+        .valid_out (bus_out_if.req_valid),
+        .ready_out (bus_out_if.req_ready)
     );
 
     ///////////////////////////////////////////////////////////////////////////
@@ -79,7 +70,7 @@ module VX_mem_arb #(
     wire [`UP(LOG_NUM_REQS)-1:0]       rsp_sel;
 
     if (NUM_REQS > 1) begin
-        assign rsp_sel = rsp_out_if.tag[TAG_SEL_IDX +: LOG_NUM_REQS];
+        assign rsp_sel = bus_out_if.rsp_tag[TAG_SEL_IDX +: LOG_NUM_REQS];
     end else begin
         assign rsp_sel = '0;
     end
@@ -91,7 +82,7 @@ module VX_mem_arb #(
         .S   (LOG_NUM_REQS),
         .POS (TAG_SEL_IDX)
     ) bits_remove (
-        .data_in  (rsp_out_if.tag),
+        .data_in  (bus_out_if.rsp_tag),
         .data_out (rsp_tag_out)
     );
 
@@ -104,18 +95,18 @@ module VX_mem_arb #(
         .clk       (clk),
         .reset     (reset),
         .sel_in    (rsp_sel),
-        .valid_in  (rsp_out_if.valid),
-        .ready_in  (rsp_out_if.ready),
-        .data_in   ({rsp_tag_out, rsp_out_if.data}),        
+        .valid_in  (bus_out_if.rsp_valid),
+        .ready_in  (bus_out_if.rsp_ready),
+        .data_in   ({rsp_tag_out, bus_out_if.rsp_data}),        
         .data_out  (rsp_data_in),
         .valid_out (rsp_valid_in),        
         .ready_out (rsp_ready_in)
     );
     
     for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign rsp_in_if[i].valid = rsp_valid_in[i];
-        assign {rsp_in_if[i].tag, rsp_in_if[i].data} = rsp_data_in[i];        
-        assign rsp_ready_in[i] = rsp_in_if[i].ready;
+        assign bus_in_if[i].rsp_valid = rsp_valid_in[i];
+        assign {bus_in_if[i].rsp_tag, bus_in_if[i].rsp_data} = rsp_data_in[i];        
+        assign rsp_ready_in[i] = bus_in_if[i].rsp_ready;
     end
 
 endmodule

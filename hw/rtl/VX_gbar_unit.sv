@@ -31,11 +31,11 @@ module VX_gbar_unit #(
             end
             if (gbar_bus_if.req_valid) begin
                 if (active_barrier_count[NC_WIDTH-1:0] == gbar_bus_if.req_size_m1) begin
-                    barrier_masks[gbar_bus_if.req_id] <= '0;                                        
-                    rsp_valid  <= 1;
+                    barrier_masks[gbar_bus_if.req_id] <= '0;
                     rsp_bar_id <= gbar_bus_if.req_id;
+                    rsp_valid  <= 1;
                 end else begin
-                    barrier_masks[gbar_bus_if.req_id][gbar_bus_if.req_core_id] <= 1;                    
+                    barrier_masks[gbar_bus_if.req_id][gbar_bus_if.req_core_id] <= 1;
                 end
             end
         end

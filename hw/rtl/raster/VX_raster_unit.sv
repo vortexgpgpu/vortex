@@ -23,8 +23,7 @@ module VX_raster_unit #(
 `endif
 
     // Memory interface
-    VX_cache_req_if.master  cache_req_if,
-    VX_cache_rsp_if.slave   cache_rsp_if,
+    VX_cache_bus_if.master  cache_bus_if,
 
     // Inputs
     VX_dcr_write_if.slave   dcr_write_if,
@@ -91,8 +90,7 @@ module VX_raster_unit #(
 
         .dcrs         (raster_dcrs),
 
-        .cache_req_if (cache_req_if),
-        .cache_rsp_if (cache_rsp_if), 
+        .cache_bus_if (cache_bus_if),
 
         .valid_out    (mem_unit_valid),
         .xloc_out     (mem_xloc),
@@ -287,8 +285,8 @@ module VX_raster_unit #(
 `ifdef DBG_SCOPE_RASTER
     if (INSTANCE_ID == "cluster0-raster0") begin
     `ifdef SCOPE
-        wire cache_req_fire = cache_req_if.valid && cache_req_if.ready;
-        wire cache_rsp_fire = cache_rsp_if.valid && cache_rsp_if.ready;
+        wire cache_req_fire = cache_bus_if.req_valid && cache_bus_if.req_ready;
+        wire cache_rsp_fire = cache_bus_if.rsp_valid && cache_bus_if.rsp_ready;
         wire raster_req_fire = raster_req_if.valid && raster_req_if.ready;
         VX_scope_tap #(
             .SCOPE_ID (4),
@@ -311,11 +309,11 @@ module VX_raster_unit #(
                 raster_req_if.done
             }),
             .probes({
-                cache_rsp_if.data,
-                cache_rsp_if.tag,
-                cache_req_if.tag,
-                cache_req_if.addr,
-                cache_req_if.rw,
+                cache_bus_if.rsp_data,
+                cache_bus_if.rsp_tag,
+                cache_bus_if.req_tag,
+                cache_bus_if.req_addr,
+                cache_bus_if.req_rw,
                 no_pending_tiledata
             }),
             .bus_in(scope_bus_in),
@@ -325,7 +323,7 @@ module VX_raster_unit #(
     `ifdef CHIPSCOPE
         ila_raster ila_raster_inst (
             .clk    (clk),
-            .probe0 ({cache_rsp_if.data, cache_rsp_if.tag, cache_rsp_if.ready, cache_rsp_if.valid, cache_req_if.tag, cache_req_if.addr, cache_req_if.rw, cache_req_if.valid, cache_req_if.ready}),
+            .probe0 ({cache_bus_if.rsp_data, cache_bus_if.rsp_tag, cache_bus_if.rsp_ready, cache_bus_if.rsp_valid, cache_bus_if.req_tag, cache_bus_if.req_addr, cache_bus_if.req_rw, cache_bus_if.req_valid, cache_bus_if.req_ready}),
             .probe1 ({no_pending_tiledata, mem_unit_busy, mem_unit_ready, mem_unit_start, mem_unit_valid, raster_req_if.done, raster_req_if.valid, raster_req_if.ready})
         );
     `endif
@@ -337,8 +335,8 @@ module VX_raster_unit #(
     wire [$clog2(RCACHE_NUM_REQS+1)-1:0] perf_mem_rsp_per_cycle;
     wire [$clog2(RCACHE_NUM_REQS+1)+1-1:0] perf_pending_reads_cycle;
 
-    wire [RCACHE_NUM_REQS-1:0] perf_mem_req_fire = cache_req_if.valid & cache_req_if.ready;
-    wire [RCACHE_NUM_REQS-1:0] perf_mem_rsp_fire = cache_rsp_if.valid & cache_rsp_if.ready;
+    wire [RCACHE_NUM_REQS-1:0] perf_mem_req_fire = cache_bus_if.req_valid & cache_bus_if.req_ready;
+    wire [RCACHE_NUM_REQS-1:0] perf_mem_rsp_fire = cache_bus_if.rsp_valid & cache_bus_if.rsp_ready;
 
     `POP_COUNT(perf_mem_req_per_cycle, perf_mem_req_fire);
     `POP_COUNT(perf_mem_rsp_per_cycle, perf_mem_rsp_fire);
@@ -451,30 +449,24 @@ module VX_raster_unit_top #(
     assign raster_req_if.done = raster_req_done;
     assign raster_req_if.ready = raster_req_ready;
 
-    VX_cache_req_if #(
+    VX_cache_bus_if #(
         .NUM_REQS  (RCACHE_NUM_REQS), 
         .WORD_SIZE (RCACHE_WORD_SIZE), 
         .TAG_WIDTH (RCACHE_TAG_WIDTH)
-    ) cache_req_if();
+    ) cache_bus_if();
 
-    VX_cache_rsp_if #(
-        .NUM_REQS  (RCACHE_NUM_REQS), 
-        .WORD_SIZE (RCACHE_WORD_SIZE), 
-        .TAG_WIDTH (RCACHE_TAG_WIDTH)
-    ) cache_rsp_if();
+    assign cache_req_valid = cache_bus_if.req_valid;
+    assign cache_req_rw = cache_bus_if.req_rw;
+    assign cache_req_byteen = cache_bus_if.req_byteen;
+    assign cache_req_addr = cache_bus_if.req_addr;
+    assign cache_req_data = cache_bus_if.req_data;
+    assign cache_req_tag = cache_bus_if.req_tag;
+    assign cache_bus_if.req_ready = cache_req_ready;
 
-    assign cache_req_valid = cache_req_if.valid;
-    assign cache_req_rw = cache_req_if.rw;
-    assign cache_req_byteen = cache_req_if.byteen;
-    assign cache_req_addr = cache_req_if.addr;
-    assign cache_req_data = cache_req_if.data;
-    assign cache_req_tag = cache_req_if.tag;
-    assign cache_req_if.ready = cache_req_ready;
-
-    assign cache_rsp_if.valid = cache_rsp_valid;
-    assign cache_rsp_if.tag = cache_rsp_tag;
-    assign cache_rsp_if.data = cache_rsp_data;
-    assign cache_rsp_ready = cache_rsp_if.ready;
+    assign cache_bus_if.rsp_valid = cache_rsp_valid;
+    assign cache_bus_if.rsp_tag = cache_rsp_tag;
+    assign cache_bus_if.rsp_data = cache_rsp_data;
+    assign cache_rsp_ready = cache_bus_if.rsp_ready;
 
 `ifdef SCOPE
     wire [0:0] scope_reset_w = 1'b0; 
@@ -502,8 +494,7 @@ module VX_raster_unit_top #(
     `endif 
         .dcr_write_if  (dcr_write_if),
         .raster_req_if (raster_req_if),
-        .cache_req_if  (cache_req_if),
-        .cache_rsp_if  (cache_rsp_if)
+        .cache_bus_if  (cache_bus_if)
     );
 
 endmodule

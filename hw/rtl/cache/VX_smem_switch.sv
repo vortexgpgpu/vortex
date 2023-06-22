@@ -12,18 +12,9 @@ module VX_smem_switch #(
 ) (
     input wire              clk,
     input wire              reset,
-
-    // input requests        
-    VX_cache_req_if.slave   req_in_if,
-
-    // input responses
-    VX_cache_rsp_if.master  rsp_in_if,
     
-    // output request
-    VX_cache_req_if.master  req_out_if [NUM_REQS],
-
-    // output response
-    VX_cache_rsp_if.slave   rsp_out_if [NUM_REQS]    
+    VX_cache_bus_if.slave   bus_in_if,
+    VX_cache_bus_if.master  bus_out_if [NUM_REQS]
 );  
     localparam ADDR_WIDTH    = (`XLEN-`CLOG2(DATA_SIZE));
     localparam DATA_WIDTH    = (8 * DATA_SIZE);
@@ -47,17 +38,17 @@ module VX_smem_switch #(
             .S   (LOG_NUM_REQS),
             .POS (TAG_SEL_IDX)
         ) bits_remove (
-            .data_in  (req_in_if.tag[i]),
+            .data_in  (bus_in_if.req_tag[i]),
             .data_out (req_tag_in)
         );            
 
         if (NUM_REQS > 1) begin
-            assign req_sel_in = req_in_if.tag[i][TAG_SEL_IDX +: LOG_NUM_REQS];
+            assign req_sel_in = bus_in_if.req_tag[i][TAG_SEL_IDX +: LOG_NUM_REQS];
         end else begin
             assign req_sel_in = '0;
         end
 
-        assign req_data_in = {req_tag_in, req_in_if.addr[i], req_in_if.rw[i], req_in_if.byteen[i], req_in_if.data[i]};
+        assign req_data_in = {req_tag_in, bus_in_if.req_addr[i], bus_in_if.req_rw[i], bus_in_if.req_byteen[i], bus_in_if.req_data[i]};
 
         VX_stream_switch #(
             .NUM_OUTPUTS (NUM_REQS),
@@ -68,8 +59,8 @@ module VX_smem_switch #(
             .clk       (clk),
             .reset     (reset),
             .sel_in    (req_sel_in),
-            .valid_in  (req_in_if.valid[i]),
-            .ready_in  (req_in_if.ready[i]),
+            .valid_in  (bus_in_if.req_valid[i]),
+            .ready_in  (bus_in_if.req_ready[i]),
             .data_in   (req_data_in),
             .data_out  (req_data_out),
             .valid_out (req_valid_out),
@@ -77,9 +68,9 @@ module VX_smem_switch #(
         );
     
         for (genvar j = 0; j < NUM_REQS; ++j) begin
-            assign req_out_if[j].valid[i] = req_valid_out[j];
-            assign {req_out_if[j].tag[i], req_out_if[j].addr[i], req_out_if[j].rw[i], req_out_if[j].byteen[i], req_out_if[j].data[i]} = req_data_out[j];
-            assign req_ready_out[j] = req_out_if[j].ready[i];
+            assign bus_out_if[j].req_valid[i] = req_valid_out[j];
+            assign {bus_out_if[j].req_tag[i], bus_out_if[j].req_addr[i], bus_out_if[j].req_rw[i], bus_out_if[j].req_byteen[i], bus_out_if[j].req_data[i]} = req_data_out[j];
+            assign req_ready_out[j] = bus_out_if[j].req_ready[i];
         end
     end
 
@@ -99,14 +90,14 @@ module VX_smem_switch #(
                 .S   (LOG_NUM_REQS),
                 .POS (TAG_SEL_IDX)
             ) bits_insert (
-                .data_in  (rsp_out_if[i].tag[j]),
+                .data_in  (bus_out_if[i].rsp_tag[j]),
                 .sel_in   (`UP(LOG_NUM_REQS)'(i)),
                 .data_out (rsp_tag_out)
             );
 
-            assign rsp_valid_out[i][j] = rsp_out_if[i].valid[j];
-            assign rsp_data_out[i][j] = {rsp_tag_out, rsp_out_if[i].data[j]};
-            assign rsp_out_if[i].ready[j] = rsp_ready_out[i][j];
+            assign rsp_valid_out[i][j] = bus_out_if[i].rsp_valid[j];
+            assign rsp_data_out[i][j] = {rsp_tag_out, bus_out_if[i].rsp_data[j]};
+            assign bus_out_if[i].rsp_ready[j] = rsp_ready_out[i][j];
         end
     end
 
@@ -123,12 +114,12 @@ module VX_smem_switch #(
         .ready_in  (rsp_ready_out),
         .data_in   (rsp_data_out),     
         .data_out  (rsp_data_in),
-        .valid_out (rsp_in_if.valid),
-        .ready_out (rsp_in_if.ready)
+        .valid_out (bus_in_if.rsp_valid),
+        .ready_out (bus_in_if.rsp_ready)
     );
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        assign {rsp_in_if.tag[i], rsp_in_if.data[i]} = rsp_data_in[i];
+        assign {bus_in_if.rsp_tag[i], bus_in_if.rsp_data[i]} = rsp_data_in[i];
     end
 
 endmodule

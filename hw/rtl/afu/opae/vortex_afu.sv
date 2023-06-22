@@ -458,16 +458,11 @@ module vortex_afu #(
 
     //--
 
-    VX_mem_req_if #(
+    VX_mem_bus_if #(
         .DATA_WIDTH ($bits(t_local_mem_data)),
         .ADDR_WIDTH ($bits(t_local_mem_addr)),
         .TAG_WIDTH  (AVS_REQ_TAGW)
-    ) cci_vx_mem_req_if[1:0]();
-
-    VX_mem_rsp_if #(
-        .DATA_WIDTH ($bits(t_local_mem_data)),
-        .TAG_WIDTH  (AVS_REQ_TAGW)
-    ) cci_vx_mem_rsp_if[1:0]();
+    ) cci_vx_mem_bus_if[1:0]();
 
     VX_mem_adapter #(
         .SRC_DATA_WIDTH (CCI_DATA_WIDTH), 
@@ -495,18 +490,18 @@ module vortex_afu #(
         .mem_rsp_tag_in     (cci_mem_rsp_tag), 
         .mem_rsp_ready_in   (cci_mem_rsp_ready),
 
-        .mem_req_valid_out  (cci_vx_mem_req_if[1].valid),
-        .mem_req_addr_out   (cci_vx_mem_req_if[1].addr),
-        .mem_req_rw_out     (cci_vx_mem_req_if[1].rw),
-        .mem_req_byteen_out (cci_vx_mem_req_if[1].byteen),
-        .mem_req_data_out   (cci_vx_mem_req_if[1].data),
-        .mem_req_tag_out    (cci_vx_mem_req_if[1].tag),
-        .mem_req_ready_out  (cci_vx_mem_req_if[1].ready), 
+        .mem_req_valid_out  (cci_vx_mem_bus_if[1].req_valid),
+        .mem_req_addr_out   (cci_vx_mem_bus_if[1].req_addr),
+        .mem_req_rw_out     (cci_vx_mem_bus_if[1].req_rw),
+        .mem_req_byteen_out (cci_vx_mem_bus_if[1].req_byteen),
+        .mem_req_data_out   (cci_vx_mem_bus_if[1].req_data),
+        .mem_req_tag_out    (cci_vx_mem_bus_if[1].req_tag),
+        .mem_req_ready_out  (cci_vx_mem_bus_if[1].req_ready), 
 
-        .mem_rsp_valid_out  (cci_vx_mem_rsp_if[1].valid), 
-        .mem_rsp_data_out   (cci_vx_mem_rsp_if[1].data), 
-        .mem_rsp_tag_out    (cci_vx_mem_rsp_if[1].tag), 
-        .mem_rsp_ready_out  (cci_vx_mem_rsp_if[1].ready)
+        .mem_rsp_valid_out  (cci_vx_mem_bus_if[1].rsp_valid), 
+        .mem_rsp_data_out   (cci_vx_mem_bus_if[1].rsp_data), 
+        .mem_rsp_tag_out    (cci_vx_mem_bus_if[1].rsp_tag), 
+        .mem_rsp_ready_out  (cci_vx_mem_bus_if[1].rsp_ready)
     );
 
     //--
@@ -543,31 +538,26 @@ module vortex_afu #(
         .mem_rsp_tag_in     (vx_mem_rsp_tag), 
         .mem_rsp_ready_in   (vx_mem_rsp_ready),
 
-        .mem_req_valid_out  (cci_vx_mem_req_if[0].valid),
-        .mem_req_addr_out   (cci_vx_mem_req_if[0].addr),
-        .mem_req_rw_out     (cci_vx_mem_req_if[0].rw),
-        .mem_req_byteen_out (cci_vx_mem_req_if[0].byteen),
-        .mem_req_data_out   (cci_vx_mem_req_if[0].data),
-        .mem_req_tag_out    (cci_vx_mem_req_if[0].tag),
-        .mem_req_ready_out  (cci_vx_mem_req_if[0].ready), 
+        .mem_req_valid_out  (cci_vx_mem_bus_if[0].req_valid),
+        .mem_req_addr_out   (cci_vx_mem_bus_if[0].req_addr),
+        .mem_req_rw_out     (cci_vx_mem_bus_if[0].req_rw),
+        .mem_req_byteen_out (cci_vx_mem_bus_if[0].req_byteen),
+        .mem_req_data_out   (cci_vx_mem_bus_if[0].req_data),
+        .mem_req_tag_out    (cci_vx_mem_bus_if[0].req_tag),
+        .mem_req_ready_out  (cci_vx_mem_bus_if[0].req_ready), 
 
-        .mem_rsp_valid_out  (cci_vx_mem_rsp_if[0].valid), 
-        .mem_rsp_data_out   (cci_vx_mem_rsp_if[0].data), 
-        .mem_rsp_tag_out    (cci_vx_mem_rsp_if[0].tag), 
-        .mem_rsp_ready_out  (cci_vx_mem_rsp_if[0].ready)
+        .mem_rsp_valid_out  (cci_vx_mem_bus_if[0].rsp_valid), 
+        .mem_rsp_data_out   (cci_vx_mem_bus_if[0].rsp_data), 
+        .mem_rsp_tag_out    (cci_vx_mem_bus_if[0].rsp_tag), 
+        .mem_rsp_ready_out  (cci_vx_mem_bus_if[0].rsp_ready)
     );
 
     //--
-    VX_mem_req_if #(
+    VX_mem_bus_if #(
         .DATA_WIDTH ($bits(t_local_mem_data)),
         .ADDR_WIDTH ($bits(t_local_mem_addr)),
         .TAG_WIDTH  (AVS_REQ_TAGW+1)
-    ) mem_req_if();
-
-    VX_mem_rsp_if #(
-        .DATA_WIDTH ($bits(t_local_mem_data)),
-        .TAG_WIDTH  (AVS_REQ_TAGW+1)
-    ) mem_rsp_if();
+    ) mem_bus_if();
 
     `RESET_RELAY (mem_arb_reset, reset);
 
@@ -582,10 +572,8 @@ module vortex_afu #(
     ) mem_arb (
         .clk        (clk),
         .reset      (mem_arb_reset),
-        .req_in_if  (cci_vx_mem_req_if),
-        .rsp_in_if  (cci_vx_mem_rsp_if),
-        .req_out_if (mem_req_if),
-        .rsp_out_if (mem_rsp_if)
+        .bus_in_if  (cci_vx_mem_bus_if),
+        .bus_out_if (mem_bus_if)
     );
 
     //--
@@ -606,19 +594,19 @@ module vortex_afu #(
         .reset            (avs_adapter_reset),
 
         // Memory request 
-        .mem_req_valid    (mem_req_if.valid),
-        .mem_req_rw       (mem_req_if.rw),
-        .mem_req_byteen   (mem_req_if.byteen),
-        .mem_req_addr     (mem_req_if.addr),
-        .mem_req_data     (mem_req_if.data),
-        .mem_req_tag      (mem_req_if.tag),
-        .mem_req_ready    (mem_req_if.ready),
+        .mem_req_valid    (mem_bus_if.req_valid),
+        .mem_req_rw       (mem_bus_if.req_rw),
+        .mem_req_byteen   (mem_bus_if.req_byteen),
+        .mem_req_addr     (mem_bus_if.req_addr),
+        .mem_req_data     (mem_bus_if.req_data),
+        .mem_req_tag      (mem_bus_if.req_tag),
+        .mem_req_ready    (mem_bus_if.req_ready),
 
         // Memory response  
-        .mem_rsp_valid    (mem_rsp_if.valid),
-        .mem_rsp_data     (mem_rsp_if.data),
-        .mem_rsp_tag      (mem_rsp_if.tag),
-        .mem_rsp_ready    (mem_rsp_if.ready),
+        .mem_rsp_valid    (mem_bus_if.rsp_valid),
+        .mem_rsp_data     (mem_bus_if.rsp_data),
+        .mem_rsp_tag      (mem_bus_if.rsp_tag),
+        .mem_rsp_ready    (mem_bus_if.rsp_ready),
 
         // AVS bus
         .avs_writedata    (avs_writedata),
@@ -1000,11 +988,11 @@ module vortex_afu #(
 
 `ifdef DBG_SCOPE_AFU
 `ifdef SCOPE
-    wire mem_req_fire = mem_req_if.valid && mem_req_if.ready;
-    wire mem_rsp_fire = mem_rsp_if.valid && mem_rsp_if.ready;
+    wire mem_req_fire = mem_bus_if.req_valid && mem_bus_if.req_ready;
+    wire mem_rsp_fire = mem_bus_if.rsp_valid && mem_bus_if.rsp_ready;
     wire avs_write_fire = avs_write[0] && ~avs_waitrequest[0];
     wire avs_read_fire = avs_read[0] && ~avs_waitrequest[0];
-    wire [$bits(t_local_mem_addr)-1:0] mem_req_if_addr = mem_req_if.addr;
+    wire [$bits(t_local_mem_addr)-1:0] mem_bus_if_addr = mem_bus_if.req_addr;
 
     reg [STATE_WIDTH-1:0] state_prev;
     always @(posedge clk) begin
@@ -1064,7 +1052,7 @@ module vortex_afu #(
             cci_rd_req_ctr,
             cci_rd_rsp_ctr,
             cci_wr_req_ctr,
-            mem_req_if_addr
+            mem_bus_if_addr
         }),
         .bus_in(scope_bus_in_w[0]),
         .bus_out(scope_bus_out_w[0])

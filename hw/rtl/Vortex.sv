@@ -54,28 +54,23 @@ module Vortex (
     VX_perf_cache_if  perf_l3cache_if();    
 `endif
 
-    VX_mem_req_if #(
+    VX_mem_bus_if #(
         .DATA_WIDTH (L3_MEM_DATA_WIDTH),
         .TAG_WIDTH  (L3_MEM_TAG_WIDTH)
-    ) mem_req_if();
+    ) mem_bus_if();
 
-    VX_mem_rsp_if #(
-        .DATA_WIDTH (L3_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (L3_MEM_TAG_WIDTH)
-    ) mem_rsp_if();
+    assign mem_req_valid = mem_bus_if.req_valid;
+    assign mem_req_rw    = mem_bus_if.req_rw;
+    assign mem_req_byteen= mem_bus_if.req_byteen;
+    assign mem_req_addr  = mem_bus_if.req_addr;
+    assign mem_req_data  = mem_bus_if.req_data;
+    assign mem_req_tag   = mem_bus_if.req_tag;
+    assign mem_bus_if.req_ready = mem_req_ready;
 
-    assign mem_req_valid = mem_req_if.valid;
-    assign mem_req_rw    = mem_req_if.rw;
-    assign mem_req_byteen= mem_req_if.byteen;
-    assign mem_req_addr  = mem_req_if.addr;
-    assign mem_req_data  = mem_req_if.data;
-    assign mem_req_tag   = mem_req_if.tag;
-    assign mem_req_if.ready = mem_req_ready;
-
-    assign mem_rsp_if.valid = mem_rsp_valid;
-    assign mem_rsp_if.data  = mem_rsp_data;
-    assign mem_rsp_if.tag   = mem_rsp_tag;
-    assign mem_rsp_ready = mem_rsp_if.ready;
+    assign mem_bus_if.rsp_valid = mem_rsp_valid;
+    assign mem_bus_if.rsp_data  = mem_rsp_data;
+    assign mem_bus_if.rsp_tag   = mem_rsp_tag;
+    assign mem_rsp_ready = mem_bus_if.rsp_ready;
 
     wire mem_req_fire = mem_req_valid && mem_req_ready;
     wire mem_rsp_fire = mem_rsp_valid && mem_rsp_ready;
@@ -124,15 +119,10 @@ module Vortex (
     `UNUSED_VAR (per_cluster_sim_ebreak)
     `UNUSED_VAR (per_cluster_sim_wb_value)
 
-    VX_mem_req_if #(
+    VX_mem_bus_if #(
         .DATA_WIDTH (L2_MEM_DATA_WIDTH),
         .TAG_WIDTH  (L2_MEM_TAG_WIDTH)
-    ) per_cluster_mem_req_if[`NUM_CLUSTERS]();        
-
-    VX_mem_rsp_if #(
-        .DATA_WIDTH (L2_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (L2_MEM_TAG_WIDTH)
-    ) per_cluster_mem_rsp_if[`NUM_CLUSTERS]();
+    ) per_cluster_mem_bus_if[`NUM_CLUSTERS]();        
 
     VX_dcr_write_if dcr_write_if();
     assign dcr_write_if.valid = dcr_wr_valid;
@@ -192,8 +182,7 @@ module Vortex (
         `endif
         `endif
 
-            .mem_req_if         (per_cluster_mem_req_if[i]),
-            .mem_rsp_if         (per_cluster_mem_rsp_if[i]),
+            .mem_bus_if         (per_cluster_mem_bus_if[i]),
 
             .sim_ebreak         (per_cluster_sim_ebreak[i]),
             .sim_wb_value       (per_cluster_sim_wb_value[i]),
@@ -235,10 +224,8 @@ module Vortex (
         .perf_cache_if  (perf_l3cache_if),
     `endif
 
-        .core_req_if    (per_cluster_mem_req_if),
-        .core_rsp_if    (per_cluster_mem_rsp_if),
-        .mem_req_if     (mem_req_if),
-        .mem_rsp_if     (mem_rsp_if)
+        .core_bus_if    (per_cluster_mem_bus_if),
+        .mem_bus_if     (mem_bus_if)
     );
 
 `ifdef PERF_ENABLE
@@ -284,7 +271,7 @@ module Vortex (
             perf_mem_pending_reads <= '0;
         end else begin
             perf_mem_pending_reads <= $signed(perf_mem_pending_reads) + 
-                `PERF_CTR_BITS'($signed(2'(mem_req_fire && ~mem_req_if.rw) - 2'(mem_rsp_fire)));
+                `PERF_CTR_BITS'($signed(2'(mem_req_fire && ~mem_bus_if.req_rw) - 2'(mem_rsp_fire)));
         end
     end
     
@@ -298,10 +285,10 @@ module Vortex (
             perf_mem_writes <= '0;
             perf_mem_lat    <= '0;
         end else begin  
-            if (mem_req_fire && ~mem_req_if.rw) begin
+            if (mem_req_fire && ~mem_bus_if.req_rw) begin
                 perf_mem_reads <= perf_mem_reads + `PERF_CTR_BITS'(1);
             end
-            if (mem_req_fire && mem_req_if.rw) begin
+            if (mem_req_fire && mem_bus_if.req_rw) begin
                 perf_mem_writes <= perf_mem_writes + `PERF_CTR_BITS'(1);
             end      
             perf_mem_lat <= perf_mem_lat + perf_mem_pending_reads;

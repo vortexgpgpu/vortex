@@ -60,17 +60,8 @@ module VX_cache_cluster #(
     VX_perf_cache_if.master perf_cache_if,
 `endif
 
-    // Core request
-    VX_cache_req_if.slave   core_req_if [NUM_INPUTS],
-
-    // Core response
-    VX_cache_rsp_if.master  core_rsp_if [NUM_INPUTS],
-
-    // Memory request
-    VX_mem_req_if.master    mem_req_if,
-    
-    // Memory response
-    VX_mem_rsp_if.slave     mem_rsp_if
+    VX_cache_bus_if.slave   core_bus_if [NUM_INPUTS],
+    VX_mem_bus_if.master    mem_bus_if
 );
     localparam NUM_CACHES = `UP(NUM_UNITS);
     localparam PASSTHRU   = (NUM_UNITS == 0);
@@ -87,27 +78,16 @@ module VX_cache_cluster #(
     `PERF_CACHE_ADD (perf_cache_if, perf_cache_unit_if, NUM_CACHES);
 `endif
 
-    VX_mem_req_if #(
+    VX_mem_bus_if #(
         .DATA_WIDTH (`LINE_WIDTH),
         .TAG_WIDTH  (MEM_TAG_WIDTH)
-    ) cache_mem_req_if[NUM_CACHES]();
-    
-    VX_mem_rsp_if #(
-        .DATA_WIDTH (`LINE_WIDTH),
-        .TAG_WIDTH  (MEM_TAG_WIDTH)
-    ) cache_mem_rsp_if[NUM_CACHES]();
+    ) cache_mem_bus_if[NUM_CACHES]();
 
-    VX_cache_req_if #(
+    VX_cache_bus_if #(
         .NUM_REQS  (NUM_REQS), 
         .WORD_SIZE (WORD_SIZE),
         .TAG_WIDTH (ARB_TAG_WIDTH)
-    ) arb_core_req_if[NUM_CACHES]();
-
-    VX_cache_rsp_if #(
-        .NUM_REQS  (NUM_REQS), 
-        .WORD_SIZE (WORD_SIZE), 
-        .TAG_WIDTH (ARB_TAG_WIDTH)
-    ) arb_core_rsp_if[NUM_CACHES]();
+    ) arb_core_bus_if[NUM_CACHES]();
 
     `RESET_RELAY (cache_arb_reset, reset);
 
@@ -124,30 +104,19 @@ module VX_cache_cluster #(
     ) cache_arb (
         .clk        (clk),
         .reset      (cache_arb_reset),
-        .req_in_if  (core_req_if),
-        .rsp_in_if  (core_rsp_if),
-        .req_out_if (arb_core_req_if),
-        .rsp_out_if (arb_core_rsp_if)
+        .bus_in_if  (core_bus_if),
+        .bus_out_if (arb_core_bus_if)
     );
 
     for (genvar i = 0; i < NUM_CACHES; ++i) begin
 
-        VX_mem_req_if #(
+        VX_mem_bus_if #(
             .DATA_WIDTH (`WORD_WIDTH),
             .TAG_WIDTH  (ARB_TAG_WIDTH)
-        ) arb_core_req_m_if[NUM_REQS]();
-
-        VX_mem_rsp_if #(
-            .DATA_WIDTH (`WORD_WIDTH), 
-            .TAG_WIDTH (ARB_TAG_WIDTH)
-        ) arb_core_rsp_m_if[NUM_REQS]();
+        ) arb_core_bus_m_if[NUM_REQS]();
 
         for (genvar j = 0; j < NUM_REQS; ++j) begin
-            `CACHE_REQ_TO_MEM(arb_core_req_m_if, arb_core_req_if[i], j);
-        end
-
-        for (genvar j = 0; j < NUM_REQS; ++j) begin
-            `CACHE_RSP_FROM_MEM(arb_core_rsp_if[i], arb_core_rsp_m_if, j);
+            `CACHE_BUS_TO_MEM(arb_core_bus_m_if, arb_core_bus_if[i], j);
         end
 
         `RESET_RELAY (cache_reset, reset);
@@ -181,10 +150,8 @@ module VX_cache_cluster #(
             .clk         (clk),
             .reset       (cache_reset),
 
-            .core_req_if (arb_core_req_m_if),
-            .core_rsp_if (arb_core_rsp_m_if),
-            .mem_req_if  (cache_mem_req_if[i]),
-            .mem_rsp_if  (cache_mem_rsp_if[i])
+            .core_bus_if (arb_core_bus_m_if),
+            .mem_bus_if  (cache_mem_bus_if[i])
         );
     end
 
@@ -201,10 +168,8 @@ module VX_cache_cluster #(
     ) mem_arb (
         .clk        (clk),
         .reset      (mem_arb_reset),
-        .req_in_if  (cache_mem_req_if),        
-        .rsp_in_if  (cache_mem_rsp_if),
-        .req_out_if (mem_req_if),
-        .rsp_out_if (mem_rsp_if)
+        .bus_in_if  (cache_mem_bus_if),
+        .bus_out_if (mem_bus_if)
     );
 
 endmodule
@@ -304,61 +269,50 @@ module VX_cache_cluster_top #(
     input  wire [MEM_TAG_WIDTH-1:0] mem_rsp_tag, 
     output wire                    mem_rsp_ready
 );
-    VX_cache_req_if #(
+    VX_cache_bus_if #(
         .NUM_REQS  (NUM_REQS), 
         .WORD_SIZE (WORD_SIZE), 
         .TAG_WIDTH (TAG_WIDTH)
-    ) core_req_if[NUM_INPUTS]();
+    ) core_bus_if[NUM_INPUTS]();
 
-    VX_cache_rsp_if #(
-        .NUM_REQS  (NUM_REQS), 
-        .WORD_SIZE (WORD_SIZE), 
-        .TAG_WIDTH (TAG_WIDTH)
-    ) core_rsp_if[NUM_INPUTS]();
-
-    VX_mem_req_if #(
+    VX_mem_bus_if #(
         .DATA_WIDTH (`LINE_WIDTH),
         .TAG_WIDTH  (MEM_TAG_WIDTH)
-    ) mem_req_if();
-    
-    VX_mem_rsp_if #(
-        .DATA_WIDTH (`LINE_WIDTH),
-        .TAG_WIDTH  (MEM_TAG_WIDTH)
-    ) mem_rsp_if();
+    ) mem_bus_if();
 
     // Core request
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin
-        assign core_req_if[i].valid = core_req_valid[i];
-        assign core_req_if[i].rw = core_req_rw[i];
-        assign core_req_if[i].byteen = core_req_byteen[i];
-        assign core_req_if[i].addr = core_req_addr[i];
-        assign core_req_if[i].data = core_req_data[i];
-        assign core_req_if[i].tag = core_req_tag[i];
-        assign core_req_ready[i] = core_req_if[i].ready;
+        assign core_bus_if[i].req_valid = core_req_valid[i];
+        assign core_bus_if[i].req_rw = core_req_rw[i];
+        assign core_bus_if[i].req_byteen = core_req_byteen[i];
+        assign core_bus_if[i].req_addr = core_req_addr[i];
+        assign core_bus_if[i].req_data = core_req_data[i];
+        assign core_bus_if[i].req_tag = core_req_tag[i];
+        assign core_req_ready[i] = core_bus_if[i].req_ready;
     end
 
     // Core response
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin
-        assign core_rsp_valid[i] = core_rsp_if[i].valid;
-        assign core_rsp_data[i] = core_rsp_if[i].data;
-        assign core_rsp_tag[i] = core_rsp_if[i].tag;
-        assign core_rsp_if[i].ready = core_rsp_ready[i];
+        assign core_rsp_valid[i] = core_bus_if[i].rsp_valid;
+        assign core_rsp_data[i] = core_bus_if[i].rsp_data;
+        assign core_rsp_tag[i] = core_bus_if[i].rsp_tag;
+        assign core_bus_if[i].rsp_ready = core_rsp_ready[i];
     end
 
     // Memory request
-    assign mem_req_valid = mem_req_if.valid;
-    assign mem_req_rw = mem_req_if.rw; 
-    assign mem_req_byteen = mem_req_if.byteen;
-    assign mem_req_addr = mem_req_if.addr;
-    assign mem_req_data = mem_req_if.data;  
-    assign mem_req_tag = mem_req_if.tag; 
-    assign mem_req_if.ready = mem_req_ready;
+    assign mem_req_valid = mem_bus_if.req_valid;
+    assign mem_req_rw = mem_bus_if.req_rw; 
+    assign mem_req_byteen = mem_bus_if.req_byteen;
+    assign mem_req_addr = mem_bus_if.req_addr;
+    assign mem_req_data = mem_bus_if.req_data;  
+    assign mem_req_tag = mem_bus_if.req_tag; 
+    assign mem_bus_if.req_ready = mem_req_ready;
     
     // Memory response
-    assign mem_rsp_if.valid = mem_rsp_valid;    
-    assign mem_rsp_if.data = mem_rsp_data;
-    assign mem_rsp_if.tag = mem_rsp_tag; 
-    assign mem_rsp_ready = mem_rsp_if.ready;
+    assign mem_bus_if.rsp_valid = mem_rsp_valid;    
+    assign mem_bus_if.rsp_data = mem_rsp_data;
+    assign mem_bus_if.rsp_tag = mem_rsp_tag; 
+    assign mem_rsp_ready = mem_bus_if.rsp_ready;
 
     VX_cache_cluster #(
         .INSTANCE_ID    (INSTANCE_ID),
@@ -387,10 +341,8 @@ module VX_cache_cluster_top #(
     `endif
         .clk            (clk),
         .reset          (reset),
-        .core_req_if    (core_req_if),
-        .core_rsp_if    (core_rsp_if),
-        .mem_req_if     (mem_req_if),
-        .mem_rsp_if     (mem_rsp_if)
+        .core_bus_if    (core_bus_if),
+        .mem_bus_if     (mem_bus_if)
     );
 
  endmodule

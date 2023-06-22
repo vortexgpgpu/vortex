@@ -12,8 +12,7 @@ module VX_icache_stage #(
     input  wire             reset,
 
     // Icache interface
-    VX_cache_req_if.master icache_req_if,
-    VX_cache_rsp_if.slave  icache_rsp_if,
+    VX_cache_bus_if.master icache_bus_if,
     
     // request
     VX_ifetch_req_if.slave  ifetch_req_if,
@@ -39,7 +38,7 @@ module VX_icache_stage #(
     
     assign req_tag = ifetch_req_if.wid;
     
-    assign {rsp_uuid, rsp_tag} = icache_rsp_if.tag;
+    assign {rsp_uuid, rsp_tag} = icache_bus_if.rsp_tag;
 
     wire [`XLEN-1:0] rsp_PC;
     wire [`NUM_THREADS-1:0] rsp_tmask;
@@ -94,29 +93,29 @@ module VX_icache_stage #(
         .reset     (reset),
         .valid_in  (icache_req_valid),
         .ready_in  (icache_req_ready),
-        .data_in   ({icache_req_addr,    icache_req_tag}),
-        .data_out  ({icache_req_if.addr, icache_req_if.tag}),
-        .valid_out (icache_req_if.valid),
-        .ready_out (icache_req_if.ready)
+        .data_in   ({icache_req_addr, icache_req_tag}),
+        .data_out  ({icache_bus_if.req_addr, icache_bus_if.req_tag}),
+        .valid_out (icache_bus_if.req_valid),
+        .ready_out (icache_bus_if.req_ready)
     );
 
-    assign icache_req_if.rw     = 0;
-    assign icache_req_if.byteen = 4'b1111;
-    assign icache_req_if.data   = '0;    
+    assign icache_bus_if.req_rw     = 0;
+    assign icache_bus_if.req_byteen = 4'b1111;
+    assign icache_bus_if.req_data   = '0;    
 
     // Icache Response
 
     wire [NW_WIDTH-1:0] rsp_wid = rsp_tag;
 
-    assign ifetch_rsp_if.valid = icache_rsp_if.valid;
+    assign ifetch_rsp_if.valid = icache_bus_if.rsp_valid;
     assign ifetch_rsp_if.tmask = rsp_tmask;
     assign ifetch_rsp_if.wid   = rsp_wid;
     assign ifetch_rsp_if.PC    = rsp_PC;
-    assign ifetch_rsp_if.data  = icache_rsp_if.data;
+    assign ifetch_rsp_if.data  = icache_bus_if.rsp_data;
     assign ifetch_rsp_if.uuid  = rsp_uuid;
     
     // Can accept new response?
-    assign icache_rsp_if.ready = ifetch_rsp_if.ready;
+    assign icache_bus_if.rsp_ready = ifetch_rsp_if.ready;
 
 `ifdef DBG_TRACE_CORE_ICACHE
     wire ifetch_req_fire = ifetch_req_if.valid && ifetch_req_if.ready;

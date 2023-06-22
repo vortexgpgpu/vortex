@@ -20,11 +20,9 @@ module VX_socket #(
 
     VX_dcr_write_if.slave   dcr_write_if,
 
-    VX_cache_req_if.master  dcache_req_if,
-    VX_cache_rsp_if.slave   dcache_rsp_if,
+    VX_cache_bus_if.master  dcache_bus_if,
 
-    VX_cache_req_if.master  icache_req_if,
-    VX_cache_rsp_if.slave   icache_rsp_if,    
+    VX_cache_bus_if.master  icache_bus_if,
 
 `ifdef EXT_F_ENABLE
     VX_fpu_req_if.master    fpu_req_if,
@@ -171,7 +169,6 @@ module VX_socket #(
     );
 
     `ASSIGN_VX_TEX_REQ_IF (tex_req_if, tex_req_tmp_if[0]);
-    `ASSIGN_VX_TEX_RSP_IF (tex_rsp_tmp_if[0], tex_rsp_if);
             
 `endif
 
@@ -216,35 +213,22 @@ module VX_socket #(
     );
 
     `ASSIGN_VX_FPU_REQ_IF (fpu_req_if, fpu_req_tmp_if[0]);
-    `ASSIGN_VX_FPU_RSP_IF (fpu_rsp_tmp_if[0], fpu_rsp_if);
 
 `endif
 
     ///////////////////////////////////////////////////////////////////////////
 
-    VX_cache_req_if #(
+    VX_cache_bus_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_TAG_WIDTH)
-    ) per_core_dcache_req_if[`SOCKET_SIZE]();
+    ) per_core_dcache_bus_if[`SOCKET_SIZE]();
 
-    VX_cache_rsp_if #(
-        .NUM_REQS  (DCACHE_NUM_REQS), 
-        .WORD_SIZE (DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (DCACHE_TAG_WIDTH)
-    ) per_core_dcache_rsp_if[`SOCKET_SIZE]();
-
-    VX_cache_req_if #(
+    VX_cache_bus_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE),
         .TAG_WIDTH (DCACHE_ARB_TAG_WIDTH)
-    ) dcache_req_tmp_if[1]();
-
-    VX_cache_rsp_if #(
-        .NUM_REQS  (DCACHE_NUM_REQS), 
-        .WORD_SIZE (DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (DCACHE_ARB_TAG_WIDTH)
-    ) dcache_rsp_tmp_if[1]();
+    ) dcache_bus_tmp_if[1]();
 
     `RESET_RELAY (dcache_arb_reset, reset);
 
@@ -261,40 +245,25 @@ module VX_socket #(
     ) dcache_arb (
         .clk        (clk),
         .reset      (dcache_arb_reset),
-        .req_in_if  (per_core_dcache_req_if),
-        .rsp_in_if  (per_core_dcache_rsp_if),
-        .req_out_if (dcache_req_tmp_if),
-        .rsp_out_if (dcache_rsp_tmp_if)
+        .bus_in_if  (per_core_dcache_bus_if),
+        .bus_out_if (dcache_bus_tmp_if)
     );
 
-    `ASSIGN_VX_CACHE_REQ_IF (dcache_req_if, dcache_req_tmp_if[0]);
-    `ASSIGN_VX_CACHE_RSP_IF (dcache_rsp_tmp_if[0], dcache_rsp_if);
+    `ASSIGN_VX_CACHE_BUS_IF (dcache_bus_if, dcache_bus_tmp_if[0]);
 
     ///////////////////////////////////////////////////////////////////////////
     
-    VX_cache_req_if #(
+    VX_cache_bus_if #(
         .NUM_REQS  (ICACHE_NUM_REQS), 
         .WORD_SIZE (ICACHE_WORD_SIZE), 
         .TAG_WIDTH (ICACHE_TAG_WIDTH)
-    ) per_core_icache_req_if[`SOCKET_SIZE]();
+    ) per_core_icache_bus_if[`SOCKET_SIZE]();
 
-    VX_cache_rsp_if #(
-        .NUM_REQS  (ICACHE_NUM_REQS), 
-        .WORD_SIZE (ICACHE_WORD_SIZE), 
-        .TAG_WIDTH (ICACHE_TAG_WIDTH)
-    ) per_core_icache_rsp_if[`SOCKET_SIZE]();
-
-    VX_cache_req_if #(
+    VX_cache_bus_if #(
         .NUM_REQS  (ICACHE_NUM_REQS), 
         .WORD_SIZE (ICACHE_WORD_SIZE),
         .TAG_WIDTH (ICACHE_ARB_TAG_WIDTH)
-    ) icache_req_tmp_if[1]();
-
-    VX_cache_rsp_if #(
-        .NUM_REQS  (ICACHE_NUM_REQS), 
-        .WORD_SIZE (ICACHE_WORD_SIZE), 
-        .TAG_WIDTH (ICACHE_ARB_TAG_WIDTH)
-    ) icache_rsp_tmp_if[1]();
+    ) icache_bus_tmp_if[1]();
 
     `RESET_RELAY (icache_arb_reset, reset);
 
@@ -311,14 +280,11 @@ module VX_socket #(
     ) icache_arb (
         .clk        (clk),
         .reset      (icache_arb_reset),
-        .req_in_if  (per_core_icache_req_if),
-        .rsp_in_if  (per_core_icache_rsp_if),
-        .req_out_if (icache_req_tmp_if),
-        .rsp_out_if (icache_rsp_tmp_if)
+        .bus_in_if  (per_core_icache_bus_if),
+        .bus_out_if (icache_bus_tmp_if)
     );
 
-    `ASSIGN_VX_CACHE_REQ_IF (icache_req_if, icache_req_tmp_if[0]);
-    `ASSIGN_VX_CACHE_RSP_IF (icache_rsp_tmp_if[0], icache_rsp_if);
+    `ASSIGN_VX_CACHE_BUS_IF (icache_bus_if, icache_bus_tmp_if[0]);
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -354,11 +320,9 @@ module VX_socket #(
             
             .dcr_write_if   (core_dcr_write_if),
 
-            .dcache_req_if  (per_core_dcache_req_if[i]),
-            .dcache_rsp_if  (per_core_dcache_rsp_if[i]),
+            .dcache_bus_if  (per_core_dcache_bus_if[i]),
 
-            .icache_req_if  (per_core_icache_req_if[i]),
-            .icache_rsp_if  (per_core_icache_rsp_if[i]),
+            .icache_bus_if  (per_core_icache_bus_if[i]),
 
         `ifdef EXT_F_ENABLE
             .fpu_req_if     (per_core_fpu_req_if[i]),

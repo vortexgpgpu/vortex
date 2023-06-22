@@ -317,82 +317,71 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define ASSIGN_VX_MEM_REQ_IF(dst, src) \
-    assign dst.valid  = src.valid;  \
-    assign dst.rw     = src.rw;     \
-    assign dst.byteen = src.byteen; \
-    assign dst.addr   = src.addr;   \
-    assign dst.data   = src.data;   \
-    assign dst.tag    = src.tag;    \
-    assign src.ready  = dst.ready
+`define ASSIGN_VX_MEM_BUS_IF(dst, src) \
+    assign dst.req_valid  = src.req_valid;  \
+    assign dst.req_rw     = src.req_rw;     \
+    assign dst.req_byteen = src.req_byteen; \
+    assign dst.req_addr   = src.req_addr;   \
+    assign dst.req_data   = src.req_data;   \
+    assign dst.req_tag    = src.req_tag;    \
+    assign src.req_ready  = dst.req_ready;  \
+    assign src.rsp_valid  = dst.rsp_valid;  \
+    assign src.rsp_data   = dst.rsp_data;   \
+    assign src.rsp_tag    = dst.rsp_tag;    \
+    assign dst.rsp_ready  = src.rsp_ready
 
-`define ASSIGN_VX_MEM_RSP_IF(dst, src) \
-    assign dst.valid  = src.valid;  \
-    assign dst.data   = src.data;   \
-    assign dst.tag    = src.tag;    \
-    assign src.ready  = dst.ready
-
-`define ASSIGN_VX_MEM_REQ_IF_X(dst, src, TD, TS) \
-    assign dst.valid  = src.valid;  \
-    assign dst.rw     = src.rw;     \
-    assign dst.byteen = src.byteen; \
-    assign dst.addr   = src.addr;   \
-    assign dst.data   = src.data;   \
+`define ASSIGN_VX_MEM_BUS_IF_X(dst, src, TD, TS) \
+    assign dst.req_valid  = src.req_valid;  \
+    assign dst.req_rw     = src.req_rw;     \
+    assign dst.req_byteen = src.req_byteen; \
+    assign dst.req_addr   = src.req_addr;   \
+    assign dst.req_data   = src.req_data;   \
     if (TD != TS) \
-        assign dst.tag = {src.tag, {(TD-TS){1'b0}}}; \
+        assign dst.req_tag = {src.req_tag, {(TD-TS){1'b0}}}; \
     else \
-        assign dst.tag = src.tag; \
-    assign src.ready  = dst.ready
+        assign dst.req_tag = src.req_tag;   \
+    assign src.req_ready  = dst.req_ready;  \
+    assign src.rsp_valid  = dst.rsp_valid;  \
+    assign src.rsp_data   = dst.rsp_data;   \
+    assign src.rsp_tag    = dst.rsp_tag[TD-1 -: TS]; \
+    assign dst.rsp_ready  = src.rsp_ready
 
+`define ASSIGN_VX_CACHE_BUS_IF(dst, src) \
+    assign dst.req_valid  = src.req_valid;  \
+    assign dst.req_rw     = src.req_rw;     \
+    assign dst.req_byteen = src.req_byteen; \
+    assign dst.req_addr   = src.req_addr;   \
+    assign dst.req_data   = src.req_data;   \
+    assign dst.req_tag    = src.req_tag;    \
+    assign src.req_ready  = dst.req_ready;  \
+    assign src.rsp_valid  = dst.rsp_valid;  \
+    assign src.rsp_data   = dst.rsp_data;   \
+    assign src.rsp_tag    = dst.rsp_tag;    \
+    assign dst.rsp_ready  = src.rsp_ready
 
-`define ASSIGN_VX_MEM_RSP_IF_X(dst, src, TD, TS) \
-    assign dst.valid  = src.valid;  \
-    assign dst.data   = src.data;   \
-    assign dst.tag    = src.tag[TS-1 -: TD]; \
-    assign src.ready  = dst.ready
+`define ASSIGN_VX_CACHE_BUS_IF_XTAG(dst, src) \
+    assign dst.req_valid  = src.req_valid;  \
+    assign dst.req_rw     = src.req_rw;     \
+    assign dst.req_byteen = src.req_byteen; \
+    assign dst.req_addr   = src.req_addr;   \
+    assign dst.req_data   = src.req_data;   \
+    assign src.req_ready  = dst.req_ready;  \
+    assign src.rsp_valid  = dst.rsp_valid;  \
+    assign src.rsp_data   = dst.rsp_data;   \
+    assign dst.rsp_ready  = src.rsp_ready
 
-`define ASSIGN_VX_CACHE_REQ_IF(dst, src) \
-    assign dst.valid  = src.valid;  \
-    assign dst.rw     = src.rw;     \
-    assign dst.byteen = src.byteen; \
-    assign dst.addr   = src.addr;   \
-    assign dst.data   = src.data;   \
-    assign dst.tag    = src.tag;    \
-    assign src.ready  = dst.ready
-
-`define ASSIGN_VX_CACHE_RSP_IF(dst, src) \
-    assign dst.valid  = src.valid;  \
-    assign dst.data   = src.data;   \
-    assign dst.tag    = src.tag;    \
-    assign src.ready  = dst.ready
-
-`define ASSIGN_VX_CACHE_REQ_IF_XTAG(dst, src) \
-    assign dst.valid  = src.valid;  \
-    assign dst.rw     = src.rw;     \
-    assign dst.byteen = src.byteen; \
-    assign dst.addr   = src.addr;   \
-    assign dst.data   = src.data;   \
-    assign src.ready  = dst.ready
-
-`define ASSIGN_VX_CACHE_RSP_IF_XTAG(dst, src) \
-    assign dst.valid  = src.valid;  \
-    assign dst.data   = src.data;   \
-    assign src.ready  = dst.ready
-
-`define CACHE_REQ_TO_MEM(dst, src, i) \
-    assign dst[i].valid = src.valid[i]; \
-    assign dst[i].rw = src.rw[i]; \
-    assign dst[i].byteen = src.byteen[i]; \
-    assign dst[i].addr = src.addr[i]; \
-    assign dst[i].data = src.data[i]; \
-    assign dst[i].tag = src.tag[i]; \
-    assign src.ready[i] = dst[i].ready
-
-`define CACHE_RSP_FROM_MEM(dst, src, i) \
-    assign dst.valid[i] = src[i].valid; \
-    assign dst.data[i] = src[i].data; \
-    assign dst.tag[i] = src[i].tag; \
-    assign src[i].ready = dst.ready[i]
+`define CACHE_BUS_TO_MEM(dst, src, i) \
+    assign dst[i].req_valid = src.req_valid[i]; \
+    assign dst[i].req_rw = src.req_rw[i]; \
+    assign dst[i].req_byteen = src.req_byteen[i]; \
+    assign dst[i].req_addr = src.req_addr[i]; \
+    assign dst[i].req_data = src.req_data[i]; \
+    assign dst[i].req_tag = src.req_tag[i]; \
+    assign src.req_ready[i] = dst[i].req_ready; \
+    assign src.rsp_valid[i] = dst[i].rsp_valid; \
+    assign src.rsp_data[i] = dst[i].rsp_data; \
+    assign src.rsp_tag[i] = dst[i].rsp_tag; \
+    assign dst[i].rsp_ready = src.rsp_ready[i]
 
 `define ASSIGN_VX_RASTER_REQ_IF(dst, src) \
     assign dst.valid = src.valid; \

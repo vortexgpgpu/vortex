@@ -61,8 +61,7 @@ module VX_cluster #(
 `endif
 
     // Memory
-    VX_mem_req_if.master        mem_req_if,
-    VX_mem_rsp_if.slave         mem_rsp_if,
+    VX_mem_bus_if.master        mem_bus_if,
 
     // simulation helper signals
     output wire                 sim_ebreak,
@@ -106,17 +105,11 @@ module VX_cluster #(
     `PERF_RASTER_ADD (perf_raster_if, perf_raster_unit_if, `NUM_RASTER_UNITS);
 `endif
 
-    VX_cache_req_if #(
+    VX_cache_bus_if #(
         .NUM_REQS  (RCACHE_NUM_REQS), 
         .WORD_SIZE (RCACHE_WORD_SIZE), 
         .TAG_WIDTH (RCACHE_TAG_WIDTH)
-    ) rcache_req_if[`NUM_RASTER_UNITS]();
-
-    VX_cache_rsp_if #(
-        .NUM_REQS  (RCACHE_NUM_REQS), 
-        .WORD_SIZE (RCACHE_WORD_SIZE), 
-        .TAG_WIDTH (RCACHE_TAG_WIDTH)
-    ) rcache_rsp_if[`NUM_RASTER_UNITS]();
+    ) rcache_bus_if[`NUM_RASTER_UNITS]();
 
     VX_raster_req_if #(
         .NUM_LANES (`NUM_THREADS)
@@ -153,8 +146,7 @@ module VX_cluster #(
         `endif
             .dcr_write_if  (raster_dcr_write_if),
             .raster_req_if (raster_req_if[i]),
-            .cache_req_if  (rcache_req_if[i]),
-            .cache_rsp_if  (rcache_rsp_if[i])
+            .cache_bus_if  (rcache_bus_if[i])
         );
     end
 
@@ -185,17 +177,11 @@ module VX_cluster #(
     `PERF_ROP_ADD (perf_rop_if, perf_rop_unit_if, `NUM_ROP_UNITS);
 `endif
 
-    VX_cache_req_if #(
+    VX_cache_bus_if #(
         .NUM_REQS  (OCACHE_NUM_REQS), 
         .WORD_SIZE (OCACHE_WORD_SIZE), 
         .TAG_WIDTH (OCACHE_TAG_WIDTH)
-    ) ocache_req_if[`NUM_ROP_UNITS]();
-
-    VX_cache_rsp_if #(
-        .NUM_REQS  (OCACHE_NUM_REQS), 
-        .WORD_SIZE (OCACHE_WORD_SIZE), 
-        .TAG_WIDTH (OCACHE_TAG_WIDTH)
-    ) ocache_rsp_if[`NUM_ROP_UNITS]();
+    ) ocache_bus_if[`NUM_ROP_UNITS]();
 
     VX_rop_req_if #(
         .NUM_LANES (`NUM_THREADS)
@@ -243,8 +229,7 @@ module VX_cluster #(
         `endif
             .dcr_write_if  (rop_dcr_write_if),
             .rop_req_if    (rop_req_if[i]),            
-            .cache_req_if  (ocache_req_if[i]),
-            .cache_rsp_if  (ocache_rsp_if[i])
+            .cache_bus_if  (ocache_bus_if[i])
         );
     end
 
@@ -257,17 +242,11 @@ module VX_cluster #(
     `PERF_TEX_ADD (perf_tex_if, perf_tex_unit_if, `NUM_TEX_UNITS);
 `endif
 
-    VX_cache_req_if #(
+    VX_cache_bus_if #(
         .NUM_REQS  (TCACHE_NUM_REQS), 
         .WORD_SIZE (TCACHE_WORD_SIZE), 
         .TAG_WIDTH (TCACHE_TAG_WIDTH)
-    ) tcache_req_if[`NUM_TEX_UNITS]();
-
-    VX_cache_rsp_if #(
-        .NUM_REQS  (TCACHE_NUM_REQS), 
-        .WORD_SIZE (TCACHE_WORD_SIZE), 
-        .TAG_WIDTH (TCACHE_TAG_WIDTH)
-    ) tcache_rsp_if[`NUM_TEX_UNITS]();
+    ) tcache_bus_if[`NUM_TEX_UNITS]();
 
     VX_tex_req_if #(
         .NUM_LANES (`NUM_THREADS),
@@ -332,8 +311,7 @@ module VX_cluster #(
             .dcr_write_if (tex_dcr_write_if),
             .tex_req_if   (tex_req_if[i]),
             .tex_rsp_if   (tex_rsp_if[i]),
-            .cache_req_if (tcache_req_if[i]),
-            .cache_rsp_if (tcache_rsp_if[i])
+            .cache_bus_if (tcache_bus_if[i])
         );
     end
             
@@ -398,29 +376,17 @@ module VX_cluster #(
 
 `endif
 
-    VX_cache_req_if #(
+    VX_cache_bus_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_ARB_TAG_WIDTH)
-    ) per_socket_dcache_req_if[`NUM_SOCKETS]();
-
-    VX_cache_rsp_if #(
-        .NUM_REQS  (DCACHE_NUM_REQS), 
-        .WORD_SIZE (DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (DCACHE_ARB_TAG_WIDTH)
-    ) per_socket_dcache_rsp_if[`NUM_SOCKETS]();
+    ) per_socket_dcache_bus_if[`NUM_SOCKETS]();
     
-    VX_cache_req_if #(
+    VX_cache_bus_if #(
         .NUM_REQS  (ICACHE_NUM_REQS), 
         .WORD_SIZE (ICACHE_WORD_SIZE), 
         .TAG_WIDTH (ICACHE_ARB_TAG_WIDTH)
-    ) per_socket_icache_req_if[`NUM_SOCKETS]();
-
-    VX_cache_rsp_if #(
-        .NUM_REQS  (ICACHE_NUM_REQS), 
-        .WORD_SIZE (ICACHE_WORD_SIZE), 
-        .TAG_WIDTH (ICACHE_ARB_TAG_WIDTH)
-    ) per_socket_icache_rsp_if[`NUM_SOCKETS]();
+    ) per_socket_icache_bus_if[`NUM_SOCKETS]();
 
     `RESET_RELAY (mem_unit_reset, reset);
 
@@ -434,38 +400,32 @@ module VX_cluster #(
         .perf_memsys_if     (perf_memsys_if),
     `endif
 
-        .dcache_req_if      (per_socket_dcache_req_if),
-        .dcache_rsp_if      (per_socket_dcache_rsp_if),
+        .dcache_bus_if      (per_socket_dcache_bus_if),
         
-        .icache_req_if      (per_socket_icache_req_if),
-        .icache_rsp_if      (per_socket_icache_rsp_if),
+        .icache_bus_if      (per_socket_icache_bus_if),
 
     `ifdef EXT_TEX_ENABLE
     `ifdef PERF_ENABLE
         .perf_tcache_if     (perf_tcache_if),
     `endif
-        .tcache_req_if      (tcache_req_if),
-        .tcache_rsp_if      (tcache_rsp_if),
+        .tcache_bus_if      (tcache_bus_if),
     `endif
 
     `ifdef EXT_RASTER_ENABLE
     `ifdef PERF_ENABLE
         .perf_rcache_if     (perf_rcache_if),
     `endif
-        .rcache_req_if      (rcache_req_if),
-        .rcache_rsp_if      (rcache_rsp_if),
+        .rcache_bus_if      (rcache_bus_if),
     `endif 
 
     `ifdef EXT_ROP_ENABLE
     `ifdef PERF_ENABLE
         .perf_ocache_if     (perf_ocache_if),
     `endif
-        .ocache_req_if      (ocache_req_if),
-        .ocache_rsp_if      (ocache_rsp_if),
+        .ocache_bus_if      (ocache_bus_if),
     `endif
 
-        .mem_req_if         (mem_req_if),
-        .mem_rsp_if         (mem_rsp_if)
+        .mem_bus_if         (mem_bus_if)
     );
 
     ///////////////////////////////////////////////////////////////////////////
@@ -505,11 +465,9 @@ module VX_cluster #(
             
             .dcr_write_if   (socket_dcr_write_if),
 
-            .dcache_req_if  (per_socket_dcache_req_if[i]),
-            .dcache_rsp_if  (per_socket_dcache_rsp_if[i]),
+            .dcache_bus_if  (per_socket_dcache_bus_if[i]),
 
-            .icache_req_if  (per_socket_icache_req_if[i]),
-            .icache_rsp_if  (per_socket_icache_rsp_if[i]),
+            .icache_bus_if  (per_socket_icache_bus_if[i]),
 
         `ifdef EXT_F_ENABLE
             .fpu_req_if     (per_socket_fpu_req_if[i]),

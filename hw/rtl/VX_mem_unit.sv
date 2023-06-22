@@ -15,38 +15,32 @@ module VX_mem_unit # (
     VX_perf_memsys_if.master perf_memsys_if,
 `endif    
 
-    VX_cache_req_if.slave   icache_req_if [`NUM_SOCKETS],  
-    VX_cache_rsp_if.master  icache_rsp_if [`NUM_SOCKETS],
+    VX_cache_bus_if.slave   icache_bus_if [`NUM_SOCKETS],
 
-    VX_cache_req_if.slave   dcache_req_if [`NUM_SOCKETS],
-    VX_cache_rsp_if.master  dcache_rsp_if [`NUM_SOCKETS],
+    VX_cache_bus_if.slave   dcache_bus_if [`NUM_SOCKETS],
 
 `ifdef EXT_TEX_ENABLE
 `ifdef PERF_ENABLE
     VX_perf_cache_if.master perf_tcache_if,
 `endif
-    VX_cache_req_if.slave   tcache_req_if [`NUM_TEX_UNITS],
-    VX_cache_rsp_if.master  tcache_rsp_if [`NUM_TEX_UNITS],
+    VX_cache_bus_if.slave   tcache_bus_if [`NUM_TEX_UNITS],
 `endif
 
 `ifdef EXT_RASTER_ENABLE
 `ifdef PERF_ENABLE
     VX_perf_cache_if.master perf_rcache_if,
 `endif
-    VX_cache_req_if.slave   rcache_req_if [`NUM_RASTER_UNITS],
-    VX_cache_rsp_if.master  rcache_rsp_if [`NUM_RASTER_UNITS],
+    VX_cache_bus_if.slave   rcache_bus_if [`NUM_RASTER_UNITS],
 `endif 
 
 `ifdef EXT_ROP_ENABLE
 `ifdef PERF_ENABLE
     VX_perf_cache_if.master perf_ocache_if,
 `endif
-    VX_cache_req_if.slave   ocache_req_if [`NUM_ROP_UNITS],
-    VX_cache_rsp_if.master  ocache_rsp_if [`NUM_ROP_UNITS],
+    VX_cache_bus_if.slave   ocache_bus_if [`NUM_ROP_UNITS],
 `endif
 
-    VX_mem_req_if.master    mem_req_if,
-    VX_mem_rsp_if.slave     mem_rsp_if
+    VX_mem_bus_if.master    mem_bus_if
 );
 
 `ifdef PERF_ENABLE
@@ -58,15 +52,10 @@ module VX_mem_unit # (
 
 /////////////////////////////// I-Cache ///////////////////////////////////
 
-    VX_mem_req_if #(
+    VX_mem_bus_if #(
         .DATA_WIDTH (ICACHE_MEM_DATA_WIDTH),
         .TAG_WIDTH  (ICACHE_MEM_TAG_WIDTH)
-    ) icache_mem_req_if();
-    
-    VX_mem_rsp_if #(
-        .DATA_WIDTH (ICACHE_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (ICACHE_MEM_TAG_WIDTH)
-    ) icache_mem_rsp_if();
+    ) icache_mem_bus_if();
     
     `RESET_RELAY (icache_reset, reset);
 
@@ -97,35 +86,22 @@ module VX_mem_unit # (
     `endif
         .clk            (clk),
         .reset          (icache_reset),
-        .core_req_if    (icache_req_if),
-        .core_rsp_if    (icache_rsp_if),
-        .mem_req_if     (icache_mem_req_if),
-        .mem_rsp_if     (icache_mem_rsp_if)
+        .core_bus_if    (icache_bus_if),
+        .mem_bus_if     (icache_mem_bus_if)
     );
 
 /////////////////////////////// D-Cache ///////////////////////////////////
 
-    VX_mem_req_if #(
+    VX_mem_bus_if #(
         .DATA_WIDTH (DCACHE_MEM_DATA_WIDTH),
         .TAG_WIDTH  (DCACHE_MEM_TAG_WIDTH)
-    ) dcache_mem_req_if();
-    
-    VX_mem_rsp_if #(
-        .DATA_WIDTH (DCACHE_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (DCACHE_MEM_TAG_WIDTH)
-    ) dcache_mem_rsp_if();
+    ) dcache_mem_bus_if();
 
-    VX_cache_req_if #(
+    VX_cache_bus_if #(
         .NUM_REQS  (DCACHE_NUM_REQS), 
         .WORD_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-    ) dcache_switch_req_if [`NUM_SOCKETS]();
-
-    VX_cache_rsp_if #(
-        .NUM_REQS  (DCACHE_NUM_REQS), 
-        .WORD_SIZE (DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-    ) dcache_switch_rsp_if [`NUM_SOCKETS]();
+    ) dcache_switch_bus_if [`NUM_SOCKETS]();
 
     `RESET_RELAY (dcache_reset, reset);
 
@@ -159,10 +135,8 @@ module VX_mem_unit # (
         
         .clk            (clk),
         .reset          (dcache_reset),        
-        .core_req_if    (dcache_switch_req_if),
-        .core_rsp_if    (dcache_switch_rsp_if),
-        .mem_req_if     (dcache_mem_req_if),
-        .mem_rsp_if     (dcache_mem_rsp_if)
+        .core_bus_if    (dcache_switch_bus_if),
+        .mem_bus_if     (dcache_mem_bus_if)
     );
 
 ////////////////////////////// Shared Memory //////////////////////////////
@@ -170,17 +144,11 @@ module VX_mem_unit # (
 `ifdef SM_ENABLE
 
     for (genvar i = 0; i < `NUM_SOCKETS; ++i) begin
-        VX_cache_req_if #(
+        VX_cache_bus_if #(
             .NUM_REQS  (DCACHE_NUM_REQS), 
             .WORD_SIZE (DCACHE_WORD_SIZE), 
             .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-        ) smem_switch_out_req_if[2]();
-
-        VX_cache_rsp_if #(
-            .NUM_REQS  (DCACHE_NUM_REQS), 
-            .WORD_SIZE (DCACHE_WORD_SIZE), 
-            .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
-        ) smem_switch_out_rsp_if[2]();
+        ) smem_switch_out_bus_if[2]();
 
         `RESET_RELAY (dcache_smem_switch_reset, reset);
 
@@ -196,14 +164,11 @@ module VX_mem_unit # (
         ) smem_switch (
             .clk        (clk),
             .reset      (dcache_smem_switch_reset),
-            .req_in_if  (dcache_req_if[i]),
-            .rsp_in_if  (dcache_rsp_if[i]),
-            .req_out_if (smem_switch_out_req_if),
-            .rsp_out_if (smem_switch_out_rsp_if)
+            .bus_in_if  (dcache_bus_if[i]),
+            .bus_out_if (smem_switch_out_bus_if)
         );
 
-        `ASSIGN_VX_CACHE_REQ_IF (dcache_switch_req_if[i], smem_switch_out_req_if[0]);
-        `ASSIGN_VX_CACHE_RSP_IF (smem_switch_out_rsp_if[0], dcache_switch_rsp_if[i]);
+        `ASSIGN_VX_CACHE_BUS_IF (dcache_switch_bus_if[i], smem_switch_out_bus_if[0]);
 
         // shared memory address mapping:
         // [core_idx][warp_idx][word_idx][thread_idx] <= [core_idx][warp_idx][thread_idx][bank_offset..word_idx]
@@ -217,14 +182,14 @@ module VX_mem_unit # (
 
         for (genvar j = 0; j < DCACHE_NUM_REQS; ++j) begin
             if (`NT_BITS != 0) begin
-                assign smem_req_addr[j][0 +: `NT_BITS] = smem_switch_out_req_if[1].addr[j][BANK_ADDR_OFFSET +: `NT_BITS];
+                assign smem_req_addr[j][0 +: `NT_BITS] = smem_switch_out_bus_if[1].req_addr[j][BANK_ADDR_OFFSET +: `NT_BITS];
             end    
-            assign smem_req_addr[j][`NT_BITS +: WORD_SEL_BITS] = smem_switch_out_req_if[1].addr[j][0 +: WORD_SEL_BITS];
+            assign smem_req_addr[j][`NT_BITS +: WORD_SEL_BITS] = smem_switch_out_bus_if[1].req_addr[j][0 +: WORD_SEL_BITS];
             if (`NW_BITS != 0) begin
-                assign smem_req_addr[j][(`NT_BITS + WORD_SEL_BITS) +: `NW_BITS] = smem_switch_out_req_if[1].addr[j][(BANK_ADDR_OFFSET + `NT_BITS) +: `NW_BITS];
+                assign smem_req_addr[j][(`NT_BITS + WORD_SEL_BITS) +: `NW_BITS] = smem_switch_out_bus_if[1].req_addr[j][(BANK_ADDR_OFFSET + `NT_BITS) +: `NW_BITS];
             end
             if (SOCKET_BITS != 0) begin
-                assign smem_req_addr[j][(`NT_BITS + WORD_SEL_BITS + `NW_BITS) +: SOCKET_BITS] = smem_switch_out_req_if[1].addr[j][(BANK_ADDR_OFFSET + `NT_BITS + `NW_BITS) +: SOCKET_BITS];
+                assign smem_req_addr[j][(`NT_BITS + WORD_SEL_BITS + `NW_BITS) +: SOCKET_BITS] = smem_switch_out_bus_if[1].req_addr[j][(BANK_ADDR_OFFSET + `NT_BITS + `NW_BITS) +: SOCKET_BITS];
             end
         end
 
@@ -249,27 +214,26 @@ module VX_mem_unit # (
         `endif
 
             // Core request
-            .req_valid  (smem_switch_out_req_if[1].valid),
-            .req_rw     (smem_switch_out_req_if[1].rw),
-            .req_byteen (smem_switch_out_req_if[1].byteen),
+            .req_valid  (smem_switch_out_bus_if[1].req_valid),
+            .req_rw     (smem_switch_out_bus_if[1].req_rw),
+            .req_byteen (smem_switch_out_bus_if[1].req_byteen),
             .req_addr   (smem_req_addr),
-            .req_data   (smem_switch_out_req_if[1].data),        
-            .req_tag    (smem_switch_out_req_if[1].tag),
-            .req_ready  (smem_switch_out_req_if[1].ready),
+            .req_data   (smem_switch_out_bus_if[1].req_data),        
+            .req_tag    (smem_switch_out_bus_if[1].req_tag),
+            .req_ready  (smem_switch_out_bus_if[1].req_ready),
 
             // Core response
-            .rsp_valid  (smem_switch_out_rsp_if[1].valid),
-            .rsp_data   (smem_switch_out_rsp_if[1].data),
-            .rsp_tag    (smem_switch_out_rsp_if[1].tag),
-            .rsp_ready  (smem_switch_out_rsp_if[1].ready)
+            .rsp_valid  (smem_switch_out_bus_if[1].rsp_valid),
+            .rsp_data   (smem_switch_out_bus_if[1].rsp_data),
+            .rsp_tag    (smem_switch_out_bus_if[1].rsp_tag),
+            .rsp_ready  (smem_switch_out_bus_if[1].rsp_ready)
         ); 
     end   
 
 `else
 
     for (genvar i = 0; i < `NUM_SOCKETS; ++i) begin
-        `ASSIGN_VX_CACHE_REQ_IF (dcache_switch_req_if[i], dcache_req_if[i]);
-        `ASSIGN_VX_CACHE_RSP_IF (dcache_rsp_if[i], dcache_switch_rsp_if[i]);
+        `ASSIGN_VX_CACHE_BUS_IF (dcache_switch_bus_if[i], dcache_bus_if[i]);
     end
 
 `endif
@@ -278,15 +242,10 @@ module VX_mem_unit # (
 
 `ifdef EXT_TEX_ENABLE    
 
-    VX_mem_req_if #(
+    VX_mem_bus_if #(
         .DATA_WIDTH (TCACHE_MEM_DATA_WIDTH),
         .TAG_WIDTH  (TCACHE_MEM_TAG_WIDTH)
-    ) tcache_mem_req_if();
-    
-    VX_mem_rsp_if #(
-        .DATA_WIDTH (TCACHE_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (TCACHE_MEM_TAG_WIDTH)
-    ) tcache_mem_rsp_if();
+    ) tcache_mem_bus_if();
 
     `RESET_RELAY (tcache_reset, reset);
 
@@ -319,10 +278,8 @@ module VX_mem_unit # (
     `endif        
         .clk            (clk),
         .reset          (tcache_reset),
-        .core_req_if    (tcache_req_if),
-        .core_rsp_if    (tcache_rsp_if),
-        .mem_req_if     (tcache_mem_req_if),
-        .mem_rsp_if     (tcache_mem_rsp_if)
+        .core_bus_if    (tcache_bus_if),
+        .mem_bus_if     (tcache_mem_bus_if)
     );
 
 `endif
@@ -331,15 +288,10 @@ module VX_mem_unit # (
 
 `ifdef EXT_ROP_ENABLE    
 
-    VX_mem_req_if #(
+    VX_mem_bus_if #(
         .DATA_WIDTH (OCACHE_MEM_DATA_WIDTH),
         .TAG_WIDTH  (OCACHE_MEM_TAG_WIDTH)
-    ) ocache_mem_req_if();
-    
-    VX_mem_rsp_if #(
-        .DATA_WIDTH (OCACHE_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (OCACHE_MEM_TAG_WIDTH)
-    ) ocache_mem_rsp_if();
+    ) ocache_mem_bus_if();
 
     `RESET_RELAY (ocache_reset, reset);
 
@@ -373,10 +325,8 @@ module VX_mem_unit # (
         .clk            (clk),
         .reset          (ocache_reset),
 
-        .core_req_if    (ocache_req_if),
-        .core_rsp_if    (ocache_rsp_if),
-        .mem_req_if     (ocache_mem_req_if),
-        .mem_rsp_if     (ocache_mem_rsp_if)
+        .core_bus_if    (ocache_bus_if),
+        .mem_bus_if     (ocache_mem_bus_if)
     );
 
 `endif
@@ -385,15 +335,10 @@ module VX_mem_unit # (
 
 `ifdef EXT_RASTER_ENABLE
 
-    VX_mem_req_if #(
+    VX_mem_bus_if #(
         .DATA_WIDTH (RCACHE_MEM_DATA_WIDTH),
         .TAG_WIDTH  (RCACHE_MEM_TAG_WIDTH)
-    ) rcache_mem_req_if();
-    
-    VX_mem_rsp_if #(
-        .DATA_WIDTH (RCACHE_MEM_DATA_WIDTH),
-        .TAG_WIDTH  (RCACHE_MEM_TAG_WIDTH)
-    ) rcache_mem_rsp_if();
+    ) rcache_mem_bus_if();
 
     `RESET_RELAY (rcache_reset, reset);
 
@@ -426,25 +371,18 @@ module VX_mem_unit # (
     `endif        
         .clk            (clk),
         .reset          (rcache_reset),
-        .core_req_if    (rcache_req_if),
-        .core_rsp_if    (rcache_rsp_if),
-        .mem_req_if     (rcache_mem_req_if),
-        .mem_rsp_if     (rcache_mem_rsp_if)
+        .core_bus_if    (rcache_bus_if),
+        .mem_bus_if     (rcache_mem_bus_if)
     );
 
 `endif
 
 /////////////////////////////// L2-Cache //////////////////////////////////
 
-    VX_mem_req_if #(
+    VX_mem_bus_if #(
         .DATA_WIDTH (L2_WORD_SIZE * 8),
         .TAG_WIDTH  (L2_TAG_WIDTH)
-    ) l2_mem_req_if[L2_NUM_REQS]();
-    
-    VX_mem_rsp_if #(
-        .DATA_WIDTH (L2_WORD_SIZE * 8),
-        .TAG_WIDTH  (L2_TAG_WIDTH)
-    ) l2_mem_rsp_if[L2_NUM_REQS]();
+    ) l2_mem_bus_if[L2_NUM_REQS]();
 
     localparam I_MEM_ARB_IDX = 0;
     localparam D_MEM_ARB_IDX = I_MEM_ARB_IDX + 1;
@@ -455,25 +393,19 @@ module VX_mem_unit # (
     `UNUSED_PARAM (R_MEM_ARB_IDX)
     `UNUSED_PARAM (O_MEM_ARB_IDX)
 
-    `ASSIGN_VX_MEM_REQ_IF_X (l2_mem_req_if[I_MEM_ARB_IDX], icache_mem_req_if, L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH);
-    `ASSIGN_VX_MEM_RSP_IF_X (icache_mem_rsp_if, l2_mem_rsp_if[I_MEM_ARB_IDX], ICACHE_MEM_TAG_WIDTH, L1_MEM_TAG_WIDTH);
-
-    `ASSIGN_VX_MEM_REQ_IF_X (l2_mem_req_if[D_MEM_ARB_IDX], dcache_mem_req_if, L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH);
-    `ASSIGN_VX_MEM_RSP_IF_X (dcache_mem_rsp_if, l2_mem_rsp_if[D_MEM_ARB_IDX], DCACHE_MEM_TAG_WIDTH, L1_MEM_TAG_WIDTH);
+    `ASSIGN_VX_MEM_BUS_IF_X (l2_mem_bus_if[I_MEM_ARB_IDX], icache_mem_bus_if, L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH);
+    `ASSIGN_VX_MEM_BUS_IF_X (l2_mem_bus_if[D_MEM_ARB_IDX], dcache_mem_bus_if, L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH);
 
 `ifdef EXT_TEX_ENABLE
-    `ASSIGN_VX_MEM_REQ_IF_X (l2_mem_req_if[T_MEM_ARB_IDX], tcache_mem_req_if, L1_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH);
-    `ASSIGN_VX_MEM_RSP_IF_X (tcache_mem_rsp_if, l2_mem_rsp_if[T_MEM_ARB_IDX], TCACHE_MEM_TAG_WIDTH, L1_MEM_TAG_WIDTH);
+    `ASSIGN_VX_MEM_BUS_IF_X (l2_mem_bus_if[T_MEM_ARB_IDX], tcache_mem_bus_if, L1_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH);
 `endif
 
 `ifdef EXT_RASTER_ENABLE
-    `ASSIGN_VX_MEM_REQ_IF_X (l2_mem_req_if[R_MEM_ARB_IDX], rcache_mem_req_if, L1_MEM_TAG_WIDTH, RCACHE_MEM_TAG_WIDTH);
-    `ASSIGN_VX_MEM_RSP_IF_X (rcache_mem_rsp_if, l2_mem_rsp_if[R_MEM_ARB_IDX], RCACHE_MEM_TAG_WIDTH, L1_MEM_TAG_WIDTH);
+    `ASSIGN_VX_MEM_BUS_IF_X (l2_mem_bus_if[R_MEM_ARB_IDX], rcache_mem_bus_if, L1_MEM_TAG_WIDTH, RCACHE_MEM_TAG_WIDTH);
 `endif
 
 `ifdef EXT_ROP_ENABLE
-    `ASSIGN_VX_MEM_REQ_IF_X (l2_mem_req_if[O_MEM_ARB_IDX], ocache_mem_req_if, L1_MEM_TAG_WIDTH, OCACHE_MEM_TAG_WIDTH);
-    `ASSIGN_VX_MEM_RSP_IF_X (ocache_mem_rsp_if, l2_mem_rsp_if[O_MEM_ARB_IDX], OCACHE_MEM_TAG_WIDTH, L1_MEM_TAG_WIDTH);
+    `ASSIGN_VX_MEM_BUS_IF_X (l2_mem_bus_if[O_MEM_ARB_IDX], ocache_mem_bus_if, L1_MEM_TAG_WIDTH, OCACHE_MEM_TAG_WIDTH);
 `endif
 
     `RESET_RELAY (l2_reset, reset);
@@ -505,10 +437,8 @@ module VX_mem_unit # (
     `ifdef PERF_ENABLE
         .perf_cache_if  (perf_l2cache_if),
     `endif
-        .core_req_if    (l2_mem_req_if),
-        .core_rsp_if    (l2_mem_rsp_if),
-        .mem_req_if     (mem_req_if),
-        .mem_rsp_if     (mem_rsp_if)
+        .core_bus_if    (l2_mem_bus_if),
+        .mem_bus_if     (mem_bus_if)
     );
 
 `ifdef PERF_ENABLE

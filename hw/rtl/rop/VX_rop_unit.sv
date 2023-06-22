@@ -13,8 +13,7 @@ module VX_rop_unit #(
 `endif
 
     // Memory interface
-    VX_cache_req_if.master  cache_req_if,
-    VX_cache_rsp_if.slave   cache_rsp_if,
+    VX_cache_bus_if.master  cache_bus_if,
 
     // Inputs
     VX_dcr_write_if.slave   dcr_write_if,
@@ -74,8 +73,7 @@ module VX_rop_unit #(
 
         .dcrs           (rop_dcrs),
 
-        .cache_req_if   (cache_req_if),
-        .cache_rsp_if   (cache_rsp_if),
+        .cache_bus_if   (cache_bus_if),
 
         .req_valid      (mem_req_valid_r),
         .req_ds_mask    (mem_req_ds_mask_r),
@@ -329,9 +327,9 @@ module VX_rop_unit #(
     wire [$clog2(OCACHE_NUM_REQS+1)-1:0] perf_mem_rd_rsp_per_cycle;
     wire [$clog2(OCACHE_NUM_REQS+1)+1-1:0] perf_pending_reads_cycle;
 
-    wire [OCACHE_NUM_REQS-1:0] perf_mem_rd_req_fire = cache_req_if.valid & ~cache_req_if.rw & cache_req_if.ready;
-    wire [OCACHE_NUM_REQS-1:0] perf_mem_wr_req_fire = cache_req_if.valid & cache_req_if.rw & cache_req_if.ready;
-    wire [OCACHE_NUM_REQS-1:0] perf_mem_rd_rsp_fire = cache_rsp_if.valid & cache_rsp_if.ready;
+    wire [OCACHE_NUM_REQS-1:0] perf_mem_rd_req_fire = cache_bus_if.req_valid & ~cache_bus_if.req_rw & cache_bus_if.req_ready;
+    wire [OCACHE_NUM_REQS-1:0] perf_mem_wr_req_fire = cache_bus_if.req_valid & cache_bus_if.req_rw & cache_bus_if.req_ready;
+    wire [OCACHE_NUM_REQS-1:0] perf_mem_rd_rsp_fire = cache_bus_if.rsp_valid & cache_bus_if.rsp_ready;
 
     `POP_COUNT(perf_mem_rd_req_per_cycle, perf_mem_rd_req_fire);    
     `POP_COUNT(perf_mem_wr_req_per_cycle, perf_mem_wr_req_fire);    
@@ -437,30 +435,24 @@ module VX_rop_unit_top #(
     assign rop_req_if.face = rop_req_face;
     assign rop_req_ready = rop_req_if.ready;
 
-    VX_cache_req_if #(
+    VX_cache_bus_if #(
         .NUM_REQS  (OCACHE_NUM_REQS), 
         .WORD_SIZE (OCACHE_WORD_SIZE), 
         .TAG_WIDTH (OCACHE_TAG_WIDTH)
-    ) cache_req_if();
+    ) cache_bus_if();
 
-    VX_cache_rsp_if #(
-        .NUM_REQS  (OCACHE_NUM_REQS), 
-        .WORD_SIZE (OCACHE_WORD_SIZE), 
-        .TAG_WIDTH (OCACHE_TAG_WIDTH)
-    ) cache_rsp_if();
+    assign cache_req_valid = cache_bus_if.req_valid;
+    assign cache_req_rw = cache_bus_if.req_rw;
+    assign cache_req_byteen = cache_bus_if.req_byteen;
+    assign cache_req_addr = cache_bus_if.req_addr;
+    assign cache_req_data = cache_bus_if.req_data;
+    assign cache_req_tag = cache_bus_if.req_tag;
+    assign cache_bus_if.req_ready = cache_req_ready;
 
-    assign cache_req_valid = cache_req_if.valid;
-    assign cache_req_rw = cache_req_if.rw;
-    assign cache_req_byteen = cache_req_if.byteen;
-    assign cache_req_addr = cache_req_if.addr;
-    assign cache_req_data = cache_req_if.data;
-    assign cache_req_tag = cache_req_if.tag;
-    assign cache_req_if.ready = cache_req_ready;
-
-    assign cache_rsp_if.valid = cache_rsp_valid;
-    assign cache_rsp_if.tag = cache_rsp_tag;
-    assign cache_rsp_if.data = cache_rsp_data;
-    assign cache_rsp_ready = cache_rsp_if.ready;
+    assign cache_bus_if.rsp_valid = cache_rsp_valid;
+    assign cache_bus_if.rsp_tag = cache_rsp_tag;
+    assign cache_bus_if.rsp_data = cache_rsp_data;
+    assign cache_rsp_ready = cache_bus_if.rsp_ready;
 
     VX_rop_unit #(
         .INSTANCE_ID (INSTANCE_ID),
@@ -473,8 +465,7 @@ module VX_rop_unit_top #(
     `endif 
         .dcr_write_if  (dcr_write_if),
         .rop_req_if    (rop_req_if),
-        .cache_req_if  (cache_req_if),
-        .cache_rsp_if  (cache_rsp_if)
+        .cache_bus_if  (cache_bus_if)
     );
 
 endmodule
